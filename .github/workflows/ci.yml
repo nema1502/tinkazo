@@ -21,3 +21,20 @@ jobs:
         run: cargo build --release --target wasm32v1-none -p tinkazo-raffle
       - name: Tamaño del contrato
         run: ls -la target/wasm32v1-none/release/*.wasm
+
+  web:
+    name: Sitio (Vite + TypeScript)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build

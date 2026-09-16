@@ -20,7 +20,7 @@ Interfaz bilingüe ES / EN, modo claro y oscuro, modo estadio a pantalla complet
 
 ## Estado del proyecto
 
-Hoy el sitio en producción es el **demo estático v1**: un solo `index.html` autocontenido, sin build. El sellado y la verificación ocurren en el navegador con la cadena *default* de drand.
+Hoy el sitio en producción es el **demo v1**: sellado y verificación en el navegador con la cadena *default* de drand, ya migrado a Vite + TypeScript y sin dependencias de terceros para la identidad.
 
 La versión sobre **Stellar** está en marcha:
 
@@ -32,7 +32,13 @@ Próximos pasos: desplegar en testnet y medir costos, migrar el sitio a Vite + T
 
 ## Correr en local
 
-**Sitio (demo v1):** no hace falta instalar nada. Abrí `index.html` en el navegador o servilo con cualquier servidor estático (`npx serve .`).
+**Sitio:** Vite + TypeScript con pnpm.
+
+```bash
+pnpm install
+pnpm dev        # http://localhost:5173
+pnpm build      # genera dist/
+```
 
 **Contrato:** requiere Rust con el target `wasm32v1-none` y, para desplegar, [stellar-cli](https://developers.stellar.org/docs/tools/cli/stellar-cli).
 
@@ -44,7 +50,7 @@ cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ## Estructura
 
 ```
-index.html            Sitio v1: landing, juegos, sellado y verificación
+index.html, src/     Sitio (Vite + TypeScript): landing, juegos, sellado y verificación
 contracts/raffle/     Contrato Soroban tinkazo-raffle (Rust)
 docs/                 Protocolo, PRD, arquitectura, épicas, despliegues, vectores, capturas
 .claude/skills/       Kit de skills para construir en Stellar (ideas → PRD → arquitectura → Soroban → mainnet)

@@ -1,0 +1,23 @@
+{
+  "name": "tinkazo",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Sorteos verificables para comunidades: lista sellada, semilla pública de drand y anclaje en Stellar",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.1"
+  }
+}

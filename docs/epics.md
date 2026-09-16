@@ -141,7 +141,9 @@ para que una regresión en la matemática no llegue a `main` sin aviso.
 
 ## Épica 2: Sitio con protocolo v2 y modo libre verificable
 
-### Historia 2.1: Migrar el sitio a Vite, TypeScript y pnpm con paridad visual
+### Historia 2.1: Migrar el sitio a Vite, TypeScript y pnpm con paridad visual — hecho
+
+Resultado (2026-09-16): `index.html` es la entrada de Vite 8; el CSS vive en `src/styles.css` y el JavaScript en módulos TypeScript 7 (`src/i18n.ts`, `src/state.ts`, `src/ui/*`, `src/games/*`, `src/protocol/legacy-v1.ts`). Clerk retirado. Verificado con Chrome headless: idioma por URL, demo de ruleta y de carrera con drand real, tema oscuro. El algoritmo sigue siendo el v1 hasta la historia 2.2.
 
 Como organizadora,
 quiero que Tinkazo siga viéndose y funcionando igual mientras el código pasa a módulos,
@@ -241,6 +243,22 @@ para que lo que se ve en pantalla sea exactamente lo que dice la cadena.
 **Y** el show (carrera o ruleta) se siembra con `randomness` del registro y termina en los índices del registro
 **Y** si el sorteo ya fue finalizado por otra persona, la app lo detecta (`AlreadyDrawn`) y pasa directo al show
 **Y** al recargar la página con un sello pendiente, la app ofrece reanudar el sorteo por `id`.
+
+### Historia 3.5: Cuenta invitada en testnet
+
+Como organizadora que quiere probar sin instalar nada,
+quiero que Tinkazo me cree una cuenta de Stellar en testnet con un clic,
+para sellar y sortear anclado sin wallet ni XLM propios.
+
+**Criterios de aceptación:**
+
+**Dado** la red configurada en testnet y ninguna wallet conectada
+**Cuando** pulso "Probar sin wallet"
+**Entonces** el navegador genera un par de llaves, lo fondea con friendbot, lo guarda solo en este dispositivo y lo expone por el mismo adaptador de wallet que Freighter
+**Y** la interfaz deja claro que es una cuenta de prueba de testnet, ofrece exportar o borrar la llave y no aparece cuando la red configurada es mainnet
+**Y** `seal` y `draw` funcionan igual que con una wallet externa.
+
+Justificación: mientras el proyecto viva en testnet, esta es la forma más rápida de demostrar el anclaje a cualquier comunidad. Se decidió el 2026-09-16 como alternativa gratuita a Pollar para esta etapa.
 
 ### Historia 3.4: Errores, costos y estados de transacción
 
