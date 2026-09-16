@@ -1,0 +1,17 @@
+[package]
+name = "tinkazo-raffle"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "MIT"
+description = "Sorteos verificables: sello de lista + semilla pública de drand quicknet verificada on-chain"
+
+[lib]
+crate-type = ["lib", "cdylib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
