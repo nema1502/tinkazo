@@ -24,13 +24,11 @@ Hoy el sitio en producción es el **demo estático v1**: un solo `index.html` au
 
 La versión sobre **Stellar** está en marcha:
 
-- **Contrato Soroban `tinkazo-raffle`** ([contracts/raffle](contracts/raffle)): `seal` compromete el hash de la lista y una ronda futura de drand quicknet; `draw` verifica la firma BLS de esa ronda **en la cadena** (`pairing_check` sobre BLS12-381), deriva la semilla idéntica al `randomness` de drand y selecciona ganadores de forma determinista. Inmutable, sin admin, sin custodia de fondos. 19 tests, incluida una ronda real de quicknet. WASM de 27 KB.
+- **Contrato Soroban `tinkazo-raffle`** ([contracts/raffle](contracts/raffle)): `seal` compromete el hash de la lista y una ronda futura de drand quicknet; `draw` verifica la firma BLS de esa ronda **en la cadena** (`pairing_check` sobre BLS12-381), deriva la semilla idéntica al `randomness` de drand y selecciona ganadores de forma determinista. Inmutable, sin admin, sin custodia de fondos. 19 tests, incluida una ronda real de quicknet. WASM de 11 KB. Desplegado en testnet (`CD2SSHBU…RENH`) con un sorteo real ejecutado y verificado; ver [docs/deployments.md](docs/deployments.md).
 - **Protocolo v2** ([docs/protocolo.md](docs/protocolo.md)): especificación normativa que cualquier tercero puede reimplementar, con vectores de prueba compartidos ([docs/vectors.json](docs/vectors.json)).
 - **Plan**: [PRD](docs/prd.md) · [Arquitectura](docs/architecture.md) · [Épicas e historias](docs/epics.md) · [Despliegues](docs/deployments.md).
 
 Próximos pasos: desplegar en testnet y medir costos, migrar el sitio a Vite + TypeScript con pnpm, conectar wallets (Stellar Wallets Kit), página pública de verificación y mainnet.
-
-La idea original (ideathon de Arkiv, agosto 2026) está en [docs/idea-original-arkiv.md](docs/idea-original-arkiv.md). El modelo de datos se mantiene; cambia la red que lo ancla.
 
 ## Correr en local
 

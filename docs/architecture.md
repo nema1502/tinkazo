@@ -67,6 +67,7 @@ Versiones verificadas el 2026-09-16 en crates.io, npm y las redes.
 | D-12 | Hosting y CI | Vercel (proyecto existente, preset Vite, `pnpm`) y GitHub Actions (`cargo test`, build WASM, `pnpm test`, `pnpm build`) | Netlify (opción de v1): el proyecto ya vive en Vercel. |
 | D-13 | Comprobante | Enlace con `red`, `contrato`, `id` y la lista canónica comprimida (deflate + base64url) en el fragmento `#`, más descarga JSON | Lista en la cadena: v2, opcional, expone nombres. Servidor de comprobantes: viola NFR-2. |
 | D-14 | Toolchain de contratos | Rust 1.98 (`stable-x86_64-pc-windows-gnu` en la máquina del autor), `wasm32v1-none`, `soroban-sdk` 27.0.6, `stellar-cli` 28.0 | SDK 28 rc: solo necesario para funciones nuevas del protocolo 28; mainnet sigue en 27. |
+| D-15 | Política de renta (TTL) | `seal` y `draw` extienden solo las entradas del propio sorteo (120 días). La renta de la instancia y del código se renueva con `extend`, explícita y a cargo del proyecto | Extender la instancia en cada llamada (patrón habitual): el primer organizador tras el umbral pagaba 15 XLM de renta del código sin saberlo. Medido en testnet el 2026-09-16. |
 
 ### Detalle de la capa de confianza
 
@@ -108,9 +109,11 @@ Estado implementado y probado (19 tests, incluida la firma real de la ronda 3225
 | `extend(id)` | ninguna | Renueva TTL de sorteo y registro |
 | `round_at(ts) → u64` / `round_time(round) → u64` | ninguna | Utilidades de quicknet |
 
-Almacenamiento: `instance` para `NextId`; `persistent` para `Raffle(id)` y `Draw(id)` con TTL extendido a 120 días cuando baja de 60. Errores numerados y estables (`NotFound=1 … MetaTooLong=9`): son ABI pública, nunca se renumeran. Tamaño del WASM: 26,7 KB (límite 128 KB).
+Almacenamiento: `instance` para `NextId`; `persistent` para `Raffle(id)` y `Draw(id)` con TTL extendido a 120 días cuando baja de 60 (D-15). Errores numerados y estables (`NotFound=1 … MetaTooLong=9`): son ABI pública, nunca se renumeran. Tamaño del WASM: 11,4 KB optimizado por `stellar contract build` (26,7 KB sin optimizar; límite 128 KB).
 
-Riesgos conocidos: un `signature` malformado (fuera de la curva) aborta la invocación en el host en lugar de devolver `InvalidSignature`; el cliente valida la codificación antes de enviar. El costo de `pairing_check` se mide en testnet (historia 1.4) y se registra en [deployments.md](deployments.md).
+Desplegado y probado en testnet el 2026-09-16 con un sorteo real: `seal` 0,099 XLM, `draw` 0,083 XLM (de los cuales 0,003 XLM son cómputo, incluido el `pairing_check`), `extend` 15,15 XLM por la renta del código e instancia. En mainnet la subida del WASM cuesta 15,86 XLM (simulado) y mantener el contrato vivo unos 49 XLM al año. Detalle y proyección en [deployments.md](deployments.md).
+
+Riesgos conocidos: un `signature` malformado (fuera de la curva) aborta la invocación en el host en lugar de devolver `InvalidSignature`; el cliente valida la codificación antes de enviar. La renta del código depende del tamaño del módulo compilado, no del WASM crudo: agregar dependencias pesadas encarece el mantenimiento anual.
 
 ### Frontend
 
@@ -244,7 +247,7 @@ tinkazo/
 **Cobertura.** Cada FR del PRD está mapeado a una épica en [epics.md](epics.md). NFR-1 se garantiza con vectores cruzados; NFR-2 con la ausencia de backend (excepción acotada y opcional en D-07); NFR-3 se mide en 1.4; NFR-4 con `.gitignore` y las reglas de CLAUDE.md; NFR-6 porque el contrato solo recibe `list_hash`.
 
 **Brechas.**
-- *Importante:* el costo real de `pairing_check` en testnet (historia 1.4). Si supera el presupuesto o el objetivo de NFR-3, se activa el plan B de D-02 y se actualiza este documento.
+- *Resuelta (2026-09-16):* el costo real de `pairing_check` es despreciable (0,003 XLM); el plan B de D-02 no hace falta. El costo por sorteo lo domina la renta de almacenamiento (0,18 XLM) y NFR-3 se ajustó a 0,25 XLM.
 - *Importante:* el relayer de D-07 no está diseñado en detalle; se hace en la historia 6.3, solo si la épica 6 se aprueba.
 - *Menor:* paleta de wallets exacta del Wallets Kit en la primera versión (por defecto los 12 módulos sin configuración).
 
@@ -260,6 +263,6 @@ tinkazo/
 - [x] Árbol de proyecto completo y fronteras
 - [x] Mapa de requisitos a estructura
 
-**Estado:** LISTA PARA IMPLEMENTAR CON BRECHAS MENORES. Confianza alta en el contrato (ya probado); media en la integración de wallet hasta cerrar la historia 3.2 en testnet.
+**Estado:** LISTA PARA IMPLEMENTAR CON BRECHAS MENORES. Confianza alta en el contrato (probado en testnet con un sorteo real); media en la integración de wallet hasta cerrar la historia 3.2 en testnet.
 
-**Primera prioridad de implementación:** historia 1.4 (desplegar el contrato en testnet, correr `seal`/`draw` reales por CLI y medir costo), seguida de 2.1 (migración a Vite con paridad visual).
+**Primera prioridad de implementación:** historia 2.1 (migración a Vite + TypeScript con pnpm y paridad visual), seguida de 2.2 y 2.3 (protocolo v2 y quicknet en el navegador).

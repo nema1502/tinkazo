@@ -108,7 +108,9 @@ para poder auditar meses después sin depender de Tinkazo.
 **Entonces** obtengo los datos sin autorización, `extend` renueva el TTL de sorteo y registro y devuelve `NotFound` si el id no existe
 **Y** los TTL se extienden a 120 días cuando bajan de 60 en cada escritura.
 
-### Historia 1.4: Desplegar en testnet y medir
+### Historia 1.4: Desplegar en testnet y medir — hecho
+
+Resultado (2026-09-16): contrato `CD2SSHBU…RENH` en testnet; sorteo real `id=1` contra la ronda 32255926 con `seal` (0,099 XLM), `draw` (0,083 XLM) y `extend` (15,15 XLM por la renta del código). La primera versión desplegada cobraba la renta del código dentro de `seal`; se corrigió y redesplegó el mismo día. Detalle en [deployments.md](deployments.md).
 
 Como equipo,
 quiero el contrato desplegado en testnet con un sorteo real ejecutado por CLI y su costo medido,
@@ -123,7 +125,7 @@ para validar NFR-3 y tener una dirección estable para el frontend.
 **Y** `stellar contract invoke --send=no` reporta el costo de `draw`; si el fee de `seal + draw` supera 0,1 XLM equivalente, se abre la brecha del plan B de D-02
 **Y** la dirección se agrega a `src/stellar/deployments.ts` (o a un JSON provisional si la épica 2 no empezó).
 
-### Historia 1.5: Integración continua del contrato — hecho (pendiente de ver la primera corrida en GitHub)
+### Historia 1.5: Integración continua del contrato — hecho (primera corrida en verde)
 
 Como mantenedor,
 quiero que cada push ejecute los tests y compile el WASM,

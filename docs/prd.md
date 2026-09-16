@@ -196,7 +196,7 @@ La interfaz respeta `prefers-color-scheme` y permite forzar el tema.
 
 - **NFR-1 Determinismo verificable.** Todo lo que decide un resultado está en el Protocolo y es recomputable con herramientas públicas; ningún paso depende de un servidor de Tinkazo.
 - **NFR-2 Sin servidor.** El sitio es estático (Vercel); no hay backend propio ni base de datos. Las únicas dependencias en tiempo de ejecución son Stellar RPC, relays de drand y la wallet.
-- **NFR-3 Costo.** Un Sorteo anclado (Sello + Sorteo) debe costar menos de 0,1 XLM en mainnet `[ASSUMPTION: la verificación BLS cabe en el presupuesto de una transacción; se mide en testnet]`.
+- **NFR-3 Costo.** Un Sorteo anclado (Sello + Sorteo) debe costar menos de 0,25 XLM al Organizador. Medido en testnet el 2026-09-16: 0,18 XLM (≈ US$ 0,03), casi todo renta de almacenamiento por 120 días; la verificación BLS en sí cuesta 0,003 XLM. Mantener el Contrato vivo cuesta al proyecto unos 49 XLM al año y nunca se le cobra a un Organizador (ver [deployments.md](deployments.md)).
 - **NFR-4 Sin secretos en el repo.** Repositorio público: ninguna llave privada, token ni identidad de la CLI se commitea.
 - **NFR-5 Tiempo de sorteo.** Entre "Sellar" y el inicio del Show pasan menos de 90 segundos en condiciones normales.
 - **NFR-6 Privacidad.** En la cadena solo va el hash de la lista, nunca los nombres. La lista se publica por decisión del Organizador en el Comprobante.
@@ -245,7 +245,7 @@ La interfaz respeta `prefers-color-scheme` y permite forzar el tema.
 ## 8. Preguntas abiertas
 
 1. **Clerk.** ¿Eliminar el login de Clerk en la versión Stellar? Recomendación: sí; la wallet es la identidad del Organizador y Clerk es una dependencia externa con instancia de desarrollo. Decide el autor.
-2. **Costo de la verificación BLS.** Se asume que `pairing_check` de dos pares cabe holgado en el presupuesto de una transacción. Se mide en testnet en la historia 1.2; si no cupiera, el plan B es registrar la firma sin verificar en la cadena y verificarla en el navegador.
+2. ~~**Costo de la verificación BLS.**~~ Resuelto el 2026-09-16: `draw` con `pairing_check` cuesta 0,083 XLM en testnet y la parte de cómputo es 0,003 XLM. No hace falta el plan B.
 3. **Lista en la cadena.** ¿Ofrecer la opción para Sorteos de hasta 50 nombres? Diferido a v2.
 4. **Mutabilidad del Contrato.** Se propone inmutable (sin admin ni `upgrade`): cada versión es un nuevo contrato y los Comprobantes llevan la dirección. Confirmar.
 5. **Cuenta de despliegue en mainnet.** ¿Qué cuenta despliega y quién guarda esa llave? Debe quedar en [deployments.md](deployments.md) antes del despliegue.
@@ -254,5 +254,5 @@ La interfaz respeta `prefers-color-scheme` y permite forzar el tema.
 
 - §4.2 FR-5 — Margen de 45 s en la app frente a 30 s mínimos del Contrato.
 - §4.6 FR-23 — No convertir Modo libre a Anclaje después del hecho.
-- §Requisitos no funcionales NFR-3 — La verificación BLS cabe en una transacción y el costo total es < 0,1 XLM.
+- §Requisitos no funcionales NFR-3 — Confirmado con medición: 0,18 XLM por Sorteo en testnet; el umbral pasó de 0,1 a 0,25 XLM porque la renta de 120 días domina el costo.
 - §5 — Se elimina Clerk en la versión Stellar.
