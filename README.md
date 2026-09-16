@@ -20,31 +20,37 @@ Interfaz bilingüe ES / EN, modo claro y oscuro, modo estadio a pantalla complet
 
 ## Estado del proyecto
 
-Hoy Tinkazo es un **demo estático funcional**: un solo `index.html` autocontenido, sin build ni dependencias. El sellado y la verificación ocurren en el navegador.
+Hoy el sitio en producción es el **demo estático v1**: un solo `index.html` autocontenido, sin build. El sellado y la verificación ocurren en el navegador con la cadena *default* de drand.
 
-El siguiente paso es llevar la capa de confianza a **Stellar**:
+La versión sobre **Stellar** está en marcha:
 
-- Anclar el sello de la lista y el resultado del sorteo en un contrato Soroban, con timestamp inmutable en la red.
-- Publicar cada sorteo como un registro consultable vía Stellar RPC, para que la verificación no dependa de que Tinkazo siga en línea.
-- Wallet solo para el organizador (Freighter / Stellar Wallets Kit). Los participantes siguen entrando sin cuenta.
-- Costos de centavos por sorteo, para que la verificación siga siendo gratis para las comunidades.
+- **Contrato Soroban `tinkazo-raffle`** ([contracts/raffle](contracts/raffle)): `seal` compromete el hash de la lista y una ronda futura de drand quicknet; `draw` verifica la firma BLS de esa ronda **en la cadena** (`pairing_check` sobre BLS12-381), deriva la semilla idéntica al `randomness` de drand y selecciona ganadores de forma determinista. Inmutable, sin admin, sin custodia de fondos. 19 tests, incluida una ronda real de quicknet. WASM de 27 KB.
+- **Protocolo v2** ([docs/protocolo.md](docs/protocolo.md)): especificación normativa que cualquier tercero puede reimplementar, con vectores de prueba compartidos ([docs/vectors.json](docs/vectors.json)).
+- **Plan**: [PRD](docs/prd.md) · [Arquitectura](docs/architecture.md) · [Épicas e historias](docs/epics.md) · [Despliegues](docs/deployments.md).
 
-La idea original (concebida para el ideathon de Arkiv, agosto 2026) está en [docs/idea-original-arkiv.md](docs/idea-original-arkiv.md). El modelo de datos y las invariantes se mantienen; cambia la red que los ancla.
+Próximos pasos: desplegar en testnet y medir costos, migrar el sitio a Vite + TypeScript con pnpm, conectar wallets (Stellar Wallets Kit), página pública de verificación y mainnet.
+
+La idea original (ideathon de Arkiv, agosto 2026) está en [docs/idea-original-arkiv.md](docs/idea-original-arkiv.md). El modelo de datos se mantiene; cambia la red que lo ancla.
 
 ## Correr en local
 
-No hace falta instalar nada. Abrí `index.html` en el navegador, o servilo con cualquier servidor estático:
+**Sitio (demo v1):** no hace falta instalar nada. Abrí `index.html` en el navegador o servilo con cualquier servidor estático (`npx serve .`).
+
+**Contrato:** requiere Rust con el target `wasm32v1-none` y, para desplegar, [stellar-cli](https://developers.stellar.org/docs/tools/cli/stellar-cli).
 
 ```bash
-npx serve .
+cargo test --workspace
+cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
 ## Estructura
 
 ```
-index.html            Sitio completo: landing, juegos, sellado y verificación
-docs/                 Idea original y capturas de pantalla
+index.html            Sitio v1: landing, juegos, sellado y verificación
+contracts/raffle/     Contrato Soroban tinkazo-raffle (Rust)
+docs/                 Protocolo, PRD, arquitectura, épicas, despliegues, vectores, capturas
 .claude/skills/       Kit de skills para construir en Stellar (ideas → PRD → arquitectura → Soroban → mainnet)
+.github/workflows/    CI: tests y build del contrato
 ```
 
 Las skills en `.claude/skills/` vienen de [Stellar-Elite-Bolivia](https://github.com/nema1502/Stellar-Elite-Bolivia) y guían el desarrollo con Claude Code: contratos Soroban, dApps con `@stellar/stellar-sdk`, estándares SEP/CAP, checklist de despliegue a mainnet y preparación para Stellar Community Fund. El punto de entrada es [`.claude/skills/SKILL_ROUTER.md`](.claude/skills/SKILL_ROUTER.md).
@@ -69,6 +75,6 @@ Es código libre. Issues y pull requests son bienvenidos. Si encontrás una form
 
 **Tinkazo** is a raffle platform for communities where luck is fun to watch (llama race, roulette) and impossible to rig. The participant list is sealed with SHA-256 before the draw, randomness comes from the public [drand](https://drand.love) beacon, and anyone can recompute the winner from the sealed list and the beacon round. The game on screen is the show; the math is the guarantee.
 
-Today it is a single self-contained `index.html` with no build step. Next: anchoring the list seal and draw result on **Stellar** via a Soroban contract, so verification does not depend on Tinkazo staying online. Organizers use a wallet; participants never need one.
+The live site is still the v1 static demo. The Stellar version is underway: a Soroban contract (`contracts/raffle`) that commits the list hash to a future drand quicknet round, verifies the round's BLS signature on-chain and derives the winners deterministically. Spec in [docs/protocolo.md](docs/protocolo.md), plan in [docs/](docs/). Organizers use a wallet; participants never need one.
 
 Live demo: [tinkazo.vercel.app](https://tinkazo.vercel.app) · Licensed under MIT.

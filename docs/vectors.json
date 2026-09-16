@@ -1,0 +1,100 @@
+{
+  "protocol": "tinkazo-v2",
+  "quicknet": {
+    "chain_hash": "52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971",
+    "round": 32254977,
+    "signature": "a77a689daae687c7b16e6f9388d4ebbb7b368d09d7a6c33ad1dfd75d32e4114cfbdcf3e2cc54f4fee659abf2ac7ef9ac",
+    "randomness": "6e049991d7e23bdc566d3adfff08cd81798c644bc54dd5daa18eb0a8938b2829"
+  },
+  "list": [
+    "María Quispe",
+    "Jorge Mamani",
+    "Lucía Flores",
+    "Carlos Choque",
+    "Ana Vargas",
+    "Diego Rojas",
+    "Elena Condori",
+    "Pablo Gutiérrez",
+    "Sofía Aguilar",
+    "Rodrigo Peña",
+    "Valeria Torrez",
+    "Miguel Arce",
+    "Camila Suárez",
+    "Andrés Villca",
+    "Paola Mendoza",
+    "Franco Ibáñez",
+    "Daniela Cruz",
+    "Óscar Limachi"
+  ],
+  "list_hash": "32e2099c7a8dde7b6892523dc7d3e34ac06a972fd67f142186c58dced51a21ef",
+  "count": 18,
+  "cases": [
+    {
+      "k": 1,
+      "winners": [
+        4
+      ]
+    },
+    {
+      "k": 3,
+      "winners": [
+        4,
+        11,
+        3
+      ]
+    },
+    {
+      "k": 5,
+      "winners": [
+        4,
+        11,
+        3,
+        17,
+        0
+      ]
+    },
+    {
+      "k": 18,
+      "winners": [
+        4,
+        11,
+        3,
+        17,
+        0,
+        12,
+        15,
+        5,
+        7,
+        8,
+        14,
+        1,
+        9,
+        16,
+        2,
+        13,
+        6,
+        10
+      ]
+    }
+  ],
+  "extra": [
+    {
+      "count": 2,
+      "k": 1,
+      "winners": [
+        0
+      ]
+    },
+    {
+      "count": 1000,
+      "k": 5,
+      "winners": [
+        312,
+        247,
+        521,
+        649,
+        166
+      ]
+    }
+  ]
+}

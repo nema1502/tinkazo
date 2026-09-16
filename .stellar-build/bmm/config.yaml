@@ -1,0 +1,9 @@
+# Configuración de las skills (BMAD / stellar.new) para este proyecto.
+project_name: Tinkazo
+user_name: Nicolás
+communication_language: Español
+document_output_language: Español
+user_skill_level: intermediate
+planning_artifacts: docs
+implementation_artifacts: docs/stories
+project_knowledge: docs
