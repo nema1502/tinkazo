@@ -1,12 +1,10 @@
 import { $, esc } from "../dom";
 import { SAMPLE, app, avatar } from "../state";
+import { canonicalList } from "../protocol/canonical";
 
-/** Una línea por participante; solo la primera columna de un CSV. */
+/** Lista canónica a partir del textarea (protocolo §1). */
 export function parseNames(): string[] {
-  return $<HTMLTextAreaElement>("ta")
-    .value.split(/\r?\n/)
-    .map((l) => (l.split(",")[0] ?? "").trim())
-    .filter((l) => l.length > 1);
+  return canonicalList($<HTMLTextAreaElement>("ta").value);
 }
 
 export function renderNames(): void {

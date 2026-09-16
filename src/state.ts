@@ -1,13 +1,24 @@
-import type { Beacon } from "./protocol/legacy-v1";
-
 export type Game = "race" | "wheel";
+
+/** Ronda de quicknet ya publicada y verificada. */
+export interface Beacon {
+  round: number;
+  /** `sha256(signature)`, en hex. Igual al `randomness` de drand. */
+  randomness: string;
+  /** Firma G1 comprimida (48 bytes) en hex. */
+  signature: string;
+}
 
 export interface Frozen {
   names: string[];
-  digest: string;
+  /** `list_hash` en hex (protocolo §1). */
+  listHash: string;
+  /** Instante del sello (Unix, segundos). */
   ts: number;
   at: string;
   prize: string;
+  /** Ronda objetivo de quicknet (protocolo §3). */
+  round: number;
 }
 
 export interface Drawn {
@@ -32,6 +43,13 @@ export const params = new URLSearchParams(location.search);
 
 /** `?instant=1`: salta las animaciones (capturas y pruebas). */
 export const instantMode = params.get("instant") === "1";
+
+/**
+ * Segundos entre el sello y la ronda objetivo. 45 s por defecto: margen sobre
+ * los 30 s que exige el contrato. `?lead=N` (mínimo 3) acorta la espera en
+ * demos del modo libre.
+ */
+export const LEAD_SECONDS = Math.max(3, Number(params.get("lead")) || 45);
 
 export const SAMPLE = [
   "María Quispe", "Jorge Mamani", "Lucía Flores", "Carlos Choque", "Ana Vargas", "Diego Rojas",

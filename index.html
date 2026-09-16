@@ -70,12 +70,12 @@
     <div class="head"><h2><span data-i="p2">Lista congelada</span></h2><span class="kicker" id="frozen-ts"></span></div>
     <div class="kpis">
       <div><b id="k-n">0</b><span data-i="kEntries">entries</span></div>
-      <div><b id="k-digest" style="font-size:16px" class="mono">—</b><span data-i="kDigest">digest sha-256</span></div>
-      <div><b id="k-status">frozen</b><span data-i="kStatus">estado del raffle</span></div>
+      <div><b id="k-digest" style="font-size:16px" class="mono">—</b><span data-i="kDigest">list_hash sha-256</span></div>
+      <div><b id="k-status">frozen</b><span data-i="kStatus">estado del sorteo</span></div>
     </div>
     <div class="body">
       <p class="entity" id="entities"></p>
-      <p class="note" data-i="frozenNote">Desde este momento nadie puede agregar ni quitar participantes: cualquier entrada posterior al freeze sería estructuralmente visible.</p>
+      <p class="note" data-i="frozenNote">La lista quedó sellada antes de que exista la semilla: la ronda objetivo del faro nace recién en unos segundos. Nadie puede agregar ni quitar participantes sin cambiar el hash.</p>
       <div class="row">
         <span class="kicker" data-i="gameLabel">Juego</span>
         <div class="gamepick">
@@ -107,7 +107,7 @@
           <div>
             <p class="kicker" data-i="verifyTitle">Prueba de imparcialidad</p>
             <p class="entity" id="proof"></p>
-            <p class="ok" data-i="verifyHow">Cómo verificar: 1) abre la ronda del faro público y confirma la aleatoriedad pública · 2) recomputa sha256(randomness | digest | premio) · 3) el módulo contra el total de entries da el índice ganador.</p>
+            <p class="ok" data-i="verifyHow">Cómo verificar: 1) abre la ronda de quicknet y comprueba su firma con la clave pública del faro · 2) randomness = sha256(firma) · 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, saltando repetidos. Protocolo completo en docs/protocolo.md.</p>
             <div class="row">
               <a id="drand-link" target="_blank" rel="noopener" class="mono" style="font-size:12px"></a>
               <button class="ghost" id="btn-reverify" data-i="reverify">Recomputar aquí mismo</button>
@@ -143,7 +143,7 @@
   </section>
 </main>
 
-<footer><div class="bar"><span data-i="footL">Tinkazo · Código libre</span><span data-i="footR">Hecho en Bolivia</span></div></footer>
+<footer><div class="bar"><span data-i="footL">Tinkazo</span><span data-i="footR">Hecho en Bolivia</span></div></footer>
 
 <!-- Estadio fullscreen -->
 <div class="stadium" id="stadium">

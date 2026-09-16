@@ -1,30 +1,42 @@
 import { $, esc } from "../dom";
 import { T, getLang, t } from "../i18n";
-import { LCOLORS, WHEEL_MAX, app, avatar } from "../state";
-import { type Beacon, getLatestBeacon, roundUrl, selectV1 } from "../protocol/legacy-v1";
+import { LCOLORS, WHEEL_MAX, app, avatar, type Beacon } from "../state";
+import { bytesToHex, fetchRound, hexToBytes, randomnessOf, roundUrl, verifyRound } from "../protocol/drand";
+import { select } from "../protocol/select";
 import { stadiumRace } from "../games/race";
 import { wheelSpin } from "../games/wheel";
+import { secondsToRound } from "./freeze";
+
+/** Obtiene la ronda objetivo, verifica su firma y selecciona (protocolo §2, §5). */
+async function resolveBeacon(round: number): Promise<Beacon> {
+  const { signature } = await fetchRound(round);
+  if (!verifyRound(round, signature)) throw new Error("bad-signature");
+  return { round, randomness: bytesToHex(randomnessOf(signature)), signature };
+}
 
 export async function draw(): Promise<void> {
-  if (!app.frozen || app.drawn) return;
+  if (!app.frozen || app.drawn || secondsToRound() > 0) return;
   const btn = $<HTMLButtonElement>("btn-draw");
   btn.disabled = true;
+  btn.textContent = t("fetching");
   let beacon: Beacon;
   try {
-    beacon = await getLatestBeacon();
-  } catch {
+    beacon = await resolveBeacon(app.frozen.round);
+  } catch (e) {
     btn.disabled = false;
-    alert(t("drandDown"));
+    btn.textContent = t("draw");
+    alert(t(e instanceof Error && e.message === "bad-signature" ? "badSig" : "drandDown"));
     return;
   }
-  const { names, digest } = app.frozen;
+  btn.textContent = t("draw");
+  const { names, listHash } = app.frozen;
   const nWinners = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10), names.length);
-  const winners = await selectV1(beacon.randomness, digest, names.length, nWinners);
+  const winners = select(hexToBytes(beacon.randomness), hexToBytes(listHash), names.length, nWinners);
   app.drawn = { beacon, winners };
   $("sec-draw").style.display = "block";
   $("seed-label").textContent = `${t("seed")} ${beacon.round}`;
   const first = winners[0] ?? 0;
-  const finish = () => reveal(names, winners, beacon, digest);
+  const finish = () => reveal(names, winners, beacon, listHash);
   if (app.game === "wheel" && names.length <= WHEEL_MAX) {
     $("sec-draw").scrollIntoView({ behavior: "smooth", block: "start" });
     wheelSpin(names, first, finish);
@@ -33,7 +45,7 @@ export async function draw(): Promise<void> {
   }
 }
 
-export function reveal(names: string[], winners: number[], beacon: Beacon, digest: string): void {
+export function reveal(names: string[], winners: number[], beacon: Beacon, listHash: string): void {
   $("winner-box").style.display = "block";
   const prize = app.frozen?.prize ?? "";
   $("winner-cards").innerHTML = winners
@@ -54,7 +66,7 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, diges
     })
     .join(" ");
   $("proof").textContent =
-    `Draw · drand round=${beacon.round} · randomness=${beacon.randomness.slice(0, 24)}… · entry_count=${names.length} · winners=[${winners.join(",")}] · digest=${digest.slice(0, 24)}…`;
+    `Draw · quicknet round=${beacon.round} · signature verified ✓ · randomness=${beacon.randomness.slice(0, 24)}… · list_hash=${listHash.slice(0, 24)}… · count=${names.length} · winners=[${winners.join(",")}]`;
   const url = roundUrl(beacon.round);
   const dl = $<HTMLAnchorElement>("drand-link");
   dl.href = url;
@@ -65,12 +77,15 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, diges
   confetti();
 }
 
-export async function reverify(): Promise<void> {
+/** Rehace la verificación de la firma y la selección desde cero (protocolo §7). */
+export function reverify(): void {
   if (!app.frozen || !app.drawn) return;
-  const { names, digest } = app.frozen;
+  const { names, listHash } = app.frozen;
   const { beacon, winners } = app.drawn;
-  const again = await selectV1(beacon.randomness, digest, names.length, winners.length);
-  const ok = JSON.stringify(again) === JSON.stringify(winners);
+  const sigOk = verifyRound(beacon.round, beacon.signature);
+  const seedOk = bytesToHex(randomnessOf(beacon.signature)) === beacon.randomness;
+  const again = select(hexToBytes(beacon.randomness), hexToBytes(listHash), names.length, winners.length);
+  const ok = sigOk && seedOk && JSON.stringify(again) === JSON.stringify(winners);
   const out = $("reverify-out");
   out.style.display = "block";
   out.textContent = ok ? t("reverifyOk") : "✗";
@@ -78,15 +93,14 @@ export async function reverify(): Promise<void> {
 
 export async function copySummary(btn: HTMLButtonElement): Promise<void> {
   if (!app.frozen || !app.drawn) return;
-  const { names, digest } = app.frozen;
+  const { names, listHash } = app.frozen;
   const { beacon, winners } = app.drawn;
-  const url = roundUrl(beacon.round);
   const text = T[getLang()].summary(
     winners.map((i) => names[i] ?? "").join(", "),
     names.length,
-    digest.slice(0, 24) + "…",
+    listHash,
     beacon.round,
-    url,
+    roundUrl(beacon.round),
   );
   try {
     await navigator.clipboard.writeText(text);

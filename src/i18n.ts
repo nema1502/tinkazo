@@ -5,6 +5,7 @@ export interface Dict {
   cLead: (n: string) => string;
   cWin: (n: string) => string;
   summary: (w: string, n: number, d: string, r: number, u: string) => string;
+  drawIn: (mmss: string) => string;
 }
 
 export const T: Record<Lang, Dict> = {
@@ -22,18 +23,20 @@ export const T: Record<Lang, Dict> = {
     gameLabel: "Juego", gameRace: "Carrera de llamas", gameWheel: "Ruleta",
     wheelCap: "La ruleta se ve bien hasta 24 participantes; con más, la carrera es tu juego.",
     prizeLabel: "¿Qué sorteas? (opcional)", prizePh: "Ej: Licencia JetBrains, libro, entrada…",
-    kEntries: "entries", kDigest: "digest sha-256", kStatus: "estado del raffle",
-    frozenNote: "Desde este momento nadie puede agregar ni quitar participantes: cualquier entrada posterior al freeze sería estructuralmente visible.",
+    kEntries: "entries", kDigest: "list_hash sha-256", kStatus: "estado del sorteo",
+    frozenNote: "La lista quedó sellada antes de que exista la semilla: la ronda objetivo del faro nace recién en unos segundos. Nadie puede agregar ni quitar participantes sin cambiar el hash.",
     winnerLabel: "Resultado", verifyTitle: "Prueba de imparcialidad",
-    verifyHow: "Cómo verificar: 1) abre la ronda del faro público y confirma la aleatoriedad pública · 2) recomputa sha256(randomness | digest | premio) · 3) el módulo contra el total de entries da el índice ganador.",
+    verifyHow: "Cómo verificar: 1) abre la ronda de quicknet y comprueba su firma con la clave pública del faro · 2) randomness = sha256(firma) · 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, saltando repetidos. Protocolo completo en docs/protocolo.md.",
     reverify: "Recomputar aquí mismo", reverifyOk: "Verificado: el recómputo reproduce exactamente el resultado.",
     copySummary: "Copiar resumen", copied: "¡Copiado!",
     qrCaption: "Escanea y verifica la ronda desde tu celular",
     nextTitle: "Lo que viene: anclaje en Stellar",
     nextBody: "En la próxima versión, el sello de la lista y una ronda futura del faro quedan registrados en un contrato en Stellar que verifica la firma del faro por sí mismo y guarda el resultado. Cualquiera podrá leerlo y recomputarlo aunque Tinkazo no esté en línea. Este demo hace el sellado en tu navegador.",
-    footL: "Tinkazo · Código libre", footR: "Hecho en Bolivia",
+    footL: "Tinkazo", footR: "Hecho en Bolivia",
     src: "fuente: pegado / csv", frozenAt: "congelada:", seed: "semilla pública · ronda", drandLink: "ver la ronda pública ↗",
     placeholder: "Un participante por línea…", winsPrize: "Gana:", skip: "Saltar",
+    fetching: "Buscando la ronda…", badSig: "La firma de la ronda no verifica contra la clave pública de quicknet. Reintenta.",
+    drawIn: (mmss) => `Sortear en ${mmss}`,
     prTitle: "Precios", prNote: "La verificación nunca se cobra. Se cobra el show.",
     pr1t: "Gratis", pr1p: "$0 · para siempre", pr1b: "Sorteos verificables ilimitados, ruleta y carrera, QR de verificación y prueba recomputable.",
     pr2t: "Pro", pr2p: "US$ 5 / sorteo", pr2b: "Catálogo completo de juegos y skins, tu logo en el estadio, participantes ilimitados y soporte.",
@@ -41,7 +44,7 @@ export const T: Record<Lang, Dict> = {
     cReady: "¡Llamas a sus puestos!", cStart: "¡ARRANCA LA CARRERA!",
     cLead: (n) => `¡${n} toma la punta!`, cLast: "¡ÚLTIMA RECTA!", cWin: (n) => `¡GANA ${n}!`,
     drandDown: "No pude alcanzar drand. Revisa tu conexión.",
-    summary: (w, n, d, r, u) => `Tinkazo · sorteo verificable\nGanador(es): ${w}\nEntries: ${n} · digest: ${d}\nRonda drand: ${r} → ${u}\nRecomputa: sha256(randomness|digest|premio) mod entries`,
+    summary: (w, n, d, r, u) => `Tinkazo · sorteo verificable (protocolo v2)\nGanador(es): ${w}\nEntries: ${n}\nlist_hash: ${d}\nRonda quicknet: ${r} → ${u}\nRecomputa: docs/protocolo.md §5`,
   },
   en: {
     badge: "Open source · MIT",
@@ -57,18 +60,20 @@ export const T: Record<Lang, Dict> = {
     gameLabel: "Game", gameRace: "Llama race", gameWheel: "Roulette",
     wheelCap: "The wheel looks great up to 24 participants; beyond that, the race is your game.",
     prizeLabel: "What are you raffling? (optional)", prizePh: "E.g. JetBrains license, book, ticket…",
-    kEntries: "entries", kDigest: "sha-256 digest", kStatus: "raffle status",
-    frozenNote: "From this moment nobody can add or remove participants: any entry after the freeze would be structurally visible.",
+    kEntries: "entries", kDigest: "sha-256 list_hash", kStatus: "raffle status",
+    frozenNote: "The list was sealed before the seed exists: the beacon's target round is only born in a few seconds. Nobody can add or remove participants without changing the hash.",
     winnerLabel: "Result", verifyTitle: "Proof of fairness",
-    verifyHow: "How to verify: 1) open the public beacon round and confirm the public randomness · 2) recompute sha256(randomness | digest | prize) · 3) modulo the entry count gives the winning index.",
+    verifyHow: "How to verify: 1) open the quicknet round and check its signature against the beacon's public key · 2) randomness = sha256(signature) · 3) idx = first 8 bytes of sha256(randomness ‖ list_hash ‖ counter) mod entries, skipping repeats. Full protocol in docs/protocolo.md.",
     reverify: "Recompute right here", reverifyOk: "Verified: the recomputation reproduces the exact result.",
     copySummary: "Copy summary", copied: "Copied!",
     qrCaption: "Scan and verify the round from your phone",
     nextTitle: "Next: anchored on Stellar",
     nextBody: "In the next version, the list seal and a future beacon round are recorded in a Stellar contract that verifies the beacon signature itself and stores the result. Anyone will be able to read and recompute it even if Tinkazo is offline. This demo seals the list in your browser.",
-    footL: "Tinkazo · Open source", footR: "Built in Bolivia",
+    footL: "Tinkazo", footR: "Built in Bolivia",
     src: "source: paste / csv", frozenAt: "frozen:", seed: "public seed · round", drandLink: "view the public round ↗",
     placeholder: "One participant per line…", winsPrize: "Wins:", skip: "Skip",
+    fetching: "Fetching the round…", badSig: "The round signature does not verify against quicknet's public key. Try again.",
+    drawIn: (mmss) => `Draw in ${mmss}`,
     prTitle: "Pricing", prNote: "Verification is never charged. We charge for the show.",
     pr1t: "Free", pr1p: "$0 · forever", pr1b: "Unlimited verifiable raffles, roulette and race, verification QR and recomputable proof.",
     pr2t: "Pro", pr2p: "US$ 5 / raffle", pr2b: "Full game and skin catalog, your logo in the stadium, unlimited participants and support.",
@@ -76,7 +81,7 @@ export const T: Record<Lang, Dict> = {
     cReady: "Llamas, on your marks!", cStart: "AND THEY'RE OFF!",
     cLead: (n) => `${n} takes the lead!`, cLast: "FINAL STRETCH!", cWin: (n) => `${n} WINS!`,
     drandDown: "Couldn't reach drand. Check your connection.",
-    summary: (w, n, d, r, u) => `Tinkazo · verifiable raffle\nWinner(s): ${w}\nEntries: ${n} · digest: ${d}\ndrand round: ${r} → ${u}\nRecompute: sha256(randomness|digest|prize) mod entries`,
+    summary: (w, n, d, r, u) => `Tinkazo · verifiable raffle (protocol v2)\nWinner(s): ${w}\nEntries: ${n}\nlist_hash: ${d}\nquicknet round: ${r} → ${u}\nRecompute: docs/protocolo.md §5`,
   },
 };
 

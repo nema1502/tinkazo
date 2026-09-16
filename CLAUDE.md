@@ -32,12 +32,19 @@ cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 stellar contract build            # equivalente, con optimización
 
-# Frontend (pnpm 11, Vite 8, TypeScript 7) — a partir de la historia 2.1
+# Frontend (pnpm 11, Vite 8, TypeScript 7)
 pnpm install
-pnpm dev
-pnpm test
-pnpm build
+pnpm dev            # http://localhost:5173
+pnpm typecheck
+pnpm test           # Vitest: protocolo v2 contra docs/vectors.json
+pnpm build          # tsc --noEmit + vite build → dist/
+
+# Smoke test del sitio construido con Chrome headless (DevTools, sin dependencias)
+pnpm preview &      # sirve dist/ en :4173
+node scripts/smoke.mjs "http://localhost:4173/?demo=wheel&instant=1&lead=3"
 ```
+
+Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=race|wheel` (carga el ejemplo, sella y sortea), `?instant=1` (sin animaciones), `?lead=N` (segundos hasta la ronda objetivo, mínimo 3; solo modo libre), `?pose=1` (escena fija del estadio).
 
 En la máquina del autor (Windows sin MSVC) el toolchain es `stable-x86_64-pc-windows-gnu`; `cargo` está en `~/.cargo/bin` y `stellar.exe` en `C:\Program Files (x86)\Stellar CLI\`.
 
@@ -48,8 +55,9 @@ En la máquina del autor (Windows sin MSVC) el toolchain es `stable-x86_64-pc-wi
 ## Estructura
 
 ```
-index.html          Sitio v1 (entrada de Vite tras la historia 2.1)
-src/                Frontend TypeScript (protocol/, stellar/, games/, ui/)
+index.html          Entrada de Vite (markup del sitio)
+src/                Frontend TypeScript: main, i18n, state, protocol/ (canonical, select, drand), ui/, games/
+scripts/            deploy.sh (contrato) y smoke.mjs (sitio)
 contracts/raffle/   Contrato Soroban tinkazo-raffle (lib, drand, select, test)
 docs/               PRD, arquitectura, protocolo, épicas, despliegues, vectores, capturas
 .claude/skills/     Skills para construir en Stellar

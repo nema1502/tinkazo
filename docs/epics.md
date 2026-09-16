@@ -170,7 +170,9 @@ para que ambos lleguen al mismo ganador.
 **Entonces** `listHash(SAMPLE)` es `32e2099c…21ef` y `select` reproduce todos los casos del archivo
 **Y** la normalización sigue el protocolo §1 (recorte, longitud ≥ 2, duplicados exactos fuera, orden de entrada).
 
-### Historia 2.3: Quicknet en el navegador y modo libre verificable
+### Historia 2.3: Quicknet en el navegador y modo libre verificable — hecho
+
+Resultado (2026-09-16): el sello elige `targetRound(now + 45 s)`, el botón de sortear muestra la cuenta regresiva, `draw` obtiene la firma rotando relays, la verifica con `@noble/curves` y selecciona con el protocolo v2; el resumen y la prueba muestran ronda, firma verificada, `list_hash` e índices. `?lead=N` acorta la espera en demos. Verificado con `scripts/smoke.mjs` (Chrome headless vía DevTools) contra rondas reales. El texto "sin anclaje en Stellar" y el comprobante llegan con la 2.4.
 
 Como organizadora sin wallet,
 quiero sortear con una ronda futura de quicknet cuya firma el navegador verifica,

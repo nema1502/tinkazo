@@ -4,7 +4,7 @@ import { onLangChange, setLang, t } from "./i18n";
 import { SAMPLE, app, params } from "./state";
 import { soundLabel, toggleSound } from "./sound";
 import { bindParticipants, loadSample, renderNames } from "./ui/participants";
-import { freeze, setGame } from "./ui/freeze";
+import { freeze, secondsToRound, setGame } from "./ui/freeze";
 import { copySummary, draw, reverify } from "./ui/draw";
 import { skipRace, stadiumRace } from "./games/race";
 
@@ -30,7 +30,7 @@ $("btn-freeze").addEventListener("click", () => void freeze());
 $("g-race").addEventListener("click", () => setGame("race"));
 $("g-wheel").addEventListener("click", () => setGame("wheel"));
 $("btn-draw").addEventListener("click", () => void draw());
-$("btn-reverify").addEventListener("click", () => void reverify());
+$("btn-reverify").addEventListener("click", reverify);
 $<HTMLButtonElement>("btn-copy").addEventListener("click", (e) => void copySummary(e.currentTarget as HTMLButtonElement));
 $("st-sound").addEventListener("click", toggleSound);
 $("st-skip").addEventListener("click", skipRace);
@@ -41,13 +41,15 @@ async function autoDemo(mode: string): Promise<void> {
   loadSample();
   await freeze();
   setGame(mode === "wheel" ? "wheel" : "race");
+  // La ronda objetivo todavía no existe: esperar la cuenta regresiva.
+  while (secondsToRound() > 0) await new Promise((r) => setTimeout(r, 250));
   await draw();
 }
 
 function poseScene(): void {
   // Escena estática del estadio para capturas: sin red, sin animación.
-  const fakeBeacon = { round: 999999, randomness: "deadbeefcafe0123456789abcdef" };
-  app.frozen = { names: SAMPLE, digest: "posemode", ts: 0, at: "-", prize: "" };
+  const fakeBeacon = { round: 32254977, randomness: "6e049991d7e23bdc566d3adfff08cd81798c644bc54dd5daa18eb0a8938b2829", signature: "a77a689daae687c7b16e6f9388d4ebbb7b368d09d7a6c33ad1dfd75d32e4114cfbdcf3e2cc54f4fee659abf2ac7ef9ac" };
+  app.frozen = { names: SAMPLE, listHash: "32e2099c7a8dde7b6892523dc7d3e34ac06a972fd67f142186c58dced51a21ef", ts: 0, at: "-", prize: "", round: 32254977 };
   app.drawn = { beacon: fakeBeacon, winners: [3] };
   stadiumRace(SAMPLE, 3, fakeBeacon, () => {});
 }

@@ -1,8 +1,7 @@
 import { $ } from "../dom";
 import { T, getLang, t } from "../i18n";
-import { LCOLORS, avatar, instantMode } from "../state";
+import { LCOLORS, avatar, instantMode, type Beacon } from "../state";
 import { beep, fanfare } from "../sound";
-import type { Beacon } from "../protocol/legacy-v1";
 
 /* Modo estadio: carrera de llamas a pantalla completa, sembrada con la semilla. */
 
