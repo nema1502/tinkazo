@@ -1,0 +1,11 @@
+{
+  "$comment": "Direcciones vigentes del contrato tinkazo-raffle por red. Se actualiza junto con docs/deployments.md en el mismo commit.",
+  "testnet": {
+    "contractId": "CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH",
+    "deployedAt": "2026-09-16",
+    "wasmSha256": "c9f3227ffb92ef04ad62911c6b4788f22999242ddaf80f0e638ba4dd97e60d1e",
+    "rpcUrl": "https://soroban-testnet.stellar.org",
+    "networkPassphrase": "Test SDF Network ; September 2015"
+  },
+  "mainnet": null
+}

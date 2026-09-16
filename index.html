@@ -218,7 +218,7 @@
 <main>
   <section class="hero">
     <div class="hero-copy">
-      <span class="sticker" data-i="badge">Ideathon Arkiv 2026 — Open Lane</span>
+      <span class="sticker" data-i="badge">Código libre · MIT</span>
       <h1 data-i-html="h1">Sorteos que <span class="hl">no se pueden arreglar</span>.</h1>
       <p class="lead" data-i="lead">Importa a tus asistentes, congela la lista y deja que la suerte venga de un faro público de aleatoriedad. Carrera de llamas en modo estadio o ruleta: el show es tuyo, la imparcialidad es matemática.</p>
       <p class="kicker" data-i="note">Demo funcional — la suerte es pública y cualquiera puede verificarla desde su celular</p>
@@ -228,7 +228,7 @@
 
   <div class="steps">
     <article><span class="num">01</span><h3 data-i="s1t">Importa participantes</h3><p data-i="s1b">Pega la lista, sube un CSV o tráelos de Luma/Meetup. Nadie necesita wallet ni cuenta.</p></article>
-    <article><span class="num">02</span><h3 data-i="s2t">Congela la lista</h3><p data-i="s2b">La lista queda sellada con un digest SHA-256 y timestamp — así se escribiría como entidades en Arkiv.</p></article>
+    <article><span class="num">02</span><h3 data-i="s2t">Congela la lista</h3><p data-i="s2b">La lista queda sellada con un digest SHA-256 y timestamp: después nadie puede agregar ni quitar nombres sin que se note.</p></article>
     <article><span class="num">03</span><h3 data-i="s3t">Elige tu juego y sortea</h3><p data-i="s3b">Carrera en pantalla completa o ruleta. El ganador se deriva de aleatoriedad pública; el juego solo lo cuenta bonito.</p></article>
   </div>
 
@@ -328,12 +328,12 @@
   </section>
 
   <section style="padding: 14px 0 30px">
-    <p class="kicker" data-i="arkivTitle">El modelo Arkiv detrás</p>
-    <p style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 8px" data-i="arkivBody">En producción, cada participante es una entidad Entry (raffle_id, entered_ts, hash) escrita por la wallet de la comunidad; el freeze fija freeze_ts; el Draw guarda la ronda del faro público, el conteo y el digest de la lista ordenada — verificable por cualquiera, sin cuentas, incluso después de que las entries expiren. Este demo simula esas escrituras (regla del ideathon: nada se despliega).</p>
+    <p class="kicker" data-i="nextTitle">Lo que viene: anclaje en Stellar</p>
+    <p style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 8px" data-i="nextBody">En la próxima versión, el sello de la lista y una ronda futura del faro quedan registrados en un contrato en Stellar que verifica la firma del faro por sí mismo y guarda el resultado. Cualquiera podrá leerlo y recomputarlo aunque Tinkazo no esté en línea. Este demo hace el sellado en tu navegador.</p>
   </section>
 </main>
 
-<footer><div class="bar"><span data-i="footL">Tinkazo · Ideathon Arkiv 2026 · Open Lane</span><span data-i="footR">Hecho en Bolivia</span></div></footer>
+<footer><div class="bar"><span data-i="footL">Tinkazo · Código libre</span><span data-i="footR">Hecho en Bolivia</span></div></footer>
 
 <!-- Estadio fullscreen -->
 <div class="stadium" id="stadium">
@@ -368,12 +368,12 @@
 <script>
 const T = {
   es: {
-    badge: "Ideathon Arkiv 2026 — Open Lane",
+    badge: "Código libre · MIT",
     h1: 'Sorteos que <span class="hl">no se pueden arreglar</span>.',
     lead: "Importa a tus asistentes, congela la lista y deja que la suerte venga de un faro público de aleatoriedad. Carrera de llamas en modo estadio o ruleta: el show es tuyo, la imparcialidad es matemática.",
     note: "Demo funcional — la suerte es pública y cualquiera puede verificarla desde su celular",
     s1t: "Importa participantes", s1b: "Pega la lista, sube un CSV o tráelos de Luma/Meetup. Nadie necesita wallet ni cuenta.",
-    s2t: "Congela la lista", s2b: "La lista queda sellada con un digest SHA-256 y timestamp — así se escribiría como entidades en Arkiv.",
+    s2t: "Congela la lista", s2b: "La lista queda sellada con un digest SHA-256 y timestamp: después nadie puede agregar ni quitar nombres sin que se note.",
     s3t: "Elige tu juego y sortea", s3b: "Carrera en pantalla completa o ruleta. El ganador se deriva de aleatoriedad pública; el juego solo lo cuenta bonito.",
     p1: "Participantes", p2: "Lista congelada", p3: "El sorteo",
     srcPaste: "Pegar lista", srcCsv: "Subir CSV", srcLuma: "Luma · pronto", srcMeetup: "Meetup · pronto",
@@ -388,9 +388,9 @@ const T = {
     reverify: "Recomputar aquí mismo", reverifyOk: "Verificado: el recómputo reproduce exactamente el resultado.",
     copySummary: "Copiar resumen", copied: "¡Copiado!",
     qrCaption: "Escanea y verifica la ronda desde tu celular",
-    arkivTitle: "El modelo Arkiv detrás",
-    arkivBody: "En producción, cada participante es una entidad Entry (raffle_id, entered_ts, hash) escrita por la wallet de la comunidad; el freeze fija freeze_ts; el Draw guarda la ronda del faro público, el conteo y el digest de la lista ordenada — verificable por cualquiera, sin cuentas, incluso después de que las entries expiren. Este demo simula esas escrituras (regla del ideathon: nada se despliega).",
-    footL: "Tinkazo · Ideathon Arkiv 2026 · Open Lane", footR: "Hecho en Bolivia",
+    nextTitle: "Lo que viene: anclaje en Stellar",
+    nextBody: "En la próxima versión, el sello de la lista y una ronda futura del faro quedan registrados en un contrato en Stellar que verifica la firma del faro por sí mismo y guarda el resultado. Cualquiera podrá leerlo y recomputarlo aunque Tinkazo no esté en línea. Este demo hace el sellado en tu navegador.",
+    footL: "Tinkazo · Código libre", footR: "Hecho en Bolivia",
     src: "fuente: pegado / csv", frozenAt: "congelada:", seed: "semilla pública · ronda", drandLink: "ver la ronda pública ↗",
     placeholder: "Un participante por línea…", winsPrize: "Gana:", skip: "Saltar",
     signin: "Entrar", signup: "Crear cuenta",
@@ -404,12 +404,12 @@ const T = {
     summary: (w, n, d, r, u) => `Tinkazo · sorteo verificable\nGanador(es): ${w}\nEntries: ${n} · digest: ${d}\nRonda drand: ${r} → ${u}\nRecomputa: sha256(randomness|digest|premio) mod entries`,
   },
   en: {
-    badge: "Arkiv Ideathon 2026 — Open Lane",
+    badge: "Open source · MIT",
     h1: 'Raffles that <span class="hl">cannot be rigged</span>.',
     lead: "Import your attendees, freeze the list and let luck come from a public randomness beacon. Stadium-mode llama race or roulette: the show is yours, fairness is math.",
     note: "Working demo — luck is public and anyone can verify it from their phone",
     s1t: "Import participants", s1b: "Paste the list, upload a CSV or bring them from Luma/Meetup. Nobody needs a wallet or an account.",
-    s2t: "Freeze the list", s2b: "The list is sealed with a SHA-256 digest and timestamp — exactly how it would be written as Arkiv entities.",
+    s2t: "Freeze the list", s2b: "The list is sealed with a SHA-256 digest and timestamp: nobody can add or remove names afterwards without it showing.",
     s3t: "Pick your game and draw", s3b: "Fullscreen race or roulette. The winner derives from public randomness; the game just tells it beautifully.",
     p1: "Participants", p2: "Frozen list", p3: "The draw",
     srcPaste: "Paste list", srcCsv: "Upload CSV", srcLuma: "Luma · soon", srcMeetup: "Meetup · soon",
@@ -424,9 +424,9 @@ const T = {
     reverify: "Recompute right here", reverifyOk: "Verified: the recomputation reproduces the exact result.",
     copySummary: "Copy summary", copied: "Copied!",
     qrCaption: "Scan and verify the round from your phone",
-    arkivTitle: "The Arkiv model behind it",
-    arkivBody: "In production, every participant is an Entry entity (raffle_id, entered_ts, hash) written by the community wallet; the freeze pins freeze_ts; the Draw stores the public beacon round, the entry count and the digest of the ordered list — verifiable by anyone, no accounts, even after entries expire. This demo simulates those writes (ideathon rule: nothing is deployed).",
-    footL: "Tinkazo · Arkiv Ideathon 2026 · Open Lane", footR: "Built in Bolivia",
+    nextTitle: "Next: anchored on Stellar",
+    nextBody: "In the next version, the list seal and a future beacon round are recorded in a Stellar contract that verifies the beacon signature itself and stores the result. Anyone will be able to read and recompute it even if Tinkazo is offline. This demo seals the list in your browser.",
+    footL: "Tinkazo · Open source", footR: "Built in Bolivia",
     src: "source: paste / csv", frozenAt: "frozen:", seed: "public seed · round", drandLink: "view the public round ↗",
     placeholder: "One participant per line…", winsPrize: "Wins:", skip: "Skip",
     signin: "Sign in", signup: "Create account",

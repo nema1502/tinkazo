@@ -13,6 +13,10 @@
 //!
 //! El contrato no custodia fondos, no tiene administrador y no es actualizable:
 //! cada versión es un despliegue nuevo y los comprobantes llevan la dirección.
+//!
+//! Renta: cada sorteo paga la renta de sus dos entradas (`Raffle`, `Draw`) por
+//! 120 días. La renta de la instancia y del código del contrato se renueva con
+//! `extend`, nunca dentro de `seal` o `draw`.
 
 mod drand;
 mod select;
@@ -163,9 +167,6 @@ impl TinkazoRaffle {
             return Err(Error::RoundTooFar);
         }
 
-        env.storage()
-            .instance()
-            .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
         let id: u64 = env
             .storage()
             .instance()
@@ -247,9 +248,6 @@ impl TinkazoRaffle {
         };
 
         raffle.status = Status::Drawn;
-        env.storage()
-            .instance()
-            .extend_ttl(TTL_THRESHOLD, TTL_EXTEND_TO);
         env.storage().persistent().set(&key, &raffle);
         env.storage()
             .persistent()
@@ -287,7 +285,13 @@ impl TinkazoRaffle {
             .unwrap_or(1u64)
     }
 
-    /// Renueva el TTL de un sorteo y su registro. Cualquiera puede llamarlo.
+    /// Renueva el TTL de un sorteo, de su registro y de la instancia del
+    /// contrato (código incluido). Cualquiera puede llamarlo.
+    ///
+    /// `seal` y `draw` solo extienden las entradas del propio sorteo: la renta
+    /// del código del contrato (la partida cara) se paga aquí, de forma
+    /// explícita, y no por sorpresa al organizador que llega justo cuando el
+    /// TTL cae bajo el umbral.
     pub fn extend(env: Env, raffle_id: u64) -> Result<(), Error> {
         let key = DataKey::Raffle(raffle_id);
         if !env.storage().persistent().has(&key) {
