@@ -1,0 +1,1149 @@
+﻿<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tinkazo — sorteos que no se pueden arreglar</title>
+<meta name="description" content="Sorteos verificables para comunidades: la lista se congela, la suerte viene de un faro público de aleatoriedad y cualquiera puede auditar el resultado." />
+<meta property="og:title" content="Tinkazo — sorteos que no se pueden arreglar" />
+<meta property="og:description" content="Carrera de llamas en modo estadio o ruleta: el show es tuyo, la imparcialidad es matemática. Aleatoriedad pública de drand, verificable por cualquiera." />
+<meta property="og:type" content="website" />
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -4 26 30"><g fill="%23e93d9c"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></g></svg>' />
+<!-- Clerk para sitios estáticos: solo la publishable key (pública por diseño) viaja al navegador -->
+<script
+  async
+  crossorigin="anonymous"
+  data-clerk-publishable-key="pk_test_dGVhY2hpbmctZG9nLTg0LmNsZXJrLmFjY291bnRzLmRldiQ"
+  src="https://teaching-dog-84.clerk.accounts.dev/npm/@clerk/clerk-js@5/dist/clerk.browser.js"
+></script>
+<style>
+  :root {
+    color-scheme: light;
+    --paper: #fff6e9; --card: #ffffff; --ink: #191919; --ink2: #4b4437; --muted: #8a8378;
+    --magenta: #e93d9c; --orange: #ff7a1a; --teal: #00a896; --yellow: #ffc629; --purple: #6c4ce0;
+    --bw: 3px; --sh: 6px 6px 0 var(--ink); --sh-sm: 3px 3px 0 var(--ink);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --paper: #171126; --card: #221a33; --ink: #f6efe2; --ink2: #cfc6b4; --muted: #97909f;
+      --magenta: #ff5cb3; --orange: #ff8b3d; --teal: #17c3b2; --yellow: #ffd24d; --purple: #9b7bff;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #171126; --card: #221a33; --ink: #f6efe2; --ink2: #cfc6b4; --muted: #97909f;
+    --magenta: #ff5cb3; --orange: #ff8b3d; --teal: #17c3b2; --yellow: #ffd24d; --purple: #9b7bff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .hl {
+      background: var(--yellow); color: #191919; padding: 0 0.12em;
+      -webkit-box-decoration-break: clone; box-decoration-break: clone;
+    }
+  }
+  :root[data-theme="dark"] .hl {
+    background: var(--yellow); color: #191919; padding: 0 0.12em;
+    -webkit-box-decoration-break: clone; box-decoration-break: clone;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--paper); color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.5; display: flex; flex-direction: column; min-height: 100vh;
+  }
+  .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+  .kicker { font-family: ui-monospace, Consolas, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--muted); font-weight: 600; }
+  header { position: sticky; top: 0; z-index: 10; background: var(--paper); border-bottom: var(--bw) solid var(--ink); }
+  .stripe { height: 10px; background: repeating-linear-gradient(90deg, var(--magenta) 0 44px, var(--orange) 44px 88px, var(--yellow) 88px 132px, var(--teal) 132px 176px, var(--purple) 176px 220px); }
+  .bar { max-width: 1060px; margin: 0 auto; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .wordmark { font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; font-size: 20px; }
+  .wordmark b { color: var(--magenta); }
+  .langs { display: flex; gap: 4px; }
+  .langs button {
+    font-family: ui-monospace, Consolas, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    background: var(--card); color: var(--muted); border: 2px solid var(--ink); padding: 4px 9px; cursor: pointer; font-weight: 700;
+  }
+  .langs button.on { background: var(--yellow); color: #191919; box-shadow: var(--sh-sm); }
+  .auth { display: flex; gap: 8px; align-items: center; }
+  .auth button.mini {
+    background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+    padding: 5px 12px; font-weight: 800; font-size: 12px; cursor: pointer; font-family: inherit;
+  }
+  .auth button.mini.solid { background: var(--magenta); color: #fff; }
+  .auth .hello { font-size: 12px; font-weight: 700; color: var(--ink2); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #wheel { max-width: 88vw; height: auto; }
+  main { flex: 1; width: 100%; max-width: 1060px; margin: 0 auto; padding: 0 20px; }
+  .hero { padding: 64px 0 40px; display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; }
+  .hero-copy { display: flex; flex-direction: column; gap: 18px; align-items: flex-start; }
+  .sticker {
+    display: inline-block; background: var(--teal); color: #fff; border: var(--bw) solid var(--ink);
+    box-shadow: var(--sh-sm); padding: 5px 14px; font-family: ui-monospace, Consolas, monospace;
+    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; transform: rotate(-1.5deg);
+  }
+  h1 { font-size: clamp(38px, 6.4vw, 64px); line-height: 1.02; letter-spacing: -0.02em; font-weight: 900; max-width: 640px; }
+  .hl { background: linear-gradient(transparent 58%, var(--yellow) 58%); }
+  .lead { font-size: 18px; color: var(--ink2); max-width: 560px; font-weight: 500; }
+  .mascot { color: var(--magenta); transform: rotate(3deg); }
+  .mascot svg { width: 150px; height: 130px; filter: drop-shadow(6px 6px 0 var(--ink)); }
+  .steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 18px; margin: 14px 0 52px; }
+  .steps article { background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); padding: 20px; }
+  .steps article:nth-child(1) .num { background: var(--magenta); }
+  .steps article:nth-child(2) .num { background: var(--orange); }
+  .steps article:nth-child(3) .num { background: var(--purple); }
+  .num { display: inline-block; color: #fff; border: 2px solid var(--ink); font-family: ui-monospace, Consolas, monospace; font-weight: 800; font-size: 12px; padding: 2px 9px; transform: rotate(-2deg); }
+  .steps h3 { font-size: 17px; margin-top: 10px; font-weight: 800; }
+  .steps p { font-size: 13.5px; color: var(--ink2); margin-top: 6px; }
+  section.block { background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); margin-bottom: 34px; }
+  .head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 14px 22px; border-bottom: var(--bw) solid var(--ink); flex-wrap: wrap; }
+  .head h2 { font-size: 19px; font-weight: 800; }
+  .body { padding: 22px; }
+  textarea, input[type="text"] {
+    width: 100%; background: var(--paper); color: var(--ink);
+    border: 2px solid var(--ink); padding: 12px; font: 14px/1.5 ui-monospace, Consolas, monospace;
+  }
+  textarea { min-height: 120px; resize: vertical; }
+  textarea:focus, input:focus, select:focus { outline: 3px solid var(--yellow); outline-offset: 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 16px; }
+  button.primary {
+    background: var(--magenta); color: #fff; border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm);
+    padding: 12px 24px; font-weight: 800; font-size: 15px; cursor: pointer; transition: transform 0.08s, box-shadow 0.08s;
+  }
+  button.primary:hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
+  button.primary:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+  button.primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.ghost {
+    background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+    padding: 10px 18px; font-size: 13px; font-weight: 700; cursor: pointer; transition: transform 0.08s, box-shadow 0.08s;
+  }
+  button.ghost:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
+  .chip {
+    border: 2px solid var(--ink); padding: 5px 12px; font-family: ui-monospace, Consolas, monospace;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; background: var(--paper); color: var(--ink2);
+  }
+  .chip.live { background: var(--teal); color: #fff; transform: rotate(-1deg); box-shadow: var(--sh-sm); }
+  .chip.soon { opacity: 0.55; }
+  .gamepick { display: flex; gap: 10px; flex-wrap: wrap; }
+  .gamepick button {
+    border: 2px solid var(--ink); background: var(--paper); color: var(--ink2); padding: 9px 16px;
+    font-weight: 800; font-size: 13px; cursor: pointer; font-family: inherit;
+  }
+  .gamepick button.on { background: var(--purple); color: #fff; box-shadow: var(--sh-sm); transform: rotate(-1deg); }
+  .gamepick button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0; border-bottom: var(--bw) solid var(--ink); }
+  .kpis > div { padding: 16px 22px; border-right: 2px dashed var(--ink); }
+  .kpis > div:last-child { border-right: 0; }
+  .kpis b { font-size: 28px; font-weight: 900; display: block; }
+  .kpis > div:nth-child(1) b { color: var(--magenta); }
+  .kpis > div:nth-child(2) b { color: var(--teal); }
+  .kpis > div:nth-child(3) b { color: var(--purple); }
+  .kpis span { font-family: ui-monospace, Consolas, monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); font-weight: 700; }
+  .names { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .names i { font-style: normal; border: 2px solid var(--ink); background: var(--paper); padding: 3px 11px 3px 4px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 7px; }
+  .names i img { width: 22px; height: 22px; border: 1.5px solid var(--ink); background: #fff; }
+  .names i:nth-child(5n+1) { transform: rotate(-1deg); }
+  .names i:nth-child(5n+3) { transform: rotate(1.2deg); }
+  .entity { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--muted); line-height: 1.7; word-break: break-all; }
+  .wheel-wrap { display: none; text-align: center; padding: 10px 0; }
+  .wheel-box { position: relative; display: inline-block; }
+  .pointer {
+    position: absolute; top: -6px; left: 50%; transform: translateX(-50%); z-index: 4;
+    width: 0; height: 0; border-left: 14px solid transparent; border-right: 14px solid transparent;
+    border-top: 22px solid var(--magenta); filter: drop-shadow(2px 2px 0 var(--ink));
+  }
+  canvas { max-width: 100%; }
+  .winner-box { display: none; border-top: var(--bw) solid var(--ink); padding: 24px; position: relative; overflow: hidden; }
+  .winner-card {
+    display: inline-flex; align-items: center; gap: 16px; background: var(--yellow); color: #191919; border: var(--bw) solid var(--ink);
+    box-shadow: var(--sh); padding: 16px 26px; transform: rotate(-1.5deg); margin-top: 8px;
+  }
+  .winner-card img { width: 64px; height: 64px; border: 2px solid #191919; background: #fff; }
+  .winner-name { font-size: clamp(22px, 3.6vw, 34px); font-weight: 900; letter-spacing: -0.01em; }
+  .winner-prize { font-size: 14px; font-weight: 700; margin-top: 2px; }
+  .verify { margin-top: 22px; border: 2px solid var(--ink); padding: 16px; background: var(--paper); display: grid; grid-template-columns: 1fr auto; gap: 16px; }
+  .verify a { color: var(--ink); font-weight: 700; }
+  .qr { text-align: center; }
+  .qr img { width: 132px; height: 132px; border: 2px solid var(--ink); background: #fff; padding: 6px; }
+  .qr p { font-size: 10px; margin-top: 6px; max-width: 140px; }
+  .ok { border-left: 4px solid var(--teal); padding-left: 10px; margin-top: 10px; font-size: 13px; color: var(--ink2); }
+  footer { border-top: var(--bw) solid var(--ink); margin-top: 44px; }
+  footer .bar { font-family: ui-monospace, Consolas, monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); font-weight: 700; }
+  .note { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  select { background: var(--card); color: var(--ink); border: 2px solid var(--ink); padding: 9px 12px; font-weight: 700; }
+  .confetti { position: fixed; inset: 0; pointer-events: none; z-index: 60; }
+  .confetti i { position: absolute; width: 10px; height: 14px; top: -20px; animation: fall linear forwards; }
+  @keyframes fall { to { transform: translateY(105vh) rotate(720deg); } }
+  .field { margin-top: 16px; }
+  .field label { display: block; font-family: ui-monospace, Consolas, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); font-weight: 700; margin-bottom: 6px; }
+  /* ---------- Modo estadio ---------- */
+  .stadium { position: fixed; inset: 0; z-index: 40; display: none; background: #10101c; }
+  .stadium canvas { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; }
+  .st-top { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; z-index: 2; }
+  .st-brand { background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); padding: 4px 12px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; font-size: 14px; }
+  .st-brand b { color: var(--magenta); }
+  .st-round { background: var(--card); border: 2px solid var(--ink); padding: 4px 12px; font-family: ui-monospace, Consolas, monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink2); }
+  .st-actions { display: flex; gap: 8px; }
+  .st-actions button {
+    background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+    padding: 6px 14px; font-weight: 800; font-size: 12px; cursor: pointer;
+  }
+  .commentary {
+    position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%);
+    background: var(--card); color: var(--ink); border: var(--bw) solid var(--ink); box-shadow: var(--sh);
+    padding: 10px 24px; font-weight: 900; font-size: clamp(15px, 2.8vw, 24px); white-space: nowrap; z-index: 2;
+    max-width: 92vw; overflow: hidden; text-overflow: ellipsis;
+  }
+  .commentary.pop { animation: popIn 0.28s; }
+  @keyframes popIn { from { transform: translateX(-50%) scale(0.75); } to { transform: translateX(-50%) scale(1); } }
+  @media (max-width: 700px) { .hero { grid-template-columns: 1fr; } .mascot { display: none; } .verify { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="stripe"></div>
+  <div class="bar">
+    <span class="wordmark">Tinka<b>zo</b></span>
+    <div style="display:flex; gap:14px; align-items:center">
+      <nav class="langs" aria-label="idioma">
+        <button id="l-es" class="on" onclick="setLang('es')">es</button>
+        <button id="l-en" onclick="setLang('en')">en</button>
+      </nav>
+      <div class="auth" id="auth-box">
+        <button class="mini" onclick="window.Clerk && Clerk.openSignIn()" data-i="signin">Entrar</button>
+        <button class="mini solid" onclick="window.Clerk && Clerk.openSignUp()" data-i="signup">Crear cuenta</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="hero-copy">
+      <span class="sticker" data-i="badge">Ideathon Arkiv 2026 — Open Lane</span>
+      <h1 data-i-html="h1">Sorteos que <span class="hl">no se pueden arreglar</span>.</h1>
+      <p class="lead" data-i="lead">Importa a tus asistentes, congela la lista y deja que la suerte venga de un faro público de aleatoriedad. Carrera de llamas en modo estadio o ruleta: el show es tuyo, la imparcialidad es matemática.</p>
+      <p class="kicker" data-i="note">Demo funcional — la suerte es pública y cualquiera puede verificarla desde su celular</p>
+    </div>
+    <div class="mascot" aria-hidden="true"><svg viewBox="-1 -3 24 28"><use href="#llama" fill="currentColor"/></svg></div>
+  </section>
+
+  <div class="steps">
+    <article><span class="num">01</span><h3 data-i="s1t">Importa participantes</h3><p data-i="s1b">Pega la lista, sube un CSV o tráelos de Luma/Meetup. Nadie necesita wallet ni cuenta.</p></article>
+    <article><span class="num">02</span><h3 data-i="s2t">Congela la lista</h3><p data-i="s2b">La lista queda sellada con un digest SHA-256 y timestamp — así se escribiría como entidades en Arkiv.</p></article>
+    <article><span class="num">03</span><h3 data-i="s3t">Elige tu juego y sortea</h3><p data-i="s3b">Carrera en pantalla completa o ruleta. El ganador se deriva de aleatoriedad pública; el juego solo lo cuenta bonito.</p></article>
+  </div>
+
+  <!-- 01 Participantes -->
+  <section class="block">
+    <div class="head"><h2><span data-i="p1">Participantes</span></h2><span class="kicker" id="src-label">fuente: pegado / csv</span></div>
+    <div class="body">
+      <div class="row" style="margin: 0 0 14px">
+        <span class="chip live" data-i="srcPaste">Pegar lista</span>
+        <label class="chip live" style="cursor: pointer"><span data-i="srcCsv">Subir CSV</span><input id="csv" type="file" accept=".csv,.txt" hidden /></label>
+        <span class="chip soon" data-i="srcLuma">Luma · pronto</span>
+        <span class="chip soon" data-i="srcMeetup">Meetup · pronto</span>
+      </div>
+      <textarea id="ta" spellcheck="false" placeholder="Un participante por línea…"></textarea>
+      <div class="field">
+        <label for="prize" data-i="prizeLabel">¿Qué sorteas? (opcional)</label>
+        <input id="prize" type="text" maxlength="60" placeholder="Ej: Licencia JetBrains, libro, entrada…" data-i-ph="prizePh" />
+      </div>
+      <div class="row">
+        <button class="ghost" onclick="loadSample()" data-i="sample">Cargar ejemplo</button>
+        <button class="primary" id="btn-freeze" onclick="freeze()" data-i="freeze">Congelar lista</button>
+      </div>
+      <div class="names" id="names"></div>
+    </div>
+  </section>
+
+  <!-- 02 Congelar -->
+  <section class="block" id="sec-frozen" style="display:none">
+    <div class="head"><h2><span data-i="p2">Lista congelada</span></h2><span class="kicker" id="frozen-ts"></span></div>
+    <div class="kpis">
+      <div><b id="k-n">0</b><span data-i="kEntries">entries</span></div>
+      <div><b id="k-digest" style="font-size:16px" class="mono">—</b><span data-i="kDigest">digest sha-256</span></div>
+      <div><b id="k-status">frozen</b><span data-i="kStatus">estado del raffle</span></div>
+    </div>
+    <div class="body">
+      <p class="entity" id="entities"></p>
+      <p class="note" data-i="frozenNote">Desde este momento nadie puede agregar ni quitar participantes: cualquier entrada posterior al freeze sería estructuralmente visible.</p>
+      <div class="row">
+        <span class="kicker" data-i="gameLabel">Juego</span>
+        <div class="gamepick">
+          <button id="g-race" class="on" onclick="setGame('race')" data-i="gameRace">Carrera de llamas</button>
+          <button id="g-wheel" onclick="setGame('wheel')" data-i="gameWheel">Ruleta</button>
+        </div>
+        <label class="kicker" for="nw" data-i="winners">Premios</label>
+        <select id="nw" class="mono"><option>1</option><option>2</option><option>3</option></select>
+        <button class="primary" id="btn-draw" onclick="draw()" data-i="draw">Lanzar sorteo</button>
+      </div>
+      <p class="note" id="wheel-cap" style="display:none" data-i="wheelCap">La ruleta se ve bien hasta 24 participantes; con más, la carrera es tu juego.</p>
+    </div>
+  </section>
+
+  <!-- 03 Sortear -->
+  <section class="block" id="sec-draw" style="display:none">
+    <div class="head"><h2><span data-i="p3">El sorteo</span></h2><span class="kicker" id="seed-label"></span></div>
+    <div class="body">
+      <div class="wheel-wrap" id="wheel-wrap">
+        <div class="wheel-box">
+          <div class="pointer"></div>
+          <canvas id="wheel" width="480" height="480"></canvas>
+        </div>
+      </div>
+      <div class="winner-box" id="winner-box">
+        <p class="kicker" data-i="winnerLabel">Resultado</p>
+        <div id="winner-cards"></div>
+        <div class="verify">
+          <div>
+            <p class="kicker" data-i="verifyTitle">Prueba de imparcialidad</p>
+            <p class="entity" id="proof"></p>
+            <p class="ok" data-i="verifyHow">Cómo verificar: 1) abre la ronda del faro público y confirma la aleatoriedad pública · 2) recomputa sha256(randomness | digest | premio) · 3) el módulo contra el total de entries da el índice ganador.</p>
+            <div class="row">
+              <a id="drand-link" target="_blank" rel="noopener" class="mono" style="font-size:12px"></a>
+              <button class="ghost" onclick="reverify()" data-i="reverify">Recomputar aquí mismo</button>
+              <button class="ghost" onclick="copySummary(this)" data-i="copySummary">Copiar resumen</button>
+            </div>
+            <p class="ok" id="reverify-out" style="display:none"></p>
+          </div>
+          <div class="qr" id="qr-box" style="display:none">
+            <img id="qr-img" alt="QR de verificación" />
+            <p class="kicker" data-i="qrCaption">Escanea y verifica la ronda desde tu celular</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Precios -->
+  <section style="padding: 6px 0 10px">
+    <div style="display:flex; align-items:baseline; gap:14px; flex-wrap:wrap">
+      <h2 style="font-size:26px; font-weight:900" data-i="prTitle">Precios</h2>
+      <span class="kicker" data-i="prNote">La verificación nunca se cobra. Se cobra el show.</span>
+    </div>
+    <div class="steps" style="margin-top:18px">
+      <article><span class="num" style="background:var(--teal)" data-i="pr1t">Gratis</span><h3 data-i="pr1p">$0 · para siempre</h3><p data-i="pr1b">Sorteos verificables ilimitados, ruleta y carrera, QR de verificación y prueba recomputable.</p></article>
+      <article><span class="num" style="background:var(--magenta)" data-i="pr2t">Pro</span><h3 data-i="pr2p">US$ 5 / sorteo</h3><p data-i="pr2b">Catálogo completo de juegos y skins, tu logo en el estadio, participantes ilimitados y soporte.</p></article>
+      <article><span class="num" style="background:var(--orange)" data-i="pr3t">Sponsor</span><h3 data-i="pr3p">lo paga tu sponsor</h3><p data-i="pr3b">Sorteo brandeado: su marca en el estadio y la ruleta, en el momento de máxima atención del evento.</p></article>
+    </div>
+  </section>
+
+  <section style="padding: 14px 0 30px">
+    <p class="kicker" data-i="arkivTitle">El modelo Arkiv detrás</p>
+    <p style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 8px" data-i="arkivBody">En producción, cada participante es una entidad Entry (raffle_id, entered_ts, hash) escrita por la wallet de la comunidad; el freeze fija freeze_ts; el Draw guarda la ronda del faro público, el conteo y el digest de la lista ordenada — verificable por cualquiera, sin cuentas, incluso después de que las entries expiren. Este demo simula esas escrituras (regla del ideathon: nada se despliega).</p>
+  </section>
+</main>
+
+<footer><div class="bar"><span data-i="footL">Tinkazo · Ideathon Arkiv 2026 · Open Lane</span><span data-i="footR">Hecho en Bolivia</span></div></footer>
+
+<!-- Estadio fullscreen -->
+<div class="stadium" id="stadium">
+  <canvas id="race-canvas"></canvas>
+  <div class="st-top">
+    <span class="st-brand">Tinka<b>zo</b></span>
+    <span class="st-round mono" id="st-round"></span>
+    <div class="st-actions">
+      <button id="st-sound" onclick="toggleSound()">SONIDO: ON</button>
+      <button id="st-skip" onclick="skipRace()" data-i="skip">Saltar</button>
+    </div>
+  </div>
+  <div class="commentary" id="commentary"></div>
+</div>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <g id="llama">
+      <rect x="2" y="11" width="16" height="7"/>
+      <rect x="15" y="3" width="4" height="10"/>
+      <rect x="14" y="0" width="8" height="4"/>
+      <rect x="20" y="-2" width="2" height="3"/>
+      <rect x="3" y="18" width="2.5" height="6"/>
+      <rect x="8" y="18" width="2.5" height="6"/>
+      <rect x="12.5" y="18" width="2.5" height="6"/>
+      <rect x="16" y="18" width="2.5" height="6"/>
+      <rect x="0" y="9" width="3" height="4"/>
+    </g>
+  </defs>
+</svg>
+
+<script>
+const T = {
+  es: {
+    badge: "Ideathon Arkiv 2026 — Open Lane",
+    h1: 'Sorteos que <span class="hl">no se pueden arreglar</span>.',
+    lead: "Importa a tus asistentes, congela la lista y deja que la suerte venga de un faro público de aleatoriedad. Carrera de llamas en modo estadio o ruleta: el show es tuyo, la imparcialidad es matemática.",
+    note: "Demo funcional — la suerte es pública y cualquiera puede verificarla desde su celular",
+    s1t: "Importa participantes", s1b: "Pega la lista, sube un CSV o tráelos de Luma/Meetup. Nadie necesita wallet ni cuenta.",
+    s2t: "Congela la lista", s2b: "La lista queda sellada con un digest SHA-256 y timestamp — así se escribiría como entidades en Arkiv.",
+    s3t: "Elige tu juego y sortea", s3b: "Carrera en pantalla completa o ruleta. El ganador se deriva de aleatoriedad pública; el juego solo lo cuenta bonito.",
+    p1: "Participantes", p2: "Lista congelada", p3: "El sorteo",
+    srcPaste: "Pegar lista", srcCsv: "Subir CSV", srcLuma: "Luma · pronto", srcMeetup: "Meetup · pronto",
+    sample: "Cargar ejemplo", freeze: "Congelar lista", draw: "Lanzar sorteo", winners: "Premios",
+    gameLabel: "Juego", gameRace: "Carrera de llamas", gameWheel: "Ruleta",
+    wheelCap: "La ruleta se ve bien hasta 24 participantes; con más, la carrera es tu juego.",
+    prizeLabel: "¿Qué sorteas? (opcional)", prizePh: "Ej: Licencia JetBrains, libro, entrada…",
+    kEntries: "entries", kDigest: "digest sha-256", kStatus: "estado del raffle",
+    frozenNote: "Desde este momento nadie puede agregar ni quitar participantes: cualquier entrada posterior al freeze sería estructuralmente visible.",
+    winnerLabel: "Resultado", verifyTitle: "Prueba de imparcialidad",
+    verifyHow: "Cómo verificar: 1) abre la ronda del faro público y confirma la aleatoriedad pública · 2) recomputa sha256(randomness | digest | premio) · 3) el módulo contra el total de entries da el índice ganador.",
+    reverify: "Recomputar aquí mismo", reverifyOk: "Verificado: el recómputo reproduce exactamente el resultado.",
+    copySummary: "Copiar resumen", copied: "¡Copiado!",
+    qrCaption: "Escanea y verifica la ronda desde tu celular",
+    arkivTitle: "El modelo Arkiv detrás",
+    arkivBody: "En producción, cada participante es una entidad Entry (raffle_id, entered_ts, hash) escrita por la wallet de la comunidad; el freeze fija freeze_ts; el Draw guarda la ronda del faro público, el conteo y el digest de la lista ordenada — verificable por cualquiera, sin cuentas, incluso después de que las entries expiren. Este demo simula esas escrituras (regla del ideathon: nada se despliega).",
+    footL: "Tinkazo · Ideathon Arkiv 2026 · Open Lane", footR: "Hecho en Bolivia",
+    src: "fuente: pegado / csv", frozenAt: "congelada:", seed: "semilla pública · ronda", drandLink: "ver la ronda pública ↗",
+    placeholder: "Un participante por línea…", winsPrize: "Gana:", skip: "Saltar",
+    signin: "Entrar", signup: "Crear cuenta",
+    signinToFreeze: "Inicia sesión para congelar la lista: el organizador firma el sorteo.",
+    prTitle: "Precios", prNote: "La verificación nunca se cobra. Se cobra el show.",
+    pr1t: "Gratis", pr1p: "$0 · para siempre", pr1b: "Sorteos verificables ilimitados, ruleta y carrera, QR de verificación y prueba recomputable.",
+    pr2t: "Pro", pr2p: "US$ 5 / sorteo", pr2b: "Catálogo completo de juegos y skins, tu logo en el estadio, participantes ilimitados y soporte.",
+    pr3t: "Sponsor", pr3p: "lo paga tu sponsor", pr3b: "Sorteo brandeado: su marca en el estadio y la ruleta, en el momento de máxima atención del evento.",
+    cReady: "¡Llamas a sus puestos!", cStart: "¡ARRANCA LA CARRERA!",
+    cLead: (n) => `¡${n} toma la punta!`, cLast: "¡ÚLTIMA RECTA!", cWin: (n) => `¡GANA ${n}!`,
+    summary: (w, n, d, r, u) => `Tinkazo · sorteo verificable\nGanador(es): ${w}\nEntries: ${n} · digest: ${d}\nRonda drand: ${r} → ${u}\nRecomputa: sha256(randomness|digest|premio) mod entries`,
+  },
+  en: {
+    badge: "Arkiv Ideathon 2026 — Open Lane",
+    h1: 'Raffles that <span class="hl">cannot be rigged</span>.',
+    lead: "Import your attendees, freeze the list and let luck come from a public randomness beacon. Stadium-mode llama race or roulette: the show is yours, fairness is math.",
+    note: "Working demo — luck is public and anyone can verify it from their phone",
+    s1t: "Import participants", s1b: "Paste the list, upload a CSV or bring them from Luma/Meetup. Nobody needs a wallet or an account.",
+    s2t: "Freeze the list", s2b: "The list is sealed with a SHA-256 digest and timestamp — exactly how it would be written as Arkiv entities.",
+    s3t: "Pick your game and draw", s3b: "Fullscreen race or roulette. The winner derives from public randomness; the game just tells it beautifully.",
+    p1: "Participants", p2: "Frozen list", p3: "The draw",
+    srcPaste: "Paste list", srcCsv: "Upload CSV", srcLuma: "Luma · soon", srcMeetup: "Meetup · soon",
+    sample: "Load sample", freeze: "Freeze list", draw: "Run the draw", winners: "Prizes",
+    gameLabel: "Game", gameRace: "Llama race", gameWheel: "Roulette",
+    wheelCap: "The wheel looks great up to 24 participants; beyond that, the race is your game.",
+    prizeLabel: "What are you raffling? (optional)", prizePh: "E.g. JetBrains license, book, ticket…",
+    kEntries: "entries", kDigest: "sha-256 digest", kStatus: "raffle status",
+    frozenNote: "From this moment nobody can add or remove participants: any entry after the freeze would be structurally visible.",
+    winnerLabel: "Result", verifyTitle: "Proof of fairness",
+    verifyHow: "How to verify: 1) open the public beacon round and confirm the public randomness · 2) recompute sha256(randomness | digest | prize) · 3) modulo the entry count gives the winning index.",
+    reverify: "Recompute right here", reverifyOk: "Verified: the recomputation reproduces the exact result.",
+    copySummary: "Copy summary", copied: "Copied!",
+    qrCaption: "Scan and verify the round from your phone",
+    arkivTitle: "The Arkiv model behind it",
+    arkivBody: "In production, every participant is an Entry entity (raffle_id, entered_ts, hash) written by the community wallet; the freeze pins freeze_ts; the Draw stores the public beacon round, the entry count and the digest of the ordered list — verifiable by anyone, no accounts, even after entries expire. This demo simulates those writes (ideathon rule: nothing is deployed).",
+    footL: "Tinkazo · Arkiv Ideathon 2026 · Open Lane", footR: "Built in Bolivia",
+    src: "source: paste / csv", frozenAt: "frozen:", seed: "public seed · round", drandLink: "view the public round ↗",
+    placeholder: "One participant per line…", winsPrize: "Wins:", skip: "Skip",
+    signin: "Sign in", signup: "Create account",
+    signinToFreeze: "Sign in to freeze the list: the organizer signs the raffle.",
+    prTitle: "Pricing", prNote: "Verification is never charged. We charge for the show.",
+    pr1t: "Free", pr1p: "$0 · forever", pr1b: "Unlimited verifiable raffles, roulette and race, verification QR and recomputable proof.",
+    pr2t: "Pro", pr2p: "US$ 5 / raffle", pr2b: "Full game and skin catalog, your logo in the stadium, unlimited participants and support.",
+    pr3t: "Sponsor", pr3p: "your sponsor pays", pr3b: "Branded raffle: their brand in the stadium and the wheel, at the event's peak-attention moment.",
+    cReady: "Llamas, on your marks!", cStart: "AND THEY'RE OFF!",
+    cLead: (n) => `${n} takes the lead!`, cLast: "FINAL STRETCH!", cWin: (n) => `${n} WINS!`,
+    summary: (w, n, d, r, u) => `Tinkazo · verifiable raffle\nWinner(s): ${w}\nEntries: ${n} · digest: ${d}\ndrand round: ${r} → ${u}\nRecompute: sha256(randomness|digest|prize) mod entries`,
+  },
+};
+let lang = "es";
+let game = "race";
+let state = { frozen: null, drawn: null };
+const LCOLORS = ["--magenta", "--orange", "--teal", "--purple", "--yellow"];
+const WHEEL_MAX = 24;
+
+const params = new URLSearchParams(location.search);
+const instantMode = params.get("instant") === "1";
+const themeParam = params.get("theme");
+if (themeParam === "light" || themeParam === "dark") document.documentElement.dataset.theme = themeParam;
+
+const avatar = (name, size) =>
+  `https://api.dicebear.com/9.x/adventurer-neutral/svg?size=${size}&seed=${encodeURIComponent(name)}`;
+
+function setLang(l) {
+  lang = l;
+  document.documentElement.lang = l;
+  document.getElementById("l-es").classList.toggle("on", l === "es");
+  document.getElementById("l-en").classList.toggle("on", l === "en");
+  document.querySelectorAll("[data-i]").forEach((el) => {
+    const v = T[l][el.dataset.i];
+    if (typeof v === "string") el.textContent = v;
+  });
+  document.querySelectorAll("[data-i-html]").forEach((el) => {
+    const v = T[l][el.dataset.iHtml];
+    if (v) el.innerHTML = v;
+  });
+  document.querySelectorAll("[data-i-ph]").forEach((el) => {
+    const v = T[l][el.dataset.iPh];
+    if (v) el.placeholder = v;
+  });
+  document.getElementById("ta").placeholder = T[l].placeholder;
+  document.getElementById("src-label").textContent = T[l].src;
+  const dl = document.getElementById("drand-link");
+  if (dl.href) dl.textContent = T[l].drandLink;
+  if (state.frozen) document.getElementById("frozen-ts").textContent = T[l].frozenAt + " " + state.frozen.at;
+  if (clerkReady) updateAuthUI();
+  soundLabel();
+}
+
+function setGame(g) {
+  if (state.drawn) return;
+  game = g;
+  document.getElementById("g-race").classList.toggle("on", g === "race");
+  document.getElementById("g-wheel").classList.toggle("on", g === "wheel");
+}
+
+const SAMPLE = ["María Quispe","Jorge Mamani","Lucía Flores","Carlos Choque","Ana Vargas","Diego Rojas","Elena Condori","Pablo Gutiérrez","Sofía Aguilar","Rodrigo Peña","Valeria Torrez","Miguel Arce","Camila Suárez","Andrés Villca","Paola Mendoza","Franco Ibáñez","Daniela Cruz","Óscar Limachi"];
+function loadSample() { document.getElementById("ta").value = SAMPLE.join("\n"); renderNames(); }
+
+function parseNames() {
+  return document.getElementById("ta").value.split(/\r?\n/)
+    .map((l) => l.split(",")[0].trim()).filter((l) => l.length > 1);
+}
+function renderNames() {
+  const names = parseNames();
+  document.getElementById("names").innerHTML = names
+    .map((n) => `<i><img src="${avatar(n, 44)}" alt="" loading="lazy" />${esc(n)}</i>`)
+    .join("");
+  document.getElementById("btn-freeze").disabled = names.length < 2 || !!state.frozen;
+}
+function esc(s) { return s.replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+document.getElementById("ta").addEventListener("input", renderNames);
+document.getElementById("csv").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (f) { document.getElementById("ta").value = await f.text(); renderNames(); }
+});
+
+async function sha256(text) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function freeze() {
+  const names = parseNames();
+  if (names.length < 2) return;
+  // El organizador firma el congelado: login requerido (los demos de auditoría lo saltan)
+  const bypass = !!params.get("demo") || params.get("pose") === "1";
+  if (clerkReady && !window.Clerk.user && !bypass) {
+    alert(T[lang].signinToFreeze);
+    Clerk.openSignIn();
+    return;
+  }
+  const digest = await sha256(names.join("\n"));
+  const ts = Math.floor(Date.now() / 1000);
+  state.frozen = { names, digest, ts, at: new Date().toLocaleString(lang === "es" ? "es-BO" : "en-US"), prize: document.getElementById("prize").value.trim() };
+  document.getElementById("ta").disabled = true;
+  document.getElementById("prize").disabled = true;
+  document.getElementById("btn-freeze").disabled = true;
+  document.getElementById("sec-frozen").style.display = "block";
+  document.getElementById("k-n").textContent = names.length;
+  document.getElementById("k-digest").textContent = digest.slice(0, 16) + "…";
+  document.getElementById("frozen-ts").textContent = T[lang].frozenAt + " " + state.frozen.at;
+  const org = clerkReady && window.Clerk.user
+    ? (Clerk.user.firstName || Clerk.user.username || Clerk.user.primaryEmailAddress?.emailAddress || "org")
+    : "invitado";
+  document.getElementById("entities").textContent =
+    `Raffle · status="frozen" · freeze_ts=${ts} · attestor="${org}"  —  Entry ×${names.length} · entered_ts ≤ ${ts}  —  digest ${digest}`;
+  if (names.length > WHEEL_MAX) {
+    document.getElementById("g-wheel").disabled = true;
+    document.getElementById("wheel-cap").style.display = "block";
+    setGame("race");
+  }
+  document.getElementById("sec-frozen").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+async function getBeacon() {
+  const res = await fetch("https://api.drand.sh/public/latest");
+  if (!res.ok) throw new Error("drand " + res.status);
+  return res.json();
+}
+
+async function draw() {
+  if (!state.frozen || state.drawn) return;
+  document.getElementById("btn-draw").disabled = true;
+  let beacon;
+  try {
+    beacon = await getBeacon();
+  } catch {
+    document.getElementById("btn-draw").disabled = false;
+    alert(lang === "es" ? "No pude alcanzar drand. Revisa tu conexión." : "Couldn't reach drand. Check your connection.");
+    return;
+  }
+  const { names, digest } = state.frozen;
+  const nWinners = Math.min(parseInt(document.getElementById("nw").value, 10), names.length);
+  const winners = [];
+  const pool = names.map((_, i) => i);
+  for (let p = 0; p < nWinners; p++) {
+    const h = await sha256(`${beacon.randomness}|${digest}|${p}`);
+    const idx = Number(BigInt("0x" + h) % BigInt(pool.length));
+    winners.push(pool.splice(idx, 1)[0]);
+  }
+  state.drawn = { beacon, winners };
+  document.getElementById("sec-draw").style.display = "block";
+  document.getElementById("seed-label").textContent = `${T[lang].seed} ${beacon.round}`;
+  const finish = () => reveal(names, winners, beacon, digest);
+  if (game === "wheel" && names.length <= WHEEL_MAX) {
+    document.getElementById("sec-draw").scrollIntoView({ behavior: "smooth", block: "start" });
+    wheelSpin(names, winners[0], finish);
+  } else {
+    stadiumRace(names, winners[0], beacon, finish);
+  }
+}
+
+/* ---------- Sonido (WebAudio, sin assets) ---------- */
+let audioCtx = null, muted = false;
+function beep(f, d = 0.09, type = "square", g = 0.05) {
+  if (muted) return;
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audioCtx.createOscillator(), ga = audioCtx.createGain();
+    o.type = type; o.frequency.value = f;
+    ga.gain.setValueAtTime(g, audioCtx.currentTime);
+    ga.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + d);
+    o.connect(ga); ga.connect(audioCtx.destination);
+    o.start(); o.stop(audioCtx.currentTime + d);
+  } catch { /* sin audio */ }
+}
+function fanfare() { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => beep(f, 0.22, "triangle", 0.07), i * 140)); }
+function soundLabel() {
+  const word = lang === "es" ? "SONIDO" : "SOUND";
+  document.getElementById("st-sound").textContent = `${word}: ${muted ? "OFF" : "ON"}`;
+}
+function toggleSound() { muted = !muted; soundLabel(); }
+
+/* ---------- Modo estadio: carrera fullscreen ---------- */
+let stApi = null;
+function skipRace() { if (stApi) stApi.skip(); }
+
+function stadiumRace(names, winnerIdx, beacon, done) {
+  if (instantMode) { done(); return; }
+  const ov = document.getElementById("stadium");
+  const canvas = document.getElementById("race-canvas");
+  const ctx = canvas.getContext("2d");
+  const commentEl = document.getElementById("commentary");
+  document.getElementById("st-round").textContent = `${T[lang].seed} ${beacon.round}`;
+  ov.style.display = "block";
+  document.body.style.overflow = "hidden";
+
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  function resize() { canvas.width = innerWidth * dpr; canvas.height = innerHeight * dpr; }
+  resize();
+  addEventListener("resize", resize);
+
+  // PRNG sembrado con la aleatoriedad de drand: hasta la animación es reproducible.
+  let s = parseInt(beacon.randomness.slice(0, 8), 16) | 0;
+  const rng = () => {
+    s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+
+  const dark = matchMedia("(prefers-color-scheme: dark)").matches
+    ? document.documentElement.dataset.theme !== "light"
+    : document.documentElement.dataset.theme === "dark";
+  const cs = getComputedStyle(document.documentElement);
+  const P = LCOLORS.map((v) => cs.getPropertyValue(v).trim());
+  const INK = "#191919";
+
+  const laneIdx = [winnerIdx];
+  for (const i of names.keys()) {
+    if (laneIdx.length >= Math.min(8, names.length)) break;
+    if (!laneIdx.includes(i)) laneIdx.push(i);
+  }
+  laneIdx.sort(() => rng() - 0.5);
+  const runners = laneIdx.map((i, k) => ({
+    i, name: names[i], color: P[k % P.length], x: 0, v: 0, n1: rng() * 7, img: null,
+  }));
+  runners.forEach((r) => { const im = new Image(); im.src = avatar(r.name, 64); r.img = im; });
+  // Arrancan justo después de la línea de salida, no cortadas en el borde
+  runners.forEach((r) => { r.x = canvas.width * 0.05; });
+
+  // Escenario sembrado
+  const peaks = Array.from({ length: 24 }, (_, k) => ({ dx: k * 0.09, h: 0.14 + rng() * 0.16, w: 0.07 + rng() * 0.05 }));
+  const hills = Array.from({ length: 18 }, (_, k) => ({ dx: k * 0.13, h: 0.05 + rng() * 0.07, w: 0.11 + rng() * 0.06 }));
+  const clouds = Array.from({ length: 6 }, () => ({ x: rng(), y: 0.06 + rng() * 0.16, sc: 0.5 + rng(), sp: 4 + rng() * 8 }));
+  const stars = Array.from({ length: 60 }, () => ({ x: rng(), y: rng() * 0.4, r: rng() * 1.4 + 0.4 }));
+
+  const DUR = 15;
+  let phase = "count", tPhase = 0, tRace = 0, camX = 0, shake = 0, lastLeader = -1, leadCd = 0, saidLast = false, finished = false, tFreeze = 0;
+  let lastBeepN = 4;
+  say(T[lang].cReady);
+
+  function say(msg) {
+    commentEl.textContent = msg;
+    commentEl.classList.remove("pop");
+    void commentEl.offsetWidth;
+    commentEl.classList.add("pop");
+  }
+
+  const W = () => canvas.width, H = () => canvas.height;
+  const L = () => W() * 2.6;
+
+  function skip() {
+    if (finished) return;
+    phase = "race"; tRace = DUR;
+    const w = runners.find((r) => r.i === winnerIdx);
+    w.x = L();
+    runners.forEach((r) => { if (r.i !== winnerIdx) r.x = Math.min(r.x, L() - W() * 0.12) || L() * 0.9; });
+    finishNow();
+  }
+  stApi = { skip };
+
+  function finishNow() {
+    finished = true; phase = "done"; tFreeze = 0; shake = 1;
+    say(T[lang].cWin(names[winnerIdx]));
+    fanfare();
+  }
+
+  function update(dt) {
+    if (phase === "count") {
+      tPhase += dt;
+      const n = 3 - Math.floor(tPhase);
+      if (n < lastBeepN && n >= 1) { lastBeepN = n; beep(440, 0.12); }
+      if (tPhase >= 3) { phase = "race"; say(T[lang].cStart); beep(880, 0.25, "square", 0.07); }
+      return;
+    }
+    if (phase === "done") {
+      tFreeze += dt; shake = Math.max(0, shake - dt * 1.4);
+      if (tFreeze > 1.4) cleanup();
+      return;
+    }
+    tRace += dt;
+    const baseV = L() / DUR;
+    const prog = tRace / DUR;
+    const leader = runners.reduce((a, b) => (b.x > a.x ? b : a));
+    for (const r of runners) {
+      r.n1 += dt * (0.9 + 0.3 * (r.i % 3));
+      let mult = 0.92 + 0.22 * (0.5 + 0.5 * Math.sin(r.n1 * 1.7 + r.i));
+      if (r.x < leader.x - W() * 0.28) mult *= 1.22; // banda elástica: nadie se queda atrás del plano
+      if (r.i === winnerIdx && prog > 0.6) mult = 1.3 + 0.15 * Math.min(1, (prog - 0.6) * 4); // sprint final
+      if (r.i !== winnerIdx) {
+        const cap = L() - W() * 0.055;
+        r.x = Math.min(r.x + baseV * mult * dt, cap);
+      } else {
+        r.x += baseV * mult * dt;
+      }
+    }
+    if (leader.i !== lastLeader && tRace > 1 && leadCd <= 0 && !saidLast) {
+      lastLeader = leader.i; leadCd = 1.6;
+      say(T[lang].cLead(leader.name));
+      beep(660, 0.08, "triangle", 0.04);
+    }
+    leadCd -= dt;
+    const wr = runners.find((r) => r.i === winnerIdx);
+    if (!saidLast && wr.x / L() > 0.78) { saidLast = true; say(T[lang].cLast); beep(740, 0.1, "triangle", 0.05); }
+    const camTarget = leader.x - W() * 0.4;
+    camX += (Math.max(0, Math.min(camTarget, L() - W() * 0.86)) - camX) * Math.min(1, dt * 2.6);
+    if (wr.x >= L()) finishNow();
+  }
+
+  function drawScene() {
+    const w = W(), h = H(), u = h / 720;
+    const shx = shake ? (rng() - 0.5) * 14 * shake * u : 0;
+    const shy = shake ? (rng() - 0.5) * 10 * shake * u : 0;
+    ctx.save();
+    ctx.translate(shx, shy);
+    // Cielo
+    const sky = ctx.createLinearGradient(0, 0, 0, h * 0.62);
+    if (dark) { sky.addColorStop(0, "#141032"); sky.addColorStop(1, "#3a1d5c"); }
+    else { sky.addColorStop(0, "#8fd3ff"); sky.addColorStop(1, "#ffe9c4"); }
+    ctx.fillStyle = sky;
+    ctx.fillRect(-20, -20, w + 40, h * 0.64 + 20);
+    if (dark) {
+      ctx.fillStyle = "rgba(255,255,255,0.8)";
+      for (const st of stars) { ctx.beginPath(); ctx.arc(st.x * w, st.y * h, st.r * u, 0, 7); ctx.fill(); }
+      ctx.fillStyle = "#f6efe2";
+      ctx.beginPath(); ctx.arc(w * 0.82, h * 0.14, 34 * u, 0, 7); ctx.fill();
+    } else {
+      ctx.fillStyle = "#ffd24d";
+      ctx.beginPath(); ctx.arc(w * 0.82, h * 0.15, 44 * u, 0, 7); ctx.fill();
+      ctx.lineWidth = 3 * u; ctx.strokeStyle = INK; ctx.stroke();
+    }
+    // Nubes
+    ctx.fillStyle = dark ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.9)";
+    const tNow = performance.now() / 1000;
+    for (const c of clouds) {
+      const cx = ((c.x * w * 3 - camX * 0.12 - tNow * c.sp * u) % (w + 300 * u)) - 150 * u;
+      const cy = c.y * h;
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, 60 * c.sc * u, 16 * c.sc * u, 0, 0, 7);
+      ctx.ellipse(cx + 34 * c.sc * u, cy - 8 * c.sc * u, 40 * c.sc * u, 13 * c.sc * u, 0, 0, 7);
+      ctx.fill();
+    }
+    // Montañas (parallax lejano) — terminan en el horizonte, no bajo la pista
+    ctx.fillStyle = dark ? "#241b4a" : "#b98ad1";
+    drawRange(peaks, 0.22, 0.425, w, h);
+    // Cerros (parallax medio)
+    ctx.fillStyle = dark ? "#1d2a3f" : "#7fc07a";
+    drawRange(hills, 0.5, 0.43, w, h);
+    // Pista
+    const trackTop = h * 0.42, trackH = h * 0.5;
+    ctx.fillStyle = dark ? "#2b2140" : "#e9c797";
+    ctx.fillRect(-20, trackTop, w + 40, trackH + 40);
+    // Banderines al borde
+    for (let k = 0; k * 260 * u < L() + w; k++) {
+      const fx = k * 260 * u - camX;
+      if (fx < -40 || fx > w + 40) continue;
+      ctx.fillStyle = INK;
+      ctx.fillRect(fx, trackTop - 58 * u, 4 * u, 58 * u);
+      ctx.fillStyle = P[k % P.length];
+      ctx.beginPath();
+      ctx.moveTo(fx + 4 * u, trackTop - 56 * u);
+      ctx.lineTo(fx + 40 * u, trackTop - 46 * u);
+      ctx.lineTo(fx + 4 * u, trackTop - 36 * u);
+      ctx.closePath(); ctx.fill();
+      ctx.lineWidth = 2 * u; ctx.strokeStyle = INK; ctx.stroke();
+    }
+    // Carriles
+    const lanes = runners.length, laneH = trackH / lanes;
+    ctx.strokeStyle = dark ? "rgba(246,239,226,0.25)" : "rgba(25,25,25,0.3)";
+    ctx.lineWidth = 2 * u; ctx.setLineDash([18 * u, 16 * u]);
+    for (let li = 1; li < lanes; li++) {
+      ctx.beginPath();
+      ctx.moveTo(0, trackTop + li * laneH);
+      ctx.lineTo(w, trackTop + li * laneH);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    // Línea de salida y arco de meta
+    const startX = 40 * u - camX;
+    if (startX > -20 && startX < w + 20) { ctx.fillStyle = dark ? "#f6efe2" : INK; ctx.fillRect(startX, trackTop, 4 * u, trackH); }
+    const finX = L() - camX;
+    if (finX > -80 && finX < w + 120) {
+      ctx.fillStyle = INK;
+      ctx.fillRect(finX, trackTop - 70 * u, 8 * u, trackH + 70 * u);
+      const sq = 12 * u;
+      for (let yy = 0; yy < 3; yy++)
+        for (let xx = 0; xx < Math.ceil(trackH / sq) + 1; xx++) {
+          ctx.fillStyle = (xx + yy) % 2 ? "#fff" : INK;
+          ctx.fillRect(finX + 8 * u, trackTop - 70 * u + (yy * sq), sq, sq) ;
+        }
+      // banda vertical cuadriculada en la meta
+      for (let yy = 0; yy < Math.ceil((trackH + 70 * u) / sq); yy++) {
+        ctx.fillStyle = yy % 2 ? "#fff" : INK;
+        ctx.fillRect(finX + 2 * u, trackTop - 70 * u + yy * sq, 4 * u, sq);
+      }
+    }
+    // Llamas
+    runners.forEach((r, k) => {
+      const ly = trackTop + k * laneH + laneH * 0.5;
+      const lx = r.x - camX;
+      if (lx < -140 || lx > w + 140) return;
+      const sc = (laneH * 0.62) / 26;
+      const bob = phase === "race" ? Math.sin(tRace * 16 + k * 2) * 3 * u : 0;
+      drawLlama(lx, ly - 8 * sc + bob, sc, r.color, phase === "race" ? tRace * 14 + k : 0);
+      // Chip con nombre y avatar
+      const label = r.name.length > 16 ? r.name.slice(0, 15) + "…" : r.name;
+      ctx.font = `700 ${Math.max(11, 12 * u)}px system-ui, sans-serif`;
+      const tw = ctx.measureText(label).width;
+      const chipY = ly - laneH * 0.52, av = 18 * u;
+      ctx.fillStyle = dark ? "#f6efe2" : "#fff";
+      ctx.fillRect(lx - 4 * u, chipY - 14 * u, tw + av + 18 * u, 22 * u);
+      ctx.lineWidth = 2 * u; ctx.strokeStyle = INK;
+      ctx.strokeRect(lx - 4 * u, chipY - 14 * u, tw + av + 18 * u, 22 * u);
+      if (r.img && r.img.complete && r.img.naturalWidth) ctx.drawImage(r.img, lx, chipY - 11 * u, av, av);
+      ctx.fillStyle = "#191919";
+      ctx.fillText(label, lx + av + 6 * u, chipY + 3 * u);
+    });
+    ctx.restore();
+    // Countdown gigante
+    if (phase === "count") {
+      const n = Math.max(1, 3 - Math.floor(tPhase));
+      ctx.font = `900 ${180 * u}px system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.fillStyle = INK;
+      ctx.fillText(String(n), w / 2 + 6 * u, h * 0.36 + 6 * u);
+      ctx.fillStyle = P[0];
+      ctx.fillText(String(n), w / 2, h * 0.36);
+      ctx.textAlign = "left";
+    }
+  }
+
+  function drawRange(arr, parallax, baseY, w, h) {
+    ctx.beginPath();
+    ctx.moveTo(-40, h * baseY);
+    for (const p of arr) {
+      const sx = p.dx * L() * 1.15 - camX * parallax;
+      if (sx < -w * 0.3 || sx > w * 1.3) continue;
+      ctx.lineTo(sx - p.w * w, h * baseY);
+      ctx.lineTo(sx, h * (baseY - p.h));
+      ctx.lineTo(sx + p.w * w, h * baseY);
+    }
+    ctx.lineTo(w + 40, h * baseY);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawLlama(x, y, sc, color, phase2) {
+    const r = (rx, ry, rw, rh) => ctx.fillRect(x + rx * sc, y + ry * sc, rw * sc, rh * sc);
+    ctx.fillStyle = color;
+    r(2, 11, 16, 7); r(15, 3, 4, 10); r(14, 0, 8, 4); r(20, -2, 2, 3); r(0, 9, 3, 4);
+    const legUp = Math.sin(phase2) * 2.6, legUp2 = Math.sin(phase2 + Math.PI) * 2.6;
+    r(3, 18 - Math.max(0, legUp), 2.5, 6 + Math.min(0, legUp));
+    r(8, 18 - Math.max(0, legUp2), 2.5, 6 + Math.min(0, legUp2));
+    r(12.5, 18 - Math.max(0, legUp2), 2.5, 6 + Math.min(0, legUp2));
+    r(16, 18 - Math.max(0, legUp), 2.5, 6 + Math.min(0, legUp));
+    ctx.fillStyle = "#191919";
+    ctx.fillRect(x + 19.4 * sc, y + 1.2 * sc, 1.4 * sc, 1.4 * sc);
+  }
+
+  let tPrev = performance.now();
+  let rafId = 0;
+  function loop(t) {
+    const dt = Math.min(0.05, (t - tPrev) / 1000);
+    tPrev = t;
+    update(dt);
+    drawScene();
+    if (phase !== "dead") rafId = requestAnimationFrame(loop);
+  }
+
+  function cleanup() {
+    phase = "dead";
+    cancelAnimationFrame(rafId);
+    removeEventListener("resize", resize);
+    ov.style.display = "none";
+    document.body.style.overflow = "";
+    stApi = null;
+    document.getElementById("sec-draw").scrollIntoView({ behavior: "smooth", block: "start" });
+    done();
+  }
+
+  rafId = requestAnimationFrame((t) => { tPrev = t; loop(t); });
+}
+
+/* ---------- Ruleta ---------- */
+const WHEEL_CSS = 480;
+// Texto oscuro sobre naranja/amarillo, blanco sobre magenta/teal/púrpura (contraste por gajo)
+const TEXT_ON = ["#ffffff", "#191919", "#ffffff", "#ffffff", "#191919"];
+function wheelColors() {
+  const cs = getComputedStyle(document.documentElement);
+  return LCOLORS.map((v) => cs.getPropertyValue(v).trim());
+}
+function setupWheelCanvas() {
+  const c = document.getElementById("wheel");
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  c.width = WHEEL_CSS * dpr; c.height = WHEEL_CSS * dpr;
+  c.style.width = WHEEL_CSS + "px"; c.style.height = WHEEL_CSS + "px";
+  const ctx = c.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return ctx;
+}
+function segColorIdx(i, n) {
+  let idx = i % LCOLORS.length;
+  if (n % LCOLORS.length === 1 && i === n - 1) idx = (i + 2) % LCOLORS.length;
+  return idx;
+}
+function drawWheel(ctx, names, rotation, highlightIdx = -1) {
+  const cs = getComputedStyle(document.documentElement);
+  const ink = cs.getPropertyValue("--ink").trim();
+  const colors = wheelColors();
+  const n = names.length, R = 224, cx = WHEEL_CSS / 2, cy = WHEEL_CSS / 2;
+  ctx.clearRect(0, 0, WHEEL_CSS, WHEEL_CSS);
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(rotation);
+  const fontPx = n <= 10 ? 16 : n <= 16 ? 14 : 12;
+  for (let i = 0; i < n; i++) {
+    const a0 = (i / n) * 2 * Math.PI - Math.PI / 2;
+    const a1 = ((i + 1) / n) * 2 * Math.PI - Math.PI / 2;
+    const cIdx = segColorIdx(i, n);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, R, a0, a1);
+    ctx.closePath();
+    ctx.fillStyle = colors[cIdx];
+    ctx.fill();
+    if (highlightIdx >= 0 && i !== highlightIdx) {
+      ctx.fillStyle = "rgba(20,15,30,0.55)";
+      ctx.fill();
+    }
+    ctx.strokeStyle = ink; ctx.lineWidth = 2; ctx.stroke();
+    ctx.save();
+    ctx.rotate((a0 + a1) / 2);
+    ctx.textAlign = "right";
+    ctx.font = `800 ${fontPx}px system-ui, sans-serif`;
+    const label = names[i].length > 15 ? names[i].slice(0, 14) + "…" : names[i];
+    ctx.fillStyle = highlightIdx >= 0 && i !== highlightIdx ? "rgba(255,255,255,0.35)" : TEXT_ON[cIdx];
+    ctx.fillText(label, R - 14, fontPx * 0.35);
+    ctx.restore();
+  }
+  if (highlightIdx >= 0) {
+    const a0 = (highlightIdx / n) * 2 * Math.PI - Math.PI / 2;
+    const a1 = ((highlightIdx + 1) / n) * 2 * Math.PI - Math.PI / 2;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, R, a0, a1);
+    ctx.closePath();
+    ctx.strokeStyle = ink; ctx.lineWidth = 6; ctx.stroke();
+  }
+  // Hub con la llama de la casa
+  ctx.beginPath(); ctx.arc(0, 0, 40, 0, 2 * Math.PI);
+  ctx.fillStyle = cs.getPropertyValue("--card").trim(); ctx.fill();
+  ctx.strokeStyle = ink; ctx.lineWidth = 3; ctx.stroke();
+  drawMiniLlama(ctx, -19, -16, 1.6, cs.getPropertyValue("--magenta").trim());
+  ctx.restore();
+  ctx.strokeStyle = ink; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, 2 * Math.PI); ctx.stroke();
+}
+function drawMiniLlama(ctx, x, y, sc, color) {
+  const r = (rx, ry, rw, rh) => ctx.fillRect(x + rx * sc, y + ry * sc, rw * sc, rh * sc);
+  ctx.fillStyle = color;
+  r(2, 11, 16, 7); r(15, 3, 4, 10); r(14, 0, 8, 4); r(20, -2, 2, 3); r(0, 9, 3, 4);
+  r(3, 18, 2.5, 6); r(8, 18, 2.5, 6); r(12.5, 18, 2.5, 6); r(16, 18, 2.5, 6);
+}
+function wheelSpin(names, winnerIdx, done) {
+  const wrap = document.getElementById("wheel-wrap");
+  wrap.style.display = "block";
+  const ctx = setupWheelCanvas();
+  const n = names.length;
+  // El centro del segmento ganador debe terminar bajo el puntero (arriba).
+  const target = 6 * 2 * Math.PI - ((winnerIdx + 0.5) / n) * 2 * Math.PI;
+  if (instantMode) {
+    drawWheel(ctx, names, target, winnerIdx);
+    setTimeout(done, 60);
+    return;
+  }
+  const dur = 4600;
+  const t0 = performance.now();
+  let lastTickSeg = -1;
+  function frame(t) {
+    const p = Math.min((t - t0) / dur, 1);
+    const ease = 1 - Math.pow(1 - p, 3);
+    const rot = target * ease;
+    drawWheel(ctx, names, rot);
+    const seg = Math.floor((rot / (2 * Math.PI)) * n) % n;
+    if (seg !== lastTickSeg) { lastTickSeg = seg; beep(300 + 200 * p, 0.03, "square", 0.02); }
+    if (p < 1) requestAnimationFrame(frame);
+    else {
+      drawWheel(ctx, names, target, winnerIdx);
+      fanfare();
+      setTimeout(done, 600);
+    }
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ---------- Resultado ---------- */
+function confetti() {
+  const box = document.createElement("div");
+  box.className = "confetti";
+  const colors = LCOLORS.map((c) => `var(${c})`);
+  for (let i = 0; i < 90; i++) {
+    const p = document.createElement("i");
+    p.style.left = Math.random() * 100 + "vw";
+    p.style.background = colors[i % colors.length];
+    p.style.animationDuration = 1.6 + Math.random() * 1.8 + "s";
+    p.style.animationDelay = Math.random() * 0.6 + "s";
+    p.style.transform = `rotate(${Math.random() * 360}deg)`;
+    box.appendChild(p);
+  }
+  document.body.appendChild(box);
+  setTimeout(() => box.remove(), 4200);
+}
+
+function reveal(names, winners, beacon, digest) {
+  document.getElementById("winner-box").style.display = "block";
+  const prize = state.frozen.prize;
+  document.getElementById("winner-cards").innerHTML = winners
+    .map(
+      (i, k) => `<div class="winner-card" style="transform: rotate(${k % 2 ? 1.5 : -1.5}deg)">
+        <img src="${avatar(names[i], 128)}" alt="" />
+        <div>
+          <p class="winner-name">${esc(names[i])}</p>
+          ${prize ? `<p class="winner-prize">${esc(T[lang].winsPrize)} ${esc(prize)}${winners.length > 1 ? ` · #${k + 1}` : ""}</p>` : winners.length > 1 ? `<p class="winner-prize">#${k + 1}</p>` : ""}
+        </div>
+      </div>`,
+    )
+    .join(" ");
+  document.getElementById("proof").textContent =
+    `Draw · drand round=${beacon.round} · randomness=${beacon.randomness.slice(0, 24)}… · entry_count=${names.length} · winners=[${winners.join(",")}] · digest=${digest.slice(0, 24)}…`;
+  const url = `https://api.drand.sh/public/${beacon.round}`;
+  const dl = document.getElementById("drand-link");
+  dl.href = url;
+  dl.textContent = T[lang].drandLink;
+  const qr = document.getElementById("qr-img");
+  qr.src = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(url)}`;
+  document.getElementById("qr-box").style.display = "block";
+  confetti();
+}
+
+async function reverify() {
+  const { names, digest } = state.frozen;
+  const { beacon, winners } = state.drawn;
+  const pool = names.map((_, i) => i);
+  const again = [];
+  for (let p = 0; p < winners.length; p++) {
+    const h = await sha256(`${beacon.randomness}|${digest}|${p}`);
+    again.push(pool.splice(Number(BigInt("0x" + h) % BigInt(pool.length)), 1)[0]);
+  }
+  const ok = JSON.stringify(again) === JSON.stringify(winners);
+  const out = document.getElementById("reverify-out");
+  out.style.display = "block";
+  out.textContent = ok ? T[lang].reverifyOk : "✗";
+}
+
+async function copySummary(btn) {
+  const { names, digest } = state.frozen;
+  const { beacon, winners } = state.drawn;
+  const url = `https://api.drand.sh/public/${beacon.round}`;
+  const text = T[lang].summary(
+    winners.map((i) => names[i]).join(", "),
+    names.length,
+    digest.slice(0, 24) + "…",
+    beacon.round,
+    url,
+  );
+  try {
+    await navigator.clipboard.writeText(text);
+    const orig = btn.textContent;
+    btn.textContent = T[lang].copied;
+    setTimeout(() => (btn.textContent = orig), 1600);
+  } catch { /* clipboard bloqueado: nada que hacer */ }
+}
+
+/* ---------- Modo demo / pose para auditoría ---------- */
+async function autoDemo(mode) {
+  loadSample();
+  await freeze();
+  setGame(mode === "wheel" ? "wheel" : "race");
+  await draw();
+}
+function posoScene() {
+  // Escena estática del estadio para capturas: sin red, sin animación.
+  const fakeBeacon = { round: 999999, randomness: "deadbeefcafe0123456789abcdef" };
+  state.frozen = { names: SAMPLE, digest: "posemode", ts: 0, at: "-", prize: "" };
+  state.drawn = { beacon: fakeBeacon, winners: [3] };
+  stadiumRace(SAMPLE, 3, fakeBeacon, () => {});
+  // Congela la escena a mitad de carrera tras 2 frames
+  setTimeout(() => { if (stApi) { /* dejamos correr: la pose real es el primer segundo */ } }, 100);
+}
+/* ---------- Clerk (login del organizador) ---------- */
+let clerkReady = false;
+function updateAuthUI() {
+  const box = document.getElementById("auth-box");
+  if (!window.Clerk) return;
+  if (Clerk.user) {
+    const name = Clerk.user.firstName || Clerk.user.username || Clerk.user.primaryEmailAddress?.emailAddress || "";
+    box.innerHTML = `<span class="hello">${esc(name)}</span><div id="user-btn"></div>`;
+    Clerk.mountUserButton(document.getElementById("user-btn"));
+  } else {
+    box.innerHTML =
+      `<button class="mini" onclick="Clerk.openSignIn()">${T[lang].signin}</button>` +
+      `<button class="mini solid" onclick="Clerk.openSignUp()">${T[lang].signup}</button>`;
+  }
+}
+window.addEventListener("load", async () => {
+  if (!window.Clerk) return; // sin red o CDN bloqueado: el sitio sigue funcionando
+  try {
+    await Clerk.load({ appearance: { variables: { colorPrimary: "#e93d9c", borderRadius: "0px" } } });
+    clerkReady = true;
+    updateAuthUI();
+    Clerk.addListener(() => updateAuthUI());
+  } catch (e) {
+    console.warn("Clerk no cargó:", e);
+  }
+});
+
+renderNames();
+if (params.get("lang") === "en") setLang("en");
+const demoMode = params.get("demo");
+if (demoMode) setTimeout(() => autoDemo(demoMode), 300);
+if (params.get("pose") === "1") setTimeout(posoScene, 300);
+</script>
+</body>
+</html>

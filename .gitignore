@@ -1,0 +1,18 @@
+# Secretos — nunca commitear
+.env
+.env.*
+!.env.example
+
+# Enlace local al proyecto de Vercel
+.vercel
+
+# Dependencias y builds
+node_modules/
+.next/
+dist/
+out/
+target/
+
+# Sistema
+.DS_Store
+Thumbs.db
