@@ -28,17 +28,17 @@
 <main>
   <section class="hero">
     <div class="hero-copy">
-      <span class="sticker" data-i="badge">Código libre · MIT</span>
+      <span class="sticker" data-i="badge">Para el sorteo del meetup</span>
       <h1 data-i-html="h1">Sorteos que <span class="hl">no se pueden arreglar</span>.</h1>
-      <p class="lead" data-i="lead">Importa a tus asistentes, congela la lista y deja que la suerte venga de un faro público de aleatoriedad. Carrera de llamas en modo estadio o ruleta: el show es tuyo, la imparcialidad es matemática.</p>
-      <p class="kicker" data-i="note">Demo funcional — la suerte es pública y cualquiera puede verificarla desde su celular</p>
+      <p class="lead" data-i="lead">Pega la lista de inscritos y sortea en pantalla grande: carrera de llamas o ruleta. Quién gana lo decide un azar público que nadie controla —ni tú—, y cualquiera puede comprobarlo después desde su celular.</p>
+      <p class="kicker" data-i="note">Pruébalo ahora con tu propia lista: gratis, sin cuenta y sin instalar nada.</p>
     </div>
     <div class="mascot" aria-hidden="true"><svg viewBox="-1 -3 24 28"><use href="#llama" fill="currentColor"/></svg></div>
   </section>
 
   <div class="steps">
     <article><span class="num">01</span><h3 data-i="s1t">Importa participantes</h3><p data-i="s1b">Pega la lista, sube un CSV o tráelos de Luma/Meetup. Nadie necesita wallet ni cuenta.</p></article>
-    <article><span class="num">02</span><h3 data-i="s2t">Congela la lista</h3><p data-i="s2b">La lista queda sellada con un digest SHA-256 y timestamp: después nadie puede agregar ni quitar nombres sin que se note.</p></article>
+    <article><span class="num">02</span><h3 data-i="s2t">Congela la lista</h3><p data-i="s2b">Al congelarla, la lista queda con una huella digital única y una hora. Si después alguien agrega o quita un nombre, la huella cambia y se nota.</p></article>
     <article><span class="num">03</span><h3 data-i="s3t">Elige tu juego y sortea</h3><p data-i="s3b">Carrera en pantalla completa o ruleta. El ganador se deriva de aleatoriedad pública; el juego solo lo cuenta bonito.</p></article>
   </div>
 
@@ -70,7 +70,7 @@
     <div class="head"><h2><span data-i="p2">Lista congelada</span></h2><span class="kicker" id="frozen-ts"></span></div>
     <div class="kpis">
       <div><b id="k-n">0</b><span data-i="kEntries">entries</span></div>
-      <div><b id="k-digest" style="font-size:16px" class="mono">—</b><span data-i="kDigest">list_hash sha-256</span></div>
+      <div><b id="k-digest" style="font-size:16px" class="mono">—</b><span data-i="kDigest">huella de la lista</span></div>
       <div><b id="k-status">frozen</b><span data-i="kStatus">estado del sorteo</span></div>
     </div>
     <div class="body">
@@ -107,7 +107,7 @@
           <div>
             <p class="kicker" data-i="verifyTitle">Prueba de imparcialidad</p>
             <p class="entity" id="proof"></p>
-            <p class="ok" data-i="verifyHow">Cómo verificar: 1) abre la ronda de quicknet y comprueba su firma con la clave pública del faro · 2) randomness = sha256(firma) · 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, saltando repetidos. Protocolo completo en docs/protocolo.md.</p>
+            <p class="ok" data-i="verifyHow">Cualquiera puede repetir este sorteo por su cuenta: con la huella de la lista y el número público que salió a esa hora, el resultado da siempre el mismo. No hace falta creernos nada. · Paso a paso: 1) abre la ronda de quicknet y comprueba su firma con la clave pública del faro · 2) randomness = sha256(firma) · 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, saltando repetidos. Protocolo completo en docs/protocolo.md.</p>
             <div class="row">
               <a id="drand-link" target="_blank" rel="noopener" class="mono" style="font-size:12px"></a>
               <button class="ghost" id="btn-reverify" data-i="reverify">Recomputar aquí mismo</button>
@@ -131,14 +131,14 @@
       <span class="kicker" data-i="prNote">La verificación nunca se cobra. Se cobra el show.</span>
     </div>
     <div class="steps" style="margin-top:18px">
-      <article><span class="num" style="background:var(--teal)" data-i="pr1t">Gratis</span><h3 data-i="pr1p">$0 · para siempre</h3><p data-i="pr1b">Sorteos verificables ilimitados, ruleta y carrera, QR de verificación y prueba recomputable.</p></article>
-      <article><span class="num" style="background:var(--magenta)" data-i="pr2t">Pro</span><h3 data-i="pr2p">US$ 5 / sorteo</h3><p data-i="pr2b">Catálogo completo de juegos y skins, tu logo en el estadio, participantes ilimitados y soporte.</p></article>
-      <article><span class="num" style="background:var(--orange)" data-i="pr3t">Sponsor</span><h3 data-i="pr3p">lo paga tu sponsor</h3><p data-i="pr3b">Sorteo brandeado: su marca en el estadio y la ruleta, en el momento de máxima atención del evento.</p></article>
+      <article><span class="num" style="background:var(--teal)" data-i="pr1t">Gratis</span><h3 data-i="pr1p">$0 · para siempre</h3><p data-i="pr1b">Sorteos verificables ilimitados, ruleta y carrera, QR de verificación y prueba recomputable. Código abierto (MIT).</p></article>
+      <article><span class="num" style="background:var(--magenta)" data-i="pr2t">Pro</span><h3 data-i="pr2p">US$ 5 / sorteo · pronto</h3><p data-i="pr2b">Catálogo completo de juegos y skins, tu logo en el estadio, participantes ilimitados y soporte.</p></article>
+      <article><span class="num" style="background:var(--orange)" data-i="pr3t">Sponsor</span><h3 data-i="pr3p">lo paga tu sponsor · pronto</h3><p data-i="pr3b">Sorteo brandeado: su marca en el estadio y la ruleta, en el momento de máxima atención del evento.</p></article>
     </div>
   </section>
 
   <section style="padding: 14px 0 30px">
-    <p class="kicker" data-i="nextTitle">Lo que viene: anclaje en Stellar</p>
+    <p class="kicker" data-i="nextTitle">Lo que viene: el sorteo queda guardado fuera de Tinkazo</p>
     <p style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 8px" data-i="nextBody">En la próxima versión, el sello de la lista y una ronda futura del faro quedan registrados en un contrato en Stellar que verifica la firma del faro por sí mismo y guarda el resultado. Cualquiera podrá leerlo y recomputarlo aunque Tinkazo no esté en línea. Este demo hace el sellado en tu navegador.</p>
   </section>
 </main>
