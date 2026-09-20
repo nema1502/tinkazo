@@ -22,7 +22,20 @@ export interface Dict {
   tellBody: (w: string, prize: string, n: number, u: string) => string;
 }
 
-const pick = (xs: string[]): string => xs[Math.floor(Math.random() * xs.length)] ?? "";
+/**
+ * Elige una variante de una clave con varias.
+ *
+ * Usa el azar sembrado con la ronda de drand cuando hay un juego corriendo, y
+ * `Math.random()` fuera de un juego. Así dos corridas de la misma ronda narran
+ * exactamente igual, que es la misma promesa que hace el resto del producto.
+ */
+let pickRng: (() => number) | null = null;
+const pick = (xs: string[]): string => xs[Math.floor((pickRng ?? Math.random)() * xs.length)] ?? "";
+
+/** El juego en curso presta su azar sembrado. `null` al terminar. */
+export function setPickSeed(rng: (() => number) | null): void {
+  pickRng = rng;
+}
 
 export const T: Record<Lang, Dict> = {
   es: {

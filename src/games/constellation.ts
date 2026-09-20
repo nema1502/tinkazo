@@ -245,7 +245,7 @@ export function stellarConstellation(
       beep(600 + 52 * hopI, 0.05, "triangle", 0.025);
       chips.push({ node: ni, a: 1 });
       if ((hops[hopI] as Hop).dur > 0.3 && n.idx !== winnerIdx) {
-        say(T[getLang()].cConstPass(names[n.idx] ?? ""));
+        say(T[getLang()].cConstPass(names[n.idx] ?? ""), 0.25 + 0.4 * (hopI / K));
       }
     }
   }
@@ -255,7 +255,7 @@ export function stellarConstellation(
     tPhase = 0;
     novaK = 0;
     shake = 1;
-    say(T[getLang()].cWin(names[winnerIdx] ?? ""));
+    say(T[getLang()].cWin(names[winnerIdx] ?? ""), 1);
     fanfare();
     beep(65, 0.6, "sine", 0.07);
     setTimeout(() => beep(1319, 0.08, "triangle", 0.04), 150);
@@ -285,7 +285,7 @@ export function stellarConstellation(
         beep(520 + bornTicks * 18, 0.03, "sine", 0.015);
         bornTicks++;
       }
-      if (tPhase >= 1.6 && barTick === 0) say(t("cConstReady"));
+      if (tPhase >= 1.6 && barTick === 0) say(t("cConstReady"), 0.1);
       const ticks = [1.75, 1.95, 2.15];
       const tones = [392, 494, 587];
       while (barTick < 3 && tPhase >= (ticks[barTick] as number)) {
@@ -296,7 +296,7 @@ export function stellarConstellation(
         phase = "hop";
         hopI = 0;
         hopT = 0;
-        say(t("cRouteFound"));
+        say(t("cRouteFound"), 0.35);
         beep(880, 0.22, "sawtooth", 0.06);
         beep(440, 0.3, "triangle", 0.04);
       }
@@ -306,17 +306,17 @@ export function stellarConstellation(
     if (phase === "hop") {
       const hp = hops[hopI] as Hop;
       if (hopT === 0 && hopI === K - 1) {
-        say(t("cConstLast"));
+        say(t("cConstLast"), 0.85);
         beep(120, 0.9, "sine", 0.05);
       } else if (!saidNarrow && hopI === 15) {
-        say(t("cConstNarrow"));
+        say(t("cConstNarrow"), 0.6);
         saidNarrow = true;
       }
       hopT += dt / hp.dur;
       if (hopI === K - 1 && !saidDecoy && hopT >= 0.72) {
         // El engaño: 380 ms yendo claramente hacia el vecino equivocado.
         (nodes[DECOY] as Node).flare = 1;
-        say(t("cConstDecoy"));
+        say(t("cConstDecoy"), 0.95);
         beep(988, 0.1, "square", 0.05);
         setTimeout(() => beep(740, 0.06, "sawtooth", 0.04), 100);
         saidDecoy = true;

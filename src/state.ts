@@ -52,16 +52,32 @@ export const params = new URLSearchParams(location.search);
 export const instantMode = params.get("instant") === "1";
 
 /**
- * Segundos entre el sello y la ronda objetivo. 45 s por defecto: margen sobre
- * los 30 s que exige el contrato.
+ * Segundos entre el sello y la ronda objetivo, en modo libre.
  *
- * `?lead=N` acorta la espera para demos y pruebas, pero solo en modo libre:
- * un sello anclado con menos de 30 s lo rechaza el contrato con `RoundTooSoon`,
- * y con razón, porque esa espera es justo lo que hace imposible elegir la ronda.
+ * La espera no es un trámite: es todo el truco. La lista se cierra **antes** de
+ * que exista el número que va a decidir, y por eso nadie pudo elegirlo. Lo que
+ * se necesita es que la ronda objetivo esté en el futuro al momento de sellar,
+ * y quicknet publica una cada tres segundos.
+ *
+ * Diez segundos alcanzan y se sienten mucho mejor en un evento, con la sala
+ * mirando. El margen que queda cubre un reloj desfasado unos pocos segundos, y
+ * si el reloj de la máquina está peor que eso, el comprobante lo delata: quien
+ * verifica recalcula la hora de la ronda desde el génesis de drand, no desde el
+ * reloj del organizador.
+ *
+ * `?lead=N` la acorta todavía más para pruebas.
  */
-export const LEAD_SECONDS = Math.max(3, Number(params.get("lead")) || 45);
+export const LEAD_SECONDS = Math.max(3, Number(params.get("lead")) || 10);
 
-/** Margen mínimo cuando el sello va a la cadena. El contrato exige 30 s. */
+/**
+ * Margen mínimo cuando el sello va a la cadena.
+ *
+ * Acá no lo elijo yo: el contrato rechaza con `RoundTooSoon` cualquier ronda
+ * que nazca antes de treinta segundos, y el contrato es inmutable. Sobre esos
+ * treinta hay que dejar lo que tarde la transacción en confirmarse, porque el
+ * contrato mide contra la hora de cierre del ledger, no contra la del
+ * navegador. Cuarenta y cinco es lo que aguantó sin fallar en testnet.
+ */
 export const ANCHOR_LEAD_SECONDS = 45;
 
 export const SAMPLE = [

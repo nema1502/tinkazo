@@ -1,6 +1,7 @@
 import { $ } from "../dom";
 import { LCOLORS, avatar, instantMode, type Beacon } from "../state";
-import { t } from "../i18n";
+import { setPickSeed, t } from "../i18n";
+import { narrate, stopNarrator } from "../narrator";
 
 /**
  * Lo que comparten todos los juegos.
@@ -27,8 +28,13 @@ export interface Stage {
   rng: () => number;
   /** El color k del ciclo de la paleta. */
   color: (k: number) => string;
-  /** Escribe una línea del narrador. */
-  say: (msg: string) => void;
+  /**
+   * Escribe y dice una línea del narrador.
+   *
+   * `heat` va de 0 a 1 y es la tensión del momento. Sube el ritmo y el tono de
+   * la voz: es lo que separa a un relator de alguien leyendo en voz alta.
+   */
+  say: (msg: string, heat?: number) => void;
   /** Dibuja el chip con avatar y nombre. Devuelve su ancho. */
   chip: (name: string, x: number, y: number, alpha?: number) => number;
   /** Desmonta y devuelve el control a la página. Idempotente. */
@@ -82,6 +88,7 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
   };
   resize();
   addEventListener("resize", resize);
+  takeOverScreen(ov);
 
   // PRNG sembrado con la aleatoriedad de drand: la misma ronda dibuja siempre
   // la misma animación, en cualquier navegador.
@@ -126,11 +133,15 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
     rng,
     dark,
     color: (k) => P[k % P.length] ?? INK,
-    say(msg) {
+    say(msg, heat = 0) {
       commentEl.textContent = msg;
-      commentEl.classList.remove("pop");
-      void commentEl.offsetWidth;
-      commentEl.classList.add("pop");
+      // Con la API de animaciones en vez de quitar y poner la clase: ese truco
+      // obligaba a recalcular el diseño de la página en cada línea.
+      commentEl.animate(
+        [{ transform: "translateX(-50%) scale(0.75)" }, { transform: "translateX(-50%) scale(1)" }],
+        { duration: 280, easing: "cubic-bezier(.34,1.56,.64,1)" },
+      );
+      narrate(msg, heat);
     },
     chip(name, x, y, alpha = 1) {
       const k = u();
@@ -159,6 +170,9 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
       if (dead) return;
       dead = true;
       cancelAnimationFrame(rafId);
+      setPickSeed(null);
+      stopNarrator();
+      releaseScreen();
       removeEventListener("resize", resize);
       ov.style.display = "none";
       document.body.style.overflow = "";
@@ -181,8 +195,64 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
     },
   };
 
+  // Las frases del narrador también salen de la semilla: con voz, dos corridas
+  // de la misma ronda tienen que sonar igual.
+  setPickSeed(rng);
   current = { skip: onSkip };
   return stage;
+}
+
+/* ------------------------------------------------------------------ pantalla
+   El estadio pide la pantalla completa y le dice al sistema que no la apague.
+
+   Los dos permisos pueden negarse, y ninguno hace falta para sortear, así que
+   todo falla en silencio: el estadio ya ocupa la ventana entera por CSS.
+
+   El bloqueo se suelta solo cuando la pestaña pasa a segundo plano, así que hay
+   que volver a pedirlo al regresar. Si no, la pantalla se apaga en la mitad de
+   una carrera de quince segundos porque alguien miró el celular. */
+
+interface WakeLockSentinelLike {
+  release(): Promise<void>;
+}
+interface WakeLockLike {
+  request(type: "screen"): Promise<WakeLockSentinelLike>;
+}
+type NavWithWakeLock = Navigator & { wakeLock?: WakeLockLike };
+
+let sentinel: WakeLockSentinelLike | null = null;
+
+async function keepAwake(): Promise<void> {
+  const nav = navigator as NavWithWakeLock;
+  if (!nav.wakeLock) return;
+  try {
+    sentinel = await nav.wakeLock.request("screen");
+  } catch {
+    /* sin permiso o con la batería baja: la pantalla se apagará, y no es fatal */
+  }
+}
+
+const onVisible = (): void => {
+  if (document.visibilityState === "visible" && sentinel) void keepAwake();
+};
+
+function takeOverScreen(el: HTMLElement): void {
+  // Esconder la barra del navegador solo funciona en escritorio. En iPhone no
+  // hay pantalla completa de elementos, y ahí el CSS es todo lo que hay.
+  if (!document.fullscreenElement && el.requestFullscreen) {
+    void el.requestFullscreen({ navigationUI: "hide" }).catch(() => undefined);
+  }
+  void keepAwake();
+  document.addEventListener("visibilitychange", onVisible);
+}
+
+function releaseScreen(): void {
+  document.removeEventListener("visibilitychange", onVisible);
+  if (sentinel) {
+    void sentinel.release().catch(() => undefined);
+    sentinel = null;
+  }
+  if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
 }
 
 /** Interpolación suave, la de siempre. */

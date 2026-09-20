@@ -16,7 +16,7 @@ Toda comunidad hace sorteos: libros, licencias, entradas, poleras. Y en todos ha
 
 1. **Traés la lista.** Pegás los nombres o subís un CSV. Los participantes no instalan nada ni se crean cuenta. Nunca.
 2. **Se congela la lista.** Se calcula su huella (SHA-256) y se compromete contra una **ronda futura** de [drand](https://drand.love), el faro público de aleatoriedad de la League of Entropy. La clave está en el orden: cuando cerrás la lista, el número que va a decidir **todavía no existe**.
-3. **Llega el número.** Cuarenta y cinco segundos después, drand publica esa ronda firmada. Ni vos ni yo pudimos elegirla.
+3. **Llega el número.** Diez segundos después, drand publica esa ronda firmada. Ni vos ni yo pudimos elegirla. Si el sorteo se ancla en Stellar la espera sube a cuarenta y cinco, porque el contrato exige treinta de margen y no se puede cambiar.
 4. **El show.** Cinco juegos a pantalla completa, con narrador. Cuando arranca la animación el ganador ya está decidido: el juego solo lo cuenta.
 5. **Cualquiera revisa.** El comprobante es un enlace. Quien lo abre ve la página rehacer el sorteo desde cero en su propio navegador y dar un veredicto.
 

@@ -166,7 +166,7 @@ export function ledgerClose(
     tPhase = 0;
     const tone = [180, 270, 400][sweepI] ?? 400;
     beep(tone, 0.8, "sawtooth", 0.035);
-    say(t(sweepI === 0 ? "cLedgerSweep" : sweepI === 1 ? "cLedgerSweep2" : "cLedgerSweep3"));
+    say(t(sweepI === 0 ? "cLedgerSweep" : sweepI === 1 ? "cLedgerSweep2" : "cLedgerSweep3"), 0.2 + sweepI * 0.25);
   }
 
   /** Cuántas sobreviven a la pasada `i`. */
@@ -188,7 +188,7 @@ export function ledgerClose(
       phase = "stamp";
       tPhase = 0;
       stampI = 0;
-      say(t("cLedgerFinal"));
+      say(t("cLedgerFinal"), 0.8);
     } else {
       startSweep();
     }
@@ -198,7 +198,7 @@ export function ledgerClose(
     phase = "seal";
     tPhase = 0;
     sealK = 0;
-    say(T[getLang()].cWin(names[winnerIdx] ?? ""));
+    say(T[getLang()].cWin(names[winnerIdx] ?? ""), 1);
     fanfare();
     beep(1568, 0.1, "triangle", 0.04);
   }

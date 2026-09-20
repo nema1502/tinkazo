@@ -1,4 +1,5 @@
 import { getLang } from "./i18n";
+import { muteNarrator } from "./narrator";
 
 /* Sonido con WebAudio, sin assets. */
 
@@ -40,5 +41,10 @@ export function soundLabel(): void {
 
 export function toggleSound(): void {
   muted = !muted;
+  // La voz del narrador es parte del sonido: un solo botón las apaga a las dos.
+  muteNarrator(muted);
   soundLabel();
 }
+
+/** `true` si el estadio está en silencio. */
+export const isMuted = (): boolean => muted;

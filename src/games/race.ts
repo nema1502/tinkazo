@@ -1,9 +1,10 @@
 import { $ } from "../dom";
-import { T, getLang, t } from "../i18n";
+import { T, getLang, setPickSeed, t } from "../i18n";
 import { LCOLORS, avatar, instantMode, type Beacon } from "../state";
 import { beep, fanfare } from "../sound";
 import { THEMES, type ThemeId } from "./themes";
 import { registerSkip } from "./overlay";
+import { narrate, stopNarrator } from "../narrator";
 
 /* Modo estadio: carrera de llamas a pantalla completa, sembrada con la semilla. */
 
@@ -64,6 +65,10 @@ export function stadiumRace(
     return ((q ^ (q >>> 14)) >>> 0) / 4294967296;
   };
 
+  // Las frases del narrador también salen de la semilla, igual que todo lo
+  // demás: la misma ronda tiene que sonar igual en cada corrida.
+  setPickSeed(rng);
+
   const prefersDark = matchMedia("(prefers-color-scheme: dark)").matches
     ? document.documentElement.dataset.theme !== "light"
     : document.documentElement.dataset.theme === "dark";
@@ -110,13 +115,15 @@ export function stadiumRace(
   let tPhase = 0, tRace = 0, camX = 0, shake = 0, lastLeader = -1, leadCd = 0, saidLast = false, finished = false, tFreeze = 0;
   let lastBeepN = 4;
   const winnerName = names[winnerIdx] ?? "";
-  say(t(skin.readyKey));
+  say(t(skin.readyKey), 0.1);
 
-  function say(msg: string): void {
+  function say(msg: string, heat = 0): void {
     commentEl.textContent = msg;
-    commentEl.classList.remove("pop");
-    void commentEl.offsetWidth;
-    commentEl.classList.add("pop");
+    commentEl.animate(
+      [{ transform: "translateX(-50%) scale(0.75)" }, { transform: "translateX(-50%) scale(1)" }],
+      { duration: 280, easing: "cubic-bezier(.34,1.56,.64,1)" },
+    );
+    narrate(msg, heat);
   }
 
   const W = () => canvas.width;
@@ -141,7 +148,7 @@ export function stadiumRace(
     phase = "done";
     tFreeze = 0;
     shake = 1;
-    say(T[getLang()].cWin(winnerName));
+    say(T[getLang()].cWin(winnerName), 1);
     fanfare();
   }
 
@@ -150,7 +157,7 @@ export function stadiumRace(
       tPhase += dt;
       const n = 3 - Math.floor(tPhase);
       if (n < lastBeepN && n >= 1) { lastBeepN = n; beep(440, 0.12); }
-      if (tPhase >= 3) { phase = "race"; say(t("cStart")); beep(880, 0.25, "square", 0.07); }
+      if (tPhase >= 3) { phase = "race"; say(t("cStart"), 0.35); beep(880, 0.25, "square", 0.07); }
       return;
     }
     if (phase === "done") {
@@ -196,11 +203,11 @@ export function stadiumRace(
     if (leader.i !== lastLeader && tRace > 1 && leadCd <= 0 && !saidLast) {
       lastLeader = leader.i;
       leadCd = 1.6;
-      say(T[getLang()].cLead(leader.name));
+      say(T[getLang()].cLead(leader.name), 0.3 + 0.4 * prog);
       beep(660, 0.08, "triangle", 0.04);
     }
     leadCd -= dt;
-    if (!saidLast && prog > SURGE_AT) { saidLast = true; say(t("cLast")); beep(740, 0.1, "triangle", 0.05); }
+    if (!saidLast && prog > SURGE_AT) { saidLast = true; say(t("cLast"), 0.85); beep(740, 0.1, "triangle", 0.05); }
     const camTarget = leader.x - W() * 0.4;
     camX += (Math.max(0, Math.min(camTarget, L() - W() * 0.86)) - camX) * Math.min(1, dt * 2.6);
     if (wr.x >= L()) finishNow();
@@ -388,6 +395,8 @@ export function stadiumRace(
     ov.style.display = "none";
     document.body.style.overflow = "";
     registerSkip(null);
+    setPickSeed(null);
+    stopNarrator();
     $("sec-draw").scrollIntoView({ behavior: "smooth", block: "start" });
     done();
   }
