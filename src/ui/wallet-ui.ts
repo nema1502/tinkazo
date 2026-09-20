@@ -160,14 +160,52 @@ function showModal(options: Option[]): void {
   const close = document.createElement("button");
   close.className = "mini";
   close.textContent = t("cancel");
-  close.addEventListener("click", () => back.remove());
+  close.addEventListener("click", () => shut());
   card.appendChild(close);
 
   back.appendChild(card);
   back.addEventListener("click", (e) => {
-    if (e.target === back) back.remove();
+    if (e.target === back) shut();
   });
+
+  // Un diálogo de verdad: se anuncia como tal, atrapa el foco, cierra con
+  // Escape y devuelve el foco a donde estaba. Sin esto, con teclado se puede
+  // tabular "por detrás" del modal y con lector de pantalla no existe.
+  card.setAttribute("role", "dialog");
+  card.setAttribute("aria-modal", "true");
+  card.setAttribute("aria-label", t("connectTitle"));
+  card.tabIndex = -1;
+
+  const returnTo = document.activeElement;
+  const onKey = (e: KeyboardEvent): void => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      shut();
+      return;
+    }
+    if (e.key !== "Tab") return;
+    const focusable = [...card.querySelectorAll<HTMLElement>("a[href], button:not([disabled])")];
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) return;
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
+  function shut(): void {
+    document.removeEventListener("keydown", onKey, true);
+    back.remove();
+    if (returnTo instanceof HTMLElement) returnTo.focus();
+  }
+
+  document.addEventListener("keydown", onKey, true);
   document.body.appendChild(back);
+  (card.querySelector<HTMLElement>("a[href], button") ?? card).focus();
 }
 
 async function connect(

@@ -338,7 +338,12 @@ function renderResult(
   }
 }
 
-/** Los pasos con los valores concretos, para rehacerlo con otras herramientas. */
+/**
+ * Los pasos con los valores concretos, para rehacerlo con otras herramientas.
+ *
+ * Los comentarios van en el idioma de quien abre el enlace. Los comandos no se
+ * traducen: son comandos.
+ */
 function renderSteps(
   proof: Proof,
   hash: string,
@@ -347,20 +352,20 @@ function renderSteps(
   winners: number[],
 ): void {
   $("v-steps").textContent = [
-    `# 1. la huella de la lista (los nombres unidos por saltos de línea)`,
+    `# 1. ${t("vStep1")}`,
     `printf '%s' "$(cat lista.txt)" | sha256sum`,
     `  → ${hash}`,
     ``,
-    `# 2. la firma de la ronda, del faro público`,
+    `# 2. ${t("vStep2")}`,
     `curl ${QUICKNET.relays[0]}/v2/chains/${QUICKNET.chainHash}/rounds/${proof.round}`,
-    `  publicada el ${new Date(roundTime(proof.round) * 1000).toISOString()}`,
+    `  ${t("vStepPublished")} ${new Date(roundTime(proof.round) * 1000).toISOString()}`,
     ``,
-    `# 3. la semilla sale de la firma`,
-    `randomness = sha256(firma)`,
+    `# 3. ${t("vStep3")}`,
+    `randomness = sha256(${t("vStepSig")})`,
     `  → ${randomness}`,
     ``,
-    `# 4. el ganador, con contador desde 0 y salteando repetidos`,
-    `idx = be64(sha256(randomness ‖ list_hash ‖ be32(contador))[0..8]) mod ${count}`,
+    `# 4. ${t("vStep4")}`,
+    `idx = be64(sha256(randomness ‖ list_hash ‖ be32(${t("vStepCounter")}))[0..8]) mod ${count}`,
     `  → [${winners.join(", ")}]`,
   ].join("\n");
 }
