@@ -128,8 +128,9 @@
   }
   .netbadge.main { background: var(--teal); }
   .netbadge.bad { background: var(--orange); }
-  .auth a.hello { text-decoration: none; display: inline-flex; align-items: center; gap: 7px; }
-  .auth .hello-face { width: 22px; height: 22px; border: 2px solid var(--ink); background: var(--card); }
+  .auth a.hello, .auth button.hello { text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
+  .auth .hello { max-width: 190px; overflow: hidden; }
+  .auth .hello-face { width: 24px; height: 24px; border: 2px solid var(--ink); background: var(--card); flex: 0 0 auto; }
   .auth a.hello:hover { text-decoration: underline; }
   .modal-back {
     position: fixed; inset: 0; z-index: 70; background: rgba(12, 8, 20, 0.72);

@@ -116,12 +116,18 @@ function render(): void {
   if (session.avatar) {
     const img = document.createElement("img");
     img.className = "hello-face";
-    img.src = session.avatar;
     img.alt = "";
+    // Google a veces rechaza la foto cuando no llega el origen, y entonces el
+    // navegador pinta el icono de imagen rota. Mejor no mostrar nada.
+    img.addEventListener("error", () => img.remove());
     img.referrerPolicy = "no-referrer";
+    img.src = session.avatar;
     link.appendChild(img);
   }
-  link.appendChild(document.createTextNode(session.name || shortAddress(session.address)));
+  // Solo el nombre de pila: "Nicolás Emir Mejía Agreda" no entra en una
+  // cabecera y quedaba cortado a la mitad.
+  const short = (session.name ?? "").trim().split(/\s+/)[0] ?? "";
+  link.appendChild(document.createTextNode(short || shortAddress(session.address)));
   box.appendChild(link);
 
   // El botón de salir vive adentro del panel: la cabecera de un celular no
