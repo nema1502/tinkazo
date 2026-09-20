@@ -197,6 +197,9 @@
     font-weight: 800; font-size: 13px; cursor: pointer; font-family: inherit;
   }
   .gamepick button.on { background: var(--purple); color: var(--on-purple); box-shadow: var(--sh-sm); transform: rotate(-1deg); }
+  /* La miniatura de cada juego, dentro de su botón. */
+  .gamepick button { flex-direction: column; gap: 6px; padding: 8px 12px 10px; }
+  .gamepick .thumb { width: 54px; height: 30px; border: 2px solid var(--ink); display: block; }
   .gamepick button:disabled {
     cursor: not-allowed; background: var(--paper); color: var(--muted);
     border-style: dashed; box-shadow: none;
@@ -239,7 +242,9 @@
   .qr p { font-size: 10px; margin-top: 6px; max-width: 140px; }
   .ok { border-left: 4px solid var(--teal); padding-left: 10px; margin-top: 10px; font-size: 13px; color: var(--ink2); }
   footer { border-top: var(--bw) solid var(--ink); margin-top: 44px; }
-  footer .bar { font-family: ui-monospace, Consolas, monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); font-weight: 700; }
+  footer .bar { font-family: ui-monospace, Consolas, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); font-weight: 700; }
+  /* El pie lleva emoji, y en versalitas con mucho espaciado quedan feos. */
+  footer .bar [data-i="footR"] { text-transform: none; letter-spacing: 0.04em; font-size: 13px; }
   .note { font-size: 12px; color: var(--muted); margin-top: 10px; }
   select { background: var(--card); color: var(--ink); border: 2px solid var(--ink); padding: 9px 12px; font-weight: 700; }
   /* Detrás de la tarjeta del ganador, no encima: caía justo sobre el nombre

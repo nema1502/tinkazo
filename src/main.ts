@@ -114,6 +114,9 @@ function poseScene(): void {
 
 renderNames();
 showVoiceNote();
+// Cada juego muestra en su botón lo que hace. Los nombres solos no le dicen
+// nada a quien llega por primera vez.
+void import("./ui/thumbs").then((m) => m.initThumbs(GAMES));
 // Siempre se aplica el diccionario al cargar, también en español: si no, el
 // texto que se ve sale del markup y los dos archivos se separan sin que se note.
 setLang(params.get("lang") === "en" ? "en" : "es");

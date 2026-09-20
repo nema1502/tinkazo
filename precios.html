@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tinkazo, precios y cómo funciona</title>
+<meta name="description" content="Qué cuesta un sorteo de Tinkazo y qué pasa por dentro. Verificar siempre es gratis." />
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -4 26 30"><g fill="%23e93d9c"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></g></svg>' />
+</head>
+<body>
+<header>
+  <div class="stripe"></div>
+  <div class="bar">
+    <a class="wordmark" href="/" style="text-decoration:none;color:inherit">Tinka<b>zo</b></a>
+    <nav class="langs" aria-label="idioma">
+      <button id="l-es" class="on">es</button>
+      <button id="l-en">en</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero" style="padding: 48px 0 8px">
+    <div class="hero-copy">
+      <h1 style="font-size: clamp(32px, 4.6vw, 48px)" data-i="prTitle">Precios</h1>
+      <p class="lead" data-i="prNote">La verificación nunca se cobra. Se cobra el show.</p>
+    </div>
+  </section>
+
+  <section style="padding: 6px 0 10px">
+    <div class="steps" style="margin-top:6px">
+      <article><span class="num" style="background:var(--teal)" data-i="pr1t">Gratis</span><h3 data-i="pr1p">$0 · para siempre</h3><p data-i="pr1b">Sorteos verificables ilimitados, ruleta y carrera, QR de verificación y prueba recomputable. Código abierto (MIT).</p></article>
+      <article><span class="num" style="background:var(--magenta)" data-i="pr2t">Pro</span><h3 data-i="pr2p">US$ 5 / sorteo · pronto</h3><p data-i="pr2b">Catálogo completo de juegos y skins, tu logo en el estadio, participantes ilimitados y soporte.</p></article>
+      <article><span class="num" style="background:var(--orange)" data-i="pr3t">Sponsor</span><h3 data-i="pr3p">lo paga tu sponsor · pronto</h3><p data-i="pr3b">Sorteo brandeado: su marca en el estadio y la ruleta, en el momento de máxima atención del evento.</p></article>
+    </div>
+  </section>
+
+  <section style="padding: 14px 0 30px">
+    <h2 class="kicker" data-i="nextTitle">El sorteo no depende de mí</h2>
+    <p style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 8px" data-i="nextBody">Si conectás una cuenta de Stellar, la huella de la lista y la ronda que va a decidir quedan anotadas en un contrato. El contrato verifica la firma del faro por su cuenta y se queda con el resultado. Cuesta tres centavos de dólar. Si mañana Tinkazo desaparece, ese sorteo sigue ahí y cualquiera lo rehace. Sin cuenta también sorteás, pero el comprobante lo sostiene tu palabra.</p>
+  </section>
+  <section style="padding: 0 0 40px">
+    <p class="note"><a href="/" data-i="backHome">Volver a sortear</a></p>
+  </section>
+</main>
+
+<footer><div class="bar"><span data-i="footL">Tinkazo</span><span data-i="footR">Hecho con ♥ en 🇧🇴</span></div></footer>
+<script type="module" src="/src/precios.ts"></script>
+</body>
+</html>
