@@ -128,13 +128,24 @@ Módulos y responsabilidades:
 | `src/protocol/drand.ts` | Parámetros de quicknet, `roundAt`, `roundTime`, fetch con relays y reintentos, verificación BLS y descompresión G1 (§2, §6) |
 | `src/protocol/proof.ts` | Comprobante: codificar/decodificar enlace y JSON (D-13) |
 | `src/stellar/config.ts` | Red activa, RPC, passphrase, dirección del contrato |
-| `src/stellar/wallet.ts` | Adaptador de wallet: `connect()`, `address`, `network`, `signTransaction(xdr)` sobre Stellar Wallets Kit |
+| `src/stellar/wallet.ts` | Adaptador de wallet: `connect()`, `address`, `network`, `signTransaction(xdr)` sobre `@stellar/freighter-api`, más la cuenta invitada de testnet |
+| `src/stellar/wallet-pollar.ts` | Entrar con Google. Firma y envía de una sola vez contra su propio servidor, por eso se marca con `submitsItself` |
+| `src/narrator.ts` | El narrador con voz, sobre la API del navegador. Elige voz en español, prefiere las locales y sube el ritmo con la tensión |
 | `src/stellar/contract.ts` | `contract.Client` tipado de `tinkazo-raffle`: `seal`, `draw`, `getRaffle`, `getDraw` |
-| `src/games/race.ts`, `src/games/wheel.ts` | Carrera de llamas y ruleta (código v1 migrado) |
+| `src/games/overlay.ts` | El andamiaje de los juegos: monta el estadio, siembra el azar con la ronda, dibuja los chips, registra el botón de saltar, pide pantalla completa y desmonta |
+| `src/games/*.ts` | Los seis juegos. Ninguno calcula nada: reciben el ganador ya decidido |
+| `src/games/lore.ts` | Las tarjetas de "¿por qué se llama así?", con su fuente primaria |
 | `src/ui/*.ts` | Render de secciones: lista, sello, cuenta regresiva, resultado, errores |
 | `verificar.html` + `src/verify.ts` | Página de verificación de solo lectura (FR-17 a 21) |
 
-El adaptador de wallet es una interfaz pequeña para que la historia 6.2 agregue Pollar sin tocar el resto: `{ kind, connect, disconnect, getAddress, getNetwork, signTransaction }`.
+El adaptador de wallet es una interfaz pequeña para que se pueda agregar una wallet sin tocar el resto: `{ kind, connect, disconnect, getAddress, getNetwork, signTransaction }`. Pollar la extiende con `submitsItself` y `signAndSubmit`, porque firma y envía junto contra su propio servidor y ahí no se puede usar `signAndSend`: la transacción saldría dos veces.
+
+**La capa de juegos.** `overlay.ts` expone un `Stage` con el lienzo, el azar sembrado con `beacon.randomness`, los chips con avatar, el narrador y el desmontaje idempotente. Un juego nuevo pide `mount()` y recibe todo eso; si devuelve `null` es porque corre en modo `?instant=1` y hay que cerrar el sorteo de una.
+
+Dos reglas que valen para los seis juegos:
+
+- **Ninguno decide nada.** El ganador llega por parámetro desde `playGame()` en `src/ui/draw.ts`. Lo único sembrado es cómo se ve.
+- **Nunca `Math.random()`.** Todo el azar visual sale del PRNG de `overlay.ts`, así que la misma ronda dibuja siempre la misma animación en cualquier navegador. Eso incluye las frases del narrador: `setPickSeed()` le presta ese azar a `src/i18n.ts` mientras hay un juego corriendo.
 
 ## Patrones de implementación y reglas de consistencia
 
@@ -191,8 +202,14 @@ tinkazo/
 │   │   ├── wallet.ts             # adaptador Stellar Wallets Kit
 │   │   └── contract.ts           # contract.Client tipado
 │   ├── games/
-│   │   ├── race.ts
-│   │   └── wheel.ts
+│   │   ├── overlay.ts            # andamiaje compartido: estadio, semilla, chips, skip
+│   │   ├── lore.ts               # las tarjetas con su fuente
+│   │   ├── constellation.ts      # Constelación Stellar
+│   │   ├── ledger.ts             # Cierre de Libro
+│   │   ├── pasanaku.ts           # Pasanaku
+│   │   ├── race.ts               # carrera, con temas (llamas y cohetes)
+│   │   ├── themes.ts
+│   │   └── wheel.ts              # ruleta
 │   └── ui/
 ├── public/                       # favicon, og-image
 ├── contracts/
