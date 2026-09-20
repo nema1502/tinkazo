@@ -35,7 +35,9 @@ Obligaciones:
 
 **Como tema de la carrera** (lo barato). El motor de `src/games/race.ts` ya resuelve carriles, cámara, parallax, narrador, cuenta regresiva y meta. Un tema nuevo es una entrada en `src/games/themes.ts`: paleta del cielo, cordillera, pista, forma del horizonte, texto de largada y una función que dibuja al corredor. Así se hizo la [Carrera Stellar](juegos/carrera-stellar.md).
 
-**Como juego propio** (cuando el formato no es una carrera). Un módulo nuevo en `src/games/`, como la ruleta. Vale la pena solo si la mecánica visual es distinta de verdad.
+**Como juego propio** (cuando el formato no es una carrera). Un módulo nuevo en `src/games/` que use el andamiaje de [`src/games/overlay.ts`](../src/games/overlay.ts): `mount()` devuelve el lienzo, el azar sembrado con la ronda de drand, los chips con avatar, el registro del botón de saltar y el desmontaje. También devuelve `null` en modo `?instant=1`, y ahí hay que cerrar el sorteo de una. Así se hicieron [Constelación Stellar](juegos/constelacion-stellar.md) y [Cierre de Libro](juegos/cierre-de-libro.md).
+
+Vale la pena solo si la mecánica visual es distinta de verdad. La prueba: si hay que pelearse con el motor para que algo se vea, el formato no era una carrera.
 
 ## Pasos para sumarlo
 
@@ -88,8 +90,10 @@ Revisalo vos antes de subirlo:
 
 ## Juegos actuales
 
-| Juego | `?demo=` | Tipo | Documento |
-|---|---|---|---|
-| Carrera de llamas | `race` | Motor de carrera, tema andino | — |
-| Carrera Stellar | `stellar` | Motor de carrera, tema espacial | [carrera-stellar.md](juegos/carrera-stellar.md) |
-| Ruleta | `wheel` | Módulo propio, hasta 24 participantes | — |
+| Juego | `?demo=` | Tipo | Hasta | Documento |
+|---|---|---|---|---|
+| Carrera de llamas | `race` | Motor de carrera, tema andino | 8 en pantalla | — |
+| Constelación Stellar | `stellar` | Módulo propio | 200 | [constelacion-stellar.md](juegos/constelacion-stellar.md) |
+| Cierre de Libro | `ledger` | Módulo propio | 200 | [cierre-de-libro.md](juegos/cierre-de-libro.md) |
+| Carrera de cohetes | `rockets` | Motor de carrera, tema espacial | 8 en pantalla | [carrera-stellar.md](juegos/carrera-stellar.md) |
+| Ruleta | `wheel` | Módulo propio | 24 | — |

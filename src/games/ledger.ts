@@ -1,6 +1,6 @@
 import { T, getLang, t } from "../i18n";
 import { beep, fanfare } from "../sound";
-import type { Beacon } from "../state";
+import { avatar, type Beacon } from "../state";
 import { INK, clamp, ease, mount } from "./overlay";
 
 /**
@@ -56,11 +56,31 @@ export function ledgerClose(
     done();
     return;
   }
-  const { c, W, H, u, rng, color, say, chip, dark, cleanup, run } = st;
+  const { c, W, H, u, rng, color, say, dark, cleanup, run } = st;
 
   const n = names.length;
   /** Cuántas quedan en la mesa final. Con dos participantes, dos. */
   const FINAL = Math.min(3, n);
+
+  const faces = new Map<number, HTMLImageElement>();
+  /** El avatar de una persona, cargado una sola vez. */
+  function face(idx: number): HTMLImageElement {
+    let im = faces.get(idx);
+    if (!im) {
+      im = new Image();
+      im.src = avatar(names[idx] ?? "", 64);
+      faces.set(idx, im);
+    }
+    return im;
+  }
+
+  /** Recorta el nombre a lo que entra, con puntos suspensivos. */
+  function fit(name: string, room: number): string {
+    if (c.measureText(name).width <= room) return name;
+    let cut = name.length;
+    while (cut > 1 && c.measureText(name.slice(0, cut) + "…").width > room) cut--;
+    return name.slice(0, cut) + "…";
+  }
 
   let phase: Phase = "fall";
   let tPhase = 0;
@@ -285,15 +305,17 @@ export function ledgerClose(
   function drawCard(q: Card): void {
     const k = u();
     if (!q.alive) {
-      const a = Math.max(0, 1 - q.killed * 1.6);
+      // Se van rápido y en su propio color: grises y grandes tapaban la mesa.
+      const a = Math.max(0, 1 - q.killed * 2.6);
       if (a <= 0) return;
-      c.globalAlpha = a;
-      c.fillStyle = "#8a8378";
+      c.globalAlpha = a * 0.7;
+      c.fillStyle = color(q.idx);
+      const s = a;
       for (const b of q.bits) {
         c.save();
         c.translate(b.x, b.y);
         c.rotate(b.r);
-        c.fillRect(0, 0, q.w / 2, q.h / 2);
+        c.fillRect(0, 0, (q.w / 2) * s, (q.h / 2) * s);
         c.restore();
       }
       c.globalAlpha = 1;
@@ -311,24 +333,30 @@ export function ledgerClose(
     c.strokeRect(q.x, q.y, w, h);
 
     const col = color(q.idx);
-    // Con la tarjeta chica el texto no entra: queda el avatar y la barra de
-    // color, que igual se lee como "una transacción".
-    const big = w > 90 * k;
-    const av = Math.min(h * 0.6, 22 * k);
-    const name = names[q.idx] ?? "";
-    if (big) {
-      chip(name, q.x + 10 * k, q.y + h * 0.5 + 5 * k, 1);
-      for (let i = 0; i < 3; i++) {
-        c.fillStyle = col;
-        c.fillRect(q.x + w - (30 - i * 9) * k, q.y + 8 * k, 4 * k, h - 16 * k);
-      }
+    // La barra de color a la izquierda es la firma de la transacción: está
+    // siempre, con la tarjeta grande y con la chica.
+    c.fillStyle = col;
+    c.fillRect(q.x + 5 * k, q.y + 5 * k, 6 * k, h - 10 * k);
+
+    // Con la tarjeta chica el nombre no entra. Quedan dos rayitas que se leen
+    // como texto sin serlo, y la tarjeta sigue pareciendo una transacción.
+    if (w > 110 * k) {
+      const av = Math.min(h * 0.62, 24 * k);
+      const im = face(q.idx);
+      if (im.complete && im.naturalWidth) c.drawImage(im, q.x + 16 * k, q.y + (h - av) / 2, av, av);
+      const name = names[q.idx] ?? "";
+      const tx = q.x + 16 * k + av + 8 * k;
+      const room = q.x + w - 12 * k - tx;
+      c.font = `700 ${Math.min(15, h * 0.34)}px system-ui, sans-serif`;
+      c.textAlign = "left";
+      c.textBaseline = "middle";
+      c.fillStyle = dark ? "#f6efe2" : INK;
+      c.fillText(fit(name, room), tx, q.y + h / 2);
+      c.textBaseline = "alphabetic";
     } else {
-      c.fillStyle = col;
-      c.fillRect(q.x + 6 * k, q.y + 6 * k, 5 * k, h - 12 * k);
-      c.fillStyle = dark ? "rgba(246,239,226,0.35)" : "rgba(25,25,25,0.25)";
-      c.fillRect(q.x + 16 * k, q.y + h * 0.3, w - 24 * k, 3 * k);
-      c.fillRect(q.x + 16 * k, q.y + h * 0.55, (w - 24 * k) * 0.6, 3 * k);
-      void av;
+      c.fillStyle = dark ? "rgba(246,239,226,0.32)" : "rgba(25,25,25,0.22)";
+      c.fillRect(q.x + 16 * k, q.y + h * 0.33, w - 26 * k, 3 * k);
+      c.fillRect(q.x + 16 * k, q.y + h * 0.58, (w - 26 * k) * 0.55, 3 * k);
     }
 
     if (q.stamp > 0) drawStamp(q, false);
@@ -337,9 +365,11 @@ export function ledgerClose(
   function drawStamp(q: Card, ok: boolean): void {
     const k = u();
     const e = 2.4 - 1.4 * ease.outCubic(Math.min(1, q.stamp));
-    const cx = q.x + q.w / 2;
+    const s = Math.min(q.w * 0.5, q.h * 0.78) * e;
+    // Pegado al borde derecho: centrado tapaba el nombre justo cuando la sala
+    // lo está leyendo.
+    const cx = q.x + q.w - Math.min(q.w * 0.28, q.h * 0.5);
     const cy = q.y + q.h / 2;
-    const s = Math.min(q.w, q.h) * 0.7 * e;
     c.save();
     c.translate(cx, cy);
     c.rotate(-0.14);
@@ -383,22 +413,38 @@ export function ledgerClose(
     c.textAlign = "left";
     c.fillStyle = dark ? "rgba(246,239,226,0.6)" : "rgba(25,25,25,0.55)";
     const round = beacon.round + (ledgerBump ? 1 : 0);
-    c.fillText(`${t("cLedgerNo")} #${round}`, 22 * k, 34 * k);
+    c.fillText(`${t("cLedgerNo")} #${round}`, 22 * k, H() - 26 * k);
   }
 
   function drawSeal(): void {
     const k = u();
     const win = cards[winnerIdx] as Card;
     const e = ease.outBack(Math.min(1, sealK));
-    c.save();
-    c.translate(win.x + win.w / 2, win.y + win.h / 2);
-    c.scale(1 + 0.18 * e, 1 + 0.18 * e);
-    c.translate(-(win.x + win.w / 2), -(win.y + win.h / 2));
-    drawCard(win);
-    c.restore();
-    win.stamp = 1;
-    drawStamp(win, true);
-    win.stamp = 0;
+    // La tarjeta ganadora no es "la misma un poco más grande": cambia de color
+    // y de tamaño, porque es lo único que la sala tiene que mirar.
+    const cw = win.w * (1 + 1.4 * e);
+    const ch = win.h * (1 + 1.4 * e);
+    const cx = W() / 2 - cw / 2;
+    const cy = win.y + win.h / 2 - ch / 2;
+    c.fillStyle = "#e93d9c";
+    c.fillRect(cx + 10 * k, cy + 10 * k, cw, ch);
+    c.fillStyle = "#ffc629";
+    c.fillRect(cx, cy, cw, ch);
+    c.lineWidth = 6 * k;
+    c.strokeStyle = INK;
+    c.strokeRect(cx, cy, cw, ch);
+
+    const name = names[winnerIdx] ?? "";
+    const av = ch * 0.62;
+    const im = face(winnerIdx);
+    if (im.complete && im.naturalWidth) c.drawImage(im, cx + 20 * k, cy + (ch - av) / 2, av, av);
+    c.font = `900 ${Math.min(52 * k, ch * 0.5)}px system-ui, sans-serif`;
+    c.textAlign = "left";
+    c.textBaseline = "middle";
+    c.fillStyle = INK;
+    const tx = cx + 20 * k + av + 14 * k;
+    c.fillText(fit(name, cx + cw - 20 * k - tx), tx, cy + ch / 2);
+    c.textBaseline = "alphabetic";
 
     const label = t("cLedgerOk");
     c.font = `900 ${34 * k}px system-ui, sans-serif`;
@@ -406,7 +452,7 @@ export function ledgerClose(
     const bw = c.measureText(label).width + 48 * k;
     const bh = 62 * k;
     const bx = W() / 2 - bw / 2;
-    const by = win.y + win.h + 34 * k;
+    const by = cy + ch + 34 * k;
     c.globalAlpha = Math.min(1, sealK * 1.6);
     c.fillStyle = INK;
     c.fillRect(bx + 7 * k, by + 7 * k, bw, bh);
@@ -426,11 +472,15 @@ export function ledgerClose(
     update(dt);
     drawPaper(now);
     for (const q of cards) if (!q.alive) drawCard(q);
+    // En el sello las perdedoras se apagan: si no, asoman por detrás de la
+    // tarjeta amarilla y le roban la foto.
+    if (phase === "seal") c.globalAlpha = Math.max(0, 1 - sealK * 1.6);
     for (const q of cards) {
       if (!q.alive) continue;
       if (phase === "seal" && q.idx === winnerIdx) continue;
       drawCard(q);
     }
+    c.globalAlpha = 1;
     if (phase === "sweep") drawSweep();
     if (phase === "seal") drawSeal();
     drawHud();
