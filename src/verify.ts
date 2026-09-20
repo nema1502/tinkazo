@@ -112,17 +112,14 @@ async function main(): Promise<void> {
   renderList(proof);
 
   // ---------------------------------------------------- 1. la lista y su huella
+  // Se lee la cadena primero porque es el único testigo capaz de decir si la
+  // lista que trae este enlace es la que se selló. Sin ella, todo lo demás
+  // solo puede comprobar que el comprobante cierra consigo mismo.
   set("vCheckList", "working");
-  const names = canonicalList(proof.names.join("\n"));
-  const hash = bytesToHex(listHash(names));
-  const sameList = names.length === proof.names.length;
-  set("vCheckList", sameList ? "ok" : "bad", `${names.length} · ${hash.slice(0, 16)}…`);
-  $("v-hash").textContent = `list_hash = ${hash}`;
 
   // ------------------------------------------------- 2. la ronda y su firma
-  set("vCheckRound", "working");
-  let signature = proof.signature ?? null;
   let onChain: { winners: number[]; randomness: string; listHash: string; count: number } | null = null;
+  let chainUnreachable = false;
 
   if (isAnchored(proof)) {
     set("vCheckChain", "working");
@@ -135,9 +132,24 @@ async function main(): Promise<void> {
         set("vCheckChain", "ok", `#${proof.id} · ${proof.net}`);
       }
     } catch {
+      // No es que el sorteo no esté anclado: es que no llegamos a leerlo.
+      // Confundir las dos cosas acusaría al organizador por culpa del wifi.
+      chainUnreachable = true;
       set("vCheckChain", "bad", t("vChainUnreachable"));
     }
   }
+
+  const names = canonicalList(proof.names.join("\n"));
+  const hash = bytesToHex(listHash(names));
+  // Con registro en la cadena esto compara contra el testigo, que es lo que
+  // detecta un nombre cambiado. Sin registro, lo único comprobable es que el
+  // comprobante no viene deformado, y el veredicto lo dice sin adornos.
+  const sameList = onChain ? onChain.listHash === hash : names.length === proof.names.length;
+  set("vCheckList", sameList ? "ok" : "bad", `${names.length} · ${hash.slice(0, 16)}…`);
+  $("v-hash").textContent = `list_hash = ${hash}`;
+
+  set("vCheckRound", "working");
+  let signature = proof.signature ?? null;
 
   if (!signature) {
     try {
@@ -154,7 +166,9 @@ async function main(): Promise<void> {
 
   // ------------------------------------------------------------ 3. la semilla
   const randomness = bytesToHex(randomnessOf(signature));
-  set("vCheckSeed", "ok", randomness.slice(0, 24) + "…");
+  // La semilla se deriva de la firma. Si la firma no era válida, esto no
+  // comprueba nada: un visto bueno acá sería inflar la cuenta.
+  set("vCheckSeed", sigOk ? "ok" : "bad", randomness.slice(0, 24) + "…");
 
   // --------------------------------------------- 4. el ganador, recomputado
   const k = onChain ? onChain.winners.length : 1;
@@ -163,16 +177,29 @@ async function main(): Promise<void> {
   const hashMatches = onChain ? onChain.listHash === hash : true;
   set("vCheckWinner", matches && hashMatches ? "ok" : "bad", winners.map((i) => names[i]).join(", "));
 
-  renderResult(proof, names, winners, signature, randomness, !!onChain);
+  // Los pasos se muestran siempre: son los que dejan rehacer la cuenta a mano
+  // y ver dónde se rompe. La tarjeta de ganador, en cambio, solo si cuadra.
   renderSteps(proof, hash, randomness, names.length, winners);
 
   const allOk = sameList && sigOk && matches && hashMatches;
   if (!allOk) {
-    fail("vVerdictBad", t(!hashMatches ? "vListChanged" : !sigOk ? "vBadSignature" : "vMismatch"));
+    // Nunca un ganador sobre un veredicto rojo: esa tarjeta se saca de pantalla
+    // y se comparte, y sería indistinguible de la de un sorteo de verdad.
+    fail(
+      "vVerdictBad",
+      t(!hashMatches || !sameList ? "vListChanged" : !sigOk ? "vBadSignature" : "vMismatch"),
+    );
     return;
   }
+
+  renderResult(proof, names, winners, signature, randomness, !!onChain);
+
   if (onChain) {
     verdict("ok", "vVerdictOkChain", t("vVerdictOkChainDetail"));
+  } else if (chainUnreachable) {
+    // El sorteo dice estar anclado y no pudimos comprobarlo. No es culpa del
+    // organizador y no se le imputa: se pide reintentar.
+    verdict("working", "vVerdictUnknown", t("vVerdictUnknownDetail"));
   } else {
     // Sin registro externo, la cuenta cierra pero la lista no está atestiguada.
     set("vCheckWitness", "pending", t("vNoWitnessShort"));

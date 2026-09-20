@@ -16,6 +16,7 @@ export interface Dict {
   cWin: (n: string) => string;
   summary: (w: string, n: number, d: string, r: number, u: string) => string;
   drawIn: (mmss: string) => string;
+  csvRows: (n: number) => string;
   tellBody: (w: string, prize: string, n: number, u: string) => string;
 }
 
@@ -35,6 +36,8 @@ export const T: Record<Lang, Dict> = {
     s3b: "Carrera de llamas o ruleta, a pantalla completa. Cuando arranca la animación el ganador ya salió del número público. El show es show. El sorteo ya estaba hecho.",
     p1: "Participantes", p2: "Lista congelada", p3: "El sorteo",
     srcPaste: "Pegar lista", srcCsv: "Subir CSV", srcLuma: "Luma · pronto", srcMeetup: "Meetup · pronto",
+    csvColumn: "¿Cuál columna tiene los nombres?",
+    csvRows: (n) => (n === 1 ? "1 fila en el archivo" : `${n} filas en el archivo`),
     sample: "Cargar ejemplo", freeze: "Congelar lista", draw: "Lanzar el sorteo", winners: "Premios",
     gameLabel: "Juego", gameRace: "Carrera de llamas", gameStellar: "Carrera Stellar", gameWheel: "Ruleta",
     wheelCap: "La ruleta se ve linda hasta unos 24 nombres. De ahí para arriba, andá con la carrera.",
@@ -114,6 +117,8 @@ export const T: Record<Lang, Dict> = {
     vCheckChain: "El registro en Stellar",
     vNotDrawnYet: "todavía no se sorteó en la cadena",
     vChainUnreachable: "no pude leer el contrato",
+    vVerdictUnknown: "No pude comprobarlo del todo",
+    vVerdictUnknownDetail: "Las cuentas cierran, pero este sorteo dice estar registrado en Stellar y no pude leer ese registro. Puede ser la conexión o la red. No es señal de que algo esté mal: recargá en un rato.",
     vRoundUnreachable: "no pude traer la ronda del faro",
     vListChanged: "La lista de este enlace no es la que se selló. Alguien la cambió después.",
     vBadSignature: "La firma de la ronda no verifica contra la clave pública del faro.",
@@ -157,6 +162,8 @@ export const T: Record<Lang, Dict> = {
     s3b: "Llama race or roulette, fullscreen. By the time the animation starts, the public number already picked the winner. The show is the show. The draw was done before it.",
     p1: "Participants", p2: "Frozen list", p3: "The draw",
     srcPaste: "Paste list", srcCsv: "Upload CSV", srcLuma: "Luma · soon", srcMeetup: "Meetup · soon",
+    csvColumn: "Which column has the names?",
+    csvRows: (n) => (n === 1 ? "1 row in the file" : `${n} rows in the file`),
     sample: "Load sample", freeze: "Freeze list", draw: "Run the draw", winners: "Prizes",
     gameLabel: "Game", gameRace: "Llama race", gameStellar: "Stellar race", gameWheel: "Roulette",
     wheelCap: "The wheel looks great up to about 24 names. Past that, run the race.",
@@ -236,6 +243,8 @@ export const T: Record<Lang, Dict> = {
     vCheckChain: "The record on Stellar",
     vNotDrawnYet: "not drawn on chain yet",
     vChainUnreachable: "couldn't read the contract",
+    vVerdictUnknown: "I couldn't finish checking",
+    vVerdictUnknownDetail: "The math adds up, but this raffle says it is recorded on Stellar and I could not read that record. It may be the connection or the network. It is not a sign that anything is wrong: reload in a bit.",
     vRoundUnreachable: "couldn't fetch the beacon round",
     vListChanged: "The list in this link is not the one that was sealed. Someone changed it afterwards.",
     vBadSignature: "The round signature doesn't verify against the beacon's public key.",
