@@ -114,6 +114,7 @@ scripts/                     Despliegue, smoke test y auditor de juegos
 - [Protocolo v2](docs/protocolo.md) — la especificación normativa. Cualquiera puede reimplementarla y llegar al mismo resultado.
 - [Juegos](docs/juegos.md) — el contrato que cumple todo juego y las doce comprobaciones del auditor.
 - [Despliegues](docs/deployments.md) — direcciones por red y costos medidos.
+- [Marca](docs/marca.md) — paleta con los contrastes medidos, tipografía, cómo se escribe y qué no va. Para armar una presentación o un afiche.
 - [PRD](docs/prd.md) · [Arquitectura](docs/architecture.md) · [Épicas](docs/epics.md)
 
 ## Estado
