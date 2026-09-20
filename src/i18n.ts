@@ -17,6 +17,7 @@ export interface Dict {
   summary: (w: string, n: number, d: string, r: number, u: string) => string;
   drawIn: (mmss: string) => string;
   drandTry: (i: number, n: number) => string;
+  drawTry: (i: number, n: number) => string;
   cConstPass: (n: string) => string;
   cLanes: (k: number, n: number) => string;
   cWheelSplit: (segs: number, rep: number) => string;
@@ -203,6 +204,7 @@ export const T: Record<Lang, Dict> = {
     placeholder: "Un nombre por línea…", winsPrize: "Se lleva:", skip: "Saltar",
     fetching: "Esperando el número público…",
     drandTry: (i, n) => `El faro todavía no responde. Intento ${i} de ${n}…`,
+    drawTry: (i, n) => `La cadena todavía no ve esa ronda. Reintento ${i} de ${n}…`,
     drawRetry: "Reintentar el sorteo",
     badSig: "La firma de esa ronda no cuadra con la clave pública de quicknet. Probá de nuevo.",
     drawIn: (mmss) => `Sortear en ${mmss}`,
@@ -286,7 +288,8 @@ export const T: Record<Lang, Dict> = {
     freighterHint: "La wallet del navegador. Firmás vos, nadie más.",
     freighterInstall: "No la tenés instalada. Bajala de freighter.app ↗",
     googleWallet: "Entrar con Google",
-    googleHint: "Sin instalar nada. Tu cuenta de Stellar la maneja Pollar.",
+    googleHint: "En dos toques y sin instalar nada. Es lo que usa casi todo el mundo.",
+    byPollar: "Tu llave la custodia Pollar, en un módulo de seguridad. Tinkazo nunca la ve.",
     guestWallet: "Cuenta de prueba",
     guestHint: "El navegador te arma una cuenta de testnet y le pone fondos. No instalás nada.",
     guestReady: "Cuenta de prueba lista y con fondos en testnet.",
@@ -454,6 +457,7 @@ export const T: Record<Lang, Dict> = {
     placeholder: "One name per line…", winsPrize: "Takes home:", skip: "Skip",
     fetching: "Waiting for the public number…",
     drandTry: (i, n) => `The beacon is not answering yet. Attempt ${i} of ${n}…`,
+    drawTry: (i, n) => `The chain does not see that round yet. Retry ${i} of ${n}…`,
     drawRetry: "Try the draw again",
     badSig: "That round's signature doesn't check out against quicknet's public key. Try again.",
     drawIn: (mmss) => `Draw in ${mmss}`,
@@ -537,7 +541,8 @@ export const T: Record<Lang, Dict> = {
     freighterHint: "The browser wallet. You sign, nobody else.",
     freighterInstall: "You don't have it installed. Get it at freighter.app ↗",
     googleWallet: "Sign in with Google",
-    googleHint: "Nothing to install. Pollar manages your Stellar account.",
+    googleHint: "Two taps, nothing to install. It is what almost everyone uses.",
+    byPollar: "Your key is held by Pollar, in a security module. Tinkazo never sees it.",
     guestWallet: "Test account",
     guestHint: "The browser makes you a testnet account and funds it. Nothing to install.",
     guestReady: "Test account ready and funded on testnet.",

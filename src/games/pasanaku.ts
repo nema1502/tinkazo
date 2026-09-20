@@ -370,53 +370,94 @@ export function pasanaku(
     c.closePath();
   }
 
+  /**
+   * El aguayo.
+   *
+   * La primera versión eran anillos concéntricos y no se leía como una tela:
+   * se leía como un blanco de tiro. Un aguayo es **rectangular y de franjas
+   * horizontales**, con bandas lisas anchas (pampa) y bandas angostas con
+   * rombos tejidos (pallay) entre medio. Eso es lo que hace que un boliviano
+   * lo reconozca de una y un extranjero vea una tela y no un gráfico.
+   *
+   * Se dibuja en perspectiva, como tendido en el suelo: más angosto arriba que
+   * abajo. El borde ondula siempre, porque una tela no tiene bordes rectos.
+   */
   function drawAguayo(now: number): void {
     const { x, y, k } = C();
     const rr = Rc();
+    const lift = liftK * 70 * k;
     const grow = phase === "spread" ? ease.outBack(clamp(tAll / T_DROP, 0, 1)) : 1;
-    // Sombra de la tela en el suelo.
+
+    // Sombra en el suelo.
     c.save();
     c.globalAlpha = 0.35;
     c.fillStyle = INK;
     c.beginPath();
-    c.ellipse(x, y + 22 * k, rr * 1.12, rr * 0.42, 0, 0, 7);
+    c.ellipse(x, y + 22 * k, rr * 1.15, rr * 0.44, 0, 0, 7);
     c.fill();
     c.restore();
 
+    // La tela en perspectiva: el borde de arriba más corto que el de abajo.
+    const halfB = rr * 1.02;
+    const halfT = rr * 0.74;
+    const top = y - lift - rr * 0.6 * grow;
+    const bot = y - lift + rr * 0.6 * grow;
+    /** El ancho de la tela a una altura dada, con la ondulación del borde. */
+    const halfAt = (p: number): number =>
+      (halfT + (halfB - halfT) * p) * (1 + 0.035 * Math.sin(p * 7 + now * 1.4));
+
     c.save();
-    c.translate(x, y - liftK * 70 * k);
-    c.scale(1, grow);
-    c.translate(-x, -(y - liftK * 70 * k));
-    // Cinco franjas lisas, en la paleta de la casa. En "colores andinos" sería
-    // un afiche de turismo; así un extranjero ve una tela a rayas y un
-    // boliviano ve un aguayo.
-    // El orden va de afuera hacia adentro, así que la franja externa queda
-    // amarilla y el centro magenta, que es donde termina el nudo.
+    // Recorta todo lo que venga al contorno de la tela.
+    c.beginPath();
+    c.moveTo(x - halfAt(0), top);
+    for (let i = 0; i <= 20; i++) {
+      const p = i / 20;
+      c.lineTo(x + halfAt(p), top + (bot - top) * p);
+    }
+    for (let i = 20; i >= 0; i--) {
+      const p = i / 20;
+      c.lineTo(x - halfAt(p), top + (bot - top) * p);
+    }
+    c.closePath();
+    c.save();
+    c.clip();
+
+    // Las franjas, de arriba abajo. Anchas de color, angostas con rombos.
     const pal = ["#e93d9c", "#ff7a1a", "#00a896", "#6c4ce0", "#ffc629"];
-    for (let b = 5; b >= 1; b--) {
-      clothPath(now, rr, b / 5);
-      c.fillStyle = pal[(b - 1) % pal.length] ?? "#e93d9c";
-      c.fill();
-      c.lineWidth = 2 * k;
-      c.strokeStyle = INK;
-      c.stroke();
+    const bands = 9;
+    for (let b = 0; b < bands; b++) {
+      const p0 = b / bands;
+      const p1 = (b + 1) / bands;
+      const yy0 = top + (bot - top) * p0;
+      const yy1 = top + (bot - top) * p1;
+      const pallay = b % 2 === 1;
+      c.fillStyle = pallay
+        ? dark ? "#efe4cf" : "#fbf3e4"
+        : pal[Math.floor(b / 2) % pal.length] ?? "#e93d9c";
+      c.fillRect(x - halfB * 1.1, yy0, halfB * 2.2, yy1 - yy0 + 1);
+      if (!pallay) continue;
+      // La banda de pallay: rombos de tinta, que es el diseño tejido.
+      const mid = (yy0 + yy1) / 2;
+      const sz = (yy1 - yy0) * 0.38;
+      const half = halfAt((p0 + p1) / 2);
+      const step = sz * 2.6;
+      c.fillStyle = INK;
+      for (let px = x - half + step / 2; px < x + half; px += step) {
+        c.beginPath();
+        c.moveTo(px, mid - sz);
+        c.lineTo(px + sz, mid);
+        c.lineTo(px, mid + sz);
+        c.lineTo(px - sz, mid);
+        c.closePath();
+        c.fill();
+      }
     }
-    // La banda de pallay: dieciséis rombos, que es el diseño que lleva un
-    // aguayo de verdad entre franja y franja.
-    c.fillStyle = INK;
-    for (let i = 0; i < 16; i++) {
-      const a = (i / 16) * Math.PI * 2 + now * 0.05;
-      const px = x + Math.cos(a) * rr * 0.62;
-      const py = y - liftK * 70 * k + Math.sin(a) * rr * 0.62 * 0.62;
-      const s = 9 * k;
-      c.beginPath();
-      c.moveTo(px, py - s);
-      c.lineTo(px + s, py);
-      c.lineTo(px, py + s);
-      c.lineTo(px - s, py);
-      c.closePath();
-      c.fill();
-    }
+    c.restore();
+
+    // El contorno, con el mismo camino que sirvió de recorte.
+    c.lineWidth = 3 * k;
+    c.strokeStyle = INK;
+    c.stroke();
     c.restore();
   }
 

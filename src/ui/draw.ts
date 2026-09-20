@@ -61,34 +61,58 @@ export async function draw(): Promise<void> {
 
   const { names, listHash, raffleId } = app.frozen;
   const nWinners = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10), names.length);
-  let winners: number[];
+  let winners: number[] = [];
   let drawTx: string | undefined;
 
   if (raffleId !== undefined) {
     // Anclado: el contrato verifica la firma y decide. Lo que muestra la
     // pantalla es lo que quedó registrado, no un cálculo nuestro.
-    try {
-      const res = await drawOnChain(raffleId, decompressG1(beacon.signature), (step, detail) => {
-        btn.textContent = stepLabel(step);
-        showTxStatus("draw-status", step, detail);
-      });
-      winners = res.winners;
-      drawTx = res.txHash;
-    } catch (e) {
-      // Si alguien más ya lo finalizó, el resultado igual es público.
-      const already = await readDraw(raffleId);
-      if (already) {
-        winners = already.winners;
-        showTxStatus("draw-status", "confirmed");
-      } else {
-        btn.disabled = false;
-        btn.textContent = t("draw");
-        const status = $("draw-status");
-        status.style.display = "block";
-        status.className = "txstatus";
-        status.textContent = await anchorErrorText(e);
-        return;
+    //
+    // Se reintenta, y no es capricho. El contrato compara la hora de la ronda
+    // contra la **hora de cierre del ledger**, que va unos segundos atrás del
+    // reloj del navegador. Así que hay una ventana de pocos segundos en la que
+    // acá ya es hora y para la cadena todavía no, y la transacción se cae.
+    // Pedirle a alguien que vuelva a apretar el botón, con la sala mirando, es
+    // inaceptable: se reintenta solo.
+    const TRIES = 4;
+    let lastError: unknown = null;
+    let done = false;
+    for (let attempt = 1; attempt <= TRIES && !done; attempt++) {
+      try {
+        const res = await drawOnChain(raffleId, decompressG1(beacon.signature), (step, detail) => {
+          btn.textContent = stepLabel(step);
+          showTxStatus("draw-status", step, detail);
+        });
+        winners = res.winners;
+        drawTx = res.txHash;
+        done = true;
+      } catch (e) {
+        lastError = e;
+        // Si alguien más ya lo finalizó, el resultado igual es público.
+        const already = await readDraw(raffleId);
+        if (already) {
+          winners = already.winners;
+          showTxStatus("draw-status", "confirmed");
+          done = true;
+          break;
+        }
+        if (attempt < TRIES) {
+          const status = $("draw-status");
+          status.style.display = "block";
+          status.className = "txstatus";
+          status.textContent = T[getLang()].drawTry(attempt + 1, TRIES);
+          await new Promise((r) => setTimeout(r, 5000));
+        }
       }
+    }
+    if (!done) {
+      btn.disabled = false;
+      btn.textContent = t("drawRetry");
+      const status = $("draw-status");
+      status.style.display = "block";
+      status.className = "txstatus bad";
+      status.textContent = await anchorErrorText(lastError);
+      return;
     }
   } else {
     winners = select(hexToBytes(beacon.randomness), hexToBytes(listHash), names.length, nWinners);

@@ -24,10 +24,21 @@ export function setGame(g: Game): void {
   for (const [id, key] of GAME_BUTTONS) $(id).classList.toggle("on", g === key);
 }
 
-/** Segundos que faltan para que nazca la ronda objetivo (0 si ya existe). */
+/**
+ * Segundos que faltan para poder sortear.
+ *
+ * Para un sorteo anclado se esperan unos segundos de más. El contrato compara
+ * la hora de la ronda contra la **hora de cierre del ledger**, que va detrás
+ * del reloj del navegador porque un ledger cierra cada cinco segundos. Sin ese
+ * margen hay una ventana en la que acá ya es hora, para la cadena todavía no,
+ * y la transacción se cae delante de toda la sala.
+ */
+const CHAIN_MARGIN_SECONDS = 8;
+
 export function secondsToRound(): number {
   if (!app.frozen) return 0;
-  return Math.max(0, roundTime(app.frozen.round) - Math.floor(Date.now() / 1000));
+  const margin = app.frozen.raffleId !== undefined ? CHAIN_MARGIN_SECONDS : 0;
+  return Math.max(0, roundTime(app.frozen.round) + margin - Math.floor(Date.now() / 1000));
 }
 
 let countdownTimer: number | undefined;

@@ -337,6 +337,17 @@ async function openPicker(): Promise<void> {
   const w = await loadWallets();
   const options: Option[] = [];
 
+  // Google primero, y de lejos: es el camino que funciona sin instalar nada y
+  // el que va a tomar casi todo el mundo. Ofrecer arriba una extensión que la
+  // persona no tiene instalada es mandarla a una tienda antes de dejarla
+  // probar el producto.
+  const { pollarConfigured } = await import("../stellar/wallet-pollar");
+  if (pollarConfigured()) {
+    options.push({ label: t("googleWallet"), hint: t("googleHint"), pick: "google" });
+  }
+  if (w.guestAvailable()) {
+    options.push({ label: t("guestWallet"), hint: t("guestHint"), pick: "guest" });
+  }
   if (await w.freighterInstalled()) {
     options.push({ label: "Freighter", hint: t("freighterHint"), pick: "freighter" });
   } else {
@@ -346,13 +357,6 @@ async function openPicker(): Promise<void> {
       pick: null,
       href: "https://www.freighter.app/",
     });
-  }
-  const { pollarConfigured } = await import("../stellar/wallet-pollar");
-  if (pollarConfigured()) {
-    options.push({ label: t("googleWallet"), hint: t("googleHint"), pick: "google" });
-  }
-  if (w.guestAvailable()) {
-    options.push({ label: t("guestWallet"), hint: t("guestHint"), pick: "guest" });
   }
 
   showModal(options);
@@ -385,6 +389,14 @@ function showModal(options: Option[]): void {
   close.textContent = t("cancel");
   close.addEventListener("click", () => shut());
   card.appendChild(close);
+
+  // Quién custodia la llave, dicho en chiquito y al pie. Va acá y no en la
+  // explicación de arriba: a quien entra con Google le importa entrar, y quien
+  // quiera saber quién guarda la llave lo encuentra sin buscar.
+  const by = document.createElement("p");
+  by.className = "modal-by";
+  by.textContent = t("byPollar");
+  card.appendChild(by);
 
   back.appendChild(card);
   back.addEventListener("click", (e) => {

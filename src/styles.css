@@ -302,6 +302,7 @@
   label.chip.live:focus-within { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 6px var(--yellow); }
   /* Una huella de 64 caracteres desbordaba la tarjeta en celular. */
   .note { word-break: break-word; overflow-wrap: anywhere; }
+  .modal-by { margin-top: 14px; font-size: 11px; color: var(--muted); text-align: center; line-height: 1.5; }
 
   /* La puerta. Sin cuenta conectada no se sortea, así que el bloque de
      participantes aparece apagado y esto explica por qué. */
