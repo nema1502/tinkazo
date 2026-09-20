@@ -1,7 +1,7 @@
 import { T, getLang, t } from "../i18n";
 import { beep, fanfare } from "../sound";
 import { avatar, type Beacon } from "../state";
-import { INK, clamp, ease, mount } from "./overlay";
+import { INK, clamp, ease, mount, shorten } from "./overlay";
 
 /**
  * Cierre de Libro.
@@ -74,12 +74,17 @@ export function ledgerClose(
     return im;
   }
 
-  /** Recorta el nombre a lo que entra, con puntos suspensivos. */
+  /**
+   * Recorta el nombre a lo que entra.
+   *
+   * Por el medio, no por el final: dos personas con el mismo nombre de pila y
+   * distinto apellido tienen que seguir viéndose distintas.
+   */
   function fit(name: string, room: number): string {
     if (c.measureText(name).width <= room) return name;
     let cut = name.length;
-    while (cut > 1 && c.measureText(name.slice(0, cut) + "…").width > room) cut--;
-    return name.slice(0, cut) + "…";
+    while (cut > 4 && c.measureText(shorten(name, cut)).width > room) cut--;
+    return shorten(name, cut);
   }
 
   let phase: Phase = "fall";
@@ -347,7 +352,7 @@ export function ledgerClose(
       const name = names[q.idx] ?? "";
       const tx = q.x + 16 * k + av + 8 * k;
       const room = q.x + w - 12 * k - tx;
-      c.font = `700 ${Math.min(15, h * 0.34)}px system-ui, sans-serif`;
+      c.font = `700 ${Math.min(22 * k, h * 0.34)}px system-ui, sans-serif`;
       c.textAlign = "left";
       c.textBaseline = "middle";
       c.fillStyle = dark ? "#f6efe2" : INK;

@@ -1,7 +1,7 @@
 import { T, getLang, t } from "../i18n";
 import { beep, fanfare } from "../sound";
 import type { Beacon } from "../state";
-import { INK, clamp, ease, mount } from "./overlay";
+import { INK, clamp, ease, mount, shorten } from "./overlay";
 
 /**
  * Constelación Stellar.
@@ -557,7 +557,7 @@ export function stellarConstellation(
     const k = u();
     const name = names[winnerIdx] ?? "";
     const e = ease.outBack(Math.min(1, novaK * 2.4));
-    const label = name.length > 26 ? name.slice(0, 25) + "…" : name;
+    const label = shorten(name, 26);
     c.save();
     c.translate(W() / 2, H() * 0.5);
     c.scale(e, e);

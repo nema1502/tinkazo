@@ -1,7 +1,7 @@
 import { T, getLang, t } from "../i18n";
 import { beep, fanfare } from "../sound";
 import { avatar, type Beacon } from "../state";
-import { INK, clamp, ease, mount } from "./overlay";
+import { INK, clamp, ease, mount, shorten } from "./overlay";
 
 /**
  * Pasanaku.
@@ -548,7 +548,7 @@ export function pasanaku(
     const k = u();
     const e = ease.outBack(Math.min(1, liftK * 1.6));
     const name = names[winnerIdx] ?? "";
-    const label = name.length > 24 ? name.slice(0, 23) + "…" : name;
+    const label = shorten(name, 26);
     c.save();
     c.translate(W() / 2, H() * 0.74);
     c.scale(e, e);
@@ -624,9 +624,13 @@ export function pasanaku(
       const r = rad();
       const k = u();
       // Se escalonan para que no se pisen cuando los bultos se juntan.
-      live.forEach((q, i) => {
-        chip(names[q.idx] ?? "", q.x + r + 6 * k, q.y - r - 8 * k - liftK * 70 * k - (i % 3) * 22 * k, 1);
-      });
+      // Se ordenan por altura y se escalonan de arriba hacia abajo: apilados
+      // en el mismo lugar se tapaban entre ellos y no se leía ninguno.
+      [...live]
+        .sort((a, bb) => a.y - bb.y)
+        .forEach((q, i) => {
+          chip(names[q.idx] ?? "", q.x + r + 6 * k, q.y - r - 10 * k - liftK * 70 * k - i * 26 * k, 1);
+        });
     }
     drawPot();
     drawHud();

@@ -1,7 +1,7 @@
 import { T, getLang, t } from "../i18n";
 import { beep, fanfare } from "../sound";
 import { avatar, type Beacon } from "../state";
-import { INK, clamp, ease, mount } from "./overlay";
+import { INK, clamp, ease, mount, shorten } from "./overlay";
 
 /**
  * La ruleta.
@@ -157,10 +157,13 @@ export function wheelSpin(
   /* -------------------------------------------------------------- geometría */
   const geo = (): { cx: number; cy: number; R: number; k: number; wide: boolean } => {
     const k = u();
-    const R = Math.min(H() * 0.395, W() * 0.3);
-    const cx = Math.max(W() * 0.58, W() - R - 150 * k);
-    const colW = cx - R - 90 * k;
-    return { cx, cy: H() * 0.5, R, k, wide: colW > 300 * k };
+    // En 4:3 la rueda tiene que achicarse, si no la columna de nombres queda
+    // tan angosta que los corta. Ese es justo el proyector de sala.
+    const wide43 = W() / H() < 1.5;
+    const R = Math.min(H() * (wide43 ? 0.34 : 0.395), W() * (wide43 ? 0.26 : 0.3));
+    const cx = Math.max(W() * 0.56, W() - R - 110 * k);
+    const colW = cx - R - 70 * k;
+    return { cx, cy: H() * 0.5, R, k, wide: colW > 260 * k };
   };
 
   /** Qué gajo está bajo el puntero. */
@@ -418,10 +421,15 @@ export function wheelSpin(
     c.textBaseline = "middle";
     for (let i = 0; i < shown; i++) {
       const a = rot + (i / 64) * TAU - Math.PI / 2;
+      // En la mitad de abajo del aro el dígito saldría cabeza abajo. Se lo gira
+      // media vuelta y se lo pone del otro lado del radio: el comentario del
+      // código dice "sacá la foto y comprobalos", y con la mitad ilegible eso
+      // era mentira.
+      const upsideDown = Math.cos(a) < 0;
       c.save();
-      c.rotate(a + Math.PI / 2);
+      c.rotate(a + Math.PI / 2 + (upsideDown ? Math.PI : 0));
       c.fillStyle = tAll >= T_CROWN ? "#ffc629" : "rgba(246,239,226,0.72)";
-      c.fillText(rimChars[i] ?? "", 0, -rm);
+      c.fillText(rimChars[i] ?? "", 0, upsideDown ? rm : -rm);
       c.restore();
     }
     c.restore();
@@ -522,11 +530,9 @@ export function wheelSpin(
     c.textAlign = "left";
     c.textBaseline = "middle";
     c.fillStyle = dark ? "#f6efe2" : INK;
-    let show = label;
-    while (show.length > 2 && c.measureText(show).width > w - tx - 14 * k) {
-      show = show.slice(0, -1);
-    }
-    c.fillText(show === label ? label : show + "…", tx, hgt / 2);
+    let cut = label.length;
+    while (cut > 4 && c.measureText(shorten(label, cut)).width > w - tx - 14 * k) cut--;
+    c.fillText(shorten(label, cut), tx, hgt / 2);
     c.textBaseline = "alphabetic";
     c.restore();
   }
@@ -562,7 +568,7 @@ export function wheelSpin(
     c.restore();
 
     const name = names[winnerIdx] ?? "";
-    const label = name.length > 20 ? name.slice(0, 19) + "…" : name;
+    const label = shorten(name, 22);
     // En la columna libre, no encima de la rueda: la rueda con el gajo
     // encendido es media foto y no se puede tapar.
     const colCx = (cx - R) / 2;

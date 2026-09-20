@@ -149,7 +149,7 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
     chip(name, x, y, alpha = 1) {
       const k = u();
       const av = 18 * k;
-      const label = name.length > 18 ? name.slice(0, 17) + "…" : name;
+      const label = shorten(name, 20);
       c.save();
       c.globalAlpha = alpha;
       // El espaciado de letras en lienzo existe desde 2025. En un navegador
@@ -293,3 +293,19 @@ export const ease = {
 };
 
 export const clamp = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(hi, v));
+
+/**
+ * Acorta un nombre sin que dos personas queden iguales.
+ *
+ * Cortar por el final es lo natural y es justo lo que falla acá: "María
+ * Fernanda Quispe Mamani" y "María Fernanda Quispe Rojas" se vuelven la misma
+ * cosa, y en una sala llena de apellidos compartidos eso pasa seguido. Cortar
+ * por el medio conserva las dos puntas, que es donde está la diferencia.
+ */
+export function shorten(name: string, max: number): string {
+  if (name.length <= max) return name;
+  if (max < 6) return name.slice(0, Math.max(1, max - 1)) + "…";
+  const head = Math.ceil((max - 1) * 0.55);
+  const tail = max - 1 - head;
+  return name.slice(0, head) + "…" + name.slice(name.length - tail);
+}

@@ -4,6 +4,9 @@
     --magenta: #e93d9c; --orange: #ff7a1a; --teal: #00a896; --yellow: #ffc629; --purple: #6c4ce0;
     /* Texto sobre un color plano. El blanco no se lee sobre estos tonos. */
     --on-accent: #191919; --on-purple: #ffffff;
+    /* Y los mismos acentos, oscurecidos, para cuando el color **es** el texto.
+       El teal de relleno sobre blanco da 2,98 a 1: no se puede escribir con él. */
+    --magenta-ink: #c9247f; --teal-ink: #00776a; --purple-ink: #5b3ad0;
     --bw: 3px; --sh: 6px 6px 0 var(--ink); --sh-sm: 3px 3px 0 var(--ink);
   }
   @media (prefers-color-scheme: dark) {
@@ -12,6 +15,9 @@
       --paper: #171126; --card: #221a33; --ink: #f6efe2; --ink2: #cfc6b4; --muted: #97909f;
       --magenta: #ff5cb3; --orange: #ff8b3d; --teal: #17c3b2; --yellow: #ffd24d; --purple: #9b7bff;
       --on-accent: #191919; --on-purple: #191919;
+      /* En oscuro los acentos ya se leen sobre la tarjeta: 7,51 el teal,
+         5,88 el magenta, 5,28 el morado. No hace falta cambiarlos. */
+      --magenta-ink: var(--magenta); --teal-ink: var(--teal); --purple-ink: var(--purple);
     }
   }
   :root[data-theme="dark"] {
@@ -19,6 +25,9 @@
     --paper: #171126; --card: #221a33; --ink: #f6efe2; --ink2: #cfc6b4; --muted: #97909f;
     --magenta: #ff5cb3; --orange: #ff8b3d; --teal: #17c3b2; --yellow: #ffd24d; --purple: #9b7bff;
       --on-accent: #191919; --on-purple: #191919;
+      /* En oscuro los acentos ya se leen sobre la tarjeta: 7,51 el teal,
+         5,88 el magenta, 5,28 el morado. No hace falta cambiarlos. */
+      --magenta-ink: var(--magenta); --teal-ink: var(--teal); --purple-ink: var(--purple);
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) .hl {
@@ -95,7 +104,12 @@
   }
   button.primary:hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
   button.primary:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
-  button.primary:disabled { opacity: 0.4; cursor: not-allowed; }
+  /* Apagar con opacidad dejaba la cuenta regresiva en 1,47 a 1, que es lo que
+     toda la sala mira fijo. Un color sólido apagado se sigue leyendo. */
+  button.primary:disabled {
+    cursor: not-allowed; background: var(--muted); color: var(--paper);
+    box-shadow: 2px 2px 0 var(--ink); transform: none;
+  }
   a.primary.cta { display: inline-block; text-decoration: none; }
   button.ghost, a.ghost {
     background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
@@ -177,14 +191,17 @@
     font-weight: 800; font-size: 13px; cursor: pointer; font-family: inherit;
   }
   .gamepick button.on { background: var(--purple); color: var(--on-purple); box-shadow: var(--sh-sm); transform: rotate(-1deg); }
-  .gamepick button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .gamepick button:disabled {
+    cursor: not-allowed; background: var(--paper); color: var(--muted);
+    border-style: dashed; box-shadow: none;
+  }
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0; border-bottom: var(--bw) solid var(--ink); }
   .kpis > div { padding: 16px 22px; border-right: 2px dashed var(--ink); }
   .kpis > div:last-child { border-right: 0; }
   .kpis b { font-size: 28px; font-weight: 900; display: block; }
-  .kpis > div:nth-child(1) b { color: var(--magenta); }
-  .kpis > div:nth-child(2) b { color: var(--teal); }
-  .kpis > div:nth-child(3) b { color: var(--purple); }
+  .kpis > div:nth-child(1) b { color: var(--magenta-ink); }
+  .kpis > div:nth-child(2) b { color: var(--teal-ink); }
+  .kpis > div:nth-child(3) b { color: var(--purple-ink); }
   .kpis span { font-family: ui-monospace, Consolas, monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); font-weight: 700; }
   .names { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
   .names i { font-style: normal; border: 2px solid var(--ink); background: var(--paper); padding: 3px 11px 3px 4px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 7px; }

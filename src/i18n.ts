@@ -18,6 +18,7 @@ export interface Dict {
   drawIn: (mmss: string) => string;
   drandTry: (i: number, n: number) => string;
   cConstPass: (n: string) => string;
+  cLanes: (k: number, n: number) => string;
   cWheelSplit: (segs: number, rep: number) => string;
   cWheelOn: (n: string) => string;
   cPasOut: (n: string) => string;
@@ -134,6 +135,7 @@ export const T: Record<Lang, Dict> = {
     cConstDecoy: ["¡NO, SE FUE PARA OTRO LADO!", "¡DIO LA VUELTA!",
       "¡CAMBIÓ DE RUTA!", "¡NOOO, SIGUE DE LARGO!"],
     cHop: "SALTO",
+    cLanes: (k, n) => `EN PISTA ${k} DE ${n} · EL SORTEO FUE ENTRE LOS ${n}`,
     // --- Cierre de Libro. Stellar cierra un ledger cada cinco segundos.
     cLedgerSweep: ["¡Empieza el cierre!", "¡Ahí viene la barrida!", "¡Primera pasada!"],
     cLedgerSweep2: ["¡Segunda pasada!", "¡Quedan poquitos!", "¡Se está vaciando la mesa!"],
@@ -351,6 +353,7 @@ export const T: Record<Lang, Dict> = {
     cConstDecoy: ["NO, IT SWUNG AWAY!", "IT TURNED AROUND!",
       "IT CHANGED PATH!", "NOOO, IT KEEPS GOING!"],
     cHop: "HOP",
+    cLanes: (k, n) => `${k} OF ${n} ON TRACK · THE DRAW WAS AMONG ALL ${n}`,
     cLedgerSweep: ["The close begins!", "Here comes the sweep!", "First pass!"],
     cLedgerSweep2: ["Second pass!", "Only a few left!", "The table is emptying!"],
     cLedgerSweep3: ["Last pass!", "This is being decided!", "It stops here!"],

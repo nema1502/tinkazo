@@ -484,6 +484,32 @@ Resultado (2026-09-20): el juego con nombre boliviano. El *Diccionario de americ
 
 Resultado (2026-09-20): `src/games/overlay.ts` concentra el montaje del estadio, el azar sembrado con la ronda, los chips con avatar, el botón de saltar, la pantalla completa, el bloqueo de apagado y el desmontaje. Estaba dentro de la carrera, así que cada juego nuevo lo copiaba. Los seis juegos lo usan.
 
+### Historia 7.11: Lo que encontró el control de calidad — hecho en parte
+
+Una revisión de los seis juegos con 2, 3, 5, 24, 60 y 200 participantes, en tres relaciones de pantalla, los dos temas y los dos idiomas: 66 corridas, cero errores de consola, cero excepciones, y los seis a sesenta cuadros por segundo con doscientos participantes.
+
+Arreglado (2026-09-20):
+
+- **La carrera delataba al ganador antes de largar.** Corrían ocho, y eran los siete primeros de la lista más el ganador. Con una lista alfabética la sala veía seis apellidos con A y uno del medio, y ganaba ese. El sorteo estaba bien; el juego lo cantaba. Ahora los ocho salen del azar sembrado, y el carril del ganador también.
+- **Las dos carreras eran los únicos juegos sin tarjeta de ganador.** El nombre salía solo en la caja del narrador.
+- **No se decía que corrían ocho de doscientos.** Callarlo hacía pensar que el sorteo había sido entre ocho.
+- **El botón con la cuenta regresiva era ilegible:** apagar con opacidad lo dejaba en 1,47 a 1, y es lo que toda la sala mira fijo. Ahora 5,39.
+- **La huella de la lista, en teal sobre blanco, daba 2,98 a 1.** Es el dato técnico más importante de esa fila. Se agregaron variantes de texto de los acentos, oscurecidas solo lo necesario.
+- **En Cierre de Libro el nombre no escalaba con la densidad de píxeles:** en una pantalla HiDPI salía más chico que el rótulo de al lado.
+- **Los chips se pisaban** en Pasanaku, y el de la carrera invadía el carril de arriba.
+- **Los dígitos de la semilla salían cabeza abajo** en la mitad inferior del aro de la ruleta. El código decía "sacá la foto y comprobalos" y con la mitad ilegible eso era mentira.
+- **En 4:3 la ruleta cortaba el nombre.** Es justo el proyector de sala.
+
+Pendiente:
+
+- Con nombres largos todos los participantes se ven iguales: la carrera trunca a dieciséis caracteres y el chip compartido a dieciocho. Con veinticuatro nombres de treinta y ocho caracteres, los ocho chips dicen lo mismo.
+- La carrera termina con el ochenta por ciento de la pantalla vacío: la cámara topa la meta al 86% del ancho.
+- La llama cambia cuatro veces de tamaño según cuánta gente haya.
+- El confeti cae encima del nombre del ganador los primeros segundos.
+- Cierre de Libro dura lo mismo con dos que con doscientos, y con doscientos los nombres están menos de dos segundos en pantalla.
+- Constelación con dos o tres participantes es casi solo líneas señuelo.
+- El número de ronda de la barra del estadio va a diez píxeles fijos y no escala: es lo que hace verificable el sorteo y en un proyector no se lee.
+
 ### Historia 7.3: Mejoras transversales de presentación
 
 Como organizadora,

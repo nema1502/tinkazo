@@ -251,8 +251,11 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
     link = roundLink;
   }
   proofLink = link;
-  await paintQr(link);
+  // Los avisos primero: el QR carga su librería aparte y tarda, y hacer
+  // esperar a los botones de "avisarle por WhatsApp" por un cuadradito los
+  // dejaba sin armar justo cuando el ganador aparece en pantalla.
   setNotifyLinks(names, winners, link);
+  void paintQr(link);
 }
 
 /** Copia el enlace del comprobante: es lo que se pega en el grupo del evento. */

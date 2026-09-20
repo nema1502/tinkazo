@@ -3,7 +3,7 @@ import { T, getLang, setPickSeed, t } from "../i18n";
 import { LCOLORS, avatar, instantMode, type Beacon } from "../state";
 import { beep, fanfare } from "../sound";
 import { THEMES, type ThemeId } from "./themes";
-import { registerSkip } from "./overlay";
+import { registerSkip, shorten } from "./overlay";
 import { narrate, stopNarrator } from "../narrator";
 
 /* Modo estadio: carrera de llamas a pantalla completa, sembrada con la semilla. */
@@ -82,12 +82,32 @@ export function stadiumRace(
   const INK = "#191919";
   const color = (k: number): string => P[k % P.length] ?? INK;
 
-  const laneIdx = [winnerIdx];
-  for (const i of names.keys()) {
-    if (laneIdx.length >= Math.min(8, names.length)) break;
-    if (!laneIdx.includes(i)) laneIdx.push(i);
+  /**
+   * Quiénes corren.
+   *
+   * Hay ocho carriles, así que con más de ocho participantes la mayoría no
+   * aparece. Antes los acompañantes eran **los siete primeros de la lista**, y
+   * eso delataba al ganador antes de largar: con una lista alfabética la sala
+   * veía seis apellidos con A y uno del medio, y ganaba ese. El sorteo estaba
+   * bien; el juego lo cantaba.
+   *
+   * Ahora se eligen con el azar sembrado con la ronda, como todo lo demás. El
+   * ganador va adentro porque tiene que estar, pero su carril y sus rivales ya
+   * no dicen nada.
+   */
+  const LANES = Math.min(8, names.length);
+  const pool = names.map((_, i) => i).filter((i) => i !== winnerIdx);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [pool[i], pool[j]] = [pool[j] as number, pool[i] as number];
   }
-  laneIdx.sort(() => rng() - 0.5);
+  const laneIdx = [winnerIdx, ...pool.slice(0, LANES - 1)];
+  // Y el carril del ganador también se sortea: si siempre fuera el primero,
+  // bastaría con mirar arriba.
+  for (let i = laneIdx.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [laneIdx[i], laneIdx[j]] = [laneIdx[j] as number, laneIdx[i] as number];
+  }
   const runners: Runner[] = laneIdx.map((i, k) => ({
     i, name: names[i] ?? "", color: color(k), x: 0, v: 0, n1: rng() * 7, img: null,
   }));
@@ -326,10 +346,10 @@ export function stadiumRace(
       const bob = phase === "race" ? Math.sin(tRace * 16 + k * 2) * 3 * u : 0;
       skin.drawRunner(c, lx, ly - 8 * sc + bob, sc, r.color, phase === "race" ? tRace * 14 + k : 0);
       // Chip con nombre y avatar
-      const label = r.name.length > 16 ? r.name.slice(0, 15) + "…" : r.name;
+      const label = shorten(r.name, 18);
       c.font = `700 ${Math.max(11, 12 * u)}px system-ui, sans-serif`;
       const tw = c.measureText(label).width;
-      const chipY = ly - laneH * 0.52, av = 18 * u;
+      const chipY = ly - Math.min(laneH * 0.52, 30 * u), av = 18 * u;
       c.fillStyle = dark ? "#f6efe2" : "#fff";
       c.fillRect(lx - 4 * u, chipY - 14 * u, tw + av + 18 * u, 22 * u);
       c.lineWidth = 2 * u; c.strokeStyle = INK;
@@ -338,7 +358,44 @@ export function stadiumRace(
       c.fillStyle = "#191919";
       c.fillText(label, lx + av + 6 * u, chipY + 3 * u);
     });
+    // Cuántos corren de cuántos. Con ocho carriles y doscientos inscritos,
+    // callarlo hace pensar que el sorteo fue entre ocho.
+    if (names.length > runners.length) {
+      c.font = `700 ${12 * u}px ui-monospace, Consolas, monospace`;
+      c.textAlign = "left";
+      c.fillStyle = "rgba(246,239,226,0.6)";
+      c.fillText(T[getLang()].cLanes(runners.length, names.length), 22 * u, h - 26 * u);
+    }
     c.restore();
+
+    // La tarjeta del ganador, igual que en los otros cuatro juegos. Sin esto,
+    // el nombre solo aparecía en la caja del narrador y no se leía de lejos.
+    if (phase === "done" && tFreeze > 0.25) {
+      const e = 1 + 2.70158 * Math.pow(Math.min(1, (tFreeze - 0.25) * 2.4) - 1, 3)
+        + 1.70158 * Math.pow(Math.min(1, (tFreeze - 0.25) * 2.4) - 1, 2);
+      const label = shorten(winnerName, 26);
+      c.save();
+      c.translate(w / 2, h * 0.34);
+      c.scale(e, e);
+      c.font = `900 ${64 * u}px system-ui, sans-serif`;
+      c.textAlign = "center";
+      c.textBaseline = "middle";
+      const bw = c.measureText(label).width + 72 * u;
+      const bh = 120 * u;
+      c.fillStyle = "#e93d9c";
+      c.fillRect(-bw / 2 + 10 * u, -bh / 2 + 10 * u, bw, bh);
+      c.fillStyle = "#ffc629";
+      c.fillRect(-bw / 2, -bh / 2, bw, bh);
+      c.lineWidth = 6 * u;
+      c.strokeStyle = INK;
+      c.strokeRect(-bw / 2, -bh / 2, bw, bh);
+      c.fillStyle = INK;
+      c.fillText(label, 0, 0);
+      c.restore();
+      c.textBaseline = "alphabetic";
+      c.textAlign = "left";
+    }
+
     // Countdown gigante
     if (phase === "count") {
       const n = Math.max(1, 3 - Math.floor(tPhase));
