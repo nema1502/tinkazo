@@ -240,9 +240,16 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
     round: d.beacon.round,
     sealedAt: f.ts,
     ...(f.prize ? { prize: f.prize } : {}),
+    // La firma va siempre, esté anclado o no. Antes solo la llevaba el
+    // comprobante de modo libre, que es el "peor": el anclado dependía de que
+    // el RPC contestara y de que la entrada no estuviera archivada, así que un
+    // comprobante de hoy abierto dentro de unos años no probaba nada. Con la
+    // firma adentro, la matemática se puede rehacer siempre; el veredicto
+    // verde sigue exigiendo que la cadena atestigüe la lista.
+    signature: d.beacon.signature,
     ...(f.raffleId !== undefined
       ? { net: network.name, contract: network.contractId ?? "", id: String(f.raffleId) }
-      : { signature: d.beacon.signature }),
+      : {}),
   };
   let link: string;
   try {

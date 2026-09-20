@@ -61,7 +61,7 @@ Un organizador sella cinco listas distintas, cada una contra una ronda distinta,
 
 **Lo que se hizo el 20 de septiembre de 2026:** la página de verificación ahora **trae y muestra los otros sellos recientes de esa misma dirección**, al lado del veredicto. Si el organizador selló cinco listas, se ven las cinco, con cuánta gente tenía cada una y contra qué ronda. La fila del sorteo que se está mirando va marcada.
 
-**El límite, que hay que decir:** el RPC de Stellar solo indexa los eventos recientes, unas pocas horas hacia atrás. Alcanza para este ataque, que por su naturaleza ocurre cerca en el tiempo del sorteo que se publica, pero no sirve para auditar el historial completo de una dirección. Para eso hace falta un explorador de bloques o un indexador propio.
+**El límite, que hay que decir:** el RPC de Stellar guarda siete días de eventos, no más. Alcanza para este ataque, que por su naturaleza ocurre cerca en el tiempo del sorteo que se publica, pero no sirve para auditar el historial completo de una dirección. Para eso está el explorador de bloques, o reconstruirlo desde el estado del contrato, que no tiene ventana.
 
 Y si el RPC no contesta, la sección no aparece: decir "hay uno solo" sin haber podido mirar sería peor que callar.
 
@@ -86,6 +86,21 @@ Y si el RPC no contesta, la sección no aparece: decir "hay uno solo" sin haber 
 | Los avatares de la lista salen a un servicio externo | **Cubierto desde el 20 de septiembre de 2026** | Cada participante generaba una petición a un servicio de avatares con su nombre en la dirección: con doscientos inscritos, doscientas peticiones con nombres reales adentro. Ahora el avatar sale de un hash del nombre y se dibuja en el navegador. **Comprobado: la única petición que sale durante un sorteo es la ronda del faro** |
 | Quien comparte el enlace expone la lista | **Aceptado y explícito** | El comprobante trae los nombres a propósito: sin ellos nadie puede recomputar. Quien comparte el enlace comparte la lista, y eso se dice |
 | La huella filtra la lista | **Cubierto en la práctica** | SHA-256 de la lista canónica completa. Adivinar la lista exige adivinar todos los nombres, en orden, con la forma exacta |
+
+## La fecha que le pone vencimiento a todo: 16 de diciembre de 2026
+
+**Testnet se borra entera.** La documentación de Stellar anuncia el reset para el 16 de diciembre de 2026 a las 17:00 UTC, con dos semanas de aviso, y ese reset borra las entradas de ledger, las transacciones y la historia, en Core, en Horizon y en el RPC.
+
+Lo que eso significa para Tinkazo, sin adornos:
+
+- La dirección del contrato desaparece y hay que desplegar otro.
+- **Todos los comprobantes anclados que se hayan compartido dejan de verificar.** No degradan: mueren. Quien abra el enlace ve "no pude comprobarlo".
+- Los identificadores de sorteo vuelven a empezar en uno, así que un comprobante viejo puede terminar apuntando a un sorteo **distinto** del contrato nuevo. Eso es peor que no verificar.
+- El README, la presentación y la postulación dicen que el registro sobrevive a que Tinkazo desaparezca. En testnet eso no es cierto.
+
+**La consecuencia práctica:** los sorteos de prueba pueden seguir en testnet, pero **el primer sorteo con gente de afuera tiene que estar en mainnet**. Si una comunidad sortea en octubre y en diciembre abre el enlace y no hay nada, el daño es peor que no haber anclado nunca.
+
+Mitigación parcial, ya hecha: **el comprobante lleva siempre la firma de la ronda**, esté anclado o no. Así, aunque el contrato desaparezca, la matemática se puede rehacer y el veredicto baja a amarillo en vez de morir. Lo que se pierde con el reset es el testigo, no la cuenta.
 
 ## D: Denegación de servicio
 
@@ -125,7 +140,7 @@ Plan de monitoreo, que es el otro entregable del tramo 2.
 
 2. **Medir con más de doscientos participantes.**
 3. **Un aviso cuando la renta del contrato se acerca al vencimiento.**
-4. **Un indexador propio de sellos**, para que la enumeración no dependa de la ventana corta del RPC.
+4. **Reconstruir el historial desde el estado del contrato**, que no tiene ventana temporal, para los sorteos de más de siete días.
 
 ## Lo que decidimos no hacer
 

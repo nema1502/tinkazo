@@ -57,6 +57,16 @@ Lista literal de lo que pide el handbook para una postulación de Build:
 
 Los pagos van en cuatro tramos: 10% al aceptar, 20% con el MVP, 30% en testnet, 40% al lanzar en mainnet. Cada tramo hay que presentarlo dentro de los 90 días del anterior o se pierde el saldo.
 
+## La fecha que manda: 16 de diciembre de 2026
+
+**Testnet se borra entera ese día**, a las 17:00 UTC, y el reset se lleva el contrato, las transacciones y la historia. Todos los comprobantes anclados que se compartan entre hoy y esa fecha dejan de verificar.
+
+El voto de la ronda 46 termina el 3 de diciembre, así que una demostración en testnet sobrevive la postulación por trece días. Pero **los diez sorteos reales con comunidades no se pueden hacer en testnet**: si se hacen en octubre y noviembre, en diciembre la gente abre el enlace y no hay nada. Eso es peor que no haber anclado.
+
+O sea que los 70 XLM de mainnet dejan de ser una decisión abierta. Van antes del primer sorteo con gente de afuera.
+
+Fuente: https://developers.stellar.org/docs/networks
+
 ## Los tres riesgos que pueden hundir la postulación
 
 ### 1. El solapamiento con Stellar-VRF
@@ -103,7 +113,7 @@ Es el problema número uno y el único que Lisboa puede arreglar en seis semanas
 | Falta | Qué hacer | Cuándo |
 |---|---|---|
 | Tracción | Diez sorteos con comunidades reales | Lisboa, y antes si se puede |
-| Mainnet | Desplegar. Cuesta unos trece dólares y `pnpm preflight:mainnet` ya comprueba todo lo demás | **Antes de postular** |
+| Mainnet | Desplegar. Cuesta unos catorce dólares y `pnpm preflight:mainnet` ya comprueba todo lo demás | **Antes del primer sorteo con gente de afuera, y como muy tarde antes del 16 de diciembre** |
 | Referidor | El 61% de los premiados vino por uno | Lisboa |
 | Reputación para el voto | Verificarse en el Discord de Stellar y participar. El voto usa reputación acumulada | Empezar ya |
 | Modelo de amenazas | Es requisito del tramo 2. Está escrito en [amenazas.md](amenazas.md) | Hecho |
@@ -139,7 +149,7 @@ Esqueleto propuesto:
 
 **Tramo 1, MVP.** Extraer la verificación de drand como librería independiente, publicada como crate de Rust y como paquete de npm, con documentación, para que cualquier contrato Soroban pueda verificar quicknet sin montar un oráculo. Más un SDK para organizadores.
 
-**Tramo 2, testnet.** El plan de monitoreo en la cadena, que es requisito obligatorio de este tramo. Sorteos con varios ganadores y con pesos. Un **indexador propio de sellos**, para que la enumeración no dependa de la ventana corta del RPC. Pruebas de carga con listas de diez mil.
+**Tramo 2, testnet.** El plan de monitoreo en la cadena, que es requisito obligatorio de este tramo. Sorteos con varios ganadores y con pesos. Pruebas de carga con listas de mil y de diez mil, midiendo dónde revienta cada parte.
 
 (El modelo de amenazas y la enumeración de sellos dentro de la página de verificación ya están hechos, así que no se pueden cobrar: el fondo no reembolsa trabajo hecho. Van en la postulación como prueba de que el equipo entrega, no como entregable.)
 
@@ -163,7 +173,7 @@ Son capas distintas. Ellos venden la primitiva y hay que confiar en que su orác
 La defensa está más arriba. Contestarla sin que la pregunten.
 
 **"¿Qué impide que el organizador selle cinco listas y publique solo la que le conviene?"**
-Nada lo impide del todo, y es el borde real del diseño: está documentado en [amenazas.md](amenazas.md) desde antes de que nadie preguntara. Lo que sí hay: **la propia página de verificación trae y muestra los otros sellos recientes de esa dirección**, con cuánta gente tenía cada lista y contra qué ronda. Si selló cinco, se ven las cinco. El límite también se dice: el RPC indexa unas pocas horas hacia atrás, que es justo la ventana en la que ocurre este ataque, pero no sirve para auditar un historial completo. **Decir esto sin que lo pregunten es lo que hace ver serio a un proyecto.**
+Nada lo impide del todo, y es el borde real del diseño: está documentado en [amenazas.md](amenazas.md) desde antes de que nadie preguntara. Lo que sí hay: **la propia página de verificación trae y muestra los otros sellos recientes de esa dirección**, con cuánta gente tenía cada lista y contra qué ronda. Si selló cinco, se ven las cinco. El límite también se dice: el RPC guarda siete días de eventos, que es de sobra para la ventana en la que ocurre este ataque, pero no sirve para auditar un historial completo. **Decir esto sin que lo pregunten es lo que hace ver serio a un proyecto.**
 
 **"¿Por qué Stellar y no otra cadena?"**
 Porque desde el protocolo 22, CAP-0059 trae BLS12-381 y hash-to-curve como funciones nativas del host, y la verificación de la firma cuesta 0,003 XLM. Sin esas primitivas el mismo emparejamiento cuesta órdenes de magnitud más o directamente no entra en el presupuesto de gas. No es preferencia: es el único lugar donde el número cierra.

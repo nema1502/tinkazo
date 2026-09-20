@@ -14,14 +14,25 @@ import type { Proof } from "../protocol/proof";
  * explorador de bloques, y eso no es una defensa, es una nota al pie. Acá se
  * traen y se muestran al lado del veredicto.
  *
- * Límite que hay que decir: el RPC solo indexa los eventos recientes, unas
- * pocas horas hacia atrás. Alcanza para este ataque, que por su naturaleza
- * ocurre cerca en el tiempo del sorteo que se publica, pero no sirve para
- * auditar el historial completo de una dirección. Para eso, un explorador.
+ * Límite que hay que decir: el RPC guarda siete días de eventos, no más. El
+ * ataque ocurre cerca en el tiempo del sorteo que se publica, así que la
+ * ventana alcanza; auditar el historial completo de una dirección no se puede
+ * por acá, y para eso está el explorador de bloques.
  */
 
-/** Cuántos ledgers hacia atrás se pregunta. A unos cinco segundos cada uno, medio día. */
-const LOOKBACK = 9000;
+/**
+ * Cuántos ledgers hacia atrás se pregunta.
+ *
+ * El RPC guarda 120 960 ledgers, que a cinco segundos cada uno son siete días.
+ * Se pide casi todo, dejando margen porque la ventana se corre entre una
+ * llamada y la siguiente y pedir el borde exacto da error.
+ *
+ * Cuesta siempre lo mismo: el RPC escanea como mucho diez mil ledgers por
+ * llamada, así que son trece viajes, encuentre o no encuentre algo.
+ */
+const LOOKBACK = 119_000;
+/** Cuántos ledgers barre el RPC en una sola llamada. */
+const SCAN = 10_000;
 
 export interface Seal {
   raffleId: string;
@@ -82,22 +93,33 @@ export async function recentSealsOf(proof: Proof): Promise<SealsResult | null> {
   const startLedger = Math.max(1, latest - LOOKBACK);
 
   const addressTopic = new Address(organizer).toScVal().toXDR("base64");
-  const events = (await rpc(url, "getEvents", {
-    startLedger,
-    filters: [
-      {
-        type: "contract",
-        contractIds: [proof.contract],
-        // El evento de sello lleva el nombre, el identificador y la dirección
-        // como temas. El comodín en el segundo deja pasar cualquier sorteo de
-        // esta misma dirección.
-        topics: [["*", "*", addressTopic]],
-      },
-    ],
-    pagination: { limit: 200 },
-  })) as { events?: unknown[]; cursor?: string };
+  const filters = [
+    {
+      type: "contract",
+      contractIds: [proof.contract],
+      // El evento de sello lleva el nombre, el identificador y la dirección
+      // como temas. El comodín en el segundo deja pasar cualquier sorteo de
+      // esta misma dirección.
+      topics: [["*", "*", addressTopic]],
+    },
+  ];
 
-  const list = Array.isArray(events.events) ? events.events : [];
+  // El RPC barre como mucho diez mil ledgers por llamada, así que la semana
+  // entera son trece viajes. Se sigue el cursor hasta el final o hasta que se
+  // junten doscientos sellos, que es más de lo que nadie va a mirar.
+  const list: unknown[] = [];
+  let cursor: string | undefined;
+  for (let trip = 0; trip < Math.ceil(LOOKBACK / SCAN) + 1 && list.length < 200; trip++) {
+    const page = (await rpc(url, "getEvents", {
+      ...(cursor ? {} : { startLedger }),
+      filters,
+      pagination: cursor ? { cursor, limit: 200 } : { limit: 200 },
+    })) as { events?: unknown[]; cursor?: string };
+    const got = Array.isArray(page.events) ? page.events : [];
+    list.push(...got);
+    if (!page.cursor) break;
+    cursor = page.cursor;
+  }
   const seals: Seal[] = [];
   for (const raw of list) {
     const e = raw as {
