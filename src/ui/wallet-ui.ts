@@ -76,8 +76,11 @@ function render(): void {
   }
 
   const net = document.createElement("span");
-  net.className = wrongNetwork ? "netbadge bad" : "netbadge";
-  net.textContent = network.name;
+  // Naranja en testnet y turquesa en mainnet: el color dice en qué red estás
+  // antes de que alcances a leer la palabra.
+  net.className = wrongNetwork ? "netbadge bad" : network.name === "mainnet" ? "netbadge main" : "netbadge";
+  net.textContent = network.name === "testnet" ? t("netTest") : network.name;
+  net.title = t(network.name === "testnet" ? "netTestHint" : "netMainHint");
   box.appendChild(net);
 
   const link = document.createElement("a");
@@ -92,6 +95,111 @@ function render(): void {
   box.appendChild(button(t("disconnect"), "", () => void disconnect()));
 
   if (wrongNetwork) notice(t("wrongNetwork").replace("{red}", network.name), true);
+  void refreshFunds();
+}
+
+/* -------------------------------------------------------------------- grifo */
+
+/**
+ * El panel del grifo.
+ *
+ * Una cuenta recién creada no tiene con qué pagar la comisión, y ese es el
+ * primer muro que se encuentra cualquiera que entra con Google. Antes el error
+ * aparecía recién al intentar sellar, y decía "tu cuenta no tiene XLM" sin
+ * decir qué hacer al respecto.
+ *
+ * En testnet hay un grifo público que regala XLM de mentira, así que el panel
+ * lo ofrece con un botón. En mainnet no hay grifo: ahí solo se muestra la
+ * dirección para copiarla y mandarle fondos desde donde sea.
+ */
+async function refreshFunds(): Promise<void> {
+  const box = $("fund-box");
+  if (!session) {
+    box.style.display = "none";
+    return;
+  }
+  const { xlmBalance } = await loadWallets();
+  const bal = await xlmBalance(session.address);
+  // -1 es "no pude preguntar". Sin respuesta no se afirma nada.
+  if (bal < 0 || bal >= 1) {
+    box.style.display = "none";
+    return;
+  }
+  renderFundBox(box, session.address);
+}
+
+function renderFundBox(box: HTMLElement, address: string): void {
+  const testnet = network.name === "testnet";
+  box.innerHTML = "";
+
+  const tag = document.createElement("span");
+  tag.className = "fund-tag";
+  tag.textContent = testnet ? t("fundTag") : network.name;
+  box.appendChild(tag);
+
+  const h = document.createElement("h3");
+  h.textContent = t("fundTitle");
+  box.appendChild(h);
+
+  const p = document.createElement("p");
+  p.textContent = t(testnet ? "fundBody" : "fundBodyMain");
+  box.appendChild(p);
+
+  const row = document.createElement("div");
+  row.className = "fund-addr";
+  const code = document.createElement("code");
+  code.textContent = address;
+  row.appendChild(code);
+
+  const copy = button(t("fundCopy"), "", () => {
+    void navigator.clipboard.writeText(address).then(
+      () => { copy.textContent = t("copied"); },
+      () => { code.focus(); },
+    );
+  });
+  row.appendChild(copy);
+  box.appendChild(row);
+
+  const actions = document.createElement("div");
+  actions.className = "row";
+  if (testnet) {
+    const get = button(t("fundGet"), "solid", () => {
+      get.disabled = true;
+      get.textContent = t("fundWorking");
+      void (async () => {
+        try {
+          const { fundWithFriendbot } = await loadWallets();
+          await fundWithFriendbot(address);
+          // El grifo tarda un par de segundos en que el saldo se vea.
+          setTimeout(() => void refreshFunds(), 2500);
+          get.textContent = t("fundDone");
+        } catch {
+          get.disabled = false;
+          get.textContent = t("fundFailed");
+        }
+      })();
+    });
+    actions.appendChild(get);
+  }
+
+  const lab = document.createElement("a");
+  lab.className = "ghost";
+  lab.target = "_blank";
+  lab.rel = "noopener";
+  lab.href = testnet
+    ? "https://lab.stellar.org/account/fund"
+    : accountUrl(address);
+  lab.textContent = t(testnet ? "fundLab" : "fundExplorer");
+  actions.appendChild(lab);
+  box.appendChild(actions);
+
+  if (testnet) {
+    const foot = document.createElement("p");
+    foot.className = "note";
+    foot.textContent = t("fundFoot");
+    box.appendChild(foot);
+  }
+  box.style.display = "block";
 }
 
 function button(label: string, extra: string, onClick: () => void): HTMLButtonElement {

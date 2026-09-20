@@ -117,11 +117,16 @@
   }
   a.ghost { display: inline-block; text-decoration: none; }
   button.ghost:hover, a.ghost:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
+  /* Que la red se vea. Alguien que entra con Google no tiene por qué saber
+     que está en una red de pruebas, y confundirla con la de verdad sería lo
+     peor que puede pasar. */
   .netbadge {
-    font-family: ui-monospace, Consolas, monospace; font-size: 10px; text-transform: uppercase;
-    letter-spacing: 0.1em; font-weight: 800; border: 2px solid var(--ink); background: var(--teal);
-    color: var(--on-accent); padding: 3px 8px;
+    font-family: ui-monospace, Consolas, monospace; font-size: 12px; text-transform: uppercase;
+    letter-spacing: 0.12em; font-weight: 800; border: 2px solid var(--ink);
+    box-shadow: var(--sh-sm); background: var(--orange);
+    color: var(--on-accent); padding: 5px 11px;
   }
+  .netbadge.main { background: var(--teal); }
   .netbadge.bad { background: var(--orange); }
   .auth a.hello { text-decoration: none; }
   .auth a.hello:hover { text-decoration: underline; }
@@ -219,6 +224,7 @@
   canvas { max-width: 100%; }
   .winner-box { display: none; border-top: var(--bw) solid var(--ink); padding: 24px; position: relative; overflow: hidden; }
   .winner-card {
+    position: relative; z-index: 40;
     display: inline-flex; align-items: center; gap: 16px; background: var(--yellow); color: #191919; border: var(--bw) solid var(--ink);
     box-shadow: var(--sh); padding: 16px 26px; transform: rotate(-1.5deg); margin-top: 8px;
   }
@@ -235,7 +241,9 @@
   footer .bar { font-family: ui-monospace, Consolas, monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); font-weight: 700; }
   .note { font-size: 12px; color: var(--muted); margin-top: 10px; }
   select { background: var(--card); color: var(--ink); border: 2px solid var(--ink); padding: 9px 12px; font-weight: 700; }
-  .confetti { position: fixed; inset: 0; pointer-events: none; z-index: 60; }
+  /* Detrás de la tarjeta del ganador, no encima: caía justo sobre el nombre
+     en los primeros segundos, que es cuando la gente saca la foto. */
+  .confetti { position: fixed; inset: 0; pointer-events: none; z-index: 30; }
   .confetti i { position: absolute; width: 10px; height: 14px; top: -20px; animation: fall linear forwards; }
   @keyframes fall { to { transform: translateY(105vh) rotate(720deg); } }
   .field { margin-top: 16px; }
@@ -244,9 +252,17 @@
   .stadium { position: fixed; inset: 0; z-index: 40; display: none; background: #10101c; }
   .stadium canvas { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; }
   .st-top { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; z-index: 2; }
-  .st-brand { background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); padding: 4px 12px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; font-size: 14px; }
+  .st-brand { background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); padding: 4px 12px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; font-size: clamp(14px, 1.3vw, 20px); }
   .st-brand b { color: var(--magenta); }
-  .st-round { background: var(--card); border: 2px solid var(--ink); padding: 4px 12px; font-family: ui-monospace, Consolas, monospace; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink2); }
+  /* El número de ronda es el dato que hace verificable el sorteo. A diez
+     píxeles fijos no se lee desde el fondo de la sala, así que escala con la
+     pantalla igual que el resto del estadio. */
+  .st-round {
+    background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+    padding: 6px 14px; font-family: ui-monospace, Consolas, monospace;
+    font-size: clamp(11px, 1.15vw, 18px); letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--ink); font-weight: 700;
+  }
   .st-actions { display: flex; gap: 8px; }
   .st-actions button {
     background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
@@ -255,7 +271,7 @@
   .commentary {
     position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%);
     background: var(--card); color: var(--ink); border: var(--bw) solid var(--ink); box-shadow: var(--sh);
-    padding: 10px 24px; font-weight: 900; font-size: clamp(15px, 2.8vw, 24px); white-space: nowrap; z-index: 2;
+    padding: 12px 28px; font-weight: 900; font-size: clamp(16px, 2.6vw, 38px); white-space: nowrap; z-index: 2;
     max-width: 92vw; overflow: hidden; text-overflow: ellipsis;
   }
   .commentary.pop { animation: popIn 0.28s; }
@@ -285,6 +301,29 @@
   label.chip.live:focus-within { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 6px var(--yellow); }
   /* Una huella de 64 caracteres desbordaba la tarjeta en celular. */
   .note { word-break: break-word; overflow-wrap: anywhere; }
+
+  /* El panel del grifo. Aparece cuando la cuenta conectada no tiene con qué
+     pagar la comisión, que es lo primero que le pasa a todo el mundo. */
+  .fund {
+    display: block; margin: 16px 0 0; padding: 16px 18px;
+    background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh);
+  }
+  .fund .fund-tag {
+    display: inline-block; background: var(--orange); color: var(--on-accent);
+    border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+    font-family: ui-monospace, Consolas, monospace; font-size: 12px; font-weight: 800;
+    letter-spacing: 0.14em; text-transform: uppercase; padding: 5px 12px; transform: rotate(-1deg);
+  }
+  .fund h3 { font-size: 18px; font-weight: 800; margin: 12px 0 6px; text-wrap: balance; }
+  .fund p { font-size: 14px; color: var(--ink2); line-height: 1.55; }
+  .fund .fund-addr {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 14px 0 4px;
+  }
+  .fund .fund-addr code {
+    font-family: ui-monospace, Consolas, monospace; font-size: 13px; font-weight: 700;
+    background: var(--paper); border: 2px solid var(--ink); padding: 8px 12px;
+    overflow-wrap: anywhere; flex: 1 1 260px; min-width: 0;
+  }
   /* El QR se dibuja más grande de lo que se muestra y se achica acá: así
      los módulos quedan nítidos en vez de interpolados. */
   #qr-img { width: 140px; height: 140px; image-rendering: pixelated; }

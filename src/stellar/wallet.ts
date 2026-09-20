@@ -197,8 +197,14 @@ class GuestWallet implements WalletAdapter {
   }
 }
 
-/** Crea la cuenta en la red con XLM de prueba. Idempotente: si ya existe, no falla. */
-async function fundWithFriendbot(address: string): Promise<void> {
+/**
+ * Crea la cuenta en la red con XLM de prueba. Idempotente: si ya existe, no falla.
+ *
+ * Sirve para cualquier cuenta, no solo la de prueba que genera el navegador:
+ * una cuenta de Google recién creada tampoco tiene con qué pagar la comisión,
+ * y este es el grifo oficial de testnet.
+ */
+export async function fundWithFriendbot(address: string): Promise<void> {
   if (!network.friendbotUrl) return;
   try {
     const res = await fetch(`${network.friendbotUrl}/?addr=${encodeURIComponent(address)}`);
@@ -206,6 +212,32 @@ async function fundWithFriendbot(address: string): Promise<void> {
     if (!res.ok && res.status !== 400) throw new Error(`friendbot ${res.status}`);
   } catch (e) {
     throw new Error(WALLET_ERRORS.friendbot, { cause: e });
+  }
+}
+
+/**
+ * Cuántos XLM tiene una cuenta. `0` si no existe todavía.
+ *
+ * Se pregunta a Horizon y no al RPC porque el saldo es un dato de cuenta, no
+ * de contrato, y Horizon lo devuelve de una.
+ */
+export async function xlmBalance(address: string): Promise<number> {
+  const base = network.name === "mainnet"
+    ? "https://horizon.stellar.org"
+    : "https://horizon-testnet.stellar.org";
+  try {
+    const res = await fetch(`${base}/accounts/${encodeURIComponent(address)}`, {
+      signal: AbortSignal.timeout(12_000),
+    });
+    // 404 es "la cuenta no existe todavía", que para esto es lo mismo que cero.
+    if (res.status === 404) return 0;
+    if (!res.ok) return -1;
+    const body = (await res.json()) as { balances?: { asset_type?: string; balance?: string }[] };
+    const native = body.balances?.find((b) => b.asset_type === "native");
+    return Number(native?.balance ?? 0);
+  } catch {
+    // Sin respuesta no se afirma nada: -1 significa "no sé".
+    return -1;
   }
 }
 

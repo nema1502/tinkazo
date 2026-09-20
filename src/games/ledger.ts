@@ -45,6 +45,18 @@ const SWEEPS = [
   { from: "top", cut: 1 },
 ] as const;
 
+/**
+ * Cuánto dura cada pasada, según cuánta gente haya.
+ *
+ * Con doscientos participantes el juego duraba lo mismo que con dos, así que
+ * los nombres estaban en pantalla menos de dos segundos antes de que quedara
+ * el podio. La sala no alcanzaba a ver a nadie. Con más gente, más tiempo de
+ * barrido: hay más que mirar.
+ */
+const sweepDur = (n: number): number => clamp(0.8 + n / 120, 0.8, 1.6);
+/** Y un respiro antes de sellar, para leer a los tres que quedaron. */
+const HOLD = 0.6;
+
 export function ledgerClose(
   names: string[],
   winnerIdx: number,
@@ -259,7 +271,7 @@ export function ledgerClose(
     }
 
     if (phase === "sweep") {
-      const p = clamp(tPhase / 0.8, 0, 1);
+      const p = clamp(tPhase / sweepDur(n), 0, 1);
       const dir = SWEEPS[sweepI]?.from ?? "top";
       sweepY = dir === "top" ? p * H() : (1 - p) * H();
       if (p >= 1) endSweep();
@@ -267,16 +279,18 @@ export function ledgerClose(
     }
 
     if (phase === "stamp") {
-      // Los sellos de a uno cada 0,33 s. La ganadora queda última.
+      // Un respiro para leer a los que quedaron, y recién ahí los sellos, de a
+      // uno cada 0,33 s. La ganadora queda última.
+      if (tPhase < HOLD) return;
       const losers = cards.filter((q) => q.alive && q.idx !== winnerIdx);
-      const want = Math.floor(tPhase / 0.33);
+      const want = Math.floor((tPhase - HOLD) / 0.33);
       while (stampI < want && stampI < losers.length) {
         const q = losers[stampI] as Card;
         q.stamp = 0.001;
         beep(140, 0.14, "square", 0.06);
         stampI++;
       }
-      if (stampI >= losers.length && tPhase >= losers.length * 0.33 + 0.35) toSeal();
+      if (stampI >= losers.length && tPhase >= HOLD + losers.length * 0.33 + 0.35) toSeal();
       return;
     }
 

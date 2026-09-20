@@ -140,9 +140,11 @@ export function stellarConstellation(
       });
     }
     // Los rombos intermedios son las trustlines por las que rebota el pago.
-    // Con pocos participantes hacen falta más, si no el paquete no tiene a
-    // dónde ir sin repetir estrella.
-    const anchors = clamp(24 - n, 8, 20);
+    // Con pocos participantes hacen falta más, porque nadie recibe el pago más
+    // de tres veces y el paquete necesita a dónde ir. Pero no veinte: con dos
+    // o tres participantes la pantalla se volvía un campo de rombos con un par
+    // de estrellas perdidas. Ocho alcanzan para los veinte saltos.
+    const anchors = clamp(22 - n * 2, 8, 20);
     for (let a = 0; a < anchors; a++) {
       for (let tryI = 0; tryI < 8; tryI++) {
         const x = x0 + rng() * (x1 - x0);
@@ -610,11 +612,20 @@ export function stellarConstellation(
     if (phase === "nova") drawNova();
     // Nunca los doscientos nombres a la vez: solo el actual y los anteriores
     // desvaneciéndose. Es lo que hace que doscientos se lean en un proyector.
-    for (const ch of chips) {
-      const n = nodes[ch.node] as Node;
-      // El chip queda opaco casi toda su vida: sobre el cielo oscuro, medio
-      // transparente no se lee desde el fondo de la sala.
-      if (n.idx >= 0) chip(names[n.idx] ?? "", n.x + n.r + 6 * k, n.y - n.r - 10 * k, Math.min(1, ch.a * 3));
+    // Con pocos participantes los nombres quedan puestos todo el tiempo: si
+    // solo aparecen cuando el paquete los toca, la sala no sabe quién es quién.
+    if (names.length <= 4) {
+      for (const q of nodes) {
+        if (q.idx < 0) continue;
+        chip(names[q.idx] ?? "", q.x + q.r + 6 * k, q.y - q.r - 10 * k, 1);
+      }
+    } else {
+      for (const ch of chips) {
+        const q = nodes[ch.node] as Node;
+        // El chip queda opaco casi toda su vida: sobre el cielo oscuro, medio
+        // transparente no se lee desde el fondo de la sala.
+        if (q.idx >= 0) chip(names[q.idx] ?? "", q.x + q.r + 6 * k, q.y - q.r - 10 * k, Math.min(1, ch.a * 3));
+      }
     }
     c.restore();
 

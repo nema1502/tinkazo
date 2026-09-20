@@ -230,8 +230,12 @@ export function stadiumRace(
     }
     leadCd -= dt;
     if (!saidLast && prog > SURGE_AT) { saidLast = true; say(t("cLast"), 0.85); beep(740, 0.1, "triangle", 0.05); }
+    // La cámara sigue al puntero, pero al final se destraba y deja la meta
+    // cerca del centro. Con el tope viejo el remate pasaba en la franja
+    // derecha de la pantalla y el resto de la pista quedaba vacía.
     const camTarget = leader.x - W() * 0.4;
-    camX += (Math.max(0, Math.min(camTarget, L() - W() * 0.86)) - camX) * Math.min(1, dt * 2.6);
+    const camCap = L() - W() * (prog > SURGE_AT ? 0.62 : 0.86);
+    camX += (Math.max(0, Math.min(camTarget, camCap)) - camX) * Math.min(1, dt * 2.6);
     if (wr.x >= L()) finishNow();
   }
 
@@ -308,13 +312,17 @@ export function stadiumRace(
       c.lineWidth = 2 * u; c.strokeStyle = INK; c.stroke();
     }
     // Carriles
-    const lanes = runners.length, laneH = trackH / lanes;
+    const lanes = runners.length;
+    // Con dos corredores la pista entera se repartía en dos franjas gigantes.
+    // Se acota el alto de carril y se centra lo que sobra.
+    const laneH = Math.min(trackH / lanes, 118 * u);
+    const trackPad = (trackH - laneH * lanes) / 2;
     c.strokeStyle = dark ? "rgba(246,239,226,0.25)" : "rgba(25,25,25,0.3)";
     c.lineWidth = 2 * u; c.setLineDash([18 * u, 16 * u]);
     for (let li = 1; li < lanes; li++) {
       c.beginPath();
-      c.moveTo(0, trackTop + li * laneH);
-      c.lineTo(w, trackTop + li * laneH);
+      c.moveTo(0, trackTop + trackPad + li * laneH);
+      c.lineTo(w, trackTop + trackPad + li * laneH);
       c.stroke();
     }
     c.setLineDash([]);
@@ -339,10 +347,10 @@ export function stadiumRace(
     }
     // Llamas
     runners.forEach((r, k) => {
-      const ly = trackTop + k * laneH + laneH * 0.5;
+      const ly = trackTop + trackPad + k * laneH + laneH * 0.5;
       const lx = r.x - camX;
       if (lx < -140 || lx > w + 140) return;
-      const sc = (laneH * 0.62) / 26;
+      const sc = Math.min(laneH * 0.62, 78 * u) / 26;
       const bob = phase === "race" ? Math.sin(tRace * 16 + k * 2) * 3 * u : 0;
       skin.drawRunner(c, lx, ly - 8 * sc + bob, sc, r.color, phase === "race" ? tRace * 14 + k : 0);
       // Chip con nombre y avatar

@@ -110,7 +110,7 @@ Es el problema número uno y el único que Lisboa puede arreglar en seis semanas
 | Métrica de crecimiento en la cadena | Ver abajo | Antes de postular |
 | Documentación unificada | Un Gitbook con todo | Antes de postular |
 | Video del equipo | Está en la lista literal de lo que hace buena a una postulación | Antes de postular |
-| Declaración de uso de IA | Es requisito explícito. Esconderlo es peor que declararlo | Antes de postular |
+| Declaración de uso de IA | El fondo la pide dentro de la postulación, no en el repositorio. Decidir qué decir al escribirla | Antes de postular |
 
 **El bloqueo formal de mainnet es uno solo:** la cuenta `GB3OND7F…` no existe en esa red, o sea que nunca se fondeó. Hacen falta unos 70 XLM para desplegar y cubrir el primer año de alquiler con colchón.
 

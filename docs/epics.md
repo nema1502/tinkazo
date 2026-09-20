@@ -500,15 +500,21 @@ Arreglado (2026-09-20):
 - **Los dígitos de la semilla salían cabeza abajo** en la mitad inferior del aro de la ruleta. El código decía "sacá la foto y comprobalos" y con la mitad ilegible eso era mentira.
 - **En 4:3 la ruleta cortaba el nombre.** Es justo el proyector de sala.
 
-Pendiente:
+Segunda tanda, también hecha (2026-09-20):
 
-- Con nombres largos todos los participantes se ven iguales: la carrera trunca a dieciséis caracteres y el chip compartido a dieciocho. Con veinticuatro nombres de treinta y ocho caracteres, los ocho chips dicen lo mismo.
-- La carrera termina con el ochenta por ciento de la pantalla vacío: la cámara topa la meta al 86% del ancho.
-- La llama cambia cuatro veces de tamaño según cuánta gente haya.
-- El confeti cae encima del nombre del ganador los primeros segundos.
-- Cierre de Libro dura lo mismo con dos que con doscientos, y con doscientos los nombres están menos de dos segundos en pantalla.
-- Constelación con dos o tres participantes es casi solo líneas señuelo.
-- El número de ronda de la barra del estadio va a diez píxeles fijos y no escala: es lo que hace verificable el sorteo y en un proyector no se lee.
+- **Los nombres largos hacían que todos se vieran iguales.** Cortar por el final convierte a "María Fernanda Quispe Mamani" y "María Fernanda Quispe Rojas" en la misma cosa, y en una sala llena de apellidos compartidos eso pasa seguido. Ahora se corta por el medio, que conserva las dos puntas.
+- **La carrera terminaba con el ochenta por ciento de la pantalla vacío.** La cámara fijaba la meta al 86% del ancho. Ahora se destraba en el último tramo y la deja cerca del centro.
+- **La llama cambiaba cuatro veces de tamaño** según cuánta gente hubiera: con dos ocupaba el 15% de la pantalla y con ocho el 3,9%. Es el mismo animal.
+- **El confeti caía encima del nombre del ganador** justo cuando la gente saca la foto. Ahora va detrás.
+- **Cierre de Libro duraba lo mismo con dos que con doscientos.** Ahora las pasadas duran más cuanta más gente hay, y queda un respiro antes de sellar para leer a los tres que quedaron.
+- **Constelación con dos o tres participantes** era un campo de rombos con un par de estrellas perdidas. Ahora hay menos rombos y los nombres quedan puestos todo el tiempo.
+- **El número de ronda iba a diez píxeles fijos.** Es el dato que hace verificable el sorteo y en un proyector no se leía. Ahora escala, como el narrador.
+
+Pendiente, para cuando haya un evento real donde probarlo:
+
+- Medir con más de doscientos participantes.
+- Un aviso cuando la renta del contrato se acerque al vencimiento.
+- Un indexador propio de sellos, para que la enumeración no dependa de la ventana corta del RPC.
 
 ### Historia 7.3: Mejoras transversales de presentación
 
