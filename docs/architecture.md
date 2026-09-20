@@ -32,7 +32,7 @@ Documento de decisiones técnicas para implementar el [PRD](prd.md) sobre Stella
 
 ### Restricciones y dependencias
 
-- Stellar testnet corre protocolo 28 y mainnet 27 (verificado 2026-09-16 vía `getVersionInfo`). El contrato se compila con `soroban-sdk` 27, que corre en ambas redes.
+- Testnet y mainnet corren **protocolo 28** (mainnet subió de 27 a 28 entre el 16 y el 19 de septiembre de 2026; verificado vía `getVersionInfo`). El contrato se compila hoy con `soroban-sdk` 27.0.6, compatible con ambas; `soroban-sdk` 28.0.0 ya es estable y se evalúa antes del despliegue a mainnet (historia 5.1).
 - drand quicknet es la única fuente de aleatoriedad. Sus parámetros son constantes públicas (ver protocolo §2).
 - La máquina de desarrollo es Windows sin MSVC: toolchain Rust `x86_64-pc-windows-gnu` con `wasm32v1-none`.
 - El sitio v1 existe y está en producción; la migración debe conservar la interfaz.
@@ -66,7 +66,7 @@ Versiones verificadas el 2026-09-16 en crates.io, npm y las redes.
 | D-11 | Redes | Configuración por `VITE_STELLAR_NETWORK` (`testnet` por defecto). Direcciones de contrato en `src/stellar/deployments.ts` y en [deployments.md](deployments.md) | Auto-detectar la red desde la wallet: la app debe declarar contra qué contrato habla. |
 | D-12 | Hosting y CI | Vercel (proyecto existente, preset Vite, `pnpm`) y GitHub Actions (`cargo test`, build WASM, `pnpm test`, `pnpm build`) | Netlify (opción de v1): el proyecto ya vive en Vercel. |
 | D-13 | Comprobante | Enlace con `red`, `contrato`, `id` y la lista canónica comprimida (deflate + base64url) en el fragmento `#`, más descarga JSON | Lista en la cadena: v2, opcional, expone nombres. Servidor de comprobantes: viola NFR-2. |
-| D-14 | Toolchain de contratos | Rust 1.98 (`stable-x86_64-pc-windows-gnu` en la máquina del autor), `wasm32v1-none`, `soroban-sdk` 27.0.6, `stellar-cli` 28.0 | SDK 28 rc: solo necesario para funciones nuevas del protocolo 28; mainnet sigue en 27. |
+| D-14 | Toolchain de contratos | Rust 1.98 (`stable-x86_64-pc-windows-gnu` en la máquina del autor), `wasm32v1-none`, `soroban-sdk` 27.0.6, `stellar-cli` 28.0 | Subir a `soroban-sdk` 28.0.0 (estable desde septiembre de 2026): se evalúa en la historia 5.1, ahora que ambas redes corren protocolo 28. Sin urgencia: el contrato no usa funciones nuevas del 28. |
 | D-15 | Política de renta (TTL) | `seal` y `draw` extienden solo las entradas del propio sorteo (120 días). La renta de la instancia y del código se renueva con `extend`, explícita y a cargo del proyecto | Extender la instancia en cada llamada (patrón habitual): el primer organizador tras el umbral pagaba 15 XLM de renta del código sin saberlo. Medido en testnet el 2026-09-16. |
 
 ### Detalle de la capa de confianza
