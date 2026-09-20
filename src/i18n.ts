@@ -18,6 +18,8 @@ export interface Dict {
   drawIn: (mmss: string) => string;
   drandTry: (i: number, n: number) => string;
   cConstPass: (n: string) => string;
+  cWheelSplit: (segs: number, rep: number) => string;
+  cWheelOn: (n: string) => string;
   csvRows: (n: number) => string;
   tellBody: (w: string, prize: string, n: number, u: string) => string;
 }
@@ -60,6 +62,19 @@ export const T: Record<Lang, Dict> = {
     sample: "Cargar ejemplo", freeze: "Congelar lista", draw: "Lanzar el sorteo", winners: "Premios",
     // --- Tarjetas de "¿por qué se llama así?". Cada dato tiene su fuente
     //     primaria anotada en src/games/lore.ts. Ninguno se inventa.
+    // --- Ruleta. Cada persona se lleva varios gajos intercalados, así que con
+    //     dos participantes la rueda igual tiene veinticuatro y se ve girar.
+    cWheelBuild: ["¡Armando la rueda!", "¡Se acomodan los gajos, señores!", "¡Ya viene la rueda!"],
+    cWheelSplit: (segs, rep) => (rep > 1 ? `¡${segs} gajos, ${rep} para cada uno!` : `¡${segs} gajos, uno por cabeza!`),
+    cWheelCharge: ["¿Listos?", "¡Se tensa esto!", "¡Agárrense, señores!"],
+    cWheelGo: ["¡ALLÁ VA!", "¡Y GIRA!", "¡Arrancó la rueda!"],
+    cWheelFast: ["¡No se ve nada!", "¡Va volando, señores!", "¡Puro borrón!"],
+    cWheelSlow: ["¡Se está frenando!", "¡Cada vez más lento!", "¡Ya casi!"],
+    cWheelOn: (n) => pick([`¡Va por ${n}!`, `¡Pasa por ${n}!`, `¡Ahora ${n}!`]),
+    cWheelPeg: ["¡SE TRABA!", "¡NO PASA DE AHÍ!", "¡SE QUEDA, SE QUEDA!"],
+    cWheelLast: ["¡SE DEFINE ACÁ!", "¡NO RESPIRA NADIE!", "¡UN GAJO MÁS!"],
+    cWheelRound: "RONDA",
+    cWheelSeed: "LA SEMILLA ESTÁ EN EL BORDE",
     loreTitle: "DE PASO",
     loreTinkazoQ: "¿Por qué “Tinkazo”?",
     loreTinkazoA: "El Diccionario de americanismos trae dos: tinkazo, en Bolivia, es un presentimiento. Y tincazo es el golpecito que dan haciendo resbalar el dedo sobre el pulgar. Este sorteo es las dos cosas.",
@@ -247,6 +262,17 @@ export const T: Record<Lang, Dict> = {
     frozenOk: "List frozen ✓",
     csvRows: (n) => (n === 1 ? "1 row in the file" : `${n} rows in the file`),
     sample: "Load sample", freeze: "Freeze list", draw: "Run the draw", winners: "Prizes",
+    cWheelBuild: ["Building the wheel!", "Slices lining up, people!", "Here comes the wheel!"],
+    cWheelSplit: (segs, rep) => (rep > 1 ? `${segs} slices, ${rep} each!` : `${segs} slices, one apiece!`),
+    cWheelCharge: ["Ready?", "It's winding up!", "Hold on, people!"],
+    cWheelGo: ["THERE IT GOES!", "AND IT SPINS!", "The wheel is off!"],
+    cWheelFast: ["You can't see a thing!", "It's flying, people!", "Pure blur!"],
+    cWheelSlow: ["It's braking!", "Slower and slower!", "Almost there!"],
+    cWheelOn: (n) => pick([`On ${n}!`, `Passing ${n}!`, `${n} now!`]),
+    cWheelPeg: ["IT'S STUCK!", "IT WON'T PASS!", "IT'S STAYING, IT'S STAYING!"],
+    cWheelLast: ["IT'S DECIDED RIGHT HERE!", "NOBODY IS BREATHING!", "ONE MORE SLICE!"],
+    cWheelRound: "ROUND",
+    cWheelSeed: "THE SEED IS ON THE RIM",
     loreTitle: "BY THE WAY",
     loreTinkazoQ: "Why “Tinkazo”?",
     loreTinkazoA: "The Spanish academies' dictionary of Americanisms has two: in Bolivia a tinkazo is a hunch. Its twin tincazo is the flick you give with a finger off your thumb. This raffle is both.",

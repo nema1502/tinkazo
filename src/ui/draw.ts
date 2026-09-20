@@ -109,8 +109,7 @@ export async function draw(): Promise<void> {
  */
 function playGame(names: string[], first: number, beacon: Beacon, finish: () => void): void {
   if (app.game === "wheel" && names.length <= WHEEL_MAX) {
-    $("sec-draw").scrollIntoView({ behavior: "smooth", block: "start" });
-    wheelSpin(names, first, finish);
+    wheelSpin(names, first, beacon, finish);
     return;
   }
   if (app.game === "stellar") {
