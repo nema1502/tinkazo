@@ -65,7 +65,14 @@ export function roundUrl(round: number): string {
  */
 export async function fetchRound(
   round: number,
-  opts: { attempts?: number; delayMs?: number; signal?: AbortSignal; fetchFn?: typeof fetch } = {},
+  opts: {
+    attempts?: number;
+    delayMs?: number;
+    signal?: AbortSignal;
+    fetchFn?: typeof fetch;
+    /** Se llama antes de cada intento, para que la interfaz no quede muda. */
+    onAttempt?: (attempt: number, total: number) => void;
+  } = {},
 ): Promise<RoundSignature> {
   const attempts = opts.attempts ?? 12;
   const delayMs = opts.delayMs ?? 2_000;
@@ -73,6 +80,7 @@ export async function fetchRound(
   let lastError: unknown = null;
   for (let i = 0; i < attempts; i++) {
     const relay = QUICKNET.relays[i % QUICKNET.relays.length];
+    opts.onAttempt?.(i + 1, attempts);
     try {
       const res = await doFetch(`${relay}/v2/chains/${QUICKNET.chainHash}/rounds/${round}`, {
         signal: opts.signal ?? null,

@@ -48,7 +48,7 @@
     <div class="body">
       <div class="row" style="margin: 0 0 14px">
         <span class="chip live" data-i="srcPaste">Pegar lista</span>
-        <label class="chip live" style="cursor: pointer"><span data-i="srcCsv">Subir CSV</span><input id="csv" type="file" accept=".csv,.txt" hidden /></label>
+        <label class="chip live" style="cursor: pointer"><span data-i="srcCsv">Subir CSV</span><input id="csv" type="file" accept=".csv,.txt" class="sr-only" /></label>
         <span class="chip soon" data-i="srcLuma">Luma · pronto</span>
         <span class="chip soon" data-i="srcMeetup">Meetup · pronto</span>
       </div>
@@ -63,9 +63,12 @@
         <input id="prize" type="text" maxlength="60" placeholder="Ej: Licencia JetBrains, libro, entrada…" data-i-ph="prizePh" />
       </div>
       <div class="row">
+        <label class="kicker" for="nw" data-i="winners">Premios</label>
+        <select id="nw" class="mono"><option>1</option><option>2</option><option>3</option></select>
         <button class="ghost" id="btn-sample" data-i="sample">Cargar ejemplo</button>
         <button class="primary" id="btn-freeze" data-i="freeze">Congelar lista</button>
       </div>
+      <p class="note" id="freeze-hint" data-i="freezeHint">Hacen falta al menos dos nombres.</p>
       <p class="txstatus" id="seal-status" style="display:none"></p>
       <div class="names" id="names"></div>
     </div>
@@ -89,8 +92,6 @@
           <button id="g-stellar" data-i="gameStellar">Carrera Stellar</button>
           <button id="g-wheel" data-i="gameWheel">Ruleta</button>
         </div>
-        <label class="kicker" for="nw" data-i="winners">Premios</label>
-        <select id="nw" class="mono"><option>1</option><option>2</option><option>3</option></select>
         <button class="primary" id="btn-draw" data-i="draw">Lanzar sorteo</button>
       </div>
       <p class="txstatus" id="draw-status" style="display:none"></p>
@@ -149,8 +150,8 @@
   </section>
 
   <section style="padding: 14px 0 30px">
-    <p class="kicker" data-i="nextTitle">Lo que viene: el sorteo queda guardado fuera de Tinkazo</p>
-    <p style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 8px" data-i="nextBody">En la próxima versión, el sello de la lista y una ronda futura del faro quedan registrados en un contrato en Stellar que verifica la firma del faro por sí mismo y guarda el resultado. Cualquiera podrá leerlo y recomputarlo aunque Tinkazo no esté en línea. Este demo hace el sellado en tu navegador.</p>
+    <h2 class="kicker" data-i="nextTitle">El sorteo no depende de mí</h2>
+    <p style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 8px" data-i="nextBody">Si conectás una cuenta de Stellar, la huella de la lista y la ronda que va a decidir quedan anotadas en un contrato. El contrato verifica la firma del faro por su cuenta y se queda con el resultado. Cuesta tres centavos de dólar. Si mañana Tinkazo desaparece, ese sorteo sigue ahí y cualquiera lo rehace. Sin cuenta también sorteás, pero el comprobante lo sostiene tu palabra.</p>
   </section>
 </main>
 
@@ -167,7 +168,7 @@
       <button id="st-skip" data-i="skip">Saltar</button>
     </div>
   </div>
-  <div class="commentary" id="commentary"></div>
+  <div class="commentary" id="commentary" role="status" aria-live="polite"></div>
 </div>
 
 <svg width="0" height="0" style="position:absolute">

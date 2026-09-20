@@ -15,6 +15,8 @@ export function renderNames(): void {
     .map((n) => `<i><img src="${avatar(n, 44)}" alt="" loading="lazy" />${esc(n)}</i>`)
     .join("");
   $<HTMLButtonElement>("btn-freeze").disabled = names.length < 2 || !!app.frozen;
+  // Un boton apagado sin explicacion es lo que mas frena a quien recien llega.
+  $("freeze-hint").style.display = names.length < 2 && !app.frozen ? "block" : "none";
 }
 
 export function loadSample(): void {

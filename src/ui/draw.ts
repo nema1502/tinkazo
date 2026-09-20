@@ -11,8 +11,11 @@ import { wheelSpin } from "../games/wheel";
 import { secondsToRound } from "./freeze";
 
 /** Obtiene la ronda objetivo, verifica su firma y selecciona (protocolo §2, §5). */
-async function resolveBeacon(round: number): Promise<Beacon> {
-  const { signature } = await fetchRound(round);
+async function resolveBeacon(
+  round: number,
+  onAttempt: (attempt: number, total: number) => void,
+): Promise<Beacon> {
+  const { signature } = await fetchRound(round, { onAttempt });
   if (!verifyRound(round, signature)) throw new Error("bad-signature");
   return { round, randomness: bytesToHex(randomnessOf(signature)), signature };
 }
@@ -23,13 +26,26 @@ export async function draw(): Promise<void> {
   btn.disabled = true;
   btn.textContent = t("fetching");
 
+  // Esto pasa con la sala mirando la pantalla grande. Si un relay no responde
+  // hay hasta doce intentos en veintitres segundos, y quedarse mudo todo ese
+  // rato es peor que el fallo. Un `alert()` del sistema, peor todavia: rompe el
+  // modo estadio y no hay forma de estilarlo.
+  const status = $("draw-status");
+  status.style.display = "block";
+  status.className = "txstatus";
+  status.textContent = t("fetching");
+
   let beacon: Beacon;
   try {
-    beacon = await resolveBeacon(app.frozen.round);
+    beacon = await resolveBeacon(app.frozen.round, (attempt, total) => {
+      if (attempt > 1) status.textContent = T[getLang()].drandTry(attempt, total);
+    });
+    status.style.display = "none";
   } catch (e) {
     btn.disabled = false;
-    btn.textContent = t("draw");
-    alert(t(e instanceof Error && e.message === "bad-signature" ? "badSig" : "drandDown"));
+    btn.textContent = t("drawRetry");
+    status.className = "txstatus bad";
+    status.textContent = t(e instanceof Error && e.message === "bad-signature" ? "badSig" : "drandDown");
     return;
   }
 

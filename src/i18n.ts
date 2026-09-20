@@ -16,6 +16,7 @@ export interface Dict {
   cWin: (n: string) => string;
   summary: (w: string, n: number, d: string, r: number, u: string) => string;
   drawIn: (mmss: string) => string;
+  drandTry: (i: number, n: number) => string;
   csvRows: (n: number) => string;
   tellBody: (w: string, prize: string, n: number, u: string) => string;
 }
@@ -37,6 +38,8 @@ export const T: Record<Lang, Dict> = {
     p1: "Participantes", p2: "Lista congelada", p3: "El sorteo",
     srcPaste: "Pegar lista", srcCsv: "Subir CSV", srcLuma: "Luma · pronto", srcMeetup: "Meetup · pronto",
     csvColumn: "¿Cuál columna tiene los nombres?",
+    freezeHint: "Hacen falta al menos dos nombres.",
+    frozenOk: "Lista congelada ✓",
     csvRows: (n) => (n === 1 ? "1 fila en el archivo" : `${n} filas en el archivo`),
     sample: "Cargar ejemplo", freeze: "Congelar lista", draw: "Lanzar el sorteo", winners: "Premios",
     gameLabel: "Juego", gameRace: "Carrera de llamas", gameStellar: "Carrera Stellar", gameWheel: "Ruleta",
@@ -57,12 +60,14 @@ export const T: Record<Lang, Dict> = {
       `Revisalo vos mismo, te toma diez segundos: ${u}\n\n` +
       `Sorteado con Tinkazo · https://tinkazo.vercel.app`,
     qrCaption: "Apuntá el celular y revisalo vos mismo",
-    nextTitle: "Lo que viene: el sorteo deja de depender de mí",
-    nextBody: "En la próxima versión, la huella de la lista y la ronda que va a decidir quedan anotadas en un contrato en Stellar. El contrato verifica la firma del faro por su cuenta y se queda con el resultado. Si mañana Tinkazo desaparece, el sorteo sigue ahí y cualquiera lo rehace. Hoy, en este demo, el sellado pasa en tu navegador.",
+    nextTitle: "El sorteo no depende de mí",
+    nextBody: "Si conectás una cuenta de Stellar, la huella de la lista y la ronda que va a decidir quedan anotadas en un contrato. El contrato verifica la firma del faro por su cuenta y se queda con el resultado. Cuesta tres centavos de dólar. Si mañana Tinkazo desaparece, ese sorteo sigue ahí y cualquiera lo rehace. Sin cuenta también sorteás, pero el comprobante lo sostiene tu palabra.",
     footL: "Tinkazo", footR: "Hecho en Bolivia por Nicolás",
     src: "fuente: pegado / csv", frozenAt: "congelada:", seed: "número público · ronda", drandLink: "ver la ronda pública ↗",
     placeholder: "Un nombre por línea…", winsPrize: "Se lleva:", skip: "Saltar",
     fetching: "Esperando el número público…",
+    drandTry: (i, n) => `El faro todavía no responde. Intento ${i} de ${n}…`,
+    drawRetry: "Reintentar el sorteo",
     badSig: "La firma de esa ronda no cuadra con la clave pública de quicknet. Probá de nuevo.",
     drawIn: (mmss) => `Sortear en ${mmss}`,
     prTitle: "Precios", prNote: "Verificar es gratis siempre. Lo que se cobra es el show.",
@@ -163,6 +168,8 @@ export const T: Record<Lang, Dict> = {
     p1: "Participants", p2: "Frozen list", p3: "The draw",
     srcPaste: "Paste list", srcCsv: "Upload CSV", srcLuma: "Luma · soon", srcMeetup: "Meetup · soon",
     csvColumn: "Which column has the names?",
+    freezeHint: "At least two names are needed.",
+    frozenOk: "List frozen ✓",
     csvRows: (n) => (n === 1 ? "1 row in the file" : `${n} rows in the file`),
     sample: "Load sample", freeze: "Freeze list", draw: "Run the draw", winners: "Prizes",
     gameLabel: "Game", gameRace: "Llama race", gameStellar: "Stellar race", gameWheel: "Roulette",
@@ -183,12 +190,14 @@ export const T: Record<Lang, Dict> = {
       `Check it yourself, it takes ten seconds: ${u}\n\n` +
       `Drawn with Tinkazo · https://tinkazo.vercel.app`,
     qrCaption: "Point your phone at it and check for yourself",
-    nextTitle: "What's next: the draw stops depending on me",
-    nextBody: "In the next version, the list fingerprint and the round that will decide go into a Stellar contract. The contract checks the beacon signature on its own and keeps the result. If Tinkazo disappears tomorrow, the draw is still there and anyone can run it again. Today, in this demo, the sealing happens in your browser.",
+    nextTitle: "The draw doesn't depend on me",
+    nextBody: "If you connect a Stellar account, the list fingerprint and the round that will decide go into a contract. The contract checks the beacon signature on its own and keeps the result. It costs three cents. If Tinkazo disappears tomorrow, that draw is still there and anyone can run it again. Without an account you can still draw, but the receipt rests on your word.",
     footL: "Tinkazo", footR: "Built in Bolivia by Nicolás",
     src: "source: paste / csv", frozenAt: "frozen:", seed: "public number · round", drandLink: "see the public round ↗",
     placeholder: "One name per line…", winsPrize: "Takes home:", skip: "Skip",
     fetching: "Waiting for the public number…",
+    drandTry: (i, n) => `The beacon is not answering yet. Attempt ${i} of ${n}…`,
+    drawRetry: "Try the draw again",
     badSig: "That round's signature doesn't check out against quicknet's public key. Try again.",
     drawIn: (mmss) => `Draw in ${mmss}`,
     prTitle: "Pricing", prNote: "Verifying is always free. What costs money is the show.",
