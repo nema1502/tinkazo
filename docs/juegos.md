@@ -69,13 +69,13 @@ Donde `<juego>` es el valor de `?demo=`: `race`, `stellar`, `ledger`, `rockets`,
 | 6 | El juego devolvió la pantalla al terminar | Sin esto el sitio queda inusable |
 | 7 | El juego tiene su botón en el selector | Si no, nadie lo puede elegir |
 | 8 | No hubo excepciones en consola | Errores silenciosos hoy son fallas en vivo mañana |
-| 9 | El sorteo también corre en inglés | La interfaz es bilingüe |
-| 10 | El nombre del juego está traducido | Detecta la clave de i18n olvidada |
-| 11 | La escena se dibuja en tema claro | |
-| 12 | La escena se dibuja en tema oscuro | |
-| 13 | La tarjeta de historia sale **después** del ganador | Durante el sorteo nadie lee; y una clave sin traducir se delata sola |
-| 14 | Esa tarjeta cita una fuente | Un dato sin fuente es un dato inventado a los seis meses |
-| 15 | La tarjeta también está en inglés | Detecta la mitad del par olvidada |
+| 9 | La tarjeta de historia sale **después** del ganador | Durante el sorteo nadie lee. Y una clave sin traducir se delata sola |
+| 10 | Esa tarjeta cita una fuente | Un dato sin fuente es un dato inventado a los seis meses |
+| 11 | El sorteo también corre en inglés | La interfaz es bilingüe |
+| 12 | La tarjeta de historia también está en inglés | Detecta la mitad del par olvidada |
+| 13 | El nombre del juego está en los dos diccionarios | No exige que el texto cambie: "Pasanaku" es nombre propio y en inglés se dice igual |
+| 14 | La escena se dibuja en tema claro | |
+| 15 | La escena se dibuja en tema oscuro | |
 
 Guarda capturas en `docs/capturas/juego-<juego>*.png` para revisar a ojo lo que ninguna comprobación automática ve: si se entiende, si emociona, si se lee de lejos en un proyector.
 
@@ -100,4 +100,5 @@ Revisalo vos antes de subirlo:
 | Constelación Stellar | `stellar` | Módulo propio | 200 | [constelacion-stellar.md](juegos/constelacion-stellar.md) |
 | Cierre de Libro | `ledger` | Módulo propio | 200 | [cierre-de-libro.md](juegos/cierre-de-libro.md) |
 | Carrera de cohetes | `rockets` | Motor de carrera, tema espacial | 8 en pantalla | [carrera-stellar.md](juegos/carrera-stellar.md) |
-| Ruleta | `wheel` | Módulo propio | 24 | — |
+| Pasanaku | `pasanaku` | Módulo propio | 200 | [pasanaku.md](juegos/pasanaku.md) |
+| Ruleta | `wheel` | Módulo propio | 24 | [ruleta.md](juegos/ruleta.md) |

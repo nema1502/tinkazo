@@ -1,5 +1,5 @@
 /** `race` y `stellar` son la misma carrera con distinto escenario. */
-export type Game = "race" | "stellar" | "wheel" | "ledger" | "rockets";
+export type Game = "race" | "stellar" | "wheel" | "ledger" | "rockets" | "pasanaku";
 
 /** Ronda de quicknet ya publicada y verificada. */
 export interface Beacon {

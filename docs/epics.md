@@ -57,8 +57,14 @@ Cualquiera abre el comprobante, ve el sello y el registro leídos de la cadena y
 ### Épica 5: Lanzamiento a mainnet
 Contrato en mainnet con checklist de despliegue, documentación final y distribución en el ecosistema. NFR-3, 7.
 
-### Épica 7: Catálogo de juegos
+### Épica 7: Catálogo de juegos — seis juegos, todos aprobados
 El show es lo único que se personaliza y lo que hace que una comunidad elija Tinkazo sobre una ruleta cualquiera. Cada juego nuevo pasa el auditor de `docs/juegos.md` antes de entrar.
+
+### Épica 8: Que el juego enseñe — hecha
+Después del ganador aparece una tarjeta que contesta la pregunta que el juego deja picando, con fuente primaria. Es lo que convierte un sorteo en un minuto de divulgación sobre Stellar, sin frenar nada.
+
+### Épica 9: El narrador habla — hecha
+La voz usa la API del navegador, elige una voz en español de verdad instalada y sube el ritmo con la tensión. Sin voz en la máquina, el sorteo funciona igual.
 
 ### Épica 6: Entrar con Google sin instalar nada — hecha, falta probarla con una cuenta real
 El organizador entra con Google y sella sin instalar wallet. Decisión D-07. El relayer resultó innecesario: la cuenta custodial de Pollar firma y envía la invocación por su cuenta.
@@ -450,6 +456,26 @@ Resultado (2026-09-19): `pnpm audit:game <juego>` corre un sorteo real en Chrome
 
 Resultado (2026-09-20): el ganador ya no arranca su sprint en el segundo 9. Corre en el tercio de atrás hasta el 80% de la carrera y remonta al final, con la velocidad calculada para llegar justo al acabarse el tiempo. La punta se la pelea el pelotón y el narrador la canta. Comprobado en una corrida real: tres líderes distintos antes del final y el ganador aparece recién al cruzar. Los tres juegos siguen aprobando el auditor.
 
+### Historia 7.6: Constelación Stellar, que deja de ser un reskin — hecho
+
+Resultado (2026-09-20): la Carrera Stellar era la carrera de llamas con otra piel, y se notaba en el código, que tenía que aclarar la pista "para que los cohetes no se pierdan". Se reemplazó por [Constelación Stellar](juegos/constelacion-stellar.md): un pago que salta de estrella en estrella como un path payment, donde cada participante tiene su estrella y al terminar queda dibujada una constelación. La carrera de cohetes quedó como juego propio (`rockets`).
+
+### Historia 7.7: Cierre de Libro, para doscientas personas — hecho
+
+Resultado (2026-09-20): no había nada para doscientos. La ruleta muere a los veinticuatro nombres y la carrera solo muestra ocho carriles. [Cierre de Libro](juegos/cierre-de-libro.md) barre tarjetas hasta que queda una sellada, y se ve mejor cuanta más gente hay. Dura lo que tarda Stellar en cerrar un ledger.
+
+### Historia 7.8: La ruleta, de nuevo — hecho
+
+Resultado (2026-09-20): con dos o tres participantes no se veía girar, y no era estilo sino geometría: una rueda de n gajos se ve igual cada 360/n grados. Ahora cada persona se lleva varios gajos intercalados y la rueda siempre tiene cerca de veinticuatro. Además frena integrando una velocidad en vez de interpolar el ángulo, la paleta se traba en los pernos, y los 64 dígitos de la semilla están escritos en el aro. Detalle en [ruleta.md](juegos/ruleta.md).
+
+### Historia 7.9: Pasanaku — hecho
+
+Resultado (2026-09-20): el juego con nombre boliviano. El *Diccionario de americanismos* define `pasanacu` como "juego que consiste en sortear el dinero de las cuotas" de un grupo, así que ya era un sorteo. Un aguayo que se cierra sobre los bultos hasta que queda uno en el nudo, y los hilos entre vecinos son las trustlines. Detalle en [pasanaku.md](juegos/pasanaku.md).
+
+### Historia 7.10: El andamiaje compartido — hecho
+
+Resultado (2026-09-20): `src/games/overlay.ts` concentra el montaje del estadio, el azar sembrado con la ronda, los chips con avatar, el botón de saltar, la pantalla completa, el bloqueo de apagado y el desmontaje. Estaba dentro de la carrera, así que cada juego nuevo lo copiaba. Los seis juegos lo usan.
+
 ### Historia 7.3: Mejoras transversales de presentación
 
 Como organizadora,
@@ -474,8 +500,54 @@ para que el sorteo encaje con el tono de mi público.
 
 **Dado** el diseño de un juego nuevo
 **Cuando** se implementa
-**Entonces** cumple el contrato de `docs/juegos.md`, tiene su documento en `docs/juegos/`, textos en ES y EN, y aprueba las doce comprobaciones
+**Entonces** cumple el contrato de `docs/juegos.md`, tiene su documento en `docs/juegos/`, textos en ES y EN, y aprueba las quince comprobaciones
 **Y** si es una carrera, se agrega como tema y no como módulo nuevo.
+
+Resultado parcial (2026-09-20): seis juegos en el catálogo, todos con 15/15. Constelación Stellar, Cierre de Libro, Pasanaku, Carrera de llamas, Carrera de cohetes y Ruleta.
+
+---
+
+## Épica 8: Que el juego enseñe
+
+### Historia 8.1: La tarjeta de "¿por qué se llama así?" — hecho
+
+Resultado (2026-09-20): doce tarjetas, cada una con su fuente primaria comprobada. Aparecen después del ganador y nunca antes, porque durante el sorteo nadie lee. Se sortean con la ronda, así que son deterministas. El auditor comprueba que salgan después del ganador, que citen una fuente y que estén en los dos idiomas.
+
+### Historia 8.2: Más tarjetas y verificación viva de las fuentes
+
+Como organizadora,
+quiero que los datos que muestra mi sorteo sigan siendo ciertos dentro de un año,
+para no quedar mal delante de gente que sabe del tema.
+
+**Criterios de aceptación:**
+
+**Dado** el catálogo de tarjetas
+**Cuando** corre la integración continua
+**Entonces** se comprueba que cada enlace de fuente responde
+**Y** una fuente caída falla la corrida en vez de pasar desapercibida.
+
+---
+
+## Épica 9: El narrador habla
+
+### Historia 9.1: Voz con la API del navegador — hecho
+
+Resultado (2026-09-20): `src/narrator.ts` elige una voz en español, prefiriendo boliviana y cayendo por vecinos, y prioriza las locales, que arrancan al instante y no dependen del wifi del evento. Cada línea lleva una tensión de 0 a 1 que sube el ritmo y el tono. El botón de sonido del estadio la apaga junto con los pitidos. Sin voz en la máquina no pasa nada.
+
+De paso se arregló que las frases se sorteaban con `Math.random()`: ahora también salen de la semilla, así que la misma ronda narra siempre igual.
+
+### Historia 9.2: Probarla con voz real en el equipo del evento
+
+Como organizadora,
+quiero saber antes del evento si la máquina tiene voz en español,
+para no descubrirlo con la sala mirando.
+
+**Criterios de aceptación:**
+
+**Dado** el estadio
+**Cuando** la página carga
+**Entonces** se puede saber si hay voz y cuál se eligió
+**Y** si no hay ninguna, se dice antes del sorteo y no durante.
 
 ---
 

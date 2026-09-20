@@ -14,7 +14,7 @@
  * Sale con código 0 si pasan todas las comprobaciones. Con 1 si alguna falla, y
  * la lista dice cuál.
  */
-import { mkdir } from "node:fs/promises";
+import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { launch } from "./lib/browser.mjs";
 
@@ -50,7 +50,8 @@ const READ_STATE = `JSON.stringify({
   winners: [...document.querySelectorAll('.winner-name')].map(e => e.textContent),
   proof: document.getElementById('proof')?.textContent || '',
   options: [...document.querySelectorAll('.gamepick button')].map(b => ({
-    id: b.id, text: b.textContent, on: b.classList.contains('on'), disabled: b.disabled,
+    id: b.id, text: b.textContent, key: b.getAttribute('data-i') || '',
+    on: b.classList.contains('on'), disabled: b.disabled,
   })),
   drandLink: document.getElementById('drand-link')?.getAttribute('href') || '',
   whatsapp: document.getElementById('btn-whatsapp')?.getAttribute('href') || '',
@@ -149,10 +150,17 @@ async function run() {
       !!enState.lore && !!s.lore && enState.lore.a.length > 10 && enState.lore.a !== s.lore.a,
       enState.lore ? `"${enState.lore.q}"` : "no apareció",
     );
+    // El nombre del juego tiene que estar en los dos diccionarios. No se puede
+    // exigir que el texto cambie: "Pasanaku" es un nombre propio y en inglés se
+    // dice igual. Lo que se comprueba es que la clave exista dos veces en
+    // `src/i18n.ts`, una por idioma, que es lo que detecta la mitad olvidada.
+    const key = option?.key || "";
+    const dict = await readFile("src/i18n.ts", "utf8").catch(() => "");
+    const times = key ? dict.split(`${key}:`).length - 1 : 0;
     check(
-      "el nombre del juego está traducido",
-      !!enOption && !!option && enOption.text.trim() !== option.text.trim(),
-      enOption ? `"${enOption.text.trim()}"` : "sin botón",
+      "el nombre del juego está en los dos diccionarios",
+      !!enOption && times >= 2,
+      key ? `${key} aparece ${times} vez/veces · en inglés "${enOption?.text.trim() ?? "?"}"` : "sin data-i",
     );
 
     // --------------------------------------------- 8. tema claro y oscuro

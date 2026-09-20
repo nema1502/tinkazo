@@ -20,6 +20,7 @@ export interface Dict {
   cConstPass: (n: string) => string;
   cWheelSplit: (segs: number, rep: number) => string;
   cWheelOn: (n: string) => string;
+  cPasOut: (n: string) => string;
   csvRows: (n: number) => string;
   tellBody: (w: string, prize: string, n: number, u: string) => string;
 }
@@ -75,6 +76,20 @@ export const T: Record<Lang, Dict> = {
     cWheelLast: ["¡SE DEFINE ACÁ!", "¡NO RESPIRA NADIE!", "¡UN GAJO MÁS!"],
     cWheelRound: "RONDA",
     cWheelSeed: "LA SEMILLA ESTÁ EN EL BORDE",
+    // --- Pasanaku. El diccionario de las academias lo define como "juego que
+    //     consiste en sortear el dinero de las cuotas" de un grupo: ya era un
+    //     sorteo antes de que lo fuéramos a buscar.
+    gamePasanaku: "Pasanaku",
+    cPasSpread: ["¡Se tiende el aguayo!", "¡Al suelo el aguayo, señores!", "¡Se abre la rueda!"],
+    cPasDrop: ["¡Todos ponen lo mismo!", "¡Cada uno con su cuota!", "¡Adentro la parte!"],
+    cPasWeave: ["¡Acá nadie firma nada!", "¡Todos con todos!", "¡La rueda se cierra!"],
+    cPasCinch: ["¡Se aprieta el nudo!", "¡Primer apretón!", "¡Ahí va apretando!"],
+    cPasCinch2: ["¡Segundo apretón!", "¡Quedan menos!", "¡Se cierra más!"],
+    cPasCinch3: ["¡Último apretón!", "¡Esto ya se define!", "¡No entra nadie más!"],
+    cPasOut: (n) => pick([`¡Ya cobró ${n}!`, `¡${n} ya pasó, sale!`, `¡Sale ${n}, ya le tocó!`]),
+    cPasKnot: ["¡SE ATA EL NUDO!", "¡ACÁ QUEDA!", "¡NO RESPIRA NADIE!"],
+    cPasPot: "POTE",
+    cPasCinchLbl: "APRETÓN",
     loreTitle: "DE PASO",
     loreTinkazoQ: "¿Por qué “Tinkazo”?",
     loreTinkazoA: "El Diccionario de americanismos trae dos: tinkazo, en Bolivia, es un presentimiento. Y tincazo es el golpecito que dan haciendo resbalar el dedo sobre el pulgar. Este sorteo es las dos cosas.",
@@ -273,6 +288,17 @@ export const T: Record<Lang, Dict> = {
     cWheelLast: ["IT'S DECIDED RIGHT HERE!", "NOBODY IS BREATHING!", "ONE MORE SLICE!"],
     cWheelRound: "ROUND",
     cWheelSeed: "THE SEED IS ON THE RIM",
+    gamePasanaku: "Pasanaku",
+    cPasSpread: ["The cloth goes down!", "Aguayo on the floor!", "The circle opens!"],
+    cPasDrop: ["Everyone puts in the same!", "Each one their share!", "In goes the share!"],
+    cPasWeave: ["Nobody signs anything here!", "Everyone with everyone!", "The circle closes!"],
+    cPasCinch: ["The knot tightens!", "First pull!", "There it goes, pulling!"],
+    cPasCinch2: ["Second pull!", "Fewer left!", "It's closing in!"],
+    cPasCinch3: ["Last pull!", "This is being decided!", "Nobody else gets in!"],
+    cPasOut: (n) => pick([`${n} already collected!`, `${n}'s turn came, out!`, `Out goes ${n}, already paid!`]),
+    cPasKnot: ["THE KNOT IS TIED!", "IT STOPS HERE!", "NOBODY IS BREATHING!"],
+    cPasPot: "POT",
+    cPasCinchLbl: "PULL",
     loreTitle: "BY THE WAY",
     loreTinkazoQ: "Why “Tinkazo”?",
     loreTinkazoA: "The Spanish academies' dictionary of Americanisms has two: in Bolivia a tinkazo is a hunch. Its twin tincazo is the flick you give with a finger off your thumb. This raffle is both.",

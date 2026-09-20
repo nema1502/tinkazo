@@ -30,7 +30,7 @@ Es inmutable: no tiene administrador ni actualización, y no custodia fondos. `d
 
 **El sitio**, en Vite y TypeScript sin framework. Interfaz bilingüe, tema claro y oscuro, y tres formas de entrar: Freighter, Google vía Pollar, o una cuenta de prueba que el navegador crea y fondea solo.
 
-**Cinco juegos**, todos sembrados con la misma ronda de drand, así que la animación de un sorteo es reproducible:
+**Seis juegos**, todos sembrados con la misma ronda de drand, así que la animación de un sorteo es reproducible:
 
 | Juego | Qué es | Aguanta |
 |---|---|---|
@@ -38,9 +38,14 @@ Es inmutable: no tiene administrador ni actualización, y no custodia fondos. `d
 | Cierre de Libro | Tarjetas barridas por el cierre de un ledger hasta que queda una sellada. Dura lo que tarda Stellar en cerrar uno. | 200 |
 | Carrera de llamas | Lo nuestro. Ocho carriles por la cordillera. | 8 en pantalla |
 | Carrera de cohetes | La misma carrera, en el espacio. | 8 en pantalla |
-| Ruleta | La de siempre. | 24 |
+| Pasanaku | El ahorro rotativo boliviano: un aguayo que se cierra sobre los bultos hasta que queda uno en el nudo. Los hilos entre vecinos son trustlines. | 200 |
+| Ruleta | La de siempre, pero que se ve girar con dos personas. | 24 |
 
-Ninguno decide nada: el ganador llega dado por el protocolo y el juego solo lo cuenta. Hay un auditor que lo comprueba en cada juego, con doce verificaciones. La que importa: el nombre en pantalla tiene que ser el que fijó el protocolo.
+Ninguno decide nada: el ganador llega dado por el protocolo y el juego solo lo cuenta. Hay un auditor que lo comprueba en cada juego, con quince verificaciones. La que importa: el nombre en pantalla tiene que ser el que fijó el protocolo.
+
+**El narrador habla.** Usa la voz del navegador, elige una en español de las que estén instaladas y sube el ritmo con la tensión. Si la máquina no tiene voz, el sorteo funciona igual.
+
+**Y después del ganador aparece una tarjeta** que contesta la pregunta que el juego deja picando: por qué los rombos de la Constelación son anchors, si la red de Stellar alguna vez no pudo cerrar un libro, qué es un pasanaku. Dos frases y el enlace a la fuente primaria. Doce tarjetas, todas verificadas.
 
 **La página de verificación**, que da uno de tres veredictos:
 
@@ -88,7 +93,7 @@ cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
-Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|race|rockets|wheel`, `?instant=1`, `?lead=3`.
+Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|race|rockets|wheel`, `?instant=1`, `?lead=3`.
 
 Para auditar un juego: `node scripts/audit-game.mjs <juego>`.
 
@@ -135,7 +140,7 @@ Para agregar un juego, mirá [docs/juegos.md](docs/juegos.md): hay que pasar el 
 
 In Bolivia, a *tinkazo* is that hunch that today is your lucky day. Tinkazo draws prizes at community events: paste the list, the winner comes out on the big screen with a llama race or a roulette, and anyone can check afterwards that it was clean.
 
-Five full-screen games tell the result: a payment hopping star to star, a ledger close sweeping cards away, two races and a roulette. None of them decides anything.
+Six full-screen games tell the result: a payment hopping star to star, a ledger close sweeping cards away, a Bolivian rotating savings circle, two races and a roulette. None of them decides anything. A narrator calls the draw out loud, and afterwards a card explains a piece of Stellar history with its primary source.
 
 The list is sealed with SHA-256 and committed against a **future** round of the [drand](https://drand.love) public randomness beacon, so when you lock the list the number that decides doesn't exist yet. A Soroban contract on Stellar verifies that round's BLS12-381 signature **on chain** and derives the winner deterministically. Participants never need a wallet or an account.
 

@@ -10,6 +10,7 @@ import { primeNarrator } from "../narrator";
 import { stadiumRace } from "../games/race";
 import { stellarConstellation } from "../games/constellation";
 import { ledgerClose } from "../games/ledger";
+import { pasanaku } from "../games/pasanaku";
 import { loreFor } from "../games/lore";
 import { wheelSpin } from "../games/wheel";
 import { secondsToRound } from "./freeze";
@@ -118,6 +119,10 @@ function playGame(names: string[], first: number, beacon: Beacon, finish: () => 
   }
   if (app.game === "ledger") {
     ledgerClose(names, first, beacon, finish);
+    return;
+  }
+  if (app.game === "pasanaku") {
+    pasanaku(names, first, beacon, finish);
     return;
   }
   stadiumRace(names, first, beacon, finish, app.game === "rockets" ? "stellar" : "andes");

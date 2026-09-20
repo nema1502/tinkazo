@@ -32,6 +32,7 @@ $("btn-freeze").addEventListener("click", () => void freeze());
 $("g-race").addEventListener("click", () => setGame("race"));
 $("g-stellar").addEventListener("click", () => setGame("stellar"));
 $("g-ledger").addEventListener("click", () => setGame("ledger"));
+$("g-pasanaku").addEventListener("click", () => setGame("pasanaku"));
 $("g-rockets").addEventListener("click", () => setGame("rockets"));
 $("g-wheel").addEventListener("click", () => setGame("wheel"));
 $("btn-draw").addEventListener("click", () => void draw());
@@ -45,7 +46,7 @@ initWalletUI();
 refreshFreezeLabel();
 
 /* Modo demo y pose para capturas: `?demo=<juego>`, `?pose=1`, `?instant=1`. */
-const GAMES: readonly Game[] = ["race", "stellar", "ledger", "rockets", "wheel"];
+const GAMES: readonly Game[] = ["race", "stellar", "ledger", "pasanaku", "rockets", "wheel"];
 
 async function autoDemo(mode: string): Promise<void> {
   loadSample();
