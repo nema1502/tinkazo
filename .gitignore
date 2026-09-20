@@ -22,3 +22,7 @@ Thumbs.db
 
 # Web build
 *.tsbuildinfo
+
+# Material de postulaciones (becas, hackathones): privado, nunca se publica.
+# Borrar la carpeta una vez enviada la postulación.
+postulacion/
