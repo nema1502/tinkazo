@@ -268,5 +268,17 @@
   label.chip.live:focus-within { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 6px var(--yellow); }
   /* Una huella de 64 caracteres desbordaba la tarjeta en celular. */
   .note { word-break: break-word; overflow-wrap: anywhere; }
+
+  /* La tarjeta de "¿por qué se llama así?", pegada debajo del ganador. Se lee
+     como una estampilla puesta a mano, no como un banner. */
+  .lore {
+    position: relative; display: block; max-width: 520px; margin: 22px 0 0;
+    background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh);
+    padding: 16px 18px 14px 26px; transform: rotate(-1deg);
+  }
+  .lore .lore-tab { position: absolute; left: 0; top: 0; bottom: 0; width: 10px; }
+  .lore .lore-q { font-size: 17px; font-weight: 800; margin: 6px 0 6px; text-wrap: balance; }
+  .lore .lore-a { font-size: 14px; color: var(--ink2); line-height: 1.55; }
+  .lore .lore-src { display: inline-block; margin-top: 10px; font-size: 11px; color: var(--muted); }
   .entity { overflow-wrap: anywhere; }
   #wheel { max-width: 100%; }

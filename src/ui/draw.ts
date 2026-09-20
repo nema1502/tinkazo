@@ -10,6 +10,7 @@ import { primeNarrator } from "../narrator";
 import { stadiumRace } from "../games/race";
 import { stellarConstellation } from "../games/constellation";
 import { ledgerClose } from "../games/ledger";
+import { loreFor } from "../games/lore";
 import { wheelSpin } from "../games/wheel";
 import { secondsToRound } from "./freeze";
 
@@ -123,8 +124,33 @@ function playGame(names: string[], first: number, beacon: Beacon, finish: () => 
   stadiumRace(names, first, beacon, finish, app.game === "rockets" ? "stellar" : "andes");
 }
 
+/**
+ * La tarjeta de "¿por qué se llama así?".
+ *
+ * Va después del ganador y nunca antes: durante el sorteo nadie lee nada, y
+ * cuando ya salió el nombre sí. Es voluntaria, tiene dos frases y siempre
+ * lleva el enlace a la fuente, porque esto lo va a leer gente que sabe del
+ * tema y un dato inventado nos deja sin credibilidad justo donde importa.
+ */
+function renderLore(beacon: Beacon): void {
+  const box = $("lore-box");
+  const lo = loreFor(app.game, beacon);
+  if (!lo) {
+    box.style.display = "none";
+    return;
+  }
+  box.innerHTML =
+    `<span class="lore-tab" style="background:var(--${lo.hue})"></span>` +
+    `<p class="kicker">${esc(t("loreTitle"))}</p>` +
+    `<h3 class="lore-q">${esc(t(lo.q))}</h3>` +
+    `<p class="lore-a">${esc(t(lo.a))}</p>` +
+    `<a class="mono lore-src" href="${esc(lo.href)}" target="_blank" rel="noopener">${esc(lo.src)} ↗</a>`;
+  box.style.display = "block";
+}
+
 export function reveal(names: string[], winners: number[], beacon: Beacon, listHash: string): void {
   $("winner-box").style.display = "block";
+  renderLore(beacon);
   const prize = app.frozen?.prize ?? "";
   $("winner-cards").innerHTML = winners
     .map((i, k) => {

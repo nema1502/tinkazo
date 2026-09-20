@@ -56,6 +56,18 @@ const READ_STATE = `JSON.stringify({
   whatsapp: document.getElementById('btn-whatsapp')?.getAttribute('href') || '',
   stadiumVisible: getComputedStyle(document.getElementById('stadium')).display !== 'none',
   bodyOverflow: document.body.style.overflow,
+  lore: (() => {
+    const l = document.getElementById('lore-box');
+    if (!l || getComputedStyle(l).display === 'none') return null;
+    return {
+      q: l.querySelector('.lore-q')?.textContent || '',
+      a: l.querySelector('.lore-a')?.textContent || '',
+      href: l.querySelector('a')?.getAttribute('href') || '',
+      // Tiene que venir después del ganador, no antes.
+      afterWinner: !!document.getElementById('winner-cards') &&
+        (document.getElementById('winner-cards').compareDocumentPosition(l) & 4) !== 0,
+    };
+  })(),
 })`;
 
 async function run() {
@@ -109,6 +121,21 @@ async function run() {
       page.exceptions.slice(0, 2).join(" | "),
     );
 
+    // ------------------------------------------- 8. la tarjeta que enseña
+    // Sale después del ganador, con las dos frases traducidas y con su fuente.
+    // Una clave sin traducir se delata sola: `t()` devuelve la clave.
+    const lore = s.lore;
+    check(
+      "la tarjeta de historia sale después del ganador",
+      !!lore && lore.afterWinner && lore.q.length > 4 && !/^lore[A-Z]/.test(lore.q),
+      lore ? `"${lore.q}"` : "no apareció",
+    );
+    check(
+      "la tarjeta cita una fuente",
+      !!lore && /^https:\/\//.test(lore.href),
+      lore?.href || "sin enlace",
+    );
+
     await page.screenshot(join(outDir, `juego-${game}.png`));
 
     // ------------------------------------------------------- 7. en inglés
@@ -117,6 +144,11 @@ async function run() {
     const enState = JSON.parse(await en.eval(READ_STATE));
     const enOption = enState.options.find((o) => o.id === `g-${game}`);
     check("el sorteo también corre en inglés", enOk.ok);
+    check(
+      "la tarjeta de historia también está en inglés",
+      !!enState.lore && !!s.lore && enState.lore.a.length > 10 && enState.lore.a !== s.lore.a,
+      enState.lore ? `"${enState.lore.q}"` : "no apareció",
+    );
     check(
       "el nombre del juego está traducido",
       !!enOption && !!option && enOption.text.trim() !== option.text.trim(),

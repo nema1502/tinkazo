@@ -57,7 +57,7 @@ pnpm preview &
 node scripts/audit-game.mjs <juego>
 ```
 
-Donde `<juego>` es el valor de `?demo=`: `race`, `stellar`, `wheel`. El auditor abre Chrome, corre un sorteo real contra drand y comprueba doce cosas:
+Donde `<juego>` es el valor de `?demo=`: `race`, `stellar`, `ledger`, `rockets`, `wheel`, `pasanaku`. El auditor abre Chrome, corre un sorteo real contra drand y comprueba quince cosas:
 
 | # | Comprobación | Por qué importa |
 |---|---|---|
@@ -73,6 +73,9 @@ Donde `<juego>` es el valor de `?demo=`: `race`, `stellar`, `wheel`. El auditor 
 | 10 | El nombre del juego está traducido | Detecta la clave de i18n olvidada |
 | 11 | La escena se dibuja en tema claro | |
 | 12 | La escena se dibuja en tema oscuro | |
+| 13 | La tarjeta de historia sale **después** del ganador | Durante el sorteo nadie lee; y una clave sin traducir se delata sola |
+| 14 | Esa tarjeta cita una fuente | Un dato sin fuente es un dato inventado a los seis meses |
+| 15 | La tarjeta también está en inglés | Detecta la mitad del par olvidada |
 
 Guarda capturas en `docs/capturas/juego-<juego>*.png` para revisar a ojo lo que ninguna comprobación automática ve: si se entiende, si emociona, si se lee de lejos en un proyector.
 
@@ -84,7 +87,8 @@ Revisalo vos antes de subirlo:
 
 - ¿Se entiende quién va ganando sin leer texto?
 - ¿Se lee desde el fondo de la sala, proyectado?
-- ¿Dura lo suficiente para generar tensión y lo bastante poco para no aburrir? La carrera dura 15 segundos y la ruleta menos de 5.
+- ¿Dura lo suficiente para generar tensión y lo bastante poco para no aburrir? La carrera dura 15 segundos y Cierre de Libro menos de 5.
+- ¿El dato de la tarjeta es verdad? El auditor comprueba que haya un enlace, no que el enlace diga lo que la tarjeta dice. Eso lo comprobás vos, en la fuente primaria, antes de subirlo.
 - ¿Funciona con 2 participantes y con 200?
 - ¿El ganador queda claro al final, sin ambigüedad?
 
