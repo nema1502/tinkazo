@@ -3,6 +3,7 @@ import { T, getLang, t } from "../i18n";
 import { LCOLORS, avatar, instantMode, type Beacon } from "../state";
 import { beep, fanfare } from "../sound";
 import { THEMES, type ThemeId } from "./themes";
+import { registerSkip } from "./overlay";
 
 /* Modo estadio: carrera de llamas a pantalla completa, sembrada con la semilla. */
 
@@ -20,12 +21,6 @@ interface Ridge {
   dx: number;
   h: number;
   w: number;
-}
-
-let stApi: { skip: () => void } | null = null;
-
-export function skipRace(): void {
-  stApi?.skip();
 }
 
 export function stadiumRace(
@@ -139,7 +134,7 @@ export function stadiumRace(
     });
     finishNow();
   }
-  stApi = { skip };
+  registerSkip(skip);
 
   function finishNow(): void {
     finished = true;
@@ -392,7 +387,7 @@ export function stadiumRace(
     removeEventListener("resize", resize);
     ov.style.display = "none";
     document.body.style.overflow = "";
-    stApi = null;
+    registerSkip(null);
     $("sec-draw").scrollIntoView({ behavior: "smooth", block: "start" });
     done();
   }

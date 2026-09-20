@@ -7,6 +7,8 @@ import { network, txUrl } from "../stellar/config";
 import { PROOF_VERSION, type Proof, proofUrl } from "../protocol/proof";
 import { anchorErrorText, drawOnChain, readDraw, showTxStatus, stepLabel } from "./anchor";
 import { stadiumRace } from "../games/race";
+import { stellarConstellation } from "../games/constellation";
+import { ledgerClose } from "../games/ledger";
 import { wheelSpin } from "../games/wheel";
 import { secondsToRound } from "./freeze";
 
@@ -90,12 +92,31 @@ export async function draw(): Promise<void> {
   $("seed-label").textContent = `${t("seed")} ${beacon.round}`;
   const first = winners[0] ?? 0;
   const finish = () => reveal(names, winners, beacon, listHash);
+  playGame(names, first, beacon, finish);
+}
+
+/**
+ * Le pasa el resultado al juego elegido.
+ *
+ * Ninguno de estos decide nada: reciben el ganador ya calculado y solo lo
+ * cuentan. Si un juego no puede con la cantidad de participantes, se cambia
+ * por uno que sí, y eso no altera quién ganó.
+ */
+function playGame(names: string[], first: number, beacon: Beacon, finish: () => void): void {
   if (app.game === "wheel" && names.length <= WHEEL_MAX) {
     $("sec-draw").scrollIntoView({ behavior: "smooth", block: "start" });
     wheelSpin(names, first, finish);
-  } else {
-    stadiumRace(names, first, beacon, finish, app.game === "stellar" ? "stellar" : "andes");
+    return;
   }
+  if (app.game === "stellar") {
+    stellarConstellation(names, first, beacon, finish);
+    return;
+  }
+  if (app.game === "ledger") {
+    ledgerClose(names, first, beacon, finish);
+    return;
+  }
+  stadiumRace(names, first, beacon, finish, app.game === "rockets" ? "stellar" : "andes");
 }
 
 export function reveal(names: string[], winners: number[], beacon: Beacon, listHash: string): void {

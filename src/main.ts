@@ -1,12 +1,13 @@
 import "./styles.css";
 import { $ } from "./dom";
 import { onLangChange, setLang, t } from "./i18n";
-import { SAMPLE, app, params } from "./state";
+import { SAMPLE, app, params, type Game } from "./state";
 import { soundLabel, toggleSound } from "./sound";
 import { bindParticipants, loadSample, renderNames } from "./ui/participants";
 import { freeze, refreshFreezeLabel, secondsToRound, setGame } from "./ui/freeze";
 import { copySummary, draw, reverify, shareProof } from "./ui/draw";
-import { skipRace, stadiumRace } from "./games/race";
+import { stadiumRace } from "./games/race";
+import { skipGame } from "./games/overlay";
 import { initWalletUI } from "./ui/wallet-ui";
 
 // `?theme=light|dark` fuerza el tema (capturas).
@@ -30,22 +31,26 @@ $("btn-sample").addEventListener("click", loadSample);
 $("btn-freeze").addEventListener("click", () => void freeze());
 $("g-race").addEventListener("click", () => setGame("race"));
 $("g-stellar").addEventListener("click", () => setGame("stellar"));
+$("g-ledger").addEventListener("click", () => setGame("ledger"));
+$("g-rockets").addEventListener("click", () => setGame("rockets"));
 $("g-wheel").addEventListener("click", () => setGame("wheel"));
 $("btn-draw").addEventListener("click", () => void draw());
 $("btn-reverify").addEventListener("click", reverify);
 $<HTMLButtonElement>("btn-copy").addEventListener("click", (e) => void copySummary(e.currentTarget as HTMLButtonElement));
 $<HTMLButtonElement>("btn-proof").addEventListener("click", (e) => void shareProof(e.currentTarget as HTMLButtonElement));
 $("st-sound").addEventListener("click", toggleSound);
-$("st-skip").addEventListener("click", skipRace);
+$("st-skip").addEventListener("click", skipGame);
 bindParticipants();
 initWalletUI();
 refreshFreezeLabel();
 
-/* Modo demo y pose para capturas: `?demo=race|wheel`, `?pose=1`, `?instant=1`. */
+/* Modo demo y pose para capturas: `?demo=<juego>`, `?pose=1`, `?instant=1`. */
+const GAMES: readonly Game[] = ["race", "stellar", "ledger", "rockets", "wheel"];
+
 async function autoDemo(mode: string): Promise<void> {
   loadSample();
   await freeze();
-  setGame(mode === "wheel" ? "wheel" : mode === "stellar" ? "stellar" : "race");
+  setGame((GAMES.find((g) => g === mode) ?? "race") as Game);
   // La ronda objetivo todavía no existe: esperar la cuenta regresiva.
   while (secondsToRound() > 0) await new Promise((r) => setTimeout(r, 250));
   await draw();

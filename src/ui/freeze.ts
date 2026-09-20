@@ -8,12 +8,19 @@ import { anchorErrorText, hideTxStatus, sealOnChain, showTxStatus, stepLabel } f
 import { canAnchor, currentSession } from "./wallet-ui";
 import { parseNames } from "./participants";
 
+/** Los botones del selector, en el orden en que se muestran. */
+const GAME_BUTTONS: ReadonlyArray<[string, Game]> = [
+  ["g-race", "race"],
+  ["g-stellar", "stellar"],
+  ["g-ledger", "ledger"],
+  ["g-rockets", "rockets"],
+  ["g-wheel", "wheel"],
+];
+
 export function setGame(g: Game): void {
   if (app.drawn) return;
   app.game = g;
-  $("g-race").classList.toggle("on", g === "race");
-  $("g-stellar").classList.toggle("on", g === "stellar");
-  $("g-wheel").classList.toggle("on", g === "wheel");
+  for (const [id, key] of GAME_BUTTONS) $(id).classList.toggle("on", g === key);
 }
 
 /** Segundos que faltan para que nazca la ronda objetivo (0 si ya existe). */
@@ -134,9 +141,12 @@ export async function freeze(): Promise<void> {
   renderSealSummary();
 
   if (names.length > WHEEL_MAX) {
+    // La ruleta es el único juego con tope. Los demás aguantan doscientos, y
+    // Cierre de Libro justamente se ve mejor cuantos más haya, así que el
+    // reemplazo automático va para ahí y no para la carrera.
     $<HTMLButtonElement>("g-wheel").disabled = true;
     $("wheel-cap").style.display = "block";
-    setGame("race");
+    if (app.game === "wheel") setGame("ledger");
   }
   startCountdown();
   $("sec-frozen").scrollIntoView({ behavior: "smooth", block: "start" });
