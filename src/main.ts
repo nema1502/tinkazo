@@ -5,7 +5,7 @@ import { SAMPLE, app, params } from "./state";
 import { soundLabel, toggleSound } from "./sound";
 import { bindParticipants, loadSample, renderNames } from "./ui/participants";
 import { freeze, refreshFreezeLabel, secondsToRound, setGame } from "./ui/freeze";
-import { copySummary, draw, reverify } from "./ui/draw";
+import { copySummary, draw, reverify, shareProof } from "./ui/draw";
 import { skipRace, stadiumRace } from "./games/race";
 import { initWalletUI } from "./ui/wallet-ui";
 
@@ -34,6 +34,7 @@ $("g-wheel").addEventListener("click", () => setGame("wheel"));
 $("btn-draw").addEventListener("click", () => void draw());
 $("btn-reverify").addEventListener("click", reverify);
 $<HTMLButtonElement>("btn-copy").addEventListener("click", (e) => void copySummary(e.currentTarget as HTMLButtonElement));
+$<HTMLButtonElement>("btn-proof").addEventListener("click", (e) => void shareProof(e.currentTarget as HTMLButtonElement));
 $("st-sound").addEventListener("click", toggleSound);
 $("st-skip").addEventListener("click", skipRace);
 bindParticipants();

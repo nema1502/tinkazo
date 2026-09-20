@@ -135,6 +135,30 @@
   }
   .txstatus.ok { border-left-color: var(--teal); }
   .txstatus a { color: var(--ink); }
+  .verdict { padding: 44px 0 26px; }
+  .verdict h1 { font-size: clamp(30px, 5vw, 48px); line-height: 1.05; font-weight: 900; margin-top: 8px; }
+  .verdict.ok h1 { color: var(--teal); }
+  .verdict.bad h1 { color: var(--orange); }
+  .verdict.partial h1 { color: var(--yellow); }
+  .verdict .lead { margin-top: 12px; }
+  .checks { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+  .check {
+    border-left: 5px solid var(--muted); padding: 8px 0 8px 12px;
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; font-size: 14px; font-weight: 700;
+  }
+  .check span { font-size: 12px; color: var(--ink2); font-weight: 600; word-break: break-all; }
+  .check.ok { border-left-color: var(--teal); }
+  .check.bad { border-left-color: var(--orange); }
+  .check.pending { border-left-color: var(--yellow); }
+  .check.working { border-left-color: var(--purple); opacity: 0.65; }
+  .check.ok b::before { content: "✓ "; color: var(--teal); }
+  .check.bad b::before { content: "✗ "; color: var(--orange); }
+  .check.pending b::before { content: "· "; }
+  .check.working b::before { content: "… "; }
+  .steps-code {
+    background: var(--paper); border: 2px solid var(--ink); padding: 14px; overflow-x: auto;
+    font: 12px/1.7 ui-monospace, Consolas, monospace; color: var(--ink2); white-space: pre; margin-top: 12px;
+  }
   .chip {
     border: 2px solid var(--ink); padding: 5px 12px; font-family: ui-monospace, Consolas, monospace;
     font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; background: var(--paper); color: var(--ink2);

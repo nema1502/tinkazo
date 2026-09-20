@@ -3,7 +3,8 @@ import { T, getLang, t } from "../i18n";
 import { LCOLORS, WHEEL_MAX, app, avatar, type Beacon } from "../state";
 import { bytesToHex, decompressG1, fetchRound, hexToBytes, randomnessOf, roundUrl, verifyRound } from "../protocol/drand";
 import { select } from "../protocol/select";
-import { txUrl } from "../stellar/config";
+import { network, txUrl } from "../stellar/config";
+import { PROOF_VERSION, type Proof, proofUrl } from "../protocol/proof";
 import { anchorErrorText, drawOnChain, readDraw, showTxStatus, stepLabel } from "./anchor";
 import { stadiumRace } from "../games/race";
 import { wheelSpin } from "../games/wheel";
@@ -118,11 +119,57 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   const dl = $<HTMLAnchorElement>("drand-link");
   dl.href = url;
   dl.textContent = t("drandLink");
-  $<HTMLImageElement>("qr-img").src =
-    `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(url)}`;
   $("qr-box").style.display = "block";
-  setNotifyLinks(names, winners, url);
   confetti();
+  // El comprobante se arma aparte: comprimir la lista es asíncrono y no vale
+  // la pena hacer esperar al confeti por eso.
+  void buildProof(names, winners, url);
+}
+
+let proofLink = "";
+
+/**
+ * Arma el comprobante y apunta el QR y los avisos a la página de verificación,
+ * que es donde el participante puede rehacer el sorteo por su cuenta.
+ */
+async function buildProof(names: string[], winners: number[], roundLink: string): Promise<void> {
+  const f = app.frozen;
+  const d = app.drawn;
+  if (!f || !d) return;
+  const proof: Proof = {
+    v: PROOF_VERSION,
+    names,
+    round: d.beacon.round,
+    sealedAt: f.ts,
+    ...(f.prize ? { prize: f.prize } : {}),
+    ...(f.raffleId !== undefined
+      ? { net: network.name, contract: network.contractId ?? "", id: String(f.raffleId) }
+      : { signature: d.beacon.signature }),
+  };
+  let link: string;
+  try {
+    link = await proofUrl(proof);
+  } catch {
+    // Sin comprobante, el QR al menos lleva a la ronda del faro.
+    link = roundLink;
+  }
+  proofLink = link;
+  $<HTMLImageElement>("qr-img").src =
+    `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(link)}`;
+  setNotifyLinks(names, winners, link);
+}
+
+/** Copia el enlace del comprobante: es lo que se pega en el grupo del evento. */
+export async function shareProof(btn: HTMLButtonElement): Promise<void> {
+  if (!proofLink) return;
+  try {
+    await navigator.clipboard.writeText(proofLink);
+    const orig = btn.textContent;
+    btn.textContent = t("proofCopied");
+    setTimeout(() => (btn.textContent = orig), 1800);
+  } catch {
+    window.open(proofLink, "_blank", "noopener");
+  }
 }
 
 /**

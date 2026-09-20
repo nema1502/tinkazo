@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tinkazo — revisá el sorteo</title>
+<meta name="description" content="Rehacé el sorteo por tu cuenta. Con la huella de la lista y el número público de esa hora no hay otro resultado posible." />
+<meta name="robots" content="noindex" />
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -4 26 30"><g fill="%23e93d9c"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></g></svg>' />
+</head>
+<body>
+<header>
+  <div class="stripe"></div>
+  <div class="bar">
+    <a class="wordmark" href="/" style="text-decoration:none;color:inherit">Tinka<b>zo</b></a>
+    <div style="display:flex; gap:14px; align-items:center">
+      <nav class="langs" aria-label="idioma">
+        <button id="l-es" class="on">es</button>
+        <button id="l-en">en</button>
+      </nav>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- Veredicto -->
+  <section class="verdict" id="verdict">
+    <p class="kicker" id="verdict-kicker">Revisando…</p>
+    <h1 id="verdict-title">Revisando el sorteo</h1>
+    <p class="lead" id="verdict-detail"></p>
+  </section>
+
+  <!-- Los cuatro pasos de la comprobación -->
+  <section class="block">
+    <div class="head"><h2 data-i="vChecks">Lo que se comprobó</h2><span class="kicker" id="v-net"></span></div>
+    <div class="body">
+      <ul class="checks" id="checks"></ul>
+    </div>
+  </section>
+
+  <!-- Resultado -->
+  <section class="block" id="sec-result" style="display:none">
+    <div class="head"><h2 data-i="vResult">Quién ganó</h2><span class="kicker" id="v-round"></span></div>
+    <div class="body">
+      <div id="v-winners"></div>
+      <p class="entity" id="v-proof"></p>
+      <div class="row">
+        <a id="v-drand" target="_blank" rel="noopener" class="ghost" data-i="vRound">Ver la ronda pública ↗</a>
+        <a id="v-contract" target="_blank" rel="noopener" class="ghost" style="display:none" data-i="vContract">Ver el contrato ↗</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- La lista -->
+  <section class="block">
+    <div class="head"><h2 data-i="vList">La lista sellada</h2><span class="kicker" id="v-count"></span></div>
+    <div class="body">
+      <div class="names" id="v-names"></div>
+      <p class="note" id="v-hash"></p>
+    </div>
+  </section>
+
+  <!-- Rehacerlo con tus propias herramientas -->
+  <section class="block">
+    <div class="head"><h2 data-i="vHow">Rehacelo con tus herramientas</h2></div>
+    <div class="body">
+      <p class="note" data-i="vHowIntro">No hace falta que confíes en esta página. Estos son los pasos exactos, con los valores de este sorteo:</p>
+      <pre class="steps-code" id="v-steps"></pre>
+      <p class="note"><a href="https://github.com/nema1502/tinkazo/blob/main/docs/protocolo.md" target="_blank" rel="noopener" data-i="vProtocol">El protocolo completo ↗</a></p>
+    </div>
+  </section>
+
+  <section style="padding: 14px 0 30px">
+    <p class="note"><a href="/" data-i="vBack">← Sortear con Tinkazo</a></p>
+  </section>
+</main>
+
+<footer><div class="bar"><span data-i="footL">Tinkazo</span><span data-i="footR">Hecho en Bolivia por Nicolás</span></div></footer>
+
+<script type="module" src="/src/verify.ts"></script>
+</body>
+</html>

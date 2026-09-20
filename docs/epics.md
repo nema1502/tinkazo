@@ -45,14 +45,14 @@ A-1 Vectores cruzados Rust/TS en `docs/vectors.json` · A-2 Adaptador de wallet 
 ### Épica 1: Contrato de sorteos verificables
 El organizador compromete una lista y cualquiera finaliza el sorteo con la firma del faro, verificada en la cadena. **FRs:** 7, 10, 11, 12, 13. NFR-1, 3, 7.
 
-### Épica 2: Sitio con protocolo v2 y modo libre verificable
-El sitio actual pasa a build con pnpm y Vite, adopta quicknet y el protocolo v2, verifica la firma del faro en el navegador y emite comprobantes locales. **FRs:** 1, 2, 3, 9, 11, 14, 15, 16, 22, 23, 24, 25. NFR-2. **En curso:** 2.1, 2.2 y 2.3 hechas; falta 2.4 (comprobante).
+### Épica 2: Sitio con protocolo v2 y modo libre verificable — hecha
+El sitio pasó a Vite con pnpm, adoptó quicknet y el protocolo v2, verifica la firma del faro en el navegador y emite comprobantes. **FRs:** 1, 2, 3, 9, 11, 14, 15, 16, 22, 23, 24, 25. NFR-2.
 
-### Épica 3: Anclaje en Stellar desde la interfaz
-El organizador conecta su wallet, sella y sortea en el contrato desde la pantalla, con cuenta regresiva y show. **FRs:** 4, 5, 6, 7, 8, 9, 10, 12, 13. NFR-5, 6. **En curso:** 3.1 y 3.5 hechas; faltan 3.2, 3.3 y 3.4.
+### Épica 3: Anclaje en Stellar desde la interfaz — hecha
+El organizador conecta su wallet, sella y sortea en el contrato desde la pantalla, con cuenta regresiva y show. **FRs:** 4, 5, 6, 7, 8, 9, 10, 12, 13. NFR-5, 6. Falta solo mostrar el costo estimado antes de firmar.
 
-### Épica 4: Verificación pública
-Cualquier persona abre el comprobante, ve el sello y el registro leídos de la cadena y obtiene un veredicto recomputado en su navegador. **FRs:** 17, 18, 19, 20, 21.
+### Épica 4: Verificación pública — hecha salvo finalizar
+Cualquiera abre el comprobante, ve el sello y el registro leídos de la cadena y obtiene un veredicto recomputado en su navegador. **FRs:** 17, 18, 19, 20, 21. Falta el botón para finalizar un sorteo sellado sin registro (historia 4.2).
 
 ### Épica 5: Lanzamiento a mainnet
 Contrato en mainnet con checklist de despliegue, documentación final y distribución en el ecosistema. NFR-3, 7.
@@ -189,7 +189,9 @@ para que el modo libre también sea honesto.
 **Y** una firma inválida o un relay caído producen mensajes claros en ES/EN y permiten reintentar sin perder el sello
 **Y** el resumen indica "sin anclaje en Stellar".
 
-### Historia 2.4: Comprobante local
+### Historia 2.4: Comprobante — hecho
+
+Resultado (2026-09-20): `src/protocol/proof.ts` arma el comprobante y lo comprime con deflate a base64url. Va en el fragmento de la URL, que no viaja al servidor: los nombres nunca salen del navegador de quien abre el enlace. Un sorteo de 18 nombres da un enlace de 500 caracteres. El QR y los avisos al ganador apuntan ahí.
 
 Como participante,
 quiero un enlace o archivo que contenga todo lo necesario para recomputar,
@@ -222,7 +224,9 @@ para sellar con mi identidad.
 **Y** si la wallet está en otra red, veo el aviso y el botón "Sellar en Stellar" queda deshabilitado
 **Y** sin wallet instalada, veo el enlace de instalación y el modo libre sigue disponible.
 
-### Historia 3.2: Sellar en Stellar
+### Historia 3.2: Sellar en Stellar — hecho
+
+Resultado (2026-09-19): el botón pasa a "Sellar en Stellar" con wallet conectada, firma la transacción y muestra cada paso con el enlace al explorador. El margen hasta la ronda se fuerza a 45 s al anclar, porque por debajo de 30 el contrato rechaza el sello.
 
 Como organizadora,
 quiero firmar una transacción que registre el sello en el contrato,
@@ -236,7 +240,9 @@ para que la lista quede comprometida con timestamp público.
 **Y** al confirmarse muestra `id`, hash, ronda, hora del ledger, enlace a stellar.expert y bloquea lista y premio
 **Y** un rechazo de la wallet, falta de XLM o un error del contrato (por código) se muestran en ES/EN sin dejar la pantalla en estado intermedio.
 
-### Historia 3.3: Sortear en Stellar y revelar desde el registro
+### Historia 3.3: Sortear en Stellar y revelar desde el registro — hecho
+
+Resultado (2026-09-19): `draw` va al contrato, el show usa los índices registrados y, si otro finalizó antes, se lee el registro en vez de fallar. Probado de punta a punta en el navegador con la cuenta de prueba: sorteo #4 en testnet.
 
 Como organizadora,
 quiero que al llegar la ronda la app finalice el sorteo en el contrato y el show use el resultado registrado,
@@ -269,7 +275,9 @@ para sellar y sortear anclado sin wallet ni XLM propios.
 
 Justificación: mientras el proyecto viva en testnet, esta es la forma más rápida de demostrar el anclaje a cualquier comunidad. Se decidió el 2026-09-16 como alternativa gratuita a Pollar para esta etapa.
 
-### Historia 3.4: Errores, costos y estados de transacción
+### Historia 3.4: Errores y estados de transacción — hecho
+
+Resultado (2026-09-19): los nueve errores del contrato, más los de wallet, fondos y red, se traducen a mensajes que dicen qué hacer. Falta mostrar el costo estimado antes de firmar.
 
 Como organizadora,
 quiero mensajes claros y un estado visible en cada paso,
@@ -287,7 +295,9 @@ para saber qué pasó y qué hacer.
 
 ## Épica 4: Verificación pública
 
-### Historia 4.1: Página de verificación
+### Historia 4.1: Página de verificación — hecho
+
+Resultado (2026-09-20): `verificar.html` lee el comprobante, rehace el sorteo y da un veredicto. Sin wallet y sin servidor.
 
 Como verificador,
 quiero abrir un comprobante y ver el sello, el registro, la ronda y la lista,
@@ -300,7 +310,9 @@ para juzgar por mí mismo.
 **Entonces** la página lee `get_raffle` y `get_draw` por RPC, obtiene la ronda de drand y muestra los cuatro bloques con sus valores
 **Y** funciona también para comprobantes de modo libre (sin contrato).
 
-### Historia 4.2: Veredicto y finalización
+### Historia 4.2: Veredicto — hecho (falta finalizar un sorteo pendiente)
+
+Resultado (2026-09-20): **tres veredictos, no dos.** Verde solo cuando el contrato atestigua la huella de la lista. Amarillo en modo libre, donde la cuenta cierra pero nadie garantiza que esa fuera la lista original, porque el comprobante trae lista y firma juntas. Rojo cuando algo no cuadra. Probado: lista manipulada sobre un sorteo anclado da rojo con el motivo exacto. Ese amarillo es justo lo que compra anclar. Falta el botón de finalizar un sorteo sellado sin registro.
 
 Como participante,
 quiero un veredicto claro y la posibilidad de finalizar un sorteo pendiente,
@@ -313,7 +325,9 @@ para no depender de que el organizador vuelva a la app.
 **Entonces** el navegador recomputa `list_hash`, verifica la firma BLS, ejecuta la selección y compara con el registro, y muestra verde solo si todo coincide o rojo con el paso que falló
 **Y** si el sorteo está sellado pero sin registro y la ronda ya existe, la página ofrece "Finalizar" (llamada `draw` con cualquier wallet).
 
-### Historia 4.3: Recomputar a mano y enlaces
+### Historia 4.3: Recomputar a mano y enlaces — hecho
+
+Resultado (2026-09-20): la página imprime los cuatro pasos del protocolo con los valores concretos del sorteo, listos para pegar en una terminal, y enlaza al contrato y a la ronda de drand.
 
 Como auditora técnica,
 quiero los pasos del protocolo con los valores concretos de este sorteo,
