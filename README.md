@@ -1,73 +1,113 @@
 # Tinkazo 🦙
 
-**Sorteos que no se pueden arreglar.**
+**Sorteos que nadie puede arreglar. Ni vos.**
 
-En Bolivia, un *tinkazo* es esa corazonada de que hoy tienes suerte. Tinkazo es una plataforma de sorteos para comunidades donde la suerte es divertida de ver (carrera de llamas, ruleta) e imposible de manipular: la lista de participantes se sella antes del sorteo y la aleatoriedad viene de un faro público que nadie controla.
+En Bolivia, un *tinkazo* es esa corazonada de que hoy tenés suerte. Tinkazo sortea premios en eventos de comunidades: pegás la lista, sale el ganador en pantalla grande con una carrera de llamas o una ruleta, y cualquiera puede comprobar después que no hubo trampa.
 
-🌐 **Demo en vivo:** [tinkazo.vercel.app](https://tinkazo.vercel.app)
+🌐 **Probalo:** [tinkazo.vercel.app](https://tinkazo.vercel.app)
 
 ![Tinkazo — carrera de llamas en modo estadio](docs/capturas/tinkazo-estadio.png)
 
+## El problema
+
+Toda comunidad hace sorteos: libros, licencias, entradas, poleras. Y en todos hay alguien que piensa que el organizador le dio el premio a su amigo. Las herramientas que existen o cobran por algo trivial, o son gratis y el resultado es "confía en mí".
+
 ## Cómo funciona
 
-1. **Cargás la lista.** Pegás nombres o subís un CSV. Los participantes no necesitan cuenta ni wallet.
-2. **Se sella la lista.** El navegador calcula el SHA-256 de la lista ordenada. Ese hash es el compromiso público: después de sellar, nadie puede agregar ni quitar gente sin que se note.
-3. **Llega la semilla.** La aleatoriedad la aporta [drand](https://drand.love) (League of Entropy), un faro público y verificable. Ni el organizador ni Tinkazo pueden elegirla.
-4. **El show.** El resultado ya está determinado por `hash(lista) + semilla`. La carrera de llamas o la ruleta son la presentación teatral, no el mecanismo.
-5. **Cualquiera verifica.** Con el hash de la lista, la ronda de drand y el algoritmo (público y determinista) se recomputa el ganador desde cero.
+1. **Traés la lista.** Pegás los nombres o subís un CSV. Los participantes no instalan nada ni se crean cuenta. Nunca.
+2. **Se congela la lista.** Se calcula su huella (SHA-256) y se compromete contra una **ronda futura** de [drand](https://drand.love), el faro público de aleatoriedad de la League of Entropy. La clave está en el orden: cuando cerrás la lista, el número que va a decidir **todavía no existe**.
+3. **Llega el número.** Cuarenta y cinco segundos después, drand publica esa ronda firmada. Ni vos ni yo pudimos elegirla.
+4. **El show.** Carrera de llamas, carrera espacial o ruleta, a pantalla completa con narrador. Cuando arranca la animación el ganador ya está decidido: el juego solo lo cuenta.
+5. **Cualquiera revisa.** El comprobante es un enlace. Quien lo abre ve la página rehacer el sorteo desde cero en su propio navegador y dar un veredicto.
 
-Interfaz bilingüe ES / EN, modo claro y oscuro, modo estadio a pantalla completa con narrador, y QR de verificación para compartir con la sala.
+Con una cuenta de Stellar conectada, el sello y el resultado quedan **registrados en un contrato**, que verifica la firma del faro por su cuenta. Ese registro sigue ahí aunque Tinkazo desaparezca.
 
-## Estado del proyecto
+## Qué hay construido
 
-Hoy el sitio en producción es el **demo v1**: sellado y verificación en el navegador con la cadena *default* de drand, ya migrado a Vite + TypeScript y sin dependencias de terceros para la identidad.
+**El contrato `tinkazo-raffle`** ([contracts/raffle](contracts/raffle)), en Rust sobre Soroban. `seal` compromete la huella de la lista, la cantidad de participantes y una ronda futura, y exige que esa ronda nazca al menos treinta segundos después. `draw` verifica la firma BLS12-381 de la ronda **dentro de la cadena** con `pairing_check`, deriva la semilla y selecciona los ganadores.
 
-La versión sobre **Stellar** está en marcha:
+Es inmutable: no tiene administrador ni actualización, y no custodia fondos. `draw` no pide permiso a nadie, así que el organizador no puede retener un resultado que no le gusta. 19 tests, incluida una ronda real de quicknet y vectores compartidos con la implementación en TypeScript. WASM de 11,4 KB.
 
-- **Contrato Soroban `tinkazo-raffle`** ([contracts/raffle](contracts/raffle)): `seal` compromete el hash de la lista y una ronda futura de drand quicknet; `draw` verifica la firma BLS de esa ronda **en la cadena** (`pairing_check` sobre BLS12-381), deriva la semilla idéntica al `randomness` de drand y selecciona ganadores de forma determinista. Inmutable, sin admin, sin custodia de fondos. 19 tests, incluida una ronda real de quicknet. WASM de 11 KB. Desplegado en testnet (`CD2SSHBU…RENH`) con un sorteo real ejecutado y verificado; ver [docs/deployments.md](docs/deployments.md).
-- **Protocolo v2** ([docs/protocolo.md](docs/protocolo.md)): especificación normativa que cualquier tercero puede reimplementar, con vectores de prueba compartidos ([docs/vectors.json](docs/vectors.json)).
-- **Plan**: [PRD](docs/prd.md) · [Arquitectura](docs/architecture.md) · [Épicas e historias](docs/epics.md) · [Despliegues](docs/deployments.md).
+**El sitio**, en Vite y TypeScript sin framework. Tres juegos, interfaz bilingüe, tema claro y oscuro, y tres formas de entrar: Freighter, Google vía Pollar, o una cuenta de prueba que el navegador crea y fondea solo.
 
-Próximos pasos: desplegar en testnet y medir costos, migrar el sitio a Vite + TypeScript con pnpm, conectar wallets (Stellar Wallets Kit), página pública de verificación y mainnet.
+**La página de verificación**, que da uno de tres veredictos:
+
+| Veredicto | Cuándo |
+|---|---|
+| 🟢 Verde | El contrato atestigua la huella de la lista. Cambiar un nombre se detecta. |
+| 🟡 Amarillo | La cuenta cierra, pero el sorteo no quedó en la cadena: nadie más que el organizador puede confirmar que esa era la lista original. |
+| 🔴 Rojo | Algo no cuadra, y dice qué. |
+
+Ese amarillo es justo lo que compra anclar, y decirlo es más honesto que un verde fácil.
+
+## Qué cuesta
+
+Medido en testnet, no estimado. Con XLM a US$ 0,196:
+
+| | XLM | US$ |
+|---|---|---|
+| Sellar un sorteo | 0,099 | 0,019 |
+| Sortear (incluye la verificación BLS) | 0,083 | 0,016 |
+| **Total por sorteo** | **0,18** | **0,036** |
+
+La verificación criptográfica en sí cuesta 0,003 XLM. Es posible gracias a las funciones nativas de BLS12-381 que Stellar incorporó en [CAP-0059](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md). Casi todo el resto es alquiler de almacenamiento por 120 días. Detalle en [docs/deployments.md](docs/deployments.md).
+
+**Verificar siempre es gratis.** Sortear en el navegador también.
+
+## Sin servidor, a propósito
+
+No hay backend ni base de datos. Las únicas dependencias en ejecución son el RPC de Stellar, los relays de drand y la wallet del organizador. No es una limitación temporal: es lo que permite decir que no hace falta confiar en nadie.
+
+Dos consecuencias concretas. En la cadena viaja **solo la huella de la lista**, nunca los nombres. Y el comprobante viaja en el fragmento de la URL, esa parte después del numeral que **no se envía al servidor**: los nombres de tus participantes no llegan ni a los registros del hosting.
 
 ## Correr en local
 
-**Sitio:** Vite + TypeScript con pnpm.
-
 ```bash
 pnpm install
-pnpm dev        # http://localhost:5173
-pnpm build      # genera dist/
+pnpm dev          # http://localhost:5173
+pnpm test         # protocolo v2 contra vectores compartidos
+pnpm build
 ```
 
-**Contrato:** requiere Rust con el target `wasm32v1-none` y, para desplegar, [stellar-cli](https://developers.stellar.org/docs/tools/cli/stellar-cli).
+El contrato necesita Rust con el target `wasm32v1-none`:
 
 ```bash
 cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
+Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=race|stellar|wheel`, `?instant=1`, `?lead=3`.
+
 ## Estructura
 
 ```
-index.html, src/     Sitio (Vite + TypeScript): landing, juegos, sellado y verificación
-contracts/raffle/     Contrato Soroban tinkazo-raffle (Rust)
-docs/                 Protocolo, PRD, arquitectura, épicas, despliegues, vectores, capturas
-.claude/skills/       Kit de skills para construir en Stellar (ideas → PRD → arquitectura → Soroban → mainnet)
-.github/workflows/    CI: tests y build del contrato
+index.html, verificar.html   Las dos páginas
+src/protocol/                Lista canónica, selección, drand, comprobante
+src/stellar/                 Red, wallets y cliente del contrato
+src/games/                   Carrera (con temas) y ruleta
+contracts/raffle/            El contrato Soroban, en Rust
+docs/                        Protocolo, PRD, arquitectura, épicas, juegos, despliegues
+scripts/                     Despliegue, smoke test y auditor de juegos
 ```
 
-Las skills en `.claude/skills/` vienen de [Stellar-Elite-Bolivia](https://github.com/nema1502/Stellar-Elite-Bolivia) y guían el desarrollo con Claude Code: contratos Soroban, dApps con `@stellar/stellar-sdk`, estándares SEP/CAP, checklist de despliegue a mainnet y preparación para Stellar Community Fund. El punto de entrada es [`.claude/skills/SKILL_ROUTER.md`](.claude/skills/SKILL_ROUTER.md).
+## Documentación
 
-## Capturas
+- [Protocolo v2](docs/protocolo.md) — la especificación normativa. Cualquiera puede reimplementarla y llegar al mismo resultado.
+- [Juegos](docs/juegos.md) — el contrato que cumple todo juego y las doce comprobaciones del auditor.
+- [Despliegues](docs/deployments.md) — direcciones por red y costos medidos.
+- [PRD](docs/prd.md) · [Arquitectura](docs/architecture.md) · [Épicas](docs/epics.md)
 
-| Landing | Ruleta | Estadio |
-|---|---|---|
-| ![Landing](docs/capturas/tinkazo-light.png) | ![Ruleta](docs/capturas/tinkazo-ruleta.png) | ![Carrera](docs/capturas/tinkazo-carrera.png) |
+## Estado
+
+Funcionando en **testnet**, de punta a punta. Mainnet es el siguiente paso: cuesta unos 16 XLM desplegar y unos 49 al año de alquiler.
 
 ## Contribuir
 
-Es código libre. Issues y pull requests son bienvenidos. Si encontrás una forma de manipular un sorteo, abrí un issue: ese es exactamente el tipo de reporte que más nos sirve.
+Es código libre. Issues y pull requests son bienvenidos.
+
+**Si encontrás una forma de arreglar un sorteo, abrí un issue.** Ese es el reporte que más sirve. Hay una conocida y documentada: un organizador podría sellar varias listas contra rondas distintas y publicar solo la que le conviene. La defensa es que todos los sellos son públicos bajo su dirección, y que el identificador del sorteo se anuncia antes de que exista la semilla.
+
+Para agregar un juego, mirá [docs/juegos.md](docs/juegos.md): hay que pasar el auditor antes de entrar.
 
 ## Licencia
 
@@ -75,10 +115,16 @@ Es código libre. Issues y pull requests son bienvenidos. Si encontrás una form
 
 ---
 
-## English summary
+## English
 
-**Tinkazo** is a raffle platform for communities where luck is fun to watch (llama race, roulette) and impossible to rig. The participant list is sealed with SHA-256 before the draw, randomness comes from the public [drand](https://drand.love) beacon, and anyone can recompute the winner from the sealed list and the beacon round. The game on screen is the show; the math is the guarantee.
+**Raffles nobody can rig. Not even you.**
 
-The live site is still the v1 static demo. The Stellar version is underway: a Soroban contract (`contracts/raffle`) that commits the list hash to a future drand quicknet round, verifies the round's BLS signature on-chain and derives the winners deterministically. Spec in [docs/protocolo.md](docs/protocolo.md), plan in [docs/](docs/). Organizers use a wallet; participants never need one.
+In Bolivia, a *tinkazo* is that hunch that today is your lucky day. Tinkazo draws prizes at community events: paste the list, the winner comes out on the big screen with a llama race or a roulette, and anyone can check afterwards that it was clean.
 
-Live demo: [tinkazo.vercel.app](https://tinkazo.vercel.app) · Licensed under MIT.
+The list is sealed with SHA-256 and committed against a **future** round of the [drand](https://drand.love) public randomness beacon, so when you lock the list the number that decides doesn't exist yet. A Soroban contract on Stellar verifies that round's BLS12-381 signature **on chain** and derives the winner deterministically. Participants never need a wallet or an account.
+
+A whole raffle costs **0.18 XLM**, about four cents. The cryptographic verification itself is 0.003 XLM, thanks to Stellar's native BLS12-381 host functions ([CAP-0059](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md)).
+
+No backend, no database. The only runtime dependencies are Stellar RPC, drand relays and the organizer's wallet. Only the list fingerprint goes on chain, never the names.
+
+Running on **testnet** end to end. Spec in [docs/protocolo.md](docs/protocolo.md) (Spanish). Live at [tinkazo.vercel.app](https://tinkazo.vercel.app) · MIT licensed.
