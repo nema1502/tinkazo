@@ -86,5 +86,7 @@ export const SAMPLE = [
   "Camila Suárez", "Andrés Villca", "Paola Mendoza", "Franco Ibáñez", "Daniela Cruz", "Óscar Limachi",
 ];
 
-export const avatar = (name: string, size: number): string =>
-  `https://api.dicebear.com/9.x/adventurer-neutral/svg?size=${size}&seed=${encodeURIComponent(name)}`;
+// El avatar se dibuja en el navegador. Antes se le pedía a un servicio
+// externo con el nombre de la persona en la dirección, lo que sacaba la lista
+// entera del navegador de a un nombre por vez. Ver src/avatar.ts.
+export { avatar } from "./avatar";

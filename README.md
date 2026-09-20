@@ -77,7 +77,9 @@ No hay backend ni base de datos. Las únicas dependencias en ejecución son el R
 
 Dos consecuencias concretas. En la cadena viaja **solo la huella de la lista**, nunca los nombres. Y el comprobante viaja en el fragmento de la URL, esa parte después del numeral que **no se envía al servidor**: los nombres de tus participantes no llegan ni a los registros del hosting.
 
-Esa disciplina se rompe fácil sin darse cuenta. El QR del comprobante se pedía a un servicio de terceros, lo que sacaba los nombres del navegador igual, solo que a otro lado. Ahora se dibuja acá, y de paso funciona con el wifi del evento caído. Hay una comprobación automática que lo lee con un lector independiente: `pnpm check:qr`.
+Esa disciplina se rompe fácil sin darse cuenta, y se rompió dos veces. El QR del comprobante se le pedía a un servicio ajeno, mandándole la URL entera. Y el avatar de cada participante se le pedía a otro, con el nombre de la persona en la dirección: con doscientos inscritos eran doscientas peticiones, cada una con el nombre de alguien real adentro. Los dos se dibujan acá ahora.
+
+**Hoy la única petición que sale del navegador es la ronda del faro, y no lleva ningún nombre.** De paso, los avatares aparecen al instante y el QR funciona con el wifi del evento caído. Hay una comprobación que lee el QR con un lector independiente: `pnpm check:qr`. Lo que puede salir mal y qué lo impide está en [docs/amenazas.md](docs/amenazas.md).
 
 ## Correr en local
 
@@ -117,6 +119,7 @@ scripts/                     Despliegue, smoke test y auditor de juegos
 - [Juegos](docs/juegos.md) — el contrato que cumple todo juego y las doce comprobaciones del auditor.
 - [Despliegues](docs/deployments.md) — direcciones por red y costos medidos.
 - [Marca](docs/marca.md) — paleta con los contrastes medidos, tipografía, cómo se escribe y qué no va. Para armar una presentación o un afiche.
+- [Amenazas](docs/amenazas.md) — qué puede salir mal, qué lo impide hoy y qué no. Incluye el único ataque conocido que sigue abierto.
 - [PRD](docs/prd.md) · [Arquitectura](docs/architecture.md) · [Épicas](docs/epics.md)
 
 ## Estado
