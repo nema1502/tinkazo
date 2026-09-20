@@ -1,8 +1,10 @@
 import { $, esc } from "../dom";
 import { T, getLang, t } from "../i18n";
 import { LCOLORS, WHEEL_MAX, app, avatar, type Beacon } from "../state";
-import { bytesToHex, fetchRound, hexToBytes, randomnessOf, roundUrl, verifyRound } from "../protocol/drand";
+import { bytesToHex, decompressG1, fetchRound, hexToBytes, randomnessOf, roundUrl, verifyRound } from "../protocol/drand";
 import { select } from "../protocol/select";
+import { txUrl } from "../stellar/config";
+import { anchorErrorText, drawOnChain, readDraw, showTxStatus, stepLabel } from "./anchor";
 import { stadiumRace } from "../games/race";
 import { wheelSpin } from "../games/wheel";
 import { secondsToRound } from "./freeze";
@@ -19,6 +21,7 @@ export async function draw(): Promise<void> {
   const btn = $<HTMLButtonElement>("btn-draw");
   btn.disabled = true;
   btn.textContent = t("fetching");
+
   let beacon: Beacon;
   try {
     beacon = await resolveBeacon(app.frozen.round);
@@ -28,11 +31,44 @@ export async function draw(): Promise<void> {
     alert(t(e instanceof Error && e.message === "bad-signature" ? "badSig" : "drandDown"));
     return;
   }
-  btn.textContent = t("draw");
-  const { names, listHash } = app.frozen;
+
+  const { names, listHash, raffleId } = app.frozen;
   const nWinners = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10), names.length);
-  const winners = select(hexToBytes(beacon.randomness), hexToBytes(listHash), names.length, nWinners);
-  app.drawn = { beacon, winners };
+  let winners: number[];
+  let drawTx: string | undefined;
+
+  if (raffleId !== undefined) {
+    // Anclado: el contrato verifica la firma y decide. Lo que muestra la
+    // pantalla es lo que quedó registrado, no un cálculo nuestro.
+    try {
+      const res = await drawOnChain(raffleId, decompressG1(beacon.signature), (step, detail) => {
+        btn.textContent = stepLabel(step);
+        showTxStatus("draw-status", step, detail);
+      });
+      winners = res.winners;
+      drawTx = res.txHash;
+    } catch (e) {
+      // Si alguien más ya lo finalizó, el resultado igual es público.
+      const already = await readDraw(raffleId);
+      if (already) {
+        winners = already.winners;
+        showTxStatus("draw-status", "confirmed");
+      } else {
+        btn.disabled = false;
+        btn.textContent = t("draw");
+        const status = $("draw-status");
+        status.style.display = "block";
+        status.className = "txstatus";
+        status.textContent = await anchorErrorText(e);
+        return;
+      }
+    }
+  } else {
+    winners = select(hexToBytes(beacon.randomness), hexToBytes(listHash), names.length, nWinners);
+  }
+
+  btn.textContent = t("draw");
+  app.drawn = { beacon, winners, ...(drawTx ? { drawTx } : {}) };
   $("sec-draw").style.display = "block";
   $("seed-label").textContent = `${t("seed")} ${beacon.round}`;
   const first = winners[0] ?? 0;
@@ -65,8 +101,19 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
       </div>`;
     })
     .join(" ");
-  $("proof").textContent =
+  const proof = $("proof");
+  proof.textContent =
     `Draw · quicknet round=${beacon.round} · signature verified ✓ · randomness=${beacon.randomness.slice(0, 24)}… · list_hash=${listHash.slice(0, 24)}… · count=${names.length} · winners=[${winners.join(",")}]`;
+  const drawTx = app.drawn?.drawTx;
+  if (drawTx) {
+    proof.append(" · ");
+    const a = document.createElement("a");
+    a.href = txUrl(drawTx);
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = t("onChain") + " ↗";
+    proof.appendChild(a);
+  }
   const url = roundUrl(beacon.round);
   const dl = $<HTMLAnchorElement>("drand-link");
   dl.href = url;

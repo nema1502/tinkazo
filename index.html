@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Tinkazo — sorteos que no se pueden arreglar</title>
-<meta name="description" content="Sorteos verificables para comunidades: la lista se congela, la suerte viene de un faro público de aleatoriedad y cualquiera puede auditar el resultado." />
-<meta property="og:title" content="Tinkazo — sorteos que no se pueden arreglar" />
-<meta property="og:description" content="Carrera de llamas en modo estadio o ruleta: el show es tuyo, la imparcialidad es matemática. Aleatoriedad pública de drand, verificable por cualquiera." />
+<title>Tinkazo — sorteos que nadie puede arreglar</title>
+<meta name="description" content="El sorteo de tu meetup en pantalla grande, con carrera de llamas o ruleta. La lista se congela antes y el ganador sale de un número al azar público que cualquiera puede revisar." />
+<meta property="og:title" content="Tinkazo — sorteos que nadie puede arreglar" />
+<meta property="og:description" content="Carrera de llamas a pantalla completa. El show es show: el ganador ya salió de un número público que no controla ni el que organiza. Hecho en Bolivia." />
 <meta property="og:type" content="website" />
 <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -4 26 30"><g fill="%23e93d9c"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></g></svg>' />
 </head>
@@ -28,18 +28,18 @@
 <main>
   <section class="hero">
     <div class="hero-copy">
-      <span class="sticker" data-i="badge">Para el sorteo del meetup</span>
-      <h1 data-i-html="h1">Sorteos que <span class="hl">no se pueden arreglar</span>.</h1>
-      <p class="lead" data-i="lead">Pega la lista de inscritos y sortea en pantalla grande: carrera de llamas o ruleta. Quién gana lo decide un azar público que nadie controla —ni tú—, y cualquiera puede comprobarlo después desde su celular.</p>
-      <p class="kicker" data-i="note">Pruébalo ahora con tu propia lista: gratis, sin cuenta y sin instalar nada.</p>
+      <span class="sticker" data-i="badge">Para el que le toca sortear</span>
+      <h1 data-i-html="h1">Sorteos que <span class="hl">nadie puede arreglar</span>. Ni vos.</h1>
+      <p class="lead" data-i="lead">Pegá la lista de tu evento y sorteá en pantalla grande, con carrera de llamas o con ruleta. Al ganador lo decide un número al azar que se publica en internet a una hora fija, después de que vos cerraste la lista. Vos no lo elegís. Yo tampoco. Y cualquiera lo revisa desde su celular.</p>
+      <p class="kicker" data-i="note">Probalo ahora con tu lista de verdad. Es gratis y no te pido ni el correo.</p>
     </div>
     <div class="mascot" aria-hidden="true"><svg viewBox="-1 -3 24 28"><use href="#llama" fill="currentColor"/></svg></div>
   </section>
 
   <div class="steps">
-    <article><span class="num">01</span><h3 data-i="s1t">Importa participantes</h3><p data-i="s1b">Pega la lista, sube un CSV o tráelos de Luma/Meetup. Nadie necesita wallet ni cuenta.</p></article>
-    <article><span class="num">02</span><h3 data-i="s2t">Congela la lista</h3><p data-i="s2b">Al congelarla, la lista queda con una huella digital única y una hora. Si después alguien agrega o quita un nombre, la huella cambia y se nota.</p></article>
-    <article><span class="num">03</span><h3 data-i="s3t">Elige tu juego y sortea</h3><p data-i="s3b">Carrera en pantalla completa o ruleta. El ganador se deriva de aleatoriedad pública; el juego solo lo cuenta bonito.</p></article>
+    <article><span class="num">01</span><h3 data-i="s1t">Traé tu lista</h3><p data-i="s1b">Pegás los nombres o subís un CSV. Luma y Meetup están en camino. Tu gente no instala nada ni se crea cuenta.</p></article>
+    <article><span class="num">02</span><h3 data-i="s2t">Congelá la lista</h3><p data-i="s2b">Al congelarla, la lista queda con una huella y una hora. Si después alguien mete a su primo o saca a otro, la huella cambia y se nota. No hay cómo disimularlo.</p></article>
+    <article><span class="num">03</span><h3 data-i="s3t">Elegí el juego y sorteá</h3><p data-i="s3b">Carrera de llamas o ruleta, a pantalla completa. Cuando arranca la animación el ganador ya salió del número público. El show es show. El sorteo ya estaba hecho.</p></article>
   </div>
 
   <!-- 01 Participantes -->
@@ -52,7 +52,7 @@
         <span class="chip soon" data-i="srcLuma">Luma · pronto</span>
         <span class="chip soon" data-i="srcMeetup">Meetup · pronto</span>
       </div>
-      <textarea id="ta" spellcheck="false" placeholder="Un participante por línea…"></textarea>
+      <textarea id="ta" spellcheck="false" placeholder="Un nombre por línea…"></textarea>
       <div class="field">
         <label for="prize" data-i="prizeLabel">¿Qué sorteas? (opcional)</label>
         <input id="prize" type="text" maxlength="60" placeholder="Ej: Licencia JetBrains, libro, entrada…" data-i-ph="prizePh" />
@@ -61,6 +61,7 @@
         <button class="ghost" id="btn-sample" data-i="sample">Cargar ejemplo</button>
         <button class="primary" id="btn-freeze" data-i="freeze">Congelar lista</button>
       </div>
+      <p class="txstatus" id="seal-status" style="display:none"></p>
       <div class="names" id="names"></div>
     </div>
   </section>
@@ -87,6 +88,7 @@
         <select id="nw" class="mono"><option>1</option><option>2</option><option>3</option></select>
         <button class="primary" id="btn-draw" data-i="draw">Lanzar sorteo</button>
       </div>
+      <p class="txstatus" id="draw-status" style="display:none"></p>
       <p class="note" id="wheel-cap" style="display:none" data-i="wheelCap">La ruleta se ve bien hasta 24 participantes; con más, la carrera es tu juego.</p>
     </div>
   </section>
@@ -119,7 +121,7 @@
             <p class="ok" id="reverify-out" style="display:none"></p>
           </div>
           <div class="qr" id="qr-box" style="display:none">
-            <img id="qr-img" alt="QR de verificación" />
+            <img id="qr-img" alt="QR para revisar el sorteo" />
             <p class="kicker" data-i="qrCaption">Escanea y verifica la ronda desde tu celular</p>
           </div>
         </div>

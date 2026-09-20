@@ -4,7 +4,7 @@ import { onLangChange, setLang, t } from "./i18n";
 import { SAMPLE, app, params } from "./state";
 import { soundLabel, toggleSound } from "./sound";
 import { bindParticipants, loadSample, renderNames } from "./ui/participants";
-import { freeze, secondsToRound, setGame } from "./ui/freeze";
+import { freeze, refreshFreezeLabel, secondsToRound, setGame } from "./ui/freeze";
 import { copySummary, draw, reverify } from "./ui/draw";
 import { skipRace, stadiumRace } from "./games/race";
 import { initWalletUI } from "./ui/wallet-ui";
@@ -38,6 +38,7 @@ $("st-sound").addEventListener("click", toggleSound);
 $("st-skip").addEventListener("click", skipRace);
 bindParticipants();
 initWalletUI();
+refreshFreezeLabel();
 
 /* Modo demo y pose para capturas: `?demo=race|wheel`, `?pose=1`, `?instant=1`. */
 async function autoDemo(mode: string): Promise<void> {
@@ -59,7 +60,9 @@ function poseScene(): void {
 }
 
 renderNames();
-if (params.get("lang") === "en") setLang("en");
+// Siempre se aplica el diccionario al cargar, también en español: si no, el
+// texto que se ve sale del markup y los dos archivos se separan sin que se note.
+setLang(params.get("lang") === "en" ? "en" : "es");
 const demoMode = params.get("demo");
 if (demoMode) setTimeout(() => void autoDemo(demoMode), 300);
 if (params.get("pose")) setTimeout(poseScene, 300);

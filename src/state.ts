@@ -20,11 +20,17 @@ export interface Frozen {
   prize: string;
   /** Ronda objetivo de quicknet (protocolo §3). */
   round: number;
+  /** Id del sorteo en el contrato, si quedó anclado en Stellar. */
+  raffleId?: bigint;
+  /** Hash de la transacción del sello. */
+  sealTx?: string;
 }
 
 export interface Drawn {
   beacon: Beacon;
   winners: number[];
+  /** Hash de la transacción del sorteo, si se registró en el contrato. */
+  drawTx?: string;
 }
 
 /** Estado de la pantalla principal. Un solo sorteo por carga de página. */
@@ -47,10 +53,16 @@ export const instantMode = params.get("instant") === "1";
 
 /**
  * Segundos entre el sello y la ronda objetivo. 45 s por defecto: margen sobre
- * los 30 s que exige el contrato. `?lead=N` (mínimo 3) acorta la espera en
- * demos del modo libre.
+ * los 30 s que exige el contrato.
+ *
+ * `?lead=N` acorta la espera para demos y pruebas, pero solo en modo libre:
+ * un sello anclado con menos de 30 s lo rechaza el contrato con `RoundTooSoon`,
+ * y con razón, porque esa espera es justo lo que hace imposible elegir la ronda.
  */
 export const LEAD_SECONDS = Math.max(3, Number(params.get("lead")) || 45);
+
+/** Margen mínimo cuando el sello va a la cadena. El contrato exige 30 s. */
+export const ANCHOR_LEAD_SECONDS = 45;
 
 export const SAMPLE = [
   "María Quispe", "Jorge Mamani", "Lucía Flores", "Carlos Choque", "Ana Vargas", "Diego Rojas",

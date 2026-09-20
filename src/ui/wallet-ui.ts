@@ -1,6 +1,7 @@
 import { $, esc } from "../dom";
 import { onLangChange, t } from "../i18n";
 import { anchoringAvailable, accountUrl, network, shortAddress } from "../stellar/config";
+import { refreshFreezeLabel } from "./freeze";
 
 /**
  * Identidad del organizador en la cabecera.
@@ -164,6 +165,7 @@ async function connect(pick: "freighter" | "guest", back: HTMLElement, row: HTML
     session = { kind: wallet.kind, label: wallet.label, address };
     back.remove();
     render();
+    refreshFreezeLabel();
     if (wallet.kind === "guest") notice(t("guestReady"), false);
   } catch (e) {
     row.innerHTML = original;
@@ -181,6 +183,7 @@ async function disconnect(): Promise<void> {
   session = null;
   wrongNetwork = false;
   render();
+  refreshFreezeLabel();
 }
 
 async function walletErrorText(e: unknown): Promise<string> {

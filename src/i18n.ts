@@ -1,7 +1,17 @@
 export type Lang = "es" | "en";
 
+/**
+ * Diccionario de la interfaz.
+ *
+ * Una clave puede ser texto, una lista de variantes o una función. Las listas
+ * existen para el narrador de la carrera: `t()` sortea una variante en cada
+ * llamada, así el relator no repite la misma frase tres veces en treinta
+ * segundos. `setLang` ignora las listas al pintar los atributos `data-i`, de
+ * modo que una clave con variantes no puede usarse en el markup.
+ */
+
 export interface Dict {
-  [key: string]: string | ((...args: never[]) => string);
+  [key: string]: string | string[] | ((...args: never[]) => string);
   cLead: (n: string) => string;
   cWin: (n: string) => string;
   summary: (w: string, n: number, d: string, r: number, u: string) => string;
@@ -9,134 +19,182 @@ export interface Dict {
   tellBody: (w: string, prize: string, n: number, u: string) => string;
 }
 
+const pick = (xs: string[]): string => xs[Math.floor(Math.random() * xs.length)] ?? "";
+
 export const T: Record<Lang, Dict> = {
   es: {
-    badge: "Para el sorteo del meetup",
-    h1: 'Sorteos que <span class="hl">no se pueden arreglar</span>.',
-    lead: "Pega la lista de inscritos y sortea en pantalla grande: carrera de llamas o ruleta. Quién gana lo decide un azar público que nadie controla —ni tú—, y cualquiera puede comprobarlo después desde su celular.",
-    note: "Pruébalo ahora con tu propia lista: gratis, sin cuenta y sin instalar nada.",
-    s1t: "Importa participantes", s1b: "Pega la lista, sube un CSV o tráelos de Luma/Meetup. Nadie necesita wallet ni cuenta.",
-    s2t: "Congela la lista", s2b: "Al congelarla, la lista queda con una huella digital única y una hora. Si después alguien agrega o quita un nombre, la huella cambia y se nota.",
-    s3t: "Elige tu juego y sortea", s3b: "Carrera en pantalla completa o ruleta. El ganador se deriva de aleatoriedad pública; el juego solo lo cuenta bonito.",
+    badge: "Para el que le toca sortear",
+    h1: 'Sorteos que <span class="hl">nadie puede arreglar</span>. Ni vos.',
+    lead: "Pegá la lista de tu evento y sorteá en pantalla grande, con carrera de llamas o con ruleta. Al ganador lo decide un número al azar que se publica en internet a una hora fija, después de que vos cerraste la lista. Vos no lo elegís. Yo tampoco. Y cualquiera lo revisa desde su celular.",
+    note: "Probalo ahora con tu lista de verdad. Es gratis y no te pido ni el correo.",
+    s1t: "Traé tu lista",
+    s1b: "Pegás los nombres o subís un CSV. Luma y Meetup están en camino. Tu gente no instala nada ni se crea cuenta.",
+    s2t: "Congelá la lista",
+    s2b: "Al congelarla, la lista queda con una huella y una hora. Si después alguien mete a su primo o saca a otro, la huella cambia y se nota. No hay cómo disimularlo.",
+    s3t: "Elegí el juego y sorteá",
+    s3b: "Carrera de llamas o ruleta, a pantalla completa. Cuando arranca la animación el ganador ya salió del número público. El show es show. El sorteo ya estaba hecho.",
     p1: "Participantes", p2: "Lista congelada", p3: "El sorteo",
     srcPaste: "Pegar lista", srcCsv: "Subir CSV", srcLuma: "Luma · pronto", srcMeetup: "Meetup · pronto",
-    sample: "Cargar ejemplo", freeze: "Congelar lista", draw: "Lanzar sorteo", winners: "Premios",
+    sample: "Cargar ejemplo", freeze: "Congelar lista", draw: "Lanzar el sorteo", winners: "Premios",
     gameLabel: "Juego", gameRace: "Carrera de llamas", gameStellar: "Carrera Stellar", gameWheel: "Ruleta",
-    wheelCap: "La ruleta se ve bien hasta 24 participantes; con más, la carrera es tu juego.",
-    prizeLabel: "¿Qué sorteas? (opcional)", prizePh: "Ej: Licencia JetBrains, libro, entrada…",
-    kEntries: "entries", kDigest: "huella de la lista", kStatus: "estado del sorteo",
-    frozenNote: "La lista quedó sellada antes de que exista la semilla: la ronda objetivo del faro nace recién en unos segundos. Nadie puede agregar ni quitar participantes sin cambiar el hash.",
-    winnerLabel: "Resultado", verifyTitle: "Prueba de imparcialidad",
-    verifyHow: "Cualquiera puede repetir este sorteo por su cuenta: con la huella de la lista y el número público que salió a esa hora, el resultado da siempre el mismo. No hace falta creernos nada. · Paso a paso: 1) abre la ronda de quicknet y comprueba su firma con la clave pública del faro · 2) randomness = sha256(firma) · 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, saltando repetidos. Protocolo completo en docs/protocolo.md.",
-    reverify: "Recomputar aquí mismo", reverifyOk: "Verificado: el recómputo reproduce exactamente el resultado.",
+    wheelCap: "La ruleta se ve linda hasta unos 24 nombres. De ahí para arriba, andá con la carrera.",
+    prizeLabel: "¿Qué sorteás? (opcional)", prizePh: "Una polera, un libro, la licencia de JetBrains…",
+    kEntries: "participantes", kDigest: "huella de la lista", kStatus: "estado del sorteo",
+    frozenNote: "Sellaste la lista antes de que exista el número. La ronda que va a decidir todavía no nace, sale en unos segundos. De acá en adelante, agregar o sacar a alguien cambia la huella y se ve.",
+    winnerLabel: "Lo que salió", verifyTitle: "Por si alguien duda",
+    verifyHow: "Cualquiera puede rehacer este sorteo por su cuenta y le tiene que dar el mismo nombre. Con la huella de la lista y el número público de esa hora, no hay otro resultado posible. No hace falta que me creas. · Paso a paso: 1) abrí la ronda de quicknet y verificá su firma con la clave pública del faro · 2) randomness = sha256(firma) · 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, salteando repetidos. El protocolo entero está en docs/protocolo.md.",
+    reverify: "Rehacelo acá mismo", reverifyOk: "Lo rehicimos delante tuyo y dio el mismo nombre.",
     copySummary: "Copiar resumen", copied: "¡Copiado!",
-    tellWhatsapp: "Avisar por WhatsApp", tellEmail: "Avisar por correo",
+    tellWhatsapp: "Avisarle por WhatsApp", tellEmail: "Avisarle por correo",
     tellSubject: "Ganaste el sorteo 🦙",
     tellBody: (w, prize, n, u) =>
-      `¡Felicidades ${w}! Ganaste${prize ? " " + prize : " el sorteo"}.
-
-` +
-      `Fuiste elegido entre ${n} participantes por un sorteo que cualquiera puede verificar. ` +
-      `La lista se selló antes de que existiera la semilla, y la semilla la publicó un faro público de aleatoriedad.
-
-` +
-      `Comprobalo vos mismo: ${u}
-
-Sorteado con Tinkazo · https://tinkazo.vercel.app`,
-    qrCaption: "Escanea y verifica la ronda desde tu celular",
-    nextTitle: "Lo que viene: el sorteo queda guardado fuera de Tinkazo",
-    nextBody: "En la próxima versión, el sello de la lista y una ronda futura del faro quedan registrados en un contrato en Stellar que verifica la firma del faro por sí mismo y guarda el resultado. Cualquiera podrá leerlo y recomputarlo aunque Tinkazo no esté en línea. Este demo hace el sellado en tu navegador.",
-    footL: "Tinkazo", footR: "Hecho en Bolivia",
-    src: "fuente: pegado / csv", frozenAt: "congelada:", seed: "semilla pública · ronda", drandLink: "ver la ronda pública ↗",
-    placeholder: "Un participante por línea…", winsPrize: "Gana:", skip: "Saltar",
-    fetching: "Buscando la ronda…", badSig: "La firma de la ronda no verifica contra la clave pública de quicknet. Reintenta.",
+      `¡Ganaste, ${w}! Te llevás${prize ? " " + prize : " el sorteo"}.\n\n` +
+      `Saliste entre ${n} personas y nadie te eligió a dedo. La lista se cerró antes de que existiera el número que te sacó, ` +
+      `y ese número lo publica un servicio de azar público que no controla nadie.\n\n` +
+      `Revisalo vos mismo, te toma diez segundos: ${u}\n\n` +
+      `Sorteado con Tinkazo · https://tinkazo.vercel.app`,
+    qrCaption: "Apuntá el celular y revisalo vos mismo",
+    nextTitle: "Lo que viene: el sorteo deja de depender de mí",
+    nextBody: "En la próxima versión, la huella de la lista y la ronda que va a decidir quedan anotadas en un contrato en Stellar. El contrato verifica la firma del faro por su cuenta y se queda con el resultado. Si mañana Tinkazo desaparece, el sorteo sigue ahí y cualquiera lo rehace. Hoy, en este demo, el sellado pasa en tu navegador.",
+    footL: "Tinkazo", footR: "Hecho en Bolivia por Nicolás",
+    src: "fuente: pegado / csv", frozenAt: "congelada:", seed: "número público · ronda", drandLink: "ver la ronda pública ↗",
+    placeholder: "Un nombre por línea…", winsPrize: "Se lleva:", skip: "Saltar",
+    fetching: "Esperando el número público…",
+    badSig: "La firma de esa ronda no cuadra con la clave pública de quicknet. Probá de nuevo.",
     drawIn: (mmss) => `Sortear en ${mmss}`,
-    prTitle: "Precios", prNote: "La verificación nunca se cobra. Se cobra el show.",
-    pr1t: "Gratis", pr1p: "$0 · para siempre", pr1b: "Sorteos verificables ilimitados, ruleta y carrera, QR de verificación y prueba recomputable. Código abierto (MIT).",
-    pr2t: "Pro", pr2p: "US$ 5 / sorteo · pronto", pr2b: "Catálogo completo de juegos y skins, tu logo en el estadio, participantes ilimitados y soporte.",
-    pr3t: "Sponsor", pr3p: "lo paga tu sponsor · pronto", pr3b: "Sorteo brandeado: su marca en el estadio y la ruleta, en el momento de máxima atención del evento.",
-    cReady: "¡Llamas a sus puestos!", cReadyStellar: "¡Cohetes en la rampa!", cStart: "¡ARRANCA LA CARRERA!",
-    cLead: (n) => `¡${n} toma la punta!`, cLast: "¡ÚLTIMA RECTA!", cWin: (n) => `¡GANA ${n}!`,
+    prTitle: "Precios", prNote: "Verificar es gratis siempre. Lo que se cobra es el show.",
+    pr1t: "Gratis", pr1p: "$0 · y va a seguir así",
+    pr1b: "Sorteá las veces que quieras, con carrera o con ruleta, con QR y prueba para rehacerlo. El código está abierto (MIT). Si no me creés, leelo.",
+    pr2t: "Pro", pr2p: "US$ 5 / sorteo · pronto",
+    pr2b: "Más juegos y más skins, tu logo en el estadio y sin tope de participantes. Si algo falla en pleno evento, me escribís y contesto yo.",
+    pr3t: "Sponsor", pr3p: "lo paga tu sponsor · pronto",
+    pr3b: "El sorteo con la marca de tu sponsor en el estadio y en la ruleta. Es el único minuto del evento en que todos miran la pantalla al mismo tiempo. Vendéselo así.",
+    sealOnStellar: "Sellar en Stellar", sealed: "Sellado en Stellar", defaultMeta: "Sorteo de comunidad",
+    noAnchor: "sin registrar en Stellar", onChain: "verlo en la cadena",
+    txSimulating: "Armando la transacción…", txSigning: "Firmá en tu wallet…",
+    txSending: "Mandando a la red…", txConfirmed: "Quedó en Stellar ·",
+    "errAnchor.notFound": "El contrato no encuentra ese sorteo.",
+    "errAnchor.alreadyDrawn": "Ese sorteo ya se cerró.",
+    "errAnchor.tooFewEntries": "Con uno solo no hay sorteo. Metele al menos dos.",
+    "errAnchor.badWinnerCount": "Esa cantidad de ganadores no va.",
+    "errAnchor.roundTooSoon": "Esa ronda está demasiado cerca. Probá de nuevo.",
+    "errAnchor.roundTooFar": "Esa ronda está a más de 30 días. Elegí una más cerca.",
+    "errAnchor.roundNotReady": "Esa ronda todavía no se publica. Esperá unos segundos.",
+    "errAnchor.invalidSignature": "El contrato rechazó la firma de la ronda.",
+    "errAnchor.metaTooLong": "El nombre del premio es muy largo. Cortalo un poco.",
+    "errAnchor.noFunds": "Tu cuenta no tiene XLM para pagar la transacción.",
+    "errAnchor.userRejected": "Cancelaste la firma en la wallet.",
+    "errAnchor.rpcDown": "No pude hablar con la red de Stellar. Probá de nuevo.",
+    "errAnchor.unknown": "Falló la transacción. Probá de nuevo.",
     connectWallet: "Conectar wallet", disconnect: "Salir", cancel: "Cancelar", connecting: "Conectando…",
-    connectTitle: "Identidad del organizador",
-    connectLead: "Conectá una cuenta para sellar el sorteo en Stellar",
-    freighterHint: "La wallet del navegador. Firmás vos.",
-    freighterInstall: "No está instalada. Instalar desde freighter.app ↗",
+    connectTitle: "¿Quién organiza?",
+    connectLead: "Conectá una cuenta y el sorteo queda grabado en Stellar",
+    freighterHint: "La wallet del navegador. Firmás vos, nadie más.",
+    freighterInstall: "No la tenés instalada. Bajala de freighter.app ↗",
     guestWallet: "Cuenta de prueba",
-    guestHint: "El navegador crea una cuenta de testnet y la fondea. Sin instalar nada.",
-    guestReady: "Cuenta de prueba lista y fondeada en testnet.",
-    guestTestnetOnly: "La cuenta de prueba solo existe en testnet.",
-    guestReady2: "",
+    guestHint: "El navegador te arma una cuenta de testnet y le pone fondos. No instalás nada.",
+    guestReady: "Cuenta de prueba lista y con fondos en testnet.",
+    guestTestnetOnly: "La cuenta de prueba solo vive en testnet.",
     walletRejected: "Cancelaste la conexión en la wallet.",
-    walletUnknown: "No pude conectar la wallet. Reintentá.",
-    friendbotFailed: "No pude fondear la cuenta de prueba. Reintentá en un momento.",
-    wrongNetwork: "Tu wallet está en otra red. Cambiala a {red} para sellar.",
-    drandDown: "No pude alcanzar drand. Revisa tu conexión.",
-    summary: (w, n, d, r, u) => `Tinkazo · sorteo verificable (protocolo v2)\nGanador(es): ${w}\nEntries: ${n}\nlist_hash: ${d}\nRonda quicknet: ${r} → ${u}\nRecomputa: docs/protocolo.md §5`,
+    walletUnknown: "No pude conectar la wallet. Probá de nuevo.",
+    friendbotFailed: "No pude ponerle fondos a la cuenta de prueba. Probá en un ratito.",
+    wrongNetwork: "Tu wallet está en otra red. Pasala a {red} para sellar.",
+    drandDown: "No llego a drand. Revisá tu conexión.",
+    cReady: ["¡Llamas a sus puestos!", "¡Se acomodan las llamas!", "¡Silencio, que arranca esto!", "¡Miren la pantalla, señores!"],
+    cReadyStellar: ["¡Cohetes en la rampa!", "¡Motores encendidos!", "¡Cuenta regresiva, señores!", "¡Agárrense que despegan!"],
+    cStart: ["¡ARRANCA LA CARRERA!", "¡Y SALIERON!", "¡ALLÁ VAN!", "¡EMPEZÓ ESTO!"],
+    cLast: ["¡ÚLTIMA RECTA!", "¡LOS ÚLTIMOS METROS!", "¡SE DEFINE ACÁ!", "¡NO RESPIRA NADIE!"],
+    cLead: (n) => pick([`¡${n} toma la punta!`, `¡Se le va ${n}!`, `¡${n} al frente, señores!`, `¡Ahora manda ${n}!`, `¡${n} los pasa a todos!`]),
+    cWin: (n) => pick([`¡GANA ${n}!`, `¡SE LO LLEVA ${n}!`, `¡Y ES ${n}, SEÑORES!`, `¡${n}, ESE ES EL TINKAZO!`]),
+    summary: (w, n, d, r, u) =>
+      `Tinkazo · sorteo verificable (protocolo v2)\nGanador(es): ${w}\nEntries: ${n}\nlist_hash: ${d}\nRonda quicknet: ${r} → ${u}\nRehacelo: docs/protocolo.md §5`,
   },
   en: {
-    badge: "For your meetup raffle",
-    h1: 'Raffles that <span class="hl">cannot be rigged</span>.',
-    lead: "Paste your attendee list and draw on the big screen: llama race or roulette. The winner is decided by public randomness nobody controls — not even you — and anyone can check it afterwards from their phone.",
-    note: "Try it now with your own list: free, no account, nothing to install.",
-    s1t: "Import participants", s1b: "Paste the list, upload a CSV or bring them from Luma/Meetup. Nobody needs a wallet or an account.",
-    s2t: "Freeze the list", s2b: "Once frozen, the list gets a unique fingerprint and a timestamp. If anyone adds or removes a name afterwards, the fingerprint changes and it shows.",
-    s3t: "Pick your game and draw", s3b: "Fullscreen race or roulette. The winner derives from public randomness; the game just tells it beautifully.",
+    badge: "For whoever has to run the raffle",
+    h1: 'Raffles <span class="hl">nobody can rig</span>. Not even you.',
+    lead: "Paste your attendee list and draw it on the big screen, llama race or roulette. The winner comes out of a random number published on the internet at a fixed time, after you locked the list. You don't pick it. I don't either. And anyone can check it from their phone.",
+    note: "Try it right now with your real list. It's free and I don't even ask for your email.",
+    s1t: "Bring your list",
+    s1b: "Paste the names or upload a CSV. Luma and Meetup are on the way. Your people install nothing and sign up for nothing.",
+    s2t: "Freeze the list",
+    s2b: "Freezing stamps the list with a fingerprint and a time. If someone slips in a friend or drops a name later, the fingerprint changes and everybody sees it. There's no hiding it.",
+    s3t: "Pick a game and draw",
+    s3b: "Llama race or roulette, fullscreen. By the time the animation starts, the public number already picked the winner. The show is the show. The draw was done before it.",
     p1: "Participants", p2: "Frozen list", p3: "The draw",
     srcPaste: "Paste list", srcCsv: "Upload CSV", srcLuma: "Luma · soon", srcMeetup: "Meetup · soon",
     sample: "Load sample", freeze: "Freeze list", draw: "Run the draw", winners: "Prizes",
     gameLabel: "Game", gameRace: "Llama race", gameStellar: "Stellar race", gameWheel: "Roulette",
-    wheelCap: "The wheel looks great up to 24 participants; beyond that, the race is your game.",
-    prizeLabel: "What are you raffling? (optional)", prizePh: "E.g. JetBrains license, book, ticket…",
+    wheelCap: "The wheel looks great up to about 24 names. Past that, run the race.",
+    prizeLabel: "What are you giving away? (optional)", prizePh: "A t-shirt, a book, that JetBrains license…",
     kEntries: "entries", kDigest: "list fingerprint", kStatus: "raffle status",
-    frozenNote: "The list was sealed before the seed exists: the beacon's target round is only born in a few seconds. Nobody can add or remove participants without changing the hash.",
-    winnerLabel: "Result", verifyTitle: "Proof of fairness",
-    verifyHow: "Anyone can repeat this draw on their own: with the list fingerprint and the public number published at that time, the result always comes out the same. You don't have to take our word for it. · Step by step: 1) open the quicknet round and check its signature against the beacon's public key · 2) randomness = sha256(signature) · 3) idx = first 8 bytes of sha256(randomness ‖ list_hash ‖ counter) mod entries, skipping repeats. Full protocol in docs/protocolo.md.",
-    reverify: "Recompute right here", reverifyOk: "Verified: the recomputation reproduces the exact result.",
+    frozenNote: "You sealed the list before the number existed. The round that decides this hasn't been published yet, it lands in a few seconds. From here on, adding or removing anyone changes the fingerprint and it shows.",
+    winnerLabel: "What came out", verifyTitle: "In case anyone doubts it",
+    verifyHow: "Anyone can run this draw again on their own and has to land on the same name. With the list fingerprint and the public number from that minute, no other result is possible. You don't have to take my word for it. · Step by step: 1) open the quicknet round and check its signature against the beacon's public key · 2) randomness = sha256(signature) · 3) idx = first 8 bytes of sha256(randomness ‖ list_hash ‖ counter) mod entries, skipping repeats. Whole protocol in docs/protocolo.md.",
+    reverify: "Run it again right here", reverifyOk: "Ran it again in front of you. Same name.",
     copySummary: "Copy summary", copied: "Copied!",
     tellWhatsapp: "Tell them on WhatsApp", tellEmail: "Tell them by email",
     tellSubject: "You won the raffle 🦙",
     tellBody: (w, prize, n, u) =>
-      `Congratulations ${w}! You won${prize ? " " + prize : " the raffle"}.
-
-` +
-      `You were picked from ${n} participants by a draw anyone can verify. ` +
-      `The list was sealed before the seed existed, and the seed was published by a public randomness beacon.
-
-` +
-      `Check it yourself: ${u}
-
-Drawn with Tinkazo · https://tinkazo.vercel.app`,
-    qrCaption: "Scan and verify the round from your phone",
-    nextTitle: "Next: the draw stored outside Tinkazo",
-    nextBody: "In the next version, the list seal and a future beacon round are recorded in a Stellar contract that verifies the beacon signature itself and stores the result. Anyone will be able to read and recompute it even if Tinkazo is offline. This demo seals the list in your browser.",
-    footL: "Tinkazo", footR: "Built in Bolivia",
-    src: "source: paste / csv", frozenAt: "frozen:", seed: "public seed · round", drandLink: "view the public round ↗",
-    placeholder: "One participant per line…", winsPrize: "Wins:", skip: "Skip",
-    fetching: "Fetching the round…", badSig: "The round signature does not verify against quicknet's public key. Try again.",
+      `You won, ${w}! You're taking home${prize ? " " + prize : " the raffle"}.\n\n` +
+      `You came out of ${n} people and nobody hand-picked you. The list was locked before the number that drew you existed, ` +
+      `and that number is published by a public randomness beacon nobody controls.\n\n` +
+      `Check it yourself, it takes ten seconds: ${u}\n\n` +
+      `Drawn with Tinkazo · https://tinkazo.vercel.app`,
+    qrCaption: "Point your phone at it and check for yourself",
+    nextTitle: "What's next: the draw stops depending on me",
+    nextBody: "In the next version, the list fingerprint and the round that will decide go into a Stellar contract. The contract checks the beacon signature on its own and keeps the result. If Tinkazo disappears tomorrow, the draw is still there and anyone can run it again. Today, in this demo, the sealing happens in your browser.",
+    footL: "Tinkazo", footR: "Built in Bolivia by Nicolás",
+    src: "source: paste / csv", frozenAt: "frozen:", seed: "public number · round", drandLink: "see the public round ↗",
+    placeholder: "One name per line…", winsPrize: "Takes home:", skip: "Skip",
+    fetching: "Waiting for the public number…",
+    badSig: "That round's signature doesn't check out against quicknet's public key. Try again.",
     drawIn: (mmss) => `Draw in ${mmss}`,
-    prTitle: "Pricing", prNote: "Verification is never charged. We charge for the show.",
-    pr1t: "Free", pr1p: "$0 · forever", pr1b: "Unlimited verifiable raffles, roulette and race, verification QR and recomputable proof. Open source (MIT).",
-    pr2t: "Pro", pr2p: "US$ 5 / raffle · soon", pr2b: "Full game and skin catalog, your logo in the stadium, unlimited participants and support.",
-    pr3t: "Sponsor", pr3p: "your sponsor pays · soon", pr3b: "Branded raffle: their brand in the stadium and the wheel, at the event's peak-attention moment.",
-    cReady: "Llamas, on your marks!", cReadyStellar: "Rockets on the launchpad!", cStart: "AND THEY'RE OFF!",
-    cLead: (n) => `${n} takes the lead!`, cLast: "FINAL STRETCH!", cWin: (n) => `${n} WINS!`,
+    prTitle: "Pricing", prNote: "Verifying is always free. What costs money is the show.",
+    pr1t: "Free", pr1p: "$0 · and it stays that way",
+    pr1b: "Draw as many times as you want, race or roulette, with a QR and a proof anyone can rerun. The code is open (MIT). If you don't believe me, read it.",
+    pr2t: "Pro", pr2p: "US$ 5 / raffle · soon",
+    pr2b: "More games and more skins, your logo in the stadium, no cap on participants. If something breaks mid-event, you write and I answer.",
+    pr3t: "Sponsor", pr3p: "your sponsor pays · soon",
+    pr3b: "The raffle wearing your sponsor's brand, in the stadium and on the wheel. It's the one minute of the event when everyone looks at the screen at once. Sell it to them like that.",
+    sealOnStellar: "Seal on Stellar", sealed: "Sealed on Stellar", defaultMeta: "Community raffle",
+    noAnchor: "not recorded on Stellar", onChain: "see it on chain",
+    txSimulating: "Building the transaction…", txSigning: "Sign in your wallet…",
+    txSending: "Sending it to the network…", txConfirmed: "It's on Stellar ·",
+    "errAnchor.notFound": "The contract can't find that raffle.",
+    "errAnchor.alreadyDrawn": "That raffle is already closed.",
+    "errAnchor.tooFewEntries": "One name is not a raffle. Add at least two.",
+    "errAnchor.badWinnerCount": "That number of winners doesn't work.",
+    "errAnchor.roundTooSoon": "That round is too close. Try again.",
+    "errAnchor.roundTooFar": "That round is more than 30 days out. Pick a closer one.",
+    "errAnchor.roundNotReady": "That round isn't published yet. Wait a few seconds.",
+    "errAnchor.invalidSignature": "The contract rejected the round signature.",
+    "errAnchor.metaTooLong": "The prize name is too long. Trim it a bit.",
+    "errAnchor.noFunds": "Your account has no XLM to pay for the transaction.",
+    "errAnchor.userRejected": "You cancelled the signature in the wallet.",
+    "errAnchor.rpcDown": "Couldn't reach the Stellar network. Try again.",
+    "errAnchor.unknown": "The transaction failed. Try again.",
     connectWallet: "Connect wallet", disconnect: "Sign out", cancel: "Cancel", connecting: "Connecting…",
-    connectTitle: "Organizer identity",
-    connectLead: "Connect an account to seal the raffle on Stellar",
-    freighterHint: "The browser wallet. You sign.",
-    freighterInstall: "Not installed. Get it at freighter.app ↗",
+    connectTitle: "Who's running this?",
+    connectLead: "Connect an account and the draw gets recorded on Stellar",
+    freighterHint: "The browser wallet. You sign, nobody else.",
+    freighterInstall: "You don't have it installed. Get it at freighter.app ↗",
     guestWallet: "Test account",
-    guestHint: "The browser creates a testnet account and funds it. Nothing to install.",
+    guestHint: "The browser makes you a testnet account and funds it. Nothing to install.",
     guestReady: "Test account ready and funded on testnet.",
-    guestTestnetOnly: "The test account only exists on testnet.",
-    guestReady2: "",
+    guestTestnetOnly: "The test account only lives on testnet.",
     walletRejected: "You cancelled the connection in the wallet.",
     walletUnknown: "Couldn't connect the wallet. Try again.",
-    friendbotFailed: "Couldn't fund the test account. Try again in a moment.",
-    wrongNetwork: "Your wallet is on another network. Switch to {red} to seal.",
-    drandDown: "Couldn't reach drand. Check your connection.",
-    summary: (w, n, d, r, u) => `Tinkazo · verifiable raffle (protocol v2)\nWinner(s): ${w}\nEntries: ${n}\nlist_hash: ${d}\nquicknet round: ${r} → ${u}\nRecompute: docs/protocolo.md §5`,
+    friendbotFailed: "Couldn't fund the test account. Try again in a minute.",
+    wrongNetwork: "Your wallet is on another network. Switch it to {red} to seal.",
+    drandDown: "Can't reach drand. Check your connection.",
+    cReady: ["Llamas on your marks!", "Llamas lining up!", "Quiet down, here we go!", "Eyes on the screen, people!"],
+    cReadyStellar: ["Rockets on the launchpad!", "Engines lit!", "Countdown, people!", "Hold on, they're lifting off!"],
+    cStart: ["AND THEY'RE OFF!", "HERE WE GO!", "THERE THEY GO!", "GO GO GO!"],
+    cLast: ["FINAL STRETCH!", "LAST FEW METERS!", "IT'S DECIDED RIGHT HERE!", "NOBODY IS BREATHING!"],
+    cLead: (n) => pick([`${n} takes the lead!`, `${n} is gone!`, `${n} out in front!`, `${n} pushes past everyone!`, `It's ${n} now!`]),
+    cWin: (n) => pick([`${n} WINS!`, `${n} TAKES IT ALL!`, `AND IT'S ${n}, PEOPLE!`, `${n}, THAT'S THE TINKAZO!`]),
+    summary: (w, n, d, r, u) =>
+      `Tinkazo · verifiable raffle (protocol v2)\nWinner(s): ${w}\nEntries: ${n}\nlist_hash: ${d}\nquicknet round: ${r} → ${u}\nRun it again: docs/protocolo.md §5`,
   },
 };
 
@@ -145,9 +203,10 @@ const listeners: Array<(l: Lang) => void> = [];
 
 export const getLang = (): Lang => current;
 
-/** Cadena traducida; devuelve la clave si no existe (visible, para detectarlo). */
+/** Cadena traducida. Si la clave tiene variantes, sortea una. */
 export function t(key: string): string {
   const v = T[current][key];
+  if (Array.isArray(v)) return pick(v);
   return typeof v === "string" ? v : key;
 }
 
@@ -162,6 +221,7 @@ export function setLang(l: Lang): void {
   document.getElementById("l-es")?.classList.toggle("on", l === "es");
   document.getElementById("l-en")?.classList.toggle("on", l === "en");
   const dict = T[l];
+  // Las claves con variantes se saltan: el markup nunca las usa.
   document.querySelectorAll<HTMLElement>("[data-i]").forEach((el) => {
     const v = dict[el.dataset.i ?? ""];
     if (typeof v === "string") el.textContent = v;
