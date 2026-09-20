@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "check:lore": "node scripts/check-lore.mjs",
+    "check:qr": "node scripts/check-qr.mjs",
     "preflight:mainnet": "node scripts/preflight-mainnet.mjs",
     "audit:game": "node scripts/audit-game.mjs",
     "smoke": "node scripts/smoke.mjs"
@@ -20,6 +21,7 @@
     "node": ">=22"
   },
   "devDependencies": {
+    "jsqr": "^1.4.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.0",
     "vitest": "^5.0.1"
@@ -29,6 +31,7 @@
     "@noble/hashes": "^2.4.0",
     "@pollar/core": "^0.11.3",
     "@stellar/freighter-api": "^6.0.1",
-    "@stellar/stellar-sdk": "^17.1.0"
+    "@stellar/stellar-sdk": "^17.1.0",
+    "qrcode-generator": "^2.0.4"
   }
 }

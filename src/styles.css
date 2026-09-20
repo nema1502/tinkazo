@@ -268,6 +268,9 @@
   label.chip.live:focus-within { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 6px var(--yellow); }
   /* Una huella de 64 caracteres desbordaba la tarjeta en celular. */
   .note { word-break: break-word; overflow-wrap: anywhere; }
+  /* El QR se dibuja más grande de lo que se muestra y se achica acá: así
+     los módulos quedan nítidos en vez de interpolados. */
+  #qr-img { width: 140px; height: 140px; image-rendering: pixelated; }
   /* El nombre del ganador, con borde de tinta. Sin `paint-order` el trazo se
      pinta encima del relleno y se come la letra. */
   .winner-name {

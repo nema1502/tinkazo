@@ -12,6 +12,7 @@ import { stellarConstellation } from "../games/constellation";
 import { ledgerClose } from "../games/ledger";
 import { pasanaku } from "../games/pasanaku";
 import { loreFor } from "../games/lore";
+import { qrDataUrl } from "./qr";
 import { wheelSpin } from "../games/wheel";
 import { secondsToRound } from "./freeze";
 
@@ -190,7 +191,6 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   const dl = $<HTMLAnchorElement>("drand-link");
   dl.href = url;
   dl.textContent = t("drandLink");
-  $("qr-box").style.display = "block";
   confetti();
   // El comprobante se arma aparte: comprimir la lista es asíncrono y no vale
   // la pena hacer esperar al confeti por eso.
@@ -198,6 +198,32 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
 }
 
 let proofLink = "";
+
+/**
+ * Dibuja el QR del comprobante en el navegador.
+ *
+ * Nunca sale a internet a buscarlo: el enlace lleva los nombres en el
+ * fragmento, y mandárselo a otro servidor para que dibuje un cuadradito
+ * anulaba toda la disciplina de privacidad del producto. Además, así funciona
+ * con el wifi del evento caído.
+ */
+async function paintQr(link: string): Promise<void> {
+  const box = $("qr-box");
+  const img = $<HTMLImageElement>("qr-img");
+  try {
+    const url = await qrDataUrl(link);
+    if (!url) {
+      // Una lista enorme no entra en un QR. El enlace se sigue pudiendo
+      // copiar y compartir, así que se esconde el recuadro y ya.
+      box.style.display = "none";
+      return;
+    }
+    img.src = url;
+    box.style.display = "block";
+  } catch {
+    box.style.display = "none";
+  }
+}
 
 /**
  * Arma el comprobante y apunta el QR y los avisos a la página de verificación,
@@ -225,8 +251,7 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
     link = roundLink;
   }
   proofLink = link;
-  $<HTMLImageElement>("qr-img").src =
-    `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(link)}`;
+  await paintQr(link);
   setNotifyLinks(names, winners, link);
 }
 

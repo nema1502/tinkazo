@@ -77,6 +77,8 @@ No hay backend ni base de datos. Las únicas dependencias en ejecución son el R
 
 Dos consecuencias concretas. En la cadena viaja **solo la huella de la lista**, nunca los nombres. Y el comprobante viaja en el fragmento de la URL, esa parte después del numeral que **no se envía al servidor**: los nombres de tus participantes no llegan ni a los registros del hosting.
 
+Esa disciplina se rompe fácil sin darse cuenta. El QR del comprobante se pedía a un servicio de terceros, lo que sacaba los nombres del navegador igual, solo que a otro lado. Ahora se dibuja acá, y de paso funciona con el wifi del evento caído. Hay una comprobación automática que lo lee con un lector independiente: `pnpm check:qr`.
+
 ## Correr en local
 
 ```bash
