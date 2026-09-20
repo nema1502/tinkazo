@@ -526,6 +526,8 @@ para no quedar mal delante de gente que sabe del tema.
 **Entonces** se comprueba que cada enlace de fuente responde
 **Y** una fuente caída falla la corrida en vez de pasar desapercibida.
 
+Resultado (2026-09-20): `pnpm check:lore` comprueba las doce fuentes y que las dos mitades del texto estén en los dos diccionarios. Corre en la integración continua. Lo que no puede comprobar es que la fuente diga lo que la tarjeta dice: eso lo comprueba una persona al escribirla, y está anotado en el script.
+
 ---
 
 ## Épica 9: El narrador habla

@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
+    "check:lore": "node scripts/check-lore.mjs",
     "audit:game": "node scripts/audit-game.mjs",
     "smoke": "node scripts/smoke.mjs"
   },

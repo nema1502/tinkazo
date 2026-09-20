@@ -38,3 +38,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      # Las tarjetas de historia afirman hechos con fuente primaria. Una fuente
+      # caída es un dato inventado a los seis meses, así que se comprueba acá.
+      - name: Fuentes de las tarjetas de historia
+        run: node scripts/check-lore.mjs
