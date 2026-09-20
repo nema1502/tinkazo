@@ -192,6 +192,18 @@ Toda cadena visible existe en español e inglés; el idioma se elige con el conm
 #### FR-25: Modo claro y oscuro
 La interfaz respeta `prefers-color-scheme` y permite forzar el tema.
 
+#### FR-26: Catálogo de juegos
+El organizador elige entre varios juegos para mostrar el resultado. Ninguno calcula nada: reciben el ganador ya fijado por el Protocolo. Cada juego pasa las 15 comprobaciones del auditor antes de entrar, y la segunda de esas comprobaciones —que el nombre en pantalla sea el que fijó el Protocolo— no se negocia.
+
+#### FR-27: El narrador habla
+El relato del sorteo se dice en voz alta con la voz del navegador, en el idioma de la página, con el ritmo subiendo según la tensión del momento. Si la máquina no tiene voz instalada, se avisa antes del sorteo y el sorteo funciona igual.
+
+#### FR-28: La tarjeta que enseña
+Después de revelar al ganador se muestra una tarjeta que contesta una pregunta sobre lo que el juego acaba de mostrar, con enlace a fuente primaria. Nunca antes del resultado. La tarjeta se elige con la ronda, así que es determinista.
+
+#### FR-29: Columnas de un archivo
+Cuando la lista viene de un archivo con varias columnas, el organizador elige cuál tiene los nombres. La lista canónica del Protocolo no cambia: sigue recibiendo un nombre por línea.
+
 ## Requisitos no funcionales transversales
 
 - **NFR-1 Determinismo verificable.** Todo lo que decide un resultado está en el Protocolo y es recomputable con herramientas públicas; ningún paso depende de un servidor de Tinkazo.
@@ -256,3 +268,5 @@ La interfaz respeta `prefers-color-scheme` y permite forzar el tema.
 - §4.6 FR-23 — No convertir Modo libre a Anclaje después del hecho.
 - §Requisitos no funcionales NFR-3 — Confirmado con medición: 0,18 XLM por Sorteo en testnet; el umbral pasó de 0,1 a 0,25 XLM porque la renta de 120 días domina el costo.
 - §5 — Se elimina Clerk en la versión Stellar.
+- §4 — Se agregan FR-26 a FR-29 (2026-09-20): catálogo de juegos, narrador con voz, tarjeta que enseña y selección de columna. Los cuatro salieron de usar el producto, no de planificarlo.
+- §Requisitos no funcionales — La espera entre sellar y sortear baja de 45 a 10 segundos en Modo libre (2026-09-20). Lo que la propiedad necesita es que la ronda esté en el futuro al sellar, y quicknet publica una cada tres segundos. Con Anclaje sigue en 45 porque el Contrato exige 30 de margen y es inmutable.

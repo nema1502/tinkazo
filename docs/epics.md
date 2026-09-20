@@ -37,6 +37,10 @@ A-1 Vectores cruzados Rust/TS en `docs/vectors.json` · A-2 Adaptador de wallet 
 | FR-17, FR-18, FR-19, FR-20, FR-21 | 4 |
 | FR-22, FR-23 | 2 |
 | FR-24, FR-25 | 2 (y regla A-6 en todas) |
+| FR-26 | 7 |
+| FR-27 | 9 |
+| FR-28 | 8 |
+| FR-29 | 2 (la lista canónica no cambia: la columna se elige antes) |
 | NFR-3, NFR-7 | 1 y 5 |
 | D-07 (Pollar) | 6 |
 
