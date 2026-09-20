@@ -17,7 +17,7 @@ Toda comunidad hace sorteos: libros, licencias, entradas, poleras. Y en todos ha
 1. **Traés la lista.** Pegás los nombres o subís un CSV. Los participantes no instalan nada ni se crean cuenta. Nunca.
 2. **Se congela la lista.** Se calcula su huella (SHA-256) y se compromete contra una **ronda futura** de [drand](https://drand.love), el faro público de aleatoriedad de la League of Entropy. La clave está en el orden: cuando cerrás la lista, el número que va a decidir **todavía no existe**.
 3. **Llega el número.** Cuarenta y cinco segundos después, drand publica esa ronda firmada. Ni vos ni yo pudimos elegirla.
-4. **El show.** Carrera de llamas, carrera espacial o ruleta, a pantalla completa con narrador. Cuando arranca la animación el ganador ya está decidido: el juego solo lo cuenta.
+4. **El show.** Cinco juegos a pantalla completa, con narrador. Cuando arranca la animación el ganador ya está decidido: el juego solo lo cuenta.
 5. **Cualquiera revisa.** El comprobante es un enlace. Quien lo abre ve la página rehacer el sorteo desde cero en su propio navegador y dar un veredicto.
 
 Con una cuenta de Stellar conectada, el sello y el resultado quedan **registrados en un contrato**, que verifica la firma del faro por su cuenta. Ese registro sigue ahí aunque Tinkazo desaparezca.
@@ -28,7 +28,19 @@ Con una cuenta de Stellar conectada, el sello y el resultado quedan **registrado
 
 Es inmutable: no tiene administrador ni actualización, y no custodia fondos. `draw` no pide permiso a nadie, así que el organizador no puede retener un resultado que no le gusta. 19 tests, incluida una ronda real de quicknet y vectores compartidos con la implementación en TypeScript. WASM de 11,4 KB.
 
-**El sitio**, en Vite y TypeScript sin framework. Tres juegos, interfaz bilingüe, tema claro y oscuro, y tres formas de entrar: Freighter, Google vía Pollar, o una cuenta de prueba que el navegador crea y fondea solo.
+**El sitio**, en Vite y TypeScript sin framework. Interfaz bilingüe, tema claro y oscuro, y tres formas de entrar: Freighter, Google vía Pollar, o una cuenta de prueba que el navegador crea y fondea solo.
+
+**Cinco juegos**, todos sembrados con la misma ronda de drand, así que la animación de un sorteo es reproducible:
+
+| Juego | Qué es | Aguanta |
+|---|---|---|
+| Constelación Stellar | Un pago que salta de estrella en estrella buscando ruta, como un *path payment*. Deja dibujada una constelación. | 200 |
+| Cierre de Libro | Tarjetas barridas por el cierre de un ledger hasta que queda una sellada. Dura lo que tarda Stellar en cerrar uno. | 200 |
+| Carrera de llamas | Lo nuestro. Ocho carriles por la cordillera. | 8 en pantalla |
+| Carrera de cohetes | La misma carrera, en el espacio. | 8 en pantalla |
+| Ruleta | La de siempre. | 24 |
+
+Ninguno decide nada: el ganador llega dado por el protocolo y el juego solo lo cuenta. Hay un auditor que lo comprueba en cada juego, con doce verificaciones. La que importa: el nombre en pantalla tiene que ser el que fijó el protocolo.
 
 **La página de verificación**, que da uno de tres veredictos:
 
@@ -76,7 +88,9 @@ cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
-Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=race|stellar|wheel`, `?instant=1`, `?lead=3`.
+Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|race|rockets|wheel`, `?instant=1`, `?lead=3`.
+
+Para auditar un juego: `node scripts/audit-game.mjs <juego>`.
 
 ## Estructura
 
@@ -84,7 +98,7 @@ Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=race|stellar
 index.html, verificar.html   Las dos páginas
 src/protocol/                Lista canónica, selección, drand, comprobante
 src/stellar/                 Red, wallets y cliente del contrato
-src/games/                   Carrera (con temas) y ruleta
+src/games/                   Los cinco juegos y el andamiaje que comparten
 contracts/raffle/            El contrato Soroban, en Rust
 docs/                        Protocolo, PRD, arquitectura, épicas, juegos, despliegues
 scripts/                     Despliegue, smoke test y auditor de juegos
@@ -120,6 +134,8 @@ Para agregar un juego, mirá [docs/juegos.md](docs/juegos.md): hay que pasar el 
 **Raffles nobody can rig. Not even you.**
 
 In Bolivia, a *tinkazo* is that hunch that today is your lucky day. Tinkazo draws prizes at community events: paste the list, the winner comes out on the big screen with a llama race or a roulette, and anyone can check afterwards that it was clean.
+
+Five full-screen games tell the result: a payment hopping star to star, a ledger close sweeping cards away, two races and a roulette. None of them decides anything.
 
 The list is sealed with SHA-256 and committed against a **future** round of the [drand](https://drand.love) public randomness beacon, so when you lock the list the number that decides doesn't exist yet. A Soroban contract on Stellar verifies that round's BLS12-381 signature **on chain** and derives the winner deterministically. Participants never need a wallet or an account.
 
