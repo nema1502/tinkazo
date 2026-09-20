@@ -105,12 +105,12 @@ function render(): void {
   net.title = t(network.name === "testnet" ? "netTestHint" : "netMainHint");
   box.appendChild(net);
 
-  const link = document.createElement("a");
-  link.className = session.name ? "hello" : "hello mono";
-  link.href = accountUrl(session.address);
-  link.target = "_blank";
-  link.rel = "noopener";
+  // Tocar el nombre abre el panel de la cuenta, con todo lo tuyo junto.
+  const link = document.createElement("button");
+  link.className = session.name ? "hello mini" : "hello mini mono";
+  link.type = "button";
   link.title = `${session.label} · ${session.address}`;
+  link.addEventListener("click", () => void showAccount());
   // Si la cuenta trae nombre, se muestra el nombre: una dirección de 56
   // caracteres no le dice nada a nadie, y menos en una pantalla grande.
   if (session.avatar) {
@@ -124,10 +124,32 @@ function render(): void {
   link.appendChild(document.createTextNode(session.name || shortAddress(session.address)));
   box.appendChild(link);
 
-  box.appendChild(button(t("disconnect"), "", () => void disconnect()));
+  // El botón de salir vive adentro del panel: la cabecera de un celular no
+  // aguanta insignia, nombre y dos botones sin romperse.
 
   if (wrongNetwork) notice(t("wrongNetwork").replace("{red}", network.name), true);
   void refreshFunds();
+}
+
+/** Abre el panel con todo lo de la cuenta: quién sos, red, saldo, sorteos. */
+async function showAccount(): Promise<void> {
+  if (!session) return;
+  const [{ openAccount }, w] = await Promise.all([import("./account"), loadWallets()]);
+  const balance = await w.xlmBalance(session.address);
+  if (!session) return;
+  openAccount({
+    address: session.address,
+    label: session.label,
+    balance,
+    ...(session.name ? { name: session.name } : {}),
+    ...(session.avatar ? { avatar: session.avatar } : {}),
+    onDisconnect: () => void disconnect(),
+    onFund: () => {
+      const box = $("fund-box");
+      renderFundBox(box, session?.address ?? "");
+      box.scrollIntoView({ behavior: "smooth", block: "center" });
+    },
+  });
 }
 
 /* -------------------------------------------------------------------- puerta */

@@ -307,6 +307,17 @@
   label.chip.live:focus-within { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 6px var(--yellow); }
   /* Una huella de 64 caracteres desbordaba la tarjeta en celular. */
   .note { word-break: break-word; overflow-wrap: anywhere; }
+  /* El panel de la cuenta. */
+  .acct-card { max-width: 420px; }
+  .acct-who { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .acct-who img { width: 44px; height: 44px; border: 2px solid var(--ink); background: var(--card); }
+  .acct-who b { display: block; font-size: 17px; font-weight: 800; }
+  .acct-who span { font-size: 11px; color: var(--muted); }
+  .acct-net { font-family: ui-monospace, Consolas, monospace; font-size: 12px; font-weight: 700; color: var(--ink2); }
+  .acct-prefs, .acct-hist { margin-top: 18px; padding-top: 14px; border-top: 2px dashed var(--ink); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .acct-prefs .kicker, .acct-hist .kicker { width: 100%; }
+  .acct-hist { display: block; }
+  .acct-hist .entity { margin-top: 6px; }
   .modal-by { margin-top: 14px; font-size: 11px; color: var(--muted); text-align: center; line-height: 1.5; }
 
   /* La puerta. Sin cuenta conectada no se sortea, así que el bloque de
