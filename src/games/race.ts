@@ -2,6 +2,7 @@ import { $ } from "../dom";
 import { T, getLang, t } from "../i18n";
 import { LCOLORS, avatar, instantMode, type Beacon } from "../state";
 import { beep, fanfare } from "../sound";
+import { THEMES, type ThemeId } from "./themes";
 
 /* Modo estadio: carrera de llamas a pantalla completa, sembrada con la semilla. */
 
@@ -27,7 +28,14 @@ export function skipRace(): void {
   stApi?.skip();
 }
 
-export function stadiumRace(names: string[], winnerIdx: number, beacon: Beacon, done: () => void): void {
+export function stadiumRace(
+  names: string[],
+  winnerIdx: number,
+  beacon: Beacon,
+  done: () => void,
+  themeId: ThemeId = "andes",
+): void {
+  const skin = THEMES[themeId];
   if (instantMode) {
     done();
     return;
@@ -61,9 +69,12 @@ export function stadiumRace(names: string[], winnerIdx: number, beacon: Beacon, 
     return ((q ^ (q >>> 14)) >>> 0) / 4294967296;
   };
 
-  const dark = matchMedia("(prefers-color-scheme: dark)").matches
+  const prefersDark = matchMedia("(prefers-color-scheme: dark)").matches
     ? document.documentElement.dataset.theme !== "light"
     : document.documentElement.dataset.theme === "dark";
+  // En el espacio siempre es de noche, sin importar el tema de la página.
+  const dark = skin.alwaysNight || prefersDark;
+  const tone = <T>(v: { light: T; dark: T }): T => (dark ? v.dark : v.light);
   const cs = getComputedStyle(document.documentElement);
   const P = LCOLORS.map((v) => cs.getPropertyValue(v).trim());
   const INK = "#191919";
@@ -90,14 +101,19 @@ export function stadiumRace(names: string[], winnerIdx: number, beacon: Beacon, 
   const peaks: Ridge[] = Array.from({ length: 24 }, (_, k) => ({ dx: k * 0.09, h: 0.14 + rng() * 0.16, w: 0.07 + rng() * 0.05 }));
   const hills: Ridge[] = Array.from({ length: 18 }, (_, k) => ({ dx: k * 0.13, h: 0.05 + rng() * 0.07, w: 0.11 + rng() * 0.06 }));
   const clouds = Array.from({ length: 6 }, () => ({ x: rng(), y: 0.06 + rng() * 0.16, sc: 0.5 + rng(), sp: 4 + rng() * 8 }));
-  const stars = Array.from({ length: 60 }, () => ({ x: rng(), y: rng() * 0.4, r: rng() * 1.4 + 0.4 }));
+  const starCount = skin.alwaysNight ? 150 : 60;
+  // Con tema espacial las estrellas cubren toda la pantalla, no solo el cielo.
+  const starSpread = skin.alwaysNight ? 1 : 0.4;
+  const stars = Array.from({ length: starCount }, () => ({
+    x: rng(), y: rng() * starSpread, r: rng() * 1.4 + 0.4,
+  }));
 
   const DUR = 15;
   let phase: "count" | "race" | "done" | "dead" = "count";
   let tPhase = 0, tRace = 0, camX = 0, shake = 0, lastLeader = -1, leadCd = 0, saidLast = false, finished = false, tFreeze = 0;
   let lastBeepN = 4;
   const winnerName = names[winnerIdx] ?? "";
-  say(t("cReady"));
+  say(t(skin.readyKey));
 
   function say(msg: string): void {
     commentEl.textContent = msg;
@@ -185,22 +201,36 @@ export function stadiumRace(names: string[], winnerIdx: number, beacon: Beacon, 
     c.translate(shx, shy);
     // Cielo
     const sky = c.createLinearGradient(0, 0, 0, h * 0.62);
-    if (dark) { sky.addColorStop(0, "#141032"); sky.addColorStop(1, "#3a1d5c"); }
-    else { sky.addColorStop(0, "#8fd3ff"); sky.addColorStop(1, "#ffe9c4"); }
+    const [skyTop, skyBottom] = tone(skin.sky);
+    sky.addColorStop(0, skyTop);
+    sky.addColorStop(1, skyBottom);
     c.fillStyle = sky;
     c.fillRect(-20, -20, w + 40, h * 0.64 + 20);
     if (dark) {
       c.fillStyle = "rgba(255,255,255,0.8)";
       for (const st of stars) { c.beginPath(); c.arc(st.x * w, st.y * h, st.r * u, 0, 7); c.fill(); }
-      c.fillStyle = "#f6efe2";
-      c.beginPath(); c.arc(w * 0.82, h * 0.14, 34 * u, 0, 7); c.fill();
+      if (skin.alwaysNight) {
+        // Planeta anillado en lugar de luna.
+        c.fillStyle = "#ff8b3d";
+        c.beginPath(); c.arc(w * 0.82, h * 0.15, 40 * u, 0, 7); c.fill();
+        c.strokeStyle = "rgba(246,239,226,0.55)";
+        c.lineWidth = 4 * u;
+        c.beginPath(); c.ellipse(w * 0.82, h * 0.15, 66 * u, 16 * u, -0.35, 0, 7); c.stroke();
+      } else {
+        c.fillStyle = "#f6efe2";
+        c.beginPath(); c.arc(w * 0.82, h * 0.14, 34 * u, 0, 7); c.fill();
+      }
     } else {
       c.fillStyle = "#ffd24d";
       c.beginPath(); c.arc(w * 0.82, h * 0.15, 44 * u, 0, 7); c.fill();
       c.lineWidth = 3 * u; c.strokeStyle = INK; c.stroke();
     }
     // Nubes
-    c.fillStyle = dark ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.9)";
+    c.fillStyle = skin.alwaysNight
+      ? "rgba(155,123,255,0.16)"
+      : dark
+        ? "rgba(255,255,255,0.14)"
+        : "rgba(255,255,255,0.9)";
     const tNow = performance.now() / 1000;
     for (const cl of clouds) {
       const cx = ((cl.x * w * 3 - camX * 0.12 - tNow * cl.sp * u) % (w + 300 * u)) - 150 * u;
@@ -211,14 +241,14 @@ export function stadiumRace(names: string[], winnerIdx: number, beacon: Beacon, 
       c.fill();
     }
     // Montañas (parallax lejano) — terminan en el horizonte, no bajo la pista
-    c.fillStyle = dark ? "#241b4a" : "#b98ad1";
+    c.fillStyle = tone(skin.ridgeFar);
     drawRange(peaks, 0.22, 0.425, w, h);
     // Cerros (parallax medio)
-    c.fillStyle = dark ? "#1d2a3f" : "#7fc07a";
+    c.fillStyle = tone(skin.ridgeNear);
     drawRange(hills, 0.5, 0.43, w, h);
     // Pista
     const trackTop = h * 0.42, trackH = h * 0.5;
-    c.fillStyle = dark ? "#2b2140" : "#e9c797";
+    c.fillStyle = tone(skin.track);
     c.fillRect(-20, trackTop, w + 40, trackH + 40);
     // Banderines al borde
     for (let k = 0; k * 260 * u < L() + w; k++) {
@@ -271,7 +301,7 @@ export function stadiumRace(names: string[], winnerIdx: number, beacon: Beacon, 
       if (lx < -140 || lx > w + 140) return;
       const sc = (laneH * 0.62) / 26;
       const bob = phase === "race" ? Math.sin(tRace * 16 + k * 2) * 3 * u : 0;
-      drawLlama(lx, ly - 8 * sc + bob, sc, r.color, phase === "race" ? tRace * 14 + k : 0);
+      skin.drawRunner(c, lx, ly - 8 * sc + bob, sc, r.color, phase === "race" ? tRace * 14 + k : 0);
       // Chip con nombre y avatar
       const label = r.name.length > 16 ? r.name.slice(0, 15) + "…" : r.name;
       c.font = `700 ${Math.max(11, 12 * u)}px system-ui, sans-serif`;
@@ -306,27 +336,25 @@ export function stadiumRace(names: string[], winnerIdx: number, beacon: Beacon, 
     for (const p of arr) {
       const sx = p.dx * L() * 1.15 - camX * parallax;
       if (sx < -w * 0.3 || sx > w * 1.3) continue;
-      c.lineTo(sx - p.w * w, h * baseY);
-      c.lineTo(sx, h * (baseY - p.h));
-      c.lineTo(sx + p.w * w, h * baseY);
+      if (skin.ridgeShape === "domes") {
+        // Planetas asomando por el horizonte: media elipse trazada a mano para
+        // que el contorno siga siendo un solo camino relleno.
+        const rx = p.w * w;
+        const ry = h * p.h;
+        c.lineTo(sx - rx, h * baseY);
+        for (let a = Math.PI; a >= 0; a -= Math.PI / 24) {
+          c.lineTo(sx + Math.cos(a) * rx, h * baseY - Math.sin(a) * ry);
+        }
+        c.lineTo(sx + rx, h * baseY);
+      } else {
+        c.lineTo(sx - p.w * w, h * baseY);
+        c.lineTo(sx, h * (baseY - p.h));
+        c.lineTo(sx + p.w * w, h * baseY);
+      }
     }
     c.lineTo(w + 40, h * baseY);
     c.closePath();
     c.fill();
-  }
-
-  function drawLlama(x: number, y: number, sc: number, col: string, phase2: number): void {
-    const c = ctx as CanvasRenderingContext2D;
-    const r = (rx: number, ry: number, rw: number, rh: number) => c.fillRect(x + rx * sc, y + ry * sc, rw * sc, rh * sc);
-    c.fillStyle = col;
-    r(2, 11, 16, 7); r(15, 3, 4, 10); r(14, 0, 8, 4); r(20, -2, 2, 3); r(0, 9, 3, 4);
-    const legUp = Math.sin(phase2) * 2.6, legUp2 = Math.sin(phase2 + Math.PI) * 2.6;
-    r(3, 18 - Math.max(0, legUp), 2.5, 6 + Math.min(0, legUp));
-    r(8, 18 - Math.max(0, legUp2), 2.5, 6 + Math.min(0, legUp2));
-    r(12.5, 18 - Math.max(0, legUp2), 2.5, 6 + Math.min(0, legUp2));
-    r(16, 18 - Math.max(0, legUp), 2.5, 6 + Math.min(0, legUp));
-    c.fillStyle = "#191919";
-    c.fillRect(x + 19.4 * sc, y + 1.2 * sc, 1.4 * sc, 1.4 * sc);
   }
 
   let tPrev = performance.now();

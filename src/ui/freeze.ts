@@ -9,6 +9,7 @@ export function setGame(g: Game): void {
   if (app.drawn) return;
   app.game = g;
   $("g-race").classList.toggle("on", g === "race");
+  $("g-stellar").classList.toggle("on", g === "stellar");
   $("g-wheel").classList.toggle("on", g === "wheel");
 }
 

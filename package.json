@@ -10,7 +10,9 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "audit:game": "node scripts/audit-game.mjs",
+    "smoke": "node scripts/smoke.mjs"
   },
   "engines": {
     "node": ">=22"

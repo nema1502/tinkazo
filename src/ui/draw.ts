@@ -41,7 +41,7 @@ export async function draw(): Promise<void> {
     $("sec-draw").scrollIntoView({ behavior: "smooth", block: "start" });
     wheelSpin(names, first, finish);
   } else {
-    stadiumRace(names, first, beacon, finish);
+    stadiumRace(names, first, beacon, finish, app.game === "stellar" ? "stellar" : "andes");
   }
 }
 
