@@ -54,6 +54,19 @@ Resultado del 19 de septiembre de 2026: **APROBADO, 12 de 12**. Incluye la compr
 
 Capturas en `docs/capturas/juego-stellar*.png`.
 
+## La curva de tensión
+
+El motor reparte la carrera así, y vale para los dos temas:
+
+| Momento | Qué pasa |
+|---|---|
+| 0 a 3 s | Cuenta regresiva, con el número gigante y un pitido por segundo |
+| 3 a 12 s | El pelotón se pelea la punta y el narrador la va cantando. **El ganador corre en el tercio de atrás**, visible pero lejos |
+| 12 a 15 s | "¡No respira nadie!" y el ganador remonta. La velocidad se calcula para llegar justo cuando se acaba el tiempo, así nunca se amontona en la meta |
+| Al cruzar | Fanfarria, temblor de cámara y la tarjeta del ganador |
+
+Esto se corrigió el 20 de septiembre de 2026. Antes el ganador arrancaba su sprint en el segundo 9 de 15 y desde ahí no lo alcanzaba nadie: la sala se enteraba del final a mitad de carrera y los últimos cuatro segundos eran trámite.
+
 ## Ideas pendientes
 
 - Cometas de fondo cruzando la pantalla en diagonal.

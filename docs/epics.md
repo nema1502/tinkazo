@@ -436,6 +436,10 @@ Resultado (2026-09-19): escenario, horizonte, pista, corredor y texto de largada
 
 Resultado (2026-09-19): `pnpm audit:game <juego>` corre un sorteo real en Chrome y comprueba doce cosas, entre ellas la única que no se negocia: que el ganador en pantalla sea exactamente el que fijó el protocolo. Contrato y checklist en [juegos.md](juegos.md).
 
+### Historia 7.5: La tensión de la carrera — hecho
+
+Resultado (2026-09-20): el ganador ya no arranca su sprint en el segundo 9. Corre en el tercio de atrás hasta el 80% de la carrera y remonta al final, con la velocidad calculada para llegar justo al acabarse el tiempo. La punta se la pelea el pelotón y el narrador la canta. Comprobado en una corrida real: tres líderes distintos antes del final y el ganador aparece recién al cruzar. Los tres juegos siguen aprobando el auditor.
+
 ### Historia 7.3: Mejoras transversales de presentación
 
 Como organizadora,

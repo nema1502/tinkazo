@@ -109,6 +109,8 @@ export function stadiumRace(
   }));
 
   const DUR = 15;
+  /** Momento de la carrera en que el ganador empieza a remontar. */
+  const SURGE_AT = 0.8;
   let phase: "count" | "race" | "done" | "dead" = "count";
   let tPhase = 0, tRace = 0, camX = 0, shake = 0, lastLeader = -1, leadCd = 0, saidLast = false, finished = false, tFreeze = 0;
   let lastBeepN = 4;
@@ -165,19 +167,37 @@ export function stadiumRace(
     tRace += dt;
     const baseV = L() / DUR;
     const prog = tRace / DUR;
-    const leader = runners.reduce((a, b) => (b.x > a.x ? b : a));
-    for (const r of runners) {
+    const cap = L() - W() * 0.055;
+
+    // El pelotón corre por su cuenta; al ganador lo ubicamos después, según
+    // dónde esté el pelotón. Antes el ganador aceleraba en el segundo 9 de 15 y
+    // desde ahí no lo alcanzaba nadie: la sala sabía el final y los últimos
+    // cuatro segundos sobraban. Ahora va atrás y remonta al final.
+    const pack = runners.filter((r) => r.i !== winnerIdx);
+    const wr = winner();
+    const packLeader = pack.reduce((a, b) => (b.x > a.x ? b : a), pack[0] ?? wr);
+    const packBack = pack.reduce((a, b) => (b.x < a.x ? b : a), pack[0] ?? wr);
+    for (const r of pack) {
       r.n1 += dt * (0.9 + 0.3 * (r.i % 3));
       let mult = 0.92 + 0.22 * (0.5 + 0.5 * Math.sin(r.n1 * 1.7 + r.i));
-      if (r.x < leader.x - W() * 0.28) mult *= 1.22; // banda elástica: nadie se queda atrás del plano
-      if (r.i === winnerIdx && prog > 0.6) mult = 1.3 + 0.15 * Math.min(1, (prog - 0.6) * 4); // sprint final
-      if (r.i !== winnerIdx) {
-        const cap = L() - W() * 0.055;
-        r.x = Math.min(r.x + baseV * mult * dt, cap);
-      } else {
-        r.x += baseV * mult * dt;
-      }
+      if (r.x < packLeader.x - W() * 0.28) mult *= 1.22; // banda elástica: nadie se queda fuera del plano
+      r.x = Math.min(r.x + baseV * mult * dt, cap);
     }
+
+    if (prog < SURGE_AT) {
+      // Se queda en el tercio de atrás, visible pero lejos de la punta.
+      const want = prog < 0.5 ? 0.32 : 0.12; // 0 = último del pelotón, 1 = puntero
+      const target = packBack.x + (packLeader.x - packBack.x) * want;
+      wr.n1 += dt * 1.1;
+      const drift = 0.5 + 0.5 * Math.sin(wr.n1 * 2.1);
+      wr.x += (target - wr.x) * Math.min(1, dt * 2.2) + baseV * (0.88 + 0.14 * drift) * dt;
+    } else {
+      // Remontada: la velocidad se calcula para llegar justo cuando se acaba el
+      // tiempo, así nunca se amontona en la meta ni llega antes de hora.
+      const timeLeft = Math.max(0.2, (1 - prog) * DUR);
+      wr.x += Math.max(baseV * 1.1, (L() - wr.x) / timeLeft) * dt;
+    }
+    const leader = runners.reduce((a, b) => (b.x > a.x ? b : a));
     if (leader.i !== lastLeader && tRace > 1 && leadCd <= 0 && !saidLast) {
       lastLeader = leader.i;
       leadCd = 1.6;
@@ -185,8 +205,7 @@ export function stadiumRace(
       beep(660, 0.08, "triangle", 0.04);
     }
     leadCd -= dt;
-    const wr = winner();
-    if (!saidLast && wr.x / L() > 0.78) { saidLast = true; say(t("cLast")); beep(740, 0.1, "triangle", 0.05); }
+    if (!saidLast && prog > SURGE_AT) { saidLast = true; say(t("cLast")); beep(740, 0.1, "triangle", 0.05); }
     const camTarget = leader.x - W() * 0.4;
     camX += (Math.max(0, Math.min(camTarget, L() - W() * 0.86)) - camX) * Math.min(1, dt * 2.6);
     if (wr.x >= L()) finishNow();
