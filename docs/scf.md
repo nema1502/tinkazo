@@ -139,7 +139,9 @@ Esqueleto propuesto:
 
 **Tramo 1, MVP.** Extraer la verificación de drand como librería independiente, publicada como crate de Rust y como paquete de npm, con documentación, para que cualquier contrato Soroban pueda verificar quicknet sin montar un oráculo. Más un SDK para organizadores.
 
-**Tramo 2, testnet.** El modelo de amenazas y el plan de monitoreo en la cadena, que son requisito obligatorio de este tramo. Sorteos con varios ganadores y con pesos. **La herramienta de enumeración pública de sellos por dirección**, que es la defensa contra el ataque de selección de compromiso. Pruebas de carga con listas de diez mil.
+**Tramo 2, testnet.** El plan de monitoreo en la cadena, que es requisito obligatorio de este tramo. Sorteos con varios ganadores y con pesos. Un **indexador propio de sellos**, para que la enumeración no dependa de la ventana corta del RPC. Pruebas de carga con listas de diez mil.
+
+(El modelo de amenazas y la enumeración de sellos dentro de la página de verificación ya están hechos, así que no se pueden cobrar: el fondo no reembolsa trabajo hecho. Van en la postulación como prueba de que el equipo entrega, no como entregable.)
 
 **Tramo 3, mainnet.** El despliegue, los comprobantes permanentes, los sorteos reales con comunidades identificadas y la documentación unificada.
 
@@ -161,7 +163,7 @@ Son capas distintas. Ellos venden la primitiva y hay que confiar en que su orác
 La defensa está más arriba. Contestarla sin que la pregunten.
 
 **"¿Qué impide que el organizador selle cinco listas y publique solo la que le conviene?"**
-Nada lo impide técnicamente, y es el borde real del diseño. Las defensas son dos y las dos son verificables: todos los sellos son públicos bajo la dirección del organizador y cualquiera puede enumerarlos, y el identificador del sorteo se anuncia antes de que exista la semilla. El tramo 2 incluye la herramienta de enumeración para que la defensa no dependa de que alguien sepa buscarla. **Decir esto sin que lo pregunten es lo que hace ver serio a un proyecto.**
+Nada lo impide del todo, y es el borde real del diseño: está documentado en [amenazas.md](amenazas.md) desde antes de que nadie preguntara. Lo que sí hay: **la propia página de verificación trae y muestra los otros sellos recientes de esa dirección**, con cuánta gente tenía cada lista y contra qué ronda. Si selló cinco, se ven las cinco. El límite también se dice: el RPC indexa unas pocas horas hacia atrás, que es justo la ventana en la que ocurre este ataque, pero no sirve para auditar un historial completo. **Decir esto sin que lo pregunten es lo que hace ver serio a un proyecto.**
 
 **"¿Por qué Stellar y no otra cadena?"**
 Porque desde el protocolo 22, CAP-0059 trae BLS12-381 y hash-to-curve como funciones nativas del host, y la verificación de la firma cuesta 0,003 XLM. Sin esas primitivas el mismo emparejamiento cuesta órdenes de magnitud más o directamente no entra en el presupuesto de gas. No es preferencia: es el único lugar donde el número cierra.

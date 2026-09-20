@@ -1,6 +1,6 @@
 import "./styles.css";
 import { $, esc } from "./dom";
-import { setLang, t } from "./i18n";
+import { getLang, setLang, t } from "./i18n";
 import { avatar } from "./state";
 import { canonicalList, listHash } from "./protocol/canonical";
 import {
@@ -193,6 +193,9 @@ async function main(): Promise<void> {
   }
 
   renderResult(proof, names, winners, signature, randomness, !!onChain);
+  // Los otros sellos se traen al final y sin bloquear: el veredicto no
+  // depende de ellos, y si el RPC no contesta la página ya sirvió.
+  void renderSeals(proof);
 
   if (onChain) {
     verdict("ok", "vVerdictOkChain", t("vVerdictOkChainDetail"));
@@ -204,6 +207,47 @@ async function main(): Promise<void> {
     // Sin registro externo, la cuenta cierra pero la lista no está atestiguada.
     set("vCheckWitness", "pending", t("vNoWitnessShort"));
     verdict("partial", "vVerdictPartial", t("vVerdictPartialDetail"));
+  }
+}
+
+/**
+ * Muestra los otros sellos recientes del mismo organizador.
+ *
+ * Es la defensa contra el único ataque conocido que sigue abierto: sellar
+ * varias listas y publicar solo la que conviene. La defensa siempre existió
+ * —los sellos son públicos— pero dependía de saber buscarlos en un explorador,
+ * y eso no es una defensa. Acá están al lado del veredicto.
+ *
+ * No afirma nada que no pueda comprobar. Si el RPC no contesta, la sección no
+ * aparece: decir "hay uno solo" sin haber podido mirar sería peor que callar.
+ */
+async function renderSeals(proof: Proof): Promise<void> {
+  if (!isAnchored(proof)) return;
+  const box = $("sec-seals");
+  try {
+    const { recentSealsOf } = await import("./stellar/seals");
+    const found = await recentSealsOf(proof);
+    if (!found || found.seals.length === 0) return;
+
+    const mine = String(proof.id ?? "");
+    $("v-seals-since").textContent = found.truncated ? t("vSealsMany") : t("vSealsWindow");
+    $("v-seals-list").innerHTML = found.seals
+      .map((sl) => {
+        const yo = sl.raffleId === mine;
+        const when = sl.at ? new Date(sl.at).toLocaleString(getLang() === "es" ? "es-BO" : "en-US") : "";
+        return (
+          `<p class="entity"${yo ? ' style="font-weight:800"' : ""}>` +
+          `#${esc(sl.raffleId)}${yo ? ` · ${esc(t("vSealsThis"))}` : ""} · ` +
+          `${sl.count} ${esc(t("vSealsPeople"))} · ${esc(t("vSealsRound"))} ${sl.round} · ` +
+          `${esc(when)} · ${esc(sl.listHash.slice(0, 16))}…</p>`
+        );
+      })
+      .join("");
+    // Con un solo sello no hay nada que sospechar, y conviene decirlo.
+    $("v-seals-why").textContent = found.seals.length > 1 ? t("vSealsWhy") : t("vSealsOnly");
+    box.style.display = "block";
+  } catch {
+    /* sin RPC no se muestra nada: callar es más honesto que suponer */
   }
 }
 

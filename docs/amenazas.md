@@ -59,9 +59,13 @@ Un organizador sella cinco listas distintas, cada una contra una ronda distinta,
 - El identificador del sorteo se anuncia antes de que exista la semilla, así que si el organizador lo dijo en voz alta, cambiarlo después se nota.
 - Sellar cuesta, así que el ataque tiene un precio por intento. Bajo, pero no cero.
 
-**Lo que falta:** una herramienta dentro del producto que enumere los sellos de una dirección y los muestre en la página de verificación. Hoy la defensa existe pero depende de que alguien sepa buscarla en un explorador, y eso no es una defensa: es una nota al pie.
+**Lo que se hizo el 20 de septiembre de 2026:** la página de verificación ahora **trae y muestra los otros sellos recientes de esa misma dirección**, al lado del veredicto. Si el organizador selló cinco listas, se ven las cinco, con cuánta gente tenía cada una y contra qué ronda. La fila del sorteo que se está mirando va marcada.
 
-Está en el tramo 2 del plan del fondo.
+**El límite, que hay que decir:** el RPC de Stellar solo indexa los eventos recientes, unas pocas horas hacia atrás. Alcanza para este ataque, que por su naturaleza ocurre cerca en el tiempo del sorteo que se publica, pero no sirve para auditar el historial completo de una dirección. Para eso hace falta un explorador de bloques o un indexador propio.
+
+Y si el RPC no contesta, la sección no aparece: decir "hay uno solo" sin haber podido mirar sería peor que callar.
+
+**Lo que sigue faltando:** el ataque no está cerrado, solo es mucho más visible. Cerrarlo del todo exigiría que el organizador anuncie el identificador del sorteo por un canal que él no controle antes de sellar, y eso Tinkazo no lo puede imponer.
 
 ## R — Repudio
 
@@ -79,7 +83,7 @@ Está en el tramo 2 del plan del fondo.
 | Los nombres llegan a la cadena | **Cubierto** | En la cadena viaja solo la huella. El contrato nunca ve un nombre |
 | Los nombres llegan a los registros del hosting | **Cubierto** | El comprobante viaja en el fragmento de la URL, que el navegador no envía al servidor |
 | Los nombres llegan a un tercero por el QR | **Cubierto desde el 20 de septiembre de 2026** | Se le pedía el QR a un servicio ajeno, mandándole la URL entera como parámetro de consulta. Los nombres salían del navegador igual, solo que a otro lado. Ahora el QR se dibuja en el navegador, y hay una comprobación que lo verifica |
-| Los avatares de la lista salen a un servicio externo | **No cubierto** | Cada participante genera una petición a un servicio de avatares con su nombre en la URL. **Es una filtración real y está pendiente**. La solución es generar el avatar en el navegador a partir del nombre |
+| Los avatares de la lista salen a un servicio externo | **Cubierto desde el 20 de septiembre de 2026** | Cada participante generaba una petición a un servicio de avatares con su nombre en la dirección: con doscientos inscritos, doscientas peticiones con nombres reales adentro. Ahora el avatar sale de un hash del nombre y se dibuja en el navegador. **Comprobado: la única petición que sale durante un sorteo es la ronda del faro** |
 | Quien comparte el enlace expone la lista | **Aceptado y explícito** | El comprobante trae los nombres a propósito: sin ellos nadie puede recomputar. Quien comparte el enlace comparte la lista, y eso se dice |
 | La huella filtra la lista | **Cubierto en la práctica** | SHA-256 de la lista canónica completa. Adivinar la lista exige adivinar todos los nombres, en orden, con la forma exacta |
 
@@ -119,10 +123,9 @@ Plan de monitoreo, que es el otro entregable del tramo 2.
 
 ## Lo que está pendiente, en orden
 
-1. **Los avatares salen a un servicio externo con el nombre de cada participante en la URL.** Es la filtración que queda y contradice lo que el producto promete. Se arregla generando el avatar en el navegador.
-2. **La enumeración de sellos por dirección**, dentro de la página de verificación, para que la defensa contra la selección de compromiso no dependa de saber buscar en un explorador.
-3. **Medir con más de doscientos participantes.**
-4. **Un aviso cuando la renta del contrato se acerca al vencimiento.**
+2. **Medir con más de doscientos participantes.**
+3. **Un aviso cuando la renta del contrato se acerca al vencimiento.**
+4. **Un indexador propio de sellos**, para que la enumeración no dependa de la ventana corta del RPC.
 
 ## Lo que decidimos no hacer
 
