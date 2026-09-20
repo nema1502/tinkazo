@@ -13,7 +13,21 @@ import { network, txUrl } from "../stellar/config";
 
 export type AnchorStep = "simulating" | "signing" | "sending" | "confirmed";
 
+/**
+ * `detail` lleva el costo estimado en el paso de firma y el hash de la
+ * transacción al confirmar. Antes de firmar, el organizador tiene que ver
+ * cuánto le va a salir.
+ */
 export type OnStep = (step: AnchorStep, detail?: string) => void;
+
+/** Fee de la transacción ya simulada, en XLM, para mostrarlo antes de firmar. */
+function feeInXlm(tx: { built?: { fee?: string | number } }): string | undefined {
+  const raw = tx.built?.fee;
+  if (raw === undefined) return undefined;
+  const stroops = Number(raw);
+  if (!Number.isFinite(stroops)) return undefined;
+  return (stroops / 1e7).toFixed(4).replace(/0+$/, "").replace(/\.$/, "") + " XLM";
+}
 
 export interface SealArgs {
   organizer: string;
@@ -51,7 +65,7 @@ export async function sealOnChain(args: SealArgs, onStep: OnStep): Promise<SealR
     round: BigInt(args.round),
     meta: args.meta.slice(0, 160),
   });
-  onStep("signing");
+  onStep("signing", feeInXlm(tx));
   const sent = await tx.signAndSend();
   const raw = sent.result as unknown;
   const raffleId = unwrap<bigint>(raw);
@@ -77,7 +91,7 @@ export async function drawOnChain(
     raffle_id: raffleId,
     signature: signature96 as unknown as Buffer,
   });
-  onStep("signing");
+  onStep("signing", feeInXlm(tx));
   const sent = await tx.signAndSend();
   const draw = unwrap<{ winners: number[]; randomness: Uint8Array }>(sent.result as unknown);
   const txHash = sent.sendTransactionResponse?.hash ?? "";
@@ -128,12 +142,18 @@ export function stepLabel(step: AnchorStep): string {
  * Línea de estado bajo el botón. Al confirmarse deja el enlace a la
  * transacción en el explorador, que es lo que el organizador va a compartir.
  */
-export function showTxStatus(containerId: string, step: AnchorStep, txHash?: string): void {
+export function showTxStatus(containerId: string, step: AnchorStep, detail?: string): void {
   const host = document.getElementById(containerId);
   if (!host) return;
   host.style.display = "block";
   host.className = step === "confirmed" ? "txstatus ok" : "txstatus";
   host.textContent = stepLabel(step);
+  if (step === "signing" && detail) {
+    // El costo antes de firmar, no después.
+    host.textContent = `${stepLabel(step)} ${t("txCost")} ${detail}`;
+    return;
+  }
+  const txHash = step === "confirmed" ? detail : undefined;
   if (step === "confirmed" && txHash) {
     host.textContent = stepLabel(step) + " ";
     const a = document.createElement("a");

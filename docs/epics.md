@@ -49,10 +49,10 @@ El organizador compromete una lista y cualquiera finaliza el sorteo con la firma
 El sitio pasó a Vite con pnpm, adoptó quicknet y el protocolo v2, verifica la firma del faro en el navegador y emite comprobantes. **FRs:** 1, 2, 3, 9, 11, 14, 15, 16, 22, 23, 24, 25. NFR-2.
 
 ### Épica 3: Anclaje en Stellar desde la interfaz — hecha
-El organizador conecta su wallet, sella y sortea en el contrato desde la pantalla, con cuenta regresiva y show. **FRs:** 4, 5, 6, 7, 8, 9, 10, 12, 13. NFR-5, 6. Falta solo mostrar el costo estimado antes de firmar.
+El organizador conecta su wallet, sella y sortea en el contrato desde la pantalla, con cuenta regresiva, costo a la vista antes de firmar y show. **FRs:** 4, 5, 6, 7, 8, 9, 10, 12, 13. NFR-5, 6.
 
-### Épica 4: Verificación pública — hecha salvo finalizar
-Cualquiera abre el comprobante, ve el sello y el registro leídos de la cadena y obtiene un veredicto recomputado en su navegador. **FRs:** 17, 18, 19, 20, 21. Falta el botón para finalizar un sorteo sellado sin registro (historia 4.2).
+### Épica 4: Verificación pública — hecha
+Cualquiera abre el comprobante, ve el sello y el registro leídos de la cadena y obtiene un veredicto recomputado en su navegador, y puede finalizar un sorteo que quedó pendiente. **FRs:** 17, 18, 19, 20, 21.
 
 ### Épica 5: Lanzamiento a mainnet
 Contrato en mainnet con checklist de despliegue, documentación final y distribución en el ecosistema. NFR-3, 7.
@@ -277,7 +277,7 @@ Justificación: mientras el proyecto viva en testnet, esta es la forma más ráp
 
 ### Historia 3.4: Errores y estados de transacción — hecho
 
-Resultado (2026-09-19): los nueve errores del contrato, más los de wallet, fondos y red, se traducen a mensajes que dicen qué hacer. Falta mostrar el costo estimado antes de firmar.
+Resultado (2026-09-20): los nueve errores del contrato, más los de wallet, fondos y red, se traducen a mensajes que dicen qué hacer. El costo sale de la simulación y se muestra en el paso de firma, antes de que el organizador apruebe nada.
 
 Como organizadora,
 quiero mensajes claros y un estado visible en cada paso,
@@ -310,9 +310,11 @@ para juzgar por mí mismo.
 **Entonces** la página lee `get_raffle` y `get_draw` por RPC, obtiene la ronda de drand y muestra los cuatro bloques con sus valores
 **Y** funciona también para comprobantes de modo libre (sin contrato).
 
-### Historia 4.2: Veredicto — hecho (falta finalizar un sorteo pendiente)
+### Historia 4.2: Veredicto y finalización — hecho
 
-Resultado (2026-09-20): **tres veredictos, no dos.** Verde solo cuando el contrato atestigua la huella de la lista. Amarillo en modo libre, donde la cuenta cierra pero nadie garantiza que esa fuera la lista original, porque el comprobante trae lista y firma juntas. Rojo cuando algo no cuadra. Probado: lista manipulada sobre un sorteo anclado da rojo con el motivo exacto. Ese amarillo es justo lo que compra anclar. Falta el botón de finalizar un sorteo sellado sin registro.
+Resultado (2026-09-20): **tres veredictos, no dos.** Verde solo cuando el contrato atestigua la huella de la lista. Amarillo en modo libre, donde la cuenta cierra pero nadie garantiza que esa fuera la lista original, porque el comprobante trae lista y firma juntas. Rojo cuando algo no cuadra. Probado: lista manipulada sobre un sorteo anclado da rojo con el motivo exacto. Ese amarillo es justo lo que compra anclar.
+
+La finalización también está: si el sorteo quedó sellado sin sortear y la ronda ya existe, la página ofrece cerrarlo. Como `draw` no pide permiso a nadie, lo puede hacer cualquiera que abra el comprobante, y el resultado es el mismo porque lo fija la ronda del faro. Probado de punta a punta: sorteo #5 sellado y abandonado a propósito, cerrado desde la verificación por una cuenta que el navegador armó en el momento.
 
 Como participante,
 quiero un veredicto claro y la posibilidad de finalizar un sorteo pendiente,

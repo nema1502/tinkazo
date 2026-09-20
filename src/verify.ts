@@ -15,6 +15,7 @@ import {
 } from "./protocol/drand";
 import { select } from "./protocol/select";
 import { decodeProof, isAnchored, type Proof } from "./protocol/proof";
+import { network } from "./stellar/config";
 
 /**
  * Página de verificación.
@@ -129,6 +130,7 @@ async function main(): Promise<void> {
       onChain = await readFromChain(proof);
       if (!onChain) {
         set("vCheckChain", "pending", t("vNotDrawnYet"));
+        offerToFinish(proof);
       } else {
         set("vCheckChain", "ok", `#${proof.id} · ${proof.net}`);
       }
@@ -210,6 +212,63 @@ async function readFromChain(
     listHash: bytesToHex(new Uint8Array(raffle.list_hash)),
     count: raffle.count,
   };
+}
+
+/**
+ * Un sorteo puede quedar sellado sin sortear si al organizador se le cortó la
+ * luz a mitad del evento. `draw` no pide permiso a nadie, así que cualquiera
+ * que abra el comprobante puede cerrarlo, y el resultado es el mismo: lo fija
+ * la ronda del faro, no quien apriete el botón.
+ */
+function offerToFinish(proof: Proof): void {
+  // Solo si el comprobante habla de la misma red para la que está compilado
+  // el sitio: firmar contra otra red daría un error confuso.
+  if (proof.net !== network.name) return;
+  if (roundTime(proof.round) > Math.floor(Date.now() / 1000)) return;
+
+  const box = $("finish-box");
+  const btn = $<HTMLButtonElement>("btn-finish");
+  const note = $("finish-note");
+  box.style.display = "flex";
+
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    try {
+      const [{ guestAvailable, guestWallet, freighterInstalled, freighterWallet, setActiveWallet }, anchor, drand] =
+        await Promise.all([
+          import("./stellar/wallet"),
+          import("./ui/anchor"),
+          import("./protocol/drand"),
+        ]);
+      // Con quién pagar el fee: la wallet del navegador si está, y si no, una
+      // cuenta de prueba que el navegador arma en el momento.
+      const wallet = (await freighterInstalled())
+        ? freighterWallet
+        : guestAvailable()
+          ? guestWallet
+          : null;
+      if (!wallet) {
+        note.textContent = t("vFinishNoWallet");
+        btn.disabled = false;
+        return;
+      }
+      note.textContent = t("connecting");
+      await wallet.connect();
+      setActiveWallet(wallet);
+
+      note.textContent = t("fetching");
+      const { signature } = await drand.fetchRound(proof.round, { attempts: 8, delayMs: 1500 });
+      await anchor.drawOnChain(BigInt(proof.id as string), drand.decompressG1(signature), (step) => {
+        note.textContent = anchor.stepLabel(step);
+      });
+      note.textContent = t("vFinishDone");
+      setTimeout(() => location.reload(), 1200);
+    } catch (e) {
+      btn.disabled = false;
+      const { anchorErrorText } = await import("./ui/anchor");
+      note.textContent = await anchorErrorText(e);
+    }
+  });
 }
 
 function renderList(proof: Proof): void {
