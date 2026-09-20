@@ -74,7 +74,23 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   $<HTMLImageElement>("qr-img").src =
     `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(url)}`;
   $("qr-box").style.display = "block";
+  setNotifyLinks(names, winners, url);
   confetti();
+}
+
+/**
+ * Avisar al ganador sin servidor ni base de datos: los botones abren WhatsApp
+ * o el cliente de correo del organizador con el mensaje ya escrito, incluido el
+ * enlace para que el ganador verifique por su cuenta. Tinkazo no manda nada ni
+ * guarda ningún contacto.
+ */
+function setNotifyLinks(names: string[], winners: number[], url: string): void {
+  const prize = app.frozen?.prize ?? "";
+  const who = winners.map((i) => names[i] ?? "").join(", ");
+  const body = T[getLang()].tellBody(who, prize, names.length, url);
+  $<HTMLAnchorElement>("btn-whatsapp").href = `https://wa.me/?text=${encodeURIComponent(body)}`;
+  $<HTMLAnchorElement>("btn-email").href =
+    `mailto:?subject=${encodeURIComponent(t("tellSubject"))}&body=${encodeURIComponent(body)}`;
 }
 
 /** Rehace la verificación de la firma y la selección desde cero (protocolo §7). */

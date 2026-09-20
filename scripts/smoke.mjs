@@ -140,6 +140,8 @@ async function main() {
     winners: [...document.querySelectorAll('.winner-name')].map(e => e.textContent),
     drandLink: document.getElementById('drand-link')?.getAttribute('href') || '',
     footer: document.querySelector('[data-i="footL"]')?.textContent || '',
+    whatsapp: document.getElementById('btn-whatsapp')?.getAttribute('href') || '',
+    email: document.getElementById('btn-email')?.getAttribute('href') || '',
   })`);
   const s = JSON.parse(summary);
   console.log(`${ok ? "OK" : "TIMEOUT"} tras ${elapsed} s · ${url}`);

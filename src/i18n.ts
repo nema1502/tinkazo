@@ -6,6 +6,7 @@ export interface Dict {
   cWin: (n: string) => string;
   summary: (w: string, n: number, d: string, r: number, u: string) => string;
   drawIn: (mmss: string) => string;
+  tellBody: (w: string, prize: string, n: number, u: string) => string;
 }
 
 export const T: Record<Lang, Dict> = {
@@ -29,6 +30,19 @@ export const T: Record<Lang, Dict> = {
     verifyHow: "Cualquiera puede repetir este sorteo por su cuenta: con la huella de la lista y el número público que salió a esa hora, el resultado da siempre el mismo. No hace falta creernos nada. · Paso a paso: 1) abre la ronda de quicknet y comprueba su firma con la clave pública del faro · 2) randomness = sha256(firma) · 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, saltando repetidos. Protocolo completo en docs/protocolo.md.",
     reverify: "Recomputar aquí mismo", reverifyOk: "Verificado: el recómputo reproduce exactamente el resultado.",
     copySummary: "Copiar resumen", copied: "¡Copiado!",
+    tellWhatsapp: "Avisar por WhatsApp", tellEmail: "Avisar por correo",
+    tellSubject: "Ganaste el sorteo 🦙",
+    tellBody: (w, prize, n, u) =>
+      `¡Felicidades ${w}! Ganaste${prize ? " " + prize : " el sorteo"}.
+
+` +
+      `Fuiste elegido entre ${n} participantes por un sorteo que cualquiera puede verificar. ` +
+      `La lista se selló antes de que existiera la semilla, y la semilla la publicó un faro público de aleatoriedad.
+
+` +
+      `Comprobalo vos mismo: ${u}
+
+Sorteado con Tinkazo · https://tinkazo.vercel.app`,
     qrCaption: "Escanea y verifica la ronda desde tu celular",
     nextTitle: "Lo que viene: el sorteo queda guardado fuera de Tinkazo",
     nextBody: "En la próxima versión, el sello de la lista y una ronda futura del faro quedan registrados en un contrato en Stellar que verifica la firma del faro por sí mismo y guarda el resultado. Cualquiera podrá leerlo y recomputarlo aunque Tinkazo no esté en línea. Este demo hace el sellado en tu navegador.",
@@ -66,6 +80,19 @@ export const T: Record<Lang, Dict> = {
     verifyHow: "Anyone can repeat this draw on their own: with the list fingerprint and the public number published at that time, the result always comes out the same. You don't have to take our word for it. · Step by step: 1) open the quicknet round and check its signature against the beacon's public key · 2) randomness = sha256(signature) · 3) idx = first 8 bytes of sha256(randomness ‖ list_hash ‖ counter) mod entries, skipping repeats. Full protocol in docs/protocolo.md.",
     reverify: "Recompute right here", reverifyOk: "Verified: the recomputation reproduces the exact result.",
     copySummary: "Copy summary", copied: "Copied!",
+    tellWhatsapp: "Tell them on WhatsApp", tellEmail: "Tell them by email",
+    tellSubject: "You won the raffle 🦙",
+    tellBody: (w, prize, n, u) =>
+      `Congratulations ${w}! You won${prize ? " " + prize : " the raffle"}.
+
+` +
+      `You were picked from ${n} participants by a draw anyone can verify. ` +
+      `The list was sealed before the seed existed, and the seed was published by a public randomness beacon.
+
+` +
+      `Check it yourself: ${u}
+
+Drawn with Tinkazo · https://tinkazo.vercel.app`,
     qrCaption: "Scan and verify the round from your phone",
     nextTitle: "Next: the draw stored outside Tinkazo",
     nextBody: "In the next version, the list seal and a future beacon round are recorded in a Stellar contract that verifies the beacon signature itself and stores the result. Anyone will be able to read and recompute it even if Tinkazo is offline. This demo seals the list in your browser.",
