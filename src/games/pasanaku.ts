@@ -1,7 +1,7 @@
 import { T, getLang, t } from "../i18n";
 import { beep, fanfare } from "../sound";
 import { avatar, type Beacon } from "../state";
-import { INK, clamp, ease, mount, shorten } from "./overlay";
+import { INK, clamp, drawFlag, ease, mount, shorten } from "./overlay";
 
 /**
  * Pasanaku.
@@ -536,11 +536,8 @@ export function pasanaku(
     // El cordón tricolor: es lo que ata el nudo, así que es funcional. Aparece
     // un segundo y medio, al final, cuando ya no hay tensión que robar.
     c.fillStyle = INK;
-    c.fillRect(-16 * k, -6 * k, 32 * k, 24 * k);
-    ["#c8102e", "#ffc629", "#0f8a5f"].forEach((col, i) => {
-      c.fillStyle = col;
-      c.fillRect(-13 * k + i * 9 * k, -3 * k, 8 * k, 18 * k);
-    });
+    c.fillRect(-17 * k, -7 * k, 34 * k, 26 * k);
+    drawFlag(c, -14 * k, -4 * k, 28 * k, 20 * k);
     c.restore();
   }
 

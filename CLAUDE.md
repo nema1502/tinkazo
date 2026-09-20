@@ -22,7 +22,7 @@ Sitio en producción: https://tinkazo.vercel.app
 - **Es público.** Nunca commitear `.env*`, `.vercel/`, `.stellar/` (identidades de la CLI con semillas), tokens ni llaves. Las llaves publicables (Pollar `pub_…`) van en `.env.local` igual.
 - **Idioma.** Documentación, commits e issues en español. Identificadores de código en inglés. La interfaz es bilingüe: toda cadena visible nueva va en `es` y `en` en el mismo cambio.
 - **Determinismo.** La lógica del sorteo vive solo en `contracts/raffle/src/{drand,select}.rs` y `src/protocol/*`. Ambas implementaciones deben pasar `docs/vectors.json`.
-- **Modo libre siempre funciona.** Sin wallet ni red de Stellar el sitio sigue sorteando (sellado local + quicknet verificado en el navegador).
+- **Se entra con cuenta.** Desde el 20 de septiembre de 2026 hay que conectar una cuenta para sortear: así todos los sorteos nacen atribuibles y verificables. El código del modo libre sigue ahí y se usa de respaldo cuando la cuenta conectada no puede pagar la comisión. Los participantes siguen sin necesitar nada.
 - **Errores del contrato son ABI.** Nunca renumerar `Error`. Nuevos eventos son nuevas variantes.
 - **Sin atribuciones automáticas** en commits ni PRs.
 

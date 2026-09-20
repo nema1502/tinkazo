@@ -1,5 +1,5 @@
 import { $ } from "../dom";
-import { LCOLORS, avatar, instantMode, type Beacon } from "../state";
+import { LCOLORS, avatar, instantMode, paceFactor, type Beacon } from "../state";
 import { setPickSeed, t } from "../i18n";
 import { narrate, stopNarrator } from "../narrator";
 
@@ -212,11 +212,15 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
     },
     run(fn) {
       let prev = 0;
+      // El factor de ritmo divide el tiempo que ve el juego, así que las
+      // fases, los avisos del narrador y los sonidos se estiran juntos y
+      // nunca se desacoplan.
+      const pace = paceFactor();
       const loop = (now: number): void => {
         if (dead) return;
         // Se acota el delta para que volver de una pestaña en segundo plano no
         // salte media animación de golpe.
-        const dt = prev ? Math.min(0.05, (now - prev) / 1000) : 0;
+        const dt = prev ? Math.min(0.05, (now - prev) / 1000) / pace : 0;
         prev = now;
         fn(dt, now / 1000);
         if (!dead) rafId = requestAnimationFrame(loop);
@@ -283,6 +287,31 @@ function releaseScreen(): void {
     sentinel = null;
   }
   if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+}
+
+/**
+ * La bandera de Bolivia, en tres franjas.
+ *
+ * Estaba mal: eran tres barras verticales pegadas, que no es una bandera de
+ * nadie. La de Bolivia es de franjas **horizontales**, de arriba abajo rojo,
+ * amarillo y verde, en ese orden, fijado por ley desde 1851. Dibujarla mal es
+ * peor que no dibujarla.
+ */
+export function drawFlag(
+  c: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): void {
+  const band = h / 3;
+  ["#d52b1e", "#f9e300", "#007a33"].forEach((col, i) => {
+    c.fillStyle = col;
+    c.fillRect(x, y + i * band, w, band);
+  });
+  c.lineWidth = Math.max(1, h * 0.07);
+  c.strokeStyle = INK;
+  c.strokeRect(x, y, w, h);
 }
 
 /** Interpolación suave, la de siempre. */

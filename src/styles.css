@@ -128,7 +128,8 @@
   }
   .netbadge.main { background: var(--teal); }
   .netbadge.bad { background: var(--orange); }
-  .auth a.hello { text-decoration: none; }
+  .auth a.hello { text-decoration: none; display: inline-flex; align-items: center; gap: 7px; }
+  .auth .hello-face { width: 22px; height: 22px; border: 2px solid var(--ink); background: var(--card); }
   .auth a.hello:hover { text-decoration: underline; }
   .modal-back {
     position: fixed; inset: 0; z-index: 70; background: rgba(12, 8, 20, 0.72);
@@ -301,6 +302,21 @@
   label.chip.live:focus-within { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 6px var(--yellow); }
   /* Una huella de 64 caracteres desbordaba la tarjeta en celular. */
   .note { word-break: break-word; overflow-wrap: anywhere; }
+
+  /* La puerta. Sin cuenta conectada no se sortea, así que el bloque de
+     participantes aparece apagado y esto explica por qué. */
+  .gate {
+    display: block; margin: 0 0 18px; padding: 18px 20px;
+    background: var(--yellow); color: var(--on-accent);
+    border: var(--bw) solid var(--ink); box-shadow: var(--sh);
+  }
+  .gate h3 { font-size: 19px; font-weight: 800; margin-bottom: 6px; text-wrap: balance; }
+  .gate p { font-size: 14px; line-height: 1.55; }
+  .gate .row { margin-top: 14px; }
+  .gate .note { color: #3a3529; }
+  /* Lo de abajo queda a la vista pero apagado: se entiende qué vas a poder
+     hacer, y por qué todavía no. */
+  .body.locked > *:not(.gate) { opacity: 0.45; pointer-events: none; filter: saturate(0.5); }
 
   /* El panel del grifo. Aparece cuando la cuenta conectada no tiene con qué
      pagar la comisión, que es lo primero que le pasa a todo el mundo. */

@@ -24,6 +24,13 @@ import type { SignedTx, WalletAdapter } from "./wallet";
 
 const KEY = "tinkazo.pollar.intent";
 
+/** Lo que Pollar sabe de quien entró. Todo sale de la cuenta de Google. */
+export interface Profile {
+  name: string;
+  mail: string;
+  avatar: string;
+}
+
 export interface SubmittingWallet extends WalletAdapter {
   readonly submitsItself: true;
   /** Firma y envía en un solo paso. Devuelve el hash de la transacción. */
@@ -83,6 +90,20 @@ class PollarWallet implements SubmittingWallet {
     const wallet = await waitForWallet(client, 8_000).catch(() => null);
     this.address = wallet?.address ?? null;
     return this.address;
+  }
+
+  /**
+   * El nombre y la foto de quien entró.
+   *
+   * Sale de la cuenta de Google, así que la cabecera puede decir "Nicolás" en
+   * vez de una dirección de 56 caracteres que no le dice nada a nadie. No se
+   * guarda en ningún lado: vive mientras dura la sesión de Pollar.
+   */
+  profile(): Profile | null {
+    const p = this.#client?.getUserProfile?.();
+    if (!p) return null;
+    const name = [p.first_name, p.last_name].filter(Boolean).join(" ").trim();
+    return { name: name || p.mail, mail: p.mail, avatar: p.avatar };
   }
 
   async disconnect(): Promise<void> {

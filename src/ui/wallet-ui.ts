@@ -27,6 +27,9 @@ interface Session {
   kind: "external" | "guest";
   label: string;
   address: string;
+  /** Nombre y foto, cuando la cuenta los trae. Con Google, sí. */
+  name?: string;
+  avatar?: string;
 }
 
 let session: Session | null = null;
@@ -56,7 +59,13 @@ async function restorePollar(): Promise<void> {
     if (!address) return;
     const { setActiveWallet } = await loadWallets();
     setActiveWallet(pollarWallet);
-    session = { kind: "external", label: pollarWallet.label, address };
+    const prof = pollarWallet.profile();
+    session = {
+      kind: "external",
+      label: pollarWallet.label,
+      address,
+      ...(prof ? { name: prof.name, avatar: prof.avatar } : {}),
+    };
     render();
     refreshFreezeLabel();
   } catch {
@@ -67,6 +76,7 @@ async function restorePollar(): Promise<void> {
 function render(): void {
   const box = $("wallet-box");
   box.innerHTML = "";
+  applyGate();
   // Sin contrato en esta red, el anclaje no se ofrece y la cabecera calla.
   if (!anchoringAvailable) return;
 
@@ -84,18 +94,74 @@ function render(): void {
   box.appendChild(net);
 
   const link = document.createElement("a");
-  link.className = "hello mono";
+  link.className = session.name ? "hello" : "hello mono";
   link.href = accountUrl(session.address);
   link.target = "_blank";
   link.rel = "noopener";
   link.title = `${session.label} · ${session.address}`;
-  link.textContent = shortAddress(session.address);
+  // Si la cuenta trae nombre, se muestra el nombre: una dirección de 56
+  // caracteres no le dice nada a nadie, y menos en una pantalla grande.
+  if (session.avatar) {
+    const img = document.createElement("img");
+    img.className = "hello-face";
+    img.src = session.avatar;
+    img.alt = "";
+    img.referrerPolicy = "no-referrer";
+    link.appendChild(img);
+  }
+  link.appendChild(document.createTextNode(session.name || shortAddress(session.address)));
   box.appendChild(link);
 
   box.appendChild(button(t("disconnect"), "", () => void disconnect()));
 
   if (wrongNetwork) notice(t("wrongNetwork").replace("{red}", network.name), true);
   void refreshFunds();
+}
+
+/* -------------------------------------------------------------------- puerta */
+
+/**
+ * Sin cuenta conectada no se sortea.
+ *
+ * Es una decisión de producto, no una limitación técnica: el sorteo funciona
+ * igual sin cuenta, y de hecho el código para hacerlo sigue ahí. Pero un
+ * sorteo sin cuenta no queda registrado en ningún lado, así que nadie más que
+ * el organizador puede confirmar después que esa era la lista original. Pedir
+ * la cuenta de entrada hace que todos los sorteos nazcan verificables.
+ *
+ * Lo de abajo no se esconde: queda a la vista y apagado, para que se entienda
+ * qué se va a poder hacer y por qué todavía no.
+ *
+ * Los participantes siguen sin necesitar nada. La cuenta es del organizador.
+ */
+function applyGate(): void {
+  const gate = $("gate");
+  const body = gate.parentElement;
+  // Si en esta red no hay contrato, no hay nada que conectar: no se traba a
+  // nadie con una puerta que no tiene llave.
+  const locked = anchoringAvailable && session === null;
+  body?.classList.toggle("locked", locked);
+  if (!locked) {
+    gate.style.display = "none";
+    return;
+  }
+  gate.innerHTML = "";
+  const h = document.createElement("h3");
+  h.textContent = t("gateTitle");
+  gate.appendChild(h);
+  const p = document.createElement("p");
+  p.textContent = t("gateBody");
+  gate.appendChild(p);
+  const row = document.createElement("div");
+  row.className = "row";
+  const b = button(t("gateAction"), "solid", () => void openPicker());
+  row.appendChild(b);
+  gate.appendChild(row);
+  const foot = document.createElement("p");
+  foot.className = "note";
+  foot.textContent = t("gateFoot");
+  gate.appendChild(foot);
+  gate.style.display = "block";
 }
 
 /* -------------------------------------------------------------------- grifo */
@@ -376,7 +442,13 @@ async function connect(
     // Si la wallet no sabe decir su red, no bloqueamos: la transacción fallaría
     // igual, y con un error más claro que una suposición nuestra.
     wrongNetwork = passphrase !== null && passphrase !== network.networkPassphrase;
-    session = { kind: wallet.kind, label: wallet.label, address };
+    const prof = pick === "google" ? (wallet as { profile?: () => { name: string; avatar: string } | null }).profile?.() : null;
+    session = {
+      kind: wallet.kind,
+      label: wallet.label,
+      address,
+      ...(prof ? { name: prof.name, avatar: prof.avatar } : {}),
+    };
     render();
     refreshFreezeLabel();
     if (wallet.kind === "guest") notice(t("guestReady"), false);

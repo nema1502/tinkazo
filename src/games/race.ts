@@ -1,6 +1,6 @@
 import { $ } from "../dom";
 import { T, getLang, setPickSeed, t } from "../i18n";
-import { LCOLORS, avatar, instantMode, type Beacon } from "../state";
+import { LCOLORS, avatar, instantMode, paceFactor, type Beacon } from "../state";
 import { beep, fanfare } from "../sound";
 import { THEMES, type ThemeId } from "./themes";
 import { registerSkip, shorten } from "./overlay";
@@ -447,8 +447,10 @@ export function stadiumRace(
 
   let tPrev = performance.now();
   let rafId = 0;
+  const pace = paceFactor();
   function loop(now: number): void {
-    const dt = Math.min(0.05, (now - tPrev) / 1000);
+    // El mismo factor de ritmo que los demás juegos: estira todo junto.
+    const dt = Math.min(0.05, (now - tPrev) / 1000) / pace;
     tPrev = now;
     update(dt);
     drawScene();

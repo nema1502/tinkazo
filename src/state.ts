@@ -80,6 +80,49 @@ export const LEAD_SECONDS = Math.max(3, Number(params.get("lead")) || 10);
  */
 export const ANCHOR_LEAD_SECONDS = 45;
 
+/**
+ * Cuánto dura el show.
+ *
+ * No es un número fijo porque no hay uno bueno para todos los casos. Un sorteo
+ * entre amigos en un bar quiere veinte segundos; el cierre de una conferencia
+ * con doscientas personas mirando una pantalla gigante aguanta el doble y lo
+ * agradece. El factor multiplica el tiempo de todos los juegos por igual, así
+ * que el sonido y la animación siguen yendo juntos.
+ *
+ * El resultado no cambia: el ganador ya estaba decidido antes de que empiece.
+ */
+export const PACES = { rapido: 0.8, normal: 1.4, epico: 2.2 } as const;
+export type Pace = keyof typeof PACES;
+
+const PACE_KEY = "tinkazo.pace";
+
+function initialPace(): Pace {
+  const fromUrl = params.get("pace");
+  if (fromUrl && fromUrl in PACES) return fromUrl as Pace;
+  try {
+    const saved = localStorage.getItem(PACE_KEY);
+    if (saved && saved in PACES) return saved as Pace;
+  } catch {
+    /* sin almacenamiento, se usa el de siempre */
+  }
+  return "normal";
+}
+
+let pace: Pace = initialPace();
+
+/** El factor por el que se multiplica la duración de cualquier juego. */
+export const paceFactor = (): number => PACES[pace];
+export const currentPace = (): Pace => pace;
+
+export function setPace(p: Pace): void {
+  pace = p;
+  try {
+    localStorage.setItem(PACE_KEY, p);
+  } catch {
+    /* que no se guarde no rompe nada */
+  }
+}
+
 export const SAMPLE = [
   "María Quispe", "Jorge Mamani", "Lucía Flores", "Carlos Choque", "Ana Vargas", "Diego Rojas",
   "Elena Condori", "Pablo Gutiérrez", "Sofía Aguilar", "Rodrigo Peña", "Valeria Torrez", "Miguel Arce",

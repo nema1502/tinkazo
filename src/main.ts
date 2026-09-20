@@ -1,7 +1,7 @@
 import "./styles.css";
 import { $ } from "./dom";
 import { onLangChange, setLang, t } from "./i18n";
-import { SAMPLE, app, params, type Game } from "./state";
+import { SAMPLE, app, currentPace, params, setPace, type Game, type Pace } from "./state";
 import { soundLabel, toggleSound } from "./sound";
 import { bindParticipants, loadSample, renderNames } from "./ui/participants";
 import { freeze, refreshFreezeLabel, secondsToRound, setGame } from "./ui/freeze";
@@ -50,6 +50,12 @@ $("l-es").addEventListener("click", () => setLang("es"));
 $("l-en").addEventListener("click", () => setLang("en"));
 $("btn-sample").addEventListener("click", loadSample);
 $("btn-freeze").addEventListener("click", () => void freeze());
+// El ritmo del show. Se guarda, porque quien organiza suele querer siempre el
+// mismo, y no cambia el resultado: el ganador ya estaba decidido.
+const paceSel = $<HTMLSelectElement>("pace");
+paceSel.value = currentPace();
+paceSel.addEventListener("change", () => setPace(paceSel.value as Pace));
+
 $("g-race").addEventListener("click", () => setGame("race"));
 $("g-stellar").addEventListener("click", () => setGame("stellar"));
 $("g-ledger").addEventListener("click", () => setGame("ledger"));

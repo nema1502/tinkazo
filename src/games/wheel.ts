@@ -1,7 +1,7 @@
 import { T, getLang, t } from "../i18n";
 import { beep, fanfare } from "../sound";
 import { avatar, type Beacon } from "../state";
-import { INK, clamp, ease, mount, shorten } from "./overlay";
+import { INK, clamp, drawFlag, ease, mount, shorten } from "./overlay";
 
 /**
  * La ruleta.
@@ -370,11 +370,8 @@ export function wheelSpin(
     c.translate(x, y);
     c.rotate(a0 + Math.PI / 2);
     c.fillStyle = INK;
-    c.fillRect(-7.5 * k, -20 * k, 15 * k, 15 * k);
-    ["#c8102e", "#ffc629", "#0f8a5f"].forEach((col, i) => {
-      c.fillStyle = col;
-      c.fillRect(-6 * k + i * 4 * k, -18.5 * k, 4 * k, 12 * k);
-    });
+    c.fillRect(-9 * k, -22 * k, 18 * k, 16 * k);
+    drawFlag(c, -7.5 * k, -20.5 * k, 15 * k, 13 * k);
     c.restore();
     c.restore();
   }
