@@ -9,6 +9,27 @@ import { copySummary, draw, reverify, shareProof } from "./ui/draw";
 import { stadiumRace } from "./games/race";
 import { skipGame } from "./games/overlay";
 import { initWalletUI } from "./ui/wallet-ui";
+import { hasVoice, voiceName } from "./narrator";
+
+/**
+ * Avisa si la máquina tiene voz para el narrador, y cuál.
+ *
+ * El momento de enterarse no es con la sala mirando. Las voces del sistema
+ * tardan en aparecer, así que se reintenta una vez.
+ */
+function showVoiceNote(): void {
+  const paint = (): void => {
+    const el = document.getElementById("voice-note");
+    if (!el) return;
+    const on = hasVoice();
+    el.textContent = on ? `${t("voiceOn")} ${voiceName() ?? ""}` : t("voiceOff");
+    el.style.display = "block";
+  };
+  paint();
+  // `getVoices()` suele venir vacío en la primera llamada.
+  setTimeout(paint, 1200);
+  onLangChange(paint);
+}
 
 // `?theme=light|dark` fuerza el tema (capturas).
 const themeParam = params.get("theme");
@@ -67,6 +88,7 @@ function poseScene(): void {
 }
 
 renderNames();
+showVoiceNote();
 // Siempre se aplica el diccionario al cargar, también en español: si no, el
 // texto que se ve sale del markup y los dos archivos se separan sin que se note.
 setLang(params.get("lang") === "en" ? "en" : "es");

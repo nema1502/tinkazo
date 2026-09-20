@@ -70,7 +70,10 @@ export function registerSkip(fn: (() => void) | null): void {
  * auditor para comprobar el resultado sin esperar la animación.
  */
 export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Stage | null {
-  if (instantMode) return null;
+  // `?instant=1` existe para el auditor. Esto es para alguien que marcó en su
+  // sistema que las animaciones lo marean, y que hasta ahora no tenía forma de
+  // decirlo. El sorteo igual se hace y el ganador igual sale.
+  if (instantMode || matchMedia("(prefers-reduced-motion: reduce)").matches) return null;
   const ov = $("stadium");
   const canvas = $<HTMLCanvasElement>("race-canvas");
   const c = canvas.getContext("2d");
@@ -149,20 +152,47 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
       const label = name.length > 18 ? name.slice(0, 17) + "…" : name;
       c.save();
       c.globalAlpha = alpha;
+      // El espaciado de letras en lienzo existe desde 2025. En un navegador
+      // viejo asignarlo no hace nada y el chip se ve igual, solo más apretado.
+      c.letterSpacing = "0.01em";
       c.font = `700 ${12 * k}px system-ui, sans-serif`;
       c.textAlign = "left";
       c.textBaseline = "alphabetic";
-      const tw = c.measureText(label).width;
-      const bw = tw + av + 18 * k;
+      const bw = c.measureText(label).width + av + 18 * k;
+
+      const round = typeof c.roundRect === "function";
+      c.beginPath();
+      if (round) c.roundRect(x - 4 * k, y - 14 * k, bw, 22 * k, 5 * k);
+      else c.rect(x - 4 * k, y - 14 * k, bw, 22 * k);
+      // La sombra dura de la casa, la misma que el CSS: sin desenfoque, porque
+      // el neobrutalismo no lo tiene. Hasta ahora vivía solo en la página y no
+      // existía en ningún juego.
+      c.shadowColor = INK;
+      c.shadowBlur = 0;
+      c.shadowOffsetX = 3 * k;
+      c.shadowOffsetY = 3 * k;
       c.fillStyle = dark ? "#f6efe2" : "#ffffff";
-      c.fillRect(x - 4 * k, y - 14 * k, bw, 22 * k);
+      c.fill();
+      c.shadowColor = "transparent";
+      c.shadowOffsetX = 0;
+      c.shadowOffsetY = 0;
       c.strokeStyle = INK;
       c.lineWidth = 2 * k;
-      c.strokeRect(x - 4 * k, y - 14 * k, bw, 22 * k);
+      c.stroke();
+
       const im = imageOf(name);
-      if (im.complete && im.naturalWidth) c.drawImage(im, x, y - 11 * k, av, av);
+      if (im.complete && im.naturalWidth) {
+        c.save();
+        c.beginPath();
+        if (round) c.roundRect(x, y - 11 * k, av, av, 3 * k);
+        else c.rect(x, y - 11 * k, av, av);
+        c.clip();
+        c.drawImage(im, x, y - 11 * k, av, av);
+        c.restore();
+      }
       c.fillStyle = INK;
       c.fillText(label, x + av + 6 * k, y + 3 * k);
+      c.letterSpacing = "0px";
       c.restore();
       return bw;
     },

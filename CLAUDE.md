@@ -2,9 +2,9 @@
 
 ## Qué es
 
-Sorteos verificables para comunidades. La lista se sella con SHA-256 antes de que exista la semilla; la semilla es una ronda futura de drand quicknet cuya firma BLS verifica un contrato Soroban en Stellar; la selección es determinista y cualquiera la recomputa. El show (carrera de llamas, ruleta) es presentación, no mecanismo.
+Sorteos verificables para comunidades. La lista se sella con SHA-256 antes de que exista la semilla; la semilla es una ronda futura de drand quicknet cuya firma BLS verifica un contrato Soroban en Stellar; la selección es determinista y cualquiera la recomputa. El show es presentación, no mecanismo: seis juegos, y ninguno decide nada.
 
-Sitio en producción: https://tinkazo.vercel.app (hoy el demo v1, un solo `index.html`).
+Sitio en producción: https://tinkazo.vercel.app
 
 ## Documentos que mandan
 
@@ -13,6 +13,8 @@ Sitio en producción: https://tinkazo.vercel.app (hoy el demo v1, un solo `index
 - [docs/prd.md](docs/prd.md) — requisitos (FR/NFR) y alcance.
 - [docs/epics.md](docs/epics.md) — historias con criterios de aceptación y estado.
 - [docs/deployments.md](docs/deployments.md) — direcciones del contrato por red y costos medidos.
+- [docs/juegos.md](docs/juegos.md) — el contrato que cumple todo juego y las 15 comprobaciones del auditor.
+- [docs/marca.md](docs/marca.md) — paleta con los contrastes medidos, tipografía y cómo se escribe.
 - [docs/vectors.json](docs/vectors.json) — vectores de prueba compartidos por Rust y TypeScript.
 
 ## Reglas del repositorio
@@ -44,7 +46,15 @@ pnpm preview &      # sirve dist/ en :4173
 node scripts/smoke.mjs "http://localhost:4173/?demo=wheel&instant=1&lead=3"
 ```
 
-Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=race|wheel` (carga el ejemplo, sella y sortea), `?instant=1` (sin animaciones), `?lead=N` (segundos hasta la ronda objetivo, mínimo 3; solo modo libre), `?pose=1` (escena fija del estadio).
+Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|race|rockets|wheel` (carga el ejemplo, sella y sortea), `?instant=1` (sin animaciones), `?lead=N` (segundos hasta la ronda objetivo, mínimo 3; solo modo libre), `?pose=1` (escena fija del estadio).
+
+```bash
+# Auditor de juegos: 15 comprobaciones por juego, contra drand de verdad
+node scripts/audit-game.mjs <juego> --base http://localhost:4173
+
+# Las fuentes de las tarjetas de historia siguen vivas
+pnpm check:lore
+```
 
 En la máquina del autor (Windows sin MSVC) el toolchain es `stable-x86_64-pc-windows-gnu`; `cargo` está en `~/.cargo/bin` y `stellar.exe` en `C:\Program Files (x86)\Stellar CLI\`.
 
@@ -56,8 +66,10 @@ En la máquina del autor (Windows sin MSVC) el toolchain es `stable-x86_64-pc-wi
 
 ```
 index.html          Entrada de Vite (markup del sitio)
-src/                Frontend TypeScript: main, i18n, state, protocol/ (canonical, select, drand), ui/, games/
-scripts/            deploy.sh (contrato) y smoke.mjs (sitio)
+verificar.html      Página de verificación, solo lectura
+src/                Frontend TypeScript: main, i18n, state, narrator, protocol/, stellar/, ui/, games/
+src/games/overlay.ts  Andamiaje de los juegos: estadio, azar sembrado, chips, saltar, desmontaje
+scripts/            deploy.sh (contrato), smoke.mjs (sitio), audit-game.mjs, check-lore.mjs
 contracts/raffle/   Contrato Soroban tinkazo-raffle (lib, drand, select, test)
 docs/               PRD, arquitectura, protocolo, épicas, despliegues, vectores, capturas
 .claude/skills/     Skills para construir en Stellar

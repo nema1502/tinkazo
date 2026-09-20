@@ -32,7 +32,9 @@ export function stadiumRace(
   themeId: ThemeId = "andes",
 ): void {
   const skin = THEMES[themeId];
-  if (instantMode) {
+  // Igual que los juegos nuevos: `?instant=1` es del auditor, y la preferencia
+  // del sistema es de una persona a la que las animaciones le hacen mal.
+  if (instantMode || matchMedia("(prefers-reduced-motion: reduce)").matches) {
     done();
     return;
   }
