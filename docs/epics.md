@@ -365,8 +365,12 @@ para lanzar sin sorpresas.
 
 **Dado** el contrato validado en testnet
 **Cuando** completo la puerta 1 (tests, auth, TTL, sin `unwrap` en rutas de usuario, decisión de inmutabilidad documentada, custodia de la cuenta de despliegue)
-**Entonces** despliego con `scripts/deploy.sh mainnet`, registro dirección, hash y commit en `deployments.md`, verifico en stellar.expert y actualizo `deployments.ts`
+**Entonces** despliego con `scripts/deploy.sh mainnet`, registro dirección, hash y commit en `deployments.md`, verifico en stellar.expert y actualizo `deployments.json`
 **Y** el sitio en producción apunta a mainnet por configuración.
+
+Avance (2026-09-20): `pnpm preflight:mainnet --account G…` comprueba de una vez todo lo que se puede comprobar **sin gastar un centavo**: los tests del contrato y del protocolo, el tamaño del WASM, que el `.gitignore` cubra lo sensible, que no se haya colado ninguna semilla en el repositorio, que los cuatro relays de drand respondan, que el RPC de mainnet esté vivo y que la red soporte BLS12-381, y que la cuenta exista y tenga saldo.
+
+Estado hoy: todo en verde menos una cosa. **La cuenta `GB3OND7F…` no existe en mainnet**, o sea que nunca se fondeó. Hacen falta unos 70 XLM para desplegar y cubrir el primer año de alquiler con colchón. Ese es el único bloqueo de la épica 5.
 
 ### Historia 5.2: Documentación y README finales
 
