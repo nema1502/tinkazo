@@ -98,6 +98,37 @@
   }
   a.ghost { display: inline-block; text-decoration: none; }
   button.ghost:hover, a.ghost:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
+  .netbadge {
+    font-family: ui-monospace, Consolas, monospace; font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.1em; font-weight: 800; border: 2px solid var(--ink); background: var(--teal);
+    color: #fff; padding: 3px 8px;
+  }
+  .netbadge.bad { background: var(--orange); }
+  .auth a.hello { text-decoration: none; }
+  .auth a.hello:hover { text-decoration: underline; }
+  .modal-back {
+    position: fixed; inset: 0; z-index: 70; background: rgba(12, 8, 20, 0.72);
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-card {
+    background: var(--card); color: var(--ink); border: var(--bw) solid var(--ink); box-shadow: var(--sh);
+    padding: 22px; width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 12px;
+  }
+  .modal-card h3 { font-size: 19px; font-weight: 800; }
+  .wallet-row {
+    display: block; text-align: left; text-decoration: none; cursor: pointer;
+    background: var(--paper); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+    padding: 12px 14px; font-family: inherit; transition: transform 0.08s, box-shadow 0.08s;
+  }
+  .wallet-row:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
+  .wallet-row b { display: block; font-size: 15px; font-weight: 800; }
+  .wallet-row span { display: block; font-size: 12px; color: var(--ink2); margin-top: 3px; }
+  .wallet-notice {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 80;
+    background: var(--teal); color: #fff; border: var(--bw) solid var(--ink); box-shadow: var(--sh);
+    padding: 10px 18px; font-size: 13px; font-weight: 700; max-width: 90vw; text-align: center;
+  }
+  .wallet-notice.bad { background: var(--orange); color: #191919; }
   .chip {
     border: 2px solid var(--ink); padding: 5px 12px; font-family: ui-monospace, Consolas, monospace;
     font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; background: var(--paper); color: var(--ink2);

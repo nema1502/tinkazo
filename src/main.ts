@@ -7,6 +7,7 @@ import { bindParticipants, loadSample, renderNames } from "./ui/participants";
 import { freeze, secondsToRound, setGame } from "./ui/freeze";
 import { copySummary, draw, reverify } from "./ui/draw";
 import { skipRace, stadiumRace } from "./games/race";
+import { initWalletUI } from "./ui/wallet-ui";
 
 // `?theme=light|dark` fuerza el tema (capturas).
 const themeParam = params.get("theme");
@@ -36,6 +37,7 @@ $<HTMLButtonElement>("btn-copy").addEventListener("click", (e) => void copySumma
 $("st-sound").addEventListener("click", toggleSound);
 $("st-skip").addEventListener("click", skipRace);
 bindParticipants();
+initWalletUI();
 
 /* Modo demo y pose para capturas: `?demo=race|wheel`, `?pose=1`, `?instant=1`. */
 async function autoDemo(mode: string): Promise<void> {

@@ -46,16 +46,19 @@ A-1 Vectores cruzados Rust/TS en `docs/vectors.json` · A-2 Adaptador de wallet 
 El organizador compromete una lista y cualquiera finaliza el sorteo con la firma del faro, verificada en la cadena. **FRs:** 7, 10, 11, 12, 13. NFR-1, 3, 7.
 
 ### Épica 2: Sitio con protocolo v2 y modo libre verificable
-El sitio actual pasa a build con pnpm y Vite, adopta quicknet y el protocolo v2, verifica la firma del faro en el navegador y emite comprobantes locales. **FRs:** 1, 2, 3, 9, 11, 14, 15, 16, 22, 23, 24, 25. NFR-2.
+El sitio actual pasa a build con pnpm y Vite, adopta quicknet y el protocolo v2, verifica la firma del faro en el navegador y emite comprobantes locales. **FRs:** 1, 2, 3, 9, 11, 14, 15, 16, 22, 23, 24, 25. NFR-2. **En curso:** 2.1, 2.2 y 2.3 hechas; falta 2.4 (comprobante).
 
 ### Épica 3: Anclaje en Stellar desde la interfaz
-El organizador conecta su wallet, sella y sortea en el contrato desde la pantalla, con cuenta regresiva y show. **FRs:** 4, 5, 6, 7, 8, 9, 10, 12, 13. NFR-5, 6.
+El organizador conecta su wallet, sella y sortea en el contrato desde la pantalla, con cuenta regresiva y show. **FRs:** 4, 5, 6, 7, 8, 9, 10, 12, 13. NFR-5, 6. **En curso:** 3.1 y 3.5 hechas; faltan 3.2, 3.3 y 3.4.
 
 ### Épica 4: Verificación pública
 Cualquier persona abre el comprobante, ve el sello y el registro leídos de la cadena y obtiene un veredicto recomputado en su navegador. **FRs:** 17, 18, 19, 20, 21.
 
 ### Épica 5: Lanzamiento a mainnet
 Contrato en mainnet con checklist de despliegue, documentación final y distribución en el ecosistema. NFR-3, 7.
+
+### Épica 7: Catálogo de juegos
+El show es lo único que se personaliza y lo que hace que una comunidad elija Tinkazo sobre una ruleta cualquiera. Cada juego nuevo pasa el auditor de `docs/juegos.md` antes de entrar.
 
 ### Épica 6: Entrar con Google sin wallet ni XLM (v1.1)
 El organizador puede usar Pollar para iniciar sesión con Google y sellar sin instalar una wallet, mediante `signAuthEntry` y un relayer mínimo. Decisión D-07; se ejecuta solo si el autor la aprueba tras la épica 3.
@@ -203,7 +206,9 @@ para verificar en mi celular sin pedirle nada al organizador.
 
 ## Épica 3: Anclaje en Stellar desde la interfaz
 
-### Historia 3.1: Conectar wallet y detectar red
+### Historia 3.1: Conectar wallet y detectar red — hecho
+
+Resultado (2026-09-19): el botón "Conectar wallet" de la cabecera abre un selector con Freighter (con enlace de instalación si no está) y la cuenta de prueba. Al conectar se muestra la red, la dirección abreviada enlazada al explorador y el botón de salir; si la wallet está en otra red aparece el aviso y el anclaje queda bloqueado. El SDK de Stellar se carga con `import()` recién al abrir el selector, así que quien solo sortea en modo libre no descarga esos 500 KB.
 
 Como organizadora,
 quiero conectar mi wallet y ver mi dirección y la red,
@@ -246,7 +251,9 @@ para que lo que se ve en pantalla sea exactamente lo que dice la cadena.
 **Y** si el sorteo ya fue finalizado por otra persona, la app lo detecta (`AlreadyDrawn`) y pasa directo al show
 **Y** al recargar la página con un sello pendiente, la app ofrece reanudar el sorteo por `id`.
 
-### Historia 3.5: Cuenta invitada en testnet
+### Historia 3.5: Cuenta invitada en testnet — hecho
+
+Resultado (2026-09-19): el navegador genera el par de llaves, lo fondea con friendbot y lo guarda solo en ese dispositivo. Solo se ofrece en testnet. Falta exponer el exportar y borrar la llave en la interfaz.
 
 Como organizadora que quiere probar sin instalar nada,
 quiero que Tinkazo me cree una cuenta de Stellar en testnet con un clic,
@@ -402,6 +409,45 @@ para no necesitar XLM.
 **Entonces** el relayer arma la transacción con esa entrada, simula, firma como fuente, envía y devuelve el hash
 **Y** el relayer solo acepta invocaciones al contrato de Tinkazo (`seal`, `draw`), verifica la sesión de Pollar y aplica un límite por dirección y por día
 **Y** la excepción a NFR-2 queda documentada en `architecture.md`.
+
+---
+
+## Épica 7: Catálogo de juegos
+
+### Historia 7.1: Motor de carrera tematizable y Carrera Stellar — hecho
+
+Resultado (2026-09-19): escenario, horizonte, pista, corredor y texto de largada salen de `src/games/themes.ts`. La Carrera Stellar es una entrada en ese archivo, no un juego duplicado. Documentada en [juegos/carrera-stellar.md](juegos/carrera-stellar.md).
+
+### Historia 7.2: Auditor de juegos — hecho
+
+Resultado (2026-09-19): `pnpm audit:game <juego>` corre un sorteo real en Chrome y comprueba doce cosas, entre ellas la única que no se negocia: que el ganador en pantalla sea exactamente el que fijó el protocolo. Contrato y checklist en [juegos.md](juegos.md).
+
+### Historia 7.3: Mejoras transversales de presentación
+
+Como organizadora,
+quiero que el momento del ganador se sienta como el clímax del evento,
+para que la sala reaccione y la gente quiera repetirlo.
+
+**Criterios de aceptación:**
+
+**Dado** un sorteo terminado
+**Cuando** se revela al ganador
+**Entonces** hay una transición entre el juego y la tarjeta, partículas o destello en el instante exacto, y el nombre entra con una animación propia
+**Y** las mejoras aplican a los tres juegos por igual, sin duplicar código
+**Y** todos los juegos siguen aprobando el auditor.
+
+### Historia 7.4: Juegos nuevos del catálogo
+
+Como comunidad organizadora,
+quiero elegir entre varios juegos según el evento,
+para que el sorteo encaje con el tono de mi público.
+
+**Criterios de aceptación:**
+
+**Dado** el diseño de un juego nuevo
+**Cuando** se implementa
+**Entonces** cumple el contrato de `docs/juegos.md`, tiene su documento en `docs/juegos/`, textos en ES y EN, y aprueba las doce comprobaciones
+**Y** si es una carrera, se agrega como tema y no como módulo nuevo.
 
 ---
 
