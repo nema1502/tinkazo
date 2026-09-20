@@ -1,4 +1,4 @@
-# Tinkazo — guía para el proyecto
+# Tinkazo: guía para el proyecto
 
 ## Qué es
 
@@ -8,14 +8,14 @@ Sitio en producción: https://tinkazo.vercel.app
 
 ## Documentos que mandan
 
-- [docs/protocolo.md](docs/protocolo.md) — especificación normativa del sorteo (v2). Si el código difiere, el código está mal.
-- [docs/architecture.md](docs/architecture.md) — decisiones técnicas, patrones y estructura.
-- [docs/prd.md](docs/prd.md) — requisitos (FR/NFR) y alcance.
-- [docs/epics.md](docs/epics.md) — historias con criterios de aceptación y estado.
-- [docs/deployments.md](docs/deployments.md) — direcciones del contrato por red y costos medidos.
-- [docs/juegos.md](docs/juegos.md) — el contrato que cumple todo juego y las 15 comprobaciones del auditor.
-- [docs/marca.md](docs/marca.md) — paleta con los contrastes medidos, tipografía y cómo se escribe.
-- [docs/vectors.json](docs/vectors.json) — vectores de prueba compartidos por Rust y TypeScript.
+- [docs/protocolo.md](docs/protocolo.md), especificación normativa del sorteo (v2). Si el código difiere, el código está mal.
+- [docs/architecture.md](docs/architecture.md), decisiones técnicas, patrones y estructura.
+- [docs/prd.md](docs/prd.md), requisitos (FR/NFR) y alcance.
+- [docs/epics.md](docs/epics.md), historias con criterios de aceptación y estado.
+- [docs/deployments.md](docs/deployments.md), direcciones del contrato por red y costos medidos.
+- [docs/juegos.md](docs/juegos.md), el contrato que cumple todo juego y las 15 comprobaciones del auditor.
+- [docs/marca.md](docs/marca.md), paleta con los contrastes medidos, tipografía y cómo se escribe.
+- [docs/vectors.json](docs/vectors.json), vectores de prueba compartidos por Rust y TypeScript.
 
 ## Reglas del repositorio
 

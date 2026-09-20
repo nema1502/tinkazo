@@ -68,6 +68,17 @@ async function restorePollar(): Promise<void> {
     };
     render();
     refreshFreezeLabel();
+    // Al retomar la sesión, el perfil puede llegar un instante después que la
+    // dirección. Sin este reintento la cabecera se quedaba con la dirección y
+    // el nombre no volvía a aparecer hasta el próximo ingreso.
+    if (!prof) {
+      setTimeout(() => {
+        const late = pollarWallet.profile();
+        if (!late || !session) return;
+        session = { ...session, name: late.name, avatar: late.avatar };
+        render();
+      }, 2000);
+    }
   } catch {
     /* sin sesion previa, la cabecera queda como estaba */
   }
@@ -77,6 +88,7 @@ function render(): void {
   const box = $("wallet-box");
   box.innerHTML = "";
   applyGate();
+  void import("./history").then((h) => h.renderHistory(session?.address ?? null));
   // Sin contrato en esta red, el anclaje no se ofrece y la cabecera calla.
   if (!anchoringAvailable) return;
 
@@ -455,10 +467,22 @@ async function connect(
     // El diálogo no se cierra hasta saber si la cuenta puede pagar. Cerrarlo y
     // dejar el aviso más abajo en la página hacía que nadie lo viera: la
     // persona seguía con su lista y se enteraba recién al intentar sellar.
-    const bal = await w.xlmBalance(address);
-    if (bal >= 0 && bal < 1) {
-      showFundStep(back, address);
-      return;
+    //
+    // La cuenta de prueba se fondea sola al crearse, así que ahí no se
+    // pregunta: Horizon tarda unos segundos en reflejarlo y el diálogo
+    // mostraría el grifo para una cuenta que ya tiene fondos.
+    if (wallet.kind !== "guest") {
+      let bal = await w.xlmBalance(address);
+      // Una cuenta recién creada puede tardar en aparecer. Se reintenta una vez
+      // antes de decirle a alguien que no tiene nada.
+      if (bal === 0) {
+        await new Promise((r) => setTimeout(r, 2500));
+        bal = await w.xlmBalance(address);
+      }
+      if (bal >= 0 && bal < 1) {
+        showFundStep(back, address);
+        return;
+      }
     }
     back.remove();
   } catch (e) {

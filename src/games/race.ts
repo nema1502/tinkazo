@@ -287,7 +287,7 @@ export function stadiumRace(
       c.ellipse(cx + 34 * cl.sc * u, cy - 8 * cl.sc * u, 40 * cl.sc * u, 13 * cl.sc * u, 0, 0, 7);
       c.fill();
     }
-    // Montañas (parallax lejano) — terminan en el horizonte, no bajo la pista
+    // Montañas (parallax lejano), terminan en el horizonte, no bajo la pista
     c.fillStyle = tone(skin.ridgeFar);
     drawRange(peaks, 0.22, 0.425, w, h);
     // Cerros (parallax medio)

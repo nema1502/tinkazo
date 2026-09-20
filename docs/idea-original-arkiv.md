@@ -1,6 +1,6 @@
-# Tinkazo — sorteos verificables y juegos para comunidades
+# Tinkazo, sorteos verificables y juegos para comunidades
 
-**Track:** Open Lane (todo agosto — "game state, provenance") · **Autor:** Nicolás Emir Mejía Agreda (Bolivia)
+**Track:** Open Lane (todo agosto, "game state, provenance") · **Autor:** Nicolás Emir Mejía Agreda (Bolivia)
 
 > En Bolivia, un *tinkazo* es esa corazonada de que hoy tienes suerte. **Tinkazo** es la plataforma de sorteos
 > para comunidades donde la suerte es divertida de ver (juegos) e imposible de arreglar (Arkiv).
@@ -19,7 +19,7 @@ Y el dolor operativo real: **cargar a los participantes es un martirio**. Copiar
 Tinkazo tiene tres piezas:
 
 1. **Importación sin fricción:** conecta el evento de Luma (API de guest list), Eventbrite o Meetup y los asistentes con check-in entran al sorteo automáticamente. Alternativas: QR en pantalla para auto-registro en sala, o CSV. Nadie transcribe nombres nunca más.
-2. **Sorteo verificable:** al cerrar inscripciones, la lista queda **congelada como entidades en Arkiv** (inmutable, con timestamp). La semilla aleatoria es el hash de un bloque futuro de Ethereum — ni el organizador ni Tinkazo pueden manipular el resultado, y cualquiera puede re-computarlo.
+2. **Sorteo verificable:** al cerrar inscripciones, la lista queda **congelada como entidades en Arkiv** (inmutable, con timestamp). La semilla aleatoria es el hash de un bloque futuro de Ethereum, ni el organizador ni Tinkazo pueden manipular el resultado, y cualquiera puede re-computarlo.
 3. **Juegos como show:** el resultado ya está determinado por la semilla; el juego es la *presentación teatral*. Catálogo: carrera de llamas 🦙 (nuestra respuesta a los patos), ruleta, batalla de avatares generados por IA a partir de la foto de perfil de cada participante, carrera de teleféricos paceños. El juego es skin; la verdad está en la chain.
 
 ## 3. Esquema de entidades
@@ -28,7 +28,7 @@ Tinkazo tiene tres piezas:
 |---|---|---|---|
 | `Raffle` | `type="raffle"`, `community`, `event_id`, `status` (open/frozen/drawn), `seed_block` | premio(s), reglas, juego elegido, fuente de participantes (luma/qr/csv) | 6 meses |
 | `Entry` | `type="entry"`, `raffle_id`, `participant_hash` | nombre/alias (o hash si hay privacidad), origen (luma/qr), timestamp de check-in | 6 meses |
-| `Draw` | `type="draw"`, `raffle_id`, `winner_entry` | hash del bloque-semilla, algoritmo (determinista, público), lista de ganadores por premio | 1 año — evidencia |
+| `Draw` | `type="draw"`, `raffle_id`, `winner_entry` | hash del bloque-semilla, algoritmo (determinista, público), lista de ganadores por premio | 1 año, evidencia |
 | `CommunityStats` | `type="stats"`, `community` | sorteos realizados, participantes históricos | Renovable |
 
 **Invariante clave:** una vez `status="frozen"`, no se pueden crear más `Entry` para ese raffle (el freeze registra el `count` exacto). Cualquier auditor verifica: entradas ≤ timestamp de freeze, ganador = f(seed_block_hash, entradas ordenadas).
@@ -46,8 +46,8 @@ Tinkazo tiene tres piezas:
 ## 5. ¿Por qué Arkiv?
 
 - **La lista congelada es el producto.** Un sorteo es un problema de confianza sobre un registro temporal: exactamente lo que una entidad inmutable con timestamp resuelve y una DB editable no puede prometer.
-- **BTL nativo:** las entradas expiran solas a los 6 meses — cero basura acumulada, y el costo del sorteo es centavos porque pagas por dato × tiempo.
-- **Verificación permissionless:** el participante escéptico no necesita cuenta ni permiso para auditar — query pública y listo.
+- **BTL nativo:** las entradas expiran solas a los 6 meses, cero basura acumulada, y el costo del sorteo es centavos porque pagas por dato × tiempo.
+- **Verificación permissionless:** el participante escéptico no necesita cuenta ni permiso para auditar, query pública y listo.
 - Los participantes **no necesitan wallet** (se registran vía Luma/QR); solo la comunidad organizadora tiene wallet. Web3 invisible = adopción real.
 
 ## 6. Integración con Luma (y amigas)
@@ -64,9 +64,9 @@ flowchart LR
     K --> V[Cualquiera verifica]
 ```
 
-Luma expone la guest list y el estado de check-in vía API: Tinkazo puede ofrecer "sortea solo entre los que SÍ vinieron", que es lo que todo organizador quiere y ninguna ruleta gratuita hace. (SerpApi entra opcional: Google Events para descubrir eventos/comunidades a las que ofrecerles Tinkazo — motor de growth, no de producto.)
+Luma expone la guest list y el estado de check-in vía API: Tinkazo puede ofrecer "sortea solo entre los que SÍ vinieron", que es lo que todo organizador quiere y ninguna ruleta gratuita hace. (SerpApi entra opcional: Google Events para descubrir eventos/comunidades a las que ofrecerles Tinkazo, motor de growth, no de producto.)
 
-**Identidad (Clerk):** el organizador entra a su dashboard con Google vía [Clerk](https://clerk.com) — la wallet comunitaria que firma en Arkiv queda custodiada por la app y mapeada a su cuenta. Los participantes **jamás crean cuenta**: entran por Luma, QR o CSV. Fricción cero en ambos lados.
+**Identidad (Clerk):** el organizador entra a su dashboard con Google vía [Clerk](https://clerk.com), la wallet comunitaria que firma en Arkiv queda custodiada por la app y mapeada a su cuenta. Los participantes **jamás crean cuenta**: entran por Luma, QR o CSV. Fricción cero en ambos lados.
 
 ## 7. Modelo de negocio 💰
 
@@ -81,7 +81,7 @@ La jugada: **la verificación es gratis siempre** (eso construye la marca "sorte
 
 ## 8. Encaje con la rúbrica
 
-- **Track (20):** Open Lane pide "game state, provenance" — Tinkazo es game state con provenance como propuesta de valor.
+- **Track (20):** Open Lane pide "game state, provenance", Tinkazo es game state con provenance como propuesta de valor.
 - **Arkiv fit (20):** inmutabilidad = anti-fraude, BTL = higiene y costo, lectura pública = verificación permissionless.
 - **Datos y queries (20):** esquema mínimo (4 entidades) con un invariante verificable elegante.
 - **Impacto (15):** toda comunidad del mundo hace sorteos; el dolor (carga de participantes + desconfianza) es universal y cotidiano.

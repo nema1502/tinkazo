@@ -1,4 +1,4 @@
-# Protocolo de sorteo Tinkazo — v2
+# Protocolo de sorteo Tinkazo: v2
 
 Este documento es normativo. Cualquier implementación (el contrato en Rust, el sitio en TypeScript o una herramienta de un tercero) que siga estos pasos obtiene exactamente el mismo resultado. Si algo aquí y el código difieren, el código tiene un bug.
 

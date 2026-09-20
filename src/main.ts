@@ -56,6 +56,24 @@ const paceSel = $<HTMLSelectElement>("pace");
 paceSel.value = currentPace();
 paceSel.addEventListener("change", () => setPace(paceSel.value as Pace));
 
+$("btn-hist-csv").addEventListener("click", () => {
+  void import("./ui/history").then(async (h) => {
+    const { currentSession } = await import("./ui/wallet-ui");
+    const a = currentSession()?.address;
+    if (a) h.downloadCsv(a);
+  });
+});
+$("btn-hist-clear").addEventListener("click", () => {
+  if (!confirm(t("histConfirm"))) return;
+  void import("./ui/history").then(async (h) => {
+    const { currentSession } = await import("./ui/wallet-ui");
+    const a = currentSession()?.address;
+    if (!a) return;
+    h.forget(a);
+    h.renderHistory(a);
+  });
+});
+
 $("g-race").addEventListener("click", () => setGame("race"));
 $("g-stellar").addEventListener("click", () => setGame("stellar"));
 $("g-ledger").addEventListener("click", () => setGame("ledger"));
@@ -67,6 +85,7 @@ $("btn-reverify").addEventListener("click", reverify);
 $<HTMLButtonElement>("btn-copy").addEventListener("click", (e) => void copySummary(e.currentTarget as HTMLButtonElement));
 $<HTMLButtonElement>("btn-proof").addEventListener("click", (e) => void shareProof(e.currentTarget as HTMLButtonElement));
 $("st-sound").addEventListener("click", toggleSound);
+$("btn-sound").addEventListener("click", toggleSound);
 $("st-skip").addEventListener("click", skipGame);
 bindParticipants();
 initWalletUI();

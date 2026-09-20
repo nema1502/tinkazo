@@ -49,28 +49,28 @@ A-1 Vectores cruzados Rust/TS en `docs/vectors.json` · A-2 Adaptador de wallet 
 ### Épica 1: Contrato de sorteos verificables
 El organizador compromete una lista y cualquiera finaliza el sorteo con la firma del faro, verificada en la cadena. **FRs:** 7, 10, 11, 12, 13. NFR-1, 3, 7.
 
-### Épica 2: Sitio con protocolo v2 y modo libre verificable — hecha
+### Épica 2: Sitio con protocolo v2 y modo libre verificable: hecha
 El sitio pasó a Vite con pnpm, adoptó quicknet y el protocolo v2, verifica la firma del faro en el navegador y emite comprobantes. **FRs:** 1, 2, 3, 9, 11, 14, 15, 16, 22, 23, 24, 25. NFR-2.
 
-### Épica 3: Anclaje en Stellar desde la interfaz — hecha
+### Épica 3: Anclaje en Stellar desde la interfaz: hecha
 El organizador conecta su wallet, sella y sortea en el contrato desde la pantalla, con cuenta regresiva, costo a la vista antes de firmar y show. **FRs:** 4, 5, 6, 7, 8, 9, 10, 12, 13. NFR-5, 6.
 
-### Épica 4: Verificación pública — hecha
+### Épica 4: Verificación pública: hecha
 Cualquiera abre el comprobante, ve el sello y el registro leídos de la cadena y obtiene un veredicto recomputado en su navegador, y puede finalizar un sorteo que quedó pendiente. **FRs:** 17, 18, 19, 20, 21.
 
 ### Épica 5: Lanzamiento a mainnet
 Contrato en mainnet con checklist de despliegue, documentación final y distribución en el ecosistema. NFR-3, 7.
 
-### Épica 7: Catálogo de juegos — seis juegos, todos aprobados
+### Épica 7: Catálogo de juegos: seis juegos, todos aprobados
 El show es lo único que se personaliza y lo que hace que una comunidad elija Tinkazo sobre una ruleta cualquiera. Cada juego nuevo pasa el auditor de `docs/juegos.md` antes de entrar.
 
-### Épica 8: Que el juego enseñe — hecha
+### Épica 8: Que el juego enseñe: hecha
 Después del ganador aparece una tarjeta que contesta la pregunta que el juego deja picando, con fuente primaria. Es lo que convierte un sorteo en un minuto de divulgación sobre Stellar, sin frenar nada.
 
-### Épica 9: El narrador habla — hecha
+### Épica 9: El narrador habla: hecha
 La voz usa la API del navegador, elige una voz en español de verdad instalada y sube el ritmo con la tensión. Sin voz en la máquina, el sorteo funciona igual.
 
-### Épica 6: Entrar con Google sin instalar nada — hecha, falta probarla con una cuenta real
+### Épica 6: Entrar con Google sin instalar nada: hecha, falta probarla con una cuenta real
 El organizador entra con Google y sella sin instalar wallet. Decisión D-07. El relayer resultó innecesario: la cuenta custodial de Pollar firma y envía la invocación por su cuenta.
 
 ---
@@ -79,7 +79,7 @@ El organizador entra con Google y sella sin instalar wallet. Decisión D-07. El 
 
 Un contrato Soroban inmutable que guarda sellos y registros, verifica la firma BLS de quicknet y selecciona ganadores de forma determinista.
 
-### Historia 1.1: Sellar una lista — hecho
+### Historia 1.1: Sellar una lista: hecho
 
 Como organizador,
 quiero comprometer el hash de mi lista, la cantidad de entradas, los ganadores y una ronda futura,
@@ -93,7 +93,7 @@ para que nadie (ni yo) pueda cambiar la lista después de conocer la semilla.
 **Y** rechaza con `TooFewEntries`, `BadWinnerCount`, `MetaTooLong`, `RoundTooSoon` o `RoundTooFar` cada violación
 **Y** la autorización del organizador es obligatoria.
 
-### Historia 1.2: Registrar el resultado con la firma de quicknet verificada — hecho
+### Historia 1.2: Registrar el resultado con la firma de quicknet verificada: hecho
 
 Como participante,
 quiero que el contrato solo acepte la firma auténtica de la ronda comprometida y derive de ella los ganadores,
@@ -108,7 +108,7 @@ para que el resultado no dependa de confiar en el organizador ni en Tinkazo.
 **Y** rechaza `RoundNotReady` antes de tiempo, `AlreadyDrawn` en una segunda llamada y `NotFound` para ids inexistentes
 **Y** el test usa la ronda real 32254977 y reproduce los índices de `docs/vectors.json`.
 
-### Historia 1.3: Consultas, TTL y utilidades — hecho
+### Historia 1.3: Consultas, TTL y utilidades: hecho
 
 Como verificador,
 quiero leer el sello y el registro por id, renovar su vigencia y calcular rondas,
@@ -121,7 +121,7 @@ para poder auditar meses después sin depender de Tinkazo.
 **Entonces** obtengo los datos sin autorización, `extend` renueva el TTL de sorteo y registro y devuelve `NotFound` si el id no existe
 **Y** los TTL se extienden a 120 días cuando bajan de 60 en cada escritura.
 
-### Historia 1.4: Desplegar en testnet y medir — hecho
+### Historia 1.4: Desplegar en testnet y medir: hecho
 
 Resultado (2026-09-16): contrato `CD2SSHBU…RENH` en testnet; sorteo real `id=1` contra la ronda 32255926 con `seal` (0,099 XLM), `draw` (0,083 XLM) y `extend` (15,15 XLM por la renta del código). La primera versión desplegada cobraba la renta del código dentro de `seal`; se corrigió y redesplegó el mismo día. Detalle en [deployments.md](deployments.md).
 
@@ -138,7 +138,7 @@ para validar NFR-3 y tener una dirección estable para el frontend.
 **Y** `stellar contract invoke --send=no` reporta el costo de `draw`; si el fee de `seal + draw` supera 0,1 XLM equivalente, se abre la brecha del plan B de D-02
 **Y** la dirección se agrega a `src/stellar/deployments.ts` (o a un JSON provisional si la épica 2 no empezó).
 
-### Historia 1.5: Integración continua del contrato — hecho (primera corrida en verde)
+### Historia 1.5: Integración continua del contrato: hecho (primera corrida en verde)
 
 Como mantenedor,
 quiero que cada push ejecute los tests y compile el WASM,
@@ -154,7 +154,7 @@ para que una regresión en la matemática no llegue a `main` sin aviso.
 
 ## Épica 2: Sitio con protocolo v2 y modo libre verificable
 
-### Historia 2.1: Migrar el sitio a Vite, TypeScript y pnpm con paridad visual — hecho
+### Historia 2.1: Migrar el sitio a Vite, TypeScript y pnpm con paridad visual: hecho
 
 Resultado (2026-09-16): `index.html` es la entrada de Vite 8; el CSS vive en `src/styles.css` y el JavaScript en módulos TypeScript 7 (`src/i18n.ts`, `src/state.ts`, `src/ui/*`, `src/games/*`, `src/protocol/legacy-v1.ts`). Clerk retirado. Verificado con Chrome headless: idioma por URL, demo de ruleta y de carrera con drand real, tema oscuro. El algoritmo sigue siendo el v1 hasta la historia 2.2.
 
@@ -183,7 +183,7 @@ para que ambos lleguen al mismo ganador.
 **Entonces** `listHash(SAMPLE)` es `32e2099c…21ef` y `select` reproduce todos los casos del archivo
 **Y** la normalización sigue el protocolo §1 (recorte, longitud ≥ 2, duplicados exactos fuera, orden de entrada).
 
-### Historia 2.3: Quicknet en el navegador y modo libre verificable — hecho
+### Historia 2.3: Quicknet en el navegador y modo libre verificable: hecho
 
 Resultado (2026-09-16): el sello elige `targetRound(now + 45 s)`, el botón de sortear muestra la cuenta regresiva, `draw` obtiene la firma rotando relays, la verifica con `@noble/curves` y selecciona con el protocolo v2; el resumen y la prueba muestran ronda, firma verificada, `list_hash` e índices. `?lead=N` acorta la espera en demos. Verificado con `scripts/smoke.mjs` (Chrome headless vía DevTools) contra rondas reales. El texto "sin anclaje en Stellar" y el comprobante llegan con la 2.4.
 
@@ -199,7 +199,7 @@ para que el modo libre también sea honesto.
 **Y** una firma inválida o un relay caído producen mensajes claros en ES/EN y permiten reintentar sin perder el sello
 **Y** el resumen indica "sin anclaje en Stellar".
 
-### Historia 2.4: Comprobante — hecho
+### Historia 2.4: Comprobante: hecho
 
 Resultado (2026-09-20): `src/protocol/proof.ts` arma el comprobante y lo comprime con deflate a base64url. Va en el fragmento de la URL, que no viaja al servidor: los nombres nunca salen del navegador de quien abre el enlace. Un sorteo de 18 nombres da un enlace de 500 caracteres. El QR y los avisos al ganador apuntan ahí.
 
@@ -218,7 +218,7 @@ para verificar en mi celular sin pedirle nada al organizador.
 
 ## Épica 3: Anclaje en Stellar desde la interfaz
 
-### Historia 3.1: Conectar wallet y detectar red — hecho
+### Historia 3.1: Conectar wallet y detectar red: hecho
 
 Resultado (2026-09-19): el botón "Conectar wallet" de la cabecera abre un selector con Freighter (con enlace de instalación si no está) y la cuenta de prueba. Al conectar se muestra la red, la dirección abreviada enlazada al explorador y el botón de salir; si la wallet está en otra red aparece el aviso y el anclaje queda bloqueado. El SDK de Stellar se carga con `import()` recién al abrir el selector, así que quien solo sortea en modo libre no descarga esos 500 KB.
 
@@ -234,7 +234,7 @@ para sellar con mi identidad.
 **Y** si la wallet está en otra red, veo el aviso y el botón "Sellar en Stellar" queda deshabilitado
 **Y** sin wallet instalada, veo el enlace de instalación y el modo libre sigue disponible.
 
-### Historia 3.2: Sellar en Stellar — hecho
+### Historia 3.2: Sellar en Stellar: hecho
 
 Resultado (2026-09-19): el botón pasa a "Sellar en Stellar" con wallet conectada, firma la transacción y muestra cada paso con el enlace al explorador. El margen hasta la ronda se fuerza a 45 s al anclar, porque por debajo de 30 el contrato rechaza el sello.
 
@@ -250,7 +250,7 @@ para que la lista quede comprometida con timestamp público.
 **Y** al confirmarse muestra `id`, hash, ronda, hora del ledger, enlace a stellar.expert y bloquea lista y premio
 **Y** un rechazo de la wallet, falta de XLM o un error del contrato (por código) se muestran en ES/EN sin dejar la pantalla en estado intermedio.
 
-### Historia 3.3: Sortear en Stellar y revelar desde el registro — hecho
+### Historia 3.3: Sortear en Stellar y revelar desde el registro: hecho
 
 Resultado (2026-09-19): `draw` va al contrato, el show usa los índices registrados y, si otro finalizó antes, se lee el registro en vez de fallar. Probado de punta a punta en el navegador con la cuenta de prueba: sorteo #4 en testnet.
 
@@ -267,7 +267,7 @@ para que lo que se ve en pantalla sea exactamente lo que dice la cadena.
 **Y** si el sorteo ya fue finalizado por otra persona, la app lo detecta (`AlreadyDrawn`) y pasa directo al show
 **Y** al recargar la página con un sello pendiente, la app ofrece reanudar el sorteo por `id`.
 
-### Historia 3.5: Cuenta invitada en testnet — hecho
+### Historia 3.5: Cuenta invitada en testnet: hecho
 
 Resultado (2026-09-19): el navegador genera el par de llaves, lo fondea con friendbot y lo guarda solo en ese dispositivo. Solo se ofrece en testnet. Falta exponer el exportar y borrar la llave en la interfaz.
 
@@ -285,7 +285,7 @@ para sellar y sortear anclado sin wallet ni XLM propios.
 
 Justificación: mientras el proyecto viva en testnet, esta es la forma más rápida de demostrar el anclaje a cualquier comunidad. Se decidió el 2026-09-16 como alternativa gratuita a Pollar para esta etapa.
 
-### Historia 3.4: Errores y estados de transacción — hecho
+### Historia 3.4: Errores y estados de transacción: hecho
 
 Resultado (2026-09-20): los nueve errores del contrato, más los de wallet, fondos y red, se traducen a mensajes que dicen qué hacer. El costo sale de la simulación y se muestra en el paso de firma, antes de que el organizador apruebe nada.
 
@@ -305,7 +305,7 @@ para saber qué pasó y qué hacer.
 
 ## Épica 4: Verificación pública
 
-### Historia 4.1: Página de verificación — hecho
+### Historia 4.1: Página de verificación: hecho
 
 Resultado (2026-09-20): `verificar.html` lee el comprobante, rehace el sorteo y da un veredicto. Sin wallet y sin servidor.
 
@@ -320,7 +320,7 @@ para juzgar por mí mismo.
 **Entonces** la página lee `get_raffle` y `get_draw` por RPC, obtiene la ronda de drand y muestra los cuatro bloques con sus valores
 **Y** funciona también para comprobantes de modo libre (sin contrato).
 
-### Historia 4.2: Veredicto y finalización — hecho
+### Historia 4.2: Veredicto y finalización: hecho
 
 Resultado (2026-09-20): **tres veredictos, no dos.** Verde solo cuando el contrato atestigua la huella de la lista. Amarillo en modo libre, donde la cuenta cierra pero nadie garantiza que esa fuera la lista original, porque el comprobante trae lista y firma juntas. Rojo cuando algo no cuadra. Probado: lista manipulada sobre un sorteo anclado da rojo con el motivo exacto. Ese amarillo es justo lo que compra anclar.
 
@@ -337,7 +337,7 @@ para no depender de que el organizador vuelva a la app.
 **Entonces** el navegador recomputa `list_hash`, verifica la firma BLS, ejecuta la selección y compara con el registro, y muestra verde solo si todo coincide o rojo con el paso que falló
 **Y** si el sorteo está sellado pero sin registro y la ronda ya existe, la página ofrece "Finalizar" (llamada `draw` con cualquier wallet).
 
-### Historia 4.3: Recomputar a mano y enlaces — hecho
+### Historia 4.3: Recomputar a mano y enlaces: hecho
 
 Resultado (2026-09-20): la página imprime los cuatro pasos del protocolo con los valores concretos del sorteo, listos para pegar en una terminal, y enlaza al contrato y a la ronda de drand.
 
@@ -400,7 +400,7 @@ para conseguir usuarios y evaluar SCF.
 
 ## Épica 6: Entrar con Google sin wallet ni XLM (v1.1)
 
-### Historia 6.1: App de Pollar configurada — hecho (testnet)
+### Historia 6.1: App de Pollar configurada: hecho (testnet)
 
 Como equipo,
 quiero una app de Pollar en testnet con key publicable, dominios y wallet fondeada,
@@ -413,7 +413,7 @@ para prototipar el login social.
 **Entonces** existe la key `pub_testnet_…` en `.env.local` (fuera del repo), los orígenes `https://tinkazo.vercel.app` y `localhost` están permitidos y la wallet de la app está fondeada
 **Y** tras la historia 1.4, el contrato y la función `seal` se agregan a Treasury → Auth Policy.
 
-### Historia 6.2: Login con Google en el sitio — hecho, sin verificar de punta a punta
+### Historia 6.2: Login con Google en el sitio: hecho, sin verificar de punta a punta
 
 Resultado (2026-09-20): el selector de cuenta ofrece "Entrar con Google". `src/stellar/wallet-pollar.ts` implementa el adaptador y la sesión se retoma sola al volver del redirect.
 
@@ -430,7 +430,7 @@ para sellar igual que con wallet.
 **Entonces** completo el OAuth, veo mi dirección custodial y el adaptador de wallet expone `getAddress` y `signAuthEntry`
 **Y** el modo con wallet externa sigue disponible en el mismo menú.
 
-### Historia 6.3: Relayer mínimo — ya no hace falta
+### Historia 6.3: Relayer mínimo: ya no hace falta
 
 Se descartó el 2026-09-20. `signAndSubmitTx` de Pollar acepta un XDR de Soroban ya construido, así que la cuenta custodial del propio organizador firma y envía. No hay relayer, no hay servidor, y NFR-2 queda intacto: el proyecto sigue sin backend.
 
@@ -452,39 +452,39 @@ para no necesitar XLM.
 
 ## Épica 7: Catálogo de juegos
 
-### Historia 7.1: Motor de carrera tematizable y Carrera Stellar — hecho
+### Historia 7.1: Motor de carrera tematizable y Carrera Stellar: hecho
 
 Resultado (2026-09-19): escenario, horizonte, pista, corredor y texto de largada salen de `src/games/themes.ts`. La Carrera Stellar es una entrada en ese archivo, no un juego duplicado. Documentada en [juegos/carrera-stellar.md](juegos/carrera-stellar.md).
 
-### Historia 7.2: Auditor de juegos — hecho
+### Historia 7.2: Auditor de juegos: hecho
 
 Resultado (2026-09-19): `pnpm audit:game <juego>` corre un sorteo real en Chrome y comprueba doce cosas, entre ellas la única que no se negocia: que el ganador en pantalla sea exactamente el que fijó el protocolo. Contrato y checklist en [juegos.md](juegos.md).
 
-### Historia 7.5: La tensión de la carrera — hecho
+### Historia 7.5: La tensión de la carrera: hecho
 
 Resultado (2026-09-20): el ganador ya no arranca su sprint en el segundo 9. Corre en el tercio de atrás hasta el 80% de la carrera y remonta al final, con la velocidad calculada para llegar justo al acabarse el tiempo. La punta se la pelea el pelotón y el narrador la canta. Comprobado en una corrida real: tres líderes distintos antes del final y el ganador aparece recién al cruzar. Los tres juegos siguen aprobando el auditor.
 
-### Historia 7.6: Constelación Stellar, que deja de ser un reskin — hecho
+### Historia 7.6: Constelación Stellar, que deja de ser un reskin: hecho
 
 Resultado (2026-09-20): la Carrera Stellar era la carrera de llamas con otra piel, y se notaba en el código, que tenía que aclarar la pista "para que los cohetes no se pierdan". Se reemplazó por [Constelación Stellar](juegos/constelacion-stellar.md): un pago que salta de estrella en estrella como un path payment, donde cada participante tiene su estrella y al terminar queda dibujada una constelación. La carrera de cohetes quedó como juego propio (`rockets`).
 
-### Historia 7.7: Cierre de Libro, para doscientas personas — hecho
+### Historia 7.7: Cierre de Libro, para doscientas personas: hecho
 
 Resultado (2026-09-20): no había nada para doscientos. La ruleta muere a los veinticuatro nombres y la carrera solo muestra ocho carriles. [Cierre de Libro](juegos/cierre-de-libro.md) barre tarjetas hasta que queda una sellada, y se ve mejor cuanta más gente hay. Dura lo que tarda Stellar en cerrar un ledger.
 
-### Historia 7.8: La ruleta, de nuevo — hecho
+### Historia 7.8: La ruleta, de nuevo: hecho
 
 Resultado (2026-09-20): con dos o tres participantes no se veía girar, y no era estilo sino geometría: una rueda de n gajos se ve igual cada 360/n grados. Ahora cada persona se lleva varios gajos intercalados y la rueda siempre tiene cerca de veinticuatro. Además frena integrando una velocidad en vez de interpolar el ángulo, la paleta se traba en los pernos, y los 64 dígitos de la semilla están escritos en el aro. Detalle en [ruleta.md](juegos/ruleta.md).
 
-### Historia 7.9: Pasanaku — hecho
+### Historia 7.9: Pasanaku: hecho
 
 Resultado (2026-09-20): el juego con nombre boliviano. El *Diccionario de americanismos* define `pasanacu` como "juego que consiste en sortear el dinero de las cuotas" de un grupo, así que ya era un sorteo. Un aguayo que se cierra sobre los bultos hasta que queda uno en el nudo, y los hilos entre vecinos son las trustlines. Detalle en [pasanaku.md](juegos/pasanaku.md).
 
-### Historia 7.10: El andamiaje compartido — hecho
+### Historia 7.10: El andamiaje compartido: hecho
 
 Resultado (2026-09-20): `src/games/overlay.ts` concentra el montaje del estadio, el azar sembrado con la ronda, los chips con avatar, el botón de saltar, la pantalla completa, el bloqueo de apagado y el desmontaje. Estaba dentro de la carrera, así que cada juego nuevo lo copiaba. Los seis juegos lo usan.
 
-### Historia 7.11: Lo que encontró el control de calidad — hecho en parte
+### Historia 7.11: Lo que encontró el control de calidad: hecho en parte
 
 Una revisión de los seis juegos con 2, 3, 5, 24, 60 y 200 participantes, en tres relaciones de pantalla, los dos temas y los dos idiomas: 66 corridas, cero errores de consola, cero excepciones, y los seis a sesenta cuadros por segundo con doscientos participantes.
 
@@ -549,7 +549,7 @@ Resultado parcial (2026-09-20): seis juegos en el catálogo, todos con 15/15. Co
 
 ## Épica 8: Que el juego enseñe
 
-### Historia 8.1: La tarjeta de "¿por qué se llama así?" — hecho
+### Historia 8.1: La tarjeta de "¿por qué se llama así?": hecho
 
 Resultado (2026-09-20): doce tarjetas, cada una con su fuente primaria comprobada. Aparecen después del ganador y nunca antes, porque durante el sorteo nadie lee. Se sortean con la ronda, así que son deterministas. El auditor comprueba que salgan después del ganador, que citen una fuente y que estén en los dos idiomas.
 
@@ -572,7 +572,7 @@ Resultado (2026-09-20): `pnpm check:lore` comprueba las doce fuentes y que las d
 
 ## Épica 9: El narrador habla
 
-### Historia 9.1: Voz con la API del navegador — hecho
+### Historia 9.1: Voz con la API del navegador: hecho
 
 Resultado (2026-09-20): `src/narrator.ts` elige una voz en español, prefiriendo boliviana y cayendo por vecinos, y prioriza las locales, que arrancan al instante y no dependen del wifi del evento. Cada línea lleva una tensión de 0 a 1 que sube el ritmo y el tono. El botón de sonido del estadio la apaga junto con los pitidos. Sin voz en la máquina no pasa nada.
 

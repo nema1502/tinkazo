@@ -215,7 +215,7 @@ async function main(): Promise<void> {
  *
  * Es la defensa contra el único ataque conocido que sigue abierto: sellar
  * varias listas y publicar solo la que conviene. La defensa siempre existió
- * —los sellos son públicos— pero dependía de saber buscarlos en un explorador,
+ * ·los sellos son públicos· pero dependía de saber buscarlos en un explorador,
  * y eso no es una defensa. Acá están al lado del veredicto.
  *
  * No afirma nada que no pueda comprobar. Si el RPC no contesta, la sección no

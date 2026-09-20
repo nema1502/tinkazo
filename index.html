@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Tinkazo — sorteos que nadie puede arreglar</title>
+<title>Tinkazo, sorteos que nadie puede arreglar</title>
 <meta name="description" content="El sorteo de tu meetup en pantalla grande, con carrera de llamas o ruleta. La lista se congela antes y el ganador sale de un número al azar público que cualquiera puede revisar." />
-<meta property="og:title" content="Tinkazo — sorteos que nadie puede arreglar" />
+<meta property="og:title" content="Tinkazo, sorteos que nadie puede arreglar" />
 <meta property="og:description" content="Carrera de llamas a pantalla completa. El show es show: el ganador ya salió de un número público que no controla ni el que organiza. Hecho en Bolivia." />
 <meta property="og:type" content="website" />
 <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -4 26 30"><g fill="%23e93d9c"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></g></svg>' />
@@ -32,7 +32,7 @@
       <h1 data-i-html="h1">Sorteos que <span class="hl">nadie puede arreglar</span>. Ni vos.</h1>
       <p class="lead" data-i="lead">Pegá la lista de tu evento y sorteá en pantalla grande, con carrera de llamas o con ruleta. Al ganador lo decide un número al azar que se publica en internet a una hora fija, después de que vos cerraste la lista. Vos no lo elegís. Yo tampoco. Y cualquiera lo revisa desde su celular.</p>
       <div class="row" style="margin-top:4px">
-        <a class="primary cta" href="#ta" data-i="ctaHero">Entrar y sortear — es gratis</a>
+        <a class="primary cta" href="#ta" data-i="ctaHero">Entrar y sortear, es gratis</a>
         <span class="kicker" data-i="note">Entrás con Google en dos toques, sin instalar nada. Tu gente no se crea ninguna cuenta.</span>
       </div>
     </div>
@@ -86,7 +86,7 @@
     <div class="head"><h2><span data-i="p2">Lista congelada</span></h2><span class="kicker" id="frozen-ts"></span></div>
     <div class="kpis">
       <div><b id="k-n">0</b><span data-i="kEntries">entries</span></div>
-      <div><b id="k-digest" style="font-size:16px" class="mono">—</b><span data-i="kDigest">huella de la lista</span></div>
+      <div><b id="k-digest" style="font-size:16px" class="mono">···</b><span data-i="kDigest">huella de la lista</span></div>
       <div><b id="k-status">frozen</b><span data-i="kStatus">estado del sorteo</span></div>
     </div>
     <div class="body">
@@ -102,6 +102,7 @@
           <button id="g-rockets" data-i="gameRockets">Carrera de cohetes</button>
           <button id="g-wheel" data-i="gameWheel">Ruleta</button>
         </div>
+        <button class="ghost" id="btn-sound" data-i="soundOn">Sonido: sí</button>
         <label class="kicker" for="pace" data-i="paceLabel">Duración</label>
         <select id="pace" class="mono">
           <option value="rapido" data-i="paceFast">Rápida</option>
@@ -149,6 +150,19 @@
           </div>
         </div>
         <aside class="lore" id="lore-box" style="display:none"></aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- Historial -->
+  <section class="block" id="sec-history" style="display:none">
+    <div class="head"><h2 data-i="histTitle">Tus sorteos</h2><span class="kicker" id="hist-count"></span></div>
+    <div class="body">
+      <p class="note" data-i="histWhy">Este equipo se acuerda de los sorteos que hiciste acá. Si borrás los datos del sitio se pierde la lista, pero no los sorteos: esos siguen en la cadena, y cada comprobante funciona para siempre desde cualquier lado.</p>
+      <div id="hist-list"></div>
+      <div class="row">
+        <button class="ghost" id="btn-hist-csv" data-i="histCsv">Bajar como CSV</button>
+        <button class="ghost" id="btn-hist-clear" data-i="histClear">Borrar de este equipo</button>
       </div>
     </div>
   </section>

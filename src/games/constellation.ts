@@ -1,5 +1,5 @@
 import { T, getLang, t } from "../i18n";
-import { beep, fanfare } from "../sound";
+import { beep, fanfare, note } from "../sound";
 import type { Beacon } from "../state";
 import { INK, clamp, ease, mount, shorten } from "./overlay";
 
@@ -239,16 +239,21 @@ export function stellarConstellation(
     const n = nodes[ni] as Node;
     n.flare = 1;
     links.push({ a: (hops[hopI] as Hop).from, b: ni, c: color(hopI) });
-    // El tono sube de 300 a 794 Hz mientras el ritmo se frena. Es el truco más
-    // viejo que hay y sigue funcionando.
-    beep(300 + 26 * hopI, 0.045, "square", 0.035);
+    // Una nota por salto, subiendo la escala pentatónica. Antes eran dos
+    // sonidos superpuestos con hercios sueltos, y sonaban desafinados entre
+    // ellos: el tono subía, sí, pero el resultado era ruido de aparato.
+    //
+    // Ahora suena un solo golpe por aterrizaje, y el timbre dice de qué se
+    // trata: suave y redondo cuando el pago rebota en un rombo, brillante
+    // cuando toca a una persona. El oído lo aprende en dos saltos.
     if (n.idx >= 0) {
-      // Timbre distinto para una persona: en dos saltos el oído lo aprende.
-      beep(600 + 52 * hopI, 0.05, "triangle", 0.025);
+      beep(note(hopI + 5), 0.16, "triangle", 0.05);
       chips.push({ node: ni, a: 1 });
       if ((hops[hopI] as Hop).dur > 0.3 && n.idx !== winnerIdx) {
         say(T[getLang()].cConstPass(names[n.idx] ?? ""), 0.25 + 0.4 * (hopI / K));
       }
+    } else {
+      beep(note(hopI + 2), 0.1, "sine", 0.03);
     }
   }
 
@@ -259,9 +264,9 @@ export function stellarConstellation(
     shake = 1;
     say(T[getLang()].cWin(names[winnerIdx] ?? ""), 1);
     fanfare();
-    beep(65, 0.6, "sine", 0.07);
-    setTimeout(() => beep(1319, 0.08, "triangle", 0.04), 150);
-    setTimeout(() => beep(1568, 0.08, "triangle", 0.04), 300);
+    beep(note(0, -1), 0.7, "sine", 0.06);
+    setTimeout(() => beep(note(25), 0.14, "triangle", 0.04), 150);
+    setTimeout(() => beep(note(27), 0.14, "triangle", 0.035), 300);
   }
 
   /** Saltar deja exactamente la misma imagen final, solo que sin la espera. */
@@ -282,16 +287,16 @@ export function stellarConstellation(
       tPhase += dt;
       // Doscientas estrellas apareciendo no pueden sonar a ametralladora: como
       // mucho veinticuatro golpecitos, repartidos en el segundo que dura.
-      const want = Math.floor(clamp((tPhase - 0.6) / 1, 0, 1) * Math.min(24, names.length));
+      // Las estrellas encendiéndose: notas de la escala, suaves, subiendo.
+      const want = Math.floor(clamp((tPhase - 0.6) / 1, 0, 1) * Math.min(18, names.length));
       while (bornTicks < want) {
-        beep(520 + bornTicks * 18, 0.03, "sine", 0.015);
+        beep(note(bornTicks + 8), 0.07, "sine", 0.016);
         bornTicks++;
       }
       if (tPhase >= 1.6 && barTick === 0) say(t("cConstReady"), 0.1);
       const ticks = [1.75, 1.95, 2.15];
-      const tones = [392, 494, 587];
       while (barTick < 3 && tPhase >= (ticks[barTick] as number)) {
-        beep(tones[barTick] as number, 0.09, "square", 0.05);
+        beep(note(5 + barTick * 2), 0.12, "triangle", 0.045);
         barTick++;
       }
       if (tPhase >= ARM) {
@@ -299,8 +304,8 @@ export function stellarConstellation(
         hopI = 0;
         hopT = 0;
         say(t("cRouteFound"), 0.35);
-        beep(880, 0.22, "sawtooth", 0.06);
-        beep(440, 0.3, "triangle", 0.04);
+        beep(note(10), 0.3, "triangle", 0.055);
+        beep(note(5), 0.34, "sine", 0.035);
       }
       return;
     }
@@ -309,7 +314,7 @@ export function stellarConstellation(
       const hp = hops[hopI] as Hop;
       if (hopT === 0 && hopI === K - 1) {
         say(t("cConstLast"), 0.85);
-        beep(120, 0.9, "sine", 0.05);
+        beep(note(0), 0.9, "sine", 0.045);
       } else if (!saidNarrow && hopI === 15) {
         say(t("cConstNarrow"), 0.6);
         saidNarrow = true;
@@ -319,8 +324,10 @@ export function stellarConstellation(
         // El engaño: 380 ms yendo claramente hacia el vecino equivocado.
         (nodes[DECOY] as Node).flare = 1;
         say(t("cConstDecoy"), 0.95);
-        beep(988, 0.1, "square", 0.05);
-        setTimeout(() => beep(740, 0.06, "sawtooth", 0.04), 100);
+        // El señuelo: una nota alta que promete, y enseguida otra por debajo
+        // que la contradice. Es el "casi" dicho en dos sonidos.
+        beep(note(24), 0.14, "triangle", 0.05);
+        setTimeout(() => beep(note(20), 0.1, "sine", 0.04), 120);
         saidDecoy = true;
       }
       if (hopT >= 1) {

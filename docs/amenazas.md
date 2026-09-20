@@ -27,7 +27,7 @@ Lo que hay acá no son hipótesis: cada límite del diseño está anotado con lo
 | **Quien hospeda el sitio** | Podría servir un sitio distinto | No puede tocar lo que ya quedó en la cadena |
 | **La red del evento** | Corta o intercepta el tráfico | No puede falsificar una firma |
 
-## S — Suplantación
+## S: Suplantación
 
 | Amenaza | Estado | Por qué |
 |---|---|---|
@@ -36,7 +36,7 @@ Lo que hay acá no son hipótesis: cada límite del diseño está anotado con lo
 | Un relay que devuelve otra ronda | **Cubierto** | El cliente comprueba que el número de ronda que volvió sea el pedido, y la firma se verifica igual |
 | Un sitio clonado que dice ser Tinkazo | **Parcial** | Un clon puede mostrar lo que quiera, pero no puede escribir en el contrato sin la cuenta del organizador. Un comprobante anclado abierto en el sitio de verdad delata la diferencia. **En modo libre no hay defensa**, y eso es parte de lo que compra anclar |
 
-## T — Alteración
+## T: Alteración
 
 | Amenaza | Estado | Por qué |
 |---|---|---|
@@ -67,7 +67,7 @@ Y si el RPC no contesta, la sección no aparece: decir "hay uno solo" sin haber 
 
 **Lo que sigue faltando:** el ataque no está cerrado, solo es mucho más visible. Cerrarlo del todo exigiría que el organizador anuncie el identificador del sorteo por un canal que él no controle antes de sellar, y eso Tinkazo no lo puede imponer.
 
-## R — Repudio
+## R: Repudio
 
 | Amenaza | Estado | Por qué |
 |---|---|---|
@@ -76,7 +76,7 @@ Y si el RPC no contesta, la sección no aparece: decir "hay uno solo" sin haber 
 | Alguien niega que el faro publicó esa ronda | **Cubierto** | La firma se verifica contra la clave pública de quicknet, que es pública y fija |
 | No queda registro de quién finalizó el sorteo | **Aceptado** | `draw` no pide permiso a propósito: cualquiera puede finalizar un sorteo pendiente, y eso es una función, no un descuido. Impide que un organizador retenga un resultado que no le gustó |
 
-## I — Filtración de información
+## I: Filtración de información
 
 | Amenaza | Estado | Por qué |
 |---|---|---|
@@ -87,7 +87,7 @@ Y si el RPC no contesta, la sección no aparece: decir "hay uno solo" sin haber 
 | Quien comparte el enlace expone la lista | **Aceptado y explícito** | El comprobante trae los nombres a propósito: sin ellos nadie puede recomputar. Quien comparte el enlace comparte la lista, y eso se dice |
 | La huella filtra la lista | **Cubierto en la práctica** | SHA-256 de la lista canónica completa. Adivinar la lista exige adivinar todos los nombres, en orden, con la forma exacta |
 
-## D — Denegación de servicio
+## D: Denegación de servicio
 
 | Amenaza | Estado | Por qué |
 |---|---|---|
@@ -99,7 +99,7 @@ Y si el RPC no contesta, la sección no aparece: decir "hay uno solo" sin haber 
 | Un sorteo que se queda sin finalizar | **Cubierto** | `draw` no pide permiso: la propia página de verificación le ofrece a quien abra el enlace finalizarlo |
 | La pantalla se apaga en medio del sorteo | **Cubierto** | El estadio le pide al sistema que no apague la pantalla, y lo vuelve a pedir al volver de segundo plano |
 
-## E — Elevación de privilegios
+## E: Elevación de privilegios
 
 | Amenaza | Estado | Por qué |
 |---|---|---|

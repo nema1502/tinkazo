@@ -7,7 +7,7 @@ completedAt: '2026-09-16'
 inputDocuments: ['docs/prd.md', 'docs/protocolo.md', 'docs/idea-original-arkiv.md', 'index.html (demo v1)']
 ---
 
-# Tinkazo — Arquitectura
+# Tinkazo: Arquitectura
 
 Documento de decisiones técnicas para implementar el [PRD](prd.md) sobre Stellar. Es la fuente de verdad para quien implemente (humano o agente): si algo no está aquí, se decide y se agrega aquí antes de codificarlo. El [Protocolo](protocolo.md) es la especificación normativa del sorteo y manda sobre este documento en lo que respecta a la matemática.
 

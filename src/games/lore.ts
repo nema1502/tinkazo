@@ -101,7 +101,7 @@ export const LORE: Record<string, Lore[]> = {
     {
       // "The Japanese soroban is the smallest and simplest abacus. Developed
       //  in the 14th century and still in use today, its design is compact and
-      //  minimalist, focused on doing the essentials — and doing them well."
+      //  minimalist, focused on doing the essentials, and doing them well."
       q: "loreSorobanQ",
       a: "loreSorobanA",
       href: "https://stellar.org/blog/developers/soroban-a-new-smart-contract-standard",

@@ -128,6 +128,26 @@ export async function freeze(): Promise<void> {
     ...(sealTx ? { sealTx } : {}),
   };
 
+  // Se anota en el historial de este equipo apenas se sella, no al sortear:
+  // si el sorteo queda pendiente, igual hay que poder encontrarlo.
+  const who = currentSession()?.address;
+  if (who) {
+    void import("./history").then((h) => {
+      h.remember({
+        organizer: who,
+        listHash: hash,
+        count: names.length,
+        numWinners,
+        round,
+        sealedAt: ts,
+        prize,
+        ...(raffleId !== undefined ? { id: String(raffleId) } : {}),
+        ...(sealTx ? { sealTx } : {}),
+      });
+      h.renderHistory(who);
+    });
+  }
+
   $<HTMLTextAreaElement>("ta").disabled = true;
   $<HTMLInputElement>("prize").disabled = true;
   $<HTMLSelectElement>("nw").disabled = true;

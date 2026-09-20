@@ -6,7 +6,7 @@ En Bolivia, un *tinkazo* es esa corazonada de que hoy tenés suerte. Tinkazo sor
 
 🌐 **Probalo:** [tinkazo.vercel.app](https://tinkazo.vercel.app)
 
-![Tinkazo — carrera de llamas en modo estadio](docs/capturas/tinkazo-estadio.png)
+![Tinkazo, carrera de llamas en modo estadio](docs/capturas/tinkazo-estadio.png)
 
 ## El problema
 
@@ -115,11 +115,11 @@ scripts/                     Despliegue, smoke test y auditor de juegos
 
 ## Documentación
 
-- [Protocolo v2](docs/protocolo.md) — la especificación normativa. Cualquiera puede reimplementarla y llegar al mismo resultado.
-- [Juegos](docs/juegos.md) — el contrato que cumple todo juego y las doce comprobaciones del auditor.
-- [Despliegues](docs/deployments.md) — direcciones por red y costos medidos.
-- [Marca](docs/marca.md) — paleta con los contrastes medidos, tipografía, cómo se escribe y qué no va. Para armar una presentación o un afiche.
-- [Amenazas](docs/amenazas.md) — qué puede salir mal, qué lo impide hoy y qué no. Incluye el único ataque conocido que sigue abierto.
+- [Protocolo v2](docs/protocolo.md), la especificación normativa. Cualquiera puede reimplementarla y llegar al mismo resultado.
+- [Juegos](docs/juegos.md), el contrato que cumple todo juego y las doce comprobaciones del auditor.
+- [Despliegues](docs/deployments.md), direcciones por red y costos medidos.
+- [Marca](docs/marca.md), paleta con los contrastes medidos, tipografía, cómo se escribe y qué no va. Para armar una presentación o un afiche.
+- [Amenazas](docs/amenazas.md), qué puede salir mal, qué lo impide hoy y qué no. Incluye el único ataque conocido que sigue abierto.
 - [PRD](docs/prd.md) · [Arquitectura](docs/architecture.md) · [Épicas](docs/epics.md)
 
 ## Estado

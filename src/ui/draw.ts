@@ -12,6 +12,7 @@ import { stellarConstellation } from "../games/constellation";
 import { ledgerClose } from "../games/ledger";
 import { pasanaku } from "../games/pasanaku";
 import { loreFor } from "../games/lore";
+import { currentSession } from "./wallet-ui";
 import { qrDataUrl } from "./qr";
 import { wheelSpin } from "../games/wheel";
 import { secondsToRound } from "./freeze";
@@ -251,6 +252,27 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
     link = roundLink;
   }
   proofLink = link;
+  // Y ahora se completa la fila del historial con el ganador y el comprobante.
+  const f2 = app.frozen;
+  const who = currentSession()?.address;
+  if (f2 && who) {
+    void import("./history").then((h) => {
+      h.remember({
+        organizer: who,
+        listHash: f2.listHash,
+        count: names.length,
+        numWinners: winners.length,
+        round: d.beacon.round,
+        sealedAt: f2.ts,
+        prize: f2.prize,
+        winners: winners.map((i) => names[i] ?? ""),
+        proof: link,
+        ...(f2.raffleId !== undefined ? { id: String(f2.raffleId) } : {}),
+        ...(d.drawTx ? { drawTx: d.drawTx } : {}),
+      });
+      h.renderHistory(who);
+    });
+  }
   // Los avisos primero: el QR carga su librería aparte y tarda, y hacer
   // esperar a los botones de "avisarle por WhatsApp" por un cuadradito los
   // dejaba sin armar justo cuando el ganador aparece en pantalla.

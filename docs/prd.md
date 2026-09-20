@@ -4,7 +4,7 @@ status: draft
 created: 2026-09-16
 updated: 2026-09-16
 stakes: lanzamiento (código libre, repo público)
-mode: fast path — redactado a partir de la idea original y el demo existente; las inferencias llevan [ASSUMPTION]
+mode: fast path, redactado a partir de la idea original y el demo existente; las inferencias llevan [ASSUMPTION]
 ---
 
 # PRD: Tinkazo
@@ -62,22 +62,22 @@ Ana recibe el enlace de comprobante. Abre la página de verificación, que lee e
 
 ## 3. Glosario
 
-- **Sorteo** — Un evento de selección aleatoria sobre una Lista canónica, con uno o más Ganadores. Tiene un `id` numérico en el Contrato.
-- **Lista canónica** — La lista de Participantes normalizada según el Protocolo: una línea por nombre, recortada, sin líneas vacías ni duplicados exactos, en el orden de entrada.
-- **Sello** — El hash SHA-256 de la Lista canónica (`list_hash`) junto con su cantidad de entradas (`count`). Compromete la lista antes de que exista la Semilla.
-- **Faro** — El servicio público de aleatoriedad drand, cadena *quicknet*: publica cada 3 segundos una firma BLS sobre el número de ronda.
-- **Ronda objetivo** — La ronda del Faro elegida al sellar, siempre en el futuro respecto al momento del Sello.
-- **Semilla** — La aleatoriedad de la Ronda objetivo: `sha256(firma)`, igual al campo `randomness` que publica drand.
-- **Selección** — El algoritmo determinista del Protocolo que deriva los índices ganadores a partir de Semilla, `list_hash` y `count`.
-- **Registro** — El resultado del Sorteo guardado en el Contrato: ronda, firma, Semilla, índices ganadores y momento.
-- **Contrato** — El contrato Soroban de Tinkazo en Stellar. Guarda Sellos y Registros y verifica la firma del Faro.
-- **Anclaje** — Un Sorteo cuyo Sello y Registro viven en el Contrato. Lo opuesto es **Modo libre**: el mismo Protocolo, sin Contrato, sellado en el navegador.
-- **Organizador** — Quien crea el Sorteo. En Anclaje, la cuenta de Stellar que firma el Sello.
-- **Participante** — Cada entrada de la Lista canónica. Nunca necesita cuenta ni wallet.
-- **Verificador** — Cualquier persona o programa que recomputa el resultado. No necesita permiso.
-- **Comprobante** — El enlace o archivo que contiene lo necesario para verificar: `id` del Sorteo, dirección del Contrato, red y Lista canónica.
-- **Protocolo** — La especificación normativa en [protocolo.md](protocolo.md). Versión actual: v2.
-- **Show** — La presentación visual del resultado: carrera de llamas (modo estadio) o ruleta. No influye en el resultado.
+- **Sorteo**, Un evento de selección aleatoria sobre una Lista canónica, con uno o más Ganadores. Tiene un `id` numérico en el Contrato.
+- **Lista canónica**, La lista de Participantes normalizada según el Protocolo: una línea por nombre, recortada, sin líneas vacías ni duplicados exactos, en el orden de entrada.
+- **Sello**, El hash SHA-256 de la Lista canónica (`list_hash`) junto con su cantidad de entradas (`count`). Compromete la lista antes de que exista la Semilla.
+- **Faro**, El servicio público de aleatoriedad drand, cadena *quicknet*: publica cada 3 segundos una firma BLS sobre el número de ronda.
+- **Ronda objetivo**, La ronda del Faro elegida al sellar, siempre en el futuro respecto al momento del Sello.
+- **Semilla**, La aleatoriedad de la Ronda objetivo: `sha256(firma)`, igual al campo `randomness` que publica drand.
+- **Selección**, El algoritmo determinista del Protocolo que deriva los índices ganadores a partir de Semilla, `list_hash` y `count`.
+- **Registro**, El resultado del Sorteo guardado en el Contrato: ronda, firma, Semilla, índices ganadores y momento.
+- **Contrato**, El contrato Soroban de Tinkazo en Stellar. Guarda Sellos y Registros y verifica la firma del Faro.
+- **Anclaje**, Un Sorteo cuyo Sello y Registro viven en el Contrato. Lo opuesto es **Modo libre**: el mismo Protocolo, sin Contrato, sellado en el navegador.
+- **Organizador**, Quien crea el Sorteo. En Anclaje, la cuenta de Stellar que firma el Sello.
+- **Participante**, Cada entrada de la Lista canónica. Nunca necesita cuenta ni wallet.
+- **Verificador**, Cualquier persona o programa que recomputa el resultado. No necesita permiso.
+- **Comprobante**, El enlace o archivo que contiene lo necesario para verificar: `id` del Sorteo, dirección del Contrato, red y Lista canónica.
+- **Protocolo**, La especificación normativa en [protocolo.md](protocolo.md). Versión actual: v2.
+- **Show**, La presentación visual del resultado: carrera de llamas (modo estadio) o ruleta. No influye en el resultado.
 
 ## 4. Funcionalidades
 
@@ -193,7 +193,7 @@ Toda cadena visible existe en español e inglés; el idioma se elige con el conm
 La interfaz respeta `prefers-color-scheme` y permite forzar el tema.
 
 #### FR-26: Catálogo de juegos
-El organizador elige entre varios juegos para mostrar el resultado. Ninguno calcula nada: reciben el ganador ya fijado por el Protocolo. Cada juego pasa las 15 comprobaciones del auditor antes de entrar, y la segunda de esas comprobaciones —que el nombre en pantalla sea el que fijó el Protocolo— no se negocia.
+El organizador elige entre varios juegos para mostrar el resultado. Ninguno calcula nada: reciben el ganador ya fijado por el Protocolo. Cada juego pasa las 15 comprobaciones del auditor antes de entrar, y la segunda de esas comprobaciones ·que el nombre en pantalla sea el que fijó el Protocolo· no se negocia.
 
 #### FR-27: El narrador habla
 El relato del sorteo se dice en voz alta con la voz del navegador, en el idioma de la página, con el ritmo subiendo según la tensión del momento. Si la máquina no tiene voz instalada, se avisa antes del sorteo y el sorteo funciona igual.
@@ -264,9 +264,9 @@ Cuando la lista viene de un archivo con varias columnas, el organizador elige cu
 
 ## 9. Índice de supuestos
 
-- §4.2 FR-5 — Margen de 45 s en la app frente a 30 s mínimos del Contrato.
-- §4.6 FR-23 — No convertir Modo libre a Anclaje después del hecho.
-- §Requisitos no funcionales NFR-3 — Confirmado con medición: 0,18 XLM por Sorteo en testnet; el umbral pasó de 0,1 a 0,25 XLM porque la renta de 120 días domina el costo.
-- §5 — Se elimina Clerk en la versión Stellar.
-- §4 — Se agregan FR-26 a FR-29 (2026-09-20): catálogo de juegos, narrador con voz, tarjeta que enseña y selección de columna. Los cuatro salieron de usar el producto, no de planificarlo.
-- §Requisitos no funcionales — La espera entre sellar y sortear baja de 45 a 10 segundos en Modo libre (2026-09-20). Lo que la propiedad necesita es que la ronda esté en el futuro al sellar, y quicknet publica una cada tres segundos. Con Anclaje sigue en 45 porque el Contrato exige 30 de margen y es inmutable.
+- §4.2 FR-5, Margen de 45 s en la app frente a 30 s mínimos del Contrato.
+- §4.6 FR-23, No convertir Modo libre a Anclaje después del hecho.
+- §Requisitos no funcionales NFR-3, Confirmado con medición: 0,18 XLM por Sorteo en testnet; el umbral pasó de 0,1 a 0,25 XLM porque la renta de 120 días domina el costo.
+- §5, Se elimina Clerk en la versión Stellar.
+- §4, Se agregan FR-26 a FR-29 (2026-09-20): catálogo de juegos, narrador con voz, tarjeta que enseña y selección de columna. Los cuatro salieron de usar el producto, no de planificarlo.
+- §Requisitos no funcionales, La espera entre sellar y sortear baja de 45 a 10 segundos en Modo libre (2026-09-20). Lo que la propiedad necesita es que la ronda esté en el futuro al sellar, y quicknet publica una cada tres segundos. Con Anclaje sigue en 45 porque el Contrato exige 30 de margen y es inmutable.
