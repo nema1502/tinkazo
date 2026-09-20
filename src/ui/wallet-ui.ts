@@ -44,6 +44,24 @@ export const canAnchor = (): boolean => anchoringAvailable && session !== null &
 export function initWalletUI(): void {
   render();
   onLangChange(render);
+  void restorePollar();
+}
+
+/** Al volver del redirect de Google, la sesión se retoma sola. */
+async function restorePollar(): Promise<void> {
+  try {
+    const { pollarConfigured, pollarWallet } = await import("../stellar/wallet-pollar");
+    if (!pollarConfigured()) return;
+    const address = await pollarWallet.restore();
+    if (!address) return;
+    const { setActiveWallet } = await loadWallets();
+    setActiveWallet(pollarWallet);
+    session = { kind: "external", label: pollarWallet.label, address };
+    render();
+    refreshFreezeLabel();
+  } catch {
+    /* sin sesion previa, la cabecera queda como estaba */
+  }
 }
 
 function render(): void {
@@ -87,7 +105,7 @@ function button(label: string, extra: string, onClick: () => void): HTMLButtonEl
 interface Option {
   label: string;
   hint: string;
-  pick: "freighter" | "guest" | null;
+  pick: "freighter" | "guest" | "google" | null;
   href?: string;
 }
 
@@ -105,6 +123,10 @@ async function openPicker(): Promise<void> {
       pick: null,
       href: "https://www.freighter.app/",
     });
+  }
+  const { pollarConfigured } = await import("../stellar/wallet-pollar");
+  if (pollarConfigured()) {
+    options.push({ label: t("googleWallet"), hint: t("googleHint"), pick: "google" });
   }
   if (w.guestAvailable()) {
     options.push({ label: t("guestWallet"), hint: t("guestHint"), pick: "guest" });
@@ -148,12 +170,21 @@ function showModal(options: Option[]): void {
   document.body.appendChild(back);
 }
 
-async function connect(pick: "freighter" | "guest", back: HTMLElement, row: HTMLElement): Promise<void> {
+async function connect(
+  pick: "freighter" | "guest" | "google",
+  back: HTMLElement,
+  row: HTMLElement,
+): Promise<void> {
   const original = row.innerHTML;
   row.innerHTML = `<b>${esc(t("connecting"))}</b>`;
   try {
     const w = await loadWallets();
-    const wallet = pick === "guest" ? w.guestWallet : w.freighterWallet;
+    const wallet =
+      pick === "guest"
+        ? w.guestWallet
+        : pick === "google"
+          ? (await import("../stellar/wallet-pollar")).pollarWallet
+          : w.freighterWallet;
     const address = await wallet.connect();
     w.setActiveWallet(wallet);
     const { resetClient } = await import("../stellar/contract");

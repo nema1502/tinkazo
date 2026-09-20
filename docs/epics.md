@@ -60,8 +60,8 @@ Contrato en mainnet con checklist de despliegue, documentación final y distribu
 ### Épica 7: Catálogo de juegos
 El show es lo único que se personaliza y lo que hace que una comunidad elija Tinkazo sobre una ruleta cualquiera. Cada juego nuevo pasa el auditor de `docs/juegos.md` antes de entrar.
 
-### Épica 6: Entrar con Google sin wallet ni XLM (v1.1)
-El organizador puede usar Pollar para iniciar sesión con Google y sellar sin instalar una wallet, mediante `signAuthEntry` y un relayer mínimo. Decisión D-07; se ejecuta solo si el autor la aprueba tras la épica 3.
+### Épica 6: Entrar con Google sin instalar nada — hecha, falta probarla con una cuenta real
+El organizador entra con Google y sella sin instalar wallet. Decisión D-07. El relayer resultó innecesario: la cuenta custodial de Pollar firma y envía la invocación por su cuenta.
 
 ---
 
@@ -399,7 +399,11 @@ para prototipar el login social.
 **Entonces** existe la key `pub_testnet_…` en `.env.local` (fuera del repo), los orígenes `https://tinkazo.vercel.app` y `localhost` están permitidos y la wallet de la app está fondeada
 **Y** tras la historia 1.4, el contrato y la función `seal` se agregan a Treasury → Auth Policy.
 
-### Historia 6.2: Login con Google en el sitio
+### Historia 6.2: Login con Google en el sitio — hecho, sin verificar de punta a punta
+
+Resultado (2026-09-20): el selector de cuenta ofrece "Entrar con Google". `src/stellar/wallet-pollar.ts` implementa el adaptador y la sesión se retoma sola al volver del redirect.
+
+**Pendiente de comprobar con una cuenta real:** que la política de transacciones de la app en el panel de Pollar acepte firmar una invocación de contrato. Si la rechaza, el error se muestra tal cual. Y para que aparezca en producción hay que cargar `VITE_POLLAR_PUBLISHABLE_KEY` en las variables de entorno de Vercel: el build local la lee de `.env.local`, que no está en el repo.
 
 Como organizadora sin wallet,
 quiero entrar con Google y tener una dirección de Stellar sin instalar nada,
@@ -412,7 +416,11 @@ para sellar igual que con wallet.
 **Entonces** completo el OAuth, veo mi dirección custodial y el adaptador de wallet expone `getAddress` y `signAuthEntry`
 **Y** el modo con wallet externa sigue disponible en el mismo menú.
 
-### Historia 6.3: Relayer mínimo para `seal` y `draw`
+### Historia 6.3: Relayer mínimo — ya no hace falta
+
+Se descartó el 2026-09-20. `signAndSubmitTx` de Pollar acepta un XDR de Soroban ya construido, así que la cuenta custodial del propio organizador firma y envía. No hay relayer, no hay servidor, y NFR-2 queda intacto: el proyecto sigue sin backend.
+
+La historia original, para referencia:
 
 Como organizadora con sesión de Pollar,
 quiero que alguien envíe la transacción y pague el fee por mí,

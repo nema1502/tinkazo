@@ -66,12 +66,51 @@ export async function sealOnChain(args: SealArgs, onStep: OnStep): Promise<SealR
     meta: args.meta.slice(0, 160),
   });
   onStep("signing", feeInXlm(tx));
+
+  const delegated = await submitElsewhere(tx, onStep);
+  if (delegated) {
+    return { raffleId: unwrap<bigint>(delegated.value), txHash: delegated.hash };
+  }
+
   const sent = await tx.signAndSend();
-  const raw = sent.result as unknown;
-  const raffleId = unwrap<bigint>(raw);
+  const raffleId = unwrap<bigint>(sent.result as unknown);
   const txHash = sent.sendTransactionResponse?.hash ?? "";
   onStep("confirmed", txHash);
   return { raffleId, txHash };
+}
+
+/**
+ * Algunas wallets firman y envían de una sola vez contra su propio servidor.
+ * Ahí no se puede usar `signAndSend`, porque la transacción saldría dos veces:
+ * se les entrega el XDR y el resultado de la invocación se lee de la red.
+ *
+ * Devuelve `null` si la wallet activa no es de ese tipo, y sigue el camino
+ * normal de firmar acá y enviar nosotros.
+ */
+async function submitElsewhere(
+  tx: { toXDR(): string },
+  onStep: OnStep,
+): Promise<{ hash: string; value: unknown } | null> {
+  const [{ activeWallet }, { submitsItself }] = await Promise.all([
+    import("../stellar/wallet"),
+    import("../stellar/wallet-pollar"),
+  ]);
+  const wallet = activeWallet();
+  if (!submitsItself(wallet)) return null;
+  const hash = await wallet.signAndSubmit(tx.toXDR());
+  onStep("sending", hash);
+  const value = await readReturnValue(hash);
+  onStep("confirmed", hash);
+  return { hash, value };
+}
+
+/** Lee lo que devolvió la invocación, ya confirmada en la red. */
+async function readReturnValue(hash: string): Promise<unknown> {
+  const { scValToNative } = await import("@stellar/stellar-sdk");
+  const { server } = await import("../stellar/contract");
+  const res = await server.pollTransaction(hash, { attempts: 12 });
+  if (res.status !== "SUCCESS" || !res.returnValue) throw new Error("tx-" + res.status);
+  return scValToNative(res.returnValue);
 }
 
 /**
@@ -92,6 +131,13 @@ export async function drawOnChain(
     signature: signature96 as unknown as Buffer,
   });
   onStep("signing", feeInXlm(tx));
+
+  const delegated = await submitElsewhere(tx, onStep);
+  if (delegated) {
+    const d = unwrap<{ winners: number[]; randomness: Uint8Array }>(delegated.value);
+    return { winners: [...d.winners], randomness: toHex(d.randomness), txHash: delegated.hash };
+  }
+
   const sent = await tx.signAndSend();
   const draw = unwrap<{ winners: number[]; randomness: Uint8Array }>(sent.result as unknown);
   const txHash = sent.sendTransactionResponse?.hash ?? "";
