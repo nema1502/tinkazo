@@ -101,6 +101,43 @@ function render(): void {
 /* -------------------------------------------------------------------- grifo */
 
 /**
+ * El paso del grifo, dentro del mismo diálogo de conectar.
+ *
+ * Una cuenta recién creada no tiene con qué pagar la comisión, y ese es el
+ * primer muro. Aparece acá, con la persona todavía mirando el diálogo, en vez
+ * de como un aviso más abajo en la página que nadie lee.
+ */
+function showFundStep(back: HTMLElement, address: string): void {
+  const card = back.querySelector<HTMLElement>(".modal-card");
+  if (!card) {
+    back.remove();
+    void refreshFunds();
+    return;
+  }
+  card.innerHTML = "";
+  const box = document.createElement("div");
+  box.className = "fund";
+  box.style.boxShadow = "none";
+  box.style.border = "0";
+  box.style.margin = "0";
+  box.style.padding = "0";
+  card.appendChild(box);
+  renderFundBox(box, address);
+
+  const close = document.createElement("button");
+  close.className = "mini";
+  close.style.marginTop = "14px";
+  close.textContent = t("fundLater");
+  close.addEventListener("click", () => {
+    back.remove();
+    // Queda en la página por si quiere volver, pero ya lo vio.
+    void refreshFunds();
+  });
+  card.appendChild(close);
+  (card.querySelector<HTMLElement>("button") ?? card).focus();
+}
+
+/**
  * El panel del grifo.
  *
  * Una cuenta recién creada no tiene con qué pagar la comisión, y ese es el
@@ -340,10 +377,18 @@ async function connect(
     // igual, y con un error más claro que una suposición nuestra.
     wrongNetwork = passphrase !== null && passphrase !== network.networkPassphrase;
     session = { kind: wallet.kind, label: wallet.label, address };
-    back.remove();
     render();
     refreshFreezeLabel();
     if (wallet.kind === "guest") notice(t("guestReady"), false);
+    // El diálogo no se cierra hasta saber si la cuenta puede pagar. Cerrarlo y
+    // dejar el aviso más abajo en la página hacía que nadie lo viera: la
+    // persona seguía con su lista y se enteraba recién al intentar sellar.
+    const bal = await w.xlmBalance(address);
+    if (bal >= 0 && bal < 1) {
+      showFundStep(back, address);
+      return;
+    }
+    back.remove();
   } catch (e) {
     row.innerHTML = original;
     notice(await walletErrorText(e), true);
