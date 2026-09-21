@@ -49,7 +49,7 @@
   .kicker { font-family: ui-monospace, Consolas, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--muted); font-weight: 600; }
   header { position: sticky; top: 0; z-index: 10; background: var(--paper); border-bottom: var(--bw) solid var(--ink); }
   .stripe { height: 10px; background: repeating-linear-gradient(90deg, var(--magenta) 0 44px, var(--orange) 44px 88px, var(--yellow) 88px 132px, var(--teal) 132px 176px, var(--purple) 176px 220px); }
-  .bar { max-width: 1060px; margin: 0 auto; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .bar { max-width: 1060px; margin: 0 auto; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
   .wordmark { font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; font-size: 20px; }
   .wordmark b { color: var(--magenta); }
   .langs { display: flex; gap: 4px; }
@@ -59,12 +59,13 @@
   }
   .langs button.on { background: var(--yellow); color: #191919; box-shadow: var(--sh-sm); }
   .auth { display: flex; gap: 8px; align-items: center; }
-  button.mini {
+  button.mini, a.mini {
     background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
     padding: 5px 12px; font-weight: 800; font-size: 12px; cursor: pointer; font-family: inherit;
   }
-  button.mini.solid { background: var(--magenta); color: var(--on-accent); }
-  .auth .hello { font-size: 12px; font-weight: 700; color: var(--ink2); max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  a.mini { text-decoration: none; }
+  button.mini.solid, a.mini.solid { background: var(--magenta); color: var(--on-accent); }
+  .auth .hello { font-size: 12px; font-weight: 700; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #wheel { max-width: 88vw; height: auto; }
   main { flex: 1; width: 100%; max-width: 1060px; margin: 0 auto; padding: 0 20px; }
   .hero { padding: 64px 0 40px; display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; }
@@ -83,7 +84,7 @@
   .steps article { background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); padding: 20px; }
   .steps article:nth-child(1) .num { background: var(--magenta); }
   .steps article:nth-child(2) .num { background: var(--orange); }
-  .steps article:nth-child(3) .num { background: var(--purple); }
+  .steps article:nth-child(3) .num { background: var(--purple); color: var(--on-purple); }
   .num { display: inline-block; color: var(--on-accent); border: 2px solid var(--ink); font-family: ui-monospace, Consolas, monospace; font-weight: 800; font-size: 12px; padding: 2px 9px; transform: rotate(-2deg); }
   .steps h3 { font-size: 17px; margin-top: 10px; font-weight: 800; }
   .steps p { font-size: 13.5px; color: var(--ink2); margin-top: 6px; }
@@ -129,7 +130,7 @@
   .netbadge.main { background: var(--teal); }
   .netbadge.bad { background: var(--orange); }
   .auth a.hello, .auth button.hello { text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
-  .auth .hello { max-width: 190px; overflow: hidden; }
+  .auth .hello { max-width: 190px; min-width: 0; }
   .auth .hello-face { width: 24px; height: 24px; border: 2px solid var(--ink); background: var(--card); flex: 0 0 auto; }
   .auth a.hello:hover { text-decoration: underline; }
   .modal-back {
@@ -138,7 +139,8 @@
   }
   .modal-card {
     background: var(--card); color: var(--ink); border: var(--bw) solid var(--ink); box-shadow: var(--sh);
-    padding: 22px; width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 12px;
+    padding: 22px; width: 100%; max-width: min(380px, calc(100vw - 28px));
+    display: flex; flex-direction: column; gap: 12px;
   }
   .modal-card h3 { font-size: 19px; font-weight: 800; }
   .wallet-row {
@@ -191,16 +193,31 @@
     font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; background: var(--paper); color: var(--ink2);
   }
   .chip.live { background: var(--teal); color: var(--on-accent); transform: rotate(-1deg); box-shadow: var(--sh-sm); }
-  .chip.soon { opacity: 0.55; }
+  /* Apagar con opacidad los dejaba en 2,8 a 1. Un color sólido apagado se
+     sigue leyendo y sigue diciendo "todavía no". */
+  .chip.soon { background: var(--paper); color: var(--muted); border-style: dashed; box-shadow: none; }
+  .pick-label { margin-top: 18px; margin-bottom: 8px; }
   .gamepick { display: flex; gap: 10px; flex-wrap: wrap; }
   .gamepick button {
     border: 2px solid var(--ink); background: var(--paper); color: var(--ink2); padding: 9px 16px;
     font-weight: 800; font-size: 13px; cursor: pointer; font-family: inherit;
   }
   .gamepick button.on { background: var(--purple); color: var(--on-purple); box-shadow: var(--sh-sm); transform: rotate(-1deg); }
-  /* La miniatura de cada juego, dentro de su botón. */
-  .gamepick button { flex-direction: column; gap: 6px; padding: 8px 12px 10px; }
-  .gamepick .thumb { width: 54px; height: 30px; border: 2px solid var(--ink); display: block; }
+  /* La miniatura de cada juego, dentro de su botón.
+     A 54x30 px no hay dibujo que se vea: una llama medía nueve píxeles y un
+     cohete eran dos rectángulos. El botón pasa a ser una tarjeta con la escena
+     arriba y el nombre abajo, que es lo que hace que dé ganas de tocarlo. */
+  .gamepick { gap: 12px; align-items: stretch; }
+  .gamepick button {
+    flex-direction: column; gap: 8px; padding: 8px 8px 10px; width: 132px;
+    align-items: stretch; text-align: center;
+  }
+  .gamepick .thumb {
+    width: 100%; height: 66px; border: 2px solid var(--ink); display: block;
+    transition: transform 120ms;
+  }
+  .gamepick button:hover:not(:disabled) .thumb { transform: scale(1.04); }
+  .gamepick button.on { transform: rotate(-1deg) translate(-1px, -1px); box-shadow: var(--sh); }
   .gamepick button:disabled {
     cursor: not-allowed; background: var(--paper); color: var(--muted);
     border-style: dashed; box-shadow: none;
@@ -284,6 +301,22 @@
   .commentary.pop { animation: popIn 0.28s; }
   @keyframes popIn { from { transform: translateX(-50%) scale(0.75); } to { transform: translateX(-50%) scale(1); } }
   @media (max-width: 700px) { .hero { grid-template-columns: 1fr; } .mascot { display: none; } .verify { grid-template-columns: 1fr; } }
+  /* En un celular de 390 px la cabecera medía 411 y arrastraba de lado a la
+     página entera, incluido el panel de la cuenta. Todo lo de la barra se
+     achica un punto; nada deja de estar. */
+  @media (max-width: 460px) {
+    /* A 20 px y peso 900 el magenta contaba como texto grande y le alcanzaba
+       con 3:1. Achicado a 16 px ya no, y sobre papel claro daba 3,49. La
+       variante oscura del magenta da 4,84 y es el mismo color de marca. */
+    .wordmark { font-size: 16px; }
+    .wordmark b { color: var(--magenta-ink); }
+    .langs button { padding: 4px 7px; }
+    .bar { gap: 10px; padding: 12px 14px; }
+    .auth { gap: 6px; }
+    .netbadge { font-size: 11px; padding: 5px 8px; letter-spacing: 0.08em; }
+    .auth .hello { max-width: 104px; }
+    .gamepick button { width: calc(50% - 6px); }
+  }
 
   /* ---------------------------------------------------------------- acceso
      Los controles tienen bordes negros de 2 o 3 px, asi que un anillo de foco
@@ -295,8 +328,8 @@
     box-shadow: 0 0 0 6px var(--yellow);
   }
   /* Un dedo en un evento, con poca luz. 44 px es el minimo que se acierta. */
-  .langs button, button.mini, button.ghost, a.ghost, .gamepick button,
-  select, .st-actions button, label.chip.live {
+  .langs button, button.mini, a.mini, button.ghost, a.ghost, .gamepick button,
+  select, .st-actions button, label.chip.live, a.primary.cta, button.primary {
     min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
   }
   /* Visible para el teclado y para el lector, invisible en pantalla. Con
@@ -309,7 +342,8 @@
   /* Una huella de 64 caracteres desbordaba la tarjeta en celular. */
   .note { word-break: break-word; overflow-wrap: anywhere; }
   /* El panel de la cuenta. */
-  .acct-card { max-width: 420px; }
+  /* Nunca más ancho que la pantalla, o el diálogo empuja la página entera. */
+  .acct-card { max-width: min(420px, calc(100vw - 28px)); }
   .acct-who { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
   .acct-who img { width: 44px; height: 44px; border: 2px solid var(--ink); background: var(--card); }
   .acct-who b { display: block; font-size: 17px; font-weight: 800; }
