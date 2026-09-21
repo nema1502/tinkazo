@@ -1,7 +1,7 @@
 import { T, getLang, t } from "../i18n";
-import { beep, fanfare, note } from "../sound";
-import type { Beacon } from "../state";
-import { INK, clamp, ease, mount, shorten } from "./overlay";
+import { beep, beepFor, fanfare, note } from "../sound";
+import { paceFactor, type Beacon } from "../state";
+import { INK, WINNER_HOLD, clamp, ease, mount, drawWinnerPlate, shorten, winnerNames, winnersLabel } from "./overlay";
 
 /**
  * Constelación Stellar.
@@ -64,10 +64,13 @@ function hopDur(i: number): number {
 
 export function stellarConstellation(
   names: string[],
-  winnerIdx: number,
+  winners: readonly number[],
   beacon: Beacon,
   done: () => void,
 ): void {
+  // La animación se centra en el primero; el cartel y el narrador cantan
+  // a todos. Con tres premios sorteados, la sala tiene que oír tres nombres.
+  const winnerIdx = winners[0] ?? 0;
   const st = mount(beacon, done, () => skip());
   if (!st) {
     done();
@@ -90,6 +93,8 @@ export function stellarConstellation(
   let shake = 0;
   let novaK = 0;
   let saidNarrow = false;
+  let saidReady = false;
+  let tHold = 0;
   let saidDecoy = false;
   let bornTicks = 0;
   let barTick = 0;
@@ -247,13 +252,20 @@ export function stellarConstellation(
     // trata: suave y redondo cuando el pago rebota en un rombo, brillante
     // cuando toca a una persona. El oído lo aprende en dos saltos.
     if (n.idx >= 0) {
-      beep(note(hopI + 5), 0.16, "triangle", 0.05);
+      // Un grado por salto y sin techo llevaba los últimos aterrizajes a
+      // 2,1-3,5 kHz, donde el sonido ya no tiene cuerpo: el ascenso adelgazaba
+      // en vez de crecer. Medio grado por salto se queda dentro del registro
+      // que reproduce un parlante de sala, y desde el salto doce se dobla una
+      // octava abajo, que es como se gana cuerpo sin subir.
+      const deg = 5 + Math.round(hopI * 0.53);
+      beep(note(deg), 0.16, "triangle", 0.05);
+      if (hopI >= 12) beep(note(Math.max(0, deg - 5)), 0.2, "sine", 0.04);
       chips.push({ node: ni, a: 1 });
       if ((hops[hopI] as Hop).dur > 0.3 && n.idx !== winnerIdx) {
         say(T[getLang()].cConstPass(names[n.idx] ?? ""), 0.25 + 0.4 * (hopI / K));
       }
     } else {
-      beep(note(hopI + 2), 0.1, "sine", 0.03);
+      beep(note(2 + Math.round(hopI * 0.4)), 0.1, "sine", 0.03);
     }
   }
 
@@ -262,11 +274,14 @@ export function stellarConstellation(
     tPhase = 0;
     novaK = 0;
     shake = 1;
-    say(T[getLang()].cWin(names[winnerIdx] ?? ""), 1);
+    say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
     fanfare();
-    beep(note(0, -1), 0.7, "sine", 0.06);
-    setTimeout(() => beep(note(25), 0.14, "triangle", 0.04), 150);
-    setTimeout(() => beep(note(27), 0.14, "triangle", 0.035), 300);
+    // Una octava abajo del grado 0 son 65 Hz: inaudible en cualquier parlante
+    // de sala. Y los adornos caían a 10 y 20 ms de notas de la fanfarria que
+    // suenan al doble de volumen: quedaban enmascarados.
+    beep(note(0), 0.8, "sine", 0.08);
+    setTimeout(() => beep(note(15), 0.14, "triangle", 0.045), 520);
+    setTimeout(() => beep(note(18), 0.14, "triangle", 0.035), 700);
   }
 
   /** Saltar deja exactamente la misma imagen final, solo que sin la espera. */
@@ -290,10 +305,18 @@ export function stellarConstellation(
       // Las estrellas encendiéndose: notas de la escala, suaves, subiendo.
       const want = Math.floor(clamp((tPhase - 0.6) / 1, 0, 1) * Math.min(18, names.length));
       while (bornTicks < want) {
-        beep(note(bornTicks + 8), 0.07, "sine", 0.016);
+        // Llegaba al grado 25: los últimos seis eran silbidos, y a 0,016 de
+        // volumen ninguno se oía en una sala.
+        beep(note(4 + Math.round(bornTicks * 0.4)), 0.07, "sine", 0.028);
         bornTicks++;
       }
-      if (tPhase >= 1.6 && barTick === 0) say(t("cConstReady"), 0.1);
+      // Con cierre. `barTick === 0` se cumple durante 0,15 s de juego, o sea
+      // unos siete cuadros, y `say` se disparaba en cada uno cancelando al
+      // anterior: el narrador tartamudeaba justo al arrancar.
+      if (tPhase >= 1.6 && !saidReady) {
+        saidReady = true;
+        say(t("cConstReady"), 0.1);
+      }
       const ticks = [1.75, 1.95, 2.15];
       while (barTick < 3 && tPhase >= (ticks[barTick] as number)) {
         beep(note(5 + barTick * 2), 0.12, "triangle", 0.045);
@@ -312,9 +335,14 @@ export function stellarConstellation(
 
     if (phase === "hop") {
       const hp = hops[hopI] as Hop;
+      // El vuelo del paquete era mudo, y en los últimos saltos eso es casi un
+      // segundo de silencio con la única cosa que importa moviéndose.
+      if (hopT === 0) beepFor(note(4 + Math.round(hopI * 0.5)), hp.dur * 0.6, "sine", 0.02);
       if (hopT === 0 && hopI === K - 1) {
         say(t("cConstLast"), 0.85);
-        beep(note(0), 0.9, "sine", 0.045);
+        // El último salto dura 1,35 s de juego: el sonido de 0,9 s reales se
+        // apagaba antes de que llegara, y en épico 2 s antes.
+        beepFor(note(0), 1.35, "sawtooth", 0.04);
       } else if (!saidNarrow && hopI === 15) {
         say(t("cConstNarrow"), 0.6);
         saidNarrow = true;
@@ -326,8 +354,10 @@ export function stellarConstellation(
         say(t("cConstDecoy"), 0.95);
         // El señuelo: una nota alta que promete, y enseguida otra por debajo
         // que la contradice. Es el "casi" dicho en dos sonidos.
-        beep(note(24), 0.14, "triangle", 0.05);
-        setTimeout(() => beep(note(20), 0.1, "sine", 0.04), 120);
+        // Mismo gesto, registro que se oye: el grado 24 son 3,5 kHz, donde el
+        // mejor momento dramático del juego quedaba en un silbido.
+        beep(note(15), 0.14, "triangle", 0.05);
+        setTimeout(() => beep(note(11), 0.12, "sine", 0.04), 120);
         saidDecoy = true;
       }
       if (hopT >= 1) {
@@ -348,7 +378,9 @@ export function stellarConstellation(
       tPhase += dt;
       novaK = Math.min(1, novaK + dt);
       shake = Math.max(0, shake - dt * 1.5);
-      if (tPhase >= 1.62) {
+      // En segundos reales: eran 1,62 s de juego, o sea 1,3 s en modo rápido.
+      tHold += dt * paceFactor();
+      if (tHold >= WINNER_HOLD) {
         phase = "dead";
         cleanup();
       }
@@ -563,31 +595,10 @@ export function stellarConstellation(
   }
 
   function drawWinnerCard(): void {
-    const k = u();
-    const name = names[winnerIdx] ?? "";
-    const e = ease.outBack(Math.min(1, novaK * 2.4));
-    const label = shorten(name, 26);
-    c.save();
-    c.translate(W() / 2, H() * 0.5);
-    c.scale(e, e);
-    c.font = `900 ${64 * k}px system-ui, sans-serif`;
-    const bw = c.measureText(label).width + 72 * k;
-    const bh = 120 * k;
-    c.fillStyle = "#e93d9c";
-    c.fillRect(-bw / 2 + 10 * k, -bh / 2 + 10 * k, bw, bh);
     // Amarillo con tinta encima es el par de mayor contraste de la paleta: se
-    // lee desde el fondo de la sala con cualquier proyector.
-    c.fillStyle = "#ffc629";
-    c.fillRect(-bw / 2, -bh / 2, bw, bh);
-    c.lineWidth = 6 * k;
-    c.strokeStyle = INK;
-    c.strokeRect(-bw / 2, -bh / 2, bw, bh);
-    c.fillStyle = INK;
-    c.textAlign = "center";
-    c.textBaseline = "middle";
-    c.fillText(label, 0, 0);
-    c.restore();
-    c.textBaseline = "alphabetic";
+    // lee desde el fondo de la sala con cualquier proyector. Si hubo varios
+    // premios, se listan todos.
+    drawWinnerPlate(c, winnerNames(names, winners), W() / 2, H() * 0.5, u(), ease.outBack(Math.min(1, novaK * 2.4)));
   }
 
   function draw(now: number): void {
@@ -621,17 +632,29 @@ export function stellarConstellation(
     // desvaneciéndose. Es lo que hace que doscientos se lean en un proyector.
     // Con pocos participantes los nombres quedan puestos todo el tiempo: si
     // solo aparecen cuando el paquete los toca, la sala no sabe quién es quién.
+    // El chip de quien tiene el paquete ahora va más grande que los que se
+    // desvanecen: es el único nombre que importa en ese instante, y al tamaño
+    // de textura quedaba ilegible en un proyector.
+    const enMano = (hops[Math.min(hopI, hops.length - 1)] as Hop | undefined)?.to ?? -1;
     if (names.length <= 4) {
       for (const q of nodes) {
         if (q.idx < 0) continue;
-        chip(names[q.idx] ?? "", q.x + q.r + 6 * k, q.y - q.r - 10 * k, 1);
+        chip(names[q.idx] ?? "", q.x + q.r + 6 * k, q.y - q.r - 10 * k, 1, 1.6);
       }
     } else {
       for (const ch of chips) {
         const q = nodes[ch.node] as Node;
         // El chip queda opaco casi toda su vida: sobre el cielo oscuro, medio
         // transparente no se lee desde el fondo de la sala.
-        if (q.idx >= 0) chip(names[q.idx] ?? "", q.x + q.r + 6 * k, q.y - q.r - 10 * k, Math.min(1, ch.a * 3));
+        if (q.idx < 0) continue;
+        const vivo = ch.node === enMano;
+        chip(
+          names[q.idx] ?? "",
+          q.x + q.r + 6 * k,
+          q.y - q.r - 10 * k,
+          Math.min(1, ch.a * 3),
+          vivo ? 1.7 : 1,
+        );
       }
     }
     c.restore();

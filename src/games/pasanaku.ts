@@ -1,7 +1,7 @@
 import { T, getLang, t } from "../i18n";
-import { beep, fanfare } from "../sound";
-import { avatar, type Beacon } from "../state";
-import { INK, clamp, drawFlag, ease, mount, shorten } from "./overlay";
+import { beep, beepFor, fanfare, note } from "../sound";
+import { avatar, paceFactor, type Beacon } from "../state";
+import { INK, WINNER_HOLD, clamp, drawFlag, ease, mount, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
 
 /**
  * Pasanaku.
@@ -64,10 +64,13 @@ const T_END = 10.3;
 
 export function pasanaku(
   names: string[],
-  winnerIdx: number,
+  winners: readonly number[],
   beacon: Beacon,
   done: () => void,
 ): void {
+  // La animación se centra en el primero; el cartel y el narrador cantan
+  // a todos. Con tres premios sorteados, la sala tiene que oír tres nombres.
+  const winnerIdx = winners[0] ?? 0;
   const st = mount(beacon, done, () => skip());
   if (!st) {
     done();
@@ -112,6 +115,9 @@ export function pasanaku(
   let pulls = 0;
   let collected = 0;
   let dropTicks = 0;
+  let weaveTicks = 0;
+  let tHold = 0;
+  let flashK = 0;
   let knotHits = 0;
   let saidUpTo = -1;
   let lastOut = -999;
@@ -253,7 +259,11 @@ export function pasanaku(
       q.vx = Math.cos(a) * 380 * k;
       q.vy = Math.sin(a) * 380 * k - 160 * k;
       // Con mucha gente no suena cada salida: sería una ametralladora.
-      if (n <= 40 || collected % 6 === 0) beep(180 + (collected % 4) * 30, 0.05, "square", 0.025);
+      // Dos notas que bajan: "ya cobró", dicho sin palabras.
+      if (n <= 40 || collected % 6 === 0) {
+        beep(note(7), 0.09, "sine", 0.03);
+        setTimeout(() => beep(note(5), 0.09, "sine", 0.026), 60);
+      }
       if (tAll - lastOut > 0.5 && alive().length <= 8) {
         lastOut = tAll;
         say(T[getLang()].cPasOut(names[q.idx] ?? ""), 0.5);
@@ -274,11 +284,16 @@ export function pasanaku(
   function crown(): void {
     if (crowned) return;
     crowned = true;
-    say(T[getLang()].cWin(names[winnerIdx] ?? ""), 1);
-    beep(90, 0.5, "sine", 0.06);
+    flashK = 1;
+    say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
+    // 90 Hz no sale por el parlante de ninguna sala: el golpe de la levantada,
+    // que es el clímax del juego, se perdía entero.
+    beep(note(0), 0.7, "sine", 0.09);
     fanfare();
-    setTimeout(() => beep(1318, 0.09, "triangle", 0.04), 150);
-    setTimeout(() => beep(1760, 0.09, "triangle", 0.03), 300);
+    // A 150 y 300 ms caían dentro de la fanfarria, que suena al doble: estaban
+    // escritos y no existían. Después del acorde sí se oyen.
+    setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);
+    setTimeout(() => beep(note(19), 0.12, "triangle", 0.035), 700);
   }
 
   /* ----------------------------------------------------------------- guion */
@@ -302,7 +317,11 @@ export function pasanaku(
       while (pulls < want) {
         pulls++;
         say(t(pulls === 1 ? "cPasCinch" : pulls === 2 ? "cPasCinch2" : "cPasCinch3"), 0.3 + pulls * 0.2);
-        beep(120 - pulls * 11, 0.7, "sawtooth", 0.035);
+        // 109, 98 y 87 Hz: el último está fuera de escala y ninguno sale por el
+        // parlante de un proyector. Y 0,7 s reales para un apretón de 1,96 s
+        // dejaban al nudo cerrándose en silencio, 2,4 s en épico. Ahora baja un
+        // grado por apretón y dura el apretón entero.
+        beepFor(note(Math.max(0, 4 - (pulls - 1) * 2)), PULL_DUR + 0.2, "sawtooth", 0.03);
       }
       const p = clamp((tAll - T_CINCH) / 4.2, 0, 1);
       cinchTotal = ease.outCubic(p) * 0.86;
@@ -317,11 +336,13 @@ export function pasanaku(
       const hits = Math.floor((tAll - T_KNOT) / 0.14);
       while (knotHits < hits) {
         knotHits++;
-        if (knotHits % 2 === 0) beep(520 + Math.floor(rng() * 120), 0.02, "sine", 0.012);
+        // El único sonido de altura al azar del producto, y a 0,012 de volumen
+        // no se oía: el nudo apretándose era mudo.
+        if (knotHits % 2 === 0) beep(note(15), 0.035, "sine", 0.024);
       }
       // El penúltimo sale cerca del final y deja a uno solo.
       if (tAll >= T_LIFT - 0.15 && alive().length > 1) {
-        beep(140, 0.35, "sine", 0.06);
+        beep(note(1), 0.35, "sine", 0.07);
         evict(1);
       } else if (alive().length > FINAL) {
         evict(FINAL);
@@ -441,6 +462,12 @@ export function pasanaku(
       const sz = (yy1 - yy0) * 0.38;
       const half = halfAt((p0 + p1) / 2);
       const step = sz * 2.6;
+      // Un paso de cero no avanza nunca y este `for` no termina: cuelga la
+      // pestaña entera, sin excepción y sin cuadro dibujado. Pasa en el primer
+      // cuadro, donde `dt` vale 0 y `ease.outBack(0)` no devuelve cero sino
+      // 2,2e-16: la tela mide 1e-13 px de alto, `yy1 - yy0` se redondea contra
+      // `top` y el paso se va con él. Medio píxel no dibuja nada igual.
+      if (!(step > 0.5)) continue;
       c.fillStyle = INK;
       for (let px = x - half + step / 2; px < x + half; px += step) {
         c.beginPath();
@@ -583,29 +610,10 @@ export function pasanaku(
   }
 
   function drawWinnerCard(): void {
-    const k = u();
-    const e = ease.outBack(Math.min(1, liftK * 1.6));
-    const name = names[winnerIdx] ?? "";
-    const label = shorten(name, 26);
-    c.save();
-    c.translate(W() / 2, H() * 0.74);
-    c.scale(e, e);
-    c.font = `900 ${54 * k}px system-ui, sans-serif`;
-    c.textAlign = "center";
-    c.textBaseline = "middle";
-    const bw = c.measureText(label).width + 72 * k;
-    const bh = 112 * k;
-    c.fillStyle = "#e93d9c";
-    c.fillRect(-bw / 2 + 10 * k, -bh / 2 + 10 * k, bw, bh);
-    c.fillStyle = "#ffc629";
-    c.fillRect(-bw / 2, -bh / 2, bw, bh);
-    c.lineWidth = 6 * k;
-    c.strokeStyle = INK;
-    c.strokeRect(-bw / 2, -bh / 2, bw, bh);
-    c.fillStyle = INK;
-    c.fillText(label, 0, 0);
-    c.restore();
-    c.textBaseline = "alphabetic";
+      // El fogonazo del revelado: el golpe visual que separa "apareció un
+      // nombre" de "pasó algo". Va debajo del cartel, no encima.
+    flashScreen(c, W(), H(), flashK);
+    drawWinnerPlate(c, winnerNames(names, winners), W() / 2, H() * 0.74, u(), ease.outBack(Math.min(1, liftK * 1.6)), 54);
   }
 
   function drawHud(): void {
@@ -635,8 +643,19 @@ export function pasanaku(
     if (phase === "drop") {
       const want = Math.floor(clamp((tAll - T_DROP) / 1.6, 0, 1) * Math.min(24, n));
       while (dropTicks < want) {
-        beep(300 + (dropTicks % 7) * 40, 0.035, "triangle", 0.03);
+        // Siete alturas en ciclo, ninguna en escala: sonaba a marcador de
+        // partidos. Dos notas que alternan dicen lo mismo y suenan bien.
+        beep(note(dropTicks % 2 === 0 ? 5 : 8), 0.06, "triangle", 0.035);
         dropTicks++;
+      }
+    }
+    // El tejido de los hilos era **mudo**, y es justo la escena que enseña qué
+    // es una trustline: una red de confianza que nadie firma. Un hilo, una nota.
+    if (phase === "weave") {
+      const want = Math.floor(clamp((tAll - T_WEAVE) / (T_CINCH - T_WEAVE), 0, 1) * 10);
+      while (weaveTicks < want) {
+        beep(note(10 + (weaveTicks % 5)), 0.14, "sine", 0.025);
+        weaveTicks++;
       }
     }
     script(dt);
@@ -676,7 +695,10 @@ export function pasanaku(
       drawKnot(now);
       drawWinnerCard();
     }
-    if (tAll >= T_END) {
+    // En segundos reales: eran 1,7 s de juego, o sea 1,36 s en modo rápido.
+    if (phase === "lift") tHold += dt * paceFactor();
+    flashK = Math.max(0, flashK - dt * paceFactor() * 4);
+    if (tHold >= WINNER_HOLD) {
       phase = "dead";
       cleanup();
     }

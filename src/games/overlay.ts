@@ -35,8 +35,15 @@ export interface Stage {
    * la voz: es lo que separa a un relator de alguien leyendo en voz alta.
    */
   say: (msg: string, heat?: number) => void;
-  /** Dibuja el chip con avatar y nombre. Devuelve su ancho. */
-  chip: (name: string, x: number, y: number, alpha?: number) => number;
+  /**
+   * Dibuja el chip con avatar y nombre. Devuelve su ancho.
+   *
+   * `scale` existe porque el chip cumple dos papeles distintos. Con doscientos
+   * participantes es textura y tiene que ser chico; cuando quedan tres es el
+   * dato más importante de la pantalla y a 12·u mide el 1,7% del alto, que
+   * proyectado no se lee desde el fondo de la sala.
+   */
+  chip: (name: string, x: number, y: number, alpha?: number, scale?: number) => number;
   /** Desmonta y devuelve el control a la página. Idempotente. */
   cleanup: () => void;
   /** `true` cuando el tema de la página es oscuro. */
@@ -111,7 +118,11 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
 
   const W = (): number => canvas.width;
   const H = (): number => canvas.height;
-  const u = (): number => canvas.height / 720;
+  // Nunca cero. Media docena de bucles de dibujo avanzan de a `algo * u()`, y
+  // un paso de cero es un `for` que no termina y una pestaña colgada. Un alto
+  // de ventana en cero dura un cuadro y no se ve, pero el cuelgue es para
+  // siempre.
+  const u = (): number => Math.max(canvas.height, 1) / 720;
 
   const avatars = new Map<string, HTMLImageElement>();
   const imageOf = (name: string): HTMLImageElement => {
@@ -146,8 +157,8 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
       );
       narrate(msg, heat);
     },
-    chip(name, x, y, alpha = 1) {
-      const k = u();
+    chip(name, x, y, alpha = 1, scale = 1) {
+      const k = u() * scale;
       const av = 18 * k;
       const label = shorten(name, 20);
       c.save();
@@ -155,7 +166,7 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
       // El espaciado de letras en lienzo existe desde 2025. En un navegador
       // viejo asignarlo no hace nada y el chip se ve igual, solo más apretado.
       c.letterSpacing = "0.01em";
-      c.font = `700 ${12 * k}px system-ui, sans-serif`;
+      c.font = `${scale > 1.2 ? 800 : 700} ${12 * k}px system-ui, sans-serif`;
       c.textAlign = "left";
       c.textBaseline = "alphabetic";
       const bw = c.measureText(label).width + av + 18 * k;
@@ -312,6 +323,109 @@ export function drawFlag(
   c.lineWidth = Math.max(1, h * 0.07);
   c.strokeStyle = INK;
   c.strokeRect(x, y, w, h);
+}
+
+/**
+ * Los nombres que ganaron, listos para mostrar y para decir.
+ *
+ * Los juegos reciben la lista entera de ganadores, no solo el primero. Antes
+ * la animación se quedaba con `winners[0]` y el cartel y el narrador cantaban
+ * un solo nombre aunque se hubieran sorteado tres premios. Quien organiza
+ * elegía tres y la sala escuchaba uno.
+ */
+/**
+ * El fogonazo del revelado.
+ *
+ * Dos o tres cuadros de blanco en el instante exacto en que se sabe quién ganó,
+ * antes de que el cartel termine de entrar. Cuesta cuatro líneas y es lo que
+ * separa "apareció un nombre" de "pasó algo". La Constelación ya tenía su nova;
+ * los otros cuatro revelaban sin ningún golpe visual.
+ *
+ * `a` va de 1 a 0 y quien llama decide en cuántos cuadros. Se corta en 0,85
+ * para que la escena no desaparezca del todo: el blanco es un acento, no un
+ * corte a negro.
+ */
+export function flashScreen(
+  c: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  a: number,
+): void {
+  if (a <= 0) return;
+  c.save();
+  c.fillStyle = `rgba(255,255,255,${Math.min(0.85, a).toFixed(3)})`;
+  c.fillRect(0, 0, w, h);
+  c.restore();
+}
+
+/**
+ * Cuánto se sostiene el cartel del ganador, **en segundos reales**.
+ *
+ * Leer un nombre proyectado lleva casi un segundo, reconocerlo medio más, y la
+ * reacción de la sala recién llega a su pico a los dos. Los juegos lo tenían
+ * entre 1,4 y 1,7 segundos de juego, así que en modo rápido el cartel se iba
+ * antes de que nadie alcanzara a reaccionar.
+ *
+ * Va en segundos reales a propósito: lo que tarda una persona en leer no cambia
+ * porque el organizador haya elegido "épica". Se acumula con
+ * `tHold += dt * paceFactor()`, que deshace la división del selector.
+ */
+export const WINNER_HOLD = 3;
+
+export function winnerNames(names: string[], winners: readonly number[]): string[] {
+  return winners.map((i) => names[i] ?? "").filter(Boolean);
+}
+
+/** Los ganadores en una línea, para el narrador y para el cartel. */
+export function winnersLabel(names: string[], winners: readonly number[], max = 3): string {
+  const all = winnerNames(names, winners);
+  if (all.length <= 1) return all[0] ?? "";
+  if (all.length <= max) return all.join(", ");
+  return all.slice(0, max).join(", ") + " +" + (all.length - max);
+}
+
+/**
+ * El cartel del ganador, o de los ganadores.
+ *
+ * Con un solo premio es un nombre grande. Con varios, uno debajo del otro y
+ * numerados, porque sortear tres premios y mostrar un nombre es mentir sobre
+ * lo que acaba de pasar.
+ */
+export function drawWinnerPlate(
+  c: CanvasRenderingContext2D,
+  names: readonly string[],
+  cx: number,
+  cy: number,
+  k: number,
+  scale: number,
+  maxSize = 64,
+): void {
+  const many = names.length > 1;
+  const size = many ? Math.max(24 * k, (maxSize * k) / Math.min(names.length, 3)) : maxSize * k;
+  const rows = names.map((n, i) => (many ? `${i + 1}. ${shorten(n, 22)}` : shorten(n, 26)));
+  c.save();
+  c.translate(cx, cy);
+  c.scale(scale, scale);
+  c.font = `900 ${size}px system-ui, sans-serif`;
+  c.textAlign = "center";
+  c.textBaseline = "middle";
+  const wide = rows.reduce((m, r) => Math.max(m, c.measureText(r).width), 0);
+  const bw = wide + 72 * k;
+  const lineH = size * 1.2;
+  const bh = Math.max(110 * k, rows.length * lineH + 44 * k);
+  c.fillStyle = "#e93d9c";
+  c.fillRect(-bw / 2 + 10 * k, -bh / 2 + 10 * k, bw, bh);
+  c.fillStyle = "#ffc629";
+  c.fillRect(-bw / 2, -bh / 2, bw, bh);
+  c.lineWidth = 6 * k;
+  c.strokeStyle = INK;
+  c.strokeRect(-bw / 2, -bh / 2, bw, bh);
+  c.fillStyle = INK;
+  const top = -((rows.length - 1) * lineH) / 2;
+  rows.forEach((r, i) => c.fillText(r, 0, top + i * lineH));
+  c.restore();
+  c.textBaseline = "alphabetic";
+  c.textAlign = "left";
 }
 
 /** Interpolación suave, la de siempre. */

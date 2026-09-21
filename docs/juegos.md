@@ -55,9 +55,10 @@ Vale la pena solo si la mecánica visual es distinta de verdad. La prueba: si ha
 pnpm build
 pnpm preview &
 node scripts/audit-game.mjs <juego>
+node scripts/audit-sound.mjs <juego>
 ```
 
-Donde `<juego>` es el valor de `?demo=`: `race`, `stellar`, `ledger`, `rockets`, `wheel`, `pasanaku`. El auditor abre Chrome, corre un sorteo real contra drand y comprueba quince cosas:
+Donde `<juego>` es el valor de `?demo=`: `race`, `stellar`, `ledger`, `rockets`, `wheel`, `pasanaku`. El auditor abre Chrome, corre un sorteo real contra drand y comprueba dieciséis cosas:
 
 | # | Comprobación | Por qué importa |
 |---|---|---|
@@ -71,15 +72,37 @@ Donde `<juego>` es el valor de `?demo=`: `race`, `stellar`, `ledger`, `rockets`,
 | 8 | No hubo excepciones en consola | Errores silenciosos hoy son fallas en vivo mañana |
 | 9 | La tarjeta de historia sale **después** del ganador | Durante el sorteo nadie lee. Y una clave sin traducir se delata sola |
 | 10 | Esa tarjeta cita una fuente | Un dato sin fuente es un dato inventado a los seis meses |
-| 11 | El sorteo también corre en inglés | La interfaz es bilingüe |
-| 12 | La tarjeta de historia también está en inglés | Detecta la mitad del par olvidada |
-| 13 | El nombre del juego está en los dos diccionarios | No exige que el texto cambie: "Pasanaku" es nombre propio y en inglés se dice igual |
-| 14 | La escena se dibuja en tema claro | |
-| 15 | La escena se dibuja en tema oscuro | |
+| 11 | **Con dos premios el juego anuncia a los dos** | Salió un sorteo de dos en el que el juego y la voz decían "el ganador es tal". El auditor corría siempre con un premio y no lo veía |
+| 12 | El sorteo también corre en inglés | La interfaz es bilingüe |
+| 13 | La tarjeta de historia también está en inglés | Detecta la mitad del par olvidada |
+| 14 | El nombre del juego está en los dos diccionarios | No exige que el texto cambie: "Pasanaku" es nombre propio y en inglés se dice igual |
+| 15 | La escena se dibuja en tema claro | |
+| 16 | La escena se dibuja en tema oscuro | |
 
 Guarda capturas en `docs/capturas/juego-<juego>*.png` para revisar a ojo lo que ninguna comprobación automática ve: si se entiende, si emociona, si se lee de lejos en un proyector.
 
-Un juego no entra a `main` hasta que la auditoría dice APROBADO.
+Y el auditor de sonido engancha `OscillatorNode` antes de que cargue la página, anota cada nota que arranca (cuándo, qué altura, qué timbre, qué volumen, cuánto dura) y mide lo que se puede medir sin oídos: que nada quede fuera del rango que reproduce un parlante de sala, que nada quede por debajo del murmullo, que todo esté en la escala, que no haya huecos de más de cuatro segundos, que ningún golpe se redispare y que ningún sonido quede tapado por otro al doble de volumen.
+
+Un juego no entra a `main` hasta que las dos auditorías dicen APROBADO.
+
+## El sonido
+
+Todo el sonido sale de [`src/sound.ts`](../src/sound.ts) y no hay archivos de audio: son osciladores. Eso trae tres reglas que no son gusto sino límite del aparato y del oído, y que existen porque durante un tiempo no estuvieron escritas y los seis juegos se degradaron a la vez.
+
+**Registro.** El parlante de un proyector, de un portátil o de una barra de sala chica se cae por debajo de unos 120 Hz y se vuelve un silbido fino por encima de unos 3 kHz. El rango útil son los **grados 0 a 20 de `note()`**, o sea 131 Hz a 2093 Hz. Lo que está fuera de ahí está escrito y no se oye: hubo golpes de clímax a 70 y a 90 Hz que nadie escuchó nunca.
+
+**Volumen.** Una sala con cincuenta personas tiene un piso de ruido de 60 a 70 dB. Fondo 0,02 a 0,03; eventos 0,04 a 0,06; clímax 0,08 a 0,12. **Nada por debajo de 0,02**: llegó a haber sesenta y seis sonidos a 0,008 y 0,016, todos por debajo del murmullo.
+
+**Duración.** Por debajo de unos 40 ms el oído no percibe altura, oye un clic. Un clic está bien como clic, pero no sirve para melodía.
+
+Y cuatro obligaciones:
+
+- **Todas las alturas con `note(grado)`.** La pentatónica no tiene semitonos, así que cualquier par de notas suena bien junto. Sumar hercios sueltos (`f0 + k * 12`) da intervalos que se achican al subir y el oído lo escucha como una máquina contando.
+- **Lo que tiene que durar una fase va con `beepFor`,** que mide en segundos **del juego**. `beep` mide en segundos reales, y el selector de duración divide el `dt`: un zumbido de 0,7 s puesto a tapar un apretón de 1,4 s dejaba 2,4 s de silencio en modo épico, justo en el momento de más tensión.
+- **Lo que le habla a una persona va en segundos reales:** la cuenta regresiva y el sostén del cartel del ganador. Lo que tarda alguien en leer un nombre proyectado no cambia porque el organizador elija "épica". El cartel se sostiene 3 segundos reales; menos que eso corta la reacción de la sala por la mitad.
+- **Los adornos del final van después de la fanfarria,** a +520 y +700 ms. Dentro quedan enmascarados por notas que suenan al doble de volumen.
+
+Y un cierre por cada golpe que pasa una vez. Una condición como `if (t >= T_LOCK && flash === 0)` vuelve a cumplirse en cuanto el destello decae, y el golpe de la traba llegó a dispararse catorce veces encima de la fanfarria. Lo mismo con el narrador: una ventana de `t >= X && t < X + 0.05` dura cuatro o cinco cuadros, y cada `say` cancela al anterior, así que el narrador tartamudea. **Cierre booleano, no ventana.**
 
 ## Lo que el auditor no puede ver
 
@@ -87,7 +110,11 @@ Revisalo vos antes de subirlo:
 
 - ¿Se entiende quién va ganando sin leer texto?
 - ¿Se lee desde el fondo de la sala, proyectado?
-- ¿Dura lo suficiente para generar tensión y lo bastante poco para no aburrir? La carrera dura 15 segundos y Cierre de Libro menos de 5.
+- ¿Dura lo suficiente para generar tensión y lo bastante poco para no aburrir? La ventana útil en modo normal son 24 a 34 segundos: menos y la sala no llega a girar la cabeza, más y se va.
+- ¿Hay un hecho legible nuevo cada 1,5 a 2,5 segundos, y nunca más de 4 segundos sin novedad?
+- ¿Los primeros 3 segundos son llamada de atención y no información? Entre el clic y "todos mirando" hay gente hablando; lo que se cuente ahí se lo pierde media sala.
+- ¿Hay silencio justo antes del golpe? Un cuarto de segundo sin nada es el efecto más barato que existe.
+- ¿Cada pasada, ronda o fase elimina a alguien de verdad? Hubo una que el narrador anunciaba como "¡última pasada!" y no sacaba a nadie.
 - ¿El dato de la tarjeta es verdad? El auditor comprueba que haya un enlace, no que el enlace diga lo que la tarjeta dice. Eso lo comprobás vos, en la fuente primaria, antes de subirlo.
 - ¿Funciona con 2 participantes y con 200?
 - ¿El ganador queda claro al final, sin ambigüedad?

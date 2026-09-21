@@ -17,7 +17,7 @@ Toda comunidad hace sorteos: libros, licencias, entradas, poleras. Y en todos ha
 1. **Traés la lista.** Pegás los nombres o subís un CSV. Los participantes no instalan nada ni se crean cuenta. Nunca.
 2. **Se congela la lista.** Se calcula su huella (SHA-256) y se compromete contra una **ronda futura** de [drand](https://drand.love), el faro público de aleatoriedad de la League of Entropy. La clave está en el orden: cuando cerrás la lista, el número que va a decidir **todavía no existe**.
 3. **Llega el número.** Diez segundos después, drand publica esa ronda firmada. Ni vos ni yo pudimos elegirla. Si el sorteo se ancla en Stellar la espera sube a cuarenta y cinco, porque el contrato exige treinta de margen y no se puede cambiar.
-4. **El show.** Cinco juegos a pantalla completa, con narrador. Cuando arranca la animación el ganador ya está decidido: el juego solo lo cuenta.
+4. **El show.** Seis juegos a pantalla completa, con narrador. Cuando arranca la animación el ganador ya está decidido: el juego solo lo cuenta.
 5. **Cualquiera revisa.** El comprobante es un enlace. Quien lo abre ve la página rehacer el sorteo desde cero en su propio navegador y dar un veredicto.
 
 Con una cuenta de Stellar conectada, el sello y el resultado quedan **registrados en un contrato**, que verifica la firma del faro por su cuenta. Ese registro sigue ahí aunque Tinkazo desaparezca.
@@ -41,7 +41,7 @@ Es inmutable: no tiene administrador ni actualización, y no custodia fondos. `d
 | Pasanaku | El ahorro rotativo boliviano: un aguayo que se cierra sobre los bultos hasta que queda uno en el nudo. Los hilos entre vecinos son trustlines. | 200 |
 | Ruleta | La de siempre, pero que se ve girar con dos personas. | 24 |
 
-Ninguno decide nada: el ganador llega dado por el protocolo y el juego solo lo cuenta. Hay un auditor que lo comprueba en cada juego, con quince verificaciones. La que importa: el nombre en pantalla tiene que ser el que fijó el protocolo.
+Ninguno decide nada: el ganador llega dado por el protocolo y el juego solo lo cuenta. Hay un auditor que lo comprueba en cada juego, con dieciséis verificaciones, y otro que escucha el sonido sin oídos. La que importa: el nombre en pantalla tiene que ser el que fijó el protocolo.
 
 **El narrador habla.** Usa la voz del navegador, elige una en español de las que estén instaladas y sube el ritmo con la tensión. Si la máquina no tiene voz, el sorteo funciona igual.
 
@@ -99,7 +99,7 @@ cargo build --release --target wasm32v1-none -p tinkazo-raffle
 
 Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|race|rockets|wheel`, `?instant=1`, `?lead=3`.
 
-Para auditar un juego: `node scripts/audit-game.mjs <juego>`.
+Para auditar un juego: `node scripts/audit-game.mjs <juego>` y `node scripts/audit-sound.mjs <juego>`. Para la interfaz: `node scripts/audit-ui.mjs`.
 
 ## Estructura
 
@@ -107,16 +107,16 @@ Para auditar un juego: `node scripts/audit-game.mjs <juego>`.
 index.html, verificar.html   Las dos páginas
 src/protocol/                Lista canónica, selección, drand, comprobante
 src/stellar/                 Red, wallets y cliente del contrato
-src/games/                   Los cinco juegos y el andamiaje que comparten
+src/games/                   Los seis juegos y el andamiaje que comparten
 contracts/raffle/            El contrato Soroban, en Rust
 docs/                        Protocolo, PRD, arquitectura, épicas, juegos, despliegues
-scripts/                     Despliegue, smoke test y auditor de juegos
+scripts/                     Despliegue, smoke test y auditores de juegos, sonido e interfaz
 ```
 
 ## Documentación
 
 - [Protocolo v2](docs/protocolo.md), la especificación normativa. Cualquiera puede reimplementarla y llegar al mismo resultado.
-- [Juegos](docs/juegos.md), el contrato que cumple todo juego y las doce comprobaciones del auditor.
+- [Juegos](docs/juegos.md), el contrato que cumple todo juego, las reglas del sonido y las comprobaciones de los auditores.
 - [Despliegues](docs/deployments.md), direcciones por red y costos medidos.
 - [Marca](docs/marca.md), paleta con los contrastes medidos, tipografía, cómo se escribe y qué no va. Para armar una presentación o un afiche.
 - [Amenazas](docs/amenazas.md), qué puede salir mal, qué lo impide hoy y qué no. Incluye el único ataque conocido que sigue abierto.

@@ -65,7 +65,11 @@ Dura nueve segundos donde antes duraba cuatro y medio. La carrera dura quince: l
 
 Nunca más de catorce pitidos por segundo: cada uno crea un oscilador, y cuarenta por segundo es basura y latencia.
 
-Durante el crucero no hay clics: hay un zumbido grave y un tono agudo por vuelta, que se pueden contar de oído. Los clics individuales arrancan cuando la velocidad baja lo suficiente, y su tono **sube** de 420 a 980 Hz mientras la rueda frena. Es el truco más viejo que hay y sigue funcionando.
+Durante el crucero hay un motor y un tono por vuelta, que se pueden contar de oído. **El motor baja de tono con la rueda**, así que el oído y el ojo cuentan lo mismo. Antes eran 90 Hz fijos, que ningún parlante de proyector reproduce, y además callaban al empezar la frenada: quedaban 1,7 segundos mudos justo en lo único que la sala estaba mirando.
+
+Los clics individuales toman el relevo cuando el motor se apaga, y van a **altura fija**. La frenada la cuenta el ritmo, que se va espaciando solo. Antes el tono subía de 420 a 980 Hz mientras la rueda frenaba: es un truco viejo, pero acá decía lo contrario de lo que se veía.
+
+La traba suena **una sola vez**. Durante un tiempo se redisparó catorce veces, al volumen más alto del juego, encima de la fanfarria, porque la condición miraba el destello y el destello decae a los 0,12 s. El puntero parpadeaba en blanco las catorce.
 
 **Con cuatro participantes o menos, cada persona tiene su nota.** Con dos se oye de quién es cada gajo sin mirar la pantalla. Esa es la respuesta sonora al problema que tenía la ruleta.
 

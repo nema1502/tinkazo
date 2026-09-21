@@ -139,7 +139,32 @@ async function run() {
 
     await page.screenshot(join(outDir, `juego-${game}.png`));
 
-    // ------------------------------------------------------- 7. en inglés
+    // ------------------------------ 7. con dos premios, el juego dice los dos
+    // Salió un sorteo de dos ganadores en el que el juego y la voz anunciaban
+    // uno solo: "el ganador es tal". El auditor corría siempre con un premio,
+    // así que no podía verlo. La comprobación mira el comentario del estadio
+    // mientras el juego corre, que es donde estaba la mentira.
+    const dos = await browser.open(`${url}&nw=2`);
+    const dichos = new Set();
+    let salio = false;
+    for (let i = 0; i < 600 && !salio; i++) {
+      const linea = await dos.eval(
+        `(document.querySelector('.commentary') || {}).textContent || ''`,
+      );
+      if (linea) dichos.add(linea.trim());
+      salio = (await dos.eval(`String(document.querySelectorAll('.winner-name').length > 0)`)) === "true";
+      if (!salio) await new Promise((r) => setTimeout(r, 200));
+    }
+    const dosState = JSON.parse(await dos.eval(READ_STATE));
+    const nombres = dosState.winners.map((x) => String(x).trim()).filter(Boolean);
+    const anuncio = [...dichos].find((x) => nombres.length === 2 && nombres.every((n) => x.includes(n)));
+    check(
+      "con dos premios el juego anuncia a los dos",
+      salio && nombres.length === 2 && !!anuncio,
+      anuncio ? `"${anuncio.slice(0, 64)}"` : `en pantalla ${JSON.stringify(nombres)}`,
+    );
+
+    // ------------------------------------------------------- 8. en inglés
     const en = await browser.open(`${url}&lang=en&instant=1`);
     const enOk = await en.waitFor("document.querySelectorAll('.winner-name').length > 0", 120_000);
     const enState = JSON.parse(await en.eval(READ_STATE));
@@ -163,7 +188,7 @@ async function run() {
       key ? `${key} aparece ${times} vez/veces · en inglés "${enOption?.text.trim() ?? "?"}"` : "sin data-i",
     );
 
-    // --------------------------------------------- 8. tema claro y oscuro
+    // --------------------------------------------- 9. tema claro y oscuro
     for (const theme of ["light", "dark"]) {
       const p = await browser.open(`${base}/?pose=${game === "race" ? "1" : game}&theme=${theme}`);
       const painted = await p.waitFor(

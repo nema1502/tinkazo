@@ -52,6 +52,15 @@ Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledg
 # Auditor de juegos: 15 comprobaciones por juego, contra drand de verdad
 node scripts/audit-game.mjs <juego> --base http://localhost:4173
 
+# Auditor de sonido: engancha los osciladores y mide afinación, registro,
+# volumen, huecos de silencio y golpes repetidos. Sin oídos.
+node scripts/audit-sound.mjs todos --base http://localhost:4173
+
+# Auditor de interfaz: cabecera, panel de cuenta y selector, en escritorio y
+# celular, en los dos temas. Imágenes rotas, texto cortado, contraste,
+# blancos de toque y scroll horizontal.
+node scripts/audit-ui.mjs --base http://localhost:4173
+
 # Las fuentes de las tarjetas de historia siguen vivas
 pnpm check:lore
 ```

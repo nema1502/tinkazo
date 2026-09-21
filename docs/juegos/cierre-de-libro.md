@@ -17,7 +17,7 @@ El nombre viene de que Stellar cierra un ledger cada cinco segundos, que es el a
 - **Fondo:** papel de contador. Trama de puntos de tinta que baja despacio.
 - **Las tarjetas:** una por persona, con borde de tinta y sombra dura. Adentro, avatar, nombre y tres barritas del color que le tocó, que parecen un hash.
 - **Con muchos nombres** la tarjeta pierde el texto y queda el avatar con la barra de color. Sigue leyéndose como "una transacción" y no como un cuadrado vacío.
-- **La barra de cierre:** turquesa, de ancho completo, precedida por un degradado. Pasa de arriba abajo, después de abajo arriba, después otra vez de arriba.
+- **La barra de cierre:** turquesa, de ancho completo, precedida por un degradado. Pasa de arriba abajo, después de abajo arriba, y así, alternando.
 - **Las eliminadas** se desintegran en cuatro cuadraditos que caen rotando.
 - **Los sellos:** cuadro magenta con una X para las que quedan afuera, turquesa con un visto para la ganadora.
 
@@ -26,13 +26,15 @@ El nombre viene de que Stellar cierra un ledger cada cinco segundos, que es el a
 | Tramo | Qué pasa |
 |---|---|
 | 0,0 – 0,8 s | Las tarjetas caen desde arriba y se acomodan con un pequeño rebote. |
-| 0,8 – 1,6 s | Primera barrida. Elimina el 62%. |
-| 1,6 – 2,4 s | Segunda barrida, en sentido contrario. Elimina el 74% de lo que quedaba. Las supervivientes se reacomodan al centro y crecen. |
-| 2,4 – 3,2 s | Tercera barrida. Quedan tres, grandes, con nombre y avatar legibles desde el fondo de la sala. |
+| 0,8 – 1,6 s | Primera barrida. Elimina cerca de la mitad. |
+| 1,6 – 2,4 s | Segunda barrida, en sentido contrario. Las supervivientes se reacomodan al centro y crecen. |
+| 2,4 – 4,0 s | Las barridas que falten, hasta quedar tres, grandes, con nombre y avatar legibles desde el fondo de la sala. |
 | 3,2 – 4,2 s | Los sellos, de a uno cada tercio de segundo. Primero las que pierden. |
 | 4,2 – 4,6 s | Sello turquesa de confirmado, la tarjeta crece, el número de libro sube en uno. |
 
-Que las perdedoras se sellen primero y la ganadora al final es lo que sostiene la tensión en un juego de cuatro segundos. Cuando quedan tres en pantalla, la sala ya sabe que una de esas gana.
+Que las perdedoras se sellen primero y la ganadora al final es lo que sostiene la tensión. Cuando quedan tres en pantalla, la sala ya sabe que una de esas gana.
+
+**Cuántas barridas hay depende de cuánta gente hay:** de una a cuatro. Eran tres fijas con cortes del 62%, el 74% y el resto, y con menos de treinta participantes **la última no eliminaba a nadie**. Con dieciocho personas la primera mataba once, la segunda cuatro y la tercera cero: el narrador anunciaba "¡última pasada!", la barra cruzaba la pantalla entera y no pasaba nada. Ahora cada barrida tiene piso y techo para que siempre saque a alguien, y "última pasada" se dice sólo en la última de verdad.
 
 ## Cómo está hecho
 

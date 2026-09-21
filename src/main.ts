@@ -96,6 +96,11 @@ const GAMES: readonly Game[] = ["race", "stellar", "ledger", "pasanaku", "rocket
 
 async function autoDemo(mode: string): Promise<void> {
   loadSample();
+  // `?nw=N` elige cuántos premios, para poder auditar el caso de varios
+  // ganadores: hubo un sorteo de dos en el que el juego anunciaba uno solo.
+  const nw = Number(params.get("nw"));
+  const sel = document.getElementById("nw");
+  if (nw >= 1 && nw <= 32 && sel instanceof HTMLSelectElement) sel.value = String(nw);
   await freeze();
   setGame((GAMES.find((g) => g === mode) ?? "race") as Game);
   // La ronda objetivo todavía no existe: esperar la cuenta regresiva.
@@ -109,7 +114,7 @@ function poseScene(): void {
   app.frozen = { names: SAMPLE, listHash: "32e2099c7a8dde7b6892523dc7d3e34ac06a972fd67f142186c58dced51a21ef", ts: 0, at: "-", prize: "", round: 32254977 };
   app.drawn = { beacon: fakeBeacon, winners: [3] };
   // `?pose=stellar` congela la escena espacial; cualquier otro valor, la andina.
-  stadiumRace(SAMPLE, 3, fakeBeacon, () => {}, params.get("pose") === "stellar" ? "stellar" : "andes");
+  stadiumRace(SAMPLE, [3], fakeBeacon, () => {}, params.get("pose") === "stellar" ? "stellar" : "andes");
 }
 
 renderNames();

@@ -103,6 +103,11 @@ export async function launch({ port = Number(process.env.CDP_PORT || 9222), widt
       "--disable-gpu",
       "--no-first-run",
       "--no-default-browser-check",
+      // Sin esto el contexto de audio nace suspendido y no avanza su reloj: el
+      // auditor de sonido mediría todas las notas en el instante cero. En una
+      // sesión real el primer sonido sale de un clic, así que esto se parece
+      // más a la verdad que lo contrario.
+      "--autoplay-policy=no-user-gesture-required",
       `--remote-debugging-port=${port}`,
       `--user-data-dir=${profile}`,
       `--window-size=${width},${height}`,

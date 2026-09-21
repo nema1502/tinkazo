@@ -122,9 +122,8 @@ export async function draw(): Promise<void> {
   app.drawn = { beacon, winners, ...(drawTx ? { drawTx } : {}) };
   $("sec-draw").style.display = "block";
   $("seed-label").textContent = `${t("seed")} ${beacon.round}`;
-  const first = winners[0] ?? 0;
-  const finish = () => reveal(names, winners, beacon, listHash);
-  playGame(names, first, beacon, finish);
+  const finish = (): void => reveal(names, winners, beacon, listHash);
+  playGame(names, winners, beacon, finish);
 }
 
 /**
@@ -134,24 +133,24 @@ export async function draw(): Promise<void> {
  * cuentan. Si un juego no puede con la cantidad de participantes, se cambia
  * por uno que sí, y eso no altera quién ganó.
  */
-function playGame(names: string[], first: number, beacon: Beacon, finish: () => void): void {
+function playGame(names: string[], winners: number[], beacon: Beacon, finish: () => void): void {
   if (app.game === "wheel" && names.length <= WHEEL_MAX) {
-    wheelSpin(names, first, beacon, finish);
+    wheelSpin(names, winners, beacon, finish);
     return;
   }
   if (app.game === "stellar") {
-    stellarConstellation(names, first, beacon, finish);
+    stellarConstellation(names, winners, beacon, finish);
     return;
   }
   if (app.game === "ledger") {
-    ledgerClose(names, first, beacon, finish);
+    ledgerClose(names, winners, beacon, finish);
     return;
   }
   if (app.game === "pasanaku") {
-    pasanaku(names, first, beacon, finish);
+    pasanaku(names, winners, beacon, finish);
     return;
   }
-  stadiumRace(names, first, beacon, finish, app.game === "rockets" ? "stellar" : "andes");
+  stadiumRace(names, winners, beacon, finish, app.game === "rockets" ? "stellar" : "andes");
 }
 
 /**

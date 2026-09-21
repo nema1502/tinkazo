@@ -1,7 +1,7 @@
 import { T, getLang, t } from "../i18n";
-import { beep, fanfare } from "../sound";
-import { avatar, type Beacon } from "../state";
-import { INK, clamp, ease, mount, shorten } from "./overlay";
+import { beep, beepFor, fanfare, note } from "../sound";
+import { avatar, paceFactor, type Beacon } from "../state";
+import { INK, WINNER_HOLD, clamp, ease, mount, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
 
 /**
  * Cierre de Libro.
@@ -38,12 +38,25 @@ interface Card {
   stamp: number;
 }
 
-/** Las tres pasadas del cierre y cuánto elimina cada una. */
-const SWEEPS = [
-  { from: "top", cut: 0.62 },
-  { from: "bottom", cut: 0.74 },
-  { from: "top", cut: 1 },
-] as const;
+/**
+ * Las pasadas del cierre y cuánto elimina cada una.
+ *
+ * Eran tres fijas, con cortes 0,62 / 0,74 / resto, y con menos de treinta
+ * participantes **la tercera no eliminaba a nadie**: el narrador anunciaba
+ * "¡última pasada!", la barra verde cruzaba la pantalla entera y no pasaba
+ * nada. Con dieciocho personas la primera mataba once, la segunda cuatro y la
+ * tercera cero, o sea que la eliminación más grande iba primero y la pasada más
+ * dramática iba vacía. La curva estaba al revés.
+ *
+ * Ahora el plan depende de cuánta gente hay, los cortes van subiendo y ninguna
+ * pasada se anuncia si no tiene a quién sacar.
+ */
+function sweepPlan(n: number, final: number): { from: "top" | "bottom"; cut: number }[] {
+  const room = Math.max(0, n - final);
+  const count = room >= 9 ? 4 : room >= 4 ? 3 : room >= 2 ? 2 : 1;
+  const cuts = [[1], [0.55, 1], [0.5, 0.6, 1], [0.45, 0.55, 0.6, 1]][count - 1] as number[];
+  return cuts.map((cut, i) => ({ from: i % 2 === 0 ? "top" : "bottom", cut } as const));
+}
 
 /**
  * Cuánto dura cada pasada, según cuánta gente haya.
@@ -59,10 +72,13 @@ const HOLD = 0.6;
 
 export function ledgerClose(
   names: string[],
-  winnerIdx: number,
+  winners: readonly number[],
   beacon: Beacon,
   done: () => void,
 ): void {
+  // La animación se centra en el primero; el cartel y el narrador cantan
+  // a todos. Con tres premios sorteados, la sala tiene que oír tres nombres.
+  const winnerIdx = winners[0] ?? 0;
   const st = mount(beacon, done, () => skip());
   if (!st) {
     done();
@@ -72,7 +88,11 @@ export function ledgerClose(
 
   const n = names.length;
   /** Cuántas quedan en la mesa final. Con dos participantes, dos. */
-  const FINAL = Math.min(3, n);
+  // Nunca tantos finalistas como participantes: con tres personas y tres
+  // finalistas la única pasada del juego no elimina a nadie, que es justo el
+  // problema que `sweepPlan` viene a arreglar.
+  const FINAL = Math.min(3, Math.max(1, n - 1));
+  const SWEEPS = sweepPlan(n, FINAL);
 
   const faces = new Map<number, HTMLImageElement>();
   /** El avatar de una persona, cargado una sola vez. */
@@ -108,6 +128,8 @@ export function ledgerClose(
   let fallTicks = 0;
   let killTicks = 0;
   let ledgerBump = false;
+  let tHold = 0;
+  let flashK = 0;
 
   const cards: Card[] = names.map((_, i) => ({
     idx: i, x: 0, y: 0, tx: 0, ty: 0, w: 0, h: 0, tw: 0,
@@ -175,15 +197,22 @@ export function ledgerClose(
       });
     }
     killTicks++;
-    if (killTicks % 8 === 0) beep(200 + (killTicks % 5) * 40, 0.02, "square", 0.02);
+    // Cada ocho bajas: con dieciocho participantes se oía **una sola vez** en
+    // todo el juego. Cada tres, y en dos notas que alternan.
+    if (killTicks % 3 === 0) beep(note(killTicks % 6 === 0 ? 10 : 12), 0.03, "square", 0.022);
   }
 
   function startSweep(): void {
     phase = "sweep";
     tPhase = 0;
-    const tone = [180, 270, 400][sweepI] ?? 400;
-    beep(tone, 0.8, "sawtooth", 0.035);
-    say(t(sweepI === 0 ? "cLedgerSweep" : sweepI === 1 ? "cLedgerSweep2" : "cLedgerSweep3"), 0.2 + sweepI * 0.25);
+    // 180, 270 y 400 Hz son tres alturas sin relación entre ellas ni con la
+    // escala, y duraban 0,8 s reales para tapar una pasada de 1,33 s: medio
+    // segundo de barra avanzando en silencio, y 1,29 s en épico. Ahora sube un
+    // grado por pasada y dura lo que dura la barra, en cualquier ritmo.
+    setTimeout(() => beepFor(note(sweepI), sweepDur(n) + 0.15, "sawtooth", 0.03), 90);
+    const last = sweepI === SWEEPS.length - 1;
+    const key = last ? "cLedgerSweep3" : sweepI === 0 ? "cLedgerSweep" : "cLedgerSweep2";
+    say(t(key), 0.2 + (sweepI / Math.max(1, SWEEPS.length - 1)) * 0.6);
   }
 
   /** Cuántas sobreviven a la pasada `i`. */
@@ -191,7 +220,12 @@ export function ledgerClose(
     const alive = cards.filter((q) => q.alive).length;
     if (i >= SWEEPS.length - 1) return FINAL;
     const cut = SWEEPS[i]?.cut ?? 0.6;
-    return Math.max(FINAL, Math.round(alive * (1 - cut)));
+    // Piso: hay que dejarle gente a las pasadas que faltan, una por cabeza.
+    // Techo: ésta también tiene que sacar a alguien. Entre los dos, el corte.
+    const left = SWEEPS.length - 1 - i;
+    const ceilK = Math.max(FINAL, alive - 1);
+    const floorK = Math.min(FINAL + left, ceilK);
+    return clamp(Math.round(alive * (1 - cut)), floorK, ceilK);
   }
 
   function endSweep(): void {
@@ -199,7 +233,7 @@ export function ledgerClose(
     const alive = cards.filter((q) => q.alive).sort((a, b) => (rankOf.get(a.idx) ?? 0) - (rankOf.get(b.idx) ?? 0));
     alive.slice(keep).forEach(kill);
     layout(keep);
-    beep(660, 0.08, "triangle", 0.04);
+    beep(note(12), 0.12, "triangle", 0.05);
     sweepI++;
     if (sweepI >= SWEEPS.length) {
       phase = "stamp";
@@ -215,9 +249,11 @@ export function ledgerClose(
     phase = "seal";
     tPhase = 0;
     sealK = 0;
-    say(T[getLang()].cWin(names[winnerIdx] ?? ""), 1);
+    flashK = 1;
+    say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
     fanfare();
-    beep(1568, 0.1, "triangle", 0.04);
+    // Después del acorde, no dentro: a 0 ms quedaba enmascarado por la fanfarria.
+    setTimeout(() => beep(note(18), 0.12, "triangle", 0.045), 520);
   }
 
   /** Saltar deja la misma imagen final: la ganadora sellada, sola. */
@@ -263,7 +299,10 @@ export function ledgerClose(
     if (phase === "fall") {
       const want = Math.floor(clamp(tPhase / 0.8, 0, 1) * Math.min(24, n));
       while (fallTicks < want) {
-        beep(300 + fallTicks * 7, 0.02, "square", 0.012);
+        // Sumar siete hercios por tarjeta es una máquina contando, y a 0,012 de
+        // volumen no se oía: eran dieciocho de los treinta y tres sonidos del
+        // juego, todos inaudibles.
+        beep(note(fallTicks % 2 === 0 ? 3 : 4), 0.045, "square", 0.028);
         fallTicks++;
       }
       if (tPhase >= 0.8) startSweep();
@@ -287,7 +326,10 @@ export function ledgerClose(
       while (stampI < want && stampI < losers.length) {
         const q = losers[stampI] as Card;
         q.stamp = 0.001;
-        beep(140, 0.14, "square", 0.06);
+        // 140 Hz es un do sostenido fuera de escala, y además era el golpe más
+        // fuerte de media partida. El cuerpo abajo y lo que se oye arriba.
+        beep(note(0), 0.1, "square", 0.07);
+        beep(note(5), 0.18, "sine", 0.05);
         stampI++;
       }
       if (stampI >= losers.length && tPhase >= HOLD + losers.length * 0.33 + 0.35) toSeal();
@@ -298,9 +340,14 @@ export function ledgerClose(
       sealK = Math.min(1, sealK + dt * 2.2);
       if (!ledgerBump && sealK >= 0.5) {
         ledgerBump = true;
-        beep(880, 0.04, "square", 0.03);
+        // Sonaba fuerte para un número de trece píxeles que nadie mira, encima
+        // del sello final. Queda apenas como un roce.
+        beep(note(14), 0.06, "triangle", 0.025);
       }
-      if (tPhase >= 1.5) {
+      // En segundos reales: eran 1,5 s de juego, o sea 1,2 s en modo rápido.
+      tHold += dt * paceFactor();
+      flashK = Math.max(0, flashK - dt * paceFactor() * 4);
+      if (tHold >= WINNER_HOLD) {
         phase = "dead";
         cleanup();
       }
@@ -501,6 +548,9 @@ export function ledgerClose(
     }
     c.globalAlpha = 1;
     if (phase === "sweep") drawSweep();
+      // El fogonazo del revelado: el golpe visual que separa "apareció un
+      // nombre" de "pasó algo". Va debajo del cartel, no encima.
+    flashScreen(c, W(), H(), flashK);
     if (phase === "seal") drawSeal();
     drawHud();
   });

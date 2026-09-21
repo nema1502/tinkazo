@@ -1,9 +1,9 @@
 import { $ } from "../dom";
 import { T, getLang, setPickSeed, t } from "../i18n";
 import { LCOLORS, avatar, instantMode, paceFactor, type Beacon } from "../state";
-import { beep, fanfare } from "../sound";
+import { beep, beepFor, fanfare, note } from "../sound";
 import { THEMES, type ThemeId } from "./themes";
-import { registerSkip, shorten } from "./overlay";
+import { registerSkip, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
 import { narrate, stopNarrator } from "../narrator";
 
 /* Modo estadio: carrera de llamas a pantalla completa, sembrada con la semilla. */
@@ -26,11 +26,12 @@ interface Ridge {
 
 export function stadiumRace(
   names: string[],
-  winnerIdx: number,
+  winners: readonly number[],
   beacon: Beacon,
   done: () => void,
   themeId: ThemeId = "andes",
 ): void {
+  const winnerIdx = winners[0] ?? 0;
   const skin = THEMES[themeId];
   // Igual que los juegos nuevos: `?instant=1` es del auditor, y la preferencia
   // del sistema es de una persona a la que las animaciones le hacen mal.
@@ -170,28 +171,84 @@ export function stadiumRace(
     phase = "done";
     tFreeze = 0;
     shake = 1;
-    say(T[getLang()].cWin(winnerName), 1);
+    flashK = 1;
+    say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
     fanfare();
+  }
+
+  /* ---------------------------------------------------------------- sonido
+     Catorce sonidos en veintiséis segundos, con huecos de 4,3 s a ritmo normal
+     y 4,9 s en épico, y en épico el hueco caía dentro de la remontada. Una
+     carrera muda no emociona por bien que se vea.
+
+     Lo que falta es lo que hace una carrera: el galope, que además marca el
+     paso de las patas, y un zumbido de tribuna que sube un grado de la escala
+     cada tercio sin que nadie lo anuncie. Los dos en segundos de juego, así que
+     se estiran con el selector igual que la imagen. */
+  let flashK = 0;
+  let hoofIn = 0;
+  let hoofStep = 0;
+  let droneIn = 0;
+
+  function raceAudio(dt: number, prog: number): void {
+    // Los últimos dos centésimos van mudos a propósito: el silencio antes del
+    // golpe es lo que hace que el golpe se sienta.
+    if (prog > 0.975) return;
+    hoofIn -= dt;
+    if (hoofIn <= 0) {
+      // Cuatro pisadas por segundo de juego, seis en la remontada: el mismo
+      // tempo que el balanceo de las patas, así imagen y sonido van juntos.
+      hoofIn = prog > SURGE_AT ? 0.16 : 0.25;
+      // Los cohetes no galopan: mismo ritmo, motor en vez de pezuña.
+      const wave: OscillatorType = skin.alwaysNight ? "sawtooth" : "square";
+      beep(note(hoofStep % 2 === 0 ? 0 : 3), 0.05, wave, 0.022);
+      hoofStep++;
+    }
+    droneIn -= dt;
+    if (droneIn <= 0) {
+      droneIn = 0.7;
+      beepFor(note(prog > SURGE_AT ? 4 : prog > 0.45 ? 2 : 0), 0.78, "sawtooth", 0.02);
+    }
   }
 
   function update(dt: number): void {
     if (phase === "count") {
-      tPhase += dt;
+      // En segundos reales. El selector de duración divide el `dt`, así que en
+      // modo épico el "3" se quedaba dos segundos y pico quieto en pantalla:
+      // una cuenta que no va a un pitido por segundo no se lee como cuenta, se
+      // lee como que se colgó.
+      tPhase += dt * paceFactor();
       const n = 3 - Math.floor(tPhase);
-      if (n < lastBeepN && n >= 1) { lastBeepN = n; beep(440, 0.12); }
-      if (tPhase >= 3) { phase = "race"; say(t("cStart"), 0.35); beep(880, 0.25, "square", 0.07); }
+      // Sube en vez de repetir el mismo la tres veces.
+      if (n < lastBeepN && n >= 1) {
+        lastBeepN = n;
+        beep(note(n === 3 ? 9 : n === 2 ? 10 : 12), 0.18, "triangle", 0.06);
+      }
+      if (tPhase >= 3) {
+        phase = "race";
+        say(t("cStart"), 0.35);
+        // Dos notas a una octava: una bocina, no un pitido.
+        beep(note(14), 0.45, "square", 0.055);
+        beep(note(9), 0.45, "square", 0.055);
+      }
       return;
     }
     if (phase === "done") {
-      tFreeze += dt;
+      // También en segundos reales: lo que tarda la sala en leer un nombre
+      // proyectado y reaccionar no cambia porque el organizador elija "épico".
+      // Con 1,4 segundos de juego el cartel vivía 1,6 s en normal y 0,9 s en
+      // rápido, y la reacción de una sala recién arranca al segundo y pico.
+      tFreeze += dt * paceFactor();
       shake = Math.max(0, shake - dt * 1.4);
-      if (tFreeze > 1.4) cleanup();
+      flashK = Math.max(0, flashK - dt * paceFactor() * 4);
+      if (tFreeze > 3) cleanup();
       return;
     }
     tRace += dt;
     const baseV = L() / DUR;
     const prog = tRace / DUR;
     const cap = L() - W() * 0.055;
+    raceAudio(dt, prog);
 
     // El pelotón corre por su cuenta; al ganador lo ubicamos después, según
     // dónde esté el pelotón. Antes el ganador aceleraba en el segundo 9 de 15 y
@@ -203,8 +260,14 @@ export function stadiumRace(
     const packBack = pack.reduce((a, b) => (b.x < a.x ? b : a), pack[0] ?? wr);
     for (const r of pack) {
       r.n1 += dt * (0.9 + 0.3 * (r.i % 3));
-      let mult = 0.92 + 0.22 * (0.5 + 0.5 * Math.sin(r.n1 * 1.7 + r.i));
-      if (r.x < packLeader.x - W() * 0.28) mult *= 1.22; // banda elástica: nadie se queda fuera del plano
+      // Más variación: con 0,92 a 1,14 el pelotón salía como un bloque, y un
+      // bloque no tiene carrera adentro.
+      let mult = 0.87 + 0.33 * (0.5 + 0.5 * Math.sin(r.n1 * 1.7 + r.i));
+      // La banda elástica juntaba al pelotón en el 28% del ancho, y de lejos
+      // eso se lee como una sola mancha: los ocho corredores y sus ocho
+      // carteles caían uno encima de otro. Abierta al 46% se ve quién va
+      // adelante sin leer nada, que es lo único que la sala quiere saber.
+      if (r.x < packLeader.x - W() * 0.4) mult *= 1.22;
       r.x = Math.min(r.x + baseV * mult * dt, cap);
     }
 
@@ -224,16 +287,29 @@ export function stadiumRace(
     const leader = runners.reduce((a, b) => (b.x > a.x ? b : a));
     if (leader.i !== lastLeader && tRace > 1 && leadCd <= 0 && !saidLast) {
       lastLeader = leader.i;
+      // En segundos reales: el habla no se estira con el selector, así que en
+      // rápido este cooldown valía 1,28 s y las frases se cortaban entre ellas.
       leadCd = 1.6;
       say(T[getLang()].cLead(leader.name), 0.3 + 0.4 * prog);
-      beep(660, 0.08, "triangle", 0.04);
+      beep(note(12), 0.12, "triangle", 0.05);
+      setTimeout(() => beep(note(15), 0.1, "triangle", 0.04), 70);
     }
-    leadCd -= dt;
-    if (!saidLast && prog > SURGE_AT) { saidLast = true; say(t("cLast"), 0.85); beep(740, 0.1, "triangle", 0.05); }
+    leadCd -= dt * paceFactor();
+        // 740 Hz era un fa sostenido: el único tono fuera de la escala del juego, y
+    // marcaba justo el momento más importante.
+    if (!saidLast && prog > SURGE_AT) {
+      saidLast = true;
+      say(t("cLast"), 0.85);
+      beep(note(13), 0.22, "triangle", 0.06);
+    }
     // La cámara sigue al puntero, pero al final se destraba y deja la meta
     // cerca del centro. Con el tope viejo el remate pasaba en la franja
     // derecha de la pantalla y el resto de la pista quedaba vacía.
-    const camTarget = leader.x - W() * 0.4;
+    //
+    // Y el puntero va al 58% del ancho, no al 40%: con el pelotón abierto y el
+    // puntero a la izquierda, el último corredor quedaba fuera de cuadro. Ahora
+    // la carrera entera entra en pantalla y se ve quién le viene atrás a quién.
+    const camTarget = leader.x - W() * 0.58;
     const camCap = L() - W() * (prog > SURGE_AT ? 0.62 : 0.86);
     camX += (Math.max(0, Math.min(camTarget, camCap)) - camX) * Math.min(1, dt * 2.6);
     if (wr.x >= L()) finishNow();
@@ -319,6 +395,11 @@ export function stadiumRace(
     const trackPad = (trackH - laneH * lanes) / 2;
     c.strokeStyle = dark ? "rgba(246,239,226,0.25)" : "rgba(25,25,25,0.3)";
     c.lineWidth = 2 * u; c.setLineDash([18 * u, 16 * u]);
+    // Las rayas se dibujaban de 0 a w en coordenadas de pantalla, con el patrón
+    // clavado: la cámara sigue al puntero, así que el pelotón queda en el medio
+    // y **nada se movía durante doce segundos**. Correr el patrón con la cámara
+    // es una línea y es la diferencia entre una pista y un fondo fijo.
+    c.lineDashOffset = -camX % (34 * u);
     for (let li = 1; li < lanes; li++) {
       c.beginPath();
       c.moveTo(0, trackTop + trackPad + li * laneH);
@@ -326,6 +407,7 @@ export function stadiumRace(
       c.stroke();
     }
     c.setLineDash([]);
+    c.lineDashOffset = 0;
     // Línea de salida y arco de meta
     const startX = 40 * u - camX;
     if (startX > -20 && startX < w + 20) { c.fillStyle = dark ? "#f6efe2" : INK; c.fillRect(startX, trackTop, 4 * u, trackH); }
@@ -353,18 +435,25 @@ export function stadiumRace(
       const sc = Math.min(laneH * 0.62, 78 * u) / 26;
       const bob = phase === "race" ? Math.sin(tRace * 16 + k * 2) * 3 * u : 0;
       skin.drawRunner(c, lx, ly - 8 * sc + bob, sc, r.color, phase === "race" ? tRace * 14 + k : 0);
-      // Chip con nombre y avatar
+      // Chip con nombre y avatar. A 12·u el nombre medía el 1,7% del alto de
+      // pantalla: proyectado en una sala no se lee. Y el del puntero va en
+      // amarillo, que es la respuesta a "de lejos no se sabe quién va ganando".
+      const punta = r.i === lastLeader && phase === "race";
       const label = shorten(r.name, 18);
-      c.font = `700 ${Math.max(11, 12 * u)}px system-ui, sans-serif`;
+      const fs = Math.max(13, (punta ? 19 : 16) * u);
+      c.font = `800 ${fs}px system-ui, sans-serif`;
       const tw = c.measureText(label).width;
-      const chipY = ly - Math.min(laneH * 0.52, 30 * u), av = 18 * u;
-      c.fillStyle = dark ? "#f6efe2" : "#fff";
-      c.fillRect(lx - 4 * u, chipY - 14 * u, tw + av + 18 * u, 22 * u);
-      c.lineWidth = 2 * u; c.strokeStyle = INK;
-      c.strokeRect(lx - 4 * u, chipY - 14 * u, tw + av + 18 * u, 22 * u);
-      if (r.img && r.img.complete && r.img.naturalWidth) c.drawImage(r.img, lx, chipY - 11 * u, av, av);
+      const hh = fs + 12 * u;
+      const chipY = ly - Math.min(laneH * 0.52, 32 * u), av = hh - 8 * u;
+      c.fillStyle = punta ? "#ffc629" : dark ? "#f6efe2" : "#fff";
+      c.fillRect(lx - 4 * u, chipY - hh * 0.64, tw + av + 18 * u, hh);
+      c.lineWidth = (punta ? 3 : 2) * u; c.strokeStyle = INK;
+      c.strokeRect(lx - 4 * u, chipY - hh * 0.64, tw + av + 18 * u, hh);
+      if (r.img && r.img.complete && r.img.naturalWidth) {
+        c.drawImage(r.img, lx, chipY - hh * 0.5, av, av);
+      }
       c.fillStyle = "#191919";
-      c.fillText(label, lx + av + 6 * u, chipY + 3 * u);
+      c.fillText(label, lx + av + 6 * u, chipY + fs * 0.34);
     });
     // Cuántos corren de cuántos. Con ocho carriles y doscientos inscritos,
     // callarlo hace pensar que el sorteo fue entre ocho.
@@ -378,30 +467,13 @@ export function stadiumRace(
 
     // La tarjeta del ganador, igual que en los otros cuatro juegos. Sin esto,
     // el nombre solo aparecía en la caja del narrador y no se leía de lejos.
+      // El fogonazo del revelado: el golpe visual que separa "apareció un
+      // nombre" de "pasó algo". Va debajo del cartel, no encima.
+    flashScreen(c, w, h, flashK);
     if (phase === "done" && tFreeze > 0.25) {
       const e = 1 + 2.70158 * Math.pow(Math.min(1, (tFreeze - 0.25) * 2.4) - 1, 3)
         + 1.70158 * Math.pow(Math.min(1, (tFreeze - 0.25) * 2.4) - 1, 2);
-      const label = shorten(winnerName, 26);
-      c.save();
-      c.translate(w / 2, h * 0.34);
-      c.scale(e, e);
-      c.font = `900 ${64 * u}px system-ui, sans-serif`;
-      c.textAlign = "center";
-      c.textBaseline = "middle";
-      const bw = c.measureText(label).width + 72 * u;
-      const bh = 120 * u;
-      c.fillStyle = "#e93d9c";
-      c.fillRect(-bw / 2 + 10 * u, -bh / 2 + 10 * u, bw, bh);
-      c.fillStyle = "#ffc629";
-      c.fillRect(-bw / 2, -bh / 2, bw, bh);
-      c.lineWidth = 6 * u;
-      c.strokeStyle = INK;
-      c.strokeRect(-bw / 2, -bh / 2, bw, bh);
-      c.fillStyle = INK;
-      c.fillText(label, 0, 0);
-      c.restore();
-      c.textBaseline = "alphabetic";
-      c.textAlign = "left";
+      drawWinnerPlate(c, winnerNames(names, winners), w / 2, h * 0.34, u, e);
     }
 
     // Countdown gigante

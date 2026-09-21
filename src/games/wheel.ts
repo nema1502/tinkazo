@@ -1,7 +1,7 @@
 import { T, getLang, t } from "../i18n";
-import { beep, fanfare } from "../sound";
-import { avatar, type Beacon } from "../state";
-import { INK, clamp, drawFlag, ease, mount, shorten } from "./overlay";
+import { beep, beepFor, fanfare, note } from "../sound";
+import { avatar, paceFactor, type Beacon } from "../state";
+import { INK, WINNER_HOLD, clamp, drawFlag, ease, mount, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
 
 /**
  * La ruleta.
@@ -74,10 +74,13 @@ function omega(tt: number): number {
 
 export function wheelSpin(
   names: string[],
-  winnerIdx: number,
+  winners: readonly number[],
   beacon: Beacon,
   done: () => void,
 ): void {
+  // La animación se centra en el primero; el cartel y el narrador cantan
+  // a todos. Con tres premios sorteados, la sala tiene que oír tres nombres.
+  const winnerIdx = winners[0] ?? 0;
   const st = mount(beacon, done, () => skip());
   if (!st) {
     done();
@@ -151,7 +154,11 @@ export function wheelSpin(
   let cur = personOf(Math.floor(startSeg));
   let curSmooth = cur;
   let flash = 0;
-  const built: number[] = [];
+  let didLock = false;
+  let saidPeg = false;
+  let saidLast = false;
+  let tHold = 0;
+  let flashK = 0;
   const rimChars = beacon.randomness.slice(0, 64).split("");
 
   /* -------------------------------------------------------------- geometría */
@@ -199,12 +206,15 @@ export function wheelSpin(
   function crowned(): void {
     if (didCrown) return;
     didCrown = true;
+    flashK = 1;
     cur = winnerIdx;
     curSmooth = winnerIdx;
-    say(T[getLang()].cWin(names[winnerIdx] ?? ""), 1);
+    say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
     fanfare();
-    setTimeout(() => beep(1568, 0.09, "triangle", 0.04), 180);
-    setTimeout(() => beep(2093, 0.09, "triangle", 0.03), 340);
+    // A 180 y 340 ms los adornos caían dentro de la fanfarria, que suena al
+    // doble de volumen: estaban escritos y no se oían. Después del acorde sí.
+    setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);
+    setTimeout(() => beep(note(19), 0.12, "triangle", 0.035), 700);
   }
 
   /* ---------------------------------------------------------------- sonido */
@@ -215,13 +225,21 @@ export function wheelSpin(
       const lap = Math.floor(cum(tAll) * scale / segs);
       if (lap !== lastLap) {
         lastLap = lap;
-        // Un tono por vuelta, al pasar el perno tricolor: se pueden contar de oído.
-        beep(1400, 0.02, "sine", 0.008);
+        // Un tono por vuelta, al pasar el perno tricolor: se pueden contar de
+        // oído. A 1400 Hz y 0,008 de volumen no se contaba ninguno.
+        beep(note(15), 0.05, "sine", 0.03);
       }
-      const hum = Math.floor(tAll / 0.45);
+    }
+    // El motor. Antes eran 90 Hz fijos, que el parlante de un proyector no
+    // reproduce, y además callaba en T_BRAKE: quedaban 1,7 s mudos justo
+    // cuando empieza a frenar, que es lo único que la sala está mirando. Ahora
+    // suena hasta que los clics toman el relevo y **baja de tono con la rueda**,
+    // así el oído y el ojo cuentan lo mismo.
+    if (tAll >= T_SPIN && w > 16) {
+      const hum = Math.floor(tAll / 0.3);
       if (hum !== lastHum) {
         lastHum = hum;
-        beep(90, 0.5, "sawtooth", 0.03);
+        beepFor(note(Math.round((w / W0) * 4)), 0.36, "sawtooth", 0.026);
       }
       return;
     }
@@ -229,15 +247,18 @@ export function wheelSpin(
     const s = Math.floor(((-rot / A) % segs + segs) % segs);
     if (s === lastClick) return;
     lastClick = s;
-    // El tono sube mientras la rueda frena: es el truco más viejo que hay.
-    beep(420 + 560 * (1 - w / 16), 0.03, "square", 0.03);
-    // Con pocos participantes cada persona tiene su nota. Con dos se oye de
-    // quién es cada gajo sin mirar la pantalla, que es la respuesta sonora al
-    // problema que tenía la ruleta.
+    // Con pocos participantes cada persona tiene su nota, y entonces el clic
+    // sobra: eran dos timbres sin relación disparados en el mismo milisegundo,
+    // catorce veces por segundo.
     if (n <= 4) {
-      const notes = [523, 659, 784, 988];
-      beep(notes[personOf(s)] ?? 523, 0.03, "triangle", 0.03);
+      const deg = [5, 8, 10, 12];
+      beep(note(deg[personOf(s)] ?? 5), 0.05, "triangle", 0.03);
+      return;
     }
+    // Altura fija: la frenada ya la cuenta el ritmo, que se va espaciando solo.
+    // El glissando que subía mientras la rueda frenaba decía lo contrario de lo
+    // que se veía.
+    beep(note(8), 0.03, "square", 0.034);
   }
 
   /* -------------------------------------------------------------- narración */
@@ -261,11 +282,16 @@ export function wheelSpin(
       lastSaid = tAll;
       say(T[getLang()].cWheelOn(names[cur] ?? ""), 0.75);
     }
-    if (tAll >= T_HOLD && tAll < T_HOLD + 0.05) {
+    // Con cierre, no con ventana. Una ventana de 0,05 s de juego dura cuatro o
+    // cinco cuadros, así que `say` se disparaba cuatro o cinco veces y cada una
+    // cancelaba a la anterior: el narrador tartamudeaba, y justo en el clímax.
+    if (tAll >= T_HOLD && !saidPeg) {
+      saidPeg = true;
       lastSaid = tAll;
       say(t("cWheelPeg"), 0.9);
     }
-    if (tAll >= T_SETTLE && tAll < T_SETTLE + 0.06) {
+    if (tAll >= T_SETTLE && !saidLast) {
+      saidLast = true;
       lastSaid = tAll;
       say(t("cWheelLast"), 0.95);
     }
@@ -564,30 +590,13 @@ export function wheelSpin(
     }
     c.restore();
 
-    const name = names[winnerIdx] ?? "";
-    const label = shorten(name, 22);
-    // En la columna libre, no encima de la rueda: la rueda con el gajo
-    // encendido es media foto y no se puede tapar.
+    // El cartel, en la columna libre y no encima de la rueda: la rueda con el
+    // gajo encendido es media foto y no se puede tapar.
+      // El fogonazo del revelado: el golpe visual que separa "apareció un
+      // nombre" de "pasó algo". Va debajo del cartel, no encima.
+    flashScreen(c, W(), H(), flashK);
     const colCx = (cx - R) / 2;
-    c.save();
-    c.translate(Math.max(colCx, 240 * k), H() * 0.52);
-    c.scale(e, e);
-    c.font = `900 ${48 * k}px system-ui, sans-serif`;
-    c.textAlign = "center";
-    c.textBaseline = "middle";
-    const bw = c.measureText(label).width + 72 * k;
-    const bh = 110 * k;
-    c.fillStyle = "#e93d9c";
-    c.fillRect(-bw / 2 + 10 * k, -bh / 2 + 10 * k, bw, bh);
-    c.fillStyle = "#ffc629";
-    c.fillRect(-bw / 2, -bh / 2, bw, bh);
-    c.lineWidth = 6 * k;
-    c.strokeStyle = INK;
-    c.strokeRect(-bw / 2, -bh / 2, bw, bh);
-    c.fillStyle = INK;
-    c.fillText(label, 0, 0);
-    c.restore();
-    c.textBaseline = "alphabetic";
+    drawWinnerPlate(c, winnerNames(names, winners), Math.max(colCx, 240 * k), H() * 0.52, k, e, 48);
   }
 
   function drawHud(): void {
@@ -611,22 +620,33 @@ export function wheelSpin(
     if (tAll < 0.8) {
       const want = Math.floor((tAll / 0.8) * 24);
       while (buildTick < want) {
-        beep(380 + buildTick * 9, 0.02, "square", 0.012);
+        // Sumar hercios iguales da intervalos que se achican al subir: el oído
+        // oye una máquina contando. Por grados de la escala sube parejo, y a
+        // 0,012 de volumen no se oía nada de esto en una sala.
+        beep(note(5 + Math.floor(buildTick / 2)), 0.05, "square", 0.03);
         buildTick++;
-        built.push(buildTick);
       }
     }
     if (tAll >= T_HOLD && tAll < T_SETTLE) {
       const hits = Math.floor((tAll - T_HOLD) / 0.07);
       while (pegHits < hits) {
         pegHits++;
-        beep(150, 0.03, "square", 0.035);
+        beep(note(2), 0.06, "square", 0.055);
       }
     }
-    if (tAll >= T_LOCK && flash === 0) {
+    // Un cierre propio. La condición era `flash === 0`, y `flash` vuelve a cero
+    // a los 0,12 s de juego: desde T_LOCK hasta el final el golpe se redisparaba
+    // **catorce veces**, al volumen más alto del juego, encima de la fanfarria,
+    // y el puntero parpadeaba en blanco las catorce. Eso era "el audio está
+    // horrible", con nombre y apellido.
+    if (tAll >= T_LOCK && !didLock) {
+      didLock = true;
       flash = 0.12;
-      beep(70, 0.35, "sine", 0.09);
-      setTimeout(() => beep(1046, 0.06, "square", 0.05), 40);
+      // 70 Hz no sale por el parlante de ningún proyector: el golpe de la traba
+      // se perdía entero. El grado 0 sí se oye.
+      beep(note(0), 0.45, "sine", 0.1);
+      setTimeout(() => beep(note(5), 0.07, "square", 0.06), 40);
+      setTimeout(() => beep(note(15), 0.12, "triangle", 0.05), 90);
     }
     flash = Math.max(0, flash - dt);
     if (tAll >= T_CROWN) crowned();
@@ -644,6 +664,10 @@ export function wheelSpin(
     if (tAll < T_CROWN) drawRoster(dt);
     drawHud();
     if (tAll >= T_CROWN) drawCrown(tAll - T_CROWN);
-    if (tAll >= T_END) cleanup();
+    // El sostén del cartel, en segundos reales. Eran 1,55 s de juego, que en
+    // modo rápido son 1,24 s: menos de lo que tarda una sala en reaccionar.
+    if (tAll >= T_CROWN) tHold += dt * paceFactor();
+    flashK = Math.max(0, flashK - dt * paceFactor() * 4);
+    if (tHold >= WINNER_HOLD) cleanup();
   });
 }

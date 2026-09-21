@@ -540,7 +540,7 @@ para que el sorteo encaje con el tono de mi público.
 
 **Dado** el diseño de un juego nuevo
 **Cuando** se implementa
-**Entonces** cumple el contrato de `docs/juegos.md`, tiene su documento en `docs/juegos/`, textos en ES y EN, y aprueba las quince comprobaciones
+**Entonces** cumple el contrato de `docs/juegos.md`, tiene su documento en `docs/juegos/`, textos en ES y EN, y aprueba las dieciséis comprobaciones del auditor de juegos y las del auditor de sonido
 **Y** si es una carrera, se agrega como tema y no como módulo nuevo.
 
 Resultado parcial (2026-09-20): seis juegos en el catálogo, todos con 15/15. Constelación Stellar, Cierre de Libro, Pasanaku, Carrera de llamas, Carrera de cohetes y Ruleta.
@@ -590,6 +590,112 @@ para no descubrirlo con la sala mirando.
 **Cuando** la página carga
 **Entonces** se puede saber si hay voz y cuál se eligió
 **Y** si no hay ninguna, se dice antes del sorteo y no durante.
+
+---
+
+## Épica 10: Que el juego se oiga y se sienta
+
+Nació de una auditoría de experiencia sobre los seis juegos, medida en el navegador contra el sitio construido: cada oscilador que arrancaba y cada cambio de la caja del narrador, cronometrados. Encontró un cuelgue, un golpe que sonaba catorce veces y una pasada que el narrador anunciaba como la última sin eliminar a nadie.
+
+### Historia 10.1: Que Pasanaku no cuelgue el navegador: hecho
+
+Resultado (2026-09-20): el aguayo dibujaba los rombos del pallay con `for (px = ...; px < ...; px += step)`, y en el primer cuadro `step` valía cero. No es que fuera lento: `ease.outBack(0)` no devuelve cero sino 2,2e-16, así que la tela medía 1e-13 píxeles de alto, la resta contra la coordenada de arriba se redondeaba al propio valor y el paso se iba con ella. Un `for` que avanza de a cero no termina nunca: la pestaña se colgaba entera, sin excepción y sin un solo cuadro dibujado.
+
+Arreglado con un piso de medio píxel, que no dibuja nada igual, y de paso `u()` en `overlay.ts` ya no puede devolver cero, que protege a los otros bucles de dibujo que avanzan de a `algo * u()`.
+
+### Historia 10.2: El diseño sonoro de los seis juegos: hecho
+
+Resultado (2026-09-20): el problema no eran los sonidos sueltos sino que no había reglas, y ahora están en [juegos.md](juegos.md).
+
+- `beep` ponía la ganancia en su máximo de un salto, y un salto de amplitud es un clic. Ese clic sonaba delante de cada una de las cincuenta notas del producto: era la mitad de por qué esto sonaba a aparato. Ahora hay doce milésimas de ataque, cierre a cero y un paso bajo a 4,5 kHz que le saca el filo a las ondas cuadradas.
+- Dieciséis de los veintiún puntos de sonido fuera de la Constelación estaban fuera de la pentatónica. Ahora todos pasan por `note()`.
+- Había sesenta y seis sonidos entre 0,008 y 0,016 de volumen, o sea por debajo del murmullo de una sala: estaban escritos y no existían. Y golpes de clímax a 70 y 90 Hz, que el parlante de un proyector no reproduce.
+- La traba de la ruleta se disparaba **catorce veces** encima de la fanfarria, al volumen más alto del juego, porque la condición era `flash === 0` y `flash` vuelve a cero a los 0,12 s. El puntero parpadeaba en blanco las catorce.
+- La carrera tenía catorce sonidos en veintiséis segundos, con huecos de casi cinco. Ahora tiene galope, que además marca el paso de las patas, y un zumbido de tribuna que sube un grado cada tercio.
+- El tejido del Pasanaku, que es la escena que enseña qué es una trustline, era mudo.
+
+### Historia 10.3: El ritmo, que no puede dividir por igual al sonido y a la imagen: hecho
+
+Resultado (2026-09-20): el selector de duración divide el `dt` del juego, pero `beep` mide en segundos reales. Los dos sistemas convivían sin saberlo, y en modo épico el zumbido de 0,7 s que tapaba un apretón entero del Pasanaku dejaba 2,4 s de tela cerrándose en silencio, en el momento de más tensión.
+
+Ahora hay dos funciones y la elección es explícita: `beepFor` para lo que tiene que durar una fase, `beep` para lo que le habla a una persona. La cuenta regresiva avanza en segundos reales, porque una cuenta que no va a un pitido por segundo se lee como una pantalla colgada, y el cartel del ganador se sostiene tres segundos reales en los cinco módulos de juego: leer un nombre proyectado lleva casi un segundo y la reacción de la sala recién llega a su pico a los dos.
+
+### Historia 10.4: La última pasada del Cierre de Libro, que no eliminaba a nadie: hecho
+
+Resultado (2026-09-20): eran tres pasadas fijas con cortes 0,62 / 0,74 / resto. Con dieciocho participantes la primera mataba once, la segunda cuatro y la tercera **cero**: el narrador anunciaba "¡última pasada!", la barra verde cruzaba la pantalla entera y no pasaba nada. La curva estaba al revés, y mordía justo en el caso común de veinte a cuarenta personas.
+
+Ahora el plan de pasadas depende de cuánta gente hay (una a cuatro), los cortes suben, cada pasada tiene piso y techo para que siempre saque a alguien, y "última pasada" se dice sólo en la última de verdad.
+
+### Historia 10.5: Lo que falta de la auditoría de experiencia
+
+Como organizadora,
+quiero que el sorteo se entienda desde el fondo de la sala,
+para que la gente mire la pantalla y no el teléfono.
+
+**Criterios de aceptación:**
+
+**Dado** un sorteo proyectado y mirado al 25%
+**Cuando** corre cualquiera de los seis juegos
+**Entonces** se sabe quién va ganando sin leer texto
+**Y** hay un hecho legible nuevo cada 1,5 a 2,5 segundos, nunca más de 4 sin novedad
+**Y** el efecto del revelado se ve medio segundo antes de que entre el cartel, no debajo.
+
+Pendiente concreto: un cuarto de segundo de silencio antes del golpe en los que todavía no lo tienen; cámara lenta en el último 10%; un destello de dos o tres cuadros en el instante del revelado; apagar a los perdedores cuando sale el cartel; y poner en escena la espera de la ronda, que hoy son diez segundos en una etiqueta de un botón gris y es el momento en que el producto es verdaderamente distinto de cualquier ruleta.
+
+### Historia 10.6: Que el show dure lo que el organizador eligió
+
+Como organizadora con un proyector y cincuenta personas mirando,
+quiero que "normal" dure lo mismo en los seis juegos,
+para no tener que reaprender el selector cada vez que cambio de juego.
+
+**Criterios de aceptación:**
+
+**Dado** el selector de duración
+**Cuando** se elige una posición
+**Entonces** los seis juegos duran aproximadamente eso
+**Y** ninguno se estira tanto que se vuelva cámara lenta.
+
+`PACES` es hoy un multiplicador (`rápido 0,8 · normal 1,4 · épico 2,2`) y los seis juegos no duran lo mismo sin estirar. Medido, en segundos reales:
+
+| Juego | Base, en segundos de juego hasta el revelado | Normal | Épico |
+|---|---|---|---|
+| Carrera / Cohetes | 3 de cuenta (ya en segundos reales) + 15 | 23,5 | 36,0 |
+| Constelación | 11,48 | 16,2 | 25,3 |
+| Pasanaku | 8,60 | 11,8 | 18,9 |
+| Ruleta | 7,65 | 11,5 | 16,8 |
+| Cierre de Libro (n=18) | 6,21 | 9,3 | 13,7 |
+
+Más tres segundos reales de sostén del cartel en todos. El pedido es que el mínimo sea alrededor de treinta segundos, y hoy no lo alcanzan cuatro de los seis ni en épico.
+
+**Subir el multiplicador no sirve.** Para que el Cierre de Libro llegue a treinta segundos haría falta ×4,35 y la ruleta ×3,53. La ruleta ya tiene 2,2 segundos de crucero en los que la imagen es un borrón: a ×3,5 son casi ocho segundos de nada. Estirar no es alargar.
+
+Van dos pasos, en este orden. Primero, que el selector sea un **objetivo de duración**: cada juego declara cuánto dura sin estirar y el factor sale de `(objetivo menos lo fijo) / nominal`, acotado a ×2,2. Con objetivos de 20, 30 y 42 segundos, "normal" pasa a dar 30 en la carrera, 28 en la constelación y entre 17 y 22 en los otros tres, y el botón por fin significa lo mismo en los seis.
+
+Segundo, y es lo que de verdad falta: **contenido en los tres que topean**. La ruleta tiene que acortar el crucero y darle ese tiempo a la frenada y al amague, que es donde está la tensión, y a la carga inicial, que hoy son 0,9 segundos con la rueda quieta. El Cierre de Libro necesita más pasadas con listas grandes, donde hoy el tope son cuatro, y un desfile de sellos menos apurado que uno cada 0,33 segundos. El Pasanaku tiene el tejido de los hilos en 0,8 segundos, y es la escena que enseña qué es una trustline.
+
+---
+
+## Épica 11: Recordatorios y aviso a los ganadores
+
+No hay nada de esto todavía y no hace falta para el evento. Queda escrito para no volver a discutirlo desde cero.
+
+Hoy el sitio no tiene servidor ni base de datos: todo vive en el navegador y en la cadena. El historial de sorteos se guarda en `localStorage`, así que se pierde si se borran los datos del sitio, y el aviso al ganador es un enlace que el organizador manda a mano.
+
+Lo que pediría un servidor de verdad: avisar por correo a quien ganó sin que el organizador tenga que copiar nada, recordar un sorteo programado, y que el historial sobreviva a cambiar de equipo. Las tres cosas tienen el mismo costo: dejar de ser un sitio estático.
+
+Hay un camino intermedio que no lo requiere y conviene medir antes: **reconstruir el historial desde la cadena**. Los sellos están en el contrato, la cuenta que los firmó es la del organizador, y `getLedgerEntries` no tiene ventana temporal. Eso devuelve el historial en cualquier equipo con la misma cuenta, sin servidor y sin base de datos. Lo que no resuelve es el correo.
+
+---
+
+## Sobre pagar a los ganadores con USDC
+
+Se evaluó y **no entra en v2**, por una razón que no es técnica.
+
+La promesa del producto es que **los participantes no necesitan nada**: ni wallet, ni cuenta, ni saldo, ni saber qué es Stellar. Alguien pega una lista de nombres y sortea. Pagar el premio en USDC rompe eso: para cobrar, quien gana necesita una cuenta de Stellar, una trustline al USDC de Circle y entender qué acaba de recibir. En un evento con cincuenta personas eso convierte un momento de dos segundos en una fila.
+
+Y hay un segundo costo, más serio: hoy el contrato **no custodia valor**. No tiene admin, no se puede actualizar y no tiene fondos. Eso es lo que hace que la auditoría quepa en una tarde y que la promesa sea creíble. Cualquier cosa que ponga dinero adentro cambia el modelo de amenazas por completo y obliga a un tipo de auditoría que hoy no tenemos.
+
+Si algún día se hace, el camino es no custodiar: Pollar ya expone `setTrustline` y `sendPayment`, así que el organizador podría pagarle al ganador desde su propia cuenta, con el sorteo como comprobante. El contrato no se entera y sigue sin tocar dinero.
 
 ---
 
