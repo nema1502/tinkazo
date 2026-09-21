@@ -78,9 +78,67 @@ const HOOK = `(() => {
   };
 })()`;
 
+/**
+ * El narrador, medido sin voz.
+ *
+ * Chrome sin interfaz no trae ninguna voz instalada, así que `narrate()` se
+ * vuelve en el acto y el narrador nunca habló en una auditoría. Por eso nadie
+ * vio durante meses que cortaba sus propias frases por la mitad: cada línea
+ * nueva cancelaba a la anterior, y en una sala eso se oye como un relator que
+ * se traba.
+ *
+ * Acá se le pone una voz de mentira y se simula el tiempo que tardaría en decir
+ * cada línea, a unos trece caracteres por segundo al ritmo base. Con eso se
+ * cuentan las frases que quedan a medias sin que suene nada.
+ */
+const HOOK_VOZ = `(() => {
+  window.__voz = { dichas: [], cortadas: [] };
+  const voz = { name: "Prueba", lang: "es-ES", localService: true, default: true, voiceURI: "prueba" };
+  const SS = Object.getPrototypeOf(speechSynthesis);
+  SS.getVoices = () => [voz];
+  // Y una declamación de mentira: asignarle una voz que no es un
+  // SpeechSynthesisVoice de verdad al objeto nativo tira una excepción.
+  window.SpeechSynthesisUtterance = function (texto) {
+    this.text = texto;
+    this.rate = 1;
+    this.pitch = 1;
+    this.volume = 1;
+    this.voice = null;
+    this.lang = "";
+    this.onend = null;
+    this.onerror = null;
+  };
+  let viva = null;
+  SS.speak = function (u) {
+    if (!u || !u.text || !u.text.trim()) return;
+    const dur = (u.text.length / (13 * (u.rate || 1))) * 1000;
+    const rec = { t: performance.now(), texto: u.text, dur: dur, dicho: 0 };
+    window.__voz.dichas.push(rec);
+    const id = setTimeout(() => {
+      rec.dicho = dur;
+      viva = null;
+      if (u.onend) u.onend(new Event("end"));
+    }, dur);
+    viva = { u: u, rec: rec, id: id };
+  };
+  SS.cancel = function () {
+    if (!viva) return;
+    clearTimeout(viva.id);
+    const r = viva.rec;
+    r.dicho = performance.now() - r.t;
+    if (r.dicho < r.dur * 0.88) window.__voz.cortadas.push({ texto: r.texto, pct: r.dicho / r.dur });
+    const u = viva.u;
+    viva = null;
+    if (u.onend) u.onend(new Event("end"));
+  };
+  Object.defineProperty(SS, "speaking", { configurable: true, get: () => !!viva });
+  Object.defineProperty(SS, "paused", { configurable: true, get: () => false });
+})()`;
+
 async function correr(browser, juego) {
   const page = await browser.open("about:blank");
   await page.send("Page.addScriptToEvaluateOnNewDocument", { source: HOOK });
+  await page.send("Page.addScriptToEvaluateOnNewDocument", { source: HOOK_VOZ });
   await page.send("Page.navigate", { url: `${base}/?demo=${juego}&lead=3&pace=normal` });
 
   const arranco = await page.waitFor(
@@ -94,7 +152,8 @@ async function correr(browser, juego) {
   );
   await sleep(400);
   const crudo = await page.eval(`JSON.stringify(window.__snd || [])`);
-  return { juego, notas: JSON.parse(crudo), termino: termino.ok };
+  const voz = await page.eval(`JSON.stringify(window.__voz || { dichas: [], cortadas: [] })`);
+  return { juego, notas: JSON.parse(crudo), voz: JSON.parse(voz), termino: termino.ok };
 }
 
 function medir(notas) {
@@ -194,7 +253,19 @@ async function run() {
       if (m.hueco > HUECO_MAX) fallas.push(`${m.hueco.toFixed(1)} s de silencio en el segundo ${m.cuando.toFixed(1)}`);
       if (m.cortas.length) fallas.push(`${m.cortas.length} notas sin altura audible (${unicos(m.cortas)})`);
 
-      const cab = `${juego.padEnd(9)} ${String(m.total).padStart(3)} notas en ${m.dur.toFixed(1)} s · hueco máximo ${m.hueco.toFixed(1)} s`;
+      // El narrador. Una frase cortada es aceptable: el anuncio del ganador
+      // tiene derecho a pisar lo que se esté diciendo. Dos ya son un relator
+      // que se traba, que es como sonaba antes.
+      const v = r.voz ?? { dichas: [], cortadas: [] };
+      if (v.cortadas.length > 1) {
+        fallas.push(
+          `${v.cortadas.length} frases del narrador cortadas: ` +
+            v.cortadas.slice(0, 2).map((x) => `"${x.texto.slice(0, 24)}" al ${Math.round(x.pct * 100)}%`).join(", "),
+        );
+      }
+
+      const cortes = v.cortadas.length ? ` · ${v.cortadas.length} cortada(s)` : "";
+      const cab = `${juego.padEnd(9)} ${String(m.total).padStart(3)} notas y ${String(v.dichas.length).padStart(2)} frases en ${m.dur.toFixed(1)} s · hueco máximo ${m.hueco.toFixed(1)} s${cortes}`;
       if (fallas.length) {
         malas++;
         console.log(`✗ ${cab}`);

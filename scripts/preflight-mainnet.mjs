@@ -48,6 +48,9 @@ const RENT_YEAR_XLM = 49;
 const CUSHION_XLM = 5;
 const NEEDED_XLM = DEPLOY_XLM + RENT_YEAR_XLM + CUSHION_XLM;
 
+// La fuente de verdad es `RPC_URLS` en `src/stellar/config.ts`. Acá se repite
+// porque esto es un script de Node suelto y no compila TypeScript; si allá se
+// rota el endpoint, hay que tocar esta línea también.
 const MAINNET_RPC = "https://mainnet.sorobanrpc.com";
 const HORIZON = "https://horizon.stellar.org";
 

@@ -39,6 +39,8 @@ const SAMPLE = [
   "Camila Suárez", "Andrés Villca", "Paola Mendoza", "Franco Ibáñez", "Daniela Cruz", "Óscar Limachi",
 ];
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 const checks = [];
 const check = (name, ok, detail = "") => {
   checks.push({ name, ok, detail });
@@ -144,16 +146,54 @@ async function run() {
     // uno solo: "el ganador es tal". El auditor corría siempre con un premio,
     // así que no podía verlo. La comprobación mira el comentario del estadio
     // mientras el juego corre, que es donde estaba la mentira.
-    const dos = await browser.open(`${url}&nw=2`);
+    // Y corre en un celular, que es donde el cartel del ganador tiene más
+    // chance de no entrar: el tamaño de la tipografía sale del alto de la
+    // pantalla, y en vertical eso no dice nada del ancho.
+    const dos = await browser.open("about:blank");
+    await dos.send("Emulation.setDeviceMetricsOverride", {
+      width: 390, height: 844, deviceScaleFactor: 2, mobile: true,
+      screenWidth: 390, screenHeight: 844,
+    });
+    await dos.send("Page.navigate", { url: `${url}&nw=2` });
     const dichos = new Set();
     let salio = false;
-    for (let i = 0; i < 600 && !salio; i++) {
+    let cartel = null;
+    for (let i = 0; i < 900 && !salio; i++) {
       const linea = await dos.eval(
         `(document.querySelector('.commentary') || {}).textContent || ''`,
       );
       if (linea) dichos.add(linea.trim());
+      // El cartel es la mancha amarilla grande. Si se sale del lienzo el
+      // navegador lo recorta sin avisar, así que la forma de detectarlo es que
+      // el amarillo toque los dos bordes a la vez.
+      // Cada cuatro sondeos, no todos: leer el lienzo entero fuerza una
+      // lectura de vuelta desde la GPU y le compite al juego por el hilo. El
+      // cartel dura tres segundos, así que uno cada 0,8 no se pierde ninguno.
+      const am = i % 4 !== 0 ? "" : await dos.eval(`(() => {
+        const cv = document.querySelector('.stadium canvas');
+        if (!cv || document.getElementById('stadium').style.display !== 'block') return '';
+        const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+        let n = 0, izq = false, der = false, arr = false, aba = false;
+        for (let y = 0; y < cv.height; y += 4) for (let x = 0; x < cv.width; x += 4) {
+          const i = (y * cv.width + x) * 4;
+          if (d[i] > 235 && d[i + 1] > 180 && d[i + 1] < 225 && d[i + 2] < 85) {
+            n++;
+            if (x < 8) izq = true;
+            if (x > cv.width - 12) der = true;
+            if (y < 8) arr = true;
+            if (y > cv.height - 12) aba = true;
+          }
+        }
+        const area = n / ((cv.width / 4) * (cv.height / 4));
+        return area > 0.03 ? JSON.stringify({ area, izq, der, arr, aba }) : '';
+      })()`);
+
+      if (am && !cartel) {
+        cartel = JSON.parse(am);
+        await dos.screenshot(join(outDir, `juego-${game}-celular-ganador.png`));
+      }
       salio = (await dos.eval(`String(document.querySelectorAll('.winner-name').length > 0)`)) === "true";
-      if (!salio) await new Promise((r) => setTimeout(r, 200));
+      if (!salio) await sleep(200);
     }
     const dosState = JSON.parse(await dos.eval(READ_STATE));
     const nombres = dosState.winners.map((x) => String(x).trim()).filter(Boolean);
@@ -162,6 +202,14 @@ async function run() {
       "con dos premios el juego anuncia a los dos",
       salio && nombres.length === 2 && !!anuncio,
       anuncio ? `"${anuncio.slice(0, 64)}"` : `en pantalla ${JSON.stringify(nombres)}`,
+    );
+
+    check(
+      "en un celular el cartel del ganador entra en la pantalla",
+      !!cartel && !(cartel.izq && cartel.der) && !(cartel.arr && cartel.aba),
+      cartel
+        ? `ocupa el ${(cartel.area * 100).toFixed(0)}% · bordes ${cartel.izq ? "izq " : ""}${cartel.der ? "der " : ""}${cartel.arr ? "arr " : ""}${cartel.aba ? "aba" : ""}`.trim()
+        : "no se encontró el cartel",
     );
 
     // ------------------------------------------------------- 8. en inglés
@@ -188,7 +236,54 @@ async function run() {
       key ? `${key} aparece ${times} vez/veces · en inglés "${enOption?.text.trim() ?? "?"}"` : "sin data-i",
     );
 
-    // --------------------------------------------- 9. tema claro y oscuro
+    // -------------------------------------------- 9. en la mano, no en un muro
+    // El estadio está pensado para un proyector, y se auditaba sólo a 1280x720.
+    // Pero el organizador prueba el sorteo en su celular antes del evento, y a
+    // 390x844 la escena es vertical: la tarjeta del ganador, el comentario y el
+    // encabezado tienen que entrar igual. Lo que se mira es que nada se salga
+    // del lienzo ni se pise.
+    const cel = await browser.open("about:blank");
+    await cel.send("Emulation.setDeviceMetricsOverride", {
+      width: 390, height: 844, deviceScaleFactor: 2, mobile: true,
+      screenWidth: 390, screenHeight: 844,
+    });
+    await cel.send("Page.navigate", { url: `${base}/?pose=${game === "race" ? "1" : game}&theme=dark` });
+    const celOk = await cel.waitFor(
+      `document.getElementById('stadium').style.display === 'block'`,
+      30_000,
+    );
+    check("la escena arranca en un celular", celOk.ok);
+    if (celOk.ok) {
+      await sleep(1400);
+      const m = JSON.parse(await cel.eval(`JSON.stringify((() => {
+        const caben = [...document.querySelectorAll('.stadium .st-top, .stadium .commentary, .stadium .st-actions button')]
+          .filter(e => getComputedStyle(e).display !== 'none')
+          .map(e => { const r = e.getBoundingClientRect();
+            return { sel: e.className || e.tagName, fuera: r.right > innerWidth + 1 || r.left < -1, h: Math.round(r.height) }; });
+        const cv = document.querySelector('.stadium canvas');
+        const r = cv.getBoundingClientRect();
+        return {
+          malos: caben.filter(x => x.fuera).map(x => x.sel),
+          chicos: caben.filter(x => x.h > 0 && x.h < 40 && String(x.sel).indexOf('commentary') < 0).map(x => x.sel + ' ' + x.h),
+          lienzo: [Math.round(r.width), Math.round(r.height)],
+          vista: [innerWidth, innerHeight],
+          scroll: document.documentElement.scrollWidth,
+        };
+      })())`));
+      check(
+        "en el celular nada se sale de la pantalla",
+        m.malos.length === 0 && m.scroll <= m.vista[0] + 1,
+        m.malos.length ? m.malos.join(" | ") : `scroll ${m.scroll} vs ${m.vista[0]}`,
+      );
+      check(
+        "el lienzo ocupa la pantalla del celular",
+        Math.abs(m.lienzo[0] - m.vista[0]) <= 2 && Math.abs(m.lienzo[1] - m.vista[1]) <= 2,
+        `${m.lienzo.join("x")} en ${m.vista.join("x")}`,
+      );
+      await cel.screenshot(join(outDir, `juego-${game}-celular.png`));
+    }
+
+    // -------------------------------------------- 10. tema claro y oscuro
     for (const theme of ["light", "dark"]) {
       const p = await browser.open(`${base}/?pose=${game === "race" ? "1" : game}&theme=${theme}`);
       const painted = await p.waitFor(

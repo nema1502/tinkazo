@@ -108,6 +108,12 @@ export async function launch({ port = Number(process.env.CDP_PORT || 9222), widt
       // sesión real el primer sonido sale de un clic, así que esto se parece
       // más a la verdad que lo contrario.
       "--autoplay-policy=no-user-gesture-required",
+      // Y silenciado, porque con lo de arriba solo los seis juegos empiezan a
+      // sonar de verdad por los parlantes de quien esté corriendo la auditoría.
+      // Esto apaga la salida sin apagar el grafo de WebAudio: los osciladores
+      // se siguen creando y el reloj del contexto sigue corriendo, que es lo
+      // único que el auditor de sonido necesita.
+      "--mute-audio",
       `--remote-debugging-port=${port}`,
       `--user-data-dir=${profile}`,
       `--window-size=${width},${height}`,

@@ -23,6 +23,9 @@ Thumbs.db
 # Web build
 *.tsbuildinfo
 
+# Artefacto de ejecución de las tareas programadas de Claude Code
+.claude/scheduled_tasks.lock
+
 # Material de postulaciones (becas, hackathones): privado, nunca se publica.
 # Borrar la carpeta una vez enviada la postulación.
 postulacion/
