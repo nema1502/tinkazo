@@ -31,19 +31,21 @@ La carrera de cohetes no se tiró: quedó como juego propio, con el identificado
 
 ## El ritmo
 
-Veinte saltos. Los primeros seis **aceleran**, de 0,45 a 0,16 segundos. Los catorce restantes se frenan hasta que el último dura 1,35 segundos.
+Veinte saltos. Los primeros seis **aceleran**, de 0,62 a 0,22 segundos. Los catorce restantes se frenan hasta que el último dura 2,17 segundos. Los veinte suman 14,5 segundos de juego, y con el armado del tablero el juego llega a 17,5: en "normal" son treinta segundos reales.
 
 Acelerar primero no es un capricho. Una desaceleración pura desde el arranque se lee como "esto ya va a terminar" desde el segundo tres. Así la sala aprende el ritmo y se relaja justo antes de que empiece a costar.
 
+En **segundos de juego**: el selector los estira todos por igual, y en "normal" el show dura treinta segundos reales.
+
 | Tramo | Qué pasa |
 |---|---|
-| 0,0 – 2,2 s | Aparecen las estrellas en oleadas y se llena la barra de "buscando ruta". |
-| 2,2 – 4,0 s | Seis saltos, acelerando. |
-| 4,0 – 8,0 s | Siete saltos, el ritmo se abre. |
-| 8,0 – 10,1 s | Dos saltos. Dos segundos enteros para dos saltos: acá la sala se calla. |
-| 10,1 – 11,5 s | El último salto, con un zumbido grave de fondo. |
-| 11,1 – 11,5 s | **El engaño.** Al 72% del recorrido el paquete va claramente hacia una estrella vecina, que destella. La curva se apoya en ella. Después se va para otro lado. |
-| 11,5 – 13,1 s | Supernova en tres anillos y ocho púas, la constelación entera engorda, la tarjeta amarilla con el nombre. |
+| 0,0 – 3,0 s | Aparecen las estrellas en oleadas y se llena la barra de "buscando ruta". Los primeros segundos son llamada de atención, no información: la sala todavía está girando la cabeza. |
+| 3,0 – 5,4 s | Seis saltos, acelerando. |
+| 5,4 – 12,0 s | Siete saltos, el ritmo se abre. |
+| 12,0 – 15,3 s | Cuatro saltos, cada uno más largo que el anterior: acá la sala se calla. |
+| 15,3 – 17,5 s | El último salto, con un zumbido grave de fondo que dura lo que dura el salto. |
+| Al 72% del último salto | **El engaño.** El paquete va claramente hacia una estrella vecina, que destella. La curva se apoya en ella. Después se va para otro lado. |
+| 17,5 s en adelante | Supernova en tres anillos y ocho púas, la constelación entera engorda, la tarjeta amarilla con el nombre. Tres segundos **reales**, para que la sala alcance a leer y a reaccionar. |
 
 ## Las tres reglas que lo hacen funcionar
 

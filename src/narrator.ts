@@ -35,9 +35,18 @@ interface Line {
   text: string;
   rate: number;
   pitch: number;
+  /** La tensión del momento, de 0 a 1. Decide quién puede pisar a quién. */
+  heat: number;
+  /** Cuándo se pidió, para no decir tarde algo que ya no viene al caso. */
+  at: number;
 }
 
+/** Cuánto aguanta una línea esperando turno antes de dejar de tener sentido. */
+const STALE_MS = 2600;
+
 let voice: SpeechSynthesisVoice | null = null;
+/** La tensión de la línea que está sonando ahora. */
+let liveHeat = 0;
 let picked: "es" | "en" | null = null;
 let queued: Line | null = null;
 let busy = false;
@@ -110,8 +119,17 @@ export function primeNarrator(): void {
 }
 
 /**
- * Dice una línea. Pisa la anterior a propósito: la carrera va rápido y un
- * narrador que acumula frases atrasadas suena peor que uno mudo.
+ * Dice una línea.
+ *
+ * Antes cortaba la anterior siempre, y eso dejaba frases a medio decir: en una
+ * sala se oye como un narrador que se traba, no como uno que va rápido. Ahora
+ * **sólo interrumpe lo que de verdad importa más que lo que se está diciendo**:
+ * el anuncio del ganador pisa a cualquier cosa, un cambio de líder no pisa a
+ * otro cambio de líder.
+ *
+ * Lo que no alcanza a entrar espera turno, y si para cuando le toca ya pasó el
+ * momento se cae. "Va puntero fulano" dicho tres segundos tarde es peor que el
+ * silencio, y encolar frases atrasadas suena peor que quedarse mudo.
  *
  * `heat` va de 0 a 1 y es la tensión del momento. A más tensión, más rápido y
  * más agudo. Esa rampa es lo único que separa a un relator de alguien leyendo
@@ -122,16 +140,26 @@ export function narrate(text: string, heat = 0): void {
   refresh();
   if (!voice) return;
   const h = Math.min(1, Math.max(0, heat));
-  queued = {
+  const line: Line = {
     text: text.length > MAX_CHARS ? text.slice(0, MAX_CHARS - 1) + "…" : text,
     rate: 1.05 + 0.45 * h,
     pitch: 1.05 + 0.35 * h,
+    heat: h,
+    at: Date.now(),
   };
   if (busy) {
-    // `cancel()` dispara el `onend` de la actual, que saca la encolada.
-    speechSynthesis.cancel();
+    // Un escalón de tres décimos: lo bastante para que la corona pise al
+    // relato, no tanto como para que dos frases del mismo momento se peleen.
+    if (h >= liveHeat + 0.3) {
+      queued = line;
+      // `cancel()` dispara el `onend` de la actual, que saca la encolada.
+      speechSynthesis.cancel();
+      return;
+    }
+    if (!queued || h >= queued.heat) queued = line;
     return;
   }
+  queued = line;
   flush();
 }
 
@@ -142,18 +170,29 @@ function flush(): void {
     busy = false;
     return;
   }
+  // Si esperó demasiado, ya no viene al caso. El anuncio del ganador queda
+  // exento: ese se dice aunque llegue tarde, porque es el único que importa.
+  if (line.heat < 0.9 && Date.now() - line.at > STALE_MS) {
+    busy = false;
+    return;
+  }
   busy = true;
-  const u = new SpeechSynthesisUtterance(line.text);
-  u.voice = voice;
-  // Android a veces ignora `voice` si `lang` no coincide: se fija a mano.
-  u.lang = voice.lang.replace("_", "-");
-  u.rate = line.rate;
-  u.pitch = line.pitch;
-  u.volume = 1;
-  u.onend = onDone;
-  u.onerror = onDone;
-  live = u;
+  liveHeat = line.heat;
+  // Todo el armado adentro del `try`, no sólo `speak`. Asignar `voice` puede
+  // tirar si el navegador no acepta ese objeto, y esa excepción subía hasta el
+  // bucle del juego y lo mataba: el sorteo entero se caía por el narrador, que
+  // es justo lo que este módulo promete que nunca pasa.
   try {
+    const u = new SpeechSynthesisUtterance(line.text);
+    u.voice = voice;
+    // Android a veces ignora `voice` si `lang` no coincide: se fija a mano.
+    u.lang = voice.lang.replace("_", "-");
+    u.rate = line.rate;
+    u.pitch = line.pitch;
+    u.volume = 1;
+    u.onend = onDone;
+    u.onerror = onDone;
+    live = u;
     speechSynthesis.speak(u);
   } catch {
     onDone();
@@ -171,6 +210,7 @@ function flush(): void {
 function onDone(): void {
   live = null;
   busy = false;
+  liveHeat = 0;
   if (queued) flush();
   else if (guard) {
     clearInterval(guard);
@@ -182,6 +222,7 @@ function onDone(): void {
 export function stopNarrator(): void {
   queued = null;
   busy = false;
+  liveHeat = 0;
   live = null;
   if (guard) {
     clearInterval(guard);

@@ -1,4 +1,5 @@
 import type { Proof } from "../protocol/proof";
+import { RPC_URLS } from "./config";
 
 /**
  * Los otros sellos del mismo organizador.
@@ -52,10 +53,7 @@ export interface SealsResult {
   truncated: boolean;
 }
 
-const RPC: Record<string, string> = {
-  mainnet: "https://mainnet.sorobanrpc.com",
-  testnet: "https://soroban-testnet.stellar.org",
-};
+const RPC: Record<string, string> = RPC_URLS;
 
 async function rpc(url: string, method: string, params: unknown): Promise<Record<string, unknown>> {
   const res = await fetch(url, {

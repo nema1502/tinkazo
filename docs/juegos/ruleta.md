@@ -38,19 +38,23 @@ La versión anterior interpolaba el **ángulo** con una curva cúbica. Eso da "r
 
 Ahora se define la **velocidad** y el ángulo sale de integrarla, que es como frena una rueda de verdad. El presupuesto de giro está escrito en gajos y no en radianes, así que **el ritmo de los clics es idéntico con dos participantes que con veinticuatro**, y lo único que cambia es cuántas vueltas da.
 
+Los tramos van en **segundos de juego**: el selector de duración los estira todos por igual, y en "normal" el show entero dura treinta segundos reales.
+
 | Tramo | Qué pasa |
 |---|---|
-| 0,0 – 0,8 s | Los gajos entran y el aro se escribe con los 64 dígitos de la semilla |
-| 0,8 – 1,7 s | Se tensa. Cinco tonos ascendentes y tres de cuenta |
-| 1,7 – 3,9 s | Velocidad de crucero, con desenfoque de movimiento. Un tono por vuelta |
-| 3,9 – 6,2 s | Frena. A mitad del frenado empiezan los clics individuales |
-| 6,2 – 6,75 s | Paso de hombre. Dos clics, uno por uno |
-| 6,75 – 7,0 s | **El falso.** La paleta queda trabada contra un perno, vibrando: parece que se queda un gajo antes |
-| 7,0 – 7,4 s | El último empujón la mete al centro del gajo |
-| 7,4 – 7,65 s | Golpe seco |
-| 7,65 – 9,2 s | Todo se apaga menos los gajos del ganador, que salen hacia afuera y se encienden |
+| 0,0 – 1,2 s | Los gajos entran y el aro se escribe con los 64 dígitos de la semilla |
+| 1,2 – 2,6 s | **Carga.** La rueda toma velocidad a la vista, con el trinquete |
+| 2,6 – 4,2 s | Velocidad de crucero, con desenfoque de movimiento. Un tono por vuelta |
+| 4,2 – 12,0 s | Frena. A mitad del frenado empiezan los clics individuales, y el narrador canta el nombre que va pasando |
+| 12,0 – 14,4 s | Paso de hombre. Los gajos pasan uno por uno bajo la paleta |
+| 14,4 – 15,6 s | **El falso.** La paleta queda trabada contra un perno, vibrando: parece que se queda un gajo antes |
+| 15,6 – 16,8 s | El último empujón la mete al centro del gajo |
+| 16,8 – 17,2 s | Golpe seco y fogonazo |
+| 17,2 s en adelante | Todo se apaga menos los gajos del ganador, que salen hacia afuera y se encienden. Tres segundos **reales**, para que la sala alcance a leer y a reaccionar |
 
-Dura nueve segundos donde antes duraba cuatro y medio. La carrera dura quince: la ruleta podía pedir más.
+Duraba 7,65 segundos y de esos, tres eran tiempo muerto: 1,7 con la rueda completamente quieta, que en una pantalla grande es una foto, y 2,2 de crucero en los que la imagen es un borrón. Lo bueno ·los clics separándose, el puntero arrastrándose, el amague· sumaba segundo y medio.
+
+Ahora dura 17,2 y el reparto está al revés: 1,6 de borrón contra 4,4 de clics sueltos, 2,4 de arrastre y 1,2 de amague. **No es el mismo juego más lento: es el mismo juego con más de lo que vale la pena mirar.**
 
 ## Lo que se ve y por qué
 

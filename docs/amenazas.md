@@ -121,6 +121,7 @@ Mitigación parcial, ya hecha: **el comprobante lleva siempre la firma de la ron
 | Alguien toma el control del contrato | **Cubierto por diseño** | El contrato **no tiene administrador, no se puede actualizar y no custodia fondos**. No hay privilegio que tomar |
 | Vaciar los fondos del contrato | **No aplica** | Nunca tiene fondos |
 | Un error deja el contrato inutilizable | **Mitigado** | Diecinueve tests, incluida una ronda real de quicknet. Los errores están numerados y son parte de la interfaz pública: nunca se renumeran |
+| El RPC de mainnet se cae o desaparece | **Abierto** | `mainnet.sorobanrpc.com` es de un tercero: la SDF no ofrece un RPC público de mainnet. Si se cae, el sitio no puede sellar ni anclar, aunque el modo libre sigue sorteando y la verificación por drand sigue funcionando en el navegador. Los comprobantes ya emitidos no se pierden: están en la cadena y cualquier otro RPC los lee. Mitigación parcial hecha: el endpoint vive en un solo lugar (`RPC_URLS` en `src/stellar/config.ts`) para que rotarlo sea un cambio de una línea. Falta una lista de respaldo con reintento, que es trabajo pendiente antes de mainnet |
 | La renta se vence y el contrato desaparece | **Mitigado** | Cada sorteo paga la renta de sus dos entradas por ciento veinte días. La renta de la instancia y del código se renueva aparte con `extend`, nunca dentro de `seal` ni de `draw`. **Esto ya costó caro una vez**: extender la renta de la instancia arrastra la del código, y el primer sellado desplegado cobró quince XLM |
 
 ## Lo que se vigila en la cadena

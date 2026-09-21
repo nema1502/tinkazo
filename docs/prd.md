@@ -193,7 +193,7 @@ Toda cadena visible existe en español e inglés; el idioma se elige con el conm
 La interfaz respeta `prefers-color-scheme` y permite forzar el tema.
 
 #### FR-26: Catálogo de juegos
-El organizador elige entre varios juegos para mostrar el resultado. Ninguno calcula nada: reciben el ganador ya fijado por el Protocolo. Cada juego pasa las 16 comprobaciones del auditor antes de entrar, y la segunda de esas comprobaciones ·que el nombre en pantalla sea el que fijó el Protocolo· no se negocia. Cuando hay varios premios, el juego anuncia a todos, no sólo al primero: mostrar un nombre de tres es mentir sobre lo que acaba de pasar.
+El organizador elige entre varios juegos para mostrar el resultado. Ninguno calcula nada: reciben el ganador ya fijado por el Protocolo. Cada juego pasa las 20 comprobaciones del auditor antes de entrar, incluidas cuatro que lo miran en un celular, y la segunda de esas comprobaciones ·que el nombre en pantalla sea el que fijó el Protocolo· no se negocia. Cuando hay varios premios, el juego anuncia a todos, no sólo al primero: mostrar un nombre de tres es mentir sobre lo que acaba de pasar.
 
 #### FR-27: El narrador habla
 El relato del sorteo se dice en voz alta con la voz del navegador, en el idioma de la página, con el ritmo subiendo según la tensión del momento. Si la máquina no tiene voz instalada, se avisa antes del sorteo y el sorteo funciona igual.
@@ -205,7 +205,10 @@ Después de revelar al ganador se muestra una tarjeta que contesta una pregunta 
 Cuando la lista viene de un archivo con varias columnas, el organizador elige cuál tiene los nombres. La lista canónica del Protocolo no cambia: sigue recibiendo un nombre por línea.
 
 #### FR-30: El sorteo se oye y se lee desde el fondo de la sala
-El show está hecho para una pantalla grande, con cincuenta personas y nadie interactuando. Todo el sonido sale de osciladores, dentro del rango que reproduce el parlante de un proyector, por encima del murmullo de una sala y en una escala donde cualquier par de notas suena bien junto. Lo que tiene que durar una fase del juego se estira con el selector de duración; lo que le habla a una persona ·la cuenta regresiva y el sostén del cartel del ganador· va en segundos reales, porque lo que tarda alguien en leer un nombre proyectado no cambia porque se elija una duración más larga. Hay un auditor que lo mide sin oídos.
+El show está hecho para una pantalla grande, con cincuenta personas y nadie interactuando. Todo el sonido sale de osciladores, dentro del rango que reproduce el parlante de un proyector, por encima del murmullo de una sala y en una escala donde cualquier par de notas suena bien junto. Lo que tiene que durar una fase del juego se estira con el selector de duración; lo que le habla a una persona ·la cuenta regresiva y el sostén del cartel del ganador· va en segundos reales, porque lo que tarda alguien en leer un nombre proyectado no cambia porque se elija una duración más larga. **El selector apunta a una cantidad de segundos, no multiplica**: cada juego declara cuánto dura sin estirar, y el mismo botón significa lo mismo en los seis. Hay un auditor que lo mide sin oídos.
+
+#### FR-31: La espera se ve
+Entre que la lista se sella y que la ronda del faro existe pasan unos segundos, y son el corazón del producto: la lista ya está cerrada y el número que la va a decidir todavía no existe, así que nadie ·tampoco el organizador· puede acomodar el resultado. Eso se muestra: el número de la ronda que falta nacer y los segundos que le quedan.
 
 ## Requisitos no funcionales transversales
 
@@ -272,5 +275,6 @@ El show está hecho para una pantalla grande, con cincuenta personas y nadie int
 - §Requisitos no funcionales NFR-3, Confirmado con medición: 0,18 XLM por Sorteo en testnet; el umbral pasó de 0,1 a 0,25 XLM porque la renta de 120 días domina el costo.
 - §5, Se elimina Clerk en la versión Stellar.
 - §4, Se agregan FR-26 a FR-29 (2026-09-20): catálogo de juegos, narrador con voz, tarjeta que enseña y selección de columna. Los cuatro salieron de usar el producto, no de planificarlo.
+- §4, Se agrega FR-31 (2026-09-20): la espera se ve. Salió de notar que el mejor momento del producto estaba contado en una etiqueta de un botón deshabilitado.
 - §4, Se agrega FR-30 (2026-09-20): el sorteo se oye y se lee desde el fondo de la sala. Salió de una auditoría de experiencia que midió cada oscilador y cada línea del narrador, y encontró golpes de clímax que ningún parlante reproduce, sesenta y seis notas por debajo del murmullo y un juego que colgaba la pestaña.
 - §Requisitos no funcionales, La espera entre sellar y sortear baja de 45 a 10 segundos en Modo libre (2026-09-20). Lo que la propiedad necesita es que la ronda esté en el futuro al sellar, y quicknet publica una cada tres segundos. Con Anclaje sigue en 45 porque el Contrato exige 30 de margen y es inmutable.

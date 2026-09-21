@@ -3,6 +3,7 @@ import { $, esc } from "./dom";
 import { getLang, setLang, t } from "./i18n";
 import { avatar } from "./state";
 import { canonicalList, listHash } from "./protocol/canonical";
+import { RPC_URLS } from "./stellar/config";
 import {
   QUICKNET,
   bytesToHex,
@@ -260,8 +261,7 @@ async function readFromChain(
     proof.net === "mainnet"
       ? "Public Global Stellar Network ; September 2015"
       : "Test SDF Network ; September 2015";
-  const rpcUrl =
-    proof.net === "mainnet" ? "https://mainnet.sorobanrpc.com" : "https://soroban-testnet.stellar.org";
+  const rpcUrl = proof.net === "mainnet" ? RPC_URLS.mainnet : RPC_URLS.testnet;
   void rpc;
   const client = await contract.Client.from({
     contractId: proof.contract as string,

@@ -1,7 +1,7 @@
 import { T, getLang, t } from "../i18n";
 import { beep, beepFor, fanfare, note } from "../sound";
-import { paceFactor, type Beacon } from "../state";
-import { INK, WINNER_HOLD, clamp, ease, mount, drawWinnerPlate, shorten, winnerNames, winnersLabel } from "./overlay";
+import { paceFactor, setGameLength, type Beacon } from "../state";
+import { INK, WINNER_HOLD, chrome, clamp, ease, mount, drawWinnerPlate, shorten, winnerNames, winnersLabel } from "./overlay";
 
 /**
  * Constelación Stellar.
@@ -46,7 +46,10 @@ interface Hop {
 /** Saltos del recorrido. El último es el único que toca al ganador. */
 const K = 20;
 /** Cuánto dura la fase de armado, antes del primer salto. */
-const ARM = 2.2;
+// El armado del tablero. Dos segundos y pico no alcanzan para que la sala gire
+// la cabeza y además lea de qué se trata: los primeros segundos de un show son
+// llamada de atención, no información.
+const ARM = 3.0;
 
 /**
  * Los primeros seis saltos aceleran y después todo se frena.
@@ -57,9 +60,13 @@ const ARM = 2.2;
  */
 function hopDur(i: number): number {
   const p = i / (K - 1);
-  if (p < 0.28) return 0.45 - 0.31 * (p / 0.28);
+  // Los veinte saltos sumaban 9,3 segundos y el juego entero 11,5, así que el
+  // selector de duración lo tenía que estirar más de dos veces para llegar a
+  // media pantalla de tiempo. Ahora suman 14,5: el mismo dibujo del ritmo
+  // ·acelera, después se frena· con espacio para que se sienta.
+  if (p < 0.28) return 0.62 - 0.4 * (p / 0.28);
   const v = (p - 0.28) / 0.72;
-  return 0.14 + 1.21 * Math.pow(v, 2.4);
+  return 0.22 + 1.95 * Math.pow(v, 2.4);
 }
 
 export function stellarConstellation(
@@ -163,6 +170,10 @@ export function stellarConstellation(
     if (WIN_NODE < 0) WIN_NODE = 0;
     DECOY = pickDecoy();
     hops = buildHops();
+    // Lo que dura sin estirar: el armado del tablero más la suma de los veinte
+    // saltos. Sale de los saltos de verdad y no de una constante, para que no
+    // se despegue si `hopDur` cambia.
+    setGameLength(ARM + hops.reduce((a, h) => a + h.dur, 0), WINNER_HOLD);
   }
 
   /** El señuelo es una estrella vecina del ganador: el engaño tiene que ser corto. */
@@ -340,9 +351,10 @@ export function stellarConstellation(
       if (hopT === 0) beepFor(note(4 + Math.round(hopI * 0.5)), hp.dur * 0.6, "sine", 0.02);
       if (hopT === 0 && hopI === K - 1) {
         say(t("cConstLast"), 0.85);
-        // El último salto dura 1,35 s de juego: el sonido de 0,9 s reales se
-        // apagaba antes de que llegara, y en épico 2 s antes.
-        beepFor(note(0), 1.35, "sawtooth", 0.04);
+        // Tres cuartos del salto, no el salto entero: el último cuarto va mudo
+        // a propósito. Un cuarto de segundo de silencio antes del golpe es el
+        // efecto más barato que existe y no estaba en ninguno de los juegos.
+        beepFor(note(0), hp.dur * 0.72, "sawtooth", 0.04);
       } else if (!saidNarrow && hopI === 15) {
         say(t("cConstNarrow"), 0.6);
         saidNarrow = true;
@@ -603,8 +615,13 @@ export function stellarConstellation(
 
   function draw(now: number): void {
     const k = u();
-    const sx = shake ? (rng() - 0.5) * 16 * shake * k : 0;
-    const sy = shake ? (rng() - 0.5) * 12 * shake * k : 0;
+    // El temblor sale del reloj, no del azar sembrado. Llamar a `rng()` en el
+    // dibujo consume la secuencia a la velocidad de los cuadros, así que la
+    // misma ronda no se dibujaba igual a 60 Hz que a 144, y el proyecto entero
+    // se apoya en que la misma ronda dé siempre lo mismo. No cambia quién gana,
+    // pero contradice la promesa.
+    const sx = shake ? Math.sin(tPhase * 97) * 8 * shake * k : 0;
+    const sy = shake ? Math.sin(tPhase * 131 + 1.7) * 6 * shake * k : 0;
     c.save();
     c.translate(sx, sy);
     drawSpace();
@@ -664,7 +681,7 @@ export function stellarConstellation(
       c.font = `700 ${11 * k}px ui-monospace, Consolas, monospace`;
       c.textAlign = "left";
       c.fillStyle = "rgba(246,239,226,0.55)";
-      c.fillText(`${t("cHop")} ${hopI + 1}/${K}`, 22 * k, 34 * k);
+      c.fillText(`${t("cHop")} ${hopI + 1}/${K}`, 22 * k, chrome(c).arriba + 22 * k);
     }
     if (phase === "nova") drawWinnerCard();
     c.restore();

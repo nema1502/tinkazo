@@ -1,7 +1,7 @@
 import "./styles.css";
 import { $ } from "./dom";
 import { onLangChange, setLang, t } from "./i18n";
-import { SAMPLE, app, currentPace, params, setPace, type Game, type Pace } from "./state";
+import { SAMPLE, app, currentPace, paceSeconds, params, setPace, type Game, type Pace } from "./state";
 import { soundLabel, toggleSound } from "./sound";
 import { bindParticipants, loadSample, renderNames } from "./ui/participants";
 import { freeze, refreshFreezeLabel, secondsToRound, setGame } from "./ui/freeze";
@@ -54,6 +54,21 @@ $("btn-freeze").addEventListener("click", () => void freeze());
 // mismo, y no cambia el resultado: el ganador ya estaba decidido.
 const paceSel = $<HTMLSelectElement>("pace");
 paceSel.value = currentPace();
+/**
+ * Las etiquetas llevan la duración: "Normal · 30 s".
+ *
+ * El selector dejó de ser un multiplicador y pasó a ser un objetivo de
+ * segundos, y eso sólo sirve si se ve. El número sale de `PACES`, así que no
+ * puede quedar desactualizado.
+ */
+function paceLabels(): void {
+  for (const o of paceSel.options) {
+    const p = o.value as Pace;
+    const base = t(p === "rapido" ? "paceFast" : p === "normal" ? "paceNormal" : "paceEpic");
+    o.textContent = `${base} · ${paceSeconds(p)} s`;
+  }
+}
+onLangChange(paceLabels);
 paceSel.addEventListener("change", () => setPace(paceSel.value as Pace));
 
 $("btn-hist-csv").addEventListener("click", () => {
@@ -108,13 +123,38 @@ async function autoDemo(mode: string): Promise<void> {
   await draw();
 }
 
-function poseScene(): void {
-  // Escena estática del estadio para capturas: sin red, sin animación.
+/**
+ * Escena del estadio para capturas, sin red.
+ *
+ * `?pose=<juego>` levanta **ese** juego. Antes cualquier valor que no fuera
+ * "stellar" caía en la carrera andina, así que las comprobaciones de tema claro,
+ * tema oscuro y celular del auditor estaban mirando la carrera para los seis
+ * juegos: nadie había visto nunca la ruleta ni el pasanaku en tema claro.
+ */
+async function poseScene(): Promise<void> {
   const fakeBeacon = { round: 32254977, randomness: "6e049991d7e23bdc566d3adfff08cd81798c644bc54dd5daa18eb0a8938b2829", signature: "a77a689daae687c7b16e6f9388d4ebbb7b368d09d7a6c33ad1dfd75d32e4114cfbdcf3e2cc54f4fee659abf2ac7ef9ac" };
   app.frozen = { names: SAMPLE, listHash: "32e2099c7a8dde7b6892523dc7d3e34ac06a972fd67f142186c58dced51a21ef", ts: 0, at: "-", prize: "", round: 32254977 };
   app.drawn = { beacon: fakeBeacon, winners: [3] };
-  // `?pose=stellar` congela la escena espacial; cualquier otro valor, la andina.
-  stadiumRace(SAMPLE, [3], fakeBeacon, () => {}, params.get("pose") === "stellar" ? "stellar" : "andes");
+  const cual = params.get("pose") ?? "1";
+  const nada = (): void => {};
+  if (cual === "wheel") {
+    (await import("./games/wheel")).wheelSpin(SAMPLE, [3], fakeBeacon, nada);
+    return;
+  }
+  if (cual === "ledger") {
+    (await import("./games/ledger")).ledgerClose(SAMPLE, [3], fakeBeacon, nada);
+    return;
+  }
+  if (cual === "pasanaku") {
+    (await import("./games/pasanaku")).pasanaku(SAMPLE, [3], fakeBeacon, nada);
+    return;
+  }
+  if (cual === "stellar") {
+    (await import("./games/constellation")).stellarConstellation(SAMPLE, [3], fakeBeacon, nada);
+    return;
+  }
+  // "rockets" es la carrera con la piel espacial; cualquier otro valor, la andina.
+  stadiumRace(SAMPLE, [3], fakeBeacon, nada, cual === "rockets" ? "stellar" : "andes");
 }
 
 renderNames();
@@ -127,4 +167,4 @@ void import("./ui/thumbs").then((m) => m.initThumbs(GAMES));
 setLang(params.get("lang") === "en" ? "en" : "es");
 const demoMode = params.get("demo");
 if (demoMode) setTimeout(() => void autoDemo(demoMode), 300);
-if (params.get("pose")) setTimeout(poseScene, 300);
+if (params.get("pose")) setTimeout(() => void poseScene(), 300);

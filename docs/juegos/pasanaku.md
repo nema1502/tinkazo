@@ -18,7 +18,7 @@ Un pasanaku es lo que en la literatura se llama una ROSCA, un ahorro rotativo. L
 
 Y el puente técnico no es una metáfora. **Un pasanaku corre sobre trustlines.** En Stellar, aceptar el activo de alguien es un acto explícito que te cuesta media unidad de reserva. En un pasanaku es lo mismo sin cadena: solo entrás a la rueda con gente de la que aceptarías plata.
 
-El juego lo dibuja. Cada bulto tira dos hilos a sus vecinos, y esa red es lo que sostiene el pozo. A los 2,3 segundos el narrador dice **"¡Acá nadie firma nada!"**, y en dos segundos la sala ve una red de confianza y oye que no hay contrato. Eso es la trustline explicada sin usar la palabra. La palabra aparece recién en la tarjeta, después del ganador.
+El juego lo dibuja. Cada bulto tira dos hilos a sus vecinos, y esa red es lo que sostiene el pozo. A los 3,4 segundos el narrador dice **"¡Acá nadie firma nada!"**, y en los dos segundos siguientes la sala ve una red de confianza y oye que no hay contrato. El tejido duraba 0,8 segundos y era mudo: la escena que más enseña era la que menos duraba. Eso es la trustline explicada sin usar la palabra. La palabra aparece recién en la tarjeta, después del ganador.
 
 ## La mecánica
 
@@ -39,7 +39,7 @@ Al revés que la ruleta, y mejor que todos.
 | 5 a 12 | 2 | |
 | 13 a 200 | 3 | Un hervidero. La pila de los que ya cobraron se vuelve una barra de progreso hecha de cuerpos |
 
-Los apretones suman siempre 4,2 segundos, así que el juego dura lo mismo con cualquier cantidad.
+Los apretones suman siempre 7,5 segundos de juego, así que el juego dura lo mismo con cualquier cantidad. Sumaban 4,2 y el nudo se cerraba antes de que la sala entendiera qué estaba mirando.
 
 ## Los tiempos
 

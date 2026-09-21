@@ -43,17 +43,39 @@ export function secondsToRound(): number {
 
 let countdownTimer: number | undefined;
 
-/** El botón de sortear muestra la cuenta regresiva y se habilita cuando la ronda existe. */
+/**
+ * El botón de sortear muestra la cuenta regresiva y se habilita cuando la
+ * ronda existe. Y arriba, el panel que pone la espera en escena.
+ *
+ * Esos segundos son el corazón del producto: la lista ya está cerrada y el
+ * número que la va a decidir **todavía no existe**. Es el único momento en que
+ * esto es distinto de cualquier ruleta, y vivía como una etiqueta chica en un
+ * botón gris, en silencio. Ahora se ve el número de la ronda que falta nacer y
+ * los segundos que le quedan.
+ */
 function startCountdown(): void {
   const btn = $<HTMLButtonElement>("btn-draw");
+  const box = document.getElementById("wait-box");
+  const num = document.getElementById("wait-round");
+  const left = document.getElementById("wait-left");
+  const line = box?.querySelector(".wait-line");
+  if (num && app.frozen) num.textContent = `#${app.frozen.round}`;
   const tick = (): void => {
     const s = secondsToRound();
     if (s > 0) {
       btn.disabled = true;
-      btn.textContent = T[getLang()].drawIn(`${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`);
+      const reloj = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+      btn.textContent = T[getLang()].drawIn(reloj);
+      if (box) box.style.display = "block";
+      if (left) left.textContent = reloj;
+      if (line) line.textContent = t("waitLine");
     } else {
       btn.disabled = !!app.drawn;
       btn.textContent = t("draw");
+      // El panel no desaparece de golpe: dice que la ronda ya nació, que es la
+      // otra mitad de la idea.
+      if (left) left.textContent = t("waitNow");
+      if (line) line.textContent = "";
       if (countdownTimer !== undefined) clearInterval(countdownTimer);
       countdownTimer = undefined;
     }

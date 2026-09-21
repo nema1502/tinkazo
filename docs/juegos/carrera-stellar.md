@@ -58,12 +58,14 @@ Capturas en `docs/capturas/juego-stellar*.png`.
 
 El motor reparte la carrera así, y vale para los dos temas:
 
+La cuenta regresiva va en **segundos reales** y los quince de carrera en segundos de juego, que son los que estira el selector de duración: en "normal" la carrera entera dura treinta segundos.
+
 | Momento | Qué pasa |
 |---|---|
-| 0 a 3 s | Cuenta regresiva, con el número gigante y un pitido por segundo |
-| 3 a 12 s | El pelotón se pelea la punta y el narrador la va cantando. **El ganador corre en el tercio de atrás**, visible pero lejos |
-| 12 a 15 s | "¡No respira nadie!" y el ganador remonta. La velocidad se calcula para llegar justo cuando se acaba el tiempo, así nunca se amontona en la meta |
-| Al cruzar | Fanfarria, temblor de cámara y la tarjeta del ganador |
+| 0 a 3 s reales | Cuenta regresiva, con el número gigante y un pitido por segundo que sube de tono. No se estira: un "3" que dura dos segundos no se lee como cuenta regresiva |
+| 0 a 12 s de juego | El pelotón se pelea la punta, con galope y zumbido de tribuna, y el narrador la va cantando. **El ganador corre en el tercio de atrás**, visible pero lejos. El cartel del puntero va en amarillo |
+| 12 a 15 s de juego | "¡No respira nadie!" y el ganador remonta. La velocidad se calcula para llegar justo cuando se acaba el tiempo, así nunca se amontona en la meta. Los últimos dos centésimos van mudos |
+| Al cruzar | Fogonazo, temblor de cámara, fanfarria y la tarjeta del ganador, sostenida **tres segundos reales**. Los que perdieron se apagan |
 
 Esto se corrigió el 20 de septiembre de 2026. Antes el ganador arrancaba su sprint en el segundo 9 de 15 y desde ahí no lo alcanzaba nadie: la sala se enteraba del final a mitad de carrera y los últimos cuatro segundos eran trámite.
 

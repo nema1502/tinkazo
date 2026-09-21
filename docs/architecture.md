@@ -130,10 +130,10 @@ Módulos y responsabilidades:
 | `src/stellar/config.ts` | Red activa, RPC, passphrase, dirección del contrato |
 | `src/stellar/wallet.ts` | Adaptador de wallet: `connect()`, `address`, `network`, `signTransaction(xdr)` sobre `@stellar/freighter-api`, más la cuenta invitada de testnet |
 | `src/stellar/wallet-pollar.ts` | Entrar con Google. Firma y envía de una sola vez contra su propio servidor, por eso se marca con `submitsItself` |
-| `src/narrator.ts` | El narrador con voz, sobre la API del navegador. Elige voz en español, prefiere las locales y sube el ritmo con la tensión |
+| `src/narrator.ts` | El narrador con voz, sobre la API del navegador. Elige voz en español, prefiere las locales y sube el ritmo con la tensión. Una línea sólo interrumpe a la que suena si la supera en tensión: cortar siempre dejaba frases a medio decir |
 | `src/stellar/contract.ts` | `contract.Client` tipado de `tinkazo-raffle`: `seal`, `draw`, `getRaffle`, `getDraw` |
 | `src/games/overlay.ts` | El andamiaje de los juegos: monta el estadio, siembra el azar con la ronda, dibuja los chips, registra el botón de saltar, pide pantalla completa y desmonta |
-| `src/games/*.ts` | Los seis juegos. Ninguno calcula nada: reciben el ganador ya decidido |
+| `src/games/*.ts` | Los seis juegos. Ninguno calcula nada: reciben el ganador ya decidido. Cada uno declara con `setGameLength` cuánto dura sin estirar, porque el selector de duración apunta a una cantidad de segundos y no multiplica |
 | `src/games/lore.ts` | Las tarjetas de "¿por qué se llama así?", con su fuente primaria |
 | `src/ui/*.ts` | Render de secciones: lista, sello, cuenta regresiva, resultado, errores |
 | `verificar.html` + `src/verify.ts` | Página de verificación de solo lectura (FR-17 a 21) |

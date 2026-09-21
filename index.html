@@ -92,6 +92,11 @@
     <div class="body">
       <p class="entity" id="entities"></p>
       <p class="note" data-i="frozenNote">La lista quedó sellada antes de que exista la semilla: la ronda objetivo del faro nace recién en unos segundos. Nadie puede agregar ni quitar participantes sin cambiar el hash.</p>
+      <aside class="wait" id="wait-box" style="display:none">
+        <p class="kicker" data-i="waitTitle">La ronda que va a decidir</p>
+        <p class="wait-num mono"><b id="wait-round">·</b><span id="wait-left">0:00</span></p>
+        <p class="wait-line" data-i="waitLine"></p>
+      </aside>
       <p class="kicker pick-label" data-i="gameLabel">Juego</p>
       <div class="gamepick">
         <button id="g-race" class="on" data-i="gameRace">Carrera de llamas</button>

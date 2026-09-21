@@ -10,7 +10,7 @@ Por un hueco concreto: **no había nada para doscientas personas**. La ruleta se
 
 Este es el único que se ve *mejor* cuanta más gente hay, porque hay más que barrer.
 
-El nombre viene de que Stellar cierra un ledger cada cinco segundos, que es el argumento de venta que repiten en todas las charlas de la red. El juego dura eso.
+El nombre viene de que Stellar cierra un ledger cada cinco segundos, que es el argumento de venta que repiten en todas las charlas de la red.
 
 ## Cómo se ve
 
@@ -23,14 +23,15 @@ El nombre viene de que Stellar cierra un ledger cada cinco segundos, que es el a
 
 ## El ritmo
 
+En **segundos de juego**: el selector los estira todos por igual, y en "normal" el show dura treinta segundos reales.
+
 | Tramo | Qué pasa |
 |---|---|
-| 0,0 – 0,8 s | Las tarjetas caen desde arriba y se acomodan con un pequeño rebote. |
-| 0,8 – 1,6 s | Primera barrida. Elimina cerca de la mitad. |
-| 1,6 – 2,4 s | Segunda barrida, en sentido contrario. Las supervivientes se reacomodan al centro y crecen. |
-| 2,4 – 4,0 s | Las barridas que falten, hasta quedar tres, grandes, con nombre y avatar legibles desde el fondo de la sala. |
-| 3,2 – 4,2 s | Los sellos, de a uno cada tercio de segundo. Primero las que pierden. |
-| 4,2 – 4,6 s | Sello turquesa de confirmado, la tarjeta crece, el número de libro sube en uno. |
+| 0,0 – 1,4 s | Las tarjetas caen desde arriba y se acomodan con un pequeño rebote. |
+| 1,4 en adelante | Las barridas, de dos a tres segundos cada una, alternando arriba y abajo. Cuántas hay depende de cuánta gente: de una a seis. |
+| Las últimas dos | Quedan tres tarjetas, grandes, con nombre y avatar legibles desde el fondo de la sala. Dos segundos de respiro para leerlas, con un latido grave de fondo: en silencio eran cuatro segundos de escena muerta justo donde la sala está leyendo. |
+| Después | Los sellos, uno cada 0,7 s. Primero las que pierden. |
+| Al final | Sello turquesa de confirmado, fogonazo, la tarjeta crece. Tres segundos **reales** de sostén. |
 
 Que las perdedoras se sellen primero y la ganadora al final es lo que sostiene la tensión. Cuando quedan tres en pantalla, la sala ya sabe que una de esas gana.
 

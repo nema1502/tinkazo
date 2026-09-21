@@ -41,7 +41,7 @@ Es inmutable: no tiene administrador ni actualización, y no custodia fondos. `d
 | Pasanaku | El ahorro rotativo boliviano: un aguayo que se cierra sobre los bultos hasta que queda uno en el nudo. Los hilos entre vecinos son trustlines. | 200 |
 | Ruleta | La de siempre, pero que se ve girar con dos personas. | 24 |
 
-Ninguno decide nada: el ganador llega dado por el protocolo y el juego solo lo cuenta. Hay un auditor que lo comprueba en cada juego, con dieciséis verificaciones, y otro que escucha el sonido sin oídos. La que importa: el nombre en pantalla tiene que ser el que fijó el protocolo.
+Ninguno decide nada: el ganador llega dado por el protocolo y el juego solo lo cuenta. Hay un auditor que lo comprueba en cada juego, con veinte verificaciones, cuatro de ellas en un celular, y otro que escucha el sonido sin oídos. La que importa: el nombre en pantalla tiene que ser el que fijó el protocolo.
 
 **El narrador habla.** Usa la voz del navegador, elige una en español de las que estén instaladas y sube el ritmo con la tensión. Si la máquina no tiene voz, el sorteo funciona igual.
 

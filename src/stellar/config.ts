@@ -10,6 +10,21 @@ import deployments from "./deployments.json";
 
 export type NetworkName = "testnet" | "mainnet";
 
+/**
+ * Los puntos de entrada a la cadena, en un solo lugar.
+ *
+ * Estaban escritos a mano en cuatro archivos, y eso tiene dos problemas. El
+ * chico es que se despegan entre ellos sin que nadie lo note. El grande es que
+ * `mainnet.sorobanrpc.com` es de un tercero ·la SDF no ofrece un RPC público de
+ * mainnet· y hoy es un punto único de falla para el sitio entero. El día que
+ * haya que rotarlo, o poner una lista de respaldo, tiene que ser un cambio de
+ * una línea y no una cacería.
+ */
+export const RPC_URLS: Record<NetworkName, string> = {
+  testnet: "https://soroban-testnet.stellar.org",
+  mainnet: "https://mainnet.sorobanrpc.com",
+};
+
 export interface NetworkConfig {
   name: NetworkName;
   rpcUrl: string;
@@ -24,7 +39,7 @@ export interface NetworkConfig {
 const NETWORKS: Record<NetworkName, NetworkConfig> = {
   testnet: {
     name: "testnet",
-    rpcUrl: deployments.testnet?.rpcUrl ?? "https://soroban-testnet.stellar.org",
+    rpcUrl: deployments.testnet?.rpcUrl ?? RPC_URLS.testnet,
     networkPassphrase: "Test SDF Network ; September 2015",
     contractId: deployments.testnet?.contractId ?? null,
     explorerBase: "https://stellar.expert/explorer/testnet",
@@ -32,7 +47,7 @@ const NETWORKS: Record<NetworkName, NetworkConfig> = {
   },
   mainnet: {
     name: "mainnet",
-    rpcUrl: "https://mainnet.sorobanrpc.com",
+    rpcUrl: RPC_URLS.mainnet,
     networkPassphrase: "Public Global Stellar Network ; September 2015",
     contractId: null,
     explorerBase: "https://stellar.expert/explorer/public",

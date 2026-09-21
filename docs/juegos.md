@@ -58,7 +58,7 @@ node scripts/audit-game.mjs <juego>
 node scripts/audit-sound.mjs <juego>
 ```
 
-Donde `<juego>` es el valor de `?demo=`: `race`, `stellar`, `ledger`, `rockets`, `wheel`, `pasanaku`. El auditor abre Chrome, corre un sorteo real contra drand y comprueba dieciséis cosas:
+Donde `<juego>` es el valor de `?demo=`: `race`, `stellar`, `ledger`, `rockets`, `wheel`, `pasanaku`. El auditor abre Chrome, corre un sorteo real contra drand y comprueba veinte cosas:
 
 | # | Comprobación | Por qué importa |
 |---|---|---|
@@ -76,14 +76,33 @@ Donde `<juego>` es el valor de `?demo=`: `race`, `stellar`, `ledger`, `rockets`,
 | 12 | El sorteo también corre en inglés | La interfaz es bilingüe |
 | 13 | La tarjeta de historia también está en inglés | Detecta la mitad del par olvidada |
 | 14 | El nombre del juego está en los dos diccionarios | No exige que el texto cambie: "Pasanaku" es nombre propio y en inglés se dice igual |
-| 15 | La escena se dibuja en tema claro | |
-| 16 | La escena se dibuja en tema oscuro | |
+| 15 | **En un celular el cartel del ganador entra en la pantalla** | El tamaño de la tipografía sale del alto, y en vertical eso no dice nada del ancho: a 390 por 844 el cartel salía con tipografía de 150 px sobre un lienzo de 780. Si se sale, el lienzo lo recorta sin avisar, y la forma de detectarlo es que el amarillo toque los dos bordes a la vez |
+| 16 | La escena arranca en un celular | El organizador prueba el sorteo en su teléfono antes del evento |
+| 17 | **En el celular nada se sale de la pantalla** | A 390 px de ancho la escena es vertical y el encabezado, el comentario y los botones tienen que entrar igual |
+| 18 | El lienzo ocupa la pantalla del celular | Un lienzo más chico que la ventana deja franjas negras |
+| 19 | La escena se dibuja en tema claro | |
+| 20 | La escena se dibuja en tema oscuro | |
 
 Guarda capturas en `docs/capturas/juego-<juego>*.png` para revisar a ojo lo que ninguna comprobación automática ve: si se entiende, si emociona, si se lee de lejos en un proyector.
 
 Y el auditor de sonido engancha `OscillatorNode` antes de que cargue la página, anota cada nota que arranca (cuándo, qué altura, qué timbre, qué volumen, cuánto dura) y mide lo que se puede medir sin oídos: que nada quede fuera del rango que reproduce un parlante de sala, que nada quede por debajo del murmullo, que todo esté en la escala, que no haya huecos de más de cuatro segundos, que ningún golpe se redispare y que ningún sonido quede tapado por otro al doble de volumen.
 
 Un juego no entra a `main` hasta que las dos auditorías dicen APROBADO.
+
+## La duración
+
+El selector de duración **apunta a una cantidad de segundos**, no multiplica. `PACES` en [`src/state.ts`](../src/state.ts) dice cuánto tiene que durar el show (`rápido 20 · normal 30 · épico 42`) y cada juego declara cuánto dura sin estirar con `setGameLength(nominal, fijo)`:
+
+- `nominal` son los **segundos de juego** hasta el revelado, que sí se estiran.
+- `fijo` son los **segundos reales** que no se estiran nunca porque le hablan a una persona: los tres del sostén del cartel del ganador, y los tres de la cuenta regresiva de la carrera. Lo que tarda alguien en leer un nombre proyectado no cambia porque se elija una duración más larga.
+
+De ahí sale `paceFactor()`, acotado entre ×0,55 y ×2,2.
+
+Era un multiplicador fijo (`0,8 / 1,4 / 2,2`) y el problema no era el número sino la idea: los seis juegos no duran lo mismo sin estirar, así que el mismo botón entregaba una carrera de 23,5 segundos y un Cierre de Libro de 9,3. No había ninguna posición del selector en la que los seis duraran algo parecido.
+
+**El tope de ×2,2 no es negociable.** Más que eso no es más emoción, es cámara lenta: la ruleta tenía dos segundos de crucero en los que la imagen es un borrón, y multiplicarlos por tres y medio son ocho segundos de nada. Un juego que topa ahí **necesita más contenido, no ir más despacio**. Por eso la ruleta pasó de 7,65 a 17,2 segundos nominales acortando el borrón y alargando la frenada, el Cierre de Libro llegó a seis pasadas y al Pasanaku se le dio tiempo al tejido de los hilos y al apretón.
+
+Hoy, medido: "normal" son treinta segundos en los seis.
 
 ## El sonido
 
@@ -102,7 +121,29 @@ Y cuatro obligaciones:
 - **Lo que le habla a una persona va en segundos reales:** la cuenta regresiva y el sostén del cartel del ganador. Lo que tarda alguien en leer un nombre proyectado no cambia porque el organizador elija "épica". El cartel se sostiene 3 segundos reales; menos que eso corta la reacción de la sala por la mitad.
 - **Los adornos del final van después de la fanfarria,** a +520 y +700 ms. Dentro quedan enmascarados por notas que suenan al doble de volumen.
 
-Y un cierre por cada golpe que pasa una vez. Una condición como `if (t >= T_LOCK && flash === 0)` vuelve a cumplirse en cuanto el destello decae, y el golpe de la traba llegó a dispararse catorce veces encima de la fanfarria. Lo mismo con el narrador: una ventana de `t >= X && t < X + 0.05` dura cuatro o cinco cuadros, y cada `say` cancela al anterior, así que el narrador tartamudea. **Cierre booleano, no ventana.**
+## El narrador
+
+La voz va por [`src/narrator.ts`](../src/narrator.ts) y tiene una regla que no es obvia: **una línea nueva no corta a la que se está diciendo**, salvo que de verdad importe más. Cada `narrate(texto, heat)` lleva su tensión de 0 a 1, y sólo pisa a la actual si la supera por tres décimos. El anuncio del ganador pisa a cualquier cosa; un cambio de líder no pisa a otro cambio de líder.
+
+Antes cortaba siempre, y eso dejaba frases a medio decir: en una sala no se oye como un relator que va rápido, se oye como uno que se traba. Lo que no alcanza a entrar espera turno, y si para cuando le toca ya pasaron dos segundos y medio se cae: "va puntero fulano" dicho tarde es peor que el silencio.
+
+Y todo el armado de la declamación va dentro de un `try`, no sólo la llamada a hablar. Asignar la voz puede tirar una excepción según el navegador, y esa excepción subía hasta el bucle del juego y **lo mataba**: el sorteo entero se caía por el narrador, que es justo lo que este módulo promete que nunca pasa.
+
+Chrome sin interfaz no trae ninguna voz instalada, así que en una auditoría el narrador nunca habla. Por eso `scripts/audit-sound.mjs` le pone una voz de mentira, simula el tiempo que tardaría en decir cada línea y cuenta las que quedan a medias. Sin que suene nada.
+
+## Los cierres
+
+Un cierre por cada golpe que pasa una vez. Una condición como `if (t >= T_LOCK && flash === 0)` vuelve a cumplirse en cuanto el destello decae, y el golpe de la traba llegó a dispararse catorce veces encima de la fanfarria. Lo mismo con el narrador: una ventana de `t >= X && t < X + 0.05` dura cuatro o cinco cuadros, y cada `say` cancela al anterior, así que el narrador tartamudea. **Cierre booleano, no ventana.**
+
+## Vertical
+
+El estadio está pensado para una pantalla grande, pero el organizador prueba el sorteo en su teléfono antes del evento. Ahí la escena es vertical y hay tres trampas que no se ven en un proyector:
+
+- **El tamaño de la tipografía sale del alto de la pantalla** (`u()` es `canvas.height / 720`). En vertical eso no dice nada del ancho: el cartel del ganador salía con tipografía de 150 píxeles sobre un lienzo de 780. Todo lo que tenga texto se mide contra el ancho disponible, no sólo contra `u()`.
+- **Las disposiciones de dos columnas no existen.** La ruleta tenía la rueda a la derecha y los nombres a la izquierda, y en vertical la placa terminaba encima de la rueda. Un juego con esa forma necesita una disposición propia para vertical, no un reescalado.
+- **La barra de arriba y la caja del comentario son HTML por encima del lienzo**, así que el juego no las ve y dibuja debajo. `chrome(c)` en [`overlay.ts`](../src/games/overlay.ts) devuelve cuántos píxeles de lienzo ocupan, arriba y abajo.
+
+Las grillas se reparten con la proporción real de la pantalla y no con una constante: `sqrt(m * ancho / alto)`. Un 1,7 escrito a mano es la proporción de un proyector y en un celular deja las celdas diminutas apretadas en una esquina.
 
 ## Lo que el auditor no puede ver
 
@@ -116,7 +157,7 @@ Revisalo vos antes de subirlo:
 - ¿Hay silencio justo antes del golpe? Un cuarto de segundo sin nada es el efecto más barato que existe.
 - ¿Cada pasada, ronda o fase elimina a alguien de verdad? Hubo una que el narrador anunciaba como "¡última pasada!" y no sacaba a nadie.
 - ¿El dato de la tarjeta es verdad? El auditor comprueba que haya un enlace, no que el enlace diga lo que la tarjeta dice. Eso lo comprobás vos, en la fuente primaria, antes de subirlo.
-- ¿Funciona con 2 participantes y con 200?
+- ¿Funciona con 2 participantes y con 200? El protocolo tiene su propia prueba de carga en [`src/protocol/carga.test.ts`](../src/protocol/carga.test.ts): sellar diez mil nombres y sortear treinta y dos ganadores entre ellos pasa desapercibido. Lo que hay que mirar a ojo es el juego, no el protocolo.
 - ¿El ganador queda claro al final, sin ambigüedad?
 
 ## Juegos actuales

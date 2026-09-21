@@ -81,17 +81,25 @@ export const LEAD_SECONDS = Math.max(3, Number(params.get("lead")) || 10);
 export const ANCHOR_LEAD_SECONDS = 45;
 
 /**
- * Cuánto dura el show.
+ * Cuánto dura el show, **en segundos**.
  *
  * No es un número fijo porque no hay uno bueno para todos los casos. Un sorteo
  * entre amigos en un bar quiere veinte segundos; el cierre de una conferencia
  * con doscientas personas mirando una pantalla gigante aguanta el doble y lo
- * agradece. El factor multiplica el tiempo de todos los juegos por igual, así
- * que el sonido y la animación siguen yendo juntos.
+ * agradece.
+ *
+ * Era un multiplicador (0,8 / 1,4 / 2,2) y eso tenía un problema de fondo: los
+ * seis juegos no duran lo mismo sin estirar, así que el mismo botón entregaba
+ * una carrera de 23,5 segundos y un Cierre de Libro de 9,3. No había ninguna
+ * posición del selector en la que los seis duraran algo parecido, y el
+ * organizador tenía que reaprender el botón cada vez que cambiaba de juego.
+ *
+ * Ahora el selector dice cuánto tiene que durar el show y cada juego declara
+ * cuánto dura sin estirar. "Normal" significa treinta segundos en los seis.
  *
  * El resultado no cambia: el ganador ya estaba decidido antes de que empiece.
  */
-export const PACES = { rapido: 0.8, normal: 1.4, epico: 2.2 } as const;
+export const PACES = { rapido: 20, normal: 30, epico: 42 } as const;
 export type Pace = keyof typeof PACES;
 
 const PACE_KEY = "tinkazo.pace";
@@ -110,9 +118,57 @@ function initialPace(): Pace {
 
 let pace: Pace = initialPace();
 
-/** El factor por el que se multiplica la duración de cualquier juego. */
-export const paceFactor = (): number => PACES[pace];
+/**
+ * Hasta dónde se deja estirar un juego.
+ *
+ * Más que esto no es más emoción, es cámara lenta. La ruleta tenía dos segundos
+ * de crucero en los que la imagen es un borrón: multiplicarlos por tres y medio
+ * son ocho segundos de nada. Un juego que topa acá necesita más contenido, no
+ * ir más despacio.
+ */
+const MAX_STRETCH = 2.2;
+const MIN_STRETCH = 0.55;
+
+/** Segundos de juego del juego en curso, y los que no se estiran nunca. */
+let nominal = 0;
+let fijo = 0;
+
+/**
+ * Cuánto dura el juego en curso sin estirar, para que el selector pueda
+ * apuntarle a una duración.
+ *
+ * `nominalSeconds` son los segundos de juego hasta el revelado, que sí se
+ * estiran. `fixedSeconds` son los segundos reales que no se estiran nunca
+ * porque le hablan a una persona y no al reloj del juego: el sostén del cartel
+ * del ganador, y la cuenta regresiva de la carrera. Lo que tarda alguien en
+ * leer un nombre proyectado no cambia porque se elija una duración más larga.
+ *
+ * Con cero vuelve al factor neutro, que es lo que corresponde cuando no hay
+ * ningún juego corriendo.
+ */
+export function setGameLength(nominalSeconds: number, fixedSeconds = 0): void {
+  nominal = Math.max(0, nominalSeconds);
+  fijo = Math.max(0, fixedSeconds);
+}
+
+/** El factor por el que se multiplica el tiempo del juego en curso. */
+export const paceFactor = (): number => {
+  if (nominal <= 0) return 1;
+  // Un piso de cuatro segundos para que un objetivo chico y un juego con mucho
+  // tiempo fijo no den un factor absurdo.
+  const util = Math.max(4, PACES[pace] - fijo);
+  return Math.max(MIN_STRETCH, Math.min(MAX_STRETCH, util / nominal));
+};
 export const currentPace = (): Pace => pace;
+
+/**
+ * Cómo se llama cada posición del selector, con su duración.
+ *
+ * El número sale de `PACES` y no de una cadena escrita a mano, así que no se
+ * puede despegar del código. Sin el número, "Normal" no le dice nada a alguien
+ * que está preparando un evento y quiere saber cuánto va a durar la pantalla.
+ */
+export const paceSeconds = (p: Pace): number => PACES[p];
 
 export function setPace(p: Pace): void {
   pace = p;

@@ -1,7 +1,7 @@
 import { $, esc } from "../dom";
 import { getLang, onLangChange, setLang, t } from "../i18n";
 import { accountUrl, network } from "../stellar/config";
-import { PACES, currentPace, setPace, type Pace } from "../state";
+import { PACES, currentPace, paceSeconds, setPace, type Pace } from "../state";
 import { isMuted, toggleSound } from "../sound";
 
 /**
@@ -109,7 +109,10 @@ export function openAccount(view: AccountView): void {
   for (const p of Object.keys(PACES) as Pace[]) {
     const o = document.createElement("option");
     o.value = p;
-    o.textContent = t(p === "rapido" ? "paceFast" : p === "normal" ? "paceNormal" : "paceEpic");
+    // Con los segundos, igual que en la página: el selector apunta a una
+    // duración y sin el número "Normal" no le dice nada a nadie.
+    const base = t(p === "rapido" ? "paceFast" : p === "normal" ? "paceNormal" : "paceEpic");
+    o.textContent = `${base} · ${paceSeconds(p)} s`;
     pace.appendChild(o);
   }
   pace.value = currentPace();

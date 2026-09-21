@@ -540,7 +540,7 @@ para que el sorteo encaje con el tono de mi público.
 
 **Dado** el diseño de un juego nuevo
 **Cuando** se implementa
-**Entonces** cumple el contrato de `docs/juegos.md`, tiene su documento en `docs/juegos/`, textos en ES y EN, y aprueba las dieciséis comprobaciones del auditor de juegos y las del auditor de sonido
+**Entonces** cumple el contrato de `docs/juegos.md`, tiene su documento en `docs/juegos/`, textos en ES y EN, y aprueba las veinte comprobaciones del auditor de juegos y las del auditor de sonido
 **Y** si es una carrera, se agrega como tema y no como módulo nuevo.
 
 Resultado parcial (2026-09-20): seis juegos en el catálogo, todos con 15/15. Constelación Stellar, Cierre de Libro, Pasanaku, Carrera de llamas, Carrera de cohetes y Ruleta.
@@ -640,22 +640,25 @@ para que la gente mire la pantalla y no el teléfono.
 **Y** hay un hecho legible nuevo cada 1,5 a 2,5 segundos, nunca más de 4 sin novedad
 **Y** el efecto del revelado se ve medio segundo antes de que entre el cartel, no debajo.
 
-Pendiente concreto: un cuarto de segundo de silencio antes del golpe en los que todavía no lo tienen; cámara lenta en el último 10%; un destello de dos o tres cuadros en el instante del revelado; apagar a los perdedores cuando sale el cartel; y poner en escena la espera de la ronda, que hoy son diez segundos en una etiqueta de un botón gris y es el momento en que el producto es verdaderamente distinto de cualquier ruleta.
+Hecho (2026-09-20): el destello de dos o tres cuadros en el instante del revelado, en los cuatro juegos que no lo tenían; el temblor del golpe en la ruleta, el Cierre de Libro y el Pasanaku; apagar a los perdedores de la carrera cuando sale el cartel, que hasta ahora seguían corriendo detrás y uno asomaba por el borde; un cuarto de segundo de silencio antes del golpe en la constelación, el Pasanaku y el Cierre; y **la espera de la ronda puesta en escena**, que era el pendiente más grande.
 
-### Historia 10.6: Que el show dure lo que el organizador eligió
+Esa espera son los segundos entre sellar la lista y que la ronda exista, y es el único momento en que este producto es distinto de cualquier ruleta: la lista ya está cerrada y el número que la va a decidir **todavía no existe**. Vivía como una etiqueta chica en un botón gris. Ahora es un panel con el número de la ronda que falta nacer, los segundos que le quedan latiendo, y la frase que lo explica.
 
-Como organizadora con un proyector y cincuenta personas mirando,
-quiero que "normal" dure lo mismo en los seis juegos,
-para no tener que reaprender el selector cada vez que cambio de juego.
+De paso, el temblor dejó de salir de `rng()`. Llamar al azar sembrado dentro del dibujo consume la secuencia a la velocidad de los cuadros, así que la misma ronda no se dibujaba igual a 60 Hz que a 144. No cambiaba quién ganaba, pero contradecía la promesa de animación reproducible. Ahora sale del reloj.
 
-**Criterios de aceptación:**
+Pendiente: cámara lenta en el último 10% de cada juego. Se dejó afuera a propósito porque cambia el `dt` y eso interactúa con el modelo de duración; conviene mirarlo corriendo antes de meterlo.
 
-**Dado** el selector de duración
-**Cuando** se elige una posición
-**Entonces** los seis juegos duran aproximadamente eso
-**Y** ninguno se estira tanto que se vuelva cámara lenta.
+### Historia 10.6: Que el show dure lo que el organizador eligió: hecho
 
-`PACES` es hoy un multiplicador (`rápido 0,8 · normal 1,4 · épico 2,2`) y los seis juegos no duran lo mismo sin estirar. Medido, en segundos reales:
+Resultado (2026-09-20): `PACES` dejó de ser un multiplicador y pasó a ser un objetivo de duración en segundos (`rápido 20 · normal 30 · épico 42`). Cada juego declara con `setGameLength(nominal, fijo)` cuánto dura sin estirar, y `paceFactor()` sale de ahí, acotado entre ×0,55 y ×2,2. Medido, "normal" son treinta segundos en los seis.
+
+Lo que no alcanzaba era subir el multiplicador, y por eso tres juegos recibieron **contenido**: la ruleta pasó de 7,65 a 17,2 segundos nominales acortando el borrón del crucero de 2,2 a 1,6 y llevando la frenada de 1,3 a 4,4, el arrastre de 0,55 a 2,4 y el amague de 0,25 a 1,2; el Cierre de Libro llegó a seis pasadas con listas grandes, con barridas de dos a tres segundos y sellos cada 0,7; el Pasanaku le dio al tejido de los hilos 2 segundos en vez de 0,8 y al apretón 7,5 en vez de 4,2; y la constelación subió el armado a 3 segundos y la suma de los saltos de 9,3 a 14,5.
+
+Y el selector muestra los segundos: "Normal · 30 s". El número sale de `PACES`, así que no se puede despegar del código.
+
+Lo que sigue estando escrito abajo es el análisis que llevó a esto.
+
+`PACES` era un multiplicador (`rápido 0,8 · normal 1,4 · épico 2,2`) y los seis juegos no duran lo mismo sin estirar. Medido, en segundos reales:
 
 | Juego | Base, en segundos de juego hasta el revelado | Normal | Épico |
 |---|---|---|---|
@@ -672,6 +675,20 @@ Más tres segundos reales de sostén del cartel en todos. El pedido es que el m�
 Van dos pasos, en este orden. Primero, que el selector sea un **objetivo de duración**: cada juego declara cuánto dura sin estirar y el factor sale de `(objetivo menos lo fijo) / nominal`, acotado a ×2,2. Con objetivos de 20, 30 y 42 segundos, "normal" pasa a dar 30 en la carrera, 28 en la constelación y entre 17 y 22 en los otros tres, y el botón por fin significa lo mismo en los seis.
 
 Segundo, y es lo que de verdad falta: **contenido en los tres que topean**. La ruleta tiene que acortar el crucero y darle ese tiempo a la frenada y al amague, que es donde está la tensión, y a la carga inicial, que hoy son 0,9 segundos con la rueda quieta. El Cierre de Libro necesita más pasadas con listas grandes, donde hoy el tope son cuatro, y un desfile de sellos menos apurado que uno cada 0,33 segundos. El Pasanaku tiene el tejido de los hilos en 0,8 segundos, y es la escena que enseña qué es una trustline.
+
+### Historia 10.7: Que el estadio se vea en un celular: hecho
+
+Resultado (2026-09-20): el auditor corría todo a 1280 por 720, que es un proyector, y el estadio nunca se había mirado en vertical. El organizador prueba el sorteo en su teléfono antes del evento, así que ahí se ve primero. Cinco defectos, todos reales:
+
+- **El cartel del ganador** saca su tamaño del alto de la pantalla, y en vertical eso no dice nada del ancho: a 390 por 844 salía con tipografía de 150 píxeles sobre un lienzo de 780. Un nombre largo se iba de los dos bordes y el lienzo lo recortaba sin avisar. Ahora se achica hasta entrar.
+- **La ruleta** dibujaba la placa del nombre en una columna a la izquierda que en vertical no existe: quedaba **encima de la rueda**, tapándola entera. Ahora tiene su propia disposición: rueda arriba, centrada, placa debajo.
+- **El Cierre de Libro** repartía las tarjetas con `sqrt(m * 1.7)` columnas, donde 1,7 es la proporción de un proyector. En un celular once tarjetas caían en cinco columnas diminutas, apretadas arriba a la izquierda, con los nombres reemplazados por barritas y media pantalla vacía. Ahora las columnas salen de la forma de la pantalla.
+- **El contador de saltos** de la constelación y los números de ronda quedaban debajo de la barra de la interfaz y de la caja del comentario, que son HTML por encima del lienzo y el juego no ve. `chrome()` en `overlay.ts` los mide.
+- **Los chips** se anclan a su nodo, y un nodo cerca del borde los empujaba fuera: medio nombre cortado contra el filo. Ahora se acotan al lienzo.
+
+Y de paso, dos que no eran de vertical: la pila de monedas del Pasanaku eran catorce barras rectas del ancho de la caja del pote, que a tamaño de celular se leen como un código de barras naranja flotando en una esquina; y `?pose=` dibujaba **siempre la carrera**, así que las comprobaciones de tema claro, tema oscuro y celular venían mirando la carrera para los seis juegos. Nadie había visto nunca la ruleta ni el pasanaku en tema claro.
+
+El auditor pasa de dieciséis a veinte comprobaciones, cuatro de ellas en 390 por 844.
 
 ---
 

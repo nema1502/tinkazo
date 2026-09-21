@@ -1,7 +1,7 @@
 import { T, getLang, t } from "../i18n";
 import { beep, beepFor, fanfare, note } from "../sound";
-import { avatar, paceFactor, type Beacon } from "../state";
-import { INK, WINNER_HOLD, clamp, drawFlag, ease, mount, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
+import { avatar, paceFactor, setGameLength, type Beacon } from "../state";
+import { INK, WINNER_HOLD, chrome, clamp, drawFlag, ease, mount, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
 
 /**
  * Pasanaku.
@@ -55,12 +55,17 @@ interface Bundle {
  *  la misma ronda dé siempre lo mismo. */
 const DT = 1 / 120;
 
-const T_DROP = 0.7;
-const T_WEAVE = 2.3;
-const T_CINCH = 3.1;
-const T_KNOT = 7.3;
-const T_LIFT = 8.6;
-const T_END = 10.3;
+/* El juego duraba 8,6 segundos hasta la levantada, y las dos escenas que más
+   valen duraban nada: el tejido de los hilos, que es lo que enseña qué es una
+   trustline, tenía 0,8 segundos, y el nudo apretándose 1,3. Ahora dura 16,5 y
+   el tiempo nuevo está casi todo ahí: tejido y apretones. */
+const T_DROP = 1.0;
+const T_WEAVE = 3.4;
+const T_CINCH = 5.4;
+/** Cuánto dura el apretón entero, repartido entre los tirones que haya. */
+const CINCH_DUR = 7.5;
+const T_KNOT = T_CINCH + CINCH_DUR;
+const T_LIFT = 16.5;
 
 export function pasanaku(
   names: string[],
@@ -80,9 +85,11 @@ export function pasanaku(
 
   const n = names.length;
   const FINAL = Math.min(3, n);
-  /** Cuántos apretones. Suman siempre 4,2 s, así que el total no cambia con n. */
+  /** Cuántos apretones. Suman siempre lo mismo, así que el total no cambia con n. */
   const PULLS = n <= 4 ? 1 : n <= 12 ? 2 : 3;
-  const PULL_DUR = 4.2 / PULLS;
+  // Lo que dura sin estirar: hasta que se levanta el aguayo.
+  setGameLength(T_LIFT, WINNER_HOLD);
+  const PULL_DUR = CINCH_DUR / PULLS;
 
   /**
    * El orden de salida. El ganador va primero y por lo tanto nunca lo
@@ -118,6 +125,7 @@ export function pasanaku(
   let weaveTicks = 0;
   let tHold = 0;
   let flashK = 0;
+  let shake = 0;
   let knotHits = 0;
   let saidUpTo = -1;
   let lastOut = -999;
@@ -285,6 +293,7 @@ export function pasanaku(
     if (crowned) return;
     crowned = true;
     flashK = 1;
+    shake = 1;
     say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
     // 90 Hz no sale por el parlante de ninguna sala: el golpe de la levantada,
     // que es el clímax del juego, se perdía entero.
@@ -316,14 +325,19 @@ export function pasanaku(
       const want = Math.min(PULLS, Math.floor((tAll - T_CINCH) / PULL_DUR) + 1);
       while (pulls < want) {
         pulls++;
-        say(t(pulls === 1 ? "cPasCinch" : pulls === 2 ? "cPasCinch2" : "cPasCinch3"), 0.3 + pulls * 0.2);
+        // Tope en 0,75. A 0,9 el anuncio del apretón superaba por más de tres
+        // décimos a las salidas ·que van en 0,5· y las cortaba por la mitad:
+        // "¡Sale Rodrigo Peña, ya l" al trece por ciento. Quién cobró importa
+        // más que anunciar que se aprieta, y ahora espera turno en vez de pisar.
+        const calor = Math.min(0.75, 0.3 + pulls * 0.15);
+        say(t(pulls === 1 ? "cPasCinch" : pulls === 2 ? "cPasCinch2" : "cPasCinch3"), calor);
         // 109, 98 y 87 Hz: el último está fuera de escala y ninguno sale por el
         // parlante de un proyector. Y 0,7 s reales para un apretón de 1,96 s
         // dejaban al nudo cerrándose en silencio, 2,4 s en épico. Ahora baja un
         // grado por apretón y dura el apretón entero.
         beepFor(note(Math.max(0, 4 - (pulls - 1) * 2)), PULL_DUR + 0.2, "sawtooth", 0.03);
       }
-      const p = clamp((tAll - T_CINCH) / 4.2, 0, 1);
+      const p = clamp((tAll - T_CINCH) / CINCH_DUR, 0, 1);
       cinchTotal = ease.outCubic(p) * 0.86;
       // Cuántos quedan vivos según lo avanzado del apretón.
       const target = Math.max(FINAL, Math.round(n * (1 - p) ** 1.5));
@@ -338,7 +352,10 @@ export function pasanaku(
         knotHits++;
         // El único sonido de altura al azar del producto, y a 0,012 de volumen
         // no se oía: el nudo apretándose era mudo.
-        if (knotHits % 2 === 0) beep(note(15), 0.035, "sine", 0.024);
+        // Los últimos cuatro décimos de juego van mudos: la tela sigue
+        // cerrándose y no se oye nada, que es lo que hace que la levantada
+        // golpee.
+        if (knotHits % 2 === 0 && tAll < T_LIFT - 0.4) beep(note(15), 0.035, "sine", 0.024);
       }
       // El penúltimo sale cerca del final y deja a uno solo.
       if (tAll >= T_LIFT - 0.15 && alive().length > 1) {
@@ -584,14 +601,28 @@ export function pasanaku(
     c.textBaseline = "middle";
     c.fillText(label, bx + bw / 2, by + bh / 2);
     c.textBaseline = "alphabetic";
-    // Los cantos de las monedas apiladas debajo: la pila crece mientras cae
-    // la cuota de cada uno.
+    // Los cantos de las monedas apiladas debajo: la pila crece mientras cae la
+    // cuota de cada uno.
+    //
+    // Eran catorce barras rectas del ancho de la caja del pote, y a tamaño de
+    // celular eso no se lee como una pila de monedas: se lee como un código de
+    // barras naranja flotando en una esquina. Son elipses, más angostas que la
+    // caja, apenas desalineadas entre ellas, que es como se apila plata de
+    // verdad.
     const coins = Math.min(put, 14);
+    const cw = Math.min(82 * k, bw - 40 * k);
+    const cx0 = bx + bw / 2;
     for (let i = 0; i < coins; i++) {
-      c.fillStyle = i % 2 ? "#ffc629" : "#ff7a1a";
-      c.fillRect(bx + 10 * k, by + bh + 10 * k + i * 6 * k, bw - 20 * k, 3 * k);
+      const off = Math.sin(i * 2.1) * 4 * k;
+      const cy = by + bh + 18 * k + (coins - 1 - i) * 7 * k;
       c.fillStyle = INK;
-      c.fillRect(bx + 10 * k, by + bh + 13 * k + i * 6 * k, bw - 20 * k, 1 * k);
+      c.beginPath();
+      c.ellipse(cx0 + off, cy + 2 * k, cw / 2 + 2 * k, 5.4 * k, 0, 0, 7);
+      c.fill();
+      c.fillStyle = i % 2 ? "#ffc629" : "#ff7a1a";
+      c.beginPath();
+      c.ellipse(cx0 + off, cy, cw / 2, 3.6 * k, 0, 0, 7);
+      c.fill();
     }
   }
 
@@ -622,9 +653,9 @@ export function pasanaku(
     c.textAlign = "left";
     c.fillStyle = dark ? "rgba(246,239,226,0.55)" : "rgba(25,25,25,0.55)";
     c.textAlign = "right";
-    c.fillText(`${t("cWheelRound")} #${beacon.round}`, W() - 22 * k, H() - 26 * k);
+    c.fillText(`${t("cWheelRound")} #${beacon.round}`, W() - 22 * k, H() - chrome(c).abajo);
     if (phase === "cinch") {
-      c.fillText(`${t("cPasCinchLbl")} ${pulls}/${PULLS}`, W() - 22 * k, H() - 44 * k);
+      c.fillText(`${t("cPasCinchLbl")} ${pulls}/${PULLS}`, W() - 22 * k, H() - chrome(c).abajo - 18 * k);
     }
     c.textAlign = "left";
   }
@@ -641,7 +672,7 @@ export function pasanaku(
                 : "lift";
 
     if (phase === "drop") {
-      const want = Math.floor(clamp((tAll - T_DROP) / 1.6, 0, 1) * Math.min(24, n));
+      const want = Math.floor(clamp((tAll - T_DROP) / (T_WEAVE - T_DROP), 0, 1) * Math.min(24, n));
       while (dropTicks < want) {
         // Siete alturas en ciclo, ninguna en escala: sonaba a marcador de
         // partidos. Dos notas que alternan dicen lo mismo y suenan bien.
@@ -652,7 +683,7 @@ export function pasanaku(
     // El tejido de los hilos era **mudo**, y es justo la escena que enseña qué
     // es una trustline: una red de confianza que nadie firma. Un hilo, una nota.
     if (phase === "weave") {
-      const want = Math.floor(clamp((tAll - T_WEAVE) / (T_CINCH - T_WEAVE), 0, 1) * 10);
+      const want = Math.floor(clamp((tAll - T_WEAVE) / (T_CINCH - T_WEAVE), 0, 1) * 18);
       while (weaveTicks < want) {
         beep(note(10 + (weaveTicks % 5)), 0.14, "sine", 0.025);
         weaveTicks++;
@@ -668,6 +699,16 @@ export function pasanaku(
     }
     if (acc > DT) acc = 0;
 
+    shake = Math.max(0, shake - dt * 2.2);
+    // El temblor del golpe. La carrera y la constelación ya lo tenían; acá
+    // faltaba, y es lo que hace que el revelado se sienta en el cuerpo y no
+    // sólo se vea. Sale del reloj y no del azar, para que la misma ronda se
+    // dibuje igual a 60 y a 144 cuadros por segundo.
+    const tem = shake > 0;
+    if (tem) {
+      c.save();
+      c.translate(Math.sin(shake * 97) * 9 * shake * u(), Math.sin(shake * 131 + 1.7) * 7 * shake * u());
+    }
     drawRoom(now);
     drawAguayo(now);
     drawCorners(now);
@@ -689,6 +730,7 @@ export function pasanaku(
           chip(names[q.idx] ?? "", q.x + r + 6 * k, q.y - r - 10 * k - liftK * 70 * k - i * 26 * k, 1);
         });
     }
+    if (tem) c.restore();
     drawPot();
     drawHud();
     if (phase === "lift") {

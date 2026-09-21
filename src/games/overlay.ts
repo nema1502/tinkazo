@@ -170,11 +170,15 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
       c.textAlign = "left";
       c.textBaseline = "alphabetic";
       const bw = c.measureText(label).width + av + 18 * k;
+      // Que no se salga por los costados. El chip se ancla al nodo, y un nodo
+      // cerca del borde ·cosa común en una pantalla vertical· lo empujaba
+      // afuera: quedaba medio nombre cortado contra el filo del lienzo.
+      const bx = Math.max(6 * k, Math.min(x - 4 * k, W() - bw - 6 * k));
 
       const round = typeof c.roundRect === "function";
       c.beginPath();
-      if (round) c.roundRect(x - 4 * k, y - 14 * k, bw, 22 * k, 5 * k);
-      else c.rect(x - 4 * k, y - 14 * k, bw, 22 * k);
+      if (round) c.roundRect(bx, y - 14 * k, bw, 22 * k, 5 * k);
+      else c.rect(bx, y - 14 * k, bw, 22 * k);
       // La sombra dura de la casa, la misma que el CSS: sin desenfoque, porque
       // el neobrutalismo no lo tiene. Hasta ahora vivía solo en la página y no
       // existía en ningún juego.
@@ -198,11 +202,11 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
         if (round) c.roundRect(x, y - 11 * k, av, av, 3 * k);
         else c.rect(x, y - 11 * k, av, av);
         c.clip();
-        c.drawImage(im, x, y - 11 * k, av, av);
+        c.drawImage(im, bx + 4 * k, y - 11 * k, av, av);
         c.restore();
       }
       c.fillStyle = INK;
-      c.fillText(label, x + av + 6 * k, y + 3 * k);
+      c.fillText(label, bx + av + 10 * k, y + 3 * k);
       c.letterSpacing = "0px";
       c.restore();
       return bw;
@@ -372,6 +376,24 @@ export function flashScreen(
  */
 export const WINNER_HOLD = 3;
 
+/**
+ * Los píxeles de lienzo que ocupan las barras de la interfaz del estadio.
+ *
+ * Arriba está la barra con la marca, la ronda y los botones; abajo, la caja del
+ * comentario. Las dos son HTML por encima del lienzo, así que el juego no las
+ * ve y dibujaba debajo: en un celular el contador de saltos de la constelación
+ * quedaba tapado por la insignia de Tinkazo y el número de ronda, detrás del
+ * comentario.
+ *
+ * La cuenta va de píxeles de CSS a píxeles de lienzo con la proporción real,
+ * que es lo único que no depende de la densidad de la pantalla.
+ */
+export function chrome(c: CanvasRenderingContext2D): { arriba: number; abajo: number } {
+  const escala = c.canvas.height / Math.max(1, window.innerHeight);
+  const angosto = window.innerWidth < 700;
+  return { arriba: 82 * escala, abajo: (angosto ? 118 : 86) * escala };
+}
+
 export function winnerNames(names: string[], winners: readonly number[]): string[] {
   return winners.map((i) => names[i] ?? "").filter(Boolean);
 }
@@ -401,15 +423,29 @@ export function drawWinnerPlate(
   maxSize = 64,
 ): void {
   const many = names.length > 1;
-  const size = many ? Math.max(24 * k, (maxSize * k) / Math.min(names.length, 3)) : maxSize * k;
+  let size = many ? Math.max(24 * k, (maxSize * k) / Math.min(names.length, 3)) : maxSize * k;
   const rows = names.map((n, i) => (many ? `${i + 1}. ${shorten(n, 22)}` : shorten(n, 26)));
   c.save();
   c.translate(cx, cy);
   c.scale(scale, scale);
-  c.font = `900 ${size}px system-ui, sans-serif`;
   c.textAlign = "center";
   c.textBaseline = "middle";
-  const wide = rows.reduce((m, r) => Math.max(m, c.measureText(r).width), 0);
+
+  // El tamaño sale de la altura de la pantalla, y en un celular eso no dice
+  // nada del ancho: a 390 por 844 la unidad vale 2,3, así que el cartel salía
+  // con tipografía de 150 píxeles sobre un lienzo de 780. Un nombre largo se
+  // iba de los dos bordes y el lienzo lo recortaba sin avisar. Se achica hasta
+  // que entra, que es lo que haría cualquiera a mano.
+  const cabe = c.canvas.width * 0.94;
+  let wide = 0;
+  for (let i = 0; i < 9; i++) {
+    c.font = `900 ${size}px system-ui, sans-serif`;
+    wide = rows.reduce((m, r) => Math.max(m, c.measureText(r).width), 0);
+    // A tamaño final, no al de la animación de entrada: `scale` crece cuadro a
+    // cuadro y medir contra él haría bailar la tipografía mientras entra.
+    if (wide + 72 * k <= cabe || size <= 14) break;
+    size *= 0.86;
+  }
   const bw = wide + 72 * k;
   const lineH = size * 1.2;
   const bh = Math.max(110 * k, rows.length * lineH + 44 * k);

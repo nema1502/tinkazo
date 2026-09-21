@@ -1,7 +1,7 @@
 import { T, getLang, t } from "../i18n";
 import { beep, beepFor, fanfare, note } from "../sound";
-import { avatar, paceFactor, type Beacon } from "../state";
-import { INK, WINNER_HOLD, clamp, ease, mount, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
+import { avatar, paceFactor, setGameLength, type Beacon } from "../state";
+import { INK, WINNER_HOLD, chrome, clamp, ease, mount, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
 
 /**
  * Cierre de Libro.
@@ -53,8 +53,12 @@ interface Card {
  */
 function sweepPlan(n: number, final: number): { from: "top" | "bottom"; cut: number }[] {
   const room = Math.max(0, n - final);
-  const count = room >= 9 ? 4 : room >= 4 ? 3 : room >= 2 ? 2 : 1;
-  const cuts = [[1], [0.55, 1], [0.5, 0.6, 1], [0.45, 0.55, 0.6, 1]][count - 1] as number[];
+  // Más pasadas cuando hay gente para barrer. Con cuatro, el juego duraba seis
+  // segundos y el selector de duración lo tenía que estirar al tope para llegar
+  // a algo mirable. Una pasada más es contenido; estirar no lo es.
+  const count = room >= 24 ? 6 : room >= 14 ? 5 : room >= 9 ? 4 : room >= 4 ? 3 : room >= 2 ? 2 : 1;
+  const cuts = [[1], [0.55, 1], [0.5, 0.6, 1], [0.45, 0.55, 0.6, 1],
+    [0.4, 0.45, 0.5, 0.6, 1], [0.35, 0.4, 0.45, 0.5, 0.6, 1]][count - 1] as number[];
   return cuts.map((cut, i) => ({ from: i % 2 === 0 ? "top" : "bottom", cut } as const));
 }
 
@@ -66,9 +70,13 @@ function sweepPlan(n: number, final: number): { from: "top" | "bottom"; cut: num
  * el podio. La sala no alcanzaba a ver a nadie. Con más gente, más tiempo de
  * barrido: hay más que mirar.
  */
-const sweepDur = (n: number): number => clamp(0.8 + n / 120, 0.8, 1.6);
+const sweepDur = (n: number): number => clamp(1.8 + n / 80, 1.8, 3.2);
 /** Y un respiro antes de sellar, para leer a los tres que quedaron. */
-const HOLD = 0.6;
+const HOLD = 2.0;
+/** Cuánto tarda entre un sello y el siguiente, en el desfile final. */
+const STAMP_GAP = 0.7;
+/** Lo que tardan las tarjetas en caer y acomodarse al principio. */
+const FALL = 1.4;
 
 export function ledgerClose(
   names: string[],
@@ -93,6 +101,12 @@ export function ledgerClose(
   // problema que `sweepPlan` viene a arreglar.
   const FINAL = Math.min(3, Math.max(1, n - 1));
   const SWEEPS = sweepPlan(n, FINAL);
+  // Lo que dura sin estirar: la caída, las pasadas, el respiro para leer a los
+  // finalistas, el desfile de sellos y el remate.
+  setGameLength(
+    FALL + SWEEPS.length * sweepDur(n) + HOLD + (FINAL - 1) * STAMP_GAP + 0.8,
+    WINNER_HOLD,
+  );
 
   const faces = new Map<number, HTMLImageElement>();
   /** El avatar de una persona, cargado una sola vez. */
@@ -129,7 +143,9 @@ export function ledgerClose(
   let killTicks = 0;
   let ledgerBump = false;
   let tHold = 0;
+  let heldTicks = 0;
   let flashK = 0;
+  let shake = 0;
 
   const cards: Card[] = names.map((_, i) => ({
     idx: i, x: 0, y: 0, tx: 0, ty: 0, w: 0, h: 0, tw: 0,
@@ -159,11 +175,23 @@ export function ledgerClose(
     const w = W();
     const h = H();
     const alive = cards.filter((q) => q.alive);
-    const cols = Math.max(1, Math.ceil(Math.sqrt(m * 1.7)));
+    // Las columnas salen de la forma de la pantalla, no de un 1,7 fijo.
+    // Ese número era la proporción de un proyector, y en un celular vertical
+    // repartía once tarjetas en cinco columnas: quedaban diminutas, apretadas
+    // arriba a la izquierda, con los nombres reemplazados por barritas, y
+    // media pantalla vacía debajo.
+    const cols = Math.max(1, Math.round(Math.sqrt(m * (w / h))) || 1);
     const rows = Math.ceil(m / cols);
     const gap = 8 * k;
-    const cw = clamp((w * 0.86) / cols - gap, 34 * k, 260 * k);
-    const ch = cw * 0.36;
+    let cw = clamp((w * 0.86) / cols - gap, 34 * k, 260 * k);
+    let ch = cw * 0.36;
+    // Y que la grilla entera entre a lo alto: con pocas columnas son muchas
+    // filas, y una tarjeta ancha de más las empuja fuera de la pantalla.
+    const maxH = h * 0.74;
+    if (rows * (ch + gap) - gap > maxH) {
+      ch = (maxH + gap) / rows - gap;
+      cw = Math.max(34 * k, ch / 0.36);
+    }
     const gw = cols * (cw + gap) - gap;
     const gh = rows * (ch + gap) - gap;
     const x0 = w / 2 - gw / 2;
@@ -250,6 +278,7 @@ export function ledgerClose(
     tPhase = 0;
     sealK = 0;
     flashK = 1;
+    shake = 1;
     say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
     fanfare();
     // Después del acorde, no dentro: a 0 ms quedaba enmascarado por la fanfarria.
@@ -297,7 +326,7 @@ export function ledgerClose(
     }
 
     if (phase === "fall") {
-      const want = Math.floor(clamp(tPhase / 0.8, 0, 1) * Math.min(24, n));
+      const want = Math.floor(clamp(tPhase / FALL, 0, 1) * Math.min(24, n));
       while (fallTicks < want) {
         // Sumar siete hercios por tarjeta es una máquina contando, y a 0,012 de
         // volumen no se oía: eran dieciocho de los treinta y tres sonidos del
@@ -305,7 +334,7 @@ export function ledgerClose(
         beep(note(fallTicks % 2 === 0 ? 3 : 4), 0.045, "square", 0.028);
         fallTicks++;
       }
-      if (tPhase >= 0.8) startSweep();
+      if (tPhase >= FALL) startSweep();
       return;
     }
 
@@ -318,11 +347,25 @@ export function ledgerClose(
     }
 
     if (phase === "stamp") {
-      // Un respiro para leer a los que quedaron, y recién ahí los sellos, de a
-      // uno cada 0,33 s. La ganadora queda última.
-      if (tPhase < HOLD) return;
+      // Un respiro para leer a los que quedaron, y recién ahí los sellos. La
+      // ganadora queda última.
+      //
+      // El respiro no es silencio. Con dos segundos de juego, que estirados son
+      // tres y medio, más el hueco antes del remate, quedaban 4,3 segundos sin
+      // que sonara nada: una escena muerta justo donde la sala está leyendo tres
+      // nombres y esperando. Un latido lento no tapa la lectura y sostiene la
+      // tensión, que es exactamente lo que hace un corazón.
+      if (tPhase < HOLD) {
+        const late = Math.floor(tPhase / 0.55);
+        while (heldTicks < late) {
+          heldTicks++;
+          beep(note(0), 0.16, "sine", 0.045);
+          setTimeout(() => beep(note(0), 0.12, "sine", 0.03), 150);
+        }
+        return;
+      }
       const losers = cards.filter((q) => q.alive && q.idx !== winnerIdx);
-      const want = Math.floor((tPhase - HOLD) / 0.33);
+      const want = Math.floor((tPhase - HOLD) / STAMP_GAP);
       while (stampI < want && stampI < losers.length) {
         const q = losers[stampI] as Card;
         q.stamp = 0.001;
@@ -332,7 +375,9 @@ export function ledgerClose(
         beep(note(5), 0.18, "sine", 0.05);
         stampI++;
       }
-      if (stampI >= losers.length && tPhase >= HOLD + losers.length * 0.33 + 0.35) toSeal();
+      // Medio segundo largo entre el último sello de los que pierden y el
+      // remate, y en ese hueco no suena nada.
+      if (stampI >= losers.length && tPhase >= HOLD + losers.length * STAMP_GAP + 0.8) toSeal();
       return;
     }
 
@@ -413,7 +458,10 @@ export function ledgerClose(
       const name = names[q.idx] ?? "";
       const tx = q.x + 16 * k + av + 8 * k;
       const room = q.x + w - 12 * k - tx;
-      c.font = `700 ${Math.min(22 * k, h * 0.34)}px system-ui, sans-serif`;
+      // El tercer tope es por el sitio que queda para el nombre. Sin él la
+      // tipografía crecía con el alto de la tarjeta y en dos columnas quedaba
+      // "Jorg...ani": la tarjeta era grande y el nombre igual no entraba.
+      c.font = `700 ${Math.min(22 * k, h * 0.34, room * 0.115)}px system-ui, sans-serif`;
       c.textAlign = "left";
       c.textBaseline = "middle";
       c.fillStyle = dark ? "#f6efe2" : INK;
@@ -479,7 +527,7 @@ export function ledgerClose(
     c.textAlign = "left";
     c.fillStyle = dark ? "rgba(246,239,226,0.6)" : "rgba(25,25,25,0.55)";
     const round = beacon.round + (ledgerBump ? 1 : 0);
-    c.fillText(`${t("cLedgerNo")} #${round}`, 22 * k, H() - 26 * k);
+    c.fillText(`${t("cLedgerNo")} #${round}`, 22 * k, H() - chrome(c).abajo);
   }
 
   function drawSeal(): void {
@@ -488,8 +536,13 @@ export function ledgerClose(
     const e = ease.outBack(Math.min(1, sealK));
     // La tarjeta ganadora no es "la misma un poco más grande": cambia de color
     // y de tamaño, porque es lo único que la sala tiene que mirar.
-    const cw = win.w * (1 + 1.4 * e);
-    const ch = win.h * (1 + 1.4 * e);
+    // Con tope. La tarjeta ganadora crece dos veces y media, y desde que las
+    // tarjetas se reparten según la forma de la pantalla son mucho más anchas
+    // en vertical: la ganadora terminaba tocando los dos bordes del lienzo, sin
+    // aire alrededor. Una foto sin margen no se lee como foto.
+    const crece = 1 + 1.4 * e;
+    const cw = Math.min(win.w * crece, W() - 56 * k);
+    const ch = Math.min(win.h * crece, H() * 0.34);
     const cx = W() / 2 - cw / 2;
     const cy = win.y + win.h / 2 - ch / 2;
     c.fillStyle = "#e93d9c";
@@ -536,6 +589,16 @@ export function ledgerClose(
 
   run((dt, now) => {
     update(dt);
+    shake = Math.max(0, shake - dt * 2.2);
+    // El temblor del golpe. La carrera y la constelación ya lo tenían; acá
+    // faltaba, y es lo que hace que el revelado se sienta en el cuerpo y no
+    // sólo se vea. Sale del reloj y no del azar, para que la misma ronda se
+    // dibuje igual a 60 y a 144 cuadros por segundo.
+    const tem = shake > 0;
+    if (tem) {
+      c.save();
+      c.translate(Math.sin(shake * 97) * 9 * shake * u(), Math.sin(shake * 131 + 1.7) * 7 * shake * u());
+    }
     drawPaper(now);
     for (const q of cards) if (!q.alive) drawCard(q);
     // En el sello las perdedoras se apagan: si no, asoman por detrás de la
@@ -547,6 +610,7 @@ export function ledgerClose(
       drawCard(q);
     }
     c.globalAlpha = 1;
+    if (tem) c.restore();
     if (phase === "sweep") drawSweep();
       // El fogonazo del revelado: el golpe visual que separa "apareció un
       // nombre" de "pasó algo". Va debajo del cartel, no encima.

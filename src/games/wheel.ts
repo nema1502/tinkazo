@@ -1,7 +1,7 @@
 import { T, getLang, t } from "../i18n";
 import { beep, beepFor, fanfare, note } from "../sound";
-import { avatar, paceFactor, type Beacon } from "../state";
-import { INK, WINNER_HOLD, clamp, drawFlag, ease, mount, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
+import { avatar, paceFactor, setGameLength, type Beacon } from "../state";
+import { INK, WINNER_HOLD, chrome, clamp, drawFlag, ease, mount, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
 
 /**
  * La ruleta.
@@ -25,15 +25,24 @@ import { INK, WINNER_HOLD, clamp, drawFlag, ease, mount, drawWinnerPlate, flashS
 const SEGS = 24;
 const TAU = Math.PI * 2;
 
-/* Los tiempos de cada fase, en segundos desde el arranque. */
-const T_SPIN = 1.7;
-const T_BRAKE = 3.9;
-const T_CREEP = 6.2;
-const T_HOLD = 6.75;
-const T_SETTLE = 7.0;
-const T_LOCK = 7.4;
-const T_CROWN = 7.65;
-const T_END = 9.2;
+/* Los tiempos de cada fase, en segundos de juego desde el arranque.
+   La rueda duraba 7,65 segundos hasta la corona y de esos, tres eran tiempo
+   muerto: 1,7 con la rueda completamente quieta y 2,2 de crucero en los que la
+   imagen es un borrón y no hay nada que mirar. El resto, que es lo bueno (los
+   clics separándose, el puntero arrastrándose, el amague), duraba un segundo y
+   medio en total.
+
+   Ahora dura 17,2 y el reparto está al revés: menos borrón, mucha más frenada.
+   No es el mismo juego más lento; es el mismo juego con más de lo que vale la
+   pena mirar. */
+const T_WIND = 1.2;
+const T_SPIN = 2.6;
+const T_BRAKE = 4.2;
+const T_CREEP = 12.0;
+const T_HOLD = 14.4;
+const T_SETTLE = 15.6;
+const T_LOCK = 16.8;
+const T_CROWN = 17.2;
 
 /** Velocidad de crucero y de entrada al arrastre, en gajos por segundo. */
 const W0 = 38.4;
@@ -53,7 +62,14 @@ const W1 = 5.6;
  * que cambia es cuántas vueltas da.
  */
 function omega(tt: number): number {
-  if (tt < T_SPIN) return 0;
+  if (tt < T_WIND) return 0;
+  if (tt < T_SPIN) {
+    // La carga. Antes la rueda pasaba 1,7 segundos completamente quieta, que
+    // en una pantalla grande es una foto: nadie sabe si arrancó o si se colgó.
+    // Ahora se ve tomar velocidad.
+    const p = (tt - T_WIND) / (T_SPIN - T_WIND);
+    return W0 * Math.pow(p, 2.2);
+  }
   if (tt < T_BRAKE) return W0;
   if (tt < T_CREEP) {
     const p = (tt - T_BRAKE) / (T_CREEP - T_BRAKE);
@@ -107,6 +123,11 @@ export function wheelSpin(
     return im;
   }
 
+  // El selector de duración apunta a una cantidad de segundos, así que la
+  // rueda declara los suyos: 17,2 de juego hasta la corona, más los tres reales
+  // del sostén del cartel, que no se estiran.
+  setGameLength(T_CROWN, WINNER_HOLD);
+
   /* --------------------------------------------------------- dónde termina */
   const startSeg = rng() * segs;
   // Cuál de los gajos del ganador queda bajo el puntero. El ganador ya estaba
@@ -159,18 +180,27 @@ export function wheelSpin(
   let saidLast = false;
   let tHold = 0;
   let flashK = 0;
+  let shake = 0;
   const rimChars = beacon.randomness.slice(0, 64).split("");
 
   /* -------------------------------------------------------------- geometría */
-  const geo = (): { cx: number; cy: number; R: number; k: number; wide: boolean } => {
+  const geo = (): { cx: number; cy: number; R: number; k: number; wide: boolean; alto: boolean } => {
     const k = u();
+    // En un celular vertical no hay columna a la izquierda, y la placa del
+    // nombre terminaba dibujada **encima de la rueda**, tapándola entera. Ahí
+    // la disposición es otra: rueda arriba, centrada, y la placa debajo.
+    const alto = H() > W() * 1.1;
+    if (alto) {
+      const R = Math.min(W() * 0.4, H() * 0.28);
+      return { cx: W() / 2, cy: H() * 0.38, R, k, wide: false, alto };
+    }
     // En 4:3 la rueda tiene que achicarse, si no la columna de nombres queda
     // tan angosta que los corta. Ese es justo el proyector de sala.
     const wide43 = W() / H() < 1.5;
     const R = Math.min(H() * (wide43 ? 0.34 : 0.395), W() * (wide43 ? 0.26 : 0.3));
     const cx = Math.max(W() * 0.56, W() - R - 110 * k);
     const colW = cx - R - 70 * k;
-    return { cx, cy: H() * 0.5, R, k, wide: colW > 260 * k };
+    return { cx, cy: H() * 0.5, R, k, wide: colW > 260 * k, alto };
   };
 
   /** Qué gajo está bajo el puntero. */
@@ -265,11 +295,11 @@ export function wheelSpin(
   function sayIfDue(w: number): void {
     const cues: [number, () => void][] = [
       [0.05, () => say(t("cWheelBuild"), 0.1)],
-      [0.55, () => say(T[getLang()].cWheelSplit(segs, rep), 0.15)],
-      [0.9, () => say(t("cWheelCharge"), 0.3)],
+      [0.7, () => say(T[getLang()].cWheelSplit(segs, rep), 0.15)],
+      [T_WIND, () => say(t("cWheelCharge"), 0.3)],
       [T_SPIN, () => say(t("cWheelGo"), 0.45)],
-      [2.6, () => say(t("cWheelFast"), 0.5)],
-      [4.6, () => say(t("cWheelSlow"), 0.65)],
+      [3.4, () => say(t("cWheelFast"), 0.5)],
+      [6.4, () => say(t("cWheelSlow"), 0.65)],
     ];
     for (let i = saidUpTo + 1; i < cues.length; i++) {
       const cue = cues[i] as [number, () => void];
@@ -506,10 +536,18 @@ export function wheelSpin(
   }
 
   function drawRoster(dt: number): void {
-    const { cx, cy, R, k, wide } = geo();
+    const { cx, cy, R, k, wide, alto } = geo();
     // Se interpola para que a toda velocidad titile en vez de estrobar.
     curSmooth += (cur - curSmooth) * Math.min(1, dt * 10);
     const colW = cx - R - 90 * k;
+    if (alto) {
+      // Vertical: una sola placa, ancha, debajo de la rueda.
+      // El ancho descuenta la sombra, el empuje y el 6% que crece la placa
+      // encendida: sin eso se salía por el borde derecho.
+      const w = Math.min(W() / 1.06 - 76 * k, 520 * k);
+      plate((W() - w * 1.06) / 2 - 12 * k, cy + R + 56 * k, w, 92 * k, cur, true);
+      return;
+    }
     if (!wide || n > 14) {
       // Una sola placa grande, la del puntero: con muchos nombres el listado no
       // se lee de lejos, y una placa que cambia sí.
@@ -549,7 +587,10 @@ export function wheelSpin(
     if (im.complete && im.naturalWidth) c.drawImage(im, 36 * k, (hgt - av) / 2, av, av);
     const label = names[idx] ?? "";
     const tx = 36 * k + av + 12 * k;
-    c.font = `800 ${Math.min(26 * k, hgt * 0.4)}px system-ui, sans-serif`;
+    // El tope por alto de placa existe para que no reviente el renglón; el
+    // tope por ancho, para que un nombre entero entre antes de cortarlo. En
+    // vertical la placa es ancha y baja, así que manda el primero.
+    c.font = `800 ${Math.min(26 * k, hgt * 0.36, (w - tx) * 0.085)}px system-ui, sans-serif`;
     c.textAlign = "left";
     c.textBaseline = "middle";
     c.fillStyle = dark ? "#f6efe2" : INK;
@@ -561,7 +602,7 @@ export function wheelSpin(
   }
 
   function drawCrown(p: number): void {
-    const { cx, cy, R, k } = geo();
+    const { cx, cy, R, k, alto } = geo();
     const e = ease.outBack(Math.min(1, p * 1.6));
     c.fillStyle = "rgba(0,0,0,0.45)";
     c.beginPath();
@@ -596,7 +637,11 @@ export function wheelSpin(
       // nombre" de "pasó algo". Va debajo del cartel, no encima.
     flashScreen(c, W(), H(), flashK);
     const colCx = (cx - R) / 2;
-    drawWinnerPlate(c, winnerNames(names, winners), Math.max(colCx, 240 * k), H() * 0.52, k, e, 48);
+    // Vertical: el cartel va debajo de la rueda, no sobre la columna que no
+    // existe. La rueda con el gajo encendido es media foto y no se puede tapar.
+    const px = alto ? W() / 2 : Math.max(colCx, 240 * k);
+    const py = alto ? Math.min(H() - 150 * k, cy + R + 130 * k) : H() * 0.52;
+    drawWinnerPlate(c, winnerNames(names, winners), px, py, k, e, 48);
   }
 
   function drawHud(): void {
@@ -604,10 +649,10 @@ export function wheelSpin(
     c.font = `700 ${11 * k}px ui-monospace, Consolas, monospace`;
     c.textAlign = "left";
     c.fillStyle = "rgba(246,239,226,0.55)";
-    c.fillText(`${t("cWheelRound")} #${beacon.round}`, 22 * k, H() - 26 * k);
+    c.fillText(`${t("cWheelRound")} #${beacon.round}`, 22 * k, H() - chrome(c).abajo);
     if (tAll >= T_CROWN) {
       c.fillStyle = "rgba(255,198,41,0.75)";
-      c.fillText(t("cWheelSeed"), 22 * k, H() - 44 * k);
+      c.fillText(t("cWheelSeed"), 22 * k, H() - chrome(c).abajo - 18 * k);
     }
   }
 
@@ -615,10 +660,11 @@ export function wheelSpin(
   let buildTick = 0;
   run((dt, now) => {
     tAll += dt;
+    shake = Math.max(0, shake - dt * 2.2);
     const w = omega(tAll);
     rot = -(startSeg + cum(tAll) * scale) * A;
-    if (tAll < 0.8) {
-      const want = Math.floor((tAll / 0.8) * 24);
+    if (tAll < 1.1) {
+      const want = Math.floor((tAll / 1.1) * 24);
       while (buildTick < want) {
         // Sumar hercios iguales da intervalos que se achican al subir: el oído
         // oye una máquina contando. Por grados de la escala sube parejo, y a
@@ -628,10 +674,16 @@ export function wheelSpin(
       }
     }
     if (tAll >= T_HOLD && tAll < T_SETTLE) {
-      const hits = Math.floor((tAll - T_HOLD) / 0.07);
+      // Se van separando: el amague dura 1,2 segundos y un perno cada 0,07
+      // serían diecisiete golpes seguidos, que es ruido. Separándose se lee
+      // como una rueda que ya casi no puede.
+      const hits = Math.floor(Math.pow((tAll - T_HOLD) / (T_SETTLE - T_HOLD), 0.62) * 7);
       while (pegHits < hits) {
         pegHits++;
-        beep(note(2), 0.06, "square", 0.055);
+        // Y cada golpe más bajo y más grave que el anterior. Siete idénticos
+        // seguidos no son una paleta trabada contra un perno: son un aparato.
+        const q = pegHits / 7;
+        beep(note(Math.max(0, 2 - Math.round(q * 2))), 0.06, "square", 0.062 - q * 0.028);
       }
     }
     // Un cierre propio. La condición era `flash === 0`, y `flash` vuelve a cero
@@ -644,6 +696,7 @@ export function wheelSpin(
       flash = 0.12;
       // 70 Hz no sale por el parlante de ningún proyector: el golpe de la traba
       // se perdía entero. El grado 0 sí se oye.
+      shake = 1;
       beep(note(0), 0.45, "sine", 0.1);
       setTimeout(() => beep(note(5), 0.07, "square", 0.06), 40);
       setTimeout(() => beep(note(15), 0.12, "triangle", 0.05), 90);
@@ -655,12 +708,22 @@ export function wheelSpin(
     tickAudio(w);
     sayIfDue(w);
 
+    // El temblor del golpe. La carrera y la constelación ya lo tenían; acá
+    // faltaba, y es lo que hace que el revelado se sienta en el cuerpo y no
+    // sólo se vea. Sale del reloj y no del azar, para que la misma ronda se
+    // dibuje igual a 60 y a 144 cuadros por segundo.
+    const tem = shake > 0;
+    if (tem) {
+      c.save();
+      c.translate(Math.sin(shake * 97) * 9 * shake * u(), Math.sin(shake * 131 + 1.7) * 7 * shake * u());
+    }
     drawBackdrop(now);
     drawDisc(w);
     drawRim(w);
     drawPegs();
     drawHub(w);
     drawPointer(flapper(w));
+    if (tem) c.restore();
     if (tAll < T_CROWN) drawRoster(dt);
     drawHud();
     if (tAll >= T_CROWN) drawCrown(tAll - T_CROWN);

@@ -1,9 +1,9 @@
 import { $ } from "../dom";
 import { T, getLang, setPickSeed, t } from "../i18n";
-import { LCOLORS, avatar, instantMode, paceFactor, type Beacon } from "../state";
+import { LCOLORS, avatar, instantMode, paceFactor, setGameLength, type Beacon } from "../state";
 import { beep, beepFor, fanfare, note } from "../sound";
 import { THEMES, type ThemeId } from "./themes";
-import { registerSkip, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
+import { registerSkip, WINNER_HOLD, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
 import { narrate, stopNarrator } from "../narrator";
 
 /* Modo estadio: carrera de llamas a pantalla completa, sembrada con la semilla. */
@@ -134,6 +134,10 @@ export function stadiumRace(
   const DUR = 15;
   /** Momento de la carrera en que el ganador empieza a remontar. */
   const SURGE_AT = 0.8;
+  // Lo que el selector puede estirar son los quince segundos de carrera. La
+  // cuenta regresiva y el sostén del cartel van en segundos reales y no se
+  // tocan: un "3" que dura dos segundos no se lee como cuenta regresiva.
+  setGameLength(DUR, WINNER_HOLD + 3);
   let phase: "count" | "race" | "done" | "dead" = "count";
   let tPhase = 0, tRace = 0, camX = 0, shake = 0, lastLeader = -1, leadCd = 0, saidLast = false, finished = false, tFreeze = 0;
   let lastBeepN = 4;
@@ -318,8 +322,13 @@ export function stadiumRace(
   function drawScene(): void {
     const c = ctx as CanvasRenderingContext2D;
     const w = W(), h = H(), u = h / 720;
-    const shx = shake ? (rng() - 0.5) * 14 * shake * u : 0;
-    const shy = shake ? (rng() - 0.5) * 10 * shake * u : 0;
+    // El temblor sale del reloj, no del azar sembrado. Llamar a `rng()` en el
+    // dibujo consume la secuencia a la velocidad de los cuadros, así que la
+    // misma ronda no se dibujaba igual a 60 Hz que a 144, y el proyecto entero
+    // se apoya en que la misma ronda dé siempre lo mismo. No cambia quién gana,
+    // pero contradice la promesa.
+    const shx = shake ? Math.sin(tFreeze * 97) * 7 * shake * u : 0;
+    const shy = shake ? Math.sin(tFreeze * 131 + 1.7) * 5 * shake * u : 0;
     c.save();
     c.translate(shx, shy);
     // Cielo
@@ -427,8 +436,12 @@ export function stadiumRace(
         c.fillRect(finX + 2 * u, trackTop - 70 * u + yy * sq, 4 * u, sq);
       }
     }
-    // Llamas
+    // Llamas. Cuando sale el cartel, los que perdieron se apagan: si no,
+    // siguen corriendo detrás y uno asoma por el borde del cartel robándole la
+    // foto al ganador. El Cierre de Libro ya lo hacía; acá faltaba.
+    const apaga = phase === "done" && tFreeze > 0.25;
     runners.forEach((r, k) => {
+      if (apaga) c.globalAlpha = r.i === winnerIdx ? 1 : 0.22;
       const ly = trackTop + trackPad + k * laneH + laneH * 0.5;
       const lx = r.x - camX;
       if (lx < -140 || lx > w + 140) return;
@@ -455,6 +468,7 @@ export function stadiumRace(
       c.fillStyle = "#191919";
       c.fillText(label, lx + av + 6 * u, chipY + fs * 0.34);
     });
+    c.globalAlpha = 1;
     // Cuántos corren de cuántos. Con ocho carriles y doscientos inscritos,
     // callarlo hace pensar que el sorteo fue entre ocho.
     if (names.length > runners.length) {

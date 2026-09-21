@@ -196,6 +196,28 @@
   /* Apagar con opacidad los dejaba en 2,8 a 1. Un color sólido apagado se
      sigue leyendo y sigue diciendo "todavía no". */
   .chip.soon { background: var(--paper); color: var(--muted); border-style: dashed; box-shadow: none; }
+  /* La espera de la ronda.
+     Son los diez segundos en que la lista ya está cerrada y el número que la
+     va a decidir todavía no existe: es el momento en que este producto es
+     distinto de cualquier ruleta, y vivía como una etiqueta en un botón gris. */
+  .wait {
+    display: block; margin-top: 18px; padding: 16px 20px;
+    border: var(--bw) solid var(--ink); background: var(--purple); color: var(--on-purple);
+    box-shadow: var(--sh);
+  }
+  /* Sin opacidad: al 0,85 el contraste daba 4,53 contra el 4,5 que hace falta,
+     o sea aprobado por tres centésimas. Eso no es un margen, es suerte. */
+  .wait .kicker { color: var(--on-purple); }
+  .wait-num { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin: 6px 0 8px; }
+  .wait-num b { font-size: clamp(26px, 5vw, 40px); font-weight: 900; letter-spacing: -0.01em; }
+  .wait-num span {
+    font-size: clamp(30px, 6vw, 48px); font-weight: 900; font-variant-numeric: tabular-nums;
+    background: var(--yellow); color: #191919; border: 2px solid var(--ink); padding: 0 12px;
+    animation: latido 1s ease-in-out infinite;
+  }
+  @keyframes latido { 50% { transform: scale(1.06); } }
+  @media (prefers-reduced-motion: reduce) { .wait-num span { animation: none; } }
+  .wait-line { font-size: 14px; line-height: 1.55; max-width: 62ch; }
   .pick-label { margin-top: 18px; margin-bottom: 8px; }
   .gamepick { display: flex; gap: 10px; flex-wrap: wrap; }
   .gamepick button {
