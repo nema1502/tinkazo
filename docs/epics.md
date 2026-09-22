@@ -512,9 +512,27 @@ Segunda tanda, también hecha (2026-09-20):
 - **Constelación con dos o tres participantes** era un campo de rombos con un par de estrellas perdidas. Ahora hay menos rombos y los nombres quedan puestos todo el tiempo.
 - **El número de ronda iba a diez píxeles fijos.** Es el dato que hace verificable el sorteo y en un proyector no se leía. Ahora escala, como el narrador.
 
+Medido el 22 de septiembre de 2026 (ver abajo): doscientos no es el techo.
+
 Pendiente, para cuando haya un evento real donde probarlo:
 
-- Medir con más de doscientos participantes.
+Medido el 22 de septiembre de 2026, en Chrome sin ventana a 1600x900, con la
+cuenta de prueba y anclando de verdad en testnet:
+
+| Juego | Gente | Congelar | Sorteo | Cuadros | Peor cuadro | Memoria |
+|---|---|---|---|---|---|---|
+| Constelación | 200 | 3,3 s | 36,5 s | 58,8/s | 67 ms | 8 MB |
+| Constelación | 500 | 8,2 s | 35,5 s | 56,9/s | 117 ms | 9 MB |
+| Constelación | 1000 | 7,5 s | 38,0 s | 59,7/s | 83 ms | 11 MB |
+| Cierre de Libro | 500 | 2,9 s | 33,6 s | 59,8/s | 50 ms | 9 MB |
+| Cierre de Libro | 1000 | 5,0 s | 34,5 s | 59,7/s | 50 ms | 12 MB |
+| Pasanaku | 500 | 8,2 s | 39,1 s | 55,6/s | 50 ms | 15 MB |
+
+O sea: **doscientos no es el techo**. A mil personas el sorteo sigue a sesenta
+cuadros por segundo, el cartel del ganador se lee igual y el sello queda en la
+cadena. Lo que sí cambia es la lista en pantalla: con mil nombres ya no se lee
+ninguno, y eso es lo que fija el tope útil de cada juego, no el rendimiento.
+
 - Un aviso cuando la renta del contrato se acerque al vencimiento.
 - Un indexador propio de sellos, para que la enumeración no dependa de la ventana corta del RPC.
 

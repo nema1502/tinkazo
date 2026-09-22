@@ -41,6 +41,8 @@ Es inmutable: no tiene administrador ni actualización, y no custodia fondos. `d
 | Pasanaku | El ahorro rotativo boliviano: un aguayo que se cierra sobre los bultos hasta que queda uno en el nudo. Los hilos entre vecinos son trustlines. | 200 |
 | Ruleta | La de siempre, pero que se ve girar con dos personas. | 24 |
 
+El número de la columna es hasta dónde se distingue a la gente en pantalla, no hasta dónde aguanta la máquina: medido el 22 de septiembre de 2026, con mil participantes el sorteo sigue corriendo a sesenta cuadros por segundo y se ancla igual.
+
 Ninguno decide nada: el ganador llega dado por el protocolo y el juego solo lo cuenta. Hay un auditor que lo comprueba en cada juego, con veinte verificaciones, cuatro de ellas en un celular, y otro que escucha el sonido sin oídos. La que importa: el nombre en pantalla tiene que ser el que fijó el protocolo.
 
 **El narrador habla.** Usa la voz del navegador, elige una en español de las que estén instaladas y sube el ritmo con la tensión. Si la máquina no tiene voz, el sorteo funciona igual.
@@ -104,7 +106,10 @@ Para auditar un juego: `node scripts/audit-game.mjs <juego>` y `node scripts/aud
 ## Estructura
 
 ```
-index.html, verificar.html   Las dos páginas
+index.html                   La herramienta: pegar la lista, sellar y sortear
+verificar.html               Rehacer un sorteo desde su comprobante
+juegos.html, historia.html,  Páginas de lectura: los seis juegos, de dónde sale
+seguridad.html, precios.html   el nombre, cómo se puede romper, y qué cuesta
 src/protocol/                Lista canónica, selección, drand, comprobante
 src/stellar/                 Red, wallets y cliente del contrato
 src/games/                   Los seis juegos y el andamiaje que comparten

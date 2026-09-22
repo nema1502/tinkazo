@@ -142,7 +142,7 @@ Plan de monitoreo, que es el otro entregable del tramo 2.
 
 ## Lo que está pendiente, en orden
 
-2. **Medir con más de doscientos participantes.**
+2. ~~Medir con más de doscientos participantes~~: hecho el 22 de septiembre de 2026. Con mil, el sorteo corre a sesenta cuadros por segundo y se ancla igual; el límite real es cuándo deja de leerse la lista en pantalla, no el rendimiento. Números en [epics.md](epics.md), historia 7.11.
 3. **Un aviso cuando la renta del contrato se acerca al vencimiento.**
 4. ~~Reconstruir el historial desde el estado del contrato~~: hecho el 21 de septiembre de 2026, para el historial del organizador y para los sellos de la página de verificación.
 
