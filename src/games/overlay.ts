@@ -458,7 +458,15 @@ export function drawWinnerPlate(
   c.strokeRect(-bw / 2, -bh / 2, bw, bh);
   c.fillStyle = INK;
   const top = -((rows.length - 1) * lineH) / 2;
-  rows.forEach((r, i) => c.fillText(r, 0, top + i * lineH));
+  // El nombre entra un poco después que el cartel, subiendo desde el borde de
+  // abajo. Antes cartel y nombre aparecían pegados y el momento se leía como
+  // una sola cosa que crece; ahora primero llega el cartel y después el nombre
+  // se asienta adentro, que es donde mira la sala. La animación sale del mismo
+  // `scale` que trae cada juego, así que los seis la tienen sin tocar nada.
+  const entra = clamp((scale - 0.5) / 0.42, 0, 1);
+  c.globalAlpha = entra;
+  rows.forEach((r, i) => c.fillText(r, 0, top + i * lineH + (1 - entra) * lineH * 0.5));
+  c.globalAlpha = 1;
   c.restore();
   c.textBaseline = "alphabetic";
   c.textAlign = "left";

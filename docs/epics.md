@@ -550,6 +550,10 @@ para que la sala reaccione y la gente quiera repetirlo.
 **Y** las mejoras aplican a los tres juegos por igual, sin duplicar código
 **Y** todos los juegos siguen aprobando el auditor.
 
+Hecho (2026-09-22): lo último que faltaba era que el nombre tuviera animación propia. Ahora entra medio tiempo después que el cartel, subiendo desde el borde de abajo, y sale del mismo `scale` que cada juego ya le pasa a `drawWinnerPlate`: los seis lo tienen sin tocar ni una línea de los juegos. La transición, el destello y el temblor estaban desde la 10.5.
+
+De paso se arregló el auditor, que fallaba solo una de cada dos corridas en "el cartel entra en la pantalla": contaba píxeles amarillos sueltos y el confeti también es amarillo y cae contra los dos bordes. Ahora mide el cartel como banda contigua, quedándose con el tramo más largo de cada fila. Validado contra un cartel roto a propósito, más ancho que la pantalla: lo rechaza; con el de verdad, aprueba tres corridas seguidas.
+
 ### Historia 7.4: Juegos nuevos del catálogo
 
 Como comunidad organizadora,

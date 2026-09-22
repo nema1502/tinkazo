@@ -163,9 +163,13 @@ async function run() {
         `(document.querySelector('.commentary') || {}).textContent || ''`,
       );
       if (linea) dichos.add(linea.trim());
-      // El cartel es la mancha amarilla grande. Si se sale del lienzo el
-      // navegador lo recorta sin avisar, así que la forma de detectarlo es que
-      // el amarillo toque los dos bordes a la vez.
+      // El cartel es la BANDA amarilla ancha, no cualquier amarillo: el
+      // confeti también es amarillo y cae contra los dos bordes, así que
+      // contando píxeles sueltos la comprobación fallaba sola una de cada dos
+      // corridas. Se mide por filas, quedándose con el tramo contiguo más
+      // largo de cada una, y solo cuentan las filas donde ese tramo pasa el
+      // cuarto del ancho. Si se sale del lienzo el navegador lo recorta sin
+      // avisar, y eso se ve porque la banda toca los dos bordes a la vez.
       // Cada cuatro sondeos, no todos: leer el lienzo entero fuerza una
       // lectura de vuelta desde la GPU y le compite al juego por el hilo. El
       // cartel dura tres segundos, así que uno cada 0,8 no se pierde ninguno.
@@ -173,19 +177,29 @@ async function run() {
         const cv = document.querySelector('.stadium canvas');
         if (!cv || document.getElementById('stadium').style.display !== 'block') return '';
         const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
-        let n = 0, izq = false, der = false, arr = false, aba = false;
-        for (let y = 0; y < cv.height; y += 4) for (let x = 0; x < cv.width; x += 4) {
-          const i = (y * cv.width + x) * 4;
-          if (d[i] > 235 && d[i + 1] > 180 && d[i + 1] < 225 && d[i + 2] < 85) {
-            n++;
-            if (x < 8) izq = true;
-            if (x > cv.width - 12) der = true;
-            if (y < 8) arr = true;
-            if (y > cv.height - 12) aba = true;
+        const esAmarillo = (i) => d[i] > 235 && d[i + 1] > 180 && d[i + 1] < 225 && d[i + 2] < 85;
+        const ancho = cv.width, alto = cv.height;
+        let n = 0, x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1;
+        for (let y = 0; y < alto; y += 4) {
+          let corre = 0, desde = 0, mejor = 0, mejorDesde = 0;
+          for (let x = 0; x < ancho; x += 4) {
+            if (esAmarillo((y * ancho + x) * 4)) {
+              if (corre === 0) desde = x;
+              corre += 4;
+              if (corre > mejor) { mejor = corre; mejorDesde = desde; }
+            } else corre = 0;
+          }
+          if (mejor > ancho * 0.25) {
+            n += mejor / 4;
+            x0 = Math.min(x0, mejorDesde); x1 = Math.max(x1, mejorDesde + mejor);
+            y0 = Math.min(y0, y); y1 = Math.max(y1, y);
           }
         }
-        const area = n / ((cv.width / 4) * (cv.height / 4));
-        return area > 0.03 ? JSON.stringify({ area, izq, der, arr, aba }) : '';
+        if (x1 < 0) return '';
+        const area = n / ((ancho / 4) * (alto / 4));
+        return area > 0.02 ? JSON.stringify({
+          area, izq: x0 < 8, der: x1 > ancho - 12, arr: y0 < 8, aba: y1 > alto - 12,
+        }) : '';
       })()`);
 
       if (am && !cartel) {
