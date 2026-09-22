@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cómo se puede romper un sorteo de Tinkazo</title>
+<meta name="description" content="Qué impide el protocolo, cuál es el único ataque que sigue abierto y qué límites tiene la herramienta. Dicho antes de que lo pregunten." />
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -4 26 30"><g fill="%23e93d9c"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></g></svg>' />
+</head>
+<body>
+<header>
+  <div class="stripe"></div>
+  <div class="bar">
+    <a class="wordmark" href="/" style="text-decoration:none;color:inherit">Tinka<b>zo</b></a>
+    <nav class="langs" aria-label="idioma">
+      <button id="l-es" class="on">es</button>
+      <button id="l-en">en</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero" style="padding: 48px 0 8px">
+    <div class="hero-copy">
+      <span class="sticker" style="background:var(--yellow)" data-i="sgKicker">Seguridad</span>
+      <h1 style="font-size: clamp(32px, 4.6vw, 48px)" data-i="sgTitle">Cómo se puede romper</h1>
+      <p class="lead" data-i="sgLead">Un sorteo que dice ser verificable tiene que decir también dónde no llega. Esto es lo que el protocolo impide, lo que todavía no, y lo que la herramienta no puede prometer.</p>
+    </div>
+  </section>
+
+  <section class="notas">
+    <article class="nota">
+      <h3 data-i="sgQ1T">Meter un nombre después</h3>
+      <p data-i="sgQ1B">No se puede sin que se note. Al congelar, la lista queda reducida a una huella de 64 caracteres. Cambiar, agregar o sacar un nombre da otra huella, y la que vale quedó anotada en el contrato antes de que existiera el número.</p>
+    </article>
+    <article class="nota">
+      <h3 data-i="sgQ2T">Elegir el número que decide</h3>
+      <p data-i="sgQ2B">Tampoco. El número lo publica drand, un faro público de aleatoriedad que sostienen Cloudflare, Protocol Labs, la EPFL y otros, y la ronda que va a decidir se fija antes de que esa ronda exista. El contrato exige al menos treinta segundos de margen.</p>
+    </article>
+    <article class="nota">
+      <h3 data-i="sgQ3T">Retener un resultado que no gustó</h3>
+      <p data-i="sgQ3B">Cualquiera puede finalizar un sorteo sellado: la función que registra el resultado no pide permiso a nadie. Si al organizador se le corta la luz a mitad del evento, alguien más abre el comprobante y lo cierra, y el ganador es el mismo.</p>
+    </article>
+    <article class="nota">
+      <h3 data-i="sgQ4T">Cambiar el contrato</h3>
+      <p data-i="sgQ4B">El contrato es inmutable: no tiene administrador ni forma de actualizarse, y no custodia fondos. Una versión nueva es una dirección nueva, anotada en la documentación con su fecha.</p>
+    </article>
+  </section>
+
+  <section class="block" style="margin-top: 26px">
+    <div class="head"><h2 data-i="sgOpenT">El ataque que sigue abierto</h2><span class="kicker" data-i="sgOpenK">selección del compromiso</span></div>
+    <div class="body">
+      <p style="color: var(--ink2); font-size: 14px" data-i="sgOpenB">Un organizador puede sellar la misma lista cinco veces contra cinco rondas distintas y publicar solo el comprobante que le convino. Cada uno de esos sorteos es, por separado, perfectamente legítimo. Esta es la única forma conocida de torcer un sorteo de Tinkazo y no está cerrada.</p>
+      <p style="color: var(--ink2); font-size: 14px; margin-top: 12px" data-i-html="sgOpenD"><b>Lo que hay contra eso:</b> la página de verificación trae todos los sellos de esa dirección, leídos del contrato, y marca sola los que repiten la huella de la lista o la cantidad de gente. Si selló cinco, se ven las cinco. Cerrarlo del todo exigiría que el organizador anuncie el identificador del sorteo por un canal que él no controle, y eso Tinkazo no lo puede imponer.</p>
+    </div>
+  </section>
+
+  <section style="padding: 6px 0 12px">
+    <h2 class="kicker" data-i="sgLimitT">Los límites que hay que decir</h2>
+    <ul style="max-width: 680px; color: var(--ink2); font-size: 14px; margin: 10px 0 0 18px; display: grid; gap: 8px">
+      <li data-i="sgLimit1">Sin anclar en Stellar, la cuenta cierra igual, pero nadie más que el organizador atestigua que esa era la lista. La página lo dice con un veredicto amarillo en vez de un verde fácil.</li>
+      <li data-i="sgLimit2">Los nombres nunca suben a la cadena, solo su huella. Eso protege a los participantes y, a la vez, hace que el comprobante dependa de que el organizador conserve la lista.</li>
+      <li data-i="sgLimit3">Lo que el contrato guarda tiene alquiler: si nadie lo extiende, la entrada se archiva y deja de leerse hasta que alguien la restaure. El sorteo no se pierde, pero hay que pagar para volver a verlo.</li>
+      <li data-i="sgLimit4">Si el faro público se cayera entero y para siempre, un sorteo sellado quedaría sin número. Son cuatro relays independientes y se consultan todos.</li>
+    </ul>
+  </section>
+
+  <section style="padding: 6px 0 34px">
+    <h2 class="kicker" data-i="sgReportT">Si encontrás una forma de arreglar un sorteo</h2>
+    <p style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 8px" data-i="sgReportB">Abrí un issue. Es el reporte que más sirve, y el proyecto es código abierto justamente para eso: el protocolo completo, el contrato y las amenazas conocidas están escritos y se pueden auditar sin pedirle permiso a nadie.</p>
+    <p class="row"><a class="mini" href="https://github.com/nema1502/tinkazo/blob/main/docs/protocolo.md" target="_blank" rel="noopener" data-i="sgLinkProto">El protocolo ↗</a><a class="mini" href="https://github.com/nema1502/tinkazo/blob/main/docs/amenazas.md" target="_blank" rel="noopener" data-i="sgLinkAmen">Las amenazas ↗</a><a class="mini" href="https://github.com/nema1502/tinkazo/issues" target="_blank" rel="noopener" data-i="sgLinkIssue">Abrir un issue ↗</a></p>
+  </section>
+
+  <section style="padding: 0 0 40px">
+    <p class="note"><a href="/" data-i="backHome">Volver a sortear</a></p>
+  </section>
+</main>
+
+<footer><div class="bar">
+  <span data-i="footL">Tinkazo</span>
+  <nav class="pies" aria-label="secciones">
+    <a href="/juegos.html" data-i="navJuegos">Juegos</a>
+    <a href="/historia.html" data-i="navHistoria">Historia</a>
+    <a href="/seguridad.html" data-i="navSeguridad">Seguridad</a>
+    <a href="/precios.html" data-i="navPrecios">Precios</a>
+    <a href="https://github.com/nema1502/tinkazo" target="_blank" rel="noopener" data-i="navCodigo">Código</a>
+  </nav>
+  <span data-i="footR">Hecho con ♥ en 🇧🇴</span>
+</div></footer>
+<script type="module" src="/src/pagina.ts"></script>
+</body>
+</html>
