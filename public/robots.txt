@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+Disallow: /verificar.html
+Sitemap: https://tinkazo.vercel.app/sitemap.xml

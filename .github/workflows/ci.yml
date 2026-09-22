@@ -42,3 +42,10 @@ jobs:
       # caída es un dato inventado a los seis meses, así que se comprueba acá.
       - name: Fuentes de las tarjetas de historia
         run: node scripts/check-lore.mjs
+      # Las páginas de lectura se rompen en silencio: una imagen que no está,
+      # una clave de idioma que falta, un enlace del pie a una página borrada.
+      - name: Páginas de lectura
+        run: |
+          pnpm preview --port 4173 &
+          npx wait-on http://localhost:4173 --timeout 60000
+          node scripts/check-paginas.mjs --base http://localhost:4173

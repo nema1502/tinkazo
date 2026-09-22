@@ -533,8 +533,8 @@ cuadros por segundo, el cartel del ganador se lee igual y el sello queda en la
 cadena. Lo que sí cambia es la lista en pantalla: con mil nombres ya no se lee
 ninguno, y eso es lo que fija el tope útil de cada juego, no el rendimiento.
 
-- Un aviso cuando la renta del contrato se acerque al vencimiento.
-- Un indexador propio de sellos, para que la enumeración no dependa de la ventana corta del RPC.
+- ~~Un aviso cuando la renta del contrato se acerque al vencimiento~~: hecho el 22 de septiembre de 2026. `pnpm check:renta` lee cuántos días le quedan a la instancia y al código, y sale con error por debajo de treinta (se le puede pedir otro umbral con `--dias`). Hoy: 113,9 días en testnet.
+- ~~Un indexador propio de sellos~~: no hizo falta. `sealsOnChain` recorre el estado del contrato, que no tiene ventana temporal, así que la enumeración dejó de depender de los siete días de eventos del RPC.
 
 ### Historia 7.3: Mejoras transversales de presentación
 
@@ -712,6 +712,26 @@ El auditor pasa de dieciséis a veinte comprobaciones, cuatro de ellas en 390 po
 
 ---
 
+## Épica 12: El sitio cuenta el proyecto
+
+### Historia 12.1: Páginas de lectura: hecho
+
+Como alguien que llega por un enlace y no sabe qué es esto,
+quiero entender qué hace Tinkazo, cómo se ve y hasta dónde llega,
+sin tener que usarlo primero ni leer el repositorio.
+
+**Criterios de aceptación:**
+
+**Dado** el sitio construido
+**Cuando** abro `/juegos.html`, `/historia.html` o `/seguridad.html`
+**Entonces** cada una carga sin scroll horizontal en celular, en los dos temas y en los dos idiomas
+**Y** la de juegos muestra la captura real del estadio de cada juego
+**Y** todas llevan el mismo pie de navegación, con blancos de toque de 44 px.
+
+Resultado (2026-09-22): tres páginas nuevas más la de precios, todas sobre `src/pagina.ts`. Las capturas salen de `?pose=<juego>`, que es la escena fija pensada para eso, convertidas a webp (264 KB las doce, entre tema claro y oscuro). `pnpm check:paginas` las revisa como las mira alguien ·doce vistas y los dos idiomas· y corre en la integración continua. De paso: Open Graph en cada una, `sitemap.xml` y `robots.txt` que deja fuera la página de verificación, porque cada comprobante es de alguien.
+
+---
+
 ## Épica 11: Recordatorios y aviso a los ganadores
 
 Salvo el historial desde la cadena (11.1), no hay nada de esto todavía y no hace falta para el evento. Queda escrito para no volver a discutirlo desde cero.
@@ -721,6 +741,22 @@ El sitio no tiene servidor ni base de datos: todo vive en el navegador y en la c
 Lo que pediría un servidor de verdad: avisar por correo a quien ganó sin que el organizador tenga que copiar nada, recordar un sorteo programado, y que el historial sobreviva a cambiar de equipo. Las tres cosas tienen el mismo costo: dejar de ser un sitio estático.
 
 Hay un camino intermedio que no lo requiere y conviene medir antes: **reconstruir el historial desde la cadena**. Los sellos están en el contrato, la cuenta que los firmó es la del organizador, y `getLedgerEntries` no tiene ventana temporal. Eso devuelve el historial en cualquier equipo con la misma cuenta, sin servidor y sin base de datos. Lo que no resuelve es el correo.
+
+### Historia 11.2: Rearmar el comprobante de un sorteo traído de la cadena: hecho
+
+Como organizadora que abre su historial en otro equipo,
+quiero volver a armar el comprobante de un sorteo que hice en otro lado,
+para poder compartirlo aunque este navegador no lo tenga.
+
+**Criterios de aceptación:**
+
+**Dado** un sorteo del historial que vino de la cadena, sin comprobante
+**Cuando** pego la lista de ese sorteo
+**Entonces** el sitio calcula su huella, la compara con la que está en el contrato y, si coincide, devuelve el enlace del comprobante de siempre
+**Y** si la lista no es la que se selló, lo dice y no arma nada
+**Y** si la cantidad de nombres no coincide, lo dice con los dos números.
+
+Resultado (2026-09-22): `src/ui/rebuild.ts`, con su diálogo y cinco tests. La huella hace de prueba: no se puede rearmar el comprobante de otro sorteo ni con una lista parecida, y el orden importa porque la lista canónica no se ordena.
 
 ### Historia 11.1: El historial desde la cadena: hecho
 

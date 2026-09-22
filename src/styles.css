@@ -468,7 +468,13 @@
   .nota h3 { font-size: 17px; font-weight: 800; text-wrap: balance; }
   .nota p { font-size: 13.5px; color: var(--ink2); margin-top: 8px; }
   /* La navegación del pie, en todas las páginas. */
-  .pies { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
-  .pies a { color: var(--ink2); text-decoration: none; font-size: 12px; font-weight: 700; }
+  .pies { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  /* El blanco de toque manda sobre el tamaño de la letra: en un celular, un
+     enlace de 18 px de alto no se acierta con el pulgar. El auditor de
+     interfaz exige 44. */
+  .pies a {
+    color: var(--ink2); text-decoration: none; font-size: 12px; font-weight: 700;
+    display: inline-flex; align-items: center; min-height: 44px; padding: 0 10px;
+  }
   .pies a:hover { color: var(--ink); text-decoration: underline; }
   @media (max-width: 700px) { footer .bar { justify-content: center; text-align: center; } }
