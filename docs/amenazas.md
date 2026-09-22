@@ -61,9 +61,12 @@ Un organizador sella cinco listas distintas, cada una contra una ronda distinta,
 
 **Lo que se hizo el 20 de septiembre de 2026:** la página de verificación ahora **trae y muestra los otros sellos recientes de esa misma dirección**, al lado del veredicto. Si el organizador selló cinco listas, se ven las cinco, con cuánta gente tenía cada una y contra qué ronda. La fila del sorteo que se está mirando va marcada.
 
-**El límite, que hay que decir:** el RPC de Stellar guarda siete días de eventos, no más. Alcanza para este ataque, que por su naturaleza ocurre cerca en el tiempo del sorteo que se publica, pero no sirve para auditar el historial completo de una dirección. Para eso está el explorador de bloques, o reconstruirlo desde el estado del contrato, que no tiene ventana.
+**Lo que se hizo el 21 de septiembre de 2026:** la lista ya no sale de los eventos del RPC, que duran siete días, sino del estado del contrato, que no tiene ventana. Se ven todos los sellos de esa dirección que siguen en la cadena. Y la página marca sola las dos señales:
 
-Y si el RPC no contesta, la sección no aparece: decir "hay uno solo" sin haber podido mirar sería peor que callar.
+- **La misma huella de lista**, sellada otra vez. Es la forma directa del ataque y no tiene otra lectura.
+- **La misma cantidad de gente** con otra huella. Es más débil: puede ser otro sorteo del mismo evento. Pero es lo que queda si el organizador reordena los nombres para cambiar la huella, porque el protocolo no ordena la lista (§1). Por eso se marca y se explica, sin acusar.
+
+**Los límites, que hay que decir:** una entrada cuyo alquiler se venció se archiva y deja de aparecer hasta que alguien la restaure, y se recorren como mucho los últimos dos mil sorteos del contrato. Y si el RPC no contesta, la sección no aparece: decir "hay uno solo" sin haber podido mirar sería peor que callar.
 
 **Lo que sigue faltando:** el ataque no está cerrado, solo es mucho más visible. Cerrarlo del todo exigiría que el organizador anuncie el identificador del sorteo por un canal que él no controle antes de sellar, y eso Tinkazo no lo puede imponer.
 
@@ -141,7 +144,7 @@ Plan de monitoreo, que es el otro entregable del tramo 2.
 
 2. **Medir con más de doscientos participantes.**
 3. **Un aviso cuando la renta del contrato se acerca al vencimiento.**
-4. **Reconstruir el historial desde el estado del contrato**, que no tiene ventana temporal, para los sorteos de más de siete días.
+4. ~~Reconstruir el historial desde el estado del contrato~~: hecho el 21 de septiembre de 2026, para el historial del organizador y para los sellos de la página de verificación.
 
 ## Lo que decidimos no hacer
 

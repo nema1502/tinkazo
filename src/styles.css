@@ -143,6 +143,13 @@
     display: flex; flex-direction: column; gap: 12px;
   }
   .modal-card h3 { font-size: 19px; font-weight: 800; }
+  /* La lista que se pega para rearmar un comprobante: monoespaciada, porque a
+     veces son direcciones y ahí importa cada carácter. */
+  .modal-card textarea {
+    width: 100%; box-sizing: border-box; resize: vertical; margin-top: 10px;
+    font-family: ui-monospace, Consolas, monospace; font-size: 13px; line-height: 1.5;
+    background: var(--paper); color: var(--ink); border: 2px solid var(--ink); padding: 10px;
+  }
   .wallet-row {
     display: block; text-align: left; text-decoration: none; cursor: pointer;
     background: var(--paper); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
@@ -267,13 +274,20 @@
   }
   canvas { max-width: 100%; }
   .winner-box { display: none; border-top: var(--bw) solid var(--ink); padding: 24px; position: relative; overflow: hidden; }
+  /* `max-width` y `min-width: 0` no son adorno: un nombre sin espacios, como
+     una dirección de Stellar de 56 caracteres, estiraba la tarjeta hasta salirse
+     de la página. Pasó con el sorteo entre direcciones del pase de evento. */
   .winner-card {
-    position: relative; z-index: 40;
+    position: relative; z-index: 40; max-width: 100%;
     display: inline-flex; align-items: center; gap: 16px; background: var(--yellow); color: #191919; border: var(--bw) solid var(--ink);
     box-shadow: var(--sh); padding: 16px 26px; transform: rotate(-1.5deg); margin-top: 8px;
   }
+  .winner-card > div { min-width: 0; }
   .winner-card img { width: 64px; height: 64px; border: 2px solid #191919; background: #fff; }
-  .winner-name { font-size: clamp(22px, 3.6vw, 34px); font-weight: 900; letter-spacing: -0.01em; }
+  .winner-name {
+    font-size: clamp(22px, 3.6vw, 34px); font-weight: 900; letter-spacing: -0.01em;
+    overflow-wrap: anywhere;
+  }
   .winner-prize { font-size: 14px; font-weight: 700; margin-top: 2px; }
   .verify { margin-top: 22px; border: 2px solid var(--ink); padding: 16px; background: var(--paper); display: grid; grid-template-columns: 1fr auto; gap: 16px; }
   .verify a { color: var(--ink); font-weight: 700; }

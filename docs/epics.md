@@ -70,7 +70,7 @@ Después del ganador aparece una tarjeta que contesta la pregunta que el juego d
 ### Épica 9: El narrador habla: hecha
 La voz usa la API del navegador, elige una voz en español de verdad instalada y sube el ritmo con la tensión. Sin voz en la máquina, el sorteo funciona igual.
 
-### Épica 6: Entrar con Google sin instalar nada: hecha, falta probarla con una cuenta real
+### Épica 6: Entrar con Google sin instalar nada: hecha, el login ya se probó con una cuenta real
 El organizador entra con Google y sella sin instalar wallet. Decisión D-07. El relayer resultó innecesario: la cuenta custodial de Pollar firma y envía la invocación por su cuenta.
 
 ---
@@ -417,6 +417,8 @@ para prototipar el login social.
 
 Resultado (2026-09-20): el selector de cuenta ofrece "Entrar con Google". `src/stellar/wallet-pollar.ts` implementa el adaptador y la sesión se retoma sola al volver del redirect.
 
+Actualización (2026-09-21): el autor entró con Google en producción con su cuenta real y el login funciona.
+
 **Pendiente de comprobar con una cuenta real:** que la política de transacciones de la app en el panel de Pollar acepte firmar una invocación de contrato. Si la rechaza, el error se muestra tal cual. Y para que aparezca en producción hay que cargar `VITE_POLLAR_PUBLISHABLE_KEY` en las variables de entorno de Vercel: el build local la lee de `.env.local`, que no está en el repo.
 
 Como organizadora sin wallet,
@@ -694,13 +696,35 @@ El auditor pasa de dieciséis a veinte comprobaciones, cuatro de ellas en 390 po
 
 ## Épica 11: Recordatorios y aviso a los ganadores
 
-No hay nada de esto todavía y no hace falta para el evento. Queda escrito para no volver a discutirlo desde cero.
+Salvo el historial desde la cadena (11.1), no hay nada de esto todavía y no hace falta para el evento. Queda escrito para no volver a discutirlo desde cero.
 
-Hoy el sitio no tiene servidor ni base de datos: todo vive en el navegador y en la cadena. El historial de sorteos se guarda en `localStorage`, así que se pierde si se borran los datos del sitio, y el aviso al ganador es un enlace que el organizador manda a mano.
+El sitio no tiene servidor ni base de datos: todo vive en el navegador y en la cadena. Hasta la 11.1 el historial de sorteos vivía solo en `localStorage` y se perdía al borrar los datos del sitio. El aviso al ganador sigue siendo un enlace que el organizador manda a mano.
 
 Lo que pediría un servidor de verdad: avisar por correo a quien ganó sin que el organizador tenga que copiar nada, recordar un sorteo programado, y que el historial sobreviva a cambiar de equipo. Las tres cosas tienen el mismo costo: dejar de ser un sitio estático.
 
 Hay un camino intermedio que no lo requiere y conviene medir antes: **reconstruir el historial desde la cadena**. Los sellos están en el contrato, la cuenta que los firmó es la del organizador, y `getLedgerEntries` no tiene ventana temporal. Eso devuelve el historial en cualquier equipo con la misma cuenta, sin servidor y sin base de datos. Lo que no resuelve es el correo.
+
+### Historia 11.1: El historial desde la cadena: hecho
+
+Como organizadora que entra con la misma cuenta desde otro equipo,
+quiero ver los sorteos que ya hice,
+para no depender de la memoria de un navegador.
+
+**Criterios de aceptación:**
+
+**Dado** una cuenta que ancló sorteos desde otro equipo
+**Cuando** la conecto en un navegador sin nada guardado
+**Entonces** "Tus sorteos" muestra esos sorteos, marcados como traídos de la cadena, con fecha, premio, cantidad de personas y el puesto de quien ganó
+**Y** un sorteo que este equipo ya conoce no se duplica: gana la fila del equipo, que tiene los nombres
+**Y** si la cadena no responde, el historial muestra lo del equipo y no afirma nada más.
+
+Resultado (2026-09-21): `sealsOnChain` en `src/stellar/seals.ts` lee `NextId` de la instancia del contrato y recorre `Raffle(id)` de los más nuevos para atrás, doscientas claves por llamada, con techo en dos mil sorteos. Después pide `Draw(id)` solo de los de esa cuenta que ya se sortearon. `mergeWithChain` en `src/ui/history.ts` junta las dos fuentes por id y huella: el id solo no alcanza, porque si el contrato se redespliega los ids vuelven a arrancar desde 1. El CSV suma la columna `origen`.
+
+Probado contra testnet: desde un navegador vacío, la cuenta `GBZQ…DSQY` trae sus seis sorteos en dos segundos, con los ganadores de los sorteos #39 y #40 tal como están en el contrato. Los tests de red se corren a mano con `TINKAZO_RED=1 pnpm test`.
+
+Límites que quedan dichos en el código: los nombres no están en la cadena, así que de un sorteo traído se sabe el puesto de quien ganó y no su nombre, y no hay comprobante para abrir; y una entrada cuyo alquiler se venció se archiva y deja de aparecer hasta que alguien la restaure.
+
+Lo mismo, el mismo día, en la página de verificación: los otros sellos del organizador ya no salen de los eventos del RPC, que duran siete días, sino de `sealsOnChain`, así que aparecen todos. Y se marcan solos los que repiten la huella de la lista (la forma directa de la selección del compromiso) y los que tienen la misma cantidad de gente con otra huella, que es lo que queda si alguien reordena los nombres. Detalle en [amenazas.md](amenazas.md).
 
 ---
 

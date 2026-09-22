@@ -1,12 +1,13 @@
+import type { xdr as XdrNs } from "@stellar/stellar-sdk";
 import type { Proof } from "../protocol/proof";
 import { RPC_URLS } from "./config";
 
 /**
- * Los otros sellos del mismo organizador.
+ * Los sellos de un organizador, leídos del contrato.
  *
  * Esto existe por el único ataque conocido que sigue abierto contra Tinkazo:
- * la **selección del compromiso**. Un organizador puede sellar cinco listas
- * distintas contra cinco rondas distintas y después publicar solo el
+ * la **selección del compromiso**. Un organizador puede sellar la misma lista
+ * cinco veces contra cinco rondas distintas y después publicar solo el
  * comprobante de la que le dio el resultado que quería. Cada uno de esos
  * sorteos es, por separado, perfectamente legítimo.
  *
@@ -15,43 +16,12 @@ import { RPC_URLS } from "./config";
  * explorador de bloques, y eso no es una defensa, es una nota al pie. Acá se
  * traen y se muestran al lado del veredicto.
  *
- * Límite que hay que decir: el RPC guarda siete días de eventos, no más. El
- * ataque ocurre cerca en el tiempo del sorteo que se publica, así que la
- * ventana alcanza; auditar el historial completo de una dirección no se puede
- * por acá, y para eso está el explorador de bloques.
+ * La primera versión los buscaba en los eventos del RPC, que duran siete días,
+ * así que un sello de hace un mes no aparecía. Ahora se leen de lo que guarda
+ * el contrato (`sealsOnChain`), que no tiene ventana: están todos los que
+ * siguen vivos. El mismo recorrido arma el historial de la cuenta en otro
+ * equipo.
  */
-
-/**
- * Cuántos ledgers hacia atrás se pregunta.
- *
- * El RPC guarda 120 960 ledgers, que a cinco segundos cada uno son siete días.
- * Se pide casi todo, dejando margen porque la ventana se corre entre una
- * llamada y la siguiente y pedir el borde exacto da error.
- *
- * Cuesta siempre lo mismo: el RPC escanea como mucho diez mil ledgers por
- * llamada, así que son trece viajes, encuentre o no encuentre algo.
- */
-const LOOKBACK = 119_000;
-/** Cuántos ledgers barre el RPC en una sola llamada. */
-const SCAN = 10_000;
-
-export interface Seal {
-  raffleId: string;
-  /** Cuántas personas tenía esa lista. */
-  count: number;
-  round: number;
-  listHash: string;
-  at: string;
-  txHash: string;
-}
-
-export interface SealsResult {
-  seals: Seal[];
-  /** Desde qué momento se pudo mirar. Antes de eso el RPC ya no indexa. */
-  since: string;
-  /** El RPC cortó la lista: hay más de los que se muestran. */
-  truncated: boolean;
-}
 
 const RPC: Record<string, string> = RPC_URLS;
 
@@ -68,90 +38,178 @@ async function rpc(url: string, method: string, params: unknown): Promise<Record
 }
 
 /**
- * Trae los sellos recientes de quien selló este sorteo.
+ * Todos los sellos de quien selló este sorteo, del más nuevo al más viejo.
  *
  * Devuelve `null` si el sorteo no está anclado o si no se pudo preguntar. No
  * se inventa nada: sin respuesta del RPC, la página no afirma ni que hay uno
  * solo ni que hay varios.
  */
-export async function recentSealsOf(proof: Proof): Promise<SealsResult | null> {
+export async function sealsOf(proof: Proof): Promise<ChainHistory | null> {
   if (!proof.contract || !proof.net) return null;
   const url = RPC[proof.net];
   if (!url) return null;
 
-  const { xdr, scValToNative, Address } = await import("@stellar/stellar-sdk");
-
+  const { xdr, scValToNative } = await import("@stellar/stellar-sdk");
   // Primero hay que saber quién selló: el comprobante no lo trae.
   const organizer = await organizerOf(url, proof, xdr, scValToNative);
   if (!organizer) return null;
+  return sealsOnChain(organizer, proof.contract, url);
+}
 
-  const health = (await rpc(url, "getHealth", {})) as { latestLedger?: number };
-  const latest = Number(health.latestLedger ?? 0);
-  if (!latest) return null;
-  const startLedger = Math.max(1, latest - LOOKBACK);
+/* --------------------------------------------- los sorteos, desde el contrato */
 
-  const addressTopic = new Address(organizer).toScVal().toXDR("base64");
-  const filters = [
-    {
-      type: "contract",
-      contractIds: [proof.contract],
-      // El evento de sello lleva el nombre, el identificador y la dirección
-      // como temas. El comodín en el segundo deja pasar cualquier sorteo de
-      // esta misma dirección.
-      topics: [["*", "*", addressTopic]],
-    },
-  ];
+/**
+ * Un sorteo tal como lo guarda el contrato. Sin nombres: la lista nunca sube a
+ * la cadena, solo su huella. De los ganadores se sabe el puesto en la lista.
+ */
+export interface ChainRaffle {
+  id: string;
+  organizer: string;
+  listHash: string;
+  count: number;
+  numWinners: number;
+  round: number;
+  /** Momento del sello, en segundos. */
+  sealedAt: number;
+  prize: string;
+  drawn: boolean;
+  /** Índices ganadores en la lista canónica, desde cero. Solo si ya se sorteó. */
+  winners?: number[];
+}
 
-  // El RPC barre como mucho diez mil ledgers por llamada, así que la semana
-  // entera son trece viajes. Se sigue el cursor hasta el final o hasta que se
-  // junten doscientos sellos, que es más de lo que nadie va a mirar.
-  const list: unknown[] = [];
-  let cursor: string | undefined;
-  for (let trip = 0; trip < Math.ceil(LOOKBACK / SCAN) + 1 && list.length < 200; trip++) {
-    const page = (await rpc(url, "getEvents", {
-      ...(cursor ? {} : { startLedger }),
-      filters,
-      pagination: cursor ? { cursor, limit: 200 } : { limit: 200 },
-    })) as { events?: unknown[]; cursor?: string };
-    const got = Array.isArray(page.events) ? page.events : [];
-    list.push(...got);
-    if (!page.cursor) break;
-    cursor = page.cursor;
-  }
-  const seals: Seal[] = [];
-  for (const raw of list) {
-    const e = raw as {
-      topic?: string[];
-      value?: string;
-      ledgerClosedAt?: string;
-      txHash?: string;
+export interface ChainHistory {
+  raffles: ChainRaffle[];
+  /** No se recorrió el contrato entero: hay sorteos más viejos que no se miraron. */
+  truncated: boolean;
+}
+
+/** Cuántas claves acepta el RPC en un solo `getLedgerEntries`. */
+const KEYS_PER_CALL = 200;
+/**
+ * Cuántos sorteos del contrato se recorren como mucho, de los más nuevos para
+ * atrás. Son diez viajes. El costo crece con los sorteos de todo el contrato,
+ * no con los de la cuenta, así que hace falta un techo para que la página no
+ * se cuelgue el día que haya decenas de miles.
+ */
+const SCAN_MAX = 2_000;
+
+const hex = (b: Uint8Array | undefined): string =>
+  [...(b ?? [])].map((x) => x.toString(16).padStart(2, "0")).join("");
+
+/**
+ * Pasa un `Raffle` del contrato, ya convertido a valores de JavaScript, a la
+ * forma de acá. Devuelve `null` si le falta algo: mejor saltar una fila que
+ * mostrarla inventada.
+ */
+export function parseRaffle(raw: unknown): ChainRaffle | null {
+  const r = raw as {
+    id?: bigint | number;
+    organizer?: string;
+    list_hash?: Uint8Array;
+    count?: number;
+    num_winners?: number;
+    round?: bigint | number;
+    sealed_at?: bigint | number;
+    meta?: string;
+    status?: unknown;
+  } | null;
+  if (!r || r.id === undefined || typeof r.organizer !== "string") return null;
+  // Las variantes sin datos de un enum del contrato llegan como `["Drawn"]`.
+  const status = Array.isArray(r.status) ? String(r.status[0]) : String(r.status ?? "");
+  return {
+    id: String(r.id),
+    organizer: r.organizer,
+    listHash: hex(r.list_hash),
+    count: Number(r.count ?? 0),
+    numWinners: Number(r.num_winners ?? 0),
+    round: Number(r.round ?? 0),
+    sealedAt: Number(r.sealed_at ?? 0),
+    prize: String(r.meta ?? ""),
+    drawn: status === "Drawn",
+  };
+}
+
+/**
+ * Todos los sorteos de una cuenta que siguen vivos en el contrato.
+ *
+ * Es lo que deja ver el historial desde otro equipo sin servidor. Los eventos
+ * del RPC duran siete días; lo que el contrato guarda, no. Cada sello vive
+ * bajo `Raffle(id)` con la cuenta que lo firmó, y los ids son correlativos
+ * desde 1, así que se puede recorrer el contrato de atrás para adelante con
+ * `getLedgerEntries`, que no tiene ventana de tiempo.
+ *
+ * Límite que hay que decir: una entrada que nadie extiende se archiva cuando
+ * se le acaba el alquiler (120 días en mainnet) y deja de aparecer acá. El
+ * sorteo no se pierde, pero para leerlo hay que restaurarlo.
+ *
+ * Devuelve `null` si no se pudo preguntar. Sin respuesta, no se afirma nada.
+ */
+export async function sealsOnChain(
+  organizer: string,
+  contractId: string,
+  rpcUrl: string,
+): Promise<ChainHistory | null> {
+  try {
+    const { xdr, scValToNative, Address } = await import("@stellar/stellar-sdk");
+    const contract = new Address(contractId).toScAddress();
+    const keyOf = (val: XdrNs.ScVal): string =>
+      xdr.LedgerKey.contractData(
+        new xdr.LedgerKeyContractData({ contract, key: val, durability: xdr.ContractDataDurability.persistent }),
+      ).toXdr("base64");
+    const entryKey = (variant: string, id: number): string =>
+      keyOf(xdr.ScVal.scvVec([xdr.ScVal.scvSymbol(variant), xdr.ScVal.scvU64(BigInt(id))]));
+    /** Los valores guardados bajo esas claves. Las que no existen no vuelven. */
+    const read = async (keys: string[]): Promise<XdrNs.ScVal[]> => {
+      const out: XdrNs.ScVal[] = [];
+      for (let i = 0; i < keys.length; i += KEYS_PER_CALL) {
+        const got = (await rpc(rpcUrl, "getLedgerEntries", { keys: keys.slice(i, i + KEYS_PER_CALL) })) as {
+          entries?: { xdr?: string }[];
+        };
+        for (const e of got.entries ?? []) {
+          if (!e.xdr) continue;
+          const data = xdr.LedgerEntryData.fromXdr(e.xdr, "base64");
+          if (data.type === "contractData") out.push(data.contractData.val);
+        }
+      }
+      return out;
     };
-    try {
-      const name = scValToNative(xdr.ScVal.fromXDR(e.topic?.[0] ?? "", "base64")) as unknown;
-      if (String(name) !== "sealed") continue;
-      const id = scValToNative(xdr.ScVal.fromXDR(e.topic?.[1] ?? "", "base64")) as bigint | number;
-      const body = scValToNative(xdr.ScVal.fromXDR(e.value ?? "", "base64")) as {
-        count?: number;
-        round?: bigint | number;
-        list_hash?: Uint8Array;
-      };
-      seals.push({
-        raffleId: String(id),
-        count: Number(body.count ?? 0),
-        round: Number(body.round ?? 0),
-        listHash: [...(body.list_hash ?? [])].map((b) => b.toString(16).padStart(2, "0")).join(""),
-        at: e.ledgerClosedAt ?? "",
-        txHash: e.txHash ?? "",
-      });
-    } catch {
-      // Un evento que no se puede leer se salta: mejor mostrar de menos que
-      // afirmar de más.
-    }
-  }
-  seals.sort((a, b) => a.at.localeCompare(b.at));
 
-  const since = seals[0]?.at ?? "";
-  return { seals, since, truncated: list.length >= 200 };
+    // El contador vive en el almacenamiento de la instancia, no en una entrada
+    // propia: se lee la instancia y se busca `NextId` adentro.
+    const [inst] = await read([keyOf(xdr.ScVal.scvLedgerKeyContractInstance())]);
+    if (inst?.type !== "scvContractInstance") return null;
+    let next = 1;
+    for (const e of inst.instance.storage ?? []) {
+      const k = scValToNative(e.key) as unknown;
+      if (Array.isArray(k) && k[0] === "NextId") next = Number(scValToNative(e.val));
+    }
+
+    const last = next - 1;
+    const first = Math.max(1, last - SCAN_MAX + 1);
+    const ids: number[] = [];
+    for (let id = last; id >= first; id--) ids.push(id);
+
+    const mine = (await read(ids.map((id) => entryKey("Raffle", id))))
+      .map((v) => parseRaffle(scValToNative(v)))
+      .filter((r): r is ChainRaffle => r !== null && r.organizer === organizer);
+
+    // Los ganadores se piden solo de los que ya se sortearon, y solo de esta
+    // cuenta: el registro del resultado es otra entrada.
+    const drawn = mine.filter((r) => r.drawn);
+    if (drawn.length) {
+      const byId = new Map(mine.map((r) => [r.id, r]));
+      for (const v of await read(drawn.map((r) => entryKey("Draw", Number(r.id))))) {
+        const d = scValToNative(v) as { raffle_id?: bigint | number; winners?: number[] } | null;
+        const r = d?.raffle_id !== undefined ? byId.get(String(d.raffle_id)) : undefined;
+        if (r && Array.isArray(d?.winners)) r.winners = d.winners.map(Number);
+      }
+    }
+
+    mine.sort((a, b) => b.sealedAt - a.sealedAt);
+    return { raffles: mine, truncated: first > 1 };
+  } catch {
+    return null;
+  }
 }
 
 /** Quién selló este sorteo, leído del contrato. */

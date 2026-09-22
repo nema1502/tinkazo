@@ -211,13 +211,18 @@ async function main(): Promise<void> {
   }
 }
 
+/** Cuántos sellos se listan como mucho. Los que repiten la lista entran siempre. */
+const SEALS_SHOWN = 100;
+
 /**
- * Muestra los otros sellos recientes del mismo organizador.
+ * Muestra todos los sellos del mismo organizador que siguen en la cadena.
  *
- * Es la defensa contra el único ataque conocido que sigue abierto: sellar
- * varias listas y publicar solo la que conviene. La defensa siempre existió
- * ·los sellos son públicos· pero dependía de saber buscarlos en un explorador,
- * y eso no es una defensa. Acá están al lado del veredicto.
+ * Es la defensa contra el único ataque conocido que sigue abierto: sellar la
+ * misma lista varias veces y publicar solo el resultado que conviene. La
+ * defensa siempre existió ·los sellos son públicos· pero dependía de saber
+ * buscarlos en un explorador, y eso no es una defensa. Acá están al lado del
+ * veredicto, y la señal fuerte se marca sola: otro sello con la misma huella
+ * de lista que este.
  *
  * No afirma nada que no pueda comprobar. Si el RPC no contesta, la sección no
  * aparece: decir "hay uno solo" sin haber podido mirar sería peor que callar.
@@ -226,26 +231,54 @@ async function renderSeals(proof: Proof): Promise<void> {
   if (!isAnchored(proof)) return;
   const box = $("sec-seals");
   try {
-    const { recentSealsOf } = await import("./stellar/seals");
-    const found = await recentSealsOf(proof);
-    if (!found || found.seals.length === 0) return;
+    const { sealsOf } = await import("./stellar/seals");
+    const found = await sealsOf(proof);
+    if (!found || found.raffles.length === 0) return;
 
     const mine = String(proof.id ?? "");
-    $("v-seals-since").textContent = found.truncated ? t("vSealsMany") : t("vSealsWindow");
-    $("v-seals-list").innerHTML = found.seals
-      .map((sl) => {
-        const yo = sl.raffleId === mine;
-        const when = sl.at ? new Date(sl.at).toLocaleString(getLang() === "es" ? "es-BO" : "en-US") : "";
+    const self = found.raffles.find((r) => r.id === mine);
+    // Dos señales, de distinta fuerza. La misma huella es la misma lista con
+    // el mismo orden: no tiene otra lectura. La misma cantidad de gente es más
+    // débil, porque puede ser otro sorteo del mismo evento, pero es también lo
+    // que queda si alguien reordena los nombres para cambiar la huella: el
+    // protocolo no ordena la lista (protocolo.md §1), así que eso alcanza.
+    const again = (id: string, listHash: string): boolean => !!self && id !== mine && listHash === self.listHash;
+    const sameCount = (id: string, listHash: string, count: number): boolean =>
+      !!self && id !== mine && listHash !== self.listHash && count === self.count;
+    const flagged = (r: { id: string; listHash: string; count: number }): boolean =>
+      again(r.id, r.listHash) || sameCount(r.id, r.listHash, r.count);
+    const shown = found.raffles.filter((r, i) => i < SEALS_SHOWN || r.id === mine || flagged(r));
+    const repeats = found.raffles.filter((r) => again(r.id, r.listHash)).length;
+    const alike = found.raffles.filter((r) => sameCount(r.id, r.listHash, r.count)).length;
+
+    $("v-seals-since").textContent =
+      found.truncated || shown.length < found.raffles.length ? t("vSealsMany") : t("vSealsAll");
+    $("v-seals-list").innerHTML = shown
+      .map((r) => {
+        const yo = r.id === mine;
+        const rep = again(r.id, r.listHash);
+        const like = sameCount(r.id, r.listHash, r.count);
+        const when = r.sealedAt
+          ? new Date(r.sealedAt * 1000).toLocaleString(getLang() === "es" ? "es-BO" : "en-US")
+          : "";
+        const mark = rep ? ` · ⚠ ${esc(t("vSealsAgain"))}` : like ? ` · ${esc(t("vSealsSameCount"))}` : "";
         return (
-          `<p class="entity"${yo ? ' style="font-weight:800"' : ""}>` +
-          `#${esc(sl.raffleId)}${yo ? ` · ${esc(t("vSealsThis"))}` : ""} · ` +
-          `${sl.count} ${esc(t("vSealsPeople"))} · ${esc(t("vSealsRound"))} ${sl.round} · ` +
-          `${esc(when)} · ${esc(sl.listHash.slice(0, 16))}…</p>`
+          `<p class="entity"${yo || rep ? ' style="font-weight:800"' : ""}>` +
+          `#${esc(r.id)}${yo ? ` · ${esc(t("vSealsThis"))}` : ""}${mark} · ` +
+          `${r.count} ${esc(t("vSealsPeople"))} · ${esc(t("vSealsRound"))} ${r.round} · ` +
+          `${esc(when)} · ${esc(r.listHash.slice(0, 16))}…</p>`
         );
       })
       .join("");
-    // Con un solo sello no hay nada que sospechar, y conviene decirlo.
-    $("v-seals-why").textContent = found.seals.length > 1 ? t("vSealsWhy") : t("vSealsOnly");
+    // Con un solo sello no hay nada que sospechar, y conviene decirlo. Y si la
+    // lista se repite, eso va primero.
+    $("v-seals-why").textContent = repeats
+      ? t("vSealsAgainWhy")
+      : alike
+        ? t("vSealsSameCountWhy")
+        : found.raffles.length > 1
+          ? t("vSealsWhy")
+          : t("vSealsOnly");
     box.style.display = "block";
   } catch {
     /* sin RPC no se muestra nada: callar es más honesto que suponer */

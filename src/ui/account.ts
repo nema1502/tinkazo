@@ -149,7 +149,7 @@ export function openAccount(view: AccountView): void {
     ul.innerHTML = list
       .slice(0, 6)
       .map((e) => {
-        const w = e.winners?.length ? e.winners.join(", ") : t("histPending");
+        const w = h.winnerLabel(e);
         const link = e.proof ? ` <a href="${esc(e.proof)}" target="_blank" rel="noopener">${esc(t("histProof"))} ↗</a>` : "";
         return `<p class="entity"><b>${esc(w)}</b> · ${e.count} ${esc(t("histPeople"))}${link}</p>`;
       })
