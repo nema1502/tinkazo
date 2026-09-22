@@ -101,7 +101,7 @@ cargo build --release --target wasm32v1-none -p tinkazo-raffle
 
 Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|race|rockets|wheel`, `?instant=1`, `?lead=3`.
 
-Para auditar un juego: `node scripts/audit-game.mjs <juego>` y `node scripts/audit-sound.mjs <juego>`. Para la interfaz: `node scripts/audit-ui.mjs`.
+Para auditar un juego: `node scripts/audit-game.mjs <juego>` y `node scripts/audit-sound.mjs <juego>`. Para la interfaz: `node scripts/audit-ui.mjs`. Las páginas de lectura, en los dos temas, en celular y en los dos idiomas: `pnpm check:paginas`. Y cuánta renta le queda al contrato antes de que la red lo archive: `pnpm check:renta`.
 
 ## Estructura
 

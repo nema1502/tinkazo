@@ -63,6 +63,14 @@ node scripts/audit-ui.mjs --base http://localhost:4173
 
 # Las fuentes de las tarjetas de historia siguen vivas
 pnpm check:lore
+
+# Las páginas de lectura (juegos, historia, seguridad, precios): imágenes,
+# traducciones, celular, temas y blancos de toque. Corre también en la CI.
+pnpm check:paginas
+
+# Cuántos días le quedan al contrato antes de que la red archive sus datos.
+# Sale con error por debajo de 30 días; --dias N cambia el umbral.
+pnpm check:renta
 ```
 
 En la máquina del autor (Windows sin MSVC) el toolchain es `stable-x86_64-pc-windows-gnu`; `cargo` está en `~/.cargo/bin` y `stellar.exe` en `C:\Program Files (x86)\Stellar CLI\`.
@@ -75,6 +83,11 @@ En la máquina del autor (Windows sin MSVC) el toolchain es `stable-x86_64-pc-wi
 
 ```
 index.html          Entrada de Vite (markup del sitio)
+juegos.html         Los seis juegos, con la captura del estadio de cada uno
+historia.html       De dónde salen el nombre, la llama y el aguayo
+seguridad.html      Qué impide el protocolo, el ataque abierto y los límites
+precios.html        Qué cuesta y cómo funciona por dentro
+public/             juegos/*.webp, sitemap.xml y robots.txt
 verificar.html      Página de verificación, solo lectura
 src/                Frontend TypeScript: main, i18n, state, narrator, protocol/, stellar/, ui/, games/
 src/games/overlay.ts  Andamiaje de los juegos: estadio, azar sembrado, chips, saltar, desmontaje
