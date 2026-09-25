@@ -1,6 +1,6 @@
 import { T, getLang, t } from "../i18n";
 import { beep, beepFor, fanfare, note } from "../sound";
-import { avatar, paceFactor, setGameLength, type Beacon } from "../state";
+import { drawAvatar, paceFactor, setGameLength, type Beacon } from "../state";
 import { INK, WINNER_HOLD, chrome, clamp, drawFlag, ease, mount, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
 
 /**
@@ -112,16 +112,6 @@ export function wheelSpin(
   /** El gajo k es de la persona k % n: el intercalado sale solo. */
   const personOf = (k: number): number => ((k % n) + n) % n;
 
-  const faces = new Map<number, HTMLImageElement>();
-  function face(idx: number): HTMLImageElement {
-    let im = faces.get(idx);
-    if (!im) {
-      im = new Image();
-      im.src = avatar(names[idx] ?? "", 64);
-      faces.set(idx, im);
-    }
-    return im;
-  }
 
   // El selector de duración apunta a una cantidad de segundos, así que la
   // rueda declara los suyos: 17,2 de juego hasta la corona, más los tres reales
@@ -583,8 +573,7 @@ export function wheelSpin(
     c.fillStyle = color(idx);
     c.fillRect(0, 0, on ? 26 * k : 10 * k, hgt);
     const av = Math.min(hgt * 0.62, 44 * k);
-    const im = face(idx);
-    if (im.complete && im.naturalWidth) c.drawImage(im, 36 * k, (hgt - av) / 2, av, av);
+    drawAvatar(c, names[idx] ?? "", 36 * k, (hgt - av) / 2, av);
     const label = names[idx] ?? "";
     const tx = 36 * k + av + 12 * k;
     // El tope por alto de placa existe para que no reviente el renglón; el

@@ -207,7 +207,10 @@ async function run() {
             }))`);
             const a = JSON.parse(t1);
             const bb = JSON.parse(t2);
-            check(`${etiqueta}: hay una miniatura por juego`, a.length === 6, `${a.length} de 6`);
+            // Contra los botones del selector, no contra un número escrito a
+            // mano: eran seis, y al sumar juegos el auditor fallaba solo.
+            const botones = Number(await page.eval(`document.querySelectorAll('.gamepick button').length`));
+            check(`${etiqueta}: hay una miniatura por juego`, a.length === botones && botones > 0, `${a.length} de ${botones}`);
             const quietas = a.filter((v, k) => v === bb[k]).length;
             check(
               `${etiqueta}: las miniaturas están animadas`,

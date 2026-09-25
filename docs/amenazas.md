@@ -113,7 +113,7 @@ Mitigación parcial, ya hecha: **el comprobante lleva siempre la firma de la ron
 | **Randamu, el administrador corporativo de drand, cerró en febrero de 2026** | **Vigilado** | La red es operada por la League of Entropy, que es un conjunto de organizaciones independientes, no por una empresa. Los cuatro relays responden y la ronda última vuelve firmada. Pero el riesgo de abandono a largo plazo es real y hay que decirlo |
 | El RPC de Stellar no responde | **Mitigado** | La verificación distingue "no pude leer el contrato" de "este sorteo no está anclado". Confundirlas acusaba al organizador por culpa del wifi |
 | Se cae el hosting | **Mitigado** | El sitio es estático. Lo que quedó en la cadena sobrevive a que Tinkazo desaparezca, y el protocolo está especificado para que cualquiera lo reimplemente |
-| Una lista enorme cuelga el navegador | **Parcial** | Probado con doscientos participantes en los seis juegos. Arriba de eso no está medido |
+| Una lista enorme cuelga el navegador | **Parcial** | El auditor exigente corre los ocho juegos con doscientos participantes en cada auditoría (veinticuatro en la ruleta, que es su tope) y mide que cierren y sigan fluidos. Con quinientos y mil se midió a mano el 22 de septiembre en tres juegos. Arriba de eso no está medido |
 | Un sorteo que se queda sin finalizar | **Cubierto** | `draw` no pide permiso: la propia página de verificación le ofrece a quien abra el enlace finalizarlo |
 | La pantalla se apaga en medio del sorteo | **Cubierto** | El estadio le pide al sistema que no apague la pantalla, y lo vuelve a pedir al volver de segundo plano |
 

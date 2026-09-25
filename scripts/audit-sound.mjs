@@ -26,7 +26,7 @@ const opt = (name, def) => {
   return i >= 0 && args[i + 1] ? args[i + 1] : def;
 };
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
-const JUEGOS = ["race", "rockets", "stellar", "ledger", "pasanaku", "wheel"];
+const JUEGOS = ["race", "rockets", "stellar", "ledger", "pasanaku", "teleferico", "tombola", "wheel"];
 const pedido = args[0] && !args[0].startsWith("--") ? args[0] : "todos";
 const lista = pedido === "todos" ? JUEGOS : [pedido];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

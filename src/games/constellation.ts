@@ -97,10 +97,21 @@ export function stellarConstellation(
   let hopT = 0;
   let camRot = 0;
   let camScale = 1;
+  /**
+   * Cuánto se acerca la cámara al paquete, de 0 a 1. En los saltos lentos del
+   * final el paquete era una miga cruzando un cielo casi quieto: con pocos
+   * participantes, casi cinco segundos sin que la pantalla cambiara. El primer
+   * plano es el suspenso; al estallar la nova la cámara se aleja y muestra la
+   * constelación entera, que es el remate.
+   */
+  let focusK = 0;
+  let focusX = 0;
+  let focusY = 0;
   let shake = 0;
   let novaK = 0;
   let saidNarrow = false;
   let saidReady = false;
+  let saidBuild = false;
   let tHold = 0;
   let saidDecoy = false;
   let bornTicks = 0;
@@ -157,12 +168,17 @@ export function stellarConstellation(
     // o tres participantes la pantalla se volvía un campo de rombos con un par
     // de estrellas perdidas. Ocho alcanzan para los veinte saltos.
     const anchors = clamp(22 - n * 2, 8, 20);
+    // Con poca gente, casi todos los saltos caen en rombos: tienen que verse.
+    // Eran de catorce píxeles con dos participantes, y el cielo quedaba en dos
+    // estrellas y polvo.
+    const ar = (n <= 6 ? 11 : 7) * k;
     for (let a = 0; a < anchors; a++) {
       for (let tryI = 0; tryI < 8; tryI++) {
         const x = x0 + rng() * (x1 - x0);
         const y = y0 + rng() * (y1 - y0);
         if (nodes.some((q) => Math.hypot(q.x - x, q.y - y) < 1.4 * r)) continue;
-        nodes.push({ x, y, kind: "anchor", idx: -1, r: 7 * k, flare: 0, seen: 0, born: 0.4 });
+        // De a uno, intercalados con las estrellas: el cielo se arma a la vista.
+        nodes.push({ x, y, kind: "anchor", idx: -1, r: ar, flare: 0, seen: 0, born: 0.3 + (a / anchors) * 1.5 });
         break;
       }
     }
@@ -311,6 +327,16 @@ export function stellarConstellation(
   function update(dt: number): void {
     if (phase === "arm") {
       tPhase += dt;
+      // La cámara entra despacio mientras se arma el cielo. El armado eran
+      // cinco segundos reales de estrellitas apareciendo sobre fondo quieto:
+      // desde el fondo de la sala, una foto. El auditor exigente midió siete
+      // segundos y medio sin que la pantalla cambiara lo suficiente.
+      const desde = names.length <= 6 ? 0.7 : 0.84;
+      camScale = desde + (1 - desde) * ease.inOutCubic(clamp(tPhase / ARM, 0, 1));
+      if (tPhase >= 0.05 && !saidBuild) {
+        saidBuild = true;
+        say(t("cConstBuild"), 0.1);
+      }
       // Doscientas estrellas apareciendo no pueden sonar a ametralladora: como
       // mucho veinticuatro golpecitos, repartidos en el segundo que dura.
       // Las estrellas encendiéndose: notas de la escala, suaves, subiendo.
@@ -355,7 +381,10 @@ export function stellarConstellation(
         // a propósito. Un cuarto de segundo de silencio antes del golpe es el
         // efecto más barato que existe y no estaba en ninguno de los juegos.
         beepFor(note(0), hp.dur * 0.72, "sawtooth", 0.04);
-      } else if (!saidNarrow && hopI === 15) {
+      } else if (!saidNarrow && hopI === 15 && hopT >= 0.45) {
+        // A mitad del salto y no al arrancarlo: al arrancar pisaba, un cuadro
+        // después, el "¡pasa por fulano!" del salto anterior, y la caja
+        // mostraba ese nombre durante dieciséis milisegundos.
         say(t("cConstNarrow"), 0.6);
         saidNarrow = true;
       }
@@ -383,12 +412,18 @@ export function stellarConstellation(
       }
       camScale = 1 + 0.06 * (hopI / K);
       camRot = 0.021 * (hopI / K);
+      focusK = ease.inOutCubic(clamp((hopI + hopT - 13) / 4, 0, 1));
+      const pk = packetPos();
+      focusX = pk.x;
+      focusY = pk.y;
       return;
     }
 
     if (phase === "nova") {
       tPhase += dt;
       novaK = Math.min(1, novaK + dt);
+      // La cámara se aleja para mostrar lo que quedó dibujado.
+      focusK = Math.max(0, focusK - dt * 0.9);
       shake = Math.max(0, shake - dt * 1.5);
       // En segundos reales: eran 1,62 s de juego, o sea 1,3 s en modo rápido.
       tHold += dt * paceFactor();
@@ -449,7 +484,11 @@ export function stellarConstellation(
     const grow = clamp((tAll - n.born) / 0.28, 0, 1);
     if (grow <= 0) return;
     const pop = grow < 1 ? 1 + 0.15 * Math.sin(grow * Math.PI) : 1;
-    const r = n.r * (1 + 0.28 * n.flare) * grow * pop;
+    // Las estrellas respiran, cada una a su tiempo, más mientras la sala lee
+    // el cielo y menos cuando el paquete ya está saltando. Con el cielo fijo,
+    // el armado era una foto desde el fondo de la sala.
+    const breath = 1 + (phase === "arm" ? 0.09 : 0.035) * Math.sin(tAll * 3.1 + n.x * 0.013 + n.y * 0.007);
+    const r = n.r * (1 + 0.28 * n.flare) * grow * pop * breath;
     const col = color(n.idx);
     if (n.flare > 0) {
       c.globalAlpha = 0.35 * n.flare;
@@ -457,6 +496,16 @@ export function stellarConstellation(
       c.beginPath();
       c.arc(n.x, n.y, r * 2.6, 0, 7);
       c.fill();
+      // Y una onda que se abre desde la estrella. El paquete aterrizando era
+      // un rombo de once píxeles tocando otra cosa chica: de cerca se veía, de
+      // lejos no. La onda es lo que la sala ve como "tocó a alguien".
+      const k = u();
+      c.globalAlpha = n.flare;
+      c.strokeStyle = col;
+      c.lineWidth = 5 * k * n.flare;
+      c.beginPath();
+      c.arc(n.x, n.y, r * (1.4 + (1 - n.flare) * 4.2), 0, 7);
+      c.stroke();
       c.globalAlpha = 1;
     }
     // Un solo trazado, para que el contorno de tinta no se corte por dentro.
@@ -482,7 +531,23 @@ export function stellarConstellation(
 
   function drawAnchor(n: Node): void {
     const k = u();
-    const s = 7 * k;
+    const grow = clamp((tAll - n.born) / 0.22, 0, 1);
+    if (grow <= 0) return;
+    // Al nacer y al recibir el paquete, una onda violeta: como las estrellas.
+    // El rombo tocado era lo único del juego que no reaccionaba.
+    const born = clamp(1 - (tAll - n.born) / 0.5, 0, 1);
+    const wave = Math.max(n.flare, born);
+    if (wave > 0) {
+      c.globalAlpha = wave;
+      c.strokeStyle = "#8f6cff";
+      c.lineWidth = 4 * k * wave;
+      c.beginPath();
+      c.arc(n.x, n.y, n.r * (1.3 + (1 - wave) * 4.5), 0, 7);
+      c.stroke();
+      c.globalAlpha = 1;
+    }
+    const breath = 1 + (phase === "arm" ? 0.12 : 0.05) * Math.sin(tAll * 2.6 + n.x * 0.017 + n.y * 0.011);
+    const s = n.r * grow * breath * (1 + 0.6 * n.flare);
     c.beginPath();
     c.moveTo(n.x, n.y - s);
     c.lineTo(n.x + s, n.y);
@@ -525,7 +590,14 @@ export function stellarConstellation(
     });
     c.globalAlpha = 1;
     const p = packetPos();
-    const s = 11 * k + Math.sin(now * 14) * 1.2 * k;
+    // Era de once píxeles: el protagonista del juego, del tamaño de una miga.
+    const s = 19 * k + Math.sin(now * 14) * 1.6 * k;
+    c.globalAlpha = 0.22;
+    c.fillStyle = "#ffc629";
+    c.beginPath();
+    c.arc(p.x, p.y, s * 1.5, 0, 7);
+    c.fill();
+    c.globalAlpha = 1;
     c.save();
     c.translate(p.x, p.y);
     c.rotate(Math.PI / 4 + now * 1.6);
@@ -631,8 +703,10 @@ export function stellarConstellation(
     c.save();
     c.translate(W() / 2, H() / 2);
     c.rotate(camRot);
-    c.scale(camScale, camScale);
-    c.translate(-W() / 2, -H() / 2);
+    // El primer plano: más cerca, y con el paquete corrido hacia el centro.
+    const zoom = camScale * (1 + 0.45 * focusK);
+    c.scale(zoom, zoom);
+    c.translate(-W() / 2 + (W() / 2 - focusX) * focusK * 0.7, -H() / 2 + (H() / 2 - focusY) * focusK * 0.7);
 
     // En la nova la constelación entera engorda de golpe: es lo que convierte
     // veinte líneas sueltas en un dibujo.

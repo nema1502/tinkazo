@@ -328,12 +328,22 @@
     background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
     padding: 6px 14px; font-weight: 800; font-size: 12px; cursor: pointer;
   }
+  /* En un celular la barra no entra en un renglón: al número de ronda le
+     quedaban noventa píxeles entre la marca y los botones, y se partía en
+     cuatro renglones. Pasa a uno propio, debajo, entero. */
+  @media (max-width: 520px) {
+    .st-top { flex-wrap: wrap; row-gap: 6px; padding: 10px 12px; }
+    .st-round { order: 3; flex-basis: 100%; text-align: center; letter-spacing: 0.06em; padding: 4px 8px; }
+    .st-actions button { white-space: nowrap; padding: 6px 10px; }
+  }
   .commentary {
     position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%);
     background: var(--card); color: var(--ink); border: var(--bw) solid var(--ink); box-shadow: var(--sh);
     padding: 12px 28px; font-weight: 900; font-size: clamp(16px, 2.6vw, 38px); white-space: nowrap; z-index: 2;
     max-width: 92vw; overflow: hidden; text-overflow: ellipsis;
   }
+  /* Sin texto no hay caja: vacía era un recuadro oscuro sin nada adentro. */
+  .commentary:empty { display: none; }
   .commentary.pop { animation: popIn 0.28s; }
   @keyframes popIn { from { transform: translateX(-50%) scale(0.75); } to { transform: translateX(-50%) scale(1); } }
   @media (max-width: 700px) { .hero { grid-template-columns: 1fr; } .mascot { display: none; } .verify { grid-template-columns: 1fr; } }

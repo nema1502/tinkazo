@@ -17,7 +17,7 @@ Toda comunidad hace sorteos: libros, licencias, entradas, poleras. Y en todos ha
 1. **Traés la lista.** Pegás los nombres o subís un CSV. Los participantes no instalan nada ni se crean cuenta. Nunca.
 2. **Se congela la lista.** Se calcula su huella (SHA-256) y se compromete contra una **ronda futura** de [drand](https://drand.love), el faro público de aleatoriedad de la League of Entropy. La clave está en el orden: cuando cerrás la lista, el número que va a decidir **todavía no existe**.
 3. **Llega el número.** Diez segundos después, drand publica esa ronda firmada. Ni vos ni yo pudimos elegirla. Si el sorteo se ancla en Stellar la espera sube a cuarenta y cinco, porque el contrato exige treinta de margen y no se puede cambiar.
-4. **El show.** Seis juegos a pantalla completa, con narrador. Cuando arranca la animación el ganador ya está decidido: el juego solo lo cuenta.
+4. **El show.** Ocho juegos a pantalla completa, con narrador. Cuando arranca la animación el ganador ya está decidido: el juego solo lo cuenta.
 5. **Cualquiera revisa.** El comprobante es un enlace. Quien lo abre ve la página rehacer el sorteo desde cero en su propio navegador y dar un veredicto.
 
 Con una cuenta de Stellar conectada, el sello y el resultado quedan **registrados en un contrato**, que verifica la firma del faro por su cuenta. Ese registro sigue ahí aunque Tinkazo desaparezca.
@@ -30,7 +30,7 @@ Es inmutable: no tiene administrador ni actualización, y no custodia fondos. `d
 
 **El sitio**, en Vite y TypeScript sin framework. Interfaz bilingüe, tema claro y oscuro, y tres formas de entrar: Freighter, Google vía Pollar, o una cuenta de prueba que el navegador crea y fondea solo.
 
-**Seis juegos**, todos sembrados con la misma ronda de drand, así que la animación de un sorteo es reproducible:
+**Ocho juegos**, todos sembrados con la misma ronda de drand, así que la animación de un sorteo es reproducible:
 
 | Juego | Qué es | Aguanta |
 |---|---|---|
@@ -39,15 +39,17 @@ Es inmutable: no tiene administrador ni actualización, y no custodia fondos. `d
 | Carrera de llamas | Lo nuestro. Ocho carriles por la cordillera. | 8 en pantalla |
 | Carrera de cohetes | La misma carrera, en el espacio. | 8 en pantalla |
 | Pasanaku | El ahorro rotativo boliviano: un aguayo que se cierra sobre los bultos hasta que queda uno en el nudo. Los hilos entre vecinos son trustlines. | 200 |
+| Teleférico | Un convoy de cabinas sube por el cable y en cada estación se baja la mitad, hasta que una sola llega a la cumbre. Las cabinas llevan los colores de las líneas de La Paz y El Alto. | 200 |
+| Tómbola | El bombo de la kermés. Una bola por persona con su número en la lista sellada; la que sale por la compuerta es la ganadora. | 200 |
 | Ruleta | La de siempre, pero que se ve girar con dos personas. | 24 |
 
 El número de la columna es hasta dónde se distingue a la gente en pantalla, no hasta dónde aguanta la máquina: medido el 22 de septiembre de 2026, con mil participantes el sorteo sigue corriendo a sesenta cuadros por segundo y se ancla igual.
 
-Ninguno decide nada: el ganador llega dado por el protocolo y el juego solo lo cuenta. Hay un auditor que lo comprueba en cada juego, con veinte verificaciones, cuatro de ellas en un celular, y otro que escucha el sonido sin oídos. La que importa: el nombre en pantalla tiene que ser el que fijó el protocolo.
+Ninguno decide nada: el ganador llega dado por el protocolo y el juego solo lo cuenta. Hay un auditor que lo comprueba en cada juego, con veinte verificaciones, cuatro de ellas en un celular, y otro que escucha el sonido sin oídos. La que importa: el nombre en pantalla tiene que ser el que fijó el protocolo. Y un tercero, el exigente, que cambia el reloj del navegador para comparar dos corridas cuadro contra cuadro y mide lo que antes se revisaba a ojo: que la misma ronda dibuje lo mismo, que nunca pasen cuatro segundos sin novedad, que el relator no se pise, que corra fluido con dos personas y con doscientas, y que el nombre del ganador se lea desde el fondo de la sala.
 
 **El narrador habla.** Usa la voz del navegador, elige una en español de las que estén instaladas y sube el ritmo con la tensión. Si la máquina no tiene voz, el sorteo funciona igual.
 
-**Y después del ganador aparece una tarjeta** que contesta la pregunta que el juego deja picando: por qué los rombos de la Constelación son anchors, si la red de Stellar alguna vez no pudo cerrar un libro, qué es un pasanaku. Dos frases y el enlace a la fuente primaria. Doce tarjetas, todas verificadas.
+**Y después del ganador aparece una tarjeta** que contesta la pregunta que el juego deja picando: por qué los rombos de la Constelación son anchors, si la red de Stellar alguna vez no pudo cerrar un libro, qué es un pasanaku, por qué cada cabina del teleférico tiene un color. Dos frases y el enlace a la fuente primaria. Trece tarjetas, todas verificadas.
 
 **La página de verificación**, que da uno de tres veredictos:
 
@@ -99,20 +101,20 @@ cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
-Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|race|rockets|wheel`, `?instant=1`, `?lead=3`.
+Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|teleferico|tombola|race|rockets|wheel`, `?instant=1`, `?lead=3`.
 
-Para auditar un juego: `node scripts/audit-game.mjs <juego>` y `node scripts/audit-sound.mjs <juego>`. Para la interfaz: `node scripts/audit-ui.mjs`. Las páginas de lectura, en los dos temas, en celular y en los dos idiomas: `pnpm check:paginas`. Y cuánta renta le queda al contrato antes de que la red lo archive: `pnpm check:renta`.
+Para auditar un juego: `node scripts/audit-game.mjs <juego>`, `node scripts/audit-sound.mjs <juego>` y `node scripts/audit-rigor.mjs <juego>`. Para la interfaz: `node scripts/audit-ui.mjs`. Las páginas de lectura, en los dos temas, en celular y en los dos idiomas: `pnpm check:paginas`. Y cuánta renta le queda al contrato antes de que la red lo archive: `pnpm check:renta`.
 
 ## Estructura
 
 ```
 index.html                   La herramienta: pegar la lista, sellar y sortear
 verificar.html               Rehacer un sorteo desde su comprobante
-juegos.html, historia.html,  Páginas de lectura: los seis juegos, de dónde sale
+juegos.html, historia.html,  Páginas de lectura: los ocho juegos, de dónde sale
 seguridad.html, precios.html   el nombre, cómo se puede romper, y qué cuesta
 src/protocol/                Lista canónica, selección, drand, comprobante
 src/stellar/                 Red, wallets y cliente del contrato
-src/games/                   Los seis juegos y el andamiaje que comparten
+src/games/                   Los ocho juegos y el andamiaje que comparten
 contracts/raffle/            El contrato Soroban, en Rust
 docs/                        Protocolo, PRD, arquitectura, épicas, juegos, despliegues
 scripts/                     Despliegue, smoke test y auditores de juegos, sonido e interfaz
@@ -151,7 +153,7 @@ Para agregar un juego, mirá [docs/juegos.md](docs/juegos.md): hay que pasar el 
 
 In Bolivia, a *tinkazo* is that hunch that today is your lucky day. Tinkazo draws prizes at community events: paste the list, the winner comes out on the big screen with a llama race or a roulette, and anyone can check afterwards that it was clean.
 
-Six full-screen games tell the result: a payment hopping star to star, a ledger close sweeping cards away, a Bolivian rotating savings circle, two races and a roulette. None of them decides anything. A narrator calls the draw out loud, and afterwards a card explains a piece of Stellar history with its primary source.
+Eight full-screen games tell the result: a payment hopping star to star, a ledger close sweeping cards away, a Bolivian rotating savings circle, a cable car shedding riders station by station, a fair's raffle drum, two races and a roulette. None of them decides anything. A narrator calls the draw out loud, and afterwards a card explains a piece of Stellar history with its primary source.
 
 The list is sealed with SHA-256 and committed against a **future** round of the [drand](https://drand.love) public randomness beacon, so when you lock the list the number that decides doesn't exist yet. A Soroban contract on Stellar verifies that round's BLS12-381 signature **on chain** and derives the winner deterministically. Participants never need a wallet or an account.
 

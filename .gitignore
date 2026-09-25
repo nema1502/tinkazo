@@ -29,3 +29,6 @@ Thumbs.db
 # Material de postulaciones (becas, hackathones): privado, nunca se publica.
 # Borrar la carpeta una vez enviada la postulación.
 postulacion/
+
+# Lo que deja el auditor exigente en cada corrida: se regenera, no se versiona.
+docs/capturas/rigor/

@@ -58,7 +58,7 @@ node scripts/audit-game.mjs <juego>
 node scripts/audit-sound.mjs <juego>
 ```
 
-Donde `<juego>` es el valor de `?demo=`: `race`, `stellar`, `ledger`, `rockets`, `wheel`, `pasanaku`. El auditor abre Chrome, corre un sorteo real contra drand y comprueba veinte cosas:
+Donde `<juego>` es el valor de `?demo=`: `race`, `stellar`, `ledger`, `rockets`, `wheel`, `pasanaku`, `teleferico`, `tombola`. El auditor abre Chrome, corre un sorteo real contra drand y comprueba veinte cosas:
 
 | # | Comprobación | Por qué importa |
 |---|---|---|
@@ -87,7 +87,42 @@ Guarda capturas en `docs/capturas/juego-<juego>*.png` para revisar a ojo lo que 
 
 Y el auditor de sonido engancha `OscillatorNode` antes de que cargue la página, anota cada nota que arranca (cuándo, qué altura, qué timbre, qué volumen, cuánto dura) y mide lo que se puede medir sin oídos: que nada quede fuera del rango que reproduce un parlante de sala, que nada quede por debajo del murmullo, que todo esté en la escala, que no haya huecos de más de cuatro segundos, que ningún golpe se redispare y que ningún sonido quede tapado por otro al doble de volumen.
 
-Un juego no entra a `main` hasta que las dos auditorías dicen APROBADO.
+Un juego no entra a `main` hasta que las tres auditorías dicen APROBADO.
+
+## El auditor exigente
+
+```bash
+node scripts/audit-rigor.mjs <juego>      # o "todos"
+```
+
+Las dos auditorías de arriba comprueban que el juego no decida nada y que el sorteo cierre. Esta mide lo que antes estaba en la lista de "revisalo vos a ojo", y que por estar ahí se revisaba poco.
+
+**Cómo lo logra.** Antes de que cargue la página cambia el reloj: cada cuadro de animación avanza exactamente un sesenta y cuatroavo de segundo, sin importar cuánto tardó de verdad, y adentro de la página se toma una huella de la pantalla cada seis cuadros (una grilla de 32 por 18 en grises). Así dos corridas se comparan cuadro contra cuadro, y lo que se mide no depende de lo cargada que esté la máquina. Corre sin red, con la escena fija de `?pose=<juego>`, y cada juego se corre once veces: dos iguales, tres saltando, dos duraciones más, en celular, en tema claro, y con dos y con doscientas personas.
+
+Un sesenta y cuatroavo y no un sesentavo porque un sesentavo no es exacto en binario: sumado cuadro a cuadro, la resta entre dos marcas de tiempo dependía del instante en que arrancaba el juego, y en un juego con física, como el Pasanaku, eso movía un píxel de vez en cuando entre dos corridas iguales. Era un error del reloj del auditor, no del juego.
+
+Para afinar un caso sin correr las once: `node scripts/audit-rigor.mjs <juego> --gente 2` corre una sola escena con esa cantidad de personas y deja la corrida escrita. Con `--volcar`, la auditoría completa escribe todas las corridas y no sólo la primera.
+
+| Comprobación | Qué se mide | Por qué |
+|---|---|---|
+| La misma ronda dibuja los mismos cuadros | Las huellas de dos corridas, una por una. Si difieren, dice cuándo y en qué parte de la pantalla | Es la promesa de la animación reproducible. Encontró los avatares, que se decodificaban cuando el navegador quería, y los adornos que giraban con la hora de la página en vez de la del juego |
+| El juego no llama a `Math.random()` | Se envuelve la función y se cuentan las llamadas mientras el estadio está a la vista | La regla de siempre, ahora comprobada |
+| Nunca pasan más de 4 s sin que cambie la pantalla | Cuánto cambió la huella contra la de medio segundo atrás | Desde el fondo de la sala, una pantalla que casi no cambia es una foto. Encontró el armado de la constelación y la mesa final del Cierre de Libro |
+| Un hecho nuevo cada 2,5 s, y nunca 4 s sin ninguno | Cada sonido que arranca, cada línea nueva del relator y cada salto de la pantalla después de un rato quieta | Encontró el tercer apretón del Pasanaku: cuatro segundos de zumbido parejo |
+| El relator no tartamudea | Dos líneas a menos de tres décimos | Encontró el nudo del Pasanaku cambiando de frase ocho veces seguidas |
+| Ningún cuadro queda vacío | Huellas de un solo gris | |
+| Corre fluido | Tiempo real de cada cuadro: 30 por segundo o más, y el 95% en menos de 80 ms | Los cuadros en que el auditor lee el lienzo entero no cuentan |
+| El nombre del ganador se lee desde el fondo | Alto de la tinta dentro del cartel: 4,5% del alto de la pantalla o más | A 720 son 32 píxeles, que a un cuarto de escala siguen siendo ocho |
+| La tinta del cartel contrasta 4,5:1 o más | Luminancia medida de la tinta contra el fondo del cartel | Un proyector lava el negro |
+| Al terminar no queda nada corriendo | Bucles de animación de más, estadio oculto, scroll devuelto, sin pantalla completa | |
+| Saltar al 10%, al 50% y al 90% cierra | Que el estadio se vaya antes de seis segundos reales, sin bucles ni excepciones | El cartel se sostiene tres a propósito |
+| Dura lo que se eligió | Rápido, normal y épico contra 20, 30 y 42 segundos, con 20% de margen | |
+| En celular y en tema claro | Las mismas medidas donde más se rompen | |
+| Con dos y con doscientas | Que cierre, se mueva, fluya y el cartel se lea, con `?n=2` y `?n=200` (veinticuatro en la ruleta, que es su tope) | Contesta la pregunta que antes era "revisalo vos". Con dos personas encontró la Constelación con el cielo casi vacío en el armado y en los saltos finales, y el único apretón del Pasanaku con un tirón cada cuatro segundos |
+
+Para medir el cartel, `drawWinnerPlate` anota en el lienzo el rectángulo donde lo dibujó. Buscarlo por el color no alcanzaba: el aguayo del Pasanaku tiene una franja del mismo amarillo, y el auditor la medía como si fuera el cartel.
+
+Cada corrida deja en `docs/capturas/rigor/<juego>-corrida.json` cuándo sonó algo, qué dijo el relator y cuánto cambió la pantalla en cada décimo de segundo, para mirar un hueco sin volver a correr nada.
 
 ## La duración
 
@@ -102,7 +137,7 @@ Era un multiplicador fijo (`0,8 / 1,4 / 2,2`) y el problema no era el número si
 
 **El tope de ×2,2 no es negociable.** Más que eso no es más emoción, es cámara lenta: la ruleta tenía dos segundos de crucero en los que la imagen es un borrón, y multiplicarlos por tres y medio son ocho segundos de nada. Un juego que topa ahí **necesita más contenido, no ir más despacio**. Por eso la ruleta pasó de 7,65 a 17,2 segundos nominales acortando el borrón y alargando la frenada, el Cierre de Libro llegó a seis pasadas y al Pasanaku se le dio tiempo al tejido de los hilos y al apretón.
 
-Hoy, medido: "normal" son treinta segundos en los seis.
+Hoy, medido por el auditor exigente: "normal" son treinta segundos en los ocho.
 
 ## El sonido
 
@@ -147,7 +182,7 @@ Las grillas se reparten con la proporción real de la pantalla y no con una cons
 
 ## Lo que el auditor no puede ver
 
-Revisalo vos antes de subirlo:
+El ritmo, la legibilidad del cartel y el tartamudeo del relator ya los mide el auditor exigente. Lo que sigue no, y lo revisás vos antes de subirlo:
 
 - ¿Se entiende quién va ganando sin leer texto?
 - ¿Se lee desde el fondo de la sala, proyectado?
@@ -157,7 +192,7 @@ Revisalo vos antes de subirlo:
 - ¿Hay silencio justo antes del golpe? Un cuarto de segundo sin nada es el efecto más barato que existe.
 - ¿Cada pasada, ronda o fase elimina a alguien de verdad? Hubo una que el narrador anunciaba como "¡última pasada!" y no sacaba a nadie.
 - ¿El dato de la tarjeta es verdad? El auditor comprueba que haya un enlace, no que el enlace diga lo que la tarjeta dice. Eso lo comprobás vos, en la fuente primaria, antes de subirlo.
-- ¿Funciona con 2 participantes y con 200? El protocolo tiene su propia prueba de carga en [`src/protocol/carga.test.ts`](../src/protocol/carga.test.ts): sellar diez mil nombres y sortear treinta y dos ganadores entre ellos pasa desapercibido. Lo que hay que mirar a ojo es el juego, no el protocolo.
+- ¿Se ve bien con 2 participantes y con 200? Que funcione, fluya y no quede quieto lo mide el auditor exigente; si se entiende quién es quién, lo mirás vos. El protocolo tiene su propia prueba de carga en [`src/protocol/carga.test.ts`](../src/protocol/carga.test.ts): sellar diez mil nombres y sortear treinta y dos ganadores entre ellos pasa desapercibido.
 - ¿El ganador queda claro al final, sin ambigüedad?
 
 ## Juegos actuales
@@ -170,3 +205,5 @@ Revisalo vos antes de subirlo:
 | Carrera de cohetes | `rockets` | Motor de carrera, tema espacial | 8 en pantalla | [carrera-stellar.md](juegos/carrera-stellar.md) |
 | Pasanaku | `pasanaku` | Módulo propio | 200 | [pasanaku.md](juegos/pasanaku.md) |
 | Ruleta | `wheel` | Módulo propio | 24 | [ruleta.md](juegos/ruleta.md) |
+| Teleférico | `teleferico` | Módulo propio | 200 | [teleferico.md](juegos/teleferico.md) |
+| Tómbola | `tombola` | Módulo propio | 200 | [tombola.md](juegos/tombola.md) |

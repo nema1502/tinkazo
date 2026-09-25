@@ -1,6 +1,6 @@
 import { T, getLang, t } from "../i18n";
 import { beep, beepFor, fanfare, note } from "../sound";
-import { avatar, paceFactor, setGameLength, type Beacon } from "../state";
+import { paceFactor, setGameLength, type Beacon } from "../state";
 import { INK, WINNER_HOLD, chrome, clamp, drawFlag, ease, mount, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
 
 /**
@@ -104,17 +104,6 @@ export function pasanaku(
   /** Puesto de cada persona: 0 es el ganador, el último es el primero en salir. */
   const place = new Map(rank.map((idx, pos) => [idx, pos]));
 
-  const faces = new Map<number, HTMLImageElement>();
-  function face(idx: number): HTMLImageElement {
-    let im = faces.get(idx);
-    if (!im) {
-      im = new Image();
-      im.src = avatar(names[idx] ?? "", 64);
-      faces.set(idx, im);
-    }
-    return im;
-  }
-
   let phase: Phase = "spread";
   let tAll = 0;
   let acc = 0;
@@ -127,6 +116,9 @@ export function pasanaku(
   let flashK = 0;
   let shake = 0;
   let knotHits = 0;
+  let saidKnot = false;
+  let tugs = 0;
+  let lastTug = -99;
   let saidUpTo = -1;
   let lastOut = -999;
   let liftK = 0;
@@ -272,7 +264,9 @@ export function pasanaku(
         beep(note(7), 0.09, "sine", 0.03);
         setTimeout(() => beep(note(5), 0.09, "sine", 0.026), 60);
       }
-      if (tAll - lastOut > 0.5 && alive().length <= 8) {
+      // El penúltimo no se anuncia: sale 0,15 s de juego antes del cartel, y
+      // su línea duraba un cuarto de segundo antes de que la pisara la corona.
+      if (tAll - lastOut > 0.5 && alive().length <= 8 && keep > 1) {
         lastOut = tAll;
         say(T[getLang()].cPasOut(names[q.idx] ?? ""), 0.5);
       }
@@ -337,8 +331,25 @@ export function pasanaku(
         // grado por apretón y dura el apretón entero.
         beepFor(note(Math.max(0, 4 - (pulls - 1) * 2)), PULL_DUR + 0.2, "sawtooth", 0.03);
       }
+      // Cada apretón son tres tirones, con golpe y sacudida de la tela. El
+      // último apretón no saca a nadie ·ya quedan los finalistas· y eran
+      // cuatro segundos reales de un zumbido parejo: la sala no tenía nada
+      // nuevo que mirar ni que oír justo antes del nudo.
+      // Un tirón por segundo de juego como mucho, no un tercio del apretón:
+      // con dos participantes hay un solo apretón de 7,5 segundos, y en tercios
+      // quedaban cuatro segundos reales entre tirón y tirón. El que cae justo
+      // donde arranca un apretón no suena: ahí ya suena el apretón.
+      const tug = Math.min(1, PULL_DUR / 3);
+      const wantTugs = Math.floor((tAll - T_CINCH) / tug);
+      while (tugs < wantTugs) {
+        tugs++;
+        const fase = (tugs * tug) % PULL_DUR;
+        if (fase < 0.2 || PULL_DUR - fase < 0.2) continue;
+        lastTug = tAll;
+        beep(note(3), 0.08, "square", 0.04);
+      }
       const p = clamp((tAll - T_CINCH) / CINCH_DUR, 0, 1);
-      cinchTotal = ease.outCubic(p) * 0.86;
+      cinchTotal = ease.outCubic(p) * 0.86 + 0.035 * Math.exp(-(tAll - lastTug) * 9);
       // Cuántos quedan vivos según lo avanzado del apretón.
       const target = Math.max(FINAL, Math.round(n * (1 - p) ** 1.5));
       if (alive().length > target) evict(target);
@@ -364,7 +375,14 @@ export function pasanaku(
       } else if (alive().length > FINAL) {
         evict(FINAL);
       }
-      if (knotHits === 1) say(t("cPasKnot"), 0.9);
+      // Con cierre, no con `knotHits === 1`: esa condición se cumple unos
+      // catorce cuadros seguidos, y en cada uno el relator elegía otra variante
+      // de la frase. El auditor exigente midió ocho cambios del comentario en
+      // dos décimas de segundo, justo en el nudo.
+      if (knotHits >= 1 && !saidKnot) {
+        saidKnot = true;
+        say(t("cPasKnot"), 0.9);
+      }
       return;
     }
 

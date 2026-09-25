@@ -14,6 +14,8 @@ const GAME_BUTTONS: ReadonlyArray<[string, Game]> = [
   ["g-stellar", "stellar"],
   ["g-ledger", "ledger"],
   ["g-pasanaku", "pasanaku"],
+  ["g-teleferico", "teleferico"],
+  ["g-tombola", "tombola"],
   ["g-rockets", "rockets"],
   ["g-wheel", "wheel"],
 ];

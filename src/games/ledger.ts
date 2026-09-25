@@ -1,7 +1,7 @@
 import { T, getLang, t } from "../i18n";
 import { beep, beepFor, fanfare, note } from "../sound";
-import { avatar, paceFactor, setGameLength, type Beacon } from "../state";
-import { INK, WINNER_HOLD, chrome, clamp, ease, mount, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
+import { drawAvatar, paceFactor, setGameLength, type Beacon } from "../state";
+import { INK, WINNER_HOLD, chrome, clamp, ease, mount, drawWinnerPlate, flashScreen, markPlate, shorten, winnerNames, winnersLabel } from "./overlay";
 
 /**
  * Cierre de Libro.
@@ -29,6 +29,7 @@ interface Card {
   w: number;
   h: number;
   tw: number;
+  th: number;
   /** 0 mientras cae, 1 cuando está puesta. */
   in: number;
   alive: boolean;
@@ -108,17 +109,6 @@ export function ledgerClose(
     WINNER_HOLD,
   );
 
-  const faces = new Map<number, HTMLImageElement>();
-  /** El avatar de una persona, cargado una sola vez. */
-  function face(idx: number): HTMLImageElement {
-    let im = faces.get(idx);
-    if (!im) {
-      im = new Image();
-      im.src = avatar(names[idx] ?? "", 64);
-      faces.set(idx, im);
-    }
-    return im;
-  }
 
   /**
    * Recorta el nombre a lo que entra.
@@ -148,7 +138,7 @@ export function ledgerClose(
   let shake = 0;
 
   const cards: Card[] = names.map((_, i) => ({
-    idx: i, x: 0, y: 0, tx: 0, ty: 0, w: 0, h: 0, tw: 0,
+    idx: i, x: 0, y: 0, tx: 0, ty: 0, w: 0, h: 0, tw: 0, th: 0,
     in: 0, alive: true, killed: 0, bits: [], stamp: 0,
   }));
 
@@ -169,8 +159,16 @@ export function ledgerClose(
 
   layout(n);
 
-  /** Acomoda las `m` tarjetas vivas en una grilla centrada. */
-  function layout(m: number): void {
+  /**
+   * Acomoda las `m` tarjetas vivas en una grilla centrada.
+   *
+   * En la mesa final (`finale`) la cámara se acerca: una sola columna y
+   * tarjetas del doble. Quedaban tres tarjetas de 260 por 94 en el medio de
+   * una pantalla oscura, con los nombres a 22 píxeles, durante los ocho
+   * segundos de más tensión del juego. De cerca se leía; desde el fondo de la
+   * sala eran tres rayas y unas cruces finitas.
+   */
+  function layout(m: number, finale = false): void {
     const k = u();
     const w = W();
     const h = H();
@@ -180,10 +178,10 @@ export function ledgerClose(
     // repartía once tarjetas en cinco columnas: quedaban diminutas, apretadas
     // arriba a la izquierda, con los nombres reemplazados por barritas, y
     // media pantalla vacía debajo.
-    const cols = Math.max(1, Math.round(Math.sqrt(m * (w / h))) || 1);
+    const cols = finale ? 1 : Math.max(1, Math.round(Math.sqrt(m * (w / h))) || 1);
     const rows = Math.ceil(m / cols);
-    const gap = 8 * k;
-    let cw = clamp((w * 0.86) / cols - gap, 34 * k, 260 * k);
+    const gap = (finale ? 18 : 8) * k;
+    let cw = clamp((w * 0.86) / cols - gap, 34 * k, (finale ? 560 : 260) * k);
     let ch = cw * 0.36;
     // Y que la grilla entera entre a lo alto: con pocas columnas son muchas
     // filas, y una tarjeta ancha de más las empuja fuera de la pantalla.
@@ -200,9 +198,10 @@ export function ledgerClose(
       q.tx = x0 + (i % cols) * (cw + gap);
       q.ty = y0 + Math.floor(i / cols) * (ch + gap);
       q.tw = cw;
-      q.h = ch;
+      q.th = ch;
       if (q.w === 0) {
         q.w = cw;
+        q.h = ch;
         // Caen desde arriba, escalonadas por su puesto en el orden sembrado.
         q.x = q.tx;
         q.y = -ch - rng() * h * 0.5;
@@ -260,7 +259,7 @@ export function ledgerClose(
     const keep = survivors(sweepI);
     const alive = cards.filter((q) => q.alive).sort((a, b) => (rankOf.get(a.idx) ?? 0) - (rankOf.get(b.idx) ?? 0));
     alive.slice(keep).forEach(kill);
-    layout(keep);
+    layout(keep, sweepI + 1 >= SWEEPS.length);
     beep(note(12), 0.12, "triangle", 0.05);
     sweepI++;
     if (sweepI >= SWEEPS.length) {
@@ -312,6 +311,7 @@ export function ledgerClose(
         q.x += (q.tx - q.x) * sp;
         q.y += (q.ty - q.y) * sp;
         q.w += (q.tw - q.w) * sp;
+        q.h += (q.th - q.h) * sp;
       } else {
         q.killed += dt;
         const k = u();
@@ -433,8 +433,13 @@ export function ledgerClose(
       return;
     }
     const e = ease.outBack(clamp(q.in, 0, 1));
-    const w = q.w * (0.94 + 0.06 * e);
-    const h = q.h * (0.94 + 0.06 * e);
+    // En la mesa final las tarjetas laten con el corazón que suena: el oído y
+    // el ojo cuentan lo mismo, y la escena no queda quieta mientras la sala lee.
+    const late = phase === "stamp" && q.stamp === 0 ? 1 + 0.045 * Math.exp(-((tPhase % 0.55) * 7)) : 1;
+    const w = q.w * (0.94 + 0.06 * e) * late;
+    const h = q.h * (0.94 + 0.06 * e) * late;
+    c.save();
+    c.translate(-(w - q.w) / 2, -(h - q.h) / 2);
     c.fillStyle = INK;
     c.fillRect(q.x + 4 * k, q.y + 4 * k, w, h);
     c.fillStyle = dark ? "#2d2342" : "#ffffff";
@@ -453,15 +458,14 @@ export function ledgerClose(
     // como texto sin serlo, y la tarjeta sigue pareciendo una transacción.
     if (w > 110 * k) {
       const av = Math.min(h * 0.62, 24 * k);
-      const im = face(q.idx);
-      if (im.complete && im.naturalWidth) c.drawImage(im, q.x + 16 * k, q.y + (h - av) / 2, av, av);
+      drawAvatar(c, names[q.idx] ?? "", q.x + 16 * k, q.y + (h - av) / 2, av);
       const name = names[q.idx] ?? "";
       const tx = q.x + 16 * k + av + 8 * k;
       const room = q.x + w - 12 * k - tx;
       // El tercer tope es por el sitio que queda para el nombre. Sin él la
       // tipografía crecía con el alto de la tarjeta y en dos columnas quedaba
       // "Jorg...ani": la tarjeta era grande y el nombre igual no entraba.
-      c.font = `700 ${Math.min(22 * k, h * 0.34, room * 0.115)}px system-ui, sans-serif`;
+      c.font = `700 ${Math.min(46 * k, h * 0.34, room * 0.115)}px system-ui, sans-serif`;
       c.textAlign = "left";
       c.textBaseline = "middle";
       c.fillStyle = dark ? "#f6efe2" : INK;
@@ -474,6 +478,7 @@ export function ledgerClose(
     }
 
     if (q.stamp > 0) drawStamp(q, false);
+    c.restore();
   }
 
   function drawStamp(q: Card, ok: boolean): void {
@@ -534,6 +539,13 @@ export function ledgerClose(
     const k = u();
     const win = cards[winnerIdx] as Card;
     const e = ease.outBack(Math.min(1, sealK));
+    // Con varios premios, el cartel común con todos los nombres. La tarjeta
+    // sellada mostraba uno solo: el relator cantaba dos ganadores y la pantalla
+    // uno, que es mentir sobre lo que acaba de pasar.
+    if (winners.length > 1) {
+      drawWinnerPlate(c, winnerNames(names, winners), W() / 2, H() * 0.5, k, e);
+      return;
+    }
     // La tarjeta ganadora no es "la misma un poco más grande": cambia de color
     // y de tamaño, porque es lo único que la sala tiene que mirar.
     // Con tope. La tarjeta ganadora crece dos veces y media, y desde que las
@@ -552,11 +564,11 @@ export function ledgerClose(
     c.lineWidth = 6 * k;
     c.strokeStyle = INK;
     c.strokeRect(cx, cy, cw, ch);
+    markPlate(c, cx, cy, cw, ch);
 
     const name = names[winnerIdx] ?? "";
     const av = ch * 0.62;
-    const im = face(winnerIdx);
-    if (im.complete && im.naturalWidth) c.drawImage(im, cx + 20 * k, cy + (ch - av) / 2, av, av);
+    drawAvatar(c, name, cx + 20 * k, cy + (ch - av) / 2, av);
     c.font = `900 ${Math.min(52 * k, ch * 0.5)}px system-ui, sans-serif`;
     c.textAlign = "left";
     c.textBaseline = "middle";

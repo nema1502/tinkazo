@@ -1,5 +1,5 @@
 import { $ } from "../dom";
-import { LCOLORS, avatar, instantMode, paceFactor, type Beacon } from "../state";
+import { LCOLORS, drawAvatar, instantMode, paceFactor, type Beacon } from "../state";
 import { setPickSeed, t } from "../i18n";
 import { narrate, stopNarrator } from "../narrator";
 
@@ -87,6 +87,10 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
   if (!c) return null;
 
   const commentEl = $("commentary");
+  // Vacía al montar. Si no, en un evento con varios sorteos seguidos el juego
+  // nuevo arrancaba mostrando "¡ganó fulano!" del sorteo anterior hasta que el
+  // relator dijera su primera línea: casi tres segundos en la constelación.
+  commentEl.textContent = "";
   $("st-round").textContent = `${t("seed")} ${beacon.round}`;
   ov.style.display = "block";
   document.body.style.overflow = "hidden";
@@ -123,17 +127,6 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
   // de ventana en cero dura un cuadro y no se ve, pero el cuelgue es para
   // siempre.
   const u = (): number => Math.max(canvas.height, 1) / 720;
-
-  const avatars = new Map<string, HTMLImageElement>();
-  const imageOf = (name: string): HTMLImageElement => {
-    let im = avatars.get(name);
-    if (!im) {
-      im = new Image();
-      im.src = avatar(name, 64);
-      avatars.set(name, im);
-    }
-    return im;
-  };
 
   let rafId = 0;
   let dead = false;
@@ -195,16 +188,13 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
       c.lineWidth = 2 * k;
       c.stroke();
 
-      const im = imageOf(name);
-      if (im.complete && im.naturalWidth) {
-        c.save();
-        c.beginPath();
-        if (round) c.roundRect(x, y - 11 * k, av, av, 3 * k);
-        else c.rect(x, y - 11 * k, av, av);
-        c.clip();
-        c.drawImage(im, bx + 4 * k, y - 11 * k, av, av);
-        c.restore();
-      }
+      c.save();
+      c.beginPath();
+      if (round) c.roundRect(x, y - 11 * k, av, av, 3 * k);
+      else c.rect(x, y - 11 * k, av, av);
+      c.clip();
+      drawAvatar(c, name, bx + 4 * k, y - 11 * k, av);
+      c.restore();
       c.fillStyle = INK;
       c.fillText(label, bx + av + 10 * k, y + 3 * k);
       c.letterSpacing = "0px";
@@ -227,6 +217,7 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
     },
     run(fn) {
       let prev = 0;
+      let start = -1;
       // El factor de ritmo divide el tiempo que ve el juego, así que las
       // fases, los avisos del narrador y los sonidos se estiran juntos y
       // nunca se desacoplan.
@@ -237,7 +228,12 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
         // salte media animación de golpe.
         const dt = prev ? Math.min(0.05, (now - prev) / 1000) / pace : 0;
         prev = now;
-        fn(dt, now / 1000);
+        // El reloj de los adornos cuenta desde que arrancó el juego, no desde
+        // que se abrió la página. Si no, el sol de la ruleta y los brillos
+        // salían en otra posición según cuánto rato estuvo abierta la pestaña
+        // antes de sortear, y la misma ronda no se dibujaba igual dos veces.
+        if (start < 0) start = now;
+        fn(dt, (now - start) / 1000);
         if (!dead) rafId = requestAnimationFrame(loop);
       };
       rafId = requestAnimationFrame(loop);
@@ -391,7 +387,10 @@ export const WINNER_HOLD = 3;
 export function chrome(c: CanvasRenderingContext2D): { arriba: number; abajo: number } {
   const escala = c.canvas.height / Math.max(1, window.innerHeight);
   const angosto = window.innerWidth < 700;
-  return { arriba: 82 * escala, abajo: (angosto ? 118 : 86) * escala };
+  // Por debajo de 520 la ronda va en un renglón propio, debajo de la marca y
+  // los botones (ver `.st-top` en styles.css), y la barra crece.
+  const partida = window.innerWidth <= 520;
+  return { arriba: (partida ? 100 : 82) * escala, abajo: (angosto ? 118 : 86) * escala };
 }
 
 export function winnerNames(names: string[], winners: readonly number[]): string[] {
@@ -404,6 +403,19 @@ export function winnersLabel(names: string[], winners: readonly number[], max = 
   if (all.length <= 1) return all[0] ?? "";
   if (all.length <= max) return all.join(", ");
   return all.slice(0, max).join(", ") + " +" + (all.length - max);
+}
+
+/**
+ * Anota en el lienzo dónde quedó el cartel del ganador, en píxeles del lienzo
+ * y con la transformación que traiga el juego.
+ *
+ * Lo lee el auditor exigente para medir el nombre justo ahí: buscándolo por el
+ * color se confundía con la franja amarilla del aguayo. Un juego que dibuja su
+ * propio cartel, como el Cierre de Libro, lo llama también.
+ */
+export function markPlate(c: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+  const m = c.getTransform();
+  c.canvas.dataset.cartel = [m.e + m.a * x, m.f + m.d * y, m.a * w, m.d * h].map((v) => Math.round(v)).join(",");
 }
 
 /**
@@ -436,7 +448,11 @@ export function drawWinnerPlate(
   // con tipografía de 150 píxeles sobre un lienzo de 780. Un nombre largo se
   // iba de los dos bordes y el lienzo lo recortaba sin avisar. Se achica hasta
   // que entra, que es lo que haría cualquiera a mano.
-  const cabe = c.canvas.width * 0.94;
+  // El cartel entra con un rebote que llega a un 10% de más, y lleva la sombra
+  // corrida diez unidades: las dos cosas cuentan. Medido sólo a tamaño final,
+  // en un celular un nombre largo tocaba los dos bordes en el pico del rebote
+  // y la sombra quedaba cortada.
+  const cabe = (c.canvas.width * 0.94) / 1.1 - 10 * k;
   let wide = 0;
   for (let i = 0; i < 9; i++) {
     c.font = `900 ${size}px system-ui, sans-serif`;
@@ -449,6 +465,7 @@ export function drawWinnerPlate(
   const bw = wide + 72 * k;
   const lineH = size * 1.2;
   const bh = Math.max(110 * k, rows.length * lineH + 44 * k);
+  markPlate(c, -bw / 2, -bh / 2, bw, bh);
   c.fillStyle = "#e93d9c";
   c.fillRect(-bw / 2 + 10 * k, -bh / 2 + 10 * k, bw, bh);
   c.fillStyle = "#ffc629";
@@ -462,7 +479,7 @@ export function drawWinnerPlate(
   // abajo. Antes cartel y nombre aparecían pegados y el momento se leía como
   // una sola cosa que crece; ahora primero llega el cartel y después el nombre
   // se asienta adentro, que es donde mira la sala. La animación sale del mismo
-  // `scale` que trae cada juego, así que los seis la tienen sin tocar nada.
+  // `scale` que trae cada juego, así que todos la tienen sin tocar nada.
   const entra = clamp((scale - 0.5) / 0.42, 0, 1);
   c.globalAlpha = entra;
   rows.forEach((r, i) => c.fillText(r, 0, top + i * lineH + (1 - entra) * lineH * 0.5));

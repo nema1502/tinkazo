@@ -11,6 +11,8 @@ import { stadiumRace } from "../games/race";
 import { stellarConstellation } from "../games/constellation";
 import { ledgerClose } from "../games/ledger";
 import { pasanaku } from "../games/pasanaku";
+import { cableCar } from "../games/cablecar";
+import { tombola } from "../games/tombola";
 import { loreFor } from "../games/lore";
 import { currentSession } from "./wallet-ui";
 import { qrDataUrl } from "./qr";
@@ -148,6 +150,14 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   }
   if (app.game === "pasanaku") {
     pasanaku(names, winners, beacon, finish);
+    return;
+  }
+  if (app.game === "teleferico") {
+    cableCar(names, winners, beacon, finish);
+    return;
+  }
+  if (app.game === "tombola") {
+    tombola(names, winners, beacon, finish);
     return;
   }
   stadiumRace(names, winners, beacon, finish, app.game === "rockets" ? "stellar" : "andes");

@@ -1,6 +1,6 @@
 import { $ } from "../dom";
 import { T, getLang, setPickSeed, t } from "../i18n";
-import { LCOLORS, avatar, instantMode, paceFactor, setGameLength, type Beacon } from "../state";
+import { LCOLORS, drawAvatar, instantMode, paceFactor, setGameLength, type Beacon } from "../state";
 import { beep, beepFor, fanfare, note } from "../sound";
 import { THEMES, type ThemeId } from "./themes";
 import { registerSkip, WINNER_HOLD, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
@@ -15,7 +15,6 @@ interface Runner {
   x: number;
   v: number;
   n1: number;
-  img: HTMLImageElement | null;
 }
 
 interface Ridge {
@@ -47,6 +46,10 @@ export function stadiumRace(
     return;
   }
   const commentEl = $("commentary");
+  // Vacía al montar. Si no, en un evento con varios sorteos seguidos el juego
+  // nuevo arrancaba mostrando "¡ganó fulano!" del sorteo anterior hasta que el
+  // relator dijera su primera línea: casi tres segundos en la constelación.
+  commentEl.textContent = "";
   $("st-round").textContent = `${t("seed")} ${beacon.round}`;
   ov.style.display = "block";
   document.body.style.overflow = "hidden";
@@ -110,13 +113,8 @@ export function stadiumRace(
     [laneIdx[i], laneIdx[j]] = [laneIdx[j] as number, laneIdx[i] as number];
   }
   const runners: Runner[] = laneIdx.map((i, k) => ({
-    i, name: names[i] ?? "", color: color(k), x: 0, v: 0, n1: rng() * 7, img: null,
+    i, name: names[i] ?? "", color: color(k), x: 0, v: 0, n1: rng() * 7,
   }));
-  runners.forEach((r) => {
-    const im = new Image();
-    im.src = avatar(r.name, 64);
-    r.img = im;
-  });
   // Arrancan justo después de la línea de salida, no cortadas en el borde
   runners.forEach((r) => { r.x = canvas.width * 0.05; });
 
@@ -363,7 +361,9 @@ export function stadiumRace(
       : dark
         ? "rgba(255,255,255,0.14)"
         : "rgba(255,255,255,0.9)";
-    const tNow = performance.now() / 1000;
+    // Desde que arrancó la carrera, no desde que se abrió la página: la misma
+    // ronda tiene que dibujar las mismas nubes.
+    const tNow = (performance.now() - tStart) / 1000;
     for (const cl of clouds) {
       const cx = ((cl.x * w * 3 - camX * 0.12 - tNow * cl.sp * u) % (w + 300 * u)) - 150 * u;
       const cy = cl.y * h;
@@ -462,9 +462,7 @@ export function stadiumRace(
       c.fillRect(lx - 4 * u, chipY - hh * 0.64, tw + av + 18 * u, hh);
       c.lineWidth = (punta ? 3 : 2) * u; c.strokeStyle = INK;
       c.strokeRect(lx - 4 * u, chipY - hh * 0.64, tw + av + 18 * u, hh);
-      if (r.img && r.img.complete && r.img.naturalWidth) {
-        c.drawImage(r.img, lx, chipY - hh * 0.5, av, av);
-      }
+      drawAvatar(c, r.name, lx, chipY - hh * 0.5, av);
       c.fillStyle = "#191919";
       c.fillText(label, lx + av + 6 * u, chipY + fs * 0.34);
     });
@@ -532,6 +530,7 @@ export function stadiumRace(
   }
 
   let tPrev = performance.now();
+  const tStart = tPrev;
   let rafId = 0;
   const pace = paceFactor();
   function loop(now: number): void {

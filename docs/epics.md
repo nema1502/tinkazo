@@ -61,7 +61,7 @@ Cualquiera abre el comprobante, ve el sello y el registro leídos de la cadena y
 ### Épica 5: Lanzamiento a mainnet
 Contrato en mainnet con checklist de despliegue, documentación final y distribución en el ecosistema. NFR-3, 7.
 
-### Épica 7: Catálogo de juegos: seis juegos, todos aprobados
+### Épica 7: Catálogo de juegos: ocho juegos, todos aprobados por los tres auditores
 El show es lo único que se personaliza y lo que hace que una comunidad elija Tinkazo sobre una ruleta cualquiera. Cada juego nuevo pasa el auditor de `docs/juegos.md` antes de entrar.
 
 ### Épica 8: Que el juego enseñe: hecha
@@ -536,6 +536,51 @@ ninguno, y eso es lo que fija el tope útil de cada juego, no el rendimiento.
 - ~~Un aviso cuando la renta del contrato se acerque al vencimiento~~: hecho el 22 de septiembre de 2026. `pnpm check:renta` lee cuántos días le quedan a la instancia y al código, y sale con error por debajo de treinta (se le puede pedir otro umbral con `--dias`). Hoy: 113,9 días en testnet.
 - ~~Un indexador propio de sellos~~: no hizo falta. `sealsOnChain` recorre el estado del contrato, que no tiene ventana temporal, así que la enumeración dejó de depender de los siete días de eventos del RPC.
 
+### Historia 7.12: El auditor exigente: hecho
+
+Como organizadora,
+quiero que lo que se revisaba "a ojo" se mida,
+para que un juego no llegue al evento con cinco segundos muertos que nadie vio.
+
+Hecho (2026-09-24): `scripts/audit-rigor.mjs`. Cambia el reloj antes de que cargue la página, de modo que cada cuadro avanza un sesentavo de segundo exacto, y toma una huella de la pantalla cada seis cuadros. Con eso dos corridas se comparan cuadro contra cuadro, y el ritmo, la fluidez y la legibilidad dejan de depender de la máquina que audita. Son veinte comprobaciones por juego, en once corridas: dos iguales, tres saltando, dos duraciones más, celular, tema claro, y con dos y con doscientas personas (veinticuatro en la ruleta). El detalle está en `docs/juegos.md`.
+
+La primera pasada sobre los seis juegos dio 95 de 102, y las siete fallas eran reales:
+
+- **La Constelación arrancaba con 7,7 segundos casi quietos.** Estrellitas apareciendo sobre fondo fijo y un paquete de once píxeles: de cerca se veía, desde el fondo era una foto. Ahora la cámara entra mientras se arma el cielo, el paquete es del doble con un halo, y cada estrella que toca abre una onda.
+- **El Cierre de Libro llegaba al clímax con tres tarjetas de 260 por 94 en medio de la pantalla**, nombres a 22 píxeles y cruces finitas: 6,7 segundos sin cambio visible. Ahora la mesa final se acerca, una columna de tarjetas del doble con nombres de hasta 46, y las finalistas laten con el corazón que ya sonaba.
+- **El Pasanaku tartamudeaba en el nudo**: `if (knotHits === 1) say(...)` se cumplía catorce cuadros seguidos y el comentario cambió de frase ocho veces en dos décimas. Ahora es un cierre booleano, y el auditor tiene una comprobación propia para eso.
+- **El tercer apretón del Pasanaku eran cuatro segundos de zumbido parejo** sin nada nuevo. Ahora cada apretón son tres tirones con golpe y sacudida de la tela.
+- **Los avatares se decodificaban cuando el navegador quería**, así que los primeros cuadros de cada ficha salían sin cara y la misma ronda no se dibujaba igual dos veces. Ahora se pintan directo en el lienzo, desde el primer cuadro.
+- **Los adornos giraban con la hora de la página**, no la del juego: el sol de la ruleta y las nubes de la carrera salían distintos según cuánto rato estuvo abierta la pestaña.
+- **La caja del relator no se vaciaba al montar el estadio**: en un evento con varios sorteos seguidos, el juego nuevo arrancaba mostrando "¡ganó fulano!" del anterior.
+
+Y tres errores del propio auditor, encontrados antes de culpar a nadie: tomaba las huellas contadas desde que abrió la página y no desde que arrancó el juego; buscaba el cartel del ganador por el color, que en el Pasanaku coincide con una franja del aguayo (ahora `drawWinnerPlate` anota en el lienzo el rectángulo donde lo dibujó); y su reloj avanzaba de a un sesentavo de segundo, que no es exacto en binario, así que en un juego con física dos corridas iguales diferían en un píxel. Ahora avanza de a un sesenta y cuatroavo.
+
+La segunda vuelta, ya con ocho juegos y las corridas con dos y con doscientas personas, dio 158 de 160, y las dos fallas volvieron a ser reales:
+
+- **La Constelación con dos personas** era un cielo de dieciocho rombos de catorce píxeles y dos estrellas. Casi todos los saltos caían en rombos, que no reaccionaban al tocarlos. Ahora los rombos aparecen de a uno con una onda, crecen cuando hay poca gente y hacen onda cuando los toca el paquete; y en los saltos lentos del final la cámara se acerca y sigue al paquete, y se aleja en la nova para mostrar la constelación entera. Eso mejoró el final con cualquier cantidad de gente.
+- **El Pasanaku con dos personas** tiene un solo apretón de siete segundos y medio, y los tirones iban en tercios del apretón: uno cada cuatro segundos reales. Ahora tienen ritmo propio, uno por segundo de juego como mucho.
+
+De paso apareció algo que ningún auditor miraba: **con varios premios, el Cierre de Libro mostraba un solo nombre** en su tarjeta sellada. El relator cantaba los dos y la pantalla uno. Ahora usa el cartel común con todos.
+
+Y el auditor de juegos, corrido de nuevo sobre los ocho contra drand de verdad, encontró uno en el cartel común: ajustaba el tamaño para entrar al 94% del ancho a tamaño final, pero el cartel entra con un rebote que llega a un 10% de más y lleva la sombra corrida. En un celular, con dos premios y un nombre largo, tocaba los dos bordes y la sombra quedaba cortada. Dependía de qué ganador saliera, así que fallaba de a ratos. Ahora el ajuste cuenta el rebote y la sombra, y lo arregla en los ocho juegos a la vez.
+
+Al cierre (2026-09-25): los ocho juegos, 20 de 20 en el auditor exigente y 20 de 20 en el auditor de juegos; el de sonido, 8 de 8; el de interfaz, 44 de 44 (contaba seis miniaturas escritas a mano, ahora cuenta los botones del selector); las páginas de lectura, el QR y las trece fuentes de las tarjetas, sanos.
+
+### Historia 7.13: Teleférico: hecho
+
+Un convoy de cabinas sube por el cable y en cada estación se baja la mitad, hasta que una sola llega a la cumbre. Las cabinas llevan los colores de las diez líneas de Mi Teleférico, y la tarjeta de historia cita al fabricante. Detalle en `docs/juegos/teleferico.md`.
+
+Nació pasando el auditor exigente, y lo que se corrigió antes de subirlo salió de mirarlo en fotos: el número de la estación y la cuenta de los que se bajaban quedaban tapados por la cabina que llegaba; el embarque decía "subieron 8" con cinco caras en las ventanas; y el fondo era un nevado de tres picos, que `docs/marca.md` pide no poner. Ahora es una cordillera genérica.
+
+### Historia 7.14: Tómbola: hecho
+
+El bombo de las kermeses: una bola por persona con su número en la lista sellada, tres vueltas de manivela, y la que sale por la compuerta es la ganadora. Es el único juego donde sale una sola en vez de ir sacando gente, como en una tómbola de verdad, y el sorteo que cualquier sala entiende sin explicación. Física de paso fijo en radios del bombo, así que girar el celular no mueve ninguna bola. Detalle en `docs/juegos/tombola.md`.
+
+Lo que se corrigió mirándola en fotos antes de auditarla: las guirnaldas se cruzaban con el bombo y con el contador; la bola rodaba dentro de la canaleta en vez de encima; el vaso era una caja amarilla; y el cartel final tapaba el bombo. Y al saltar, la física seguía corriendo con paletas que ya no se dibujaban: ahora saltar deja las bolas asentadas en una pila calculada.
+
+Y una que encontró el auditor de juegos, contra drand de verdad: en un celular, con dos premios, el cartel no aparecía. Se le pasaba la escala de la escena en vez de la de pantalla, que en un teléfono es la mitad, y los dos nombres salían a quince píxeles. Ahora usa la misma que los demás juegos.
+
 ### Historia 7.3: Mejoras transversales de presentación
 
 Como organizadora,
@@ -568,6 +613,8 @@ para que el sorteo encaje con el tono de mi público.
 **Y** si es una carrera, se agrega como tema y no como módulo nuevo.
 
 Resultado parcial (2026-09-20): seis juegos en el catálogo, todos con 15/15. Constelación Stellar, Cierre de Libro, Pasanaku, Carrera de llamas, Carrera de cohetes y Ruleta.
+
+Resultado (2026-09-24): ocho. Entraron el Teleférico (historia 7.13), el primero que nace pasando el auditor exigente, y la Tómbola (7.14).
 
 ---
 

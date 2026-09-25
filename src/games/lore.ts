@@ -156,6 +156,19 @@ export const LORE: Record<string, Lore[]> = {
       hue: "yellow",
     },
   ],
+  teleferico: [
+    {
+      // "Bolivia is home to Mi Teleférico, the world's biggest urban ropeway
+      //  network. A total of ten lines connect the cities of La Paz and El Alto"
+      // y "detachable 10-passenger gondola lifts [...] 1,396 cabins". Las
+      // líneas se llaman por su color: Roja, Amarilla, Verde, Azul y seis más.
+      q: "loreTelefericoQ",
+      a: "loreTelefericoA",
+      href: "https://www.doppelmayr.com/en/reference-projects/reference-project-mi-teleferico/",
+      src: "doppelmayr.com · Mi Teleférico",
+      hue: "teal",
+    },
+  ],
 };
 
 /**

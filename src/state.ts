@@ -1,5 +1,5 @@
 /** `race` y `stellar` son la misma carrera con distinto escenario. */
-export type Game = "race" | "stellar" | "wheel" | "ledger" | "rockets" | "pasanaku";
+export type Game = "race" | "stellar" | "wheel" | "ledger" | "rockets" | "pasanaku" | "teleferico" | "tombola";
 
 /** Ronda de quicknet ya publicada y verificada. */
 export interface Beacon {
@@ -95,7 +95,7 @@ export const ANCHOR_LEAD_SECONDS = 45;
  * organizador tenía que reaprender el botón cada vez que cambiaba de juego.
  *
  * Ahora el selector dice cuánto tiene que durar el show y cada juego declara
- * cuánto dura sin estirar. "Normal" significa treinta segundos en los seis.
+ * cuánto dura sin estirar. "Normal" significa treinta segundos en todos.
  *
  * El resultado no cambia: el ganador ya estaba decidido antes de que empiece.
  */
@@ -188,4 +188,4 @@ export const SAMPLE = [
 // El avatar se dibuja en el navegador. Antes se le pedía a un servicio
 // externo con el nombre de la persona en la dirección, lo que sacaba la lista
 // entera del navegador de a un nombre por vez. Ver src/avatar.ts.
-export { avatar } from "./avatar";
+export { avatar, drawAvatar } from "./avatar";

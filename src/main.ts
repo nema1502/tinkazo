@@ -93,6 +93,8 @@ $("g-race").addEventListener("click", () => setGame("race"));
 $("g-stellar").addEventListener("click", () => setGame("stellar"));
 $("g-ledger").addEventListener("click", () => setGame("ledger"));
 $("g-pasanaku").addEventListener("click", () => setGame("pasanaku"));
+$("g-teleferico").addEventListener("click", () => setGame("teleferico"));
+$("g-tombola").addEventListener("click", () => setGame("tombola"));
 $("g-rockets").addEventListener("click", () => setGame("rockets"));
 $("g-wheel").addEventListener("click", () => setGame("wheel"));
 $("btn-draw").addEventListener("click", () => void draw());
@@ -107,7 +109,7 @@ initWalletUI();
 refreshFreezeLabel();
 
 /* Modo demo y pose para capturas: `?demo=<juego>`, `?pose=1`, `?instant=1`. */
-const GAMES: readonly Game[] = ["race", "stellar", "ledger", "pasanaku", "rockets", "wheel"];
+const GAMES: readonly Game[] = ["race", "stellar", "ledger", "pasanaku", "teleferico", "tombola", "rockets", "wheel"];
 
 async function autoDemo(mode: string): Promise<void> {
   loadSample();
@@ -133,28 +135,47 @@ async function autoDemo(mode: string): Promise<void> {
  */
 async function poseScene(): Promise<void> {
   const fakeBeacon = { round: 32254977, randomness: "6e049991d7e23bdc566d3adfff08cd81798c644bc54dd5daa18eb0a8938b2829", signature: "a77a689daae687c7b16e6f9388d4ebbb7b368d09d7a6c33ad1dfd75d32e4114cfbdcf3e2cc54f4fee659abf2ac7ef9ac" };
-  app.frozen = { names: SAMPLE, listHash: "32e2099c7a8dde7b6892523dc7d3e34ac06a972fd67f142186c58dced51a21ef", ts: 0, at: "-", prize: "", round: 32254977 };
-  app.drawn = { beacon: fakeBeacon, winners: [3] };
+  // `?n=<cantidad>` arma una lista de ese largo con los nombres de ejemplo
+  // numerados, para medir cada juego con dos personas y con doscientas sin
+  // tocar la red. Es solo para la escena fija: no sella ni sortea nada.
+  const cantidad = Math.max(0, Math.min(2000, Math.floor(Number(params.get("n")) || 0)));
+  const L = cantidad
+    ? Array.from({ length: cantidad }, (_, i) => {
+      const vuelta = Math.floor(i / SAMPLE.length);
+      return `${SAMPLE[i % SAMPLE.length]}${vuelta ? ` ${vuelta + 1}` : ""}`;
+    })
+    : SAMPLE;
+  const W3 = [Math.min(3, L.length - 1)];
+  app.frozen = { names: L, listHash: "32e2099c7a8dde7b6892523dc7d3e34ac06a972fd67f142186c58dced51a21ef", ts: 0, at: "-", prize: "", round: 32254977 };
+  app.drawn = { beacon: fakeBeacon, winners: W3 };
   const cual = params.get("pose") ?? "1";
   const nada = (): void => {};
   if (cual === "wheel") {
-    (await import("./games/wheel")).wheelSpin(SAMPLE, [3], fakeBeacon, nada);
+    (await import("./games/wheel")).wheelSpin(L, W3, fakeBeacon, nada);
     return;
   }
   if (cual === "ledger") {
-    (await import("./games/ledger")).ledgerClose(SAMPLE, [3], fakeBeacon, nada);
+    (await import("./games/ledger")).ledgerClose(L, W3, fakeBeacon, nada);
     return;
   }
   if (cual === "pasanaku") {
-    (await import("./games/pasanaku")).pasanaku(SAMPLE, [3], fakeBeacon, nada);
+    (await import("./games/pasanaku")).pasanaku(L, W3, fakeBeacon, nada);
+    return;
+  }
+  if (cual === "teleferico") {
+    (await import("./games/cablecar")).cableCar(L, W3, fakeBeacon, nada);
+    return;
+  }
+  if (cual === "tombola") {
+    (await import("./games/tombola")).tombola(L, W3, fakeBeacon, nada);
     return;
   }
   if (cual === "stellar") {
-    (await import("./games/constellation")).stellarConstellation(SAMPLE, [3], fakeBeacon, nada);
+    (await import("./games/constellation")).stellarConstellation(L, W3, fakeBeacon, nada);
     return;
   }
   // "rockets" es la carrera con la piel espacial; cualquier otro valor, la andina.
-  stadiumRace(SAMPLE, [3], fakeBeacon, nada, cual === "rockets" ? "stellar" : "andes");
+  stadiumRace(L, W3, fakeBeacon, nada, cual === "rockets" ? "stellar" : "andes");
 }
 
 renderNames();

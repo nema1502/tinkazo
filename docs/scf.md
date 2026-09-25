@@ -143,7 +143,7 @@ La métrica propuesta, que es honesta y se puede verificar en la cadena:
 
 **No pedir el máximo.** El handbook es explícito: *"Requesting the maximum award amount is not expected. Proposals that overreach in cost relative to their scope often perform poorly in review and voting."* En la ronda 44, SAFU ganó con treinta mil y VRF-Soroban con cincuenta mil.
 
-**Pedir entre treinta y sesenta mil dólares.** Y ojo con un problema conceptual: el fondo no reembolsa trabajo hecho, y el contrato, el protocolo, el sitio y los seis juegos ya están. Los tres tramos tienen que mirar hacia adelante y no ser relleno.
+**Pedir entre treinta y sesenta mil dólares.** Y ojo con un problema conceptual: el fondo no reembolsa trabajo hecho, y el contrato, el protocolo, el sitio y los ocho juegos ya están. Los tres tramos tienen que mirar hacia adelante y no ser relleno.
 
 Esqueleto propuesto:
 

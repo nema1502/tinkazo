@@ -356,6 +356,121 @@ const PAINTERS: Record<string, Painter> = {
     }
   },
 
+  /** Tres cabinas subiendo por el cable hasta la estación de arriba. */
+  teleferico(c, t) {
+    const g = c.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, "#152052");
+    g.addColorStop(0.6, "#2a1b48");
+    g.addColorStop(1, "#b3553f");
+    c.fillStyle = g;
+    c.fillRect(0, 0, W, H);
+    // Las luces de la ciudad, abajo, quietas.
+    c.fillStyle = "#ffc27a";
+    for (let i = 0; i < 18; i++) c.fillRect((i * 37) % W, H - 4 - ((i * 13) % 12), 1.5, 1.5);
+    const x0 = -6;
+    const y0 = H + 2;
+    const x1 = W + 6;
+    const y1 = 4;
+    const at = (q: number): [number, number] => [x0 + (x1 - x0) * q, y0 + (y1 - y0) * q];
+    c.strokeStyle = INK;
+    c.lineWidth = 2;
+    c.beginPath();
+    c.moveTo(x0, y0);
+    c.lineTo(x1, y1);
+    c.stroke();
+    // Las cabinas llevan los colores de las líneas: roja, verde, azul.
+    const lines = ["#d7263d", "#2f9e44", "#1c64c8"];
+    for (let i = 0; i < 3; i++) {
+      const q = ((t * 0.16 + i * 0.28) % 1) * 0.72;
+      const [x, y] = at(q);
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.moveTo(x, y);
+      c.lineTo(x, y + 6);
+      c.stroke();
+      c.fillStyle = INK;
+      c.fillRect(x - 6.5, y + 7.5, 14, 11);
+      c.fillStyle = lines[i] ?? "#d7263d";
+      c.fillRect(x - 8, y + 6, 14, 11);
+      c.strokeRect(x - 8, y + 6, 14, 11);
+      c.fillStyle = "#1d2336";
+      c.fillRect(x - 6, y + 8, 10, 5);
+    }
+    // La estación de arriba, encima: las cabinas entran y desaparecen.
+    const [sx, sy] = at(0.72);
+    c.fillStyle = INK;
+    c.fillRect(sx - 12, sy - 2, 28, 20);
+    c.fillStyle = "#f6efe2";
+    c.fillRect(sx - 14, sy - 4, 28, 20);
+    c.fillStyle = "#ffc629";
+    c.fillRect(sx - 14, sy - 4, 28, 5);
+    c.lineWidth = 1.5;
+    c.strokeRect(sx - 14, sy - 4, 28, 20);
+  },
+
+  /** El bombo girando con las bolas adentro, y una que baja por la canaleta. */
+  tombola(c, t, col) {
+    c.fillStyle = "#1b1426";
+    c.fillRect(0, 0, W, H);
+    const cx = 40;
+    const cy = 30;
+    const r = 22;
+    const a = t * 2.2;
+    // Las bolas se hamacan abajo, arrastradas por el giro.
+    for (let i = 0; i < 9; i++) {
+      const q = i / 9;
+      const ang = Math.PI * (0.25 + 0.5 * q) + Math.sin(t * 2.2 + i) * 0.35;
+      const d = 9 + (i % 3) * 4;
+      c.fillStyle = INK;
+      c.beginPath();
+      c.arc(cx + Math.cos(ang) * d + 0.6, cy + Math.sin(ang) * d + 0.6, 3.6, 0, TAU);
+      c.fill();
+      c.fillStyle = col(i);
+      c.beginPath();
+      c.arc(cx + Math.cos(ang) * d, cy + Math.sin(ang) * d, 3.6, 0, TAU);
+      c.fill();
+    }
+    // Los barrotes, que giran.
+    for (let i = 0; i < 8; i++) {
+      const b = a + (i / 8) * TAU;
+      c.strokeStyle = i % 2 ? "#ffc629" : "#e93d9c";
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.moveTo(cx + Math.cos(b) * 4, cy + Math.sin(b) * 4);
+      c.lineTo(cx + Math.cos(b) * r, cy + Math.sin(b) * r);
+      c.stroke();
+    }
+    c.strokeStyle = INK;
+    c.lineWidth = 4;
+    c.beginPath();
+    c.arc(cx, cy, r, 0, TAU);
+    c.stroke();
+    c.strokeStyle = "#ff7a1a";
+    c.lineWidth = 2;
+    c.stroke();
+    // La canaleta y la bola que baja, en ciclo.
+    c.strokeStyle = "#5c5378";
+    c.lineWidth = 4;
+    c.beginPath();
+    c.moveTo(cx + 18, cy + 14);
+    c.lineTo(96, 40);
+    c.lineTo(78, 52);
+    c.stroke();
+    const p = (t * 0.45) % 1;
+    const bx = p < 0.6 ? cx + 18 + (96 - cx - 18) * (p / 0.6) : 96 - 18 * ((p - 0.6) / 0.4);
+    const by = p < 0.6 ? cy + 14 + (40 - cy - 14) * (p / 0.6) : 40 + 12 * ((p - 0.6) / 0.4);
+    c.fillStyle = "#ffc629";
+    c.beginPath();
+    c.arc(bx, by - 3, 4.2, 0, TAU);
+    c.fill();
+    c.strokeStyle = INK;
+    c.lineWidth = 1.5;
+    c.stroke();
+    c.fillStyle = "#ffc629";
+    c.fillRect(70, 52, 20, 10);
+    c.strokeRect(70, 52, 20, 10);
+  },
+
   /** La rueda girando, con la paleta arriba. */
   wheel(c, t, col) {
     c.fillStyle = "#1a1330";
