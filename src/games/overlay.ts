@@ -390,7 +390,9 @@ export function chrome(c: CanvasRenderingContext2D): { arriba: number; abajo: nu
   // Por debajo de 520 la ronda va en un renglón propio, debajo de la marca y
   // los botones (ver `.st-top` en styles.css), y la barra crece.
   const partida = window.innerWidth <= 520;
-  return { arriba: (partida ? 100 : 82) * escala, abajo: (angosto ? 118 : 86) * escala };
+  // La caja del relator mide 105 en escritorio, medida: con 86 el último
+  // carril de la carrera quedaba detrás.
+  return { arriba: (partida ? 100 : 82) * escala, abajo: (angosto ? 118 : 106) * escala };
 }
 
 export function winnerNames(names: string[], winners: readonly number[]): string[] {

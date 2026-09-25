@@ -581,6 +581,26 @@ Lo que se corrigió mirándola en fotos antes de auditarla: las guirnaldas se cr
 
 Y una que encontró el auditor de juegos, contra drand de verdad: en un celular, con dos premios, el cartel no aparecía. Se le pasaba la escala de la escena en vez de la de pantalla, que en un teléfono es la mitad, y los dos nombres salían a quince píxeles. Ahora usa la misma que los demás juegos.
 
+### Historia 7.15: El director de emoción: piloto en la carrera
+
+Como organizadora,
+quiero que la carrera cuente una historia y no una simulación,
+para que la sala grite, se ría y no sepa quién gana hasta el final.
+
+Nació de mirar la carrera en un celular: las llamas medían veinte píxeles, los nombres las tapaban, y todas caminaban igual. Por dentro, cada una tenía una velocidad que subía y bajaba sola, y la ganadora remontaba siempre desde atrás al 80%.
+
+Hecho (2026-09-25), en la carrera de llamas y la de cohetes, que comparten motor:
+
+- **`src/games/drama.ts`**, el director: escribe la historia sembrada con la ronda. Cuatro arcos para la ganadora (remontada, susto, duelo, tapada), de una a tres historias chicas para el resto (se planta, tropieza, pega un pique, le escupe a la de al lado), y una curva de tensión para el sonido y el relator. En dieciséis semillas salieron los cuatro arcos: cinco remontadas, cinco sustos, cuatro duelos y dos tapadas.
+- **La carrera lo actúa**: cada llama tiene su propio reloj, que se detiene al plantarse y se adelanta en el pique. Todo sigue siendo función del tiempo, así que la misma ronda dibuja lo mismo y saltar funciona.
+- **El cuerpo cuenta**: paso según la velocidad real, inclinación al picar, polvareda al tropezar, un "!" al plantarse, la escupida cruzando de carril. El cohete cabecea, se le apaga el motor, larga humo.
+- **En celular**: llamas del alto del carril, el nombre de pila detrás de cada una, una tabla de posiciones en vivo como en la tele, y la pista termina arriba de la caja del relator. La caja, de paso, se cortaba a la mitad de la pantalla por su posición y quedaba en cuatro renglones: ahora toma el ancho de lo que dice.
+- **El relator** tiene líneas para cada momento, en dos voces (la llama se planta; al cohete se le apaga el motor), y no pisa una línea con otra de menos calor.
+
+Pasó los tres auditores: 20 de 20 en el exigente y en el de juegos, y el de sonido, en las dos carreras.
+
+Falta: llevar el director a los otros seis juegos, cada uno en su idioma (en el Teleférico, la cabina de la ganadora a punto de soltarse; en el Pasanaku, el bulto que casi sale por el borde). Y un auditor de emoción que mida, sobre muchas semillas, que los arcos varíen y que el puesto de la ganadora a la mitad no la delate.
+
 ### Historia 7.3: Mejoras transversales de presentación
 
 Como organizadora,
@@ -842,6 +862,8 @@ La promesa del producto es que **los participantes no necesitan nada**: ni walle
 Y hay un segundo costo, más serio: hoy el contrato **no custodia valor**. No tiene admin, no se puede actualizar y no tiene fondos. Eso es lo que hace que la auditoría quepa en una tarde y que la promesa sea creíble. Cualquier cosa que ponga dinero adentro cambia el modelo de amenazas por completo y obliga a un tipo de auditoría que hoy no tenemos.
 
 Si algún día se hace, el camino es no custodiar: Pollar ya expone `setTrustline` y `sendPayment`, así que el organizador podría pagarle al ganador desde su propia cuenta, con el sorteo como comprobante. El contrato no se entera y sigue sin tocar dinero.
+
+Actualización (2026-09-25): hay una propuesta que respeta las dos razones de arriba, en [premios.md](premios.md). El premio va de la cuenta del organizador a un saldo reclamable con vencimiento, el ganador lo cobra desde un enlace entrando con Google, y ni el contrato ni un servidor nuestro tocan el dinero. Está para discutir, no aprobada.
 
 ---
 

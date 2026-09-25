@@ -341,6 +341,10 @@
     background: var(--card); color: var(--ink); border: var(--bw) solid var(--ink); box-shadow: var(--sh);
     padding: 12px 28px; font-weight: 900; font-size: clamp(16px, 2.6vw, 38px); white-space: nowrap; z-index: 2;
     max-width: 92vw; overflow: hidden; text-overflow: ellipsis;
+    /* Ancho según lo que dice. Con `left: 50%` el ancho automático se corta en
+       la mitad de la pantalla, y en un celular una frase larga quedaba en
+       cuatro renglones tapando el último carril de la carrera. */
+    width: max-content;
   }
   /* Sin texto no hay caja: vacía era un recuadro oscuro sin nada adentro. */
   .commentary:empty { display: none; }

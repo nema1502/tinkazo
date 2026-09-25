@@ -156,6 +156,31 @@ Y cuatro obligaciones:
 - **Lo que le habla a una persona va en segundos reales:** la cuenta regresiva y el sostén del cartel del ganador. Lo que tarda alguien en leer un nombre proyectado no cambia porque el organizador elija "épica". El cartel se sostiene 3 segundos reales; menos que eso corta la reacción de la sala por la mitad.
 - **Los adornos del final van después de la fanfarria,** a +520 y +700 ms. Dentro quedan enmascarados por notas que suenan al doble de volumen.
 
+## El director de emoción
+
+Un juego que cuenta el resultado con parámetros se ve como una simulación. La carrera de llamas era eso: cada llama con una velocidad que subía y bajaba sola, todas con el mismo paso, y el ganador remontando siempre desde atrás al 80%. Nadie tropezaba, nadie se plantaba, no había duelos ni llegadas por una nariz, y a los dos sorteos la sala ya sabía mirar a la última.
+
+[`src/games/drama.ts`](../src/games/drama.ts) escribe la **historia** antes de que el juego arranque, sembrada con la ronda como todo lo demás, y el juego la actúa en su idioma. Nada de esto decide nada: el ganador llega dado, y la historia se escribe alrededor de él.
+
+**El arco del ganador**, uno de cuatro, para que el final no se adivine:
+
+| Arco | Qué pasa |
+|---|---|
+| Remontada | Viene de atrás y pasa a todos al final |
+| Susto | Va adelante, tropieza cuando más cómodo iba, queda atrás y recupera |
+| Duelo | Mano a mano con la rival desde la mitad; gana por una nariz, con foto y cámara lenta |
+| Tapada | Dos se pelean adelante, una le escupe a la otra, y la que nadie miraba se cuela |
+
+**Las historias chicas del resto**, de una a tres según cuánta gente hay: una que se planta (terca como llama), una que tropieza, una que pega un pique y se desinfla, una que le escupe a la de al lado. Se reparten con separación mínima, así que siempre pasa algo, y cada persona es un personaje: se recuerda "la de Jorge que se plantó", no "el carril cuatro".
+
+**La tensión**, una curva de 0 a 1 que sube despacio, tiene un escalón en la mitad y se dispara en el último cuarto. La usan el sonido y el relator: la misma curva para los dos.
+
+Cómo lo actúa la carrera: cada llama sigue un camino planificado (la línea de base más una ventaja propia, con puntos de control) y tiene **su propio reloj**, que se detiene cuando se planta, se frena un instante al tropezar y se adelanta en un pique. El reloj nunca corre para atrás, así que nadie retrocede, y el de la ganadora termina en hora: llega a la meta justo cuando se acaba la carrera. Como todo es función del tiempo, la misma ronda dibuja los mismos cuadros y saltar sigue funcionando.
+
+Y el cuerpo cuenta lo que le pasa a cada una: el paso de las patas sale de lo que corre de verdad (quieta no las mueve), se inclina al picar, se tambalea con polvareda al tropezar, levanta la cabeza con un "!" al plantarse, y la escupida cruza al carril de al lado. En un celular, donde los carriles son finitos, cuenta la carrera una **tabla de posiciones en vivo**, como en la tele, con las filas deslizándose cuando alguien pasa a alguien.
+
+Para mirar un arco puntual: `?pose=1&semilla=<64 hex>` cambia la semilla de la escena fija, y la carrera anota su arco en `canvas.dataset.arco`.
+
 ## El narrador
 
 La voz va por [`src/narrator.ts`](../src/narrator.ts) y tiene una regla que no es obvia: **una línea nueva no corta a la que se está diciendo**, salvo que de verdad importe más. Cada `narrate(texto, heat)` lleva su tensión de 0 a 1, y sólo pisa a la actual si la supera por tres décimos. El anuncio del ganador pisa a cualquier cosa; un cambio de líder no pisa a otro cambio de líder.

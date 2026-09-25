@@ -30,6 +30,17 @@ export interface Dict {
   cTelOf: (k: number, of: number) => string;
   cTomCount: (n: number) => string;
   cTomBall: (num: string) => string;
+  cPlantadaL: (n: string) => string;
+  cPlantadaR: (n: string) => string;
+  cTropiezoL: (n: string) => string;
+  cTropiezoR: (n: string) => string;
+  cPiqueL: (n: string) => string;
+  cPiqueR: (n: string) => string;
+  cEscupidaL: (a: string, b: string) => string;
+  cEscupidaR: (a: string, b: string) => string;
+  cRemonta: (n: string) => string;
+  cDuelo: (a: string, b: string) => string;
+  cCuela: (n: string) => string;
   csvRows: (n: number) => string;
   tellBody: (w: string, prize: string, n: number, u: string) => string;
 }
@@ -165,6 +176,19 @@ export const T: Record<Lang, Dict> = {
     cTomAlmost: ["¡Casi, casi!", "¡Se tambalea!", "¡Cae o no cae!"],
     cTomNum: "N.º",
     cTomBalls: "BOLAS",
+    cPlantadaL: (n) => pick([`¡Se plantó ${n}! ¡Terca como llama!`, `¡${n} no quiere correr!`, `¡${n} se quedó mirando el paisaje!`]),
+    cPlantadaR: (n) => pick([`¡Se le apagó el motor a ${n}!`, `¡${n} se quedó sin combustible!`, `¡${n} está flotando!`]),
+    cTropiezoL: (n) => pick([`¡Tropezó ${n}!`, `¡${n} pisó mal!`, `¡Uy, ${n} casi se cae!`]),
+    cTropiezoR: (n) => pick([`¡${n} perdió el rumbo!`, `¡${n} chocó con un asteroide!`, `¡Uy, ${n} se desvió!`]),
+    cPiqueL: (n) => pick([`¡Se viene ${n} por afuera!`, `¡${n} pegó un pique!`, `¡Miren a ${n}!`]),
+    cPiqueR: (n) => pick([`¡${n} prendió el turbo!`, `¡${n} a toda máquina!`, `¡Miren a ${n}!`]),
+    cEscupidaL: (a, b) => pick([`¡${a} le escupió a ${b}!`, `¡Pelea de llamas: ${a} contra ${b}!`, `¡${a} escupió y ${b} se frenó!`]),
+    cEscupidaR: (a, b) => pick([`¡${a} le tiró humo a ${b}!`, `¡${a} encandiló a ${b}!`, `¡Humo de ${a} en la cara de ${b}!`]),
+    cRemonta: (n) => pick([`¡Atención a ${n}, que viene de atrás!`, `¡${n} se despertó!`, `¡Ojo con ${n}!`]),
+    cDuelo: (a, b) => pick([`¡Mano a mano ${a} y ${b}!`, `¡${a} y ${b}, codo a codo!`, `¡Esto es entre ${a} y ${b}!`]),
+    cCuela: (n) => pick([`¡Y se cuela ${n}!`, `¡${n} aprovecha la pelea!`, `¡Por el medio, ${n}!`]),
+    cFoto: ["¡FOTO FINISH!", "¡POR UNA NARIZ!", "¡HAY QUE VER LA FOTO!"],
+    cTabla: "POSICIONES",
     // --- Pasanaku. El diccionario de las academias lo define como "juego que
     //     consiste en sortear el dinero de las cuotas" de un grupo: ya era un
     //     sorteo antes de que lo fuéramos a buscar.
@@ -554,6 +578,19 @@ export const T: Record<Lang, Dict> = {
     cTomAlmost: ["Almost, almost!", "It's wobbling!", "In or out?"],
     cTomNum: "No.",
     cTomBalls: "BALLS",
+    cPlantadaL: (n) => pick([`${n} just stopped! Stubborn as a llama!`, `${n} doesn't want to run!`, `${n} is admiring the view!`]),
+    cPlantadaR: (n) => pick([`${n}'s engine just died!`, `${n} ran out of fuel!`, `${n} is just floating!`]),
+    cTropiezoL: (n) => pick([`${n} tripped!`, `${n} missed a step!`, `Whoa, ${n} nearly fell!`]),
+    cTropiezoR: (n) => pick([`${n} lost course!`, `${n} hit an asteroid!`, `Whoa, ${n} drifted off!`]),
+    cPiqueL: (n) => pick([`Here comes ${n} on the outside!`, `${n} kicks it up!`, `Look at ${n}!`]),
+    cPiqueR: (n) => pick([`${n} hits the turbo!`, `${n} at full throttle!`, `Look at ${n}!`]),
+    cEscupidaL: (a, b) => pick([`${a} spat at ${b}!`, `Llama fight: ${a} versus ${b}!`, `${a} spat and ${b} slowed down!`]),
+    cEscupidaR: (a, b) => pick([`${a} blew smoke at ${b}!`, `${a} blinded ${b}!`, `${a}'s smoke right in ${b}'s face!`]),
+    cRemonta: (n) => pick([`Watch out for ${n}, coming from behind!`, `${n} just woke up!`, `Keep an eye on ${n}!`]),
+    cDuelo: (a, b) => pick([`${a} and ${b}, head to head!`, `${a} and ${b}, neck and neck!`, `It's between ${a} and ${b}!`]),
+    cCuela: (n) => pick([`And ${n} slips through!`, `${n} takes advantage of the fight!`, `Right down the middle, ${n}!`]),
+    cFoto: ["PHOTO FINISH!", "BY A NOSE!", "WE NEED THE PHOTO!"],
+    cTabla: "STANDINGS",
     gamePasanaku: "Pasanaku",
     gameTeleferico: "Cable car",
     gameTombola: "Raffle drum",

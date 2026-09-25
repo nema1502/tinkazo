@@ -135,6 +135,11 @@ async function autoDemo(mode: string): Promise<void> {
  */
 async function poseScene(): Promise<void> {
   const fakeBeacon = { round: 32254977, randomness: "6e049991d7e23bdc566d3adfff08cd81798c644bc54dd5daa18eb0a8938b2829", signature: "a77a689daae687c7b16e6f9388d4ebbb7b368d09d7a6c33ad1dfd75d32e4114cfbdcf3e2cc54f4fee659abf2ac7ef9ac" };
+  // `?semilla=<64 hex>` cambia la semilla de la escena fija: con una sola, el
+  // director de emoción escribía siempre la misma historia y no había forma de
+  // mirar los otros arcos. Sigue sin tocar la red ni sortear nada.
+  const semilla = params.get("semilla") ?? "";
+  if (/^[0-9a-f]{64}$/.test(semilla)) fakeBeacon.randomness = semilla;
   // `?n=<cantidad>` arma una lista de ese largo con los nombres de ejemplo
   // numerados, para medir cada juego con dos personas y con doscientas sin
   // tocar la red. Es solo para la escena fija: no sella ni sortea nada.
