@@ -2,6 +2,7 @@ import { T, getLang, t } from "../i18n";
 import { beep, beepFor, fanfare, note } from "../sound";
 import { drawAvatar, paceFactor, setGameLength, type Beacon } from "../state";
 import { INK, WINNER_HOLD, chrome, clamp, ease, mount, drawWinnerPlate, flashScreen, markPlate, shorten, winnerNames, winnersLabel } from "./overlay";
+import { writeStory } from "./drama";
 
 /**
  * Cierre de Libro.
@@ -37,6 +38,8 @@ interface Card {
   killed: number;
   bits: { x: number; y: number; vx: number; vy: number; r: number }[];
   stamp: number;
+  /** El susto: la barra pasó por encima y casi se la lleva. De 1 a 0. */
+  susto: number;
 }
 
 /**
@@ -102,10 +105,20 @@ export function ledgerClose(
   // problema que `sweepPlan` viene a arreglar.
   const FINAL = Math.min(3, Math.max(1, n - 1));
   const SWEEPS = sweepPlan(n, FINAL);
+  /* El director de emoción elige el arco. En el Cierre de Libro, el susto es
+     la última barrida pasando por encima de la tarjeta ganadora, que tiembla
+     en rojo y casi se desarma; el duelo es el último sello, que se queda
+     flotando sobre la ganadora y a último momento se va a la otra. */
+  const story = writeStory(rng, Math.max(2, n), winnerIdx % Math.max(2, n));
+  const susto = story.arc === "susto" && n >= 2;
+  const duda = story.arc === "duelo" && FINAL >= 2;
+  st.canvas.dataset.arco = story.arc;
+  /** Cuánto flota el sello sobre la ganadora antes de irse. */
+  const DUDA = 0.9;
   // Lo que dura sin estirar: la caída, las pasadas, el respiro para leer a los
   // finalistas, el desfile de sellos y el remate.
   setGameLength(
-    FALL + SWEEPS.length * sweepDur(n) + HOLD + (FINAL - 1) * STAMP_GAP + 0.8,
+    FALL + SWEEPS.length * sweepDur(n) + HOLD + (FINAL - 1) * STAMP_GAP + 0.8 + (duda ? DUDA : 0),
     WINNER_HOLD,
   );
 
@@ -134,12 +147,14 @@ export function ledgerClose(
   let ledgerBump = false;
   let tHold = 0;
   let heldTicks = 0;
+  let saidSusto = false;
+  let saidDuda = false;
   let flashK = 0;
   let shake = 0;
 
   const cards: Card[] = names.map((_, i) => ({
     idx: i, x: 0, y: 0, tx: 0, ty: 0, w: 0, h: 0, tw: 0, th: 0,
-    in: 0, alive: true, killed: 0, bits: [], stamp: 0,
+    in: 0, alive: true, killed: 0, bits: [], stamp: 0, susto: 0,
   }));
 
   /**
@@ -183,9 +198,12 @@ export function ledgerClose(
     const gap = (finale ? 18 : 8) * k;
     let cw = clamp((w * 0.86) / cols - gap, 34 * k, (finale ? 560 : 260) * k);
     let ch = cw * 0.36;
-    // Y que la grilla entera entre a lo alto: con pocas columnas son muchas
-    // filas, y una tarjeta ancha de más las empuja fuera de la pantalla.
-    const maxH = h * 0.74;
+    // Y que la grilla entera entre a lo alto, entre la barra de arriba y la caja
+    // del relator: centrada en toda la pantalla, la mesa final de tres dejaba
+    // la tercera tarjeta medio tapada por la caja.
+    const arriba = chrome(c).arriba + 12 * k;
+    const abajo = h - chrome(c).abajo - 12 * k;
+    const maxH = Math.min(h * 0.74, abajo - arriba);
     if (rows * (ch + gap) - gap > maxH) {
       ch = (maxH + gap) / rows - gap;
       cw = Math.max(34 * k, ch / 0.36);
@@ -193,7 +211,7 @@ export function ledgerClose(
     const gw = cols * (cw + gap) - gap;
     const gh = rows * (ch + gap) - gap;
     const x0 = w / 2 - gw / 2;
-    const y0 = h / 2 - gh / 2;
+    const y0 = arriba + (abajo - arriba - gh) / 2;
     alive.forEach((q, i) => {
       q.tx = x0 + (i % cols) * (cw + gap);
       q.ty = y0 + Math.floor(i / cols) * (ch + gap);
@@ -323,6 +341,7 @@ export function ledgerClose(
         }
       }
       if (q.stamp > 0) q.stamp = Math.min(1, q.stamp + dt * 8);
+      q.susto = Math.max(0, q.susto - dt * 1.4);
     }
 
     if (phase === "fall") {
@@ -342,6 +361,17 @@ export function ledgerClose(
       const p = clamp(tPhase / sweepDur(n), 0, 1);
       const dir = SWEEPS[sweepI]?.from ?? "top";
       sweepY = dir === "top" ? p * H() : (1 - p) * H();
+      if (susto && !saidSusto && sweepI === SWEEPS.length - 1) {
+        const win = cards[winnerIdx] as Card;
+        const cy = win.y + win.h / 2;
+        if (dir === "top" ? sweepY >= cy : sweepY <= cy) {
+          saidSusto = true;
+          win.susto = 1;
+          say(T[getLang()].cLedgerClose(names[winnerIdx] ?? ""), 0.75);
+          beep(note(1), 0.1, "square", 0.05);
+          setTimeout(() => beep(note(0), 0.14, "sine", 0.045), 90);
+        }
+      }
       if (p >= 1) endSweep();
       return;
     }
@@ -365,8 +395,16 @@ export function ledgerClose(
         return;
       }
       const losers = cards.filter((q) => q.alive && q.idx !== winnerIdx);
-      const want = Math.floor((tPhase - HOLD) / STAMP_GAP);
-      while (stampI < want && stampI < losers.length) {
+      // El sello i cae a HOLD + (i + 1) · STAMP_GAP; en el duelo, el último
+      // espera lo que dura la duda.
+      const stampAt = (i: number): number => HOLD + (i + 1) * STAMP_GAP + (duda && i === losers.length - 1 ? DUDA : 0);
+      const dudaDesde = stampAt(losers.length - 1) - DUDA;
+      if (duda && !saidDuda && tPhase >= dudaDesde) {
+        saidDuda = true;
+        say(T[getLang()].cLedgerHover(names[winnerIdx] ?? ""), 0.85);
+      }
+      while (stampI < losers.length && tPhase >= stampAt(stampI)) {
+        if (duda && stampI === losers.length - 1) say(T[getLang()].cLedgerNope((losers[stampI] as Card) ? names[(losers[stampI] as Card).idx] ?? "" : ""), 0.9);
         const q = losers[stampI] as Card;
         q.stamp = 0.001;
         // 140 Hz es un do sostenido fuera de escala, y además era el golpe más
@@ -377,7 +415,7 @@ export function ledgerClose(
       }
       // Medio segundo largo entre el último sello de los que pierden y el
       // remate, y en ese hueco no suena nada.
-      if (stampI >= losers.length && tPhase >= HOLD + losers.length * STAMP_GAP + 0.8) toSeal();
+      if (stampI >= losers.length && tPhase >= HOLD + losers.length * STAMP_GAP + 0.8 + (duda ? DUDA : 0)) toSeal();
       return;
     }
 
@@ -440,6 +478,8 @@ export function ledgerClose(
     const h = q.h * (0.94 + 0.06 * e) * late;
     c.save();
     c.translate(-(w - q.w) / 2, -(h - q.h) / 2);
+    // El susto: tiembla, del reloj y no del azar.
+    if (q.susto > 0) c.translate(Math.sin(tPhase * 70) * 7 * k * q.susto, Math.sin(tPhase * 53 + 1) * 3 * k * q.susto);
     c.fillStyle = INK;
     c.fillRect(q.x + 4 * k, q.y + 4 * k, w, h);
     c.fillStyle = dark ? "#2d2342" : "#ffffff";
@@ -478,6 +518,46 @@ export function ledgerClose(
     }
 
     if (q.stamp > 0) drawStamp(q, false);
+    if (q.susto > 0) {
+      // En rojo, y con pedazos que se sueltan y vuelven.
+      c.fillStyle = `rgba(233,61,156,${0.4 * q.susto})`;
+      c.fillRect(q.x, q.y, w, h);
+      c.fillStyle = color(q.idx);
+      const lejos = Math.sin(Math.PI * q.susto) * 26 * k;
+      for (let i = 0; i < 6; i++) {
+        const a = i * 1.047 + 0.4;
+        c.fillRect(q.x + w / 2 + Math.cos(a) * (w * 0.4 + lejos), q.y + h / 2 + Math.sin(a) * (h * 0.5 + lejos), 8 * k, 8 * k);
+      }
+    }
+    c.restore();
+  }
+
+  /** El sello que duda: flota sobre la ganadora, temblando, sin caer. */
+  function drawDuda(): void {
+    if (!duda || phase !== "stamp") return;
+    const losers = cards.filter((q) => q.alive && q.idx !== winnerIdx);
+    const cae = HOLD + losers.length * STAMP_GAP + DUDA;
+    const desde = cae - DUDA;
+    if (tPhase < desde || tPhase >= cae || stampI >= losers.length) return;
+    const k = u();
+    const win = cards[winnerIdx] as Card;
+    const f = (tPhase - desde) / DUDA;
+    const s = Math.min(win.w * 0.5, win.h * 0.78) * (1.5 + 0.08 * Math.sin(tPhase * 18));
+    const cx = win.x + win.w - Math.min(win.w * 0.28, win.h * 0.5) + Math.sin(tPhase * 9) * 6 * k;
+    const cy = win.y + win.h / 2 - 30 * k * (1 - f);
+    c.save();
+    c.globalAlpha = 0.75;
+    c.translate(cx, cy);
+    c.rotate(-0.14 + Math.sin(tPhase * 7) * 0.08);
+    c.lineWidth = 5 * k;
+    c.strokeStyle = "#e93d9c";
+    c.strokeRect(-s / 2, -s / 2, s, s);
+    c.beginPath();
+    c.moveTo(-s * 0.25, -s * 0.25);
+    c.lineTo(s * 0.25, s * 0.25);
+    c.moveTo(s * 0.25, -s * 0.25);
+    c.lineTo(-s * 0.25, s * 0.25);
+    c.stroke();
     c.restore();
   }
 
@@ -622,6 +702,7 @@ export function ledgerClose(
       drawCard(q);
     }
     c.globalAlpha = 1;
+    drawDuda();
     if (tem) c.restore();
     if (phase === "sweep") drawSweep();
       // El fogonazo del revelado: el golpe visual que separa "apareció un

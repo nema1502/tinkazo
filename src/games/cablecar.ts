@@ -2,6 +2,7 @@ import { T, getLang, t } from "../i18n";
 import { beep, beepFor, fanfare, note } from "../sound";
 import { drawAvatar, paceFactor, setGameLength, type Beacon } from "../state";
 import { INK, WINNER_HOLD, chrome, clamp, ease, mount, drawWinnerPlate, flashScreen, winnerNames, winnersLabel } from "./overlay";
+import { writeStory } from "./drama";
 
 /**
  * El Teleférico.
@@ -124,6 +125,14 @@ export function cableCar(
   const emptiesAt = pax.map((ps) => Math.max(...ps.map((p) => offAt.get(p) ?? R)));
   const winnerCab = cabinOf.get(winnerIdx) ?? 0;
 
+  /* El director de emoción elige el arco. En el teleférico, el susto y el
+     duelo terminan con la puerta: en la última estación se abre la de la
+     cabina ganadora, el pasajero se asoma como para bajarse, y la puerta se
+     cierra. El que se baja es el de la otra cabina. */
+  const story = writeStory(rng, Math.max(2, n), winnerIdx % Math.max(2, n));
+  const puerta = (story.arc === "susto" || story.arc === "duelo") && R >= 1 && C >= 2;
+  st.canvas.dataset.arco = story.arc;
+
   /* ---------------------------------------------------------- estaciones */
   // Con menos paradas que estaciones, las que sobran son de largo. La última
   // parada es siempre la última estación: ahí se bajan de a uno.
@@ -147,7 +156,8 @@ export function cableCar(
   // arranque del último tramo.
   const wTravel = 1;
   const wStop = 0.8;
-  const wLast = 1.7;
+  // Con la puerta, la última parada se toma más tiempo: primero el amague.
+  const wLast = puerta ? 2.4 : 1.7;
   let wSum = 0;
   for (let k = 1; k <= S; k++) {
     wSum += wTravel;
@@ -196,8 +206,8 @@ export function cableCar(
   const stops = legs.filter((L): L is Extract<Leg, { kind: "stop" }> => L.kind === "stop").map((L) => ({
     ...L,
     // La última se toma su tiempo: el latido arranca antes que la bajada.
-    tOff: L.t0 + (L.t1 - L.t0) * (L.last ? 0.55 : 0.28),
-    tDetach: L.t0 + (L.t1 - L.t0) * (L.last ? 0.78 : 0.62),
+    tOff: L.t0 + (L.t1 - L.t0) * (L.last ? (puerta ? 0.64 : 0.55) : 0.28),
+    tDetach: L.t0 + (L.t1 - L.t0) * (L.last ? (puerta ? 0.84 : 0.78) : 0.62),
   }));
   /** A qué hora pasa la cabeza por cada estación de largo. */
   const passes: { station: number; t: number }[] = [];
@@ -348,6 +358,19 @@ export function cableCar(
       });
       once(`detach${s.station}`, tAll >= s.tDetach, () => {
         if (!silent && detachT.some((d) => d === s.tDetach)) beep(note(3), 0.08, "square", 0.036);
+      });
+    }
+    if (puerta) {
+      once("puerta", tAll >= puertaA, () => {
+        sayNow(T[lang].cTelDoor(names[winnerIdx] ?? ""), 0.85);
+        if (!silent) {
+          beep(note(12), 0.08, "triangle", 0.04);
+          setTimeout(() => beep(note(15), 0.1, "triangle", 0.035), 70);
+        }
+      });
+      once("cierra", tAll >= puertaB, () => {
+        sayNow(t("cTelStays"), 0.9);
+        if (!silent) beep(note(5), 0.08, "square", 0.05);
       });
     }
     once("climb", tAll >= T_RUN + 0.15, () => sayNow(t("cTelClimb"), 0.9));
@@ -656,6 +679,15 @@ export function cableCar(
     c.textAlign = "left";
   }
 
+  /** La puerta del amague, en la última estación: se abre, se sostiene y se cierra. */
+  const ultima = stops.find((x) => x.last);
+  const puertaA = ultima ? ultima.t0 + (ultima.t1 - ultima.t0) * 0.2 : Infinity;
+  const puertaB = ultima ? ultima.t0 + (ultima.t1 - ultima.t0) * 0.5 : Infinity;
+  function puertaAt(x: number): number {
+    if (!puerta || x < puertaA || x > puertaB) return 0;
+    return clamp(Math.sin((Math.PI * (x - puertaA)) / (puertaB - puertaA)) * 1.6, 0, 1);
+  }
+
   /** Un rectángulo redondeado, o recto en un navegador que no los sabe dibujar. */
   function box(x: number, y: number, w: number, h: number, r: number): void {
     c.beginPath();
@@ -703,14 +735,22 @@ export function cableCar(
     c.fillStyle = "#1d2336";
     c.fillRect(wx, wy, ww, wh);
     const av = wh - 8 * k;
+    // En el amague, el pasajero se corre hacia la puerta, que está a la derecha.
+    const asoma = cab === winnerCab ? puertaAt(tAll) : 0;
     if (who.length === 1) {
-      drawAvatar(c, names[who[0] as number] ?? "", -av / 2, wy + 4 * k, av);
+      drawAvatar(c, names[who[0] as number] ?? "", -av / 2 + asoma * (ww / 2 - av / 2 - 2 * k), wy + 4 * k, av);
     } else if (who.length > 1) {
       const show = Math.min(3, who.length);
       const small = Math.min(av, (ww - 8 * k) / 3 - 3 * k);
       for (let i = 0; i < show; i++) {
         drawAvatar(c, names[who[i] as number] ?? "", wx + 4 * k + i * (small + 3 * k), wy + (wh - small) / 2, small);
       }
+    }
+    // La puerta del amague: un hueco oscuro que se abre en el costado.
+    if (asoma > 0) {
+      const dw = cw * 0.26 * asoma;
+      c.fillStyle = INK;
+      c.fillRect(cw / 2 - dw - 2 * k, top + 6 * k, dw, ch - 12 * k);
     }
     // Las puertas se abren al llegar arriba.
     if (cab === winnerCab && tAll > T_DOCK) {
@@ -743,7 +783,7 @@ export function cableCar(
     const head = headAt(tAll);
     const sw = swingAt(tAll);
     const few = leftAt(tAll) <= C && tAll > T_BOARD;
-    const labels: { name: string; x: number; y: number }[] = [];
+    const labels: { name: string; x: number; y: number; izq?: boolean }[] = [];
     for (let cab = C - 1; cab >= 0; cab--) {
       const td = detachT[cab] as number;
       let alpha = 1;
@@ -758,18 +798,20 @@ export function cableCar(
       const slot = slotAt(cab, tAll);
       const p = onCable(head, slot * gap + back);
       const glow = cab === winnerCab && tAll > T_DOCK ? 0.6 + 0.4 * Math.sin(tAll * 8) : 0;
-      drawCabin(cab, p.x, p.y, alpha, sw * (1 - slot * 0.06), glow);
+      const sacude = cab === winnerCab ? puertaAt(tAll) * 0.07 * Math.sin(tAll * 22) : 0;
+      drawCabin(cab, p.x, p.y, alpha, sw * (1 - slot * 0.06) + sacude, glow);
       // Con una persona por cabina, se la nombra debajo.
       const who = aboard(cab, tAll);
-      // En vertical, al costado: la cabina de abajo queda justo debajo y el
-      // nombre la tapaba.
+      // En vertical, a la izquierda: la cabina de abajo queda justo debajo y el
+      // nombre la tapaba; a la derecha no entra y se corría encima de la
+      // cabina, tapando la puerta del amague.
       if (few && who.length === 1 && alpha === 1) {
         labels.push(vertical
-          ? { name: names[who[0] as number] ?? "", x: p.x + cw / 2 + 14 * k, y: p.y + 24 * k + ch / 2 + 8 * k }
+          ? { name: names[who[0] as number] ?? "", x: p.x - cw / 2 - 14 * k, y: p.y + 24 * k + ch / 2 + 8 * k, izq: true }
           : { name: names[who[0] as number] ?? "", x: p.x - 40 * k, y: p.y + 24 * k + ch + 28 * k });
       }
     }
-    if (tAll < T_CROWN) for (const L of labels) chip(L.name, L.x, L.y, 1, 1.15);
+    if (tAll < T_CROWN) for (const L of labels) chip(L.name, L.x, L.y, 1, 1.15, L.izq);
   }
 
   /**

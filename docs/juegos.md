@@ -179,7 +179,37 @@ Cómo lo actúa la carrera: cada llama sigue un camino planificado (la línea de
 
 Y el cuerpo cuenta lo que le pasa a cada una: el paso de las patas sale de lo que corre de verdad (quieta no las mueve), se inclina al picar, se tambalea con polvareda al tropezar, levanta la cabeza con un "!" al plantarse, y la escupida cruza al carril de al lado. En un celular, donde los carriles son finitos, cuenta la carrera una **tabla de posiciones en vivo**, como en la tele, con las filas deslizándose cuando alguien pasa a alguien.
 
-Para mirar un arco puntual: `?pose=1&semilla=<64 hex>` cambia la semilla de la escena fija, y la carrera anota su arco en `canvas.dataset.arco`.
+Para mirar un arco puntual: `?pose=<juego>&semilla=<64 hex>` cambia la semilla de la escena fija, y cada juego anota su arco en `canvas.dataset.arco`. El auditor exigente acepta `--semilla N` para auditar otro arco que el de la semilla fija.
+
+### El giro de cada juego
+
+La carrera actúa la historia entera. Los demás juegos toman del director el arco, y en el susto o el duelo hacen su propio amague, en su idioma. Así la sala no puede aprender cómo termina: en dieciséis semillas, el giro salió en seis cuando lo dispara solo el susto, y en diez cuando lo disparan el susto y el duelo. Cuál sale depende de la ronda.
+
+| Juego | Arco | El giro |
+|---|---|---|
+| Carrera de llamas y de cohetes | Los cuatro | La historia completa: tropiezos, plantadas, piques, escupidas, duelo con foto |
+| Ruleta | Susto | **La parada falsa.** La rueda se para del todo un gajo antes del ganador ("¿se queda en fulano?"), y después de un instante avanza uno más ("¡no! ¡se movió!"). La integral de la velocidad sigue garantizando que caiga donde tiene que caer |
+| Teleférico | Susto y duelo | **La puerta.** En la última estación se abre la de la cabina ganadora, el pasajero se asoma y la cabina se sacude; la puerta se cierra ("¡se queda!") y el que se baja es el de la otra |
+| Tómbola | Susto y duelo | **El rebote.** Se abre la compuerta y asoma primero otra bola, medio afuera, temblando en el borde ("¡sale la 12!"); cae para adentro ("¡no era esa!") y recién sale la ganadora |
+| Cierre de Libro | Susto | **La barrida.** La última barrida pasa por la tarjeta ganadora, que tiembla en rojo y suelta pedazos que se vuelven a juntar |
+| Cierre de Libro | Duelo | **El sello que duda.** El último sello flota sobre la ganadora ("¿se lo sellan a fulano?") y a último momento se va a la otra |
+| Pasanaku | Susto | **El filo.** En el último apretón el bulto ganador sale empujado hasta el borde del aguayo, tiembla ahí con un aro rojo, y la tela lo vuelve a meter |
+| Constelación | Susto | **El roce.** A mitad de juego el paquete va derecho a la estrella del ganador, la roza (la estrella se enciende) y se desvía. El amague del último salto ya estaba, en todos los sorteos |
+
+Los giros alargan el juego lo que duran (el rebote casi un segundo, el sello que duda casi uno), y cada juego lo suma a lo que declara con `setGameLength`: el show sigue durando lo que eligió el organizador.
+
+### El auditor de emoción
+
+```bash
+node scripts/audit-emocion.mjs <juego>      # o "todos"
+```
+
+Los otros auditores miran un sorteo por vez. Lo que mata la emoción no se ve en uno solo: se ve cuando la sala ya aprendió cómo termina. Este corre dieciséis semillas por juego, con el reloj en turbo (veinte cuadros de juego por cuadro real), y mide:
+
+- **Que los arcos varíen**: al menos tres de los cuatro, y ninguno en más de la mitad.
+- **En la carrera, que el puesto de la ganadora a la mitad no la delate**: apostar por la que va primera a la mitad, o por la última, no puede acertar en más del 40% de las carreras (al azar se acierta en una de ocho), y la ganadora no puede ir adelante, ni atrás, en más del 60%.
+
+La primera vez que corrió encontró justo eso: con las curvas de cada arco fijas, a la mitad la ganadora iba primera o última en casi todas las carreras, y en los cohetes iba atrás en trece de dieciséis. Ahora el puesto a la mitad se sortea según el arco (en la remontada, entre los últimos cuatro; en la tapada, en el medio; en el susto, primera si el tropiezo viene después, en el medio si ya tropezó; en el duelo, arriba o en el medio según arranque temprano o tarde), y la curva de la ganadora se corrige por bisección hasta ocuparlo. La corrección vale cero en la largada y desde el 86%, así que la llegada no cambia.
 
 ## El narrador
 

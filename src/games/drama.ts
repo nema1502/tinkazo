@@ -108,8 +108,10 @@ export function writeStory(rng: () => number, actors: number, winner: number): S
   // La tapada termina en una escupida entre las dos que se pelean adelante: es
   // lo que abre el hueco por donde se cuela la ganadora.
   if (arc === "tapada") beats.push({ kind: "escupida", actor: rival, target: rival2, at: 0.8 });
-  // En el susto, la ganadora tropieza cuando más cómoda iba.
-  if (arc === "susto") beats.push({ kind: "tropiezo", actor: winner, at: 0.56 });
+  // En el susto, la ganadora tropieza cuando más cómoda iba. Cuándo, sembrado:
+  // si fuera siempre al 56%, a la mitad de la carrera iría siempre primera, y
+  // apostar por la que va primera a la mitad sería una pista.
+  if (arc === "susto") beats.push({ kind: "tropiezo", actor: winner, at: 0.38 + rng() * 0.28 });
   beats.sort((a, b) => a.at - b.at);
   return { arc, winner, rival, rival2, beats };
 }

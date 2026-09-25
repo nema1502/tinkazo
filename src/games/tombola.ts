@@ -2,6 +2,7 @@ import { T, getLang, t } from "../i18n";
 import { beep, beepFor, fanfare, note } from "../sound";
 import { paceFactor, setGameLength, type Beacon } from "../state";
 import { INK, WINNER_HOLD, chrome, clamp, ease, mount, drawWinnerPlate, flashScreen, winnerNames, winnersLabel } from "./overlay";
+import { writeStory } from "./drama";
 
 /**
  * La tómbola.
@@ -78,9 +79,26 @@ export function tombola(
     return;
   }
   const { c, W, H, u, rng, color, say, chip, dark, cleanup, run } = st;
-  setGameLength(T_CROWN, WINNER_HOLD);
   const n = names.length;
   const lang = getLang();
+
+  /* El director de emoción elige el arco. En la tómbola, el susto y el duelo
+     terminan con el rebote: se abre la compuerta y asoma primero otra bola,
+     que queda medio afuera, se tambalea y vuelve a caer adentro. Recién
+     después sale la ganadora. Todo lo que viene después de la compuerta se
+     corre lo que dura el rebote, y la duración del show se recalcula. */
+  const story = writeStory(rng, Math.max(2, n), winnerIdx % Math.max(2, n));
+  const rebote = (story.arc === "susto" || story.arc === "duelo") && n >= 2;
+  st.canvas.dataset.arco = story.arc;
+  const REBOTE = 0.95;
+  const SH = rebote ? REBOTE : 0;
+  /** Cuándo empieza a salir la ganadora. */
+  const tOutStart = T_STOP + SH;
+  const tOut = T_OUT + SH;
+  const tLip = T_LIP + SH;
+  const tLand = T_LAND + SH;
+  const tCrown = T_CROWN + SH;
+  setGameLength(tCrown, WINNER_HOLD);
 
   /* ---------------------------------------------------------- las bolas */
   /** Radio de una bola, en radios del bombo: un tercio del bombo lleno. */
@@ -101,6 +119,9 @@ export function tombola(
     born: 0.15 + (k / Math.max(1, n)) * (T_FILL - 0.55),
   }));
   const winBall = balls.find((b) => b.idx === winnerIdx) as Ball;
+  /** La que asoma y vuelve a caer, si hay rebote. */
+  const rivalBall = rebote ? balls.find((b) => b.idx === story.rival && b !== winBall) ?? null : null;
+  let volvio = false;
 
   /* ------------------------------------------------ el ángulo del bombo */
   // La compuerta tiene que terminar en la salida. Se integra la velocidad una
@@ -158,15 +179,27 @@ export function tombola(
     const w = omega(tSim) * TAU * scale;
     const ang = drumAngle(tSim);
     const g = 5.2;
-    const inside = balls.filter((b) => tSim >= b.born && !(b === winBall && tSim >= T_STOP));
+    const asomando = rivalBall !== null && tSim >= T_STOP && tSim < tOutStart;
+    const inside = balls.filter((b) => tSim >= b.born && !(b === winBall && tSim >= tOutStart) && !(asomando && b === rivalBall));
+    // La rival vuelve adentro de la física empujada hacia el centro.
+    if (rivalBall && !volvio && tSim >= tOutStart) {
+      volvio = true;
+      const ea = exitAngle();
+      rivalBall.x = Math.cos(ea) * (1 - rb * 1.2);
+      rivalBall.y = Math.sin(ea) * (1 - rb * 1.2);
+      rivalBall.vx = -Math.cos(ea) * 1.6;
+      rivalBall.vy = -Math.sin(ea) * 1.6 - 0.6;
+    }
     for (const b of inside) {
       b.vy += g * dt;
       // En la última vuelta la del ganador se va acercando a la compuerta.
       // Es lo único que el bombo hace a propósito, y sólo con esa bola.
-      if (b === winBall && tSim > T_S3 - 1.4) {
+      if ((b === winBall || b === rivalBall) && tSim > T_S3 - 1.4 && tSim < T_STOP) {
         const ea = exitAngle();
-        const tx = Math.cos(ea) * (1 - rb * 1.2);
-        const ty = Math.sin(ea) * (1 - rb * 1.2);
+        // Con rebote, la rival va a la compuerta y la ganadora justo detrás.
+        const fondo = b === winBall && rivalBall ? 3.5 : 1.2;
+        const tx = Math.cos(ea) * (1 - rb * fondo);
+        const ty = Math.sin(ea) * (1 - rb * fondo);
         const pull = tSim > T_S3 ? 26 : 9;
         b.vx += (tx - b.x) * pull * dt;
         b.vy += (ty - b.y) * pull * dt;
@@ -262,7 +295,7 @@ export function tombola(
       const dx0 = Math.cos(ea) * (1 - rb * 1.2);
       const dy0 = Math.sin(ea) * (1 - rb * 1.2);
       for (const b of inside) {
-        if (b === winBall) continue;
+        if (b === winBall || b === rivalBall) continue;
         const dx = b.x - dx0;
         const dy = b.y - dy0;
         const d = Math.hypot(dx, dy);
@@ -335,9 +368,9 @@ export function tombola(
    * caer: el amague.
    */
   function rollAt(x: number): number {
-    if (x < T_OUT) return 0;
-    if (x < T_LIP) return 0.94 * ease.outCubic((x - T_OUT) / (T_LIP - T_OUT));
-    if (x < T_LAND) return 0.94 + 0.06 * Math.pow((x - T_LIP) / (T_LAND - T_LIP), 3);
+    if (x < tOut) return 0;
+    if (x < tLip) return 0.94 * ease.outCubic((x - tOut) / (tLip - tOut));
+    if (x < tLand) return 0.94 + 0.06 * Math.pow((x - tLip) / (tLand - tLip), 3);
     return 1;
   }
 
@@ -368,9 +401,23 @@ export function tombola(
         setTimeout(() => beep(note(10), 0.14, "triangle", 0.05), 70);
       }
     });
-    once("ball", tAll >= T_OUT + 0.5, () => sayNow(T[lang].cTomBall(num), 0.9));
-    once("almost", tAll >= T_LIP, () => sayNow(t("cTomAlmost"), 0.95));
-    once("land", tAll >= T_LAND, () => {
+    if (rivalBall) {
+      const suya = String(rivalBall.idx + 1);
+      once("asoma", tAll >= T_STOP + REBOTE * 0.32, () => {
+        sayNow(T[lang].cTomFake(suya), 0.9);
+        if (!silent) beep(note(10), 0.1, "triangle", 0.045);
+      });
+      once("vuelve", tAll >= T_STOP + REBOTE * 0.76, () => {
+        sayNow(t("cTomBack"), 0.95);
+        if (!silent) {
+          beep(note(3), 0.08, "square", 0.05);
+          setTimeout(() => beep(note(1), 0.1, "sine", 0.05), 80);
+        }
+      });
+    }
+    once("ball", tAll >= tOut + 0.5, () => sayNow(T[lang].cTomBall(num), 0.9));
+    once("almost", tAll >= tLip, () => sayNow(t("cTomAlmost"), 0.95));
+    once("land", tAll >= tLand, () => {
       flashK = Math.max(flashK, 0.5);
       shake = 1;
       if (!silent) {
@@ -379,9 +426,9 @@ export function tombola(
         setTimeout(() => beep(note(15), 0.12, "triangle", 0.05), 90);
       }
     });
-    if (tAll >= T_CROWN) crowned();
+    if (tAll >= tCrown) crowned();
     // Mientras rueda, que el relator no se calle más de dos segundos y medio.
-    if (tAll > T_OUT + 1 && tAll < T_LIP && tAll - lastSaid > 2.2) sayNow(t("cTomRoll"), 0.85);
+    if (tAll > tOut + 1 && tAll < tLip && tAll - lastSaid > 2.2) sayNow(t("cTomRoll"), 0.85);
   }
 
   function sounds(): void {
@@ -417,8 +464,8 @@ export function tombola(
     }
     hits = 0;
     // El latido del borde del vaso.
-    if (tAll >= T_LIP - 0.4 && tAll < T_LAND) {
-      const b = Math.floor((tAll - (T_LIP - 0.4)) / 0.35);
+    if (tAll >= tLip - 0.4 && tAll < tLand) {
+      const b = Math.floor((tAll - (tLip - 0.4)) / 0.35);
       if (b !== beat) {
         beat = b;
         beep(note(0), 0.12, "sine", 0.07);
@@ -427,7 +474,7 @@ export function tombola(
     // La bola rodando: un toque en cada vuelta de la canaleta.
     const { path } = geo();
     const seg = along(path, rollAt(tAll)).seg;
-    once(`seg${seg}`, tAll > T_OUT && tAll < T_LIP, () => beep(note(12 - seg * 2), 0.09, "triangle", 0.045));
+    once(`seg${seg}`, tAll > tOut && tAll < tLip, () => beep(note(12 - seg * 2), 0.09, "triangle", 0.045));
   }
 
   function crowned(): void {
@@ -441,10 +488,10 @@ export function tombola(
   }
 
   function skip(): void {
-    if (tAll >= T_CROWN) return;
+    if (tAll >= tCrown) return;
     silent = true;
-    tAll = T_CROWN;
-    tSim = T_STOP + 1;
+    tAll = tCrown;
+    tSim = T_STOP + 3;
     settle();
     events();
     silent = false;
@@ -658,7 +705,8 @@ export function tombola(
     const { cx, cy, R } = geo();
     for (const b of balls) {
       if (tAll < b.born) continue;
-      if (b === winBall && tAll >= T_STOP) continue;
+      if (b === winBall && tAll >= tOutStart) continue;
+      if (b === rivalBall && tAll >= T_STOP && tAll < tOutStart) continue;
       const fall = clamp((tAll - b.born) / 0.25, 0, 1);
       drawBall(b, cx + b.x * R, cy + b.y * R - (1 - fall) * R * 0.5, rb * R);
     }
@@ -726,20 +774,39 @@ export function tombola(
     c.fillRect(cup.x - top / 2 - 6 * k, y0 - 4 * k, top + 12 * k, 8 * k);
   }
 
+  /**
+   * La bola que asoma y vuelve: sale medio cuerpo por la compuerta, se
+   * tambalea en el borde y cae para adentro.
+   */
+  function drawRival(): void {
+    if (!rivalBall || tAll < T_STOP || tAll >= tOutStart) return;
+    const { cx, cy, R, k } = geo();
+    const ea = exitAngle();
+    const q = (tAll - T_STOP) / REBOTE;
+    // Afuera hasta medio cuerpo, se sostiene temblando, y vuelve.
+    const fuera = q < 0.42 ? ease.outCubic(q / 0.42) : q < 0.63 ? 1 : 1 - ease.inOutCubic((q - 0.63) / 0.37);
+    const tiembla = q >= 0.42 && q < 0.63 ? Math.sin(tAll * 40) * 3 * k : 0;
+    const d = (1 - rb * 1.2) * R + fuera * rb * 1.4 * R;
+    const nx = Math.cos(ea), ny = Math.sin(ea);
+    drawBall(rivalBall, cx + nx * d - ny * tiembla, cy + ny * d + nx * tiembla, rb * R * (1 + 0.25 * fuera), true);
+  }
+
   /** La bola ganadora afuera: sale por la compuerta, rueda y cae al vaso. */
   function drawWinnerBall(): void {
-    if (tAll < T_STOP) return;
+    drawRival();
+    if (tAll < tOutStart) return;
     const { cx, cy, R, path, cup, k } = geo();
     const r0 = rb * R;
     let x: number;
     let y: number;
     let r: number;
-    if (tAll < T_OUT) {
+    if (tAll < tOut) {
       // Del lugar frente a la compuerta, hacia afuera.
       const ea = exitAngle();
-      const q = ease.inOutCubic((tAll - T_STOP) / (T_OUT - T_STOP));
-      const sx = cx + Math.cos(ea) * (1 - rb * 1.2) * R;
-      const sy = cy + Math.sin(ea) * (1 - rb * 1.2) * R;
+      const q = ease.inOutCubic((tAll - tOutStart) / (tOut - tOutStart));
+      // Desde donde quedó en la física: con rebote, detrás de la compuerta.
+      const sx = rivalBall ? cx + winBall.x * R : cx + Math.cos(ea) * (1 - rb * 1.2) * R;
+      const sy = rivalBall ? cy + winBall.y * R : cy + Math.sin(ea) * (1 - rb * 1.2) * R;
       x = sx + ((path[0] as { x: number }).x - sx) * q;
       y = sy + ((path[0] as { y: number }).y - sy) * q;
       r = r0;
@@ -747,14 +814,14 @@ export function tombola(
       const q = rollAt(tAll);
       const p = along(path, q);
       // En el borde del vaso, se tambalea.
-      const wob = tAll > T_LIP && tAll < T_LAND ? Math.sin((tAll - T_LIP) * 30) * 5 * k : 0;
+      const wob = tAll > tLip && tAll < tLand ? Math.sin((tAll - tLip) * 30) * 5 * k : 0;
       x = p.x + wob;
       // Crece mientras baja: al llegar se tiene que leer el número desde el fondo.
-      r = r0 + (Math.max(r0, 34 * k) - r0) * ease.outCubic(clamp((tAll - T_OUT) / 1.2, 0, 1));
+      r = r0 + (Math.max(r0, 34 * k) - r0) * ease.outCubic(clamp((tAll - tOut) / 1.2, 0, 1));
       // Encima de la canaleta: el centro va un radio más arriba del riel.
       y = p.y - r - 8 * k;
-      if (tAll >= T_LAND) {
-        const q2 = clamp((tAll - T_LAND) / 0.25, 0, 1);
+      if (tAll >= tLand) {
+        const q2 = clamp((tAll - tLand) / 0.25, 0, 1);
         const from = p.y - r - 8 * k;
         x = x + (cup.x - x) * ease.inOutCubic(q2);
         y = from + (cup.y + 22 * k - r * 0.4 - from) * ease.inOutCubic(q2);
@@ -763,11 +830,11 @@ export function tombola(
     winBall.rot += 0.1;
     drawBall(winBall, x, y, r, true);
     // El número, grande, al lado mientras rueda.
-    if (tAll > T_OUT + 0.3 && tAll < T_CROWN) {
+    if (tAll > tOut + 0.3 && tAll < tCrown) {
       chip(`${t("cTomNum")} ${num}`, x + r + 10 * k, y - r - 6 * k, 1, 1.4);
     }
-    if (tAll >= T_LAND && tAll < T_CROWN) {
-      chip(names[winnerIdx] ?? "", cup.x - 60 * k, cup.y - 60 * k, clamp((tAll - T_LAND) / 0.2, 0, 1), 1.5);
+    if (tAll >= tLand && tAll < tCrown) {
+      chip(names[winnerIdx] ?? "", cup.x - 60 * k, cup.y - 60 * k, clamp((tAll - tLand) / 0.2, 0, 1), 1.5);
     }
   }
 
@@ -802,7 +869,7 @@ export function tombola(
     // recorrido a 60 cuadros por segundo y a 144.
     acc += dt;
     let guard = 0;
-    while (acc >= DT && guard++ < 40 && tSim < T_STOP + 0.5) {
+    while (acc >= DT && guard++ < 40 && tSim < T_STOP + (rebote ? 2.2 : 0.5)) {
       step(DT);
       acc -= DT;
     }
@@ -825,11 +892,11 @@ export function tombola(
     cupShape(false);
     if (tem) c.restore();
     drawHud();
-    if (tAll >= T_CROWN) {
+    if (tAll >= tCrown) {
       c.fillStyle = "rgba(20,14,30,0.35)";
       c.fillRect(0, 0, W(), H());
       flashScreen(c, W(), H(), flashK);
-      const e = ease.outBack(Math.min(1, (tAll - T_CROWN) * 1.6));
+      const e = ease.outBack(Math.min(1, (tAll - tCrown) * 1.6));
       const g = geo();
       // Al costado del bombo en horizontal, entre el bombo y el vaso en vertical.
       const px = g.vertical ? W() / 2 : Math.min(W() * 0.68, W() - 260 * g.k);

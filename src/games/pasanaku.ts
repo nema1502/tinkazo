@@ -2,6 +2,7 @@ import { T, getLang, t } from "../i18n";
 import { beep, beepFor, fanfare, note } from "../sound";
 import { paceFactor, setGameLength, type Beacon } from "../state";
 import { INK, WINNER_HOLD, chrome, clamp, drawFlag, ease, mount, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
+import { writeStory } from "./drama";
 
 /**
  * Pasanaku.
@@ -84,12 +85,19 @@ export function pasanaku(
   const { c, W, H, u, rng, color, say, chip, dark, cleanup, run } = st;
 
   const n = names.length;
+  /* El director de emoción elige el arco. En el Pasanaku, el susto es el
+     bulto ganador empujado hasta el filo del aguayo en el último apretón:
+     tiembla ahí, con un aro rojo, y la tela lo vuelve a meter. */
+  const story = writeStory(rng, Math.max(2, n), winnerIdx % Math.max(2, n));
+  const susto = story.arc === "susto" && n >= 3;
+  st.canvas.dataset.arco = story.arc;
   const FINAL = Math.min(3, n);
   /** Cuántos apretones. Suman siempre lo mismo, así que el total no cambia con n. */
   const PULLS = n <= 4 ? 1 : n <= 12 ? 2 : 3;
   // Lo que dura sin estirar: hasta que se levanta el aguayo.
   setGameLength(T_LIFT, WINNER_HOLD);
   const PULL_DUR = CINCH_DUR / PULLS;
+  const SUSTO = T_CINCH + CINCH_DUR * 0.72;
 
   /**
    * El orden de salida. El ganador va primero y por lo tanto nunca lo
@@ -116,6 +124,7 @@ export function pasanaku(
   let flashK = 0;
   let shake = 0;
   let knotHits = 0;
+  let saidSusto = false;
   let saidKnot = false;
   let tugs = 0;
   let lastTug = -99;
@@ -171,6 +180,11 @@ export function pasanaku(
       const g = 220 * k * (0.25 + cinchTotal);
       q.vx += (dx / d) * g * dt;
       q.vy += (dy / d) * g * dt;
+      // El susto: empujado hacia afuera; el aro lo frena en el filo.
+      if (susto && q.idx === winnerIdx && tAll >= SUSTO && tAll < SUSTO + 0.6) {
+        q.vx -= (dx / d) * 900 * k * dt;
+        q.vy -= (dy / d) * 900 * k * dt * 0.62;
+      }
       // Temblor sembrado: nada queda nunca quieto.
       q.vx += Math.sin(tAll * q.wob + q.ph) * 26 * k * dt;
       q.vy += Math.cos(tAll * q.wob * 0.83 + q.ph) * 26 * k * dt;
@@ -316,6 +330,12 @@ export function pasanaku(
     }
 
     if (phase === "cinch") {
+      if (susto && !saidSusto && tAll >= SUSTO + 0.25) {
+        saidSusto = true;
+        say(T[getLang()].cPasClose(names[winnerIdx] ?? ""), 0.8);
+        beep(note(1), 0.1, "square", 0.05);
+        setTimeout(() => beep(note(8), 0.12, "triangle", 0.045), 80);
+      }
       const want = Math.min(PULLS, Math.floor((tAll - T_CINCH) / PULL_DUR) + 1);
       while (pulls < want) {
         pulls++;
@@ -570,6 +590,18 @@ export function pasanaku(
     const k = u();
     const r = q.alive ? rad() : rad() * 0.8;
     const col = color(q.idx);
+    // El aro rojo del susto, latiendo alrededor del bulto que casi sale.
+    if (susto && q.idx === winnerIdx && tAll >= SUSTO && tAll < SUSTO + 1.1) {
+      const f = (tAll - SUSTO) / 1.1;
+      c.save();
+      c.globalAlpha = 1 - f;
+      c.strokeStyle = "#e93d9c";
+      c.lineWidth = 5 * k;
+      c.beginPath();
+      c.arc(q.x, q.y - (q.alive ? liftK * 70 * k : 0), r * (1.8 + 0.4 * Math.sin(tAll * 18)), 0, 7);
+      c.stroke();
+      c.restore();
+    }
     c.save();
     c.translate(q.x, q.y - (q.alive ? liftK * 70 * k : 0));
     c.rotate(q.rot + 0.12 * Math.sin(now * 1.1 + q.ph));

@@ -210,8 +210,19 @@ export function stadiumRace(
     tapada: [0, 0.02, 0.04, 0.05, 0.06, 0.07, 0.07, 0.055, 0.02, -0.03],
   };
   const V2_TAPADA = [0, 0.01, 0.03, 0.06, 0.05, 0.068, 0.075, 0.05, 0.01, -0.045];
+  // El duelo que arranca tarde: la ganadora escondida en el pelotón hasta
+  // alcanzar a la rival al 62%. La mitad de los duelos son así.
+  const DUELO_TARDE = [0, -0.02, -0.04, -0.06, -0.05, 0.01, 0.03, 0.02, 0.012, 0];
+  const dueloTarde = story.arc === "duelo" && rng() < 0.5;
+  // Cuánto de atrás viene la ganadora en la remontada y en la tapada, sembrado:
+  // con la misma distancia siempre, a mitad de carrera iba última en todas las
+  // remontadas, y el auditor de emoción vio que la sala podía aprenderlo.
+  const intensidad = 0.45 + 0.75 * rng();
   const gaps: number[][] = runners.map((_, k) => {
-    if (k === story.winner) return ARC_W[story.arc];
+    if (k === story.winner) {
+      const g = dueloTarde ? DUELO_TARDE : ARC_W[story.arc];
+      return story.arc === "remontada" || story.arc === "tapada" ? g.map((v) => v * intensidad) : g;
+    }
     if (k === story.rival) return ARC_V[story.arc];
     if (story.arc === "tapada" && k === story.rival2) return V2_TAPADA;
     // El resto: un paseo sembrado, que al final queda detrás de la ganadora.
@@ -284,6 +295,56 @@ export function stadiumRace(
   function xAt(k: number, q: number): number {
     const tau = Math.max(0, Math.min(1, q - delayAt(k, q)));
     return X0() + (L() - X0()) * tau + gapAt(k, tau) * W();
+  }
+
+  /*
+   * El puesto de la ganadora a mitad de carrera, sorteado según el arco.
+   *
+   * Con las curvas fijas, a la mitad iba primera o última en casi todas las
+   * carreras, y el auditor de emoción lo midió: apostar por la que va primera
+   * a la mitad acertaba más de la mitad de las veces, cuatro veces mejor que
+   * al azar. Ahora el puesto sale de la ronda y la curva se corrige hasta
+   * ocuparlo de verdad. La corrección se afina en el medio de la carrera y vale
+   * cero en la largada y desde el 86%: la llegada no cambia.
+   *
+   * Es una función y se llama al final del armado: necesita el ancho de la
+   * pista, que se define más abajo.
+   */
+  function ubicarGanadora(): void {
+    const L_ = runners.length;
+    const entre = (a: number, b: number): number => {
+      const lo = Math.max(1, Math.min(a, L_));
+      const hi = Math.max(lo, Math.min(b, L_));
+      return lo + Math.floor(rng() * (hi - lo + 1));
+    };
+    const tropiezo = story.beats.find((bt) => bt.actor === story.winner && bt.kind === "tropiezo");
+    const objetivo =
+      story.arc === "remontada" ? entre(L_ - 3, L_)
+        : story.arc === "tapada" ? entre(3, L_ - 2)
+          : story.arc === "susto" ? (tropiezo && tropiezo.at > 0.5 ? 1 : entre(3, L_ - 2))
+            : dueloTarde ? entre(3, 5) : entre(1, 2);
+    const taper = [0, 0, 0.5, 0.85, 1, 0.6, 0.3, 0, 0, 0];
+    const base = (gaps[story.winner] as number[]).slice();
+    const puestoCon = (d: number): number => {
+      gaps[story.winner] = base.map((v, i) => v + (taper[i] as number) * d);
+      const xs = runners.map((_, k) => xAt(k, 0.5));
+      const wx = xs[story.winner] as number;
+      return 1 + xs.filter((x, k) => k !== story.winner && x > wx).length;
+    };
+    // El corrimiento más chico que deja a la ganadora en el puesto `r` o mejor.
+    const borde = (r: number): number => {
+      let lo = -0.45, hi = 0.25;
+      for (let it = 0; it < 28; it++) {
+        const m = (lo + hi) / 2;
+        if (puestoCon(m) <= r) hi = m;
+        else lo = m;
+      }
+      return hi;
+    };
+    const d1 = borde(objetivo);
+    const d2 = objetivo > 1 ? borde(objetivo - 1) : d1 + 0.06;
+    // En el medio del tramo que da ese puesto, no pegada al borde.
+    puestoCon((d1 + d2) / 2);
   }
 
   /** En qué momento de la historia está un actor: para la postura y los efectos. */
@@ -455,6 +516,9 @@ export function stadiumRace(
     // La tabla de posiciones: las filas se deslizan al nuevo puesto.
     const orden = runners.map((r, k) => ({ r, k })).sort((a, b) => b.r.x - a.r.x);
     orden.forEach(({ r }, puesto) => { r.row += (puesto - r.row) * Math.min(1, dt * 10); });
+    // El puesto de la ganadora, para el auditor de emoción: mide que a mitad
+    // de carrera no la delate.
+    canvas.dataset.puesto = String(orden.findIndex((o) => o.k === story.winner) + 1);
     if (prog >= 1) finishNow();
   }
 
@@ -884,6 +948,7 @@ export function stadiumRace(
     c.fill();
   }
 
+  ubicarGanadora();
   let tPrev = performance.now();
   const tStart = tPrev;
   let rafId = 0;

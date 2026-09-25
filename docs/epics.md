@@ -599,7 +599,9 @@ Hecho (2026-09-25), en la carrera de llamas y la de cohetes, que comparten motor
 
 Pasó los tres auditores: 20 de 20 en el exigente y en el de juegos, y el de sonido, en las dos carreras.
 
-Falta: llevar el director a los otros seis juegos, cada uno en su idioma (en el Teleférico, la cabina de la ganadora a punto de soltarse; en el Pasanaku, el bulto que casi sale por el borde). Y un auditor de emoción que mida, sobre muchas semillas, que los arcos varíen y que el puesto de la ganadora a la mitad no la delate.
+Después, el mismo día, el director llegó a los otros seis juegos, cada uno con su giro para el susto o el duelo: la parada falsa de la ruleta, la puerta del Teleférico, el rebote de la Tómbola, la barrida y el sello que duda del Cierre de Libro, el filo del Pasanaku y el roce de la Constelación. El detalle está en `docs/juegos.md`. De paso aparecieron dos defectos viejos: el chip del nombre perdía la foto cuando se corría para entrar en pantalla, y la mesa final del Cierre de Libro quedaba medio tapada por la caja del relator.
+
+Y el auditor de emoción, `scripts/audit-emocion.mjs`: dieciséis semillas por juego con el reloj en turbo, midiendo que los arcos varíen y que en la carrera el puesto de la ganadora a la mitad no la delate. Encontró justo eso en la primera corrida: la ganadora iba primera o última a la mitad en casi todas las carreras, y en los cohetes atrás en trece de dieciséis. Ahora ese puesto se sortea según el arco y la curva se corrige hasta ocuparlo.
 
 ### Historia 7.3: Mejoras transversales de presentación
 

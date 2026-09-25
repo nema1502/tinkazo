@@ -2,6 +2,7 @@ import { T, getLang, t } from "../i18n";
 import { beep, beepFor, fanfare, note } from "../sound";
 import { drawAvatar, paceFactor, setGameLength, type Beacon } from "../state";
 import { INK, WINNER_HOLD, chrome, clamp, drawFlag, ease, mount, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
+import { writeStory } from "./drama";
 
 /**
  * La ruleta.
@@ -61,7 +62,16 @@ const W1 = 5.6;
  * los clics es el mismo con dos participantes que con veinticuatro, y lo único
  * que cambia es cuántas vueltas da.
  */
-function omega(tt: number): number {
+/** Cuánto dura la parada falsa, en segundos de juego. */
+const FALSA = 0.75;
+
+/**
+ * `falsa`: el arco "susto" del director de emoción. La rueda se para del todo
+ * un gajo antes del ganador, la sala cree que ganó ese, y después de un
+ * instante avanza un gajo más. Es el truco de las ruletas de feria, y la
+ * integral de abajo sigue garantizando que caiga justo donde tiene que caer.
+ */
+function omega(tt: number, falsa = false): number {
   if (tt < T_WIND) return 0;
   if (tt < T_SPIN) {
     // La carga. Antes la rueda pasaba 1,7 segundos completamente quieta, que
@@ -80,6 +90,14 @@ function omega(tt: number): number {
   if (tt < T_HOLD) {
     const p = (tt - T_CREEP) / (T_HOLD - T_CREEP);
     return W1 * Math.pow(1 - p, 1.6);
+  }
+  if (falsa) {
+    // Quieta del todo, y después un empujón que avanza exactamente un gajo:
+    // la integral del seno sobre el tramo vale uno.
+    const a = T_HOLD + FALSA;
+    if (tt < a || tt >= T_LOCK) return 0;
+    const d = T_LOCK - a;
+    return (Math.PI / (2 * d)) * Math.sin((Math.PI * (tt - a)) / d);
   }
   // El falso: la paleta trabada contra el perno, casi sin avanzar.
   if (tt < T_SETTLE) return 0.64;
@@ -105,6 +123,11 @@ export function wheelSpin(
   const { c, W, H, u, rng, color, say, dark, cleanup, run } = st;
 
   const n = names.length;
+  // El director de emoción elige el arco. En la ruleta, el susto es la parada
+  // falsa; los demás arcos terminan con la paleta trabada de siempre.
+  const story = writeStory(rng, Math.max(2, n), winnerIdx % Math.max(2, n));
+  const falsa = story.arc === "susto" && n >= 2;
+  st.canvas.dataset.arco = story.arc;
   /** Cuántos gajos se lleva cada persona. */
   const rep = n <= 12 ? Math.max(1, Math.round(SEGS / n)) : 1;
   const segs = n * rep;
@@ -131,8 +154,8 @@ export function wheelSpin(
   cumT[0] = 0;
   const h = T_LOCK / STEPS;
   for (let i = 1; i <= STEPS; i++) {
-    const a = omega((i - 1) * h);
-    const b = omega(i * h);
+    const a = omega((i - 1) * h, falsa);
+    const b = omega(i * h, falsa);
     cumT[i] = (cumT[i - 1] as number) + ((a + b) / 2) * h;
   }
   const BUDGET = cumT[STEPS] as number;
@@ -308,12 +331,18 @@ export function wheelSpin(
     if (tAll >= T_HOLD && !saidPeg) {
       saidPeg = true;
       lastSaid = tAll;
-      say(t("cWheelPeg"), 0.9);
+      say(falsa ? T[getLang()].cWheelFalse(names[cur] ?? "") : t("cWheelPeg"), 0.9);
     }
-    if (tAll >= T_SETTLE && !saidLast) {
+    const reanuda = falsa ? T_HOLD + FALSA : T_SETTLE;
+    if (tAll >= reanuda && !saidLast) {
       saidLast = true;
       lastSaid = tAll;
-      say(t("cWheelLast"), 0.95);
+      say(t(falsa ? "cWheelMoved" : "cWheelLast"), 0.95);
+      // El golpe de la paleta que se destraba.
+      if (falsa) {
+        beep(note(3), 0.08, "square", 0.06);
+        setTimeout(() => beep(note(10), 0.12, "triangle", 0.05), 60);
+      }
     }
   }
 
@@ -650,7 +679,7 @@ export function wheelSpin(
   run((dt, now) => {
     tAll += dt;
     shake = Math.max(0, shake - dt * 2.2);
-    const w = omega(tAll);
+    const w = omega(tAll, falsa);
     rot = -(startSeg + cum(tAll) * scale) * A;
     if (tAll < 1.1) {
       const want = Math.floor((tAll / 1.1) * 24);
@@ -662,7 +691,7 @@ export function wheelSpin(
         buildTick++;
       }
     }
-    if (tAll >= T_HOLD && tAll < T_SETTLE) {
+    if (!falsa && tAll >= T_HOLD && tAll < T_SETTLE) {
       // Se van separando: el amague dura 1,2 segundos y un perno cada 0,07
       // serían diecisiete golpes seguidos, que es ruido. Separándose se lee
       // como una rueda que ya casi no puede.

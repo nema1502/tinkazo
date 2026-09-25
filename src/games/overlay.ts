@@ -42,8 +42,11 @@ export interface Stage {
    * participantes es textura y tiene que ser chico; cuando quedan tres es el
    * dato más importante de la pantalla y a 12·u mide el 1,7% del alto, que
    * proyectado no se lee desde el fondo de la sala.
+   *
+   * `alRevés` ancla el chip por su borde derecho en `x`, para ponerlo a la
+   * izquierda de algo: en un celular a la derecha no suele haber lugar.
    */
-  chip: (name: string, x: number, y: number, alpha?: number, scale?: number) => number;
+  chip: (name: string, x: number, y: number, alpha?: number, scale?: number, alRevés?: boolean) => number;
   /** Desmonta y devuelve el control a la página. Idempotente. */
   cleanup: () => void;
   /** `true` cuando el tema de la página es oscuro. */
@@ -150,7 +153,7 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
       );
       narrate(msg, heat);
     },
-    chip(name, x, y, alpha = 1, scale = 1) {
+    chip(name, x, y, alpha = 1, scale = 1, alRevés = false) {
       const k = u() * scale;
       const av = 18 * k;
       const label = shorten(name, 20);
@@ -166,7 +169,7 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
       // Que no se salga por los costados. El chip se ancla al nodo, y un nodo
       // cerca del borde ·cosa común en una pantalla vertical· lo empujaba
       // afuera: quedaba medio nombre cortado contra el filo del lienzo.
-      const bx = Math.max(6 * k, Math.min(x - 4 * k, W() - bw - 6 * k));
+      const bx = Math.max(6 * k, Math.min((alRevés ? x - bw : x) - 4 * k, W() - bw - 6 * k));
 
       const round = typeof c.roundRect === "function";
       c.beginPath();
@@ -188,10 +191,13 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
       c.lineWidth = 2 * k;
       c.stroke();
 
+      // El recorte va donde va la foto, no donde se pidió el chip: cuando el
+      // chip se corría para entrar en pantalla, la foto quedaba fuera del
+      // recorte y desaparecía.
       c.save();
       c.beginPath();
-      if (round) c.roundRect(x, y - 11 * k, av, av, 3 * k);
-      else c.rect(x, y - 11 * k, av, av);
+      if (round) c.roundRect(bx + 4 * k, y - 11 * k, av, av, 3 * k);
+      else c.rect(bx + 4 * k, y - 11 * k, av, av);
       c.clip();
       drawAvatar(c, name, bx + 4 * k, y - 11 * k, av);
       c.restore();

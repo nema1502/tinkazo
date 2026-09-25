@@ -22,14 +22,22 @@ export interface Dict {
   cLanes: (k: number, n: number) => string;
   cWheelSplit: (segs: number, rep: number) => string;
   cWheelOn: (n: string) => string;
+  cWheelFalse: (n: string) => string;
   cPasOut: (n: string) => string;
   cTelCount: (n: number, cabs: number) => string;
   cTelPass: (k: number) => string;
   cTelStop: (k: number, off: number, left: number) => string;
   cTelOff: (n: string) => string;
   cTelOf: (k: number, of: number) => string;
+  cTelDoor: (n: string) => string;
   cTomCount: (n: number) => string;
   cTomBall: (num: string) => string;
+  cTomFake: (num: string) => string;
+  cLedgerClose: (n: string) => string;
+  cLedgerHover: (n: string) => string;
+  cLedgerNope: (n: string) => string;
+  cPasClose: (n: string) => string;
+  cConstNear: (n: string) => string;
   cPlantadaL: (n: string) => string;
   cPlantadaR: (n: string) => string;
   cTropiezoL: (n: string) => string;
@@ -147,6 +155,8 @@ export const T: Record<Lang, Dict> = {
     cWheelOn: (n) => pick([`¡Va por ${n}!`, `¡Pasa por ${n}!`, `¡Ahora ${n}!`]),
     cWheelPeg: ["¡SE TRABA!", "¡NO PASA DE AHÍ!", "¡SE QUEDA, SE QUEDA!"],
     cWheelLast: ["¡SE DEFINE ACÁ!", "¡NO RESPIRA NADIE!", "¡UN GAJO MÁS!"],
+    cWheelFalse: (n) => pick([`¿Se queda en ${n}?`, `¿${n}? ¿Será?`, `¿Se paró en ${n}?`]),
+    cWheelMoved: ["¡NO! ¡SE MOVIÓ!", "¡NO ERA! ¡UN GAJO MÁS!", "¡SE DESTRABÓ!"],
     cWheelRound: "RONDA",
     cWheelSeed: "LA SEMILLA ESTÁ EN EL BORDE",
     cTelBoard: ["¡Suban, suban, que se va!", "¡Todos a bordo!", "¡Se llenan las cabinas!"],
@@ -164,6 +174,8 @@ export const T: Record<Lang, Dict> = {
     cTelOf: (k, of) => `ESTACIÓN ${k} DE ${of}`,
     cTelTop: "CUMBRE",
     cTelBase: "BASE",
+    cTelDoor: (n) => pick([`¡Se abre la puerta de ${n}!`, `¿Se baja ${n}?`, `¡${n} está en la puerta!`]),
+    cTelStays: ["¡NO! ¡SE QUEDA!", "¡Se cierra la puerta!", "¡Falsa alarma, señores!"],
     cTomDrop: ["¡Adentro todas las bolas!", "¡Cada uno con su número!", "¡Se llena la tómbola!"],
     cTomCount: (n) => (n === 1 ? "¡Una bola, una sola!" : `¡${n} bolas, una por cabeza!`),
     cTomSpin1: ["¡Primera vuelta!", "¡Gira la tómbola!", "¡A mezclar!"],
@@ -176,6 +188,13 @@ export const T: Record<Lang, Dict> = {
     cTomAlmost: ["¡Casi, casi!", "¡Se tambalea!", "¡Cae o no cae!"],
     cTomNum: "N.º",
     cTomBalls: "BOLAS",
+    cConstNear: (n) => pick([`¡Casi toca a ${n}!`, `¡Pasó rozando a ${n}!`, `¡Uy, ${n}!`]),
+    cPasClose: (n) => pick([`¡Casi sale ${n}!`, `¡${n} en el borde!`, `¡Se agarra ${n}!`]),
+    cLedgerClose: (n) => pick([`¡Casi se lleva a ${n}!`, `¡Uy, ${n} tembló!`, `¡A ${n} casi la barre!`]),
+    cLedgerHover: (n) => pick([`¿Se lo sellan a ${n}?`, `¡Va para ${n}!`, `¿${n}? ¿Será?`]),
+    cLedgerNope: (n) => pick([`¡No! ¡Es para ${n}!`, `¡Se fue para ${n}!`, `¡Cambió! ¡${n}!`]),
+    cTomFake: (num) => pick([`¡Sale la ${num}!`, `¡Asoma la ${num}!`, `¿La ${num}?`]),
+    cTomBack: ["¡NO! ¡SE VOLVIÓ!", "¡Se cayó para adentro!", "¡No era esa!"],
     cPlantadaL: (n) => pick([`¡Se plantó ${n}! ¡Terca como llama!`, `¡${n} no quiere correr!`, `¡${n} se quedó mirando el paisaje!`]),
     cPlantadaR: (n) => pick([`¡Se le apagó el motor a ${n}!`, `¡${n} se quedó sin combustible!`, `¡${n} está flotando!`]),
     cTropiezoL: (n) => pick([`¡Tropezó ${n}!`, `¡${n} pisó mal!`, `¡Uy, ${n} casi se cae!`]),
@@ -549,6 +568,8 @@ export const T: Record<Lang, Dict> = {
     cWheelOn: (n) => pick([`On ${n}!`, `Passing ${n}!`, `${n} now!`]),
     cWheelPeg: ["IT'S STUCK!", "IT WON'T PASS!", "IT'S STAYING, IT'S STAYING!"],
     cWheelLast: ["IT'S DECIDED RIGHT HERE!", "NOBODY IS BREATHING!", "ONE MORE SLICE!"],
+    cWheelFalse: (n) => pick([`Does it stay on ${n}?`, `${n}? Could it be?`, `Did it stop on ${n}?`]),
+    cWheelMoved: ["NO! IT MOVED!", "NOT THAT ONE! ONE MORE!", "IT SLIPPED!"],
     cWheelRound: "ROUND",
     cWheelSeed: "THE SEED IS ON THE RIM",
     cTelBoard: ["All aboard!", "Hop in, hop in, it's leaving!", "The cabins are filling up!"],
@@ -566,6 +587,8 @@ export const T: Record<Lang, Dict> = {
     cTelOf: (k, of) => `STATION ${k} OF ${of}`,
     cTelTop: "TOP",
     cTelBase: "BASE",
+    cTelDoor: (n) => pick([`${n}'s door is opening!`, `Is ${n} getting off?`, `${n} is at the door!`]),
+    cTelStays: ["NO! STAYING ON!", "The door closes!", "False alarm, people!"],
     cTomDrop: ["In go all the balls!", "Everyone gets a number!", "The drum is filling up!"],
     cTomCount: (n) => (n === 1 ? "One ball, just one!" : `${n} balls, one each!`),
     cTomSpin1: ["First spin!", "Round it goes!", "Mix it up!"],
@@ -578,6 +601,13 @@ export const T: Record<Lang, Dict> = {
     cTomAlmost: ["Almost, almost!", "It's wobbling!", "In or out?"],
     cTomNum: "No.",
     cTomBalls: "BALLS",
+    cConstNear: (n) => pick([`It nearly touched ${n}!`, `It just grazed ${n}!`, `Whoa, ${n}!`]),
+    cPasClose: (n) => pick([`${n} almost fell out!`, `${n} on the edge!`, `${n} hangs on!`]),
+    cLedgerClose: (n) => pick([`It nearly swept ${n}!`, `Whoa, ${n} shook!`, `${n} almost got wiped!`]),
+    cLedgerHover: (n) => pick([`Is ${n} getting stamped?`, `It's going to ${n}!`, `${n}? Could it be?`]),
+    cLedgerNope: (n) => pick([`No! It's ${n}!`, `It went to ${n}!`, `Switch! ${n}!`]),
+    cTomFake: (num) => pick([`Out comes ${num}!`, `Number ${num} peeks out!`, `Is it ${num}?`]),
+    cTomBack: ["NO! IT FELL BACK!", "It dropped back in!", "Not that one!"],
     cPlantadaL: (n) => pick([`${n} just stopped! Stubborn as a llama!`, `${n} doesn't want to run!`, `${n} is admiring the view!`]),
     cPlantadaR: (n) => pick([`${n}'s engine just died!`, `${n} ran out of fuel!`, `${n} is just floating!`]),
     cTropiezoL: (n) => pick([`${n} tripped!`, `${n} missed a step!`, `Whoa, ${n} nearly fell!`]),

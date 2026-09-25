@@ -29,6 +29,7 @@
  *   pnpm preview &
  *   node scripts/audit-rigor.mjs [juego|todos] [--base http://localhost:4173]
  */
+import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
@@ -226,8 +227,15 @@ const check = (name, ok, detail = "") => {
   console.log(`  ${ok ? "✓" : "✗"} ${name}${detail ? ` · ${detail}` : ""}`);
 };
 
+/**
+ * `--semilla N` corre la escena con otra semilla (la de "semilla-N"): con la
+ * fija, el director de emoción escribe siempre la misma historia, y los giros
+ * de los otros arcos (la parada falsa, la puerta, el rebote) no se auditaban.
+ */
+const semillaN = opt("--semilla", "");
+const semilla = semillaN ? createHash("sha256").update(`semilla-${semillaN}`).digest("hex") : "";
 const urlDe = (juego, extra = "") =>
-  `${base}/?pose=${juego === "race" ? "1" : juego}${extra}`;
+  `${base}/?pose=${juego === "race" ? "1" : juego}${extra}${semilla ? `&semilla=${semilla}` : ""}`;
 
 /**
  * Corre la escena de un juego con el reloj cambiado y devuelve lo que midió.

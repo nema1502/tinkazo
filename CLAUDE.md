@@ -57,6 +57,11 @@ node scripts/audit-game.mjs <juego> --base http://localhost:4173
 # fluidez, cartel legible desde el fondo, saltar, fugas y duración. Sin red.
 node scripts/audit-rigor.mjs todos --base http://localhost:4173
 
+# Auditor de emoción: dieciséis semillas por juego, con el reloj en turbo.
+# Que los arcos del director varíen y que en la carrera el puesto de la
+# ganadora a la mitad no la delate.
+node scripts/audit-emocion.mjs todos --base http://localhost:4173
+
 # Las capturas de la página de juegos, en los dos temas, a WebP
 node scripts/capturas-juegos.mjs <juego> --en 6.5
 
@@ -99,7 +104,7 @@ public/             juegos/*.webp, sitemap.xml y robots.txt
 verificar.html      Página de verificación, solo lectura
 src/                Frontend TypeScript: main, i18n, state, narrator, protocol/, stellar/, ui/, games/
 src/games/overlay.ts  Andamiaje de los juegos: estadio, azar sembrado, chips, saltar, desmontaje
-scripts/            deploy.sh (contrato), smoke.mjs (sitio), audit-game.mjs, audit-rigor.mjs, check-lore.mjs
+scripts/            deploy.sh (contrato), smoke.mjs (sitio), audit-game.mjs, audit-rigor.mjs, audit-emocion.mjs, check-lore.mjs
 contracts/raffle/   Contrato Soroban tinkazo-raffle (lib, drand, select, test)
 docs/               PRD, arquitectura, protocolo, épicas, despliegues, vectores, capturas
 .claude/skills/     Skills para construir en Stellar

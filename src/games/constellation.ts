@@ -2,6 +2,7 @@ import { T, getLang, t } from "../i18n";
 import { beep, beepFor, fanfare, note } from "../sound";
 import { paceFactor, setGameLength, type Beacon } from "../state";
 import { INK, WINNER_HOLD, chrome, clamp, ease, mount, drawWinnerPlate, shorten, winnerNames, winnersLabel } from "./overlay";
+import { writeStory } from "./drama";
 
 /**
  * Constelación Stellar.
@@ -90,6 +91,15 @@ export function stellarConstellation(
   let DECOY = 0;
   let hops: Hop[] = [];
 
+  /* El director de emoción elige el arco. En la constelación, el último salto
+     ya amaga en todos los sorteos; el susto suma otro a mitad de juego: el
+     paquete va derecho a la estrella del ganador, la roza y se desvía. */
+  const story = writeStory(rng, Math.max(2, names.length), winnerIdx % Math.max(2, names.length));
+  const casi = story.arc === "susto" && names.length >= 2;
+  /** En qué salto roza al ganador. */
+  const CASI = 13;
+  st.canvas.dataset.arco = story.arc;
+  let saidCasi = false;
   let phase: Phase = "arm";
   let tPhase = 0;
   let tAll = 0;
@@ -246,8 +256,9 @@ export function stellarConstellation(
         dur: hopDur(i),
         // En el último salto la curva se apoya en el señuelo, así que el
         // paquete parece ir para allá hasta que ya no.
-        cx: last ? d.x * 0.86 + b.x * 0.14 : (a.x + b.x) / 2,
-        cy: last ? d.y * 0.86 + b.y * 0.14 : (a.y + b.y) / 2,
+        // En el roce, la curva se apoya en la estrella del ganador.
+        cx: last ? d.x * 0.86 + b.x * 0.14 : casi && i === CASI ? (nodes[WIN_NODE] as Node).x * 1.3 - (a.x + b.x) * 0.15 : (a.x + b.x) / 2,
+        cy: last ? d.y * 0.86 + b.y * 0.14 : casi && i === CASI ? (nodes[WIN_NODE] as Node).y * 1.3 - (a.y + b.y) * 0.15 : (a.y + b.y) / 2,
       };
     });
   }
@@ -288,7 +299,8 @@ export function stellarConstellation(
       beep(note(deg), 0.16, "triangle", 0.05);
       if (hopI >= 12) beep(note(Math.max(0, deg - 5)), 0.2, "sine", 0.04);
       chips.push({ node: ni, a: 1 });
-      if ((hops[hopI] as Hop).dur > 0.3 && n.idx !== winnerIdx) {
+      // En el roce ya habló el relator: dos líneas seguidas se pisaban.
+      if ((hops[hopI] as Hop).dur > 0.3 && n.idx !== winnerIdx && !(casi && hopI === CASI)) {
         say(T[getLang()].cConstPass(names[n.idx] ?? ""), 0.25 + 0.4 * (hopI / K));
       }
     } else {
@@ -389,6 +401,13 @@ export function stellarConstellation(
         saidNarrow = true;
       }
       hopT += dt / hp.dur;
+      if (casi && hopI === CASI && !saidCasi && hopT >= 0.48) {
+        saidCasi = true;
+        (nodes[WIN_NODE] as Node).flare = 1;
+        say(T[getLang()].cConstNear(names[winnerIdx] ?? ""), 0.6);
+        beep(note(14), 0.1, "triangle", 0.045);
+        setTimeout(() => beep(note(9), 0.12, "sine", 0.04), 110);
+      }
       if (hopI === K - 1 && !saidDecoy && hopT >= 0.72) {
         // El engaño: 380 ms yendo claramente hacia el vecino equivocado.
         (nodes[DECOY] as Node).flare = 1;
