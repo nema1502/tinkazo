@@ -16,6 +16,7 @@ Sitio en producción: https://tinkazo.vercel.app
 - [docs/juegos.md](docs/juegos.md), el contrato que cumple todo juego, las 20 comprobaciones del auditor de juegos y las 20 del exigente.
 - [docs/marca.md](docs/marca.md), paleta con los contrastes medidos, tipografía y cómo se escribe.
 - [docs/vectors.json](docs/vectors.json), vectores de prueba compartidos por Rust y TypeScript.
+- [docs/legal.md](docs/legal.md), el marco legal en Bolivia y en el mundo, y lo que decide el producto por eso. Entrar a un sorteo es gratis, siempre.
 
 ## Reglas del repositorio
 

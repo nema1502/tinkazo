@@ -83,7 +83,7 @@ Y para el Stellar Community Fund, el argumento más fuerte que puede tener el pr
 
 ## Antes de construir
 
-1. **Legal.** En Bolivia los sorteos promocionales están regulados. Hay que saber qué pide la norma para un sorteo gratuito entre asistentes de un evento, y qué cambia si el premio es dinero. Esto se consulta con alguien del área, no se supone.
+1. **Legal.** Lo investigado está en [legal.md](legal.md), para Bolivia y para el resto del mundo. En corto: donde entrar es gratis casi nadie lo regula; en Bolivia la Ley 1733 sacó la autorización y los impuestos de las promociones empresariales; Brasil, Colombia y México piden permiso incluso para sorteos gratuitos. Quedan cinco preguntas para un abogado, y la cuarta toca a este plan: si cobrar una comisión por premio vuelve a Tinkazo un proveedor de activos virtuales.
 2. **El CSV de Luma** real.
 3. **Pollar**: si patrocina reservas, y si su SDK permite firmar la transacción de cobro junto con la llave del cupón.
 4. **Cobrar en Bolivia**: qué anclas y qué opciones reales hay.
@@ -94,6 +94,7 @@ Y para el Stellar Community Fund, el argumento más fuerte que puede tener el pr
 |---|---|---|---|
 | 1 | Importar el CSV de Luma, filtrar por check-in, correos solo en el navegador | No | No |
 | 2 | Textos listos para el envío de Luma: resultado para todos, con la prueba de cada uno, y aviso al ganador | No | No |
+| 2b | Las bases del sorteo, generadas, y unos términos de uso y privacidad (ver [legal.md](legal.md)) | No | No |
 | 3 | Cobro en testnet, con USDC de prueba, de punta a punta | No | De prueba |
 | 4 | Con lo legal claro: cobro en mainnet y la comisión | No | Sí |
 | 5 | Si hace falta: envío de correos desde Tinkazo | Uno chico | No |
