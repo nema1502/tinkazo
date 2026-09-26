@@ -842,13 +842,30 @@ Resultado (2026-09-26): sale de la investigación de [legal.md](legal.md). Casi 
 
 ## Épica 11: Recordatorios y aviso a los ganadores
 
-Salvo el historial desde la cadena (11.1), no hay nada de esto todavía y no hace falta para el evento. Queda escrito para no volver a discutirlo desde cero.
+Salvo el historial desde la cadena (11.1), el comprobante rearmado (11.2) y la lista desde el export de Luma (11.3), no hay nada de esto todavía y no hace falta para el evento. Queda escrito para no volver a discutirlo desde cero.
 
 El sitio no tiene servidor ni base de datos: todo vive en el navegador y en la cadena. Hasta la 11.1 el historial de sorteos vivía solo en `localStorage` y se perdía al borrar los datos del sitio. El aviso al ganador sigue siendo un enlace que el organizador manda a mano.
 
 Lo que pediría un servidor de verdad: avisar por correo a quien ganó sin que el organizador tenga que copiar nada, recordar un sorteo programado, y que el historial sobreviva a cambiar de equipo. Las tres cosas tienen el mismo costo: dejar de ser un sitio estático.
 
 Hay un camino intermedio que no lo requiere y conviene medir antes: **reconstruir el historial desde la cadena**. Los sellos están en el contrato, la cuenta que los firmó es la del organizador, y `getLedgerEntries` no tiene ventana temporal. Eso devuelve el historial en cualquier equipo con la misma cuenta, sin servidor y sin base de datos. Lo que no resuelve es el correo.
+
+### Historia 11.3: Del export de Luma a la lista, solo los que fueron: hecho
+
+Como organizadora que exporta los inscritos de Luma al final del evento,
+quiero sortear entre los que hicieron check-in y no entre todos los inscritos,
+para que no gane alguien que no vino.
+
+**Criterios de aceptación:**
+
+**Dado** un CSV con una columna de asistencia (el `checked_in_at` de Luma, o un estado como "Checked In")
+**Cuando** lo subo
+**Entonces** la lista queda con los que fueron, y la nota dice cuántas filas tenía el archivo y cuántas entran
+**Y** si nadie hizo check-in, o lo hicieron todos, no se filtra nada
+**Y** puedo cambiar el filtro: todas las filas, las que tienen algo en una columna, o las que tienen un valor de una columna de pocos valores, como el estado de la inscripción
+**Y** el archivo no sale del navegador.
+
+Resultado (2026-09-26): `suggestFilter`, `filterChoices` y `filterRows` en `src/ui/csv.ts`, con seis tests más, y el selector "¿Quiénes entran?" al lado del de la columna. Los correos del archivo siguen sin usarse: son el paso 2 de [premios.md](premios.md). Falta probarlo con un export real de Luma; el formato de los tests sigue las columnas conocidas (`name`, `approval_status`, `checked_in_at`).
 
 ### Historia 11.2: Rearmar el comprobante de un sorteo traído de la cadena: hecho
 

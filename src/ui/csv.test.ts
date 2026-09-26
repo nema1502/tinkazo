@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { columnToText, looksTabular, parseTable } from "./csv";
+import { columnToText, filterChoices, filterRows, looksTabular, parseTable, suggestFilter } from "./csv";
 import { canonicalList } from "../protocol/canonical";
 
 /** Lo que exporta Luma: la primera columna es el identificador, no el nombre. */
@@ -67,6 +67,47 @@ describe("parseTable", () => {
 
   it("filas de ancho distinto no son una tabla", () => {
     expect(looksTabular("a,b,c\nd,e\nf")).toBe(false);
+  });
+});
+
+describe("quiénes entran", () => {
+  it("en un export de Luma, propone a los que hicieron check-in", () => {
+    const t = parseTable(LUMA)!;
+    const f = suggestFilter(t)!;
+    expect(t.columns[f.column]).toBe("checked_in_at");
+    expect(f.value).toBeNull();
+    expect(columnToText(filterRows(t, f), t.suggested)).toBe("Ana Quispe\nRodrigo Mamani");
+  });
+
+  it("si nadie hizo check-in, no propone nada: dejaría la lista vacía", () => {
+    const t = parseTable("name,checked_in_at\nAna Quispe,\nLuis Choque,")!;
+    expect(suggestFilter(t)).toBeNull();
+  });
+
+  it("si todos hicieron check-in, tampoco: no cambiaría nada", () => {
+    const t = parseTable("name,checked_in_at\nAna Quispe,2026-09-03T18:10:00Z\nLuis Choque,2026-09-03T18:12:00Z")!;
+    expect(suggestFilter(t)).toBeNull();
+  });
+
+  it("en una columna de estado, elige el valor que dice que fue", () => {
+    const t = parseTable("Attendee name,Attendee Status\nAna Quispe,Checked In\nLuis Choque,Attending\nRodrigo Mamani,Checked In")!;
+    const f = suggestFilter(t)!;
+    expect(f.value).toBe("Checked In");
+    expect(columnToText(filterRows(t, f), 0)).toBe("Ana Quispe\nRodrigo Mamani");
+  });
+
+  it("ofrece filtrar por lo que tiene sentido y no por la columna de nombres", () => {
+    const t = parseTable("name,approval_status,checked_in_at\nAna,approved,x\nLuis,declined,\nRo,approved,x")!;
+    const choices = filterChoices(t, 0);
+    expect(choices.some((c) => c.column === 0)).toBe(false);
+    expect(choices).toContainEqual({ column: 1, value: "approved" });
+    expect(choices).toContainEqual({ column: 1, value: "declined" });
+    expect(choices).toContainEqual({ column: 2, value: null });
+  });
+
+  it("sin filtro, entran todas las filas", () => {
+    const t = parseTable(LUMA)!;
+    expect(filterRows(t, null).rows).toHaveLength(3);
   });
 });
 

@@ -68,6 +68,10 @@ export interface Dict {
   cDuelo: (a: string, b: string) => string;
   cCuela: (n: string) => string;
   csvRows: (n: number) => string;
+  csvAll: (n: number) => string;
+  csvHas: (col: string, n: number) => string;
+  csvIs: (col: string, v: string, n: number) => string;
+  csvIn: (n: number) => string;
   tellBody: (w: string, prize: string, n: number, u: string) => string;
 }
 
@@ -159,6 +163,11 @@ export const T: Record<Lang, Dict> = {
     freezeHint: "Hacen falta al menos dos nombres.",
     frozenOk: "Lista congelada ✓",
     csvRows: (n) => (n === 1 ? "1 fila en el archivo" : `${n} filas en el archivo`),
+    csvWho: "¿Quiénes entran?",
+    csvAll: (n) => `Todas las filas (${n})`,
+    csvHas: (col, n) => `Con algo en «${col}» (${n})`,
+    csvIs: (col, v, n) => `«${col}» = ${v} (${n})`,
+    csvIn: (n) => (n === 1 ? "entra 1" : `entran ${n}`),
     sample: "Cargar ejemplo", freeze: "Congelar lista", draw: "Lanzar el sorteo", winners: "Premios",
     // --- Tarjetas de "¿por qué se llama así?". Cada dato tiene su fuente
     //     primaria anotada en src/games/lore.ts. Ninguno se inventa.
@@ -618,6 +627,11 @@ export const T: Record<Lang, Dict> = {
     freezeHint: "At least two names are needed.",
     frozenOk: "List frozen ✓",
     csvRows: (n) => (n === 1 ? "1 row in the file" : `${n} rows in the file`),
+    csvWho: "Who gets in?",
+    csvAll: (n) => `Every row (${n})`,
+    csvHas: (col, n) => `Something in "${col}" (${n})`,
+    csvIs: (col, v, n) => `"${col}" = ${v} (${n})`,
+    csvIn: (n) => (n === 1 ? "1 gets in" : `${n} get in`),
     sample: "Load sample", freeze: "Freeze list", draw: "Run the draw", winners: "Prizes",
     cWheelBuild: ["Building the wheel!", "Slices lining up, people!", "Here comes the wheel!"],
     cWheelSplit: (segs, rep) => (rep > 1 ? `${segs} slices, ${rep} each!` : `${segs} slices, one apiece!`),

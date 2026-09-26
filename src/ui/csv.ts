@@ -85,6 +85,87 @@ export function columnToText(table: Table, index: number): string {
     .join("\n");
 }
 
+/**
+ * Qué filas entran al sorteo.
+ *
+ * Un export de Luma trae a todos los inscritos, y el sorteo suele ser entre
+ * los que fueron. El filtro elige filas por una columna: las que tienen algo
+ * escrito (la hora del check-in) o las que tienen un valor exacto ("approved",
+ * "Checked In"). Todo pasa en el navegador, como el resto del archivo.
+ */
+export interface RowFilter {
+  column: number;
+  /** El valor que tiene que tener la celda, o `null` para "tiene algo escrito". */
+  value: string | null;
+}
+
+/** Cabeceras que dicen si la persona fue: el check-in de Luma, la asistencia de otras. */
+const PRESENT_HINTS = [
+  "checked_in_at", "checked in", "checked_in", "check-in", "check in", "checkin",
+  "attended", "attendance", "attendee status", "asistió", "asistio", "asistencia", "presente",
+];
+/** Valores de una columna de estado que quieren decir que sí fue. */
+const PRESENT_VALUE = /^(yes|s[ií]|true|1|x|checked[ _-]?in|attended|presente|asisti[óo])$/i;
+
+const cell = (row: string[], i: number): string => (row[i] ?? "").trim();
+
+/**
+ * Los valores de una columna de categorías, como el estado de la inscripción:
+ * pocos y repetidos. Una columna de correos o de fechas tiene un valor por
+ * fila, y ofrecer cada uno como filtro llenaba el selector de ruido.
+ */
+function categories(vals: string[]): string[] {
+  const filled = vals.filter(Boolean);
+  const distinct = [...new Set(filled)];
+  return distinct.length >= 2 && distinct.length <= 6 && distinct.length < filled.length ? distinct : [];
+}
+
+export function rowPasses(row: string[], f: RowFilter): boolean {
+  const v = cell(row, f.column);
+  return f.value === null ? v !== "" : v === f.value;
+}
+
+/** La misma tabla, con las filas que pasan el filtro. Sin filtro, entera. */
+export function filterRows(table: Table, f: RowFilter | null): Table {
+  return f ? { ...table, rows: table.rows.filter((r) => rowPasses(r, f)) } : table;
+}
+
+/**
+ * El filtro que conviene proponer: el de asistencia, si la tabla tiene una
+ * columna que lo diga y esa columna de verdad separa a unos de otros. Si todos
+ * pasan no hace nada, y si no pasa nadie (el evento todavía no empezó, o nadie
+ * usó el check-in) dejaría la lista vacía: en los dos casos, no se propone.
+ */
+export function suggestFilter(table: Table): RowFilter | null {
+  if (!table.headerDetected) return null;
+  const col = table.columns.findIndex((c) => PRESENT_HINTS.includes(c.trim().toLowerCase()));
+  if (col < 0) return null;
+  let f: RowFilter = { column: col, value: null };
+  // Una columna de estado ("Attending", "Checked In") tiene pocos valores:
+  // se elige el que dice que fue.
+  const yes = categories(table.rows.map((r) => cell(r, col))).find((d) => PRESENT_VALUE.test(d));
+  if (yes) f = { column: col, value: yes };
+  const pass = filterRows(table, f).rows.length;
+  return pass > 0 && pass < table.rows.length ? f : null;
+}
+
+/**
+ * Los filtros que tiene sentido ofrecer, fuera de la columna de nombres: "tiene
+ * algo escrito" en las columnas que a veces están vacías, y cada valor en las
+ * que tienen pocos distintos, como el estado de la inscripción.
+ */
+export function filterChoices(table: Table, except: number): RowFilter[] {
+  const out: RowFilter[] = [];
+  table.columns.forEach((_, c) => {
+    if (c === except) return;
+    const vals = table.rows.map((r) => cell(r, c));
+    const empties = vals.filter((v) => v === "").length;
+    if (empties > 0 && empties < vals.length) out.push({ column: c, value: null });
+    for (const v of categories(vals)) out.push({ column: c, value: v });
+  });
+  return out;
+}
+
 /** El separador que parte el texto en más columnas de forma consistente. */
 function pickDelimiter(text: string): string | null {
   let best: { d: string; width: number } | null = null;

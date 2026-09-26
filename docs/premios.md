@@ -92,7 +92,7 @@ Y para el Stellar Community Fund, el argumento más fuerte que puede tener el pr
 
 | Paso | Qué | Servidor | Dinero |
 |---|---|---|---|
-| 1 | Importar el CSV de Luma, filtrar por check-in, correos solo en el navegador | No | No |
+| 1 | Importar el CSV de Luma, filtrar por check-in, correos solo en el navegador. **Hecho el filtro**; falta probarlo con un export real | No | No |
 | 2 | Textos listos para el envío de Luma: resultado para todos, con la prueba de cada uno, y aviso al ganador | No | No |
 | 2b | Las bases del sorteo, generadas, y unos términos de uso y privacidad (ver [legal.md](legal.md)). **Hecho** | No | No |
 | 3 | Cobro en testnet, con USDC de prueba, de punta a punta | No | De prueba |

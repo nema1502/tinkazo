@@ -2,7 +2,7 @@ import { $, esc } from "../dom";
 import { SAMPLE, app, avatar } from "../state";
 import { canonicalList } from "../protocol/canonical";
 import { T, getLang } from "../i18n";
-import { type Table, columnToText, parseTable } from "./csv";
+import { type RowFilter, type Table, columnToText, filterChoices, filterRows, parseTable, suggestFilter } from "./csv";
 
 /** Lista canónica a partir del textarea (protocolo §1). */
 export function parseNames(): string[] {
@@ -25,6 +25,10 @@ export function loadSample(): void {
 
 /** La tabla del último archivo, mientras el organizador elige la columna. */
 let table: Table | null = null;
+/** Qué columna tiene los nombres y qué filas entran. */
+let nameCol = 0;
+let filters: RowFilter[] = [];
+let filter: RowFilter | null = null;
 
 export function bindParticipants(): void {
   $("ta").addEventListener("input", () => {
@@ -34,7 +38,17 @@ export function bindParticipants(): void {
   });
   $("csv-col").addEventListener("change", (e) => {
     if (!table) return;
-    setList(columnToText(table, Number((e.target as HTMLSelectElement).value)), false);
+    nameCol = Number((e.target as HTMLSelectElement).value);
+    // La columna de nombres no puede ser la del filtro.
+    if (filter?.column === nameCol) filter = null;
+    fillFilters(table);
+    applyTable();
+  });
+  $("csv-filter").addEventListener("change", (e) => {
+    if (!table) return;
+    const i = Number((e.target as HTMLSelectElement).value);
+    filter = i >= 0 ? (filters[i] ?? null) : null;
+    applyTable();
   });
   $<HTMLInputElement>("csv").addEventListener("change", async (e) => {
     const input = e.target as HTMLInputElement;
@@ -63,8 +77,41 @@ export function loadFile(raw: string): void {
     return;
   }
   table = parsed;
+  nameCol = parsed.suggested;
+  // Si el archivo dice quién fue, entran los que fueron.
+  filter = suggestFilter(parsed);
+  if (filter?.column === nameCol) filter = null;
   showPicker(parsed);
-  setList(columnToText(parsed, parsed.suggested), false);
+  applyTable();
+}
+
+/** La columna elegida, de las filas que entran, al textarea. */
+function applyTable(): void {
+  if (!table) return;
+  const kept = filterRows(table, filter);
+  const lang = T[getLang()];
+  $("csv-note").textContent = filter
+    ? `${lang.csvRows(table.rows.length)} · ${lang.csvIn(kept.rows.length)}`
+    : lang.csvRows(table.rows.length);
+  setList(columnToText(kept, nameCol), false);
+}
+
+/** Las opciones del filtro, con cuántas filas deja cada una. */
+function fillFilters(t: Table): void {
+  filters = filterChoices(t, nameCol);
+  const lang = T[getLang()];
+  const count = (f: RowFilter): number => filterRows(t, f).rows.length;
+  const label = (f: RowFilter): string => {
+    const col = t.columns[f.column] ?? "";
+    return f.value === null ? lang.csvHas(col, count(f)) : lang.csvIs(col, f.value, count(f));
+  };
+  const select = $<HTMLSelectElement>("csv-filter");
+  select.innerHTML =
+    `<option value="-1">${esc(lang.csvAll(t.rows.length))}</option>` +
+    filters.map((f, i) => `<option value="${i}">${esc(label(f))}</option>`).join("");
+  const at = filter ? filters.findIndex((f) => f.column === filter?.column && f.value === filter?.value) : -1;
+  if (at < 0) filter = null;
+  select.value = String(at);
 }
 
 function setList(text: string, clearPicker = true): void {
@@ -79,11 +126,12 @@ function showPicker(parsed: Table): void {
     .map((c, i) => `<option value="${i}">${esc(c)}</option>`)
     .join("");
   select.value = String(parsed.suggested);
-  $("csv-note").textContent = T[getLang()].csvRows(parsed.rows.length);
+  fillFilters(parsed);
   $("csv-pick").style.display = "";
 }
 
 function hidePicker(): void {
   table = null;
+  filter = null;
   $("csv-pick").style.display = "none";
 }
