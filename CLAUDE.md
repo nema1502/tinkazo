@@ -78,7 +78,7 @@ node scripts/audit-ui.mjs --base http://localhost:4173
 # Las fuentes de las tarjetas de historia siguen vivas
 pnpm check:lore
 
-# Las páginas de lectura (juegos, historia, seguridad, precios): imágenes,
+# Las páginas de lectura (juegos, historia, seguridad, precios, términos): imágenes,
 # traducciones, celular, temas y blancos de toque. Corre también en la CI.
 pnpm check:paginas
 
@@ -101,6 +101,7 @@ juegos.html         Los ocho juegos, con la captura del estadio de cada uno
 historia.html       De dónde salen el nombre, la llama y el aguayo
 seguridad.html      Qué impide el protocolo, el ataque abierto y los límites
 precios.html        Qué cuesta y cómo funciona por dentro
+terminos.html       Términos y privacidad: participar es gratis, quien organiza responde
 public/             juegos/*.webp, sitemap.xml y robots.txt
 verificar.html      Página de verificación, solo lectura
 src/                Frontend TypeScript: main, i18n, state, narrator, protocol/, stellar/, ui/, games/

@@ -94,7 +94,9 @@ Para los correos de Luma el plan de [premios.md](premios.md) sigue la misma lín
 3. **Nada de datos personales en servidores.** Ya es así, y se mantiene cuando lleguen los correos.
 4. **Premios sin custodia.** El dinero va del organizador al ganador. Si Tinkazo cobra una comisión, se cobra en la misma transacción, a la vista, y antes se resuelve la pregunta 4.
 
-## Lo que se puede construir ya, sin dinero
+## Lo que ya se construyó, sin dinero
+
+Las dos cosas de esta sección están hechas desde el 26 de septiembre de 2026: la página [terminos.html](../terminos.html) y el botón "Copiar las bases", que aparece apenas se sella la lista.
 
 - **Términos de uso y privacidad**, en español e inglés, cortos, con lo de arriba: gratis para participar, el organizador responde por su sorteo, qué datos se tocan y cuáles no.
 - **Las bases del sorteo, generadas.** Casi todas las normas piden reglas claras antes de sortear: quién participa, qué se gana, cómo se elige, cuándo, cómo se avisa y cuánto tiempo hay para reclamar. Tinkazo ya sabe casi todo eso, y la parte de "cómo se elige" es el protocolo: la huella de la lista y la ronda de drand, fijadas antes de que exista la semilla. Un texto listo para pegar en Luma, en los dos idiomas, sirve en cualquier país y hace que el sorteo se vea serio.

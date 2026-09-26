@@ -21,7 +21,7 @@ const base = (() => {
   return i >= 0 && args[i + 1] ? args[i + 1] : "http://localhost:4173";
 })();
 
-const PAGINAS = ["juegos", "historia", "seguridad", "precios"];
+const PAGINAS = ["juegos", "historia", "seguridad", "precios", "terminos"];
 const VISTAS = [
   { tema: "dark", ancho: 1280, alto: 900, como: "escritorio" },
   { tema: "light", ancho: 1280, alto: 900, como: "escritorio" },
@@ -52,7 +52,7 @@ try {
         desborde: document.documentElement.scrollWidth - window.innerWidth,
         rotas: [...document.images].filter(i => !i.complete || i.naturalWidth === 0).length,
         vacios: [...document.querySelectorAll('[data-i], [data-i-html]')].filter(e => !e.textContent.trim()).length,
-        enlaces: [...document.querySelectorAll('.pies a')].length,
+        enlaces: [...document.querySelectorAll('.pies a')].map((a) => a.getAttribute('href')),
         toque: [...document.querySelectorAll('.pies a')].every(a => a.getBoundingClientRect().height >= 44),
       })`));
       let r = await mirar();
@@ -67,7 +67,11 @@ try {
       check(r.desborde <= 1, `${etiqueta}: sin scroll horizontal`, `${r.desborde}px`);
       check(r.rotas === 0, `${etiqueta}: sin imágenes rotas`);
       check(r.vacios === 0, `${etiqueta}: sin textos sin traducir`);
-      check(r.enlaces === 5, `${etiqueta}: el pie lleva a todas`, `${r.enlaces} enlaces`);
+      // Cada página de lectura, más el código. Se compara contra la lista de
+      // arriba y no contra un número: con un número, agregar una página
+      // obligaba a acordarse de cambiarlo acá.
+      const faltan = PAGINAS.filter((p) => !r.enlaces.includes(`/${p}.html`));
+      check(faltan.length === 0 && r.enlaces.length === PAGINAS.length + 1, `${etiqueta}: el pie lleva a todas`, faltan.length ? `falta ${faltan.join(", ")}` : `${r.enlaces.length} enlaces`);
       if (como === "celular") check(r.toque, `${etiqueta}: blancos de toque de 44 px`);
       check(page.exceptions.length === 0, `${etiqueta}: sin excepciones`, page.exceptions[0] ?? "");
     }

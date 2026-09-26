@@ -183,13 +183,16 @@ Para mirar un arco puntual: `?pose=<juego>&semilla=<64 hex>` cambia la semilla d
 
 ### El giro de cada juego
 
-La carrera actúa la historia entera. Los demás juegos toman del director el arco, y en el susto o el duelo hacen su propio amague, en su idioma. Así la sala no puede aprender cómo termina: en dieciséis semillas, el giro salió en seis cuando lo dispara solo el susto, y en diez cuando lo disparan el susto y el duelo. Cuál sale depende de la ronda.
+La carrera actúa la historia entera. Los demás juegos toman del director el arco, y en el susto o el duelo hacen su propio amague, en su idioma. Así la sala no puede aprender cómo termina: en dieciséis semillas, el giro salió en seis cuando lo dispara solo el susto, y en diez cuando lo disparan el susto y el duelo. Cuál sale depende de la ronda. El teleférico va más lejos: tiene un giro para cada uno de los cuatro arcos, así que siempre pasa algo, pero nunca lo mismo.
 
 | Juego | Arco | El giro |
 |---|---|---|
 | Carrera de llamas y de cohetes | Los cuatro | La historia completa: tropiezos, plantadas, piques, escupidas, duelo con foto |
 | Ruleta | Susto | **La parada falsa.** La rueda se para del todo un gajo antes del ganador ("¿se queda en fulano?"), y después de un instante avanza uno más ("¡no! ¡se movió!"). La integral de la velocidad sigue garantizando que caiga donde tiene que caer |
-| Teleférico | Susto y duelo | **La puerta.** En la última estación se abre la de la cabina ganadora, el pasajero se asoma y la cabina se sacude; la puerta se cierra ("¡se queda!") y el que se baja es el de la otra |
+| Teleférico | Susto | **La puerta.** En la última estación se abre la de la cabina ganadora, el pasajero se asoma y la cabina se sacude; la puerta se cierra ("¡se queda!") y el que se baja es el de la otra |
+| Teleférico | Duelo | **La mordaza.** En la última estación la cabina de atrás se suelta y resbala cable abajo, hasta que la mordaza la agarra entre chispas y la vuelve a subir. A veces es la del ganador y a veces la de la otra, así que "la que se salvó" no delata a nadie |
+| Teleférico | Tapada | **El apagón.** Justo antes de la última estación se corta la luz: se apaga la ciudad, el convoy frena en el aire y se hamaca a oscuras con un latido. La luz vuelve titilando y el convoy sigue |
+| Teleférico | Remontada | **La ráfaga.** A mitad de viaje entra un viento que cruza la pantalla, hamaca cada cabina a su tiempo y hace flamear las banderas. El relator la canta si no está diciendo otra cosa |
 | Tómbola | Susto y duelo | **El rebote.** Se abre la compuerta y asoma primero otra bola, medio afuera, temblando en el borde ("¡sale la 12!"); cae para adentro ("¡no era esa!") y recién sale la ganadora |
 | Cierre de Libro | Susto | **La barrida.** La última barrida pasa por la tarjeta ganadora, que tiembla en rojo y suelta pedazos que se vuelven a juntar |
 | Cierre de Libro | Duelo | **El sello que duda.** El último sello flota sobre la ganadora ("¿se lo sellan a fulano?") y a último momento se va a la otra |

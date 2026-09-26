@@ -603,6 +603,24 @@ Después, el mismo día, el director llegó a los otros seis juegos, cada uno co
 
 Y el auditor de emoción, `scripts/audit-emocion.mjs`: dieciséis semillas por juego con el reloj en turbo, midiendo que los arcos varíen y que en la carrera el puesto de la ganadora a la mitad no la delate. Encontró justo eso en la primera corrida: la ganadora iba primera o última a la mitad en casi todas las carreras, y en los cohetes atrás en trece de dieciséis. Ahora ese puesto se sortea según el arco y la curva se corrige hasta ocuparlo.
 
+### Historia 7.16: El Teleférico, con un giro por arco y banderas: hecho
+
+Como alguien que ya vio el Teleférico dos veces,
+quiero que la tercera no termine igual,
+para seguir mirando la pantalla y no el celular.
+
+**Criterios de aceptación:**
+
+**Dado** un sorteo en el Teleférico
+**Cuando** el director de emoción elige el arco
+**Entonces** cada uno de los cuatro arcos tiene su giro: la puerta (susto), la mordaza (duelo), el apagón (tapada) y la ráfaga (remontada)
+**Y** en la mordaza se suelta la cabina de atrás, que a veces es la del ganador y a veces no
+**Y** el apagón no alarga el show: se lleva un pedazo del viaje, y el convoy frena con una curva continua que nunca retrocede
+**Y** hay banderas que flamean con el viento: una por estación, un banderín por cabina y banderines en la cumbre
+**Y** todo sigue siendo función del tiempo de juego: el auditor exigente da 20 de 20 en una semilla de cada arco.
+
+Resultado (2026-09-26): los cuatro giros y las banderas en `src/games/cablecar.ts`; el detalle, con los tiempos y el sonido, en [juegos/teleferico.md](juegos/teleferico.md). Sale de lo que mejor funcionó en la ruleta, que se para y después se mueve: finales que no se adivinan.
+
 ### Historia 7.3: Mejoras transversales de presentación
 
 Como organizadora,
@@ -802,6 +820,23 @@ sin tener que usarlo primero ni leer el repositorio.
 **Y** todas llevan el mismo pie de navegación, con blancos de toque de 44 px.
 
 Resultado (2026-09-22): tres páginas nuevas más la de precios, todas sobre `src/pagina.ts`. Las capturas salen de `?pose=<juego>`, que es la escena fija pensada para eso, convertidas a webp (264 KB las doce, entre tema claro y oscuro). `pnpm check:paginas` las revisa como las mira alguien ·doce vistas y los dos idiomas· y corre en la integración continua. De paso: Open Graph en cada una, `sitemap.xml` y `robots.txt` que deja fuera la página de verificación, porque cada comprobante es de alguien.
+
+### Historia 12.2: Términos, privacidad y las bases del sorteo: hecho
+
+Como organizadora que va a sortear en su país,
+quiero unas bases para publicar antes de sortear y saber qué hace Tinkazo con los datos,
+para que el sorteo se vea serio y nadie me pregunte lo que ya está escrito.
+
+**Criterios de aceptación:**
+
+**Dado** una lista sellada
+**Cuando** toco "Copiar las bases"
+**Entonces** se copia un texto en el idioma de la página con el premio, cuántos participan y cuántos ganan, la huella completa, la fecha del sello, la ronda y la hora en que se publica, el sorteo y la red si quedó anclado, y cómo se verifica
+**Y** dice que participar es gratis y que quien organiza responde por el premio
+**Y** si el navegador no deja copiar, el texto queda a la vista
+**Y** hay una página `/terminos.html`, en los dos idiomas, que dice lo que el sitio hace con los datos y lo que no.
+
+Resultado (2026-09-26): sale de la investigación de [legal.md](legal.md). Casi todas las normas piden reglas claras antes de sortear, y Tinkazo ya sabía casi todo. Las bases tienen una ventaja más: publicadas en Luma o en un grupo antes de sortear, dejan anotado cuál es el sorteo que vale, que es lo que [seguridad.html](../seguridad.html) dice que hace falta contra la selección del compromiso. El texto sale de `T[lang].rules` y lo cubren seis tests. La página de términos entra en `check:paginas`.
 
 ---
 

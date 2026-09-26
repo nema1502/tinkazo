@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tinkazo, términos y privacidad</title>
+<meta name="description" content="Participar es gratis, quien organiza responde por su sorteo y los nombres no salen del navegador. Los términos de Tinkazo, cortos." />
+<meta property="og:title" content="Tinkazo, términos y privacidad" />
+<meta property="og:description" content="Participar es gratis, quien organiza responde por su sorteo y los nombres no salen del navegador." />
+<meta property="og:type" content="website" />
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -4 26 30"><g fill="%23e93d9c"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></g></svg>' />
+</head>
+<body>
+<header>
+  <div class="stripe"></div>
+  <div class="bar">
+    <a class="wordmark" href="/" style="text-decoration:none;color:inherit">Tinka<b>zo</b></a>
+    <nav class="langs" aria-label="idioma">
+      <button id="l-es" class="on">es</button>
+      <button id="l-en">en</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero" style="padding: 48px 0 8px">
+    <div class="hero-copy">
+      <span class="sticker" style="background:var(--teal)" data-i="tmKicker">Términos</span>
+      <h1 style="font-size: clamp(32px, 4.6vw, 48px)" data-i="tmTitle">Términos y privacidad</h1>
+      <p class="lead" data-i="tmLead">Cortos, como tienen que ser. Tinkazo es una herramienta para sortear, y quien sortea sos vos.</p>
+    </div>
+  </section>
+
+  <section class="notas">
+    <article class="nota">
+      <h3 data-i="tmQ1T">Participar es gratis, siempre</h3>
+      <p data-i="tmQ1B">Tinkazo no cobra por participar en un sorteo, y no es para sorteos que cobren. Un sorteo con entrada paga es una lotería, y en casi todo el mundo pide licencia.</p>
+    </article>
+    <article class="nota">
+      <h3 data-i="tmQ2T">Quien organiza responde</h3>
+      <p data-i="tmQ2B">El sorteo es tuyo: el premio, las bases, avisarle a quien gana y lo que pida la ley de tu país. En algunos, como Brasil, Colombia o México, hasta un sorteo gratuito pide permiso. Las bases que arma Tinkazo ayudan, pero no reemplazan lo que diga tu ley.</p>
+    </article>
+    <article class="nota">
+      <h3 data-i="tmQ3T">Los nombres no salen de tu navegador</h3>
+      <p data-i="tmQ3B">La lista se sella con una huella SHA-256, y a la red Stellar van esa huella, cuántos son y el premio que escribiste, nunca los nombres. El comprobante lleva los nombres en la parte de la dirección que el navegador no le manda a ningún servidor; por eso quien comparte el enlace comparte la lista. El QR y las caras se dibujan acá mismo.</p>
+    </article>
+    <article class="nota">
+      <h3 data-i="tmQ4T">Lo que queda guardado</h3>
+      <p data-i="tmQ4B">Si conectás una cuenta, su dirección pública queda en el contrato como la de quien organizó el sorteo: es pública a propósito, para que cada sorteo tenga dueño. Si entrás con Google, la llave la guarda Pollar y Tinkazo nunca la ve. En este equipo quedan el sonido, el ritmo del show, el historial de tus sorteos, que se borra desde el sitio, y la llave de la cuenta de prueba si la usás.</p>
+    </article>
+  </section>
+
+  <section style="padding: 20px 0 12px">
+    <h2 class="kicker" data-i="tmMoreT">Y además</h2>
+    <ul style="max-width: 680px; color: var(--ink2); font-size: 14px; margin: 10px 0 0 18px; display: grid; gap: 8px">
+      <li data-i="tmMore1">No hay publicidad ni rastreadores, ni una base de datos de participantes. Aparte de la red Stellar cuando anclás un sorteo, lo único que el sitio pide afuera durante un sorteo es el número público de drand.</li>
+      <li data-i="tmMore2">El sitio está en Vercel, que como todo alojamiento anota las visitas: dirección IP y navegador. Los nombres no llegan ahí.</li>
+      <li data-i="tmMore3">Tinkazo es código abierto (MIT) y se ofrece tal cual, sin garantías. Hoy el contrato vive en testnet, la red de prueba de Stellar. Si algo falla a mitad de un sorteo, cualquiera lo rehace con la lista y la ronda: para eso está el protocolo.</li>
+      <li data-i="tmMore4">Vigentes desde el 26 de septiembre de 2026. Si cambian, cambia esta página, con su fecha.</li>
+    </ul>
+    <p class="row"><a class="mini" href="https://github.com/nema1502/tinkazo/blob/main/docs/legal.md" target="_blank" rel="noopener" data-i="tmLinkLegal">Lo que averiguamos de las leyes, país por país ↗</a><a class="mini" href="https://github.com/nema1502/tinkazo/issues" target="_blank" rel="noopener" data-i="sgLinkIssue">Abrir un issue ↗</a></p>
+  </section>
+
+  <section style="padding: 0 0 40px">
+    <p class="note"><a href="/" data-i="backHome">Volver a sortear</a></p>
+  </section>
+</main>
+
+<footer><div class="bar">
+  <span data-i="footL">Tinkazo</span>
+  <nav class="pies" aria-label="secciones">
+    <a href="/juegos.html" data-i="navJuegos">Juegos</a>
+    <a href="/historia.html" data-i="navHistoria">Historia</a>
+    <a href="/seguridad.html" data-i="navSeguridad">Seguridad</a>
+    <a href="/precios.html" data-i="navPrecios">Precios</a>
+    <a href="/terminos.html" data-i="navTerminos">Términos</a>
+    <a href="https://github.com/nema1502/tinkazo" target="_blank" rel="noopener" data-i="navCodigo">Código</a>
+  </nav>
+  <span data-i="footR">Hecho con ♥ en 🇧🇴</span>
+</div></footer>
+<script type="module" src="/src/pagina.ts"></script>
+</body>
+</html>

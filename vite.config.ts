@@ -1,10 +1,11 @@
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
 
-// Tres páginas. El sitio, que es la herramienta y nada más; la verificación
-// pública, que se abre desde el QR o el enlace del comprobante y no necesita
-// cuenta; y los precios, que salieron de la principal para no meterle una
-// tabla de precios a quien solo quiere sortear.
+// El sitio, que es la herramienta y nada más; la verificación pública, que se
+// abre desde el QR o el enlace del comprobante y no necesita cuenta; y las
+// páginas de lectura (precios, juegos, historia, seguridad, términos), que
+// salieron de la principal para no meterle nada de eso a quien solo quiere
+// sortear.
 export default defineConfig({
   build: {
     target: "es2022",
@@ -17,6 +18,7 @@ export default defineConfig({
         juegos: resolve(__dirname, "juegos.html"),
         historia: resolve(__dirname, "historia.html"),
         seguridad: resolve(__dirname, "seguridad.html"),
+        terminos: resolve(__dirname, "terminos.html"),
       },
     },
   },

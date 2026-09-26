@@ -1,5 +1,21 @@
 export type Lang = "es" | "en";
 
+/** Lo que hace falta para escribir las bases de un sorteo sellado. */
+export interface RulesParams {
+  prize: string;
+  count: number;
+  winners: number;
+  listHash: string;
+  /** Fecha y hora del sello, ya formateadas en el idioma y con la zona. */
+  sealedAt: string;
+  round: number;
+  /** Fecha y hora en que se publica la ronda, formateadas igual. */
+  roundAt: string;
+  raffleId?: string;
+  network: string;
+  verifyUrl: string;
+}
+
 /**
  * Diccionario de la interfaz.
  *
@@ -30,6 +46,8 @@ export interface Dict {
   cTelOff: (n: string) => string;
   cTelOf: (k: number, of: number) => string;
   cTelDoor: (n: string) => string;
+  cTelSlip: (n: string) => string;
+  rules: (p: RulesParams) => string;
   cTomCount: (n: number) => string;
   cTomBall: (num: string) => string;
   cTomFake: (num: string) => string;
@@ -176,6 +194,11 @@ export const T: Record<Lang, Dict> = {
     cTelBase: "BASE",
     cTelDoor: (n) => pick([`¡Se abre la puerta de ${n}!`, `¿Se baja ${n}?`, `¡${n} está en la puerta!`]),
     cTelStays: ["¡NO! ¡SE QUEDA!", "¡Se cierra la puerta!", "¡Falsa alarma, señores!"],
+    cTelSlip: (n) => pick([`¡SE SUELTA LA DE ${n}!`, `¡${n} se va cable abajo!`, `¡Resbala la cabina de ${n}!`]),
+    cTelCaught: ["¡LA MORDAZA AGUANTA!", "¡NO! ¡LA AGARRÓ!", "¡Se salvó la cabina!"],
+    cTelDark: ["¡SE CORTÓ LA LUZ!", "¡APAGÓN! ¡Se paró en el aire!", "¡Se quedó a oscuras!"],
+    cTelLight: ["¡VOLVIÓ LA LUZ!", "¡Arranca de nuevo!", "¡Prendió! ¡Sigue!"],
+    cTelWind: ["¡RÁFAGA DE VIENTO!", "¡Viento, viento! ¡Agárrense!", "¡Cómo se hamacan!"],
     cTomDrop: ["¡Adentro todas las bolas!", "¡Cada uno con su número!", "¡Se llena la tómbola!"],
     cTomCount: (n) => (n === 1 ? "¡Una bola, una sola!" : `¡${n} bolas, una por cabeza!`),
     cTomSpin1: ["¡Primera vuelta!", "¡Gira la tómbola!", "¡A mezclar!"],
@@ -290,6 +313,25 @@ export const T: Record<Lang, Dict> = {
     verifyHow: "Cualquiera puede rehacer este sorteo por su cuenta y le tiene que dar el mismo nombre. Con la huella de la lista y el número público de esa hora, no hay otro resultado posible. No hace falta que me creas. · Paso a paso: 1) abrí la ronda de quicknet y verificá su firma con la clave pública del faro · 2) randomness = sha256(firma) · 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, salteando repetidos. El protocolo entero está en docs/protocolo.md.",
     reverify: "Rehacelo acá mismo", reverifyOk: "Lo rehicimos delante tuyo y dio el mismo nombre.",
     copySummary: "Copiar resumen", copied: "¡Copiado!",
+    copyRules: "Copiar las bases",
+    rulesNote: "Pegalas en Luma, en WhatsApp o donde avisaste del sorteo. Dicen cómo se elige antes de que se sepa quién gana, y dejan anotado cuál es el sorteo que vale.",
+    rules: (p) => [
+      `Bases del sorteo${p.prize ? ` · ${p.prize}` : ""}`,
+      "",
+      "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta.",
+      `2. Participan las ${p.count} personas de la lista. ${p.winners === 1 ? "Sale un ganador." : `Salen ${p.winners} ganadores.`}`,
+      `3. La lista quedó sellada el ${p.sealedAt} con esta huella SHA-256:`,
+      `   ${p.listHash}`,
+      p.raffleId
+        ? `   El sello está en la red Stellar (${p.network}), sorteo #${p.raffleId}. Si alguien cambia la lista, cambia la huella.`
+        : "   El sello se calculó en el navegador de quien organiza: nadie más atestigua cuándo se cerró la lista.",
+      `4. ${p.winners === 1 ? "Quién gana sale" : "Quiénes ganan salen"} de la ronda ${p.round} de drand quicknet, que se publica el ${p.roundAt}. Es un número al azar que nadie conocía cuando se selló la lista.`,
+      "5. La selección sigue el protocolo Tinkazo v2: con la lista y la ronda, cualquiera puede recomputar el resultado.",
+      "6. El juego que se ve en pantalla es presentación: no decide nada.",
+      "7. Quien organiza responde por el premio. Tinkazo es la herramienta.",
+      "",
+      `Cómo se verifica: ${p.verifyUrl}`,
+    ].join("\n"),
     tellWhatsapp: "Avisarle por WhatsApp", tellEmail: "Avisarle por correo",
     tellSubject: "Ganaste el sorteo 🦙",
     tellBody: (w, prize, n, u) =>
@@ -361,6 +403,24 @@ export const T: Record<Lang, Dict> = {
     hiReglaB: "Si un elemento se puede sacar sin que nada deje de funcionar, es decoración y sobra. En el producto hay exactamente cinco cosas bolivianas y las cinco hacen algo: el nombre, la llama de la mascota, el perno tricolor de la ruleta que marca la vuelta, el aguayo del Pasanaku que es el tablero, y el teleférico, cuyo cable es la barra de progreso. No hay wiphalas de fondo ni cholitas de stock.",
     hiQuienT: "Quién lo hace",
     hiQuienB: "Lo construyo yo, Nicolás, desde Santa Cruz de la Sierra. Es código abierto con licencia MIT, y el protocolo del sorteo está escrito paso a paso para que cualquiera pueda rehacerlo con sus propias herramientas, sin confiar en mí.",
+    navTerminos: "Términos",
+    tmKicker: "Términos",
+    tmTitle: "Términos y privacidad",
+    tmLead: "Cortos, como tienen que ser. Tinkazo es una herramienta para sortear, y quien sortea sos vos.",
+    tmQ1T: "Participar es gratis, siempre",
+    tmQ1B: "Tinkazo no cobra por participar en un sorteo, y no es para sorteos que cobren. Un sorteo con entrada paga es una lotería, y en casi todo el mundo pide licencia.",
+    tmQ2T: "Quien organiza responde",
+    tmQ2B: "El sorteo es tuyo: el premio, las bases, avisarle a quien gana y lo que pida la ley de tu país. En algunos, como Brasil, Colombia o México, hasta un sorteo gratuito pide permiso. Las bases que arma Tinkazo ayudan, pero no reemplazan lo que diga tu ley.",
+    tmQ3T: "Los nombres no salen de tu navegador",
+    tmQ3B: "La lista se sella con una huella SHA-256, y a la red Stellar van esa huella, cuántos son y el premio que escribiste, nunca los nombres. El comprobante lleva los nombres en la parte de la dirección que el navegador no le manda a ningún servidor; por eso quien comparte el enlace comparte la lista. El QR y las caras se dibujan acá mismo.",
+    tmQ4T: "Lo que queda guardado",
+    tmQ4B: "Si conectás una cuenta, su dirección pública queda en el contrato como la de quien organizó el sorteo: es pública a propósito, para que cada sorteo tenga dueño. Si entrás con Google, la llave la guarda Pollar y Tinkazo nunca la ve. En este equipo quedan el sonido, el ritmo del show, el historial de tus sorteos, que se borra desde el sitio, y la llave de la cuenta de prueba si la usás.",
+    tmMoreT: "Y además",
+    tmMore1: "No hay publicidad ni rastreadores, ni una base de datos de participantes. Aparte de la red Stellar cuando anclás un sorteo, lo único que el sitio pide afuera durante un sorteo es el número público de drand.",
+    tmMore2: "El sitio está en Vercel, que como todo alojamiento anota las visitas: dirección IP y navegador. Los nombres no llegan ahí.",
+    tmMore3: "Tinkazo es código abierto (MIT) y se ofrece tal cual, sin garantías. Hoy el contrato vive en testnet, la red de prueba de Stellar. Si algo falla a mitad de un sorteo, cualquiera lo rehace con la lista y la ronda: para eso está el protocolo.",
+    tmMore4: "Vigentes desde el 26 de septiembre de 2026. Si cambian, cambia esta página, con su fecha.",
+    tmLinkLegal: "Lo que averiguamos de las leyes, país por país ↗",
     sgKicker: "Seguridad",
     sgTitle: "Cómo se puede romper",
     sgLead: "Un sorteo que dice ser verificable tiene que decir también dónde no llega. Esto es lo que el protocolo impide, lo que todavía no, y lo que la herramienta no puede prometer.",
@@ -589,6 +649,11 @@ export const T: Record<Lang, Dict> = {
     cTelBase: "BASE",
     cTelDoor: (n) => pick([`${n}'s door is opening!`, `Is ${n} getting off?`, `${n} is at the door!`]),
     cTelStays: ["NO! STAYING ON!", "The door closes!", "False alarm, people!"],
+    cTelSlip: (n) => pick([`${n}'S CABIN SLIPS!`, `${n} is sliding down the cable!`, `${n}'s cabin is slipping!`]),
+    cTelCaught: ["THE GRIP HOLDS!", "NO! IT CAUGHT IT!", "The cabin is saved!"],
+    cTelDark: ["THE POWER'S OUT!", "BLACKOUT! Stuck in the air!", "Lights out!"],
+    cTelLight: ["POWER'S BACK!", "Moving again!", "Lights on! Here we go!"],
+    cTelWind: ["GUST OF WIND!", "Wind, wind! Hold on tight!", "Look at them swing!"],
     cTomDrop: ["In go all the balls!", "Everyone gets a number!", "The drum is filling up!"],
     cTomCount: (n) => (n === 1 ? "One ball, just one!" : `${n} balls, one each!`),
     cTomSpin1: ["First spin!", "Round it goes!", "Mix it up!"],
@@ -697,6 +762,25 @@ export const T: Record<Lang, Dict> = {
     verifyHow: "Anyone can run this draw again on their own and has to land on the same name. With the list fingerprint and the public number from that minute, no other result is possible. You don't have to take my word for it. · Step by step: 1) open the quicknet round and check its signature against the beacon's public key · 2) randomness = sha256(signature) · 3) idx = first 8 bytes of sha256(randomness ‖ list_hash ‖ counter) mod entries, skipping repeats. Whole protocol in docs/protocolo.md.",
     reverify: "Run it again right here", reverifyOk: "Ran it again in front of you. Same name.",
     copySummary: "Copy summary", copied: "Copied!",
+    copyRules: "Copy the rules",
+    rulesNote: "Paste them on Luma, WhatsApp or wherever you announced the raffle. They say how the winner is chosen before anyone knows, and put on record which raffle counts.",
+    rules: (p) => [
+      `Raffle rules${p.prize ? ` · ${p.prize}` : ""}`,
+      "",
+      "1. Entry is free. Nothing to buy and no account needed.",
+      `2. The ${p.count} people on the list take part. ${p.winners === 1 ? "One winner is drawn." : `${p.winners} winners are drawn.`}`,
+      `3. The list was sealed on ${p.sealedAt} with this SHA-256 fingerprint:`,
+      `   ${p.listHash}`,
+      p.raffleId
+        ? `   The seal is on the Stellar network (${p.network}), raffle #${p.raffleId}. Change the list and the fingerprint changes.`
+        : "   The seal was computed in the organizer's browser: nobody else witnesses when the list was closed.",
+      `4. ${p.winners === 1 ? "The winner comes" : "The winners come"} from drand quicknet round ${p.round}, published on ${p.roundAt}. It is a random number nobody knew when the list was sealed.`,
+      "5. Selection follows the Tinkazo v2 protocol: with the list and the round, anyone can recompute the result.",
+      "6. The game on screen is presentation: it decides nothing.",
+      "7. The organizer is responsible for the prize. Tinkazo is the tool.",
+      "",
+      `How to verify: ${p.verifyUrl}`,
+    ].join("\n"),
     tellWhatsapp: "Tell them on WhatsApp", tellEmail: "Tell them by email",
     tellSubject: "You won the raffle 🦙",
     tellBody: (w, prize, n, u) =>
@@ -766,6 +850,24 @@ export const T: Record<Lang, Dict> = {
     hiReglaB: "If an element can be removed and nothing stops working, it is decoration and it goes. The product has exactly five Bolivian things and all five do something: the name, the llama mascot, the wheel's tricolor pin that marks the turn, the Pasanaku's aguayo, which is the board, and the cable car, whose cable is the progress bar. No wiphalas in the background, no stock photos.",
     hiQuienT: "Who builds it",
     hiQuienB: "I build it, Nicolás, from Santa Cruz de la Sierra. It is open source under MIT, and the raffle protocol is written step by step so anyone can redo it with their own tools, without trusting me.",
+    navTerminos: "Terms",
+    tmKicker: "Terms",
+    tmTitle: "Terms and privacy",
+    tmLead: "Short, as they should be. Tinkazo is a tool for running raffles, and you are the one running them.",
+    tmQ1T: "Entry is free, always",
+    tmQ1B: "Tinkazo never charges anyone to enter a raffle, and it is not for raffles that do. A raffle with paid entry is a lottery, and almost everywhere that needs a license.",
+    tmQ2T: "The organizer is responsible",
+    tmQ2B: "The raffle is yours: the prize, the rules, telling the winner and whatever your country's law asks for. In some countries, like Brazil, Colombia or Mexico, even a free raffle needs a permit. The rules Tinkazo writes help, but they do not replace what your law says.",
+    tmQ3T: "Names stay in your browser",
+    tmQ3B: "The list is sealed with a SHA-256 fingerprint; the Stellar network gets that fingerprint, the head count and the prize you typed, never the names. The proof carries the names in the part of the address the browser never sends to any server; that is why sharing the link shares the list. The QR code and the faces are drawn right here.",
+    tmQ4T: "What gets stored",
+    tmQ4B: "If you connect an account, its public address is recorded in the contract as the organizer of the raffle: public on purpose, so every raffle has an owner. If you sign in with Google, Pollar holds the key and Tinkazo never sees it. This device keeps your sound setting, the show's pace, the history of your raffles, which you can delete from the site, and the key of the test account if you use it.",
+    tmMoreT: "Also",
+    tmMore1: "No ads, no trackers, no database of participants. Apart from the Stellar network when you anchor a raffle, the only thing the site fetches during a draw is drand's public number.",
+    tmMore2: "The site is hosted on Vercel, which like any host logs visits: IP address and browser. Names never get there.",
+    tmMore3: "Tinkazo is open source (MIT) and provided as is, without warranty. Today the contract lives on testnet, Stellar's test network. If something breaks in the middle of a raffle, anyone can run it again with the list and the round: that is what the protocol is for.",
+    tmMore4: "In effect since September 26, 2026. If they change, this page changes, with its date.",
+    tmLinkLegal: "What we found about the law, country by country ↗",
     sgKicker: "Security",
     sgTitle: "How it could be rigged",
     sgLead: "A raffle that claims to be verifiable also has to say where it stops. This is what the protocol prevents, what it does not yet, and what the tool cannot promise.",

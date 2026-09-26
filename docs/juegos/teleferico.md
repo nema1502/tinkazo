@@ -22,6 +22,21 @@ La regla de la casa es que un elemento boliviano tiene que hacer algo o no entra
 
 **El último tramo.** La cabina que queda sube sola, despacio, con el latido cada vez más seguido. Llega a la cumbre, golpe, se abren las puertas y sale el cartel.
 
+**Las banderas.** Cada estación tiene la suya, en su color, en un mástil alto sobre la esquina izquierda del techo; cada cabina lleva un banderín en la esquina de atrás; y la cumbre tiene banderines de los diez colores colgados de esquina a esquina, que se sacuden de fiesta cuando llega la cabina ganadora. Flamean para la izquierda, que es para donde sopla el viento en este valle, y con la ráfaga se estiran y ondulan más. Como todo lo demás, salen de la hora de juego.
+
+## El giro de cada arco
+
+El director de emoción ([`src/games/drama.ts`](../../src/games/drama.ts)) elige un arco por sorteo, y en el teleférico cada uno tiene su giro. Siempre pasa algo, pero nunca lo mismo:
+
+| Arco | Giro | Qué se ve |
+|---|---|---|
+| Susto | La puerta | En la última estación se abre la puerta de la cabina ganadora, el pasajero se corre hacia ella y la cabina se sacude. La puerta se cierra: "¡NO! ¡SE QUEDA!". El que se baja es el de la otra |
+| Duelo | La mordaza | En la última estación la cabina de atrás de las dos que quedan se suelta y resbala cable abajo más de media cabina. La mordaza la agarra con chispas y un tirón que la deja hamacándose, y el cable la vuelve a subir. Es la de atrás y no la del ganador: a veces se salva el que gana y a veces el que se baja igual |
+| Tapada | El apagón | En el tramo que llega a la última estación, cuando más rápido va, se corta la luz. Se apaga la ciudad, se oscurecen las ventanas y el convoy frena de golpe en el aire, hamacándose con un latido. La luz vuelve titilando y el convoy recupera el paso |
+| Remontada | La ráfaga | A mitad de viaje entra un viento: vetas que cruzan la pantalla, cabinas que se hamacan cada una a su tiempo y banderas estiradas. La hora se siembra, pero se corre si cae encima de una estación, para no pisar al relator |
+
+El apagón no alarga el juego: se lleva un pedazo del viaje, igual que la última parada se toma más tiempo con la puerta o la mordaza. El convoy frena con una curva continua (la hora del tramo avanza cada vez más despacio hasta quedarse quieta y después recupera el paso), así que nunca retrocede ni salta, y saltar al final sigue siendo poner el reloj en su lugar.
+
 ## Tres decisiones que no son de estilo
 
 **Los últimos cinco en bajarse van cada uno en una cabina distinta.** El convoy lleva como mucho cinco cabinas, y el reparto se hace de modo que los últimos cinco del orden de bajada queden separados. Así, cuando quedan cinco o menos, cada cabina lleva a una persona y se la puede nombrar. Y la cabina del ganador cae en un puesto sorteado del convoy: si fuera siempre la de adelante, la sala lo aprende al segundo sorteo y se acabó la tensión.
@@ -50,7 +65,7 @@ En segundos de juego, sin estirar. En "normal" se multiplican por 1,6.
 |---|---|
 | 0,0 – 2,0 s | Embarque. "¡Suban, suban, que se va!" |
 | 2,0 s | Campana de salida |
-| 2,0 – 13,4 s | Viajes y paradas. Viajar pesa 1, parar 0,8 y la última parada 1,7 |
+| 2,0 – 13,4 s | Viajes y paradas. Viajar pesa 1, parar 0,8 y la última parada 1,7 (2,4 con la puerta, 2,6 con la mordaza). El apagón pesa 1,3 |
 | 13,4 – 15,8 s | El último tramo, a solas |
 | 15,8 s | Llega a la cumbre: destello, temblor y golpe |
 | 16,4 s | Se abren las puertas y sale el cartel, que se sostiene tres segundos reales |
@@ -66,6 +81,9 @@ Todo por la escala de `note()` y dentro de los grados 0 a 20.
 - **Cabina que se suelta:** un golpe seco.
 - **La última estación y el último tramo:** un latido grave, cada vez más seguido.
 - **La cumbre:** el golpe de la traba, como en la ruleta, y después la fanfarria.
+- **La mordaza:** cinco notas que bajan mientras resbala, y un golpe metálico cuando agarra.
+- **El apagón:** cuatro notas que caen cuando se va la luz, un latido a oscuras y un clic por cada vez que prende.
+- **La ráfaga:** un soplido grave que dura lo que dura el viento.
 
 ## Cómo está hecho
 

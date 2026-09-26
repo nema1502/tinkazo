@@ -208,6 +208,45 @@ export async function freeze(): Promise<void> {
   $("sec-frozen").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+/**
+ * Copia las bases del sorteo: quién participa, qué se gana, cómo se elige y
+ * cómo se verifica, con la huella y la ronda ya fijadas.
+ *
+ * Casi todas las normas de sorteos del mundo piden lo mismo: reglas claras
+ * antes de sortear (docs/legal.md). Tinkazo ya sabe casi todo, y la parte de
+ * "cómo se elige" es el protocolo. Se ofrecen apenas se sella, que es cuando
+ * dicen algo que todavía nadie puede acomodar: la ronda no existe.
+ */
+export async function copyRules(btn: HTMLButtonElement): Promise<void> {
+  const f = app.frozen;
+  if (!f) return;
+  const lang = getLang();
+  const when = (s: number): string =>
+    new Date(s * 1000).toLocaleString(lang === "es" ? "es-BO" : "en-US", { dateStyle: "long", timeStyle: "long" });
+  const text = T[lang].rules({
+    prize: f.prize,
+    count: f.names.length,
+    winners: Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, f.names.length),
+    listHash: f.listHash,
+    sealedAt: when(f.ts),
+    round: f.round,
+    roundAt: when(roundTime(f.round)),
+    ...(f.raffleId !== undefined ? { raffleId: String(f.raffleId) } : {}),
+    network: network.name,
+    verifyUrl: `${location.origin}/seguridad.html`,
+  });
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.textContent = t("copied");
+    setTimeout(() => { btn.textContent = t("copyRules"); }, 1600);
+  } catch {
+    // Sin permiso para el portapapeles, el texto queda a la vista para copiarlo a mano.
+    const pre = $("rules-text");
+    pre.textContent = text;
+    pre.style.display = "block";
+  }
+}
+
 /** Resumen técnico del sello, con enlace al contrato si quedó anclado. */
 function renderSealSummary(): void {
   const f = app.frozen;
