@@ -126,7 +126,11 @@ const HOOK_VOZ = `(() => {
     clearTimeout(viva.id);
     const r = viva.rec;
     r.dicho = performance.now() - r.t;
-    if (r.dicho < r.dur * 0.88) window.__voz.cortadas.push({ texto: r.texto, pct: r.dicho / r.dur });
+    // Cortar una línea que ya dijo lo suyo (más de un segundo y más de la
+    // mitad) es lo que hace un relator cuando pasa algo más grande, y el
+    // narrador lo hace a propósito desde que el apagón del teleférico se perdía
+    // esperando turno. Lo que se marca es cortar una línea que recién empezaba.
+    if (r.dicho < r.dur * 0.88 && (r.dicho < 1000 || r.dicho < r.dur * 0.5)) window.__voz.cortadas.push({ texto: r.texto, pct: r.dicho / r.dur });
     const u = viva.u;
     viva = null;
     if (u.onend) u.onend(new Event("end"));

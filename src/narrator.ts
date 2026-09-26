@@ -14,19 +14,42 @@ import { getLang } from "./i18n";
  */
 
 /**
- * Orden de preferencia de región. Boliviano primero, después los vecinos.
+ * Orden de preferencia de región: boliviano primero, después los vecinos y el
+ * resto de Latinoamérica, y España al final. El texto está escrito en español
+ * boliviano con voseo, y leído con acento de Madrid no se entiende igual.
  *
- * Ningún sistema trae una voz boliviana instalada de fábrica, así que en la
- * práctica casi siempre va a caer en mexicano o español. Se pide igual: si
- * alguien la tiene, que la use.
+ * Ningún sistema trae una voz boliviana instalada de fábrica. Edge sí la trae
+ * por red: Marcelo y Sofía, neurales, entre las voces "Online (Natural)" de
+ * toda Latinoamérica.
  */
 const PREF: Record<"es" | "en", string[]> = {
-  es: ["es-bo", "es-pe", "es-cl", "es-ar", "es-419", "es-mx", "es-us", "es-co", "es-es"],
+  es: [
+    "es-bo", "es-pe", "es-cl", "es-ar", "es-py", "es-uy", "es-ec", "es-co", "es-419", "es-mx", "es-us",
+    "es-ve", "es-cr", "es-gt", "es-hn", "es-ni", "es-pa", "es-sv", "es-do", "es-pr", "es-cu", "es-es",
+  ],
   en: ["en-us", "en-gb", "en-au"],
 };
 
-/** Cómo llaman las plataformas a sus voces buenas. */
-const GOOD = /natural|neural|premium|enhanced|siri|google/i;
+/**
+ * La calidad de una voz, que manda sobre la región.
+ *
+ * Antes mandaba la región y una voz instalada sumaba puntos, así que en
+ * Windows ganaba una voz de escritorio de las viejas: robótica y, en Chrome,
+ * de España. Una voz neural de otro país se entiende mejor que una robótica
+ * del país justo. 3 es neural (Edge la llama "Online (Natural)"), 2 son las
+ * buenas de Google y de Apple, 1 todas las demás.
+ */
+function tier(v: SpeechSynthesisVoice | null): number {
+  if (!v) return 0;
+  if (/natural|neural/i.test(v.name)) return 3;
+  if (/google|siri|premium|enhanced/i.test(v.name)) return 2;
+  return 1;
+}
+
+/** Entre dos voces bolivianas igual de buenas, el relator de la casa. */
+const HOUSE = /marcelo/i;
+
+const VOICE_KEY = "tinkazo.voz.";
 
 /** Chrome corta las voces de red a los quince segundos. Ninguna línea llega, pero por si acaso. */
 const MAX_CHARS = 140;
@@ -45,8 +68,12 @@ interface Line {
 const STALE_MS = 2600;
 
 let voice: SpeechSynthesisVoice | null = null;
+/** Voces de red que ya fallaron en esta sesión: el wifi del evento no dio. */
+const failed = new Set<string>();
 /** La tensión de la línea que está sonando ahora. */
 let liveHeat = 0;
+/** Cuándo empezó a sonar la línea actual. */
+let liveAt = 0;
 let picked: "es" | "en" | null = null;
 let queued: Line | null = null;
 let busy = false;
@@ -59,41 +86,48 @@ const available = (): boolean =>
   typeof speechSynthesis !== "undefined" && typeof SpeechSynthesisUtterance === "function";
 
 /**
- * Puntaje de una voz.
- *
- * La región exacta pesa más que todo; después la calidad; al final que sea
- * local, que es lo que importa cuando el wifi del evento no da.
+ * Puntaje de una voz: primero la calidad, después la región y al final que
+ * sea local, que desempata a favor de la que no necesita internet.
  */
 function score(v: SpeechSynthesisVoice, want: string[]): number {
   const tag = v.lang.toLowerCase().replace("_", "-");
   const base = (want[0] ?? "").slice(0, 2);
-  if (!tag.startsWith(base)) return -1;
+  if (!tag.startsWith(base) || failed.has(v.name)) return -1;
   const exact = want.indexOf(tag);
   const near = want.findIndex((w) => tag.startsWith(w) || w.startsWith(tag));
-  let s = exact >= 0 ? (want.length - exact) * 100 : near >= 0 ? (want.length - near) * 60 : 10;
-  if (GOOD.test(v.name)) s += 40;
-  // Una voz local arranca en decenas de milisegundos, no necesita internet y no
-  // sufre el corte a los quince segundos que tienen las voces de red.
-  if (v.localService) s += 35;
-  return s;
+  const region = exact >= 0 ? want.length - exact : near >= 0 ? (want.length - near) / 2 : 0;
+  return tier(v) * 1000 + region * 10 + (HOUSE.test(v.name) ? 5 : 0) + (v.localService ? 1 : 0);
 }
 
-function refresh(): void {
-  const lang = getLang() === "en" ? "en" : "es";
-  if (picked === lang && voice) return;
-  picked = lang;
-  const want = PREF[lang];
-  let best: SpeechSynthesisVoice | null = null;
-  let bestScore = 0;
-  // La primera llamada puede venir vacía: para eso está `voiceschanged`.
-  for (const v of speechSynthesis.getVoices()) {
-    const s = score(v, want);
-    if (s > bestScore) {
-      bestScore = s;
-      best = v;
-    }
+const pageLang = (): "es" | "en" => (getLang() === "en" ? "en" : "es");
+
+/** Las voces del idioma de la página, de la mejor a la peor. */
+function ranked(): SpeechSynthesisVoice[] {
+  const want = PREF[pageLang()];
+  return speechSynthesis
+    .getVoices()
+    .map((v) => ({ v, s: score(v, want) }))
+    .filter((x) => x.s > 0)
+    .sort((a, b) => b.s - a.s)
+    .map((x) => x.v);
+}
+
+function saved(): string | null {
+  try {
+    return localStorage.getItem(VOICE_KEY + pageLang());
+  } catch {
+    return null;
   }
-  voice = best;
+}
+
+function refresh(force = false): void {
+  const lang = pageLang();
+  if (!force && picked === lang && voice) return;
+  picked = lang;
+  // La primera llamada puede venir vacía: para eso está `voiceschanged`.
+  const list = ranked();
+  const mine = saved();
+  voice = (mine ? list.find((v) => v.name === mine) : undefined) ?? list[0] ?? null;
 }
 
 /**
@@ -106,7 +140,7 @@ function refresh(): void {
  */
 export function primeNarrator(): void {
   if (!available()) return;
-  speechSynthesis.addEventListener("voiceschanged", refresh);
+  speechSynthesis.addEventListener("voiceschanged", () => refresh(true));
   refresh();
   try {
     const warm = new SpeechSynthesisUtterance(" ");
@@ -140,17 +174,28 @@ export function narrate(text: string, heat = 0): void {
   refresh();
   if (!voice) return;
   const h = Math.min(1, Math.max(0, heat));
+  const spoken = forSpeech(text);
   const line: Line = {
-    text: text.length > MAX_CHARS ? text.slice(0, MAX_CHARS - 1) + "…" : text,
-    rate: 1.05 + 0.45 * h,
-    pitch: 1.05 + 0.35 * h,
+    text: spoken.length > MAX_CHARS ? spoken.slice(0, MAX_CHARS - 1) + "…" : spoken,
+    // La tensión se oye en el apuro, no en el tono. Subir el tono hasta 1,4
+    // convertía al relator en una ardilla, y a una voz neural cualquier
+    // cambio de tono la deja rara: esa se queda en su tono de siempre.
+    // Un relator habla rápido siempre, y más rápido cuando se pone bueno.
+    rate: 1.08 + 0.2 * h,
+    pitch: tier(voice) === 3 ? 1 : 1 + 0.08 * h,
     heat: h,
     at: Date.now(),
   };
   if (busy) {
     // Un escalón de tres décimos: lo bastante para que la corona pise al
     // relato, no tanto como para que dos frases del mismo momento se peleen.
-    if (h >= liveHeat + 0.3) {
+    // Y un relator de verdad se corta a sí mismo cuando pasa algo más grande:
+    // si la línea que suena ya dijo lo suyo (más de un segundo) y la nueva trae
+    // más tensión, la nueva entra. Sin esto, "¡Estación 2! Se bajan 4,
+    // quedan 5" tardaba cuatro segundos en decirse y "¡SE CORTÓ LA LUZ!", que
+    // llegaba en el medio, esperaba su turno y se caía por vieja.
+    const said = Date.now() - liveAt;
+    if (h >= liveHeat + 0.3 || (h > liveHeat + 0.05 && said > 1000)) {
       queued = line;
       // `cancel()` dispara el `onend` de la actual, que saca la encolada.
       speechSynthesis.cancel();
@@ -178,6 +223,7 @@ function flush(): void {
   }
   busy = true;
   liveHeat = line.heat;
+  liveAt = Date.now();
   // Todo el armado adentro del `try`, no sólo `speak`. Asignar `voice` puede
   // tirar si el navegador no acepta ese objeto, y esa excepción subía hasta el
   // bucle del juego y lo mataba: el sorteo entero se caía por el narrador, que
@@ -191,7 +237,17 @@ function flush(): void {
     u.pitch = line.pitch;
     u.volume = 1;
     u.onend = onDone;
-    u.onerror = onDone;
+    u.onerror = (ev) => {
+      // Una voz de red que falla (sin internet, o el servicio no responde) se
+      // descarta por el resto de la sesión y se pasa a la mejor que quede.
+      // Cancelar o interrumpir no es una falla de la voz.
+      const err = (ev as SpeechSynthesisErrorEvent).error;
+      if (voice && !voice.localService && err !== "interrupted" && err !== "canceled") {
+        failed.add(voice.name);
+        refresh(true);
+      }
+      onDone();
+    };
     live = u;
     speechSynthesis.speak(u);
   } catch {
@@ -247,4 +303,39 @@ export function hasVoice(): boolean {
 /** El nombre de la voz elegida, para mostrarlo en el estadio. */
 export function voiceName(): string | null {
   return voice?.name ?? null;
+}
+
+/** El nombre de una voz sin la marca ni los apellidos técnicos. */
+export function shortVoiceName(name: string): string {
+  return name.replace(/^Microsoft\s+/, "").replace(/\s+Online \(Natural\)/, "").replace(/\s+Multilingual/, "");
+}
+
+/** Las voces que se pueden elegir, de la mejor a la peor. */
+export function voiceChoices(): { name: string; natural: boolean }[] {
+  if (!available()) return [];
+  return ranked().map((v) => ({ name: v.name, natural: tier(v) === 3 }));
+}
+
+/** Qué tan buena es la voz elegida: 3 neural, 2 buena, 1 robótica, 0 ninguna. */
+export function voiceTier(): number {
+  return tier(voice);
+}
+
+/** Elige una voz a mano. Se recuerda en este equipo, por idioma. */
+export function chooseVoice(name: string): void {
+  try {
+    localStorage.setItem(VOICE_KEY + pageLang(), name);
+  } catch {
+    /* sin almacenamiento: vale para esta sesión */
+  }
+  refresh(true);
+}
+
+/**
+ * El texto como se dice. Las líneas del relator van en mayúsculas en pantalla
+ * ("¡QUEDAN DOS!"), y algunas voces leen una palabra en mayúsculas como una
+ * sigla, letra por letra. Para la voz van en minúsculas.
+ */
+export function forSpeech(text: string): string {
+  return text.replace(/\p{Lu}{2,}/gu, (w) => w.toLowerCase());
 }

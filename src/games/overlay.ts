@@ -2,6 +2,7 @@ import { $ } from "../dom";
 import { LCOLORS, drawAvatar, instantMode, paceFactor, type Beacon } from "../state";
 import { setPickSeed, t } from "../i18n";
 import { narrate, stopNarrator } from "../narrator";
+import { musicCue, startMusic, stopMusic } from "../music";
 
 /**
  * Lo que comparten todos los juegos.
@@ -152,6 +153,7 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
         { duration: 280, easing: "cubic-bezier(.34,1.56,.64,1)" },
       );
       narrate(msg, heat);
+      musicCue(heat);
     },
     chip(name, x, y, alpha = 1, scale = 1, alRevés = false) {
       const k = u() * scale;
@@ -213,6 +215,7 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
       cancelAnimationFrame(rafId);
       setPickSeed(null);
       stopNarrator();
+      stopMusic();
       releaseScreen();
       removeEventListener("resize", resize);
       ov.style.display = "none";
@@ -250,6 +253,9 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
   // de la misma ronda tienen que sonar igual.
   setPickSeed(rng);
   current = { skip: onSkip };
+  // La música sale de otra parte de la ronda que el azar del juego: si usara
+  // el mismo generador, prenderla cambiaría la animación.
+  startMusic(parseInt(beacon.randomness.slice(8, 16), 16));
   return stage;
 }
 

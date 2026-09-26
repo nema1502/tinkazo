@@ -6,6 +6,7 @@ import { NO_POSE, THEMES, type Pose, type ThemeId } from "./themes";
 import { tension, writeStory, type Arc, type Story } from "./drama";
 import { registerSkip, WINNER_HOLD, chrome, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
 import { narrate, stopNarrator } from "../narrator";
+import { musicCue, startMusic, stopMusic } from "../music";
 
 /* Modo estadio: carrera de llamas a pantalla completa, sembrada con la semilla. */
 
@@ -370,6 +371,7 @@ export function stadiumRace(
   let tPhase = 0, tRace = 0, camX = 0, shake = 0, lastLeader = -1, saidLast = false, finished = false, tFreeze = 0;
   let lastBeepN = 4;
   const winnerName = names[winnerIdx] ?? "";
+  startMusic(parseInt(beacon.randomness.slice(8, 16), 16));
   say(t(skin.readyKey), 0.1);
 
   function say(msg: string, heat = 0): void {
@@ -379,6 +381,7 @@ export function stadiumRace(
       { duration: 280, easing: "cubic-bezier(.34,1.56,.64,1)" },
     );
     narrate(msg, heat);
+    musicCue(heat);
   }
 
   const W = () => canvas.width;
@@ -971,6 +974,7 @@ export function stadiumRace(
     registerSkip(null);
     setPickSeed(null);
     stopNarrator();
+    stopMusic();
     $("sec-draw").scrollIntoView({ behavior: "smooth", block: "start" });
     done();
   }

@@ -787,6 +787,16 @@ Van dos pasos, en este orden. Primero, que el selector sea un **objetivo de dura
 
 Segundo, y es lo que de verdad falta: **contenido en los tres que topean**. La ruleta tiene que acortar el crucero y darle ese tiempo a la frenada y al amague, que es donde está la tensión, y a la carga inicial, que hoy son 0,9 segundos con la rueda quieta. El Cierre de Libro necesita más pasadas con listas grandes, donde hoy el tope son cuatro, y un desfile de sellos menos apurado que uno cada 0,33 segundos. El Pasanaku tiene el tejido de los hilos en 0,8 segundos, y es la escena que enseña qué es una trustline.
 
+### Historia 10.8: Una voz que se entienda y un modo con música: hecho
+
+Resultado (2026-09-26): el relator sonaba robótico y con acento de España, y los videos de prueba no tenían sonido. Tres cosas:
+
+- **La voz.** En Windows, Chrome solo trae voces de escritorio de España, y el puntaje premiaba la voz instalada sobre la calidad. Ahora manda la calidad: en Edge el relator es Marcelo, la voz neural boliviana, y la página deja elegir y probar la voz. Sin tono de ardilla: la tensión va en la velocidad. Y un relator que se corta cuando pasa algo más grande, que es lo que hacía perder el apagón del Teleférico.
+- **La música.** Andina con beat, generada en el navegador y sembrada con la ronda, que sigue la tensión del relator. Detalle en [juegos.md](juegos.md#la-música).
+- **Videos con sonido.** Se graban en tiempo real con el audio de la página (efectos y música), y la voz se agrega después con la misma voz neural que usa Edge, en los momentos en que el narrador habló. Así se escucha lo que escucha la sala, que era lo que faltaba para juzgar el sonido.
+
+Pasó el auditor de sonido en los ocho juegos, dos veces, con la regla de líneas cortadas ajustada a la nueva política, el de interfaz y el exigente en la carrera.
+
 ### Historia 10.7: Que el estadio se vea en un celular: hecho
 
 Resultado (2026-09-20): el auditor corría todo a 1280 por 720, que es un proyector, y el estadio nunca se había mirado en vertical. El organizador prueba el sorteo en su teléfono antes del evento, así que ahí se ve primero. Cinco defectos, todos reales:

@@ -9,25 +9,68 @@ import { copySummary, draw, reverify, shareProof } from "./ui/draw";
 import { stadiumRace } from "./games/race";
 import { skipGame } from "./games/overlay";
 import { initWalletUI } from "./ui/wallet-ui";
-import { hasVoice, voiceName } from "./narrator";
+import { musicOn, toggleMusic } from "./music";
+import { chooseVoice, hasVoice, narrate, primeNarrator, shortVoiceName, voiceChoices, voiceName, voiceTier } from "./narrator";
 
 /**
- * Avisa si la máquina tiene voz para el narrador, y cuál.
+ * Avisa si la máquina tiene voz para el narrador, cuál, y deja cambiarla.
  *
  * El momento de enterarse no es con la sala mirando. Las voces del sistema
- * tardan en aparecer, así que se reintenta una vez.
+ * tardan en aparecer, así que se reintenta una vez. Y como la mejor voz depende
+ * del navegador (Chrome en Windows solo trae voces robóticas de España, Edge
+ * trae neurales de toda Latinoamérica), se puede elegir y probar acá mismo.
  */
 function showVoiceNote(): void {
   const paint = (): void => {
     const el = document.getElementById("voice-note");
     if (!el) return;
-    const on = hasVoice();
-    el.textContent = on ? `${t("voiceOn")} ${voiceName() ?? ""}` : t("voiceOff");
-    el.style.display = "block";
+    el.style.display = "flex";
+    const choices = voiceChoices();
+    if (!hasVoice() || choices.length === 0) {
+      el.textContent = t("voiceOff");
+      return;
+    }
+    el.textContent = "";
+    const label = document.createElement("label");
+    label.htmlFor = "voice-sel";
+    label.textContent = `${t("voiceOn")} `;
+    const sel = document.createElement("select");
+    sel.id = "voice-sel";
+    for (const c of choices) {
+      const o = document.createElement("option");
+      o.value = c.name;
+      o.textContent = shortVoiceName(c.name) + (c.natural ? ` · ${t("voiceNatural")}` : "");
+      sel.appendChild(o);
+    }
+    sel.value = voiceName() ?? "";
+    sel.addEventListener("change", () => {
+      chooseVoice(sel.value);
+      paint();
+    });
+    const probar = document.createElement("button");
+    probar.type = "button";
+    probar.className = "ghost";
+    probar.textContent = t("voiceTry");
+    probar.addEventListener("click", () => {
+      primeNarrator();
+      narrate(t("voiceSample"), 0.6);
+    });
+    el.append(label, sel, " ", probar);
+    // Sin ninguna voz natural a mano, se dice dónde hay: Edge trae neurales de
+    // toda Latinoamérica, y Marcelo y Sofía son de Bolivia.
+    const tierNow = voiceTier();
+    if (tierNow < 3 && !choices.some((c) => c.natural)) {
+      const hint = document.createElement("span");
+      hint.className = "voice-hint";
+      hint.textContent = t(tierNow === 1 ? "voiceRobot" : "voiceEdge");
+      el.append(hint);
+    }
   };
   paint();
-  // `getVoices()` suele venir vacío en la primera llamada.
+  // `getVoices()` suele venir vacío en la primera llamada, y Chrome suma sus
+  // voces de Google un rato después: se repinta cuando llegan.
   setTimeout(paint, 1200);
+  if (typeof speechSynthesis !== "undefined") speechSynthesis.addEventListener("voiceschanged", paint);
   onLangChange(paint);
 }
 
@@ -104,6 +147,16 @@ $<HTMLButtonElement>("btn-rules").addEventListener("click", (e) => void copyRule
 $<HTMLButtonElement>("btn-proof").addEventListener("click", (e) => void shareProof(e.currentTarget as HTMLButtonElement));
 $("st-sound").addEventListener("click", toggleSound);
 $("btn-sound").addEventListener("click", toggleSound);
+/** El modo con música: andina con beat, que sigue la tensión del relator. */
+const musicLabel = (): void => {
+  $("btn-music").textContent = t(musicOn() ? "musicYes" : "musicNo");
+};
+$("btn-music").addEventListener("click", () => {
+  toggleMusic();
+  musicLabel();
+});
+musicLabel();
+onLangChange(musicLabel);
 $("st-skip").addEventListener("click", skipGame);
 bindParticipants();
 initWalletUI();

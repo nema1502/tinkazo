@@ -216,13 +216,31 @@ La primera vez que corrió encontró justo eso: con las curvas de cada arco fija
 
 ## El narrador
 
-La voz va por [`src/narrator.ts`](../src/narrator.ts) y tiene una regla que no es obvia: **una línea nueva no corta a la que se está diciendo**, salvo que de verdad importe más. Cada `narrate(texto, heat)` lleva su tensión de 0 a 1, y sólo pisa a la actual si la supera por tres décimos. El anuncio del ganador pisa a cualquier cosa; un cambio de líder no pisa a otro cambio de líder.
+La voz va por [`src/narrator.ts`](../src/narrator.ts) y tiene una regla que no es obvia: **una línea nueva no corta a la que se está diciendo**, salvo que de verdad importe más. Cada `narrate(texto, heat)` lleva su tensión de 0 a 1, y pisa a la actual si la supera por tres décimos, o si la supera por poco y la actual ya lleva más de un segundo sonando: un relator se corta a sí mismo cuando pasa algo más grande. El anuncio del ganador pisa a cualquier cosa; un cambio de líder no pisa a otro cambio de líder.
+
+Lo segundo se agregó el 26 de septiembre de 2026, al grabar el Teleférico con voz: "¡Estación 2! Se bajan 4, quedan 5" tarda cuatro segundos en decirse, y "¡SE CORTÓ LA LUZ!", que llegaba en el medio, esperaba su turno y se caía por vieja. El giro se veía y no se oía.
+
+**Qué voz.** Manda la calidad y después la región. Una voz neural (Edge las llama "Online (Natural)") gana a cualquier otra; después las buenas de Google y de Apple; al final las de escritorio, que suenan a robot. Entre las del mismo nivel, la región: Bolivia primero, después los vecinos y Latinoamérica, y España al final, porque el texto está escrito con voseo boliviano. En Windows eso da dos resultados muy distintos: **Chrome solo trae voces de escritorio de España** (Helena, Laura, Pablo), y **Edge trae neurales de toda Latinoamérica, incluidas dos de Bolivia: Marcelo y Sofía**. En Edge el relator es Marcelo. La página deja elegir la voz y probarla, y si no hay ninguna natural dice que en Edge sí.
+
+**Cómo dice.** La tensión se oye en el apuro, no en el tono: la velocidad va de 1,08 a 1,28, y el tono de una voz neural no se toca. Antes el tono subía hasta 1,4 y el relator sonaba a ardilla. Las palabras en mayúsculas se dicen en minúsculas, porque algunas voces leen "DOS" como una sigla.
+
+**Si la voz de red se cae** (el wifi del evento), se descarta por el resto de la sesión y habla la mejor que quede.
 
 Antes cortaba siempre, y eso dejaba frases a medio decir: en una sala no se oye como un relator que va rápido, se oye como uno que se traba. Lo que no alcanza a entrar espera turno, y si para cuando le toca ya pasaron dos segundos y medio se cae: "va puntero fulano" dicho tarde es peor que el silencio.
 
 Y todo el armado de la declamación va dentro de un `try`, no sólo la llamada a hablar. Asignar la voz puede tirar una excepción según el navegador, y esa excepción subía hasta el bucle del juego y **lo mataba**: el sorteo entero se caía por el narrador, que es justo lo que este módulo promete que nunca pasa.
 
-Chrome sin interfaz no trae ninguna voz instalada, así que en una auditoría el narrador nunca habla. Por eso `scripts/audit-sound.mjs` le pone una voz de mentira, simula el tiempo que tardaría en decir cada línea y cuenta las que quedan a medias. Sin que suene nada.
+Chrome sin interfaz no trae ninguna voz instalada, así que en una auditoría el narrador nunca habla. Por eso `scripts/audit-sound.mjs` le pone una voz de mentira, simula el tiempo que tardaría en decir cada línea y cuenta las que quedan a medias. Sin que suene nada. Cuenta como trabada una línea cortada antes de un segundo o antes de la mitad: cortar una que ya dijo lo suyo es lo que el narrador hace a propósito.
+
+## La música
+
+El modo con música es [`src/music.ts`](../src/music.ts): andina con beat, generada en el navegador. Charango en ritmo de huayno (larga, corta, corta), bombo legüero, zampoña repartida entre dos cañas que se contestan como los sikuris, y un beat electrónico debajo. Sin archivos de audio y sin licencias.
+
+- **La escala es la pentatónica de la menor,** que tiene las mismas cinco notas que la de do mayor de los efectos: la música y los golpes de los juegos no chocan.
+- **Sigue al relator.** Cada línea trae su tensión, y la música prende capas con ella: bombo, charango, beat, zampoña, y todo doblado arriba de 0,85. El tempo va de 96 a 132. Un piso que crece con el tiempo hace que siempre vaya de menos a más aunque el relator calle. Así sirve para los ocho juegos sin que ninguno sepa de música.
+- **La sorpresa es silencio.** Un salto de tensión de tres décimos corta la música un tiempo entero, y vuelve con platillo y bombo. El ganador (tensión 1) remata con el charango en trémolo y se apaga.
+- **Sembrada con la ronda,** con otra parte de la aleatoriedad que el juego: prenderla no cambia la animación. Ni un `Math.random`.
+- **Es un modo:** arranca apagada, se prende con el botón "Música" de la página y el sonido apagado también la apaga.
 
 ## Los cierres
 

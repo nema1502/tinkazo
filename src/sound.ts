@@ -159,3 +159,8 @@ export function toggleSound(): void {
 
 /** `true` si el estadio está en silencio. */
 export const isMuted = (): boolean => muted;
+
+/** El contexto de audio compartido, para la música. `null` si no hay audio. */
+export function audio(): AudioContext | null {
+  return chain()?.ctx ?? null;
+}
