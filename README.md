@@ -1,164 +1,199 @@
+<div align="center">
+
 # Tinkazo 🦙
 
-**Sorteos que nadie puede arreglar. Ni vos.**
+### Provably fair draws for communities, sealed before the randomness exists and verified on Stellar.
 
-En Bolivia, un *tinkazo* es esa corazonada de que hoy tenés suerte. Tinkazo sortea premios en eventos de comunidades: pegás la lista, sale el ganador en pantalla grande con una carrera de llamas o una ruleta, y cualquiera puede comprobar después que no hubo trampa.
+[![Live demo](https://img.shields.io/badge/demo-tinkazo.vercel.app-e93d9c?style=flat-square)](https://tinkazo.vercel.app)
+[![Soroban contract on testnet](https://img.shields.io/badge/Soroban-live%20on%20testnet-7b61ff?style=flat-square)](https://stellar.expert/explorer/testnet/contract/CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH)
+[![CI](https://github.com/nema1502/tinkazo/actions/workflows/ci.yml/badge.svg)](https://github.com/nema1502/tinkazo/actions/workflows/ci.yml)
+[![drand quicknet](https://img.shields.io/badge/randomness-drand%20quicknet-14b8a6?style=flat-square)](https://drand.love)
+[![License: MIT](https://img.shields.io/badge/license-MIT-ffc629?style=flat-square)](LICENSE)
 
-🌐 **Probalo:** [tinkazo.vercel.app](https://tinkazo.vercel.app)
+**[Try it](https://tinkazo.vercel.app)** · [How it works](#how-it-works) · [Why Stellar](#why-stellar) · [What is live](#what-is-live-today) · [Roadmap](#roadmap) · [Español](README.es.md)
 
-![Tinkazo, carrera de llamas en modo estadio](docs/capturas/tinkazo-estadio.png)
+<img src="docs/capturas/readme/hero.webp" alt="Tinkazo home page: raffles nobody can rig, not even you" width="860">
 
-## El problema
+</div>
 
-Toda comunidad hace sorteos: libros, licencias, entradas, poleras. Y en todos hay alguien que piensa que el organizador le dio el premio a su amigo. Las herramientas que existen o cobran por algo trivial, o son gratis y el resultado es "confía en mí".
+---
 
-## Cómo funciona
+Every community gives things away: conference tickets, books, software licenses, scholarships, speaking slots, the turn order of a rotating savings circle. And every time, someone in the room wonders whether the organizer picked a friend. The tools people use today are a spreadsheet `RAND()`, a spinning wheel on a website, or "trust me". None of them can be checked afterwards.
 
-1. **Traés la lista.** Pegás los nombres o subís un CSV. Los participantes no instalan nada ni se crean cuenta. Nunca.
-2. **Se congela la lista.** Se calcula su huella (SHA-256) y se compromete contra una **ronda futura** de [drand](https://drand.love), el faro público de aleatoriedad de la League of Entropy. La clave está en el orden: cuando cerrás la lista, el número que va a decidir **todavía no existe**.
-3. **Llega el número.** Diez segundos después, drand publica esa ronda firmada. Ni vos ni yo pudimos elegirla. Si el sorteo se ancla en Stellar la espera sube a cuarenta y cinco, porque el contrato exige treinta de margen y no se puede cambiar.
-4. **El show.** Ocho juegos a pantalla completa, con narrador. Cuando arranca la animación el ganador ya está decidido: el juego solo lo cuenta.
-5. **Cualquiera revisa.** El comprobante es un enlace. Quien lo abre ve la página rehacer el sorteo desde cero en su propio navegador y dar un veredicto.
+**Tinkazo makes the draw checkable by anyone, from their phone, forever.** The organizer pastes a list, the list is sealed on Stellar, and the winner comes from a public random number that did not exist yet when the list was sealed. A Soroban contract verifies that number's signature on chain. The result is shown on the big screen as a full-screen game with a narrator, and anyone can re-run the whole draw in their browser from a link.
 
-Con una cuenta de Stellar conectada, el sello y el resultado quedan **registrados en un contrato**, que verifica la firma del faro por su cuenta. Ese registro sigue ahí aunque Tinkazo desaparezca.
+Participants need nothing: no wallet, no account, no app.
 
-## Qué hay construido
+## How it works
 
-**El contrato `tinkazo-raffle`** ([contracts/raffle](contracts/raffle)), en Rust sobre Soroban. `seal` compromete la huella de la lista, la cantidad de participantes y una ronda futura, y exige que esa ronda nazca al menos treinta segundos después. `draw` verifica la firma BLS12-381 de la ronda **dentro de la cadena** con `pairing_check`, deriva la semilla y selecciona los ganadores.
+```mermaid
+sequenceDiagram
+    autonumber
+    participant O as Organizer (browser)
+    participant C as tinkazo-raffle (Soroban)
+    participant D as drand quicknet
+    participant A as Anyone
+    O->>O: canonical list → SHA-256 fingerprint
+    O->>C: seal(list_hash, count, winners, round R)
+    Note over C: R must be at least 30 s in the future:<br/>the seed does not exist yet
+    D-->>A: round R is published with its BLS12-381 signature
+    A->>C: draw(id, signature), permissionless
+    C->>C: verify the signature on chain (CAP-0059)<br/>seed = SHA-256(signature) → winners
+    A->>A: open the proof link → recompute in the browser → verdict
+```
 
-Es inmutable: no tiene administrador ni actualización, y no custodia fondos. `draw` no pide permiso a nadie, así que el organizador no puede retener un resultado que no le gusta. 19 tests, incluida una ronda real de quicknet y vectores compartidos con la implementación en TypeScript. WASM de 11,4 KB.
+1. **Seal.** The list is canonicalized and hashed with SHA-256. The contract records the fingerprint, the head count, the number of winners and a **future** drand round. The contract refuses a round less than 30 seconds away.
+2. **Wait for the number.** [drand](https://drand.love) quicknet, the public randomness beacon run by the League of Entropy (Cloudflare, Protocol Labs, EPFL and others), publishes a BLS-signed round every 3 seconds. Nobody, including the organizer and Tinkazo, can know or choose it in advance.
+3. **Draw.** `draw` verifies the round's BLS12-381 signature **inside the contract** with a pairing check, derives the seed and selects the winners deterministically. It asks nobody for permission: if the organizer disappears mid-event, anyone can finalize the draw and the winner is the same.
+4. **Show.** One of eight full-screen games tells the result. The winner is already fixed when the animation starts; the game only narrates it.
+5. **Verify.** The proof is a link. Whoever opens it watches the page recompute the draw from scratch and gets a verdict: green if the contract attests the list, yellow if the draw was not anchored, red with the reason if anything does not match.
 
-**El sitio**, en Vite y TypeScript sin framework. Interfaz bilingüe, tema claro y oscuro, y tres formas de entrar: Freighter, Google vía Pollar, o una cuenta de prueba que el navegador crea y fondea solo.
+The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.md), with test vectors shared by the Rust contract and the TypeScript client ([docs/vectors.json](docs/vectors.json)). Anyone can reimplement it and reach the same winners.
 
-**Ocho juegos**, todos sembrados con la misma ronda de drand, así que la animación de un sorteo es reproducible:
+## Why Stellar
 
-| Juego | Qué es | Aguanta |
+- **Verifying public randomness on chain is cheap here.** Stellar's native BLS12-381 host functions ([CAP-0059](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md)) let the contract check drand's signature itself. The verification costs **0.003 XLM**; a whole draw, seal plus draw, costs **0.18 XLM, about US$0.04**, measured on testnet ([breakdown](docs/deployments.md)).
+- **No oracle to run.** The proof is drand's own signature, checkable against its public key years from now. There is no node to keep alive and no operator to trust.
+- **Immutable and custody-free.** The contract has no admin, no upgrade path and holds no funds. A new version is a new address, recorded in [docs/deployments.md](docs/deployments.md).
+- **Onboarding that works at a meetup.** Organizers sign in with Google through a Pollar smart wallet, with Freighter, or with a testnet account the browser creates and funds. Participants never touch Stellar at all.
+- **Where it goes next is native to Stellar:** prizes paid in USDC as claimable balances, so the winner claims when ready without the organizer holding anything for them ([design](docs/premios.md)).
+
+## What is live today
+
+| Component | Status | Evidence |
 |---|---|---|
-| Constelación Stellar | Un pago que salta de estrella en estrella buscando ruta, como un *path payment*. Deja dibujada una constelación. | 200 |
-| Cierre de Libro | Tarjetas barridas por el cierre de un ledger hasta que queda una sellada. Dura lo que tarda Stellar en cerrar uno. | 200 |
-| Carrera de llamas | Lo nuestro. Ocho carriles por la cordillera. | 8 en pantalla |
-| Carrera de cohetes | La misma carrera, en el espacio. | 8 en pantalla |
-| Pasanaku | El ahorro rotativo boliviano: un aguayo que se cierra sobre los bultos hasta que queda uno en el nudo. Los hilos entre vecinos son trustlines. | 200 |
-| Teleférico | Un convoy de cabinas sube por el cable y en cada estación se baja la mitad, hasta que una sola llega a la cumbre. Las cabinas llevan los colores de las líneas de La Paz y El Alto. | 200 |
-| Tómbola | El bombo de la kermés. Una bola por persona con su número en la lista sellada; la que sale por la compuerta es la ganadora. | 200 |
-| Ruleta | La de siempre, pero que se ve girar con dos personas. | 24 |
+| Soroban contract `tinkazo-raffle` | Deployed on testnet | [`CD2SSHBU…ARENH`](https://stellar.expert/explorer/testnet/contract/CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH) · 19 tests, including a real quicknet round · 11.4 KB WASM |
+| Web app | Live | [tinkazo.vercel.app](https://tinkazo.vercel.app) · Spanish and English · light and dark · no backend |
+| Verification page | Live | Recomputes any draw in the browser from its proof link |
+| Eight stadium games | Live | Deterministic: the same round draws the same frames on any machine |
+| Protocol v2 | Specified | [docs/protocolo.md](docs/protocolo.md) and shared vectors that both implementations must pass |
+| Quality gates | In CI and in the repo | 76 unit tests, contract tests, and five custom auditors (below) |
 
-El número de la columna es hasta dónde se distingue a la gente en pantalla, no hasta dónde aguanta la máquina: medido el 22 de septiembre de 2026, con mil participantes el sorteo sigue corriendo a sesenta cuadros por segundo y se ancla igual.
+Tested with a thousand participants: the draw still runs at 60 frames per second and anchors the same way.
 
-Ninguno decide nada: el ganador llega dado por el protocolo y el juego solo lo cuenta. Lo que sí hay es un director de emoción que escribe la historia de cada sorteo con la misma ronda: en la carrera una llama se planta, otra tropieza y dos se escupen; la ruleta se para en otro nombre y después avanza un gajo; en la tómbola asoma otra bola y vuelve a caer. El final no se adivina. Hay un auditor que lo comprueba en cada juego, con veinte verificaciones, cuatro de ellas en un celular, y otro que escucha el sonido sin oídos. La que importa: el nombre en pantalla tiene que ser el que fijó el protocolo. Y un tercero, el exigente, que cambia el reloj del navegador para comparar dos corridas cuadro contra cuadro y mide lo que antes se revisaba a ojo: que la misma ronda dibuje lo mismo, que nunca pasen cuatro segundos sin novedad, que el relator no se pise, que corra fluido con dos personas y con doscientas, y que el nombre del ganador se lea desde el fondo de la sala.
+<div align="center">
+<img src="docs/capturas/readme/juegos.webp" alt="Six of the eight Tinkazo games: Stellar constellation, llama race, cable car, raffle drum, pasanaku and ledger close" width="860">
+</div>
 
-**El narrador habla.** Usa la voz del navegador, elige una en español de las que estén instaladas y sube el ritmo con la tensión. Si la máquina no tiene voz, el sorteo funciona igual.
+## The show
 
-**Y después del ganador aparece una tarjeta** que contesta la pregunta que el juego deja picando: por qué los rombos de la Constelación son anchors, si la red de Stellar alguna vez no pudo cerrar un libro, qué es un pasanaku, por qué cada cabina del teleférico tiene un color. Dos frases y el enlace a la fuente primaria. Trece tarjetas, todas verificadas.
+Fairness is math; the show is what makes a room care. Eight games, each seeded with the same drand round, so a draw's animation is reproducible:
 
-**La página de verificación**, que da uno de tres veredictos:
-
-| Veredicto | Cuándo |
+| Game | What it is |
 |---|---|
-| 🟢 Verde | El contrato atestigua la huella de la lista. Cambiar un nombre se detecta. |
-| 🟡 Amarillo | La cuenta cierra, pero el sorteo no quedó en la cadena: nadie más que el organizador puede confirmar que esa era la lista original. |
-| 🔴 Rojo | Algo no cuadra, y dice qué. |
+| Stellar Constellation | A payment hops from star to star looking for a route, like a path payment, and leaves a constellation drawn |
+| Ledger Close | Cards are swept away by ledger closes until one stays sealed |
+| Llama Race | Eight lanes across the Andes |
+| Rocket Race | The same race, in space |
+| Pasanaku | Bolivia's rotating savings circle: a woven cloth closes over the bundles until one is left in the knot |
+| Cable Car | Cabins in the colors of the La Paz and El Alto lines climb the cable; half the riders get off at each station |
+| Raffle Drum | The fair's drum, one numbered ball per person on the sealed list |
+| Wheel | The classic, readable even with two people |
 
-Ese amarillo es justo lo que compra anclar, y decirlo es más honesto que un verde fácil.
+**None of them decides anything.** An *emotion director* writes each draw's story from the same round: in the race a llama stops dead, another trips and two spit at each other; the wheel stops on someone else and then slips one more slice; in the cable car the power goes out mid-air. The ending cannot be guessed, and an auditor checks across sixteen seeds per game that the story does not give the winner away.
 
-## Qué cuesta
+A narrator calls the draw out loud (in Microsoft Edge it picks a neural Bolivian voice), an optional music mode plays Andean music with a beat that follows the tension, and after the winner a card explains a piece of the story with its primary source.
 
-Medido en testnet, no estimado. Con XLM a US$ 0,196:
+## Trust model
+
+What is guaranteed, and what is not, is written down in [docs/amenazas.md](docs/amenazas.md) and on the [security page](https://tinkazo.vercel.app/seguridad.html).
+
+- **Adding a name after sealing** changes the fingerprint, and the fingerprint that counts was recorded before the seed existed.
+- **Choosing the number** is impossible: the round is fixed before it is published, and its signature is verified on chain.
+- **Withholding an unwanted result** does not work: `draw` is permissionless.
+- **The one known open attack** is commitment selection: sealing the same list against several rounds and publishing only the convenient one. Every seal is public under the organizer's address, and the verification page flags repeated fingerprints on its own. Publishing the draw's rules before the round exists (the app generates them) closes most of the gap.
+- **Privacy.** Only the fingerprint goes on chain, never the names. The proof travels in the URL fragment, which browsers do not send to servers. During a draw, the only outbound request is the drand round.
+
+**Free by rule.** Entering a draw is always free: no tickets, no bets, and the contract holds no funds. Tinkazo is a tool for allocating something scarce among people already on a list, which keeps it on the free-draw side of the rules almost everywhere. The legal research, country by country, is in [docs/legal.md](docs/legal.md).
+
+## How it compares
+
+| | Spreadsheet or wheel website | Oracle-based VRF service | Tinkazo |
+|---|---|---|---|
+| Who can verify | Nobody | Consumers of the oracle | Anyone with the link, from a phone |
+| What must be trusted | The organizer | The oracle operator | drand's public key and the contract code |
+| Infrastructure to run | None | An off-chain oracle node | None: the browser builds the transaction |
+| Commits to the full list | No | No, to a seed | Yes, SHA-256 of the canonical list before the seed exists |
+| Built for | Anyone, unverifiable | Other contracts | Organizers and a live audience |
+
+VRF oracles are a primitive for other contracts. Tinkazo is the end-user product for the moment where fairness matters and a room is watching the screen.
+
+## Costs
+
+Measured on testnet, not estimated. XLM at US$0.196.
 
 | | XLM | US$ |
 |---|---|---|
-| Sellar un sorteo | 0,099 | 0,019 |
-| Sortear (incluye la verificación BLS) | 0,083 | 0,016 |
-| **Total por sorteo** | **0,18** | **0,036** |
+| Seal a draw | 0.099 | 0.019 |
+| Draw, including BLS verification | 0.083 | 0.016 |
+| **Total per draw** | **0.18** | **0.036** |
+| Mainnet: deploy once | about 16 | about 3 |
+| Mainnet: keep the contract alive | about 49 a year | about 10 a year |
 
-La verificación criptográfica en sí cuesta 0,003 XLM. Es posible gracias a las funciones nativas de BLS12-381 que Stellar incorporó en [CAP-0059](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md). Casi todo el resto es alquiler de almacenamiento por 120 días. Detalle en [docs/deployments.md](docs/deployments.md).
+Most of each fee is storage rent for 120 days. **Verifying is always free**, and so is drawing without anchoring.
 
-**Verificar siempre es gratis.** Sortear en el navegador también.
+## Quality
 
-## Sin servidor, a propósito
+Five auditors in [`scripts/`](scripts) run the real site in headless Chrome:
 
-No hay backend ni base de datos. Las únicas dependencias en ejecución son el RPC de Stellar, los relays de drand y la wallet del organizador. No es una limitación temporal: es lo que permite decir que no hace falta confiar en nadie.
+- **Game auditor**, 20 checks per game against live drand. The one that matters: the name on screen is the one the protocol fixed.
+- **Strict auditor**, which swaps the browser clock to compare two runs frame by frame: same round, same frames, no `Math.random`, never four seconds without something happening, a readable winner plate from the back of the room, with two people and with two hundred, on a phone.
+- **Emotion auditor**, sixteen seeds per game: the story arcs vary and the winner's mid-race position does not give it away.
+- **Sound auditor**, which hooks every oscillator and measures pitch, register, volume, gaps and a narrator that trips over itself.
+- **UI auditor**, desktop and phone, both themes: broken images, clipped text, contrast, tap targets.
 
-Dos consecuencias concretas. En la cadena viaja **solo la huella de la lista**, nunca los nombres. Y el comprobante viaja en el fragmento de la URL, esa parte después del numeral que **no se envía al servidor**: los nombres de tus participantes no llegan ni a los registros del hosting.
+## Roadmap
 
-Esa disciplina se rompe fácil sin darse cuenta, y se rompió dos veces. El QR del comprobante se le pedía a un servicio ajeno, mandándole la URL entera. Y el avatar de cada participante se le pedía a otro, con el nombre de la persona en la dirección: con doscientos inscritos eran doscientas peticiones, cada una con el nombre de alguien real adentro. Los dos se dibujan acá ahora.
+Each step has a success criterion that can be checked from outside.
 
-**Hoy la única petición que sale del navegador es la ronda del faro, y no lleva ningún nombre.** De paso, los avatares aparecen al instante y el QR funciona con el wifi del evento caído. Hay una comprobación que lee el QR con un lector independiente: `pnpm check:qr`. Lo que puede salir mal y qué lo impide está en [docs/amenazas.md](docs/amenazas.md).
+| Step | Done when |
+|---|---|
+| Mainnet deployment (`pnpm preflight:mainnet` already checks everything else) | The contract is live on mainnet and a first draw verifies green from its link |
+| Ten draws with real communities | Ten meetups, hackathons or classrooms, each with a public on-chain proof |
+| USDC prizes as claimable balances | A winner signs in with Google and claims USDC on testnet, then on mainnet |
+| Event import and announcements | Luma CSV with check-in filter (done) plus a results message with each participant's proof |
+| New rendering engine | All eight games on PixiJS at 60 fps on a mid-range phone, passing the same auditors (the llama race is prototyped behind `?motor=pixi`) |
 
-## Correr en local
+## Run it locally
 
 ```bash
 pnpm install
 pnpm dev          # http://localhost:5173
-pnpm test         # protocolo v2 contra vectores compartidos
+pnpm test         # protocol v2 against the shared vectors
 pnpm build
 ```
 
-El contrato necesita Rust con el target `wasm32v1-none`:
+The contract needs Rust with the `wasm32v1-none` target:
 
 ```bash
 cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
-Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|teleferico|tombola|race|rockets|wheel`, `?instant=1`, `?lead=3`.
+Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|teleferico|tombola|race|rockets|wheel`, `?instant=1`, `?pose=1` and `?motor=pixi`.
 
-Para auditar un juego: `node scripts/audit-game.mjs <juego>`, `node scripts/audit-sound.mjs <juego>` y `node scripts/audit-rigor.mjs <juego>`. Para la interfaz: `node scripts/audit-ui.mjs`. Las páginas de lectura, en los dos temas, en celular y en los dos idiomas: `pnpm check:paginas`. Y cuánta renta le queda al contrato antes de que la red lo archive: `pnpm check:renta`.
-
-## Estructura
+## Repository
 
 ```
-index.html                   La herramienta: pegar la lista, sellar y sortear
-verificar.html               Rehacer un sorteo desde su comprobante
-juegos.html, historia.html,  Páginas de lectura: los ocho juegos, de dónde sale
-seguridad.html, precios.html   el nombre, cómo se puede romper, y qué cuesta
-src/protocol/                Lista canónica, selección, drand, comprobante
-src/stellar/                 Red, wallets y cliente del contrato
-src/games/                   Los ocho juegos y el andamiaje que comparten
-contracts/raffle/            El contrato Soroban, en Rust
-docs/                        Protocolo, PRD, arquitectura, épicas, juegos, despliegues
-scripts/                     Despliegue, smoke test y auditores de juegos, sonido e interfaz
+index.html · verificar.html     The tool, and the page that re-runs a draw from its proof
+src/protocol/                   Canonical list, selection, drand, proof
+src/stellar/                    Network, wallets and contract client
+src/games/                      The eight games and the scaffolding they share
+contracts/raffle/               The Soroban contract, in Rust
+docs/                           Protocol, architecture, threats, deployments, legal, games
+scripts/                        Deployment, smoke test and the auditors
 ```
 
-## Documentación
+Documentation is in Spanish: [protocol](docs/protocolo.md) · [architecture](docs/architecture.md) · [threats](docs/amenazas.md) · [deployments and costs](docs/deployments.md) · [games](docs/juegos.md) · [legal](docs/legal.md) · [brand](docs/marca.md).
 
-- [Protocolo v2](docs/protocolo.md), la especificación normativa. Cualquiera puede reimplementarla y llegar al mismo resultado.
-- [Juegos](docs/juegos.md), el contrato que cumple todo juego, las reglas del sonido y las comprobaciones de los auditores.
-- [Despliegues](docs/deployments.md), direcciones por red y costos medidos.
-- [Marca](docs/marca.md), paleta con los contrastes medidos, tipografía, cómo se escribe y qué no va. Para armar una presentación o un afiche.
-- [Amenazas](docs/amenazas.md), qué puede salir mal, qué lo impide hoy y qué no. Incluye el único ataque conocido que sigue abierto.
-- [PRD](docs/prd.md) · [Arquitectura](docs/architecture.md) · [Épicas](docs/epics.md)
+## Team
 
-## Estado
+Built in Bolivia by [Nicolás Emir Mejía Agreda](https://github.com/nema1502). The name is Bolivian: a *tinkazo* is the hunch that today is your lucky day.
 
-Funcionando en **testnet**, de punta a punta. Mainnet es el siguiente paso: cuesta unos 16 XLM desplegar y unos 49 al año de alquiler.
+## Contributing
 
-## Contribuir
+Issues and pull requests are welcome. **If you find a way to rig a draw, open an issue**: it is the most useful report there is. To add a game, read [docs/juegos.md](docs/juegos.md); it has to pass the auditors to get in.
 
-Es código libre. Issues y pull requests son bienvenidos.
-
-**Si encontrás una forma de arreglar un sorteo, abrí un issue.** Ese es el reporte que más sirve. Hay una conocida y documentada: un organizador podría sellar varias listas contra rondas distintas y publicar solo la que le conviene. La defensa es que todos los sellos son públicos bajo su dirección, y que el identificador del sorteo se anuncia antes de que exista la semilla.
-
-Para agregar un juego, mirá [docs/juegos.md](docs/juegos.md): hay que pasar el auditor antes de entrar.
-
-## Licencia
+## License
 
 [MIT](LICENSE) © 2026 Nicolás Emir Mejía Agreda
-
----
-
-## English
-
-**Raffles nobody can rig. Not even you.**
-
-In Bolivia, a *tinkazo* is that hunch that today is your lucky day. Tinkazo draws prizes at community events: paste the list, the winner comes out on the big screen with a llama race or a roulette, and anyone can check afterwards that it was clean.
-
-Eight full-screen games tell the result: a payment hopping star to star, a ledger close sweeping cards away, a Bolivian rotating savings circle, a cable car shedding riders station by station, a fair's raffle drum, two races and a roulette. None of them decides anything. A narrator calls the draw out loud, and afterwards a card explains a piece of Stellar history with its primary source.
-
-The list is sealed with SHA-256 and committed against a **future** round of the [drand](https://drand.love) public randomness beacon, so when you lock the list the number that decides doesn't exist yet. A Soroban contract on Stellar verifies that round's BLS12-381 signature **on chain** and derives the winner deterministically. Participants never need a wallet or an account.
-
-A whole raffle costs **0.18 XLM**, about four cents. The cryptographic verification itself is 0.003 XLM, thanks to Stellar's native BLS12-381 host functions ([CAP-0059](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md)).
-
-No backend, no database. The only runtime dependencies are Stellar RPC, drand relays and the organizer's wallet. Only the list fingerprint goes on chain, never the names.
-
-Running on **testnet** end to end. Spec in [docs/protocolo.md](docs/protocolo.md) (Spanish). Live at [tinkazo.vercel.app](https://tinkazo.vercel.app) · MIT licensed.
