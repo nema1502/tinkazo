@@ -1,6 +1,6 @@
 import { $, esc } from "../dom";
 import { T, getLang, t } from "../i18n";
-import { LCOLORS, WHEEL_MAX, app, avatar, type Beacon } from "../state";
+import { LCOLORS, WHEEL_MAX, app, avatar, type Beacon, params } from "../state";
 import { bytesToHex, decompressG1, fetchRound, hexToBytes, randomnessOf, roundUrl, verifyRound } from "../protocol/drand";
 import { select } from "../protocol/select";
 import { network, txUrl } from "../stellar/config";
@@ -158,6 +158,12 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   }
   if (app.game === "tombola") {
     tombola(names, winners, beacon, finish);
+    return;
+  }
+  // `?motor=pixi`: el prototipo de la carrera en PixiJS, que se carga solo si
+  // se pide. Es la misma carrera, para compararla con la de siempre.
+  if (app.game === "race" && params.get("motor") === "pixi") {
+    void import("../games/llamas/pixi-race").then((m) => m.llamasPixi(names, winners, beacon, finish));
     return;
   }
   stadiumRace(names, winners, beacon, finish, app.game === "rockets" ? "stellar" : "andes");

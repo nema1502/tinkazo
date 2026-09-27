@@ -233,6 +233,10 @@ async function poseScene(): Promise<void> {
     (await import("./games/constellation")).stellarConstellation(L, W3, fakeBeacon, nada);
     return;
   }
+  if (cual !== "rockets" && params.get("motor") === "pixi") {
+    await (await import("./games/llamas/pixi-race")).llamasPixi(L, W3, fakeBeacon, nada);
+    return;
+  }
   // "rockets" es la carrera con la piel espacial; cualquier otro valor, la andina.
   stadiumRace(L, W3, fakeBeacon, nada, cual === "rockets" ? "stellar" : "andes");
 }

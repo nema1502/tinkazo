@@ -621,6 +621,16 @@ para seguir mirando la pantalla y no el celular.
 
 Resultado (2026-09-26): los cuatro giros y las banderas en `src/games/cablecar.ts`; el detalle, con los tiempos y el sonido, en [juegos/teleferico.md](juegos/teleferico.md). Sale de lo que mejor funcionó en la ruleta, que se para y después se mueve: finales que no se adivinan.
 
+### Historia 7.17: La carrera en PixiJS y GSAP: prototipo
+
+Resultado (2026-09-27): la misma carrera, dibujada con la placa de video, para decidir si vale la pena cambiar de motor. Se prende con `?motor=pixi` (en un sorteo de verdad con la carrera elegida, o en `?pose=1&motor=pixi`) y se carga solo cuando se pide: 118 KB comprimidos aparte, el sitio no pesa más.
+
+- **El plan, sin dibujo,** en [`src/games/llamas/plan.ts`](../src/games/llamas/plan.ts): quiénes corren, la historia del director y dónde va cada una, en fracción de pista. Consume el azar en el mismo orden que `race.ts`, así que la misma ronda cuenta la misma historia en los dos motores, línea por línea.
+- **El dibujo** en [`src/games/llamas/pixi-race.ts`](../src/games/llamas/pixi-race.ts): paisaje en capas con paralaje, una tribuna con la hinchada que salta con la tensión y levanta los brazos con el ganador, llamas armadas por partes con galope, manta de aguayo y número, polvo, líneas de velocidad, escupidas, minimapa de la carrera, tabla de posiciones, cuenta regresiva y podio con papel picado. La cuenta y el podio son líneas de tiempo de GSAP en pausa que se llevan a la hora del juego; el polvo y el papel picado se calculan desde la hora, no se acumulan.
+- **Medido:** 60 cuadros por segundo parejos en una placa integrada Intel Iris Xe, igual que la carrera de siempre. En Chrome sin interfaz, que dibuja WebGL sin placa, baja a unos 31: los auditores van a necesitar una placa o un reloj propio.
+
+Falta decidir si se sigue: el video lado a lado está en la carpeta de videos del autor. Si se sigue, `race.ts` pasa a usar el plan, se adaptan los auditores al lienzo de WebGL y se prueba en celulares de verdad.
+
 ### Historia 7.3: Mejoras transversales de presentación
 
 Como organizadora,
