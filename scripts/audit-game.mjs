@@ -57,7 +57,7 @@ const READ_STATE = `JSON.stringify({
   winners: [...document.querySelectorAll('.winner-name')].map(e => e.textContent),
   proof: document.getElementById('proof')?.textContent || '',
   options: [...document.querySelectorAll('.gamepick button')].map(b => ({
-    id: b.id, text: b.textContent, key: b.getAttribute('data-i') || '',
+    id: b.id, text: b.textContent, key: b.getAttribute('data-i') || b.querySelector('[data-i]')?.getAttribute('data-i') || '',
     on: b.classList.contains('on'), disabled: b.disabled,
   })),
   drandLink: document.getElementById('drand-link')?.getAttribute('href') || '',

@@ -10,7 +10,7 @@
 [![drand quicknet](https://img.shields.io/badge/azar-drand%20quicknet-14b8a6?style=flat-square)](https://drand.love)
 [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-ffc629?style=flat-square)](LICENSE)
 
-**[Probalo](https://tinkazo.vercel.app)** · [Cómo funciona](#cómo-funciona) · [Por qué Stellar](#por-qué-stellar) · [Qué está andando](#qué-está-andando-hoy) · [Lo que sigue](#lo-que-sigue) · [English](README.md)
+**[Probalo](https://tinkazo.vercel.app)** · [Cómo funciona](#cómo-funciona) · [Por qué Stellar](#por-qué-stellar) · [Qué está andando](#qué-está-andando-hoy) · [Los próximos 30 días](#los-próximos-30-días) · [English](README.md)
 
 <img src="docs/capturas/readme/hero.webp" alt="La portada de Tinkazo" width="860">
 
@@ -18,7 +18,7 @@
 
 ---
 
-Toda comunidad regala cosas: entradas, libros, licencias, becas, turnos para hablar, el orden de un pasanaku. Y cada vez alguien en la sala piensa que el organizador eligió a un amigo. Lo que se usa hoy es un `ALEATORIO()` en una planilla, una ruleta en una página web o "confíen en mí". Nada de eso se puede revisar después.
+Toda comunidad regala cosas: entradas, libros, licencias, becas, turnos para hablar, quién expone primero. Y cada vez alguien en la sala piensa que el organizador eligió a un amigo. Lo que se usa hoy es un `ALEATORIO()` en una planilla, una ruleta en una página web o "confíen en mí". Nada de eso se puede revisar después.
 
 **Tinkazo hace que cualquiera pueda revisar el sorteo, desde su celular y para siempre.** Quien organiza pega la lista, la lista se sella en Stellar, y el ganador sale de un número público que todavía no existía cuando se selló. Un contrato de Soroban verifica la firma de ese número dentro de la cadena. El resultado se cuenta en pantalla grande con un juego y un relator, y cualquiera rehace el sorteo entero en su navegador desde un enlace.
 
@@ -66,7 +66,7 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 - **Sin oráculo que operar.** La prueba es la firma del propio drand, verificable contra su clave pública dentro de años. No hay nodo que mantener vivo ni operador en quien confiar.
 - **Inmutable y sin custodia.** El contrato no tiene administrador ni forma de actualizarse, y no guarda fondos. Una versión nueva es una dirección nueva, anotada en [docs/deployments.md](docs/deployments.md).
 - **Entrar funciona en un meetup.** Quien organiza entra con Google mediante una billetera de Pollar, con Freighter, o con una cuenta de prueba que el navegador crea y fondea. Los participantes no tocan Stellar nunca.
-- **Lo que sigue es nativo de Stellar:** cualquier comunidad, desde un meetup hasta un curso, una cooperativa o un pasanaku, reparte recompensas y becas en USDC como saldos reclamables. Quien sale elegido entra con Google y cobra cuando quiere, sin saber que abajo hay una blockchain y sin que el organizador le guarde la plata ([diseño](docs/premios.md)). La cadena es lo que deja que un grupo chico llegue a gente a la que antes no podía pagarle; nadie tiene que aprenderla. Cada recompensa la pone quien organiza y los participantes no pagan nada, así que no hay pozo ni nada que apostar.
+- **Lo que sigue es nativo de Stellar:** cualquier comunidad, desde un meetup hasta un curso o una cooperativa, reparte recompensas y becas en USDC como saldos reclamables, y el sorteo se cuenta en pantalla con un juego de la cultura boliviana y latinoamericana. Quien sale elegido entra con Google y cobra cuando quiere, sin saber que abajo hay una blockchain y sin que el organizador le guarde la plata ([diseño](docs/premios.md)). La cadena es lo que deja que un grupo chico llegue a gente a la que antes no podía pagarle; nadie tiene que aprenderla. Cada recompensa la pone quien organiza y los participantes no pagan nada, así que no hay pozo ni nada que apostar.
 
 ## Qué está andando hoy
 
@@ -77,7 +77,7 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 | Página de verificación | En producción | Rehace cualquier sorteo en el navegador desde su comprobante |
 | Ocho juegos de estadio | En producción | Deterministas: la misma ronda dibuja los mismos cuadros en cualquier máquina |
 | Protocolo v2 | Especificado | [docs/protocolo.md](docs/protocolo.md) y vectores que las dos implementaciones tienen que pasar |
-| Controles de calidad | En la CI y en el repositorio | 76 tests unitarios, los del contrato, y cinco auditores propios (abajo) |
+| Controles de calidad | En la CI y en el repositorio | 78 tests unitarios, los del contrato, y cinco auditores propios (abajo) |
 
 Probado con mil participantes: el sorteo sigue a sesenta cuadros por segundo y se ancla igual.
 
@@ -128,6 +128,8 @@ Lo que está garantizado y lo que no está escrito en [docs/amenazas.md](docs/am
 
 Un VRF con oráculo es una primitiva para otros contratos. Tinkazo es el producto para el momento en que la justicia importa y hay una sala mirando la pantalla.
 
+La parte que comprueba drand en la cadena, [`drand.rs`](contracts/raffle/src/drand.rs), son 112 líneas sin nada propio de Tinkazo. Publicada como crate, deja que cualquier contrato de Soroban use azar público sin correr un oráculo.
+
 ## Qué cuesta
 
 Medido en testnet, no estimado. XLM a US$ 0,196.
@@ -152,17 +154,18 @@ Cinco auditores en [`scripts/`](scripts) corren el sitio de verdad en Chrome sin
 - **El de sonido**, que engancha cada oscilador y mide afinación, registro, volumen, silencios y un relator que se traba.
 - **El de interfaz**, en escritorio y celular, en los dos temas: imágenes rotas, texto cortado, contraste y blancos de toque.
 
-## Lo que sigue
+## Los próximos 30 días
 
-Cada paso tiene un criterio que se puede comprobar desde afuera.
+Cuatro entregables, cada uno con una comprobación que cualquiera puede hacer desde afuera:
 
-| Paso | Está hecho cuando |
+| Entregable | Está hecho cuando |
 |---|---|
-| Despliegue en mainnet (`pnpm preflight:mainnet` ya comprueba todo lo demás) | El contrato está en mainnet y un primer sorteo da verde desde su enlace |
-| Diez sorteos con comunidades reales | Diez meetups, hackatones o aulas, cada uno con su comprobante público en la cadena |
+| Mainnet (`pnpm preflight:mainnet` ya comprueba todo lo demás) | El contrato está en mainnet y un primer sorteo da verde desde su enlace |
 | Recompensas en USDC como saldos reclamables, que pone quien organiza | Alguien sin billetera entra con Google y cobra USDC en testnet, y después en mainnet; los participantes siguen sin pagar nada |
-| Importar el evento y avisar el resultado | CSV de Luma con filtro de check-in (hecho) y un mensaje con la prueba de cada participante |
-| Motor gráfico nuevo | Los ocho juegos en PixiJS a sesenta cuadros por segundo en un celular de gama media, pasando los mismos auditores (en computadora: hecho, 20/20 en el auditor exigente a sesenta cuadros; falta medirlo en un celular) |
+| Cinco sorteos con comunidades reales de Bolivia | Cinco meetups, clases o hackatones, cada uno con su enlace de comprobación público |
+| El verificador de drand como crate reutilizable | Un contrato de Soroban que no es Tinkazo verifica una ronda de quicknet con él, contra los vectores de prueba compartidos |
+
+Después: un mensaje con el resultado y la prueba de cada participante (la importación de Luma con su filtro de check-in ya está hecha), y medir los juegos en un celular de gama media. En computadora, los ocho pasan el auditor exigente a sesenta cuadros por segundo.
 
 ## Correr en local
 

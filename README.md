@@ -2,7 +2,7 @@
 
 # Tinkazo 🦙
 
-### Provably fair draws for communities, sealed before the randomness exists and verified on Stellar.
+### Verifiable draws for communities, sealed before the randomness exists and checked on Stellar.
 
 [![Live demo](https://img.shields.io/badge/demo-tinkazo.vercel.app-e93d9c?style=flat-square)](https://tinkazo.vercel.app)
 [![Soroban contract on testnet](https://img.shields.io/badge/Soroban-live%20on%20testnet-7b61ff?style=flat-square)](https://stellar.expert/explorer/testnet/contract/CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH)
@@ -10,7 +10,7 @@
 [![drand quicknet](https://img.shields.io/badge/randomness-drand%20quicknet-14b8a6?style=flat-square)](https://drand.love)
 [![License: MIT](https://img.shields.io/badge/license-MIT-ffc629?style=flat-square)](LICENSE)
 
-**[Try it](https://tinkazo.vercel.app)** · [How it works](#how-it-works) · [Why Stellar](#why-stellar) · [What is live](#what-is-live-today) · [Roadmap](#roadmap) · [Español](README.es.md)
+**[Try it](https://tinkazo.vercel.app)** · [How it works](#how-it-works) · [Why Stellar](#why-stellar) · [What is live](#what-is-live-today) · [Next 30 days](#the-next-30-days) · [Español](README.es.md)
 
 <img src="docs/capturas/readme/hero.webp" alt="Tinkazo home page: draws nobody can rig, not even you" width="860">
 
@@ -18,7 +18,7 @@
 
 ---
 
-Every community gives things away: conference tickets, books, software licenses, scholarships, speaking slots, the turn order of a rotating savings circle. And every time, someone in the room wonders whether the organizer picked a friend. The tools people use today are a spreadsheet `RAND()`, a spinning wheel on a website, or "trust me". None of them can be checked afterwards.
+Every community gives things away: conference tickets, books, software licenses, scholarships, speaking slots, who presents first. And every time, someone in the room wonders whether the organizer picked a friend. The tools people use today are a spreadsheet `RAND()`, a spinning wheel on a website, or "trust me". None of them can be checked afterwards.
 
 **Tinkazo makes the draw checkable by anyone, from their phone, forever.** The organizer pastes a list, the list is sealed on Stellar, and the winner comes from a public random number that did not exist yet when the list was sealed. A Soroban contract verifies that number's signature on chain. The result is shown on the big screen as a full-screen game with a narrator, and anyone can re-run the whole draw in their browser from a link.
 
@@ -66,7 +66,7 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 - **No oracle to run.** The proof is drand's own signature, checkable against its public key years from now. There is no node to keep alive and no operator to trust.
 - **Immutable and custody-free.** The contract has no admin, no upgrade path and holds no funds. A new version is a new address, recorded in [docs/deployments.md](docs/deployments.md).
 - **Onboarding that works at a meetup.** Organizers sign in with Google through a Pollar smart wallet, with Freighter, or with a testnet account the browser creates and funds. Participants never touch Stellar at all.
-- **Where it goes next is native to Stellar:** any community, from a meetup to a classroom, a cooperative or a savings circle, hands out rewards and stipends in USDC as claimable balances. Whoever is picked signs in with Google and claims when ready, without knowing there is a blockchain underneath and without the organizer holding the money for them ([design](docs/premios.md)). The chain is what lets a small group reach people it could not pay before; nobody has to learn it. The organizer funds every reward and participants never pay anything, so there is no pot and nothing to bet.
+- **Where it goes next is native to Stellar:** any community, from a meetup to a classroom or a cooperative, hands out rewards and stipends in USDC as claimable balances, and the draw plays out on screen as a game rooted in Bolivian and Latin American culture. Whoever is picked signs in with Google and claims when ready, without knowing there is a blockchain underneath and without the organizer holding the money for them ([design](docs/premios.md)). The chain is what lets a small group reach people it could not pay before; nobody has to learn it. The organizer funds every reward and participants never pay anything, so there is no pot and nothing to bet.
 
 ## What is live today
 
@@ -77,7 +77,7 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 | Verification page | Live | Recomputes any draw in the browser from its proof link |
 | Eight stadium games | Live | Deterministic: the same round draws the same frames on any machine |
 | Protocol v2 | Specified | [docs/protocolo.md](docs/protocolo.md) and shared vectors that both implementations must pass |
-| Quality gates | In CI and in the repo | 76 unit tests, contract tests, and five custom auditors (below) |
+| Quality gates | In CI and in the repo | 78 unit tests, contract tests, and five custom auditors (below) |
 
 Tested with a thousand participants: the draw still runs at 60 frames per second and anchors the same way.
 
@@ -128,6 +128,8 @@ What is guaranteed, and what is not, is written down in [docs/amenazas.md](docs/
 
 VRF oracles are a primitive for other contracts. Tinkazo is the end-user product for the moment where fairness matters and a room is watching the screen.
 
+The part that checks drand on chain, [`drand.rs`](contracts/raffle/src/drand.rs), is 112 lines with nothing specific to Tinkazo in it. Published as a crate, it lets any Soroban contract use public randomness without running an oracle.
+
 ## Costs
 
 Measured on testnet, not estimated. XLM at US$0.196.
@@ -152,17 +154,18 @@ Five auditors in [`scripts/`](scripts) run the real site in headless Chrome:
 - **Sound auditor**, which hooks every oscillator and measures pitch, register, volume, gaps and a narrator that trips over itself.
 - **UI auditor**, desktop and phone, both themes: broken images, clipped text, contrast, tap targets.
 
-## Roadmap
+## The next 30 days
 
-Each step has a success criterion that can be checked from outside.
+Four deliverables, each with a check anyone can run from outside:
 
-| Step | Done when |
+| Deliverable | Done when |
 |---|---|
-| Mainnet deployment (`pnpm preflight:mainnet` already checks everything else) | The contract is live on mainnet and a first draw verifies green from its link |
-| Ten draws with real communities | Ten meetups, hackathons or classrooms, each with a public on-chain proof |
+| Mainnet (`pnpm preflight:mainnet` already checks everything else) | The contract is live on mainnet and a first draw verifies green from its link |
 | USDC rewards as claimable balances, funded by the organizer | Someone with no wallet signs in with Google and claims USDC on testnet, then on mainnet; participants still pay nothing |
-| Event import and announcements | Luma CSV with check-in filter (done) plus a results message with each participant's proof |
-| New rendering engine | All eight games on PixiJS at 60 fps on a mid-range phone, passing the same auditors (on desktop: done, 20/20 on the strict auditor at 60 fps; the phone measurement is next) |
+| Five draws with real communities in Bolivia | Five meetups, classes or hackathons, each with its public proof link |
+| The drand verifier as a reusable crate | A Soroban contract outside Tinkazo verifies a quicknet round with it, against the shared test vectors |
+
+After that: a results message with each participant's proof (the Luma import with its check-in filter is already done), and measuring the games on a mid-range phone. On desktop all eight pass the strict auditor at 60 fps.
 
 ## Run it locally
 
