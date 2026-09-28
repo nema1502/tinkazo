@@ -209,6 +209,15 @@ async function poseScene(): Promise<void> {
   app.drawn = { beacon: fakeBeacon, winners: W3 };
   const cual = params.get("pose") ?? "1";
   const nada = (): void => {};
+  // `?motor=pixi`: la escena fija en el motor nuevo, si el juego ya lo tiene.
+  if (params.get("motor") === "pixi") {
+    const juego = (cual === "1" ? "race" : cual) as Game;
+    const px = await import("./games/pixi");
+    if (px.hasPixi(juego)) {
+      await px.playPixi(juego, L, W3, fakeBeacon, nada);
+      return;
+    }
+  }
   if (cual === "wheel") {
     (await import("./games/wheel")).wheelSpin(L, W3, fakeBeacon, nada);
     return;
@@ -231,10 +240,6 @@ async function poseScene(): Promise<void> {
   }
   if (cual === "stellar") {
     (await import("./games/constellation")).stellarConstellation(L, W3, fakeBeacon, nada);
-    return;
-  }
-  if (cual !== "rockets" && params.get("motor") === "pixi") {
-    await (await import("./games/llamas/pixi-race")).llamasPixi(L, W3, fakeBeacon, nada);
     return;
   }
   // "rockets" es la carrera con la piel espacial; cualquier otro valor, la andina.

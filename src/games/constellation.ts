@@ -299,8 +299,10 @@ export function stellarConstellation(
       beep(note(deg), 0.16, "triangle", 0.05);
       if (hopI >= 12) beep(note(Math.max(0, deg - 5)), 0.2, "sine", 0.04);
       chips.push({ node: ni, a: 1 });
-      // En el roce ya habló el relator: dos líneas seguidas se pisaban.
-      if ((hops[hopI] as Hop).dur > 0.3 && n.idx !== winnerIdx && !(casi && hopI === CASI)) {
+      // En el roce ya habló el relator: dos líneas seguidas se pisaban. Y en
+      // el penúltimo salto tampoco: un cuadro después arranca el último con su
+      // propia línea.
+      if ((hops[hopI] as Hop).dur > 0.3 && n.idx !== winnerIdx && !(casi && hopI === CASI) && hopI !== K - 2) {
         say(T[getLang()].cConstPass(names[n.idx] ?? ""), 0.25 + 0.4 * (hopI / K));
       }
     } else {

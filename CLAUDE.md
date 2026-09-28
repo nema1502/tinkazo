@@ -14,6 +14,7 @@ Sitio en producción: https://tinkazo.vercel.app
 - [docs/epics.md](docs/epics.md), historias con criterios de aceptación y estado.
 - [docs/deployments.md](docs/deployments.md), direcciones del contrato por red y costos medidos.
 - [docs/juegos.md](docs/juegos.md), el contrato que cumple todo juego, las 20 comprobaciones del auditor de juegos y las 20 del exigente.
+- [docs/motores.md](docs/motores.md), con qué se dibujan los juegos, por qué PixiJS y cómo mira la cámara en cada uno.
 - [docs/marca.md](docs/marca.md), paleta con los contrastes medidos, tipografía y cómo se escribe.
 - [docs/vectors.json](docs/vectors.json), vectores de prueba compartidos por Rust y TypeScript.
 - [docs/legal.md](docs/legal.md), el marco legal en Bolivia y en el mundo, y lo que decide el producto por eso. Entrar a un sorteo es gratis, siempre.
@@ -47,7 +48,7 @@ pnpm preview &      # sirve dist/ en :4173
 node scripts/smoke.mjs "http://localhost:4173/?demo=wheel&instant=1&lead=3"
 ```
 
-Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|teleferico|tombola|race|rockets|wheel` (carga el ejemplo, sella y sortea), `?instant=1` (sin animaciones), `?lead=N` (segundos hasta la ronda objetivo, mínimo 3; solo modo libre), `?pose=1` (escena fija del estadio).
+Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|teleferico|tombola|race|rockets|wheel` (carga el ejemplo, sella y sortea), `?instant=1` (sin animaciones), `?lead=N` (segundos hasta la ronda objetivo, mínimo 3; solo modo libre), `?pose=1` (escena fija del estadio), `?motor=pixi` (los juegos en el motor nuevo, PixiJS con director de cámara; ver [docs/motores.md](docs/motores.md)). Los auditores aceptan `--motor pixi`, que usa la placa de video.
 
 ```bash
 # Auditor de juegos: 20 comprobaciones por juego, contra drand de verdad
@@ -106,6 +107,7 @@ public/             juegos/*.webp, sitemap.xml y robots.txt
 verificar.html      Página de verificación, solo lectura
 src/                Frontend TypeScript: main, i18n, state, narrator, protocol/, stellar/, ui/, games/
 src/games/overlay.ts  Andamiaje de los juegos: estadio, azar sembrado, chips, saltar, desmontaje
+src/games/pixi/     El motor nuevo: stage.ts (andamiaje), camera.ts (director de cámara) y un archivo por juego
 scripts/            deploy.sh (contrato), smoke.mjs (sitio), audit-game.mjs, audit-rigor.mjs, audit-emocion.mjs, check-lore.mjs
 contracts/raffle/   Contrato Soroban tinkazo-raffle (lib, drand, select, test)
 docs/               PRD, arquitectura, protocolo, épicas, despliegues, vectores, capturas

@@ -293,7 +293,7 @@ const onVisible = (): void => {
   if (document.visibilityState === "visible" && sentinel) void keepAwake();
 };
 
-function takeOverScreen(el: HTMLElement): void {
+export function takeOverScreen(el: HTMLElement): void {
   // Esconder la barra del navegador solo funciona en escritorio. En iPhone no
   // hay pantalla completa de elementos, y ahí el CSS es todo lo que hay.
   if (!document.fullscreenElement && el.requestFullscreen) {
@@ -303,7 +303,7 @@ function takeOverScreen(el: HTMLElement): void {
   document.addEventListener("visibilitychange", onVisible);
 }
 
-function releaseScreen(): void {
+export function releaseScreen(): void {
   document.removeEventListener("visibilitychange", onVisible);
   if (sentinel) {
     void sentinel.release().catch(() => undefined);

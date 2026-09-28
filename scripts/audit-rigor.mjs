@@ -40,7 +40,10 @@ const opt = (name, def) => {
   const i = args.indexOf(name);
   return i >= 0 && args[i + 1] ? args[i + 1] : def;
 };
-const cual = args.find((a) => !a.startsWith("--") && args[args.indexOf(a) - 1] !== "--base" && args[args.indexOf(a) - 1] !== "--out") ?? "todos";
+const cual = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--")) ?? "todos";
+// `--motor pixi` audita los juegos en el motor nuevo (docs/motores.md).
+const motor = opt("--motor", "");
+if (motor === "pixi") process.env.TINKAZO_GPU = "1";
 const juegos = cual === "todos" ? TODOS : [cual];
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const outDir = opt("--out", "docs/capturas/rigor");
@@ -140,7 +143,12 @@ const PRELUDIO = `(() => {
     const x0 = Math.max(0, Math.round(rx)), y0 = Math.max(0, Math.round(ry));
     const x1 = Math.min(W, Math.round(rx + rw)), y1 = Math.min(H, Math.round(ry + rh));
     if (x1 - x0 < 4 || y1 - y0 < 4) return null;
-    const d = cv.getContext('2d').getImageData(x0, y0, x1 - x0, y1 - y0).data;
+    // Copiado a un lienzo 2D: así se lee igual un lienzo 2D que uno de WebGL.
+    const cc = document.createElement('canvas');
+    cc.width = x1 - x0; cc.height = y1 - y0;
+    const cg = cc.getContext('2d', { willReadFrequently: true });
+    cg.drawImage(cv, x0, y0, x1 - x0, y1 - y0, 0, 0, x1 - x0, y1 - y0);
+    const d = cg.getImageData(0, 0, x1 - x0, y1 - y0).data;
     const ww = x1 - x0;
     // Sin el borde de tinta del cartel, que no es texto.
     const pad = Math.max(6, Math.round(rh * 0.07));
@@ -177,7 +185,7 @@ const PRELUDIO = `(() => {
       tk.visto = true;
       tk.f0 = tk.frames;
       // Un cartel anotado por un juego anterior no cuenta.
-      const cv0 = st.querySelector('canvas');
+      const cv0 = st.querySelector('#pixi-canvas') || st.querySelector('canvas');
       if (cv0) cv0.dataset.cartel = '';
     }
     if (tk.visto && !visible && tk.cerro < 0) tk.cerro = virt;
@@ -198,7 +206,8 @@ const PRELUDIO = `(() => {
         if (txt && txt !== comentario) { comentario = txt; anotar('comentario'); }
       }
       if (visible && (tk.frames - tk.f0) % ${CADA} === 0) {
-        const cv = st.querySelector('canvas');
+        // El lienzo que se ve: el del motor nuevo si está, el de siempre si no.
+        const cv = st.querySelector('#pixi-canvas') || st.querySelector('canvas');
         if (cv && cv.width > 0) {
           const { s } = huella(cv);
           tk.muestras.push({ f: tk.frames, h: s });
@@ -235,7 +244,7 @@ const check = (name, ok, detail = "") => {
 const semillaN = opt("--semilla", "");
 const semilla = semillaN ? createHash("sha256").update(`semilla-${semillaN}`).digest("hex") : "";
 const urlDe = (juego, extra = "") =>
-  `${base}/?pose=${juego === "race" ? "1" : juego}${extra}${semilla ? `&semilla=${semilla}` : ""}`;
+  `${base}/?pose=${juego === "race" ? "1" : juego}${extra}${semilla ? `&semilla=${semilla}` : ""}${motor ? `&motor=${motor}` : ""}`;
 
 /**
  * Corre la escena de un juego con el reloj cambiado y devuelve lo que midió.

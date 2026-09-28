@@ -39,6 +39,9 @@ const cual = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith
 const juegos = cual === "todos" ? TODOS : [cual];
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const N = Number(opt("--semillas", "16"));
+// `--motor pixi` mide los juegos del motor nuevo (docs/motores.md).
+const motor = opt("--motor", "");
+if (motor === "pixi") process.env.TINKAZO_GPU = "1";
 
 /** El reloj en turbo: veinte cuadros de juego por cuadro real, de a 1/64 s. */
 const TURBO = `(() => {
@@ -79,7 +82,7 @@ try {
     for (let i = 1; i <= N; i++) {
       const page = await browser.open("about:blank");
       await page.send("Page.addScriptToEvaluateOnNewDocument", { source: TURBO });
-      await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&semilla=${semilla(i)}` });
+      await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&semilla=${semilla(i)}${motor ? `&motor=${motor}` : ""}` });
       const ok = await page.waitFor("document.getElementById('race-canvas').dataset.arco", 20_000);
       if (!ok.ok) {
         arcos.push("?");

@@ -31,6 +31,10 @@ const opt = (name, def) => {
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const outDir = opt("--out", "docs/capturas");
 const lead = opt("--lead", "3");
+// `--motor pixi` audita el juego en el motor nuevo (docs/motores.md).
+const motor = opt("--motor", "");
+if (motor === "pixi") process.env.TINKAZO_GPU = "1";
+const conMotor = motor ? `&motor=${motor}` : "";
 
 /** Lista de ejemplo del sitio, en el mismo orden. Debe coincidir con src/state.ts. */
 const SAMPLE = [
@@ -79,7 +83,7 @@ async function run() {
   try {
     // ---------------------------------------------------------- 1. el sorteo
     console.log(`\nAuditando "${game}" contra ${base}\n`);
-    const url = `${base}/?demo=${encodeURIComponent(game)}&lead=${lead}`;
+    const url = `${base}/?demo=${encodeURIComponent(game)}&lead=${lead}${conMotor}`;
     const page = await browser.open(url);
     const drew = await page.waitFor("document.querySelectorAll('.winner-name').length > 0", 120_000);
     check("el sorteo termina y muestra un ganador", drew.ok, `${(drew.elapsed / 1000).toFixed(1)} s`);
@@ -174,9 +178,14 @@ async function run() {
       // lectura de vuelta desde la GPU y le compite al juego por el hilo. El
       // cartel dura tres segundos, así que uno cada 0,8 no se pierde ninguno.
       const am = i % 4 !== 0 ? "" : await dos.eval(`(() => {
-        const cv = document.querySelector('.stadium canvas');
+        const cv = document.getElementById('pixi-canvas') || document.querySelector('.stadium canvas');
         if (!cv || document.getElementById('stadium').style.display !== 'block') return '';
-        const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+        // Copiado a un lienzo 2D: así se lee igual un lienzo 2D que uno de WebGL.
+        const cc = document.createElement('canvas');
+        cc.width = cv.width; cc.height = cv.height;
+        const cg = cc.getContext('2d', { willReadFrequently: true });
+        cg.drawImage(cv, 0, 0);
+        const d = cg.getImageData(0, 0, cv.width, cv.height).data;
         const esAmarillo = (i) => d[i] > 235 && d[i + 1] > 180 && d[i + 1] < 225 && d[i + 2] < 85;
         const ancho = cv.width, alto = cv.height;
         let n = 0, x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1;
@@ -261,7 +270,7 @@ async function run() {
       width: 390, height: 844, deviceScaleFactor: 2, mobile: true,
       screenWidth: 390, screenHeight: 844,
     });
-    await cel.send("Page.navigate", { url: `${base}/?pose=${game === "race" ? "1" : game}&theme=dark` });
+    await cel.send("Page.navigate", { url: `${base}/?pose=${game === "race" ? "1" : game}&theme=dark${conMotor}` });
     const celOk = await cel.waitFor(
       `document.getElementById('stadium').style.display === 'block'`,
       30_000,
@@ -274,7 +283,7 @@ async function run() {
           .filter(e => getComputedStyle(e).display !== 'none')
           .map(e => { const r = e.getBoundingClientRect();
             return { sel: e.className || e.tagName, fuera: r.right > innerWidth + 1 || r.left < -1, h: Math.round(r.height) }; });
-        const cv = document.querySelector('.stadium canvas');
+        const cv = document.getElementById('pixi-canvas') || document.querySelector('.stadium canvas');
         const r = cv.getBoundingClientRect();
         return {
           malos: caben.filter(x => x.fuera).map(x => x.sel),
@@ -299,7 +308,7 @@ async function run() {
 
     // -------------------------------------------- 10. tema claro y oscuro
     for (const theme of ["light", "dark"]) {
-      const p = await browser.open(`${base}/?pose=${game === "race" ? "1" : game}&theme=${theme}`);
+      const p = await browser.open(`${base}/?pose=${game === "race" ? "1" : game}&theme=${theme}${conMotor}`);
       const painted = await p.waitFor(
         "getComputedStyle(document.getElementById('stadium')).display !== 'none'",
         20_000,

@@ -37,6 +37,7 @@
     "@stellar/freighter-api": "^6.0.1",
     "@stellar/stellar-sdk": "^17.1.0",
     "gsap": "^3.15.0",
+    "pixi-filters": "^6.1.5",
     "pixi.js": "^8.21.0",
     "qrcode-generator": "^2.0.4"
   }

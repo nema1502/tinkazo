@@ -26,6 +26,9 @@ importers:
       gsap:
         specifier: ^3.15.0
         version: 3.15.0
+      pixi-filters:
+        specifier: ^6.1.5
+        version: 6.1.5(pixi.js@8.21.0)
       pixi.js:
         specifier: ^8.21.0
         version: 8.21.0
@@ -229,6 +232,9 @@ packages:
 
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
+
+  '@types/gradient-parser@0.1.5':
+    resolution: {integrity: sha512-r7K3NkJz3A95WkVVmjs0NcchhHstC2C/VIYNX4JC6tieviUNo774FFeOHjThr3Vw/WCeMP9kAT77MKbIRlO/4w==}
 
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
@@ -677,6 +683,11 @@ packages:
     resolution: {integrity: sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==}
     engines: {node: '>=12'}
 
+  pixi-filters@6.1.5:
+    resolution: {integrity: sha512-Ewb/J+kxAbaNN+0/ATJbglAJG+skGJfh7BIDP3ILIDdD6wWk1p0pGa25pVf1T8hGBOQSUNVAmwwJBwkj+cyLLA==}
+    peerDependencies:
+      pixi.js: '>=8.0.0-0'
+
   pixi.js@8.21.0:
     resolution: {integrity: sha512-GJ/KqBtUuWDBPMQu2D0ZHsRCYOcWRjjKrpyC+3jPQI5JTqHMC5dH8l9sSyvoUT4qJidvRzs1fwFWRWceno2Ltw==}
 
@@ -962,6 +973,8 @@ snapshots:
   '@types/earcut@3.0.0': {}
 
   '@types/estree@1.0.9': {}
+
+  '@types/gradient-parser@0.1.5': {}
 
   '@types/json-schema@7.0.15': {}
 
@@ -1290,6 +1303,11 @@ snapshots:
   picocolors@1.1.1: {}
 
   picomatch@4.0.7: {}
+
+  pixi-filters@6.1.5(pixi.js@8.21.0):
+    dependencies:
+      '@types/gradient-parser': 0.1.5
+      pixi.js: 8.21.0
 
   pixi.js@8.21.0:
     dependencies:

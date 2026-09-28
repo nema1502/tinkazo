@@ -28,6 +28,9 @@ const opt = (name, def) => {
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const JUEGOS = ["race", "rockets", "stellar", "ledger", "pasanaku", "teleferico", "tombola", "wheel"];
 const pedido = args[0] && !args[0].startsWith("--") ? args[0] : "todos";
+// `--motor pixi` escucha los juegos del motor nuevo (docs/motores.md).
+const motor = opt("--motor", "");
+if (motor === "pixi") process.env.TINKAZO_GPU = "1";
 const lista = pedido === "todos" ? JUEGOS : [pedido];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -143,7 +146,7 @@ async function correr(browser, juego) {
   const page = await browser.open("about:blank");
   await page.send("Page.addScriptToEvaluateOnNewDocument", { source: HOOK });
   await page.send("Page.addScriptToEvaluateOnNewDocument", { source: HOOK_VOZ });
-  await page.send("Page.navigate", { url: `${base}/?demo=${juego}&lead=3&pace=normal` });
+  await page.send("Page.navigate", { url: `${base}/?demo=${juego}&lead=3&pace=normal${motor ? `&motor=${motor}` : ""}` });
 
   const arranco = await page.waitFor(
     `document.getElementById('stadium').style.display === 'block'`,

@@ -100,7 +100,10 @@ export async function launch({ port = Number(process.env.CDP_PORT || 9222), widt
     findChrome(),
     [
       "--headless=new",
-      "--disable-gpu",
+      // Con TINKAZO_GPU=1 se usa la placa de video: el motor nuevo dibuja con
+      // WebGL, y sin placa Chrome lo hace por software, a unos 17 cuadros por
+      // segundo. Medir la fluidez así sería medir la computadora del auditor.
+      ...(process.env.TINKAZO_GPU === "1" ? ["--enable-gpu", "--ignore-gpu-blocklist"] : ["--disable-gpu"]),
       "--no-first-run",
       "--no-default-browser-check",
       // Sin esto el contexto de audio nace suspendido y no avanza su reloj: el

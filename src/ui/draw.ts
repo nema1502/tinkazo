@@ -136,6 +136,21 @@ export async function draw(): Promise<void> {
  * por uno que sí, y eso no altera quién ganó.
  */
 function playGame(names: string[], winners: number[], beacon: Beacon, finish: () => void): void {
+  // `?motor=pixi`: el motor nuevo, para los juegos que ya tienen versión en
+  // PixiJS (docs/motores.md). Se carga solo si se pide, y el que todavía no
+  // tiene versión nueva sigue con la de siempre.
+  if (params.get("motor") === "pixi") {
+    const game = app.game === "wheel" && names.length > WHEEL_MAX ? "ledger" : app.game;
+    void import("../games/pixi").then(async (m) => {
+      if (m.hasPixi(game)) await m.playPixi(game, names, winners, beacon, finish);
+      else classicGame(names, winners, beacon, finish);
+    });
+    return;
+  }
+  classicGame(names, winners, beacon, finish);
+}
+
+function classicGame(names: string[], winners: number[], beacon: Beacon, finish: () => void): void {
   if (app.game === "wheel" && names.length <= WHEEL_MAX) {
     wheelSpin(names, winners, beacon, finish);
     return;
@@ -158,12 +173,6 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   }
   if (app.game === "tombola") {
     tombola(names, winners, beacon, finish);
-    return;
-  }
-  // `?motor=pixi`: el prototipo de la carrera en PixiJS, que se carga solo si
-  // se pide. Es la misma carrera, para compararla con la de siempre.
-  if (app.game === "race" && params.get("motor") === "pixi") {
-    void import("../games/llamas/pixi-race").then((m) => m.llamasPixi(names, winners, beacon, finish));
     return;
   }
   stadiumRace(names, winners, beacon, finish, app.game === "rockets" ? "stellar" : "andes");
