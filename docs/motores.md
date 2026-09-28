@@ -40,6 +40,7 @@ El punto para volver atrás del todo está marcado en git con la etiqueta `antes
 - **`src/games/pixi/stage.ts`**, el andamiaje: lo mismo que `overlay.ts` hace para el motor de siempre (el lienzo, el azar sembrado, el relator, la música, las caras, los chips con nombre, el cartel del ganador con papel picado, el reloj, saltar y desmontar). El estadio aparece recién cuando el motor está listo, para que dos corridas de la misma ronda arranquen en el mismo cuadro.
 - **`src/games/pixi/camera.ts`**, el director de cámara. Cada juego le dice a qué mirar, qué tan cerca y a qué ritmo; la cámara llega con suavidad, pega golpes de acercamiento (`punch`), sacude (`shake`), se inclina (`tilt`) y desenfoca hacia el centro cuando el acercamiento es rápido, como un zoom de cine. El sacudón sale del reloj, no del azar.
 - **`src/games/pixi/index.ts`**, qué juegos tienen versión nueva. Con `?motor=pixi` el sitio pregunta ahí primero, y cada versión se carga recién cuando se pide.
+- **Los cuatro juegos que nacieron en el motor nuevo** (Trompo, Balsas de totora, Piñata y Carnaval de Oruro) no tienen versión anterior: en un equipo sin WebGL, el sorteo sale con la carrera de llamas del motor anterior, que cuenta el mismo ganador.
 - **Un archivo por juego**, con la misma lógica que el de siempre (el mismo orden de azar, la misma historia del director de emoción, el mismo relato y los mismos sonidos) y dibujo nuevo. Donde la lógica era larga, como en el teleférico, vive en un plan aparte (`cablecar-plan.ts`) copiado tal cual.
 
 Los momentos de cámara de cada juego:
@@ -50,8 +51,12 @@ Los momentos de cámara de cada juego:
 | Ruleta | Pegada al cubo al armarse, se abre al girar, se acerca al puntero mientras frena y queda encima en el "¿se queda en fulano?"; sacude cuando se mueve |
 | Tómbola | En la boca del bombo mientras caen las bolas, en la compuerta cuando se abre (y en la bola que asoma y vuelve a caer), sigue a la ganadora por la canaleta y se pega al vaso |
 | Teleférico | En el andén de la base, sigue al convoy, se acerca a cada andén, se mete en la cabina de la puerta o de la mordaza, se hamaca con la ráfaga, se acerca despacio en el apagón y sigue a la cabina sola hasta la cumbre |
-| Pasanaku | Cerca de la tela al tenderla, más cerca en cada apretón con un tirón, golpe al bulto que queda en el filo, pegada al nudo |
+| Aguayo | Cerca de la tela al tenderla, más cerca en cada apretón con un tirón, golpe al bulto que queda en el filo, pegada al nudo |
 | Cierre de Libro | Sigue a la barra en cada barrida, se mete en la tarjeta del susto, se acerca a la mesa final, golpe con cada sello y encima de la ganadora mientras el sello duda |
+| Trompo | Sobre el ruedo al tirar, se mete en cada choque, sigue al trompo que sacan hasta la tiza, pegada al mano a mano y encima del que cabecea |
+| Balsas de totora | La misma cámara de la carrera, sobre el lago |
+| Piñata | La piñata de cerca en los palos, más cerca en la rajadura y en el caramelo que se asoma, y cuando se rompe sigue al último caramelo hasta el piso |
+| Carnaval de Oruro | Sigue a la comparsa, se acerca a los que se quedan en cada arco y a la máscara que se corre, se abre al Socavón y se cierra en el contrapunto |
 | Constelación | Sigue al paquete desde el primer salto, encima en los saltos lentos del final, golpe en el roce y en el engaño, y se abre en la nova para mostrar la constelación |
 
 ## Auditarlo

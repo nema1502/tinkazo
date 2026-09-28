@@ -55,7 +55,7 @@ sequenceDiagram
 1. **Seal.** The list is canonicalized and hashed with SHA-256. The contract records the fingerprint, the head count, the number of winners and a **future** drand round. The contract refuses a round less than 30 seconds away.
 2. **Wait for the number.** [drand](https://drand.love) quicknet, the public randomness beacon run by the League of Entropy (Cloudflare, Protocol Labs, EPFL and others), publishes a BLS-signed round every 3 seconds. Nobody, including the organizer and Tinkazo, can know or choose it in advance.
 3. **Draw.** `draw` verifies the round's BLS12-381 signature **inside the contract** with a pairing check, derives the seed and selects the winners deterministically. It asks nobody for permission: if the organizer disappears mid-event, anyone can finalize the draw and the winner is the same.
-4. **Show.** One of eight full-screen games tells the result. The winner is already fixed when the animation starts; the game only narrates it.
+4. **Show.** One of twelve full-screen games tells the result. The winner is already fixed when the animation starts; the game only narrates it.
 5. **Verify.** The proof is a link. Whoever opens it watches the page recompute the draw from scratch and gets a verdict: green if the contract attests the list, yellow if the draw was not anchored, red with the reason if anything does not match.
 
 The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.md), with test vectors shared by the Rust contract and the TypeScript client ([docs/vectors.json](docs/vectors.json)). Anyone can reimplement it and reach the same winners.
@@ -82,12 +82,12 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 Tested with a thousand participants: the draw still runs at 60 frames per second and anchors the same way.
 
 <div align="center">
-<img src="docs/capturas/readme/juegos.webp" alt="Six of the eight Tinkazo games: Stellar constellation, llama race, cable car, ball drum, pasanaku and ledger close" width="860">
+<img src="docs/capturas/readme/juegos.webp" alt="Six of the twelve Tinkazo games: Stellar constellation, llama race, cable car, ball drum, aguayo and ledger close" width="860">
 </div>
 
 ## The show
 
-Fairness is math; the show is what makes a room care. Eight games, each seeded with the same drand round, so a draw's animation is reproducible:
+Fairness is math; the show is what makes a room care. Twelve games, most of them rooted in Bolivian and Latin American culture, each seeded with the same drand round, so a draw's animation is reproducible:
 
 | Game | What it is |
 |---|---|
@@ -95,10 +95,14 @@ Fairness is math; the show is what makes a room care. Eight games, each seeded w
 | Ledger Close | Cards are swept away by ledger closes until one stays sealed |
 | Llama Race | Eight lanes across the Andes |
 | Rocket Race | The same race, in space |
-| Pasanaku | Bolivia's rotating savings circle: a woven cloth closes over the bundles until one is left in the knot |
+| Aguayo | The Andean carrying cloth: everyone's bundle sits on it, the cloth closes and ties up, and the one left goes off in the knot |
 | Cable Car | Cabins in the colors of the La Paz and El Alto lines climb the cable; half the riders get off at each station |
 | Ball Drum | The fair's drum, one numbered ball per person on the sealed list |
 | Wheel | The classic, readable even with two people |
+| Spinning Tops | The schoolyard game: tops thrown into a chalk ring clash and knock each other out, down to a head-to-head |
+| Reed Boats | Totora reed boats with a puma-head prow race across Lake Titicaca |
+| Piñata | The seven-pointed star from the posadas: every swing knocks names out, and the last candy inside wins |
+| Oruro Carnival | A Diablada troupe dances block by block toward the Socavón; a few stay at every arch |
 
 **None of them decides anything.** An *emotion director* writes each draw's story from the same round: in the race a llama stops dead, another trips and two spit at each other; the wheel stops on someone else and then slips one more slice; in the cable car the power goes out mid-air. The ending cannot be guessed, and an auditor checks across sixteen seeds per game that the story does not give the winner away.
 
@@ -183,7 +187,7 @@ cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
-Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|teleferico|tombola|race|rockets|wheel`, `?instant=1`, `?pose=1` and `?motor=clasico` (the previous engine).
+Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|teleferico|tombola|race|rockets|wheel|trompo|totora|pinata|oruro`, `?instant=1`, `?pose=1` and `?motor=clasico` (the previous engine).
 
 ## Repository
 

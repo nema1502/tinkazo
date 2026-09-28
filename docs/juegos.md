@@ -196,7 +196,15 @@ La carrera actúa la historia entera. Los demás juegos toman del director el ar
 | Tómbola | Susto y duelo | **El rebote.** Se abre la compuerta y asoma primero otra bola, medio afuera, temblando en el borde ("¡sale la 12!"); cae para adentro ("¡no era esa!") y recién sale la ganadora |
 | Cierre de Libro | Susto | **La barrida.** La última barrida pasa por la tarjeta ganadora, que tiembla en rojo y suelta pedazos que se vuelven a juntar |
 | Cierre de Libro | Duelo | **El sello que duda.** El último sello flota sobre la ganadora ("¿se lo sellan a fulano?") y a último momento se va a la otra |
-| Pasanaku | Susto | **El filo.** En el último apretón el bulto ganador sale empujado hasta el borde del aguayo, tiembla ahí con un aro rojo, y la tela lo vuelve a meter |
+| Aguayo (antes Pasanaku) | Susto | **El filo.** En el último apretón el bulto ganador sale empujado hasta el borde del aguayo, tiembla ahí con un aro rojo, y la tela lo vuelve a meter |
+| Trompo | Susto | **El cabeceo.** En el mano a mano el trompo ganador cabecea, casi se cae ("¡cabecea el de fulano!") y se endereza |
+| Trompo | Remontada | **La tiza.** A mitad de los choques lo sacan hasta el borde del ruedo y vuelve |
+| Trompo | Duelo | **Un choque más.** El mano a mano dura cuatro choques en vez de tres |
+| Piñata | Susto | **El que se asoma.** En los últimos palos el caramelo ganador asoma por la rajadura y vuelve a entrar |
+| Piñata | Remontada | **Al aire.** Dos palos que no le pegan a nada antes de los últimos |
+| Carnaval de Oruro | Susto | **La máscara.** En la última cuadra a la ganadora casi se le cae la máscara |
+| Carnaval de Oruro | Remontada | **Desde atrás.** Arranca en la última fila de la comparsa y en cada cuadra avanza |
+| Balsas de totora | Todos | **El lago.** Los mismos momentos de la carrera, contados en agua: la balsa que se queda quieta, la ola que la ladea, la salpicada |
 | Constelación | Susto | **El roce.** A mitad de juego el paquete va derecho a la estrella del ganador, la roza (la estrella se enciende) y se desvía. El amague del último salto ya estaba, en todos los sorteos |
 
 Los giros alargan el juego lo que duran (el rebote casi un segundo, el sello que duda casi uno), y cada juego lo suma a lo que declara con `setGameLength`: el show sigue durando lo que eligió el organizador.
@@ -279,7 +287,11 @@ El ritmo, la legibilidad del cartel y el tartamudeo del relator ya los mide el a
 | Constelación Stellar | `stellar` | Módulo propio | 200 | [constelacion-stellar.md](juegos/constelacion-stellar.md) |
 | Cierre de Libro | `ledger` | Módulo propio | 200 | [cierre-de-libro.md](juegos/cierre-de-libro.md) |
 | Carrera de cohetes | `rockets` | Motor de carrera, tema espacial | 8 en pantalla | [carrera-stellar.md](juegos/carrera-stellar.md) |
-| Pasanaku | `pasanaku` | Módulo propio | 200 | [pasanaku.md](juegos/pasanaku.md) |
+| Aguayo (antes Pasanaku) | `pasanaku` | Módulo propio | 200 | [pasanaku.md](juegos/pasanaku.md) |
 | Ruleta | `wheel` | Módulo propio | 24 | [ruleta.md](juegos/ruleta.md) |
 | Teleférico | `teleferico` | Módulo propio | 200 | [teleferico.md](juegos/teleferico.md) |
 | Tómbola | `tombola` | Módulo propio | 200 | [tombola.md](juegos/tombola.md) |
+| Trompo | `trompo` | Módulo propio (solo motor nuevo) | 200 | · |
+| Balsas de totora | `totora` | Motor de carrera, tema del lago | 8 en pantalla | · |
+| Piñata | `pinata` | Módulo propio (solo motor nuevo) | 200 | · |
+| Carnaval de Oruro | `oruro` | Módulo propio (solo motor nuevo) | 200 | · |

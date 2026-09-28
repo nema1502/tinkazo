@@ -17,6 +17,13 @@ const PIXI: Partial<Record<Game, () => Promise<Launch>>> = {
   },
   wheel: async () => (await import("./wheel")).wheelPixi,
   tombola: async () => (await import("./tombola")).tombolaPixi,
+  trompo: async () => (await import("./trompo")).trompoPixi,
+  pinata: async () => (await import("./pinata")).pinataPixi,
+  oruro: async () => (await import("./oruro")).oruroPixi,
+  totora: async () => {
+    const m = await import("../llamas/pixi-race");
+    return (n, w, b, d) => m.llamasPixi(n, w, b, d, "lago");
+  },
   teleferico: async () => (await import("./cablecar")).cableCarPixi,
   pasanaku: async () => (await import("./pasanaku")).pasanakuPixi,
   ledger: async () => (await import("./ledger")).ledgerPixi,

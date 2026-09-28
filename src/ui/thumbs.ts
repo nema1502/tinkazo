@@ -101,7 +101,199 @@ function pista(c: CanvasRenderingContext2D, y: number, h: number, off: number, t
   }
 }
 
+/** Un trompo de perfil, apoyado en la púa, con la tapa vista desde arriba. */
+function trompoFig(c: CanvasRenderingContext2D, x: number, y: number, s: number, fill: string, tilt: number, ph: number): void {
+  c.save();
+  c.translate(x, y);
+  c.rotate(tilt);
+  c.scale(s, s);
+  c.lineWidth = 0.08;
+  c.strokeStyle = INK;
+  c.fillStyle = "#9aa1ad";
+  c.beginPath();
+  c.moveTo(-0.07, -0.2);
+  c.lineTo(0.07, -0.2);
+  c.lineTo(0, 0);
+  c.closePath();
+  c.fill();
+  c.fillStyle = fill;
+  c.beginPath();
+  c.moveTo(-0.5, -0.92);
+  c.lineTo(0.5, -0.92);
+  c.lineTo(0.16, -0.22);
+  c.lineTo(-0.16, -0.22);
+  c.closePath();
+  c.fill();
+  c.stroke();
+  c.fillStyle = "rgba(255,255,255,0.45)";
+  c.fillRect(-0.4, -0.72, 0.8, 0.12);
+  c.fillStyle = fill;
+  c.beginPath();
+  c.ellipse(0, -0.92, 0.5, 0.17, 0, 0, TAU);
+  c.fill();
+  c.stroke();
+  c.fillStyle = "#ffffff";
+  c.beginPath();
+  c.ellipse(Math.sin(ph) * 0.3, -0.94, 0.09, 0.05, 0, 0, TAU);
+  c.fill();
+  c.restore();
+}
+
 const PAINTERS: Record<string, Painter> = {
+  /** Tres diablos de la comparsa saltando por la calle, con las fachadas atrás. */
+  oruro(c, t, col) {
+    c.fillStyle = "#2a2056";
+    c.fillRect(0, 0, W, H);
+    const pastel = ["#e9b8a5", "#a9d1c4", "#f3d37c"];
+    for (let i = 0; i < 6; i++) {
+      c.fillStyle = pastel[i % 3] ?? "#e9b8a5";
+      c.fillRect(i * 22 - 4, 6 + (i % 2) * 5, 20, 26);
+    }
+    c.fillStyle = "#5b5f79";
+    c.fillRect(0, 30, W, 8);
+    c.fillStyle = "#6b6478";
+    c.fillRect(0, 38, W, H - 38);
+    for (let i = 0; i < 3; i++) {
+      const x = ((t * 0.22 + i * 0.3) % 1.1) * W - 8, y = 58 - Math.abs(Math.sin(t * 7 + i)) * 6;
+      c.fillStyle = col(i);
+      c.beginPath();
+      c.moveTo(x - 5, y - 18);
+      c.lineTo(x + 5, y - 18);
+      c.lineTo(x + 9, y - 4);
+      c.lineTo(x - 9, y - 4);
+      c.closePath();
+      c.fill();
+      c.fillStyle = "#ffc629";
+      c.fillRect(x - 4, y - 18, 8, 8);
+      c.fillStyle = "#d52b1e";
+      c.beginPath();
+      c.arc(x, y - 23, 5, 0, TAU);
+      c.fill();
+      c.strokeStyle = "#ffc629";
+      c.lineWidth = 1.6;
+      c.beginPath();
+      c.moveTo(x - 4, y - 26);
+      c.lineTo(x - 8, y - 33);
+      c.moveTo(x + 4, y - 26);
+      c.lineTo(x + 8, y - 33);
+      c.stroke();
+      c.fillStyle = INK;
+      c.fillRect(x - 4, y - 4, 3, 4);
+      c.fillRect(x + 1, y - 4, 3, 4);
+    }
+  },
+  /** La piñata de siete picos balanceándose, y cada tanto caen caramelos. */
+  pinata(c, t, col) {
+    c.fillStyle = "#3a2440";
+    c.fillRect(0, 0, W, H);
+    for (let i = 0; i < 7; i++) {
+      c.fillStyle = col(i);
+      c.fillRect(4 + i * 16, 2, 12, 9);
+    }
+    const th = Math.sin(t * 2.2) * 0.35;
+    const px = W / 2 + Math.sin(th) * 20, py = 12 + Math.cos(th) * 20;
+    c.strokeStyle = INK;
+    c.lineWidth = 1.5;
+    c.beginPath();
+    c.moveTo(W / 2, 0);
+    c.lineTo(px, py - 7);
+    c.stroke();
+    for (let i = 0; i < 7; i++) {
+      const a = -Math.PI / 2 + (i / 7) * TAU + th;
+      c.fillStyle = col(i);
+      c.beginPath();
+      c.moveTo(px + Math.cos(a - 0.4) * 7, py + Math.sin(a - 0.4) * 7);
+      c.lineTo(px + Math.cos(a) * 17, py + Math.sin(a) * 17);
+      c.lineTo(px + Math.cos(a + 0.4) * 7, py + Math.sin(a + 0.4) * 7);
+      c.closePath();
+      c.fill();
+      c.stroke();
+    }
+    c.fillStyle = "#ff7a1a";
+    c.beginPath();
+    c.arc(px, py, 8, 0, TAU);
+    c.fill();
+    c.stroke();
+    const ciclo = t % 2.4;
+    for (let i = 0; i < 5; i++) {
+      const f = ciclo / 2.4;
+      const x = px + (i - 2) * 9 * f * 2, y = py + 10 + f * f * 60 + (i % 2) * 4;
+      if (y > H - 4) continue;
+      c.fillStyle = col(i + 1);
+      c.beginPath();
+      c.ellipse(x, y, 4, 2.6, i, 0, TAU);
+      c.fill();
+    }
+  },
+  /** Dos balsas de totora remando en el lago, con la cordillera al fondo. */
+  totora(c, t, col) {
+    c.fillStyle = "#6fa8d8";
+    c.fillRect(0, 0, W, 24);
+    c.fillStyle = "#eef0f8";
+    c.beginPath();
+    c.moveTo(0, 24);
+    for (let k = 0; k <= 6; k++) c.lineTo(k * 20, 24 - (k % 2 === 0 ? 12 : 4));
+    c.lineTo(W, 24);
+    c.closePath();
+    c.fill();
+    c.fillStyle = "#2f86bf";
+    c.fillRect(0, 24, W, H - 24);
+    c.strokeStyle = "rgba(255,255,255,0.35)";
+    c.lineWidth = 1.2;
+    for (let i = 0; i < 9; i++) {
+      const wx = ((i * 29 - t * 30) % (W + 20) + W + 20) % (W + 20) - 10, wy = 30 + ((i * 13) % 30);
+      c.beginPath();
+      c.moveTo(wx, wy);
+      c.quadraticCurveTo(wx + 5, wy - 3, wx + 10, wy);
+      c.stroke();
+    }
+    for (let i = 0; i < 2; i++) {
+      const x = ((t * 0.3 + i * 0.45) % 1.2) * W - 20, y = 44 + i * 14;
+      c.fillStyle = "#d9b45a";
+      c.strokeStyle = INK;
+      c.lineWidth = 1.4;
+      c.beginPath();
+      c.moveTo(x - 16, y - 8);
+      c.quadraticCurveTo(x - 12, y + 1, x, y + 1);
+      c.quadraticCurveTo(x + 12, y + 1, x + 17, y - 10);
+      c.lineTo(x + 14, y - 10);
+      c.quadraticCurveTo(x + 9, y - 4, x, y - 4);
+      c.quadraticCurveTo(x - 9, y - 4, x - 13, y - 9);
+      c.closePath();
+      c.fill();
+      c.stroke();
+      c.fillStyle = col(i);
+      c.fillRect(x - 3, y - 12, 6, 8);
+      c.fillStyle = "#7a5230";
+      c.save();
+      c.translate(x + 2, y - 9);
+      c.rotate(0.3 + Math.sin(t * 7 + i) * 0.5);
+      c.fillRect(-0.6, 0, 1.2, 12);
+      c.restore();
+    }
+  },
+  /** Tres trompos bailando en el ruedo de tiza; cada tanto uno se cae. */
+  trompo(c, t, col) {
+    c.fillStyle = "#4a3526";
+    c.fillRect(0, 0, W, H);
+    c.fillStyle = "#5e4838";
+    for (let i = 0; i < 16; i++) c.fillRect((i * 37) % W, (i * 23) % H, 2.5, 1.5);
+    c.strokeStyle = "rgba(255,255,255,0.8)";
+    c.lineWidth = 2;
+    c.beginPath();
+    c.ellipse(W / 2, 44, 50, 17, 0, 0, TAU);
+    c.stroke();
+    const ciclo = t % 4;
+    const figs = [0, 1, 2].map((i) => {
+      const a = t * 0.9 + (i * TAU) / 3;
+      return { i, x: W / 2 + Math.cos(a) * 28, y: 46 + Math.sin(a) * 8 };
+    }).sort((a, b) => a.y - b.y);
+    for (const f of figs) {
+      const cae = f.i === 2 && ciclo > 2.6;
+      const tilt = cae ? Math.min(1.4, (ciclo - 2.6) * 3) : Math.sin(t * 6 + f.i) * 0.12;
+      trompoFig(c, f.x, f.y, 19, col(f.i), tilt, t * 20 + f.i);
+    }
+  },
   /** Dos llamas galopando hacia la meta, con el suelo corriendo debajo. */
   race(c, t, col) {
     const g = c.createLinearGradient(0, 0, 0, H);

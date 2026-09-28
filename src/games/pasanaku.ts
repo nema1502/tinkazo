@@ -5,21 +5,18 @@ import { INK, WINNER_HOLD, chrome, clamp, drawFlag, ease, mount, drawWinnerPlate
 import { writeStory } from "./drama";
 
 /**
- * Pasanaku.
+ * Aguayo. Se llamó Pasanaku hasta el 28 de septiembre de 2026: el pasanaku
+ * de verdad es un ahorro donde todos ponen plata y uno se lleva el pozo, y un
+ * sorteo gratuito no tiene por qué parecerse a eso. El identificador sigue
+ * siendo `pasanaku` para no romper enlaces.
  *
- * El *Diccionario de americanismos* lo define, bajo la grafía `pasanacu`, como
- * "juego que consiste en sortear el dinero de las cuotas semanales o mensuales
- * de los participantes". O sea que no hubo que forzar nada: el pasanaku ya es
- * un sorteo, y uno que miles de bolivianos corren todos los meses con la misma
- * promesa que vende Tinkazo, que el orden lo decida algo que nadie pueda
- * arreglar.
- *
- * Un aguayo tendido en el suelo. Cada participante tira su bulto encima y se
- * tejen los hilos entre vecinos: esos hilos son las trustlines, porque a un
- * pasanaku solo entrás con gente de la que aceptarías plata. Después la tela
- * se empieza a cerrar y los bultos que quedan fuera del aro salen por el
- * borde. **El que sale no pierde: ya cobró**, que es exactamente como funciona.
- * Al final queda uno en el nudo, se ata con un cordón tricolor y se levanta.
+ * El *Diccionario de americanismos* define el aguayo como la "pieza
+ * rectangular de lana de colores" que se usa "para llevar a los niños o
+ * cargar algunas cosas". Eso es el juego: un aguayo tendido en el suelo, cada
+ * participante tira su bulto encima y se tejen los hilos entre vecinos, que
+ * son las trustlines. Después la tela se empieza a cerrar, los bultos que
+ * quedan fuera del aro se caen por el borde y al final queda uno en el nudo,
+ * que se ata con un cordón tricolor y se levanta.
  *
  * Escala al revés que la ruleta: con doscientos es un hervidero, y con dos son
  * dos atados forcejeando dentro de un nudo que se aprieta, que es todavía más
@@ -630,10 +627,15 @@ export function pasanaku(
     c.restore();
   }
 
+  // Cuántos bultos quedan sobre la tela, y debajo un retazo de aguayo que se
+  // teje franja por franja mientras van cayendo. Antes era el pote con su pila
+  // de monedas: el juego se llamaba Pasanaku y contaba plata, y un sorteo
+  // gratuito no tiene por qué mostrar plata.
   function drawPot(): void {
     const k = u();
     const put = phase === "spread" ? 0 : Math.min(n, Math.floor(clamp((tAll - T_DROP) / 1.6, 0, 1) * n));
-    const label = `${t("cPasPot")}  ${Math.max(put, collected ? n : put)} / ${n}`;
+    const enTela = phase === "spread" || phase === "drop" ? put : n - collected;
+    const label = `${t("cPasPot")}  ${enTela} / ${n}`;
     c.font = `700 ${14 * k}px ui-monospace, Consolas, monospace`;
     c.textAlign = "center";
     const bw = c.measureText(label).width + 40 * k;
@@ -651,29 +653,31 @@ export function pasanaku(
     c.textBaseline = "middle";
     c.fillText(label, bx + bw / 2, by + bh / 2);
     c.textBaseline = "alphabetic";
-    // Los cantos de las monedas apiladas debajo: la pila crece mientras cae la
-    // cuota de cada uno.
-    //
-    // Eran catorce barras rectas del ancho de la caja del pote, y a tamaño de
-    // celular eso no se lee como una pila de monedas: se lee como un código de
-    // barras naranja flotando en una esquina. Son elipses, más angostas que la
-    // caja, apenas desalineadas entre ellas, que es como se apila plata de
-    // verdad.
-    const coins = Math.min(put, 14);
-    const cw = Math.min(82 * k, bw - 40 * k);
-    const cx0 = bx + bw / 2;
-    for (let i = 0; i < coins; i++) {
-      const off = Math.sin(i * 2.1) * 4 * k;
-      const cy = by + bh + 18 * k + (coins - 1 - i) * 7 * k;
+    const tejidas = Math.ceil((put / Math.max(1, n)) * 5);
+    if (tejidas <= 0) return;
+    const rw = Math.min(82 * k, bw - 40 * k), rh = 7 * k, rx = bx + (bw - rw) / 2, ry = by + bh + 14 * k;
+    const bandas = ["#e93d9c", "#ff7a1a", "#00a896"];
+    c.fillStyle = INK;
+    c.fillRect(rx + 4 * k, ry + 4 * k, rw, tejidas * rh);
+    for (let b = 0; b < tejidas; b++) {
+      const pallay = b % 2 === 1, yb = ry + b * rh;
+      c.fillStyle = pallay ? (dark ? "#efe4cf" : "#fbf3e4") : (bandas[Math.floor(b / 2) % bandas.length] ?? "#e93d9c");
+      c.fillRect(rx, yb, rw, rh);
+      if (!pallay) continue;
+      const d = rh * 0.34;
       c.fillStyle = INK;
-      c.beginPath();
-      c.ellipse(cx0 + off, cy + 2 * k, cw / 2 + 2 * k, 5.4 * k, 0, 0, 7);
-      c.fill();
-      c.fillStyle = i % 2 ? "#ffc629" : "#ff7a1a";
-      c.beginPath();
-      c.ellipse(cx0 + off, cy, cw / 2, 3.6 * k, 0, 0, 7);
-      c.fill();
+      for (let px = rx + 6 * k; px < rx + rw - 3 * k; px += 9 * k) {
+        c.beginPath();
+        c.moveTo(px, yb + rh / 2 - d);
+        c.lineTo(px + d, yb + rh / 2);
+        c.lineTo(px, yb + rh / 2 + d);
+        c.lineTo(px - d, yb + rh / 2);
+        c.fill();
+      }
     }
+    c.lineWidth = 2 * k;
+    c.strokeStyle = INK;
+    c.strokeRect(rx, ry, rw, tejidas * rh);
   }
 
   function drawKnot(now: number): void {

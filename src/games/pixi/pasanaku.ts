@@ -7,11 +7,11 @@ import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
 
 /**
- * Pasanaku, en PixiJS, con el director de cámara.
+ * Aguayo (antes Pasanaku), en PixiJS, con el director de cámara.
  *
  * El mismo juego de `pasanaku.ts`: los bultos caen sobre el aguayo, se tejen
  * los hilos entre vecinos (las trustlines), la tela se aprieta y los que
- * quedan afuera ya cobraron, hasta que queda uno en el nudo. La física es la
+ * se caen quedan afuera, hasta que queda uno en el nudo. La física es la
  * misma, a paso fijo y sembrada. Lo nuevo es la cámara: arranca cerca de la
  * tela, se abre cuando caen los bultos, en cada apretón pega un tirón y se
  * acerca un poco más, en el susto va de golpe al bulto que quedó en el filo,
@@ -274,7 +274,7 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
   let knot!: Graphics;
   let chips!: Container;
   let potText!: Text;
-  let coins!: Graphics;
+  let swatch!: Graphics;
   let cinchText!: Text;
 
   function makeBundle(q: Bundle): Container {
@@ -301,7 +301,7 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
     ring = new Graphics();
     knot = new Graphics();
     chips = new Container();
-    // Los que ya cobraron y los nombres van en la interfaz: con la cámara
+    // Los que se cayeron y los nombres van en la interfaz: con la cámara
     // encima de la tela, la fila de abajo y los chips quedan siempre a la vista
     // y del mismo tamaño.
     S.scene.addChild(cloth, threads, ring, inLayer, knot);
@@ -313,12 +313,12 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
       q.chip?.destroy({ children: true });
       q.chip = undefined;
     }
-    // El pote: la caja con la cuenta y la pila de monedas.
+    // La cuenta de bultos sobre la tela, con su retazo de aguayo.
     const pot = new Container();
     potText = S.text("", { fontFamily: MONO, fontSize: 14 * k, fontWeight: "700", fill: S.dark ? CREAM : INK });
     potText.anchor.set(0.5);
-    coins = new Graphics();
-    pot.addChild(coins, potText);
+    swatch = new Graphics();
+    pot.addChild(swatch, potText);
     pot.position.set(22 * k, S.top() + 10 * k);
     S.hud.addChild(pot);
     cinchText = S.text("", { fontFamily: MONO, fontSize: 11 * k, fontWeight: "700", fill: S.dark ? CREAM : INK });
@@ -488,19 +488,25 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
         .rect(x - 14 * k, ky + 9.4 * k, 28 * k, 6.6 * k).fill(0x007a33);
       knot.rotation = 0;
     }
-    // El pote.
+    // Cuántos bultos quedan sobre la tela, y debajo un retazo de aguayo que
+    // se teje franja por franja mientras van cayendo.
     const put = phase === "spread" ? 0 : Math.min(n, Math.floor(clamp((tAll - T_DROP) / 1.6, 0, 1) * n));
-    potText.text = `${t("cPasPot")}  ${Math.max(put, collected ? n : put)} / ${n}`;
+    const enTela = phase === "spread" || phase === "drop" ? put : alive().length;
+    potText.text = `${t("cPasPot")}  ${enTela} / ${n}`;
     const bw = potText.width + 40 * k, bh = 40 * k;
     potText.position.set(bw / 2, bh / 2);
-    coins.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 3 * k, color: INK });
-    const nc = Math.min(put, 14);
-    const cw = Math.min(82 * k, bw - 40 * k);
-    for (let i = 0; i < nc; i++) {
-      const off = Math.sin(i * 2.1) * 4 * k;
-      const cy = bh + 18 * k + (nc - 1 - i) * 7 * k;
-      coins.ellipse(bw / 2 + off, cy + 2 * k, cw / 2 + 2 * k, 5.4 * k).fill(INK).ellipse(bw / 2 + off, cy, cw / 2, 3.6 * k).fill(i % 2 ? YELLOW : 0xff7a1a);
+    swatch.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 3 * k, color: INK });
+    const tejidas = Math.ceil((put / Math.max(1, n)) * 5);
+    const rw = Math.min(82 * k, bw - 40 * k), rh = 7 * k, rx = (bw - rw) / 2, ry = bh + 14 * k;
+    if (tejidas > 0) swatch.rect(rx + 4 * k, ry + 4 * k, rw, tejidas * rh).fill(INK);
+    for (let b = 0; b < tejidas; b++) {
+      const pallay = b % 2 === 1, yb = ry + b * rh;
+      swatch.rect(rx, yb, rw, rh).fill(pallay ? (S.dark ? 0xefe4cf : 0xfbf3e4) : (PAL[Math.floor(b / 2) % PAL.length] as number));
+      if (!pallay) continue;
+      const d = rh * 0.34;
+      for (let px = rx + 6 * k; px < rx + rw - 3 * k; px += 9 * k) swatch.poly([px, yb + rh / 2 - d, px + d, yb + rh / 2, px, yb + rh / 2 + d, px - d, yb + rh / 2]).fill(INK);
     }
+    if (tejidas > 0) swatch.rect(rx, ry, rw, tejidas * rh).stroke({ width: 2 * k, color: INK });
     cinchText.text = phase === "cinch" ? `${t("cPasCinchLbl")} ${pulls}/${PULLS}` : "";
     if (phase === "lift") crownUI.at((tAll - T_LIFT) / 1);
   }

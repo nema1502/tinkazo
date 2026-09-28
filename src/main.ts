@@ -164,7 +164,7 @@ initWalletUI();
 refreshFreezeLabel();
 
 /* Modo demo y pose para capturas: `?demo=<juego>`, `?pose=1`, `?instant=1`. */
-const GAMES: readonly Game[] = ["race", "stellar", "ledger", "pasanaku", "teleferico", "tombola", "rockets", "wheel"];
+const GAMES: readonly Game[] = ["race", "stellar", "ledger", "pasanaku", "teleferico", "tombola", "rockets", "wheel", "trompo", "totora", "pinata", "oruro"];
 
 async function autoDemo(mode: string): Promise<void> {
   loadSample();

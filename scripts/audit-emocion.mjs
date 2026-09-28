@@ -29,7 +29,7 @@
 import { createHash } from "node:crypto";
 import { launch, sleep } from "./lib/browser.mjs";
 
-const TODOS = ["race", "stellar", "ledger", "pasanaku", "teleferico", "tombola", "rockets", "wheel"];
+const TODOS = ["race", "stellar", "ledger", "pasanaku", "teleferico", "tombola", "rockets", "wheel", "trompo", "totora", "pinata", "oruro"];
 const args = process.argv.slice(2);
 const opt = (name, def) => {
   const i = args.indexOf(name);

@@ -2,7 +2,7 @@
 
 ## Qué es
 
-Sorteos verificables para comunidades. La lista se sella con SHA-256 antes de que exista la semilla; la semilla es una ronda futura de drand quicknet cuya firma BLS verifica un contrato Soroban en Stellar; la selección es determinista y cualquiera la recomputa. El show es presentación, no mecanismo: ocho juegos, y ninguno decide nada.
+Sorteos verificables para comunidades. La lista se sella con SHA-256 antes de que exista la semilla; la semilla es una ronda futura de drand quicknet cuya firma BLS verifica un contrato Soroban en Stellar; la selección es determinista y cualquiera la recomputa. El show es presentación, no mecanismo: doce juegos, y ninguno decide nada.
 
 Sitio en producción: https://tinkazo.vercel.app
 
@@ -48,7 +48,7 @@ pnpm preview &      # sirve dist/ en :4173
 node scripts/smoke.mjs "http://localhost:4173/?demo=wheel&instant=1&lead=3"
 ```
 
-Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|teleferico|tombola|race|rockets|wheel` (carga el ejemplo, sella y sortea), `?instant=1` (sin animaciones), `?lead=N` (segundos hasta la ronda objetivo, mínimo 3; solo modo libre), `?pose=1` (escena fija del estadio), `?motor=clasico` (los juegos en el motor anterior; el de todos es PixiJS con director de cámara, ver [docs/motores.md](docs/motores.md)). Los auditores miran el motor nuevo con la placa de video; `--motor clasico` mira el anterior.
+Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|teleferico|tombola|race|rockets|wheel|trompo|totora|pinata|oruro` (carga el ejemplo, sella y sortea), `?instant=1` (sin animaciones), `?lead=N` (segundos hasta la ronda objetivo, mínimo 3; solo modo libre), `?pose=1` (escena fija del estadio), `?motor=clasico` (los juegos en el motor anterior; el de todos es PixiJS con director de cámara, ver [docs/motores.md](docs/motores.md)). Los auditores miran el motor nuevo con la placa de video; `--motor clasico` mira el anterior.
 
 ```bash
 # Auditor de juegos: 20 comprobaciones por juego, contra drand de verdad
@@ -98,7 +98,7 @@ En la máquina del autor (Windows sin MSVC) el toolchain es `stable-x86_64-pc-wi
 
 ```
 index.html          Entrada de Vite (markup del sitio)
-juegos.html         Los ocho juegos, con la captura del estadio de cada uno
+juegos.html         Los doce juegos, con la captura del estadio de cada uno
 historia.html       De dónde salen el nombre, la llama y el aguayo
 seguridad.html      Qué impide el protocolo, el ataque abierto y los límites
 precios.html        Qué cuesta y cómo funciona por dentro

@@ -23,7 +23,7 @@ import { planRace, type Plan } from "./plan";
  */
 
 const DUR = 15;
-type Skin = "andes" | "stellar";
+type Skin = "andes" | "stellar" | "lago";
 
 /** Colores de lana de llama: blanca, café, crema, oscura, gris. */
 const FUR = [0xf3ead8, 0xa0683a, 0xe4c99a, 0x5b3a29, 0xc2bab0, 0x8a5a3c, 0xefe3cc, 0x6e4a36];
@@ -50,6 +50,7 @@ export async function llamasPixi(
 ): Promise<void> {
   const winnerIdx = winners[0] ?? 0;
   const space = skin === "stellar";
+  const lake = skin === "lago";
   let skipFn = (): void => {};
   const st = await mountPixi(beacon, done, () => skipFn());
   if (!st) {
@@ -59,7 +60,7 @@ export async function llamasPixi(
   const S: PixiStage = st;
   const { rng, cam } = S;
   const dark = space || S.dark;
-  const voice = space ? "R" : "L";
+  const voice = space ? "R" : lake ? "B" : "L";
 
   setGameLength(DUR, WINNER_HOLD + 3);
 
@@ -70,7 +71,7 @@ export async function llamasPixi(
   const stars = space ? 150 : 60;
   const plan: Plan = planRace(names, winnerIdx, rng, {
     sceneryDraws: Math.min(8, names.length) + 24 * 2 + 18 * 2 + 6 * 4 + stars * 3,
-    beforePlace: () => S.say(t(space ? "cReadyStellar" : "cReady"), 0.1),
+    beforePlace: () => S.say(t(space ? "cReadyStellar" : lake ? "cReadyLago" : "cReady"), 0.1),
   });
   const { story, lanes } = plan;
   S.mark("arco", story.arc);
@@ -273,6 +274,81 @@ export async function llamasPixi(
     };
   }
 
+  /**
+   * Una balsa de totora del Titicaca, mirando a la derecha, con la línea de
+   * agua en y = 0: dos haces de totora curvados hacia arriba, la proa con
+   * cabeza de puma y un remero de poncho y chullo con la cara del participante.
+   */
+  function makeBoat(k: number, sc: number): Runner {
+    const col = S.color(k);
+    const reed = 0xd9b45a, reedDark = 0x9c7a34;
+    const root = new Container();
+    root.addChild(new Graphics().ellipse(0, 1, 50, 6).fill({ color: 0x000000, alpha: 0.18 }));
+    const body = new Container();
+    root.addChild(body);
+    const hull = new Graphics()
+      .poly([-48, -26, -46, -22, -38, -8, -24, 1, 24, 1, 38, -8, 46, -22, 50, -30, 46, -31, 40, -20, 30, -12, -30, -12, -40, -20, -45, -28])
+      .fill(reed).stroke({ width: 2.2, color: INK, join: "round" })
+      .moveTo(-34, -7).lineTo(34, -7).moveTo(-26, -2).lineTo(26, -2).stroke({ width: 1.4, color: reedDark })
+      .rect(-30, -12, 3, 13).fill(reedDark).rect(-10, -12, 3, 13).fill(reedDark).rect(10, -12, 3, 13).fill(reedDark).rect(28, -12, 3, 12).fill(reedDark)
+      .circle(50, -34, 5.5).fill(reed).stroke({ width: 2, color: INK })
+      .poly([47, -38, 48.5, -44, 51, -38]).fill(reed).stroke({ width: 1.4, color: INK })
+      .circle(52, -34.5, 1.3).fill(INK);
+    body.addChild(hull);
+    const rower = new Container();
+    const poncho = new Graphics().poly([-10, -12, 10, -12, 7, -24, 4, -31, -4, -31, -7, -24]).fill(col).stroke({ width: 2, color: INK, join: "round" })
+      .rect(-8, -21, 16, 2.4).fill(0xffffff)
+      .poly([4, -27, 13, -22, 11, -19, 3, -23]).fill(col).stroke({ width: 1.6, color: INK });
+    const av = new Sprite(S.face(nameOf(k)));
+    av.width = av.height = 13;
+    av.anchor.set(0.5);
+    av.position.set(0, -38);
+    const chullo = new Graphics()
+      .poly([-7.5, -42, -8.5, -34, -5.5, -34, -5, -42]).fill(col).stroke({ width: 1.2, color: INK })
+      .poly([7.5, -42, 8.5, -34, 5.5, -34, 5, -42]).fill(col).stroke({ width: 1.2, color: INK })
+      .ellipse(0, -44, 8, 5.5).fill(col).stroke({ width: 1.6, color: INK })
+      .rect(-7, -44, 14, 1.6).fill(0xffffff)
+      .circle(0, -50, 2.4).fill(YELLOW).stroke({ width: 1, color: INK });
+    rower.addChild(poncho, av, chullo);
+    rower.position.set(-6, 0);
+    const paddle = new Graphics().rect(-1.2, 0, 2.4, 34).fill(0x7a5230).roundRect(-4, 30, 8, 14, 3).fill(0x7a5230).stroke({ width: 1.4, color: INK });
+    paddle.position.set(-2, -26);
+    body.addChild(rower, paddle);
+    const bib = S.text(String(k + 1), { fontSize: 10, fontWeight: "900", fill: INK });
+    bib.anchor.set(0.5);
+    bib.position.set(-18, -5);
+    body.addChild(bib);
+    const mark = S.text("!", { fontSize: 26, fontWeight: "900", fill: YELLOW, stroke: { color: INK, width: 5 } });
+    mark.anchor.set(0.5, 1);
+    mark.position.set(0, -62);
+    mark.visible = false;
+    root.addChild(mark);
+    root.scale.set(sc);
+    return {
+      root, mark, tag: S.chip(nameOf(k)),
+      pose(ph, speed, beat, now) {
+        // El remo va y viene con el paso; sin viento se queda quieto.
+        let rot = Math.sin(ph * 0.5 + k) * 0.03;
+        let stroke = 0.35 + Math.sin(ph) * 0.55;
+        mark.visible = false;
+        if (beat?.kind === "plantada") {
+          stroke = 0.1;
+          mark.visible = true;
+          mark.text = "!";
+          rot = 0.03 * Math.sin(now * 3);
+        } else if (beat?.kind === "tropiezo") rot = 0.3 * Math.sin(Math.PI * Math.min(1, beat.p * 1.4));
+        else if (beat?.kind === "escupido") {
+          rot = -0.1 * Math.sin(Math.PI * beat.p * 3);
+          mark.visible = true;
+          mark.text = "?!";
+        }
+        paddle.rotation = stroke + (speed > 1.25 ? 0.15 : 0);
+        body.rotation = rot;
+        body.y = Math.sin(now * 2.2 + k) * 1.6;
+      },
+    };
+  }
+
   let L!: Layers;
 
   function build(): void {
@@ -352,9 +428,15 @@ export async function llamasPixi(
     // La tribuna con la hinchada (en el espacio, la sala de control).
     const stands = new Container();
     const standsW = TL * 0.75 + sw * 3;
-    const sg = new Graphics().rect(-sw, standsTop, standsW, trackTop - standsTop + 4 * u).fill(space ? 0x1a1640 : dark ? 0x2b2640 : 0x5b5f79);
+    const sg = new Graphics().rect(-sw, standsTop, standsW, trackTop - standsTop + 4 * u).fill(space ? 0x1a1640 : lake ? (dark ? 0x22301d : 0x6f8445) : dark ? 0x2b2640 : 0x5b5f79);
     for (let tier = 0; tier < 3; tier++) sg.rect(-sw, standsTop + (tier + 1) * 26 * u, standsW, 4 * u).fill({ color: 0x000000, alpha: 0.28 });
-    sg.rect(-sw, standsTop - 10 * u, standsW, 10 * u).fill(INK);
+    if (lake) {
+      // Los totorales de la orilla, de alturas sembradas.
+      for (let x = -sw, i = 0; x < standsW - sw; x += 6 * u, i++) {
+        const h = (14 + hash(i, 31) * 22) * u;
+        sg.rect(x, standsTop - h + 6 * u, 2.4 * u, h).fill(i % 3 ? 0xc9b25a : 0x98883c);
+      }
+    } else sg.rect(-sw, standsTop - 10 * u, standsW, 10 * u).fill(INK);
     stands.addChild(sg);
     const people: Texture[] = [];
     const skinTones = [0xf1c27d, 0xc68642, 0x8d5524, 0xe0ac69];
@@ -391,7 +473,7 @@ export async function llamasPixi(
     const world = new Container();
     S.scene.addChild(world);
     const ground = new Graphics();
-    ground.rect(-sw * 2, trackTop - 6 * u, TL + sw * 5, sh * 2).fill(space ? 0x221a4e : dark ? 0x3d2b22 : 0xb98552);
+    ground.rect(-sw * 2, trackTop - 6 * u, TL + sw * 5, sh * 2).fill(space ? 0x221a4e : lake ? (dark ? 0x173a5c : 0x2f86bf) : dark ? 0x3d2b22 : 0xb98552);
     for (let k = 0; k < N; k++) {
       ground.rect(-sw * 2, trackTop + k * laneH, TL + sw * 5, laneH).fill({ color: k % 2 ? 0x000000 : 0xffffff, alpha: dark ? 0.05 : 0.06 });
     }
@@ -399,9 +481,21 @@ export async function llamasPixi(
       const y = trackTop + k * laneH;
       for (let x = -sw * 2; x < TL + sw * 3; x += 34 * u) ground.rect(x, y - 1, 18 * u, 2).fill({ color: space ? 0x9fe3ff : 0xffffff, alpha: space ? 0.4 : 0.28 });
     }
-    ground.rect(-sw * 2, trackTop - 8 * u, TL + sw * 5, 4 * u).fill(space ? 0x9fe3ff : CREAM);
-    for (let x = -sw * 2; x < TL + sw * 3; x += 60 * u) ground.rect(x, trackTop - 20 * u, 4 * u, 16 * u).fill(space ? 0x9fe3ff : CREAM);
-    ground.rect(-sw * 2, trackTop - 20 * u, TL + sw * 5, 3 * u).fill(space ? 0x9fe3ff : CREAM);
+    if (lake) {
+      // La orilla de arena y la cuerda de boyas que marca la pista.
+      ground.rect(-sw * 2, trackTop - 10 * u, TL + sw * 5, 6 * u).fill(0xe6d3a3);
+      ground.rect(-sw * 2, trackTop - 1 * u, TL + sw * 5, 1.6 * u).fill({ color: 0xffffff, alpha: 0.6 });
+      for (let x = -sw * 2, i = 0; x < TL + sw * 3; x += 44 * u, i++) ground.circle(x, trackTop, 4.2 * u).fill(i % 2 ? 0xff7a1a : 0xffffff).stroke({ width: 1.4 * u, color: INK });
+      // Crestas de ola, quietas: el movimiento lo ponen las balsas.
+      for (let i = 0; i < 260; i++) {
+        const wx = -sw * 2 + hash(i, 41) * (TL + sw * 5), wy = trackTop + hash(i, 42) * (trackBot - trackTop);
+        ground.moveTo(wx, wy).quadraticCurveTo(wx + 7 * u, wy - 4 * u, wx + 14 * u, wy).stroke({ width: 1.6 * u, color: 0xffffff, alpha: 0.22 });
+      }
+    } else {
+      ground.rect(-sw * 2, trackTop - 8 * u, TL + sw * 5, 4 * u).fill(space ? 0x9fe3ff : CREAM);
+      for (let x = -sw * 2; x < TL + sw * 3; x += 60 * u) ground.rect(x, trackTop - 20 * u, 4 * u, 16 * u).fill(space ? 0x9fe3ff : CREAM);
+      ground.rect(-sw * 2, trackTop - 20 * u, TL + sw * 5, 3 * u).fill(space ? 0x9fe3ff : CREAM);
+    }
     ground.rect(X0 - 3 * u, trackTop, 6 * u, trackBot - trackTop).fill({ color: 0xffffff, alpha: 0.85 });
     const cell = 9 * u;
     for (let y = trackTop, r = 0; y < trackBot; y += cell, r++) {
@@ -430,7 +524,7 @@ export async function llamasPixi(
     const tagsLayer = new Container();
     const runnersLayer = new Container();
     for (let k = 0; k < N; k++) {
-      const r = space ? makeRocket(k, G.laneScale(k)) : makeLlama(k, G.laneScale(k));
+      const r = space ? makeRocket(k, G.laneScale(k)) : lake ? makeBoat(k, G.laneScale(k)) : makeLlama(k, G.laneScale(k));
       runners.push(r);
       runnersLayer.addChild(r.root);
       tagsLayer.addChild(r.tag);
@@ -630,7 +724,7 @@ export async function llamasPixi(
     hoofIn -= dt;
     if (hoofIn <= 0) {
       hoofIn = prog > 0.8 ? 0.16 : 0.25;
-      beep(note(hoofStep % 2 === 0 ? 0 : 3), 0.05, space ? "sawtooth" : "square", 0.022);
+      beep(note(hoofStep % 2 === 0 ? 0 : 3), 0.05, space ? "sawtooth" : lake ? "sine" : "square", 0.022);
       hoofStep++;
     }
     droneIn -= dt;
@@ -783,8 +877,9 @@ export async function llamasPixi(
       r.root.position.set(x - 34 * sc, y);
       r.pose(p * 95, speed, phase === "race" ? plan.beatOf(k, prog) : null, now);
       if (phase === "done" && k === winnerLane) r.root.y = y - Math.abs(Math.sin(tFreeze * 7)) * 22 * u * Math.max(0, 1 - tFreeze / 2.6);
-      // Detrás de la cola de la llama (llega a 67) o de las aletas del cohete.
-      r.tag.position.set(x - (space ? 82 : 70) * sc - r.tag.width, y - 30 * sc);
+      // Detrás de la cola de la llama (llega a 67), de las aletas del cohete o
+      // de la popa de la balsa.
+      r.tag.position.set(x - (space ? 82 : lake ? 86 : 70) * sc - r.tag.width, y - 30 * sc);
       r.tag.alpha = phase === "done" ? 0.35 : 1;
       if (phase === "count") continue;
       // Polvo (o estela), cada grano calculado desde su hora.
@@ -796,9 +891,9 @@ export async function llamasPixi(
         if (age < 0 || age > 1) continue;
         const spd = (plan.pos(k, qe) - plan.pos(k, Math.max(0, qe - 0.004))) / 0.004;
         if (spd < 0.5) continue;
-        const px = G.X0 + plan.pos(k, qe) * G.TL - (space ? 44 : 30) * sc - age * 26 * u - hash(e, k) * 10 * u;
-        const py = y - (space ? 36 * sc : 3 * u) - age * (space ? (hash(k, e) - 0.5) * 16 : 8 + hash(k, e) * 12) * u;
-        fx.circle(px, py, (3 + age * 7) * u * sc).fill({ color: space ? 0xff9f1c : dark ? 0x8a6a52 : 0xe0c49a, alpha: (space ? 0.6 : 0.45) * (1 - age) });
+        const px = G.X0 + plan.pos(k, qe) * G.TL - (space ? 44 : lake ? 46 : 30) * sc - age * 26 * u - hash(e, k) * 10 * u;
+        const py = y - (space ? 36 * sc : lake ? 2 * u : 3 * u) - age * (space ? (hash(k, e) - 0.5) * 16 : lake ? 3 + hash(k, e) * 6 : 8 + hash(k, e) * 12) * u;
+        fx.circle(px, py, (3 + age * 7) * u * sc).fill({ color: space ? 0xff9f1c : lake ? 0xeaf8ff : dark ? 0x8a6a52 : 0xe0c49a, alpha: (space || lake ? 0.6 : 0.45) * (1 - age) });
       }
       if (speed > 1.3) {
         for (let j = 0; j < 3; j++) {

@@ -181,6 +181,18 @@ async function run() {
       const am = i % 4 !== 0 ? "" : await dos.eval(`(() => {
         const cv = document.getElementById('pixi-canvas') || document.querySelector('.stadium canvas');
         if (!cv || document.getElementById('stadium').style.display !== 'block') return '';
+        // Primero el rectángulo que anota el propio juego al dibujar el cartel,
+        // en píxeles del lienzo. Buscarlo por el color confundía cualquier
+        // franja amarilla ancha con el cartel: la tela del aguayo, en celular,
+        // cruza la pantalla entera.
+        const anotado = cv.dataset.cartel || document.getElementById('race-canvas')?.dataset.cartel;
+        if (anotado) {
+          const [x, y, w, h] = anotado.split(',').map(Number);
+          return JSON.stringify({
+            anotado: true, area: (w * h) / (cv.width * cv.height),
+            izq: x < 8, der: x + w > cv.width - 12, arr: y < 8, aba: y + h > cv.height - 12,
+          });
+        }
         // Copiado a un lienzo 2D: así se lee igual un lienzo 2D que uno de WebGL.
         const cc = document.createElement('canvas');
         cc.width = cv.width; cc.height = cv.height;
@@ -212,8 +224,11 @@ async function run() {
         }) : '';
       })()`);
 
-      if (am && !cartel) {
-        cartel = JSON.parse(am);
+      // El rectángulo anotado por el juego manda sobre uno encontrado por el
+      // color, aunque el del color haya aparecido antes.
+      const hallado = am ? JSON.parse(am) : null;
+      if (hallado && (!cartel || (hallado.anotado && !cartel.anotado))) {
+        cartel = hallado;
         await dos.screenshot(join(outDir, `juego-${game}-celular-ganador.png`));
       }
       salio = (await dos.eval(`String(document.querySelectorAll('.winner-name').length > 0)`)) === "true";

@@ -44,8 +44,14 @@ try {
         width: ancho, height: alto, deviceScaleFactor: 1, mobile: ancho < 500,
       });
       // Las imágenes son `loading="lazy"`: sin bajar hasta el final, las de
-      // abajo figuran como no cargadas sin estar rotas.
-      await page.eval("window.scrollTo(0, document.body.scrollHeight); true");
+      // abajo figuran como no cargadas sin estar rotas. Y se baja de a una
+      // pantalla, como quien lee: saltando directo al final, en un celular
+      // las del medio de una página larga nunca entraban en pantalla.
+      for (let i = 0; i < 40; i++) {
+        const fin = await page.eval("window.scrollBy(0, window.innerHeight); window.innerHeight + window.scrollY >= document.body.scrollHeight - 2");
+        await sleep(120);
+        if (fin === true || fin === "true") break;
+      }
       await sleep(1500);
       const mirar = async () => JSON.parse(await page.eval(`JSON.stringify({
         titulo: document.title,

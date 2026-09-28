@@ -131,11 +131,12 @@ export const LORE: Record<string, Lore[]> = {
   ],
   pasanaku: [
     {
-      // "pasanacu. sust. masc. Bo. Juego que consiste en sortear el dinero de
-      //  las cuotas semanales o mensuales de los participantes."
+      // "aguayo. m. Pe, Bo, Ar:NO. Pieza rectangular de lana de colores, usada
+      //  por las mujeres como complemento de su vestidura y para llevar a los
+      //  niños o cargar algunas cosas."
       q: "lorePasanakuQ",
       a: "lorePasanakuA",
-      href: "https://www.asale.org/damer/pasanacu",
+      href: "https://www.asale.org/damer/aguayo",
       src: "asale.org · Diccionario de americanismos",
       hue: "orange",
     },
@@ -167,6 +168,52 @@ export const LORE: Record<string, Lore[]> = {
       href: "https://www.doppelmayr.com/en/reference-projects/reference-project-mi-teleferico/",
       src: "doppelmayr.com · Mi Teleférico",
       hue: "teal",
+    },
+  ],
+  oruro: [
+    {
+      // "More than 28,000 dancers and 10,000 musicians organized in about 50
+      //  groups take part in the procession" · proclamado en 2001, inscrito
+      //  en 2008 · "four kilometres [...] twenty hours without interruption".
+      q: "loreOruroQ",
+      a: "loreOruroA",
+      href: "https://ich.unesco.org/en/RL/carnival-of-oruro-00003",
+      src: "ich.unesco.org · Carnaval de Oruro",
+      hue: "purple",
+    },
+  ],
+  pinata: [
+    {
+      // "Acolman: cuatro siglos de posadas y tradicionales piñatas": la piñata
+      //  llegó en 1586 con los agustinos de Acolman y las misas de aguinaldo.
+      q: "lorePinataQ",
+      a: "lorePinataA",
+      href: "https://www.inah.gob.mx/foto-del-dia/acolman-cuatro-siglos-de-posadas-y-tradicionales-pinatas",
+      src: "inah.gob.mx · Acolman",
+      hue: "magenta",
+    },
+  ],
+  totora: [
+    {
+      // "totora. Planta perenne con tallo erecto de hasta 3 m de altura [...];
+      //  se usa en la construcción de techos, paredes para cobertizos de
+      //  ranchos y embarcaciones." Co, E, SO, Ec, Pe, Bo, O, Ch, Py, Ar, Ur.
+      q: "loreTotoraQ",
+      a: "loreTotoraA",
+      href: "https://www.asale.org/damer/totora",
+      src: "asale.org · Diccionario de americanismos",
+      hue: "teal",
+    },
+  ],
+  trompo: [
+    {
+      // "trompo. II. 1. m. CR, Bo; Ur, obsol. Juego de niños que se practica
+      //  con peonzas."
+      q: "loreTrompoQ",
+      a: "loreTrompoA",
+      href: "https://www.asale.org/damer/trompo",
+      src: "asale.org · Diccionario de americanismos",
+      hue: "orange",
     },
   ],
 };

@@ -55,7 +55,7 @@ sequenceDiagram
 1. **Sellar.** La lista se normaliza y se resume con SHA-256. El contrato anota la huella, la cantidad de personas, cuántos ganan y una ronda **futura** de drand, y rechaza una ronda a menos de treinta segundos.
 2. **Esperar el número.** [drand](https://drand.love) quicknet, el faro público de aleatoriedad de la League of Entropy (Cloudflare, Protocol Labs, la EPFL y otros), publica una ronda firmada cada tres segundos. Nadie, ni quien organiza ni Tinkazo, puede conocerla ni elegirla antes.
 3. **Sortear.** `draw` verifica la firma BLS12-381 de la ronda **dentro del contrato**, deriva la semilla y elige a los ganadores de forma determinista. No le pide permiso a nadie: si quien organiza desaparece en medio del evento, cualquiera lo finaliza y el ganador es el mismo.
-4. **El show.** Uno de ocho juegos a pantalla completa cuenta el resultado. Cuando arranca la animación, el ganador ya está fijado: el juego solo lo relata.
+4. **El show.** Uno de doce juegos a pantalla completa cuenta el resultado. Cuando arranca la animación, el ganador ya está fijado: el juego solo lo relata.
 5. **Revisar.** El comprobante es un enlace. Quien lo abre ve a la página rehacer el sorteo desde cero y recibe un veredicto: verde si el contrato atestigua la lista, amarillo si el sorteo no se ancló, rojo con el motivo si algo no cuadra.
 
 La selección completa es una especificación normativa, el [protocolo v2](docs/protocolo.md), con vectores de prueba que comparten el contrato en Rust y el cliente en TypeScript ([docs/vectors.json](docs/vectors.json)). Cualquiera puede reimplementarlo y llegar a los mismos ganadores.
@@ -82,12 +82,12 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 Probado con mil participantes: el sorteo sigue a sesenta cuadros por segundo y se ancla igual.
 
 <div align="center">
-<img src="docs/capturas/readme/juegos.webp" alt="Seis de los ocho juegos" width="860">
+<img src="docs/capturas/readme/juegos.webp" alt="Seis de los doce juegos" width="860">
 </div>
 
 ## El show
 
-La justicia es matemática; el show es lo que hace que a la sala le importe. Ocho juegos, todos sembrados con la misma ronda de drand, así que la animación de un sorteo se puede reproducir:
+La justicia es matemática; el show es lo que hace que a la sala le importe. Doce juegos, casi todos de la cultura boliviana y latinoamericana, sembrados con la misma ronda de drand, así que la animación de un sorteo se puede reproducir:
 
 | Juego | Qué es |
 |---|---|
@@ -95,10 +95,14 @@ La justicia es matemática; el show es lo que hace que a la sala le importe. Och
 | Cierre de Libro | Tarjetas barridas por el cierre de un ledger hasta que queda una sellada |
 | Carrera de llamas | Ocho carriles por la cordillera |
 | Carrera de cohetes | La misma carrera, en el espacio |
-| Pasanaku | El ahorro rotativo boliviano: un aguayo que se cierra sobre los bultos hasta que queda uno en el nudo |
+| Aguayo | La tela andina que carga: el bulto de cada uno va encima, la tela se cierra y se amarra, y el que queda se va en el nudo |
 | Teleférico | Cabinas con los colores de las líneas de La Paz y El Alto suben por el cable; en cada estación se baja la mitad |
 | Tómbola | El bombo de la kermés, una bola numerada por persona de la lista sellada |
 | Ruleta | La de siempre, que se ve bien hasta con dos personas |
+| Trompo | El juego de patio: los trompos se tiran al ruedo de tiza, chocan y se sacan hasta el mano a mano |
+| Balsas de totora | Balsas de totora con proa de puma cruzan el lago Titicaca |
+| Piñata | La estrella de siete picos de las posadas: con cada palo caen nombres, y gana el último caramelo que quedaba adentro |
+| Carnaval de Oruro | Una comparsa de la Diablada baila cuadra por cuadra hacia el Socavón; en cada arco se quedan algunos |
 
 **Ninguno decide nada.** Un *director de emoción* escribe la historia de cada sorteo con la misma ronda: en la carrera una llama se planta, otra tropieza y dos se escupen; la ruleta se para en otro nombre y después avanza un gajo; en el teleférico se corta la luz en el aire. El final no se adivina, y un auditor comprueba en dieciséis semillas por juego que la historia no delata al ganador.
 
@@ -183,7 +187,7 @@ cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
-Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|teleferico|tombola|race|rockets|wheel`, `?instant=1`, `?pose=1` y `?motor=clasico` (el motor anterior).
+Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|teleferico|tombola|race|rockets|wheel|trompo|totora|pinata|oruro`, `?instant=1`, `?pose=1` y `?motor=clasico` (el motor anterior).
 
 ## El repositorio
 
