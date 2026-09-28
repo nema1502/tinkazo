@@ -66,7 +66,7 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 - **No oracle to run.** The proof is drand's own signature, checkable against its public key years from now. There is no node to keep alive and no operator to trust.
 - **Immutable and custody-free.** The contract has no admin, no upgrade path and holds no funds. A new version is a new address, recorded in [docs/deployments.md](docs/deployments.md).
 - **Onboarding that works at a meetup.** Organizers sign in with Google through a Pollar smart wallet, with Freighter, or with a testnet account the browser creates and funds. Participants never touch Stellar at all.
-- **Where it goes next is native to Stellar:** prizes paid in USDC as claimable balances, so the winner claims when ready without the organizer holding anything for them ([design](docs/premios.md)). The organizer funds the prize; participants never pay anything, so there is no pot and nothing to bet.
+- **Where it goes next is native to Stellar:** any community, from a meetup to a classroom, a cooperative or a savings circle, hands out rewards and stipends in USDC as claimable balances. Whoever is picked signs in with Google and claims when ready, without knowing there is a blockchain underneath and without the organizer holding the money for them ([design](docs/premios.md)). The chain is what lets a small group reach people it could not pay before; nobody has to learn it. The organizer funds every reward and participants never pay anything, so there is no pot and nothing to bet.
 
 ## What is live today
 
@@ -160,7 +160,7 @@ Each step has a success criterion that can be checked from outside.
 |---|---|
 | Mainnet deployment (`pnpm preflight:mainnet` already checks everything else) | The contract is live on mainnet and a first draw verifies green from its link |
 | Ten draws with real communities | Ten meetups, hackathons or classrooms, each with a public on-chain proof |
-| USDC prizes as claimable balances, funded by the organizer | A winner signs in with Google and claims USDC on testnet, then on mainnet; participants still pay nothing |
+| USDC rewards as claimable balances, funded by the organizer | Someone with no wallet signs in with Google and claims USDC on testnet, then on mainnet; participants still pay nothing |
 | Event import and announcements | Luma CSV with check-in filter (done) plus a results message with each participant's proof |
 | New rendering engine | All eight games on PixiJS at 60 fps on a mid-range phone, passing the same auditors (on desktop: done, 20/20 on the strict auditor at 60 fps; the phone measurement is next) |
 

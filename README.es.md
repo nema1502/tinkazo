@@ -66,7 +66,7 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 - **Sin oráculo que operar.** La prueba es la firma del propio drand, verificable contra su clave pública dentro de años. No hay nodo que mantener vivo ni operador en quien confiar.
 - **Inmutable y sin custodia.** El contrato no tiene administrador ni forma de actualizarse, y no guarda fondos. Una versión nueva es una dirección nueva, anotada en [docs/deployments.md](docs/deployments.md).
 - **Entrar funciona en un meetup.** Quien organiza entra con Google mediante una billetera de Pollar, con Freighter, o con una cuenta de prueba que el navegador crea y fondea. Los participantes no tocan Stellar nunca.
-- **Lo que sigue es nativo de Stellar:** premios en USDC como saldos reclamables, para que quien gana cobre cuando quiera sin que el organizador le guarde nada ([diseño](docs/premios.md)). El premio lo pone quien organiza; los participantes no pagan nada, así que no hay pozo ni nada que apostar.
+- **Lo que sigue es nativo de Stellar:** cualquier comunidad, desde un meetup hasta un curso, una cooperativa o un pasanaku, reparte recompensas y becas en USDC como saldos reclamables. Quien sale elegido entra con Google y cobra cuando quiere, sin saber que abajo hay una blockchain y sin que el organizador le guarde la plata ([diseño](docs/premios.md)). La cadena es lo que deja que un grupo chico llegue a gente a la que antes no podía pagarle; nadie tiene que aprenderla. Cada recompensa la pone quien organiza y los participantes no pagan nada, así que no hay pozo ni nada que apostar.
 
 ## Qué está andando hoy
 
@@ -160,7 +160,7 @@ Cada paso tiene un criterio que se puede comprobar desde afuera.
 |---|---|
 | Despliegue en mainnet (`pnpm preflight:mainnet` ya comprueba todo lo demás) | El contrato está en mainnet y un primer sorteo da verde desde su enlace |
 | Diez sorteos con comunidades reales | Diez meetups, hackatones o aulas, cada uno con su comprobante público en la cadena |
-| Premios en USDC como saldos reclamables, que pone quien organiza | Quien gana entra con Google y cobra USDC en testnet, y después en mainnet; los participantes siguen sin pagar nada |
+| Recompensas en USDC como saldos reclamables, que pone quien organiza | Alguien sin billetera entra con Google y cobra USDC en testnet, y después en mainnet; los participantes siguen sin pagar nada |
 | Importar el evento y avisar el resultado | CSV de Luma con filtro de check-in (hecho) y un mensaje con la prueba de cada participante |
 | Motor gráfico nuevo | Los ocho juegos en PixiJS a sesenta cuadros por segundo en un celular de gama media, pasando los mismos auditores (en computadora: hecho, 20/20 en el auditor exigente a sesenta cuadros; falta medirlo en un celular) |
 
