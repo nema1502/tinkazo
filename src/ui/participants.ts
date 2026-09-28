@@ -17,6 +17,7 @@ export function renderNames(): void {
   $<HTMLButtonElement>("btn-freeze").disabled = names.length < 2 || !!app.frozen;
   // Un boton apagado sin explicacion es lo que mas frena a quien recien llega.
   $("freeze-hint").style.display = names.length < 2 && !app.frozen ? "block" : "none";
+  $("free-rule").style.display = app.frozen ? "none" : "block";
 }
 
 export function loadSample(): void {

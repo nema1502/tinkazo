@@ -36,7 +36,7 @@ describe("las bases del sorteo", () => {
     it(`${lang}: con varios ganadores, en plural`, () => {
       const txt = T[lang].rules({ ...base, winners: 3, prize: "" });
       expect(txt).toMatch(lang === "es" ? /Salen 3 ganadores/ : /3 winners are drawn/);
-      expect(txt.split("\n")[0]).toBe(lang === "es" ? "Bases del sorteo" : "Raffle rules");
+      expect(txt.split("\n")[0]).toBe(lang === "es" ? "Bases del sorteo" : "Draw rules");
     });
   }
 });

@@ -189,6 +189,7 @@ export async function freeze(): Promise<void> {
   btn.disabled = true;
   btn.textContent = raffleId !== undefined ? t("sealed") : t("frozenOk");
   $("freeze-hint").style.display = "none";
+  $("free-rule").style.display = "none";
   $("sec-frozen").style.display = "block";
   $("k-n").textContent = String(names.length);
   $("k-digest").textContent = hash.slice(0, 16) + "…";

@@ -12,7 +12,7 @@
 
 **[Try it](https://tinkazo.vercel.app)** · [How it works](#how-it-works) · [Why Stellar](#why-stellar) · [What is live](#what-is-live-today) · [Roadmap](#roadmap) · [Español](README.es.md)
 
-<img src="docs/capturas/readme/hero.webp" alt="Tinkazo home page: raffles nobody can rig, not even you" width="860">
+<img src="docs/capturas/readme/hero.webp" alt="Tinkazo home page: draws nobody can rig, not even you" width="860">
 
 </div>
 
@@ -23,6 +23,16 @@ Every community gives things away: conference tickets, books, software licenses,
 **Tinkazo makes the draw checkable by anyone, from their phone, forever.** The organizer pastes a list, the list is sealed on Stellar, and the winner comes from a public random number that did not exist yet when the list was sealed. A Soroban contract verifies that number's signature on chain. The result is shown on the big screen as a full-screen game with a narrator, and anyone can re-run the whole draw in their browser from a link.
 
 Participants need nothing: no wallet, no account, no app.
+
+## Not gambling
+
+Tinkazo decides who gets something that is already being given away. It is not a way to bet or to sell chances:
+
+- **Entering is free, always.** No tickets and no entry fees. The [terms](https://tinkazo.vercel.app/terminos.html) forbid using Tinkazo for draws that charge to take part.
+- **Nobody can bet on the outcome.** There are no odds and no pot: nobody puts money in, so nobody wins anyone else's money.
+- **The contract holds no funds.** It stores a list fingerprint and a result, nothing else.
+
+A free draw with no purchase required stays outside gambling rules almost everywhere; the country-by-country research is in [docs/legal.md](docs/legal.md). A few identifiers in the contract still say *raffle* (`tinkazo-raffle`, `raffle_id`), from before the name settled. They are part of the deployed contract's interface, so they stay.
 
 ## How it works
 
@@ -56,7 +66,7 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 - **No oracle to run.** The proof is drand's own signature, checkable against its public key years from now. There is no node to keep alive and no operator to trust.
 - **Immutable and custody-free.** The contract has no admin, no upgrade path and holds no funds. A new version is a new address, recorded in [docs/deployments.md](docs/deployments.md).
 - **Onboarding that works at a meetup.** Organizers sign in with Google through a Pollar smart wallet, with Freighter, or with a testnet account the browser creates and funds. Participants never touch Stellar at all.
-- **Where it goes next is native to Stellar:** prizes paid in USDC as claimable balances, so the winner claims when ready without the organizer holding anything for them ([design](docs/premios.md)).
+- **Where it goes next is native to Stellar:** prizes paid in USDC as claimable balances, so the winner claims when ready without the organizer holding anything for them ([design](docs/premios.md)). The organizer funds the prize; participants never pay anything, so there is no pot and nothing to bet.
 
 ## What is live today
 
@@ -72,7 +82,7 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 Tested with a thousand participants: the draw still runs at 60 frames per second and anchors the same way.
 
 <div align="center">
-<img src="docs/capturas/readme/juegos.webp" alt="Six of the eight Tinkazo games: Stellar constellation, llama race, cable car, raffle drum, pasanaku and ledger close" width="860">
+<img src="docs/capturas/readme/juegos.webp" alt="Six of the eight Tinkazo games: Stellar constellation, llama race, cable car, ball drum, pasanaku and ledger close" width="860">
 </div>
 
 ## The show
@@ -87,7 +97,7 @@ Fairness is math; the show is what makes a room care. Eight games, each seeded w
 | Rocket Race | The same race, in space |
 | Pasanaku | Bolivia's rotating savings circle: a woven cloth closes over the bundles until one is left in the knot |
 | Cable Car | Cabins in the colors of the La Paz and El Alto lines climb the cable; half the riders get off at each station |
-| Raffle Drum | The fair's drum, one numbered ball per person on the sealed list |
+| Ball Drum | The fair's drum, one numbered ball per person on the sealed list |
 | Wheel | The classic, readable even with two people |
 
 **None of them decides anything.** An *emotion director* writes each draw's story from the same round: in the race a llama stops dead, another trips and two spit at each other; the wheel stops on someone else and then slips one more slice; in the cable car the power goes out mid-air. The ending cannot be guessed, and an auditor checks across sixteen seeds per game that the story does not give the winner away.
@@ -105,8 +115,6 @@ What is guaranteed, and what is not, is written down in [docs/amenazas.md](docs/
 - **Withholding an unwanted result** does not work: `draw` is permissionless.
 - **The one known open attack** is commitment selection: sealing the same list against several rounds and publishing only the convenient one. Every seal is public under the organizer's address, and the verification page flags repeated fingerprints on its own. Publishing the draw's rules before the round exists (the app generates them) closes most of the gap.
 - **Privacy.** Only the fingerprint goes on chain, never the names. The proof travels in the URL fragment, which browsers do not send to servers. During a draw, the only outbound request is the drand round.
-
-**Free by rule.** Entering a draw is always free: no tickets, no bets, and the contract holds no funds. Tinkazo is a tool for allocating something scarce among people already on a list, which keeps it on the free-draw side of the rules almost everywhere. The legal research, country by country, is in [docs/legal.md](docs/legal.md).
 
 ## How it compares
 
@@ -152,7 +160,7 @@ Each step has a success criterion that can be checked from outside.
 |---|---|
 | Mainnet deployment (`pnpm preflight:mainnet` already checks everything else) | The contract is live on mainnet and a first draw verifies green from its link |
 | Ten draws with real communities | Ten meetups, hackathons or classrooms, each with a public on-chain proof |
-| USDC prizes as claimable balances | A winner signs in with Google and claims USDC on testnet, then on mainnet |
+| USDC prizes as claimable balances, funded by the organizer | A winner signs in with Google and claims USDC on testnet, then on mainnet; participants still pay nothing |
 | Event import and announcements | Luma CSV with check-in filter (done) plus a results message with each participant's proof |
 | New rendering engine | All eight games on PixiJS at 60 fps on a mid-range phone, passing the same auditors (on desktop: done, 20/20 on the strict auditor at 60 fps; the phone measurement is next) |
 

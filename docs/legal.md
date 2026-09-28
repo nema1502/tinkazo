@@ -93,6 +93,13 @@ Para los correos de Luma el plan de [premios.md](premios.md) sigue la misma lín
 2. **Tinkazo es una herramienta, como un bolillero.** Quien sortea es el organizador, y responde por su sorteo: las bases, el premio, los permisos y los impuestos de su país. Esto se dice en unos términos de uso.
 3. **Nada de datos personales en servidores.** Ya es así, y se mantiene cuando lleguen los correos.
 4. **Premios sin custodia.** El dinero va del organizador al ganador. Si Tinkazo cobra una comisión, se cobra en la misma transacción, a la vista, y antes se resuelve la pregunta 4.
+5. **No es de apuestas, y tiene que notarse desde afuera.** Los programas de fondos de ecosistemas y las tiendas de aplicaciones dejan fuera a los proyectos que "involve, facilitate, or promote gambling". Tinkazo no lo hace, pero en inglés un sorteo se lee *raffle*, y en Estados Unidos una *raffle* casi siempre es con boletos pagados. Por eso, desde el 28 de septiembre de 2026:
+   - la interfaz en inglés dice *draw*, como el *free prize draw* británico;
+   - la primera cláusula de los términos dice que no es para apuestas ni para sorteos con entrada paga, y que usarlo así va contra los términos;
+   - debajo del botón para congelar la lista, una línea recuerda que participar tiene que ser gratis y enlaza los términos;
+   - el README abre con una sección que lo explica.
+
+   Los identificadores del contrato (`tinkazo-raffle`, `raffle_id`, el tipo `Raffle`) siguen igual, porque son la interfaz del contrato desplegado. Lo que más se puede leer como apuesta son los premios en dinero de la hoja de ruta (USDC como saldo reclamable): nadie pone plata para participar, así que no es una apuesta. Se mantienen, y el README aclara que el premio lo pone quien organiza y que los participantes no pagan nada.
 
 ## Lo que ya se construyó, sin dinero
 

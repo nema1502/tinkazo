@@ -24,6 +24,16 @@ Toda comunidad regala cosas: entradas, libros, licencias, becas, turnos para hab
 
 Los participantes no necesitan nada: ni billetera, ni cuenta, ni aplicación.
 
+## No es de apuestas
+
+Tinkazo decide quién se lleva algo que ya se está regalando. No sirve para apostar ni para vender chances:
+
+- **Participar es gratis, siempre.** No hay boletos ni entrada paga. Los [términos](https://tinkazo.vercel.app/terminos.html) prohíben usar Tinkazo para sorteos que cobren por participar.
+- **Nadie puede apostar al resultado.** No hay cuotas ni pozo: nadie pone plata, así que nadie gana la plata de otro.
+- **El contrato no guarda fondos.** Guarda la huella de la lista y el resultado, nada más.
+
+Un sorteo gratuito, sin compra obligatoria, queda fuera de las reglas de juegos de azar en casi todo el mundo; la investigación país por país está en [docs/legal.md](docs/legal.md). Algunos identificadores del contrato todavía dicen *raffle* (`tinkazo-raffle`, `raffle_id`), de antes de que el nombre se asentara. Son parte de la interfaz del contrato desplegado, así que quedan como están.
+
 ## Cómo funciona
 
 ```mermaid
@@ -56,7 +66,7 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 - **Sin oráculo que operar.** La prueba es la firma del propio drand, verificable contra su clave pública dentro de años. No hay nodo que mantener vivo ni operador en quien confiar.
 - **Inmutable y sin custodia.** El contrato no tiene administrador ni forma de actualizarse, y no guarda fondos. Una versión nueva es una dirección nueva, anotada en [docs/deployments.md](docs/deployments.md).
 - **Entrar funciona en un meetup.** Quien organiza entra con Google mediante una billetera de Pollar, con Freighter, o con una cuenta de prueba que el navegador crea y fondea. Los participantes no tocan Stellar nunca.
-- **Lo que sigue es nativo de Stellar:** premios en USDC como saldos reclamables, para que quien gana cobre cuando quiera sin que el organizador le guarde nada ([diseño](docs/premios.md)).
+- **Lo que sigue es nativo de Stellar:** premios en USDC como saldos reclamables, para que quien gana cobre cuando quiera sin que el organizador le guarde nada ([diseño](docs/premios.md)). El premio lo pone quien organiza; los participantes no pagan nada, así que no hay pozo ni nada que apostar.
 
 ## Qué está andando hoy
 
@@ -106,8 +116,6 @@ Lo que está garantizado y lo que no está escrito en [docs/amenazas.md](docs/am
 - **El único ataque conocido que sigue abierto** es la selección del compromiso: sellar la misma lista contra varias rondas y publicar solo la que convino. Todos los sellos son públicos bajo la dirección de quien organiza, y la página de verificación marca sola las huellas repetidas. Publicar las bases del sorteo antes de que exista la ronda (el sitio las arma) cierra casi todo el hueco.
 - **Privacidad.** En la cadena va solo la huella, nunca los nombres. El comprobante viaja en el fragmento de la URL, que el navegador no manda a ningún servidor. Durante un sorteo, la única petición que sale es la ronda de drand.
 
-**Gratis por regla.** Entrar a un sorteo es gratis siempre: no hay boletos ni apuestas, y el contrato no guarda fondos. Tinkazo es una herramienta para repartir algo escaso entre personas que ya están en una lista, y eso lo deja del lado del sorteo gratuito en casi todo el mundo. La investigación, país por país, está en [docs/legal.md](docs/legal.md).
-
 ## Cómo se compara
 
 | | Planilla o ruleta web | Servicio de VRF con oráculo | Tinkazo |
@@ -152,7 +160,7 @@ Cada paso tiene un criterio que se puede comprobar desde afuera.
 |---|---|
 | Despliegue en mainnet (`pnpm preflight:mainnet` ya comprueba todo lo demás) | El contrato está en mainnet y un primer sorteo da verde desde su enlace |
 | Diez sorteos con comunidades reales | Diez meetups, hackatones o aulas, cada uno con su comprobante público en la cadena |
-| Premios en USDC como saldos reclamables | Quien gana entra con Google y cobra USDC en testnet, y después en mainnet |
+| Premios en USDC como saldos reclamables, que pone quien organiza | Quien gana entra con Google y cobra USDC en testnet, y después en mainnet; los participantes siguen sin pagar nada |
 | Importar el evento y avisar el resultado | CSV de Luma con filtro de check-in (hecho) y un mensaje con la prueba de cada participante |
 | Motor gráfico nuevo | Los ocho juegos en PixiJS a sesenta cuadros por segundo en un celular de gama media, pasando los mismos auditores (en computadora: hecho, 20/20 en el auditor exigente a sesenta cuadros; falta medirlo en un celular) |
 
