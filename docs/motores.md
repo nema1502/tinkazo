@@ -27,7 +27,13 @@ Tinkazo no es un videojuego: es un show de treinta segundos que se abre desde un
 
 **PixiJS v8 con GSAP para los ocho juegos, y un director de cámara compartido.** El director de emoción ya decide qué pasa en cada sorteo; el de cámara decide cómo se mira: a quién sigue, cuándo se acerca, cuándo va en cámara lenta y cuándo sacude. Así cada juego tiene sus momentos de cámara sin escribirlos de cero.
 
-El motor de siempre no se borra: sigue siendo el que se usa y el nuevo se prende con `?motor=pixi` hasta que pase los mismos auditores. El punto para volver atrás está marcado en git con la etiqueta `antes-de-pixi`.
+Desde el 28 de septiembre de 2026 el motor nuevo es el de todos: los ocho juegos pasaron el auditor exigente con 20/20. El anterior no se borra, queda de respaldo por tres caminos:
+
+- **`?motor=clasico`** lo pide a mano.
+- **Sin WebGL** (un equipo viejo o con la aceleración apagada) el sitio lo usa solo: `src/games/engine.ts` lo mira antes de cargar nada.
+- **Si el motor nuevo no arranca** o el wifi del evento no alcanza a bajarlo, el sorteo sigue con el anterior. El show nunca se queda en blanco.
+
+El punto para volver atrás del todo está marcado en git con la etiqueta `antes-de-pixi`.
 
 ## Cómo está hecho
 
@@ -50,7 +56,9 @@ Los momentos de cámara de cada juego:
 
 ## Auditarlo
 
-Los cuatro auditores aceptan `--motor pixi`. Con eso usan la placa de video (`TINKAZO_GPU=1`): sin placa, Chrome dibuja WebGL por software a unos diecisiete cuadros por segundo, y medir la fluidez así sería medir la computadora del auditor.
+Los cuatro auditores y el script de capturas miran el motor nuevo por defecto, con la placa de video (`TINKAZO_GPU=1`): sin placa, Chrome dibuja WebGL por software a unos diecisiete cuadros por segundo, y medir la fluidez así sería medir la computadora del auditor. Con `--motor clasico` miran el anterior.
+
+`TINKAZO_SIN_WEBGL=1` levanta el navegador sin WebGL, para comprobar que el sorteo cae solo al motor anterior.
 
 ## Fuentes
 

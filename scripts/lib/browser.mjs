@@ -104,6 +104,9 @@ export async function launch({ port = Number(process.env.CDP_PORT || 9222), widt
       // WebGL, y sin placa Chrome lo hace por software, a unos 17 cuadros por
       // segundo. Medir la fluidez así sería medir la computadora del auditor.
       ...(process.env.TINKAZO_GPU === "1" ? ["--enable-gpu", "--ignore-gpu-blocklist"] : ["--disable-gpu"]),
+      // Con TINKAZO_SIN_WEBGL=1 el navegador no tiene WebGL, como un equipo
+      // viejo: para comprobar que el sorteo cae solo al motor anterior.
+      ...(process.env.TINKAZO_SIN_WEBGL === "1" ? ["--disable-3d-apis"] : []),
       "--no-first-run",
       "--no-default-browser-check",
       // Sin esto el contexto de audio nace suspendido y no avanza su reloj: el

@@ -1,11 +1,12 @@
 import type { Beacon, Game } from "../../state";
+import { PixiInitError } from "./stage";
 
 /**
  * Qué juegos tienen versión en el motor nuevo, y cómo se lanzan.
  *
- * Con `?motor=pixi` el sitio pregunta acá primero; si el juego todavía no
- * tiene versión nueva, sigue con la de siempre. Cada versión se carga recién
- * cuando se pide, así que el motor nuevo no le pesa a quien no lo usa.
+ * El sitio pregunta acá primero (salvo con `?motor=clasico` o sin WebGL, ver
+ * `../engine.ts`); si el juego no tiene versión nueva, sigue con la de
+ * siempre. Cada versión se carga recién cuando se pide.
  */
 type Launch = (names: string[], winners: readonly number[], beacon: Beacon, done: () => void) => Promise<void>;
 
@@ -29,11 +30,19 @@ const PIXI: Partial<Record<Game, () => Promise<Launch>>> = {
 /** `true` si el juego tiene versión en PixiJS. */
 export const hasPixi = (game: Game): boolean => game in PIXI;
 
-/** Lanza la versión en PixiJS. Devuelve `false` si no hay, para seguir con la de siempre. */
+/**
+ * Lanza la versión en PixiJS. Devuelve `false` si no hay o si el motor no
+ * arrancó en este equipo, para seguir con la de siempre.
+ */
 export async function playPixi(game: Game, names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<boolean> {
   const load = PIXI[game];
   if (!load) return false;
   const launch = await load();
-  await launch(names, winners, beacon, done);
+  try {
+    await launch(names, winners, beacon, done);
+  } catch (err) {
+    if (err instanceof PixiInitError) return false;
+    throw err;
+  }
   return true;
 }

@@ -436,10 +436,9 @@ export async function llamasPixi(
       tagsLayer.addChild(r.tag);
     }
     const fx = new Graphics();
-    // En el espacio el nombre va encima: la llama del motor sale de atrás del
-    // chip en vez de taparlo.
-    if (space) world.addChild(runnersLayer, tagsLayer, fx);
-    else world.addChild(tagsLayer, runnersLayer, fx);
+    // El nombre va encima del corredor: la cola de la llama o el fuego del
+    // motor salen de atrás del chip en vez de taparlo.
+    world.addChild(runnersLayer, tagsLayer, fx);
 
     // La interfaz: viñeta, minimapa, tabla, cuenta y foto.
     const vig = document.createElement("canvas");
@@ -523,7 +522,7 @@ export async function llamasPixi(
 
   /* ============================================================== estado */
   let phase: "count" | "race" | "done" = "count";
-  let tPhase = 0, tRace = 0, tFreeze = 0, lastLeader = -1, saidLast = false, finished = false;
+  let tPhase = 0, tRace = 0, tFreeze = 0, lastLeader = -1, saidLast = false, finished = false, mitadMarcada = false;
   let lastBeepN = 4;
   const rowPos = lanes.map((_, k) => k);
   const winnerLane = story.winner;
@@ -694,7 +693,14 @@ export async function llamasPixi(
     }
     const order = xs.map((x, k) => ({ x, k })).sort((a, b) => b.x - a.x);
     order.forEach(({ k }, puesto) => { rowPos[k] = (rowPos[k] as number) + (puesto - (rowPos[k] as number)) * Math.min(1, dt * 10); });
-    S.mark("puesto", String(order.findIndex((o) => o.k === story.winner) + 1));
+    const puesto = String(order.findIndex((o) => o.k === story.winner) + 1);
+    S.mark("puesto", puesto);
+    // El puesto en el cuadro en que la carrera cruza la mitad, para el auditor
+    // de emoción: con el reloj del juego, no con el de la página.
+    if (prog >= 0.5 && !mitadMarcada) {
+      mitadMarcada = true;
+      S.mark("mitad", puesto);
+    }
 
     // La cámara. Por defecto sigue a la punta, un poco adelantada, y se
     // acerca a medida que sube la tensión. En un momento de la historia se
@@ -777,7 +783,8 @@ export async function llamasPixi(
       r.root.position.set(x - 34 * sc, y);
       r.pose(p * 95, speed, phase === "race" ? plan.beatOf(k, prog) : null, now);
       if (phase === "done" && k === winnerLane) r.root.y = y - Math.abs(Math.sin(tFreeze * 7)) * 22 * u * Math.max(0, 1 - tFreeze / 2.6);
-      r.tag.position.set(x - (space ? 82 : 40) * sc - r.tag.width, y - 30 * sc);
+      // Detrás de la cola de la llama (llega a 67) o de las aletas del cohete.
+      r.tag.position.set(x - (space ? 82 : 70) * sc - r.tag.width, y - 30 * sc);
       r.tag.alpha = phase === "done" ? 0.35 : 1;
       if (phase === "count") continue;
       // Polvo (o estela), cada grano calculado desde su hora.

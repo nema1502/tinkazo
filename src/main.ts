@@ -8,6 +8,7 @@ import { copyRules, freeze, refreshFreezeLabel, secondsToRound, setGame } from "
 import { copySummary, draw, reverify, shareProof } from "./ui/draw";
 import { stadiumRace } from "./games/race";
 import { skipGame } from "./games/overlay";
+import { usePixi } from "./games/engine";
 import { initWalletUI } from "./ui/wallet-ui";
 import { musicOn, toggleMusic } from "./music";
 import { chooseVoice, hasVoice, narrate, primeNarrator, shortVoiceName, voiceChoices, voiceName, voiceTier } from "./narrator";
@@ -209,14 +210,11 @@ async function poseScene(): Promise<void> {
   app.drawn = { beacon: fakeBeacon, winners: W3 };
   const cual = params.get("pose") ?? "1";
   const nada = (): void => {};
-  // `?motor=pixi`: la escena fija en el motor nuevo, si el juego ya lo tiene.
-  if (params.get("motor") === "pixi") {
+  // La escena fija en el motor nuevo, salvo con `?motor=clasico` o sin WebGL.
+  if (usePixi()) {
     const juego = (cual === "1" ? "race" : cual) as Game;
     const px = await import("./games/pixi");
-    if (px.hasPixi(juego)) {
-      await px.playPixi(juego, L, W3, fakeBeacon, nada);
-      return;
-    }
+    if (await px.playPixi(juego, L, W3, fakeBeacon, nada)) return;
   }
   if (cual === "wheel") {
     (await import("./games/wheel")).wheelSpin(L, W3, fakeBeacon, nada);

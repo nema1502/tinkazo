@@ -56,6 +56,13 @@ export function seeded(seed: number): () => number {
   };
 }
 
+/** El motor no pudo arrancar en este equipo: el juego se cuenta con el de siempre. */
+export class PixiInitError extends Error {
+  constructor(cause: unknown) {
+    super("PixiJS no arrancó", { cause });
+  }
+}
+
 export const FONT = "system-ui, -apple-system, 'Segoe UI', sans-serif";
 export const MONO = "ui-monospace, Consolas, monospace";
 
@@ -117,6 +124,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   // un lienzo que ya dio un contexto 2D no puede dar uno de WebGL.
   base.style.visibility = "hidden";
   delete base.dataset.cartel;
+  delete base.dataset.mitad;
   document.getElementById("pixi-canvas")?.remove();
   const view = document.createElement("canvas");
   view.id = "pixi-canvas";
@@ -139,19 +147,28 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
 
   const app = new Application();
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  await app.init({
-    canvas: view,
-    width: innerWidth,
-    height: innerHeight,
-    antialias: true,
-    resolution: dpr,
-    autoDensity: true,
-    backgroundColor: 0x10101c,
-    autoStart: false,
-    // Para que los auditores puedan leer el lienzo entre cuadros.
-    preserveDrawingBuffer: true,
-    preference: "webgl",
-  });
+  try {
+    await app.init({
+      canvas: view,
+      width: innerWidth,
+      height: innerHeight,
+      antialias: true,
+      resolution: dpr,
+      autoDensity: true,
+      backgroundColor: 0x10101c,
+      autoStart: false,
+      // Para que los auditores puedan leer el lienzo entre cuadros.
+      preserveDrawingBuffer: true,
+      preference: "webgl",
+    });
+  } catch (err) {
+    // Sin motor no se muestra nada: todo queda como estaba y el sorteo sigue
+    // con el motor de siempre.
+    view.remove();
+    base.style.visibility = "";
+    setPickSeed(null);
+    throw new PixiInitError(err);
+  }
   const bg = new Container();
   const scene = new Container();
   const hud = new Container();

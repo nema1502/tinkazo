@@ -31,9 +31,10 @@ const opt = (name, def) => {
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const outDir = opt("--out", "docs/capturas");
 const lead = opt("--lead", "3");
-// `--motor pixi` audita el juego en el motor nuevo (docs/motores.md).
-const motor = opt("--motor", "");
-if (motor === "pixi") process.env.TINKAZO_GPU = "1";
+// El motor nuevo es el de todos desde el 28 de septiembre (docs/motores.md);
+// `--motor clasico` audita el juego en el motor anterior. El nuevo usa la placa de video.
+const motor = opt("--motor", "pixi");
+if (motor !== "clasico") process.env.TINKAZO_GPU = "1";
 const conMotor = motor ? `&motor=${motor}` : "";
 
 /** Lista de ejemplo del sitio, en el mismo orden. Debe coincidir con src/state.ts. */

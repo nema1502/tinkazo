@@ -39,9 +39,10 @@ const cual = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith
 const juegos = cual === "todos" ? TODOS : [cual];
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const N = Number(opt("--semillas", "16"));
-// `--motor pixi` mide los juegos del motor nuevo (docs/motores.md).
-const motor = opt("--motor", "");
-if (motor === "pixi") process.env.TINKAZO_GPU = "1";
+// El motor nuevo es el de todos desde el 28 de septiembre (docs/motores.md);
+// `--motor clasico` mide los juegos del motor anterior. El nuevo usa la placa de video.
+const motor = opt("--motor", "pixi");
+if (motor !== "clasico") process.env.TINKAZO_GPU = "1";
 
 /** El reloj en turbo: veinte cuadros de juego por cuadro real, de a 1/64 s. */
 const TURBO = `(() => {
@@ -89,16 +90,15 @@ try {
       } else {
         arcos.push(await page.eval("document.getElementById('race-canvas').dataset.arco"));
       }
-      // En la carrera, el puesto de la ganadora a mitad de camino: tres
-      // segundos de cuenta regresiva más la mitad de la carrera, en tiempo de
-      // juego estirado por el ritmo normal.
+      // En la carrera, el puesto de la ganadora a mitad de camino. Lo anota la
+      // carrera misma en el cuadro en que cruza la mitad, con su propio reloj.
+      // Antes se leía cuando la hora de la página llegaba a quince segundos, y
+      // esa hora corre en turbo también mientras el juego se descarga: con el
+      // motor nuevo, que tarda más en arrancar, la foto caía antes de la mitad.
       if ((juego === "race" || juego === "rockets") && ok.ok) {
-        const mitad = (3 + 12) * 1000;
-        for (let t = 0; t < 400; t++) {
-          if (Number(await page.eval("window.__v()")) >= mitad) break;
-          await sleep(50);
-        }
-        aMitad.push(Number(await page.eval("document.getElementById('race-canvas').dataset.puesto || 0")));
+        const mitad = "document.getElementById('race-canvas').dataset.mitad";
+        await page.waitFor(mitad, 20_000);
+        aMitad.push(Number(await page.eval(`${mitad} || 0`)));
       }
       try {
         await page.send("Page.close");

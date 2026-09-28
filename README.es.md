@@ -92,7 +92,9 @@ La justicia es matemática; el show es lo que hace que a la sala le importe. Och
 
 **Ninguno decide nada.** Un *director de emoción* escribe la historia de cada sorteo con la misma ronda: en la carrera una llama se planta, otra tropieza y dos se escupen; la ruleta se para en otro nombre y después avanza un gajo; en el teleférico se corta la luz en el aire. El final no se adivina, y un auditor comprueba en dieciséis semillas por juego que la historia no delata al ganador.
 
-Un relator canta el sorteo en voz alta (en Microsoft Edge elige una voz neural boliviana), un modo con música pone andina con beat que sigue la tensión, y después del ganador una tarjeta cuenta un pedazo de la historia con su fuente primaria.
+Un director de cámara filma cada juego como una transmisión: sigue a la punta, se mete en el susto, va en cámara lenta en la foto final y sacude en los choques. Los juegos corren en PixiJS, y en un equipo sin WebGL toma la posta el motor anterior: el sorteo nunca se queda en blanco.
+
+Un relator canta en voz alta los momentos grandes (en Microsoft Edge elige una voz neural boliviana), un modo con música pone andina con beat que sigue la tensión, y después del ganador una tarjeta cuenta un pedazo de la historia con su fuente primaria.
 
 ## Modelo de confianza
 
@@ -152,7 +154,7 @@ Cada paso tiene un criterio que se puede comprobar desde afuera.
 | Diez sorteos con comunidades reales | Diez meetups, hackatones o aulas, cada uno con su comprobante público en la cadena |
 | Premios en USDC como saldos reclamables | Quien gana entra con Google y cobra USDC en testnet, y después en mainnet |
 | Importar el evento y avisar el resultado | CSV de Luma con filtro de check-in (hecho) y un mensaje con la prueba de cada participante |
-| Motor gráfico nuevo | Los ocho juegos en PixiJS a sesenta cuadros por segundo en un celular de gama media, pasando los mismos auditores (la carrera ya tiene prototipo con `?motor=pixi`) |
+| Motor gráfico nuevo | Los ocho juegos en PixiJS a sesenta cuadros por segundo en un celular de gama media, pasando los mismos auditores (en computadora: hecho, 20/20 en el auditor exigente a sesenta cuadros; falta medirlo en un celular) |
 
 ## Correr en local
 
@@ -170,7 +172,7 @@ cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
-Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|teleferico|tombola|race|rockets|wheel`, `?instant=1`, `?pose=1` y `?motor=pixi`.
+Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|teleferico|tombola|race|rockets|wheel`, `?instant=1`, `?pose=1` y `?motor=clasico` (el motor anterior).
 
 ## El repositorio
 

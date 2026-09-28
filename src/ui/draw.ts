@@ -1,6 +1,6 @@
 import { $, esc } from "../dom";
 import { T, getLang, t } from "../i18n";
-import { LCOLORS, WHEEL_MAX, app, avatar, type Beacon, params } from "../state";
+import { LCOLORS, WHEEL_MAX, app, avatar, type Beacon } from "../state";
 import { bytesToHex, decompressG1, fetchRound, hexToBytes, randomnessOf, roundUrl, verifyRound } from "../protocol/drand";
 import { select } from "../protocol/select";
 import { network, txUrl } from "../stellar/config";
@@ -17,6 +17,7 @@ import { loreFor } from "../games/lore";
 import { currentSession } from "./wallet-ui";
 import { qrDataUrl } from "./qr";
 import { wheelSpin } from "../games/wheel";
+import { usePixi } from "../games/engine";
 import { secondsToRound } from "./freeze";
 
 /** Obtiene la ronda objetivo, verifica su firma y selecciona (protocolo §2, §5). */
@@ -136,15 +137,17 @@ export async function draw(): Promise<void> {
  * por uno que sí, y eso no altera quién ganó.
  */
 function playGame(names: string[], winners: number[], beacon: Beacon, finish: () => void): void {
-  // `?motor=pixi`: el motor nuevo, para los juegos que ya tienen versión en
-  // PixiJS (docs/motores.md). Se carga solo si se pide, y el que todavía no
-  // tiene versión nueva sigue con la de siempre.
-  if (params.get("motor") === "pixi") {
+  // El motor nuevo, PixiJS con el director de cámara (docs/motores.md). Si el
+  // equipo no tiene WebGL, si se pide `?motor=clasico`, si el motor no arranca
+  // o si el wifi no alcanza a bajarlo, el juego sale con el de siempre.
+  if (usePixi()) {
     const game = app.game === "wheel" && names.length > WHEEL_MAX ? "ledger" : app.game;
-    void import("../games/pixi").then(async (m) => {
-      if (m.hasPixi(game)) await m.playPixi(game, names, winners, beacon, finish);
-      else classicGame(names, winners, beacon, finish);
-    });
+    void import("../games/pixi").then(
+      async (m) => {
+        if (!(await m.playPixi(game, names, winners, beacon, finish))) classicGame(names, winners, beacon, finish);
+      },
+      () => classicGame(names, winners, beacon, finish),
+    );
     return;
   }
   classicGame(names, winners, beacon, finish);

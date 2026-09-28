@@ -48,7 +48,7 @@ pnpm preview &      # sirve dist/ en :4173
 node scripts/smoke.mjs "http://localhost:4173/?demo=wheel&instant=1&lead=3"
 ```
 
-Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|teleferico|tombola|race|rockets|wheel` (carga el ejemplo, sella y sortea), `?instant=1` (sin animaciones), `?lead=N` (segundos hasta la ronda objetivo, mínimo 3; solo modo libre), `?pose=1` (escena fija del estadio), `?motor=pixi` (los juegos en el motor nuevo, PixiJS con director de cámara; ver [docs/motores.md](docs/motores.md)). Los auditores aceptan `--motor pixi`, que usa la placa de video.
+Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|teleferico|tombola|race|rockets|wheel` (carga el ejemplo, sella y sortea), `?instant=1` (sin animaciones), `?lead=N` (segundos hasta la ronda objetivo, mínimo 3; solo modo libre), `?pose=1` (escena fija del estadio), `?motor=clasico` (los juegos en el motor anterior; el de todos es PixiJS con director de cámara, ver [docs/motores.md](docs/motores.md)). Los auditores miran el motor nuevo con la placa de video; `--motor clasico` mira el anterior.
 
 ```bash
 # Auditor de juegos: 20 comprobaciones por juego, contra drand de verdad
@@ -106,8 +106,9 @@ terminos.html       Términos y privacidad: participar es gratis, quien organiza
 public/             juegos/*.webp, sitemap.xml y robots.txt
 verificar.html      Página de verificación, solo lectura
 src/                Frontend TypeScript: main, i18n, state, narrator, protocol/, stellar/, ui/, games/
-src/games/overlay.ts  Andamiaje de los juegos: estadio, azar sembrado, chips, saltar, desmontaje
-src/games/pixi/     El motor nuevo: stage.ts (andamiaje), camera.ts (director de cámara) y un archivo por juego
+src/games/engine.ts   Qué motor dibuja: el nuevo, o el anterior con ?motor=clasico o sin WebGL
+src/games/pixi/     El motor de los juegos: stage.ts (andamiaje), camera.ts (director de cámara) y un archivo por juego
+src/games/overlay.ts  Andamiaje del motor anterior, que queda de respaldo, y lo común a los dos
 scripts/            deploy.sh (contrato), smoke.mjs (sitio), audit-game.mjs, audit-rigor.mjs, audit-emocion.mjs, check-lore.mjs
 contracts/raffle/   Contrato Soroban tinkazo-raffle (lib, drand, select, test)
 docs/               PRD, arquitectura, protocolo, épicas, despliegues, vectores, capturas

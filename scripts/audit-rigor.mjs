@@ -41,9 +41,10 @@ const opt = (name, def) => {
   return i >= 0 && args[i + 1] ? args[i + 1] : def;
 };
 const cual = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--")) ?? "todos";
-// `--motor pixi` audita los juegos en el motor nuevo (docs/motores.md).
-const motor = opt("--motor", "");
-if (motor === "pixi") process.env.TINKAZO_GPU = "1";
+// El motor nuevo es el de todos desde el 28 de septiembre (docs/motores.md);
+// `--motor clasico` audita los juegos en el motor anterior. El nuevo usa la placa de video.
+const motor = opt("--motor", "pixi");
+if (motor !== "clasico") process.env.TINKAZO_GPU = "1";
 const juegos = cual === "todos" ? TODOS : [cual];
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const outDir = opt("--out", "docs/capturas/rigor");

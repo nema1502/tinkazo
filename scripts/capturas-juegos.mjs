@@ -33,6 +33,9 @@ if (!juego) {
 }
 const en = Number(opt("--en", "6"));
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
+// El motor nuevo, con la placa de video; `--motor clasico` fotografía el anterior.
+const motor = opt("--motor", "pixi");
+if (motor !== "clasico") process.env.TINKAZO_GPU = "1";
 
 const tmp = mkdtempSync(join(tmpdir(), "tinkazo-capturas-"));
 const browser = await launch({ port: Number(process.env.CDP_PORT || 9381), width: 1600, height: 900 });
@@ -40,7 +43,7 @@ try {
   for (const tema of ["dark", "light"]) {
     const page = await browser.open("about:blank");
     await page.send("Emulation.setDeviceMetricsOverride", { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
-    await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&theme=${tema}` });
+    await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&theme=${tema}&motor=${motor}` });
     const ok = await page.waitFor("document.getElementById('stadium').style.display === 'block'", 20_000);
     if (!ok.ok) throw new Error(`la escena de ${juego} no arrancó`);
     await sleep(en * 1000);

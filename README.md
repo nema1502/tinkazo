@@ -92,7 +92,9 @@ Fairness is math; the show is what makes a room care. Eight games, each seeded w
 
 **None of them decides anything.** An *emotion director* writes each draw's story from the same round: in the race a llama stops dead, another trips and two spit at each other; the wheel stops on someone else and then slips one more slice; in the cable car the power goes out mid-air. The ending cannot be guessed, and an auditor checks across sixteen seeds per game that the story does not give the winner away.
 
-A narrator calls the draw out loud (in Microsoft Edge it picks a neural Bolivian voice), an optional music mode plays Andean music with a beat that follows the tension, and after the winner a card explains a piece of the story with its primary source.
+A camera director frames every game like a broadcast: it follows the leader, pushes in on the scare, slows down for the photo finish and shakes on impact. The games run on PixiJS, and where a device has no WebGL the previous engine takes over, so a draw never goes blank.
+
+A narrator calls the big moments out loud (in Microsoft Edge it picks a neural Bolivian voice), an optional music mode plays Andean music with a beat that follows the tension, and after the winner a card explains a piece of the story with its primary source.
 
 ## Trust model
 
@@ -152,7 +154,7 @@ Each step has a success criterion that can be checked from outside.
 | Ten draws with real communities | Ten meetups, hackathons or classrooms, each with a public on-chain proof |
 | USDC prizes as claimable balances | A winner signs in with Google and claims USDC on testnet, then on mainnet |
 | Event import and announcements | Luma CSV with check-in filter (done) plus a results message with each participant's proof |
-| New rendering engine | All eight games on PixiJS at 60 fps on a mid-range phone, passing the same auditors (the llama race is prototyped behind `?motor=pixi`) |
+| New rendering engine | All eight games on PixiJS at 60 fps on a mid-range phone, passing the same auditors (on desktop: done, 20/20 on the strict auditor at 60 fps; the phone measurement is next) |
 
 ## Run it locally
 
@@ -170,7 +172,7 @@ cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
-Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|teleferico|tombola|race|rockets|wheel`, `?instant=1`, `?pose=1` and `?motor=pixi`.
+Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|teleferico|tombola|race|rockets|wheel`, `?instant=1`, `?pose=1` and `?motor=clasico` (the previous engine).
 
 ## Repository
 

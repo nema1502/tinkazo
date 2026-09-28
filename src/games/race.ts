@@ -192,6 +192,7 @@ export function stadiumRace(
   // El arco queda anotado en el lienzo, como el cartel: lo lee el auditor para
   // comprobar que los cuatro salen y que el final no se adivina.
   canvas.dataset.arco = story.arc;
+  delete canvas.dataset.mitad;
 
   /* Cada llama sigue un camino planificado: la línea de base, que va de la
      largada a la meta, más una ventaja propia medida en anchos de pantalla,
@@ -520,8 +521,11 @@ export function stadiumRace(
     const orden = runners.map((r, k) => ({ r, k })).sort((a, b) => b.r.x - a.r.x);
     orden.forEach(({ r }, puesto) => { r.row += (puesto - r.row) * Math.min(1, dt * 10); });
     // El puesto de la ganadora, para el auditor de emoción: mide que a mitad
-    // de carrera no la delate.
+    // de carrera no la delate. `mitad` queda fijo en el cuadro en que la
+    // carrera cruza la mitad, con su propio reloj: leerlo desde afuera por la
+    // hora de la página dependía de cuánto tardaba en arrancar el juego.
     canvas.dataset.puesto = String(orden.findIndex((o) => o.k === story.winner) + 1);
+    if (prog >= 0.5 && !canvas.dataset.mitad) canvas.dataset.mitad = canvas.dataset.puesto;
     if (prog >= 1) finishNow();
   }
 

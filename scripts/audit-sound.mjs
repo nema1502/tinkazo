@@ -28,9 +28,10 @@ const opt = (name, def) => {
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const JUEGOS = ["race", "rockets", "stellar", "ledger", "pasanaku", "teleferico", "tombola", "wheel"];
 const pedido = args[0] && !args[0].startsWith("--") ? args[0] : "todos";
-// `--motor pixi` escucha los juegos del motor nuevo (docs/motores.md).
-const motor = opt("--motor", "");
-if (motor === "pixi") process.env.TINKAZO_GPU = "1";
+// El motor nuevo es el de todos desde el 28 de septiembre (docs/motores.md);
+// `--motor clasico` escucha los juegos del motor anterior. El nuevo usa la placa de video.
+const motor = opt("--motor", "pixi");
+if (motor !== "clasico") process.env.TINKAZO_GPU = "1";
 const lista = pedido === "todos" ? JUEGOS : [pedido];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
