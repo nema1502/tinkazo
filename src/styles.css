@@ -50,8 +50,30 @@
   header { position: sticky; top: 0; z-index: 10; background: var(--paper); border-bottom: var(--bw) solid var(--ink); }
   .stripe { height: 10px; background: repeating-linear-gradient(90deg, var(--magenta) 0 44px, var(--orange) 44px 88px, var(--yellow) 88px 132px, var(--teal) 132px 176px, var(--purple) 176px 220px); }
   .bar { max-width: 1060px; margin: 0 auto; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-  .wordmark { font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; font-size: 20px; }
+  /* El logo: la llama de la casa en un sello amarillo, torcido como una
+     estampilla, y la palabra con su sombra de color. La llama da un salto
+     cada tanto; quien pide menos movimiento la ve quieta. */
+  .wordmark {
+    display: inline-flex; align-items: center; gap: 11px; text-decoration: none; color: inherit; min-height: 44px;
+    font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; font-size: 22px;
+  }
   .wordmark b { color: var(--magenta); }
+  .wm-text { text-shadow: 2px 2px 0 var(--purple); }
+  .wm-llama {
+    display: grid; place-items: center; width: 38px; height: 38px; flex: none;
+    background: var(--yellow); border: 2.5px solid var(--ink); box-shadow: 3px 3px 0 var(--magenta);
+    transform: rotate(-5deg); transition: transform 0.2s ease;
+  }
+  .wm-llama svg { width: 25px; height: 27px; fill: #191919; animation: wm-hop 4.2s ease-in-out infinite; }
+  .wordmark:hover .wm-llama { transform: rotate(4deg) scale(1.06); }
+  @keyframes wm-hop {
+    0%, 82%, 100% { transform: translateY(0); }
+    87% { transform: translateY(-5px); }
+    91% { transform: translateY(0); }
+    94% { transform: translateY(-2px); }
+    97% { transform: translateY(0); }
+  }
+  @media (prefers-reduced-motion: reduce) { .wm-llama svg { animation: none; } }
   .langs { display: flex; gap: 4px; }
   .langs button {
     font-family: ui-monospace, Consolas, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
@@ -366,8 +388,10 @@
     /* A 20 px y peso 900 el magenta contaba como texto grande y le alcanzaba
        con 3:1. Achicado a 16 px ya no, y sobre papel claro daba 3,49. La
        variante oscura del magenta da 4,84 y es el mismo color de marca. */
-    .wordmark { font-size: 16px; }
+    .wordmark { font-size: 17px; gap: 9px; }
     .wordmark b { color: var(--magenta-ink); }
+    .wm-llama { width: 31px; height: 31px; }
+    .wm-llama svg { width: 20px; height: 22px; }
     .langs button { padding: 4px 7px; }
     .bar { gap: 10px; padding: 12px 14px; }
     .auth { gap: 6px; }
