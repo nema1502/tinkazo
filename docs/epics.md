@@ -699,6 +699,8 @@ Resultado (2026-09-20): `src/narrator.ts` elige una voz en español, prefiriendo
 
 De paso se arregló que las frases se sorteaban con `Math.random()`: ahora también salen de la semilla, así que la misma ronda narra siempre igual.
 
+Después (2026-09-28), a pedido de quien lo usa: **hablaba demasiado y con frases forzadas.** Ahora la voz dice menos que la caja: la primera línea del sorteo, las de tensión alta y, de las demás, solo las que llegan después de tres segundos de silencio, que quedan para la música y la cámara. Medido con el auditor de sonido, de 87 a 57 frases entre los ocho juegos. Las frases se reescribieron: sin "señores" en cada juego, sin el "¡Ahora manda fulano!", y cada juego cierra con lo suyo en vez de repetir "¡No respira nadie!" en cinco. "¡Viene rodando!" de la Tómbola y "¡Pasa por fulano!" de la Ruleta se repetían cada medio segundo con tensión alta y la voz los encadenaba: siguen en la caja y bajaron a tensión media.
+
 ### Historia 9.2: Probarla con voz real en el equipo del evento
 
 Como organizadora,

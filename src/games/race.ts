@@ -458,7 +458,7 @@ export function stadiumRace(
       }
       if (tPhase >= 3) {
         phase = "race";
-        say(t("cStart"), 0.35);
+        say(t("cStart"), 0.6);
         // Dos notas a una octava: una bocina, no un pitido.
         beep(note(14), 0.45, "square", 0.055);
         beep(note(9), 0.45, "square", 0.055);

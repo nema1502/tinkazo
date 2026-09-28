@@ -655,7 +655,7 @@ export async function llamasPixi(
       cam.lookAt(G.X0 - 20 * G.u + G.sw * 0.04 * Math.min(3, tPhase), G.midY, (G.portrait ? 1.3 : 1.55) - 0.12 * Math.min(3, tPhase), 2);
       if (tPhase >= 3) {
         phase = "race";
-        S.say(t("cStart"), 0.35);
+        S.say(t("cStart"), 0.6);
         beep(note(14), 0.45, "square", 0.055);
         beep(note(9), 0.45, "square", 0.055);
         cam.punch(0.08).shake(6 * G.u);

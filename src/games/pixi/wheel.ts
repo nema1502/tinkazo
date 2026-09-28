@@ -356,7 +356,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     }
     if (tAll >= T_CREEP && tAll < T_HOLD && w < 3 && tAll - lastSaid > 0.45) {
       lastSaid = tAll;
-      S.say(T[getLang()].cWheelOn(names[cur] ?? ""), 0.75);
+      S.say(T[getLang()].cWheelOn(names[cur] ?? ""), 0.55);
     }
     if (tAll >= T_HOLD && !saidPeg) {
       saidPeg = true;

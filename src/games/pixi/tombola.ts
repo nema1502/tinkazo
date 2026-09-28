@@ -472,7 +472,7 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
       }
     });
     if (tAll >= tCrown) crowned();
-    if (tAll > tOut + 1 && tAll < tLip && tAll - lastSaid > 2.2) sayNow(t("cTomRoll"), 0.85);
+    if (tAll > tOut + 1 && tAll < tLip && tAll - lastSaid > 2.2) sayNow(t("cTomRoll"), 0.55);
   }
 
   function sounds(): void {

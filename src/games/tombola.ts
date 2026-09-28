@@ -427,8 +427,9 @@ export function tombola(
       }
     });
     if (tAll >= tCrown) crowned();
-    // Mientras rueda, que el relator no se calle más de dos segundos y medio.
-    if (tAll > tOut + 1 && tAll < tLip && tAll - lastSaid > 2.2) sayNow(t("cTomRoll"), 0.85);
+    // Mientras rueda, el cartel no se queda quieto más de dos segundos; la voz
+    // lo dice solo si venía callada.
+    if (tAll > tOut + 1 && tAll < tLip && tAll - lastSaid > 2.2) sayNow(t("cTomRoll"), 0.55);
   }
 
   function sounds(): void {

@@ -67,6 +67,16 @@ interface Line {
 /** Cuánto aguanta una línea esperando turno antes de dejar de tener sentido. */
 const STALE_MS = 2600;
 
+/**
+ * La voz dice menos que el cartel. El cartel muestra cada línea; la voz dice
+ * la primera del sorteo y las de tensión alta (el susto, la definición, el
+ * ganador), y de las otras solo las que llegan después de un silencio. Un
+ * relator que no para se vuelve ruido, y ese silencio es de la música y de la
+ * cámara.
+ */
+const LOUD = 0.6;
+const BREATH_MS = 3000;
+
 let voice: SpeechSynthesisVoice | null = null;
 /** Voces de red que ya fallaron en esta sesión: el wifi del evento no dio. */
 const failed = new Set<string>();
@@ -74,6 +84,10 @@ const failed = new Set<string>();
 let liveHeat = 0;
 /** Cuándo empezó a sonar la línea actual. */
 let liveAt = 0;
+/** Cuándo terminó de sonar la última, para contar el silencio. */
+let lastEnd = 0;
+/** Si ya se dijo la primera línea de este sorteo. */
+let opened = false;
 let picked: "es" | "en" | null = null;
 let queued: Line | null = null;
 let busy = false;
@@ -139,6 +153,7 @@ function refresh(force = false): void {
  * esperas en el medio, así que acá se ceba con una frase muda.
  */
 export function primeNarrator(): void {
+  opened = false;
   if (!available()) return;
   speechSynthesis.addEventListener("voiceschanged", () => refresh(true));
   refresh();
@@ -174,6 +189,9 @@ export function narrate(text: string, heat = 0): void {
   refresh();
   if (!voice) return;
   const h = Math.min(1, Math.max(0, heat));
+  const first = !opened;
+  opened = true;
+  if (!first && h < LOUD && (busy || Date.now() - lastEnd < BREATH_MS)) return;
   const spoken = forSpeech(text);
   const line: Line = {
     text: spoken.length > MAX_CHARS ? spoken.slice(0, MAX_CHARS - 1) + "…" : spoken,
@@ -267,6 +285,7 @@ function onDone(): void {
   live = null;
   busy = false;
   liveHeat = 0;
+  lastEnd = Date.now();
   if (queued) flush();
   else if (guard) {
     clearInterval(guard);
@@ -280,6 +299,8 @@ export function stopNarrator(): void {
   busy = false;
   liveHeat = 0;
   live = null;
+  opened = false;
+  lastEnd = 0;
   if (guard) {
     clearInterval(guard);
     guard = 0;

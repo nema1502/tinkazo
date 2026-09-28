@@ -323,7 +323,7 @@ export function wheelSpin(
     }
     if (tAll >= T_CREEP && tAll < T_HOLD && w < 3 && tAll - lastSaid > 0.45) {
       lastSaid = tAll;
-      say(T[getLang()].cWheelOn(names[cur] ?? ""), 0.75);
+      say(T[getLang()].cWheelOn(names[cur] ?? ""), 0.55);
     }
     // Con cierre, no con ventana. Una ventana de 0,05 s de juego dura cuatro o
     // cinco cuadros, así que `say` se disparaba cuatro o cinco veces y cada una
