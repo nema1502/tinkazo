@@ -92,7 +92,7 @@ En la máquina del autor (Windows sin MSVC) el toolchain es `stable-x86_64-pc-wi
 
 ## Skills
 
-`.claude/skills/` trae el kit de Stellar-Elite-Bolivia (stellar.new + BMAD). Entrada: [`SKILL_ROUTER.md`](.claude/skills/SKILL_ROUTER.md). La configuración en `.stellar-build/bmm/config.yaml` apunta los artefactos de planificación a `docs/` y las historias a `docs/stories/`. Para implementar una historia: `dev-story` con la historia de `docs/epics.md`; para contratos, `smart-contracts`; para el frontend, `dapp`; antes de mainnet, `deploy-stellar-mainnet`.
+`.claude/skills/` trae el kit de Stellar-Elite-Bolivia (stellar.new + BMAD), en la máquina del autor: desde el 29 de septiembre de 2026 no se versiona (era el 40% de los archivos del repo y no es parte del proyecto). Entrada: `.claude/skills/SKILL_ROUTER.md`. La configuración en `.stellar-build/bmm/config.yaml` (tampoco versionada) apunta los artefactos de planificación a `docs/` y las historias a `docs/stories/`. Para implementar una historia: `dev-story` con la historia de `docs/epics.md`; para contratos, `smart-contracts`; para el frontend, `dapp`; antes de mainnet, `deploy-stellar-mainnet`.
 
 ## Estructura
 
@@ -112,6 +112,6 @@ src/games/overlay.ts  Andamiaje del motor anterior, que queda de respaldo, y lo 
 scripts/            deploy.sh (contrato), smoke.mjs (sitio), audit-game.mjs, audit-rigor.mjs, audit-emocion.mjs, check-lore.mjs
 contracts/raffle/   Contrato Soroban tinkazo-raffle (lib, drand, select, test)
 docs/               PRD, arquitectura, protocolo, épicas, despliegues, vectores, capturas
-.claude/skills/     Skills para construir en Stellar
+.claude/skills/     Skills para construir en Stellar (locales, no se versionan)
 .github/workflows/  CI
 ```

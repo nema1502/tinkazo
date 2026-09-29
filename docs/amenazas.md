@@ -70,6 +70,18 @@ Un organizador sella cinco listas distintas, cada una contra una ronda distinta,
 
 **Lo que sigue faltando:** el ataque no está cerrado, solo es mucho más visible. Cerrarlo del todo exigiría que el organizador anuncie el identificador del sorteo por un canal que él no controle antes de sellar, y eso Tinkazo no lo puede imponer.
 
+### El ataque más común: inflar la lista antes de sellar
+
+El sello impide cambiar la lista **después**. No impide que se arme mal **desde el principio**. Quien organiza elige qué nombres entran, y puede meter a un amigo tres veces con variantes ("Ana Quispe", "ana quispe", "Ana Quispe M."), sumar nombres de relleno o dejar afuera a alguien que vino. Es más común que la selección del compromiso, porque no hace falta saber nada de cadenas: alcanza con editar un texto. Agregado el 29 de septiembre de 2026, después de que una revisión externa marcó que faltaba.
+
+**Lo que hay hoy:**
+
+- **La lista puede salir de un tercero.** La ventana de importar toma el export de Luma y propone solo a los que hicieron check-in, que es un registro que el organizador no escribe a mano. En el primer export real que se probó, de 67 inscritos vinieron 35.
+- **Los repetidos se ven.** La ventana junta los nombres que son iguales sin tildes ni mayúsculas y pregunta si es la misma persona. Por defecto entra una vez.
+- **La lista entera viaja en el comprobante.** Cualquiera de la sala puede buscarse y contar cuántas veces aparece cada nombre.
+
+**Lo que falta:** que cada participante reciba su propia prueba ("estuviste en el puesto 37 de 120"), que es lo que deja a una persona descubrir que la dejaron afuera sin tener que leer la lista entera. Está en el plan de los próximos 30 días, en el kit para organizadores. Y el protocolo no ordena la lista (§1), así que reordenar los nombres cambia la huella sin cambiar a nadie: un protocolo v3 podría ordenar la lista canónica y pedir en el contrato que una misma dirección no selle dos veces la misma huella, lo que cerraría también la forma directa de la selección del compromiso. Ninguna de las dos cosas impide que alguien invente un nombre: eso solo lo ve la sala.
+
 ## R: Repudio
 
 | Amenaza | Estado | Por qué |
@@ -99,7 +111,7 @@ Lo que eso significa para Tinkazo, sin adornos:
 - La dirección del contrato desaparece y hay que desplegar otro.
 - **Todos los comprobantes anclados que se hayan compartido dejan de verificar.** No degradan: mueren. Quien abra el enlace ve "no pude comprobarlo".
 - Los identificadores de sorteo vuelven a empezar en uno, así que un comprobante viejo puede terminar apuntando a un sorteo **distinto** del contrato nuevo. Eso es peor que no verificar.
-- El README, la presentación y la postulación dicen que el registro sobrevive a que Tinkazo desaparezca. En testnet eso no es cierto.
+- El README y la presentación dicen que el registro sobrevive a que Tinkazo desaparezca. En testnet eso no es cierto.
 
 **La consecuencia práctica:** los sorteos de prueba pueden seguir en testnet, pero **el primer sorteo con gente de afuera tiene que estar en mainnet**. Si una comunidad sortea en octubre y en diciembre abre el enlace y no hay nada, el daño es peor que no haber anclado nunca.
 
@@ -129,7 +141,7 @@ Mitigación parcial, ya hecha: **el comprobante lleva siempre la firma de la ron
 
 ## Lo que se vigila en la cadena
 
-Plan de monitoreo, que es el otro entregable del tramo 2.
+El plan de monitoreo, para cuando esté en mainnet.
 
 | Qué se mira | Cómo | Qué dispara |
 |---|---|---|

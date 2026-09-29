@@ -58,7 +58,7 @@ sequenceDiagram
 4. **Show.** One of twelve full-screen games tells the result. The winner is already fixed when the animation starts; the game only narrates it.
 5. **Verify.** The proof is a link. Whoever opens it watches the page recompute the draw from scratch and gets a verdict: green if the contract attests the list, yellow if the draw was not anchored, red with the reason if anything does not match.
 
-The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.md), with test vectors shared by the Rust contract and the TypeScript client ([docs/vectors.json](docs/vectors.json)). Anyone can reimplement it and reach the same winners.
+The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.md) ([English translation](docs/protocol.en.md)), with test vectors shared by the Rust contract and the TypeScript client ([docs/vectors.json](docs/vectors.json)). Anyone can reimplement it and reach the same winners.
 
 ## Why Stellar
 
@@ -77,7 +77,7 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 | Luma import | Live | Drop the guest export and pick who gets in: those who checked in, the approved ones, or by hand |
 | Verification page | Live | Recomputes any draw in the browser from its proof link |
 | Twelve stadium games | Live | Deterministic: the same round draws the same frames on any machine |
-| Protocol v2 | Specified | [docs/protocolo.md](docs/protocolo.md) and shared vectors that both implementations must pass |
+| Protocol v2 | Specified | [docs/protocolo.md](docs/protocolo.md) ([in English](docs/protocol.en.md)) and shared vectors that both implementations must pass |
 | Quality gates | In CI and in the repo | 82 TypeScript tests, the 19 contract tests, and five custom auditors (below) |
 
 Tested with a thousand participants: the draw still runs at 60 frames per second and anchors the same way.
@@ -119,7 +119,7 @@ Andean music with a beat plays in the background and follows the tension, short 
 
 ## Trust model
 
-What is guaranteed, and what is not, is written down in [docs/amenazas.md](docs/amenazas.md) and on the [security page](https://tinkazo.vercel.app/seguridad.html).
+What is guaranteed, and what is not, is written down in [docs/amenazas.md](docs/amenazas.md) ([summary in English](docs/threat-model.en.md)) and on the [security page](https://tinkazo.vercel.app/seguridad.html).
 
 - **Adding a name after sealing** changes the fingerprint, and the fingerprint that counts was recorded before the seed existed.
 - **Choosing the number** is impossible: the round is fixed before it is published, and its signature is verified on chain.
@@ -209,7 +209,7 @@ docs/                           Protocol, architecture, threats, deployments, le
 scripts/                        Deployment, smoke test and the auditors
 ```
 
-Documentation is in Spanish: [protocol](docs/protocolo.md) · [architecture](docs/architecture.md) · [threats](docs/amenazas.md) · [deployments and costs](docs/deployments.md) · [games](docs/juegos.md) · [legal](docs/legal.md) · [brand](docs/marca.md).
+In English: the [protocol](docs/protocol.en.md) and a [threat model summary](docs/threat-model.en.md). The rest of the documentation is in Spanish: [protocol](docs/protocolo.md) · [architecture](docs/architecture.md) · [threats](docs/amenazas.md) · [deployments and costs](docs/deployments.md) · [games](docs/juegos.md) · [legal](docs/legal.md) · [brand](docs/marca.md).
 
 ## Team
 

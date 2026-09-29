@@ -224,7 +224,7 @@ tinkazo/
 │   ├── idea-original-arkiv.md
 │   └── capturas/
 ├── .github/workflows/ci.yml
-├── .stellar-build/bmm/config.yaml # config de las skills (planning_artifacts: docs)
+├── .stellar-build/bmm/config.yaml # config de las skills, local: no se versiona
 ├── Cargo.toml                    # workspace
 ├── package.json · pnpm-lock.yaml · vite.config.ts · tsconfig.json · vercel.json
 ├── CLAUDE.md · README.md · LICENSE · .gitignore

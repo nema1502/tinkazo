@@ -135,7 +135,7 @@ export const T: Record<Lang, Dict> = {
   es: {
     badge: "Para el que le toca sortear",
     h1: 'Sorteos que <span class="hl">cualquiera puede comprobar</span>.',
-    lead: "Pegá la lista de tu evento y sorteá en pantalla grande, con carrera de llamas o con ruleta. Al ganador lo decide un número al azar que se publica en internet a una hora fija, después de que vos cerraste la lista. Vos no lo elegís. Yo tampoco. Y cualquiera lo revisa desde su celular.",
+    lead: "Pegá la lista de tu evento y sorteá en pantalla grande, con la carrera de llamas, el trompo o el Carnaval de Oruro. Al ganador lo decide un número al azar que se publica en internet a una hora fija, después de que vos cerraste la lista. Vos no lo elegís. Yo tampoco. Y cualquiera lo revisa desde su celular.",
     ctaHero: "Entrar y sortear, es gratis",
     note: "Entrás con Google en dos toques, sin instalar nada. Tu gente no se crea ninguna cuenta.",
     howTitle: "¿Cómo funciona?",
@@ -725,7 +725,7 @@ export const T: Record<Lang, Dict> = {
   en: {
     badge: "For whoever has to run the draw",
     h1: 'Draws <span class="hl">anyone can check</span>.',
-    lead: "Paste your attendee list and draw it on the big screen, llama race or spinning wheel. The winner comes out of a random number published on the internet at a fixed time, after you locked the list. You don't pick it. I don't either. And anyone can check it from their phone.",
+    lead: "Paste your attendee list and draw it on the big screen: a llama race, spinning tops or the Oruro Carnival. The winner comes out of a random number published on the internet at a fixed time, after you locked the list. You don't pick it. I don't either. And anyone can check it from their phone.",
     ctaHero: "Sign in and draw, it's free",
     note: "Sign in with Google in two taps, nothing to install. Your people create no account at all.",
     howTitle: "How it works",
