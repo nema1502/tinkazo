@@ -38,6 +38,8 @@ Cuando una empresa sortea para vender más o captar clientes, es esto. Un sorteo
 
 Desde esta ley, **las promociones empresariales ya no necesitan autorización de la Autoridad de Fiscalización del Juego ni pagan impuestos por el sorteo**. La AJ lo confirmó en un comunicado del 28 de mayo de 2026, en [aj.gob.bo](https://www.aj.gob.bo/). Para Tinkazo es la mejor noticia posible: el caso del patrocinador, que antes pedía un trámite, ahora es mucho más simple.
 
+Cómo lo hace: su disposición adicional tercera elimina las referencias a las promociones empresariales de los artículos 2, 9, 35 y 36 de la Ley 060 ([Ferrere](https://www.ferrere.com/es/novedades/desregulacion-de-las-promociones-empresariales/)). El artículo 7, con la definición de arriba, no está entre los que cambian. Antes de citarlo en algo formal, conviene confirmar el texto final en la Gaceta Oficial.
+
 ### Premios en cripto
 
 El Banco Central levantó la prohibición de los activos virtuales con la [Resolución de Directorio 082/2024](https://www.bcb.gob.bo/webdocs/01_resoluciones/RD%20082%202024.pdf) del 26 de junio de 2024. Dos cosas que siguen:
