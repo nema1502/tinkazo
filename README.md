@@ -24,6 +24,8 @@ Every community gives things away: conference tickets, books, software licenses,
 
 Participants need nothing: no wallet, no account, no app.
 
+The draw is where it starts. What Tinkazo is for is broader: whenever people share something out (a prize, a speaking slot, a grant, a spot on a trip), it should be fair, and anyone should be able to check it from their phone, without knowing there is a blockchain underneath.
+
 ## Not gambling
 
 Tinkazo decides who gets something that is already being given away. It is not a way to bet or to sell chances:

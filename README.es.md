@@ -24,6 +24,8 @@ Toda comunidad regala cosas: entradas, libros, licencias, becas, turnos para hab
 
 Los participantes no necesitan nada: ni billetera, ni cuenta, ni aplicación.
 
+El sorteo es por donde empieza. Para lo que existe Tinkazo es más amplio: que repartir entre la gente sea justo (un premio, un turno para exponer, una beca, un cupo en un viaje), y que cualquiera lo pueda comprobar desde su celular, sin saber que abajo hay una blockchain.
+
 ## No es de apuestas
 
 Tinkazo decide quién se lleva algo que ya se está regalando. No sirve para apostar ni para vender chances:
