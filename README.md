@@ -20,7 +20,7 @@
 
 Every community gives things away: conference tickets, books, software licenses, scholarships, speaking slots, who presents first. And every time, someone in the room wonders whether the organizer picked a friend. The tools people use today are a spreadsheet `RAND()`, a spinning wheel on a website, or "trust me". None of them can be checked afterwards.
 
-**Tinkazo makes the draw checkable by anyone, from their phone, forever.** The organizer pastes a list, the list is sealed on Stellar, and the winner comes from a public random number that did not exist yet when the list was sealed. A Soroban contract verifies that number's signature on chain. The result is shown on the big screen as a full-screen game with a narrator, and anyone can re-run the whole draw in their browser from a link.
+**Tinkazo makes the draw checkable by anyone, from their phone, forever.** The organizer pastes a list, the list is sealed on Stellar, and the winner comes from a public random number that did not exist yet when the list was sealed. A Soroban contract verifies that number's signature on chain. The result is shown on the big screen as a full-screen game, and anyone can re-run the whole draw in their browser from a link.
 
 Participants need nothing: no wallet, no account, no app.
 
@@ -75,7 +75,7 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 | Soroban contract `tinkazo-raffle` | Deployed on testnet | [`CD2SSHBU…ARENH`](https://stellar.expert/explorer/testnet/contract/CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH) · 19 tests, including a real quicknet round · 11.4 KB WASM |
 | Web app | Live | [tinkazo.vercel.app](https://tinkazo.vercel.app) · Spanish and English · light and dark · no backend |
 | Verification page | Live | Recomputes any draw in the browser from its proof link |
-| Eight stadium games | Live | Deterministic: the same round draws the same frames on any machine |
+| Twelve stadium games | Live | Deterministic: the same round draws the same frames on any machine |
 | Protocol v2 | Specified | [docs/protocolo.md](docs/protocolo.md) and shared vectors that both implementations must pass |
 | Quality gates | In CI and in the repo | 78 unit tests, contract tests, and five custom auditors (below) |
 
@@ -169,7 +169,7 @@ Four deliverables, each with a check anyone can run from outside:
 | Five draws with real communities in Bolivia | Five meetups, classes or hackathons, each with its public proof link |
 | The drand verifier as a reusable crate | A Soroban contract outside Tinkazo verifies a quicknet round with it, against the shared test vectors |
 
-After that: a results message with each participant's proof (the Luma import with its check-in filter is already done), and measuring the games on a mid-range phone. On desktop all eight pass the strict auditor at 60 fps.
+After that: a results message with each participant's proof (the Luma import with its check-in filter is already done), and measuring the games on a mid-range phone. On desktop all twelve pass the strict auditor at 60 fps.
 
 ## Run it locally
 
@@ -195,7 +195,7 @@ Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pa
 index.html · verificar.html     The tool, and the page that re-runs a draw from its proof
 src/protocol/                   Canonical list, selection, drand, proof
 src/stellar/                    Network, wallets and contract client
-src/games/                      The eight games and the scaffolding they share
+src/games/                      The twelve games and the scaffolding they share
 contracts/raffle/               The Soroban contract, in Rust
 docs/                           Protocol, architecture, threats, deployments, legal, games
 scripts/                        Deployment, smoke test and the auditors

@@ -20,7 +20,7 @@
 
 Toda comunidad regala cosas: entradas, libros, licencias, becas, turnos para hablar, quién expone primero. Y cada vez alguien en la sala piensa que el organizador eligió a un amigo. Lo que se usa hoy es un `ALEATORIO()` en una planilla, una ruleta en una página web o "confíen en mí". Nada de eso se puede revisar después.
 
-**Tinkazo hace que cualquiera pueda revisar el sorteo, desde su celular y para siempre.** Quien organiza pega la lista, la lista se sella en Stellar, y el ganador sale de un número público que todavía no existía cuando se selló. Un contrato de Soroban verifica la firma de ese número dentro de la cadena. El resultado se cuenta en pantalla grande con un juego y un relator, y cualquiera rehace el sorteo entero en su navegador desde un enlace.
+**Tinkazo hace que cualquiera pueda revisar el sorteo, desde su celular y para siempre.** Quien organiza pega la lista, la lista se sella en Stellar, y el ganador sale de un número público que todavía no existía cuando se selló. Un contrato de Soroban verifica la firma de ese número dentro de la cadena. El resultado se cuenta en pantalla grande con un juego, y cualquiera rehace el sorteo entero en su navegador desde un enlace.
 
 Los participantes no necesitan nada: ni billetera, ni cuenta, ni aplicación.
 
@@ -75,7 +75,7 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 | Contrato Soroban `tinkazo-raffle` | Desplegado en testnet | [`CD2SSHBU…ARENH`](https://stellar.expert/explorer/testnet/contract/CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH) · 19 tests, uno con una ronda real de quicknet · WASM de 11,4 KB |
 | Sitio | En producción | [tinkazo.vercel.app](https://tinkazo.vercel.app) · español e inglés · tema claro y oscuro · sin servidor |
 | Página de verificación | En producción | Rehace cualquier sorteo en el navegador desde su comprobante |
-| Ocho juegos de estadio | En producción | Deterministas: la misma ronda dibuja los mismos cuadros en cualquier máquina |
+| Doce juegos de estadio | En producción | Deterministas: la misma ronda dibuja los mismos cuadros en cualquier máquina |
 | Protocolo v2 | Especificado | [docs/protocolo.md](docs/protocolo.md) y vectores que las dos implementaciones tienen que pasar |
 | Controles de calidad | En la CI y en el repositorio | 78 tests unitarios, los del contrato, y cinco auditores propios (abajo) |
 
@@ -169,7 +169,7 @@ Cuatro entregables, cada uno con una comprobación que cualquiera puede hacer de
 | Cinco sorteos con comunidades reales de Bolivia | Cinco meetups, clases o hackatones, cada uno con su enlace de comprobación público |
 | El verificador de drand como crate reutilizable | Un contrato de Soroban que no es Tinkazo verifica una ronda de quicknet con él, contra los vectores de prueba compartidos |
 
-Después: un mensaje con el resultado y la prueba de cada participante (la importación de Luma con su filtro de check-in ya está hecha), y medir los juegos en un celular de gama media. En computadora, los ocho pasan el auditor exigente a sesenta cuadros por segundo.
+Después: un mensaje con el resultado y la prueba de cada participante (la importación de Luma con su filtro de check-in ya está hecha), y medir los juegos en un celular de gama media. En computadora, los doce pasan el auditor exigente a sesenta cuadros por segundo.
 
 ## Correr en local
 
@@ -195,7 +195,7 @@ Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledg
 index.html · verificar.html     La herramienta, y la página que rehace un sorteo desde su comprobante
 src/protocol/                   Lista canónica, selección, drand, comprobante
 src/stellar/                    Red, billeteras y cliente del contrato
-src/games/                      Los ocho juegos y el andamiaje que comparten
+src/games/                      Los doce juegos y el andamiaje que comparten
 contracts/raffle/               El contrato Soroban, en Rust
 docs/                           Protocolo, arquitectura, amenazas, despliegues, legal, juegos
 scripts/                        Despliegue, prueba de humo y los auditores

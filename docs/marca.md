@@ -131,32 +131,36 @@ El sitio está en español boliviano con voseo, y en inglés neutro. No hay un t
 - "Revoluciona", "disrumpe", "la próxima generación de", "impulsado por blockchain".
 - Prometer lo que no está hecho. Si algo está en testnet, se dice testnet.
 - Explicar la criptografía antes de explicar para qué sirve.
-- Signos de exclamación en el texto del producto. En el narrador de los juegos sí, porque ahí es un relator.
+- Signos de exclamación en el texto del producto. En los subtítulos de los juegos sí, porque ahí se escribe como un relator.
 
-## El narrador es otro registro
+## Los subtítulos son otro registro
 
-Dentro de los juegos la voz es de relator de partido: mayúsculas, gritos, "¡NO RESPIRA NADIE!". Eso vive solo ahí. No se filtra a la página ni a una presentación.
+Dentro de los juegos el texto es de relator de partido: mayúsculas, gritos, "¡NO RESPIRA NADIE!". Eso vive solo ahí. No se filtra a la página ni a una presentación.
 
-## Los ocho juegos
+## Los doce juegos
 
-Cada uno tiene su color dominante, útil si una diapositiva los muestra.
+Cada uno tiene su color dominante, útil si una diapositiva los muestra. Seis salen de la cultura boliviana y latinoamericana.
 
 | Juego | Color | En una frase |
 |---|---|---|
 | Constelación Stellar | Morado y amarillo | Un pago que salta de estrella en estrella hasta encontrar ruta |
 | Cierre de Libro | Turquesa | Tarjetas barridas por el cierre de un ledger |
-| Pasanaku | Los cinco, en franjas | Un aguayo que se cierra hasta que queda uno en el nudo |
+| Aguayo | Los cinco, en franjas | Un aguayo que se cierra hasta que queda uno en el nudo |
 | Teleférico | Los de las líneas, sobre un atardecer | Un convoy que sube y en cada estación se baja la mitad |
 | Tómbola | Naranja y amarillo, con las bolas de los cinco | El bombo de la kermés: la bola que sale es la ganadora |
 | Carrera de llamas | Naranja y magenta | Ocho carriles por la cordillera |
 | Carrera de cohetes | Morado | La misma carrera, en el espacio |
 | Ruleta | Los cinco, en gajos | La de siempre, pero que se ve girar con dos personas |
+| Trompo | Tierra, con trompos de los cinco | El ruedo de tiza: chocan y se caen hasta el mano a mano |
+| Balsas de totora | Azul del lago y amarillo | La carrera, remando por el Titicaca |
+| Piñata | Los cinco, en conos | Cada palo tira caramelos; el último que queda adentro gana |
+| Carnaval de Oruro | Rojo de las máscaras y amarillo, de noche | Una comparsa de la Diablada que se queda cuadra por cuadra hasta el Socavón |
 
 ## Lo boliviano
 
 Entra por la función, nunca por la decoración. Si el elemento se puede sacar sin que nada deje de funcionar, es decoración y sobra.
 
-En el producto hay exactamente cinco cosas bolivianas y las cinco hacen algo: el nombre, la llama de la mascota, el perno tricolor de la ruleta que marca la vuelta, el aguayo del Pasanaku que es el tablero de juego, y el teleférico, cuyo cable es la barra de progreso y cuyas cabinas llevan los colores de las diez líneas de La Paz y El Alto. Los nombres de la lista de ejemplo (Quispe, Mamani, Choque, Condori, Limachi, Villca) son el detalle más sutil y el que más gusta.
+Cada cosa boliviana del producto hace algo: el nombre, la llama de la mascota, el perno tricolor de la ruleta que marca la vuelta, el aguayo que es el tablero de juego, el teleférico, cuyo cable es la barra de progreso y cuyas cabinas llevan los colores de las diez líneas de La Paz y El Alto, las balsas de totora que son los carriles de la carrera, y la entrada del Carnaval de Oruro, cuyas cuadras son las rondas de eliminación. El trompo y la piñata son de toda Latinoamérica y siguen la misma regla: el choque y el palo son los que eliminan. Los nombres de la lista de ejemplo (Quispe, Mamani, Choque, Condori, Limachi, Villca) son el detalle más sutil y el que más gusta.
 
 **Lo que no va:** wiphalas, cholitas, el Illimani, Tiwanaku, ni la palabra "Bolivia" escrita en pantalla. El pie de página dice "Hecho en Bolivia por Nicolás" y con eso alcanza.
 

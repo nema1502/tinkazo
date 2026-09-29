@@ -108,8 +108,8 @@ Para afinar un caso sin correr las once: `node scripts/audit-rigor.mjs <juego> -
 | La misma ronda dibuja los mismos cuadros | Las huellas de dos corridas, una por una. Si difieren, dice cuándo y en qué parte de la pantalla | Es la promesa de la animación reproducible. Encontró los avatares, que se decodificaban cuando el navegador quería, y los adornos que giraban con la hora de la página en vez de la del juego |
 | El juego no llama a `Math.random()` | Se envuelve la función y se cuentan las llamadas mientras el estadio está a la vista | La regla de siempre, ahora comprobada |
 | Nunca pasan más de 4 s sin que cambie la pantalla | Cuánto cambió la huella contra la de medio segundo atrás | Desde el fondo de la sala, una pantalla que casi no cambia es una foto. Encontró el armado de la constelación y la mesa final del Cierre de Libro |
-| Un hecho nuevo cada 2,5 s, y nunca 4 s sin ninguno | Cada sonido que arranca, cada línea nueva del relator y cada salto de la pantalla después de un rato quieta | Encontró el tercer apretón del Pasanaku: cuatro segundos de zumbido parejo |
-| El relator no tartamudea | Dos líneas a menos de tres décimos | Encontró el nudo del Pasanaku cambiando de frase ocho veces seguidas |
+| Un hecho nuevo cada 2,5 s, y nunca 4 s sin ninguno | Cada sonido que arranca, cada línea nueva de los subtítulos y cada salto de la pantalla después de un rato quieta | Encontró el tercer apretón del Pasanaku: cuatro segundos de zumbido parejo |
+| Los subtítulos no tartamudean | Dos líneas a menos de tres décimos | Encontró el nudo del Pasanaku cambiando de frase ocho veces seguidas |
 | Ningún cuadro queda vacío | Huellas de un solo gris | |
 | Corre fluido | Tiempo real de cada cuadro: 30 por segundo o más, y el 95% en menos de 80 ms | Los cuadros en que el auditor lee el lienzo entero no cuentan |
 | El nombre del ganador se lee desde el fondo | Alto de la tinta dentro del cartel: 4,5% del alto de la pantalla o más | A 720 son 32 píxeles, que a un cuarto de escala siguen siendo ocho |
@@ -122,7 +122,7 @@ Para afinar un caso sin correr las once: `node scripts/audit-rigor.mjs <juego> -
 
 Para medir el cartel, `drawWinnerPlate` anota en el lienzo el rectángulo donde lo dibujó. Buscarlo por el color no alcanzaba: el aguayo del Pasanaku tiene una franja del mismo amarillo, y el auditor la medía como si fuera el cartel.
 
-Cada corrida deja en `docs/capturas/rigor/<juego>-corrida.json` cuándo sonó algo, qué dijo el relator y cuánto cambió la pantalla en cada décimo de segundo, para mirar un hueco sin volver a correr nada.
+Cada corrida deja en `docs/capturas/rigor/<juego>-corrida.json` cuándo sonó algo, qué dijeron los subtítulos y cuánto cambió la pantalla en cada décimo de segundo, para mirar un hueco sin volver a correr nada.
 
 ## La duración
 
@@ -137,7 +137,7 @@ Era un multiplicador fijo (`0,8 / 1,4 / 2,2`) y el problema no era el número si
 
 **El tope de ×2,2 no es negociable.** Más que eso no es más emoción, es cámara lenta: la ruleta tenía dos segundos de crucero en los que la imagen es un borrón, y multiplicarlos por tres y medio son ocho segundos de nada. Un juego que topa ahí **necesita más contenido, no ir más despacio**. Por eso la ruleta pasó de 7,65 a 17,2 segundos nominales acortando el borrón y alargando la frenada, el Cierre de Libro llegó a seis pasadas y al Pasanaku se le dio tiempo al tejido de los hilos y al apretón.
 
-Hoy, medido por el auditor exigente: "normal" son treinta segundos en los ocho.
+Hoy, medido por el auditor exigente: "normal" son treinta segundos en los doce.
 
 ## El sonido
 
@@ -173,7 +173,7 @@ Un juego que cuenta el resultado con parámetros se ve como una simulación. La 
 
 **Las historias chicas del resto**, de una a tres según cuánta gente hay: una que se planta (terca como llama), una que tropieza, una que pega un pique y se desinfla, una que le escupe a la de al lado. Se reparten con separación mínima, así que siempre pasa algo, y cada persona es un personaje: se recuerda "la de Jorge que se plantó", no "el carril cuatro".
 
-**La tensión**, una curva de 0 a 1 que sube despacio, tiene un escalón en la mitad y se dispara en el último cuarto. La usan el sonido y el relator: la misma curva para los dos.
+**La tensión**, una curva de 0 a 1 que sube despacio, tiene un escalón en la mitad y se dispara en el último cuarto. La usan los efectos, la música y los subtítulos: la misma curva para todos.
 
 Cómo lo actúa la carrera: cada llama sigue un camino planificado (la línea de base más una ventaja propia, con puntos de control) y tiene **su propio reloj**, que se detiene cuando se planta, se frena un instante al tropezar y se adelanta en un pique. El reloj nunca corre para atrás, así que nadie retrocede, y el de la ganadora termina en hora: llega a la meta justo cuando se acaba la carrera. Como todo es función del tiempo, la misma ronda dibuja los mismos cuadros y saltar sigue funcionando.
 
@@ -192,7 +192,7 @@ La carrera actúa la historia entera. Los demás juegos toman del director el ar
 | Teleférico | Susto | **La puerta.** En la última estación se abre la de la cabina ganadora, el pasajero se asoma y la cabina se sacude; la puerta se cierra ("¡se queda!") y el que se baja es el de la otra |
 | Teleférico | Duelo | **La mordaza.** En la última estación la cabina de atrás se suelta y resbala cable abajo, hasta que la mordaza la agarra entre chispas y la vuelve a subir. A veces es la del ganador y a veces la de la otra, así que "la que se salvó" no delata a nadie |
 | Teleférico | Tapada | **El apagón.** Justo antes de la última estación se corta la luz: se apaga la ciudad, el convoy frena en el aire y se hamaca a oscuras con un latido. La luz vuelve titilando y el convoy sigue |
-| Teleférico | Remontada | **La ráfaga.** A mitad de viaje entra un viento que cruza la pantalla, hamaca cada cabina a su tiempo y hace flamear las banderas. El relator la canta si no está diciendo otra cosa |
+| Teleférico | Remontada | **La ráfaga.** A mitad de viaje entra un viento que cruza la pantalla, hamaca cada cabina a su tiempo y hace flamear las banderas. Los subtítulos la anuncian si no están diciendo otra cosa |
 | Tómbola | Susto y duelo | **El rebote.** Se abre la compuerta y asoma primero otra bola, medio afuera, temblando en el borde ("¡sale la 12!"); cae para adentro ("¡no era esa!") y recién sale la ganadora |
 | Cierre de Libro | Susto | **La barrida.** La última barrida pasa por la tarjeta ganadora, que tiembla en rojo y suelta pedazos que se vuelven a juntar |
 | Cierre de Libro | Duelo | **El sello que duda.** El último sello flota sobre la ganadora ("¿se lo sellan a fulano?") y a último momento se va a la otra |
@@ -222,33 +222,21 @@ Los otros auditores miran un sorteo por vez. Lo que mata la emoción no se ve en
 
 La primera vez que corrió encontró justo eso: con las curvas de cada arco fijas, a la mitad la ganadora iba primera o última en casi todas las carreras, y en los cohetes iba atrás en trece de dieciséis. Ahora el puesto a la mitad se sortea según el arco (en la remontada, entre los últimos cuatro; en la tapada, en el medio; en el susto, primera si el tropiezo viene después, en el medio si ya tropezó; en el duelo, arriba o en el medio según arranque temprano o tarde), y la curva de la ganadora se corrige por bisección hasta ocuparlo. La corrección vale cero en la largada y desde el 86%, así que la llegada no cambia.
 
-## El narrador
+## Los subtítulos, y por qué no hay voz
 
-La voz va por [`src/narrator.ts`](../src/narrator.ts) y tiene una regla que no es obvia: **una línea nueva no corta a la que se está diciendo**, salvo que de verdad importe más. Cada `narrate(texto, heat)` lleva su tensión de 0 a 1, y pisa a la actual si la supera por tres décimos, o si la supera por poco y la actual ya lleva más de un segundo sonando: un relator se corta a sí mismo cuando pasa algo más grande. El anuncio del ganador pisa a cualquier cosa; un cambio de líder no pisa a otro cambio de líder.
+Cada momento del juego se cuenta en la caja del estadio, abajo: "¡Tiren los trompos!", "¡Se cortó la luz!", el nombre del ganador. Cada línea lleva su tensión de 0 a 1, y una línea nueva no pisa a la que está en pantalla salvo que importe más: el anuncio del ganador pisa a cualquier cosa, y un cambio de líder no pisa a otro cambio de líder. El auditor exigente mide que dos líneas no se pisen a menos de tres décimos.
 
-Lo segundo se agregó el 26 de septiembre de 2026, al grabar el Teleférico con voz: "¡Estación 2! Se bajan 4, quedan 5" tarda cuatro segundos en decirse, y "¡SE CORTÓ LA LUZ!", que llegaba en el medio, esperaba su turno y se caía por vieja. El giro se veía y no se oía.
-
-**Qué voz.** Manda la calidad y después la región. Una voz neural (Edge las llama "Online (Natural)") gana a cualquier otra; después las buenas de Google y de Apple; al final las de escritorio, que suenan a robot. Entre las del mismo nivel, la región: Bolivia primero, después los vecinos y Latinoamérica, y España al final, porque el texto está escrito con voseo boliviano. En Windows eso da dos resultados muy distintos: **Chrome solo trae voces de escritorio de España** (Helena, Laura, Pablo), y **Edge trae neurales de toda Latinoamérica, incluidas dos de Bolivia: Marcelo y Sofía**. En Edge el relator es Marcelo. La página deja elegir la voz y probarla, y si no hay ninguna natural dice que en Edge sí.
-
-**Cómo dice.** La tensión se oye en el apuro, no en el tono: la velocidad va de 1,08 a 1,28, y el tono de una voz neural no se toca. Antes el tono subía hasta 1,4 y el relator sonaba a ardilla. Las palabras en mayúsculas se dicen en minúsculas, porque algunas voces leen "DOS" como una sigla.
-
-**Si la voz de red se cae** (el wifi del evento), se descarta por el resto de la sesión y habla la mejor que quede.
-
-Antes cortaba siempre, y eso dejaba frases a medio decir: en una sala no se oye como un relator que va rápido, se oye como uno que se traba. Lo que no alcanza a entrar espera turno, y si para cuando le toca ya pasaron dos segundos y medio se cae: "va puntero fulano" dicho tarde es peor que el silencio.
-
-Y todo el armado de la declamación va dentro de un `try`, no sólo la llamada a hablar. Asignar la voz puede tirar una excepción según el navegador, y esa excepción subía hasta el bucle del juego y **lo mataba**: el sorteo entero se caía por el narrador, que es justo lo que este módulo promete que nunca pasa.
-
-Chrome sin interfaz no trae ninguna voz instalada, así que en una auditoría el narrador nunca habla. Por eso `scripts/audit-sound.mjs` le pone una voz de mentira, simula el tiempo que tardaría en decir cada línea y cuenta las que quedan a medias. Sin que suene nada. Cuenta como trabada una línea cortada antes de un segundo o antes de la mitad: cortar una que ya dijo lo suyo es lo que el narrador hace a propósito.
+Hasta el 28 de septiembre de 2026 esas mismas líneas las decía en voz alta un relator (`src/narrator.ts`), con la voz neural boliviana de Edge cuando la había. Se sacó del todo: al autor no le gustaba ni con menos frases ni con otras palabras, y un sorteo se entiende sin voz. En una sala con parlantes flojos o con eco, una voz sintética que se traba resta más de lo que suma; la caja se lee desde el fondo y no depende del navegador. Quedaron la música de fondo y los efectos.
 
 ## La música
 
-El modo con música es [`src/music.ts`](../src/music.ts): andina con beat, generada en el navegador. Charango en ritmo de huayno (larga, corta, corta), bombo legüero, zampoña repartida entre dos cañas que se contestan como los sikuris, y un beat electrónico debajo. Sin archivos de audio y sin licencias.
+La música de fondo es [`src/music.ts`](../src/music.ts): andina con beat, generada en el navegador. Charango en ritmo de huayno (larga, corta, corta), bombo legüero, zampoña repartida entre dos cañas que se contestan como los sikuris, y un beat electrónico debajo. Sin archivos de audio y sin licencias.
 
 - **La escala es la pentatónica de la menor,** que tiene las mismas cinco notas que la de do mayor de los efectos: la música y los golpes de los juegos no chocan.
-- **Sigue al relator.** Cada línea trae su tensión, y la música prende capas con ella: bombo, charango, beat, zampoña, y todo doblado arriba de 0,85. El tempo va de 96 a 132. Un piso que crece con el tiempo hace que siempre vaya de menos a más aunque el relator calle. Así sirve para los ocho juegos sin que ninguno sepa de música.
+- **Sigue a los subtítulos.** Cada línea trae su tensión, y la música prende capas con ella: bombo, charango, beat, zampoña, y todo doblado arriba de 0,85. El tempo va de 96 a 132. Un piso que crece con el tiempo hace que siempre vaya de menos a más aunque los subtítulos no cambien. Así sirve para los doce juegos sin que ninguno sepa de música.
 - **La sorpresa es silencio.** Un salto de tensión de tres décimos corta la música un tiempo entero, y vuelve con platillo y bombo. El ganador (tensión 1) remata con el charango en trémolo y se apaga.
 - **Sembrada con la ronda,** con otra parte de la aleatoriedad que el juego: prenderla no cambia la animación. Ni un `Math.random`.
-- **Es un modo:** arranca apagada, se prende con el botón "Música" de la página y el sonido apagado también la apaga.
+- **Arranca prendida y por debajo de los efectos** desde el 28 de septiembre de 2026. Se apaga con el botón "Música" de la página, y el sonido apagado también la apaga.
 
 ## Los cierres
 
@@ -266,7 +254,7 @@ Las grillas se reparten con la proporción real de la pantalla y no con una cons
 
 ## Lo que el auditor no puede ver
 
-El ritmo, la legibilidad del cartel y el tartamudeo del relator ya los mide el auditor exigente. Lo que sigue no, y lo revisás vos antes de subirlo:
+El ritmo, la legibilidad del cartel y el tartamudeo de los subtítulos ya los mide el auditor exigente. Lo que sigue no, y lo revisás vos antes de subirlo:
 
 - ¿Se entiende quién va ganando sin leer texto?
 - ¿Se lee desde el fondo de la sala, proyectado?
