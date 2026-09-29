@@ -4,11 +4,13 @@ Escrito para quien arme una presentación, un afiche o una diapositiva de Tinkaz
 
 ## La idea en una línea
 
-> Sorteos que nadie puede arreglar. Ni vos.
+> Sorteos que cualquiera puede comprobar.
 
-En inglés: *Raffles nobody can rig. Not even you.*
+En inglés: *Draws anyone can check.*
 
-El "ni vos" es lo que hace el trabajo. Cualquiera promete un sorteo limpio; lo raro es una herramienta que le quita el poder a quien la usa. Si hay que cortar la frase, se corta la primera mitad, nunca la segunda.
+Dice lo que el producto hace de verdad: cualquiera, desde su celular, rehace el sorteo y ve si cuadra. Hasta el 28 de septiembre de 2026 el lema era "Sorteos que nadie puede arreglar. Ni vos". Se cambió porque prometía más de lo que el modelo de amenazas sostiene: el ataque de sellar varias listas y publicar una sigue abierto, está documentado, y la página lo marca en vez de impedirlo. "Arreglar" y "rig" además son palabras de casino. "Comprobar" es la promesa que se cumple siempre.
+
+La idea del "ni vos" sigue viva, pero se cuenta, no se promete: cuando cerraste la lista, el número que la decide todavía no existía.
 
 ## El nombre
 
@@ -16,7 +18,7 @@ El "ni vos" es lo que hace el trabajo. Cualquiera promete un sorteo limpio; lo r
 
 En el logotipo van las dos sílabas con peso distinto: `Tinka` en tinta y `zo` en magenta. Es la única vez que el nombre se parte.
 
-Viene del español de Bolivia. El *Diccionario de americanismos* registra dos palabras gemelas: **tinkazo**, que es un presentimiento, y **tincazo**, que es el golpecito que se da haciendo resbalar el dedo sobre el pulgar. El producto es las dos cosas, y eso se puede contar en diez segundos ante cualquier público.
+Viene del español de Bolivia. El *Diccionario de americanismos* registra dos palabras gemelas: **tinkazo**, que es un presentimiento (nunca "suerte": esa palabra es de las apuestas y el diccionario no la dice), y **tincazo**, que es el golpecito que se da haciendo resbalar el dedo sobre el pulgar. El producto es las dos cosas, y eso se puede contar en diez segundos ante cualquier público.
 
 ## La paleta
 

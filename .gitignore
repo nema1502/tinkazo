@@ -32,3 +32,9 @@ postulacion/
 
 # Lo que deja el auditor exigente en cada corrida: se regenera, no se versiona.
 docs/capturas/rigor/
+
+# Listas de invitados (exports de Luma y otras): traen nombres y correos de
+# gente real. Se usan en el navegador y nunca se versionan.
+/*.csv
+*Invitados*.csv
+*Guests*.csv

@@ -2,7 +2,7 @@
 
 Qué puede salir mal en Tinkazo, quién podría hacerlo, qué lo impide hoy y qué no. Escrito con el método STRIDE, que agrupa las amenazas en seis familias: suplantación, alteración, repudio, filtración, denegación de servicio y elevación de privilegios.
 
-Este documento existe por dos motivos. El primero es que el Stellar Community Fund lo pide como entregable obligatorio del segundo tramo. El segundo es mejor: **el producto vende que nadie puede arreglar un sorteo, y una afirmación así hay que poder defenderla por escrito.**
+Existe porque **el producto promete que cualquiera puede comprobar un sorteo, y una promesa así hay que poder defenderla por escrito**, incluido lo que todavía no impide.
 
 Lo que hay acá no son hipótesis: cada límite del diseño está anotado con lo que efectivamente pasa hoy, no con lo que nos gustaría que pasara.
 

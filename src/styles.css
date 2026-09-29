@@ -521,3 +521,116 @@
   }
   .pies a:hover { color: var(--ink); text-decoration: underline; }
   @media (max-width: 700px) { footer .bar { justify-content: center; text-align: center; } }
+
+  /* ------------------------------------------------ la ventana de importar
+     Un export de Luma trae a todos los inscritos: acá se ve el archivo entero,
+     se elige quiénes entran y se marca a mano. Ocupa casi toda la pantalla
+     porque la lista es lo importante, y en el celular se apila. */
+  body.imp-open { overflow: hidden; }
+  .imp-back { padding: 14px; }
+  .modal-card.importer {
+    max-width: min(1080px, calc(100vw - 28px)); height: min(760px, calc(100dvh - 28px));
+    padding: 0; gap: 0; overflow: hidden;
+  }
+  .imp-head {
+    display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
+    padding: 16px 22px; border-bottom: var(--bw) solid var(--ink); background: var(--yellow); color: #191919;
+  }
+  .imp-head .kicker { color: #191919; opacity: 0.75; }
+  .imp-head h3 { font-size: 20px; font-weight: 900; margin-top: 2px; overflow-wrap: anywhere; }
+  .imp-head .note { color: #191919; opacity: 0.8; margin-top: 4px; }
+  .imp-x {
+    flex: 0 0 auto; width: 44px; height: 44px; font-size: 26px; line-height: 1; cursor: pointer;
+    background: var(--card); color: var(--ink); border: var(--bw) solid #191919; box-shadow: 3px 3px 0 #191919;
+  }
+  .imp-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 330px 1fr; }
+  .imp-side {
+    padding: 18px 20px; border-right: var(--bw) solid var(--ink); overflow: auto;
+    display: flex; flex-direction: column; gap: 18px; background: var(--paper);
+  }
+  .imp-field { display: flex; flex-direction: column; gap: 6px; }
+  .imp-field select, .imp-more select { width: 100%; }
+  .imp-who { border: 0; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+  .imp-who legend { margin-bottom: 8px; }
+  .imp-opts { display: flex; flex-direction: column; gap: 8px; }
+  .imp-opt {
+    display: flex; align-items: center; gap: 10px; cursor: pointer; min-height: 52px;
+    background: var(--card); color: var(--ink); border: 2px solid var(--ink); padding: 8px 12px;
+    transition: transform 0.08s, box-shadow 0.08s;
+  }
+  .imp-opt:hover { transform: translate(-2px, -2px); box-shadow: 4px 4px 0 var(--ink); }
+  .imp-opt input { accent-color: var(--magenta); width: 18px; height: 18px; flex: 0 0 auto; }
+  .imp-opt span { flex: 1; display: flex; flex-direction: column; }
+  .imp-opt b { font-size: 15px; font-weight: 800; }
+  .imp-opt small { font-size: 12px; color: var(--ink2); }
+  .imp-opt em { font-style: normal; font-weight: 800; font-size: 18px; }
+  .imp-opt:has(input:checked) { background: var(--teal); color: var(--on-accent); box-shadow: 4px 4px 0 var(--ink); }
+  .imp-opt:has(input:checked) small { color: var(--on-accent); opacity: 0.85; }
+  .imp-more summary::before { content: "▸"; margin-right: 6px; }
+  .imp-more[open] summary::before { content: "▾"; }
+  .imp-group { padding: 14px 8px 6px; border-bottom: 2px solid var(--ink) !important; color: var(--ink2); }
+  .imp-more summary { list-style: none; cursor: pointer; font-size: 13px; font-weight: 700; min-height: 32px; display: flex; align-items: center; }
+  .imp-more select { margin-top: 6px; }
+  .imp-out { border-left: 4px solid var(--orange); padding-left: 12px; font-size: 13px; }
+  .imp-out-h { font-weight: 800; }
+  .imp-out ul { margin: 6px 0 0; padding-left: 18px; color: var(--ink2); }
+  .imp-out .note { margin-top: 0; }
+  .imp-fix { display: flex; flex-direction: column; gap: 10px; border-left: 4px solid var(--purple); padding-left: 12px; font-size: 13px; }
+  .imp-check { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; min-height: 32px; }
+  .imp-check input { accent-color: var(--magenta); width: 18px; height: 18px; margin-top: 1px; flex: 0 0 auto; }
+  .imp-check span { display: flex; flex-direction: column; }
+  .imp-check small { color: var(--ink2); font-size: 12px; overflow-wrap: anywhere; }
+  .imp-dupes { display: flex; flex-direction: column; gap: 6px; }
+  .imp-priv { margin-top: auto; }
+  .imp-list { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+  .imp-tools {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding: 12px 16px; border-bottom: 2px solid var(--ink);
+  }
+  .imp-search {
+    flex: 1 1 180px; min-width: 0; min-height: 44px; font: inherit; font-size: 14px;
+    background: var(--paper); color: var(--ink); border: 2px solid var(--ink); padding: 0 12px;
+  }
+  .imp-count { font-size: 12px; font-weight: 700; color: var(--ink2); margin-left: auto; }
+  .imp-rows { list-style: none; margin: 0; padding: 4px 8px 10px; overflow: auto; flex: 1; }
+  .imp-rows li { border-bottom: 1px dashed var(--muted); }
+  .imp-rows label {
+    display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 4px 8px; cursor: pointer;
+  }
+  .imp-rows label:hover { background: var(--paper); }
+  .imp-rows input { accent-color: var(--magenta); width: 20px; height: 20px; flex: 0 0 auto; }
+  .imp-rows img, .imp-noface { width: 32px; height: 32px; border: 2px solid var(--ink); flex: 0 0 auto; background: var(--paper); }
+  .imp-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .imp-name .n { font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .imp-was { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .imp-rows li.off .n { color: var(--muted); }
+  .imp-rows li.off img { opacity: 0.45; }
+  .imp-badges { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+  .imp-badge {
+    font: 700 11px/1 ui-monospace, Consolas, monospace; padding: 4px 7px; white-space: nowrap;
+    border: 2px solid var(--ink); background: var(--paper); color: var(--ink2);
+  }
+  .imp-badge.came { background: var(--teal); color: var(--on-accent); }
+  .imp-badge.nope { border-style: dashed; color: var(--muted); }
+  .imp-badge.rep { background: var(--yellow); color: #191919; }
+  .imp-empty { padding: 20px 8px; }
+  .imp-foot {
+    display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap;
+    padding: 14px 22px; border-top: var(--bw) solid var(--ink);
+  }
+  .imp-need { margin: 0 auto 0 0; color: var(--orange); font-weight: 700; }
+  .csv-sum { align-items: center; gap: 10px; }
+  .csv-sum .note { margin-top: 0; font-weight: 700; color: var(--ink2); }
+  #sec-participants.drop-on { outline: 4px dashed var(--magenta); outline-offset: 6px; }
+  @media (max-width: 760px) {
+    .modal-card.importer { height: calc(100dvh - 20px); }
+    .imp-back { padding: 10px; }
+    .imp-body { display: block; overflow: auto; }
+    .imp-side { border-right: 0; border-bottom: var(--bw) solid var(--ink); overflow: visible; }
+    .imp-priv { margin-top: 0; }
+    .imp-rows { overflow: visible; }
+    .imp-head { padding: 12px 14px; }
+    .imp-foot { padding: 10px 14px; }
+    .imp-foot button { flex: 1; }
+    .imp-badges { max-width: 45%; }
+  }

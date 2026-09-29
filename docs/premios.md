@@ -73,17 +73,17 @@ Una cuenta nueva en Stellar necesita 1 XLM de reserva, y medio más por la líne
 
 USDC en una cuenta de Stellar se puede pasar a moneda local por los anclas del ecosistema. **Qué opciones hay en Bolivia está por verificar** antes de prometerlo en ninguna pantalla: el caso de MoneyGram con USDC, qué países cubre hoy, y si hay anclas locales.
 
-## El negocio
+## Tinkazo no toca el premio
 
-- **El sorteo, gratis, como hoy.** Es lo que trae organizadores.
-- **El premio que se cobra, con una comisión chica por premio** (del orden de un 1%, o un monto fijo bajo), cobrada en la misma transacción que crea el saldo reclamable, a una cuenta de Tinkazo. Queda en la cadena, a la vista.
-- **Premios de patrocinadores.** Una marca fondea el premio y aparece en el estadio y en el correo. Es el minuto del evento en que todos miran la pantalla.
+- **El sorteo, gratis, como hoy.** Participar también, siempre.
+- **El premio lo pone quien organiza, entero.** Tinkazo no se queda con nada: ni un porcentaje ni un monto fijo. El saldo reclamable va de la cuenta del organizador al ganador, sin pasar por una cuenta nuestra.
+- **Lo que sí puede cobrar Tinkazo es el show** (el plan de [precios.html](../precios.html)), nunca el premio.
 
-Y para el Stellar Community Fund, el argumento más fuerte que puede tener el proyecto: **gente que nunca usó Stellar recibe USDC en su primer sorteo, entrando con Google, sin instalar nada.**
+Lo que esto le da a la gente: **alguien que nunca usó Stellar recibe USDC en su primer sorteo, entrando con Google, sin instalar nada.** Y sirve igual para lo que no es premio: una beca, un viático, el pago a un jurado.
 
 ## Antes de construir
 
-1. **Legal.** Lo investigado está en [legal.md](legal.md), para Bolivia y para el resto del mundo. En corto: donde entrar es gratis casi nadie lo regula; en Bolivia la Ley 1733 sacó la autorización y los impuestos de las promociones empresariales; Brasil, Colombia y México piden permiso incluso para sorteos gratuitos. Quedan cinco preguntas para un abogado, y la cuarta toca a este plan: si cobrar una comisión por premio vuelve a Tinkazo un proveedor de activos virtuales.
+1. **Legal.** Lo investigado está en [legal.md](legal.md), para Bolivia y para el resto del mundo. En corto: donde entrar es gratis casi nadie lo regula; en Bolivia la Ley 1733 sacó la autorización y los impuestos de las promociones empresariales; Brasil, Colombia y México piden permiso incluso para sorteos gratuitos. Quedan cinco preguntas para un abogado. Como Tinkazo no toca el premio ni lo custodia, la de si eso lo vuelve un proveedor de activos virtuales pierde peso, pero se pregunta igual.
 2. **El CSV de Luma** real.
 3. **Pollar**: si patrocina reservas, y si su SDK permite firmar la transacción de cobro junto con la llave del cupón.
 4. **Cobrar en Bolivia**: qué anclas y qué opciones reales hay.
@@ -96,5 +96,5 @@ Y para el Stellar Community Fund, el argumento más fuerte que puede tener el pr
 | 2 | Textos listos para el envío de Luma: resultado para todos, con la prueba de cada uno, y aviso al ganador | No | No |
 | 2b | Las bases del sorteo, generadas, y unos términos de uso y privacidad (ver [legal.md](legal.md)). **Hecho** | No | No |
 | 3 | Cobro en testnet, con USDC de prueba, de punta a punta | No | De prueba |
-| 4 | Con lo legal claro: cobro en mainnet y la comisión | No | Sí |
+| 4 | Con lo legal claro: cobro en mainnet | No | Sí |
 | 5 | Si hace falta: envío de correos desde Tinkazo | Uno chico | No |

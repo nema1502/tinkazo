@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Tinkazo, sorteos que nadie puede arreglar</title>
+<title>Tinkazo, sorteos que cualquiera puede comprobar</title>
 <meta name="description" content="El sorteo de tu meetup en pantalla grande, con carrera de llamas o ruleta. La lista se congela antes y el ganador sale de un número al azar público que cualquiera puede revisar." />
-<meta property="og:title" content="Tinkazo, sorteos que nadie puede arreglar" />
+<meta property="og:title" content="Tinkazo, sorteos que cualquiera puede comprobar" />
 <meta property="og:description" content="Carrera de llamas a pantalla completa. El show es show: el ganador ya salió de un número público que no controla ni el que organiza. Hecho en Bolivia." />
 <meta property="og:type" content="website" />
 <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -4 26 30"><g fill="%23e93d9c"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></g></svg>' />
@@ -29,7 +29,7 @@
   <section class="hero">
     <div class="hero-copy">
       <span class="sticker" data-i="badge">Para el que le toca sortear</span>
-      <h1 data-i-html="h1">Sorteos que <span class="hl">nadie puede arreglar</span>. Ni vos.</h1>
+      <h1 data-i-html="h1">Sorteos que <span class="hl">cualquiera puede comprobar</span>.</h1>
       <p class="lead" data-i="lead">Pegá la lista de tu evento y sorteá en pantalla grande, con carrera de llamas o con ruleta. Al ganador lo decide un número al azar que se publica en internet a una hora fija, después de que vos cerraste la lista. Vos no lo elegís. Yo tampoco. Y cualquiera lo revisa desde su celular.</p>
       <div class="row" style="margin-top:4px">
         <a class="primary cta" href="#ta" data-i="ctaHero">Entrar y sortear, es gratis</a>
@@ -41,28 +41,25 @@
 
   <h2 class="sr-only" data-i="howTitle">¿Cómo funciona?</h2>
   <div class="steps">
-    <article><span class="num">01</span><h3 data-i="s1t">Traé tu lista</h3><p data-i="s1b">Entrás con Google y pegás los nombres, o subís un CSV. Luma y Meetup están en camino. La cuenta es tuya: tu gente no instala nada ni se crea nada.</p></article>
+    <article><span class="num">01</span><h3 data-i="s1t">Traé tu lista</h3><p data-i="s1b">Entrás con Google y pegás los nombres, o subís el CSV de Luma o de cualquier planilla, y elegís quiénes entran. La cuenta es tuya: tu gente no instala nada ni se crea nada.</p></article>
     <article><span class="num">02</span><h3 data-i="s2t">Congelá la lista</h3><p data-i="s2b">Al congelarla, la lista queda con una huella y una hora. Si después alguien mete a su primo o saca a otro, la huella cambia y se nota. No hay cómo disimularlo.</p></article>
     <article><span class="num">03</span><h3 data-i="s3t">Elegí el juego y sorteá</h3><p data-i="s3b">Carrera de llamas o ruleta, a pantalla completa. Cuando arranca la animación el ganador ya salió del número público. El show es show. El sorteo ya estaba hecho.</p></article>
   </div>
 
   <!-- 01 Participantes -->
-  <section class="block">
+  <section class="block" id="sec-participants">
     <div class="head"><h2><span data-i="p1">Participantes</span></h2><span class="kicker" id="src-label">fuente: pegado / csv</span></div>
     <div class="body">
       <aside class="gate" id="gate" style="display:none"></aside>
       <div class="row" style="margin: 0 0 14px">
         <span class="chip live" data-i="srcPaste">Pegar lista</span>
         <label class="chip live" style="cursor: pointer"><span data-i="srcCsv">Subir CSV</span><input id="csv" type="file" accept=".csv,.txt" class="sr-only" /></label>
-        <span class="chip soon" data-i="srcLuma">Luma · pronto</span>
+        <label class="chip live" style="cursor: pointer" title="Exportá la lista de invitados de tu evento en Luma como CSV" data-i-title="srcLumaTip"><span data-i="srcLuma">Desde Luma</span><input id="csv-luma" type="file" accept=".csv" class="sr-only" /></label>
         <span class="chip soon" data-i="srcMeetup">Meetup · pronto</span>
       </div>
-      <div class="row" id="csv-pick" style="display:none; margin: 0 0 12px">
-        <span class="pick"><label for="csv-col" class="note" data-i="csvColumn">¿Cuál columna tiene los nombres?</label>
-        <select id="csv-col"></select></span>
-        <span class="pick"><label for="csv-filter" class="note" data-i="csvWho">¿Quiénes entran?</label>
-        <select id="csv-filter"></select></span>
+      <div class="row csv-sum" id="csv-pick" style="display:none; margin: 0 0 12px">
         <span class="note" id="csv-note"></span>
+        <button class="mini" type="button" id="csv-edit" data-i="impEdit">Editar selección</button>
       </div>
       <textarea id="ta" spellcheck="false" placeholder="Un nombre por línea…"></textarea>
       <div class="field">

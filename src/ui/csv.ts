@@ -150,20 +150,171 @@ export function suggestFilter(table: Table): RowFilter | null {
 }
 
 /**
+ * Columnas que nunca sirven de filtro: los nombres, los datos de contacto, los
+ * identificadores y el rastreo de campañas. Un export real de Luma trae 35
+ * columnas y, sin esto, el selector ofrecía "con algo en first_name".
+ */
+const NOT_FILTER = /^(first|last|full|display|guest|attendee)?[ _]?name$|^nombres?( completo)?$|^apellidos?$|e-?mail|correo|phone|tel[eé]fono|_id$|^id$|url|click|utm_|amount|currency|coupon|address|survey|referred_by/i;
+
+/**
  * Los filtros que tiene sentido ofrecer, fuera de la columna de nombres: "tiene
  * algo escrito" en las columnas que a veces están vacías, y cada valor en las
  * que tienen pocos distintos, como el estado de la inscripción.
  */
 export function filterChoices(table: Table, except: number): RowFilter[] {
   const out: RowFilter[] = [];
-  table.columns.forEach((_, c) => {
-    if (c === except) return;
+  table.columns.forEach((name, c) => {
+    if (c === except || (table.headerDetected && NOT_FILTER.test(name.trim()))) return;
     const vals = table.rows.map((r) => cell(r, c));
     const empties = vals.filter((v) => v === "").length;
     if (empties > 0 && empties < vals.length) out.push({ column: c, value: null });
     for (const v of categories(vals)) out.push({ column: c, value: v });
   });
   return out;
+}
+
+/* ------------------------------------------------ la ventana de importar */
+
+/** Una columna por su cabecera, sin importar mayúsculas. -1 si no está. */
+export function findColumn(table: Table, hints: readonly string[]): number {
+  if (!table.headerDetected) return -1;
+  return table.columns.findIndex((c) => hints.includes(c.trim().toLowerCase()));
+}
+
+/** La columna que dice si la persona fue (el check-in de Luma). */
+export const presentColumn = (t: Table): number => findColumn(t, PRESENT_HINTS);
+/** El estado de la inscripción: aprobado, pendiente, invitado, rechazado. */
+export const statusColumn = (t: Table): number =>
+  findColumn(t, ["approval_status", "status", "estado", "registration status", "rsvp"]);
+/** El correo: solo para distinguir dos personas con el mismo nombre. */
+export const emailColumn = (t: Table): number =>
+  findColumn(t, ["email", "e-mail", "email address", "correo", "correo electrónico", "mail"]);
+
+/** De dónde parece venir el archivo, para decirlo en la ventana. */
+export function detectSource(t: Table): "luma" | null {
+  if (presentColumn(t) < 0 || findColumn(t, ["checked_in_at"]) < 0) return null;
+  return findColumn(t, ["guest_id", "api_id", "approval_status", "qr_code_url"]) >= 0 ? "luma" : null;
+}
+
+/** Los valores del estado que quieren decir que la inscripción vale. */
+const APPROVED_VALUE = /^(approved|aprobad[oa]|confirmed|confirmad[oa]|going|attending)$/i;
+
+/** Los atajos de "¿quiénes entran?", con cuántas filas deja cada uno. */
+export interface Preset {
+  id: "came" | "approved" | "all";
+  filter: RowFilter | null;
+  count: number;
+}
+
+export function presets(t: Table): Preset[] {
+  const out: Preset[] = [];
+  const came = suggestFilter(t);
+  if (came) out.push({ id: "came", filter: came, count: filterRows(t, came).rows.length });
+  const st = statusColumn(t);
+  if (st >= 0) {
+    const yes = categories(t.rows.map((r) => cell(r, st))).find((v) => APPROVED_VALUE.test(v));
+    if (yes) {
+      const f: RowFilter = { column: st, value: yes };
+      const n = filterRows(t, f).rows.length;
+      if (n > 0 && n < t.rows.length) out.push({ id: "approved", filter: f, count: n });
+    }
+  }
+  out.push({ id: "all", filter: null, count: t.rows.length });
+  return out;
+}
+
+/** Partículas que van en minúscula en medio de un nombre. */
+const PARTICLES = new Set(["de", "del", "la", "las", "los", "y", "e", "da", "das", "do", "dos", "van", "von", "di"]);
+
+/**
+ * Mayúsculas de nombre para lo que llegó todo en minúsculas o todo en
+ * mayúsculas ("juan perez", "MARIA QUISPE"), que en la pantalla grande se ve
+ * descuidado. Un nombre con mayúsculas mezcladas se deja como está: "McDonald"
+ * o "de la Cruz" los escribió así la persona.
+ */
+export function fixCase(name: string): string {
+  const letters = name.replace(/[^\p{L}]/gu, "");
+  if (letters.length < 2) return name;
+  const low = name.toLocaleLowerCase("es");
+  if (name !== low && name !== name.toLocaleUpperCase("es")) return name;
+  let first = true;
+  return low
+    .split(/(\s+|-)/)
+    .map((w) => {
+      if (!/\p{L}/u.test(w)) return w;
+      const keep = !first && PARTICLES.has(w);
+      first = false;
+      return keep ? w : w.charAt(0).toLocaleUpperCase("es") + w.slice(1);
+    })
+    .join("");
+}
+
+/** Una celda de nombre, limpia: sin comas (el protocolo corta ahí) ni espacios de más. */
+export function cleanName(raw: string): string {
+  return raw.replace(/,/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/** Para comparar nombres: sin tildes, sin mayúsculas, sin espacios de más. */
+export function nameKey(name: string): string {
+  return name.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+export interface Built {
+  /** Los nombres que entran, uno por participante, en el orden del archivo. */
+  names: string[];
+  /** Por fila: el nombre con que entra, o "" si no entra. */
+  final: string[];
+  /** Grupos de filas marcadas que tienen el mismo nombre (por `nameKey`). */
+  dupes: number[][];
+  /** Cuántas filas cambiaron por las mayúsculas. */
+  cased: number;
+}
+
+/**
+ * La lista que sale de la ventana. Dos filas marcadas con el mismo nombre son,
+ * casi siempre, la misma persona inscrita dos veces: por defecto entra una. Si
+ * quien organiza dice que son dos personas, se numeran ("Ana Quispe (2)"),
+ * porque la lista canónica funde los duplicados exactos (protocolo §1).
+ */
+export function buildList(
+  t: Table,
+  nameCol: number,
+  picked: readonly boolean[],
+  opts: { fixCase: boolean; numberDupes: boolean },
+): Built {
+  const final = t.rows.map(() => "");
+  const groups = new Map<string, number[]>();
+  let cased = 0;
+  t.rows.forEach((r, i) => {
+    if (!picked[i]) return;
+    let n = cleanName(cell(r, nameCol));
+    if (opts.fixCase) {
+      const f = fixCase(n);
+      if (f !== n) cased++;
+      n = f;
+    }
+    if (n.length < 2) return;
+    final[i] = n;
+    const k = nameKey(n);
+    const g = groups.get(k);
+    if (g) g.push(i);
+    else groups.set(k, [i]);
+  });
+  const dupes = [...groups.values()].filter((g) => g.length > 1);
+  for (const g of dupes) {
+    const base = final[g[0] as number] as string;
+    g.slice(1).forEach((i, k) => {
+      final[i] = opts.numberDupes ? `${base} (${k + 2})` : "";
+    });
+  }
+  return { names: final.filter(Boolean), final, dupes, cased };
+}
+
+/** "ana@example.org" → "a•••@example.org": alcanza para distinguir a dos Anas. */
+export function maskEmail(email: string): string {
+  const [user, domain] = email.trim().split("@");
+  if (!user || !domain) return "";
+  return `${user.charAt(0)}•••@${domain}`;
 }
 
 /** El separador que parte el texto en más columnas de forma consistente. */

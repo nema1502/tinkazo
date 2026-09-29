@@ -9,7 +9,7 @@ mode: fast path, redactado a partir de la idea original y el demo existente; las
 
 # PRD: Tinkazo
 
-*Sorteos que no se pueden arreglar.*
+*Sorteos que cualquiera puede comprobar.*
 
 ## 0. Propósito del documento
 
@@ -43,7 +43,8 @@ La verificación es gratis siempre. Anclar en Stellar cuesta centavos y lo paga 
 
 ### 2.3 No usuarios (v1)
 
-- Loterías con dinero en juego, apuestas o cualquier sorteo con premios en efectivo. Tinkazo es para sorteos comunitarios de bienes y servicios.
+- Loterías con dinero en juego, apuestas o cualquier sorteo que cobre por participar. Tinkazo es para sorteos comunitarios de lo que ya se está regalando: bienes, servicios, cupos, turnos.
+- Premios en efectivo: fuera de la v1. Si vuelven, es como recompensas que pone quien organiza, con la entrada gratis y sin que Tinkazo toque la plata ([premios.md](premios.md)), y no antes de tener mainnet andando.
 - Empresas que necesitan white label o cumplimiento regulatorio. Eso es v2 o posterior.
 
 ### 2.4 Recorridos clave
@@ -228,6 +229,13 @@ Entre que la lista se sella y que la ronda del faro existe pasan unos segundos, 
 - No hay integración con Luma, Eventbrite o Meetup en v1.
 - No hay sponsor mode, white label ni cobro en v1.
 - No hay login con Google ni Clerk en la versión Stellar: la identidad del Organizador es su cuenta de Stellar `[ASSUMPTION: se elimina Clerk; decisión pendiente del autor, ver Preguntas abiertas]`.
+
+**Lo que cambió después (28 de septiembre de 2026).** Dos de estos no objetivos se hicieron, y se dice acá para que el documento no contradiga al producto:
+
+- **Luma:** se importa el CSV de asistentes, con filtro de check-in, todo en el navegador (historia 11.3).
+- **Entrar con Google:** existe, con Pollar, y desde el 20 de septiembre es la forma de organizar. Pollar guarda la llave del organizador en su infraestructura: "no custodiamos llaves" vale para Tinkazo y para el contrato, no para las cuentas que Pollar crea. Quien no quiera eso entra con su wallet.
+
+El resto sigue igual: sin backend, sin fondos en el contrato, sin cobro por participar.
 
 ## 6. Alcance del MVP
 

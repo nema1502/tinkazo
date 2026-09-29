@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { columnToText, filterChoices, filterRows, looksTabular, parseTable, suggestFilter } from "./csv";
+import {
+  buildList, columnToText, detectSource, filterChoices, filterRows, fixCase, looksTabular, maskEmail, parseTable,
+  presets, suggestFilter,
+} from "./csv";
 import { canonicalList } from "../protocol/canonical";
 
 /** Lo que exporta Luma: la primera columna es el identificador, no el nombre. */
@@ -133,5 +136,84 @@ describe("columnToText", () => {
   it("deja elegir cualquier otra columna", () => {
     const t = parseTable(LUMA)!;
     expect(columnToText(t, 2)).toBe("ana@example.org\nnico@example.org\nrodrigo@example.org");
+  });
+});
+
+/**
+ * Un export de Luma como el de verdad (septiembre de 2026): 35 columnas en el
+ * original, acá las que importan. Los nombres son inventados; los casos no:
+ * alguien inscrito dos veces que vino una sola, nombres en minúsculas o en
+ * mayúsculas, y los cuatro estados de la inscripción.
+ */
+const LUMA_REAL = `guest_id,name,first_name,last_name,email,approval_status,checked_in_at,referrer,referred_by,ticket_name
+gst-1,Ana Quispe,Ana,Quispe,ana@example.org,approved,2026-08-22T15:05:39Z,,,Standard
+gst-2,Luis Choque,Luis,Choque,luis@example.org,approved,,GMail,,Standard
+gst-3,Ana Quispe,Ana,Quispe,ana.q@example.org,approved,,,,Standard
+gst-4,jorge mamani,jorge,mamani,jorge@example.org,approved,2026-08-22T15:59:42Z,,,Standard
+gst-5,ELENA CONDORI,ELENA,CONDORI,elena@example.org,approved,2026-08-22T16:03:44Z,GMail,,Standard
+gst-6,Rosa Villca,Rosa,Villca,rosa@example.org,pending_approval,,,,Standard
+gst-7,Mario Apaza,Mario,Apaza,mario@example.org,invited,,,,
+gst-8,Nina Rocha,Nina,Rocha,nina@example.org,declined,,,alguien@example.org,Standard`;
+
+describe("la ventana de importar", () => {
+  it("reconoce un export de Luma", () => {
+    expect(detectSource(parseTable(LUMA_REAL)!)).toBe("luma");
+    expect(detectSource(parseTable("nombre,correo\nAna,ana@example.org\nLuis,luis@example.org")!)).toBeNull();
+  });
+
+  it("propone los que vinieron, los aprobados y todos, con cuántos deja cada uno", () => {
+    const ps = presets(parseTable(LUMA_REAL)!);
+    expect(ps.map((p) => [p.id, p.count])).toEqual([["came", 3], ["approved", 5], ["all", 8]]);
+  });
+
+  it("no ofrece como filtro los nombres, los correos ni los identificadores", () => {
+    const t = parseTable(LUMA_REAL)!;
+    const cols = new Set(filterChoices(t, t.suggested).map((f) => t.columns[f.column]));
+    for (const c of ["first_name", "last_name", "email", "guest_id", "referred_by"]) expect(cols.has(c)).toBe(false);
+    expect(cols.has("approval_status")).toBe(true);
+    expect(cols.has("checked_in_at")).toBe(true);
+  });
+
+  it("arregla las mayúsculas solo de lo que llegó todo igual", () => {
+    expect(fixCase("jorge mamani")).toBe("Jorge Mamani");
+    expect(fixCase("ELENA CONDORI")).toBe("Elena Condori");
+    expect(fixCase("maría de la cruz")).toBe("María de la Cruz");
+    expect(fixCase("ana-lucía flores")).toBe("Ana-Lucía Flores");
+    // Mezcladas: así las escribió la persona.
+    expect(fixCase("Ronald McDonald")).toBe("Ronald McDonald");
+    expect(fixCase("de la Fuente")).toBe("de la Fuente");
+  });
+
+  it("con los que vinieron: tres nombres, dos arreglados", () => {
+    const t = parseTable(LUMA_REAL)!;
+    const came = presets(t)[0]!;
+    const picked = t.rows.map((r) => filterRows({ ...t, rows: [r] }, came.filter).rows.length === 1);
+    const b = buildList(t, t.suggested, picked, { fixCase: true, numberDupes: false });
+    expect(b.names).toEqual(["Ana Quispe", "Jorge Mamani", "Elena Condori"]);
+    expect(b.cased).toBe(2);
+    expect(b.dupes).toEqual([]);
+  });
+
+  it("la misma persona inscrita dos veces entra una vez, salvo que se diga que son dos", () => {
+    const t = parseTable(LUMA_REAL)!;
+    const picked = [true, true, true, false, false, false, false, false];
+    const una = buildList(t, t.suggested, picked, { fixCase: true, numberDupes: false });
+    expect(una.names).toEqual(["Ana Quispe", "Luis Choque"]);
+    expect(una.dupes).toEqual([[0, 2]]);
+    const dos = buildList(t, t.suggested, picked, { fixCase: true, numberDupes: true });
+    expect(dos.names).toEqual(["Ana Quispe", "Luis Choque", "Ana Quispe (2)"]);
+    // Numerados, la lista canónica no los funde.
+    expect(canonicalList(dos.names.join("\n"))).toHaveLength(3);
+  });
+
+  it("junta los repetidos aunque cambien las tildes o las mayúsculas", () => {
+    const t = parseTable("name,email\nJosé Pérez,a@example.org\njose perez,b@example.org\nLuis Choque,c@example.org")!;
+    const b = buildList(t, 0, [true, true, true], { fixCase: false, numberDupes: false });
+    expect(b.names).toEqual(["José Pérez", "Luis Choque"]);
+  });
+
+  it("muestra del correo solo lo que alcanza para distinguir", () => {
+    expect(maskEmail("ana.quispe@example.org")).toBe("a•••@example.org");
+    expect(maskEmail("sin arroba")).toBe("");
   });
 });

@@ -12,7 +12,7 @@
 
 **[Try it](https://tinkazo.vercel.app)** · [How it works](#how-it-works) · [Why Stellar](#why-stellar) · [What is live](#what-is-live-today) · [Next 30 days](#the-next-30-days) · [Español](README.es.md)
 
-<img src="docs/capturas/readme/hero.webp" alt="Tinkazo home page: draws nobody can rig, not even you" width="860">
+<img src="docs/capturas/readme/hero.webp" alt="Tinkazo home page: draws anyone can check" width="860">
 
 </div>
 
@@ -74,12 +74,19 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 |---|---|---|
 | Soroban contract `tinkazo-raffle` | Deployed on testnet | [`CD2SSHBU…ARENH`](https://stellar.expert/explorer/testnet/contract/CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH) · 19 tests, including a real quicknet round · 11.4 KB WASM |
 | Web app | Live | [tinkazo.vercel.app](https://tinkazo.vercel.app) · Spanish and English · light and dark · no backend |
+| Luma import | Live | Drop the guest export and pick who gets in: those who checked in, the approved ones, or by hand |
 | Verification page | Live | Recomputes any draw in the browser from its proof link |
 | Twelve stadium games | Live | Deterministic: the same round draws the same frames on any machine |
 | Protocol v2 | Specified | [docs/protocolo.md](docs/protocolo.md) and shared vectors that both implementations must pass |
-| Quality gates | In CI and in the repo | 78 unit tests, contract tests, and five custom auditors (below) |
+| Quality gates | In CI and in the repo | 82 TypeScript tests, the 19 contract tests, and five custom auditors (below) |
 
 Tested with a thousand participants: the draw still runs at 60 frames per second and anchors the same way.
+
+**Who was actually in the room.** In the first real Luma export we tried, 67 people had registered and 35 checked in. Drawing from the whole export would have handed half the chances to people who were not there. The import window proposes those who checked in, says who is left out and why (didn't come, pending, invited, declined), and lets the organizer tick someone who came but was never checked in. The file never leaves the browser, and only names go into the draw.
+
+<div align="center">
+<img src="docs/capturas/readme/importar.webp" alt="The import window: a Luma export with 67 rows, 35 who checked in selected, and the breakdown of who is left out" width="860">
+</div>
 
 <div align="center">
 <img src="docs/capturas/readme/juegos.webp" alt="Six of the twelve Tinkazo games: Stellar constellation, llama race, cable car, ball drum, aguayo and ledger close" width="860">
@@ -122,17 +129,18 @@ What is guaranteed, and what is not, is written down in [docs/amenazas.md](docs/
 
 ## How it compares
 
-| | Spreadsheet or wheel website | Oracle-based VRF service | Tinkazo |
-|---|---|---|---|
-| Who can verify | Nobody | Consumers of the oracle | Anyone with the link, from a phone |
-| What must be trusted | The organizer | The oracle operator | drand's public key and the contract code |
-| Infrastructure to run | None | An off-chain oracle node | None: the browser builds the transaction |
-| Commits to the full list | No | No, to a seed | Yes, SHA-256 of the canonical list before the seed exists |
-| Built for | Anyone, unverifiable | Other contracts | Organizers and a live audience |
+Randomness from drand on Stellar is already solved more than once, and it is worth naming who solved it:
 
-VRF oracles are a primitive for other contracts. Tinkazo is the end-user product for the moment where fairness matters and a room is watching the screen.
+| | Spreadsheet or wheel website | [Stellar-VRF](https://github.com/NibrasD/Stellar-VRF) | [Drand-Relay](https://github.com/kaankacar/Drand-Relay) | Tinkazo |
+|---|---|---|---|---|
+| What it is | A button | An oracle: a contract asks, an off-chain worker delivers the round | A relay that posts drand rounds and a contract that verifies them | A draw for an organizer and a room |
+| Who can verify | Nobody | Anyone reading the chain | Anyone reading the chain | Anyone with the link, from a phone |
+| Infrastructure to run | None | The oracle worker | The feeder that posts rounds | None: the browser builds the transaction |
+| Built for | Anyone, unverifiable | Other contracts | Other contracts | People who run giveaways |
 
-The part that checks drand on chain, [`drand.rs`](contracts/raffle/src/drand.rs), is 112 lines with nothing specific to Tinkazo in it. Published as a crate, it lets any Soroban contract use public randomness without running an oracle.
+All three verify drand quicknet's BLS signature on chain with CAP-0059. Stellar-VRF and Drand-Relay are primitives for other contracts, and good ones. Tinkazo is the end-user product on top of the same idea: a list committed before the seed exists, a `draw` anyone can trigger, and a proof page that runs on a phone. Off chain, [Wallop](https://wallop.run) does commit and drand for draws without a ledger.
+
+That is why Tinkazo does not publish yet another verifier crate. Its on-chain check, [`drand.rs`](contracts/raffle/src/drand.rs), is 112 lines; what the ecosystem is asking for is a guide that compares the approaches ([stellar-docs#2874](https://github.com/stellar/stellar-docs/issues/2874)), and that is in the plan below.
 
 ## Costs
 
@@ -164,12 +172,12 @@ Four deliverables, each with a check anyone can run from outside:
 
 | Deliverable | Done when |
 |---|---|
-| Mainnet (`pnpm preflight:mainnet` already checks everything else) | The contract is live on mainnet and a first draw verifies green from its link |
-| USDC rewards as claimable balances, funded by the organizer | Someone with no wallet signs in with Google and claims USDC on testnet, then on mainnet; participants still pay nothing |
-| Five draws with real communities in Bolivia | Five meetups, classes or hackathons, each with its public proof link |
-| The drand verifier as a reusable crate | A Soroban contract outside Tinkazo verifies a quicknet round with it, against the shared test vectors |
+| Mainnet, with the fee covered and a verified build (`pnpm preflight:mainnet` already checks the rest) | The contract shows as verified on stellar.expert, and an organizer who signed in with Google, holding 0 XLM, seals and draws a draw that verifies green |
+| Five real draws, at least three run by someone else with their own account | Five green proof links on mainnet, five organizer addresses, and a short note from each organizer |
+| An organizer kit, in English and Spanish | A one-page guide, the generated rules and a results text for Luma with each participant's proof, linked from the site |
+| Randomness on Soroban, three approaches measured | A write-up comparing [Drand-Relay](https://github.com/kaankacar/Drand-Relay), [Stellar-VRF](https://github.com/NibrasD/Stellar-VRF) and Tinkazo's on-demand check (cost, trust assumptions, a sample contract), offered to [stellar-docs#2874](https://github.com/stellar/stellar-docs/issues/2874) |
 
-After that: a results message with each participant's proof (the Luma import with its check-in filter is already done), and measuring the games on a mid-range phone. On desktop all twelve pass the strict auditor at 60 fps.
+After that: USDC rewards as claimable balances, put up by the organizer and claimed by signing in with Google, first on testnet. Participants will still pay nothing, and Tinkazo never touches the money.
 
 ## Run it locally
 
@@ -205,7 +213,7 @@ Documentation is in Spanish: [protocol](docs/protocolo.md) · [architecture](doc
 
 ## Team
 
-Built in Bolivia by [Nicolás Emir Mejía Agreda](https://github.com/nema1502). The name is Bolivian: a *tinkazo* is the hunch that today is your lucky day.
+Built in Bolivia by [Nicolás Emir Mejía Agreda](https://github.com/nema1502). The name is Bolivian: a *tinkazo* is a hunch, a gut feeling.
 
 ## Contributing
 

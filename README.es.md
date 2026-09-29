@@ -74,12 +74,19 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 |---|---|---|
 | Contrato Soroban `tinkazo-raffle` | Desplegado en testnet | [`CD2SSHBU…ARENH`](https://stellar.expert/explorer/testnet/contract/CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH) · 19 tests, uno con una ronda real de quicknet · WASM de 11,4 KB |
 | Sitio | En producción | [tinkazo.vercel.app](https://tinkazo.vercel.app) · español e inglés · tema claro y oscuro · sin servidor |
+| Importar de Luma | En producción | Se suelta el export de invitados y se elige quién entra: los que hicieron check-in, los aprobados o a mano |
 | Página de verificación | En producción | Rehace cualquier sorteo en el navegador desde su comprobante |
 | Doce juegos de estadio | En producción | Deterministas: la misma ronda dibuja los mismos cuadros en cualquier máquina |
 | Protocolo v2 | Especificado | [docs/protocolo.md](docs/protocolo.md) y vectores que las dos implementaciones tienen que pasar |
-| Controles de calidad | En la CI y en el repositorio | 78 tests unitarios, los del contrato, y cinco auditores propios (abajo) |
+| Controles de calidad | En la CI y en el repositorio | 82 tests de TypeScript, los 19 del contrato y cinco auditores propios (abajo) |
 
 Probado con mil participantes: el sorteo sigue a sesenta cuadros por segundo y se ancla igual.
+
+**Quién estaba de verdad en la sala.** En el primer export real de Luma que probamos se habían inscrito 67 personas y hicieron check-in 35. Sortear con el export entero le daba la mitad de las chances a gente que no estaba. La ventana de importar propone a los que hicieron check-in, dice quién queda afuera y por qué (no vino, pendiente, invitado, rechazado) y deja marcar a alguien que vino y nunca le hicieron check-in. El archivo no sale del navegador, y al sorteo entran solo los nombres.
+
+<div align="center">
+<img src="docs/capturas/readme/importar.webp" alt="La ventana de importar: un export de Luma con 67 filas, los 35 que hicieron check-in marcados y el detalle de quién queda afuera" width="860">
+</div>
 
 <div align="center">
 <img src="docs/capturas/readme/juegos.webp" alt="Seis de los doce juegos" width="860">
@@ -122,17 +129,18 @@ Lo que está garantizado y lo que no está escrito en [docs/amenazas.md](docs/am
 
 ## Cómo se compara
 
-| | Planilla o ruleta web | Servicio de VRF con oráculo | Tinkazo |
-|---|---|---|---|
-| Quién puede revisar | Nadie | Quien consume el oráculo | Cualquiera con el enlace, desde el celular |
-| En qué hay que confiar | En quien organiza | En quien opera el oráculo | En la clave pública de drand y en el código del contrato |
-| Qué hay que operar | Nada | Un nodo oráculo fuera de la cadena | Nada: el navegador arma la transacción |
-| Compromete la lista entera | No | No, una semilla | Sí, el SHA-256 de la lista antes de que exista la semilla |
-| Para quién | Cualquiera, sin prueba | Otros contratos | Quien organiza y una sala mirando |
+El azar de drand en Stellar ya lo resolvió más de un proyecto, y vale nombrarlos:
 
-Un VRF con oráculo es una primitiva para otros contratos. Tinkazo es el producto para el momento en que la justicia importa y hay una sala mirando la pantalla.
+| | Planilla o ruleta web | [Stellar-VRF](https://github.com/NibrasD/Stellar-VRF) | [Drand-Relay](https://github.com/kaankacar/Drand-Relay) | Tinkazo |
+|---|---|---|---|---|
+| Qué es | Un botón | Un oráculo: un contrato pide y un nodo de afuera entrega la ronda | Un relé que sube las rondas de drand y un contrato que las verifica | Un sorteo para quien organiza y una sala |
+| Quién puede revisar | Nadie | Cualquiera que lea la cadena | Cualquiera que lea la cadena | Cualquiera con el enlace, desde el celular |
+| Qué hay que operar | Nada | El nodo del oráculo | El que sube las rondas | Nada: el navegador arma la transacción |
+| Para quién | Cualquiera, sin prueba | Otros contratos | Otros contratos | Gente que regala cosas |
 
-La parte que comprueba drand en la cadena, [`drand.rs`](contracts/raffle/src/drand.rs), son 112 líneas sin nada propio de Tinkazo. Publicada como crate, deja que cualquier contrato de Soroban use azar público sin correr un oráculo.
+Los tres verifican la firma BLS de drand quicknet en la cadena con CAP-0059. Stellar-VRF y Drand-Relay son primitivas para otros contratos, y buenas. Tinkazo es el producto para la gente, encima de la misma idea: una lista comprometida antes de que exista la semilla, un `draw` que cualquiera puede disparar y una página de prueba que corre en el celular. Fuera de la cadena, [Wallop](https://wallop.run) hace compromiso y drand para sorteos sin un ledger.
+
+Por eso Tinkazo no publica otro crate verificador más. Su comprobación en la cadena, [`drand.rs`](contracts/raffle/src/drand.rs), son 112 líneas; lo que el ecosistema está pidiendo es una guía que compare los enfoques ([stellar-docs#2874](https://github.com/stellar/stellar-docs/issues/2874)), y eso está en el plan de abajo.
 
 ## Qué cuesta
 
@@ -164,12 +172,12 @@ Cuatro entregables, cada uno con una comprobación que cualquiera puede hacer de
 
 | Entregable | Está hecho cuando |
 |---|---|
-| Mainnet (`pnpm preflight:mainnet` ya comprueba todo lo demás) | El contrato está en mainnet y un primer sorteo da verde desde su enlace |
-| Recompensas en USDC como saldos reclamables, que pone quien organiza | Alguien sin billetera entra con Google y cobra USDC en testnet, y después en mainnet; los participantes siguen sin pagar nada |
-| Cinco sorteos con comunidades reales de Bolivia | Cinco meetups, clases o hackatones, cada uno con su enlace de comprobación público |
-| El verificador de drand como crate reutilizable | Un contrato de Soroban que no es Tinkazo verifica una ronda de quicknet con él, contra los vectores de prueba compartidos |
+| Mainnet, con la comisión pagada y el contrato verificado (`pnpm preflight:mainnet` ya comprueba lo demás) | El contrato figura verificado en stellar.expert, y alguien que entró con Google, con 0 XLM, sella y sortea un sorteo que da verde |
+| Cinco sorteos reales, al menos tres hechos por otra persona con su propia cuenta | Cinco enlaces de comprobación en verde en mainnet, cinco direcciones de organizador y un comentario corto de cada uno |
+| Un kit para organizadores, en español y en inglés | Una guía de una página, las bases generadas y un texto de resultado para Luma con la prueba de cada participante, enlazados desde el sitio |
+| Aleatoriedad en Soroban, tres enfoques medidos | Un documento que compara [Drand-Relay](https://github.com/kaankacar/Drand-Relay), [Stellar-VRF](https://github.com/NibrasD/Stellar-VRF) y la verificación a pedido de Tinkazo (costo, en qué hay que confiar, un contrato de ejemplo), ofrecido a [stellar-docs#2874](https://github.com/stellar/stellar-docs/issues/2874) |
 
-Después: un mensaje con el resultado y la prueba de cada participante (la importación de Luma con su filtro de check-in ya está hecha), y medir los juegos en un celular de gama media. En computadora, los doce pasan el auditor exigente a sesenta cuadros por segundo.
+Después: recompensas en USDC como saldos reclamables, que pone quien organiza y que se cobran entrando con Google, primero en testnet. Los participantes siguen sin pagar nada, y Tinkazo nunca toca la plata.
 
 ## Correr en local
 
@@ -205,7 +213,7 @@ Documentación: [protocolo](docs/protocolo.md) · [arquitectura](docs/architectu
 
 ## Quién lo hace
 
-Hecho en Bolivia por [Nicolás Emir Mejía Agreda](https://github.com/nema1502). El nombre es boliviano: un *tinkazo* es la corazonada de que hoy tenés suerte.
+Hecho en Bolivia por [Nicolás Emir Mejía Agreda](https://github.com/nema1502). El nombre es boliviano: un *tinkazo* es un presentimiento, una corazonada.
 
 ## Contribuir
 

@@ -88,6 +88,31 @@ export interface Dict {
   csvHas: (col: string, n: number) => string;
   csvIs: (col: string, v: string, n: number) => string;
   csvIn: (n: number) => string;
+  impShape: (rows: number, cols: number) => string;
+  impCameAt: (hhmm: string) => string;
+  impWas: (raw: string) => string;
+  impOut: (n: number) => string;
+  impOutNoShow: (n: number) => string;
+  impOutPending: (n: number) => string;
+  impOutInvited: (n: number) => string;
+  impOutDeclined: (n: number) => string;
+  impOutWaitlist: (n: number) => string;
+  impOutStatus: (n: number, st: string) => string;
+  impOutHand: (n: number) => string;
+  impOutOther: (n: number) => string;
+  impFixCase: (n: number) => string;
+  impFixCaseEx: (a: string, b: string) => string;
+  impDupes: (n: number) => string;
+  impCount: (a: number, b: number) => string;
+  impHand: (n: number) => string;
+  impUse: (n: number) => string;
+  impSummary: (luma: boolean, n: number, total: number, mode: string, hand: number) => string;
+  impGrpCame: (n: number) => string;
+  impGrpNoCame: (n: number) => string;
+  impGrpApproved: (n: number) => string;
+  impGrpRest: (n: number) => string;
+  impGrpIn: (n: number) => string;
+  impGrpOut: (n: number) => string;
   tellBody: (w: string, prize: string, n: number, u: string) => string;
 }
 
@@ -109,19 +134,20 @@ export function setPickSeed(rng: (() => number) | null): void {
 export const T: Record<Lang, Dict> = {
   es: {
     badge: "Para el que le toca sortear",
-    h1: 'Sorteos que <span class="hl">nadie puede arreglar</span>. Ni vos.',
+    h1: 'Sorteos que <span class="hl">cualquiera puede comprobar</span>.',
     lead: "Pegá la lista de tu evento y sorteá en pantalla grande, con carrera de llamas o con ruleta. Al ganador lo decide un número al azar que se publica en internet a una hora fija, después de que vos cerraste la lista. Vos no lo elegís. Yo tampoco. Y cualquiera lo revisa desde su celular.",
     ctaHero: "Entrar y sortear, es gratis",
     note: "Entrás con Google en dos toques, sin instalar nada. Tu gente no se crea ninguna cuenta.",
     howTitle: "¿Cómo funciona?",
     s1t: "Traé tu lista",
-    s1b: "Entrás con Google y pegás los nombres, o subís un CSV. Luma y Meetup están en camino. La cuenta es tuya: tu gente no instala nada ni se crea nada.",
+    s1b: "Entrás con Google y pegás los nombres, o subís el CSV de Luma o de cualquier planilla, y elegís quiénes entran. La cuenta es tuya: tu gente no instala nada ni se crea nada.",
     s2t: "Congelá la lista",
     s2b: "Al congelarla, la lista queda con una huella y una hora. Si después alguien mete a su primo o saca a otro, la huella cambia y se nota. No hay cómo disimularlo.",
     s3t: "Elegí el juego y sorteá",
     s3b: "Carrera de llamas o ruleta, a pantalla completa. Cuando arranca la animación el ganador ya salió del número público. El show es show. El sorteo ya estaba hecho.",
     p1: "Participantes", p2: "Lista congelada", p3: "El sorteo",
-    srcPaste: "Pegar lista", srcCsv: "Subir CSV", srcLuma: "Luma · pronto", srcMeetup: "Meetup · pronto",
+    srcPaste: "Pegar lista", srcCsv: "Subir CSV", srcLuma: "Desde Luma", srcMeetup: "Meetup · pronto",
+    srcLumaTip: "Exportá la lista de invitados de tu evento en Luma como CSV",
     csvColumn: "¿Cuál columna tiene los nombres?",
     // --- El grifo. Una cuenta recién creada no tiene con qué pagar la comisión,
     //     y ese es el primer muro que encuentra cualquiera que entra con Google.
@@ -185,6 +211,63 @@ export const T: Record<Lang, Dict> = {
     csvHas: (col, n) => `Con algo en «${col}» (${n})`,
     csvIs: (col, v, n) => `«${col}» = ${v} (${n})`,
     csvIn: (n) => (n === 1 ? "entra 1" : `entran ${n}`),
+    impLuma: "Export de Luma",
+    impFile: "Tu archivo",
+    impShape: (r, c) => `${r} ${r === 1 ? "fila" : "filas"} · ${c} columnas`,
+    impClose: "Cerrar",
+    impNameCol: "Los nombres están en",
+    impWho: "¿Quiénes entran?",
+    impCame: "Los que vinieron",
+    impCameSub: "hicieron check-in",
+    impApproved: "Los aprobados",
+    impApprovedSub: "inscripción aprobada, hayan venido o no",
+    impAll: "Todos",
+    impAllSub: "cada fila del archivo",
+    impOther: "Otro filtro",
+    impPriv: "El archivo no sale de tu navegador. Al sorteo entran solo los nombres: los correos y lo demás no se usan ni se guardan.",
+    impSearch: "Buscar un nombre",
+    impAllOn: "Marcar todos",
+    impAllOff: "Ninguno",
+    impCameAt: (h) => (h ? `vino ${h}` : "vino"),
+    impNoShow: "no vino",
+    impStApproved: "aprobado",
+    impStPending: "pendiente",
+    impStInvited: "invitado",
+    impStDeclined: "rechazado",
+    impStWaitlist: "en espera",
+    impRepeated: "repetido",
+    impWas: (raw) => `era «${raw}»`,
+    impEmpty: "Ningún nombre coincide.",
+    impNoneOut: "Entran todas las filas del archivo.",
+    impOut: (n) => (n === 1 ? "Queda afuera 1:" : `Quedan afuera ${n}:`),
+    impOutNoShow: (n) => (n === 1 ? "1 inscrito que no vino" : `${n} inscritos que no vinieron`),
+    impOutPending: (n) => (n === 1 ? "1 pendiente de aprobación" : `${n} pendientes de aprobación`),
+    impOutInvited: (n) => (n === 1 ? "1 invitado que no se inscribió" : `${n} invitados que no se inscribieron`),
+    impOutDeclined: (n) => (n === 1 ? "1 rechazado" : `${n} rechazados`),
+    impOutWaitlist: (n) => (n === 1 ? "1 en lista de espera" : `${n} en lista de espera`),
+    impOutStatus: (n, st) => `${n} con estado «${st}»`,
+    impOutHand: (n) => (n === 1 ? "1 que vino, desmarcado a mano" : `${n} que vinieron, desmarcados a mano`),
+    impOutOther: (n) => (n === 1 ? "1 que no pasa el filtro" : `${n} que no pasan el filtro`),
+    impFixCase: (n) => (n === 1 ? "Arreglar las mayúsculas de 1 nombre" : `Arreglar las mayúsculas de ${n} nombres`),
+    impFixCaseEx: (a, b) => `«${a}» → «${b}»`,
+    impDupes: (n) => (n === 1 ? "Un nombre aparece más de una vez." : `${n} nombres aparecen más de una vez.`),
+    impDupesOne: "Es la misma persona: entra una vez",
+    impDupesNum: "Son personas distintas: numerarlas",
+    impCount: (a, b) => `${a} de ${b} marcados`,
+    impHand: (n) => (n === 1 ? "1 cambio a mano" : `${n} cambios a mano`),
+    impUse: (n) => (n === 1 ? "Usar este nombre" : `Usar estos ${n} nombres`),
+    impNeed: "Marcá al menos dos.",
+    impEdit: "Editar selección",
+    impGrpCame: (n) => `Vinieron · ${n}`,
+    impGrpNoCame: (n) => `No vinieron · ${n}`,
+    impGrpApproved: (n) => `Aprobados · ${n}`,
+    impGrpRest: (n) => `El resto · ${n}`,
+    impGrpIn: (n) => `Pasan el filtro · ${n}`,
+    impGrpOut: (n) => `No lo pasan · ${n}`,
+    impSummary: (luma, n, total, mode, hand) =>
+      `${luma ? "De Luma" : "Del archivo"}: ${n} de ${total}` +
+      (mode === "came" ? ", los que vinieron" : mode === "approved" ? ", los aprobados" : mode === "other" ? ", con un filtro" : "") +
+      (hand ? ` (${hand === 1 ? "1 cambio" : `${hand} cambios`} a mano)` : ""),
     sample: "Cargar ejemplo", freeze: "Congelar lista", draw: "Lanzar el sorteo", winners: "Premios",
     // --- Tarjetas de "¿por qué se llama así?". Cada dato tiene su fuente
     //     primaria anotada en src/games/lore.ts. Ninguno se inventa.
@@ -481,7 +564,7 @@ export const T: Record<Lang, Dict> = {
     jgRuleB: "Ningún juego elige. Reciben el ganador ya fijado y lo cuentan. Por eso la misma ronda del faro dibuja siempre la misma carrera: el azar de la animación sale de la semilla, no del reloj. Y si hay varios premios, el juego los anuncia a todos: mostrar uno de tres sería mentir sobre lo que acaba de pasar.",
     hiKicker: "La palabra",
     hiTitle: "Un tinkazo es una corazonada",
-    hiLead: "En Bolivia, un tinkazo es ese presentimiento de que hoy tenés suerte. Y un tincazo, con c, es el golpecito que se da haciendo resbalar el dedo sobre el pulgar. Las dos están en el Diccionario de americanismos. Un sorteo es las dos cosas: la corazonada y el golpe que decide.",
+    hiLead: "En Bolivia, un tinkazo es un presentimiento, una corazonada. Y un tincazo, con c, es el golpecito que se da haciendo resbalar el dedo sobre el pulgar. Las dos están en el Diccionario de americanismos. Un sorteo es las dos cosas: la corazonada y el golpe que decide.",
     hiLlamaT: "La llama no tiene cara",
     hiLlamaB: "Está dibujada con rectángulos, sin curvas y sin ojos. No lleva sombrero ni poncho: es una silueta, y con eso alcanza. Aparece cuando corre, cuando gana y cuando empuja el telón, nunca de adorno.",
     hiAguayoT: "El aguayo es un tablero",
@@ -641,19 +724,20 @@ export const T: Record<Lang, Dict> = {
   },
   en: {
     badge: "For whoever has to run the draw",
-    h1: 'Draws <span class="hl">nobody can rig</span>. Not even you.',
+    h1: 'Draws <span class="hl">anyone can check</span>.',
     lead: "Paste your attendee list and draw it on the big screen, llama race or spinning wheel. The winner comes out of a random number published on the internet at a fixed time, after you locked the list. You don't pick it. I don't either. And anyone can check it from their phone.",
     ctaHero: "Sign in and draw, it's free",
     note: "Sign in with Google in two taps, nothing to install. Your people create no account at all.",
     howTitle: "How it works",
     s1t: "Bring your list",
-    s1b: "Sign in with Google and paste the names, or upload a CSV. Luma and Meetup are on the way. The account is yours: your people install nothing and sign up for nothing.",
+    s1b: "Sign in with Google and paste the names, or upload the CSV from Luma or any spreadsheet, and pick who gets in. The account is yours: your people install nothing and sign up for nothing.",
     s2t: "Freeze the list",
     s2b: "Freezing stamps the list with a fingerprint and a time. If someone slips in a friend or drops a name later, the fingerprint changes and everybody sees it. There's no hiding it.",
     s3t: "Pick a game and draw",
     s3b: "Llama race or spinning wheel, full screen. By the time the animation starts, the public number already picked the winner. The show is the show. The draw was done before it.",
     p1: "Participants", p2: "Frozen list", p3: "The draw",
-    srcPaste: "Paste list", srcCsv: "Upload CSV", srcLuma: "Luma · soon", srcMeetup: "Meetup · soon",
+    srcPaste: "Paste list", srcCsv: "Upload CSV", srcLuma: "From Luma", srcMeetup: "Meetup · soon",
+    srcLumaTip: "Export your Luma event's guest list as CSV",
     csvColumn: "Which column has the names?",
     gateTitle: "Connect your account to run a draw",
     gateBody: "The draw is recorded on Stellar under your account, and that is what lets anyone check afterwards that the list was that one and not another. With no account there is nobody to attribute it to.",
@@ -715,6 +799,63 @@ export const T: Record<Lang, Dict> = {
     csvHas: (col, n) => `Something in "${col}" (${n})`,
     csvIs: (col, v, n) => `"${col}" = ${v} (${n})`,
     csvIn: (n) => (n === 1 ? "1 gets in" : `${n} get in`),
+    impLuma: "Luma export",
+    impFile: "Your file",
+    impShape: (r, c) => `${r} ${r === 1 ? "row" : "rows"} · ${c} columns`,
+    impClose: "Close",
+    impNameCol: "Names are in",
+    impWho: "Who gets in?",
+    impCame: "Those who came",
+    impCameSub: "checked in",
+    impApproved: "Approved",
+    impApprovedSub: "registration approved, whether they came or not",
+    impAll: "Everyone",
+    impAllSub: "every row in the file",
+    impOther: "Another filter",
+    impPriv: "The file never leaves your browser. Only names go into the draw: emails and everything else are neither used nor stored.",
+    impSearch: "Search a name",
+    impAllOn: "Select all",
+    impAllOff: "None",
+    impCameAt: (h) => (h ? `came ${h}` : "came"),
+    impNoShow: "didn't come",
+    impStApproved: "approved",
+    impStPending: "pending",
+    impStInvited: "invited",
+    impStDeclined: "declined",
+    impStWaitlist: "waitlist",
+    impRepeated: "repeated",
+    impWas: (raw) => `was "${raw}"`,
+    impEmpty: "No name matches.",
+    impNoneOut: "Every row in the file gets in.",
+    impOut: (n) => `${n} left out:`,
+    impOutNoShow: (n) => (n === 1 ? "1 registered who didn't come" : `${n} registered who didn't come`),
+    impOutPending: (n) => `${n} pending approval`,
+    impOutInvited: (n) => (n === 1 ? "1 invited who didn't register" : `${n} invited who didn't register`),
+    impOutDeclined: (n) => `${n} declined`,
+    impOutWaitlist: (n) => `${n} on the waitlist`,
+    impOutStatus: (n, st) => `${n} with status "${st}"`,
+    impOutHand: (n) => (n === 1 ? "1 who came, unchecked by hand" : `${n} who came, unchecked by hand`),
+    impOutOther: (n) => `${n} not passing the filter`,
+    impFixCase: (n) => (n === 1 ? "Fix the capitalization of 1 name" : `Fix the capitalization of ${n} names`),
+    impFixCaseEx: (a, b) => `"${a}" → "${b}"`,
+    impDupes: (n) => (n === 1 ? "One name shows up more than once." : `${n} names show up more than once.`),
+    impDupesOne: "Same person: counts once",
+    impDupesNum: "Different people: number them",
+    impCount: (a, b) => `${a} of ${b} selected`,
+    impHand: (n) => (n === 1 ? "1 change by hand" : `${n} changes by hand`),
+    impUse: (n) => (n === 1 ? "Use this name" : `Use these ${n} names`),
+    impNeed: "Select at least two.",
+    impEdit: "Edit selection",
+    impGrpCame: (n) => `Came · ${n}`,
+    impGrpNoCame: (n) => `Didn't come · ${n}`,
+    impGrpApproved: (n) => `Approved · ${n}`,
+    impGrpRest: (n) => `The rest · ${n}`,
+    impGrpIn: (n) => `Pass the filter · ${n}`,
+    impGrpOut: (n) => `Don't pass · ${n}`,
+    impSummary: (luma, n, total, mode, hand) =>
+      `${luma ? "From Luma" : "From the file"}: ${n} of ${total}` +
+      (mode === "came" ? ", those who came" : mode === "approved" ? ", the approved ones" : mode === "other" ? ", with a filter" : "") +
+      (hand ? ` (${hand === 1 ? "1 change" : `${hand} changes`} by hand)` : ""),
     sample: "Load sample", freeze: "Freeze list", draw: "Run the draw", winners: "Prizes",
     cWheelBuild: ["Building the wheel!", "Slices lining up!", "Here comes the wheel!"],
     cWheelSplit: (segs, rep) => (rep > 1 ? `${segs} slices, ${rep} each!` : `${segs} slices, one apiece!`),
@@ -995,7 +1136,7 @@ export const T: Record<Lang, Dict> = {
     jgRuleB: "No game picks anyone. They receive the winner already set and tell the story. That is why the same beacon round always draws the same race: the animation's randomness comes from the seed, not from the clock. And when there are several prizes, the game announces them all: showing one of three would lie about what just happened.",
     hiKicker: "The word",
     hiTitle: "A tinkazo is a hunch",
-    hiLead: "In Bolivia, a tinkazo is that feeling that today is your lucky day. And a tincazo, with a c, is the flick you give sliding a finger off your thumb. Both are in the Diccionario de americanismos. A draw is both: the hunch and the flick that decides.",
+    hiLead: "In Bolivia, a tinkazo is a hunch, a gut feeling. And a tincazo, with a c, is the flick you give sliding a finger off your thumb. Both are in the Diccionario de americanismos. A draw is both: the hunch and the flick that decides.",
     hiLlamaT: "The llama has no face",
     hiLlamaB: "It is drawn with rectangles, no curves and no eyes. No hat, no poncho: it is a silhouette, and that is enough. It shows up when it runs, when it wins and when it pushes the curtain, never as decoration.",
     hiAguayoT: "The aguayo is a board",
@@ -1190,6 +1331,10 @@ export function setLang(l: Lang): void {
   document.querySelectorAll<HTMLInputElement>("[data-i-ph]").forEach((el) => {
     const v = dict[el.dataset.iPh ?? ""];
     if (typeof v === "string") el.placeholder = v;
+  });
+  document.querySelectorAll<HTMLElement>("[data-i-title]").forEach((el) => {
+    const v = dict[el.dataset.iTitle ?? ""];
+    if (typeof v === "string") el.title = v;
   });
   for (const fn of listeners) fn(l);
 }
