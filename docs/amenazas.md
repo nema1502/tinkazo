@@ -49,7 +49,7 @@ Lo que hay acá no son hipótesis: cada límite del diseño está anotado con lo
 
 ### El ataque real: selección del compromiso
 
-**Esta es la única forma conocida de torcer un sorteo de Tinkazo, y no está cerrada.**
+**Es la única forma conocida de torcer un sorteo de Tinkazo con la lista ya sellada, y no está cerrada.** Antes de sellar hay otra, más común: inflar la lista (más abajo).
 
 Un organizador sella cinco listas distintas, cada una contra una ronda distinta, y después publica solo el comprobante de la que le dio el resultado que quería. Cada uno de esos sorteos es, por separado, perfectamente legítimo.
 
