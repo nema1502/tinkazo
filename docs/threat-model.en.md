@@ -31,6 +31,7 @@ The product promises that **anyone can check a draw**. This document says what b
 - **A made-up round:** `draw` verifies the BLS12-381 signature against quicknet's fixed public key inside the contract (CAP-0059).
 - **Changing a name after sealing:** the SHA-256 of the list is on chain; any change gives a different hash and verification turns red.
 - **Drawing twice for a better result:** `draw` stores the result once (`AlreadyDrawn`).
+- **Blind reruns** (the `try_call` attack on the network PRNG described in [rs-soroban-sdk#1748](https://github.com/stellar/rs-soroban-sdk/issues/1748)): not applicable. Tinkazo doesn't use the network PRNG; the result comes from a drand round's signature, which doesn't exist at seal time and is unique per round, so every `draw` attempt gives exactly the same result and the contract keeps the first.
 - **Picking a round that already exists:** `seal` requires the round to be born at least 30 seconds later, and at most 30 days.
 - **A game showing another winner:** games receive the winner already decided, and an auditor checks every game against the protocol.
 - **The organizer holding back a result they dislike:** `draw` needs no permission; anyone can finalize, and the verification page offers it.

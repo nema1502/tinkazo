@@ -20,7 +20,7 @@
 
 Every community gives things away: conference tickets, books, software licenses, scholarships, speaking slots, who presents first. And every time, someone in the room wonders whether the organizer picked a friend. The tools people use today are a spreadsheet `RAND()`, a spinning wheel on a website, or "trust me". None of them can be checked afterwards.
 
-**Tinkazo makes the draw checkable by anyone, from their phone, forever.** The organizer pastes a list, the list is sealed on Stellar, and the winner comes from a public random number that did not exist yet when the list was sealed. A Soroban contract verifies that number's signature on chain. The result is shown on the big screen as a full-screen game, and anyone can re-run the whole draw in their browser from a link.
+**Tinkazo makes the draw checkable by anyone, from their phone.** The organizer pastes a list, the list is sealed on Stellar, and the winner comes from a public random number that did not exist yet when the list was sealed. A Soroban contract verifies that number's signature on chain. The result is shown on the big screen as a full-screen game, and anyone can re-run the whole draw in their browser from a link.
 
 Participants need nothing: no wallet, no account, no app.
 
@@ -65,8 +65,8 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 - **Verifying public randomness on chain is cheap here.** Stellar's native BLS12-381 host functions ([CAP-0059](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md)) let the contract check drand's signature itself. The verification costs **0.003 XLM**; a whole draw, seal plus draw, costs **0.18 XLM, about US$0.04**, measured on testnet ([breakdown](docs/deployments.md)).
 - **No oracle to run.** The proof is drand's own signature, checkable against its public key years from now. There is no node to keep alive and no operator to trust.
 - **Immutable and custody-free.** The contract has no admin, no upgrade path and holds no funds. A new version is a new address, recorded in [docs/deployments.md](docs/deployments.md).
-- **Onboarding that works at a meetup.** Organizers sign in with Google through a Pollar smart wallet, with Freighter, or with a testnet account the browser creates and funds. Participants never touch Stellar at all.
-- **Where it goes next is native to Stellar:** any community, from a meetup to a classroom or a cooperative, hands out rewards and stipends in USDC as claimable balances, and the draw plays out on screen as a game rooted in Bolivian and Latin American culture. Whoever is picked signs in with Google and claims when ready, without knowing there is a blockchain underneath and without the organizer holding the money for them ([design](docs/premios.md)). The chain is what lets a small group reach people it could not pay before; nobody has to learn it. The organizer funds every reward and participants never pay anything, so there is no pot and nothing to bet.
+- **Onboarding that works at a meetup.** Organizers sign in with Google through Pollar, which holds the key for them (the full flow with a real Google session is still being tested), with Freighter, or with a testnet account the browser creates and funds. Participants never touch Stellar at all.
+- **Where it goes next is native to Stellar:** rewards and stipends in USDC that the organizer puts up and the person picked claims as a claimable balance, by signing in with Google ([design](docs/premios.md)). Participants never pay anything and Tinkazo never touches the money, so there is no pot and nothing to bet.
 
 ## What is live today
 

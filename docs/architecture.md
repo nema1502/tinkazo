@@ -4,7 +4,7 @@ workflowType: 'architecture'
 lastStep: 8
 status: 'complete'
 completedAt: '2026-09-16'
-inputDocuments: ['docs/prd.md', 'docs/protocolo.md', 'docs/idea-original-arkiv.md', 'index.html (demo v1)']
+inputDocuments: ['docs/prd.md', 'docs/protocolo.md', 'index.html (demo v1)']
 ---
 
 # Tinkazo: Arquitectura
@@ -221,7 +221,6 @@ tinkazo/
 │   └── deploy.sh                 # build + deploy + registro en deployments.md
 ├── docs/
 │   ├── prd.md · architecture.md · protocolo.md · epics.md · deployments.md · vectors.json
-│   ├── idea-original-arkiv.md
 │   └── capturas/
 ├── .github/workflows/ci.yml
 ├── .stellar-build/bmm/config.yaml # config de las skills, local: no se versiona

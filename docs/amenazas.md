@@ -44,6 +44,7 @@ Lo que hay acá no son hipótesis: cada límite del diseño está anotado con lo
 | Lo mismo, en modo libre | **No cubierto, y se dice** | El comprobante trae la lista y la firma juntas, así que recomputar siempre cierra. Por eso la verificación da un veredicto **amarillo** y no verde: la cuenta está bien, pero nadie atestigua que esa fuera la lista original |
 | Torcer la selección | **Cubierto** | La selección es determinista y está especificada en `docs/protocolo.md`. Hay vectores compartidos entre la implementación en Rust y la de TypeScript, y los dos tienen que pasarlos |
 | Sortear dos veces buscando otro resultado | **Cubierto** | `draw` guarda el resultado y devuelve el error 2 si ya se hizo |
+| Reintentar a ciegas hasta que salga el resultado buscado (el ataque de `try_call` sobre el PRNG de la red que describe [rs-soroban-sdk#1748](https://github.com/stellar/rs-soroban-sdk/issues/1748)) | **No aplica** | Tinkazo no usa el PRNG de la red. El resultado sale de la firma de una ronda de drand que no existe cuando se sella y que es una sola por ronda: cada intento de `draw` da exactamente lo mismo, y el contrato guarda el primero |
 | Elegir una ronda que ya existe | **Cubierto** | `seal` exige que la ronda nazca al menos treinta segundos después, y como mucho treinta días |
 | Un juego que muestre otro ganador | **Cubierto** | Los juegos reciben el ganador ya decidido. El auditor lo comprueba en cada juego: el nombre en pantalla tiene que ser el que fijó el protocolo |
 

@@ -20,7 +20,7 @@
 
 Toda comunidad regala cosas: entradas, libros, licencias, becas, turnos para hablar, quién expone primero. Y cada vez alguien en la sala piensa que el organizador eligió a un amigo. Lo que se usa hoy es un `ALEATORIO()` en una planilla, una ruleta en una página web o "confíen en mí". Nada de eso se puede revisar después.
 
-**Tinkazo hace que cualquiera pueda revisar el sorteo, desde su celular y para siempre.** Quien organiza pega la lista, la lista se sella en Stellar, y el ganador sale de un número público que todavía no existía cuando se selló. Un contrato de Soroban verifica la firma de ese número dentro de la cadena. El resultado se cuenta en pantalla grande con un juego, y cualquiera rehace el sorteo entero en su navegador desde un enlace.
+**Tinkazo hace que cualquiera pueda revisar el sorteo, desde su celular.** Quien organiza pega la lista, la lista se sella en Stellar, y el ganador sale de un número público que todavía no existía cuando se selló. Un contrato de Soroban verifica la firma de ese número dentro de la cadena. El resultado se cuenta en pantalla grande con un juego, y cualquiera rehace el sorteo entero en su navegador desde un enlace.
 
 Los participantes no necesitan nada: ni billetera, ni cuenta, ni aplicación.
 
@@ -65,8 +65,8 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 - **Verificar azar público en la cadena acá es barato.** Las funciones nativas de BLS12-381 ([CAP-0059](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md)) dejan que el contrato compruebe la firma de drand por su cuenta. La verificación cuesta **0,003 XLM**, y un sorteo entero, sellar más sortear, **0,18 XLM, unos cuatro centavos de dólar**, medido en testnet ([detalle](docs/deployments.md)).
 - **Sin oráculo que operar.** La prueba es la firma del propio drand, verificable contra su clave pública dentro de años. No hay nodo que mantener vivo ni operador en quien confiar.
 - **Inmutable y sin custodia.** El contrato no tiene administrador ni forma de actualizarse, y no guarda fondos. Una versión nueva es una dirección nueva, anotada en [docs/deployments.md](docs/deployments.md).
-- **Entrar funciona en un meetup.** Quien organiza entra con Google mediante una billetera de Pollar, con Freighter, o con una cuenta de prueba que el navegador crea y fondea. Los participantes no tocan Stellar nunca.
-- **Lo que sigue es nativo de Stellar:** cualquier comunidad, desde un meetup hasta un curso o una cooperativa, reparte recompensas y becas en USDC como saldos reclamables, y el sorteo se cuenta en pantalla con un juego de la cultura boliviana y latinoamericana. Quien sale elegido entra con Google y cobra cuando quiere, sin saber que abajo hay una blockchain y sin que el organizador le guarde la plata ([diseño](docs/premios.md)). La cadena es lo que deja que un grupo chico llegue a gente a la que antes no podía pagarle; nadie tiene que aprenderla. Cada recompensa la pone quien organiza y los participantes no pagan nada, así que no hay pozo ni nada que apostar.
+- **Entrar funciona en un meetup.** Quien organiza entra con Google mediante Pollar, que guarda la llave de su cuenta (el recorrido con una sesión real de Google todavía se está probando), con Freighter, o con una cuenta de prueba que el navegador crea y fondea. Los participantes no tocan Stellar nunca.
+- **Lo que sigue es nativo de Stellar:** recompensas y becas en USDC que pone quien organiza y que la persona elegida cobra como saldo reclamable, entrando con Google ([diseño](docs/premios.md)). Los participantes no pagan nada y Tinkazo nunca toca la plata, así que no hay pozo ni nada que apostar.
 
 ## Qué está andando hoy
 
