@@ -833,6 +833,32 @@ Y de paso, dos que no eran de vertical: la pila de monedas del Pasanaku eran cat
 
 El auditor pasa de dieciséis a veinte comprobaciones, cuatro de ellas en 390 por 844.
 
+### Historia 10.9: Los choques del trompo, de verdad: hecho
+
+Resultado (2026-09-29): el autor dijo que los choques del trompo eran "una basofia", y tenía razón. Pasaban tres cosas:
+- el trompo que salía volaba solo;
+- el que "le pegaba" era el más cercano aunque estuviera lejos;
+- en el mano a mano las chispas salían a una hora fija en la mitad del camino entre los dos, se tocaran o no.
+
+Ahora cada golpe es un golpe:
+- **Quién pega y cómo.** Cada golpe tiene un trompo que lo da. Lo acecha, se echa atrás y embiste, y el golpe pasa cuando los dos se tocan.
+- **La física.** Es la de dos masas con rebote. El giro desvía el golpe de costado, y el sacado vuela, pica dos veces y queda acostado.
+- **Lo que lo hace sentir.** Lo del animé y los juegos de pelea: la parada de un instante, el destello, la estrella, la onda en el piso, las chispas de costado, el aplastón, la estela, las líneas de velocidad y la cámara lenta en el último choque del mano a mano.
+- **La cámara llega antes que el golpe grande.**
+
+Detalle en [juegos/trompo.md](juegos/trompo.md).
+
+Y un auditor nuevo, `scripts/audit-choques.mjs`, que mira la física en ocho semillas y con 2, 3, 60 y 200 personas. Comprueba:
+- contacto de verdad en cada golpe;
+- acción y reacción;
+- que nadie atraviese a nadie;
+- que el sacado termine afuera;
+- paradas sin amontonarse;
+- que la ganadora nunca salga;
+- que la misma semilla dé los mismos golpes.
+
+En la primera corrida encontró que los golpes de refilón nunca tocaban, que las embestidas llegaban lentas y que en un ruedo lleno quedaban trompos encimados hasta la mitad del diámetro. Ahora pasa 132 de 132. El exigente, el de juegos, el de sonido y el de emoción siguen aprobando el trompo, y la duración elegida se cumple: 30,1 de 30 segundos en normal.
+
 ---
 
 ## Épica 12: El sitio cuenta el proyecto

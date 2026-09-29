@@ -16,9 +16,30 @@ También es el primero que nació directamente en el motor nuevo, con la cámara
 
 **El baile.** Cada trompo deambula con su propio vaivén y se empuja con los vecinos. Cuando dos se rozan fuerte suena un toque. La tiza los contiene: nadie sale sin que lo saquen.
 
-**Los choques.** Los que salen lo hacen en un orden sembrado, primero muchos y al final de a uno. La mitad sale sacado: el trompo más cercano le pega, saltan chispas y se va volando fuera de la tiza. La otra mitad se queda sin cuerda: cabecea y se acuesta. Los que salieron se apagan en un segundo y medio, para no tapar a los que siguen.
+**Los choques.** Los que salen lo hacen en un orden sembrado. Cada golpe tiene un trompo que lo da, el más cercano que esté libre:
+1. Lo acecha y se acomoda del lado de adentro del ruedo.
+2. Se echa atrás para tomar impulso.
+3. Embiste.
 
-**El mano a mano.** Quedan dos y se buscan: dan vueltas cerca uno del otro y chocan tres veces. Después del último choque, la rival se queda sin cuerda y se cae.
+El golpe pasa cuando los dos se tocan de verdad, nunca antes ni a distancia. Hay tres maneras de salir:
+- **Sacado**, la mitad: vuela girando fuera de la tiza, pica dos veces en el piso levantando tierra y queda acostado.
+- **De refilón**, tres de cada diez: el golpe entra torcido, el trompo no sale pero queda cabeceando y se acuesta.
+- **Sin cuerda**, el resto: cabecea cada vez más fuerte y se viene abajo solo.
+
+Los dos últimos antes del mano a mano salen siempre sacados. Los que salieron se apagan antes de los dos segundos, para no tapar a los que siguen.
+
+**La física.** El contacto es el de dos masas con rebote: el que embiste pesa más, así que el otro sale disparado y él sigue un poco, frenado. El giro desvía el golpe de costado, como pasa con dos trompos de verdad. Los roces que no están en el guion también rebotan y se desvían, y los fuertes sacan chispas. Nadie atraviesa a nadie: tres pasadas de separación por paso de física, cinco con más de cuarenta personas.
+
+**El mano a mano.** Quedan dos y se miden: dan vueltas uno alrededor del otro. Antes de cada choque se echan atrás y embisten a la vez, y chocan tres veces. Después del último choque, la rival se queda sin cuerda y se cae.
+
+**Lo que hace que un golpe se sienta.** Lo que se aprendió del animé y de los juegos de pelea:
+- **La parada.** El juego se congela entre 55 y 110 milésimas en los golpes grandes. En la gresca del principio no hay parada, porque sería tartamudear: solo cuando quedan doce o menos y con medio segundo entre una y otra.
+- **El destello.** Los dos trompos se prenden en blanco un instante, y en el mano a mano toda la pantalla también, uno por segundo como mucho.
+- **La estrella de cómic** en el punto de contacto, **la onda** que corre por el piso en perspectiva y **las chispas**, que salen sobre todo de costado, como del roce de dos giros, y caen.
+- **El aplastón.** El trompo se aplasta y rebota como goma.
+- **La estela** de imágenes del que embiste o sale volando.
+- **La inclinación** del que toma impulso y embiste.
+- **El último choque del mano a mano:** cámara lenta al 30% durante 0,6 s, con líneas de velocidad en los bordes.
 
 ## Lo que el ruedo hace a propósito
 
@@ -29,7 +50,7 @@ Los arcos del director de emoción se ven así:
 | Arco | Qué pasa |
 |---|---|
 | Susto | En el mano a mano el trompo ganador cabecea, casi se cae ("¡cabecea el de fulano!") y se endereza |
-| Remontada | A mitad de los choques lo sacan hasta el borde de la tiza, y vuelve |
+| Remontada | A mitad de los choques le pegan y lo mandan contra la tiza: la roza y vuelve |
 | Duelo | El mano a mano dura cuatro choques en vez de tres |
 | Tapada | Baila callado contra el borde y la cámara nunca lo busca |
 
@@ -55,16 +76,19 @@ En segundos de juego, con 18 participantes y sin estirar.
 | 12,3 – 16,9 s | El mano a mano: tres choques, y la rival se cae |
 | 16,9 s | El cartel, con la ganadora bailando debajo, más grande y con un brillo |
 
+A eso se suman las paradas de los golpes y la cámara lenta del último choque, un segundo en total. El juego las declara en `setGameLength`, así que el show sigue durando lo que eligió el organizador.
+
 ## La cámara
 
-Sobre el ruedo al tirar, se mete en cada choque, sigue al trompo que sacan hasta la tiza, queda pegada al mano a mano y se acerca más al que cabecea.
+Sobre el ruedo al tirar. En los golpes grandes **llega antes que el golpe**: encuadra a los dos mientras el que pega toma impulso, y el golpe cae en el cuadro. Llegar después era mostrar un trompo que ya se iba. Después sigue al que sacan hasta la tiza. En el mano a mano queda pegada, se cierra un poco antes de cada choque, se mete más en la cámara lenta y se acerca al que cabecea.
 
 ## El sonido
 
 - **El tiro:** una nota por trompo que cae, con tope.
-- **Los roces:** un toque corto cuando dos chocan fuerte, como mucho uno cada tercio de segundo.
-- **Los que salen:** un golpe seco y una nota que baja cuando los sacan; una nota grave cuando se caen solos.
-- **El mano a mano:** un golpe fuerte en cada choque.
+- **Los roces:** un toque corto cuando dos se rozan, como mucho uno cada tercio de segundo.
+- **Los golpes:** en capas, el chasquido de la madera y el cuerpo. En los grandes se suma un retumbe. En la gresca, como mucho uno cada décima de segundo.
+- **Los que caen:** un golpe sordo cuando el sacado pica en el piso o cuando el que se quedó sin cuerda se acuesta.
+- **El mano a mano:** un golpe grande en cada choque.
 - **El cabeceo del susto:** una alarma corta.
 
 ## Cómo está hecho
@@ -76,8 +100,20 @@ Las posiciones viven en el disco del ruedo, que mide uno, y el suelo se ve en pe
 ## Cómo auditarlo
 
 ```bash
+node scripts/audit-choques.mjs
 node scripts/audit-rigor.mjs trompo
 node scripts/audit-game.mjs trompo
 node scripts/audit-emocion.mjs trompo
 node scripts/audit-sound.mjs trompo
 ```
+
+El auditor de choques es de este juego. Con `?auditar=choques` el trompo anota cada golpe, y el auditor lo comprueba en ocho semillas y con 2, 3, 60 y 200 personas:
+- que cada golpe y cada choque del mano a mano pase con los dos tocándose, y ninguno forzado;
+- que el golpeado salga hacia donde lo empujan y el que pega retroceda;
+- que ningún par quede encimado más de un 12% del diámetro;
+- que el sacado termine afuera de la tiza;
+- que haya paradas y cámara lenta donde van, sin amontonarse;
+- que la ganadora nunca salga, que la rival salga última y que cada uno salga en su ventana;
+- que la misma semilla anote los mismos golpes.
+
+La primera vez que corrió encontró que los golpes de refilón nunca tocaban: apuntaban a un punto a 2,1 radios del otro. También encontró que las embestidas llegaban lentas y que en un ruedo lleno quedaban trompos encimados hasta la mitad del diámetro.

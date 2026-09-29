@@ -198,7 +198,7 @@ La carrera actúa la historia entera. Los demás juegos toman del director el ar
 | Cierre de Libro | Duelo | **El sello que duda.** El último sello flota sobre la ganadora ("¿se lo sellan a fulano?") y a último momento se va a la otra |
 | Aguayo (antes Pasanaku) | Susto | **El filo.** En el último apretón el bulto ganador sale empujado hasta el borde del aguayo, tiembla ahí con un aro rojo, y la tela lo vuelve a meter |
 | Trompo | Susto | **El cabeceo.** En el mano a mano el trompo ganador cabecea, casi se cae ("¡cabecea el de fulano!") y se endereza |
-| Trompo | Remontada | **La tiza.** A mitad de los choques lo sacan hasta el borde del ruedo y vuelve |
+| Trompo | Remontada | **La tiza.** A mitad de los choques le pegan y lo mandan contra la tiza: la roza y vuelve |
 | Trompo | Duelo | **Un choque más.** El mano a mano dura cuatro choques en vez de tres |
 | Piñata | Susto | **El que se asoma.** En los últimos palos el caramelo ganador asoma por la rajadura y vuelve a entrar |
 | Piñata | Remontada | **Al aire.** Dos palos que no le pegan a nada antes de los últimos |
@@ -221,6 +221,23 @@ Los otros auditores miran un sorteo por vez. Lo que mata la emoción no se ve en
 - **En la carrera, que el puesto de la ganadora a la mitad no la delate**: apostar por la que va primera a la mitad, o por la última, no puede acertar en más del 40% de las carreras (al azar se acierta en una de ocho), y la ganadora no puede ir adelante, ni atrás, en más del 60%.
 
 La primera vez que corrió encontró justo eso: con las curvas de cada arco fijas, a la mitad la ganadora iba primera o última en casi todas las carreras, y en los cohetes iba atrás en trece de dieciséis. Ahora el puesto a la mitad se sortea según el arco (en la remontada, entre los últimos cuatro; en la tapada, en el medio; en el susto, primera si el tropiezo viene después, en el medio si ya tropezó; en el duelo, arriba o en el medio según arranque temprano o tarde), y la curva de la ganadora se corrige por bisección hasta ocuparlo. La corrección vale cero en la largada y desde el 86%, así que la llegada no cambia.
+
+### El auditor de choques
+
+```bash
+node scripts/audit-choques.mjs
+```
+
+Es del trompo, el primer juego con choques de verdad. Los demás auditores miran la pantalla y el sonido; este mira la física. Con `?auditar=choques` el juego anota cada golpe, y el auditor comprueba en ocho semillas y con 2, 3, 60 y 200 personas:
+- que cada golpe pase con los dos trompos tocándose y ninguno se dé forzado;
+- que el golpeado salga hacia donde lo empujan y el que pega retroceda;
+- que nadie atraviese a nadie;
+- que el sacado termine afuera de la tiza;
+- que las paradas del golpe no se amontonen;
+- que la ganadora nunca salga;
+- que la misma semilla anote los mismos golpes.
+
+El detalle está en [juegos/trompo.md](juegos/trompo.md#cómo-auditarlo).
 
 ## Los subtítulos, y por qué no hay voz
 

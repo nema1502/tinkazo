@@ -55,7 +55,7 @@ Los momentos de cámara de cada juego:
 | Teleférico | En el andén de la base, sigue al convoy, se acerca a cada andén, se mete en la cabina de la puerta o de la mordaza, se hamaca con la ráfaga, se acerca despacio en el apagón y sigue a la cabina sola hasta la cumbre |
 | Aguayo | Cerca de la tela al tenderla, más cerca en cada apretón con un tirón, golpe al bulto que queda en el filo, pegada al nudo |
 | Cierre de Libro | Sigue a la barra en cada barrida, se mete en la tarjeta del susto, se acerca a la mesa final, golpe con cada sello y encima de la ganadora mientras el sello duda |
-| Trompo | Sobre el ruedo al tirar, se mete en cada choque, sigue al trompo que sacan hasta la tiza, pegada al mano a mano y encima del que cabecea |
+| Trompo | Sobre el ruedo al tirar, llega antes que cada golpe grande (encuadra a los dos mientras el que pega toma impulso), sigue al trompo que sacan hasta la tiza, pegada al mano a mano, se cierra antes de cada choque, cámara lenta en el último y encima del que cabecea |
 | Balsas de totora | La misma cámara de la carrera, sobre el lago |
 | Piñata | La piñata de cerca en los palos, más cerca en la rajadura y en el caramelo que se asoma, y cuando se rompe sigue al último caramelo hasta el piso |
 | Carnaval de Oruro | Sigue a la comparsa, se acerca a los que se quedan en cada arco y a la máscara que se corre, se abre al Socavón y se cierra en el contrapunto |
