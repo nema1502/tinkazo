@@ -1,4 +1,4 @@
-import type { Container, Filter } from "pixi.js";
+import { Graphics, type Container, type Filter, type Renderer } from "pixi.js";
 import { ZoomBlurFilter } from "pixi-filters";
 
 /**
@@ -40,6 +40,27 @@ export class Camera {
 
   constructor() {
     this.blur = new ZoomBlurFilter({ strength: 0, innerRadius: 60 });
+  }
+
+  /**
+   * Compila el desenfoque y los filtros de la escena antes de que se vean.
+   *
+   * La primera vez que la cámara hace un acercamiento rápido, la placa de video
+   * compila el programa del desenfoque y el cuadro espera: en la carrera, con
+   * la CPU a 4×, fueron de 118 a 514 ms congelados al segundo de arrancar
+   * (auditoría del stack, 29 de septiembre de 2026). Dibujando una vez un
+   * cuadrito con los mismos filtros a una textura que se tira, la compilación
+   * pasa antes de mostrar el estadio, donde nadie la ve.
+   */
+  warm(renderer: Renderer): void {
+    const g = new Graphics().rect(0, 0, 8, 8).fill(0xffffff);
+    const antes = this.blur.strength;
+    this.blur.strength = 0.05;
+    g.filters = [...this.extra, this.blur];
+    renderer.generateTexture(g).destroy(true);
+    g.filters = null;
+    this.blur.strength = antes;
+    g.destroy();
   }
 
   /** Mirar a un punto, con un acercamiento, llegando a ese ritmo. */

@@ -532,7 +532,19 @@ function finale(s: Session, t: number): void {
   bombo(s, t, 1.2);
   kick(s, t);
   crash(s, t, 1);
-  for (let i = 0; i < 20; i++) strum(s, t + i * 0.07, AM, i % 2 === 0, 0.55 * (1 - i / 26));
+  // Veinte rasgueos son unos 600 nodos de audio: armados todos juntos, el
+  // cuadro del ganador duraba más de 100 ms. Cada uno se arma poco antes de
+  // sonar. Los tiempos del contexto de audio son los mismos, y el rasgueo no
+  // usa el azar sembrado, así que la música de la ronda no cambia.
+  for (let i = 0; i < 20; i++) {
+    const at = t + i * 0.07;
+    const armar = (): void => {
+      if (cur === s) strum(s, at, AM, i % 2 === 0, 0.55 * (1 - i / 26));
+    };
+    const espera = (at - s.ctx.currentTime - 0.15) * 1000;
+    if (espera <= 0) armar();
+    else setTimeout(armar, espera);
+  }
   siku(s, t, deg(10), 1.5, -0.3, 1);
   siku(s, t + 0.02, deg(5), 1.5, 0.3, 0.6);
   s.bus.gain.setValueAtTime(0.34, t + 1.6);

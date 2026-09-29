@@ -121,6 +121,8 @@ export interface Crown {
   at(t: number, placa?: boolean): void;
   /** Vuelve a armarse para otro tamaño de pantalla. */
   rebuild(): void;
+  /** Dibuja el cartel una vez a una textura que se tira: ver `warmUp`. */
+  warm(): void;
 }
 
 export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => void): Promise<PixiStage | null> {
@@ -189,16 +191,22 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   app.stage.addChild(bg, scene, hud, podium);
   const cam = new Camera();
 
-  // El estadio aparece recién con el motor listo. Arrancar el motor tarda
-  // distinto en cada carga, y si el estadio se mostraba antes, el primer
-  // cuadro del juego caía en otro momento de cada corrida: el auditor
-  // exigente comparaba dos corridas desfasadas y las veía distintas.
-  ov.style.display = "block";
-  document.body.style.overflow = "hidden";
-  takeOverScreen(ov);
-
-  startMusic(parseInt(beacon.randomness.slice(8, 16), 16));
-  registerSkip(onSkip);
+  // El estadio aparece recién con el juego armado y el primer cuadro
+  // dibujado, justo antes de que corra el bucle (ver `run`). Dos razones:
+  // arrancar el motor tarda distinto en cada carga, y si el estadio se
+  // mostraba antes, el primer cuadro del juego caía en otro momento de cada
+  // corrida y el auditor exigente comparaba dos corridas desfasadas; y entre
+  // mostrarlo y el primer cuadro la sala veía el lienzo vacío, hasta dos
+  // segundos en un celular lento (auditoría del stack, 29 de septiembre de 2026).
+  let shown = false;
+  const show = (): void => {
+    if (shown) return;
+    shown = true;
+    ov.style.display = "block";
+    document.body.style.overflow = "hidden";
+    takeOverScreen(ov);
+    registerSkip(onSkip);
+  };
 
   const faces = new Map<string, Texture>();
   const face = (name: string): Texture => {
@@ -260,6 +268,28 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     for (const f of resizers) f();
   };
   addEventListener("resize", onResize);
+
+  /**
+   * Lo que cuesta la primera vez, pagado antes de mostrar el estadio: el
+   * desenfoque de la cámara (su compilación congelaba el primer zoom), el
+   * nombre del ganador dibujado a textura (se rasterizaba en el cuadro del
+   * revelado, el que toda la sala está mirando) y un primer dibujo de la
+   * escena armada, con sus texturas ya en la placa. Si algo de esto falla, se
+   * paga en el primer cuadro, como antes.
+   */
+  const warmUp = (): void => {
+    // La música arma su sala (el eco sale de una respuesta al impulso de un
+    // segundo y medio) antes de que se vea el estadio: armarla en el primer
+    // cuadro lo congelaba.
+    startMusic(parseInt(beacon.randomness.slice(8, 16), 16));
+    try {
+      cam.warm(app.renderer);
+      for (const c of crowns) c.warm();
+      app.renderer.render(app.stage);
+    } catch {
+      /* se paga después, en su momento */
+    }
+  };
 
   const crown = (names: string[], winners: readonly number[]): Crown => {
     const root = new Container();
@@ -346,6 +376,15 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         }
       },
       rebuild: build,
+      warm() {
+        // El cartel arranca en escala cero por su animación: sin tamaño no se
+        // dibuja nada, y el nombre no se rasteriza.
+        const sx = plate.scale.x;
+        const sy = plate.scale.y;
+        plate.scale.set(1);
+        app.renderer.generateTexture(plate).destroy(true);
+        plate.scale.set(sx, sy);
+      },
     };
     crowns.push(c);
     return c;
@@ -380,6 +419,8 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         app.renderer.render(app.stage);
         rafId = requestAnimationFrame(loop);
       };
+      warmUp();
+      show();
       rafId = requestAnimationFrame(loop);
     },
     cleanup() {
