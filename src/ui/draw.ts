@@ -6,7 +6,6 @@ import { select } from "../protocol/select";
 import { network, txUrl } from "../stellar/config";
 import { PROOF_VERSION, type Proof, proofUrl } from "../protocol/proof";
 import { anchorErrorText, drawOnChain, readDraw, showTxStatus, stepLabel } from "./anchor";
-import { primeNarrator } from "../narrator";
 import { stadiumRace } from "../games/race";
 import { stellarConstellation } from "../games/constellation";
 import { ledgerClose } from "../games/ledger";
@@ -34,7 +33,6 @@ export async function draw(): Promise<void> {
   if (!app.frozen || app.drawn || secondsToRound() > 0) return;
   // Tiene que correr dentro del clic: los navegadores no dejan hablar a una
   // página que nunca recibió uno, y esa habilitación después queda pegada.
-  primeNarrator();
   const btn = $<HTMLButtonElement>("btn-draw");
   btn.disabled = true;
   btn.textContent = t("fetching");

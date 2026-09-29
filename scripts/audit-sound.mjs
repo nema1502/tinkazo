@@ -66,6 +66,12 @@ const HOOK = `(() => {
   const OP = OscillatorNode.prototype;
   const start = OP.start, stop = OP.stop;
   OP.start = function (w) {
+    // La música se cuenta aparte: tiene sus propias reglas (un bombo que se
+    // repite es un ritmo) y lo que se juzga acá son los efectos del juego.
+    if (this.__musica) {
+      window.__musica = (window.__musica || 0) + 1;
+      return start.apply(this, arguments);
+    }
     // Se anota el reloj del contexto y el del navegador. Si el contexto queda
     // suspendido su reloj no avanza y todas las notas caerían en el instante
     // cero; el del navegador siempre corre, así que los huecos se miden con
@@ -161,7 +167,8 @@ async function correr(browser, juego) {
   await sleep(400);
   const crudo = await page.eval(`JSON.stringify(window.__snd || [])`);
   const voz = await page.eval(`JSON.stringify(window.__voz || { dichas: [], cortadas: [] })`);
-  return { juego, notas: JSON.parse(crudo), voz: JSON.parse(voz), termino: termino.ok };
+  const musica = Number(await page.eval("window.__musica || 0"));
+  return { juego, notas: JSON.parse(crudo), voz: JSON.parse(voz), musica, termino: termino.ok };
 }
 
 function medir(notas) {
@@ -273,7 +280,7 @@ async function run() {
       }
 
       const cortes = v.cortadas.length ? ` · ${v.cortadas.length} cortada(s)` : "";
-      const cab = `${juego.padEnd(9)} ${String(m.total).padStart(3)} notas y ${String(v.dichas.length).padStart(2)} frases en ${m.dur.toFixed(1)} s · hueco máximo ${m.hueco.toFixed(1)} s${cortes}`;
+      const cab = `${juego.padEnd(10)} ${String(m.total).padStart(3)} notas de efectos y ${String(r.musica ?? 0).padStart(4)} de música en ${m.dur.toFixed(1)} s · hueco máximo ${m.hueco.toFixed(1)} s${cortes}`;
       if (fallas.length) {
         malas++;
         console.log(`✗ ${cab}`);

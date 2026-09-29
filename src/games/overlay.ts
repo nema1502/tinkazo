@@ -1,7 +1,6 @@
 import { $ } from "../dom";
 import { LCOLORS, drawAvatar, instantMode, paceFactor, type Beacon } from "../state";
 import { setPickSeed, t } from "../i18n";
-import { narrate, stopNarrator } from "../narrator";
 import { musicCue, startMusic, stopMusic } from "../music";
 
 /**
@@ -152,7 +151,6 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
         [{ transform: "translateX(-50%) scale(0.75)" }, { transform: "translateX(-50%) scale(1)" }],
         { duration: 280, easing: "cubic-bezier(.34,1.56,.64,1)" },
       );
-      narrate(msg, heat);
       musicCue(heat);
     },
     chip(name, x, y, alpha = 1, scale = 1, alRevés = false) {
@@ -214,7 +212,6 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
       dead = true;
       cancelAnimationFrame(rafId);
       setPickSeed(null);
-      stopNarrator();
       stopMusic();
       releaseScreen();
       removeEventListener("resize", resize);

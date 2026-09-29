@@ -5,7 +5,6 @@ import { beep, beepFor, fanfare, note } from "../sound";
 import { NO_POSE, THEMES, type Pose, type ThemeId } from "./themes";
 import { tension, writeStory, type Arc, type Story } from "./drama";
 import { registerSkip, WINNER_HOLD, chrome, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
-import { narrate, stopNarrator } from "../narrator";
 import { musicCue, startMusic, stopMusic } from "../music";
 
 /* Modo estadio: carrera de llamas a pantalla completa, sembrada con la semilla. */
@@ -381,7 +380,6 @@ export function stadiumRace(
       [{ transform: "translateX(-50%) scale(0.75)" }, { transform: "translateX(-50%) scale(1)" }],
       { duration: 280, easing: "cubic-bezier(.34,1.56,.64,1)" },
     );
-    narrate(msg, heat);
     musicCue(heat);
   }
 
@@ -977,7 +975,6 @@ export function stadiumRace(
     document.body.style.overflow = "";
     registerSkip(null);
     setPickSeed(null);
-    stopNarrator();
     stopMusic();
     $("sec-draw").scrollIntoView({ behavior: "smooth", block: "start" });
     done();

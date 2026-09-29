@@ -11,69 +11,6 @@ import { skipGame } from "./games/overlay";
 import { usePixi } from "./games/engine";
 import { initWalletUI } from "./ui/wallet-ui";
 import { musicOn, toggleMusic } from "./music";
-import { chooseVoice, hasVoice, narrate, primeNarrator, shortVoiceName, voiceChoices, voiceName, voiceTier } from "./narrator";
-
-/**
- * Avisa si la máquina tiene voz para el narrador, cuál, y deja cambiarla.
- *
- * El momento de enterarse no es con la sala mirando. Las voces del sistema
- * tardan en aparecer, así que se reintenta una vez. Y como la mejor voz depende
- * del navegador (Chrome en Windows solo trae voces robóticas de España, Edge
- * trae neurales de toda Latinoamérica), se puede elegir y probar acá mismo.
- */
-function showVoiceNote(): void {
-  const paint = (): void => {
-    const el = document.getElementById("voice-note");
-    if (!el) return;
-    el.style.display = "flex";
-    const choices = voiceChoices();
-    if (!hasVoice() || choices.length === 0) {
-      el.textContent = t("voiceOff");
-      return;
-    }
-    el.textContent = "";
-    const label = document.createElement("label");
-    label.htmlFor = "voice-sel";
-    label.textContent = `${t("voiceOn")} `;
-    const sel = document.createElement("select");
-    sel.id = "voice-sel";
-    for (const c of choices) {
-      const o = document.createElement("option");
-      o.value = c.name;
-      o.textContent = shortVoiceName(c.name) + (c.natural ? ` · ${t("voiceNatural")}` : "");
-      sel.appendChild(o);
-    }
-    sel.value = voiceName() ?? "";
-    sel.addEventListener("change", () => {
-      chooseVoice(sel.value);
-      paint();
-    });
-    const probar = document.createElement("button");
-    probar.type = "button";
-    probar.className = "ghost";
-    probar.textContent = t("voiceTry");
-    probar.addEventListener("click", () => {
-      primeNarrator();
-      narrate(t("voiceSample"), 0.6);
-    });
-    el.append(label, sel, " ", probar);
-    // Sin ninguna voz natural a mano, se dice dónde hay: Edge trae neurales de
-    // toda Latinoamérica, y Marcelo y Sofía son de Bolivia.
-    const tierNow = voiceTier();
-    if (tierNow < 3 && !choices.some((c) => c.natural)) {
-      const hint = document.createElement("span");
-      hint.className = "voice-hint";
-      hint.textContent = t(tierNow === 1 ? "voiceRobot" : "voiceEdge");
-      el.append(hint);
-    }
-  };
-  paint();
-  // `getVoices()` suele venir vacío en la primera llamada, y Chrome suma sus
-  // voces de Google un rato después: se repinta cuando llegan.
-  setTimeout(paint, 1200);
-  if (typeof speechSynthesis !== "undefined") speechSynthesis.addEventListener("voiceschanged", paint);
-  onLangChange(paint);
-}
 
 // `?theme=light|dark` fuerza el tema (capturas).
 const themeParam = params.get("theme");
@@ -245,7 +182,6 @@ async function poseScene(): Promise<void> {
 }
 
 renderNames();
-showVoiceNote();
 // Cada juego muestra en su botón lo que hace. Los nombres solos no le dicen
 // nada a quien llega por primera vez.
 void import("./ui/thumbs").then((m) => m.initThumbs(GAMES));

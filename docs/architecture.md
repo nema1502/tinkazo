@@ -130,7 +130,7 @@ Módulos y responsabilidades:
 | `src/stellar/config.ts` | Red activa, RPC, passphrase, dirección del contrato |
 | `src/stellar/wallet.ts` | Adaptador de wallet: `connect()`, `address`, `network`, `signTransaction(xdr)` sobre `@stellar/freighter-api`, más la cuenta invitada de testnet |
 | `src/stellar/wallet-pollar.ts` | Entrar con Google. Firma y envía de una sola vez contra su propio servidor, por eso se marca con `submitsItself` |
-| `src/narrator.ts` | El narrador con voz, sobre la API del navegador. Elige voz en español, prefiere las locales y sube el ritmo con la tensión. Una línea sólo interrumpe a la que suena si la supera en tensión: cortar siempre dejaba frases a medio decir. La voz dice menos que la caja: la primera línea del sorteo, las de tensión alta (0,6 o más) y, de las otras, sólo las que llegan después de tres segundos de silencio |
+| `src/music.ts` | La música de fondo, andina con beat, generada en el navegador con la semilla de la ronda. Arranca prendida y más baja que los efectos; sigue la tensión de cada línea de la caja del estadio. Desde el 28 de septiembre de 2026 no hay relator con voz: lo sacó el autor porque no le gustaba, y quedaron los subtítulos |
 | `src/stellar/contract.ts` | `contract.Client` tipado de `tinkazo-raffle`: `seal`, `draw`, `getRaffle`, `getDraw` |
 | `src/games/overlay.ts` | El andamiaje de los juegos: monta el estadio, siembra el azar con la ronda, dibuja los chips, registra el botón de saltar, pide pantalla completa y desmonta |
 | `src/games/*.ts` | Los juegos del motor anterior; los doce del motor nuevo viven en `src/games/pixi/`. Ninguno calcula nada: reciben el ganador ya decidido. Cada uno declara con `setGameLength` cuánto dura sin estirar, porque el selector de duración apunta a una cantidad de segundos y no multiplica |
@@ -140,7 +140,7 @@ Módulos y responsabilidades:
 
 El adaptador de wallet es una interfaz pequeña para que se pueda agregar una wallet sin tocar el resto: `{ kind, connect, disconnect, getAddress, getNetwork, signTransaction }`. Pollar la extiende con `submitsItself` y `signAndSubmit`, porque firma y envía junto contra su propio servidor y ahí no se puede usar `signAndSend`: la transacción saldría dos veces.
 
-**La capa de juegos.** `overlay.ts` expone un `Stage` con el lienzo, el azar sembrado con `beacon.randomness`, los chips con avatar, el narrador y el desmontaje idempotente. Un juego nuevo pide `mount()` y recibe todo eso; si devuelve `null` es porque corre en modo `?instant=1` y hay que cerrar el sorteo de una.
+**La capa de juegos.** `overlay.ts` expone un `Stage` con el lienzo, el azar sembrado con `beacon.randomness`, los chips con avatar, los subtítulos del estadio y el desmontaje idempotente. Un juego nuevo pide `mount()` y recibe todo eso; si devuelve `null` es porque corre en modo `?instant=1` y hay que cerrar el sorteo de una.
 
 Dos reglas que valen para los doce juegos:
 

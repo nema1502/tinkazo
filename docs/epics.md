@@ -707,7 +707,9 @@ De paso se arregló que las frases se sorteaban con `Math.random()`: ahora tambi
 
 Después (2026-09-28), a pedido de quien lo usa: **hablaba demasiado y con frases forzadas.** Ahora la voz dice menos que la caja: la primera línea del sorteo, las de tensión alta y, de las demás, solo las que llegan después de tres segundos de silencio, que quedan para la música y la cámara. Medido con el auditor de sonido, de 87 a 57 frases entre los ocho juegos. Las frases se reescribieron: sin "señores" en cada juego, sin el "¡Ahora manda fulano!", y cada juego cierra con lo suyo en vez de repetir "¡No respira nadie!" en cinco. "¡Viene rodando!" de la Tómbola y "¡Pasa por fulano!" de la Ruleta se repetían cada medio segundo con tensión alta y la voz los encadenaba: siguen en la caja y bajaron a tensión media.
 
-### Historia 9.2: Probarla con voz real en el equipo del evento
+Después (2026-09-28): **el relator con voz se sacó del todo.** Al autor no le gustaba ni con menos frases ni con otras palabras, y un sorteo se entiende sin voz. Quedaron los subtítulos de la caja del estadio, que cuentan cada momento, y la música de fondo pasó a arrancar prendida, más baja, siguiendo la misma tensión. Los auditores no cambiaron de fondo: ya medían la caja, no la voz; el de sonido ahora cuenta la música aparte de los efectos.
+
+### Historia 9.2: Probarla con voz real en el equipo del evento: ya no aplica
 
 Como organizadora,
 quiero saber antes del evento si la máquina tiene voz en español,

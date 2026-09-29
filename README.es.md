@@ -108,7 +108,7 @@ La justicia es matemática; el show es lo que hace que a la sala le importe. Doc
 
 Un director de cámara filma cada juego como una transmisión: sigue a la punta, se mete en el susto, va en cámara lenta en la foto final y sacude en los choques. Los juegos corren en PixiJS, y en un equipo sin WebGL toma la posta el motor anterior: el sorteo nunca se queda en blanco.
 
-Un relator canta en voz alta los momentos grandes (en Microsoft Edge elige una voz neural boliviana), un modo con música pone andina con beat que sigue la tensión, y después del ganador una tarjeta cuenta un pedazo de la historia con su fuente primaria.
+De fondo suena música andina con beat que sigue la tensión, unos subtítulos cortos cuentan cada momento en pantalla, y después del ganador una tarjeta cuenta un pedazo de la historia con su fuente primaria.
 
 ## Modelo de confianza
 
@@ -155,7 +155,7 @@ Cinco auditores en [`scripts/`](scripts) corren el sitio de verdad en Chrome sin
 - **El de juegos**, veinte comprobaciones por juego contra drand de verdad. La que importa: el nombre en pantalla es el que fijó el protocolo.
 - **El exigente**, que cambia el reloj del navegador para comparar dos corridas cuadro contra cuadro: la misma ronda dibuja lo mismo, ni un `Math.random`, nunca cuatro segundos sin novedad, el cartel del ganador se lee desde el fondo de la sala, con dos personas y con doscientas, en un celular.
 - **El de emoción**, dieciséis semillas por juego: los arcos de la historia varían y el puesto de la ganadora a mitad de carrera no la delata.
-- **El de sonido**, que engancha cada oscilador y mide afinación, registro, volumen, silencios y un relator que se traba.
+- **El de sonido**, que engancha cada oscilador y mide afinación, registro, volumen y silencios de los efectos, con la música contada aparte.
 - **El de interfaz**, en escritorio y celular, en los dos temas: imágenes rotas, texto cortado, contraste y blancos de toque.
 
 ## Los próximos 30 días

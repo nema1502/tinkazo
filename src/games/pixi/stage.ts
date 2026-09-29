@@ -3,7 +3,6 @@ import { gsap } from "gsap";
 import { $ } from "../../dom";
 import { T, getLang, setPickSeed, t } from "../../i18n";
 import { LCOLORS, drawAvatar, instantMode, paceFactor, type Beacon } from "../../state";
-import { narrate, stopNarrator } from "../../narrator";
 import { musicCue, startMusic, stopMusic } from "../../music";
 import { registerSkip, releaseScreen, shorten, takeOverScreen, winnerNames } from "../overlay";
 import { Camera } from "./camera";
@@ -349,7 +348,6 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         [{ transform: "translateX(-50%) scale(0.75)" }, { transform: "translateX(-50%) scale(1)" }],
         { duration: 280, easing: "cubic-bezier(.34,1.56,.64,1)" },
       );
-      narrate(msg, heat);
       musicCue(heat);
     },
     face, text, chip, mark, crown,
@@ -397,7 +395,6 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       document.body.style.overflow = "";
       registerSkip(null);
       setPickSeed(null);
-      stopNarrator();
       stopMusic();
       $("sec-draw").scrollIntoView({ behavior: "smooth", block: "start" });
       done();

@@ -55,7 +55,7 @@ Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledg
 node scripts/audit-game.mjs <juego> --base http://localhost:4173
 
 # Auditor exigente: reloj cambiado para que la animación se compare cuadro
-# contra cuadro. Reproducibilidad, Math.random, ritmo, relator que tartamudea,
+# contra cuadro. Reproducibilidad, Math.random, ritmo, subtítulos que se pisan,
 # fluidez, cartel legible desde el fondo, saltar, fugas y duración. Sin red.
 node scripts/audit-rigor.mjs todos --base http://localhost:4173
 
@@ -105,7 +105,7 @@ precios.html        Qué cuesta y cómo funciona por dentro
 terminos.html       Términos y privacidad: participar es gratis, quien organiza responde
 public/             juegos/*.webp, sitemap.xml y robots.txt
 verificar.html      Página de verificación, solo lectura
-src/                Frontend TypeScript: main, i18n, state, narrator, protocol/, stellar/, ui/, games/
+src/                Frontend TypeScript: main, i18n, state, sound, music, protocol/, stellar/, ui/, games/
 src/games/engine.ts   Qué motor dibuja: el nuevo, o el anterior con ?motor=clasico o sin WebGL
 src/games/pixi/     El motor de los juegos: stage.ts (andamiaje), camera.ts (director de cámara) y un archivo por juego
 src/games/overlay.ts  Andamiaje del motor anterior, que queda de respaldo, y lo común a los dos

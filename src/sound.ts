@@ -1,5 +1,4 @@
 import { getLang } from "./i18n";
-import { muteNarrator } from "./narrator";
 import { paceFactor } from "./state";
 
 /* Sonido con WebAudio, sin assets. */
@@ -153,7 +152,6 @@ export function toggleSound(): void {
     /* que no se guarde no rompe nada */
   }
   // La voz del narrador es parte del sonido: un solo botón las apaga a las dos.
-  muteNarrator(muted);
   soundLabel();
 }
 

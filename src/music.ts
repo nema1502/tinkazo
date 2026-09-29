@@ -12,26 +12,29 @@ import { audio, isMuted } from "./sound";
  * - **La escala es la pentatónica de la menor.** Tiene las mismas cinco notas
  *   que la pentatónica de do mayor de los efectos (`note()` en sound.ts), así
  *   que la música y los golpes de los juegos nunca chocan entre sí.
- * - **La música sigue al relator.** Cada línea del narrador trae su tensión, de
- *   0 a 1, y la música la usa para prender capas: primero el bombo, después el
- *   charango en ritmo de huayno, el beat, la zampoña y al final todo doblado.
- *   Así sirve para los ocho juegos sin que ninguno tenga que saber de música.
- * - **La sorpresa se escucha como silencio.** Cuando el relator pega un salto
- *   de tensión (la ruleta que se para en otro nombre, el apagón del
- *   teleférico), la música se corta un tiempo entero y vuelve con un platillo.
- *   Y cuando sale el ganador, remata: bombo, platillo y el charango en trémolo.
+ * - **La música sigue a la tensión.** Cada línea de la caja del estadio trae
+ *   su tensión, de 0 a 1, y la música la usa para prender capas: primero el
+ *   bombo, después el charango en ritmo de huayno, el beat, la zampoña y al
+ *   final todo doblado. Así sirve para los doce juegos sin que ninguno tenga
+ *   que saber de música.
+ * - **La sorpresa se escucha como silencio.** Cuando la tensión pega un salto
+ *   (la ruleta que se para en otro nombre, el apagón del teleférico), la
+ *   música se corta un tiempo entero y vuelve con un platillo. Y cuando sale
+ *   el ganador, remata: bombo, platillo y el charango en trémolo.
  *
- * Es un modo: arranca apagada, y el botón de la página la prende. El sonido
- * apagado también la apaga.
+ * Es música de fondo: arranca prendida, más baja que los efectos, y el botón
+ * de la página la apaga (y se acuerda). El sonido apagado también la apaga.
+ * Desde que no hay relator con voz (28 de septiembre de 2026), es lo que
+ * acompaña el show.
  */
 
 const MUSIC_KEY = "tinkazo.musica";
 
 function load(): boolean {
   try {
-    return localStorage.getItem(MUSIC_KEY) === "1";
+    return localStorage.getItem(MUSIC_KEY) !== "0";
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -47,6 +50,17 @@ export function toggleMusic(): void {
     /* que no se guarde no rompe nada */
   }
   if (!enabled) stopMusic();
+}
+
+/**
+ * Marca los nodos de la música. El auditor de sonido juzga los efectos de
+ * cada juego (afinación, registro, golpes repetidos) y la música tiene otras
+ * reglas: un bombo que se repite es un ritmo, no un error. Con la marca, el
+ * auditor la cuenta aparte en vez de mezclarla con los efectos.
+ */
+function tag<T extends AudioScheduledSourceNode>(n: T): T {
+  (n as T & { __musica?: boolean }).__musica = true;
+  return n;
 }
 
 /* --------------------------------------------------------------- la escala */
@@ -132,7 +146,7 @@ export function startMusic(seed: number): void {
   // quitaría el brillo a los platillos.
   const bus = ctx.createGain();
   bus.gain.value = 0;
-  bus.gain.linearRampToValueAtTime(0.42, ctx.currentTime + 0.6);
+  bus.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.6);
   const comp = ctx.createDynamicsCompressor();
   comp.threshold.value = -16;
   comp.ratio.value = 4;
@@ -340,7 +354,7 @@ function env(ctx: BaseAudioContext, t: number, peak: number, attack: number, dec
 /** El bombo legüero: cuero grave que cae de tono, y un golpe de madera. */
 function bombo(s: Session, t: number, v: number): void {
   const { ctx } = s;
-  const o = ctx.createOscillator();
+  const o = tag(ctx.createOscillator());
   o.type = "sine";
   o.frequency.setValueAtTime(95, t);
   o.frequency.exponentialRampToValueAtTime(48, t + 0.22);
@@ -354,23 +368,23 @@ function bombo(s: Session, t: number, v: number): void {
 /** El bombo del beat, más seco y más corto. */
 function kick(s: Session, t: number): void {
   const { ctx } = s;
-  const o = ctx.createOscillator();
+  const o = tag(ctx.createOscillator());
   o.type = "sine";
   o.frequency.setValueAtTime(150, t);
   o.frequency.exponentialRampToValueAtTime(46, t + 0.1);
-  const g = env(ctx, t, 0.85, 0.002, 0.28);
+  const g = env(ctx, t, 0.6, 0.002, 0.28);
   o.connect(g).connect(s.bus);
   o.start(t);
   o.stop(t + 0.35);
 }
 
 function hat(s: Session, t: number, v: number): void {
-  noiseHit(s, t, 0.11 * v, 0.045, "highpass", 7500);
+  noiseHit(s, t, 0.07 * v, 0.045, "highpass", 7500);
 }
 
 /** Palmas: tres golpes de ruido casi juntos, como una fila de manos. */
 function clap(s: Session, t: number): void {
-  for (let i = 0; i < 3; i++) noiseHit(s, t + i * 0.011, i === 2 ? 0.3 : 0.18, i === 2 ? 0.16 : 0.03, "bandpass", 1600);
+  for (let i = 0; i < 3; i++) noiseHit(s, t + i * 0.011, i === 2 ? 0.2 : 0.12, i === 2 ? 0.16 : 0.03, "bandpass", 1600);
 }
 
 function crash(s: Session, t: number, v: number): void {
@@ -380,7 +394,7 @@ function crash(s: Session, t: number, v: number): void {
 /** Ruido que sube de brillo durante `len`: la subida antes de un cambio. */
 function riser(s: Session, t: number, len: number): void {
   const { ctx } = s;
-  const src = ctx.createBufferSource();
+  const src = tag(ctx.createBufferSource());
   src.buffer = s.noise;
   src.loop = true;
   const f = ctx.createBiquadFilter();
@@ -399,7 +413,7 @@ function riser(s: Session, t: number, len: number): void {
 
 function noiseHit(s: Session, t: number, peak: number, decay: number, type: BiquadFilterType, freq: number): void {
   const { ctx } = s;
-  const src = ctx.createBufferSource();
+  const src = tag(ctx.createBufferSource());
   src.buffer = s.noise;
   const f = ctx.createBiquadFilter();
   f.type = type;
@@ -414,7 +428,7 @@ function noiseHit(s: Session, t: number, peak: number, decay: number, type: Biqu
 /** El bajo: redondo, sin filo, para sostener sin tapar. */
 function bass(s: Session, t: number, semis: number): void {
   const { ctx } = s;
-  const o = ctx.createOscillator();
+  const o = tag(ctx.createOscillator());
   o.type = "triangle";
   o.frequency.value = hz(semis);
   const f = ctx.createBiquadFilter();
@@ -443,7 +457,7 @@ function strum(s: Session, t: number, chord: Chord, down: boolean, v: number): v
     f.frequency.exponentialRampToValueAtTime(1400, at + 0.25);
     const g = env(ctx, at, 0.05 * v, 0.003, 0.32);
     for (const [type, mul, lvl] of [["triangle", 1, 1], ["sawtooth", 1.003, 0.35]] as const) {
-      const o = ctx.createOscillator();
+      const o = tag(ctx.createOscillator());
       o.type = type;
       o.frequency.value = hz(semis) * mul;
       const lg = ctx.createGain();
@@ -472,10 +486,10 @@ function siku(s: Session, t: number, semis: number, len: number, pan: number, v:
   p.connect(s.wet);
   const dur = Math.max(0.09, len * 0.92);
 
-  const o = ctx.createOscillator();
+  const o = tag(ctx.createOscillator());
   o.type = "sine";
   o.frequency.value = f0;
-  const vib = ctx.createOscillator();
+  const vib = tag(ctx.createOscillator());
   vib.frequency.value = 5.4;
   const vg = ctx.createGain();
   vg.gain.setValueAtTime(0, t);
@@ -493,7 +507,7 @@ function siku(s: Session, t: number, semis: number, len: number, pan: number, v:
   vib.stop(t + dur + 0.02);
 
   // El soplido.
-  const src = ctx.createBufferSource();
+  const src = tag(ctx.createBufferSource());
   src.buffer = s.noise;
   const bp = ctx.createBiquadFilter();
   bp.type = "bandpass";
@@ -521,7 +535,7 @@ function finale(s: Session, t: number): void {
   for (let i = 0; i < 20; i++) strum(s, t + i * 0.07, AM, i % 2 === 0, 0.55 * (1 - i / 26));
   siku(s, t, deg(10), 1.5, -0.3, 1);
   siku(s, t + 0.02, deg(5), 1.5, 0.3, 0.6);
-  s.bus.gain.setValueAtTime(0.42, t + 1.6);
+  s.bus.gain.setValueAtTime(0.34, t + 1.6);
   s.bus.gain.linearRampToValueAtTime(0, t + 3.2);
 }
 

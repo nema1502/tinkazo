@@ -108,7 +108,7 @@ Fairness is math; the show is what makes a room care. Twelve games, most of them
 
 A camera director frames every game like a broadcast: it follows the leader, pushes in on the scare, slows down for the photo finish and shakes on impact. The games run on PixiJS, and where a device has no WebGL the previous engine takes over, so a draw never goes blank.
 
-A narrator calls the big moments out loud (in Microsoft Edge it picks a neural Bolivian voice), an optional music mode plays Andean music with a beat that follows the tension, and after the winner a card explains a piece of the story with its primary source.
+Andean music with a beat plays in the background and follows the tension, short captions call each moment on screen, and after the winner a card explains a piece of the story with its primary source.
 
 ## Trust model
 
@@ -155,7 +155,7 @@ Five auditors in [`scripts/`](scripts) run the real site in headless Chrome:
 - **Game auditor**, 20 checks per game against live drand. The one that matters: the name on screen is the one the protocol fixed.
 - **Strict auditor**, which swaps the browser clock to compare two runs frame by frame: same round, same frames, no `Math.random`, never four seconds without something happening, a readable winner plate from the back of the room, with two people and with two hundred, on a phone.
 - **Emotion auditor**, sixteen seeds per game: the story arcs vary and the winner's mid-race position does not give it away.
-- **Sound auditor**, which hooks every oscillator and measures pitch, register, volume, gaps and a narrator that trips over itself.
+- **Sound auditor**, which hooks every oscillator and measures the effects' pitch, register, volume and gaps, with the music counted apart.
 - **UI auditor**, desktop and phone, both themes: broken images, clipped text, contrast, tap targets.
 
 ## The next 30 days
