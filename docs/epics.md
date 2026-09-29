@@ -478,7 +478,7 @@ Resultado (2026-09-20): no había nada para doscientos. La ruleta muere a los ve
 
 Resultado (2026-09-20): con dos o tres participantes no se veía girar, y no era estilo sino geometría: una rueda de n gajos se ve igual cada 360/n grados. Ahora cada persona se lleva varios gajos intercalados y la rueda siempre tiene cerca de veinticuatro. Además frena integrando una velocidad en vez de interpolar el ángulo, la paleta se traba en los pernos, y los 64 dígitos de la semilla están escritos en el aro. Detalle en [ruleta.md](juegos/ruleta.md).
 
-### Historia 7.9: Pasanaku: hecho
+### Historia 7.9: Pasanaku: hecho (desde el 28 de septiembre se llama Aguayo)
 
 Resultado (2026-09-20): el juego con nombre boliviano. El *Diccionario de americanismos* define `pasanacu` como "juego que consiste en sortear el dinero de las cuotas" de un grupo, así que ya era un sorteo. Un aguayo que se cierra sobre los bultos hasta que queda uno en el nudo, y los hilos entre vecinos son las trustlines. Detalle en [pasanaku.md](juegos/pasanaku.md).
 
@@ -581,7 +581,7 @@ Lo que se corrigió mirándola en fotos antes de auditarla: las guirnaldas se cr
 
 Y una que encontró el auditor de juegos, contra drand de verdad: en un celular, con dos premios, el cartel no aparecía. Se le pasaba la escala de la escena en vez de la de pantalla, que en un teléfono es la mitad, y los dos nombres salían a quince píxeles. Ahora usa la misma que los demás juegos.
 
-### Historia 7.15: El director de emoción: piloto en la carrera
+### Historia 7.15: El director de emoción: hecho en todos los juegos
 
 Como organizadora,
 quiero que la carrera cuente una historia y no una simulación,
@@ -621,7 +621,7 @@ para seguir mirando la pantalla y no el celular.
 
 Resultado (2026-09-26): los cuatro giros y las banderas en `src/games/cablecar.ts`; el detalle, con los tiempos y el sonido, en [juegos/teleferico.md](juegos/teleferico.md). Sale de lo que mejor funcionó en la ruleta, que se para y después se mueve: finales que no se adivinan.
 
-### Historia 7.17: La carrera en PixiJS y GSAP: prototipo
+### Historia 7.17: El motor nuevo, PixiJS con director de cámara: hecho, y es el de todos
 
 Resultado (2026-09-27): la misma carrera, dibujada con la placa de video, para decidir si vale la pena cambiar de motor. Se prende con `?motor=pixi` (en un sorteo de verdad con la carrera elegida, o en `?pose=1&motor=pixi`) y se carga solo cuando se pide: 118 KB comprimidos aparte, el sitio no pesa más.
 
@@ -630,6 +630,8 @@ Resultado (2026-09-27): la misma carrera, dibujada con la placa de video, para d
 - **Medido:** 60 cuadros por segundo parejos en una placa integrada Intel Iris Xe, igual que la carrera de siempre. En Chrome sin interfaz, que dibuja WebGL sin placa, baja a unos 31: los auditores van a necesitar una placa o un reloj propio.
 
 Falta decidir si se sigue: el video lado a lado está en la carpeta de videos del autor. Si se sigue, `race.ts` pasa a usar el plan, se adaptan los auditores al lienzo de WebGL y se prueba en celulares de verdad.
+
+Después (2026-09-28): se siguió. Los ocho juegos pasaron al motor nuevo con un director de cámara compartido (`src/games/pixi/`), cada uno con 20/20 en el auditor exigente y en el de juegos contra drand real, y el motor nuevo pasó a ser el de todos. El anterior queda de respaldo: con `?motor=clasico`, en un equipo sin WebGL o si el motor nuevo no arranca. El detalle está en [docs/motores.md](motores.md).
 
 ### Historia 7.3: Mejoras transversales de presentación
 
@@ -665,6 +667,10 @@ para que el sorteo encaje con el tono de mi público.
 Resultado parcial (2026-09-20): seis juegos en el catálogo, todos con 15/15. Constelación Stellar, Cierre de Libro, Pasanaku, Carrera de llamas, Carrera de cohetes y Ruleta.
 
 Resultado (2026-09-24): ocho. Entraron el Teleférico (historia 7.13), el primero que nace pasando el auditor exigente, y la Tómbola (7.14).
+
+Resultado (2026-09-28): doce, casi todos de la cultura boliviana y latinoamericana. Entraron el Trompo, las Balsas de totora (un tema de la carrera, como pide el criterio), la Piñata y el Carnaval de Oruro, que nacen en el motor nuevo y pasan los cuatro auditores: el exigente y el de juegos con 20/20, el de emoción y el de sonido. Cada uno trae su tarjeta de historia con fuente viva. El Pasanaku pasó a llamarse Aguayo y dejó de mostrar plata: el pasanaku de verdad es un ahorro con pozo, y un sorteo gratuito no tiene por qué parecerse a eso.
+
+**Falta:** el documento de cada juego nuevo en `docs/juegos/`, que el criterio pide y todavía no está.
 
 ---
 
