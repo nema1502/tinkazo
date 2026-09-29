@@ -13,7 +13,7 @@ mode: fast path, redactado a partir de la idea original y el demo existente; las
 
 ## 0. Propósito del documento
 
-Este PRD define qué construye Tinkazo en su versión sobre Stellar. Lo leen quien desarrolla (humano o agente), quien diseña la arquitectura ([architecture.md](architecture.md)) y quien parte el trabajo en historias ([epics.md](epics.md)). El vocabulario del Glosario es obligatorio en todos los documentos derivados. Los requisitos funcionales (FR) tienen numeración global y estable. Las inferencias no confirmadas por el autor llevan la etiqueta `[ASSUMPTION]` y se indexan al final.
+Este PRD define qué construye Tinkazo en su versión sobre Stellar. Lo leen quien desarrolla, quien diseña la arquitectura ([architecture.md](architecture.md)) y quien parte el trabajo en historias ([epics.md](epics.md)). El vocabulario del Glosario es obligatorio en todos los documentos derivados. Los requisitos funcionales (FR) tienen numeración global y estable. Las inferencias no confirmadas por el autor llevan la etiqueta `[ASSUMPTION]` y se indexan al final.
 
 Parte del demo estático en producción en [tinkazo.vercel.app](https://tinkazo.vercel.app), que ya resuelve carga de lista, sello local, semilla de drand y dos juegos.
 

@@ -358,7 +358,7 @@ para rehacerlos con mis herramientas.
 ### Historia 5.1: Despliegue a mainnet con checklist
 
 Como equipo,
-quiero pasar las tres puertas del skill `deploy-stellar-mainnet` y desplegar,
+quiero pasar la comprobación previa (`pnpm preflight:mainnet`) y desplegar,
 para lanzar sin sorpresas.
 
 **Criterios de aceptación:**
@@ -388,13 +388,13 @@ para adoptarlo o auditarlo.
 
 Como autor,
 quiero listar Tinkazo donde la comunidad de Stellar lo encuentre,
-para conseguir usuarios y evaluar SCF.
+para conseguir usuarios.
 
 **Criterios de aceptación:**
 
 **Dado** el lanzamiento
-**Cuando** ejecuto la puerta 3 del skill
-**Entonces** hay PR a `lumenloop/stellar-ecosystem-db`, anuncio con enlace a stellar.expert y, si aplica, el borrador del formulario de interés de SCF con `scf-interest-form-drafter`.
+**Cuando** lo lanzo
+**Entonces** hay PR a `lumenloop/stellar-ecosystem-db`, y un anuncio con enlace a stellar.expert.
 
 ---
 

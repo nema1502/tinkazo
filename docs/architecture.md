@@ -9,7 +9,7 @@ inputDocuments: ['docs/prd.md', 'docs/protocolo.md', 'index.html (demo v1)']
 
 # Tinkazo: Arquitectura
 
-Documento de decisiones técnicas para implementar el [PRD](prd.md) sobre Stellar. Es la fuente de verdad para quien implemente (humano o agente): si algo no está aquí, se decide y se agrega aquí antes de codificarlo. El [Protocolo](protocolo.md) es la especificación normativa del sorteo y manda sobre este documento en lo que respecta a la matemática.
+Documento de decisiones técnicas para implementar el [PRD](prd.md) sobre Stellar. Es la fuente de verdad para quien implemente: si algo no está aquí, se decide y se agrega aquí antes de codificarlo. El [Protocolo](protocolo.md) es la especificación normativa del sorteo y manda sobre este documento en lo que respecta a la matemática.
 
 ## Análisis de contexto
 
@@ -223,10 +223,9 @@ tinkazo/
 │   ├── prd.md · architecture.md · protocolo.md · epics.md · deployments.md · vectors.json
 │   └── capturas/
 ├── .github/workflows/ci.yml
-├── .stellar-build/bmm/config.yaml # config de las skills, local: no se versiona
 ├── Cargo.toml                    # workspace
 ├── package.json · pnpm-lock.yaml · vite.config.ts · tsconfig.json · vercel.json
-├── CLAUDE.md · README.md · LICENSE · .gitignore
+├── README.md · README.es.md · LICENSE · .gitignore
 ```
 
 **Fronteras.**
@@ -260,7 +259,7 @@ tinkazo/
 
 **Coherencia.** Las decisiones encajan: quicknet (D-01) habilita la verificación on-chain (D-02) y el compromiso temporal (D-03); la inmutabilidad (D-04) y el `draw` sin permiso (D-05) refuerzan la promesa del producto; Vite vanilla (D-08) preserva la interfaz v1 y admite los SDKs (D-09, D-10).
 
-**Cobertura.** Cada FR del PRD está mapeado a una épica en [epics.md](epics.md). NFR-1 se garantiza con vectores cruzados; NFR-2 con la ausencia de backend (excepción acotada y opcional en D-07); NFR-3 se mide en 1.4; NFR-4 con `.gitignore` y las reglas de CLAUDE.md; NFR-6 porque el contrato solo recibe `list_hash`.
+**Cobertura.** Cada FR del PRD está mapeado a una épica en [epics.md](epics.md). NFR-1 se garantiza con vectores cruzados; NFR-2 con la ausencia de backend (excepción acotada y opcional en D-07); NFR-3 se mide en 1.4; NFR-4 con `.gitignore` y la comprobación previa a mainnet (`pnpm preflight:mainnet`), que revisa que no haya semillas en el repositorio; NFR-6 porque el contrato solo recibe `list_hash`.
 
 **Brechas.**
 - *Resuelta (2026-09-16):* el costo real de `pairing_check` es despreciable (0,003 XLM); el plan B de D-02 no hace falta. El costo por sorteo lo domina la renta de almacenamiento (0,18 XLM) y NFR-3 se ajustó a 0,25 XLM.
