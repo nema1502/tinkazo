@@ -89,7 +89,7 @@ Tested with a thousand participants: the draw still runs at 60 frames per second
 </div>
 
 <div align="center">
-<img src="docs/capturas/readme/juegos.webp" alt="Six of the twelve Tinkazo games: Stellar constellation, llama race, cable car, ball drum, aguayo and ledger close" width="860">
+<img src="docs/capturas/readme/partidas.webp" alt="Real games recorded from the site: the Oruro Carnival, the aguayo, totora boats on Lake Titicaca, spinning tops, the La Paz cable car, the piñata and the llama race finish, where Carlos Choque wins" width="720">
 </div>
 
 ## The show

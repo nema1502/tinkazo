@@ -89,7 +89,7 @@ Probado con mil participantes: el sorteo sigue a sesenta cuadros por segundo y s
 </div>
 
 <div align="center">
-<img src="docs/capturas/readme/juegos.webp" alt="Seis de los doce juegos" width="860">
+<img src="docs/capturas/readme/partidas-es.webp" alt="Partidas reales grabadas del sitio: el Carnaval de Oruro, el aguayo, las balsas de totora del Titicaca, el trompo, el teleférico de La Paz, la piñata y la llegada de la carrera de llamas, donde gana Carlos Choque" width="720">
 </div>
 
 ## El show
