@@ -287,11 +287,11 @@ El ritmo, la legibilidad del cartel y el tartamudeo del relator ya los mide el a
 | Constelación Stellar | `stellar` | Módulo propio | 200 | [constelacion-stellar.md](juegos/constelacion-stellar.md) |
 | Cierre de Libro | `ledger` | Módulo propio | 200 | [cierre-de-libro.md](juegos/cierre-de-libro.md) |
 | Carrera de cohetes | `rockets` | Motor de carrera, tema espacial | 8 en pantalla | [carrera-stellar.md](juegos/carrera-stellar.md) |
-| Aguayo (antes Pasanaku) | `pasanaku` | Módulo propio | 200 | [pasanaku.md](juegos/pasanaku.md) |
+| Aguayo (antes Pasanaku) | `pasanaku` | Módulo propio | 200 | [pasanaku.md](juegos/pasanaku.md), que ahora cuenta el Aguayo |
 | Ruleta | `wheel` | Módulo propio | 24 | [ruleta.md](juegos/ruleta.md) |
 | Teleférico | `teleferico` | Módulo propio | 200 | [teleferico.md](juegos/teleferico.md) |
 | Tómbola | `tombola` | Módulo propio | 200 | [tombola.md](juegos/tombola.md) |
-| Trompo | `trompo` | Módulo propio (solo motor nuevo) | 200 | · |
-| Balsas de totora | `totora` | Motor de carrera, tema del lago | 8 en pantalla | · |
-| Piñata | `pinata` | Módulo propio (solo motor nuevo) | 200 | · |
-| Carnaval de Oruro | `oruro` | Módulo propio (solo motor nuevo) | 200 | · |
+| Trompo | `trompo` | Módulo propio (solo motor nuevo) | 200 | [trompo.md](juegos/trompo.md) |
+| Balsas de totora | `totora` | Motor de carrera, tema del lago | 8 en pantalla | [balsas-de-totora.md](juegos/balsas-de-totora.md) |
+| Piñata | `pinata` | Módulo propio (solo motor nuevo) | 200 | [pinata.md](juegos/pinata.md) |
+| Carnaval de Oruro | `oruro` | Módulo propio (solo motor nuevo) | 200 | [carnaval-de-oruro.md](juegos/carnaval-de-oruro.md) |

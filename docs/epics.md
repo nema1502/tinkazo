@@ -670,7 +670,7 @@ Resultado (2026-09-24): ocho. Entraron el Teleférico (historia 7.13), el primer
 
 Resultado (2026-09-28): doce, casi todos de la cultura boliviana y latinoamericana. Entraron el Trompo, las Balsas de totora (un tema de la carrera, como pide el criterio), la Piñata y el Carnaval de Oruro, que nacen en el motor nuevo y pasan los cuatro auditores: el exigente y el de juegos con 20/20, el de emoción y el de sonido. Cada uno trae su tarjeta de historia con fuente viva. El Pasanaku pasó a llamarse Aguayo y dejó de mostrar plata: el pasanaku de verdad es un ahorro con pozo, y un sorteo gratuito no tiene por qué parecerse a eso.
 
-**Falta:** el documento de cada juego nuevo en `docs/juegos/`, que el criterio pide y todavía no está.
+Cada uno tiene su documento en `docs/juegos/`: [trompo.md](juegos/trompo.md), [balsas-de-totora.md](juegos/balsas-de-totora.md), [pinata.md](juegos/pinata.md) y [carnaval-de-oruro.md](juegos/carnaval-de-oruro.md). El del Pasanaku se reescribió como Aguayo.
 
 ---
 
