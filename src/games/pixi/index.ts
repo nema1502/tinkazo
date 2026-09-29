@@ -1,5 +1,5 @@
 import type { Beacon, Game } from "../../state";
-import { PixiInitError } from "./stage";
+import { PixiInitError, warmPixi } from "./stage";
 
 /**
  * Qué juegos tienen versión en el motor nuevo, y cómo se lanzan.
@@ -33,6 +33,14 @@ const PIXI: Partial<Record<Game, () => Promise<Launch>>> = {
     return (n, w, b, d) => m.llamasPixi(n, w, b, d, "stellar");
   },
 };
+
+/**
+ * Baja el juego y lo que PixiJS pide recién al arrancar, sin crear nada.
+ * Ver `preloadGame` en `../engine.ts`.
+ */
+export async function preloadPixi(game: Game): Promise<void> {
+  await Promise.all([PIXI[game]?.(), warmPixi()]);
+}
 
 /** `true` si el juego tiene versión en PixiJS. */
 export const hasPixi = (game: Game): boolean => game in PIXI;

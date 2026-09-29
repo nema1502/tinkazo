@@ -6,16 +6,9 @@ import { select } from "../protocol/select";
 import { network, txUrl } from "../stellar/config";
 import { PROOF_VERSION, type Proof, proofUrl } from "../protocol/proof";
 import { anchorErrorText, drawOnChain, readDraw, showTxStatus, stepLabel } from "./anchor";
-import { stadiumRace } from "../games/race";
-import { stellarConstellation } from "../games/constellation";
-import { ledgerClose } from "../games/ledger";
-import { pasanaku } from "../games/pasanaku";
-import { cableCar } from "../games/cablecar";
-import { tombola } from "../games/tombola";
 import { loreFor } from "../games/lore";
 import { currentSession } from "./wallet-ui";
 import { qrDataUrl } from "./qr";
-import { wheelSpin } from "../games/wheel";
 import { usePixi } from "../games/engine";
 import { secondsToRound } from "./freeze";
 
@@ -151,32 +144,41 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   classicGame(names, winners, beacon, finish);
 }
 
+/**
+ * El motor de siempre, de respaldo. Se baja recién si hace falta: son unos
+ * 90 KB que antes viajaban en la página inicial de todo el mundo y solo se
+ * usan sin WebGL o con `?motor=clasico`.
+ */
 function classicGame(names: string[], winners: number[], beacon: Beacon, finish: () => void): void {
-  if (app.game === "wheel" && names.length <= WHEEL_MAX) {
-    wheelSpin(names, winners, beacon, finish);
-    return;
-  }
-  if (app.game === "stellar") {
-    stellarConstellation(names, winners, beacon, finish);
-    return;
-  }
-  if (app.game === "ledger") {
-    ledgerClose(names, winners, beacon, finish);
-    return;
-  }
-  if (app.game === "pasanaku") {
-    pasanaku(names, winners, beacon, finish);
-    return;
-  }
-  if (app.game === "teleferico") {
-    cableCar(names, winners, beacon, finish);
-    return;
-  }
-  if (app.game === "tombola") {
-    tombola(names, winners, beacon, finish);
-    return;
-  }
-  stadiumRace(names, winners, beacon, finish, app.game === "rockets" ? "stellar" : "andes");
+  void (async () => {
+    if (app.game === "wheel" && names.length <= WHEEL_MAX) {
+      (await import("../games/wheel")).wheelSpin(names, winners, beacon, finish);
+      return;
+    }
+    if (app.game === "stellar") {
+      (await import("../games/constellation")).stellarConstellation(names, winners, beacon, finish);
+      return;
+    }
+    if (app.game === "ledger") {
+      (await import("../games/ledger")).ledgerClose(names, winners, beacon, finish);
+      return;
+    }
+    if (app.game === "pasanaku") {
+      (await import("../games/pasanaku")).pasanaku(names, winners, beacon, finish);
+      return;
+    }
+    if (app.game === "teleferico") {
+      (await import("../games/cablecar")).cableCar(names, winners, beacon, finish);
+      return;
+    }
+    if (app.game === "tombola") {
+      (await import("../games/tombola")).tombola(names, winners, beacon, finish);
+      return;
+    }
+    (await import("../games/race")).stadiumRace(names, winners, beacon, finish, app.game === "rockets" ? "stellar" : "andes");
+    // Si ni el motor de respaldo se alcanza a bajar, el resultado sale igual,
+    // sin show: el sorteo ya está decidido y la sala tiene que verlo.
+  })().catch(() => finish());
 }
 
 /**

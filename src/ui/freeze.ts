@@ -7,9 +7,15 @@ import { contractUrl, network } from "../stellar/config";
 import { anchorErrorText, hideTxStatus, sealOnChain, showTxStatus, stepLabel } from "./anchor";
 import { canAnchor, currentSession } from "./wallet-ui";
 import { parseNames } from "./participants";
+import { preloadGame } from "../games/engine";
 
-/** Los botones del selector, en el orden en que se muestran. */
-const GAME_BUTTONS: ReadonlyArray<[string, Game]> = [
+/**
+ * Los botones del selector, en el orden en que se muestran. Hasta el 29 de
+ * septiembre de 2026 esta lista tenía solo los ocho primeros, y los botones
+ * del trompo, las balsas, la piñata y Oruro no hacían nada: solo se llegaba a
+ * ellos con `?demo=`, que es lo que usan los auditores.
+ */
+export const GAME_BUTTONS: ReadonlyArray<[string, Game]> = [
   ["g-race", "race"],
   ["g-stellar", "stellar"],
   ["g-ledger", "ledger"],
@@ -18,12 +24,18 @@ const GAME_BUTTONS: ReadonlyArray<[string, Game]> = [
   ["g-tombola", "tombola"],
   ["g-rockets", "rockets"],
   ["g-wheel", "wheel"],
+  ["g-trompo", "trompo"],
+  ["g-totora", "totora"],
+  ["g-pinata", "pinata"],
+  ["g-oruro", "oruro"],
 ];
 
 export function setGame(g: Game): void {
   if (app.drawn) return;
   app.game = g;
   for (const [id, key] of GAME_BUTTONS) $(id).classList.toggle("on", g === key);
+  // Si ya está congelada, la cuenta regresiva corre: se baja el juego nuevo.
+  if (app.frozen) preloadGame(g, app.frozen.names.length);
 }
 
 /**
@@ -62,6 +74,8 @@ function startCountdown(): void {
   const left = document.getElementById("wait-left");
   const line = box?.querySelector(".wait-line");
   if (num && app.frozen) num.textContent = `#${app.frozen.round}`;
+  // La conexión está ociosa hasta que nazca la ronda: se baja el motor.
+  if (app.frozen) preloadGame(app.game, app.frozen.names.length);
   const tick = (): void => {
     const s = secondsToRound();
     if (s > 0) {

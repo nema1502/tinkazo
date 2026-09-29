@@ -1,4 +1,4 @@
-import { Application, Container, Graphics, Sprite, Text, Texture, type TextStyleOptions } from "pixi.js";
+import { Application, Container, Graphics, Sprite, Text, Texture, WebGLRenderer, loadEnvironmentExtensions, type TextStyleOptions } from "pixi.js";
 import { gsap } from "gsap";
 import { $ } from "../../dom";
 import { T, getLang, setPickSeed, t } from "../../i18n";
@@ -53,6 +53,18 @@ export function seeded(seed: number): () => number {
     q = (q + Math.imul(q ^ (q >>> 7), 61 | q)) ^ q;
     return ((q ^ (q >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+/**
+ * Lo que PixiJS baja recién al arrancar, pedido antes: el entorno del
+ * navegador (`loadEnvironmentExtensions`) y el renderizador de WebGL, que
+ * `app.init` importa aparte. Con la referencia de acá, el renderizador viaja
+ * en el mismo archivo que este andamiaje y ya está cuando el juego arranca.
+ * No crea ningún contexto ni toca la pantalla.
+ */
+export async function warmPixi(): Promise<string> {
+  await loadEnvironmentExtensions(false);
+  return WebGLRenderer.name;
 }
 
 /** El motor no pudo arrancar en este equipo: el juego se cuenta con el de siempre. */

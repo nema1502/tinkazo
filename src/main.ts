@@ -4,9 +4,8 @@ import { onLangChange, setLang, t } from "./i18n";
 import { SAMPLE, app, currentPace, paceSeconds, params, setPace, type Game, type Pace } from "./state";
 import { soundLabel, toggleSound } from "./sound";
 import { bindParticipants, loadSample, renderNames } from "./ui/participants";
-import { copyRules, freeze, refreshFreezeLabel, secondsToRound, setGame } from "./ui/freeze";
+import { GAME_BUTTONS, copyRules, freeze, refreshFreezeLabel, secondsToRound, setGame } from "./ui/freeze";
 import { copySummary, draw, reverify, shareProof } from "./ui/draw";
-import { stadiumRace } from "./games/race";
 import { skipGame } from "./games/overlay";
 import { usePixi } from "./games/engine";
 import { initWalletUI } from "./ui/wallet-ui";
@@ -70,14 +69,7 @@ $("btn-hist-clear").addEventListener("click", () => {
   });
 });
 
-$("g-race").addEventListener("click", () => setGame("race"));
-$("g-stellar").addEventListener("click", () => setGame("stellar"));
-$("g-ledger").addEventListener("click", () => setGame("ledger"));
-$("g-pasanaku").addEventListener("click", () => setGame("pasanaku"));
-$("g-teleferico").addEventListener("click", () => setGame("teleferico"));
-$("g-tombola").addEventListener("click", () => setGame("tombola"));
-$("g-rockets").addEventListener("click", () => setGame("rockets"));
-$("g-wheel").addEventListener("click", () => setGame("wheel"));
+for (const [id, game] of GAME_BUTTONS) $(id).addEventListener("click", () => setGame(game));
 $("btn-draw").addEventListener("click", () => void draw());
 $("btn-reverify").addEventListener("click", reverify);
 $<HTMLButtonElement>("btn-copy").addEventListener("click", (e) => void copySummary(e.currentTarget as HTMLButtonElement));
@@ -178,7 +170,7 @@ async function poseScene(): Promise<void> {
     return;
   }
   // "rockets" es la carrera con la piel espacial; cualquier otro valor, la andina.
-  stadiumRace(L, W3, fakeBeacon, nada, cual === "rockets" ? "stellar" : "andes");
+  (await import("./games/race")).stadiumRace(L, W3, fakeBeacon, nada, cual === "rockets" ? "stellar" : "andes");
 }
 
 renderNames();

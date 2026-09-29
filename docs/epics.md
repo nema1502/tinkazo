@@ -670,6 +670,8 @@ Resultado (2026-09-24): ocho. Entraron el Teleférico (historia 7.13), el primer
 
 Resultado (2026-09-28): doce, casi todos de la cultura boliviana y latinoamericana. Entraron el Trompo, las Balsas de totora (un tema de la carrera, como pide el criterio), la Piñata y el Carnaval de Oruro, que nacen en el motor nuevo y pasan los cuatro auditores: el exigente y el de juegos con 20/20, el de emoción y el de sonido. Cada uno trae su tarjeta de historia con fuente viva. El Pasanaku pasó a llamarse Aguayo y dejó de mostrar plata: el pasanaku de verdad es un ahorro con pozo, y un sorteo gratuito no tiene por qué parecerse a eso.
 
+Después (2026-09-29): los botones de esos cuatro juegos **no hacían nada** en el sitio. La lista de botones de `setGame` y los clics de `main.ts` se habían quedado con los ocho primeros, y los auditores entran con `?demo=`, que no pasa por los botones, así que nadie lo vio. Ahora los clics salen de la misma lista que el selector (`GAME_BUTTONS` en `src/ui/freeze.ts`), y se probó el clic en los doce.
+
 Cada uno tiene su documento en `docs/juegos/`: [trompo.md](juegos/trompo.md), [balsas-de-totora.md](juegos/balsas-de-totora.md), [pinata.md](juegos/pinata.md) y [carnaval-de-oruro.md](juegos/carnaval-de-oruro.md). El del Pasanaku se reescribió como Aguayo.
 
 ---
