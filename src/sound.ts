@@ -133,7 +133,7 @@ export function fanfare(): void {
 export function soundLabel(): void {
   const word = getLang() === "es" ? "SONIDO" : "SOUND";
   const el = document.getElementById("st-sound");
-  if (el) el.textContent = `${word}: ${muted ? "OFF" : "ON"}`;
+  if (el) el.textContent = `${word}: ${muted ? (getLang() === "es" ? "NO" : "OFF") : getLang() === "es" ? "SÍ" : "ON"}`;
   // El mismo estado, en la página, para poder apagarlo antes de empezar.
   const page = document.getElementById("btn-sound");
   if (page) {

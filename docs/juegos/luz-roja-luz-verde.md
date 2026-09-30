@@ -43,7 +43,7 @@ El autor pidió algo como el juego del calamar, y el juego de la serie es justam
 
 ## La cámara
 
-Avanza detrás del grupo, en perspectiva: la cancha se ve con profundidad y los corredores se achican hacia el Faro. Cuando el Faro se da vuelta, la cámara va a su cabeza; en la luz roja sigue al haz por la cancha; en el susto se mete en la ganadora; y en el último verde acompaña a la ganadora hasta el Faro.
+Avanza detrás del grupo, en perspectiva y desde tres metros de alto, como desde una tribuna: la cancha se ve con profundidad, los corredores se achican hacia el Faro y el grupo queda en el medio de la pantalla. Los cerros del horizonte se mueven con la cancha, así que al acercarse no se abre ninguna franja entre los dos. Los que se sentaron se desvanecen antes de que la cámara les pase por encima. Cuando el Faro se da vuelta, la cámara va a su cabeza; en la luz roja sigue al haz por la cancha; en el susto se mete en la ganadora; y en el último verde acompaña a la ganadora hasta el Faro.
 
 ## El sonido
 

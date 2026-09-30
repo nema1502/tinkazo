@@ -160,7 +160,7 @@ Cada uno tiene su color dominante, útil si una diapositiva los muestra. Seis sa
 
 Entra por la función, nunca por la decoración. Si el elemento se puede sacar sin que nada deje de funcionar, es decoración y sobra.
 
-Cada cosa boliviana del producto hace algo: el nombre, la llama de la mascota, el perno tricolor de la ruleta que marca la vuelta, el aguayo que es el tablero de juego, el teleférico, cuyo cable es la barra de progreso y cuyas cabinas llevan los colores de las diez líneas de La Paz y El Alto, las balsas de totora que son los carriles de la carrera, y la entrada del Carnaval de Oruro, cuyas cuadras son las rondas de eliminación. El trompo y la piñata son de toda Latinoamérica y siguen la misma regla: el choque y el palo son los que eliminan. Los nombres de la lista de ejemplo (Quispe, Mamani, Choque, Condori, Limachi, Villca) son el detalle más sutil y el que más gusta.
+Cada cosa boliviana del producto hace algo: el nombre, la llama de la mascota, el perno tricolor de la ruleta que marca la vuelta, el aguayo que es el tablero de juego, el teleférico, cuyo cable es la barra de progreso y cuyas cabinas llevan los colores de las diez líneas de La Paz y El Alto, y la entrada del Carnaval de Oruro, cuyas cuadras son las rondas de eliminación. El trompo y la piñata son de toda Latinoamérica y siguen la misma regla: el choque y el palo son los que eliminan. Los nombres de la lista de ejemplo (Quispe, Mamani, Choque, Condori, Limachi, Villca) son el detalle más sutil y el que más gusta.
 
 **Lo que no va:** wiphalas, cholitas, el Illimani, Tiwanaku, ni la palabra "Bolivia" escrita en pantalla. El pie de página dice "Hecho en Bolivia por Nicolás" y con eso alcanza.
 
@@ -176,9 +176,9 @@ Todos medidos, no estimados. Si se actualizan, se actualizan acá también.
 | Solo la verificación BLS en la cadena | 0,003 XLM |
 | Tamaño del contrato compilado | 11,4 KB |
 | Tests del contrato | 19 |
-| Tests del protocolo en TypeScript | 38 |
-| Comprobaciones por juego del auditor | 15 |
-| Juegos | 6 |
+| Tests del protocolo en TypeScript | 27 |
+| Comprobaciones por juego del auditor | 20 |
+| Juegos | 10 |
 | Espera entre sellar y sortear, modo libre | 10 segundos |
 | Espera si el sorteo se ancla en Stellar | 45 segundos |
 | Dependencias en ejecución | 3 (RPC de Stellar, relays de drand, la wallet del organizador) |
@@ -197,7 +197,7 @@ Todos medidos, no estimados. Si se actualizan, se actualizan acá también.
 
 El orden que funciona, probado contra las objeciones que aparecen:
 
-1. **La palabra.** En Bolivia un tinkazo es esa corazonada de que hoy tenés suerte. Abre con algo humano y deja el nombre pegado.
+1. **La palabra.** En Bolivia un tinkazo es una corazonada: el presentimiento de que hoy te toca. Abre con algo humano y deja el nombre pegado.
 2. **El problema.** Toda comunidad hace sorteos, y en todos hay alguien que piensa que el organizador le dio el premio a su amigo.
 3. **El truco, en una frase.** La lista se cierra antes de que exista el número que va a decidir. El orden es todo.
 4. **La demostración.** Un sorteo de verdad, en vivo. Dura diez segundos de espera y un juego. Que el público vea la lista congelarse.

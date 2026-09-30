@@ -753,6 +753,19 @@ export async function llamasPixi(
   }
 
   /* ---------------------------------------------------------- el guion */
+  /**
+   * La cámara de todos los días, sin dejar el primer carril debajo de la
+   * barra de arriba: la barra del recorrido cruzaba el chip del carril 1 y el
+   * recuadro del número público tapaba su nombre (lo encontró el agente
+   * evaluador). Los primeros planos no pasan por acá: miran lo que tienen que
+   * mirar aunque el carril 1 quede fuera.
+   */
+  function look(x: number, y: number, z: number, rate: number): void {
+    const techo = S.top() + 46 * G.u;
+    const cabeza = G.laneY(0) - 78 * G.laneScale(0);
+    cam.lookAt(x, Math.min(y, cabeza - (techo - G.sh / 2) / z), z, rate);
+  }
+
   function update(dt: number): void {
     if (phase === "count") {
       tPhase += dt * paceFactor();
@@ -763,7 +776,7 @@ export async function llamasPixi(
         cam.punch(0.03);
       }
       // En la cuenta la cámara se va abriendo de a poco, sobre la largada.
-      cam.lookAt(G.X0 - 20 * G.u + G.sw * 0.04 * Math.min(3, tPhase), G.midY, (G.portrait ? 1.3 : 1.55) - 0.12 * Math.min(3, tPhase), 2);
+      look(G.X0 - 20 * G.u + G.sw * 0.04 * Math.min(3, tPhase), G.midY, (G.portrait ? 1.3 : 1.55) - 0.12 * Math.min(3, tPhase), 2);
       if (tPhase >= 3) {
         phase = "race";
         S.say(t("cStart"), 0.6);
@@ -829,9 +842,9 @@ export async function llamasPixi(
       const second = order[1]?.k ?? leader;
       const x2 = xOf(second, prog);
       const y = (G.laneY(leader) + G.laneY(second)) / 2 - 30 * G.u;
-      cam.lookAt((leadX + x2) / 2 + 30 * G.u, y, (G.portrait ? 1.2 : 1.35) + 0.2 * (prog - 0.8) / 0.2, 3);
+      look((leadX + x2) / 2 + 30 * G.u, y, (G.portrait ? 1.2 : 1.35) + 0.2 * (prog - 0.8) / 0.2, 3);
     } else {
-      cam.lookAt(leadX - G.sw * 0.08, G.midY, 1 + 0.18 * tens, 2.6);
+      look(leadX - G.sw * 0.08, G.midY, 1 + 0.18 * tens, 2.6);
     }
     if (prog >= 1) finishNow();
   }

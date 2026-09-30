@@ -24,6 +24,8 @@ Cada bola lleva el puesto de la persona en la lista sellada, contado desde uno. 
 
 **La canaleta.** Es de madera, con rieles, travesaños y postes. La bola rueda por tres tramos en zigzag, cada vez más lenta, y crece para que el número se lea desde el fondo. Rueda de verdad: el número gira lo que la bola avanza dividido por su radio, y en cada curva pega un saltito, más chico cada vez. En el borde del vaso se frena, se tambalea medio segundo con un latido de fondo, y cae a un vaso de vidrio, donde rebota dos veces aplastándose y suelta unas chispitas.
 
+**El número** que acompaña a la bola va en una etiqueta amarilla sin cara: la cara de la ganadora aparece recién en el vaso, con su nombre.
+
 **Las bolas** tienen brillo y sombra que no giran con ellas: la luz viene siempre de arriba a la izquierda, y por eso se leen redondas aunque den vueltas.
 
 ## Lo que el bombo hace a propósito

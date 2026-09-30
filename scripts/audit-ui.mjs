@@ -42,7 +42,10 @@ const PROBE = `(() => {
   const lum = (c) => { const [r,g,b] = c.map(v => { v /= 255; return v <= 0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4); }); return 0.2126*r + 0.7152*g + 0.0722*b; };
   const nums = (s) => s.split(/[^0-9.]+/).filter(Boolean).map(Number).slice(0, 3);
   const opaque = (b) => b && b.indexOf('rgba(0, 0, 0, 0)') < 0 && b.indexOf('transparent') < 0;
-  const bgOf = (el) => { let e = el; while (e) { const b = getComputedStyle(e).backgroundColor; if (opaque(b)) return nums(b); e = e.parentElement; } return [255,255,255]; };
+  // Un fondo en degradado (el resaltado del título) cuenta por su último color
+  // opaco: es el que queda detrás de las letras.
+  const grad = (e) => { const g = getComputedStyle(e).backgroundImage; if (!g || g.indexOf('gradient(') < 0) return null; const cols = (g.match(/rgba?\\([^)]*\\)/g) || []).filter((c) => { const v = nums(c.replace(/^rgba?\\(/, '')); const a = c.startsWith('rgba') ? Number((c.match(/,\\s*([0-9.]+)\\s*\\)$/) || [0, 1])[1]) : 1; return a > 0.5 && v.length === 3; }); return cols.length ? nums(cols[cols.length - 1]) : null; };
+  const bgOf = (el) => { let e = el; while (e) { const b = getComputedStyle(e).backgroundColor; if (opaque(b)) return nums(b); const gc = grad(e); if (gc) return gc; e = e.parentElement; } return [255,255,255]; };
   const ratio = (a, b) => { const l1 = lum(a), l2 = lum(b); return +(((Math.max(l1,l2)+0.05)/(Math.min(l1,l2)+0.05)).toFixed(2)); };
 
   const out = { texto: [], desbordes: [], toques: [], rotas: [] };
@@ -116,10 +119,16 @@ async function connect(page) {
  * lo pintado.
  *
  * Por eso se mide por píxeles: una foto del título tal cual y otra con el
- * resaltado borrado entero (sin fondo y con sus letras transparentes), donde
- * solo queda el resto del texto. Un píxel del centro de una letra de esa
- * segunda foto que en la primera es amarillo es una letra tapada. Los bordes
- * suavizados no cuentan: ahí se mezclan los colores aunque nada tape nada.
+ * resaltado sin fondo y con sus letras del color del resto, donde se ven todas
+ * las letras del título enteras. Un píxel del centro de una letra de esa
+ * segunda foto que en la primera no es de ningún color de letra (ni el del
+ * título ni el del resaltado) es una letra tapada: por el amarillo, o por la
+ * franja de otro renglón del mismo resaltado. Los bordes suavizados no
+ * cuentan: ahí se mezclan los colores aunque nada tape nada.
+ *
+ * La primera versión solo miraba las letras de afuera del resaltado, y no vio
+ * que el renglón de abajo del resaltado le cortaba la cola a la "q" de
+ * "cualquiera", en el renglón de arriba. Lo encontró el agente evaluador.
  */
 async function resaltadoTapa(page) {
   const box = JSON.parse(await page.eval(`(() => { scrollTo(0, 0); const h = document.querySelector('h1'); if (!h || !h.querySelector('.hl')) return JSON.stringify({ w: 0 }); const r = h.getBoundingClientRect(); return JSON.stringify({ x: r.left, y: r.top, w: r.width, h: r.height }); })()`));
@@ -128,7 +137,7 @@ async function resaltadoTapa(page) {
   const shot = async () => (await page.send("Page.captureScreenshot", { format: "png", clip })).data;
   await sleep(200);
   const a = await shot();
-  await page.eval(`(() => { const s = document.createElement('style'); s.id = '__sin-hl'; s.textContent = 'html body h1 .hl.hl.hl { background: none !important; color: transparent !important; }'; document.head.appendChild(s); return true; })()`);
+  await page.eval(`(() => { const s = document.createElement('style'); s.id = '__sin-hl'; const tinta = getComputedStyle(document.querySelector('h1')).color; s.textContent = 'html body h1 .hl.hl.hl, html body h1 .hl.hl.hl * { background: none !important; color: ' + tinta + ' !important; }'; document.head.appendChild(s); return true; })()`);
   await sleep(150);
   const b = await shot();
   await page.eval(`(() => { document.getElementById('__sin-hl')?.remove(); return true; })()`);
@@ -144,15 +153,35 @@ async function resaltadoTapa(page) {
       return x.getImageData(0, 0, c.width, c.height).data;
     };
     const A = await load(${JSON.stringify(a)}), B = await load(${JSON.stringify(b)});
-    const hex = getComputedStyle(document.documentElement).getPropertyValue('--yellow').trim().replace('#', '');
-    const Y = [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)];
+    const rgb = (css) => (css.match(/[0-9.]+/g) || []).slice(0, 3).map(Number);
+    const tinta = rgb(getComputedStyle(document.querySelector('h1')).color);
+    const tintaHl = rgb(getComputedStyle(document.querySelector('h1 .hl')).color);
+    const cerca = (d, i, c) => Math.abs(d[i] - c[0]) + Math.abs(d[i + 1] - c[1]) + Math.abs(d[i + 2] - c[2]) < 110;
     const lum = (d, i) => (d[i] * 0.2126 + d[i + 1] * 0.7152 + d[i + 2] * 0.0722) / 255;
     const fondo = lum(B, 0);
+    const W = ${Math.round(clip.width * 2)}, H = B.length / 4 / W;
+    // El interior de una letra: el píxel y sus vecinos a dos píxeles en las
+    // cuatro direcciones son letra. Los bordes suavizados cambian apenas de una
+    // foto a la otra aunque nada tape nada, y no cuentan.
+    const letra = (x, y) => x >= 0 && y >= 0 && x < W && y < H && Math.abs(lum(B, (y * W + x) * 4) - fondo) > 0.55;
     let tapadas = 0;
-    for (let i = 0; i < B.length; i += 4) {
-      const centro = Math.abs(lum(B, i) - fondo) > 0.55;
-      const amarillo = Math.abs(A[i] - Y[0]) + Math.abs(A[i + 1] - Y[1]) + Math.abs(A[i + 2] - Y[2]) < 60;
-      if (centro && amarillo) tapadas++;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (!(letra(x, y) && letra(x - 2, y) && letra(x + 2, y) && letra(x, y - 2) && letra(x, y + 2))) continue;
+        // Tapada de verdad: ni ese píxel ni sus vecinos inmediatos tienen color
+        // de letra en la foto normal. Una letra corrida un píxel entre las dos
+        // fotos no cuenta; una cola tapada es una zona entera sin letra.
+        let hay = false;
+        for (let dy = -1; dy <= 1 && !hay; dy++) {
+          for (let dx = -1; dx <= 1 && !hay; dx++) {
+            const xx = x + dx, yy = y + dy;
+            if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+            const j = (yy * W + xx) * 4;
+            if (cerca(A, j, tinta) || cerca(A, j, tintaHl)) hay = true;
+          }
+        }
+        if (!hay) tapadas++;
+      }
     }
     return JSON.stringify({ tapadas });
   })()`));

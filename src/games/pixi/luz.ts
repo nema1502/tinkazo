@@ -385,7 +385,7 @@ export async function luzPixi(names: string[], winners: readonly number[], beaco
     const portrait = S.portrait();
     // En un celular la cancha es más angosta y la cámara va más cerca.
     const hw = portrait ? 4.2 : 7;
-    return { W, H, k, cx: W / 2, yH: H * (portrait ? 0.34 : 0.3), f: (W * 0.55 * 3) / hw, hw, back: portrait ? 5 : 6.5 };
+    return { W, H, k, cx: W / 2, yH: H * 0.3, f: (W * 0.55 * 3) / hw, hw, back: portrait ? 4 : 5.2 };
   };
   let G = geo();
   /** De la cancha a la pantalla: la posición, y cuántos píxeles mide un metro ahí. */
@@ -581,8 +581,10 @@ export async function luzPixi(names: string[], winners: readonly number[], beaco
         cam.lookAt(pw.x, pw.y - 1.2 * pw.s, 1.9, 5);
       } else if (p.ok) cam.lookAt(p.x, p.y - 0.8 * p.s, 1.25, 3);
     } else if (light === "final" || light === "crown") {
+      // El último verde, encima de la ganadora: de lejos y chica, con el
+      // resultado ya sabido, no pasaba nada.
       const pw = project(win.x, win.z);
-      if (pw.ok) cam.lookAt((pw.x + pf.x) / 2, pw.y - 1.5 * pw.s, light === "crown" ? 1.35 : 1.2, 2.5);
+      if (pw.ok) cam.lookAt(pw.x, pw.y - 1.4 * pw.s, light === "crown" ? 1.45 : 1.7, 3);
     } else cam.lookAt(cx, H * 0.5, 1, 2);
   }
 
@@ -596,14 +598,15 @@ export async function luzPixi(names: string[], winners: readonly number[], beaco
       const tw = 0.4 + 0.6 * Math.abs(Math.sin(now * 1.3 + i));
       sky.circle(hash(i, 1) * W, hash(i, 2) * yH * 0.7, (0.8 + hash(i, 3) * 1.4) * k).fill({ color: 0xffffff, alpha: 0.6 * tw });
     }
-    // Los cerros, lejos: casi no se mueven con la cámara.
-    const hills: number[] = [0, yH + 2];
-    for (let i = 0; i <= 12; i++) hills.push((i / 12) * W, yH - (18 + 26 * hash(i, 9)) * k);
-    hills.push(W, yH + 2);
-    sky.poly(hills).fill(S.dark ? 0x241c3a : 0x3a2e63);
-
-    // La cancha: franjas de pasto en perspectiva, las líneas y la tiza.
+    // La cancha: los cerros en el horizonte, franjas de pasto en
+    // perspectiva, las líneas y la tiza. Los cerros van en la escena, con el
+    // pasto: si quedaban en el fondo fijo, al acercarse la cámara el borde del
+    // pasto bajaba y entre los dos aparecía una franja vacía.
     field.clear();
+    const hills: number[] = [-W, yH + 2];
+    for (let i = 0; i <= 36; i++) hills.push(-W + (i / 36) * W * 3, yH - (18 + 26 * hash(i, 9)) * k);
+    hills.push(W * 2, yH + 2);
+    field.poly(hills).fill(S.dark ? 0x241c3a : 0x3a2e63);
     // El pasto sigue más allá de la pantalla: la cámara se corre y se acerca.
     field.rect(-W, yH, W * 3, H * 2).fill(S.dark ? 0x1d5a34 : 0x2f7d45);
     const edge = (z: number): { l: number; r: number; y: number } | null => {
@@ -702,7 +705,8 @@ export async function luzPixi(names: string[], winners: readonly number[], beaco
         // Se apagan al rato, y del todo cuando la cámara los pasa: si no, los
         // sentados quedaban enormes adelante y tapaban la carrera.
         const zc = r.z * LEN - camZ;
-        v.alpha = (1 - 0.6 * clamp((tAll - r.caught - 0.8) / 0.6, 0, 1)) * clamp((zc - 2.2) / 2.5, 0, 1);
+        v.alpha = (1 - 0.6 * clamp((tAll - r.caught - 0.8) / 0.6, 0, 1)) * clamp((zc - 3) / 2, 0, 1);
+        v.visible = v.alpha > 0.02;
         continue;
       }
       legL.visible = legR.visible = true;
@@ -741,7 +745,7 @@ export async function luzPixi(names: string[], winners: readonly number[], beaco
     }
 
     // La interfaz: el semáforo arriba a la derecha y el tinte rojo.
-    const red = light === "red" || light === "warn";
+    const red = light === "red" || ((light === "warn" || light === "back") && facing() >= 0.5);
     tint.clear();
     if (light === "red") tint.rect(0, 0, W, H).fill({ color: 0xff0000, alpha: 0.045 + 0.02 * Math.sin(now * 8) });
     const hit = tAll - hitAt;
@@ -762,15 +766,15 @@ export async function luzPixi(names: string[], winners: readonly number[], beaco
       const at = live
         .map((r) => {
           const p = project(r.x, r.z);
-          return { r, p: cam.toScreen(p.x + 0.3 * p.s, p.y - 2.0 * p.s, W, H), ok: p.ok };
+          return { r, p: cam.toScreen(p.x + 0.3 * p.s, p.y - 2.1 * p.s, W, H), ok: p.ok };
         })
         .filter((a) => a.ok)
         .sort((a, b) => a.p.y - b.p.y);
       let prev = -Infinity;
       for (const { r, p } of at) {
-        const chip = (r.chip ??= chips.addChild(S.chip(names[r.idx] ?? "")));
+        const chip = (r.chip ??= chips.addChild(S.chip(names[r.idx] ?? "", S.portrait() ? 0.8 : 1)));
         chip.visible = true;
-        const cy = Math.max(p.y, prev + 26 * k);
+        const cy = Math.max(p.y - 14 * k, prev + (S.portrait() ? 21 : 26) * k);
         prev = cy;
         chip.position.set(Math.min(p.x, W - chip.width - 10 * k), cy);
       }

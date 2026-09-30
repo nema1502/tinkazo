@@ -113,6 +113,15 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
     // Solo los que ya cayeron empujan: el que cae aparta a los que están.
     const list = alive().filter((q) => tSim >= q.drop + FALL);
     const r = rad();
+    // En el nudo, los que quedan se ponen lado a lado: uno detrás del otro se
+    // tapaban durante cinco segundos (lo encontró el agente evaluador).
+    if ((phase === "knot" || phase === "cinch") && list.length > 1 && list.length <= 3) {
+      const fila = list.slice().sort((a, b) => a.x - b.x || a.idx - b.idx);
+      fila.forEach((q, i) => {
+        q.vx += (cx + (i - (fila.length - 1) / 2) * r * 2.4 - q.x) * 10 * dt;
+        q.vy += (cy - q.y) * 10 * dt;
+      });
+    }
     for (const q of list) {
       const dx = cx - q.x, dy = (cy - q.y) * 1.6;
       const d = Math.hypot(dx, dy) || 1;

@@ -902,6 +902,42 @@ Y dos arreglos de interfaz que pidió el autor:
 - **El resaltado del título.** El recuadro amarillo de "cualquiera puede comprobar" le tapaba las colas a la "q" de la línea de arriba. Se arregló con tres cambios: más interlineado, el resaltado que no sube hasta la otra línea, y el resaltado siempre debajo del resto del texto. El auditor de interfaz lo comprueba ahora por píxeles: dos fotos del título, con y sin el resaltado, y cuenta las letras que el amarillo tapó. Con el CSS viejo marca miles de píxeles; con el nuevo, cero.
 - **El logo.** Perdió la sombra morada debajo de las letras, que hacía un relieve que ensuciaba el nombre. El estadio muestra ahora el mismo logo que la cabecera, con la llamita.
 
+### Historia 10.12: El agente evaluador: hecho
+
+Resultado (2026-09-30): el autor pidió "un agente evaluador" que revise todo. Es local y no se versiona. Mira el sitio y los juegos con capturas reales, en escritorio y celular y en los dos temas, con el reloj congelado para caer en el segundo exacto. Devuelve una lista de lo más grave a lo menos grave, cada punto con su evidencia y su arreglo concreto. No toca el código.
+
+En su primera pasada encontró 23 cosas, y se arreglaron casi todas:
+
+- **El resaltado del título** seguía cortando la cola de la "q" de "cualquiera", esta vez por el fondo del renglón de abajo del mismo resaltado. El arreglo anterior estaba a medias. La comprobación por píxeles del auditor de interfaz no lo vio, porque solo miraba las letras de afuera del resaltado. Ahora mira todas: con el CSS de antes falla en los cinco anchos y con el de ahora da cero.
+- **El botón principal** de la portada se veía como un link azul del navegador, porque el estilo alcanzaba a `button.primary` y no a `a.primary`.
+- **La cabecera** decía "Conectar wallet" al lado de "entrás con Google en dos toques". Ahora dice "Entrar".
+- **Trompo.** El mano a mano se anunciaba con la cámara siguiendo al último que salió volando. Ahora corta rápido a los dos.
+- **Luz roja, luz verde:**
+  - una franja vacía entre los cerros y el pasto al acercarse la cámara;
+  - la mitad de abajo vacía;
+  - un final lejos y chico;
+  - los sentados como fantasmas gigantes delante de la cámara;
+  - los nombres amontonados en el celular.
+- **Piñata.** El palo flotaba solo: ahora lo sostiene un chico con los ojos vendados. Además, el caramelo que acaba de caer muestra su nombre, y la cámara ya no corta la piñata cuando quedan dos.
+- **Aguayo.** En el nudo, los tres últimos quedaban uno detrás del otro. Ahora se ponen lado a lado.
+- **Tómbola.** El chip "N.º 4" dibujaba la cara del texto "N.º 4", que no era de nadie.
+- **Carrera.** La barra de arriba pisaba el primer carril.
+- **Todos los juegos.** El desenfoque de los acercamientos llegaba a volver ilegibles los nombres, y su tope bajó a la mitad.
+
+Y lo menor:
+- el selector en cinco columnas, sin fila huérfana;
+- "SONIDO: SÍ" en el estadio, como en la página;
+- la "RONDA" repetida abajo en el teleférico y la tómbola;
+- la bandera que no se dibuja en Windows;
+- los "doce" que quedaban;
+- datos viejos de `marca.md`, que ahora están medidos: 27 pruebas del protocolo y 20 comprobaciones por juego;
+- las tarjetas de la página de juegos, en el orden del selector.
+
+Quedan sin tocar tres cosas menores, a propósito:
+- los contadores que bajan un instante antes de que se vea caer al trompo o al bulto;
+- la tabla de posiciones chica de la carrera;
+- la jerga de Stellar ("path payment", "trustlines") en la página de juegos, que es parte de lo que se enseña.
+
 ---
 
 ## Épica 12: El sitio cuenta el proyecto

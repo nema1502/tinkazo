@@ -26,7 +26,7 @@ Los bultos caen sobre la tela y se tejen los hilos. Entonces empieza a apretar: 
 
 Arriba a la izquierda, un contador dice cuántos bultos quedan en el aguayo, con un retazo que se teje franja por franja mientras caen.
 
-**Los bultos son q'epis**, el atado de aguayo que se carga a la espalda: el cuerpo con el color de la persona, una franja clara con rombos como el pallay, y arriba el nudo con sus dos puntas. Caen de a uno sobre la tela, acelerando, y rebotan aplastándose al tocarla. Se ordenan por profundidad: el de más abajo en la tela tapa al de más arriba. Hasta el 29 de septiembre de 2026 eran cuadrados que se pisaban medio cuerpo, porque el choque era un círculo aplastado en perspectiva y el dibujo un cuadrado entero. Ahora chocan con seis pasadas de separación por paso (diez con más de sesenta) y `scripts/audit-fisica.mjs` mide que ninguno quede encimado: quedan por debajo del 1%.
+**Los bultos son q'epis**, el atado de aguayo que se carga a la espalda: el cuerpo con el color de la persona, una franja clara con rombos como el pallay, y arriba el nudo con sus dos puntas. Caen de a uno sobre la tela, acelerando, y rebotan aplastándose al tocarla. Se ordenan por profundidad: el de más abajo en la tela tapa al de más arriba. Hasta el 29 de septiembre de 2026 eran cuadrados que se pisaban medio cuerpo, porque el choque era un círculo aplastado en perspectiva y el dibujo un cuadrado entero. Ahora chocan con seis pasadas de separación por paso (diez con más de sesenta) y `scripts/audit-fisica.mjs` mide que ninguno quede encimado: quedan por debajo del 1%. En el nudo, los tres últimos se ponen lado a lado: uno detrás del otro, el de atrás quedaba escondido.
 
 ## Cómo escala
 

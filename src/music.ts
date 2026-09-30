@@ -15,7 +15,7 @@ import { audio, isMuted } from "./sound";
  * - **La música sigue a la tensión.** Cada línea de la caja del estadio trae
  *   su tensión, de 0 a 1, y la música la usa para prender capas: primero el
  *   bombo, después el charango en ritmo de huayno, el beat, la zampoña y al
- *   final todo doblado. Así sirve para los doce juegos sin que ninguno tenga
+ *   final todo doblado. Así sirve para todos los juegos sin que ninguno tenga
  *   que saber de música.
  * - **La sorpresa se escucha como silencio.** Cuando la tensión pega un salto
  *   (la ruleta que se para en otro nombre, el apagón del teleférico), la

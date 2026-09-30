@@ -31,12 +31,12 @@
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) .hl {
-      background-color: var(--yellow); background-image: linear-gradient(var(--paper) 13%, transparent 13%); color: #191919; padding: 0 0.12em;
+      background: linear-gradient(transparent 13%, var(--yellow) 13%); color: #191919; padding: 0 0.12em;
       -webkit-box-decoration-break: clone; box-decoration-break: clone;
     }
   }
   :root[data-theme="dark"] .hl {
-    background-color: var(--yellow); background-image: linear-gradient(var(--paper) 13%, transparent 13%); color: #191919; padding: 0 0.12em;
+    background: linear-gradient(transparent 13%, var(--yellow) 13%); color: #191919; padding: 0 0.12em;
     -webkit-box-decoration-break: clone; box-decoration-break: clone;
   }
   * { box-sizing: border-box; margin: 0; }
@@ -109,6 +109,11 @@
   h1 { font-size: clamp(38px, 6.4vw, 64px); line-height: 1.08; letter-spacing: -0.02em; font-weight: 900; max-width: 640px; isolation: isolate; }
   .hl { background: linear-gradient(transparent 58%, var(--yellow) 58%); }
   h1 .hl { position: relative; z-index: -1; }
+  /* Las letras del resaltado, posicionadas: se pintan después de todos los
+     fondos del resaltado. Sin esto, el fondo del renglón de abajo le cortaba
+     la cola a la "q" de "cualquiera" en el de arriba (lo encontró el agente
+     evaluador, 30 de septiembre de 2026). */
+  h1 .hl-t { position: relative; }
   .lead { font-size: 18px; color: var(--ink2); max-width: 560px; font-weight: 500; }
   .mascot { color: var(--magenta); transform: rotate(3deg); }
   .mascot svg { width: 150px; height: 130px; filter: drop-shadow(6px 6px 0 var(--ink)); }
@@ -131,12 +136,16 @@
   textarea { min-height: 120px; resize: vertical; }
   textarea:focus, input:focus, select:focus { outline: 3px solid var(--yellow); outline-offset: 0; }
   .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 16px; }
-  button.primary {
+  /* El botón principal, también cuando es un enlace: "Entrar y sortear, es
+     gratis" se veía como un link azul del navegador (lo encontró el agente
+     evaluador, 30 de septiembre de 2026). */
+  button.primary, a.primary {
     background: var(--magenta); color: var(--on-accent); border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm);
     padding: 12px 24px; font-weight: 800; font-size: 15px; cursor: pointer; transition: transform 0.08s, box-shadow 0.08s;
   }
-  button.primary:hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
-  button.primary:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+  a.primary { display: inline-block; text-decoration: none; }
+  button.primary:hover:not(:disabled), a.primary:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
+  button.primary:active:not(:disabled), a.primary:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
   /* Apagar con opacidad dejaba la cuenta regresiva en 1,47 a 1, que es lo que
      toda la sala mira fijo. Un color sólido apagado se sigue leyendo. */
   button.primary:disabled {
@@ -287,6 +296,12 @@
   .gamepick button:disabled {
     cursor: not-allowed; background: var(--paper); color: var(--muted);
     border-style: dashed; box-shadow: none;
+  }
+  /* Diez juegos en cinco columnas: con seis por fila quedaba una fila de
+     cuatro con dos huecos. */
+  @media (min-width: 760px) {
+    .gamepick { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); max-width: 740px; }
+    .gamepick button { width: auto; }
   }
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0; border-bottom: var(--bw) solid var(--ink); }
   .kpis > div { padding: 16px 22px; border-right: 2px dashed var(--ink); }

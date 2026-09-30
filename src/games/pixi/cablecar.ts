@@ -244,10 +244,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     hudStation = S.text("", { fontSize: 16 * k, fontWeight: "800", fill: CREAM });
     hudStation.alpha = 0.85;
     hudStation.position.set(22 * k, top + 82 * k);
-    const round = S.text(`${t("cWheelRound")} #${beacon.round}`, { fontFamily: MONO, fontSize: 12 * k, fontWeight: "700", fill: CREAM });
-    round.alpha = 0.55;
-    round.position.set(22 * k, sh - S.bottom() - 16 * k);
-    S.hud.addChild(hudLabel, hudNum, hudStation, round);
+    // La ronda ya está arriba, en la barra del estadio: abajo se encimaba con las cabinas.
+    S.hud.addChild(hudLabel, hudNum, hudStation);
     void span;
   }
   build();

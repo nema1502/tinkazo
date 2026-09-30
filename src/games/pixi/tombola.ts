@@ -487,7 +487,18 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
     bigR = Math.max(rb * R, 34 * k);
     rivalView = rivalBall ? makeBall(rivalBall, bigR, true) : null;
     winView = makeBall(winBall, bigR, true);
-    numChip = S.chip(`${t("cTomNum")} ${num}`, 1.4);
+    // El número va sin cara: el chip de siempre dibuja la cara del texto que
+    // lleva, y "N.º 4" salía con una cara que no era de nadie.
+    numChip = (() => {
+      const kk = k * 1.4;
+      const c = new Container();
+      const tx = S.text(`${t("cTomNum")} ${num}`, { fontSize: 12 * kk, fontWeight: "900", fill: INK });
+      tx.position.set(9 * kk, 3.5 * kk);
+      const w = tx.width + 18 * kk;
+      c.addChild(new Graphics().roundRect(3 * kk, 3 * kk, w, 22 * kk, 5 * kk).fill(INK).roundRect(0, 0, w, 22 * kk, 5 * kk).fill(YELLOW).stroke({ width: 2 * kk, color: INK }), tx);
+      c.pivot.set(0, 11 * kk);
+      return c;
+    })();
     nameChip = S.chip(names[winnerIdx] ?? "", 1.5);
     for (const v of [rivalView, winView, numChip, nameChip]) {
       if (!v) continue;
@@ -526,10 +537,8 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
     hudCount = S.text("0", { fontSize: 48 * k, fontWeight: "900", fill: YELLOW, stroke: { color: INK, width: 6 * k } });
     hudCount.anchor.set(1, 0);
     hudCount.position.set(W - 22 * k, S.top() + 58 * k);
-    const round = S.text(`${t("cWheelRound")} #${beacon.round}`, { fontFamily: MONO, fontSize: 12 * k, fontWeight: "700", fill: CREAM });
-    round.alpha = 0.55;
-    round.position.set(22 * k, H - S.bottom() - 16 * k);
-    S.hud.addChild(lab, hudCount, round);
+    // La ronda ya está arriba, en la barra del estadio: no se repite abajo.
+    S.hud.addChild(lab, hudCount);
   }
   build();
   const crown = S.crown(names, winners);

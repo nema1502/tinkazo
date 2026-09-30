@@ -117,8 +117,10 @@ export class Camera {
     const z = this.zoom * (1 + this.punchAmt);
     const speed = dt > 0 ? Math.abs(z - this.lastZoom) / dt : 0;
     this.lastZoom = z;
-    // Tope en 0,1: más que eso ya no se lee lo que pasa mientras la cámara viaja.
-    this.blurK += (Math.min(0.1, speed * 0.055) - this.blurK) * Math.min(1, dt * 12);
+    // Tope en 0,05: con 0,1 los nombres se volvían ilegibles durante los
+    // acercamientos de Oruro, la constelación y luz roja (lo encontró el agente
+    // evaluador, 30 de septiembre de 2026).
+    this.blurK += (Math.min(0.05, speed * 0.055) - this.blurK) * Math.min(1, dt * 12);
   }
 
   /** Aplica la cámara a la escena. `now` es la hora del juego, para el sacudón. */

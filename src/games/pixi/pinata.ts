@@ -102,6 +102,9 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   /** Cuándo pegó el último palo y dónde, para la estrella y los papelitos. */
   const blows: { at: number; x: number; y: number; seed: number }[] = [];
   let lastBlow = -9;
+  /** El caramelo que acaba de caer, para ponerle su nombre un rato. */
+  let fell = { idx: -1, at: -9 };
+  let said2At = -9;
   /** El tamaño de un caramelo: más grandes que antes, que se leían como puntitos. */
   const candySize = (): number => clamp(Math.sqrt(1 / n) * 70 * S.u(), 12 * S.u(), 26 * S.u());
   /**
@@ -116,7 +119,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   const G = (): { w: number; h: number; k: number; ax: number; ay: number; L: number; floor: number; R: number } => {
     const w = S.sw(), h = S.sh(), k = S.u();
     const R = Math.min(h * 0.13, w * 0.12);
-    return { w, h, k, ax: w / 2, ay: S.top() - 10 * k, L: h * 0.3, floor: h - S.bottom() - 30 * k, R };
+    return { w, h, k, ax: w / 2, ay: S.top() - 10 * k, L: h * 0.3, floor: h - S.bottom() - 58 * k, R };
   };
   const pinPos = (): { x: number; y: number } => {
     const g = G();
@@ -265,6 +268,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       setTimeout(() => beep(note(8 + (crackLevel % 4)), 0.06, "triangle", 0.035), 60);
       cam.punch(0.06).shake(8 * g.k);
       drop(s.drop, crackLevel > nHits - 2);
+      if (s.drop.length > 0 && s.drop.length <= 3) fell = { idx: s.drop[0] as number, at: tAll };
       for (let i = 0; i < Math.min(8, s.drop.length); i++) setTimeout(() => beep(note(10 + (i % 5)), 0.03, "triangle", 0.02), 90 + i * 40);
       const left = inside().length;
       if (s.drop.length >= 4 && tAll - lastOutSaid > 1.2) {
@@ -287,6 +291,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     }
     if (!lastSaid2 && inside().length === 2 && n > 2 && tAll >= T_HANG) {
       lastSaid2 = true;
+      said2At = tAll;
       if (story.arc !== "tapada") S.say(T[getLang()].cPinLast(names[winnerIdx] ?? "", names[rivalIdx] ?? ""), 0.8);
     }
     if (!brokeDone && tAll >= T_BREAK) {
@@ -442,7 +447,10 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     if (phase === "hang") cam.lookAt(p.x, p.y + g.R * 0.6, 1.35 - 0.15 * clamp(tAll / T_HANG, 0, 1), 2);
     else if (phase === "hits") {
       const near = story.arc === "susto" && tAll >= T_PEEK && tAll < T_PEEK + 1.4;
-      cam.lookAt(p.x, p.y + g.R * (near ? 0.4 : 1.1), near ? 1.9 : 1.2 + 0.25 * (crackLevel / nHits), near ? 5 : 2.5);
+      // Cuando quedan dos adentro, la piñata de cerca: antes la cámara encuadraba
+      // el papel picado y dejaba la piñata cortada (lo encontró el agente evaluador).
+      const dos = tAll - said2At < 1.4;
+      cam.lookAt(p.x, p.y + g.R * (near ? 0.4 : dos ? 0.2 : 0.8), near ? 1.9 : dos ? 1.6 : 1.2 + 0.25 * (crackLevel / nHits), near || dos ? 5 : 2.5);
     } else if (phase === "break") {
       if (!winC.inside) cam.lookAt(winC.x, winC.y - g.R * 0.4, 1.5, 2.2);
       else cam.lookAt(p.x, p.y, 1.1, 2.5);
@@ -532,22 +540,46 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
         pieces.rect(x - w / 2, y - h / 2, w, h).fill({ color: CONE[i % 7] as number, alpha: 1 - age / 2.2 });
       }
     }
-    // El palo: entra en arco desde abajo a la izquierda en cada golpe.
+    // El palo: lo sostiene un chico con los ojos vendados, como se juega, y
+    // entra en arco en cada golpe. Antes el palo flotaba solo.
     stick.clear();
+    const kx = g.w * 0.14, ky = g.floor + 24 * k;
+    {
+      const kid = S.color(3);
+      stick.rect(kx - 20 * k, ky - 44 * k, 11 * k, 44 * k).fill(0x2b2d42).rect(kx - 6 * k, ky - 44 * k, 11 * k, 44 * k).fill(0x2b2d42)
+        .roundRect(kx - 22 * k, ky - 5 * k, 15 * k, 7 * k, 3 * k).fill(INK).roundRect(kx - 8 * k, ky - 5 * k, 15 * k, 7 * k, 3 * k).fill(INK)
+        .roundRect(kx - 24 * k, ky - 92 * k, 34 * k, 52 * k, 9 * k).fill(kid).stroke({ width: 2.5 * k, color: INK })
+        .circle(kx - 7 * k, ky - 108 * k, 17 * k).fill(0xc68a5c).stroke({ width: 2.5 * k, color: INK })
+        .poly([kx - 24 * k, ky - 112 * k, kx + 10 * k, ky - 116 * k, kx + 10 * k, ky - 104 * k, kx - 24 * k, ky - 100 * k]).fill(0xd7263d)
+        .poly([kx - 24 * k, ky - 108 * k, kx - 36 * k, ky - 116 * k, kx - 34 * k, ky - 102 * k]).fill(0xd7263d)
+        .circle(kx - 7 * k, ky - 124 * k, 13 * k).fill(0x2b1d14);
+    }
     const sw = swings.find((s) => tAll >= s.at - 0.25 && tAll < s.at + 0.15);
-    if (sw && !broken) {
-      const f = clamp((tAll - (sw.at - 0.25)) / 0.4, 0, 1);
-      const bx = g.w * 0.14, by = g.floor + 60 * k;
-      const aim = Math.atan2(p.y - by, p.x - bx) + (sw.miss ? 0.5 : 0);
+    if (!broken) {
+      const f = sw ? clamp((tAll - (sw.at - 0.25)) / 0.4, 0, 1) : 0;
+      const bx = kx + 20 * k, by = ky - 66 * k;
+      const aim = Math.atan2(p.y - by, p.x - bx) + (sw?.miss ? 0.5 : 0);
       const a = aim - 1.1 + 1.1 * ease.outCubic(f);
-      const len = Math.hypot(p.x - bx, p.y - by) * 0.98;
+      // En reposo el palo es corto, en alto; en el golpe se estira hasta la
+      // piñata. Con el largo entero todo el tiempo era una vara que salía de
+      // la pantalla.
+      const full = Math.hypot(p.x - bx, p.y - by) * 0.98, rest = 120 * k;
+      const reach = (x: number): number => rest + (full - rest) * ease.outCubic(x);
+      const len = reach(f);
       const ex = bx + Math.cos(a) * len, ey = by + Math.sin(a) * len;
-      // La estela: dos palos fantasma un poco atrás en el arco.
-      for (let gh = 2; gh >= 1; gh--) {
+      // La estela: dos palos fantasma un poco atrás en el arco, solo al pegar.
+      for (let gh = 2; gh >= 1 && sw; gh--) {
         const fg = clamp(f - gh * 0.12, 0, 1);
         const ag = aim - 1.1 + 1.1 * ease.outCubic(fg);
-        stick.moveTo(bx, by).lineTo(bx + Math.cos(ag) * len, by + Math.sin(ag) * len).stroke({ width: 10 * k, color: 0xffffff, alpha: 0.12 * (3 - gh), cap: "round" });
+        stick.moveTo(bx, by).lineTo(bx + Math.cos(ag) * reach(fg), by + Math.sin(ag) * reach(fg)).stroke({ width: 10 * k, color: 0xffffff, alpha: 0.12 * (3 - gh), cap: "round" });
       }
+      stick.moveTo(bx, by).lineTo(ex, ey).stroke({ width: 10 * k, color: 0x7a5230, cap: "round" });
+      for (let r = 0.2; r < 0.9; r += 0.14) stick.circle(bx + (ex - bx) * r, by + (ey - by) * r, 5.5 * k).fill(CONE[Math.round(r * 10) % 7] as number);
+    } else {
+      // Rota la piñata, el chico se queda con el palo en alto: antes se
+      // esfumaba en el mismo cuadro del golpe.
+      const bx = kx + 20 * k, by = ky - 66 * k, a = -1.25, len = 120 * k;
+      const ex = bx + Math.cos(a) * len, ey = by + Math.sin(a) * len;
       stick.moveTo(bx, by).lineTo(ex, ey).stroke({ width: 10 * k, color: 0x7a5230, cap: "round" });
       for (let r = 0.2; r < 0.9; r += 0.14) stick.circle(bx + (ex - bx) * r, by + (ey - by) * r, 5.5 * k).fill(CONE[Math.round(r * 10) % 7] as number);
     }
@@ -608,8 +640,21 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       glow.circle(winC.x, winC.y, big * 2.4).fill({ color: YELLOW, alpha: 0.28 }).circle(winC.x, winC.y, big * 1.6).fill({ color: YELLOW, alpha: 0.3 });
       drawCandy(candyG, winC.x, winC.y, big, winC.rot, S.color(winnerIdx), 1);
     }
-    // La lista de los que quedan adentro, cuando son pocos.
+    // El nombre del caramelo que acaba de caer, un rato, al lado del caramelo.
     for (const ch of chipOf.values()) ch.visible = false;
+    const cf = candies[fell.idx];
+    if (cf && !cf.inside && tAll - fell.at < 1.2 && cf !== winC) {
+      let ch = chipOf.get(-1 - cf.idx);
+      if (!ch) {
+        ch = S.chip(names[cf.idx] ?? "");
+        chipOf.set(-1 - cf.idx, ch);
+        chipLayer.addChild(ch);
+      }
+      const q = cam.toScreen(cf.x + sz * 1.8, cf.y - sz * 1.4, g.w, g.h);
+      ch.visible = true;
+      ch.position.set(Math.min(q.x, g.w - ch.width - 10 * k), q.y);
+    }
+    // La lista de los que quedan adentro, cuando son pocos.
     const adentro = inside();
     if (adentro.length <= 6 && adentro.length > 0 && phase !== "crown" && story.arc !== "tapada") {
       const pts = cam.toScreen(p.x + g.R * 2.1, p.y - g.R, g.w, g.h);
