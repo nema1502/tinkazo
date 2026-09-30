@@ -23,6 +23,12 @@ import { CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./sta
  * - **remontada**: arranca en la última fila y en cada cuadra avanza.
  * - **duelo**: el contrapunto frente al Socavón dura un paso más.
  * - **tapada**: baila en el medio de la comparsa y nadie la nombra.
+ *
+ * Desde el 29 de septiembre de 2026 el diablo baila entero: los brazos suben y
+ * bajan al ritmo (el derecho con su tridente), las piernas se levantan de a
+ * una con la rodilla alta del paso de la Diablada, la pechera brilla con sus
+ * lentejuelas y la máscara tiene cuernos anillados y la culebra en la frente.
+ * Antes el cuerpo era un solo dibujo quieto que saltaba.
  */
 
 const DT = 1 / 120;
@@ -35,6 +41,8 @@ type Phase = "intro" | "walk" | "stop" | "duel" | "crown" | "dead";
 interface Dancer {
   idx: number; x: number; y: number; slot: number; alive: boolean; left: number; wx: number; wy: number;
   ph: number; view?: Container; mask?: Container; cape?: Graphics; chip?: Container;
+  /** Las partes que bailan: brazos, piernas y el brillo de la pechera. */
+  armL?: Container; armR?: Container; legL?: Container; legR?: Container; glint?: Graphics;
 }
 
 export async function oruroPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<void> {
@@ -278,17 +286,56 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     const cape = new Graphics().poly([-16, -70, 16, -70, 30, -18, -30, -18]).fill(col).stroke({ width: 2.4, color: INK, join: "round" });
     for (let i = 0; i < 4; i++) cape.star(-12 + i * 8, -40 + (i % 2) * 10, 5, 3.2, 1.4).fill(YELLOW);
     c.addChild(cape);
+    // Las piernas, cada una con su bota, que se levantan de a una.
+    const leg = (x: number): Container => {
+      const l = new Container();
+      l.position.set(x, -14);
+      l.addChild(new Graphics()
+        .rect(-3.5, -6, 7, 12).fill(0x5b1a6e).stroke({ width: 1.6, color: INK })
+        .roundRect(-5, 4, 11, 8, 2.5).fill(INK)
+        .rect(-5, 4, 11, 2).fill(YELLOW));
+      return l;
+    };
+    const legL = leg(-6), legR = leg(6);
+    c.addChild(legL, legR);
     const body = new Graphics()
-      // Las botas y el faldellín de paneles.
-      .rect(-10, -8, 8, 8).fill(INK).rect(2, -8, 8, 8).fill(INK)
-      .poly([-15, -42, 15, -42, 20, -10, -20, -10]).fill(0x5b1a6e).stroke({ width: 2, color: INK })
-      .moveTo(-7, -42).lineTo(-9, -10).moveTo(7, -42).lineTo(9, -10).stroke({ width: 1.5, color: YELLOW })
-      // La pechera dorada.
+      // El faldellín de paneles, con sus bordes dorados.
+      .poly([-15, -42, 15, -42, 20, -12, -20, -12]).fill(0x5b1a6e).stroke({ width: 2, color: INK })
+      .moveTo(-7, -42).lineTo(-9, -12).moveTo(7, -42).lineTo(9, -12).stroke({ width: 1.5, color: YELLOW })
+      .rect(-20, -15, 40, 3).fill(YELLOW)
+      // La pechera dorada, con lentejuelas.
       .rect(-13, -68, 26, 27).fill(0xffc629).stroke({ width: 2, color: INK })
-      // Los brazos, arriba en el paso.
-      .poly([-13, -66, -26, -84, -21, -87, -9, -70]).fill(col).stroke({ width: 1.8, color: INK })
-      .poly([13, -66, 26, -84, 21, -87, 9, -70]).fill(col).stroke({ width: 1.8, color: INK });
+      .circle(-6, -62, 2).fill(0xe93d9c).circle(6, -62, 2).fill(0x00a896).circle(0, -46, 2).fill(0xe93d9c);
     c.addChild(body);
+    // Las lentejuelas que brillan: se prenden y se apagan con el baile.
+    const glint = new Graphics()
+      .star(-8, -50, 4, 3.4, 1).fill(0xffffff)
+      .star(8, -56, 4, 2.8, 0.9).fill(0xffffff);
+    c.addChild(glint);
+    // Los brazos, cada uno desde su hombro; el derecho con el tridente.
+    const arm = (x: number, side: number, trident: boolean): Container => {
+      const a = new Container();
+      a.position.set(x, -66);
+      const g = new Graphics()
+        .poly([-3 * side, 0, -16 * side, -18, -11 * side, -21, 3 * side, -4]).fill(col).stroke({ width: 1.8, color: INK })
+        .circle(-14 * side, -20, 3.4).fill(0xf1c7a0).stroke({ width: 1.4, color: INK });
+      if (trident) {
+        g.moveTo(-14 * side, -8).lineTo(-14 * side, -44).stroke({ width: 2.4, color: INK })
+          .moveTo(-14 * side, -8).lineTo(-14 * side, -44).stroke({ width: 1.2, color: YELLOW })
+          .moveTo(-20 * side, -38).lineTo(-20 * side, -48).moveTo(-8 * side, -38).lineTo(-8 * side, -48)
+          .moveTo(-20 * side, -38).lineTo(-8 * side, -38).moveTo(-14 * side, -44).lineTo(-14 * side, -52)
+          .stroke({ width: 2, color: YELLOW });
+      }
+      a.addChild(g);
+      return a;
+    };
+    const armL = arm(-12, 1, false), armR = arm(12, -1, true);
+    c.addChild(armL, armR);
+    d.armL = armL;
+    d.armR = armR;
+    d.legL = legL;
+    d.legR = legR;
+    d.glint = glint;
     const av = new Sprite(S.face(names[d.idx] ?? ""));
     av.width = av.height = 14;
     av.anchor.set(0.5);
@@ -297,11 +344,20 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     // La máscara: cara, ojos saltones, dientes y cuernos retorcidos.
     const mask = new Container();
     const m = new Graphics()
-      .poly([-14, -86, -26, -104, -30, -122, -20, -110, -10, -94]).fill(0xffc629).stroke({ width: 1.8, color: INK })
-      .poly([14, -86, 26, -104, 30, -122, 20, -110, 10, -94]).fill(0xffc629).stroke({ width: 1.8, color: INK })
+      // Los cuernos, retorcidos y con anillos.
+      .poly([-12, -90, -26, -106, -34, -128, -22, -114, -8, -96]).fill(0xffc629).stroke({ width: 1.8, color: INK })
+      .poly([12, -90, 26, -106, 34, -128, 22, -114, 8, -96]).fill(0xffc629).stroke({ width: 1.8, color: INK })
+      .moveTo(-20, -104).lineTo(-15, -108).moveTo(-26, -114).lineTo(-21, -117).moveTo(20, -104).lineTo(15, -108).moveTo(26, -114).lineTo(21, -117)
+      .stroke({ width: 1.4, color: 0xb8860b })
       .ellipse(0, -84, 15, 16).fill(maskCol).stroke({ width: 2.4, color: INK })
-      .circle(-6, -88, 5).fill(0xffffff).stroke({ width: 1.4, color: INK }).circle(6, -88, 5).fill(0xffffff).stroke({ width: 1.4, color: INK })
-      .circle(-6, -88, 2.2).fill(0x1f7a3a).circle(6, -88, 2.2).fill(0x1f7a3a)
+      // La culebra que baja por la frente, con su cabecita.
+      .moveTo(0, -99).bezierCurveTo(-7, -96, 6, -93, 0, -90).stroke({ width: 2.6, color: 0x1f7a3a })
+      .circle(0, -90, 2).fill(0x1f7a3a)
+      // Los ojos saltones con su reborde de color.
+      .circle(-6, -86, 5.6).fill(YELLOW).stroke({ width: 1.2, color: INK }).circle(6, -86, 5.6).fill(YELLOW).stroke({ width: 1.2, color: INK })
+      .circle(-6, -86, 4).fill(0xffffff).circle(6, -86, 4).fill(0xffffff)
+      .circle(-6, -86, 2.2).fill(0x1f7a3a).circle(6, -86, 2.2).fill(0x1f7a3a)
+      .circle(-7, -87, 0.9).fill(0xffffff).circle(5, -87, 0.9).fill(0xffffff)
       .rect(-8, -77, 16, 5).fill(0xffffff).stroke({ width: 1.2, color: INK })
       .moveTo(-4, -77).lineTo(-4, -72).moveTo(0, -77).lineTo(0, -72).moveTo(4, -77).lineTo(4, -72).stroke({ width: 1, color: INK });
     mask.addChild(m);
@@ -486,7 +542,18 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       v.position.set(d.x, d.y - bounce * g.scale);
       v.scale.set(g.scale * (Math.abs(turn) < 0.3 ? Math.sign(turn || 1) * 0.3 : turn), g.scale);
       v.rotation = d.alive ? Math.sin(beatPh * 0.5 + d.ph) * 0.06 : 0;
-      (d.cape as Graphics).skew.x = Math.sin(beatPh + d.ph) * 0.12;
+      (d.cape as Graphics).skew.x = Math.sin(beatPh + d.ph) * (walking ? 0.2 : 0.1);
+      // Los brazos suben y bajan alternados; las piernas se levantan de a una
+      // con la rodilla alta. Quietos en la vereda, apenas se mecen.
+      const e = walking || (phase === "crown" && d === win) ? 1 : 0.25;
+      const b = beatPh + d.ph;
+      (d.armL as Container).rotation = (-0.2 + Math.sin(b) * 0.55) * e;
+      (d.armR as Container).rotation = (0.2 + Math.sin(b + Math.PI) * 0.55) * e;
+      (d.legL as Container).y = -14 - Math.max(0, Math.sin(b)) * 9 * e;
+      (d.legR as Container).y = -14 - Math.max(0, Math.sin(b + Math.PI)) * 9 * e;
+      (d.legL as Container).rotation = Math.max(0, Math.sin(b)) * 0.35 * e;
+      (d.legR as Container).rotation = -Math.max(0, Math.sin(b + Math.PI)) * 0.35 * e;
+      (d.glint as Graphics).alpha = Math.max(0, Math.sin(now * 6 + d.ph * 3));
       // El susto: la máscara se le corre y vuelve.
       const mk = d.mask as Container;
       if (d === win && story.arc === "susto" && tripSaid && tAll < T_TRIP + 1.0) {

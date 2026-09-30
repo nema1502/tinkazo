@@ -4,7 +4,7 @@ import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, note } from "../../sound";
 import { writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, shorten, winnersLabel } from "../overlay";
-import { CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
+import { CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 
 /**
  * Cierre de Libro, en PixiJS, con el director de cámara.
@@ -22,7 +22,7 @@ type Phase = "fall" | "sweep" | "stamp" | "seal" | "dead";
 interface Card {
   idx: number; x: number; y: number; tx: number; ty: number; w: number; h: number; tw: number; th: number;
   in: number; alive: boolean; killed: number; bits: { x: number; y: number; vx: number; vy: number; r: number }[];
-  stamp: number; susto: number; view?: Container; big?: Container; small?: Graphics; stampG?: Graphics; scare?: Graphics;
+  stamp: number; susto: number; stampAt?: number; view?: Container; big?: Container; small?: Graphics; stampG?: Graphics; scare?: Graphics;
 }
 
 function sweepPlan(n: number, final: number): { from: "top" | "bottom"; cut: number }[] {
@@ -241,6 +241,7 @@ export async function ledgerPixi(names: string[], winners: readonly number[], be
       while (stampI < losers.length && tPhase >= stampAt(stampI)) {
         if (duda && stampI === losers.length - 1) S.say(T[getLang()].cLedgerNope(names[(losers[stampI] as Card).idx] ?? ""), 0.9);
         (losers[stampI] as Card).stamp = 0.001;
+        (losers[stampI] as Card).stampAt = tPhase;
         beep(note(0), 0.1, "square", 0.07);
         beep(note(5), 0.18, "sine", 0.05);
         cam.punch(0.05).shake(7 * S.u());
@@ -431,8 +432,11 @@ export async function ledgerPixi(names: string[], winners: readonly number[], be
         x += Math.sin(tPhase * 70) * 7 * k * q.susto;
         y += Math.sin(tPhase * 53 + 1) * 3 * k * q.susto;
       }
-      v.position.set(x, y);
-      v.scale.set(sc);
+      // El golpe del sello: al asentarse, la tarjeta se aplasta un instante.
+      const since = q.stampAt !== undefined ? tPhase - q.stampAt - 0.125 : -1;
+      const thud = since >= 0 && since < 0.35 ? 0.06 * Math.exp(-since * 14) * Math.cos(since * 40) : 0;
+      v.position.set(x, y + (q.h * thud) / 2);
+      v.scale.set(sc * (1 + thud * 0.5), sc * (1 - thud));
       v.alpha = phase === "seal" ? Math.max(0, 1 - sealK * 1.6) : 1;
       const bigShown = w > 110 * k;
       (q.big as Container).visible = bigShown;
@@ -450,6 +454,15 @@ export async function ledgerPixi(names: string[], winners: readonly number[], be
         sg.moveTo(...(r(-s * 0.25, -s * 0.25) as [number, number])).lineTo(...(r(s * 0.25, s * 0.25) as [number, number]))
           .moveTo(...(r(s * 0.25, -s * 0.25) as [number, number])).lineTo(...(r(-s * 0.25, s * 0.25) as [number, number]))
           .stroke({ width: 4 / sc * k, color: 0xe93d9c });
+        // Las gotitas de tinta que salpica el golpe, y se quedan.
+        if (since >= 0) {
+          const out = ease.outCubic(Math.min(1, since / 0.12));
+          for (let i = 0; i < 7; i++) {
+            const a = hash(q.idx, i) * Math.PI * 2;
+            const d = (s * 0.55 + hash(q.idx, i + 9) * s * 0.35) * out;
+            sg.circle(cx + Math.cos(a) * d, cy + Math.sin(a) * d, ((1.5 + hash(q.idx, i + 17) * 2.5) / sc) * k).fill({ color: 0xe93d9c, alpha: 0.8 });
+          }
+        }
       }
       const sc2 = q.scare as Graphics;
       sc2.clear();

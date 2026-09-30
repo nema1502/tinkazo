@@ -1,6 +1,6 @@
 import { Container, Graphics, Text } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
-import { paceFactor, setGameLength, type Beacon } from "../../state";
+import { paceFactor, params, setGameLength, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, note } from "../../sound";
 import { writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
@@ -16,6 +16,15 @@ import { CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
  * tela, se abre cuando caen los bultos, en cada apretón pega un tirón y se
  * acerca un poco más, en el susto va de golpe al bulto que quedó en el filo,
  * y en el nudo se pega al nudo.
+ *
+ * Desde el 29 de septiembre de 2026 los bultos son q'epis, atados de aguayo
+ * con su nudo, y no cuadrados. Caen de a uno sobre la tela con un rebote, se
+ * ordenan por profundidad (el de más abajo tapa al de más arriba, como en la
+ * tela de verdad) y chocan con varias pasadas de separación. Antes el choque
+ * era un círculo aplastado en perspectiva y el dibujo un cuadrado entero, así
+ * que se pisaban medio cuerpo. Con `?auditar=fisica` el juego anota lo
+ * encimados que quedan y si alguno se escapó de la tela, para
+ * `scripts/audit-fisica.mjs`.
  */
 
 const DT = 1 / 120;
@@ -31,6 +40,8 @@ type Phase = "spread" | "drop" | "weave" | "cinch" | "knot" | "lift" | "dead";
 interface Bundle {
   idx: number; x: number; y: number; vx: number; vy: number; rot: number; wob: number; ph: number;
   alive: boolean; out: number; slot: number; a: number; b: number; view?: Container; chip?: Container;
+  /** Cuándo cae sobre la tela: de a uno, en el orden de la lista. */
+  drop: number;
 }
 
 export async function pasanakuPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<void> {
@@ -78,17 +89,29 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
       const d = 0.3 + rng() * 0.6;
       bundles.push({
         idx: i, x: x + Math.cos(a) * r0 * d, y: y + Math.sin(a) * r0 * d * 0.62, vx: 0, vy: 0,
-        rot: rng() * Math.PI, wob: 1.4 + rng() * 2.2, ph: rng() * 7, alive: true, out: 0, slot: 0,
-        a: (i + 1) % n, b: (i + n - 1) % n,
+        rot: (rng() - 0.5) * 0.5, wob: 1.4 + rng() * 2.2, ph: rng() * 7, alive: true, out: 0, slot: 0,
+        a: (i + 1) % n, b: (i + n - 1) % n, drop: T_DROP + (i / n) * 1.6,
       });
     }
   }
   const alive = (): Bundle[] => bundles.filter((q) => q.alive);
+  /** Lo que tarda en caer un bulto desde arriba hasta la tela. */
+  const FALL = 0.35;
+
+  // `?auditar=fisica`: lo encimados que quedan después de cada paso, en el
+  // plano de la tela, y si alguno se sale, para `scripts/audit-fisica.mjs`.
+  const audit = params.get("auditar") === "fisica"
+    ? { juego: "pasanaku", n, maxOverlap: 0, maxAt: 0, escapes: 0, pasos: 0, done: false }
+    : null;
+  if (audit) (window as unknown as { __fisica: typeof audit }).__fisica = audit;
+  let tSim = 0;
 
   /* --------------------------------------------------------------- física */
   function step(dt: number): void {
+    tSim += dt;
     const { x: cx, y: cy, k } = C();
-    const list = alive();
+    // Solo los que ya cayeron empujan: el que cae aparta a los que están.
+    const list = alive().filter((q) => tSim >= q.drop + FALL);
     const r = rad();
     for (const q of list) {
       const dx = cx - q.x, dy = (cy - q.y) * 1.6;
@@ -108,30 +131,65 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
       q.y += q.vy * dt;
       q.rot += q.vx * dt * 0.01;
     }
-    for (let i = 0; i < list.length; i++) {
-      const p = list[i] as Bundle;
-      for (let j = i + 1; j < list.length; j++) {
-        const q = list[j] as Bundle;
-        const dx = q.x - p.x, dy = (q.y - p.y) / 0.62;
-        const d = Math.hypot(dx, dy);
-        const min = r * 2;
-        if (d >= min || d === 0) continue;
-        const push = (min - d) / 2;
-        const ux = dx / d, uy = dy / d;
-        p.x -= ux * push; p.y -= uy * push * 0.62;
-        q.x += ux * push; q.y += uy * push * 0.62;
-      }
-    }
+    // Los choques, en el plano de la tela (lo vertical va aplastado por la
+    // perspectiva): varias pasadas, y en cada una el borde de la tela.
     const rr = Rc();
-    for (const q of list) {
+    const min = r * 2;
+    const edge = (q: Bundle, bounce: boolean): void => {
       const dx = q.x - cx, dy = (q.y - cy) / 0.62;
       const d = Math.hypot(dx, dy);
       const lim = rr - r;
-      if (d <= lim || d === 0) continue;
+      if (d <= lim || d === 0) return;
       q.x = cx + (dx / d) * lim;
       q.y = cy + (dy / d) * lim * 0.62;
-      q.vx *= -0.42;
-      q.vy *= -0.42;
+      if (bounce) {
+        q.vx *= -0.42;
+        q.vy *= -0.42;
+      }
+    };
+    const passes = n > 60 ? 10 : 6;
+    for (let pass = 0; pass < passes; pass++) {
+      const act = list.slice().sort((a, b) => a.x - b.x || a.idx - b.idx);
+      for (let i = 0; i < act.length; i++) {
+        const p = act[i] as Bundle;
+        for (let j = i + 1; j < act.length; j++) {
+          const q = act[j] as Bundle;
+          if (q.x - p.x >= min) break;
+          const dx = q.x - p.x, dy = (q.y - p.y) / 0.62;
+          if (Math.abs(dy) >= min) continue;
+          const d = Math.hypot(dx, dy);
+          if (d >= min || d === 0) continue;
+          const push = (min - d) / 2;
+          const ux = dx / d, uy = dy / d;
+          p.x -= ux * push; p.y -= uy * push * 0.62;
+          q.x += ux * push; q.y += uy * push * 0.62;
+          if (pass > 0) continue;
+          // Un atado blando: rebota poco.
+          const rel = (q.vx - p.vx) * ux + (q.vy - p.vy) * uy;
+          if (rel < 0) {
+            const imp = (-rel * 1.2) / 2;
+            p.vx -= ux * imp; p.vy -= uy * imp;
+            q.vx += ux * imp; q.vy += uy * imp;
+          }
+        }
+      }
+      for (const q of list) edge(q, pass === 0);
+    }
+    if (audit) {
+      audit.pasos++;
+      for (let i = 0; i < list.length; i++) {
+        const p = list[i] as Bundle;
+        const dx0 = p.x - cx, dy0 = (p.y - cy) / 0.62;
+        if (Math.hypot(dx0, dy0) > rr - r + 0.5 * k) audit.escapes++;
+        for (let j = i + 1; j < list.length; j++) {
+          const q = list[j] as Bundle;
+          const d = Math.hypot(q.x - p.x, (q.y - p.y) / 0.62);
+          if (d < min && (min - d) / min > audit.maxOverlap) {
+            audit.maxOverlap = (min - d) / min;
+            audit.maxAt = Math.round(tSim * 100) / 100;
+          }
+        }
+      }
     }
     for (const q of bundles) {
       if (q.alive) continue;
@@ -277,15 +335,38 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
   let swatch!: Graphics;
   let cinchText!: Text;
 
+  /**
+   * Un q'epi: el atado de aguayo que se carga a la espalda. El cuerpo lleva el
+   * color de la persona, una franja clara con rombos como el pallay del
+   * aguayo, y arriba el nudo con sus dos puntas. El brillo y la sombra le dan
+   * volumen. Se dibuja con la base en el cero, para que se aplaste desde el
+   * piso cuando cae o lo aprietan.
+   */
   function makeBundle(q: Bundle): Container {
     const c = new Container();
     const r = 20;
     const col = S.color(q.idx);
-    c.addChild(new Graphics()
-      .rect(-r + 3, -r + 3, r * 2, r * 2).fill(INK)
-      .rect(-r, -r, r * 2, r * 2).fill(col).stroke({ width: 2.5, color: INK })
-      .poly([-r * 0.5, -r, -r * 0.15, -r * 1.45, r * 0.15, -r, r * 0.5, -r * 1.4, r * 0.75, -r]).fill(col).stroke({ width: 2.5, color: INK })
-      .rect(-r * 0.6, -r * 0.6, r * 0.3, r * 0.3).fill({ color: 0xffffff, alpha: 0.35 }));
+    const band = PAL[(q.idx + 2) % PAL.length] as number;
+    const light = S.dark ? 0xefe4cf : 0xfbf3e4;
+    const g = new Graphics()
+      // La sombra en la tela.
+      .ellipse(2, 0, r * 1.05, r * 0.3).fill({ color: 0x000000, alpha: 0.3 })
+      // El cuerpo, panzón y apoyado.
+      .roundRect(-r, -r * 1.75, r * 2, r * 1.75, r * 0.72).fill(col).stroke({ width: 2.5, color: INK })
+      // La franja del pallay, con su borde de otro color y tres rombos.
+      .rect(-r + 1.2, -r * 1.02, r * 2 - 2.4, r * 0.1).fill(band)
+      .rect(-r + 1.2, -r * 0.92, r * 2 - 2.4, r * 0.34).fill(light)
+      .rect(-r + 1.2, -r * 0.58, r * 2 - 2.4, r * 0.1).fill(band);
+    for (let i = -1; i <= 1; i++) g.poly([i * r * 0.6, -r * 0.88, i * r * 0.6 + r * 0.13, -r * 0.75, i * r * 0.6, -r * 0.62, i * r * 0.6 - r * 0.13, -r * 0.75]).fill(INK);
+    g
+      // Volumen: la sombra del lado derecho y el brillo del izquierdo.
+      .roundRect(r * 0.35, -r * 1.45, r * 0.5, r * 1.3, r * 0.25).fill({ color: 0x000000, alpha: 0.13 })
+      .ellipse(-r * 0.55, -r * 1.3, r * 0.16, r * 0.26).fill({ color: 0xffffff, alpha: 0.35 })
+      // El nudo: dos puntas que salen hacia arriba y la vuelta que las ata.
+      .poly([-r * 0.12, -r * 1.72, -r * 0.7, -r * 2.35, -r * 0.5, -r * 1.68]).fill(col).stroke({ width: 2.5, color: INK, join: "round" })
+      .poly([r * 0.12, -r * 1.72, r * 0.7, -r * 2.3, r * 0.5, -r * 1.68]).fill(col).stroke({ width: 2.5, color: INK, join: "round" })
+      .roundRect(-r * 0.32, -r * 1.95, r * 0.64, r * 0.36, r * 0.14).fill(band).stroke({ width: 2.5, color: INK });
+    c.addChild(g);
     return c;
   }
 
@@ -304,6 +385,8 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
     // Los que se cayeron y los nombres van en la interfaz: con la cámara
     // encima de la tela, la fila de abajo y los chips quedan siempre a la vista
     // y del mismo tamaño.
+    // Ordenados por profundidad: el de más abajo en la tela tapa al de más arriba.
+    inLayer.sortableChildren = true;
     S.scene.addChild(cloth, threads, ring, inLayer, knot);
     S.hud.addChild(outLayer, chips);
     for (const q of bundles) {
@@ -428,11 +511,13 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
     // Los hilos entre vecinos: las trustlines.
     threads.clear();
     const byIdx = new Map(bundles.map((q) => [q.idx, q]));
+    // Solo entre los que ya cayeron: un hilo no se teje con un bulto en el aire.
+    const onCloth = (q: Bundle): boolean => q.alive && tAll >= q.drop + FALL;
     for (const q of bundles) {
-      if (!q.alive) continue;
+      if (!onCloth(q)) continue;
       for (const other of [q.a, q.b]) {
         const o = byIdx.get(other);
-        if (!o || !o.alive || o.idx < q.idx) continue;
+        if (!o || !onCloth(o) || o.idx < q.idx) continue;
         threads.moveTo(q.x, q.y - lift).lineTo(o.x, o.y - lift).stroke({ width: 3 * k, color: S.color(q.idx), alpha: 0.75 });
       }
     }
@@ -442,12 +527,28 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
     const zoom = cam.zoom;
     for (const q of bundles) {
       const v = q.view as Container;
-      v.rotation = q.rot + 0.12 * Math.sin(now * 1.1 + q.ph);
+      v.rotation = q.rot + 0.05 * Math.sin(tAll * 1.1 + q.ph);
       if (q.alive) {
-        v.scale.set(r / 20);
+        // Cae desde arriba, acelerando, y rebota aplastándose al tocar la tela.
+        const f = (tAll - q.drop) / FALL;
+        v.visible = f >= 0;
+        v.zIndex = q.y;
+        const s0 = r / 20;
+        if (f < 1) {
+          const p = clamp(f, 0, 1);
+          v.position.set(q.x, q.y - lift - (1 - p * p) * 220 * k);
+          v.rotation += (1 - p) * 0.8 * (q.idx % 2 ? 1 : -1);
+          v.scale.set(s0 * 0.92, s0 * 1.1);
+          continue;
+        }
+        const a = tAll - q.drop - FALL;
+        // El apretón también los aplasta un poco.
+        const sq = 0.28 * Math.exp(-a * 9) * Math.cos(a * 24) + 0.07 * Math.exp(-(tAll - lastTug) * 9) + 0.05 * cinchTotal;
+        v.scale.set(s0 * (1 + sq), s0 * (1 - sq));
         v.position.set(q.x, q.y - lift);
         continue;
       }
+      v.visible = true;
       if (v.parent !== outLayer) outLayer.addChild(v);
       const b = ease.inOutCubic(clamp(q.out / 0.7, 0, 1));
       const p = cam.toScreen(q.x, q.y, S.sw(), S.sh());
@@ -458,7 +559,7 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
     const win = byIdx.get(winnerIdx) as Bundle;
     if (susto && tAll >= SUSTO && tAll < SUSTO + 1.1) {
       const f = (tAll - SUSTO) / 1.1;
-      ring.circle(win.x, win.y - lift, r * (1.8 + 0.4 * Math.sin(tAll * 18))).stroke({ width: 5 * k, color: 0xe93d9c, alpha: 1 - f });
+      ring.circle(win.x, win.y - lift - r * 0.9, r * (1.8 + 0.4 * Math.sin(tAll * 18))).stroke({ width: 5 * k, color: 0xe93d9c, alpha: 1 - f });
     }
     // Los nombres, cuando quedan pocos: al lado de cada bulto en la pantalla,
     // y si dos chocan, el de más abajo baja lo que haga falta.
@@ -467,7 +568,7 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
     if (live.length <= 8 && phase !== "lift") {
       const u = S.u();
       const at = live
-        .map((q) => ({ q, p: cam.toScreen(q.x + r, q.y - r * 0.6 - lift, S.sw(), S.sh()) }))
+        .map((q) => ({ q, p: cam.toScreen(q.x + r, q.y - r * 1.6 - lift, S.sw(), S.sh()) }))
         .sort((a, b) => a.p.y - b.p.y);
       let prev = -Infinity;
       for (const { q, p } of at) {
@@ -543,6 +644,7 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
     if (phase === "lift") tHold += dt * paceFactor();
     if (tHold >= WINNER_HOLD) {
       phase = "dead";
+      if (audit) audit.done = true;
       S.cleanup();
     }
   });

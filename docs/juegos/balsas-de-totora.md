@@ -16,7 +16,7 @@ Lo mismo que cambia en la de cohetes: el dibujo y la voz, no la carrera.
 
 - **El corredor** es una balsa: dos haces de totora curvados hacia arriba, las amarras, la cabeza de puma en la proa y el remero con la cara del participante. El remo va y viene con el paso.
 - **La pista** es agua, con crestas de ola y una cuerda de boyas; **la tribuna** es la orilla con totorales y gente mirando.
-- **El polvo** es espuma, y **los cascos** son el chapoteo del remo.
+- **El polvo** es espuma, y **los cascos** son el chapoteo del remo. Cada palada salpica: donde entra el remo saltan unas gotas y se abre un anillo en el agua.
 - **Los momentos de la historia** se cuentan en agua: la llama que se planta es la balsa que se queda quieta ("¡a fulano se le fue el viento!"), el tropiezo es una ola que la ladea, el pique es remar con todo, y la escupida es una salpicada.
 
 ## Lo que la carrera hace a propósito

@@ -287,6 +287,28 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
   let flash = 0, didLock = false, saidPeg = false, saidLast = false, didCrown = false;
 
   const segUnder = (): number => Math.floor((((-rot / A) % segs) + segs) % segs) % segs;
+  /**
+   * La lengüeta es un resorte amortiguado. El clavo que pasa la empuja hasta
+   * donde la dobla (`flapper`); cuando la suelta, vuelve sola, se pasa un poco
+   * para el otro lado y tiembla, como la de una ruleta de feria. Hasta el 29 de
+   * septiembre de 2026 seguía al clavo sin física y se enderezaba de golpe.
+   * Corre a paso fijo de 1/240 s, así la misma ronda tiembla igual.
+   */
+  let flapA = 0, flapV = 0, flapAcc = 0;
+  function flapStep(dt: number, w: number): void {
+    const h = 1 / 240;
+    flapAcc += dt;
+    while (flapAcc >= h) {
+      flapAcc -= h;
+      flapV += (-900 * flapA - 11 * flapV) * h;
+      flapA += flapV * h;
+    }
+    const contact = flapper(w);
+    if (flapA < contact) {
+      flapV = Math.max(flapV, dt > 0 ? (contact - flapA) / dt : 0);
+      flapA = contact;
+    }
+  }
   function flapper(w: number): number {
     const s = (((-rot / A) % segs) + segs) % segs;
     const frac = s - Math.floor(s);
@@ -421,8 +443,10 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
       d.style.fill = tAll >= T_CROWN ? YELLOW : CREAM;
     });
     hub.rotation = Math.max(-1.2, Math.min(1.2, -rot * 0.25)) * (w > 0 ? 1 : 0);
-    pointer.rotation = flapper(w);
-    pointer.tint = flash > 0 ? 0xffffff : 0xffffff;
+    flapStep(dt, w);
+    pointer.rotation = flapA;
+    // Al trabarse, la lengüeta pega un golpe: crece y vuelve.
+    pointer.scale.set(1 + flash * 2.5);
     // Con el ganador, sus gajos salen hacia afuera y los demás se apagan.
     if (tAll >= T_CROWN) {
       const e = Math.min(1, (tAll - T_CROWN) * 2);
@@ -454,7 +478,6 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
       bigBar.clear().rect(0, 0, 26 * u, 96 * u).fill(S.color(cur));
     }
     if (tAll >= T_CROWN) crown.at(tAll - T_CROWN);
-    void dt;
   }
 
   S.run((dt, now) => {

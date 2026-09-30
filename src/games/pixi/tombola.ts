@@ -1,6 +1,6 @@
 import { Container, Graphics, GraphicsContext, Text } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
-import { paceFactor, setGameLength, type Beacon } from "../../state";
+import { paceFactor, params, setGameLength, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, note } from "../../sound";
 import { writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
@@ -15,6 +15,14 @@ import { CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
  * boca del bombo mientras caen las bolas, se abre para las vueltas, se mete en
  * la compuerta cuando se abre (y en la bola que asoma y vuelve a caer), sigue
  * a la ganadora por la canaleta y se pega al vaso en el amague del borde.
+ *
+ * Desde el 29 de septiembre de 2026 las bolas chocan como bolas: tres pasadas
+ * de separación por paso de física (con una sola se veían encimadas cuando la
+ * paleta las empujaba contra otras), rebote entre ellas y giro que sale del
+ * roce con la pared. Afuera, la ganadora rueda de verdad por una canaleta de
+ * rieles: el número gira según lo que avanza, pega un saltito en cada curva y
+ * cae al vaso rebotando. Con `?auditar=fisica` el juego anota lo encimadas que
+ * quedan y si alguna se escapó del bombo, para `scripts/audit-fisica.mjs`.
  */
 
 const TAU = Math.PI * 2;
@@ -46,8 +54,11 @@ interface Ball {
   vx: number;
   vy: number;
   rot: number;
+  /** Lo que gira por segundo: sale del roce con la pared y con las otras. */
+  spin: number;
   born: number;
   view?: Container;
+  shine?: Container;
 }
 
 export async function tombolaPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<void> {
@@ -75,14 +86,19 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
   const tCrown = T_CROWN + SH;
   setGameLength(tCrown, WINNER_HOLD);
 
-  const rb = clamp(Math.sqrt(0.34 / Math.max(1, n)), 0.035, 0.17);
+  // Con más de cien, bolas un poco más chicas: el bombo iba tan lleno que la
+  // paleta cortaba el montón como un cuchillo y las encimaba.
+  const rb = clamp(Math.sqrt((n > 100 ? 0.26 : 0.34) / Math.max(1, n)), 0.03, 0.17);
+  // Pasadas de separación por paso de física: el montón de abajo, apretado
+  // por la gravedad y empujado por las paletas, necesita más cuanto más alto es.
+  const PASSES = n > 100 ? 40 : n > 40 ? 16 : 8;
   const order = names.map((_, i) => i);
   for (let i = order.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
     [order[i], order[j]] = [order[j] as number, order[i] as number];
   }
   const balls: Ball[] = order.map((idx, k) => ({
-    idx, x: (rng() - 0.5) * 0.3, y: -0.9 + rb, vx: (rng() - 0.5) * 0.6, vy: 0.5, rot: rng() * TAU,
+    idx, x: (rng() - 0.5) * 0.3, y: -0.9 + rb, vx: (rng() - 0.5) * 0.6, vy: 0.5, rot: rng() * TAU, spin: 0,
     born: 0.15 + (k / Math.max(1, n)) * (T_FILL - 0.55),
   }));
   const winBall = balls.find((b) => b.idx === winnerIdx) as Ball;
@@ -111,7 +127,36 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
   }
 
   /* ---------------------------------------------------------------- física */
+  // `?auditar=fisica`: lo encimadas que quedan después de cada paso y si alguna
+  // se sale del bombo, para `scripts/audit-fisica.mjs`.
+  const audit = params.get("auditar") === "fisica"
+    ? { juego: "tombola", n, maxOverlap: 0, maxAt: 0, escapes: 0, pasos: 0, done: false }
+    : null;
+  if (audit) (window as unknown as { __fisica: typeof audit }).__fisica = audit;
+
   let tSim = 0, acc = 0, hits = 0;
+  /** La pared del bombo: la contiene, rebota y la hace rodar con el giro. */
+  function wallOf(b: Ball, w: number): void {
+    const d = Math.hypot(b.x, b.y);
+    const lim = 1 - rb;
+    if (d <= lim || d === 0) return;
+    const nx = b.x / d, ny = b.y / d;
+    b.x = nx * lim;
+    b.y = ny * lim;
+    const vn = b.vx * nx + b.vy * ny;
+    if (vn > 0) {
+      b.vx -= vn * nx * 1.35;
+      b.vy -= vn * ny * 1.35;
+      if (vn > 1.1) hits++;
+    }
+    const tx = -ny, ty = nx;
+    const vt = b.vx * tx + b.vy * ty;
+    const wall = w * lim;
+    b.vx += tx * (wall - vt) * 0.08;
+    b.vy += ty * (wall - vt) * 0.08;
+    // Rueda contra la pared: el giro sigue a lo que se desliza.
+    b.spin += ((b.vx * tx + b.vy * ty) / rb - b.spin) * 0.3;
+  }
   function step(dt: number): void {
     tSim += dt;
     const w = omega(tSim) * TAU * scale;
@@ -139,49 +184,11 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
       }
       b.x += b.vx * dt;
       b.y += b.vy * dt;
-      b.rot += (b.vx - b.vy) * dt * 3;
+      b.spin *= 0.995;
+      b.rot += b.spin * dt;
     }
-    for (let i = 0; i < inside.length; i++) {
-      const p = inside[i] as Ball;
-      for (let j = i + 1; j < inside.length; j++) {
-        const q = inside[j] as Ball;
-        const dx = q.x - p.x, dy = q.y - p.y;
-        const d2 = dx * dx + dy * dy;
-        const min = rb * 2;
-        if (d2 >= min * min || d2 === 0) continue;
-        const d = Math.sqrt(d2);
-        const nx = dx / d, ny = dy / d;
-        const push = (min - d) / 2;
-        p.x -= nx * push; p.y -= ny * push;
-        q.x += nx * push; q.y += ny * push;
-        const rel = (q.vx - p.vx) * nx + (q.vy - p.vy) * ny;
-        if (rel < 0) {
-          const imp = -rel * 0.8;
-          p.vx -= nx * imp * 0.5; p.vy -= ny * imp * 0.5;
-          q.vx += nx * imp * 0.5; q.vy += ny * imp * 0.5;
-          if (-rel > 0.9) hits++;
-        }
-      }
-    }
+    // Las paletas empujan y levantan.
     for (const b of inside) {
-      const d = Math.hypot(b.x, b.y);
-      const lim = 1 - rb;
-      if (d > lim && d > 0) {
-        const nx = b.x / d, ny = b.y / d;
-        b.x = nx * lim;
-        b.y = ny * lim;
-        const vn = b.vx * nx + b.vy * ny;
-        if (vn > 0) {
-          b.vx -= vn * nx * 1.35;
-          b.vy -= vn * ny * 1.35;
-          if (vn > 1.1) hits++;
-        }
-        const tx = -ny, ty = nx;
-        const vt = b.vx * tx + b.vy * ty;
-        const wall = w * lim;
-        b.vx += tx * (wall - vt) * 0.08;
-        b.vy += ty * (wall - vt) * 0.08;
-      }
       for (let v = 0; v < VANES; v++) {
         const a = ang + (v / VANES) * TAU;
         const ax = Math.cos(a), ay = Math.sin(a);
@@ -201,9 +208,12 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
           b.vy += ny * (vp * side - vn2) * 0.5;
         }
       }
+      wallOf(b, w);
       b.vx *= 0.998;
       b.vy *= 0.998;
     }
+    // La boca de la compuerta queda libre para la ganadora: las demás se
+    // apartan. Va antes de los choques, que después las acomodan sin encimarse.
     if (tSim > T_S3) {
       const dx0 = Math.cos(EXIT) * (1 - rb * 1.2), dy0 = Math.sin(EXIT) * (1 - rb * 1.2);
       for (const b of inside) {
@@ -213,6 +223,58 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
         if (d < rb * 2.4 && d > 0) {
           b.x = dx0 + (dx / d) * rb * 2.4;
           b.y = dy0 + (dy / d) * rb * 2.4;
+        }
+      }
+    }
+    // Los choques entre bolas: varias pasadas, como un solver de juego. La
+    // primera rebota; en todas se separa y se vuelve a meter en el bombo,
+    // porque separar un par empuja a una contra otra o contra la pared.
+    const min = rb * 2;
+    for (let pass = 0; pass < PASSES; pass++) {
+      const act = inside.slice().sort((a, b) => a.x - b.x || a.idx - b.idx);
+      for (let i = 0; i < act.length; i++) {
+        const p = act[i] as Ball;
+        for (let j = i + 1; j < act.length; j++) {
+          const q = act[j] as Ball;
+          if (q.x - p.x >= min) break;
+          const dx = q.x - p.x, dy = q.y - p.y;
+          if (Math.abs(dy) >= min) continue;
+          const d2 = dx * dx + dy * dy;
+          if (d2 >= min * min || d2 === 0) continue;
+          const d = Math.sqrt(d2);
+          const nx = dx / d, ny = dy / d;
+          const push = (min - d) / 2;
+          p.x -= nx * push; p.y -= ny * push;
+          q.x += nx * push; q.y += ny * push;
+          if (pass > 0) continue;
+          const rel = (q.vx - p.vx) * nx + (q.vy - p.vy) * ny;
+          if (rel < 0) {
+            // Dos bolas iguales con un rebote seco, como las de plástico duro.
+            const imp = (-rel * (1 + 0.55)) / 2;
+            p.vx -= nx * imp; p.vy -= ny * imp;
+            q.vx += nx * imp; q.vy += ny * imp;
+            // El roce las hace girar.
+            const vt = (q.vx - p.vx) * -ny + (q.vy - p.vy) * nx;
+            p.spin -= (vt / rb) * 0.15;
+            q.spin -= (vt / rb) * 0.15;
+            if (-rel > 0.9) hits++;
+          }
+        }
+      }
+      for (const b of inside) wallOf(b, 0);
+    }
+    if (audit) {
+      audit.pasos++;
+      for (let i = 0; i < inside.length; i++) {
+        const p = inside[i] as Ball;
+        if (Math.hypot(p.x, p.y) > 1 - rb + 0.01) audit.escapes++;
+        for (let j = i + 1; j < inside.length; j++) {
+          const q = inside[j] as Ball;
+          const d = Math.hypot(q.x - p.x, q.y - p.y);
+          if (d < min && (min - d) / min > audit.maxOverlap) {
+            audit.maxOverlap = (min - d) / min;
+            audit.maxAt = Math.round(tSim * 100) / 100;
+          }
         }
       }
     }
@@ -292,6 +354,8 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
   let ballLayer!: Container;
   let outLayer!: Container;
   let cupFront!: Graphics;
+  /** Las chispitas del vaso cuando cae la bola. */
+  let sparkles!: Graphics;
   let numChip!: Container;
   let nameChip!: Container;
   let rivalView: Container | null = null;
@@ -302,6 +366,12 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
 
   /** Una bola: sombra, color, borde y, si entra, el número en un disco. */
   const ballCtx = new Map<number, GraphicsContext>();
+  /** El brillo de cada bola: la luz viene siempre de arriba a la izquierda, así que no gira con ella. */
+  const shines = new WeakMap<Container, Container>();
+  const shineOf = (v: Container): void => {
+    const sh = shines.get(v);
+    if (sh) sh.rotation = -v.rotation;
+  };
   function makeBall(b: Ball, r: number, withNum: boolean): Container {
     const c = new Container();
     const col = S.color(b.idx);
@@ -320,6 +390,14 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
       tx.anchor.set(0.5);
       c.addChild(disc, tx);
     }
+    const shine = new Container();
+    shine.addChild(new Graphics()
+      // La sombra del lado de abajo a la derecha, y el reflejo arriba a la izquierda.
+      .moveTo(Math.cos(-0.25) * r * 0.8, Math.sin(-0.25) * r * 0.8).arc(0, 0, r * 0.8, -0.25, 1.85).stroke({ width: r * 0.18, color: 0x000000, alpha: 0.2, cap: "round" })
+      .ellipse(-r * 0.4, -r * 0.46, r * 0.26, r * 0.15).fill({ color: 0xffffff, alpha: 0.6 })
+      .circle(-r * 0.62, -r * 0.2, r * 0.07).fill({ color: 0xffffff, alpha: 0.45 }));
+    c.addChild(shine);
+    shines.set(c, shine);
     return c;
   }
 
@@ -344,16 +422,40 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
       .stroke({ width: 10 * k, color: INK, cap: "round" })
       .moveTo(cx, cy).lineTo(cx - R * 0.75, cy + R * 1.35).moveTo(cx, cy).lineTo(cx + R * 0.75, cy + R * 1.35)
       .stroke({ width: 5 * k, color: S.dark ? 0x6b6480 : 0x8a82a3, cap: "round" }));
-    // La canaleta y el fondo del vaso.
+    // La canaleta: postes al piso, el canal con su borde y los travesaños.
     const chute = new Graphics();
-    path.forEach((p, i) => (i === 0 ? chute.moveTo(p.x, p.y) : chute.lineTo(p.x, p.y)));
-    chute.stroke({ width: 26 * k, color: INK, cap: "round", join: "round" });
-    path.forEach((p, i) => (i === 0 ? chute.moveTo(p.x, p.y) : chute.lineTo(p.x, p.y)));
-    chute.stroke({ width: 18 * k, color: S.dark ? 0x4a4160 : 0x5c5378, cap: "round", join: "round" });
+    const floor = cup.y + 74 * k;
+    for (const p of path.slice(1, -1)) {
+      chute.rect(p.x - 4 * k, p.y, 8 * k, Math.max(0, floor - p.y)).fill(INK)
+        .rect(p.x - 2 * k, p.y, 4 * k, Math.max(0, floor - p.y)).fill(S.dark ? 0x6b6480 : 0x8a82a3);
+    }
+    const trace = (): void => path.forEach((p, i) => (i === 0 ? chute.moveTo(p.x, p.y) : chute.lineTo(p.x, p.y)));
+    trace();
+    chute.stroke({ width: 30 * k, color: INK, cap: "round", join: "round" });
+    trace();
+    chute.stroke({ width: 22 * k, color: S.dark ? 0x7a5a3a : 0x9a7048, cap: "round", join: "round" });
+    // El fondo del canal, más oscuro, donde rueda la bola.
+    trace();
+    chute.stroke({ width: 9 * k, color: S.dark ? 0x4a3422 : 0x6b4a2c, cap: "round", join: "round" });
+    // Los travesaños, cada tanto, y un clavo en cada curva.
+    for (let i = 0; i < path.length - 1; i++) {
+      const a = path[i] as { x: number; y: number }, b = path[i + 1] as { x: number; y: number };
+      const L = Math.hypot(b.x - a.x, b.y - a.y);
+      const ux = (b.x - a.x) / (L || 1), uy = (b.y - a.y) / (L || 1);
+      for (let d = 22 * k; d < L - 10 * k; d += 34 * k) {
+        const x = a.x + ux * d, y = a.y + uy * d;
+        chute.moveTo(x - uy * 13 * k, y + ux * 13 * k).lineTo(x + uy * 13 * k, y - ux * 13 * k).stroke({ width: 3 * k, color: INK, alpha: 0.6 });
+      }
+      if (i > 0) chute.circle(a.x, a.y, 5 * k).fill(INK).circle(a.x, a.y, 2.5 * k).fill(YELLOW);
+    }
     S.scene.addChild(chute);
     const top = 124 * k, bot = 84 * k, hh = 74 * k;
     const cupPts = [cup.x - top / 2, cup.y, cup.x + top / 2, cup.y, cup.x + bot / 2, cup.y + hh, cup.x - bot / 2, cup.y + hh];
-    S.scene.addChild(new Graphics().poly(cupPts.map((v, i) => v + 6 * k * (i % 2 === 0 ? 1 : 1))).fill(INK).poly(cupPts).fill(0xb8860b));
+    // El vaso de vidrio, por detrás: su sombra, el vidrio y el borde de atrás.
+    S.scene.addChild(new Graphics()
+      .ellipse(cup.x + 8 * k, cup.y + hh + 4 * k, bot * 0.7, 8 * k).fill({ color: 0x000000, alpha: 0.35 })
+      .poly(cupPts).fill({ color: CREAM, alpha: S.dark ? 0.1 : 0.16 })
+      .ellipse(cup.x, cup.y, top / 2, 10 * k).fill({ color: 0x000000, alpha: 0.25 }).stroke({ width: 3 * k, color: INK }));
     drumBack = new Graphics();
     S.scene.addChild(drumBack);
     ballLayer = new Container();
@@ -392,12 +494,30 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
       v.visible = false;
       outLayer.addChild(v);
     }
+    /** Medio borde de una elipse, como puntos: `arc` solo hace círculos. */
+    const rim = (x: number, y: number, rx: number, ry: number, a0: number, a1: number): number[] => {
+      const pts: number[] = [];
+      for (let i = 0; i <= 16; i++) {
+        const a = a0 + ((a1 - a0) * i) / 16;
+        pts.push(x + Math.cos(a) * rx, y + Math.sin(a) * ry);
+      }
+      return pts;
+    };
+    // El vaso por delante: el vidrio que deja ver la bola, dos reflejos, el
+    // borde de adelante y el pie.
     cupFront = new Graphics();
     const clipTop = cup.y + hh * 0.38;
-    cupFront.poly([cup.x - top / 2 + (top - bot) / 2 * 0.38, clipTop, cup.x + top / 2 - (top - bot) / 2 * 0.38, clipTop, cup.x + bot / 2, cup.y + hh, cup.x - bot / 2, cup.y + hh]).fill(YELLOW)
-      .poly(cupPts).stroke({ width: 4 * k, color: INK })
-      .rect(cup.x - top / 2 - 6 * k, cup.y - 4 * k, top + 12 * k, 8 * k).fill(INK);
+    cupFront.poly([cup.x - top / 2 + (top - bot) / 2 * 0.38, clipTop, cup.x + top / 2 - (top - bot) / 2 * 0.38, clipTop, cup.x + bot / 2, cup.y + hh, cup.x - bot / 2, cup.y + hh]).fill({ color: CREAM, alpha: 0.22 })
+      .poly([cup.x - top * 0.36, cup.y + hh * 0.12, cup.x - top * 0.26, cup.y + hh * 0.12, cup.x - bot * 0.3, cup.y + hh * 0.88, cup.x - bot * 0.4, cup.y + hh * 0.88]).fill({ color: 0xffffff, alpha: 0.45 })
+      .poly([cup.x + top * 0.2, cup.y + hh * 0.2, cup.x + top * 0.25, cup.y + hh * 0.2, cup.x + bot * 0.22, cup.y + hh * 0.8, cup.x + bot * 0.17, cup.y + hh * 0.8]).fill({ color: 0xffffff, alpha: 0.3 })
+      .poly(cupPts).stroke({ width: 4 * k, color: INK, join: "round" })
+      .poly(rim(cup.x, cup.y, top / 2, 10 * k, 0, Math.PI), false).stroke({ width: 4 * k, color: INK })
+      .poly(rim(cup.x, cup.y + 1 * k, top / 2 - 4 * k, 7 * k, 0.35, Math.PI - 0.35), false).stroke({ width: 2 * k, color: 0xffffff, alpha: 0.5 })
+      .roundRect(cup.x - bot / 2 - 8 * k, cup.y + hh - 3 * k, bot + 16 * k, 10 * k, 4 * k).fill(INK)
+      .roundRect(cup.x - bot / 2 - 5 * k, cup.y + hh - 1 * k, bot + 10 * k, 5 * k, 2 * k).fill(YELLOW);
     S.scene.addChild(cupFront);
+    sparkles = new Graphics();
+    S.scene.addChild(sparkles);
     // El contador de bolas, arriba a la derecha.
     const lab = S.text(t("cTomBalls"), { fontSize: 14 * k, fontWeight: "800", fill: CREAM });
     lab.anchor.set(1, 0);
@@ -533,27 +653,58 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
     silent = false;
   };
 
-  /** Dónde va la bola ganadora afuera, y de qué tamaño. */
-  function winnerOut(): { x: number; y: number; r: number } {
+  /** Lo que mide la canaleta, y dónde cae cada curva. */
+  function pathLens(path: { x: number; y: number }[]): { total: number; at: number[] } {
+    const at = [0];
+    for (let i = 1; i < path.length; i++) {
+      const a = path[i - 1] as { x: number; y: number }, b = path[i] as { x: number; y: number };
+      at.push((at[i - 1] as number) + Math.hypot(b.x - a.x, b.y - a.y));
+    }
+    return { total: at[at.length - 1] as number, at };
+  }
+
+  /** Dónde va la bola ganadora afuera, de qué tamaño, cuánto giró y cuánto se aplasta. */
+  function winnerOut(): { x: number; y: number; r: number; rot: number; squash: number } {
     const { cx, cy, R, path, cup, k } = G;
     const r0 = rb * R;
     if (tAll < tOut) {
       const q = ease.inOutCubic((tAll - tOutStart) / (tOut - tOutStart));
       const sx = rivalBall ? cx + winBall.x * R : cx + Math.cos(EXIT) * (1 - rb * 1.2) * R;
       const sy = rivalBall ? cy + winBall.y * R : cy + Math.sin(EXIT) * (1 - rb * 1.2) * R;
-      return { x: sx + ((path[0] as { x: number }).x - sx) * q, y: sy + ((path[0] as { y: number }).y - sy) * q, r: r0 };
+      return { x: sx + ((path[0] as { x: number }).x - sx) * q, y: sy + ((path[0] as { y: number }).y - sy) * q, r: r0, rot: winBall.rot, squash: 0 };
     }
-    const p = along(path, rollAt(tAll));
+    const f = rollAt(tAll);
+    const p = along(path, f);
     const wob = tAll > tLip && tAll < tLand ? Math.sin((tAll - tLip) * 30) * 5 * k : 0;
     const r = r0 + (Math.max(r0, 34 * k) - r0) * ease.outCubic(clamp((tAll - tOut) / 1.2, 0, 1));
+    // Rueda: gira lo que avanza dividido por su radio, como una bola de verdad.
+    const lens = pathLens(path);
+    const sDone = f * lens.total;
+    let rot = winBall.rot + sDone / Math.max(r, 1);
+    // En cada curva pega un saltito, más chico cada vez.
+    let hop = 0;
+    for (let i = 1; i < path.length - 1; i++) {
+      const d = sDone - (lens.at[i] as number);
+      const H = r * 3;
+      if (d >= 0 && d < H) hop = Math.max(hop, Math.sin((Math.PI * d) / H) * r * (0.55 - 0.15 * i));
+    }
     let x = p.x + wob;
-    let y = p.y - r - 8 * k;
+    let y = p.y - r - 8 * k - hop;
+    let squash = 0;
     if (tAll >= tLand) {
       const q2 = clamp((tAll - tLand) / 0.25, 0, 1);
       x += (cup.x - x) * ease.inOutCubic(q2);
       y += (cup.y + 22 * k - r * 0.4 - y) * ease.inOutCubic(q2);
+      // Cae al vaso y rebota dos veces, cada vez más bajo, y se aplasta al tocar.
+      const b = tAll - tLand - 0.25;
+      if (b > 0) {
+        const bounce = Math.abs(Math.sin(b * 11)) * r * 0.45 * Math.exp(-b * 4.5);
+        y -= bounce;
+        squash = Math.max(0, 1 - Math.abs(Math.sin(b * 11)) * 6) * Math.exp(-b * 4.5) * 0.18;
+        rot += Math.exp(-b * 3) * 0.4 * Math.sin(b * 11);
+      }
     }
-    return { x, y, r };
+    return { x, y, r, rot, squash };
   }
 
   /** La cámara: la boca al llenar, el bombo al girar, la compuerta, la bola, el vaso. */
@@ -617,14 +768,17 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
       v.position.set(b.x * R, b.y * R - (1 - fall) * R * 0.5);
       v.rotation = b.rot;
       v.scale.set(1);
+      shineOf(v);
     }
     bars.rotation = ang;
     // La compuerta, que gira con el bombo y se abre al pararse.
     const da = doorStart + ang;
     const open = clamp((tAll - T_STOP) / 0.3, 0, 1);
     const span = 0.2;
-    door.clear().arc(0, 0, R, da - span, da + span).stroke({ width: 14 * k, color: INK });
-    door.arc(0, 0, R, da - span, da + span).stroke({ width: 8 * k, color: open > 0 ? 0x1b1426 : YELLOW });
+    // Cada arco arranca con su moveTo: sin él, PixiJS lo une con una línea desde el centro.
+    const d0x = Math.cos(da - span) * R, d0y = Math.sin(da - span) * R;
+    door.clear().moveTo(d0x, d0y).arc(0, 0, R, da - span, da + span).stroke({ width: 14 * k, color: INK });
+    door.moveTo(d0x, d0y).arc(0, 0, R, da - span, da + span).stroke({ width: 8 * k, color: open > 0 ? 0x1b1426 : YELLOW });
     if (open > 0) {
       const hx = Math.cos(da - span) * R, hy = Math.sin(da - span) * R;
       const a2 = da - span + Math.PI / 2 + open * 1.1;
@@ -645,12 +799,30 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
       rivalView.visible = true;
       rivalView.scale.set((rb * R * (1 + 0.25 * fuera)) / bigR);
       rivalView.position.set(cx + nx * d - ny * tiembla, cy + ny * d + nx * tiembla);
+      rivalView.rotation = rivalBall.rot;
+      shineOf(rivalView);
     }
+    sparkles.clear();
     if (tAll >= tOutStart) {
       const o = winnerOut();
       winView.visible = true;
-      winView.scale.set(o.r / bigR);
-      winView.position.set(o.x, o.y);
+      winView.scale.set((o.r / bigR) * (1 + o.squash), (o.r / bigR) * (1 - o.squash));
+      winView.position.set(o.x, o.y + o.r * o.squash);
+      winView.rotation = o.rot;
+      shineOf(winView);
+      // Las chispitas del vaso: suben desde el borde cuando cae la bola.
+      const a = tAll - tLand - 0.25;
+      if (a > 0 && a < 1.1) {
+        for (let i = 0; i < 10; i++) {
+          const h1 = ((i * 7919) % 97) / 97, h2 = ((i * 104729) % 89) / 89;
+          const x = G.cup.x + (h1 - 0.5) * 124 * k;
+          const y = G.cup.y - (20 + h2 * 70) * k * ease.outCubic(clamp(a / 0.8, 0, 1));
+          const sz = (7 + 5 * h2) * k * (1 - a / 1.1);
+          if (sz <= 0.5) continue;
+          sparkles.poly([x, y - sz, x + sz * 0.3, y - sz * 0.3, x + sz, y, x + sz * 0.3, y + sz * 0.3, x, y + sz, x - sz * 0.3, y + sz * 0.3, x - sz, y, x - sz * 0.3, y - sz * 0.3])
+            .fill({ color: i % 3 ? YELLOW : 0xffffff, alpha: 1 - a / 1.1 });
+        }
+      }
       if (tAll > tOut + 0.3 && tAll < tCrown) {
         numChip.visible = true;
         numChip.position.set(o.x + o.r + 10 * k, o.y - o.r - 6 * k);
@@ -681,6 +853,9 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
     cam.apply(S.scene, S.sw(), S.sh(), now);
     draw(now);
     if (tAll >= tCrown) tHold += dt * paceFactor();
-    if (tHold >= WINNER_HOLD) S.cleanup();
+    if (tHold >= WINNER_HOLD) {
+      if (audit) audit.done = true;
+      S.cleanup();
+    }
   });
 }

@@ -22,7 +22,9 @@ Cada bola lleva el puesto de la persona en la lista sellada, contado desde uno. 
 
 **La compuerta.** El bombo frena y la compuerta termina justo en la salida: el ángulo final sale de integrar la velocidad y escalarla, igual que en la ruleta. Se abre, y sale una sola bola.
 
-**La canaleta.** La bola rueda por tres tramos en zigzag, cada vez más lenta, y crece para que el número se lea desde el fondo. En el borde del vaso se frena, se tambalea medio segundo con un latido de fondo, y cae.
+**La canaleta.** Es de madera, con rieles, travesaños y postes. La bola rueda por tres tramos en zigzag, cada vez más lenta, y crece para que el número se lea desde el fondo. Rueda de verdad: el número gira lo que la bola avanza dividido por su radio, y en cada curva pega un saltito, más chico cada vez. En el borde del vaso se frena, se tambalea medio segundo con un latido de fondo, y cae a un vaso de vidrio, donde rebota dos veces aplastándose y suelta unas chispitas.
+
+**Las bolas** tienen brillo y sombra que no giran con ellas: la luz viene siempre de arriba a la izquierda, y por eso se leen redondas aunque den vueltas.
 
 ## Lo que el bombo hace a propósito
 
@@ -76,5 +78,7 @@ En segundos de juego, sin estirar. En "normal" se multiplican por 1,7.
 Vive en [`src/games/tombola.ts`](../../src/games/tombola.ts) y usa el andamiaje de [`src/games/overlay.ts`](../../src/games/overlay.ts).
 
 La física trabaja en radios del bombo, no en píxeles: el bombo mide uno, y la pantalla solo decide dónde se dibuja. Por eso girar el celular a mitad del sorteo no mueve ninguna bola, y el lugar donde frena la compuerta se fija al arrancar. La pared arrastra la velocidad tangencial de las bolas que la tocan hacia la del bombo; las paletas son segmentos que empujan con la velocidad del punto donde tocan.
+
+**Los choques entre bolas** se resuelven con varias pasadas de separación por paso de física, como un solver de juego: 8 con pocas bolas, 16 con más de cuarenta y 40 con más de cien, porque el montón de abajo, apretado por la gravedad y empujado por las paletas, necesita más pasadas cuanto más alto es. Con una sola pasada se veían bolas encimadas. Rebotan entre ellas con un rebote seco, como el plástico duro, y el roce con la pared y con las otras las hace girar. Con más de cien personas las bolas son un poco más chicas: el bombo iba tan lleno que la paleta cortaba el montón. `scripts/audit-fisica.mjs` lo comprueba en cuatro semillas y con 2, 60 y 200 personas: ninguna bola encimada más de un 12% del diámetro (quedan entre 3 y 9%) y ninguna fuera del bombo.
 
 Saltar no simula: deja las bolas asentadas en una pila calculada. Simular hasta el final eran mil trescientos pasos de física de golpe, y con doscientas bolas eso se notaba como un tirón justo cuando alguien apretó "saltar".

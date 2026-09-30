@@ -140,15 +140,26 @@ export async function llamasPixi(
     root.addChild(new Graphics().ellipse(0, 0, 24, 5).fill({ color: 0x000000, alpha: 0.28 }));
     const body = new Container();
     root.addChild(body);
-    const leg = (x: number, far: boolean): Graphics => {
-      const g = new Graphics()
-        .roundRect(-3, 0, 6, 30, 3).fill(far ? dim(fur, 0.72) : fur).stroke({ width: 2, color: INK })
-        .roundRect(-3.5, 26, 7, 5, 2).fill(INK);
-      g.position.set(x, -30);
-      return g;
+    /**
+     * Una pata en dos partes, con la rodilla en el medio. Hasta el 29 de
+     * septiembre de 2026 era un palito rígido que se balanceaba desde la
+     * cadera; con la rodilla, la pata se dobla cuando va hacia adelante y se
+     * estira cuando apoya, que es lo que hace que un galope se lea como galope.
+     */
+    const leg = (x: number, far: boolean): { hip: Container; knee: Container } => {
+      const col = far ? dim(fur, 0.72) : fur;
+      const hip = new Container();
+      hip.position.set(x, -30);
+      const knee = new Container();
+      knee.position.set(0, 15);
+      knee.addChild(new Graphics()
+        .roundRect(-2.8, -1, 5.6, 16, 2.5).fill(col).stroke({ width: 2, color: INK })
+        .roundRect(-3.5, 12, 7, 5, 2).fill(INK));
+      hip.addChild(knee, new Graphics().roundRect(-3.3, 0, 6.6, 17, 3.2).fill(col).stroke({ width: 2, color: INK }));
+      return { hip, knee };
     };
     const legs = [leg(-12, true), leg(15, true), leg(-16, false), leg(11, false)];
-    body.addChild(legs[0] as Graphics, legs[1] as Graphics);
+    body.addChild(legs[0]!.hip, legs[1]!.hip);
     const tail = new Graphics().ellipse(-3, -2, 6, 5).fill(fur).stroke({ width: 2, color: INK });
     tail.position.set(-24, -40);
     body.addChild(tail);
@@ -164,7 +175,7 @@ export async function llamasPixi(
     const bib = S.text(String(k + 1), { fontSize: 11, fontWeight: "900", fill: CREAM, stroke: { color: INK, width: 3 } });
     bib.anchor.set(0.5);
     bib.position.set(0, -40);
-    body.addChild(bib, legs[2] as Graphics, legs[3] as Graphics);
+    body.addChild(bib, legs[2]!.hip, legs[3]!.hip);
     const neck = new Container();
     neck.position.set(16, -42);
     const neckG = new Graphics()
@@ -205,7 +216,14 @@ export async function llamasPixi(
           mark.visible = true;
           mark.text = "?!";
         }
-        legs.forEach((g, i) => { g.rotation = legA[i] ?? 0; });
+        // La cadera da el paso; la rodilla se dobla mientras la pata va hacia
+        // adelante (cuando el ángulo baja) y queda derecha al apoyar.
+        const phs = [ph, ph + 0.9, ph + Math.PI, ph + Math.PI + 0.9];
+        const stiff = beat?.kind === "plantada" || speed < 0.1;
+        legs.forEach((l, i) => {
+          l.hip.rotation = legA[i] ?? 0;
+          l.knee.rotation = stiff ? 0 : Math.max(0, -Math.cos(phs[i] ?? 0)) * (i % 2 === 0 ? 1.05 : 0.8);
+        });
         body.rotation = lean;
         body.y = speed > 0.1 ? -Math.abs(Math.sin(ph)) * 4 : 0;
         neck.rotation = neckRot;
@@ -900,6 +918,23 @@ export async function llamasPixi(
           const ly = y - (20 + j * 14) * sc;
           const lx = x - (70 + ((now * 900 + j * 37 + k * 11) % 60)) * u;
           fx.moveTo(lx, ly).lineTo(lx - 40 * u, ly).stroke({ width: 2 * u, color: 0xffffff, alpha: 0.6 });
+        }
+      }
+      // En el lago, cada palada salpica: unas gotas saltan donde entra el remo.
+      if (lake && speed > 0.3) {
+        const ph = p * 95;
+        const catchN = Math.floor((ph + Math.PI / 2) / (Math.PI * 2));
+        for (let m = catchN - 1; m <= catchN; m++) {
+          const a = ph - (m * Math.PI * 2 - Math.PI / 2);
+          if (a < 0 || a > 2.4) continue;
+          const f = a / 2.4;
+          const bx = x - 34 * sc + 2 * sc, by = y - 2 * u;
+          for (let j = 0; j < 5; j++) {
+            const vx = -(8 + hash(m, j + k * 7) * 22) * u, vy = (18 + hash(j, m + k) * 16) * u;
+            const dx = vx * f * 2.2, dy = -vy * Math.sin(Math.PI * f);
+            fx.circle(bx + dx, by + dy, (2.6 - f * 1.4) * u * Math.max(0.6, sc)).fill({ color: 0xeaf8ff, alpha: 0.85 * (1 - f) });
+          }
+          if (f < 0.6) fx.ellipse(bx, by + 1 * u, (6 + f * 22) * u, (1.5 + f * 3) * u).stroke({ width: 1.5 * u, color: 0xeaf8ff, alpha: 0.7 * (1 - f / 0.6) });
         }
       }
       const beat = phase === "race" ? plan.beatOf(k, prog) : null;

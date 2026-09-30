@@ -59,7 +59,7 @@ Ahora dura 17,2 y el reparto está al revés: 1,6 de borrón contra 4,4 de clics
 ## Lo que se ve y por qué
 
 - **El aro con la semilla.** Los 64 dígitos hexadecimales de esta ronda, escritos alrededor. Es decoración para quien no mira y una invitación para quien sí: sacá la foto y comprobalos contra el faro. A toda velocidad se reemplazan por rayas, porque no se leerían.
-- **La paleta que se traba.** Es lo que hace mirable una ruleta de premios. Es puro dibujo, nunca vuelve a entrar en el ángulo de la rueda, así que el determinismo queda intacto.
+- **La paleta que se traba.** Es lo que hace mirable una ruleta de premios. Es un resorte amortiguado: el perno que pasa la empuja, y al soltarla vuelve sola, se pasa un poco para el otro lado y tiembla, como la de una ruleta de feria (hasta el 29 de septiembre de 2026 seguía al perno sin física y se enderezaba de golpe). Corre a paso fijo de 1/240 s y nunca vuelve a entrar en el ángulo de la rueda, así que el determinismo queda intacto. Al trabarse, pega un golpe: crece y vuelve.
 - **Los pernos.** Uno por borde de gajo. Justifican el tic-tac.
 - **El perno tricolor.** En la posición cero. Marca la vuelta y suena un tono cada vez que pasa, así que es funcional. De diez metros es un acento de color; de un metro es la bandera.
 - **La columna de nombres.** Con catorce participantes o menos, una placa por persona y la del puntero resaltada. Con más, una sola placa grande que va cambiando: con veinticuatro nombres el listado no se lee de lejos, y una placa que cambia sí.

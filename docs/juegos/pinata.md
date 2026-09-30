@@ -14,9 +14,9 @@ Y el relato viene solo: "¡Dale, dale, dale! ¡No pierdas el tino!".
 
 **La piñata cuelga.** Es un péndulo que se amortigua: cada palo le da un empujón y se hamaca. La cuerda cruje cada vez que pasa por abajo.
 
-**Los palos.** Entre cinco y nueve, según cuánta gente haya, cada vez más seguidos. En cada uno la piñata se sacude, se raja un poco más y caen caramelos: al principio muchos, al final de a uno. Los que caen rebotan y se quedan en el piso. Cuando quedan seis o menos adentro, al lado de la piñata aparece la lista de quiénes siguen.
+**Los palos.** Entre cinco y nueve, según cuánta gente haya, cada vez más seguidos. Cada palo entra en arco con su estela, y donde pega sale una estrella y se desprenden papelitos; la piñata se aplasta y rebota, se sacude, se raja un poco más y caen caramelos: al principio muchos, al final de a uno. Los caramelos rebotan, ruedan y se apilan en un montoncito que crece, que se desliza por las laderas: antes quedaban todos en el piso, a una altura al azar, y eran tan chicos que se leían como puntitos. Cuando quedan seis o menos adentro, al lado de la piñata aparece la lista de quiénes siguen.
 
-**La rotura.** El último golpe la rompe: los siete picos salen volando con una lluvia de papel de china. La rival cae primero, rápido. El caramelo ganador cae último, despacio, casi flotando, con un brillo, y el piso lo recibe.
+**La rotura.** El último golpe la rompe con un destello: la olla se parte en ocho pedazos que salen girando, y los siete picos salen volando con una lluvia de papel de china. La rival cae primero, rápido. El caramelo ganador cae último, despacio, casi flotando, con un brillo, y el piso lo recibe.
 
 ## Lo que la piñata hace a propósito
 

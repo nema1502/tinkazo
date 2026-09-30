@@ -23,6 +23,12 @@ import { CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./sta
  * - **remontada**: dos palos al aire antes de los últimos.
  * - **duelo**: quedan dos adentro hasta el golpe final, y cae la rival.
  * - **tapada**: nadie la nombra hasta que se rompe.
+ *
+ * Desde el 29 de septiembre de 2026 cada palo se siente: una estrella donde
+ * pega, papelitos que se desprenden, la piñata que se aplasta y rebota, y la
+ * estela del palo. Los caramelos son más grandes, rebotan, ruedan y se apilan
+ * en un montoncito que crece (antes quedaban todos en el piso, a una altura
+ * al azar), y al romperse la olla se parte en pedazos que salen girando.
  */
 
 const DT = 1 / 120;
@@ -93,6 +99,18 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   let lastCreak = -9, creaks = 0, fallNote = 0, landed = false;
   let theta = 0.34, omega = 0, peekSaid = false, lastSaid2 = false, crowned = false, brokeDone = false, rivalDropped = false;
   const inside = (): Candy[] => candies.filter((c) => c.inside);
+  /** Cuándo pegó el último palo y dónde, para la estrella y los papelitos. */
+  const blows: { at: number; x: number; y: number; seed: number }[] = [];
+  let lastBlow = -9;
+  /** El tamaño de un caramelo: más grandes que antes, que se leían como puntitos. */
+  const candySize = (): number => clamp(Math.sqrt(1 / n) * 70 * S.u(), 12 * S.u(), 26 * S.u());
+  /**
+   * El montón del piso, por columnas: cada caramelo que se queda quieto sube
+   * su columna y un poco las de al lado, así se apilan como de verdad.
+   */
+  const heights = new Map<number, number>();
+  const colOf = (x: number): number => Math.floor(x / (candySize() * 2.2));
+  const hAt = (col: number): number => heights.get(col) ?? 0;
 
   /* -------------------------------------------------------------- geometría */
   const G = (): { w: number; h: number; k: number; ax: number; ay: number; L: number; floor: number; R: number } => {
@@ -117,6 +135,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       creaks++;
       beep(note([2, 4, 3, 5][creaks % 4] as number), 0.07, "triangle", 0.03);
     }
+    const sz = candySize();
     for (const c of candies) {
       if (c.inside || c.settled) continue;
       c.out += dt;
@@ -126,19 +145,38 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       c.x += c.vx * dt;
       c.y += c.vy * dt;
       c.rot += c.spin * dt;
-      if (c.y >= g.floor - (c === winC ? 0 : hash(c.idx, 3) * 22 * g.k)) {
-        c.y = g.floor - (c === winC ? 0 : hash(c.idx, 3) * 22 * g.k);
-        if (Math.abs(c.vy) > 160 * g.k) {
-          c.vy *= -0.32;
-          c.vx *= 0.6;
-          c.spin *= 0.5;
+      // El piso es el montón: la columna donde cae, sin pasar por encima de sus vecinas.
+      const col = colOf(c.x);
+      const ground = g.floor - sz * 0.62 - (c === winC ? 0 : hAt(col));
+      if (c.y >= ground) {
+        c.y = ground;
+        if (c.vy > 150 * g.k) {
+          // Rebota con lo que le queda, y el golpe lo hace girar.
+          c.vy *= -0.42;
+          c.vx *= 0.75;
+          c.spin = c.vx / Math.max(1, sz) + (hash(c.idx, 9) - 0.5) * 6;
         } else {
           c.vy = 0;
-          c.vx *= 0.85;
-          if (Math.abs(c.vx) < 4) c.settled = true;
+          // En la ladera del montón resbala hacia el lado más bajo.
+          const slope = hAt(col - 1) - hAt(col + 1);
+          c.vx += slope * 6 * dt * g.k;
+          c.vx *= 0.9;
+          // Rueda: gira lo que avanza.
+          c.spin = c.vx / Math.max(1, sz);
+          if (Math.abs(c.vx) < 6 * g.k && Math.abs(slope) < sz * 1.4) {
+            c.settled = true;
+            if (c !== winC) {
+              heights.set(col, hAt(col) + sz * 1.05);
+              heights.set(col - 1, Math.max(hAt(col - 1), hAt(col) - sz * 1.2));
+              heights.set(col + 1, Math.max(hAt(col + 1), hAt(col) - sz * 1.2));
+            }
+          }
         }
       }
-      if (c.x < 20 * g.k || c.x > g.w - 20 * g.k) c.vx *= -0.6;
+      if (c.x < 20 * g.k || c.x > g.w - 20 * g.k) {
+        c.x = clamp(c.x, 20 * g.k, g.w - 20 * g.k);
+        c.vx *= -0.6;
+      }
     }
   }
 
@@ -215,6 +253,14 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       // El golpe: un empujón al péndulo, un ruido seco y lo que caiga.
       omega += (hash(Math.round(s.at * 10), 1) < 0.5 ? -1 : 1) * (1.6 + 0.3 * crackLevel);
       crackLevel++;
+      {
+        // Donde pega el palo: el lado de la olla que mira hacia abajo a la izquierda.
+        const pp = pinPos();
+        const bx = g.w * 0.14, by = g.floor + 60 * g.k;
+        const dx = bx - pp.x, dy = by - pp.y, d = Math.hypot(dx, dy) || 1;
+        blows.push({ at: tAll, x: pp.x + (dx / d) * g.R, y: pp.y + (dy / d) * g.R, seed: crackLevel * 13 });
+        lastBlow = tAll;
+      }
       beep(note(1 + (crackLevel % 3)), 0.12, "square", 0.06);
       setTimeout(() => beep(note(8 + (crackLevel % 4)), 0.06, "triangle", 0.035), 60);
       cam.punch(0.06).shake(8 * g.k);
@@ -279,6 +325,8 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   }
 
   /* ---------------------------------------------------------------- escena */
+  let fx!: Graphics;
+  let flash!: Graphics;
   let wall!: Graphics;
   let garland!: Graphics;
   let rope!: Graphics;
@@ -338,7 +386,10 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     pin = makePinata(g.R);
     cracks = new Graphics();
     pin.addChild(cracks);
-    S.scene.addChild(wall, garland, pile, glow, rope, pin, pieces, candyG, stick);
+    fx = new Graphics();
+    S.scene.addChild(wall, garland, pile, glow, rope, pin, pieces, candyG, stick, fx);
+    flash = new Graphics().rect(0, 0, g.w, g.h).fill(0xffffff);
+    flash.alpha = 0;
     // El papel picado: tres guirnaldas de banderitas caladas.
     for (let row = 0; row < 3; row++) {
       const y0 = S.top() + (8 + row * 38) * k;
@@ -372,7 +423,8 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     box.addChild(counterBox, counter);
     box.position.set(22 * k, S.top() + 10 * k);
     chipLayer = new Container();
-    S.hud.addChild(box, chipLayer);
+    S.hud.addChild(flash, box, chipLayer);
+    heights.clear();
     for (const c of candies) c.drawn = false;
   }
   build();
@@ -418,7 +470,10 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     const broken = brokeDone;
     pin.visible = !broken;
     pin.position.set(p.x, p.y);
-    pin.rotation = theta * 0.6 + Math.sin(now * 1.3) * 0.03;
+    pin.rotation = theta * 0.6 + Math.sin(tAll * 1.3) * 0.03;
+    const ha = tAll - lastBlow;
+    const sq = ha >= 0 && ha < 0.6 ? 0.16 * Math.exp(-ha * 7) * Math.cos(ha * 30) : 0;
+    pin.scale.set(1 + sq, 1 - sq);
     // La rajadura crece con los golpes.
     cracks.clear();
     for (let i = 0; i < Math.min(crackLevel, 8); i++) {
@@ -446,6 +501,27 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
         pieces.poly([x - s * 0.4 * sn, y + s * 0.4 * c, x + s * c, y + s * sn, x + s * 0.4 * sn, y - s * 0.4 * c]).fill(CONE[i] as number).stroke({ width: 2 * k, color: INK });
       }
     }
+    if (broken) {
+      // La olla se parte en ocho pedazos, con su franja, que salen girando.
+      const age = tAll - T_BREAK;
+      for (let i = 0; i < 8; i++) {
+        const a0 = (i / 8) * Math.PI * 2, a1 = ((i + 1) / 8) * Math.PI * 2, am = (a0 + a1) / 2;
+        const v = (260 + hash(i, 61) * 260) * k;
+        const x = p.x + Math.cos(am) * (g.R * 0.4 + v * age), y = p.y + Math.sin(am) * (g.R * 0.4 + v * age) - 180 * k * age + 0.5 * GRAV * k * age * age * 0.7;
+        const rot = age * (5 + hash(i, 62) * 6) * (i % 2 ? 1 : -1);
+        const c = Math.cos(rot), sn = Math.sin(rot);
+        const pts: number[] = [];
+        const P = (px: number, py: number): void => {
+          pts.push(x + px * c - py * sn, y + px * sn + py * c);
+        };
+        P(-Math.cos(am) * g.R * 0.4, -Math.sin(am) * g.R * 0.4);
+        for (let j = 0; j <= 4; j++) {
+          const a = a0 + ((a1 - a0) * j) / 4;
+          P(Math.cos(a) * g.R - Math.cos(am) * g.R * 0.4, Math.sin(a) * g.R - Math.sin(am) * g.R * 0.4);
+        }
+        if (y < g.h + g.R) pieces.poly(pts).fill(i % 2 ? 0xff7a1a : 0xe93d9c).stroke({ width: 2.5 * k, color: INK, join: "round" });
+      }
+    }
     if (broken && tAll - T_BREAK < 2.2) {
       const age = tAll - T_BREAK;
       for (let i = 0; i < 60; i++) {
@@ -466,13 +542,50 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       const a = aim - 1.1 + 1.1 * ease.outCubic(f);
       const len = Math.hypot(p.x - bx, p.y - by) * 0.98;
       const ex = bx + Math.cos(a) * len, ey = by + Math.sin(a) * len;
+      // La estela: dos palos fantasma un poco atrás en el arco.
+      for (let gh = 2; gh >= 1; gh--) {
+        const fg = clamp(f - gh * 0.12, 0, 1);
+        const ag = aim - 1.1 + 1.1 * ease.outCubic(fg);
+        stick.moveTo(bx, by).lineTo(bx + Math.cos(ag) * len, by + Math.sin(ag) * len).stroke({ width: 10 * k, color: 0xffffff, alpha: 0.12 * (3 - gh), cap: "round" });
+      }
       stick.moveTo(bx, by).lineTo(ex, ey).stroke({ width: 10 * k, color: 0x7a5230, cap: "round" });
       for (let r = 0.2; r < 0.9; r += 0.14) stick.circle(bx + (ex - bx) * r, by + (ey - by) * r, 5.5 * k).fill(CONE[Math.round(r * 10) % 7] as number);
     }
+    // El golpe: la estrella donde pega y los papelitos que se desprenden.
+    fx.clear();
+    for (const b of blows) {
+      const a = tAll - b.at;
+      if (a < 0 || a > 0.9) continue;
+      if (a < 0.2) {
+        const sc = a < 0.05 ? ease.outBack(a / 0.05) : 1 - ease.inOutCubic((a - 0.05) / 0.15);
+        const R0 = g.R * 0.55 * sc;
+        if (R0 > 0.5) {
+          const star: number[] = [];
+          for (let i = 0; i < 16; i++) {
+            const ang = hash(b.seed, 3) * Math.PI + (i / 16) * Math.PI * 2;
+            const rr = i % 2 ? R0 * 0.42 : R0 * (0.85 + 0.3 * hash(b.seed, i));
+            star.push(b.x + Math.cos(ang) * rr, b.y + Math.sin(ang) * rr);
+          }
+          fx.poly(star).fill(YELLOW).stroke({ width: 2.5 * k, color: INK, join: "round" });
+          fx.circle(b.x, b.y, R0 * 0.24).fill(0xffffff);
+        }
+      }
+      for (let i = 0; i < 12; i++) {
+        const ang = -Math.PI * 0.2 - hash(b.seed, i + 20) * Math.PI * 1.1;
+        const v = (160 + hash(b.seed, i + 40) * 280) * k;
+        const x = b.x + Math.cos(ang) * v * a, y = b.y + Math.sin(ang) * v * a + 0.5 * GRAV * 0.45 * k * a * a;
+        const r = hash(b.seed, i + 60) * 6 + a * (6 + hash(b.seed, i) * 8);
+        const w = 10 * k, h = Math.max(1.5, 6 * k * Math.abs(Math.cos(r)));
+        fx.rect(x - w / 2, y - h / 2, w, h).fill({ color: CONE[i % 7] as number, alpha: 1 - a / 0.9 });
+      }
+    }
+    // Al romperse, un destello de pantalla.
+    const fa = tAll - T_BREAK;
+    flash.alpha = broken && fa >= 0 && fa < 0.18 ? 0.35 * (1 - fa / 0.18) : 0;
     // Los caramelos: los de afuera, cada uno con su color.
     candyG.clear();
     glow.clear();
-    const sz = clamp(Math.sqrt(1 / n) * 36 * k, 7 * k, 16 * k);
+    const sz = candySize();
     for (const c of candies) {
       if (c.inside || c === winC) continue;
       // Los que ya quedaron quietos se dibujan una vez, en la capa del piso.

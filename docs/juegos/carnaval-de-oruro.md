@@ -12,7 +12,7 @@ Y la entrada ya tiene la forma de un sorteo por etapas: una comparsa que avanza 
 
 ## La mecánica
 
-**La comparsa se arma.** Los bailarines arrancan en formación, en filas a lo ancho de la calle, en un orden sembrado. Cada uno es un diablo: máscara con cuernos y ojos saltones, capa del color de su participante con estrellas bordadas, pechera dorada con su cara, y los brazos arriba en el paso.
+**La comparsa se arma.** Los bailarines arrancan en formación, en filas a lo ancho de la calle, en un orden sembrado. Cada uno es un diablo: máscara con cuernos anillados, ojos saltones con reborde y la culebra que baja por la frente; capa del color de su participante con estrellas bordadas; pechera dorada con su cara y lentejuelas que brillan. Y baila entero: los brazos suben y bajan al ritmo, el derecho con su tridente, y las piernas se levantan de a una con la rodilla alta del paso de la Diablada. Hasta el 29 de septiembre de 2026 el cuerpo era un solo dibujo quieto que saltaba.
 
 **Las cuadras.** La comparsa avanza zapateando. En cada arco se para un momento, suenan los bronces de la banda y algunos se quedan: salen a la vereda de arriba y saludan desde ahí. Los que siguen se reacomodan en filas. Hay entre una y cinco cuadras, según cuánta gente haya.
 

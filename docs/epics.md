@@ -859,6 +859,25 @@ Y un auditor nuevo, `scripts/audit-choques.mjs`, que mira la física en ocho sem
 
 En la primera corrida encontró que los golpes de refilón nunca tocaban, que las embestidas llegaban lentas y que en un ruedo lleno quedaban trompos encimados hasta la mitad del diámetro. Ahora pasa 132 de 132. El exigente, el de juegos, el de sonido y el de emoción siguen aprobando el trompo, y la duración elegida se cumple: 30,1 de 30 segundos en normal.
 
+### Historia 10.10: Física, choques y personajes en los demás juegos: hecho
+
+Resultado (2026-09-29): después del trompo, el autor pidió lo mismo para todos los juegos: "que sea correcto, jugable y divertido". Se revisaron los once restantes con capturas en nueve momentos de cada sorteo, y se arregló de lo peor a lo mejor:
+
+- **Tómbola.** Las bolas se veían encimadas: una sola pasada de separación, y un bloque que despejaba la compuerta a la fuerza después de los choques y las sacaba del bombo. Ahora hay varias pasadas (hasta 40 con más de cien bolas), rebote y giro por el roce. La canaleta es de madera, con rieles y postes, y la bola rueda de verdad: el número gira lo que avanza y salta en cada curva. El vaso es de vidrio, con rebote y chispitas. Las bolas tienen un brillo que no gira con ellas.
+- **Aguayo (Pasanaku).** Los cuadrados se pisaban medio cuerpo porque el choque era un círculo aplastado y el dibujo un cuadrado entero. Ahora son q'epis con su nudo, caen de a uno con rebote, se ordenan por profundidad y chocan con varias pasadas. Los hilos se tejen solo entre los que ya cayeron.
+- **Piñata.** Estrella y papelitos en cada palo, la piñata que se aplasta, la estela del palo, caramelos más grandes que rebotan, ruedan y se apilan, y una rotura con destello y la olla en pedazos.
+- **Carreras.** La llama tiene rodillas: la pata se dobla cuando va hacia adelante. En la totora cada palada salpica.
+- **Carnaval de Oruro.** El diablo baila entero: brazos al ritmo, tridente, piernas con la rodilla alta, lentejuelas, cuernos anillados y la culebra en la frente.
+- **Ruleta.** La lengüeta es un resorte amortiguado que tiembla al soltarla. El destello al trabarse no hacía nada (pintaba blanco sobre blanco) y ahora es un golpe.
+- **Cierre de Libro.** El sello aplasta la tarjeta y salpica tinta.
+
+Y un auditor nuevo, `scripts/audit-fisica.mjs`, para los juegos con cuerpos que chocan. Comprueba en cuatro semillas y con 2, 60 y 200 personas:
+- que nadie quede encimado más de un 12% del diámetro;
+- que nadie se escape de donde tiene que estar;
+- que la misma semilla anote lo mismo.
+
+La primera vez que se midió, a mitad del arreglo, la tómbola encimaba bolas hasta un 80% con 200 personas; ahora queda por debajo del 9%, y el aguayo por debajo del 1%. Una trampa de PixiJS que apareció en el camino: un `arc` sin `moveTo` se une con una línea desde el origen, y dibujaba una raya larga que cruzaba la pantalla hasta el vaso.
+
 ---
 
 ## Épica 12: El sitio cuenta el proyecto
