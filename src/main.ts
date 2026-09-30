@@ -93,7 +93,10 @@ initWalletUI();
 refreshFreezeLabel();
 
 /* Modo demo y pose para capturas: `?demo=<juego>`, `?pose=1`, `?instant=1`. */
-const GAMES: readonly Game[] = ["race", "stellar", "ledger", "pasanaku", "teleferico", "tombola", "rockets", "wheel", "trompo", "totora", "pinata", "oruro"];
+// Los del selector, y los tres que salieron el 30 de septiembre de 2026 (el
+// Cierre de Libro, la carrera de cohetes y las balsas de totora), que siguen
+// abriendo con `?demo=` y `?pose=` mientras se decide si se borran.
+const GAMES: readonly Game[] = ["race", "luz", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "ledger", "rockets", "totora"];
 
 async function autoDemo(mode: string): Promise<void> {
   loadSample();

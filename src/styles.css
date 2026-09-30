@@ -31,12 +31,12 @@
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) .hl {
-      background: var(--yellow); color: #191919; padding: 0 0.12em;
+      background-color: var(--yellow); background-image: linear-gradient(var(--paper) 13%, transparent 13%); color: #191919; padding: 0 0.12em;
       -webkit-box-decoration-break: clone; box-decoration-break: clone;
     }
   }
   :root[data-theme="dark"] .hl {
-    background: var(--yellow); color: #191919; padding: 0 0.12em;
+    background-color: var(--yellow); background-image: linear-gradient(var(--paper) 13%, transparent 13%); color: #191919; padding: 0 0.12em;
     -webkit-box-decoration-break: clone; box-decoration-break: clone;
   }
   * { box-sizing: border-box; margin: 0; }
@@ -58,7 +58,9 @@
     font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; font-size: 22px;
   }
   .wordmark b { color: var(--magenta); }
-  .wm-text { text-shadow: 2px 2px 0 var(--purple); }
+  /* Letras planas: la sombra morada debajo de las letras hacía un relieve que
+     ensuciaba el nombre, y más debajo del "ZO" magenta (29 de septiembre de 2026). */
+  .wm-text { text-shadow: none; }
   .wm-llama {
     display: grid; place-items: center; width: 38px; height: 38px; flex: none;
     background: var(--yellow); border: 2.5px solid var(--ink); box-shadow: 3px 3px 0 var(--magenta);
@@ -97,8 +99,16 @@
     box-shadow: var(--sh-sm); padding: 5px 14px; font-family: ui-monospace, Consolas, monospace;
     font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; transform: rotate(-1.5deg);
   }
-  h1 { font-size: clamp(38px, 6.4vw, 64px); line-height: 1.02; letter-spacing: -0.02em; font-weight: 900; max-width: 640px; }
+  /* El resaltado del título queda siempre debajo del resto del texto: con
+     el interlineado apretado, el recuadro amarillo de una línea subía hasta la
+     de arriba y, como se dibuja después, le tapaba las colas a la "q" y a la
+     "p" (29 de septiembre de 2026). `isolation` arma una capa propia para el
+     título y `z-index: -1` manda el resaltado al fondo de esa capa. Además no
+     arranca desde arriba de la letra, y el interlineado tiene un poco más de
+     aire. El auditor de interfaz lo comprueba por píxeles. */
+  h1 { font-size: clamp(38px, 6.4vw, 64px); line-height: 1.08; letter-spacing: -0.02em; font-weight: 900; max-width: 640px; isolation: isolate; }
   .hl { background: linear-gradient(transparent 58%, var(--yellow) 58%); }
+  h1 .hl { position: relative; z-index: -1; }
   .lead { font-size: 18px; color: var(--ink2); max-width: 560px; font-weight: 500; }
   .mascot { color: var(--magenta); transform: rotate(3deg); }
   .mascot svg { width: 150px; height: 130px; filter: drop-shadow(6px 6px 0 var(--ink)); }
@@ -339,7 +349,10 @@
   .stadium { position: fixed; inset: 0; z-index: 40; display: none; background: #10101c; }
   .stadium canvas { position: absolute; inset: 0; width: 100%; height: 100%; max-width: none; }
   .st-top { position: absolute; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; z-index: 2; }
-  .st-brand { background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); padding: 4px 12px; font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase; font-size: clamp(14px, 1.3vw, 20px); }
+  /* El mismo logo de la cabecera, en chico: la llama en su cuadro y el nombre plano. */
+  .st-brand { display: inline-flex; align-items: center; gap: 9px; background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); padding: 4px 12px 4px 6px; font-weight: 900; letter-spacing: 0.06em; text-transform: uppercase; font-size: clamp(14px, 1.3vw, 20px); }
+  .st-brand .wm-llama { width: 26px; height: 26px; border-width: 2px; box-shadow: 2px 2px 0 var(--magenta); }
+  .st-brand .wm-llama svg { width: 17px; height: 18px; animation: none; }
   .st-brand b { color: var(--magenta); }
   /* El número de ronda es el dato que hace verificable el sorteo. A diez
      píxeles fijos no se lee desde el fondo de la sala, así que escala con la

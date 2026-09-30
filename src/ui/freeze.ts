@@ -17,17 +17,15 @@ import { preloadGame } from "../games/engine";
  */
 export const GAME_BUTTONS: ReadonlyArray<[string, Game]> = [
   ["g-race", "race"],
-  ["g-stellar", "stellar"],
-  ["g-ledger", "ledger"],
-  ["g-pasanaku", "pasanaku"],
-  ["g-teleferico", "teleferico"],
-  ["g-tombola", "tombola"],
-  ["g-rockets", "rockets"],
-  ["g-wheel", "wheel"],
+  ["g-luz", "luz"],
   ["g-trompo", "trompo"],
-  ["g-totora", "totora"],
   ["g-pinata", "pinata"],
   ["g-oruro", "oruro"],
+  ["g-tombola", "tombola"],
+  ["g-wheel", "wheel"],
+  ["g-teleferico", "teleferico"],
+  ["g-pasanaku", "pasanaku"],
+  ["g-stellar", "stellar"],
 ];
 
 export function setGame(g: Game): void {
@@ -213,11 +211,11 @@ export async function freeze(): Promise<void> {
 
   if (names.length > WHEEL_MAX) {
     // La ruleta es el único juego con tope. Los demás aguantan doscientos, y
-    // Cierre de Libro justamente se ve mejor cuantos más haya, así que el
-    // reemplazo automático va para ahí y no para la carrera.
+    // el reemplazo automático va a la carrera, que es el juego de la casa.
+    // Iba al Cierre de Libro, que salió del selector el 30 de septiembre de 2026.
     $<HTMLButtonElement>("g-wheel").disabled = true;
     $("wheel-cap").style.display = "block";
-    if (app.game === "wheel") setGame("ledger");
+    if (app.game === "wheel") setGame("race");
   }
   startCountdown();
   $("sec-frozen").scrollIntoView({ behavior: "smooth", block: "start" });

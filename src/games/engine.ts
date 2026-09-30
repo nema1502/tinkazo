@@ -50,7 +50,7 @@ const pedidos = new Set<Game>();
 export function preloadGame(game: Game, people: number): void {
   if (!usePixi()) return;
   // La misma sustitución que hace draw.ts: con mucha gente la ruleta no entra.
-  const g: Game = game === "wheel" && people > WHEEL_MAX ? "ledger" : game;
+  const g: Game = game === "wheel" && people > WHEEL_MAX ? "race" : game;
   if (pedidos.has(g)) return;
   pedidos.add(g);
   import("./pixi").then(

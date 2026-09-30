@@ -3,7 +3,7 @@
  * El auditor de física.
  *
  * Los juegos con cuerpos que chocan entre sí (las bolas de la tómbola, los
- * q'epis del aguayo) anotan con `?auditar=fisica` lo
+ * q'epis del aguayo) y luz roja, luz verde anotan con `?auditar=fisica` lo
  * encimados que quedan después de cada paso y si alguno se escapó de donde
  * tiene que estar. Este auditor los corre en varias semillas y con 2, 18, 60 y
  * 200 personas, y comprueba:
@@ -25,7 +25,7 @@
 import { createHash } from "node:crypto";
 import { launch } from "./lib/browser.mjs";
 
-const TODOS = ["tombola", "pasanaku"];
+const TODOS = ["tombola", "pasanaku", "luz"];
 const args = process.argv.slice(2);
 const opt = (name, def) => {
   const i = args.indexOf(name);
@@ -98,6 +98,16 @@ try {
       check("sin errores", r.errores + r.excepciones.length === 0, r.excepciones[0]?.slice(0, 100) ?? "");
       check("nadie atraviesa a nadie", r.log.maxOverlap < 0.12, `lo más encimado: ${(r.log.maxOverlap * 100).toFixed(1)}% del diámetro${r.log.maxAt !== undefined ? `, a los ${r.log.maxAt} s` : ""}`);
       check("nadie se escapa", r.log.escapes === 0, r.log.escapes ? `${r.log.escapes} veces afuera` : "");
+      // Luz roja, luz verde: el haz solo agarra a los que se mueven, y con luz
+      // roja nadie más se mueve.
+      if (r.log.catches) {
+        const quietos = r.log.catches.filter((c) => !(c.v > 0.01));
+        const lejos = r.log.catches.filter((c) => c.dist > 0.13);
+        check("a nadie lo agarran quieto", quietos.length === 0, quietos.length ? `${quietos.length} agarrados quietos` : `${r.log.catches.length} agarrados, todos moviéndose`);
+        check("el haz los agarra cuando pasa por encima", lejos.length === 0, lejos.length ? `${lejos.length} agarrados lejos del haz` : "");
+        check("con luz roja nadie más se mueve", r.log.redMove === 0, `lo más rápido: ${r.log.redMove}`);
+        check("agarra a todos los que tocaba, y nunca a la ganadora", r.log.catches.length === r.log.planned && !r.log.catches.some((c) => c.idx === r.log.winner), `${r.log.catches.length} de ${r.log.planned}`);
+      }
     }
     const otra = await correr(browser, juego, { seed: 1 });
     console.log(`\n${juego} · reproducible`);

@@ -106,6 +106,59 @@ async function connect(page) {
   return cerro.ok;
 }
 
+/**
+ * Que el resaltado del título no tape letras de otra línea.
+ *
+ * El 29 de septiembre de 2026 el recuadro amarillo de "cualquiera puede
+ * comprobar" le tapaba las colas a la "q" de "que", en la línea de arriba: el
+ * interlineado era apretado y el resaltado, que se dibuja después, subía hasta
+ * ahí. Ninguna comprobación lo veía, porque las cajas no se pisaban: se pisaba
+ * lo pintado.
+ *
+ * Por eso se mide por píxeles: una foto del título tal cual y otra con el
+ * resaltado borrado entero (sin fondo y con sus letras transparentes), donde
+ * solo queda el resto del texto. Un píxel del centro de una letra de esa
+ * segunda foto que en la primera es amarillo es una letra tapada. Los bordes
+ * suavizados no cuentan: ahí se mezclan los colores aunque nada tape nada.
+ */
+async function resaltadoTapa(page) {
+  const box = JSON.parse(await page.eval(`(() => { scrollTo(0, 0); const h = document.querySelector('h1'); if (!h || !h.querySelector('.hl')) return JSON.stringify({ w: 0 }); const r = h.getBoundingClientRect(); return JSON.stringify({ x: r.left, y: r.top, w: r.width, h: r.height }); })()`));
+  if (!box.w) return { ok: true, detail: "sin resaltado en el título" };
+  const clip = { x: Math.max(0, box.x - 4), y: Math.max(0, box.y - 4), width: box.w + 8, height: box.h + 8, scale: 1 };
+  const shot = async () => (await page.send("Page.captureScreenshot", { format: "png", clip })).data;
+  await sleep(200);
+  const a = await shot();
+  await page.eval(`(() => { const s = document.createElement('style'); s.id = '__sin-hl'; s.textContent = 'html body h1 .hl.hl.hl { background: none !important; color: transparent !important; }'; document.head.appendChild(s); return true; })()`);
+  await sleep(150);
+  const b = await shot();
+  await page.eval(`(() => { document.getElementById('__sin-hl')?.remove(); return true; })()`);
+  const r = JSON.parse(await page.eval(`(async () => {
+    const load = async (d) => {
+      const im = new Image();
+      im.src = 'data:image/png;base64,' + d;
+      await im.decode();
+      const c = document.createElement('canvas');
+      c.width = im.width; c.height = im.height;
+      const x = c.getContext('2d');
+      x.drawImage(im, 0, 0);
+      return x.getImageData(0, 0, c.width, c.height).data;
+    };
+    const A = await load(${JSON.stringify(a)}), B = await load(${JSON.stringify(b)});
+    const hex = getComputedStyle(document.documentElement).getPropertyValue('--yellow').trim().replace('#', '');
+    const Y = [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)];
+    const lum = (d, i) => (d[i] * 0.2126 + d[i + 1] * 0.7152 + d[i + 2] * 0.0722) / 255;
+    const fondo = lum(B, 0);
+    let tapadas = 0;
+    for (let i = 0; i < B.length; i += 4) {
+      const centro = Math.abs(lum(B, i) - fondo) > 0.55;
+      const amarillo = Math.abs(A[i] - Y[0]) + Math.abs(A[i + 1] - Y[1]) + Math.abs(A[i + 2] - Y[2]) < 60;
+      if (centro && amarillo) tapadas++;
+    }
+    return JSON.stringify({ tapadas });
+  })()`));
+  return { ok: r.tapadas <= 12, detail: `${r.tapadas} píxeles de letra tapados`, tapadas: r.tapadas };
+}
+
 async function run() {
   await mkdir(outDir, { recursive: true });
   const browser = await launch({ width: 1440, height: 900 });
@@ -120,6 +173,10 @@ async function run() {
           screenWidth: ancho, screenHeight: alto,
         });
         await page.send("Page.navigate", { url: `${base}/?theme=${tema}` });
+        await page.waitFor("document.readyState === 'complete' && document.fonts && document.fonts.status === 'loaded'", 15000);
+
+        const tapa = await resaltadoTapa(page);
+        check(`${etiqueta} ${tema}: el resaltado del título no tapa letras`, tapa.ok, tapa.detail);
 
         const ok = await connect(page);
         check(`${etiqueta} ${tema}: conecta una cuenta`, ok);

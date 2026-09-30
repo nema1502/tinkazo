@@ -57,7 +57,7 @@ sequenceDiagram
 1. **Seal.** The list is canonicalized and hashed with SHA-256. The contract records the fingerprint, the head count, the number of winners and a **future** drand round. The contract refuses a round less than 30 seconds away.
 2. **Wait for the number.** [drand](https://drand.love) quicknet, the public randomness beacon run by the League of Entropy (Cloudflare, Protocol Labs, EPFL and others), publishes a BLS-signed round every 3 seconds. Nobody, including the organizer and Tinkazo, can know or choose it in advance.
 3. **Draw.** `draw` verifies the round's BLS12-381 signature **inside the contract** with a pairing check, derives the seed and selects the winners deterministically. It asks nobody for permission: if the organizer disappears mid-event, anyone can finalize the draw and the winner is the same.
-4. **Show.** One of twelve full-screen games tells the result. The winner is already fixed when the animation starts; the game only narrates it.
+4. **Show.** One of ten full-screen games tells the result. The winner is already fixed when the animation starts; the game only narrates it.
 5. **Verify.** The proof is a link. Whoever opens it watches the page recompute the draw from scratch and gets a verdict: green if the contract attests the list, yellow if the draw was not anchored, red with the reason if anything does not match.
 
 The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.md) ([English translation](docs/protocol.en.md)), with test vectors shared by the Rust contract and the TypeScript client ([docs/vectors.json](docs/vectors.json)). Anyone can reimplement it and reach the same winners.
@@ -78,7 +78,7 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 | Web app | Live | [tinkazo.vercel.app](https://tinkazo.vercel.app) · Spanish and English · light and dark · no backend |
 | Luma import | Live | Drop the guest export and pick who gets in: those who checked in, the approved ones, or by hand |
 | Verification page | Live | Recomputes any draw in the browser from its proof link |
-| Twelve stadium games | Live | Deterministic: the same round draws the same frames on any machine |
+| Ten stadium games | Live | Deterministic: the same round draws the same frames on any machine |
 | Protocol v2 | Specified | [docs/protocolo.md](docs/protocolo.md) ([in English](docs/protocol.en.md)) and shared vectors that both implementations must pass |
 | Quality gates | In CI and in the repo | 82 TypeScript tests, the 19 contract tests, and five custom auditors (below) |
 
@@ -96,20 +96,18 @@ Tested with a thousand participants: the draw still runs at 60 frames per second
 
 ## The show
 
-Fairness is math; the show is what makes a room care. Twelve games, most of them rooted in Bolivian and Latin American culture, each seeded with the same drand round, so a draw's animation is reproducible:
+Fairness is math; the show is what makes a room care. Ten games, most of them rooted in Bolivian and Latin American culture, each seeded with the same drand round, so a draw's animation is reproducible:
 
 | Game | What it is |
 |---|---|
 | Stellar Constellation | A payment hops from star to star looking for a route, like a path payment, and leaves a constellation drawn |
-| Ledger Close | Cards are swept away by ledger closes until one stays sealed |
 | Llama Race | Eight lanes across the Andes |
-| Rocket Race | The same race, in space |
+| Red Light, Green Light | The playground game: on green everyone runs, on red the Lighthouse turns around and sweeps the field with its beam, and anyone it catches moving sits down |
 | Aguayo | The Andean carrying cloth: everyone's bundle sits on it, the cloth closes and ties up, and the one left goes off in the knot |
 | Cable Car | Cabins in the colors of the La Paz and El Alto lines climb the cable; half the riders get off at each station |
 | Ball Drum | The fair's drum, one numbered ball per person on the sealed list |
 | Wheel | The classic, readable even with two people |
 | Spinning Tops | The schoolyard game: tops thrown into a chalk ring clash and knock each other out, down to a head-to-head |
-| Reed Boats | Totora reed boats with a puma-head prow race across Lake Titicaca |
 | Piñata | The seven-pointed star from the posadas: every swing knocks names out, and the last candy inside wins |
 | Oruro Carnival | A Diablada troupe dances block by block toward the Socavón; a few stay at every arch |
 
@@ -205,7 +203,7 @@ Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pa
 index.html · verificar.html     The tool, and the page that re-runs a draw from its proof
 src/protocol/                   Canonical list, selection, drand, proof
 src/stellar/                    Network, wallets and contract client
-src/games/                      The twelve games and the scaffolding they share
+src/games/                      The ten games and the scaffolding they share
 contracts/raffle/               The Soroban contract, in Rust
 docs/                           Protocol, architecture, threats, deployments, legal, games
 scripts/                        Deployment, smoke test and the auditors

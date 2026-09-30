@@ -878,6 +878,30 @@ Y un auditor nuevo, `scripts/audit-fisica.mjs`, para los juegos con cuerpos que 
 
 La primera vez que se midió, a mitad del arreglo, la tómbola encimaba bolas hasta un 80% con 200 personas; ahora queda por debajo del 9%, y el aguayo por debajo del 1%. Una trampa de PixiJS que apareció en el camino: un `arc` sin `moveTo` se une con una línea desde el origen, y dibujaba una raya larga que cruzaba la pantalla hasta el vaso.
 
+### Historia 10.11: Luz roja, luz verde, y diez juegos en vez de doce: hecho
+
+Resultado (2026-09-30): el autor pidió "el juego del calamar". Se hizo el juego de patio que usa la serie, luz roja, luz verde, sin la marca ni la muñeca de Netflix y sin nada de apuestas.
+
+Quien mira es el Faro, que es lo que es drand para Tinkazo:
+- **Luz verde:** de espaldas, canta y los corredores avanzan.
+- **Luz roja:** se da vuelta y barre la cancha con un haz rojo.
+
+Cada corredor frena con su inercia, y al que no le alcanza el freno el haz lo agarra moviéndose ("¡te vi!") y se sienta. La cancha se ve en perspectiva, con una cámara que avanza detrás del grupo desde tres metros de alto. Detalle en [juegos/luz-roja-luz-verde.md](juegos/luz-roja-luz-verde.md).
+
+El auditor de física suma sus comprobaciones y pasa 50 de 50:
+- a nadie lo agarran quieto;
+- el haz los agarra cuando pasa por encima;
+- con luz roja nadie más se mueve;
+- nunca agarra a la ganadora.
+
+El exigente encontró que con dos personas la presentación quedaba quieta 4,4 segundos, con dos corredores diminutos en las puntas de la cancha. Ahora la cámara entra desde atrás, los carriles se juntan y los corredores calientan en el lugar.
+
+**Salieron del selector** la carrera de cohetes y las balsas de totora, que eran la misma carrera de llamas con otra piel, y el Cierre de Libro, el menos visual. El código sigue y abren con `?demo=`. La ruleta con más de 24 personas pasa ahora a la carrera de llamas.
+
+Y dos arreglos de interfaz que pidió el autor:
+- **El resaltado del título.** El recuadro amarillo de "cualquiera puede comprobar" le tapaba las colas a la "q" de la línea de arriba. Se arregló con tres cambios: más interlineado, el resaltado que no sube hasta la otra línea, y el resaltado siempre debajo del resto del texto. El auditor de interfaz lo comprueba ahora por píxeles: dos fotos del título, con y sin el resaltado, y cuenta las letras que el amarillo tapó. Con el CSS viejo marca miles de píxeles; con el nuevo, cero.
+- **El logo.** Perdió la sombra morada debajo de las letras, que hacía un relieve que ensuciaba el nombre. El estadio muestra ahora el mismo logo que la cabecera, con la llamita.
+
 ---
 
 ## Épica 12: El sitio cuenta el proyecto

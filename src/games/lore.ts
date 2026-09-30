@@ -205,6 +205,19 @@ export const LORE: Record<string, Lore[]> = {
       hue: "teal",
     },
   ],
+  luz: [
+    {
+      // drand.love: "Distributed randomness beacon" y "Verifiable,
+      //  unpredictable and unbiased random numbers as a service"; "The League
+      //  of Entropy is a collaborative project to provide a verifiable,
+      //  decentralized randomness beacon".
+      q: "loreLuzQ",
+      a: "loreLuzA",
+      href: "https://drand.love/",
+      src: "drand.love",
+      hue: "teal",
+    },
+  ],
   trompo: [
     {
       // "trompo. II. 1. m. CR, Bo; Ur, obsol. Juego de niños que se practica

@@ -133,7 +133,7 @@ Módulos y responsabilidades:
 | `src/music.ts` | La música de fondo, andina con beat, generada en el navegador con la semilla de la ronda. Arranca prendida y más baja que los efectos; sigue la tensión de cada línea de la caja del estadio. Desde el 28 de septiembre de 2026 no hay relator con voz: lo sacó el autor porque no le gustaba, y quedaron los subtítulos |
 | `src/stellar/contract.ts` | `contract.Client` tipado de `tinkazo-raffle`: `seal`, `draw`, `getRaffle`, `getDraw` |
 | `src/games/overlay.ts` | El andamiaje de los juegos: monta el estadio, siembra el azar con la ronda, dibuja los chips, registra el botón de saltar, pide pantalla completa y desmonta |
-| `src/games/*.ts` | Los juegos del motor anterior; los doce del motor nuevo viven en `src/games/pixi/`. Ninguno calcula nada: reciben el ganador ya decidido. Cada uno declara con `setGameLength` cuánto dura sin estirar, porque el selector de duración apunta a una cantidad de segundos y no multiplica |
+| `src/games/*.ts` | Los juegos del motor anterior; los del motor nuevo viven en `src/games/pixi/`: diez en el selector, y tres que salieron de él el 30 de septiembre de 2026 (Cierre de Libro, carrera de cohetes y balsas de totora) y siguen abriendo con `?demo=`. Ninguno calcula nada: reciben el ganador ya decidido. Cada uno declara con `setGameLength` cuánto dura sin estirar, porque el selector de duración apunta a una cantidad de segundos y no multiplica |
 | `src/games/lore.ts` | Las tarjetas de "¿por qué se llama así?", con su fuente primaria |
 | `src/ui/*.ts` | Render de secciones: lista, sello, cuenta regresiva, resultado, errores |
 | `verificar.html` + `src/verify.ts` | Página de verificación de solo lectura (FR-17 a 21) |
@@ -142,7 +142,7 @@ El adaptador de wallet es una interfaz pequeña para que se pueda agregar una wa
 
 **La capa de juegos.** `overlay.ts` expone un `Stage` con el lienzo, el azar sembrado con `beacon.randomness`, los chips con avatar, los subtítulos del estadio y el desmontaje idempotente. Un juego nuevo pide `mount()` y recibe todo eso; si devuelve `null` es porque corre en modo `?instant=1` y hay que cerrar el sorteo de una.
 
-Dos reglas que valen para los doce juegos:
+Dos reglas que valen para todos los juegos:
 
 - **Ninguno decide nada.** El ganador llega por parámetro desde `playGame()` en `src/ui/draw.ts`. Lo único sembrado es cómo se ve.
 - **Nunca `Math.random()`.** Todo el azar visual sale del PRNG de `overlay.ts`, así que la misma ronda dibuja siempre la misma animación en cualquier navegador. Eso incluye las frases del narrador: `setPickSeed()` le presta ese azar a `src/i18n.ts` mientras hay un juego corriendo.

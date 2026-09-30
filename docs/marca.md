@@ -139,22 +139,20 @@ El sitio está en español boliviano con voseo, y en inglés neutro. No hay un t
 
 Dentro de los juegos el texto es de relator de partido: mayúsculas, gritos, "¡NO RESPIRA NADIE!". Eso vive solo ahí. No se filtra a la página ni a una presentación.
 
-## Los doce juegos
+## Los diez juegos
 
 Cada uno tiene su color dominante, útil si una diapositiva los muestra. Seis salen de la cultura boliviana y latinoamericana.
 
 | Juego | Color | En una frase |
 |---|---|---|
 | Constelación Stellar | Morado y amarillo | Un pago que salta de estrella en estrella hasta encontrar ruta |
-| Cierre de Libro | Turquesa | Tarjetas barridas por el cierre de un ledger |
 | Aguayo | Los cinco, en franjas | Un aguayo que se cierra hasta que queda uno en el nudo |
 | Teleférico | Los de las líneas, sobre un atardecer | Un convoy que sube y en cada estación se baja la mitad |
 | Tómbola | Naranja y amarillo, con las bolas de los cinco | El bombo de la kermés: la bola que sale es la ganadora |
 | Carrera de llamas | Naranja y magenta | Ocho carriles por la cordillera |
-| Carrera de cohetes | Morado | La misma carrera, en el espacio |
+| Luz roja, luz verde | Pasto de noche, el verde y el rojo del Faro | El juego de patio: al que el Faro ve moviéndose, se sienta |
 | Ruleta | Los cinco, en gajos | La de siempre, pero que se ve girar con dos personas |
 | Trompo | Tierra, con trompos de los cinco | El ruedo de tiza: chocan y se caen hasta el mano a mano |
-| Balsas de totora | Azul del lago y amarillo | La carrera, remando por el Titicaca |
 | Piñata | Los cinco, en conos | Cada palo tira caramelos; el último que queda adentro gana |
 | Carnaval de Oruro | Rojo de las máscaras y amarillo, de noche | Una comparsa de la Diablada que se queda cuadra por cuadra hasta el Socavón |
 

@@ -137,7 +137,7 @@ Era un multiplicador fijo (`0,8 / 1,4 / 2,2`) y el problema no era el número si
 
 **El tope de ×2,2 no es negociable.** Más que eso no es más emoción, es cámara lenta: la ruleta tenía dos segundos de crucero en los que la imagen es un borrón, y multiplicarlos por tres y medio son ocho segundos de nada. Un juego que topa ahí **necesita más contenido, no ir más despacio**. Por eso la ruleta pasó de 7,65 a 17,2 segundos nominales acortando el borrón y alargando la frenada, el Cierre de Libro llegó a seis pasadas y al Pasanaku se le dio tiempo al tejido de los hilos y al apretón.
 
-Hoy, medido por el auditor exigente: "normal" son treinta segundos en los doce.
+Hoy, medido por el auditor exigente: "normal" son treinta segundos en los diez del selector.
 
 ## El sonido
 
@@ -204,6 +204,9 @@ La carrera actúa la historia entera. Los demás juegos toman del director el ar
 | Piñata | Remontada | **Al aire.** Dos palos que no le pegan a nada antes de los últimos |
 | Carnaval de Oruro | Susto | **La máscara.** En la última cuadra a la ganadora casi se le cae la máscara |
 | Carnaval de Oruro | Remontada | **Desde atrás.** Arranca en la última fila de la comparsa y en cada cuadra avanza |
+| Luz roja, luz verde | Susto | **El haz se detiene.** El Faro mira a la ganadora, que se tambalea sin dar un paso, y el haz sigue de largo ("¡por un pelo!") |
+| Luz roja, luz verde | Remontada | **Desde el fondo.** Arranca última y en el último verde pasa a todos |
+| Luz roja, luz verde | Duelo | **Una luz roja más.** La rival va adelante hasta que el haz la agarra en la última |
 | Balsas de totora | Todos | **El lago.** Los mismos momentos de la carrera, contados en agua: la balsa que se queda quieta, la ola que la ladea, la salpicada |
 | Constelación | Susto | **El roce.** A mitad de juego el paquete va derecho a la estrella del ganador, la roza (la estrella se enciende) y se desvía. El amague del último salto ya estaba, en todos los sorteos |
 
@@ -289,14 +292,20 @@ El ritmo, la legibilidad del cartel y el tartamudeo de los subtítulos ya los mi
 | Juego | `?demo=` | Tipo | Hasta | Documento |
 |---|---|---|---|---|
 | Carrera de llamas | `race` | Motor de carrera, tema andino | 8 en pantalla | · |
-| Constelación Stellar | `stellar` | Módulo propio | 200 | [constelacion-stellar.md](juegos/constelacion-stellar.md) |
-| Cierre de Libro | `ledger` | Módulo propio | 200 | [cierre-de-libro.md](juegos/cierre-de-libro.md) |
-| Carrera de cohetes | `rockets` | Motor de carrera, tema espacial | 8 en pantalla | [carrera-stellar.md](juegos/carrera-stellar.md) |
-| Aguayo (antes Pasanaku) | `pasanaku` | Módulo propio | 200 | [pasanaku.md](juegos/pasanaku.md), que ahora cuenta el Aguayo |
-| Ruleta | `wheel` | Módulo propio | 24 | [ruleta.md](juegos/ruleta.md) |
-| Teleférico | `teleferico` | Módulo propio | 200 | [teleferico.md](juegos/teleferico.md) |
-| Tómbola | `tombola` | Módulo propio | 200 | [tombola.md](juegos/tombola.md) |
+| Luz roja, luz verde | `luz` | Módulo propio (solo motor nuevo) | 200 | [luz-roja-luz-verde.md](juegos/luz-roja-luz-verde.md) |
 | Trompo | `trompo` | Módulo propio (solo motor nuevo) | 200 | [trompo.md](juegos/trompo.md) |
-| Balsas de totora | `totora` | Motor de carrera, tema del lago | 8 en pantalla | [balsas-de-totora.md](juegos/balsas-de-totora.md) |
 | Piñata | `pinata` | Módulo propio (solo motor nuevo) | 200 | [pinata.md](juegos/pinata.md) |
 | Carnaval de Oruro | `oruro` | Módulo propio (solo motor nuevo) | 200 | [carnaval-de-oruro.md](juegos/carnaval-de-oruro.md) |
+| Tómbola | `tombola` | Módulo propio | 200 | [tombola.md](juegos/tombola.md) |
+| Ruleta | `wheel` | Módulo propio | 24 | [ruleta.md](juegos/ruleta.md) |
+| Teleférico | `teleferico` | Módulo propio | 200 | [teleferico.md](juegos/teleferico.md) |
+| Aguayo (antes Pasanaku) | `pasanaku` | Módulo propio | 200 | [pasanaku.md](juegos/pasanaku.md), que ahora cuenta el Aguayo |
+| Constelación Stellar | `stellar` | Módulo propio | 200 | [constelacion-stellar.md](juegos/constelacion-stellar.md) |
+
+**Los que salieron del selector** el 30 de septiembre de 2026, porque sumaban poco: la carrera de cohetes y las balsas de totora eran la misma carrera de llamas con otra piel, y el Cierre de Libro era el menos visual. El código sigue y se abren con `?demo=` mientras se decide si se borran; la ruleta con más de 24 personas ahora pasa a la carrera de llamas, no al Cierre de Libro.
+
+| Juego | `?demo=` | Documento |
+|---|---|---|
+| Cierre de Libro | `ledger` | [cierre-de-libro.md](juegos/cierre-de-libro.md) |
+| Carrera de cohetes | `rockets` | [carrera-stellar.md](juegos/carrera-stellar.md) |
+| Balsas de totora | `totora` | [balsas-de-totora.md](juegos/balsas-de-totora.md) |

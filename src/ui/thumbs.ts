@@ -272,6 +272,75 @@ const PAINTERS: Record<string, Painter> = {
       c.restore();
     }
   },
+  /**
+   * Luz roja, luz verde: el Faro al fondo y tres corredores de espaldas. Con
+   * luz verde corren hacia él; con roja se da vuelta, se congelan, y al que
+   * sigue moviéndose le sale la cruz.
+   */
+  luz(c, t, col) {
+    const ciclo = t % 4;
+    const verde = ciclo < 2.2;
+    c.fillStyle = "#241c3a";
+    c.fillRect(0, 0, W, H);
+    c.fillStyle = "#2f7d45";
+    c.beginPath();
+    c.moveTo(W * 0.38, 18);
+    c.lineTo(W * 0.62, 18);
+    c.lineTo(W + 10, H);
+    c.lineTo(-10, H);
+    c.closePath();
+    c.fill();
+    // El Faro: la torre y la lámpara del color de la luz.
+    c.fillStyle = "#f6efe2";
+    c.fillRect(W / 2 - 3, 6, 6, 14);
+    c.fillStyle = "#e93d9c";
+    c.fillRect(W / 2 - 3, 10, 6, 2.5);
+    c.fillStyle = INK;
+    c.fillRect(W / 2 - 4, 3, 8, 4);
+    c.fillStyle = verde ? "#3ddc84" : "#ff3b3b";
+    c.beginPath();
+    c.arc(W / 2, 5, 3, 0, TAU);
+    c.fill();
+    if (!verde) {
+      c.fillStyle = "rgba(255,59,59,0.22)";
+      c.beginPath();
+      c.moveTo(W / 2, 5);
+      const sx = W / 2 + Math.sin((ciclo - 2.2) * 3) * 40;
+      c.lineTo(sx - 12, H);
+      c.lineTo(sx + 12, H);
+      c.closePath();
+      c.fill();
+    }
+    // Los corredores, de espaldas: avanzan en verde y quedan quietos en rojo.
+    for (let i = 0; i < 3; i++) {
+      const avance = verde ? ciclo / 2.2 : 1;
+      const d = 0.15 + (i === 1 ? 0.12 : 0) + avance * 0.35;
+      const y = H - 8 - d * 40;
+      const x = W / 2 + (i - 1) * (26 - d * 16);
+      const s = 1.2 - d * 0.6;
+      const paso = verde ? Math.sin(t * 16 + i * 2) : 0;
+      c.fillStyle = "#2b2d42";
+      c.fillRect(x - 3 * s, y - 7 * s + Math.max(0, paso) * 2, 2.4 * s, 7 * s);
+      c.fillRect(x + 0.6 * s, y - 7 * s + Math.max(0, -paso) * 2, 2.4 * s, 7 * s);
+      c.fillStyle = col(i);
+      c.fillRect(x - 4 * s, y - 15 * s, 8 * s, 8.5 * s);
+      c.fillStyle = "#2b1d14";
+      c.beginPath();
+      c.arc(x, y - 17.5 * s, 2.8 * s, 0, TAU);
+      c.fill();
+      // Al del medio lo ven en la luz roja.
+      if (!verde && i === 1 && ciclo > 2.9) {
+        c.strokeStyle = "#d7263d";
+        c.lineWidth = 2;
+        c.beginPath();
+        c.moveTo(x - 3 * s, y - 14 * s);
+        c.lineTo(x + 3 * s, y - 8 * s);
+        c.moveTo(x + 3 * s, y - 14 * s);
+        c.lineTo(x - 3 * s, y - 8 * s);
+        c.stroke();
+      }
+    }
+  },
   /** Tres trompos bailando en el ruedo de tiza; cada tanto uno se cae. */
   trompo(c, t, col) {
     c.fillStyle = "#4a3526";

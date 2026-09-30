@@ -57,7 +57,7 @@ sequenceDiagram
 1. **Sellar.** La lista se normaliza y se resume con SHA-256. El contrato anota la huella, la cantidad de personas, cuántos ganan y una ronda **futura** de drand, y rechaza una ronda a menos de treinta segundos.
 2. **Esperar el número.** [drand](https://drand.love) quicknet, el faro público de aleatoriedad de la League of Entropy (Cloudflare, Protocol Labs, la EPFL y otros), publica una ronda firmada cada tres segundos. Nadie, ni quien organiza ni Tinkazo, puede conocerla ni elegirla antes.
 3. **Sortear.** `draw` verifica la firma BLS12-381 de la ronda **dentro del contrato**, deriva la semilla y elige a los ganadores de forma determinista. No le pide permiso a nadie: si quien organiza desaparece en medio del evento, cualquiera lo finaliza y el ganador es el mismo.
-4. **El show.** Uno de doce juegos a pantalla completa cuenta el resultado. Cuando arranca la animación, el ganador ya está fijado: el juego solo lo relata.
+4. **El show.** Uno de diez juegos a pantalla completa cuenta el resultado. Cuando arranca la animación, el ganador ya está fijado: el juego solo lo relata.
 5. **Revisar.** El comprobante es un enlace. Quien lo abre ve a la página rehacer el sorteo desde cero y recibe un veredicto: verde si el contrato atestigua la lista, amarillo si el sorteo no se ancló, rojo con el motivo si algo no cuadra.
 
 La selección completa es una especificación normativa, el [protocolo v2](docs/protocolo.md), con vectores de prueba que comparten el contrato en Rust y el cliente en TypeScript ([docs/vectors.json](docs/vectors.json)). Cualquiera puede reimplementarlo y llegar a los mismos ganadores.
@@ -78,7 +78,7 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 | Sitio | En producción | [tinkazo.vercel.app](https://tinkazo.vercel.app) · español e inglés · tema claro y oscuro · sin servidor |
 | Importar de Luma | En producción | Se suelta el export de invitados y se elige quién entra: los que hicieron check-in, los aprobados o a mano |
 | Página de verificación | En producción | Rehace cualquier sorteo en el navegador desde su comprobante |
-| Doce juegos de estadio | En producción | Deterministas: la misma ronda dibuja los mismos cuadros en cualquier máquina |
+| Diez juegos de estadio | En producción | Deterministas: la misma ronda dibuja los mismos cuadros en cualquier máquina |
 | Protocolo v2 | Especificado | [docs/protocolo.md](docs/protocolo.md) y vectores que las dos implementaciones tienen que pasar |
 | Controles de calidad | En la CI y en el repositorio | 82 tests de TypeScript, los 19 del contrato y cinco auditores propios (abajo) |
 
@@ -96,20 +96,18 @@ Probado con mil participantes: el sorteo sigue a sesenta cuadros por segundo y s
 
 ## El show
 
-La justicia es matemática; el show es lo que hace que a la sala le importe. Doce juegos, casi todos de la cultura boliviana y latinoamericana, sembrados con la misma ronda de drand, así que la animación de un sorteo se puede reproducir:
+La justicia es matemática; el show es lo que hace que a la sala le importe. Diez juegos, casi todos de la cultura boliviana y latinoamericana, sembrados con la misma ronda de drand, así que la animación de un sorteo se puede reproducir:
 
 | Juego | Qué es |
 |---|---|
 | Constelación Stellar | Un pago salta de estrella en estrella buscando ruta, como un *path payment*, y deja dibujada una constelación |
-| Cierre de Libro | Tarjetas barridas por el cierre de un ledger hasta que queda una sellada |
 | Carrera de llamas | Ocho carriles por la cordillera |
-| Carrera de cohetes | La misma carrera, en el espacio |
+| Luz roja, luz verde | El juego de patio: con verde se corre, con roja el Faro se da vuelta y barre la cancha con su haz, y al que ve moviéndose se sienta |
 | Aguayo | La tela andina que carga: el bulto de cada uno va encima, la tela se cierra y se amarra, y el que queda se va en el nudo |
 | Teleférico | Cabinas con los colores de las líneas de La Paz y El Alto suben por el cable; en cada estación se baja la mitad |
 | Tómbola | El bombo de la kermés, una bola numerada por persona de la lista sellada |
 | Ruleta | La de siempre, que se ve bien hasta con dos personas |
 | Trompo | El juego de patio: los trompos se tiran al ruedo de tiza, chocan y se sacan hasta el mano a mano |
-| Balsas de totora | Balsas de totora con proa de puma cruzan el lago Titicaca |
 | Piñata | La estrella de siete picos de las posadas: con cada palo caen nombres, y gana el último caramelo que quedaba adentro |
 | Carnaval de Oruro | Una comparsa de la Diablada baila cuadra por cuadra hacia el Socavón; en cada arco se quedan algunos |
 
@@ -205,7 +203,7 @@ Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledg
 index.html · verificar.html     La herramienta, y la página que rehace un sorteo desde su comprobante
 src/protocol/                   Lista canónica, selección, drand, comprobante
 src/stellar/                    Red, billeteras y cliente del contrato
-src/games/                      Los doce juegos y el andamiaje que comparten
+src/games/                      Los diez juegos y el andamiaje que comparten
 contracts/raffle/               El contrato Soroban, en Rust
 docs/                           Protocolo, arquitectura, amenazas, despliegues, legal, juegos
 scripts/                        Despliegue, prueba de humo y los auditores
