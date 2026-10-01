@@ -1,5 +1,5 @@
 /** `race` y `stellar` son la misma carrera con distinto escenario. */
-export type Game = "race" | "stellar" | "wheel" | "ledger" | "rockets" | "pasanaku" | "teleferico" | "tombola" | "trompo" | "totora" | "pinata" | "oruro" | "luz";
+export type Game = "race" | "stellar" | "wheel" | "ledger" | "rockets" | "pasanaku" | "teleferico" | "tombola" | "trompo" | "totora" | "pinata" | "oruro" | "luz" | "plinko";
 
 /** Ronda de quicknet ya publicada y verificada. */
 export interface Beacon {
@@ -45,6 +45,25 @@ export const LCOLORS = ["--magenta", "--orange", "--teal", "--purple", "--yellow
 
 /** La ruleta se ve bien hasta esta cantidad de participantes. */
 export const WHEEL_MAX = 24;
+
+/**
+ * Plinko se lee bien hasta esta cantidad de participantes (un casillero por
+ * nombre). Vive en `games/pixi/plinko-plan.ts`, puro y sin DOM, para poder
+ * probarlo en Node. Con más gente el sorteo pasa a la carrera, como la ruleta.
+ */
+export { PLINKO_MAX } from "./games/pixi/plinko-plan";
+import { PLINKO_MAX as PLINKO_CAP } from "./games/pixi/plinko-plan";
+
+/**
+ * El juego que de verdad se cuenta: si el elegido no aguanta tantos nombres
+ * (la ruleta pasados WHEEL_MAX, Plinko pasados PLINKO_MAX), la carrera, que
+ * es el juego de la casa. No altera quién ganó: el juego solo narra.
+ */
+export function playableGame(game: Game, people: number): Game {
+  if (game === "wheel" && people > WHEEL_MAX) return "race";
+  if (game === "plinko" && people > PLINKO_CAP) return "race";
+  return game;
+}
 
 export const params = new URLSearchParams(location.search);
 

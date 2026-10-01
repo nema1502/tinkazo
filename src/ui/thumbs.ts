@@ -182,6 +182,38 @@ const PAINTERS: Record<string, Painter> = {
       c.fillRect(x + 1, y - 4, 3, 4);
     }
   },
+  /** Plinko: la bola rebota por un tablero de clavos y cae en un casillero. */
+  plinko(c, t, col) {
+    c.fillStyle = "#2a2142";
+    c.fillRect(0, 0, W, H);
+    const rows = 5, sp = 14, y0 = 8, rh = 8;
+    c.fillStyle = "#f6efe2";
+    for (let r = 0; r < rows; r++) {
+      for (let i = 0; i <= r; i++) {
+        c.beginPath();
+        c.arc(W / 2 + (i - r / 2) * sp, y0 + r * rh, 1.6, 0, TAU);
+        c.fill();
+      }
+    }
+    for (let s = 0; s <= rows; s++) {
+      c.fillStyle = col(s);
+      c.fillRect(W / 2 + (s - (rows + 1) / 2) * sp + 1, H - 14, sp - 2, 12);
+    }
+    // La bola: un zigzag que depende solo de la hora de la miniatura.
+    const f = (t * 0.5) % 1;
+    const seg = Math.min(rows, Math.floor(f * (rows + 1)));
+    const k = f * (rows + 1) - seg;
+    const xAt = (j: number): number => W / 2 + (Math.sin(j * 2.3 + 1) * 0.5) * sp * Math.min(j, 2.5);
+    const bx = xAt(seg) + (xAt(seg + 1) - xAt(seg)) * k;
+    const by = 2 + (seg + k) * ((H - 18) / (rows + 1)) - Math.sin(Math.PI * k) * 3;
+    c.fillStyle = "#ffc629";
+    c.strokeStyle = INK;
+    c.lineWidth = 1.2;
+    c.beginPath();
+    c.arc(bx, by, 3.4, 0, TAU);
+    c.fill();
+    c.stroke();
+  },
   /** La piñata de siete picos balanceándose, y cada tanto caen caramelos. */
   pinata(c, t, col) {
     c.fillStyle = "#3a2440";

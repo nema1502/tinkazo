@@ -1,6 +1,6 @@
 import { $, esc } from "../dom";
 import { T, getLang, t } from "../i18n";
-import { LCOLORS, WHEEL_MAX, app, avatar, forceMotion, skippedForReducedMotion, type Beacon } from "../state";
+import { LCOLORS, WHEEL_MAX, app, playableGame, avatar, forceMotion, skippedForReducedMotion, type Beacon } from "../state";
 import { bytesToHex, decompressG1, fetchRound, hexToBytes, randomnessOf, roundUrl, verifyRound } from "../protocol/drand";
 import { select } from "../protocol/select";
 import { network, txUrl } from "../stellar/config";
@@ -132,7 +132,7 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   // equipo no tiene WebGL, si se pide `?motor=clasico`, si el motor no arranca
   // o si el wifi no alcanza a bajarlo, el juego sale con el de siempre.
   if (usePixi()) {
-    const game = app.game === "wheel" && names.length > WHEEL_MAX ? "race" : app.game;
+    const game = playableGame(app.game, names.length);
     void import("../games/pixi").then(
       async (m) => {
         if (!(await m.playPixi(game, names, winners, beacon, finish))) classicGame(names, winners, beacon, finish);

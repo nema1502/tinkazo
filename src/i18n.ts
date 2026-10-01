@@ -49,6 +49,10 @@ export interface Dict {
   cPinOut: (n: string) => string;
   cPinAlmost: (n: string) => string;
   cPinLast: (a: string, b: string) => string;
+  cPlkCount: (n: number) => string;
+  cPlkNear: (n: string) => string;
+  cPlkNext: (k: number, of: number) => string;
+  cPlkDone: (n: string) => string;
   cOruCount: (n: number) => string;
   cOruStop: (k: number, off: number, left: number) => string;
   cOruStay: (n: string) => string;
@@ -353,6 +357,17 @@ export const T: Record<Lang, Dict> = {
     cPinLast: (a, b) => pick([`¡Quedan ${a} y ${b} adentro!`, `¡Adentro solo ${a} y ${b}!`]),
     cPinBreak: ["¡SE ROMPIÓ!", "¡SE ABRIÓ LA PIÑATA!", "¡AHÍ CAE!"],
     cPinLeft: "ADENTRO",
+    // --- Plinko: el tablero de clavos, la bola y un casillero por nombre.
+    gamePlinko: "Plinko",
+    cPlkHang: ["¡Se arma el tablero!", "¡Los clavos en su lugar!", "¡Cada nombre tiene su casillero!"],
+    cPlkCount: (n) => `¡${n} casilleros, uno por nombre!`,
+    cPlkDrop: ["¡Soltá la bola!", "¡Ahí va la bola!", "¡Cae la bola!"],
+    cPlkBounce: ["¡Rebota!", "¡Pica de un lado al otro!", "¡Va zigzagueando!"],
+    cPlkLate: ["¡Quedan pocas filas!", "¡Ya no hay vuelta atrás!", "¡Se acerca el final!"],
+    cPlkNear: (n) => pick([`¡Casi cae en el de ${n}!`, `¡Se va para el lado de ${n}!`, `¡${n} se ilusiona!`]),
+    cPlkLast: ["¡Último clavo!", "¡Un rebote más!", "¡Se decide ahora!"],
+    cPlkNext: (k, of) => `¡Bola ${k} de ${of}!`,
+    cPlkDone: (n) => pick([`¡Cayó en el casillero de ${n}!`, `¡Ahí quedó, en el de ${n}!`]),
     // --- Carnaval de Oruro. La entrada de la Diablada hasta el Socavón.
     cOruStart: ["¡Arranca la entrada!", "¡Suena la banda!", "¡Que baile la diablada!"],
     cOruCount: (n) => (n === 2 ? "¡Dos diablos en la comparsa!" : `¡${n} diablos en la comparsa!`),
@@ -953,6 +968,17 @@ export const T: Record<Lang, Dict> = {
     cPinLast: (a, b) => pick([`${a} and ${b} left inside!`, `Only ${a} and ${b} inside!`]),
     cPinBreak: ["IT BROKE!", "THE PIÑATA SPLIT OPEN!", "HERE IT COMES!"],
     cPinLeft: "INSIDE",
+    // --- Plinko: the peg board, the ball and one slot per name.
+    gamePlinko: "Plinko",
+    cPlkHang: ["The board is going up!", "Pegs in place!", "Every name gets a slot!"],
+    cPlkCount: (n) => `${n} slots, one per name!`,
+    cPlkDrop: ["Drop the ball!", "Here goes the ball!", "The ball falls!"],
+    cPlkBounce: ["It bounces!", "Ping-pong from side to side!", "Zigzagging down!"],
+    cPlkLate: ["Only a few rows left!", "No turning back now!", "The end is near!"],
+    cPlkNear: (n) => pick([`Almost lands on ${n}'s slot!`, `Heading for ${n}!`, `${n} gets hopeful!`]),
+    cPlkLast: ["Last peg!", "One more bounce!", "It's decided now!"],
+    cPlkNext: (k, of) => `Ball ${k} of ${of}!`,
+    cPlkDone: (n) => pick([`It landed in ${n}'s slot!`, `There it rests, in ${n}'s!`]),
     cOruStart: ["The entrada begins!", "The band strikes up!", "Let the diablada dance!"],
     cOruCount: (n) => (n === 2 ? "Two devils in the troupe!" : `${n} devils in the troupe!`),
     cOruDance: ["What steps!", "Look at them stomp!", "The devils leap!"],
