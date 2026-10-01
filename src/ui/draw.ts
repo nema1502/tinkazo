@@ -1,6 +1,6 @@
 import { $, esc } from "../dom";
 import { T, getLang, t } from "../i18n";
-import { LCOLORS, WHEEL_MAX, app, avatar, type Beacon } from "../state";
+import { LCOLORS, WHEEL_MAX, app, avatar, forceMotion, skippedForReducedMotion, type Beacon } from "../state";
 import { bytesToHex, decompressG1, fetchRound, hexToBytes, randomnessOf, roundUrl, verifyRound } from "../protocol/drand";
 import { select } from "../protocol/select";
 import { network, txUrl } from "../stellar/config";
@@ -207,6 +207,8 @@ function renderLore(beacon: Beacon): void {
 
 export function reveal(names: string[], winners: number[], beacon: Beacon, listHash: string): void {
   $("winner-box").style.display = "block";
+  // Con el movimiento reducido el juego se salteó: se avisa, para que no parezca roto.
+  $("motion-note").style.display = skippedForReducedMotion() ? "block" : "none";
   renderLore(beacon);
   const prize = app.frozen?.prize ?? "";
   $("winner-cards").innerHTML = winners
@@ -247,6 +249,20 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   // El comprobante se arma aparte: comprimir la lista es asíncrono y no vale
   // la pena hacer esperar al confeti por eso.
   void buildProof(names, winners, url);
+}
+
+/**
+ * "Ver la animación igual": repite el juego una vez con el movimiento forzado.
+ *
+ * Solo recibe lo que ya está decidido (`app.drawn`) y su cierre no hace nada
+ * más que soltar el forzado: no vuelve a revelar, ni toca el historial ni el
+ * comprobante.
+ */
+export function replayAnimation(): void {
+  const { frozen, drawn } = app;
+  if (!frozen || !drawn) return;
+  forceMotion(true);
+  playGame(frozen.names, drawn.winners, drawn.beacon, () => forceMotion(false));
 }
 
 let proofLink = "";

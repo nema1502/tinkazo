@@ -2,7 +2,7 @@ import { Application, Container, Graphics, Sprite, Text, Texture, WebGLRenderer,
 import { gsap } from "gsap";
 import { $ } from "../../dom";
 import { T, getLang, setPickSeed, t } from "../../i18n";
-import { LCOLORS, drawAvatar, instantMode, paceFactor, type Beacon } from "../../state";
+import { LCOLORS, drawAvatar, paceFactor, skipMotion, type Beacon } from "../../state";
 import { musicCue, startMusic, stopMusic } from "../../music";
 import { registerSkip, releaseScreen, shorten, takeOverScreen, winnerNames } from "../overlay";
 import { Camera } from "./camera";
@@ -126,7 +126,7 @@ export interface Crown {
 }
 
 export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => void): Promise<PixiStage | null> {
-  if (instantMode || matchMedia("(prefers-reduced-motion: reduce)").matches) return null;
+  if (skipMotion()) return null;
   const ov = $("stadium");
   const base = $<HTMLCanvasElement>("race-canvas");
   const commentEl = $("commentary");

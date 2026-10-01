@@ -51,6 +51,24 @@ export const params = new URLSearchParams(location.search);
 /** `?instant=1`: salta las animaciones (capturas y pruebas). */
 export const instantMode = params.get("instant") === "1";
 
+/** `true` si el sistema pide menos movimiento. Seguro sin `matchMedia`. */
+export function motionReduced(): boolean {
+  return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+let motionForced = false;
+
+/** Fuerza el movimiento para una repetición ("Ver la animación igual"). */
+export function forceMotion(on: boolean): void {
+  motionForced = on;
+}
+
+/** El juego se salta por la preferencia del sistema, y no por `?instant=1`. */
+export const skippedForReducedMotion = (): boolean => !instantMode && motionReduced() && !motionForced;
+
+/** Si los juegos deben saltarse su animación y entregar el resultado de una. */
+export const skipMotion = (): boolean => instantMode || skippedForReducedMotion();
+
 /**
  * Segundos entre el sello y la ronda objetivo, en modo libre.
  *

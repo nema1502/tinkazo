@@ -1,5 +1,5 @@
 import { $ } from "../dom";
-import { LCOLORS, drawAvatar, instantMode, paceFactor, type Beacon } from "../state";
+import { LCOLORS, drawAvatar, paceFactor, skipMotion, type Beacon } from "../state";
 import { setPickSeed, t } from "../i18n";
 import { musicCue, startMusic, stopMusic } from "../music";
 
@@ -83,7 +83,7 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
   // `?instant=1` existe para el auditor. Esto es para alguien que marcó en su
   // sistema que las animaciones lo marean, y que hasta ahora no tenía forma de
   // decirlo. El sorteo igual se hace y el ganador igual sale.
-  if (instantMode || matchMedia("(prefers-reduced-motion: reduce)").matches) return null;
+  if (skipMotion()) return null;
   const ov = $("stadium");
   const canvas = $<HTMLCanvasElement>("race-canvas");
   const c = canvas.getContext("2d");
