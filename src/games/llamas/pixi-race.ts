@@ -1023,9 +1023,20 @@ function crowdNoise(): ((tension: number) => void) & { stop: () => void } {
   bp.type = "bandpass";
   bp.frequency.value = 900;
   bp.Q.value = 0.8;
+  // Sin agudos: con el pasabanda solo, el ruido seguía llegando hasta los
+  // 19 kHz y la tribuna sonaba a soplido, no a gente. Lo encontró el auditor
+  // del sonido de fondo del estudio (30 de septiembre de 2026).
+  const lp = ctx.createBiquadFilter();
+  lp.type = "lowpass";
+  lp.frequency.value = 1500;
+  lp.Q.value = 0.7;
+  const lp2 = ctx.createBiquadFilter();
+  lp2.type = "lowpass";
+  lp2.frequency.value = 2200;
+  lp2.Q.value = 0.7;
   const g = ctx.createGain();
   g.gain.value = 0;
-  src.connect(bp).connect(g).connect(ctx.destination);
+  src.connect(bp).connect(lp).connect(lp2).connect(g).connect(ctx.destination);
   src.start();
   let dead = false;
   const set = (tension: number): void => {
