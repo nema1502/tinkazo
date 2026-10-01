@@ -28,9 +28,13 @@ const RING_R = 1;
 const TABLE_R = 1.55;
 /** A non-hit landing stays at least this far outside a hole's capture radius. */
 export const CAPTURE_CLEAR = 0.02;
-/** A near miss rests between these multiples of the hole radius from the hole's centre (rim ring). */
-export const NEAR_MIN = 1.2;
-export const NEAR_MAX = 1.6;
+/**
+ * A near miss rests between these multiples of the hole radius from the hole's
+ * centre. The minimum is high enough that the whole token (radius about 0.4 hole
+ * radii) sits visibly outside the rim ring, so it can never read as "in".
+ */
+export const NEAR_MIN = 1.7;
+export const NEAR_MAX = 2.1;
 /** Hard bounds on tension throws per winner. */
 export const MAX_MISSES = 4;
 export const MAX_NEARS = 2;

@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite } from "pixi.js";
+import { Container, Graphics, Sprite, Text } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
 import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, fanfare, note } from "../../sound";
@@ -145,6 +145,19 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   S.scene.addChild(tableG, avLayer, frogG, fx, tokG);
   const chipLayer = new Container();
   S.hud.addChild(chipLayer);
+  // On-screen rule line, then the "Winner k of n" counter (several winners only).
+  const caption = S.text("", { fontSize: 15, fontWeight: "800", fill: INK, align: "center" });
+  caption.anchor.set(0.5, 0);
+  caption.alpha = 0;
+  S.hud.addChild(caption);
+  const ruleText = t(total > 1 ? "cSapRuleMany" : "cSapRuleOne");
+  // Persistent "taken" badges over winners' holes, and the "Almost!" label (scene space).
+  const badgeLayer = new Container();
+  const badgeOf = new Map<number, Text>();
+  const almost = S.text("", { fontSize: 14, fontWeight: "900", fill: INK, stroke: { color: CREAM, width: 4 } });
+  almost.anchor.set(0.5, 1);
+  almost.alpha = 0;
+  S.scene.addChild(badgeLayer, almost);
   const chipOf = new Map<number, Container>();
   let avatars: Sprite[] = [];
 
@@ -164,6 +177,13 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     }
     chipLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
     chipOf.clear();
+    badgeLayer.removeChildren().forEach((c) => c.destroy());
+    badgeOf.clear();
+    caption.style.fontSize = 15 * g.k;
+    caption.style.wordWrap = true;
+    caption.style.wordWrapWidth = g.w * 0.9;
+    almost.style.fontSize = 15 * g.k;
+    almost.text = t("cSapAlmost");
     cam.cut(g.w / 2, g.h / 2, 1);
   };
   build();
@@ -266,6 +286,10 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       [1.7, () => {
         S.say(T[getLang()].cSapCount(holes), 0.15);
         for (let i = 0; i < 5; i++) setTimeout(() => beep(note(10 + (i % 3)), 0.04, "square", 0.025), 200 + i * 90);
+      }],
+      [3.3, () => {
+        S.say(ruleText, 0.2);
+        beep(note(12), 0.08, "triangle", 0.03);
       }],
     ];
     while (introSaid < cues.length && tAll >= (cues[introSaid] as [number, () => void])[0]) (cues[introSaid++] as [number, () => void])[1]();
@@ -430,6 +454,45 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
         if (o.th.kind === "near" && o.grand && story.arc !== "tapada" && age < AFTER_NEAR) focus.add(o.th.rimSlot as number);
         if (o.th.kind === "hit" && (o.final || age < 1.6)) focus.add(o.slot);
       }
+    }
+
+    // Caption: the rule until the first toss, then the winner counter (or the rule, with one winner).
+    let turn = 0;
+    for (const o of tosses) if (tAll >= o.start - 0.7) turn = o.th.turn;
+    const started = tAll >= (tosses[0] as Toss).start - 0.7;
+    caption.text = started && total > 1 ? T[getLang()].cSapTally(turn + 1, total) : ruleText;
+    caption.position.set(g.w / 2, S.top() + 2 * g.k);
+    caption.alpha = clamp((tAll - 2.6) / 0.5, 0, 1) * (crowned ? 0 : 1);
+
+    // Persistent badges: a winner's hole stays "taken" with its order number (or a check for one winner).
+    for (const o of tosses) {
+      if (o.th.kind !== "hit" || tAll < o.land + SINK) continue;
+      const c = P(L.holes[o.slot] as Point);
+      const br = Math.max(7 * g.k, L.holeR * g.sc * 0.55);
+      const bx = c.x + L.holeR * g.sc * 0.95, by = c.y - L.holeR * g.sc * TILT * 1.1;
+      fx.circle(bx, by, br).fill(YELLOW).stroke({ width: 2 * g.k, color: INK });
+      if (total > 1) {
+        let b = badgeOf.get(o.th.turn);
+        if (!b) {
+          b = S.text(`${o.th.turn + 1}`, { fontSize: br * 1.3, fontWeight: "900", fill: INK });
+          b.anchor.set(0.5);
+          badgeOf.set(o.th.turn, b);
+          badgeLayer.addChild(b);
+        }
+        b.position.set(bx, by);
+      } else {
+        fx.moveTo(bx - br * 0.45, by).lineTo(bx - br * 0.1, by + br * 0.35).lineTo(bx + br * 0.5, by - br * 0.35).stroke({ width: 2.5 * g.k, color: INK });
+      }
+    }
+
+    // "Almost!" next to a near miss, above where it rests.
+    almost.alpha = 0;
+    for (const o of tosses) {
+      if (o.th.kind !== "near" || tAll < o.land || tAll >= o.land + AFTER_NEAR) continue;
+      const age = tAll - o.land;
+      const lp = P(o.th.landing);
+      almost.position.set(lp.x, lp.y - g.br * 2.2 - 6 * g.k * ease.outCubic(clamp(age / 0.3, 0, 1)));
+      almost.alpha = clamp(age / 0.15, 0, 1) * clamp((AFTER_NEAR - age) / 0.3, 0, 1);
     }
 
     for (const ch of chipOf.values()) ch.visible = false;

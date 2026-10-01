@@ -130,6 +130,8 @@ describe("sapo: planThrows invariants", () => {
           expect(d).toBeGreaterThanOrEqual(L.holeR * NEAR_MIN - 1e-9);
           expect(d).toBeLessThanOrEqual(L.holeR * NEAR_MAX + 1e-9);
           expect(d).toBeGreaterThan(L.holeR + CAPTURE_CLEAR);
+          // unmistakably outside: clearly beyond the rim ring, never touching it
+          expect(d).toBeGreaterThanOrEqual(L.holeR * 1.7 - 1e-9);
         }
       }
     }
@@ -213,6 +215,13 @@ describe("sapo: planThrows invariants", () => {
     expect(() => planThrows(5, [5], rngOf(1), optsForArc("susto"))).toThrow(RangeError);
     expect(() => planThrows(5, [-1], rngOf(1), optsForArc("susto"))).toThrow(RangeError);
     expect(() => planThrows(5, [], rngOf(1), optsForArc("susto"))).toThrow(RangeError);
+  });
+});
+
+describe("sapo: near-miss legibility", () => {
+  it("the near-miss band starts clearly beyond the rim (at least 1.7 hole radii) and is not empty", () => {
+    expect(NEAR_MIN).toBeGreaterThanOrEqual(1.7);
+    expect(NEAR_MAX).toBeGreaterThan(NEAR_MIN);
   });
 });
 

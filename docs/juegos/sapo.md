@@ -14,7 +14,7 @@ The winner is chosen by the [protocol](../protocolo.md) before the game starts. 
 2. `holeLayout(n)` puts `n` holes evenly on a ring around the frog. The hole radius shrinks with the gap between neighbours.
 3. `planThrows(n, winnerSlots, rng, opts)` returns the ordered throws. For each winner, in `winners` order: some `miss` throws, then some `near` throws, then one `hit`.
    - `miss`: lands on the bare table, between holes and outside the frog. It clinks, bounces and rolls off.
-   - `near`: rests on the **rim ring** of a hole that is **not** the thrower's own target (a neighbour of it), between 1.2 and 1.6 hole radii from that hole's centre. It wobbles and pops out. The narrator names whoever sits at that hole.
+   - `near`: rests on the **rim ring** of a hole that is **not** the thrower's own target (a neighbour of it), between 1.7 and 2.1 hole radii from that hole's centre (the whole token sits visibly outside the rim ring; it used to be 1.2 to 1.6, which could read as "in"). It wobbles, pops out and shows an "Almost!" / "¡Casi!" label next to it. The narrator names whoever sits at that hole.
    - `hit`: lands inside the winner's hole (within 0.45 of its radius from the centre). Its `targetSlot` is that winner's slot.
 4. Neither a `miss` nor a `near` ever lands inside the capture radius of any hole (plus a small clearance), so the only way into a hole is the planned hit. This is checked geometrically in the tests.
 5. The animation is a function of the stage clock only. The toss is a parabola in screen space between planned points, driven by `dt`. No `Math.random()`: same round, same frames.
@@ -24,6 +24,15 @@ All of this lives in [`src/games/pixi/sapo-plan.ts`](../../src/games/pixi/sapo-p
 ## Several winners
 
 A short toss sequence per winner, in the order of the winners list, each ending in its own hole (slots are distinct). Earlier winners get one miss and then their hit, with a one-line narration ("Toss 2 of 3", "It dropped into X's hole!"). The **last** winner gets the big moment: more tension throws, a longer hang before the final throw, a slower final flight and the camera following the token.
+
+## What the screen explains
+
+Added after a viewer could not tell what each ball meant (written without a browser, not audited):
+
+- **Rule line.** After the intro lines the narrator and an on-screen caption (top of the stage) say the rule: with several winners "Each token that drops into a hole is a winner."; with one, "The token that drops into a hole picks the winner." (es and en, keys `cSapRuleMany` / `cSapRuleOne`).
+- **Winner counter.** With more than one winner the caption becomes "Winner 1 of 2" and follows the current winner's turn (`cSapTally`). It hides when the crown plate appears.
+- **Taken holes.** When a token drops into a winner's hole, that hole keeps a badge with the winner's order number (a check mark when there is one winner), so it stays visibly taken. The narrator says "It dropped into X's hole: winner!" (`cSapDone`). The final crown still names every winner.
+- **Near miss.** See the `near` rule above; the extra distance is covered by the plan tests (`NEAR_MIN` at least 1.7).
 
 ## Arcs and camera
 
@@ -67,4 +76,4 @@ node scripts/audit-emocion.mjs sapo
 
 `audit-rigor`, `audit-sound` and `audit-emocion` list `sapo` in their game lists (`TODOS` / `JUEGOS`). With `?n=200` the draw switches to the race by design.
 
-Things only eyes can judge and nobody has: is the token readable at 390 px wide, do the hole avatars (placed just outside each hole) read from the back of a room and do they overlap at 12 names, is the near miss obvious, does the roll-off path cross a hole visually (the planner only guarantees the landing point, not the path to the exit), does the frog read as a frog, do the chips fit, and are the timings right.
+Things only eyes can judge and nobody has: is the token readable at 390 px wide, do the hole avatars (placed just outside each hole) read from the back of a room and do they overlap at 12 names, is the near miss obvious (and the "Almost!" label legible), do the winner badges and the counter fit at 390 px and with 12 holes, does the roll-off path cross a hole visually (the planner only guarantees the landing point, not the path to the exit), does the frog read as a frog, do the chips fit, and are the timings right.

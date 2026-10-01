@@ -57,6 +57,7 @@ export interface Dict {
   cSapNear: (n: string) => string;
   cSapNext: (k: number, of: number) => string;
   cSapDone: (n: string) => string;
+  cSapTally: (k: number, of: number) => string;
   cOruCount: (n: number) => string;
   cOruStop: (k: number, off: number, left: number) => string;
   cOruStay: (n: string) => string;
@@ -383,7 +384,11 @@ export const T: Record<Lang, Dict> = {
     cSapLast: ["¡Último tiro!", "¡Este es el bueno!", "¡Se decide ahora!"],
     cSapCroak: ["¡CROAC!", "¡Se la tragó la rana!", "¡Adentro!"],
     cSapNext: (k, of) => `¡Tiro ${k} de ${of}!`,
-    cSapDone: (n) => pick([`¡Cayó en el agujero de ${n}!`, `¡Ahí quedó, en el de ${n}!`]),
+    cSapDone: (n) => pick([`¡Cayó en el agujero de ${n}: ganador!`, `¡Ahí quedó, en el de ${n}: ganador!`]),
+    cSapTally: (k, of) => `Ganador ${k} de ${of}`,
+    cSapRuleMany: ["Cada ficha que cae en un agujero es un ganador.", "Cada ficha que cae adentro marca a un ganador."],
+    cSapRuleOne: ["La ficha que caiga en un agujero marca al ganador.", "El agujero donde caiga la ficha marca al ganador."],
+    cSapAlmost: "¡Casi!",
     // --- Carnaval de Oruro. La entrada de la Diablada hasta el Socavón.
     cOruStart: ["¡Arranca la entrada!", "¡Suena la banda!", "¡Que baile la diablada!"],
     cOruCount: (n) => (n === 2 ? "¡Dos diablos en la comparsa!" : `¡${n} diablos en la comparsa!`),
@@ -1006,7 +1011,11 @@ export const T: Record<Lang, Dict> = {
     cSapLast: ["Last toss!", "This is the one!", "It's decided now!"],
     cSapCroak: ["RIBBIT!", "The frog swallowed it!", "In!"],
     cSapNext: (k, of) => `Toss ${k} of ${of}!`,
-    cSapDone: (n) => pick([`It dropped into ${n}'s hole!`, `There it rests, in ${n}'s!`]),
+    cSapDone: (n) => pick([`It dropped into ${n}'s hole: winner!`, `There it rests, in ${n}'s: winner!`]),
+    cSapTally: (k, of) => `Winner ${k} of ${of}`,
+    cSapRuleMany: ["Each token that drops into a hole is a winner.", "Every token that drops in picks a winner."],
+    cSapRuleOne: ["The token that drops into a hole picks the winner.", "The hole the token drops into picks the winner."],
+    cSapAlmost: "Almost!",
     cOruStart: ["The entrada begins!", "The band strikes up!", "Let the diablada dance!"],
     cOruCount: (n) => (n === 2 ? "Two devils in the troupe!" : `${n} devils in the troupe!`),
     cOruDance: ["What steps!", "Look at them stomp!", "The devils leap!"],
