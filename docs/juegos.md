@@ -58,7 +58,7 @@ node scripts/audit-game.mjs <juego>
 node scripts/audit-sound.mjs <juego>
 ```
 
-Donde `<juego>` es el valor de `?demo=`: `race`, `luz`, `trompo`, `pinata`, `oruro`, `tombola`, `wheel`, `teleferico`, `pasanaku`, `stellar`, `plinko`, `sapo`. El auditor abre Chrome, corre un sorteo real contra drand y comprueba veinte cosas:
+Donde `<juego>` es el valor de `?demo=`: `race`, `luz`, `trompo`, `pinata`, `oruro`, `tombola`, `wheel`, `teleferico`, `pasanaku`, `stellar`, `plinko`, `sapo`, `ahorcado`. El auditor abre Chrome, corre un sorteo real contra drand y comprueba veinte cosas:
 
 | # | Comprobación | Por qué importa |
 |---|---|---|
@@ -303,6 +303,7 @@ El ritmo, la legibilidad del cartel y el tartamudeo de los subtítulos ya los mi
 | Constelación Stellar | `stellar` | Módulo propio | 200 | [constelacion-stellar.md](juegos/constelacion-stellar.md) |
 | Plinko | `plinko` | Módulo propio (solo motor nuevo) | 12 | [plinko.md](juegos/plinko.md) |
 | Sapo | `sapo` | Módulo propio (solo motor nuevo) | 12 | [sapo.md](juegos/sapo.md) |
+| Ahorcado | `ahorcado` | Módulo propio (solo motor nuevo) | 12 (y 2 a 18 letras por nombre) | [ahorcado.md](juegos/ahorcado.md) |
 
 **Los que salieron del selector** el 30 de septiembre de 2026, porque sumaban poco: la carrera de cohetes y las balsas de totora eran la misma carrera de llamas con otra piel, y el Cierre de Libro era el menos visual. El código sigue y se abren con `?demo=` mientras se decide si se borran; la ruleta con más de 24 personas ahora pasa a la carrera de llamas, no al Cierre de Libro.
 

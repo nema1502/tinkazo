@@ -34,7 +34,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
 
-const TODOS = ["race", "luz", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "plinko", "sapo"];
+const TODOS = ["race", "luz", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "plinko", "sapo", "ahorcado"];
 const args = process.argv.slice(2);
 const opt = (name, def) => {
   const i = args.indexOf(name);

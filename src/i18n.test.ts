@@ -42,4 +42,21 @@ describe("diccionario", () => {
       expect(T.en[k]).toBeTruthy();
     }
   });
+
+  it("Ahorcado: the label, the lines and the counters exist in both languages", () => {
+    for (const l of ["es", "en"] as const) {
+      for (const k of ["gameAhorcado", "cHngStart", "cHngRuleOne", "cHngRuleMany", "cHngDanger", "cHngLast", "cHngSolved"]) {
+        expect(T[l][k]).toBeTruthy();
+      }
+      expect(T[l].cHngRight("B")).toContain("B");
+      expect(T[l].cHngWrong("Q")).toContain("Q");
+      expect(T[l].cHngCount(5)).toContain("5");
+      expect(T[l].cHngNext(2, 3)).toContain("2");
+      expect(T[l].cHngDone("Ana")).toContain("Ana");
+    }
+    expect(T.es.cHngTally(1, 2)).toBe("Ganador 1 de 2");
+    expect(T.en.cHngTally(1, 2)).toBe("Winner 1 of 2");
+    expect(T.es.cHngStrike(1)).not.toBe(T.es.cHngStrike(3));
+    expect(T.en.cHngLeft(1)).not.toBe(T.en.cHngLeft(3));
+  });
 });

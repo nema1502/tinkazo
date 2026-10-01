@@ -195,7 +195,7 @@ cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
-Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|teleferico|tombola|race|rockets|wheel|trompo|totora|pinata|oruro|plinko|sapo`, `?instant=1`, `?pose=1` and `?motor=clasico` (the previous engine).
+Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|teleferico|tombola|race|rockets|wheel|trompo|totora|pinata|oruro|plinko|sapo|ahorcado`, `?instant=1`, `?pose=1` and `?motor=clasico` (the previous engine).
 
 ## Repository
 

@@ -266,6 +266,90 @@ const PAINTERS: Record<string, Painter> = {
     c.fill();
     c.stroke();
   },
+  /** Ahorcado: la horca con su muñeco que se arma de a poco, el nombre que se descubre y los candidatos que se tachan. */
+  ahorcado(c, t, col) {
+    c.fillStyle = "#2a2440";
+    c.fillRect(0, 0, W, H);
+    // The whole loop is a function of the thumbnail clock.
+    const p = (t * 0.3) % 1;
+    c.strokeStyle = "#f6efe2";
+    c.lineWidth = 2;
+    c.lineCap = "round";
+    c.beginPath();
+    c.moveTo(8, 60);
+    c.lineTo(34, 60);
+    c.moveTo(16, 60);
+    c.lineTo(16, 8);
+    c.lineTo(36, 8);
+    c.lineTo(36, 15);
+    c.stroke();
+    // The friendly figure: head, body, arms; it never gets completed.
+    const parts = Math.min(4, 1 + Math.floor(p * 4));
+    c.strokeStyle = "#ffc629";
+    c.fillStyle = "#ffc629";
+    c.lineWidth = 1.8;
+    c.beginPath();
+    c.arc(36, 20, 5, 0, TAU);
+    c.fill();
+    if (parts >= 2) {
+      c.beginPath();
+      c.moveTo(36, 25);
+      c.lineTo(36, 42);
+      c.stroke();
+    }
+    if (parts >= 3) {
+      c.beginPath();
+      c.moveTo(36, 30);
+      c.lineTo(28, 36);
+      c.stroke();
+    }
+    if (parts >= 4) {
+      c.beginPath();
+      c.moveTo(36, 30);
+      c.lineTo(44, 36);
+      c.stroke();
+    }
+    // The masked name: one slot per letter, revealed one by one.
+    const word = "SORTE";
+    const shown = Math.min(word.length, Math.floor(p * 6));
+    c.font = "bold 11px system-ui, sans-serif";
+    c.textAlign = "center";
+    for (let k = 0; k < word.length; k++) {
+      const x = 56 + k * 12;
+      c.strokeStyle = "#f6efe2";
+      c.lineWidth = 1.6;
+      c.beginPath();
+      c.moveTo(x - 4.5, 59);
+      c.lineTo(x + 4.5, 59);
+      c.stroke();
+      if (k < shown) {
+        c.fillStyle = "#f6efe2";
+        c.fillText(word[k] as string, x, 56);
+      }
+    }
+    // The candidates: chips that get struck out, one stays.
+    for (let k = 0; k < 4; k++) {
+      const y = 6 + k * 9;
+      const struck = k < 3 && p > 0.2 + k * 0.22;
+      c.globalAlpha = struck ? 0.4 : 1;
+      c.fillStyle = col(k);
+      c.beginPath();
+      c.rect(58, y, 52, 7);
+      c.fill();
+      if (struck) {
+        c.globalAlpha = 1;
+        c.strokeStyle = INK;
+        c.lineWidth = 1.5;
+        c.beginPath();
+        c.moveTo(61, y + 3.5);
+        c.lineTo(107, y + 3.5);
+        c.stroke();
+      }
+    }
+    c.globalAlpha = 1;
+    c.textAlign = "start";
+    c.lineCap = "butt";
+  },
   /** La piñata de siete picos balanceándose, y cada tanto caen caramelos. */
   pinata(c, t, col) {
     c.fillStyle = "#3a2440";

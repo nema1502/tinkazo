@@ -58,6 +58,14 @@ export interface Dict {
   cSapNext: (k: number, of: number) => string;
   cSapDone: (n: string) => string;
   cSapTally: (k: number, of: number) => string;
+  cHngCount: (n: number) => string;
+  cHngRight: (l: string) => string;
+  cHngWrong: (l: string) => string;
+  cHngStrike: (k: number) => string;
+  cHngLeft: (k: number) => string;
+  cHngNext: (k: number, of: number) => string;
+  cHngTally: (k: number, of: number) => string;
+  cHngDone: (n: string) => string;
   cOruCount: (n: number) => string;
   cOruStop: (k: number, off: number, left: number) => string;
   cOruStay: (n: string) => string;
@@ -389,6 +397,22 @@ export const T: Record<Lang, Dict> = {
     cSapRuleMany: ["Cada ficha que cae en un agujero es un ganador.", "Cada ficha que cae adentro marca a un ganador."],
     cSapRuleOne: ["La ficha que caiga en un agujero marca al ganador.", "El agujero donde caiga la ficha marca al ganador."],
     cSapAlmost: "¡Casi!",
+    // --- Ahorcado: el nombre del ganador es la palabra oculta y la lista se va tachando.
+    gameAhorcado: "Ahorcado",
+    cHngStart: ["¡Se arma la horca!", "¡Hay un nombre escondido!", "¡Adiviná de quién es!"],
+    cHngCount: (n) => `¡${n} nombres en la lista!`,
+    cHngRuleOne: ["Cada letra tacha nombres hasta que queda uno: el ganador.", "Se descubre el nombre del ganador letra por letra."],
+    cHngRuleMany: ["Cada ronda descubre el nombre de un ganador, letra por letra.", "Se descubre un nombre por ronda, y cada letra tacha candidatos."],
+    cHngRight: (l) => pick([`¡La ${l} está!`, `¡Hay una ${l}!`, `¡Sí, la ${l}!`]),
+    cHngWrong: (l) => pick([`¡La ${l} no está!`, `¡Sin ${l}!`, `¡Esa ${l} no va!`]),
+    cHngStrike: (k) => (k === 1 ? "¡Se tacha un nombre!" : `¡Se tachan ${k} nombres!`),
+    cHngLeft: (k) => (k === 1 ? "¡Queda un solo nombre!" : `¡Quedan ${k} nombres!`),
+    cHngDanger: ["¡Cuidado, ya casi se arma el muñeco!", "¡Se acaba el margen!", "¡Queda una sola pieza libre!"],
+    cHngLast: ["¡Última letra!", "¡Esta es la que falta!", "¡Se decide ahora!"],
+    cHngSolved: ["¡Se completó el nombre!", "¡Ahí está!", "¡Ya se ve el nombre entero!"],
+    cHngNext: (k, of) => `¡Nombre ${k} de ${of}!`,
+    cHngTally: (k, of) => `Ganador ${k} de ${of}`,
+    cHngDone: (n) => pick([`¡${n}: ganador!`, `¡Ahí está, ${n} gana!`]),
     // --- Carnaval de Oruro. La entrada de la Diablada hasta el Socavón.
     cOruStart: ["¡Arranca la entrada!", "¡Suena la banda!", "¡Que baile la diablada!"],
     cOruCount: (n) => (n === 2 ? "¡Dos diablos en la comparsa!" : `¡${n} diablos en la comparsa!`),
@@ -1016,6 +1040,22 @@ export const T: Record<Lang, Dict> = {
     cSapRuleMany: ["Each token that drops into a hole is a winner.", "Every token that drops in picks a winner."],
     cSapRuleOne: ["The token that drops into a hole picks the winner.", "The hole the token drops into picks the winner."],
     cSapAlmost: "Almost!",
+    // --- Hangman: the winner's name is the hidden word and the list gets struck out.
+    gameAhorcado: "Hangman",
+    cHngStart: ["The gallows goes up!", "A name is hiding!", "Guess whose it is!"],
+    cHngCount: (n) => `${n} names on the list!`,
+    cHngRuleOne: ["Every letter strikes out names until one is left: the winner.", "The winner's name is revealed letter by letter."],
+    cHngRuleMany: ["Each round reveals one winner's name, letter by letter.", "One name per round, and every letter strikes out candidates."],
+    cHngRight: (l) => pick([`Yes, the ${l}!`, `The ${l} is in!`, `Got the ${l}!`]),
+    cHngWrong: (l) => pick([`No ${l}!`, `The ${l} is not there!`, `That ${l} does not fit!`]),
+    cHngStrike: (k) => (k === 1 ? "One name struck out!" : `${k} names struck out!`),
+    cHngLeft: (k) => (k === 1 ? "Only one name left!" : `${k} names left!`),
+    cHngDanger: ["Careful, the figure is almost built!", "The margin is running out!", "Only one part left free!"],
+    cHngLast: ["Last letter!", "This is the missing one!", "It's decided now!"],
+    cHngSolved: ["The name is complete!", "There it is!", "The whole name is showing!"],
+    cHngNext: (k, of) => `Name ${k} of ${of}!`,
+    cHngTally: (k, of) => `Winner ${k} of ${of}`,
+    cHngDone: (n) => pick([`${n}: winner!`, `There it is, ${n} wins!`]),
     cOruStart: ["The entrada begins!", "The band strikes up!", "Let the diablada dance!"],
     cOruCount: (n) => (n === 2 ? "Two devils in the troupe!" : `${n} devils in the troupe!`),
     cOruDance: ["What steps!", "Look at them stomp!", "The devils leap!"],

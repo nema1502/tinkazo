@@ -132,7 +132,7 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   // equipo no tiene WebGL, si se pide `?motor=clasico`, si el motor no arranca
   // o si el wifi no alcanza a bajarlo, el juego sale con el de siempre.
   if (usePixi()) {
-    const game = playableGame(app.game, names.length);
+    const game = playableGame(app.game, names.length, names, winners);
     void import("../games/pixi").then(
       async (m) => {
         if (!(await m.playPixi(game, names, winners, beacon, finish))) classicGame(names, winners, beacon, finish);

@@ -28,6 +28,7 @@ export const GAME_BUTTONS: ReadonlyArray<[string, Game]> = [
   ["g-stellar", "stellar"],
   ["g-plinko", "plinko"],
   ["g-sapo", "sapo"],
+  ["g-ahorcado", "ahorcado"],
 ];
 
 export function setGame(g: Game): void {

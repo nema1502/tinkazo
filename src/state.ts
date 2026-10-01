@@ -1,5 +1,5 @@
 /** `race` y `stellar` son la misma carrera con distinto escenario. */
-export type Game = "race" | "stellar" | "wheel" | "ledger" | "rockets" | "pasanaku" | "teleferico" | "tombola" | "trompo" | "totora" | "pinata" | "oruro" | "luz" | "plinko" | "sapo";
+export type Game = "race" | "stellar" | "wheel" | "ledger" | "rockets" | "pasanaku" | "teleferico" | "tombola" | "trompo" | "totora" | "pinata" | "oruro" | "luz" | "plinko" | "sapo" | "ahorcado";
 
 /** Ronda de quicknet ya publicada y verificada. */
 export interface Beacon {
@@ -63,14 +63,31 @@ export { SAPO_MAX } from "./games/pixi/sapo-plan";
 import { SAPO_MAX as SAPO_CAP } from "./games/pixi/sapo-plan";
 
 /**
+ * Ahorcado (the winner's name is the hidden word) shows up to this many
+ * candidates, each with 2 to 18 letters. Defined in `games/pixi/hangman-plan.ts`
+ * (pure, testable in Node); beyond it, or with a name it cannot play, the draw
+ * falls back to the race.
+ */
+export { HANGMAN_MAX } from "./games/pixi/hangman-plan";
+import { HANGMAN_MAX as HANGMAN_CAP, fitsHangman } from "./games/pixi/hangman-plan";
+
+/**
  * El juego que de verdad se cuenta: si el elegido no aguanta tantos nombres
  * (la ruleta pasados WHEEL_MAX, Plinko pasados PLINKO_MAX), la carrera, que
  * es el juego de la casa. No altera quién ganó: el juego solo narra.
+ *
+ * `names` and `winners` are optional: Ahorcado also needs every name to be
+ * playable (2 to 18 letters once normalized). Callers that only know the
+ * headcount (the preload) still get the cap; the draw passes both.
  */
-export function playableGame(game: Game, people: number): Game {
+export function playableGame(game: Game, people: number, names?: readonly string[], winners?: readonly number[]): Game {
   if (game === "wheel" && people > WHEEL_MAX) return "race";
   if (game === "plinko" && people > PLINKO_CAP) return "race";
   if (game === "sapo" && people > SAPO_CAP) return "race";
+  if (game === "ahorcado") {
+    if (people > HANGMAN_CAP) return "race";
+    if (names && !fitsHangman(names, winners)) return "race";
+  }
   return game;
 }
 

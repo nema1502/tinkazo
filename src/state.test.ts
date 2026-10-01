@@ -72,3 +72,35 @@ describe("skipMotion", () => {
     expect(i.skippedForReducedMotion()).toBe(false);
   });
 });
+
+describe("playableGame", () => {
+  it("keeps the existing caps working", async () => {
+    const s = await load();
+    expect(s.playableGame("wheel", 24)).toBe("wheel");
+    expect(s.playableGame("wheel", 25)).toBe("race");
+    expect(s.playableGame("plinko", 12)).toBe("plinko");
+    expect(s.playableGame("plinko", 13)).toBe("race");
+    expect(s.playableGame("sapo", 12)).toBe("sapo");
+    expect(s.playableGame("sapo", 13)).toBe("race");
+    expect(s.playableGame("race", 500)).toBe("race");
+    expect(s.playableGame("teleferico", 500)).toBe("teleferico");
+  });
+
+  it("ahorcado falls back to the race over the cap, even without names", async () => {
+    const s = await load();
+    expect(s.HANGMAN_MAX).toBe(12);
+    expect(s.playableGame("ahorcado", 12)).toBe("ahorcado");
+    expect(s.playableGame("ahorcado", 13)).toBe("race");
+  });
+
+  it("ahorcado falls back when a name cannot be played, and stays when all can", async () => {
+    const s = await load();
+    expect(s.playableGame("ahorcado", 3, ["Ana", "Luis", "José"], [1])).toBe("ahorcado");
+    expect(s.playableGame("ahorcado", 3, ["Ana", "X", "José"], [0])).toBe("race");
+    expect(s.playableGame("ahorcado", 3, ["Ana", "😀", "José"], [0])).toBe("race");
+    expect(s.playableGame("ahorcado", 2, ["Ana", "a".repeat(19)], [0])).toBe("race");
+    expect(s.playableGame("ahorcado", 3, ["Ana", "Luis", "José"], [7])).toBe("race");
+    // names are only consulted for ahorcado
+    expect(s.playableGame("sapo", 3, ["Ana", "X", "José"], [0])).toBe("sapo");
+  });
+});
