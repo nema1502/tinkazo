@@ -29,3 +29,5 @@ Thumbs.db
 # Las imágenes del README sí.
 docs/capturas/*
 !docs/capturas/readme/
+# Local AI runtime state
+.atl/
