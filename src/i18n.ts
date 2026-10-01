@@ -53,6 +53,10 @@ export interface Dict {
   cPlkNear: (n: string) => string;
   cPlkNext: (k: number, of: number) => string;
   cPlkDone: (n: string) => string;
+  cSapCount: (n: number) => string;
+  cSapNear: (n: string) => string;
+  cSapNext: (k: number, of: number) => string;
+  cSapDone: (n: string) => string;
   cOruCount: (n: number) => string;
   cOruStop: (k: number, off: number, left: number) => string;
   cOruStay: (n: string) => string;
@@ -368,6 +372,18 @@ export const T: Record<Lang, Dict> = {
     cPlkLast: ["¡Último clavo!", "¡Un rebote más!", "¡Se decide ahora!"],
     cPlkNext: (k, of) => `¡Bola ${k} de ${of}!`,
     cPlkDone: (n) => pick([`¡Cayó en el casillero de ${n}!`, `¡Ahí quedó, en el de ${n}!`]),
+    // --- Sapo: la rana del medio, un agujero por nombre y una ficha que se lanza.
+    gameSapo: "Sapo",
+    cSapHang: ["¡Se arma la mesa!", "¡La rana en su lugar!", "¡Cada nombre tiene su agujero!"],
+    cSapCount: (n) => `¡${n} agujeros, uno por nombre!`,
+    cSapThrow: ["¡Ahí va la ficha!", "¡Tiro!", "¡Se lanza la ficha!"],
+    cSapMiss: ["¡Pegó en la mesa y se fue!", "¡Afuera!", "¡Qué lástima, rodó lejos!"],
+    cSapRim: ["¡Clinc!", "¡Pegó en el borde!", "¡Tocó el aro!"],
+    cSapNear: (n) => pick([`¡Casi cae en el de ${n}!`, `¡Bailó en el borde de ${n}!`, `¡${n} se ilusiona!`]),
+    cSapLast: ["¡Último tiro!", "¡Este es el bueno!", "¡Se decide ahora!"],
+    cSapCroak: ["¡CROAC!", "¡Se la tragó la rana!", "¡Adentro!"],
+    cSapNext: (k, of) => `¡Tiro ${k} de ${of}!`,
+    cSapDone: (n) => pick([`¡Cayó en el agujero de ${n}!`, `¡Ahí quedó, en el de ${n}!`]),
     // --- Carnaval de Oruro. La entrada de la Diablada hasta el Socavón.
     cOruStart: ["¡Arranca la entrada!", "¡Suena la banda!", "¡Que baile la diablada!"],
     cOruCount: (n) => (n === 2 ? "¡Dos diablos en la comparsa!" : `¡${n} diablos en la comparsa!`),
@@ -979,6 +995,18 @@ export const T: Record<Lang, Dict> = {
     cPlkLast: ["Last peg!", "One more bounce!", "It's decided now!"],
     cPlkNext: (k, of) => `Ball ${k} of ${of}!`,
     cPlkDone: (n) => pick([`It landed in ${n}'s slot!`, `There it rests, in ${n}'s!`]),
+    // --- Sapo: the frog in the middle, one hole per name and a token to toss.
+    gameSapo: "Sapo",
+    cSapHang: ["The table is going up!", "Frog in place!", "Every name gets a hole!"],
+    cSapCount: (n) => `${n} holes, one per name!`,
+    cSapThrow: ["Here goes the token!", "Toss!", "The token flies!"],
+    cSapMiss: ["It hit the table and rolled off!", "Out!", "Too bad, it rolled away!"],
+    cSapRim: ["Clink!", "It hit the rim!", "It touched the ring!"],
+    cSapNear: (n) => pick([`Almost dropped into ${n}'s hole!`, `It danced on ${n}'s rim!`, `${n} gets hopeful!`]),
+    cSapLast: ["Last toss!", "This is the one!", "It's decided now!"],
+    cSapCroak: ["RIBBIT!", "The frog swallowed it!", "In!"],
+    cSapNext: (k, of) => `Toss ${k} of ${of}!`,
+    cSapDone: (n) => pick([`It dropped into ${n}'s hole!`, `There it rests, in ${n}'s!`]),
     cOruStart: ["The entrada begins!", "The band strikes up!", "Let the diablada dance!"],
     cOruCount: (n) => (n === 2 ? "Two devils in the troupe!" : `${n} devils in the troupe!`),
     cOruDance: ["What steps!", "Look at them stomp!", "The devils leap!"],

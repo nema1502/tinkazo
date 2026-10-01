@@ -214,6 +214,58 @@ const PAINTERS: Record<string, Painter> = {
     c.fill();
     c.stroke();
   },
+  /** Sapo: la ficha vuela en parábola hacia la rana, rebota en la mesa y cae en un agujero. */
+  sapo(c, t, col) {
+    c.fillStyle = "#2f4a3a";
+    c.fillRect(0, 0, W, H);
+    const cx = W / 2, cy = H * 0.46;
+    const holes = 6;
+    const hx = (k: number): number => cx + Math.cos(-Math.PI / 2 + (k / holes) * TAU) * 40;
+    const hy = (k: number): number => cy + Math.sin(-Math.PI / 2 + (k / holes) * TAU) * 19;
+    for (let k = 0; k < holes; k++) {
+      c.fillStyle = "#191919";
+      c.beginPath();
+      c.ellipse(hx(k), hy(k), 6.5, 3.8, 0, 0, TAU);
+      c.fill();
+      c.strokeStyle = col(k);
+      c.lineWidth = 1.4;
+      c.stroke();
+    }
+    // La rana del medio: el cuerpo, los ojos y la boca abierta.
+    c.fillStyle = "#6fbf4a";
+    c.beginPath();
+    c.ellipse(cx, cy, 11, 8, 0, 0, TAU);
+    c.fill();
+    c.strokeStyle = INK;
+    c.lineWidth = 1.2;
+    c.stroke();
+    c.fillStyle = "#f6efe2";
+    for (const dx of [-6, 6]) {
+      c.beginPath();
+      c.arc(cx + dx, cy - 7, 2.6, 0, TAU);
+      c.fill();
+      c.stroke();
+    }
+    c.fillStyle = INK;
+    c.beginPath();
+    c.ellipse(cx, cy + 1.5, 5.5, 3, 0, 0, TAU);
+    c.fill();
+    // La ficha: un lanzamiento corto que falla y otro que entra; todo depende de la hora de la miniatura.
+    const f = (t * 0.45) % 1;
+    const miss = f < 0.5;
+    const k = (miss ? f : f - 0.5) * 2;
+    const from = { x: cx, y: H - 4 };
+    const to = miss ? { x: cx + 22, y: cy + 17 } : { x: hx(3), y: hy(3) };
+    const bx = from.x + (to.x - from.x) * k;
+    const by = from.y + (to.y - from.y) * k - Math.sin(Math.PI * k) * 16;
+    c.fillStyle = "#ffc629";
+    c.strokeStyle = INK;
+    c.lineWidth = 1.2;
+    c.beginPath();
+    c.arc(bx, by, 3, 0, TAU);
+    c.fill();
+    c.stroke();
+  },
   /** La piñata de siete picos balanceándose, y cada tanto caen caramelos. */
   pinata(c, t, col) {
     c.fillStyle = "#3a2440";

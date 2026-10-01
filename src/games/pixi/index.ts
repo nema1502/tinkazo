@@ -20,6 +20,7 @@ const PIXI: Partial<Record<Game, () => Promise<Launch>>> = {
   trompo: async () => (await import("./trompo")).trompoPixi,
   pinata: async () => (await import("./pinata")).pinataPixi,
   plinko: async () => (await import("./plinko")).plinkoPixi,
+  sapo: async () => (await import("./sapo")).sapoPixi,
   oruro: async () => (await import("./oruro")).oruroPixi,
   luz: async () => (await import("./luz")).luzPixi,
   totora: async () => {
