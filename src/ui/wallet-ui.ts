@@ -2,6 +2,7 @@ import { $, esc } from "../dom";
 import { onLangChange, t } from "../i18n";
 import { anchoringAvailable, accountUrl, network, shortAddress } from "../stellar/config";
 import { refreshFreezeLabel } from "./freeze";
+import { clearSessionKind, loadSessionKind, pickRestore, saveSessionKind } from "../stellar/session-store";
 
 /**
  * Identidad del organizador en la cabecera.
@@ -48,6 +49,68 @@ export function initWalletUI(): void {
   render();
   onLangChange(render);
   void restorePollar();
+  void restoreSession();
+}
+
+/**
+ * Retoma sin ruido la sesión de cuenta de prueba o Freighter tras recargar.
+ * Google lo retoma `restorePollar`. Cualquier falla deja la sesión cerrada y
+ * olvida el tipo guardado, sin avisos: el usuario simplemente vuelve a conectar.
+ */
+async function restoreSession(): Promise<void> {
+  const kind = loadSessionKind(network.name);
+  if (!kind || kind === "google") return;
+  try {
+    const w = await loadWallets();
+    const pick = pickRestore({
+      kind,
+      guestStored: w.guestStored(),
+      guestAvailable: w.guestAvailable(),
+      // Solo se pregunta si ya hay permiso: al cargar la página nunca se abre un popup.
+      freighterAllowed: kind === "freighter" ? await w.freighterAllowed() : false,
+    });
+    if (!pick || pick === "google") {
+      clearSessionKind(network.name);
+      return;
+    }
+    const wallet = pick === "guest" ? w.guestWallet : w.freighterWallet;
+    // restore() nunca crea cuenta ni llama al grifo: solo lee lo ya guardado.
+    const address = pick === "guest" ? await w.guestWallet.restore() : await w.freighterWallet.restore();
+    if (!address) {
+      clearSessionKind(network.name);
+      return;
+    }
+    await activate(w, wallet, address, true);
+  } catch {
+    clearSessionKind(network.name);
+  }
+}
+
+/** Deja la wallet como activa y pinta la sesión. Lo comparten conectar y retomar. */
+async function activate(
+  w: WalletModule,
+  wallet: import("../stellar/wallet").WalletAdapter,
+  address: string,
+  restoring = false,
+): Promise<void> {
+  const { resetClient } = await import("../stellar/contract");
+  const passphrase = await wallet.networkPassphrase();
+  // Otra vía (retomar Google, o conectar a mano) pudo ganar mientras esperábamos.
+  if (restoring && session) return;
+  w.setActiveWallet(wallet);
+  resetClient();
+  // Si la wallet no sabe decir su red, no bloqueamos: la transacción fallaría
+  // igual, y con un error más claro que una suposición nuestra.
+  wrongNetwork = passphrase !== null && passphrase !== network.networkPassphrase;
+  const prof = (wallet as { profile?: () => { name: string; avatar: string } | null }).profile?.();
+  session = {
+    kind: wallet.kind,
+    label: wallet.label,
+    address,
+    ...(prof ? { name: prof.name, avatar: prof.avatar } : {}),
+  };
+  render();
+  refreshFreezeLabel();
 }
 
 /** Al volver del redirect de Google, la sesión se retoma sola. */
@@ -58,6 +121,7 @@ async function restorePollar(): Promise<void> {
     const address = await pollarWallet.restore();
     if (!address) return;
     const { setActiveWallet } = await loadWallets();
+    if (session) return;
     setActiveWallet(pollarWallet);
     const prof = pollarWallet.profile();
     session = {
@@ -487,22 +551,8 @@ async function connect(
           ? (await import("../stellar/wallet-pollar")).pollarWallet
           : w.freighterWallet;
     const address = await wallet.connect();
-    w.setActiveWallet(wallet);
-    const { resetClient } = await import("../stellar/contract");
-    resetClient();
-    const passphrase = await wallet.networkPassphrase();
-    // Si la wallet no sabe decir su red, no bloqueamos: la transacción fallaría
-    // igual, y con un error más claro que una suposición nuestra.
-    wrongNetwork = passphrase !== null && passphrase !== network.networkPassphrase;
-    const prof = pick === "google" ? (wallet as { profile?: () => { name: string; avatar: string } | null }).profile?.() : null;
-    session = {
-      kind: wallet.kind,
-      label: wallet.label,
-      address,
-      ...(prof ? { name: prof.name, avatar: prof.avatar } : {}),
-    };
-    render();
-    refreshFreezeLabel();
+    await activate(w, wallet, address);
+    saveSessionKind(pick, network.name);
     if (wallet.kind === "guest") notice(t("guestReady"), false);
     // El diálogo no se cierra hasta saber si la cuenta puede pagar. Cerrarlo y
     // dejar el aviso más abajo en la página hacía que nadie lo viera: la
@@ -540,6 +590,8 @@ async function disconnect(): Promise<void> {
   resetClient();
   session = null;
   wrongNetwork = false;
+  // Cerrar sesión a propósito es lo único que olvida el tipo de sesión guardado.
+  clearSessionKind(network.name);
   render();
   refreshFreezeLabel();
 }
