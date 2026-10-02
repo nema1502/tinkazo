@@ -45,6 +45,11 @@ interface Emblem {
 
 const emblems = new Map<string, Emblem>();
 
+/** El color de la cara de una persona: para que lo que es suyo en un juego tenga el mismo. */
+export function avatarColor(name: string): string {
+  return emblem(name).color;
+}
+
 /** El dibujo de una persona: su color y sus celdas. Lo comparten el SVG y el lienzo. */
 function emblem(name: string): Emblem {
   const hit = emblems.get(name);

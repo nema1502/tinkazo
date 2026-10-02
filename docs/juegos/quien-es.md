@@ -20,8 +20,9 @@ El ganador sale del [protocolo](../protocolo.md) antes de que empiece el juego. 
 1. Las letras de cada nombre se comparan sin tildes y con la Ñ como N.
 2. En cada turno se toma, entre las letras que todavía separan a alguien, la que deja el grupo más cerca de la mitad; entre empates decide el `rng` sembrado de la ronda. La carta del ganador nunca se da vuelta.
 3. Así 50 nombres se resuelven en unas seis preguntas y 200 en unas ocho (como mucho diez).
-4. Si quedan nombres que no se pueden separar por ninguna letra ("José" y "Jose"), el juego lo dice ("¡Mismas letras! El sorteo ya eligió") y la carta del ganador queda sola: el protocolo ya eligió.
-5. Con varios ganadores hay una ronda por cada uno, sin los ganadores anteriores, que esperan arriba a la derecha.
+4. Con dos o tres cartas, una sola pregunta lo resolvía todo y el juego era un subtítulo quieto. La ronda arranca entonces con una de calentamiento que no da vuelta a nadie: una letra que tienen todas ("¡Sí tiene A! Todas la tienen"), o si no hay, una que no tiene ninguna. Es verdad igual: la respuesta es la del nombre de quien ganó.
+5. Si quedan nombres que no se pueden separar por ninguna letra ("José" y "Jose"), el juego lo dice ("¡Mismas letras! El sorteo ya eligió") y la carta del ganador queda sola: el protocolo ya eligió.
+6. Con varios ganadores hay una ronda por cada uno, sin los ganadores anteriores, que esperan arriba a la derecha.
 
 Todo sale de la hora del juego. Sin `Math.random()`.
 
@@ -29,7 +30,8 @@ Todo sale de la hora del juego. Sin `Math.random()`.
 
 - **El reparto:** las cartas llegan de abajo, de a una, a la grilla. Desde el primer cuadro hay movimiento.
 - **La pregunta**, grande, arriba, en una placa amarilla, y al rato el sello "¡SÍ!" o "¡NO!".
-- **Las cartas que se van** se dan vuelta de canto, muestran el dorso con rombos del aguayo y se apagan, de a una.
+- **Mientras se espera la respuesta** un foco amarillo salta de carta en carta ("¡Mirá tu nombre!"). En la última pregunta frena de a poco y se queda en la carta de quien gana.
+- **Las cartas que se van** se dan vuelta de canto, muestran el dorso liso con un "?" y se apagan, de a una.
 - **Las que quedan** se reacomodan más grandes; con seis o menos la cámara se acerca.
 - **El final:** la carta del ganador sola, con un marco que late.
 - **El contador de la casa:** las cartas que siguen sobre las del principio.

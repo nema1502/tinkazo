@@ -2,7 +2,7 @@ import { Container, Graphics, Sprite, Text } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
 import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, fanfare, note } from "../../sound";
-import { WINNER_HOLD, clamp, ease, shorten, winnersLabel } from "../overlay";
+import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { writeStory } from "../drama";
 import { CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 import { isDigit, planRounds, type Round } from "./quien-plan";
@@ -31,7 +31,8 @@ const T_DEAL = 1.6;
 const ASK = 0.75;
 const FLIP = 0.55;
 const REGROUP = 0.6;
-const FINAL_HOLD = 1.8;
+/** Después de la última carta, casi nada: el suspenso va antes de la respuesta. */
+const FINAL_HOLD = 0.5;
 
 interface Step {
   round: number;
@@ -80,6 +81,8 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
   // Cada pregunta dura más cuando son pocas, para que un sorteo de dos personas
   // no sea un parpadeo; la última de la última ronda tiene más suspenso.
   const steps: Step[] = [];
+  /** Las rondas en que ya se dijo "quedan dos": con la pregunta de calentamiento se repetía. */
+  const dosDichos = new Set<number>();
   let tt = 0;
   rounds.forEach((r, ri) => {
     const grand = ri === total - 1;
@@ -89,8 +92,12 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
     const dur = clamp((grand ? 15 : 7) / Q, 2.2, grand ? 5.5 : 3);
     for (let qi = 0; qi < Q; qi++) {
       const last = qi === Q - 1;
-      const suspenso = grand && last ? 1.2 : 0;
-      const answer = tt + ASK + Math.min(1.4, dur - 2.2) * 0.5 + suspenso;
+      // La última pregunta: el foco frena de a poco entre las cartas.
+      const suspenso = grand && last ? 2.5 : 0;
+      // Con muchas cartas, tiempo para que cada uno revise su nombre.
+      const antes = qi === 0 ? r.pool.length : ((r.questions[qi - 1] as { remaining: number[] } | undefined)?.remaining.length ?? 2);
+      const revisar = antes > 8 ? 1.6 : 0;
+      const answer = tt + Math.max(ASK + Math.min(1.4, dur - 2.2) * 0.5, revisar) + suspenso;
       const flip = answer + 0.35;
       const regroup = flip + FLIP + Math.min(0.5, (dur - 2.2) * 0.3);
       const end = regroup + REGROUP;
@@ -135,7 +142,8 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
   /* ---------------------------------------------------------------- geometría */
   const G = (): { w: number; h: number; k: number; top: number; bottom: number } => {
     const w = S.sw(), h = S.sh(), k = S.u();
-    return { w, h, k, top: S.top() + 120 * k, bottom: h - S.bottom() - 12 * k };
+    // En el celular la pregunta va debajo del contador, así que las cartas arrancan más abajo.
+    return { w, h, k, top: S.top() + (S.portrait() ? 175 : 112) * k, bottom: h - S.bottom() - 12 * k };
   };
   let g = G();
   /** La grilla de `m` cartas que mejor llena el tablero: el tamaño de carta y dónde va cada una. */
@@ -179,7 +187,7 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
   counterG.addChild(counterBox, counter);
   S.hud.addChild(counterG);
 
-  interface Card { root: Container; front: Container; back: Graphics; face: Sprite; label: Text; x: number; y: number; s: number }
+  interface Card { root: Container; front: Container; back: Container; face: Sprite; label: Container; x: number; y: number; s: number }
   let cards: Card[] = [];
   /** Dónde estaba cada carta cuando empezó el último acomodo, para que viaje suave. */
   const from = new Map<number, { x: number; y: number; s: number }>();
@@ -191,22 +199,7 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
   let focoAntes = -1;
   let latidoAntes = -1;
 
-  const corto = (nm: string): string => {
-    const p = nm.trim().split(/\s+/);
-    const s = p.length > 1 ? `${p[0]} ${Array.from(p[1] as string)[0]}.` : (p[0] ?? "");
-    return Array.from(s).length > 13 ? `${Array.from(s).slice(0, 12).join("")}…` : s;
-  };
 
-  /** La etiqueta de cada carta: la corta, o el nombre entero si dos cortas chocan. */
-  const etiqueta: string[] = (() => {
-    const cortas = names.map(corto);
-    const veces = new Map<string, number>();
-    for (const c of cortas) veces.set(c, (veces.get(c) ?? 0) + 1);
-    return names.map((nm, i) => ((veces.get(cortas[i] as string) ?? 0) > 1 ? shorten(nm, 16) : (cortas[i] as string)));
-  })();
-
-  /** El mazo del que salen las cartas: abajo al centro, encima de la caja de subtítulos. */
-  const deck = (): { x: number; y: number } => ({ x: g.w / 2, y: g.bottom - 40 * g.k });
 
   const build = (): void => {
     g = G();
@@ -222,29 +215,40 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
       const fondo = new Graphics()
         .roundRect(4, 5, W, H, 10).fill({ color: INK, alpha: 0.5 })
         .roundRect(0, 0, W, H, 10).fill(S.dark ? CREAM : 0xffffff).stroke({ width: 3, color: INK })
-        .rect(8, 8, W - 16, 96).fill(S.color(i));
+        .rect(8, 8, W - 16, 78).fill(S.color(i));
       const face = new Sprite(S.face(nm));
       face.anchor.set(0.5);
-      face.width = face.height = 84;
-      face.position.set(W / 2, 56);
-      const label = S.text(etiqueta[i] ?? corto(nm), { fontSize: 17, fontWeight: "900", fill: INK });
-      label.anchor.set(0.5);
-      label.position.set(W / 2, 130);
-      if (label.width > W - 12) label.scale.set((W - 12) / label.width);
+      face.width = face.height = 66;
+      face.position.set(W / 2, 47);
+      // El nombre completo, en dos líneas: las letras se preguntan sobre el
+      // nombre entero, así que tienen que estar todas a la vista. Con el nombre
+      // abreviado ("Carlos C.") la H de "Choque" no se veía y parecía trampa.
+      const partes = nm.trim().split(/\s+/);
+      const lineas = partes.length > 1 ? [partes[0] as string, partes.slice(1).join(" ")] : [nm.trim()];
+      const label = new Container();
+      lineas.forEach((ln, j) => {
+        const tx = S.text(ln, { fontSize: 19, fontWeight: "900", fill: INK });
+        tx.anchor.set(0.5);
+        if (tx.width > W - 10) tx.scale.set((W - 10) / tx.width);
+        tx.position.set(W / 2, lineas.length > 1 ? 112 + j * 24 : 124);
+        label.addChild(tx);
+      });
       front.addChild(fondo, face, label);
+      // El dorso: liso, con un signo de pregunta. Los rombos se leían como naipes.
       const back = new Graphics()
         .roundRect(4, 5, W, H, 10).fill({ color: INK, alpha: 0.5 })
         .roundRect(0, 0, W, H, 10).fill(S.dark ? 0x3a2f5a : 0x7a5cc4).stroke({ width: 3, color: INK });
-      // El dorso: rombos del aguayo.
-      for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) {
-        const cx = 22 + c * 38, cy = 26 + r * 36;
-        back.poly([cx, cy - 12, cx + 12, cy, cx, cy + 12, cx - 12, cy]).fill(S.color(r + c));
-      }
-      back.visible = false;
-      root.addChild(front, back);
+      const signo = S.text("?", { fontSize: 96, fontWeight: "900", fill: CREAM });
+      signo.anchor.set(0.5);
+      signo.position.set(W / 2, H / 2);
+      signo.alpha = 0.85;
+      const backC = new Container();
+      backC.addChild(back, signo);
+      backC.visible = false;
+      root.addChild(front, backC);
       root.pivot.set(W / 2, H / 2);
       cardLayer.addChild(root);
-      return { root, front, back, face, label, x: deck().x, y: deck().y - i * 0.6, s: 0.32 * g.k };
+      return { root, front, back: backC, face, label, x: g.w / 2, y: (g.top + g.bottom) / 2, s: 0 };
     });
     bannerText.style.fontSize = 30 * k;
     stamp.style.fontSize = 28 * k;
@@ -294,10 +298,11 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
         } else if (s.q < r.questions.length) {
           const q = r.questions[s.q] as { letter: string };
           const quedan = alive(s.round, s.start).length;
-          if (quedan === 2 && grand && r.questions.length > 0 && story.arc !== "tapada") {
+          if (quedan === 2 && grand && r.questions.length > 0 && story.arc !== "tapada" && !dosDichos.has(s.round)) {
+            dosDichos.add(s.round);
             const [a, b] = alive(s.round, s.start);
             S.say(T[getLang()].cQuiTwo(names[a as number] ?? "", names[b as number] ?? ""), 0.85);
-          } else S.say(T[getLang()][isDigit(q.letter) ? "cQuiAskN" : "cQuiAsk"](q.letter), 0.3 + 0.5 * (1 - quedan / Math.max(2, r.pool.length)));
+          } else S.say(t("cQuiCheck"), 0.3 + 0.5 * (1 - quedan / Math.max(2, r.pool.length)));
           beep(note(9), 0.1, "triangle", 0.04);
         } else {
           S.say(t("cQuiTie"), 0.8);
@@ -317,7 +322,8 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
             beep(note(-2), 0.18, "triangle", 0.045);
           }
           const que = isDigit(q.letter) ? `${q.letter}` : q.letter;
-          S.say(T[getLang()][q.has ? "cQuiYes" : "cQuiNo"](que, k), 0.45 + 0.4 * (s.q / Math.max(1, r.questions.length)));
+          const dic = T[getLang()];
+          S.say(k ? dic[q.has ? "cQuiYes" : "cQuiNo"](que, k) : dic.cQuiNone(que, q.has), 0.45 + 0.4 * (s.q / Math.max(1, r.questions.length)));
           for (let i = 0; i < Math.min(8, k); i++) setTimeout(() => beep(note(10 - (i % 4)), 0.03, "square", 0.02), 350 + i * 45);
           cam.shake((2 + Math.min(4, k * 0.2)) * g.k);
         }
@@ -348,7 +354,10 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
       const ps = set.map((_, i) => gr.at(i));
       x = ps.reduce((a, p) => a + p.x, 0) / ps.length;
       y = ps.reduce((a, p) => a + p.y, 0) / ps.length;
-      z = set.length <= 2 ? 1.25 : 1.12;
+      // Nunca más cerca de lo que entra: con seis cartas cortaba las de los bordes.
+      const ancho = Math.max(...ps.map((p) => p.x)) - Math.min(...ps.map((p) => p.x)) + gr.cw * 1.2;
+      const alto = Math.max(...ps.map((p) => p.y)) - Math.min(...ps.map((p) => p.y)) + gr.ch * 1.2;
+      z = Math.max(1, Math.min(set.length <= 2 ? 1.25 : 1.12, (g.w * 0.92) / ancho, ((g.bottom - g.top) * 0.95) / alto));
     }
     x = clamp(x, g.w / 2 / z, g.w - g.w / 2 / z);
     y = clamp(y, g.h / 2 / z, g.h - g.h / 2 / z);
@@ -406,7 +415,7 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
         let tx = c.x, ts = c.s;
         if (pos >= 0) {
           const p = gr.at(pos);
-          const f = from.get(i) ?? { x: deck().x, y: deck().y, s: 0.32 * k };
+          const f = from.get(i) ?? { x: g.w / 2, y: (g.top + g.bottom) / 2, s: 0 };
           // En el reparto cada carta llega un poco después que la anterior.
           const dealU = layoutDeal ? ease.outCubic(clamp(((tAll - layoutT0) / durLayout) * 1.6 - (pos / Math.max(1, set.length)) * 0.6, 0, 1)) : u;
           tx = f.x + (p.x - f.x) * dealU;
@@ -452,10 +461,23 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
         // "¿esta? ¿esta?". Más rápido cuantas más cartas quedan.
         const espera = steps.find((s) => s.round === ri && s.q >= 0 && tAll >= s.start + 0.3 && tAll < s.answer);
         if (espera && pos >= 0 && set.length > 1) {
-          const ritmo = set.length > 8 ? 7 : 4;
-          const toca = set[Math.floor((tAll - espera.start) * ritmo + hash(ri, espera.q) * set.length) % set.length];
+          // En la última pregunta el foco frena de a poco y se
+          // queda en la carta de quien gana justo antes de la respuesta.
+          const ultima = espera === steps.filter((x) => x.round === ri && x.q >= 0).at(-1) && ri === total - 1;
+          let fase: number;
+          if (ultima) {
+            const T0 = espera.start + 0.3, dur = Math.max(0.5, espera.answer - T0);
+            const e = clamp((tAll - T0) / dur, 0, 1);
+            const vueltas = set.length * 2 + 3;
+            const quien = set.indexOf(r.winner);
+            // Más medio paso: la fase se acerca a su lugar desde abajo, y sin eso el piso caía en la carta anterior.
+            fase = vueltas * (1 - (1 - e) * (1 - e)) + ((quien - vueltas) % set.length + set.length) % set.length + 0.5;
+          } else {
+            fase = (tAll - espera.start) * (set.length > 8 ? 7 : 4) + hash(ri, espera.q) * set.length;
+          }
+          const toca = set[Math.floor(fase) % set.length];
           if (toca === i && toca !== focoAntes) {
-            // Cada salto del foco suena, como una ruleta que busca.
+            // Cada salto del foco suena, como algo que busca.
             focoAntes = toca;
             beep(note(12 + (i % 3)), 0.03, "square", 0.02);
           }
@@ -489,24 +511,26 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
       const bw = bannerText.width + 48 * k, bh = 54 * k;
       bannerBg.clear().roundRect(-bw / 2 + 5 * k, -bh / 2 + 5 * k, bw, bh, 8 * k).fill(INK)
         .roundRect(-bw / 2, -bh / 2, bw, bh, 8 * k).fill(YELLOW).stroke({ width: 3 * k, color: INK });
-      banner.position.set(g.w / 2, S.top() + 50 * k);
+      banner.position.set(g.w / 2, S.top() + (S.portrait() ? 100 : 50) * k);
       banner.scale.set(appear);
       const ans = clamp((tAll - cur.answer) / 0.2, 0, 1);
       stamp.visible = stampBg.visible = !!q && ans > 0;
       if (q && ans > 0) {
         stamp.text = q.has ? t("cQuiSi") : t("cQuiNoStamp");
         const sw = stamp.width + 26 * k, sh = 44 * k;
-        const sx = bw / 2 + sw / 2 + 12 * k;
-        stamp.position.set(sx, 0);
+        // En el celular el sello va debajo de la pregunta: al costado se cortaba.
+        const sx = S.portrait() ? 0 : bw / 2 + sw / 2 + 12 * k;
+        const sy = S.portrait() ? bh / 2 + sh / 2 + 6 * k : 0;
+        stamp.position.set(sx, sy);
         stamp.rotation = -0.12;
-        stampBg.clear().roundRect(sx - sw / 2, -sh / 2, sw, sh, 6 * k).fill(q.has ? 0x17c3b2 : 0xff5cb3).stroke({ width: 3 * k, color: INK });
+        stampBg.clear().roundRect(sx - sw / 2, sy - sh / 2, sw, sh, 6 * k).fill(q.has ? 0x17c3b2 : 0xff5cb3).stroke({ width: 3 * k, color: INK });
         stampBg.rotation = 0;
         stamp.scale.set(1 + 0.6 * (1 - ease.outBack(ans)));
       }
     }
 
     // El contador: cuántas cartas siguen.
-    counter.text = `${t("cQuiCards")}  ${alive(ri, tAll).length} / ${r.pool.length}`;
+    counter.text = `${t("cQuiLeft")}  ${alive(ri, tAll).length} / ${r.pool.length}`;
     const bw = counter.width + 40 * k, bh = 40 * k;
     counter.position.set(bw / 2, bh / 2);
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(0x221a33).stroke({ width: 3 * k, color: INK });

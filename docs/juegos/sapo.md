@@ -1,6 +1,6 @@
 # El sapo
 
-El juego de las chicherías y las ferias de Perú, Bolivia y Colombia: un cajón de madera pintado, con una rana de bronce encima y agujeros en la tapa. Desde lejos se tiran argollas de bronce: unas pegan en la madera y se van, otras bailan en el borde de un agujero y salen, y la última de cada ganador cae en su agujero. Cada agujero lleva el nombre de alguien.
+El juego de las ferias y los patios de Perú, Bolivia y Colombia: un cajón de madera pintado, con una rana de bronce encima y agujeros en la tapa. Desde lejos se tiran argollas: unas pegan en la madera y se van, otras bailan en el borde de un agujero y salen, y la última de cada ganador cae en su agujero. Cada agujero lleva el nombre de alguien.
 
 **Identificador:** `sapo` · **Probarlo:** `/?demo=sapo` (sorteo real), `/?pose=sapo` (escena fija, sin red), `/?pose=sapo&n=50`.
 
@@ -19,11 +19,12 @@ El ganador sale del [protocolo](../protocolo.md) antes de que empiece el juego. 
 
 - **El cajón**, visto desde arriba y adelante: tapa de madera con vetas y una guarda de colores, y al frente los cajoncitos numerados del sapo de verdad. Abajo, el piso de un patio.
 - **La rana de bronce**, sentada en el medio: respira, parpadea, le palpita la garganta y abre la boca cuando cae una argolla.
-- **Los nombres**: cada agujero lleva el suyo afuera, con su cara y en grande (nombre e inicial del apellido), y el aro del agujero es del color de esa persona.
-- **La mano** que tira: baja para tomar impulso y suelta.
-- **La argolla**: un disco de bronce con agujero, para que no se lea como moneda ni como ficha.
-- **El "casi"**: la argolla queda montada sobre el aro de un agujero vecino, medio adentro y medio afuera, baila y sale. El relator nombra a quien estaba ahí.
-- **El contador de la casa**, arriba a la izquierda: los que siguen en carrera durante la clasificatoria, después los agujeros, y con varios ganadores el ganador de turno.
+- **Los nombres**: cada agujero lleva el suyo afuera, pegado al aro y anclado por el borde de adentro, para que un nombre largo nunca vuelva sobre su propio agujero. En un celular la mesa se achica lo justo para que el nombre más largo de los costados entre afuera, y el que igual no entra se achica él. El del ganador, al coronar, va debajo de su agujero. Va la etiqueta más corta que no se confunda con otra: "María Q.", y si hay dos, "María Qu." y "María Qs."; si el corte cae justo en el fin de una palabra, el nombre entero. La cara es la del nombre entero, y el aro del agujero es del color de esa cara, salvo el amarillo, que es de la argolla y del ganador: esas caras llevan el aro crema.
+- **La mano** que tira: en una pantalla ancha sobre la esquina del cajón, en un celular debajo, para que la mesa use todo el ancho. Baja para tomar impulso y suelta.
+- **La argolla**: un disco amarillo con borde de tinta y agujero, grande, que contrasta con los dos tonos de madera y no se lee como moneda.
+- **El "casi"**: la argolla queda montada sobre el aro de un agujero vecino, del lado que mira a la rana (afuera quedaría debajo del nombre), baila y sale. Un "¡Casi!" amarillo aparece entre la argolla y la rana, y el relator nombra a quien estaba ahí.
+- **El agujero ganador**: el aro se vuelve amarillo y grueso, estalla en rayos, y el nombre crece con un resaltado amarillo que sigue a la vista cuando aparece el cartel.
+- **El contador de la casa**, arriba a la izquierda: los que siguen en juego durante la clasificatoria (baja cuando la oleada ya cayó, no antes), después los agujeros, y con varios ganadores el ganador de turno.
 
 ## Arcos y cámara
 
@@ -31,11 +32,12 @@ El arco sale de [`drama.ts`](../../src/games/drama.ts) y decide cuántos tiros d
 
 | Arco | Antes del tiro que entra |
 |---|---|
-| Susto, duelo | 2 que pegan en la madera y 2 que bailan en un borde vecino |
+| Susto | 2 que pegan en la madera y 2 que bailan en un borde vecino; el último pega en el labio de la rana y rebota adentro |
+| Duelo | 2 que pegan en la madera y 2 que bailan en un borde vecino |
 | Remontada | 4 en la madera y 1 en un borde; la cámara sigue de cerca desde el principio |
 | Tapada | 1 en la madera y 1 en un borde; nadie se nombra hasta que entra |
 
-La cámara sigue a la argolla, se acerca en el "casi" y en el último vuelo, y termina en el agujero del ganador, encuadrado por encima de la caja de subtítulos.
+La cámara sigue a la argolla mientras está en la mesa y vuelve a la mesa entera cuando se va. Se acerca en el "casi" y en el último vuelo, y termina en el agujero del ganador, a un 62% del alto de la pantalla, y ahí se queda con el cartel arriba, aunque el agujero sea de la fila de arriba.
 
 ## Cuánta gente
 

@@ -100,7 +100,8 @@ export interface PixiStage {
   face(name: string): Texture;
   text(s: string, style: TextStyleOptions): Text;
   /** Un chip con la cara y el nombre, anclado por la izquierda al medio. */
-  chip(name: string, scale?: number): Container;
+  /** `faceOf`: de quién es la cara, cuando la etiqueta es una versión corta del nombre. */
+  chip(name: string, scale?: number, faceOf?: string): Container;
   /** Deja anotado un dato para los auditores (arco, puesto…). */
   mark(key: string, value: string): void;
   /** El cartel del ganador y el papel picado: se arman una vez y se llevan a la hora. */
@@ -232,11 +233,11 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
 
   const text = (s: string, style: TextStyleOptions): Text => new Text({ text: s, style: { fontFamily: FONT, ...style } });
 
-  const chip = (name: string, scale = 1): Container => {
+  const chip = (name: string, scale = 1, faceOf = name): Container => {
     const k = u() * scale;
     const c = new Container();
     const label = text(shorten(name, 20), { fontSize: 12 * k, fontWeight: "800", fill: INK });
-    const av = new Sprite(face(name));
+    const av = new Sprite(face(faceOf));
     av.width = av.height = 16 * k;
     av.position.set(5 * k, 3 * k);
     label.position.set(25 * k, 3.5 * k);

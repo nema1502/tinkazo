@@ -32,14 +32,23 @@ describe("diccionario", () => {
     expect(vacias).toEqual([]);
   });
 
-  it("Sapo: the drop line says winner, the tally counts, the rule and 'almost' exist", () => {
+  it("Sapo: the drop line says winner, the tally counts, 'almost' and the frog's lip exist", () => {
     expect(T.es.cSapDone("Ana")).toContain("ganador");
     expect(T.en.cSapDone("Ana")).toContain("winner");
     expect(T.es.cSapTally(1, 2)).toBe("Ganador 1 de 2");
     expect(T.en.cSapTally(1, 2)).toBe("Winner 1 of 2");
-    for (const k of ["cSapRuleMany", "cSapRuleOne", "cSapAlmost"]) {
+    for (const k of ["cSapAlmost", "cSapLip"]) {
       expect(T.es[k]).toBeTruthy();
       expect(T.en[k]).toBeTruthy();
+    }
+  });
+
+  it("Sapo: what gets thrown is a ring, never a chip or a token", () => {
+    for (const l of ["es", "en"] as const) {
+      const textos = Object.entries(T[l])
+        .filter(([k]) => k.startsWith("cSap"))
+        .flatMap(([, v]) => (Array.isArray(v) ? v : typeof v === "string" ? [v] : []));
+      expect(textos.filter((x) => /ficha|token|chip/i.test(x))).toEqual([]);
     }
   });
 

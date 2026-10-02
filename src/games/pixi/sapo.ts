@@ -5,6 +5,7 @@ import { beep, fanfare, note } from "../../sound";
 import { writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, shorten, winnersLabel } from "../overlay";
 import { CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
+import { avatarColor } from "../../avatar";
 import { assignSlots } from "./slots";
 import { planQualifier } from "./qualifier";
 import { HAND, SAPO_MAX, holeLayout, optsForArc, planThrows, throwTime, type Point, type Throw } from "./sapo-plan";
@@ -12,9 +13,9 @@ import { HAND, SAPO_MAX, holeLayout, optsForArc, planThrows, throwTime, type Poi
 /**
  * El sapo.
  *
- * El juego de las chicherías y las ferias de Perú, Bolivia y Colombia: un
+ * El juego de las ferias y los patios de Perú, Bolivia y Colombia: un
  * cajón de madera pintado, con una rana de bronce encima y agujeros en la
- * tapa. Desde lejos se tiran argollas de bronce: unas pegan en la madera y se
+ * tapa. Desde lejos se tiran argollas: unas pegan en la madera y se
  * van, otras bailan en el borde de un agujero y salen, y la última de cada
  * ganador cae en su agujero. Cada agujero lleva el nombre de alguien.
  *
@@ -52,6 +53,8 @@ const WOBBLE = 0.8;
 const SINK = 0.5;
 /** Lo que tarda la mano en tomar impulso antes de soltar. */
 const WINDUP = 0.35;
+/** En el susto, qué parte del último vuelo llega hasta el labio de la rana. */
+const LABIO = 0.62;
 
 interface Toss {
   th: Throw;
@@ -113,6 +116,17 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     S.cleanup();
     return;
   }
+  /** En el susto la rana deja de ser decoración: el último tiro pega en su labio y rebota al agujero. */
+  const labio = story.arc === "susto";
+  /**
+   * El color de la cara de cada persona, para el aro de su agujero. El
+   * amarillo es de la argolla y del ganador: un aro amarillo desde el
+   * principio parecía ya elegido, así que esas caras llevan el aro crema.
+   */
+  const colorDe = (i: number): number => {
+    const c = parseInt((avatarColor(names[i] ?? "") || "#ffc629").replace("#", ""), 16);
+    return c === YELLOW ? CREAM : c;
+  };
   /** El índice original de quien está en el agujero `s`. */
   const whoAt = (s: number): number => fin[plan.nameAt[s] as number] as number;
   const nameOfSlot = (s: number): string => names[whoAt(s)] ?? "";
@@ -141,23 +155,62 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   setGameLength(T_CROWN, WINNER_HOLD);
 
   /* ---------------------------------------------------------------- geometría */
+  /**
+   * Dónde está la mano que tira, en unidades de la mesa: sobre la esquina de
+   * abajo a la derecha en una pantalla ancha, y debajo de la mesa en un
+   * celular, donde al costado achicaba la mesa y salía cortada.
+   */
+  const handPoint = (): Point => (S.portrait() ? { x: 0.9, y: L.tableR + 0.5 } : { x: HAND.x * 0.86, y: HAND.y * 0.82 });
+  /** Lo que mide el chip de cada nombre a escala 1, en unidades de `S.u()`. Se mide al armar. */
+  let anchoNombre: number[] = [];
   const G = (): { w: number; h: number; k: number; cx: number; cy: number; sc: number; br: number; tilt: number } => {
     const w = S.sw(), h = S.sh(), k = S.u();
     const topY = S.top() + 54 * k, botY = h - S.bottom() - 6 * k;
+    const hp = handPoint();
     // En un celular la tapa se ve más de frente, para usar el alto de la pantalla.
-    const tilt = S.portrait() ? 0.86 : 0.62;
-    const sc = Math.max(8, Math.min((w * 0.4) / L.tableR, (w * 0.47) / (HAND.x + 0.35), (botY - topY) / ((L.tableR + HAND.y) * tilt)));
-    const mid = (topY + botY) / 2;
-    const cy = mid - ((HAND.y - L.tableR) / 2) * tilt * sc;
-    return { w, h, k, cx: w / 2, cy, sc, br: clamp(sc * 0.085, 5 * k, 13 * k), tilt };
+    const tilt = S.portrait() ? 0.95 : 0.62;
+    let ancho = S.portrait() ? (w * 0.46) / L.tableR : Math.min((w * 0.4) / L.tableR, (w * 0.47) / (hp.x + 0.35));
+    if (S.portrait() && anchoNombre.length) {
+      // En un celular la mesa ocupaba casi todo el ancho y los nombres de los
+      // costados volvían sobre su agujero. Se achica lo justo para que el más
+      // largo entre afuera, y no menos de un tercio del ancho.
+      for (let s = 0; s < holes; s++) {
+        const h = L.holes[s] as Point;
+        const ux = h.x / (Math.hypot(h.x, h.y) || 1);
+        if (Math.abs(ux) <= 0.35) continue;
+        const W = (anchoNombre[whoAt(s)] ?? 0) * k * labelScale();
+        ancho = Math.min(ancho, (w / 2 - 6 * k - W) / (Math.abs(h.x) + L.holeR * 1.45 * Math.abs(ux)));
+      }
+      ancho = Math.max(ancho, (w * 0.4) / L.tableR);
+    }
+    // Lo que ocupa de alto: desde el borde de arriba del cajón hasta lo más bajo
+    // entre su borde de abajo y la mano, más el frente con los cajoncitos.
+    const arriba = L.tableR * 1.03, abajo = Math.max(hp.y, L.tableR * 1.03), frente = 46 * k;
+    const sc = Math.max(8, Math.min(ancho, (botY - topY - frente) / ((arriba + abajo) * tilt)));
+    const sobra = botY - topY - ((arriba + abajo) * tilt * sc + frente);
+    const cy = topY + Math.max(0, sobra) / 2 + arriba * tilt * sc;
+    // La argolla, grande: con 25 px no se seguía con la vista.
+    return { w, h, k, cx: w / 2, cy, sc, br: clamp(sc * 0.13, 8 * k, 20 * k), tilt };
   };
   let g = G();
   const P = (p: Point): Point => ({ x: g.cx + p.x * g.sc, y: g.cy + p.y * g.sc * g.tilt });
-  /** Dónde va el nombre de un agujero: afuera, del lado opuesto a la rana, lejos del aro. */
+  /** Dónde va el nombre de un agujero: afuera, del lado opuesto a la rana, pegado al aro. */
   const labelAt = (s: number): Point => {
     const h = L.holes[s] as Point;
     const d = Math.hypot(h.x, h.y) || 1;
-    return { x: h.x + (h.x / d) * L.holeR * 2.6, y: h.y + (h.y / d) * L.holeR * 2.6 };
+    return { x: h.x + (h.x / d) * L.holeR * 1.45, y: h.y + (h.y / d) * L.holeR * 1.45 };
+  };
+  /**
+   * Cómo se ancla el chip del agujero `s`: por su borde de adentro. A la
+   * derecha de la rana el chip crece hacia la derecha, a la izquierda hacia
+   * la izquierda, y arriba y abajo se centra. Centrado, un chip ancho volvía
+   * sobre su propio agujero.
+   */
+  const anchorOf = (s: number): { ax: number; ay: number } => {
+    const h = L.holes[s] as Point;
+    const d = Math.hypot(h.x, h.y) || 1;
+    const ux = h.x / d, uy = h.y / d;
+    return { ax: ux > 0.35 ? 0 : ux < -0.35 ? 1 : 0.5, ay: uy < -0.6 ? 1 : uy > 0.6 ? 0 : 0.5 };
   };
 
   /* ------------------------------------------------------------------ capas */
@@ -179,10 +232,17 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   const counterG = new Container();
   counterG.addChild(counterBox, counter);
   S.hud.addChild(counterG);
-  const almost = S.text("", { fontSize: 15, fontWeight: "900", fill: INK, stroke: { color: CREAM, width: 4 } });
-  almost.anchor.set(0.5, 1);
-  almost.alpha = 0;
-  S.hud.addChild(almost);
+  // "¡Casi!" como calcomanía amarilla, legible desde el fondo.
+  const almostBox = new Graphics();
+  const almost = S.text("", { fontSize: 26, fontWeight: "900", fill: INK });
+  almost.anchor.set(0.5);
+  const almostG = new Container();
+  almostG.addChild(almostBox, almost);
+  almostG.alpha = 0;
+  S.hud.addChild(almostG);
+  // Detrás del chip de quien gana, un resplandor amarillo.
+  const glowG = new Graphics();
+  S.hud.addChildAt(glowG, 0);
   const badgeLayer = new Container();
   const badgeOf = new Map<number, Text>();
   S.hud.addChild(badgeLayer);
@@ -193,24 +253,39 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   let gridAt: Point[] = [];
   let gridScale = 1;
   /** El nombre de un agujero, a una letra de 17 px o más en una pantalla de 720 de alto. */
-  const labelScale = (): number => (S.portrait() ? 1.15 : 1.45);
-  /** Nombre y la inicial del apellido: "María Q.". En la mesa entran doce, y el nombre entero no. */
-  const corto = (nm: string): string => {
+  const labelScale = (): number => (S.portrait() ? 0.9 : 1.45);
+  /** Nombre y `n` letras del apellido: "María Q.", "María Qu.". En la mesa entran doce, y el nombre entero no. */
+  const corto = (nm: string, n = 1): string => {
     const p = nm.trim().split(/\s+/);
-    const s = p.length > 1 ? `${p[0]} ${Array.from(p[1] as string)[0]}.` : (p[0] ?? "");
-    return Array.from(s).length > 13 ? `${Array.from(s).slice(0, 12).join("")}…` : s;
+    if (p.length < 2) return Array.from(nm.trim()).length > 13 ? shorten(nm.trim(), 13) : nm.trim();
+    const ap = Array.from(p.slice(1).join(" "));
+    // Si el corte cae en el fin de una palabra, "Peña." se leería como el apellido entero.
+    if (n >= ap.length || ap[n] === " " || ap[n - 1] === " ") return shorten(nm.trim(), 18);
+    return `${p[0]} ${ap.slice(0, n).join("")}.`;
   };
 
   /**
-   * La etiqueta de cada nombre: la corta, salvo que choque con la de otra
-   * persona ("María Q." dos veces); ahí va el nombre entero, acortado por el
-   * medio para que no queden iguales.
+   * La etiqueta de cada nombre: la más corta que no choque con la de otra
+   * persona. "María Q." dos veces pasa a "María Qu." y "María Qs."; si no
+   * alcanza, el nombre entero acortado por el medio.
    */
   const etiqueta: string[] = (() => {
-    const cortas = names.map(corto);
+    const out = names.map((nm) => corto(nm));
+    for (let n = 2; n <= 6; n++) {
+      const veces = new Map<string, number>();
+      for (const c of out) veces.set(c, (veces.get(c) ?? 0) + 1);
+      let quedan = false;
+      names.forEach((nm, i) => {
+        if ((veces.get(out[i] as string) ?? 0) > 1) {
+          out[i] = corto(nm, n);
+          quedan = true;
+        }
+      });
+      if (!quedan) break;
+    }
     const veces = new Map<string, number>();
-    for (const c of cortas) veces.set(c, (veces.get(c) ?? 0) + 1);
-    return names.map((nm, i) => ((veces.get(cortas[i] as string) ?? 0) > 1 ? shorten(nm, 18) : (cortas[i] as string)));
+    for (const c of out) veces.set(c, (veces.get(c) ?? 0) + 1);
+    return names.map((nm, i) => ((veces.get(out[i] as string) ?? 0) > 1 ? shorten(nm, 18) : (out[i] as string)));
   })();
 
   const build = (): void => {
@@ -226,11 +301,14 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     }
     chipLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
     chips = names.map((nm) => {
-      const c = S.chip(etiqueta[names.indexOf(nm)] ?? corto(nm), 1);
+      // La cara es la del nombre entero: con la etiqueta corta salía la cara de otra persona.
+      const c = S.chip(etiqueta[names.indexOf(nm)] ?? corto(nm), 1, nm);
       c.visible = false;
       chipLayer.addChild(c);
       return c;
     });
+    anchoNombre = chips.map((c) => c.width / k);
+    g = G();
     // La grilla de la clasificatoria: todos los nombres a la vista, del tamaño que entre.
     const top = S.top() + 54 * k, bottom = g.h - S.bottom() - 10 * k;
     const areaW = g.w * 0.94, areaH = Math.max(40, bottom - top);
@@ -252,8 +330,11 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     badgeOf.clear();
     counter.style.fontSize = 14 * k;
     counter.style.fill = CREAM;
-    almost.style.fontSize = 16 * k;
+    almost.style.fontSize = 26 * k;
     almost.text = t("cSapAlmost");
+    const aw = almost.width + 24 * k, ah = 40 * k;
+    almostBox.clear().roundRect(-aw / 2 + 4 * k, -ah / 2 + 4 * k, aw, ah, 6 * k).fill(INK)
+      .roundRect(-aw / 2, -ah / 2, aw, ah, 6 * k).fill(YELLOW).stroke({ width: 3 * k, color: INK });
     cam.cut(g.w / 2, g.h / 2, 1);
   };
   build();
@@ -277,13 +358,26 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
 
   /** Dónde está la argolla en el momento `t`, en pantalla, con su punto sobre la tapa. */
   const tokenAt = (o: Toss, t: number): Tok => {
-    const hand = P(HAND);
+    const hp = handPoint();
+    const hand = P(hp);
     const land = P(o.th.landing);
     if (t < o.land) {
       const f = clamp((t - o.start) / o.flight, 0, 1);
       const apex = g.sc * (o.final ? 0.95 : 0.7);
+      // El susto: el último tiro pega en el labio de la rana y rebota al agujero.
+      if (o.final && labio) {
+        const lab = { x: 0, y: L.frogR * 0.15 };
+        if (f < LABIO) {
+          const u = f / LABIO;
+          const q = arc(hand, P(lab), u, apex);
+          return { x: q.x, y: q.y, ground: { x: hp.x + (lab.x - hp.x) * u, y: hp.y + (lab.y - hp.y) * u }, scale: 1, alpha: 1, height: 4 * apex * u * (1 - u) };
+        }
+        const u = (f - LABIO) / (1 - LABIO);
+        const q = arc(P(lab), land, u, apex * 0.35);
+        return { x: q.x, y: q.y, ground: { x: lab.x + (o.th.landing.x - lab.x) * u, y: lab.y + (o.th.landing.y - lab.y) * u }, scale: 1, alpha: 1, height: 4 * apex * 0.35 * u * (1 - u) };
+      }
       const q = arc(hand, land, f, apex);
-      const ground = { x: HAND.x + (o.th.landing.x - HAND.x) * f, y: HAND.y + (o.th.landing.y - HAND.y) * f };
+      const ground = { x: hp.x + (o.th.landing.x - hp.x) * f, y: hp.y + (o.th.landing.y - hp.y) * f };
       return { x: q.x, y: q.y, ground, scale: 1, alpha: 1, height: 4 * apex * f * (1 - f) };
     }
     const age = t - o.land;
@@ -307,12 +401,12 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       hop = g.br * 2.6 * (1 - u) * Math.abs(Math.sin(u * Math.PI * 3));
     }
     const q = P(gp);
-    const off = clamp((Math.hypot(gp.x, gp.y) - L.tableR) / 0.6, 0, 1);
+    const off = clamp((Math.hypot(gp.x, gp.y) - L.tableR) / 0.15, 0, 1);
     return { x: q.x, y: q.y - hop, ground: gp, scale: 1, alpha: 1 - off, height: hop };
   };
 
   /* ------------------------------------------------------------------ el guion hablado */
-  let tAll = 0, tHold = 0, crowned = false, dead = false, introSaid = 0;
+  let tAll = 0, tHold = 0, crowned = false, dead = false, introSaid = 0, labioSonado = false;
   const saidWave = new Set<number>();
 
   const crownUI = S.crown(names, winners);
@@ -371,7 +465,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     while (introSaid < cues.length && tAll >= (cues[introSaid] as [number, () => void])[0]) (cues[introSaid++] as [number, () => void])[1]();
     // Cada oleada de la clasificatoria: el tachón suena y el relator cuenta cuántos quedan.
     waves.forEach((w, wi) => {
-      const at = Q_SHOW + wi * Q_WAVE + 0.1;
+      const at = Q_SHOW + wi * Q_WAVE + 0.6;
       if (saidWave.has(wi) || tAll < at) return;
       saidWave.add(wi);
       const quedan = all - waves.slice(0, wi + 1).reduce((a, x) => a + x.length, 0);
@@ -394,6 +488,13 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
         beep(note(7), 0.1, "triangle", o.grand ? 0.045 : 0.03);
         if (o.i === 0 || (o.grand && o.th.kind === "miss" && firstOfTurn)) S.say(t("cSapThrow"), 0.3);
       }
+      if (o.final && labio && !labioSonado && tAll >= o.start + o.flight * LABIO) {
+        labioSonado = true;
+        beep(note(12), 0.08, "square", 0.05);
+        beep(note(5), 0.12, "triangle", 0.04);
+        cam.punch(0.05).shake(5 * g.k);
+        S.say(t("cSapLip"), 0.95);
+      }
       if (!o.landed && tAll >= o.land) onLand(o);
     }
   }
@@ -402,6 +503,16 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   const current = (): Toss | undefined => tosses.find((o) => tAll >= o.start - 0.4 && tAll < o.end);
 
   function aim(): void {
+    const ultimo = tosses[tosses.length - 1] as Toss;
+    if (tAll >= ultimo.land) {
+      // El agujero ganador queda en el plano también con el cartel, a un 62%
+      // del alto: en la fila de arriba el cartel lo tapaba. La cámara puede
+      // salir de la escena porque el piso cubre la pantalla entera.
+      const q = P(ultimo.th.landing);
+      const z = 1.5;
+      cam.lookAt(clamp(q.x, g.w / 2 / z, g.w - g.w / 2 / z), q.y - (g.h * 0.12) / z, z, 3);
+      return;
+    }
     const cur = current();
     let x = g.w / 2, y = g.h / 2, z = 1, rate = 2;
     if (cur && cur.grand && tAll < T_CROWN) {
@@ -418,19 +529,30 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
           y = tok.y;
           rate = 3 + 2 * f;
         } else {
-          // El agujero de cerca, con su nombre: el encuadre queda por encima de la caja de subtítulos.
+          // El agujero de cerca y en la mitad de abajo: arriba entra el cartel del ganador.
           const q = P(cur.th.landing);
-          z = 1.6;
+          z = 1.5;
           x = q.x;
-          y = q.y + (S.bottom() * 0.5) / z;
+          y = q.y - (g.h * 0.12) / z;
           rate = 3;
         }
-      } else {
-        z = close ? 1.45 : cur.th.kind === "near" && tAll >= cur.land ? 1.55 : 1.2;
+      } else if (tok.alpha >= 0.5) {
+        // Sigue a la argolla mientras está en la mesa; cuando se va, vuelve a la mesa entera.
+        z = close ? 1.25 : cur.th.kind === "near" && tAll >= cur.land ? 1.45 : 1.15;
         x = tok.x;
         y = tok.y;
         rate = 2.5;
       }
+      // En un celular la mesa se mide para que los nombres de los costados
+      // entren justo: cualquier acercamiento los sacaba de cuadro. Ahí la
+      // cámara solo se acerca en el último tiro.
+      if (S.portrait() && !cur.final) {
+        z = 1;
+        x = g.w / 2;
+        y = g.h / 2;
+      }
+      // La fila de abajo, por encima de la caja de subtítulos.
+      if (z > 1) y += (S.bottom() * 0.5) / z;
     }
     x = clamp(x, g.w / 2 / z, g.w - g.w / 2 / z);
     y = clamp(y, g.h / 2 / z, g.h - g.h / 2 / z);
@@ -440,6 +562,11 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   /** La rana respira, parpadea y abre la boca cuando cae una argolla. */
   const croakAt = (): number => {
     let c = 0.1 + 0.06 * Math.max(0, Math.sin(tAll * 2.4));
+    const fin = tosses[tosses.length - 1];
+    if (labio && fin) {
+      const a = tAll - (fin.start + fin.flight * LABIO);
+      if (a >= 0 && a < 0.8) c = Math.max(c, 1 - a / 0.8);
+    }
     for (const o of tosses) {
       if (o.th.kind !== "hit" || tAll < o.land) continue;
       const age = tAll - o.land;
@@ -504,8 +631,8 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     if (open > 0.55) frogG.ellipse(c0.x, c0.y + fr * 0.02 + my * 0.3, mx * 0.5, my * 0.45).fill(0xe0707a);
   }
 
-  /** Dónde está la mano, en la escena: un poco afuera de la esquina de la mesa. */
-  const handAt = (): Point => P(HAND);
+  /** Dónde está la mano, en la escena. */
+  const handAt = (): Point => P(handPoint());
 
   /** La mano que tira: toma impulso hacia atrás y suelta. */
   function drawHand(): void {
@@ -522,9 +649,9 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       else swing = -0.8 * Math.sin(Math.PI * clamp(-u / 0.3, 0, 1));
     }
     const hx = h.x, hy = h.y + swing * 22 * k;
-    // El antebrazo entra desde la esquina de abajo a la derecha.
-    const ax = hx + 90 * k, ay = hy + 120 * k;
-    const mx = hx + 38 * k, my = hy + 50 * k;
+    // El brazo entra desde fuera de la pantalla, abajo a la derecha.
+    const ax = hx + 70 * 8 * k, ay = hy + 96 * 8 * k;
+    const mx = hx + 32 * k, my = hy + 44 * k;
     // La manga, de un color de la casa, y la mano con los dedos que sostienen la argolla.
     handG.moveTo(ax, ay).lineTo(mx, my).stroke({ width: 34 * k, color: INK, cap: "round" });
     handG.moveTo(ax, ay).lineTo(mx, my).stroke({ width: 28 * k, color: S.color(2), cap: "round" });
@@ -536,12 +663,13 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     }
   }
 
-  /** La argolla de bronce: un disco con agujero, para que no se lea como moneda ni como ficha. */
+  /** La argolla amarilla: un disco con agujero, para que no se lea como moneda. */
   function drawToken(x: number, y: number, s: number, glow: boolean, alpha = 1): void {
     const r = g.br * s;
     if (glow) tokG.circle(x, y, g.br * 2.6).fill({ color: YELLOW, alpha: 0.22 * alpha });
-    tokG.ellipse(x, y, r, r * 0.8).fill({ color: 0xc9923f, alpha }).stroke({ width: 2 * g.k, color: INK, alpha });
-    tokG.ellipse(x, y, r * 0.42, r * 0.34).fill({ color: 0x3a2a14, alpha }).stroke({ width: 1.5 * g.k, color: INK, alpha });
+    tokG.ellipse(x + 2 * g.k, y + 3 * g.k, r, r * 0.8).fill({ color: INK, alpha: 0.45 * alpha });
+    tokG.ellipse(x, y, r, r * 0.8).fill({ color: YELLOW, alpha }).stroke({ width: 3 * g.k, color: INK, alpha });
+    tokG.ellipse(x, y, r * 0.4, r * 0.32).fill({ color: 0x3a2a14, alpha }).stroke({ width: 2 * g.k, color: INK, alpha });
   }
 
   function draw(): void {
@@ -552,6 +680,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     fx.clear();
     tokG.clear();
     strikeG.clear();
+    glowG.clear();
 
     const lit = new Map<number, number>();
     for (const o of tosses) if (o.th.kind === "hit" && tAll >= o.land) lit.set(o.slot, o.final ? 1 : 0.6);
@@ -560,12 +689,24 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       if (f <= 0) continue;
       const c = P(L.holes[s] as Point);
       const rx = L.holeR * g.sc * ease.outBack(f), ry = rx * g.tilt;
-      boxG.ellipse(c.x, c.y, Math.max(0.01, rx * 1.18), Math.max(0.01, ry * 1.18)).fill(S.color(whoAt(s))).stroke({ width: 2 * k, color: INK });
-      boxG.ellipse(c.x, c.y, Math.max(0.01, rx), Math.max(0.01, ry)).fill(0x140f0a);
       const glow = lit.get(s);
-      if (glow !== undefined) {
-        const pulse = glow === 1 ? 0.35 + 0.2 * Math.sin(tAll * 7) : 0.3;
-        fx.ellipse(c.x, c.y, rx * 1.35, ry * 1.35).fill({ color: YELLOW, alpha: pulse }).stroke({ width: 3 * k, color: YELLOW });
+      const aro = glow !== undefined ? YELLOW : colorDe(whoAt(s));
+      boxG.ellipse(c.x, c.y, Math.max(0.01, rx * 1.2), Math.max(0.01, ry * 1.2)).fill(aro).stroke({ width: (glow !== undefined ? 6 : 2) * k, color: glow !== undefined ? YELLOW : INK });
+      boxG.ellipse(c.x, c.y, Math.max(0.01, rx), Math.max(0.01, ry)).fill(0x140f0a);
+      if (glow === 1) {
+        // El estallido del agujero ganador, como el del trompo.
+        const fin = tosses[tosses.length - 1] as Toss;
+        const age = tAll - fin.land;
+        if (age >= 0 && age < 0.7) {
+          const e = ease.outCubic(age / 0.7);
+          for (let r = 0; r < 12; r++) {
+            const a = (r / 12) * Math.PI * 2;
+            const r0 = rx * (1.3 + 0.4 * e), r1 = rx * (1.6 + 1.6 * e);
+            fx.moveTo(c.x + Math.cos(a) * r0, c.y + Math.sin(a) * r0 * g.tilt)
+              .lineTo(c.x + Math.cos(a) * r1, c.y + Math.sin(a) * r1 * g.tilt)
+              .stroke({ width: 5 * k, color: YELLOW, alpha: 1 - age / 0.7, cap: "round" });
+          }
+        }
       }
     }
 
@@ -584,14 +725,16 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
         if (!c.visible) return;
         c.scale.set(gridScale * ease.outBack(enter));
         c.alpha = clamp(1 - Math.max(0, age - 0.25) / 0.45, 0, 1);
-        c.position.set(grid.x - c.width / 2, grid.y + Math.max(0, age - 0.2) * 70 * k);
+        const cy = grid.y + Math.max(0, age - 0.2) * 70 * k;
+        c.position.set(grid.x - c.width / 2, cy);
         if (age > 0) {
           const f = clamp(age / 0.18, 0, 1);
-          strikeG.moveTo(grid.x - c.width / 2, grid.y).lineTo(grid.x - c.width / 2 + c.width * f, grid.y).stroke({ width: 3 * k, color: 0xd52b1e, alpha: c.alpha });
+          strikeG.moveTo(grid.x - c.width / 2, cy).lineTo(grid.x - c.width / 2 + c.width * f, cy).stroke({ width: 3 * k, color: 0xd52b1e, alpha: c.alpha });
         }
         return;
       }
-      if (crowned) {
+      const ganador = lit.get(slot) === 1;
+      if (crowned && !ganador) {
         c.visible = false;
         return;
       }
@@ -599,11 +742,36 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       const lp = P(labelAt(slot));
       const q = cam.toScreen(lp.x, lp.y, g.w, g.h);
       const u = ease.inOutCubic(clamp((tAll - flyAt(slot)) / Q_FLY, 0, 1));
-      const sc = gridScale + (ls - gridScale) * u;
+      const sc = (gridScale + (ls - gridScale) * u) * (ganador ? 1.3 : 1);
       c.scale.set(sc * (u > 0 ? 1 : ease.outBack(enter)));
-      const x = grid.x + (q.x - grid.x) * u, y = grid.y + (q.y - grid.y) * u - Math.sin(Math.PI * u) * 40 * k;
-      c.position.set(clamp(x - c.width / 2, 4, Math.max(4, g.w - c.width - 4)), y);
-      c.alpha = 1;
+      let an = anchorOf(slot);
+      let qx = q.x, qy = q.y;
+      if (ganador && S.portrait()) {
+        // En un celular, al lado del agujero no entra el chip grande del ganador: va debajo.
+        const fin = tosses[tosses.length - 1] as Toss;
+        const f = ease.outCubic(clamp((tAll - fin.land) / 0.35, 0, 1));
+        const h = L.holes[slot] as Point;
+        const d = cam.toScreen(P({ x: h.x, y: h.y + L.holeR * 1.35 }).x, P({ x: h.x, y: h.y + L.holeR * 1.35 }).y, g.w, g.h);
+        qx = q.x + (d.x - q.x) * f;
+        qy = q.y + (d.y - q.y) * f;
+        an = { ax: an.ax + (0.5 - an.ax) * f, ay: an.ay + (0 - an.ay) * f };
+      }
+      // El que no entra entre su punto y el borde se achica, en vez de volver
+      // sobre su agujero. Se mide sin zoom: con la cámara cerca se achicaban
+      // todos los de los bordes.
+      const libre = an.ax <= 0.01 ? g.w - 4 - lp.x : an.ax >= 0.99 ? lp.x - 4 : g.w - 8;
+      if (u >= 1 && !ganador && c.width > libre && libre > 0) c.scale.set(c.scale.x * Math.max(0.7, libre / c.width));
+      // En la grilla va centrado; al llegar, anclado por su borde de adentro.
+      const tx = qx - c.width * an.ax, ty = qy + c.height * (0.5 - an.ay);
+      const x = grid.x - c.width / 2 + (tx - (grid.x - c.width / 2)) * u, y = grid.y + (ty - grid.y) * u - Math.sin(Math.PI * u) * 40 * k;
+      const xx = clamp(x, 4, Math.max(4, g.w - c.width - 4));
+      c.position.set(xx, y);
+      // Con la cámara cerca, el nombre que quedaría cortado contra el borde se
+      // apaga en vez de arrastrarse encima de los agujeros o de la rana.
+      c.alpha = ganador || u < 1 || (Math.abs(xx - x) < 6 * k && qx > 0 && qx < g.w) ? 1 : 0;
+      if (ganador) {
+        glowG.roundRect(c.x - 7 * k, c.y - c.height / 2 - 7 * k, c.width + 14 * k, c.height + 14 * k, 10 * k).fill({ color: YELLOW, alpha: 0.9 });
+      }
     });
 
     for (const o of tosses) {
@@ -644,7 +812,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     let turn = 0;
     for (const o of tosses) if (tAll >= o.start - 0.7) turn = o.th.turn;
     const started = tAll >= (tosses[0] as Toss).start - 0.7;
-    const quedan = all - waves.reduce((a, w, wi) => a + (tAll >= Q_SHOW + wi * Q_WAVE + 0.1 ? w.length : 0), 0);
+    const quedan = all - waves.reduce((a, w, wi) => a + (tAll >= Q_SHOW + wi * Q_WAVE + 0.6 ? w.length : 0), 0);
     counter.text = !started
       ? (tAll < T_FLY && all > holes ? `${t("cQualIn")}  ${quedan}` : `${t("cSapHoles")}  ${holes}`)
       : total > 1 ? T[getLang()].cSapTally(turn + 1, total).toUpperCase() : `${t("cSapHoles")}  ${holes}`;
@@ -653,6 +821,8 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(0x221a33).stroke({ width: 3 * k, color: INK });
     counterG.position.set(22 * k, S.top() + 10 * k);
     counterG.visible = !crowned;
+    // Con la cámara cerca tapaba nombres de la fila de arriba.
+    counterG.alpha = clamp((1.15 - cam.zoom) / 0.1, 0, 1);
 
     // Los agujeros ya ocupados: una medalla con el orden (o una tilde con un solo ganador).
     for (const o of tosses) {
@@ -677,14 +847,16 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     badgeLayer.visible = !crowned;
 
     // "¡Casi!" al lado de la argolla que bailó en el borde. En la interfaz, para que no se borronee con la cámara.
-    almost.alpha = 0;
+    almostG.alpha = 0;
     for (const o of tosses) {
       if (o.th.kind !== "near" || tAll < o.land || tAll >= o.land + AFTER_NEAR) continue;
       const age = tAll - o.land;
-      const lp = P(o.th.landing);
-      const q = cam.toScreen(lp.x, lp.y - g.br * 2.4, g.w, g.h);
-      almost.position.set(q.x, q.y - 6 * k * ease.outCubic(clamp(age / 0.3, 0, 1)));
-      almost.alpha = clamp(age / 0.15, 0, 1) * clamp((AFTER_NEAR - age) / 0.3, 0, 1);
+      // Entre la argolla y la rana: afuera quedaba encima del nombre del vecino.
+      const lp = P({ x: o.th.landing.x * 0.55, y: o.th.landing.y * 0.55 });
+      const q = cam.toScreen(lp.x, lp.y, g.w, g.h);
+      almostG.position.set(q.x, q.y - 6 * k * ease.outCubic(clamp(age / 0.3, 0, 1)));
+      almostG.rotation = -0.08;
+      almostG.alpha = clamp(age / 0.15, 0, 1) * clamp((AFTER_NEAR - age) / 0.3, 0, 1);
     }
   }
 

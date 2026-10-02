@@ -182,10 +182,19 @@ const PAINTERS: Record<string, Painter> = {
       c.fillRect(x + 1, y - 4, 3, 4);
     }
   },
-  /** Sapo: la ficha vuela en parábola hacia la rana, rebota en la mesa y cae en un agujero. */
+  /** Sapo: la argolla vuela en parábola hacia la mesa, pega y se va, y la siguiente cae en un agujero. */
   sapo(c, t, col) {
-    c.fillStyle = "#2f4a3a";
+    // La tapa de madera, con vetas: la de antes era un paño verde y se leía como mesa de póker.
+    c.fillStyle = "#d29a5c";
     c.fillRect(0, 0, W, H);
+    c.strokeStyle = "rgba(25,25,25,0.13)";
+    c.lineWidth = 1;
+    for (let y = 6; y < H; y += 7) {
+      c.beginPath();
+      c.moveTo(0, y);
+      c.lineTo(W, y);
+      c.stroke();
+    }
     const cx = W / 2, cy = H * 0.46;
     const holes = 6;
     const hx = (k: number): number => cx + Math.cos(-Math.PI / 2 + (k / holes) * TAU) * 40;
@@ -195,19 +204,24 @@ const PAINTERS: Record<string, Painter> = {
       c.beginPath();
       c.ellipse(hx(k), hy(k), 6.5, 3.8, 0, 0, TAU);
       c.fill();
+      c.strokeStyle = INK;
+      c.lineWidth = 1.2;
+      c.stroke();
       c.strokeStyle = col(k);
-      c.lineWidth = 1.4;
+      c.lineWidth = 1.2;
+      c.beginPath();
+      c.ellipse(hx(k), hy(k), 7.8, 4.8, 0, 0, TAU);
       c.stroke();
     }
-    // La rana del medio: el cuerpo, los ojos y la boca abierta.
-    c.fillStyle = "#6fbf4a";
+    // La rana de bronce del medio: el cuerpo, los ojos y la boca abierta.
+    c.fillStyle = "#b98a3e";
     c.beginPath();
     c.ellipse(cx, cy, 11, 8, 0, 0, TAU);
     c.fill();
     c.strokeStyle = INK;
     c.lineWidth = 1.2;
     c.stroke();
-    c.fillStyle = "#f6efe2";
+    c.fillStyle = "#d8b06a";
     for (const dx of [-6, 6]) {
       c.beginPath();
       c.arc(cx + dx, cy - 7, 2.6, 0, TAU);
@@ -218,7 +232,7 @@ const PAINTERS: Record<string, Painter> = {
     c.beginPath();
     c.ellipse(cx, cy + 1.5, 5.5, 3, 0, 0, TAU);
     c.fill();
-    // La ficha: un lanzamiento corto que falla y otro que entra; todo depende de la hora de la miniatura.
+    // La argolla: un lanzamiento corto que falla y otro que entra; todo depende de la hora de la miniatura.
     const f = (t * 0.45) % 1;
     const miss = f < 0.5;
     const k = (miss ? f : f - 0.5) * 2;
@@ -226,12 +240,14 @@ const PAINTERS: Record<string, Painter> = {
     const to = miss ? { x: cx + 22, y: cy + 17 } : { x: hx(3), y: hy(3) };
     const bx = from.x + (to.x - from.x) * k;
     const by = from.y + (to.y - from.y) * k - Math.sin(Math.PI * k) * 16;
-    c.fillStyle = "#ffc629";
+    // Un aro amarillo con agujero, no un disco: un disco se lee como moneda.
     c.strokeStyle = INK;
-    c.lineWidth = 1.2;
+    c.lineWidth = 4.2;
     c.beginPath();
-    c.arc(bx, by, 3, 0, TAU);
-    c.fill();
+    c.arc(bx, by, 3.6, 0, TAU);
+    c.stroke();
+    c.strokeStyle = "#ffc629";
+    c.lineWidth = 2.4;
     c.stroke();
   },
   /** ¿Quién es?: seis cartitas con cara; se dan vuelta de a una hasta que queda la del ganador. */

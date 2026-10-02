@@ -958,6 +958,52 @@ Quedan afuera, por ahora:
 
 Un arreglo que salió de la revisión: si un juego recibía más nombres de los que sabe contar, el estadio podía quedar colgado. Ahora la entrada común a todos los juegos (`playPixi`) aplica la misma sustitución que el sorteo y pasa a la carrera.
 
+### Historia 10.14: El Sapo y ¿Quién es?, para meetups de 50: hecho
+
+Resultado (2026-10-02): los dos juegos que quedaron afuera en la 10.13 se rediseñaron y entran al selector, que pasa a tener doce. Las dos condiciones del autor:
+- **aguantar un meetup de 30 a 50 personas**;
+- **no tener nada que se lea como apuesta**.
+
+**La clasificatoria** (`qualifier.ts`, compartida): en la mesa del sapo entran doce agujeros. Con más nombres aparecen todos en una grilla y se tachan en una a tres oleadas hasta que quedan doce, siempre con los ganadores adentro. La pantalla se mueve desde el primer cuadro.
+
+**El Sapo**, rediseñado en dos pasadas del agente evaluador:
+- La mesa ya no es un óvalo de paño verde con una moneda dorada, que se leía como póker: es el cajón de madera con la rana.
+- Cada agujero lleva su nombre afuera, anclado por el borde de adentro, con un aro del color de la cara de esa persona.
+- Las etiquetas que chocan se alargan ("María Qu.") en vez de repetirse.
+- La argolla es amarilla, grande y con agujero.
+- El "casi" cae del lado de la rana, con una calcomanía de "¡Casi!".
+- El agujero ganador estalla en amarillo.
+- En el susto, el último tiro pega en el labio de la rana y rebota adentro.
+- Los subtítulos dicen argolla: "ficha" y "token" suenan a casino y a cripto, y un test lo cuida.
+
+**¿Quién es?** reemplaza al Ahorcado:
+- La horca y el largo del nombre a la vista no tenían arreglo.
+- Ahora son cartas con la cara y el nombre entero. Cada turno pregunta por la letra que más divide, y se dan vuelta las que no coinciden con quien ganó.
+- 50 nombres se resuelven en unas seis preguntas.
+
+La tercera pasada del evaluador encontró cuatro cosas graves, y se arreglaron:
+- **Los nombres en el celular.** Volvían sobre su agujero. Ahora la mesa se achica lo justo para que entren afuera, el que igual no entra se achica él, y la cámara del celular solo se acerca en el último tiro.
+- **El ganador de la fila de arriba.** Quedaba debajo del cartel en 5 de 12 semillas. Ahora la cámara lo deja a un 62% del alto, también con el cartel.
+- **El foco de ¿Quién es?** Frenaba en la carta anterior a la del ganador, por un error de uno.
+- **La miniatura del Sapo en el selector.** Seguía siendo el paño verde con una moneda.
+
+Además:
+- Con dos o tres cartas, ¿Quién es? arranca con una pregunta que no da vuelta a nadie, y un sorteo de dos personas deja de ser un subtítulo quieto.
+- El amarillo quedó solo para la argolla y el ganador.
+- Los textos dicen "ferias y patios" en vez de "chicherías".
+
+Medido con la batería:
+
+| Auditor | Sapo | ¿Quién es? |
+|---|---|---|
+| Exigente (con 2, 18 y 200 personas) | 20/20 | 20/20 |
+| Emoción (arcos en 16 semillas) | Varían: duelo 6, tapada 4, remontada 3, susto 3 | Varían: remontada 4, duelo 2, tapada 5, susto 5 |
+| Sonido (hueco máximo) | 3,4 s | 2,4 s |
+
+Interfaz y páginas de lectura pasan enteras.
+
+De paso, un arreglo que encontró el auditor de interfaz: la dirección de la cuenta en la cabecera se cortaba en el celular con algunas direcciones. `button.mini` le ganaba a `.mono` y la letra no era de ancho fijo, así que el ancho dependía de qué letras salían.
+
 ---
 
 ## Épica 12: El sitio cuenta el proyecto

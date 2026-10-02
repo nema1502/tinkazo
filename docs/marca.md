@@ -139,9 +139,9 @@ El sitio está en español boliviano con voseo, y en inglés neutro. No hay un t
 
 Dentro de los juegos el texto es de relator de partido: mayúsculas, gritos, "¡NO RESPIRA NADIE!". Eso vive solo ahí. No se filtra a la página ni a una presentación.
 
-## Los diez juegos
+## Los doce juegos
 
-Cada uno tiene su color dominante, útil si una diapositiva los muestra. Seis salen de la cultura boliviana y latinoamericana.
+Cada uno tiene su color dominante, útil si una diapositiva los muestra. Siete salen de la cultura boliviana y latinoamericana.
 
 | Juego | Color | En una frase |
 |---|---|---|
@@ -155,6 +155,8 @@ Cada uno tiene su color dominante, útil si una diapositiva los muestra. Seis sa
 | Trompo | Tierra, con trompos de los cinco | El ruedo de tiza: chocan y se caen hasta el mano a mano |
 | Piñata | Los cinco, en conos | Cada palo tira caramelos; el último que queda adentro gana |
 | Carnaval de Oruro | Rojo de las máscaras y amarillo, de noche | Una comparsa de la Diablada que se queda cuadra por cuadra hasta el Socavón |
+| Sapo | Madera, con la argolla amarilla y los aros de los cinco | La rana del cajón: la última argolla cae en el agujero de quien gana |
+| ¿Quién es? | Cartas de los cinco sobre tinta | Una letra por turno da vuelta las cartas hasta que queda una |
 
 ## Lo boliviano
 

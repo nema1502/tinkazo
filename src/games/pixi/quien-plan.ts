@@ -62,6 +62,9 @@ export interface Round {
 /** Hasta cuántas preguntas por ronda, aunque queden varios. */
 export const MAX_QUESTIONS = 10;
 
+/** Hasta cuántas cartas la ronda arranca con una pregunta de calentamiento. */
+export const WARMUP_UP_TO = 3;
+
 /**
  * Elige las preguntas de una ronda. En cada turno toma, entre las letras que
  * todavía separan a alguien, la que deja el grupo más cerca de la mitad, y
@@ -74,6 +77,20 @@ export function planRound(names: readonly string[], pool: readonly number[], win
   let quedan = [...pool];
   const usadas = new Set<string>();
   const questions: Question[] = [];
+  // Con dos o tres cartas una sola pregunta lo resolvía todo y el juego era
+  // un subtítulo quieto. Primero va una de calentamiento que no da vuelta a
+  // nadie: una letra que tienen todas ("¡las dos la tienen!"), o si no hay,
+  // una que no tiene ninguna.
+  if (pool.length > 1 && pool.length <= WARMUP_UP_TO) {
+    const todas = [...ABC].filter((l) => !isDigit(l) && pool.every((i) => (letras[i] as Set<string>).has(l)));
+    const ninguna = [..."AEIOULRNSTM"].filter((l) => pool.every((i) => !(letras[i] as Set<string>).has(l)));
+    const opciones = todas.length ? todas : ninguna;
+    if (opciones.length) {
+      const letter = opciones[Math.floor(rng() * opciones.length)] as string;
+      usadas.add(letter);
+      questions.push({ letter, has: todas.length > 0, remaining: [...quedan], out: [] });
+    }
+  }
   while (quedan.length > 1 && questions.length < MAX_QUESTIONS) {
     let mejor: { letter: string; score: number; tie: number } | null = null;
     for (const letter of ABC) {

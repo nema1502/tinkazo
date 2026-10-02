@@ -172,6 +172,10 @@
   .netbadge.bad { background: var(--orange); }
   .auth a.hello, .auth button.hello { text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
   .auth .hello { max-width: 190px; min-width: 0; }
+  /* La dirección, de ancho fijo: `button.mini` hereda la letra de la página y
+     le ganaba a `.mono`, así que el ancho dependía de qué letras salían y en
+     el celular algunas direcciones se cortaban. */
+  .auth .hello.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
   .auth .hello-face { width: 24px; height: 24px; border: 2px solid var(--ink); background: var(--card); flex: 0 0 auto; }
   .auth a.hello:hover { text-decoration: underline; }
   .modal-back {
@@ -297,10 +301,9 @@
     cursor: not-allowed; background: var(--paper); color: var(--muted);
     border-style: dashed; box-shadow: none;
   }
-  /* Diez juegos en cinco columnas: con seis por fila quedaba una fila de
-     cuatro con dos huecos. */
+  /* Doce juegos en seis columnas: dos filas parejas, sin huecos. */
   @media (min-width: 760px) {
-    .gamepick { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); max-width: 740px; }
+    .gamepick { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); max-width: 860px; }
     .gamepick button { width: auto; }
   }
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0; border-bottom: var(--bw) solid var(--ink); }

@@ -174,16 +174,19 @@ function planNear(L: Layout, rim: number, rng: () => number): Point {
   const c = L.holes[rim] as Point;
   const ok = (p: Point): boolean =>
     L.holes.every((h) => gap(p, h) > L.holeR + CAPTURE_CLEAR) && len(p) > L.frogR && len(p) < L.tableR;
+  // Only on the half of the rim that faces the frog: the name of each hole
+  // sits on the outer side, and a near miss out there landed under the name.
+  const haciaRana = Math.atan2(-c.y, -c.x);
   for (let i = 0; i < 24; i++) {
-    const a = rng() * 2 * Math.PI;
+    const a = haciaRana + (rng() - 0.5) * Math.PI;
     const d = L.holeR * (NEAR_MIN + rng() * (NEAR_MAX - NEAR_MIN));
     const p = { x: c.x + d * Math.cos(a), y: c.y + d * Math.sin(a) };
     if (ok(p)) return p;
   }
-  // Deterministic fallback: straight out from the hole, away from the frog.
+  // Deterministic fallback: straight in from the hole, towards the frog.
   const d = L.holeR * ((NEAR_MIN + NEAR_MAX) / 2);
   const k = len(c) || 1;
-  return { x: c.x + (c.x / k) * d, y: c.y + (c.y / k) * d };
+  return { x: c.x - (c.x / k) * d, y: c.y - (c.y / k) * d };
 }
 
 function planHit(L: Layout, slot: number, rng: () => number): Point {

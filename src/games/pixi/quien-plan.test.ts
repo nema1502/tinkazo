@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_QUESTIONS, lettersOf, planRound, planRounds } from "./quien-plan";
+import { MAX_QUESTIONS, WARMUP_UP_TO, lettersOf, planRound, planRounds } from "./quien-plan";
 
 function rngOf(seed: number): () => number {
   let a = seed >>> 0;
@@ -33,11 +33,12 @@ describe("quien-plan: las preguntas", () => {
       for (let seed = 1; seed <= 30; seed++) {
         const w = Math.floor(rngOf(seed)() * n);
         const r = planRound(names, names.map((_, i) => i), w, rngOf(seed));
-        for (const q of r.questions) {
+        r.questions.forEach((q, qi) => {
           expect(q.remaining).toContain(w);
           expect(q.out).not.toContain(w);
-          expect(q.out.length).toBeGreaterThan(0);
-        }
+          // Solo la de calentamiento, la primera con pocas cartas, no da vuelta a nadie.
+          if (qi > 0 || n > WARMUP_UP_TO) expect(q.out.length).toBeGreaterThan(0);
+        });
         const ult = r.questions.at(-1)?.remaining ?? names.map((_, i) => i);
         expect(new Set([w, ...r.ties])).toEqual(new Set(ult));
         expect(r.questions.length).toBeLessThanOrEqual(MAX_QUESTIONS);
@@ -53,6 +54,20 @@ describe("quien-plan: las preguntas", () => {
       peor = Math.max(peor, r.questions.length);
     }
     expect(peor).toBeLessThanOrEqual(9);
+  });
+
+  it("con dos o tres cartas arranca con una pregunta que no da vuelta a nadie y es verdad", () => {
+    for (const names of [["Ana Vargas", "Diego Rojas"], ["Lucía", "Óscar", "Eli"], ["Bo", "Ty"]]) {
+      for (let seed = 1; seed <= 20; seed++) {
+        const w = seed % names.length;
+        const r = planRound(names, names.map((_, i) => i), w, rngOf(seed));
+        const q = r.questions[0];
+        expect(q?.out).toEqual([]);
+        expect(lettersOf(names[w] as string).has(q?.letter as string)).toBe(q?.has);
+        for (const nm of names) expect(lettersOf(nm).has(q?.letter as string)).toBe(q?.has);
+        expect(r.questions.length).toBeGreaterThan(1);
+      }
+    }
   });
 
   it("con nombres que no se pueden separar los declara empatados en vez de colgarse", () => {

@@ -137,7 +137,7 @@ Era un multiplicador fijo (`0,8 / 1,4 / 2,2`) y el problema no era el número si
 
 **El tope de ×2,2 no es negociable.** Más que eso no es más emoción, es cámara lenta: la ruleta tenía dos segundos de crucero en los que la imagen es un borrón, y multiplicarlos por tres y medio son ocho segundos de nada. Un juego que topa ahí **necesita más contenido, no ir más despacio**. Por eso la ruleta pasó de 7,65 a 17,2 segundos nominales acortando el borrón y alargando la frenada, el Cierre de Libro llegó a seis pasadas y al Pasanaku se le dio tiempo al tejido de los hilos y al apretón.
 
-Hoy, medido por el auditor exigente: "normal" son treinta segundos en los diez del selector.
+Hoy, medido por el auditor exigente: "normal" son treinta segundos en los doce del selector.
 
 ## El sonido
 
