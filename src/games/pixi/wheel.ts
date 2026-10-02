@@ -4,6 +4,7 @@ import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, note } from "../../sound";
 import { writeStory } from "../drama";
 import { WINNER_HOLD, shorten, winnersLabel } from "../overlay";
+import { FALSA, T_BRAKE, T_CREEP, T_CROWN, T_HOLD, T_LOCK, T_SETTLE, T_SPIN, T_WIND, beatFor, type BeatReason } from "./wheel-beats";
 import { CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
 
 /**
@@ -20,17 +21,8 @@ import { CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
 
 const SEGS = 24;
 const TAU = Math.PI * 2;
-const T_WIND = 1.2;
-const T_SPIN = 2.6;
-const T_BRAKE = 4.2;
-const T_CREEP = 12.0;
-const T_HOLD = 14.4;
-const T_SETTLE = 15.6;
-const T_LOCK = 16.8;
-const T_CROWN = 17.2;
 const W0 = 38.4;
 const W1 = 5.6;
-const FALSA = 0.75;
 
 /** Velocidad en gajos por segundo: la misma curva que `wheel.ts`. */
 function omega(tt: number, falsa = false): number {
@@ -322,6 +314,13 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     rot = -(startSeg + BUDGET * scale) * A;
     crowned();
   };
+  /** Aplica un beat de cámara de la agenda pura (wheel-beats.ts): una sola sacudida, en la coronación. */
+  function camBeat(reason: BeatReason): void {
+    const b = beatFor(falsa, reason);
+    if (!b) return;
+    if (b.kind === "shake") cam.shake(b.strength * G.u);
+    else if (b.kind === "punch" || b.kind === "push") cam.punch(b.strength);
+  }
   function crowned(): void {
     if (didCrown) return;
     didCrown = true;
@@ -330,7 +329,8 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     fanfare();
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);
     setTimeout(() => beep(note(19), 0.12, "triangle", 0.035), 700);
-    cam.punch(0.1).shake(12 * G.u);
+    cam.punch(0.1);
+    camBeat("crown");
   }
 
   function tickAudio(w: number): void {
@@ -393,7 +393,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
       if (falsa) {
         beep(note(3), 0.08, "square", 0.06);
         setTimeout(() => beep(note(10), 0.12, "triangle", 0.05), 60);
-        cam.shake(10 * G.u).punch(0.05);
+        camBeat("tease");
       }
     }
   }
@@ -497,7 +497,6 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
         pegHits++;
         const q = pegHits / 7;
         beep(note(Math.max(0, 2 - Math.round(q * 2))), 0.06, "square", 0.062 - q * 0.028);
-        cam.shake(2 * G.u);
       }
     }
     if (tAll >= T_LOCK && !didLock) {
@@ -506,7 +505,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
       beep(note(0), 0.45, "sine", 0.1);
       setTimeout(() => beep(note(5), 0.07, "square", 0.06), 40);
       setTimeout(() => beep(note(15), 0.12, "triangle", 0.05), 90);
-      cam.shake(9 * G.u).punch(0.05);
+      camBeat("lock");
     }
     flash = Math.max(0, flash - dt);
     if (tAll >= T_CROWN) crowned();

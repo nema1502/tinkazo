@@ -50,7 +50,7 @@ Los momentos de cámara de cada juego:
 | Juego | La cámara |
 |---|---|
 | Carrera de llamas y de cohetes | Pegada a la largada en la cuenta, sigue a la punta, se mete en cada tropiezo, plantada o escupida, se cierra sobre las dos de adelante en la recta final, cámara lenta en la foto y golpe en la meta |
-| Ruleta | Pegada al cubo al armarse, se abre al girar, se acerca al puntero mientras frena y queda encima en el "¿se queda en fulano?"; sacude cuando se mueve |
+| Ruleta | Pegada al cubo al armarse, se abre al girar, se acerca al puntero mientras frena y queda encima en el "¿se queda en fulano?" (empujón de zoom, sin sacudida); sacude una sola vez, al coronar al ganador real |
 | Tómbola | En la boca del bombo mientras caen las bolas, en la compuerta cuando se abre (y en la bola que asoma y vuelve a caer), sigue a la ganadora por la canaleta y se pega al vaso |
 | Teleférico | En el andén de la base, sigue al convoy, se acerca a cada andén, se mete en la cabina de la puerta o de la mordaza, se hamaca con la ráfaga, se acerca despacio en el apagón y sigue a la cabina sola hasta la cumbre |
 | Aguayo | Cerca de la tela al tenderla, más cerca en cada apretón con un tirón, golpe al bulto que queda en el filo, pegada al nudo |
