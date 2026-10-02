@@ -47,6 +47,8 @@ export interface Dict {
   cTroDuel: (a: string, b: string) => string;
   cPinCount: (n: number) => string;
   cPinOut: (n: string) => string;
+  cPinOutMany: (ns: string[]) => string;
+  cPinOutMore: (n: string, k: number) => string;
   cPinAlmost: (n: string) => string;
   cPinLast: (a: string, b: string) => string;
   cPlkCount: (n: number) => string;
@@ -148,6 +150,8 @@ export interface Dict {
  */
 let pickRng: (() => number) | null = null;
 const pick = (xs: string[]): string => xs[Math.floor((pickRng ?? Math.random)() * xs.length)] ?? "";
+/** "A", "A y B", "A, B y C": names joined for the narrator. */
+const joinList = (ns: string[], and: string): string => (ns.length <= 1 ? (ns[0] ?? "") : `${ns.slice(0, -1).join(", ")} ${and} ${ns[ns.length - 1]}`);
 
 /** El juego en curso presta su azar sembrado. `null` al terminar. */
 export function setPickSeed(rng: (() => number) | null): void {
@@ -364,6 +368,8 @@ export const T: Record<Lang, Dict> = {
     cPinSong: ["¡Dale, dale, dale!", "¡No pierdas el tino!", "¡Dale, que se rompe!"],
     cPinRain: ["¡Llueven caramelos!", "¡Se cayeron unos cuantos!", "¡Ahí van!"],
     cPinOut: (n) => pick([`¡Se cayó ${n}!`, `¡Afuera ${n}!`, `¡${n} al piso!`]),
+    cPinOutMany: (ns) => pick([`¡Se cayeron ${joinList(ns, "y")}!`, `¡Afuera ${joinList(ns, "y")}!`, `¡${joinList(ns, "y")} al piso!`]),
+    cPinOutMore: (n, k) => pick([`¡Se cayó ${n} y ${k} más!`, `¡Afuera ${n} y ${k} más!`]),
     cPinMiss: ["¡Falló!", "¡Al aire!", "¡Casi le da!"],
     cPinCrack: ["¡Se está rajando!", "¡Ya no aguanta!", "¡Cruje la piñata!"],
     cPinAlmost: (n) => pick([`¡Casi se cae ${n}!`, `¡${n} se asoma!`, `¡Se agarra ${n}!`]),
@@ -1007,6 +1013,8 @@ export const T: Record<Lang, Dict> = {
     cPinSong: ["Hit it, hit it, hit it!", "Don't lose your aim!", "Hit it, it's about to break!"],
     cPinRain: ["It's raining candy!", "A handful fell out!", "There they go!"],
     cPinOut: (n) => pick([`${n} fell out!`, `${n} is out!`, `${n} hits the floor!`]),
+    cPinOutMany: (ns) => pick([`${joinList(ns, "and")} fell out!`, `${joinList(ns, "and")} are out!`, `${joinList(ns, "and")} hit the floor!`]),
+    cPinOutMore: (n, k) => pick([`${n} and ${k} more fell out!`, `${n} and ${k} more are out!`]),
     cPinMiss: ["Missed!", "Swinging at air!", "So close!"],
     cPinCrack: ["It's cracking!", "It can't take much more!", "The piñata creaks!"],
     cPinAlmost: (n) => pick([`${n} almost fell!`, `${n} peeks out!`, `${n} holds on!`]),
