@@ -51,6 +51,23 @@ export interface Dict {
   cPinOutMore: (n: string, k: number) => string;
   cPinAlmost: (n: string) => string;
   cPinLast: (a: string, b: string) => string;
+  cSapCount: (n: number) => string;
+  cSapNear: (n: string) => string;
+  cSapNext: (k: number, of: number) => string;
+  cSapDone: (n: string) => string;
+  cSapTally: (k: number, of: number) => string;
+  cQualStart: (n: number) => string;
+  cQualLeft: (n: number) => string;
+  cQuiStart: (n: number) => string;
+  cQuiNext: (k: number, of: number) => string;
+  cQuiTwo: (a: string, b: string) => string;
+  cQuiAsk: (l: string) => string;
+  cQuiAskShort: (l: string) => string;
+  cQuiAskN: (l: string) => string;
+  cQuiAskShortN: (l: string) => string;
+  cQuiYes: (l: string, k: number) => string;
+  cQuiNo: (l: string, k: number) => string;
+  cQuiDone: (n: string) => string;
   cOruCount: (n: number) => string;
   cOruStop: (k: number, off: number, left: number) => string;
   cOruStay: (n: string) => string;
@@ -359,6 +376,44 @@ export const T: Record<Lang, Dict> = {
     cPinLast: (a, b) => pick([`¡Quedan ${a} y ${b} adentro!`, `¡Adentro solo ${a} y ${b}!`]),
     cPinBreak: ["¡SE ROMPIÓ!", "¡SE ABRIÓ LA PIÑATA!", "¡AHÍ CAE!"],
     cPinLeft: "ADENTRO",
+    // --- Sapo: la rana del medio, un agujero por nombre y una ficha que se lanza.
+    gameSapo: "Sapo",
+    cSapHang: ["¡Se arma la mesa!", "¡La rana en su lugar!", "¡Cada nombre tiene su agujero!"],
+    cSapCount: (n) => `¡${n} agujeros, uno por nombre!`,
+    cSapThrow: ["¡Ahí va la ficha!", "¡Tiro!", "¡Se lanza la ficha!"],
+    cSapMiss: ["¡Pegó en la mesa y se fue!", "¡Afuera!", "¡Qué lástima, rodó lejos!"],
+    cSapRim: ["¡Clinc!", "¡Pegó en el borde!", "¡Tocó el aro!"],
+    cSapNear: (n) => pick([`¡Casi cae en el de ${n}!`, `¡Bailó en el borde de ${n}!`, `¡${n} se ilusiona!`]),
+    cSapLast: ["¡Último tiro!", "¡Este es el bueno!", "¡Se decide ahora!"],
+    cSapIn: ["¡ADENTRO!", "¡Entró!", "¡Cayó justo!"],
+    cSapHoles: "AGUJEROS",
+    cQualStart: (n) => `¡${n} nombres! Solo 12 llegan a la mesa.`,
+    cQualLeft: (n) => (n <= 12 ? `¡Quedan ${n}: esos van a la mesa!` : `¡Quedan ${n}!`),
+    cQualIn: "EN CARRERA",
+    // --- ¿Quién es?: cartas con cara; cada letra da vuelta a las que no coinciden.
+    gameQuien: "¿Quién es?",
+    cQuiStart: (n) => `¡${n} cartas! Con cada letra se dan vuelta las que no son.`,
+    cQuiNext: (k, of) => `¡Ronda ${k} de ${of}: otra vez todas!`,
+    cQuiTwo: (a, b) => pick([`¡Quedan dos: ${a} y ${b}!`, `¿${a} o ${b}?`, `¡Entre ${a} y ${b}!`]),
+    cQuiAsk: (l) => pick([`¿Tiene la ${l}?`, `¿Hay una ${l} en el nombre?`, `¿Y la ${l}?`]),
+    cQuiAskShort: (l) => `¿Tiene la ${l}?`,
+    cQuiAskN: (l) => pick([`¿Tiene el ${l}?`, `¿Hay un ${l} en el nombre?`]),
+    cQuiAskShortN: (l) => `¿Tiene el ${l}?`,
+    cQuiYes: (l, k) => (k === 1 ? `¡Sí tiene ${l}! Se da vuelta una.` : `¡Sí tiene ${l}! Se dan vuelta ${k}.`),
+    cQuiNo: (l, k) => (k === 1 ? `¡Sin ${l}! Se da vuelta una.` : `¡Sin ${l}! Se dan vuelta ${k}.`),
+    cQuiDone: (n) => pick([`¡Es ${n}!`, `¡Quedó ${n}!`]),
+    cQuiTie: ["¡Mismas letras! El sorteo ya eligió.", "¡Empate de letras! Decide el sorteo."],
+    cQuiTieShort: "¿Mismas letras?",
+    cQuiSi: "¡SÍ!",
+    cQuiNoStamp: "¡NO!",
+    cQuiCards: "CARTAS",
+    cQuiAlmost: ["¡Casi se da vuelta!", "¡Uy, casi!", "¡Se salvó de milagro!"],
+    cSapNext: (k, of) => `¡Tiro ${k} de ${of}!`,
+    cSapDone: (n) => pick([`¡Cayó en el agujero de ${n}: ganador!`, `¡Ahí quedó, en el de ${n}: ganador!`]),
+    cSapTally: (k, of) => `Ganador ${k} de ${of}`,
+    cSapRuleMany: ["Cada ficha que cae en un agujero es un ganador.", "Cada ficha que cae adentro marca a un ganador."],
+    cSapRuleOne: ["La ficha que caiga en un agujero marca al ganador.", "El agujero donde caiga la ficha marca al ganador."],
+    cSapAlmost: "¡Casi!",
     // --- Carnaval de Oruro. La entrada de la Diablada hasta el Socavón.
     cOruStart: ["¡Arranca la entrada!", "¡Suena la banda!", "¡Que baile la diablada!"],
     cOruCount: (n) => (n === 2 ? "¡Dos diablos en la comparsa!" : `¡${n} diablos en la comparsa!`),
@@ -961,6 +1016,44 @@ export const T: Record<Lang, Dict> = {
     cPinLast: (a, b) => pick([`${a} and ${b} left inside!`, `Only ${a} and ${b} inside!`]),
     cPinBreak: ["IT BROKE!", "THE PIÑATA SPLIT OPEN!", "HERE IT COMES!"],
     cPinLeft: "INSIDE",
+    // --- Sapo: the frog in the middle, one hole per name and a token to toss.
+    gameSapo: "Sapo",
+    cSapHang: ["The table is going up!", "Frog in place!", "Every name gets a hole!"],
+    cSapCount: (n) => `${n} holes, one per name!`,
+    cSapThrow: ["Here goes the token!", "Toss!", "The token flies!"],
+    cSapMiss: ["It hit the table and rolled off!", "Out!", "Too bad, it rolled away!"],
+    cSapRim: ["Clink!", "It hit the rim!", "It touched the ring!"],
+    cSapNear: (n) => pick([`Almost dropped into ${n}'s hole!`, `It danced on ${n}'s rim!`, `${n} gets hopeful!`]),
+    cSapLast: ["Last toss!", "This is the one!", "It's decided now!"],
+    cSapIn: ["IN!", "It dropped in!", "Right in!"],
+    cSapHoles: "HOLES",
+    cQualStart: (n) => `${n} names! Only 12 make it to the table.`,
+    cQualLeft: (n) => (n <= 12 ? `${n} left: they go to the table!` : `${n} left!`),
+    cQualIn: "STILL IN",
+    // --- Who is it?: face cards; each letter flips the ones that don't match.
+    gameQuien: "Who is it?",
+    cQuiStart: (n) => `${n} cards! Each letter flips the ones that don't match.`,
+    cQuiNext: (k, of) => `Round ${k} of ${of}: all cards back!`,
+    cQuiTwo: (a, b) => pick([`Two left: ${a} and ${b}!`, `${a} or ${b}?`, `Between ${a} and ${b}!`]),
+    cQuiAsk: (l) => pick([`Does it have the letter ${l}?`, `Is there an ${l} in the name?`, `What about ${l}?`]),
+    cQuiAskShort: (l) => `Letter ${l}?`,
+    cQuiAskN: (l) => pick([`Does it have the number ${l}?`, `Is there a ${l} in the name?`]),
+    cQuiAskShortN: (l) => `Number ${l}?`,
+    cQuiYes: (l, k) => (k === 1 ? `Yes, it has ${l}! One card flips.` : `Yes, it has ${l}! ${k} cards flip.`),
+    cQuiNo: (l, k) => (k === 1 ? `No ${l}! One card flips.` : `No ${l}! ${k} cards flip.`),
+    cQuiDone: (n) => pick([`It's ${n}!`, `${n} is left!`]),
+    cQuiTie: ["Same letters! The draw already chose.", "A letter tie! The draw decides."],
+    cQuiTieShort: "Same letters?",
+    cQuiSi: "YES!",
+    cQuiNoStamp: "NO!",
+    cQuiCards: "CARDS",
+    cQuiAlmost: ["It almost flipped!", "Whoa, so close!", "Saved by a hair!"],
+    cSapNext: (k, of) => `Toss ${k} of ${of}!`,
+    cSapDone: (n) => pick([`It dropped into ${n}'s hole: winner!`, `There it rests, in ${n}'s: winner!`]),
+    cSapTally: (k, of) => `Winner ${k} of ${of}`,
+    cSapRuleMany: ["Each token that drops into a hole is a winner.", "Every token that drops in picks a winner."],
+    cSapRuleOne: ["The token that drops into a hole picks the winner.", "The hole the token drops into picks the winner."],
+    cSapAlmost: "Almost!",
     cOruStart: ["The entrada begins!", "The band strikes up!", "Let the diablada dance!"],
     cOruCount: (n) => (n === 2 ? "Two devils in the troupe!" : `${n} devils in the troupe!`),
     cOruDance: ["What steps!", "Look at them stomp!", "The devils leap!"],

@@ -26,7 +26,7 @@ const opt = (name, def) => {
   return i >= 0 && args[i + 1] ? args[i + 1] : def;
 };
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
-const JUEGOS = ["race", "luz", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar"];
+const JUEGOS = ["race", "luz", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien"];
 const pedido = args[0] && !args[0].startsWith("--") ? args[0] : "todos";
 // El motor nuevo es el de todos desde el 28 de septiembre (docs/motores.md);
 // `--motor clasico` escucha los juegos del motor anterior. El nuevo usa la placa de video.

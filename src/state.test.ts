@@ -78,6 +78,10 @@ describe("playableGame", () => {
     const s = await load();
     expect(s.playableGame("wheel", 24)).toBe("wheel");
     expect(s.playableGame("wheel", 25)).toBe("race");
+    // El Sapo juega una clasificatoria con cualquier cantidad: solo no puede con más de 12 ganadores.
+    expect(s.playableGame("sapo", 12)).toBe("sapo");
+    expect(s.playableGame("sapo", 200)).toBe("sapo");
+    expect(s.playableGame("sapo", 50, undefined, Array.from({ length: 13 }, (_, i) => i))).toBe("race");
     expect(s.playableGame("race", 500)).toBe("race");
     expect(s.playableGame("teleferico", 500)).toBe("teleferico");
   });

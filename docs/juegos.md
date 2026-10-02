@@ -58,7 +58,7 @@ node scripts/audit-game.mjs <juego>
 node scripts/audit-sound.mjs <juego>
 ```
 
-Donde `<juego>` es el valor de `?demo=`: `race`, `luz`, `trompo`, `pinata`, `oruro`, `tombola`, `wheel`, `teleferico`, `pasanaku`, `stellar`. El auditor abre Chrome, corre un sorteo real contra drand y comprueba veinte cosas:
+Donde `<juego>` es el valor de `?demo=`: `race`, `luz`, `trompo`, `pinata`, `oruro`, `tombola`, `wheel`, `teleferico`, `pasanaku`, `stellar`, `sapo`, `quien`. El auditor abre Chrome, corre un sorteo real contra drand y comprueba veinte cosas:
 
 | # | Comprobación | Por qué importa |
 |---|---|---|
@@ -301,6 +301,8 @@ El ritmo, la legibilidad del cartel y el tartamudeo de los subtítulos ya los mi
 | Teleférico | `teleferico` | Módulo propio | 200 | [teleferico.md](juegos/teleferico.md) |
 | Aguayo (antes Pasanaku) | `pasanaku` | Módulo propio | 200 | [pasanaku.md](juegos/pasanaku.md), que ahora cuenta el Aguayo |
 | Constelación Stellar | `stellar` | Módulo propio | 200 | [constelacion-stellar.md](juegos/constelacion-stellar.md) |
+| Sapo | `sapo` | Módulo propio (solo motor nuevo) | 200, con clasificatoria a 12 | [sapo.md](juegos/sapo.md) |
+| ¿Quién es? | `quien` | Módulo propio (solo motor nuevo) | 200 | [quien-es.md](juegos/quien-es.md) |
 
 **Los que salieron del selector** el 30 de septiembre de 2026, porque sumaban poco: la carrera de cohetes y las balsas de totora eran la misma carrera de llamas con otra piel, y el Cierre de Libro era el menos visual. El código sigue y se abren con `?demo=` mientras se decide si se borran; la ruleta con más de 24 personas ahora pasa a la carrera de llamas, no al Cierre de Libro.
 

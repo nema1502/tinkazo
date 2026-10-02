@@ -1,5 +1,5 @@
 /** `race` y `stellar` son la misma carrera con distinto escenario. */
-export type Game = "race" | "stellar" | "wheel" | "ledger" | "rockets" | "pasanaku" | "teleferico" | "tombola" | "trompo" | "totora" | "pinata" | "oruro" | "luz";
+export type Game = "race" | "stellar" | "wheel" | "ledger" | "rockets" | "pasanaku" | "teleferico" | "tombola" | "trompo" | "totora" | "pinata" | "oruro" | "luz" | "sapo" | "quien";
 
 /** Ronda de quicknet ya publicada y verificada. */
 export interface Beacon {
@@ -47,13 +47,23 @@ export const LCOLORS = ["--magenta", "--orange", "--teal", "--purple", "--yellow
 export const WHEEL_MAX = 24;
 
 /**
- * El juego que de verdad se cuenta: si el elegido no aguanta tantos nombres
- * (la ruleta pasados WHEEL_MAX), la carrera, que es el juego de la casa. No
- * altera quién ganó: el juego solo narra. `names` y `winners` quedan para los
- * juegos que miran la lista además de la cantidad.
+ * El Sapo tiene doce agujeros: con más nombres juega una clasificatoria hasta
+ * doce finalistas (`games/pixi/qualifier.ts`). Solo no puede con más de doce
+ * ganadores, y ahí el sorteo pasa a la carrera.
  */
-export function playableGame(game: Game, people: number, _names?: readonly string[], _winners?: readonly number[]): Game {
+export { SAPO_MAX } from "./games/pixi/sapo-plan";
+import { SAPO_MAX as SAPO_CAP } from "./games/pixi/sapo-plan";
+
+/**
+ * El juego que de verdad se cuenta: si el elegido no aguanta tantos nombres
+ * (la ruleta pasados WHEEL_MAX, el Sapo con más de SAPO_MAX ganadores), la carrera, que
+ * es el juego de la casa. No altera quién ganó: el juego solo narra.
+ *
+ * `names` y `winners` son opcionales: el Sapo mira cuántos ganadores hay.
+ */
+export function playableGame(game: Game, people: number, _names?: readonly string[], winners?: readonly number[]): Game {
   if (game === "wheel" && people > WHEEL_MAX) return "race";
+  if (game === "sapo" && (winners?.length ?? 1) > SAPO_CAP) return "race";
   return game;
 }
 
