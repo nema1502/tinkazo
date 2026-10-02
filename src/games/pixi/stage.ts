@@ -6,6 +6,7 @@ import { LCOLORS, drawAvatar, paceFactor, skipMotion, type Beacon } from "../../
 import { musicCue, startMusic, stopMusic } from "../../music";
 import { registerSkip, releaseScreen, shorten, takeOverScreen, winnerNames } from "../overlay";
 import { Camera } from "./camera";
+import { watchRecovery } from "./recover";
 
 /**
  * El andamiaje de los juegos en PixiJS: lo mismo que `overlay.ts` hace para
@@ -269,6 +270,31 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   };
   addEventListener("resize", onResize);
 
+  // The GPU can drop textures while the tab is hidden (mobile). Pixi uploads
+  // them again on its own; the winner plate and the chips need a rebuild.
+  // Cheap path (tab back, context intact): only the crowns, no game resizers,
+  // no camera. Heavy path (context restored): full resize, camera pose kept
+  // so the shot does not snap.
+  const repaint = (full: boolean): void => {
+    if (dead) return;
+    try {
+      if (full) {
+        const pose = cam.snapshot();
+        try {
+          onResize();
+        } finally {
+          cam.restore(pose);
+        }
+      } else {
+        for (const c of crowns) c.rebuild();
+      }
+      app.renderer.render(app.stage);
+    } catch {
+      /* the loop goes on; a failed recovery must not skip done() */
+    }
+  };
+  const stopWatching = watchRecovery(view, document, { onReturn: () => repaint(false), onRestore: () => repaint(true) });
+
   /**
    * Lo que cuesta la primera vez, pagado antes de mostrar el estadio: el
    * desenfoque de la cámara (su compilación congelaba el primer zoom), el
@@ -348,9 +374,14 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     };
     build();
     root.visible = false;
+    // The last pose, to put a rebuilt plate back where it was.
+    let lastT = 0;
+    let lastPlaca = true;
     const c: Crown = {
       root,
       at(tt: number, placa = true) {
+        lastT = tt;
+        lastPlaca = placa;
         root.visible = true;
         plate.visible = placa;
         tl.time(Math.max(0, tt));
@@ -375,7 +406,12 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
           confetti.rect(x - w / 2, y - h / 2, w, h).fill(P[i % P.length] ?? YELLOW);
         }
       },
-      rebuild: build,
+      rebuild() {
+        build();
+        // `build` leaves the plate at scale 0 (the entrance animation starts
+        // there): if it was already shown, replay it to the same moment.
+        if (root.visible) c.at(lastT, lastPlaca);
+      },
       warm() {
         // El cartel arranca en escala cero por su animación: sin tamaño no se
         // dibuja nada, y el nombre no se rasteriza.
@@ -428,6 +464,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       dead = true;
       cancelAnimationFrame(rafId);
       removeEventListener("resize", onResize);
+      stopWatching();
       for (const f of cleaners) {
         try {
           f();

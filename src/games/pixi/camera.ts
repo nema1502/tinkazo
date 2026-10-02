@@ -19,6 +19,19 @@ import { ZoomBlurFilter } from "pixi-filters";
  * - **El desenfoque se apaga cuando no hace falta.** Un filtro sobre toda la
  *   escena cuesta en un celular: se prende solo mientras la cámara se mueve.
  */
+export interface CameraPose {
+  x: number;
+  y: number;
+  zoom: number;
+  rot: number;
+  tx: number;
+  ty: number;
+  tz: number;
+  tr: number;
+  rate: number;
+  lastZoom: number;
+}
+
 export class Camera {
   /** El punto del mundo que queda en el centro de la pantalla, y el acercamiento. */
   x = 0;
@@ -85,6 +98,16 @@ export class Camera {
     this.y = this.ty = y;
     this.zoom = this.tz = this.lastZoom = zoom;
     return this;
+  }
+
+  /** La pose y los objetivos, para devolverlos después de que un juego se rearma. */
+  snapshot(): CameraPose {
+    const { x, y, zoom, rot, tx, ty, tz, tr, rate, lastZoom } = this;
+    return { x, y, zoom, rot, tx, ty, tz, tr, rate, lastZoom };
+  }
+
+  restore(p: CameraPose): void {
+    Object.assign(this, p);
   }
 
   /** Un sacudón, que se apaga solo. `a` en píxeles de pantalla. */

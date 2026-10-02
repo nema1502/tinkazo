@@ -61,6 +61,10 @@ Los momentos de cámara de cada juego:
 | Carnaval de Oruro | Sigue a la comparsa, se acerca a los que se quedan en cada arco y a la máscara que se corre, se abre al Socavón y se cierra en el contrapunto |
 | Constelación | Sigue al paquete desde el primer salto, encima en los saltos lentos del final, golpe en el roce y en el engaño, y se abre en la nova para mostrar la constelación |
 
+### Volver a la pestaña con el contexto perdido
+
+En un celular, el navegador puede soltar el contexto WebGL con la pestaña oculta, y el cartel del ganador (texto dibujado a textura) podría volver en blanco. PixiJS 8 ya cancela el evento de pérdida y, al restaurarse, descarta sus texturas de GPU para subirlas de nuevo (`node_modules/pixi.js/lib/rendering/renderers/gl/context/GlContextSystem.mjs` y `.../gl/texture/GlTextureSystem.mjs`), pero no rearma lo que se dibujó una vez ni pide un cuadro. `pixi/recover.ts` distingue dos caminos: al volver a la pestaña con el contexto sano (`visibilitychange`, con 250 ms de margen) solo se rearman los carteles y se dibuja un cuadro; al restaurarse el contexto (`webglcontextrestored`, nunca descartado) se hace el cambio de tamaño completo, con los rearmados de cada juego, conservando la pose de la cámara. Si la pestaña vuelve con el contexto aún perdido, espera a la restauración. Es una hipótesis: no se pudo verificar en un celular real.
+
 ## Auditarlo
 
 Los cuatro auditores y el script de capturas miran el motor nuevo por defecto, con la placa de video (`TINKAZO_GPU=1`): sin placa, Chrome dibuja WebGL por software a unos diecisiete cuadros por segundo, y medir la fluidez así sería medir la computadora del auditor. Con `--motor clasico` miran el anterior.
