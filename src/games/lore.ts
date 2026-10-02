@@ -70,11 +70,13 @@ export const LORE: Record<string, Lore[]> = {
       hue: "purple",
     },
     {
-      // En el XDR del protocolo: `Asset path<5>`.
+      // "Stellar only considers paths of length 5 or shorter." (En el XDR del
+      // protocolo: `Asset path<5>`. La página del XDR en GitHub dejó de
+      // responder sin sesión iniciada el 2 de octubre de 2026, y la CI fallaba.)
       q: "loreHopsQ",
       a: "loreHopsA",
-      href: "https://github.com/stellar/stellar-xdr/blob/curr/Stellar-transaction.x",
-      src: "stellar-xdr · Stellar-transaction.x",
+      href: "https://developers.stellar.org/docs/build/guides/transactions/path-payments",
+      src: "developers.stellar.org",
       hue: "teal",
     },
   ],
