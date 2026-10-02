@@ -37,7 +37,19 @@ Y la entrada ya tiene la forma de un sorteo por etapas: una comparsa que avanza 
 | 3 a 5 | 2 | |
 | 6 a 14 | 3 | |
 | 15 a 50 | 4 | Una comparsa de varias filas que se va achicando |
-| 51 a 200 | 5 | Una multitud de diablos chicos; los nombres aparecen cuando quedan ocho |
+| 51 a 200 | 5 | Una multitud de diablos chicos; los nombres van a los más cercanos a la cámara y el resto se cuenta en un "+N" |
+
+## Los nombres
+
+El contador "EN LA COMPARSA 18 / 18" no cambió (su texto sale de `counterText`, con test). Hasta el 1 de octubre de 2026 los nombres aparecían recién cuando quedaban ocho en la comparsa (y en chicos, de unos 11 px), así que con 18 diablos no se veía ninguno al arrancar. Ahora:
+
+- **Desde el primer cuadro.** Cada diablo que entra lleva su cartel, de al menos 14 px de texto, con una barra del color de su capa y una línea con un punto que lo une a la cabeza de SU diablo.
+- **Quién lleva cartel.** Un tope según el tamaño de la pantalla (hasta 14). Fuera del pase de lista van primero los diablos más cercanos a la cámara (los empates los decide un hash del id) y los que acaban de quedarse; los demás se cuentan en un chip "+N" debajo del contador. Los carteles se acomodan sin pisarse (`layoutLabels`, el mismo de la Piñata) y la lógica pura está en [`oruro-tags.ts`](../../src/games/pixi/oruro-tags.ts), con sus tests.
+- **Pase de lista en varias pasadas.** Desde 0,25 s, y sin demorar el juego, los carteles pasan en páginas por TODOS los diablos, para que cada nombre se lea al menos una vez aunque no entren todos juntos: cada página lleva tantos como permita el tope y dura entre 0,6 y 1 s. El orden sale de un hash del id del diablo, no de su lugar en la fila ni de su posición, así que no sigue ni la formación ni a la ganadora, y es siempre el mismo. El cartel que se presenta se agranda. Todo el pase dura como máximo 4,5 s (puede pasar el final de la armada, solo se extiende esa ventana); con multitudes de 200 el tope de la ventana corta el pase y los que no entraron quedan en el "+N". Después vuelve la regla de cercanía a la cámara.
+- **Los que se quedan.** Su cartel se agranda y se tacha con una X roja durante 1,5 s y después se desvanece. Los que siguen conservan el suyo.
+- **Sin spoilers.** La prioridad solo usa cercanía a la cámara y quién ya se quedó; la ganadora no recibe ningún trato especial antes del cartel final, y el orden de salida no cambió.
+
+Estado: los tests de la lógica pura pasan, pero **no se verificó en un navegador**: falta confirmar la legibilidad a 390 px, el solape con el zoom de la cámara y que los carteles sigan bien a los diablos en movimiento.
 
 ## Los tiempos
 
