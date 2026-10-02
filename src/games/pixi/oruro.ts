@@ -5,6 +5,8 @@ import { beep, fanfare, note } from "../../sound";
 import { writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
+import { layoutLabels, type LabelItem } from "./pinata-labels";
+import { OUT_HOLD, counterText, estimateTagSize, outTreatment, planRollCall, rollCallAt, selectTags, tagBudget, tagName, type TagCandidate } from "./oruro-tags";
 
 /**
  * Carnaval de Oruro.
@@ -36,11 +38,17 @@ const T_START = 2.2;
 const WALK = 2.1;
 const STOP = 1.3;
 const MASKS = [0xd52b1e, 0xd52b1e, 0x1f7a3a, 0x1c64c8];
+/** Longest name on a tag, in characters. */
+const TAG_CHARS = 12;
+/** Name tags are at least this big on screen (px of text), whatever the screen. */
+const TAG_FONT_PX = 14;
+/** The tag roll call starts here (s); it may outlast the intro, but never delays the game. */
+const ROLL_T0 = 0.25;
 
 type Phase = "intro" | "walk" | "stop" | "duel" | "crown" | "dead";
 interface Dancer {
   idx: number; x: number; y: number; slot: number; alive: boolean; left: number; wx: number; wy: number;
-  ph: number; view?: Container; mask?: Container; cape?: Graphics; chip?: Container;
+  ph: number; view?: Container; mask?: Container; cape?: Graphics; chip?: Container; strike?: Graphics; tagW?: number;
   /** Las partes que bailan: brazos, piernas y el brillo de la pechera. */
   armL?: Container; armR?: Container; legL?: Container; legR?: Container; glint?: Graphics;
 }
@@ -273,6 +281,13 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   let dancerLayer!: Container;
   let fx!: Graphics;
   let chips!: Container;
+  let leaders!: Graphics;
+  let moreBox!: Graphics;
+  let moreText!: ReturnType<PixiStage["text"]>;
+  const shownNow = new Set<number>();
+  const shownNext = new Set<number>();
+  let lastHi = -1;
+  let rollPlan: ReturnType<typeof planRollCall> | null = null;
   let counter!: ReturnType<PixiStage["text"]>;
   let counterBox!: Graphics;
   let blockText!: ReturnType<PixiStage["text"]>;
@@ -456,7 +471,11 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       dancerLayer.addChild(d.view);
       d.chip?.destroy({ children: true });
       d.chip = undefined;
+      d.strike = undefined;
     }
+    shownNow.clear();
+    lastHi = -1;
+    rollPlan = null;
     // La interfaz.
     counterBox = new Graphics();
     counter = S.text("", { fontFamily: MONO, fontSize: 14 * k, fontWeight: "700", fill: S.dark ? CREAM : INK });
@@ -465,10 +484,16 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     box.addChild(counterBox, counter);
     box.position.set(22 * k, S.top() + 10 * k);
     chips = new Container();
+    leaders = new Graphics();
+    moreBox = new Graphics();
+    moreText = S.text("", { fontFamily: MONO, fontSize: TAG_FONT_PX * k, fontWeight: "800", fill: S.dark ? CREAM : INK });
+    moreText.anchor.set(0.5);
+    moreBox.visible = moreText.visible = false;
+    chips.addChild(leaders);
     blockText = S.text("", { fontFamily: MONO, fontSize: 12 * k, fontWeight: "800", fill: CREAM });
     blockText.anchor.set(1, 1);
     blockText.position.set(g.w - 22 * k, g.h - S.bottom() - 18 * k);
-    S.hud.addChild(box, chips, blockText);
+    S.hud.addChild(box, chips, moreBox, moreText, blockText);
   }
   build();
   const crownUI = S.crown(names, winners);
@@ -504,6 +529,124 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     else {
       const z = 1.3;
       cam.lookAt(win.x + 60 * g.k, win.y - 60 * g.scale - (g.h * 0.1) / z, z, 1.5);
+    }
+  }
+
+  /** One reusable candidate per dancer, so the per-frame selection allocates nothing per devil. */
+  const pool: TagCandidate[] = dancers.map((d) => ({ id: d.idx, sx: 0, sy: 0, depth: 0, visible: false, out: false }));
+  const poolOf = new Map(dancers.map((d, i) => [d.idx, pool[i] as TagCandidate]));
+  const inView: TagCandidate[] = [];
+
+  /** The chip of a devil: built once, then reused (and rebuilt with the scene on resize). */
+  function tagOf(d: Dancer, kk: number, scale: number): Container {
+    if (d.chip) return d.chip;
+    const c = S.chip(tagName(names[d.idx] ?? "", TAG_CHARS), scale);
+    const w = c.width;
+    d.tagW = w;
+    // The colour bar matches the devil's cape, and the dot on its head, so ownership reads at a glance.
+    c.addChild(new Graphics().rect(4 * kk, 17.5 * kk, w - 8 * kk, 4 * kk).fill(S.color(d.idx)));
+    // The "out" cross, only shown while the devil has just stayed behind.
+    const x = new Graphics()
+      .moveTo(5 * kk, 4 * kk).lineTo(w - 8 * kk, 19 * kk).moveTo(w - 8 * kk, 4 * kk).lineTo(5 * kk, 19 * kk)
+      .stroke({ width: 5 * kk, color: INK, cap: "round" })
+      .moveTo(5 * kk, 4 * kk).lineTo(w - 8 * kk, 19 * kk).moveTo(w - 8 * kk, 4 * kk).lineTo(5 * kk, 19 * kk)
+      .stroke({ width: 2.6 * kk, color: 0xd52b1e, cap: "round" });
+    x.visible = false;
+    c.addChild(x);
+    d.strike = x;
+    // Se guarda: sin esto cada cuadro armaba una etiqueta nueva y la línea que
+    // la usa encontraba `d.chip` vacío; Oruro se caía en el primer cuadro y el
+    // estadio quedaba colgado (lo encontró el auditor exigente, 2 de octubre).
+    d.chip = c;
+    chips.addChild(c);
+    return c;
+  }
+
+  /**
+   * Name tags from the very first frame, each tied to ITS devil by the colour of
+   * its cape and a short leader line to the head. Which devils get one: see
+   * selectTags (front first, just-eliminated ones always); the rest are the "+N".
+   */
+  function drawTags(g: ReturnType<typeof G>, live: Dancer[], cw: number, ch: number): void {
+    const k = g.k;
+    for (const d of dancers) if (d.chip) d.chip.visible = false;
+    leaders.clear();
+    moreBox.visible = moreText.visible = false;
+    if (phase === "crown" || phase === "dead") return;
+    const scale = clamp(TAG_FONT_PX / (12 * k), 1, 1.8);
+    const kk = k * scale;
+    const sz = estimateTagSize(kk, TAG_CHARS);
+    const top = S.top(), bottom = S.bottom();
+    const cap = tagBudget(g.w, g.h, top, bottom, sz.w, sz.h);
+    // Roll call: for the first seconds the tags are paged over ALL devils (ordered by
+    // hash, so everyone is named once and nothing depends on slot or who wins).
+    rollPlan ??= planRollCall(dancers.map((d) => d.idx), cap);
+    const roll = rollCallAt(rollPlan, tAll, ROLL_T0);
+    const page = roll.page >= 0 ? (rollPlan.pages[roll.page] as number[]) : null;
+    inView.length = 0;
+    for (const d of dancers) {
+      const c = poolOf.get(d.idx) as TagCandidate;
+      const age = d.alive ? -1 : tAll - d.left;
+      c.visible = false;
+      if (!outTreatment(age).visible) continue;
+      const p = cam.toScreen(d.x, d.y - 100 * g.scale, g.w, g.h);
+      c.sx = p.x;
+      c.sy = p.y;
+      c.depth = d.y;
+      c.out = !d.alive && age < OUT_HOLD;
+      c.visible = p.x > 0 && p.x < g.w && p.y > top && p.y < g.h - bottom && (!page || c.out || page.includes(d.idx));
+      if (c.visible) inView.push(c);
+    }
+    const { shown } = selectTags(inView, cap, shownNow);
+    const th = 22 * kk;
+    const items: LabelItem[] = [];
+    for (let i = 0; i < shown.length; i++) {
+      const d = byIdx.get(shown[i] as number) as Dancer;
+      const c = poolOf.get(d.idx) as TagCandidate;
+      tagOf(d, kk, scale);
+      const w = (d.tagW ?? sz.w) + 3 * kk;
+      items.push({ id: d.idx, x: c.sx - w / 2, y: c.sy - th - 10 * kk, w, h: th + 3 * kk, priority: (c.out ? 1000 : 0) + c.depth });
+    }
+    // The counter and the "+N" chip are off limits.
+    const moreH = 26 * k, moreY = S.top() + 10 * k + ch + 10 * k;
+    const blocked = [{ x: 22 * k, y: S.top() + 10 * k, w: cw + 5 * k, h: ch + 5 * k + 10 * k + moreH }];
+    const placed = layoutLabels(items, { w: g.w, h: g.h, top, bottom }, blocked);
+    const hi = roll.hi;
+    shownNext.clear();
+    let aliveTagged = 0;
+    for (const pl of placed) {
+      const d = byIdx.get(pl.id) as Dancer;
+      const c = poolOf.get(d.idx) as TagCandidate;
+      const chip = d.chip as Container;
+      const look = outTreatment(d.alive ? -1 : tAll - d.left);
+      const s = look.scale * (pl.id === hi ? 1.25 : 1);
+      chip.visible = true;
+      chip.scale.set(s);
+      chip.alpha = look.alpha;
+      chip.position.set(pl.x, pl.y + 11 * kk);
+      (d.strike as Graphics).visible = look.struck;
+      if (pl.id === hi && pl.id !== lastHi) chips.addChild(chip);
+      shownNext.add(pl.id);
+      if (d.alive) aliveTagged++;
+      // The leader: from the tag down to the head of its own devil.
+      const w = (d.tagW ?? sz.w) * s, cx = pl.x + w / 2, by = pl.y + th * s - (s - 1) * 11 * kk;
+      const col = S.color(d.idx);
+      leaders.moveTo(cx, by).lineTo(c.sx, c.sy).stroke({ width: 5 * kk * 0.5, color: INK, alpha: look.alpha })
+        .moveTo(cx, by).lineTo(c.sx, c.sy).stroke({ width: 2.4 * kk * 0.5, color: col, alpha: look.alpha })
+        .circle(c.sx, c.sy, 3.2 * kk * 0.6).fill({ color: col, alpha: look.alpha }).stroke({ width: 1.4, color: INK, alpha: look.alpha });
+    }
+    lastHi = hi;
+    shownNow.clear();
+    for (const id of shownNext) shownNow.add(id);
+    const more = live.length - aliveTagged;
+    if (more > 0) {
+      const label = `+${more}`;
+      if (moreText.text !== label) moreText.text = label;
+      const w = moreText.width + 18 * k;
+      moreBox.clear().roundRect(22 * k + 2.5 * k, moreY + 2.5 * k, w, moreH, 5 * k).fill(INK)
+        .roundRect(22 * k, moreY, w, moreH, 5 * k).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 2 * k, color: INK });
+      moreText.position.set(22 * k + w / 2, moreY + moreH / 2);
+      moreBox.visible = moreText.visible = true;
     }
   }
 
@@ -582,24 +725,12 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
         }
       }
     }
-    // Los nombres de los que quedan, cuando son pocos.
     const live = alive();
-    for (const d of dancers) if (d.chip) d.chip.visible = false;
-    if (live.length <= 8 && phase !== "crown") {
-      const at = live.map((d) => ({ d, p: cam.toScreen(d.x + 20 * g.scale, d.y - 125 * g.scale, g.w, g.h) })).sort((a, b) => a.p.y - b.p.y);
-      let prev = -Infinity;
-      for (const { d, p } of at) {
-        const chip = (d.chip ??= chips.addChild(S.chip(names[d.idx] ?? "")));
-        chip.visible = true;
-        const cy = Math.max(p.y, prev + 26 * k);
-        prev = cy;
-        chip.position.set(Math.min(p.x, g.w - chip.width - 10 * k), cy);
-      }
-    }
-    counter.text = `${t("cOruLeft")}  ${live.length} / ${n}`;
+    counter.text = counterText(t("cOruLeft"), live.length, n);
     const bw = counter.width + 40 * k, bh = 40 * k;
     counter.position.set(bw / 2, bh / 2);
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 3 * k, color: INK });
+    drawTags(g, live, bw, bh);
     blockText.text = phase === "walk" || phase === "stop" ? T[getLang()].cOruBlock(Math.min(K, stopsDone + (phase === "walk" ? 1 : 0)), K) : "";
     if (phase === "crown") crownUI.at(tAll - T_CROWN);
   }

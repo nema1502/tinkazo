@@ -4,6 +4,7 @@ import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, fanfare, note } from "../../sound";
 import { writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
+import { capRecent, layoutLabels, type LabelItem } from "./pinata-labels";
 import { CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 
 /**
@@ -34,10 +35,16 @@ import { CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./sta
 const DT = 1 / 120;
 const T_HANG = 3.0;
 const GRAV = 1500;
+/** Falling-candy name chips: how many get their own name, and how long they linger once settled. */
+const MAX_FLIGHT_LABELS = 8;
+const LINGER = 1.25;
+const STRIP_MAX = 5;
 
 type Phase = "hang" | "hits" | "break" | "crown" | "dead";
 interface Candy {
   idx: number; inside: boolean; x: number; y: number; vx: number; vy: number; rot: number; spin: number; settled: boolean; out: number; drawn: boolean;
+  /** Order in which it left the piñata (for "most recent first") and when it stopped moving. */
+  seq: number; settledAt: number;
 }
 interface Swing { at: number; miss: boolean; drop: number[]; done: boolean }
 
@@ -90,7 +97,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   setGameLength(T_CROWN, WINNER_HOLD);
   const T_PEEK = swings.filter((s) => !s.miss).at(-2)?.at ?? T_BREAK - 1;
 
-  const candies: Candy[] = names.map((_, i) => ({ idx: i, inside: true, x: 0, y: 0, vx: 0, vy: 0, rot: 0, spin: 0, settled: false, out: 0, drawn: false }));
+  const candies: Candy[] = names.map((_, i) => ({ idx: i, inside: true, x: 0, y: 0, vx: 0, vy: 0, rot: 0, spin: 0, settled: false, out: 0, drawn: false, seq: -1, settledAt: -9 }));
   const winC = candies[winnerIdx] as Candy;
   const rivC = candies[rivalIdx] as Candy;
 
@@ -102,8 +109,9 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   /** Cuándo pegó el último palo y dónde, para la estrella y los papelitos. */
   const blows: { at: number; x: number; y: number; seed: number }[] = [];
   let lastBlow = -9;
-  /** El caramelo que acaba de caer, para ponerle su nombre un rato. */
-  let fell = { idx: -1, at: -9 };
+  /** Quién cayó y en qué orden: alimenta la tira de "cayeron hace poco". */
+  let dropSeq = 0;
+  const fallen: number[] = [];
   let said2At = -9;
   /** El tamaño de un caramelo: más grandes que antes, que se leían como puntitos. */
   const candySize = (): number => clamp(Math.sqrt(1 / n) * 70 * S.u(), 12 * S.u(), 26 * S.u());
@@ -168,6 +176,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
           c.spin = c.vx / Math.max(1, sz);
           if (Math.abs(c.vx) < 6 * g.k && Math.abs(slope) < sz * 1.4) {
             c.settled = true;
+            c.settledAt = tAll;
             if (c !== winC) {
               heights.set(col, hAt(col) + sz * 1.05);
               heights.set(col - 1, Math.max(hAt(col - 1), hAt(col) - sz * 1.2));
@@ -190,6 +199,8 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       const c = candies[id] as Candy;
       if (!c.inside) continue;
       c.inside = false;
+      c.seq = dropSeq++;
+      if (c !== winC) fallen.push(id);
       c.x = p.x + (hash(id, 1) - 0.5) * g.R * 0.8;
       c.y = p.y + g.R * 0.5;
       c.vx = (hash(id, 2) - 0.5) * (strong ? 900 : 520) * g.k;
@@ -268,15 +279,17 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       setTimeout(() => beep(note(8 + (crackLevel % 4)), 0.06, "triangle", 0.035), 60);
       cam.punch(0.06).shake(8 * g.k);
       drop(s.drop, crackLevel > nHits - 2);
-      if (s.drop.length > 0 && s.drop.length <= 3) fell = { idx: s.drop[0] as number, at: tAll };
       for (let i = 0; i < Math.min(8, s.drop.length); i++) setTimeout(() => beep(note(10 + (i % 5)), 0.03, "triangle", 0.02), 90 + i * 40);
       const left = inside().length;
-      if (s.drop.length >= 4 && tAll - lastOutSaid > 1.2) {
+      if (s.drop.length > 0 && tAll - lastOutSaid > 1.2) {
         lastOutSaid = tAll;
-        S.say(t("cPinRain"), 0.45);
-      } else if (s.drop.length > 0 && tAll - lastOutSaid > 1.2) {
-        lastOutSaid = tAll;
-        S.say(T[getLang()].cPinOut(names[s.drop[0] as number] ?? ""), 0.5 + 0.2 * (1 - left / n));
+        const nm = (id: number): string => names[id] ?? "";
+        const w = 0.5 + 0.2 * (1 - left / n);
+        // Uno: su nombre. Dos o tres: todos en una línea. Más: el primero y cuántos más.
+        if (s.drop.length === 1) S.say(T[getLang()].cPinOut(nm(s.drop[0] as number)), w);
+        else if (s.drop.length <= 3) S.say(T[getLang()].cPinOutMany(s.drop.map(nm)), w);
+        else if (crackLevel === 1) S.say(t("cPinRain"), 0.45);
+        else S.say(T[getLang()].cPinOutMore(nm(s.drop[0] as number), s.drop.length - 1), w);
       }
       if (crackLevel === nHits - 1 && tAll - lastOutSaid > 0.8) {
         lastOutSaid = tAll;
@@ -346,6 +359,12 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   let counterBox!: Graphics;
   let chipLayer!: Container;
   const chipOf = new Map<number, Container>();
+  /** Tamaño de cada chip, medido una sola vez (medir un Container en cada frame sale caro). */
+  const chipDim = new Map<number, { w: number; h: number }>();
+  let moreBadge!: Container;
+  let moreBg!: Graphics;
+  let moreTxt!: ReturnType<PixiStage["text"]>;
+  let moreN = -1;
   const CONE = [0xe93d9c, 0xff7a1a, 0x00a896, 0x6c4ce0, 0xffc629, 0xe93d9c, 0x00a896];
 
   function makePinata(R: number): Container {
@@ -373,6 +392,8 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     const k = g.k;
     for (const c of [S.bg, S.scene, S.hud]) c.removeChildren().forEach((x) => x.destroy({ children: true }));
     chipOf.clear();
+    chipDim.clear();
+    moreN = -1;
     // El patio: la pared, el piso de baldosas y la luz de la fiesta.
     S.bg.addChild(new Graphics().rect(0, 0, g.w, g.h).fill(S.dark ? 0x2a1d33 : 0xf7d9b5));
     wall = new Graphics();
@@ -428,6 +449,13 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     box.addChild(counterBox, counter);
     box.position.set(22 * k, S.top() + 10 * k);
     chipLayer = new Container();
+    moreBg = new Graphics();
+    moreTxt = S.text("", { fontFamily: MONO, fontSize: 14 * k * (g.w <= 520 ? 1.35 : 1.15), fontWeight: "800", fill: INK });
+    moreTxt.anchor.set(0, 0.5);
+    moreBadge = new Container();
+    moreBadge.addChild(moreBg, moreTxt);
+    moreBadge.visible = false;
+    chipLayer.addChild(moreBadge);
     S.hud.addChild(flash, box, chipLayer);
     heights.clear();
     for (const c of candies) c.drawn = false;
@@ -640,40 +668,115 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       glow.circle(winC.x, winC.y, big * 2.4).fill({ color: YELLOW, alpha: 0.28 }).circle(winC.x, winC.y, big * 1.6).fill({ color: YELLOW, alpha: 0.3 });
       drawCandy(candyG, winC.x, winC.y, big, winC.rot, S.color(winnerIdx), 1);
     }
-    // El nombre del caramelo que acaba de caer, un rato, al lado del caramelo.
-    for (const ch of chipOf.values()) ch.visible = false;
-    const cf = candies[fell.idx];
-    if (cf && !cf.inside && tAll - fell.at < 1.2 && cf !== winC) {
-      let ch = chipOf.get(-1 - cf.idx);
-      if (!ch) {
-        ch = S.chip(names[cf.idx] ?? "");
-        chipOf.set(-1 - cf.idx, ch);
-        chipLayer.addChild(ch);
-      }
-      const q = cam.toScreen(cf.x + sz * 1.8, cf.y - sz * 1.4, g.w, g.h);
-      ch.visible = true;
-      ch.position.set(Math.min(q.x, g.w - ch.width - 10 * k), q.y);
-    }
-    // La lista de los que quedan adentro, cuando son pocos.
-    const adentro = inside();
-    if (adentro.length <= 6 && adentro.length > 0 && phase !== "crown" && story.arc !== "tapada") {
-      const pts = cam.toScreen(p.x + g.R * 2.1, p.y - g.R, g.w, g.h);
-      adentro.forEach((c, i) => {
-        let ch = chipOf.get(c.idx);
-        if (!ch) {
-          ch = S.chip(names[c.idx] ?? "");
-          chipOf.set(c.idx, ch);
-          chipLayer.addChild(ch);
-        }
-        ch.visible = true;
-        ch.position.set(Math.min(pts.x, g.w - ch.width - 10 * k), pts.y + i * 26 * k);
-      });
-    }
-    counter.text = `${t("cPinLeft")}  ${adentro.length} / ${n}`;
+    drawLabels(p, g, sz);
+    counter.text = `${t("cPinLeft")}  ${inside().length} / ${n}`;
     const bw = counter.width + 40 * k, bh = 40 * k;
     counter.position.set(bw / 2, bh / 2);
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 3 * k, color: INK });
     if (phase === "crown") crownUI.at(tAll - T_CROWN);
+  }
+
+  /**
+   * Los nombres. Cada caramelo que salió y sigue en movimiento lleva su chip
+   * (los 8 más recientes; el resto, un "+N"); los que quedan adentro van en una
+   * columna lateral y los últimos caídos en una tira abajo a la izquierda. La
+   * posición final la decide `layoutLabels`, que es pura: sin solapes y dentro
+   * de la pantalla.
+   */
+  const FLIGHT_KEY = (id: number): number => -1 - id;
+  const STRIP_KEY = (id: number): number => n + id;
+  function chipFor(key: number, name: string, scale: number): Container {
+    let ch = chipOf.get(key);
+    if (!ch) {
+      ch = S.chip(name, scale);
+      chipOf.set(key, ch);
+      chipLayer.addChild(ch);
+      chipDim.set(key, { w: ch.width, h: ch.height });
+    }
+    return ch;
+  }
+  const items: LabelItem[] = [];
+  const alphaOf = new Map<number, number>();
+  function drawLabels(p: { x: number; y: number }, g: ReturnType<typeof G>, sz: number): void {
+    const k = g.k;
+    for (const ch of chipOf.values()) ch.visible = false;
+    moreBadge.visible = false;
+    if (phase === "crown" || phase === "dead") return;
+    const phone = g.w <= 520;
+    const scaleFly = phone ? 1.35 : 1.15;
+    const scaleSide = phone ? 1.0 : 0.9;
+    const scaleStrip = phone ? 0.85 : 0.75;
+    const bounds = { w: g.w, h: g.h, top: S.top(), bottom: S.bottom() };
+    items.length = 0;
+    alphaOf.clear();
+    const put = (key: number, x: number, y: number, priority: number, alpha: number): void => {
+      const d = chipDim.get(key) as { w: number; h: number };
+      items.push({ id: key, x, y, w: d.w, h: d.h, priority });
+      alphaOf.set(key, alpha);
+    };
+    // Los últimos caídos, en una tira fija abajo a la izquierda, encima del piso.
+    const tail = fallen.slice(-STRIP_MAX);
+    const stripStep = 26 * k * scaleStrip;
+    tail.forEach((id, i) => {
+      const key = STRIP_KEY(id);
+      chipFor(key, names[id] ?? "", scaleStrip);
+      const fromEnd = tail.length - 1 - i;
+      put(key, 8 * k, g.floor - 14 * k - (fromEnd + 1) * stripStep, 1000, 0.45 + 0.55 * (1 - fromEnd / STRIP_MAX));
+    });
+    // Los que quedan adentro (pocos): una columna al costado, debajo del contador.
+    const adentro = inside();
+    if (adentro.length <= 6 && adentro.length > 0 && story.arc !== "tapada") {
+      const colTop = S.top() + 62 * k;
+      adentro.forEach((c, i) => {
+        const key = c.idx;
+        chipFor(key, names[c.idx] ?? "", scaleSide);
+        put(key, 10 * k, colTop + i * 28 * k * scaleSide, 900 - i, 1);
+      });
+    }
+    // Los que van cayendo (o acaban de quedarse quietos), cada uno con su nombre.
+    const flying: { id: number; seq: number }[] = [];
+    for (const c of candies) {
+      if (c.inside || c === winC) continue;
+      if (c.settled && tAll - c.settledAt >= LINGER) continue;
+      flying.push({ id: c.idx, seq: c.seq });
+    }
+    const cap = capRecent(flying, MAX_FLIGHT_LABELS);
+    cap.shown.forEach((id, rank) => {
+      const c = candies[id] as Candy;
+      const key = FLIGHT_KEY(id);
+      chipFor(key, names[id] ?? "", scaleFly);
+      const q = cam.toScreen(c.x + sz * 1.2, c.y - sz * 1.6, g.w, g.h);
+      const left = c.settled ? LINGER - (tAll - c.settledAt) : 1;
+      put(key, q.x, q.y - (chipDim.get(key) as { h: number }).h / 2, 500 - rank, left < 0.35 ? Math.max(0, left / 0.35) : 1);
+    });
+    if (cap.more > 0) {
+      if (moreN !== cap.more) {
+        moreN = cap.more;
+        moreTxt.text = `+${cap.more}`;
+        const bh = 24 * k * scaleFly, bw = moreTxt.width + 18 * k;
+        moreTxt.position.set(9 * k, bh / 2);
+        moreBg.clear().roundRect(3 * k, 3 * k, bw, bh, 6 * k).fill(INK).roundRect(0, 0, bw, bh, 6 * k).fill(YELLOW).stroke({ width: 2 * k, color: INK });
+      }
+      const bw = moreTxt.width + 18 * k, bh = 24 * k * scaleFly;
+      items.push({ id: -100000, x: g.w - bw - 12 * k, y: S.top() + 56 * k, w: bw + 3 * k, h: bh + 3 * k, priority: 100 });
+    }
+    // La piñata y su colgada son un obstáculo: los nombres se corren de ella si pueden.
+    const a = cam.toScreen(p.x - g.R * 1.75, p.y - g.R * 1.75, g.w, g.h);
+    const b = cam.toScreen(p.x + g.R * 1.75, p.y + g.R * 1.75, g.w, g.h);
+    const blocked = [{ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) }];
+    for (const o of layoutLabels(items, bounds, blocked)) {
+      if (o.id === -100000) {
+        moreBadge.visible = true;
+        moreBadge.position.set(o.x, o.y);
+        continue;
+      }
+      const ch = chipOf.get(o.id);
+      const d = chipDim.get(o.id);
+      if (!ch || !d) continue;
+      ch.visible = true;
+      ch.alpha = alphaOf.get(o.id) ?? 1;
+      ch.position.set(o.x, o.y + d.h / 2);
+    }
   }
 
   S.run((dt, now) => {

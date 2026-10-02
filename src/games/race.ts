@@ -1,6 +1,6 @@
 import { $ } from "../dom";
 import { T, getLang, setPickSeed, t } from "../i18n";
-import { LCOLORS, drawAvatar, instantMode, paceFactor, setGameLength, type Beacon } from "../state";
+import { LCOLORS, drawAvatar, paceFactor, skipMotion, setGameLength, type Beacon } from "../state";
 import { beep, beepFor, fanfare, note } from "../sound";
 import { NO_POSE, THEMES, type Pose, type ThemeId } from "./themes";
 import { tension, writeStory, type Arc, type Story } from "./drama";
@@ -39,7 +39,7 @@ export function stadiumRace(
   const skin = THEMES[themeId];
   // Igual que los juegos nuevos: `?instant=1` es del auditor, y la preferencia
   // del sistema es de una persona a la que las animaciones le hacen mal.
-  if (instantMode || matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  if (skipMotion()) {
     done();
     return;
   }

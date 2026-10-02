@@ -50,7 +50,7 @@ Los momentos de cámara de cada juego:
 | Juego | La cámara |
 |---|---|
 | Carrera de llamas y de cohetes | Pegada a la largada en la cuenta, sigue a la punta, se mete en cada tropiezo, plantada o escupida, se cierra sobre las dos de adelante en la recta final, cámara lenta en la foto y golpe en la meta |
-| Ruleta | Pegada al cubo al armarse, se abre al girar, se acerca al puntero mientras frena y queda encima en el "¿se queda en fulano?"; sacude cuando se mueve |
+| Ruleta | Pegada al cubo al armarse, se abre al girar, se acerca al puntero mientras frena y queda encima en el "¿se queda en fulano?" (empujón de zoom, sin sacudida); sacude una sola vez, al coronar al ganador real |
 | Tómbola | En la boca del bombo mientras caen las bolas, en la compuerta cuando se abre (y en la bola que asoma y vuelve a caer), sigue a la ganadora por la canaleta y se pega al vaso |
 | Teleférico | En el andén de la base, sigue al convoy, se acerca a cada andén, se mete en la cabina de la puerta o de la mordaza, se hamaca con la ráfaga, se acerca despacio en el apagón y sigue a la cabina sola hasta la cumbre |
 | Aguayo | Cerca de la tela al tenderla, más cerca en cada apretón con un tirón, golpe al bulto que queda en el filo, pegada al nudo |
@@ -60,6 +60,10 @@ Los momentos de cámara de cada juego:
 | Piñata | La piñata de cerca en los palos, más cerca en la rajadura y en el caramelo que se asoma, y cuando se rompe sigue al último caramelo hasta el piso |
 | Carnaval de Oruro | Sigue a la comparsa, se acerca a los que se quedan en cada arco y a la máscara que se corre, se abre al Socavón y se cierra en el contrapunto |
 | Constelación | Sigue al paquete desde el primer salto, encima en los saltos lentos del final, golpe en el roce y en el engaño, y se abre en la nova para mostrar la constelación |
+
+### Volver a la pestaña con el contexto perdido
+
+En un celular, el navegador puede soltar el contexto WebGL con la pestaña oculta, y el cartel del ganador (texto dibujado a textura) podría volver en blanco. PixiJS 8 ya cancela el evento de pérdida y, al restaurarse, descarta sus texturas de GPU para subirlas de nuevo (`node_modules/pixi.js/lib/rendering/renderers/gl/context/GlContextSystem.mjs` y `.../gl/texture/GlTextureSystem.mjs`), pero no rearma lo que se dibujó una vez ni pide un cuadro. `pixi/recover.ts` distingue dos caminos: al volver a la pestaña con el contexto sano (`visibilitychange`, con 250 ms de margen) solo se rearman los carteles y se dibuja un cuadro; al restaurarse el contexto (`webglcontextrestored`, nunca descartado) se hace el cambio de tamaño completo, con los rearmados de cada juego, conservando la pose de la cámara. Si la pestaña vuelve con el contexto aún perdido, espera a la restauración. Es una hipótesis: no se pudo verificar en un celular real.
 
 ## Auditarlo
 

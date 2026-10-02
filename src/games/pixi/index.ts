@@ -1,4 +1,4 @@
-import type { Beacon, Game } from "../../state";
+import { playableGame, type Beacon, type Game } from "../../state";
 import { PixiInitError, warmPixi } from "./stage";
 
 /**
@@ -51,6 +51,10 @@ export const hasPixi = (game: Game): boolean => game in PIXI;
  * arrancó en este equipo, para seguir con la de siempre.
  */
 export async function playPixi(game: Game, names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<boolean> {
+  // La misma sustitución que hace el sorteo, también acá: si el juego no
+  // aguanta esa lista, la carrera. Así ningún camino (la escena fija, una
+  // repetición) le pasa a un juego más nombres de los que sabe contar.
+  game = playableGame(game, names.length, names, winners);
   const load = PIXI[game];
   if (!load) return false;
   const launch = await load();

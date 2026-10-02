@@ -129,6 +129,7 @@ Módulos y responsabilidades:
 | `src/protocol/proof.ts` | Comprobante: codificar/decodificar enlace y JSON (D-13) |
 | `src/stellar/config.ts` | Red activa, RPC, passphrase, dirección del contrato |
 | `src/stellar/wallet.ts` | Adaptador de wallet: `connect()`, `address`, `network`, `signTransaction(xdr)` sobre `@stellar/freighter-api`, más la cuenta invitada de testnet |
+| `src/stellar/session-store.ts` | Recuerda qué tipo de sesión había (cuenta de prueba, Freighter o Google), por red, para no cerrarla al recargar. Solo guarda el tipo, nunca llaves. Se olvida únicamente al pulsar "Salir". Freighter se retoma solo si ya tenía permiso: al cargar nunca se abre un popup |
 | `src/stellar/wallet-pollar.ts` | Entrar con Google. Firma y envía de una sola vez contra su propio servidor, por eso se marca con `submitsItself` |
 | `src/music.ts` | La música de fondo, andina con beat, generada en el navegador con la semilla de la ronda. Arranca prendida y más baja que los efectos; sigue la tensión de cada línea de la caja del estadio. Desde el 28 de septiembre de 2026 no hay relator con voz: lo sacó el autor porque no le gustaba, y quedaron los subtítulos |
 | `src/stellar/contract.ts` | `contract.Client` tipado de `tinkazo-raffle`: `seal`, `draw`, `getRaffle`, `getDraw` |

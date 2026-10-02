@@ -73,6 +73,25 @@ class FreighterWallet implements WalletAdapter {
     }
   }
 
+  /** ¿Ya le diste permiso a este sitio? Pregunta sin abrir ningún popup. */
+  static async allowed(): Promise<boolean> {
+    try {
+      const { isAllowed, error } = await freighter.isAllowed();
+      return !error && isAllowed;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Retoma la sesión sin pedir permiso: solo si ya estaba concedido. */
+  async restore(): Promise<string | null> {
+    if (!(await FreighterWallet.allowed())) return null;
+    const { address, error } = await freighter.getAddress();
+    if (error || !address) return null;
+    this.address = address;
+    return address;
+  }
+
   async connect(): Promise<string> {
     if (!(await FreighterWallet.installed())) {
       throw new Error(WALLET_ERRORS.notInstalled);
@@ -160,6 +179,25 @@ class GuestWallet implements WalletAdapter {
     this.address = this.#keypair.publicKey();
     if (fresh) await fundWithFriendbot(this.address);
     return this.address;
+  }
+
+  /**
+   * Retoma la cuenta guardada. Nunca genera una llave ni llama al grifo: si no
+   * hay llave o está corrupta devuelve null y la sesión queda cerrada.
+   */
+  async restore(): Promise<string | null> {
+    if (network.name !== "testnet") return null;
+    try {
+      const secret = localStorage.getItem(GUEST_KEY);
+      if (!secret) return null;
+      this.#keypair = Keypair.fromSecret(secret);
+      this.address = this.#keypair.publicKey();
+      return this.address;
+    } catch {
+      this.#keypair = null;
+      this.address = null;
+      return null;
+    }
   }
 
   async disconnect(): Promise<void> {
@@ -253,6 +291,8 @@ export const activeWallet = (): WalletAdapter | null => active;
 export function setActiveWallet(w: WalletAdapter | null): void {
   active = w;
 }
+
+export const freighterAllowed = (): Promise<boolean> => FreighterWallet.allowed();
 
 export const freighterInstalled = (): Promise<boolean> => FreighterWallet.installed();
 

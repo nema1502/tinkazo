@@ -938,6 +938,26 @@ Quedan sin tocar tres cosas menores, a propósito:
 - la tabla de posiciones chica de la carrera;
 - la jerga de Stellar ("path payment", "trustlines") en la página de juegos, que es parte de lo que se enseña.
 
+### Historia 10.13: El trabajo de Guido, auditado y adentro: hecho
+
+Resultado (2026-10-02): Guido Salazar mandó el PR #1 con 14 commits. Se pasó entero por la batería de auditores y por el agente evaluador, y entra lo que la pasó:
+
+- **La piñata:** cada caramelo que sale lleva su nombre en grande, y la lista de los que quedan ya no pisa la piñata.
+- **Oruro:** cada diablo tiene su etiqueta desde el primer cuadro, unida a él por una línea, y una pasada de lista nombra a todos al menos una vez. El cambio venía con un error de una línea que hacía caer el juego en el primer cuadro y dejaba el sorteo colgado; lo encontró el auditor exigente y se arregló.
+- **La ruleta:** sacude la cámara una sola vez, cuando corona al ganador de verdad. Antes sacudía también en la parada falsa y la trampa parecía tan elegida como el ganador.
+- **La sesión se recuerda** al recargar: la cuenta de prueba, Freighter o Google. Solo se guarda el tipo de sesión, nunca una llave, y al cargar nunca se abre un popup.
+- **Animaciones reducidas:** quien las tiene así en su sistema ve el resultado directo, con un aviso y un botón para ver la animación igual.
+- **Volver a la pestaña** con el contexto de la placa de video perdido rearma el cartel del ganador.
+- **Las miniaturas del selector** se redibujan bien después de que el celular restaura la pestaña.
+
+Quedan afuera, por ahora:
+
+- **Plinko.** Es el juego insignia de los casinos cripto, y Tinkazo se postula a fondos que excluyen todo lo que se parezca a una apuesta. Además la pantalla quedaba casi quieta 18 segundos.
+- **El Sapo y el Ahorcado,** que aguantaban hasta 12 personas, y los meetups son de 30 a 50. El evaluador vio el Sapo como una mesa de póker y sin nombres en la mesa, y el Ahorcado es una horca y deja ver el largo del nombre. Se rediseñan aparte: el Sapo con una clasificatoria que lo lleva a 200 personas, y el Ahorcado como "¿Quién es?", cartas que se dan vuelta con cada letra.
+- El Dockerfile, que no se pudo probar en esta máquina, y la configuración local de sus herramientas.
+
+Un arreglo que salió de la revisión: si un juego recibía más nombres de los que sabe contar, el estadio podía quedar colgado. Ahora la entrada común a todos los juegos (`playPixi`) aplica la misma sustitución que el sorteo y pasa a la carrera.
+
 ---
 
 ## Épica 12: El sitio cuenta el proyecto

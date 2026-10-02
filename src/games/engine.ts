@@ -1,4 +1,4 @@
-import { WHEEL_MAX, params, type Game } from "../state";
+import { params, playableGame, type Game } from "../state";
 
 /**
  * Qué motor dibuja los juegos.
@@ -50,7 +50,7 @@ const pedidos = new Set<Game>();
 export function preloadGame(game: Game, people: number): void {
   if (!usePixi()) return;
   // La misma sustitución que hace draw.ts: con mucha gente la ruleta no entra.
-  const g: Game = game === "wheel" && people > WHEEL_MAX ? "race" : game;
+  const g: Game = playableGame(game, people);
   if (pedidos.has(g)) return;
   pedidos.add(g);
   import("./pixi").then(

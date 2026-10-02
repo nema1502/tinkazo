@@ -251,7 +251,16 @@ const urlDe = (juego, extra = "") =>
  * Corre la escena de un juego con el reloj cambiado y devuelve lo que midió.
  * `saltarA` son segundos de juego en los que se aprieta "saltar".
  */
+/**
+ * Cuántos nombres aguanta cada juego que tiene tope. Con más, el sorteo pasa a
+ * la carrera (`playableGame`), así que medirlos con la lista de ejemplo (18) o
+ * con 200 era medir la carrera. Se miden en su tope.
+ */
+const TOPES = { wheel: 24 };
+const EJEMPLO = 18;
+
 async function correr(browser, juego, { pace = "normal", tema = "dark", ancho = 1280, alto = 720, saltarA = null, captura = null, gente = 0 } = {}) {
+  if (!gente && TOPES[juego] && TOPES[juego] < EJEMPLO) gente = TOPES[juego];
   const page = await browser.open("about:blank");
   await page.send("Page.addScriptToEvaluateOnNewDocument", { source: PRELUDIO });
   await page.send("Emulation.setDeviceMetricsOverride", {
@@ -561,7 +570,7 @@ async function auditar(browser, juego) {
   // personas y con doscientas? Con dos, que el juego tenga qué mostrar; con
   // doscientas, que no se ahogue. La ruleta llega a veinticuatro por diseño:
   // arriba de eso el sorteo pasa solo al Cierre de Libro.
-  const tope = juego === "wheel" ? 24 : 200;
+  const tope = TOPES[juego] ?? 200;
   for (const gente of [2, tope]) {
     const x = await correr(browser, juego, { gente });
     const rx = ritmo(x.muestras, x.hechos, x.duracion);

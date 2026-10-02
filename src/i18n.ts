@@ -47,6 +47,8 @@ export interface Dict {
   cTroDuel: (a: string, b: string) => string;
   cPinCount: (n: number) => string;
   cPinOut: (n: string) => string;
+  cPinOutMany: (ns: string[]) => string;
+  cPinOutMore: (n: string, k: number) => string;
   cPinAlmost: (n: string) => string;
   cPinLast: (a: string, b: string) => string;
   cOruCount: (n: number) => string;
@@ -131,6 +133,8 @@ export interface Dict {
  */
 let pickRng: (() => number) | null = null;
 const pick = (xs: string[]): string => xs[Math.floor((pickRng ?? Math.random)() * xs.length)] ?? "";
+/** "A", "A y B", "A, B y C": names joined for the narrator. */
+const joinList = (ns: string[], and: string): string => (ns.length <= 1 ? (ns[0] ?? "") : `${ns.slice(0, -1).join(", ")} ${and} ${ns[ns.length - 1]}`);
 
 /** El juego en curso presta su azar sembrado. `null` al terminar. */
 export function setPickSeed(rng: (() => number) | null): void {
@@ -347,6 +351,8 @@ export const T: Record<Lang, Dict> = {
     cPinSong: ["¡Dale, dale, dale!", "¡No pierdas el tino!", "¡Dale, que se rompe!"],
     cPinRain: ["¡Llueven caramelos!", "¡Se cayeron unos cuantos!", "¡Ahí van!"],
     cPinOut: (n) => pick([`¡Se cayó ${n}!`, `¡Afuera ${n}!`, `¡${n} al piso!`]),
+    cPinOutMany: (ns) => pick([`¡Se cayeron ${joinList(ns, "y")}!`, `¡Afuera ${joinList(ns, "y")}!`, `¡${joinList(ns, "y")} al piso!`]),
+    cPinOutMore: (n, k) => pick([`¡Se cayó ${n} y ${k} más!`, `¡Afuera ${n} y ${k} más!`]),
     cPinMiss: ["¡Falló!", "¡Al aire!", "¡Casi le da!"],
     cPinCrack: ["¡Se está rajando!", "¡Ya no aguanta!", "¡Cruje la piñata!"],
     cPinAlmost: (n) => pick([`¡Casi se cae ${n}!`, `¡${n} se asoma!`, `¡Se agarra ${n}!`]),
@@ -488,6 +494,7 @@ export const T: Record<Lang, Dict> = {
     waitNow: "Ya nació. Dale.",
     winnerLabel: "Lo que salió", verifyTitle: "Por si alguien duda",
     verifyHow: "Cualquiera puede rehacer este sorteo por su cuenta y le tiene que dar el mismo nombre. Con la huella de la lista y el número público de esa hora, no hay otro resultado posible. No hace falta que me creas. · Paso a paso: 1) abrí la ronda de quicknet y verificá su firma con la clave pública del faro · 2) randomness = sha256(firma) · 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, salteando repetidos. El protocolo entero está en docs/protocolo.md.",
+    motionNote: "Tu sistema tiene las animaciones reducidas, por eso el sorteo se muestra directo.", motionReplay: "Ver la animación igual",
     reverify: "Rehacelo acá mismo", reverifyOk: "Lo rehicimos delante tuyo y dio el mismo nombre.",
     copySummary: "Copiar resumen", copied: "¡Copiado!",
     copyRules: "Copiar las bases",
@@ -946,6 +953,8 @@ export const T: Record<Lang, Dict> = {
     cPinSong: ["Hit it, hit it, hit it!", "Don't lose your aim!", "Hit it, it's about to break!"],
     cPinRain: ["It's raining candy!", "A handful fell out!", "There they go!"],
     cPinOut: (n) => pick([`${n} fell out!`, `${n} is out!`, `${n} hits the floor!`]),
+    cPinOutMany: (ns) => pick([`${joinList(ns, "and")} fell out!`, `${joinList(ns, "and")} are out!`, `${joinList(ns, "and")} hit the floor!`]),
+    cPinOutMore: (n, k) => pick([`${n} and ${k} more fell out!`, `${n} and ${k} more are out!`]),
     cPinMiss: ["Missed!", "Swinging at air!", "So close!"],
     cPinCrack: ["It's cracking!", "It can't take much more!", "The piñata creaks!"],
     cPinAlmost: (n) => pick([`${n} almost fell!`, `${n} peeks out!`, `${n} holds on!`]),
@@ -1078,6 +1087,7 @@ export const T: Record<Lang, Dict> = {
     waitNow: "It is out. Go.",
     winnerLabel: "What came out", verifyTitle: "In case anyone doubts it",
     verifyHow: "Anyone can run this draw again on their own and has to land on the same name. With the list fingerprint and the public number from that minute, no other result is possible. You don't have to take my word for it. · Step by step: 1) open the quicknet round and check its signature against the beacon's public key · 2) randomness = sha256(signature) · 3) idx = first 8 bytes of sha256(randomness ‖ list_hash ‖ counter) mod entries, skipping repeats. Whole protocol in docs/protocolo.md.",
+    motionNote: "Your system has reduced motion turned on, so the draw is shown directly.", motionReplay: "Watch the animation anyway",
     reverify: "Run it again right here", reverifyOk: "Ran it again in front of you. Same name.",
     copySummary: "Copy summary", copied: "Copied!",
     copyRules: "Copy the rules",

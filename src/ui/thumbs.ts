@@ -799,6 +799,28 @@ const PAINTERS: Record<string, Painter> = {
   },
 };
 
+/**
+ * Paints one frame of a thumbnail.
+ *
+ * The transform is set on every frame instead of once at creation: browsers
+ * may reset the 2D context state (discarded tab, context lost/restored on
+ * mobile), which would otherwise leave the scene drawn at 1x in a corner of
+ * a W*dpr x H*dpr backing store.
+ */
+export function paintThumb(
+  c: CanvasRenderingContext2D,
+  paint: Painter,
+  t: number,
+  col: (k: number) => string,
+  dpr: number,
+  w: number,
+  h: number,
+): void {
+  c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, w, h);
+  paint(c, t, col);
+}
+
 let running = false;
 
 /**
@@ -828,7 +850,6 @@ export function initThumbs(games: readonly Game[]): void {
     cv.setAttribute("aria-hidden", "true");
     const ctx = cv.getContext("2d");
     if (!ctx) continue;
-    ctx.scale(dpr, dpr);
     btn.insertBefore(cv, btn.firstChild);
     canvases.push({ c: ctx, paint });
   }
@@ -861,8 +882,7 @@ export function initThumbs(games: readonly Game[]): void {
     if (aLaVista && !jugando && document.visibilityState === "visible") {
       const t = now / 1000;
       for (const { c, paint } of canvases) {
-        c.clearRect(0, 0, W, H);
-        paint(c, t, col);
+        paintThumb(c, paint, t, col, dpr, W, H);
       }
     }
     requestAnimationFrame(loop);
