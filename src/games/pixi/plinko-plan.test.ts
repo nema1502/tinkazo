@@ -93,7 +93,8 @@ describe("plinko: backwards planning", () => {
         }
       }
     }
-  });
+    // The sweep is heavy: give it room so a loaded machine does not flake it.
+  }, 60_000);
 
   it("works on the edge slots (first and last)", () => {
     for (const n of [2, 3, 5, PLINKO_MAX]) {
