@@ -10,7 +10,7 @@
 [![drand quicknet](https://img.shields.io/badge/randomness-drand%20quicknet-14b8a6?style=flat-square)](https://drand.love)
 [![License: MIT](https://img.shields.io/badge/license-MIT-ffc629?style=flat-square)](LICENSE)
 
-**[Try it](https://tinkazo.vercel.app)** · [How it works](#how-it-works) · [Why Stellar](#why-stellar) · [What is live](#what-is-live-today) · [Next 30 days](#the-next-30-days) · [Español](README.es.md)
+**[Try it](https://tinkazo.vercel.app)** · [How it works](#how-it-works) · [Security](#security) · [Why Stellar](#why-stellar) · [What is live](#what-is-live-today) · [Next 30 days](#the-next-30-days) · [Español](README.es.md)
 
 <img src="docs/capturas/readme/hero.webp" alt="Tinkazo home page: draws anyone can check" width="860">
 
@@ -64,7 +64,7 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 
 ## Why Stellar
 
-- **Verifying public randomness on chain is cheap here.** Stellar's native BLS12-381 host functions ([CAP-0059](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md)) let the contract check drand's signature itself. The verification costs **0.003 XLM**; a whole draw, seal plus draw, costs **0.18 XLM, about US$0.04**, measured on testnet ([breakdown](docs/deployments.md)).
+- **Verifying public randomness on chain is cheap here.** Stellar's native BLS12-381 host functions ([CAP-0059](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md)) let the contract check drand's signature itself. The verification costs **0.003 XLM**; a whole draw, seal plus draw, costs **0.76 XLM, about US$0.16**, measured on testnet on October 3, 2026, and almost all of it is storage rent ([breakdown](docs/deployments.md)).
 - **No oracle to run.** The proof is drand's own signature, checkable against its public key years from now. There is no node to keep alive and no operator to trust.
 - **Immutable and custody-free.** The contract has no admin, no upgrade path and holds no funds. A new version is a new address, recorded in [docs/deployments.md](docs/deployments.md).
 - **Onboarding that works at a meetup.** Organizers sign in with Google through Pollar, which holds the key for them (the full flow with a real Google session is still being tested), with Freighter, or with a testnet account the browser creates and funds. Participants never touch Stellar at all.
@@ -119,15 +119,32 @@ A camera director frames every game like a broadcast: it follows the leader, pus
 
 Andean music with a beat plays in the background and follows the tension, short captions call each moment on screen, and after the winner a card explains a piece of the story with its primary source.
 
-## Trust model
+## Security
 
-What is guaranteed, and what is not, is written down in [docs/amenazas.md](docs/amenazas.md) ([summary in English](docs/threat-model.en.md)) and on the [security page](https://tinkazo.vercel.app/seguridad.html).
+> **The number that decides the draw does not exist when the list is closed, and a contract on Stellar verifies it.** What stays open is not technology, it is people: that is why everything is shown before that number exists.
 
-- **Adding a name after sealing** changes the fingerprint, and the fingerprint that counts was recorded before the seed existed.
-- **Choosing the number** is impossible: the round is fixed before it is published, and its signature is verified on chain.
-- **Withholding an unwanted result** does not work: `draw` is permissionless.
-- **The one known open attack** is commitment selection: sealing the same list against several rounds and publishing only the convenient one. Every seal is public under the organizer's address, and the verification page flags repeated fingerprints on its own. Publishing the draw's rules before the round exists (the app generates them) closes most of the gap.
-- **Privacy.** Only the fingerprint goes on chain, never the names. The proof travels in the URL fragment, which browsers do not send to servers. During a draw, the only outbound request is the drand round.
+**What is closed**
+
+| Risk | Why it can't happen |
+|---|---|
+| Choosing the winning number | The round is fixed before it exists, at least thirty seconds ahead, and its signature is verified on chain |
+| Changing the list after sealing | The fingerprint changes, and the one that counts was recorded before the seed |
+| Withholding an unwanted result | `draw` is permissionless: anyone can finalize it, and the winner is the same |
+| Drawing twice | The contract keeps the first result and rejects another |
+| A game showing another winner | Games receive the winner already decided, and an auditor checks it in all twelve |
+| Taking over the contract | It has no admin, it can't be upgraded and it holds no funds |
+
+**What stays open, and what stands against it**
+
+| Risk | What there is |
+|---|---|
+| **Building the list wrong** before sealing: a name twice, someone missing | "Show the list to the room": the list on the projector with duplicates flagged and a QR so everyone can find themselves on their phone. The receipt has the same search box, and the Luma import proposes only those who checked in |
+| **Sealing several times** and publishing the convenient result | The draw number is shown big during the wait, so it ends up in the photos. The verification flags repeated seals from the account and the same list sealed from another |
+| **A fake site** on the projector | What counts is the contract, and a fake site can't write to it. The draw can be checked on stellar.expert and with drand's public round, [without going through Tinkazo](https://tinkazo.vercel.app/como-funciona.html#sin-nosotros) |
+
+For mainnet: one open draw per account, public cancellation, the round set by the contract and a sorted list in the protocol. The full STRIDE analysis is in [docs/amenazas.md](docs/amenazas.md) ([summary in English](docs/threat-model.en.md)), and the plain-language version on the [security page](https://tinkazo.vercel.app/seguridad.html).
+
+**Privacy.** Only the fingerprint goes on chain, never the names. The proof travels in the URL fragment, which browsers do not send to servers.
 
 ## How it compares
 
@@ -199,12 +216,13 @@ cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
-Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|teleferico|tombola|race|rockets|wheel|trompo|totora|pinata|oruro|sapo|quien`, `?instant=1`, `?pose=1` and `?motor=clasico` (the previous engine).
+Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?demo=race|luz|trompo|pinata|oruro|tombola|wheel|teleferico|pasanaku|stellar|sapo|quien`, `?instant=1`, `?pose=1` and `?motor=clasico` (the previous engine).
 
 ## Repository
 
 ```
-index.html · verificar.html     The tool, and the page that re-runs a draw from its proof
+index.html · verificar.html     The landing and the tool, and the page that re-runs a draw from its proof
+lista.html                      The list to review before sealing, on everyone's phone
 src/protocol/                   Canonical list, selection, drand, proof
 src/stellar/                    Network, wallets and contract client
 src/games/                      The twelve games and the scaffolding they share
@@ -221,7 +239,7 @@ Built in Bolivia by [Nicolás Emir Mejía Agreda](https://github.com/nema1502). 
 
 ## Contributing
 
-Issues and pull requests are welcome. **If you find a way to rig a draw, open an issue**: it is the most useful report there is. To add a game, read [docs/juegos.md](docs/juegos.md); it has to pass the auditors to get in.
+Issues and pull requests are welcome. **If you find a way to skew a draw, open an issue**: it is the most useful report there is. To add a game, read [docs/juegos.md](docs/juegos.md); it has to pass the auditors to get in.
 
 ## License
 

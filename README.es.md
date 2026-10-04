@@ -10,7 +10,7 @@
 [![drand quicknet](https://img.shields.io/badge/azar-drand%20quicknet-14b8a6?style=flat-square)](https://drand.love)
 [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-ffc629?style=flat-square)](LICENSE)
 
-**[Probalo](https://tinkazo.vercel.app)** · [Cómo funciona](#cómo-funciona) · [Por qué Stellar](#por-qué-stellar) · [Qué está andando](#qué-está-andando-hoy) · [Los próximos 30 días](#los-próximos-30-días) · [English](README.md)
+**[Probalo](https://tinkazo.vercel.app)** · [Cómo funciona](#cómo-funciona) · [Seguridad](#seguridad) · [Por qué Stellar](#por-qué-stellar) · [Qué está andando](#qué-está-andando-hoy) · [Los próximos 30 días](#los-próximos-30-días) · [English](README.md)
 
 <img src="docs/capturas/readme/hero.webp" alt="La portada de Tinkazo" width="860">
 
@@ -64,7 +64,7 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 
 ## Por qué Stellar
 
-- **Verificar azar público en la cadena acá es barato.** Las funciones nativas de BLS12-381 ([CAP-0059](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md)) dejan que el contrato compruebe la firma de drand por su cuenta. La verificación cuesta **0,003 XLM**, y un sorteo entero, sellar más sortear, **0,18 XLM, unos cuatro centavos de dólar**, medido en testnet ([detalle](docs/deployments.md)).
+- **Verificar azar público en la cadena acá es barato.** Las funciones nativas de BLS12-381 ([CAP-0059](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0059.md)) dejan que el contrato compruebe la firma de drand por su cuenta. La verificación cuesta **0,003 XLM**; un sorteo entero, sellar más sortear, **0,76 XLM, unos 16 centavos de dólar**, medido en testnet el 3 de octubre de 2026, y casi todo es renta de almacenamiento ([detalle](docs/deployments.md)).
 - **Sin oráculo que operar.** La prueba es la firma del propio drand, verificable contra su clave pública dentro de años. No hay nodo que mantener vivo ni operador en quien confiar.
 - **Inmutable y sin custodia.** El contrato no tiene administrador ni forma de actualizarse, y no guarda fondos. Una versión nueva es una dirección nueva, anotada en [docs/deployments.md](docs/deployments.md).
 - **Entrar funciona en un meetup.** Quien organiza entra con Google mediante Pollar, que guarda la llave de su cuenta (el recorrido con una sesión real de Google todavía se está probando), con Freighter, o con una cuenta de prueba que el navegador crea y fondea. Los participantes no tocan Stellar nunca.
@@ -119,15 +119,32 @@ Un director de cámara filma cada juego como una transmisión: sigue a la punta,
 
 De fondo suena música andina con beat que sigue la tensión, unos subtítulos cortos cuentan cada momento en pantalla, y después del ganador una tarjeta cuenta un pedazo de la historia con su fuente primaria.
 
-## Modelo de confianza
+## Seguridad
 
-Lo que está garantizado y lo que no está escrito en [docs/amenazas.md](docs/amenazas.md) y en la [página de seguridad](https://tinkazo.vercel.app/seguridad.html).
+> **El número que decide el sorteo no existe cuando se cierra la lista, y un contrato en Stellar lo verifica.** Lo que queda abierto no es tecnología, es gente: por eso todo se muestra antes de que ese número exista.
 
-- **Meter un nombre después de sellar** cambia la huella, y la que vale quedó anotada antes de que existiera la semilla.
-- **Elegir el número** no se puede: la ronda se fija antes de publicarse y su firma se verifica en la cadena.
-- **Retener un resultado que no gustó** no sirve: `draw` no pide permiso.
-- **El único ataque conocido que sigue abierto** es la selección del compromiso: sellar la misma lista contra varias rondas y publicar solo la que convino. Todos los sellos son públicos bajo la dirección de quien organiza, y la página de verificación marca sola las huellas repetidas. Publicar las bases del sorteo antes de que exista la ronda (el sitio las arma) cierra casi todo el hueco.
-- **Privacidad.** En la cadena va solo la huella, nunca los nombres. El comprobante viaja en el fragmento de la URL, que el navegador no manda a ningún servidor. Durante un sorteo, la única petición que sale es la ronda de drand.
+**Lo que está cerrado**
+
+| Riesgo | Por qué no pasa |
+|---|---|
+| Elegir el número ganador | La ronda se fija antes de que exista, al menos treinta segundos en el futuro, y su firma se verifica en la cadena |
+| Cambiar la lista después de sellar | Cambia la huella, y la que vale quedó anotada antes de la semilla |
+| Retener un resultado que no gustó | `draw` no pide permiso: cualquiera lo finaliza y el ganador es el mismo |
+| Sortear dos veces | El contrato guarda el primer resultado y rechaza otro |
+| Que el juego muestre otro ganador | Los juegos reciben el ganador ya decidido, y un auditor lo comprueba en los doce |
+| Tomar el contrato | No tiene administrador, no se actualiza y no guarda fondos |
+
+**Lo que queda abierto, y lo que hay contra eso**
+
+| Riesgo | Lo que hay |
+|---|---|
+| **Armar mal la lista** antes de sellar: un nombre dos veces, alguien que falta | "Mostrar la lista a la sala": la lista en el proyector con los repetidos marcados y un QR para que cada uno se busque en su celular. El comprobante también tiene el buscador, y la importación de Luma propone solo a los que hicieron check-in |
+| **Sellar varias veces** y publicar el resultado que convino | El número del sorteo se muestra bien grande durante la espera, para que quede en las fotos. La verificación marca los sellos repetidos de la cuenta y la misma lista sellada desde otra |
+| **Un sitio falso** en el proyector | Lo que vale es el contrato, y un sitio falso no puede escribir ahí. El sorteo se puede comprobar en stellar.expert y con la ronda pública de drand, [sin pasar por Tinkazo](https://tinkazo.vercel.app/como-funciona.html#sin-nosotros) |
+
+Para mainnet: un solo sorteo abierto por cuenta, la cancelación pública, la ronda que pone el contrato y la lista ordenada en el protocolo. El análisis completo, con el método STRIDE, está en [docs/amenazas.md](docs/amenazas.md), y la versión para todo público en la [página de seguridad](https://tinkazo.vercel.app/seguridad.html).
+
+**Privacidad.** En la cadena va solo la huella, nunca los nombres. El comprobante viaja en el fragmento de la URL, que el navegador no le manda a ningún servidor.
 
 ## Cómo se compara
 
@@ -199,12 +216,13 @@ cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
-Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=stellar|ledger|pasanaku|teleferico|tombola|race|rockets|wheel|trompo|totora|pinata|oruro`, `?instant=1`, `?pose=1` y `?motor=clasico` (el motor anterior).
+Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=race|luz|trompo|pinata|oruro|tombola|wheel|teleferico|pasanaku|stellar|sapo|quien`, `?instant=1`, `?pose=1` y `?motor=clasico` (el motor anterior).
 
 ## El repositorio
 
 ```
-index.html · verificar.html     La herramienta, y la página que rehace un sorteo desde su comprobante
+index.html · verificar.html     La portada y la herramienta, y la página que rehace un sorteo desde su comprobante
+lista.html                      La lista para revisar antes de sellar, en el celular de cada uno
 src/protocol/                   Lista canónica, selección, drand, comprobante
 src/stellar/                    Red, billeteras y cliente del contrato
 src/games/                      Los doce juegos y el andamiaje que comparten
@@ -221,7 +239,7 @@ Hecho en Bolivia por [Nicolás Emir Mejía Agreda](https://github.com/nema1502).
 
 ## Contribuir
 
-Issues y pull requests son bienvenidos. **Si encontrás una forma de arreglar un sorteo, abrí un issue**: es el reporte que más sirve. Para agregar un juego, mirá [docs/juegos.md](docs/juegos.md); tiene que pasar los auditores para entrar.
+Issues y pull requests son bienvenidos. **Si encontrás una forma de torcer un sorteo, abrí un issue**: es el reporte que más sirve. Para agregar un juego, mirá [docs/juegos.md](docs/juegos.md); tiene que pasar los auditores para entrar.
 
 ## Licencia
 

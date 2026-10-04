@@ -1,5 +1,7 @@
 # Modelo de amenazas
 
+> **En una línea:** el número que decide el sorteo no existe cuando se cierra la lista, y un contrato en Stellar lo verifica. Eso está cerrado. Lo que queda abierto es humano, y tiene dos formas: armar mal la lista antes de sellar ([abajo](#el-ataque-más-común-inflar-la-lista-antes-de-sellar)) y sellar varias veces para publicar el resultado que conviene ([abajo](#el-ataque-real-selección-del-compromiso)). Contra las dos, todo se muestra antes de que exista el número: la lista a la sala, con un QR para buscarse, y el número del sorteo en las fotos.
+
 Qué puede salir mal en Tinkazo, quién podría hacerlo, qué lo impide hoy y qué no. Escrito con el método STRIDE, que agrupa las amenazas en seis familias: suplantación, alteración, repudio, filtración, denegación de servicio y elevación de privilegios.
 
 Existe porque **el producto promete que cualquiera puede comprobar un sorteo, y una promesa así hay que poder defenderla por escrito**, incluido lo que todavía no impide.
