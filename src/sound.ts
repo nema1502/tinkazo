@@ -162,3 +162,28 @@ export const isMuted = (): boolean => muted;
 export function audio(): AudioContext | null {
   return chain()?.ctx ?? null;
 }
+
+/**
+ * Safari en el iPhone solo deja sonar un contexto de audio que nació o se
+ * reanudó dentro de un toque. El primer sonido del sorteo sale después de
+ * esperar la ronda, ya fuera del toque, y el sorteo corría mudo. Al primer
+ * toque de la página se arma el contexto ahí mismo y se hace sonar un
+ * silencio; cuando el contexto queda andando, se deja de escuchar.
+ */
+export function unlockAudioOnGesture(): void {
+  const events = ["pointerdown", "touchend", "keydown"] as const;
+  const unlock = (): void => {
+    try {
+      const c = chain();
+      if (!c) return;
+      const src = c.ctx.createBufferSource();
+      src.buffer = c.ctx.createBuffer(1, 1, 22050);
+      src.connect(c.ctx.destination);
+      src.start(0);
+      if (c.ctx.state === "running") for (const e of events) removeEventListener(e, unlock, true);
+    } catch {
+      /* sin audio: el sorteo sigue igual */
+    }
+  };
+  for (const e of events) addEventListener(e, unlock, { capture: true, passive: true });
+}

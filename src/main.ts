@@ -2,7 +2,7 @@ import "./styles.css";
 import { $ } from "./dom";
 import { onLangChange, setLang, t } from "./i18n";
 import { SAMPLE, app, currentPace, paceSeconds, params, setPace, type Game, type Pace } from "./state";
-import { soundLabel, toggleSound } from "./sound";
+import { soundLabel, toggleSound, unlockAudioOnGesture } from "./sound";
 import { bindParticipants, loadSample, renderNames } from "./ui/participants";
 import { GAME_BUTTONS, copyRules, freeze, refreshFreezeLabel, secondsToRound, setGame } from "./ui/freeze";
 import { copySummary, draw, replayAnimation, reverify, shareProof } from "./ui/draw";
@@ -178,6 +178,7 @@ async function poseScene(): Promise<void> {
 }
 
 renderNames();
+unlockAudioOnGesture();
 // Cada juego muestra en su botón lo que hace. Los nombres solos no le dicen
 // nada a quien llega por primera vez.
 void import("./ui/thumbs").then((m) => m.initThumbs(GAMES));
