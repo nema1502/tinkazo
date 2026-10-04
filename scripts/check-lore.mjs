@@ -46,7 +46,29 @@ const cards = [...lore.matchAll(/q:\s*"([^"]+)",\s*\n\s*a:\s*"([^"]+)",\s*\n\s*h
  * se puede comprobar igual, y una caída del sitio ajeno (le pasó al
  * Diccionario de americanismos el 4 de octubre de 2026) no traba nada.
  */
+/**
+ * Las copias ya encontradas, anotadas: la consulta a archive.org desde los
+ * servidores de la integración vuelve vacía a veces, y una prueba que depende
+ * de eso no es una prueba. Se anotaron el 4 de octubre de 2026.
+ */
+const COPIAS = {
+  "https://www.asale.org/damer/tinkazo": "https://web.archive.org/web/20260609050837/https://www.asale.org/damer/tinkazo",
+  "https://www.asale.org/damer/totora": "https://web.archive.org/web/20251216085301/https://www.asale.org/damer/totora",
+  "https://www.asale.org/damer/trompo": "https://web.archive.org/web/20250907205745/https://www.asale.org/damer/trompo",
+};
+
+/** La copia anotada abre de verdad. */
+async function abre(url) {
+  try {
+    const res = await fetch(url, { redirect: "follow", headers: { "user-agent": "tinkazo-check-lore" }, signal: AbortSignal.timeout(30_000) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 async function copiaArchivada(url) {
+  if (COPIAS[url] && (await abre(COPIAS[url]))) return COPIAS[url];
   try {
     const res = await fetch(`https://archive.org/wayback/available?url=${encodeURIComponent(url.replace(/^https?:\/\//, ""))}`, {
       signal: AbortSignal.timeout(15_000),
