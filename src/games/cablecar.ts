@@ -474,8 +474,12 @@ export function cableCar(
             dx: seedOf(i) * 2 - 1, hue: color(idx),
           });
         }
-        if (s.last) sayNow(T[lang].cTelOff(names[who[0] as number] ?? ""), 0.9);
-        else sayNow(T[lang].cTelStop(s.station, who.length, left[s.round + 1] as number), 0.5 + 0.3 * (s.round / Math.max(1, R)));
+        if (s.last) {
+          // Con varios premios, el último que se baja también ganó, y el relator
+          // decía "¡Hasta acá llegó X!" de un ganador.
+          const idx = who[0] as number;
+          sayNow((winners.includes(idx) ? T[lang].cTelPrize : T[lang].cTelOff)(names[idx] ?? ""), 0.9);
+        } else sayNow(T[lang].cTelStop(s.station, who.length, left[s.round + 1] as number), 0.5 + 0.3 * (s.round / Math.max(1, R)));
         if (!silent) {
           const blips = Math.min(6, who.length);
           for (let i = 0; i < blips; i++) setTimeout(() => beep(note(15 - i), 0.07, "sine", 0.032), i * 70);

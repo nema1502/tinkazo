@@ -63,6 +63,9 @@ export interface Dict {
   cQuiTwo: (a: string, b: string) => string;
   cQuiAskShort: (l: string) => string;
   cQuiAskShortN: (l: string) => string;
+  /** Que cada uno revise su propio nombre, sin buscar su carta en la pantalla. */
+  cQuiMine: (l: string) => string;
+  cQuiMineN: (l: string) => string;
   cQuiYes: (l: string, k: number) => string;
   cQuiNo: (l: string, k: number) => string;
   cQuiNone: (l: string, has: boolean) => string;
@@ -83,6 +86,8 @@ export interface Dict {
   cTelPass: (k: number) => string;
   cTelStop: (k: number, off: number, left: number) => string;
   cTelOff: (n: string) => string;
+  /** El último que se baja, cuando también ganó: con varios premios. */
+  cTelPrize: (n: string) => string;
   cTelOf: (k: number, of: number) => string;
   cTelDoor: (n: string) => string;
   cTelSlip: (n: string) => string;
@@ -321,6 +326,7 @@ export const T: Record<Lang, Dict> = {
     cTelUp: ["¡Sigue subiendo!", "¡Más arriba todavía!", "¡Qué vista!"],
     cTelLast: ["¡QUEDAN DOS!", "¡Última estación!", "¡Acá se baja uno!"],
     cTelOff: (n) => pick([`¡Se baja ${n}!`, `¡${n} se queda en el andén!`, `¡Hasta acá llegó ${n}!`]),
+    cTelPrize: (n) => pick([`¡Se baja ${n}, y con premio!`, `¡${n} se baja con premio!`]),
     cTelClimb: ["¡Sube solita!", "¡Ya casi llega!", "¡Ya se ve la cumbre!"],
     cTelDock: ["¡LLEGÓ ARRIBA!", "¡TOCÓ LA CUMBRE!", "¡SE ABRE LA PUERTA!"],
     cTelLeft: "QUEDAN",
@@ -394,11 +400,12 @@ export const T: Record<Lang, Dict> = {
     // --- ¿Quién es?: cartas con cara; cada letra da vuelta a las que no coinciden.
     gameQuien: "¿Quién es?",
     cQuiStart: (n) => `¡${n} cartas! Letra por letra, queda una.`,
-    cQuiCheck: ["¡Revisen su nombre!", "¿La tiene el tuyo?", "¡Mirá tu nombre!"],
     cQuiNext: (k, of) => `¡Ronda ${k} de ${of}: otra vez todas!`,
     cQuiTwo: (a, b) => pick([`¡Quedan dos: ${a} y ${b}!`, `¿${a} o ${b}?`, `¡Entre ${a} y ${b}!`]),
     cQuiAskShort: (l) => `¿Tiene la ${l}?`,
     cQuiAskShortN: (l) => `¿Tiene el ${l}?`,
+    cQuiMine: (l) => pick([`¿Tu nombre tiene la ${l}?`, `¿Y el tuyo? ¿Tiene la ${l}?`, `¡Fijate si tu nombre tiene la ${l}!`]),
+    cQuiMineN: (l) => pick([`¿Tu nombre tiene el ${l}?`, `¿Y el tuyo? ¿Tiene el ${l}?`]),
     cQuiYes: (l, k) => (k === 1 ? `¡Sí tiene ${l}! Se da vuelta una.` : `¡Sí tiene ${l}! Se dan vuelta ${k}.`),
     cQuiNo: (l, k) => (k === 1 ? `¡No tiene ${l}! Se da vuelta una.` : `¡No tiene ${l}! Se dan vuelta ${k}.`),
     cQuiNone: (l, has) => (has ? `¡Sí tiene ${l}! Todas la tienen: no se da vuelta ninguna.` : `¡No tiene ${l}! Ninguna la tiene: no se da vuelta ninguna.`),
@@ -1110,6 +1117,7 @@ export const T: Record<Lang, Dict> = {
     cTelUp: ["Still climbing!", "Higher still!", "What a view!"],
     cTelLast: ["TWO LEFT!", "Last station!", "One gets off here!"],
     cTelOff: (n) => pick([`${n} gets off!`, `${n} stays on the platform!`, `End of the line for ${n}!`]),
+    cTelPrize: (n) => pick([`${n} gets off, with a prize!`, `${n} steps off with a prize!`]),
     cTelClimb: ["Climbing alone!", "Almost there!", "Nobody breathe!"],
     cTelDock: ["IT MADE THE TOP!", "TOP OF THE LINE!", "DOORS OPENING!"],
     cTelLeft: "LEFT",
@@ -1181,11 +1189,12 @@ export const T: Record<Lang, Dict> = {
     // --- Who is it?: face cards; each letter flips the ones that don't match.
     gameQuien: "Who is it?",
     cQuiStart: (n) => `${n} cards! Letter by letter, one is left.`,
-    cQuiCheck: ["Check your name!", "Does yours have it?", "Look at your name!"],
     cQuiNext: (k, of) => `Round ${k} of ${of}: all cards back!`,
     cQuiTwo: (a, b) => pick([`Two left: ${a} and ${b}!`, `${a} or ${b}?`, `Between ${a} and ${b}!`]),
     cQuiAskShort: (l) => `Letter ${l}?`,
     cQuiAskShortN: (l) => `Number ${l}?`,
+    cQuiMine: (l) => pick([`Does your name have ${l}?`, `What about yours? Any ${l}?`, `Check: does your name have ${l}?`]),
+    cQuiMineN: (l) => pick([`Does your name have a ${l}?`, `What about yours? Any ${l}?`]),
     cQuiYes: (l, k) => (k === 1 ? `Yes, it has ${l}! One card flips.` : `Yes, it has ${l}! ${k} cards flip.`),
     cQuiNo: (l, k) => (k === 1 ? `No ${l}! One card flips.` : `No ${l}! ${k} cards flip.`),
     cQuiNone: (l, has) => (has ? `Yes, it has ${l}! They all do: no card flips.` : `No ${l}! None of them has it: no card flips.`),

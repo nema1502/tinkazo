@@ -302,7 +302,12 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
             dosDichos.add(s.round);
             const [a, b] = alive(s.round, s.start);
             S.say(T[getLang()].cQuiTwo(names[a as number] ?? "", names[b as number] ?? ""), 0.85);
-          } else S.say(t("cQuiCheck"), 0.3 + 0.5 * (1 - quedan / Math.max(2, r.pool.length)));
+          } else {
+            // Cada uno revisa su propio nombre. "¡Revisen su nombre!" se leía como
+            // buscar la carta, y con 200 las cartas tienen letra de 6 píxeles.
+            const mine = T[getLang()][isDigit(q.letter) ? "cQuiMineN" : "cQuiMine"](q.letter);
+            S.say(mine, 0.3 + 0.5 * (1 - quedan / Math.max(2, r.pool.length)));
+          }
           beep(note(9), 0.1, "triangle", 0.04);
         } else {
           S.say(t("cQuiTie"), 0.8);

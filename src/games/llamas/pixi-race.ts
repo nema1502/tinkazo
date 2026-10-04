@@ -3,7 +3,7 @@ import { gsap } from "gsap";
 import { T, getLang, t } from "../../i18n";
 import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, isMuted, audio, note } from "../../sound";
-import { tension } from "../drama";
+import { enOrden, tension } from "../drama";
 import { WINNER_HOLD, shorten, winnersLabel } from "../overlay";
 import { CREAM, INK, MONO, YELLOW, hash, mountPixi, seeded, type PixiStage } from "../pixi/stage";
 import { planRace, type Plan } from "./plan";
@@ -589,6 +589,18 @@ export async function llamasPixi(
     board.position.set(12 * u, S.top() + 40 * u);
     board.visible = !G.portrait;
     S.hud.addChild(board);
+    // Con más de ocho corren ocho. El motor anterior lo avisaba y este no: con
+    // 200 inscritos, 192 no sabían si estaban (auditoría, 4 de octubre de 2026).
+    if (names.length > N) {
+      const aviso = S.text(T[getLang()].cLanes(N, names.length), { fontFamily: MONO, fontSize: 11 * u, fontWeight: "800", fill: CREAM });
+      const pad = 6 * u;
+      aviso.position.set(pad, pad / 2);
+      // Sobre la tribuna, sin fondo, no se leía.
+      const caja = new Container();
+      caja.addChild(new Graphics().roundRect(0, 0, aviso.width + pad * 2, aviso.height + pad, 4 * u).fill({ color: INK, alpha: 0.72 }), aviso);
+      caja.position.set(12 * u, S.top() + (G.portrait ? 8 : 12) * u);
+      S.hud.addChild(caja);
+    }
     const count: Text[] = ["3", "2", "1", getLang() === "es" ? "¡YA!" : "GO!"].map((s) => {
       const tx = S.text(s, {
         fontSize: 190 * u, fontWeight: "900", fill: YELLOW, stroke: { color: INK, width: 18 * u },
@@ -718,7 +730,7 @@ export async function llamasPixi(
     const rival = nameOf(story.rival);
     if (story.arc === "remontada") once("arco", 0.74, () => sayIf(L_.cRemonta(ganadora), 0.8));
     if (story.arc === "duelo") {
-      once("arco", 0.52, () => sayIf(L_.cDuelo(ganadora, rival), 0.7));
+      once("arco", 0.52, () => sayIf(L_.cDuelo(...enOrden(ganadora, rival)), 0.7));
       once("foto", plan.foto, () => {
         sayIf(t("cFoto"), 0.95);
         cam.punch(0.08);
