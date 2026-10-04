@@ -82,6 +82,9 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   }
   const S: PixiStage = st;
   const { rng, cam } = S;
+  // El último tiro es un acercamiento lento: con desenfoque, la mesa se veía
+  // borrosa justo cuando todos miran la argolla.
+  cam.noBlur();
   const all = names.length;
   const prizesAll = winners.length ? [...winners] : [0];
 
@@ -406,7 +409,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   };
 
   /* ------------------------------------------------------------------ el guion hablado */
-  let tAll = 0, tHold = 0, crowned = false, dead = false, introSaid = 0, labioSonado = false;
+  let tAll = 0, tHold = 0, crowned = false, dead = false, introSaid = 0, labioSonado = false, croo = false, silbido = false;
   const saidWave = new Set<number>();
 
   const crownUI = S.crown(names, winners);
@@ -483,10 +486,26 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
         }
         if (o.final) S.say(t("cSapLast"), 0.9);
       }
+      // La rana croa mientras la mano levanta la última argolla. En la tapada,
+      // con pocos tiros y el reloj estirado casi al doble, quedaban 5 segundos
+      // sin un solo efecto entre el último "casi" y el tiro (auditor de sonido,
+      // 4 de octubre de 2026).
+      if (o.final && !croo && tAll >= o.start - 1.0) {
+        croo = true;
+        beep(note(2), 0.16, "triangle", 0.045);
+        setTimeout(() => beep(note(0), 0.2, "triangle", 0.04), 170);
+      }
       if (!o.thrown && tAll >= o.start) {
         o.thrown = true;
         beep(note(7), 0.1, "triangle", o.grand ? 0.045 : 0.03);
         if (o.i === 0 || (o.grand && o.th.kind === "miss" && firstOfTurn)) S.say(t("cSapThrow"), 0.3);
+      }
+      // Arriba del último vuelo, un silbido corto que sube. En el susto ahí
+      // suena el labio de la rana, así que no hace falta.
+      if (o.final && !labio && !silbido && tAll >= o.start + o.flight * 0.5) {
+        silbido = true;
+        beep(note(9), 0.09, "sine", 0.035);
+        setTimeout(() => beep(note(12), 0.12, "sine", 0.035), 110);
       }
       if (o.final && labio && !labioSonado && tAll >= o.start + o.flight * LABIO) {
         labioSonado = true;
@@ -666,7 +685,12 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   /** La argolla amarilla: un disco con agujero, para que no se lea como moneda. */
   function drawToken(x: number, y: number, s: number, glow: boolean, alpha = 1): void {
     const r = g.br * s;
-    if (glow) tokG.circle(x, y, g.br * 2.6).fill({ color: YELLOW, alpha: 0.22 * alpha });
+    // La argolla del último tiro lleva un aro nítido. Antes era un halo
+    // amarillo transparente que sobre la madera se leía como una mancha borrosa.
+    if (glow) {
+      tokG.ellipse(x, y, r * 1.6, r * 1.28).stroke({ width: 6 * g.k, color: INK, alpha });
+      tokG.ellipse(x, y, r * 1.6, r * 1.28).stroke({ width: 3 * g.k, color: YELLOW, alpha });
+    }
     tokG.ellipse(x + 2 * g.k, y + 3 * g.k, r, r * 0.8).fill({ color: INK, alpha: 0.45 * alpha });
     tokG.ellipse(x, y, r, r * 0.8).fill({ color: YELLOW, alpha }).stroke({ width: 3 * g.k, color: INK, alpha });
     tokG.ellipse(x, y, r * 0.4, r * 0.32).fill({ color: 0x3a2a14, alpha }).stroke({ width: 2 * g.k, color: INK, alpha });

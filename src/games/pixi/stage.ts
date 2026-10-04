@@ -231,7 +231,13 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   const top = (): number => (innerWidth <= 520 ? 100 : 82);
   const bottom = (): number => (innerWidth <= 520 ? 118 : 106);
 
-  const text = (s: string, style: TextStyleOptions): Text => new Text({ text: s, style: { fontFamily: FONT, ...style } });
+  // Los textos se dibujan al doble: la cámara se acerca hasta 1,5× o más sobre
+  // el ganador, y un nombre dibujado a la resolución de la pantalla se veía
+  // borroso justo ahí (el sapo, 4 de octubre de 2026). El tope en 3 cuida la
+  // memoria en pantallas de alta densidad.
+  const textRes = Math.min(3, dpr * 2);
+  const text = (s: string, style: TextStyleOptions): Text =>
+    new Text({ text: s, style: { fontFamily: FONT, ...style }, resolution: textRes });
 
   const chip = (name: string, scale = 1, faceOf = name): Container => {
     const k = u() * scale;

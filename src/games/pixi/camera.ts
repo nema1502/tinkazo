@@ -48,6 +48,7 @@ export class Camera {
   private punchAmt = 0;
   private lastZoom = 1;
   private blurK = 0;
+  private blurOn = true;
   private readonly blur: ZoomBlurFilter;
   private readonly extra: Filter[] = [];
 
@@ -127,6 +128,17 @@ export class Camera {
     this.extra.push(f);
   }
 
+  /**
+   * Sin desenfoque en los acercamientos. Para los juegos donde el acercamiento
+   * lento cae sobre el ganador: en el sapo, la mesa entera se veía borrosa
+   * justo en el último tiro (lo notó Nicolás, 4 de octubre de 2026).
+   */
+  noBlur(): this {
+    this.blurOn = false;
+    this.blurK = 0;
+    return this;
+  }
+
   update(dt: number): void {
     const k = 1 - Math.exp(-this.rate * dt);
     this.x += (this.tx - this.x) * k;
@@ -157,7 +169,7 @@ export class Camera {
     scene.scale.set(z);
     scene.rotation = this.rot + (s ? Math.sin(now * 53) * s * 0.0006 : 0);
     const filters: Filter[] = [...this.extra];
-    if (this.blurK > 0.006) {
+    if (this.blurOn && this.blurK > 0.006) {
       this.blur.strength = this.blurK;
       this.blur.center = { x: sw / 2, y: sh / 2 };
       filters.push(this.blur);
