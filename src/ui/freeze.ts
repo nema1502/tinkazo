@@ -258,6 +258,14 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   $("k-n").textContent = String(names.length);
   $("k-digest").textContent = hash.slice(0, 16) + "…";
   $("k-status").textContent = raffleId !== undefined ? `Stellar #${raffleId}` : "local";
+  // El número del sorteo bien grande durante la espera: queda en las fotos de
+  // la sala antes de que exista el número que decide. Si después aparece otro
+  // sello, todos tienen el número del bueno.
+  const wid = document.getElementById("wait-id");
+  if (wid) {
+    wid.textContent = raffleId !== undefined ? t("waitId").replace("{n}", String(raffleId)) : "";
+    wid.style.display = raffleId !== undefined ? "block" : "none";
+  }
   $("frozen-ts").textContent = t("frozenAt") + " " + f.at;
   renderSealSummary();
 

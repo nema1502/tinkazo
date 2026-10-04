@@ -69,6 +69,11 @@ Un organizador sella cinco listas distintas, cada una contra una ronda distinta,
 
 **Los límites, que hay que decir:** una entrada cuyo alquiler se venció se archiva y deja de aparecer hasta que alguien la restaure, y se recorren como mucho los últimos dos mil sorteos del contrato. Y si el RPC no contesta, la sección no aparece: decir "hay uno solo" sin haber podido mirar sería peor que callar.
 
+**Lo que se hizo el 4 de octubre de 2026:**
+- Durante la espera, el número del sorteo se muestra bien grande ("Sorteo #170 en Stellar · anotalo o sacale una foto"). Así queda en las fotos de la sala antes de que exista el número que decide, y si después aparece otro sello, todos tienen el número del bueno.
+- La verificación ya leía los últimos dos mil sorteos del contrato y descartaba los de otras cuentas. Ahora marca también la misma huella sellada desde **otra cuenta**, así que cambiar de cuenta ya no esconde la forma directa del ataque.
+- La lista de ejemplo del sitio no dispara la alarma: la sella cualquiera que prueba con su cuenta.
+
 **Lo que sigue faltando:** el ataque no está cerrado, solo es mucho más visible. Cerrarlo del todo exigiría que el organizador anuncie el identificador del sorteo por un canal que él no controle antes de sellar, y eso Tinkazo no lo puede imponer.
 
 ### El ataque más común: inflar la lista antes de sellar
@@ -80,6 +85,8 @@ El sello impide cambiar la lista **después**. No impide que se arme mal **desde
 - **La lista puede salir de un tercero.** La ventana de importar toma el export de Luma y propone solo a los que hicieron check-in, que es un registro que el organizador no escribe a mano. En el primer export real que se probó, de 67 inscritos vinieron 35.
 - **Los repetidos se ven.** La ventana junta los nombres que son iguales sin tildes ni mayúsculas y pregunta si es la misma persona. Por defecto entra una vez.
 - **La lista entera viaja en el comprobante.** Cualquiera de la sala puede buscarse y contar cuántas veces aparece cada nombre.
+
+**Lo que se hizo el 4 de octubre de 2026:** la lista se puede mostrar a la sala **antes de sellar**. Va a pantalla completa en el proyector, numerada y con los repetidos marcados, y trae un QR que abre la misma lista en el celular de cada uno, con un buscador. El enlace lleva la lista en el fragmento, como el comprobante, así que no pasa por ningún servidor. Abajo se ve el principio de la huella: cuando se sella, la huella del sorteo tiene que empezar igual. El comprobante también tiene el buscador ("estás en el puesto 37 de 120"). El que está dos veces o el que falta se descubre solo, y antes del sello, cuando todavía se puede arreglar.
 
 **Lo que falta:** que cada participante reciba su propia prueba ("estuviste en el puesto 37 de 120"), que es lo que deja a una persona descubrir que la dejaron afuera sin tener que leer la lista entera. Está en el plan de los próximos 30 días, en el kit para organizadores. Y el protocolo no ordena la lista (§1), así que reordenar los nombres cambia la huella sin cambiar a nadie: un protocolo v3 podría ordenar la lista canónica y pedir en el contrato que una misma dirección no selle dos veces la misma huella, lo que cerraría también la forma directa de la selección del compromiso. Ninguna de las dos cosas impide que alguien invente un nombre: eso solo lo ve la sala.
 

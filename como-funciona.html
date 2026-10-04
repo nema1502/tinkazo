@@ -41,7 +41,7 @@
 
   <section class="portada-sec">
     <ol class="linea">
-      <li><h3 data-i="cf1t">Juntás la lista</h3><p data-i="cf1b">Pegás los nombres o subís el CSV de Luma o de cualquier planilla. Quien organiza entra con su cuenta; los participantes no necesitan nada.</p></li>
+      <li><h3 data-i="cf1t">Juntás la lista</h3><p data-i="cf1b">Pegás los nombres o subís el CSV de Luma o de cualquier planilla. Antes de sellar, la podés mostrar a la sala con un QR, para que cada uno se busque en su celular y avise si falta alguien o hay repetidos. Los participantes no necesitan nada.</p></li>
       <li><h3 data-i="cf2t">La lista se sella</h3><p data-i="cf2b">Se le calcula una huella, como la huella digital de un archivo: si cambia una letra, cambia toda. La huella y la hora quedan grabadas en Stellar.</p></li>
       <li><h3 data-i="cf3t">Se elige un número del futuro</h3><p data-i="cf3b">drand, una red de universidades y empresas, publica un número al azar cada tres segundos. El sorteo usa uno que todavía no existe cuando se sella la lista: nadie lo puede conocer antes.</p></li>
       <li><h3 data-i="cf4t">Sale el ganador</h3><p data-i="cf4b">Cuando llega ese número, un contrato en Stellar comprueba su firma y hace la cuenta, siempre la misma, que dice a quién le toca. El juego de la pantalla solo lo cuenta.</p></li>
@@ -61,6 +61,16 @@
         <tr><td data-label-i="cfColQue" data-i="cfG4a">Tu llave</td><td data-label-i="cfColDonde" data-i="cfG4b">Con Google, la guarda Pollar; con Freighter, tu extensión; con la cuenta de prueba, tu navegador</td><td data-label-i="cfColQuien" data-i="cfG4c">Nadie más</td></tr>
       </tbody>
     </table>
+  </section>
+
+  <section class="portada-sec" id="sin-nosotros">
+    <h2 class="sec-t" data-i="cfSinT">Verificalo sin nosotros</h2>
+    <p class="sec-b" data-i="cfSinB">No hace falta este sitio. Con el número del sorteo, que va en las bases y en el comprobante:</p>
+    <ol class="linea">
+      <li><h3 data-i="cfSin1t">El sello y el resultado, en un explorador</h3><p data-i="cfSin1b">Buscá el contrato en stellar.expert, que no es nuestro: ahí está cada sello, con su huella, su ronda y quién ganó.</p><a class="sec-link" href="https://stellar.expert/explorer/testnet/contract/CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH" target="_blank" rel="noopener" data-i="cfSin1a">El contrato en stellar.expert →</a></li>
+      <li><h3 data-i="cfSin2t">El número, en drand</h3><p data-i="cfSin2b">La firma de la ronda la publica drand, en una dirección pública que cualquiera abre: api.drand.sh, la red quicknet y el número de la ronda.</p><a class="sec-link" href="https://api.drand.sh/52db9ba70e0cc0f6eaf7803dd07447a1f5477735fd3f661792ba94600c84e971/public/latest" target="_blank" rel="noopener" data-i="cfSin2a">La ronda más reciente, en la API pública de drand →</a></li>
+      <li><h3 data-i="cfSin3t">La cuenta, a mano</h3><p data-i="cfSin3b">Con la lista, la huella y la firma, la cuenta está escrita paso a paso en el protocolo. Cualquiera la rehace en cualquier lenguaje y le tiene que dar el mismo ganador.</p><a class="sec-link" href="https://github.com/nema1502/tinkazo/blob/main/docs/protocolo.md" target="_blank" rel="noopener" data-i="cfSin3a">El protocolo, en GitHub →</a></li>
+    </ol>
   </section>
 
   <section class="portada-sec">

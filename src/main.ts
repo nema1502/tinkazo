@@ -71,6 +71,8 @@ $("btn-hist-clear").addEventListener("click", () => {
 
 for (const [id, game] of GAME_BUTTONS) $(id).addEventListener("click", () => setGame(game));
 $("btn-draw").addEventListener("click", () => void draw());
+// La lista a la vista de la sala, antes de sellar: el blindaje contra inflarla.
+$("btn-sala").addEventListener("click", () => void import("./ui/sala").then((m) => m.mostrarLista()));
 $("btn-reverify").addEventListener("click", reverify);
 $("btn-replay").addEventListener("click", replayAnimation);
 $<HTMLButtonElement>("btn-copy").addEventListener("click", (e) => void copySummary(e.currentTarget as HTMLButtonElement));

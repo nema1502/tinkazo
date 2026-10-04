@@ -1,7 +1,7 @@
 import "./styles.css";
 import { $, esc } from "./dom";
 import { chooseLang, getLang, initialLang, setLang, t } from "./i18n";
-import { avatar } from "./state";
+import { SAMPLE, avatar } from "./state";
 import { canonicalList, listHash } from "./protocol/canonical";
 import { RPC_URLS } from "./stellar/config";
 import {
@@ -18,6 +18,7 @@ import { select } from "./protocol/select";
 import { decodeProof, isAnchored, type Proof } from "./protocol/proof";
 import { network } from "./stellar/config";
 import { loadSessionKind } from "./stellar/session-store";
+import { buscar, vecesExacto } from "./buscar";
 
 /**
  * Página de verificación.
@@ -265,6 +266,16 @@ async function renderSeals(proof: Proof): Promise<void> {
 
     const mine = String(proof.id ?? "");
     const self = found.raffles.find((r) => r.id === mine);
+    // La lista de ejemplo la sella cualquiera que prueba el sitio con su
+    // cuenta: que se repita no dice nada, y alarmar por eso sería mentir.
+    const ejemplo = bytesToHex(listHash(canonicalList(SAMPLE.join("\n"))));
+    if (self && self.listHash === ejemplo) {
+      $("v-seals-since").textContent = t("vSealsAll");
+      $("v-seals-list").innerHTML = "";
+      $("v-seals-why").textContent = t("vSealsEjemplo");
+      box.style.display = "block";
+      return;
+    }
     // Dos señales, de distinta fuerza. La misma huella es la misma lista con
     // el mismo orden: no tiene otra lectura. La misma cantidad de gente es más
     // débil, porque puede ser otro sorteo del mismo evento, pero es también lo
@@ -281,7 +292,16 @@ async function renderSeals(proof: Proof): Promise<void> {
 
     $("v-seals-since").textContent =
       found.truncated || shown.length < found.raffles.length ? t("vSealsMany") : t("vSealsAll");
-    $("v-seals-list").innerHTML = shown
+    // La misma lista, sellada por otra cuenta: va primero y en rojo.
+    const fuera = found.elsewhere ?? [];
+    const fueraHtml = fuera
+      .map(
+        (r) =>
+          `<p class="entity" style="font-weight:800;color:var(--magenta-ink)">⚠ #${esc(r.id)} · ${esc(t("vSealsElsewhere"))} · ` +
+          `${esc(r.organizer.slice(0, 4))}…${esc(r.organizer.slice(-4))} · ${esc(t("vSealsRound"))} ${r.round}</p>`,
+      )
+      .join("");
+    $("v-seals-list").innerHTML = fueraHtml + shown
       .map((r) => {
         const yo = r.id === mine;
         const rep = again(r.id, r.listHash);
@@ -300,7 +320,9 @@ async function renderSeals(proof: Proof): Promise<void> {
       .join("");
     // Con un solo sello no hay nada que sospechar, y conviene decirlo. Y si la
     // lista se repite, eso va primero.
-    $("v-seals-why").textContent = repeats
+    $("v-seals-why").textContent = fuera.length
+      ? t("vSealsElsewhereWhy")
+      : repeats
       ? t("vSealsAgainWhy")
       : alike
         ? t("vSealsSameCountWhy")
@@ -406,8 +428,34 @@ function offerToFinish(proof: Proof): void {
 function renderList(proof: Proof): void {
   $("v-count").textContent = `${proof.names.length} ${t("kEntries")}`;
   $("v-names").innerHTML = proof.names
-    .map((n) => `<i><img src="${avatar(n, 44)}" alt="" loading="lazy" />${esc(n)}</i>`)
+    .map((n, i) => `<i data-p="${i + 1}"><img src="${avatar(n, 44)}" alt="" loading="lazy" />${esc(n)}</i>`)
     .join("");
+  // Cada uno se busca: "estás en el puesto 37 de 120". El que está dos veces
+  // o el que falta se descubre solo, que es la defensa contra inflar la lista.
+  const input = $<HTMLInputElement>("v-buscar");
+  const buscarAhora = (): void => {
+    const q = input.value;
+    const out = $("v-buscar-out");
+    document.querySelectorAll("#v-names i.match").forEach((el) => el.classList.remove("match"));
+    if (!q.trim()) {
+      out.textContent = "";
+      return;
+    }
+    const puestos = buscar(proof.names, q);
+    for (const p of puestos) document.querySelector(`#v-names i[data-p="${p}"]`)?.classList.add("match");
+    if (!puestos.length) {
+      out.textContent = t("buscateNada");
+      return;
+    }
+    let texto =
+      puestos.length === 1
+        ? t("buscateUno").replace("{p}", String(puestos[0])).replace("{n}", String(proof.names.length))
+        : t("buscateVarios").replace("{k}", String(puestos.length)).replace("{p}", puestos.slice(0, 12).join(", "));
+    const exacto = vecesExacto(proof.names, q);
+    if (exacto > 1) texto += t("buscateDos").replace("{k}", String(exacto));
+    out.textContent = texto;
+  };
+  input.addEventListener("input", buscarAhora);
   $("v-net").textContent = isAnchored(proof) ? `${proof.net} · #${proof.id}` : t("noAnchor");
 }
 

@@ -53,7 +53,7 @@ export async function sealsOf(proof: Proof): Promise<ChainHistory | null> {
   // Primero hay que saber quién selló: el comprobante no lo trae.
   const organizer = await organizerOf(url, proof, xdr, scValToNative);
   if (!organizer) return null;
-  return sealsOnChain(organizer, proof.contract, url);
+  return sealsOnChain(organizer, proof.contract, url, proof.id);
 }
 
 /* --------------------------------------------- los sorteos, desde el contrato */
@@ -79,6 +79,12 @@ export interface ChainRaffle {
 
 export interface ChainHistory {
   raffles: ChainRaffle[];
+  /**
+   * Sellos de OTRAS cuentas con la misma huella que el sorteo `matchId`. Es la
+   * forma de la selección del compromiso que cambia de cuenta para no quedar
+   * junta en la lista de una sola. Vacío si no se pidió o no hay.
+   */
+  elsewhere?: ChainRaffle[];
   /** No se recorrió el contrato entero: hay sorteos más viejos que no se miraron. */
   truncated: boolean;
 }
@@ -148,6 +154,7 @@ export async function sealsOnChain(
   organizer: string,
   contractId: string,
   rpcUrl: string,
+  matchId?: string,
 ): Promise<ChainHistory | null> {
   try {
     const { xdr, scValToNative, Address } = await import("@stellar/stellar-sdk");
@@ -189,9 +196,13 @@ export async function sealsOnChain(
     const ids: number[] = [];
     for (let id = last; id >= first; id--) ids.push(id);
 
-    const mine = (await read(ids.map((id) => entryKey("Raffle", id))))
+    const todos = (await read(ids.map((id) => entryKey("Raffle", id))))
       .map((v) => parseRaffle(scValToNative(v)))
-      .filter((r): r is ChainRaffle => r !== null && r.organizer === organizer);
+      .filter((r): r is ChainRaffle => r !== null);
+    const mine = todos.filter((r) => r.organizer === organizer);
+    // Ya se leyeron todos: la misma huella sellada por otra cuenta sale gratis.
+    const huella = matchId ? todos.find((r) => r.id === matchId)?.listHash : undefined;
+    const elsewhere = huella ? todos.filter((r) => r.listHash === huella && r.organizer !== organizer) : [];
 
     // Los ganadores se piden solo de los que ya se sortearon, y solo de esta
     // cuenta: el registro del resultado es otra entrada.
@@ -206,7 +217,7 @@ export async function sealsOnChain(
     }
 
     mine.sort((a, b) => b.sealedAt - a.sealedAt);
-    return { raffles: mine, truncated: first > 1 };
+    return { raffles: mine, truncated: first > 1, elsewhere };
   } catch {
     return null;
   }

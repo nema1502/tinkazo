@@ -855,3 +855,36 @@
     .auth .netbadge.main + .hello { border-left: 7px solid var(--teal); }
   }
   .sec-links { display: flex; flex-wrap: wrap; gap: 4px 26px; }
+
+  /* La lista a la vista de la sala: el proyector, antes de sellar. */
+  .sala { position: fixed; inset: 0; z-index: 60; background: var(--paper); color: var(--ink); display: flex; flex-direction: column; padding: 22px clamp(16px, 4vw, 48px); gap: 14px; }
+  .sala-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+  .sala-top h2 { font-size: clamp(28px, 4vw, 48px); font-weight: 900; margin-top: 10px; }
+  .sala-huella { font-size: 15px; color: var(--ink2); margin-top: 4px; }
+  .sala-huella b { color: var(--ink); background: var(--yellow); color: #191919; padding: 0 6px; }
+  .sala-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; }
+  .sala-nombres { margin: 0; padding: 0 0 0 2.2em; column-width: 230px; column-gap: 28px; overflow-y: auto; font-size: clamp(16px, 1.6vw, 22px); font-weight: 700; line-height: 1.5; }
+  .sala-nombres.densa { font-size: clamp(13px, 1.2vw, 17px); column-width: 190px; }
+  .sala-nombres li { break-inside: avoid; }
+  .sala-nombres li.rep, .lista-nombres li.rep { color: var(--magenta-ink); }
+  .sala-nombres li em, .lista-nombres li em { font-style: normal; font-size: 0.72em; text-transform: uppercase; letter-spacing: 0.08em; border: 2px solid currentColor; padding: 0 4px; margin-left: 4px; }
+  .sala-qr { display: flex; flex-direction: column; align-items: center; gap: 8px; align-self: start; background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); padding: 14px; }
+  .sala-qr img { width: clamp(150px, 16vw, 220px); height: auto; image-rendering: pixelated; background: #fff; }
+  .sala-qr p { font-weight: 800; font-size: 15px; }
+  .sala-pie { font-weight: 700; font-size: clamp(14px, 1.3vw, 18px); border-top: 2px dashed var(--ink); padding-top: 10px; }
+  @media (max-width: 700px) { .sala-body { grid-template-columns: 1fr; } .sala-qr { display: none; } }
+
+  /* La lista en el celular, y buscarse en el comprobante. */
+  .lista-pg input[type="search"], #v-buscar {
+    width: 100%; max-width: 520px; min-height: 48px; font: inherit; font-size: 17px; padding: 8px 14px; margin: 6px 0 4px;
+    border: var(--bw) solid var(--ink); background: var(--card); color: var(--ink); box-shadow: var(--sh-sm);
+  }
+  .buscar-out { min-height: 1.4em; font-weight: 800; margin-bottom: 12px; }
+  .lista-huella { margin: 4px 0 18px; }
+  .lista-huella b { background: var(--yellow); color: #191919; padding: 0 6px; }
+  .lista-nombres { padding-left: 2.4em; column-width: 240px; column-gap: 26px; font-size: 16px; line-height: 1.7; }
+  .lista-nombres li { break-inside: avoid; }
+  .lista-nombres li.match, #v-names i.match { background: var(--yellow); color: #191919; }
+
+  /* El número del sorteo durante la espera, grande para las fotos. */
+  .wait-id { font-family: ui-monospace, Consolas, monospace; font-weight: 800; font-size: clamp(16px, 2vw, 22px); background: var(--yellow); color: #191919; border: 2px solid var(--ink); display: inline-block; padding: 6px 12px; margin: 6px 0 10px; }

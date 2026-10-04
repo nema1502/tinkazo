@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import vectors from "../../docs/vectors.json";
-import { PROOF_VERSION, type Proof, decodeProof, encodeProof, isAnchored } from "./proof";
+import { PROOF_VERSION, type Proof, decodePreview, decodeProof, encodeProof, isAnchored, previewUrl } from "./proof";
 
 const libre: Proof = {
   v: PROOF_VERSION,
@@ -58,5 +58,22 @@ describe("comprobante", () => {
     await expect(decodeProof("x")).rejects.toThrow();
     await expect(decodeProof("qZZZZ")).rejects.toThrow();
     await expect(decodeProof("r" + btoa('{"v":2}'))).rejects.toThrow("proof-malformed");
+  });
+});
+
+describe("la lista para revisar antes de sellar", () => {
+  it("va y vuelve por el enlace, con tildes y todo", async () => {
+    const names = ["María Quispe", "Jorge Mamani", "Ñusta Condori"];
+    const url = await previewUrl(names, "Una polera", "https://tinkazo.vercel.app");
+    expect(url.startsWith("https://tinkazo.vercel.app/lista.html#")).toBe(true);
+    const back = await decodePreview(url.slice(url.indexOf("#")));
+    expect(back.names).toEqual(names);
+    expect(back.prize).toBe("Una polera");
+    expect(back.kind).toBe("lista");
+  });
+
+  it("no confunde un comprobante con una lista", async () => {
+    const proof = { v: PROOF_VERSION, names: ["A", "B"], round: 1, sealedAt: 1 } as Proof;
+    await expect(decodePreview(await encodeProof(proof))).rejects.toThrow();
   });
 });

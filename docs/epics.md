@@ -1090,6 +1090,27 @@ Casi todo es renta de almacenamiento y la tarifa la pone la red. Se corrigió en
 - **Tarjetas de historia** ajustadas a su cita: la entrada de Oruro dura veinte horas, no se repite; la hora del Pacífico en la caída de 2019; un anchor no es un nodo por donde rebota un pago.
 - **Los textos de respaldo del HTML** quedaron iguales al diccionario en español: son los que ven los buscadores y quien navega sin JavaScript. Una demo con la cuenta abierta ya no queda anotada en "Mis sorteos".
 
+
+### Historia 12.4: Todo a la vista antes de que exista el número: hecho
+
+Como participante de un sorteo,
+quiero ver la lista antes de que se selle y encontrarme en ella,
+para darme cuenta a tiempo si falto o si alguien está dos veces.
+
+Resultado (2026-10-04): lo que queda abierto en Tinkazo no es cripto, es humano: armar mal la lista antes de sellar, o sellar varias veces y mostrar la que conviene. Otros sorteos verificables tienen el mismo límite. UVS lo dice textual: prueba que se siguieron las reglas publicadas, no que las entradas fueran honestas. La respuesta es poner todo a la vista antes de que exista el número.
+
+- **La lista a la vista de la sala.** "Mostrar la lista a la sala" la pone a pantalla completa en el proyector, numerada, con los repetidos marcados ("Ana Vargas" y "ana vargas"), el principio de la huella y un QR. El QR abre `lista.html` en el celular de cada uno, con un buscador. La lista viaja en el fragmento del enlace, como el comprobante. Cuando se sella, la huella tiene que empezar igual que la que se mostró.
+- **Buscarse en el comprobante:** "estás en el puesto 37 de 120", y avisa si el nombre aparece dos veces.
+- **El número del sorteo bien grande durante la espera,** para que quede en las fotos antes del número que decide.
+- **La misma lista sellada por otra cuenta,** marcada en la verificación. La lista de ejemplo no alarma: la sella cualquiera que prueba el sitio.
+- **"Verificalo sin nosotros"** en Cómo funciona: el contrato en stellar.expert, la ronda en la API pública de drand y la cuenta en el protocolo.
+
+Quedan para mainnet, con el contrato v2:
+- un solo sorteo abierto por cuenta;
+- la cancelación pública;
+- la ronda que pone el contrato;
+- la lista ordenada en el protocolo v3.
+
 ---
 
 ## Épica 11: Recordatorios y aviso a los ganadores

@@ -19,6 +19,7 @@ export default defineConfig({
         historia: resolve(__dirname, "historia.html"),
         seguridad: resolve(__dirname, "seguridad.html"),
         "como-funciona": resolve(__dirname, "como-funciona.html"),
+        lista: resolve(__dirname, "lista.html"),
         terminos: resolve(__dirname, "terminos.html"),
       },
     },
