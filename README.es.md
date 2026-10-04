@@ -74,7 +74,7 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 
 | Pieza | Estado | Evidencia |
 |---|---|---|
-| Contrato Soroban `tinkazo-raffle` | Desplegado en testnet | [`CD2SSHBU…ARENH`](https://stellar.expert/explorer/testnet/contract/CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH) · 19 tests, uno con una ronda real de quicknet · WASM de 11,4 KB |
+| Contrato Soroban `tinkazo-raffle` | Desplegado en testnet, que Stellar borra entera el 16 de diciembre de 2026 | [`CD2SSHBU…ARENH`](https://stellar.expert/explorer/testnet/contract/CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH) · 19 tests, uno con una ronda real de quicknet · WASM de 11,4 KB |
 | Sitio | En producción | [tinkazo.vercel.app](https://tinkazo.vercel.app) · español e inglés · tema claro y oscuro · sin servidor |
 | Importar de Luma | En producción | Se suelta el export de invitados y se elige quién entra: los que hicieron check-in, los aprobados o a mano |
 | Página de verificación | En producción | Rehace cualquier sorteo en el navegador desde su comprobante |

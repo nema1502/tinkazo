@@ -4,9 +4,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Cómo se puede romper un sorteo de Tinkazo</title>
-<meta name="description" content="Qué impide el protocolo, cuál es el único ataque que sigue abierto y qué límites tiene la herramienta. Dicho antes de que lo pregunten." />
+<meta name="description" content="Qué impide el protocolo, qué ataques siguen abiertos y qué límites tiene la herramienta. Dicho antes de que lo pregunten." />
 <meta property="og:title" content="Cómo se puede romper un sorteo de Tinkazo" />
-<meta property="og:description" content="Qué impide el protocolo, cuál es el único ataque que sigue abierto y qué límites tiene la herramienta." />
+<meta property="og:description" content="Qué impide el protocolo, qué ataques siguen abiertos y qué límites tiene la herramienta." />
 <meta property="og:type" content="website" />
 <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -4 26 30"><g fill="%23e93d9c"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></g></svg>' />
 </head>
@@ -42,7 +42,7 @@
   <section class="notas">
     <article class="nota">
       <h3 data-i="sgQ1T">Meter un nombre después</h3>
-      <p data-i="sgQ1B">No se puede sin que se note. Al congelar, la lista queda reducida a una huella de 64 caracteres. Cambiar, agregar o sacar un nombre da otra huella, y la que vale quedó anotada en el contrato antes de que existiera el número.</p>
+      <p data-i="sgQ1B">No se puede sin que se note. Al sellar, la lista queda reducida a una huella de 64 caracteres. Cambiar, agregar o sacar un nombre da otra huella, y la que vale quedó anotada en el contrato antes de que existiera el número.</p>
     </article>
     <article class="nota">
       <h3 data-i="sgQ2T">Elegir el número que decide</h3>
@@ -50,7 +50,7 @@
     </article>
     <article class="nota">
       <h3 data-i="sgQ3T">Retener un resultado que no gustó</h3>
-      <p data-i="sgQ3B">Cualquiera puede finalizar un sorteo sellado: la función que registra el resultado no pide permiso a nadie. Si al organizador se le corta la luz a mitad del evento, alguien más abre el comprobante y lo cierra, y el ganador es el mismo.</p>
+      <p data-i="sgQ3B">Cualquiera puede finalizar un sorteo sellado: la función que registra el resultado no pide permiso a nadie. Si al organizador se le corta la luz a mitad del evento, cualquiera puede cerrarlo llamando al contrato con el número del sorteo, que va en las bases, y el ganador es el mismo.</p>
     </article>
     <article class="nota">
       <h3 data-i="sgQ4T">Cambiar el contrato</h3>
@@ -71,13 +71,14 @@
     <ul style="max-width: 680px; color: var(--ink2); font-size: 14px; margin: 10px 0 0 18px; display: grid; gap: 8px">
       <li data-i="sgLimit1">Sin anclar en Stellar, la cuenta cierra igual, pero nadie más que el organizador atestigua que esa era la lista. La página lo dice con un veredicto amarillo en vez de un verde fácil.</li>
       <li data-i="sgLimit2">Los nombres nunca suben a la cadena, solo su huella. Eso protege a los participantes y, a la vez, hace que el comprobante dependa de que el organizador conserve la lista.</li>
-      <li data-i="sgLimit3">Lo que el contrato guarda tiene alquiler: si nadie lo extiende, la entrada se archiva y deja de leerse hasta que alguien la restaure. El sorteo no se pierde, pero hay que pagar para volver a verlo.</li>
-      <li data-i="sgLimit4">Si el faro público se cayera entero y para siempre, un sorteo sellado quedaría sin número. Son cuatro relays independientes y se consultan todos.</li>
+      <li data-i="sgLimit3">Lo que el contrato guarda tiene alquiler: si nadie lo extiende, la entrada se archiva y deja de leerse hasta que alguien la restaure pagando. Y hoy el contrato está en testnet, que Stellar borra entera el 16 de diciembre de 2026: ahí sí se pierde el registro y el veredicto deja de ser verde.</li>
+      <li data-i="sgLimit5">El sello impide cambiar la lista después, no armarla mal desde el principio: quien organiza puede meter nombres de relleno o repetidos, o dejar afuera a alguien. Por eso la importación de Luma propone solo a los que hicieron check-in, marca los repetidos, y la lista entera viaja en el comprobante para que cualquiera se busque.</li>
+      <li data-i="sgLimit4">Si el faro público se cayera entero y para siempre, un sorteo sellado quedaría sin número. Hay cuatro relays, tres de drand.sh y uno de Cloudflare, y se rotan hasta que uno contesta.</li>
     </ul>
   </section>
 
   <section style="padding: 6px 0 34px">
-    <h2 class="kicker" data-i="sgReportT">Si encontrás una forma de arreglar un sorteo</h2>
+    <h2 class="kicker" data-i="sgReportT">Si encontrás una forma de torcer un sorteo</h2>
     <p style="max-width: 680px; color: var(--ink2); font-size: 14px; margin-top: 8px" data-i="sgReportB">Abrí un issue. Es el reporte que más sirve, y el proyecto es código abierto justamente para eso: el protocolo completo, el contrato y las amenazas conocidas están escritos y se pueden auditar sin pedirle permiso a nadie.</p>
     <p class="row"><a class="mini" href="https://github.com/nema1502/tinkazo/blob/main/docs/protocolo.md" target="_blank" rel="noopener" data-i="sgLinkProto">El protocolo ↗</a><a class="mini" href="https://github.com/nema1502/tinkazo/blob/main/docs/amenazas.md" target="_blank" rel="noopener" data-i="sgLinkAmen">Las amenazas ↗</a><a class="mini" href="https://github.com/nema1502/tinkazo/issues" target="_blank" rel="noopener" data-i="sgLinkIssue">Abrir un issue ↗</a></p>
   </section>

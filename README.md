@@ -74,7 +74,7 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 
 | Component | Status | Evidence |
 |---|---|---|
-| Soroban contract `tinkazo-raffle` | Deployed on testnet | [`CD2SSHBU…ARENH`](https://stellar.expert/explorer/testnet/contract/CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH) · 19 tests, including a real quicknet round · 11.4 KB WASM |
+| Soroban contract `tinkazo-raffle` | Deployed on testnet, which Stellar wipes on December 16, 2026 | [`CD2SSHBU…ARENH`](https://stellar.expert/explorer/testnet/contract/CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH) · 19 tests, including a real quicknet round · 11.4 KB WASM |
 | Web app | Live | [tinkazo.vercel.app](https://tinkazo.vercel.app) · Spanish and English · light and dark · no backend |
 | Luma import | Live | Drop the guest export and pick who gets in: those who checked in, the approved ones, or by hand |
 | Verification page | Live | Recomputes any draw in the browser from its proof link |

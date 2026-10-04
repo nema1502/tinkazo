@@ -131,6 +131,9 @@ async function main(): Promise<void> {
   // ------------------------------------------------- 2. la ronda y su firma
   let onChain: { winners: number[]; randomness: string; listHash: string; count: number } | null = null;
   let chainUnreachable = false;
+  // El contrato contestó y no tiene ese sorteo: no es la red, y no se trata
+  // como si lo fuera (antes salía "no es señal de que algo esté mal").
+  let chainMissing = false;
 
   if (isAnchored(proof)) {
     set("vCheckChain", "working");
@@ -142,11 +145,18 @@ async function main(): Promise<void> {
       } else {
         set("vCheckChain", "ok", `#${proof.id} · ${proof.net}`);
       }
-    } catch {
-      // No es que el sorteo no esté anclado: es que no llegamos a leerlo.
-      // Confundir las dos cosas acusaría al organizador por culpa del wifi.
-      chainUnreachable = true;
-      set("vCheckChain", "bad", t("vChainUnreachable"));
+    } catch (e) {
+      if (e instanceof Error && e.message === "raffle-not-found") {
+        // Una red de pruebas borrada, un registro archivado o un número que
+        // no existe: el contrato contestó, y no tiene el sorteo.
+        chainMissing = true;
+        set("vCheckChain", "bad", t("vChainMissing"));
+      } else {
+        // No es que el sorteo no esté anclado: es que no llegamos a leerlo.
+        // Confundir las dos cosas acusaría al organizador por culpa del wifi.
+        chainUnreachable = true;
+        set("vCheckChain", "bad", t("vChainUnreachable"));
+      }
     }
   }
 
@@ -203,13 +213,21 @@ async function main(): Promise<void> {
     return;
   }
 
+  if (chainMissing) {
+    // Dice estar en la cadena y la cadena no lo tiene: la cuenta cierra, pero
+    // nadie atestigua la lista. Sin tarjeta de ganador, que se comparte sola.
+    set("vCheckWitness", "pending", t("vNoWitnessShort"));
+    verdict("partial", "vVerdictMissing", t("vVerdictMissingDetail"));
+    return;
+  }
   renderResult(proof, names, winners, signature, randomness, !!onChain);
   // Los otros sellos se traen al final y sin bloquear: el veredicto no
   // depende de ellos, y si el RPC no contesta la página ya sirvió.
   void renderSeals(proof);
 
   if (onChain) {
-    verdict("ok", "vVerdictOkChain", t("vVerdictOkChainDetail"));
+    // En testnet se dice: Stellar la borra entera el 16 de diciembre de 2026.
+    verdict("ok", "vVerdictOkChain", t(proof.net === "testnet" ? "vVerdictOkChainDetailTest" : "vVerdictOkChainDetail"));
   } else if (chainUnreachable) {
     // El sorteo dice estar anclado y no pudimos comprobarlo. No es culpa del
     // organizador y no se le imputa: se pide reintentar.

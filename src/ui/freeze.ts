@@ -181,7 +181,8 @@ export async function freeze(): Promise<void> {
 
   // Se anota en el historial de este equipo apenas se sella, no al sortear:
   // si el sorteo queda pendiente, igual hay que poder encontrarlo.
-  const who = currentSession()?.address;
+  // Una demo no es un sorteo: no se anota en Mis sorteos, aunque haya cuenta.
+  const who = params.has("demo") ? undefined : currentSession()?.address;
   if (who) {
     void import("./history").then((h) => {
       h.remember({
@@ -297,7 +298,8 @@ export async function copyRules(btn: HTMLButtonElement): Promise<void> {
     roundAt: when(roundTime(f.round)),
     ...(f.raffleId !== undefined ? { raffleId: String(f.raffleId) } : {}),
     network: network.name,
-    verifyUrl: `${location.origin}/seguridad.html`,
+    // Cómo se verifica, explicado sin jerga; seguridad cuenta qué impide y qué no.
+    verifyUrl: `${location.origin}/como-funciona.html`,
   });
   try {
     await navigator.clipboard.writeText(text);

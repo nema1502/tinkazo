@@ -1076,6 +1076,20 @@ Resultado (2026-10-03): el autor sentía el sitio "muy básico". La herramienta 
 
 Casi todo es renta de almacenamiento y la tarifa la pone la red. Se corrigió en la portada, en precios, en los README, en la marca, en los despliegues y en el pitch. El requisito NFR-3 (menos de 0,25 XLM) hoy no se cumple en testnet, y queda dicho en el PRD: en mainnet se mide al desplegar.
 
+**La información, verificada.** Un agente revisó, afirmación por afirmación, todo lo que dicen las páginas públicas contra el código y los documentos. Lo que cambió:
+
+- **Testnet se borra el 16 de diciembre de 2026, y ahora se dice.** Lo dicen precios, términos, seguridad y la verificación de un comprobante de testnet. Varias frases prometían que el registro dura para siempre: eso es en mainnet, mientras se pague la renta.
+- **La verificación distingue** un sorteo que el contrato no tiene de una red que no contesta. Antes los dos decían "no es señal de que algo esté mal" y mostraban la tarjeta del ganador.
+- **Promesas medidas:** "cada paso se puede comprobar" en vez de "no hace falta confiar en nadie". Seguridad nombra los dos ataques abiertos, el de sellar varias listas y el de inflar la lista antes de sellar, y aclara que la página ve los sellos repetidos de la misma cuenta, no de otras.
+- **drand** lo firma una red de organizaciones: no es que "nadie lo controla". Son cuatro relays que se rotan; no se consultan todos.
+- **Detalles exactos:**
+  - qué guarda la cadena (también la cantidad, el premio y la dirección de quien organiza);
+  - que con Google, Pollar recibe el nombre, el correo y la foto;
+  - que avisar por WhatsApp hace pasar la lista por WhatsApp;
+  - que el plan gratis no tiene tope de participantes.
+- **Tarjetas de historia** ajustadas a su cita: la entrada de Oruro dura veinte horas, no se repite; la hora del Pacífico en la caída de 2019; un anchor no es un nodo por donde rebota un pago.
+- **Los textos de respaldo del HTML** quedaron iguales al diccionario en español: son los que ven los buscadores y quien navega sin JavaScript. Una demo con la cuenta abierta ya no queda anotada en "Mis sorteos".
+
 ---
 
 ## Épica 11: Recordatorios y aviso a los ganadores
