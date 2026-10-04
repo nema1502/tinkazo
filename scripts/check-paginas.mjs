@@ -21,7 +21,7 @@ const base = (() => {
   return i >= 0 && args[i + 1] ? args[i + 1] : "http://localhost:4173";
 })();
 
-const PAGINAS = ["juegos", "historia", "seguridad", "precios", "terminos"];
+const PAGINAS = ["juegos", "como-funciona", "historia", "seguridad", "precios", "terminos"];
 const VISTAS = [
   { tema: "dark", ancho: 1280, alto: 900, como: "escritorio" },
   { tema: "light", ancho: 1280, alto: 900, como: "escritorio" },

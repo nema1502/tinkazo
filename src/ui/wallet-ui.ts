@@ -152,6 +152,8 @@ function render(): void {
   const box = $("wallet-box");
   box.innerHTML = "";
   applyGate();
+  // La página decide con esto si muestra la portada o la herramienta.
+  document.dispatchEvent(new CustomEvent<string | null>("tinkazo:sesion", { detail: session?.address ?? null }));
   void import("./history").then((h) => h.renderHistory(session?.address ?? null));
   // Sin contrato en esta red, el anclaje no se ofrece y la cabecera calla.
   if (!anchoringAvailable) return;
@@ -425,7 +427,8 @@ interface Option {
 }
 
 /** Ofrece las formas de entrar que tienen sentido en esta red y en este navegador. */
-async function openPicker(): Promise<void> {
+/** Abre el selector de cuentas. Lo usa también el botón grande de la portada. */
+export async function openPicker(): Promise<void> {
   const w = await loadWallets();
   const options: Option[] = [];
 

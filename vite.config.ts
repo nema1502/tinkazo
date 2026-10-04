@@ -18,6 +18,7 @@ export default defineConfig({
         juegos: resolve(__dirname, "juegos.html"),
         historia: resolve(__dirname, "historia.html"),
         seguridad: resolve(__dirname, "seguridad.html"),
+        "como-funciona": resolve(__dirname, "como-funciona.html"),
         terminos: resolve(__dirname, "terminos.html"),
       },
     },

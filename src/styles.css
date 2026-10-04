@@ -537,7 +537,8 @@
   .juego-txt { padding: 16px 18px 18px; }
   .juego-txt p { font-size: 13.5px; color: var(--ink2); margin-top: 10px; }
   /* Notas sueltas: párrafos cortos con título, en dos columnas cuando entra. */
-  .notas { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; margin: 18px 0 10px; }
+  /* Cuatro en una fila en pantalla ancha: con 300 px de mínimo quedaba una sola abajo. */
+  .notas { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; margin: 18px 0 10px; }
   .nota { background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm); padding: 18px 20px; }
   .nota h3 { font-size: 17px; font-weight: 800; text-wrap: balance; }
   .nota p { font-size: 13.5px; color: var(--ink2); margin-top: 8px; }
@@ -665,3 +666,130 @@
     .imp-foot button { flex: 1; }
     .imp-badges { max-width: 45%; }
   }
+
+  /* ---------------------------------------------------------------- portada y app
+     La misma dirección tiene dos vistas: la portada para quien llega y la
+     herramienta para quien entra a sortear. Google vuelve a "/" después del
+     login, así que separar en dos direcciones habría mandado de vuelta a la
+     portada a quien acaba de entrar. */
+  body[data-vista="portada"] .app-only { display: none !important; }
+  body[data-vista="app"] .portada-only { display: none !important; }
+  body[data-vista="app"][data-tab="nuevo"] .tab-hist { display: none !important; }
+  body[data-vista="app"][data-tab="historial"] .tab-nuevo { display: none !important; }
+
+  /* El menú de páginas: en la misma fila en pantallas anchas, debajo en las angostas. */
+  header .bar { max-width: 1240px; }
+  .topnav { display: flex; align-items: center; justify-content: center; flex: 1 1 auto; min-width: 0; gap: 2px; }
+  .topnav a {
+    min-height: 44px; display: inline-flex; align-items: center; padding: 0 11px; white-space: nowrap;
+    font-weight: 800; font-size: 13.5px; color: var(--ink); text-decoration: none; border-bottom: 3px solid transparent;
+  }
+  .topnav a:hover { border-bottom-color: var(--magenta); }
+  .topnav a[aria-current="page"] { border-bottom-color: var(--yellow); }
+  .topnav a.nav-app { background: var(--yellow); color: #191919; border: 2px solid var(--ink); box-shadow: var(--sh-sm); margin-right: 8px; }
+  /* En el celular la cabecera tiene tres filas: fija se comía un cuarto de la pantalla. */
+  @media (max-width: 760px) { header { position: static; } }
+  @media (max-width: 1100px) {
+    .topnav { order: 3; flex-basis: 100%; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; margin: 0 -6px; padding: 0 6px 4px; }
+    .topnav::-webkit-scrollbar { display: none; }
+  }
+
+  /* Los dos botones de la portada. */
+  .hero-ctas { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 6px; }
+  .hero-ctas .ghost { min-height: 52px; font-size: 16px; padding: 0 22px; display: inline-flex; align-items: center; text-decoration: none; }
+  .hero-note { margin-top: 10px; }
+
+  /* Las secciones de la portada. */
+  .portada-sec { margin: 0 0 56px; }
+  .portada-sec > .kicker { display: block; margin-bottom: 8px; }
+  .portada-sec h2.sec-t { font-size: clamp(24px, 3.4vw, 34px); font-weight: 900; line-height: 1.1; letter-spacing: -0.01em; }
+  .portada-sec p.sec-b { color: var(--ink2); max-width: 680px; margin-top: 8px; font-size: 15px; }
+
+  /* Los doce juegos, cada uno con su miniatura animada: tocarlo abre la demo. */
+  .portada-juegos { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+  .portada-juegos a {
+    display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--card); color: var(--ink);
+    border: 2px solid var(--ink); box-shadow: var(--sh-sm); text-decoration: none; font-weight: 800; font-size: 13px; line-height: 1.15;
+    min-height: 44px; transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+  .portada-juegos a:hover { transform: translate(-2px, -2px); box-shadow: var(--sh); }
+  .portada-juegos canvas.thumb { width: 100%; height: auto; aspect-ratio: 16 / 9; display: block; border: 2px solid var(--ink); }
+  .portada-juegos .pj-ver { font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+  @media (max-width: 900px) { .portada-juegos { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  @media (max-width: 560px) { .portada-juegos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+  /* Tarjetas: por qué confiar y para quién. */
+  .cards3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; margin-top: 18px; }
+  .cards3 article { background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); padding: 20px; }
+  .cards3 h3 { font-size: 18px; font-weight: 900; margin-top: 12px; }
+  .cards3 p { font-size: 14px; color: var(--ink2); margin-top: 6px; }
+  .cards3 .ico {
+    width: 44px; height: 44px; display: grid; place-items: center; border: 2px solid var(--ink);
+    font-family: ui-monospace, Consolas, monospace; font-weight: 800; font-size: 15px; color: #191919; transform: rotate(-3deg);
+  }
+  .cards3 article:nth-child(4n+1) .ico { background: var(--magenta); }
+  .cards3 article:nth-child(4n+2) .ico { background: var(--orange); }
+  .cards3 article:nth-child(4n+3) .ico { background: var(--teal); }
+  .cards3 article:nth-child(4n+4) .ico { background: var(--yellow); }
+  .sec-link { display: inline-flex; align-items: center; min-height: 44px; margin-top: 14px; font-weight: 800; color: var(--ink); }
+
+  /* Los números, medidos. */
+  .cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); border: var(--bw) solid var(--ink); background: var(--card); box-shadow: var(--sh); margin-top: 18px; }
+  .cifras > div { padding: 18px 20px; border-right: 2px dashed var(--ink); }
+  .cifras > div:last-child { border-right: 0; }
+  .cifras b { display: block; font-size: 30px; font-weight: 900; line-height: 1; }
+  .cifras span { display: block; margin-top: 6px; font-size: 13px; color: var(--ink2); }
+  @media (max-width: 560px) {
+    .cifras > div { border-right: 0; border-bottom: 2px dashed var(--ink); }
+    .cifras > div:last-child { border-bottom: 0; }
+  }
+
+  /* Preguntas frecuentes. */
+  .faq { margin-top: 18px; display: grid; gap: 10px; max-width: 820px; }
+  .faq details { background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
+  .faq summary {
+    cursor: pointer; padding: 12px 18px; min-height: 44px; font-weight: 800; font-size: 15px; list-style: none;
+    display: flex; justify-content: space-between; gap: 12px; align-items: center;
+  }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after { content: "+"; font-family: ui-monospace, Consolas, monospace; font-size: 20px; }
+  .faq details[open] summary::after { content: "\2212"; }
+  .faq details p { padding: 0 18px 16px; color: var(--ink2); font-size: 14px; }
+
+  /* El cierre de la portada. */
+  .portada-fin { text-align: center; padding: 34px 20px; background: var(--purple); color: var(--on-purple); border: var(--bw) solid var(--ink); box-shadow: var(--sh); margin-bottom: 52px; }
+  .portada-fin h2 { font-size: clamp(22px, 3vw, 30px); font-weight: 900; }
+  .portada-fin .hero-ctas { justify-content: center; margin-top: 16px; }
+  .portada-fin .ghost { background: var(--card); color: var(--ink); }
+
+  /* La barra de la herramienta: el título y las pestañas. */
+  .appbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 26px 0 22px; }
+  .appbar h2 { font-size: clamp(24px, 3.2vw, 32px); font-weight: 900; }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tabs button {
+    min-height: 44px; padding: 0 18px; font-weight: 800; font-size: 14px; background: var(--card); color: var(--ink);
+    border: 2px solid var(--ink); box-shadow: var(--sh-sm); cursor: pointer; font-family: inherit;
+  }
+  .tabs button[aria-selected="true"] { background: var(--yellow); color: #191919; }
+  .appbar-links a { display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; font-size: 13px; color: var(--ink2); }
+  #hist-vacio { display: none; }
+  body[data-tab="historial"] #sec-history[style*="none"] + #hist-vacio { display: block; }
+  #hist-vacio .con-sesion { display: none; }
+  body[data-sesion="si"] #hist-vacio .con-sesion { display: block; }
+  body[data-sesion="si"] #hist-vacio .sin-sesion { display: none; }
+
+  /* Cómo funciona: la línea de tiempo y la tabla de qué queda dónde. */
+  .linea { list-style: none; counter-reset: paso; display: grid; gap: 16px; margin-top: 18px; max-width: 820px; padding: 0; }
+  .linea li { counter-increment: paso; position: relative; background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); padding: 18px 20px 18px 76px; }
+  .linea li::before {
+    content: counter(paso, decimal-leading-zero); position: absolute; left: 16px; top: 16px; width: 42px; height: 42px;
+    display: grid; place-items: center; font-family: ui-monospace, Consolas, monospace; font-weight: 800; border: 2px solid var(--ink);
+    background: var(--yellow); color: #191919; transform: rotate(-3deg);
+  }
+  .linea h3 { font-size: 18px; font-weight: 900; }
+  .linea p { color: var(--ink2); font-size: 14px; margin-top: 6px; }
+  .guarda { width: 100%; max-width: 820px; border-collapse: collapse; margin-top: 18px; background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); font-size: 14px; }
+  .guarda th, .guarda td { text-align: left; padding: 12px 14px; border-bottom: 2px dashed var(--ink); vertical-align: top; }
+  .guarda th { font-family: ui-monospace, Consolas, monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+  .guarda tr:last-child td { border-bottom: 0; }
+  @media (max-width: 560px) { .guarda th:nth-child(3), .guarda td:nth-child(3) { display: none; } }

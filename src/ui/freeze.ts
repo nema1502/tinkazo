@@ -1,6 +1,6 @@
 import { $ } from "../dom";
 import { T, getLang, t } from "../i18n";
-import { ANCHOR_LEAD_SECONDS, LEAD_SECONDS, WHEEL_MAX, app, type Game } from "../state";
+import { ANCHOR_LEAD_SECONDS, LEAD_SECONDS, WHEEL_MAX, app, params, type Game } from "../state";
 import { bytesToHex, roundTime, targetRound } from "../protocol/drand";
 import { listHash } from "../protocol/canonical";
 import { contractUrl, network } from "../stellar/config";
@@ -119,7 +119,9 @@ export async function freeze(): Promise<void> {
   if (names.length < 2) return;
 
   const btn = $<HTMLButtonElement>("btn-freeze");
-  const anchoring = canAnchor();
+  // Una demo (`?demo=`) es el show con la lista de ejemplo, nunca un sorteo:
+  // aunque haya una cuenta abierta no se graba nada ni se espera la cadena.
+  const anchoring = canAnchor() && !params.has("demo");
   const hash = bytesToHex(listHash(names));
   const ts = Math.floor(Date.now() / 1000);
   // Anclando, el margen no baja de 45 s aunque la URL pida menos: por debajo

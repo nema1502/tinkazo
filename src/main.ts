@@ -90,8 +90,72 @@ musicLabel();
 onLangChange(musicLabel);
 $("st-skip").addEventListener("click", skipGame);
 bindParticipants();
+initVistas();
 initWalletUI();
 refreshFreezeLabel();
+
+/**
+ * Las dos vistas de "/": la portada para quien llega, y la herramienta para
+ * quien entra a sortear.
+ *
+ * Viven en la misma dirección a propósito: Google vuelve a "/" después del
+ * login, así que con dos direcciones quien acaba de entrar caía en la
+ * portada. Con la cuenta conectada se ve la herramienta, con dos pestañas:
+ * el sorteo nuevo y los sorteos de esa cuenta, que se traen de la cadena en
+ * cualquier equipo. `#sortear`, `#mis-sorteos` y `#portada` eligen a mano.
+ */
+function initVistas(): void {
+  type Tab = "nuevo" | "historial";
+  const body = document.body;
+  const deApp = ["demo", "pose", "instant"].some((k) => params.has(k));
+  const marcar = (): void => {
+    $("tab-nuevo").setAttribute("aria-selected", String(body.dataset.tab !== "historial"));
+    $("tab-hist").setAttribute("aria-selected", String(body.dataset.tab === "historial"));
+  };
+  const setVista = (v: "portada" | "app", tab?: Tab): void => {
+    const antes = body.dataset.vista;
+    body.dataset.vista = v;
+    if (tab) body.dataset.tab = tab;
+    marcar();
+    if (antes && antes !== v) scrollTo(0, 0);
+  };
+  const porHash = (): boolean => {
+    const h = location.hash;
+    if (h === "#sortear" || h === "#ta") setVista("app", "nuevo");
+    else if (h === "#mis-sorteos") setVista("app", "historial");
+    else if (h === "#portada") setVista("portada");
+    else return false;
+    return true;
+  };
+  body.dataset.tab = "nuevo";
+  body.dataset.sesion = "no";
+  setVista(deApp ? "app" : "portada");
+  porHash();
+  addEventListener("hashchange", () => void porHash());
+  $("tab-nuevo").addEventListener("click", () => {
+    history.replaceState(null, "", "#sortear");
+    setVista("app", "nuevo");
+  });
+  $("tab-hist").addEventListener("click", () => {
+    history.replaceState(null, "", "#mis-sorteos");
+    setVista("app", "historial");
+  });
+  // El botón grande: a la herramienta y, si no hay cuenta, directo a elegir una.
+  for (const a of document.querySelectorAll<HTMLAnchorElement>('a.cta[href="#sortear"]')) {
+    a.addEventListener("click", () => {
+      void import("./ui/wallet-ui").then((w) => {
+        if (!w.currentSession()) void w.openPicker();
+      });
+    });
+  }
+  document.addEventListener("tinkazo:sesion", (e) => {
+    const a = (e as CustomEvent<string | null>).detail;
+    body.dataset.sesion = a ? "si" : "no";
+    if (location.hash === "#portada") return;
+    if (a) setVista("app");
+    else if (!deApp && !/^#(sortear|mis-sorteos|ta)$/.test(location.hash)) setVista("portada");
+  });
+}
 
 /* Modo demo y pose para capturas: `?demo=<juego>`, `?pose=1`, `?instant=1`. */
 // Los del selector, y los tres que salieron el 30 de septiembre de 2026 (el

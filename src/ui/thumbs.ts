@@ -936,18 +936,22 @@ export function initThumbs(games: readonly Game[]): void {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
   for (const g of games) {
-    const btn = document.getElementById(`g-${g}`);
     const paint = PAINTERS[g];
-    if (!btn || !paint) continue;
-    const cv = document.createElement("canvas");
-    cv.className = "thumb";
-    cv.width = W * dpr;
-    cv.height = H * dpr;
-    cv.setAttribute("aria-hidden", "true");
-    const ctx = cv.getContext("2d");
-    if (!ctx) continue;
-    btn.insertBefore(cv, btn.firstChild);
-    canvases.push({ c: ctx, paint });
+    if (!paint) continue;
+    // El botón del selector y, en la portada, la tarjeta de ese juego.
+    const hosts = [document.getElementById(`g-${g}`), ...document.querySelectorAll<HTMLElement>(`[data-thumb="${g}"]`)];
+    for (const host of hosts) {
+      if (!host) continue;
+      const cv = document.createElement("canvas");
+      cv.className = "thumb";
+      cv.width = W * dpr;
+      cv.height = H * dpr;
+      cv.setAttribute("aria-hidden", "true");
+      const ctx = cv.getContext("2d");
+      if (!ctx) continue;
+      host.insertBefore(cv, host.firstChild);
+      canvases.push({ c: ctx, paint });
+    }
   }
   if (canvases.length === 0 || running) return;
   running = true;
@@ -962,16 +966,23 @@ export function initThumbs(games: readonly Game[]): void {
   // la sección de la lista congelada, y dibujar seis escenas que nadie mira es
   // batería de un celular a cambio de nada.
   const stadium = document.getElementById("stadium");
-  const pick = document.querySelector(".gamepick");
+  // El selector y la grilla de la portada: se dibuja mientras alguno se ve.
+  const zonas = [...document.querySelectorAll(".gamepick, .portada-juegos")];
+  const visibles = new Set<Element>();
   let aLaVista = true;
-  if (pick && typeof IntersectionObserver === "function") {
+  if (zonas.length && typeof IntersectionObserver === "function") {
     aLaVista = false;
-    new IntersectionObserver(
+    const io = new IntersectionObserver(
       (entries) => {
-        for (const e of entries) aLaVista = e.isIntersecting;
+        for (const e of entries) {
+          if (e.isIntersecting) visibles.add(e.target);
+          else visibles.delete(e.target);
+        }
+        aLaVista = visibles.size > 0;
       },
       { rootMargin: "120px" },
-    ).observe(pick);
+    );
+    for (const z of zonas) io.observe(z);
   }
   const loop = (now: number): void => {
     const jugando = stadium?.style.display === "block";
