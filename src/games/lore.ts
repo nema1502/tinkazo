@@ -31,6 +31,13 @@ export interface Lore {
   src: string;
   /** Color de la pestaña, de la paleta de la casa. */
   hue: "magenta" | "orange" | "teal" | "purple" | "yellow";
+  /**
+   * Habla de la tecnología (drand, firmas, anchors, stroops). No sale en el
+   * sorteo: la gente que sortea no sabe que abajo hay Stellar, y la meta es
+   * que no haga falta saberlo. Queda acá, con su fuente, por si algún día
+   * sirve en una página para quien lo busca.
+   */
+  tecnica?: true;
 }
 
 /**
@@ -57,6 +64,7 @@ export const LORE: Record<string, Lore[]> = {
       href: "https://docs.drand.love/blog/2023/10/16/quicknet-is-live/",
       src: "docs.drand.love",
       hue: "purple",
+      tecnica: true,
     },
   ],
   stellar: [
@@ -68,6 +76,7 @@ export const LORE: Record<string, Lore[]> = {
       href: "https://developers.stellar.org/docs/learn/fundamentals/anchors",
       src: "developers.stellar.org",
       hue: "purple",
+      tecnica: true,
     },
     {
       // "Stellar only considers paths of length 5 or shorter." (En el XDR del
@@ -78,6 +87,7 @@ export const LORE: Record<string, Lore[]> = {
       href: "https://developers.stellar.org/docs/build/guides/transactions/path-payments",
       src: "developers.stellar.org",
       hue: "teal",
+      tecnica: true,
     },
   ],
   ledger: [
@@ -89,6 +99,7 @@ export const LORE: Record<string, Lore[]> = {
       href: "https://stellar.org/blog/developers/may-15th-network-halt",
       src: "stellar.org · informe del 15 de mayo de 2019",
       hue: "orange",
+      tecnica: true,
     },
     {
       // Protocolo 23, activo desde el 3 de septiembre de 2025.
@@ -97,6 +108,7 @@ export const LORE: Record<string, Lore[]> = {
       href: "https://stellar.org/blog/developers/announcing-protocol-23",
       src: "stellar.org · Protocolo 23",
       hue: "teal",
+      tecnica: true,
     },
   ],
   race: [
@@ -109,6 +121,7 @@ export const LORE: Record<string, Lore[]> = {
       href: "https://stellar.org/blog/developers/soroban-a-new-smart-contract-standard",
       src: "stellar.org · por qué Soroban",
       hue: "orange",
+      tecnica: true,
     },
   ],
   rockets: [
@@ -118,6 +131,7 @@ export const LORE: Record<string, Lore[]> = {
       href: "https://stellar.org/blog/foundation-news/keybase-stellar-lumens-spacedrop",
       src: "stellar.org · el airdrop de Keybase",
       hue: "magenta",
+      tecnica: true,
     },
   ],
   wheel: [
@@ -129,6 +143,7 @@ export const LORE: Record<string, Lore[]> = {
       href: "https://developers.stellar.org/docs/learn/fundamentals/fees-resource-limits-metering",
       src: "developers.stellar.org · comisiones",
       hue: "yellow",
+      tecnica: true,
     },
   ],
   pasanaku: [
@@ -149,6 +164,7 @@ export const LORE: Record<string, Lore[]> = {
       href: "https://developers.stellar.org/docs/learn/fundamentals/lumens",
       src: "developers.stellar.org · reservas",
       hue: "teal",
+      tecnica: true,
     },
     {
       // Etimología del diccionario: "Del aim. y quech. wawa, niño".
@@ -218,6 +234,7 @@ export const LORE: Record<string, Lore[]> = {
       href: "https://drand.love/",
       src: "drand.love",
       hue: "teal",
+      tecnica: true,
     },
   ],
   trompo: [
@@ -238,7 +255,7 @@ export const LORE: Record<string, Lore[]> = {
  * comprobante: quien rehace el sorteo ve la misma.
  */
 export function loreFor(game: Game, beacon: Beacon): Lore | null {
-  const pool = [...(LORE[game] ?? []), ...(LORE.any ?? [])];
+  const pool = [...(LORE[game] ?? []), ...(LORE.any ?? [])].filter((l) => !l.tecnica);
   if (!pool.length) return null;
   const k = parseInt(beacon.randomness.slice(-4), 16) % pool.length;
   return pool[k] ?? null;

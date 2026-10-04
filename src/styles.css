@@ -888,3 +888,8 @@
 
   /* El número del sorteo durante la espera, grande para las fotos. */
   .wait-id { font-family: ui-monospace, Consolas, monospace; font-weight: 800; font-size: clamp(16px, 2vw, 22px); background: var(--yellow); color: #191919; border: 2px solid var(--ink); display: inline-block; padding: 6px 12px; margin: 6px 0 10px; }
+
+  /* Lo técnico, plegado: está para quien lo busca, no para la sala. */
+  details.tecnico { margin: 8px 0 10px; }
+  details.tecnico summary { cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; font-family: ui-monospace, Consolas, monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; color: var(--muted); }
+  details.tecnico[open] summary { color: var(--ink2); }
