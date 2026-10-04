@@ -429,6 +429,13 @@ interface Option {
 /** Ofrece las formas de entrar que tienen sentido en esta red y en este navegador. */
 /** Abre el selector de cuentas. Lo usa también el botón grande de la portada. */
 export async function openPicker(): Promise<void> {
+  // Quien elige una cuenta va a sortear: al volver del login, incluso del
+  // redirect de Google, la página abre la herramienta y no la portada.
+  try {
+    sessionStorage.setItem("tinkazo.abrir", "app");
+  } catch {
+    /* sin almacenamiento, se queda en la portada y el menú lleva a sortear */
+  }
   const w = await loadWallets();
   const options: Option[] = [];
 

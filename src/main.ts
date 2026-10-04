@@ -101,10 +101,12 @@ refreshFreezeLabel();
  * quien entra a sortear.
  *
  * Viven en la misma dirección a propósito: Google vuelve a "/" después del
- * login, así que con dos direcciones quien acaba de entrar caía en la
- * portada. Con la cuenta conectada se ve la herramienta, con dos pestañas:
- * el sorteo nuevo y los sorteos de esa cuenta, que se traen de la cadena en
- * cualquier equipo. `#sortear`, `#mis-sorteos` y `#portada` eligen a mano.
+ * login. "/" es siempre la portada, también con la cuenta abierta; la
+ * herramienta se abre cuando se pide: "Sortear", "Mis sorteos", el botón
+ * grande, o volver de elegir una cuenta (que deja una marca en la sesión del
+ * navegador y sobrevive al redirect de Google). Tiene dos pestañas: el sorteo
+ * nuevo y los sorteos de esa cuenta, que se traen de la cadena en cualquier
+ * equipo. `#sortear`, `#mis-sorteos` y `#portada` eligen a mano.
  */
 function initVistas(): void {
   type Tab = "nuevo" | "historial";
@@ -165,9 +167,21 @@ function initVistas(): void {
   document.addEventListener("tinkazo:sesion", (e) => {
     const a = (e as CustomEvent<string | null>).detail;
     body.dataset.sesion = a ? "si" : "no";
+    // Con la cuenta abierta, el botón grande de la portada lleva directo a sortear.
+    for (const el of document.querySelectorAll<HTMLElement>('a.cta[href="#sortear"]')) {
+      el.dataset.i = a ? "ctaGo" : "ctaHero";
+      el.textContent = t(a ? "ctaGo" : "ctaHero");
+    }
     if (location.hash === "#portada") return;
-    if (a) setVista("app");
-    else if (!deApp && !/^#(sortear|mis-sorteos|ta)$/.test(location.hash)) setVista("portada");
+    let pidio = false;
+    try {
+      pidio = sessionStorage.getItem("tinkazo.abrir") === "app";
+      if (a && pidio) sessionStorage.removeItem("tinkazo.abrir");
+    } catch {
+      /* sin almacenamiento, la portada */
+    }
+    if (a && pidio) setVista("app");
+    else if (!a && !deApp && !/^#(sortear|mis-sorteos|ta)$/.test(location.hash)) setVista("portada");
   });
 }
 
