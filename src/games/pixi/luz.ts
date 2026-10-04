@@ -2,7 +2,7 @@ import { Container, Graphics, type Text } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
 import { paceFactor, params, setGameLength, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, note } from "../../sound";
-import { writeStory } from "../drama";
+import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 
@@ -319,7 +319,12 @@ export async function luzPixi(names: string[], winners: readonly number[], beaco
     const k = `${cycleI}`;
     if (light === "green") {
       once(`g${k}`, () => {
-        say(t(cycleI === NC - 1 && NC > 1 ? "cLuzGo" : "cLuzGreen"), 0.3 + 0.1 * cycleI);
+        // En el último ciclo quedan dos, el ganador y la rival, que cae en este
+        // rojo. La línea se decía después, con la rival ya sentada; y "¡Último
+        // verde!" sonaba acá y otra vez en el verde final de verdad.
+        if (cycleI === NC - 1 && duo && n > 2 && story.arc !== "tapada") {
+          say(T[getLang()].cLuzLast(...enOrden(names[winnerIdx] ?? "", names[rivalIdx] ?? "")), 0.8);
+        } else say(t("cLuzGreen"), 0.3 + 0.1 * cycleI);
         beep(note(9), 0.1, "triangle", 0.05);
         setTimeout(() => beep(note(12), 0.14, "triangle", 0.05), 90);
       });
@@ -354,10 +359,6 @@ export async function luzPixi(names: string[], winners: readonly number[], beaco
         say(T[getLang()].cLuzSaved(names[winnerIdx] ?? ""), 0.9);
         beep(note(10), 0.14, "triangle", 0.05);
       }
-    } else if (light === "back" && cycleI === NC - 1) {
-      once("final", () => {
-        if (duo && n > 2 && story.arc !== "tapada") say(T[getLang()].cLuzLast(names[winnerIdx] ?? "", names[rivalIdx] ?? ""), 0.8);
-      });
     }
     if (light === "final") once("finalgo", () => say(t("cLuzGo"), 0.85));
   }

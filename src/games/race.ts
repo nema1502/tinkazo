@@ -3,7 +3,7 @@ import { T, getLang, setPickSeed, t } from "../i18n";
 import { LCOLORS, drawAvatar, paceFactor, skipMotion, setGameLength, type Beacon } from "../state";
 import { beep, beepFor, fanfare, note } from "../sound";
 import { NO_POSE, THEMES, type Pose, type ThemeId } from "./themes";
-import { tension, writeStory, type Arc, type Story } from "./drama";
+import { enOrden, tension, writeStory, type Arc, type Story } from "./drama";
 import { registerSkip, WINNER_HOLD, chrome, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
 import { musicCue, startMusic, stopMusic } from "../music";
 
@@ -580,7 +580,7 @@ export function stadiumRace(
     const rival = nameOf(story.rival);
     if (story.arc === "remontada") once("arco", 0.74, () => sayIf(L_.cRemonta(ganadora), 0.8));
     if (story.arc === "duelo") {
-      once("arco", 0.52, () => sayIf(L_.cDuelo(ganadora, rival), 0.7));
+      once("arco", 0.52, () => sayIf(L_.cDuelo(...enOrden(ganadora, rival)), 0.7));
       once("foto", FOTO, () => {
         sayIf(t("cFoto"), 0.95);
         beep(note(18), 0.03, "square", 0.05);

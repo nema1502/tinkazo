@@ -137,3 +137,15 @@ export function tension(story: Story, p: number): number {
   const duelo = story.arc === "duelo" && p > 0.5 ? 0.1 : 0;
   return Math.min(1, base + final + duelo);
 }
+
+/**
+ * Los dos últimos, en orden alfabético, para la línea del relator.
+ *
+ * "¡Quedan X y Y!" nombraba siempre primero al ganador, en la carrera, luz
+ * roja, el trompo, la piñata y Oruro: una sala que miraba dos sorteos lo
+ * aprendía (auditoría de los juegos, 4 de octubre de 2026). En orden
+ * alfabético, el primero gana la mitad de las veces.
+ */
+export function enOrden(a: string, b: string): [string, string] {
+  return a.localeCompare(b, "es") <= 0 ? [a, b] : [b, a];
+}

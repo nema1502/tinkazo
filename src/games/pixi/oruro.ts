@@ -2,7 +2,7 @@ import { Container, Graphics, Sprite, type Texture } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
 import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, fanfare, note } from "../../sound";
-import { writeStory } from "../drama";
+import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 import { layoutLabels, type LabelItem } from "./pinata-labels";
@@ -254,7 +254,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     }
     if (!lastSaid && tAll >= T_SOCAVON && n >= 2) {
       lastSaid = true;
-      S.say(T[getLang()].cOruDuel(names[winnerIdx] ?? "", names[rivalIdx] ?? ""), 0.8);
+      S.say(T[getLang()].cOruDuel(...enOrden(names[winnerIdx] ?? "", names[rivalIdx] ?? "")), 0.8);
     }
     // El contrapunto: saltan de a uno, alternados.
     if (phase === "duel") {

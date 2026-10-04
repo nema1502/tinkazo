@@ -2,7 +2,7 @@ import { Container, Graphics } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
 import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, fanfare, note } from "../../sound";
-import { writeStory } from "../drama";
+import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { capRecent, layoutLabels, type LabelItem } from "./pinata-labels";
 import { CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
@@ -305,7 +305,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     if (!lastSaid2 && inside().length === 2 && n > 2 && tAll >= T_HANG) {
       lastSaid2 = true;
       said2At = tAll;
-      if (story.arc !== "tapada") S.say(T[getLang()].cPinLast(names[winnerIdx] ?? "", names[rivalIdx] ?? ""), 0.8);
+      if (story.arc !== "tapada") S.say(T[getLang()].cPinLast(...enOrden(names[winnerIdx] ?? "", names[rivalIdx] ?? "")), 0.8);
     }
     if (!brokeDone && tAll >= T_BREAK) {
       brokeDone = true;

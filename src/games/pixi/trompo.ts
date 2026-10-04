@@ -2,7 +2,7 @@ import { Container, Graphics } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
 import { paceFactor, params, setGameLength, type Beacon } from "../../state";
 import { beep, fanfare, note } from "../../sound";
-import { writeStory } from "../drama";
+import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 
@@ -1316,7 +1316,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       victimOf.clear();
       for (const h of hits) h.done = true;
       for (const q of tops) if (q.alive && q !== win && q !== riv) knockOut(q, "fall", true);
-      if (n >= 2) say(T[getLang()].cTroDuel(names[winnerIdx] ?? "", names[rivalIdx] ?? ""), 0.7);
+      if (n >= 2) say(T[getLang()].cTroDuel(...enOrden(names[winnerIdx] ?? "", names[rivalIdx] ?? "")), 0.7);
     }
     script();
     sayPending();

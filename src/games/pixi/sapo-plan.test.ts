@@ -115,7 +115,22 @@ describe("sapo: planThrows invariants", () => {
     }
   }, SWEEP_MS);
 
-  it("a near miss rests on the rim of a hole that is not its own target, outside the capture radius", () => {
+  it("where the near miss dances says nothing about who wins", () => {
+    // Before 4 October 2026 it always went next to the winner's hole, and two
+    // near misses framed the winner eight seconds early.
+    const n = SAPO_MAX;
+    const offsets = new Set<number>();
+    for (const seed of SEEDS) {
+      const ws = winnersFor(n, 1, seed);
+      for (const t of planThrows(n, ws, rngOf(seed), optsForArc("duelo"))) {
+        if (t.kind === "near") offsets.add(((t.rimSlot as number) - (ws[0] as number) + n) % n);
+      }
+    }
+    expect(offsets.has(0)).toBe(true);
+    expect(offsets.size).toBeGreaterThanOrEqual(n - 2);
+  }, SWEEP_MS);
+
+  it("a near miss rests on the rim of a hole nobody has won yet, outside the capture radius", () => {
     let nears = 0;
     for (const seed of SEEDS) {
       for (let n = 2; n <= SAPO_MAX; n++) {
@@ -125,7 +140,7 @@ describe("sapo: planThrows invariants", () => {
           if (t.kind !== "near") continue;
           nears++;
           expect(t.rimSlot).not.toBeUndefined();
-          expect(t.rimSlot).not.toBe(ws[t.turn]);
+          expect(ws.slice(0, t.turn)).not.toContain(t.rimSlot);
           const d = dist(t.landing, L.holes[t.rimSlot as number] as Throw["landing"]);
           expect(d).toBeGreaterThanOrEqual(L.holeR * NEAR_MIN - 1e-9);
           expect(d).toBeLessThanOrEqual(L.holeR * NEAR_MAX + 1e-9);

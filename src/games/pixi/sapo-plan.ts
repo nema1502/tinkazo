@@ -201,8 +201,11 @@ function planHit(L: Layout, slot: number, rng: () => number): Point {
  * `misses` throws on the bare table, then `nears` rim throws, then the hit in
  * that winner's hole. The last winner closes the draw.
  *
- * A near miss rests on the rim of a NEIGHBOURING hole of the winner's own
- * (never the winner's hole), so the narrator can name whoever sits there.
+ * A near miss rests on the rim of any hole that is still free, the winner's
+ * own included, and the narrator names whoever sits there. Until 4 October
+ * 2026 it always went to a neighbour of the winner's hole: with two near
+ * misses the winner sat right between them, eight seconds early. Now where
+ * the ring dances says nothing about who wins.
  */
 export function planThrows(n: number, winnerSlots: readonly number[], rng: () => number, opts: PlanOpts): Throw[] {
   const L = holeLayout(n);
@@ -224,9 +227,12 @@ export function planThrows(n: number, winnerSlots: readonly number[], rng: () =>
       const landing = planMiss(L, rng);
       out.push({ kind: "miss", turn, landing, exit: exitFrom(L, landing, rng) });
     }
-    const neighbours = [(slot + holes - 1) % holes, (slot + 1) % holes].filter((s, i, a) => s !== slot && a.indexOf(s) === i);
+    // Holes already won in an earlier turn carry a medal: a ring on that rim
+    // would name someone who already has a prize.
+    const won = new Set(winnerSlots.slice(0, turn));
+    const free = Array.from({ length: holes }, (_, s) => s).filter((s) => !won.has(s));
     for (let i = 0; i < nears; i++) {
-      const rimSlot = neighbours[Math.floor(rng() * neighbours.length)] as number;
+      const rimSlot = free[Math.floor(rng() * free.length)] as number;
       const landing = planNear(L, rimSlot, rng);
       out.push({ kind: "near", turn, landing, rimSlot, exit: exitFrom(L, landing, rng) });
     }
