@@ -126,5 +126,9 @@ export function errorKey(e: unknown): string {
   if (/insufficient|underfunded|txInsufficientBalance/i.test(msg)) return "noFunds";
   if (/User (declined|rejected)|denied|cancel/i.test(msg)) return "userRejected";
   if (/fetch|network|timeout|ECONN|Failed to/i.test(msg)) return "rpcDown";
+  // La red no la tomó: ocupada, con la secuencia corrida o vencida. No se
+  // reintenta sola, porque si la primera hubiera entrado igual quedarían dos
+  // sellos para el mismo evento.
+  if (/TRY_AGAIN_LATER|txBadSeq|tx_bad_seq|txTooLate|tx_too_late/i.test(msg)) return "busy";
   return "unknown";
 }

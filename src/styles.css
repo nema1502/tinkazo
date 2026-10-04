@@ -845,3 +845,13 @@
   body[data-demo="1"] .demo-fin { display: block; margin-top: 18px; padding: 18px; background: var(--purple); color: var(--on-purple); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
   body[data-demo="1"] .demo-fin h3 { font-size: 18px; font-weight: 900; margin-bottom: 10px; }
   body[data-demo="1"] #btn-whatsapp, body[data-demo="1"] #btn-email, body[data-demo="1"] #btn-proof, body[data-demo="1"] #gate { display: none !important; }
+
+  /* En el celular con la sesión abierta la cabecera ocupaba tres filas: el
+     aviso de la red pasa a ser el borde de la cuenta, del mismo color. Si la
+     red es la equivocada, el aviso sigue a la vista. */
+  @media (max-width: 560px) {
+    .auth .netbadge:not(.bad) { display: none; }
+    .auth .netbadge:not(.main):not(.bad) + .hello { border-left: 7px solid var(--orange); }
+    .auth .netbadge.main + .hello { border-left: 7px solid var(--teal); }
+  }
+  .sec-links { display: flex; flex-wrap: wrap; gap: 4px 26px; }

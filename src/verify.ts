@@ -17,6 +17,7 @@ import {
 import { select } from "./protocol/select";
 import { decodeProof, isAnchored, type Proof } from "./protocol/proof";
 import { network } from "./stellar/config";
+import { loadSessionKind } from "./stellar/session-store";
 
 /**
  * Página de verificación.
@@ -91,6 +92,15 @@ function fail(messageKey: string, detail = ""): void {
 }
 
 async function main(): Promise<void> {
+  // La cuenta a la vista, como en las demás páginas: "Mi cuenta" o "Entrar".
+  {
+    const kind = loadSessionKind(network.name);
+    const a = document.createElement("a");
+    a.className = "mini solid pg-auth";
+    a.href = kind ? "/#mis-sorteos" : "/#sortear";
+    a.dataset.i = kind ? "navCuenta" : "connectWallet";
+    document.querySelector("header .bar")?.appendChild(a);
+  }
   setLang(initialLang());
   $("l-es").addEventListener("click", () => {
     chooseLang("es");
