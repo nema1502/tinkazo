@@ -179,8 +179,9 @@ Todos medidos, no estimados. Si se actualizan, se actualizan acá también.
 | Tamaño del contrato compilado | 11,4 KB |
 | Tests del contrato | 19 |
 | Tests del protocolo en TypeScript | 27 |
+| Tests de TypeScript en total | 196 |
 | Comprobaciones por juego del auditor | 20 |
-| Juegos | 10 |
+| Juegos | 12 |
 | Espera entre sellar y sortear, modo libre | 10 segundos |
 | Espera si el sorteo se ancla en Stellar | 45 segundos |
 | Dependencias en ejecución | 3 (RPC de Stellar, relays de drand, la wallet del organizador) |

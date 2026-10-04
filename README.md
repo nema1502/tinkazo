@@ -80,7 +80,7 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 | Verification page | Live | Recomputes any draw in the browser from its proof link |
 | Twelve stadium games | Live | Deterministic: the same round draws the same frames on any machine |
 | Protocol v2 | Specified | [docs/protocolo.md](docs/protocolo.md) ([in English](docs/protocol.en.md)) and shared vectors that both implementations must pass |
-| Quality gates | In CI and in the repo | 82 TypeScript tests, the 19 contract tests, and five custom auditors (below) |
+| Quality gates | In CI and in the repo | 196 TypeScript tests, the 19 contract tests, and seven custom auditors (below) |
 
 Tested with a thousand participants: the draw still runs at 60 frames per second and anchors the same way.
 
@@ -160,13 +160,15 @@ Most of each fee is storage rent for 120 days. **Verifying is always free**, and
 
 ## Quality
 
-Five auditors in [`scripts/`](scripts) run the real site in headless Chrome:
+Seven auditors in [`scripts/`](scripts) run the real site in headless Chrome:
 
 - **Game auditor**, 20 checks per game against live drand. The one that matters: the name on screen is the one the protocol fixed.
 - **Strict auditor**, which swaps the browser clock to compare two runs frame by frame: same round, same frames, no `Math.random`, never four seconds without something happening, a readable winner plate from the back of the room, with two people and with two hundred, on a phone.
 - **Emotion auditor**, sixteen seeds per game: the story arcs vary and the winner's mid-race position does not give it away.
 - **Sound auditor**, which hooks every oscillator and measures the effects' pitch, register, volume and gaps, with the music counted apart.
 - **UI auditor**, desktop and phone, both themes: broken images, clipped text, contrast, tap targets.
+- **Physics auditor**, for the ball drum and the aguayo: nobody overlaps, nobody escapes, and the same round gives the same bounces.
+- **Collision auditor**, for the spinning tops: every hit really touches, with action and reaction, and nobody passes through anybody.
 
 ## The next 30 days
 

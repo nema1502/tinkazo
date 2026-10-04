@@ -30,8 +30,9 @@ export interface Proof {
   /** Id del sorteo en el contrato, como texto porque es un u64. */
   id?: string;
   /**
-   * Firma de la ronda, comprimida en hex. Solo en modo libre: si el sorteo
-   * está anclado, la firma se lee del contrato, que es la fuente de verdad.
+   * Firma de la ronda, comprimida en hex. Va siempre, esté anclado o no: así
+   * la matemática se puede rehacer aunque el RPC no conteste o la entrada se
+   * archive. El veredicto verde sigue exigiendo que la cadena atestigüe la lista.
    */
   signature?: string;
 }

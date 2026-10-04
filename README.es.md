@@ -80,7 +80,7 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 | Página de verificación | En producción | Rehace cualquier sorteo en el navegador desde su comprobante |
 | Doce juegos de estadio | En producción | Deterministas: la misma ronda dibuja los mismos cuadros en cualquier máquina |
 | Protocolo v2 | Especificado | [docs/protocolo.md](docs/protocolo.md) y vectores que las dos implementaciones tienen que pasar |
-| Controles de calidad | En la CI y en el repositorio | 82 tests de TypeScript, los 19 del contrato y cinco auditores propios (abajo) |
+| Controles de calidad | En la CI y en el repositorio | 196 tests de TypeScript, los 19 del contrato y siete auditores propios (abajo) |
 
 Probado con mil participantes: el sorteo sigue a sesenta cuadros por segundo y se ancla igual.
 
@@ -160,13 +160,15 @@ Casi todo el costo es alquiler de almacenamiento por 120 días. **Verificar es g
 
 ## Calidad
 
-Cinco auditores en [`scripts/`](scripts) corren el sitio de verdad en Chrome sin interfaz:
+Siete auditores en [`scripts/`](scripts) corren el sitio de verdad en Chrome sin interfaz:
 
 - **El de juegos**, veinte comprobaciones por juego contra drand de verdad. La que importa: el nombre en pantalla es el que fijó el protocolo.
 - **El exigente**, que cambia el reloj del navegador para comparar dos corridas cuadro contra cuadro: la misma ronda dibuja lo mismo, ni un `Math.random`, nunca cuatro segundos sin novedad, el cartel del ganador se lee desde el fondo de la sala, con dos personas y con doscientas, en un celular.
 - **El de emoción**, dieciséis semillas por juego: los arcos de la historia varían y el puesto de la ganadora a mitad de carrera no la delata.
 - **El de sonido**, que engancha cada oscilador y mide afinación, registro, volumen y silencios de los efectos, con la música contada aparte.
 - **El de interfaz**, en escritorio y celular, en los dos temas: imágenes rotas, texto cortado, contraste y blancos de toque.
+- **El de física**, para la tómbola y el aguayo: nadie encimado, nadie se escapa, y la misma ronda da los mismos rebotes.
+- **El de choques**, para el trompo: cada golpe toca de verdad, con acción y reacción, y nadie atraviesa a nadie.
 
 ## Los próximos 30 días
 

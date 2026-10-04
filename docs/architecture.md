@@ -58,7 +58,7 @@ Versiones verificadas el 2026-09-16 en crates.io, npm y las redes.
 | D-03 | Compromiso temporal | Ronda futura con `round_time ≥ ledger_ts + 30 s`, comprobada por el contrato | Sellar y usar "la ronda más reciente" (v1): no demuestra que la semilla no existía al sellar. |
 | D-04 | Mutabilidad del contrato | **Inmutable**: sin admin ni `upgrade`. Cada versión es un despliegue nuevo y el comprobante lleva la dirección | Contrato actualizable con admin: un solo actor podría cambiar la lógica del sorteo. |
 | D-05 | Finalización | `draw` **sin autorización** (permissionless) | Solo el organizador: podría retener un resultado que no le gusta. |
-| D-06 | Identidad del organizador (MVP) | **Wallet externa** vía Stellar Wallets Kit v2 (Freighter, xBull, Lobstr, Albedo, Hana…). Se elimina Clerk | Clerk: identidad sin capacidad de firmar. Pollar custodial: requiere relayer (D-07). |
+| D-06 | Identidad del organizador (MVP) | **Wallet externa**: Freighter, con su propio adaptador. Se evaluó Stellar Wallets Kit v2 y se descartó por ahora: arrastra WalletConnect y dependencias nativas que rompen la instalación en CI. Más wallets son más clases de `WalletAdapter`. Se elimina Clerk | Clerk: identidad sin capacidad de firmar. Pollar custodial: requiere relayer (D-07). |
 | D-07 | "Entrar con Google" sin instalar nada | **Pollar** (`@pollar/core` 0.11) con login social y wallet custodial. **Sin relayer:** `signAndSubmitTx` acepta un XDR de Soroban ya armado (es lo que Pollar usa para DeFindex y Blend), así que Tinkazo construye la invocación, se la entrega firmada y enviada de una vez, y lee el resultado de la red. La wallet se marca `submitsItself` y la capa de anclaje la trata distinto | `signAuthEntry` + relayer: era el plan y resultó innecesario, y además habría sido la única pieza con servidor del proyecto. Passkeys de Pollar (C-address): no firman `signAuthEntry` en esta versión. |
 | D-08 | Frontend | **Vite 8 + TypeScript 7, vanilla**, `pnpm` 11, dos entradas HTML (`index.html`, `verificar.html`) | React/Next: no aporta a una app DOM+canvas ya escrita. Mantener sin build: los SDKs de Stellar y BLS no se cargan bien por CDN. |
 | D-09 | SDK de Stellar en el navegador | `@stellar/stellar-sdk` **17.1** (`contract.Client`, `rpc.Server`); simulación + `signAndSend` con el firmante de la wallet | Horizon: no sirve para Soroban. Construcción manual de ScVal: innecesaria con `contract.Client`. |
@@ -200,7 +200,7 @@ tinkazo/
 │   ├── stellar/
 │   │   ├── config.ts
 │   │   ├── deployments.ts        # { testnet: "C…", mainnet: "C…" }
-│   │   ├── wallet.ts             # adaptador Stellar Wallets Kit
+│   │   ├── wallet.ts             # adaptadores de wallet: Freighter y la cuenta de prueba
 │   │   └── contract.ts           # contract.Client tipado
 │   ├── games/
 │   │   ├── overlay.ts            # andamiaje compartido: estadio, semilla, chips, skip
@@ -252,9 +252,9 @@ tinkazo/
 |---|---|---|
 | Stellar RPC (`soroban-testnet.stellar.org`; mainnet vía proveedor) | Simular, enviar, leer estado | Anclaje deshabilitado con aviso; modo libre sigue |
 | drand relays (`api.drand.sh`, `api2`, `api3`, `drand.cloudflare.com`) | Firma de la ronda | Reintento rotando relays; error claro y botón de reintentar |
-| Wallet (Stellar Wallets Kit) | Firmar `seal` y `draw` | Sin wallet: modo libre; red equivocada: bloqueo con aviso |
+| Wallet (Freighter o cuenta de prueba) | Firmar `seal` y `draw` | Sin wallet: modo libre; red equivocada: bloqueo con aviso |
 | stellar.expert | Enlaces de exploración | Solo enlaces |
-| Pollar (v1.1) | Login social + `signAuthEntry` | Si cae, queda la wallet externa |
+| Pollar (v1.1) | Login social + `signAndSubmitTx` | Si cae, queda la wallet externa |
 
 ## Validación
 
