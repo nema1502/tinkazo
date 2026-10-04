@@ -167,11 +167,11 @@ export const T: Record<Lang, Dict> = {
     howTitle: "¿Cómo funciona?",
     s1t: "Traé tu lista",
     s1b: "Entrás con Google y pegás los nombres, o subís el CSV de Luma o de cualquier planilla, y elegís quiénes entran. La cuenta es tuya: tu gente no instala nada ni se crea nada.",
-    s2t: "Congelá la lista",
-    s2b: "Al congelarla, la lista queda con una huella y una hora. Si después alguien mete a su primo o saca a otro, la huella cambia y se nota. No hay cómo disimularlo.",
+    s2t: "Sellá la lista",
+    s2b: "Al sellarla, la lista queda con una huella y una hora. Si después alguien mete a su primo o saca a otro, la huella cambia y se nota. No hay cómo disimularlo.",
     s3t: "Elegí el juego y sorteá",
     s3b: "Uno de los doce juegos, a pantalla completa. Cuando arranca la animación el ganador ya salió del número público. El show es show. El sorteo ya estaba hecho.",
-    p1: "Participantes", p2: "Lista congelada", p3: "El sorteo",
+    p1: "Participantes", p2: "Lista sellada", p3: "El sorteo",
     srcPaste: "Pegar lista", srcCsv: "Subir CSV", srcLuma: "Desde Luma", srcMeetup: "Meetup · pronto",
     srcLumaTip: "Exportá la lista de invitados de tu evento en Luma como CSV",
     csvColumn: "¿Cuál columna tiene los nombres?",
@@ -182,7 +182,7 @@ export const T: Record<Lang, Dict> = {
     gateAction: "Conectar cuenta",
     gateFoot: "Con Google no instalás nada. Tus participantes siguen sin necesitar cuenta ni aplicación: la cuenta es tuya, no de ellos.",
     histTitle: "Tus sorteos",
-    histCount: "{n} en este equipo",
+    histCount: "{n} con tu cuenta",
     histCountBoth: "{n} en este equipo · {c} traídos de la cadena",
     histCountChain: "{c} traídos de la cadena",
     histWhy: "Este equipo se acuerda de los sorteos que hiciste acá, con los nombres. Los que anclaste desde otro equipo se traen de la cadena: ahí están la fecha, el premio y qué puesto de la lista ganó, pero no los nombres, que nunca se publican. Si borrás los datos del sitio se pierde la lista de este equipo, no los sorteos, y cada comprobante funciona para siempre desde cualquier lado.",
@@ -208,7 +208,7 @@ export const T: Record<Lang, Dict> = {
     acctNoName: "Tu cuenta",
     acctPrefs: "Preferencias",
     acctUnknown: "saldo sin leer",
-    acctNoRaffles: "Todavía no sorteaste nada desde este equipo.",
+    acctNoRaffles: "Todavía no hay sorteos con esta cuenta.",
     acctSeeAll: "Ver todos",
     netTest: "Modo testnet",
     netTestHint: "Estás en la red de pruebas de Stellar. Los XLM no valen nada y el sorteo igual es verificable.",
@@ -229,8 +229,8 @@ export const T: Record<Lang, Dict> = {
     musicYes: "Música: sí",
     musicNo: "Música: no",
     freezeHint: "Hacen falta al menos dos nombres.",
-    freeRule: 'Participar tiene que ser gratis: Tinkazo no es para sorteos con entrada paga ni para apuestas. Al congelar la lista aceptás los <a href="/terminos.html">términos</a>.',
-    frozenOk: "Lista congelada ✓",
+    freeRule: 'Participar tiene que ser gratis: Tinkazo no es para sorteos con entrada paga ni para apuestas. Al sellar la lista aceptás los <a href="/terminos.html">términos</a>.',
+    frozenOk: "Lista sellada ✓",
     csvRows: (n) => (n === 1 ? "1 fila en el archivo" : `${n} filas en el archivo`),
     csvWho: "¿Quiénes entran?",
     csvAll: (n) => `Todas las filas (${n})`,
@@ -294,7 +294,7 @@ export const T: Record<Lang, Dict> = {
       `${luma ? "De Luma" : "Del archivo"}: ${n} de ${total}` +
       (mode === "came" ? ", los que vinieron" : mode === "approved" ? ", los aprobados" : mode === "other" ? ", con un filtro" : "") +
       (hand ? ` (${hand === 1 ? "1 cambio" : `${hand} cambios`} a mano)` : ""),
-    sample: "Cargar ejemplo", freeze: "Congelar lista", draw: "Lanzar el sorteo", winners: "Premios",
+    sample: "Cargar ejemplo", freeze: "Sellar la lista", draw: "Lanzar el sorteo", winners: "Premios",
     // --- Tarjetas de "¿por qué se llama así?". Cada dato tiene su fuente
     //     primaria anotada en src/games/lore.ts. Ninguno se inventa.
     // --- Ruleta. Cada persona se lleva varios gajos intercalados, así que con
@@ -579,9 +579,9 @@ export const T: Record<Lang, Dict> = {
       `Sorteado con Tinkazo · https://tinkazo.vercel.app`,
     qrCaption: "Apuntá el celular y revisalo vos mismo",
     nextTitle: "El sorteo no depende de mí",
-    nextBody: "Si conectás una cuenta de Stellar, la huella de la lista y la ronda que va a decidir quedan anotadas en un contrato. El contrato verifica la firma del faro por su cuenta y se queda con el resultado. Cuesta unos cuatro centavos de dólar. Si mañana Tinkazo desaparece, ese sorteo sigue ahí y cualquiera lo rehace. Sin cuenta también sorteás, pero el comprobante lo sostiene tu palabra.",
+    nextBody: "Si conectás una cuenta de Stellar, la huella de la lista y la ronda que va a decidir quedan anotadas en un contrato. El contrato verifica la firma del faro por su cuenta y se queda con el resultado. La red cobra unos 0,76 XLM de comisión, unos 16 centavos de dólar medidos el 3 de octubre de 2026. Si mañana Tinkazo desaparece, ese sorteo sigue ahí y cualquiera lo rehace. Sin cuenta podés mirar una demo, pero un sorteo de verdad necesita la cuenta: así nace verificable.",
     footL: "Tinkazo", footR: "Hecho con ♥ en Bolivia",
-    src: "fuente: pegado / csv", frozenAt: "congelada:", seed: "número público · ronda", drandLink: "ver la ronda pública ↗",
+    src: "fuente: pegado / csv", frozenAt: "sellada:", seed: "número público · ronda", drandLink: "ver la ronda pública ↗",
     placeholder: "Un nombre por línea…", winsPrize: "Se lleva:", skip: "Saltar",
     fetching: "Esperando el número público…",
     drandTry: (i, n) => `El faro todavía no responde. Intento ${i} de ${n}…`,
@@ -601,7 +601,7 @@ export const T: Record<Lang, Dict> = {
     masSeguridadT: "Cómo se puede romper",
     masSeguridadB: "Qué impide el protocolo, cuál es el único ataque abierto y qué límites tiene.",
     masPreciosT: "Qué cuesta",
-    masPreciosB: "Cuatro centavos por sorteo anclado. Verificar es gratis, siempre.",
+    masPreciosB: "Unos 0,76 XLM de comisión de red por sorteo grabado en Stellar. Verificar es gratis, siempre.",
     // --- La portada, la herramienta y Cómo funciona (3 de octubre de 2026).
     navSortear: "Sortear",
     navComo: "Cómo funciona",
@@ -632,18 +632,18 @@ export const T: Record<Lang, Dict> = {
     uso4b: "Premios para quienes vinieron, sin planillas ni sospechas. Participar es gratis, siempre.",
     cifKicker: "En números, medidos",
     cif1: "juegos a pantalla completa",
-    cif2v: "4 ¢",
-    cif2: "por sorteo grabado en Stellar (0,18 XLM)",
+    cif2v: "0,76 XLM",
+    cif2: "por sorteo grabado, unos 16 centavos de dólar. Lo cobra la red, no Tinkazo",
     cif3: "servidores propios: nada que se caiga de este lado",
     cif4: "código abierto, para que lo revises",
     faqKicker: "Preguntas",
     faqT: "Lo que todos preguntan.",
-    faq1q: "¿Es una apuesta?",
-    faq1a: "No. Entrar a un sorteo es gratis, siempre: nadie paga por participar, y Tinkazo no sirve para sorteos con entrada paga.",
+    faq1q: "¿Alguien paga por participar?",
+    faq1a: "No. Entrar a un sorteo es gratis, siempre, así que no es una apuesta ni una rifa con boletos. Tinkazo no sirve para sorteos con entrada paga.",
     faq2q: "¿Mi gente tiene que instalar algo?",
     faq2a: "No. Solo quien organiza entra con una cuenta, con Google en dos toques. Los participantes no instalan ni se crean nada.",
     faq3q: "¿Cuánto cuesta?",
-    faq3a: "Hoy funciona en testnet, la red de prueba de Stellar, y no cuesta nada. En la red principal, grabar un sorteo cuesta unos cuatro centavos de dólar. Verificar es gratis.",
+    faq3a: "Hoy funciona en testnet, la red de prueba de Stellar, con XLM de prueba: no cuesta nada. Grabar un sorteo usa unos 0,76 XLM de comisión, unos 16 centavos de dólar (medido el 3 de octubre de 2026). La cobra la red, no Tinkazo, y casi toda es renta de almacenamiento, que cambia con la red. Verificar es gratis.",
     faq4q: "¿Cómo sé que no hiciste trampa?",
     faq4a: "No hace falta creerme: el comprobante trae la lista, la ronda y la firma, y tu celular rehace el sorteo. Si alguien tocó algo, da otro resultado.",
     faq5q: "¿Qué queda guardado y dónde?",
@@ -654,6 +654,20 @@ export const T: Record<Lang, Dict> = {
     tabHist: "Mis sorteos",
     histNoAcct: "Entrá con tu cuenta para ver tus sorteos. Los que grabaste en Stellar aparecen en cualquier equipo donde entres.",
     histNone: "Todavía no hay sorteos con esta cuenta. El primero aparece acá apenas sellás una lista.",
+    histDraw: "Sorteo",
+    histResume: "Sortear ahora",
+    histSeeProof: "Ver comprobante",
+    histOnChain: "Ver en Stellar",
+    histStateDone: "Sorteado",
+    histStatePending: "Sellado, sin sortear",
+    histWon: "ganó",
+    histOtherDevice: "La lista quedó en el equipo donde se selló.",
+    histWhyT: "¿Qué se guarda y dónde?",
+    histWhyMas: "Todo, en Cómo funciona →",
+    histEnter: "Entrar",
+    navCuenta: "Mi cuenta",
+    demoBanner: "Demo con una lista de ejemplo: no se graba nada en Stellar.",
+    demoFinT: "Así de fácil. ¿Lo hacemos con tu lista?",
     cfTitle: "Cómo funciona · Tinkazo",
     cfKicker: "Cómo funciona",
     cfH1: "Cinco pasos, y en ninguno hay que confiar en alguien.",
@@ -678,7 +692,7 @@ export const T: Record<Lang, Dict> = {
     cfG1c: "Cualquiera",
     cfG2a: "Tus sorteos",
     cfG2b: "En Mis sorteos, desde cualquier equipo donde entres con tu cuenta",
-    cfG2c: "Vos",
+    cfG2c: "Vos, y cualquiera con tu dirección",
     cfG3a: "Los nombres",
     cfG3b: "En tu equipo y en el comprobante que compartís: nunca en la cadena",
     cfG3c: "Quien tenga el enlace",
@@ -773,7 +787,7 @@ export const T: Record<Lang, Dict> = {
     sgTitle: "Cómo se puede romper",
     sgLead: "Un sorteo que dice ser verificable tiene que decir también dónde no llega. Esto es lo que el protocolo impide, lo que todavía no, y lo que la herramienta no puede prometer.",
     sgQ1T: "Meter un nombre después",
-    sgQ1B: "No se puede sin que se note. Al congelar, la lista queda reducida a una huella de 64 caracteres. Cambiar, agregar o sacar un nombre da otra huella, y la que vale quedó anotada en el contrato antes de que existiera el número.",
+    sgQ1B: "No se puede sin que se note. Al sellar, la lista queda reducida a una huella de 64 caracteres. Cambiar, agregar o sacar un nombre da otra huella, y la que vale quedó anotada en el contrato antes de que existiera el número.",
     sgQ2T: "Elegir el número que decide",
     sgQ2B: "Tampoco. El número lo publica drand, un faro público de aleatoriedad que sostienen Cloudflare, Protocol Labs, la EPFL y otros, y la ronda que va a decidir se fija antes de que esa ronda exista. El contrato exige al menos treinta segundos de margen.",
     sgQ3T: "Retener un resultado que no gustó",
@@ -801,8 +815,8 @@ export const T: Record<Lang, Dict> = {
     pr3b: "El sorteo con la marca de tu sponsor en el estadio y en la ruleta. Es el único minuto del evento en que todos miran la pantalla al mismo tiempo. Vendéselo así.",
     sealOnStellar: "Sellar en Stellar", sealed: "Sellado en Stellar", defaultMeta: "Sorteo de comunidad",
     noAnchor: "sin registrar en Stellar", onChain: "verlo en la cadena",
-    txSimulating: "Armando la transacción…", txSigning: "Firmá en tu wallet…",
-    txSending: "Mandando a la red…", txConfirmed: "Quedó en Stellar ·", txCost: "Te va a costar",
+    txSimulating: "Armando la transacción…", txSigning: "Firmando con tu cuenta…",
+    txSending: "Mandando a la red…", txConfirmed: "Quedó en Stellar ·", txCost: "Comisión de la red: hasta",
     "errAnchor.notFound": "El contrato no encuentra ese sorteo.",
     "errAnchor.alreadyDrawn": "Ese sorteo ya se cerró.",
     "errAnchor.tooFewEntries": "Con uno solo no hay sorteo. Metele al menos dos.",
@@ -905,11 +919,11 @@ export const T: Record<Lang, Dict> = {
     howTitle: "How it works",
     s1t: "Bring your list",
     s1b: "Sign in with Google and paste the names, or upload the CSV from Luma or any spreadsheet, and pick who gets in. The account is yours: your people install nothing and sign up for nothing.",
-    s2t: "Freeze the list",
-    s2b: "Freezing stamps the list with a fingerprint and a time. If someone slips in a friend or drops a name later, the fingerprint changes and everybody sees it. There's no hiding it.",
+    s2t: "Seal the list",
+    s2b: "Sealing stamps the list with a fingerprint and a time. If someone slips in a friend or drops a name later, the fingerprint changes and everybody sees it. There's no hiding it.",
     s3t: "Pick a game and draw",
     s3b: "One of the twelve games, full screen. By the time the animation starts, the public number already picked the winner. The show is the show. The draw was done before it.",
-    p1: "Participants", p2: "Frozen list", p3: "The draw",
+    p1: "Participants", p2: "Sealed list", p3: "The draw",
     srcPaste: "Paste list", srcCsv: "Upload CSV", srcLuma: "From Luma", srcMeetup: "Meetup · soon",
     srcLumaTip: "Export your Luma event's guest list as CSV",
     csvColumn: "Which column has the names?",
@@ -918,7 +932,7 @@ export const T: Record<Lang, Dict> = {
     gateAction: "Connect account",
     gateFoot: "With Google you install nothing. Your participants still need no account and no app: the account is yours, not theirs.",
     histTitle: "Your draws",
-    histCount: "{n} on this device",
+    histCount: "{n} on your account",
     histCountBoth: "{n} on this device · {c} from the chain",
     histCountChain: "{c} from the chain",
     histWhy: "This device remembers the draws you ran here, names included. The ones you anchored from another device come from the chain: the date, the prize and which spot on the list won are there, but not the names, which are never published. Clearing the site data loses this device's list, not the draws, and every receipt keeps working forever from anywhere.",
@@ -944,7 +958,7 @@ export const T: Record<Lang, Dict> = {
     acctNoName: "Your account",
     acctPrefs: "Preferences",
     acctUnknown: "balance unread",
-    acctNoRaffles: "You have not run any draw from this device yet.",
+    acctNoRaffles: "No draws with this account yet.",
     acctSeeAll: "See all",
     netTest: "Testnet mode",
     netTestHint: "You are on Stellar's test network. The XLM are worthless and the draw is still verifiable.",
@@ -965,8 +979,8 @@ export const T: Record<Lang, Dict> = {
     musicYes: "Music: on",
     musicNo: "Music: off",
     freezeHint: "At least two names are needed.",
-    freeRule: 'Taking part has to be free: Tinkazo is not for draws with paid entry or for gambling. By freezing the list you accept the <a href="/terminos.html">terms</a>.',
-    frozenOk: "List frozen ✓",
+    freeRule: 'Taking part has to be free: Tinkazo is not for draws with paid entry or for gambling. By sealing the list you accept the <a href="/terminos.html">terms</a>.',
+    frozenOk: "List sealed ✓",
     csvRows: (n) => (n === 1 ? "1 row in the file" : `${n} rows in the file`),
     csvWho: "Who gets in?",
     csvAll: (n) => `Every row (${n})`,
@@ -1030,7 +1044,7 @@ export const T: Record<Lang, Dict> = {
       `${luma ? "From Luma" : "From the file"}: ${n} of ${total}` +
       (mode === "came" ? ", those who came" : mode === "approved" ? ", the approved ones" : mode === "other" ? ", with a filter" : "") +
       (hand ? ` (${hand === 1 ? "1 change" : `${hand} changes`} by hand)` : ""),
-    sample: "Load sample", freeze: "Freeze list", draw: "Run the draw", winners: "Prizes",
+    sample: "Load sample", freeze: "Seal the list", draw: "Run the draw", winners: "Prizes",
     cWheelBuild: ["Building the wheel!", "Slices lining up!", "Here comes the wheel!"],
     cWheelSplit: (segs, rep) => (rep > 1 ? `${segs} slices, ${rep} each!` : `${segs} slices, one apiece!`),
     cWheelCharge: ["Ready?", "It's winding up!", "Hold on!"],
@@ -1300,9 +1314,9 @@ export const T: Record<Lang, Dict> = {
       `Drawn with Tinkazo · https://tinkazo.vercel.app`,
     qrCaption: "Point your phone at it and check for yourself",
     nextTitle: "The draw doesn't depend on me",
-    nextBody: "If you connect a Stellar account, the list fingerprint and the round that will decide go into a contract. The contract checks the beacon signature on its own and keeps the result. It costs about four cents. If Tinkazo disappears tomorrow, that draw is still there and anyone can run it again. Without an account you can still draw, but the receipt rests on your word.",
+    nextBody: "If you connect a Stellar account, the list fingerprint and the round that will decide go into a contract. The contract checks the beacon signature on its own and keeps the result. The network charges about 0.76 XLM in fees, around 16 US cents as measured on October 3, 2026. If Tinkazo disappears tomorrow, that draw is still there and anyone can run it again. Without an account you can watch a demo, but a real draw needs the account: that is what makes it verifiable from birth.",
     footL: "Tinkazo", footR: "Made with ♥ in Bolivia",
-    src: "source: paste / csv", frozenAt: "frozen:", seed: "public number · round", drandLink: "see the public round ↗",
+    src: "source: paste / csv", frozenAt: "sealed:", seed: "public number · round", drandLink: "see the public round ↗",
     placeholder: "One name per line…", winsPrize: "Takes home:", skip: "Skip",
     fetching: "Waiting for the public number…",
     drandTry: (i, n) => `The beacon is not answering yet. Attempt ${i} of ${n}…`,
@@ -1317,10 +1331,10 @@ export const T: Record<Lang, Dict> = {
     masJuegosB: "Llama race, red light green light, spinning tops, piñata, Oruro Carnival, tombola, Sapo and five more, with a shot of each one.",
     masHistoriaT: "Where the name comes from",
     masHistoriaB: "A tinkazo is a hunch and a tincazo is a flick. A draw is both.",
-    masSeguridadT: "How it could be rigged",
+    masSeguridadT: "Where it can fail",
     masSeguridadB: "What the protocol prevents, the one attack still open, and the limits.",
     masPreciosT: "What it costs",
-    masPreciosB: "Four cents per anchored draw. Checking is free, always.",
+    masPreciosB: "About 0.76 XLM in network fees per draw recorded on Stellar. Checking is free, always.",
     // --- La portada, la herramienta y Cómo funciona (3 de octubre de 2026).
     navSortear: "Draw",
     navComo: "How it works",
@@ -1344,35 +1358,49 @@ export const T: Record<Lang, Dict> = {
     uso1t: "Meetups and communities",
     uso1b: "The draw at the end, with the projector on and everyone watching. From your Luma CSV, only among those who came.",
     uso2t: "Classrooms and workshops",
-    uso2b: "Who presents first, who takes the book home. Without anyone saying it was rigged.",
+    uso2b: "Who presents first, who takes the book home. Without anyone calling it a setup.",
     uso3t: "Teams at work",
     uso3b: "The year-end gift or the order of the shifts, with a result anyone can check.",
     uso4t: "Fairs and events",
     uso4b: "Prizes for the people who came, with no spreadsheets and no suspicion. Entering is always free.",
     cifKicker: "In numbers, measured",
     cif1: "full-screen games",
-    cif2v: "4 ¢",
-    cif2: "per draw recorded on Stellar (0.18 XLM)",
+    cif2v: "0.76 XLM",
+    cif2: "per recorded draw, about 16 US cents. The network charges it, not Tinkazo",
     cif3: "servers of our own: nothing on this side to go down",
     cif4: "open source, so you can check it",
     faqKicker: "Questions",
     faqT: "What everybody asks.",
-    faq1q: "Is it gambling?",
-    faq1a: "No. Entering a draw is always free: nobody pays to take part, and Tinkazo can't be used for draws with paid entry.",
+    faq1q: "Does anyone pay to take part?",
+    faq1a: "No. Entering a draw is always free, so it is not a bet or a paid lottery. Tinkazo can't be used for draws with paid entry.",
     faq2q: "Do my people have to install anything?",
     faq2a: "No. Only the organizer signs in, with Google in two taps. Participants don't install or sign up for anything.",
     faq3q: "How much does it cost?",
-    faq3a: "Today it runs on testnet, Stellar's test network, and costs nothing. On the main network, recording a draw costs about four US cents. Checking is free.",
+    faq3a: "Today it runs on testnet, Stellar's test network, with test XLM: it costs nothing. Recording a draw uses about 0.76 XLM in fees, around 16 US cents (measured on October 3, 2026). The network charges it, not Tinkazo, and almost all of it is storage rent, which changes with the network. Checking is free.",
     faq4q: "How do I know you didn't cheat?",
     faq4a: "You don't have to believe me: the receipt carries the list, the round and the signature, and your phone redoes the draw. If anyone touched anything, it gives a different result.",
     faq5q: "What gets saved, and where?",
     faq5a: "Stellar keeps the list fingerprint, the round and the result, under your account: you see them from any device in My draws. Names are never published: they stay on your device and in the receipt you share.",
-    finT: "Shall we use it at your next event?",
+    finT: "Use it at your next event.",
     appTitle: "Your draw",
     tabNuevo: "New draw",
     tabHist: "My draws",
     histNoAcct: "Sign in to see your draws. The ones you recorded on Stellar show up on any device you sign in from.",
     histNone: "No draws with this account yet. The first one shows up here as soon as you seal a list.",
+    histDraw: "Draw",
+    histResume: "Draw now",
+    histSeeProof: "See the receipt",
+    histOnChain: "See it on Stellar",
+    histStateDone: "Drawn",
+    histStatePending: "Sealed, not drawn yet",
+    histWon: "won by",
+    histOtherDevice: "The list stayed on the device where it was sealed.",
+    histWhyT: "What gets saved, and where?",
+    histWhyMas: "All of it, in How it works →",
+    histEnter: "Sign in",
+    navCuenta: "My account",
+    demoBanner: "Demo with a sample list: nothing is recorded on Stellar.",
+    demoFinT: "That easy. Shall we do it with your list?",
     cfTitle: "How it works · Tinkazo",
     cfKicker: "How it works",
     cfH1: "Five steps, and none of them asks you to trust anyone.",
@@ -1397,7 +1425,7 @@ export const T: Record<Lang, Dict> = {
     cfG1c: "Anyone",
     cfG2a: "Your draws",
     cfG2b: "In My draws, from any device you sign in from",
-    cfG2c: "You",
+    cfG2c: "You, and anyone with your address",
     cfG3a: "The names",
     cfG3b: "On your device and in the receipt you share: never on the chain",
     cfG3c: "Whoever has the link",
@@ -1489,7 +1517,7 @@ export const T: Record<Lang, Dict> = {
     tmMore4: "In effect since September 28, 2026. If they change, this page changes, with its date.",
     tmLinkLegal: "What we found about the law, country by country ↗",
     sgKicker: "Security",
-    sgTitle: "How it could be rigged",
+    sgTitle: "Where it can fail",
     sgLead: "A draw that claims to be verifiable also has to say where it stops. This is what the protocol prevents, what it does not yet, and what the tool cannot promise.",
     sgQ1T: "Adding a name afterwards",
     sgQ1B: "Not without it showing. On freezing, the list is reduced to a 64-character fingerprint. Changing, adding or removing a name gives a different fingerprint, and the one that counts was recorded in the contract before the number existed.",
@@ -1520,8 +1548,8 @@ export const T: Record<Lang, Dict> = {
     pr3b: "The draw wearing your sponsor's brand, in the stadium and on the wheel. It's the one minute of the event when everyone looks at the screen at once. Sell it to them like that.",
     sealOnStellar: "Seal on Stellar", sealed: "Sealed on Stellar", defaultMeta: "Community draw",
     noAnchor: "not recorded on Stellar", onChain: "see it on chain",
-    txSimulating: "Building the transaction…", txSigning: "Sign in your wallet…",
-    txSending: "Sending it to the network…", txConfirmed: "It's on Stellar ·", txCost: "It will cost you",
+    txSimulating: "Building the transaction…", txSigning: "Signing with your account…",
+    txSending: "Sending it to the network…", txConfirmed: "It's on Stellar ·", txCost: "Network fee: up to",
     "errAnchor.notFound": "The contract can't find that draw.",
     "errAnchor.alreadyDrawn": "That draw is already closed.",
     "errAnchor.tooFewEntries": "One name is not a draw. Add at least two.",
@@ -1632,6 +1660,36 @@ export function t(key: string): string {
 /** Se ejecuta después de cada cambio de idioma (textos que no viven en `data-i`). */
 export function onLangChange(fn: (l: Lang) => void): void {
   listeners.push(fn);
+}
+
+const LANG_KEY = "tinkazo.lang";
+
+/**
+ * El idioma con que arranca cualquier página: el de la URL (`?lang=`), si no
+ * el que la persona eligió antes, y si no el del navegador. Antes "/" solo
+ * miraba la URL y las páginas de lectura solo el navegador, así que quien
+ * apretaba EN en la portada volvía al español al entrar a Juegos.
+ */
+export function initialLang(): Lang {
+  const q = new URLSearchParams(location.search).get("lang");
+  if (q === "en" || q === "es") return q;
+  try {
+    const s = localStorage.getItem(LANG_KEY);
+    if (s === "en" || s === "es") return s;
+  } catch {
+    /* sin almacenamiento, el navegador decide */
+  }
+  return (navigator.language || "es").toLowerCase().startsWith("en") ? "en" : "es";
+}
+
+/** Lo que pasa al apretar ES o EN: se cambia y se recuerda para las otras páginas. */
+export function chooseLang(l: Lang): void {
+  try {
+    localStorage.setItem(LANG_KEY, l);
+  } catch {
+    /* se cambia igual, solo que no se recuerda */
+  }
+  setLang(l);
 }
 
 export function setLang(l: Lang): void {

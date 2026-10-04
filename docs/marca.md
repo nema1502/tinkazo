@@ -125,7 +125,7 @@ El sitio está en español boliviano con voseo, y en inglés neutro. No hay un t
 
 - Voseo: "pegá la lista", "sorteá", "probalo", "si encontrás".
 - Frases cortas, de una idea cada una.
-- Decir el precio y el costo con el número: "cuesta cuatro centavos", no "es muy barato".
+- Decir el precio y el costo con el número y la fecha: "0,76 XLM, unos 16 centavos, medido el 3 de octubre", no "es muy barato".
 - Admitir los límites. El veredicto amarillo de la página de verificación dice que la cuenta cierra pero que nadie atestigua la lista. Esa honestidad es la marca.
 
 **Lo que no:**
@@ -174,7 +174,7 @@ Todos medidos, no estimados. Si se actualizan, se actualizan acá también.
 |---|---|
 | Costo de sellar un sorteo | 0,099 XLM |
 | Costo de sortear, con la verificación criptográfica | 0,083 XLM |
-| **Total por sorteo** | **0,18 XLM, unos 0,036 dólares** |
+| **Total por sorteo** | **0,76 XLM, unos 0,16 dólares** (testnet, 3 de octubre de 2026; el 16 de septiembre eran 0,18: subió la renta de la red) |
 | Solo la verificación BLS en la cadena | 0,003 XLM |
 | Tamaño del contrato compilado | 11,4 KB |
 | Tests del contrato | 19 |
@@ -205,7 +205,7 @@ El orden que funciona, probado contra las objeciones que aparecen:
 3. **El truco, en una frase.** La lista se cierra antes de que exista el número que va a decidir. El orden es todo.
 4. **La demostración.** Un sorteo de verdad, en vivo. Dura diez segundos de espera y un juego. Que el público vea la lista congelarse.
 5. **La prueba.** Abrir el comprobante desde un celular ajeno y que la página rehaga el sorteo sola.
-6. **El costo.** Cuatro centavos. Y verificar siempre es gratis.
+6. **El costo.** Unos 16 centavos por sorteo, que cobra la red. Y verificar siempre es gratis.
 7. **La honestidad.** Mostrar el veredicto amarillo: cuando el sorteo no está anclado, la herramienta lo dice en vez de dar un verde fácil. Esta diapositiva convence más que las seis anteriores.
 
 Lo que no conviene mostrar en una presentación: el código del contrato, el diagrama de arquitectura, ni la explicación de BLS12-381. Si alguien pregunta, está en la documentación.

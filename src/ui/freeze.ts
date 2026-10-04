@@ -192,13 +192,60 @@ export async function freeze(): Promise<void> {
         round,
         sealedAt: ts,
         prize,
+        names,
         ...(raffleId !== undefined ? { id: String(raffleId) } : {}),
         ...(sealTx ? { sealTx } : {}),
       });
       h.renderHistory(who);
     });
   }
+  showFrozen(names, hash, raffleId);
+}
 
+/**
+ * Retoma un sorteo sellado y sin sortear desde "Mis sorteos": repone la lista,
+ * el premio y la cantidad de ganadores, y deja el selector de juego listo.
+ *
+ * Solo si la lista guardada sigue dando la misma huella. Si alguien la tocó en
+ * el almacenamiento del navegador, no se retoma: la cadena manda.
+ */
+export function resumeFrozen(e: {
+  names: string[];
+  listHash: string;
+  sealedAt: number;
+  prize: string;
+  round: number;
+  numWinners: number;
+  id?: string;
+  sealTx?: string;
+}): void {
+  if (bytesToHex(listHash(e.names)) !== e.listHash || app.drawn) return;
+  const ta = $<HTMLTextAreaElement>("ta");
+  ta.value = e.names.join("\n");
+  ta.dispatchEvent(new Event("input"));
+  $<HTMLInputElement>("prize").value = e.prize;
+  $<HTMLSelectElement>("nw").value = String(Math.max(1, Math.min(32, e.numWinners)));
+  const raffleId = e.id !== undefined ? BigInt(e.id) : undefined;
+  app.frozen = {
+    names: e.names,
+    listHash: e.listHash,
+    ts: e.sealedAt,
+    at: new Date(e.sealedAt * 1000).toLocaleString(getLang() === "es" ? "es-BO" : "en-US"),
+    prize: e.prize,
+    round: e.round,
+    ...(raffleId !== undefined ? { raffleId } : {}),
+    ...(e.sealTx ? { sealTx: e.sealTx } : {}),
+  };
+  history.replaceState(null, "", "#sortear");
+  dispatchEvent(new HashChangeEvent("hashchange"));
+  showFrozen(e.names, e.listHash, raffleId);
+}
+
+/** Lo que se ve con la lista ya sellada: los datos del sello, la espera y el selector de juego. */
+function showFrozen(names: string[], hash: string, raffleId: bigint | undefined): void {
+  const f = app.frozen;
+  if (!f) return;
+  const btn = $<HTMLButtonElement>("btn-freeze");
   $<HTMLTextAreaElement>("ta").disabled = true;
   $<HTMLInputElement>("prize").disabled = true;
   $<HTMLSelectElement>("nw").disabled = true;
@@ -210,7 +257,7 @@ export async function freeze(): Promise<void> {
   $("k-n").textContent = String(names.length);
   $("k-digest").textContent = hash.slice(0, 16) + "…";
   $("k-status").textContent = raffleId !== undefined ? `Stellar #${raffleId}` : "local";
-  $("frozen-ts").textContent = t("frozenAt") + " " + app.frozen.at;
+  $("frozen-ts").textContent = t("frozenAt") + " " + f.at;
   renderSealSummary();
 
   if (names.length > WHEEL_MAX) {

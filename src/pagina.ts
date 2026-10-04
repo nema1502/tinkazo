@@ -1,6 +1,8 @@
 import "./styles.css";
-import { setLang } from "./i18n";
+import { chooseLang, initialLang, onLangChange, setLang } from "./i18n";
 import { params } from "./state";
+import { network } from "./stellar/config";
+import { loadSessionKind } from "./stellar/session-store";
 
 /**
  * Las páginas de lectura: precios, juegos, historia y seguridad.
@@ -17,6 +19,26 @@ import { params } from "./state";
 const tema = params.get("theme");
 if (tema === "light" || tema === "dark") document.documentElement.dataset.theme = tema;
 
-setLang(params.get("lang") === "en" || navigator.language.startsWith("en") ? "en" : "es");
-document.getElementById("l-es")?.addEventListener("click", () => setLang("es"));
-document.getElementById("l-en")?.addEventListener("click", () => setLang("en"));
+// La cuenta también se ve acá: "Mi cuenta" si hay una sesión guardada en esta
+// red, "Entrar" si no. Sin cargar ninguna billetera: solo se lee qué tipo de
+// sesión había, y el enlace lleva a la herramienta.
+{
+  const kind = loadSessionKind(network.name);
+  const a = document.createElement("a");
+  a.className = "mini solid pg-auth";
+  a.href = kind ? "/#mis-sorteos" : "/#sortear";
+  a.dataset.i = kind ? "navCuenta" : "connectWallet";
+  document.querySelector("header .bar")?.appendChild(a);
+}
+setLang(initialLang());
+// Las tablas que se apilan en el celular llevan el rótulo de su columna en cada celda.
+const rotular = (): void => {
+  document.querySelectorAll<HTMLElement>("[data-label-i]").forEach((el) => {
+    const src = document.querySelector<HTMLElement>(`th[data-i="${el.dataset.labelI}"]`);
+    if (src) el.dataset.label = src.textContent ?? "";
+  });
+};
+rotular();
+onLangChange(rotular);
+document.getElementById("l-es")?.addEventListener("click", () => chooseLang("es"));
+document.getElementById("l-en")?.addEventListener("click", () => chooseLang("en"));

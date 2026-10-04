@@ -1,6 +1,6 @@
 import "./styles.css";
 import { $ } from "./dom";
-import { onLangChange, setLang, t } from "./i18n";
+import { chooseLang, initialLang, onLangChange, setLang, t } from "./i18n";
 import { SAMPLE, app, currentPace, paceSeconds, params, setPace, type Game, type Pace } from "./state";
 import { soundLabel, toggleSound, unlockAudioOnGesture } from "./sound";
 import { bindParticipants, loadSample, renderNames } from "./ui/participants";
@@ -26,8 +26,8 @@ onLangChange(() => {
 });
 
 // Controles
-$("l-es").addEventListener("click", () => setLang("es"));
-$("l-en").addEventListener("click", () => setLang("en"));
+$("l-es").addEventListener("click", () => chooseLang("es"));
+$("l-en").addEventListener("click", () => chooseLang("en"));
 $("btn-sample").addEventListener("click", loadSample);
 $("btn-freeze").addEventListener("click", () => void freeze());
 // El ritmo del show. Se guarda, porque quien organiza suele querer siempre el
@@ -109,8 +109,16 @@ function initVistas(): void {
   const body = document.body;
   const deApp = ["demo", "pose", "instant"].some((k) => params.has(k));
   const marcar = (): void => {
-    $("tab-nuevo").setAttribute("aria-selected", String(body.dataset.tab !== "historial"));
-    $("tab-hist").setAttribute("aria-selected", String(body.dataset.tab === "historial"));
+    const hist = body.dataset.tab === "historial";
+    $("tab-nuevo").setAttribute("aria-selected", String(!hist));
+    $("tab-hist").setAttribute("aria-selected", String(hist));
+    // En el menú, la página actual: Sortear o Mis sorteos, según la pestaña.
+    const app = body.dataset.vista === "app";
+    for (const [href, on] of [["/#sortear", app && !hist], ["/#mis-sorteos", app && hist]] as const) {
+      const a = document.querySelector(`.topnav a[href="${href}"]`);
+      if (on) a?.setAttribute("aria-current", "page");
+      else a?.removeAttribute("aria-current");
+    }
   };
   const setVista = (v: "portada" | "app", tab?: Tab): void => {
     const antes = body.dataset.vista;
@@ -129,6 +137,7 @@ function initVistas(): void {
   };
   body.dataset.tab = "nuevo";
   body.dataset.sesion = "no";
+  if (params.has("demo")) body.dataset.demo = "1";
   setVista(deApp ? "app" : "portada");
   porHash();
   addEventListener("hashchange", () => void porHash());
@@ -139,6 +148,9 @@ function initVistas(): void {
   $("tab-hist").addEventListener("click", () => {
     history.replaceState(null, "", "#mis-sorteos");
     setVista("app", "historial");
+  });
+  $("hist-entrar").addEventListener("click", () => {
+    void import("./ui/wallet-ui").then((w) => void w.openPicker());
   });
   // El botón grande: a la herramienta y, si no hay cuenta, directo a elegir una.
   for (const a of document.querySelectorAll<HTMLAnchorElement>('a.cta[href="#sortear"]')) {
@@ -248,7 +260,7 @@ unlockAudioOnGesture();
 void import("./ui/thumbs").then((m) => m.initThumbs(GAMES));
 // Siempre se aplica el diccionario al cargar, también en español: si no, el
 // texto que se ve sale del markup y los dos archivos se separan sin que se note.
-setLang(params.get("lang") === "en" ? "en" : "es");
+setLang(initialLang());
 const demoMode = params.get("demo");
 if (demoMode) setTimeout(() => void autoDemo(demoMode), 300);
 if (params.get("pose")) setTimeout(() => void poseScene(), 300);

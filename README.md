@@ -146,17 +146,17 @@ That is why Tinkazo does not publish yet another verifier crate. Its on-chain ch
 
 ## Costs
 
-Measured on testnet, not estimated. XLM at US$0.196.
+Measured on testnet on October 3, 2026, not estimated: what the network charged, per Horizon. XLM at US$0.215.
 
 | | XLM | US$ |
 |---|---|---|
-| Seal a draw | 0.099 | 0.019 |
-| Draw, including BLS verification | 0.083 | 0.016 |
-| **Total per draw** | **0.18** | **0.036** |
-| Mainnet: deploy once | about 16 | about 3 |
-| Mainnet: keep the contract alive | about 49 a year | about 10 a year |
+| Seal a draw | 0.42 | 0.090 |
+| Draw, including BLS verification | 0.34 | 0.074 |
+| **Total per draw** | **0.76** | **0.16** |
+| Mainnet: deploy once (September 16 projection) | about 16 | about 3 |
+| Mainnet: keep the contract alive (same) | about 49 a year | about 10 a year |
 
-Most of each fee is storage rent for 120 days. **Verifying is always free**, and so is drawing without anchoring.
+Almost all of the cost is storage rent, and the network sets that rate: on September 16 the same contract paid 0.18 XLM per draw, and in three weeks testnet rent quadrupled it. The BLS verification itself costs 0.003 XLM. Mainnet gets measured at deploy time. **Verifying is always free.**
 
 ## Quality
 

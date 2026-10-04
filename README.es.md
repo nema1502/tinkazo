@@ -146,17 +146,17 @@ Por eso Tinkazo no publica otro crate verificador más. Su comprobación en la c
 
 ## Qué cuesta
 
-Medido en testnet, no estimado. XLM a US$ 0,196.
+Medido en testnet el 3 de octubre de 2026, no estimado: lo que cobró la red según Horizon. XLM a US$ 0,215.
 
 | | XLM | US$ |
 |---|---|---|
-| Sellar un sorteo | 0,099 | 0,019 |
-| Sortear, con la verificación BLS | 0,083 | 0,016 |
-| **Total por sorteo** | **0,18** | **0,036** |
-| Mainnet: desplegar una vez | unos 16 | unos 3 |
-| Mainnet: mantener vivo el contrato | unos 49 al año | unos 10 al año |
+| Sellar un sorteo | 0,42 | 0,090 |
+| Sortear, con la verificación BLS | 0,34 | 0,074 |
+| **Total por sorteo** | **0,76** | **0,16** |
+| Mainnet: desplegar una vez (proyección del 16 de septiembre) | unos 16 | unos 3 |
+| Mainnet: mantener vivo el contrato (ídem) | unos 49 al año | unos 10 al año |
 
-Casi todo el costo es alquiler de almacenamiento por 120 días. **Verificar es gratis siempre**, y sortear sin anclar también.
+Casi todo el costo es alquiler de almacenamiento, y esa tarifa la pone la red: el 16 de septiembre el mismo contrato pagaba 0,18 XLM por sorteo, y en tres semanas la renta de testnet la multiplicó por cuatro. La verificación BLS en sí cuesta 0,003 XLM. En mainnet se mide al desplegar. **Verificar es gratis siempre.**
 
 ## Calidad
 

@@ -1041,6 +1041,41 @@ para que el sorteo se vea serio y nadie me pregunte lo que ya está escrito.
 
 Resultado (2026-09-26): sale de la investigación de [legal.md](legal.md). Casi todas las normas piden reglas claras antes de sortear, y Tinkazo ya sabía casi todo. Las bases tienen una ventaja más: publicadas en Luma o en un grupo antes de sortear, dejan anotado cuál es el sorteo que vale, que es lo que [seguridad.html](../seguridad.html) dice que hace falta contra la selección del compromiso. El texto sale de `T[lang].rules` y lo cubren seis tests. La página de términos entra en `check:paginas`.
 
+
+### Historia 12.3: Una portada, tus sorteos y el costo de hoy: hecho
+
+Como alguien que llega por primera vez, o que vuelve con su cuenta,
+quiero entender qué es Tinkazo, ver un sorteo sin crear nada y encontrar mis sorteos en cualquier equipo,
+sin que el sitio se sienta de una sola página.
+
+**Criterios de aceptación:**
+
+**Dado** alguien sin cuenta
+**Cuando** abre `/`
+**Entonces** ve una portada con el producto, los doce juegos y una demo que corre sin cuenta y no graba nada
+**Y** con la cuenta conectada la misma dirección es la herramienta, con "Nuevo sorteo" y "Mis sorteos"
+**Y** un sorteo sellado y sin sortear se retoma desde "Mis sorteos" después de recargar, sin sellar otra lista
+**Y** todas las páginas tienen el mismo menú y recuerdan el idioma elegido.
+
+Resultado (2026-10-03): el autor sentía el sitio "muy básico". La herramienta vivía mezclada con la presentación y la cabecera no tenía menú.
+
+- **La portada y la herramienta en la misma dirección.** Google vuelve a `/` después del login, así que con dos direcciones quien acababa de entrar caía en la portada. Sin cuenta, `/` es la portada:
+  - una partida real en el hero;
+  - "Entrar y sortear" y "Ver una demo";
+  - los doce juegos con su miniatura animada, cada uno abre su demo;
+  - por qué creerle, para quién, los números medidos y las preguntas frecuentes.
+
+  Con la cuenta conectada, `/` es la herramienta. `#sortear`, `#mis-sorteos` y `#portada` eligen a mano.
+- **Mis sorteos.** Cada sorteo es una tarjeta con su estado, el premio, cuántas personas y quién ganó. Los que están sellados y sin sortear traen "Sortear ahora", que repone la lista guardada en el equipo y deja el selector listo. Antes, si el equipo del proyector recargaba la página después de sellar, había que sellar otra lista, y dos sellos para el mismo evento es el patrón que la página de seguridad presenta como el ataque abierto.
+- **Cómo funciona.** Cinco pasos sin jerga, qué queda guardado y dónde, y qué hacer si no confiás en Tinkazo.
+- **El menú** en todas las páginas, con la cuenta a la vista ("Mi cuenta" o "Entrar"). El idioma se recuerda entre páginas y la primera vez sigue al navegador. Una demo nunca graba nada, aunque haya una cuenta abierta.
+
+**El costo, medido de nuevo.** El agente evaluador selló y sorteó, buscó lo cobrado en Horizon y no coincidía con lo publicado. Con el mismo contrato:
+- un sorteo cuesta hoy **0,76 XLM** (0,42 el sello, 0,34 el sorteo), unos 16 centavos;
+- el 16 de septiembre costaba 0,18.
+
+Casi todo es renta de almacenamiento y la tarifa la pone la red. Se corrigió en la portada, en precios, en los README, en la marca, en los despliegues y en el pitch. El requisito NFR-3 (menos de 0,25 XLM) hoy no se cumple en testnet, y queda dicho en el PRD: en mainnet se mide al desplegar.
+
 ---
 
 ## Épica 11: Recordatorios y aviso a los ganadores

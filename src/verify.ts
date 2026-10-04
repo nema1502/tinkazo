@@ -1,6 +1,6 @@
 import "./styles.css";
 import { $, esc } from "./dom";
-import { getLang, setLang, t } from "./i18n";
+import { chooseLang, getLang, initialLang, setLang, t } from "./i18n";
 import { avatar } from "./state";
 import { canonicalList, listHash } from "./protocol/canonical";
 import { RPC_URLS } from "./stellar/config";
@@ -91,13 +91,13 @@ function fail(messageKey: string, detail = ""): void {
 }
 
 async function main(): Promise<void> {
-  setLang(location.search.includes("lang=en") || navigator.language.startsWith("en") ? "en" : "es");
+  setLang(initialLang());
   $("l-es").addEventListener("click", () => {
-    setLang("es");
+    chooseLang("es");
     paint();
   });
   $("l-en").addEventListener("click", () => {
-    setLang("en");
+    chooseLang("en");
     paint();
   });
 

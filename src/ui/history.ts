@@ -45,6 +45,13 @@ export interface Entry {
   fromChain?: boolean;
   /** El enlace del comprobante. Es lo único que hace falta para rehacerlo. */
   proof?: string;
+  /**
+   * La lista sellada, solo en este equipo. Con ella un sorteo sellado y sin
+   * sortear se retoma después de recargar, en vez de sellar otra lista: dos
+   * sellos para el mismo evento es justo el patrón que la página de seguridad
+   * marca como el ataque abierto. Nunca sale del navegador.
+   */
+  names?: string[];
   sealTx?: string;
   drawTx?: string;
 }
@@ -189,7 +196,14 @@ function enlazarRearmado(): void {
   if (enlazado) return;
   enlazado = true;
   $("hist-list").addEventListener("click", (e) => {
-    const b = (e.target as HTMLElement).closest<HTMLElement>("[data-rearmar]");
+    const el = e.target as HTMLElement;
+    const r = el.closest<HTMLElement>("[data-retomar]");
+    if (r) {
+      const fila = pintadas[Number(r.dataset.retomar)];
+      if (fila?.names?.length) void import("./freeze").then((m) => m.resumeFrozen(fila as Entry & { names: string[] }));
+      return;
+    }
+    const b = el.closest<HTMLElement>("[data-rearmar]");
     if (!b) return;
     const fila = pintadas[Number(b.dataset.rearmar)];
     if (fila) void import("./rebuild").then((m) => m.abrirRearmado(fila));
@@ -209,34 +223,35 @@ function paint(organizer: string | null): void {
     return;
   }
 
-  const fromChain = list.filter((e) => e.fromChain).length;
-  const here = list.length - fromChain;
-  $("hist-count").textContent = (
-    !fromChain ? t("histCount") : here ? t("histCountBoth") : t("histCountChain")
-  )
-    .replace("{n}", String(here))
-    .replace("{c}", String(fromChain));
+  // Los sorteos de la cuenta, vengan de este equipo o de la cadena.
+  $("hist-count").textContent = t("histCount").replace("{n}", String(list.length));
   pintadas = list;
   enlazarRearmado();
+  // Cada sorteo, una tarjeta: el estado, el premio, cuántos y quién ganó, y
+  // una acción principal. Antes era un renglón de registro en monoespaciada.
   $("hist-list").innerHTML = list
     .map((e, i) => {
+      const hecho = !!(e.winners?.length || e.winnerIdx?.length || e.drawTx);
+      const titulo = e.prize || (e.id ? `${t("histDraw")} #${e.id}` : t("histDraw"));
       const id = e.id ? `#${esc(e.id)}` : t("histLocal");
-      const origin = e.fromChain ? ` · ${esc(t("histFromChain"))}` : "";
-      const chainLink = e.drawTx
-        ? ` · <a href="${esc(txUrl(e.drawTx))}" target="_blank" rel="noopener">${esc(t("histChain"))} ↗</a>`
-        : e.sealTx
-          ? ` · <a href="${esc(txUrl(e.sealTx))}" target="_blank" rel="noopener">${esc(t("histSeal"))} ↗</a>`
-          : "";
+      const origen = e.fromChain ? ` · ${esc(t("histFromChain"))}` : "";
+      const enCadena = e.drawTx ?? e.sealTx;
+      const acciones: string[] = [];
+      if (!hecho && e.names?.length) acciones.push(`<button class="primary mini" data-retomar="${i}">${esc(t("histResume"))}</button>`);
       // Sin comprobante pero con id: la lista no está acá, pero el sorteo sí
       // está en la cadena. Con la lista a mano se rearma.
-      const proof = e.proof
-        ? ` · <a href="${esc(e.proof)}" target="_blank" rel="noopener">${esc(t("histProof"))} ↗</a>`
-        : e.id
-          ? ` · <button class="mini" data-rearmar="${i}">${esc(t("histRebuild"))}</button>`
-          : "";
+      if (e.proof) acciones.push(`<a class="ghost mini" href="${esc(e.proof)}" target="_blank" rel="noopener">${esc(t("histSeeProof"))}</a>`);
+      else if (hecho && e.id) acciones.push(`<button class="ghost mini" data-rearmar="${i}">${esc(t("histRebuild"))}</button>`);
+      if (enCadena) acciones.push(`<a class="hc-link" href="${esc(txUrl(enCadena))}" target="_blank" rel="noopener">${esc(t("histOnChain"))} ↗</a>`);
+      if (!hecho && !e.names?.length) acciones.push(`<span class="note">${esc(t("histOtherDevice"))}</span>`);
       return (
-        `<p class="entity"><b>${esc(winnerLabel(e))}</b> · ${esc(id)} · ${e.count} ${esc(t("histPeople"))}` +
-        `${e.prize ? ` · ${esc(e.prize)}` : ""} · ${esc(fmtDate(e.sealedAt))}${origin}${chainLink}${proof}</p>`
+        `<article class="hist-card${hecho ? " hecho" : ""}">` +
+        `<div class="hc-top"><span class="hc-estado">${esc(t(hecho ? "histStateDone" : "histStatePending"))}</span>` +
+        `<span class="hc-fecha">${esc(fmtDate(e.sealedAt))}</span></div>` +
+        `<h3>${esc(titulo)}</h3>` +
+        `<p class="hc-meta">${esc(id)} · ${e.count} ${esc(t("histPeople"))}${hecho ? ` · ${esc(t("histWon"))} <b>${esc(winnerLabel(e))}</b>` : ""}${origen}</p>` +
+        `<div class="hc-acciones">${acciones.join("")}</div>` +
+        `</article>`
       );
     })
     .join("");

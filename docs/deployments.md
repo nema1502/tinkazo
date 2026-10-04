@@ -20,6 +20,17 @@ Transacciones del despliegue vigente (testnet, explorables en [stellar.expert](h
 
 ## Costos medidos y proyección a mainnet
 
+**Medición del 3 de octubre de 2026 (vigente).** Lo que cobró la red según Horizon, en los sorteos 151, 152, 159 y 160:
+
+| Paso | Fee cobrado | En US$ (XLM a 0,215) |
+|---|---|---|
+| `seal` | 4 202 000 stroops ≈ **0,42 XLM** | ≈ 0,090 |
+| `draw` | 3 433 000 stroops ≈ **0,34 XLM** | ≈ 0,074 |
+| **Total por sorteo** | **≈ 0,76 XLM** | **≈ 0,16** |
+
+El contrato es el mismo del 16 de septiembre. Lo que cambió es la renta de testnet: casi todo el fee es alquiler de almacenamiento, y la tarifa la pone la red. Lo de abajo es la medición original, que queda como historia; la proyección a mainnet usa los parámetros de esa fecha y hay que rehacerla al desplegar.
+
+
 Testnet y mainnet comparten hoy los parámetros de renta (`fee_write1_kb` 875, `persistent_rent_rate_denominator` 1215). La diferencia es el TTL mínimo de una entrada persistente: **7 días en testnet, 120 días en mainnet** (`min_persistent_ttl` 120 960 vs 2 073 600 ledgers). Por eso en mainnet la subida del WASM paga de entrada la renta de 120 días.
 
 | Concepto | Medido en testnet | Proyección mainnet | En US$ (XLM a 0,196) |

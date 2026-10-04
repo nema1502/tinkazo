@@ -107,6 +107,9 @@ export async function launch({ port = Number(process.env.CDP_PORT || 9222), widt
       // Con TINKAZO_SIN_WEBGL=1 el navegador no tiene WebGL, como un equipo
       // viejo: para comprobar que el sorteo cae solo al motor anterior.
       ...(process.env.TINKAZO_SIN_WEBGL === "1" ? ["--disable-3d-apis"] : []),
+      // El idioma de una persona de acá: sin esto el navegador sin interfaz
+      // toma el del sistema, y la página elige idioma según el navegador.
+      "--lang=es-BO",
       "--no-first-run",
       "--no-default-browser-check",
       // Sin esto el contexto de audio nace suspendido y no avanza su reloj: el

@@ -1,4 +1,4 @@
-import { t } from "../i18n";
+import { getLang, t } from "../i18n";
 import { network, txUrl } from "../stellar/config";
 
 /**
@@ -26,7 +26,8 @@ function feeInXlm(tx: { built?: { fee?: string | number } }): string | undefined
   if (raw === undefined) return undefined;
   const stroops = Number(raw);
   if (!Number.isFinite(stroops)) return undefined;
-  return (stroops / 1e7).toFixed(4).replace(/0+$/, "").replace(/\.$/, "") + " XLM";
+  // Es el tope que se firma, no lo que se cobra: la red devuelve lo que no usa.
+  return (stroops / 1e7).toLocaleString(getLang() === "en" ? "en-US" : "es-BO", { maximumFractionDigits: 2 }) + " XLM";
 }
 
 export interface SealArgs {

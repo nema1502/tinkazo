@@ -687,10 +687,13 @@
   .topnav a:hover { border-bottom-color: var(--magenta); }
   .topnav a[aria-current="page"] { border-bottom-color: var(--yellow); }
   .topnav a.nav-app { background: var(--yellow); color: #191919; border: 2px solid var(--ink); box-shadow: var(--sh-sm); margin-right: 8px; }
-  /* En el celular la cabecera tiene tres filas: fija se comía un cuarto de la pantalla. */
-  @media (max-width: 760px) { header { position: static; } }
+  /* Cuando el menú baja a una segunda fila, la cabecera fija se comía hasta un
+     cuarto de la pantalla: ahí deja de ser fija. */
+  @media (max-width: 1100px) { header { position: static; } }
   @media (max-width: 1100px) {
     .topnav { order: 3; flex-basis: 100%; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; margin: 0 -6px; padding: 0 6px 4px; }
+    /* Que se note que el menú sigue a la derecha. */
+    .topnav { -webkit-mask-image: linear-gradient(90deg, #000 86%, transparent); mask-image: linear-gradient(90deg, #000 86%, transparent); }
     .topnav::-webkit-scrollbar { display: none; }
   }
 
@@ -792,4 +795,53 @@
   .guarda th, .guarda td { text-align: left; padding: 12px 14px; border-bottom: 2px dashed var(--ink); vertical-align: top; }
   .guarda th { font-family: ui-monospace, Consolas, monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
   .guarda tr:last-child td { border-bottom: 0; }
-  @media (max-width: 560px) { .guarda th:nth-child(3), .guarda td:nth-child(3) { display: none; } }
+  @media (max-width: 560px) {
+    .guarda thead { display: none; }
+    .guarda tr { display: block; border-bottom: 2px dashed var(--ink); padding: 8px 0; }
+    .guarda tr:last-child { border-bottom: 0; }
+    .guarda td { display: block; border: 0; padding: 4px 14px; }
+    .guarda td::before { content: attr(data-label); display: block; font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+  }
+
+  /* Mis sorteos: cada sorteo, una tarjeta con su estado y una acción. */
+  .hist-list { display: grid; gap: 14px; margin: 4px 0 16px; }
+  .hist-card { background: var(--paper); border: 2px solid var(--ink); box-shadow: var(--sh-sm); padding: 14px 16px; }
+  .hc-top { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .hc-estado { font-family: ui-monospace, Consolas, monospace; font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border: 2px solid var(--ink); background: var(--orange); color: #191919; }
+  .hist-card.hecho .hc-estado { background: var(--teal); }
+  .hc-fecha { font-size: 12.5px; color: var(--ink2); }
+  .hist-card h3 { font-size: 18px; font-weight: 900; margin-top: 8px; }
+  .hc-meta { font-size: 13.5px; color: var(--ink2); margin-top: 4px; }
+  .hc-acciones { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 10px; }
+  .hc-acciones .mini { min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }
+  .hc-acciones a.hc-link { display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; font-size: 13px; color: var(--ink); }
+  .hist-why { margin: 6px 0 12px; }
+  .hist-why summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 800; font-size: 14px; }
+  .hist-pie { display: flex; flex-wrap: wrap; gap: 10px; }
+  /* Los enlaces de texto, del color de la casa y no del azul del navegador. */
+  .note a, .txstatus a, .entity a, main > section > a.sec-link { color: inherit; text-decoration-thickness: 2px; text-underline-offset: 2px; }
+
+  /* El hero muestra el producto: una partida de verdad, con la llama encima. */
+  .hero-portada { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 40px; }
+  .hero-shot { position: relative; display: block; }
+  .hero-shot img { width: 100%; height: auto; display: block; border: var(--bw) solid var(--ink); box-shadow: var(--sh); transform: rotate(1.2deg); transition: transform 0.15s ease; }
+  .hero-shot:hover img { transform: rotate(0deg) scale(1.01); }
+  .hero-shot .mascot { position: absolute; left: -30px; bottom: -34px; }
+  .hero-shot .mascot svg { width: 104px; height: 90px; }
+  @media (max-width: 700px) {
+    .hero-portada { grid-template-columns: 1fr; gap: 26px; }
+    .hero-portada .hero-shot { display: block; }
+  }
+  .portada-juegos .pj-ver { font-size: 12px; }
+  @media (min-width: 901px) and (max-width: 1100px) { .portada-juegos { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+  /* La demo se presenta: una franja arriba y una invitación al final. */
+  .demo-banner { display: none; }
+  body[data-demo="1"] .demo-banner {
+    display: block; margin: 22px 0 0; padding: 12px 16px; background: var(--yellow); color: #191919;
+    border: 2px solid var(--ink); box-shadow: var(--sh-sm); font-weight: 800; font-size: 14px;
+  }
+  .demo-fin { display: none; }
+  body[data-demo="1"] .demo-fin { display: block; margin-top: 18px; padding: 18px; background: var(--purple); color: var(--on-purple); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
+  body[data-demo="1"] .demo-fin h3 { font-size: 18px; font-weight: 900; margin-bottom: 10px; }
+  body[data-demo="1"] #btn-whatsapp, body[data-demo="1"] #btn-email, body[data-demo="1"] #btn-proof, body[data-demo="1"] #gate { display: none !important; }

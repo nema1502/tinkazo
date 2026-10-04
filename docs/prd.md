@@ -215,7 +215,7 @@ Entre que la lista se sella y que la ronda del faro existe pasan unos segundos, 
 
 - **NFR-1 Determinismo verificable.** Todo lo que decide un resultado está en el Protocolo y es recomputable con herramientas públicas; ningún paso depende de un servidor de Tinkazo.
 - **NFR-2 Sin servidor.** El sitio es estático (Vercel); no hay backend propio ni base de datos. Las únicas dependencias en tiempo de ejecución son Stellar RPC, relays de drand y la wallet.
-- **NFR-3 Costo.** Un Sorteo anclado (Sello + Sorteo) debe costar menos de 0,25 XLM al Organizador. Medido en testnet el 2026-09-16: 0,18 XLM (≈ US$ 0,03), casi todo renta de almacenamiento por 120 días; la verificación BLS en sí cuesta 0,003 XLM. Mantener el Contrato vivo cuesta al proyecto unos 49 XLM al año y nunca se le cobra a un Organizador (ver [deployments.md](deployments.md)).
+- **NFR-3 Costo.** Un Sorteo anclado (Sello + Sorteo) debe costar menos de 0,25 XLM al Organizador. **No se cumple hoy en testnet:** el 2026-10-03 se midieron 0,76 XLM, porque subió la renta de la red; en mainnet se mide al desplegar. Medido en testnet el 2026-09-16: 0,18 XLM (≈ US$ 0,03), casi todo renta de almacenamiento por 120 días; la verificación BLS en sí cuesta 0,003 XLM. Mantener el Contrato vivo cuesta al proyecto unos 49 XLM al año y nunca se le cobra a un Organizador (ver [deployments.md](deployments.md)).
 - **NFR-4 Sin secretos en el repo.** Repositorio público: ninguna llave privada, token ni identidad de la CLI se commitea.
 - **NFR-5 Tiempo de sorteo.** Entre "Sellar" y el inicio del Show pasan menos de 90 segundos en condiciones normales.
 - **NFR-6 Privacidad.** En la cadena solo va el hash de la lista, nunca los nombres. La lista se publica por decisión del Organizador en el Comprobante.

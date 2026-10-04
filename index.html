@@ -34,7 +34,7 @@
 </header>
 
 <main>
-  <section class="hero portada-only">
+  <section class="hero hero-portada portada-only">
     <div class="hero-copy">
       <span class="sticker" data-i="badge">Para el que le toca sortear</span>
       <h1 data-i-html="h1">Sorteos que <span class="hl"><span class="hl-t">cualquiera puede comprobar</span></span>.</h1>
@@ -45,13 +45,19 @@
       </div>
       <p class="kicker hero-note" data-i="note">Entrás con Google en dos toques, sin instalar nada. Tu gente no se crea ninguna cuenta.</p>
     </div>
-    <div class="mascot" aria-hidden="true"><svg viewBox="-1 -3 24 28"><use href="#llama" fill="currentColor"/></svg></div>
+    <a class="hero-shot" href="/?demo=race&amp;lead=3" aria-label="Ver una demo" data-i-aria="ctaDemo">
+      <picture>
+        <source srcset="/juegos/race-light.webp" media="(prefers-color-scheme: light)" />
+        <img src="/juegos/race.webp" width="900" height="506" alt="" />
+      </picture>
+      <span class="mascot" aria-hidden="true"><svg viewBox="-1 -3 24 28"><use href="#llama" fill="currentColor"/></svg></span>
+    </a>
   </section>
 
   <h2 class="sr-only portada-only" data-i="howTitle">¿Cómo funciona?</h2>
   <div class="steps portada-only">
     <article><span class="num">01</span><h3 data-i="s1t">Traé tu lista</h3><p data-i="s1b">Entrás con Google y pegás los nombres, o subís el CSV de Luma o de cualquier planilla, y elegís quiénes entran. La cuenta es tuya: tu gente no instala nada ni se crea nada.</p></article>
-    <article><span class="num">02</span><h3 data-i="s2t">Congelá la lista</h3><p data-i="s2b">Al congelarla, la lista queda con una huella y una hora. Si después alguien mete a su primo o saca a otro, la huella cambia y se nota. No hay cómo disimularlo.</p></article>
+    <article><span class="num">02</span><h3 data-i="s2t">Sellá la lista</h3><p data-i="s2b">Al sellarla, la lista queda con una huella y una hora. Si después alguien mete a su primo o saca a otro, la huella cambia y se nota. No hay cómo disimularlo.</p></article>
     <article><span class="num">03</span><h3 data-i="s3t">Elegí el juego y sorteá</h3><p data-i="s3b">Uno de los doce juegos, a pantalla completa. Cuando arranca la animación el ganador ya salió del número público. El show es show. El sorteo ya estaba hecho.</p></article>
   </div>
 
@@ -80,7 +86,7 @@
     <h2 class="sec-t" data-i="confT">No hace falta confiar en nadie. Ni en mí.</h2>
     <div class="cards3">
       <article><span class="ico" aria-hidden="true">#</span><h3 data-i="conf1t">La lista se sella</h3><p data-i="conf1b">Antes del sorteo, la lista queda con una huella. Si alguien agrega o saca un nombre, la huella cambia y se nota.</p></article>
-      <article><span class="ico" aria-hidden="true">?</span><h3 data-i="conf2t">El azar es público</h3><p data-i="conf2b">El ganador sale de un número que drand publica a una hora fija, después del sello. Nadie lo controla, ni quien organiza.</p></article>
+      <article><span class="ico" aria-hidden="true">&#9673;</span><h3 data-i="conf2t">El azar es público</h3><p data-i="conf2b">El ganador sale de un número que drand publica a una hora fija, después del sello. Nadie lo controla, ni quien organiza.</p></article>
       <article><span class="ico" aria-hidden="true">&#10003;</span><h3 data-i="conf3t">Queda en Stellar</h3><p data-i="conf3b">El sello y el resultado quedan grabados en un contrato. Cualquiera rehace el sorteo desde su celular y le tiene que dar lo mismo.</p></article>
     </div>
     <a class="sec-link" href="/como-funciona.html" data-i="confMas">Cómo funciona, paso a paso &rarr;</a>
@@ -90,10 +96,10 @@
     <span class="kicker" data-i="usosKicker">Para quién</span>
     <h2 class="sec-t" data-i="usosT">Para cuando a alguien le toca repartir.</h2>
     <div class="cards3">
-      <article><span class="ico" aria-hidden="true">01</span><h3 data-i="uso1t">Meetups y comunidades</h3><p data-i="uso1b">El sorteo del final, con el proyector y todos mirando. Desde el CSV de Luma, solo entre los que vinieron.</p></article>
-      <article><span class="ico" aria-hidden="true">02</span><h3 data-i="uso2t">Aulas y talleres</h3><p data-i="uso2b">Quién expone primero, quién se lleva el libro. Sin que nadie diga que fue a dedo.</p></article>
-      <article><span class="ico" aria-hidden="true">03</span><h3 data-i="uso3t">Equipos de trabajo</h3><p data-i="uso3b">El regalo de fin de año o el orden de los turnos, con un resultado que cualquiera revisa.</p></article>
-      <article><span class="ico" aria-hidden="true">04</span><h3 data-i="uso4t">Ferias y eventos</h3><p data-i="uso4b">Premios para quienes vinieron, sin planillas ni sospechas. Participar es gratis, siempre.</p></article>
+      <article><h3 data-i="uso1t">Meetups y comunidades</h3><p data-i="uso1b">El sorteo del final, con el proyector y todos mirando. Desde el CSV de Luma, solo entre los que vinieron.</p></article>
+      <article><h3 data-i="uso2t">Aulas y talleres</h3><p data-i="uso2b">Quién expone primero, quién se lleva el libro. Sin que nadie diga que fue a dedo.</p></article>
+      <article><h3 data-i="uso3t">Equipos de trabajo</h3><p data-i="uso3b">El regalo de fin de año o el orden de los turnos, con un resultado que cualquiera revisa.</p></article>
+      <article><h3 data-i="uso4t">Ferias y eventos</h3><p data-i="uso4b">Premios para quienes vinieron, sin planillas ni sospechas. Participar es gratis, siempre.</p></article>
     </div>
   </section>
 
@@ -101,7 +107,7 @@
     <span class="kicker" data-i="cifKicker">En números, medidos</span>
     <div class="cifras">
       <div><b>12</b><span data-i="cif1">juegos a pantalla completa</span></div>
-      <div><b data-i="cif2v">4 ¢</b><span data-i="cif2">por sorteo grabado en Stellar (0,18 XLM)</span></div>
+      <div><b data-i="cif2v">0,76 XLM</b><span data-i="cif2">por sorteo grabado, unos 16 centavos de dólar. Lo cobra la red, no Tinkazo</span></div>
       <div><b>0</b><span data-i="cif3">servidores propios: nada que se caiga de este lado</span></div>
       <div><b>MIT</b><span data-i="cif4">código abierto, para que lo revises</span></div>
     </div>
@@ -111,9 +117,9 @@
     <span class="kicker" data-i="faqKicker">Preguntas</span>
     <h2 class="sec-t" data-i="faqT">Lo que todos preguntan.</h2>
     <div class="faq">
-      <details><summary data-i="faq1q">¿Es una apuesta?</summary><p data-i="faq1a">No. Entrar a un sorteo es gratis, siempre: nadie paga por participar, y Tinkazo no sirve para sorteos con entrada paga.</p></details>
+      <details><summary data-i="faq1q">¿Alguien paga por participar?</summary><p data-i="faq1a">No. Entrar a un sorteo es gratis, siempre, así que no es una apuesta ni una rifa con boletos. Tinkazo no sirve para sorteos con entrada paga.</p></details>
       <details><summary data-i="faq2q">¿Mi gente tiene que instalar algo?</summary><p data-i="faq2a">No. Solo quien organiza entra con una cuenta, con Google en dos toques. Los participantes no instalan ni se crean nada.</p></details>
-      <details><summary data-i="faq3q">¿Cuánto cuesta?</summary><p data-i="faq3a">Hoy funciona en testnet, la red de prueba de Stellar, y no cuesta nada. En la red principal, grabar un sorteo cuesta unos cuatro centavos de dólar. Verificar es gratis.</p></details>
+      <details><summary data-i="faq3q">¿Cuánto cuesta?</summary><p data-i="faq3a">Hoy funciona en testnet, la red de prueba de Stellar, con XLM de prueba: no cuesta nada. Grabar un sorteo usa unos 0,76 XLM de comisión, unos 16 centavos de dólar (medido el 3 de octubre de 2026). La cobra la red, no Tinkazo, y casi toda es renta de almacenamiento, que cambia con la red. Verificar es gratis.</p></details>
       <details><summary data-i="faq4q">¿Cómo sé que no hiciste trampa?</summary><p data-i="faq4a">No hace falta creerme: el comprobante trae la lista, la ronda y la firma, y tu celular rehace el sorteo. Si alguien tocó algo, da otro resultado.</p></details>
       <details><summary data-i="faq5q">¿Qué queda guardado y dónde?</summary><p data-i="faq5a">En Stellar quedan la huella de la lista, la ronda y el resultado, a nombre de tu cuenta: los ves desde cualquier equipo en Mis sorteos. Los nombres no se publican nunca: quedan en tu equipo y en el comprobante que compartís.</p></details>
     </div>
@@ -127,6 +133,7 @@
     </div>
   </section>
 
+  <p class="demo-banner app-only" data-i="demoBanner">Demo con una lista de ejemplo: no se graba nada en Stellar.</p>
   <div class="appbar app-only">
     <h2 data-i="appTitle">Tu sorteo</h2>
     <div class="tabs" role="tablist">
@@ -159,10 +166,10 @@
         <label class="kicker" for="nw" data-i="winners">Premios</label>
         <select id="nw" class="mono"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option><option>14</option><option>15</option><option>16</option><option>17</option><option>18</option><option>19</option><option>20</option><option>21</option><option>22</option><option>23</option><option>24</option><option>25</option><option>26</option><option>27</option><option>28</option><option>29</option><option>30</option><option>31</option><option>32</option></select>
         <button class="ghost" id="btn-sample" data-i="sample">Cargar ejemplo</button>
-        <button class="primary" id="btn-freeze" data-i="freeze">Congelar lista</button>
+        <button class="primary" id="btn-freeze" data-i="freeze">Sellar la lista</button>
       </div>
       <p class="note" id="freeze-hint" data-i="freezeHint">Hacen falta al menos dos nombres.</p>
-      <p class="note" id="free-rule" data-i-html="freeRule">Participar tiene que ser gratis: Tinkazo no es para sorteos con entrada paga ni para apuestas. Al congelar la lista aceptás los <a href="/terminos.html">términos</a>.</p>
+      <p class="note" id="free-rule" data-i-html="freeRule">Participar tiene que ser gratis: Tinkazo no es para sorteos con entrada paga ni para apuestas. Al sellar la lista aceptás los <a href="/terminos.html">términos</a>.</p>
       <aside class="fund" id="fund-box" style="display:none"></aside>
       <p class="txstatus" id="seal-status" style="display:none"></p>
       <div class="names" id="names"></div>
@@ -171,7 +178,7 @@
 
   <!-- 02 Congelar -->
   <section class="block app-only tab-nuevo" id="sec-frozen" style="display:none" aria-live="polite">
-    <div class="head"><h2><span data-i="p2">Lista congelada</span></h2><span class="kicker" id="frozen-ts"></span></div>
+    <div class="head"><h2><span data-i="p2">Lista sellada</span></h2><span class="kicker" id="frozen-ts"></span></div>
     <div class="kpis">
       <div><b id="k-n">0</b><span data-i="kEntries">entries</span></div>
       <div><b id="k-digest" style="font-size:16px" class="mono">···</b><span data-i="kDigest">huella de la lista</span></div>
@@ -256,6 +263,12 @@
           </div>
         </div>
         <aside class="lore" id="lore-box" style="display:none"></aside>
+        <div class="demo-fin">
+          <h3 data-i="demoFinT">Así de fácil. ¿Lo hacemos con tu lista?</h3>
+          <div class="hero-ctas">
+            <a class="primary cta" href="/#sortear" data-i="ctaHero">Entrar y sortear, es gratis</a>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -264,24 +277,29 @@
   <section class="block app-only tab-hist" id="sec-history" style="display:none">
     <div class="head"><h2 data-i="histTitle">Tus sorteos</h2><span class="kicker" id="hist-count"></span></div>
     <div class="body">
-      <p class="note" data-i="histWhy">Este equipo se acuerda de los sorteos que hiciste acá, con los nombres. Los que anclaste desde otro equipo se traen de la cadena: ahí están la fecha, el premio y qué puesto de la lista ganó, pero no los nombres, que nunca se publican. Si borrás los datos del sitio se pierde la lista de este equipo, no los sorteos, y cada comprobante funciona para siempre desde cualquier lado.</p>
-      <div id="hist-list"></div>
-      <div class="row">
-        <button class="ghost" id="btn-hist-csv" data-i="histCsv">Bajar como CSV</button>
-        <button class="ghost" id="btn-hist-clear" data-i="histClear">Borrar de este equipo</button>
+      <div id="hist-list" class="hist-list"></div>
+      <details class="hist-why">
+        <summary data-i="histWhyT">¿Qué se guarda y dónde?</summary>
+        <p class="note" data-i="histWhy">Este equipo se acuerda de los sorteos que hiciste acá, con los nombres. Los que anclaste desde otro equipo se traen de la cadena: ahí están la fecha, el premio y qué puesto de la lista ganó, pero no los nombres, que nunca se publican. Si borrás los datos del sitio se pierde la lista de este equipo, no los sorteos, y cada comprobante funciona para siempre desde cualquier lado.</p>
+        <a class="sec-link" href="/como-funciona.html" data-i="histWhyMas">Todo, en Cómo funciona →</a>
+      </details>
+      <div class="hist-pie">
+        <button class="mini" id="btn-hist-csv" data-i="histCsv">Bajar como CSV</button>
+        <button class="mini" id="btn-hist-clear" data-i="histClear">Borrar de este equipo</button>
       </div>
     </div>
   </section>
   <section class="block app-only tab-hist" id="hist-vacio">
     <div class="body">
       <p class="sin-sesion" data-i="histNoAcct">Entrá con tu cuenta para ver tus sorteos. Los que grabaste en Stellar aparecen en cualquier equipo donde entres.</p>
+      <div class="row sin-sesion"><button class="primary" id="hist-entrar" data-i="histEnter">Entrar</button></div>
       <p class="con-sesion" data-i="histNone">Todavía no hay sorteos con esta cuenta. El primero aparece acá apenas sellás una lista.</p>
     </div>
   </section>
 
   <!-- Las páginas de lectura. Van al final: quien entra a sortear no tiene que
        pasar por acá, pero quien quiere entender el proyecto sí lo encuentra. -->
-  <section style="padding: 10px 0 34px">
+  <section class="app-only" style="padding: 10px 0 34px">
     <h2 class="kicker" data-i="masTitle">Para saber más</h2>
     <div class="notas" style="margin-top: 12px">
       <a class="nota" href="/juegos.html" style="text-decoration:none;color:inherit">
@@ -298,7 +316,7 @@
       </a>
       <a class="nota" href="/precios.html" style="text-decoration:none;color:inherit">
         <h3 data-i="masPreciosT">Qué cuesta</h3>
-        <p data-i="masPreciosB">Cuatro centavos por sorteo anclado. Verificar es gratis, siempre.</p>
+        <p data-i="masPreciosB">Unos 0,76 XLM de comisión de red por sorteo anclado. Verificar es gratis, siempre.</p>
       </a>
     </div>
   </section>
