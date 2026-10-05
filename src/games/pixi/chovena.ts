@@ -1156,10 +1156,14 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
         }
         if (w.rows > 0) {
           // En las filas del arranque: ellas con las manos en la cintura y
-          // la cintura que se zarandea; ellos dan palmadas adelante del pecho.
+          // la cintura que se zarandea; ellos dan palmadas adelante, con los
+          // brazos en V que se juntan justo en el medio en cada tiempo. Con
+          // más ángulo las manos se pasaban y se leía como brazos cruzados
+          // (lo vio el agente evaluador); arriba de la cabeza no se veían.
           const ritmo = Math.sin(Math.PI * beat);
-          const fL = d.tipoy ? 0.55 : -1.75 + 0.3 * Math.abs(ritmo);
-          const fR = d.tipoy ? -0.55 : 1.75 - 0.3 * Math.abs(ritmo);
+          const junta = 0.15 + 0.24 * Math.abs(ritmo);
+          const fL = d.tipoy ? 0.55 : -junta;
+          const fR = d.tipoy ? -0.55 : junta;
           aL = fL + (aL - fL) * (1 - w.rows);
           aR = fR + (aR - fR) * (1 - w.rows);
           if (d.tipoy) v.body.rotation += 0.1 * ritmo * w.rows;
