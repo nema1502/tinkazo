@@ -190,12 +190,40 @@ export function setGameLength(nominalSeconds: number, fixedSeconds = 0): void {
   fijo = Math.max(0, fixedSeconds);
 }
 
+/**
+ * Los segundos de la tarjeta de "cómo se juega" que va antes del juego. Son
+ * parte del show, así que salen del mismo total: "normal" sigue siendo
+ * treinta segundos, tarjeta incluida. Cero cuando no hay tarjeta (la escena
+ * fija de `?pose=` no la muestra).
+ */
+let tarjeta = 0;
+export function setCardSeconds(seconds: number): void {
+  tarjeta = Math.max(0, seconds);
+}
+
+/**
+ * La compuerta del estadio: el motor nuevo arranca mientras la tarjeta está
+ * arriba (tarda hasta un segundo y medio en una laptop lenta, y dos en un
+ * celular), pero el reloj del juego no corre hasta que la tarjeta termina.
+ * Antes arrancaba recién después, y la tarjeta quedaba de dos a cinco segundos
+ * de más. El estadio la toma una sola vez.
+ */
+let compuerta: Promise<void> | null = null;
+export function setShowGate(gate: Promise<void> | null): void {
+  compuerta = gate;
+}
+export function takeShowGate(): Promise<void> | null {
+  const g = compuerta;
+  compuerta = null;
+  return g;
+}
+
 /** El factor por el que se multiplica el tiempo del juego en curso. */
 export const paceFactor = (): number => {
   if (nominal <= 0) return 1;
   // Un piso de cuatro segundos para que un objetivo chico y un juego con mucho
   // tiempo fijo no den un factor absurdo.
-  const util = Math.max(4, PACES[pace] - fijo);
+  const util = Math.max(4, PACES[pace] - fijo - tarjeta);
   return Math.max(MIN_STRETCH, Math.min(MAX_STRETCH, util / nominal));
 };
 export const currentPace = (): Pace => pace;

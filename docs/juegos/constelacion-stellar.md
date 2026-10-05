@@ -31,7 +31,7 @@ La carrera de cohetes no se tiró: quedó como juego propio, con el identificado
 
 ## El ritmo
 
-Veinte saltos. Los primeros seis **aceleran**, de 0,62 a 0,22 segundos. Los catorce restantes se frenan hasta que el último dura 2,17 segundos. Los veinte suman 14,5 segundos de juego, y con el armado del tablero el juego llega a 17,5: en "normal" son treinta segundos reales.
+Veinte saltos. Los primeros seis **aceleran**, de 0,62 a 0,22 segundos. Los catorce restantes se frenan hasta que el último dura 2,17 segundos. Los veinte suman 14,5 segundos de juego, y con el armado del tablero el juego llega a 17,5. En "normal" se estira para que el show entero, con la tarjeta de "cómo se juega" y el cartel, dure treinta segundos; en la escena fija de `?pose=`, sin tarjeta, el juego solo dura treinta. Ver "La duración" en [juegos.md](../juegos.md).
 
 Acelerar primero no es un capricho. Una desaceleración pura desde el arranque se lee como "esto ya va a terminar" desde el segundo tres. Así la sala aprende el ritmo y se relaja justo antes de que empiece a costar.
 

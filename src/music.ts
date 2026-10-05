@@ -115,6 +115,8 @@ interface Session {
   crashAt: number;
   won: boolean;
   timer: number;
+  /** La semilla con que arrancó: pedirla otra vez con la misma no la reinicia. */
+  seed: number;
 }
 
 let cur: Session | null = null;
@@ -135,6 +137,9 @@ function seeded(seed: number): () => number {
  * ronda suena igual. No hace nada si el modo está apagado o no hay audio.
  */
 export function startMusic(seed: number): void {
+  // Con la tarjeta de "cómo se juega" la música ya suena cuando el juego la
+  // pide: volver a empezarla desde el primer compás se oía como un corte.
+  if (cur && cur.seed === seed) return;
   stopMusic();
   if (!enabled || isMuted()) return;
   const ctx = audio();
@@ -180,6 +185,7 @@ export function startMusic(seed: number): void {
     crashAt: -1,
     won: false,
     timer: 0,
+    seed,
   };
   cur.timer = window.setInterval(tick, 40);
   tick();

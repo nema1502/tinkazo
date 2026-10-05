@@ -59,7 +59,7 @@ Los tiempos no cambian con la cantidad: las paradas se reparten entre el fin del
 
 ## Los tiempos
 
-En segundos de juego, sin estirar. En "normal" se multiplican por 1,6.
+En segundos de juego, sin estirar. En "normal" se estiran para que el show entero dure treinta segundos: unos 1,43 con la tarjeta de "cómo se juega" y unos 1,65 en la escena fija de `?pose=`, que no la tiene. Ver "La duración" en [juegos.md](../juegos.md).
 
 | Tramo | Qué pasa |
 |---|---|

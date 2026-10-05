@@ -2,7 +2,7 @@ import { Application, Container, Graphics, Sprite, Text, Texture, WebGLRenderer,
 import { gsap } from "gsap";
 import { $ } from "../../dom";
 import { T, getLang, setPickSeed, t } from "../../i18n";
-import { LCOLORS, drawAvatar, paceFactor, skipMotion, type Beacon } from "../../state";
+import { LCOLORS, drawAvatar, paceFactor, params, skipMotion, takeShowGate, type Beacon } from "../../state";
 import { musicCue, startMusic, stopMusic } from "../../music";
 import { registerSkip, releaseScreen, shorten, takeOverScreen, winnerNames } from "../overlay";
 import { Camera } from "./camera";
@@ -127,6 +127,81 @@ export interface Crown {
   warm(): void;
 }
 
+/** Lo que mide `?auditar=identidad`: cuándo se leyó por primera vez cada nombre. */
+interface Identidad {
+  n: number;
+  /** Segundos desde que arrancó el juego, o -1 si no se leyó antes del ganador. */
+  vistos: number[];
+  /** Cuándo salió el cartel del ganador; lo que se lee después no cuenta. */
+  revelado: number | null;
+  muestras: number;
+}
+
+/**
+ * `?auditar=identidad`, para `scripts/audit-identidad.mjs`: qué nombres se
+ * llegan a leer antes de que salga el ganador. Cada persona tiene que poder
+ * saber en dos segundos si sigue en juego, y la forma más directa es ver su
+ * nombre (auditoría de los juegos, 4 de octubre de 2026).
+ *
+ * Recorre los textos de la escena y del HUD, no los del cartel del ganador.
+ * Un nombre cuenta si se ve entero en pantalla, con opacidad de 0,6 o más y
+ * un alto de al menos 1,6% de la pantalla. Las etiquetas cortas ("María Q.",
+ * "Valeria Torr…") cuentan solo si no se confunden con otro nombre.
+ */
+function identidadDe(names: string[]): { estado: Identidad; mirar: (raices: Container[], ahora: number, sw: number, sh: number) => void } {
+  const norm = (s: string): string => s.normalize("NFC").toLowerCase().replace(/\s+/g, " ").trim();
+  const nombres = names.map(norm);
+  const exactos = new Map<string, number[]>();
+  nombres.forEach((nm, i) => exactos.set(nm, [...(exactos.get(nm) ?? []), i]));
+  const memo = new Map<string, number>();
+  const quien = (txt: string): number => {
+    const s = norm(txt);
+    const hecho = memo.get(s);
+    if (hecho !== undefined) return hecho;
+    let hit = -1;
+    const ex = exactos.get(s);
+    if (ex) hit = ex.length === 1 ? (ex[0] as number) : -1;
+    else {
+      const ts = s.split(" ").map((x) => x.replace(/[.…]+$/, "")).filter(Boolean);
+      for (let i = 0; ts.length && i < nombres.length; i++) {
+        const ns = (nombres[i] as string).split(" ");
+        if (ts.length > ns.length) continue;
+        const ok = ts.every((a, j) => (j < ts.length - 1 ? a === ns[j] : (ns[j] ?? "").startsWith(a)));
+        if (!ok) continue;
+        if (hit >= 0) {
+          hit = -1;
+          break;
+        }
+        hit = i;
+      }
+    }
+    memo.set(s, hit);
+    return hit;
+  };
+  const estado: Identidad = { n: names.length, vistos: names.map(() => -1), revelado: null, muestras: 0 };
+  const mirar = (raices: Container[], ahora: number, sw: number, sh: number): void => {
+    if (estado.revelado !== null) return;
+    estado.muestras++;
+    const min = Math.max(10, sh * 0.016);
+    const visitar = (c: Container, alfa: number): void => {
+      if (!c.visible || !c.renderable) return;
+      const a = alfa * c.alpha;
+      if (a < 0.05) return;
+      if (c instanceof Text) {
+        const i = a >= 0.6 ? quien(c.text) : -1;
+        if (i >= 0 && (estado.vistos[i] as number) < 0) {
+          const b = c.getBounds();
+          if (b.height >= min && b.x >= 0 && b.y >= 0 && b.x + b.width <= sw && b.y + b.height <= sh) estado.vistos[i] = ahora;
+        }
+        return;
+      }
+      for (const ch of c.children) visitar(ch as Container, a);
+    };
+    for (const r of raices) visitar(r, 1);
+  };
+  return { estado, mirar };
+}
+
 export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => void): Promise<PixiStage | null> {
   if (skipMotion()) return null;
   const ov = $("stadium");
@@ -184,6 +259,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     setPickSeed(null);
     throw new PixiInitError(err);
   }
+  // La pantalla completa ahora se pide con la tarjeta, así que la ventana pudo
+  // cambiar de tamaño mientras el motor arrancaba, antes de que existiera el
+  // aviso de resize: se mide de nuevo.
+  if (app.screen.width !== innerWidth || app.screen.height !== innerHeight) app.renderer.resize(innerWidth, innerHeight);
   const bg = new Container();
   const scene = new Container();
   const hud = new Container();
@@ -192,6 +271,11 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   const podium = new Container();
   app.stage.addChild(bg, scene, hud, podium);
   const cam = new Camera();
+  // `?auditar=identidad`: ver `identidadDe`. Se arma con los nombres del primer cartel.
+  const identPedida = params.get("auditar") === "identidad";
+  let ident: ReturnType<typeof identidadDe> | null = null;
+  let relojId = 0;
+  let cuadros = 0;
 
   // El estadio aparece recién con el juego armado y el primer cuadro
   // dibujado, justo antes de que corra el bucle (ver `run`). Dos razones:
@@ -325,6 +409,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   };
 
   const crown = (names: string[], winners: readonly number[]): Crown => {
+    if (identPedida && !ident) {
+      ident = identidadDe(names);
+      (window as unknown as { __identidad: Identidad }).__identidad = ident.estado;
+    }
     const root = new Container();
     podium.addChild(root);
     const flash = new Graphics();
@@ -387,6 +475,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     const c: Crown = {
       root,
       at(tt: number, placa = true) {
+        if (ident && ident.estado.revelado === null) ident.estado.revelado = relojId;
         lastT = tt;
         lastPlaca = placa;
         root.visible = true;
@@ -460,11 +549,23 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         loopFn?.(dt, (now - start) / 1000);
         if (dead) return;
         app.renderer.render(app.stage);
+        if (ident) {
+          relojId = (now - start) / 1000;
+          if (cuadros++ % 5 === 0) ident.mirar([scene, hud], relojId, sw(), sh());
+        }
         rafId = requestAnimationFrame(loop);
       };
+      const arrancar = (): void => {
+        show();
+        rafId = requestAnimationFrame(loop);
+      };
+      // Con la tarjeta de "cómo se juega" arriba, lo caro se paga mientras la
+      // sala la lee (la música ya suena) y la escena espera armada: el reloj del
+      // juego corre recién cuando la tarjeta termina.
       warmUp();
-      show();
-      rafId = requestAnimationFrame(loop);
+      const gate = takeShowGate();
+      if (gate) void gate.then(() => (dead ? undefined : arrancar()));
+      else arrancar();
     },
     cleanup() {
       if (dead) return;

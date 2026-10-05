@@ -36,6 +36,10 @@ export interface Dict {
   drawTry: (i: number, n: number) => string;
   cConstPass: (n: string) => string;
   cLanes: (k: number, n: number) => string;
+  /** La tarjeta de "cómo se juega": cuántos participan y cuántos premios. */
+  gcPeople: (n: number) => string;
+  gcPrizes: (k: number) => string;
+  gcPrizesNote: (k: number) => string;
   cWheelSplit: (segs: number, rep: number) => string;
   cWheelOn: (n: string) => string;
   cWheelFalse: (n: string) => string;
@@ -353,6 +357,7 @@ export const T: Record<Lang, Dict> = {
     cTomAlmost: ["¡Casi, casi!", "¡Se tambalea!", "¿Cae o no cae?"],
     cTomNum: "N.º",
     cTomBalls: "BOLAS",
+    cTomWho: "¿CUÁL ES TU BOLA?",
     // --- Trompo. El juego de patio: el ruedo de tiza, los choques y el mano a mano.
     cTroThrow: ["¡Tiren los trompos!", "¡A la cancha!", "¡Con fuerza, que bailen!"],
     cTroCount: (n) => (n === 2 ? "¡Dos trompos, mano a mano!" : `¡${n} trompos bailando!`),
@@ -796,6 +801,32 @@ export const T: Record<Lang, Dict> = {
     jgRocketsB: "La misma carrera, en el espacio, para un público que no es de llamas. Hasta ocho en pantalla.",
     jgRuleT: "La regla de todos",
     jgRuleB: "Ningún juego elige. Reciben el ganador ya fijado y lo cuentan. Por eso la misma ronda del faro dibuja siempre la misma carrera, con el mismo juego y la misma duración: el azar de la animación sale de la semilla, no del reloj. Y si hay varios premios, el juego los anuncia a todos: mostrar uno de tres sería mentir sobre lo que acaba de pasar.",
+    // --- La tarjeta de "cómo se juega", antes de cada juego. Sin signos de
+    // exclamación: explica, no relata.
+    gcKicker: "Cómo se juega",
+    gcHonest: "El ganador ya salió del número público. El juego solo lo cuenta.",
+    gcPeople: (n) => (n === 1 ? "1 participante" : `${n} participantes`),
+    gcPrizes: (k) => (k === 1 ? "1 premio" : `${k} premios`),
+    gcPrizesNote: (k) => `Hay ${k} premios: el juego cuenta el primero y el cartel del final muestra a todos.`,
+    gcSapoMany: "Cada nombre tiene su agujero. Cada argolla que entra es un premio.",
+    gcQuienMany: "Una ronda por premio: en cada una se dan vuelta las cartas que no coinciden y gana la última.",
+    gcTelefericoMany: "En cada estación se baja la mitad. Los últimos en bajarse ganan premio, y el primero llega a la cumbre.",
+    gcSapoQual: "Con más de doce, primero se tachan nombres hasta que quedan doce.",
+    gcRace: "Gana la primera llama que cruza la meta.",
+    gcLuz: "Con luz roja, el que se mueve se sienta. Gana quien toca el Faro.",
+    gcTrompo: "Los trompos chocan y se sacan del ruedo. Gana el último que sigue bailando.",
+    gcPinata: "Con cada palo caen caramelos. Gana el último que queda adentro.",
+    gcOruro: "En cada cuadra se quedan bailarines. Gana el que llega al Socavón.",
+    gcTombola: "Cada uno tiene una bola con su número, y la lista está al lado del bombo. Gana la que cae en el vaso.",
+    gcWheel: "A cada persona le tocan uno o más gajos. Gana el gajo que queda bajo la flecha.",
+    gcTeleferico: "En cada estación se baja la mitad. Gana quien llega a la cumbre.",
+    gcPasanaku: "La tela se cierra y los bultos se caen. Gana el que queda en el nudo.",
+    gcStellar: "Un paquete salta de estrella en estrella. Gana la última que toca.",
+    gcSapo: "Cada nombre tiene su agujero. Gana el agujero donde cae la última argolla.",
+    gcQuien: "Las cartas que no coinciden con la respuesta se dan vuelta. Gana la última.",
+    gcLedger: "Las pasadas barren tarjetas. Gana la que queda sellada.",
+    gcRockets: "Gana el primer cohete que llega.",
+    gcTotora: "Gana la primera balsa que llega a la otra orilla.",
     hiKicker: "La palabra",
     hiTitle: "Un tinkazo es una corazonada",
     hiLead: "En Bolivia, un tinkazo es un presentimiento, una corazonada. Y un tincazo, con c, es el golpecito que se da haciendo resbalar el dedo sobre el pulgar. Las dos están en el Diccionario de americanismos. Un sorteo es las dos cosas: la corazonada y el golpe que decide.",
@@ -1144,6 +1175,7 @@ export const T: Record<Lang, Dict> = {
     cTomAlmost: ["Almost, almost!", "It's wobbling!", "In or out?"],
     cTomNum: "No.",
     cTomBalls: "BALLS",
+    cTomWho: "WHICH BALL IS YOURS?",
     cTroThrow: ["Throw the tops!", "Into the ring!", "Hard, make them dance!"],
     cTroCount: (n) => (n === 2 ? "Two tops, head to head!" : `${n} tops spinning!`),
     cTroDance: ["Look at them dance!", "All of them humming!", "Steady, steady!"],
@@ -1574,6 +1606,31 @@ export const T: Record<Lang, Dict> = {
     jgRocketsB: "The same race, in space, for a crowd that is not into llamas. Up to eight on screen.",
     jgRuleT: "The rule they all follow",
     jgRuleB: "No game picks anyone. They receive the winner already set and tell the story. That is why the same beacon round always draws the same race, with the same game and duration: the animation's randomness comes from the seed, not from the clock. And when there are several prizes, the game announces them all: showing one of three would lie about what just happened.",
+    // --- The "how to play" card, before each game.
+    gcKicker: "How to play",
+    gcHonest: "The winner already came from the public number. The game only tells the story.",
+    gcPeople: (n) => (n === 1 ? "1 participant" : `${n} participants`),
+    gcPrizes: (k) => (k === 1 ? "1 prize" : `${k} prizes`),
+    gcPrizesNote: (k) => `There are ${k} prizes: the game tells the first one and the final card shows them all.`,
+    gcSapoMany: "Every name has its hole. Every ring that drops in is a prize.",
+    gcQuienMany: "One round per prize: in each one the cards that don't match flip over and the last one wins.",
+    gcTelefericoMany: "Half get off at every station. The last ones off win a prize, and the first prize reaches the top.",
+    gcSapoQual: "With more than twelve, names are crossed out first until twelve are left.",
+    gcRace: "The first llama across the finish line wins.",
+    gcLuz: "On red, whoever moves sits down. Whoever touches the Lighthouse wins.",
+    gcTrompo: "The tops clash and knock each other out of the ring. The last one spinning wins.",
+    gcPinata: "Every swing knocks candies out. The last one left inside wins.",
+    gcOruro: "Dancers stay behind at every block. Whoever reaches the Socavón wins.",
+    gcTombola: "Everyone has a ball with their number, listed next to the drum. The one that drops into the cup wins.",
+    gcWheel: "Everyone gets one or more slices. The slice left under the pointer wins.",
+    gcTeleferico: "Half get off at every station. Whoever reaches the top wins.",
+    gcPasanaku: "The cloth closes and the bundles fall out. The one left in the knot wins.",
+    gcStellar: "A packet hops from star to star. The last star it touches wins.",
+    gcSapo: "Every name has its hole. The hole where the last ring drops wins.",
+    gcQuien: "Cards that don't match the answer flip over. The last card wins.",
+    gcLedger: "Each sweep clears cards. The one left sealed wins.",
+    gcRockets: "The first rocket to arrive wins.",
+    gcTotora: "The first raft to reach the far shore wins.",
     hiKicker: "The word",
     hiTitle: "A tinkazo is a hunch",
     hiLead: "In Bolivia, a tinkazo is a hunch, a gut feeling. And a tincazo, with a c, is the flick you give sliding a finger off your thumb. Both are in the Diccionario de americanismos. A draw is both: the hunch and the flick that decides.",

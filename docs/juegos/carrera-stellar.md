@@ -58,7 +58,7 @@ Capturas en `docs/capturas/juego-stellar*.png`.
 
 El motor reparte la carrera así, y vale para los dos temas:
 
-La cuenta regresiva va en **segundos reales** y los quince de carrera en segundos de juego, que son los que estira el selector de duración: en "normal" la carrera entera dura treinta segundos.
+La cuenta regresiva va en **segundos reales** y los quince de carrera en segundos de juego, que son los que estira el selector de duración. En "normal" el show entero dura treinta segundos con la tarjeta de "cómo se juega" incluida: 3,5 de tarjeta y 26,5 de carrera (3 de cuenta, unos 20,5 de carrera y 3 de cartel). En la escena fija de `?pose=`, que no tiene tarjeta, la carrera sola dura treinta. Ver "La duración" en [juegos.md](../juegos.md).
 
 | Momento | Qué pasa |
 |---|---|

@@ -44,7 +44,7 @@ Vale la pena solo si la mecánica visual es distinta de verdad. La prueba: si ha
 1. Escribir el tema o el módulo.
 2. Agregar la variante al tipo `Game` en `src/state.ts`.
 3. Agregar el botón en el selector de `index.html` con id `g-<juego>` y su `data-i`.
-4. Agregar los textos en español e inglés en `src/i18n.ts`.
+4. Agregar los textos en español e inglés en `src/i18n.ts`, entre ellos la regla en una frase para la tarjeta de "cómo se juega" (`gc<Juego>`), y sumar el juego a `NOMBRE` y `REGLA` en [`src/ui/gamecard.ts`](../src/ui/gamecard.ts).
 5. Enlazar el botón en `src/main.ts` y despachar el juego en `src/ui/draw.ts`.
 6. Escribir `docs/juegos/<nombre>.md` siguiendo el modelo de la Carrera Stellar.
 7. Pasar la auditoría.
@@ -56,7 +56,10 @@ pnpm build
 pnpm preview &
 node scripts/audit-game.mjs <juego>
 node scripts/audit-sound.mjs <juego>
+node scripts/audit-identidad.mjs <juego>
 ```
+
+**El auditor de identificación** (desde el 4 de octubre de 2026) mide si cada participante llega a leer su nombre en pantalla antes de que salga el ganador, con 8, 18 y 50 personas: con `?auditar=identidad`, el estadio anota la primera vez que se ve cada nombre entero, legible (un alto de al menos 1,6% de la pantalla) y sin confundirse con otro. Pide que con 8 se vean todos, y con 18 nueve de cada diez, en los juegos que prometen esas cantidades; con 50, informa. Nació de la tómbola, donde salía el número de la bola ganadora y nadie sabía de quién era.
 
 Donde `<juego>` es el valor de `?demo=`: `race`, `luz`, `trompo`, `pinata`, `oruro`, `tombola`, `wheel`, `teleferico`, `pasanaku`, `stellar`, `sapo`, `quien`. El auditor abre Chrome, corre un sorteo real contra drand y comprueba veinte cosas:
 
@@ -138,6 +141,8 @@ Era un multiplicador fijo (`0,8 / 1,4 / 2,2`) y el problema no era el número si
 **El tope de ×2,2 no es negociable.** Más que eso no es más emoción, es cámara lenta: la ruleta tenía dos segundos de crucero en los que la imagen es un borrón, y multiplicarlos por tres y medio son ocho segundos de nada. Un juego que topa ahí **necesita más contenido, no ir más despacio**. Por eso la ruleta pasó de 7,65 a 17,2 segundos nominales acortando el borrón y alargando la frenada, el Cierre de Libro llegó a seis pasadas y al Pasanaku se le dio tiempo al tejido de los hilos y al apretón.
 
 Hoy, medido por el auditor exigente: "normal" son treinta segundos en los doce del selector.
+
+**La tarjeta de "cómo se juega" entra en el mismo total.** Desde el 4 de octubre de 2026, antes de cada juego de un sorteo de verdad o de una demo, una tarjeta a pantalla completa dice el nombre del juego, la regla en una frase, cuántos participan y que el ganador ya salió del número público ([`src/ui/gamecard.ts`](../src/ui/gamecard.ts)). Dura 3,5 segundos, se salta con un toque, y sus segundos salen del total con `setCardSeconds`: "normal" sigue siendo treinta, tarjeta incluida (medido: 30,0 a 30,2 en el motor nuevo). La escena fija de `?pose=`, la de los auditores y las capturas, no la muestra, así que lo que mide el auditor exigente es el juego solo.
 
 ## El sonido
 

@@ -59,7 +59,15 @@ export async function playPixi(game: Game, names: string[], winners: readonly nu
   game = playableGame(game, names.length, names, winners);
   const load = PIXI[game];
   if (!load) return false;
-  const launch = await load();
+  // Si el trozo del juego no baja (el wifi del evento se cortó justo), todavía
+  // no se montó nada: el motor de siempre lo cuenta. Antes el error se perdía
+  // y no aparecía ni el juego ni el ganador.
+  let launch: Awaited<ReturnType<typeof load>>;
+  try {
+    launch = await load();
+  } catch {
+    return false;
+  }
   try {
     await launch(names, winners, beacon, done);
   } catch (err) {

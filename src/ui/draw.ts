@@ -1,6 +1,6 @@
 import { $, esc } from "../dom";
 import { T, getLang, t } from "../i18n";
-import { LCOLORS, WHEEL_MAX, app, playableGame, avatar, forceMotion, skippedForReducedMotion, type Beacon } from "../state";
+import { LCOLORS, WHEEL_MAX, app, playableGame, avatar, forceMotion, setCardSeconds, setShowGate, skipMotion, skippedForReducedMotion, type Beacon, type Game } from "../state";
 import { bytesToHex, decompressG1, fetchRound, hexToBytes, randomnessOf, roundUrl, verifyRound } from "../protocol/drand";
 import { select } from "../protocol/select";
 import { network, txUrl } from "../stellar/config";
@@ -11,6 +11,8 @@ import { currentSession } from "./wallet-ui";
 import { qrDataUrl } from "./qr";
 import { usePixi } from "../games/engine";
 import { secondsToRound } from "./freeze";
+import { CARD_SECONDS, showGameCard } from "./gamecard";
+import { startMusic, stopMusic } from "../music";
 
 /** Obtiene la ronda objetivo, verifica su firma y selecciona (protocolo §2, §5). */
 async function resolveBeacon(
@@ -128,57 +130,104 @@ export async function draw(): Promise<void> {
  * por uno que sí, y eso no altera quién ganó.
  */
 function playGame(names: string[], winners: number[], beacon: Beacon, finish: () => void): void {
-  // El motor nuevo, PixiJS con el director de cámara (docs/motores.md). Si el
+  const pixi = usePixi();
+  const game = pixi ? playableGame(app.game, names.length, names, winners) : classicPlayable(app.game, names.length);
+  // Antes del juego, la tarjeta de "cómo se juega", grande para la sala. Sus
+  // segundos salen del mismo total que eligió quien sortea.
+  const card = skipMotion() ? null : showGameCard(game, names.length, winners.length);
+  setCardSeconds(card ? CARD_SECONDS : 0);
+  // La pantalla completa se pide con la tarjeta, mientras el clic de "Sortear"
+  // todavía cuenta como gesto: el navegador la niega pasados unos cinco
+  // segundos, y el estadio aparece recién cuando la tarjeta termina.
+  const raiz = document.documentElement;
+  const gesto = (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive;
+  if (card && gesto && !document.fullscreenElement && raiz.requestFullscreen) {
+    void raiz.requestFullscreen({ navigationUI: "hide" }).catch(() => undefined);
+  }
+  let cerrado = false;
+  const fin = (): void => {
+    if (cerrado) return;
+    cerrado = true;
+    card?.hide();
+    setCardSeconds(0);
+    setShowGate(null);
+    // Si el juego no llegó a montarse, la música de la tarjeta queda sonando.
+    stopMusic();
+    finish();
+  };
+  // El de respaldo arranca recién cuando termina la tarjeta: muestra el
+  // estadio apenas monta y su reloj corre desde ahí. Mientras tanto baja el
+  // juego y suena la música, como en el motor nuevo. Si el motor nuevo no
+  // arrancó, la tarjeta pasa a decir lo que de verdad se juega.
+  const respaldo = (): void => {
+    setShowGate(null);
+    const real = classicPlayable(app.game, names.length);
+    if (card && real !== game) card.update(real);
+    const carga = classicModule(real);
+    carga.catch(() => undefined);
+    if (card) {
+      startMusic(parseInt(beacon.randomness.slice(8, 16), 16));
+      void card.ready.then(() => classicGame(carga, names, winners, beacon, fin));
+    } else classicGame(carga, names, winners, beacon, fin);
+  };
+  // El motor nuevo, PixiJS con el director de cámara (docs/motores.md), se
+  // arma mientras la tarjeta está arriba y espera en la compuerta. Si el
   // equipo no tiene WebGL, si se pide `?motor=clasico`, si el motor no arranca
   // o si el wifi no alcanza a bajarlo, el juego sale con el de siempre.
-  if (usePixi()) {
-    const game = playableGame(app.game, names.length, names, winners);
-    void import("../games/pixi").then(
-      async (m) => {
-        if (!(await m.playPixi(game, names, winners, beacon, finish))) classicGame(names, winners, beacon, finish);
-      },
-      () => classicGame(names, winners, beacon, finish),
-    );
+  if (pixi) {
+    setShowGate(card?.ready ?? null);
+    void import("../games/pixi")
+      .then(
+        async (m) => {
+          if (!(await m.playPixi(game, names, winners, beacon, fin))) respaldo();
+        },
+        respaldo,
+      )
+      // Un error con el juego a medio armar: sin show, pero con ganador.
+      .catch(() => fin());
     return;
   }
-  classicGame(names, winners, beacon, finish);
+  respaldo();
 }
+
+/** Lo que de verdad juega el motor de respaldo: el resto lo cuenta como la carrera. */
+function classicPlayable(game: Game, n: number): Game {
+  if (game === "wheel") return n <= WHEEL_MAX ? "wheel" : "race";
+  if (game === "stellar" || game === "ledger" || game === "pasanaku" || game === "teleferico" || game === "tombola" || game === "rockets") return game;
+  return "race";
+}
+
+type Clasico = (names: string[], winners: number[], beacon: Beacon, finish: () => void) => void;
 
 /**
  * El motor de siempre, de respaldo. Se baja recién si hace falta: son unos
  * 90 KB que antes viajaban en la página inicial de todo el mundo y solo se
- * usan sin WebGL o con `?motor=clasico`.
+ * usan sin WebGL o con `?motor=clasico`. Se pide apenas se sabe que hace
+ * falta, así baja mientras la sala lee la tarjeta.
  */
-function classicGame(names: string[], winners: number[], beacon: Beacon, finish: () => void): void {
-  void (async () => {
-    if (app.game === "wheel" && names.length <= WHEEL_MAX) {
-      (await import("../games/wheel")).wheelSpin(names, winners, beacon, finish);
-      return;
-    }
-    if (app.game === "stellar") {
-      (await import("../games/constellation")).stellarConstellation(names, winners, beacon, finish);
-      return;
-    }
-    if (app.game === "ledger") {
-      (await import("../games/ledger")).ledgerClose(names, winners, beacon, finish);
-      return;
-    }
-    if (app.game === "pasanaku") {
-      (await import("../games/pasanaku")).pasanaku(names, winners, beacon, finish);
-      return;
-    }
-    if (app.game === "teleferico") {
-      (await import("../games/cablecar")).cableCar(names, winners, beacon, finish);
-      return;
-    }
-    if (app.game === "tombola") {
-      (await import("../games/tombola")).tombola(names, winners, beacon, finish);
-      return;
-    }
-    (await import("../games/race")).stadiumRace(names, winners, beacon, finish, app.game === "rockets" ? "stellar" : "andes");
-    // Si ni el motor de respaldo se alcanza a bajar, el resultado sale igual,
-    // sin show: el sorteo ya está decidido y la sala tiene que verlo.
-  })().catch(() => finish());
+function classicModule(game: Game): Promise<Clasico> {
+  switch (game) {
+    case "wheel":
+      return import("../games/wheel").then((m) => m.wheelSpin);
+    case "stellar":
+      return import("../games/constellation").then((m) => m.stellarConstellation);
+    case "ledger":
+      return import("../games/ledger").then((m) => m.ledgerClose);
+    case "pasanaku":
+      return import("../games/pasanaku").then((m) => m.pasanaku);
+    case "teleferico":
+      return import("../games/cablecar").then((m) => m.cableCar);
+    case "tombola":
+      return import("../games/tombola").then((m) => m.tombola);
+    default:
+      return import("../games/race").then((m) => (n: string[], w: number[], b: Beacon, f: () => void) => m.stadiumRace(n, w, b, f, game === "rockets" ? "stellar" : "andes"));
+  }
+}
+
+function classicGame(carga: Promise<Clasico>, names: string[], winners: number[], beacon: Beacon, finish: () => void): void {
+  // Si ni el motor de respaldo se alcanza a bajar, el resultado sale igual,
+  // sin show: el sorteo ya está decidido y la sala tiene que verlo.
+  void carga.then((jugar) => jugar(names, winners, beacon, finish)).catch(() => finish());
 }
 
 /**
@@ -258,11 +307,24 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
  * más que soltar el forzado: no vuelve a revelar, ni toca el historial ni el
  * comprobante.
  */
+/**
+ * Una repetición a la vez. Saltar la tarjeta con Enter o espacio también
+ * apretaba "Ver la animación igual", que seguía con el foco, y montaba un
+ * segundo juego encima del primero (revisión del 4 de octubre de 2026).
+ */
+let replaying = false;
 export function replayAnimation(): void {
   const { frozen, drawn } = app;
-  if (!frozen || !drawn) return;
+  if (!frozen || !drawn || replaying) return;
+  replaying = true;
+  const btn = document.getElementById("btn-replay") as HTMLButtonElement | null;
+  if (btn) btn.disabled = true;
   forceMotion(true);
-  playGame(frozen.names, drawn.winners, drawn.beacon, () => forceMotion(false));
+  playGame(frozen.names, drawn.winners, drawn.beacon, () => {
+    replaying = false;
+    if (btn) btn.disabled = false;
+    forceMotion(false);
+  });
 }
 
 let proofLink = "";
