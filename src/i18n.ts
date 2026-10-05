@@ -96,6 +96,8 @@ export interface Dict {
   cChoWobble: (n: string) => string;
   cChoHold: (n: string) => string;
   cChoDuo: (a: string, b: string) => string;
+  /** Con dos desde el principio: nadie salió, así que no "quedan". */
+  cChoPair: (a: string, b: string) => string;
   cTelCount: (n: number, cabs: number) => string;
   cTelPass: (k: number) => string;
   cTelStop: (k: number, off: number, left: number) => string;
@@ -474,6 +476,7 @@ export const T: Record<Lang, Dict> = {
     cChoWobble: (n) => pick([`¡${n} se tambalea!`, `¡Ojo con ${n}!`]),
     cChoHold: (n) => pick([`¡${n} aguanta!`, `¡${n} no se soltó!`, `¡Por un pelo, ${n}!`]),
     cChoDuo: (a, b) => pick([`¡Quedan ${a} y ${b}!`, `¡${a} y ${b}, de la mano!`]),
+    cChoPair: (a, b) => `¡${a} y ${b}, de la mano!`,
     cChoDuoAnon: "¡Quedan dos!",
     cChoFinal: ["¡La última vuelta!", "¡Más rápido!", "¡Ahora o nunca!"],
     cChoLeft: "EN LA RUEDA",
@@ -1309,10 +1312,11 @@ export const T: Record<Lang, Dict> = {
     cChoPrize: (n) => `${n} goes out with a prize!`,
     cChoGo: ["The chovena goes on!", "Another round!", "Music!"],
     cChoFake: ["Just a tease!", "False alarm!", "Keep going!"],
-    cChoBack: (n) => pick([`${n} slipped out, and is back in!`, `${n} is back in the ring!`]),
+    cChoBack: (n) => pick([`${n} slipped out but is back in!`, `${n} is back in the ring!`]),
     cChoWobble: (n) => pick([`${n} is wobbling!`, `Watch ${n}!`]),
     cChoHold: (n) => pick([`${n} holds on!`, `${n} didn't let go!`, `${n} hangs on!`]),
     cChoDuo: (a, b) => pick([`It's ${a} and ${b}!`, `${a} and ${b}, hand in hand!`]),
+    cChoPair: (a, b) => `${a} and ${b}, hand in hand!`,
     cChoDuoAnon: "Two left!",
     cChoFinal: ["Last round!", "Faster!", "Now or never!"],
     cChoLeft: "IN THE RING",

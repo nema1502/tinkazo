@@ -85,11 +85,19 @@ const C: Chord = { root: -33, strings: [-5, 0, 3, 7, 10] };
 const G: Chord = { root: -38, strings: [-2, 2, 5, 10, 14] };
 const EM: Chord = { root: -29, strings: [-5, -2, 2, 7, 10] };
 
-/** Vueltas de ocho compases de dos por cuatro. La semilla elige una. */
+/**
+ * Vueltas de ocho compases de dos por cuatro. La semilla elige una. Eran tres,
+ * y en un evento de diez sorteos la música sonaba parecida en todos (la
+ * repetición es lo que hace que la gente apague el sonido: investigación del
+ * audio, 4 de octubre de 2026). Siguen siendo los mismos cuatro acordes.
+ */
 const PROGRESSIONS: Chord[][] = [
   [AM, AM, C, G, AM, G, EM, AM],
   [AM, C, G, AM, AM, C, EM, AM],
   [AM, AM, G, C, AM, EM, G, AM],
+  [AM, G, C, G, AM, EM, G, AM],
+  [C, G, AM, AM, C, G, EM, AM],
+  [AM, EM, G, AM, C, G, EM, AM],
 ];
 
 /* ------------------------------------------------------------- el estado */
@@ -395,7 +403,7 @@ function holdOf(motif: number[], i: number): number {
  * segundo compás contesta al primero y cierra en la tónica.
  */
 function writeMotif(rng: () => number): number[] {
-  const RHYTHMS = ["x..xx.x.", "x.x.x.x.", "x..xx...", "x.xxx.x."];
+  const RHYTHMS = ["x..xx.x.", "x.x.x.x.", "x..xx...", "x.xxx.x.", "x.xx.xx.", "xx..x.x."];
   const out: number[] = [];
   let d = 5 + Math.floor(rng() * 3);
   for (let b = 0; b < 2; b++) {

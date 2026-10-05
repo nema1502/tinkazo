@@ -17,7 +17,14 @@ import { loadSessionKind } from "./stellar/session-store";
 // `?theme=light|dark` fuerza el tema, igual que en la página principal: sirve
 // para las capturas y para mirar las dos versiones sin tocar el sistema.
 const tema = params.get("theme");
-if (tema === "light" || tema === "dark") document.documentElement.dataset.theme = tema;
+if (tema === "light" || tema === "dark") {
+  document.documentElement.dataset.theme = tema;
+  // Las imágenes con versión clara la eligen por el tema del sistema: con
+  // el tema forzado, la versión del tema del sitio.
+  document.querySelectorAll<HTMLSourceElement>('picture source[media*="prefers-color-scheme"]').forEach((s) => {
+    s.media = tema === "light" ? "all" : "not all";
+  });
+}
 
 // La cuenta también se ve acá: "Mi cuenta" si hay una sesión guardada en esta
 // red, "Entrar" si no. Sin cargar ninguna billetera: solo se lee qué tipo de

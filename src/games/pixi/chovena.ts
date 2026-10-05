@@ -96,7 +96,8 @@ const MUJERES = new Set(("maria ana lucia elena sofia valeria camila paola danie
   "soledad luz gladys nelly jazmin abigail ximena jimena mariela marisol yesenia wendy evelyn ingrid karen kelly nicole " +
   "michelle stephanie estefania milagros belen carolina catalina florencia agustina antonella valentina martina renata " +
   "emilia isabella guadalupe maribel noelia roxana tatiana vanessa viviana zulema esther edith judith elizabeth " +
-  "lizeth jhoselin yovana susana silvana tania rosario margarita cristina angela erika diana fabiola liliana yolanda").split(" "));
+  "lizeth jhoselin yovana susana silvana tania rosario margarita cristina angela erika diana fabiola liliana yolanda " +
+  "cielo socorro charo").split(" "));
 const HOMBRES = new Set(("jorge carlos diego pablo rodrigo miguel andres franco oscar juan jose luis pedro mario fernando " +
   "ricardo roberto sergio javier alejandro daniel david eduardo gustavo hugo ivan jaime julio marco marcos mauricio nicolas " +
   "raul rene victor wilson freddy jhonny edwin edgar alvaro boris cristian christian gonzalo gerardo hector ignacio " +
@@ -365,7 +366,9 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   const ringsFor = (m: number): number[] => {
     const single = (m * ARC) / (2 * Math.PI);
     if (m === 2) return [PAIR];
-    if (single <= 1) return [Math.max(0.14, single)];
+    // De tres a seis, la rueda un poco más abierta que de la mano justa: si
+    // no, uno quedaba detrás del otro y su nombre tapaba al de adelante.
+    if (single <= 1) return [Math.max(m <= 6 ? 0.28 : 0.14, single)];
     let best: number[] = [1];
     for (let q = 2; q <= 7; q++) {
       const radii = Array.from({ length: q }, (_, r) => 1 - r * RING_GAP);
@@ -378,11 +381,15 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
 
   // Las filas del arranque: las mujeres atrás y los hombres adelante, de a
   // dieciséis por fila. Con cuatro o menos, una sola fila, lado a lado.
+  // Cada fila va en el mismo sentido de giro que la rueda que van a formar: la
+  // de atrás de izquierda a derecha y la de adelante al revés. Con las dos en
+  // el mismo sentido, los hombres se cruzaban entre ellos camino a la rueda y
+  // se amontonaban en un costado (lo vio el agente evaluador).
   const rowOf = (i: number): { u: number; v: number } => {
     if (n <= 4) {
       const j = order.indexOf(i);
       const span = Math.min(1.2, n * ARC * 1.1);
-      return { u: -span / 2 + (span * (j + 0.5)) / Math.max(1, n), v: 0.12 };
+      return { u: span / 2 - (span * (j + 0.5)) / Math.max(1, n), v: 0.12 };
     }
     const woman = genero[i] === "f";
     const grupo = woman ? mujeres : hombres;
@@ -394,7 +401,8 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     const span = Math.min(1.7, inRow * ARC * 1.05);
     const rows = Math.ceil(count / per);
     const v = rows <= 1 ? 0.4 : 0.3 + (0.65 * r) / (rows - 1);
-    return { u: -span / 2 + (span * ((k % per) + 0.5)) / inRow, v: woman ? -v : v };
+    const pos = woman ? k % per : inRow - 1 - (k % per);
+    return { u: -span / 2 + (span * (pos + 0.5)) / inRow, v: woman ? -v : v };
   };
   const rowPolar = (i: number): Polar => {
     const p = rowOf(i);
@@ -464,6 +472,34 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       epochs.push(makeEpoch(e.x0 + 0.15, order.filter((i) => inRing.has(i)), epochs[epochs.length - 1] as Epoch));
     }
   }
+  /**
+   * De las filas a la rueda, cuánto gira cada uno. Los de una misma fila y una
+   * misma rueda giran para el mismo lado: con el giro más corto de cada uno por
+   * separado, a uno le tocaba un lado y a su vecino el otro, y se cruzaban.
+   */
+  const e0 = epochs[0] as Epoch;
+  const joinFrom = names.map((_, i) => (polarIn(e0, i, T_JOIN) as Polar).th);
+  const joinTurn: number[] = (() => {
+    const raw = names.map((_, i) => wrap((joinFrom[i] as number) - rowPolar(i).th));
+    const out = raw.slice();
+    const groups = new Map<string, number[]>();
+    for (let i = 0; i < n; i++) {
+      const key = `${(e0.slot.get(i) as Slot).rho}:${rowOf(i).v > 0 ? 1 : 0}`;
+      const g = groups.get(key) ?? [];
+      g.push(i);
+      groups.set(key, g);
+    }
+    for (const ids of groups.values()) {
+      let sx = 0, sy = 0;
+      for (const i of ids) {
+        sx += Math.cos(raw[i] as number);
+        sy += Math.sin(raw[i] as number);
+      }
+      const ref = Math.atan2(sy, sx);
+      for (const i of ids) out[i] = ref + wrap((raw[i] as number) - ref);
+    }
+    return out;
+  })();
   const epochAt = (x: number): number => {
     let k = 0;
     for (let i = 0; i < epochs.length; i++) if ((epochs[i] as Epoch).at <= x) k = i;
@@ -495,6 +531,12 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     const off = wrap(th + Math.PI / 2);
     if (Math.abs(off) < 0.34) th = -Math.PI / 2 + (off < 0 ? -0.34 : 0.34);
     d.seat = { rho: d.away ? 2.5 : 1.2 + 0.13 * hash(d.idx, 31), th };
+    // La rival de la final se sienta a unos pasos, a la vista: con la cámara
+    // cerca, irse al borde de la plaza la sacaba de cuadro en un instante.
+    if (d.idx === rivalIdx && at === FX0) {
+      d.away = false;
+      d.seat = { rho: p.rho + 0.4, th: p.th };
+    }
   };
   {
     let ei = 0;
@@ -510,6 +552,8 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   const remainingAt = (x: number): number => dancers.filter((d) => d.outAt < 0 || d.outAt > x).length;
   /** Hasta dónde llegan las filas del arranque, para encuadrarlas. */
   const rowsRho = Math.max(0.12, ...dancers.map((d) => Math.hypot(d.row.u, d.row.v * 1.4)));
+  /** La fila de más adelante del arranque: ahí el nombre va debajo de los pies. */
+  const frontV = Math.max(...dancers.map((d) => d.row.v));
 
   /* ------------------------------------------------------------ el relator */
   let tAll = 0, tHold = 0;
@@ -636,6 +680,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     if (!finalDuo) return;
     if (x >= F0 + 0.15) once("duo", () => {
       if (story.arc === "tapada") say(t("cChoDuoAnon"), 0.78);
+      else if (n === 2) say(L().cChoPair(...enOrden(nm(winnerIdx), nm(rivalIdx))), 0.8);
       else say(L().cChoDuo(...enOrden(nm(winnerIdx), nm(rivalIdx))), 0.8);
       beep(note(12), 0.12, "triangle", 0.05);
       setTimeout(() => beep(note(14), 0.16, "triangle", 0.05), 110);
@@ -729,6 +774,8 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   let leaders!: Graphics;
   let panel!: Container;
   let panelFor = -1;
+  /** Dónde va el cartel del corte que está pasando: se decide una vez, en el cuadro del corte. */
+  let bigFor = -9, bigY = 0, bigS = 0;
   let counter!: Text;
   let counterBox!: Graphics;
   let counterRoot!: Container;
@@ -960,6 +1007,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     leaders = new Graphics();
     panel = new Container();
     panelFor = -1;
+    bigFor = -9;
     counterBox = new Graphics();
     counter = S.text("", { fontFamily: MONO, fontSize: 14 * k, fontWeight: "700", fill: S.dark ? CREAM : INK });
     counter.anchor.set(0.5);
@@ -987,9 +1035,10 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   /** Dónde está cada uno, de qué tamaño, y qué tan sentado. */
   function where(d: Dancer, x: number): { p: Polar; alpha: number; seated: number; rows: number } {
     if (d.outAt >= 0 && x >= d.outAt) {
-      const dur = d.away ? EXIT * 1.9 : EXIT;
+      const lenta = d.idx === rivalIdx && d.outAt === FX0;
+      const dur = lenta ? 1.3 : d.away ? EXIT * 1.9 : EXIT;
       const f = clamp((x - d.outAt) / dur, 0, 1);
-      const e = ease.outCubic(f);
+      const e = lenta ? ease.inOutCubic(f) : ease.outCubic(f);
       const p = { rho: d.from.rho + (d.seat.rho - d.from.rho) * e, th: d.from.th + wrap(d.seat.th - d.from.th) * e };
       // Los que se van hacia la sala salen de la pantalla enteros: con
       // transparencia se veía un brazo a través del cuerpo.
@@ -1022,7 +1071,13 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     if (x < T_JOIN + JOIN) {
       rows = 1 - ease.inOutCubic(clamp((x - T_JOIN) / JOIN, 0, 1));
       const r = rowPolar(d.idx);
-      p = { rho: r.rho + (p.rho - r.rho) * (1 - rows), th: r.th + wrap(p.th - r.th) * (1 - rows) };
+      // Lo que giró la rueda desde que arrancaron, más el giro de cada uno.
+      const giro = (joinTurn[d.idx] as number) + wrap(p.th - (joinFrom[d.idx] as number));
+      // Los de adelante pasan por afuera y los de atrás por adentro: así se
+      // cruzan sin chocarse.
+      const f = Math.sin(Math.PI * (1 - rows));
+      const bombeo = d.row.v > 0 ? 1 + 0.2 * f : 1 - 0.12 * f;
+      p = { rho: (r.rho + (p.rho - r.rho) * (1 - rows)) * bombeo, th: r.th + giro * (1 - rows) };
     }
     return { p, alpha: 1, seated: 0, rows };
   }
@@ -1087,7 +1142,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       let y = pr.y;
       // De frente o de espaldas. En las filas del arranque y en la final,
       // todos miran a la sala.
-      const final = finalDuo && x >= F0 && (d.idx === winnerIdx || d.idx === rivalIdx);
+      const final = (n === 2 || (finalDuo && x >= F0)) && (d.idx === winnerIdx || d.idx === rivalIdx);
       const facing = w.rows > 0.3 || final || Math.sin(w.p.th) <= 0.08 || w.p.rho < 0.02;
       v.face.visible = facing;
       v.back.visible = !facing;
@@ -1147,6 +1202,15 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
             aL = toward + 0.18;
             aR = toward - 0.18;
           }
+          // La mano del lado del que se soltó y se va, cae: si no, lo seguía
+          // señalando mientras caminaba (en la final, a la rival).
+          const suelta = (i: number): number => {
+            const o = dancers[i] as Dancer;
+            return o.outAt >= 0 ? clamp((x - o.outAt) / 0.25, 0, 1) : 0;
+          };
+          const [il, ir] = pair[0] === pair[1] || ta.x <= tb.x ? pair : [pair[1], pair[0]];
+          aL += (0.3 - aL) * suelta(il);
+          aR += (-0.3 - aR) * suelta(ir);
           aL += 0.1 * sb;
           aR += 0.1 * sb;
         } else if (fo >= 0.3) {
@@ -1180,8 +1244,16 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       }
       v.root.position.set(pr.x, y);
       // Dónde quedaron las manos, para la cadena.
-      const hand = (sh: Pt, rot: number): Pt => ({ x: sh.x - Math.sin(rot) * 0.3 * pr.s, y: sh.y + (y - pr.y) + Math.cos(rot) * 0.3 * pr.s });
-      handsNow[d.idx] = { L: hand(shL, v.armL.rotation), R: hand(shR, v.armR.rotation) };
+      // El hombro gira con el cuerpo alrededor de la cadera: si no, en el
+      // tambaleo fuerte la cadena quedaba flotando lejos de las manos.
+      const rb = v.body.rotation, hipX = pr.x, hipY = y + v.body.y * pr.s;
+      const hand = (sx: number, rot: number): Pt => {
+        const ox = sx * pr.s, oy = -0.31 * pr.s;
+        const shx = hipX + ox * Math.cos(rb) - oy * Math.sin(rb), shy = hipY + ox * Math.sin(rb) + oy * Math.cos(rb);
+        const a = rb + rot;
+        return { x: shx - Math.sin(a) * 0.3 * pr.s, y: shy + Math.cos(a) * 0.3 * pr.s };
+      };
+      handsNow[d.idx] = { L: hand(-0.11, v.armL.rotation), R: hand(0.11, v.armR.rotation) };
     }
   }
 
@@ -1189,8 +1261,12 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   function drawChain(x: number): void {
     chain.clear();
     if (x >= T_CROWN || x < T_JOIN + JOIN * 0.7) return;
-    const ep = epochs[epochAt(x)] as Epoch;
-    const maxGap = G.rx * ep.gap * 1.9 + G.dh;
+    const ei = epochAt(x);
+    const ep = epochs[ei] as Epoch;
+    // Mientras la rueda se cierra, la distancia de antes: con la de la rueda
+    // nueva, la cadena cruzaba el hueco como un palo.
+    const prevEp = ei > 0 && x - ep.at < CLOSE ? (epochs[ei - 1] as Epoch) : ep;
+    const maxGap = G.rx * Math.min(ep.gap, prevEp.gap) * 1.9 + G.dh;
     for (const ring of ep.rings) {
       const m = ring.length;
       if (m < 2) continue;
@@ -1281,12 +1357,13 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     let tx = cx, ty: number, z: number, rate = 2;
     const ringY = cy - dh * 0.5;
     if (x >= T_CROWN) {
-      z = clamp((avail * 0.36) / dh, 1.4, 3.6);
-      ty = cy - dh * 0.75;
+      z = clamp((avail * 0.36) / dh, 1.4, 5);
+      // Más abajo que antes: el cartel le tapaba las manos y el sombrero.
+      ty = cy - dh * 1.05;
       rate = 2.2;
     } else if (finalDuo && x >= F0) {
       // La pareja final, grande aunque haya sido una sala de doscientos.
-      z = clamp((avail * (x >= FW0 ? 0.5 : 0.42)) / dh, 1.5, 4);
+      z = clamp((avail * (x >= FW0 ? 0.5 : 0.42)) / dh, 1.5, 6.5);
       ty = cy - dh * 0.6;
       rate = 2.4;
     } else if (x < T_JOIN + JOIN) {
@@ -1329,11 +1406,14 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     const { W, H, k } = G;
     if (!(wNow[d.idx] as ReturnType<typeof where>).alpha) return;
     const p = pNow[d.idx] as { x: number; y: number; s: number };
-    const head = cam.toScreen(p.x, p.y - p.s * 1.08, W, H);
+    // En las filas del arranque, los hombres de adelante llevan el nombre a
+    // los pies: arriba tapaba el ruedo de color de las mujeres de atrás.
+    const abajo = !d.tipoy && d.row.v >= frontV - 1e-6 && (wNow[d.idx] as ReturnType<typeof where>).rows > 0.5;
+    const head = abajo ? cam.toScreen(p.x, p.y + p.s * 0.05, W, H) : cam.toScreen(p.x, p.y - p.s * 1.08, W, H);
     // Si su dueño quedó fuera de cuadro (los que se van, con la cámara cerca),
     // el nombre no va: pegado al borde de la pantalla engañaba.
     if (head.x < -10 * k || head.x > W + 10 * k || head.y < S.top() - 30 * k || head.y > H - S.bottom() + 40 * k) return;
-    const s = cam.toScreen(p.x, p.y - p.s * 1.22, W, H);
+    const s = abajo ? head : cam.toScreen(p.x, p.y - p.s * 1.22, W, H);
     const chip = (d.chip ??= chips.addChild(S.chip(nm(d.idx), G.portrait ? 0.9 : 1)));
     chip.scale.set(scale);
     chip.visible = true;
@@ -1343,8 +1423,9 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       placed.some((r) => cx < r.x + r.w && cx + cw > r.x && cy - ch / 2 < r.y + r.h / 2 && cy + ch / 2 > r.y - r.h / 2);
     // Primero encima de la cabeza, después a los costados, y recién después apilado.
     const x0 = clamp(s.x - cw / 2, 8 * k, W - cw - 8 * k);
-    const y0 = clamp(s.y - 14 * k, lo, hi);
-    const cands: [number, number][] = [[x0, y0], [x0 - cw * 0.62, y0], [x0 + cw * 0.62, y0], [x0, y0 - ch - 2 * k], [x0 - cw * 0.62, y0 - ch - 2 * k], [x0 + cw * 0.62, y0 - ch - 2 * k]];
+    const y0 = clamp(abajo ? s.y + ch / 2 + 2 * k : s.y - 14 * k, lo, hi);
+    const otra = abajo ? ch + 2 * k : -(ch + 2 * k);
+    const cands: [number, number][] = [[x0, y0], [x0 - cw * 0.62, y0], [x0 + cw * 0.62, y0], [x0, y0 + otra], [x0 - cw * 0.62, y0 + otra], [x0 + cw * 0.62, y0 + otra]];
     let cx = x0, cy = y0;
     const libre = cands.map(([a, b]) => [clamp(a, 8 * k, W - cw - 8 * k), clamp(b, lo, hi)] as [number, number]).find(([a, b]) => !hits(a, b));
     if (libre) [cx, cy] = libre;
@@ -1363,7 +1444,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     chip.position.set(cx, cy);
     // Si quedó lejos de su dueño, un hilo hasta la cabeza.
     const ax = clamp(head.x, cx + 6 * k, cx + cw - 6 * k);
-    const ay = cy + ch / 2;
+    const ay = abajo ? cy - ch / 2 : cy + ch / 2;
     if (Math.hypot(ax - head.x, ay - head.y) > 22 * k) {
       leaders.moveTo(ax, ay).lineTo(head.x, head.y).stroke({ width: 2 * k, color: S.dark ? CREAM : INK, alpha: 0.7 });
       leaders.circle(head.x, head.y, 2.6 * k).fill({ color: S.dark ? CREAM : INK, alpha: 0.8 });
@@ -1446,28 +1527,85 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     if (sinceStop >= 0 && sinceStop < 0.14) tint.rect(0, 0, W, H).fill({ color: 0xffffff, alpha: 0.22 * (1 - sinceStop / 0.14) });
     big.visible = false;
     if (held && sinceStop < 1.1) {
-      // El cartel va donde no tapa a nadie: en el hueco del medio de la rueda,
-      // arriba o abajo. Si no entra en ningún lado, no sale (el subtítulo y el
-      // aviso rojo dicen lo mismo).
-      const pop = 1 + 0.35 * (1 - ease.outBack(clamp(sinceStop / 0.18, 0, 1)));
-      const bw = big.width / big.scale.x, bh = big.height / big.scale.y;
-      const fitW = Math.min(1, (W * 0.8) / Math.max(1, bw));
-      big.scale.set(pop * fitW);
-      const tw = bw * fitW, th = bh * fitW;
-      const cuerpos: Rect[] = [];
-      for (const d of dancers) {
-        if (!inRingNow(d, x)) continue;
-        const p = pNow[d.idx] as { x: number; y: number; s: number };
-        const a = cam.toScreen(p.x - 0.3 * p.s, p.y - 1.2 * p.s, W, H), b = cam.toScreen(p.x + 0.3 * p.s, p.y, W, H);
-        cuerpos.push({ x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y });
+      // El cartel va donde no tapa a nadie ni a la interfaz, y si no entra,
+      // más chico. El lugar se decide una vez, en el cuadro del corte:
+      // decidido en cada cuadro, aparecía tarde y saltaba de lugar cuando los
+      // que salían se iban (lo vio el agente evaluador). Si no entra en ningún
+      // lado, no sale: el subtítulo y el aviso rojo dicen lo mismo.
+      if (bigFor !== stopAt) {
+        bigFor = stopAt;
+        bigS = 0;
+        const obst: Rect[] = [];
+        const caja = (b: { x: number; y: number; width: number; height: number }): void => {
+          obst.push({ x: b.x, y: b.y, w: b.width, h: b.height });
+        };
+        // En el corte la cámara viaja (se acerca a los que salen): los cuerpos
+        // cuentan donde están ahora, a mitad del viaje y donde va a quedar.
+        const c = cam.snapshot();
+        const poses = [0, 0.5, 1].map((f) => ({ x: c.x + (c.tx - c.x) * f, y: c.y + (c.ty - c.y) * f, z: c.zoom + (c.tz - c.zoom) * f }));
+        /** Un rectángulo del mundo en las tres poses; `arriba` lo estira hacia arriba, en píxeles. */
+        const enMundo = (x0: number, y0: number, x1: number, y1: number, arriba = 0): void => {
+          for (const q of poses) {
+            obst.push({ x: W / 2 + (x0 - q.x) * q.z, y: H / 2 + (y0 - q.y) * q.z - arriba, w: (x1 - x0) * q.z, h: (y1 - y0) * q.z + arriba });
+          }
+        };
+        // Los que van a llevar el nombre encima en este corte: el lugar del
+        // nombre también cuenta. Si no, el cartel quedaba entre los nombres y
+        // las cabezas, con los hilos cruzándolo.
+        const evNow = evs.find((e) => e.s0 === stopAt);
+        const conNombre = new Map<number, number>();
+        if (finalDuo && x >= F0) for (const i of [winnerIdx, rivalIdx]) conNombre.set(i, G.portrait ? 1.5 : 2);
+        else if (evNow) {
+          if (evNow.victims.length <= 5) for (const v of evNow.victims) conNombre.set(v, 1.1);
+          for (const h of evNow.holders) conNombre.set(h, 1);
+        }
+        for (const d of dancers) {
+          if (!inRingNow(d, x)) continue;
+          const p = pNow[d.idx] as { x: number; y: number; s: number };
+          const sc = conNombre.get(d.idx);
+          enMundo(p.x - 0.3 * p.s, p.y - 1.2 * p.s, p.x + 0.3 * p.s, p.y, sc ? (24 * sc + 16) * k : 0);
+        }
+        // El conjunto (el cajero con los palillos arriba es una señal del corte),
+        // el contador, el aviso y, si este corte la tiene, la lista de los que salen.
+        const lb = band.root.getLocalBounds(), bs = band.root.scale.x, bp = band.root.position;
+        enMundo(bp.x + lb.minX * bs, bp.y + lb.minY * bs, bp.x + lb.maxX * bs, bp.y + lb.maxY * bs);
+        caja(counterRoot.getBounds());
+        obst.push({ x: W - 46 * k - 30 * k, y: S.top() + 8 * k, w: 64 * k, h: 64 * k });
+        if (evNow && evNow.kind === "stop" && evNow.victims.length > 5) {
+          buildPanel(evNow);
+          panelFor = evs.indexOf(evNow);
+          for (const c of panel.children) caja(c.getBounds());
+        }
+        const bw0 = big.width / big.scale.x, bh0 = big.height / big.scale.y;
+        const fitW = Math.min(1, (W * 0.8) / Math.max(1, bw0));
+        // El lugar libre más cercano al medio de la rueda, tal como va a quedar
+        // la cámara: se recorre la pantalla de arriba abajo. Con un lugar fijo
+        // (el medio, arriba o abajo) casi nunca había uno libre con la cámara
+        // cerca, aunque el hueco de la rueda tuviera lugar de sobra. En el
+        // celular, debajo del contador y del aviso.
+        const q1 = poses[2] as { x: number; y: number; z: number };
+        const centro = H / 2 + (G.cy - G.dh * 0.35 - q1.y) * q1.z;
+        const lo = G.portrait ? S.top() + 74 * k : S.top() + 12 * k, hi = H - S.bottom() - 12 * k;
+        for (const sc of [1, 0.75, 0.55]) {
+          const tw = bw0 * fitW * sc, th = bh0 * fitW * sc;
+          let mejor = NaN;
+          for (let cy = lo + th / 2; cy <= hi - th / 2; cy += 3 * k) {
+            const pisa = obst.some((r) => r.x < W / 2 + tw / 2 && r.x + r.w > W / 2 - tw / 2 && r.y < cy + th / 2 && r.y + r.h > cy - th / 2);
+            if (!pisa && !(Math.abs(cy - centro) >= Math.abs(mejor - centro))) mejor = cy;
+          }
+          if (!Number.isNaN(mejor)) {
+            bigY = mejor;
+            bigS = fitW * sc;
+            break;
+          }
+        }
       }
-      const mid = cam.toScreen(G.cx, G.cy - G.dh * 0.35, W, H);
-      const opciones = [mid.y, S.top() + th / 2 + 12 * k, H - S.bottom() - th / 2 - 12 * k];
-      const libre = opciones.find((cy) => !cuerpos.some((r) => r.x < W / 2 + tw / 2 && r.x + r.w > W / 2 - tw / 2 && r.y < cy + th / 2 && r.y + r.h > cy - th / 2));
-      if (libre !== undefined) {
+      if (bigS > 0) {
+        const pop = 1 + 0.35 * (1 - ease.outBack(clamp(sinceStop / 0.18, 0, 1)));
+        big.scale.set(pop * bigS);
         big.visible = true;
         big.alpha = 1 - clamp((sinceStop - 0.85) / 0.25, 0, 1);
-        big.position.set(W / 2, libre);
+        big.position.set(W / 2, bigY);
       }
     }
     // El aviso de la música, arriba a la derecha: la nota que salta con el
@@ -1493,6 +1631,12 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       { x: cb.x, y: cb.y + cb.height / 2, w: cb.width, h: cb.height },
       { x: bx - r - 4 * k, y: by, w: r * 2 + 8 * k, h: r * 2 + 8 * k },
     ];
+    if (big.visible) {
+      const bb = big.getBounds();
+      placed.push({ x: bb.x, y: bb.y + bb.height / 2, w: bb.width, h: bb.height });
+    }
+    // En la corona, el cartel del ganador y el papel picado: sin contador ni aviso encima.
+    counterRoot.visible = badge.visible = x < T_CROWN;
     const live = dancers.filter((d) => d.outAt < 0 || x < d.outAt);
     // El corte que está pasando: de verdad o falso.
     const si = evs.findIndex((e, i) => x >= e.w0 && x < (e.kind === "stop" ? e.s1 + 0.9 : e.x0 + 0.6) && (evs[i + 1]?.s0 ?? Infinity) > x);
@@ -1502,7 +1646,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       if (finalDuo && x >= F0) {
         for (const d of [win, dancers[rivalIdx] as Dancer]) {
           if (d.outAt >= 0 && x >= d.outAt + 0.9) continue;
-          placeChip(d, x, placed, 1.3);
+          placeChip(d, x, placed, G.portrait ? 1.5 : 2);
         }
       } else if (ev && ev.kind === "stop" && ev.victims.length > 5) {
         usePanel = x >= ev.x0 - 0.15;

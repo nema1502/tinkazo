@@ -1050,6 +1050,17 @@ La primera pasada del agente evaluador encontró cuatro cosas graves, y se arreg
 
 Y otras: los brazos apuntan a los vecinos y la cadena va de mano a mano; el color de las cintas es el de la cara en el nombre; los nombres van con un hilo cuando se corren; se pasa lista en cada baile; la pareja final se encuadra por su tamaño real, así que con doscientos se ve grande; con dos personas arrancan lado a lado y hay un amague más; en el celular la plaza baja y la rueda entra.
 
+La segunda pasada del agente evaluador encontró dos cosas graves y once menores. Cada una se verificó con sus capturas antes de arreglarla:
+- **En el celular, el "¡QUIETOS!" quedaba tapado** por el contador, el aviso y la lista de los que salen. **En escritorio, con la cámara cerca, aparecía tarde y saltaba de lugar**: ninguno de sus tres lugares fijos quedaba libre de cuerpos. Ahora el lugar se decide una sola vez, en el cuadro del corte. Es el lugar libre más cercano al medio de la rueda, recorriendo la pantalla de arriba abajo. Cuentan los cuerpos donde están y donde los deja la cámara, el conjunto, el contador, el aviso, la lista y los nombres de ese corte. Si no entra, sale más chico.
+- **En la final, la rival salía de cuadro en un instante,** con el ganador señalando a nadie. Ahora se sienta a unos pasos, a la vista, y la mano del que se suelta cae.
+- **De las filas a la rueda, los hombres se amontonaban en un costado.** Su fila iba en el sentido contrario al de la rueda y se cruzaban entre ellos. Ahora cada fila va en el sentido de la rueda y gira para un mismo lado, y los de adelante pasan por afuera.
+- La cadena sigue a las manos en el tambaleo, y mientras la rueda se cierra ya no cruza el hueco como un palo.
+- La rueda de cuatro a seis es más abierta. Con dos, los dos miran a la sala, y el relator no dice que "quedan": están "de la mano".
+- Con mucha gente, la pareja final y el ganador se ven más de cerca. El cartel del ganador ya no le tapa las manos, y los nombres del duelo van al doble, para el fondo de la sala.
+- En la corona no hay contador ni aviso. En las filas, el nombre de los hombres de adelante va a sus pies. "Cielo", "Socorro" y "Charo" van de tipoy.
+- Las capturas de la página se sacan con el reloj fijo ([`scripts/capturas-juegos.mjs`](../scripts/capturas-juegos.mjs)): la oscura y la clara, en el mismo instante. Con el tema forzado (`?theme=`), las doce imágenes de la página de juegos siguen al tema del sitio y no al del sistema.
+- En la tarjeta de "cómo se juega", en vertical, la captura de fondo va más borrosa: detrás del Saltar se leía un subtítulo.
+
 Medido con la batería, la Chovena:
 
 | Auditor | Resultado |
