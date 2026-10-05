@@ -886,6 +886,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
 
   S.run((dt, now) => {
     tAll += dt;
+    S.breath(tAll, T_CROWN);
     script();
     if (tAll >= T_CROWN) {
       crown();

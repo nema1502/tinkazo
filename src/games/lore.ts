@@ -237,6 +237,20 @@ export const LORE: Record<string, Lore[]> = {
       tecnica: true,
     },
   ],
+  chovena: [
+    {
+      // educa.com.bo: "Esta danza es de origen nativo, Chiquitano (Santa
+      //  Cruz). De ritmo marcadamente autóctono y de movimientos alegres [...]
+      //  frases cortas, constantemente repetidas en compás de 2/4 [...] Danzan
+      //  las parejas tomadas de las manos, forman círculo haciendo filas [...]
+      //  se las práctica generalmente en fiestas religiosas y de carnaval".
+      q: "loreChoQ",
+      a: "loreChoA",
+      href: "https://www.educa.com.bo/danzas/chovena",
+      src: "educa.com.bo · Danzas de Bolivia",
+      hue: "orange",
+    },
+  ],
   trompo: [
     {
       // "trompo. II. 1. m. CR, Bo; Ur, obsol. Juego de niños que se practica

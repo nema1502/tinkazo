@@ -18,6 +18,7 @@
     "preflight:mainnet": "node scripts/preflight-mainnet.mjs",
     "audit:game": "node scripts/audit-game.mjs",
     "audit:sound": "node scripts/audit-sound.mjs",
+    "audit:mezcla": "node scripts/audit-mezcla.mjs",
     "audit:ui": "node scripts/audit-ui.mjs",
     "smoke": "node scripts/smoke.mjs"
   },

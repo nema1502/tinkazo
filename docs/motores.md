@@ -58,7 +58,8 @@ Los momentos de cámara de cada juego:
 | Aguayo | Cerca de la tela al tenderla, más cerca en cada apretón con un tirón, golpe al bulto que queda en el filo, pegada al nudo |
 | Cierre de Libro | Sigue a la barra en cada barrida, se mete en la tarjeta del susto, se acerca a la mesa final, golpe con cada sello y encima de la ganadora mientras el sello duda |
 | Trompo | Sobre el ruedo al tirar, llega antes que cada golpe grande (encuadra a los dos mientras el que pega toma impulso), sigue al trompo que sacan hasta la tiza, pegada al mano a mano, se cierra antes de cada choque, cámara lenta en el último y encima del que cabecea |
-| Luz roja, luz verde | Una cámara que avanza detrás del grupo, en perspectiva: se va a la cabeza del Faro cuando se da vuelta, sigue al haz por la cancha, se mete en la ganadora en el susto y acompaña el último verde hasta que toca el Faro |
+| Chovena | La plaza entera en las dos filas del arranque; a medida que la rueda se achica se acerca hasta que la rueda llena la pantalla (sin pasar de 1,6×); en el corte se corre hacia los que salen si son uno o dos; encima de la pareja en la final, más cerca en el último tambaleo, y sin desenfoque |
+| Luz roja, luz verde (fuera del selector) | Una cámara que avanza detrás del grupo, en perspectiva: se va a la cabeza del Faro cuando se da vuelta, sigue al haz por la cancha, se mete en la ganadora en el susto y acompaña el último verde hasta que toca el Faro |
 | Piñata | La piñata de cerca en los palos, más cerca en la rajadura y en el caramelo que se asoma, y cuando se rompe sigue al último caramelo hasta el piso |
 | Carnaval de Oruro | Sigue a la comparsa, se acerca a los que se quedan en cada arco y a la máscara que se corre, se abre al Socavón y se cierra en el contrapunto |
 | Constelación | Sigue al paquete desde el primer salto, encima en los saltos lentos del final, golpe en el roce y en el engaño, y se abre en la nova para mostrar la constelación |

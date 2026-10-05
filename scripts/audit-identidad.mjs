@@ -29,7 +29,7 @@
  */
 import { launch } from "./lib/browser.mjs";
 
-const TODOS = ["race", "luz", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien"];
+const TODOS = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien"];
 /** Hasta cuántos promete cada juego hoy: la carrera corre ocho, la ruleta llega a 24, el resto a 200. */
 const PROMETE = { race: 8, wheel: 24 };
 const args = process.argv.slice(2);

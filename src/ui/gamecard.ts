@@ -23,6 +23,7 @@ export const NOMBRE: Record<Game, string> = {
   race: "jgRaceN", luz: "jgLuzN", trompo: "jgTroN", pinata: "jgPinN", oruro: "jgOruN",
   tombola: "jgTomN", wheel: "jgWheelN", teleferico: "jgTelN", pasanaku: "jgPasN", stellar: "jgStellarN",
   sapo: "jgSapoN", quien: "jgQuienN", ledger: "jgLedgerN", rockets: "jgRocketsN", totora: "jgTotN",
+  chovena: "jgChoN",
 };
 
 /** La regla de cada uno, en una línea corta: qué mirar y quién gana. */
@@ -30,6 +31,7 @@ export const REGLA: Record<Game, string> = {
   race: "gcRace", luz: "gcLuz", trompo: "gcTrompo", pinata: "gcPinata", oruro: "gcOruro",
   tombola: "gcTombola", wheel: "gcWheel", teleferico: "gcTeleferico", pasanaku: "gcPasanaku", stellar: "gcStellar",
   sapo: "gcSapo", quien: "gcQuien", ledger: "gcLedger", rockets: "gcRockets", totora: "gcTotora",
+  chovena: "gcChovena",
 };
 
 /**
@@ -38,10 +40,10 @@ export const REGLA: Record<Game, string> = {
  * dice: con tres premios, "gana el último que sigue bailando" era mentira para
  * el segundo y el tercero.
  */
-export const VARIOS: Partial<Record<Game, string>> = { sapo: "gcSapoMany", quien: "gcQuienMany", teleferico: "gcTelefericoMany" };
+export const VARIOS: Partial<Record<Game, string>> = { sapo: "gcSapoMany", quien: "gcQuienMany", teleferico: "gcTelefericoMany", chovena: "gcChovenaMany" };
 
 /** Los que tienen captura en public/juegos, para el fondo. */
-const CAPTURA = new Set<Game>(["race", "luz", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien"]);
+const CAPTURA = new Set<Game>(["race", "chovena", "luz", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien"]);
 
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c);
 

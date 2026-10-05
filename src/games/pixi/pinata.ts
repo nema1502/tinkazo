@@ -790,6 +790,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       acc -= DT;
     }
     if (acc > DT) acc = 0;
+    S.breath(tAll, T_CROWN);
     if (phase === "crown") {
       if (!rivalDropped && rivC !== winC && rivC.inside) drop([rivalIdx], true);
       rivalDropped = true;

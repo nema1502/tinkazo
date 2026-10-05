@@ -141,7 +141,7 @@ Dentro de los juegos el texto es de relator de partido: mayúsculas, gritos, "¡
 
 ## Los doce juegos
 
-Cada uno tiene su color dominante, útil si una diapositiva los muestra. Siete salen de la cultura boliviana y latinoamericana.
+Cada uno tiene su color dominante, útil si una diapositiva los muestra. Ocho salen de la cultura boliviana y latinoamericana.
 
 | Juego | Color | En una frase |
 |---|---|---|
@@ -150,7 +150,7 @@ Cada uno tiene su color dominante, útil si una diapositiva los muestra. Siete s
 | Teleférico | Los de las líneas, sobre un atardecer | Un convoy que sube y en cada estación se baja la mitad |
 | Tómbola | Naranja y amarillo, con las bolas de los cinco | El bombo de la kermés: la bola que sale es la ganadora |
 | Carrera de llamas | Naranja y magenta | Ocho carriles por la cordillera |
-| Luz roja, luz verde | Pasto de noche, el verde y el rojo del Faro | El juego de patio: al que el Faro ve moviéndose, se sienta |
+| Chovena | Tierra colorada y tipoy blanco con las cintas de los cinco | La rueda chiquitana de la mano: cuando se corta la música, el que trastabilla sale |
 | Ruleta | Los cinco, en gajos | La de siempre, pero que se ve girar con dos personas |
 | Trompo | Tierra, con trompos de los cinco | El ruedo de tiza: chocan y se caen hasta el mano a mano |
 | Piñata | Los cinco, en conos | Cada palo tira caramelos; el último que queda adentro gana |
@@ -162,7 +162,7 @@ Cada uno tiene su color dominante, útil si una diapositiva los muestra. Siete s
 
 Entra por la función, nunca por la decoración. Si el elemento se puede sacar sin que nada deje de funcionar, es decoración y sobra.
 
-Cada cosa boliviana del producto hace algo: el nombre, la llama de la mascota, el perno tricolor de la ruleta que marca la vuelta, el aguayo que es el tablero de juego, el teleférico, cuyo cable es la barra de progreso y cuyas cabinas llevan los colores de las diez líneas de La Paz y El Alto, y la entrada del Carnaval de Oruro, cuyas cuadras son las rondas de eliminación. El trompo y la piñata son de toda Latinoamérica y siguen la misma regla: el choque y el palo son los que eliminan. Los nombres de la lista de ejemplo (Quispe, Mamani, Choque, Condori, Limachi, Villca) son el detalle más sutil y el que más gusta.
+Cada cosa boliviana del producto hace algo: el nombre, la llama de la mascota, el perno tricolor de la ruleta que marca la vuelta, el aguayo que es el tablero de juego, el teleférico, cuyo cable es la barra de progreso y cuyas cabinas llevan los colores de las diez líneas de La Paz y El Alto, la entrada del Carnaval de Oruro, cuyas cuadras son las rondas de eliminación, y la rueda de la chovena, que se achica cada vez que alguien se suelta. El trompo y la piñata son de toda Latinoamérica y siguen la misma regla: el choque y el palo son los que eliminan. Los nombres de la lista de ejemplo (Quispe, Mamani, Choque, Condori, Limachi, Villca) son el detalle más sutil y el que más gusta.
 
 **Lo que no va:** wiphalas, cholitas, el Illimani, Tiwanaku, ni la palabra "Bolivia" escrita en pantalla. El pie de página dice "Hecho en Bolivia por Nicolás" y con eso alcanza.
 

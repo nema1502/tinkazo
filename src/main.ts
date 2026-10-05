@@ -189,7 +189,7 @@ function initVistas(): void {
 // Los del selector, y los tres que salieron el 30 de septiembre de 2026 (el
 // Cierre de Libro, la carrera de cohetes y las balsas de totora), que siguen
 // abriendo con `?demo=` y `?pose=` mientras se decide si se borran.
-const GAMES: readonly Game[] = ["race", "luz", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "ledger", "rockets", "totora"];
+const GAMES: readonly Game[] = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "luz", "ledger", "rockets", "totora"];
 
 async function autoDemo(mode: string): Promise<void> {
   loadSample();

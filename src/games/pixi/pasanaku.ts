@@ -326,6 +326,7 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
       }
       return;
     }
+    S.breath(tAll, T_LIFT);
     if (phase === "lift") {
       liftK = Math.min(1, liftK + dt * 0.8);
       crown();
@@ -570,11 +571,18 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
       const f = (tAll - SUSTO) / 1.1;
       ring.circle(win.x, win.y - lift - r * 0.9, r * (1.8 + 0.4 * Math.sin(tAll * 18))).stroke({ width: 5 * k, color: 0xe93d9c, alpha: 1 - f });
     }
+    // Pasar lista: mientras se teje, antes del primer apretón, los nombres de
+    // a tandas encima de cada bulto, para que cada uno sepa cuál es el suyo.
+    const roll = phase === "lift" ? [] : S.batch(n, tAll, T_DROP - 0.2, T_CINCH - 0.1);
+    S.tags(names, roll, (i) => {
+      const q = byIdx.get(i);
+      return q && q.alive && tAll >= q.drop + FALL ? cam.toScreen(q.x, q.y - r * 1.7 - lift, S.sw(), S.sh()) : null;
+    });
     // Los nombres, cuando quedan pocos: al lado de cada bulto en la pantalla,
     // y si dos chocan, el de más abajo baja lo que haga falta.
     const live = alive();
     for (const q of bundles) if (q.chip) q.chip.visible = false;
-    if (live.length <= 8 && phase !== "lift") {
+    if (!roll.length && live.length <= 8 && phase !== "lift") {
       const u = S.u();
       const at = live
         .map((q) => ({ q, p: cam.toScreen(q.x + r, q.y - r * 1.6 - lift, S.sw(), S.sh()) }))

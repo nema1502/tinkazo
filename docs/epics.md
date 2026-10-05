@@ -1004,6 +1004,83 @@ Interfaz y páginas de lectura pasan enteras.
 
 De paso, un arreglo que encontró el auditor de interfaz: la dirección de la cuenta en la cabecera se cortaba en el celular con algunas direcciones. `button.mini` le ganaba a `.mono` y la letra no era de ancho fijo, así que el ancho dependía de qué letras salían.
 
+### Historia 10.15: Saber cuál es el tuyo: la tarjeta, la leyenda y el auditor de identificación: hecho
+
+Resultado (2026-10-04): salió de la auditoría psicológica de los juegos y de un pedido de Nicolás. La sala tiene que entender qué va a pasar antes de que pase, y cada persona tiene que poder saber en dos segundos si sigue en juego.
+
+**La tarjeta de "cómo se juega"** ([`src/ui/gamecard.ts`](../src/ui/gamecard.ts)):
+- Antes de cada juego de un sorteo de verdad o de una demo, a pantalla completa: el nombre, la regla en una frase, cuántos participan, cuántos premios y que el ganador ya salió del número público.
+- Dura 3,5 segundos, se salta con un toque, Enter, espacio o Escape, y sus segundos salen del mismo total ("normal" sigue en treinta).
+- El motor nuevo se arma mientras la tarjeta está arriba y espera en una compuerta: el reloj del juego corre recién cuando la tarjeta termina.
+- Con varios premios, la regla dice cómo se cuentan; en el Sapo, ¿Quién es? y el Teleférico, que cuentan cada premio, la regla va en plural.
+
+**La leyenda de la tómbola:** al lado del bombo, la lista con la bola de cada uno, del color y con el número de la bola, de a páginas si no entra.
+
+**El auditor de identificación** ([`scripts/audit-identidad.mjs`](../scripts/audit-identidad.mjs)): con `?auditar=identidad` el estadio anota la primera vez que se lee cada nombre entero, legible y sin confundirse con otro, antes de que salga el ganador. Pide todos con 8 y nueve de cada diez con 18; con 50, informa. La primera corrida encontró seis juegos donde con 18 personas la mitad no llegaba a ver su nombre.
+
+### Historia 10.16: La Chovena, y pasar lista en los juegos que no la tenían: hecho
+
+Resultado (2026-10-05): el juego cruceño que pidió Nicolás ("pongamos la chovena"), en el lugar de luz roja, luz verde. Es el único juego donde la sala se mueve al ritmo: aplaude con la música y se congela con el corte. La ficha completa, con sus fuentes, está en [juegos/chovena.md](juegos/chovena.md).
+
+**El juego** ([`src/games/pixi/chovena.ts`](../src/games/pixi/chovena.ts)):
+- Empieza como la coreografía, en dos filas que se toman de la mano y forman la rueda.
+- La rueda gira al ritmo y cambia de sentido después de cada corte.
+- Cuando la música se corta, los que trastabillan se sueltan y se van a sentar al borde de la plaza.
+- Hay un corte falso por sorteo, y una final de dos frente a frente.
+- Los cuatro arcos del director tienen su giro, y en la mitad de los cortes trastabilla también alguien que no sale.
+
+**La música chiquitana** (estilo `chovena` en [`src/music.ts`](../src/music.ts)):
+- Flauta de caña no temperada, caja con bordón de cuero, bombo con mazo, el violín que dobla y la guitarra.
+- 2/4 a negra = 90, en mayor, con la forma A–B–A–B–C–B.
+- La receta salió de una investigación con fuentes. Lo que es inferencia (el patrón exacto de la caja y el bombo) está marcado, y tiene que escucharlo alguien chiquitano o cruceño.
+- Dos controles nuevos para los juegos: `musicHold()` corta la música en seco, eco incluido, y la suelta en el uno del compás; `musicTempo()` la acelera.
+
+**La ropa y la plaza, con fuentes:**
+- Tipoy blanco con las cintas del color de cada persona, y hombres de blanco con sombrero de saó.
+- Tierra colorada, casas de adobe con corredor de horcones, un cerro de granito y un conjunto de pífano, caja y bombo.
+- Nada religioso ni ceremonial, ni plumas ni lanzas.
+
+**Pasar lista en los demás juegos.** El estadio tiene dos piezas nuevas, `tags()` y `batch()`: los nombres de a tandas de ocho encima de cada uno, repartidos para que no se pisen, en una capa que los juegos no vacían. Las usan la Chovena (en las filas y en el primer baile), el Trompo (mientras bailan antes del primer choque), el Teleférico (en el embarque, encima de cada cabina), el Aguayo (mientras se teje) y la Constelación (mientras se arma el cielo).
+
+La primera pasada del agente evaluador encontró cuatro cosas graves, y se arreglaron:
+- **La ropa salía del puesto en la rueda, no del nombre.** "Carlos" bailaba de tipoy y "Elena" de sombrero; en ropa indígena tradicional eso se lee como burla. Ahora sale del nombre, con una lista de nombres comunes y la terminación.
+- **Los hombres de espaldas parecían caras negras sin rasgos.** La nuca era toda de pelo; ahora es de piel, con el pelo corto arriba, y la línea de botones solo se ve de frente.
+- **El "¡QUIETOS!" tapaba a los que trastabillan.** Ahora va donde no tapa a nadie, o no sale.
+- **La imagen de la página de juegos no existía.**
+
+Y otras: los brazos apuntan a los vecinos y la cadena va de mano a mano; el color de las cintas es el de la cara en el nombre; los nombres van con un hilo cuando se corren; se pasa lista en cada baile; la pareja final se encuadra por su tamaño real, así que con doscientos se ve grande; con dos personas arrancan lado a lado y hay un amague más; en el celular la plaza baja y la rueda entra.
+
+Medido con la batería, la Chovena:
+
+| Auditor | Resultado |
+|---|---|
+| Exigente (con 2, 18 y 200 personas) | 20/20 |
+| Emoción (16 semillas) | Varían: susto 6, tapada 4, duelo 4, remontada 2 |
+| Sonido | 93 efectos y 917 notas de música en 24 s; hueco máximo 0,6 s |
+| Identificación | 100% con 8, 18 y 50 |
+| Juego, contra drand de verdad | 20/20 |
+
+### Historia 10.17: El audio, medido y no a oído: hecho
+
+Resultado (2026-10-05): Nicolás pidió mejorar mucho la música y el sonido, con "auditores extremos". Primero una investigación con fuentes (librerías gratuitas, música adaptativa, cómo auditar sin oídos), después un auditor nuevo y recién ahí los cambios, medidos antes y después.
+
+**El auditor de mezcla** ([`scripts/audit-mezcla.mjs`](../scripts/audit-mezcla.mjs)) escucha la señal que sale por el parlante y mide sonoridad integrada (ITU-R BS.1770), pico real, recortes, cuánto se pierde en el parlante de una laptop o un proyector (pasos altos de 150 y 300 Hz) y el golpe del ganador (el medio segundo después del cartel contra el de antes).
+
+**La primera medición** encontró dos problemas en los doce juegos: en un parlante chico se perdían de 4,1 a 4,9 LU (el bajo y los bombos vivían entre 48 y 95 Hz), y el ganador sonaba entre 4 LU más bajo y 6 LU más alto que lo que venía sonando.
+
+**Los cambios:**
+- **El respiro**: cada juego corta la música 0,4 segundos reales antes de coronar, con su propio reloj, y el remate la vuelve a abrir.
+- **Los graves**: el bajo lleva una sierra bajita que le da armónicos, cada bombo un golpe de cuerpo cerca de 200 Hz, y menos cola grave.
+
+| Medida | Antes | Después |
+|---|---|---|
+| Pérdida en un parlante de 150 Hz | 3,5 a 4,9 LU | 2,6 a 3,5 LU |
+| Pérdida en uno de 300 Hz | 3,9 a 6,8 LU | 3,1 a 4,7 LU |
+| El ganador contra lo de antes | −4,1 a +29 LU | +6,5 a +50 LU |
+| Comprobaciones | 57/84 | 84/84 |
+
+La sonoridad quedó pareja entre juegos (de −27,8 a −29,1 LUFS) y nada recorta. El umbral de 150 Hz no tiene norma: se calibró con esta mezcla y hay que ajustarlo midiendo parlantes reales.
+
 ---
 
 ## Épica 12: El sitio cuenta el proyecto

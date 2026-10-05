@@ -1263,10 +1263,20 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       }
     }
 
+    // Pasar lista: mientras bailan, antes del primer choque, los nombres de a
+    // tandas encima de cada trompo, para que cada uno sepa cuál es el suyo.
+    const roll = phase === "crown" ? [] : S.batch(n, tAll, T_THROW - 0.8, T_FIGHT - 0.05);
+    S.tags(names, roll, (i) => {
+      const q = byIdx.get(i);
+      if (!q || !q.alive || tAll < q.land) return null;
+      const w = toWorld(q.x, q.y);
+      return cam.toScreen(w.x, w.y - size * 1.15, S.sw(), S.sh());
+    });
+
     // Los nombres, cuando quedan pocos.
     const live = alive();
     for (const q of tops) if (q.chip) q.chip.visible = false;
-    if (live.length <= 8 && phase !== "crown") {
+    if (!roll.length && live.length <= 8 && phase !== "crown") {
       const at = live
         .filter((q) => tAll >= q.land)
         .map((q) => {
@@ -1307,6 +1317,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     }
     if (g > 0 && tFx < slowUntil) g *= SLOW;
     tAll += g;
+    S.breath(tAll, T_CROWN, tFx < slowUntil ? SLOW : 1);
     phase = tAll < T_THROW ? "throw" : tAll < T_FIGHT ? "dance" : tAll < T_DUEL ? "fight" : tAll < T_CROWN ? "duel" : "crown";
     if (phase === "duel" && !duelSaid) {
       duelSaid = true;

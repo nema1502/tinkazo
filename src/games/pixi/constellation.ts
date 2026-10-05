@@ -128,6 +128,8 @@ export async function constellationPixi(names: string[], winners: readonly numbe
   const trail: { x: number; y: number }[] = [];
   const links: { a: number; b: number; c: number }[] = [];
   const chipLife = new Map<number, number>();
+  /** La estrella de cada persona. */
+  const starOf = new Map(nodes.map((nd, i) => [nd.idx, i] as const).filter(([idx]) => idx >= 0));
 
   function packetPos(): { x: number; y: number } {
     const hp = hops[hopI] as Hop;
@@ -448,6 +450,14 @@ export async function constellationPixi(names: string[], winners: readonly numbe
       }
       crown.at(novaK * 1.4);
     }
+    // Pasar lista: mientras se arma el cielo y en los primeros saltos, los
+    // nombres de a tandas encima de cada estrella, para que cada uno sepa cuál
+    // es la suya.
+    const roll = phase === "nova" ? [] : S.batch(names.length, tAll, 0.9, ARM + 1.6);
+    S.tags(names, roll, (i) => {
+      const nd = nodes[starOf.get(i) ?? -1];
+      return nd && tAll > nd.born ? cam.toScreen(nd.x, nd.y - nd.r - 16 * k, S.sw(), S.sh()) : null;
+    }, barText.text ? [barText.getBounds()] : []);
     // Los nombres: todos si son pocos, si no el que tiene el paquete y los de antes.
     const enMano = (hops[Math.min(hopI, hops.length - 1)] as Hop | undefined)?.to ?? -1;
     for (const c of chipOf.values()) c.visible = false;
@@ -465,7 +475,7 @@ export async function constellationPixi(names: string[], winners: readonly numbe
       c.alpha = alpha;
       c.position.set(nd.x + nd.r + 6 * k, nd.y - nd.r - 10 * k);
     };
-    if (phase !== "nova") {
+    if (phase !== "nova" && !roll.length) {
       if (names.length <= 4) nodes.forEach((nd, i) => { if (nd.idx >= 0 && tAll > nd.born) show(i, 1, false); });
       else for (const [ni, a] of chipLife) show(ni, Math.min(1, a * 3), ni === enMano);
     }
@@ -484,6 +494,7 @@ export async function constellationPixi(names: string[], winners: readonly numbe
 
   S.run((dt, now) => {
     tAll += dt;
+    S.breath(tAll, ARM + hops.reduce((acc, hp) => acc + hp.dur, 0));
     update(dt);
     if (phase === "dead") return;
     if (phase === "hop") {

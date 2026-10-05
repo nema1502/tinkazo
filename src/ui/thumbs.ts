@@ -437,6 +437,112 @@ const PAINTERS: Record<string, Painter> = {
       }
     }
   },
+  /**
+   * Chovena: la rueda de la mano gira con la música en una plaza de tierra
+   * colorada. Cuando se corta, se congelan, el aviso se pone rojo y uno se
+   * suelta y sale.
+   */
+  chovena(c, t, col) {
+    const ciclo = t % 4;
+    const suena = ciclo < 2.6;
+    c.fillStyle = "#ffb36b";
+    c.fillRect(0, 0, W, 22);
+    c.fillStyle = "#c4623a";
+    c.fillRect(0, 20, W, H - 20);
+    // Las casas del fondo, con su techo de teja.
+    for (const hx of [4, 44, 84]) {
+      c.fillStyle = "#f3e7cf";
+      c.fillRect(hx, 11, 28, 10);
+      c.fillStyle = "#b5532f";
+      c.fillRect(hx - 2, 8, 32, 4);
+      c.fillStyle = "#5a3a22";
+      c.fillRect(hx + 12, 15, 4, 6);
+    }
+    c.fillStyle = "#d98a5f";
+    c.beginPath();
+    c.ellipse(58, 44, 46, 16, 0, 0, TAU);
+    c.fill();
+    const giro = (suena ? ciclo : 2.6) * 0.7;
+    const N = 7;
+    const pos = Array.from({ length: N }, (_, i) => {
+      const a = giro + (i * TAU) / N;
+      let x = 58 + Math.cos(a) * 36;
+      let y = 44 + Math.sin(a) * 12;
+      const out = !suena && i === 2 && ciclo > 3.05;
+      if (out) {
+        const f = Math.min(1, (ciclo - 3.05) / 0.5);
+        x += Math.cos(a) * 14 * f;
+        y += Math.sin(a) * 8 * f;
+      }
+      return { i, x, y, s: 1 + 0.22 * Math.sin(a), out };
+    });
+    // Las manos: una línea entre cada uno y el de al lado.
+    c.strokeStyle = INK;
+    c.lineWidth = 2.6;
+    c.beginPath();
+    for (let i = 0; i < N; i++) {
+      const a = pos[i] as (typeof pos)[number], b = pos[(i + 1) % N] as (typeof pos)[number];
+      if (a.out || b.out) continue;
+      c.moveTo(a.x, a.y - 6 * a.s);
+      c.lineTo(b.x, b.y - 6 * b.s);
+    }
+    c.stroke();
+    c.strokeStyle = "#c68a5c";
+    c.lineWidth = 1.4;
+    c.stroke();
+    for (const p of [...pos].sort((a, b) => a.y - b.y)) {
+      const hop = suena ? Math.abs(Math.sin(t * 7.5)) * 1.6 : 0;
+      const y = p.y - hop;
+      c.fillStyle = INK;
+      c.beginPath();
+      c.moveTo(p.x - 3.6 * p.s, y + 0.6);
+      c.lineTo(p.x + 3.6 * p.s, y + 0.6);
+      c.lineTo(p.x + 1.9 * p.s, y - 9 * p.s);
+      c.lineTo(p.x - 1.9 * p.s, y - 9 * p.s);
+      c.fill();
+      c.fillStyle = col(p.i);
+      c.beginPath();
+      c.moveTo(p.x - 3 * p.s, y);
+      c.lineTo(p.x + 3 * p.s, y);
+      c.lineTo(p.x + 1.5 * p.s, y - 8.5 * p.s);
+      c.lineTo(p.x - 1.5 * p.s, y - 8.5 * p.s);
+      c.fill();
+      c.fillStyle = "#c68a5c";
+      c.beginPath();
+      c.arc(p.x, y - 10.6 * p.s, 2.1 * p.s, 0, TAU);
+      c.fill();
+      if (!suena && p.i === 2 && ciclo < 3.4) {
+        c.fillStyle = "#ffc629";
+        c.fillRect(p.x - 0.9, y - 19 * p.s, 1.8, 4.5);
+        c.fillRect(p.x - 0.9, y - 13.6 * p.s, 1.8, 1.6);
+      }
+    }
+    // El aviso de la música: las notas que suben, o el cuadrado rojo del corte.
+    if (suena) {
+      for (let k = 0; k < 2; k++) {
+        const f = (t * 0.6 + k * 0.5) % 1;
+        const nx = 50 + k * 14, ny = 30 - f * 18;
+        c.globalAlpha = Math.sin(f * Math.PI);
+        c.fillStyle = INK;
+        c.beginPath();
+        c.ellipse(nx, ny, 2.2, 1.6, 0, 0, TAU);
+        c.fill();
+        c.fillRect(nx + 1.5, ny - 7, 1.1, 7);
+        c.globalAlpha = 1;
+      }
+    } else {
+      c.fillStyle = INK;
+      c.beginPath();
+      c.arc(W - 11, 12, 8, 0, TAU);
+      c.fill();
+      c.fillStyle = "#d7263d";
+      c.beginPath();
+      c.arc(W - 12, 11, 7.5, 0, TAU);
+      c.fill();
+      c.fillStyle = "#ffffff";
+      c.fillRect(W - 15, 8, 6, 6);
+    }
+  },
   /** Tres trompos bailando en el ruedo de tiza; cada tanto uno se cae. */
   trompo(c, t, col) {
     c.fillStyle = "#4a3526";

@@ -61,7 +61,7 @@ node scripts/audit-identidad.mjs <juego>
 
 **El auditor de identificación** (desde el 4 de octubre de 2026) mide si cada participante llega a leer su nombre en pantalla antes de que salga el ganador, con 8, 18 y 50 personas: con `?auditar=identidad`, el estadio anota la primera vez que se ve cada nombre entero, legible (un alto de al menos 1,6% de la pantalla) y sin confundirse con otro. Pide que con 8 se vean todos, y con 18 nueve de cada diez, en los juegos que prometen esas cantidades; con 50, informa. Nació de la tómbola, donde salía el número de la bola ganadora y nadie sabía de quién era.
 
-Donde `<juego>` es el valor de `?demo=`: `race`, `luz`, `trompo`, `pinata`, `oruro`, `tombola`, `wheel`, `teleferico`, `pasanaku`, `stellar`, `sapo`, `quien`. El auditor abre Chrome, corre un sorteo real contra drand y comprueba veinte cosas:
+Donde `<juego>` es el valor de `?demo=`: `race`, `chovena`, `trompo`, `pinata`, `oruro`, `tombola`, `wheel`, `teleferico`, `pasanaku`, `stellar`, `sapo`, `quien`. El auditor abre Chrome, corre un sorteo real contra drand y comprueba veinte cosas:
 
 | # | Comprobación | Por qué importa |
 |---|---|---|
@@ -91,6 +91,22 @@ Guarda capturas en `docs/capturas/juego-<juego>*.png` para revisar a ojo lo que 
 Y el auditor de sonido engancha `OscillatorNode` antes de que cargue la página, anota cada nota que arranca (cuándo, qué altura, qué timbre, qué volumen, cuánto dura) y mide lo que se puede medir sin oídos: que nada quede fuera del rango que reproduce un parlante de sala, que nada quede por debajo del murmullo, que todo esté en la escala, que no haya huecos de más de cuatro segundos, que ningún golpe se redispare y que ningún sonido quede tapado por otro al doble de volumen.
 
 Un juego no entra a `main` hasta que las tres auditorías dicen APROBADO.
+
+## El auditor de mezcla
+
+```bash
+node scripts/audit-mezcla.mjs <juego>      # o "todos"; --sin-musica mide solo los efectos
+```
+
+El auditor de sonido mira la partitura de los efectos. Este escucha la señal: engancha la salida de WebAudio antes de que cargue la página, junta las muestras de la escena fija de punta a punta y mide con las reglas de la radiodifusión (ITU-R BS.1770, EBU R128):
+
+- **Que nada recorte** y que el pico real (sobremuestreado ×4) quede debajo de −1 dBTP.
+- **Que los doce suenen parejo**: la sonoridad integrada de cada uno a ±3 LU de la mediana, para que quien organiza no toque la perilla entre un sorteo y otro.
+- **Que ningún tramo de 3 s salte** más de 7 LU sobre la integrada.
+- **El parlante de un proyector**: la mezcla pasada por un paso alto de 150 Hz no puede perder más de 3,5 LU, y por uno de 300 Hz, más de 6. La primera medición dio de 4,1 a 4,9 LU de pérdida a 150 Hz en los doce juegos: el bajo y los bombos vivían por debajo de lo que reproduce una laptop. Con los armónicos nuevos quedó entre 2,6 y 3,5, y el ganador pasó a sonar entre 6,5 y 50 LU más fuerte que el medio segundo de antes (antes, entre −4 y +6 en los juegos con la música andina).
+- **El golpe del ganador**: el medio segundo después del cartel tiene que sonar al menos 2 LU más fuerte que el de antes.
+
+Los umbrales del parlante y del golpe no tienen norma: salen de la investigación del audio y se calibran con lo que hoy suena bien.
 
 ## El auditor exigente
 
@@ -209,6 +225,10 @@ La carrera actúa la historia entera. Los demás juegos toman del director el ar
 | Piñata | Remontada | **Al aire.** Dos palos que no le pegan a nada antes de los últimos |
 | Carnaval de Oruro | Susto | **La máscara.** En la última cuadra a la ganadora casi se le cae la máscara |
 | Carnaval de Oruro | Remontada | **Desde atrás.** Arranca en la última fila de la comparsa y en cada cuadra avanza |
+| Chovena | Susto | **El que aguanta.** En el último corte la ganadora trastabilla con un "¡!" encima ("¡ojo con fulana!") y aguanta. En la mitad de los cortes trastabilla también alguien que no sale, así que tambalearse no delata a nadie |
+| Chovena | Remontada | **La que vuelve.** En el corte falso la ganadora se había soltado y da un paso afuera; vuelve la música y vuelve a la rueda |
+| Chovena | Duelo | **El amague de la final.** Con los dos de la mano, la música se corta, se tambalean los dos, y vuelve |
+| Chovena | Tapada | **Nadie la nombra.** En la final se dice "¡quedan dos!", sin nombres |
 | Luz roja, luz verde | Susto | **El haz se detiene.** El Faro mira a la ganadora, que se tambalea sin dar un paso, y el haz sigue de largo ("¡por un pelo!") |
 | Luz roja, luz verde | Remontada | **Desde el fondo.** Arranca última y en el último verde pasa a todos |
 | Luz roja, luz verde | Duelo | **Una luz roja más.** La rival va adelante hasta que el haz la agarra en la última |
@@ -262,6 +282,9 @@ La música de fondo es [`src/music.ts`](../src/music.ts): andina con beat, gener
 - **La sorpresa es silencio.** Un salto de tensión de tres décimos corta la música un tiempo entero, y vuelve con platillo y bombo. El ganador (tensión 1) remata con el charango en trémolo y se apaga.
 - **Sembrada con la ronda,** con otra parte de la aleatoriedad que el juego: prenderla no cambia la animación. Ni un `Math.random`.
 - **Arranca prendida y por debajo de los efectos** desde el 28 de septiembre de 2026. Se apaga con el botón "Música" de la página, y el sonido apagado también la apaga.
+- **El respiro antes del ganador.** Desde el 5 de octubre de 2026, cada juego corta la música 0,4 segundos reales antes de coronar (`S.breath(reloj, corona)`, con su propio reloj, así la cámara lenta de la carrera y del trompo no lo corre), y el remate la vuelve a abrir. Vaciar y volver con todo es lo que más mueve en la música de baile, medido en el cuerpo de quien escucha.
+- **Graves que se oyen en una laptop.** El bajo vive entre 49 y 82 Hz y los bombos entre 50 y 95, y un parlante chico corta por debajo de unos 150 Hz. Desde el 5 de octubre el bajo lleva una sierra bajita que le da armónicos y cada bombo un golpe corto de cuerpo cerca de 200 Hz: el oído reconstruye la nota grave con sus armónicos.
+- **Un juego puede pedir otro estilo.** Desde el 5 de octubre de 2026 la Chovena trae el suyo, la música chiquitana (flauta de caña, caja con bordón de cuero y bombo, en mayor y a negra = 90), con `mountPixi(…, { music: "chovena" })`. Y dos controles para los juegos que hacen de la música su mecánica: `musicHold()` la corta en seco y la vuelve a soltar en el uno del compás, y `musicTempo()` la acelera. La receta y sus fuentes están en [juegos/chovena.md](juegos/chovena.md#la-música).
 
 ## Los cierres
 
@@ -297,7 +320,7 @@ El ritmo, la legibilidad del cartel y el tartamudeo de los subtítulos ya los mi
 | Juego | `?demo=` | Tipo | Hasta | Documento |
 |---|---|---|---|---|
 | Carrera de llamas | `race` | Motor de carrera, tema andino | 8 en pantalla | · |
-| Luz roja, luz verde | `luz` | Módulo propio (solo motor nuevo) | 200 | [luz-roja-luz-verde.md](juegos/luz-roja-luz-verde.md) |
+| Chovena | `chovena` | Módulo propio (solo motor nuevo), con su propia música | 200, mejor de 12 a 80 | [chovena.md](juegos/chovena.md) |
 | Trompo | `trompo` | Módulo propio (solo motor nuevo) | 200 | [trompo.md](juegos/trompo.md) |
 | Piñata | `pinata` | Módulo propio (solo motor nuevo) | 200 | [pinata.md](juegos/pinata.md) |
 | Carnaval de Oruro | `oruro` | Módulo propio (solo motor nuevo) | 200 | [carnaval-de-oruro.md](juegos/carnaval-de-oruro.md) |
@@ -309,10 +332,13 @@ El ritmo, la legibilidad del cartel y el tartamudeo de los subtítulos ya los mi
 | Sapo | `sapo` | Módulo propio (solo motor nuevo) | 200, con clasificatoria a 12 | [sapo.md](juegos/sapo.md) |
 | ¿Quién es? | `quien` | Módulo propio (solo motor nuevo) | 200 | [quien-es.md](juegos/quien-es.md) |
 
+**Luz roja, luz verde salió del selector** el 5 de octubre de 2026, cuando entró la Chovena: cubría la misma necesidad (parar y seguir), pero sin nombre boliviano, con la sombra de una serie de apuestas y con un Faro que era un concepto técnico escondido.
+
 **Los que salieron del selector** el 30 de septiembre de 2026, porque sumaban poco: la carrera de cohetes y las balsas de totora eran la misma carrera de llamas con otra piel, y el Cierre de Libro era el menos visual. El código sigue y se abren con `?demo=` mientras se decide si se borran; la ruleta con más de 24 personas ahora pasa a la carrera de llamas, no al Cierre de Libro.
 
 | Juego | `?demo=` | Documento |
 |---|---|---|
 | Cierre de Libro | `ledger` | [cierre-de-libro.md](juegos/cierre-de-libro.md) |
 | Carrera de cohetes | `rockets` | [carrera-stellar.md](juegos/carrera-stellar.md) |
+| Luz roja, luz verde | `luz` | [luz-roja-luz-verde.md](juegos/luz-roja-luz-verde.md) |
 | Balsas de totora | `totora` | [balsas-de-totora.md](juegos/balsas-de-totora.md) |

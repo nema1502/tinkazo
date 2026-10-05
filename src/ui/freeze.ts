@@ -17,7 +17,7 @@ import { preloadGame } from "../games/engine";
  */
 export const GAME_BUTTONS: ReadonlyArray<[string, Game]> = [
   ["g-race", "race"],
-  ["g-luz", "luz"],
+  ["g-chovena", "chovena"],
   ["g-trompo", "trompo"],
   ["g-pinata", "pinata"],
   ["g-oruro", "oruro"],

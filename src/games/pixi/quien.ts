@@ -545,6 +545,7 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
 
   S.run((dt, now) => {
     tAll += dt;
+    S.breath(tAll, T_CROWN);
     script();
     if (tAll >= T_CROWN) {
       crown();

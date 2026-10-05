@@ -117,7 +117,18 @@ interface Session {
   timer: number;
   /** La semilla con que arrancó: pedirla otra vez con la misma no la reinicia. */
   seed: number;
+  /** Qué toca: el andino de siempre, o la chovena del juego cruceño. */
+  style: MusicStyle;
+  /** La música cortada en seco por el juego: el corte de la chovena. */
+  hold: boolean;
+  /** El pulso, multiplicado: más de 1 acelera. */
+  tempo: number;
+  /** La chovena entera, escrita al arrancar: la melodía y los acordes de toda la forma. */
+  cho: Cho | null;
 }
+
+/** El andino de siempre, o la chovena, la música chiquitana del juego de la rueda. */
+export type MusicStyle = "andino" | "chovena";
 
 let cur: Session | null = null;
 
@@ -136,10 +147,10 @@ function seeded(seed: number): () => number {
  * Arranca la música de un sorteo. `seed` sale de la ronda, así que la misma
  * ronda suena igual. No hace nada si el modo está apagado o no hay audio.
  */
-export function startMusic(seed: number): void {
+export function startMusic(seed: number, style: MusicStyle = "andino"): void {
   // Con la tarjeta de "cómo se juega" la música ya suena cuando el juego la
   // pide: volver a empezarla desde el primer compás se oía como un corte.
-  if (cur && cur.seed === seed) return;
+  if (cur && cur.seed === seed && cur.style === style) return;
   stopMusic();
   if (!enabled || isMuted()) return;
   const ctx = audio();
@@ -186,6 +197,12 @@ export function startMusic(seed: number): void {
     won: false,
     timer: 0,
     seed,
+    style,
+    hold: false,
+    tempo: 1,
+    // La melodía sale del mismo azar, después de lo del andino: los otros
+    // juegos suenan igual que antes de que existiera la chovena.
+    cho: style === "chovena" ? writeChovena(rng) : null,
   };
   cur.timer = window.setInterval(tick, 40);
   tick();
@@ -205,6 +222,45 @@ export function stopMusic(): void {
 }
 
 /**
+ * Corta la música en seco, o la vuelve a soltar: el corte de la chovena, que
+ * es la mecánica del juego. Corta el bus entero en 25 ms (también el eco de la
+ * sala, porque un corte con cola no se oye como corte) y al soltarla retoma en
+ * el uno de un compás, como un conjunto que vuelve a entrar.
+ */
+export function musicHold(on: boolean): void {
+  const s = cur;
+  if (!s || s.won || s.hold === on) return;
+  s.hold = on;
+  const t = s.ctx.currentTime;
+  s.bus.gain.cancelScheduledValues(t);
+  s.bus.gain.setValueAtTime(s.bus.gain.value, t);
+  if (on) {
+    s.bus.gain.linearRampToValueAtTime(0, t + 0.025);
+    return;
+  }
+  s.bus.gain.linearRampToValueAtTime(0.3, t + 0.03);
+  s.next = t + 0.03;
+  s.step = Math.ceil(s.step / 8) * 8;
+}
+
+/**
+ * El silencio de antes del ganador: la música se corta en seco un momento
+ * antes del revelado, y el remate la vuelve a abrir. "Un cuarto de segundo sin
+ * nada es el efecto más barato que existe" (docs/juegos.md), y lo que más
+ * mueve en la música de baile es justamente eso: vaciar y volver con todo
+ * (investigación del audio, 4 de octubre de 2026). Cada juego lo llama con su
+ * propio reloj, unos 0,4 s reales antes de coronar.
+ */
+export function musicBreath(): void {
+  musicHold(true);
+}
+
+/** El pulso de la música, multiplicado: 1 es el normal, más acelera. */
+export function musicTempo(mul: number): void {
+  if (cur) cur.tempo = Math.max(0.5, Math.min(2, mul));
+}
+
+/**
  * Lo que dice el relator, con su tensión. Un salto grande es una sorpresa: la
  * música se calla un tiempo. Tensión 1 es el ganador: remate.
  */
@@ -213,10 +269,19 @@ export function musicCue(heat: number): void {
   if (!s || s.won) return;
   if (heat >= 0.99) {
     s.won = true;
-    finale(s, Math.max(s.next, s.ctx.currentTime + 0.03));
+    const at = Math.max(s.next, s.ctx.currentTime + 0.03);
+    // Si el juego la dejó cortada (el silencio de antes del ganador, o el
+    // corte de la chovena), el remate la vuelve a abrir.
+    if (s.hold) {
+      s.hold = false;
+      s.bus.gain.cancelScheduledValues(s.ctx.currentTime);
+      s.bus.gain.setValueAtTime(0.3, s.ctx.currentTime);
+    }
+    if (s.style === "chovena") finaleChovena(s, at);
+    else finale(s, at);
     return;
   }
-  if (heat - s.level >= 0.3) {
+  if (s.style === "andino" && heat - s.level >= 0.3) {
     const beat = beatLength(s);
     s.breakUntil = s.next + beat;
     s.crashAt = s.breakUntil;
@@ -227,7 +292,10 @@ export function musicCue(heat: number): void {
 /* ---------------------------------------------------------- el secuenciador */
 
 /** Un tiempo, en segundos. De 96 a 132 golpes por minuto según la tensión. */
-const beatLength = (s: Session): number => 60 / (96 + 36 * s.level);
+// La chovena no acelera con la tensión: los bailarines pisan en el tiempo, y
+// el juego calcula ese tiempo con el mismo número. Acelera cuando el juego lo pide.
+const beatLength = (s: Session): number =>
+  s.style === "chovena" ? 60 / (CHO_BPM * s.tempo) : 60 / ((96 + 36 * s.level) * s.tempo);
 
 function tick(): void {
   const s = cur;
@@ -244,11 +312,17 @@ function tick(): void {
   s.level += (want - s.level) * 0.06;
   s.target = Math.max(floor, s.target - 0.004);
   if (s.won) return;
+  // Cortada por el juego: no se arma nada, y al volver arranca desde ahora.
+  if (s.hold) {
+    s.next = Math.max(s.next, s.ctx.currentTime);
+    return;
+  }
 
   while (s.next < s.ctx.currentTime + 0.22) {
     const sixteenth = beatLength(s) / 4;
     // Durante el corte de una sorpresa no suena nada.
-    if (s.next >= s.breakUntil) playStep(s, s.next, s.step);
+    if (s.style === "chovena") playStepChovena(s, s.next, s.step);
+    else if (s.next >= s.breakUntil) playStep(s, s.next, s.step);
     if (s.crashAt > 0 && s.next >= s.crashAt) {
       crash(s, s.next, 0.5);
       bombo(s, s.next, 1);
@@ -364,11 +438,33 @@ function bombo(s: Session, t: number, v: number): void {
   o.type = "sine";
   o.frequency.setValueAtTime(95, t);
   o.frequency.exponentialRampToValueAtTime(48, t + 0.22);
-  const g = env(ctx, t, 0.75 * v, 0.004, 0.5);
+  // Menos cola grave que antes: en un proyector no se oye y en la mezcla se
+  // comía todo lo demás. El cuerpo de arriba la reemplaza.
+  const g = env(ctx, t, 0.56 * v, 0.004, 0.36);
   o.connect(g).connect(s.bus);
   o.start(t);
   o.stop(t + 0.6);
   noiseHit(s, t, 0.18 * v, 0.05, "lowpass", 900);
+  cuerpo(s, t, 190, 0.3 * v);
+}
+
+/**
+ * El cuerpo de un golpe grave, para los parlantes chicos: una laptop o el
+ * parlante de un proyector cortan por debajo de unos 150 Hz, y un bombo que
+ * vive entre 50 y 95 Hz ahí no suena. El oído reconstruye la nota grave con
+ * sus armónicos, así que se le suma un golpe corto que cae desde `f` hasta su
+ * mitad (investigación del audio, 4 de octubre de 2026).
+ */
+function cuerpo(s: Session, t: number, f: number, v: number): void {
+  const { ctx } = s;
+  const o = tag(ctx.createOscillator());
+  o.type = "triangle";
+  o.frequency.setValueAtTime(f, t);
+  o.frequency.exponentialRampToValueAtTime(f * 0.55, t + 0.09);
+  const g = env(ctx, t, v, 0.003, 0.11);
+  o.connect(g).connect(s.bus);
+  o.start(t);
+  o.stop(t + 0.16);
 }
 
 /** El bombo del beat, más seco y más corto. */
@@ -378,10 +474,11 @@ function kick(s: Session, t: number): void {
   o.type = "sine";
   o.frequency.setValueAtTime(150, t);
   o.frequency.exponentialRampToValueAtTime(46, t + 0.1);
-  const g = env(ctx, t, 0.6, 0.002, 0.28);
+  const g = env(ctx, t, 0.45, 0.002, 0.22);
   o.connect(g).connect(s.bus);
   o.start(t);
   o.stop(t + 0.35);
+  cuerpo(s, t, 230, 0.24);
 }
 
 function hat(s: Session, t: number, v: number): void {
@@ -434,16 +531,23 @@ function noiseHit(s: Session, t: number, peak: number, decay: number, type: Biqu
 /** El bajo: redondo, sin filo, para sostener sin tapar. */
 function bass(s: Session, t: number, semis: number): void {
   const { ctx } = s;
-  const o = tag(ctx.createOscillator());
-  o.type = "triangle";
-  o.frequency.value = hz(semis);
   const f = ctx.createBiquadFilter();
   f.type = "lowpass";
-  f.frequency.value = 700;
+  f.frequency.value = 1000;
   const g = env(ctx, t, 0.32, 0.008, 0.34);
-  o.connect(f).connect(g).connect(s.bus);
-  o.start(t);
-  o.stop(t + 0.4);
+  f.connect(g).connect(s.bus);
+  // El triángulo es la nota; la sierra, bajita, le da los armónicos que sí
+  // salen por un parlante chico (el bajo vive entre 49 y 82 Hz).
+  for (const [type, lvl] of [["triangle", 1], ["sawtooth", 0.42]] as const) {
+    const o = tag(ctx.createOscillator());
+    o.type = type;
+    o.frequency.value = hz(semis);
+    const lg = ctx.createGain();
+    lg.gain.value = lvl;
+    o.connect(lg).connect(f);
+    o.start(t);
+    o.stop(t + 0.4);
+  }
 }
 
 /**
@@ -555,6 +659,336 @@ function finale(s: Session, t: number): void {
   siku(s, t + 0.02, deg(5), 1.5, 0.3, 0.6);
   s.bus.gain.setValueAtTime(0.34, t + 1.6);
   s.bus.gain.linearRampToValueAtTime(0, t + 3.2);
+}
+
+/* -------------------------------------------------------------- la chovena */
+
+/**
+ * La chovena, la música chiquitana del juego de la rueda. De dónde sale cada
+ * decisión, con sus fuentes, está en docs/juegos/chovena.md:
+ *
+ * - **2/4 a negra = 90**, la única partitura con metrónomo que se encontró
+ *   ("Chobena oriental", Cancionero cruceño, 2023). El juego la acelera en la
+ *   final, hasta unos 103.
+ * - **En mayor, con I, IV y V** (do, fa y sol). Do mayor tiene las notas de la
+ *   pentatónica de los efectos más el fa y el si: la música y los golpes no chocan.
+ * - **Semicorcheas parejas** en frases cortas que se repiten, con notas
+ *   repetidas y la frase que cierra con una negra en el segundo tiempo. Ni el
+ *   galope del huayno ni el puntillo del taquirari.
+ * - **La tamborita**: la flauta de caña al frente, aguda y no temperada; la caja
+ *   con bordón de cuero, que repiquetea con acento en la "y" de cada tiempo y
+ *   redobla al cerrar cada frase; el bombo en el uno y en el dos. El violín
+ *   dobla la melodía, como desde la colonia, y la guitarra rasguea a contratiempo.
+ * - **Arranca con los tambores solos**, dos compases, y las capas entran con la
+ *   tensión: flauta, guitarra, violín, una segunda flauta en terceras, y al
+ *   final palmas en la "y" y la maraca.
+ *
+ * El ritmo exacto de la caja y del bombo no está escrito en ninguna fuente:
+ * es una inferencia, y la tiene que escuchar alguien chiquitano o cruceño.
+ */
+export const CHO_BPM = 90;
+/** Do mayor, en semitonos desde do. */
+const CHO_MAJOR = [0, 2, 4, 5, 7, 9, 11];
+/** Un grado de Do mayor, en semitonos desde el la de 440: el grado 0 es el do central. */
+const choDeg = (d: number): number => (CHO_MAJOR[((d % 7) + 7) % 7] as number) + 12 * Math.floor(d / 7) - 9;
+/**
+ * La flauta de caña no es temperada: cada grado queda corrido siempre lo
+ * mismo, en centésimas de semitono. Es lo que la hace sonar a caña y no a
+ * teclado (la afinación no temperada tiene fuente; los números son nuestros).
+ */
+const CHO_CENTS = [0, 12, -16, 20, -10, 15, -18];
+const choCents = (d: number): number => (CHO_CENTS[((d % 7) + 7) % 7] as number) / 100;
+
+/** Un acorde de la chovena: el bajo, las cinco cuerdas de la guitarra y sus notas, en grados. */
+interface ChoChord extends Chord {
+  tones: number[];
+}
+const CHO_I: ChoChord = { root: -33, strings: [-21, -17, -14, -9, -5], tones: [0, 2, 4] };
+const CHO_IV: ChoChord = { root: -28, strings: [-16, -12, -9, -4, 0], tones: [3, 5, 0] };
+const CHO_V: ChoChord = { root: -26, strings: [-19, -14, -10, -7, -2], tones: [4, 6, 1] };
+/** Las partes: A de ocho compases, el estribillo B de cuatro y C, el contraste, de ocho. */
+const CHO_PARTS: Record<"A" | "B" | "C", ChoChord[]> = {
+  A: [CHO_I, CHO_I, CHO_V, CHO_I, CHO_I, CHO_IV, CHO_V, CHO_I],
+  B: [CHO_IV, CHO_I, CHO_V, CHO_I],
+  C: [CHO_IV, CHO_IV, CHO_I, CHO_I, CHO_IV, CHO_I, CHO_V, CHO_I],
+};
+/** La forma de la partitura: A, B, A, B, C, B. */
+const CHO_FORM: ("A" | "B" | "C")[] = ["A", "B", "A", "B", "C", "B"];
+/** Los compases de tambores solos con que arranca. */
+const CHO_DRUMS = 2;
+
+interface Cho {
+  /** La melodía de toda la forma: grado o -1 por semicorchea. */
+  notes: number[];
+  chords: ChoChord[];
+}
+
+/**
+ * La melodía de una parte. Cada compás se arma con bloques de la partitura:
+ * cuatro semicorcheas y cuatro más, cuatro y una negra, o cuatro y dos
+ * corcheas. En los tiempos fuertes, una nota del acorde; en el medio, la
+ * misma nota repetida o un paso. La primera frase cierra en una nota del
+ * acorde que no es la tónica y la segunda contesta y cierra en do, con una
+ * negra en el segundo tiempo.
+ */
+function writePart(rng: () => number, prog: ChoChord[], lo: number, hi: number): number[] {
+  const RITMOS = ["xxxxxxxx", "xxxxxxxx", "xxxxx...", "xxxxx.x."];
+  const out: number[] = [];
+  let d = 7;
+  let run = 1;
+  const near = (from: number, tones: number[]): number => {
+    let best = from;
+    let bestD = 99;
+    for (let o = lo - 7; o <= hi + 7; o += 7) {
+      for (const tn of tones) {
+        const c = tn + Math.floor(o / 7) * 7;
+        if (c < lo || c > hi) continue;
+        const dd = Math.abs(c - from) + (c === from ? 0.5 : 0);
+        if (dd < bestD) {
+          bestD = dd;
+          best = c;
+        }
+      }
+    }
+    return best;
+  };
+  prog.forEach((chord, bar) => {
+    const end = bar === prog.length - 1;
+    const half = prog.length === 8 && bar === 3;
+    const r = end || half ? "xxxxx..." : (RITMOS[Math.floor(rng() * RITMOS.length)] as string);
+    for (let i = 0; i < 8; i++) {
+      if (r[i] !== "x") {
+        out.push(-1);
+        continue;
+      }
+      const prev = d;
+      if (i === 4 && end) d = 7;
+      else if (i === 4 && half) d = near(d, [4, 2]);
+      else if (i === 0 || i === 4) d = near(d + (rng() < 0.5 ? 1 : -1), chord.tones);
+      else if (run < 3 && rng() < 0.45) d = prev;
+      else d = Math.max(lo, Math.min(hi, d + (rng() < 0.5 ? 1 : -1) * (rng() < 0.85 ? 1 : 2)));
+      run = d === prev ? run + 1 : 1;
+      out.push(d);
+    }
+  });
+  return out;
+}
+
+function writeChovena(rng: () => number): Cho {
+  const mel = {
+    A: writePart(rng, CHO_PARTS.A, 4, 11),
+    B: writePart(rng, CHO_PARTS.B, 4, 11),
+    C: writePart(rng, CHO_PARTS.C, 5, 12),
+  };
+  return { notes: CHO_FORM.flatMap((p) => mel[p]), chords: CHO_FORM.flatMap((p) => CHO_PARTS[p]) };
+}
+
+/** Lo que suena en una semicorchea de chovena. */
+function playStepChovena(s: Session, t: number, step: number): void {
+  const cho = s.cho;
+  if (!cho) return;
+  const L = s.level;
+  const inBar = step % 8;
+  const bar = Math.floor(step / 8);
+  const drums = bar < CHO_DRUMS;
+  const fb = drums ? 0 : (bar - CHO_DRUMS) % cho.chords.length;
+  const chord = cho.chords[fb] as ChoChord;
+  const sixteenth = beatLength(s) / 4;
+  // El bombo: fuerte en el uno, medio en el dos, y cada cuatro compases un
+  // golpe más, corto, con el parche apretado con el codo.
+  if (inBar === 0) tampora(s, t, 0.95);
+  else if (inBar === 4) tampora(s, t, 0.6);
+  else if (inBar === 7 && !drums && fb % 4 === 3) codo(s, t, 0.7);
+  // La caja: el repiqueteo parejo con acento en la "y" de cada tiempo, y el
+  // redoble que cierra cada frase y cae en el uno.
+  const cierre = !drums && fb % 4 === 3 && inBar >= 4;
+  if (cierre) {
+    const v = 0.4 + 0.12 * (inBar - 4);
+    caja(s, t, v);
+    caja(s, t + sixteenth / 2, v * 0.85);
+  } else if (inBar === 2 || inBar === 6) caja(s, t, 1);
+  else caja(s, t, 0.32 + 0.18 * L);
+  if (drums) return;
+  // El bajo en el uno y en el dos, y la guitarra a contratiempo.
+  if (inBar === 0 || inBar === 4) bass(s, t, chord.root + (inBar === 4 ? 7 : 0));
+  if (L > 0.22 && (inBar === 2 || inBar === 6)) strum(s, t, chord, inBar === 2, 0.38);
+  // La flauta con la melodía, una octava arriba; el violín la dobla, y con
+  // tensión una segunda flauta en terceras.
+  const i = fb * 8 + inBar;
+  const d = cho.notes[i] as number;
+  if (d >= 0) {
+    const len = holdOf(cho.notes, i) * sixteenth;
+    pifano(s, t, choDeg(d + 7) + choCents(d), len, -0.18, 0.9);
+    if (L > 0.32) violin(s, t, choDeg(d), len, 0.25, 0.6);
+    if (L > 0.6) pifano(s, t, choDeg(d + 5) + choCents(d + 5), len, 0.42, 0.45);
+  }
+  // Con toda la tensión, las palmas de los hombres en la "y" y la maraca.
+  if (L > 0.8) {
+    if (inBar === 2 || inBar === 6) clap(s, t);
+    noiseHit(s, t, inBar % 2 ? 0.035 : 0.055, 0.03, "highpass", 6500);
+  }
+}
+
+/** El bombo de la tamborita: cuero grueso tocado con mazo, que cae de ~80 a 50 Hz, y el golpe de la madera. */
+function tampora(s: Session, t: number, v: number): void {
+  const { ctx } = s;
+  const o = tag(ctx.createOscillator());
+  o.type = "sine";
+  o.frequency.setValueAtTime(82, t);
+  o.frequency.exponentialRampToValueAtTime(50, t + 0.2);
+  const g = env(ctx, t, 0.66 * v, 0.004, 0.34);
+  o.connect(g).connect(s.bus);
+  o.start(t);
+  o.stop(t + 0.5);
+  noiseHit(s, t, 0.16 * v, 0.04, "lowpass", 1100);
+  cuerpo(s, t, 170, 0.3 * v);
+}
+
+/** El bombo con el parche apretado con el codo: más agudo y más corto. */
+function codo(s: Session, t: number, v: number): void {
+  const { ctx } = s;
+  const o = tag(ctx.createOscillator());
+  o.type = "sine";
+  o.frequency.setValueAtTime(128, t);
+  o.frequency.exponentialRampToValueAtTime(88, t + 0.08);
+  const g = env(ctx, t, 0.55 * v, 0.003, 0.12);
+  o.connect(g).connect(s.bus);
+  o.start(t);
+  o.stop(t + 0.18);
+}
+
+/**
+ * La caja con bordón de cuero: más opaca que la de metal. Ruido entre 1 y 2,5
+ * kHz que se apaga en unos 70 ms, y el parche, un golpe corto cerca de 200 Hz.
+ */
+function caja(s: Session, t: number, v: number): void {
+  noiseHit(s, t, 0.13 * v, 0.07, "bandpass", 1700);
+  const { ctx } = s;
+  const o = tag(ctx.createOscillator());
+  o.type = "triangle";
+  o.frequency.setValueAtTime(210, t);
+  o.frequency.exponentialRampToValueAtTime(170, t + 0.04);
+  const g = env(ctx, t, 0.12 * v, 0.002, 0.045);
+  o.connect(g).connect(s.bus);
+  o.start(t);
+  o.stop(t + 0.07);
+}
+
+/**
+ * La flauta de caña: casi pura, con el soplido fuerte en el ataque (el "chiff"
+ * del pico), y casi sin vibrato. `semis` puede traer centésimas: la caña no
+ * está temperada.
+ */
+function pifano(s: Session, t: number, semis: number, len: number, pan: number, v: number): void {
+  const { ctx } = s;
+  const f0 = hz(semis);
+  const dur = Math.max(0.08, len * 0.9);
+  const p = ctx.createStereoPanner();
+  p.pan.value = pan;
+  p.connect(s.bus);
+  p.connect(s.wet);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(0.11 * v, t + 0.018);
+  g.gain.setValueAtTime(0.1 * v, t + dur - 0.04);
+  g.gain.linearRampToValueAtTime(0.0001, t + dur);
+  g.connect(p);
+  const vib = tag(ctx.createOscillator());
+  vib.frequency.value = 5;
+  const vg = ctx.createGain();
+  vg.gain.setValueAtTime(0, t);
+  vg.gain.linearRampToValueAtTime(f0 * 0.0025, t + Math.min(dur, 0.3));
+  vib.connect(vg);
+  for (const [type, lvl] of [["sine", 1], ["triangle", 0.35]] as const) {
+    const o = tag(ctx.createOscillator());
+    o.type = type;
+    o.frequency.value = f0;
+    vg.connect(o.frequency);
+    const lg = ctx.createGain();
+    lg.gain.value = lvl;
+    o.connect(lg).connect(g);
+    o.start(t);
+    o.stop(t + dur + 0.02);
+  }
+  vib.start(t);
+  vib.stop(t + dur + 0.02);
+  // El soplido: ruido en la nota, fuerte al empezar.
+  const src = tag(ctx.createBufferSource());
+  src.buffer = s.noise;
+  const bp = ctx.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.value = f0 * 1.5;
+  bp.Q.value = 4;
+  const ng = ctx.createGain();
+  ng.gain.setValueAtTime(0.0001, t);
+  ng.gain.linearRampToValueAtTime(0.09 * v, t + 0.012);
+  ng.gain.exponentialRampToValueAtTime(0.012 * v, t + 0.08);
+  ng.gain.linearRampToValueAtTime(0.0001, t + dur);
+  src.connect(bp).connect(ng).connect(p);
+  src.start(t, s.rng() * 0.5);
+  src.stop(t + dur + 0.02);
+}
+
+/**
+ * Un violín: dos sierras apenas desafinadas, un filtro que deja el brillo del
+ * arco, y un vibrato que entra tarde. El ataque es corto pero no seco, como
+ * un arco que empieza la nota.
+ */
+function violin(s: Session, t: number, semis: number, len: number, pan: number, v: number): void {
+  const { ctx } = s;
+  const f0 = hz(semis);
+  const dur = Math.max(0.08, len * 0.95);
+  const p = ctx.createStereoPanner();
+  p.pan.value = pan;
+  p.connect(s.bus);
+  p.connect(s.wet);
+  const f = ctx.createBiquadFilter();
+  f.type = "lowpass";
+  f.frequency.value = 3200;
+  f.Q.value = 1.2;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(0.06 * v, t + 0.03);
+  g.gain.setValueAtTime(0.055 * v, t + dur - 0.05);
+  g.gain.linearRampToValueAtTime(0.0001, t + dur);
+  f.connect(g).connect(p);
+  const vib = tag(ctx.createOscillator());
+  vib.frequency.value = 5.8;
+  const vg = ctx.createGain();
+  vg.gain.setValueAtTime(0, t);
+  vg.gain.linearRampToValueAtTime(f0 * 0.006, t + Math.min(dur, 0.22));
+  vib.connect(vg);
+  for (const mul of [1, 1.004]) {
+    const o = tag(ctx.createOscillator());
+    o.type = "sawtooth";
+    o.frequency.value = f0 * mul;
+    vg.connect(o.frequency);
+    o.connect(f);
+    o.start(t);
+    o.stop(t + dur + 0.02);
+  }
+  vib.start(t);
+  vib.stop(t + dur + 0.02);
+}
+
+/**
+ * El remate de la chovena: un redoble de caja que crece, y en el uno todo el
+ * conjunto junto, con la flauta arriba en do. Después, el cartel es del ganador.
+ */
+function finaleChovena(s: Session, t: number): void {
+  const roll = 0.5;
+  for (let i = 0; i < 12; i++) caja(s, t + (i * roll) / 12, 0.35 + i * 0.055);
+  const at = t + roll;
+  tampora(s, at, 1.2);
+  crash(s, at, 0.6);
+  bass(s, at, CHO_I.root);
+  strum(s, at, CHO_I, true, 0.75);
+  pifano(s, at, choDeg(14), 1.3, -0.18, 1);
+  pifano(s, at + 0.01, choDeg(11) + choCents(11), 1.3, 0.4, 0.55);
+  violin(s, at, choDeg(7), 1.3, 0.25, 0.8);
+  tampora(s, at + 0.67, 0.8);
+  s.bus.gain.setValueAtTime(0.32, at + 1.4);
+  s.bus.gain.linearRampToValueAtTime(0, at + 3);
 }
 
 /* ------------------------------------------------------------- los buffers */

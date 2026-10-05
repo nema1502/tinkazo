@@ -858,6 +858,7 @@ export async function llamasPixi(
     } else {
       look(leadX - G.sw * 0.08, G.midY, 1 + 0.18 * tens, 2.6);
     }
+    S.breath(tRace, DUR, lenta);
     if (prog >= 1) finishNow();
   }
 

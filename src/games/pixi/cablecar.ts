@@ -384,6 +384,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         cam.punch(0.1).shake(14 * G.k);
       }
     }
+    S.breath(tAll, T_CROWN);
     if (tAll >= T_CROWN) crowned();
     const moving = P.headAt(tAll + 0.05) - P.headAt(tAll) > 0.002;
     if (moving && tAll > T_BOARD && tAll < T_RUN && tAll - lastSaid > 2.4) sayNow(t("cTelUp"), 0.4);
@@ -643,6 +644,19 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       cb.flag.clear().moveTo(-cw / 2 + 14 * k, topY).lineTo(-cw / 2 + 14 * k, topY - 38 * k).stroke({ width: 2.5 * k, color: INK });
       drawFlag(cb.flag, -cw / 2 + 14 * k, topY - 37 * k, 48 * k, 26 * k, 0xf6efe2, cab * 2.3, true);
     }
+
+    // Pasar lista: en el embarque y el primer tramo, los nombres de a tandas
+    // encima de su cabina, para que cada uno sepa en cuál va. Los de una misma
+    // cabina se apilan.
+    const firstStop = stops[0]?.t0 ?? T_RUN;
+    const roll = S.batch(n, tAll, 0.3, Math.min(T_BOARD + 1.8, firstStop - 0.3));
+    S.tags(names, roll, (i) => {
+      const cab = cabinOf.get(i);
+      if (cab === undefined) return null;
+      const p = cabPoint(cab, tAll);
+      if (p.alpha < 0.5) return null;
+      return cam.toScreen(p.x, p.y - 22 * G.k, S.sw(), S.sh());
+    }, stations.map((s) => s.tag.getBounds()));
 
     // Lo que se mueve suelto: pasajeros que saltan, el embarque, chispas, nombres.
     fx.clear();

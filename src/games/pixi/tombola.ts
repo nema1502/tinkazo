@@ -679,6 +679,7 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
         cam.punch(0.1).shake(12 * G.k);
       }
     });
+    S.breath(tAll, tCrown);
     if (tAll >= tCrown) crowned();
     if (tAll > tOut + 1 && tAll < tLip && tAll - lastSaid > 2.2) sayNow(t("cTomRoll"), 0.55);
   }

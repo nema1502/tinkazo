@@ -482,6 +482,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
 
   S.run((dt, now) => {
     tAll += dt;
+    S.breath(tAll, T_CROWN);
     const w = omega(tAll, falsa);
     rot = -(startSeg + cum(tAll) * scale) * A;
     if (tAll < 1.1) {

@@ -86,6 +86,16 @@ export interface Dict {
   cLuzWobble: (n: string) => string;
   cLuzSaved: (n: string) => string;
   cLuzLast: (a: string, b: string) => string;
+  cChoCount: (n: number) => string;
+  cChoOut: (n: string) => string;
+  cChoOutN: (ns: string[]) => string;
+  cChoMany: (k: number) => string;
+  /** El que sale cuando también ganó: con varios premios. */
+  cChoPrize: (n: string) => string;
+  cChoBack: (n: string) => string;
+  cChoWobble: (n: string) => string;
+  cChoHold: (n: string) => string;
+  cChoDuo: (a: string, b: string) => string;
   cTelCount: (n: number, cabs: number) => string;
   cTelPass: (k: number) => string;
   cTelStop: (k: number, off: number, left: number) => string;
@@ -449,6 +459,25 @@ export const T: Record<Lang, Dict> = {
     cLuzSaved: (n) => pick([`¡${n} se salvó!`, `¡Por un pelo, ${n}!`, `¡${n} no se movió!`]),
     cLuzLast: (a, b) => pick([`¡Quedan ${a} y ${b}!`, `¡${a} contra ${b}!`]),
     cLuzLeft: "EN CARRERA",
+    cChoIntro: ["¡Arranca la chovena!", "¡A la rueda!", "¡Todos de la mano!"],
+    cChoCount: (n) => (n === 2 ? "¡Dos en la rueda!" : `¡${n} en la rueda!`),
+    cChoClap: ["¡Aplaudan al ritmo!", "¡Palmas al ritmo!", "¡Que suene la chovena!"],
+    cChoStop: ["¡Quietos!", "¡Se cortó la música!", "¡Nadie se mueve!"],
+    cChoBig: "¡QUIETOS!",
+    cChoOut: (n) => pick([`¡${n} trastabilló!`, `¡${n} se soltó!`, `¡Afuera, ${n}!`]),
+    cChoOutN: (ns) => `¡${joinList(ns, "y")} se soltaron!`,
+    cChoMany: (k) => `¡${k} se soltaron!`,
+    cChoPrize: (n) => `¡${n} sale con premio!`,
+    cChoGo: ["¡Sigue la chovena!", "¡Otra vuelta!", "¡Música!"],
+    cChoFake: ["¡Era un amague!", "¡Falsa alarma!", "¡Sigue, sigue!"],
+    cChoBack: (n) => pick([`¡${n} se había soltado, y vuelve!`, `¡${n} vuelve a la rueda!`]),
+    cChoWobble: (n) => pick([`¡${n} se tambalea!`, `¡Ojo con ${n}!`]),
+    cChoHold: (n) => pick([`¡${n} aguanta!`, `¡${n} no se soltó!`, `¡Por un pelo, ${n}!`]),
+    cChoDuo: (a, b) => pick([`¡Quedan ${a} y ${b}!`, `¡${a} y ${b}, de la mano!`]),
+    cChoDuoAnon: "¡Quedan dos!",
+    cChoFinal: ["¡La última vuelta!", "¡Más rápido!", "¡Ahora o nunca!"],
+    cChoLeft: "EN LA RUEDA",
+    cChoOutT: "SALEN",
     cConstNear: (n) => pick([`¡Casi toca a ${n}!`, `¡Pasó rozando a ${n}!`, `¡Uy, ${n}!`]),
     cPasClose: (n) => pick([`¡Casi sale ${n}!`, `¡${n} en el borde!`, `¡Se agarra ${n}!`]),
     cLedgerClose: (n) => pick([`¡Casi se lleva a ${n}!`, `¡Uy, ${n} tembló!`, `¡A ${n} casi la barre!`]),
@@ -486,6 +515,7 @@ export const T: Record<Lang, Dict> = {
     gamePinata: "Piñata",
     gameOruro: "Carnaval de Oruro",
     gameLuz: "Luz roja, luz verde",
+    gameCho: "Chovena",
     cPasSpread: ["¡Se tiende el aguayo!", "¡Aguayo al piso!", "¡A ver ese aguayo!"],
     cPasDrop: ["¡Cada uno pone su bulto!", "¡Todos al aguayo!", "¡Adentro los bultos!"],
     cPasWeave: ["¡Hilo con hilo!", "¡Todos con todos!", "¡Se teje la trama!"],
@@ -610,7 +640,7 @@ export const T: Record<Lang, Dict> = {
     //     la herramienta: quien entra a sortear no tiene que leer nada antes.
     masTitle: "Para saber más",
     masJuegosT: "Los doce juegos",
-    masJuegosB: "Carrera de llamas, luz roja luz verde, trompo, piñata, Carnaval de Oruro, tómbola, el sapo y cinco más, con la captura de cada uno.",
+    masJuegosB: "Carrera de llamas, chovena, trompo, piñata, Carnaval de Oruro, tómbola, el sapo y cinco más, con la captura de cada uno.",
     masHistoriaT: "De dónde sale el nombre",
     masHistoriaB: "Un tinkazo es una corazonada y un tincazo es un golpecito. El sorteo es las dos cosas.",
     masSeguridadT: "Cómo se puede romper",
@@ -789,6 +819,10 @@ export const T: Record<Lang, Dict> = {
     jgLuzB: "El juego de patio, con el Faro de la casa: con luz verde se corre, con luz roja se da vuelta y barre la cancha con su haz. Al que ve moviéndose, se sienta. Gana quien toca el Faro. Hasta doscientas.",
     loreLuzQ: "¿Por qué un faro?",
     loreLuzA: "drand se presenta como un «faro de aleatoriedad distribuido»: números al azar verificables, impredecibles y sin sesgo. Lo sostiene la League of Entropy, y de una de sus rondas sale cada sorteo de Tinkazo.",
+    jgChoN: "Chovena",
+    jgChoB: "El baile chiquitano de Santa Cruz: la rueda gira tomada de la mano y, cuando se corta la música, el que trastabilla se suelta y sale. La sala aplaude al ritmo y se congela con el corte. Mejor de doce a ochenta.",
+    loreChoQ: "¿Qué es la chovena?",
+    loreChoA: "Un baile de origen chiquitano, de Santa Cruz, en dos por cuatro: las parejas, tomadas de la mano, forman círculos y filas. Se baila en las fiestas religiosas y en carnaval.",
     jgOruN: "Carnaval de Oruro",
     jgOruB: "La entrada de la Diablada: la comparsa baila por las cuadras, entre las graderías llenas, y en cada arco se quedan algunos. Los dos últimos hacen un contrapunto frente al Socavón, y el que llega entra con campanas y cohetillos. Hasta doscientas.",
     jgSapoN: "Sapo",
@@ -814,6 +848,8 @@ export const T: Record<Lang, Dict> = {
     gcSapoQual: "Con más de doce, primero se tachan nombres hasta que quedan doce.",
     gcRace: "Gana la primera llama que cruza la meta.",
     gcLuz: "Con luz roja, el que se mueve se sienta. Gana quien toca el Faro.",
+    gcChovena: "Bailan en rueda, de la mano. Cuando se corta la música, el que trastabilla se suelta y sale. Gana el último que queda bailando.",
+    gcChovenaMany: "Bailan en rueda, de la mano. Cuando se corta la música, el que trastabilla sale. Los últimos en salir ganan premio, y el último que queda bailando se lleva el primero.",
     gcTrompo: "Los trompos chocan y se sacan del ruedo. Gana el último que sigue bailando.",
     gcPinata: "Con cada palo caen caramelos. Gana el último que queda adentro.",
     gcOruro: "En cada cuadra se quedan bailarines. Gana el que llega al Socavón.",
@@ -1262,6 +1298,25 @@ export const T: Record<Lang, Dict> = {
     cLuzSaved: (n) => pick([`${n} held still!`, `By a hair, ${n}!`, `${n} didn't move!`]),
     cLuzLast: (a, b) => pick([`It's ${a} and ${b}!`, `${a} against ${b}!`]),
     cLuzLeft: "STILL RUNNING",
+    cChoIntro: ["The chovena starts!", "Into the ring!", "Everyone hold hands!"],
+    cChoCount: (n) => (n === 2 ? "Two in the ring!" : `${n} in the ring!`),
+    cChoClap: ["Clap to the beat!", "Clap along!", "Let the chovena play!"],
+    cChoStop: ["Freeze!", "The music stopped!", "Nobody move!"],
+    cChoBig: "FREEZE!",
+    cChoOut: (n) => pick([`${n} stumbled!`, `${n} let go!`, `${n} is out!`]),
+    cChoOutN: (ns) => `${joinList(ns, "and")} let go!`,
+    cChoMany: (k) => `${k} let go!`,
+    cChoPrize: (n) => `${n} goes out with a prize!`,
+    cChoGo: ["The chovena goes on!", "Another round!", "Music!"],
+    cChoFake: ["Just a tease!", "False alarm!", "Keep going!"],
+    cChoBack: (n) => pick([`${n} slipped out, and is back in!`, `${n} is back in the ring!`]),
+    cChoWobble: (n) => pick([`${n} is wobbling!`, `Watch ${n}!`]),
+    cChoHold: (n) => pick([`${n} holds on!`, `${n} didn't let go!`, `${n} hangs on!`]),
+    cChoDuo: (a, b) => pick([`It's ${a} and ${b}!`, `${a} and ${b}, hand in hand!`]),
+    cChoDuoAnon: "Two left!",
+    cChoFinal: ["Last round!", "Faster!", "Now or never!"],
+    cChoLeft: "IN THE RING",
+    cChoOutT: "OUT",
     cOruBlock: (k, of) => `BLOCK ${k} OF ${of}`,
     cConstNear: (n) => pick([`It nearly touched ${n}!`, `It just grazed ${n}!`, `Whoa, ${n}!`]),
     cPasClose: (n) => pick([`${n} almost fell out!`, `${n} on the edge!`, `${n} hangs on!`]),
@@ -1296,6 +1351,7 @@ export const T: Record<Lang, Dict> = {
     gamePinata: "Piñata",
     gameOruro: "Oruro Carnival",
     gameLuz: "Red light, green light",
+    gameCho: "Chovena",
     cPasSpread: ["The cloth goes down!", "Aguayo on the floor!", "Look at that aguayo!"],
     cPasDrop: ["Everyone puts their bundle in!", "All onto the aguayo!", "In go the bundles!"],
     cPasWeave: ["Thread by thread!", "Everyone with everyone!", "The weave comes together!"],
@@ -1415,7 +1471,7 @@ export const T: Record<Lang, Dict> = {
     backHome: "Back to the draw",
     masTitle: "More about it",
     masJuegosT: "The twelve games",
-    masJuegosB: "Llama race, red light green light, spinning tops, piñata, Oruro Carnival, tombola, Sapo and five more, with a shot of each one.",
+    masJuegosB: "Llama race, chovena, spinning tops, piñata, Oruro Carnival, tombola, Sapo and five more, with a shot of each one.",
     masHistoriaT: "Where the name comes from",
     masHistoriaB: "A tinkazo is a hunch and a tincazo is a flick. A draw is both.",
     masSeguridadT: "Where it can fail",
@@ -1584,6 +1640,10 @@ export const T: Record<Lang, Dict> = {
     jgLuzB: "The playground game, with the house Lighthouse: on green everyone runs, on red it turns around and sweeps the field with its beam. Anyone it catches moving sits down. Whoever touches the Lighthouse wins. Up to two hundred.",
     loreLuzQ: "Why a lighthouse?",
     loreLuzA: "drand calls itself a \u201cdistributed randomness beacon\u201d: verifiable, unpredictable and unbiased random numbers. The League of Entropy runs it, and every Tinkazo draw is decided by one of its rounds.",
+    jgChoN: "Chovena",
+    jgChoB: "The Chiquitano dance from Santa Cruz: the ring turns hand in hand and, when the music stops, whoever stumbles lets go and is out. The room claps to the beat and freezes with the cut. Best from twelve to eighty.",
+    loreChoQ: "What is the chovena?",
+    loreChoA: "A dance of Chiquitano origin, from Santa Cruz, in two-four time: couples, holding hands, form circles and rows. It is danced at religious feasts and at carnival.",
     loreTrompoQ: "Trompo or spinning top?",
     loreTrompoA: "In much of Spain it is a peonza. The Dictionary of Americanisms records trompo in Bolivia as the children's game played with spinning tops: the game and the toy share one name.",
     jgTotN: "Reed boats",
@@ -1618,6 +1678,8 @@ export const T: Record<Lang, Dict> = {
     gcSapoQual: "With more than twelve, names are crossed out first until twelve are left.",
     gcRace: "The first llama across the finish line wins.",
     gcLuz: "On red, whoever moves sits down. Whoever touches the Lighthouse wins.",
+    gcChovena: "They dance in a ring, hand in hand. When the music stops, whoever stumbles lets go and is out. The last one dancing wins.",
+    gcChovenaMany: "They dance in a ring, hand in hand. When the music stops, whoever stumbles is out. The last ones out win a prize, and the last one dancing takes the first.",
     gcTrompo: "The tops clash and knock each other out of the ring. The last one spinning wins.",
     gcPinata: "Every swing knocks candies out. The last one left inside wins.",
     gcOruro: "Dancers stay behind at every block. Whoever reaches the Socavón wins.",

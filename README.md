@@ -102,7 +102,7 @@ Fairness is math; the show is what makes a room care. Twelve games, most of them
 |---|---|
 | Stellar Constellation | A payment hops from star to star looking for a route, like a path payment, and leaves a constellation drawn |
 | Llama Race | Eight lanes across the Andes |
-| Red Light, Green Light | The playground game: on green everyone runs, on red the Lighthouse turns around and sweeps the field with its beam, and anyone it catches moving sits down |
+| Chovena | The Chiquitano dance from Santa Cruz: the ring turns hand in hand, and when the band cuts the music, whoever stumbles lets go and sits down at the edge of the plaza. The one game where the room claps along and freezes with the cut |
 | Aguayo | The Andean carrying cloth: everyone's bundle sits on it, the cloth closes and ties up, and the one left goes off in the knot |
 | Cable Car | Cabins in the colors of the La Paz and El Alto lines climb the cable; half the riders get off at each station |
 | Ball Drum | The fair's drum, one numbered ball per person on the sealed list |
@@ -117,7 +117,7 @@ Fairness is math; the show is what makes a room care. Twelve games, most of them
 
 A camera director frames every game like a broadcast: it follows the leader, pushes in on the scare, slows down for the photo finish and shakes on impact. The games run on PixiJS, and where a device has no WebGL the previous engine takes over, so a draw never goes blank.
 
-Andean music with a beat plays in the background and follows the tension, short captions call each moment on screen, and after the winner a card explains a piece of the story with its primary source.
+Andean music with a beat plays in the background and follows the tension (the Chovena brings its own Chiquitano music, with a cane flute, a leather-snared drum and a bass drum, and its cut is the game itself), and goes silent for a breath right before every winner; short captions call each moment on screen, and after the winner a card explains a piece of the story with its primary source.
 
 ## Security
 

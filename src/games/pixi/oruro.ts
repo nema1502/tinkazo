@@ -747,6 +747,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       acc -= DT;
     }
     if (acc > DT) acc = 0;
+    S.breath(tAll, T_CROWN);
     if (phase === "crown") {
       if (riv.alive && riv !== win) leave([rivalIdx]);
       crown();

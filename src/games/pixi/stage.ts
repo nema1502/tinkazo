@@ -3,7 +3,7 @@ import { gsap } from "gsap";
 import { $ } from "../../dom";
 import { T, getLang, setPickSeed, t } from "../../i18n";
 import { LCOLORS, drawAvatar, paceFactor, params, skipMotion, takeShowGate, type Beacon } from "../../state";
-import { musicCue, startMusic, stopMusic } from "../../music";
+import { musicBreath, musicCue, startMusic, stopMusic, type MusicStyle } from "../../music";
 import { registerSkip, releaseScreen, shorten, takeOverScreen, winnerNames } from "../overlay";
 import { Camera } from "./camera";
 import { watchRecovery } from "./recover";
@@ -102,6 +102,28 @@ export interface PixiStage {
   /** Un chip con la cara y el nombre, anclado por la izquierda al medio. */
   /** `faceOf`: de quién es la cara, cuando la etiqueta es una versión corta del nombre. */
   chip(name: string, scale?: number, faceOf?: string): Container;
+  /**
+   * Los nombres de `who` encima de cada uno, en una capa propia que los juegos
+   * no vacían: repartidos para que no se pisen y adentro de la pantalla. `at(i)`
+   * es el punto de la pantalla sobre la cabeza de la persona `i`, o null si no
+   * se ve. Se llama en cada cuadro con la lista de ese momento (vacía, para
+   * sacarlos).
+   */
+  tags(names: string[], who: readonly number[], at: (i: number) => { x: number; y: number } | null, avoid?: readonly { x: number; y: number; width: number; height: number }[]): void;
+  /**
+   * La tanda de la lista que toca en `t`: todos de a ocho, entre `t0` y `t1`,
+   * tomando uno de cada tantos de `order` para que la tanda quede repartida por
+   * la escena. Vacía fuera de ese rato o con más de 64 personas, donde los
+   * nombres ya no entran.
+   */
+  batch(n: number, t: number, t0: number, t1: number, order?: readonly number[]): number[];
+  /**
+   * El respiro antes del ganador: la música se corta 0,4 s reales antes de
+   * coronar y el remate la vuelve a abrir. `t` es el reloj del juego, `at`
+   * cuándo corona en ese reloj, y `speed` qué tan rápido corre ese reloj en
+   * ese momento (0,4 en la cámara lenta de la carrera). Se llama en cada cuadro.
+   */
+  breath(t: number, at: number, speed?: number): void;
   /** Deja anotado un dato para los auditores (arco, puesto…). */
   mark(key: string, value: string): void;
   /** El cartel del ganador y el papel picado: se arman una vez y se llevan a la hora. */
@@ -143,7 +165,8 @@ interface Identidad {
  * saber en dos segundos si sigue en juego, y la forma más directa es ver su
  * nombre (auditoría de los juegos, 4 de octubre de 2026).
  *
- * Recorre los textos de la escena y del HUD, no los del cartel del ganador.
+ * Recorre los textos de la escena, del HUD y de pasar lista, no los del
+ * cartel del ganador.
  * Un nombre cuenta si se ve entero en pantalla, con opacidad de 0,6 o más y
  * un alto de al menos 1,6% de la pantalla. Las etiquetas cortas ("María Q.",
  * "Valeria Torr…") cuentan solo si no se confunden con otro nombre.
@@ -202,7 +225,13 @@ function identidadDe(names: string[]): { estado: Identidad; mirar: (raices: Cont
   return { estado, mirar };
 }
 
-export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => void): Promise<PixiStage | null> {
+/** Lo que un juego pide al montar el estadio. */
+export interface MountOptions {
+  /** La música del juego: la andina de siempre, salvo que pida otra. */
+  music?: MusicStyle;
+}
+
+export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => void, opts: MountOptions = {}): Promise<PixiStage | null> {
   if (skipMotion()) return null;
   const ov = $("stadium");
   const base = $<HTMLCanvasElement>("race-canvas");
@@ -269,10 +298,16 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   // El cartel del ganador tiene su propia capa: los juegos vacían `hud` cuando
   // cambia el tamaño de la pantalla, y el cartel se rearma solo.
   const podium = new Container();
-  app.stage.addChild(bg, scene, hud, podium);
+  // Los nombres de pasar lista tienen su capa: los juegos vacían `hud` cuando
+  // cambia el tamaño de la pantalla, y estos se rearman solos.
+  const tagLayer = new Container();
+  app.stage.addChild(bg, scene, hud, tagLayer, podium);
   const cam = new Camera();
   // `?auditar=identidad`: ver `identidadDe`. Se arma con los nombres del primer cartel.
   const identPedida = params.get("auditar") === "identidad";
+  // `?auditar=mezcla`: el instante del revelado, para que el auditor de mezcla
+  // compare lo que suena antes y después del ganador.
+  const mezclaPedida = params.get("auditar") === "mezcla";
   let ident: ReturnType<typeof identidadDe> | null = null;
   let relojId = 0;
   let cuadros = 0;
@@ -398,7 +433,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     // La música arma su sala (el eco sale de una respuesta al impulso de un
     // segundo y medio) antes de que se vea el estadio: armarla en el primer
     // cuadro lo congelaba.
-    startMusic(parseInt(beacon.randomness.slice(8, 16), 16));
+    startMusic(parseInt(beacon.randomness.slice(8, 16), 16), opts.music);
     try {
       cam.warm(app.renderer);
       for (const c of crowns) c.warm();
@@ -476,6 +511,8 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       root,
       at(tt: number, placa = true) {
         if (ident && ident.estado.revelado === null) ident.estado.revelado = relojId;
+        const w = window as unknown as { __revelado?: number };
+        if (mezclaPedida && w.__revelado === undefined) w.__revelado = performance.now();
         lastT = tt;
         lastPlaca = placa;
         root.visible = true;
@@ -522,6 +559,72 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     return c;
   };
 
+  /**
+   * Pasar lista (auditoría de identificación, 4 de octubre de 2026): cada
+   * persona tiene que poder saber en dos segundos cuál es la suya. Lo usan los
+   * juegos donde cada uno tiene su lugar desde el arranque.
+   */
+  let tagChips = new Map<number, Container>();
+  let tagK = 0;
+  const tags = (names: string[], who: readonly number[], at: (i: number) => { x: number; y: number } | null, avoid: readonly { x: number; y: number; width: number; height: number }[] = []): void => {
+    const k = u();
+    if (k !== tagK) {
+      tagLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
+      tagChips = new Map();
+      tagK = k;
+    }
+    for (const c of tagChips.values()) c.visible = false;
+    const placed: { x: number; y: number; w: number; h: number }[] = avoid.map((r) => ({ x: r.x, y: r.y + r.height / 2, w: r.width, h: r.height }));
+    const W = sw(), H = sh();
+    const lo = top() + 14 * k, hi = H - bottom() - 16 * k;
+    const pts = who.map((i) => ({ i, p: at(i) })).filter((a): a is { i: number; p: { x: number; y: number } } => !!a.p).sort((a, b) => a.p.y - b.p.y);
+    for (const { i, p } of pts) {
+      let c = tagChips.get(i);
+      if (!c) {
+        c = chip(names[i] ?? "", portrait() ? 0.9 : 1);
+        tagChips.set(i, c);
+        tagLayer.addChild(c);
+      }
+      c.visible = true;
+      const cw = c.width, ch = 24 * k;
+      const cx = (v: number): number => Math.max(8 * k, Math.min(W - cw - 8 * k, v));
+      const cy = (v: number): number => Math.max(lo, Math.min(hi, v));
+      const choca = (a: number, b: number): boolean => placed.some((r) => a < r.x + r.w && a + cw > r.x && b - ch / 2 < r.y + r.h / 2 && b + ch / 2 > r.y - r.h / 2);
+      let x = cx(p.x - cw / 2);
+      let y = cy(p.y - ch / 2);
+      // Primero encima, después a los costados: apilados en escalera quedaban
+      // lejos de su dueño (lo vio el agente evaluador en el trompo, en celular).
+      const libre = ([[x, y], [x - cw * 0.62, y], [x + cw * 0.62, y]] as const).map(([a, b]) => [cx(a), cy(b)] as const).find(([a, b]) => !choca(a, b));
+      if (libre) [x, y] = libre;
+      for (let tries = 0; tries < 8 && !libre; tries++) {
+        const hit = placed.find((r) => x < r.x + r.w && x + cw > r.x && y - ch / 2 < r.y + r.h / 2 && y + ch / 2 > r.y - r.h / 2);
+        if (!hit) break;
+        y = hit.y - (hit.h + ch) / 2 - 2 * k;
+        if (y < lo) {
+          y = hit.y + (hit.h + ch) / 2 + 2 * k;
+          x = Math.max(8 * k, Math.min(W - cw - 8 * k, x + cw * 0.35));
+        }
+      }
+      placed.push({ x, y, w: cw, h: ch });
+      c.position.set(x, y);
+    }
+  };
+  let breathed = false;
+  const breath = (t: number, at: number, speed = 1): void => {
+    if (breathed || t >= at) return;
+    if (t >= at - (0.4 * speed) / paceFactor()) {
+      breathed = true;
+      musicBreath();
+    }
+  };
+  const batch = (n: number, t: number, t0: number, t1: number, order?: readonly number[]): number[] => {
+    if (n > 64 || n <= 0 || t < t0 || t >= t1) return [];
+    const B = Math.max(1, Math.ceil(n / 8));
+    const b = Math.min(B - 1, Math.floor(((t - t0) / (t1 - t0)) * B));
+    const seq = order ?? Array.from({ length: n }, (_, i) => i);
+    return seq.filter((_, j) => j % B === b);
+  };
+
   const stage: PixiStage = {
     app, view, bg, scene, hud, cam, sw, sh, u, portrait, top, bottom, rng, dark,
     color: (k) => P[((k % P.length) + P.length) % P.length] ?? 0xe93d9c,
@@ -533,7 +636,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       );
       musicCue(heat);
     },
-    face, text, chip, mark, crown,
+    face, text, chip, tags, batch, breath, mark, crown,
     onResize: (fn) => resizers.push(fn),
     onCleanup: (fn) => cleaners.push(fn),
     run(fn) {
@@ -551,7 +654,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         app.renderer.render(app.stage);
         if (ident) {
           relojId = (now - start) / 1000;
-          if (cuadros++ % 5 === 0) ident.mirar([scene, hud], relojId, sw(), sh());
+          if (cuadros++ % 5 === 0) ident.mirar([scene, hud, tagLayer], relojId, sw(), sh());
         }
         rafId = requestAnimationFrame(loop);
       };
