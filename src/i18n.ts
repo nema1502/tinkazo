@@ -170,8 +170,18 @@ export interface Dict {
  */
 let pickRng: (() => number) | null = null;
 const pick = (xs: string[]): string => xs[Math.floor((pickRng ?? Math.random)() * xs.length)] ?? "";
-/** "A", "A y B", "A, B y C": names joined for the narrator. */
-const joinList = (ns: string[], and: string): string => (ns.length <= 1 ? (ns[0] ?? "") : `${ns.slice(0, -1).join(", ")} ${and} ${ns[ns.length - 1]}`);
+/** Sin tildes, para mirar cómo suena el principio de un nombre. */
+const llano = (s: string): string => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+/** "y" se vuelve "e" delante del sonido i ("Jorge e Isabel", "Ana e Hilda"), pero no delante de "hie" ni "hia". */
+const yE = (next: string): string => (/^h?i(?![aeiou])/i.test(llano(next)) ? "e" : "y");
+/** "o" se vuelve "u" delante del sonido o ("Pedro u Óscar", "Ana u Hortensia"). */
+const oU = (next: string): string => (/^h?o/i.test(llano(next)) ? "u" : "o");
+/** "A", "A y B", "A, B e Isabel": names joined for the narrator. */
+const joinList = (ns: string[], and: string): string => {
+  if (ns.length <= 1) return ns[0] ?? "";
+  const last = ns[ns.length - 1] as string;
+  return `${ns.slice(0, -1).join(", ")} ${and === "y" ? yE(last) : and} ${last}`;
+};
 
 /** El juego en curso presta su azar sembrado. `null` al terminar. */
 export function setPickSeed(rng: (() => number) | null): void {
@@ -379,7 +389,7 @@ export const T: Record<Lang, Dict> = {
     cTroOut: (n) => pick([`¡Se cayó el de ${n}!`, `¡Sacaron a ${n}!`, `¡${n} fuera del ruedo!`]),
     cTroFew: ["¡Quedan los mejores!", "¡Esto se pone bravo!", "¡Aguantan pocos!"],
     cTroEdge: (n) => pick([`¡${n} casi se sale!`, `¡${n} en el borde!`, `¡${n} rozó la tiza!`]),
-    cTroDuel: (a, b) => pick([`¡Mano a mano, ${a} y ${b}!`, `¡${a} contra ${b}!`, `¡Quedan ${a} y ${b}!`]),
+    cTroDuel: (a, b) => pick([`¡Mano a mano, ${a} ${yE(b)} ${b}!`, `¡${a} contra ${b}!`, `¡Quedan ${a} ${yE(b)} ${b}!`]),
     cTroClash: ["¡Chocan!", "¡Qué golpe!", "¡Se dieron!"],
     cTroWobble: (n) => pick([`¡Cabecea el de ${n}!`, `¡${n} se tambalea!`, `¡Se va el de ${n}!`]),
     cTroRecover: ["¡Y sigue bailando!", "¡No se cae!", "¡Se endereza!"],
@@ -396,7 +406,7 @@ export const T: Record<Lang, Dict> = {
     cPinMiss: ["¡Falló!", "¡Al aire!", "¡Casi le da!"],
     cPinCrack: ["¡Se está rajando!", "¡Ya no aguanta!", "¡Cruje la piñata!"],
     cPinAlmost: (n) => pick([`¡Casi se cae ${n}!`, `¡${n} se asoma!`, `¡Se agarra ${n}!`]),
-    cPinLast: (a, b) => pick([`¡Quedan ${a} y ${b} adentro!`, `¡Adentro solo ${a} y ${b}!`]),
+    cPinLast: (a, b) => pick([`¡Quedan ${a} ${yE(b)} ${b} adentro!`, `¡Adentro solo ${a} ${yE(b)} ${b}!`]),
     cPinBreak: ["¡SE ROMPIÓ!", "¡SE ABRIÓ LA PIÑATA!", "¡AHÍ CAE!"],
     cPinLeft: "ADENTRO",
     // --- Sapo: la rana del medio, un agujero por nombre y una argolla que se lanza.
@@ -418,7 +428,7 @@ export const T: Record<Lang, Dict> = {
     gameQuien: "¿Quién es?",
     cQuiStart: (n) => `¡${n} cartas! Letra por letra, queda una.`,
     cQuiNext: (k, of) => `¡Ronda ${k} de ${of}: otra vez todas!`,
-    cQuiTwo: (a, b) => pick([`¡Quedan dos: ${a} y ${b}!`, `¿${a} o ${b}?`, `¡Entre ${a} y ${b}!`]),
+    cQuiTwo: (a, b) => pick([`¡Quedan dos: ${a} ${yE(b)} ${b}!`, `¿${a} ${oU(b)} ${b}?`, `¡Entre ${a} ${yE(b)} ${b}!`]),
     cQuiAskShort: (l) => `¿Tiene la ${l}?`,
     cQuiAskShortN: (l) => `¿Tiene el ${l}?`,
     cQuiMine: (l) => pick([`¿Tu nombre tiene la ${l}?`, `¿Y el tuyo? ¿Tiene la ${l}?`, `¡Fijate si tu nombre tiene la ${l}!`]),
@@ -445,7 +455,7 @@ export const T: Record<Lang, Dict> = {
     cOruStay: (n) => pick([`¡${n} se queda en la cuadra!`, `¡Hasta acá bailó ${n}!`, `¡${n} saluda desde la vereda!`]),
     cOruLast: ["¡Última cuadra!", "¡Ya se ve el Socavón!", "¡La recta final de la entrada!"],
     cOruMask: (n) => pick([`¡Casi se le cae la máscara a ${n}!`, `¡${n} tropieza!`, `¡Uy, ${n}!`]),
-    cOruDuel: (a, b) => pick([`¡Contrapunto entre ${a} y ${b}!`, `¡${a} y ${b}, cara a cara!`]),
+    cOruDuel: (a, b) => pick([`¡Contrapunto entre ${a} ${yE(b)} ${b}!`, `¡${a} ${yE(b)} ${b}, cara a cara!`]),
     cOruArrive: ["¡LLEGÓ AL SOCAVÓN!", "¡SUENAN LAS CAMPANAS!", "¡ENTRA AL SANTUARIO!"],
     cOruLeft: "EN LA COMPARSA",
     cOruBlock: (k, of) => `CUADRA ${k} DE ${of}`,
@@ -459,7 +469,7 @@ export const T: Record<Lang, Dict> = {
     cLuzMany: (k) => `¡${k} se movieron!`,
     cLuzWobble: (n) => pick([`¡${n} se tambalea!`, `¡Ojo con ${n}!`, `¡El Faro mira a ${n}!`]),
     cLuzSaved: (n) => pick([`¡${n} se salvó!`, `¡Por un pelo, ${n}!`, `¡${n} no se movió!`]),
-    cLuzLast: (a, b) => pick([`¡Quedan ${a} y ${b}!`, `¡${a} contra ${b}!`]),
+    cLuzLast: (a, b) => pick([`¡Quedan ${a} ${yE(b)} ${b}!`, `¡${a} contra ${b}!`]),
     cLuzLeft: "EN CARRERA",
     cChoIntro: ["¡Arranca la chovena!", "¡A la rueda!", "¡Todos de la mano!"],
     cChoCount: (n) => (n === 2 ? "¡Dos en la rueda!" : `¡${n} en la rueda!`),
@@ -475,8 +485,8 @@ export const T: Record<Lang, Dict> = {
     cChoBack: (n) => pick([`¡${n} se había soltado, y vuelve!`, `¡${n} vuelve a la rueda!`]),
     cChoWobble: (n) => pick([`¡${n} se tambalea!`, `¡Ojo con ${n}!`]),
     cChoHold: (n) => pick([`¡${n} aguanta!`, `¡${n} no se soltó!`, `¡Por un pelo, ${n}!`]),
-    cChoDuo: (a, b) => pick([`¡Quedan ${a} y ${b}!`, `¡${a} y ${b}, de la mano!`]),
-    cChoPair: (a, b) => `¡${a} y ${b}, de la mano!`,
+    cChoDuo: (a, b) => pick([`¡Quedan ${a} ${yE(b)} ${b}!`, `¡${a} ${yE(b)} ${b}, de la mano!`]),
+    cChoPair: (a, b) => `¡${a} ${yE(b)} ${b}, de la mano!`,
     cChoDuoAnon: "¡Quedan dos!",
     cChoFinal: ["¡La última vuelta!", "¡Más rápido!", "¡Ahora o nunca!"],
     cChoLeft: "EN LA RUEDA",
@@ -503,7 +513,7 @@ export const T: Record<Lang, Dict> = {
     cEscupidaL: (a, b) => pick([`¡${a} le escupió a ${b}!`, `¡Pelea de llamas: ${a} contra ${b}!`, `¡${a} escupió y ${b} se frenó!`]),
     cEscupidaR: (a, b) => pick([`¡${a} le tiró humo a ${b}!`, `¡${a} encandiló a ${b}!`, `¡${b} se comió el humo de ${a}!`]),
     cRemonta: (n) => pick([`¡${n} viene de atrás!`, `¡${n} se despertó!`, `¡Cuidado con ${n}!`]),
-    cDuelo: (a, b) => pick([`¡Mano a mano ${a} y ${b}!`, `¡${a} y ${b}, codo a codo!`, `¡Esto es entre ${a} y ${b}!`]),
+    cDuelo: (a, b) => pick([`¡Mano a mano ${a} ${yE(b)} ${b}!`, `¡${a} ${yE(b)} ${b}, codo a codo!`, `¡Esto es entre ${a} ${yE(b)} ${b}!`]),
     cCuela: (n) => pick([`¡Y se cuela ${n}!`, `¡${n} aprovecha la pelea!`, `¡Por el medio pasa ${n}!`]),
     cFoto: ["¡FOTO FINISH!", "¡POR UNA NARIZ!", "¡HAY QUE VER LA FOTO!"],
     cTabla: "POSICIONES",

@@ -376,9 +376,8 @@
     background: repeating-linear-gradient(90deg, var(--magenta) 0 48px, var(--orange) 48px 96px, var(--yellow) 96px 144px, var(--teal) 144px 192px, var(--purple) 192px 240px);
   }
   /* La captura del juego, apenas: más fuerte se leían sus subtítulos detrás de la regla. */
-  .gc-fondo { position: absolute; inset: -24px; background: var(--gc-img, none) center / cover no-repeat; opacity: 0.1; filter: blur(6px); }
-  /* En vertical la captura se agranda tanto que su subtítulo se leía detrás del Saltar. */
-  @media (orientation: portrait) { .gc-fondo { filter: blur(10px); } }
+  /* Con 6 px de difuminado todavía se adivinaba el subtítulo de la captura. */
+  .gc-fondo { position: absolute; inset: -24px; background: var(--gc-img, none) center / cover no-repeat; opacity: 0.1; filter: blur(10px); }
   .gc-caja { position: relative; width: 100%; max-width: 1100px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: clamp(10px, 2.4vh, 24px); }
   .gc-kicker {
     font-family: ui-monospace, Consolas, monospace; font-weight: 800; letter-spacing: 0.18em; text-transform: uppercase;

@@ -48,12 +48,38 @@ export class CDP {
         this.consoleErrors.push(msg.params.args.map((a) => a.value ?? a.description).join(" "));
       }
     });
+    // Si la página se cae, lo que estaba esperando su respuesta falla en vez
+    // de quedarse esperando para siempre.
+    ws.addEventListener("close", () => {
+      for (const { reject } of this.pending.values()) reject(new Error("se cerró la conexión con la página"));
+      this.pending.clear();
+    });
   }
 
-  send(method, params = {}) {
+  /**
+   * Manda un comando y espera la respuesta. Si la página deja de contestar,
+   * falla a los `ms` milisegundos: el 5 de octubre de 2026 el auditor de
+   * emoción se quedó hora y media esperando una respuesta que nunca llegó.
+   */
+  send(method, params = {}, ms = 300_000) {
     const id = ++this.id;
     this.ws.send(JSON.stringify({ id, method, params }));
-    return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`${method}: la página no contestó en ${ms / 1000} s`));
+      }, ms);
+      this.pending.set(id, {
+        resolve: (v) => {
+          clearTimeout(t);
+          resolve(v);
+        },
+        reject: (e) => {
+          clearTimeout(t);
+          reject(e);
+        },
+      });
+    });
   }
 
   /** Evalúa una expresión en la página y devuelve su valor. */

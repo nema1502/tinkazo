@@ -1061,6 +1061,13 @@ La segunda pasada del agente evaluador encontró dos cosas graves y once menores
 - Las capturas de la página se sacan con el reloj fijo ([`scripts/capturas-juegos.mjs`](../scripts/capturas-juegos.mjs)): la oscura y la clara, en el mismo instante. Con el tema forzado (`?theme=`), las doce imágenes de la página de juegos siguen al tema del sitio y no al del sistema.
 - En la tarjeta de "cómo se juega", en vertical, la captura de fondo va más borrosa: detrás del Saltar se leía un subtítulo.
 
+La tercera pasada confirmó nueve de esos arreglos y encontró algo grave que trajo el del cartel: en escritorio el "¡QUIETOS!" no salía en casi la mitad de los cortes, y con 18 nunca en el amague. Con nueve en la rueda, en la columna del medio los de atrás y los de adelante se pisan en alto. Ahora:
+- **El cartel** busca en el medio y a los costados, y gana el lugar más cercano al medio de la rueda, con un costo por achicarse: más chico en el hueco le gana a grande sobre las casas. Sale en todos los cortes, con 18 a 1280 y a 1440 de ancho y con 60. Cuentan también los sentados al borde y el lugar de los nombres de los que se tambalean, que va más alto. El salto con que aparece nunca lo saca de la pantalla.
+- **La cadena al cerrarse la rueda:** siguen de la mano los que ya lo estaban, y los vecinos nuevos se toman cuando sus manos se alcanzan. De tres a seis, la rueda se mide en largos de rueda y los brazos se estiran hasta el vecino, hasta el doble.
+- **De las filas a la rueda** quedaba un montón a la derecha: la mujer de una punta iba de la mano del hombre de la otra punta, y las dos puntas daban media vuelta por el mismo costado. Ahora cada hombre va de la mano de las mujeres que le quedan cerca (la lista de los hombres se corre hasta el menor viaje), así las dos filas se abren parejas hacia los dos costados. La primera fila de cada grupo va más lejos del medio.
+- **La final en el celular y con 200:** la pareja entra entera a lo ancho y nunca queda encimada, la rival se sienta a unos pasos y la cámara se abre para no perderla, también en la corona.
+- En el amague, el paso afuera arranca cuando ya soltaron las manos, y con dos es más corto. El nombre del que se tambalea va más arriba, y ningún nombre tapa al conjunto. El relator dice "Jorge e Isabel" y "Pedro u Óscar". La tarjeta de "cómo se juega" va más borrosa también en escritorio.
+
 Medido con la batería, la Chovena:
 
 | Auditor | Resultado |
