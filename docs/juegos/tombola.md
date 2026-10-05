@@ -14,6 +14,8 @@ Y es el único de los juegos donde **la bola que sale es la ganadora**, como en 
 
 Cada bola lleva el puesto de la persona en la lista sellada, contado desde uno. Es el mismo índice que muestra el comprobante (que cuenta desde cero, como el protocolo). Así, mientras la bola baja por la canaleta con su número a la vista, la sala puede buscarse en la lista antes de que salga el nombre.
 
+**La leyenda: ¿cuál es tu bola?** Hasta el 4 de octubre de 2026 la sala tenía que buscarse en una lista que no estaba en pantalla: salía "N.º 7" y nadie sabía de quién era. Ahora, mientras gira el bombo, al costado aparece "¿CUÁL ES TU BOLA?": cada nombre con una bolita del mismo color y número que la suya, en orden alfabético (y natural: "Ana 2" antes que "Ana 10") para encontrarse rápido. Con mucha gente pasa en páginas, con el rango de letras ("F–M · 3/6"), y se va antes de que se abra la compuerta, así la canaleta y el vaso quedan libres. En una pantalla ancha va a la derecha y la cámara corre el bombo a la izquierda para no pisarla; en un celular va abajo y la cámara sube el bombo. El auditor de identificación (`scripts/audit-identidad.mjs`) mide que todos los nombres se lean antes del ganador: con la leyenda, el 100% con 8, 18 y 50 personas.
+
 ## La mecánica
 
 **El llenado.** Las bolas entran de a una por la boca de arriba, en un orden sembrado, y caen al fondo. El contador de arriba a la derecha las cuenta.
@@ -48,7 +50,7 @@ Con doscientas son veinte mil comprobaciones de choque por paso de física. El a
 
 ## Los tiempos
 
-En segundos de juego, sin estirar. En "normal" se multiplican por 1,7.
+En segundos de juego, sin estirar. En "normal" se estiran para que el show entero dure treinta segundos: con la tarjeta de "cómo se juega", por (30 − 3 del cartel − 3,5 de la tarjeta) / 16, unos 1,47, y un poco menos con el rebote del susto o el duelo; en la escena fija de `?pose=`, sin tarjeta, unos 1,69. Ver "La duración" en [juegos.md](../juegos.md).
 
 | Tramo | Qué pasa |
 |---|---|

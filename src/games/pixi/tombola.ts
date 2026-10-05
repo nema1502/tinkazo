@@ -3,7 +3,7 @@ import { T, getLang, t } from "../../i18n";
 import { paceFactor, params, setGameLength, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, note } from "../../sound";
 import { writeStory } from "../drama";
-import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
+import { WINNER_HOLD, clamp, ease, shorten, winnersLabel } from "../overlay";
 import { CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
 
 /**
@@ -363,6 +363,14 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
   /** El radio con que se arma la bola de afuera: después solo se escala. */
   let bigR = 34;
   let hudCount!: Text;
+  /** La leyenda de quién tiene qué bola, mientras gira el bombo. */
+  let legend!: Container;
+  let legendTitle!: Text;
+  let legendPages: Container[] = [];
+  let legendRange: string[] = [];
+  /** Dónde empieza la leyenda, para que la cámara no la pise con el bombo: a la derecha en una pantalla ancha, abajo en un celular. */
+  let legendX0 = 0;
+  let legendTop = 0;
 
   /** Una bola: sombra, color, borde y, si entra, el número en un disco. */
   const ballCtx = new Map<number, GraphicsContext>();
@@ -539,6 +547,77 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
     hudCount.position.set(W - 22 * k, S.top() + 58 * k);
     // La ronda ya está arriba, en la barra del estadio: no se repite abajo.
     S.hud.addChild(lab, hudCount);
+    buildLegend();
+  }
+
+  /**
+   * La leyenda de las bolas, mientras gira el bombo: cada nombre con su bola y
+   * su número, en orden alfabético para encontrarse rápido. Antes el número de
+   * la ganadora salía tres segundos y medio antes que su nombre y nadie sabía
+   * de quién era (lo pidió Nicolás el 4 de octubre de 2026). Con mucha gente
+   * pasa en páginas, y se va antes de que se abra la compuerta: la canaleta y
+   * el vaso quedan libres para la bola.
+   */
+  function buildLegend(): void {
+    const { vertical } = G;
+    // En un celular, la letra a la medida de la pantalla: con la escala del
+    // bombo los nombres quedaban de ocho píxeles.
+    const k = vertical ? S.u() : G.k;
+    const W = S.sw(), H = S.sh();
+    legend = new Container();
+    legendPages = [];
+    legendRange = [];
+    const x0 = vertical ? 14 * k : W * 0.55;
+    const x1 = W - 14 * k;
+    const y1 = H - S.bottom() - 10 * k;
+    // En una pantalla ancha va a la derecha, debajo del contador; en un
+    // celular, abajo, en la mitad de abajo como mucho, y la cámara sube el bombo.
+    const techo = vertical ? S.top() + (y1 - S.top()) * 0.5 : S.top() + 116 * G.k;
+    const head = 32 * k, rowH = 28 * k;
+    const cols = vertical ? 2 : Math.max(1, Math.min(3, Math.floor((x1 - x0) / (170 * k))));
+    const colW = (x1 - x0) / cols;
+    const rows = Math.max(1, Math.floor((y1 - techo - head - 14 * k) / rowH));
+    const per = cols * rows;
+    // Orden natural: "Ana 2" antes que "Ana 10".
+    const orden = names.map((nm, i) => ({ nm, i })).sort((a, b) => a.nm.localeCompare(b.nm, "es", { numeric: true }));
+    const pages = Math.max(1, Math.ceil(orden.length / per));
+    const filas = Math.min(rows, Math.ceil(Math.min(per, orden.length) / cols));
+    const y0 = vertical ? y1 - (head + filas * rowH + 14 * k) + 8 * k : techo;
+    legendX0 = vertical ? 0 : x0;
+    legendTop = vertical ? y0 - 8 * k : 0;
+    legend.addChild(new Graphics()
+      .roundRect(x0 - 10 * k, y0 - 8 * k, x1 - x0 + 20 * k, head + filas * rowH + 14 * k, 10 * k)
+      .fill({ color: INK, alpha: 0.84 })
+      .stroke({ width: 2 * k, color: CREAM, alpha: 0.25 }));
+    legendTitle = S.text("", { fontFamily: MONO, fontSize: 13 * k, fontWeight: "800", fill: YELLOW, letterSpacing: 2 * k });
+    legendTitle.position.set(x0, y0);
+    legend.addChild(legendTitle);
+    const chars = Math.max(8, Math.floor((colW - 40 * k) / (8.2 * k)));
+    for (let p = 0; p < pages; p++) {
+      const page = new Container();
+      const chunk = orden.slice(p * per, (p + 1) * per);
+      const alto = Math.ceil(chunk.length / cols);
+      chunk.forEach((e, j) => {
+        const x = x0 + Math.floor(j / alto) * colW, y = y0 + head + (j % alto) * rowH + rowH / 2;
+        const lab = String(e.i + 1);
+        const disc = new Graphics()
+          .circle(x + 12 * k, y, 12 * k).fill(S.color(e.i)).stroke({ width: 2 * k, color: INK })
+          .circle(x + 12 * k, y, 8.6 * k).fill(CREAM);
+        const nt = S.text(lab, { fontSize: (lab.length > 2 ? 9 : 11) * k, fontWeight: "900", fill: INK });
+        nt.anchor.set(0.5);
+        nt.position.set(x + 12 * k, y);
+        const nm = S.text(shorten(e.nm, chars), { fontSize: 14 * k, fontWeight: "800", fill: CREAM });
+        nm.anchor.set(0, 0.5);
+        nm.position.set(x + 30 * k, y);
+        page.addChild(disc, nt, nm);
+      });
+      const ini = (s: string | undefined): string => (s ?? "").trim().charAt(0).toUpperCase();
+      legendRange.push(`${ini(chunk[0]?.nm)}–${ini(chunk[chunk.length - 1]?.nm)}`);
+      page.visible = p === 0;
+      legend.addChild(page);
+      legendPages.push(page);
+    }
+    S.hud.addChild(legend);
   }
   build();
   const crown = S.crown(names, winners);
@@ -725,7 +804,18 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
       cam.lookAt(cx + (midX - cx) * p * 0.2, cy - R * 0.6 * (1 - p), 1.8 - 0.55 * p, 3);
     } else if (tAll < T_S3) {
       const w = omega(tAll);
-      cam.lookAt(cx + (midX - cx) * 0.25, cy, 1.2 + 0.12 * w, 2);
+      const z = 1.2 + 0.12 * w;
+      let tx = cx + (midX - cx) * 0.25;
+      if (vertical && legendTop > 0) {
+        // En un celular, el bombo sube a la mitad de arriba, y se achica si no entra.
+        const ys = (S.top() + legendTop) / 2;
+        const zz = Math.max(0.6, Math.min(z, ((legendTop - S.top()) / 2 - 10 * G.k) / R));
+        cam.lookAt(cx, cy - (ys - S.sh() / 2) / zz, zz, 2);
+      } else {
+        // Con la leyenda a la derecha, el bombo se corre a la izquierda para no pisarla.
+        if (legendX0 > 0) tx = Math.max(tx, cx + (S.sw() / 2 + R * z - legendX0 + 26 * G.k) / z);
+        cam.lookAt(tx, cy, z, 2);
+      }
     } else if (tAll < tOutStart) {
       cam.lookAt(dp.x, dp.y, vertical ? 2 : 2.3, tAll < T_STOP ? 2 : 4);
     } else if (tAll < tLip) {
@@ -843,6 +933,16 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
       }
     }
     hudCount.text = String(balls.filter((b) => tAll >= b.born).length);
+    // La leyenda: desde que terminan de caer las bolas hasta la última vuelta.
+    const L0 = T_FILL - 0.3, L1 = T_S3 - 0.2;
+    legend.visible = tAll >= L0 && tAll < L1 + 0.4;
+    if (legend.visible) {
+      legend.alpha = clamp((tAll - L0) / 0.35, 0, 1) * clamp((L1 + 0.4 - tAll) / 0.4, 0, 1);
+      const np = legendPages.length;
+      const pi = np > 1 ? Math.min(np - 1, Math.floor(((tAll - L0) / (L1 - L0)) * np)) : 0;
+      legendPages.forEach((pg, i) => (pg.visible = i === pi));
+      legendTitle.text = np > 1 ? `${t("cTomWho")} · ${legendRange[pi] ?? ""} · ${pi + 1}/${np}` : t("cTomWho");
+    }
     if (tAll >= tCrown) crown.at(tAll - tCrown);
   }
 
