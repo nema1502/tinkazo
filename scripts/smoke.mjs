@@ -52,5 +52,5 @@ try {
   if (page.consoleErrors.length) console.log("  console.error:", page.consoleErrors.slice(0, 3));
   process.exitCode = ok && page.exceptions.length === 0 ? 0 : 1;
 } finally {
-  browser.close();
+  await browser.close();
 }

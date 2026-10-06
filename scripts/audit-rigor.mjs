@@ -620,7 +620,7 @@ try {
     });
   }
 } finally {
-  browser.close();
+  await browser.close();
 }
 
 await mkdir(outDir, { recursive: true });

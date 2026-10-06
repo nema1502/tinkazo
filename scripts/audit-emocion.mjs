@@ -131,7 +131,7 @@ try {
     }
   }
 } finally {
-  browser.close();
+  await browser.close();
 }
 
 const malos = checks.filter((c) => !c.ok);

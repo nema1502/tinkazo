@@ -100,6 +100,6 @@ try {
     }
   }
 } finally {
-  browser.close();
+  await browser.close();
   rmSync(tmp, { recursive: true, force: true });
 }

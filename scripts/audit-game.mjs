@@ -333,7 +333,7 @@ async function run() {
       if (painted.ok) await p.screenshot(join(outDir, `juego-${game}-${theme}.png`));
     }
   } finally {
-    browser.close();
+    await browser.close();
   }
 }
 

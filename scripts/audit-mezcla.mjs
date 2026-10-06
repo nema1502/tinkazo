@@ -240,7 +240,7 @@ async function run() {
       else console.log(`${juego.padEnd(11)} ${f1(r.I)} LUFS · pico real ${f1(db(r.picoReal))} dBTP · corto máx ${f1(r.corto)} · sin graves de 150 Hz ${f1(r.I - r.I150)} LU, de 300 Hz ${f1(r.I - r.I300)} LU · golpe ${f1(r.golpe)} LU · ${r.seg.toFixed(1)} s`);
     }
   } finally {
-    browser.close();
+    await browser.close();
   }
 
   const buenos = res.filter((r) => !r.error);

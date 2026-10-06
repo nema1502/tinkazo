@@ -114,7 +114,7 @@ try {
     check("la misma semilla anota lo mismo", !!otra.log && !!primera && JSON.stringify(otra.log) === JSON.stringify(primera));
   }
 } finally {
-  browser.close();
+  await browser.close();
 }
 
 const malos = checks.filter((c) => !c.ok);

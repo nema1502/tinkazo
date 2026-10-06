@@ -312,7 +312,7 @@ async function run() {
       }
     }
   } finally {
-    browser.close();
+    await browser.close();
   }
 }
 

@@ -88,7 +88,7 @@ try {
     check(ingles.length > 0, "inglés: el titular está traducido", ingles);
   }
 } finally {
-  browser.close();
+  await browser.close();
 }
 
 console.log(fallos ? `\nRECHAZADO: ${fallos} comprobaciones` : "\nAPROBADO: las páginas de lectura están sanas");

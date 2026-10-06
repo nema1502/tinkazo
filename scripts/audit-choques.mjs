@@ -193,7 +193,7 @@ try {
   const arcos = new Set(medidas.filter((x) => !x.gente).map((x) => x.log.arc));
   check("las semillas cubren al menos tres arcos", arcos.size >= 3, [...arcos].join(", "));
 } finally {
-  browser.close();
+  await browser.close();
 }
 
 const malos = checks.filter((c) => !c.ok);

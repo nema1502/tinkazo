@@ -114,7 +114,7 @@ try {
     void link;
   }
 } finally {
-  browser.close();
+  await browser.close();
 }
 
 console.log("");

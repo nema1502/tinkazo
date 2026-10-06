@@ -114,7 +114,7 @@ try {
     resumen.push(fila);
   }
 } finally {
-  browser.close();
+  await browser.close();
 }
 
 console.log("\nCuántos se ven antes del ganador:");

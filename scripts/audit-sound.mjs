@@ -290,7 +290,7 @@ async function run() {
       }
     }
   } finally {
-    browser.close();
+    await browser.close();
   }
   console.log("");
   console.log(malas ? `RECHAZADO: ${lista.length - malas}/${lista.length} juegos` : `APROBADO: ${lista.length}/${lista.length} juegos`);
