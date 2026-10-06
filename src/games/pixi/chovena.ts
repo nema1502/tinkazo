@@ -1416,7 +1416,8 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     const max = clamp((avail * 0.28) / dh, 1.6, 3);
     return clamp(Math.min(zx, zy), portrait ? 0.85 : 1, max);
   }
-  function direct(x: number): void {
+  /** Adónde mira la cámara en ese momento del juego, sin moverla. */
+  function camTarget(x: number): { tx: number; ty: number; z: number; rate: number } {
     const { W, H, cx, cy, ry, dh, avail } = G;
     const ep = epochs[epochAt(x)] as Epoch;
     let tx = cx, ty: number, z: number, rate = 2;
@@ -1468,7 +1469,11 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       const minTy = ringBottom - (H / 2 - S.bottom() - 6) / z;
       ty = Math.max(Math.min(ty, maxTy), minTy);
     }
-    cam.lookAt(tx, ty, z, rate);
+    return { tx, ty, z, rate };
+  }
+  function direct(x: number): void {
+    const t = camTarget(x);
+    cam.lookAt(t.tx, t.ty, t.z, t.rate);
   }
   /** El acercamiento más grande que deja a la rival de la final en cuadro, sentada o yéndose. */
   function keepRival(x: number, tx: number, ty: number): number {
@@ -1616,18 +1621,36 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       if (bigFor !== stopAt) {
         bigFor = stopAt;
         bigS = 0;
+        // Dos listas de obstáculos: con el lugar de los nombres de este corte,
+        // y sin él, para cuando con todo no entra en ningún lado.
         const obst: Rect[] = [];
+        const base: Rect[] = [];
         const caja = (b: { x: number; y: number; width: number; height: number }): void => {
-          obst.push({ x: b.x, y: b.y, w: b.width, h: b.height });
+          const r = { x: b.x, y: b.y, w: b.width, h: b.height };
+          obst.push(r);
+          base.push(r);
         };
-        // En el corte la cámara viaja (se acerca a los que salen): los cuerpos
-        // cuentan donde están ahora, a mitad del viaje y donde va a quedar.
+        // La cámara todavía se mueve después del corte: cuando empiezan a
+        // tambalearse se acerca a los que salen, y en la final se acerca más.
+        // Se cuenta adónde va a mirar entonces, no solo adónde mira ahora: si
+        // no, un nombre que subía con el acercamiento quedaba arriba del
+        // cartel con su hilo cruzándolo (lo vio el agente evaluador).
         const c = cam.snapshot();
-        const poses = [0, 0.5, 1].map((f) => ({ x: c.x + (c.tx - c.x) * f, y: c.y + (c.ty - c.y) * f, z: c.zoom + (c.tz - c.zoom) * f }));
-        /** Un rectángulo del mundo en las tres poses; `arriba` lo estira hacia arriba, en píxeles. */
-        const enMundo = (x0: number, y0: number, x1: number, y1: number, arriba = 0): void => {
+        const evCorte = evs.find((e) => e.s0 === stopAt);
+        const tFut = evCorte ? evCorte.w0 + 0.05 : finalDuo && stopAt === FS0 ? FW0 + 0.05 : x;
+        const fut = camTarget(Math.max(x, tFut));
+        const a0 = { x: c.x, y: c.y, z: c.zoom }, a1 = { x: fut.tx, y: fut.ty, z: fut.z };
+        const poses = [a0, { x: (a0.x + a1.x) / 2, y: (a0.y + a1.y) / 2, z: (a0.z + a1.z) / 2 }, a1, { x: c.tx, y: c.ty, z: c.tz }];
+        /**
+         * Un rectángulo del mundo en cada pose de la cámara. `nombre` es hasta
+         * dónde sube con el nombre encima (en el mundo) y `arriba`, lo que mide
+         * el nombre en píxeles: eso va solo a la lista completa.
+         */
+        const enMundo = (x0: number, y0: number, x1: number, y1: number, nombre = y0, arriba = 0): void => {
           for (const q of poses) {
-            obst.push({ x: W / 2 + (x0 - q.x) * q.z, y: H / 2 + (y0 - q.y) * q.z - arriba, w: (x1 - x0) * q.z, h: (y1 - y0) * q.z + arriba });
+            const r = { x: W / 2 + (x0 - q.x) * q.z, y: H / 2 + (y0 - q.y) * q.z, w: (x1 - x0) * q.z, h: (y1 - y0) * q.z };
+            base.push(r);
+            obst.push(nombre === y0 && !arriba ? r : { x: r.x, y: H / 2 + (nombre - q.y) * q.z - arriba, w: r.w, h: (y1 - nombre) * q.z + arriba });
           }
         };
         // Los que van a llevar el nombre encima en este corte: el lugar del
@@ -1647,14 +1670,14 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
           const p = pNow[d.idx] as { x: number; y: number; s: number };
           const sc = inRingNow(d, x) ? conNombre.get(d.idx) : undefined;
           // Los que van a tambalearse llevan el nombre más arriba (por el "¡!").
-          enMundo(p.x - 0.3 * p.s, p.y - (sc ? 1.56 : 1.2) * p.s, p.x + 0.3 * p.s, p.y, sc ? (24 * sc + 16) * k : 0);
+          enMundo(p.x - 0.3 * p.s, p.y - 1.2 * p.s, p.x + 0.3 * p.s, p.y, p.y - (sc ? 1.56 : 1.2) * p.s, sc ? (24 * sc + 16) * k : 0);
         }
         // El conjunto (el cajero con los palillos arriba es una señal del corte),
         // el contador, el aviso y, si este corte la tiene, la lista de los que salen.
         const lb = band.root.getLocalBounds(), bs = band.root.scale.x, bp = band.root.position;
         enMundo(bp.x + lb.minX * bs, bp.y + lb.minY * bs, bp.x + lb.maxX * bs, bp.y + lb.maxY * bs);
         caja(counterRoot.getBounds());
-        obst.push({ x: W - 46 * k - 30 * k, y: S.top() + 8 * k, w: 64 * k, h: 64 * k });
+        caja({ x: W - 46 * k - 30 * k, y: S.top() + 8 * k, width: 64 * k, height: 64 * k });
         if (evNow && evNow.kind === "stop" && evNow.victims.length > 5) {
           buildPanel(evNow);
           panelFor = evs.indexOf(evNow);
@@ -1675,20 +1698,28 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
           !en.some((r) => r.x < bx + tw / 2 && r.x + r.w > bx - tw / 2 && r.y < cy + th / 2 && r.y + r.h > cy - th / 2);
         // Gana el más cercano al medio, pero achicarse cuesta: más chico en el
         // hueco de la rueda le gana a grande en una esquina, sobre las casas.
-        let mejor: { x: number; y: number; sc: number; costo: number } | null = null;
-        for (const sc of [1, 0.75, 0.55]) {
-          const tw = bw0 * fitW * sc, th = bh0 * fitW * sc;
-          for (const f of [0, -0.12, 0.12, -0.22, 0.22, -0.32, 0.32]) {
-            const bx = W / 2 + f * W;
-            if (bx - tw / 2 < 8 * k || bx + tw / 2 > W - 8 * k) continue;
-            // Solo los obstáculos de esta columna: con doscientos son muchos.
-            const col = obst.filter((r) => r.x < bx + tw / 2 && r.x + r.w > bx - tw / 2);
-            for (let cy = lo + th / 2; cy <= hi - th / 2; cy += 3 * k) {
-              const costo = Math.hypot(bx - cx0, cy - centro) + (1 - sc) * 0.9 * H;
-              if ((!mejor || costo < mejor.costo) && libre(bx, cy, tw, th, col)) mejor = { x: bx, y: cy, sc, costo };
+        const buscar = (lista: Rect[]): { x: number; y: number; sc: number; costo: number } | null => {
+          let mejor: { x: number; y: number; sc: number; costo: number } | null = null;
+          for (const sc of [1, 0.75, 0.55]) {
+            const tw = bw0 * fitW * sc, th = bh0 * fitW * sc;
+            for (const f of [0, -0.12, 0.12, -0.22, 0.22, -0.32, 0.32]) {
+              const bx = W / 2 + f * W;
+              if (bx - tw / 2 < 8 * k || bx + tw / 2 > W - 8 * k) continue;
+              // Solo los obstáculos de esta columna: con doscientos son muchos.
+              const col = lista.filter((r) => r.x < bx + tw / 2 && r.x + r.w > bx - tw / 2);
+              for (let cy = lo + th / 2; cy <= hi - th / 2; cy += 3 * k) {
+                const costo = Math.hypot(bx - cx0, cy - centro) + (1 - sc) * 0.9 * H;
+                if ((!mejor || costo < mejor.costo) && libre(bx, cy, tw, th, col)) mejor = { x: bx, y: cy, sc, costo };
+              }
             }
           }
-        }
+          return mejor;
+        };
+        // Si con el lugar de los nombres no entra, entra igual sin él: un
+        // nombre que se corre es menos grave que un corte sin cartel.
+        const conTodo = buscar(obst);
+        const mejor = conTodo ?? buscar(base);
+        const usada = conTodo ? obst : base;
         if (mejor) {
           const m = mejor;
           const tw = bw0 * fitW * m.sc, th = bh0 * fitW * m.sc;
@@ -1697,7 +1728,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
           bigS = fitW * m.sc;
           // El salto del principio, solo hasta donde no se sale de la
           // pantalla ni pisa a nadie: en el celular cortaba el "¡" y el "!".
-          bigPop = [0.35, 0.2, 0.1].find((pp) => m.x - (tw * (1 + pp)) / 2 >= 4 * k && m.x + (tw * (1 + pp)) / 2 <= W - 4 * k && libre(m.x, m.y, tw * (1 + pp), th * (1 + pp))) ?? 0;
+          bigPop = [0.35, 0.2, 0.1].find((pp) => m.x - (tw * (1 + pp)) / 2 >= 4 * k && m.x + (tw * (1 + pp)) / 2 <= W - 4 * k && libre(m.x, m.y, tw * (1 + pp), th * (1 + pp), usada)) ?? 0;
         }
       }
       if (bigS > 0) {

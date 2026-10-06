@@ -1066,6 +1066,7 @@ La tercera pasada confirmó nueve de esos arreglos y encontró algo grave que tr
 - **La cadena al cerrarse la rueda:** siguen de la mano los que ya lo estaban, y los vecinos nuevos se toman cuando sus manos se alcanzan. De tres a seis, la rueda se mide en largos de rueda y los brazos se estiran hasta el vecino, hasta el doble.
 - **De las filas a la rueda** quedaba un montón a la derecha: la mujer de una punta iba de la mano del hombre de la otra punta, y las dos puntas daban media vuelta por el mismo costado. Ahora cada hombre va de la mano de las mujeres que le quedan cerca (la lista de los hombres se corre hasta el menor viaje), así las dos filas se abren parejas hacia los dos costados. La primera fila de cada grupo va más lejos del medio.
 - **La final en el celular y con 200:** la pareja entra entera a lo ancho y nunca queda encimada, la rival se sienta a unos pasos y la cámara se abre para no perderla, también en la corona.
+- El cartel cuenta también adónde va a mirar la cámara cuando empiezan a tambalearse: en el celular, un nombre que subía con el acercamiento quedaba arriba del cartel con su hilo cruzándolo. Si con el lugar de los nombres no entra en ningún lado, entra sin él.
 - En el amague, el paso afuera arranca cuando ya soltaron las manos, y con dos es más corto. El nombre del que se tambalea va más arriba, y ningún nombre tapa al conjunto. El relator dice "Jorge e Isabel" y "Pedro u Óscar". La tarjeta de "cómo se juega" va más borrosa también en escritorio.
 
 Medido con la batería, la Chovena:
