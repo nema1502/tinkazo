@@ -196,7 +196,7 @@ Cuatro entregables, cada uno con una comprobación que cualquiera puede hacer de
 | Mainnet, con la comisión pagada y el contrato verificado (`pnpm preflight:mainnet` ya comprueba lo demás) | El contrato figura verificado en stellar.expert, y alguien que entró con Google, con 0 XLM, sella y sortea un sorteo que da verde |
 | Cinco sorteos reales, al menos tres hechos por otra persona con su propia cuenta | Cinco enlaces de comprobación en verde en mainnet, cinco direcciones de organizador y un comentario corto de cada uno |
 | Un kit para organizadores, en español y en inglés | Una guía de una página, las bases generadas y un texto de resultado para Luma con la prueba de cada participante, enlazados desde el sitio |
-| Aleatoriedad en Soroban, tres enfoques medidos | Un documento que compara [Drand-Relay](https://github.com/kaankacar/Drand-Relay), [Stellar-VRF](https://github.com/NibrasD/Stellar-VRF) y la verificación a pedido de Tinkazo (costo, en qué hay que confiar, un contrato de ejemplo), ofrecido a [stellar-docs#2874](https://github.com/stellar/stellar-docs/issues/2874) |
+| Una guía sobre aleatoriedad en contratos de Soroban, para la documentación de Stellar | Un pull request listo para revisar y enlazado a [stellar-docs#2874](https://github.com/stellar/stellar-docs/issues/2874), que cubre el [alcance que se aceptó](https://github.com/stellar/stellar-docs/issues/2874#issuecomment-5888723019) con los costos medidos en testnet |
 
 Después: recompensas en USDC como saldos reclamables, que pone quien organiza y que se cobran entrando con Google, primero en testnet. Los participantes siguen sin pagar nada, y Tinkazo nunca toca la plata.
 

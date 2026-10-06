@@ -196,7 +196,7 @@ Four deliverables, each with a check anyone can run from outside:
 | Mainnet, with the fee covered and a verified build (`pnpm preflight:mainnet` already checks the rest) | The contract shows as verified on stellar.expert, and an organizer who signed in with Google, holding 0 XLM, seals and draws a draw that verifies green |
 | Five real draws, at least three run by someone else with their own account | Five green proof links on mainnet, five organizer addresses, and a short note from each organizer |
 | An organizer kit, in English and Spanish | A one-page guide, the generated rules and a results text for Luma with each participant's proof, linked from the site |
-| Randomness on Soroban, three approaches measured | A write-up comparing [Drand-Relay](https://github.com/kaankacar/Drand-Relay), [Stellar-VRF](https://github.com/NibrasD/Stellar-VRF) and Tinkazo's on-demand check (cost, trust assumptions, a sample contract), offered to [stellar-docs#2874](https://github.com/stellar/stellar-docs/issues/2874) |
+| A guide to randomness in Soroban contracts, for the Stellar docs | A pull request, ready for review and linked to [stellar-docs#2874](https://github.com/stellar/stellar-docs/issues/2874), that covers the [accepted scope](https://github.com/stellar/stellar-docs/issues/2874#issuecomment-5888723019) with costs measured on testnet |
 
 After that: USDC rewards as claimable balances, put up by the organizer and claimed by signing in with Google, first on testnet. Participants will still pay nothing, and Tinkazo never touches the money.
 
