@@ -286,6 +286,15 @@ La música de fondo es [`src/music.ts`](../src/music.ts): andina con beat, gener
 - **Graves que se oyen en una laptop.** El bajo vive entre 49 y 82 Hz y los bombos entre 50 y 95, y un parlante chico corta por debajo de unos 150 Hz. Desde el 5 de octubre el bajo lleva una sierra bajita que le da armónicos y cada bombo un golpe corto de cuerpo cerca de 200 Hz: el oído reconstruye la nota grave con sus armónicos.
 - **Un juego puede pedir otro estilo.** Desde el 5 de octubre de 2026 la Chovena trae el suyo, la música chiquitana (flauta de caña, caja con bordón de cuero y bombo, en mayor y a negra = 90), con `mountPixi(…, { music: "chovena" })`. Y dos controles para los juegos que hacen de la música su mecánica: `musicHold()` la corta en seco y la vuelve a soltar en el uno del compás, y `musicTempo()` la acelera. La receta y sus fuentes están en [juegos/chovena.md](juegos/chovena.md#la-música).
 
+## Varios premios
+
+Ningún ganador se narra como perdedor, y cada premio tiene su momento (7 de octubre de 2026):
+
+- **El relator los nombra bien.** "¡GANAN Jorge Mamani y Carlos Choque!", con el verbo en plural, y la lista con su "y" (o "e" delante de Isabel): "Carlos Choque, Valeria Torrez y Óscar Limachi". Con más de tres, "y 2 más". Antes los juntaba con comas, en singular y con un "+2".
+- **Un co-ganador que sale antes del final, sale con premio.** En el trompo, la piñata, Oruro y el aguayo, los juegos que cuentan la historia del primer premio, el relator dice "¡Óscar Limachi sale, pero con premio!" y lo nombra siempre, aunque haya mucha gente. La Chovena y el teleférico ya lo hacían, y el sapo tiene un turno por premio.
+- **El cartel de la corona.** Cada ganador va con su cara, el primer premio más grande, y los demás entran de a uno, cada uno con su golpe: dos notas, más graves cuanto más abajo en la lista. Con más de tres, tres nombres y "y 2 más", igual que el relator. Con un solo premio el cartel no cambia.
+- **Para auditarlo sin red:** la escena fija acepta `?nw=N` (`?pose=trompo&nw=3`). El primer ganador es el de siempre y los demás quedan repartidos por la lista.
+
 ## Los cierres
 
 Un cierre por cada golpe que pasa una vez. Una condición como `if (t >= T_LOCK && flash === 0)` vuelve a cumplirse en cuanto el destello decae, y el golpe de la traba llegó a dispararse catorce veces encima de la fanfarria. Lo mismo con el narrador: una ventana de `t >= X && t < X + 0.05` dura cuatro o cinco cuadros, y cada `say` cancela al anterior, así que el narrador tartamudea. **Cierre booleano, no ventana.**

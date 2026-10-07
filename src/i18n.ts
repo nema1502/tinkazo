@@ -29,7 +29,8 @@ export interface RulesParams {
 export interface Dict {
   [key: string]: string | string[] | ((...args: never[]) => string);
   cLead: (n: string) => string;
-  cWin: (n: string) => string;
+  /** El anuncio del ganador; `many` con varios premios, para el plural ("¡GANAN…!"). */
+  cWin: (n: string, many?: boolean) => string;
   summary: (w: string, n: number, d: string, r: number, u: string) => string;
   drawIn: (mmss: string) => string;
   drandTry: (i: number, n: number) => string;
@@ -44,6 +45,8 @@ export interface Dict {
   cWheelOn: (n: string) => string;
   cWheelFalse: (n: string) => string;
   cPasOut: (n: string) => string;
+  /** Un co-ganador que sale antes del final: nunca se lo narra como perdedor. */
+  cPrizeOut: (ns: string[]) => string;
   cTroOut: (n: string) => string;
   cTroCount: (n: number) => string;
   cTroEdge: (n: string) => string;
@@ -182,6 +185,18 @@ const joinList = (ns: string[], and: string): string => {
   const last = ns[ns.length - 1] as string;
   return `${ns.slice(0, -1).join(", ")} ${and === "y" ? yE(last) : and} ${last}`;
 };
+
+/**
+ * Los ganadores para el relator, en el idioma de ahora: "A, B y C" o "A, B e
+ * Isabel", y con más de los que entran, "A, B, C y 2 más". Antes salían
+ * separados por comas y con un "+2", y el relator decía "Carlos, Valeria,
+ * Óscar" sin la "y".
+ */
+export function nameList(ns: string[], more = 0): string {
+  const es = current === "es";
+  if (more > 0) return `${ns.join(", ")} ${es ? "y" : "and"} ${more} ${es ? "más" : "more"}`;
+  return joinList(ns, es ? "y" : "and");
+}
 
 /** El juego en curso presta su azar sembrado. `null` al terminar. */
 export function setPickSeed(rng: (() => number) | null): void {
@@ -536,6 +551,7 @@ export const T: Record<Lang, Dict> = {
     cPasCinch2: ["¡Segundo apretón!", "¡Quedan menos!", "¡Se cierra más!"],
     cPasCinch3: ["¡Último apretón!", "¡Ya quedan poquitos!", "¡No entra nadie más!"],
     cPasOut: (n) => pick([`¡Se cae el bulto de ${n}!`, `¡${n} se queda afuera!`, `¡Sale ${n}!`]),
+    cPrizeOut: (ns) => (ns.length === 1 ? pick([`¡${ns[0]} se va con premio!`, `¡${ns[0]} sale, pero con premio!`]) : `¡${joinList(ns, "y")} se van con premio!`),
     cPasKnot: ["¡SE ATA EL NUDO!", "¡A AMARRAR EL AGUAYO!", "¡ACÁ QUEDA!"],
     cPasPot: "EN EL AGUAYO",
     cPasCinchLbl: "APRETÓN",
@@ -1036,7 +1052,7 @@ export const T: Record<Lang, Dict> = {
     cStart: ["¡ALLÁ VAN!", "¡Y SALIERON!", "¡ARRANCÓ!", "¡YA ESTÁN EN CARRERA!"],
     cLast: ["¡ÚLTIMA RECTA!", "¡LOS ÚLTIMOS METROS!", "¡YA SE VE LA META!", "¡AHÍ ESTÁ LA META!"],
     cLead: (n) => pick([`¡${n} pasa adelante!`, `¡${n} se pone primero!`, `¡Adelante va ${n}!`, `¡${n} se escapa!`, `¡${n} los pasa a todos!`]),
-    cWin: (n) => pick([`¡GANA ${n}!`, `¡SE LO LLEVA ${n}!`, `¡ES PARA ${n}!`, `¡EL TINKAZO ES PARA ${n}!`]),
+    cWin: (n, many) => pick(many ? [`¡GANAN ${n}!`, `¡SE LO LLEVAN ${n}!`, `¡ES PARA ${n}!`, `¡EL TINKAZO ES PARA ${n}!`] : [`¡GANA ${n}!`, `¡SE LO LLEVA ${n}!`, `¡ES PARA ${n}!`, `¡EL TINKAZO ES PARA ${n}!`]),
     summary: (w, n, d, r, u) =>
       `Tinkazo · sorteo verificable (protocolo v2)\nGanador(es): ${w}\nParticipantes: ${n}\nlist_hash: ${d}\nRonda quicknet: ${r} → ${u}\nRehacelo: https://github.com/nema1502/tinkazo/blob/main/docs/protocolo.md (§7)`,
   },
@@ -1373,6 +1389,7 @@ export const T: Record<Lang, Dict> = {
     cPasCinch2: ["Second pull!", "Fewer left!", "It's closing in!"],
     cPasCinch3: ["Last pull!", "Only a few left!", "Nobody else gets in!"],
     cPasOut: (n) => pick([`${n}'s bundle falls off!`, `${n} is left out!`, `Out goes ${n}!`]),
+    cPrizeOut: (ns) => (ns.length === 1 ? pick([`${ns[0]} goes out with a prize!`, `${ns[0]} is out, but with a prize!`]) : `${joinList(ns, "and")} go out with prizes!`),
     cPasKnot: ["THE KNOT IS TIED!", "TIE UP THE AGUAYO!", "IT STOPS HERE!"],
     cPasPot: "ON THE AGUAYO",
     cPasCinchLbl: "PULL",
@@ -1867,7 +1884,7 @@ export const T: Record<Lang, Dict> = {
     cStart: ["AND THEY'RE OFF!", "HERE WE GO!", "THERE THEY GO!", "GO GO GO!"],
     cLast: ["FINAL STRETCH!", "LAST FEW METERS!", "THE FINISH IS IN SIGHT!", "THERE'S THE FINISH!"],
     cLead: (n) => pick([`${n} takes the lead!`, `${n} is gone!`, `${n} out in front!`, `${n} pushes past everyone!`, `It's ${n} now!`]),
-    cWin: (n) => pick([`${n} WINS!`, `${n} TAKES IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`]),
+    cWin: (n, many) => pick(many ? [`${n} WIN!`, `${n} TAKE IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`] : [`${n} WINS!`, `${n} TAKES IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`]),
     summary: (w, n, d, r, u) =>
       `Tinkazo · verifiable draw (protocol v2)\nWinner(s): ${w}\nEntries: ${n}\nlist_hash: ${d}\nquicknet round: ${r} → ${u}\nRun it again: https://github.com/nema1502/tinkazo/blob/main/docs/protocolo.md (§7)`,
   },

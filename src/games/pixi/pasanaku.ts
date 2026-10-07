@@ -227,6 +227,10 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
   function evict(keep: number): void {
     const list = alive().sort((a, b) => (place.get(b.idx) ?? 0) - (place.get(a.idx) ?? 0));
     const { x: cx, y: cy, k } = C();
+    // Los co-ganadores de esta tanda se nombran juntos y con su premio; si no
+    // hay ninguno, el primero que sale cuando ya quedan pocos.
+    const premiados: number[] = [];
+    let uno = -1;
     for (const q of list) {
       if (alive().length <= keep) break;
       q.alive = false;
@@ -239,10 +243,13 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
         beep(note(7), 0.09, "sine", 0.03);
         setTimeout(() => beep(note(5), 0.09, "sine", 0.026), 60);
       }
-      if (tAll - lastOut > 0.5 && alive().length <= 8 && keep > 1) {
-        lastOut = tAll;
-        S.say(T[getLang()].cPasOut(names[q.idx] ?? ""), 0.5);
-      }
+      if (winners.indexOf(q.idx) > 0) premiados.push(q.idx);
+      else if (uno < 0 && alive().length <= 8 && keep > 1) uno = q.idx;
+    }
+    if (tAll - lastOut > 0.5 && (premiados.length || uno >= 0)) {
+      lastOut = tAll;
+      const nm = (i: number): string => names[i] ?? "";
+      S.say(premiados.length ? T[getLang()].cPrizeOut(premiados.map(nm)) : T[getLang()].cPasOut(nm(uno)), 0.5);
     }
   }
 
@@ -250,7 +257,7 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
   function crown(): void {
     if (crowned) return;
     crowned = true;
-    S.say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
+    S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     beep(note(0), 0.7, "sine", 0.09);
     fanfare();
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);

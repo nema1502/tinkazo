@@ -296,7 +296,7 @@ export function ledgerClose(
     sealK = 0;
     flashK = 1;
     shake = 1;
-    say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
+    say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     fanfare();
     // Después del acorde, no dentro: a 0 ms quedaba enmascarado por la fanfarria.
     setTimeout(() => beep(note(18), 0.12, "triangle", 0.045), 520);

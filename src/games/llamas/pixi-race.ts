@@ -667,7 +667,7 @@ export async function llamasPixi(
     finished = true;
     phase = "done";
     tFreeze = 0;
-    S.say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
+    S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     fanfare();
     cam.punch(0.12).shake(14 * G.u);
   }

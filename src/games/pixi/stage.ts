@@ -4,6 +4,7 @@ import { $ } from "../../dom";
 import { T, getLang, setPickSeed, t } from "../../i18n";
 import { LCOLORS, drawAvatar, paceFactor, params, skipMotion, takeShowGate, type Beacon } from "../../state";
 import { musicBreath, musicCue, startMusic, stopMusic, type MusicStyle } from "../../music";
+import { beep, note } from "../../sound";
 import { registerSkip, releaseScreen, shorten, takeOverScreen, winnerNames } from "../overlay";
 import { Camera } from "./camera";
 import { watchRecovery } from "./recover";
@@ -457,6 +458,9 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     const tl = gsap.timeline({ paused: true });
     cleaners.push(() => tl.kill());
     const all = winnerNames(names, winners);
+    /** Cuándo entra cada premio después del primero, en segundos de la corona. */
+    let entradas: number[] = [];
+    const sonados = new Set<number>();
     const build = (): void => {
       plate.removeChildren().forEach((c) => c.destroy({ children: true }));
       flash.clear().rect(0, 0, sw(), sh()).fill(0xffffff);
@@ -464,17 +468,29 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       const title = text(getLang() === "es" ? (all.length > 1 ? "GANAN" : "GANA") : all.length > 1 ? "WINNERS" : "WINNER", {
         fontFamily: MONO, fontSize: 14 * k, fontWeight: "900", fill: INK, letterSpacing: 3 * k,
       });
-      const lines = all.length <= 3 ? all : [...all.slice(0, 2), `+${all.length - 2}`];
+      // Hasta tres nombres y "y N más", igual que el relator.
+      const resto = all.length - 3;
+      const lines = all.length <= 3 ? all : [...all.slice(0, 3), getLang() === "es" ? `y ${resto} más` : `and ${resto} more`];
       const big = lines.length === 1;
+      // Con varios premios, el primero un poco más grande y cada uno con su
+      // cara: antes eran renglones chicos e iguales, sin cara, y desde el fondo
+      // no se sabía quién era quién ni cuál era el primero.
+      const conCara = (i: number): boolean => !big && (all.length <= 3 || i < 3);
+      const talla = (i: number): number => (big ? 54 : i === 0 ? 46 : 38) * k;
       const nameTexts = lines.map((n, i) =>
-        text(lines.length > 1 && !n.startsWith("+") ? `${i + 1}. ${n}` : n, { fontSize: (big ? 54 : 34) * k, fontWeight: "900", fill: INK }),
+        text(conCara(i) ? `${i + 1}. ${n}` : n, { fontSize: talla(i), fontWeight: "900", fill: INK }),
       );
-      const maxW = sw() * 0.86 - (big ? 130 : 40) * k;
-      for (const tx of nameTexts) if (tx.width > maxW) tx.scale.set(maxW / tx.width);
-      const innerW = Math.max(title.width, ...nameTexts.map((x) => x.width));
+      const cara = (i: number): number => (conCara(i) ? talla(i) * 1.1 : 0);
+      const hueco = (i: number): number => (conCara(i) ? cara(i) + 12 * k : 0);
+      for (const [i, tx] of nameTexts.entries()) {
+        const maxW = sw() * 0.86 - (big ? 130 : 40) * k - hueco(i);
+        if (tx.width > maxW) tx.scale.set(maxW / tx.width);
+      }
+      const innerW = Math.max(title.width, ...nameTexts.map((x, i) => x.width + hueco(i)));
       const pw = innerW + (big ? 132 : 56) * k;
-      const lineH = (big ? 60 : 40) * k;
-      const ph = 40 * k + lineH * nameTexts.length + 16 * k;
+      const altos = nameTexts.map((_, i) => (big ? 60 * k : talla(i) * 1.22));
+      const lineH = altos[0] ?? 60 * k;
+      const ph = 40 * k + altos.reduce((a, h) => a + h, 0) + 16 * k;
       const bgp = new Graphics()
         .roundRect(-pw / 2 + 10 * k, -ph / 2 + 10 * k, pw, ph, 14 * k)
         .fill(INK)
@@ -492,15 +508,39 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       }
       title.position.set(x0, -ph / 2 + 16 * k);
       plate.addChild(title);
+      // Cada renglón en su contenedor, para que con varios premios entren de a uno.
+      const renglones: Container[] = [];
+      let y = -ph / 2 + 36 * k;
       nameTexts.forEach((tx, i) => {
-        tx.position.set(x0, -ph / 2 + 36 * k + i * lineH);
-        plate.addChild(tx);
+        const fila = new Container();
+        if (conCara(i)) {
+          const lado = cara(i);
+          const av = new Sprite(face(all[i] ?? ""));
+          av.width = av.height = lado;
+          av.position.set(0, (altos[i] ?? lineH) / 2 - lado / 2 - 2 * k);
+          fila.addChild(av, new Graphics().rect(av.x - 2 * k, av.y - 2 * k, lado + 4 * k, lado + 4 * k).stroke({ width: 3 * k, color: INK }));
+        }
+        tx.position.set(hueco(i), 0);
+        fila.addChild(tx);
+        fila.position.set(x0, y);
+        y += altos[i] ?? lineH;
+        plate.addChild(fila);
+        renglones.push(fila);
       });
       plate.position.set(sw() / 2, portrait() ? sh() * 0.24 : sh() * 0.26);
       tl.clear();
       tl.fromTo(flash, { alpha: 0.9 }, { alpha: 0, duration: 0.5, ease: "power2.out" }, 0)
         .fromTo(plate.scale, { x: 0, y: 0 }, { x: 1, y: 1, duration: 0.9, ease: "elastic.out(1, 0.55)" }, 0.12)
         .fromTo(plate, { rotation: -0.12 }, { rotation: 0, duration: 0.9, ease: "elastic.out(1, 0.4)" }, 0.12);
+      // Con varios premios, el primero aparece con el cartel y los demás
+      // llegan después, de a uno: cada premio tiene su momento.
+      entradas = big ? [] : renglones.slice(1).map((_, i) => 0.55 + (i + 1) * 0.35);
+      if (!big) {
+        renglones.forEach((fila, i) => {
+          if (i === 0) return;
+          tl.fromTo(fila, { alpha: 0, x: x0 - 40 * k }, { alpha: 1, x: x0, duration: 0.35, ease: "back.out(2)" }, 0.55 + i * 0.35);
+        });
+      }
     };
     build();
     root.visible = false;
@@ -518,6 +558,15 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         root.visible = true;
         plate.visible = placa;
         tl.time(Math.max(0, tt));
+        // Cada premio que entra suena, más grave cuanto más abajo en la lista.
+        // Si se saltó la animación, no suenan todos juntos de golpe.
+        entradas.forEach((te, i) => {
+          if (tt < te || sonados.has(i)) return;
+          sonados.add(i);
+          if (tt - te > 0.3) return;
+          beep(note(12 - 2 * i), 0.42, "triangle", 0.055);
+          beep(note(7 - 2 * i), 0.6, "triangle", 0.04);
+        });
         // El cartel queda anotado para el auditor exigente, en píxeles del lienzo.
         if (placa && tt > 0.6) {
           const b = plate.getBounds();

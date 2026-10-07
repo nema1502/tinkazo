@@ -1,6 +1,6 @@
 import { $ } from "../dom";
 import { LCOLORS, drawAvatar, paceFactor, skipMotion, type Beacon } from "../state";
-import { setPickSeed, t } from "../i18n";
+import { nameList, setPickSeed, t } from "../i18n";
 import { musicCue, startMusic, stopMusic } from "../music";
 
 /**
@@ -412,8 +412,8 @@ export function winnerNames(names: string[], winners: readonly number[]): string
 export function winnersLabel(names: string[], winners: readonly number[], max = 3): string {
   const all = winnerNames(names, winners);
   if (all.length <= 1) return all[0] ?? "";
-  if (all.length <= max) return all.join(", ");
-  return all.slice(0, max).join(", ") + " +" + (all.length - max);
+  if (all.length <= max) return nameList(all);
+  return nameList(all.slice(0, max), all.length - max);
 }
 
 /**

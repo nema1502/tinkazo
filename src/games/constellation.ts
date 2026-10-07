@@ -315,7 +315,7 @@ export function stellarConstellation(
     tPhase = 0;
     novaK = 0;
     shake = 1;
-    say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
+    say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     fanfare();
     // Una octava abajo del grado 0 son 65 Hz: inaudible en cualquier parlante
     // de sala. Y los adornos caían a 10 y 20 ms de notas de la fanfarria que

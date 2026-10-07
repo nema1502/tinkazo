@@ -401,9 +401,12 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     }
     log?.outs.push({ idx: v.idx, t: tAll, tipo: kind });
     const left = alive().length;
-    if (!quiet && tAll - lastOutSaid > 1.2 && (left <= 8 || hits.length <= 12)) {
+    // Un co-ganador que sale se nombra siempre, y con su premio: nunca como perdedor.
+    const premio = winners.indexOf(v.idx) > 0;
+    if (!quiet && tAll - lastOutSaid > (premio ? 0.6 : 1.2) && (premio || left <= 8 || hits.length <= 12)) {
       lastOutSaid = tAll;
-      say(T[getLang()].cTroOut(names[v.idx] ?? ""), 0.45 + 0.2 * (1 - left / n));
+      const nm = names[v.idx] ?? "";
+      say(premio ? T[getLang()].cPrizeOut([nm]) : T[getLang()].cTroOut(nm), 0.45 + 0.2 * (1 - left / n));
     }
   }
 
@@ -767,7 +770,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     if (crowned) return;
     crowned = true;
     if (log) log.aliveAtCrown = alive().map((q) => q.idx);
-    say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
+    say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     beep(note(0), 0.7, "sine", 0.09);
     fanfare();
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);

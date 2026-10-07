@@ -291,7 +291,7 @@ export async function luzPixi(names: string[], winners: readonly number[], beaco
   function crown(): void {
     if (crowned) return;
     crowned = true;
-    say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
+    say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     beep(note(0), 0.7, "sine", 0.09);
     fanfare();
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);

@@ -428,7 +428,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   function crowned(): void {
     if (didCrown) return;
     didCrown = true;
-    S.say(T[lang].cWin(winnersLabel(names, winners)), 1);
+    S.say(T[lang].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     fanfare();
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);
     setTimeout(() => beep(note(19), 0.12, "triangle", 0.035), 700);

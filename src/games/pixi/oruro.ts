@@ -189,7 +189,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   function crown(): void {
     if (crowned) return;
     crowned = true;
-    S.say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
+    S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     fanfare();
     // Las campanas del Socavón.
     [0, 180, 360, 540].forEach((ms, i) => setTimeout(() => beep(note(i % 2 ? 12 : 14), 0.4, "triangle", 0.05), ms));
@@ -234,7 +234,10 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       beep(note(5), 0.3, "sawtooth", 0.035);
       beep(note(9), 0.3, "sawtooth", 0.028);
       cam.punch(0.05).shake(5 * S.u());
+      // Si en esta cuadra se queda un co-ganador, se lo nombra con su premio.
+      const premiados = ids.filter((i) => winners.indexOf(i) > 0);
       if (last && n > 2) S.say(t("cOruLast"), 0.8);
+      else if (premiados.length) S.say(T[getLang()].cPrizeOut(premiados.map((i) => names[i] ?? "")), 0.6);
       else if (ids.length === 1) S.say(T[getLang()].cOruStay(names[ids[0] as number] ?? ""), 0.55);
       else S.say(T[getLang()].cOruStop(stopsDone, ids.length, left), 0.45 + 0.3 * (stopsDone / K));
       if (story.arc === "remontada") {

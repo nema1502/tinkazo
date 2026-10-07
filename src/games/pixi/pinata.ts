@@ -212,7 +212,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   function crown(): void {
     if (crowned) return;
     crowned = true;
-    S.say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
+    S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     beep(note(0), 0.7, "sine", 0.09);
     fanfare();
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);
@@ -285,8 +285,11 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
         lastOutSaid = tAll;
         const nm = (id: number): string => names[id] ?? "";
         const w = 0.5 + 0.2 * (1 - left / n);
-        // Uno: su nombre. Dos o tres: todos en una línea. Más: el primero y cuántos más.
-        if (s.drop.length === 1) S.say(T[getLang()].cPinOut(nm(s.drop[0] as number)), w);
+        // Uno: su nombre. Dos o tres: todos en una línea. Más: el primero y
+        // cuántos más. Si cae un co-ganador, se lo nombra a él, con su premio.
+        const premiados = s.drop.filter((id) => winners.indexOf(id) > 0);
+        if (premiados.length) S.say(T[getLang()].cPrizeOut(premiados.map(nm)), w);
+        else if (s.drop.length === 1) S.say(T[getLang()].cPinOut(nm(s.drop[0] as number)), w);
         else if (s.drop.length <= 3) S.say(T[getLang()].cPinOutMany(s.drop.map(nm)), w);
         else if (crackLevel === 1) S.say(t("cPinRain"), 0.45);
         else S.say(T[getLang()].cPinOutMore(nm(s.drop[0] as number), s.drop.length - 1), w);

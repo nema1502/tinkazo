@@ -252,7 +252,7 @@ export function wheelSpin(
     flashK = 1;
     cur = winnerIdx;
     curSmooth = winnerIdx;
-    say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
+    say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     fanfare();
     // A 180 y 340 ms los adornos caían dentro de la fanfarria, que suena al
     // doble de volumen: estaban escritos y no se oían. Después del acorde sí.

@@ -403,7 +403,7 @@ export function stadiumRace(
     tFreeze = 0;
     shake = 1;
     flashK = 1;
-    say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
+    say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     fanfare();
   }
 

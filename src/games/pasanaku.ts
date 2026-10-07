@@ -299,7 +299,7 @@ export function pasanaku(
     crowned = true;
     flashK = 1;
     shake = 1;
-    say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
+    say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     // 90 Hz no sale por el parlante de ninguna sala: el golpe de la levantada,
     // que es el clímax del juego, se perdía entero.
     beep(note(0), 0.7, "sine", 0.09);

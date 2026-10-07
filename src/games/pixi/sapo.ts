@@ -416,7 +416,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   function crown(): void {
     if (crowned) return;
     crowned = true;
-    S.say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
+    S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     beep(note(0), 0.7, "sine", 0.09);
     fanfare();
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);

@@ -151,7 +151,7 @@ export async function ledgerPixi(names: string[], winners: readonly number[], be
     phase = "seal";
     tPhase = 0;
     sealK = 0;
-    S.say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
+    S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     fanfare();
     setTimeout(() => beep(note(18), 0.12, "triangle", 0.045), 520);
     cam.punch(0.1).shake(12 * S.u());

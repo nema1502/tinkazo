@@ -158,7 +158,7 @@ export async function constellationPixi(names: string[], winners: readonly numbe
     phase = "nova";
     tPhase = 0;
     novaK = 0;
-    S.say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
+    S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     fanfare();
     beep(note(0), 0.8, "sine", 0.08);
     setTimeout(() => beep(note(15), 0.14, "triangle", 0.045), 520);

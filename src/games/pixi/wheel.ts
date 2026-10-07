@@ -325,7 +325,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     if (didCrown) return;
     didCrown = true;
     cur = winnerIdx;
-    S.say(T[getLang()].cWin(winnersLabel(names, winners)), 1);
+    S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     fanfare();
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);
     setTimeout(() => beep(note(19), 0.12, "triangle", 0.035), 700);
