@@ -80,7 +80,7 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 | Verification page | Live | Recomputes any draw in the browser from its proof link |
 | Twelve stadium games | Live | Deterministic: the same round draws the same frames on any machine |
 | Protocol v2 | Specified | [docs/protocolo.md](docs/protocolo.md) ([in English](docs/protocol.en.md)) and shared vectors that both implementations must pass |
-| Quality gates | In CI and in the repo | 196 TypeScript tests, the 19 contract tests, and seven custom auditors (below) |
+| Quality gates | In CI and in the repo | 205 TypeScript tests, the 19 contract tests, and nine custom auditors (below) |
 
 Tested with a thousand participants: the draw still runs at 60 frames per second and anchors the same way.
 
@@ -177,7 +177,7 @@ Almost all of the cost is storage rent, and the network sets that rate: on Septe
 
 ## Quality
 
-Seven auditors in [`scripts/`](scripts) run the real site in headless Chrome:
+Nine auditors in [`scripts/`](scripts) run the real site in headless Chrome:
 
 - **Game auditor**, 20 checks per game against live drand. The one that matters: the name on screen is the one the protocol fixed.
 - **Strict auditor**, which swaps the browser clock to compare two runs frame by frame: same round, same frames, no `Math.random`, never four seconds without something happening, a readable winner plate from the back of the room, with two people and with two hundred, on a phone.
@@ -186,6 +186,8 @@ Seven auditors in [`scripts/`](scripts) run the real site in headless Chrome:
 - **UI auditor**, desktop and phone, both themes: broken images, clipped text, contrast, tap targets.
 - **Physics auditor**, for the ball drum and the aguayo: nobody overlaps, nobody escapes, and the same round gives the same bounces.
 - **Collision auditor**, for the spinning tops: every hit really touches, with action and reaction, and nobody passes through anybody.
+- **Identification auditor**, with 8, 18 and 50 people: how many get to read their own name before the winner.
+- **Mix auditor**, which records what comes out of the speaker and measures loudness by the BS.1770 standard, peaks, how much a projector speaker loses and the winner's hit.
 
 ## The next 30 days
 
@@ -216,7 +218,7 @@ cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
-Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?demo=race|luz|trompo|pinata|oruro|tombola|wheel|teleferico|pasanaku|stellar|sapo|quien`, `?instant=1`, `?pose=1` and `?motor=clasico` (the previous engine).
+Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?demo=race|chovena|trompo|pinata|oruro|tombola|wheel|teleferico|pasanaku|stellar|sapo|quien`, `?instant=1`, `?pose=1` and `?motor=clasico` (the previous engine).
 
 ## Repository
 

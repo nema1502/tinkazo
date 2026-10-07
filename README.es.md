@@ -80,7 +80,7 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 | Página de verificación | En producción | Rehace cualquier sorteo en el navegador desde su comprobante |
 | Doce juegos de estadio | En producción | Deterministas: la misma ronda dibuja los mismos cuadros en cualquier máquina |
 | Protocolo v2 | Especificado | [docs/protocolo.md](docs/protocolo.md) y vectores que las dos implementaciones tienen que pasar |
-| Controles de calidad | En la CI y en el repositorio | 196 tests de TypeScript, los 19 del contrato y siete auditores propios (abajo) |
+| Controles de calidad | En la CI y en el repositorio | 205 tests de TypeScript, los 19 del contrato y nueve auditores propios (abajo) |
 
 Probado con mil participantes: el sorteo sigue a sesenta cuadros por segundo y se ancla igual.
 
@@ -91,7 +91,7 @@ Probado con mil participantes: el sorteo sigue a sesenta cuadros por segundo y s
 </div>
 
 <div align="center">
-<img src="docs/capturas/readme/partidas-es.webp" alt="Partidas reales grabadas del sitio: el Carnaval de Oruro, el aguayo, luz roja, luz verde con el Faro, el trompo, el teleférico de La Paz, la piñata, el sapo con la argolla que rebota en la rana, las cartas de ¿Quién es? dándose vuelta y la llegada de la carrera de llamas, donde gana Carlos Choque" width="720">
+<img src="docs/capturas/readme/partidas-es.webp" alt="Partidas reales grabadas del sitio: el Carnaval de Oruro, el aguayo, la rueda de la Chovena que se congela cuando se corta la música, el trompo, el teleférico de La Paz, la piñata, el sapo con la argolla que rebota en la rana, las cartas de ¿Quién es? dándose vuelta y la llegada de la carrera de llamas, donde gana Carlos Choque" width="720">
 </div>
 
 ## El show
@@ -102,7 +102,7 @@ La justicia es matemática; el show es lo que hace que a la sala le importe. Doc
 |---|---|
 | Constelación Stellar | Un pago salta de estrella en estrella buscando ruta, como un *path payment*, y deja dibujada una constelación |
 | Carrera de llamas | Ocho carriles por la cordillera |
-| Luz roja, luz verde | El juego de patio: con verde se corre, con roja el Faro se da vuelta y barre la cancha con su haz, y al que ve moviéndose se sienta |
+| Chovena | El baile chiquitano de Santa Cruz: la rueda gira de la mano y, cuando el conjunto corta la música, el que trastabilla se suelta y se sienta al borde de la plaza. El único juego donde la sala aplaude al ritmo y se congela con el corte |
 | Aguayo | La tela andina que carga: el bulto de cada uno va encima, la tela se cierra y se amarra, y el que queda se va en el nudo |
 | Teleférico | Cabinas con los colores de las líneas de La Paz y El Alto suben por el cable; en cada estación se baja la mitad |
 | Tómbola | El bombo de la kermés, una bola numerada por persona de la lista sellada |
@@ -117,7 +117,7 @@ La justicia es matemática; el show es lo que hace que a la sala le importe. Doc
 
 Un director de cámara filma cada juego como una transmisión: sigue a la punta, se mete en el susto, va en cámara lenta en la foto final y sacude en los choques. Los juegos corren en PixiJS, y en un equipo sin WebGL toma la posta el motor anterior: el sorteo nunca se queda en blanco.
 
-De fondo suena música andina con beat que sigue la tensión, unos subtítulos cortos cuentan cada momento en pantalla, y después del ganador una tarjeta cuenta un pedazo de la historia con su fuente primaria.
+De fondo suena música andina con beat que sigue la tensión (la Chovena trae su propia música chiquitana, con flauta de caña, caja con bordón de cuero y bombo, y su corte es el juego mismo), y se calla un respiro justo antes de cada ganador; unos subtítulos cortos cuentan cada momento en pantalla, y después del ganador una tarjeta cuenta un pedazo de la historia con su fuente primaria.
 
 ## Seguridad
 
@@ -177,7 +177,7 @@ Casi todo el costo es alquiler de almacenamiento, y esa tarifa la pone la red: e
 
 ## Calidad
 
-Siete auditores en [`scripts/`](scripts) corren el sitio de verdad en Chrome sin interfaz:
+Nueve auditores en [`scripts/`](scripts) corren el sitio de verdad en Chrome sin interfaz:
 
 - **El de juegos**, veinte comprobaciones por juego contra drand de verdad. La que importa: el nombre en pantalla es el que fijó el protocolo.
 - **El exigente**, que cambia el reloj del navegador para comparar dos corridas cuadro contra cuadro: la misma ronda dibuja lo mismo, ni un `Math.random`, nunca cuatro segundos sin novedad, el cartel del ganador se lee desde el fondo de la sala, con dos personas y con doscientas, en un celular.
@@ -186,6 +186,8 @@ Siete auditores en [`scripts/`](scripts) corren el sitio de verdad en Chrome sin
 - **El de interfaz**, en escritorio y celular, en los dos temas: imágenes rotas, texto cortado, contraste y blancos de toque.
 - **El de física**, para la tómbola y el aguayo: nadie encimado, nadie se escapa, y la misma ronda da los mismos rebotes.
 - **El de choques**, para el trompo: cada golpe toca de verdad, con acción y reacción, y nadie atraviesa a nadie.
+- **El de identificación**, con 8, 18 y 50 personas: cuántos llegan a leer su nombre antes del ganador.
+- **El de mezcla**, que graba lo que sale por el parlante y mide la sonoridad con la norma BS.1770, los picos, cuánto se pierde en un parlante de proyector y el golpe del ganador.
 
 ## Los próximos 30 días
 
@@ -216,7 +218,7 @@ cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
-Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=race|luz|trompo|pinata|oruro|tombola|wheel|teleferico|pasanaku|stellar|sapo|quien`, `?instant=1`, `?pose=1` y `?motor=clasico` (el motor anterior).
+Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=race|chovena|trompo|pinata|oruro|tombola|wheel|teleferico|pasanaku|stellar|sapo|quien`, `?instant=1`, `?pose=1` y `?motor=clasico` (el motor anterior).
 
 ## El repositorio
 

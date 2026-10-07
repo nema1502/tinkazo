@@ -534,11 +534,15 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         .fromTo(plate, { rotation: -0.12 }, { rotation: 0, duration: 0.9, ease: "elastic.out(1, 0.4)" }, 0.12);
       // Con varios premios, el primero aparece con el cartel y los demás
       // llegan después, de a uno: cada premio tiene su momento.
-      entradas = big ? [] : renglones.slice(1).map((_, i) => 0.55 + (i + 1) * 0.35);
+      // En segundos reales: la corona recibe la hora del juego, que el
+      // selector de duración estira, y en "épico" el tercer premio entraba
+      // cuando el cartel ya se iba.
+      const real = (s: number): number => s / paceFactor();
+      entradas = big ? [] : renglones.slice(1).map((_, i) => real(0.55 + (i + 1) * 0.35));
       if (!big) {
         renglones.forEach((fila, i) => {
           if (i === 0) return;
-          tl.fromTo(fila, { alpha: 0, x: x0 - 40 * k }, { alpha: 1, x: x0, duration: 0.35, ease: "back.out(2)" }, 0.55 + i * 0.35);
+          tl.fromTo(fila, { alpha: 0, x: x0 - 40 * k }, { alpha: 1, x: x0, duration: real(0.35), ease: "back.out(2)" }, real(0.55 + i * 0.35));
         });
       }
     };

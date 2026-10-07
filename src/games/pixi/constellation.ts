@@ -448,7 +448,9 @@ export async function constellationPixi(names: string[], winners: readonly numbe
         const c = Math.cos(a), sn = Math.sin(a);
         novaG.poly([nd.x - (wd / 2) * -sn, nd.y + (wd / 2) * -c, nd.x + L * c, nd.y + L * sn, nd.x + (wd / 2) * -sn, nd.y - (wd / 2) * -c]).fill(YELLOW).stroke({ width: 3 * k, color: INK });
       }
-      crown.at(novaK * 1.4);
+      // Con la hora de la fase, que no tiene tope: con novaK (que llega a 1)
+      // la corona se congelaba a los 1,4 s, sin los premios de más ni el papel picado.
+      crown.at(tPhase * 1.4);
     }
     // Pasar lista: mientras se arma el cielo y en los primeros saltos, los
     // nombres de a tandas encima de cada estrella, para que cada uno sepa cuál
