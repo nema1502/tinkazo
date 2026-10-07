@@ -230,7 +230,17 @@ async function poseScene(): Promise<void> {
       return `${SAMPLE[i % SAMPLE.length]}${vuelta ? ` ${vuelta + 1}` : ""}`;
     })
     : SAMPLE;
-  const W3 = [Math.min(3, L.length - 1)];
+  // `?nw=N` también acá: la escena fija con varios premios, sin red, para
+  // auditar cómo anuncia cada juego a cada ganador. Los ganadores son siempre
+  // los mismos y quedan repartidos por la lista.
+  const premios = Math.max(1, Math.min(L.length, Math.floor(Number(params.get("nw")) || 1)));
+  // El primero, el de siempre: con un premio la escena no cambia.
+  const W3: number[] = [Math.min(3, L.length - 1)];
+  for (let i = 1; W3.length < premios && i < L.length * 7; i++) {
+    const w = (3 + i * 7) % L.length;
+    if (!W3.includes(w)) W3.push(w);
+  }
+  for (let w = 0; W3.length < premios; w++) if (!W3.includes(w)) W3.push(w);
   app.frozen = { names: L, listHash: "32e2099c7a8dde7b6892523dc7d3e34ac06a972fd67f142186c58dced51a21ef", ts: 0, at: "-", prize: "", round: 32254977 };
   app.drawn = { beacon: fakeBeacon, winners: W3 };
   const cual = params.get("pose") ?? "1";
