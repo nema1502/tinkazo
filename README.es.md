@@ -80,9 +80,9 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 | Página de verificación | En producción | Rehace cualquier sorteo en el navegador desde su comprobante |
 | Doce juegos de estadio | En producción | Deterministas: la misma ronda dibuja los mismos cuadros en cualquier máquina |
 | Protocolo v2 | Especificado | [docs/protocolo.md](docs/protocolo.md) y vectores que las dos implementaciones tienen que pasar |
-| Controles de calidad | En la CI y en el repositorio | 205 tests de TypeScript, los 19 del contrato y nueve auditores propios (abajo) |
+| Controles de calidad | Tests en la CI, auditores antes de cada subida | 205 tests de TypeScript y los 19 del contrato corren en la CI; nueve auditores propios (abajo) corren contra el sitio construido |
 
-Probado con mil participantes: el sorteo sigue a sesenta cuadros por segundo y se ancla igual.
+Probado con mil participantes (el 22 de septiembre, con el motor anterior): el sorteo andaba a sesenta cuadros por segundo y se anclaba igual. Los juegos de hoy están pensados para hasta doscientas personas en pantalla.
 
 **Quién estaba de verdad en la sala.** En el primer export real de Luma que probamos se habían inscrito 67 personas y hicieron check-in 35. Sortear con el export entero le daba la mitad de las chances a gente que no estaba. La ventana de importar propone a los que hicieron check-in, dice quién queda afuera y por qué (no vino, pendiente, invitado, rechazado) y deja marcar a alguien que vino y nunca le hicieron check-in. El archivo no sale del navegador, y al sorteo entran solo los nombres.
 
@@ -204,10 +204,12 @@ Después: recompensas en USDC como saldos reclamables, que pone quien organiza y
 
 ## Correr en local
 
+Hace falta Node 22 o más y pnpm 11. Copiá `.env.example` a `.env.local`: la llave de Pollar es opcional, y sin ella no aparece la entrada con Google (Freighter y la cuenta de prueba andan igual).
+
 ```bash
 pnpm install
 pnpm dev          # http://localhost:5173
-pnpm test         # protocolo v2 contra los vectores compartidos
+pnpm test         # 205 tests, entre ellos el protocolo v2 contra los vectores compartidos
 pnpm build
 ```
 

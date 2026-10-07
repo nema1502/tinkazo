@@ -80,9 +80,9 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 | Verification page | Live | Recomputes any draw in the browser from its proof link |
 | Twelve stadium games | Live | Deterministic: the same round draws the same frames on any machine |
 | Protocol v2 | Specified | [docs/protocolo.md](docs/protocolo.md) ([in English](docs/protocol.en.md)) and shared vectors that both implementations must pass |
-| Quality gates | In CI and in the repo | 205 TypeScript tests, the 19 contract tests, and nine custom auditors (below) |
+| Quality gates | Tests in CI, auditors before every push | 205 TypeScript tests and the 19 contract tests run in CI; nine custom auditors (below) run against the built site |
 
-Tested with a thousand participants: the draw still runs at 60 frames per second and anchors the same way.
+Tested with a thousand participants (September 22, with the previous engine): the draw ran at 60 frames per second and anchored the same way. Today's games are built for up to 200 on screen.
 
 **Who was actually in the room.** In the first real Luma export we tried, 67 people had registered and 35 checked in. Drawing from the whole export would have handed half the chances to people who were not there. The import window proposes those who checked in, says who is left out and why (didn't come, pending, invited, declined), and lets the organizer tick someone who came but was never checked in. The file never leaves the browser, and only names go into the draw.
 
@@ -204,10 +204,12 @@ After that: USDC rewards as claimable balances, put up by the organizer and clai
 
 ## Run it locally
 
+Requires Node 22+ and pnpm 11. Copy `.env.example` to `.env.local`: the Pollar key is optional, and without it Google sign-in is hidden (Freighter and the test account still work).
+
 ```bash
 pnpm install
 pnpm dev          # http://localhost:5173
-pnpm test         # protocol v2 against the shared vectors
+pnpm test         # 205 tests, including protocol v2 against the shared vectors
 pnpm build
 ```
 
