@@ -24,9 +24,9 @@ Cada bola lleva el puesto de la persona en la lista sellada, contado desde uno. 
 
 **La compuerta.** El bombo frena y la compuerta termina justo en la salida: el ángulo final sale de integrar la velocidad y escalarla, igual que en la ruleta. Se abre, y sale una sola bola.
 
-**La canaleta.** Es de madera, con rieles, travesaños y postes. La bola rueda por tres tramos en zigzag, cada vez más lenta, y crece para que el número se lea desde el fondo. Rueda de verdad: el número gira lo que la bola avanza dividido por su radio, y en cada curva pega un saltito, más chico cada vez. En el borde del vaso se frena, se tambalea medio segundo con un latido de fondo, y cae a un vaso de vidrio, donde rebota dos veces aplastándose y suelta unas chispitas.
+**La canaleta.** Es de madera, con rieles, travesaños y postes. La bola rueda por tres tramos en zigzag, cada vez más lenta y traqueteando en cada travesaño, y crece para que el número se lea desde el fondo. Rueda de verdad: el número gira lo que la bola avanza dividido por su radio, y en cada curva pega un saltito, más chico cada vez. En el borde del vaso se frena, se tambalea medio segundo con un latido de fondo, y cae a un vaso de vidrio, donde rebota dos veces aplastándose y suelta unas chispitas.
 
-**El número** que acompaña a la bola va en una etiqueta amarilla sin cara: la cara de la ganadora aparece recién en el vaso, con su nombre.
+**El número** que acompaña a la bola va en una etiqueta amarilla sin cara: la cara de la ganadora aparece recién en el vaso, con su nombre, que reemplaza al número y va arriba de la bola. En la corona la cámara se queda en el vaso, sin desenfoque.
 
 **Las bolas** tienen brillo y sombra que no giran con ellas: la luz viene siempre de arriba a la izquierda, y por eso se leen redondas aunque den vueltas.
 
@@ -58,23 +58,23 @@ En segundos de juego, sin estirar. En "normal" se estiran para que el show enter
 | 1,8 – 4,2 s | Primera vuelta |
 | 4,2 – 6,8 s | Segunda, más fuerte |
 | 6,8 – 10,2 s | La última, a toda máquina. La bola del ganador se va acercando a la compuerta |
-| 10,2 – 11,0 s | El bombo frena. Silencio |
+| 10,2 – 11,0 s | El bombo frena. Silencio: la música se calla y vuelve con la compuerta |
 | 11,0 s | Se abre la compuerta |
 | 11,0 – 11,6 s | La bola sale |
 | 11,6 – 14,8 s | Rueda por la canaleta. "¡La número 4!" |
 | 14,8 – 15,4 s | Se tambalea en el borde del vaso |
-| 15,4 s | Cae: destello, temblor y golpe |
+| 15,4 s | Cae: destello, temblor, golpe y "¡ADENTRO!" |
 | 16,0 s | El cartel, que se sostiene tres segundos reales |
 
 ## El sonido
 
 - **El llenado:** una nota por bola que entra, con tope.
 - **La manivela:** un trinquete cada octavo de vuelta, que se acelera con el bombo.
-- **El bombo:** un zumbido que sube y baja con la velocidad.
+- **El bombo:** un zumbido que sube y baja con la velocidad, también de volumen.
 - **Las bolas:** un golpeteo corto cuando chocan fuerte, como mucho ocho por segundo.
 - **La compuerta:** dos notas que abren.
-- **La canaleta:** un toque en cada vuelta del zigzag, cada vez más grave.
-- **El borde del vaso:** el latido.
+- **La canaleta:** un toque en cada vuelta del zigzag, cada vez más grave, y un traqueteo en cada travesaño que se frena con la bola.
+- **El borde del vaso:** el latido, cada vez más fuerte y seguido.
 - **La caída:** el golpe de la traba, como en la ruleta, y después la fanfarria.
 
 ## Cómo está hecho

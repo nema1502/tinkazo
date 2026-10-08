@@ -2,6 +2,7 @@ import { Container, Graphics, GraphicsContext, Text } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
 import { paceFactor, params, setGameLength, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, note } from "../../sound";
+import { musicHold } from "../../music";
 import { writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, shorten, winnersLabel } from "../overlay";
 import { CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
@@ -339,7 +340,12 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
   }
   function rollAt(x: number): number {
     if (x < tOut) return 0;
-    if (x < tLip) return 0.94 * ease.outCubic((x - tOut) / (tLip - tOut));
+    // Frena, pero sin arrastrarse: con la curva cúbica el último 6% del tramo
+    // ocupaba 2,2 s reales con la bola casi quieta.
+    if (x < tLip) {
+      const q = (x - tOut) / (tLip - tOut);
+      return 0.94 * (1 - (1 - q) * (1 - q));
+    }
     if (x < tLand) return 0.94 + 0.06 * Math.pow((x - tLip) / (tLand - tLip), 3);
     return 1;
   }
@@ -627,6 +633,8 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
   /* ---------------------------------------------------------------- estado */
   let tAll = 0, tHold = 0, silent = false, didCrown = false;
   let lastHum = -1, dropTicks = 0, crankN = -1, clatterAt = -9, beat = -1, lastSaid = -99;
+  /** El último travesaño de la canaleta que sonó, y cuándo. */
+  let slatN = -1, slatAt = -9;
   const fired = new Set<string>();
   function once(key: string, due: boolean, fn: () => void): void {
     if (!due || fired.has(key)) return;
@@ -646,7 +654,14 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
     once("s2", tAll >= T_S1 + 0.1, () => sayNow(t("cTomSpin2"), 0.5));
     once("s3", tAll >= T_S2 + 0.1, () => sayNow(t("cTomSpin3"), 0.7));
     once("stop", tAll >= T_S3 - 0.2, () => sayNow(t("cTomStop"), 0.75));
+    // Mientras frena el bombo, la banda se calla del todo y vuelve en el uno
+    // con la compuerta: antes seguía sonando debajo del "Se frena…", y el
+    // único silencio era el medio segundo de la compuerta.
+    once("calla", tAll >= T_S3 - 0.1, () => {
+      if (!silent) musicHold(true);
+    });
     once("door", tAll >= T_STOP, () => {
+      musicHold(false);
       sayNow(t("cTomDoor"), 0.85);
       if (!silent) {
         beep(note(5), 0.08, "square", 0.06);
@@ -672,8 +687,12 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
     once("ball", tAll >= tOut + 0.5, () => sayNow(T[lang].cTomBall(num), 0.9));
     once("almost", tAll >= tLip, () => sayNow(t("cTomAlmost"), 0.95));
     once("land", tAll >= tLand, () => {
+      // Responde al "¿Cae o no cae?", que seguía en pantalla con la bola ya en el vaso.
+      sayNow(t("cTomIn"), 0.97);
       if (!silent) {
-        beep(note(0), 0.45, "sine", 0.1);
+        // Más baja que el revelado, para que el cartel sea el golpe más fuerte:
+        // con el seno a 0,1 la caída sonaba igual de fuerte que el ganador.
+        beep(note(0), 0.3, "triangle", 0.07);
         setTimeout(() => beep(note(5), 0.07, "square", 0.06), 40);
         setTimeout(() => beep(note(15), 0.12, "triangle", 0.05), 90);
         cam.punch(0.1).shake(12 * G.k);
@@ -704,7 +723,8 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
       const hb = Math.floor(tAll / 0.3);
       if (hb !== lastHum) {
         lastHum = hb;
-        beepFor(note(2 + Math.round(w * 3)), 0.36, "sawtooth", 0.024);
+        // Sube con la velocidad: la última vuelta se oye más rápida.
+        beepFor(note(2 + Math.round(w * 3)), 0.36, "sawtooth", 0.022 + 0.016 * w);
       }
     }
     if (hits > 3 && tAll - clatterAt > 0.125 && tAll < T_STOP) {
@@ -713,14 +733,28 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
     }
     hits = 0;
     if (tAll >= tLip - 0.4 && tAll < tLand) {
-      const b = Math.floor((tAll - (tLip - 0.4)) / 0.35);
+      // El latido del borde, en triángulo y cada vez más fuerte y seguido: el
+      // seno de 131 Hz que había no sale por el parlante de un proyector.
+      const b = Math.floor((tAll - (tLip - 0.4)) / 0.3);
       if (b !== beat) {
         beat = b;
-        beep(note(0), 0.12, "sine", 0.07);
+        beep(note(0), 0.12, "triangle", 0.06 + 0.006 * b);
+        beep(note(5), 0.08, "triangle", 0.035);
       }
     }
-    const seg = along(G.path, rollAt(tAll)).seg;
+    const roll = rollAt(tAll);
+    const seg = along(G.path, roll).seg;
     once(`seg${seg}`, tAll > tOut && tAll < tLip, () => beep(note(12 - seg * 2), 0.09, "triangle", 0.045));
+    // La bola traquetea en cada travesaño de la canaleta y se frena con ella:
+    // antes bajaba tres segundos y medio sin un solo sonido propio.
+    if (tAll > tOut && tAll < tLip) {
+      const slat = Math.floor((roll * pathLens(G.path).total) / (34 * G.k));
+      if (slat !== slatN && tAll - slatAt >= 0.05) {
+        if (slatN >= 0) beep(note(slat % 2 ? 13 : 14), 0.035, "triangle", 0.028);
+        slatN = slat;
+        slatAt = tAll;
+      }
+    }
   }
 
   function crowned(): void {
@@ -799,13 +833,16 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
   /** La cámara: la boca al llenar, el bombo al girar, la compuerta, la bola, el vaso. */
   function direct(): void {
     const { cx, cy, R, door: dp, cup, vertical } = G;
-    const midX = S.sw() / 2, midY = S.sh() / 2;
+    const midX = S.sw() / 2;
     if (tAll < T_FILL) {
       const p = tAll / T_FILL;
       cam.lookAt(cx + (midX - cx) * p * 0.2, cy - R * 0.6 * (1 - p), 1.8 - 0.55 * p, 3);
     } else if (tAll < T_S3) {
       const w = omega(tAll);
-      const z = 1.2 + 0.12 * w;
+      // La última vuelta se nota: la cámara se sigue acercando y tiembla con
+      // el bombo. Antes las tres vueltas eran trece segundos del mismo encuadre.
+      const z = 1.2 + 0.12 * w + (tAll > T_S2 ? (0.15 * (tAll - T_S2)) / (T_S3 - T_S2) : 0);
+      if (tAll > T_S2) cam.shake(2 * w * G.k);
       let tx = cx + (midX - cx) * 0.25;
       if (vertical && legendTop > 0) {
         // En un celular, el bombo sube a la mitad de arriba, y se achica si no entra.
@@ -821,12 +858,17 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
       cam.lookAt(dp.x, dp.y, vertical ? 2 : 2.3, tAll < T_STOP ? 2 : 4);
     } else if (tAll < tLip) {
       const o = winnerOut();
-      cam.lookAt(o.x + (vertical ? 0 : 60 * G.k), o.y, vertical ? 1.5 : 1.7, 3.5);
+      // Se acerca a la bola mientras baja, y llega al borde ya encima.
+      const near = 0.4 * clamp((tAll - tOut) / (tLip - tOut), 0, 1);
+      cam.lookAt(o.x + (vertical ? 0 : 60 * G.k), o.y, (vertical ? 1.5 : 1.7) + near, 3.5);
     } else if (tAll < tCrown) {
       cam.lookAt(cup.x, cup.y - 20 * G.k, vertical ? 2 : 2.4, 4);
     } else {
-      // Se abre despacio: un tirón de 2,4 a 1 desenfoca toda la escena.
-      cam.lookAt(midX, midY, 1.05, 1.1);
+      // La corona queda en el vaso, sin desenfoque y con la bola debajo del
+      // cartel: abrirse a toda la escena era un tirón de 2,4 a 1 que la dejaba
+      // borrosa y la bola ganadora chica en una esquina.
+      cam.noBlur();
+      cam.lookAt(cup.x - (vertical ? 0 : 120 * G.k), cup.y - (S.sh() * 0.18) / 1.5, 1.5, 2);
     }
   }
 
@@ -923,13 +965,17 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
             .fill({ color: i % 3 ? YELLOW : 0xffffff, alpha: 1 - a / 1.1 });
         }
       }
-      if (tAll > tOut + 0.3 && tAll < tCrown) {
+      // En el vaso, el nombre reemplaza al número, y va arriba de la bola: los
+      // dos juntos se pisaban y el nombre tapaba el número.
+      if (tAll > tOut + 0.3 && tAll < tLand) {
         numChip.visible = true;
         numChip.position.set(o.x + o.r + 10 * k, o.y - o.r - 6 * k);
       }
       if (tAll >= tLand && tAll < tCrown) {
         nameChip.visible = true;
-        nameChip.position.set(G.cup.x - 60 * k, G.cup.y - 60 * k);
+        // Centrado sobre el vaso: corrido a la derecha, en un celular la
+        // cámara cerca lo dejaba cortado por el borde.
+        nameChip.position.set(G.cup.x - nameChip.width / 2, G.cup.y - 115 * k);
         nameChip.alpha = clamp((tAll - tLand) / 0.2, 0, 1);
       }
     }

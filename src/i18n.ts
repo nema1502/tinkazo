@@ -1072,6 +1072,8 @@ export const T: Record<Lang, Dict> = {
     cWheelTick: ["¡Escuchen la flecha!", "¡Tic, tic, tic!", "¡Cada clic más lento!"],
     cWheelWhere: ["¿Dónde para?", "¿En quién se queda?", "¿A quién le toca?"],
     cPasTwo: (n) => pick([`¡Sale ${n}! ¡Quedan dos!`, `¡Afuera ${n}! ¡Mano a mano!`, `¡Se cae ${n}! ¡Quedan dos!`]),
+    // Tómbola: la bola cae al vaso (responde al "¿Cae o no cae?").
+    cTomIn: ["¡ADENTRO!", "¡AL VASO!", "¡CAYÓ!"],
   },
   en: {
     badge: "For whoever has to run the draw",
@@ -1911,6 +1913,8 @@ export const T: Record<Lang, Dict> = {
     cWheelTick: ["Hear the clicker!", "Tick, tick, tick!", "Every click slower!"],
     cWheelWhere: ["Where will it stop?", "Who will it land on?", "Whose slice will it be?"],
     cPasTwo: (n) => pick([`${n} is out! Two left!`, `Out goes ${n}! Head to head!`, `${n} drops! Two left!`]),
+    // Tómbola: the ball drops into the cup (answers "In or out?").
+    cTomIn: ["IN!", "IN THE CUP!", "IT'S IN!"],
   },
 };
 
