@@ -49,6 +49,8 @@ type Phase = "intro" | "walk" | "stop" | "duel" | "crown" | "dead";
 interface Dancer {
   idx: number; x: number; y: number; slot: number; alive: boolean; left: number; wx: number; wy: number;
   ph: number; view?: Container; mask?: Container; cape?: Graphics; chip?: Container; strike?: Graphics; tagW?: number;
+  /** El borde amarillo del chip de un co-ganador que se queda en una cuadra. */
+  prize?: Graphics;
   /** Las partes que bailan: brazos, piernas y el brillo de la pechera. */
   armL?: Container; armR?: Container; legL?: Container; legR?: Container; glint?: Graphics;
 }
@@ -91,6 +93,22 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   const duelDur = story.arc === "duelo" ? 4.2 : 3.2;
   const T_CROWN = T_SOCAVON + (n >= 2 ? duelDur : 0.6);
   setGameLength(T_CROWN, WINNER_HOLD);
+  /**
+   * Los saltos del contrapunto, en segundos desde el Socavón: cada uno llega
+   * antes que el anterior y salta más alto, hasta la llegada. El último número
+   * es cuándo termina el último salto. Antes saltaban cada 0,8 s, siempre a
+   * la misma altura, y el clímax eran cinco segundos de lo mismo (auditoría
+   * con capturas, 7 de octubre de 2026). Lo usan el sonido y el dibujo.
+   */
+  const JUMPS = story.arc === "duelo" ? [0, 0.75, 1.45, 2.05, 2.6, 3.05, 3.4] : [0, 0.75, 1.4, 1.95, 2.35, 2.7];
+  /** Qué salto va a `td` segundos del Socavón y por dónde va, de 0 a 1; `b` es -1 entre saltos. */
+  const jumpAt = (td: number): { b: number; f: number } => {
+    for (let i = JUMPS.length - 2; i >= 0; i--) {
+      const a = JUMPS[i] as number, e = JUMPS[i + 1] as number;
+      if (td >= a) return td < e ? { b: i, f: (td - a) / (e - a) } : { b: -1, f: 0 };
+    }
+    return { b: -1, f: 0 };
+  };
   const T_TRIP = arrive(K) + STOP + WALK * 0.45;
 
   // La formación: la ganadora en el medio si es tapada, al fondo si remonta.
@@ -111,6 +129,10 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
 
   let phase: Phase = "intro";
   let tAll = 0, acc = 0, tHold = 0, saidUpTo = -1, stopsDone = 0, stepTick = 0, crowned = false, tripSaid = false, lastSaid = false, arrived = false;
+  /** Cuántos saltos del contrapunto ya sonaron. */
+  let jumpsDone = 0;
+  /** Los que llevan el nombre entero en su chip: los dos del contrapunto. */
+  const fullTag = new Set<number>();
   const alive = (): Dancer[] => dancers.filter((d) => d.alive);
 
   /* -------------------------------------------------------------- geometría */
@@ -158,8 +180,12 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
           // El contrapunto: frente al Socavón, cara a cara.
           const sx = (K + 1) * g.seg;
           const my = (g.streetTop + g.streetBot) / 2;
-          if (d === win) target = { x: sx - 40 * g.scale * (phase === "crown" ? 0 : 1), y: my };
+          if (d === win) target = { x: sx - 40 * g.scale, y: my };
           else if (d === riv) target = { x: sx + 70 * g.scale, y: my + 10 * g.scale };
+          // Llegó: el que gana camina hasta la puerta del Socavón. Antes la que
+          // subía a la puerta era la rival, y con las campanas sonando parecía
+          // que entraba la que perdió.
+          if (d === win && (arrived || phase === "crown")) target = { x: sx + 170 * g.k, y: g.streetTop + 24 * g.k };
         }
         const sp = Math.min(1, dt * 4);
         d.x += (target.x - d.x) * sp;
@@ -182,6 +208,12 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       d.left = tAll;
       d.wx = d.x + (hash(id, 3) - 0.5) * 40 * g.k;
       d.wy = g.streetTop - 6 * g.k - hash(id, 4) * 10 * g.k;
+      if (id === rivalIdx && tAll >= T_SOCAVON) {
+        // Frente al Socavón la vereda es la puerta del santuario, y esa es del
+        // que gana: la rival se abre hacia el público, a la derecha.
+        d.wx = d.x + 240 * g.k;
+        d.wy = g.streetTop + 30 * g.k;
+      }
     }
     relayout();
   }
@@ -191,8 +223,9 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     crowned = true;
     S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     fanfare();
-    // Las campanas del Socavón.
-    [0, 180, 360, 540].forEach((ms, i) => setTimeout(() => beep(note(i % 2 ? 12 : 14), 0.4, "triangle", 0.05), ms));
+    // Las campanas del Socavón, después de la fanfarria: adentro quedaban
+    // tapadas por notas que suenan al doble.
+    [520, 700, 880, 1060].forEach((ms, i) => setTimeout(() => beep(note(i % 2 ? 12 : 14), 0.4, "triangle", 0.05), ms));
     cam.punch(0.08).shake(10 * S.u());
   }
   skipFn = (): void => {
@@ -221,7 +254,9 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       const want = Math.floor(tAll / 0.42);
       while (stepTick < want) {
         stepTick++;
-        beep(note(stepTick % 2 ? 0 : 3), 0.05, "square", 0.02);
+        // Con acento en el uno: dos notas alternadas, siempre igual, eran un tic.
+        if (stepTick % 4 === 0) beep(note(0), 0.05, "square", 0.03);
+        else beep(note(3), 0.05, "square", 0.02);
       }
     }
     while (stopsDone < K && tAll >= arrive(stopsDone + 1)) {
@@ -230,9 +265,13 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       leave(ids);
       const last = stopsDone === K;
       const left = alive().length;
-      // Los bronces de la banda en cada cuadra.
-      beep(note(5), 0.3, "sawtooth", 0.035);
-      beep(note(9), 0.3, "sawtooth", 0.028);
+      // Los bronces de la banda en cada cuadra, cada vez más agudos y más
+      // largos, y en la última con una voz más: eran el mismo acorde cuatro veces.
+      const up = stopsDone - 1;
+      beep(note(5 + 2 * up), 0.3 + 0.1 * up, "sawtooth", 0.035);
+      beep(note(9 + 2 * up), 0.3 + 0.1 * up, "sawtooth", 0.028);
+      // La de arriba en triángulo: con cinco cuadras llega a 2 kHz, y una sierra ahí chilla.
+      if (last) beep(note(12 + 2 * up), 0.3 + 0.1 * up, "triangle", 0.03);
       cam.punch(0.05).shake(5 * S.u());
       // Si en esta cuadra se queda un co-ganador, se lo nombra con su premio.
       const premiados = ids.filter((i) => winners.indexOf(i) > 0);
@@ -257,18 +296,34 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     }
     if (!lastSaid && tAll >= T_SOCAVON && n >= 2) {
       lastSaid = true;
+      // En el contrapunto quedan dos y hay lugar: sus nombres van enteros, no
+      // "Carlos Choq…". Los chips se rearman una vez.
+      for (const d of [win, riv]) {
+        fullTag.add(d.idx);
+        d.chip?.destroy({ children: true });
+        d.chip = undefined;
+        d.strike = undefined;
+        d.prize = undefined;
+      }
       S.say(T[getLang()].cOruDuel(...enOrden(names[winnerIdx] ?? "", names[rivalIdx] ?? "")), 0.8);
     }
-    // El contrapunto: saltan de a uno, alternados.
+    // El contrapunto: saltan de a uno, alternados, cada salto más arriba y
+    // con una nota más aguda, y una pisada.
     if (phase === "duel") {
       const td = tAll - T_SOCAVON;
-      const beat = Math.floor(td / 0.8);
-      if (beat > Math.floor((td - DT) / 0.8)) beep(note(beat % 2 ? 7 : 10), 0.12, "triangle", 0.045);
+      while (jumpsDone < JUMPS.length - 1 && td >= (JUMPS[jumpsDone] as number)) {
+        const b = jumpsDone++;
+        beep(note(b % 2 === 0 ? 7 + b : 9 + b), 0.14, "triangle", 0.05);
+        beep(note(0), 0.06, "square", 0.035);
+      }
       if (!arrived && td >= duelDur - 0.9) {
         arrived = true;
         leave([rivalIdx]);
         S.say(t("cOruArrive"), 0.95);
-        beep(note(12), 0.5, "triangle", 0.06);
+        // La campana de la llegada, con cuerpo: una sola nota sonaba a timbre.
+        beep(note(12), 0.9, "triangle", 0.06);
+        beep(note(17), 0.9, "triangle", 0.04);
+        beep(note(19), 0.9, "triangle", 0.03);
       }
     }
   }
@@ -475,6 +530,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       d.chip?.destroy({ children: true });
       d.chip = undefined;
       d.strike = undefined;
+      d.prize = undefined;
     }
     shownNow.clear();
     lastHi = -1;
@@ -527,9 +583,22 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     } else if (story.arc === "susto" && tripSaid && tAll < T_TRIP + 1.1) cam.lookAt(win.x, win.y - 60 * g.scale, 2.0, 5);
     else if (phase === "walk" || phase === "stop") {
       const nearEnd = clamp((tAll - arrive(K)) / (T_SOCAVON - arrive(K)), 0, 1);
-      cam.lookAt(cx + 40 * g.k + nearEnd * 140 * g.k, my - nearEnd * 60 * g.k, 1.05 - 0.2 * nearEnd, 2);
-    } else if (phase === "duel") cam.lookAt((K + 1) * g.seg + 20 * g.k, my - 30 * g.k, 1.7, 2.5);
-    else {
+      // Mira adonde va a estar la comparsa en medio segundo: la cámara que la
+      // perseguía se quedaba unos 400 px atrás, con media pantalla de calle
+      // vacía. Con poca gente, más cerca; en un celular no, que ya no entra.
+      const lead = headX(tAll + 0.5) - headX(tAll);
+      const z = n <= 24 && !S.portrait() ? 1.25 : 1.05;
+      cam.lookAt(cx + lead + 40 * g.k + nearEnd * 140 * g.k, my - nearEnd * 60 * g.k, z - 0.2 * nearEnd, 2.5);
+    } else if (phase === "duel") {
+      const td = tAll - T_SOCAVON;
+      // Primero el Socavón entero, que antes no se veía (solo la puerta), y
+      // después el contrapunto, cada vez más cerca.
+      if (td < 0.9) cam.lookAt((K + 1) * g.seg + 170 * g.k, g.streetTop - 150 * g.k, 0.9, 3);
+      else if (!arrived) cam.lookAt((K + 1) * g.seg + 20 * g.k, my - 30 * g.k, 1.5 + 0.4 * clamp(td / duelDur, 0, 1), 2.5);
+      // Llegó: la cámara se abre con el que gana mientras camina a la puerta.
+      // Con el plano del contrapunto, en un celular le cortaba la cabeza.
+      else cam.lookAt(win.x + 60 * g.k, win.y - 60 * g.scale - (g.h * 0.1) / 1.3, 1.3, 2.5);
+    } else {
       const z = 1.3;
       cam.lookAt(win.x + 60 * g.k, win.y - 60 * g.scale - (g.h * 0.1) / z, z, 1.5);
     }
@@ -543,20 +612,28 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   /** The chip of a devil: built once, then reused (and rebuilt with the scene on resize). */
   function tagOf(d: Dancer, kk: number, scale: number): Container {
     if (d.chip) return d.chip;
-    const c = S.chip(tagName(names[d.idx] ?? "", TAG_CHARS), scale);
+    const c = S.chip(tagName(names[d.idx] ?? "", fullTag.has(d.idx) ? 20 : TAG_CHARS), scale, names[d.idx] ?? "");
     const w = c.width;
     d.tagW = w;
     // The colour bar matches the devil's cape, and the dot on its head, so ownership reads at a glance.
     c.addChild(new Graphics().rect(4 * kk, 17.5 * kk, w - 8 * kk, 4 * kk).fill(S.color(d.idx)));
-    // The "out" cross, only shown while the devil has just stayed behind.
+    // La marca de "se quedó", solo mientras recién se queda: una raya roja que
+    // tacha el nombre por la mitad. La cruz que había lo tapaba entero, y no
+    // se leía quién se quedaba, que es justo el dato del momento.
     const x = new Graphics()
-      .moveTo(5 * kk, 4 * kk).lineTo(w - 8 * kk, 19 * kk).moveTo(w - 8 * kk, 4 * kk).lineTo(5 * kk, 19 * kk)
-      .stroke({ width: 5 * kk, color: INK, cap: "round" })
-      .moveTo(5 * kk, 4 * kk).lineTo(w - 8 * kk, 19 * kk).moveTo(w - 8 * kk, 4 * kk).lineTo(5 * kk, 19 * kk)
-      .stroke({ width: 2.6 * kk, color: 0xd52b1e, cap: "round" });
+      .moveTo(4 * kk, 11.5 * kk).lineTo(w - 6 * kk, 11.5 * kk)
+      .stroke({ width: 2.4 * kk, color: 0xd52b1e, cap: "round" });
     x.visible = false;
     c.addChild(x);
     d.strike = x;
+    // Un co-ganador que se queda no va tachado: se queda con premio, y lleva
+    // un borde amarillo mientras el relator lo nombra.
+    if (winners.includes(d.idx)) {
+      const prize = new Graphics().roundRect(-1.5 * kk, -1.5 * kk, w + 3 * kk, 25 * kk, 6 * kk).stroke({ width: 3 * kk, color: YELLOW });
+      prize.visible = false;
+      c.addChild(prize);
+      d.prize = prize;
+    }
     // Se guarda: sin esto cada cuadro armaba una etiqueta nueva y la línea que
     // la usa encontraba `d.chip` vacío; Oruro se caía en el primer cuadro y el
     // estadio quedaba colgado (lo encontró el auditor exigente, 2 de octubre).
@@ -627,7 +704,9 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       chip.scale.set(s);
       chip.alpha = look.alpha;
       chip.position.set(pl.x, pl.y + 11 * kk);
-      (d.strike as Graphics).visible = look.struck;
+      const premiado = winners.includes(d.idx);
+      (d.strike as Graphics).visible = look.struck && !premiado;
+      if (d.prize) d.prize.visible = look.struck && premiado && !d.alive && tAll - d.left < OUT_HOLD;
       if (pl.id === hi && pl.id !== lastHi) chips.addChild(chip);
       shownNext.add(pl.id);
       if (d.alive) aliveTagged++;
@@ -675,18 +754,23 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       let bounce = walking ? Math.abs(Math.sin(beatPh + d.ph)) * 10 : Math.abs(Math.sin(now * 3 + d.ph)) * 3;
       let turn = Math.cos(now * 0.9 + d.ph);
       if (phase === "duel" && (d === win || d === riv)) {
-        // Saltan de a uno, alternados, y se miran.
-        const td = tAll - T_SOCAVON;
-        const mine = d === win ? Math.floor(td / 0.8) % 2 === 0 : Math.floor(td / 0.8) % 2 === 1;
-        bounce = mine ? Math.sin(Math.PI * ((td % 0.8) / 0.8)) * 36 : 2;
+        // Saltan de a uno, alternados, y se miran: cada salto más alto.
+        const { b, f } = jumpAt(tAll - T_SOCAVON);
+        const mine = b >= 0 && (d === win ? b % 2 === 0 : b % 2 === 1);
+        bounce = mine ? Math.sin(Math.PI * f) * Math.min(60, 30 + 6 * b) : 2;
         turn = d === win ? 1 : -1;
       }
+      // De frente en la corona y en el susto: con la vuelta quedaba de canto
+      // la mitad del tiempo, un palito, y no se le veía la máscara.
       if (phase === "crown" && d === win) {
         bounce = Math.abs(Math.sin(now * 6)) * 24;
-        turn = Math.cos(now * 2);
+        turn = 1;
       }
+      if (d === win && story.arc === "susto" && tripSaid && tAll < T_TRIP + 1.1) turn = 1;
       v.position.set(d.x, d.y - bounce * g.scale);
-      v.scale.set(g.scale * (Math.abs(turn) < 0.3 ? Math.sign(turn || 1) * 0.3 : turn), g.scale);
+      // La vuelta es un volteo rápido: por debajo de 0,55 de ancho el diablo
+      // se volvía un palito (le pasaba a cuatro de cada diez).
+      v.scale.set(g.scale * (Math.abs(turn) < 0.55 ? Math.sign(turn || 1) * 0.55 : turn), g.scale);
       v.rotation = d.alive ? Math.sin(beatPh * 0.5 + d.ph) * 0.06 : 0;
       (d.cape as Graphics).skew.x = Math.sin(beatPh + d.ph) * (walking ? 0.2 : 0.1);
       // Los brazos suben y bajan alternados; las piernas se levantan de a una

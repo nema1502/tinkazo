@@ -14,9 +14,9 @@ Y la entrada ya tiene la forma de un sorteo por etapas: una comparsa que avanza 
 
 **La comparsa se arma.** Los bailarines arrancan en formación, en filas a lo ancho de la calle, en un orden sembrado. Cada uno es un diablo: máscara con cuernos anillados, ojos saltones con reborde y la culebra que baja por la frente; capa del color de su participante con estrellas bordadas; pechera dorada con su cara y lentejuelas que brillan. Y baila entero: los brazos suben y bajan al ritmo, el derecho con su tridente, y las piernas se levantan de a una con la rodilla alta del paso de la Diablada. Hasta el 29 de septiembre de 2026 el cuerpo era un solo dibujo quieto que saltaba.
 
-**Las cuadras.** La comparsa avanza zapateando. En cada arco se para un momento, suenan los bronces de la banda y algunos se quedan: salen a la vereda de arriba y saludan desde ahí. Los que siguen se reacomodan en filas. Hay entre una y cinco cuadras, según cuánta gente haya.
+**Las cuadras.** La comparsa avanza zapateando. En cada arco se para un momento, suenan los bronces de la banda y algunos se quedan: salen a la vereda de arriba y saludan desde ahí. Mientras dura el momento, su nombre va tachado con una raya roja que se deja leer (era una cruz que lo tapaba entero); un co-ganador que se queda no va tachado, lleva un borde amarillo. Los que siguen se reacomodan en filas. Hay entre una y cinco cuadras, según cuánta gente haya.
 
-**El contrapunto.** Después de la última cuadra quedan dos, y frente al Socavón se enfrentan: saltan de a uno, alternados, y se miran. Al final la rival se queda, y la ganadora entra al santuario con las campanas.
+**El contrapunto.** Después de la última cuadra quedan dos, y frente al Socavón se enfrentan: saltan de a uno, alternados, y se miran, cada salto antes y más alto que el anterior. Al final la rival se abre hacia el público y la ganadora camina a la puerta del santuario con las campanas. Los dos llevan su nombre entero.
 
 ## Lo que la comparsa hace a propósito
 
@@ -65,15 +65,15 @@ En segundos de juego, con 18 participantes (cuatro cuadras) y sin estirar.
 
 ## La cámara
 
-Sigue a la comparsa, se acerca a los que se quedan en cada arco y a la máscara que se corre en el susto, se abre al Socavón al llegar y se cierra en el contrapunto.
+Sigue a la comparsa mirando medio segundo adelante (si la perseguía, se quedaba atrás con media calle vacía), se acerca a los que se quedan en cada arco y a la máscara que se corre en el susto, muestra el Socavón entero al llegar, se va cerrando en el contrapunto y se abre con la ganadora cuando camina a la puerta.
 
 ## El sonido
 
-- **El zapateo:** un golpe cada medio tiempo mientras la comparsa avanza.
-- **Cada cuadra:** los bronces de la banda, en acorde.
+- **El zapateo:** un golpe cada medio tiempo mientras la comparsa avanza, con acento en el uno.
+- **Cada cuadra:** los bronces de la banda, en acorde, más agudos y más largos en cada cuadra, y con una voz más en la última.
 - **La máscara del susto:** una alarma corta.
-- **El contrapunto:** una nota por salto, alternada entre los dos.
-- **La llegada:** la campana, y en el cartel las campanas del Socavón.
+- **El contrapunto:** una nota por salto, alternada entre los dos y cada vez más aguda, con su pisada.
+- **La llegada:** la campana, de tres notas, y en el cartel las campanas del Socavón, después de la fanfarria para que no las tape.
 
 La música con beat, cuando está prendida, hace de banda de fondo.
 
