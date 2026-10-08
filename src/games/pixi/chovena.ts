@@ -335,6 +335,20 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     const g = segAt(x);
     return !!g && x < g.b;
   };
+  /**
+   * Los golpes bailados desde el principio, sin volver a cero después de cada
+   * corte: para lo que no puede saltar de lugar cuando vuelve la música.
+   */
+  const beatsDanced = (x: number): number => {
+    let b = 0;
+    for (const s of segs) {
+      if (s.a > x) break;
+      b += (Math.min(x, s.b) - s.a) * BPS * s.tempo;
+    }
+    return b;
+  };
+  /** Para que la hamaca de la final vaya al compás de la música en la última vuelta. */
+  const swayOff = beatAt(FD0) - beatsDanced(FD0);
 
   // La ropa, del nombre; y la rueda alternada, en un orden sembrado.
   const genero = names.map(generoDe);
@@ -471,7 +485,11 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     if (!s) return null;
     // Los dos de la final, frente a frente y de las dos manos: se hamacan de un
     // lado al otro en vez de dar la vuelta, que los dejaba uno detrás del otro.
-    if (e.members.length === 2) return { rho: s.rho, th: s.base + 0.35 * Math.sin(spinAt(x) * 1.3) };
+    // Una hamaca entera cada cuatro tiempos, al compás: con la vuelta de la
+    // rueda tardaba unos ocho segundos y en "¡La última vuelta!" nadie se
+    // movía. Con los golpes bailados y no con los del tramo, que vuelven a
+    // cero en cada corte: si no, la pareja saltaba de lugar al volver la música.
+    if (e.members.length === 2) return { rho: s.rho, th: s.base + 0.32 * Math.sin((Math.PI * (beatsDanced(x) + swayOff)) / 2) };
     return { rho: s.rho, th: s.dir * spinAt(x) + s.base };
   }
   // Con quién va de la mano cada uno: la lista de los hombres se corre hasta
@@ -620,6 +638,9 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     crowned = true;
     say(L().cWin(winnersLabel(names, winners), winners.length > 1), 1);
     beep(note(0), 0.7, "sine", 0.09);
+    // La octava de arriba, con armónicos: es la que el oído usa para
+    // reconstruir el grave en el parlante de una laptop o un proyector.
+    beep(note(5), 0.6, "sawtooth", 0.04);
     fanfare();
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);
     setTimeout(() => beep(note(19), 0.12, "triangle", 0.045), 700);
@@ -739,7 +760,12 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       musicHold(true);
       say(t("cChoStop"), 0.92);
       beep(note(15), 0.1, "square", 0.06);
-      setTimeout(() => beep(note(2), 0.26, "sine", 0.08), 80);
+      // Un golpe de caja seco que marca el silencio: el seno solo en el piso
+      // del registro no pasaba por un parlante chico.
+      setTimeout(() => {
+        beep(note(2), 0.26, "triangle", 0.06);
+        beep(note(7), 0.06, "square", 0.05);
+      }, 80);
       beepFor(note(1), (FX0 - FS0) * 0.95, "sawtooth", 0.024);
       cam.punch(0.07).shake(6 * S.u());
       stopAt = FS0;
@@ -1177,8 +1203,10 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       v.root.alpha = w.alpha;
       // Los que ya salieron se ven apagados, para que nadie los confunda con
       // los que siguen en la rueda; la ganadora, coronada, con todo su color.
+      // Los que salen con premio, en un tono cálido: con el gris de eliminado
+      // parecía que perdían.
       const fuera = d.outAt >= 0 && x >= d.outAt;
-      v.root.tint = fuera ? (S.dark ? 0x9a92ad : 0xc2bccb) : 0xffffff;
+      v.root.tint = fuera ? (prized.has(d.idx) ? 0xfff0c2 : S.dark ? 0x9a92ad : 0xc2bccb) : 0xffffff;
       v.root.zIndex = pr.y;
       v.root.scale.set(pr.s);
       let y = pr.y;
@@ -1430,8 +1458,9 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       // Con la rival aplaudiendo a la vista.
       if (finalDuo) z = Math.min(z, keepRival(x, tx, ty));
     } else if (finalDuo && x >= F0) {
-      // La pareja final, grande aunque haya sido una sala de doscientos.
-      z = clamp((avail * (x >= FW0 ? 0.5 : 0.42)) / dh, 1.5, 6.5);
+      // La pareja final, grande aunque haya sido una sala de doscientos. En la
+      // última vuelta la cámara se va acercando, hasta el corte.
+      z = clamp((avail * (x >= FW0 ? 0.5 : 0.42 + 0.08 * clamp((x - FD0) / (FS0 - FD0), 0, 1))) / dh, 1.5, 6.5);
       // Entera a lo ancho: en el celular el alto daba un acercamiento que la cortaba.
       z = Math.min(z, (0.88 * W) / (2.2 * pairRho() * G.rx + 1.1 * dh));
       ty = cy - dh * 0.6;
@@ -1592,7 +1621,9 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   function rollCall(x: number, live: Dancer[], placed: Rect[]): void {
     if (live.length > 64 || x < 0.3) return;
     if (live.length <= 6) {
-      for (const d of live) placeChip(d, x, placed);
+      // Con cuatro o menos, más grandes: a 12 px no se leían desde el fondo.
+      const s = live.length <= 4 ? (G.portrait ? 1.2 : 1.4) : 1;
+      for (const d of live) placeChip(d, x, placed, s);
       return;
     }
     const ring = order.filter((i) => live.some((d) => d.idx === i));
