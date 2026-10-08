@@ -12,7 +12,7 @@
  * escondido no se muestra ni se cuenta su largo: lo que la sala ve son las
  * cartas que se dan vuelta.
  *
- * Nació del Ahorcado que propuso Guido Salazar (PR #1). La horca no podía
+ * Nació del Ahorcado que propuso Guido Salazar (@GuidoSV7). La horca no podía
  * quedar, y el largo del nombre delataba al ganador antes de la primera letra
  * (agente evaluador, 2 de octubre de 2026). Lo que valía, revelar letra por
  * letra mientras la lista se achica, sigue acá.

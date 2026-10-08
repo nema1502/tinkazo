@@ -20,8 +20,8 @@ import { isDigit, planRounds, type Round } from "./quien-plan";
  * cualquier cantidad de gente: cada pregunta parte el grupo cerca de la mitad,
  * así que 50 nombres son unas seis preguntas y 200 unas ocho.
  *
- * Nació del Ahorcado que propuso Guido Salazar en el PR #1 (2 de octubre de
- * 2026): se quedó la idea de las letras que achican la lista, y se fueron la
+ * Nació del Ahorcado que propuso Guido Salazar (@GuidoSV7) el 1 de octubre
+ * de 2026: se quedó la idea de las letras que achican la lista, y se fueron la
  * horca y los casilleros que delataban el largo del nombre.
  *
  * Todo sale de la hora del juego (`dt`).

@@ -938,9 +938,9 @@ Quedan sin tocar tres cosas menores, a propósito:
 - la tabla de posiciones chica de la carrera;
 - la jerga de Stellar ("path payment", "trustlines") en la página de juegos, que es parte de lo que se enseña.
 
-### Historia 10.13: El trabajo de Guido, auditado y adentro: hecho
+### Historia 10.13: La piñata, Oruro, la ruleta y la sesión: hecho
 
-Resultado (2026-10-02): Guido Salazar mandó el PR #1 con 14 commits. Se pasó entero por la batería de auditores y por el agente evaluador, y entra lo que la pasó:
+Resultado (2026-10-02): el trabajo de Guido Salazar ([@GuidoSV7](https://github.com/GuidoSV7)) en el PR #1, 14 commits. Como todo cambio, pasó por la batería de auditores y por el agente evaluador, y entra lo que la pasó:
 
 - **La piñata:** cada caramelo que sale lleva su nombre en grande, y la lista de los que quedan ya no pisa la piñata.
 - **Oruro:** cada diablo tiene su etiqueta desde el primer cuadro, unida a él por una línea, y una pasada de lista nombra a todos al menos una vez. El cambio venía con un error de una línea que hacía caer el juego en el primer cuadro y dejaba el sorteo colgado; lo encontró el auditor exigente y se arregló.

@@ -239,7 +239,12 @@ Documentación: [protocolo](docs/protocolo.md) · [arquitectura](docs/architectu
 
 ## Quién lo hace
 
-Hecho en Bolivia por [Nicolás Emir Mejía Agreda](https://github.com/nema1502). El nombre es boliviano: un *tinkazo* es un presentimiento, una corazonada.
+Hecho en Bolivia por:
+
+- **Nicolás Emir Mejía Agreda** ([@nema1502](https://github.com/nema1502)), fundador
+- **Guido Salazar** ([@GuidoSV7](https://github.com/GuidoSV7)), desarrollador
+
+El nombre es boliviano: un *tinkazo* es un presentimiento, una corazonada.
 
 ## Contribuir
 

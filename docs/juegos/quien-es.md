@@ -6,7 +6,7 @@ Todos los nombres en cartas, con su cara. En cada turno se pregunta por una letr
 
 ## De dónde sale
 
-Del Ahorcado que propuso Guido Salazar en el PR #1 (1 de octubre de 2026). El agente evaluador lo miró con capturas el 2 de octubre y no pasó:
+Del Ahorcado que propuso Guido Salazar ([@GuidoSV7](https://github.com/GuidoSV7)) el 1 de octubre de 2026. El agente evaluador lo miró con capturas el 2 de octubre y encontró dos cosas que había que cambiar:
 
 - **La horca.** Un muñeco colgado, aunque sonría, es una horca. En Bolivia además evoca los muñecos colgados de postes como amenaza, y ante un jurado o en un evento de comunidad es de mal gusto.
 - **El largo del nombre** delataba al ganador antes de la primera letra: con la lista de ejemplo, 8 de cada 12 nombres tenían una forma única.

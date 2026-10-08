@@ -29,7 +29,8 @@ import { HAND, SAPO_MAX, holeLayout, optsForArc, planThrows, throwTime, type Poi
  * ganadores adentro) y esos vuelan a sus agujeros. Con 12 o menos, los nombres
  * vuelan directo. Así la pantalla se mueve desde el primer cuadro.
  *
- * Rediseñado el 2 de octubre de 2026 desde el que propuso Guido Salazar: el
+ * Rediseñado el 2 de octubre de 2026 desde el que propuso Guido Salazar
+ * (@GuidoSV7): el
  * agente evaluador lo vio como una mesa de póker (óvalo de paño verde y una
  * moneda dorada) y sin un solo nombre en la mesa.
  *

@@ -4,7 +4,7 @@ El juego de las ferias y los patios de Perú, Bolivia y Colombia: un cajón de m
 
 **Identificador:** `sapo` · **Probarlo:** `/?demo=sapo` (sorteo real), `/?pose=sapo` (escena fija, sin red), `/?pose=sapo&n=50`.
 
-Lo propuso Guido Salazar en el PR #1 (1 de octubre de 2026). El 2 de octubre se rediseñó después de que el agente evaluador lo mirara con capturas: se leía como una mesa de póker (un óvalo de paño verde y una moneda dorada), no había un solo nombre en la mesa y los primeros ocho segundos la pantalla casi no se movía.
+Lo propuso Guido Salazar ([@GuidoSV7](https://github.com/GuidoSV7)) el 1 de octubre de 2026. El 2 de octubre se rediseñó después de que el agente evaluador lo mirara con capturas: se leía como una mesa de póker (un óvalo de paño verde y una moneda dorada), no había un solo nombre en la mesa y los primeros ocho segundos la pantalla casi no se movía.
 
 ## La regla: el juego no decide nada
 

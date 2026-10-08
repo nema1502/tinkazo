@@ -239,7 +239,12 @@ In English: the [protocol](docs/protocol.en.md) and a [threat model summary](doc
 
 ## Team
 
-Built in Bolivia by [Nicolás Emir Mejía Agreda](https://github.com/nema1502). The name is Bolivian: a *tinkazo* is a hunch, a gut feeling.
+Built in Bolivia by:
+
+- **Nicolás Emir Mejía Agreda** ([@nema1502](https://github.com/nema1502)), founder
+- **Guido Salazar** ([@GuidoSV7](https://github.com/GuidoSV7)), developer
+
+The name is Bolivian: a *tinkazo* is a hunch, a gut feeling.
 
 ## Contributing
 
