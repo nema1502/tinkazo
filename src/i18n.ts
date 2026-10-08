@@ -167,6 +167,11 @@ export interface Dict {
   // Constelación, sapo y ¿Quién es? (7 de octubre de 2026).
   cConstHeading: (n: string) => string;
   cSapMissBy: (n: string) => string;
+  /** La ruleta mientras frena: el trinquete y la pregunta de dónde para. */
+  cWheelTick: string[];
+  cWheelWhere: string[];
+  /** El aguayo: sale el tercero del nudo y queda el mano a mano. */
+  cPasTwo: (n: string) => string;
 }
 
 /**
@@ -1064,6 +1069,9 @@ export const T: Record<Lang, Dict> = {
     // --- Constelación, sapo y ¿Quién es? (7 de octubre de 2026).
     cConstHeading: (n) => pick([`¿Va para ${n}…?`, `¿Se queda en ${n}…?`]),
     cSapMissBy: (n) => pick([`¡Pegó al lado de ${n} y se fue!`, `¡Pasó cerca de ${n}!`, `¡Se le escapó a ${n}!`]),
+    cWheelTick: ["¡Escuchen la flecha!", "¡Tic, tic, tic!", "¡Cada clic más lento!"],
+    cWheelWhere: ["¿Dónde para?", "¿En quién se queda?", "¿A quién le toca?"],
+    cPasTwo: (n) => pick([`¡Sale ${n}! ¡Quedan dos!`, `¡Afuera ${n}! ¡Mano a mano!`, `¡Se cae ${n}! ¡Quedan dos!`]),
   },
   en: {
     badge: "For whoever has to run the draw",
@@ -1900,6 +1908,9 @@ export const T: Record<Lang, Dict> = {
     // --- Constellation, sapo and Guess Who (7 October 2026).
     cConstHeading: (n) => pick([`Is it going to ${n}…?`, `Is it stopping at ${n}…?`]),
     cSapMissBy: (n) => pick([`It hit next to ${n}'s and rolled off!`, `It went right past ${n}!`, `${n} watched it roll away!`]),
+    cWheelTick: ["Hear the clicker!", "Tick, tick, tick!", "Every click slower!"],
+    cWheelWhere: ["Where will it stop?", "Who will it land on?", "Whose slice will it be?"],
+    cPasTwo: (n) => pick([`${n} is out! Two left!`, `Out goes ${n}! Head to head!`, `${n} drops! Two left!`]),
   },
 };
 

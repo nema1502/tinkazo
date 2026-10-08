@@ -1,6 +1,6 @@
 # Ruleta
 
-La de siempre, pero que se ve girar. Gajos que pasan, pernos que suenan, una paleta que se traba, y los 64 dígitos de la semilla escritos en el aro.
+La de siempre, pero que se ve girar. Gajos con nombre que pasan, pernos que suenan, una paleta que se traba, y un aro de foquitos que se prende con el ganador.
 
 **Identificador:** `wheel` · **Probalo:** [tinkazo.vercel.app/?demo=wheel](https://tinkazo.vercel.app/?demo=wheel) · **Rehecha:** 20 de septiembre de 2026
 
@@ -42,28 +42,30 @@ Los tramos van en **segundos de juego**: el selector de duración los estira tod
 
 | Tramo | Qué pasa |
 |---|---|
-| 0,0 – 1,2 s | Los gajos entran y el aro se escribe con los 64 dígitos de la semilla |
+| 0,0 – 1,2 s | Los gajos entran, cada uno con su nombre, y se prenden los foquitos del aro |
 | 1,2 – 2,6 s | **Carga.** La rueda toma velocidad a la vista, con el trinquete |
 | 2,6 – 4,2 s | Velocidad de crucero, con desenfoque de movimiento. Un tono por vuelta |
 | 4,2 – 12,0 s | Frena. A mitad del frenado empiezan los clics individuales, y el narrador canta el nombre que va pasando |
 | 12,0 – 14,4 s | Paso de hombre. Los gajos pasan uno por uno bajo la paleta |
 | 14,4 – 15,6 s | **El falso.** La paleta queda trabada contra un perno, vibrando: parece que se queda un gajo antes |
 | 15,6 – 16,8 s | El último empujón la mete al centro del gajo |
-| 16,8 – 17,2 s | Golpe seco y fogonazo |
-| 17,2 s en adelante | Todo se apaga menos los gajos del ganador, que salen hacia afuera y se encienden. Tres segundos **reales**, para que la sala alcance a leer y a reaccionar |
+| 16,8 – 17,6 s | Golpe seco y fogonazo, y un respiro en silencio antes del cartel |
+| 17,6 s en adelante | Todo se apaga menos los gajos del ganador, que salen hacia afuera y se encienden. Tres segundos **reales**, para que la sala alcance a leer y a reaccionar |
 
 Duraba 7,65 segundos y de esos, tres eran tiempo muerto: 1,7 con la rueda completamente quieta, que en una pantalla grande es una foto, y 2,2 de crucero en los que la imagen es un borrón. Lo bueno ·los clics separándose, el puntero arrastrándose, el amague· sumaba segundo y medio.
 
-Ahora dura 17,2 y el reparto está al revés: 1,6 de borrón contra 4,4 de clics sueltos, 2,4 de arrastre y 1,2 de amague. **No es el mismo juego más lento: es el mismo juego con más de lo que vale la pena mirar.**
+Ahora dura 17,6 y el reparto está al revés: 1,6 de borrón contra 4,4 de clics sueltos, 2,4 de arrastre y 1,2 de amague. **No es el mismo juego más lento: es el mismo juego con más de lo que vale la pena mirar.**
 
 ## Lo que se ve y por qué
 
-- **El aro con la semilla.** Los 64 dígitos hexadecimales de esta ronda, escritos alrededor. Es decoración para quien no mira y una invitación para quien sí: sacá la foto y comprobalos contra el faro. A toda velocidad se reemplazan por rayas, porque no se leerían.
+- **Los foquitos del aro.** Sesenta y cuatro, como en una rueda de feria, y con el ganador se prenden en amarillo de a uno sí y uno no. A toda velocidad se reemplazan por rayas. Hasta el 7 de octubre de 2026 eran los 64 dígitos hexadecimales de la semilla: en el primer plano del final eran lo más grande después de la flecha, y durante el sorteo no va nada técnico en pantalla. La semilla se comprueba en la tarjeta de después y en la página de verificación.
 - **La paleta que se traba.** Es lo que hace mirable una ruleta de premios. Es un resorte amortiguado: el perno que pasa la empuja, y al soltarla vuelve sola, se pasa un poco para el otro lado y tiembla, como la de una ruleta de feria (hasta el 29 de septiembre de 2026 seguía al perno sin física y se enderezaba de golpe). Corre a paso fijo de 1/240 s y nunca vuelve a entrar en el ángulo de la rueda, así que el determinismo queda intacto. Al trabarse, pega un golpe: crece y vuelve.
-- **Una sola sacudida de cámara.** Antes la cámara sacudía tres veces en unos 2-3 s (al moverse el falso, al trabarse en el ganador y al coronar), y en el celular el amague y el ganador parecían igual de "elegidos". Ahora la sacudida se reserva al único momento en que el ganador real se confirma (la coronación, 17,2 s). El amague da solo un empujón de zoom sin sacudida, más su sonido y la frase "¿se queda en fulano?"; el trabado da un empujón de zoom con su fogonazo y sonido; y los toques por perno al frenar ya no sacuden la cámara (solo suenan). La agenda vive en `src/games/pixi/wheel-beats.ts` y tiene pruebas. No está verificado en un navegador: lo que se ve en pantalla falta confirmarlo a ojo.
+- **Una sola sacudida de cámara.** Antes la cámara sacudía tres veces en unos 2-3 s (al moverse el falso, al trabarse en el ganador y al coronar), y en el celular el amague y el ganador parecían igual de "elegidos". Ahora la sacudida se reserva al único momento en que el ganador real se confirma (la coronación, 17,6 s). El amague da solo un empujón de zoom sin sacudida, más su sonido y la frase "¿se queda en fulano?"; el trabado da un empujón de zoom con su fogonazo y sonido; y los toques por perno al frenar ya no sacuden la cámara (solo suenan). La agenda vive en `src/games/pixi/wheel-beats.ts` y tiene pruebas. No está verificado en un navegador: lo que se ve en pantalla falta confirmarlo a ojo.
 - **Los pernos.** Uno por borde de gajo. Justifican el tic-tac.
 - **El perno tricolor.** En la posición cero. Marca la vuelta y suena un tono cada vez que pasa, así que es funcional. De diez metros es un acento de color; de un metro es la bandera.
-- **La columna de nombres.** Con catorce participantes o menos, una placa por persona y la del puntero resaltada. Con más, una sola placa grande que va cambiando: con veinticuatro nombres el listado no se lee de lejos, y una placa que cambia sí.
+- **Los nombres en los gajos.** Cada gajo lleva escrito de quién es, hacia afuera: el nombre entero si es corto, si no el de pila con la inicial ("María Q."). Hasta el 7 de octubre de 2026 solo con doce participantes o menos, y cortados por la mitad ("María…spe"); con más, lo único que daba nombres era una placa que cambiaba treinta veces por segundo mientras giraba.
+- **La columna y la placa.** Con catorce participantes o menos y pantalla ancha, una placa por persona y la del puntero resaltada. La placa grande aparece recién cuando la rueda va a paso de hombre, que es cuando se puede leer el nombre que pasa bajo la flecha.
+- **El cartel no tapa al ganador.** Con el cartel, la rueda baja y se aleja un poco: el cartel sale arriba al centro, y el gajo ganador siempre queda arriba, bajo la flecha.
 - **El sol de doce rayos** del fondo, contra-rotando. Es lo que hace que la escena nunca esté del todo quieta.
 
 ## El sonido
@@ -72,7 +74,11 @@ Nunca más de catorce pitidos por segundo: cada uno crea un oscilador, y cuarent
 
 Durante el crucero hay un motor y un tono por vuelta, que se pueden contar de oído. **El motor baja de tono con la rueda**, así que el oído y el ojo cuentan lo mismo. Antes eran 90 Hz fijos, que ningún parlante de proyector reproduce, y además callaban al empezar la frenada: quedaban 1,7 segundos mudos justo en lo único que la sala estaba mirando.
 
-Los clics individuales toman el relevo cuando el motor se apaga, y van a **altura fija**. La frenada la cuenta el ritmo, que se va espaciando solo. Antes el tono subía de 420 a 980 Hz mientras la rueda frenaba: es un truco viejo, pero acá decía lo contrario de lo que se veía.
+Los clics individuales toman el relevo cuando el motor se apaga: tic y tac, dos notas que se alternan, y cada vez más fuertes a medida que frena, porque los últimos son los que deciden. La frenada la cuenta el ritmo, que se va espaciando solo. Antes el tono subía de 420 a 980 Hz mientras la rueda frenaba: es un truco viejo, pero acá decía lo contrario de lo que se veía.
+
+**La parada falsa suena a parada.** Un clac como el de la traba, más chico, y un latido mientras la rueda está quieta en el señuelo; los últimos 0,15 s van en silencio, para que la sala crea que paró. Hasta el 7 de octubre de 2026 eran 2,7 s sin ningún efecto.
+
+Entre la traba y el cartel hay 0,8 s de juego: con 0,4 la traba sonaba en el medio segundo de antes del ganador y el cartel no se oía como golpe.
 
 La traba suena **una sola vez**. Durante un tiempo se redisparó catorce veces, al volumen más alto del juego, encima de la fanfarria, porque la condición miraba el destello y el destello decae a los 0,12 s. El puntero parpadeaba en blanco las catorce.
 

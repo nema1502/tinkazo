@@ -5,7 +5,7 @@ import { beep, beepFor, fanfare, note } from "../../sound";
 import { writeStory } from "../drama";
 import { WINNER_HOLD, shorten, winnersLabel } from "../overlay";
 import { FALSA, T_BRAKE, T_CREEP, T_CROWN, T_HOLD, T_LOCK, T_SETTLE, T_SPIN, T_WIND, beatFor, type BeatReason } from "./wheel-beats";
-import { CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
+import { CREAM, INK, YELLOW, mountPixi, type PixiStage } from "./stage";
 
 /**
  * La ruleta, en PixiJS, con el director de cámara.
@@ -40,6 +40,19 @@ function omega(tt: number, falsa = false): number {
   if (tt < T_SETTLE) return 0.64;
   if (tt >= T_LOCK) return 0;
   return 1.7 * Math.pow(1 - (tt - T_SETTLE) / (T_LOCK - T_SETTLE), 2.2);
+}
+
+/**
+ * El nombre que entra en un gajo: entero si es corto, si no el nombre de pila
+ * con la inicial del apellido ("María Q."), y si tampoco entra, el de pila.
+ * Antes se cortaba por la mitad ("María…spe"), y eso de lejos no se reconoce.
+ */
+function sliceLabel(name: string, max: number): string {
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0] ?? "";
+  const initial = parts.length > 1 ? `${first} ${(parts[parts.length - 1] ?? "").charAt(0)}.` : first;
+  for (const c of [name, initial, first]) if (c.length <= max) return c;
+  return `${first.slice(0, Math.max(1, max - 1))}…`;
 }
 
 export async function wheelPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<void> {
@@ -100,7 +113,8 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
   let wheel!: Container;
   let ghosts: Container[] = [];
   let segG: Graphics[] = [];
-  let digits: Text[] = [];
+  let bulbs!: Graphics;
+  let bulbKey = -1;
   let stripes!: Graphics;
   let pointer!: Graphics;
   let hub!: Container;
@@ -110,8 +124,6 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
   let bigAv!: Sprite;
   let bigBar!: Graphics;
 
-  const rimChars = beacon.randomness.slice(0, 64).split("");
-
   function discGraphics(R: number, u: number, withNames: boolean): Container {
     const c = new Container();
     const Rd = R * 0.86;
@@ -119,10 +131,12 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
       const a0 = j * A - Math.PI / 2;
       const g = new Graphics().moveTo(0, 0).arc(0, 0, Rd, a0, a0 + A).closePath().fill(S.color(personOf(j))).stroke({ width: 2.5 * u, color: INK });
       c.addChild(g);
-      if (withNames && n <= 12) {
+      if (withNames && n <= 24) {
         // El nombre en su gajo, escrito hacia afuera: con la rueda quieta se
-        // lee de quién es cada pedazo sin mirar la columna.
-        const nm = S.text(shorten(names[personOf(j)] ?? "", n <= 4 ? 12 : 9), { fontSize: Math.min(18 * u, A * Rd * 0.9 * 0.42), fontWeight: "900", fill: INK });
+        // lee de quién es cada pedazo sin mirar la columna. Hasta el 7 de
+        // octubre de 2026 solo con doce o menos; con más, lo único que daba
+        // nombres era la placa, que cambiaba treinta veces por segundo.
+        const nm = S.text(sliceLabel(names[personOf(j)] ?? "", n <= 4 ? 12 : 10), { fontSize: Math.min(18 * u, A * Rd * 0.9 * 0.42), fontWeight: "900", fill: INK });
         nm.anchor.set(1, 0.5);
         if (nm.width > Rd * 0.55) nm.scale.set((Rd * 0.55) / nm.width);
         const mid = a0 + A / 2;
@@ -178,13 +192,13 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     }
     stripes.stroke({ width: 2 * u, color: CREAM, alpha: 0.3 });
     wheel.addChild(stripes);
-    digits = rimChars.map((ch) => {
-      const tx = S.text(ch, { fontFamily: MONO, fontSize: 15 * u, fontWeight: "700", fill: CREAM });
-      tx.anchor.set(0.5);
-      tx.alpha = 0.72;
-      wheel.addChild(tx);
-      return tx;
-    });
+    // Los foquitos del aro, como en una rueda de feria. Hasta el 7 de octubre
+    // de 2026 eran los 64 dígitos de la semilla: en el primer plano del final
+    // eran lo más grande después de la flecha, y durante el sorteo no va nada
+    // técnico en pantalla. La semilla se comprueba en la tarjeta de después.
+    bulbs = new Graphics();
+    bulbKey = -1;
+    wheel.addChild(bulbs);
     const pegs = new Graphics();
     const rr = R * 0.875;
     for (let j = 0; j < segs; j++) {
@@ -274,7 +288,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
   let tAll = 0, tHold = 0;
   let rot = -startSeg * A;
   let lastClick = Math.floor(startSeg), lastLap = -1, lastHum = -1, lastSaid = -999, saidUpTo = -1;
-  let pegHits = 0, buildTick = 0;
+  let pegHits = 0, buildTick = 0, holdBeats = 0;
   let cur = personOf(Math.floor(startSeg));
   let flash = 0, didLock = false, saidPeg = false, saidLast = false, didCrown = false;
 
@@ -312,6 +326,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     if (tAll >= T_CROWN) return;
     tAll = T_CROWN;
     rot = -(startSeg + BUDGET * scale) * A;
+    didLock = true;
     crowned();
   };
   /** Aplica un beat de cámara de la agenda pura (wheel-beats.ts): una sola sacudida, en la coronación. */
@@ -357,10 +372,15 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
       beep(note([5, 8, 10, 12][personOf(s)] ?? 5), 0.05, "triangle", 0.03);
       return;
     }
-    beep(note(8), 0.03, "square", 0.034);
+    // Tic y tac, y cada vez más fuerte a medida que frena: eran ochenta clics
+    // idénticos, y los últimos, que son los que deciden, pesaban lo mismo.
+    beep(note(s % 2 ? 7 : 8), 0.03, "square", 0.034 + 0.016 * (1 - w / 16));
   }
 
   function sayIfDue(w: number): void {
+    // Al saltar, la hora pasa directo al cartel: lo que quedaba por decir no
+    // se dice encima del ganador.
+    if (didCrown) return;
     const cues: [number, () => void][] = [
       [0.05, () => S.say(t("cWheelBuild"), 0.1)],
       [0.7, () => S.say(T[getLang()].cWheelSplit(segs, rep), 0.15)],
@@ -368,6 +388,10 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
       [T_SPIN, () => S.say(t("cWheelGo"), 0.45)],
       [3.4, () => S.say(t("cWheelFast"), 0.5)],
       [6.4, () => S.say(t("cWheelSlow"), 0.65)],
+      // Mientras frena eran diez segundos con la misma línea, y la música se
+      // enfriaba justo antes del final.
+      [8.6, () => S.say(t("cWheelTick"), 0.72)],
+      [10.6, () => S.say(t("cWheelWhere"), 0.78)],
     ];
     for (let i = saidUpTo + 1; i < cues.length; i++) {
       const cue = cues[i] as [number, () => void];
@@ -376,7 +400,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
       cue[1]();
       lastSaid = tAll;
     }
-    if (tAll >= T_CREEP && tAll < T_HOLD && w < 3 && tAll - lastSaid > 0.45) {
+    if (tAll >= T_CREEP && tAll < T_HOLD && w < 4.5 && tAll - lastSaid > 0.45) {
       lastSaid = tAll;
       S.say(T[getLang()].cWheelOn(names[cur] ?? ""), 0.55);
     }
@@ -385,6 +409,12 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
       lastSaid = tAll;
       S.say(falsa ? T[getLang()].cWheelFalse(names[cur] ?? "") : t("cWheelPeg"), 0.9);
       cam.punch(0.06);
+      // La parada falsa tiene que sonar a parada: un clac como el de la traba,
+      // más chico. Hasta el 7 de octubre de 2026 eran 2,7 s sin ningún efecto.
+      if (falsa) {
+        beep(note(5), 0.07, "square", 0.05);
+        beep(note(0), 0.25, "sine", 0.06);
+      }
     }
     if (tAll >= (falsa ? T_HOLD + FALSA : T_SETTLE) && !saidLast) {
       saidLast = true;
@@ -416,7 +446,9 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
       const close = G.alto ? 1.9 : 2.3;
       cam.lookAt(ptr.x, ptr.y, tAll >= T_HOLD ? close : 1.6 + (close - 1.6) * ((tAll - T_CREEP) / (T_HOLD - T_CREEP)), 3.5);
     } else {
-      cam.lookAt(rest.x, rest.y, 0.96, 2.2);
+      // Con el ganador, la rueda baja y se aleja un poco: el cartel sale arriba
+      // al centro y tapaba el gajo ganador, que siempre queda bajo la flecha.
+      cam.lookAt(rest.x, rest.y - S.sh() * (G.alto ? 0.16 : 0.17), G.alto ? 0.96 : 0.84, 2.2);
     }
   }
 
@@ -432,16 +464,19 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     const R = G.R;
     const rm = (R + R * 0.88) / 2;
     stripes.visible = w > 12;
-    digits.forEach((d, i) => {
-      d.visible = w <= 12 && i < shown;
-      if (!d.visible) return;
-      const a = (i / 64) * TAU - Math.PI / 2;
-      const world = a + rot;
-      const upside = Math.cos(world) < 0;
-      d.position.set(Math.cos(a) * rm, Math.sin(a) * rm);
-      d.rotation = a + Math.PI / 2 + (upside ? Math.PI : 0);
-      d.style.fill = tAll >= T_CROWN ? YELLOW : CREAM;
-    });
+    bulbs.visible = w <= 12;
+    // Con el ganador, los foquitos se prenden en amarillo, de a uno sí y uno no.
+    const lit = tAll >= T_CROWN ? 1 + (Math.floor((tAll - T_CROWN) * 5) % 2) : 0;
+    const key = shown * 3 + lit;
+    if (bulbs.visible && key !== bulbKey) {
+      bulbKey = key;
+      bulbs.clear();
+      for (let i = 0; i < shown; i++) {
+        const a = (i / 64) * TAU - Math.PI / 2;
+        const on = lit > 0 && i % 2 === lit - 1;
+        bulbs.circle(Math.cos(a) * rm, Math.sin(a) * rm, (on ? 3.6 : 2.8) * u).fill({ color: on ? YELLOW : CREAM, alpha: on ? 1 : lit ? 0.35 : 0.6 });
+      }
+    }
     hub.rotation = Math.max(-1.2, Math.min(1.2, -rot * 0.25)) * (w > 0 ? 1 : 0);
     flapStep(dt, w);
     pointer.rotation = flapA;
@@ -465,10 +500,15 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
       r.scale.set(on ? 1.06 : 1);
       r.alpha = close ? Math.max(0, 1 - (tAll - T_CREEP) * 2) : 1;
     });
-    bigPlate.visible = rows.length === 0 || close;
+    // La placa, solo cuando se puede leer: girando cambiaba treinta veces por
+    // segundo, y de entrada tapaba la rueda. Mientras gira, cada uno busca su
+    // nombre en su gajo.
+    bigPlate.visible = close && w < 4;
     bigPlate.alpha = tAll >= T_CROWN ? Math.max(0, 1 - (tAll - T_CROWN) * 3) : 1;
     const pname = names[cur] ?? "";
-    if (bigName.text !== pname) {
+    // Escondida no se reescribe: girando cambiaba treinta veces por segundo, y
+    // cada cambio vuelve a dibujar el texto en el hilo principal.
+    if (bigPlate.visible && bigName.text !== pname) {
       bigName.text = pname;
       bigAv.texture = S.face(pname);
       const pw = (bigPlate as Container & { pw?: number }).pw ?? 300;
@@ -500,10 +540,21 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
         beep(note(Math.max(0, 2 - Math.round(q * 2))), 0.06, "square", 0.062 - q * 0.028);
       }
     }
+    // Mientras dura la parada falsa, un latido. Los últimos 0,15 s van en
+    // silencio, para que la sala crea que paró antes del "¡se movió!".
+    if (falsa && tAll >= T_HOLD && tAll < T_HOLD + FALSA - 0.15) {
+      const want = Math.floor((tAll - T_HOLD) / 0.25);
+      while (holdBeats < want) {
+        holdBeats++;
+        beep(note(0), 0.12, "sine", 0.06 + 0.008 * holdBeats);
+        beep(note(5), 0.08, "triangle", 0.03);
+      }
+    }
     if (tAll >= T_LOCK && !didLock) {
       didLock = true;
       flash = 0.12;
-      beep(note(0), 0.45, "sine", 0.1);
+      // Corta: con su cola larga pisaba el silencio de antes del cartel.
+      beep(note(0), 0.3, "sine", 0.08);
       setTimeout(() => beep(note(5), 0.07, "square", 0.06), 40);
       setTimeout(() => beep(note(15), 0.12, "triangle", 0.05), 90);
       camBeat("lock");

@@ -16,7 +16,13 @@ export const T_CREEP = 12.0;
 export const T_HOLD = 14.4;
 export const T_SETTLE = 15.6;
 export const T_LOCK = 16.8;
-export const T_CROWN = 17.2;
+/**
+ * El cartel, 0,8 s de juego después de la traba (unos 1,2 s reales). Con 0,4
+ * la traba sonaba en el medio segundo de antes del ganador y le robaba el
+ * golpe: el auditor de mezcla lo medía más bajo que lo de antes. Es el mismo
+ * respiro que hay entre la cumbre y el cartel del teleférico.
+ */
+export const T_CROWN = 17.6;
 /** Cuánto dura la falsa parada sobre el señuelo antes de moverse. */
 export const FALSA = 0.75;
 
