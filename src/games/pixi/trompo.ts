@@ -1,7 +1,7 @@
 import { Container, Graphics } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
 import { paceFactor, params, setGameLength, type Beacon } from "../../state";
-import { beep, fanfare, note } from "../../sound";
+import { beep, beepFor, fanfare, note } from "../../sound";
 import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
@@ -97,7 +97,9 @@ interface Top {
   /** Las últimas posiciones para la estela, de a tres: x, y, altura. */
   trail: number[];
   gone: boolean;
-  view?: Container; glint?: Graphics; marks?: Graphics; flash?: Graphics; chip?: Container;
+  /** Si al salir lleva su nombre un rato: así cada uno ve cuándo se va el suyo. */
+  tagOut?: boolean;
+  view?: Container; glint?: Graphics; marks?: Graphics; flash?: Graphics; chip?: Container; outChip?: Container;
 }
 interface Hit { at: number; victim: number; kind: HitKind; stop: number; done: boolean }
 interface Charge { hit: Hit; hitter: Top; victim: Top; aimX: number; aimY: number }
@@ -212,6 +214,9 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
   let stop = 0, slowUntil = -1, flashAt = -9, flashPow = 0;
   let clashIdx = 0, clashHits = 0;
   let wobbleSaid = false, recoverSaid = false, fewSaid = false, crowned = false;
+  /** Las notas del trompo de la rival que se apaga: cuándo suena cada una, en segundos desde que se queda sin cuerda. */
+  const APAGA = [0, 0.07, 0.16, 0.27, 0.4];
+  let apagado = 0, acostada = false, humTick = -1;
   const impacts: Impact[] = [];
   const dusts: Dust[] = [];
   const hitterOf = new Map<Top, Charge>();
@@ -264,6 +269,9 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     const v = seed % 3;
     beep(note(14 + v), 0.05, "square", big ? 0.055 : 0.034 + v * 0.004);
     beep(note(big ? (seed % 2) * 2 : 5 + (seed % 2)), big ? 0.24 : 0.12, "sine", big ? 0.085 : 0.042 + 0.006 * pow);
+    // El cuerpo del golpe grande, una octava arriba y con armónicos: el seno
+    // solo, a 131 y 165 Hz, lo pierde el parlante de un proyector.
+    if (big) beep(note(5 + (seed % 2) * 2), 0.18, "triangle", 0.05);
     if (big) setTimeout(() => beep(note(10 + v), 0.18, "triangle", 0.045), 40);
   }
   /** El que se acuesta o pica en el piso. */
@@ -403,10 +411,16 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     const left = alive().length;
     // Un co-ganador que sale se nombra siempre, y con su premio: nunca como perdedor.
     const premio = winners.indexOf(v.idx) > 0;
-    if (!quiet && tAll - lastOutSaid > (premio ? 0.6 : 1.2) && (premio || left <= 8 || hits.length <= 12)) {
+    // Con su nombre encima mientras sale, salvo en la gresca de una sala
+    // grande: de 7 a 14 s salían nueve trompos sin que nadie supiera de quién.
+    v.tagOut = !quiet && (premio || left <= 40);
+    // Los demás se nombran desde que quedan doce (o siempre, en una sala
+    // chica), con aire entre uno y otro. El co-ganador, siempre: con más
+    // nombres en el relato, el suyo caía pegado a otro y se perdía.
+    if (!quiet && (premio || (tAll - lastOutSaid > 1.2 && (left <= 12 || hits.length <= 16)))) {
       lastOutSaid = tAll;
       const nm = names[v.idx] ?? "";
-      say(premio ? T[getLang()].cPrizeOut([nm]) : T[getLang()].cTroOut(nm), 0.45 + 0.2 * (1 - left / n));
+      say(premio ? T[getLang()].cPrizeOut([nm]) : T[getLang()].cTroOut(nm), 0.45 + 0.2 * (1 - left / n) + (premio ? 0.1 : 0));
     }
   }
 
@@ -500,7 +514,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     const hides = story.arc === "tapada" && (v === win || h === win);
     const busy = focus && tFx < focus.until - 0.25;
     if (!hides && !busy && (big || alive().length <= 20 || hit.kind === "edge")) {
-      focus = { x: h.x + nx * rn, y: h.y + ny * rn, top: hit.kind === "glance" ? null : v, until: tFx + (hit.kind === "glance" ? 0.5 : 0.7), zoom: big ? 1.6 : 1.4 };
+      focus = { x: h.x + nx * rn, y: h.y + ny * rn, top: hit.kind === "glance" ? null : v, until: tFx + (hit.kind === "edge" ? 0.7 : 0.5), zoom: big ? 1.6 : 1.4 };
     }
     log?.events.push({
       t: tAll, tipo, victim: v.idx, hitter: h.idx, gap: d / (rn * 2), vrel,
@@ -772,6 +786,8 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     if (log) log.aliveAtCrown = alive().map((q) => q.idx);
     say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     beep(note(0), 0.7, "sine", 0.09);
+    // La octava de arriba, con armónicos: la que reconstruye el grave en un parlante chico.
+    beep(note(5), 0.6, "sawtooth", 0.04);
     fanfare();
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);
     cam.punch(0.1).shake(12 * S.u());
@@ -872,11 +888,28 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
         say(t("cTroRecover"), 0.9);
         beep(note(12), 0.12, "triangle", 0.05);
       }
-      // Después del último choque la rival se queda sin cuerda: cabecea y se cae.
+      // Después del último choque la rival se queda sin cuerda: cabecea y se
+      // cae. Es el instante que decide, así que se nombra y suena: pasaba sin
+      // subtítulo (la caja seguía diciendo "¡Se endereza!") y con un seno grave.
       const lastClash = T_DUEL + (clashes.at(-1) as number);
-      if (riv.alive && tAll >= lastClash + 1.0) {
+      if (riv.alive && tAll >= lastClash + 0.7) {
         knockOut(riv, "fall", true);
-        beep(note(0), 0.3, "sine", 0.06);
+        const nm = names[rivalIdx] ?? "";
+        say(winners.indexOf(riv.idx) > 0 ? T[getLang()].cPrizeOut([nm]) : T[getLang()].cTroSpent(nm), 0.95);
+      }
+      // El trompo que se apaga: notas que bajan mientras cabecea, y el golpe
+      // sordo cuando se acuesta. En la hora del juego, para que caigan con lo
+      // que se ve en cualquier duración; cae en el respiro de la música.
+      if (!riv.alive) {
+        while (apagado < APAGA.length && riv.out >= (APAGA[apagado] as number)) {
+          const d = [9, 7, 5, 3, 1][apagado] as number;
+          if (riv.out - (APAGA[apagado] as number) < 0.15) beep(note(d), 0.08 + 0.03 * apagado, "triangle", 0.05);
+          apagado++;
+        }
+        if (!acostada && riv.out >= WOBBLE_T + 0.28) {
+          acostada = true;
+          if (riv.out < WOBBLE_T + 0.45) beep(note(2), 0.14, "square", 0.04);
+        }
       }
     }
   }
@@ -956,6 +989,8 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       topsLayer.addChild(q.view);
       q.chip?.destroy({ children: true });
       q.chip = undefined;
+      q.outChip?.destroy({ children: true });
+      q.outChip = undefined;
     }
     // Las piedritas y la rayuela dibujada con tiza en una esquina.
     const pebble = S.dark ? 0x5b4636 : 0xc9a47a;
@@ -1008,9 +1043,15 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     const c = center();
     const fz = focus && tFx < focus.until ? focus : null;
     const look = (f: NonNullable<typeof focus>): void => {
-      const p = f.top ? toWorld(f.top.x, f.top.y) : toWorld(f.x, f.y);
-      const up = f.top ? f.top.z * R() : 0;
-      cam.lookAt(p.x, p.y - up - 20 * S.u(), f.zoom, 5);
+      // Al sacado lo sigue hasta la tiza y no más allá: afuera del ruedo la
+      // cámara mostraba un trompo solo con polvo, y "¡Quedan los mejores!"
+      // salía sobre uno que volaba, sin los dos que importan.
+      const pr = f.top ? Math.hypot(f.top.x, f.top.y) : 0;
+      const s = pr > LIM ? LIM / pr : 1;
+      const p = f.top ? toWorld(f.top.x * s, f.top.y * s) : toWorld(f.x, f.y);
+      const up = f.top ? f.top.z * R() * s : 0;
+      const zoom = f.zoom - (f.zoom - Math.min(f.zoom, 1.25)) * clamp((pr - LIM) / 0.15, 0, 1);
+      cam.lookAt(p.x, p.y - up - 20 * S.u(), zoom, 5);
     };
     if (phase === "throw") cam.lookAt(c.x, c.y, 1.25 - 0.2 * ease.inOutCubic(clamp(tAll / T_THROW, 0, 1)), 2);
     else if (phase === "dance") {
@@ -1050,7 +1091,9 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     } else {
       const a = toWorld(win.x, win.y);
       const z = 1.5;
-      cam.lookAt(a.x, a.y - (S.sh() * 0.12) / z, z, 1.6);
+      // Con varios premios el cartel tiene más renglones: el trompo baja para
+      // salir entero debajo.
+      cam.lookAt(a.x, a.y - (S.sh() * (winners.length > 1 ? 0.21 : 0.12)) / z, z, 1.6);
     }
   }
 
@@ -1276,24 +1319,63 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       return cam.toScreen(w.x, w.y - size * 1.15, S.sw(), S.sh());
     });
 
-    // Los nombres, cuando quedan pocos.
+    // Los nombres: los que siguen, cuando quedan pocos, y los que acaban de salir.
     const live = alive();
-    for (const q of tops) if (q.chip) q.chip.visible = false;
-    if (!roll.length && live.length <= 8 && phase !== "crown") {
-      const at = live
-        .filter((q) => tAll >= q.land)
-        .map((q) => {
+    for (const q of tops) {
+      if (q.chip) q.chip.visible = false;
+      if (q.outChip) q.outChip.visible = false;
+    }
+    if (!roll.length && phase !== "crown") {
+      const vivos = live.length <= 8 ? live.filter((q) => tAll >= q.land) : [];
+      // La rival conserva su nombre mientras cae: el chip desaparecía justo
+      // en el instante que decide.
+      if (phase === "duel" && duo && !riv.alive && !riv.gone) vivos.push(riv);
+      // Los que salen llevan su nombre un rato, de a cuatro como mucho (los
+      // más recientes), y el co-ganador con su estrella: si no, el relator
+      // decía "sale con premio" y nadie sabía cuál era su trompo.
+      const OUT_TAG = 1.2;
+      const salen = tops.filter((q) => q.tagOut && !q.alive && !q.gone && q.out < OUT_TAG).sort((a, b) => a.out - b.out).slice(0, 4);
+      // En el mano a mano, grandes: a 8 px de mayúscula no se leían desde el fondo.
+      const grande = live.length <= 2 ? (S.portrait() ? 1.4 : 1.7) : live.length <= 4 ? 1.3 : 1;
+      const W = S.sw(), H = S.sh();
+      const at = [...vivos.map((q) => ({ q, out: false })), ...salen.map((q) => ({ q, out: true }))]
+        .map(({ q, out }) => {
           const w = toWorld(q.x, q.y);
-          return { q, p: cam.toScreen(w.x + size * 0.35, w.y - size * 1.1, S.sw(), S.sh()) };
+          const up = out && q.kind === "kick" ? q.z * r : 0;
+          return { q, out, p: cam.toScreen(w.x + size * 0.35, w.y - up - size * 1.1, W, H) };
         })
+        // El nombre de uno que ya salió de cuadro no va: pegado al borde engañaba.
+        .filter(({ out, p }) => !out || (p.x > -10 * k && p.x < W + 10 * k && p.y > S.top() && p.y < H - S.bottom()))
         .sort((a, b) => a.p.y - b.p.y);
-      let prev = -Infinity;
-      for (const { q, p } of at) {
-        const chip = (q.chip ??= chips.addChild(S.chip(names[q.idx] ?? "")));
+      // Dónde está el cuerpo de cada uno de los que siguen, en pantalla: un
+      // nombre grande no va encima del trompo del otro.
+      const cuerpos = vivos.map((q) => {
+        const w = toWorld(q.x, q.y);
+        const a = cam.toScreen(w.x - size * 0.5, w.y - size * 1.05, W, H), b = cam.toScreen(w.x + size * 0.5, w.y, W, H);
+        return { q, x0: a.x, y0: a.y, x1: b.x, y1: b.y };
+      });
+      let prev = -Infinity, prevS = 1;
+      for (const { q, out, p } of at) {
+        const nm = names[q.idx] ?? "";
+        const chip = out
+          ? (q.outChip ??= chips.addChild(S.chip(winners.indexOf(q.idx) > 0 ? `★ ${nm}` : nm, 1, nm)))
+          : (q.chip ??= chips.addChild(S.chip(nm)));
+        const sc = out ? 1 : grande;
+        chip.scale.set(sc);
+        chip.alpha = out ? clamp((OUT_TAG - q.out) / 0.5, 0, 1) : 1;
         chip.visible = true;
-        const cy = Math.max(p.y, prev + 26 * k);
+        const cy = Math.max(p.y, prev + 13 * k * (prevS + sc));
         prev = cy;
-        chip.position.set(Math.min(p.x + 4 * k, S.sw() - chip.width - 10 * k), cy);
+        prevS = sc;
+        const cw = chip.width, ch = 13 * k * sc;
+        const tapa = (x: number): boolean => cuerpos.some((c) => c.q !== q && x < c.x1 && x + cw > c.x0 && cy - ch < c.y1 && cy + ch > c.y0);
+        let x = Math.min(p.x + 4 * k, W - cw - 10 * k);
+        // Si a la derecha tapa al otro trompo, a la izquierda del suyo.
+        if (tapa(x)) {
+          const izq = Math.max(10 * k, cam.toScreen(toWorld(q.x, q.y).x - size * 0.35, 0, W, H).x - 4 * k - cw);
+          if (!tapa(izq)) x = izq;
+        }
+        chip.position.set(x, cy);
       }
     }
 
@@ -1334,6 +1416,19 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     }
     script();
     sayPending();
+    // El zumbido de los trompos: se decía "¡Todos zumbando!" y no sonaba nada
+    // continuo. Sube de tono a medida que quedan menos; en el mano a mano, uno
+    // por trompo, y cuando la rival cae queda el de la ganadora sola. Termina
+    // antes del cartel, para que el respiro de la música se oiga.
+    if ((phase === "dance" || phase === "fight" || phase === "duel") && tAll < T_CROWN - 0.5) {
+      const tick = Math.floor(tAll / 0.5);
+      if (tick !== humTick) {
+        humTick = tick;
+        const left = alive().length;
+        const deg = phase === "duel" && duo ? (riv.alive && tick % 2 ? 8 : 9) : left > 8 ? 7 : left > 2 ? 8 : 9;
+        beepFor(note(deg), 0.55, "sawtooth", 0.02);
+      }
+    }
     acc += g;
     let guard = 0;
     while (acc >= DT && guard++ < 12) {

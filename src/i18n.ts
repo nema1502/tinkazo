@@ -162,6 +162,8 @@ export interface Dict {
   impGrpIn: (n: number) => string;
   impGrpOut: (n: number) => string;
   tellBody: (w: string, prize: string, n: number, u: string) => string;
+  /** Trompo: la rival del mano a mano se queda sin cuerda y cae. */
+  cTroSpent: (n: string) => string;
 }
 
 /**
@@ -1055,6 +1057,7 @@ export const T: Record<Lang, Dict> = {
     cWin: (n, many) => pick(many ? [`¡GANAN ${n}!`, `¡SE LO LLEVAN ${n}!`, `¡ES PARA ${n}!`, `¡EL TINKAZO ES PARA ${n}!`] : [`¡GANA ${n}!`, `¡SE LO LLEVA ${n}!`, `¡ES PARA ${n}!`, `¡EL TINKAZO ES PARA ${n}!`]),
     summary: (w, n, d, r, u) =>
       `Tinkazo · sorteo verificable (protocolo v2)\nGanador(es): ${w}\nParticipantes: ${n}\nlist_hash: ${d}\nRonda quicknet: ${r} → ${u}\nRehacelo: https://github.com/nema1502/tinkazo/blob/main/docs/protocolo.md (§7)`,
+    cTroSpent: (n) => pick([`¡Se le acabó la cuerda a ${n}!`, `¡Se apagó el trompo de ${n}!`, `¡${n} se queda sin cuerda!`]),
   },
   en: {
     badge: "For whoever has to run the draw",
@@ -1887,6 +1890,7 @@ export const T: Record<Lang, Dict> = {
     cWin: (n, many) => pick(many ? [`${n} WIN!`, `${n} TAKE IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`] : [`${n} WINS!`, `${n} TAKES IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`]),
     summary: (w, n, d, r, u) =>
       `Tinkazo · verifiable draw (protocol v2)\nWinner(s): ${w}\nEntries: ${n}\nlist_hash: ${d}\nquicknet round: ${r} → ${u}\nRun it again: https://github.com/nema1502/tinkazo/blob/main/docs/protocolo.md (§7)`,
+    cTroSpent: (n) => pick([`${n}'s top runs out of spin!`, `${n}'s top stops spinning!`, `${n} is out of spin!`]),
   },
 };
 
