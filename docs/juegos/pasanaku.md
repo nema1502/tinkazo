@@ -26,7 +26,7 @@ Los bultos caen sobre la tela y se tejen los hilos. Entonces empieza a apretar: 
 
 Arriba a la izquierda, un contador dice cuántos bultos quedan en el aguayo, con un retazo que se teje franja por franja mientras caen.
 
-**Los bultos son q'epis**, el atado de aguayo que se carga a la espalda: el cuerpo con el color de la persona, una franja clara con rombos como el pallay, y arriba el nudo con sus dos puntas. Caen de a uno sobre la tela, acelerando, y rebotan aplastándose al tocarla. Se ordenan por profundidad: el de más abajo en la tela tapa al de más arriba. Hasta el 29 de septiembre de 2026 eran cuadrados que se pisaban medio cuerpo, porque el choque era un círculo aplastado en perspectiva y el dibujo un cuadrado entero. Ahora chocan con seis pasadas de separación por paso (diez con más de sesenta) y `scripts/audit-fisica.mjs` mide que ninguno quede encimado: quedan por debajo del 1%. En el nudo, los tres últimos se ponen lado a lado: uno detrás del otro, el de atrás quedaba escondido.
+**Los bultos son q'epis**, el atado de aguayo que se carga a la espalda: el cuerpo con el color de la persona, una franja clara con rombos como el pallay, y arriba el nudo con sus dos puntas. Caen de a uno sobre la tela, acelerando, y rebotan aplastándose al tocarla. Se ordenan por profundidad: el de más abajo en la tela tapa al de más arriba. Hasta el 29 de septiembre de 2026 eran cuadrados que se pisaban medio cuerpo, porque el choque era un círculo aplastado en perspectiva y el dibujo un cuadrado entero. Ahora chocan con seis pasadas de separación por paso (diez con más de sesenta) y `scripts/audit-fisica.mjs` mide que ninguno quede encimado: quedan por debajo del 1%. En el nudo, los tres últimos se ponen lado a lado: uno detrás del otro, el de atrás quedaba escondido. Y crecen hasta el tamaño máximo en 0,8 s: eran tres q'epis de unos 50 px apilados durante cinco segundos. La fila de los que salieron conserva su tamaño.
 
 ## Cómo escala
 
@@ -51,7 +51,8 @@ En segundos de juego, sin estirar.
 | 1,0 – 3,4 s | Caen los bultos. "¡Cada uno pone su bulto!" |
 | 3,4 – 5,4 s | Se teje la red. "¡Hilo con hilo!" |
 | 5,4 – 12,9 s | Uno, dos o tres apretones; las puntas se doblan y los de afuera se caen |
-| 12,9 – 16,5 s | Los últimos en un aro chiquito. "¡SE ATA EL NUDO!" |
+| 12,9 – 16,0 s | Los últimos en un aro chiquito. "¡SE ATA EL NUDO!". A los 14,1 sale el tercero con su nombre ("¡Sale Ana Vargas! ¡Quedan dos!") y los dos que quedan se tironean, con un latido que se acelera y una cuerda que se tensa |
+| 16,0 s | Sale despedido el último, con su golpe y su nombre. Después, silencio. Hasta el 7 de octubre de 2026 los dos últimos salían juntos 0,15 s antes del cartel y pisaban el silencio |
 | 16,5 s | Se levanta el atado, con las cuatro puntas juntas en el nudo, y sale el cartel |
 
 ## Lo que la tela hace a propósito
@@ -63,6 +64,8 @@ En segundos de juego, sin estirar.
 Vive en [`src/games/pixi/pasanaku.ts`](../../src/games/pixi/pasanaku.ts), en el motor nuevo, y tiene su versión de respaldo en [`src/games/pasanaku.ts`](../../src/games/pasanaku.ts).
 
 **La física corre a paso fijo de 1/120 de segundo**, con acumulador. Sin eso la misma ronda dibujaría distinto en una pantalla de 60 Hz y en una de 144, y el proyecto entero se apoya en que la misma ronda dé siempre lo mismo.
+
+**Ningún co-ganador sale sin nombre.** Si el relator acaba de hablar, el premio queda debido y se dice apenas hay lugar, sin pisar lo agendado (los apretones, el susto, el nudo) y nunca en el último segundo antes del cartel. En el nudo, el tercero y el último se nombran con su premio si lo tienen.
 
 Los que se caen y los nombres viven en la capa de la interfaz, no en la de la cámara: con la cámara pegada a la tela, la fila de abajo y los chips quedan siempre a la vista y del mismo tamaño.
 

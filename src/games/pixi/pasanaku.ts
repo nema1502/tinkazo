@@ -34,6 +34,9 @@ const T_CINCH = 5.4;
 const CINCH_DUR = 7.5;
 const T_KNOT = T_CINCH + CINCH_DUR;
 const T_LIFT = 16.5;
+/** En el nudo: cuándo sale el tercero y queda el mano a mano, y cuándo sale el último. */
+const T_DUEL = T_KNOT + 1.2;
+const T_LAST = T_LIFT - 0.5;
 const PAL = [0xe93d9c, 0xff7a1a, 0x00a896, 0x6c4ce0, 0xffc629];
 
 type Phase = "spread" | "drop" | "weave" | "cinch" | "knot" | "lift" | "dead";
@@ -75,12 +78,33 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
   let phase: Phase = "spread";
   let tAll = 0, acc = 0, cinchTotal = 0, pulls = 0, collected = 0, dropTicks = 0, weaveTicks = 0, tHold = 0;
   let knotHits = 0, saidSusto = false, saidKnot = false, tugs = 0, lastTug = -99, saidUpTo = -1, lastOut = -999, liftK = 0;
+  let knotBeat = -1, knotString = -1, saidDuel = false, saidLast = false, lastLine = -999;
+  /**
+   * Los co-ganadores que salieron cuando el relator no podía nombrarlos: se
+   * dicen apenas hay lugar. Antes el freno de medio segundo entre anuncios
+   * también los frenaba a ellos, y el tercer premio salía sin que nadie lo
+   * nombrara (7 de octubre de 2026).
+   */
+  let owed: number[] = [];
   const bundles: Bundle[] = [];
 
   const C = (): { x: number; y: number; k: number } => ({ x: S.sw() / 2, y: S.sh() * 0.47, k: S.u() });
   const R0 = (): number => Math.min(S.sh() * 0.46, S.sw() * 0.34);
   const Rc = (): number => R0() * (1 - 0.62 * cinchTotal);
-  const rad = (): number => clamp(Math.sqrt((Rc() * Rc() * 0.2) / n), 7 * S.u(), 30 * S.u());
+  /** El tamaño de un bulto según cuántos hay: es el de la fila de los que salieron. */
+  const radBase = (): number => clamp(Math.sqrt((Rc() * Rc() * 0.2) / n), 7 * S.u(), 30 * S.u());
+  /**
+   * El tamaño de los que siguen en la tela. En el nudo crecen en 0,8 s: eran
+   * tres q'epis de unos 50 px apilados durante cinco segundos, y en el momento
+   * que decide no se veía quién era quién. Crecen hasta donde entran tres en
+   * fila dentro de la tela, que en el celular es angosta, y nunca achican.
+   */
+  const rad = (): number => {
+    const r = radBase();
+    if (tAll < T_KNOT) return r;
+    const big = Math.max(r, Math.min(30 * S.u(), Rc() / 4.8));
+    return r + (big - r) * ease.inOutCubic(clamp((tAll - T_KNOT) / 0.8, 0, 1));
+  };
   {
     const { x, y } = C();
     const r0 = R0();
@@ -117,9 +141,17 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
     // tapaban durante cinco segundos (lo encontró el agente evaluador).
     if ((phase === "knot" || phase === "cinch") && list.length > 1 && list.length <= 3) {
       const fila = list.slice().sort((a, b) => a.x - b.x || a.idx - b.idx);
+      // Mano a mano en el nudo: los dos se tironean, se separan y se chocan.
+      const tiron = phase === "knot" && fila.length === 2 ? 0.3 * r * Math.sin((tAll - T_KNOT) * 9) : 0;
+      // En el nudo el resorte es más firme y los deja más separados: con el de
+      // siempre ganaba la gravedad hacia el centro, y los bultos grandes, que
+      // se ladean, quedaban pegados y se dibujaban uno encima del otro.
+      const firm = phase === "knot" ? 40 : 10;
+      const gap = phase === "knot" ? 2.8 : 2.4;
       fila.forEach((q, i) => {
-        q.vx += (cx + (i - (fila.length - 1) / 2) * r * 2.4 - q.x) * 10 * dt;
-        q.vy += (cy - q.y) * 10 * dt;
+        const lado = i - (fila.length - 1) / 2;
+        q.vx += (cx + lado * r * gap + Math.sign(lado) * tiron - q.x) * firm * dt;
+        q.vy += (cy - q.y) * firm * dt;
       });
     }
     for (const q of list) {
@@ -139,6 +171,12 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
       q.x += q.vx * dt;
       q.y += q.vy * dt;
       q.rot += q.vx * dt * 0.01;
+      // En el nudo se enderezan: grandes y ladeados (alguno quedaba cabeza
+      // abajo) se dibujaban uno encima del otro. Solo cambia el dibujo.
+      if (phase === "knot") {
+        const up = Math.round(q.rot / (Math.PI * 2)) * Math.PI * 2;
+        q.rot += (up - q.rot) * Math.min(1, 5 * dt);
+      }
     }
     // Los choques, en el plano de la tela (lo vertical va aplastado por la
     // perspectiva): varias pasadas, y en cada una el borde de la tela.
@@ -207,7 +245,7 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
       q.x += q.vx * dt;
       q.y += q.vy * dt;
       q.rot += dt * 3;
-      const rr2 = rad();
+      const rr2 = radBase();
       const cols = Math.max(1, Math.floor((S.sw() - 120 * S.u()) / (rr2 * 2.2)));
       const tx = 60 * S.u() + (q.slot % cols) * rr2 * 2.2 + rr2;
       const ty = S.sh() - 56 * S.u() - Math.floor(q.slot / cols) * rr2 * 1.5;
@@ -224,33 +262,63 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
       }
     }
   }
-  function evict(keep: number): void {
+  const nm = (i: number): string => names[i] ?? "";
+  /** Todo lo que dice el relator pasa por acá, para saber cuándo habló por última vez. */
+  const say = (msg: string, heat: number): void => {
+    lastLine = tAll;
+    S.say(msg, heat);
+  };
+  /**
+   * Saca bultos hasta que queden `keep`, y devuelve quiénes salieron. Con
+   * `quiet`, no anuncia: el nudo dice lo suyo.
+   */
+  function evict(keep: number, quiet = false): number[] {
     const list = alive().sort((a, b) => (place.get(b.idx) ?? 0) - (place.get(a.idx) ?? 0));
     const { x: cx, y: cy, k } = C();
     // Los co-ganadores de esta tanda se nombran juntos y con su premio; si no
     // hay ninguno, el primero que sale cuando ya quedan pocos.
     const premiados: number[] = [];
+    const out: number[] = [];
     let uno = -1;
     for (const q of list) {
       if (alive().length <= keep) break;
       q.alive = false;
       q.out = 0;
       q.slot = collected++;
+      out.push(q.idx);
       const a = Math.atan2(q.y - cy, q.x - cx);
       q.vx = Math.cos(a) * 380 * k;
       q.vy = Math.sin(a) * 380 * k - 160 * k;
       if (n <= 40 || collected % 6 === 0) {
-        beep(note(7), 0.09, "sine", 0.03);
-        setTimeout(() => beep(note(5), 0.09, "sine", 0.026), 60);
+        // Cuantos menos quedan, más aguda la salida: eran trece iguales.
+        const up = Math.min(3, Math.max(0, 8 - alive().length));
+        beep(note(7 + up), 0.09, "sine", 0.03);
+        setTimeout(() => beep(note(5 + up), 0.09, "sine", 0.026), 60);
       }
       if (winners.indexOf(q.idx) > 0) premiados.push(q.idx);
       else if (uno < 0 && alive().length <= 8 && keep > 1) uno = q.idx;
     }
+    if (quiet) return out;
     if (tAll - lastOut > 0.5 && (premiados.length || uno >= 0)) {
       lastOut = tAll;
-      const nm = (i: number): string => names[i] ?? "";
-      S.say(premiados.length ? T[getLang()].cPrizeOut(premiados.map(nm)) : T[getLang()].cPasOut(nm(uno)), 0.5);
-    }
+      say(premiados.length ? T[getLang()].cPrizeOut(premiados.map(nm)) : T[getLang()].cPasOut(nm(uno)), 0.5);
+    } else if (premiados.length) owed.push(...premiados);
+    return out;
+  }
+
+  /** Lo que el relator ya tiene agendado: ahí no se mete un premio debido. */
+  function lineDueSoon(): boolean {
+    const soon = (at: number): boolean => at - tAll >= 0 && at - tAll < 0.35;
+    if (phase === "cinch" && pulls < PULLS && soon(T_CINCH + pulls * PULL_DUR)) return true;
+    if (susto && !saidSusto && soon(SUSTO + 0.25)) return true;
+    return soon(T_KNOT + 0.14) || soon(T_DUEL) || soon(T_LAST);
+  }
+  /** Nombra a los co-ganadores debidos apenas hay lugar, y nunca encima del silencio de antes del cartel. */
+  function payOwed(): void {
+    if (!owed.length || tAll - lastLine <= 0.5 || tAll > T_LAST - 0.6 || lineDueSoon()) return;
+    lastOut = tAll;
+    say(T[getLang()].cPrizeOut(owed.map(nm)), 0.6);
+    owed = [];
   }
 
   let crowned = false;
@@ -275,9 +343,9 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
 
   function script(dt: number): void {
     const cues: [number, () => void][] = [
-      [0.05, () => S.say(t("cPasSpread"), 0.1)],
-      [T_DROP + 0.1, () => S.say(t("cPasDrop"), 0.2)],
-      [T_WEAVE, () => S.say(t("cPasWeave"), 0.3)],
+      [0.05, () => say(t("cPasSpread"), 0.1)],
+      [T_DROP + 0.1, () => say(t("cPasDrop"), 0.2)],
+      [T_WEAVE, () => say(t("cPasWeave"), 0.3)],
     ];
     for (let i = saidUpTo + 1; i < cues.length; i++) {
       const cue = cues[i] as [number, () => void];
@@ -288,7 +356,7 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
     if (phase === "cinch") {
       if (susto && !saidSusto && tAll >= SUSTO + 0.25) {
         saidSusto = true;
-        S.say(T[getLang()].cPasClose(names[winnerIdx] ?? ""), 0.8);
+        say(T[getLang()].cPasClose(names[winnerIdx] ?? ""), 0.8);
         beep(note(1), 0.1, "square", 0.05);
         setTimeout(() => beep(note(8), 0.12, "triangle", 0.045), 80);
         cam.shake(10 * S.u()).punch(0.05);
@@ -296,8 +364,9 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
       const want = Math.min(PULLS, Math.floor((tAll - T_CINCH) / PULL_DUR) + 1);
       while (pulls < want) {
         pulls++;
-        S.say(t(pulls === 1 ? "cPasCinch" : pulls === 2 ? "cPasCinch2" : "cPasCinch3"), Math.min(0.75, 0.3 + pulls * 0.15));
-        beepFor(note(Math.max(0, 4 - (pulls - 1) * 2)), PULL_DUR + 0.2, "sawtooth", 0.03);
+        say(t(pulls === 1 ? "cPasCinch" : pulls === 2 ? "cPasCinch2" : "cPasCinch3"), Math.min(0.75, 0.3 + pulls * 0.15));
+        // Cada apretón un poco más agudo: bajaba de tono mientras subía la tensión.
+        beepFor(note((pulls - 1) * 2), PULL_DUR + 0.2, "sawtooth", 0.03);
         cam.punch(0.06).shake(8 * S.u());
       }
       const tug = Math.min(1, PULL_DUR / 3);
@@ -314,23 +383,61 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
       cinchTotal = ease.outCubic(p) * 0.86 + 0.035 * Math.exp(-(tAll - lastTug) * 9);
       const target = Math.max(FINAL, Math.round(n * (1 - p) ** 1.5));
       if (alive().length > target) evict(target);
+      payOwed();
       return;
     }
     if (phase === "knot") {
       cinchTotal = 0.86 + 0.12 * clamp((tAll - T_KNOT) / (T_LIFT - T_KNOT), 0, 1);
       const hits = Math.floor((tAll - T_KNOT) / 0.14);
-      while (knotHits < hits) {
-        knotHits++;
-        if (knotHits % 2 === 0 && tAll < T_LIFT - 0.4) beep(note(15), 0.035, "sine", 0.024);
+      while (knotHits < hits) knotHits++;
+      // El nudo era el tramo de más tensión y el que menos sonaba: once clics
+      // iguales. Ahora un latido que se acelera y sube, y una cuerda que se
+      // tensa de a un grado. Todo calla al salir el último: el silencio de
+      // antes del cartel queda limpio.
+      if (tAll < T_LAST) {
+        const D = T_LAST - T_KNOT;
+        const p = clamp((tAll - T_KNOT) / D, 0, 1);
+        // El número de latido es la integral del ritmo: de 0,42 a 0,14 s de juego.
+        const b = Math.floor((D / 0.28) * Math.log(0.42 / (0.42 - 0.28 * p)));
+        if (b !== knotBeat) {
+          knotBeat = b;
+          const step = Math.min(2, Math.floor(p * 3));
+          beep(note(step), 0.12, "sine", 0.06 + 0.025 * p);
+          beep(note(5 + step), 0.08, "triangle", 0.035);
+        }
+        const s = Math.floor((tAll - T_KNOT) / 0.7);
+        if (s !== knotString && tAll < T_LAST - 0.2) {
+          knotString = s;
+          beepFor(note(2 + Math.min(4, s)), Math.min(0.7, T_LAST - tAll), "sawtooth", 0.028);
+        }
       }
-      if (tAll >= T_LIFT - 0.15 && alive().length > 1) {
-        beep(note(1), 0.35, "sine", 0.07);
-        evict(1);
-      } else if (alive().length > FINAL) evict(FINAL);
       if (knotHits >= 1 && !saidKnot) {
         saidKnot = true;
-        S.say(t("cPasKnot"), 0.9);
+        say(t("cPasKnot"), 0.9);
       }
+      // El mano a mano: sale el tercero, con su nombre, y quedan dos.
+      if (tAll >= T_DUEL && !saidDuel && alive().length > 2) {
+        saidDuel = true;
+        const third = evict(2, true)[0] ?? -1;
+        const prem = [...owed, ...(winners.indexOf(third) > 0 ? [third] : [])];
+        owed = [];
+        lastOut = tAll;
+        say(prem.length ? T[getLang()].cPrizeOut(prem.map(nm)) : T[getLang()].cPasTwo(nm(third)), 0.95);
+      }
+      // El último sale despedido medio segundo antes del cartel, con su golpe
+      // y su nombre. Salía junto con el anterior, 0,15 s antes del cartel, y
+      // pisaba el silencio.
+      if (tAll >= T_LAST && !saidLast && alive().length > 1) {
+        saidLast = true;
+        beep(note(1), 0.25, "sine", 0.07);
+        const out = evict(1, true);
+        const prem = [...owed, ...out.filter((i) => winners.indexOf(i) > 0)];
+        owed = [];
+        lastOut = tAll;
+        const last = out[out.length - 1] ?? -1;
+        say(prem.length ? T[getLang()].cPrizeOut(prem.map(nm)) : T[getLang()].cPasOut(nm(last)), 0.95);
+      } else if (alive().length > FINAL) evict(FINAL);
+      payOwed();
       return;
     }
     S.breath(tAll, T_LIFT);
@@ -570,7 +677,7 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
       const b = ease.inOutCubic(clamp(q.out / 0.7, 0, 1));
       const p = cam.toScreen(q.x, q.y, S.sw(), S.sh());
       v.position.set(p.x + (q.x - p.x) * b, p.y + (q.y - p.y) * b);
-      v.scale.set(((r * 0.8) / 20) * (zoom + (1 - zoom) * b));
+      v.scale.set(((radBase() * 0.8) / 20) * (zoom + (1 - zoom) * b));
     }
     ring.clear();
     const win = byIdx.get(winnerIdx) as Bundle;
@@ -591,8 +698,11 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
     for (const q of bundles) if (q.chip) q.chip.visible = false;
     if (!roll.length && live.length <= 8 && phase !== "lift") {
       const u = S.u();
+      // En el nudo los bultos son grandes y van lado a lado: el nombre va
+      // centrado encima de cada uno. Al costado caía encima del vecino.
+      const knotted = phase === "knot";
       const at = live
-        .map((q) => ({ q, p: cam.toScreen(q.x + r, q.y - r * 1.6 - lift, S.sw(), S.sh()) }))
+        .map((q) => ({ q, p: cam.toScreen(knotted ? q.x : q.x + r, q.y - r * (knotted ? 2.6 : 1.6) - lift, S.sw(), S.sh()) }))
         .sort((a, b) => a.p.y - b.p.y);
       let prev = -Infinity;
       for (const { q, p } of at) {
@@ -600,7 +710,8 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
         chip.visible = true;
         const cy = Math.max(p.y, prev + 26 * u);
         prev = cy;
-        chip.position.set(Math.min(p.x + 4 * u, S.sw() - chip.width - 10 * u), cy);
+        const x = knotted ? Math.max(10 * u, p.x - chip.width / 2) : p.x + 4 * u;
+        chip.position.set(Math.min(x, S.sw() - chip.width - 10 * u), cy);
       }
     }
     // El nudo con el cordón tricolor, al levantar.
