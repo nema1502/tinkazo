@@ -16,11 +16,11 @@ La regla de la casa es que un elemento boliviano tiene que hacer algo o no entra
 
 **Embarque.** Los pasajeros suben a las cabinas en la base. El contador de arriba a la izquierda cuenta los que subieron.
 
-**Las paradas.** El convoy sube hasta una estación y frena; las cabinas se hamacan para adelante. Se bajan los que les tocaba, saltando al andén, y el andén queda marcado con cuántos se bajaron. Si son tres o menos, también con sus nombres. Las cabinas que quedaron vacías se sueltan y vuelven para abajo, y las demás cierran el hueco.
+**Las paradas.** El convoy sube hasta una estación y frena; las cabinas se hamacan para adelante. Se bajan los que les tocaba, saltando al andén, y el andén queda marcado con cuántos se bajaron. Si son tres o menos, también con sus nombres. Un co-ganador que se baja antes de la última estación se nombra siempre, con su premio, aunque se bajen muchos: "¡Óscar Limachi sale, pero con premio!". Las cabinas que quedaron vacías se sueltan y vuelven para abajo, y las demás cierran el hueco.
 
-**La última estación.** Quedan dos cabinas, con una persona cada una y su nombre al lado. Suena un latido. Uno se baja.
+**La última estación.** Quedan dos cabinas, con una persona cada una y su nombre al lado. Si el arco no tiene ahí su giro (la puerta o la mordaza), un aro amarillo salta de una cabina a la otra en cada latido, cada vez más lento, como una moneda en el aire, y se apaga sobre la que pierde justo cuando se abre su puerta. Cuántos saltos da sale de la ronda, así que de qué cabina arranca no dice nada. El que se baja salta al andén con su cara y su nombre, por encima de la cabina de adelante, y al tocar el piso suena un golpe seco. Hasta el 7 de octubre de 2026 era un cuadradito de 14 px y un pitido.
 
-**El último tramo.** La cabina que queda sube sola, despacio, con el latido cada vez más seguido. Llega a la cumbre, golpe, se abren las puertas y sale el cartel.
+**El último tramo.** La cabina que queda sube sola, con el latido cada vez más seguido y más agudo. Llega a la cumbre, golpe, se abren las puertas y sale el cartel.
 
 **Las banderas.** Cada estación tiene la suya, en su color, en un mástil alto sobre la esquina izquierda del techo; cada cabina lleva un banderín en la esquina de atrás; y la cumbre tiene banderines de los diez colores colgados de esquina a esquina, que se sacuden de fiesta cuando llega la cabina ganadora. Flamean para la izquierda, que es para donde sopla el viento en este valle, y con la ráfaga se estiran y ondulan más. Como todo lo demás, salen de la hora de juego.
 
@@ -65,8 +65,8 @@ En segundos de juego, sin estirar. En "normal" se estiran para que el show enter
 |---|---|
 | 0,0 – 2,0 s | Embarque. "¡Suban, suban, que se va!" |
 | 2,0 s | Campana de salida |
-| 2,0 – 13,4 s | Viajes y paradas. Viajar pesa 1, parar 0,8 y la última parada 1,7 (2,4 con la puerta, 2,6 con la mordaza). El apagón pesa 1,3 |
-| 13,4 – 15,8 s | El último tramo, a solas |
+| 2,0 – 14,0 s | Viajes y paradas. Viajar pesa 1, parar 0,8 y la última parada 1,7 (2,4 con la puerta, 2,6 con la mordaza). El apagón pesa 1,3 |
+| 14,0 – 15,8 s | El último tramo, a solas. Hasta el 7 de octubre de 2026 arrancaba a los 13,4: con el ganador ya sabido, la subida sola se hacía larga |
 | 15,8 s | Llega a la cumbre: destello, temblor y golpe |
 | 16,4 s | Se abren las puertas y sale el cartel, que se sostiene tres segundos reales |
 
@@ -79,7 +79,9 @@ Todo por la escala de `note()` y dentro de los grados 0 a 20.
 - **Estaciones:** ding-dong al llegar; una sola campanada al pasar de largo.
 - **Los que se bajan:** hasta seis notas que bajan, una por pasajero.
 - **Cabina que se suelta:** un golpe seco.
-- **La última estación y el último tramo:** un latido grave, cada vez más seguido.
+- **La última estación:** un latido grave con su octava, que en un parlante de proyector un seno solo de 131 Hz se pierde. Con el aro, cada salto es un latido.
+- **El que se baja en la última:** un golpe seco cuando toca el andén.
+- **El último tramo:** el latido se acelera de 0,42 a 0,18 s de juego y sube de a un grado. Iba parejo.
 - **La cumbre:** el golpe de la traba, como en la ruleta, y después la fanfarria.
 - **La mordaza:** cinco notas que bajan mientras resbala, y un golpe metálico cuando agarra.
 - **El apagón:** cuatro notas que caen cuando se va la luz, un latido a oscuras y un clic por cada vez que prende.

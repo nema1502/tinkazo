@@ -4,8 +4,9 @@ import { writeStory, type Story } from "../drama";
 /**
  * El plan del teleférico, sin dibujo: el mismo de `cablecar.ts`, copiado tal
  * cual para que el motor nuevo cuente exactamente la misma historia con la
- * misma ronda (el orden de bajada, las cabinas, el horario y los cuatro
- * giros). Consume el azar en el mismo orden que el juego de siempre.
+ * misma ronda (el orden de bajada, las cabinas y los cuatro giros; el
+ * horario también, salvo `T_RUN`). Consume el azar en el mismo orden que el
+ * juego de siempre.
  *
  * Si el motor nuevo gana, `cablecar.ts` pasa a usar este módulo y la copia
  * desaparece. Hasta entonces el de siempre no se toca.
@@ -15,7 +16,13 @@ export const LINES = ["#d7263d", "#e9b000", "#2f9e44", "#1c64c8", "#f2771a", "#e
 export const MAXC = 5;
 export const MIN_STATIONS = 4;
 export const T_BOARD = 2.0;
-export const T_RUN = 13.4;
+/**
+ * Cuándo arranca el último tramo, el de la cabina sola. Desde el 7 de octubre
+ * de 2026 es 14,0 y no 13,4 como en `cablecar.ts`: la subida con el ganador ya
+ * sabido duraba 2,4 s de juego, y esos 0,6 se reparten entre las paradas. Es
+ * lo único del horario que difiere del motor anterior; el azar se consume igual.
+ */
+export const T_RUN = 14.0;
 export const T_DOCK = 15.8;
 export const T_CROWN = 16.4;
 
