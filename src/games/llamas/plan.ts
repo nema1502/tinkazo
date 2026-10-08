@@ -38,7 +38,7 @@ export function planRace(
   names: string[],
   winnerIdx: number,
   rng: () => number,
-  opts: { sceneryDraws?: number; beforePlace?: () => void } = {},
+  opts: { sceneryDraws?: number; beforePlace?: () => void; co?: readonly number[] } = {},
 ): Plan {
   // Ocho carriles como mucho; los acompañantes y el carril del ganador salen
   // del azar sembrado, así que la lista no delata a nadie.
@@ -48,7 +48,13 @@ export function planRace(
     const j = Math.floor(rng() * (i + 1));
     [pool[i], pool[j]] = [pool[j] as number, pool[i] as number];
   }
-  const lanes = [winnerIdx, ...pool.slice(0, LANES - 1)];
+  // Con varios premios, los otros premiados corren seguro: con sesenta
+  // inscritos la sala los veía ganar sin haberlos visto nunca en la pista.
+  // Se eligen después de barajar y antes de repartir carriles, así que el azar
+  // se consume igual que con un premio y la historia es la misma.
+  const co = (opts.co ?? []).filter((i, j, a) => i !== winnerIdx && i >= 0 && i < names.length && a.indexOf(i) === j).slice(0, LANES - 1);
+  const resto = co.length ? pool.filter((i) => !co.includes(i)) : pool;
+  const lanes = [winnerIdx, ...co, ...resto.slice(0, LANES - 1 - co.length)];
   for (let i = lanes.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
     [lanes[i], lanes[j]] = [lanes[j] as number, lanes[i] as number];

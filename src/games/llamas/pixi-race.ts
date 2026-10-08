@@ -72,11 +72,14 @@ export async function llamasPixi(
   const plan: Plan = planRace(names, winnerIdx, rng, {
     sceneryDraws: Math.min(8, names.length) + 24 * 2 + 18 * 2 + 6 * 4 + stars * 3,
     beforePlace: () => S.say(t(space ? "cReadyStellar" : lake ? "cReadyLago" : "cReady"), 0.1),
+    co: winners.slice(1),
   });
   const { story, lanes } = plan;
   S.mark("arco", story.arc);
   const N = lanes.length;
   const nameOf = (k: number): string => names[lanes[k] as number] ?? "";
+  /** Los carriles de los que ganan algo: en la corona no se apagan. */
+  const prizedLanes = new Set(winners.map((w) => lanes.indexOf(w)).filter((k) => k >= 0));
   const deco = seeded(parseInt(beacon.randomness.slice(24, 32), 16));
 
   /* ============================================================ geometría */
@@ -615,7 +618,9 @@ export async function llamasPixi(
     const foto = new Container();
     foto.addChild(new Graphics().rect(0, 0, sw, sh * 0.1).fill(INK).rect(0, sh * 0.9, sw, sh * 0.1).fill(INK));
     const fotoTx = S.text(getLang() === "es" ? "● FOTO" : "● PHOTO", { fontFamily: MONO, fontSize: 26 * u, fontWeight: "900", fill: 0xff4d4d, letterSpacing: 6 * u });
-    fotoTx.position.set(20 * u, sh * 0.1 + 12 * u);
+    // A la derecha, donde la franja está libre: a la izquierda se encimaba con
+    // el aviso de cuántos corren.
+    fotoTx.position.set(sw - fotoTx.width - 24 * u, sh * 0.1 + 12 * u);
     foto.addChild(fotoTx);
     foto.visible = false;
     S.hud.addChild(foto);
@@ -647,6 +652,9 @@ export async function llamasPixi(
   /* ============================================================== estado */
   let phase: "count" | "race" | "done" = "count";
   let tPhase = 0, tRace = 0, tFreeze = 0, lastLeader = -1, saidLast = false, finished = false, mitadMarcada = false;
+  /** El reloj de la sala, en segundos reales: el del relator. `tRace` va en segundos de juego y se frena en la foto. */
+  let tReal = 0;
+  let hushed = false;
   let lastBeepN = 4;
   const rowPos = lanes.map((_, k) => k);
   const winnerLane = story.winner;
@@ -669,6 +677,8 @@ export async function llamasPixi(
     tFreeze = 0;
     S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     fanfare();
+    // La tribuna explota con la ganadora: venía callada desde el respiro.
+    roar?.burst();
     cam.punch(0.12).shake(14 * G.u);
   }
 
@@ -679,7 +689,11 @@ export async function llamasPixi(
   let lastSayAt = -99;
   let lastHeat = 0;
   function sayIf(msg: string, heat: number): boolean {
-    const now = tRace / paceFactor();
+    // En segundos reales. Hasta el 7 de octubre de 2026 era `tRace / pace`,
+    // al revés: el espacio entre líneas daba 2,8 s en "normal" y 5,3 s en
+    // "épico", y el relator se tragaba el mano a mano, las historias chicas y
+    // la última recta (lo encontró la auditoría con capturas).
+    const now = tReal;
     if (now - lastSayAt < 1.1 && heat < lastHeat + 0.3) return false;
     lastSayAt = now;
     lastHeat = heat;
@@ -690,9 +704,16 @@ export async function llamasPixi(
   let latido = -1;
   /** El momento de la historia que la cámara está mirando, y hasta cuándo. */
   let shot: { k: number; until: number; zoom: number } | null = null;
+  /**
+   * La línea de un momento de la historia que no entró porque otra recién
+   * salió: espera su turno mientras el momento se ve. Si no, en pantalla
+   * Elena escupía y el subtítulo hablaba de otra.
+   */
+  let enEspera: { msg: string; heat: number; hasta: number } | null = null;
   function storyBeats(prog: number): void {
     const L_ = T[getLang()];
     const calor = 0.35 + 0.5 * tension(story, prog);
+    if (enEspera && (prog >= enEspera.hasta || sayIf(enEspera.msg, enEspera.heat))) enEspera = null;
     story.beats.forEach((bt, n) => {
       const id = `b${n}`;
       if (prog < bt.at || fired.has(id)) return;
@@ -701,20 +722,24 @@ export async function llamasPixi(
       const suya = bt.actor === story.winner;
       // La cámara se mete en cada momento de la historia.
       shot = { k: bt.target ?? bt.actor, until: prog + 0.06, zoom: bt.kind === "tropiezo" ? 1.7 : 1.5 };
+      const contar = (msg: string, heat: number): void => {
+        if (sayIf(msg, heat)) return;
+        if (!enEspera || heat >= enEspera.heat) enEspera = { msg, heat, hasta: bt.at + 0.06 };
+      };
       if (bt.kind === "plantada") {
-        sayIf((L_[key("cPlantada")] as (n: string) => string)(quien), calor);
+        contar((L_[key("cPlantada")] as (n: string) => string)(quien), calor);
         beep(note(8), 0.12, "triangle", 0.045);
         setTimeout(() => beep(note(3), 0.16, "triangle", 0.04), 120);
       } else if (bt.kind === "tropiezo") {
-        sayIf((L_[key("cTropiezo")] as (n: string) => string)(quien), suya ? 0.85 : calor);
+        contar((L_[key("cTropiezo")] as (n: string) => string)(quien), suya ? 0.85 : calor);
         beep(note(1), 0.09, "square", 0.05);
         cam.punch(0.06).shake(8 * G.u);
       } else if (bt.kind === "pique") {
-        sayIf((L_[key("cPique")] as (n: string) => string)(quien), calor);
+        contar((L_[key("cPique")] as (n: string) => string)(quien), calor);
         [10, 12, 14].forEach((g, i) => setTimeout(() => beep(note(g), 0.08, "triangle", 0.04), i * 60));
       } else if (bt.kind === "escupida" && bt.target !== undefined) {
         const tapada = story.arc === "tapada" && bt.actor === story.rival;
-        sayIf((L_[key("cEscupida")] as (a: string, b: string) => string)(quien, nameOf(bt.target)), tapada ? 0.8 : calor);
+        contar((L_[key("cEscupida")] as (a: string, b: string) => string)(quien, nameOf(bt.target)), tapada ? 0.8 : calor);
         beep(note(16), 0.05, "square", 0.035);
         setTimeout(() => beep(note(11), 0.07, "triangle", 0.035), 50);
         cam.punch(0.04);
@@ -726,27 +751,53 @@ export async function llamasPixi(
         fn();
       }
     };
+    /**
+     * Las líneas del arco no se pierden: si otra recién salió, esperan su
+     * turno. El texto se arma una sola vez, porque cada variante sorteada
+     * consume azar, y se da por dicho recién cuando sale (o pasado el plazo).
+     */
+    const arco = (id: string, at: number, heat: number, make: () => string): boolean => {
+      if (prog < at || fired.has(id)) return false;
+      const msg = (arcMsg[id] ??= make());
+      if (sayIf(msg, heat) || prog > at + 0.1) {
+        fired.add(id);
+        return true;
+      }
+      return false;
+    };
     const ganadora = nameOf(story.winner);
     const rival = nameOf(story.rival);
-    if (story.arc === "remontada") once("arco", 0.74, () => sayIf(L_.cRemonta(ganadora), 0.8));
+    if (story.arc === "remontada") arco("arco", 0.74, 0.8, () => L_.cRemonta(ganadora));
     if (story.arc === "duelo") {
-      once("arco", 0.52, () => sayIf(L_.cDuelo(...enOrden(ganadora, rival)), 0.7));
+      arco("arco", 0.52, 0.7, () => L_.cDuelo(...enOrden(ganadora, rival)));
       once("foto", plan.foto, () => {
-        sayIf(t("cFoto"), 0.95);
         cam.punch(0.08);
         beep(note(18), 0.03, "square", 0.05);
         setTimeout(() => beep(note(18), 0.03, "square", 0.04), 90);
       });
+      arco("fotoTx", plan.foto, 0.95, () => t("cFoto"));
     }
-    if (story.arc === "tapada") once("arco", 0.88, () => sayIf(L_.cCuela(ganadora), 0.9));
-    if (story.arc === "duelo" && prog > 0.52 && prog < plan.foto) {
-      const b = Math.floor(((prog - 0.52) * DUR) / 0.45);
+    if (story.arc === "tapada") arco("arco", 0.88, 0.9, () => L_.cCuela(ganadora));
+    // El latido del mano a mano: dos golpes con armónicos (un seno solo en el
+    // piso del registro no pasaba por el parlante de un proyector), que se
+    // apuran en la recta y siguen en la foto. Cuenta en tiempo de juego, así
+    // que en la cámara lenta suena "tum… tum…" solo. La fase es continua en
+    // el cambio de ritmo: con un contador nuevo se disparaba doble.
+    if (story.arc === "duelo" && prog > 0.52 && prog < 1) {
+      const s = (prog - 0.52) * DUR, s8 = (0.8 - 0.52) * DUR;
+      const b = Math.floor(s <= s8 ? s / 0.45 : s8 / 0.45 + (s - s8) / 0.3);
       if (b !== latido) {
         latido = b;
-        beep(note(0), 0.12, "sine", 0.065);
+        beep(note(0), 0.09, "square", 0.035);
+        beep(note(5), 0.08, "triangle", 0.045);
+        setTimeout(() => beep(note(3), 0.07, "triangle", 0.04), 140);
       }
     }
   }
+  /** El texto de cada línea del arco, sorteado una sola vez. */
+  const arcMsg: Record<string, string> = {};
+  /** Cuándo dice el relator las líneas fijas: la del arco, la última recta y la foto. */
+  const hitos = [0.8, plan.foto, ...(story.arc === "remontada" ? [0.74] : story.arc === "duelo" ? [0.52] : story.arc === "tapada" ? [0.88] : [])];
 
   let hoofIn = 0, hoofStep = 0, droneIn = 0;
   function raceAudio(dt: number, prog: number): void {
@@ -800,8 +851,11 @@ export async function llamasPixi(
     }
     if (phase === "done") {
       tFreeze += dt * paceFactor();
-      // Con la ganadora ya en la meta, la cámara se le acerca despacio.
-      cam.lookAt(xOf(winnerLane, 1) - 20 * G.u, G.laneY(winnerLane) - 40 * G.u, G.portrait ? 1.35 : 1.6, 1.6);
+      // Con la ganadora ya en la meta, la cámara se le acerca despacio. Con la
+      // llama más abajo que el centro: si no, le quedaba la cabeza debajo del
+      // cartel, que con varios premios es más alto.
+      const baja = G.portrait ? 70 : winners.length > 1 ? 120 : 95;
+      cam.lookAt(xOf(winnerLane, 1) - 20 * G.u, G.laneY(winnerLane) - baja * G.u, G.portrait ? 1.35 : 1.6, 1.6);
       if (tFreeze > WINNER_HOLD) {
         roar?.stop();
         S.cleanup();
@@ -810,13 +864,20 @@ export async function llamasPixi(
     }
     const lenta = tRace / DUR > plan.foto ? 0.4 : 1;
     tRace += dt * lenta;
+    tReal += dt * paceFactor();
     const prog = qNow();
-    raceAudio(dt, prog);
+    // Los cascos se frenan con las patas en la cámara lenta.
+    raceAudio(dt * lenta, prog);
     storyBeats(prog);
     const xs = lanes.map((_, k) => plan.pos(k, prog));
     let leader = 0;
     xs.forEach((x, k) => { if (x > (xs[leader] as number)) leader = k; });
-    if (leader !== lastLeader && tRace > 1 && !saidLast) {
+    // Los cambios de punta ceden el turno: con el relator a tiempo salen
+    // seguido, y le quitaban el lugar a las historias del arco y a los
+    // momentos de la historia que están por pasar.
+    const cerca = (at: number): boolean => at > prog && at - prog < 0.05;
+    const momento = enEspera !== null || story.beats.some((bt) => cerca(bt.at)) || hitos.some(cerca);
+    if (leader !== lastLeader && tRace > 1 && !saidLast && !momento && tReal - lastSayAt >= 2.5) {
       lastLeader = leader;
       if (sayIf(T[getLang()].cLead(nameOf(leader)), 0.3 + 0.4 * prog)) {
         beep(note(12), 0.12, "triangle", 0.05);
@@ -824,9 +885,14 @@ export async function llamasPixi(
       }
     }
     if (!saidLast && prog > 0.8) {
-      saidLast = true;
-      sayIf(t("cLast"), 0.85);
-      beep(note(13), 0.22, "triangle", 0.06);
+      if (arcMsg.last === undefined) beep(note(13), 0.22, "triangle", 0.06);
+      // Si otra línea recién salió, espera su turno (un rato, no hasta la meta).
+      if (sayIf((arcMsg.last ??= t("cLast")), 0.85) || prog > 0.9) saidLast = true;
+    }
+    // La tribuna se calla junto con la música, en el respiro antes de la meta.
+    if (!hushed && tRace >= DUR - (0.4 * lenta) / paceFactor()) {
+      hushed = true;
+      roar?.hush();
     }
     const order = xs.map((x, k) => ({ x, k })).sort((a, b) => b.x - a.x);
     order.forEach(({ k }, puesto) => { rowPos[k] = (rowPos[k] as number) + (puesto - (rowPos[k] as number)) * Math.min(1, dt * 10); });
@@ -854,7 +920,14 @@ export async function llamasPixi(
       const second = order[1]?.k ?? leader;
       const x2 = xOf(second, prog);
       const y = (G.laneY(leader) + G.laneY(second)) / 2 - 30 * G.u;
-      look((leadX + x2) / 2 + 30 * G.u, y, (G.portrait ? 1.2 : 1.35) + 0.2 * (prog - 0.8) / 0.2, 3);
+      // Un acercamiento que se apura hasta la meta: con +0,2 parejo, de los 22
+      // a los 26 s la pantalla casi no cambiaba. Nunca tan cerca que una de
+      // las dos de adelante quede fuera, si van en carriles lejanos.
+      const base = G.portrait ? 1.2 : 1.35;
+      const alto = Math.abs(G.laneY(leader) - G.laneY(second)) + 120 * G.u;
+      const cabe = (G.sh - S.top() - S.bottom() - 80 * G.u) / alto;
+      const z = Math.max(base, Math.min(base + 0.55 * Math.pow((prog - 0.8) / 0.2, 1.5), cabe));
+      look((leadX + x2) / 2 + 30 * G.u, y, z, 3);
     } else {
       look(leadX - G.sw * 0.08, G.midY, 1 + 0.18 * tens, 2.6);
     }
@@ -910,6 +983,14 @@ export async function llamasPixi(
     // Los corredores.
     const fx = L.fx;
     fx.clear();
+    // En la corona, la ganadora va adelante de todas: en su carril de arriba
+    // quedaba detrás de la del carril de al lado. Se mira en cada cuadro
+    // porque un cambio de tamaño vuelve a armar la pista.
+    if (phase === "done") {
+      const w = L.runners[winnerLane]?.root;
+      const capa = w?.parent;
+      if (w && capa && capa.children[capa.children.length - 1] !== w) capa.addChild(w);
+    }
     for (let k = 0; k < N; k++) {
       const r = L.runners[k] as Runner;
       const sc = G.laneScale(k);
@@ -921,10 +1002,15 @@ export async function llamasPixi(
       r.root.position.set(x - 34 * sc, y);
       r.pose(p * 95, speed, phase === "race" ? plan.beatOf(k, prog) : null, now);
       if (phase === "done" && k === winnerLane) r.root.y = y - Math.abs(Math.sin(tFreeze * 7)) * 22 * u * Math.max(0, 1 - tFreeze / 2.6);
+      // En la corona, las que no ganan nada se apagan, como sus nombres y la
+      // tabla. Con tinte y no con transparencia: transparente, se veían las
+      // patas a través del cuerpo.
+      const premio = prizedLanes.has(k);
+      r.root.tint = phase === "done" && !premio ? (dark ? 0x8a8499 : 0xb3aebf) : 0xffffff;
       // Detrás de la cola de la llama (llega a 67), de las aletas del cohete o
       // de la popa de la balsa.
       r.tag.position.set(x - (space ? 82 : lake ? 86 : 70) * sc - r.tag.width, y - 30 * sc);
-      r.tag.alpha = phase === "done" ? 0.35 : 1;
+      r.tag.alpha = phase === "done" && !premio ? 0.35 : 1;
       if (phase === "count") continue;
       // Polvo (o estela), cada grano calculado desde su hora.
       const every = 0.006;
@@ -996,7 +1082,7 @@ export async function llamasPixi(
     L.rows.forEach((r, k) => {
       r.y = (rowPos[k] as number) * rowH;
       (r.children[2] as Text).text = String(Math.round(rowPos[k] as number) + 1);
-      r.alpha = phase === "done" && k !== winnerLane ? 0.4 : 1;
+      r.alpha = phase === "done" && !prizedLanes.has(k) ? 0.4 : 1;
     });
 
     tlCount.time(phase === "count" ? tPhase : 4);
@@ -1016,10 +1102,15 @@ export async function llamasPixi(
 /**
  * El ruido de la tribuna: ruido filtrado en la banda de las voces, que sube
  * con la tensión. No es una nota: es gente.
+ *
+ * Al final no sigue a la tensión: se calla en el respiro antes de la meta y
+ * explota con la ganadora. Hasta el 7 de octubre de 2026 quedaba al máximo
+ * desde el 80% de la carrera y seguía igual con el revelado, así que tapaba
+ * el silencio de antes y no festejaba nada después.
  */
-function crowdNoise(): ((tension: number) => void) & { stop: () => void } {
+function crowdNoise(): ((tension: number) => void) & { stop: () => void; hush: () => void; burst: () => void } {
   const ctx = audio();
-  const noop = Object.assign((_: number) => {}, { stop: () => {} });
+  const noop = Object.assign((_: number) => {}, { stop: () => {}, hush: () => {}, burst: () => {} });
   if (!ctx || isMuted()) return noop;
   const len = ctx.sampleRate * 2;
   const buf = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -1052,8 +1143,10 @@ function crowdNoise(): ((tension: number) => void) & { stop: () => void } {
   src.connect(bp).connect(lp).connect(lp2).connect(g).connect(ctx.destination);
   src.start();
   let dead = false;
+  /** Desde el respiro, la tribuna ya no sigue a la tensión. */
+  let fija = false;
   const set = (tension: number): void => {
-    if (dead) return;
+    if (dead || fija) return;
     g.gain.setTargetAtTime(isMuted() ? 0 : 0.012 + 0.05 * tension * tension, ctx.currentTime, 0.25);
     bp.frequency.setTargetAtTime(800 + 500 * tension, ctx.currentTime, 0.4);
   };
@@ -1062,6 +1155,27 @@ function crowdNoise(): ((tension: number) => void) & { stop: () => void } {
       dead = true;
       g.gain.setTargetAtTime(0, ctx.currentTime, 0.15);
       setTimeout(() => { try { src.stop(); } catch { /* ya parado */ } }, 500);
+    },
+    /** Todos aguantan la respiración. */
+    hush: () => {
+      if (dead) return;
+      fija = true;
+      g.gain.setTargetAtTime(isMuted() ? 0 : 0.008, ctx.currentTime, 0.05);
+    },
+    /** La ovación: sube de golpe y queda festejando. */
+    burst: () => {
+      if (dead) return;
+      fija = true;
+      const t = ctx.currentTime;
+      const top = isMuted() ? 0 : 0.12;
+      // Desde donde esté (callada si hubo respiro; si se saltó, no).
+      const now = g.gain.value;
+      g.gain.cancelScheduledValues(t);
+      g.gain.setValueAtTime(now, t);
+      g.gain.linearRampToValueAtTime(top, t + 0.08);
+      g.gain.setTargetAtTime(top * 0.375, t + 0.4, 0.7);
+      bp.frequency.cancelScheduledValues(t);
+      bp.frequency.setTargetAtTime(1500, t, 0.1);
     },
   });
 }
