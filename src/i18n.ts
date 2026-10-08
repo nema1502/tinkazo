@@ -164,6 +164,8 @@ export interface Dict {
   tellBody: (w: string, prize: string, n: number, u: string) => string;
   /** Trompo: la rival del mano a mano se queda sin cuerda y cae. */
   cTroSpent: (n: string) => string;
+  // Constelación, sapo y ¿Quién es? (7 de octubre de 2026).
+  cConstHeading: (n: string) => string;
 }
 
 /**
@@ -595,7 +597,7 @@ export const T: Record<Lang, Dict> = {
       "¡Miren la pantalla: ahí están todos!", "¡Ahí arriba está cada uno de ustedes!"],
     cRoute: ["BUSCANDO RUTA", "TRAZANDO RUTA", "CONSULTANDO EL CIELO", "ABRIENDO CAMINO"],
     cRouteFoundShort: "¡RUTA ENCONTRADA!",
-    cRouteFound: ["¡Ruta encontrada!", "¡Y salió el pago!", "¡Allá va!", "¡Arrancó el salto!"],
+    cRouteFound: ["¡Ruta encontrada!", "¡Y salió el paquete!", "¡Allá va!", "¡Arrancó el salto!"],
     cConstPass: (n) => pick([`¡Pasa por ${n}!`, `¡Toca a ${n} y sigue!`,
       `¡${n} lo tuvo un segundo!`, `¡Rebota en ${n}!`, `¡Casi, ${n}!`]),
     cConstNarrow: ["¡Cada vez más lento!", "¡Se está frenando!",
@@ -1058,6 +1060,8 @@ export const T: Record<Lang, Dict> = {
     summary: (w, n, d, r, u) =>
       `Tinkazo · sorteo verificable (protocolo v2)\nGanador(es): ${w}\nParticipantes: ${n}\nlist_hash: ${d}\nRonda quicknet: ${r} → ${u}\nRehacelo: https://github.com/nema1502/tinkazo/blob/main/docs/protocolo.md (§7)`,
     cTroSpent: (n) => pick([`¡Se le acabó la cuerda a ${n}!`, `¡Se apagó el trompo de ${n}!`, `¡${n} se queda sin cuerda!`]),
+    // --- Constelación, sapo y ¿Quién es? (7 de octubre de 2026).
+    cConstHeading: (n) => pick([`¿Va para ${n}…?`, `¿Se queda en ${n}…?`]),
   },
   en: {
     badge: "For whoever has to run the draw",
@@ -1432,7 +1436,7 @@ export const T: Record<Lang, Dict> = {
       "Eyes up: that's all of you!", "Every one of you is up there!"],
     cRoute: ["FINDING PATH", "PLOTTING ROUTE", "ASKING THE SKY", "OPENING A PATH"],
     cRouteFoundShort: "PATH FOUND!",
-    cRouteFound: ["Path found!", "And the payment is out!", "There it goes!", "It's hopping!"],
+    cRouteFound: ["Path found!", "And it's off!", "There it goes!", "It's hopping!"],
     cConstPass: (n) => pick([`It goes through ${n}!`, `Touches ${n} and moves on!`,
       `${n} had it for a second!`, `Bounces off ${n}!`, `So close, ${n}!`]),
     cConstNarrow: ["Slower and slower!", "It's braking!",
@@ -1891,6 +1895,8 @@ export const T: Record<Lang, Dict> = {
     summary: (w, n, d, r, u) =>
       `Tinkazo · verifiable draw (protocol v2)\nWinner(s): ${w}\nEntries: ${n}\nlist_hash: ${d}\nquicknet round: ${r} → ${u}\nRun it again: https://github.com/nema1502/tinkazo/blob/main/docs/protocolo.md (§7)`,
     cTroSpent: (n) => pick([`${n}'s top runs out of spin!`, `${n}'s top stops spinning!`, `${n} is out of spin!`]),
+    // --- Constellation, sapo and Guess Who (7 October 2026).
+    cConstHeading: (n) => pick([`Is it going to ${n}…?`, `Is it stopping at ${n}…?`]),
   },
 };
 

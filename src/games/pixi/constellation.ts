@@ -49,6 +49,8 @@ export async function constellationPixi(names: string[], winners: readonly numbe
 
   const nodes: Node[] = [];
   let WIN_NODE = 0, DECOY = 0;
+  /** En qué punto del último salto se nombra la estrella del amague, y en cuál se desvía. */
+  let HEAD_AT = 2, DECOY_AT = 2;
   let hops: Hop[] = [];
   const story = writeStory(rng, Math.max(2, names.length), winnerIdx % Math.max(2, names.length));
   const casi = story.arc === "susto" && names.length >= 2;
@@ -83,10 +85,14 @@ export async function constellationPixi(names: string[], winners: readonly numbe
     }
     WIN_NODE = Math.max(0, nodes.findIndex((q) => q.idx === winnerIdx));
     const win = nodes[WIN_NODE] as Node;
-    const near = nodes.map((q, i) => ({ i, d: Math.hypot(q.x - win.x, q.y - win.y) })).filter((q) => q.i !== WIN_NODE && nodes[q.i]?.kind === "star").sort((a, b) => a.d - b.d).slice(0, 4);
+    // Los otros premios no son ni el amague ni una parada del recorrido: el
+    // relator los nombraba como perdedores ("¡Pasa por…!", "¡Casi, …!"). Con
+    // un solo premio el conjunto está vacío y el cielo sale igual que antes.
+    const coWin = new Set(winners.slice(1));
+    const near = nodes.map((q, i) => ({ i, d: Math.hypot(q.x - win.x, q.y - win.y) })).filter((q) => q.i !== WIN_NODE && nodes[q.i]?.kind === "star" && !coWin.has((nodes[q.i] as Node).idx)).sort((a, b) => a.d - b.d).slice(0, 4);
     DECOY = near.length ? (near[Math.floor(rng() * near.length)] as { i: number }).i : WIN_NODE;
     const minD = 0.18 * Math.min(w, h);
-    const pool = nodes.map((_, i) => i).filter((i) => i !== WIN_NODE);
+    const pool = nodes.map((_, i) => i).filter((i) => i !== WIN_NODE && !coWin.has((nodes[i] as Node).idx));
     let first = pool[0] ?? 0;
     for (const i of pool) if ((nodes[i] as Node).x < (nodes[first] as Node).x) first = i;
     const seq = [first];
@@ -119,15 +125,40 @@ export async function constellationPixi(names: string[], winners: readonly numbe
         cy: last ? d.y * 0.86 + b.y * 0.14 : casi && i === CASI ? wn.y * 1.3 - (a.y + b.y) * 0.15 : (a.y + b.y) / 2,
       };
     });
+    // El amague, donde el paquete pasa de verdad más cerca de la estrella
+    // vecina: la misma cuenta que packetPos, en sesenta puntos del último
+    // salto. Fijo al 72% salía con el paquete ya encima de la ganadora, y sin
+    // nombre: la sala veía un destello, no a alguien que casi gana. Ahora se
+    // nombra un poco antes ("¿Va para…?") y se desvía apenas pasa, con tope
+    // para que la línea no pise a la del ganador.
+    if (DECOY !== WIN_NODE) {
+      const hp = hops[K - 1] as Hop;
+      const a = nodes[hp.from] as Node, b = nodes[hp.to] as Node, d = nodes[DECOY] as Node;
+      let best = Infinity, at = 0.5;
+      for (let s = 0; s <= 60; s++) {
+        const u = s / 60, p = ease.inOutCubic(u), q = 1 - p;
+        const x = q * q * a.x + 2 * q * p * hp.cx + p * p * b.x, y = q * q * a.y + 2 * q * p * hp.cy + p * p * b.y;
+        const dd = Math.hypot(x - d.x, y - d.y);
+        if (dd < best) {
+          best = dd;
+          at = u;
+        }
+      }
+      DECOY_AT = clamp(at + 0.03, 0.45, 0.72);
+      HEAD_AT = clamp(at - 0.35, 0.2, DECOY_AT - 0.25);
+    }
     setGameLength(ARM + hops.reduce((acc, hp) => acc + hp.dur, 0), WINNER_HOLD);
   }
 
   let phase: Phase = "arm";
   let tPhase = 0, tAll = 0, hopI = 0, hopT = 0, novaK = 0, tHold = 0, bornTicks = 0, barTick = 0;
-  let saidCasi = false, saidNarrow = false, saidReady = false, saidBuild = false, saidDecoy = false;
+  let saidCasi = false, saidNarrow = false, saidReady = false, saidBuild = false, saidDecoy = false, saidHeading = false;
   const trail: { x: number; y: number }[] = [];
   const links: { a: number; b: number; c: number }[] = [];
   const chipLife = new Map<number, number>();
+  /** En la nova, las estrellas de los co-ganadores que ya recibieron su rayo, y las que muestran su nombre en este cuadro. */
+  const coLit = new Set<number>();
+  const coShown: number[] = [];
   /** La estrella de cada persona. */
   const starOf = new Map(nodes.map((nd, i) => [nd.idx, i] as const).filter(([idx]) => idx >= 0));
 
@@ -211,7 +242,9 @@ export async function constellationPixi(names: string[], winners: readonly numbe
     }
     if (phase === "hop") {
       const hp = hops[hopI] as Hop;
-      if (hopT === 0) beepFor(note(4 + Math.round(hopI * 0.5)), hp.dur * 0.6, "sine", 0.02);
+      // En los saltos lentos del final, un seno a 0,02 lo tapaba la música:
+      // en triángulo y un poco más fuerte se oye que el paquete sigue viajando.
+      if (hopT === 0) beepFor(note(4 + Math.round(hopI * 0.5)), hp.dur * 0.6, hopI >= 12 ? "triangle" : "sine", hopI >= 12 ? 0.03 : 0.02);
       if (hopT === 0 && hopI === K - 1) {
         S.say(t("cConstLast"), 0.85);
         beepFor(note(0), hp.dur * 0.72, "sawtooth", 0.04);
@@ -223,16 +256,27 @@ export async function constellationPixi(names: string[], winners: readonly numbe
       if (casi && hopI === CASI && !saidCasi && hopT >= 0.48) {
         saidCasi = true;
         (nodes[WIN_NODE] as Node).flare = 1;
+        // Con su nombre al lado: el relator decía "¡Uy, fulano!" y la estrella
+        // destellaba sin chip, así que nadie sabía cuál era.
+        chipLife.set(WIN_NODE, 1);
         S.say(T[getLang()].cConstNear(names[winnerIdx] ?? ""), 0.6);
-        beep(note(14), 0.1, "triangle", 0.045);
-        setTimeout(() => beep(note(9), 0.12, "sine", 0.04), 110);
+        // Una subida corta: el roce no suena como una llegada cualquiera.
+        beep(note(12), 0.08, "triangle", 0.045);
+        setTimeout(() => beep(note(14), 0.08, "triangle", 0.045), 80);
         cam.punch(0.06).shake(6 * S.u());
       }
-      if (hopI === K - 1 && !saidDecoy && hopT >= 0.72) {
+      if (hopI === K - 1 && DECOY !== WIN_NODE && !saidHeading && hopT >= HEAD_AT) {
+        // Antes de pasar al lado, la estrella del amague con su nombre: la
+        // sala lee a alguien, cree que gana y lo ve perder.
+        saidHeading = true;
+        chipLife.set(DECOY, 1);
+        S.say(T[getLang()].cConstHeading(names[(nodes[DECOY] as Node).idx] ?? ""), 0.9);
+      }
+      if (hopI === K - 1 && DECOY !== WIN_NODE && !saidDecoy && hopT >= DECOY_AT) {
         (nodes[DECOY] as Node).flare = 1;
         S.say(t("cConstDecoy"), 0.95);
-        beep(note(15), 0.14, "triangle", 0.05);
-        setTimeout(() => beep(note(11), 0.12, "sine", 0.04), 120);
+        // Cuatro notas que caen: el giro se distingue de oído de una llegada.
+        [17, 15, 13, 11].forEach((d, i) => setTimeout(() => beep(note(d), 0.08, "triangle", 0.05 - i * 0.005), i * 60));
         saidDecoy = true;
         cam.shake(8 * S.u());
       }
@@ -349,8 +393,22 @@ export async function constellationPixi(names: string[], winners: readonly numbe
     } else if (phase === "hop") {
       const pk = packetPos();
       const focus = 0.25 + 0.75 * ease.inOutCubic(clamp((hopI + hopT - 12) / 4, 0, 1));
-      const zoom = 1.05 + 0.08 * (hopI / K) + 0.6 * ease.inOutCubic(clamp((hopI + hopT - 12) / 4, 0, 1));
-      cam.lookAt(mid.x + (pk.x - mid.x) * focus, mid.y + (pk.y - mid.y) * focus, zoom, 2.4 + 2 * focus, 0.025 * (hopI / K));
+      let zoom = 1.05 + 0.08 * (hopI / K) + 0.6 * ease.inOutCubic(clamp((hopI + hopT - 12) / 4, 0, 1));
+      let x = mid.x + (pk.x - mid.x) * focus, y = mid.y + (pk.y - mid.y) * focus;
+      // En el último salto mira también hacia la estrella del amague, como
+      // quien cree que va para ahí, y abre lo justo para que entren las dos:
+      // pegada al paquete, la estrella que se nombra quedaba fuera de cuadro.
+      // Después del desvío vuelve al paquete.
+      if (hopI === K - 1 && DECOY !== WIN_NODE) {
+        const d = nodes[DECOY] as Node;
+        const w = 0.5 * clamp(hopT / 0.15, 0, 1) * (1 - clamp((hopT - DECOY_AT) / 0.15, 0, 1));
+        x += (d.x - x) * w;
+        y += (d.y - y) * w;
+        const ancho = Math.abs(d.x - pk.x) + 160 * S.u(), alto = Math.abs(d.y - pk.y) + 160 * S.u();
+        const cabe = Math.max(1, Math.min(W() / ancho, (H() * 0.8) / alto));
+        zoom += (Math.min(zoom, cabe) - zoom) * (w / 0.5);
+      }
+      cam.lookAt(x, y, zoom, 2.4 + 2 * focus, 0.025 * (hopI / K));
     } else {
       // Se abre, pero con la ganadora a la vista, debajo del cartel.
       const win = nodes[WIN_NODE] as Node;
@@ -369,14 +427,17 @@ export async function constellationPixi(names: string[], winners: readonly numbe
       const x = ((((s.x * W() - now * s.v * k) % span) + span) % span) - 20 * k;
       backG.rect(x, s.y * H(), s.r * k, s.r * k).fill({ color: S.dark ? CREAM : 0xfff6e9, alpha: (0.55 + 0.45 * Math.sin(now * 2 + s.ph)) * (S.dark ? 0.75 : 0.9) });
     }
-    // Las líneas de la constelación: en la nova engordan de golpe.
+    // Las líneas de la constelación: en la nova engordan de golpe. Antes, las
+    // seis últimas van enteras y las viejas finitas y apagadas: veinte líneas
+    // iguales cruzadas no dejaban ver por dónde venía el paquete.
     linksG.clear();
     const fat = phase === "nova";
-    for (const l of links) {
+    links.forEach((l, j) => {
       const a = nodes[l.a] as Node, b = nodes[l.b] as Node;
-      linksG.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: (fat ? 10 : 7) * k, color: INK, cap: "square" });
-      linksG.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: (fat ? 5 : 3) * k, color: l.c, cap: "square" });
-    }
+      const vieja = !fat && j < links.length - 6;
+      linksG.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: (fat ? 10 : vieja ? 5 : 7) * k, color: INK, cap: "square" });
+      linksG.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: (fat ? 5 : vieja ? 2 : 3) * k, color: l.c, alpha: vieja ? 0.35 : 1, cap: "square" });
+    });
     // Estrellas y rombos: nacen, respiran y se encienden al recibir el pago.
     wavesG.clear();
     for (const nd of nodes) {
@@ -451,6 +512,30 @@ export async function constellationPixi(names: string[], winners: readonly numbe
       // Con la hora de la fase, que no tiene tope: con novaK (que llega a 1)
       // la corona se congelaba a los 1,4 s, sin los premios de más ni el papel picado.
       crown.at(tPhase * 1.4);
+      // Cada co-ganador con su momento: cuando su renglón entra al cartel (la
+      // misma hora que usa la corona), un rayo sale de la estrella ganadora a
+      // la suya, que se enciende y muestra su nombre. Con tres premios, en el
+      // cielo brillaba solo el primero. El sonido ya lo pone la corona.
+      coShown.length = 0;
+      for (let i = 1; i < Math.min(3, winners.length); i++) {
+        const ni = starOf.get(winners[i] as number);
+        const te = (0.55 + i * 0.35) / paceFactor();
+        if (ni === undefined || tPhase * 1.4 < te) continue;
+        const b = nodes[ni] as Node;
+        const f = ease.outCubic(clamp((tPhase * 1.4 - te) / 0.3, 0, 1));
+        const len = Math.hypot(b.x - nd.x, b.y - nd.y) || 1;
+        const hasta = Math.max(0, len - b.r * 1.6) * f;
+        const ex = nd.x + ((b.x - nd.x) / len) * hasta, ey = nd.y + ((b.y - nd.y) / len) * hasta;
+        novaG.moveTo(nd.x, nd.y).lineTo(ex, ey).stroke({ width: 10 * k, color: INK, cap: "round" });
+        novaG.moveTo(nd.x, nd.y).lineTo(ex, ey).stroke({ width: 6 * k, color: YELLOW, cap: "round" });
+        if (f >= 1) {
+          if (!coLit.has(ni)) {
+            coLit.add(ni);
+            b.flare = 1;
+          }
+          coShown.push(ni);
+        }
+      }
     }
     // Pasar lista: mientras se arma el cielo y en los primeros saltos, los
     // nombres de a tandas encima de cada estrella, para que cada uno sepa cuál
@@ -475,12 +560,19 @@ export async function constellationPixi(names: string[], winners: readonly numbe
       }
       c.visible = true;
       c.alpha = alpha;
-      c.position.set(nd.x + nd.r + 6 * k, nd.y - nd.r - 10 * k);
+      // El chip del amague va del lado contrario a la ganadora, que está
+      // pegada: arriba a la derecha, como los demás, la tapaba.
+      const wn = nodes[WIN_NODE] as Node;
+      const lejos = ni === DECOY && hopI === K - 1;
+      const izq = lejos && wn.x >= nd.x, abajo = lejos && wn.y < nd.y;
+      c.position.set(izq ? nd.x - nd.r - 6 * k - c.width : nd.x + nd.r + 6 * k, abajo ? nd.y + nd.r + 10 * k : nd.y - nd.r - 10 * k);
     };
     if (phase !== "nova" && !roll.length) {
       if (names.length <= 4) nodes.forEach((nd, i) => { if (nd.idx >= 0 && tAll > nd.born) show(i, 1, false); });
-      else for (const [ni, a] of chipLife) show(ni, Math.min(1, a * 3), ni === enMano);
+      // Grandes: el que tiene el paquete, la ganadora en el roce y la estrella del amague.
+      else for (const [ni, a] of chipLife) show(ni, Math.min(1, a * 3), ni === enMano || (casi && ni === WIN_NODE) || (hopI === K - 1 && ni === DECOY));
     }
+    if (phase === "nova") for (const ni of coShown) show(ni, 1, true);
     // La barra de "buscando ruta", en el armado.
     bar.clear();
     barText.text = "";

@@ -26,7 +26,7 @@ La carrera de cohetes no se tiró: quedó como juego propio, con el identificado
 - **Las estrellas de la gente:** una cruz de doce puntas, del color que le toca en el ciclo de la paleta, con contorno de tinta y un cuadradito claro en el centro. Cuando el paquete llega, la estrella crece y suelta un halo.
 - **Los rombos:** nodos intermedios, huecos, violeta, sin nombre. Son las trustlines por donde rebota el pago. La sala aprende en dos saltos que los rombos no son gente.
 - **El paquete:** un cuadrado amarillo girado, girando, con estela de rombos que se achican.
-- **Las líneas:** doble trazo, tinta gruesa debajo y color arriba. Es el borde neobrutalista aplicado a una línea.
+- **Las líneas:** doble trazo, tinta gruesa debajo y color arriba. Es el borde neobrutalista aplicado a una línea. Durante los saltos, las seis últimas van enteras y las viejas finitas y apagadas, para que se vea por dónde viene el paquete y no veinte líneas iguales cruzadas; en la nova engordan todas a la vez.
 - **Los chips:** avatar y nombre, solo el actual y los anteriores desvaneciéndose. Nunca los doscientos a la vez.
 
 ## El ritmo
@@ -44,7 +44,7 @@ En **segundos de juego**: el selector los estira todos por igual, y en "normal" 
 | 5,4 – 12,0 s | Siete saltos, el ritmo se abre. |
 | 12,0 – 15,3 s | Cuatro saltos, cada uno más largo que el anterior: acá la sala se calla. |
 | 15,3 – 17,5 s | El último salto, con un zumbido grave de fondo que dura lo que dura el salto. |
-| Al 72% del último salto | **El engaño.** El paquete va claramente hacia una estrella vecina, que destella. La curva se apoya en ella. Después se va para otro lado. |
+| En el último salto | **El engaño.** La curva se apoya en una estrella vecina y la cámara mira hacia ella. Un poco antes de pasarle al lado se la nombra, con su chip grande ("¿Va para Lucía Flores…?"), y justo cuando el paquete pasa pegado destella y se desvía ("¡DIO LA VUELTA!"), con cuatro notas que caen. El punto sale de la geometría de la curva, no de un porcentaje fijo: al 72% el paquete ya estaba encima de la ganadora. Con tope al 72%, para que la línea no pise a la del ganador. |
 | 17,5 s en adelante | Supernova en tres anillos y ocho púas, la constelación entera engorda, la tarjeta amarilla con el nombre. Tres segundos **reales**, para que la sala alcance a leer y a reaccionar. |
 
 ## Las tres reglas que lo hacen funcionar
@@ -52,6 +52,7 @@ En **segundos de juego**: el selector los estira todos por igual, y en "normal" 
 1. **El ganador no se visita nunca antes del último salto.** Si no, habría falsos positivos y la sala no sabría cuándo terminó.
 2. **Ningún nodo recibe el pago más de tres veces.** Con dos participantes el paquete no puede quedar rebotando en la única estrella que hay: se va a los rombos.
 3. **Ningún salto mide menos del 18% del lado corto.** Todos los saltos se ven.
+4. **Con varios premios, los otros ganadores no son ni parada ni amague.** El relator no puede decir "¡Pasa por…!" ni "¡Casi, …!" de alguien que se lleva un premio. En la nova, cuando su renglón entra al cartel, un rayo va de la estrella ganadora a la suya, que se enciende y muestra su nombre.
 
 ## Cómo está hecho
 
