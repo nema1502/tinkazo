@@ -166,6 +166,7 @@ export interface Dict {
   cTroSpent: (n: string) => string;
   // Constelación, sapo y ¿Quién es? (7 de octubre de 2026).
   cConstHeading: (n: string) => string;
+  cSapMissBy: (n: string) => string;
 }
 
 /**
@@ -462,9 +463,9 @@ export const T: Record<Lang, Dict> = {
     cQuiNoStamp: "¡NO!",
     cQuiLeft: "QUEDAN",
     cQuiAlmost: ["¡Casi se da vuelta!", "¡Uy, casi!", "¡Se salvó de milagro!"],
-    cSapNext: (k, of) => `¡Tiro ${k} de ${of}!`,
+    cSapNext: (k) => `¡Va el premio ${k}!`,
     cSapDone: (n) => pick([`¡Cayó en el agujero de ${n}: ganador!`, `¡Ahí quedó, en el de ${n}: ganador!`]),
-    cSapTally: (k, of) => `Ganador ${k} de ${of}`,
+    cSapTally: (k, of) => `Premio ${k} de ${of}`,
     cSapAlmost: "¡Casi!",
     // --- Carnaval de Oruro. La entrada de la Diablada hasta el Socavón.
     cOruStart: ["¡Arranca la entrada!", "¡Suena la banda!", "¡Que baile la diablada!"],
@@ -1062,6 +1063,7 @@ export const T: Record<Lang, Dict> = {
     cTroSpent: (n) => pick([`¡Se le acabó la cuerda a ${n}!`, `¡Se apagó el trompo de ${n}!`, `¡${n} se queda sin cuerda!`]),
     // --- Constelación, sapo y ¿Quién es? (7 de octubre de 2026).
     cConstHeading: (n) => pick([`¿Va para ${n}…?`, `¿Se queda en ${n}…?`]),
+    cSapMissBy: (n) => pick([`¡Pegó al lado de ${n} y se fue!`, `¡Pasó cerca de ${n}!`, `¡Se le escapó a ${n}!`]),
   },
   en: {
     badge: "For whoever has to run the draw",
@@ -1309,9 +1311,9 @@ export const T: Record<Lang, Dict> = {
     cQuiNoStamp: "NO!",
     cQuiLeft: "LEFT",
     cQuiAlmost: ["It almost flipped!", "Whoa, so close!", "Saved by a hair!"],
-    cSapNext: (k, of) => `Toss ${k} of ${of}!`,
+    cSapNext: (k) => `Prize ${k}, here it goes!`,
     cSapDone: (n) => pick([`It dropped into ${n}'s hole: winner!`, `There it rests, in ${n}'s: winner!`]),
-    cSapTally: (k, of) => `Winner ${k} of ${of}`,
+    cSapTally: (k, of) => `Prize ${k} of ${of}`,
     cSapAlmost: "Almost!",
     cOruStart: ["The entrada begins!", "The band strikes up!", "Let the diablada dance!"],
     cOruCount: (n) => (n === 2 ? "Two devils in the troupe!" : `${n} devils in the troupe!`),
@@ -1897,6 +1899,7 @@ export const T: Record<Lang, Dict> = {
     cTroSpent: (n) => pick([`${n}'s top runs out of spin!`, `${n}'s top stops spinning!`, `${n} is out of spin!`]),
     // --- Constellation, sapo and Guess Who (7 October 2026).
     cConstHeading: (n) => pick([`Is it going to ${n}…?`, `Is it stopping at ${n}…?`]),
+    cSapMissBy: (n) => pick([`It hit next to ${n}'s and rolled off!`, `It went right past ${n}!`, `${n} watched it roll away!`]),
   },
 };
 

@@ -48,6 +48,12 @@ const HANG_SMALL = 0.5;
 const AFTER_MISS = 0.8;
 const AFTER_NEAR = 1.3;
 const AFTER_HIT = 1.0;
+/**
+ * No se acorta: "¡ADENTRO!" abre el remate de la música al caer, y el remate
+ * rasguea casi dos segundos. Con 1,3 y con 1,6 el cartel llegaba encima del
+ * rasgueo y el golpe del ganador sonaba más bajo que lo de antes (auditor de
+ * mezcla, 7 de octubre de 2026: −4,6 y −8,1 LU).
+ */
 const AFTER_FINAL = 2.0;
 /** La parte de AFTER_NEAR que la argolla baila en el borde antes de salir. */
 const WOBBLE = 0.8;
@@ -87,7 +93,13 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   // borrosa justo cuando todos miran la argolla.
   cam.noBlur();
   const all = names.length;
-  const prizesAll = winners.length ? [...winners] : [0];
+  // Los premios se tiran del último al primero, como en una premiación: el
+  // turno largo, con la remontada, los "casi" y el acercamiento, es el del
+  // primer premio. Antes el primero se decidía a los seis segundos, cuando la
+  // sala recién miraba, y todo el suspenso era para el tercero. El cartel y el
+  // relator del final siguen con el orden de `winners`. Con un solo premio no
+  // cambia nada.
+  const prizesAll = winners.length ? [...winners].reverse() : [0];
 
   /* ------------------------------------------------------------ la clasificatoria */
   let Q: ReturnType<typeof planQualifier>;
@@ -137,6 +149,8 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   /** El agujero de cada participante original que llegó a la final. */
   const slotOfName = new Map<number, number>();
   for (let s = 0; s < holes; s++) slotOfName.set(whoAt(s), s);
+  /** El número de premio del turno `turn`: se tiran del último al primero. */
+  const premioDe = (turn: number): number => total - turn;
 
   /* ---------------------------------------------------------------- el guion */
   const tosses: Toss[] = [];
@@ -156,6 +170,8 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     tt = start + flight + after;
   });
   const T_CROWN = tt;
+  /** Cuándo cae la última argolla: ahí va el respiro de la música. */
+  const T_LAND = (tosses[tosses.length - 1] as Toss).land;
   setGameLength(T_CROWN, WINNER_HOLD);
 
   /* ---------------------------------------------------------------- geometría */
@@ -430,14 +446,37 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     crown();
   };
 
+  /**
+   * El agujero más cerca de donde pegó la argolla, sin los que ya tienen
+   * medalla: el relator nombra a esa persona en cada tiro a la madera.
+   */
+  const cercano = (o: Toss): number => {
+    const ganados = new Set(tosses.filter((x) => x.th.kind === "hit" && x.i < o.i).map((x) => x.slot));
+    let mejor = -1, d = Infinity;
+    L.holes.forEach((h, s) => {
+      const dd = Math.hypot(h.x - o.th.landing.x, h.y - o.th.landing.y);
+      if (!ganados.has(s) && dd < d) {
+        d = dd;
+        mejor = s;
+      }
+    });
+    return Math.max(0, mejor);
+  };
+
   const onLand = (o: Toss): void => {
     o.landed = true;
     const big = o.grand;
     const k = g.k;
     if (o.th.kind === "miss") {
-      beep(note(4), 0.08, "square", big ? 0.05 : 0.03);
+      // La madera no suena siempre igual, y la argolla rebota: un segundo
+      // golpe más bajo con su saltito. Eran cuatro golpes iguales seguidos.
+      beep(note(4 + (o.i % 3)), 0.08, "square", big ? 0.05 : 0.03);
+      setTimeout(() => beep(note(2 + (o.i % 3)), 0.06, "square", 0.03), 150);
       cam.punch(big ? 0.04 : 0.02).shake((big ? 4 : 2) * k);
-      if (big) S.say(t("cSapMiss"), 0.5);
+      // Con el nombre de quien estaba más cerca: doce segundos de "¡Afuera!"
+      // sin nombrar a nadie no le daban a la sala de dónde agarrarse. En la
+      // tapada no se nombra a nadie hasta que entra.
+      if (big) S.say(story.arc === "tapada" ? t("cSapMiss") : T[getLang()].cSapMissBy(nameOfSlot(cercano(o))), 0.5);
     } else if (o.th.kind === "near") {
       beep(note(12), 0.09, "triangle", big ? 0.055 : 0.035);
       [0, 1, 2].forEach((d) => setTimeout(() => beep(note(11 - d), 0.05, "square", 0.025), 110 + d * 130));
@@ -447,8 +486,19 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
         else S.say(T[getLang()].cSapNear(nameOfSlot(o.th.rimSlot as number)), 0.85);
       }
     } else {
-      beep(note(o.final ? 0 : 3), o.final ? 0.4 : 0.2, "triangle", o.final ? 0.07 : 0.05);
-      beep(note(o.final ? -5 : -2), 0.16, "sawtooth", 0.035);
+      if (o.final) {
+        // La caída que decide, en el registro de un proyector: el clonc de la
+        // argolla, cuerpo en dos notas y el trago de la rana. Eran dos notas a
+        // 131 Hz (el grado -5 se recorta a 0), debajo de lo que reproduce un
+        // parlante de sala.
+        beep(note(7), 0.06, "square", 0.05);
+        beep(note(5), 0.45, "triangle", 0.08);
+        beep(note(0), 0.5, "triangle", 0.06);
+        [12, 9, 7].forEach((d, i) => setTimeout(() => beep(note(d), 0.07, "triangle", 0.045), 120 + i * 90));
+      } else {
+        beep(note(3), 0.2, "triangle", 0.05);
+        beep(note(3), 0.16, "sawtooth", 0.035);
+      }
       cam.punch(o.final ? 0.1 : 0.05).shake((o.final ? 12 : 6) * k);
       if (o.final) S.say(t("cSapIn"), 1);
       else S.say(T[getLang()].cSapDone(nameOfSlot(o.slot)), 0.55);
@@ -482,7 +532,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       if (!o.announced && tAll >= o.start - 0.7) {
         o.announced = true;
         if (firstOfTurn && total > 1) {
-          S.say(T[getLang()].cSapNext(o.th.turn + 1, total), 0.3 + 0.5 * (o.th.turn / Math.max(1, last)));
+          S.say(T[getLang()].cSapNext(premioDe(o.th.turn), total), 0.3 + 0.5 * (o.th.turn / Math.max(1, last)));
           beep(note(8 + (o.th.turn % 4)), 0.12, "sine", 0.04);
         }
         if (o.final) S.say(t("cSapLast"), 0.9);
@@ -840,7 +890,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     const quedan = all - waves.reduce((a, w, wi) => a + (tAll >= Q_SHOW + wi * Q_WAVE + 0.6 ? w.length : 0), 0);
     counter.text = !started
       ? (tAll < T_FLY && all > holes ? `${t("cQualIn")}  ${quedan}` : `${t("cSapHoles")}  ${holes}`)
-      : total > 1 ? T[getLang()].cSapTally(turn + 1, total).toUpperCase() : `${t("cSapHoles")}  ${holes}`;
+      : total > 1 ? T[getLang()].cSapTally(premioDe(turn), total).toUpperCase() : `${t("cSapHoles")}  ${holes}`;
     const bw = counter.width + 40 * k, bh = 40 * k;
     counter.position.set(bw / 2, bh / 2);
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(0x221a33).stroke({ width: 3 * k, color: INK });
@@ -859,7 +909,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       if (total > 1) {
         let b = badgeOf.get(o.th.turn);
         if (!b) {
-          b = S.text(`${o.th.turn + 1}`, { fontSize: br * 1.3, fontWeight: "900", fill: INK });
+          b = S.text(`${premioDe(o.th.turn)}`, { fontSize: br * 1.3, fontWeight: "900", fill: INK });
           b.anchor.set(0.5);
           badgeOf.set(o.th.turn, b);
           badgeLayer.addChild(b);
@@ -887,7 +937,10 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
 
   S.run((dt, now) => {
     tAll += dt;
-    S.breath(tAll, T_CROWN);
+    // El respiro, antes de que caiga la argolla y no antes del cartel:
+    // "¡ADENTRO!" ya dispara el remate, y después del remate el respiro no
+    // cortaba nada. Silencio, caída, golpe.
+    S.breath(tAll, T_LAND);
     script();
     if (tAll >= T_CROWN) {
       crown();

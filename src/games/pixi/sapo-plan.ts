@@ -111,7 +111,10 @@ export function optsForArc(arc: ArcName): PlanOpts {
     case "duelo":
       return { lastMisses: 2, lastNears: 2, otherMisses: 1, otherNears: 0 };
     case "remontada":
-      return { lastMisses: 4, lastNears: 1, otherMisses: 1, otherNears: 0 };
+      // Dos "casi" en vez de uno: cada uno nombra a alguien, con la
+      // calcomanía y el clinc, que es lo que más mueve a la sala. Eran cuatro
+      // tiros a la madera seguidos y un solo "casi".
+      return { lastMisses: 3, lastNears: 2, otherMisses: 1, otherNears: 0 };
     case "tapada":
       return { lastMisses: 1, lastNears: 1, otherMisses: 1, otherNears: 0 };
   }

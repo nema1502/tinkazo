@@ -35,8 +35,8 @@ describe("diccionario", () => {
   it("Sapo: the drop line says winner, the tally counts, 'almost' and the frog's lip exist", () => {
     expect(T.es.cSapDone("Ana")).toContain("ganador");
     expect(T.en.cSapDone("Ana")).toContain("winner");
-    expect(T.es.cSapTally(1, 2)).toBe("Ganador 1 de 2");
-    expect(T.en.cSapTally(1, 2)).toBe("Winner 1 of 2");
+    expect(T.es.cSapTally(1, 2)).toBe("Premio 1 de 2");
+    expect(T.en.cSapTally(1, 2)).toBe("Prize 1 of 2");
     for (const k of ["cSapAlmost", "cSapLip"]) {
       expect(T.es[k]).toBeTruthy();
       expect(T.en[k]).toBeTruthy();

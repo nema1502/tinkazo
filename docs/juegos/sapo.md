@@ -12,7 +12,7 @@ El ganador sale del [protocolo](../protocolo.md) antes de que empiece el juego. 
 
 1. **La clasificatoria** ([`qualifier.ts`](../../src/games/pixi/qualifier.ts)). En la mesa entran doce agujeros. Con más nombres aparecen todos en una grilla y se tachan en una a tres oleadas hasta que quedan doce finalistas, que siempre incluyen a los ganadores. Quiénes los acompañan se elige con el `rng` sembrado de la ronda. Con doce o menos no hay oleadas: los nombres vuelan directo a sus agujeros. Así la pantalla se mueve desde el primer cuadro.
 2. **Los agujeros** ([`slots.ts`](../../src/games/pixi/slots.ts)). Los finalistas se reparten sobre los agujeros con el mismo `rng`. Es una permutación: dos ganadores nunca comparten agujero.
-3. **Los tiros** ([`sapo-plan.ts`](../../src/games/pixi/sapo-plan.ts), de Guido). Para cada ganador, unos tiros que pegan en la madera, unos que bailan en el borde de un agujero libre, y uno que cae en el suyo. Ningún tiro que no sea el del ganador cae adentro de un agujero: está probado geométricamente.
+3. **Los tiros** ([`sapo-plan.ts`](../../src/games/pixi/sapo-plan.ts), de Guido). Para cada ganador, unos tiros que pegan en la madera, unos que bailan en el borde de un agujero libre, y uno que cae en el suyo. Ningún tiro que no sea el del ganador cae adentro de un agujero: está probado geométricamente. Con varios premios se tiran del último al primero, como en una premiación ("¡Va el premio 3!", medalla 3, "Premio 3 de 3" en el contador): el turno largo, con la remontada, los "casi" y el acercamiento, es el del primer premio. Hasta el 7 de octubre de 2026 el primero se decidía a los seis segundos y todo el suspenso era para el tercero. El cartel y el relator del final siguen en el orden de los premios.
 4. Todo sale de la hora del juego. Sin `Math.random()`: la misma ronda dibuja los mismos cuadros.
 
 ## Lo que se ve
@@ -23,7 +23,8 @@ El ganador sale del [protocolo](../protocolo.md) antes de que empiece el juego. 
 - **La mano** que tira: en una pantalla ancha sobre la esquina del cajón, en un celular debajo, para que la mesa use todo el ancho. Baja para tomar impulso y suelta.
 - **La argolla**: un disco amarillo con borde de tinta y agujero, grande, que contrasta con los dos tonos de madera y no se lee como moneda. La del último tiro lleva un aro amarillo nítido. Hasta el 4 de octubre de 2026 era un halo transparente que sobre la madera se leía como una mancha borrosa, justo en el tiro que todos miran.
 - **El "casi"**: la argolla queda montada sobre el aro de cualquier agujero libre, también el del ganador, del lado que mira a la rana (afuera quedaría debajo del nombre), baila y sale. Un "¡Casi!" amarillo aparece entre la argolla y la rana, y el relator nombra a quien estaba ahí. Hasta el 4 de octubre de 2026 caía siempre en un vecino del agujero ganador, y con dos "casi" el ganador quedaba en el medio ocho segundos antes. Ahora dónde baila no dice nada de quién gana.
-- **El agujero ganador**: el aro se vuelve amarillo y grueso, estalla en rayos, y el nombre crece con un resaltado amarillo que sigue a la vista cuando aparece el cartel.
+- **Los tiros a la madera**: el relator nombra a quien tenía el agujero más cerca ("¡Se le escapó a Andrés Villca!"), salvo en la tapada, y el golpe en la madera cambia de nota y rebota. Eran doce segundos de "¡Afuera!" sin nombrar a nadie y cuatro golpes iguales.
+- **El agujero ganador**: el aro se vuelve amarillo y grueso, estalla en rayos, y el nombre crece con un resaltado amarillo que sigue a la vista cuando aparece el cartel. La música se corta 0,4 s antes de que caiga la argolla y "¡ADENTRO!" la vuelve a abrir con el remate; la caída suena en el registro de un proyector (el clonc de la argolla, cuerpo en dos notas y el trago de la rana). El cartel sigue llegando 2 s de juego después de la caída: se probó acortarlo a 1,3 y a 1,6, y el cartel caía encima del rasgueo del remate y el golpe del ganador sonaba más bajo que lo de antes.
 - **El contador de la casa**, arriba a la izquierda: los que siguen en juego durante la clasificatoria (baja cuando la oleada ya cayó, no antes), después los agujeros, y con varios ganadores el ganador de turno.
 
 ## Arcos y cámara
@@ -34,7 +35,7 @@ El arco sale de [`drama.ts`](../../src/games/drama.ts) y decide cuántos tiros d
 |---|---|
 | Susto | 2 que pegan en la madera y 2 que bailan en un borde; el último pega en el labio de la rana y rebota adentro |
 | Duelo | 2 que pegan en la madera y 2 que bailan en un borde |
-| Remontada | 4 en la madera y 1 en un borde; la cámara sigue de cerca desde el principio |
+| Remontada | 3 en la madera y 2 en un borde; la cámara sigue de cerca desde el principio |
 | Tapada | 1 en la madera y 1 en un borde; nadie se nombra hasta que entra |
 
 La cámara sigue a la argolla mientras está en la mesa y vuelve a la mesa entera cuando se va. Se acerca en el "casi" y en el último vuelo, y termina en el agujero del ganador, a un 62% del alto de la pantalla, y ahí se queda con el cartel arriba, aunque el agujero sea de la fila de arriba. Es el único juego sin el desenfoque de los acercamientos: el último vuelo es un acercamiento lento sobre la argolla, y con desenfoque la mesa entera se veía borrosa justo ahí.
