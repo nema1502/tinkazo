@@ -203,6 +203,73 @@
   .wallet-row:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
   .wallet-row b { display: block; font-size: 15px; font-weight: 800; }
   .wallet-row span { display: block; font-size: 12px; color: var(--ink2); margin-top: 3px; }
+  /* La ventana de ingreso, con la forma de la de Pollar (8 de octubre de 2026):
+     redonda, limpia y centrada, con los colores de Tinkazo. Es la única
+     tarjeta redonda del sitio a propósito: se lee como el momento de entrar,
+     no como una parte más de la página. */
+  .modal-card.login {
+    --line: color-mix(in srgb, var(--ink) 16%, transparent);
+    --field: color-mix(in srgb, var(--ink) 4%, var(--card));
+    position: relative; max-width: min(420px, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow-y: auto;
+    border: 0; border-radius: 22px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.38);
+    padding: 34px 32px 16px; gap: 0;
+  }
+  .login-x {
+    position: absolute; top: 12px; right: 12px; width: 44px; height: 44px; display: grid; place-items: center;
+    background: var(--card); color: var(--ink2); border: 1px solid var(--line); border-radius: 12px; cursor: pointer;
+  }
+  .login-x:hover { color: var(--ink); border-color: var(--ink2); }
+  .login-x svg { width: 18px; height: 18px; }
+  .login-head { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; margin-bottom: 22px; }
+  .login-logo {
+    width: 64px; height: 64px; display: grid; place-items: center; margin-bottom: 8px;
+    background: var(--yellow); color: #191919; border-radius: 18px; box-shadow: 4px 4px 0 var(--magenta);
+  }
+  .login-logo svg { width: 38px; height: 38px; fill: currentColor; }
+  .login-head h3 { font-size: 21px; font-weight: 800; }
+  .login-head p { font-size: 14px; color: var(--ink2); line-height: 1.45; overflow-wrap: anywhere; }
+  .login-form { display: flex; flex-direction: column; gap: 10px; }
+  .login-form input {
+    min-height: 48px; width: 100%; box-sizing: border-box; padding: 0 16px;
+    background: var(--field); color: var(--ink); border: 1px solid var(--line); border-radius: 12px;
+    font-family: inherit; font-size: 16px;
+  }
+  .login-form input::placeholder { color: var(--muted); }
+  .login-form input.login-code { text-align: center; letter-spacing: 0.4em; font-family: ui-monospace, Consolas, monospace; font-size: 22px; }
+  .login-go {
+    min-height: 48px; border: 0; border-radius: 12px; cursor: pointer;
+    background: var(--magenta); color: var(--on-accent); font-family: inherit; font-size: 15px; font-weight: 800;
+  }
+  .login-go:disabled { opacity: 0.45; cursor: default; }
+  .login-err { font-size: 13px; font-weight: 700; color: var(--magenta-ink); text-align: center; }
+  .login-err.ok { color: var(--teal-ink); }
+  .login-or { display: flex; align-items: center; gap: 12px; margin: 22px 0 14px; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .login-or::before, .login-or::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
+  .login-opts { display: flex; flex-direction: column; gap: 10px; }
+  .login-opt {
+    display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; padding: 0 16px;
+    background: var(--field); color: var(--ink); border: 1px solid var(--line); border-radius: 12px;
+    font-family: inherit; font-size: 15px; font-weight: 700; text-decoration: none; cursor: pointer;
+    transition: border-color 0.12s, background 0.12s;
+  }
+  .login-opt:hover { border-color: var(--ink2); background: var(--card); }
+  .login-opt svg { width: 20px; height: 20px; flex: 0 0 auto; }
+  .login-opt small { font-size: 12px; font-weight: 600; color: var(--muted); }
+  .login-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 0 18px; margin-top: 8px; }
+  .login-link {
+    min-height: 44px; padding: 0 4px; background: none; border: 0; cursor: pointer;
+    color: var(--ink2); font-family: inherit; font-size: 13px; font-weight: 700; text-decoration: underline;
+  }
+  .login-link:disabled { opacity: 0.5; cursor: default; }
+  .login-foot { margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--line); text-align: center; font-size: 12px; color: var(--muted); }
+  .login-by { display: inline-flex; align-items: center; gap: 6px; }
+  .login-by svg { width: 15px; height: 15px; color: var(--purple-ink); }
+  .login-by b { color: var(--ink); font-weight: 800; }
+  .login-foot summary { display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; color: var(--ink2); text-decoration: underline; }
+  .login-foot details p { color: var(--ink2); line-height: 1.5; padding-bottom: 6px; }
+  @media (max-width: 420px) {
+    .modal-card.login { padding: 30px 20px 12px; border-radius: 18px; }
+  }
   .wallet-notice {
     position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 80;
     background: var(--teal); color: var(--on-accent); border: var(--bw) solid var(--ink); box-shadow: var(--sh);

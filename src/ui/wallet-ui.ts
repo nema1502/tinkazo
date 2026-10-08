@@ -421,10 +421,38 @@ function button(label: string, extra: string, onClick: () => void): HTMLButtonEl
 
 interface Option {
   label: string;
+  /** Lo que se lee al pasar el mouse: el detalle que la ventana ya no escribe. */
   hint: string;
+  icon: keyof typeof ICONS;
+  /** Al lado del nombre, en chiquito: "Freighter", "testnet". */
+  small?: string;
   pick: "freighter" | "guest" | "google" | null;
   href?: string;
 }
+
+/**
+ * Los íconos de la ventana de ingreso. El de Google es el oficial, de cuatro
+ * colores: así lo reconoce cualquiera de un vistazo.
+ */
+const ICONS = {
+  google:
+    '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>',
+  wallet:
+    '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/><path d="M15.5 14.5h2.5"/></svg>',
+  test:
+    '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"/><path d="M10 3v6l-5.2 9.1A2 2 0 0 0 6.5 21h11a2 2 0 0 0 1.7-2.9L14 9V3"/><path d="M7.4 15h9.2"/></svg>',
+} as const;
+
+const SHIELD =
+  '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8.4-7 10-4-1.6-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4" stroke-linecap="round"/></svg>';
+const CLOSE =
+  '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+/** La llama del logo, la misma de la cabecera. */
+const LLAMA =
+  '<svg viewBox="-1 -3 24 28" aria-hidden="true"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></svg>';
+
+/** Un correo con forma de correo. Pollar revisa el resto. */
+const mailOk = (s: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s.trim());
 
 /** Ofrece las formas de entrar que tienen sentido en esta red y en este navegador. */
 /** Abre el selector de cuentas. Lo usa también el botón grande de la portada. */
@@ -444,74 +472,249 @@ export async function openPicker(): Promise<void> {
   // persona no tiene instalada es mandarla a una tienda antes de dejarla
   // probar el producto.
   const { pollarConfigured } = await import("../stellar/wallet-pollar");
-  if (pollarConfigured()) {
-    options.push({ label: t("googleWallet"), hint: t("googleHint"), pick: "google" });
-  }
-  if (w.guestAvailable()) {
-    options.push({ label: t("guestWallet"), hint: t("guestHint"), pick: "guest" });
+  const pollar = pollarConfigured();
+  if (pollar) {
+    options.push({ label: "Google", hint: t("googleHint"), icon: "google", pick: "google" });
   }
   if (await w.freighterInstalled()) {
-    options.push({ label: "Freighter", hint: t("freighterHint"), pick: "freighter" });
+    options.push({ label: t("loginWallet"), small: "Freighter", hint: t("freighterHint"), icon: "wallet", pick: "freighter" });
   } else {
     options.push({
-      label: "Freighter",
+      label: t("loginWallet"),
+      small: `Freighter · ${t("loginInstall")} ↗`,
       hint: t("freighterInstall"),
+      icon: "wallet",
       pick: null,
       href: "https://www.freighter.app/",
     });
   }
+  if (w.guestAvailable()) {
+    options.push({ label: t("guestWallet"), small: t("loginTestnet"), hint: t("guestHint"), icon: "test", pick: "guest" });
+  }
 
-  showModal(options);
+  // El correo también es de Pollar: va solo si Pollar está configurado.
+  showModal(options, pollar);
 }
 
-function showModal(options: Option[]): void {
+/**
+ * La ventana de ingreso, con la forma de la de Pollar (8 de octubre de 2026):
+ * el logo arriba, el correo primero, "o seguí con" y los botones de Google y de
+ * la wallet, y al pie quién protege la cuenta. Con los colores de Tinkazo.
+ *
+ * El correo tiene dos pasos dentro de la misma ventana: se pide el código y se
+ * escribe el código. La sesión que queda es de Pollar, igual que con Google.
+ */
+function showModal(options: Option[], emailOn: boolean): void {
   const back = document.createElement("div");
   back.className = "modal-back";
   const card = document.createElement("div");
-  card.className = "modal-card";
-  card.innerHTML = `<p class="kicker">${esc(t("connectTitle"))}</p><h3>${esc(t("connectLead"))}</h3>`;
-
-  for (const o of options) {
-    const row = document.createElement(o.href ? "a" : "button");
-    row.className = "wallet-row";
-    row.innerHTML = `<b>${esc(o.label)}</b><span>${esc(o.hint)}</span>`;
-    if (o.href && row instanceof HTMLAnchorElement) {
-      row.href = o.href;
-      row.target = "_blank";
-      row.rel = "noopener";
-    } else if (o.pick) {
-      const pick = o.pick;
-      row.addEventListener("click", () => void connect(pick, back, row));
-    }
-    card.appendChild(row);
-  }
-
-  const close = document.createElement("button");
-  close.className = "mini";
-  close.textContent = t("cancel");
-  close.addEventListener("click", () => shut());
-  card.appendChild(close);
-
-  // Quién custodia la llave, dicho en chiquito y al pie. Va acá y no en la
-  // explicación de arriba: a quien entra con Google le importa entrar, y quien
-  // quiera saber quién guarda la llave lo encuentra sin buscar.
-  const by = document.createElement("p");
-  by.className = "modal-by";
-  by.textContent = t("byPollar");
-  card.appendChild(by);
-
-  back.appendChild(card);
-  back.addEventListener("click", (e) => {
-    if (e.target === back) shut();
-  });
+  card.className = "modal-card login";
 
   // Un diálogo de verdad: se anuncia como tal, atrapa el foco, cierra con
   // Escape y devuelve el foco a donde estaba. Sin esto, con teclado se puede
   // tabular "por detrás" del modal y con lector de pantalla no existe.
   card.setAttribute("role", "dialog");
   card.setAttribute("aria-modal", "true");
-  card.setAttribute("aria-label", t("connectTitle"));
+  card.setAttribute("aria-label", t("loginTitle"));
   card.tabIndex = -1;
+
+  const close = document.createElement("button");
+  close.className = "login-x";
+  close.type = "button";
+  close.setAttribute("aria-label", t("loginClose"));
+  close.innerHTML = CLOSE;
+  close.addEventListener("click", () => shut());
+
+  const body = document.createElement("div");
+  body.className = "login-body";
+
+  // Quién custodia la llave, plegado al pie. A quien entra le importa entrar, y
+  // quien quiera saber quién guarda la llave lo encuentra sin buscar.
+  const foot = document.createElement("div");
+  foot.className = "login-foot";
+  foot.innerHTML =
+    `<span class="login-by">${SHIELD}${esc(t("loginProtected"))} <b>Pollar</b></span>` +
+    `<details><summary>${esc(t("loginWhoKey"))}</summary><p>${esc(t("byPollar"))}</p></details>`;
+
+  card.append(close, body, foot);
+  back.appendChild(card);
+  back.addEventListener("click", (e) => {
+    if (e.target === back) shut();
+  });
+
+  function head(title: string, lead: (string | Node)[]): void {
+    const h = document.createElement("div");
+    h.className = "login-head";
+    h.innerHTML = `<span class="login-logo">${LLAMA}</span>`;
+    const h3 = document.createElement("h3");
+    h3.textContent = title;
+    const p = document.createElement("p");
+    p.append(...lead);
+    h.append(h3, p);
+    body.appendChild(h);
+  }
+
+  function say(err: HTMLElement, text: string, ok = false): void {
+    err.textContent = text;
+    err.classList.toggle("ok", ok);
+    err.hidden = false;
+  }
+
+  /** El primer paso: el correo, y las otras formas de entrar. */
+  function home(mail = ""): void {
+    body.replaceChildren();
+    head("Tinkazo", [t("loginTitle")]);
+    if (emailOn) {
+      const form = document.createElement("form");
+      form.className = "login-form";
+      form.noValidate = true;
+      form.innerHTML =
+        `<label class="sr-only" for="login-mail">${esc(t("loginMailLabel"))}</label>` +
+        `<input id="login-mail" type="email" inputmode="email" autocomplete="email" spellcheck="false" placeholder="${esc(t("loginMailPh"))}">` +
+        `<button class="login-go" type="submit">${esc(t("loginMailGo"))}</button>` +
+        `<p class="login-err" role="alert" hidden></p>`;
+      const input = form.querySelector("input") as HTMLInputElement;
+      const go = form.querySelector("button") as HTMLButtonElement;
+      const err = form.querySelector(".login-err") as HTMLElement;
+      input.value = mail;
+      go.disabled = !mailOk(mail);
+      input.addEventListener("input", () => {
+        go.disabled = !mailOk(input.value);
+        err.hidden = true;
+      });
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        void sendCode(input.value.trim(), go, err);
+      });
+      body.appendChild(form);
+      const or = document.createElement("p");
+      or.className = "login-or";
+      or.textContent = t("loginOr");
+      body.appendChild(or);
+    }
+
+    const list = document.createElement("div");
+    list.className = "login-opts";
+    for (const o of options) {
+      const row = document.createElement(o.href ? "a" : "button");
+      row.className = "login-opt";
+      row.title = o.hint;
+      row.innerHTML = `${ICONS[o.icon]}<span>${esc(o.label)}</span>${o.small ? `<small>${esc(o.small)}</small>` : ""}`;
+      if (o.href && row instanceof HTMLAnchorElement) {
+        row.href = o.href;
+        row.target = "_blank";
+        row.rel = "noopener";
+      } else if (o.pick) {
+        const pick = o.pick;
+        (row as HTMLButtonElement).type = "button";
+        row.addEventListener("click", () => void connect(pick, back, row, shut));
+      }
+      list.appendChild(row);
+    }
+    body.appendChild(list);
+  }
+
+  async function sendCode(mail: string, go: HTMLButtonElement, err: HTMLElement): Promise<void> {
+    if (!mailOk(mail)) {
+      say(err, t("loginBadMail"));
+      return;
+    }
+    const label = go.textContent ?? "";
+    go.disabled = true;
+    go.textContent = t("loginSending");
+    try {
+      const { pollarWallet } = await import("../stellar/wallet-pollar");
+      await pollarWallet.sendEmailCode(mail);
+      codeStep(mail);
+    } catch {
+      go.disabled = false;
+      go.textContent = label;
+      say(err, t("loginSendFailed"));
+    }
+  }
+
+  /** El segundo paso: el código que llegó al correo. */
+  function codeStep(mail: string): void {
+    body.replaceChildren();
+    const [antes, despues] = t("loginCodeLead").split("{mail}");
+    const b = document.createElement("b");
+    b.textContent = mail;
+    head(t("loginCodeTitle"), [antes ?? "", b, despues ?? ""]);
+
+    const form = document.createElement("form");
+    form.className = "login-form";
+    form.noValidate = true;
+    form.innerHTML =
+      `<label class="sr-only" for="login-code">${esc(t("loginCodeLabel"))}</label>` +
+      `<input id="login-code" class="login-code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="••••••">` +
+      `<button class="login-go" type="submit" disabled>${esc(t("loginCodeGo"))}</button>` +
+      `<p class="login-err" role="alert" hidden></p>`;
+    const input = form.querySelector("input") as HTMLInputElement;
+    const go = form.querySelector("button") as HTMLButtonElement;
+    const err = form.querySelector(".login-err") as HTMLElement;
+    const code = (): string => input.value.replace(/\s+/g, "");
+    input.addEventListener("input", () => {
+      go.disabled = code().length < 4;
+      err.hidden = true;
+    });
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      void verify();
+    });
+
+    async function verify(): Promise<void> {
+      if (code().length < 4) return;
+      go.disabled = true;
+      go.textContent = t("loginChecking");
+      try {
+        const w = await loadWallets();
+        const { pollarWallet } = await import("../stellar/wallet-pollar");
+        const address = await pollarWallet.verifyEmailCode(code());
+        // La sesión de correo es de Pollar, como la de Google: se guarda con
+        // ese tipo y se retoma igual al recargar.
+        await afterConnect(w, pollarWallet, address, "google", back, shut);
+      } catch (e) {
+        const why = e instanceof Error ? e.message : "";
+        go.disabled = false;
+        go.textContent = t("loginCodeGo");
+        say(
+          err,
+          why === "EMAIL_CODE_INVALID" ? t("loginBadCode") : why === "EMAIL_CODE_EXPIRED" ? t("loginExpired") : t("loginFailed"),
+        );
+        input.select();
+      }
+    }
+
+    const links = document.createElement("div");
+    links.className = "login-links";
+    const again = document.createElement("button");
+    again.type = "button";
+    again.className = "login-link";
+    again.textContent = t("loginResend");
+    again.addEventListener("click", async () => {
+      again.disabled = true;
+      try {
+        const { pollarWallet } = await import("../stellar/wallet-pollar");
+        await pollarWallet.sendEmailCode(mail);
+        say(err, t("loginResent"), true);
+      } catch {
+        say(err, t("loginSendFailed"));
+      }
+      again.disabled = false;
+    });
+    const other = document.createElement("button");
+    other.type = "button";
+    other.className = "login-link";
+    other.textContent = t("loginOtherMail");
+    other.addEventListener("click", () => {
+      home(mail);
+      card.querySelector<HTMLInputElement>("#login-mail")?.focus();
+    });
+    links.append(again, other);
+
+    body.append(form, links);
+    input.focus();
+  }
 
   const returnTo = document.activeElement;
   const onKey = (e: KeyboardEvent): void => {
@@ -521,7 +724,9 @@ function showModal(options: Option[]): void {
       return;
     }
     if (e.key !== "Tab") return;
-    const focusable = [...card.querySelectorAll<HTMLElement>("a[href], button:not([disabled])")];
+    const focusable = [
+      ...card.querySelectorAll<HTMLElement>("a[href], button:not([disabled]), input, summary"),
+    ];
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
     if (!first || !last) return;
@@ -540,18 +745,20 @@ function showModal(options: Option[]): void {
     if (returnTo instanceof HTMLElement) returnTo.focus();
   }
 
+  home();
   document.addEventListener("keydown", onKey, true);
   document.body.appendChild(back);
-  (card.querySelector<HTMLElement>("a[href], button") ?? card).focus();
+  (card.querySelector<HTMLElement>("#login-mail, .login-opt") ?? card).focus();
 }
 
 async function connect(
   pick: "freighter" | "guest" | "google",
   back: HTMLElement,
   row: HTMLElement,
+  done: () => void,
 ): Promise<void> {
   const original = row.innerHTML;
-  row.innerHTML = `<b>${esc(t("connecting"))}</b>`;
+  row.innerHTML = `<span>${esc(t("connecting"))}</span>`;
   try {
     const w = await loadWallets();
     const wallet =
@@ -561,34 +768,46 @@ async function connect(
           ? (await import("../stellar/wallet-pollar")).pollarWallet
           : w.freighterWallet;
     const address = await wallet.connect();
-    await activate(w, wallet, address);
-    saveSessionKind(pick, network.name);
-    if (wallet.kind === "guest") notice(t("guestReady"), false);
-    // El diálogo no se cierra hasta saber si la cuenta puede pagar. Cerrarlo y
-    // dejar el aviso más abajo en la página hacía que nadie lo viera: la
-    // persona seguía con su lista y se enteraba recién al intentar sellar.
-    //
-    // La cuenta de prueba se fondea sola al crearse, así que ahí no se
-    // pregunta: Horizon tarda unos segundos en reflejarlo y el diálogo
-    // mostraría el grifo para una cuenta que ya tiene fondos.
-    if (wallet.kind !== "guest") {
-      let bal = await w.xlmBalance(address);
-      // Una cuenta recién creada puede tardar en aparecer. Se reintenta una vez
-      // antes de decirle a alguien que no tiene nada.
-      if (bal === 0) {
-        await new Promise((r) => setTimeout(r, 2500));
-        bal = await w.xlmBalance(address);
-      }
-      if (bal >= 0 && bal < 1) {
-        showFundStep(back, address);
-        return;
-      }
-    }
-    back.remove();
+    await afterConnect(w, wallet, address, pick, back, done);
   } catch (e) {
     row.innerHTML = original;
     notice(await walletErrorText(e), true);
   }
+}
+
+/** Lo que pasa al entrar, por cualquier camino: la sesión, y los fondos si faltan. */
+async function afterConnect(
+  w: WalletModule,
+  wallet: import("../stellar/wallet").WalletAdapter,
+  address: string,
+  pick: "freighter" | "guest" | "google",
+  back: HTMLElement,
+  done: () => void,
+): Promise<void> {
+  await activate(w, wallet, address);
+  saveSessionKind(pick, network.name);
+  if (wallet.kind === "guest") notice(t("guestReady"), false);
+  // El diálogo no se cierra hasta saber si la cuenta puede pagar. Cerrarlo y
+  // dejar el aviso más abajo en la página hacía que nadie lo viera: la
+  // persona seguía con su lista y se enteraba recién al intentar sellar.
+  //
+  // La cuenta de prueba se fondea sola al crearse, así que ahí no se
+  // pregunta: Horizon tarda unos segundos en reflejarlo y el diálogo
+  // mostraría el grifo para una cuenta que ya tiene fondos.
+  if (wallet.kind !== "guest") {
+    let bal = await w.xlmBalance(address);
+    // Una cuenta recién creada puede tardar en aparecer. Se reintenta una vez
+    // antes de decirle a alguien que no tiene nada.
+    if (bal === 0) {
+      await new Promise((r) => setTimeout(r, 2500));
+      bal = await w.xlmBalance(address);
+    }
+    if (bal >= 0 && bal < 1) {
+      showFundStep(back, address);
+      return;
+    }
+  }
+  done();
 }
 
 async function disconnect(): Promise<void> {
