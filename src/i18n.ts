@@ -1051,7 +1051,7 @@ export const T: Record<Lang, Dict> = {
     // La ventana de ingreso, con la forma de la de Pollar (8 de octubre de 2026).
     loginTitle: "Entrá o creá tu cuenta",
     loginMailLabel: "Tu correo",
-    loginMailPh: "vos@correo.com",
+    loginMailPh: "Tu correo",
     loginMailGo: "Seguir con el correo",
     loginOr: "o seguí con",
     loginWallet: "Wallet",
@@ -1918,7 +1918,7 @@ export const T: Record<Lang, Dict> = {
     // The sign-in window, shaped like Pollar's (8 October 2026).
     loginTitle: "Sign in or create your account",
     loginMailLabel: "Your email",
-    loginMailPh: "you@email.com",
+    loginMailPh: "Your email",
     loginMailGo: "Continue with email",
     loginOr: "or continue with",
     loginWallet: "Wallet",
