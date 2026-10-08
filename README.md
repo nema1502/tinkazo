@@ -239,10 +239,7 @@ In English: the [protocol](docs/protocol.en.md) and a [threat model summary](doc
 
 ## Team
 
-Built in Bolivia by:
-
-- **Nicolás Emir Mejía Agreda** ([@nema1502](https://github.com/nema1502)), founder and lead developer
-- **Guido Salazar** ([@GuidoSV7](https://github.com/GuidoSV7)), frontend developer
+Tinkazo was created in Bolivia by **Nicolás Emir Mejía Agreda** ([@nema1502](https://github.com/nema1502)), founder and lead developer, with **Guido Salazar** ([@GuidoSV7](https://github.com/GuidoSV7)), frontend developer.
 
 The name is Bolivian: a *tinkazo* is a hunch, a gut feeling.
 
