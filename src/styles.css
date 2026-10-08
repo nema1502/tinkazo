@@ -1,6 +1,8 @@
   :root {
     color-scheme: light;
     --paper: #fff6e9; --card: #ffffff; --ink: #191919; --ink2: #4b4437; --muted: #6b655b;
+    /* Campos y bordes finos de la ventana de ingreso. */
+    --field: #f6f4f0; --line: #e2ddd4;
     --magenta: #e93d9c; --orange: #ff7a1a; --teal: #00a896; --yellow: #ffc629; --purple: #6c4ce0;
     /* Texto sobre un color plano. El blanco no se lee sobre estos tonos. */
     --on-accent: #191919; --on-purple: #ffffff;
@@ -13,6 +15,7 @@
     :root:not([data-theme="light"]) {
       color-scheme: dark;
       --paper: #171126; --card: #221a33; --ink: #f6efe2; --ink2: #cfc6b4; --muted: #97909f;
+      --field: #2b2240; --line: #40355a;
       --magenta: #ff5cb3; --orange: #ff8b3d; --teal: #17c3b2; --yellow: #ffd24d; --purple: #9b7bff;
       --on-accent: #191919; --on-purple: #191919;
       /* En oscuro los acentos ya se leen sobre la tarjeta: 7,51 el teal,
@@ -23,6 +26,7 @@
   :root[data-theme="dark"] {
     color-scheme: dark;
     --paper: #171126; --card: #221a33; --ink: #f6efe2; --ink2: #cfc6b4; --muted: #97909f;
+    --field: #2b2240; --line: #40355a;
     --magenta: #ff5cb3; --orange: #ff8b3d; --teal: #17c3b2; --yellow: #ffd24d; --purple: #9b7bff;
       --on-accent: #191919; --on-purple: #191919;
       /* En oscuro los acentos ya se leen sobre la tarjeta: 7,51 el teal,
@@ -208,8 +212,6 @@
      tarjeta redonda del sitio a propósito: se lee como el momento de entrar,
      no como una parte más de la página. */
   .modal-card.login {
-    --line: color-mix(in srgb, var(--ink) 16%, transparent);
-    --field: color-mix(in srgb, var(--ink) 4%, var(--card));
     position: relative; max-width: min(420px, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow-y: auto;
     border: 0; border-radius: 22px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.38);
     padding: 34px 32px 16px; gap: 0;

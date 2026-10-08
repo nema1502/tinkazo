@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Auditor de la interfaz: la cabecera, la cuenta y el selector de juegos.
+ * Auditor de la interfaz: la ventana de ingreso, la cabecera, la cuenta y el
+ * selector de juegos.
  *
  * Existe porque hubo dos cosas rotas que ninguna comprobación miraba: la foto
  * de perfil que no cargaba y dejaba el icono de imagen rota en el medio de la
@@ -62,7 +63,10 @@ const PROBE = `(() => {
 
     // Texto propio, no el de los hijos.
     const own = [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent.trim()).join(' ').trim();
-    if (own.length > 1) {
+    // Un botón desactivado está apagado a propósito: las pautas de contraste
+    // no lo cuentan, y el "Seguir con el correo" vacío se marcaba solo.
+    const apagado = !!el.closest('button:disabled');
+    if (own.length > 1 && !apagado) {
       const size = parseFloat(cs.fontSize), w = parseInt(cs.fontWeight) || 400;
       const need = (size >= 24 || (size >= 18.66 && w >= 700)) ? 3 : 4.5;
       const op = parseFloat(cs.opacity) || 1;
@@ -91,19 +95,48 @@ const PROBE = `(() => {
   return JSON.stringify(out);
 })()`;
 
-/** Conecta con la cuenta de prueba, que es la única que no necesita a nadie. */
-async function connect(page) {
+/**
+ * Conecta con la cuenta de prueba, que es la única que no necesita a nadie.
+ * Antes mide la ventana de ingreso, que desde el 8 de octubre de 2026 tiene la
+ * forma de la de Pollar: el correo, Google, la wallet y la cuenta de prueba.
+ */
+async function connect(page, etiqueta, tema) {
   await page.waitFor(`document.querySelector('#gate button, #wallet-box button')`, 20000);
   await sleep(500);
   await page.eval(`(document.querySelector('#gate button') || document.querySelector('#wallet-box button')).click()`);
-  const abrio = await page.waitFor(`document.querySelector('.wallet-row')`, 15000);
+  const abrio = await page.waitFor(`document.querySelector('.login-opt')`, 15000);
+  check(`${etiqueta} ${tema}: se abre la ventana de ingreso`, abrio.ok);
   if (!abrio.ok) return false;
-  await sleep(300);
+  await sleep(400);
+  const v = JSON.parse(await page.eval(PROBE));
+  const card = JSON.parse(await page.eval(`JSON.stringify((() => {
+    const r = document.querySelector('.modal-card.login').getBoundingClientRect();
+    return { dentro: r.left >= 0 && r.right <= innerWidth + 1 && r.top >= 0 && r.bottom <= innerHeight + 1 };
+  })())`));
+  check(`${etiqueta} ${tema}: la ventana de ingreso entra en la pantalla`, card.dentro);
+  check(
+    `${etiqueta} ${tema}: la ventana de ingreso sin texto recortado`,
+    v.desbordes.length === 0,
+    v.desbordes.slice(0, 2).map((d) => `"${d.t}" ${d.sw}>${d.cw}`).join(" | "),
+  );
+  check(
+    `${etiqueta} ${tema}: contraste en la ventana de ingreso`,
+    v.texto.length === 0,
+    v.texto.slice(0, 3).map((x) => `"${x.t}" ${x.r}<${x.need}`).join(" | "),
+  );
+  if (etiqueta === "celular") {
+    check(
+      `celular ${tema}: blancos de toque de 44 px en la ventana de ingreso`,
+      v.toques.length === 0,
+      v.toques.slice(0, 3).map((x) => `"${x.t}" ${x.h}px`).join(" | "),
+    );
+  }
+  await page.screenshot(join(outDir, `ui-ingreso-${etiqueta}-${tema}.png`));
   const i = await page.eval(
-    `String([...document.querySelectorAll('.wallet-row b')].findIndex(e => /prueba|Test account/.test(e.textContent)))`,
+    `String([...document.querySelectorAll('.login-opt')].findIndex(e => /prueba|Test account/.test(e.textContent)))`,
   );
   if (i === "-1") return false;
-  await page.eval(`[...document.querySelectorAll('.wallet-row')][${i}].click()`);
+  await page.eval(`[...document.querySelectorAll('.login-opt')][${i}].click()`);
   const cerro = await page.waitFor(`!document.querySelector('.modal-back')`, 90000);
   await sleep(600);
   return cerro.ok;
@@ -207,7 +240,7 @@ async function run() {
         const tapa = await resaltadoTapa(page);
         check(`${etiqueta} ${tema}: el resaltado del título no tapa letras`, tapa.ok, tapa.detail);
 
-        const ok = await connect(page);
+        const ok = await connect(page, etiqueta, tema);
         check(`${etiqueta} ${tema}: conecta una cuenta`, ok);
         if (!ok) continue;
 
