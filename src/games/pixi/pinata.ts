@@ -39,6 +39,11 @@ const GRAV = 1500;
 const MAX_FLIGHT_LABELS = 8;
 const LINGER = 1.25;
 const STRIP_MAX = 5;
+/**
+ * Dónde está parado el chico del palo, en fracción del ancho. En 0,14 la
+ * cámara, cerca de la piñata, lo dejaba medio fuera de cuadro.
+ */
+const KID_X = 0.22;
 
 type Phase = "hang" | "hits" | "break" | "crown" | "dead";
 interface Candy {
@@ -90,10 +95,16 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     const take = Math.max(0, Math.min(fallOrder.length - given, want));
     swings.push({ at: tH, miss: false, drop: fallOrder.slice(given, given + take), done: false });
     given += take;
-    tH += clamp(1.7 - i * 0.08, 1.1, 1.7);
+    // Los palos se apuran: de 1,9 a 0,75 s entre uno y otro, el "¡dale, dale!"
+    // del final. Con un palo parejo cada 2,3 s reales la sala no sentía que
+    // la piñata estaba por ceder (auditoría con capturas, 7 de octubre de 2026).
+    tH += clamp(1.9 - i * 0.17, 0.75, 1.9);
   }
   const T_BREAK = tH + (story.arc === "duelo" ? 1.2 : 0.6);
-  const T_CROWN = T_BREAK + 2.4;
+  // Rota la piñata, el cartel llega enseguida: el caramelo ganador cae más
+  // rápido y toca el piso un poco antes del cartel. Antes eran 3,6 s de
+  // caramelo flotando con el resultado ya sabido.
+  const T_CROWN = T_BREAK + 2.2;
   setGameLength(T_CROWN, WINNER_HOLD);
   const T_PEEK = swings.filter((s) => !s.miss).at(-2)?.at ?? T_BREAK - 1;
 
@@ -150,9 +161,9 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     for (const c of candies) {
       if (c.inside || c.settled) continue;
       c.out += dt;
-      // El caramelo ganador baja despacio, casi flotando.
-      c.vy += GRAV * g.k * dt * (c === winC ? 0.22 : 1);
-      if (c === winC) c.vy = Math.min(c.vy, 260 * g.k);
+      // El caramelo ganador baja despacio, pero llega al piso antes del cartel.
+      c.vy += GRAV * g.k * dt * (c === winC ? 0.32 : 1);
+      if (c === winC) c.vy = Math.min(c.vy, 300 * g.k);
       c.x += c.vx * dt;
       c.y += c.vy * dt;
       c.rot += c.spin * dt;
@@ -161,6 +172,14 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       const ground = g.floor - sz * 0.62 - (c === winC ? 0 : hAt(col));
       if (c.y >= ground) {
         c.y = ground;
+        if (c === winC && !landed) {
+          // El golpe del ganador va en el primer toque, a la vista: esperar a
+          // que se aquietara lo hacía sonar con el cartel ya puesto.
+          landed = true;
+          beep(note(0), 0.25, "triangle", 0.07);
+          beep(note(10), 0.12, "triangle", 0.04);
+          cam.punch(0.05);
+        }
         if (c.vy > 150 * g.k) {
           // Rebota con lo que le queda, y el golpe lo hace girar.
           c.vy *= -0.42;
@@ -213,7 +232,9 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     if (crowned) return;
     crowned = true;
     S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
-    beep(note(0), 0.7, "sine", 0.09);
+    // En triángulo: el seno de 131 Hz no sale por el parlante de un proyector,
+    // los armónicos del triángulo sí.
+    beep(note(0), 0.7, "triangle", 0.08);
     fanfare();
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);
     cam.punch(0.08).shake(10 * S.u());
@@ -223,6 +244,10 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     for (const c of candies) if (c !== winC && c.inside) drop([c.idx], true);
     brokeDone = true;
     rivalDropped = true;
+    // Saltado, el arpegio de la caída y el golpe del piso no suenan todos
+    // juntos encima de la fanfarria.
+    landed = true;
+    fallNote = 8;
     const g = G();
     winC.inside = false;
     winC.x = g.w / 2;
@@ -266,20 +291,27 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       }
       // El golpe: un empujón al péndulo, un ruido seco y lo que caiga.
       omega += (hash(Math.round(s.at * 10), 1) < 0.5 ? -1 : 1) * (1.6 + 0.3 * crackLevel);
+      // Con tope: sin él, los últimos palos la hamacaban a 110° y 124°, más
+      // arriba que su propio gancho, y la cámara la seguía hasta dar vuelta el
+      // cuadro. Con los palos apurados, 2,2 la deja entre 26° y 56°.
+      omega = clamp(omega, -2.2, 2.2);
       crackLevel++;
       {
         // Donde pega el palo: el lado de la olla que mira hacia abajo a la izquierda.
         const pp = pinPos();
-        const bx = g.w * 0.14, by = g.floor + 60 * g.k;
+        const bx = g.w * KID_X, by = g.floor + 60 * g.k;
         const dx = bx - pp.x, dy = by - pp.y, d = Math.hypot(dx, dy) || 1;
         blows.push({ at: tAll, x: pp.x + (dx / d) * g.R, y: pp.y + (dy / d) * g.R, seed: crackLevel * 13 });
         lastBlow = tAll;
       }
-      beep(note(1 + (crackLevel % 3)), 0.12, "square", 0.06);
+      // Cada palo suena un poco más fuerte que el anterior, y los dos últimos
+      // con un golpe grave: antes los ocho sonaban iguales.
+      beep(note(1 + (crackLevel % 3)), 0.12, "square", 0.05 + 0.004 * crackLevel);
       setTimeout(() => beep(note(8 + (crackLevel % 4)), 0.06, "triangle", 0.035), 60);
+      if (crackLevel >= nHits - 1) beep(note(0), 0.2, "triangle", 0.06);
       cam.punch(0.06).shake(8 * g.k);
       drop(s.drop, crackLevel > nHits - 2);
-      for (let i = 0; i < Math.min(8, s.drop.length); i++) setTimeout(() => beep(note(10 + (i % 5)), 0.03, "triangle", 0.02), 90 + i * 40);
+      for (let i = 0; i < Math.min(8, s.drop.length); i++) setTimeout(() => beep(note(10 + (i % 5)), 0.03, "triangle", 0.028), 90 + i * 40);
       const left = inside().length;
       if (s.drop.length > 0 && tAll - lastOutSaid > 1.2) {
         lastOutSaid = tAll;
@@ -313,8 +345,12 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     if (!brokeDone && tAll >= T_BREAK) {
       brokeDone = true;
       S.say(t("cPinBreak"), 0.95);
-      beep(note(0), 0.4, "square", 0.07);
-      setTimeout(() => beep(note(12), 0.2, "triangle", 0.05), 80);
+      // La rotura en capas: el golpe, la lluvia de caramelos y el papel. Antes
+      // era una nota apenas más fuerte que un palo.
+      beep(note(0), 0.45, "square", 0.09);
+      beep(note(5), 0.3, "square", 0.06);
+      for (let i = 0; i < 10; i++) setTimeout(() => beep(note(10 + (i % 5)), 0.04, "triangle", 0.03), i * 35);
+      [15, 17, 18].forEach((d, i) => setTimeout(() => beep(note(d), 0.12, "triangle", 0.035), 120 + i * 60));
       cam.punch(0.12).shake(14 * G().k);
       // La rival cae primero, rápido; la ganadora después, despacio.
       if (rivC !== winC && rivC.inside) {
@@ -323,18 +359,15 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       }
     }
     if (brokeDone && !winC.inside && !landed) {
-      const want = Math.floor((tAll - T_BREAK - 0.5) / 0.3);
+      // Mientras baja, un arpegio que sube: el que bajaba aflojaba la tensión
+      // justo antes del cartel. El golpe del piso va en `step`, en el primer toque.
+      const want = Math.floor((tAll - T_BREAK - 0.35) / 0.22);
       while (fallNote < want && fallNote < 8) {
-        beep(note(14 - fallNote), 0.14, "sine", 0.035);
+        beep(note(6 + fallNote), 0.14, "triangle", 0.03 + 0.003 * fallNote);
         fallNote++;
       }
-      if (winC.settled || (Math.abs(winC.vy) < 1 && winC.y >= G().floor - 1)) {
-        landed = true;
-        beep(note(0), 0.25, "triangle", 0.06);
-        cam.punch(0.04);
-      }
     }
-    if (brokeDone && winC.inside && tAll >= T_BREAK + 0.5) {
+    if (brokeDone && winC.inside && tAll >= T_BREAK + 0.35) {
       const p = pinPos();
       winC.inside = false;
       winC.x = p.x;
@@ -483,7 +516,10 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       const dos = tAll - said2At < 1.4;
       cam.lookAt(p.x, p.y + g.R * (near ? 0.4 : dos ? 0.2 : 0.8), near ? 1.9 : dos ? 1.6 : 1.2 + 0.25 * (crackLevel / nHits), near || dos ? 5 : 2.5);
     } else if (phase === "break") {
-      if (!winC.inside) cam.lookAt(winC.x, winC.y - g.R * 0.4, 1.5, 2.2);
+      // Un poco por debajo del caramelo y más rápido: con la mira encima y a
+      // 2,2 la cámara se atrasaba y el caramelo bajaba hasta quedar detrás de
+      // los subtítulos.
+      if (!winC.inside) cam.lookAt(winC.x, winC.y + g.R * 0.3, 1.5, 4);
       else cam.lookAt(p.x, p.y, 1.1, 2.5);
     } else {
       const z = 1.3;
@@ -574,7 +610,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     // El palo: lo sostiene un chico con los ojos vendados, como se juega, y
     // entra en arco en cada golpe. Antes el palo flotaba solo.
     stick.clear();
-    const kx = g.w * 0.14, ky = g.floor + 24 * k;
+    const kx = g.w * KID_X, ky = g.floor + 24 * k;
     {
       const kid = S.color(3);
       stick.rect(kx - 20 * k, ky - 44 * k, 11 * k, 44 * k).fill(0x2b2d42).rect(kx - 6 * k, ky - 44 * k, 11 * k, 44 * k).fill(0x2b2d42)
@@ -717,18 +753,22 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       items.push({ id: key, x, y, w: d.w, h: d.h, priority });
       alphaOf.set(key, alpha);
     };
-    // Los últimos caídos, en una tira fija abajo a la izquierda, encima del piso.
+    // Los últimos caídos, en una tira fija abajo a la derecha, encima del piso.
+    // A la izquierda le tapaba la cabeza al chico del palo.
     const tail = fallen.slice(-STRIP_MAX);
     const stripStep = 26 * k * scaleStrip;
     tail.forEach((id, i) => {
       const key = STRIP_KEY(id);
       chipFor(key, names[id] ?? "", scaleStrip);
       const fromEnd = tail.length - 1 - i;
-      put(key, 8 * k, g.floor - 14 * k - (fromEnd + 1) * stripStep, 1000, 0.45 + 0.55 * (1 - fromEnd / STRIP_MAX));
+      const ancho = (chipDim.get(key) as { w: number }).w;
+      put(key, g.w - ancho - 8 * k, g.floor - 14 * k - (fromEnd + 1) * stripStep, 1000, 0.45 + 0.55 * (1 - fromEnd / STRIP_MAX));
     });
     // Los que quedan adentro (pocos): una columna al costado, debajo del contador.
+    // Con uno solo no: rota la piñata, la lista con un nombre era el ganador
+    // escrito tres segundos antes del cartel.
     const adentro = inside();
-    if (adentro.length <= 6 && adentro.length > 0 && story.arc !== "tapada") {
+    if (adentro.length <= 6 && adentro.length > 1 && !brokeDone && story.arc !== "tapada") {
       const colTop = S.top() + 62 * k;
       adentro.forEach((c, i) => {
         const key = c.idx;
@@ -764,8 +804,12 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       items.push({ id: -100000, x: g.w - bw - 12 * k, y: S.top() + 56 * k, w: bw + 3 * k, h: bh + 3 * k, priority: 100 });
     }
     // La piñata y su colgada son un obstáculo: los nombres se corren de ella si pueden.
-    const a = cam.toScreen(p.x - g.R * 1.75, p.y - g.R * 1.75, g.w, g.h);
-    const b = cam.toScreen(p.x + g.R * 1.75, p.y + g.R * 1.75, g.w, g.h);
+    // Rota, el obstáculo es el caramelo ganador que baja: con mucha gente, los
+    // nombres de los últimos caídos lo tapaban justo cuando toca el piso.
+    const fuera = !winC.inside;
+    const ox = fuera ? winC.x : p.x, oy = fuera ? winC.y : p.y, oR = fuera ? sz * 1.8 * 1.6 : g.R * 1.75;
+    const a = cam.toScreen(ox - oR, oy - oR, g.w, g.h);
+    const b = cam.toScreen(ox + oR, oy + oR, g.w, g.h);
     const blocked = [{ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) }];
     for (const o of layoutLabels(items, bounds, blocked)) {
       if (o.id === -100000) {
