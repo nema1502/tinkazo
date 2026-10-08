@@ -22,7 +22,7 @@ El ganador sale del [protocolo](../protocolo.md) antes de que empiece el juego. 
 3. Así 50 nombres se resuelven en unas seis preguntas y 200 en unas ocho (como mucho diez).
 4. Con dos o tres cartas, una sola pregunta lo resolvía todo y el juego era un subtítulo quieto. La ronda arranca entonces con una de calentamiento que no da vuelta a nadie: una letra que tienen todas ("¡Sí tiene A! Todas la tienen"), o si no hay, una que no tiene ninguna. Es verdad igual: la respuesta es la del nombre de quien ganó.
 5. Si quedan nombres que no se pueden separar por ninguna letra ("José" y "Jose"), el juego lo dice ("¡Mismas letras! El sorteo ya eligió") y la carta del ganador queda sola: el protocolo ya eligió.
-6. Con varios ganadores hay una ronda por cada uno, sin los ganadores anteriores, que esperan arriba a la derecha.
+6. Con varios ganadores hay una ronda por cada uno, sin los ganadores anteriores, que esperan arriba a la derecha con un marco amarillo, fijos en la pantalla aunque la cámara se acerque. Las rondas van del último premio al primero, como en una premiación ("¡Va el premio 2: otra vez todas!", "¡Valeria Torrez, premio 2!"): la ronda larga, con el suspenso de la última pregunta, es la del primer premio. Hasta el 7 de octubre de 2026 el primero salía a los siete segundos.
 
 Todo sale de la hora del juego. Sin `Math.random()`.
 
@@ -30,10 +30,11 @@ Todo sale de la hora del juego. Sin `Math.random()`.
 
 - **El reparto:** las cartas llegan de abajo, de a una, a la grilla. Desde el primer cuadro hay movimiento.
 - **La pregunta**, grande, arriba, en una placa amarilla, y al rato el sello "¡SÍ!" o "¡NO!".
-- **Mientras se espera la respuesta** un foco amarillo salta de carta en carta ("¡Mirá tu nombre!"). En la última pregunta frena de a poco y se queda en la carta de quien gana.
+- **Mientras se espera la respuesta** un foco amarillo salta de carta en carta ("¡Mirá tu nombre!"). En la última pregunta frena de a poco y se queda en la carta de quien gana, con un tic-tac de dos notas que se espacia a medida que frena.
+- **La respuesta que decide:** la música se corta 0,4 s antes, el sello cae grande en el medio del tablero (con más de dos cartas, o en un celular, donde van pegadas, en el hueco entre la pregunta y las cartas, para no tapar los nombres) y vuelve a su lugar al lado de la pregunta, y suena distinto de las otras (cuerpo grave y dos notas que suben). La música queda cortada desde ahí hasta el cartel, que la vuelve a abrir con el remate: la carta sola late en silencio. Antes la música sonaba a fondo hasta 0,35 s antes del cartel y el golpe del ganador a veces no se distinguía. Se probó que la respuesta abriera el remate, como en el sapo, y el cartel quedaba solo con la fanfarria: el golpe salía negativo o enorme según la corrida.
 - **Las cartas que se van** se dan vuelta de canto, muestran el dorso liso con un "?" y se apagan, de a una.
 - **Las que quedan** se reacomodan más grandes; con seis o menos la cámara se acerca.
-- **El final:** la carta del ganador sola, con un marco que late.
+- **El final:** la carta del ganador sola, más cerca (la cámara llega hasta 1,55), con un marco que late y un latido que se oye en un parlante chico.
 - **El contador de la casa:** las cartas que siguen sobre las del principio.
 
 Con pocas cartas cada pregunta dura más (hasta cinco segundos y medio), así un sorteo de dos personas no es un parpadeo; la última pregunta tiene un segundo más de suspenso.

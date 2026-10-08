@@ -76,7 +76,7 @@ export interface Dict {
   cQuiYes: (l: string, k: number) => string;
   cQuiNo: (l: string, k: number) => string;
   cQuiNone: (l: string, has: boolean) => string;
-  cQuiDone: (n: string) => string;
+  cQuiDone: (n: string, k: number) => string;
   cOruCount: (n: number) => string;
   cOruStop: (k: number, off: number, left: number) => string;
   cOruStay: (n: string) => string;
@@ -447,7 +447,7 @@ export const T: Record<Lang, Dict> = {
     // --- ¿Quién es?: cartas con cara; cada letra da vuelta a las que no coinciden.
     gameQuien: "¿Quién es?",
     cQuiStart: (n) => `¡${n} cartas! Letra por letra, queda una.`,
-    cQuiNext: (k, of) => `¡Ronda ${k} de ${of}: otra vez todas!`,
+    cQuiNext: (k) => `¡Va el premio ${k}: otra vez todas!`,
     cQuiTwo: (a, b) => pick([`¡Quedan dos: ${a} ${yE(b)} ${b}!`, `¿${a} ${oU(b)} ${b}?`, `¡Entre ${a} ${yE(b)} ${b}!`]),
     cQuiAskShort: (l) => `¿Tiene la ${l}?`,
     cQuiAskShortN: (l) => `¿Tiene el ${l}?`,
@@ -456,7 +456,7 @@ export const T: Record<Lang, Dict> = {
     cQuiYes: (l, k) => (k === 1 ? `¡Sí tiene ${l}! Se da vuelta una.` : `¡Sí tiene ${l}! Se dan vuelta ${k}.`),
     cQuiNo: (l, k) => (k === 1 ? `¡No tiene ${l}! Se da vuelta una.` : `¡No tiene ${l}! Se dan vuelta ${k}.`),
     cQuiNone: (l, has) => (has ? `¡Sí tiene ${l}! Todas la tienen: no se da vuelta ninguna.` : `¡No tiene ${l}! Ninguna la tiene: no se da vuelta ninguna.`),
-    cQuiDone: (n) => pick([`¡Es ${n}!`, `¡Quedó ${n}!`]),
+    cQuiDone: (n, k) => pick([`¡${n}, premio ${k}!`, `¡Es ${n}: premio ${k}!`]),
     cQuiTie: ["¡Mismas letras! El sorteo ya eligió.", "¡Empate de letras! Decide el sorteo."],
     cQuiTieShort: "¿Mismas letras?",
     cQuiSi: "¡SÍ!",
@@ -1295,7 +1295,7 @@ export const T: Record<Lang, Dict> = {
     // --- Who is it?: face cards; each letter flips the ones that don't match.
     gameQuien: "Who is it?",
     cQuiStart: (n) => `${n} cards! Letter by letter, one is left.`,
-    cQuiNext: (k, of) => `Round ${k} of ${of}: all cards back!`,
+    cQuiNext: (k) => `Prize ${k} now: all cards back!`,
     cQuiTwo: (a, b) => pick([`Two left: ${a} and ${b}!`, `${a} or ${b}?`, `Between ${a} and ${b}!`]),
     cQuiAskShort: (l) => `Letter ${l}?`,
     cQuiAskShortN: (l) => `Number ${l}?`,
@@ -1304,7 +1304,7 @@ export const T: Record<Lang, Dict> = {
     cQuiYes: (l, k) => (k === 1 ? `Yes, it has ${l}! One card flips.` : `Yes, it has ${l}! ${k} cards flip.`),
     cQuiNo: (l, k) => (k === 1 ? `No ${l}! One card flips.` : `No ${l}! ${k} cards flip.`),
     cQuiNone: (l, has) => (has ? `Yes, it has ${l}! They all do: no card flips.` : `No ${l}! None of them has it: no card flips.`),
-    cQuiDone: (n) => pick([`It's ${n}!`, `${n} is left!`]),
+    cQuiDone: (n, k) => pick([`${n}, prize ${k}!`, `It's ${n}: prize ${k}!`]),
     cQuiTie: ["Same letters! The draw already chose.", "A letter tie! The draw decides."],
     cQuiTieShort: "Same letters?",
     cQuiSi: "YES!",
