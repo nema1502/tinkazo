@@ -118,7 +118,7 @@ onLangChange(() => {
   if (lastResult) showSummary();
 });
 
-function setList(text: string, clearSummary = true): void {
+export function setList(text: string, clearSummary = true): void {
   if (clearSummary) hideSummary();
   $<HTMLTextAreaElement>("ta").value = text;
   renderNames();

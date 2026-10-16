@@ -33,6 +33,8 @@ export interface Dict {
   cWin: (n: string, many?: boolean) => string;
   summary: (w: string, n: number, d: string, r: number, u: string) => string;
   drawIn: (mmss: string) => string;
+  /** Debajo del resultado: cuántos quedan en la lista sin los ganadores. */
+  againLeft: (n: number) => string;
   drandTry: (i: number, n: number) => string;
   drawTry: (i: number, n: number) => string;
   cConstPass: (n: string) => string;
@@ -672,8 +674,21 @@ export const T: Record<Lang, Dict> = {
     drawTry: (i, n) => `La cadena todavía no ve esa ronda. Reintento ${i} de ${n}…`,
     drawRetry: "Reintentar el sorteo",
     drawnDone: "Ya se sorteó",
-    drawAgain: "Hacer otro sorteo",
-    drawAgainNote: "La lista queda cargada para cambiarla. Este sorteo no se toca: sigue en Mis sorteos y en su comprobante.",
+    againTitle: "¿Hay otro premio?",
+    againLeft: (n) => (n === 1 ? "Sin los ganadores queda 1 persona en la lista." : `Sin los ganadores quedan ${n} personas en la lista.`),
+    againSin: "Otro sorteo sin los ganadores",
+    againNueva: "Otro sorteo con otra lista",
+    againFew: "Sin los ganadores no quedan dos personas para otro sorteo.",
+    againNote: "Al sellar elegís el juego otra vez, el mismo u otro. Este sorteo queda como está, en Mis sorteos y en su comprobante.",
+    obTitle: "Tu primer sorteo, en tres pasos",
+    ob1T: "Cargá la lista",
+    ob1B: "Pegá los nombres, uno por línea, o subí el CSV de Luma con los que hicieron check-in.",
+    ob2T: "Sellala",
+    ob2B: "Queda cerrada antes de que exista el número que decide. Después nadie la puede cambiar.",
+    ob3T: "Lanzá el sorteo",
+    ob3B: "Elegí un juego para la pantalla grande. Cualquiera lo comprueba después desde su celular.",
+    obSample: "Probar con la lista de ejemplo",
+    obOk: "Entendido",
     badSig: "La firma de esa ronda no cuadra con la clave pública de quicknet. Probá de nuevo.",
     drawIn: (mmss) => `Sortear en ${mmss}`,
     moreLink: "Precios y cómo funciona por dentro",
@@ -1558,8 +1573,21 @@ export const T: Record<Lang, Dict> = {
     drawTry: (i, n) => `The chain does not see that round yet. Retry ${i} of ${n}…`,
     drawRetry: "Try the draw again",
     drawnDone: "Already drawn",
-    drawAgain: "Run another draw",
-    drawAgainNote: "The list stays loaded so you can change it. This draw is untouched: it stays in My draws and in its receipt.",
+    againTitle: "Another prize to give away?",
+    againLeft: (n) => (n === 1 ? "Without the winners, 1 person is left on the list." : `Without the winners, ${n} people are left on the list.`),
+    againSin: "Another draw without the winners",
+    againNueva: "Another draw with a new list",
+    againFew: "Without the winners, fewer than two people are left for another draw.",
+    againNote: "When you seal, you pick the game again, the same one or another. This draw stays as it is, in My draws and in its receipt.",
+    obTitle: "Your first draw, in three steps",
+    ob1T: "Load the list",
+    ob1B: "Paste the names, one per line, or upload the Luma CSV with those who checked in.",
+    ob2T: "Seal it",
+    ob2B: "It is closed before the number that decides it exists. Nobody can change it afterwards.",
+    ob3T: "Run the draw",
+    ob3B: "Pick a game for the big screen. Anyone can check it afterwards from their phone.",
+    obSample: "Try it with the sample list",
+    obOk: "Got it",
     badSig: "That round's signature doesn't check out against quicknet's public key. Try again.",
     drawIn: (mmss) => `Draw in ${mmss}`,
     moreLink: "Pricing and how it works inside",

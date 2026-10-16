@@ -9,6 +9,7 @@ import { copySummary, draw, newDraw, replayAnimation, reverify, shareProof } fro
 import { skipGame } from "./games/overlay";
 import { usePixi } from "./games/engine";
 import { initWalletUI } from "./ui/wallet-ui";
+import { initOnboarding } from "./ui/onboarding";
 import { musicOn, toggleMusic } from "./music";
 
 // `?theme=light|dark` fuerza el tema (capturas).
@@ -75,7 +76,8 @@ $("btn-draw").addEventListener("click", () => void draw());
 $("btn-sala").addEventListener("click", () => void import("./ui/sala").then((m) => m.mostrarLista()));
 $("btn-reverify").addEventListener("click", reverify);
 $("btn-replay").addEventListener("click", replayAnimation);
-$("btn-again").addEventListener("click", newDraw);
+$("btn-again-sin").addEventListener("click", () => newDraw("sinGanadores"));
+$("btn-again-nueva").addEventListener("click", () => newDraw("otraLista"));
 $<HTMLButtonElement>("btn-copy").addEventListener("click", (e) => void copySummary(e.currentTarget as HTMLButtonElement));
 $<HTMLButtonElement>("btn-rules").addEventListener("click", (e) => void copyRules(e.currentTarget as HTMLButtonElement));
 $<HTMLButtonElement>("btn-proof").addEventListener("click", (e) => void shareProof(e.currentTarget as HTMLButtonElement));
@@ -94,6 +96,7 @@ onLangChange(musicLabel);
 $("st-skip").addEventListener("click", skipGame);
 bindParticipants();
 initVistas();
+initOnboarding();
 initWalletUI();
 refreshFreezeLabel();
 

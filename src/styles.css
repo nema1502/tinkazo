@@ -636,6 +636,42 @@
   .lore .lore-q { font-size: 17px; font-weight: 800; margin: 6px 0 6px; text-wrap: balance; }
   .lore .lore-a { font-size: 14px; color: var(--ink2); line-height: 1.55; }
   .lore .lore-src { display: inline-block; margin-top: 10px; font-size: 11px; color: var(--muted); }
+
+  /* Debajo de la verificación: otro premio, con la misma lista sin los
+     ganadores o con una nueva. Tres premios suelen ser tres sorteos. */
+  .again {
+    margin-top: 22px; padding: 16px 18px; background: var(--card);
+    border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+  }
+  .again h3 { font-size: 18px; font-weight: 800; text-wrap: balance; }
+  .again-left { font-size: 14px; color: var(--ink2); margin-top: 4px; }
+  .again .row { margin-top: 12px; }
+
+  /* La bienvenida de la primera vez: los tres pasos, en el mismo idioma
+     visual que la puerta y el grifo. */
+  .onboard {
+    display: block; margin: 0 0 18px; padding: 18px 20px;
+    background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh);
+  }
+  .onboard h3 { font-size: 19px; font-weight: 800; margin-bottom: 12px; text-wrap: balance; }
+  .ob-pasos {
+    list-style: none; counter-reset: paso; margin: 0; padding: 0;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+  }
+  .ob-pasos li {
+    counter-increment: paso; position: relative; padding: 12px 14px 12px 54px;
+    background: var(--paper); border: 2px solid var(--ink);
+  }
+  .ob-pasos li::before {
+    content: counter(paso); position: absolute; left: 12px; top: 12px; width: 30px; height: 30px;
+    display: grid; place-items: center; font-weight: 900; font-size: 15px;
+    background: var(--yellow); color: var(--on-accent); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+  }
+  .ob-pasos li:nth-child(2)::before { background: var(--magenta); }
+  .ob-pasos li:nth-child(3)::before { background: var(--teal); }
+  .ob-pasos b { display: block; font-size: 15px; font-weight: 800; margin-bottom: 4px; }
+  .ob-pasos span { display: block; font-size: 13px; color: var(--ink2); line-height: 1.5; }
+  @media (max-width: 700px) { .ob-pasos { grid-template-columns: 1fr; } }
   .entity { overflow-wrap: anywhere; }
   #wheel { max-width: 100%; }
 

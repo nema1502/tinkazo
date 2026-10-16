@@ -6,7 +6,7 @@ import { listHash } from "../protocol/canonical";
 import { contractUrl, network } from "../stellar/config";
 import { anchorErrorText, hideTxStatus, sealOnChain, showTxStatus, stepLabel } from "./anchor";
 import { canAnchor, currentSession } from "./wallet-ui";
-import { parseNames, renderNames } from "./participants";
+import { parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
 
 /**
@@ -244,11 +244,11 @@ export function resumeFrozen(e: {
 
 /**
  * Suelta el sello de la pantalla para armar otro sorteo (lo llama `newDraw`).
- * La lista queda en el cuadro para editarla y el premio se borra: el próximo
- * casi siempre es otro. El sorteo anterior no se toca: sigue en la cadena, en
- * Mis sorteos y en su comprobante.
+ * `lista` es lo que queda en el cuadro: la anterior sin los ganadores, o
+ * nada. El premio se borra, porque el próximo casi siempre es otro. El sorteo
+ * anterior no se toca: sigue en la cadena, en Mis sorteos y en su comprobante.
  */
-export function unfreeze(): void {
+export function unfreeze(lista: string): void {
   if (countdownTimer !== undefined) clearInterval(countdownTimer);
   countdownTimer = undefined;
   app.frozen = null;
@@ -264,7 +264,8 @@ export function unfreeze(): void {
   $("wheel-cap").style.display = "none";
   hideTxStatus("seal-status");
   refreshFreezeLabel();
-  renderNames();
+  // El resumen del CSV ya no aplica a la lista nueva: se esconde.
+  setList(lista);
 }
 
 /** Lo que se ve con la lista ya sellada: los datos del sello, la espera y el selector de juego. */

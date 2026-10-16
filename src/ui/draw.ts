@@ -1,5 +1,5 @@
 import { $, esc } from "../dom";
-import { T, getLang, t } from "../i18n";
+import { T, getLang, onLangChange, t } from "../i18n";
 import { LCOLORS, WHEEL_MAX, app, playableGame, avatar, forceMotion, setCardSeconds, setShowGate, skipMotion, skippedForReducedMotion, type Beacon, type Game } from "../state";
 import { bytesToHex, decompressG1, fetchRound, hexToBytes, randomnessOf, roundUrl, verifyRound } from "../protocol/drand";
 import { select } from "../protocol/select";
@@ -297,7 +297,7 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   const dl = $<HTMLAnchorElement>("drand-link");
   dl.href = url;
   dl.textContent = t("drandLink");
-  $("again-row").style.display = "flex";
+  showAgain();
   confetti();
   // El comprobante se arma aparte: comprimir la lista es asíncrono y no vale
   // la pena hacer esperar al confeti por eso.
@@ -331,16 +331,43 @@ export function replayAnimation(): void {
   });
 }
 
+/** Quiénes quedan en la lista sellada si se sacan los que ya salieron. */
+function sinGanadores(): string[] {
+  const { frozen, drawn } = app;
+  if (!frozen || !drawn) return [];
+  const salieron = new Set(drawn.winners);
+  return frozen.names.filter((_, i) => !salieron.has(i));
+}
+
 /**
- * "Hacer otro sorteo": deja la herramienta lista para el siguiente, sin
- * recargar la página. Hasta el 16 de octubre de 2026 no había cómo: después
- * del primero, sellar y sortear quedaban apagados y la pestaña "Nuevo sorteo"
- * solo cambiaba de vista.
+ * El panel de "¿hay otro premio?", debajo del resultado: cuántos quedan sin
+ * los ganadores, y ese botón apagado si no alcanzan para otro sorteo.
  */
-export function newDraw(): void {
+function showAgain(): void {
+  const quedan = sinGanadores().length;
+  const sin = $<HTMLButtonElement>("btn-again-sin");
+  sin.disabled = quedan < 2;
+  sin.title = quedan < 2 ? t("againFew") : "";
+  $("again-left").textContent = T[getLang()].againLeft(quedan);
+  $("again-row").style.display = "block";
+}
+onLangChange(() => {
+  if (app.drawn && $("again-row").style.display !== "none") showAgain();
+});
+
+/**
+ * "Otro sorteo": deja la herramienta lista para el siguiente, sin recargar la
+ * página. Con la misma lista sin los que ya ganaron, o con una lista nueva; en
+ * los dos casos el juego se vuelve a elegir al sellar. Hasta el 16 de octubre
+ * de 2026 no había cómo: después del primero, sellar y sortear quedaban
+ * apagados y la pestaña "Nuevo sorteo" solo cambiaba de vista.
+ */
+export function newDraw(modo: "sinGanadores" | "otraLista"): void {
   if (!app.drawn || replaying) return;
+  const quedan = modo === "sinGanadores" ? sinGanadores() : [];
+  if (modo === "sinGanadores" && quedan.length < 2) return;
   app.drawn = null;
-  unfreeze();
+  unfreeze(quedan.join("\n"));
   const btn = $<HTMLButtonElement>("btn-draw");
   btn.disabled = false;
   btn.dataset.i = "draw";
@@ -351,9 +378,10 @@ export function newDraw(): void {
     $(id).style.display = "none";
   }
   $("winner-cards").innerHTML = "";
-  const sec = $("sec-participants");
-  sec.scrollIntoView({ behavior: "smooth", block: "start" });
-  $<HTMLTextAreaElement>("ta").focus({ preventScroll: true });
+  $("sec-participants").scrollIntoView({ behavior: "smooth", block: "start" });
+  // Con la lista lista, lo que sigue es sellar; con la lista vacía, cargarla.
+  if (modo === "sinGanadores") $("btn-freeze").focus({ preventScroll: true });
+  else $<HTMLTextAreaElement>("ta").focus({ preventScroll: true });
 }
 
 let proofLink = "";
