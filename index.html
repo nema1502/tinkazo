@@ -161,8 +161,8 @@
           <li><b data-i="ob3T">Lanzá el sorteo</b><span data-i="ob3B">Elegí un juego para la pantalla grande. Cualquiera lo comprueba después desde su celular.</span></li>
         </ol>
         <div class="row">
-          <button class="primary" id="ob-sample" data-i="obSample">Probar con la lista de ejemplo</button>
-          <button class="ghost" id="ob-ok" data-i="obOk">Entendido</button>
+          <button class="primary" id="ob-ok" data-i="obOk">Entendido</button>
+          <a class="ghost" id="ob-demo" href="/?demo=race&amp;lead=3" data-i="obDemo">Ver una demo primero</a>
         </div>
       </aside>
       <div class="row" style="margin: 0 0 14px">
@@ -170,11 +170,13 @@
         <label class="chip live" style="cursor: pointer"><span data-i="srcCsv">Subir CSV</span><input id="csv" type="file" accept=".csv,.txt" class="sr-only" /></label>
         <label class="chip live" style="cursor: pointer" title="Exportá la lista de invitados de tu evento en Luma como CSV" data-i-title="srcLumaTip"><span data-i="srcLuma">Desde Luma</span><input id="csv-luma" type="file" accept=".csv" class="sr-only" /></label>
         <span class="chip soon" data-i="srcMeetup">Meetup · pronto</span>
+        <button class="mini" type="button" id="btn-recuperar" style="display:none" data-i="recuperarLista">Recuperar la lista anterior</button>
       </div>
       <div class="row csv-sum" id="csv-pick" style="display:none; margin: 0 0 12px">
         <span class="note" id="csv-note"></span>
         <button class="mini" type="button" id="csv-edit" data-i="impEdit">Editar selección</button>
       </div>
+      <p class="again-note" id="again-note" style="display:none" aria-live="polite"></p>
       <textarea id="ta" spellcheck="false" placeholder="Un nombre por línea…"></textarea>
       <div class="field">
         <label for="prize" data-i="prizeLabel">¿Qué sorteás? (opcional)</label>
@@ -258,9 +260,9 @@
           <canvas id="wheel" width="480" height="480"></canvas>
         </div>
       </div>
-      <div class="winner-box" id="winner-box" role="status" aria-live="polite">
+      <div class="winner-box" id="winner-box">
         <p class="kicker" data-i="winnerLabel">Lo que salió</p>
-        <div id="winner-cards"></div>
+        <div id="winner-cards" role="status" aria-live="polite"></div>
         <p class="note" id="motion-note" style="display:none"><span data-i="motionNote">Tu sistema tiene las animaciones reducidas, por eso el sorteo se muestra directo.</span> <button class="ghost" id="btn-replay" data-i="motionReplay">Ver la animación igual</button></p>
         <div class="verify">
           <div>
@@ -290,10 +292,10 @@
           <h3 id="again-t" data-i="againTitle">¿Hay otro premio?</h3>
           <p class="again-left" id="again-left"></p>
           <div class="row">
-            <button class="primary" id="btn-again-sin" data-i="againSin">Otro sorteo sin los ganadores</button>
-            <button class="ghost" id="btn-again-nueva" data-i="againNueva">Otro sorteo con otra lista</button>
+            <button class="primary" id="btn-again-sin">Sortear entre los que quedan</button>
+            <button class="ghost" id="btn-again-nueva" data-i="againNueva">Usar otra lista</button>
           </div>
-          <p class="note" data-i="againNote">Al sellar elegís el juego otra vez, el mismo u otro. Este sorteo queda como está, en Mis sorteos y en su comprobante.</p>
+          <p class="note" data-i="againNote">Después de sellar elegís el juego, el mismo u otro. Este sorteo queda como está, en Mis sorteos y en su comprobante.</p>
         </section>
         <aside class="lore" id="lore-box" style="display:none"></aside>
         <div class="demo-fin">

@@ -49,6 +49,8 @@
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     line-height: 1.5; display: flex; flex-direction: column; min-height: 100vh;
   }
+  /* Sin esto los botones salían en Arial, la letra por defecto del navegador. */
+  button { font-family: inherit; }
   .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
   .kicker { font-family: ui-monospace, Consolas, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--muted); font-weight: 600; }
   header { position: sticky; top: 0; z-index: 10; background: var(--paper); border-bottom: var(--bw) solid var(--ink); }
@@ -402,7 +404,7 @@
      una dirección de Stellar de 56 caracteres, estiraba la tarjeta hasta salirse
      de la página. Pasó con el sorteo entre direcciones del pase de evento. */
   .winner-card {
-    position: relative; z-index: 40; max-width: 100%;
+    position: relative; z-index: 9; max-width: 100%;
     display: inline-flex; align-items: center; gap: 16px; background: var(--yellow); color: #191919; border: var(--bw) solid var(--ink);
     box-shadow: var(--sh); padding: 16px 26px; transform: rotate(-1.5deg); margin-top: 8px;
   }
@@ -427,7 +429,7 @@
   select { background: var(--card); color: var(--ink); border: 2px solid var(--ink); padding: 9px 12px; font-weight: 700; }
   /* Detrás de la tarjeta del ganador, no encima: caía justo sobre el nombre
      en los primeros segundos, que es cuando la gente saca la foto. */
-  .confetti { position: fixed; inset: 0; pointer-events: none; z-index: 30; }
+  .confetti { position: fixed; inset: 0; pointer-events: none; z-index: 8; }
   .confetti i { position: absolute; width: 10px; height: 14px; top: -20px; animation: fall linear forwards; }
   @keyframes fall { to { transform: translateY(105vh) rotate(720deg); } }
   .field { margin-top: 16px; }
@@ -549,6 +551,10 @@
     outline-offset: 3px;
     box-shadow: 0 0 0 6px var(--yellow);
   }
+  /* La sombra dura de los botones le ganaba al halo del foco. */
+  button.primary:focus-visible, button.ghost:focus-visible, a.primary:focus-visible, a.ghost:focus-visible {
+    box-shadow: 0 0 0 6px var(--yellow);
+  }
   /* Un dedo en un evento, con poca luz. 44 px es el minimo que se acierta. */
   .langs button, button.mini, a.mini, button.ghost, a.ghost, .gamepick button,
   select, .st-actions button, label.chip.live, a.primary.cta, button.primary {
@@ -646,6 +652,17 @@
   .again h3 { font-size: 18px; font-weight: 800; text-wrap: balance; }
   .again-left { font-size: 14px; color: var(--ink2); margin-top: 4px; }
   .again .row { margin-top: 12px; }
+  /* Arriba del cuadro, después de "sin los ganadores": quién salió de la lista. */
+  .again-note {
+    margin: 0 0 12px; padding: 10px 14px; font-size: 14px; font-weight: 700;
+    background: var(--yellow); color: var(--on-accent); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+  }
+  /* En el celular los rellenos anidados dejaban 212 px para los botones. */
+  @media (max-width: 460px) {
+    .again { padding: 14px; }
+    .again .row > button { flex: 1 1 100%; }
+  }
+  button.primary, button.ghost, a.primary, a.ghost { text-wrap: balance; }
 
   /* La bienvenida de la primera vez: los tres pasos, en el mismo idioma
      visual que la puerta y el grifo. */
@@ -671,7 +688,9 @@
   .ob-pasos li:nth-child(3)::before { background: var(--teal); }
   .ob-pasos b { display: block; font-size: 15px; font-weight: 800; margin-bottom: 4px; }
   .ob-pasos span { display: block; font-size: 13px; color: var(--ink2); line-height: 1.5; }
-  @media (max-width: 700px) { .ob-pasos { grid-template-columns: 1fr; } }
+  @media (max-width: 900px) { .ob-pasos { grid-template-columns: 1fr; } }
+  /* En el celular, los pasos sin la explicación: la bienvenida ocupaba la pantalla entera. */
+  @media (max-width: 700px) { .ob-pasos span { display: none; } .ob-pasos li { padding: 10px 12px 10px 52px; } }
   .entity { overflow-wrap: anywhere; }
   #wheel { max-width: 100%; }
 
@@ -838,6 +857,8 @@
   /* Cuando el menú baja a una segunda fila, la cabecera fija se comía hasta un
      cuarto de la pantalla: ahí deja de ser fija. */
   @media (max-width: 1100px) { header { position: static; } }
+  /* Con la cabecera fija, lo que se encuadra con scrollIntoView queda debajo de ella. */
+  @media (min-width: 1101px) { section.block { scroll-margin-top: 97px; } }
   @media (max-width: 1100px) {
     .topnav { order: 3; flex-basis: 100%; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; margin: 0 -6px; padding: 0 6px 4px; }
     /* Que se note que el menú sigue a la derecha. */

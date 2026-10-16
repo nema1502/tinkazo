@@ -36,6 +36,7 @@ export function bindParticipants(): void {
   $("ta").addEventListener("input", () => {
     // Si edita a mano, manda lo que escribió: el resumen del archivo ya no aplica.
     hideSummary();
+    quitarAvisos();
     renderNames();
   });
   const onFile = async (file: File | undefined): Promise<void> => {
@@ -118,8 +119,20 @@ onLangChange(() => {
   if (lastResult) showSummary();
 });
 
+/**
+ * Lo que deja "otro premio" arriba del cuadro (quién salió de la lista y
+ * "Recuperar la lista anterior") vale hasta que la lista cambia.
+ */
+function quitarAvisos(): void {
+  for (const id of ["again-note", "btn-recuperar"]) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = "none";
+  }
+}
+
 export function setList(text: string, clearSummary = true): void {
   if (clearSummary) hideSummary();
+  quitarAvisos();
   $<HTMLTextAreaElement>("ta").value = text;
   renderNames();
 }

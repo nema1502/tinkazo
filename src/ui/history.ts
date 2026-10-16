@@ -223,7 +223,9 @@ function paint(organizer: string | null): void {
     return;
   }
 
-  // Los sorteos de la cuenta, vengan de este equipo o de la cadena.
+  // Los sorteos de la cuenta, vengan de este equipo o de la cadena. Quien ya
+  // tiene sorteos no necesita la bienvenida de la primera vez (onboarding.ts).
+  document.dispatchEvent(new CustomEvent("tinkazo:con-sorteos"));
   $("hist-count").textContent = t("histCount").replace("{n}", String(list.length));
   pintadas = list;
   enlazarRearmado();

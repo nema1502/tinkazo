@@ -11,6 +11,7 @@ import { currentSession } from "./wallet-ui";
 import { qrDataUrl } from "./qr";
 import { usePixi } from "../games/engine";
 import { secondsToRound, unfreeze } from "./freeze";
+import { setList } from "./participants";
 import { CARD_SECONDS, showGameCard } from "./gamecard";
 import { startMusic, stopMusic } from "../music";
 
@@ -299,6 +300,10 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   dl.textContent = t("drandLink");
   showAgain();
   confetti();
+  // El juego pidió bajar a "El sorteo" cuando el resultado todavía estaba
+  // escondido: quedaba el selector de juegos arriba y el panel fuera de la
+  // pantalla. Con el resultado ya puesto, se encuadra la sección entera.
+  requestAnimationFrame(() => $("sec-draw").scrollIntoView({ behavior: "smooth", block: "start" }));
   // El comprobante se arma aparte: comprimir la lista es asíncrono y no vale
   // la pena hacer esperar al confeti por eso.
   void buildProof(names, winners, url);
@@ -341,14 +346,19 @@ function sinGanadores(): string[] {
 
 /**
  * El panel de "¿hay otro premio?", debajo del resultado: cuántos quedan sin
- * los ganadores, y ese botón apagado si no alcanzan para otro sorteo.
+ * los ganadores y los dos caminos, cada uno empezando por lo que lo distingue.
+ * Con menos de dos no hay otro sorteo con esta lista: ese botón se va y la
+ * razón queda escrita, no escondida en un title que el proyector no muestra.
  */
 function showAgain(): void {
+  const L = T[getLang()];
   const quedan = sinGanadores().length;
+  const alcanza = quedan >= 2;
   const sin = $<HTMLButtonElement>("btn-again-sin");
-  sin.disabled = quedan < 2;
-  sin.title = quedan < 2 ? t("againFew") : "";
-  $("again-left").textContent = T[getLang()].againLeft(quedan);
+  sin.style.display = alcanza ? "" : "none";
+  sin.textContent = L.againSin(quedan);
+  $("btn-again-nueva").className = alcanza ? "ghost" : "primary";
+  $("again-left").textContent = alcanza ? L.againLeft(quedan) : L.againFew(quedan);
   $("again-row").style.display = "block";
 }
 onLangChange(() => {
@@ -363,11 +373,25 @@ onLangChange(() => {
  * apagados y la pestaña "Nuevo sorteo" solo cambiaba de vista.
  */
 export function newDraw(modo: "sinGanadores" | "otraLista"): void {
-  if (!app.drawn || replaying) return;
+  const { frozen, drawn } = app;
+  if (!frozen || !drawn || replaying) return;
   const quedan = modo === "sinGanadores" ? sinGanadores() : [];
   if (modo === "sinGanadores" && quedan.length < 2) return;
+  const salieron = drawn.winners.map((i) => frozen.names[i] ?? "").filter(Boolean);
+  // La lista sellada se guarda: "Usar otra lista" vacía el cuadro, y un clic
+  // equivocado frente a la sala no puede costar la lista de Luma filtrada.
+  anterior = frozen.names;
   app.drawn = null;
   unfreeze(quedan.join("\n"));
+  // "Premios" no puede quedar en más que los que quedan: con 2 personas y 3
+  // premios, el próximo sorteo los premiaba a todos sin avisar.
+  const nw = $<HTMLSelectElement>("nw");
+  if (quedan.length) nw.value = String(Math.max(1, Math.min(parseInt(nw.value, 10) || 1, quedan.length - 1)));
+  // Arriba del cuadro, qué cambió: quién salió de la lista, o cómo volver.
+  const nota = $("again-note");
+  nota.textContent = modo === "sinGanadores" ? T[getLang()].againQuitados(salieron, quedan.length) : "";
+  nota.style.display = modo === "sinGanadores" ? "block" : "none";
+  $("btn-recuperar").style.display = modo === "otraLista" ? "" : "none";
   const btn = $<HTMLButtonElement>("btn-draw");
   btn.disabled = false;
   btn.dataset.i = "draw";
@@ -379,9 +403,22 @@ export function newDraw(modo: "sinGanadores" | "otraLista"): void {
   }
   $("winner-cards").innerHTML = "";
   $("sec-participants").scrollIntoView({ behavior: "smooth", block: "start" });
-  // Con la lista lista, lo que sigue es sellar; con la lista vacía, cargarla.
-  if (modo === "sinGanadores") $("btn-freeze").focus({ preventScroll: true });
+  // Con la lista lista, lo que sigue es nombrar el premio nuevo: si no, el
+  // cartel no dice qué se lleva y en Mis sorteos todos se llaman igual. Con la
+  // lista vacía, lo que sigue es cargarla.
+  if (modo === "sinGanadores") $<HTMLInputElement>("prize").focus({ preventScroll: true });
   else $<HTMLTextAreaElement>("ta").focus({ preventScroll: true });
+}
+
+/** La lista del sorteo anterior, para "Recuperar la lista anterior". */
+let anterior: string[] = [];
+
+/** Vuelve a poner en el cuadro la lista del sorteo anterior, entera. */
+export function recuperarLista(): void {
+  if (!anterior.length || app.frozen) return;
+  setList(anterior.join("\n"));
+  $("btn-recuperar").style.display = "none";
+  $("btn-freeze").focus({ preventScroll: true });
 }
 
 let proofLink = "";

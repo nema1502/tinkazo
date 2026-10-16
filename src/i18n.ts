@@ -35,6 +35,12 @@ export interface Dict {
   drawIn: (mmss: string) => string;
   /** Debajo del resultado: cuántos quedan en la lista sin los ganadores. */
   againLeft: (n: number) => string;
+  /** El botón de seguir con la misma lista: empieza por lo que lo distingue. */
+  againSin: (n: number) => string;
+  /** Por qué no hay otro sorteo con esta lista, cuando quedan menos de dos. */
+  againFew: (n: number) => string;
+  /** Arriba del cuadro, después de "sin los ganadores": quién salió y cuántos quedan. */
+  againQuitados: (nombres: string[], n: number) => string;
   drandTry: (i: number, n: number) => string;
   drawTry: (i: number, n: number) => string;
   cConstPass: (n: string) => string;
@@ -676,18 +682,20 @@ export const T: Record<Lang, Dict> = {
     drawnDone: "Ya se sorteó",
     againTitle: "¿Hay otro premio?",
     againLeft: (n) => (n === 1 ? "Sin los ganadores queda 1 persona en la lista." : `Sin los ganadores quedan ${n} personas en la lista.`),
-    againSin: "Otro sorteo sin los ganadores",
-    againNueva: "Otro sorteo con otra lista",
-    againFew: "Sin los ganadores no quedan dos personas para otro sorteo.",
-    againNote: "Al sellar elegís el juego otra vez, el mismo u otro. Este sorteo queda como está, en Mis sorteos y en su comprobante.",
+    againSin: (n) => `Sortear entre los ${n} que quedan`,
+    againNueva: "Usar otra lista",
+    againFew: (n) => (n === 1 ? "Queda una sola persona sin premio: para otro sorteo, usá otra lista." : "Ya ganaron todos los de la lista: para otro premio, usá otra lista."),
+    againQuitados: (nombres, n) => (nombres.length > 3 ? `${nombres.length} personas ya ganaron y no están en esta lista. Quedan ${n}.` : nombres.length === 1 ? `${nombres[0]} ya ganó y no está en esta lista. Quedan ${n}.` : `${nombres.join(", ")} ya ganaron y no están en esta lista. Quedan ${n}.`),
+    recuperarLista: "Recuperar la lista anterior",
+    againNote: "Después de sellar elegís el juego, el mismo u otro. Este sorteo queda como está, en Mis sorteos y en su comprobante.",
     obTitle: "Tu primer sorteo, en tres pasos",
     ob1T: "Cargá la lista",
     ob1B: "Pegá los nombres, uno por línea, o subí el CSV de Luma con los que hicieron check-in.",
     ob2T: "Sellala",
-    ob2B: "Queda cerrada antes de que exista el número que decide. Después nadie la puede cambiar.",
+    ob2B: "Queda cerrada antes de que exista el número que decide, que sale unos 45 segundos después. Desde ahí nadie la puede cambiar.",
     ob3T: "Lanzá el sorteo",
     ob3B: "Elegí un juego para la pantalla grande. Cualquiera lo comprueba después desde su celular.",
-    obSample: "Probar con la lista de ejemplo",
+    obDemo: "Ver una demo primero",
     obOk: "Entendido",
     badSig: "La firma de esa ronda no cuadra con la clave pública de quicknet. Probá de nuevo.",
     drawIn: (mmss) => `Sortear en ${mmss}`,
@@ -1575,18 +1583,20 @@ export const T: Record<Lang, Dict> = {
     drawnDone: "Already drawn",
     againTitle: "Another prize to give away?",
     againLeft: (n) => (n === 1 ? "Without the winners, 1 person is left on the list." : `Without the winners, ${n} people are left on the list.`),
-    againSin: "Another draw without the winners",
-    againNueva: "Another draw with a new list",
-    againFew: "Without the winners, fewer than two people are left for another draw.",
-    againNote: "When you seal, you pick the game again, the same one or another. This draw stays as it is, in My draws and in its receipt.",
+    againSin: (n) => `Draw among the ${n} left`,
+    againNueva: "Use another list",
+    againFew: (n) => (n === 1 ? "Only one person is left without a prize: for another draw, use another list." : "Everyone on the list has already won: for another prize, use another list."),
+    againQuitados: (nombres, n) => (nombres.length > 3 ? `${nombres.length} people already won and are off this list. ${n} left.` : nombres.length === 1 ? `${nombres[0]} already won and is off this list. ${n} left.` : `${nombres.join(", ")} already won and are off this list. ${n} left.`),
+    recuperarLista: "Bring back the previous list",
+    againNote: "After sealing you pick the game again, the same one or another. This draw stays as it is, in My draws and in its receipt.",
     obTitle: "Your first draw, in three steps",
     ob1T: "Load the list",
     ob1B: "Paste the names, one per line, or upload the Luma CSV with those who checked in.",
     ob2T: "Seal it",
-    ob2B: "It is closed before the number that decides it exists. Nobody can change it afterwards.",
+    ob2B: "It gets locked before the number that decides the draw even exists, about 45 seconds later. After that, nobody can change it.",
     ob3T: "Run the draw",
     ob3B: "Pick a game for the big screen. Anyone can check it afterwards from their phone.",
-    obSample: "Try it with the sample list",
+    obDemo: "Watch a demo first",
     obOk: "Got it",
     badSig: "That round's signature doesn't check out against quicknet's public key. Try again.",
     drawIn: (mmss) => `Draw in ${mmss}`,
