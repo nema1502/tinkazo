@@ -144,7 +144,7 @@ De fondo suena música andina con beat que sigue la tensión (la Chovena trae su
 
 Para mainnet: un solo sorteo abierto por cuenta, la cancelación pública, la ronda que pone el contrato y la lista ordenada en el protocolo. El análisis completo, con el método STRIDE, está en [docs/amenazas.md](docs/amenazas.md), y la versión para todo público en la [página de seguridad](https://tinkazo.app/seguridad.html).
 
-**Privacidad.** En la cadena va solo la huella, nunca los nombres. El comprobante viaja en el fragmento de la URL, que el navegador no le manda a ningún servidor.
+**Privacidad.** En la cadena va solo la huella, nunca los nombres. El comprobante viaja en el fragmento de la URL, que el navegador no le manda a ningún servidor. El sitio cuenta visitas con la analítica de Vercel, sin cookies, y corta cada dirección hasta la ruta antes de contar ([src/analytics.ts](src/analytics.ts)).
 
 ## Cómo se compara
 

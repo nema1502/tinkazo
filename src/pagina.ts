@@ -3,6 +3,7 @@ import { chooseLang, initialLang, onLangChange, setLang } from "./i18n";
 import { params } from "./state";
 import { network } from "./stellar/config";
 import { loadSessionKind } from "./stellar/session-store";
+import { countVisits } from "./analytics";
 
 /**
  * Las páginas de lectura: precios, juegos, historia y seguridad.
@@ -38,6 +39,7 @@ if (tema === "light" || tema === "dark") {
   document.querySelector("header .bar")?.appendChild(a);
 }
 setLang(initialLang());
+countVisits();
 // Las tablas que se apilan en el celular llevan el rótulo de su columna en cada celda.
 const rotular = (): void => {
   document.querySelectorAll<HTMLElement>("[data-label-i]").forEach((el) => {
