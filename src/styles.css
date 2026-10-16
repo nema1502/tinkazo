@@ -415,6 +415,16 @@
     overflow-wrap: anywhere;
   }
   .winner-prize { font-size: 14px; font-weight: 700; margin-top: 2px; }
+  /* "No está", dentro de la tarjeta: siempre tinta sobre amarillo, en los dos
+     temas. Chico, para que no le compita al nombre en el proyector. */
+  .ausente { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 8px; }
+  .ausente-q { flex-basis: 100%; font-size: 14px; font-weight: 800; }
+  .ausente-btn {
+    min-height: 44px; padding: 4px 12px; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer;
+    background: transparent; color: #191919; border: 2px solid #191919;
+  }
+  .ausente-btn.si { background: #191919; color: #ffd24d; }
+  .ausente-btn:focus-visible { outline: 3px solid #191919; outline-offset: 2px; }
   .verify { margin-top: 22px; border: 2px solid var(--ink); padding: 16px; background: var(--paper); display: grid; grid-template-columns: 1fr auto; gap: 16px; }
   .verify a { color: var(--ink); font-weight: 700; }
   .qr { text-align: center; }
@@ -672,6 +682,10 @@
   @media (max-width: 460px) {
     .again { padding: 14px; }
     .again .row > button { flex: 1 1 100%; }
+    /* La cara al costado dejaba una columna angosta: el nombre y "No está" se
+       partían en tres renglones. Arriba, y el texto usa todo el ancho. */
+    .winner-card { flex-direction: column; align-items: flex-start; gap: 10px; padding: 14px 18px; }
+    .winner-card img { width: 48px; height: 48px; }
   }
   button.primary, button.ghost, a.primary, a.ghost { text-wrap: balance; }
 
@@ -1032,7 +1046,8 @@
   .demo-fin { display: none; }
   body[data-demo="1"] .demo-fin { display: block; margin-top: 18px; padding: 18px; background: var(--purple); color: var(--on-purple); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
   body[data-demo="1"] .demo-fin h3 { font-size: 18px; font-weight: 900; margin-bottom: 10px; }
-  body[data-demo="1"] #btn-whatsapp, body[data-demo="1"] #btn-email, body[data-demo="1"] #btn-proof, body[data-demo="1"] #gate, body[data-demo="1"] #again-row { display: none !important; }
+  body[data-demo="1"] #btn-whatsapp, body[data-demo="1"] #btn-email, body[data-demo="1"] #btn-proof, body[data-demo="1"] #gate, body[data-demo="1"] #again-row,
+  body[data-demo="1"] #btn-imagen, body[data-demo="1"] .ausente { display: none !important; }
 
   /* En el celular con la sesión abierta la cabecera ocupaba tres filas: el
      aviso de la red pasa a ser el borde de la cuenta, del mismo color. Si la

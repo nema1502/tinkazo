@@ -267,19 +267,23 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   $("motion-note").style.display = skippedForReducedMotion() ? "block" : "none";
   renderLore(beacon);
   const prize = app.frozen?.prize ?? "";
+  // "No está" solo si queda con quién volver a sortear: dos personas, como
+  // en "Otro premio".
+  const reemplazo = names.length - winners.length >= 2;
   $("winner-cards").innerHTML = winners
     .map((i, k) => {
       const name = names[i] ?? "";
       const tag = prize
-        ? `<p class="winner-prize">${esc(t("winsPrize"))} ${esc(prize)}${winners.length > 1 ? ` · #${k + 1}` : ""}</p>`
+        ? `<p class="winner-prize"><span data-i="winsPrize">${esc(t("winsPrize"))}</span> ${esc(prize)}${winners.length > 1 ? ` · #${k + 1}` : ""}</p>`
         : winners.length > 1
           ? `<p class="winner-prize">#${k + 1}</p>`
           : "";
       return `<div class="winner-card" style="transform: rotate(${k % 2 ? 1.5 : -1.5}deg)">
         <img src="${avatar(name, 128)}" alt="" />
         <div>
-          <p class="winner-name">${esc(name)}</p>
+          <p class="winner-name" id="wn-${k}">${esc(name)}</p>
           ${tag}
+          ${reemplazo ? `<div class="ausente" data-k="${k}">${botonAusente(k)}</div>` : ""}
         </div>
       </div>`;
     })
@@ -303,6 +307,7 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   dl.textContent = t("drandLink");
   showAgain();
   confetti();
+  programarImagen();
   // El juego pidió bajar a "El sorteo" cuando el resultado todavía estaba
   // escondido: quedaba el selector de juegos arriba y el panel fuera de la
   // pantalla. Con el resultado ya puesto, se encuadra la sección entera.
@@ -375,12 +380,16 @@ onLangChange(() => {
  * de 2026 no había cómo: después del primero, sellar y sortear quedaban
  * apagados y la pestaña "Nuevo sorteo" solo cambiaba de vista.
  */
-export function newDraw(modo: "sinGanadores" | "otraLista"): void {
+export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1): void {
   const { frozen, drawn } = app;
   if (!frozen || !drawn || replaying) return;
-  const quedan = modo === "sinGanadores" ? sinGanadores() : [];
-  if (modo === "sinGanadores" && quedan.length < 2) return;
+  const conLista = modo !== "otraLista";
+  const quedan = conLista ? sinGanadores() : [];
+  if (conLista && quedan.length < 2) return;
   const salieron = drawn.winners.map((i) => frozen.names[i] ?? "").filter(Boolean);
+  const ausente = modo === "ausente" ? (frozen.names[drawn.winners[k] ?? -1] ?? "") : "";
+  if (modo === "ausente" && !ausente) return;
+  const premio = frozen.prize;
   // La lista sellada se guarda: "Usar otra lista" vacía el cuadro, y un clic
   // equivocado frente a la sala no puede costar la lista de Luma filtrada.
   anterior = frozen.names;
@@ -389,11 +398,19 @@ export function newDraw(modo: "sinGanadores" | "otraLista"): void {
   // "Premios" no puede quedar en más que los que quedan: con 2 personas y 3
   // premios, el próximo sorteo los premiaba a todos sin avisar.
   const nw = $<HTMLSelectElement>("nw");
-  if (quedan.length) nw.value = String(Math.max(1, Math.min(parseInt(nw.value, 10) || 1, quedan.length - 1)));
+  if (modo === "ausente") {
+    // El reemplazo es uno solo y se lleva lo mismo que se iba a llevar quien
+    // no estaba. Los otros ganadores, si los hubo, se quedan con lo suyo y no
+    // entran a este sorteo.
+    nw.value = "1";
+    $<HTMLInputElement>("prize").value = premio;
+  } else if (quedan.length) nw.value = String(Math.max(1, Math.min(parseInt(nw.value, 10) || 1, quedan.length - 1)));
   // Arriba del cuadro, qué cambió: quién salió de la lista, o cómo volver.
+  const L = T[getLang()];
   const nota = $("again-note");
-  nota.textContent = modo === "sinGanadores" ? T[getLang()].againQuitados(salieron, quedan.length) : "";
-  nota.style.display = modo === "sinGanadores" ? "block" : "none";
+  nota.textContent =
+    modo === "sinGanadores" ? L.againQuitados(salieron, quedan.length) : modo === "ausente" ? L.ausenteNota(ausente, quedan.length, salieron.length > 1) : "";
+  nota.style.display = conLista ? "block" : "none";
   $("btn-recuperar").style.display = modo === "otraLista" ? "" : "none";
   const btn = $<HTMLButtonElement>("btn-draw");
   btn.disabled = false;
@@ -409,8 +426,63 @@ export function newDraw(modo: "sinGanadores" | "otraLista"): void {
   // Con la lista lista, lo que sigue es nombrar el premio nuevo: si no, el
   // cartel no dice qué se lleva y en Mis sorteos todos se llaman igual. Con la
   // lista vacía, lo que sigue es cargarla.
+  // Con "No está" ya están la lista, el premio y la cantidad: lo que sigue es
+  // sellar.
   if (modo === "sinGanadores") $<HTMLInputElement>("prize").focus({ preventScroll: true });
+  else if (modo === "ausente") $<HTMLButtonElement>("btn-freeze").focus({ preventScroll: true });
   else $<HTMLTextAreaElement>("ta").focus({ preventScroll: true });
+}
+
+/** El botón "No está" de una tarjeta; describe a quién se refiere con el nombre de la tarjeta. */
+const botonAusente = (k: number): string =>
+  `<button class="ausente-btn" type="button" data-ausente aria-describedby="wn-${k}" data-i="ausenteBtn">${esc(t("ausenteBtn"))}</button>`;
+
+const preguntaAusente = (): string =>
+  `<p class="ausente-q" data-i="ausenteQ">${esc(t("ausenteQ"))}</p>` +
+  `<button class="ausente-btn si" type="button" data-ausente-si data-i="ausenteSi">${esc(t("ausenteSi"))}</button>` +
+  `<button class="ausente-btn" type="button" data-ausente-no data-i="ausenteNo">${esc(t("ausenteNo"))}</button>`;
+
+/**
+ * "No está": quien ganó ya se fue, cosa que pasa en casi todo evento. Su
+ * premio vuelve a sortearse entre los que quedan, con un sello nuevo: el
+ * sorteo de recién queda como está, en Mis sorteos y en su comprobante, y el
+ * reemplazo tiene el suyo. Pide confirmación en la misma tarjeta, porque un
+ * clic de más frente a la sala no puede borrar al ganador de la pantalla.
+ */
+export function alTocarGanadores(e: Event): void {
+  const b = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>("button");
+  const caja = b?.closest<HTMLElement>(".ausente");
+  if (!b || !caja) return;
+  const k = Number(caja.dataset.k);
+  if (b.dataset.ausenteSi !== undefined) {
+    newDraw("ausente", k);
+    return;
+  }
+  const preguntar = b.dataset.ausente !== undefined;
+  caja.innerHTML = preguntar ? preguntaAusente() : botonAusente(k);
+  caja.querySelector<HTMLButtonElement>(preguntar ? "[data-ausente-si]" : "[data-ausente]")?.focus({ preventScroll: true });
+}
+
+/** La imagen para redes (imagen.ts): en el celular, el menú de compartir; en la computadora, la descarga. */
+export function imagenRedes(btn: HTMLButtonElement): void {
+  void import("./imagen").then((m) => m.compartirImagen(btn));
+}
+
+/**
+ * La imagen se arma de antemano, cuando termina el festejo: compartir desde el
+ * celular tiene que salir del mismo toque. En la demo no hay botón.
+ */
+function programarImagen(): void {
+  if (document.body.dataset.demo === "1") return;
+  const armar = (): void => {
+    void import("./imagen").then((m) => m.prepararImagen()).catch(() => undefined);
+  };
+  setTimeout(() => ("requestIdleCallback" in window ? requestIdleCallback(armar, { timeout: 2000 }) : armar()), 1200);
+}
+
+/** Al apoyar el dedo en el botón: si todavía no estaba, se empieza a armar antes del toque. */
+export function adelantarImagen(): void {
+  void import("./imagen").then((m) => m.prepararImagen()).catch(() => undefined);
 }
 
 /** La lista del sorteo anterior, para "Recuperar la lista anterior". */

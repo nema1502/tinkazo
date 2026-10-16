@@ -41,6 +41,13 @@ export interface Dict {
   againFew: (n: number) => string;
   /** Arriba del cuadro, después de "sin los ganadores": quién salió y cuántos quedan. */
   againQuitados: (nombres: string[], n: number) => string;
+  /** "No está": quién no estaba, entre cuántos vuelve a salir su premio y si también salen los otros ganadores. */
+  ausenteNota: (nombre: string, n: number, otros: boolean) => string;
+  /** La imagen del resultado: entre cuántas personas salió, con uno o con varios ganadores. */
+  imgEntre: (n: number, varios: boolean) => string;
+  imgMas: (n: number) => string;
+  /** El texto que acompaña a la imagen cuando se comparte desde el celular. */
+  imgTexto: (nombres: string[], premio: string) => string;
   drandTry: (i: number, n: number) => string;
   drawTry: (i: number, n: number) => string;
   cConstPass: (n: string) => string;
@@ -693,6 +700,24 @@ export const T: Record<Lang, Dict> = {
     againQuitados: (nombres, n) => (nombres.length > 3 ? `${nombres.length} personas ya ganaron y no están en esta lista. Quedan ${n}.` : nombres.length === 1 ? `${nombres[0]} ya ganó y no está en esta lista. Quedan ${n}.` : `${nombres.join(", ")} ya ganaron y no están en esta lista. Quedan ${n}.`),
     recuperarLista: "Recuperar la lista anterior",
     againNote: "Después de sellar elegís el juego, el mismo u otro. Este sorteo queda como está, en Mis sorteos y en su comprobante.",
+    ausenteBtn: "No está",
+    ausenteQ: "¿Sorteamos de nuevo su premio?",
+    ausenteSi: "Sí, sortear de nuevo",
+    ausenteNo: "Cancelar",
+    ausenteNota: (nombre, n, otros) => `${nombre} no está: su premio se sortea de nuevo entre las ${n} personas que quedan${otros ? ", sin quienes ya ganaron" : ""}. Sellá la lista para seguir.`,
+    imgBtn: "Imagen para redes",
+    imgLista: "Imagen compartida",
+    imgDescargada: "Imagen descargada",
+    imgFalla: "No se pudo armar la imagen",
+    imgKicker: "Resultado del sorteo",
+    imgGano: "Ganó",
+    imgGanaron: "Ganaron",
+    imgPremio: "Premio:",
+    imgEntre: (n, varios) => `${varios ? "Salieron" : "Salió"} entre ${n} personas`,
+    imgMas: (n) => (n === 1 ? "y 1 más" : `y ${n} más`),
+    imgPieVarios: "Nadie eligió estos nombres: la lista se cerró antes de que existiera el número que los decidió.",
+    imgSello: "Sorteo verificable",
+    imgTexto: (nombres, premio) => `${nombres.length > 1 ? `Ganaron ${nombres.join(", ")}` : `Ganó ${nombres[0] ?? ""}`}${premio ? ` (${premio})` : ""}. Un sorteo que cualquiera puede comprobar, hecho con Tinkazo: https://tinkazo.app`,
     obTitle: "Tu primer sorteo, en tres pasos",
     ob1T: "Cargá la lista",
     ob1B: "Pegá los nombres, uno por línea, o subí el CSV de Luma con los que hicieron check-in.",
@@ -1600,6 +1625,24 @@ export const T: Record<Lang, Dict> = {
     againQuitados: (nombres, n) => (nombres.length > 3 ? `${nombres.length} people already won and are off this list. ${n} left.` : nombres.length === 1 ? `${nombres[0]} already won and is off this list. ${n} left.` : `${nombres.join(", ")} already won and are off this list. ${n} left.`),
     recuperarLista: "Bring back the previous list",
     againNote: "After sealing you pick the game again, the same one or another. This draw stays as it is, in My draws and in its receipt.",
+    ausenteBtn: "Not here",
+    ausenteQ: "Draw this prize again?",
+    ausenteSi: "Yes, draw again",
+    ausenteNo: "Cancel",
+    ausenteNota: (nombre, n, otros) => `${nombre} is not here: their prize is drawn again among the ${n} people left${otros ? ", without the other winners" : ""}. Seal the list to go on.`,
+    imgBtn: "Image for social media",
+    imgLista: "Image shared",
+    imgDescargada: "Image downloaded",
+    imgFalla: "Could not make the image",
+    imgKicker: "Draw result",
+    imgGano: "Winner",
+    imgGanaron: "Winners",
+    imgPremio: "Prize:",
+    imgEntre: (n) => `Drawn from ${n} people`,
+    imgMas: (n) => `and ${n} more`,
+    imgPieVarios: "Nobody picked these names: the list was locked before the number that decided them existed.",
+    imgSello: "Verifiable draw",
+    imgTexto: (nombres, premio) => `${nombres.length > 1 ? `Winners: ${nombres.join(", ")}` : `Winner: ${nombres[0] ?? ""}`}${premio ? ` (${premio})` : ""}. A draw anyone can check, made with Tinkazo: https://tinkazo.app`,
     obTitle: "Your first draw, in three steps",
     ob1T: "Load the list",
     ob1B: "Paste the names, one per line, or upload the Luma CSV with those who checked in.",
