@@ -19,7 +19,6 @@ import { decodeProof, isAnchored, type Proof } from "./protocol/proof";
 import { network } from "./stellar/config";
 import { loadSessionKind } from "./stellar/session-store";
 import { buscar, vecesExacto } from "./buscar";
-import { countVisits } from "./analytics";
 
 /**
  * Página de verificación.
@@ -104,7 +103,9 @@ async function main(): Promise<void> {
     document.querySelector("header .bar")?.appendChild(a);
   }
   setLang(initialLang());
-  countVisits();
+  // El contador va aparte y después: no frena la página y queda en su propio
+  // archivo, chico, en vez de darle su nombre al código común.
+  void import("./analytics").then((m) => m.countVisits());
   $("l-es").addEventListener("click", () => {
     chooseLang("es");
     paint();
