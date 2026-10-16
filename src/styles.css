@@ -473,6 +473,17 @@
   .gc-barra { position: absolute; left: 0; right: 0; bottom: 0; height: 8px; background: rgba(246, 239, 226, 0.12); }
   .gc-barra i { display: block; width: 100%; height: 100%; background: #ffc629; transform-origin: left; animation: gc-barra var(--gc-ms, 3500ms) linear forwards; }
   .game-card.gc-fuera { animation: gc-sale 0.2s ease forwards; }
+  /* "¡Cuenten conmigo!": la regla se apaga y un número gigante late una vez por segundo. */
+  .gc-cuenta { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 2vh; pointer-events: none; opacity: 0; }
+  .game-card.gc-contando .gc-cuenta { opacity: 1; }
+  .game-card.gc-contando .gc-caja { opacity: 0.12; filter: blur(4px); transition: opacity 0.25s, filter 0.25s; }
+  .gc-cuenta-t {
+    font-size: clamp(28px, min(6vw, 8vh), 84px); font-weight: 900; letter-spacing: -0.01em;
+    background: #ffc629; color: #10101c; padding: 0.04em 0.4em; box-shadow: 8px 8px 0 #000; transform: rotate(-2deg);
+  }
+  .gc-cuenta-n { font-size: clamp(140px, 34vh, 380px); font-weight: 900; line-height: 1; color: #f6efe2; text-shadow: 10px 10px 0 #e93d9c; }
+  .gc-cuenta-n.gc-pum { animation: gc-pum 0.9s cubic-bezier(.2,1.4,.4,1) forwards; }
+  @keyframes gc-pum { 0% { transform: scale(1.9); opacity: 0; } 25% { transform: scale(1); opacity: 1; } 80% { opacity: 1; } 100% { transform: scale(0.92); opacity: 0.25; } }
   @keyframes gc-entra { from { opacity: 0; transform: scale(1.04); } to { opacity: 1; transform: none; } }
   @keyframes gc-sale { to { opacity: 0; } }
   @keyframes gc-barra { from { transform: scaleX(0); } to { transform: scaleX(1); } }
@@ -1049,6 +1060,25 @@
   .sala-qr img { width: clamp(150px, 16vw, 220px); height: auto; image-rendering: pixelated; background: #fff; }
   .sala-qr p { font-weight: 800; font-size: 15px; }
   .sala-pie { font-weight: 700; font-size: clamp(14px, 1.3vw, 18px); border-top: 2px dashed var(--ink); padding-top: 10px; }
+  /* El resultado en grande (pantalla.ts): el nombre es lo más grande, y el QR lo segundo, para leerlo desde el fondo. */
+  .grande-row { margin-top: 14px; }
+  .pantalla-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: clamp(20px, 4vw, 56px); align-items: center; }
+  .pantalla-ganadores { display: flex; flex-direction: column; gap: clamp(14px, 2.4vh, 28px); align-items: flex-start; min-width: 0; }
+  .pantalla-ganador {
+    display: flex; align-items: center; gap: clamp(14px, 2vw, 30px); max-width: 100%;
+    background: var(--yellow); color: #191919; border: var(--bw) solid var(--ink); box-shadow: var(--sh);
+    padding: clamp(12px, 2vh, 22px) clamp(18px, 2.4vw, 38px); transform: rotate(-1.5deg);
+  }
+  .pantalla-ganador:nth-child(even) { transform: rotate(1.2deg); }
+  .pantalla-ganador > div { min-width: 0; }
+  .pantalla-ganador img { width: clamp(64px, 9vw, 150px); height: auto; border: 3px solid #191919; background: #fff; flex-shrink: 0; }
+  .pantalla-nombre { font-size: clamp(40px, 8vw, 132px); font-weight: 900; line-height: 1; letter-spacing: -0.02em; overflow-wrap: anywhere; -webkit-text-stroke: 2px #191919; paint-order: stroke fill; }
+  .pantalla.varios .pantalla-nombre { font-size: clamp(26px, 4vw, 64px); }
+  .pantalla-premio { font-size: clamp(18px, 2.2vw, 34px); font-weight: 800; margin-top: 8px; }
+  .pantalla-qr { display: flex; flex-direction: column; align-items: center; gap: 8px; background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); padding: 16px; }
+  .pantalla-qr img { width: clamp(180px, 26vw, 400px); height: auto; image-rendering: pixelated; background: #fff; }
+  .pantalla-qr p { font-weight: 900; font-size: clamp(15px, 1.7vw, 26px); text-align: center; }
+  @media (max-width: 700px) { .pantalla-body { grid-template-columns: 1fr; align-items: start; } .pantalla-qr img { width: 200px; } }
   @media (max-width: 700px) { .sala-body { grid-template-columns: 1fr; } .sala-qr { display: none; } }
 
   /* La lista en el celular, y buscarse en el comprobante. */

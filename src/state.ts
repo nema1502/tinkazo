@@ -235,7 +235,16 @@ export const currentPace = (): Pace => pace;
  * puede despegar del código. Sin el número, "Normal" no le dice nada a alguien
  * que está preparando un evento y quiere saber cuánto va a durar la pantalla.
  */
-export const paceSeconds = (p: Pace): number => PACES[p];
+export const paceSeconds = (p: Pace): number => PACES[p] + (conCuenta(p) ? CUENTA_SECONDS : 0);
+
+/**
+ * "¡Cuenten conmigo!": el 3, 2, 1 que cuenta la sala entera al final de la
+ * tarjeta de "cómo se juega" (un ritual de sala, de la auditoría de juegos).
+ * Se suma al show en vez de quitarle segundos al juego, y por eso el selector
+ * lo cuenta. En la duración rápida no va: es la que se elige para ir al grano.
+ */
+export const CUENTA_SECONDS = 3;
+export const conCuenta = (p: Pace = pace): boolean => p !== "rapido";
 
 export function setPace(p: Pace): void {
   pace = p;

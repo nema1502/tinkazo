@@ -16,6 +16,7 @@ import type { Game } from "../state";
  * con movimiento reducido no hay show. No suena por su cuenta: la música del
  * juego arranca con ella.
  */
+/** Lo que dura la lectura; sale del total elegido. La cuenta va después y se suma. */
 export const CARD_SECONDS = 3.5;
 
 /** El nombre de cada juego, el mismo del selector. */
@@ -79,7 +80,12 @@ function caja(game: Game, people: number, prizes: number): string {
  * Muestra la tarjeta. Queda arriba hasta que aparece el estadio, para que entre
  * la tarjeta y el primer cuadro no se vea la página.
  */
-export function showGameCard(game: Game, people: number, prizes: number): GameCard {
+/**
+ * `cuenta` son los segundos de "¡Cuenten conmigo!" (cero, sin cuenta) y `sonar`
+ * suena en cada número: los decide quien llama, así la tarjeta no depende del
+ * estado ni del sonido y se puede probar sola.
+ */
+export function showGameCard(game: Game, people: number, prizes: number, cuenta = 0, sonar?: (n: number) => void): GameCard {
   const el = document.createElement("div");
   el.className = "game-card";
   // Un diálogo de verdad para el lector de pantalla: se anuncia porque el foco
@@ -88,7 +94,8 @@ export function showGameCard(game: Game, people: number, prizes: number): GameCa
   el.setAttribute("aria-modal", "true");
   el.setAttribute("aria-labelledby", "gc-nombre");
   el.setAttribute("aria-describedby", "gc-regla gc-honesta");
-  el.style.setProperty("--gc-ms", `${CARD_SECONDS * 1000}ms`);
+  const total = CARD_SECONDS + cuenta;
+  el.style.setProperty("--gc-ms", `${total * 1000}ms`);
   const fondo = (g: Game): void => {
     if (CAPTURA.has(g)) el.style.setProperty("--gc-img", `url("/juegos/${g}.webp")`);
     else el.style.removeProperty("--gc-img");
@@ -114,9 +121,32 @@ export function showGameCard(game: Game, people: number, prizes: number): GameCa
     if (listo) return;
     listo = true;
     clearTimeout(reloj);
+    for (const p of pasos) clearTimeout(p);
     resolver();
   };
-  const reloj = setTimeout(terminar, CARD_SECONDS * 1000);
+  const reloj = setTimeout(terminar, total * 1000);
+
+  // "¡Cuenten conmigo!": la regla se apaga y la sala cuenta 3, 2, 1 en voz alta.
+  const pasos: number[] = [];
+  if (cuenta > 0) {
+    const nodo = document.createElement("div");
+    nodo.className = "gc-cuenta";
+    nodo.setAttribute("aria-live", "assertive");
+    nodo.innerHTML = `<p class="gc-cuenta-t">${esc(t("gcCuenta"))}</p><p class="gc-cuenta-n"></p>`;
+    el.appendChild(nodo);
+    const numero = nodo.querySelector<HTMLElement>(".gc-cuenta-n");
+    for (let i = 0; i < cuenta; i++) {
+      pasos.push(window.setTimeout(() => {
+        if (listo || !numero) return;
+        el.classList.add("gc-contando");
+        numero.textContent = String(cuenta - i);
+        numero.classList.remove("gc-pum");
+        void numero.offsetWidth; // para que la animación vuelva a empezar
+        numero.classList.add("gc-pum");
+        sonar?.(cuenta - i);
+      }, (CARD_SECONDS + i) * 1000));
+    }
+  }
 
   let ido = false;
   const hide = (): void => {
@@ -145,7 +175,7 @@ export function showGameCard(game: Game, people: number, prizes: number): GameCa
   void ready.then(() => {
     if (stadium?.style.display === "block") hide();
   });
-  const tope = setTimeout(hide, (CARD_SECONDS + 10) * 1000);
+  const tope = setTimeout(hide, (total + 10) * 1000);
 
   // Saltarla: el botón, un toque en la tarjeta o Enter, espacio o Escape. La
   // tecla no sigue de largo: ni hace scroll ni aprieta otra cosa.

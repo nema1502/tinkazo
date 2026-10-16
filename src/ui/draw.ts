@@ -1,6 +1,7 @@
 import { $, esc } from "../dom";
 import { T, getLang, onLangChange, t } from "../i18n";
-import { LCOLORS, WHEEL_MAX, app, playableGame, avatar, forceMotion, setCardSeconds, setShowGate, skipMotion, skippedForReducedMotion, type Beacon, type Game } from "../state";
+import { CUENTA_SECONDS, LCOLORS, WHEEL_MAX, app, conCuenta, playableGame, avatar, forceMotion, setCardSeconds, setShowGate, skipMotion, skippedForReducedMotion, type Beacon, type Game } from "../state";
+import { beep } from "../sound";
 import { bytesToHex, decompressG1, fetchRound, hexToBytes, randomnessOf, roundUrl, verifyRound } from "../protocol/drand";
 import { select } from "../protocol/select";
 import { network, txUrl } from "../stellar/config";
@@ -138,7 +139,9 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   const game = pixi ? playableGame(app.game, names.length, names, winners) : classicPlayable(app.game, names.length);
   // Antes del juego, la tarjeta de "cómo se juega", grande para la sala. Sus
   // segundos salen del mismo total que eligió quien sortea.
-  const card = skipMotion() ? null : showGameCard(game, names.length, winners.length);
+  // "¡Cuenten conmigo!" al final de la tarjeta (state.ts): un tono por número, más alto en el 1.
+  const cuenta = conCuenta() ? CUENTA_SECONDS : 0;
+  const card = skipMotion() ? null : showGameCard(game, names.length, winners.length, cuenta, (n) => beep(n > 1 ? 660 : 990, 0.16, "triangle", 0.07));
   setCardSeconds(card ? CARD_SECONDS : 0);
   // La pantalla completa se pide con la tarjeta, mientras el clic de "Sortear"
   // todavía cuenta como gesto: el navegador la niega pasados unos cinco
@@ -422,6 +425,11 @@ export function recuperarLista(): void {
 }
 
 let proofLink = "";
+
+/** El resultado en grande para el proyector, con el QR del comprobante (pantalla.ts). */
+export function mostrarGrande(): void {
+  void import("./pantalla").then((m) => m.mostrarResultado(proofLink));
+}
 
 /**
  * Dibuja el QR del comprobante en el navegador.
