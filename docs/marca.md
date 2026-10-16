@@ -191,7 +191,7 @@ Todos medidos, no estimados. Si se actualizan, se actualizan acá también.
 
 | Qué | Dónde |
 |---|---|
-| Producto | https://tinkazo.vercel.app |
+| Producto | https://tinkazo.app |
 | Código | https://github.com/nema1502/tinkazo |
 | Protocolo, especificación normativa | `docs/protocolo.md` |
 | Licencia | MIT |

@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://tinkazo.vercel.app/</loc></url>
-  <url><loc>https://tinkazo.vercel.app/juegos.html</loc></url>
-  <url><loc>https://tinkazo.vercel.app/historia.html</loc></url>
-  <url><loc>https://tinkazo.vercel.app/como-funciona.html</loc></url>
-  <url><loc>https://tinkazo.vercel.app/seguridad.html</loc></url>
-  <url><loc>https://tinkazo.vercel.app/precios.html</loc></url>
-  <url><loc>https://tinkazo.vercel.app/terminos.html</loc></url>
+  <url><loc>https://tinkazo.app/</loc></url>
+  <url><loc>https://tinkazo.app/juegos.html</loc></url>
+  <url><loc>https://tinkazo.app/historia.html</loc></url>
+  <url><loc>https://tinkazo.app/como-funciona.html</loc></url>
+  <url><loc>https://tinkazo.app/seguridad.html</loc></url>
+  <url><loc>https://tinkazo.app/precios.html</loc></url>
+  <url><loc>https://tinkazo.app/terminos.html</loc></url>
 </urlset>

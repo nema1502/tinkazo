@@ -2,7 +2,7 @@
 
 Un cielo lleno de estrellas, una por persona, y un paquete que salta de una a otra dejando una línea dibujada, cada vez más lento, hasta que la última explota.
 
-**Identificador:** `stellar` · **Probalo:** [tinkazo.vercel.app/?demo=stellar](https://tinkazo.vercel.app/?demo=stellar) · **Agregado:** 20 de septiembre de 2026
+**Identificador:** `stellar` · **Probalo:** [tinkazo.app/?demo=stellar](https://tinkazo.app/?demo=stellar) · **Agregado:** 20 de septiembre de 2026
 
 ## Por qué existe
 

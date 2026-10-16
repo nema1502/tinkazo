@@ -2,7 +2,7 @@
 
 El juego de patio de todo el mundo. Con luz verde se corre, con luz roja hay que quedarse quieto, y al que se mueve lo ven y queda afuera. Acá quien mira es el Faro: con luz verde está de espaldas y muestra su lámpara verde; con luz roja se da vuelta, prende el ojo rojo y barre la cancha con su haz. Al que el haz agarra moviéndose, "¡te vi!", y se sienta. Gana quien toca el Faro.
 
-**Identificador:** `luz` · **Probalo:** [tinkazo.vercel.app/?demo=luz](https://tinkazo.vercel.app/?demo=luz) · **Agregado:** 30 de septiembre de 2026
+**Identificador:** `luz` · **Probalo:** [tinkazo.app/?demo=luz](https://tinkazo.app/?demo=luz) · **Agregado:** 30 de septiembre de 2026
 
 ## Por qué un faro
 

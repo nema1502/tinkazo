@@ -662,7 +662,7 @@ export const T: Record<Lang, Dict> = {
       `Saliste entre ${n} personas y nadie te eligió a dedo. La lista se cerró antes de que existiera el número que te sacó, ` +
       `y ese número lo publica un faro de azar público que no controlan ni quien organiza ni Tinkazo.\n\n` +
       `Revisalo vos mismo, te toma diez segundos: ${u}\n\n` +
-      `Sorteado con Tinkazo · https://tinkazo.vercel.app`,
+      `Sorteado con Tinkazo · https://tinkazo.app`,
     qrCaption: "Apuntá el celular y revisalo vos mismo",
     nextTitle: "El sorteo no depende de mí",
     nextBody: "La huella de la lista y la ronda que decide quedan en un contrato de Stellar, que verifica el faro solo. La red cobra unos 0,76 XLM por sorteo (testnet). Hoy está en testnet, que se reinicia el 16 de diciembre de 2026; el comprobante igual sirve para rehacer la cuenta.",
@@ -1561,7 +1561,7 @@ export const T: Record<Lang, Dict> = {
       `You came out of ${n} people and nobody hand-picked you. The list was locked before the number that drew you existed, ` +
       `and that number is published by a public randomness beacon that neither the organizer nor Tinkazo controls.\n\n` +
       `Check it yourself, it takes ten seconds: ${u}\n\n` +
-      `Drawn with Tinkazo · https://tinkazo.vercel.app`,
+      `Drawn with Tinkazo · https://tinkazo.app`,
     qrCaption: "Point your phone at it and check for yourself",
     nextTitle: "The draw doesn't depend on me",
     nextBody: "The list's fingerprint and the deciding round go into a Stellar contract, which checks the beacon on its own. The network charges about 0.76 XLM per draw (testnet). Today it's on testnet, which resets on December 16, 2026; the receipt still lets anyone redo the math.",

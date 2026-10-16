@@ -4,13 +4,13 @@
 
 ### Verifiable draws for communities, sealed before the randomness exists and checked on Stellar.
 
-[![Live demo](https://img.shields.io/badge/demo-tinkazo.vercel.app-e93d9c?style=flat-square)](https://tinkazo.vercel.app)
+[![Live demo](https://img.shields.io/badge/demo-tinkazo.app-e93d9c?style=flat-square)](https://tinkazo.app)
 [![Soroban contract on testnet](https://img.shields.io/badge/Soroban-live%20on%20testnet-7b61ff?style=flat-square)](https://stellar.expert/explorer/testnet/contract/CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH)
 [![CI](https://github.com/nema1502/tinkazo/actions/workflows/ci.yml/badge.svg)](https://github.com/nema1502/tinkazo/actions/workflows/ci.yml)
 [![drand quicknet](https://img.shields.io/badge/randomness-drand%20quicknet-14b8a6?style=flat-square)](https://drand.love)
 [![License: MIT](https://img.shields.io/badge/license-MIT-ffc629?style=flat-square)](LICENSE)
 
-**[Try it](https://tinkazo.vercel.app)** · [How it works](#how-it-works) · [Security](#security) · [Why Stellar](#why-stellar) · [What is live](#what-is-live-today) · [Next 30 days](#the-next-30-days) · [Español](README.es.md)
+**[Try it](https://tinkazo.app)** · [How it works](#how-it-works) · [Security](#security) · [Why Stellar](#why-stellar) · [What is live](#what-is-live-today) · [Next 30 days](#the-next-30-days) · [Español](README.es.md)
 
 <img src="docs/capturas/readme/hero.webp" alt="Tinkazo home page: draws anyone can check" width="860">
 
@@ -30,7 +30,7 @@ The draw is where it starts. What Tinkazo is for is broader: whenever people sha
 
 Tinkazo decides who gets something that is already being given away. It is not a way to bet or to sell chances:
 
-- **Entering is free, always.** No tickets and no entry fees. The [terms](https://tinkazo.vercel.app/terminos.html) forbid using Tinkazo for draws that charge to take part.
+- **Entering is free, always.** No tickets and no entry fees. The [terms](https://tinkazo.app/terminos.html) forbid using Tinkazo for draws that charge to take part.
 - **Nobody can bet on the outcome.** There are no odds and no pot: nobody puts money in, so nobody wins anyone else's money.
 - **The contract holds no funds.** It stores a list fingerprint and a result, nothing else.
 
@@ -75,7 +75,7 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 | Component | Status | Evidence |
 |---|---|---|
 | Soroban contract `tinkazo-raffle` | Deployed on testnet, which Stellar wipes on December 16, 2026 | [`CD2SSHBU…ARENH`](https://stellar.expert/explorer/testnet/contract/CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH) · 19 tests, including a real quicknet round · 11.4 KB WASM |
-| Web app | Live | [tinkazo.vercel.app](https://tinkazo.vercel.app) · Spanish and English · light and dark · no backend |
+| Web app | Live | [tinkazo.app](https://tinkazo.app) · Spanish and English · light and dark · no backend |
 | Luma import | Live | Drop the guest export and pick who gets in: those who checked in, the approved ones, or by hand |
 | Verification page | Live | Recomputes any draw in the browser from its proof link |
 | Twelve stadium games | Live | Deterministic: the same round draws the same frames on any machine |
@@ -140,9 +140,9 @@ Andean music with a beat plays in the background and follows the tension (the Ch
 |---|---|
 | **Building the list wrong** before sealing: a name twice, someone missing | "Show the list to the room": the list on the projector with duplicates flagged and a QR so everyone can find themselves on their phone. The receipt has the same search box, and the Luma import proposes only those who checked in |
 | **Sealing several times** and publishing the convenient result | The draw number is shown big during the wait, so it ends up in the photos. The verification flags repeated seals from the account and the same list sealed from another |
-| **A fake site** on the projector | What counts is the contract, and a fake site can't write to it. The draw can be checked on stellar.expert and with drand's public round, [without going through Tinkazo](https://tinkazo.vercel.app/como-funciona.html#sin-nosotros) |
+| **A fake site** on the projector | What counts is the contract, and a fake site can't write to it. The draw can be checked on stellar.expert and with drand's public round, [without going through Tinkazo](https://tinkazo.app/como-funciona.html#sin-nosotros) |
 
-For mainnet: one open draw per account, public cancellation, the round set by the contract and a sorted list in the protocol. The full STRIDE analysis is in [docs/amenazas.md](docs/amenazas.md) ([summary in English](docs/threat-model.en.md)), and the plain-language version on the [security page](https://tinkazo.vercel.app/seguridad.html).
+For mainnet: one open draw per account, public cancellation, the round set by the contract and a sorted list in the protocol. The full STRIDE analysis is in [docs/amenazas.md](docs/amenazas.md) ([summary in English](docs/threat-model.en.md)), and the plain-language version on the [security page](https://tinkazo.app/seguridad.html).
 
 **Privacy.** Only the fingerprint goes on chain, never the names. The proof travels in the URL fragment, which browsers do not send to servers.
 

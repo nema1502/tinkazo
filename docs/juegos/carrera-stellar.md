@@ -2,7 +2,7 @@
 
 Cohetes corriendo por el espacio hacia la meta, con planetas asomando en el horizonte y un planeta anillado de fondo. Es el mismo motor que la carrera de llamas, con otro escenario.
 
-**Identificador:** `stellar` · **Probalo:** [tinkazo.vercel.app/?demo=stellar](https://tinkazo.vercel.app/?demo=stellar) · **Agregado:** 19 de septiembre de 2026
+**Identificador:** `stellar` · **Probalo:** [tinkazo.app/?demo=stellar](https://tinkazo.app/?demo=stellar) · **Agregado:** 19 de septiembre de 2026
 
 ## Por qué existe
 

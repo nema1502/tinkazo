@@ -10,7 +10,7 @@ const base: RulesParams = {
   round: 32254977,
   roundAt: "25 de septiembre de 2026, 21:05:00 GMT-4",
   network: "testnet",
-  verifyUrl: "https://tinkazo.vercel.app/seguridad.html",
+  verifyUrl: "https://tinkazo.app/seguridad.html",
 };
 
 describe("las bases del sorteo", () => {

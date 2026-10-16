@@ -2,7 +2,7 @@
 
 El juego de patio. Un ruedo de tiza en el suelo, cada participante tira su trompo adentro y bailan. Después empiezan los choques: los trompos se sacan del ruedo o se quedan sin cuerda y se caen, hasta que quedan dos en un mano a mano. Gana el último que sigue bailando.
 
-**Identificador:** `trompo` · **Probalo:** [tinkazo.vercel.app/?demo=trompo](https://tinkazo.vercel.app/?demo=trompo) · **Agregado:** 28 de septiembre de 2026
+**Identificador:** `trompo` · **Probalo:** [tinkazo.app/?demo=trompo](https://tinkazo.app/?demo=trompo) · **Agregado:** 28 de septiembre de 2026
 
 ## Por qué un trompo
 

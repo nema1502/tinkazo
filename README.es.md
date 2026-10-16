@@ -4,13 +4,13 @@
 
 ### Sorteos verificables para comunidades, sellados antes de que exista el azar y comprobados en Stellar.
 
-[![Probalo](https://img.shields.io/badge/demo-tinkazo.vercel.app-e93d9c?style=flat-square)](https://tinkazo.vercel.app)
+[![Probalo](https://img.shields.io/badge/demo-tinkazo.app-e93d9c?style=flat-square)](https://tinkazo.app)
 [![Contrato Soroban en testnet](https://img.shields.io/badge/Soroban-en%20testnet-7b61ff?style=flat-square)](https://stellar.expert/explorer/testnet/contract/CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH)
 [![CI](https://github.com/nema1502/tinkazo/actions/workflows/ci.yml/badge.svg)](https://github.com/nema1502/tinkazo/actions/workflows/ci.yml)
 [![drand quicknet](https://img.shields.io/badge/azar-drand%20quicknet-14b8a6?style=flat-square)](https://drand.love)
 [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-ffc629?style=flat-square)](LICENSE)
 
-**[Probalo](https://tinkazo.vercel.app)** · [Cómo funciona](#cómo-funciona) · [Seguridad](#seguridad) · [Por qué Stellar](#por-qué-stellar) · [Qué está andando](#qué-está-andando-hoy) · [Los próximos 30 días](#los-próximos-30-días) · [English](README.md)
+**[Probalo](https://tinkazo.app)** · [Cómo funciona](#cómo-funciona) · [Seguridad](#seguridad) · [Por qué Stellar](#por-qué-stellar) · [Qué está andando](#qué-está-andando-hoy) · [Los próximos 30 días](#los-próximos-30-días) · [English](README.md)
 
 <img src="docs/capturas/readme/hero.webp" alt="La portada de Tinkazo" width="860">
 
@@ -30,7 +30,7 @@ El sorteo es por donde empieza. Para lo que existe Tinkazo es más amplio: que r
 
 Tinkazo decide quién se lleva algo que ya se está regalando. No sirve para apostar ni para vender chances:
 
-- **Participar es gratis, siempre.** No hay boletos ni entrada paga. Los [términos](https://tinkazo.vercel.app/terminos.html) prohíben usar Tinkazo para sorteos que cobren por participar.
+- **Participar es gratis, siempre.** No hay boletos ni entrada paga. Los [términos](https://tinkazo.app/terminos.html) prohíben usar Tinkazo para sorteos que cobren por participar.
 - **Nadie puede apostar al resultado.** No hay cuotas ni pozo: nadie pone plata, así que nadie gana la plata de otro.
 - **El contrato no guarda fondos.** Guarda la huella de la lista y el resultado, nada más.
 
@@ -75,7 +75,7 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 | Pieza | Estado | Evidencia |
 |---|---|---|
 | Contrato Soroban `tinkazo-raffle` | Desplegado en testnet, que Stellar borra entera el 16 de diciembre de 2026 | [`CD2SSHBU…ARENH`](https://stellar.expert/explorer/testnet/contract/CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH) · 19 tests, uno con una ronda real de quicknet · WASM de 11,4 KB |
-| Sitio | En producción | [tinkazo.vercel.app](https://tinkazo.vercel.app) · español e inglés · tema claro y oscuro · sin servidor |
+| Sitio | En producción | [tinkazo.app](https://tinkazo.app) · español e inglés · tema claro y oscuro · sin servidor |
 | Importar de Luma | En producción | Se suelta el export de invitados y se elige quién entra: los que hicieron check-in, los aprobados o a mano |
 | Página de verificación | En producción | Rehace cualquier sorteo en el navegador desde su comprobante |
 | Doce juegos de estadio | En producción | Deterministas: la misma ronda dibuja los mismos cuadros en cualquier máquina |
@@ -140,9 +140,9 @@ De fondo suena música andina con beat que sigue la tensión (la Chovena trae su
 |---|---|
 | **Armar mal la lista** antes de sellar: un nombre dos veces, alguien que falta | "Mostrar la lista a la sala": la lista en el proyector con los repetidos marcados y un QR para que cada uno se busque en su celular. El comprobante también tiene el buscador, y la importación de Luma propone solo a los que hicieron check-in |
 | **Sellar varias veces** y publicar el resultado que convino | El número del sorteo se muestra bien grande durante la espera, para que quede en las fotos. La verificación marca los sellos repetidos de la cuenta y la misma lista sellada desde otra |
-| **Un sitio falso** en el proyector | Lo que vale es el contrato, y un sitio falso no puede escribir ahí. El sorteo se puede comprobar en stellar.expert y con la ronda pública de drand, [sin pasar por Tinkazo](https://tinkazo.vercel.app/como-funciona.html#sin-nosotros) |
+| **Un sitio falso** en el proyector | Lo que vale es el contrato, y un sitio falso no puede escribir ahí. El sorteo se puede comprobar en stellar.expert y con la ronda pública de drand, [sin pasar por Tinkazo](https://tinkazo.app/como-funciona.html#sin-nosotros) |
 
-Para mainnet: un solo sorteo abierto por cuenta, la cancelación pública, la ronda que pone el contrato y la lista ordenada en el protocolo. El análisis completo, con el método STRIDE, está en [docs/amenazas.md](docs/amenazas.md), y la versión para todo público en la [página de seguridad](https://tinkazo.vercel.app/seguridad.html).
+Para mainnet: un solo sorteo abierto por cuenta, la cancelación pública, la ronda que pone el contrato y la lista ordenada en el protocolo. El análisis completo, con el método STRIDE, está en [docs/amenazas.md](docs/amenazas.md), y la versión para todo público en la [página de seguridad](https://tinkazo.app/seguridad.html).
 
 **Privacidad.** En la cadena va solo la huella, nunca los nombres. El comprobante viaja en el fragmento de la URL, que el navegador no le manda a ningún servidor.
 

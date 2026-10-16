@@ -2,7 +2,7 @@
 
 La de las posadas y los cumpleaños. Una estrella de siete picos cuelga en el patio, con papel picado arriba. Cada nombre es un caramelo adentro. Con cada palo caen algunos, y los que caen quedan afuera. Al final la piñata se rompe, y el último caramelo, el que se quedó adentro hasta el final, baja despacio: ese gana.
 
-**Identificador:** `pinata` · **Probalo:** [tinkazo.vercel.app/?demo=pinata](https://tinkazo.vercel.app/?demo=pinata) · **Agregado:** 28 de septiembre de 2026
+**Identificador:** `pinata` · **Probalo:** [tinkazo.app/?demo=pinata](https://tinkazo.app/?demo=pinata) · **Agregado:** 28 de septiembre de 2026
 
 ## Por qué una piñata
 

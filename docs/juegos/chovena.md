@@ -2,7 +2,7 @@
 
 El baile chiquitano de Santa Cruz, hecho juego. Las mujeres en una fila y los hombres en otra se toman de la mano y forman la rueda, que gira al ritmo de la flauta, la caja y el bombo. Cuando el conjunto corta la música, todos se quedan quietos sin soltarse. El que estaba a mitad de un paso trastabilla, se suelta y se va a sentar al borde de la plaza, y la rueda se vuelve a cerrar con los que quedan. Gana el último que queda bailando.
 
-**Identificador:** `chovena` · **Probalo:** [tinkazo.vercel.app/?demo=chovena](https://tinkazo.vercel.app/?demo=chovena) · **Agregado:** 5 de octubre de 2026, en el lugar de luz roja, luz verde en el selector.
+**Identificador:** `chovena` · **Probalo:** [tinkazo.app/?demo=chovena](https://tinkazo.app/?demo=chovena) · **Agregado:** 5 de octubre de 2026, en el lugar de luz roja, luz verde en el selector.
 
 ## Por qué existe
 

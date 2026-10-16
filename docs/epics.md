@@ -410,7 +410,7 @@ para prototipar el login social.
 
 **Dado** la cuenta de Pollar del autor
 **Cuando** se crea la app "Tinkazo" (vía MCP con el PAT local)
-**Entonces** existe la key `pub_testnet_…` en `.env.local` (fuera del repo), los orígenes `https://tinkazo.vercel.app` y `localhost` están permitidos y la wallet de la app está fondeada
+**Entonces** existe la key `pub_testnet_…` en `.env.local` (fuera del repo), los orígenes `https://tinkazo.app`, `https://tinkazo.vercel.app` y `localhost` están permitidos y la wallet de la app está fondeada
 **Y** tras la historia 1.4, el contrato y la función `seal` se agregan a Treasury → Auth Policy.
 
 ### Historia 6.2: Login con Google en el sitio: hecho, sin verificar de punta a punta

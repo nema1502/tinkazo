@@ -2,7 +2,7 @@
 
 El bombo de las kermeses. Una bola por persona, con su número en la lista sellada. Tres vueltas de manivela con las bolas golpeándose adentro, se abre la compuerta y sale una sola, que baja rodando por una canaleta en zigzag hasta el vaso. Al caer, el nombre.
 
-**Identificador:** `tombola` · **Probalo:** [tinkazo.vercel.app/?demo=tombola](https://tinkazo.vercel.app/?demo=tombola) · **Agregado:** 24 de septiembre de 2026
+**Identificador:** `tombola` · **Probalo:** [tinkazo.app/?demo=tombola](https://tinkazo.app/?demo=tombola) · **Agregado:** 24 de septiembre de 2026
 
 ## Por qué una tómbola
 

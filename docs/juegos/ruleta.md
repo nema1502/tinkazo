@@ -2,7 +2,7 @@
 
 La de siempre, pero que se ve girar. Gajos con nombre que pasan, pernos que suenan, una paleta que se traba, y un aro de foquitos que se prende con el ganador.
 
-**Identificador:** `wheel` · **Probalo:** [tinkazo.vercel.app/?demo=wheel](https://tinkazo.vercel.app/?demo=wheel) · **Rehecha:** 20 de septiembre de 2026
+**Identificador:** `wheel` · **Probalo:** [tinkazo.app/?demo=wheel](https://tinkazo.app/?demo=wheel) · **Rehecha:** 20 de septiembre de 2026
 
 ## El problema que tenía
 

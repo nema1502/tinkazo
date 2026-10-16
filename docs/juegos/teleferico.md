@@ -2,7 +2,7 @@
 
 Un convoy de cabinas sube por el cable. En cada estación se baja la mitad de los pasajeros, las cabinas que quedan vacías vuelven para abajo, y la última cabina llega sola a la cumbre y abre la puerta.
 
-**Identificador:** `teleferico` · **Probalo:** [tinkazo.vercel.app/?demo=teleferico](https://tinkazo.vercel.app/?demo=teleferico) · **Agregado:** 24 de septiembre de 2026
+**Identificador:** `teleferico` · **Probalo:** [tinkazo.app/?demo=teleferico](https://tinkazo.app/?demo=teleferico) · **Agregado:** 24 de septiembre de 2026
 
 ## Por qué un teleférico
 

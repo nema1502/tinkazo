@@ -2,7 +2,7 @@
 
 La entrada. Una comparsa de la Diablada baila por las cuadras, entre las graderías llenas, hacia el Santuario del Socavón. En cada arco de cuadra se quedan algunos bailarines, que salen a la vereda y saludan. Los dos últimos hacen un contrapunto frente al Socavón, y el que llega entra con campanas y cohetillos.
 
-**Identificador:** `oruro` · **Probalo:** [tinkazo.vercel.app/?demo=oruro](https://tinkazo.vercel.app/?demo=oruro) · **Agregado:** 28 de septiembre de 2026
+**Identificador:** `oruro` · **Probalo:** [tinkazo.app/?demo=oruro](https://tinkazo.app/?demo=oruro) · **Agregado:** 28 de septiembre de 2026
 
 ## Por qué el Carnaval de Oruro
 

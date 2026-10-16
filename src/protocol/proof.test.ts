@@ -64,8 +64,8 @@ describe("comprobante", () => {
 describe("la lista para revisar antes de sellar", () => {
   it("va y vuelve por el enlace, con tildes y todo", async () => {
     const names = ["María Quispe", "Jorge Mamani", "Ñusta Condori"];
-    const url = await previewUrl(names, "Una polera", "https://tinkazo.vercel.app");
-    expect(url.startsWith("https://tinkazo.vercel.app/lista.html#")).toBe(true);
+    const url = await previewUrl(names, "Una polera", "https://tinkazo.app");
+    expect(url.startsWith("https://tinkazo.app/lista.html#")).toBe(true);
     const back = await decodePreview(url.slice(url.indexOf("#")));
     expect(back.names).toEqual(names);
     expect(back.prize).toBe("Una polera");

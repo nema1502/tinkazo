@@ -2,7 +2,7 @@
 
 Tarjetas flotando como papeles sueltos y una barra luminosa que las va barriendo hasta que queda una sola, sellada.
 
-**Identificador:** `ledger` · **Probalo:** [tinkazo.vercel.app/?demo=ledger](https://tinkazo.vercel.app/?demo=ledger) · **Agregado:** 20 de septiembre de 2026
+**Identificador:** `ledger` · **Probalo:** [tinkazo.app/?demo=ledger](https://tinkazo.app/?demo=ledger) · **Agregado:** 20 de septiembre de 2026
 
 ## Por qué existe
 

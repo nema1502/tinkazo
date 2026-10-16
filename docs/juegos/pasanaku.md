@@ -2,7 +2,7 @@
 
 Un aguayo tendido en el suelo. Cada participante tira su bulto encima, se tejen los hilos entre vecinos, y después la tela se empieza a cerrar y a amarrar hasta que queda uno solo en el nudo.
 
-**Identificador:** `pasanaku` · **Probalo:** [tinkazo.vercel.app/?demo=pasanaku](https://tinkazo.vercel.app/?demo=pasanaku) · **Agregado:** 20 de septiembre de 2026, como Pasanaku · **Aguayo desde:** 28 de septiembre de 2026
+**Identificador:** `pasanaku` · **Probalo:** [tinkazo.app/?demo=pasanaku](https://tinkazo.app/?demo=pasanaku) · **Agregado:** 20 de septiembre de 2026, como Pasanaku · **Aguayo desde:** 28 de septiembre de 2026
 
 ## Por qué dejó de llamarse Pasanaku
 

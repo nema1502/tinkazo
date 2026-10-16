@@ -6,7 +6,7 @@ import { decodeProof } from "../protocol/proof";
 import type { Entry } from "./history";
 
 const LISTA = "María Quispe\nJorge Mamani\nLucía Flores";
-const BASE = "https://tinkazo.vercel.app";
+const BASE = "https://tinkazo.app";
 
 const fila = (over: Partial<Entry> = {}): Entry => ({
   id: "7",

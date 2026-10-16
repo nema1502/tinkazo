@@ -2,7 +2,7 @@
 
 La carrera, en el lago Titicaca. Balsas de totora con la proa de puma, un remero por carril con poncho y chullo, la Cordillera Real al fondo y la meta en la otra orilla.
 
-**Identificador:** `totora` · **Probalo:** [tinkazo.vercel.app/?demo=totora](https://tinkazo.vercel.app/?demo=totora) · **Agregado:** 28 de septiembre de 2026
+**Identificador:** `totora` · **Probalo:** [tinkazo.app/?demo=totora](https://tinkazo.app/?demo=totora) · **Agregado:** 28 de septiembre de 2026
 
 ## Por qué balsas de totora
 
