@@ -6,7 +6,7 @@ import { listHash } from "../protocol/canonical";
 import { contractUrl, network } from "../stellar/config";
 import { anchorErrorText, hideTxStatus, sealOnChain, showTxStatus, stepLabel } from "./anchor";
 import { canAnchor, currentSession } from "./wallet-ui";
-import { parseNames } from "./participants";
+import { parseNames, renderNames } from "./participants";
 import { preloadGame } from "../games/engine";
 
 /**
@@ -240,6 +240,31 @@ export function resumeFrozen(e: {
   history.replaceState(null, "", "#sortear");
   dispatchEvent(new HashChangeEvent("hashchange"));
   showFrozen(e.names, e.listHash, raffleId);
+}
+
+/**
+ * Suelta el sello de la pantalla para armar otro sorteo (lo llama `newDraw`).
+ * La lista queda en el cuadro para editarla y el premio se borra: el próximo
+ * casi siempre es otro. El sorteo anterior no se toca: sigue en la cadena, en
+ * Mis sorteos y en su comprobante.
+ */
+export function unfreeze(): void {
+  if (countdownTimer !== undefined) clearInterval(countdownTimer);
+  countdownTimer = undefined;
+  app.frozen = null;
+  $<HTMLTextAreaElement>("ta").disabled = false;
+  const prize = $<HTMLInputElement>("prize");
+  prize.disabled = false;
+  prize.value = "";
+  $<HTMLSelectElement>("nw").disabled = false;
+  $("sec-frozen").style.display = "none";
+  $("wait-box").style.display = "none";
+  $("rules-text").style.display = "none";
+  $<HTMLButtonElement>("g-wheel").disabled = false;
+  $("wheel-cap").style.display = "none";
+  hideTxStatus("seal-status");
+  refreshFreezeLabel();
+  renderNames();
 }
 
 /** Lo que se ve con la lista ya sellada: los datos del sello, la espera y el selector de juego. */

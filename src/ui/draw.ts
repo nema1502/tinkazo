@@ -10,7 +10,7 @@ import { loreFor } from "../games/lore";
 import { currentSession } from "./wallet-ui";
 import { qrDataUrl } from "./qr";
 import { usePixi } from "../games/engine";
-import { secondsToRound } from "./freeze";
+import { secondsToRound, unfreeze } from "./freeze";
 import { CARD_SECONDS, showGameCard } from "./gamecard";
 import { startMusic, stopMusic } from "../music";
 
@@ -114,7 +114,10 @@ export async function draw(): Promise<void> {
     winners = select(hexToBytes(beacon.randomness), hexToBytes(listHash), names.length, nWinners);
   }
 
-  btn.textContent = t("draw");
+  // Apagado y diciendo por qué: un "Lanzar el sorteo" gris parecía roto. Con
+  // data-i, el cambio de idioma lo traduce en vez de volver a "Lanzar".
+  btn.dataset.i = "drawnDone";
+  btn.textContent = t("drawnDone");
   app.drawn = { beacon, winners, ...(drawTx ? { drawTx } : {}) };
   $("sec-draw").style.display = "block";
   $("seed-label").textContent = `${t("seed")} ${beacon.round}`;
@@ -294,6 +297,7 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   const dl = $<HTMLAnchorElement>("drand-link");
   dl.href = url;
   dl.textContent = t("drandLink");
+  $("again-row").style.display = "flex";
   confetti();
   // El comprobante se arma aparte: comprimir la lista es asíncrono y no vale
   // la pena hacer esperar al confeti por eso.
@@ -325,6 +329,31 @@ export function replayAnimation(): void {
     if (btn) btn.disabled = false;
     forceMotion(false);
   });
+}
+
+/**
+ * "Hacer otro sorteo": deja la herramienta lista para el siguiente, sin
+ * recargar la página. Hasta el 16 de octubre de 2026 no había cómo: después
+ * del primero, sellar y sortear quedaban apagados y la pestaña "Nuevo sorteo"
+ * solo cambiaba de vista.
+ */
+export function newDraw(): void {
+  if (!app.drawn || replaying) return;
+  app.drawn = null;
+  unfreeze();
+  const btn = $<HTMLButtonElement>("btn-draw");
+  btn.disabled = false;
+  btn.dataset.i = "draw";
+  btn.textContent = t("draw");
+  // Sin restos del anterior: con el movimiento reducido el próximo resultado
+  // sale sin juego, y no puede asomar el ganador viejo mientras tanto.
+  for (const id of ["draw-status", "reverify-out", "again-row", "winner-box", "lore-box", "qr-box", "sec-draw"]) {
+    $(id).style.display = "none";
+  }
+  $("winner-cards").innerHTML = "";
+  const sec = $("sec-participants");
+  sec.scrollIntoView({ behavior: "smooth", block: "start" });
+  $<HTMLTextAreaElement>("ta").focus({ preventScroll: true });
 }
 
 let proofLink = "";
