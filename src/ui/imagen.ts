@@ -221,8 +221,9 @@ function dibujar(d: Datos): HTMLCanvasElement {
   const abajo = pieY - 40;
   const premio = d.premio ? `${s(varios ? "imgPremio" : "winsPrize")} ${d.premio}` : "";
   c.font = `700 46px ${SANS}`;
-  // Con varios ganadores el premio va en un renglón: el lugar es de los nombres.
-  const premioL = !premio ? [] : varios ? [recortar(c, premio, ANCHO)] : partir(c, premio, ANCHO).slice(0, 2);
+  // El premio, en dos renglones como mucho: más largo, se recorta el segundo.
+  const lineas = premio ? partir(c, premio, ANCHO) : [];
+  const premioL = lineas.length > 2 ? [lineas[0] ?? "", recortar(c, lineas.slice(1).join(" "), ANCHO)] : lineas;
   const entre = L.imgEntre(d.total, varios);
   const colaAlto = premioL.length * 60 + 58;
 
