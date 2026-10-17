@@ -31,7 +31,8 @@ export interface Dict {
   cLead: (n: string) => string;
   /** El anuncio del ganador; `many` con varios premios, para el plural ("¡GANAN…!"). */
   cWin: (n: string, many?: boolean) => string;
-  summary: (w: string, n: number, d: string, r: number, u: string) => string;
+  /** "Copiar resumen": lo que se pega en el grupo. Quién ganó, entre cuántos, el premio y el enlace para comprobarlo. */
+  summary: (w: string, n: number, premio: string, enlace: string, varios: boolean) => string;
   drawIn: (mmss: string) => string;
   /** Debajo del resultado: cuántos quedan en la lista sin los ganadores. */
   againLeft: (n: number) => string;
@@ -176,7 +177,8 @@ export interface Dict {
   impGrpRest: (n: number) => string;
   impGrpIn: (n: number) => string;
   impGrpOut: (n: number) => string;
-  tellBody: (w: string, prize: string, n: number, u: string) => string;
+  /** El mensaje para quien ganó; con `varios`, para todos los que ganaron juntos. */
+  tellBody: (w: string, prize: string, n: number, u: string, varios?: boolean) => string;
   /** Trompo: la rival del mano a mano se queda sin cuerda y cae. */
   cTroSpent: (n: string) => string;
   // Constelación, sapo y ¿Quién es? (7 de octubre de 2026).
@@ -635,7 +637,7 @@ export const T: Record<Lang, Dict> = {
     cLedgerFinal: ["¡Estos son los que quedan!", "¡Miren bien, son estos!", "¡Y ahora se sella!"],
     cLedgerNo: "LIBRO",
     cLedgerOk: "CONFIRMADO",
-    wheelCap: "La ruleta se ve linda hasta unos 24 nombres. De ahí para arriba, el sorteo pasa a la carrera de llamas.",
+    wheelCap: "La ruleta se ve linda hasta unos 24 nombres. De ahí para arriba, el sorteo pasa a la tómbola, que muestra a todos.",
     prizeLabel: "¿Qué sorteás? (opcional)", prizePh: "Una polera, un libro, la licencia de JetBrains…",
     kEntries: "participantes", kDigest: "huella de la lista", kStatus: "estado del sorteo",
     frozenNote: "Sellaste la lista antes de que exista el número. La ronda que va a decidir todavía no nace, sale en unos segundos. De acá en adelante, agregar o sacar a alguien cambia la huella y se ve.",
@@ -647,7 +649,7 @@ export const T: Record<Lang, Dict> = {
     verifyPasos: "Paso a paso: 1) abrí la ronda de quicknet y verificá su firma con la clave pública del faro · 2) randomness = sha256(firma) · 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, salteando repetidos. El protocolo entero está en github.com/nema1502/tinkazo, en docs/protocolo.md.",
     tecnicoT: "Detalles técnicos",
     motionNote: "Tu sistema tiene las animaciones reducidas, por eso el sorteo se muestra directo.", motionReplay: "Ver la animación igual",
-    reverify: "Rehacelo acá mismo", reverifyOk: "Lo rehicimos delante tuyo y dio el mismo nombre.",
+    reverify: "Rehacelo acá mismo", reverifyOk: "Lo rehicimos delante tuyo y dio el mismo nombre.", reverifyOkMany: "Lo rehicimos delante tuyo y dio los mismos nombres.",
     copySummary: "Copiar resumen", copied: "¡Copiado!",
     copyRules: "Copiar las bases",
     rulesNote: "Pegalas en Luma, en WhatsApp o donde avisaste del sorteo. Dicen cómo se elige antes de que se sepa quién gana, y dejan anotado cuál es el sorteo que vale.",
@@ -670,12 +672,18 @@ export const T: Record<Lang, Dict> = {
     ].join("\n"),
     tellWhatsapp: "Avisarle por WhatsApp", tellEmail: "Avisarle por correo",
     tellSubject: "Ganaste el sorteo 🦙",
-    tellBody: (w, prize, n, u) =>
-      `¡Ganaste, ${w}! Te llevás${prize ? " " + prize : " el sorteo"}.\n\n` +
-      `Saliste entre ${n} personas y nadie te eligió a dedo. La lista se cerró antes de que existiera el número que te sacó, ` +
-      `y ese número lo publica un faro de azar público que no controlan ni quien organiza ni Tinkazo.\n\n` +
-      `Revisalo vos mismo, te toma diez segundos: ${u}\n\n` +
-      `Sorteado con Tinkazo · https://tinkazo.app`,
+    tellBody: (w, prize, n, u, varios) =>
+      varios
+        ? `¡Ganaron, ${w}! Se llevan${prize ? " " + prize : " el sorteo"}.\n\n` +
+          `Salieron entre ${n} personas y nadie los eligió a dedo. La lista se cerró antes de que existiera el número que los sacó, ` +
+          `y ese número lo publica un faro de azar público que no controlan ni quien organiza ni Tinkazo.\n\n` +
+          `Revísenlo ustedes mismos, toma diez segundos: ${u}\n\n` +
+          `Sorteado con Tinkazo · https://tinkazo.app`
+        : `¡Ganaste, ${w}! Te llevás${prize ? " " + prize : " el sorteo"}.\n\n` +
+          `Saliste entre ${n} personas y nadie te eligió a dedo. La lista se cerró antes de que existiera el número que te sacó, ` +
+          `y ese número lo publica un faro de azar público que no controlan ni quien organiza ni Tinkazo.\n\n` +
+          `Revisalo vos mismo, te toma diez segundos: ${u}\n\n` +
+          `Sorteado con Tinkazo · https://tinkazo.app`,
     qrCaption: "Apuntá el celular y revisalo vos mismo",
     nextTitle: "El sorteo no depende de mí",
     nextBody: "La huella de la lista y la ronda que decide quedan en un contrato de Stellar, que verifica el faro solo. La red cobra unos 0,76 XLM por sorteo (testnet). Hoy está en testnet, que se reinicia el 16 de diciembre de 2026; el comprobante igual sirve para rehacer la cuenta.",
@@ -700,6 +708,10 @@ export const T: Record<Lang, Dict> = {
     againQuitados: (nombres, n) => (nombres.length > 3 ? `${nombres.length} personas ya ganaron y no están en esta lista. Quedan ${n}.` : nombres.length === 1 ? `${nombres[0]} ya ganó y no está en esta lista. Quedan ${n}.` : `${nombres.join(", ")} ya ganaron y no están en esta lista. Quedan ${n}.`),
     recuperarLista: "Recuperar la lista anterior",
     againNote: "Después de sellar elegís el juego, el mismo u otro. Este sorteo queda como está, en Mis sorteos y en su comprobante.",
+    cortinaSe: "Se sortea",
+    cortinaSin: "Ya sale el sorteo",
+    cortinaGraba: "Grabando el sorteo para que nadie lo pueda cambiar…",
+    cortinaNumero: "Está llegando el número que decide…",
     ausenteBtn: "No está",
     ausenteQ: "¿Sorteamos de nuevo su premio?",
     ausenteSi: "Sí, sortear de nuevo",
@@ -802,6 +814,7 @@ export const T: Record<Lang, Dict> = {
     histStateDone: "Sorteado",
     histStatePending: "Sellado, sin sortear",
     histWon: "ganó",
+    histWonMany: "ganaron",
     histOtherDevice: "La lista quedó en el equipo donde se selló.",
     histWhyT: "¿Qué se guarda y dónde?",
     histWhyMas: "Todo, en Cómo funciona →",
@@ -1084,7 +1097,7 @@ export const T: Record<Lang, Dict> = {
     vCheckChain: "El registro en Stellar",
     vNotDrawnYet: "todavía no se sorteó en la cadena",
     vChainUnreachable: "no pude leer el contrato",
-    vSeals: "Otros sellos de este organizador",
+    vSeals: "Otros sellos de este organizador y de esta lista",
     vSealsWhy: "Un organizador podría sellar la misma lista varias veces y publicar solo el resultado que le conviene. Todos los sellos son públicos, así que acá están los suyos, todos los que siguen en la cadena. Ninguno repite la lista de este sorteo ni su cantidad de gente.",
     vSealsSameCount: "misma cantidad de gente",
     vSealsSameCountWhy: "Hay otros sellos con la misma cantidad de gente que este. Puede ser otro sorteo del mismo evento, o la misma lista con los nombres en otro orden, que da otra huella. Si están cerca en el tiempo, pedile al organizador los comprobantes.",
@@ -1159,8 +1172,8 @@ export const T: Record<Lang, Dict> = {
     cLast: ["¡ÚLTIMA RECTA!", "¡LOS ÚLTIMOS METROS!", "¡YA SE VE LA META!", "¡AHÍ ESTÁ LA META!"],
     cLead: (n) => pick([`¡${n} pasa adelante!`, `¡${n} se pone primero!`, `¡Adelante va ${n}!`, `¡${n} se escapa!`, `¡${n} los pasa a todos!`]),
     cWin: (n, many) => pick(many ? [`¡GANAN ${n}!`, `¡SE LO LLEVAN ${n}!`, `¡ES PARA ${n}!`, `¡EL TINKAZO ES PARA ${n}!`] : [`¡GANA ${n}!`, `¡SE LO LLEVA ${n}!`, `¡ES PARA ${n}!`, `¡EL TINKAZO ES PARA ${n}!`]),
-    summary: (w, n, d, r, u) =>
-      `Tinkazo · sorteo verificable (protocolo v2)\nGanador(es): ${w}\nParticipantes: ${n}\nlist_hash: ${d}\nRonda quicknet: ${r} → ${u}\nRehacelo: https://github.com/nema1502/tinkazo/blob/main/docs/protocolo.md (§7)`,
+    summary: (w, n, premio, enlace, varios) =>
+      `${premio ? `Sorteo de ${premio}: ` : ""}${varios ? "ganaron" : "ganó"} ${w}, entre ${n} personas.\nNadie eligió ${varios ? "estos nombres" : "este nombre"}, y cualquiera lo puede comprobar desde el celular:\n${enlace}`,
     cTroSpent: (n) => pick([`¡Se le acabó la cuerda a ${n}!`, `¡Se apagó el trompo de ${n}!`, `¡${n} se queda sin cuerda!`]),
     // --- Constelación, sapo y ¿Quién es? (7 de octubre de 2026).
     cConstHeading: (n) => pick([`¿Va para ${n}…?`, `¿Se queda en ${n}…?`]),
@@ -1560,7 +1573,7 @@ export const T: Record<Lang, Dict> = {
     cLedgerFinal: ["These are the ones left!", "Look close, it's these!", "And now it gets sealed!"],
     cLedgerNo: "LEDGER",
     cLedgerOk: "CONFIRMED",
-    wheelCap: "The wheel looks great up to about 24 names. Past that, the draw switches to the llama race.",
+    wheelCap: "The wheel looks great up to about 24 names. Past that, the draw switches to the ball drum, which shows everyone.",
     prizeLabel: "What are you giving away? (optional)", prizePh: "A t-shirt, a book, that JetBrains license…",
     kEntries: "entries", kDigest: "list fingerprint", kStatus: "draw status",
     frozenNote: "You sealed the list before the number existed. The round that decides this hasn't been published yet, it lands in a few seconds. From here on, adding or removing anyone changes the fingerprint and it shows.",
@@ -1572,7 +1585,7 @@ export const T: Record<Lang, Dict> = {
     verifyPasos: "Step by step: 1) open the quicknet round and check its signature against the beacon's public key · 2) randomness = sha256(signature) · 3) idx = first 8 bytes of sha256(randomness ‖ list_hash ‖ counter) mod entries, skipping repeats. Whole protocol at github.com/nema1502/tinkazo, in docs/protocolo.md.",
     tecnicoT: "Technical details",
     motionNote: "Your system has reduced motion turned on, so the draw is shown directly.", motionReplay: "Watch the animation anyway",
-    reverify: "Run it again right here", reverifyOk: "Ran it again in front of you. Same name.",
+    reverify: "Run it again right here", reverifyOk: "Ran it again in front of you. Same name.", reverifyOkMany: "Ran it again in front of you. Same names.",
     copySummary: "Copy summary", copied: "Copied!",
     copyRules: "Copy the rules",
     rulesNote: "Paste them on Luma, WhatsApp or wherever you announced the draw. They say how the winner is chosen before anyone knows, and put on record which draw counts.",
@@ -1595,11 +1608,11 @@ export const T: Record<Lang, Dict> = {
     ].join("\n"),
     tellWhatsapp: "Tell them on WhatsApp", tellEmail: "Tell them by email",
     tellSubject: "You won the draw 🦙",
-    tellBody: (w, prize, n, u) =>
+    tellBody: (w, prize, n, u, varios) =>
       `You won, ${w}! You're taking home${prize ? " " + prize : " the draw"}.\n\n` +
       `You came out of ${n} people and nobody hand-picked you. The list was locked before the number that drew you existed, ` +
       `and that number is published by a public randomness beacon that neither the organizer nor Tinkazo controls.\n\n` +
-      `Check it yourself, it takes ten seconds: ${u}\n\n` +
+      `Check it ${varios ? "for yourselves" : "yourself"}, it takes ten seconds: ${u}\n\n` +
       `Drawn with Tinkazo · https://tinkazo.app`,
     qrCaption: "Point your phone at it and check for yourself",
     nextTitle: "The draw doesn't depend on me",
@@ -1625,6 +1638,10 @@ export const T: Record<Lang, Dict> = {
     againQuitados: (nombres, n) => (nombres.length > 3 ? `${nombres.length} people already won and are off this list. ${n} left.` : nombres.length === 1 ? `${nombres[0]} already won and is off this list. ${n} left.` : `${nombres.join(", ")} already won and are off this list. ${n} left.`),
     recuperarLista: "Bring back the previous list",
     againNote: "After sealing you pick the game again, the same one or another. This draw stays as it is, in My draws and in its receipt.",
+    cortinaSe: "Up for grabs",
+    cortinaSin: "The draw is coming",
+    cortinaGraba: "Recording the draw so nobody can change it…",
+    cortinaNumero: "The number that decides is on its way…",
     ausenteBtn: "Not here",
     ausenteQ: "Draw this prize again?",
     ausenteSi: "Yes, draw again",
@@ -1725,6 +1742,7 @@ export const T: Record<Lang, Dict> = {
     histStateDone: "Drawn",
     histStatePending: "Sealed, not drawn yet",
     histWon: "won by",
+    histWonMany: "won by",
     histOtherDevice: "The list stayed on the device where it was sealed.",
     histWhyT: "What gets saved, and where?",
     histWhyMas: "All of it, in How it works →",
@@ -2006,7 +2024,7 @@ export const T: Record<Lang, Dict> = {
     vCheckChain: "The record on Stellar",
     vNotDrawnYet: "not drawn on chain yet",
     vChainUnreachable: "couldn't read the contract",
-    vSeals: "Other seals by this organizer",
+    vSeals: "Other seals by this organizer, and of this list",
     vSealsWhy: "An organizer could seal the same list several times and publish only the convenient result. Every seal is public, so here are theirs, all the ones still on chain. None of them repeats this draw's list or its head count.",
     vSealsSameCount: "same number of people",
     vSealsSameCountWhy: "There are other seals with the same number of people as this one. It may be another draw at the same event, or the same list with the names in another order, which gives a different fingerprint. If they are close in time, ask the organizer for the receipts.",
@@ -2081,8 +2099,8 @@ export const T: Record<Lang, Dict> = {
     cLast: ["FINAL STRETCH!", "LAST FEW METERS!", "THE FINISH IS IN SIGHT!", "THERE'S THE FINISH!"],
     cLead: (n) => pick([`${n} takes the lead!`, `${n} is gone!`, `${n} out in front!`, `${n} pushes past everyone!`, `It's ${n} now!`]),
     cWin: (n, many) => pick(many ? [`${n} WIN!`, `${n} TAKE IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`] : [`${n} WINS!`, `${n} TAKES IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`]),
-    summary: (w, n, d, r, u) =>
-      `Tinkazo · verifiable draw (protocol v2)\nWinner(s): ${w}\nEntries: ${n}\nlist_hash: ${d}\nquicknet round: ${r} → ${u}\nRun it again: https://github.com/nema1502/tinkazo/blob/main/docs/protocolo.md (§7)`,
+    summary: (w, n, premio, enlace, varios) =>
+      `${premio ? `${premio} draw: ` : ""}${varios ? "the winners are" : "the winner is"} ${w}, out of ${n} people.\nNobody picked ${varios ? "these names" : "this name"}, and anyone can check it from their phone:\n${enlace}`,
     cTroSpent: (n) => pick([`${n}'s top runs out of spin!`, `${n}'s top stops spinning!`, `${n} is out of spin!`]),
     // --- Constellation, sapo and Guess Who (7 October 2026).
     cConstHeading: (n) => pick([`Is it going to ${n}…?`, `Is it stopping at ${n}…?`]),

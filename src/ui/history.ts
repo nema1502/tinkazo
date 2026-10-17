@@ -251,7 +251,7 @@ function paint(organizer: string | null): void {
         `<div class="hc-top"><span class="hc-estado">${esc(t(hecho ? "histStateDone" : "histStatePending"))}</span>` +
         `<span class="hc-fecha">${esc(fmtDate(e.sealedAt))}</span></div>` +
         `<h3>${esc(titulo)}</h3>` +
-        `<p class="hc-meta">${esc(id)} · ${e.count} ${esc(t("histPeople"))}${hecho ? ` · ${esc(t("histWon"))} <b>${esc(winnerLabel(e))}</b>` : ""}${origen}</p>` +
+        `<p class="hc-meta">${esc(id)} · ${e.count} ${esc(t("histPeople"))}${hecho ? ` · ${esc(t((e.winners?.length ?? 0) > 1 ? "histWonMany" : "histWon"))} <b>${esc(winnerLabel(e))}</b>` : ""}${origen}</p>` +
         `<div class="hc-acciones">${acciones.join("")}</div>` +
         `</article>`
       );

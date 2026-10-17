@@ -55,14 +55,17 @@ export { SAPO_MAX } from "./games/pixi/sapo-plan";
 import { SAPO_MAX as SAPO_CAP } from "./games/pixi/sapo-plan";
 
 /**
- * El juego que de verdad se cuenta: si el elegido no aguanta tantos nombres
- * (la ruleta pasados WHEEL_MAX, el Sapo con más de SAPO_MAX ganadores), la carrera, que
- * es el juego de la casa. No altera quién ganó: el juego solo narra.
+ * El juego que de verdad se cuenta: si el elegido no aguanta tantos nombres,
+ * otro que sí. La ruleta pasados WHEEL_MAX va a la tómbola; el Sapo con más de
+ * SAPO_MAX ganadores, a la carrera. No altera quién ganó: el juego solo narra.
  *
  * `names` y `winners` son opcionales: el Sapo mira cuántos ganadores hay.
  */
 export function playableGame(game: Game, people: number, _names?: readonly string[], winners?: readonly number[]): Game {
-  if (game === "wheel" && people > WHEEL_MAX) return "race";
+  // La ruleta pasa a la tómbola, que muestra a todos con su número: la
+  // carrera ponía ocho en pista y dejaba afuera al resto (revisiones del 16
+  // de octubre de 2026).
+  if (game === "wheel" && people > WHEEL_MAX) return "tombola";
   if (game === "sapo" && (winners?.length ?? 1) > SAPO_CAP) return "race";
   return game;
 }
@@ -245,6 +248,17 @@ export const paceSeconds = (p: Pace): number => PACES[p] + (conCuenta(p) ? CUENT
  */
 export const CUENTA_SECONDS = 3;
 export const conCuenta = (p: Pace = pace): boolean => p !== "rapido";
+
+/**
+ * Si la sala ya contó "3, 2, 1" con la tarjeta: el juego larga directo, sin
+ * una segunda cuenta. La carrera tenía la suya y quedaban dos seguidas
+ * (revisión del experto en sorteos, 16 de octubre de 2026).
+ */
+let contaron = false;
+export function setYaContaron(v: boolean): void {
+  contaron = v;
+}
+export const yaContaron = (): boolean => contaron;
 
 export function setPace(p: Pace): void {
   pace = p;

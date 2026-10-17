@@ -343,7 +343,7 @@ El ritmo, la legibilidad del cartel y el tartamudeo de los subtítulos ya los mi
 
 **Luz roja, luz verde salió del selector** el 5 de octubre de 2026, cuando entró la Chovena: cubría la misma necesidad (parar y seguir), pero sin nombre boliviano, con la sombra de una serie de apuestas y con un Faro que era un concepto técnico escondido.
 
-**Los que salieron del selector** el 30 de septiembre de 2026, porque sumaban poco: la carrera de cohetes y las balsas de totora eran la misma carrera de llamas con otra piel, y el Cierre de Libro era el menos visual. El código sigue y se abren con `?demo=` mientras se decide si se borran; la ruleta con más de 24 personas ahora pasa a la carrera de llamas, no al Cierre de Libro.
+**Los que salieron del selector** el 30 de septiembre de 2026, porque sumaban poco: la carrera de cohetes y las balsas de totora eran la misma carrera de llamas con otra piel, y el Cierre de Libro era el menos visual. El código sigue y se abren con `?demo=` mientras se decide si se borran; la ruleta con más de 24 personas pasaba a la carrera de llamas, no al Cierre de Libro. Desde el 16 de octubre de 2026 pasa a la tómbola, que muestra a todos con su número: la carrera pone ocho en pista y dejaba afuera al resto.
 
 | Juego | `?demo=` | Documento |
 |---|---|---|

@@ -5,6 +5,7 @@ import { bytesToHex, roundTime, targetRound } from "../protocol/drand";
 import { listHash } from "../protocol/canonical";
 import { contractUrl, network } from "../stellar/config";
 import { anchorErrorText, hideTxStatus, sealOnChain, showTxStatus, stepLabel } from "./anchor";
+import { precargarQr } from "./qr";
 import { canAnchor, currentSession } from "./wallet-ui";
 import { parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
@@ -94,6 +95,13 @@ function startCountdown(): void {
       if (line) line.textContent = "";
       if (countdownTimer !== undefined) clearInterval(countdownTimer);
       countdownTimer = undefined;
+      // Ya nació: el botón, a la vista y con el foco. Quedaba una pantalla más
+      // abajo, y dos en el celular (revisión del 16 de octubre de 2026).
+      if (!app.drawn) {
+        const r = btn.getBoundingClientRect();
+        if (r.top < 0 || r.bottom > innerHeight) btn.scrollIntoView({ behavior: "smooth", block: "center" });
+        btn.focus({ preventScroll: true });
+      }
     }
   };
   tick();
@@ -103,7 +111,11 @@ function startCountdown(): void {
 /** El botón cambia de nombre según haya wallet conectada o no. */
 export function refreshFreezeLabel(): void {
   if (app.frozen) return;
-  $("btn-freeze").textContent = canAnchor() ? t("sealOnStellar") : t("freeze");
+  // Con data-i, el cambio de idioma traduce el texto que corresponde en vez
+  // de volver a "Sellar la lista" (QA, 16 de octubre de 2026).
+  const btn = $("btn-freeze");
+  btn.dataset.i = canAnchor() ? "sealOnStellar" : "freeze";
+  btn.textContent = t(btn.dataset.i);
 }
 
 /**
@@ -114,6 +126,18 @@ export function refreshFreezeLabel(): void {
  * sorteo sigue siendo verificable, pero nadie atestigua que la lista se cerró
  * antes de que existiera la semilla.
  */
+/**
+ * Si el sello falló sin dejar nada en la cadena, y por el reloj: la ronda
+ * quedó demasiado cerca (el contrato devuelve el error 5 al simular), o la
+ * transacción entró y falló. En los dos casos reintentar no puede dejar dos
+ * sellos. Un plazo vencido o un corte de red no entran: ahí no se sabe si
+ * el primero quedó grabado.
+ */
+function selloSinGrabar(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return /Error\(Contract,\s*#5\)|Transaction failed!|tx-FAILED/.test(msg);
+}
+
 export async function freeze(): Promise<void> {
   const names = parseNames();
   if (names.length < 2) return;
@@ -123,11 +147,11 @@ export async function freeze(): Promise<void> {
   // aunque haya una cuenta abierta no se graba nada ni se espera la cadena.
   const anchoring = canAnchor() && !params.has("demo");
   const hash = bytesToHex(listHash(names));
-  const ts = Math.floor(Date.now() / 1000);
+  let ts = Math.floor(Date.now() / 1000);
   // Anclando, el margen no baja de 45 s aunque la URL pida menos: por debajo
   // de 30 el contrato rechaza el sello.
   const lead = anchoring ? Math.max(ANCHOR_LEAD_SECONDS, LEAD_SECONDS) : LEAD_SECONDS;
-  const round = targetRound(ts, lead);
+  let round = targetRound(ts, lead);
   const prize = $<HTMLInputElement>("prize").value.trim();
   const numWinners = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, names.length);
 
@@ -139,24 +163,43 @@ export async function freeze(): Promise<void> {
     if (!session) return;
     btn.disabled = true;
     try {
-      const res = await sealOnChain(
-        {
-          organizer: session.address,
-          listHash: listHash(names),
-          count: names.length,
-          numWinners,
-          round,
-          meta: prize || t("defaultMeta"),
-        },
-        (step, detail) => {
-          btn.textContent = stepLabel(step);
-          showTxStatus("seal-status", step, detail);
-        },
-      );
-      raffleId = res.raffleId;
-      sealTx = res.txHash;
+      // Si la red tarda, la ronda elegida al hacer clic llega a la cadena con
+      // menos de los 30 s que exige el contrato y el sello falla: con el RPC
+      // público de testnet pasó en 3 de 11 sellos (QA, 16 de octubre de 2026).
+      // Cuando la transacción falló de verdad, no quedó nada grabado y se
+      // reintenta solo, con una ronda nueva. Si no se sabe si entró, no.
+      for (let intento = 1; ; intento++) {
+        try {
+          const res = await sealOnChain(
+            {
+              organizer: session.address,
+              listHash: listHash(names),
+              count: names.length,
+              numWinners,
+              round,
+              meta: prize || t("defaultMeta"),
+            },
+            (step, detail) => {
+              btn.textContent = stepLabel(step);
+              showTxStatus("seal-status", step, detail);
+            },
+          );
+          raffleId = res.raffleId;
+          sealTx = res.txHash;
+          break;
+        } catch (e) {
+          if (intento >= 3 || !selloSinGrabar(e)) throw e;
+          console.warn("[tinkazo] el sello no entró a tiempo; se reintenta con otra ronda", e);
+          ts = Math.floor(Date.now() / 1000);
+          round = targetRound(ts, lead);
+        }
+      }
     } catch (e) {
+      // La pantalla dice algo que se entiende; el error de verdad queda en la
+      // consola, para saber la causa si "la red rechazó" vuelve a pasar.
+      console.warn("[tinkazo] el sello no se pudo grabar", e);
       btn.disabled = false;
+      btn.dataset.i = "sealOnStellar";
       btn.textContent = t("sealOnStellar");
       const status = $("seal-status");
       status.style.display = "block";
@@ -167,6 +210,13 @@ export async function freeze(): Promise<void> {
   } else {
     hideTxStatus("seal-status");
   }
+
+  // Lo que se usa al final del show se baja ahora, con internet seguro: si
+  // el wifi se cae durante el juego, el QR y "Mostrar en grande" igual andan
+  // (QA, 16 de octubre de 2026).
+  void precargarQr();
+  void import("./pantalla").catch(() => undefined);
+  void import("./imagen").catch(() => undefined);
 
   app.frozen = {
     names,
@@ -277,7 +327,8 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   $<HTMLInputElement>("prize").disabled = true;
   $<HTMLSelectElement>("nw").disabled = true;
   btn.disabled = true;
-  btn.textContent = raffleId !== undefined ? t("sealed") : t("frozenOk");
+  btn.dataset.i = raffleId !== undefined ? "sealed" : "frozenOk";
+  btn.textContent = t(btn.dataset.i);
   $("freeze-hint").style.display = "none";
   $("free-rule").style.display = "none";
   $("sec-frozen").style.display = "block";
@@ -297,11 +348,11 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
 
   if (names.length > WHEEL_MAX) {
     // La ruleta es el único juego con tope. Los demás aguantan doscientos, y
-    // el reemplazo automático va a la carrera, que es el juego de la casa.
-    // Iba al Cierre de Libro, que salió del selector el 30 de septiembre de 2026.
+    // el reemplazo automático va a la tómbola, que muestra a todos con su
+    // número. Iba a la carrera, que pone ocho en pista (16 de octubre de 2026).
     $<HTMLButtonElement>("g-wheel").disabled = true;
     $("wheel-cap").style.display = "block";
-    if (app.game === "wheel") setGame("race");
+    if (app.game === "wheel") setGame("tombola");
   }
   startCountdown();
   $("sec-frozen").scrollIntoView({ behavior: "smooth", block: "start" });

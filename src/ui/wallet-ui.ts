@@ -261,6 +261,9 @@ function applyGate(): void {
   const row = document.createElement("div");
   row.className = "row";
   const b = button(t("gateAction"), "solid", () => void openPicker());
+  // Es lo único que se puede hacer en esta pantalla: el botón grande de la
+  // casa, no el chico de la cabecera (revisión de arte del 16 de octubre).
+  b.className = "primary";
   row.appendChild(b);
   gate.appendChild(row);
   const foot = document.createElement("p");
@@ -456,7 +459,20 @@ const mailOk = (s: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s.tr
 
 /** Ofrece las formas de entrar que tienen sentido en esta red y en este navegador. */
 /** Abre el selector de cuentas. Lo usa también el botón grande de la portada. */
+let abriendo = false;
 export async function openPicker(): Promise<void> {
+  // La ventana tarda unos segundos en armarse la primera vez: un segundo toque
+  // en ese rato abría otra encima (revisión del 16 de octubre de 2026).
+  if (abriendo || document.querySelector(".modal-card.login")) return;
+  abriendo = true;
+  try {
+    await abrirPicker();
+  } finally {
+    abriendo = false;
+  }
+}
+
+async function abrirPicker(): Promise<void> {
   // Quien elige una cuenta va a sortear: al volver del login, incluso del
   // redirect de Google, la página abre la herramienta y no la portada.
   try {
@@ -476,7 +492,11 @@ export async function openPicker(): Promise<void> {
   if (pollar) {
     options.push({ label: "Google", hint: t("googleHint"), icon: "google", pick: "google" });
   }
-  if (await w.freighterInstalled()) {
+  // Freighter contesta en milisegundos si está; si no está, su librería espera
+  // dos segundos enteros antes de rendirse, y la ventana tardaba eso en abrir
+  // cada vez (medición de velocidad del 16 de octubre de 2026).
+  const conFreighter = await Promise.race([w.freighterInstalled(), new Promise<boolean>((r) => setTimeout(() => r(false), 400))]);
+  if (conFreighter) {
     options.push({ label: t("loginWallet"), small: "Freighter", hint: t("freighterHint"), icon: "wallet", pick: "freighter" });
   } else {
     options.push({

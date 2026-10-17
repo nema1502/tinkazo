@@ -58,7 +58,7 @@ export interface GameCard {
 }
 
 /** El contenido de la tarjeta para un juego. */
-function caja(game: Game, people: number, prizes: number): string {
+function caja(game: Game, people: number, prizes: number, premio = ""): string {
   const L = T[getLang()];
   const lanes = (game === "race" || game === "rockets" || game === "totora") && people > 8;
   const varios = prizes > 1 ? VARIOS[game] : undefined;
@@ -71,6 +71,9 @@ function caja(game: Game, people: number, prizes: number): string {
     `<h2 class="gc-nombre" id="gc-nombre"><span>${esc(t(NOMBRE[game]))}</span></h2>` +
     `<p class="gc-regla" id="gc-regla">${esc(t(varios ?? REGLA[game]))}</p>` +
     extras.map((x) => `<p class="gc-extra">${esc(x)}</p>`).join("") +
+    // Qué se sortea, con el nombre que le puso quien organiza: la tarjeta decía
+    // "1 premio" sin decir cuál (revisión del experto en sorteos).
+    (premio ? `<p class="gc-premio"><span>${esc(t("cortinaSe"))}</span> ${esc(premio)}</p>` : "") +
     `<p class="gc-chips"><span>${esc(L.gcPeople(people))}</span><span>${esc(L.gcPrizes(prizes))}</span></p>` +
     `<p class="gc-honesta" id="gc-honesta">${esc(t("gcHonest"))}</p>`
   );
@@ -85,7 +88,7 @@ function caja(game: Game, people: number, prizes: number): string {
  * suena en cada número: los decide quien llama, así la tarjeta no depende del
  * estado ni del sonido y se puede probar sola.
  */
-export function showGameCard(game: Game, people: number, prizes: number, cuenta = 0, sonar?: (n: number) => void): GameCard {
+export function showGameCard(game: Game, people: number, prizes: number, cuenta = 0, sonar?: (n: number) => void, premio = ""): GameCard {
   const el = document.createElement("div");
   el.className = "game-card";
   // Un diálogo de verdad para el lector de pantalla: se anuncia porque el foco
@@ -103,7 +106,7 @@ export function showGameCard(game: Game, people: number, prizes: number, cuenta 
   fondo(game);
   el.innerHTML =
     `<div class="gc-fondo" aria-hidden="true"></div>` +
-    `<div class="gc-caja">${caja(game, people, prizes)}</div>` +
+    `<div class="gc-caja">${caja(game, people, prizes, premio)}</div>` +
     `<button class="gc-saltar" type="button">${esc(t("skip"))}</button>` +
     `<div class="gc-barra" aria-hidden="true"><i></i></div>`;
   document.body.appendChild(el);
@@ -189,7 +192,7 @@ export function showGameCard(game: Game, people: number, prizes: number, cuenta 
 
   const update = (g: Game): void => {
     const c = el.querySelector(".gc-caja");
-    if (c) c.innerHTML = caja(g, people, prizes);
+    if (c) c.innerHTML = caja(g, people, prizes, premio);
     fondo(g);
   };
   return { ready, hide, update };

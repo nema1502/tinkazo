@@ -1,6 +1,6 @@
 import { $ } from "../dom";
 import { T, getLang, setPickSeed, t } from "../i18n";
-import { LCOLORS, drawAvatar, paceFactor, skipMotion, setGameLength, type Beacon } from "../state";
+import { LCOLORS, drawAvatar, paceFactor, skipMotion, setGameLength, yaContaron, type Beacon } from "../state";
 import { beep, beepFor, fanfare, note } from "../sound";
 import { NO_POSE, THEMES, type Pose, type ThemeId } from "./themes";
 import { enOrden, tension, writeStory, type Arc, type Story } from "./drama";
@@ -366,9 +366,11 @@ export function stadiumRace(
   // Lo que el selector puede estirar son los quince segundos de carrera. La
   // cuenta regresiva y el sostén del cartel van en segundos reales y no se
   // tocan: un "3" que dura dos segundos no se lee como cuenta regresiva.
-  setGameLength(DUR, WINNER_HOLD + 3);
+  // Si la sala ya contó "3, 2, 1" con la tarjeta, larga directo.
+  const CUENTA = yaContaron() ? 0 : 3;
+  setGameLength(DUR, WINNER_HOLD + CUENTA);
   let phase: "count" | "race" | "done" | "dead" = "count";
-  let tPhase = 0, tRace = 0, camX = 0, shake = 0, lastLeader = -1, saidLast = false, finished = false, tFreeze = 0;
+  let tPhase = 3 - CUENTA, tRace = 0, camX = 0, shake = 0, lastLeader = -1, saidLast = false, finished = false, tFreeze = 0;
   let lastBeepN = 4;
   const winnerName = names[winnerIdx] ?? "";
   startMusic(parseInt(beacon.randomness.slice(8, 16), 16));
@@ -913,7 +915,7 @@ export function stadiumRace(
     }
 
     // Countdown gigante
-    if (phase === "count") {
+    if (phase === "count" && tPhase < 3) {
       const n = Math.max(1, 3 - Math.floor(tPhase));
       c.font = `900 ${180 * u}px system-ui, sans-serif`;
       c.textAlign = "center";

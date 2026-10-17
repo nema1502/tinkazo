@@ -465,9 +465,12 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
         const fw = 30 * k, fh = 36 * k;
         garland.rect(x - fw / 2, y, fw, fh).fill(col);
         garland.poly([x - fw / 2, y + fh, x - fw / 4, y + fh - 6 * k, x, y + fh, x + fw / 4, y + fh - 6 * k, x + fw / 2, y + fh]).fill(col);
-        // Los calados: un rombo y dos puntos del color de la pared.
+        // Los calados: una flor de cuatro pétalos y dos puntos del color de la
+        // pared. Era un rombo, y una banderita con un rombo al medio es un
+        // naipe de diamantes (revisión de juegos del 16 de octubre de 2026).
         const hole = S.dark ? 0x2a1d33 : 0xf7d9b5;
-        garland.poly([x, y + 8 * k, x + 6 * k, y + 16 * k, x, y + 24 * k, x - 6 * k, y + 16 * k]).fill(hole);
+        const cy = y + 16 * k;
+        for (const [dx, dy] of [[0, -5.5], [5.5, 0], [0, 5.5], [-5.5, 0]] as const) garland.circle(x + dx * k, cy + dy * k, 3 * k).fill(hole);
         garland.circle(x - 9 * k, y + 28 * k, 2.4 * k).fill(hole).circle(x + 9 * k, y + 28 * k, 2.4 * k).fill(hole);
       }
       const pts: number[] = [];

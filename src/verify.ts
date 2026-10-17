@@ -1,6 +1,6 @@
 import "./styles.css";
 import { $, esc } from "./dom";
-import { chooseLang, getLang, initialLang, setLang, t } from "./i18n";
+import { T, chooseLang, getLang, initialLang, setLang, t } from "./i18n";
 import { SAMPLE, avatar } from "./state";
 import { canonicalList, listHash } from "./protocol/canonical";
 import { RPC_URLS } from "./stellar/config";
@@ -133,7 +133,7 @@ async function main(): Promise<void> {
   set("vCheckList", "working");
 
   // ------------------------------------------------- 2. la ronda y su firma
-  let onChain: { winners: number[]; randomness: string; listHash: string; count: number } | null = null;
+  let onChain: { winners: number[]; randomness: string; listHash: string; count: number; meta?: string } | null = null;
   let chainUnreachable = false;
   // El contrato contestó y no tiene ese sorteo: no es la red, y no se trata
   // como si lo fuera (antes salía "no es señal de que algo esté mal").
@@ -224,7 +224,7 @@ async function main(): Promise<void> {
     verdict("partial", "vVerdictMissing", t("vVerdictMissingDetail"));
     return;
   }
-  renderResult(proof, names, winners, signature, randomness, !!onChain);
+  renderResult(proof, names, winners, signature, randomness, !!onChain, premioDe(proof, onChain?.meta));
   // Los otros sellos se traen al final y sin bloquear: el veredicto no
   // depende de ellos, y si el RPC no contesta la página ya sirvió.
   void renderSeals(proof);
@@ -356,7 +356,7 @@ async function readFromChain(
   });
   const id = BigInt(proof.id as string);
   const raffle = (await (client as never as { get_raffle(a: { raffle_id: bigint }): Promise<{ result: unknown }> }).get_raffle({ raffle_id: id })).result as
-    | { list_hash: Uint8Array; count: number }
+    | { list_hash: Uint8Array; count: number; meta?: string }
     | undefined;
   if (!raffle) throw new Error("raffle-not-found");
   const draw = (await (client as never as { get_draw(a: { raffle_id: bigint }): Promise<{ result: unknown }> }).get_draw({ raffle_id: id })).result as
@@ -368,7 +368,19 @@ async function readFromChain(
     randomness: bytesToHex(new Uint8Array(draw.randomness)),
     listHash: bytesToHex(new Uint8Array(raffle.list_hash)),
     count: raffle.count,
+    ...(typeof raffle.meta === "string" ? { meta: raffle.meta } : {}),
   };
+}
+
+/**
+ * El premio que se muestra: el que quedó grabado al sellar, si se pudo leer la
+ * cadena. El del enlace se puede cambiar a mano, y con él el comprobante salía
+ * verde diciendo "Se lleva: un auto 0 km" (QA, 16 de octubre de 2026). El
+ * texto por defecto del sello ("Sorteo de comunidad") no es un premio.
+ */
+function premioDe(proof: Proof, meta: string | undefined): string {
+  if (meta === undefined) return proof.prize ?? "";
+  return meta === T.es.defaultMeta || meta === T.en.defaultMeta ? "" : meta;
 }
 
 /**
@@ -469,6 +481,7 @@ function renderResult(
   signature: string,
   randomness: string,
   fromChain: boolean,
+  premio: string,
 ): void {
   $("sec-result").style.display = "block";
   $("v-round").textContent = `${t("seed")} ${proof.round}`;
@@ -479,7 +492,7 @@ function renderResult(
         <img src="${avatar(name, 128)}" alt="" />
         <div>
           <p class="winner-name">${esc(name)}</p>
-          ${proof.prize ? `<p class="winner-prize">${esc(t("winsPrize"))} ${esc(proof.prize)}</p>` : ""}
+          ${premio ? `<p class="winner-prize">${esc(t("winsPrize"))} ${esc(premio)}</p>` : ""}
         </div>
       </div>`;
     })

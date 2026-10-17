@@ -74,6 +74,9 @@ for (const [id, game] of GAME_BUTTONS) $(id).addEventListener("click", () => set
 $("btn-draw").addEventListener("click", () => void draw());
 // La lista a la vista de la sala, antes de sellar: el blindaje contra inflarla.
 $("btn-sala").addEventListener("click", () => void import("./ui/sala").then((m) => m.mostrarLista()));
+// Precargada con la página quieta: si se publica una versión nueva con la
+// pestaña abierta, o se corta el wifi, el botón igual abre (QA, 16 de octubre).
+setTimeout(() => void import("./ui/sala").catch(() => undefined), 4000);
 $("btn-reverify").addEventListener("click", reverify);
 $("btn-replay").addEventListener("click", replayAnimation);
 $("btn-again-sin").addEventListener("click", () => newDraw("sinGanadores"));

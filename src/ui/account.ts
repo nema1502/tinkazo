@@ -161,7 +161,10 @@ export function openAccount(view: AccountView): void {
     more.appendChild(
       mini(t("acctSeeAll"), () => {
         closeAccount();
-        document.getElementById("sec-history")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        // La pestaña se abre por la dirección (main.ts): el scroll solo no
+        // cambiaba de pestaña y el clic no llevaba a ningún lado.
+        if (location.hash !== "#mis-sorteos") location.hash = "#mis-sorteos";
+        requestAnimationFrame(() => document.getElementById("sec-history")?.scrollIntoView({ behavior: "smooth", block: "start" }));
       }),
     );
     hist.appendChild(more);

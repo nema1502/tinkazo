@@ -77,7 +77,7 @@ describe("playableGame", () => {
   it("keeps the existing caps working", async () => {
     const s = await load();
     expect(s.playableGame("wheel", 24)).toBe("wheel");
-    expect(s.playableGame("wheel", 25)).toBe("race");
+    expect(s.playableGame("wheel", 25)).toBe("tombola");
     // El Sapo juega una clasificatoria con cualquier cantidad: solo no puede con más de 12 ganadores.
     expect(s.playableGame("sapo", 12)).toBe("sapo");
     expect(s.playableGame("sapo", 200)).toBe("sapo");

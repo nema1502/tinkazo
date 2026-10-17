@@ -5,7 +5,7 @@ import { bytesToHex } from "../protocol/drand";
 import { previewUrl } from "../protocol/proof";
 import { repetidos } from "../buscar";
 import { parseNames } from "./participants";
-import { qrDataUrl } from "./qr";
+import { pintarQr } from "./qr";
 
 /**
  * La lista a la vista de la sala, antes de sellar.
@@ -17,6 +17,25 @@ import { qrDataUrl } from "./qr";
  * selle, la huella del sorteo tiene que empezar igual, y cualquiera de la sala
  * lo puede comparar con lo que vio.
  */
+/**
+ * La letra de la lista, lo más grande que entre sin dejar a nadie afuera. Con
+ * dieciocho nombres usaba medio proyector, y con sesenta, a 1280 × 720, se
+ * veían cuarenta y dos (revisiones del 16 de octubre de 2026). Las columnas
+ * se miden en em, así que crecen con la letra.
+ */
+function encajar(ol: HTMLElement): void {
+  const entra = (): boolean => ol.scrollHeight <= ol.clientHeight + 1 && ol.scrollWidth <= ol.clientWidth + 1;
+  let chico = 11;
+  let grande = 46;
+  while (grande - chico > 1) {
+    const medio = Math.floor((chico + grande) / 2);
+    ol.style.fontSize = `${medio}px`;
+    if (entra()) chico = medio;
+    else grande = medio;
+  }
+  ol.style.fontSize = `${chico}px`;
+}
+
 export async function mostrarLista(): Promise<void> {
   const names = parseNames();
   if (names.length < 2) return;
@@ -37,7 +56,7 @@ export async function mostrarLista(): Promise<void> {
     `<button class="ghost" type="button" data-cerrar>${esc(t("salaCerrar"))}</button>` +
     `</div>` +
     `<div class="sala-body">` +
-    `<ol class="sala-nombres${names.length > 60 ? " densa" : ""}">` +
+    `<ol class="sala-nombres">` +
     names
       .map((n, i) => `<li${rep.has(i) ? ' class="rep"' : ""}>${esc(n)}${rep.has(i) ? ` <em>${esc(t("salaRep"))}</em>` : ""}</li>`)
       .join("") +
@@ -47,10 +66,17 @@ export async function mostrarLista(): Promise<void> {
     `</div>` +
     `<p class="sala-pie">${esc(t("salaPie"))}</p>`;
   document.body.appendChild(back);
+  const ol = back.querySelector<HTMLElement>(".sala-nombres");
+  const ajustar = (): void => {
+    if (ol) encajar(ol);
+  };
+  ajustar();
+  addEventListener("resize", ajustar);
 
   const cerrar = (): void => {
     back.remove();
     removeEventListener("keydown", tecla);
+    removeEventListener("resize", ajustar);
   };
   const tecla = (e: KeyboardEvent): void => {
     if (e.key === "Escape") cerrar();
@@ -71,7 +97,7 @@ export async function mostrarLista(): Promise<void> {
   });
   back.dataset.url = url;
   const img = back.querySelector<HTMLImageElement>(".sala-qr img");
-  const png = await qrDataUrl(url);
-  if (img && png) img.src = png;
-  else back.querySelector(".sala-qr")?.remove();
+  const listo = img ? await pintarQr(img, url, Math.min(260, innerWidth * 0.2)) : false;
+  if (!listo) back.querySelector(".sala-qr")?.remove();
+  ajustar();
 }

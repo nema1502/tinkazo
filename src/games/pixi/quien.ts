@@ -288,6 +288,8 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
 
   /* ------------------------------------------------------------------ guion hablado */
   let tAll = 0, tHold = 0, crowned = false, dead = false;
+  /** "¡Uy, casi!" va una vez, a mitad del amague de la carta. */
+  let casiDicho = false;
   const crownUI = S.crown(names, winners);
   function crown(): void {
     if (crowned) return;
@@ -369,11 +371,6 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
           cam.shake((2 + Math.min(4, k * 0.2)) * g.k);
         }
         const fin = s.q === r.questions.length - 1 + (r.ties.length ? 1 : 0);
-        if (fin && story.arc === "susto" && s.round === total - 1) {
-          setTimeout(() => {
-            if (!crowned) S.say(t("cQuiAlmost"), 0.95);
-          }, 400);
-        }
         if (fin) {
           setTimeout(() => {
             if (crowned) return;
@@ -486,6 +483,13 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
         const ult = steps.filter((s) => s.round === ri && s.q >= 0).at(-1);
         if (story.arc === "susto" && ri === total - 1 && i === r.winner && ult && tAll >= ult.flip && tAll < ult.flip + 0.9) {
           const f = (tAll - ult.flip) / 0.9;
+          // "¡Uy, casi!" a mitad del amague, en el reloj del juego: a los 0,4 s
+          // de la respuesta le comía el "¡Sí tiene…!" y se adelantaba a la carta
+          // (revisión de juegos del 16 de octubre de 2026).
+          if (!casiDicho && !crowned && tAll >= ult.flip + 0.45) {
+            casiDicho = true;
+            S.say(t("cQuiAlmost"), 0.95);
+          }
           c.root.position.set(c.x, c.y);
           c.root.scale.set(c.s * (1 - 0.8 * Math.sin(Math.PI * f)), c.s);
           c.root.alpha = 1;

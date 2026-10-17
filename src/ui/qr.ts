@@ -18,8 +18,8 @@
  * descubre cuando alguien no puede escanearlo.
  */
 
-/** Cuánto mide el QR en píxeles de CSS. */
-const SIZE = 140;
+/** Cuánto mide el QR chico en píxeles de CSS, como mínimo. */
+const SIZE = 200;
 /** Margen obligatorio alrededor, en módulos. Sin esto muchos lectores fallan. */
 const QUIET = 4;
 
@@ -31,6 +31,29 @@ const QUIET = 4;
  * mostrar uno roto: el enlace de todos modos se puede copiar y compartir.
  */
 export async function qrDataUrl(text: string): Promise<string | null> {
+  return (await dibujar(text, SIZE))?.url ?? null;
+}
+
+/**
+ * Pone el QR en la imagen al tamaño en que se dibujó, para que el navegador
+ * no lo reescale. Reescalado, un comprobante largo perdía módulos: de 339 a
+ * 140 px quedaba en 1,2 px por módulo y no lo leía ningún celular (revisión
+ * del 16 de octubre de 2026). `ancho` es lo que se quiere ocupar, en px de CSS.
+ */
+export async function pintarQr(img: HTMLImageElement, text: string, ancho = SIZE): Promise<boolean> {
+  const qr = await dibujar(text, ancho);
+  if (!qr) return false;
+  img.src = qr.url;
+  img.style.width = img.style.height = `${qr.lado}px`;
+  return true;
+}
+
+/** Baja la librería del QR de antemano: con el wifi caído al final del show, igual se dibuja. */
+export function precargarQr(): Promise<unknown> {
+  return import("qrcode-generator").catch(() => undefined);
+}
+
+async function dibujar(text: string, ancho: number): Promise<{ url: string; lado: number } | null> {
   const { default: qrcode } = await import("qrcode-generator");
   let qr: ReturnType<typeof qrcode>;
   try {
@@ -46,11 +69,10 @@ export async function qrDataUrl(text: string): Promise<string | null> {
   const count = qr.getModuleCount();
   const total = count + QUIET * 2;
   const dpr = Math.min(window.devicePixelRatio || 1, 3);
-  // Cada módulo es un número entero de píxeles: si no, el redondeo deja
-  // costuras de un píxel y algunos lectores se confunden. Y nunca menos de
-  // tres, porque un comprobante largo da un QR denso que a un módulo por píxel
-  // se dibuja más chico que el recuadro y el navegador lo agranda borroso.
-  const cell = Math.max(3, Math.round((SIZE * dpr) / total));
+  // Cada módulo es un número entero de píxeles del equipo, y nunca menos de
+  // dos: si no, el redondeo deja costuras y los lectores se confunden. Se
+  // muestra a ese mismo tamaño (`lado`), sin que el navegador lo estire.
+  const cell = Math.max(2, Math.floor((ancho * dpr) / total));
   const side = cell * total;
 
   const canvas = document.createElement("canvas");
@@ -72,5 +94,5 @@ export async function qrDataUrl(text: string): Promise<string | null> {
       c.fillRect((col + QUIET) * cell, (r + QUIET) * cell, cell, cell);
     }
   }
-  return canvas.toDataURL("image/png");
+  return { url: canvas.toDataURL("image/png"), lado: side / dpr };
 }

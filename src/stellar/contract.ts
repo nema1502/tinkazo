@@ -130,5 +130,8 @@ export function errorKey(e: unknown): string {
   // reintenta sola, porque si la primera hubiera entrado igual quedarían dos
   // sellos para el mismo evento.
   if (/TRY_AGAIN_LATER|txBadSeq|tx_bad_seq|txTooLate|tx_too_late/i.test(msg)) return "busy";
+  // Entró y falló sin decir por qué (el SDK no puede leer el resultado): con
+  // la red lenta, casi siempre es la ronda que quedó demasiado cerca.
+  if (/Transaction failed!|tx-FAILED/.test(msg)) return "busy";
   return "unknown";
 }

@@ -1,6 +1,6 @@
 import { $, esc } from "../dom";
 import { T, getLang, onLangChange, t } from "../i18n";
-import { CUENTA_SECONDS, LCOLORS, WHEEL_MAX, app, conCuenta, playableGame, avatar, forceMotion, setCardSeconds, setShowGate, skipMotion, skippedForReducedMotion, type Beacon, type Game } from "../state";
+import { CUENTA_SECONDS, LCOLORS, WHEEL_MAX, app, conCuenta, params, playableGame, avatar, forceMotion, setCardSeconds, setShowGate, setYaContaron, skipMotion, skippedForReducedMotion, type Beacon, type Game } from "../state";
 import { beep } from "../sound";
 import { bytesToHex, decompressG1, fetchRound, hexToBytes, randomnessOf, roundUrl, verifyRound } from "../protocol/drand";
 import { select } from "../protocol/select";
@@ -9,7 +9,7 @@ import { PROOF_VERSION, type Proof, proofUrl } from "../protocol/proof";
 import { anchorErrorText, drawOnChain, readDraw, showTxStatus, stepLabel } from "./anchor";
 import { loreFor } from "../games/lore";
 import { currentSession } from "./wallet-ui";
-import { qrDataUrl } from "./qr";
+import { pintarQr } from "./qr";
 import { usePixi } from "../games/engine";
 import { secondsToRound, unfreeze } from "./freeze";
 import { setList } from "./participants";
@@ -33,98 +33,165 @@ export async function draw(): Promise<void> {
   const btn = $<HTMLButtonElement>("btn-draw");
   btn.disabled = true;
   btn.textContent = t("fetching");
+  // La pantalla completa, en el mismo clic: con cuenta, grabar el sorteo tarda
+  // unos segundos y para cuando salía la tarjeta el navegador ya no la
+  // concedía. El estadio quedaba dentro de la página.
+  pedirPantallaCompleta();
+  const cortina = skipMotion() ? null : abrirCortina(app.frozen.prize, app.frozen.raffleId !== undefined);
+  const sinShow = (): void => {
+    cortina?.cerrar();
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+  };
 
-  // Esto pasa con la sala mirando la pantalla grande. Si un relay no responde
-  // hay hasta doce intentos en veintitres segundos, y quedarse mudo todo ese
-  // rato es peor que el fallo. Un `alert()` del sistema, peor todavia: rompe el
-  // modo estadio y no hay forma de estilarlo.
-  const status = $("draw-status");
-  status.style.display = "block";
-  status.className = "txstatus";
-  status.textContent = t("fetching");
-
-  let beacon: Beacon;
   try {
-    beacon = await resolveBeacon(app.frozen.round, (attempt, total) => {
-      if (attempt > 1) status.textContent = T[getLang()].drandTry(attempt, total);
-    });
-    status.style.display = "none";
-  } catch (e) {
-    btn.disabled = false;
-    btn.textContent = t("drawRetry");
-    status.className = "txstatus bad";
-    status.textContent = t(e instanceof Error && e.message === "bad-signature" ? "badSig" : "drandDown");
-    return;
-  }
+    // Esto pasa con la sala mirando la pantalla grande. Si un relay no responde
+    // hay hasta doce intentos en veintitres segundos, y quedarse mudo todo ese
+    // rato es peor que el fallo. Un `alert()` del sistema, peor todavia: rompe el
+    // modo estadio y no hay forma de estilarlo.
+    const status = $("draw-status");
+    status.style.display = "block";
+    status.className = "txstatus";
+    status.textContent = t("fetching");
 
-  const { names, listHash, raffleId } = app.frozen;
-  const nWinners = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10), names.length);
-  let winners: number[] = [];
-  let drawTx: string | undefined;
-
-  if (raffleId !== undefined) {
-    // Anclado: el contrato verifica la firma y decide. Lo que muestra la
-    // pantalla es lo que quedó registrado, no un cálculo nuestro.
-    //
-    // Se reintenta, y no es capricho. El contrato compara la hora de la ronda
-    // contra la **hora de cierre del ledger**, que va unos segundos atrás del
-    // reloj del navegador. Así que hay una ventana de pocos segundos en la que
-    // acá ya es hora y para la cadena todavía no, y la transacción se cae.
-    // Pedirle a alguien que vuelva a apretar el botón, con la sala mirando, es
-    // inaceptable: se reintenta solo.
-    const TRIES = 4;
-    let lastError: unknown = null;
-    let done = false;
-    for (let attempt = 1; attempt <= TRIES && !done; attempt++) {
-      try {
-        const res = await drawOnChain(raffleId, decompressG1(beacon.signature), (step, detail) => {
-          btn.textContent = stepLabel(step);
-          showTxStatus("draw-status", step, detail);
-        });
-        winners = res.winners;
-        drawTx = res.txHash;
-        done = true;
-      } catch (e) {
-        lastError = e;
-        // Si alguien más ya lo finalizó, el resultado igual es público.
-        const already = await readDraw(raffleId);
-        if (already) {
-          winners = already.winners;
-          showTxStatus("draw-status", "confirmed");
-          done = true;
-          break;
-        }
-        if (attempt < TRIES) {
-          const status = $("draw-status");
-          status.style.display = "block";
-          status.className = "txstatus";
-          status.textContent = T[getLang()].drawTry(attempt + 1, TRIES);
-          await new Promise((r) => setTimeout(r, 5000));
-        }
-      }
-    }
-    if (!done) {
+    let beacon: Beacon;
+    try {
+      beacon = await resolveBeacon(app.frozen.round, (attempt, total) => {
+        if (attempt > 1) status.textContent = T[getLang()].drandTry(attempt, total);
+      });
+      status.style.display = "none";
+    } catch (e) {
+      sinShow();
       btn.disabled = false;
       btn.textContent = t("drawRetry");
-      const status = $("draw-status");
-      status.style.display = "block";
       status.className = "txstatus bad";
-      status.textContent = await anchorErrorText(lastError);
+      status.textContent = t(e instanceof Error && e.message === "bad-signature" ? "badSig" : "drandDown");
       return;
     }
-  } else {
-    winners = select(hexToBytes(beacon.randomness), hexToBytes(listHash), names.length, nWinners);
-  }
 
-  // Apagado y diciendo por qué: un "Lanzar el sorteo" gris parecía roto. Con
-  // data-i, el cambio de idioma lo traduce en vez de volver a "Lanzar".
-  btn.dataset.i = "drawnDone";
-  btn.textContent = t("drawnDone");
-  app.drawn = { beacon, winners, ...(drawTx ? { drawTx } : {}) };
-  $("sec-draw").style.display = "block";
-  $("seed-label").textContent = `${t("seed")} ${beacon.round}`;
-  const finish = (): void => reveal(names, winners, beacon, listHash);
-  playGame(names, winners, beacon, finish);
+    const { names, listHash, raffleId } = app.frozen;
+    const nWinners = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10), names.length);
+    let winners: number[] = [];
+    let drawTx: string | undefined;
+
+    if (raffleId !== undefined) {
+      // Anclado: el contrato verifica la firma y decide. Lo que muestra la
+      // pantalla es lo que quedó registrado, no un cálculo nuestro.
+      //
+      // Se reintenta, y no es capricho. El contrato compara la hora de la ronda
+      // contra la **hora de cierre del ledger**, que va unos segundos atrás del
+      // reloj del navegador. Así que hay una ventana de pocos segundos en la que
+      // acá ya es hora y para la cadena todavía no, y la transacción se cae.
+      // Pedirle a alguien que vuelva a apretar el botón, con la sala mirando, es
+      // inaceptable: se reintenta solo.
+      const TRIES = 4;
+      let lastError: unknown = null;
+      let done = false;
+      for (let attempt = 1; attempt <= TRIES && !done; attempt++) {
+        try {
+          const res = await drawOnChain(raffleId, decompressG1(beacon.signature), (step, detail) => {
+            btn.textContent = stepLabel(step);
+            showTxStatus("draw-status", step, detail);
+          });
+          winners = res.winners;
+          drawTx = res.txHash;
+          done = true;
+        } catch (e) {
+          lastError = e;
+          // Si alguien más ya lo finalizó, el resultado igual es público. Si la
+          // red tampoco contesta acá, se sigue con los reintentos: antes esto
+          // cortaba draw() y el botón quedaba trabado para siempre (QA, 16 de
+          // octubre de 2026).
+          const already = await readDraw(raffleId).catch(() => null);
+          if (already) {
+            winners = already.winners;
+            showTxStatus("draw-status", "confirmed");
+            done = true;
+            break;
+          }
+          if (attempt < TRIES) {
+            const status = $("draw-status");
+            status.style.display = "block";
+            status.className = "txstatus";
+            status.textContent = T[getLang()].drawTry(attempt + 1, TRIES);
+            await new Promise((r) => setTimeout(r, 5000));
+          }
+        }
+      }
+      if (!done) {
+        sinShow();
+        // El mensaje de la pantalla es para la sala; el error de verdad queda en
+        // la consola, para saber qué pasó si se repite.
+        console.warn("[tinkazo] el sorteo no se pudo grabar", lastError);
+        btn.disabled = false;
+        btn.textContent = t("drawRetry");
+        const status = $("draw-status");
+        status.style.display = "block";
+        status.className = "txstatus bad";
+        status.textContent = await anchorErrorText(lastError);
+        return;
+      }
+    } else {
+      winners = select(hexToBytes(beacon.randomness), hexToBytes(listHash), names.length, nWinners);
+    }
+
+    // Apagado y diciendo por qué: un "Lanzar el sorteo" gris parecía roto. Con
+    // data-i, el cambio de idioma lo traduce en vez de volver a "Lanzar".
+    btn.dataset.i = "drawnDone";
+    btn.textContent = t("drawnDone");
+    app.drawn = { beacon, winners, ...(drawTx ? { drawTx } : {}) };
+    $("sec-draw").style.display = "block";
+    $("seed-label").textContent = `${t("seed")} ${beacon.round}`;
+    const finish = (): void => reveal(names, winners, beacon, listHash);
+    playGame(names, winners, beacon, finish);
+    // La tarjeta ya está arriba: la cortina se va sin dejar ver la página.
+    cortina?.cerrar();
+  } catch (e) {
+    // Lo inesperado, en cualquier paso: sin esto la cortina quedaba tapando la
+    // pantalla y el botón apagado, con la sala mirando.
+    sinShow();
+    console.warn("[tinkazo] el sorteo se cortó", e);
+    btn.disabled = false;
+    btn.textContent = t("drawRetry");
+    const status = $("draw-status");
+    status.style.display = "block";
+    status.className = "txstatus bad";
+    status.textContent = t("errAnchor.unknown");
+  }
+}
+
+/** Pide la pantalla completa mientras el clic todavía cuenta como gesto. */
+function pedirPantallaCompleta(): void {
+  const raiz = document.documentElement;
+  if (skipMotion() || document.fullscreenElement || !raiz.requestFullscreen) return;
+  void raiz.requestFullscreen({ navigationUI: "hide" }).catch(() => undefined);
+}
+
+/**
+ * Lo que ve la sala mientras llega el número y, con cuenta, se graba el
+ * sorteo: el premio y una línea, sin comisiones ni pasos técnicos. Antes la
+ * sala leía "Comisión de la red: hasta 0,55 XLM" durante nueve segundos
+ * (revisión del experto en sorteos, 16 de octubre de 2026). Aparece si la
+ * espera dura más que un instante, para no parpadear cuando el juego sale
+ * enseguida.
+ */
+function abrirCortina(premio: string, graba: boolean): { cerrar: () => void } {
+  let el: HTMLElement | null = null;
+  const reloj = setTimeout(() => {
+    el = document.createElement("div");
+    el.className = "cortina";
+    el.setAttribute("role", "status");
+    el.innerHTML =
+      (premio ? `<p class="kicker">${esc(t("cortinaSe"))}</p><h2>${esc(premio)}</h2>` : `<h2>${esc(t("cortinaSin"))}</h2>`) +
+      `<p class="cortina-t">${esc(t(graba ? "cortinaGraba" : "cortinaNumero"))}</p>` +
+      `<span class="cortina-puntos" aria-hidden="true"><i></i><i></i><i></i></span>`;
+    document.body.appendChild(el);
+  }, 350);
+  return {
+    cerrar: () => {
+      clearTimeout(reloj);
+      el?.remove();
+    },
+  };
 }
 
 /**
@@ -141,8 +208,12 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   // segundos salen del mismo total que eligió quien sortea.
   // "¡Cuenten conmigo!" al final de la tarjeta (state.ts): un tono por número, más alto en el 1.
   const cuenta = conCuenta() ? CUENTA_SECONDS : 0;
-  const card = skipMotion() ? null : showGameCard(game, names.length, winners.length, cuenta, (n) => beep(n > 1 ? 660 : 990, 0.16, "triangle", 0.07));
+  const card = skipMotion()
+    ? null
+    : showGameCard(game, names.length, winners.length, cuenta, (n) => beep(n > 1 ? 660 : 990, 0.16, "triangle", 0.07), app.frozen?.prize ?? "");
   setCardSeconds(card ? CARD_SECONDS : 0);
+  // Si la sala ya contó con la tarjeta, el juego no vuelve a contar.
+  setYaContaron(card !== null && cuenta > 0);
   // La pantalla completa se pide con la tarjeta, mientras el clic de "Sortear"
   // todavía cuenta como gesto: el navegador la niega pasados unos cinco
   // segundos, y el estadio aparece recién cuando la tarjeta termina.
@@ -199,7 +270,7 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
 
 /** Lo que de verdad juega el motor de respaldo: el resto lo cuenta como la carrera. */
 function classicPlayable(game: Game, n: number): Game {
-  if (game === "wheel") return n <= WHEEL_MAX ? "wheel" : "race";
+  if (game === "wheel") return n <= WHEEL_MAX ? "wheel" : "tombola";
   if (game === "stellar" || game === "ledger" || game === "pasanaku" || game === "teleferico" || game === "tombola" || game === "rockets") return game;
   return "race";
 }
@@ -460,7 +531,8 @@ export function alTocarGanadores(e: Event): void {
   }
   const preguntar = b.dataset.ausente !== undefined;
   caja.innerHTML = preguntar ? preguntaAusente() : botonAusente(k);
-  caja.querySelector<HTMLButtonElement>(preguntar ? "[data-ausente-si]" : "[data-ausente]")?.focus({ preventScroll: true });
+  // El foco va a "Cancelar": con él en "Sí", dos Enter seguidos borraban al ganador.
+  caja.querySelector<HTMLButtonElement>(preguntar ? "[data-ausente-no]" : "[data-ausente]")?.focus({ preventScroll: true });
 }
 
 /** La imagen para redes (imagen.ts): en el celular, el menú de compartir; en la computadora, la descarga. */
@@ -515,14 +587,12 @@ async function paintQr(link: string): Promise<void> {
   const box = $("qr-box");
   const img = $<HTMLImageElement>("qr-img");
   try {
-    const url = await qrDataUrl(link);
-    if (!url) {
+    if (!(await pintarQr(img, link))) {
       // Una lista enorme no entra en un QR. El enlace se sigue pudiendo
       // copiar y compartir, así que se esconde el recuadro y ya.
       box.style.display = "none";
       return;
     }
-    img.src = url;
     box.style.display = "block";
   } catch {
     box.style.display = "none";
@@ -563,8 +633,10 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
   }
   proofLink = link;
   // Y ahora se completa la fila del historial con el ganador y el comprobante.
+  // Una demo no es un sorteo: no se anota en Mis sorteos aunque haya cuenta,
+  // igual que en el sello (freeze.ts). Anotarla además borraba la bienvenida.
   const f2 = app.frozen;
-  const who = currentSession()?.address;
+  const who = params.has("demo") ? undefined : currentSession()?.address;
   if (f2 && who) {
     void import("./history").then((h) => {
       h.remember({
@@ -611,8 +683,10 @@ export async function shareProof(btn: HTMLButtonElement): Promise<void> {
  */
 function setNotifyLinks(names: string[], winners: number[], url: string): void {
   const prize = app.frozen?.prize ?? "";
-  const who = winners.map((i) => names[i] ?? "").join(", ");
-  const body = T[getLang()].tellBody(who, prize, names.length, url);
+  // "Ana, Beto y Carla", no "Ana, Beto, Carla"; y en plural si son varios.
+  const lista = winners.map((i) => names[i] ?? "");
+  const who = new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(lista);
+  const body = T[getLang()].tellBody(who, prize, names.length, url, lista.length > 1);
   $<HTMLAnchorElement>("btn-whatsapp").href = `https://wa.me/?text=${encodeURIComponent(body)}`;
   $<HTMLAnchorElement>("btn-email").href =
     `mailto:?subject=${encodeURIComponent(t("tellSubject"))}&body=${encodeURIComponent(body)}`;
@@ -629,19 +703,23 @@ export function reverify(): void {
   const ok = sigOk && seedOk && JSON.stringify(again) === JSON.stringify(winners);
   const out = $("reverify-out");
   out.style.display = "block";
-  out.textContent = ok ? t("reverifyOk") : "✗";
+  out.textContent = ok ? t(winners.length > 1 ? "reverifyOkMany" : "reverifyOk") : "✗";
 }
 
 export async function copySummary(btn: HTMLButtonElement): Promise<void> {
   if (!app.frozen || !app.drawn) return;
-  const { names, listHash } = app.frozen;
+  // Lo que se pega en el grupo del evento: quién, entre cuántos, el premio y
+  // el enlace para comprobarlo. Era un bloque técnico, sin el premio ni el
+  // comprobante (revisión del 16 de octubre de 2026). Lo técnico sigue en
+  // "Detalles técnicos" y en el comprobante.
+  const { names, prize } = app.frozen;
   const { beacon, winners } = app.drawn;
   const text = T[getLang()].summary(
     winners.map((i) => names[i] ?? "").join(", "),
     names.length,
-    listHash,
-    beacon.round,
-    roundUrl(beacon.round),
+    prize,
+    proofLink || roundUrl(beacon.round),
+    winners.length > 1,
   );
   try {
     await navigator.clipboard.writeText(text);

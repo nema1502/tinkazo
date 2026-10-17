@@ -289,9 +289,23 @@
   .txstatus a { color: var(--ink); }
   .verdict { padding: 44px 0 26px; }
   .verdict h1 { font-size: clamp(30px, 5vw, 48px); line-height: 1.05; font-weight: 900; margin-top: 8px; }
-  .verdict.ok h1 { color: var(--teal); }
-  .verdict.bad h1 { color: var(--orange); }
-  .verdict.partial h1 { color: var(--yellow); }
+  /* El veredicto es lo primero que lee la sala en el celular, y de día el
+     celular suele estar en claro. En claro el acento no se puede escribir
+     sobre el papel (amarillo 1,47:1, turquesa 2,79:1): el título va en tinta,
+     o en el turquesa oscuro, y el color del veredicto pasa a una franja
+     debajo. En oscuro los acentos sí se leen y van en el texto. */
+  .verdict.ok h1 { color: var(--teal-ink); }
+  .verdict.bad h1, .verdict.partial h1 {
+    text-decoration-line: var(--verdict-franja);
+    text-decoration-thickness: 0.2em; text-underline-offset: 0.06em; text-decoration-skip-ink: none;
+  }
+  .verdict.bad h1 { color: var(--verdict-bad); text-decoration-color: var(--orange); }
+  .verdict.partial h1 { color: var(--verdict-partial); text-decoration-color: var(--yellow); }
+  :root { --verdict-bad: var(--ink); --verdict-partial: var(--ink); --verdict-franja: underline; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --verdict-bad: var(--orange); --verdict-partial: var(--yellow); --verdict-franja: none; }
+  }
+  :root[data-theme="dark"] { --verdict-bad: var(--orange); --verdict-partial: var(--yellow); --verdict-franja: none; }
   .verdict .lead { margin-top: 12px; }
   .checks { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 10px; }
   .check {
@@ -417,7 +431,8 @@
   .winner-prize { font-size: 14px; font-weight: 700; margin-top: 2px; }
   /* "No está", dentro de la tarjeta: siempre tinta sobre amarillo, en los dos
      temas. Chico, para que no le compita al nombre en el proyector. */
-  .ausente { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 8px; }
+  /* `width: 0` con `min-width: 100%`: toma el ancho de la tarjeta sin agrandarla, así la pregunta no empuja a la de al lado. */
+  .ausente { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 8px; width: 0; min-width: 100%; }
   .ausente-q { flex-basis: 100%; font-size: 14px; font-weight: 800; }
   .ausente-btn {
     min-height: 44px; padding: 4px 12px; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer;
@@ -468,6 +483,8 @@
   .gc-nombre span { background: #ffc629; color: #10101c; padding: 0 0.16em; box-decoration-break: clone; -webkit-box-decoration-break: clone; box-shadow: 6px 6px 0 #000; }
   .gc-regla { font-size: clamp(22px, min(4.4vw, 6vh), 58px); line-height: 1.18; font-weight: 800; max-width: 22em; text-wrap: balance; }
   .gc-extra { font-family: ui-monospace, Consolas, monospace; font-weight: 800; letter-spacing: 0.06em; font-size: clamp(12px, 2vh, 18px); color: #ffc629; }
+  .gc-premio { font-size: clamp(18px, min(3.2vw, 4.2vh), 42px); font-weight: 900; line-height: 1.15; max-width: 24em; text-wrap: balance; overflow-wrap: anywhere; }
+  .gc-premio span { font-family: ui-monospace, Consolas, monospace; font-size: 0.55em; letter-spacing: 0.14em; text-transform: uppercase; color: #ffc629; margin-right: 0.4em; }
   .gc-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
   .gc-chips span {
     font-family: ui-monospace, Consolas, monospace; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
@@ -643,13 +660,31 @@
   }
   /* El QR se dibuja más grande de lo que se muestra y se achica acá: así
      los módulos quedan nítidos en vez de interpolados. */
-  #qr-img { width: 140px; height: 140px; image-rendering: pixelated; }
-  /* El nombre del ganador, con borde de tinta. Sin `paint-order` el trazo se
-     pinta encima del relleno y se come la letra. */
-  .winner-name {
-    letter-spacing: -0.015em; text-wrap: balance;
-    -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill;
+  #qr-img { box-sizing: content-box; max-width: 100%; image-rendering: pixelated; }
+  /* El nombre del ganador, sin borde: el trazo de tinta cerraba los huecos de
+     la a y la g en el celular, y en oscuro dejaba un halo crema. Tinta sobre
+     amarillo ya da 11:1 (revisión de arte del 16 de octubre de 2026). */
+  .winner-name { letter-spacing: -0.015em; text-wrap: balance; }
+  /* En verificar, la tarjeta girada tapaba el renglón de la prueba. */
+  #v-proof { margin-top: 20px; }
+  /* Mientras llega el número y se graba el sorteo (draw.ts): lo que ve la
+     sala, sin comisiones ni pasos técnicos. */
+  .cortina {
+    position: fixed; inset: 0; z-index: 70; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; padding: 24px; text-align: center; background: var(--paper); color: var(--ink);
   }
+  .cortina h2 { font-size: clamp(36px, 7vw, 96px); font-weight: 900; letter-spacing: -0.02em; line-height: 1.02; text-wrap: balance; max-width: 18ch; overflow-wrap: anywhere; }
+  .cortina-t { font-size: clamp(18px, 2.2vw, 30px); font-weight: 700; color: var(--ink2); max-width: 32ch; text-wrap: balance; }
+  .cortina-puntos { display: flex; gap: 12px; margin-top: 8px; }
+  .cortina-puntos i { width: 18px; height: 18px; background: var(--magenta); border: 2px solid var(--ink); animation: cortina-salto 0.9s ease-in-out infinite; }
+  .cortina-puntos i:nth-child(2) { background: var(--yellow); animation-delay: 0.15s; }
+  .cortina-puntos i:nth-child(3) { background: var(--teal); animation-delay: 0.3s; }
+  @keyframes cortina-salto { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+  html:has(.cortina) { overflow: hidden; }
+  /* El proyector no muestra la barra de desplazamiento de la página de atrás. */
+  html:has(.sala) { overflow: hidden; }
+  /* El correo de contacto en los términos: en el color del texto, no en el azul del navegador. */
+  .tm-mas a { color: inherit; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
   h1, .commentary { text-wrap: balance; }
 
   /* La tarjeta de "¿por qué se llama así?", pegada debajo del ganador. Se lee
@@ -714,8 +749,18 @@
   .ob-pasos b { display: block; font-size: 15px; font-weight: 800; margin-bottom: 4px; }
   .ob-pasos span { display: block; font-size: 13px; color: var(--ink2); line-height: 1.5; }
   @media (max-width: 900px) { .ob-pasos { grid-template-columns: 1fr; } }
-  /* En el celular, los pasos sin la explicación: la bienvenida ocupaba la pantalla entera. */
-  @media (max-width: 700px) { .ob-pasos span { display: none; } .ob-pasos li { padding: 10px 12px 10px 52px; } }
+  /* En el celular: sin la explicación quedaban tres títulos sueltos, y con
+     la de escritorio ocupaba casi toda la pantalla. Más compacta, con el
+     número a la altura del título (revisiones del 16 de octubre de 2026). */
+  @media (max-width: 700px) {
+    .onboard { padding: 14px 14px; }
+    .onboard h3 { font-size: 17px; margin-bottom: 10px; }
+    .ob-pasos { gap: 8px; }
+    .ob-pasos li { padding: 8px 10px 8px 44px; }
+    .ob-pasos li::before { left: 8px; top: 7px; width: 26px; height: 26px; font-size: 13px; }
+    .ob-pasos b { font-size: 14px; margin-bottom: 2px; }
+    .ob-pasos span { font-size: 12.5px; line-height: 1.35; }
+  }
   .entity { overflow-wrap: anywhere; }
   #wheel { max-width: 100%; }
 
@@ -1066,34 +1111,43 @@
   .sala-huella { font-size: 15px; color: var(--ink2); margin-top: 4px; }
   .sala-huella b { color: var(--ink); background: var(--yellow); color: #191919; padding: 0 6px; }
   .sala-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; }
-  .sala-nombres { margin: 0; padding: 0 0 0 2.2em; column-width: 230px; column-gap: 28px; overflow-y: auto; font-size: clamp(16px, 1.6vw, 22px); font-weight: 700; line-height: 1.5; }
-  .sala-nombres.densa { font-size: clamp(13px, 1.2vw, 17px); column-width: 190px; }
+  /* La letra la ajusta sala.ts para que entren todos; las columnas crecen con ella. */
+  .sala-nombres { margin: 0; padding: 0 0 0 2.2em; column-width: 10.5em; column-gap: 2.6em; overflow-y: auto; font-size: 20px; font-weight: 700; line-height: 1.45; }
   .sala-nombres li { break-inside: avoid; }
   .sala-nombres li.rep, .lista-nombres li.rep { color: var(--magenta-ink); }
   .sala-nombres li em, .lista-nombres li em { font-style: normal; font-size: 0.72em; text-transform: uppercase; letter-spacing: 0.08em; border: 2px solid currentColor; padding: 0 4px; margin-left: 4px; }
   .sala-qr { display: flex; flex-direction: column; align-items: center; gap: 8px; align-self: start; background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); padding: 14px; }
-  .sala-qr img { width: clamp(150px, 16vw, 220px); height: auto; image-rendering: pixelated; background: #fff; }
+  .sala-qr img { max-width: 100%; height: auto; image-rendering: pixelated; background: #fff; }
   .sala-qr p { font-weight: 800; font-size: 15px; }
   .sala-pie { font-weight: 700; font-size: clamp(14px, 1.3vw, 18px); border-top: 2px dashed var(--ink); padding-top: 10px; }
   /* El resultado en grande (pantalla.ts): el nombre es lo más grande, y el QR lo segundo, para leerlo desde el fondo. */
   .grande-row { margin-top: 14px; }
   .pantalla-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: clamp(20px, 4vw, 56px); align-items: center; }
-  .pantalla-ganadores { display: flex; flex-direction: column; gap: clamp(14px, 2.4vh, 28px); align-items: flex-start; min-width: 0; }
+  /* La letra la ajusta pantalla.ts (--letra) para que entren todos sin partir
+     palabras; la cara, el relleno y el premio van en em y crecen con ella. */
+  .pantalla-ganadores { font-size: var(--letra, 64px); display: flex; flex-direction: column; gap: max(10px, 0.24em); align-items: flex-start; min-width: 0; }
   .pantalla-ganador {
-    display: flex; align-items: center; gap: clamp(14px, 2vw, 30px); max-width: 100%;
+    display: flex; align-items: center; gap: max(10px, 0.24em); max-width: 100%;
     background: var(--yellow); color: #191919; border: var(--bw) solid var(--ink); box-shadow: var(--sh);
-    padding: clamp(12px, 2vh, 22px) clamp(18px, 2.4vw, 38px); transform: rotate(-1.5deg);
+    padding: max(8px, 0.16em) max(14px, 0.3em); transform: rotate(-1.5deg);
   }
   .pantalla-ganador:nth-child(even) { transform: rotate(1.2deg); }
   .pantalla-ganador > div { min-width: 0; }
-  .pantalla-ganador img { width: clamp(64px, 9vw, 150px); height: auto; border: 3px solid #191919; background: #fff; flex-shrink: 0; }
-  .pantalla-nombre { font-size: clamp(40px, 8vw, 132px); font-weight: 900; line-height: 1; letter-spacing: -0.02em; overflow-wrap: anywhere; -webkit-text-stroke: 2px #191919; paint-order: stroke fill; }
-  .pantalla.varios .pantalla-nombre { font-size: clamp(26px, 4vw, 64px); }
-  .pantalla-premio { font-size: clamp(18px, 2.2vw, 34px); font-weight: 800; margin-top: 8px; }
+  .pantalla-ganador img { width: clamp(28px, 1.1em, 150px); height: auto; border: 3px solid #191919; background: #fff; flex-shrink: 0; }
+  .pantalla-nombre { font-size: 1em; font-weight: 900; line-height: 1.08; letter-spacing: -0.02em; overflow-wrap: normal; }
+  .pantalla-premio { font-size: max(14px, 0.3em); font-weight: 800; margin-top: 0.12em; }
+  .pantalla.varios .pantalla-premio { font-family: ui-monospace, Consolas, monospace; letter-spacing: 0.06em; }
+  .pantalla.muchos .pantalla-ganadores { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: max(6px, 0.2em) max(10px, 0.4em); align-items: stretch; }
   .pantalla-qr { display: flex; flex-direction: column; align-items: center; gap: 8px; background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); padding: 16px; }
-  .pantalla-qr img { width: clamp(180px, 26vw, 400px); height: auto; image-rendering: pixelated; background: #fff; }
+  /* El tamaño lo fija pantalla.ts al dibujarlo, con módulos enteros: estirado por CSS se rompía. */
+  .pantalla-qr img { max-width: 100%; height: auto; image-rendering: pixelated; background: #fff; }
   .pantalla-qr p { font-weight: 900; font-size: clamp(15px, 1.7vw, 26px); text-align: center; }
-  @media (max-width: 700px) { .pantalla-body { grid-template-columns: 1fr; align-items: start; } .pantalla-qr img { width: 200px; } }
+  /* En el celular, la pantalla se desplaza en vez de achicar todo hasta no leerse. */
+  @media (max-width: 700px) {
+    .sala.pantalla { overflow-y: auto; }
+    .pantalla-body { flex: none; grid-template-columns: 1fr; align-items: start; }
+    .pantalla.muchos .pantalla-ganadores { grid-template-columns: 1fr; }
+  }
   @media (max-width: 700px) { .sala-body { grid-template-columns: 1fr; } .sala-qr { display: none; } }
 
   /* La lista en el celular, y buscarse en el comprobante. */

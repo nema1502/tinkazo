@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite, Text, Texture } from "pixi.js";
 import { gsap } from "gsap";
 import { T, getLang, t } from "../../i18n";
-import { paceFactor, setGameLength, type Beacon } from "../../state";
+import { paceFactor, setGameLength, yaContaron, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, isMuted, audio, note } from "../../sound";
 import { enOrden, tension } from "../drama";
 import { WINNER_HOLD, shorten, winnersLabel } from "../overlay";
@@ -62,7 +62,10 @@ export async function llamasPixi(
   const dark = space || S.dark;
   const voice = space ? "R" : lake ? "B" : "L";
 
-  setGameLength(DUR, WINNER_HOLD + 3);
+  // La cuenta propia de la largada. Si la sala ya contó "3, 2, 1" con la
+  // tarjeta, larga directo: dos cuentas seguidas eran una de más.
+  const CUENTA = yaContaron() ? 0 : 3;
+  setGameLength(DUR, WINNER_HOLD + CUENTA);
 
   // El mismo azar que `race.ts`, consumido en el mismo orden: la misma ronda
   // cuenta la misma historia en los dos motores. `race.ts` siembra su paisaje
@@ -651,7 +654,7 @@ export async function llamasPixi(
 
   /* ============================================================== estado */
   let phase: "count" | "race" | "done" = "count";
-  let tPhase = 0, tRace = 0, tFreeze = 0, lastLeader = -1, saidLast = false, finished = false, mitadMarcada = false;
+  let tPhase = 3 - CUENTA, tRace = 0, tFreeze = 0, lastLeader = -1, saidLast = false, finished = false, mitadMarcada = false;
   /** El reloj de la sala, en segundos reales: el del relator. `tRace` va en segundos de juego y se frena en la foto. */
   let tReal = 0;
   let hushed = false;
@@ -913,6 +916,10 @@ export async function llamasPixi(
     const leadX = G.X0 + (xs[leader] as number) * G.TL;
     if (shot && prog >= shot.until) shot = null;
     if (prog > plan.foto) {
+      // En la foto, sin desenfoque: el acercamiento rápido a la meta dejaba
+      // borrosos justo los dos nombres del duelo (revisión de juegos del 16 de
+      // octubre de 2026), como pasaba en el último tiro del sapo.
+      cam.noBlur();
       cam.lookAt(G.X0 + G.TL - 30 * G.u, (G.laneY(story.winner) + G.laneY(story.rival)) / 2 - 30 * G.u, G.portrait ? 1.8 : 2.1, 4);
     } else if (shot) {
       cam.lookAt(xOf(shot.k, prog) + 20 * G.u, G.laneY(shot.k) - 40 * G.u, shot.zoom, 5);

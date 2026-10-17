@@ -51,6 +51,10 @@ export function initOnboarding(): void {
     cerrar();
     $<HTMLTextAreaElement>("ta").focus({ preventScroll: true });
   });
-  // Quien sella sin cerrarla ya entendió: no vuelve a aparecer.
-  $("btn-freeze").addEventListener("click", cerrar);
+  // Quien sella sin cerrarla ya entendió: no vuelve a aparecer. La demo
+  // aprieta "Sellar" sola, y eso no cuenta: "Ver una demo primero" borraba la
+  // bienvenida para siempre (revisión del 16 de octubre de 2026).
+  $("btn-freeze").addEventListener("click", () => {
+    if (!params.has("demo")) cerrar();
+  });
 }
