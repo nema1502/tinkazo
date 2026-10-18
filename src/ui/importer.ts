@@ -182,7 +182,8 @@ export function openImporter(s: ImportState, onApply: (r: ImportResult) => void)
   const presetLabel = (p: Preset): [string, string] =>
     p.id === "came" ? [t("impCame"), t("impCameSub")]
       : p.id === "approved" ? [t("impApproved"), t("impApprovedSub")]
-        : [t("impAll"), t("impAllSub")];
+        // "Aprobado o no" solo tiene sentido si el archivo trae el estado de la inscripción.
+        : [t("impAll"), t(scol >= 0 ? "impAllSub" : "impAllSubFile")];
   opts.innerHTML = ps
     .map((p) => {
       const [a, b] = presetLabel(p);
