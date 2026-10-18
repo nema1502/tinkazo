@@ -89,6 +89,8 @@ export interface Dict {
   /** La presentación de los carriles antes de la largada. */
   rqIntro: string;
   rqLane: (k: number) => string;
+  /** La espera en grande: cuántos hay en la lista sellada. */
+  espPie: (n: number) => string;
   cQuiStart: (n: number) => string;
   cQuiNext: (k: number, of: number) => string;
   cQuiTwo: (a: string, b: string) => string;
@@ -658,6 +660,15 @@ export const T: Record<Lang, Dict> = {
     waitTitle: "La ronda que va a decidir",
     waitLine: "Todavía no existe. Nace sola, en la red del faro, y ni vos ni nadie puede saber qué número va a traer. Por eso, con esta lista sellada, el resultado ya no se puede elegir.",
     waitNow: "Ya nació. Dale.",
+    espSticker: "El número que decide todavía no existe",
+    espFaltan: "para que nazca el número público que decide el sorteo",
+    espContemos: "¡Contemos juntos!",
+    espNacio: "¡Nació!",
+    espListo: "Ya existe el número que decide. Nadie lo eligió.",
+    espSortear: "¡Sortear ahora!",
+    espVolver: "Volver a la página",
+    espVer: "Mostrar la espera en grande",
+    espPie: (n) => `${n} en la lista, sellada: ya nadie la puede cambiar.`,
     winnerLabel: "Lo que salió", verifyTitle: "Por si alguien duda",
     verifyHow: "Cualquiera puede rehacer este sorteo desde su celular y le tiene que dar el mismo nombre. No hace falta que me creas.",
     verifyPasos: "Paso a paso: 1) abrí la ronda de quicknet y verificá su firma con la clave pública del faro · 2) randomness = sha256(firma) · 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, salteando repetidos. El protocolo entero está en github.com/nema1502/tinkazo, en docs/protocolo.md.",
@@ -709,7 +720,7 @@ export const T: Record<Lang, Dict> = {
     drawTry: (i, n) => `La cadena todavía no ve esa ronda. Reintento ${i} de ${n}…`,
     drawRetry: "Reintentar el sorteo",
     drawnDone: "Ya se sorteó",
-    gcCuenta: "¡Cuenten conmigo!",
+    gcCuenta: "¡Contemos juntos!",
     pantallaBtn: "Mostrar en grande",
     pantallaT: "Lo que salió",
     pantallaQr: "Escaneá y comprobalo vos",
@@ -1600,6 +1611,15 @@ export const T: Record<Lang, Dict> = {
     waitTitle: "The round that will decide",
     waitLine: "It does not exist yet. It is born on its own, out on the beacon network, and nobody, not even you, can know what number it will bring. That is why, with this list sealed, the result can no longer be picked.",
     waitNow: "It is out. Go.",
+    espSticker: "The number that decides does not exist yet",
+    espFaltan: "until the public number that decides the draw is born",
+    espContemos: "Count with us!",
+    espNacio: "It's here!",
+    espListo: "The number that decides now exists. Nobody picked it.",
+    espSortear: "Draw now!",
+    espVolver: "Back to the page",
+    espVer: "Show the wait on the big screen",
+    espPie: (n) => `${n} on the list, sealed: nobody can change it now.`,
     winnerLabel: "What came out", verifyTitle: "In case anyone doubts it",
     verifyHow: "Anyone can run this draw again from their phone and has to land on the same name. You don't have to take my word for it.",
     verifyPasos: "Step by step: 1) open the quicknet round and check its signature against the beacon's public key · 2) randomness = sha256(signature) · 3) idx = first 8 bytes of sha256(randomness ‖ list_hash ‖ counter) mod entries, skipping repeats. Whole protocol at github.com/nema1502/tinkazo, in docs/protocolo.md.",
@@ -1645,7 +1665,7 @@ export const T: Record<Lang, Dict> = {
     drawTry: (i, n) => `The chain does not see that round yet. Retry ${i} of ${n}…`,
     drawRetry: "Try the draw again",
     drawnDone: "Already drawn",
-    gcCuenta: "Count with me!",
+    gcCuenta: "Count with us!",
     pantallaBtn: "Show it big",
     pantallaT: "The result",
     pantallaQr: "Scan it and check it yourself",

@@ -58,6 +58,17 @@ export function secondsToRound(): number {
 
 let countdownTimer: number | undefined;
 
+/** Aprieta "Sortear" si ya se puede: lo usa la espera en grande cuando nace el número. */
+function sortearSiSePuede(): void {
+  const btn = $<HTMLButtonElement>("btn-draw");
+  if (!btn.disabled) btn.click();
+}
+
+/** La espera en grande (`espera.ts`), que se baja recién cuando hace falta. */
+function abrirEspera(): void {
+  void import("./espera").then((m) => m.mostrarEspera(secondsToRound, sortearSiSePuede));
+}
+
 /**
  * El botón de sortear muestra la cuenta regresiva y se habilita cuando la
  * ronda existe. Y arriba, el panel que pone la espera en escena.
@@ -74,6 +85,11 @@ function startCountdown(): void {
   const num = document.getElementById("wait-round");
   const left = document.getElementById("wait-left");
   const line = box?.querySelector(".wait-line");
+  const grande = document.getElementById("btn-espera");
+  if (grande) {
+    grande.onclick = abrirEspera;
+    grande.style.display = "";
+  }
   if (num && app.frozen) num.textContent = `#${app.frozen.round}`;
   // La conexión está ociosa hasta que nazca la ronda: se baja el motor.
   if (app.frozen) preloadGame(app.game, app.frozen.names.length);
@@ -93,6 +109,7 @@ function startCountdown(): void {
       // otra mitad de la idea.
       if (left) left.textContent = t("waitNow");
       if (line) line.textContent = "";
+      if (grande) grande.style.display = "none";
       if (countdownTimer !== undefined) clearInterval(countdownTimer);
       countdownTimer = undefined;
       // Ya nació: el botón, a la vista y con el foco. Quedaba una pantalla más
@@ -356,6 +373,9 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   }
   startCountdown();
   $("sec-frozen").scrollIntoView({ behavior: "smooth", block: "start" });
+  // La espera se pone en escena sola, para la sala. No en la demo ni en las
+  // capturas (que sellan y sortean de corrido), ni si ya casi no queda espera.
+  if (!params.has("demo") && params.get("instant") !== "1" && secondsToRound() > 6) abrirEspera();
 }
 
 /**

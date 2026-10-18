@@ -681,6 +681,46 @@
   .cortina-puntos i:nth-child(3) { background: var(--teal); animation-delay: 0.3s; }
   @keyframes cortina-salto { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
   html:has(.cortina) { overflow: hidden; }
+
+  /* La espera en grande: entre el sello y el número, la sala mira una cuenta
+     gigante, el premio y sus nombres pasando (espera.ts). */
+  .espera {
+    position: fixed; inset: 0; z-index: 65; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: clamp(6px, 1.4vh, 16px); padding: 72px 16px 24px; text-align: center; background: var(--paper); color: var(--ink); overflow: hidden;
+  }
+  .espera-top { position: absolute; top: 16px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .espera-top .sticker { max-width: 60vw; text-align: left; }
+  .espera-premio { font-size: clamp(20px, 3.2vw, 44px); font-weight: 800; max-width: 30ch; text-wrap: balance; overflow-wrap: anywhere; }
+  .espera-premio b { background: var(--yellow); color: #191919; padding: 0 0.2em; }
+  .espera-reloj { font-size: clamp(88px, 26vmin, 340px); font-weight: 900; line-height: 0.95; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
+  .espera-t { font-size: clamp(16px, 2.3vw, 30px); font-weight: 700; color: var(--ink2); max-width: 34ch; text-wrap: balance; }
+  .espera.ultimos .espera-reloj { color: var(--magenta-ink); }
+  .espera.ultimos .espera-reloj.late { animation: espera-latido 0.9s cubic-bezier(.2, .8, .3, 1); }
+  .espera.ultimos .espera-t { font-size: clamp(24px, 3.8vw, 52px); font-weight: 900; color: var(--ink); }
+  .espera.nacio .espera-reloj { color: var(--teal-ink); font-size: clamp(64px, 16vmin, 220px); font-family: inherit; letter-spacing: -0.02em; }
+  /* El botón de sortear aparece recién cuando nace el número: `.primary` le ganaba al atributo hidden. */
+  .espera-go[hidden] { display: none; }
+  .espera-nombres {
+    width: 100vw; display: grid; gap: 10px; margin: clamp(4px, 1.6vh, 18px) 0;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+  }
+  .espera-cinta { display: flex; gap: 10px; width: max-content; animation: espera-cinta var(--dur, 30s) linear infinite; }
+  .espera-cinta.al-reves { animation-direction: reverse; }
+  .espera-cinta span {
+    padding: 5px 12px; border: 2px solid var(--ink); background: var(--card); box-shadow: var(--sh-sm);
+    font-weight: 800; font-size: clamp(14px, 1.7vw, 24px); white-space: nowrap;
+  }
+  .espera-pie { font-size: clamp(13px, 1.5vw, 18px); color: var(--muted); max-width: 60ch; }
+  .espera-id { font-size: clamp(13px, 1.5vw, 18px); font-weight: 800; }
+  .espera button.espera-go { font-size: clamp(22px, 3vw, 38px); padding: 0.45em 1.2em; margin-top: 6px; }
+  @keyframes espera-cinta { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  @keyframes espera-latido { 0% { transform: scale(1.22); } 100% { transform: scale(1); } }
+  html:has(.espera) { overflow: hidden; }
+  @media (prefers-reduced-motion: reduce) {
+    .espera-cinta { animation: none; }
+    .espera.ultimos .espera-reloj.late { animation: none; }
+  }
   /* El proyector no muestra la barra de desplazamiento de la página de atrás. */
   html:has(.sala) { overflow: hidden; }
   /* El correo de contacto en los términos: en el color del texto, no en el azul del navegador. */
