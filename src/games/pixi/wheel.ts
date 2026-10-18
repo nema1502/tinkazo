@@ -97,17 +97,36 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
   }
 
   /* ============================================================ escena */
-  interface Geo { R: number; cx: number; cy: number; u: number; alto: boolean; wide: boolean }
+  /**
+   * `col`: hay columna de nombres a la izquierda (catorce o menos, en pantalla
+   * ancha). Sin columna, la rueda va al medio. Hasta el 18 de octubre de 2026
+   * se quedaba a la derecha igual, con media pantalla vacía, porque al medio
+   * chocaba con la placa del nombre, que iba a la izquierda y a media altura
+   * (lo encontró el crítico de juegos, 16 de octubre de 2026). La placa ahora
+   * va arriba (ver `build`), y al medio la rueda baja lo justo para que la
+   * flecha no quede debajo de la barra del número público.
+   */
+  interface Geo { R: number; cx: number; cy: number; u: number; alto: boolean; col: boolean }
   const geo = (): Geo => {
     const sw = S.sw(), sh = S.sh(), u = S.u();
     const alto = S.portrait();
-    if (alto) return { R: Math.min(sw * 0.4, sh * 0.28), cx: sw / 2, cy: sh * 0.38, u, alto, wide: false };
+    if (alto) return { R: Math.min(sw * 0.4, sh * 0.28), cx: sw / 2, cy: sh * 0.38, u, alto, col: false };
     const wide43 = sw / sh < 1.5;
     const R = Math.min(sh * (wide43 ? 0.34 : 0.395), sw * (wide43 ? 0.26 : 0.3));
     const cx = Math.max(sw * 0.56, sw - R - 110 * u);
-    return { R, cx, cy: sh * 0.5, u, alto, wide: cx - R - 70 * u > 260 * u };
+    if (n <= 14 && cx - R - 70 * u > 260 * u) return { R, cx, cy: sh * 0.5, u, alto, col: true };
+    // Al medio: el poste arranca debajo de la barra de arriba (que es HTML, en
+    // píxeles de pantalla) y el borde de abajo puede meterse un poco detrás de
+    // la caja del relator, donde los gajos van cabeza abajo.
+    const post = S.top() - 22;
+    const Rc = Math.min(R, (sh - S.bottom() + 40 * u - post - 54 * u) / 2);
+    return { R: Rc, cx: sw / 2, cy: post + 54 * u + Rc, u, alto, col: false };
   };
   let G = geo();
+  /** El acercamiento sobre la flecha mientras frena: en el celular, menos. */
+  const closeZoom = (): number => (G.alto ? 1.9 : 2.3);
+  /** Dónde quedó la placa del nombre, en la pantalla: la cámara la esquiva al acercarse. */
+  let plateBox = { x: 0, y: 0, w: 0, h: 0, mid: false };
 
   let rays!: Graphics;
   let wheel!: Container;
@@ -234,7 +253,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     // La columna de nombres (o una placa grande), fija en la pantalla.
     rows = [];
     const k = u;
-    if (!G.alto && G.wide && n <= 14) {
+    if (G.col) {
       const colW = G.cx - R - 90 * k;
       const cnt = Math.min(n, 9);
       const gap = 10 * k;
@@ -259,9 +278,22 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
         rows.push(row);
       }
     }
+    // La placa del nombre que pasa bajo la flecha sale recién a paso de hombre,
+    // y para entonces la cámara está encima de la flecha y la rueda llena la
+    // pantalla: a media altura tapaba gajos de cualquier lado, y en el celular
+    // el mismo gajo de la flecha (lo encontró el crítico de juegos, 16 de
+    // octubre de 2026). Va arriba, donde con la cámara encima de la flecha
+    // solo hay cielo: en pantalla ancha, a la izquierda de la flecha; si ahí no
+    // entra (en el celular), centrada encima del poste, y la cámara baja lo que
+    // haga falta para que el poste arranque debajo (ver `underPlate`).
     bigPlate = new Container();
-    const pw = G.alto ? Math.min(sw - 60 * k, 520 * k) : Math.max(240 * k, G.cx - R - 90 * k);
     const ph = (G.alto ? 92 : 96) * k;
+    // Lo que queda a la izquierda de la flecha con la cámara encima: la flecha
+    // mide 17 de medio ancho, crece un 30% en el golpe de la traba y se ve
+    // agrandada por el acercamiento.
+    const side = sw / 2 - 40 * k - 17 * k * 1.3 * closeZoom() - 20 * k;
+    const mid = G.alto || side < 240 * k;
+    const pw = mid ? Math.min(sw - 32 * k, 520 * k) : Math.min(520 * k, side);
     bigBar = new Graphics();
     bigPlate.addChild(new Graphics().rect(6 * k, 6 * k, pw, ph).fill(INK).rect(0, 0, pw, ph).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 4 * k, color: YELLOW }), bigBar);
     bigAv = new Sprite(S.face(names[0] ?? ""));
@@ -271,8 +303,8 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     bigName.anchor.set(0, 0.5);
     bigName.position.set(38 * k + 68 * k, ph / 2);
     bigPlate.addChild(bigAv, bigName);
-    (bigPlate as Container & { pw?: number }).pw = pw;
-    bigPlate.position.set(G.alto ? (sw - pw) / 2 : 40 * k, G.alto ? Math.min(sh - S.bottom() - ph - 20 * k, G.cy + R + 40 * k) : G.cy - ph / 2);
+    bigPlate.position.set(mid ? (sw - pw) / 2 : 40 * k, S.top() + 8 * k);
+    plateBox = { x: bigPlate.x, y: bigPlate.y, w: pw, h: ph, mid };
     bigPlate.visible = rows.length === 0;
     S.hud.addChild(bigPlate);
   }
@@ -428,6 +460,24 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     }
   }
 
+  /**
+   * Lo más arriba que puede mirar la cámara con ese acercamiento y la flecha
+   * en el medio, sin que la rueda quede debajo de la placa del nombre. Con la
+   * placa a un costado cuenta el aro a la altura de su borde de adentro; con la
+   * placa centrada, el poste de la flecha, que es lo más alto. Con un 6% más
+   * de acercamiento, por los golpes de zoom del final.
+   */
+  function underPlate(zoom: number): number {
+    const z = zoom * 1.06;
+    const u = G.u;
+    const below = plateBox.y + plateBox.h + 12 * u - S.sh() / 2;
+    if (plateBox.mid) return -G.R - 54 * u - below / z;
+    const dx = plateBox.x + plateBox.w - S.sw() / 2;
+    const r = z * G.R;
+    if (Math.abs(dx) >= r) return Infinity;
+    return -(Math.sqrt(r * r - dx * dx) + below) / z;
+  }
+
   /** La cámara: pegada al cubo al armar, abierta al girar, encima del puntero al frenar. */
   function direct(): void {
     const rest = restView();
@@ -443,8 +493,9 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
       const e = p * p;
       cam.lookAt(rest.x * (1 - e) + ptr.x * e * 0.6, rest.y * (1 - e) + ptr.y * e * 0.6, 1 + 0.45 * e, 2);
     } else if (tAll < T_CROWN) {
-      const close = G.alto ? 1.9 : 2.3;
-      cam.lookAt(ptr.x, ptr.y, tAll >= T_HOLD ? close : 1.6 + (close - 1.6) * ((tAll - T_CREEP) / (T_HOLD - T_CREEP)), 3.5);
+      const close = closeZoom();
+      const z = tAll >= T_HOLD ? close : 1.6 + (close - 1.6) * ((tAll - T_CREEP) / (T_HOLD - T_CREEP));
+      cam.lookAt(ptr.x, Math.min(ptr.y, underPlate(z)), z, 3.5);
     } else {
       // Con el ganador, la rueda baja y se aleja un poco: el cartel sale arriba
       // al centro y tapaba el gajo ganador, que siempre queda bajo la flecha.
@@ -504,18 +555,19 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     // segundo, y de entrada tapaba la rueda. Mientras gira, cada uno busca su
     // nombre en su gajo.
     bigPlate.visible = close && w < 4;
-    bigPlate.alpha = tAll >= T_CROWN ? Math.max(0, 1 - (tAll - T_CROWN) * 3) : 1;
+    // Arriba, al lado del cartel del ganador: se apaga enseguida, si no son
+    // dos placas con el mismo nombre.
+    bigPlate.alpha = tAll >= T_CROWN ? Math.max(0, 1 - (tAll - T_CROWN) * 6) : 1;
     const pname = names[cur] ?? "";
     // Escondida no se reescribe: girando cambiaba treinta veces por segundo, y
     // cada cambio vuelve a dibujar el texto en el hilo principal.
     if (bigPlate.visible && bigName.text !== pname) {
       bigName.text = pname;
       bigAv.texture = S.face(pname);
-      const pw = (bigPlate as Container & { pw?: number }).pw ?? 300;
-      const maxW = pw - 130 * u;
+      const maxW = plateBox.w - 130 * u;
       bigName.scale.set(1);
       if (bigName.width > maxW) bigName.scale.set(maxW / bigName.width);
-      bigBar.clear().rect(0, 0, 26 * u, 96 * u).fill(S.color(cur));
+      bigBar.clear().rect(0, 0, 26 * u, plateBox.h).fill(S.color(cur));
     }
     if (tAll >= T_CROWN) crown.at(tAll - T_CROWN);
   }
