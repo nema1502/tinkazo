@@ -382,6 +382,8 @@ export const T: Record<Lang, Dict> = {
     impSkippedHint: "Suele ser una coma sin comillas. Corregila en el archivo y subilo de nuevo, o agregá ese nombre a mano.",
     impSkippedShort: (n) => (n === 1 ? "1 fila no se pudo leer" : `${n} filas no se pudieron leer`),
     impPasted: "Lo que pegaste",
+    impMailSame: "mismo correo",
+    impMailOther: "otro correo",
     sample: "Cargar ejemplo", freeze: "Sellar la lista", draw: "Lanzar el sorteo", winners: "Premios",
     // --- Tarjetas de "¿por qué se llama así?". Cada dato tiene su fuente
     //     primaria anotada en src/games/lore.ts. Ninguno se inventa.
@@ -1340,6 +1342,8 @@ export const T: Record<Lang, Dict> = {
     impSkippedHint: "It's usually a comma without quotes. Fix it in the file and upload it again, or add that name by hand.",
     impSkippedShort: (n) => (n === 1 ? "1 row couldn't be read" : `${n} rows couldn't be read`),
     impPasted: "What you pasted",
+    impMailSame: "same email",
+    impMailOther: "different email",
     sample: "Load sample", freeze: "Seal the list", draw: "Run the draw", winners: "Prizes",
     cWheelBuild: ["Building the wheel!", "Slices lining up!", "Here comes the wheel!"],
     cWheelSplit: (segs, rep) => (rep > 1 ? `${segs} slices, ${rep} each!` : `${segs} slices, one apiece!`),

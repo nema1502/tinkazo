@@ -12,6 +12,7 @@ import {
   emailColumn,
   filterChoices,
   filterRows,
+  mailNotes,
   maskEmail,
   nameKey,
   presentColumn,
@@ -46,7 +47,8 @@ export interface ImportState {
   filter: RowFilter | null;
   hand: number;
   fixCase: boolean;
-  numberDupes: boolean;
+  /** Los nombres repetidos (por `nameKey`) que son personas distintas y se numeran. */
+  distinct: string[];
 }
 
 export interface ImportResult {
@@ -59,6 +61,12 @@ export interface ImportResult {
   /** Cuántas filas del archivo no se pudieron leer. */
   skipped: number;
 }
+
+/** Lo que `buildList` necesita saber de la ventana. */
+const listOpts = (s: ImportState): { fixCase: boolean; numberDupes: ReadonlySet<string> } => ({
+  fixCase: s.fixCase,
+  numberDupes: new Set(s.distinct),
+});
 
 /** El estado inicial de un archivo recién leído: entran los que fueron, si se sabe. */
 export function initialState(table: Table, fileName: string): ImportState {
@@ -73,7 +81,7 @@ export function initialState(table: Table, fileName: string): ImportState {
     filter: first.filter,
     hand: 0,
     fixCase: true,
-    numberDupes: false,
+    distinct: [],
   };
 }
 
@@ -98,7 +106,7 @@ export function openImporter(s: ImportState, onApply: (r: ImportResult) => void)
   const ecol = emailColumn(tb);
   const ps = presets(tb);
   let search = "";
-  let built: Built = buildList(tb, s.nameCol, s.picked, s);
+  let built: Built = buildList(tb, s.nameCol, s.picked, listOpts(s));
   // Las filas que no se pudieron leer, arriba de todo: si falta alguien, es lo
   // primero que tiene que ver. Solo los números de línea, para buscarlas en el
   // archivo: la fila entera puede traer correos, y la pantalla puede estar
@@ -224,6 +232,7 @@ export function openImporter(s: ImportState, onApply: (r: ImportResult) => void)
   const renderRows = (): void => {
     const faces = tb.rows.length <= MAX_FACES;
     const rep = dupeRows();
+    const notes = mailNotes(tb, ecol, built.dupes);
     const needle = nameKey(search);
     const html: string[] = [];
     // Con un filtro, primero los que lo pasan y después el resto, cada grupo
@@ -256,7 +265,13 @@ export function openImporter(s: ImportState, onApply: (r: ImportResult) => void)
       if (on && rep.has(i)) badges.push(`<span class="imp-badge rep">${esc(t("impRepeated"))}</span>`);
       const was = on && built.final[i] && built.final[i] !== raw && !rep.has(i)
         ? `<small class="imp-was">${esc(L.impWas(raw))}</small>` : "";
-      const mail = rep.has(i) && ecol >= 0 ? `<small class="imp-was mono">${esc(maskEmail(r[ecol] ?? ""))}</small>` : "";
+      // Con el mismo correo enmascarado, si el completo es el mismo u otro.
+      const masked = rep.has(i) && ecol >= 0 ? maskEmail(r[ecol] ?? "") : "";
+      const note = notes.get(i);
+      const mail = masked
+        ? `<small class="imp-was"><span class="mono">${esc(masked)}</span>` +
+          `${note ? ` · ${esc(t(note === "same" ? "impMailSame" : "impMailOther"))}` : ""}</small>`
+        : "";
       const face = faces && shown.length >= 2 ? `<img src="${avatar(shown, 36)}" alt="" />` : `<i class="imp-noface"></i>`;
       html.push(
         `<li class="${on ? "on" : "off"}"><label><input type="checkbox" data-row="${i}"${on ? " checked" : ""} />` +
@@ -310,7 +325,7 @@ export function openImporter(s: ImportState, onApply: (r: ImportResult) => void)
   const renderFix = (): void => {
     const parts: string[] = [];
     // Cuántos cambiaría el arreglo de mayúsculas, aunque esté apagado.
-    const withCase = buildList(tb, s.nameCol, s.picked, { fixCase: true, numberDupes: s.numberDupes });
+    const withCase = buildList(tb, s.nameCol, s.picked, { ...listOpts(s), fixCase: true });
     if (withCase.cased > 0) {
       const ex = tb.rows.findIndex((r, i) => s.picked[i] && withCase.final[i] && withCase.final[i] !== cleanName(r[s.nameCol] ?? ""));
       const before = ex >= 0 ? cleanName(tb.rows[ex]?.[s.nameCol] ?? "") : "";
@@ -321,11 +336,19 @@ export function openImporter(s: ImportState, onApply: (r: ImportResult) => void)
       );
     }
     if (built.dupes.length) {
-      parts.push(
-        `<div class="imp-dupes"><b>${esc(L.impDupes(built.dupes.length))}</b>` +
-        `<label class="imp-check"><input type="radio" name="imp-dup" value="one"${s.numberDupes ? "" : " checked"} /><span>${esc(t("impDupesOne"))}</span></label>` +
-        `<label class="imp-check"><input type="radio" name="imp-dup" value="num"${s.numberDupes ? " checked" : ""} /><span>${esc(t("impDupesNum"))}</span></label></div>`,
-      );
+      // Cada nombre se decide aparte: dos "Diego Rojas" pueden ser dos personas
+      // y, en el mismo archivo, "Ana Quispe" inscrita dos veces una sola. Con
+      // una opción para toda la lista, separar a los Diegos duplicaba a Ana.
+      const groups = built.dupes.map((g) => {
+        const name = built.final[g[0] as number] ?? "";
+        const key = nameKey(name);
+        const num = s.distinct.includes(key);
+        return `<label class="imp-field"><span>${esc(name)} ×${g.length}</span>` +
+          `<select class="imp-dup" data-key="${esc(key)}">` +
+          `<option value="one"${num ? "" : " selected"}>${esc(t("impDupesOne"))}</option>` +
+          `<option value="num"${num ? " selected" : ""}>${esc(t("impDupesNum"))}</option></select></label>`;
+      });
+      parts.push(`<div class="imp-dupes"><b>${esc(L.impDupes(built.dupes.length))}</b>${groups.join("")}</div>`);
     }
     fix.innerHTML = parts.join("");
     fix.style.display = parts.length ? "" : "none";
@@ -341,7 +364,7 @@ export function openImporter(s: ImportState, onApply: (r: ImportResult) => void)
   };
 
   function render(): void {
-    built = buildList(tb, s.nameCol, s.picked, s);
+    built = buildList(tb, s.nameCol, s.picked, listOpts(s));
     syncMode();
     renderRows();
     renderOut();
@@ -373,7 +396,7 @@ export function openImporter(s: ImportState, onApply: (r: ImportResult) => void)
     s.hand++;
     // Solo cambia esta fila y los números: redibujar la lista entera movería
     // el scroll de quien está marcando de a uno.
-    built = buildList(tb, s.nameCol, s.picked, s);
+    built = buildList(tb, s.nameCol, s.picked, listOpts(s));
     box.closest("li")?.classList.toggle("on", box.checked);
     box.closest("li")?.classList.toggle("off", !box.checked);
     renderOut();
@@ -381,10 +404,16 @@ export function openImporter(s: ImportState, onApply: (r: ImportResult) => void)
     renderFoot();
   });
   fix.addEventListener("change", (e) => {
-    const el = e.target as HTMLInputElement;
-    if (el.classList.contains("imp-case")) s.fixCase = el.checked;
-    if (el.name === "imp-dup") s.numberDupes = el.value === "num";
+    const el = e.target as HTMLInputElement | HTMLSelectElement;
+    if (el instanceof HTMLInputElement && el.classList.contains("imp-case")) s.fixCase = el.checked;
+    const key = el.classList.contains("imp-dup") ? (el.dataset.key ?? "") : null;
+    if (key !== null) {
+      s.distinct = s.distinct.filter((k) => k !== key);
+      if (el.value === "num") s.distinct.push(key);
+    }
     render();
+    // El panel se redibuja entero: el foco vuelve al selector que se tocó.
+    if (key !== null) fix.querySelector<HTMLSelectElement>(`select[data-key="${CSS.escape(key)}"]`)?.focus();
   });
   const search_ = q<HTMLInputElement>(".imp-search");
   search_.addEventListener("input", () => {

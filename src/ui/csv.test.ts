@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildList, columnToText, decodeText, detectSource, dropListHeader, filterChoices, filterRows, fixCase, looksTabular,
-  maskEmail, parseTable, presets, suggestFilter,
+  mailNotes, maskEmail, nameKey, parseTable, presets, suggestFilter,
 } from "./csv";
 import { canonicalList } from "../protocol/canonical";
 
@@ -366,5 +366,42 @@ describe("una fila que no encaja no descarta la tabla", () => {
     const t = parseTable("Nombre;Correo\nMejía, Nicolás;nico@example.org\nQuispe, María;maria@example.org")!;
     expect(t.columns).toEqual(["Nombre", "Correo"]);
     expect(t.rows.map((r) => r[0])).toEqual(["Mejía, Nicolás", "Quispe, María"]);
+  });
+});
+
+describe("homónimos", () => {
+  const T2 = parseTable(
+    "name,email\nDiego Rojas,diego.rojas@example.org\nAna Quispe,ana@example.org\nDiego Rojas,drojas@example.org\n" +
+    "Ana Quispe,ana.q@example.org\nElena Condori,elena@example.org\nElena Condori,elena@example.org",
+  )!;
+  const all = T2.rows.map(() => true);
+
+  it("se decide por nombre: dos Diego Rojas distintos y las demás, una vez", () => {
+    const b = buildList(T2, 0, all, { fixCase: false, numberDupes: new Set([nameKey("Diego Rojas")]) });
+    expect(b.names).toEqual(["Diego Rojas", "Ana Quispe", "Diego Rojas (2)", "Elena Condori"]);
+    expect(b.dupes).toHaveLength(3);
+  });
+
+  it("con el mismo correo enmascarado, dice si el completo es el mismo u otro, sin mostrarlo", () => {
+    const { dupes } = buildList(T2, 0, all, { fixCase: false, numberDupes: false });
+    const notes = mailNotes(T2, 1, dupes);
+    // "diego.rojas@" y "drojas@" son los dos "d•••@example.org".
+    expect(maskEmail("diego.rojas@example.org")).toBe(maskEmail("drojas@example.org"));
+    expect(notes.get(2)).toBe("other");
+    expect(notes.get(3)).toBe("other");
+    expect(notes.get(5)).toBe("same");
+    expect(notes.has(0)).toBe(false);
+  });
+
+  it("si los correos enmascarados ya se distinguen, no agrega nada", () => {
+    const t = parseTable("name,email\nAna Quispe,ana@example.org\nAna Quispe,quispe.ana@example.org")!;
+    const { dupes } = buildList(t, 0, [true, true], { fixCase: false, numberDupes: false });
+    expect(mailNotes(t, 1, dupes).size).toBe(0);
+  });
+
+  it("sin columna de correo, no hay nada que comparar", () => {
+    const t = parseTable("name,city\nDiego Rojas,La Paz\nDiego Rojas,Sucre")!;
+    const { dupes } = buildList(t, 0, [true, true], { fixCase: false, numberDupes: false });
+    expect(mailNotes(t, -1, dupes).size).toBe(0);
   });
 });

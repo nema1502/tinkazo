@@ -327,12 +327,17 @@ export interface Built {
  * casi siempre, la misma persona inscrita dos veces: por defecto entra una. Si
  * quien organiza dice que son dos personas, se numeran ("Ana Quispe (2)"),
  * porque la lista canónica funde los duplicados exactos (protocolo §1).
+ *
+ * Se decide por nombre y no para toda la lista: en un mismo archivo puede
+ * haber dos "Diego Rojas" que son dos personas y una "Ana Quispe" inscrita dos
+ * veces. `numberDupes` dice cuáles se numeran: todos, ninguno, o los nombres
+ * de ese conjunto (por `nameKey`).
  */
 export function buildList(
   t: Table,
   nameCol: number,
   picked: readonly boolean[],
-  opts: { fixCase: boolean; numberDupes: boolean },
+  opts: { fixCase: boolean; numberDupes: boolean | ReadonlySet<string> },
 ): Built {
   const final = t.rows.map(() => "");
   const groups = new Map<string, number[]>();
@@ -352,11 +357,14 @@ export function buildList(
     if (g) g.push(i);
     else groups.set(k, [i]);
   });
-  const dupes = [...groups.values()].filter((g) => g.length > 1);
-  for (const g of dupes) {
+  const dupes: number[][] = [];
+  for (const [k, g] of groups) {
+    if (g.length < 2) continue;
+    dupes.push(g);
+    const split = opts.numberDupes === true || (opts.numberDupes !== false && opts.numberDupes.has(k));
     const base = final[g[0] as number] as string;
-    g.slice(1).forEach((i, k) => {
-      final[i] = opts.numberDupes ? `${base} (${k + 2})` : "";
+    g.slice(1).forEach((i, n) => {
+      final[i] = split ? `${base} (${n + 2})` : "";
     });
   }
   return { names: final.filter(Boolean), final, dupes, cased };
@@ -367,6 +375,32 @@ export function maskEmail(email: string): string {
   const [user, domain] = email.trim().split("@");
   if (!user || !domain) return "";
   return `${user.charAt(0)}•••@${domain}`;
+}
+
+/**
+ * Dos personas con el mismo nombre suelen tener el mismo correo enmascarado:
+ * "diego.rojas@example.com" y "drojas@example.com" quedan los dos en
+ * "d•••@example.com", y en la ventana parecían la misma persona (QA, 16 de
+ * octubre de 2026). Para cada fila repetida cuyo correo enmascarado es igual
+ * al de la primera de su grupo, dice si el correo completo es el mismo o es
+ * otro. Se compara en el navegador y del correo no se muestra nada más.
+ *
+ * No decide nada: una persona puede inscribirse con dos correos, y una
+ * familia puede compartir uno. Lo decide quien organiza.
+ */
+export function mailNotes(t: Table, emailCol: number, dupes: readonly number[][]): Map<number, "same" | "other"> {
+  const out = new Map<number, "same" | "other">();
+  if (emailCol < 0) return out;
+  const mail = (i: number): string => cell(t.rows[i] ?? [], emailCol).toLowerCase();
+  for (const g of dupes) {
+    const first = mail(g[0] as number);
+    const mask = maskEmail(first);
+    if (!mask) continue;
+    for (const i of g.slice(1)) {
+      if (maskEmail(mail(i)) === mask) out.set(i, mail(i) === first ? "same" : "other");
+    }
+  }
+  return out;
 }
 
 /* ------------------------------------------------ el archivo, antes de la tabla */
