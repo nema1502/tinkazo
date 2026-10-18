@@ -33,11 +33,24 @@ let imported: ImportState | null = null;
 let lastResult: ImportResult | null = null;
 
 export function bindParticipants(): void {
-  $("ta").addEventListener("input", () => {
+  const ta = $<HTMLTextAreaElement>("ta");
+  ta.addEventListener("input", () => {
     // Si edita a mano, manda lo que escribió: el resumen del archivo ya no aplica.
     hideSummary();
     quitarAvisos();
     renderNames();
+  });
+  // Pegar una tabla entera es lo mismo que subirla: abre la ventana de
+  // importar. Y una columna copiada de una planilla con su encabezado entra
+  // sin el encabezado. Solo cuando lo pegado es toda la lista: con algo ya
+  // escrito, pegar agrega como siempre, y una lista suelta se pega igual que
+  // antes, y se puede deshacer.
+  ta.addEventListener("paste", (e) => {
+    const text = e.clipboardData?.getData("text/plain") ?? "";
+    const toda = !ta.value.trim() || (ta.selectionStart === 0 && ta.selectionEnd === ta.value.length);
+    if (app.frozen || !toda || !text.trim() || !pideImportar(text)) return;
+    e.preventDefault();
+    loadFile(text, "");
   });
   // El aviso vive desde el principio, vacío: un lector de pantalla anuncia los
   // cambios de una región que ya estaba, no de una que aparece con el texto.
@@ -105,6 +118,8 @@ export function bindParticipants(): void {
  *
  * Un archivo sin nombres (vacío, o solo el encabezado) no toca la lista que
  * había: la borraba sin decir nada.
+ *
+ * `fileName` vacío es texto pegado.
  */
 export function loadFile(raw: string, fileName = "lista.csv"): void {
   callarAviso();
@@ -125,6 +140,12 @@ export function loadFile(raw: string, fileName = "lista.csv"): void {
   }
   setList(text);
   if (header) avisar((L) => L.impHeaderOut(header));
+}
+
+/** ¿Lo pegado es una tabla o trae el encabezado de la columna? Si no, se pega como siempre. */
+function pideImportar(text: string): boolean {
+  const parsed = parseTable(text);
+  return (parsed !== null && parsed.columns.length > 1) || dropListHeader(text).header !== null;
 }
 
 /** Lo que eligió en la ventana, al texto, con un resumen para volver a abrirla. */
