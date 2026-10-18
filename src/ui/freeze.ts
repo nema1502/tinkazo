@@ -1,7 +1,7 @@
 import { $ } from "../dom";
 import { T, getLang, t } from "../i18n";
 import { ANCHOR_LEAD_SECONDS, LEAD_SECONDS, WHEEL_MAX, app, params, type Game } from "../state";
-import { bytesToHex, roundTime, targetRound } from "../protocol/quicknet";
+import { QUICKNET, bytesToHex, roundTime, targetRound } from "../protocol/quicknet";
 import { listHash } from "../protocol/canonical";
 import { prepararFirma } from "../protocol/firma";
 import { contractUrl, network } from "../stellar/config";
@@ -60,6 +60,26 @@ export function secondsToRound(): number {
 let countdownTimer: number | undefined;
 
 /**
+ * Abre la conexión con drand poco antes de que nazca la ronda.
+ *
+ * Conectarse con el relay (DNS, TCP y TLS) son tres o cuatro idas y vueltas:
+ * en un celular con 4G, medio segundo o más justo cuando la sala mira la
+ * pantalla esperando. El navegador la deja lista. Cierra una conexión ociosa a
+ * los pocos segundos, así que no se pide al sellar sino cinco segundos antes,
+ * y otra vez cuando la ronda ya nació y el botón se habilita.
+ */
+function preconectarDrand(): void {
+  const href = QUICKNET.relays[0];
+  document.head.querySelector(`link[rel="preconnect"][href="${href}"]`)?.remove();
+  const link = document.createElement("link");
+  link.rel = "preconnect";
+  link.href = href;
+  // `fetch` pide la ronda sin credenciales: la conexión tiene que ser la anónima.
+  link.crossOrigin = "anonymous";
+  document.head.appendChild(link);
+}
+
+/**
  * El botón de sortear muestra la cuenta regresiva y se habilita cuando la
  * ronda existe. Y arriba, el panel que pone la espera en escena.
  *
@@ -83,9 +103,14 @@ function startCountdown(): void {
   if (app.frozen) preloadGame(app.game, app.frozen.names.length);
   prepararFirma();
   if (app.frozen?.raffleId !== undefined) void import("../protocol/drand").catch(() => undefined);
+  let preconectado = false;
   const tick = (): void => {
     const s = secondsToRound();
     if (s > 0) {
+      if (s <= 5 && !preconectado) {
+        preconectado = true;
+        preconectarDrand();
+      }
       btn.disabled = true;
       const reloj = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
       btn.textContent = T[getLang()].drawIn(reloj);
@@ -101,6 +126,7 @@ function startCountdown(): void {
       if (line) line.textContent = "";
       if (countdownTimer !== undefined) clearInterval(countdownTimer);
       countdownTimer = undefined;
+      if (!app.drawn) preconectarDrand();
       // Ya nació: el botón, a la vista y con el foco. Quedaba una pantalla más
       // abajo, y dos en el celular (revisión del 16 de octubre de 2026).
       if (!app.drawn) {
