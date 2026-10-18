@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildList, columnToText, detectSource, filterChoices, filterRows, fixCase, looksTabular, maskEmail, parseTable,
-  presets, suggestFilter,
+  buildList, columnToText, decodeText, detectSource, dropListHeader, filterChoices, filterRows, fixCase, looksTabular,
+  mailNotes, maskEmail, nameKey, parseTable, presets, suggestFilter,
 } from "./csv";
 import { canonicalList } from "../protocol/canonical";
 
@@ -215,5 +215,193 @@ describe("la ventana de importar", () => {
   it("muestra del correo solo lo que alcanza para distinguir", () => {
     expect(maskEmail("ana.quispe@example.org")).toBe("a•••@example.org");
     expect(maskEmail("sin arroba")).toBe("");
+  });
+});
+
+/* Lo que encontró el QA del 16 de octubre de 2026 al importar CSV de verdad. */
+
+/** Bytes de un texto en una codificación de un byte por letra (Latin-1 y la mayor parte de Windows-1252). */
+const latin1 = (s: string): number[] => [...s].map((c) => c.charCodeAt(0));
+const utf8 = (s: string): number[] => [...new TextEncoder().encode(s)];
+const utf16 = (s: string, bigEndian = false): number[] =>
+  [...s].flatMap((c) => {
+    const n = c.charCodeAt(0);
+    return bigEndian ? [n >> 8, n & 0xff] : [n & 0xff, n >> 8];
+  });
+const bytes = (...parts: number[][]): Uint8Array => Uint8Array.from(parts.flat());
+
+describe("la codificación del archivo", () => {
+  it("lee un CSV de Excel en Windows (ANSI) sin dejar «Mar�a»", () => {
+    const text = decodeText(bytes(latin1("Nombre;Correo\nMaría Peña;maria@example.org\nÓscar Limachi;oscar@example.org")))!;
+    expect(text).not.toContain("\uFFFD");
+    const t = parseTable(text)!;
+    expect(t.rows.map((r) => r[0])).toEqual(["María Peña", "Óscar Limachi"]);
+  });
+
+  it("en Windows-1252, lo de 0x80 a 0x9F son letras y no controles", () => {
+    // 0x92 es el apóstrofo tipográfico que Excel pone en "O’Brien".
+    expect(decodeText(bytes(latin1("Pat O"), [0x92], latin1("Brien")))).toBe("Pat O’Brien");
+  });
+
+  it("UTF-8, con o sin BOM, queda igual y sin el BOM", () => {
+    expect(decodeText(bytes(utf8("nombre\nSofía Aguilar")))).toBe("nombre\nSofía Aguilar");
+    expect(decodeText(bytes([0xef, 0xbb, 0xbf], utf8("nombre\nSofía Aguilar")))).toBe("nombre\nSofía Aguilar");
+  });
+
+  it("UTF-16 con BOM, que es el «Texto Unicode» de Excel, en los dos órdenes", () => {
+    const tsv = "Nombre\tCorreo\nFranco Ibáñez\tfranco@example.org";
+    expect(decodeText(bytes([0xff, 0xfe], utf16(tsv)))).toBe(tsv);
+    expect(decodeText(bytes([0xfe, 0xff], utf16(tsv, true)))).toBe(tsv);
+  });
+
+  it("UTF-16 sin BOM, por los ceros", () => {
+    expect(decodeText(bytes(utf16("Camila Suárez\nAndrés Villca")))).toBe("Camila Suárez\nAndrés Villca");
+  });
+
+  it("una planilla de Excel, un PDF o algo binario no son texto", () => {
+    expect(decodeText(bytes([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x06, 0x00]))).toBeNull();
+    expect(decodeText(bytes(latin1("%PDF-1.7\n")))).toBeNull();
+    expect(decodeText(bytes(latin1("Ana"), [0x00, 0x00, 0x00, 0x01, 0xff], latin1("Luis")))).toBeNull();
+  });
+
+  it("los finales de línea de Windows y de Mac quedan en \\n", () => {
+    expect(decodeText(bytes(latin1("Ana Vargas\r\nDiego Rojas\rElena Condori")))).toBe("Ana Vargas\nDiego Rojas\nElena Condori");
+  });
+
+  it("un archivo vacío es texto vacío", () => {
+    expect(decodeText(new Uint8Array())).toBe("");
+  });
+});
+
+describe("el encabezado no es un participante", () => {
+  it("en una lista de una columna, la primera línea «Nombre» no entra", () => {
+    const { text, header } = dropListHeader("Nombre\nMaría Quispe\nJorge Mamani");
+    expect(header).toBe("Nombre");
+    expect(canonicalList(text)).toEqual(["María Quispe", "Jorge Mamani"]);
+  });
+
+  it("reconoce las formas de siempre del encabezado", () => {
+    for (const h of [
+      "Name", "NOMBRE COMPLETO", "Participante", "Participantes", "Nombres y apellidos",
+      "Nombre del participante", "Nombre:", '"Nombre"', "Full name", "Asistentes",
+    ]) {
+      expect(dropListHeader(`${h}\nLucía Flores\nCarlos Choque`).header, h).not.toBeNull();
+    }
+  });
+
+  it("una lista que empieza con un nombre queda como estaba", () => {
+    const list = "Diego Rojas\nLucía Flores\nCarlos Choque";
+    expect(dropListHeader(list)).toEqual({ text: list, header: null });
+  });
+
+  it("con un número no es encabezado: «Participante 1» es un nombre de prueba", () => {
+    expect(dropListHeader("Participante 1\nParticipante 2").header).toBeNull();
+  });
+
+  it("en una tabla, «Participantes» también es encabezado aunque no haya números", () => {
+    const t = parseTable("Participantes;Carrera\nMaría Quispe;Sistemas\nJorge Mamani;Civil")!;
+    expect(t.headerDetected).toBe(true);
+    expect(t.rows.map((r) => r[0])).toEqual(["María Quispe", "Jorge Mamani"]);
+  });
+
+  it("un archivo con solo el encabezado no tiene a nadie", () => {
+    const t = parseTable("Nombre,Correo\n")!;
+    expect(t.headerDetected).toBe(true);
+    expect(t.rows).toEqual([]);
+    expect(canonicalList(dropListHeader("Nombre\n").text)).toEqual([]);
+  });
+});
+
+describe("una fila que no encaja no descarta la tabla", () => {
+  it("una coma sin comillas en el nombre se arregla", () => {
+    const t = parseTable("Nombre,Correo\nAna Vargas,ana@example.org\nMejía, Nicolás,nico@example.org\nPablo Gutiérrez,pablo@example.org")!;
+    expect(t.columns).toEqual(["Nombre", "Correo"]);
+    expect(t.rows).toEqual([
+      ["Ana Vargas", "ana@example.org"],
+      ["Mejía, Nicolás", "nico@example.org"],
+      ["Pablo Gutiérrez", "pablo@example.org"],
+    ]);
+    expect(t.skipped).toEqual([]);
+  });
+
+  it("en un export de Luma, también: la coma estaba en el nombre y no en el código", () => {
+    const t = parseTable(LUMA.replace('"Mejía, Nicolás"', "Mejía, Nicolás"))!;
+    expect(t.skipped).toEqual([]);
+    expect(t.rows[1]?.slice(0, 3)).toEqual(["evt-guest-b2", "Mejía, Nicolás", "nico@example.org"]);
+    expect(columnToText(t, t.suggested)).toBe("Ana Quispe\nMejía Nicolás\nRodrigo Mamani");
+  });
+
+  it("si la coma pudo estar en dos columnas, no adivina: salta la fila y dice en qué línea está", () => {
+    const t = parseTable(
+      "Nombre,Dirección,Correo\nAna Vargas,Calle 1,ana@example.org\nLuis Choque,Calle 2, Zona Sur,luis@example.org\nRodrigo Peña,Calle 3,rodrigo@example.org",
+    )!;
+    expect(t.rows.map((r) => r[0])).toEqual(["Ana Vargas", "Rodrigo Peña"]);
+    expect(t.skipped).toEqual([3]);
+  });
+
+  it("las líneas se cuentan bien aunque una celda entre comillas tenga saltos de línea", () => {
+    const t = parseTable(
+      'Nombre,Dirección,Correo\nAna Vargas,"Calle 1\nZona Sur",ana@example.org\nLuis Choque,Calle 2, Zona Sur,luis@example.org',
+    )!;
+    expect(t.rows).toHaveLength(1);
+    expect(t.skipped).toEqual([4]);
+  });
+
+  it("una fila corta se completa con celdas vacías, como en cualquier planilla", () => {
+    const t = parseTable("nombre,correo\nAna Vargas,ana@example.org\nLuis Choque\nRodrigo Peña,rodrigo@example.org")!;
+    expect(t.rows[1]).toEqual(["Luis Choque", ""]);
+    expect(t.skipped).toEqual([]);
+  });
+
+  it("una comilla que nunca cierra no se traga el resto del archivo", () => {
+    const t = parseTable('nombre,correo\n"Ana Vargas,ana@example.org\nLuis Choque,luis@example.org\nRodrigo Peña,rodrigo@example.org')!;
+    expect(t.rows.map((r) => r[0])).toEqual(["Ana Vargas", "Luis Choque", "Rodrigo Peña"]);
+  });
+
+  it("una lista con alguna coma suelta sigue siendo una lista", () => {
+    expect(looksTabular("Mejía, Nicolás\nAna Vargas\nLuis Choque")).toBe(false);
+  });
+
+  it("el punto y coma de Excel en español gana aunque los nombres tengan comas", () => {
+    const t = parseTable("Nombre;Correo\nMejía, Nicolás;nico@example.org\nQuispe, María;maria@example.org")!;
+    expect(t.columns).toEqual(["Nombre", "Correo"]);
+    expect(t.rows.map((r) => r[0])).toEqual(["Mejía, Nicolás", "Quispe, María"]);
+  });
+});
+
+describe("homónimos", () => {
+  const T2 = parseTable(
+    "name,email\nDiego Rojas,diego.rojas@example.org\nAna Quispe,ana@example.org\nDiego Rojas,drojas@example.org\n" +
+    "Ana Quispe,ana.q@example.org\nElena Condori,elena@example.org\nElena Condori,elena@example.org",
+  )!;
+  const all = T2.rows.map(() => true);
+
+  it("se decide por nombre: dos Diego Rojas distintos y las demás, una vez", () => {
+    const b = buildList(T2, 0, all, { fixCase: false, numberDupes: new Set([nameKey("Diego Rojas")]) });
+    expect(b.names).toEqual(["Diego Rojas", "Ana Quispe", "Diego Rojas (2)", "Elena Condori"]);
+    expect(b.dupes).toHaveLength(3);
+  });
+
+  it("con el mismo correo enmascarado, dice si el completo es el mismo u otro, sin mostrarlo", () => {
+    const { dupes } = buildList(T2, 0, all, { fixCase: false, numberDupes: false });
+    const notes = mailNotes(T2, 1, dupes);
+    // "diego.rojas@" y "drojas@" son los dos "d•••@example.org".
+    expect(maskEmail("diego.rojas@example.org")).toBe(maskEmail("drojas@example.org"));
+    expect(notes.get(2)).toBe("other");
+    expect(notes.get(3)).toBe("other");
+    expect(notes.get(5)).toBe("same");
+    expect(notes.has(0)).toBe(false);
+  });
+
+  it("si los correos enmascarados ya se distinguen, no agrega nada", () => {
+    const t = parseTable("name,email\nAna Quispe,ana@example.org\nAna Quispe,quispe.ana@example.org")!;
+    const { dupes } = buildList(t, 0, [true, true], { fixCase: false, numberDupes: false });
+    expect(mailNotes(t, 1, dupes).size).toBe(0);
+  });
+
+  it("sin columna de correo, no hay nada que comparar", () => {
+    const t = parseTable("name,city\nDiego Rojas,La Paz\nDiego Rojas,Sucre")!;
+    const { dupes } = buildList(t, 0, [true, true], { fixCase: false, numberDupes: false });
+    expect(mailNotes(t, -1, dupes).size).toBe(0);
   });
 });

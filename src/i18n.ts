@@ -187,6 +187,12 @@ export interface Dict {
   impGrpRest: (n: number) => string;
   impGrpIn: (n: number) => string;
   impGrpOut: (n: number) => string;
+  /** Un archivo sin nombres; con `file` vacío, texto pegado. */
+  impNoNames: (file: string) => string;
+  impNotText: (file: string) => string;
+  impHeaderOut: (header: string) => string;
+  impSkipped: (n: number, lines: string) => string;
+  impSkippedShort: (n: number) => string;
   /** El mensaje para quien ganó; con `varios`, para todos los que ganaron juntos. */
   tellBody: (w: string, prize: string, n: number, u: string, varios?: boolean) => string;
   /** Trompo: la rival del mano a mano se queda sin cuerda y cae. */
@@ -328,11 +334,13 @@ export const T: Record<Lang, Dict> = {
     impNameCol: "Los nombres están en",
     impWho: "¿Quiénes entran?",
     impCame: "Los que vinieron",
-    impCameSub: "hicieron check-in",
+    impCameSub: "su QR se escaneó en la puerta (check-in)",
     impApproved: "Los aprobados",
-    impApprovedSub: "inscripción aprobada, hayan venido o no",
+    impApprovedSub: "inscritos aprobados, hayan venido o no",
     impAll: "Todos",
-    impAllSub: "cada fila del archivo",
+    impAllSub: "cada inscrito del archivo, aprobado o no",
+    // Un archivo sin estado de inscripción (una planilla de nombres) no tiene aprobados.
+    impAllSubFile: "cada fila del archivo",
     impOther: "Otro filtro",
     impPriv: "El archivo no sale de tu navegador. Al sorteo entran solo los nombres: los correos y lo demás no se usan ni se guardan.",
     impSearch: "Buscar un nombre",
@@ -378,6 +386,16 @@ export const T: Record<Lang, Dict> = {
       `${luma ? "De Luma" : "Del archivo"}: ${n} de ${total}` +
       (mode === "came" ? ", los que vinieron" : mode === "approved" ? ", los aprobados" : mode === "other" ? ", con un filtro" : "") +
       (hand ? ` (${hand === 1 ? "1 cambio" : `${hand} cambios`} a mano)` : ""),
+    // Cuando el archivo no viene limpio (QA, 16 de octubre de 2026).
+    impNoNames: (f) => (f ? `«${f}» no trae nombres: la lista quedó como estaba.` : "Lo que pegaste no trae nombres: la lista quedó como estaba."),
+    impNotText: (f) => `«${f}» no es un archivo de texto. Si es una planilla, guardala como CSV y subila de nuevo. La lista quedó como estaba.`,
+    impHeaderOut: (h) => `«${h}» es el encabezado de la columna: no entra al sorteo.`,
+    impSkipped: (n, lines) => (n === 1 ? `No se pudo leer 1 fila (línea ${lines}): quedó afuera.` : `No se pudieron leer ${n} filas (líneas ${lines}): quedaron afuera.`),
+    impSkippedHint: "Suele ser una coma sin comillas. Corregila en el archivo y subilo de nuevo, o agregá ese nombre a mano.",
+    impSkippedShort: (n) => (n === 1 ? "1 fila no se pudo leer" : `${n} filas no se pudieron leer`),
+    impPasted: "Lo que pegaste",
+    impMailSame: "mismo correo",
+    impMailOther: "otro correo",
     sample: "Cargar ejemplo", freeze: "Sellar la lista", draw: "Lanzar el sorteo", winners: "Premios",
     // --- Tarjetas de "¿por qué se llama así?". Cada dato tiene su fuente
     //     primaria anotada en src/games/lore.ts. Ninguno se inventa.
@@ -1290,11 +1308,12 @@ export const T: Record<Lang, Dict> = {
     impNameCol: "Names are in",
     impWho: "Who gets in?",
     impCame: "Those who came",
-    impCameSub: "checked in",
+    impCameSub: "their QR was scanned at the door (check-in)",
     impApproved: "Approved",
-    impApprovedSub: "registration approved, whether they came or not",
+    impApprovedSub: "approved sign-ups, whether they came or not",
     impAll: "Everyone",
-    impAllSub: "every row in the file",
+    impAllSub: "every sign-up in the file, approved or not",
+    impAllSubFile: "every row in the file",
     impOther: "Another filter",
     impPriv: "The file never leaves your browser. Only names go into the draw: emails and everything else are neither used nor stored.",
     impSearch: "Search a name",
@@ -1312,9 +1331,9 @@ export const T: Record<Lang, Dict> = {
     impEmpty: "No name matches.",
     impNoneOut: "Every row in the file gets in.",
     impOut: (n) => `${n} left out:`,
-    impOutNoShow: (n) => (n === 1 ? "1 registered who didn't come" : `${n} registered who didn't come`),
+    impOutNoShow: (n) => (n === 1 ? "1 who signed up but didn't come" : `${n} who signed up but didn't come`),
     impOutPending: (n) => `${n} pending approval`,
-    impOutInvited: (n) => (n === 1 ? "1 invited who didn't register" : `${n} invited who didn't register`),
+    impOutInvited: (n) => (n === 1 ? "1 invited who didn't sign up" : `${n} invited who didn't sign up`),
     impOutDeclined: (n) => `${n} declined`,
     impOutWaitlist: (n) => `${n} on the waitlist`,
     impOutStatus: (n, st) => `${n} with status "${st}"`,
@@ -1340,6 +1359,15 @@ export const T: Record<Lang, Dict> = {
       `${luma ? "From Luma" : "From the file"}: ${n} of ${total}` +
       (mode === "came" ? ", those who came" : mode === "approved" ? ", the approved ones" : mode === "other" ? ", with a filter" : "") +
       (hand ? ` (${hand === 1 ? "1 change" : `${hand} changes`} by hand)` : ""),
+    impNoNames: (f) => (f ? `"${f}" has no names: the list was left as it was.` : "What you pasted has no names: the list was left as it was."),
+    impNotText: (f) => `"${f}" isn't a text file. If it's a spreadsheet, save it as CSV and upload it again. The list was left as it was.`,
+    impHeaderOut: (h) => `"${h}" is the column header: it doesn't go into the draw.`,
+    impSkipped: (n, lines) => (n === 1 ? `1 row couldn't be read (line ${lines}) and was left out.` : `${n} rows couldn't be read (lines ${lines}) and were left out.`),
+    impSkippedHint: "It's usually a comma without quotes. Fix it in the file and upload it again, or add that name by hand.",
+    impSkippedShort: (n) => (n === 1 ? "1 row couldn't be read" : `${n} rows couldn't be read`),
+    impPasted: "What you pasted",
+    impMailSame: "same email",
+    impMailOther: "different email",
     sample: "Load sample", freeze: "Seal the list", draw: "Run the draw", winners: "Prizes",
     cWheelBuild: ["Building the wheel!", "Slices lining up!", "Here comes the wheel!"],
     cWheelSplit: (segs, rep) => (rep > 1 ? `${segs} slices, ${rep} each!` : `${segs} slices, one apiece!`),
