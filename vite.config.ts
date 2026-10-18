@@ -1,5 +1,7 @@
+/// <reference types="vitest/config" />
 import { resolve } from "node:path";
 import { defineConfig } from "vite";
+import { configDefaults } from "vitest/config";
 
 // El sitio, que es la herramienta y nada más; la verificación pública, que se
 // abre desde el QR o el enlace del comprobante y no necesita cuenta; y las
@@ -26,4 +28,10 @@ export default defineConfig({
   },
   server: { port: 5173 },
   preview: { port: 4173 },
+  test: {
+    // Las copias de trabajo de git (worktrees) no se prueban: sin esto,
+    // `pnpm test` corría también las pruebas a medias de otra copia y
+    // fallaba por trabajo ajeno (18 de octubre de 2026).
+    exclude: [...configDefaults.exclude, "**/worktrees/**"],
+  },
 });
