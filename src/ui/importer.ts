@@ -267,11 +267,12 @@ export function openImporter(s: ImportState, onApply: (r: ImportResult) => void)
       const was = on && built.final[i] && built.final[i] !== raw && !rep.has(i)
         ? `<small class="imp-was">${esc(L.impWas(raw))}</small>` : "";
       // Con el mismo correo enmascarado, si el completo es el mismo u otro.
+      // Adelante: en el celular el correo se corta con puntos suspensivos.
       const masked = rep.has(i) && ecol >= 0 ? maskEmail(r[ecol] ?? "") : "";
       const note = notes.get(i);
       const mail = masked
-        ? `<small class="imp-was"><span class="mono">${esc(masked)}</span>` +
-          `${note ? ` · ${esc(t(note === "same" ? "impMailSame" : "impMailOther"))}` : ""}</small>`
+        ? `<small class="imp-was">${note ? `${esc(t(note === "same" ? "impMailSame" : "impMailOther"))} · ` : ""}` +
+          `<span class="mono">${esc(masked)}</span></small>`
         : "";
       const face = faces && shown.length >= 2 ? `<img src="${avatar(shown, 36)}" alt="" />` : `<i class="imp-noface"></i>`;
       html.push(
@@ -340,14 +341,17 @@ export function openImporter(s: ImportState, onApply: (r: ImportResult) => void)
       // Cada nombre se decide aparte: dos "Diego Rojas" pueden ser dos personas
       // y, en el mismo archivo, "Ana Quispe" inscrita dos veces una sola. Con
       // una opción para toda la lista, separar a los Diegos duplicaba a Ana.
-      const groups = built.dupes.map((g) => {
+      // Dos opciones a la vista por nombre, como antes para toda la lista: en
+      // un selector el texto no entraba y quedaba "entra una v…".
+      const groups = built.dupes.map((g, n) => {
         const name = built.final[g[0] as number] ?? "";
-        const key = nameKey(name);
-        const num = s.distinct.includes(key);
-        return `<label class="imp-field"><span>${esc(name)} ×${g.length}</span>` +
-          `<select class="imp-dup" data-key="${esc(key)}">` +
-          `<option value="one"${num ? "" : " selected"}>${esc(t("impDupesOne"))}</option>` +
-          `<option value="num"${num ? " selected" : ""}>${esc(t("impDupesNum"))}</option></select></label>`;
+        const key = esc(nameKey(name));
+        const num = s.distinct.includes(nameKey(name));
+        const opt = (value: "one" | "num", on: boolean, label: string): string =>
+          `<label class="imp-check"><input type="radio" class="imp-dup" name="imp-dup-${n}" value="${value}" data-key="${key}"${on ? " checked" : ""} />` +
+          `<span>${esc(label)}</span></label>`;
+        return `<div role="radiogroup" aria-label="${esc(name)}"><span>${esc(name)} ×${g.length}</span>` +
+          opt("one", !num, t("impDupesOne")) + opt("num", num, t("impDupesNum")) + `</div>`;
       });
       parts.push(`<div class="imp-dupes"><b>${esc(L.impDupes(built.dupes.length))}</b>${groups.join("")}</div>`);
     }
@@ -405,16 +409,16 @@ export function openImporter(s: ImportState, onApply: (r: ImportResult) => void)
     renderFoot();
   });
   fix.addEventListener("change", (e) => {
-    const el = e.target as HTMLInputElement | HTMLSelectElement;
-    if (el instanceof HTMLInputElement && el.classList.contains("imp-case")) s.fixCase = el.checked;
+    const el = e.target as HTMLInputElement;
+    if (el.classList.contains("imp-case")) s.fixCase = el.checked;
     const key = el.classList.contains("imp-dup") ? (el.dataset.key ?? "") : null;
     if (key !== null) {
       s.distinct = s.distinct.filter((k) => k !== key);
       if (el.value === "num") s.distinct.push(key);
     }
     render();
-    // El panel se redibuja entero: el foco vuelve al selector que se tocó.
-    if (key !== null) fix.querySelector<HTMLSelectElement>(`select[data-key="${CSS.escape(key)}"]`)?.focus();
+    // El panel se redibuja entero: el foco vuelve a la opción que se tocó.
+    if (key !== null) fix.querySelector<HTMLInputElement>(`input[name="${CSS.escape(el.name)}"][value="${el.value}"]`)?.focus();
   });
   const search_ = q<HTMLInputElement>(".imp-search");
   search_.addEventListener("input", () => {
