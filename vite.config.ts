@@ -100,13 +100,32 @@ function textosPorPagina(): Plugin {
   };
 }
 
+/**
+ * Las páginas de lectura se adelantan: cuando el mouse se posa 200 ms sobre un
+ * enlace a otra (o al tocarlo, en el celular), Chrome la prerenderiza y al
+ * hacer clic se muestra al instante. Solo esas seis: son livianas y no tienen
+ * efectos. La herramienta no, que arranca audio, sesiones y miniaturas, y el
+ * contador de visitas espera a que la página se muestre (`analytics.ts`). Los
+ * navegadores sin speculation rules ignoran el bloque.
+ */
+function adelantarLectura(): Plugin {
+  const paginas = ["juegos", "como-funciona", "historia", "seguridad", "precios", "terminos"];
+  const reglas = {
+    prerender: [{ where: { href_matches: paginas.map((p) => `/${p}.html`) }, eagerness: "moderate" }],
+  };
+  return {
+    name: "tinkazo:adelantar-lectura",
+    transformIndexHtml: () => [{ tag: "script", attrs: { type: "speculationrules" }, children: JSON.stringify(reglas), injectTo: "head" }],
+  };
+}
+
 // El sitio, que es la herramienta y nada más; la verificación pública, que se
 // abre desde el QR o el enlace del comprobante y no necesita cuenta; y las
 // páginas de lectura (precios, juegos, historia, seguridad, términos), que
 // salieron de la principal para no meterle nada de eso a quien solo quiere
 // sortear.
 export default defineConfig({
-  plugins: [textosPorPagina()],
+  plugins: [textosPorPagina(), adelantarLectura()],
   build: {
     target: "es2022",
     sourcemap: true,
