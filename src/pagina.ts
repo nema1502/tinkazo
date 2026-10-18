@@ -1,6 +1,5 @@
 import "./styles.css";
-import { chooseLang, initialLang, onLangChange, setLang } from "./i18n";
-import { params } from "./state";
+import { chooseLang, initialLang, onLangChange, setLang, textosDeLaPagina } from "./idioma";
 import { network } from "./stellar/config";
 import { loadSessionKind } from "./stellar/session-store";
 
@@ -12,11 +11,14 @@ import { loadSessionKind } from "./stellar/session-store";
  * quien quiere entender el proyecto no tiene que aprender a usarlo primero.
  *
  * Todas cargan lo mismo: el idioma y los dos botones de la cabecera. No hay
- * nada de red acá.
+ * nada de red acá. Los textos vienen en el HTML de cada página, solo los que
+ * esa página usa (ver `idioma.ts`): el diccionario entero es de la herramienta.
  */
+textosDeLaPagina();
 // `?theme=light|dark` fuerza el tema, igual que en la página principal: sirve
-// para las capturas y para mirar las dos versiones sin tocar el sistema.
-const tema = params.get("theme");
+// para las capturas y para mirar las dos versiones sin tocar el sistema. Se
+// lee acá y no de `state`, que es de la herramienta y arrastra a los juegos.
+const tema = new URLSearchParams(location.search).get("theme");
 if (tema === "light" || tema === "dark") {
   document.documentElement.dataset.theme = tema;
   // Las imágenes con versión clara la eligen por el tema del sistema: con

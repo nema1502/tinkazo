@@ -1,6 +1,6 @@
 import "./styles.css";
 import { $, esc } from "./dom";
-import { T, chooseLang, getLang, initialLang, setLang, t } from "./i18n";
+import { chooseLang, getLang, initialLang, setLang, texto as t, textos, textosDeLaPagina } from "./idioma";
 import { SAMPLE, avatar } from "./state";
 import { canonicalList, listHash } from "./protocol/canonical";
 import { RPC_URLS } from "./stellar/config";
@@ -85,6 +85,8 @@ function fail(messageKey: string, detail = ""): void {
 }
 
 async function main(): Promise<void> {
+  // Los textos de esta página vienen en su HTML (ver `idioma.ts`).
+  textosDeLaPagina();
   // La cuenta a la vista, como en las demás páginas: "Mi cuenta" o "Entrar".
   {
     const kind = loadSessionKind(network.name);
@@ -375,7 +377,7 @@ async function readFromChain(
  */
 function premioDe(proof: Proof, meta: string | undefined): string {
   if (meta === undefined) return proof.prize ?? "";
-  return meta === T.es.defaultMeta || meta === T.en.defaultMeta ? "" : meta;
+  return meta === textos("es").defaultMeta || meta === textos("en").defaultMeta ? "" : meta;
 }
 
 /**

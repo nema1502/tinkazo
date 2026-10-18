@@ -1,6 +1,6 @@
 import "./pagina";
 import { $, esc } from "./dom";
-import { onLangChange, t } from "./i18n";
+import { onLangChange, texto as t } from "./idioma";
 import { canonicalList, listHash } from "./protocol/canonical";
 import { bytesToHex } from "./protocol/quicknet";
 import { decodePreview } from "./protocol/proof";

@@ -1,5 +1,104 @@
-import { resolve } from "node:path";
-import { defineConfig } from "vite";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { defineConfig, runnerImport, type Plugin } from "vite";
+
+type Dict = Record<string, unknown>;
+
+/**
+ * Los textos de cada página, adentro de su HTML.
+ *
+ * El diccionario de `src/i18n.ts` tiene ~870 claves, casi todas de la
+ * herramienta y de los relatores de los juegos, y era el 94 % del código común
+ * que bajaba cada página: precios o verificar cargaban 140 KB para pintar unos
+ * cuantos títulos. Al construir (y en `pnpm dev`), cada página que no es la
+ * herramienta recibe en un `<script type="application/json" id="textos">` solo
+ * las cadenas que usa, en español y en inglés, y `src/idioma.ts` las pinta.
+ *
+ * Qué usa una página sale de dos lugares: los atributos `data-i*` de su HTML, y
+ * las cadenas entre comillas de su código (la entrada y lo que importa sin
+ * `import()`) que son claves del diccionario. Sobra alguna, no falta ninguna:
+ * así entran también las que el código pone a mano, como `t("vCheckList")`.
+ *
+ * La herramienta (`index.html`) importa `i18n.ts` y sigue con el diccionario
+ * entero, porque los juegos lo usan con `T[getLang()]` y `t()`.
+ */
+function textosPorPagina(): Plugin {
+  const raiz = __dirname;
+  const i18n = resolve(raiz, "src/i18n.ts");
+  let cache: { cuando: number; T: Record<"es" | "en", Dict> } | null = null;
+
+  const diccionario = async (): Promise<Record<"es" | "en", Dict>> => {
+    const cuando = Math.max(statSync(i18n).mtimeMs, statSync(resolve(raiz, "src/idioma.ts")).mtimeMs);
+    if (cache?.cuando !== cuando) {
+      const { module } = await runnerImport<{ T: Record<"es" | "en", Dict> }>(i18n, { configFile: false, logLevel: "silent" });
+      cache = { cuando, T: module.T };
+    }
+    return cache.T;
+  };
+
+  /** Resuelve un import relativo a un archivo del proyecto, o null si no es código nuestro. */
+  const resolver = (desde: string, spec: string): string | null => {
+    const base = resolve(dirname(desde), spec);
+    for (const f of [base, `${base}.ts`, resolve(base, "index.ts")]) {
+      if (existsSync(f) && statSync(f).isFile()) return f;
+    }
+    return null;
+  };
+
+  /** La entrada y todo lo que importa de forma estática (no `import()`, no `import type`). */
+  const alcanzables = (entrada: string): string[] => {
+    const vistos = new Set<string>();
+    const pendientes = [entrada];
+    while (pendientes.length) {
+      const f = pendientes.pop() as string;
+      if (vistos.has(f) || f === i18n || !f.endsWith(".ts")) continue;
+      vistos.add(f);
+      const codigo = readFileSync(f, "utf8");
+      for (const m of codigo.matchAll(/^\s*(?:import|export)\s+(?!type\b)(?:[^"';]*?\sfrom\s*)?["'](\.{1,2}\/[^"']+)["']/gm)) {
+        const r = resolver(f, m[1] as string);
+        if (r) pendientes.push(r);
+      }
+    }
+    return [...vistos];
+  };
+
+  return {
+    name: "tinkazo:textos-por-pagina",
+    transformIndexHtml: {
+      order: "post",
+      async handler(_html, ctx) {
+        // El HTML de origen: en `post` el que llega ya tiene los scripts reescritos.
+        const fuente = readFileSync(ctx.filename, "utf8");
+        const entradas = [...fuente.matchAll(/<script[^>]*\bsrc="\/(src\/[^"]+\.ts)"/g)].map((m) => resolve(raiz, m[1] as string));
+        if (entradas.length === 0) return;
+        // La herramienta importa el diccionario entero: no necesita el suyo.
+        const usaElEntero = entradas.some((e) => /^\s*import\s+(?!type\b)[^;]*?from\s*["']\.\/i18n["']/m.test(readFileSync(e, "utf8")));
+        if (usaElEntero) return;
+
+        const T = await diccionario();
+        const claves = new Set<string>();
+        const delHtml = [...fuente.matchAll(/\bdata-(?:i|i-html|i-ph|i-title|i-aria|label-i)="([^"]+)"/g)].map((m) => m[1] as string);
+        for (const k of delHtml) {
+          if (typeof T.es[k] !== "string" || typeof T.en[k] !== "string") {
+            this.warn(`${ctx.path}: la clave "${k}" no es una cadena en los dos idiomas de src/i18n.ts`);
+            continue;
+          }
+          claves.add(k);
+        }
+        for (const archivo of entradas.flatMap(alcanzables)) {
+          for (const m of readFileSync(archivo, "utf8").matchAll(/(["'`])([A-Za-z][A-Za-z0-9]*)\1/g)) {
+            const k = m[2] as string;
+            if (typeof T.es[k] === "string" && typeof T.en[k] === "string") claves.add(k);
+          }
+        }
+        const elegir = (l: "es" | "en"): Dict => Object.fromEntries([...claves].sort().map((k) => [k, T[l][k]]));
+        // `<` escapado: el JSON va adentro de un <script> y nada puede cerrarlo.
+        const json = JSON.stringify({ es: elegir("es"), en: elegir("en") }).replace(/</g, "\\u003c");
+        return [{ tag: "script", attrs: { type: "application/json", id: "textos" }, children: json, injectTo: "body" }];
+      },
+    },
+  };
+}
 
 // El sitio, que es la herramienta y nada más; la verificación pública, que se
 // abre desde el QR o el enlace del comprobante y no necesita cuenta; y las
@@ -7,6 +106,7 @@ import { defineConfig } from "vite";
 // salieron de la principal para no meterle nada de eso a quien solo quiere
 // sortear.
 export default defineConfig({
+  plugins: [textosPorPagina()],
   build: {
     target: "es2022",
     sourcemap: true,
