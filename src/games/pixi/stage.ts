@@ -79,6 +79,17 @@ export class PixiInitError extends Error {
 export const FONT = "system-ui, -apple-system, 'Segoe UI', sans-serif";
 export const MONO = "ui-monospace, Consolas, monospace";
 
+/**
+ * El tamaño de los chips con nombre, sobre el de 12 px de letra en una
+ * pantalla de 720 con que nacieron. Proyectados, a 12 px no se leían desde el
+ * fondo de la sala, y el crítico de juegos pidió 1,6 o más (16 de octubre de
+ * 2026): la letra queda en 19 px. El `scale` de cada chip sigue siendo
+ * relativo a esto, así que un juego que necesite otro tamaño lo pide igual que
+ * antes. Un juego que dibuja sobre el chip o reparte chips usa su alto de
+ * verdad (`chip.height`) o esta escala, nunca los 22 de alto de antes.
+ */
+export const CHIP_SCALE = 1.6;
+
 export interface PixiStage {
   app: Application;
   view: HTMLCanvasElement;
@@ -100,8 +111,11 @@ export interface PixiStage {
   say(msg: string, heat?: number): void;
   face(name: string): Texture;
   text(s: string, style: TextStyleOptions): Text;
-  /** Un chip con la cara y el nombre, anclado por la izquierda al medio. */
-  /** `faceOf`: de quién es la cara, cuando la etiqueta es una versión corta del nombre. */
+  /**
+   * Un chip con la cara y el nombre, anclado por la izquierda al medio.
+   * `scale` es relativo al tamaño legible de `CHIP_SCALE`; `faceOf`, de quién
+   * es la cara, cuando la etiqueta es una versión corta del nombre.
+   */
   chip(name: string, scale?: number, faceOf?: string): Container;
   /**
    * Los nombres de `who` encima de cada uno, en una capa propia que los juegos
@@ -360,7 +374,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     new Text({ text: s, style: { fontFamily: FONT, ...style }, resolution: textRes });
 
   const chip = (name: string, scale = 1, faceOf = name): Container => {
-    const k = u() * scale;
+    const k = u() * scale * CHIP_SCALE;
     const c = new Container();
     const label = text(shorten(name, 20), { fontSize: 12 * k, fontWeight: "800", fill: INK });
     const av = new Sprite(face(faceOf));
@@ -629,7 +643,6 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     for (const c of tagChips.values()) c.visible = false;
     const placed: { x: number; y: number; w: number; h: number }[] = avoid.map((r) => ({ x: r.x, y: r.y + r.height / 2, w: r.width, h: r.height }));
     const W = sw(), H = sh();
-    const lo = top() + 14 * k, hi = H - bottom() - 16 * k;
     const pts = who.map((i) => ({ i, p: at(i) })).filter((a): a is { i: number; p: { x: number; y: number } } => !!a.p).sort((a, b) => a.p.y - b.p.y);
     for (const { i, p } of pts) {
       let c = tagChips.get(i);
@@ -639,7 +652,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         tagLayer.addChild(c);
       }
       c.visible = true;
-      const cw = c.width, ch = 24 * k;
+      // El alto de verdad, con la sombra: con los 24 de antes escritos a mano,
+      // los chips de letra legible se encimaban al apilarse (16 de octubre de 2026).
+      const cw = c.width, ch = c.height;
+      const lo = top() + ch / 2 + 2 * k, hi = H - bottom() - ch / 2 - 3 * k;
       const cx = (v: number): number => Math.max(8 * k, Math.min(W - cw - 8 * k, v));
       const cy = (v: number): number => Math.max(lo, Math.min(hi, v));
       const choca = (a: number, b: number): boolean => placed.some((r) => a < r.x + r.w && a + cw > r.x && b - ch / 2 < r.y + r.h / 2 && b + ch / 2 > r.y - r.h / 2);
