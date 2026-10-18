@@ -2,7 +2,7 @@ import { $, esc } from "../dom";
 import { T, getLang, onLangChange, t } from "../i18n";
 import { CUENTA_SECONDS, LCOLORS, WHEEL_MAX, app, conCuenta, params, playableGame, avatar, forceMotion, setCardSeconds, setShowGate, setYaContaron, skipMotion, skippedForReducedMotion, type Beacon, type Game } from "../state";
 import { beep } from "../sound";
-import { bytesToHex, decompressG1, fetchRound, hexToBytes, randomnessOf, roundUrl, verifyRound } from "../protocol/drand";
+import { bytesToHex, fetchRound, hexToBytes, randomnessOf, roundUrl } from "../protocol/quicknet";
 import { select } from "../protocol/select";
 import { network, txUrl } from "../stellar/config";
 import { PROOF_VERSION, type Proof, proofUrl } from "../protocol/proof";
@@ -16,12 +16,18 @@ import { setList } from "./participants";
 import { CARD_SECONDS, showGameCard } from "./gamecard";
 import { startMusic, stopMusic } from "../music";
 
+/**
+ * La verificación BLS, que pesa: la cuenta regresiva la pide (ver `freeze`) y
+ * acá se espera, en paralelo con la ronda. La portada no la baja.
+ */
+const bls = (): Promise<typeof import("../protocol/drand")> => import("../protocol/drand");
+
 /** Obtiene la ronda objetivo, verifica su firma y selecciona (protocolo §2, §5). */
 async function resolveBeacon(
   round: number,
   onAttempt: (attempt: number, total: number) => void,
 ): Promise<Beacon> {
-  const { signature } = await fetchRound(round, { onAttempt });
+  const [{ signature }, { verifyRound }] = await Promise.all([fetchRound(round, { onAttempt }), bls()]);
   if (!verifyRound(round, signature)) throw new Error("bad-signature");
   return { round, randomness: bytesToHex(randomnessOf(signature)), signature };
 }
@@ -86,6 +92,8 @@ export async function draw(): Promise<void> {
       const TRIES = 4;
       let lastError: unknown = null;
       let done = false;
+      // Ya está cargada: `resolveBeacon` la esperó para verificar la firma.
+      const { decompressG1 } = await bls();
       for (let attempt = 1; attempt <= TRIES && !done; attempt++) {
         try {
           const res = await drawOnChain(raffleId, decompressG1(beacon.signature), (step, detail) => {
@@ -693,10 +701,11 @@ function setNotifyLinks(names: string[], winners: number[], url: string): void {
 }
 
 /** Rehace la verificación de la firma y la selección desde cero (protocolo §7). */
-export function reverify(): void {
+export async function reverify(): Promise<void> {
   if (!app.frozen || !app.drawn) return;
   const { names, listHash } = app.frozen;
   const { beacon, winners } = app.drawn;
+  const { verifyRound } = await bls();
   const sigOk = verifyRound(beacon.round, beacon.signature);
   const seedOk = bytesToHex(randomnessOf(beacon.signature)) === beacon.randomness;
   const again = select(hexToBytes(beacon.randomness), hexToBytes(listHash), names.length, winners.length);

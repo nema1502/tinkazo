@@ -4,16 +4,8 @@ import { T, chooseLang, getLang, initialLang, setLang, t } from "./i18n";
 import { SAMPLE, avatar } from "./state";
 import { canonicalList, listHash } from "./protocol/canonical";
 import { RPC_URLS } from "./stellar/config";
-import {
-  QUICKNET,
-  bytesToHex,
-  fetchRound,
-  hexToBytes,
-  randomnessOf,
-  roundTime,
-  roundUrl,
-  verifyRound,
-} from "./protocol/drand";
+import { QUICKNET, bytesToHex, fetchRound, hexToBytes, randomnessOf, roundTime, roundUrl } from "./protocol/quicknet";
+import { verifyRound } from "./protocol/drand";
 import { select } from "./protocol/select";
 import { decodeProof, isAnchored, type Proof } from "./protocol/proof";
 import { network } from "./stellar/config";

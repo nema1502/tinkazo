@@ -1,7 +1,7 @@
 import { $ } from "../dom";
 import { T, getLang, t } from "../i18n";
 import { ANCHOR_LEAD_SECONDS, LEAD_SECONDS, WHEEL_MAX, app, params, type Game } from "../state";
-import { bytesToHex, roundTime, targetRound } from "../protocol/drand";
+import { bytesToHex, roundTime, targetRound } from "../protocol/quicknet";
 import { listHash } from "../protocol/canonical";
 import { contractUrl, network } from "../stellar/config";
 import { anchorErrorText, hideTxStatus, sealOnChain, showTxStatus, stepLabel } from "./anchor";
@@ -75,8 +75,10 @@ function startCountdown(): void {
   const left = document.getElementById("wait-left");
   const line = box?.querySelector(".wait-line");
   if (num && app.frozen) num.textContent = `#${app.frozen.round}`;
-  // La conexión está ociosa hasta que nazca la ronda: se baja el motor.
+  // La conexión está ociosa hasta que nazca la ronda: se baja el motor, y la
+  // verificación de la firma, que la portada no carga.
   if (app.frozen) preloadGame(app.game, app.frozen.names.length);
+  void import("../protocol/drand").catch(() => undefined);
   const tick = (): void => {
     const s = secondsToRound();
     if (s > 0) {
