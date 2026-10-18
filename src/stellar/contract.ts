@@ -1,6 +1,6 @@
 import { contract, rpc } from "@stellar/stellar-sdk";
 import { network } from "./config";
-import { activeWallet } from "./wallet";
+import { activeWallet, type WalletAdapter } from "./wallet-lite";
 
 /**
  * Cliente del contrato `tinkazo-raffle`.
@@ -79,17 +79,19 @@ export type TinkazoClient = contract.Client & TinkazoContract;
 
 export const server = new rpc.Server(network.rpcUrl);
 
-let cached: { client: TinkazoClient; publicKey: string | null } | null = null;
+let cached: { client: TinkazoClient; publicKey: string | null; wallet: WalletAdapter | null } | null = null;
 
 /**
  * Cliente listo para firmar con la wallet activa. Se recrea si cambia la
- * cuenta, porque la firma va atada a la dirección que paga la transacción.
+ * cuenta o la wallet, porque la firma va atada a la dirección que paga la
+ * transacción y a quien la firma. Antes había que olvidarlo a mano al cambiar
+ * de wallet, y eso obligaba a bajar el SDK solo para retomar una sesión.
  */
 export async function getClient(): Promise<TinkazoClient> {
   if (!network.contractId) throw new Error("no-contract-on-network");
   const wallet = activeWallet();
   const publicKey = wallet?.address ?? null;
-  if (cached && cached.publicKey === publicKey) return cached.client;
+  if (cached && cached.publicKey === publicKey && cached.wallet === wallet) return cached.client;
 
   const client = await contract.Client.from<TinkazoContract>({
     contractId: network.contractId,
@@ -103,11 +105,14 @@ export async function getClient(): Promise<TinkazoClient> {
         }
       : {}),
   });
-  cached = { client, publicKey };
+  cached = { client, publicKey, wallet };
   return client;
 }
 
-/** Olvida el cliente en memoria. Se llama al cambiar de wallet. */
+/**
+ * Olvida el cliente en memoria. Al cambiar de wallet ya no hace falta
+ * (`getClient` lo nota solo); queda para forzarlo.
+ */
 export function resetClient(): void {
   cached = null;
 }
