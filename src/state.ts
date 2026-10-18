@@ -141,14 +141,15 @@ export const ANCHOR_LEAD_SECONDS = 45;
  *
  * Era treinta hasta el 17 de octubre de 2026. En el primer evento después de
  * Stellar Elite, Nicolás lo sintió corto: "deberían durar más los juegos para
- * tener más emoción y expectativa". Treinta y ocho y cincuenta son lo que
- * alcanzan los juegos sin pasar de `MAX_STRETCH`, o sea sin volverse cámara
- * lenta. La carrera, además, ganó contenido: la clasificatoria y la
+ * tener más emoción y expectativa". Treinta y ocho y cuarenta y cinco son
+ * lo que alcanzan los doce juegos sin pasar de `MAX_STRETCH`, o sea sin
+ * volverse cámara lenta: con cincuenta, el teleférico y el aguayo quedaban en
+ * 39,5 (auditor exigente, 17 de octubre). La carrera, además, ganó contenido: la clasificatoria y la
  * presentación de los carriles.
  *
  * El resultado no cambia: el ganador ya estaba decidido antes de que empiece.
  */
-export const PACES = { rapido: 20, normal: 38, epico: 50 } as const;
+export const PACES = { rapido: 20, normal: 38, epico: 45 } as const;
 export type Pace = keyof typeof PACES;
 
 const PACE_KEY = "tinkazo.pace";
