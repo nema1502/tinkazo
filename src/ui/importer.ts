@@ -107,14 +107,14 @@ export function openImporter(s: ImportState, onApply: (r: ImportResult) => void)
   const ps = presets(tb);
   let search = "";
   let built: Built = buildList(tb, s.nameCol, s.picked, listOpts(s));
-  // Las filas que no se pudieron leer, arriba de todo: si falta alguien, es lo
-  // primero que tiene que ver. Solo los números de línea, para buscarlas en el
-  // archivo: la fila entera puede traer correos, y la pantalla puede estar
-  // proyectada.
+  // Las filas que no se pudieron leer, en la cabecera, con lo demás que se
+  // sabe del archivo: si falta alguien, es lo primero que tiene que ver. Solo
+  // los números de línea, para buscarlas en el archivo: la fila entera puede
+  // traer correos, y la pantalla puede estar proyectada. No usa `.imp-out`:
+  // esa clase es la de "quedan afuera", que se busca por clase más abajo.
   const lines = tb.skipped.slice(0, 6).join(", ") + (tb.skipped.length > 6 ? "…" : "");
   const skippedNote = tb.skipped.length
-    ? `<div class="imp-out" role="note"><p class="imp-out-h">${esc(L.impSkipped(tb.skipped.length, lines))}</p>` +
-      `<p class="note">${esc(t("impSkippedHint"))}</p></div>`
+    ? `<p class="note imp-skip" role="note"><b>${esc(L.impSkipped(tb.skipped.length, lines))}</b> ${esc(t("impSkippedHint"))}</p>`
     : "";
 
   const back = document.createElement("div");
@@ -131,12 +131,12 @@ export function openImporter(s: ImportState, onApply: (r: ImportResult) => void)
         <span class="kicker">${esc(source === "luma" ? t("impLuma") : t("impFile"))}</span>
         <h3 id="imp-title">${esc(s.fileName || t("impPasted"))}</h3>
         <p class="note">${esc(L.impShape(tb.rows.length, tb.columns.length))}</p>
+        ${skippedNote}
       </div>
       <button class="imp-x" type="button" aria-label="${esc(t("impClose"))}">×</button>
     </div>
     <div class="imp-body">
       <aside class="imp-side">
-        ${skippedNote}
         <label class="imp-field"><span class="kicker">${esc(t("impNameCol"))}</span><select class="imp-col"></select></label>
         <fieldset class="imp-who">
           <legend class="kicker">${esc(t("impWho"))}</legend>
