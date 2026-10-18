@@ -1,8 +1,8 @@
 import { $, esc } from "../dom";
 import { SAMPLE, app, avatar } from "../state";
 import { canonicalList } from "../protocol/canonical";
-import { T, getLang, onLangChange } from "../i18n";
-import { parseTable } from "./csv";
+import { type Dict, T, getLang, onLangChange } from "../i18n";
+import { decodeText, dropListHeader, parseTable } from "./csv";
 import { type ImportResult, type ImportState, initialState, openImporter } from "./importer";
 
 /** Lista canónica a partir del textarea (protocolo §1). */
@@ -39,9 +39,23 @@ export function bindParticipants(): void {
     quitarAvisos();
     renderNames();
   });
+  // El aviso vive desde el principio, vacío: un lector de pantalla anuncia los
+  // cambios de una región que ya estaba, no de una que aparece con el texto.
+  const nota = document.createElement("p");
+  nota.id = "csv-aviso";
+  // El mismo recuadro con que "otro premio" dice quién salió de la lista.
+  nota.className = "again-note";
+  nota.setAttribute("role", "status");
+  nota.style.display = "none";
+  $("again-note").before(nota);
+
   const onFile = async (file: File | undefined): Promise<void> => {
     if (!file || app.frozen) return;
-    loadFile(await file.text(), file.name);
+    // Los bytes y no `file.text()`, que lee todo como UTF-8: un CSV de Excel
+    // en Windows llegaba con "Mar�a".
+    const text = decodeText(new Uint8Array(await file.arrayBuffer()));
+    if (text === null) avisar((L) => L.impNotText(file.name));
+    else loadFile(text, file.name);
   };
   for (const id of ["csv", "csv-luma"]) {
     $<HTMLInputElement>(id).addEventListener("change", async (e) => {
@@ -85,18 +99,32 @@ export function bindParticipants(): void {
  *
  * Una tabla (Luma, Meetup, Eventbrite, una planilla) abre la ventana de
  * importar: ahí se elige la columna, quiénes entran y se marca a mano. Una
- * lista suelta, de un nombre por línea, va directo al texto como siempre. La
- * lista canónica no cambia: sigue recibiendo un nombre por línea.
+ * lista suelta, de un nombre por línea, va directo al texto como siempre, sin
+ * el encabezado de la columna si lo trae. La lista canónica no cambia: sigue
+ * recibiendo un nombre por línea.
+ *
+ * Un archivo sin nombres (vacío, o solo el encabezado) no toca la lista que
+ * había: la borraba sin decir nada.
  */
 export function loadFile(raw: string, fileName = "lista.csv"): void {
+  callarAviso();
   const parsed = parseTable(raw);
-  if (!parsed || parsed.columns.length < 2) {
-    hideSummary();
-    setList(raw);
+  if (parsed && parsed.columns.length > 1) {
+    if (parsed.rows.length === 0) {
+      avisar((L) => L.impNoNames(fileName));
+      return;
+    }
+    imported = initialState(parsed, fileName);
+    openImporter(imported, apply);
     return;
   }
-  imported = initialState(parsed, fileName);
-  openImporter(imported, apply);
+  const { text, header } = dropListHeader(raw);
+  if (canonicalList(text).length === 0) {
+    avisar((L) => L.impNoNames(fileName));
+    return;
+  }
+  setList(text);
+  if (header) avisar((L) => L.impHeaderOut(header));
 }
 
 /** Lo que eligió en la ventana, al texto, con un resumen para volver a abrirla. */
@@ -110,20 +138,45 @@ function showSummary(): void {
   if (!lastResult) return;
   const L = T[getLang()];
   const r = lastResult;
-  $("csv-note").textContent = L.impSummary(r.source === "luma", r.picked, r.total, r.mode, r.hand);
+  // Las filas que no se pudieron leer siguen a la vista después de cerrar la ventana.
+  $("csv-note").textContent = L.impSummary(r.source === "luma", r.picked, r.total, r.mode, r.hand) +
+    (r.skipped ? ` · ${L.impSkippedShort(r.skipped)}` : "");
   $("csv-pick").style.display = "";
 }
 
-// El resumen se vuelve a escribir al cambiar de idioma.
+/**
+ * Lo que pasó con lo último que se cargó y no se ve en la lista: un archivo
+ * sin nombres que no se usó, o el encabezado que quedó afuera. Se guarda como
+ * función del idioma para volver a escribirlo si cambia.
+ */
+let aviso: ((L: Dict) => string) | null = null;
+
+function avisar(texto: (L: Dict) => string): void {
+  aviso = texto;
+  const el = $("csv-aviso");
+  el.textContent = texto(T[getLang()]);
+  el.style.display = "";
+}
+
+function callarAviso(): void {
+  aviso = null;
+  const el = document.getElementById("csv-aviso");
+  if (el) el.style.display = "none";
+}
+
+// El resumen y el aviso se vuelven a escribir al cambiar de idioma.
 onLangChange(() => {
   if (lastResult) showSummary();
+  if (aviso) $("csv-aviso").textContent = aviso(T[getLang()]);
 });
 
 /**
  * Lo que deja "otro premio" arriba del cuadro (quién salió de la lista y
- * "Recuperar la lista anterior") vale hasta que la lista cambia.
+ * "Recuperar la lista anterior") y el aviso del último archivo valen hasta
+ * que la lista cambia.
  */
 function quitarAvisos(): void {
+  callarAviso();
   for (const id of ["again-note", "btn-recuperar"]) {
     const el = document.getElementById(id);
     if (el) el.style.display = "none";

@@ -56,6 +56,8 @@ export interface ImportResult {
   mode: ImportState["mode"];
   hand: number;
   source: "luma" | null;
+  /** Cuántas filas del archivo no se pudieron leer. */
+  skipped: number;
 }
 
 /** El estado inicial de un archivo recién leído: entran los que fueron, si se sabe. */
@@ -97,6 +99,15 @@ export function openImporter(s: ImportState, onApply: (r: ImportResult) => void)
   const ps = presets(tb);
   let search = "";
   let built: Built = buildList(tb, s.nameCol, s.picked, s);
+  // Las filas que no se pudieron leer, arriba de todo: si falta alguien, es lo
+  // primero que tiene que ver. Solo los números de línea, para buscarlas en el
+  // archivo: la fila entera puede traer correos, y la pantalla puede estar
+  // proyectada.
+  const lines = tb.skipped.slice(0, 6).join(", ") + (tb.skipped.length > 6 ? "…" : "");
+  const skippedNote = tb.skipped.length
+    ? `<div class="imp-out" role="note"><p class="imp-out-h">${esc(L.impSkipped(tb.skipped.length, lines))}</p>` +
+      `<p class="note">${esc(t("impSkippedHint"))}</p></div>`
+    : "";
 
   const back = document.createElement("div");
   back.className = "modal-back imp-back";
@@ -110,13 +121,14 @@ export function openImporter(s: ImportState, onApply: (r: ImportResult) => void)
     <div class="imp-head">
       <div class="imp-title">
         <span class="kicker">${esc(source === "luma" ? t("impLuma") : t("impFile"))}</span>
-        <h3 id="imp-title">${esc(s.fileName)}</h3>
+        <h3 id="imp-title">${esc(s.fileName || t("impPasted"))}</h3>
         <p class="note">${esc(L.impShape(tb.rows.length, tb.columns.length))}</p>
       </div>
       <button class="imp-x" type="button" aria-label="${esc(t("impClose"))}">×</button>
     </div>
     <div class="imp-body">
       <aside class="imp-side">
+        ${skippedNote}
         <label class="imp-field"><span class="kicker">${esc(t("impNameCol"))}</span><select class="imp-col"></select></label>
         <fieldset class="imp-who">
           <legend class="kicker">${esc(t("impWho"))}</legend>
@@ -432,6 +444,7 @@ export function openImporter(s: ImportState, onApply: (r: ImportResult) => void)
       mode: s.mode,
       hand: s.hand,
       source,
+      skipped: tb.skipped.length,
     });
     close();
   });
