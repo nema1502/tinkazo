@@ -81,6 +81,14 @@ export interface Dict {
   cSapTally: (k: number, of: number) => string;
   cQualStart: (n: number) => string;
   cQualLeft: (n: number) => string;
+  /** La clasificatoria de la carrera: `n` en la largada, `k` a la final. */
+  rqTitle: string;
+  rqSub: (n: number, k: number) => string;
+  rqStart: (n: number, k: number) => string;
+  rqLeft: (n: number, k: number) => string;
+  /** La presentación de los carriles antes de la largada. */
+  rqIntro: string;
+  rqLane: (k: number) => string;
   cQuiStart: (n: number) => string;
   cQuiNext: (k: number, of: number) => string;
   cQuiTwo: (a: string, b: string) => string;
@@ -466,6 +474,12 @@ export const T: Record<Lang, Dict> = {
     cQualStart: (n) => `¡${n} nombres! Solo 12 llegan a la mesa.`,
     cQualLeft: (n) => (n <= 12 ? `¡Quedan ${n}: esos van a la mesa!` : `¡Quedan ${n}!`),
     cQualIn: "EN JUEGO",
+    rqTitle: "CLASIFICATORIA",
+    rqSub: (n, k) => `${n} en la largada · ${k} a la final`,
+    rqStart: (n, k) => `¡${n} en la largada! Solo ${k} corren la final.`,
+    rqLeft: (n, k) => (n <= k ? `¡Estos ${n} van a la final!` : `¡Quedan ${n}!`),
+    rqIntro: "¡A la largada, carril por carril!",
+    rqLane: (k) => `CARRIL ${k}`,
     // --- ¿Quién es?: cartas con cara; cada letra da vuelta a las que no coinciden.
     gameQuien: "¿Quién es?",
     cQuiStart: (n) => `¡${n} cartas! Letra por letra, queda una.`,
@@ -1411,6 +1425,12 @@ export const T: Record<Lang, Dict> = {
     cQualStart: (n) => `${n} names! Only 12 make it to the table.`,
     cQualLeft: (n) => (n <= 12 ? `${n} left: they go to the table!` : `${n} left!`),
     cQualIn: "IN PLAY",
+    rqTitle: "QUALIFYING",
+    rqSub: (n, k) => `${n} at the start · ${k} make the final`,
+    rqStart: (n, k) => `${n} at the start! Only ${k} run the final.`,
+    rqLeft: (n, k) => (n <= k ? `These ${n} go to the final!` : `${n} left!`),
+    rqIntro: "To the start, lane by lane!",
+    rqLane: (k) => `LANE ${k}`,
     // --- Who is it?: face cards; each letter flips the ones that don't match.
     gameQuien: "Who is it?",
     cQuiStart: (n) => `${n} cards! Letter by letter, one is left.`,

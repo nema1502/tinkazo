@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planQualifier, wavesFor } from "./qualifier";
+import { planQualifier, wavesAround, wavesFor } from "./qualifier";
 
 /** Un rng sembrado y simple, solo para las pruebas (mulberry32). */
 function rngOf(seed: number): () => number {
@@ -69,5 +69,35 @@ describe("qualifier: la clasificatoria", () => {
     expect(() => planQualifier(50, [1, 1], 12, rngOf(1))).toThrow();
     expect(() => planQualifier(50, [60], 12, rngOf(1))).toThrow();
     expect(() => planQualifier(50, Array.from({ length: 13 }, (_, i) => i), 12, rngOf(1))).toThrow();
+  });
+});
+
+describe("wavesAround: la clasificatoria de la carrera", () => {
+  it("se van todos menos los finalistas, cada uno una sola vez, y nunca un finalista", () => {
+    for (const n of [9, 27, 50, 200]) {
+      for (let seed = 1; seed <= 20; seed++) {
+        const rng = rngOf(seed);
+        const finalistas = Array.from({ length: 8 }, () => Math.floor(rng() * n)).filter((x, i, a) => a.indexOf(x) === i);
+        const waves = wavesAround(n, finalistas, rngOf(seed + 1000));
+        const idos = waves.flat();
+        expect(new Set(idos).size).toBe(idos.length);
+        expect(idos.length).toBe(n - finalistas.length);
+        for (const f of finalistas) expect(idos).not.toContain(f);
+      }
+    }
+  });
+
+  it("con 27 en la largada son dos oleadas, la segunda más chica", () => {
+    const waves = wavesAround(27, [0, 3, 5, 8, 13, 21, 22, 26], rngOf(7));
+    expect(waves).toHaveLength(2);
+    expect((waves[0] as number[]).length).toBeGreaterThan((waves[1] as number[]).length);
+  });
+
+  it("sin nadie afuera no hay oleadas", () => {
+    expect(wavesAround(8, [0, 1, 2, 3, 4, 5, 6, 7], rngOf(1))).toEqual([]);
+  });
+
+  it("es determinista", () => {
+    expect(wavesAround(60, [1, 2, 3], rngOf(5))).toEqual(wavesAround(60, [1, 2, 3], rngOf(5)));
   });
 });

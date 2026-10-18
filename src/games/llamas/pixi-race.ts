@@ -5,6 +5,7 @@ import { paceFactor, setGameLength, yaContaron, type Beacon } from "../../state"
 import { beep, beepFor, fanfare, isMuted, audio, note } from "../../sound";
 import { enOrden, tension } from "../drama";
 import { WINNER_HOLD, shorten, winnersLabel } from "../overlay";
+import { wavesAround } from "../pixi/qualifier";
 import { CREAM, INK, MONO, YELLOW, hash, mountPixi, seeded, type PixiStage } from "../pixi/stage";
 import { planRace, type Plan } from "./plan";
 
@@ -24,6 +25,23 @@ import { planRace, type Plan } from "./plan";
 
 const DUR = 15;
 type Skin = "andes" | "stellar" | "lago";
+
+/**
+ * Antes de la largada, en segundos de juego.
+ *
+ * Con más de ocho, la clasificatoria: aparecen todos con su llama del color de
+ * su lana, se van tachando en oleadas, y los ocho de la final bajan a la pista.
+ * En el evento del 17 de octubre de 2026 corrieron 8 de 27 y Nicolás no vio a
+ * las otras 19: "no sentí que aparecieran las 25 o 26 llamas".
+ *
+ * Con ocho o menos, la presentación: cada carril entra con su nombre, como los
+ * atletas antes de una final. Le da a cada uno su momento y a la sala unos
+ * segundos de expectativa antes del disparo.
+ */
+const Q_SHOW = 1.8;
+const Q_WAVE = 1.5;
+const P_LANE = 0.5;
+const P_TAIL = 0.7;
 
 /** Colores de lana de llama: blanca, café, crema, oscura, gris. */
 const FUR = [0xf3ead8, 0xa0683a, 0xe4c99a, 0x5b3a29, 0xc2bab0, 0x8a5a3c, 0xefe3cc, 0x6e4a36];
@@ -65,21 +83,40 @@ export async function llamasPixi(
   // La cuenta propia de la largada. Si la sala ya contó "3, 2, 1" con la
   // tarjeta, larga directo: dos cuentas seguidas eran una de más.
   const CUENTA = yaContaron() ? 0 : 3;
-  setGameLength(DUR, WINNER_HOLD + CUENTA);
 
   // El mismo azar que `race.ts`, consumido en el mismo orden: la misma ronda
   // cuenta la misma historia en los dos motores. `race.ts` siembra su paisaje
   // entre los carriles y la historia: una semilla de paso por corredor, 24
   // cerros, 18 lomas, 6 nubes, y 60 estrellas (150 en el espacio).
   const stars = space ? 150 : 60;
+  /** La línea de "¡a sus puestos!": se sortea acá, en su turno del azar, y se dice cuando termina la presentación. */
+  let listos = "";
   const plan: Plan = planRace(names, winnerIdx, rng, {
     sceneryDraws: Math.min(8, names.length) + 24 * 2 + 18 * 2 + 6 * 4 + stars * 3,
-    beforePlace: () => S.say(t(space ? "cReadyStellar" : lake ? "cReadyLago" : "cReady"), 0.1),
+    beforePlace: () => {
+      listos = t(space ? "cReadyStellar" : lake ? "cReadyLago" : "cReady");
+    },
     co: winners.slice(1),
   });
   const { story, lanes } = plan;
   S.mark("arco", story.arc);
   const N = lanes.length;
+
+  // La clasificatoria, con un azar aparte (de la ronda, no el del plan): los
+  // ocho de la final son los mismos de siempre, así que la carrera cuenta la
+  // misma historia que antes y que en el motor anterior.
+  const waves = names.length > N ? wavesAround(names.length, lanes, seeded(parseInt(beacon.randomness.slice(40, 48), 16))) : [];
+  /** Cuándo entra el primer carril: después de las oleadas, si las hay. */
+  const T_LANES = waves.length ? Q_SHOW + waves.length * Q_WAVE : 0;
+  /** Cuándo entra a la pista el carril `k`. */
+  const laneAt = (k: number): number => T_LANES + k * P_LANE;
+  /** Todo lo de antes de la cuenta, en segundos de juego. */
+  const PRE = T_LANES + N * P_LANE + P_TAIL;
+  /** Cuándo se va cada nombre de la clasificatoria: su oleada, y un escalonado chico adentro. */
+  const goneAt = new Map<number, number>();
+  waves.forEach((w, wi) => w.forEach((idx, j) => goneAt.set(idx, Q_SHOW + wi * Q_WAVE + 0.1 + (j / Math.max(1, w.length)) * 0.45)));
+  setGameLength(DUR + PRE, WINNER_HOLD + CUENTA);
+  S.mark("clasificatoria", `${N}/${names.length}`);
   const nameOf = (k: number): string => names[lanes[k] as number] ?? "";
   /** Los carriles de los que ganan algo: en la corona no se apagan. */
   const prizedLanes = new Set(winners.map((w) => lanes.indexOf(w)).filter((k) => k >= 0));
@@ -113,6 +150,16 @@ export async function llamasPixi(
     crowd: Sprite[]; crowdBase: { x: number; y: number; ph: number }[]; people: Texture[];
     flags: Graphics; fx: Graphics; runners: Runner[]; clouds: Container; sun: Container;
     mini: Graphics; rows: Container[]; count: Text[]; foto: Container;
+    board: Container; aviso: Container | null; qual: Qual;
+  }
+  /** La clasificatoria en pantalla: todos los nombres con su llama, y las oleadas. */
+  interface Qual {
+    root: Container; dim: Graphics; head: Container; count: Text | null; strikes: Graphics;
+    cells: Container[]; at: { x: number; y: number }[];
+    /** Hasta dónde llega el chip de cada celda, para tacharlo. */
+    ends: number[];
+    /** Cuánto se corre el chip desde el centro de la celda (la llama va a la izquierda). */
+    chipDx: number;
   }
 
   function gradientTexture(stops: [number, string][], h = 256): Texture {
@@ -597,6 +644,8 @@ export async function llamasPixi(
     S.hud.addChild(board);
     // Con más de ocho corren ocho. El motor anterior lo avisaba y este no: con
     // 200 inscritos, 192 no sabían si estaban (auditoría, 4 de octubre de 2026).
+    // Desde la clasificatoria se ven todos antes; el aviso queda para la carrera.
+    let avisoBox: Container | null = null;
     if (names.length > N) {
       const aviso = S.text(T[getLang()].cLanes(N, names.length), { fontFamily: MONO, fontSize: 11 * u, fontWeight: "800", fill: CREAM });
       const pad = 6 * u;
@@ -606,6 +655,7 @@ export async function llamasPixi(
       caja.addChild(new Graphics().roundRect(0, 0, aviso.width + pad * 2, aviso.height + pad, 4 * u).fill({ color: INK, alpha: 0.72 }), aviso);
       caja.position.set(12 * u, S.top() + (G.portrait ? 8 : 12) * u);
       S.hud.addChild(caja);
+      avisoBox = caja;
     }
     const count: Text[] = ["3", "2", "1", getLang() === "es" ? "¡YA!" : "GO!"].map((s) => {
       const tx = S.text(s, {
@@ -628,8 +678,80 @@ export async function llamasPixi(
     foto.visible = false;
     S.hud.addChild(foto);
 
-    L = { far, mid, near, stands, world, crowd, crowdBase, people, flags, fx, runners, clouds, sun, mini, rows, count, foto };
+    L = { far, mid, near, stands, world, crowd, crowdBase, people, flags, fx, runners, clouds, sun, mini, rows, count, foto, board, aviso: avisoBox, qual: buildQual() };
     choreograph();
+  }
+
+  /** Una llamita pixelada del color de la lana de cada uno, en una moneda clara: se ve sobre el fondo oscuro con cualquier lana. */
+  function llamaIcon(fur: number): Graphics {
+    const g = new Graphics().circle(0, 0, 15).fill(CREAM).stroke({ width: 2, color: INK });
+    const partes: [number, number, number, number][] = [
+      [2, 11, 16, 7], [15, 3, 4, 10], [14, 0, 8, 4], [20, -2, 2, 3], [0, 9, 3, 4],
+      [3, 18, 2.5, 5], [8, 18, 2.5, 5], [12.5, 18, 2.5, 5], [16, 18, 2.5, 5],
+    ];
+    const s = 0.82;
+    for (const [x, y, w, h] of partes) g.rect((x - 11) * s + 1, (y - 10.5) * s + 1, w * s, h * s).fill(INK);
+    for (const [x, y, w, h] of partes) g.rect((x - 11) * s, (y - 10.5) * s, w * s, h * s).fill(fur);
+    return g;
+  }
+
+  /**
+   * La clasificatoria: todos los nombres en una grilla, cada uno con su llama,
+   * del tamaño que entre. Se arma de nuevo si cambia el tamaño de la pantalla;
+   * los tiempos no dependen de eso.
+   */
+  function buildQual(): Qual {
+    const { sw, sh, u } = G;
+    const root = new Container();
+    const dim = new Graphics().rect(0, 0, sw, sh).fill({ color: INK, alpha: 0.82 });
+    const head = new Container();
+    const strikes = new Graphics();
+    root.addChild(dim, head);
+    const q: Qual = { root, dim, head, count: null, strikes, cells: [], at: [], ends: [], chipDx: 0 };
+    root.visible = false;
+    S.hud.addChild(root);
+    if (!waves.length) return q;
+    const L_ = T[getLang()];
+    const title = S.text(L_.rqTitle, { fontSize: (G.portrait ? 30 : 44) * u, fontWeight: "900", fill: YELLOW, stroke: { color: INK, width: 8 * u }, letterSpacing: 2 * u });
+    title.anchor.set(0.5, 0);
+    title.position.set(sw / 2, S.top() + 8 * u);
+    const sub = S.text(L_.rqSub(names.length, N), { fontFamily: MONO, fontSize: (G.portrait ? 12 : 15) * u, fontWeight: "800", fill: CREAM });
+    sub.anchor.set(0.5, 0);
+    sub.position.set(sw / 2, title.y + title.height + 2 * u);
+    const count = S.text("", { fontFamily: MONO, fontSize: (G.portrait ? 12 : 14) * u, fontWeight: "900", fill: YELLOW, letterSpacing: 2 * u });
+    count.anchor.set(0.5, 0);
+    count.position.set(sw / 2, sub.y + sub.height + 6 * u);
+    head.addChild(title, sub, count);
+    q.count = count;
+    // La grilla: la escala más grande en la que entran todos.
+    const top = count.y + count.height + 14 * u, bottom = sh - S.bottom() - 12 * u;
+    const areaW = sw * 0.95, areaH = Math.max(40 * u, bottom - top);
+    const cw = 210 * u, ch = 36 * u;
+    let best = { cols: 1, s: 0 };
+    for (let cols = 1; cols <= names.length; cols++) {
+      const rows = Math.ceil(names.length / cols);
+      const s = Math.min(1.45, areaW / (cols * cw), areaH / (rows * ch));
+      if (s > best.s) best = { cols, s };
+    }
+    const s = best.s, cols = best.cols, rows = Math.ceil(names.length / cols);
+    const x0 = (sw - cols * cw * s) / 2, y0 = top + (areaH - rows * ch * s) / 2;
+    q.chipDx = 20 * u * s;
+    names.forEach((nm, i) => {
+      const cell = new Container();
+      const icon = llamaIcon(FUR[i % FUR.length] ?? 0xf3ead8);
+      icon.scale.set(u * s);
+      const c = S.chip(shorten(nm, 18), s, nm);
+      c.position.set(q.chipDx, 0);
+      cell.addChild(icon, c);
+      const at = { x: x0 + (i % cols) * cw * s + 17 * u * s, y: y0 + (Math.floor(i / cols) + 0.5) * ch * s };
+      cell.position.set(at.x, at.y);
+      root.addChild(cell);
+      q.cells.push(cell);
+      q.at.push(at);
+      q.ends.push(q.chipDx + c.width);
+    });
+    root.addChild(strikes);
+    return q;
   }
 
   /* ========================================================= coreografía */
@@ -653,8 +775,12 @@ export async function llamasPixi(
   });
 
   /* ============================================================== estado */
-  let phase: "count" | "race" | "done" = "count";
+  let phase: "pre" | "count" | "race" | "done" = "pre";
   let tPhase = 3 - CUENTA, tRace = 0, tFreeze = 0, lastLeader = -1, saidLast = false, finished = false, mitadMarcada = false;
+  /** El reloj de la clasificatoria y la presentación, en segundos de juego. */
+  let tPre = 0;
+  /** Segundos reales desde la largada, para el "¡YA!", que antes no llegaba a verse: la cuenta terminaba justo cuando aparecía. */
+  let tGo = -1;
   /** El reloj de la sala, en segundos reales: el del relator. `tRace` va en segundos de juego y se frena en la foto. */
   let tReal = 0;
   let hushed = false;
@@ -665,7 +791,29 @@ export async function llamasPixi(
   const xOf = (k: number, q: number): number => G.X0 + plan.pos(k, q) * G.TL;
 
   // Arranca pegada a la largada.
-  cam.cut(G.X0 - 20 * G.u, G.midY, G.portrait ? 1.3 : 1.55);
+  /**
+   * El plano de la largada: los ocho carriles enteros, del nombre del primero
+   * a las patas del último. A 1,55 fijo (el de antes) los dos de abajo
+   * quedaban fuera, y en la presentación cada carril tiene que verse entrar.
+   */
+  const largada = (): { x: number; y: number; z: number } => {
+    const arriba = G.laneY(0) - 100 * G.laneScale(0);
+    const abajo = G.trackBot + 6 * G.u;
+    const alto = G.sh - S.top() - S.bottom() - 70 * G.u;
+    // De punta a punta: del nombre más largo (va a la izquierda de su llama) al hocico.
+    const nombre = Math.max(0, ...(L?.runners ?? []).map((r) => r.tag.width));
+    const izq = G.X0 - (space ? 82 : lake ? 86 : 70) * G.laneScale(N - 1) - nombre - 14 * G.u;
+    const der = G.X0 + 70 * G.u;
+    const z = Math.max(0.7, Math.min(G.portrait ? 1.3 : 1.55, alto / Math.max(1, abajo - arriba), G.sw / Math.max(1, der - izq)));
+    // En celular, centrado en la largada; en la pantalla grande, la largada a
+    // la izquierda y la pista libre a la derecha, sin dejar afuera un nombre.
+    const x = G.portrait ? (izq + der) / 2 : Math.min(G.X0 + 60 * G.u, izq + G.sw / (2 * z) - 10 * G.u);
+    return { x, y: (arriba + abajo) / 2, z };
+  };
+  {
+    const l = largada();
+    cam.cut(l.x, l.y, l.z);
+  }
 
   skipFn = (): void => {
     if (finished) return;
@@ -832,7 +980,44 @@ export async function llamasPixi(
     cam.lookAt(x, Math.min(y, cabeza - (techo - G.sh / 2) / z), z, rate);
   }
 
+  /** Lo de antes de la cuenta: la clasificatoria (si hay) y la presentación de los carriles. */
+  const dichoPre = new Set<string>();
+  function preUpdate(dt: number): void {
+    tPre += dt;
+    tReal += dt * paceFactor();
+    const L_ = T[getLang()];
+    const once = (id: string, at: number, fn: () => void): void => {
+      if (tPre >= at && !dichoPre.has(id)) {
+        dichoPre.add(id);
+        fn();
+      }
+    };
+    if (waves.length) {
+      once("q", 0.1, () => sayIf(L_.rqStart(names.length, N), 0.3));
+      waves.forEach((w, wi) => once(`w${wi}`, Q_SHOW + wi * Q_WAVE + 0.55, () => {
+        const quedan = names.length - waves.slice(0, wi + 1).reduce((a, x) => a + x.length, 0);
+        S.say(L_.rqLeft(quedan, N), 0.35 + 0.15 * wi);
+        lastSayAt = tReal;
+        for (let i = 0; i < Math.min(6, 2 + w.length); i++) setTimeout(() => beep(note(3 - i), 0.05, "square", 0.03), i * 80);
+      }));
+    } else once("intro", 0.05, () => sayIf(L_.rqIntro, 0.3));
+    // Cada carril entra con su nota, de abajo hacia arriba del pentagrama.
+    for (let k = 0; k < N; k++) once(`l${k}`, laneAt(k), () => beep(note(5 + k), 0.09, "triangle", 0.045));
+    once("listos", Math.max(laneAt(N - 1), PRE - 0.55), () => {
+      S.say(listos, 0.45);
+      lastSayAt = tReal;
+    });
+    // La cámara, quieta sobre la largada mientras entran.
+    const l = largada();
+    cam.lookAt(l.x, l.y, l.z, 2);
+    if (tPre >= PRE) phase = "count";
+  }
+
   function update(dt: number): void {
+    if (phase === "pre") {
+      preUpdate(dt);
+      return;
+    }
     if (phase === "count") {
       tPhase += dt * paceFactor();
       const n = 3 - Math.floor(tPhase);
@@ -842,9 +1027,13 @@ export async function llamasPixi(
         cam.punch(0.03);
       }
       // En la cuenta la cámara se va abriendo de a poco, sobre la largada.
-      look(G.X0 - 20 * G.u + G.sw * 0.04 * Math.min(3, tPhase), G.midY, (G.portrait ? 1.3 : 1.55) - 0.12 * Math.min(3, tPhase), 2);
+      // Desde el plano de la presentación, abriéndose de a poco hacia la pista.
+      const l = largada();
+      // En celular, quieta: corrida, dejaba los nombres contra el borde.
+      cam.lookAt(l.x + (G.portrait ? 0 : G.sw * 0.04 * Math.min(3, tPhase)), l.y, l.z - (G.portrait ? 0 : 0.05 * Math.min(3, tPhase)), 2);
       if (tPhase >= 3) {
         phase = "race";
+        tGo = 0;
         S.say(t("cStart"), 0.6);
         beep(note(14), 0.45, "square", 0.055);
         beep(note(9), 0.45, "square", 0.055);
@@ -868,6 +1057,7 @@ export async function llamasPixi(
     const lenta = tRace / DUR > plan.foto ? 0.4 : 1;
     tRace += dt * lenta;
     tReal += dt * paceFactor();
+    if (tGo >= 0) tGo += dt * paceFactor();
     const prog = qNow();
     // Los cascos se frenan con las patas en la cámara lenta.
     raceAudio(dt * lenta, prog);
@@ -945,7 +1135,9 @@ export async function llamasPixi(
   function draw(now: number): void {
     const prog = qNow();
     const { u, sw } = G;
-    const tens = phase === "count" ? 0.1 : phase === "done" ? 1 : tension(story, prog);
+    /** Antes de la largada, todos quietos en la línea. */
+    const quieto = phase === "pre" || phase === "count";
+    const tens = quieto ? 0.1 : phase === "done" ? 1 : tension(story, prog);
 
     // Paralaje: cada capa se corre una parte de lo que se corre la cámara.
     const par = (c: Container, f: number): void => {
@@ -1001,13 +1193,20 @@ export async function llamasPixi(
     for (let k = 0; k < N; k++) {
       const r = L.runners[k] as Runner;
       const sc = G.laneScale(k);
-      const p = phase === "count" ? 0 : plan.pos(k, prog);
-      const pPrev = phase === "count" ? 0 : plan.pos(k, Math.max(0, prog - 0.004));
+      const p = quieto ? 0 : plan.pos(k, prog);
+      const pPrev = quieto ? 0 : plan.pos(k, Math.max(0, prog - 0.004));
       const speed = phase === "race" ? (p - pPrev) / 0.004 : 0;
-      const x = G.X0 + p * G.TL;
+      // La presentación: cada una llega trotando desde atrás de la línea, se
+      // planta y pega un salto cuando dicen su nombre.
+      const h = phase === "pre" ? tPre - laneAt(k) : 9;
+      const entra = Math.max(0, Math.min(1, h / 0.32));
+      const llega = 1 - (1 - entra) ** 3;
+      const salto = h > 0.25 && h < 0.7 ? Math.sin(((h - 0.25) / 0.45) * Math.PI) * 16 * u : 0;
+      const x = G.X0 + p * G.TL - (1 - llega) * 150 * u;
       const y = G.laneY(k);
-      r.root.position.set(x - 34 * sc, y);
-      r.pose(p * 95, speed, phase === "race" ? plan.beatOf(k, prog) : null, now);
+      r.root.position.set(x - 34 * sc, y - salto);
+      r.root.alpha = entra;
+      r.pose(phase === "pre" ? (1 - llega) * 12 : p * 95, phase === "pre" && entra < 1 ? 1 : speed, phase === "race" ? plan.beatOf(k, prog) : null, now);
       if (phase === "done" && k === winnerLane) r.root.y = y - Math.abs(Math.sin(tFreeze * 7)) * 22 * u * Math.max(0, 1 - tFreeze / 2.6);
       // En la corona, las que no ganan nada se apagan, como sus nombres y la
       // tabla. Con tinte y no con transparencia: transparente, se veían las
@@ -1016,9 +1215,12 @@ export async function llamasPixi(
       r.root.tint = phase === "done" && !premio ? (dark ? 0x8a8499 : 0xb3aebf) : 0xffffff;
       // Detrás de la cola de la llama (llega a 67), de las aletas del cohete o
       // de la popa de la balsa.
+      // El nombre aparece cuando llega su chip de la clasificatoria, y late una vez.
+      const late = h > 0.15 && h < 0.55 ? Math.sin(((h - 0.15) / 0.4) * Math.PI) * 0.35 : 0;
+      r.tag.scale.set(1 + late);
       r.tag.position.set(x - (space ? 82 : lake ? 86 : 70) * sc - r.tag.width, y - 30 * sc);
-      r.tag.alpha = phase === "done" && !premio ? 0.35 : 1;
-      if (phase === "count") continue;
+      r.tag.alpha = (phase === "done" && !premio ? 0.35 : 1) * Math.max(0, Math.min(1, (h + 0.05) / 0.2));
+      if (quieto) continue;
       // Polvo (o estela), cada grano calculado desde su hora.
       const every = 0.006;
       for (let e = Math.floor((prog - 0.03) / every); e <= Math.floor(prog / every); e++) {
@@ -1080,9 +1282,12 @@ export async function llamasPixi(
     mini.roundRect(mx - 10 * u, my - 12 * u, mw + 20 * u, 24 * u, 12 * u).fill({ color: INK, alpha: 0.75 });
     mini.rect(mx, my - 1.5 * u, mw, 3 * u).fill({ color: CREAM, alpha: 0.5 });
     for (let c = 0; c < 4; c++) mini.rect(mx + mw - 6 * u + (c % 2) * 3 * u, my - 7 * u + Math.floor(c / 2) * 7 * u, 3 * u, 7 * u).fill(c % 3 === 0 ? 0xffffff : INK);
-    const minis = lanes.map((_, k) => ({ k, p: phase === "count" ? 0 : plan.pos(k, prog) })).sort((a, b) => a.p - b.p);
+    mini.visible = phase !== "pre";
+    L.board.visible = !G.portrait && phase !== "pre";
+    if (L.aviso) L.aviso.visible = phase !== "pre";
+    const minis = lanes.map((_, k) => ({ k, p: quieto ? 0 : plan.pos(k, prog) })).sort((a, b) => a.p - b.p);
     for (const { k, p } of minis) {
-      const lead = Math.round(rowPos[k] as number) === 0 && phase !== "count";
+      const lead = Math.round(rowPos[k] as number) === 0 && !quieto;
       mini.circle(mx + Math.max(0, Math.min(1, p)) * mw, my, (lead ? 7 : 5) * u).fill(S.color(k)).stroke({ width: 2 * u, color: INK });
     }
     const rowH = 22 * u;
@@ -1092,10 +1297,59 @@ export async function llamasPixi(
       r.alpha = phase === "done" && !prizedLanes.has(k) ? 0.4 : 1;
     });
 
-    tlCount.time(phase === "count" ? tPhase : 4);
+    tlCount.time(phase === "pre" ? 0 : phase === "count" ? tPhase : tGo >= 0 && tGo < 1 ? 3 + tGo : 4);
     L.foto.visible = prog > plan.foto && phase === "race";
     if (phase === "done") crown.at(tFreeze);
     roar?.(tens);
+    drawQual();
+  }
+
+  /** La clasificatoria: las oleadas tachan, y los de la final vuelan a su carril. */
+  function drawQual(): void {
+    const Q = L.qual;
+    Q.root.visible = phase === "pre" && waves.length > 0 && tPre < laneAt(N - 1) + 0.2;
+    if (!Q.root.visible) return;
+    const { u } = G;
+    const sale = Math.max(0, Math.min(1, (tPre - T_LANES + 0.3) / 0.6));
+    Q.dim.alpha = 1 - sale;
+    Q.head.alpha = 1 - sale;
+    const quedan = names.length - waves.reduce((a, w, wi) => a + (tPre >= Q_SHOW + wi * Q_WAVE + 0.55 ? w.length : 0), 0);
+    if (Q.count) Q.count.text = `${t("cQualIn")}  ${quedan}`;
+    Q.strikes.clear();
+    // Los de la final laten mientras termina la última oleada.
+    const pulso = tPre > T_LANES - 0.9 && tPre < T_LANES ? 1 + 0.07 * Math.sin((tPre - T_LANES) * 18) : 1;
+    names.forEach((_, i) => {
+      const cell = Q.cells[i];
+      const at = Q.at[i];
+      if (!cell || !at) return;
+      const se = goneAt.get(i);
+      if (se !== undefined) {
+        const g = Math.max(0, Math.min(1, (tPre - se) / 0.35));
+        cell.alpha = (1 - 0.82 * g) * (1 - sale);
+        cell.position.set(at.x, at.y + 7 * u * g);
+        if (g > 0) {
+          const x1 = at.x + Q.chipDx - 4 * u;
+          const x2 = x1 + ((Q.ends[i] ?? Q.chipDx) - Q.chipDx + 8 * u) * Math.min(1, g * 2);
+          Q.strikes.moveTo(x1, cell.y).lineTo(x2, cell.y).stroke({ width: 3 * u, color: 0xff4d4d, alpha: 1 - sale });
+        }
+        return;
+      }
+      const k = lanes.indexOf(i);
+      const t0 = laneAt(k) - 0.45;
+      const f = Math.max(0, Math.min(1, (tPre - t0) / 0.45));
+      const e = f * f * (3 - 2 * f);
+      const r = L.runners[k];
+      let tx = at.x, ty = at.y;
+      if (r) {
+        const sc = G.laneScale(k);
+        const s = cam.toScreen(G.X0 - (space ? 82 : lake ? 86 : 70) * sc - r.tag.width, G.laneY(k) - 30 * sc, G.sw, G.sh);
+        tx = s.x - Q.chipDx;
+        ty = s.y;
+      }
+      cell.position.set(at.x + (tx - at.x) * e, at.y + (ty - at.y) * e);
+      cell.scale.set(f > 0 ? 1 : pulso);
+      cell.alpha = f < 0.7 ? 1 : 1 - (f - 0.7) / 0.3;
+    });
   }
 
   S.run((dt, now) => {

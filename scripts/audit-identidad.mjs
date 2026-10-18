@@ -18,7 +18,7 @@
  * - **Con 18, se ven 9 de cada 10** en los juegos que prometen 18 o más.
  * - Con 50, cuántos: se informa, sin aprobar ni rechazar todavía.
  *
- * La carrera corre ocho carriles por diseño y la ruleta llega a 24: cada juego
+ * La ruleta llega a 24 (con más pasa a la tómbola) y el resto, a 200: cada juego
  * se mide hasta lo que promete.
  *
  * Corre sin red, con la escena fija y el reloj en turbo.
@@ -30,8 +30,12 @@
 import { launch } from "./lib/browser.mjs";
 
 const TODOS = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien"];
-/** Hasta cuántos promete cada juego hoy: la carrera corre ocho, la ruleta llega a 24, el resto a 200. */
-const PROMETE = { race: 8, wheel: 24 };
+/**
+ * Hasta cuántos promete cada juego hoy: la ruleta llega a 24, el resto a 200.
+ * La carrera prometía ocho hasta el 17 de octubre de 2026; desde la
+ * clasificatoria, todos se ven antes de que corran los ocho de la final.
+ */
+const PROMETE = { wheel: 24 };
 const args = process.argv.slice(2);
 const opt = (name, def) => {
   const i = args.indexOf(name);

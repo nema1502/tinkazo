@@ -135,7 +135,7 @@ Para afinar un caso sin correr las once: `node scripts/audit-rigor.mjs <juego> -
 | La tinta del cartel contrasta 4,5:1 o más | Luminancia medida de la tinta contra el fondo del cartel | Un proyector lava el negro |
 | Al terminar no queda nada corriendo | Bucles de animación de más, estadio oculto, scroll devuelto, sin pantalla completa | |
 | Saltar al 10%, al 50% y al 90% cierra | Que el estadio se vaya antes de seis segundos reales, sin bucles ni excepciones | El cartel se sostiene tres a propósito |
-| Dura lo que se eligió | Rápido, normal y épico contra 20, 30 y 42 segundos, con 20% de margen | |
+| Dura lo que se eligió | Rápido, normal y épico contra 20, 38 y 50 segundos, con 20% de margen | |
 | En celular y en tema claro | Las mismas medidas donde más se rompen | |
 | Con dos y con doscientas | Que cierre, se mueva, fluya y el cartel se lea, con `?n=2` y `?n=200` (veinticuatro en la ruleta, que es su tope) | Contesta la pregunta que antes era "revisalo vos". Con dos personas encontró la Constelación con el cielo casi vacío en el armado y en los saltos finales, y el único apretón del Pasanaku con un tirón cada cuatro segundos |
 
@@ -145,7 +145,7 @@ Cada corrida deja en `docs/capturas/rigor/<juego>-corrida.json` cuándo sonó al
 
 ## La duración
 
-El selector de duración **apunta a una cantidad de segundos**, no multiplica. `PACES` en [`src/state.ts`](../src/state.ts) dice cuánto tiene que durar el show (`rápido 20 · normal 30 · épico 42`) y cada juego declara cuánto dura sin estirar con `setGameLength(nominal, fijo)`:
+El selector de duración **apunta a una cantidad de segundos**, no multiplica. `PACES` en [`src/state.ts`](../src/state.ts) dice cuánto tiene que durar el show (`rápido 20 · normal 38 · épico 50`; normal era 30 y épico 42 hasta el 17 de octubre de 2026) y cada juego declara cuánto dura sin estirar con `setGameLength(nominal, fijo)`:
 
 - `nominal` son los **segundos de juego** hasta el revelado, que sí se estiran.
 - `fijo` son los **segundos reales** que no se estiran nunca porque le hablan a una persona: los tres del sostén del cartel del ganador, y los tres de la cuenta regresiva de la carrera. Lo que tarda alguien en leer un nombre proyectado no cambia porque se elija una duración más larga.
@@ -328,7 +328,7 @@ El ritmo, la legibilidad del cartel y el tartamudeo de los subtítulos ya los mi
 
 | Juego | `?demo=` | Tipo | Hasta | Documento |
 |---|---|---|---|---|
-| Carrera de llamas | `race` | Motor de carrera, tema andino | 8 en pantalla | · |
+| Carrera de llamas | `race` | Motor de carrera, tema andino | Todos en la clasificatoria, 8 en la final | · |
 | Chovena | `chovena` | Módulo propio (solo motor nuevo), con su propia música | 200, mejor de 12 a 80 | [chovena.md](juegos/chovena.md) |
 | Trompo | `trompo` | Módulo propio (solo motor nuevo) | 200 | [trompo.md](juegos/trompo.md) |
 | Piñata | `pinata` | Módulo propio (solo motor nuevo) | 200 | [pinata.md](juegos/pinata.md) |

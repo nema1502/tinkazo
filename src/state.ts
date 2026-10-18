@@ -137,11 +137,18 @@ export const ANCHOR_LEAD_SECONDS = 45;
  * organizador tenía que reaprender el botón cada vez que cambiaba de juego.
  *
  * Ahora el selector dice cuánto tiene que durar el show y cada juego declara
- * cuánto dura sin estirar. "Normal" significa treinta segundos en todos.
+ * cuánto dura sin estirar. "Normal" significa treinta y ocho segundos en todos.
+ *
+ * Era treinta hasta el 17 de octubre de 2026. En el primer evento después de
+ * Stellar Elite, Nicolás lo sintió corto: "deberían durar más los juegos para
+ * tener más emoción y expectativa". Treinta y ocho y cincuenta son lo que
+ * alcanzan los juegos sin pasar de `MAX_STRETCH`, o sea sin volverse cámara
+ * lenta. La carrera, además, ganó contenido: la clasificatoria y la
+ * presentación de los carriles.
  *
  * El resultado no cambia: el ganador ya estaba decidido antes de que empiece.
  */
-export const PACES = { rapido: 20, normal: 30, epico: 42 } as const;
+export const PACES = { rapido: 20, normal: 38, epico: 50 } as const;
 export type Pace = keyof typeof PACES;
 
 const PACE_KEY = "tinkazo.pace";

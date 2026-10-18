@@ -50,7 +50,7 @@ const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const outDir = opt("--out", "docs/capturas/rigor");
 
 /** Lo que el selector de duración promete, en segundos. Debe coincidir con `PACES`. */
-const PACES = { rapido: 20, normal: 30, epico: 42 };
+const PACES = { rapido: 20, normal: 38, epico: 50 };
 
 /**
  * El reloj virtual avanza de a 1/64 de segundo, no 1/60. Un sesentavo no es

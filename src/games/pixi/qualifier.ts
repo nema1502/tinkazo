@@ -38,6 +38,37 @@ export function wavesFor(out: number): number {
 }
 
 /**
+ * Reparte a los que se van en oleadas que se achican: la primera se lleva a la
+ * mayoría y la última a pocos, así el final de la clasificatoria tiene
+ * suspenso. Respeta el orden en que vienen: barajarlos es cosa de quien llama.
+ */
+export function splitWaves(afuera: readonly number[]): number[][] {
+  const W = wavesFor(afuera.length);
+  if (W === 0) return [];
+  const pesos = W === 1 ? [1] : W === 2 ? [2, 1] : [3, 2, 1];
+  const suma = pesos.reduce((a, b) => a + b, 0);
+  const waves: number[][] = [];
+  let desde = 0;
+  pesos.forEach((p, i) => {
+    const cuantos = i === pesos.length - 1 ? afuera.length - desde : Math.round((afuera.length * p) / suma);
+    waves.push(afuera.slice(desde, desde + cuantos));
+    desde += cuantos;
+  });
+  return waves;
+}
+
+/**
+ * La clasificatoria de un juego que ya eligió a sus finalistas por su cuenta
+ * (la carrera los elige en su propio plan, con el azar de la ronda): los demás,
+ * barajados con `rng`, se van en oleadas. Usa un azar aparte para no cambiar
+ * la historia que ese juego ya cuenta.
+ */
+export function wavesAround(n: number, finalists: readonly number[], rng: () => number): number[][] {
+  const quedan = new Set(finalists);
+  return splitWaves(shuffle(Array.from({ length: n }, (_, i) => i).filter((i) => !quedan.has(i)), rng));
+}
+
+/**
  * Arma la clasificatoria de `n` nombres hasta `cap` finalistas. Con `n <= cap`
  * no hay oleadas: todos son finalistas, en el orden de la lista.
  */
@@ -55,17 +86,5 @@ export function planQualifier(n: number, winners: readonly number[], cap: number
   const acompanan = otros.slice(0, cap - winners.length);
   const afuera = otros.slice(cap - winners.length);
   const finalists = shuffle([...winners, ...acompanan], rng);
-  // Las oleadas se achican: la primera se lleva a la mayoría y la última a
-  // pocos, así el final de la clasificatoria tiene suspenso.
-  const W = wavesFor(afuera.length);
-  const pesos = W === 1 ? [1] : W === 2 ? [2, 1] : [3, 2, 1];
-  const suma = pesos.reduce((a, b) => a + b, 0);
-  const waves: number[][] = [];
-  let desde = 0;
-  pesos.forEach((p, i) => {
-    const cuantos = i === pesos.length - 1 ? afuera.length - desde : Math.round((afuera.length * p) / suma);
-    waves.push(afuera.slice(desde, desde + cuantos));
-    desde += cuantos;
-  });
-  return { finalists, waves, finalWinners: winners.map((w) => finalists.indexOf(w)) };
+  return { finalists, waves: splitWaves(afuera), finalWinners: winners.map((w) => finalists.indexOf(w)) };
 }
