@@ -58,15 +58,13 @@ export function secondsToRound(): number {
 
 let countdownTimer: number | undefined;
 
-/** Aprieta "Sortear" si ya se puede: lo usa la espera en grande cuando nace el número. */
-function sortearSiSePuede(): void {
-  const btn = $<HTMLButtonElement>("btn-draw");
-  if (!btn.disabled) btn.click();
-}
-
-/** La espera en grande (`espera.ts`), que se baja recién cuando hace falta. */
+/**
+ * La espera en grande (`espera.ts`), que se baja recién cuando hace falta. Es
+ * una opción de la caja de la espera: no se abre sola (Nicolás, 17 de octubre
+ * de 2026: el "¡Contemos juntos!" y el "¡Nació!" no le gustaron, y salieron).
+ */
 function abrirEspera(): void {
-  void import("./espera").then((m) => m.mostrarEspera(secondsToRound, sortearSiSePuede));
+  void import("./espera").then((m) => m.mostrarEspera(secondsToRound));
 }
 
 /**
@@ -373,9 +371,6 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   }
   startCountdown();
   $("sec-frozen").scrollIntoView({ behavior: "smooth", block: "start" });
-  // La espera se pone en escena sola, para la sala. No en la demo ni en las
-  // capturas (que sellan y sortean de corrido), ni si ya casi no queda espera.
-  if (!params.has("demo") && params.get("instant") !== "1" && secondsToRound() > 6) abrirEspera();
 }
 
 /**

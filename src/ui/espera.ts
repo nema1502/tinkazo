@@ -1,7 +1,6 @@
 import { esc } from "../dom";
 import { T, getLang, t } from "../i18n";
 import { app } from "../state";
-import { beep, note } from "../sound";
 
 /**
  * La espera en grande: los segundos entre sellar y poder sortear, puestos en
@@ -10,12 +9,13 @@ import { beep, note } from "../sound";
  * Es el corazón del producto. La lista ya está cerrada y el número que la va a
  * decidir todavía no existe: nadie lo puede elegir porque nadie lo tiene. Eran
  * cuarenta y cinco segundos en una caja violeta dentro de la página, mientras
- * la sala miraba un formulario (revisión del 16 de octubre de 2026). Y en el
- * evento del 17, Nicolás pidió más expectativa.
+ * la sala miraba un formulario (revisión del 16 de octubre de 2026).
  *
- * Ahora es la pantalla entera: una cuenta gigante, el premio, los nombres de
- * todos pasando, y en los últimos diez segundos "¡Contemos juntos!", con un
- * golpe por segundo. Cuando nace el número, el botón de sortear, grande.
+ * Es una opción de la caja de la espera, no se abre sola: una cuenta grande, el
+ * premio y los nombres de todos pasando. La primera versión cerraba con
+ * "¡Contemos juntos!", un golpe por segundo y un "¡Nació!" con el botón de
+ * sortear; a Nicolás no le gustó y salieron. Cuando nace el número se cierra
+ * sola y deja el botón de sortear de siempre, a la vista y con el foco.
  *
  * No decide nada ni toca el sello: solo muestra la cuenta que ya llevaba el
  * botón de sortear. Se cierra con Escape o con "Volver a la página".
@@ -45,13 +45,10 @@ function cintas(names: string[]): string {
 
 let abierta: HTMLElement | null = null;
 
-/**
- * Abre la espera en grande. `segundos` es la misma cuenta del botón de sortear;
- * `sortear` lo aprieta cuando nace el número.
- */
-export function mostrarEspera(segundos: () => number, sortear: () => void): void {
+/** Abre la espera en grande. `segundos` es la misma cuenta del botón de sortear. */
+export function mostrarEspera(segundos: () => number): void {
   const f = app.frozen;
-  if (!f || app.drawn || abierta) return;
+  if (!f || app.drawn || abierta || segundos() <= 0) return;
   const L_ = T[getLang()];
   const back = document.createElement("div");
   back.className = "espera";
@@ -69,16 +66,11 @@ export function mostrarEspera(segundos: () => number, sortear: () => void): void
     `<div class="espera-nombres">${cintas(f.names)}</div>` +
     `<p class="espera-pie">${esc(L_.espPie(f.names.length))}</p>` +
     // El número del sorteo, para las fotos de la sala: si después aparece otro sello, todos tienen el del bueno.
-    (f.raffleId !== undefined ? `<p class="espera-id mono">${esc(t("waitId").replace("{n}", String(f.raffleId)))}</p>` : "") +
-    `<button class="primary espera-go" type="button" data-sortear hidden>${esc(t("espSortear"))}</button>`;
+    (f.raffleId !== undefined ? `<p class="espera-id mono">${esc(t("waitId").replace("{n}", String(f.raffleId)))}</p>` : "");
   document.body.appendChild(back);
   abierta = back;
 
   const reloj = back.querySelector<HTMLElement>(".espera-reloj");
-  const linea = back.querySelector<HTMLElement>(".espera-t");
-  const go = back.querySelector<HTMLButtonElement>("[data-sortear]");
-  const volver = back.querySelector<HTMLButtonElement>("[data-volver]");
-  let ultimo = -1;
   let timer = 0;
 
   const cerrar = (): void => {
@@ -91,52 +83,21 @@ export function mostrarEspera(segundos: () => number, sortear: () => void): void
     if (e.key === "Escape") cerrar();
   };
   addEventListener("keydown", tecla);
-  volver?.addEventListener("click", cerrar);
-  go?.addEventListener("click", () => {
-    cerrar();
-    sortear();
-  });
+  back.querySelector<HTMLButtonElement>("[data-volver]")?.addEventListener("click", cerrar);
 
   const tick = (): void => {
-    // Si se sorteó o se soltó el sello por otro lado, la espera ya no tiene sentido.
-    if (!app.frozen || app.drawn) {
+    const s = segundos();
+    // Nació el número, se sorteó o se soltó el sello: la espera terminó. La
+    // página ya deja el botón de sortear a la vista y con el foco.
+    if (!app.frozen || app.drawn || s <= 0) {
       cerrar();
       return;
     }
-    const s = segundos();
-    if (s === ultimo) return;
-    ultimo = s;
-    if (!reloj || !linea) return;
-    if (s > 10) {
-      back.classList.remove("ultimos", "nacio");
-      reloj.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-      linea.textContent = t("espFaltan");
-    } else if (s > 0) {
-      back.classList.add("ultimos");
-      reloj.textContent = String(s);
-      linea.textContent = t("espContemos");
-      // El latido vuelve a arrancar con cada número.
-      reloj.classList.remove("late");
-      void reloj.offsetWidth;
-      reloj.classList.add("late");
-      beep(note(s > 3 ? 7 : 10 + (3 - s)), 0.12, "triangle", 0.05);
-    } else {
-      back.classList.remove("ultimos");
-      back.classList.add("nacio");
-      reloj.textContent = t("espNacio");
-      linea.textContent = t("espListo");
-      beep(note(14), 0.3, "square", 0.05);
-      beep(note(9), 0.3, "square", 0.05);
-      if (go) {
-        go.hidden = false;
-        go.focus({ preventScroll: true });
-      }
-      window.clearInterval(timer);
-    }
+    if (reloj) reloj.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   };
   tick();
-  timer = window.setInterval(tick, 200);
-  volver?.focus({ preventScroll: true });
+  timer = window.setInterval(tick, 250);
+  back.querySelector<HTMLButtonElement>("[data-volver]")?.focus({ preventScroll: true });
 }
 
 /** Si la espera en grande está abierta. */
