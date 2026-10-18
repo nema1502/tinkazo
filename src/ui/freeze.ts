@@ -3,6 +3,7 @@ import { T, getLang, t } from "../i18n";
 import { ANCHOR_LEAD_SECONDS, LEAD_SECONDS, WHEEL_MAX, app, params, type Game } from "../state";
 import { bytesToHex, roundTime, targetRound } from "../protocol/quicknet";
 import { listHash } from "../protocol/canonical";
+import { prepararFirma } from "../protocol/firma";
 import { contractUrl, network } from "../stellar/config";
 import { anchorErrorText, hideTxStatus, sealOnChain, showTxStatus, stepLabel } from "./anchor";
 import { precargarQr } from "./qr";
@@ -75,10 +76,13 @@ function startCountdown(): void {
   const left = document.getElementById("wait-left");
   const line = box?.querySelector(".wait-line");
   if (num && app.frozen) num.textContent = `#${app.frozen.round}`;
-  // La conexión está ociosa hasta que nazca la ronda: se baja el motor, y la
-  // verificación de la firma, que la portada no carga.
+  // La conexión está ociosa hasta que nazca la ronda: se baja el motor, y se
+  // levanta el worker que va a verificar la firma (la portada no lo carga).
+  // Anclado, también la curva en la página: el contrato pide la firma
+  // descomprimida.
   if (app.frozen) preloadGame(app.game, app.frozen.names.length);
-  void import("../protocol/drand").catch(() => undefined);
+  prepararFirma();
+  if (app.frozen?.raffleId !== undefined) void import("../protocol/drand").catch(() => undefined);
   const tick = (): void => {
     const s = secondsToRound();
     if (s > 0) {

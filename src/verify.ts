@@ -5,7 +5,7 @@ import { SAMPLE, avatar } from "./state";
 import { canonicalList, listHash } from "./protocol/canonical";
 import { RPC_URLS } from "./stellar/config";
 import { QUICKNET, bytesToHex, fetchRound, hexToBytes, randomnessOf, roundTime, roundUrl } from "./protocol/quicknet";
-import { verifyRound } from "./protocol/drand";
+import { prepararFirma, verifyRoundAsync } from "./protocol/firma";
 import { select } from "./protocol/select";
 import { decodeProof, isAnchored, type Proof } from "./protocol/proof";
 import { network } from "./stellar/config";
@@ -114,6 +114,9 @@ async function main(): Promise<void> {
     fail("vNoProof", t("vNoProofDetail"));
     return;
   }
+  // El worker que verifica la firma se levanta ya: baja la curva mientras se
+  // lee la cadena, y el cálculo no traba la página.
+  prepararFirma();
 
   verdict("working", "vWorking", "");
   renderList(proof);
@@ -178,7 +181,7 @@ async function main(): Promise<void> {
     }
   }
 
-  const sigOk = verifyRound(proof.round, signature);
+  const sigOk = await verifyRoundAsync(proof.round, signature);
   set("vCheckRound", sigOk ? "ok" : "bad", `${proof.round} · ${signature.slice(0, 16)}…`);
 
   // ------------------------------------------------------------ 3. la semilla
