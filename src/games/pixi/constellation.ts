@@ -22,13 +22,29 @@ import { CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
 type Phase = "arm" | "hop" | "nova" | "dead";
 interface Node { x: number; y: number; kind: "star" | "anchor"; idx: number; r: number; flare: number; seen: number; born: number; g?: Graphics }
 interface Hop { from: number; to: number; dur: number; cx: number; cy: number }
+/** Un nombre ya puesto en la pantalla: `x` es su borde izquierdo y `y` su centro. */
+interface Caja { x: number; y: number; w: number; h: number }
 const K = 20;
 const ARM = 3.0;
+/** Desde qué salto los saltos se vuelven lentos y la cámara se pega al paquete. */
+const SLOW = 12;
 function hopDur(i: number): number {
   const p = i / (K - 1);
   if (p < 0.28) return 0.62 - 0.4 * (p / 0.28);
   return 0.22 + 1.95 * Math.pow((p - 0.28) / 0.72, 2.4);
 }
+/** Las estrellas nacen de a una, en el orden de la lista, durante un segundo. */
+const BORN0 = 0.6;
+const BORN_SPAN = 1;
+/**
+ * Pasar lista, desde que nació la última estrella hasta que los saltos se
+ * vuelven rápidos (el quinto). Arrancaba a los 0,9 s, antes de que nacieran
+ * las últimas: con cincuenta personas, las dos más tardías de la primera tanda
+ * no llegaban a mostrar su nombre nunca (auditor de identificación, 18 de
+ * octubre de 2026). Dura lo mismo que antes, corrido más tarde.
+ */
+const T_ROLL0 = BORN0 + BORN_SPAN + 0.05;
+const T_ROLL1 = ARM + [0, 1, 2, 3, 4].reduce((acc, i) => acc + hopDur(i), 0);
 const STAR = [
   [1, 0.42], [0.42, 0.42], [0.42, 1], [-0.42, 1], [-0.42, 0.42], [-1, 0.42],
   [-1, -0.42], [-0.42, -0.42], [-0.42, -1], [0.42, -1], [0.42, -0.42], [1, -0.42],
@@ -71,7 +87,7 @@ export async function constellationPixi(names: string[], winners: readonly numbe
     const r = clamp(Math.min(cw, ch) * 0.3, 4 * k, 26 * k);
     for (let i = 0; i < n; i++) {
       const cx = i % cols, cy = Math.floor(i / cols);
-      nodes.push({ x: x0 + cw * (cx + 0.5) + (rng() - 0.5) * cw * 0.62, y: y0 + ch * (cy + 0.5) + (rng() - 0.5) * ch * 0.62, kind: "star", idx: i, r, flare: 0, seen: 0, born: 0.6 + (i / n) * 1 });
+      nodes.push({ x: x0 + cw * (cx + 0.5) + (rng() - 0.5) * cw * 0.62, y: y0 + ch * (cy + 0.5) + (rng() - 0.5) * ch * 0.62, kind: "star", idx: i, r, flare: 0, seen: 0, born: BORN0 + (i / n) * BORN_SPAN });
     }
     const anchors = clamp(22 - n * 2, 8, 20);
     const ar = (n <= 6 ? 11 : 7) * k;
@@ -189,6 +205,8 @@ export async function constellationPixi(names: string[], winners: readonly numbe
     phase = "nova";
     tPhase = 0;
     novaK = 0;
+    // También si se saltó antes de los saltos lentos: la cámara se abre de golpe.
+    cam.noBlur();
     S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     fanfare();
     beep(note(0), 0.8, "sine", 0.08);
@@ -368,15 +386,16 @@ export async function constellationPixi(names: string[], winners: readonly numbe
     }
     packetG = new Graphics();
     novaG = new Graphics();
-    chipsLayer = new Container();
-    S.scene.addChild(packetG, novaG, chipsLayer);
+    S.scene.addChild(packetG, novaG);
     bar = new Graphics();
     barText = S.text("", { fontFamily: MONO, fontSize: 13 * k, fontWeight: "700", fill: CREAM });
     barText.anchor.set(0.5, 1);
     hopText = S.text("", { fontFamily: MONO, fontSize: 11 * k, fontWeight: "700", fill: CREAM });
     hopText.alpha = 0.55;
     hopText.position.set(22 * k, S.top() + 12 * k);
-    S.hud.addChild(bar, barText, hopText);
+    // Los nombres, en la interfaz y no en el cielo: ver `draw`.
+    chipsLayer = new Container();
+    S.hud.addChild(bar, barText, hopText, chipsLayer);
   }
   build();
   const crown = S.crown(names, winners);
@@ -391,9 +410,15 @@ export async function constellationPixi(names: string[], winners: readonly numbe
       const desde = names.length <= 6 ? 0.7 : 0.84;
       cam.lookAt(mid.x, mid.y, desde + (1 - desde) * ease.inOutCubic(clamp(tPhase / ARM, 0, 1)), 2);
     } else if (phase === "hop") {
+      // Desde que los saltos se vuelven lentos, sin desenfoque: la cámara se
+      // acerca rápido al roce, abre y cierra en el amague y se abre en la nova,
+      // y el desenfoque dejaba borrosas justo la estrella y el paquete que la
+      // sala está mirando (crítico de juegos, 16 de octubre de 2026). Como en
+      // la foto de la carrera.
+      if (hopI >= SLOW) cam.noBlur();
       const pk = packetPos();
-      const focus = 0.25 + 0.75 * ease.inOutCubic(clamp((hopI + hopT - 12) / 4, 0, 1));
-      let zoom = 1.05 + 0.08 * (hopI / K) + 0.6 * ease.inOutCubic(clamp((hopI + hopT - 12) / 4, 0, 1));
+      const focus = 0.25 + 0.75 * ease.inOutCubic(clamp((hopI + hopT - SLOW) / 4, 0, 1));
+      let zoom = 1.05 + 0.08 * (hopI / K) + 0.6 * ease.inOutCubic(clamp((hopI + hopT - SLOW) / 4, 0, 1));
       let x = mid.x + (pk.x - mid.x) * focus, y = mid.y + (pk.y - mid.y) * focus;
       // En el último salto mira también hacia la estrella del amague, como
       // quien cree que va para ahí, y abre lo justo para que entren las dos:
@@ -537,20 +562,31 @@ export async function constellationPixi(names: string[], winners: readonly numbe
         }
       }
     }
-    // Pasar lista: mientras se arma el cielo y en los primeros saltos, los
-    // nombres de a tandas encima de cada estrella, para que cada uno sepa cuál
-    // es la suya.
-    const roll = phase === "nova" ? [] : S.batch(names.length, tAll, 0.9, ARM + 1.6);
-    S.tags(names, roll, (i) => {
-      const nd = nodes[starOf.get(i) ?? -1];
-      return nd && tAll > nd.born ? cam.toScreen(nd.x, nd.y - nd.r - 16 * k, S.sw(), S.sh()) : null;
-    }, barText.text ? [barText.getBounds()] : []);
-    // Los nombres: todos si son pocos, si no el que tiene el paquete y los de antes.
+    // Los nombres: todos si son pocos, si no el que tiene el paquete y los de
+    // antes. Van en la interfaz y no en el cielo (crítico de juegos, 16 de
+    // octubre de 2026): en el cielo la cámara los agrandaba sin mirar el
+    // ancho, y en un celular el del amague o el del roce quedaban cortados
+    // contra el borde; y el desenfoque de los acercamientos los borroneaba
+    // justo en los saltos que deciden. Acá cada uno va al lado de su estrella,
+    // del tamaño que le da la cámara sin pasarse de la pantalla, adentro de
+    // ella y sin pisar a otro nombre.
     const enMano = (hops[Math.min(hopI, hops.length - 1)] as Hop | undefined)?.to ?? -1;
     for (const c of chipOf.values()) c.visible = false;
+    const W0 = W(), H0 = H();
+    const lo = S.top() + 6 * k, hi = H0 - S.bottom() - 6 * k;
+    const z = S.scene.scale.x;
+    const puestos: Caja[] = [];
+    const conNombre = new Set<number>();
+    const libre = (a: Caja): boolean =>
+      a.x >= 8 * k && a.x + a.w <= W0 - 8 * k && a.y - a.h / 2 >= lo && a.y + a.h / 2 <= hi &&
+      !puestos.some((b) => a.x < b.x + b.w && a.x + a.w > b.x && Math.abs(a.y - b.y) < (a.h + b.h) / 2);
     const show = (ni: number, alpha: number, big: boolean): void => {
       const nd = nodes[ni] as Node;
       if (nd.idx < 0) return;
+      // Con la hora de la escena y no la del cuadro anterior: `apply` ya movió la cámara.
+      const p = S.scene.toGlobal({ x: nd.x, y: nd.y });
+      // La estrella que la cámara dejó afuera no lleva nombre: pegado al borde engañaba.
+      if (p.x < 0 || p.x > W0 || p.y < lo || p.y > hi) return;
       const key = ni * 2 + (big ? 1 : 0);
       let c = chipOf.get(key);
       if (!c) {
@@ -558,21 +594,49 @@ export async function constellationPixi(names: string[], winners: readonly numbe
         chipOf.set(key, c);
         chipsLayer.addChild(c);
       }
-      c.visible = true;
-      c.alpha = alpha;
-      // El chip del amague va del lado contrario a la ganadora, que está
-      // pegada: arriba a la derecha, como los demás, la tapaba.
+      c.scale.set(1);
+      // Nunca más chico que su tamaño ni más ancho que el 82% de la pantalla.
+      c.scale.set(Math.min(Math.max(1, z), (W0 * 0.82) / c.width));
+      const w = c.width, h = c.height;
+      const gx = (nd.r + 6 * k) * z, gy = (nd.r + 10 * k) * z;
+      // El del amague va del lado contrario a la ganadora, que está pegada:
+      // arriba a la derecha, como los demás, la tapaba. Si no entra de ese
+      // lado, prueba los otros tres, y si no entra en ninguno, se arrima.
       const wn = nodes[WIN_NODE] as Node;
       const lejos = ni === DECOY && hopI === K - 1;
       const izq = lejos && wn.x >= nd.x, abajo = lejos && wn.y < nd.y;
-      c.position.set(izq ? nd.x - nd.r - 6 * k - c.width : nd.x + nd.r + 6 * k, abajo ? nd.y + nd.r + 10 * k : nd.y - nd.r - 10 * k);
+      const xa = izq ? p.x - gx - w : p.x + gx, xb = izq ? p.x + gx : p.x - gx - w;
+      const ya = abajo ? p.y + gy : p.y - gy, yb = abajo ? p.y - gy : p.y + gy;
+      const opciones: Caja[] = [[xa, ya], [xb, ya], [xa, yb], [xb, yb]].map(([x, y]) => ({ x: x as number, y: y as number, w, h }));
+      const caja = opciones.find(libre) ?? (opciones[0] as Caja);
+      caja.x = clamp(caja.x, 8 * k, W0 - 8 * k - w);
+      caja.y = clamp(caja.y, lo + h / 2, hi - h / 2);
+      c.position.set(caja.x, caja.y);
+      c.alpha = alpha;
+      c.visible = true;
+      puestos.push(caja);
+      conNombre.add(nd.idx);
     };
-    if (phase !== "nova" && !roll.length) {
+    if (phase !== "nova") {
       if (names.length <= 4) nodes.forEach((nd, i) => { if (nd.idx >= 0 && tAll > nd.born) show(i, 1, false); });
-      // Grandes: el que tiene el paquete, la ganadora en el roce y la estrella del amague.
-      else for (const [ni, a] of chipLife) show(ni, Math.min(1, a * 3), ni === enMano || (casi && ni === WIN_NODE) || (hopI === K - 1 && ni === DECOY));
-    }
-    if (phase === "nova") for (const ni of coShown) show(ni, 1, true);
+      else {
+        // Grandes: el que tiene el paquete, la ganadora en el roce y la
+        // estrella del amague. Se ubican primero, así les toca el mejor lugar.
+        const grande = (ni: number): boolean => ni === enMano || (casi && ni === WIN_NODE) || (hopI === K - 1 && ni === DECOY);
+        [...chipLife].sort((a, b) => Number(grande(b[0])) - Number(grande(a[0])) || b[1] - a[1])
+          .forEach(([ni, a]) => show(ni, Math.min(1, a * 3), grande(ni)));
+      }
+    } else for (const ni of coShown) show(ni, 1, true);
+    // Pasar lista: mientras se arma el cielo y en los primeros saltos, los
+    // nombres de a tandas encima de cada estrella, para que cada uno sepa cuál
+    // es la suya. El que ya tiene su nombre al lado no se repite, y la tanda
+    // esquiva a los nombres de los saltos: antes esos no salían hasta que
+    // terminaba la lista, aunque el relator los nombrara.
+    const roll = phase === "nova" ? [] : S.batch(names.length, tAll, T_ROLL0, T_ROLL1).filter((i) => !conNombre.has(i));
+    S.tags(names, roll, (i) => {
+      const nd = nodes[starOf.get(i) ?? -1];
+      return nd && tAll > nd.born ? cam.toScreen(nd.x, nd.y - nd.r - 16 * k, S.sw(), S.sh()) : null;
+    }, [...(barText.text ? [barText.getBounds()] : []), ...puestos.map((b) => ({ x: b.x, y: b.y - b.h / 2, width: b.w, height: b.h }))]);
     // La barra de "buscando ruta", en el armado.
     bar.clear();
     barText.text = "";
