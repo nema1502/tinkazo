@@ -15,8 +15,9 @@ import { LINES, T_BOARD, T_CROWN, T_DOCK, T_RUN, planCableCar } from "./cablecar
  * la mitad, y cada arco tiene su giro: la puerta, la mordaza, el apagón o la
  * ráfaga. Lo nuevo es cómo se mira. La cámara arranca en el andén de la base,
  * sigue al convoy, se acerca a cada andén cuando se baja gente, se mete en la
- * cabina del giro, se hamaca con el viento, se acerca despacio en el apagón, y
- * sigue a la cabina sola hasta la cumbre.
+ * cabina de la puerta, se queda quieta sobre el tramo por donde resbala la de
+ * la mordaza, se hamaca con el viento, se mete en el convoy apenas titila la
+ * luz del apagón, y sigue a la cabina sola hasta la cumbre.
  *
  * Los nombres viven en la pantalla, no en el mundo (18 de octubre de 2026): en
  * un celular, los que iban pegados a las cabinas crecían con el acercamiento de
