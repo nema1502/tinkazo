@@ -573,7 +573,10 @@ export async function constellationPixi(names: string[], winners: readonly numbe
       const wn = nodes[WIN_NODE] as Node;
       const lejos = ni === DECOY && hopI === K - 1;
       const izq = lejos && wn.x >= nd.x, abajo = lejos && wn.y < nd.y;
-      const y = abajo ? nd.y + nd.r + 10 * k : nd.y - nd.r - 10 * k;
+      let y = abajo ? nd.y + nd.r + 10 * k : nd.y - nd.r - 10 * k;
+      // Si arriba de su estrella queda debajo de la cabecera, debajo de ella
+      // (salvo el del amague, que tiene su lado elegido para no tapar a la ganadora).
+      if (!lejos && !abajo && cam.toScreen(nd.x, y - c.height / 2, Wp, Hp).y < S.top() + m) y = nd.y + nd.r + 10 * k;
       const der = nd.x + nd.r + 6 * k, izqX = nd.x - nd.r - 6 * k - c.width;
       // Entero en la pantalla (en un celular quedaban cortados contra el borde,
       // crítico de juegos, 16 de octubre de 2026): del otro lado de su estrella
