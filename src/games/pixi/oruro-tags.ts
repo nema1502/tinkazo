@@ -54,7 +54,7 @@ export function selectTags(cands: readonly TagCandidate[], cap: number, prev: Re
   return { shown };
 }
 
-/** Rough tag size in px for a chip built with scale factor `kk` (= u * scale). */
+/** Rough tag size in px for a chip whose own unit is `kk` (= u * scale * CHIP_SCALE). */
 export function estimateTagSize(kk: number, maxChars: number): { w: number; h: number } {
   const k = fin(kk) && kk > 0 ? kk : 1;
   const chars = fin(maxChars) && maxChars > 0 ? maxChars : 12;

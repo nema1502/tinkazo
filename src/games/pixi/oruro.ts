@@ -4,7 +4,7 @@ import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, fanfare, note } from "../../sound";
 import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
-import { CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
+import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 import { layoutLabels, type LabelItem } from "./pinata-labels";
 import { OUT_HOLD, counterText, estimateTagSize, outTreatment, planRollCall, rollCallAt, selectTags, tagBudget, tagName, type TagCandidate } from "./oruro-tags";
 
@@ -609,27 +609,30 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   const poolOf = new Map(dancers.map((d, i) => [d.idx, pool[i] as TagCandidate]));
   const inView: TagCandidate[] = [];
 
-  /** The chip of a devil: built once, then reused (and rebuilt with the scene on resize). */
-  function tagOf(d: Dancer, kk: number, scale: number): Container {
+  /**
+   * The chip of a devil: built once, then reused (and rebuilt with the scene on resize).
+   * `kc` is the chip's own unit (u * scale * CHIP_SCALE): what is drawn on it goes in those units.
+   */
+  function tagOf(d: Dancer, kc: number, scale: number): Container {
     if (d.chip) return d.chip;
     const c = S.chip(tagName(names[d.idx] ?? "", fullTag.has(d.idx) ? 20 : TAG_CHARS), scale, names[d.idx] ?? "");
     const w = c.width;
     d.tagW = w;
     // The colour bar matches the devil's cape, and the dot on its head, so ownership reads at a glance.
-    c.addChild(new Graphics().rect(4 * kk, 17.5 * kk, w - 8 * kk, 4 * kk).fill(S.color(d.idx)));
+    c.addChild(new Graphics().rect(4 * kc, 17.5 * kc, w - 8 * kc, 4 * kc).fill(S.color(d.idx)));
     // La marca de "se quedó", solo mientras recién se queda: una raya roja que
     // tacha el nombre por la mitad. La cruz que había lo tapaba entero, y no
     // se leía quién se quedaba, que es justo el dato del momento.
     const x = new Graphics()
-      .moveTo(4 * kk, 11.5 * kk).lineTo(w - 6 * kk, 11.5 * kk)
-      .stroke({ width: 2.4 * kk, color: 0xd52b1e, cap: "round" });
+      .moveTo(4 * kc, 11.5 * kc).lineTo(w - 6 * kc, 11.5 * kc)
+      .stroke({ width: 2.4 * kc, color: 0xd52b1e, cap: "round" });
     x.visible = false;
     c.addChild(x);
     d.strike = x;
     // Un co-ganador que se queda no va tachado: se queda con premio, y lleva
     // un borde amarillo mientras el relator lo nombra.
     if (winners.includes(d.idx)) {
-      const prize = new Graphics().roundRect(-1.5 * kk, -1.5 * kk, w + 3 * kk, 25 * kk, 6 * kk).stroke({ width: 3 * kk, color: YELLOW });
+      const prize = new Graphics().roundRect(-1.5 * kc, -1.5 * kc, w + 3 * kc, 25 * kc, 6 * kc).stroke({ width: 3 * kc, color: YELLOW });
       prize.visible = false;
       c.addChild(prize);
       d.prize = prize;
@@ -653,9 +656,13 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     leaders.clear();
     moreBox.visible = moreText.visible = false;
     if (phase === "crown" || phase === "dead") return;
-    const scale = clamp(TAG_FONT_PX / (12 * k), 1, 1.8);
+    // El chip ya nace con letra legible (CHIP_SCALE); esto solo lo agranda en
+    // las pantallas chicas, donde ni así llegaba a TAG_FONT_PX.
+    const scale = clamp(TAG_FONT_PX / (12 * k * CHIP_SCALE), 1, 1.8);
     const kk = k * scale;
-    const sz = estimateTagSize(kk, TAG_CHARS);
+    /** La unidad del chip: lo que mide y lo que se le dibuja encima va en esta. */
+    const kc = kk * CHIP_SCALE;
+    const sz = estimateTagSize(kc, TAG_CHARS);
     const top = S.top(), bottom = S.bottom();
     const cap = tagBudget(g.w, g.h, top, bottom, sz.w, sz.h);
     // Roll call: for the first seconds the tags are paged over ALL devils (ordered by
@@ -678,14 +685,14 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       if (c.visible) inView.push(c);
     }
     const { shown } = selectTags(inView, cap, shownNow);
-    const th = 22 * kk;
+    const th = 22 * kc;
     const items: LabelItem[] = [];
     for (let i = 0; i < shown.length; i++) {
       const d = byIdx.get(shown[i] as number) as Dancer;
       const c = poolOf.get(d.idx) as TagCandidate;
-      tagOf(d, kk, scale);
-      const w = (d.tagW ?? sz.w) + 3 * kk;
-      items.push({ id: d.idx, x: c.sx - w / 2, y: c.sy - th - 10 * kk, w, h: th + 3 * kk, priority: (c.out ? 1000 : 0) + c.depth });
+      tagOf(d, kc, scale);
+      const w = (d.tagW ?? sz.w) + 3 * kc;
+      items.push({ id: d.idx, x: c.sx - w / 2, y: c.sy - th - 10 * kk, w, h: th + 3 * kc, priority: (c.out ? 1000 : 0) + c.depth });
     }
     // The counter and the "+N" chip are off limits.
     const moreH = 26 * k, moreY = S.top() + 10 * k + ch + 10 * k;
@@ -703,7 +710,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       chip.visible = true;
       chip.scale.set(s);
       chip.alpha = look.alpha;
-      chip.position.set(pl.x, pl.y + 11 * kk);
+      chip.position.set(pl.x, pl.y + 11 * kc);
       const premiado = winners.includes(d.idx);
       (d.strike as Graphics).visible = look.struck && !premiado;
       if (d.prize) d.prize.visible = look.struck && premiado && !d.alive && tAll - d.left < OUT_HOLD;
@@ -711,7 +718,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       shownNext.add(pl.id);
       if (d.alive) aliveTagged++;
       // The leader: from the tag down to the head of its own devil.
-      const w = (d.tagW ?? sz.w) * s, cx = pl.x + w / 2, by = pl.y + th * s - (s - 1) * 11 * kk;
+      const w = (d.tagW ?? sz.w) * s, cx = pl.x + w / 2, by = pl.y + th * s - (s - 1) * 11 * kc;
       const col = S.color(d.idx);
       leaders.moveTo(cx, by).lineTo(c.sx, c.sy).stroke({ width: 5 * kk * 0.5, color: INK, alpha: look.alpha })
         .moveTo(cx, by).lineTo(c.sx, c.sy).stroke({ width: 2.4 * kk * 0.5, color: col, alpha: look.alpha })
