@@ -634,6 +634,21 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     g.poly(pts).fill(col).stroke({ width: 2 * G.k, color: INK });
   }
 
+  /**
+   * Un nombre que no entra en la pantalla se corre lo justo para quedar entero:
+   * en un celular quedaban cortados contra el borde, y con la letra legible
+   * más (crítico de juegos, 16 de octubre de 2026). `c` vive en el mundo,
+   * anclado por la izquierda al medio, como todo chip.
+   */
+  function enPantalla(c: Container): void {
+    const W = S.sw(), H = S.sh(), m = 8 * S.u();
+    const o = cam.toScreen(0, 0, W, H);
+    const z = Math.max(1e-6, cam.toScreen(1, 0, W, H).x - o.x);
+    const sx = cam.toScreen(c.x, c.y, W, H).x;
+    if (sx < m) c.x += (m - sx) / z;
+    else if (sx + c.width * z > W - m) c.x -= (sx + c.width * z - (W - m)) / z;
+  }
+
   function draw(now: number): void {
     const { k, cw, ch, gap } = G;
     const luz = P.luzAt(tAll);
@@ -679,12 +694,16 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         stn.minus.text = `−${pl.off}`;
         stn.minus.scale.set(ease.outBack(clamp(since / 0.4, 0, 1)));
         if (pl.who.length && since < 2.4 && since > 0.3) {
-          if (!stn.chips.children.length) {
-            pl.who.forEach((idx, i) => {
-              const c = S.chip(names[idx] ?? "");
-              c.position.set(p.x - bw / 2 - 190 * k, y0 - 34 * k + 34 * k + i * 30 * k);
-              stn.chips.addChild(c);
-            });
+          if (!stn.chips.children.length) pl.who.forEach((idx) => stn.chips.addChild(S.chip(names[idx] ?? "")));
+          // A la izquierda de la estación, alineados contra ella y apilados por
+          // su alto de verdad, debajo del "−N": corridos 190 y cada 30, como
+          // antes, los chips de letra legible se encimaban entre ellos y sobre
+          // la estación (16 de octubre de 2026).
+          let arriba = y0 - 6 * k;
+          for (const c of stn.chips.children) {
+            c.position.set(p.x - bw / 2 - 10 * k - c.width, arriba + c.height / 2);
+            enPantalla(c as Container);
+            arriba += c.height + 2 * k;
           }
           stn.chips.alpha = clamp(Math.min(since - 0.3, 2.4 - since) / 0.3, 0, 1);
         } else stn.chips.alpha = 0;
@@ -861,6 +880,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         }
         chip.visible = true;
         chip.position.set(G.vertical ? p.x - cw / 2 - 14 * k - chip.width : p.x - 40 * k, G.vertical ? p.y + 24 * k + ch / 2 + 8 * k : p.y + 24 * k + ch + 28 * k);
+        enPantalla(chip);
       }
     }
     for (const c of fx.parent?.children ?? []) {
