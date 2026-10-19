@@ -273,7 +273,13 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   let gridAt: Point[] = [];
   let gridScale = 1;
   /** El nombre de un agujero, a una letra de 17 px o más en una pantalla de 720 de alto. */
-  const labelScale = (): number => (S.portrait() ? 0.9 : 1.45);
+  /**
+   * El tamaño de los nombres de la mesa, sobre la base legible (CHIP_SCALE).
+   * En un celular, 0,9 de la base no entraba entre la mesa y el borde, y los
+   * nombres de los costados se apagaban (16 de octubre de 2026): con 0,75
+   * entran todos, y la letra sigue siendo un tercio más grande que antes.
+   */
+  const labelScale = (): number => (S.portrait() ? 0.75 : 1.45);
   /** Nombre y `n` letras del apellido: "María Q.", "María Qu.". En la mesa entran doce, y el nombre entero no. */
   const corto = (nm: string, n = 1): string => {
     const p = nm.trim().split(/\s+/);

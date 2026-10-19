@@ -745,9 +745,12 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     moreBadge.visible = false;
     if (phase === "crown" || phase === "dead") return;
     const phone = g.w <= 520;
-    const scaleFly = phone ? 1.35 : 1.15;
-    const scaleSide = phone ? 1.0 : 0.9;
-    const scaleStrip = phone ? 0.85 : 0.75;
+    // Relativos a la base legible (CHIP_SCALE). En un celular iban más grandes
+    // que en la pantalla ancha, y con la letra nueva los que vuelan ocupaban
+    // media pantalla y tapaban la piñata: ahora, apenas por encima de la base.
+    const scaleFly = phone ? 1 : 1.15;
+    const scaleSide = phone ? 0.85 : 0.9;
+    const scaleStrip = phone ? 0.7 : 0.75;
     const bounds = { w: g.w, h: g.h, top: S.top(), bottom: S.bottom() };
     items.length = 0;
     alphaOf.clear();

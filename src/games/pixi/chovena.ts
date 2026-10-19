@@ -1623,8 +1623,9 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   function rollCall(x: number, live: Dancer[], placed: Rect[]): void {
     if (live.length > 64 || x < 0.3) return;
     if (live.length <= 6) {
-      // Con cuatro o menos, más grandes: a 12 px no se leían desde el fondo.
-      const s = live.length <= 4 ? (G.portrait ? 1.2 : 1.4) : 1;
+      // Con cuatro o menos, más grandes: a 12 px no se leían desde el fondo. En
+      // un celular, la base legible (CHIP_SCALE) ya alcanza.
+      const s = live.length <= 4 && !G.portrait ? 1.4 : 1;
       for (const d of live) placeChip(d, x, placed, s);
       return;
     }
@@ -1813,7 +1814,8 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       if (finalDuo && x >= F0) {
         for (const d of [win, dancers[rivalIdx] as Dancer]) {
           if (d.outAt >= 0 && x >= d.outAt + 0.9) continue;
-          placeChip(d, x, placed, G.portrait ? 1.5 : 2);
+          // En un celular, la base legible: más grandes ocupaban dos tercios del ancho.
+          placeChip(d, x, placed, G.portrait ? 1 : 2);
         }
       } else if (ev && ev.kind === "stop" && ev.victims.length > 5) {
         usePanel = x >= ev.x0 - 0.15;
