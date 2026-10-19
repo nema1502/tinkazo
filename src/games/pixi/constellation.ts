@@ -328,6 +328,8 @@ export async function constellationPixi(names: string[], winners: readonly numbe
   let novaG!: Graphics;
   let chipsLayer!: Container;
   const chipOf = new Map<number, Container>();
+  /** Qué lugar eligió cada nombre en el cuadro anterior: ver `draw`. */
+  const lugarDe = new Map<number, number>();
   let bar!: Graphics;
   let barText!: Text;
   let hopText!: Text;
@@ -337,6 +339,7 @@ export async function constellationPixi(names: string[], winners: readonly numbe
     const k = S.u();
     for (const c of [S.bg, S.scene, S.hud]) c.removeChildren().forEach((x) => x.destroy({ children: true }));
     chipOf.clear();
+    lugarDe.clear();
     const cv = document.createElement("canvas");
     cv.width = 2;
     cv.height = 256;
@@ -569,24 +572,51 @@ export async function constellationPixi(names: string[], winners: readonly numbe
     // contra el borde; y el desenfoque de los acercamientos los borroneaba
     // justo en los saltos que deciden. Acá cada uno va al lado de su estrella,
     // del tamaño que le da la cámara sin pasarse de la pantalla, adentro de
-    // ella y sin pisar a otro nombre.
+    // ella y sin pisar a otro nombre ni al paquete.
     const enMano = (hops[Math.min(hopI, hops.length - 1)] as Hop | undefined)?.to ?? -1;
     for (const c of chipOf.values()) c.visible = false;
     const W0 = W(), H0 = H();
     const lo = S.top() + 6 * k, hi = H0 - S.bottom() - 6 * k;
     const z = S.scene.scale.x;
+    // Quiénes llevan nombre en este cuadro: estrella, opacidad y si va grande.
+    const conChip: [number, number, boolean][] = [];
+    if (phase !== "nova") {
+      if (names.length <= 4) nodes.forEach((nd, i) => { if (nd.idx >= 0 && tAll > nd.born) conChip.push([i, 1, false]); });
+      else {
+        // Grandes: el que tiene el paquete, la ganadora en el roce y la
+        // estrella del amague. Se ubican primero, así les toca el mejor lugar.
+        const grande = (ni: number): boolean => ni === enMano || (casi && ni === WIN_NODE) || (hopI === K - 1 && ni === DECOY);
+        [...chipLife].sort((a, b) => Number(grande(b[0])) - Number(grande(a[0])) || b[1] - a[1])
+          .forEach(([ni, a]) => conChip.push([ni, Math.min(1, a * 3), grande(ni)]));
+      }
+    } else for (const ni of coShown) conChip.push([ni, 1, true]);
+    // Lo que un nombre no tapa si tiene otro lugar: el paquete con su brillo,
+    // y las estrellas con nombre, la del paquete y la ganadora. Arrimado al
+    // borde del celular, el nombre caía encima del paquete justo en el
+    // último salto.
+    const cuadrado = (q: { x: number; y: number }, r: number): Caja => ({ x: q.x - r, y: q.y, w: 2 * r, h: 2 * r });
+    const estorbos: { b: Caja; peso: number }[] = [];
+    if (phase === "hop") estorbos.push({ b: cuadrado(S.scene.toGlobal(packetPos()), 31 * k * z), peso: 20 });
+    for (const ni of new Set([...conChip.map(([ni]) => ni), enMano, WIN_NODE])) {
+      const nd = nodes[ni];
+      if (nd?.kind === "star" && nd.g?.visible) estorbos.push({ b: cuadrado(S.scene.toGlobal({ x: nd.x, y: nd.y }), nd.g.scale.x * 1.11 * z), peso: 6 });
+    }
+    /** Cuánto de `a` cae encima de `b`, en píxeles cuadrados. */
+    const pisa = (a: Caja, b: Caja): number => {
+      const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+      const oy = Math.min(a.y + a.h / 2, b.y + b.h / 2) - Math.max(a.y - a.h / 2, b.y - b.h / 2);
+      return ox > 0 && oy > 0 ? ox * oy : 0;
+    };
     const puestos: Caja[] = [];
     const conNombre = new Set<number>();
-    const libre = (a: Caja): boolean =>
-      a.x >= 8 * k && a.x + a.w <= W0 - 8 * k && a.y - a.h / 2 >= lo && a.y + a.h / 2 <= hi &&
-      !puestos.some((b) => a.x < b.x + b.w && a.x + a.w > b.x && Math.abs(a.y - b.y) < (a.h + b.h) / 2);
-    const show = (ni: number, alpha: number, big: boolean): void => {
+    for (const [ni, alpha, big] of conChip) {
       const nd = nodes[ni] as Node;
-      if (nd.idx < 0) return;
+      if (nd.idx < 0) continue;
       // Con la hora de la escena y no la del cuadro anterior: `apply` ya movió la cámara.
       const p = S.scene.toGlobal({ x: nd.x, y: nd.y });
-      // La estrella que la cámara dejó afuera no lleva nombre: pegado al borde engañaba.
-      if (p.x < 0 || p.x > W0 || p.y < lo || p.y > hi) return;
+      // La estrella que la cámara dejó afuera no lleva nombre: pegado al borde
+      // engañaba. La que queda al costado del relator, sí.
+      if (p.x < 0 || p.x > W0 || p.y < S.top() || p.y > H0) continue;
       const key = ni * 2 + (big ? 1 : 0);
       let c = chipOf.get(key);
       if (!c) {
@@ -595,46 +625,47 @@ export async function constellationPixi(names: string[], winners: readonly numbe
         chipsLayer.addChild(c);
       }
       c.scale.set(1);
-      // Nunca más chico que su tamaño ni más ancho que el 82% de la pantalla.
-      c.scale.set(Math.min(Math.max(1, z), (W0 * 0.82) / c.width));
+      // Nunca más chico que su tamaño ni más ancho que el 82% de la pantalla,
+      // o el 60% si no es de los grandes: con pocos van los cuatro a la vez.
+      c.scale.set(Math.min(Math.max(1, z), (W0 * (big ? 0.82 : 0.6)) / c.width));
       const w = c.width, h = c.height;
       const gx = (nd.r + 6 * k) * z, gy = (nd.r + 10 * k) * z;
       // El del amague va del lado contrario a la ganadora, que está pegada:
-      // arriba a la derecha, como los demás, la tapaba. Si no entra de ese
-      // lado, prueba los otros tres.
+      // arriba a la derecha, como los demás, la tapaba.
       const wn = nodes[WIN_NODE] as Node;
       const lejos = ni === DECOY && hopI === K - 1;
       const izq = lejos && wn.x >= nd.x, abajo = lejos && wn.y < nd.y;
       const xa = izq ? p.x - gx - w : p.x + gx, xb = izq ? p.x + gx : p.x - gx - w;
       const ya = abajo ? p.y + gy : p.y - gy, yb = abajo ? p.y - gy : p.y + gy;
-      const lados: Caja[] = [[xa, ya], [xb, ya], [xa, yb], [xb, yb]].map(([x, y]) => ({ x: x as number, y: y as number, w, h }));
-      // Si no entra a ningún costado (en el celular, el grande del amague es
-      // casi tan ancho como la pantalla), va centrado encima o debajo, sin
-      // tocar la estrella: arrimado al costado le tapaba media estrella. La
-      // estrella llega a 1,42 veces su radio cuando se enciende.
-      const sep = nd.r * 1.42 * z + 4 * k + h / 2;
-      const xc = clamp(p.x - w / 2, 8 * k, W0 - 8 * k - w);
-      const centro: Caja[] = (abajo ? [p.y + sep, p.y - sep] : [p.y - sep, p.y + sep]).map((y) => ({ x: xc, y, w, h }));
-      const entra = (a: Caja): boolean => a.y - a.h / 2 >= lo && a.y + a.h / 2 <= hi;
-      const caja = [...lados, ...centro].find(libre) ?? centro.find(entra) ?? (lados[0] as Caja);
-      caja.x = clamp(caja.x, 8 * k, W0 - 8 * k - w);
-      caja.y = clamp(caja.y, lo + h / 2, hi - h / 2);
+      // Hasta dónde llega la estrella encendida (1,42 veces su radio), y un poco.
+      const ext = nd.r * 1.42 * z + 4 * k;
+      // Los lugares, del preferido al último: en las cuatro esquinas, al
+      // costado a la altura de la estrella, y centrado encima o debajo, que
+      // es donde entra el grande del amague en un celular.
+      const lugares: [number, number][] = [
+        [xa, ya], [xb, ya], [xa, yb], [xb, yb],
+        [izq ? p.x - ext - w : p.x + ext, p.y], [izq ? p.x + ext : p.x - ext - w, p.y],
+        [p.x - w / 2, abajo ? p.y + ext + h / 2 : p.y - ext - h / 2], [p.x - w / 2, abajo ? p.y - ext - h / 2 : p.y + ext + h / 2],
+      ];
+      // Cada uno, metido en la pantalla, cuesta lo que tapa (otro nombre, más
+      // que una estrella), lo que hubo que correrlo para que entrara y lo que
+      // se aleja del preferido. El que tenía en el cuadro anterior cuesta un
+      // poco menos: si no, saltaba de un lado al otro con cada paso del paquete.
+      const antes = lugarDe.get(key);
+      let caja: Caja = { x: 0, y: 0, w, h }, menor = Infinity, elegido = 0;
+      lugares.forEach(([x0, y0], i) => {
+        const b: Caja = { x: clamp(x0, 8 * k, W0 - 8 * k - w), y: clamp(y0, lo + h / 2, hi - h / 2), w, h };
+        const costo = estorbos.reduce((s, e) => s + e.peso * pisa(b, e.b), 0) + puestos.reduce((s, o) => s + 10 * pisa(b, o), 0) +
+          h * (Math.abs(b.x - x0) + Math.abs(b.y - y0) + 8 * i - (i === antes ? 12 : 0));
+        if (costo < menor) [menor, caja, elegido] = [costo, b, i];
+      });
+      lugarDe.set(key, elegido);
       c.position.set(caja.x, caja.y);
       c.alpha = alpha;
       c.visible = true;
       puestos.push(caja);
       conNombre.add(nd.idx);
-    };
-    if (phase !== "nova") {
-      if (names.length <= 4) nodes.forEach((nd, i) => { if (nd.idx >= 0 && tAll > nd.born) show(i, 1, false); });
-      else {
-        // Grandes: el que tiene el paquete, la ganadora en el roce y la
-        // estrella del amague. Se ubican primero, así les toca el mejor lugar.
-        const grande = (ni: number): boolean => ni === enMano || (casi && ni === WIN_NODE) || (hopI === K - 1 && ni === DECOY);
-        [...chipLife].sort((a, b) => Number(grande(b[0])) - Number(grande(a[0])) || b[1] - a[1])
-          .forEach(([ni, a]) => show(ni, Math.min(1, a * 3), grande(ni)));
-      }
-    } else for (const ni of coShown) show(ni, 1, true);
+    }
     // Pasar lista: mientras se arma el cielo y en los primeros saltos, los
     // nombres de a tandas encima de cada estrella, para que cada uno sepa cuál
     // es la suya. El que ya tiene su nombre al lado no se repite, y la tanda
