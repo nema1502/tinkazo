@@ -993,7 +993,13 @@ export async function llamasPixi(
       }
     };
     if (waves.length) {
-      once("q", 0.1, () => sayIf(L_.rqStart(names.length, N), 0.3));
+      once("q", 0.1, () => {
+        sayIf(L_.rqStart(names.length, N), 0.3);
+        // La tabla entra con su campanita: sin ella, entre el último número de
+        // la tarjeta y la primera tanda de eliminados pasaban más de cuatro
+        // segundos sin un efecto (lo marcaba el auditor de sonido).
+        [10, 12, 15].forEach((d, i) => setTimeout(() => beep(note(d), 0.1, "triangle", 0.045), i * 90));
+      });
       waves.forEach((w, wi) => once(`w${wi}`, Q_SHOW + wi * Q_WAVE + 0.55, () => {
         const quedan = names.length - waves.slice(0, wi + 1).reduce((a, x) => a + x.length, 0);
         S.say(L_.rqLeft(quedan, N), 0.35 + 0.15 * wi);
