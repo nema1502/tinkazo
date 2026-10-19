@@ -758,25 +758,27 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     };
     // Los últimos caídos, en una tira fija abajo a la derecha, encima del piso.
     // A la izquierda le tapaba la cabeza al chico del palo.
+    // Apilados por su alto de verdad: con los 26 de antes, los chips de letra
+    // legible arrancaban encimados y el reparto los desparramaba (16 de octubre de 2026).
     const tail = fallen.slice(-STRIP_MAX);
-    const stripStep = 26 * k * scaleStrip;
     tail.forEach((id, i) => {
       const key = STRIP_KEY(id);
       chipFor(key, names[id] ?? "", scaleStrip);
       const fromEnd = tail.length - 1 - i;
-      const ancho = (chipDim.get(key) as { w: number }).w;
-      put(key, g.w - ancho - 8 * k, g.floor - 14 * k - (fromEnd + 1) * stripStep, 1000, 0.45 + 0.55 * (1 - fromEnd / STRIP_MAX));
+      const d = chipDim.get(key) as { w: number; h: number };
+      put(key, g.w - d.w - 8 * k, g.floor - 14 * k - (fromEnd + 1) * (d.h + k), 1000, 0.45 + 0.55 * (1 - fromEnd / STRIP_MAX));
     });
     // Los que quedan adentro (pocos): una columna al costado, debajo del contador.
     // Con uno solo no: rota la piñata, la lista con un nombre era el ganador
     // escrito tres segundos antes del cartel.
     const adentro = inside();
     if (adentro.length <= 6 && adentro.length > 1 && !brokeDone && story.arc !== "tapada") {
-      const colTop = S.top() + 62 * k;
+      let colTop = S.top() + 62 * k;
       adentro.forEach((c, i) => {
         const key = c.idx;
         chipFor(key, names[c.idx] ?? "", scaleSide);
-        put(key, 10 * k, colTop + i * 28 * k * scaleSide, 900 - i, 1);
+        put(key, 10 * k, colTop, 900 - i, 1);
+        colTop += (chipDim.get(key) as { h: number }).h + 2 * k;
       });
     }
     // Los que van cayendo (o acaban de quedarse quietos), cada uno con su nombre.

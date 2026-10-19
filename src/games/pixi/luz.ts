@@ -775,7 +775,9 @@ export async function luzPixi(names: string[], winners: readonly number[], beaco
       for (const { r, p } of at) {
         const chip = (r.chip ??= chips.addChild(S.chip(names[r.idx] ?? "", S.portrait() ? 0.8 : 1)));
         chip.visible = true;
-        const cy = Math.max(p.y - 14 * k, prev + (S.portrait() ? 21 : 26) * k);
+        // Apilados por su alto de verdad: con los 21 y 26 de antes, los chips de
+        // letra legible se encimaban (16 de octubre de 2026).
+        const cy = Math.max(p.y - chip.height / 2 - k, prev + chip.height);
         prev = cy;
         chip.position.set(Math.min(p.x, W - chip.width - 10 * k), cy);
       }

@@ -1354,7 +1354,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
         const a = cam.toScreen(w.x - size * 0.5, w.y - size * 1.05, W, H), b = cam.toScreen(w.x + size * 0.5, w.y, W, H);
         return { q, x0: a.x, y0: a.y, x1: b.x, y1: b.y };
       });
-      let prev = -Infinity, prevS = 1;
+      let prev = -Infinity, prevH = 0;
       for (const { q, out, p } of at) {
         const nm = names[q.idx] ?? "";
         const chip = out
@@ -1364,10 +1364,13 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
         chip.scale.set(sc);
         chip.alpha = out ? clamp((OUT_TAG - q.out) / 0.5, 0, 1) : 1;
         chip.visible = true;
-        const cy = Math.max(p.y, prev + 13 * k * (prevS + sc));
+        // El medio alto de verdad: con los 13 por escala de antes escritos a
+        // mano, los chips de letra legible se encimaban (16 de octubre de 2026).
+        const ch = chip.height / 2 + k;
+        const cy = Math.max(p.y, prev + prevH + ch);
         prev = cy;
-        prevS = sc;
-        const cw = chip.width, ch = 13 * k * sc;
+        prevH = ch;
+        const cw = chip.width;
         const tapa = (x: number): boolean => cuerpos.some((c) => c.q !== q && x < c.x1 && x + cw > c.x0 && cy - ch < c.y1 && cy + ch > c.y0);
         let x = Math.min(p.x + 4 * k, W - cw - 10 * k);
         // Si a la derecha tapa al otro trompo, a la izquierda del suyo.

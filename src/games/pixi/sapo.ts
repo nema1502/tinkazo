@@ -329,10 +329,13 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     });
     anchoNombre = chips.map((c) => c.width / k);
     g = G();
-    // La grilla de la clasificatoria: todos los nombres a la vista, del tamaño que entre.
+    // La grilla de la clasificatoria: todos los nombres a la vista, del tamaño
+    // que entre. Las celdas miden lo que el chip más ancho y su alto de verdad:
+    // con las de 150 por 30 de antes, los chips de letra legible se pisaban
+    // (16 de octubre de 2026).
     const top = S.top() + 54 * k, bottom = g.h - S.bottom() - 10 * k;
     const areaW = g.w * 0.94, areaH = Math.max(40, bottom - top);
-    const cw = 150 * k, ch = 30 * k;
+    const cw = chips.reduce((m, c) => Math.max(m, c.width), 0) + 12 * k, ch = (chips[0]?.height ?? 40 * k) + 6 * k;
     let best = { cols: 1, s: 0 };
     for (let cols = 1; cols <= all; cols++) {
       const rows = Math.ceil(all / cols);

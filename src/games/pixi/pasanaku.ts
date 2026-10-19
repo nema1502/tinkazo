@@ -708,7 +708,9 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
       for (const { q, p } of at) {
         const chip = (q.chip ??= chips.addChild(S.chip(names[q.idx] ?? "")));
         chip.visible = true;
-        const cy = Math.max(p.y, prev + 26 * u);
+        // Apilados por su alto de verdad: con los 26 de antes, los chips de
+        // letra legible se encimaban (16 de octubre de 2026).
+        const cy = Math.max(p.y, prev + chip.height);
         prev = cy;
         const x = knotted ? Math.max(10 * u, p.x - chip.width / 2) : p.x + 4 * u;
         chip.position.set(Math.min(x, S.sw() - chip.width - 10 * u), cy);
