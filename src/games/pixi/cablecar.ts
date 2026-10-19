@@ -115,6 +115,9 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   let dark!: Graphics;
   let wind!: Graphics;
   let jumper: Container | null = null;
+  /** El nombre del que salta y el lado de su cara, para acomodarlo cuadro a cuadro. */
+  let jumperTag: Container | null = null;
+  let jumperSide = 0;
   let hudLabel!: Text;
   let hudNum!: Text;
   let hudStation!: Text;
@@ -273,6 +276,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     // El que se baja en la última parada, con su cara y su nombre: era un
     // cuadradito de 14 px, y es la bajada que decide el sorteo.
     jumper = null;
+    jumperTag = null;
     if (lastStop && loserIdx >= 0) {
       const nm = names[loserIdx] ?? "";
       const side = 44 * k;
@@ -287,6 +291,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       jc.visible = false;
       world.addChild(jc);
       jumper = jc;
+      jumperTag = tag;
+      jumperSide = side;
     }
 
     // La interfaz: oscuridad del apagón, vetas del viento y los contadores.
@@ -651,6 +657,10 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
 
   function draw(now: number): void {
     const { k, cw, ch, gap } = G;
+    // Los nombres viven en el mundo: con la cámara cerca crecían con ella, y
+    // con la letra legible tapaban las cabinas en un celular. Conservan su
+    // tamaño en la pantalla cuando la cámara se acerca.
+    const comp = 1 / Math.max(1, cam.zoom);
     const luz = P.luzAt(tAll);
     // Paralaje: la cordillera casi quieta, la ciudad a medio camino.
     far.position.set(cam.x * 0.85, cam.y * 0.85);
@@ -701,6 +711,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
           // la estación (16 de octubre de 2026).
           let arriba = y0 - 6 * k;
           for (const c of stn.chips.children) {
+            c.scale.set(comp);
             c.position.set(p.x - bw / 2 - 10 * k - c.width, arriba + c.height / 2);
             enPantalla(c as Container);
             arriba += c.height + 2 * k;
@@ -804,6 +815,15 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         const sq = land > 0 ? 0.2 * Math.exp(-land * 9) * Math.cos(land * 28) : 0;
         jumper.scale.set(1 + sq, 1 - sq);
         jumper.alpha = clamp((hasta - tAll) / 0.3, 0, 1);
+        // El nombre, del tamaño de siempre en la pantalla y del lado que entra:
+        // a la derecha de la cara se cortaba contra el borde (16 de octubre de 2026).
+        if (jumperTag) {
+          jumperTag.scale.set(comp);
+          jumperTag.x = jumperSide / 2 + 8 * k;
+          const W = S.sw();
+          const derecha = cam.toScreen(jumper.x + jumperTag.x + jumperTag.width, jumper.y, W, S.sh()).x;
+          if (derecha > W - 8 * S.u()) jumperTag.x = -jumperSide / 2 - 8 * k - jumperTag.width;
+        }
       }
     }
 
@@ -879,6 +899,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
           fx.parent?.addChild(chip);
         }
         chip.visible = true;
+        chip.scale.set(comp);
         chip.position.set(G.vertical ? p.x - cw / 2 - 14 * k - chip.width : p.x - 40 * k, G.vertical ? p.y + 24 * k + ch / 2 + 8 * k : p.y + 24 * k + ch + 28 * k);
         enPantalla(chip);
       }
