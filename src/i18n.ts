@@ -1,4 +1,8 @@
-export type Lang = "es" | "en";
+import { getLang, usarTextos, type Lang } from "./idioma";
+
+// Elegir, recordar y pintar el idioma vive en `idioma.ts`, sin el diccionario:
+// las páginas de lectura y verificar lo usan con sus pocos textos.
+export { chooseLang, getLang, initialLang, onLangChange, setLang, type Lang } from "./idioma";
 
 /** Lo que hace falta para escribir las bases de un sorteo sellado. */
 export interface RulesParams {
@@ -236,7 +240,7 @@ const joinList = (ns: string[], and: string): string => {
  * Óscar" sin la "y".
  */
 export function nameList(ns: string[], more = 0): string {
-  const es = current === "es";
+  const es = getLang() === "es";
   if (more > 0) return `${ns.join(", ")} ${es ? "y" : "and"} ${more} ${es ? "más" : "more"}`;
   return joinList(ns, es ? "y" : "and");
 }
@@ -2173,79 +2177,13 @@ export const T: Record<Lang, Dict> = {
   },
 };
 
-let current: Lang = "es";
-const listeners: Array<(l: Lang) => void> = [];
-
-export const getLang = (): Lang => current;
+// El diccionario entero, para la herramienta: `setLang` pinta con este, y los
+// juegos leen `T[getLang()]` y `t()` como siempre.
+usarTextos(T);
 
 /** Cadena traducida. Si la clave tiene variantes, sortea una. */
 export function t(key: string): string {
-  const v = T[current][key];
+  const v = T[getLang()][key];
   if (Array.isArray(v)) return pick(v);
   return typeof v === "string" ? v : key;
-}
-
-/** Se ejecuta después de cada cambio de idioma (textos que no viven en `data-i`). */
-export function onLangChange(fn: (l: Lang) => void): void {
-  listeners.push(fn);
-}
-
-const LANG_KEY = "tinkazo.lang";
-
-/**
- * El idioma con que arranca cualquier página: el de la URL (`?lang=`), si no
- * el que la persona eligió antes, y si no el del navegador. Antes "/" solo
- * miraba la URL y las páginas de lectura solo el navegador, así que quien
- * apretaba EN en la portada volvía al español al entrar a Juegos.
- */
-export function initialLang(): Lang {
-  const q = new URLSearchParams(location.search).get("lang");
-  if (q === "en" || q === "es") return q;
-  try {
-    const s = localStorage.getItem(LANG_KEY);
-    if (s === "en" || s === "es") return s;
-  } catch {
-    /* sin almacenamiento, el navegador decide */
-  }
-  return (navigator.language || "es").toLowerCase().startsWith("en") ? "en" : "es";
-}
-
-/** Lo que pasa al apretar ES o EN: se cambia y se recuerda para las otras páginas. */
-export function chooseLang(l: Lang): void {
-  try {
-    localStorage.setItem(LANG_KEY, l);
-  } catch {
-    /* se cambia igual, solo que no se recuerda */
-  }
-  setLang(l);
-}
-
-export function setLang(l: Lang): void {
-  current = l;
-  document.documentElement.lang = l;
-  document.getElementById("l-es")?.classList.toggle("on", l === "es");
-  document.getElementById("l-en")?.classList.toggle("on", l === "en");
-  const dict = T[l];
-  // Las claves con variantes se saltan: el markup nunca las usa.
-  document.querySelectorAll<HTMLElement>("[data-i]").forEach((el) => {
-    const v = dict[el.dataset.i ?? ""];
-    if (typeof v === "string") el.textContent = v;
-  });
-  document.querySelectorAll<HTMLElement>("[data-i-html]").forEach((el) => {
-    const v = dict[el.dataset.iHtml ?? ""];
-    if (typeof v === "string") el.innerHTML = v;
-  });
-  document.querySelectorAll<HTMLInputElement>("[data-i-ph]").forEach((el) => {
-    const v = dict[el.dataset.iPh ?? ""];
-    if (typeof v === "string") el.placeholder = v;
-  });
-  document.querySelectorAll<HTMLElement>("[data-i-title]").forEach((el) => {
-    const v = dict[el.dataset.iTitle ?? ""];
-    if (typeof v === "string") el.title = v;
-  });
-  document.querySelectorAll<HTMLElement>("[data-i-aria]").forEach((el) => {
-    const v = dict[el.dataset.iAria ?? ""];
-    if (typeof v === "string") el.setAttribute("aria-label", v);
-  });
-  for (const fn of listeners) fn(l);
 }

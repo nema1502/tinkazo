@@ -2,7 +2,8 @@ import { $, esc } from "../dom";
 import { T, getLang, onLangChange, t } from "../i18n";
 import { CUENTA_SECONDS, LCOLORS, WHEEL_MAX, app, conCuenta, params, playableGame, avatar, forceMotion, setCardSeconds, setShowGate, setYaContaron, skipMotion, skippedForReducedMotion, type Beacon, type Game } from "../state";
 import { beep } from "../sound";
-import { bytesToHex, decompressG1, fetchRound, hexToBytes, randomnessOf, roundUrl, verifyRound } from "../protocol/drand";
+import { bytesToHex, fetchRound, hexToBytes, randomnessOf, roundUrl } from "../protocol/quicknet";
+import { verifyRoundAsync } from "../protocol/firma";
 import { select } from "../protocol/select";
 import { network, txUrl } from "../stellar/config";
 import { PROOF_VERSION, type Proof, proofUrl } from "../protocol/proof";
@@ -22,7 +23,8 @@ async function resolveBeacon(
   onAttempt: (attempt: number, total: number) => void,
 ): Promise<Beacon> {
   const { signature } = await fetchRound(round, { onAttempt });
-  if (!verifyRound(round, signature)) throw new Error("bad-signature");
+  // En un worker, que la cuenta regresiva levantó: la cortina no se traba.
+  if (!(await verifyRoundAsync(round, signature))) throw new Error("bad-signature");
   return { round, randomness: bytesToHex(randomnessOf(signature)), signature };
 }
 
@@ -86,6 +88,9 @@ export async function draw(): Promise<void> {
       const TRIES = 4;
       let lastError: unknown = null;
       let done = false;
+      // La curva, para pasar la firma al formato del contrato. La cuenta
+      // regresiva ya la bajó (ver `freeze`).
+      const { decompressG1 } = await import("../protocol/drand");
       for (let attempt = 1; attempt <= TRIES && !done; attempt++) {
         try {
           const res = await drawOnChain(raffleId, decompressG1(beacon.signature), (step, detail) => {
@@ -693,11 +698,11 @@ function setNotifyLinks(names: string[], winners: number[], url: string): void {
 }
 
 /** Rehace la verificación de la firma y la selección desde cero (protocolo §7). */
-export function reverify(): void {
+export async function reverify(): Promise<void> {
   if (!app.frozen || !app.drawn) return;
   const { names, listHash } = app.frozen;
   const { beacon, winners } = app.drawn;
-  const sigOk = verifyRound(beacon.round, beacon.signature);
+  const sigOk = await verifyRoundAsync(beacon.round, beacon.signature);
   const seedOk = bytesToHex(randomnessOf(beacon.signature)) === beacon.randomness;
   const again = select(hexToBytes(beacon.randomness), hexToBytes(listHash), names.length, winners.length);
   const ok = sigOk && seedOk && JSON.stringify(again) === JSON.stringify(winners);

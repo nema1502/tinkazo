@@ -1,7 +1,7 @@
 import { esc } from "../dom";
 import { t } from "../i18n";
 import { listHash } from "../protocol/canonical";
-import { bytesToHex } from "../protocol/drand";
+import { bytesToHex } from "../protocol/quicknet";
 import { previewUrl } from "../protocol/proof";
 import { repetidos } from "../buscar";
 import { parseNames } from "./participants";

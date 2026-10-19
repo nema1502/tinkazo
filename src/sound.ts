@@ -26,17 +26,17 @@ let master: GainNode | null = null;
  * y eso es literalmente lo que suena a aparato en el parlante de un proyector.
  * El paso bajo a 4,5 kHz les saca el filo sin quitarles el carácter, y el techo
  * evita que dos sonidos a la vez saturen.
+ *
+ * Arma el contexto si no existe, sin reanudarlo: armarlo es lo que cuesta (ver
+ * `armarDeAntemano`).
  */
-function chain(): { ctx: AudioContext; out: GainNode } | null {
+function contexto(): { ctx: AudioContext; out: GainNode } | null {
   const Ctor =
     window.AudioContext ||
     (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!Ctor) return null;
   const ctx = audioCtx ?? new Ctor();
   audioCtx = ctx;
-  // El contexto nace suspendido si el primer sonido no salió de un clic. Sin
-  // esto el sorteo entero corre en silencio y nadie entiende por qué.
-  if (ctx.state === "suspended") void ctx.resume();
   if (!master) {
     const lp = ctx.createBiquadFilter();
     lp.type = "lowpass";
@@ -49,6 +49,15 @@ function chain(): { ctx: AudioContext; out: GainNode } | null {
     master = g;
   }
   return { ctx, out: master };
+}
+
+/** La cadena, lista para sonar. */
+function chain(): { ctx: AudioContext; out: GainNode } | null {
+  const c = contexto();
+  // El contexto nace suspendido si el primer sonido no salió de un clic. Sin
+  // esto el sorteo entero corre en silencio y nadie entiende por qué.
+  if (c?.ctx.state === "suspended") void c.ctx.resume();
+  return c;
 }
 
 export function beep(f: number, d = 0.09, type: OscillatorType = "square", g = 0.05): void {
@@ -186,4 +195,48 @@ export function unlockAudioOnGesture(): void {
     }
   };
   for (const e of events) addEventListener(e, unlock, { capture: true, passive: true });
+  armarDeAntemano();
+}
+
+/**
+ * Arma el contexto de audio con la página quieta, antes del primer toque.
+ *
+ * Crear un AudioContext le pregunta al sistema por la salida de sonido y traba
+ * el hilo de la página: unos 170 ms con la CPU de un celular (CPU x4, medición
+ * del 17 de octubre de 2026), y eso lo pagaba el primer toque, que tardaba en
+ * responder. Armado antes nace suspendido y no suena nada: el toque solo lo
+ * reanuda y hace sonar el silencio, que no bloquea. Si alguien toca antes de
+ * que esté, se arma en el toque, como siempre. Con el sonido apagado, no.
+ *
+ * Cuándo: con la primera señal de que hay alguien (mueve el mouse o baja por
+ * la página, que casi siempre pasa antes de tocar algo) o a los seis
+ * segundos de cargar, lo que llegue antes, y en un momento ocioso. No al
+ * cargar, que es cuando la página tiene más que hacer.
+ */
+function armarDeAntemano(): void {
+  const armar = (): void => {
+    if (muted || audioCtx) return;
+    try {
+      contexto();
+    } catch {
+      /* sin audio: el toque lo vuelve a intentar */
+    }
+  };
+  let pedido = false;
+  const pedir = (): void => {
+    if (pedido) return;
+    pedido = true;
+    removeEventListener("scroll", pedir);
+    removeEventListener("pointermove", alMover);
+    if (typeof requestIdleCallback === "function") requestIdleCallback(armar, { timeout: 2000 });
+    else setTimeout(armar, 0);
+  };
+  const alMover = (e: PointerEvent): void => {
+    if (e.pointerType === "mouse") pedir();
+  };
+  addEventListener("scroll", pedir, { passive: true });
+  addEventListener("pointermove", alMover, { passive: true });
+  const luego = (): void => void setTimeout(pedir, 6000);
+  if (document.readyState === "complete") luego();
+  else addEventListener("load", luego, { once: true });
 }

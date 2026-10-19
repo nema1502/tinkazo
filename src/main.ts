@@ -77,7 +77,7 @@ $("btn-sala").addEventListener("click", () => void import("./ui/sala").then((m) 
 // Precargada con la página quieta: si se publica una versión nueva con la
 // pestaña abierta, o se corta el wifi, el botón igual abre (QA, 16 de octubre).
 setTimeout(() => void import("./ui/sala").catch(() => undefined), 4000);
-$("btn-reverify").addEventListener("click", reverify);
+$("btn-reverify").addEventListener("click", () => void reverify());
 $("btn-replay").addEventListener("click", replayAnimation);
 $("btn-again-sin").addEventListener("click", () => newDraw("sinGanadores"));
 $("btn-again-nueva").addEventListener("click", () => newDraw("otraLista"));

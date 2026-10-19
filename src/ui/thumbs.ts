@@ -1023,6 +1023,8 @@ export function paintThumb(
   paint(c, t, col);
 }
 
+type Thumb = { cv: HTMLCanvasElement; c: CanvasRenderingContext2D; paint: Painter };
+
 let running = false;
 
 /**
@@ -1038,7 +1040,7 @@ export function initThumbs(games: readonly Game[]): void {
   );
   const col = (k: number): string => palette[((k % 5) + 5) % 5] ?? "#e93d9c";
 
-  const canvases: { c: CanvasRenderingContext2D; paint: Painter }[] = [];
+  const canvases: Thumb[] = [];
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
 
   for (const g of games) {
@@ -1056,49 +1058,72 @@ export function initThumbs(games: readonly Game[]): void {
       const ctx = cv.getContext("2d");
       if (!ctx) continue;
       host.insertBefore(cv, host.firstChild);
-      canvases.push({ c: ctx, paint });
+      canvases.push({ cv, c: ctx, paint });
     }
   }
   if (canvases.length === 0 || running) return;
   running = true;
 
-  // Un solo bucle para las seis, y se frena en tres casos.
+  // Un solo bucle para todas, y dibuja solo las que se ven.
   //
-  // Cuando la pestaña no está visible, por lo obvio. **Mientras corre un
-  // sorteo**, porque seis lienzos animados detrás del estadio le robaban
-  // cuadros al juego y lo dejaban corriendo a un tercio de su velocidad: se
-  // veía como si se hubiera colgado. Y cuando el selector no está en pantalla,
-  // que es casi todo el tiempo: la página es larga, el selector vive abajo en
-  // la sección de la lista congelada, y dibujar seis escenas que nadie mira es
-  // batería de un celular a cambio de nada.
+  // Cada lienzo tiene su propio observador: la portada trae una miniatura por
+  // juego y el selector otra, y con que se viera una sola zona se redibujaban
+  // todas en cada cuadro, también las de la vista escondida. Y sin ninguna a
+  // la vista el bucle seguía pidiendo sesenta cuadros por segundo: con la
+  // página quieta, un cuarto del hilo principal de un celular (CPU x4,
+  // medición del 17 de octubre de 2026). Ahora se dibujan las que están en
+  // pantalla, a 30 cuadros por segundo, que en 116 px no se distingue de 60;
+  // sin ninguna a la vista el bucle se duerme. **Mientras corre un sorteo**
+  // tampoco, porque los lienzos animados detrás del estadio le robaban cuadros
+  // al juego y lo dejaban corriendo a un tercio de su velocidad. Con la pestaña
+  // oculta el navegador ya no llama al bucle.
   const stadium = document.getElementById("stadium");
-  // El selector y la grilla de la portada: se dibuja mientras alguno se ve.
-  const zonas = [...document.querySelectorAll(".gamepick, .portada-juegos")];
-  const visibles = new Set<Element>();
-  let aLaVista = true;
-  if (zonas.length && typeof IntersectionObserver === "function") {
-    aLaVista = false;
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (e.isIntersecting) visibles.add(e.target);
-          else visibles.delete(e.target);
-        }
-        aLaVista = visibles.size > 0;
-      },
-      { rootMargin: "120px" },
-    );
-    for (const z of zonas) io.observe(z);
-  }
+  const visibles = new Set<Thumb>();
+  const PASO = 1000 / 30;
+  let vivo = false;
+  let ultimo = -Infinity;
   const loop = (now: number): void => {
-    const jugando = stadium?.style.display === "block";
-    if (aLaVista && !jugando && document.visibilityState === "visible") {
-      const t = now / 1000;
-      for (const { c, paint } of canvases) {
-        paintThumb(c, paint, t, col, dpr, W, H);
-      }
+    if (visibles.size === 0) {
+      vivo = false;
+      return;
     }
+    // Medio cuadro de tolerancia: a 60 Hz los cuadros llegan cada 16,7 ms y
+    // un corte exacto en 33,3 ms saltaría a veces dos seguidos.
+    if (now - ultimo < PASO - 8) {
+      requestAnimationFrame(loop);
+      return;
+    }
+    ultimo = now;
+    if (stadium?.style.display !== "block") {
+      const t = now / 1000;
+      for (const { c, paint } of visibles) paintThumb(c, paint, t, col, dpr, W, H);
+    }
+    // El próximo cuadro se pide recién cuando falta poco: un cuadro pedido le
+    // cuesta al navegador aunque no se dibuje nada en él.
+    setTimeout(() => requestAnimationFrame(loop), 20);
+  };
+  const despertar = (): void => {
+    if (vivo || visibles.size === 0) return;
+    vivo = true;
     requestAnimationFrame(loop);
   };
-  requestAnimationFrame(loop);
+  if (typeof IntersectionObserver !== "function") {
+    for (const th of canvases) visibles.add(th);
+    despertar();
+    return;
+  }
+  const porLienzo = new Map(canvases.map((th) => [th.cv as Element, th]));
+  const io = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        const th = porLienzo.get(e.target);
+        if (!th) continue;
+        if (e.isIntersecting) visibles.add(th);
+        else visibles.delete(th);
+      }
+      despertar();
+    },
+    { rootMargin: "120px" },
+  );
+  for (const th of canvases) io.observe(th.cv);
 }

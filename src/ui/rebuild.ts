@@ -1,7 +1,7 @@
 import { esc } from "../dom";
 import { t } from "../i18n";
 import { canonicalList, listHash } from "../protocol/canonical";
-import { bytesToHex } from "../protocol/drand";
+import { bytesToHex } from "../protocol/quicknet";
 import { PROOF_VERSION, proofUrl } from "../protocol/proof";
 import { network } from "../stellar/config";
 import type { Entry } from "./history";

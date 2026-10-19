@@ -15,13 +15,16 @@ import { clearSessionKind, loadSessionKind, pickRestore, saveSessionKind } from 
  * que el propio navegador crea y fondea en testnet para quien quiera probar el
  * anclaje sin instalar nada.
  *
- * El SDK de Stellar pesa medio megabyte y solo hace falta si alguien conecta,
- * así que la capa `src/stellar/wallet` se carga con `import()` recién cuando
- * el usuario abre el selector. Quien solo quiere sortear en modo libre no
- * descarga nada de eso.
+ * El SDK de Stellar pesa medio megabyte y solo hace falta para la cuenta de
+ * prueba y para sellar. Abrir la ventana de ingreso, entrar con Freighter o
+ * con Google, retomar la sesión y ver el saldo usan `src/stellar/wallet-lite`,
+ * que no lo trae; `src/stellar/wallet` (la cuenta de prueba) se carga con
+ * `import()` recién cuando se elige esa cuenta. Con una sesión abierta, el SDK
+ * se baja con la página quieta (ver `precargarSello`).
  */
 
 type WalletModule = typeof import("../stellar/wallet");
+type LiteModule = typeof import("../stellar/wallet-lite");
 
 /** Resumen de la sesión, para no tener que importar la capa solo para pintar. */
 interface Session {
@@ -39,6 +42,38 @@ let wrongNetwork = false;
 let mod: WalletModule | null = null;
 
 const loadWallets = async (): Promise<WalletModule> => (mod ??= await import("../stellar/wallet"));
+let liteMod: LiteModule | null = null;
+const lite = async (): Promise<LiteModule> => (liteMod ??= await import("../stellar/wallet-lite"));
+
+let freighterVisto: Promise<boolean> | null = null;
+/**
+ * Si Freighter está instalada. Se pregunta una sola vez: sin la extensión, su
+ * librería tarda dos segundos en rendirse.
+ */
+const hayFreighter = (): Promise<boolean> =>
+  (freighterVisto ??= lite()
+    .then((w) => w.freighterInstalled())
+    .catch(() => false));
+
+let precargado = false;
+/**
+ * Con una sesión abierta lo próximo es sellar, y sellar necesita el SDK: se
+ * baja unos segundos después, en un momento ocioso, para que el botón no lo
+ * espere. Antes se bajaba al cargar la página, compitiendo con el arranque.
+ */
+function precargarSello(): void {
+  if (!anchoringAvailable || precargado) return;
+  precargado = true;
+  const bajar = (): void => {
+    void import("../stellar/contract").catch(() => {
+      precargado = false;
+    });
+  };
+  setTimeout(() => {
+    if (typeof requestIdleCallback === "function") requestIdleCallback(bajar, { timeout: 5000 });
+    else bajar();
+  }, 3000);
+}
 
 export const currentSession = (): Session | null => session;
 
@@ -50,6 +85,23 @@ export function initWalletUI(): void {
   onLangChange(render);
   void restorePollar();
   void restoreSession();
+  // La ventana de ingreso, lista antes del clic: con la página quieta se baja
+  // lo poco que necesita y se le pregunta a Freighter si está. Así abre sin
+  // esperar a la red ni a los dos segundos de Freighter.
+  if (anchoringAvailable) {
+    const preparar = (): void => {
+      void hayFreighter();
+      void import("../stellar/wallet-pollar").catch(() => undefined);
+    };
+    const luego = (): void => {
+      setTimeout(() => {
+        if (typeof requestIdleCallback === "function") requestIdleCallback(preparar, { timeout: 3000 });
+        else preparar();
+      }, 1500);
+    };
+    if (document.readyState === "complete") luego();
+    else addEventListener("load", luego, { once: true });
+  }
 }
 
 /**
@@ -61,7 +113,7 @@ async function restoreSession(): Promise<void> {
   const kind = loadSessionKind(network.name);
   if (!kind || kind === "google") return;
   try {
-    const w = await loadWallets();
+    const w = await lite();
     const pick = pickRestore({
       kind,
       guestStored: w.guestStored(),
@@ -73,9 +125,10 @@ async function restoreSession(): Promise<void> {
       clearSessionKind(network.name);
       return;
     }
-    const wallet = pick === "guest" ? w.guestWallet : w.freighterWallet;
+    // La cuenta de prueba arma su par de llaves con el SDK; Freighter no lo necesita.
+    const wallet = pick === "guest" ? (await loadWallets()).guestWallet : w.freighterWallet;
     // restore() nunca crea cuenta ni llama al grifo: solo lee lo ya guardado.
-    const address = pick === "guest" ? await w.guestWallet.restore() : await w.freighterWallet.restore();
+    const address = await wallet.restore();
     if (!address) {
       clearSessionKind(network.name);
       return;
@@ -88,17 +141,16 @@ async function restoreSession(): Promise<void> {
 
 /** Deja la wallet como activa y pinta la sesión. Lo comparten conectar y retomar. */
 async function activate(
-  w: WalletModule,
-  wallet: import("../stellar/wallet").WalletAdapter,
+  w: LiteModule,
+  wallet: import("../stellar/wallet-lite").WalletAdapter,
   address: string,
   restoring = false,
 ): Promise<void> {
-  const { resetClient } = await import("../stellar/contract");
   const passphrase = await wallet.networkPassphrase();
   // Otra vía (retomar Google, o conectar a mano) pudo ganar mientras esperábamos.
   if (restoring && session) return;
+  // El cliente del contrato se rehace solo con la wallet nueva (ver `getClient`).
   w.setActiveWallet(wallet);
-  resetClient();
   // Si la wallet no sabe decir su red, no bloqueamos: la transacción fallaría
   // igual, y con un error más claro que una suposición nuestra.
   wrongNetwork = passphrase !== null && passphrase !== network.networkPassphrase;
@@ -111,6 +163,7 @@ async function activate(
   };
   render();
   refreshFreezeLabel();
+  precargarSello();
 }
 
 /** Al volver del redirect de Google, la sesión se retoma sola. */
@@ -120,7 +173,7 @@ async function restorePollar(): Promise<void> {
     if (!pollarConfigured()) return;
     const address = await pollarWallet.restore();
     if (!address) return;
-    const { setActiveWallet } = await loadWallets();
+    const { setActiveWallet } = await lite();
     if (session) return;
     setActiveWallet(pollarWallet);
     const prof = pollarWallet.profile();
@@ -132,6 +185,7 @@ async function restorePollar(): Promise<void> {
     };
     render();
     refreshFreezeLabel();
+    precargarSello();
     // Al retomar la sesión, el perfil puede llegar un instante después que la
     // dirección. Sin este reintento la cabecera se quedaba con la dirección y
     // el nombre no volvía a aparecer hasta el próximo ingreso.
@@ -206,7 +260,7 @@ function render(): void {
 /** Abre el panel con todo lo de la cuenta: quién sos, red, saldo, sorteos. */
 async function showAccount(): Promise<void> {
   if (!session) return;
-  const [{ openAccount }, w] = await Promise.all([import("./account"), loadWallets()]);
+  const [{ openAccount }, w] = await Promise.all([import("./account"), lite()]);
   const balance = await w.xlmBalance(session.address);
   if (!session) return;
   openAccount({
@@ -330,7 +384,7 @@ async function refreshFunds(): Promise<void> {
     box.style.display = "none";
     return;
   }
-  const { xlmBalance } = await loadWallets();
+  const { xlmBalance } = await lite();
   const bal = await xlmBalance(session.address);
   // -1 es "no pude preguntar". Sin respuesta no se afirma nada.
   if (bal < 0 || bal >= 1) {
@@ -380,7 +434,7 @@ function renderFundBox(box: HTMLElement, address: string): void {
       get.textContent = t("fundWorking");
       void (async () => {
         try {
-          const { fundWithFriendbot } = await loadWallets();
+          const { fundWithFriendbot } = await lite();
           await fundWithFriendbot(address);
           // El grifo tarda un par de segundos en que el saldo se vea.
           setTimeout(() => void refreshFunds(), 2500);
@@ -480,22 +534,23 @@ async function abrirPicker(): Promise<void> {
   } catch {
     /* sin almacenamiento, se queda en la portada y el menú lleva a sortear */
   }
-  const w = await loadWallets();
+  // Sin el SDK: preguntarle a Freighter si está es hablar con su extensión.
+  const [w, { pollarConfigured }] = await Promise.all([lite(), import("../stellar/wallet-pollar")]);
   const options: Option[] = [];
 
   // Google primero, y de lejos: es el camino que funciona sin instalar nada y
   // el que va a tomar casi todo el mundo. Ofrecer arriba una extensión que la
   // persona no tiene instalada es mandarla a una tienda antes de dejarla
   // probar el producto.
-  const { pollarConfigured } = await import("../stellar/wallet-pollar");
   const pollar = pollarConfigured();
   if (pollar) {
     options.push({ label: "Google", hint: t("googleHint"), icon: "google", pick: "google" });
   }
   // Freighter contesta en milisegundos si está; si no está, su librería espera
   // dos segundos enteros antes de rendirse, y la ventana tardaba eso en abrir
-  // cada vez (medición de velocidad del 16 de octubre de 2026).
-  const conFreighter = await Promise.race([w.freighterInstalled(), new Promise<boolean>((r) => setTimeout(() => r(false), 400))]);
+  // cada vez (medición de velocidad del 16 de octubre de 2026). La pregunta se
+  // hace una vez, con la página quieta: casi siempre ya está contestada.
+  const conFreighter = await Promise.race([hayFreighter(), new Promise<boolean>((r) => setTimeout(() => r(false), 400))]);
   if (conFreighter) {
     options.push({ label: t("loginWallet"), small: "Freighter", hint: t("freighterHint"), icon: "wallet", pick: "freighter" });
   } else {
@@ -687,7 +742,7 @@ function showModal(options: Option[], emailOn: boolean): void {
       go.disabled = true;
       go.textContent = t("loginChecking");
       try {
-        const w = await loadWallets();
+        const w = await lite();
         const { pollarWallet } = await import("../stellar/wallet-pollar");
         const address = await pollarWallet.verifyEmailCode(code());
         // La sesión de correo es de Pollar, como la de Google: se guarda con
@@ -780,10 +835,11 @@ async function connect(
   const original = row.innerHTML;
   row.innerHTML = `<span>${esc(t("connecting"))}</span>`;
   try {
-    const w = await loadWallets();
+    const w = await lite();
+    // Solo la cuenta de prueba necesita el SDK, para armar su par de llaves.
     const wallet =
       pick === "guest"
-        ? w.guestWallet
+        ? (await loadWallets()).guestWallet
         : pick === "google"
           ? (await import("../stellar/wallet-pollar")).pollarWallet
           : w.freighterWallet;
@@ -797,8 +853,8 @@ async function connect(
 
 /** Lo que pasa al entrar, por cualquier camino: la sesión, y los fondos si faltan. */
 async function afterConnect(
-  w: WalletModule,
-  wallet: import("../stellar/wallet").WalletAdapter,
+  w: LiteModule,
+  wallet: import("../stellar/wallet-lite").WalletAdapter,
   address: string,
   pick: "freighter" | "guest" | "google",
   back: HTMLElement,
@@ -831,12 +887,10 @@ async function afterConnect(
 }
 
 async function disconnect(): Promise<void> {
-  const w = await loadWallets();
+  const w = await lite();
   const wallet = w.activeWallet();
   if (wallet) await wallet.disconnect();
   w.setActiveWallet(null);
-  const { resetClient } = await import("../stellar/contract");
-  resetClient();
   session = null;
   wrongNetwork = false;
   // Cerrar sesión a propósito es lo único que olvida el tipo de sesión guardado.
@@ -846,7 +900,7 @@ async function disconnect(): Promise<void> {
 }
 
 async function walletErrorText(e: unknown): Promise<string> {
-  const { WALLET_ERRORS } = await loadWallets();
+  const { WALLET_ERRORS } = await lite();
   const msg = e instanceof Error ? e.message : String(e);
   if (msg === WALLET_ERRORS.notInstalled) return t("freighterInstall");
   if (msg === WALLET_ERRORS.rejected) return t("walletRejected");

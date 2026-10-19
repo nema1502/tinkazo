@@ -1,19 +1,11 @@
 import "./styles.css";
 import { $, esc } from "./dom";
-import { T, chooseLang, getLang, initialLang, setLang, t } from "./i18n";
+import { chooseLang, getLang, initialLang, setLang, texto as t, textos, textosDeLaPagina } from "./idioma";
 import { SAMPLE, avatar } from "./state";
 import { canonicalList, listHash } from "./protocol/canonical";
 import { RPC_URLS } from "./stellar/config";
-import {
-  QUICKNET,
-  bytesToHex,
-  fetchRound,
-  hexToBytes,
-  randomnessOf,
-  roundTime,
-  roundUrl,
-  verifyRound,
-} from "./protocol/drand";
+import { QUICKNET, bytesToHex, fetchRound, hexToBytes, randomnessOf, roundTime, roundUrl } from "./protocol/quicknet";
+import { prepararFirma, verifyRoundAsync } from "./protocol/firma";
 import { select } from "./protocol/select";
 import { decodeProof, isAnchored, type Proof } from "./protocol/proof";
 import { network } from "./stellar/config";
@@ -93,6 +85,8 @@ function fail(messageKey: string, detail = ""): void {
 }
 
 async function main(): Promise<void> {
+  // Los textos de esta página vienen en su HTML (ver `idioma.ts`).
+  textosDeLaPagina();
   // La cuenta a la vista, como en las demás páginas: "Mi cuenta" o "Entrar".
   {
     const kind = loadSessionKind(network.name);
@@ -122,6 +116,9 @@ async function main(): Promise<void> {
     fail("vNoProof", t("vNoProofDetail"));
     return;
   }
+  // El worker que verifica la firma se levanta ya: baja la curva mientras se
+  // lee la cadena, y el cálculo no traba la página.
+  prepararFirma();
 
   verdict("working", "vWorking", "");
   renderList(proof);
@@ -186,7 +183,7 @@ async function main(): Promise<void> {
     }
   }
 
-  const sigOk = verifyRound(proof.round, signature);
+  const sigOk = await verifyRoundAsync(proof.round, signature);
   set("vCheckRound", sigOk ? "ok" : "bad", `${proof.round} · ${signature.slice(0, 16)}…`);
 
   // ------------------------------------------------------------ 3. la semilla
@@ -380,7 +377,7 @@ async function readFromChain(
  */
 function premioDe(proof: Proof, meta: string | undefined): string {
   if (meta === undefined) return proof.prize ?? "";
-  return meta === T.es.defaultMeta || meta === T.en.defaultMeta ? "" : meta;
+  return meta === textos("es").defaultMeta || meta === textos("en").defaultMeta ? "" : meta;
 }
 
 /**

@@ -45,6 +45,12 @@ type Va = (command: string, arg?: unknown) => void;
 /** Carga el contador, con el filtro puesto antes de que corra. */
 export function countVisits(): void {
   if (!shouldCount(location, navigator)) return;
+  // Una página prerenderizada (las de lectura se adelantan cuando el mouse se
+  // posa sobre su enlace) todavía no la vio nadie: se cuenta si se muestra.
+  if ((document as Document & { prerendering?: boolean }).prerendering) {
+    document.addEventListener("prerenderingchange", () => countVisits(), { once: true });
+    return;
+  }
   const w = window as unknown as { va?: Va; vaq?: unknown[][] };
   // La cola que lee el script al cargar: el filtro tiene que estar antes de la
   // primera visita, que se manda apenas el script corre.
