@@ -831,7 +831,10 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
           if (derecha > W - 8 * S.u()) jumperTag.x = -jumperSide / 2 - 8 * k - jumperTag.width;
           // Es el dato del momento: arriba de todo, y los demás nombres no lo tapan.
           noTapar.push({ x: jumper.x + jumperTag.x, y: jumper.y + jumperTag.y - jumperTag.height / 2, w: jumperTag.width, h: jumperTag.height });
-          jumper.parent?.addChild(jumper);
+          // Solo si algo quedó encima: mover un hijo cambia la estructura de la
+          // escena, y hacerlo en cada cuadro rearmaba todo el dibujo cada vez.
+          const capa = jumper.parent;
+          if (capa && capa.children[capa.children.length - 1] !== jumper) capa.addChild(jumper);
         }
       }
     }
