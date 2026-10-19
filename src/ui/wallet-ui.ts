@@ -90,6 +90,13 @@ export function initWalletUI(): void {
   // esperar a la red ni a los dos segundos de Freighter.
   if (anchoringAvailable) {
     const preparar = (): void => {
+      // Nunca durante el sorteo: la librería de Freighter usa Math.random() y
+      // el auditor exigente lo contaba dentro del juego (19 de octubre de 2026),
+      // y el estadio merece la máquina entera. Se vuelve a intentar al rato.
+      if (document.getElementById("stadium")?.style.display === "block") {
+        setTimeout(preparar, 5000);
+        return;
+      }
       void hayFreighter();
       void import("../stellar/wallet-pollar").catch(() => undefined);
     };
