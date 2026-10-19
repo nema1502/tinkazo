@@ -513,7 +513,8 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
       c.pivot.set(0, 11 * kk);
       return c;
     })();
-    nameChip = S.chip(names[winnerIdx] ?? "", 1.5);
+    // En un celular, la base legible (CHIP_SCALE): a 1,5 se salía de la pantalla.
+    nameChip = S.chip(names[winnerIdx] ?? "", S.portrait() ? 1 : 1.5);
     for (const v of [rivalView, winView, numChip, nameChip]) {
       if (!v) continue;
       v.visible = false;
@@ -974,8 +975,19 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
       if (tAll >= tLand && tAll < tCrown) {
         nameChip.visible = true;
         // Centrado sobre el vaso: corrido a la derecha, en un celular la
-        // cámara cerca lo dejaba cortado por el borde.
+        // cámara cerca lo dejaba cortado por el borde. Y entero en la
+        // pantalla: vive en el mundo y la cámara cerca lo agranda, así que
+        // nunca más ancho que ella, y si hace falta se corre (16 de octubre de 2026).
+        const W = S.sw(), m = 12 * S.u();
+        const o = cam.toScreen(0, 0, W, S.sh());
+        const z = Math.max(1e-6, cam.toScreen(1, 0, W, S.sh()).x - o.x);
+        nameChip.scale.set(1);
+        const cabe = (W - 2 * m) / z;
+        if (nameChip.width > cabe) nameChip.scale.set(cabe / nameChip.width);
         nameChip.position.set(G.cup.x - nameChip.width / 2, G.cup.y - 115 * k);
+        const sx = cam.toScreen(nameChip.x, nameChip.y, W, S.sh()).x;
+        if (sx < m) nameChip.x += (m - sx) / z;
+        else if (sx + nameChip.width * z > W - m) nameChip.x -= (sx + nameChip.width * z - (W - m)) / z;
         nameChip.alpha = clamp((tAll - tLand) / 0.2, 0, 1);
       }
     }
