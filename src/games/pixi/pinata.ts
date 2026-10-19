@@ -688,12 +688,13 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   function drawKid(p: { x: number; y: number }, broken: boolean): void {
     const g = G();
     kid.position.set(kidX, g.ky);
-    // Las vueltas: se da vuelta entero, de frente y de espaldas, con un
-    // mínimo de ancho para que no se vuelva un palito.
+    // Las vueltas: se da vuelta entero, de frente y de espaldas. De costado
+    // una persona mide más o menos la mitad que de frente: con menos ancho, en
+    // cada vuelta se volvía un palito.
     let face = 1;
     if (tAll >= SPIN_T0 && tAll < SPIN_T1) {
       const c = Math.cos(spinAt(tAll) * 2 * Math.PI);
-      face = (c < 0 ? -1 : 1) * Math.max(0.16, Math.abs(c));
+      face = (c < 0 ? -1 : 1) * Math.max(0.4, Math.abs(c));
     }
     const dizzy = tAll >= SPIN_T1 ? clamp(1 - (tAll - SPIN_T1) / 1.1, 0, 1) : 0;
     kid.scale.set(g.ks * face, g.ks);
