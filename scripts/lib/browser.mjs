@@ -164,6 +164,11 @@ function limpiarViejos() {
         /* sin dueño anotado */
       }
       if (dueno ? vivo(dueno) : Date.now() - statSync(dir).mtimeMs < 3_600_000) continue;
+      // Un Chrome que sigue vivo aunque su dueño murió tiene tomado el
+      // `lockfile` del perfil (en Windows): borrarlo tira y el perfil queda
+      // para la próxima. Sin esto se le sacaban archivos a un Chrome en uso.
+      const lock = join(dir, "lockfile");
+      if (existsSync(lock)) rmSync(lock);
       rmSync(dir, { recursive: true, force: true, maxRetries: 2, retryDelay: 100 });
       borrados++;
     } catch {
@@ -172,8 +177,22 @@ function limpiarViejos() {
   }
 }
 
+/** ¿Ya hay un Chrome escuchando en ese puerto? */
+async function puertoOcupado(port) {
+  try {
+    return (await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(800) })).ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function launch({ port = Number(process.env.CDP_PORT || 9222), width = 1280, height = 900 } = {}) {
   limpiarViejos();
+  // Con el puerto ya tomado (otra auditoría, o un Chrome que quedó suelto), la
+  // espera de abajo se enganchaba a ese Chrome, que no es nuestro: cualquier
+  // otra corrida podía borrarle el perfil y la página se cerraba a mitad de
+  // camino (le pasó a una auditoría en paralelo el 19 de octubre de 2026).
+  if (await puertoOcupado(port)) throw new Error(`el puerto ${port} ya tiene un Chrome: usá otro CDP_PORT`);
   const profile = mkdtempSync(join(tmpdir(), PREFIJO));
   writeFileSync(join(profile, DUENO), String(process.pid));
   const proc = spawn(
@@ -241,6 +260,11 @@ export async function launch({ port = Number(process.env.CDP_PORT || 9222), widt
   };
 
   for (let i = 0; ; i++) {
+    // Si el nuestro se cerró al arrancar, el que contestaría es de otro.
+    if (proc.exitCode !== null) {
+      await cerrar();
+      throw new Error(`Chrome se cerró al arrancar (¿el puerto ${port} quedó tomado?)`);
+    }
     try {
       if ((await fetch(`http://127.0.0.1:${port}/json/version`)).ok) break;
     } catch {
