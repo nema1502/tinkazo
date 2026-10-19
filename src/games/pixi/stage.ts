@@ -664,9 +664,30 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       // Primero encima, después a los costados: apilados en escalera quedaban
       // lejos de su dueño (lo vio el agente evaluador en el trompo, en celular).
       const libre = ([[x, y], [x - cw * 0.62, y], [x + cw * 0.62, y]] as const).map(([a, b]) => [cx(a), cy(b)] as const).find(([a, b]) => !choca(a, b));
+      const golpe = (a: number, b: number): { x: number; y: number; w: number; h: number } | undefined =>
+        placed.find((r) => a < r.x + r.w && a + cw > r.x && b - ch / 2 < r.y + r.h / 2 && b + ch / 2 > r.y - r.h / 2);
+      // Si no, apilado hacia arriba en su columna; y si la columna llega al
+      // borde de arriba o a lo que no se tapa, en la de al lado. Con la letra
+      // legible, en un celular la escalera de abajo no alcanzaba y la pila
+      // terminaba encima del contador del trompo (16 de octubre de 2026).
+      let hallado = !!libre;
       if (libre) [x, y] = libre;
-      for (let tries = 0; tries < 8 && !libre; tries++) {
-        const hit = placed.find((r) => x < r.x + r.w && x + cw > r.x && y - ch / 2 < r.y + r.h / 2 && y + ch / 2 > r.y - r.h / 2);
+      for (const dx of hallado ? [] : [0, cw * 0.62, -cw * 0.62, cw * 1.24, -cw * 1.24]) {
+        const a = cx(x + dx);
+        let b = y;
+        for (let tries = 0; tries < 12; tries++) {
+          const hit = golpe(a, b);
+          if (!hit) { hallado = true; break; }
+          b = hit.y - (hit.h + ch) / 2 - 2 * k;
+          if (b < lo) break;
+        }
+        if (hallado) {
+          [x, y] = [a, b];
+          break;
+        }
+      }
+      for (let tries = 0; tries < 8 && !hallado; tries++) {
+        const hit = golpe(x, y);
         if (!hit) break;
         y = hit.y - (hit.h + ch) / 2 - 2 * k;
         if (y < lo) {
