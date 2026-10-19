@@ -548,24 +548,48 @@ export async function constellationPixi(names: string[], winners: readonly numbe
     // Los nombres: todos si son pocos, si no el que tiene el paquete y los de antes.
     const enMano = (hops[Math.min(hopI, hops.length - 1)] as Hop | undefined)?.to ?? -1;
     for (const c of chipOf.values()) c.visible = false;
+    // Los nombres viven en el cielo: con la cámara cerca crecían con ella, y con
+    // la letra legible el grande no entraba en un celular. Conservan su tamaño
+    // en la pantalla cuando la cámara se acerca.
+    const comp = 1 / Math.max(1, cam.zoom);
+    const Wp = W(), Hp = H(), m = 8 * S.u();
     const show = (ni: number, alpha: number, big: boolean): void => {
       const nd = nodes[ni] as Node;
       if (nd.idx < 0) return;
       const key = ni * 2 + (big ? 1 : 0);
       let c = chipOf.get(key);
       if (!c) {
-        c = S.chip(names[nd.idx] ?? "", big ? 1.7 : names.length <= 4 ? 1.6 : 1);
+        // Relativos a la base legible (CHIP_SCALE); en un celular, más chicos.
+        const p = S.portrait();
+        c = S.chip(names[nd.idx] ?? "", big ? (p ? 1.2 : 1.7) : names.length <= 4 ? (p ? 1.1 : 1.6) : 1);
         chipOf.set(key, c);
         chipsLayer.addChild(c);
       }
       c.visible = true;
       c.alpha = alpha;
+      c.scale.set(comp);
       // El chip del amague va del lado contrario a la ganadora, que está
       // pegada: arriba a la derecha, como los demás, la tapaba.
       const wn = nodes[WIN_NODE] as Node;
       const lejos = ni === DECOY && hopI === K - 1;
       const izq = lejos && wn.x >= nd.x, abajo = lejos && wn.y < nd.y;
-      c.position.set(izq ? nd.x - nd.r - 6 * k - c.width : nd.x + nd.r + 6 * k, abajo ? nd.y + nd.r + 10 * k : nd.y - nd.r - 10 * k);
+      const y = abajo ? nd.y + nd.r + 10 * k : nd.y - nd.r - 10 * k;
+      const der = nd.x + nd.r + 6 * k, izqX = nd.x - nd.r - 6 * k - c.width;
+      // Entero en la pantalla (en un celular quedaban cortados contra el borde,
+      // crítico de juegos, 16 de octubre de 2026): del otro lado de su estrella
+      // si de este no entra, salvo el del amague, que no puede ir sobre la
+      // ganadora; y si tampoco, corrido lo justo.
+      const sale = (x: number): number => {
+        const a = cam.toScreen(x, y, Wp, Hp).x, b = cam.toScreen(x + c.width, y, Wp, Hp).x;
+        return Math.max(0, m - Math.min(a, b)) + Math.max(0, Math.max(a, b) - (Wp - m));
+      };
+      let x = izq ? izqX : der;
+      if (!lejos && sale(x) > 0 && sale(izq ? der : izqX) < sale(x)) x = izq ? der : izqX;
+      const a = cam.toScreen(x, y, Wp, Hp).x, b = cam.toScreen(x + c.width, y, Wp, Hp).x;
+      const z = Math.max(1e-6, (b - a) / Math.max(1e-6, c.width));
+      if (a < m) x += (m - a) / z;
+      else if (b > Wp - m) x -= (b - (Wp - m)) / z;
+      c.position.set(x, y);
     };
     if (phase !== "nova" && !roll.length) {
       if (names.length <= 4) nodes.forEach((nd, i) => { if (nd.idx >= 0 && tAll > nd.born) show(i, 1, false); });
