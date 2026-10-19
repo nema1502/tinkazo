@@ -487,9 +487,15 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       const dir = r % 2 === 0 ? 1 : -1;
       const step = (2 * Math.PI) / Math.max(1, ring.length);
       // La rueda nueva arranca donde quedó la vieja (o donde estaban las
-      // filas): el ángulo que menos mueve a todos.
+      // filas): el ángulo que menos mueve a todos. Los dos de la final van
+      // uno a cada costado, y cada uno del lado donde estaba: con el primero
+      // siempre a la derecha, la mitad de las veces se cambiaban de lado al
+      // formar la pareja y se atravesaban en el medio.
       let base = 0;
-      if (m !== 2) {
+      if (m === 2 && prev && ring.length === 2) {
+        const a = polarIn(prev, ring[0] as number, at), b = polarIn(prev, ring[1] as number, at);
+        if (a && b && Math.cos(a.th) < Math.cos(b.th)) base = Math.PI;
+      } else if (m !== 2) {
         let sx = 0, sy = 0;
         ring.forEach((idx, j) => {
           const p = prev ? polarIn(prev, idx, at) : rowPolar(idx);

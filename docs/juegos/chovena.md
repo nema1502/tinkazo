@@ -22,7 +22,7 @@ Reemplaza a luz roja, luz verde, que cubría la misma necesidad (parar y seguir)
 
 **El corte falso.** Una vez por sorteo (dos, con dos o tres personas) la música se calla y vuelve. No sale nadie: los que se soltaron antes de tiempo sueltan las manos, dan un paso afuera (más corto con dos, que la cámara está encima), llevan su nombre encima, y vuelven a la rueda. Nunca va antes del primer corte de verdad: la sala tiene que saber primero que el corte saca gente.
 
-**La final.** Quedan dos, de las dos manos y mirando a la sala. La música acelera y se hamacan. Corte: los dos trastabillan, y uno se suelta y se sienta a unos pasos, a la vista, mientras la cámara se abre para no perderla. La cámara los encuadra por su tamaño real: aunque la sala haya sido de doscientos, la pareja final llena la pantalla, y en el celular entra entera a lo ancho. Nunca quedan encimados: los separa por lo menos un cuerpo.
+**La final.** Quedan dos, de las dos manos y mirando a la sala, cada uno del lado donde estaba: hasta el 19 de octubre de 2026 el primero de la lista iba siempre a la derecha, y la mitad de las veces los dos se cambiaban de lado al formar la pareja y se atravesaban en el medio. La música acelera y se hamacan. Corte: los dos trastabillan, y uno se suelta y se sienta a unos pasos, a la vista, mientras la cámara se abre para no perderla. La cámara los encuadra por su tamaño real: aunque la sala haya sido de doscientos, la pareja final llena la pantalla, y en el celular entra entera a lo ancho. Nunca quedan encimados: los separa por lo menos un cuerpo.
 
 **El remate.** Redoble de caja y el conjunto entero en el uno, mientras la ganadora salta en el medio de la plaza.
 
