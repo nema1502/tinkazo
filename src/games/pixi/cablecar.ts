@@ -157,6 +157,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     box: { x0: number; y0: number; x1: number; y1: number };
   }
   let boardView: BoardView | null = null;
+  /** Los renglones del andén de cada estación, armados antes de su parada (`prepareBoards`). */
+  const prepared = new Map<number, Container[]>();
   /** El nombre de cada cabina que lleva a una sola persona, y de qué costado va. */
   const soloTags = new Map<number, { idx: number; sc: number; chip: Container; side: number }>();
   let hudLabel!: Text;
@@ -361,8 +363,10 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     flyFrame = new Graphics();
     flyFaces = [];
     S.hud.addChild(vignette, wind, nameLayer, flyBack, flyBox, flyFrame);
-    // Lo que estaba armado para el tamaño anterior se rearma en el próximo cuadro.
+    // Lo que estaba armado para el tamaño anterior se rearma en el próximo
+    // cuadro (ya se destruyó con el resto de la interfaz).
     boardView = null;
+    prepared.clear();
     soloTags.clear();
     jumperTag = null;
     if (jumper) {
@@ -458,7 +462,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
           const next = stops.find((x) => x.t0 > s.t0);
           let tEnd = next ? (next.last ? next.t0 - 0.1 : next.tOff - 0.02) : T_RUN - 0.1;
           if (apagon && P.corte > s.tOff) tEnd = Math.min(tEnd, P.corte + 0.08);
-          boards.push({ station: s.station, at: s.at, tOff: s.tOff, tEnd, who: [...prem, ...resto] });
+          boards.push({ station: s.station, at: s.at, tOff: s.tOff, tEnd, who: offOf(s.round) });
         }
         if (s.last) {
           // Con varios premios, el último que se baja también ganó, y el relator
@@ -692,6 +696,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     events();
     silent = false;
     boards.length = 0;
+    dropPrepared();
   };
 
   /** Dónde está una cabina a la hora `x`, en el mundo. */
@@ -743,6 +748,55 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     return c;
   }
 
+  /** El andén en esta pantalla: la escala de los renglones, su paso, dónde entran y cuántos. */
+  function boardGrid(): { sc: number; kc: number; pitch: number; lo: number; hi: number; rowsMax: number; colsMax: number } {
+    const u = S.u();
+    const sc = G.vertical ? 1.05 : 1.3;
+    const kc = u * sc;
+    const pitch = 28 * kc;
+    const lo = S.top() + 12 * u, hi = S.sh() - S.bottom() - 12 * u;
+    return { sc, kc, pitch, lo, hi, rowsMax: clamp(Math.floor((hi - lo) / pitch), 2, G.vertical ? 7 : 8), colsMax: G.vertical ? 2 : 3 };
+  }
+
+  /** Quiénes se bajan en una parada, en el orden del andén: los co-ganadores primero. */
+  function offOf(round: number): number[] {
+    const who = rank.slice(left[round + 1] as number, left[round] as number);
+    return [...who.filter((i) => winners.indexOf(i) > 0), ...who.filter((i) => winners.indexOf(i) <= 0)];
+  }
+
+  /** El renglón de una persona en el andén, todavía sin mostrar. */
+  function boardChip(idx: number, sc: number): Container {
+    const nm = names[idx] ?? "";
+    // El co-ganador que se baja antes lleva su estrella: el relator dice que se va con premio.
+    const c = S.chip(winners.indexOf(idx) > 0 ? `★ ${nm}` : nm, sc, nm);
+    c.visible = false;
+    nameLayer.addChild(c);
+    return c;
+  }
+
+  /**
+   * Los renglones de cada andén se arman antes de su parada, de a dos por
+   * cuadro. Cada uno dibuja su cara y mide su nombre: con doscientas personas
+   * se bajan cien en la primera estación, y armar los veinticuatro renglones
+   * en el cuadro en que empiezan a volar trababa la escena 63 ms. Quedan en
+   * `prepared`, por estación.
+   */
+  function prepareBoards(budget: number): void {
+    const s = stops.find((x) => !(x.last && jumper) && x.tOff > tAll);
+    if (!s) return;
+    const g = boardGrid();
+    const who = offOf(s.round);
+    const want = Math.min(who.length, g.rowsMax * g.colsMax);
+    const list = prepared.get(s.station) ?? [];
+    prepared.set(s.station, list);
+    while (budget-- > 0 && list.length < want) list.push(boardChip(who[list.length] as number, g.sc));
+  }
+
+  function dropPrepared(): void {
+    for (const list of prepared.values()) for (const c of list) c.destroy({ children: true });
+    prepared.clear();
+  }
+
   /**
    * Arma el andén de una parada: un chip con cara y nombre por cada uno que se
    * baja, en columnas, al costado de la estación donde menos tapa. Dónde va se
@@ -752,19 +806,13 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
    */
   function makeBoard(b: Board): BoardView {
     const W = S.sw(), H = S.sh(), u = S.u(), k = G.k;
-    const sc = G.vertical ? 1.05 : 1.3;
-    const kc = u * sc;
-    const pitch = 28 * kc;
-    const lo = S.top() + 12 * u, hi = H - S.bottom() - 12 * u;
-    const rowsMax = clamp(Math.floor((hi - lo) / pitch), 2, G.vertical ? 7 : 8);
-    const chips = b.who.slice(0, rowsMax * (G.vertical ? 2 : 3)).map((idx) => {
-      const nm = names[idx] ?? "";
-      // El co-ganador que se baja antes lleva su estrella: el relator dice que se va con premio.
-      const c = S.chip(winners.indexOf(idx) > 0 ? `★ ${nm}` : nm, sc, nm);
-      c.visible = false;
-      nameLayer.addChild(c);
-      return c;
-    });
+    const { sc, kc, pitch, lo, hi, rowsMax, colsMax } = boardGrid();
+    // Los renglones ya vienen armados (`prepareBoards`); si falta alguno,
+    // porque la pantalla cambió de tamaño justo antes, se arma acá.
+    const want = Math.min(b.who.length, rowsMax * colsMax);
+    const chips = prepared.get(b.station) ?? [];
+    prepared.delete(b.station);
+    while (chips.length < want) chips.push(boardChip(b.who[chips.length] as number, sc));
     const colW = Math.max(0, ...chips.map((c) => c.width)) + 8 * u;
     const cols = clamp(Math.ceil(chips.length / rowsMax), 1, Math.max(1, Math.floor((W - 20 * u) / colW)));
     // Si no entran todos, el último renglón es "+N".
@@ -1288,6 +1336,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     // El andén de la parada, en la pantalla, y lo que se mueve suelto en el
     // mundo: los que saltan sin renglón, el embarque, las chispas.
     fx.clear();
+    prepareBoards(2);
     const brd = boardAt(tAll);
     drawBoard(brd);
     // Cuando se bajan más de los que entran en el andén (doscientas personas),
