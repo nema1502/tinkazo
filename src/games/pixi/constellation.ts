@@ -601,14 +601,22 @@ export async function constellationPixi(names: string[], winners: readonly numbe
       const gx = (nd.r + 6 * k) * z, gy = (nd.r + 10 * k) * z;
       // El del amague va del lado contrario a la ganadora, que está pegada:
       // arriba a la derecha, como los demás, la tapaba. Si no entra de ese
-      // lado, prueba los otros tres, y si no entra en ninguno, se arrima.
+      // lado, prueba los otros tres.
       const wn = nodes[WIN_NODE] as Node;
       const lejos = ni === DECOY && hopI === K - 1;
       const izq = lejos && wn.x >= nd.x, abajo = lejos && wn.y < nd.y;
       const xa = izq ? p.x - gx - w : p.x + gx, xb = izq ? p.x + gx : p.x - gx - w;
       const ya = abajo ? p.y + gy : p.y - gy, yb = abajo ? p.y - gy : p.y + gy;
-      const opciones: Caja[] = [[xa, ya], [xb, ya], [xa, yb], [xb, yb]].map(([x, y]) => ({ x: x as number, y: y as number, w, h }));
-      const caja = opciones.find(libre) ?? (opciones[0] as Caja);
+      const lados: Caja[] = [[xa, ya], [xb, ya], [xa, yb], [xb, yb]].map(([x, y]) => ({ x: x as number, y: y as number, w, h }));
+      // Si no entra a ningún costado (en el celular, el grande del amague es
+      // casi tan ancho como la pantalla), va centrado encima o debajo, sin
+      // tocar la estrella: arrimado al costado le tapaba media estrella. La
+      // estrella llega a 1,42 veces su radio cuando se enciende.
+      const sep = nd.r * 1.42 * z + 4 * k + h / 2;
+      const xc = clamp(p.x - w / 2, 8 * k, W0 - 8 * k - w);
+      const centro: Caja[] = (abajo ? [p.y + sep, p.y - sep] : [p.y - sep, p.y + sep]).map((y) => ({ x: xc, y, w, h }));
+      const entra = (a: Caja): boolean => a.y - a.h / 2 >= lo && a.y + a.h / 2 <= hi;
+      const caja = [...lados, ...centro].find(libre) ?? centro.find(entra) ?? (lados[0] as Caja);
       caja.x = clamp(caja.x, 8 * k, W0 - 8 * k - w);
       caja.y = clamp(caja.y, lo + h / 2, hi - h / 2);
       c.position.set(caja.x, caja.y);
