@@ -669,8 +669,11 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     lightsB.alpha = (0.55 + 0.35 * Math.sin(now * 2 + 2.2)) * (0.06 + 0.94 * luz);
 
     // Estaciones: la bandera, los banderines, la cuenta de los que bajaron.
-    /** Dónde quedó la lista de los que se bajan, para que nada la tape. */
-    const lista: { x: number; y: number; w: number; h: number }[] = [];
+    /**
+     * Lo que no se tapa, en el mundo: la lista de los que se bajan, el nombre
+     * del que salta y los nombres de los que van solos que ya se pusieron.
+     */
+    const noTapar: { x: number; y: number; w: number; h: number }[] = [];
     stations.forEach((stn, s) => {
       const p = pt(s);
       const top = s === NS + 1;
@@ -716,7 +719,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
             c.scale.set(comp);
             c.position.set(p.x - bw / 2 - 10 * k - c.width, arriba + c.height / 2);
             enPantalla(c as Container);
-            lista.push({ x: c.x, y: c.y - c.height / 2, w: c.width, h: c.height });
+            noTapar.push({ x: c.x, y: c.y - c.height / 2, w: c.width, h: c.height });
             arriba += c.height + 2 * k;
           }
           stn.chips.alpha = clamp(Math.min(since - 0.3, 2.4 - since) / 0.3, 0, 1);
@@ -826,6 +829,9 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
           const W = S.sw();
           const derecha = cam.toScreen(jumper.x + jumperTag.x + jumperTag.width, jumper.y, W, S.sh()).x;
           if (derecha > W - 8 * S.u()) jumperTag.x = -jumperSide / 2 - 8 * k - jumperTag.width;
+          // Es el dato del momento: arriba de todo, y los demás nombres no lo tapan.
+          noTapar.push({ x: jumper.x + jumperTag.x, y: jumper.y + jumperTag.y - jumperTag.height / 2, w: jumperTag.width, h: jumperTag.height });
+          jumper.parent?.addChild(jumper);
         }
       }
     }
@@ -905,12 +911,21 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         chip.scale.set(comp);
         chip.position.set(G.vertical ? p.x - cw / 2 - 14 * k - chip.width : p.x - 40 * k, G.vertical ? p.y + 24 * k + ch / 2 + 8 * k : p.y + 24 * k + ch + 28 * k);
         enPantalla(chip);
-        // La lista de los que se acaban de bajar manda: el nombre del que va
-        // solo se corre debajo de ella. En un celular, con la letra legible, la tapaba.
-        for (const r of lista) {
-          const a = chip.y - chip.height / 2, b = chip.y + chip.height / 2;
-          if (chip.x < r.x + r.w && chip.x + chip.width > r.x && a < r.y + r.h && b > r.y) chip.y = r.y + r.h + chip.height / 2 + 2 * k;
+        // La lista de los que se acaban de bajar y el nombre del que salta
+        // mandan: el nombre del que va solo se corre debajo de ellos, y de los
+        // otros que van solos. En un celular, con la letra legible, los tapaba.
+        for (let pasada = 0; pasada < 4; pasada++) {
+          let movido = false;
+          for (const r of noTapar) {
+            const a = chip.y - chip.height / 2, b = chip.y + chip.height / 2;
+            if (chip.x < r.x + r.w && chip.x + chip.width > r.x && a < r.y + r.h && b > r.y) {
+              chip.y = r.y + r.h + chip.height / 2 + 2 * k;
+              movido = true;
+            }
+          }
+          if (!movido) break;
         }
+        noTapar.push({ x: chip.x, y: chip.y - chip.height / 2, w: chip.width, h: chip.height });
       }
     }
     for (const c of fx.parent?.children ?? []) {
