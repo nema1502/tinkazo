@@ -1217,6 +1217,10 @@ export async function llamasPixi(
      */
     const o0 = cam.toScreen(0, 0, sw, G.sh);
     const z = cam.toScreen(1, 0, sw, G.sh).x - o0.x;
+    // En los acercamientos el nombre no crece con la cámara: en la foto, a
+    // 2,1, los chips legibles tapaban a las llamas enteras. Alejándose sí se
+    // achica con la pista, para no encimarse con el del carril de al lado.
+    const comp = 1 / Math.max(1, cam.zoom);
     const muros = [L.board, L.aviso].filter((b): b is Container => !!b && b.visible).map((b) => b.getBounds());
     const adentro = (tag: Container): void => {
       const p = cam.toScreen(tag.x, tag.y, sw, G.sh);
@@ -1264,7 +1268,7 @@ export async function llamasPixi(
       // de la popa de la balsa.
       // El nombre aparece cuando llega su chip de la clasificatoria, y late una vez.
       const late = h > 0.15 && h < 0.55 ? Math.sin(((h - 0.15) / 0.4) * Math.PI) * 0.35 : 0;
-      r.tag.scale.set(1 + late);
+      r.tag.scale.set((1 + late) * comp);
       r.tag.position.set(x - (space ? 82 : lake ? 86 : 70) * sc - r.tag.width, y - 30 * sc);
       adentro(r.tag);
       r.tag.alpha = (phase === "done" && !premio ? 0.35 : 1) * Math.max(0, Math.min(1, (h + 0.05) / 0.2));
