@@ -52,9 +52,14 @@ interface Bundle {
 }
 /** Un nombre ya puesto en la pantalla: `x` es su borde izquierdo y `y` su centro. */
 interface Caja { x: number; y: number; w: number; h: number }
-/** Cuántos de los que salen llevan su nombre a la vez (los más recientes), y cuánto rato. */
+/**
+ * Cuántos de los que salen llevan su nombre a la vez (los más recientes), y
+ * cuánto rato en segundos de juego: lo que tarda en volar a la fila y un poco
+ * más (en "normal", unos tres segundos y medio). Con 2,5 se juntaban cuatro
+ * nombres apilados encima de la tela justo en el filo.
+ */
 const OUT_MAX = 4;
-const OUT_LIFE = 2.5;
+const OUT_LIFE = 1.6;
 
 export async function pasanakuPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<void> {
   const winnerIdx = winners[0] ?? 0;
