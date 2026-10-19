@@ -1,7 +1,7 @@
 import { $, esc } from "../dom";
 import { T, getLang, onLangChange, t } from "../i18n";
 import { CUENTA_SECONDS, LCOLORS, WHEEL_MAX, app, conCuenta, params, playableGame, avatar, forceMotion, setCardSeconds, setShowGate, setYaContaron, skipMotion, skippedForReducedMotion, type Beacon, type Game } from "../state";
-import { beep } from "../sound";
+import { beep, note } from "../sound";
 import { bytesToHex, fetchRound, hexToBytes, randomnessOf, roundUrl } from "../protocol/quicknet";
 import { verifyRoundAsync } from "../protocol/firma";
 import { select } from "../protocol/select";
@@ -212,10 +212,11 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   // Antes del juego, la tarjeta de "cómo se juega", grande para la sala. Sus
   // segundos salen del mismo total que eligió quien sortea.
   // "¡Cuenten conmigo!" al final de la tarjeta (state.ts): un tono por número, más alto en el 1.
+  // Los dos en la pentatónica, mi y do: el 990 Hz de antes era un si, fuera de la escala de los juegos.
   const cuenta = conCuenta() ? CUENTA_SECONDS : 0;
   const card = skipMotion()
     ? null
-    : showGameCard(game, names.length, winners.length, cuenta, (n) => beep(n > 1 ? 660 : 990, 0.16, "triangle", 0.07), app.frozen?.prize ?? "");
+    : showGameCard(game, names.length, winners.length, cuenta, (n) => beep(note(n > 1 ? 12 : 15), 0.16, "triangle", 0.07), app.frozen?.prize ?? "");
   setCardSeconds(card ? CARD_SECONDS : 0);
   // Si la sala ya contó con la tarjeta, el juego no vuelve a contar.
   setYaContaron(card !== null && cuenta > 0);
