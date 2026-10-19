@@ -1,5 +1,6 @@
 import { Container, Graphics, Sprite, Text, Texture } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
+import { musicHold } from "../../music";
 import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, note } from "../../sound";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
@@ -16,6 +17,12 @@ import { LINES, T_BOARD, T_CROWN, T_DOCK, T_RUN, planCableCar } from "./cablecar
  * sigue al convoy, se acerca a cada andén cuando se baja gente, se mete en la
  * cabina del giro, se hamaca con el viento, se acerca despacio en el apagón, y
  * sigue a la cabina sola hasta la cumbre.
+ *
+ * Los nombres viven en la pantalla, no en el mundo (18 de octubre de 2026): en
+ * un celular, los que iban pegados a las cabinas crecían con el acercamiento de
+ * la cámara y quedaban cortados contra el borde. Ahora cada uno busca el costado
+ * de su cabina que entra, y los que se bajan en cada estación saltan con su
+ * cara hasta su renglón en el andén, con su nombre.
  */
 
 const hexOf = (css: string): number => parseInt(css.replace("#", ""), 16);
@@ -39,6 +46,16 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   const loserIdx = n >= 2 ? (rank[1] ?? -1) : -1;
   /** Lo que tarda el salto de la cabina al andén. */
   const HOP = 0.55;
+  /** Lo que tarda una cara en volar de su cabina a su renglón del andén. */
+  const FLY = 0.5;
+  /**
+   * Cuánto resbala la cabina en la mordaza, en distancias entre cabinas. Era
+   * 0,62, y con la cámara siguiéndola de cerca el resbalón no se veía: la
+   * cabina quedaba quieta en el medio de la pantalla y lo que se movía era el
+   * fondo (crítico de juegos, 16 de octubre de 2026). Ahora la cámara queda
+   * quieta y la cabina se va casi una cabina entera cable abajo.
+   */
+  const SLIP = 0.95;
   const lang = getLang();
   S.mark("arco", story.arc);
   const deco = seeded(parseInt(beacon.randomness.slice(24, 32), 16));
@@ -104,7 +121,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     root: Container; hang: Container; body: Graphics; win: Graphics; faces: Sprite[]; count: Text;
     door: Graphics; flag: Graphics; doors: Graphics; ring: Graphics; lastKey: string; empty: boolean;
   }
-  interface Station { root: Container; flag: Graphics; bunting: Graphics | null; tag: Container; minus: Text; chips: Container }
+  interface Station { root: Container; flag: Graphics; bunting: Graphics | null; tag: Container; minus: Text }
   let far!: Container;
   let lightsA!: Graphics;
   let lightsB!: Graphics;
@@ -112,9 +129,36 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   let stations: Station[] = [];
   let cabs: Cab[] = [];
   let fx!: Graphics;
-  let dark!: Graphics;
+  /**
+   * El apagón, en dos capas: un velo negro sobre el mundo entero menos las
+   * cabinas, que quedan colgando con su luz de emergencia, y los bordes de la
+   * pantalla más oscuros todavía. Antes era un velo al 50% sobre todo, cabinas
+   * incluidas, y la escena casi no cambiaba: la sala no se enteraba del
+   * apagón (crítico de juegos, 16 de octubre de 2026).
+   */
+  let blackout!: Graphics;
+  let vignette!: Sprite;
   let wind!: Graphics;
   let jumper: Container | null = null;
+  /** Los nombres, en la pantalla y no en el mundo: los de las cabinas, el andén y el que salta. */
+  let nameLayer!: Container;
+  /** Las caras que vuelan al andén: la sombra abajo, las caras y el marco arriba. */
+  let flyBack!: Graphics;
+  let flyBox!: Container;
+  let flyFrame!: Graphics;
+  let flyFaces: Sprite[] = [];
+  let jumperTag: Container | null = null;
+  /**
+   * El andén de la parada en curso, ya armado: los chips de los que se bajan,
+   * dónde va cada uno, y el "+N" cuando no entran todos.
+   */
+  interface BoardView {
+    key: string; chips: Container[]; plus: Container | null; slots: { x: number; y: number }[]; sc: number;
+    box: { x0: number; y0: number; x1: number; y1: number };
+  }
+  let boardView: BoardView | null = null;
+  /** El nombre de cada cabina que lleva a una sola persona, y de qué costado va. */
+  const soloTags = new Map<number, { idx: number; sc: number; chip: Container; side: number }>();
   let hudLabel!: Text;
   let hudNum!: Text;
   let hudStation!: Text;
@@ -233,11 +277,18 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       const minus = S.text("", { fontSize: 36 * k, fontWeight: "900", fill: YELLOW, stroke: { color: INK, width: 7 * k } });
       minus.anchor.set(1, 0.5);
       minus.position.set(p.x - 40 * k, ty);
-      const chips = new Container();
-      root.addChild(tag, minus, chips);
+      root.addChild(tag, minus);
       world.addChild(root);
-      stations.push({ root, flag, bunting, tag, minus, chips });
+      stations.push({ root, flag, bunting, tag, minus });
     }
+
+    // El velo del apagón tapa el cielo, la cordillera, la ciudad, las torres y
+    // las estaciones, y deja afuera a las cabinas, que van encima. Es enorme
+    // para que ningún encuadre de la cámara le encuentre el borde.
+    const v0 = pt(-3), v1 = pt(NS + 4);
+    blackout = new Graphics().rect(v0.x - sw * 3, v1.y - sh * 3, v1.x - v0.x + sw * 6, v0.y - v1.y + sh * 6).fill(0x020208);
+    blackout.alpha = 0;
+    world.addChild(blackout);
 
     // Las cabinas.
     cabs = [];
@@ -280,20 +331,45 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       const sp = new Sprite(S.face(nm));
       sp.width = sp.height = side;
       sp.position.set(-side / 2, -side);
-      // El nombre al costado: abajo chocaba con el de la cabina que sigue.
-      const tag = S.chip(nm, 1.1);
-      tag.position.set(side / 2 + 8 * k, -side / 2);
-      jc.addChild(new Graphics().rect(-side / 2 + 4 * k, -side + 4 * k, side, side).fill(INK), sp, new Graphics().rect(-side / 2, -side, side, side).stroke({ width: 3 * k, color: INK }), tag);
+      // El nombre va en la pantalla (ver `placeJumperTag`): pegado a la cara,
+      // en el mundo, crecía con el acercamiento y en un celular quedaba cortado
+      // contra el borde derecho.
+      jc.addChild(new Graphics().rect(-side / 2 + 4 * k, -side + 4 * k, side, side).fill(INK), sp, new Graphics().rect(-side / 2, -side, side, side).stroke({ width: 3 * k, color: INK }));
       jc.visible = false;
       world.addChild(jc);
       jumper = jc;
     }
 
-    // La interfaz: oscuridad del apagón, vetas del viento y los contadores.
-    dark = new Graphics().rect(0, 0, sw, sh).fill(0x03030a);
-    dark.alpha = 0;
+    // La interfaz: los bordes del apagón, vetas del viento, los nombres y los
+    // contadores.
+    const vc = document.createElement("canvas");
+    vc.width = vc.height = 128;
+    const vx = vc.getContext("2d") as CanvasRenderingContext2D;
+    const vg = vx.createRadialGradient(64, 64, 20, 64, 64, 92);
+    vg.addColorStop(0, "rgba(2,2,8,0)");
+    vg.addColorStop(1, "rgba(2,2,8,0.95)");
+    vx.fillStyle = vg;
+    vx.fillRect(0, 0, 128, 128);
+    vignette = new Sprite(Texture.from(vc));
+    vignette.width = sw;
+    vignette.height = sh;
+    vignette.alpha = 0;
     wind = new Graphics();
-    S.hud.addChild(dark, wind);
+    nameLayer = new Container();
+    flyBack = new Graphics();
+    flyBox = new Container();
+    flyFrame = new Graphics();
+    flyFaces = [];
+    S.hud.addChild(vignette, wind, nameLayer, flyBack, flyBox, flyFrame);
+    // Lo que estaba armado para el tamaño anterior se rearma en el próximo cuadro.
+    boardView = null;
+    soloTags.clear();
+    jumperTag = null;
+    if (jumper) {
+      jumperTag = S.chip(names[loserIdx] ?? "", S.portrait() ? 1.25 : 1.5);
+      jumperTag.visible = false;
+      nameLayer.addChild(jumperTag);
+    }
     const top = S.top() + 18 * k;
     hudLabel = S.text("", { fontSize: 14 * k, fontWeight: "800", fill: CREAM });
     hudLabel.alpha = 0.8;
@@ -313,10 +389,20 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
 
   /* ================================================================ estado */
   let tAll = 0, tHold = 0, silent = false, didCrown = false, didDock = false;
-  let lastHum = -1, boardTicks = 0, beat = -1, beatDark = -1, lastSaid = -99;
+  let lastHum = -1, boardTicks = 0, beat = -1, beatDark = -1, lastSaid = -99, lastGrind = -1;
   const fired = new Set<string>();
-  const platform = new Map<number, { off: number; who: number[]; t: number }>();
-  const hops: { cab: number; station: number; t0: number; dx: number; hue: number }[] = [];
+  /** Cuántos se bajaron en cada estación, para el "−N" de su rótulo. */
+  const platform = new Map<number, { off: number; t: number }>();
+  /**
+   * El andén de cada parada menos la última, que tiene su propio salto: quiénes
+   * se bajaron (los co-ganadores primero), desde cuándo y hasta cuándo se ven.
+   * Hasta el 18 de octubre de 2026 saltaban cuadraditos de color y los nombres
+   * salían solo si se bajaban tres o menos: con 27 personas, los trece de la
+   * primera estación se iban sin que nadie supiera quiénes eran (crítico de
+   * juegos, 16 de octubre de 2026).
+   */
+  interface Board { station: number; at: number; tOff: number; tEnd: number; who: number[] }
+  const boards: Board[] = [];
   const chispas = Array.from({ length: 14 }, () => ({ a: -Math.PI * (0.1 + deco() * 0.8), v: 0.6 + deco() * 0.8 }));
   const vetas = Array.from({ length: 22 }, () => ({ y: deco(), len: 0.08 + deco() * 0.14, v: 1.1 + deco() * 1.2, off: deco() }));
 
@@ -362,13 +448,17 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         // de 2026 el tercer premio se bajaba con "se baja uno, quedan 2".
         const prem = who.filter((i) => winners.indexOf(i) > 0);
         const resto = who.filter((i) => winners.indexOf(i) <= 0);
-        // En la última parada el nombre va pegado a la cara que salta.
-        const onPlatform = s.last && jumper ? [] : (who.length <= 3 ? [...prem, ...resto] : prem).slice(0, 3);
-        platform.set(s.station, { off: who.length, who: onPlatform, t: s.tOff });
-        const stp = Math.max(1, Math.ceil(who.length / 40));
-        for (let i = 0; i < who.length && !(s.last && jumper); i += stp) {
-          const idx = who[i] as number;
-          hops.push({ cab: cabinOf.get(idx) ?? 0, station: s.station, t0: s.tOff + (i / who.length) * 0.35, dx: seedOf(i) * 2 - 1, hue: S.color(idx) });
+        platform.set(s.station, { off: who.length, t: s.tOff });
+        // En la última parada la cara que salta lleva su nombre; en las demás,
+        // cada uno vuela con su cara a su renglón del andén. El andén se queda
+        // hasta que bajan los de la estación siguiente, y se va antes de que
+        // llegue la última, que es de ella. Con el apagón titila con la luz y
+        // se apaga con ella (`drawBoard`).
+        if (!(s.last && jumper)) {
+          const next = stops.find((x) => x.t0 > s.t0);
+          let tEnd = next ? (next.last ? next.t0 - 0.1 : next.tOff - 0.02) : T_RUN - 0.1;
+          if (apagon && P.corte > s.tOff) tEnd = Math.min(tEnd, P.corte + 0.08);
+          boards.push({ station: s.station, at: s.at, tOff: s.tOff, tEnd, who: [...prem, ...resto] });
         }
         if (s.last) {
           // Con varios premios, el último que se baja también ganó, y el relator
@@ -413,33 +503,72 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         }
       });
     }
+    // Los dos giros que la sala no notaba (crítico de juegos, 16 de octubre de
+    // 2026): los dos callan la banda de golpe. Un velo o un resbalón se pierden
+    // si alguien está mirando para otro lado; que se corte la música, no.
     if (mordaza) {
+      // Se suelta, y mientras resbala el chirrido del cable baja (en `sounds`).
       once("suelta", tAll >= P.mA, () => {
         const who = slipCab === winnerCab ? winnerIdx : (rank[1] as number);
         sayNow(T[lang].cTelSlip(names[who] ?? ""), 0.9);
-        if (!silent) [14, 12, 10, 8, 6].forEach((d, i) => setTimeout(() => beep(note(d), 0.06, "square", 0.035), i * 45));
+        if (!silent) {
+          musicHold(true);
+          [14, 12, 10, 8, 6].forEach((d, i) => setTimeout(() => beep(note(d), 0.06, "square", 0.035), i * 45));
+          cam.punch(0.04);
+        }
       });
+      // La agarra: el golpe de la mordaza, el chasquido del metal y la banda
+      // que vuelve en el uno, todo junto.
       once("agarra", tAll >= P.mB, () => {
+        musicHold(false);
         sayNow(t("cTelCaught"), 0.95);
         if (!silent) {
           beep(note(2), 0.12, "square", 0.06);
           beep(note(0), 0.3, "sine", 0.08);
-          cam.shake(16 * G.k).punch(0.08);
+          setTimeout(() => beep(note(14), 0.16, "triangle", 0.045), 50);
+          cam.shake(18 * G.k).punch(0.1);
         }
       });
     }
     if (apagon) {
+      // Titila dos veces antes de cortarse (`luzAt`), con un chasquido en cada
+      // parpadeo: el aviso para levantar la vista.
+      once("titila1", tAll >= P.corte - 0.24, () => {
+        if (!silent) beep(note(9), 0.05, "square", 0.035);
+      });
+      once("titila2", tAll >= P.corte - 0.13, () => {
+        if (!silent) beep(note(7), 0.05, "square", 0.035);
+      });
+      // Se corta la luz y con ella la banda, y el zumbido del cable se apaga
+      // con el frenazo.
       once("corte", tAll >= P.corte, () => {
         sayNow(t("cTelDark"), 0.85);
-        if (!silent) [12, 9, 6, 3].forEach((d, i) => setTimeout(() => beep(note(d), 0.09, "sawtooth", 0.035), i * 70));
+        if (!silent) {
+          musicHold(true);
+          [12, 9, 6, 3].forEach((d, i) => setTimeout(() => beep(note(d), 0.09, "sawtooth", 0.035), i * 70));
+          cam.punch(0.05);
+        }
       });
+      // Queda quieto en el aire de un tirón: golpe seco y sacudón.
+      once("frena", tAll >= P.quieto, () => {
+        if (silent) return;
+        beep(note(0), 0.3, "sine", 0.09);
+        beep(note(3), 0.1, "square", 0.05);
+        cam.shake(12 * G.k).punch(0.05);
+      });
+      // Vuelve titilando, con un chasquido cada vez que prende. Iban a 160 y
+      // 300 ms reales, y en "épico" ya no caían con la luz: ahora van en la
+      // hora del juego. La banda vuelve cuando la luz se queda.
       once("vuelve", tAll >= P.vuelve, () => {
         sayNow(t("cTelLight"), 0.8);
-        if (!silent) {
-          beep(note(10), 0.05, "square", 0.04);
-          setTimeout(() => beep(note(12), 0.05, "square", 0.04), 160);
-          setTimeout(() => beep(note(15), 0.1, "triangle", 0.045), 300);
-        }
+        if (!silent) beep(note(10), 0.05, "square", 0.04);
+      });
+      once("prende", tAll >= P.vuelve + 0.16, () => {
+        if (!silent) beep(note(12), 0.05, "square", 0.04);
+      });
+      once("queda", tAll >= P.vuelve + 0.3, () => {
+        musicHold(false);
+        if (!silent) beep(note(15), 0.1, "triangle", 0.045);
       });
     }
     if (rafaga) {
@@ -491,8 +620,21 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       const b = Math.floor((tAll - P.quieto) / 0.42);
       if (b !== beatDark) {
         beatDark = b;
-        beep(note(0), 0.14, "sine", 0.075);
-        beep(note(5), 0.09, "triangle", 0.035);
+        // El primero cae con el golpe del frenazo, que ya suena.
+        if (b > 0) {
+          beep(note(0), 0.14, "sine", 0.075);
+          beep(note(5), 0.09, "triangle", 0.035);
+        }
+      }
+    }
+    // La mordaza patina: un chirrido que baja de tono mientras la cabina
+    // resbala, y se calla justo antes del golpe que la agarra.
+    if (tAll >= P.mA + 0.08 && tAll < P.mB - 0.04) {
+      const g = Math.floor((tAll - P.mA) / 0.07);
+      if (g !== lastGrind) {
+        lastGrind = g;
+        const q = clamp((tAll - P.mA) / (P.mB - P.mA), 0, 1);
+        beepFor(note(Math.round(13 - q * 9)), 0.09, "sawtooth", 0.03);
       }
     }
     const from = lastStop ? lastStop.t0 : T_RUN;
@@ -549,7 +691,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     tAll = T_CROWN;
     events();
     silent = false;
-    hops.length = 0;
+    boards.length = 0;
   };
 
   /** Dónde está una cabina a la hora `x`, en el mundo. */
@@ -561,9 +703,328 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       back = 0.5 * 2.2 * since * since * 140 * G.k;
       alpha = clamp(1 - since / 0.9, 0, 1);
     }
-    const resbala = cab === slipCab ? P.slipAt(x) * G.gap * 0.62 : 0;
+    const resbala = cab === slipCab ? P.slipAt(x) * G.gap * SLIP : 0;
     const p = pt(P.headAt(x), P.slotAt(cab, x) * G.gap + back + resbala);
     return { ...p, alpha };
+  }
+
+  /* ============================================================= nombres */
+  // Los nombres van en la pantalla, del tamaño de la pantalla, y cada uno se
+  // acomoda donde entra entero. En el mundo crecían con el acercamiento y en un
+  // celular quedaban cortados contra el borde (crítico de juegos, 16 de
+  // octubre de 2026).
+  interface Box { x0: number; y0: number; x1: number; y1: number }
+  /** Cuánto se tapan dos rectángulos, en píxeles cuadrados. */
+  const overlap = (a: Box, b: Box): number =>
+    Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) * Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0));
+  /** Cuántos píxeles de pantalla mide una unidad del mundo en este cuadro. */
+  const zoomNow = (): number => cam.toScreen(1, 0, S.sw(), S.sh()).x - cam.toScreen(0, 0, S.sw(), S.sh()).x;
+  /** Dónde cae en pantalla el cuerpo de una cabina, sin el colgante ni la bandera. */
+  function cabBox(cab: number, x: number): Box | null {
+    const p = cabPoint(cab, x);
+    if (p.alpha <= 0) return null;
+    const a = cam.toScreen(p.x - G.cw / 2, p.y + 24 * G.k, S.sw(), S.sh());
+    const z = zoomNow();
+    return { x0: a.x, y0: a.y, x1: a.x + G.cw * z, y1: a.y + G.ch * z };
+  }
+
+  /** La parada cuyo andén se ve a la hora `x`. */
+  const boardAt = (x: number): Board | null => boards.find((b) => x >= b.tOff && x < b.tEnd) ?? null;
+
+  /** Un chip sin cara para los que no entran en el andén: "+13". */
+  function plusChip(m: number, sc: number): Container {
+    const k = S.u() * sc;
+    const c = new Container();
+    const label = S.text(`+${m}`, { fontSize: 12 * k, fontWeight: "900", fill: INK });
+    label.position.set(9 * k, 3.5 * k);
+    const w = label.width + 18 * k;
+    c.addChild(new Graphics().roundRect(3 * k, 3 * k, w, 22 * k, 5 * k).fill(INK).roundRect(0, 0, w, 22 * k, 5 * k).fill(YELLOW).stroke({ width: 2 * k, color: INK }), label);
+    c.pivot.set(0, 11 * k);
+    return c;
+  }
+
+  /**
+   * Arma el andén de una parada: un chip con cara y nombre por cada uno que se
+   * baja, en columnas, al costado de la estación donde menos tapa. Dónde va se
+   * decide una vez, con el encuadre al que va la cámara y no con el de este
+   * cuadro, que todavía está llegando, y después queda quieto: un nombre que
+   * se mueve no se lee. Si no entran todos, el último renglón dice cuántos faltan.
+   */
+  function makeBoard(b: Board): BoardView {
+    const W = S.sw(), H = S.sh(), u = S.u(), k = G.k;
+    const sc = G.vertical ? 1.05 : 1.3;
+    const kc = u * sc;
+    const pitch = 28 * kc;
+    const lo = S.top() + 12 * u, hi = H - S.bottom() - 12 * u;
+    const rowsMax = clamp(Math.floor((hi - lo) / pitch), 2, G.vertical ? 7 : 8);
+    const chips = b.who.slice(0, rowsMax * (G.vertical ? 2 : 3)).map((idx) => {
+      const nm = names[idx] ?? "";
+      // El co-ganador que se baja antes lleva su estrella: el relator dice que se va con premio.
+      const c = S.chip(winners.indexOf(idx) > 0 ? `★ ${nm}` : nm, sc, nm);
+      c.visible = false;
+      nameLayer.addChild(c);
+      return c;
+    });
+    const colW = Math.max(0, ...chips.map((c) => c.width)) + 8 * u;
+    const cols = clamp(Math.ceil(chips.length / rowsMax), 1, Math.max(1, Math.floor((W - 20 * u) / colW)));
+    // Si no entran todos, el último renglón es "+N".
+    const cap = rowsMax * cols;
+    const shown = b.who.length <= cap ? b.who.length : cap - 1;
+    for (const c of chips.splice(shown)) c.destroy({ children: true });
+    const plus = shown < b.who.length ? plusChip(b.who.length - shown, sc) : null;
+    if (plus) {
+      plus.visible = false;
+      nameLayer.addChild(plus);
+    }
+    const count = shown + (plus ? 1 : 0);
+    const rows = Math.ceil(count / cols);
+    const bw = cols * colW - 8 * u, bh = rows * pitch - 6 * kc;
+
+    // Lo que no hay que tapar, en la pantalla del encuadre al que va la cámara.
+    const pose = cam.snapshot();
+    const toT = (x: number, y: number): { x: number; y: number } => ({ x: W / 2 + (x - pose.tx) * pose.tz, y: H / 2 + (y - pose.ty) * pose.tz });
+    const area = (x0: number, y0: number, x1: number, y1: number): Box => {
+      const a = toT(x0, y0), c = toT(x1, y1);
+      return { x0: Math.min(a.x, c.x), y0: Math.min(a.y, c.y), x1: Math.max(a.x, c.x), y1: Math.max(a.y, c.y) };
+    };
+    const sp = pt(b.station);
+    const st = area(sp.x - 90 * k, sp.y - 70 * k, sp.x + 90 * k, sp.y + 125 * k);
+    const obst: { r: Box; w: number }[] = [
+      { r: st, w: 1.5 },
+      // La bandera, el rótulo y el "−N".
+      { r: area(sp.x - 180 * k, sp.y - 185 * k, sp.x + 35 * k, sp.y - 40 * k), w: 1 },
+      // Los contadores de arriba a la izquierda.
+      { r: { x0: 0, y0: S.top(), x1: 200 * k, y1: S.top() + 140 * k }, w: 2 },
+    ];
+    // Las cabinas que siguen con gente; las que se vaciaron se van cable abajo.
+    for (let cab = 0; cab < C; cab++) {
+      const p = cabPoint(cab, b.tOff);
+      if (p.alpha > 0 && P.aboard(cab, b.tOff).length) obst.push({ r: area(p.x - G.cw / 2 - 6 * k, p.y - 44 * k, p.x + G.cw / 2 + 8 * k, p.y + 24 * k + G.ch + 8 * k), w: 3 });
+    }
+    const mid = { x: (st.x0 + st.x1) / 2, y: (st.y0 + st.y1) / 2 };
+    const cands = [
+      { x: st.x1 + 16 * u, y: mid.y - bh / 2 },
+      { x: st.x1 - bw * 0.2, y: st.y1 + 12 * u },
+      { x: W - bw - 10 * u, y: lo },
+      { x: W - bw - 10 * u, y: hi - bh },
+      { x: st.x0 - 16 * u - bw, y: mid.y - bh / 2 },
+      { x: (W - bw) / 2, y: lo },
+    ];
+    let best = { x: 0, y: 0 }, bestS = Infinity;
+    for (const c0 of cands) {
+      const c = { x: clamp(c0.x, 10 * u, Math.max(10 * u, W - bw - 10 * u)), y: clamp(c0.y, lo, Math.max(lo, hi - bh)) };
+      const r = { x0: c.x, y0: c.y, x1: c.x + bw, y1: c.y + bh };
+      let s = 0.04 * bh * Math.hypot(c.x + bw / 2 - mid.x, c.y + bh / 2 - mid.y);
+      for (const o of obst) s += o.w * overlap(r, o.r);
+      if (s < bestS - 1) {
+        bestS = s;
+        best = c;
+      }
+    }
+    const slots = Array.from({ length: count }, (_, i) => ({ x: best.x + Math.floor(i / rows) * colW, y: best.y + (i % rows) * pitch + 11 * kc }));
+    return { key: String(b.station), chips, plus, slots, sc, box: { x0: best.x, y0: best.y, x1: best.x + bw, y1: best.y + bh } };
+  }
+
+  function dropBoard(): void {
+    if (!boardView) return;
+    for (const c of boardView.chips) c.destroy({ children: true });
+    boardView.plus?.destroy({ children: true });
+    boardView = null;
+  }
+
+  /**
+   * El andén de la parada en curso. Cada uno sale por la ventana de su cabina
+   * con su cara, vuela a su renglón achicándose hasta el tamaño de la cara del
+   * chip, y ahí aparece su nombre. Las caras salen de a una, en el orden del
+   * andén (los co-ganadores primero), y el andén se va todo junto.
+   */
+  function drawBoard(b: Board | null): void {
+    flyBack.clear();
+    flyFrame.clear();
+    if (!b) {
+      dropBoard();
+      for (const f of flyFaces) f.visible = false;
+      return;
+    }
+    if (!boardView || boardView.key !== String(b.station)) {
+      dropBoard();
+      boardView = makeBoard(b);
+    }
+    const v = boardView;
+    const W = S.sw(), H = S.sh(), u = S.u(), k = G.k;
+    const kc = u * v.sc;
+    const shown = v.chips.length;
+    const spread = Math.min(0.45, 0.07 * shown);
+    // Es parte de lo que se ve iluminado: titila con la luz y se apaga con ella.
+    const fade = clamp((b.tEnd - tAll) / 0.3, 0, 1) * P.luzAt(tAll);
+    const z = zoomNow();
+    while (flyFaces.length < shown) {
+      const f = new Sprite(Texture.EMPTY);
+      f.visible = false;
+      flyBox.addChild(f);
+      flyFaces.push(f);
+    }
+    let last = b.tOff;
+    for (let i = 0; i < flyFaces.length; i++) {
+      const f = flyFaces[i] as Sprite;
+      if (i >= shown) {
+        f.visible = false;
+        continue;
+      }
+      const idx = b.who[i] as number;
+      const t0 = b.tOff + (shown > 1 ? (i / (shown - 1)) * spread : 0);
+      last = Math.max(last, t0 + FLY);
+      const q = (tAll - t0) / FLY;
+      const chip = v.chips[i] as Container;
+      const slot = v.slots[i] as { x: number; y: number };
+      chip.position.set(slot.x, slot.y);
+      if (q >= 1) {
+        const since = tAll - t0 - FLY;
+        f.visible = false;
+        chip.visible = true;
+        chip.alpha = fade * clamp(since / 0.1, 0, 1);
+        chip.scale.set(1 + 0.22 * Math.exp(-since * 14));
+        continue;
+      }
+      chip.visible = false;
+      if (q < 0) {
+        f.visible = false;
+        continue;
+      }
+      const w0 = pt(b.at, P.slotAt(cabinOf.get(idx) ?? 0, t0) * G.gap);
+      const a = cam.toScreen(w0.x, w0.y + 24 * k + G.ch * 0.5, W, H);
+      const e = ease.inOutCubic(q);
+      const tx = slot.x + 13 * kc, ty = slot.y;
+      const x = a.x + (tx - a.x) * e, y = a.y + (ty - a.y) * e - Math.sin(q * Math.PI) * 60 * u;
+      // Se agranda en el aire, para que la cara se vea mientras vuela.
+      const s = (30 * k * z + (16 * kc - 30 * k * z) * e) * (1 + 0.7 * Math.sin(q * Math.PI));
+      const tex = S.face(names[idx] ?? "");
+      if (f.texture !== tex) f.texture = tex;
+      f.visible = true;
+      f.alpha = fade;
+      f.width = f.height = s;
+      f.position.set(x - s / 2, y - s / 2);
+      flyBack.rect(x - s / 2 + 3 * u, y - s / 2 + 3 * u, s, s).fill({ color: INK, alpha: fade });
+      flyFrame.rect(x - s / 2, y - s / 2, s, s).stroke({ width: 2.5 * u, color: INK, alpha: fade });
+    }
+    if (v.plus) {
+      const since = tAll - last - 0.05;
+      const slot = v.slots[shown] as { x: number; y: number };
+      v.plus.position.set(slot.x, slot.y);
+      v.plus.visible = since >= 0;
+      v.plus.alpha = fade;
+      v.plus.scale.set(1 + 0.22 * Math.exp(-Math.max(0, since) * 14));
+    }
+  }
+
+  /** Dónde quedaron los nombres de las cabinas en este cuadro: el del que salta no se les encima. */
+  let soloPlaced: Box[] = [];
+
+  /**
+   * Los nombres de las cabinas que llevan a una sola persona. Cada uno prueba
+   * los costados de su cabina (en vertical primero a la izquierda y después a
+   * la derecha; en horizontal, abajo) y se queda en el primero donde entra
+   * entero sin tapar otra cabina ni otro nombre. Mientras siga entrando no se
+   * cambia de costado, para que no salte de un cuadro al otro. El de una
+   * cabina que salió de cuadro no va: pegado al borde, engañaba.
+   */
+  function placeSoloTags(few: boolean): void {
+    const W = S.sw(), H = S.sh(), u = S.u();
+    const lo = S.top() + 6 * u, hi = H - S.bottom() - 6 * u;
+    const seen = new Set<number>();
+    // El andén, si está, cuenta como un nombre ya puesto: no se le encima nadie.
+    const placed: Box[] = boardView ? [boardView.box] : [];
+    if (few && tAll < T_CROWN) {
+      // Más grandes cuando quedan dos: es el momento que decide.
+      const quedan = P.leftAt(tAll);
+      const sc = G.vertical ? (quedan <= 2 ? 1.3 : 1.12) : quedan <= 2 ? 1.6 : 1.3;
+      const z = zoomNow();
+      // Las cabinas vacías no cuentan: se están yendo cable abajo.
+      const boxes = new Map<number, Box>();
+      for (let cab = 0; cab < C; cab++) {
+        const r = P.aboard(cab, tAll).length ? cabBox(cab, tAll) : null;
+        if (r) boxes.set(cab, r);
+      }
+      for (let cab = 0; cab < C; cab++) {
+        const who = P.aboard(cab, tAll);
+        const box = boxes.get(cab);
+        if (who.length !== 1 || !box || cabPoint(cab, tAll).alpha < 1) continue;
+        const cy = (box.y0 + box.y1) / 2;
+        if ((box.x0 + box.x1) / 2 < 0 || (box.x0 + box.x1) / 2 > W || cy < lo || cy > hi) continue;
+        const idx = who[0] as number;
+        let e = soloTags.get(cab);
+        if (!e || e.idx !== idx || e.sc !== sc) {
+          e?.chip.destroy({ children: true });
+          e = { idx, sc, chip: S.chip(names[idx] ?? "", sc), side: -1 };
+          nameLayer.addChild(e.chip);
+          soloTags.set(cab, e);
+        }
+        seen.add(cab);
+        const w = e.chip.width, h = 25 * u * sc, gap = 8 * u;
+        const at = (side: number): Box => {
+          const x = side === 0 ? box.x0 + (box.x1 - box.x0) * 0.1 : side === 1 ? box.x0 - gap - w : side === 2 ? box.x1 + gap : box.x0;
+          const y = side === 0 ? box.y1 + gap + h / 2 : side === 3 ? box.y0 - 64 * G.k * z - gap - h / 2 : cy;
+          return { x0: x, y0: y - h / 2, x1: x + w, y1: y + h / 2 };
+        };
+        const fits = (r: Box, m = 0): boolean =>
+          r.x0 >= 8 * u + m && r.x1 <= W - 8 * u - m && r.y0 >= lo + m && r.y1 <= hi - m &&
+          !placed.some((o) => overlap(r, o) > 0) && ![...boxes].some(([c2, o]) => c2 !== cab && overlap(r, o) > 0);
+        const order = G.vertical ? [1, 2, 0, 3] : [0, 2, 1, 3];
+        // Vuelve a un costado mejor solo si entra con holgura: así no salta de
+        // un costado al otro cuando la cabina pasa justo por el borde.
+        const mejor = order.find((s) => fits(at(s), 18 * u));
+        const side = mejor !== undefined && (e.side < 0 || order.indexOf(mejor) < order.indexOf(e.side))
+          ? mejor
+          : e.side >= 0 && fits(at(e.side)) ? e.side : order.find((s) => fits(at(s))) ?? (order[0] as number);
+        e.side = side;
+        const r = at(side);
+        const x = clamp(r.x0, 8 * u, W - w - 8 * u), y = clamp((r.y0 + r.y1) / 2, lo + h / 2, hi - h / 2);
+        e.chip.position.set(x, y);
+        e.chip.visible = true;
+        placed.push({ x0: x, y0: y - h / 2, x1: x + w, y1: y + h / 2 });
+      }
+    }
+    for (const [cab, e] of soloTags) if (!seen.has(cab)) e.chip.visible = false;
+    soloPlaced = placed;
+  }
+
+  /** De qué costado de su cara va el nombre del que salta: 0 derecha, 1 izquierda, 2 arriba, 3 abajo. */
+  let jumperSide = -1;
+  /**
+   * El nombre del que se baja en la última, al costado de su cara mientras
+   * vuela y cuando cae. Primero a la derecha, que en un proyector siempre
+   * entra; en un celular, donde la cara cae contra el borde derecho, a la
+   * izquierda o encima.
+   */
+  function placeJumperTag(): void {
+    if (!jumperTag) return;
+    if (!jumper || !jumper.visible) {
+      jumperTag.visible = false;
+      return;
+    }
+    const W = S.sw(), H = S.sh(), u = S.u();
+    const half = 22 * G.k * zoomNow();
+    const c = cam.toScreen(jumper.x, jumper.y - 22 * G.k, W, H);
+    const w = jumperTag.width, h = 25 * u * (G.vertical ? 1.25 : 1.5), gap = 10 * u;
+    const lo = S.top() + 6 * u, hi = H - S.bottom() - 6 * u;
+    const at = (s: number): Box => {
+      const x = s === 0 ? c.x + half + gap : s === 1 ? c.x - half - gap - w : c.x - w / 2;
+      const y = s === 2 ? c.y - half - gap - h / 2 : s === 3 ? c.y + half + gap + h / 2 : c.y;
+      return { x0: x, y0: y - h / 2, x1: x + w, y1: y + h / 2 };
+    };
+    // Su propia cabina no cuenta, ni ninguna vacía: se están yendo.
+    const others: Box[] = [...soloPlaced];
+    for (let cab = 0; cab < C; cab++) {
+      const r = cab === P.loserCab || !P.aboard(cab, tAll).length ? null : cabBox(cab, tAll);
+      if (r) others.push(r);
+    }
+    const fits = (r: Box): boolean => r.x0 >= 8 * u && r.x1 <= W - 8 * u && r.y0 >= lo && r.y1 <= hi && !others.some((o) => overlap(r, o) > 0);
+    const s = jumperSide >= 0 && fits(at(jumperSide)) ? jumperSide : [0, 1, 2, 3].find((q) => fits(at(q))) ?? 0;
+    jumperSide = s;
+    const r = at(s);
+    jumperTag.position.set(clamp(r.x0, 8 * u, W - w - 8 * u), clamp((r.y0 + r.y1) / 2, lo + h / 2, hi - h / 2));
+    jumperTag.alpha = jumper.alpha;
+    jumperTag.visible = true;
   }
 
   /* ============================================================== cámara */
@@ -592,16 +1053,24 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       if (puerta && tAll >= P.puertaA - 0.25 && tAll <= P.puertaB + 0.35) {
         const p = cabPoint(winnerCab, tAll);
         cam.lookAt(p.x, p.y + 60 * k, 2.1, 4);
-      } else if (mordaza && tAll >= P.mA - 0.1 && tAll <= P.mD + 0.2) {
-        const p = cabPoint(slipCab, tAll);
-        cam.lookAt(p.x, p.y + 60 * k, 2.0, tAll < P.mB ? 6 : 3);
+      } else if (mordaza && tAll <= P.mD + 0.2) {
+        // Quieta sobre el tramo que resbala, desde la cabina en su lugar hasta
+        // donde la agarra la mordaza, y desde que llega a la estación. Antes
+        // seguía a la cabina de cerca: la cabina quedaba quieta en la pantalla,
+        // lo que se movía era el fondo, y el resbalón no se veía.
+        const h = P.headAt(P.mA), slot = P.slotAt(slipCab, P.mA);
+        const a = pt(h, slot * G.gap), b = pt(h, (slot + SLIP) * G.gap);
+        cam.lookAt((a.x + b.x) / 2, (a.y + b.y) / 2 + 60 * k, 1.8, 3);
       } else {
         const a = cabPoint(winnerCab, tAll), b = cabPoint(P.loserCab, tAll);
         cam.lookAt((a.x + b.x) / 2, (a.y + b.y) / 2 + 60 * k, 1.6, 3);
       }
-    } else if (apagon && tAll >= P.corte && tAll <= P.vuelve + 0.4) {
+    } else if (apagon && tAll >= P.corte - 0.25 && tAll <= P.vuelve + 0.45) {
+      // Se va al convoy apenas titila la luz y se sigue metiendo en lo oscuro.
+      // Llegaba a 1,55 en un segundo y medio, tan despacio que no se notaba.
       const p = lower(pt(head, G.gap * 0.8));
-      cam.lookAt(p.x, p.y, 1.2 + 0.35 * clamp((tAll - P.corte) / 1.5, 0, 1), 1.4);
+      const dk = clamp((tAll - P.corte) / 1.2, 0, 1);
+      cam.lookAt(p.x, p.y, 1.25 + 0.4 * ease.outCubic(dk), 2.4);
     } else if (inStop) {
       const s = pt(inStop.station);
       cam.lookAt(s.x - 40 * k, s.y + 70 * k, 1.35, 3);
@@ -673,21 +1142,11 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
           g.poly([...r(-half, 0), ...r(half, 0), ...r(0, len)]).fill(hexOf(LINES[i % LINES.length] as string)).stroke({ width: 2 * k, color: INK });
         }
       }
+      // Los nombres de los que se bajaron van en el andén de la pantalla (`drawBoard`).
       const pl = platform.get(s);
       if (pl && !top && s !== 0) {
-        const since = tAll - pl.t;
         stn.minus.text = `−${pl.off}`;
-        stn.minus.scale.set(ease.outBack(clamp(since / 0.4, 0, 1)));
-        if (pl.who.length && since < 2.4 && since > 0.3) {
-          if (!stn.chips.children.length) {
-            pl.who.forEach((idx, i) => {
-              const c = S.chip(names[idx] ?? "");
-              c.position.set(p.x - bw / 2 - 190 * k, y0 - 34 * k + 34 * k + i * 30 * k);
-              stn.chips.addChild(c);
-            });
-          }
-          stn.chips.alpha = clamp(Math.min(since - 0.3, 2.4 - since) / 0.3, 0, 1);
-        } else stn.chips.alpha = 0;
+        stn.minus.scale.set(ease.outBack(clamp((tAll - pl.t) / 0.4, 0, 1)));
       } else stn.minus.text = "";
     });
 
@@ -705,7 +1164,12 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       const slot = P.slotAt(cab, tAll);
       let sacude = cab === winnerCab ? P.puertaAt(tAll) * 0.07 * Math.sin(tAll * 22) : 0;
       sacude += (P.windAt(tAll) - 0.2) * 0.12 * Math.sin(tAll * 6.3 + cab * 1.7);
-      if (cab === slipCab && tAll > P.mB && tAll < P.mB + 3) sacude += 0.3 * Math.exp(-(tAll - P.mB) * 2.4) * Math.sin((tAll - P.mB) * 9);
+      if (mordaza && cab === slipCab) {
+        // Mientras resbala, la cabina se queda atrás de su mordaza y se inclina
+        // cuesta arriba; al agarrarla, el tirón la manda para el otro lado.
+        if (tAll > P.mA && tAll <= P.mB) sacude -= 0.26 * Math.sin((Math.PI / 2) * clamp((tAll - P.mA) / (P.mB - P.mA), 0, 1));
+        if (tAll > P.mB && tAll < P.mB + 3) sacude += -0.26 * Math.exp(-(tAll - P.mB) * 9) + 0.3 * Math.exp(-(tAll - P.mB) * 2.4) * Math.sin((tAll - P.mB) * 9);
+      }
       cb.hang.rotation = sw * (1 - slot * 0.06) + sacude;
       const who = P.aboard(cab, tAll);
       const empty = !(who.length || tAll < T_BOARD);
@@ -745,7 +1209,19 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       cb.count.text = who.length > 1 ? `×${who.length}` : "";
       cb.door.clear();
       if (asoma > 0) cb.door.rect(cw / 2 - cw * 0.26 * asoma - 2 * k, topY + 6 * k, cw * 0.26 * asoma, ch - 12 * k).fill(INK);
-      if (luz < 1) cb.door.rect(wx, wy, ww, wh).fill({ color: 0x04050c, alpha: (1 - luz) * 0.82 });
+      if (luz < 1) {
+        // A oscuras la cabina se apaga hasta la mitad y le queda la luz de
+        // emergencia, roja, que parpadea. Las caras se siguen viendo: en lo
+        // negro lo único que queda es el convoy colgando, con su gente. Antes
+        // la ventana se iba al negro y las caras desaparecían.
+        const dim = 1 - luz;
+        cb.door.roundRect(-cw / 2, topY, cw, ch, 12 * k).fill({ color: 0x04050c, alpha: dim * 0.42 })
+          .rect(wx, wy, ww, wh).fill({ color: 0x04050c, alpha: dim * 0.3 });
+        if (Math.sin(tAll * 9 + cab * 1.9) > -0.3) {
+          const lx = cw / 2 - 13 * k, ly = topY + 9 * k;
+          cb.door.circle(lx, ly, 13 * k).fill({ color: 0xff3b30, alpha: dim * 0.3 }).circle(lx, ly, 4.5 * k).fill({ color: 0xff6a5f, alpha: dim });
+        }
+      }
       cb.doors.clear();
       if (cab === winnerCab && tAll > T_DOCK) {
         const o = ease.outCubic(clamp((tAll - T_DOCK - 0.2) / 0.5, 0, 1));
@@ -753,6 +1229,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       }
       cb.flag.clear().moveTo(-cw / 2 + 14 * k, topY).lineTo(-cw / 2 + 14 * k, topY - 38 * k).stroke({ width: 2.5 * k, color: INK });
       drawFlag(cb.flag, -cw / 2 + 14 * k, topY - 37 * k, 48 * k, 26 * k, 0xf6efe2, cab * 2.3, true);
+      cb.flag.alpha = 0.3 + 0.7 * luz;
       // El aro del "¿quién se baja?": en cada salto aparece un poco más grande
       // y se cierra sobre la cabina; al abrirse la puerta, se apaga.
       cb.ring.clear();
@@ -762,6 +1239,13 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         const rx = -cw / 2 - pad, ry = topY - pad, rw = cw + 2 * pad, rh = ch + 2 * pad;
         cb.ring.roundRect(rx, ry, rw, rh, 16 * k).stroke({ width: 10 * k, color: INK, alpha })
           .roundRect(rx, ry, rw, rh, 16 * k).stroke({ width: 5.5 * k, color: YELLOW, alpha });
+      }
+      // La cabina que resbala, en rojo y titilando hasta que la mordaza la agarra.
+      if (mordaza && cab === slipCab && tAll > P.mA && tAll < P.mB + 0.25) {
+        const on = tAll < P.mB ? (Math.sin((tAll - P.mA) * 30) > -0.2 ? 1 : 0.35) : clamp(1 - (tAll - P.mB) / 0.25, 0, 1);
+        const pad = 8 * k;
+        cb.ring.roundRect(-cw / 2 - pad, topY - pad, cw + 2 * pad, ch + 2 * pad, 16 * k).stroke({ width: 10 * k, color: INK, alpha: on })
+          .roundRect(-cw / 2 - pad, topY - pad, cw + 2 * pad, ch + 2 * pad, 16 * k).stroke({ width: 5.5 * k, color: 0xff3b30, alpha: on });
       }
     }
 
@@ -801,22 +1285,31 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       return cam.toScreen(p.x, p.y - 22 * G.k, S.sw(), S.sh());
     }, stations.map((s) => s.tag.getBounds()));
 
-    // Lo que se mueve suelto: pasajeros que saltan, el embarque, chispas, nombres.
+    // El andén de la parada, en la pantalla, y lo que se mueve suelto en el
+    // mundo: los que saltan sin renglón, el embarque, las chispas.
     fx.clear();
-    for (const hp of hops) {
-      const pr = (tAll - hp.t0) / 0.55;
-      if (pr < 0 || pr > 1.6) continue;
-      const q = clamp(pr, 0, 1);
-      const stop = stops.find((s) => s.station === hp.station);
-      if (!stop) continue;
-      const from = pt(stop.at, P.slotAt(hp.cab, hp.t0) * gap);
-      const sp = pt(hp.station);
-      const bw = 160 * k;
-      const tx = sp.x + hp.dx * (bw / 2 - 12 * k), ty = sp.y - 40 * k + 160 * k - 26 * k;
-      const x = from.x + (tx - from.x) * q;
-      const y = from.y + 60 * k + (ty - from.y - 60 * k) * q - Math.sin(q * Math.PI) * 80 * k;
-      const a = pr > 1 ? clamp(1.6 - pr, 0, 1) / 0.6 : 1;
-      fx.rect(x - 7 * k, y - 7 * k, 14 * k, 14 * k).fill({ color: INK, alpha: a }).rect(x - 5 * k, y - 5 * k, 10 * k, 10 * k).fill({ color: hp.hue, alpha: a });
+    const brd = boardAt(tAll);
+    drawBoard(brd);
+    // Cuando se bajan más de los que entran en el andén (doscientas personas),
+    // los que no tienen renglón saltan como antes, de color, al piso de la estación.
+    if (brd && boardView) {
+      const resto = brd.who.slice(boardView.chips.length);
+      const stp = Math.max(1, Math.ceil(resto.length / 40));
+      for (let j = 0; j < resto.length; j += stp) {
+        const idx = resto[j] as number;
+        const t0 = brd.tOff + 0.05 + (j / resto.length) * 0.35;
+        const pr = (tAll - t0) / 0.55;
+        if (pr < 0 || pr > 1.6) continue;
+        const q = clamp(pr, 0, 1);
+        const from = pt(brd.at, P.slotAt(cabinOf.get(idx) ?? 0, t0) * gap);
+        const sp = pt(brd.station);
+        const bw = 160 * k;
+        const tx = sp.x + (seedOf(j) * 2 - 1) * (bw / 2 - 12 * k), ty = sp.y - 40 * k + 160 * k - 26 * k;
+        const x = from.x + (tx - from.x) * q;
+        const y = from.y + 60 * k + (ty - from.y - 60 * k) * q - Math.sin(q * Math.PI) * 80 * k;
+        const a = pr > 1 ? clamp(1.6 - pr, 0, 1) / 0.6 : 1;
+        fx.rect(x - 7 * k, y - 7 * k, 14 * k, 14 * k).fill({ color: INK, alpha: a }).rect(x - 5 * k, y - 5 * k, 10 * k, 10 * k).fill({ color: S.color(idx), alpha: a });
+      }
     }
     if (tAll < T_BOARD) {
       const perCab = Math.ceil(n / C);
@@ -837,39 +1330,49 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         }
       }
     }
-    if (mordaza && tAll > P.mB && tAll < P.mB + 0.55) {
+    // La mordaza. Mientras patina, vetas de velocidad detrás de la cabina,
+    // cuesta arriba, más largas cuanto más rápido resbala, y chispitas en la
+    // mordaza; al agarrarla, un fogonazo y la lluvia de chispas. Antes había
+    // solo la lluvia, de cuadraditos de 5 px durante medio segundo.
+    if (mordaza && tAll > P.mA && tAll < P.mB + 0.8) {
       const p = cabPoint(slipCab, tAll);
-      const since = tAll - P.mB;
-      for (const s of chispas) {
-        const d = s.v * since * 260 * k;
-        fx.rect(p.x + Math.cos(s.a) * d - 2.5 * k, p.y + Math.sin(s.a) * d + since * since * 900 * k - 2.5 * k, 5 * k, 5 * k).fill({ color: s.v > 1 ? 0xfff3c4 : YELLOW, alpha: clamp(1 - since / 0.55, 0, 1) });
+      if (tAll < P.mB) {
+        const v = clamp((P.slipAt(tAll + 0.02) - P.slipAt(tAll)) / 0.02, 0, 4);
+        const len = v * 45 * k;
+        const nx = -G.dir.y, ny = G.dir.x;
+        const bx = p.x, by = p.y + 24 * k + ch / 2;
+        for (let j = 0; j < 4; j++) {
+          const off = (j - 1.5) * 17 * k, a0 = cw / 2 + 8 * k + (j % 2) * 10 * k;
+          const sx = bx + G.dir.x * a0 + nx * off, sy = by + G.dir.y * a0 + ny * off;
+          fx.moveTo(sx, sy).lineTo(sx + G.dir.x * len, sy + G.dir.y * len);
+        }
+        if (len > 1) fx.stroke({ width: 3.5 * k, color: CREAM, alpha: 0.8, cap: "round" });
+        for (let j = 0; j < 6; j++) {
+          const ph = (tAll * 6 + j / 6) % 1;
+          const ang = Math.PI * (1.05 + hash(j, 3) * 0.8);
+          const d = ph * 42 * k;
+          fx.rect(p.x + Math.cos(ang) * d - 2 * k, p.y + Math.sin(ang) * d + ph * ph * 50 * k - 2 * k, 4 * k, 4 * k).fill({ color: YELLOW, alpha: 1 - ph });
+        }
+      } else {
+        const since = tAll - P.mB;
+        const f = clamp(since / 0.3, 0, 1);
+        if (f < 1) {
+          fx.circle(p.x, p.y, (12 + 80 * f) * k).stroke({ width: 7 * k * (1 - f), color: YELLOW, alpha: 1 - f })
+            .circle(p.x, p.y, 16 * k * (1 - f)).fill({ color: 0xfff3c4, alpha: 1 - f });
+        }
+        const fade = clamp(1 - since / 0.8, 0, 1);
+        for (let j = 0; j < 26; j++) {
+          const s = j < chispas.length ? chispas[j] as { a: number; v: number } : { a: -Math.PI * (0.05 + hash(j, 11) * 0.9), v: 0.6 + hash(j, 12) * 0.9 };
+          const d = s.v * since * 300 * k;
+          fx.rect(p.x + Math.cos(s.a) * d - 3 * k, p.y + Math.sin(s.a) * d + since * since * 900 * k - 3 * k, 6 * k, 6 * k).fill({ color: s.v > 1.1 ? 0xfff3c4 : YELLOW, alpha: fade });
+        }
       }
     }
 
-    // Los nombres de los que van solos, al costado de su cabina.
-    if (few && tAll < T_CROWN) {
-      for (let cab = 0; cab < C; cab++) {
-        const who = P.aboard(cab, tAll);
-        const p = cabPoint(cab, tAll);
-        if (who.length !== 1 || p.alpha < 1) continue;
-        const key = `nm${cab}`;
-        let chip = fx.parent?.getChildByLabel(key) as Container | null;
-        if (!chip) {
-          chip = S.chip(names[who[0] as number] ?? "", 1.15);
-          chip.label = key;
-          fx.parent?.addChild(chip);
-        }
-        chip.visible = true;
-        chip.position.set(G.vertical ? p.x - cw / 2 - 14 * k - chip.width : p.x - 40 * k, G.vertical ? p.y + 24 * k + ch / 2 + 8 * k : p.y + 24 * k + ch + 28 * k);
-      }
-    }
-    for (const c of fx.parent?.children ?? []) {
-      if (typeof c.label === "string" && c.label.startsWith("nm")) {
-        const cab = Number(c.label.slice(2));
-        const who = P.aboard(cab, tAll);
-        if (!few || tAll >= T_CROWN || who.length !== 1 || cabPoint(cab, tAll).alpha < 1) c.visible = false;
-      }
-    }
+    // Los nombres de las cabinas de a uno y el del que salta en la última, en
+    // la pantalla. El andén ya se dibujó arriba (`drawBoard`).
+    placeSoloTags(few);
+    placeJumperTag();
 
     // El viento y la oscuridad, en la pantalla.
     wind.clear();
@@ -884,7 +1387,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       }
       wind.stroke({ width: 2.5 * k, color: CREAM, alpha: Math.min(0.55, wv * 0.6), cap: "round" });
     }
-    dark.alpha = (1 - luz) * 0.5;
+    blackout.alpha = (1 - luz) * 0.86;
+    vignette.alpha = 1 - luz;
 
     // Los contadores.
     const m = tAll < T_BOARD ? P.pax.reduce((a, _, cab) => a + P.aboard(cab, tAll).length, 0) : P.leftAt(tAll);
@@ -893,7 +1397,6 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     const at = Math.min(NS, Math.floor(P.headAt(tAll) + 0.02));
     hudStation.text = tAll >= T_BOARD && tAll < T_RUN ? T[lang].cTelOf(Math.max(1, at), NS) : "";
     if (tAll >= T_CROWN) crown.at(tAll - T_CROWN);
-    void hash;
   }
 
   cam.cut(pt(0).x + 40 * G.k, pt(0).y + 20 * G.k, 1.55);

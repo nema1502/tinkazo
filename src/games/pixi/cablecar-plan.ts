@@ -218,9 +218,23 @@ export function planCableCar(names: string[], winners: readonly number[], rng: (
   /**
    * Cuánta luz hay, de 0 a 1. Se corta de golpe y vuelve titilando, como
    * vuelve la luz de verdad: prende, se apaga, prende, se apaga, y queda.
+   *
+   * Y antes de cortarse titila dos veces, en el último cuarto de segundo. El
+   * crítico de juegos (16 de octubre de 2026) vio que el apagón pasaba sin que
+   * la sala lo notara: el corte llegaba sin aviso, en medio del viaje, y cuando
+   * alguien levantaba la vista ya estaba a oscuras. Los dos parpadeos son el
+   * aviso que hace mirar. Es lo único de la luz que difiere de `cablecar.ts`, y
+   * no toca el azar ni el horario: el corte sigue a la misma hora.
    */
   function luzAt(x: number): number {
-    if (x < corte) return 1;
+    if (x < corte) {
+      const d = corte - x;
+      if (d > 0.24) return 1;
+      if (d > 0.19) return 0.3;
+      if (d > 0.13) return 1;
+      if (d > 0.08) return 0.2;
+      return 1;
+    }
     if (x < vuelve) return clamp(1 - (x - corte) / 0.08, 0, 1);
     const d = x - vuelve;
     if (d < 0.07) return 1;
