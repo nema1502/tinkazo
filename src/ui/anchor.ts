@@ -84,10 +84,35 @@ async function sellar(args: SealArgs, onStep: OnStep): Promise<SealResult> {
   }
 
   const sent = await tx.signAndSend();
-  const raffleId = unwrap<bigint>(sent.result as unknown);
+  const raffleId = unwrap<bigint>(resultadoDe(sent));
   const txHash = sent.sendTransactionResponse?.hash ?? "";
   onStep("confirmed", txHash);
   return { raffleId, txHash };
+}
+
+/**
+ * Lo que devolvió una invocación que `signAndSend` mandó y esperó.
+ *
+ * Si la transacción entró a un ledger y falló (con el sello, casi siempre porque
+ * la ronda quedó a menos de 30 s mientras la red andaba lenta), el SDK no lo
+ * dice: con el protocolo 23 o posterior la respuesta trae `returnValue` como una
+ * clave sin valor, `sent.result` la lee igual y revienta con
+ * `TypeError: Cannot read properties of undefined (reading 'type')`. Ese error
+ * no lo reconoce nadie, así que el sello no se reintentaba con otra ronda y
+ * quien entraba con Freighter o con la cuenta de prueba veía "la red rechazó la
+ * transacción" y tenía que apretar de nuevo (medido el 20 de octubre de 2026 con
+ * la cuenta de prueba: 6 de 16 sellos fallaron así, por igual antes y después
+ * de los cambios de fondos).
+ *
+ * Se mira el estado antes de leer el resultado y se lanza `tx-FAILED`, que es lo
+ * mismo que dice `readReturnValue` y lo que `selloSinGrabar` y `errorKey` ya
+ * entienden. Una transacción fallida no deja nada grabado, así que reintentar no
+ * puede dejar dos sellos.
+ */
+function resultadoDe(sent: { result: unknown; getTransactionResponse?: { status?: string } }): unknown {
+  const estado = sent.getTransactionResponse?.status;
+  if (estado && estado !== "SUCCESS") throw new Error("tx-" + estado);
+  return sent.result;
 }
 
 /**
@@ -237,7 +262,7 @@ async function sortear(raffleId: bigint, signature96: Uint8Array, onStep: OnStep
   }
 
   const sent = await tx.signAndSend();
-  const draw = unwrap<{ winners: number[]; randomness: Uint8Array }>(sent.result as unknown);
+  const draw = unwrap<{ winners: number[]; randomness: Uint8Array }>(resultadoDe(sent));
   const txHash = sent.sendTransactionResponse?.hash ?? "";
   onStep("confirmed", txHash);
   return {

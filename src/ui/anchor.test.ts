@@ -2,6 +2,11 @@ import { nativeToScVal } from "@stellar/stellar-sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { selloSinGrabar, type AnchorStep, type DrawResult, type SealResult } from "./anchor";
 
+// La primera prueba paga la carga en frío del SDK de Stellar (cada una vuelve a cargar
+// `anchor` con `vi.resetModules()`). Con la máquina ocupada, 5 s no alcanzaban (20 de
+// octubre de 2026: 60 s de transformación entre todos los archivos, y esa prueba se cayó).
+vi.setConfig({ testTimeout: 30_000 });
+
 /**
  * `sealOnChain` con las piezas de afuera reemplazadas: el cliente del contrato, la
  * wallet activa, el grifo y el saldo. Lo que se mira es la conexión de la ayuda de
@@ -271,6 +276,58 @@ describe("con cualquier otra wallet (Freighter, cuenta de prueba)", () => {
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
     expect(pasos.map(([p]) => p)).not.toContain("funding");
     expect(eventos).toEqual([]);
+  });
+
+  describe("si la transacción entró a un ledger y falló", () => {
+    /**
+     * Lo que le pasa al SDK con el protocolo 23 o posterior: la respuesta de una transacción fallida trae
+     * `returnValue` como una clave sin valor, y `result` revienta al leerla. Medido contra la testnet el 20 de
+     * octubre de 2026 (la ronda quedó cerca con la red lenta).
+     */
+    const fallada = () => ({
+      sendTransactionResponse: { hash: "ab12" },
+      getTransactionResponse: { status: "FAILED" },
+      get result(): never {
+        throw new TypeError("Cannot read properties of undefined (reading 'type')");
+      },
+    });
+
+    it("el sello lo dice con tx-FAILED y no con el TypeError del SDK, así se reintenta con otra ronda", async () => {
+      h.wallet = otra;
+      h.seal.mockImplementation(async () => ({ ...txSimulada(), signAndSend: async () => fallada() }));
+      const { error } = await sellar();
+      expect((error as Error).message).toBe("tx-FAILED");
+      expect(selloSinGrabar(error)).toBe(true);
+      expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+      expect(eventos).toEqual([]);
+    });
+
+    it("el sorteo también: sale tx-FAILED", async () => {
+      h.wallet = otra;
+      h.draw.mockImplementation(async () => ({ ...txSimulada(), signAndSend: async () => fallada() }));
+      const { error } = await sortear();
+      expect((error as Error).message).toBe("tx-FAILED");
+    });
+
+    it("el TypeError del SDK sin un estado que lo explique sigue saliendo tal cual: no se disfraza lo que no se entiende", async () => {
+      h.wallet = otra;
+      const sinEstado = { sendTransactionResponse: { hash: "ab12" }, get result(): never { throw new TypeError("otra cosa"); } };
+      h.seal.mockImplementation(async () => ({ ...txSimulada(), signAndSend: async () => sinEstado }));
+      const { error } = await sellar();
+      expect((error as Error).message).toBe("otra cosa");
+      expect(selloSinGrabar(error)).toBe(false);
+    });
+
+    it("si entró bien (SUCCESS) se lee el resultado como siempre", async () => {
+      h.wallet = otra;
+      h.seal.mockImplementation(async () => ({
+        ...txSimulada(),
+        signAndSend: async () => ({ result: 9n, sendTransactionResponse: { hash: "ab12" }, getTransactionResponse: { status: "SUCCESS" } }),
+      }));
+      const { r } = await sellar();
+      expect(r?.raffleId).toBe(9n);
+      expect(r?.txHash).toBe("ab12");
+    });
   });
 });
 
