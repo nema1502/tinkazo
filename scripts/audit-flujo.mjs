@@ -127,7 +127,11 @@ const MEDIR = (selReal) => `JSON.stringify((() => {
   const barra = document.getElementById('siguiente');
   const sigBtn = document.getElementById('sig-btn');
   const pasos = [...document.querySelectorAll('#pasos li')].map((li) => ({ n: Number(li.dataset.paso), actual: li.classList.contains('actual'), hecho: li.classList.contains('hecho'), aria: li.getAttribute('aria-current'), marca: (li.querySelector('.p-n') || {}).textContent || '', texto: (li.querySelector('.p-t') || {}).textContent || '' }));
-  const principales = ['#btn-freeze', '#btn-draw', '#btn-again-sin', '#btn-proof', '#btn-again-nueva', '#sig-btn']
+  // La geometría del indicador, para saber si entra en una sola línea y sin cortarse: no importa si se ve ahora.
+  const lis = [...document.querySelectorAll('#pasos li')].map((li) => li.getBoundingClientRect());
+  const pasosGeo = lis.length ? { arriba: Math.round(Math.min(...lis.map((r) => r.top))), abajo: Math.round(Math.max(...lis.map((r) => r.bottom))), alto: Math.round(Math.max(...lis.map((r) => r.height))), izq: Math.round(Math.min(...lis.map((r) => r.left))), der: Math.round(Math.max(...lis.map((r) => r.right))), lineas: new Set(lis.map((r) => Math.round(r.top / 4))).size } : null;
+  // "Entendido" de la bienvenida cuenta: quien llega por primera vez la tiene arriba de la lista, y con la lista cargada no puede competir con "Sellar".
+  const principales = ['#btn-freeze', '#btn-draw', '#btn-again-sin', '#btn-proof', '#btn-again-nueva', '#sig-btn', '#ob-ok']
     .map((s) => document.querySelector(s))
     .filter((e) => e && e.classList.contains('primary'))
     .map((e) => ({ id: e.id, caja: caja(e), off: !!e.disabled }))
@@ -142,6 +146,7 @@ const MEDIR = (selReal) => `JSON.stringify((() => {
     aviso: (document.getElementById('sig-aviso') || {}).textContent || null,
     avisoVivo: document.getElementById('sig-aviso') ? { rol: document.getElementById('sig-aviso').getAttribute('role'), live: document.getElementById('sig-aviso').getAttribute('aria-live') } : null,
     pasos,
+    pasosGeo,
     principales,
     pie: caja(pie),
     scrollX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -278,12 +283,23 @@ async function paso(page, ctx, n, nombre, esperado) {
     okPasos,
     m.pasos.length === 0 ? "no hay indicador de pasos" : okPasos ? m.pasos.map((p) => (p.hecho ? "✓" : p.actual ? `[${p.n}]` : p.n)).join(" ") : `marca ${cur.map((p) => p.n).join(",") || "ninguno"} y ${m.pasos.filter((p) => p.hecho).length} hechos`,
   );
+  // 6b. Y entra en una sola línea, sin cortarse por los costados de la pantalla (el celular parado es el justo).
+  const pg = m.pasosGeo;
+  check(
+    `${quien} · ${n} ${nombre}: el indicador entra en una sola línea`,
+    !!pg && pg.lineas === 1 && pg.izq >= -1 && pg.der <= m.vp.w + 1,
+    pg ? `${pg.lineas} línea, de ${pg.izq} a ${pg.der} de ${m.vp.w}` : "no hay indicador",
+  );
   // 7. Toques y contraste de lo que se ve.
   const s = JSON.parse(await page.eval(SONDA));
   if (celular) check(`${quien} · ${n} ${nombre}: blancos de toque de 44 px`, s.toques.length === 0, s.toques.slice(0, 3).map((x) => `"${x.t}" ${x.h}px`).join(" | "));
   check(`${quien} · ${n} ${nombre}: contraste del texto`, s.texto.length === 0, s.texto.slice(0, 3).map((x) => `"${x.t}" ${x.r}<${x.pide}`).join(" | "));
-  // 8. La captura.
-  await page.screenshot(join(outDir, `flujo-${etiqueta}-${tema}-${n}-${sinTildes(nombre).replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.png`));
+  // 8. La captura. El caso "sin resto" repite los pasos 1 a 3 con una lista de dos: sus capturas pisaban las
+  //    del recorrido principal (mismo nombre), y lo que se miraba como "la lista cargada" era esa lista chica.
+  //    De ese caso se guarda solo el resultado, que es lo que lo distingue.
+  if (ctx.caso !== "sin-resto" || n >= 4) {
+    await page.screenshot(join(outDir, `flujo-${etiqueta}-${tema}-${n}-${sinTildes(nombre).replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.png`));
+  }
   return { m, verReal, verBarra };
 }
 
@@ -344,7 +360,7 @@ async function superpuestos(page, ctx) {
 /** El recorrido de una pantalla, en un tema. Devuelve si llegó hasta el final. */
 async function recorrer(browser, vista, tema, caso) {
   const [etiqueta, ancho, alto, dpr, celular] = vista;
-  const ctx = { etiqueta, tema, celular };
+  const ctx = { etiqueta, tema, celular, caso };
   const quien = `${etiqueta} ${tema}`;
   const page = await browser.open("about:blank");
   try {
@@ -373,11 +389,17 @@ async function recorrer(browser, vista, tema, caso) {
       await page.eval(`document.getElementById('nw').value = '2'; document.getElementById('nw').dispatchEvent(new Event('change', { bubbles: true })); document.getElementById('btn-sample').click(); true`);
     }
     await sleep(900);
+    // El inicio de la página, con el indicador de pasos arriba y la lista cargada: es la captura que
+    // enseña dónde está uno. Va antes de medir el paso, para no mover la pantalla donde la deja la página.
+    if (caso !== "sin-resto") {
+      await page.eval("scrollTo(0, 0); true");
+      await quieto(page);
+      await page.screenshot(join(outDir, `flujo-${etiqueta}-${tema}-0-inicio-con-indicador.png`));
+    }
     // La tarjeta de participantes arriba: ahí queda quien pega la lista.
     await page.eval("document.getElementById('sec-participants').scrollIntoView({ block: 'start' }); true");
     await quieto(page);
     await paso(page, ctx, 1, "lista cargada", { paso: 2, real: REAL.lista });
-    // El inicio de la página, con el indicador arriba y la lista cargada.
     const viaBarraSello = await pulsar(page, ctx, REAL.lista, "sellar");
 
     // 2. Sellada y esperando la ronda.
