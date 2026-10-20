@@ -575,12 +575,17 @@ export async function luzPixi(names: string[], winners: readonly number[], beaco
       const xb = beamAt(c, tAll);
       const zs = alive().map((r) => r.z).sort((a, b) => a - b);
       const zm = zs[Math.floor(zs.length / 2)] ?? 0.5;
+      // El que acaba de caer se queda en cuadro un rato: el haz ya sigue de largo
+      // y el anuncio de la eliminación llegaba con el jugador afuera.
+      const recien = c.victims.map((i) => runners[i] as Runner).find((r) => r.caught >= 0 && tAll - r.caught < 1.4);
       const p = project(xb * 0.8, zm);
       const onWin = c.hold > 0 && saidWobble && !saidSaved;
+      const pr = recien ? project(recien.x, recien.z) : null;
       if (onWin) {
         const pw = project(win.x, win.z);
         cam.lookAt(pw.x, pw.y - 1.2 * pw.s, 1.9, 5);
-      } else if (p.ok) cam.lookAt(p.x, p.y - 0.8 * p.s, 1.25, 3);
+      } else if (pr?.ok) cam.lookAt(pr.x, pr.y - 0.8 * pr.s, 1.25, 3);
+      else if (p.ok) cam.lookAt(p.x, p.y - 0.8 * p.s, 1.25, 3);
     } else if (light === "final" || light === "crown") {
       // El último verde, encima de la ganadora: de lejos y chica, con el
       // resultado ya sabido, no pasaba nada.
@@ -771,6 +776,7 @@ export async function luzPixi(names: string[], winners: readonly number[], beaco
         })
         .filter((a) => a.ok)
         .sort((a, b) => a.p.y - b.p.y);
+      const pila: { chip: Container; x: number; y: number }[] = [];
       let prev = -Infinity;
       for (const { r, p } of at) {
         const chip = (r.chip ??= chips.addChild(S.chip(names[r.idx] ?? "", S.portrait() ? 0.8 : 1)));
@@ -779,8 +785,17 @@ export async function luzPixi(names: string[], winners: readonly number[], beaco
         // letra legible se encimaban (16 de octubre de 2026).
         const cy = Math.max(p.y - chip.height / 2 - k, prev + chip.height);
         prev = cy;
-        chip.position.set(Math.min(p.x, W - chip.width - 10 * k), cy);
+        pila.push({ chip, x: p.x, y: cy });
       }
+      // Lo que baja del borde de la pista sube, apilado desde ese borde: si no,
+      // la columna de ocho se metía debajo de la caja del relator.
+      let cota = H - S.bottom() - 2 * k;
+      for (let i = pila.length - 1; i >= 0; i--) {
+        const it = pila[i] as { chip: Container; x: number; y: number };
+        it.y = Math.min(it.y, cota - it.chip.height / 2);
+        cota = it.y - it.chip.height / 2 - 2 * k;
+      }
+      for (const it of pila) it.chip.position.set(Math.max(10 * k, Math.min(it.x, W - it.chip.width - 10 * k)), it.y);
     }
     counter.text = `${t("cLuzLeft")}  ${live.length} / ${n}`;
     const bw = counter.width + 40 * k, bh = 40 * k;
