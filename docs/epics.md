@@ -904,9 +904,9 @@ Y dos arreglos de interfaz que pidió el autor:
 - **El resaltado del título.** El recuadro amarillo de "cualquiera puede comprobar" le tapaba las colas a la "q" de la línea de arriba. Se arregló con tres cambios: más interlineado, el resaltado que no sube hasta la otra línea, y el resaltado siempre debajo del resto del texto. El auditor de interfaz lo comprueba ahora por píxeles: dos fotos del título, con y sin el resaltado, y cuenta las letras que el amarillo tapó. Con el CSS viejo marca miles de píxeles; con el nuevo, cero.
 - **El logo.** Perdió la sombra morada debajo de las letras, que hacía un relieve que ensuciaba el nombre. El estadio muestra ahora el mismo logo que la cabecera, con la llamita.
 
-### Historia 10.12: El agente evaluador: hecho
+### Historia 10.12: La revisión visual: hecho
 
-Resultado (2026-09-30): el autor pidió "un agente evaluador" que revise todo. Es local y no se versiona. Mira el sitio y los juegos con capturas reales, en escritorio y celular y en los dos temas, con el reloj congelado para caer en el segundo exacto. Devuelve una lista de lo más grave a lo menos grave, cada punto con su evidencia y su arreglo concreto. No toca el código.
+Resultado (2026-09-30): el autor pidió una revisión visual que revise todo. La herramienta es local y no se versiona. Mira el sitio y los juegos con capturas reales, en escritorio y celular y en los dos temas, con el reloj congelado para caer en el segundo exacto. Devuelve una lista de lo más grave a lo menos grave, cada punto con su evidencia y su arreglo concreto. No toca el código.
 
 En su primera pasada encontró 23 cosas, y se arreglaron casi todas:
 
@@ -942,7 +942,7 @@ Quedan sin tocar tres cosas menores, a propósito:
 
 ### Historia 10.13: La piñata, Oruro, la ruleta y la sesión: hecho
 
-Resultado (2026-10-02): el trabajo de Guido Salazar ([@GuidoSV7](https://github.com/GuidoSV7)) en el PR #1, 14 commits. Como todo cambio, pasó por la batería de auditores y por el agente evaluador, y entra lo que la pasó:
+Resultado (2026-10-02): el trabajo de Guido Salazar ([@GuidoSV7](https://github.com/GuidoSV7)) en el PR #1, 14 commits. Como todo cambio, pasó por la batería de auditores y por la revisión visual, y entra lo que la pasó:
 
 - **La piñata:** cada caramelo que sale lleva su nombre en grande, y la lista de los que quedan ya no pisa la piñata.
 - **Oruro:** cada diablo tiene su etiqueta desde el primer cuadro, unida a él por una línea, y una pasada de lista nombra a todos al menos una vez. El cambio venía con un error de una línea que hacía caer el juego en el primer cuadro y dejaba el sorteo colgado; lo encontró el auditor exigente y se arregló.
@@ -955,7 +955,7 @@ Resultado (2026-10-02): el trabajo de Guido Salazar ([@GuidoSV7](https://github.
 Quedan afuera, por ahora:
 
 - **Plinko.** Es el juego insignia de los casinos cripto, y Tinkazo se postula a fondos que excluyen todo lo que se parezca a una apuesta. Además la pantalla quedaba casi quieta 18 segundos.
-- **El Sapo y el Ahorcado,** que aguantaban hasta 12 personas, y los meetups son de 30 a 50. El evaluador vio el Sapo como una mesa de póker y sin nombres en la mesa, y el Ahorcado es una horca y deja ver el largo del nombre. Se rediseñan aparte: el Sapo con una clasificatoria que lo lleva a 200 personas, y el Ahorcado como "¿Quién es?", cartas que se dan vuelta con cada letra.
+- **El Sapo y el Ahorcado,** que aguantaban hasta 12 personas, y los meetups son de 30 a 50. La revisión visual vio el Sapo como una mesa de póker y sin nombres en la mesa, y el Ahorcado es una horca y deja ver el largo del nombre. Se rediseñan aparte: el Sapo con una clasificatoria que lo lleva a 200 personas, y el Ahorcado como "¿Quién es?", cartas que se dan vuelta con cada letra.
 - El Dockerfile, que no se pudo probar en esta máquina, y la configuración local de sus herramientas.
 
 Un arreglo que salió de la revisión: si un juego recibía más nombres de los que sabe contar, el estadio podía quedar colgado. Ahora la entrada común a todos los juegos (`playPixi`) aplica la misma sustitución que el sorteo y pasa a la carrera.
@@ -968,7 +968,7 @@ Resultado (2026-10-02): los dos juegos que quedaron afuera en la 10.13 se redise
 
 **La clasificatoria** (`qualifier.ts`, compartida): en la mesa del sapo entran doce agujeros. Con más nombres aparecen todos en una grilla y se tachan en una a tres oleadas hasta que quedan doce, siempre con los ganadores adentro. La pantalla se mueve desde el primer cuadro.
 
-**El Sapo**, rediseñado en dos pasadas del agente evaluador:
+**El Sapo**, rediseñado en dos pasadas de la revisión visual:
 - La mesa ya no es un óvalo de paño verde con una moneda dorada, que se leía como póker: es el cajón de madera con la rana.
 - Cada agujero lleva su nombre afuera, anclado por el borde de adentro, con un aro del color de la cara de esa persona.
 - Las etiquetas que chocan se alargan ("María Qu.") en vez de repetirse.
@@ -983,7 +983,7 @@ Resultado (2026-10-02): los dos juegos que quedaron afuera en la 10.13 se redise
 - Ahora son cartas con la cara y el nombre entero. Cada turno pregunta por la letra que más divide, y se dan vuelta las que no coinciden con quien ganó.
 - 50 nombres se resuelven en unas seis preguntas.
 
-La tercera pasada del evaluador encontró cuatro cosas graves, y se arreglaron:
+La tercera pasada de la revisión visual encontró cuatro cosas graves, y se arreglaron:
 - **Los nombres en el celular.** Volvían sobre su agujero. Ahora la mesa se achica lo justo para que entren afuera, el que igual no entra se achica él, y la cámara del celular solo se acerca en el último tiro.
 - **El ganador de la fila de arriba.** Quedaba debajo del cartel en 5 de 12 semillas. Ahora la cámara lo deja a un 62% del alto, también con el cartel.
 - **El foco de ¿Quién es?** Frenaba en la carta anterior a la del ganador, por un error de uno.
@@ -1044,7 +1044,7 @@ Resultado (2026-10-05): el juego cruceño que pidió Nicolás ("pongamos la chov
 
 **Pasar lista en los demás juegos.** El estadio tiene dos piezas nuevas, `tags()` y `batch()`: los nombres de a tandas de ocho encima de cada uno, repartidos para que no se pisen, en una capa que los juegos no vacían. Las usan la Chovena (en las filas y en el primer baile), el Trompo (mientras bailan antes del primer choque), el Teleférico (en el embarque, encima de cada cabina), el Aguayo (mientras se teje) y la Constelación (mientras se arma el cielo).
 
-La primera pasada del agente evaluador encontró cuatro cosas graves, y se arreglaron:
+La primera pasada de la revisión visual encontró cuatro cosas graves, y se arreglaron:
 - **La ropa salía del puesto en la rueda, no del nombre.** "Carlos" bailaba de tipoy y "Elena" de sombrero; en ropa indígena tradicional eso se lee como burla. Ahora sale del nombre, con una lista de nombres comunes y la terminación.
 - **Los hombres de espaldas parecían caras negras sin rasgos.** La nuca era toda de pelo; ahora es de piel, con el pelo corto arriba, y la línea de botones solo se ve de frente.
 - **El "¡QUIETOS!" tapaba a los que trastabillan.** Ahora va donde no tapa a nadie, o no sale.
@@ -1052,7 +1052,7 @@ La primera pasada del agente evaluador encontró cuatro cosas graves, y se arreg
 
 Y otras: los brazos apuntan a los vecinos y la cadena va de mano a mano; el color de las cintas es el de la cara en el nombre; los nombres van con un hilo cuando se corren; se pasa lista en cada baile; la pareja final se encuadra por su tamaño real, así que con doscientos se ve grande; con dos personas arrancan lado a lado y hay un amague más; en el celular la plaza baja y la rueda entra.
 
-La segunda pasada del agente evaluador encontró dos cosas graves y once menores. Cada una se verificó con sus capturas antes de arreglarla:
+La segunda pasada de la revisión visual encontró dos cosas graves y once menores. Cada una se verificó con sus capturas antes de arreglarla:
 - **En el celular, el "¡QUIETOS!" quedaba tapado** por el contador, el aviso y la lista de los que salen. **En escritorio, con la cámara cerca, aparecía tarde y saltaba de lugar**: ninguno de sus tres lugares fijos quedaba libre de cuerpos. Ahora el lugar se decide una sola vez, en el cuadro del corte. Es el lugar libre más cercano al medio de la rueda, recorriendo la pantalla de arriba abajo. Cuentan los cuerpos donde están y donde los deja la cámara, el conjunto, el contador, el aviso, la lista y los nombres de ese corte. Si no entra, sale más chico.
 - **En la final, la rival salía de cuadro en un instante,** con el ganador señalando a nadie. Ahora se sienta a unos pasos, a la vista, y la mano del que se suelta cae.
 - **De las filas a la rueda, los hombres se amontonaban en un costado.** Su fila iba en el sentido contrario al de la rueda y se cruzaban entre ellos. Ahora cada fila va en el sentido de la rueda y gira para un mismo lado, y los de adelante pasan por afuera.
@@ -1168,13 +1168,13 @@ Resultado (2026-10-03): el autor sentía el sitio "muy básico". La herramienta 
 - **Cómo funciona.** Cinco pasos sin jerga, qué queda guardado y dónde, y qué hacer si no confiás en Tinkazo.
 - **El menú** en todas las páginas, con la cuenta a la vista ("Mi cuenta" o "Entrar"). El idioma se recuerda entre páginas y la primera vez sigue al navegador. Una demo nunca graba nada, aunque haya una cuenta abierta.
 
-**El costo, medido de nuevo.** El agente evaluador selló y sorteó, buscó lo cobrado en Horizon y no coincidía con lo publicado. Con el mismo contrato:
+**El costo, medido de nuevo.** Se selló y sorteó, y lo cobrado en Horizon no coincidía con lo publicado. Con el mismo contrato:
 - un sorteo cuesta hoy **0,76 XLM** (0,42 el sello, 0,34 el sorteo), unos 16 centavos;
 - el 16 de septiembre costaba 0,18.
 
 Casi todo es renta de almacenamiento y la tarifa la pone la red. Se corrigió en la portada, en precios, en los README, en la marca, en los despliegues y en el pitch. El requisito NFR-3 (menos de 0,25 XLM) hoy no se cumple en testnet, y queda dicho en el PRD: en mainnet se mide al desplegar.
 
-**La información, verificada.** Un agente revisó, afirmación por afirmación, todo lo que dicen las páginas públicas contra el código y los documentos. Lo que cambió:
+**La información, verificada.** Una revisión, afirmación por afirmación, contrastó todo lo que dicen las páginas públicas con el código y los documentos. Lo que cambió:
 
 - **Testnet se borra el 16 de diciembre de 2026, y ahora se dice.** Lo dicen precios, términos, seguridad y la verificación de un comprobante de testnet. Varias frases prometían que el registro dura para siempre: eso es en mainnet, mientras se pague la renta.
 - **La verificación distingue** un sorteo que el contrato no tiene de una red que no contesta. Antes los dos decían "no es señal de que algo esté mal" y mostraban la tarjeta del ganador.

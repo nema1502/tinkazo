@@ -216,7 +216,7 @@ Dos reglas que valen para todos los juegos:
 - La app nunca guarda llaves; la wallet firma. Los archivos `.env*`, `.vercel/` y `.stellar/` están ignorados por git.
 - Las direcciones de contrato se cambian solo vía `deployments.ts` + `deployments.md` en el mismo commit.
 
-**Todo agente debe:**
+**Todo colaborador debe:**
 - Implementar la matemática exactamente como el [Protocolo](protocolo.md) y pasar `docs/vectors.json`.
 - Mantener el modo libre funcionando sin wallet ni red de Stellar.
 - No agregar dependencias fuera de las listadas en las decisiones sin actualizar este documento.
