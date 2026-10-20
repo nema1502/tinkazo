@@ -136,12 +136,12 @@ export interface PixiStage {
    */
   tags(names: string[], who: readonly number[], at: (i: number) => { x: number; y: number } | null, avoid?: readonly { x: number; y: number; width: number; height: number }[]): void;
   /**
-   * La tanda de la lista que toca en `t`: todos de a ocho, entre `t0` y `t1`,
-   * tomando uno de cada tantos de `order` para que la tanda quede repartida por
-   * la escena. Vacía fuera de ese rato o con más de 64 personas, donde los
-   * nombres ya no entran.
+   * La tanda de la lista que toca en `t`: de a `max` (ocho si no se pide otra
+   * cosa), entre `t0` y `t1`, tomando uno de cada tantos de `order` para que la
+   * tanda quede repartida por la escena. Vacía fuera de ese rato o con más de 64
+   * personas, donde los nombres ya no entran.
    */
-  batch(n: number, t: number, t0: number, t1: number, order?: readonly number[]): number[];
+  batch(n: number, t: number, t0: number, t1: number, order?: readonly number[], max?: number): number[];
   /**
    * El respiro antes del ganador: la música se corta 0,4 s reales antes de
    * coronar y el remate la vuelve a abrir. `t` es el reloj del juego, `at`
@@ -722,9 +722,9 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       musicBreath();
     }
   };
-  const batch = (n: number, t: number, t0: number, t1: number, order?: readonly number[]): number[] => {
+  const batch = (n: number, t: number, t0: number, t1: number, order?: readonly number[], max = 8): number[] => {
     if (n > 64 || n <= 0 || t < t0 || t >= t1) return [];
-    const B = Math.max(1, Math.ceil(n / 8));
+    const B = Math.max(1, Math.ceil(n / Math.max(1, max)));
     const b = Math.min(B - 1, Math.floor(((t - t0) / (t1 - t0)) * B));
     const seq = order ?? Array.from({ length: n }, (_, i) => i);
     return seq.filter((_, j) => j % B === b);

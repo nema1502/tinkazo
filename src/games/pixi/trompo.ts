@@ -1311,7 +1311,9 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
 
     // Pasar lista: mientras bailan, antes del primer choque, los nombres de a
     // tandas encima de cada trompo, para que cada uno sepa cuál es el suyo.
-    const roll = phase === "crown" ? [] : S.batch(n, tAll, T_THROW - 0.8, T_FIGHT - 0.05);
+    // En vertical, de a cinco: con ocho, el chip ancho no entraba entre el
+    // contador y el ruedo, y la torre quedaba lejos de su trompo.
+    const roll = phase === "crown" ? [] : S.batch(n, tAll, T_THROW - 0.8, T_FIGHT - 0.05, undefined, S.portrait() ? 5 : 8);
     // El contador no se tapa: en un celular, con la letra legible, la columna
     // de nombres subía hasta encima de él.
     S.tags(names, roll, (i) => {
@@ -1359,30 +1361,47 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
         return { q, x0: a.x, y0: a.y, x1: b.x, y1: b.y };
       });
       let prev = -Infinity, prevH = 0;
+      // El contador: ningún nombre se pone encima, ni el que sale por el borde.
+      const cont = counterBox.getBounds();
       for (const { q, out, p } of at) {
         const nm = names[q.idx] ?? "";
         const chip = out
           ? (q.outChip ??= chips.addChild(S.chip(winners.indexOf(q.idx) > 0 ? `★ ${nm}` : nm, 1, nm)))
           : (q.chip ??= chips.addChild(S.chip(nm)));
-        const sc = out ? 1 : grande;
-        chip.scale.set(sc);
+        const escala = out ? 1 : grande;
         chip.alpha = out ? clamp((OUT_TAG - q.out) / 0.5, 0, 1) : 1;
         chip.visible = true;
-        // El medio alto de verdad: con los 13 por escala de antes escritos a
-        // mano, los chips de letra legible se encimaban (16 de octubre de 2026).
-        const ch = chip.height / 2 + k;
-        const cy = Math.max(p.y, prev + prevH + ch);
-        prev = cy;
-        prevH = ch;
-        const cw = chip.width;
-        const tapa = (x: number): boolean => cuerpos.some((c) => c.q !== q && x < c.x1 && x + cw > c.x0 && cy - ch < c.y1 && cy + ch > c.y0);
-        let x = Math.min(p.x + 4 * k, W - cw - 10 * k);
-        // Si a la derecha tapa al otro trompo, a la izquierda del suyo.
-        if (tapa(x)) {
-          const izq = Math.max(10 * k, cam.toScreen(toWorld(q.x, q.y).x - size * 0.35, 0, W, H).x - 4 * k - cw);
-          if (!tapa(izq)) x = izq;
-        }
-        chip.position.set(x, cy);
+        /**
+         * Dónde cae el nombre a esa escala: a la derecha de su trompo o, si
+         * tapa a otro, a la izquierda. `abajo` lo baja debajo del contador.
+         */
+        const ubicar = (sc: number, abajo: boolean): { x: number; y: number; ch: number; libre: boolean } => {
+          chip.scale.set(sc);
+          // El medio alto de verdad: con los 13 por escala de antes escritos a
+          // mano, los chips de letra legible se encimaban (16 de octubre de 2026).
+          const ch = chip.height / 2 + k;
+          const cw = chip.width;
+          let cy = Math.max(p.y, prev + prevH + ch);
+          if (abajo) cy = Math.max(cy, cont.y + cont.height + 4 * k + ch);
+          const tapa = (x: number): boolean =>
+            cuerpos.some((c) => c.q !== q && x < c.x1 && x + cw > c.x0 && cy - ch < c.y1 && cy + ch > c.y0) ||
+            (x < cont.x + cont.width && x + cw > cont.x && cy - ch < cont.y + cont.height && cy + ch > cont.y);
+          let x = Math.min(p.x + 4 * k, W - cw - 10 * k);
+          // Si a la derecha tapa al otro trompo, a la izquierda del suyo.
+          if (tapa(x)) {
+            const izq = Math.max(10 * k, cam.toScreen(toWorld(q.x, q.y).x - size * 0.35, 0, W, H).x - 4 * k - cw);
+            if (!tapa(izq)) x = izq;
+          }
+          return { x, y: cy, ch, libre: !tapa(x) };
+        };
+        // Primero a su escala; si tapa, a la letra chica; y si el contador
+        // queda justo arriba, debajo de él.
+        let pos = ubicar(escala, false);
+        if (!pos.libre && escala > 1) pos = ubicar(1, false);
+        if (!pos.libre) pos = ubicar(1, true);
+        prev = pos.y;
+        prevH = pos.ch;
+        chip.position.set(pos.x, pos.y);
       }
     }
 
