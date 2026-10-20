@@ -53,6 +53,19 @@ let moBoton: MutationObserver | null = null;
 let alto = 0;
 let ultimaClave = "";
 
+/**
+ * Mide la barra y deja su alto en `--sig-alto`: de ahí salen el aire de abajo
+ * de la página y el lugar del aviso flotante. Se vuelve a medir al ponerla,
+ * con su texto ya escrito: vacía mide menos (en el celular la línea del paso
+ * queda sobre el botón) y el pie de la página quedaba a medias detrás de ella.
+ */
+function medirBarra(): void {
+  const h = Math.ceil($("siguiente").offsetHeight);
+  if (h === alto) return;
+  alto = h;
+  document.documentElement.style.setProperty("--sig-alto", `${h}px`);
+}
+
 /** Cuánto tiene que llevar el botón fuera de la pantalla, y la pantalla quieta, para que entre la barra (ms). */
 const DEMORA = 250;
 const QUIETO = 150;
@@ -165,10 +178,12 @@ function pintarBarra(s: Toca, mostrar: boolean): void {
     const p = $("sig-paso");
     if (p.textContent !== l) p.textContent = l;
   }
+  const entra = mostrar && !bar.classList.contains("on");
   bar.classList.toggle("on", mostrar);
   // Escondida de verdad: ni el foco ni el lector la encuentran.
   bar.inert = !mostrar;
   document.body.classList.toggle("con-siguiente", mostrar);
+  if (entra) medirBarra();
 }
 
 function render(): void {
@@ -226,8 +241,7 @@ function vigilar(boton: HTMLButtonElement | null): void {
  * lo tapa.
  */
 function armar(): void {
-  alto = Math.ceil($("siguiente").offsetHeight);
-  document.documentElement.style.setProperty("--sig-alto", `${alto}px`);
+  medirBarra();
   const cab = document.querySelector("header");
   const arriba = cab && getComputedStyle(cab).position === "sticky" ? Math.ceil(cab.getBoundingClientRect().height) : 0;
   io?.disconnect();

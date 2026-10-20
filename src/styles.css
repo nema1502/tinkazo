@@ -1362,7 +1362,7 @@
   .siguiente.on { visibility: visible; transform: none; transition: transform 0.18s ease; }
   .sig-in { max-width: 1060px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px 20px; }
   .sig-paso {
-    margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    margin: 0; min-width: 0; min-height: 1.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2);
   }
   #sig-btn { flex: 0 0 auto; max-width: 100%; min-height: 52px; }
