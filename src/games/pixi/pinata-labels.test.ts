@@ -79,6 +79,20 @@ describe("layoutLabels", () => {
     expect(out).toHaveLength(1);
   });
 
+  it("never overlaps a hard rectangle, not even when the short search is the only one left", () => {
+    const hard = [{ x: 0, y: 100, w: 390, h: 300 }];
+    const everywhere = [{ x: 0, y: 100, w: 390, h: 626 }];
+    const out = layoutLabels([item(1, 100, 350)], B, everywhere, hard);
+    expect(out).toHaveLength(1);
+    expect(overlap({ x: out[0]!.x, y: out[0]!.y, w: 100, h: 30 }, hard[0]!)).toBe(false);
+  });
+
+  it("lets an ignoreBlocked label keep its anchor over a soft blocked rectangle", () => {
+    const blocked = [{ x: 50, y: 280, w: 200, h: 100 }];
+    expect(layoutLabels([{ ...item(1, 100, 300), ignoreBlocked: true }], B, blocked)).toEqual([{ id: 1, x: 100, y: 300 }]);
+    expect(layoutLabels([item(1, 100, 300)], B, blocked)[0]).not.toEqual({ id: 1, x: 100, y: 300 });
+  });
+
   it("does not throw or return NaN on degenerate input", () => {
     const its = [item(1, NaN, NaN, NaN, 0, 0), item(2, Infinity, -Infinity, 1, -5, -5), item(3, 10, 10, 0, 9999, 9999)];
     const out = layoutLabels(its, B);
