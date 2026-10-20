@@ -86,6 +86,26 @@ export function chooseLang(l: Lang): void {
   setLang(l);
 }
 
+/**
+ * El título y la descripción que una página de sorteo dice de sí misma en un
+ * idioma. Su `<html>` pide las claves (`data-titulo-clave` y `data-desc-clave`)
+ * y el diccionario las trae en los dos idiomas. Una página sin claves no dice
+ * nada, y queda como está escrita.
+ */
+export function metasDePagina(dict: Textos, ds: DOMStringMap): { titulo?: string; desc?: string } {
+  const titulo = ds.tituloClave ? dict[ds.tituloClave] : undefined;
+  const desc = ds.descClave ? dict[ds.descClave] : undefined;
+  return {
+    ...(typeof titulo === "string" ? { titulo } : {}),
+    ...(typeof desc === "string" ? { desc } : {}),
+  };
+}
+
+/** Pone el `content` de una etiqueta `meta` si la página la trae. */
+function fijarMeta(selector: string, valor: string): void {
+  document.querySelector<HTMLMetaElement>(selector)?.setAttribute("content", valor);
+}
+
 export function setLang(l: Lang): void {
   current = l;
   document.documentElement.lang = l;
@@ -114,12 +134,16 @@ export function setLang(l: Lang): void {
     if (typeof v === "string") el.setAttribute("aria-label", v);
   });
   // Las páginas de sorteo dicen su título y su descripción en el idioma de la
-  // página: el `<html>` trae las claves en `data-titulo-clave` y `data-desc-clave`.
-  const { tituloClave, descClave } = document.documentElement.dataset;
-  const titulo = tituloClave ? dict[tituloClave] : undefined;
-  if (typeof titulo === "string") document.title = titulo;
-  const desc = descClave ? dict[descClave] : undefined;
-  const meta = document.querySelector<HTMLMetaElement>('meta[name="description"]');
-  if (typeof desc === "string" && meta) meta.content = desc;
+  // página, y lo mismo en las etiquetas og: lo que se comparte sale en el
+  // idioma que se lee.
+  const { titulo, desc } = metasDePagina(dict, document.documentElement.dataset);
+  if (titulo !== undefined) {
+    document.title = titulo;
+    fijarMeta('meta[property="og:title"]', titulo);
+  }
+  if (desc !== undefined) {
+    fijarMeta('meta[name="description"]', desc);
+    fijarMeta('meta[property="og:description"]', desc);
+  }
   for (const fn of listeners) fn(l);
 }

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { T } from "./i18n";
+import { metasDePagina } from "./idioma";
 
 /**
  * Lo que los buscadores leen del sitio: etiquetas canónicas, idiomas, datos
@@ -205,6 +206,38 @@ describe("título y descripción de las páginas nuevas, en el idioma de la pág
     const { titulo, desc } = clavesDePagina(html);
     expect(T.es[titulo]).toBe(NUEVAS[archivo]?.titulo);
     expect(T.es[desc]).toBe(descripcion(html));
+  });
+});
+
+describe("og:title y og:description, en el idioma de la página", () => {
+  /** Las claves de título y descripción que pide el `<html>` de una página. */
+  const clavesOg = (html: string): { tituloClave: string; descClave: string } => {
+    const etiqueta = html.match(/<html\b[^>]*>/)?.[0] ?? "";
+    return {
+      tituloClave: etiqueta.match(/\sdata-titulo-clave="([^"]+)"/)?.[1] ?? "",
+      descClave: etiqueta.match(/\sdata-desc-clave="([^"]+)"/)?.[1] ?? "",
+    };
+  };
+  const ogTitulo = (html: string): string => html.match(/<meta property="og:title" content="([^"]*)"/)?.[1] ?? "";
+
+  it.each(Object.keys(NUEVAS))("%s: sin JavaScript, las etiquetas og están en español, como el título", (archivo) => {
+    const html = leer(archivo);
+    const { tituloClave, descClave } = clavesOg(html);
+    expect(ogTitulo(html)).toBe(T.es[tituloClave]);
+    expect(ogDescripcion(html)).toBe(T.es[descClave]);
+  });
+
+  it.each(Object.keys(NUEVAS))("%s: en inglés, las mismas claves dan el og:title y el og:description en inglés", (archivo) => {
+    const { tituloClave, descClave } = clavesOg(leer(archivo));
+    const en = metasDePagina(T.en, { tituloClave, descClave });
+    expect(en.titulo, "og:title en en").toBeTruthy();
+    expect(en.desc, "og:description en en").toBeTruthy();
+    expect(en.titulo).not.toBe(T.es[tituloClave]);
+    expect(en.desc).not.toBe(T.es[descClave]);
+  });
+
+  it("una página sin claves no cambia sus etiquetas", () => {
+    expect(metasDePagina(T.en, {})).toEqual({});
   });
 });
 
