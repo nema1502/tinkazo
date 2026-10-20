@@ -130,8 +130,48 @@ describe("cada página pública", () => {
       NUEVAS[archivo]?.titulo,
       descripcion(html),
     ].filter((v): v is string => typeof v === "string");
-    const prohibidas = /rifa|raffle|apuesta|lotería|loteria|casino|premio en efectivo|premio en dinero|garantiz|imposible de trampear/i;
+    const prohibidas = /rifa|raffle|apuesta|lotería|loteria|casino|premio en efectivo|premio en dinero|garantiz|imposible de trampear|sin confiar en quien|no hace falta confiar en quien|favoritos|a dedo/i;
     expect(textos.filter((t) => prohibidas.test(t))).toEqual([]);
+  });
+});
+
+/** Cada elemento con `data-i`: su clave y el texto que trae escrito, sin etiquetas ni espacios de más. */
+const elementosConClave = (html: string): Array<{ clave: string; texto: string }> =>
+  [...html.matchAll(/<([a-z][a-z0-9]*)\b[^>]*?\sdata-i="([^"]+)"[^>]*>([\s\S]*?)<\/\1>/g)].map((m) => ({
+    clave: m[2] ?? "",
+    texto: (m[3] ?? "")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/\s+/g, " ")
+      .trim(),
+  }));
+
+/** El texto de `T.es` para una clave, con los espacios como en el HTML. */
+const textoEs = (clave: string): string => {
+  const valor = T.es[clave];
+  return typeof valor === "string" ? valor.replace(/\s+/g, " ").trim() : "";
+};
+
+/** Sin versión en inglés: la clave no existe en `T.en` o viene vacía. */
+const sinVersionEn = (clave: string): boolean => {
+  const valor = T.en[clave];
+  return typeof valor !== "string" || valor.trim() === "";
+};
+
+describe("el texto escrito en las páginas nuevas y en las tarjetas es el del diccionario", () => {
+  it.each(Object.keys(NUEVAS))("%s repite en español el texto de T.es, y cada clave tiene su versión en inglés", (archivo) => {
+    const elementos = elementosConClave(leer(archivo));
+    expect(elementos.length).toBeGreaterThan(0);
+    expect(elementos.filter((e) => e.texto !== textoEs(e.clave)).map((e) => `${e.clave}: ${e.texto}`)).toEqual([]);
+    expect(elementos.filter((e) => sinVersionEn(e.clave)).map((e) => e.clave)).toEqual([]);
+  });
+
+  it("las tarjetas de meetup, clase y verificable de la portada repiten el texto de T.es", () => {
+    const tarjetas = elementosConClave(leer("index.html")).filter((e) => /^mas(Meetup|Clase|Verif)[TB]$/.test(e.clave));
+    expect(tarjetas.map((e) => e.clave).sort()).toEqual(["masClaseB", "masClaseT", "masMeetupB", "masMeetupT", "masVerifB", "masVerifT"]);
+    expect(tarjetas.filter((e) => e.texto !== textoEs(e.clave)).map((e) => `${e.clave}: ${e.texto}`)).toEqual([]);
+    expect(tarjetas.filter((e) => sinVersionEn(e.clave)).map((e) => e.clave)).toEqual([]);
   });
 });
 
