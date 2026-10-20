@@ -181,17 +181,45 @@ class PollarWallet implements SubmittingWallet {
 
   async signAndSubmit(xdr: string): Promise<string> {
     const client = await this.#ensureClient();
-    const outcome = (await client.signAndSubmitTx(xdr)) as {
-      status?: string;
-      hash?: string;
-      details?: string;
-      code?: string;
-    };
+    const outcome = (await client.signAndSubmitTx(xdr)) as ResultadoDeEnvio;
     if (outcome.status === "error" || !outcome.hash) {
-      throw new Error(outcome.code ?? outcome.details ?? "pollar-submit-failed");
+      throw new Error(mensajeDeRechazo(outcome));
     }
     return outcome.hash;
   }
+}
+
+/**
+ * Lo que devuelve `signAndSubmitTx` de Pollar. El SDK no lanza cuando algo sale
+ * mal: devuelve `status: "error"` y deja el motivo en alguno de estos campos.
+ */
+export interface ResultadoDeEnvio {
+  status?: string;
+  hash?: string;
+  details?: string;
+  code?: string;
+  resultCode?: string;
+  message?: string;
+}
+
+/**
+ * El mensaje del error de un envío que Pollar no pudo hacer.
+ *
+ * El motivo no viene siempre en el mismo campo. Si la red rechazó la
+ * transacción, el SDK pone el código de resultado en `resultCode` y en
+ * `details` (`txInsufficientBalance`, `txFailed`…). Si el servidor contesta con
+ * un error de API, pone su código en `code` (`TX_SUBMIT_FAILED`…), un texto en
+ * `message` y el diagnóstico en `details`. Antes se lanzaba solo `code` o, si
+ * no había, `details`: con un error de API se perdía el motivo, y una cuenta
+ * sin saldo se mostraba como "la red rechazó la transacción, probá de nuevo"
+ * (probado el 19 de octubre de 2026 contra un servidor que responde así).
+ *
+ * Se juntan los cuatro, sin repetir y con el código de resultado primero, así
+ * quien interpreta el error (`errorKey`) lo encuentra venga por donde venga.
+ */
+export function mensajeDeRechazo(r: ResultadoDeEnvio): string {
+  const partes = [r.resultCode, r.details, r.code, r.message].filter((p): p is string => typeof p === "string" && p.length > 0);
+  return [...new Set(partes)].join(" · ") || "pollar-submit-failed";
 }
 
 /**
