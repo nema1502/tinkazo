@@ -1301,7 +1301,7 @@
      encabezado y el pie se achican para que el cuerpo tenga dónde recorrerse. */
   @media (max-height: 460px) {
     .acct-head { padding-block: 8px; }
-    .acct-body { padding-block: 8px 16px; gap: 16px; }
+    .acct-body { padding-block: 12px 16px; gap: 16px; }
     .acct-foot { padding-block: 4px; }
   }
   @media (prefers-reduced-motion: no-preference) {
