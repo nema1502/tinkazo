@@ -1,6 +1,6 @@
 import { $, esc } from "../dom";
 import { getLang, T, t } from "../i18n";
-import { EVENTO_AVISO_CARACTERES, EVENTO_TOPE, eventoUrl, type SorteoDelEvento } from "../protocol/evento";
+import { eventosUrls, type SorteoDelEvento } from "../protocol/evento";
 import { decodeProof } from "../protocol/proof";
 import { network, txUrl } from "../stellar/config";
 import type { ChainRaffle } from "../stellar/seals";
@@ -309,11 +309,11 @@ function cabeceraDeEvento(g: Entry[], gi: number): string {
 }
 
 /**
- * El mensaje del evento, con el enlace a evento.html que trae sus sorteos.
+ * El mensaje del evento, con sus enlaces: uno por parte si el evento es grande.
  * Solo entran los que tienen comprobante y se pueden leer, con sus ganadores.
  * Devuelve null si no queda ninguno.
  */
-async function mensajeDelEvento(g: Entry[]): Promise<string | null> {
+async function mensajeDelEvento(g: Entry[]): Promise<{ texto: string; partes: number } | null> {
   const sorteos: SorteoDelEvento[] = [];
   for (const e of g) {
     if (!tieneComprobante(e) || !e.winners?.length || !e.proof) continue;
@@ -326,8 +326,10 @@ async function mensajeDelEvento(g: Entry[]): Promise<string | null> {
   }
   if (!sorteos.length) return null;
   const fecha = fechaLarga(g[0]?.sealedAt ?? 0, getLang());
-  const enlace = await eventoUrl(t("histGrupoT").replace("{f}", fecha), sorteos);
-  return T[getLang()].summaryEvento(fecha, Math.min(sorteos.length, EVENTO_TOPE), enlace);
+  const parte = (i: number, n: number): string => t("evParte").replace("{i}", String(i)).replace("{n}", String(n));
+  const enlaces = await eventosUrls(t("histGrupoT").replace("{f}", fecha), sorteos, (i, n) => ` · ${parte(i, n)}`);
+  const enlace = enlaces.length === 1 ? (enlaces[0] ?? "") : enlaces.map((u, i) => `${parte(i + 1, enlaces.length)}: ${u}`).join("\n");
+  return { texto: T[getLang()].summaryEvento(fecha, sorteos.length, enlace), partes: enlaces.length };
 }
 
 /**
@@ -341,18 +343,18 @@ async function compartirEvento(g: Entry[], btn: HTMLButtonElement): Promise<void
   try {
     await navigator.clipboard.write([
       new ClipboardItem({
-        "text/plain": mensaje.then((s) => {
-          if (!s) throw new Error("evento-vacio");
-          return new Blob([s], { type: "text/plain" });
+        "text/plain": mensaje.then((r) => {
+          if (!r) throw new Error("evento-vacio");
+          return new Blob([r.texto], { type: "text/plain" });
         }),
       }),
     ]);
     copiado = true;
   } catch {
     try {
-      const s = await mensaje;
-      if (s) {
-        await navigator.clipboard.writeText(s);
+      const r = await mensaje;
+      if (r) {
+        await navigator.clipboard.writeText(r.texto);
         copiado = true;
       }
     } catch {
@@ -360,12 +362,9 @@ async function compartirEvento(g: Entry[], btn: HTMLButtonElement): Promise<void
     }
   }
   if (!copiado) return;
-  // Antes de que lo manden: con más sorteos de los que entran, o con un enlace que algunos chats cortan.
-  const s = await mensaje.catch(() => null);
-  const validos = g.filter((e) => tieneComprobante(e) && e.winners?.length && e.proof).length;
-  const aviso = validos > EVENTO_TOPE
-    ? t("evAvisoTope").replace("{n}", String(EVENTO_TOPE))
-    : s && s.length > EVENTO_AVISO_CARACTERES ? t("evAvisoLargo") : "";
+  // Si el evento se partió en enlaces, se dice antes de que lo manden: así no se pega uno solo.
+  const r = await mensaje.catch(() => null);
+  const aviso = r && r.partes > 1 ? t("evAvisoPartes").replace("{n}", String(r.partes)) : "";
   const orig = btn.textContent;
   btn.textContent = aviso || t("copied");
   setTimeout(() => (btn.textContent = orig), aviso ? 6000 : 1600);

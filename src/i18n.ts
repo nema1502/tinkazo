@@ -1186,7 +1186,6 @@ export const T: Record<Lang, Dict> = {
     evNoEvento: "Este enlace no trae un evento de Tinkazo.",
     evVersion: "Es de una versión de evento que esta página no conoce. Pedí el enlace de nuevo.",
     evVacio: "Este evento no tiene sorteos con comprobante.",
-    evMas: "Este enlace trae {n} sorteos, que es el tope. Hay {m} más fuera del enlace.",
     evUnSorteo: "1 sorteo", evNSorteos: "{n} sorteos",
     evSinPremio: "Sorteo sin premio", evGano: "Ganó", evGanaron: "Ganaron",
     evPersonas: "{n} personas", evSellado: "Sellado el {f}",
@@ -1250,10 +1249,10 @@ export const T: Record<Lang, Dict> = {
     summary: (w, n, premio, enlace, varios) =>
       `${premio ? `Sorteo de ${premio}: ${varios ? "ganaron" : "ganó"}` : varios ? "Ganaron" : "Ganó"} ${w}, entre ${n} personas.\nNadie eligió ${varios ? "estos nombres" : "este nombre"}.\nSi querés verificarlo, entrá acá: ${enlace}\n\nSorteado con Tinkazo · https://tinkazo.app`,
     summaryEvento: (f, n, enlace) =>
-      `Sorteos del ${f} (${n} ${n === 1 ? "sorteo" : "sorteos"}), todos verificables.\nSi querés verificarlos, entrá acá: ${enlace}\n\nSorteado con Tinkazo · https://tinkazo.app`,
+      `Sorteos del ${f} (${n} ${n === 1 ? "sorteo" : "sorteos"}), todos verificables.\nSi querés verificarlos, entrá acá:\n${enlace}\n\nSorteado con Tinkazo · https://tinkazo.app`,
     histGrupoT: "Sorteos del {f}", histGrupoCompartir: "Compartir el evento",
-    evAvisoLargo: "El enlace es largo: algunos chats lo cortan. Si son muchos sorteos, mandalo en partes.",
-    evAvisoTope: "Solo entran los primeros {n} sorteos del evento.",
+    evAvisoPartes: "El evento va en {n} enlaces, para que ninguno se corte al pegarlo.",
+    evParte: "Parte {i} de {n}",
     cTroSpent: (n) => pick([`¡Se le acabó la cuerda a ${n}!`, `¡Se apagó el trompo de ${n}!`, `¡${n} se queda sin cuerda!`]),
     // --- Constelación, sapo y ¿Quién es? (7 de octubre de 2026).
     cConstHeading: (n) => pick([`¿Va para ${n}…?`, `¿Se queda en ${n}…?`]),
@@ -2213,7 +2212,6 @@ export const T: Record<Lang, Dict> = {
     evNoEvento: "This link doesn't hold a Tinkazo event.",
     evVersion: "It's from an event version this page doesn't know. Ask for the link again.",
     evVacio: "This event has no draws with a receipt.",
-    evMas: "This link holds {n} draws, the limit. {m} more are left out.",
     evUnSorteo: "1 draw", evNSorteos: "{n} draws",
     evSinPremio: "Draw without a prize", evGano: "Won by", evGanaron: "Won by",
     evPersonas: "{n} people", evSellado: "Sealed on {f}",
@@ -2277,10 +2275,10 @@ export const T: Record<Lang, Dict> = {
     summary: (w, n, premio, enlace, varios) =>
       `${premio ? `${premio} draw: ${varios ? "the winners are" : "the winner is"}` : varios ? "The winners are" : "The winner is"} ${w}, out of ${n} people.\nNobody picked ${varios ? "these names" : "this name"}.\nIf you want to verify it, open this link: ${enlace}\n\nDrawn with Tinkazo · https://tinkazo.app`,
     summaryEvento: (f, n, enlace) =>
-      `Draws from ${f} (${n} ${n === 1 ? "draw" : "draws"}), all verifiable.\nIf you want to verify them, open this link: ${enlace}\n\nDrawn with Tinkazo · https://tinkazo.app`,
+      `Draws from ${f} (${n} ${n === 1 ? "draw" : "draws"}), all verifiable.\nIf you want to verify them, open this link:\n${enlace}\n\nDrawn with Tinkazo · https://tinkazo.app`,
     histGrupoT: "Draws from {f}", histGrupoCompartir: "Share the event",
-    evAvisoLargo: "The link is long: some chats cut it off. If there are many draws, send it in parts.",
-    evAvisoTope: "Only the first {n} draws of the event fit in the link.",
+    evAvisoPartes: "The event goes in {n} links, so none gets cut when pasted.",
+    evParte: "Part {i} of {n}",
     cTroSpent: (n) => pick([`${n}'s top runs out of spin!`, `${n}'s top stops spinning!`, `${n} is out of spin!`]),
     // --- Constellation, sapo and Guess Who (7 October 2026).
     cConstHeading: (n) => pick([`Is it going to ${n}…?`, `Is it stopping at ${n}…?`]),

@@ -19,7 +19,7 @@ Si querés verificarlos, entrá acá: https://tinkazo.app/evento.html#…
 Sorteado con Tinkazo · https://tinkazo.app
 ```
 
-- Un evento lleva **como máximo 30 sorteos**, los primeros por fecha. Si tiene más, el enlace trae esos 30 y la página avisa cuántos quedaron fuera.
+- Un evento no tiene tope de sorteos. Se reparte en **varios enlaces** cuando uno pasaría de unos 8 mil caracteres (unos cuatro sorteos de 200 personas). Cada enlace dice cuál es (parte 1 de 3, y así), y ningún sorteo queda afuera.
 
 ## Qué se comprueba sin la cadena
 
@@ -47,7 +47,7 @@ Si los tres cuadran, el sorteo cuadra. El veredicto de arriba dice si cuadran to
 ## Límites
 
 - El enlace crece con los nombres, porque cada sorteo lleva su lista entera. Medido con listas de 200 personas con nombres distintos, 4 sorteos pesan unos 8 KB y 30 sorteos unos 50 KB. Algunos chats cortan los enlaces muy largos al pegarlos; si pasa, cada sorteo sigue teniendo su propio comprobante, que se abre desde Mis sorteos con «Ver comprobante».
-- El tope de 30 es por enlace. Un evento con más sorteos no se reparte en varios enlaces: los que pasan del tope quedan fuera del enlace de evento, y la página lo dice.
+- Un sorteo que pesa más que ese tamaño, por ejemplo uno con miles de personas, va en un enlace propio: queda entero, aunque ese enlace sea largo.
 - El título y el mensaje se escriben en el idioma de quien comparte. La página los muestra tal cual.
 
 ## Formato
@@ -67,7 +67,6 @@ El texto después del `#` es igual al de un comprobante (`src/protocol/proof.ts`
 ```
 
 - Cada sorteo es su comprobante completo más `ganadores`: los nombres que salieron, en orden. `net`, `contract` e `id` aparecen solo si el sorteo está anclado.
-- `mas` aparece solo cuando quedaron sorteos fuera del tope de 30.
 - Una versión que la página no conoce se rechaza entera: no muestra nada a medias.
 
 Implementación: `src/protocol/evento.ts` (formato), `src/ui/agrupar.ts` (los eventos de una cuenta), `src/evento.ts` (la página). Las pruebas están en `src/protocol/evento.test.ts`, `src/ui/agrupar.test.ts`, `src/mensaje.test.ts` y `src/evento-textos.test.ts`.

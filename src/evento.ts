@@ -3,7 +3,7 @@ import { $, esc } from "./dom";
 import { getLang, onLangChange, texto as t } from "./idioma";
 import { canonicalList, listHash } from "./protocol/canonical";
 import { prepararFirma, verifyRoundAsync } from "./protocol/firma";
-import { EVENTO_TOPE, type Evento, decodeEvento, type SorteoDelEvento, verificarUrlDe } from "./protocol/evento";
+import { type Evento, decodeEvento, type SorteoDelEvento, verificarUrlDe } from "./protocol/evento";
 import { bytesToHex, fetchRound, hexToBytes, randomnessOf } from "./protocol/quicknet";
 import { select } from "./protocol/select";
 import { isAnchored } from "./protocol/proof";
@@ -31,7 +31,7 @@ interface Revision {
 let evento: Evento | null = null;
 /** La clave del texto que explica por qué no hay evento que mostrar. */
 let claveError: string | null = null;
-/** Los sorteos que se muestran (hasta el tope), en el orden del enlace. */
+/** Los sorteos que se muestran, en el orden del enlace. */
 let entran: SorteoDelEvento[] = [];
 let verificar: string[] = [];
 let anclado: boolean[] = [];
@@ -123,12 +123,9 @@ function pintarLista(): void {
     caja.style.display = "none";
     return;
   }
-  const fuera = (evento.mas ?? 0) + Math.max(0, evento.sorteos.length - EVENTO_TOPE);
   $("ev-titulo").textContent = evento.titulo;
   document.title = `${evento.titulo} · Tinkazo`;
   $("ev-count").textContent = entran.length === 1 ? t("evUnSorteo") : t("evNSorteos").replace("{n}", String(entran.length));
-  $("ev-mas").textContent = fuera ? t("evMas").replace("{n}", String(EVENTO_TOPE)).replace("{m}", String(fuera)) : "";
-  $("ev-mas").style.display = fuera ? "block" : "none";
   $("ev-lista").innerHTML = entran.length ? entran.map((s, i) => tarjeta(s, i)).join("") : `<p class="note">${esc(t("evVacio"))}</p>`;
 }
 
@@ -148,7 +145,7 @@ async function main(): Promise<void> {
     return;
   }
   evento = ev;
-  entran = ev.sorteos.slice(0, EVENTO_TOPE);
+  entran = ev.sorteos;
   if (entran.length === 0) {
     claveError = "evVacio";
     revisando = false;

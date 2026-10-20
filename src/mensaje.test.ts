@@ -55,7 +55,8 @@ describe("mensaje del resultado", () => {
 describe("mensaje del evento", () => {
   it("es: cuántos sorteos hay, verificables, con el enlace y el pie", () => {
     expect(T.es.summaryEvento("20 de octubre de 2026", 3, enlace)).toBe(
-      `Sorteos del 20 de octubre de 2026 (3 sorteos), todos verificables.\nSi querés verificarlos, entrá acá: ${enlace}\n\n${pie.es}`,
+      `Sorteos del 20 de octubre de 2026 (3 sorteos), todos verificables.\nSi querés verificarlos, entrá acá:
+${enlace}\n\n${pie.es}`,
     );
   });
 
@@ -66,7 +67,8 @@ describe("mensaje del evento", () => {
   it("en: cuántos sorteos hay, con el enlace y el pie", () => {
     const m = T.en.summaryEvento("October 20, 2026", 3, enlace);
     expect(m.startsWith("Draws from October 20, 2026 (3 draws), all verifiable.\n")).toBe(true);
-    expect(m).toContain(`If you want to verify them, open this link: ${enlace}`);
+    expect(m).toContain(`If you want to verify them, open this link:
+${enlace}`);
     expect(m.endsWith(pie.en)).toBe(true);
   });
 
