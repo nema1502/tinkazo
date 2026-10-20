@@ -27,6 +27,11 @@ describe("panel de la cuenta: quién no ve el saldo", () => {
     expect(moneyLine("Email", 250.5, "testnet")).toEqual({ balance: 250.5, fund: false });
   });
 
+  it("un saldo que no es un número cuenta como un saldo que no se pudo leer", () => {
+    expect(moneyLine("Freighter", Number.NaN, "testnet")).toEqual({ balance: "unknown", fund: false });
+    expect(moneyLine("Google", Number.NaN, "testnet")).toEqual({ balance: null, fund: false });
+  });
+
   it("con Freighter o la cuenta de prueba el saldo se muestra siempre, como hoy", () => {
     expect(moneyLine("Freighter", 0, "testnet").balance).toBe(0);
     expect(moneyLine("Cuenta de prueba", 10000, "testnet").balance).toBe(10000);

@@ -37,7 +37,9 @@ export interface MoneyLine {
  * leer), y nunca el grifo. Las demás (Freighter, la cuenta de prueba): el saldo
  * como siempre, y el grifo en testnet con menos de 20.
  */
-export function moneyLine(label: string, balance: number, net: string): MoneyLine {
+export function moneyLine(label: string, raw: number, net: string): MoneyLine {
+  // Un saldo que no es un número (la red contestó algo raro) es un saldo que no se pudo leer.
+  const balance = Number.isFinite(raw) ? raw : -1;
   if (feeCovered(label)) return { balance: balance >= 1 ? balance : null, fund: false };
   return {
     balance: balance < 0 ? "unknown" : balance,
