@@ -584,7 +584,7 @@
     .wordmark b { color: var(--magenta-ink); }
     .wm-llama { width: 31px; height: 31px; }
     .wm-llama svg { width: 20px; height: 22px; }
-    .langs button { padding: 4px 7px; }
+    .langs button { padding: 4px 7px; min-width: 44px; }
     .bar { gap: 10px; padding: 12px 14px; }
     .auth { gap: 6px; }
     .netbadge { font-size: 11px; padding: 5px 8px; letter-spacing: 0.08em; }
