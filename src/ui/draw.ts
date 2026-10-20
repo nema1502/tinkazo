@@ -379,7 +379,7 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
     .join(" ");
   const proof = $("proof");
   proof.textContent =
-    `Draw · quicknet round=${beacon.round} · signature verified ✓ · randomness=${beacon.randomness.slice(0, 24)}… · list_hash=${listHash.slice(0, 24)}… · count=${names.length} · winners=[${winners.join(",")}]`;
+    `Draw · quicknet round=${beacon.round} · ${t("proofOk")} ✓ · randomness=${beacon.randomness.slice(0, 24)}… · list_hash=${listHash.slice(0, 24)}… · count=${names.length} · winners=[${winners.join(",")}]`;
   const drawTx = app.drawn?.drawTx;
   if (drawTx) {
     proof.append(" · ");

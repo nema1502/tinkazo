@@ -104,8 +104,8 @@ async function run() {
 
     // --------------------------------- 3. la prueba de imparcialidad se llena
     check(
-      "la firma de la ronda quedó verificada",
-      /signature verified ✓/.test(s.proof) && /quicknet round=\d+/.test(s.proof),
+      "la prueba de la ronda quedó verificada",
+      /(?:proof verified|prueba verificada) ✓/.test(s.proof) && /quicknet round=\d+/.test(s.proof),
       s.proof.slice(0, 60) + "…",
     );
     check("el enlace a la ronda pública apunta a drand", s.drandLink.includes("api.drand.sh"));
