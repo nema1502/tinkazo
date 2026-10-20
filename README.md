@@ -80,7 +80,7 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 | Verification page | Live | Recomputes any draw in the browser from its proof link |
 | Twelve stadium games | Live | Deterministic: the same round draws the same frames on any machine |
 | Protocol v2 | Specified | [docs/protocolo.md](docs/protocolo.md) ([in English](docs/protocol.en.md)) and shared vectors that both implementations must pass |
-| Quality gates | Tests in CI, auditors before every push | 205 TypeScript tests and the 19 contract tests run in CI; nine custom auditors (below) run against the built site |
+| Quality gates | Tests in CI, auditors before every push | 205 TypeScript tests and the 19 contract tests run in CI; ten custom auditors (below) run against the built site |
 
 Tested with a thousand participants (September 22, with the previous engine): the draw ran at 60 frames per second and anchored the same way. Today's games are built for up to 200 on screen.
 
@@ -177,7 +177,7 @@ Almost all of the cost is storage rent, and the network sets that rate: on Septe
 
 ## Quality
 
-Nine auditors in [`scripts/`](scripts) run the real site in headless Chrome:
+Ten auditors in [`scripts/`](scripts) run the real site in headless Chrome:
 
 - **Game auditor**, 20 checks per game against live drand. The one that matters: the name on screen is the one the protocol fixed.
 - **Strict auditor**, which swaps the browser clock to compare two runs frame by frame: same round, same frames, no `Math.random`, never four seconds without something happening, a readable winner plate from the back of the room, with two people and with two hundred, on a phone.
@@ -188,6 +188,7 @@ Nine auditors in [`scripts/`](scripts) run the real site in headless Chrome:
 - **Collision auditor**, for the spinning tops: every hit really touches, with action and reaction, and nobody passes through anybody.
 - **Identification auditor**, with 8, 18 and 50 people: how many get to read their own name before the winner.
 - **Mix auditor**, which records what comes out of the speaker and measures loudness by the BS.1770 standard, peaks, how much a projector speaker loses and the winner's hit.
+- **Flow auditor**, the UX QA: it goes through the real flow with a test account on five screen sizes plus 200% zoom, and checks that every step has one main action in view without scrolling, that the "what's next" bar never covers anything, and that nobody gets lost ([`docs/ux.md`](docs/ux.md)).
 
 ## The next 30 days
 
@@ -235,7 +236,7 @@ docs/                           Protocol, architecture, threats, deployments, le
 scripts/                        Deployment, smoke test and the auditors
 ```
 
-In English: the [protocol](docs/protocol.en.md) and a [threat model summary](docs/threat-model.en.md). The rest of the documentation is in Spanish: [protocol](docs/protocolo.md) · [architecture](docs/architecture.md) · [threats](docs/amenazas.md) · [deployments and costs](docs/deployments.md) · [games](docs/juegos.md) · [legal](docs/legal.md) · [brand](docs/marca.md).
+In English: the [protocol](docs/protocol.en.md) and a [threat model summary](docs/threat-model.en.md). The rest of the documentation is in Spanish: [protocol](docs/protocolo.md) · [architecture](docs/architecture.md) · [threats](docs/amenazas.md) · [deployments and costs](docs/deployments.md) · [games](docs/juegos.md) · [legal](docs/legal.md) · [brand](docs/marca.md) · [UX](docs/ux.md).
 
 ## Team
 

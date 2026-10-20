@@ -80,7 +80,7 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 | Página de verificación | En producción | Rehace cualquier sorteo en el navegador desde su comprobante |
 | Doce juegos de estadio | En producción | Deterministas: la misma ronda dibuja los mismos cuadros en cualquier máquina |
 | Protocolo v2 | Especificado | [docs/protocolo.md](docs/protocolo.md) y vectores que las dos implementaciones tienen que pasar |
-| Controles de calidad | Tests en la CI, auditores antes de cada subida | 205 tests de TypeScript y los 19 del contrato corren en la CI; nueve auditores propios (abajo) corren contra el sitio construido |
+| Controles de calidad | Tests en la CI, auditores antes de cada subida | 205 tests de TypeScript y los 19 del contrato corren en la CI; diez auditores propios (abajo) corren contra el sitio construido |
 
 Probado con mil participantes (el 22 de septiembre, con el motor anterior): el sorteo andaba a sesenta cuadros por segundo y se anclaba igual. Los juegos de hoy están pensados para hasta doscientas personas en pantalla.
 
@@ -177,7 +177,7 @@ Casi todo el costo es alquiler de almacenamiento, y esa tarifa la pone la red: e
 
 ## Calidad
 
-Nueve auditores en [`scripts/`](scripts) corren el sitio de verdad en Chrome sin interfaz:
+Diez auditores en [`scripts/`](scripts) corren el sitio de verdad en Chrome sin interfaz:
 
 - **El de juegos**, veinte comprobaciones por juego contra drand de verdad. La que importa: el nombre en pantalla es el que fijó el protocolo.
 - **El exigente**, que cambia el reloj del navegador para comparar dos corridas cuadro contra cuadro: la misma ronda dibuja lo mismo, ni un `Math.random`, nunca cuatro segundos sin novedad, el cartel del ganador se lee desde el fondo de la sala, con dos personas y con doscientas, en un celular.
@@ -188,6 +188,7 @@ Nueve auditores en [`scripts/`](scripts) corren el sitio de verdad en Chrome sin
 - **El de choques**, para el trompo: cada golpe toca de verdad, con acción y reacción, y nadie atraviesa a nadie.
 - **El de identificación**, con 8, 18 y 50 personas: cuántos llegan a leer su nombre antes del ganador.
 - **El de mezcla**, que graba lo que sale por el parlante y mide la sonoridad con la norma BS.1770, los picos, cuánto se pierde en un parlante de proyector y el golpe del ganador.
+- **El de flujo**, la QA de UX: recorre el sorteo de verdad con una cuenta de prueba en cinco tamaños de pantalla y a 200 % de zoom, y comprueba que en cada paso hay una acción principal a la vista sin hacer scroll, que la barra de "lo que sigue" no tapa nada y que nadie se pierde ([`docs/ux.md`](docs/ux.md)).
 
 ## Los próximos 30 días
 
@@ -235,7 +236,7 @@ docs/                           Protocolo, arquitectura, amenazas, despliegues, 
 scripts/                        Despliegue, prueba de humo y los auditores
 ```
 
-Documentación: [protocolo](docs/protocolo.md) · [arquitectura](docs/architecture.md) · [amenazas](docs/amenazas.md) · [despliegues y costos](docs/deployments.md) · [juegos](docs/juegos.md) · [legal](docs/legal.md) · [marca](docs/marca.md).
+Documentación: [protocolo](docs/protocolo.md) · [arquitectura](docs/architecture.md) · [amenazas](docs/amenazas.md) · [despliegues y costos](docs/deployments.md) · [juegos](docs/juegos.md) · [legal](docs/legal.md) · [marca](docs/marca.md) · [UX](docs/ux.md).
 
 ## Quién lo hace
 
