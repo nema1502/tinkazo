@@ -1,5 +1,6 @@
 import { nativeToScVal } from "@stellar/stellar-sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { roundTime, targetRound } from "../protocol/quicknet";
 import { selloSinGrabar, type AnchorStep, type DrawResult, type SealResult } from "./anchor";
 
 // La primera prueba paga la carga en frío del SDK de Stellar (cada una vuelve a cargar
@@ -53,7 +54,8 @@ vi.mock("../stellar/wallet-lite", async (orig) => {
 });
 
 const DIR = "GBZQHWXF4I4ERXBLLHLQOENNXIJMHDGIYMFDYZVNX5KZM4OXTY4BDSQY";
-const ARGS = { organizer: DIR, listHash: new Uint8Array(32), count: 5, numWinners: 1, round: 123, meta: "premio" };
+/** Los argumentos del sello, con la ronda que elegiría `freeze.ts` ahora mismo: 45 s de margen. */
+const argsDeAhora = () => ({ organizer: DIR, listHash: new Uint8Array(32), count: 5, numWinners: 1, round: targetRound(Date.now() / 1000, 45), meta: "premio" });
 
 /** La transacción ya simulada: con su tope de comisión (0,75 XLM) y lista para entregar. */
 const txSimulada = () => ({ built: { fee: "7500000" }, simulationData: {}, toXDR: () => "AAAA", signAndSend: vi.fn() });
@@ -75,11 +77,11 @@ const sinSaldo = () => new Error("txInsufficientBalance");
 const pollar = (signAndSubmit = vi.fn(async () => "deadbeef")) => ({ kind: "external", address: DIR, submitsItself: true, signAndSubmit });
 
 /** Corre el sellado y devuelve lo que vio la pantalla, en orden, y cómo terminó. */
-async function sellar(): Promise<{ pasos: [AnchorStep, string | undefined][]; r?: SealResult; error?: unknown }> {
+async function sellar(args = argsDeAhora()): Promise<{ pasos: [AnchorStep, string | undefined][]; r?: SealResult; error?: unknown }> {
   const { sealOnChain } = await import("./anchor");
   const pasos: [AnchorStep, string | undefined][] = [];
   try {
-    const r = await sealOnChain(ARGS, (paso, detalle) => void pasos.push([paso, detalle]));
+    const r = await sealOnChain(args, (paso, detalle) => void pasos.push([paso, detalle]));
     return { pasos, r };
   } catch (error) {
     return { pasos, error };
@@ -373,6 +375,49 @@ describe("una cuenta de Pollar que todavía no existe en la red", () => {
     expect(eventos).toEqual([]);
   });
 
+  describe("la espera se comió el margen de la ronda", () => {
+    /** La cuenta aparece al cabo de `segundos` de preguntar una vez por segundo. */
+    const apareceA = (segundos: number) => {
+      for (let i = 0; i < segundos; i++) h.accountOnRpc.mockResolvedValueOnce(false);
+      h.accountOnRpc.mockResolvedValue(true);
+    };
+
+    it("con una espera larga no manda el sello (iba a entrar al ledger y fallar con RoundTooSoon): pide otra ronda, como el contrato", async () => {
+      apareceA(12);
+      h.wallet = pollar();
+      const { pasos, error } = await correr(sellar());
+      expect((error as Error).message).toContain("Error(Contract, #5)");
+      // Lo que hace freeze.ts: lo reconoce y reintenta con otra ronda, sin que haya quedado nada en la cadena.
+      const { selloSinGrabar, anchorErrorText } = await import("./anchor");
+      expect(selloSinGrabar(error)).toBe(true);
+      expect(await anchorErrorText(error)).toBe("Esa ronda está demasiado cerca. Probá de nuevo.");
+      // Ni simuló, ni firmó, ni mandó nada.
+      expect(pasos.map(([p]) => p)).toEqual(["preparing"]);
+      expect(h.seal).not.toHaveBeenCalled();
+      expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+    });
+
+    it("el reintento de freeze.ts, con la ronda nueva y la cuenta ya abierta, sella sin esperar", async () => {
+      apareceA(12);
+      const enviar = vi.fn(async () => "deadbeef");
+      h.wallet = pollar(enviar);
+      const primero = await correr(sellar());
+      expect(primero.error).toBeDefined();
+      const { r, pasos } = await correr(sellar());
+      expect(r?.txHash).toBe("deadbeef");
+      expect(pasos.map(([p]) => p)).toEqual(["simulating", "signing", "sending", "confirmed"]);
+      expect(enviar).toHaveBeenCalledTimes(1);
+    });
+
+    it("con una espera corta (la mediana de Pollar, 7 s) todavía alcanza y sella a la primera", async () => {
+      apareceA(2);
+      h.wallet = pollar();
+      const { r, pasos } = await correr(sellar());
+      expect(r?.txHash).toBe("deadbeef");
+      expect(pasos.map(([p]) => p)).toEqual(["preparing", "simulating", "signing", "sending", "confirmed"]);
+    });
+  });
+
   describe("la red la mostró pero simular dice 'Account not found'", () => {
     it("un respiro, se mira otra vez y se reintenta una vez: si ahora sale bien, sella", async () => {
       h.wallet = pollar();
@@ -538,6 +583,52 @@ describe("una comisión corta no es falta de saldo", () => {
     expect(enviar).toHaveBeenCalledTimes(1);
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
     expect(eventos).toEqual([]);
+  });
+});
+
+/**
+ * El contrato rechaza una ronda que nazca a menos de 30 s de la entrada al ledger. Al empezar a
+ * armar el sello tienen que faltar al menos 40: lo que sobra de los 45 que da `freeze.ts` alcanza
+ * para simular, firmar y entrar. Con el reloj fijo, para medirlo al segundo.
+ */
+describe("el margen de la ronda al empezar a armar el sello", () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ["Date"] }));
+  afterEach(() => vi.useRealTimers());
+
+  /** Una ronda y el instante en que faltan exactamente `faltan` segundos para que nazca. */
+  function conMargen(faltan: number) {
+    const round = targetRound(Math.floor(Date.now() / 1000), 45);
+    vi.setSystemTime((roundTime(round) - faltan) * 1000);
+    return { ...argsDeAhora(), round };
+  }
+
+  it.each([45, 44, 41, 40])("faltan %s s: alcanza, se arma el sello", async (faltan) => {
+    h.wallet = pollar();
+    const { r } = await sellar(conMargen(faltan));
+    expect(r?.txHash).toBe("deadbeef");
+  });
+
+  it.each([39.9, 35, 30, 29, 10, 0, -5])("faltan %s s: no alcanza, se pide otra ronda antes de mandar nada", async (faltan) => {
+    h.wallet = pollar();
+    const { error, pasos } = await sellar(conMargen(faltan));
+    expect((error as Error).message).toContain("Error(Contract, #5)");
+    expect(pasos).toEqual([]);
+    expect(h.seal).not.toHaveBeenCalled();
+  });
+
+  it("vale para cualquier wallet, no solo Pollar: el margen se come también con una librería que tarda en bajar", async () => {
+    h.wallet = { kind: "external", address: DIR, signTransaction: vi.fn() };
+    const { error } = await sellar(conMargen(20));
+    expect((error as Error).message).toContain("Error(Contract, #5)");
+    expect(h.seal).not.toHaveBeenCalled();
+  });
+
+  it("lo reconoce selloSinGrabar y lo cuenta errorKey como 'ronda cerca'", async () => {
+    h.wallet = pollar();
+    const { error } = await sellar(conMargen(10));
+    const { selloSinGrabar, anchorErrorText } = await import("./anchor");
+    expect(selloSinGrabar(error)).toBe(true);
+    expect(await anchorErrorText(error)).toBe("Esa ronda está demasiado cerca. Probá de nuevo.");
   });
 });
 

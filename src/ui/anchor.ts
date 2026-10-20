@@ -1,4 +1,5 @@
 import { getLang, t } from "../i18n";
+import { roundTime } from "../protocol/quicknet";
 import { network, txUrl } from "../stellar/config";
 import { grifoApagado, grifoDisponible, hayAyudaDeFondos } from "../stellar/grifo";
 import { conAyudaDeFondos, conCuentaLista, conTope, dormirCancelable, esperarCuenta, esperarHasta } from "./reintento";
@@ -67,9 +68,39 @@ export function sealOnChain(args: SealArgs, onStep: OnStep): Promise<SealResult>
   return conFondos(() => sellar(args, onStep), onStep);
 }
 
+/**
+ * Cuántos segundos tienen que faltar para que nazca la ronda al empezar a armar
+ * el sello.
+ *
+ * El contrato rechaza (`RoundTooSoon`, #5) una ronda que nazca a menos de 30 s de
+ * cuando la transacción entra a un ledger. `freeze.ts` elige la ronda con 45 s de
+ * margen al hacer clic, y de ahí salen unos segundos para simular, firmar y
+ * entrar. Si antes se esperó a que Pollar abriera la cuenta, el margen se come: la
+ * simulación todavía pasa (mira el último ledger, unos segundos atrás) y la
+ * transacción entra al ledger y falla. Se vio el 20 de octubre de 2026 con una
+ * cuenta nueva: costó una comisión y unos veinte segundos. Con menos de esto se
+ * pide otra ronda antes de mandar nada.
+ */
+const MARGEN_DE_RONDA_S = 40;
+
+/**
+ * La ronda ya no alcanza. Es el mismo caso que el contrato rechaza con `RoundTooSoon`
+ * (#5), y por eso lleva ese texto: `selloSinGrabar` lo reconoce y `freeze.ts` reintenta
+ * con una ronda nueva, sin que haya quedado nada en la cadena; si fuera lo último que
+ * pasa, `errorKey` lo cuenta como "esa ronda está demasiado cerca".
+ */
+class RondaMuyCerca extends Error {
+  constructor(faltan: number) {
+    super(`la ronda quedó cerca antes de mandar el sello (faltan ${Math.max(0, Math.round(faltan))} s): Error(Contract, #5)`);
+    this.name = "RondaMuyCerca";
+  }
+}
+
 async function sellar(args: SealArgs, onStep: OnStep): Promise<SealResult> {
   const { getClient } = await import("../stellar/contract");
   const client = await getClient();
+  const faltan = roundTime(args.round) - Date.now() / 1000;
+  if (faltan < MARGEN_DE_RONDA_S) throw new RondaMuyCerca(faltan);
   onStep("simulating");
   const tx = await client.seal({
     organizer: args.organizer,
