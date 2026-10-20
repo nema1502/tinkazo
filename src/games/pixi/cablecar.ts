@@ -371,7 +371,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     soloTags.clear();
     jumperTag = null;
     if (jumper) {
-      jumperTag = S.chip(names[loserIdx] ?? "", S.portrait() ? 1.25 : 1.5);
+      jumperTag = S.chip(names[loserIdx] ?? "", S.portrait() ? 1 : 1.5);
       jumperTag.visible = false;
       nameLayer.addChild(jumperTag);
     }
@@ -1005,7 +1005,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     if (few && tAll < T_CROWN) {
       // Más grandes cuando quedan dos: es el momento que decide.
       const quedan = P.leftAt(tAll);
-      const sc = G.vertical ? (quedan <= 2 ? 1.3 : 1.12) : quedan <= 2 ? 1.6 : 1.3;
+      // En vertical, la base legible (19 px): agrandados se salían de la pantalla.
+      const sc = G.vertical ? 1 : quedan <= 2 ? 1.6 : 1.3;
       const z = zoomNow();
       // Las cabinas vacías no cuentan: se están yendo cable abajo.
       const boxes = new Map<number, Box>();
@@ -1031,7 +1032,10 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         // La caja es del chip de verdad: con 25 * u * sc, que no lleva CHIP_SCALE, era el 62 % del alto.
         const w = e.chip.width, h = e.chip.height, gap = 8 * u;
         const at = (side: number): Box => {
-          const x = side === 0 ? box.x0 + (box.x1 - box.x0) * 0.1 : side === 1 ? box.x0 - gap - w : side === 2 ? box.x1 + gap : box.x0;
+          const x0 = side === 0 ? box.x0 + (box.x1 - box.x0) * 0.1 : side === 1 ? box.x0 - gap - w : side === 2 ? box.x1 + gap : box.x0;
+          // Debajo y encima de la cabina el nombre se corre hasta el borde antes de
+          // probar si entra: sin eso ningún costado entraba y caía sobre su propia cabina.
+          const x = side === 0 || side === 3 ? clamp(x0, 8 * u, Math.max(8 * u, W - w - 8 * u)) : x0;
           const y = side === 0 ? box.y1 + gap + h / 2 : side === 3 ? box.y0 - 64 * G.k * z - gap - h / 2 : cy;
           return { x0: x, y0: y - h / 2, x1: x + w, y1: y + h / 2 };
         };
@@ -1094,7 +1098,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     const w = jumperTag.width, h = jumperTag.height, gap = 10 * u;
     const lo = S.top() + 6 * u, hi = H - S.bottom() - 6 * u;
     const at = (s: number): Box => {
-      const x = s === 0 ? c.x + half + gap : s === 1 ? c.x - half - gap - w : c.x - w / 2;
+      const x = s === 0 ? c.x + half + gap : s === 1 ? c.x - half - gap - w : clamp(c.x - w / 2, 8 * u, Math.max(8 * u, W - w - 8 * u));
       const y = s === 2 ? c.y - half - gap - h / 2 : s === 3 ? c.y + half + gap + h / 2 : c.y;
       return { x0: x, y0: y - h / 2, x1: x + w, y1: y + h / 2 };
     };
