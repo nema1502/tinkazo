@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { T } from "./i18n";
 
@@ -396,5 +398,42 @@ describe("frases fijas de la segunda ronda", () => {
 describe("frases fijas de la tercera ronda", () => {
   it("uso2b en inglés dice lo mismo que en español", () => {
     expect(T.en.uso2b).toBe("Who presents first, who takes the book home. Without anyone saying the organizer picked it to their liking.");
+  });
+});
+
+/** La raíz del repo: desde acá salen las carpetas que revisa la prueba de la revisión visual. */
+const RAIZ = fileURLToPath(new URL("..", import.meta.url));
+
+/** Las menciones de la revisión con nombre propio, escritas de cualquier forma (con saltos de línea también). */
+const REVISION_CON_NOMBRE = /agente\s+evaluador|lo\s+(?:encontr[oó]|vio)\s+el\s+agente/i;
+
+/** Los archivos de una carpeta del repo, en todos sus niveles, como rutas desde la raíz. */
+const archivosDe = (carpeta: string): string[] =>
+  readdirSync(join(RAIZ, carpeta), { encoding: "utf8", recursive: true })
+    .map((ruta) => join(carpeta, ruta))
+    .filter((ruta) => statSync(join(RAIZ, ruta)).isFile());
+
+describe("la revisión visual va sin nombre propio en el repo público", () => {
+  const archivos = [
+    ...archivosDe("src"),
+    ...archivosDe("scripts"),
+    ...archivosDe("docs"),
+    ...readdirSync(RAIZ).filter((nombre) => nombre.endsWith(".html")),
+  ];
+
+  it("ni en src/, scripts/ o docs/, ni en los HTML de la raíz", () => {
+    const con = archivos.filter((ruta) => REVISION_CON_NOMBRE.test(readFileSync(join(RAIZ, ruta), "utf8")));
+    expect(con).toEqual([]);
+  });
+});
+
+describe("el sorteo no se llama faro de azar", () => {
+  it("ni los términos ni el mensaje al ganador lo dicen, en ninguno de sus casos", () => {
+    expect(leer("terminos.html")).not.toMatch(/faro de azar/i);
+    for (const idioma of ["es", "en"] as const) {
+      for (const varios of [false, true]) {
+        expect(T[idioma].tellBody("Ana", "", 8, "https://tinkazo.app/x", varios)).not.toMatch(/faro de azar/i);
+      }
+    }
   });
 });
