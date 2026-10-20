@@ -1,6 +1,6 @@
 import { nativeToScVal } from "@stellar/stellar-sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { selloSinGrabar, type AnchorStep, type SealResult } from "./anchor";
+import { selloSinGrabar, type AnchorStep, type DrawResult, type SealResult } from "./anchor";
 
 /**
  * `sealOnChain` con las piezas de afuera reemplazadas: el cliente del contrato, la
@@ -12,6 +12,8 @@ const h = vi.hoisted(() => ({
   red: { name: "testnet" as "testnet" | "mainnet", friendbotUrl: "https://friendbot.stellar.org" as string | null },
   wallet: null as null | Record<string, unknown>,
   seal: vi.fn(),
+  draw: vi.fn(),
+  poll: vi.fn(),
   accountExists: vi.fn(),
   fundWithFriendbot: vi.fn(),
   xlmBalance: vi.fn(),
@@ -30,8 +32,8 @@ vi.mock("../stellar/contract", async (orig) => {
   const real = await orig<typeof import("../stellar/contract")>();
   return {
     ...real,
-    getClient: async () => ({ seal: h.seal }),
-    server: { pollTransaction: async () => ({ status: "SUCCESS", returnValue: nativeToScVal(7n, { type: "u64" }) }) },
+    getClient: async () => ({ seal: h.seal, draw: h.draw }),
+    server: { pollTransaction: (...a: unknown[]) => h.poll(...a) },
   };
 });
 vi.mock("../stellar/wallet-lite", async (orig) => {
@@ -79,6 +81,21 @@ async function sellar(): Promise<{ pasos: [AnchorStep, string | undefined][]; r?
   }
 }
 
+/** Lo que devuelve el contrato al sortear: los números que ganaron y la semilla. */
+const resultadoDelSorteo = () => ({ status: "SUCCESS", returnValue: nativeToScVal({ winners: [1, 2], randomness: new Uint8Array(32) }) });
+
+/** Corre el sorteo en la cadena y devuelve lo que vio la pantalla, en orden, y cómo terminó. */
+async function sortear(): Promise<{ pasos: [AnchorStep, string | undefined][]; r?: DrawResult; error?: unknown }> {
+  const { drawOnChain } = await import("./anchor");
+  const pasos: [AnchorStep, string | undefined][] = [];
+  try {
+    const r = await drawOnChain(5n, new Uint8Array(96), (paso, detalle) => void pasos.push([paso, detalle]));
+    return { pasos, r };
+  } catch (error) {
+    return { pasos, error };
+  }
+}
+
 let eventos: string[];
 beforeEach(() => {
   vi.resetModules();
@@ -86,6 +103,9 @@ beforeEach(() => {
   h.red.friendbotUrl = "https://friendbot.stellar.org";
   h.wallet = null;
   h.seal.mockReset().mockImplementation(async () => txSimulada());
+  h.draw.mockReset().mockImplementation(async () => txSimulada());
+  // Lo que la red devuelve al confirmar: el número del sorteo, que es lo que lee `seal`.
+  h.poll.mockReset().mockImplementation(async () => ({ status: "SUCCESS", returnValue: nativeToScVal(7n, { type: "u64" }) }));
   h.accountExists.mockReset().mockResolvedValue(true);
   h.fundWithFriendbot.mockReset().mockResolvedValue(undefined);
   h.xlmBalance.mockReset().mockResolvedValue(10_000);
@@ -248,6 +268,69 @@ describe("con cualquier otra wallet (Freighter, cuenta de prueba)", () => {
     const { pasos, error } = await sellar();
     expect((error as Error).message).toBe("txInsufficientBalance");
     expect(h.seal).toHaveBeenCalledTimes(1);
+    expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+    expect(pasos.map(([p]) => p)).not.toContain("funding");
+    expect(eventos).toEqual([]);
+  });
+});
+
+describe("el sorteo (drawOnChain) se ayuda igual que el sellado", () => {
+  // Es el paso que ocurre frente a la sala, así que vale lo mismo que `seal`: se intenta, y si
+  // falta saldo en testnet se carga la cuenta y se reintenta una vez, sin que nadie toque nada.
+  beforeEach(() => h.poll.mockImplementation(async () => resultadoDelSorteo()));
+
+  it("Pollar sin saldo en testnet: carga la cuenta una vez, reintenta una vez y devuelve los ganadores", async () => {
+    const enviar = vi.fn().mockRejectedValueOnce(sinSaldo()).mockResolvedValueOnce("cafe");
+    h.wallet = pollar(enviar);
+    const { pasos, r } = await sortear();
+    expect(r?.txHash).toBe("cafe");
+    expect(r?.winners.map(Number)).toEqual([1, 2]);
+    expect(h.fundWithFriendbot).toHaveBeenCalledTimes(1);
+    expect(h.draw).toHaveBeenCalledTimes(2);
+    expect(enviar).toHaveBeenCalledTimes(2);
+    expect(pasos.map(([p]) => p)).toEqual(["simulating", "signing", "funding", "simulating", "signing", "sending", "confirmed"]);
+    // Sin costo a la vista: quizá lo paga la app.
+    expect(pasos.some(([, detalle]) => detalle?.includes("XLM"))).toBe(false);
+    expect(eventos).toEqual([]);
+  });
+
+  it("si Pollar paga la comisión, sale a la primera: sin grifo, sin 'preparando' y sin caja de fondos", async () => {
+    h.wallet = pollar(vi.fn(async () => "cafe"));
+    const { pasos, r } = await sortear();
+    expect(r?.winners.map(Number)).toEqual([1, 2]);
+    expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+    expect(pasos.map(([p]) => p)).not.toContain("funding");
+    expect(eventos).toEqual([]);
+  });
+
+  it("si después del grifo sigue sin saldo: dos intentos en total y la caja de fondos", async () => {
+    const enviar = vi.fn().mockRejectedValue(sinSaldo());
+    h.wallet = pollar(enviar);
+    const { error } = await sortear();
+    expect(error).toBeInstanceOf(Error);
+    expect(enviar).toHaveBeenCalledTimes(2);
+    expect(h.fundWithFriendbot).toHaveBeenCalledTimes(1);
+    expect(eventos).toEqual(["tinkazo:sin-fondos"]);
+  });
+
+  it("en mainnet nunca hay grifo: no se pide nada y se muestra la caja de fondos", async () => {
+    h.red.name = "mainnet";
+    h.red.friendbotUrl = null;
+    const enviar = vi.fn().mockRejectedValue(sinSaldo());
+    h.wallet = pollar(enviar);
+    const { error } = await sortear();
+    expect(error).toBeInstanceOf(Error);
+    expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+    expect(enviar).toHaveBeenCalledTimes(1);
+    expect(eventos).toEqual(["tinkazo:sin-fondos"]);
+  });
+
+  it("con otra wallet no cambia nada: el error sale tal cual, sin grifo ni caja de fondos", async () => {
+    h.wallet = { kind: "external", address: DIR, signTransaction: vi.fn() };
+    h.draw.mockImplementation(async () => ({ ...txSimulada(), signAndSend: async () => Promise.reject(sinSaldo()) }));
+    const { pasos, error } = await sortear();
+    expect((error as Error).message).toBe("txInsufficientBalance");
+    expect(h.draw).toHaveBeenCalledTimes(1);
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
     expect(pasos.map(([p]) => p)).not.toContain("funding");
     expect(eventos).toEqual([]);
