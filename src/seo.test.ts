@@ -368,6 +368,8 @@ describe("frases fijas de la segunda ronda", () => {
     expect(T.en.sgLimit1).toContain("yellow verdict");
     expect(T.es.verifN2).toContain("veredicto amarillo");
     expect(T.en.verifN2).toContain("yellow verdict");
+    expect(T.es.verifN2).not.toMatch(/cuenta/i);
+    expect(T.en.verifN2).not.toMatch(/account/i);
     const todos = [...Object.values(T.es), ...Object.values(T.en)].filter((v): v is string => typeof v === "string");
     expect(todos.filter((t) => /veredicto de advertencia|warning verdict/i.test(t))).toEqual([]);
   });
