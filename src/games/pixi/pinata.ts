@@ -214,7 +214,8 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       const sw = swingAt(tAll);
       const spun = tAll >= SPIN_T1;
       const dizzy = clamp(1 - (tAll - SPIN_T1) / 1.1, 0, 1);
-      const want = !spun
+      // Rota la piñata, el chico se queda donde está: no sigue caminando hacia un palo que ya no hay.
+      const want = brokeDone ? kidX : !spun
         ? kidSpot(g.ax, g.restY)
         : kidSpot(p.x, p.y) + (sw ? 0 : (Math.sin(tAll * 1.9 + 0.7) * 8 + Math.sin(tAll * 5.3) * 14 * dizzy) * g.ks);
       const before = kidX;
