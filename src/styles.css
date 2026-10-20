@@ -1091,8 +1091,10 @@
   .hist-evento h3 { font-size: 16px; font-weight: 900; }
   .hist-evento .note { margin-top: 2px; }
   .hist-evento .mini { min-height: 44px; display: inline-flex; align-items: center; }
-  /* La página de evento: un bloque por sorteo, con sus comprobaciones. */
-  .ev-sorteo + .ev-sorteo { margin-top: 14px; }
+  /* La página de evento: la lista va sin marco y cada sorteo es un bloque con sus comprobaciones. */
+  .ev-cabeza { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 4px 0 12px; }
+  .ev-cabeza h2 { font-size: 19px; font-weight: 800; }
+  .ev-lista > .note { margin: 0 0 18px; }
   .ev-gana { margin-bottom: 6px; overflow-wrap: anywhere; }
   .hist-why { margin: 6px 0 12px; }
   .hist-why summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 800; font-size: 14px; }

@@ -82,7 +82,7 @@ function tarjeta(s: SorteoDelEvento, i: number): string {
     fila(t("evChkGanador"), r?.ganador, estado(r?.ganador)),
   ];
   return (
-    `<article class="block ev-sorteo">` +
+    `<section class="block ev-sorteo">` +
     `<div class="head"><h2>${esc(premio)}</h2><span class="kicker">${esc(cuando)}</span></div>` +
     `<div class="body">` +
     `<p class="ev-gana"><span class="kicker">${esc(t(s.ganadores.length > 1 ? "evGanaron" : "evGano"))}</span> <b>${esc(s.ganadores.join(", "))}</b></p>` +
@@ -90,7 +90,7 @@ function tarjeta(s: SorteoDelEvento, i: number): string {
     `<ul class="checks">${filas.join("")}</ul>` +
     `<p class="note">${esc(anclado[i] ? t("evAnclado") : t("evSinAnclar"))}</p>` +
     `<div class="row"><a class="ghost" href="${esc(verificar[i] ?? "/verificar.html")}" target="_blank" rel="noopener">${esc(t("evVerificar"))} ↗</a></div>` +
-    `</div></article>`
+    `</div></section>`
   );
 }
 
