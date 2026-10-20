@@ -4,7 +4,7 @@
  */
 
 export interface Rect { x: number; y: number; w: number; h: number }
-export interface LabelItem extends Rect { id: number; priority: number }
+export interface LabelItem extends Rect { id: number; priority: number; ignoreBlocked?: boolean }
 export interface Bounds { w: number; h: number; top: number; bottom: number }
 export interface Placed { id: number; x: number; y: number }
 
@@ -71,7 +71,10 @@ export function layoutLabels(items: LabelItem[], bounds: Bounds, blocked: Rect[]
     w = size(it.w); h = size(it.h);
     ax = clampX(fin(it.x)); ay = clampY(fin(it.y));
     sx = Math.max(1, w / 2); sy = Math.max(1, h * 0.6);
-    if (!search(withBlocked, MAX_RINGS) && !search(placed, FALLBACK_RINGS)) continue;
+    // Un item con `ignoreBlocked` (la lista de los que siguen adentro) no se corre por lo blando, la piñata:
+    // se busca lugar cerca de su sitio, sin pasar por encima de los demás ni de los obstáculos duros.
+    const found = it.ignoreBlocked ? search(placed, MAX_RINGS) : search(withBlocked, MAX_RINGS) || search(placed, FALLBACK_RINGS);
+    if (!found) continue;
     const r = { x: rx, y: ry, w, h };
     placed.push(r);
     withBlocked.push(r);

@@ -927,9 +927,9 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     const bounds = { w: g.w, h: g.h, top: S.top(), bottom: S.bottom() };
     items.length = 0;
     alphaOf.clear();
-    const put = (key: number, x: number, y: number, priority: number, alpha: number): void => {
+    const put = (key: number, x: number, y: number, priority: number, alpha: number, ignoreBlocked = false): void => {
       const d = chipDim.get(key) as { w: number; h: number };
-      items.push({ id: key, x, y, w: d.w, h: d.h, priority });
+      items.push({ id: key, x, y, w: d.w, h: d.h, priority, ignoreBlocked });
       alphaOf.set(key, alpha);
     };
     // Los últimos caídos, en una tira fija abajo a la derecha, encima del piso.
@@ -953,7 +953,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       adentro.forEach((c, i) => {
         const key = c.idx;
         chipFor(key, names[c.idx] ?? "", scaleSide);
-        put(key, 10 * k, colTop, 900 - i, 1);
+        put(key, 10 * k, colTop, 900 - i, 1, true);
         colTop += (chipDim.get(key) as { h: number }).h + 2 * k;
       });
     }
