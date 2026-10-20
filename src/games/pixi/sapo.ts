@@ -341,8 +341,18 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     // que entre. Las celdas miden lo que el chip más ancho y su alto de verdad:
     // con las de 150 por 30 de antes, los chips de letra legible se pisaban
     // (16 de octubre de 2026).
-    const top = S.top() + 54 * k, bottom = g.h - S.bottom() - 10 * k;
-    const areaW = g.w * 0.94, areaH = Math.max(40, bottom - top);
+    let top = S.top() + 54 * k, bottom = g.h - S.bottom() - 10 * k;
+    let areaW = g.w * 0.94;
+    // Con doce o menos no hay clasificatoria: la grilla es la presentación de la
+    // mesa, y tiene que caer sobre la tapa, no sobre la pantalla (en un celular,
+    // la columna de ocho se salía por el frente de la mesa).
+    if (all <= holes) {
+      const atras = P({ x: 0, y: -L.tableR }).y, delante = P({ x: 0, y: L.tableR }).y;
+      top = Math.max(top, atras + 8 * k);
+      bottom = Math.min(bottom, delante - 8 * k);
+      areaW = Math.min(areaW, 2 * L.tableR * g.sc);
+    }
+    const areaH = Math.max(40, bottom - top);
     const cw = chips.reduce((m, c) => Math.max(m, c.width), 0) + 12 * k, ch = (chips[0]?.height ?? 40 * k) + 6 * k;
     let best = { cols: 1, s: 0 };
     for (let cols = 1; cols <= all; cols++) {
