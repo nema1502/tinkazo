@@ -1399,8 +1399,10 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       if (wob > 0) {
         const ph = (x - stopAt) * Math.PI * 2 * 3 + hash(d.idx, 53) * 6;
         v.body.rotation += Math.sin(ph) * wob;
-        v.armL.rotation += Math.sin(ph * 1.3) * wob * 3.2;
-        v.armR.rotation -= Math.sin(ph * 1.1 + 1) * wob * 3.2;
+        // Con el brazo estirado (rL), el mismo ángulo mueve la mano el doble:
+        // se divide, para que al tambalearse la cadena no se haga un palo.
+        v.armL.rotation += (Math.sin(ph * 1.3) * wob * 3.2) / rL;
+        v.armR.rotation -= (Math.sin(ph * 1.1 + 1) * wob * 3.2) / rR;
       }
       reach(v.armL, rL);
       reach(v.armR, rR);
