@@ -389,3 +389,9 @@ describe("frases fijas de la segunda ronda", () => {
     expect(leer("sorteo-verificable.html")).toMatch(/<h1[^>]*data-i="verifH1">Sorteo verificable: cualquiera puede rehacer el resultado<\/h1>/);
   });
 });
+
+describe("frases fijas de la tercera ronda", () => {
+  it("uso2b en inglés dice lo mismo que en español", () => {
+    expect(T.en.uso2b).toBe("Who presents first, who takes the book home. Without anyone saying the organizer picked it to their liking.");
+  });
+});

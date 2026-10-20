@@ -2028,7 +2028,7 @@ export const T: Record<Lang, Dict> = {
     uso1t: "Meetups and communities",
     uso1b: "The draw at the end, with the projector on and everyone watching. From your Luma CSV, only among those who came.",
     uso2t: "Classrooms and workshops",
-    uso2b: "Who presents first, who takes the book home. Without anyone calling it a setup.",
+    uso2b: "Who presents first, who takes the book home. Without anyone saying the organizer picked it to their liking.",
     uso3t: "Teams at work",
     uso3b: "The year-end gift or the order of the shifts, with a result anyone can check.",
     uso4t: "Fairs and events",
