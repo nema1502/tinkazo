@@ -188,7 +188,7 @@ Ten auditors in [`scripts/`](scripts) run the real site in headless Chrome:
 - **Collision auditor**, for the spinning tops: every hit really touches, with action and reaction, and nobody passes through anybody.
 - **Identification auditor**, with 8, 18 and 50 people: how many get to read their own name before the winner.
 - **Mix auditor**, which records what comes out of the speaker and measures loudness by the BS.1770 standard, peaks, how much a projector speaker loses and the winner's hit.
-- **Flow auditor**, the UX QA: it goes through the real flow with a test account on five screen sizes plus 200% zoom, and checks that every step has one main action in view without scrolling, that the "what's next" bar never covers anything, and that nobody gets lost ([`docs/ux.md`](docs/ux.md)).
+- **Flow auditor**, the UX QA: it goes through the real flow with a test account on five screen sizes plus 200% zoom, and checks that every step has one main action in view without scrolling, that the "what's next" bar never hides the button it stands for or the page footer, and that nobody gets lost ([`docs/ux.md`](docs/ux.md)).
 
 ## The next 30 days
 

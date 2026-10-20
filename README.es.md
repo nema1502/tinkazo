@@ -188,7 +188,7 @@ Diez auditores en [`scripts/`](scripts) corren el sitio de verdad en Chrome sin 
 - **El de choques**, para el trompo: cada golpe toca de verdad, con acción y reacción, y nadie atraviesa a nadie.
 - **El de identificación**, con 8, 18 y 50 personas: cuántos llegan a leer su nombre antes del ganador.
 - **El de mezcla**, que graba lo que sale por el parlante y mide la sonoridad con la norma BS.1770, los picos, cuánto se pierde en un parlante de proyector y el golpe del ganador.
-- **El de flujo**, la QA de UX: recorre el sorteo de verdad con una cuenta de prueba en cinco tamaños de pantalla y a 200 % de zoom, y comprueba que en cada paso hay una acción principal a la vista sin hacer scroll, que la barra de "lo que sigue" no tapa nada y que nadie se pierde ([`docs/ux.md`](docs/ux.md)).
+- **El de flujo**, la QA de UX: recorre el sorteo de verdad con una cuenta de prueba en cinco tamaños de pantalla y a 200 % de zoom, y comprueba que en cada paso hay una acción principal a la vista sin hacer scroll, que la barra de "lo que sigue" no tapa el botón al que reemplaza ni el pie de la página, y que nadie se pierde ([`docs/ux.md`](docs/ux.md)).
 
 ## Los próximos 30 días
 
