@@ -1231,6 +1231,13 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       drawFlag(stn.flag, p.x - bw / 2 + 14 * k, y0 - 134 * k, 88 * k, 46 * k, top ? YELLOW : hexOf(LINES[(s + 2) % LINES.length] as string), s * 1.9, false);
       // La banderita de la cumbre no asoma detrás del cartel del ganador.
       stn.flag.visible = !(top && tAll >= T_CROWN);
+      if (top) {
+        // El rótulo CUMBRE no se mete debajo de la barra de arriba (SONIDO, Saltar):
+        // en 4:3 quedaba con las últimas letras tapadas. Baja solo si hace falta.
+        const ty = y0 - 34 * k;
+        const sy = cam.toScreen(p.x, ty, S.sw(), S.sh()).y;
+        stn.tag.position.set(p.x, sy < S.top() ? ty + (S.top() - sy) / zoomNow() : ty);
+      }
       if (stn.bunting) {
         const g = stn.bunting;
         g.clear();
