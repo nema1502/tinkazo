@@ -388,7 +388,7 @@ describe("frases fijas de la segunda ronda", () => {
     expect(todos.filter((t) => /veredicto de advertencia|warning verdict/i.test(t))).toEqual([]);
   });
 
-  it.each(["sgLimit2", "meetNamesB", "tmQ3B"])("%s dice la lista completa que sube a Stellar, en los dos idiomas", (clave) => {
+  it.each(["sgLimit2", "meetListaDet", "tmQ3B"])("%s dice la lista completa que sube a Stellar, en los dos idiomas", (clave) => {
     expect(T.es[clave]).toContain(LISTA_ES);
     expect(T.en[clave]).toContain(LISTA_EN);
   });
