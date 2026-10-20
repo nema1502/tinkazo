@@ -185,6 +185,10 @@ const ALCANCE = (sel) => `(() => {
     vista: [vw, vh],
     card: { top: Math.round(r0.top), bottom: Math.round(r0.bottom), left: Math.round(r0.left), right: Math.round(r0.right), h: Math.round(r0.height) },
     entra: r0.top >= -0.5 && r0.bottom <= vh + 0.5 && r0.left >= -0.5 && r0.right <= vw + 0.5,
+    // No se corta: arranca adentro de la pantalla, arriba y de costado (lo que hacía el fondo centrado, con la tarjeta más alta).
+    sinCortar: r0.top >= -0.5 && r0.left >= -0.5 && r0.right <= vw + 0.5,
+    // Se recorre: la ventana o el fondo tienen scroll y algo que recorrer.
+    recorre: [back, dlg, ...dlg.querySelectorAll('*')].some((s) => s && /(auto|scroll)/.test(getComputedStyle(s).overflowY) && s.scrollHeight > s.clientHeight + 1),
     inalcanzables, chicos,
     scrollH: de.scrollWidth > de.clientWidth + 1,
     cardScrollW: dlg.scrollWidth > dlg.clientWidth + 1,
@@ -192,17 +196,23 @@ const ALCANCE = (sel) => `(() => {
   });
 })()`;
 
-/** Pasa lo que midió `ALCANCE` a comprobaciones. */
-function chequearVentana(pre, m, movil) {
+/**
+ * Pasa lo que midió `ALCANCE` a comprobaciones.
+ *
+ * La regla es "entra o se recorre". Las ventanas con alto máximo y cuerpo que se
+ * recorre (la cuenta, el ingreso, el paso de fondos) tienen que **entrar**:
+ * `entra` queda en true. La que depende del fondo para recorrerse (la de rearmar)
+ * puede ser más alta que la pantalla (`entra: false`), pero no puede cortarse por
+ * arriba ni de costado, y tiene que recorrerse.
+ */
+function chequearVentana(pre, m, movil, { entra = true } = {}) {
   if (!m) {
     check(`${pre}: se midió`, false, "la ventana no estaba abierta");
     return;
   }
-  check(
-    `${pre}: entra en la pantalla`,
-    m.entra,
-    `tarjeta de ${m.card.top} a ${m.card.bottom} en una pantalla de ${m.vista[1]} px de alto, y de ${m.card.left} a ${m.card.right} de ${m.vista[0]} de ancho`,
-  );
+  const donde = `tarjeta de ${m.card.top} a ${m.card.bottom} en una pantalla de ${m.vista[1]} px de alto, y de ${m.card.left} a ${m.card.right} de ${m.vista[0]} de ancho`;
+  if (entra) check(`${pre}: entra en la pantalla`, m.entra, donde);
+  else check(`${pre}: entra en la pantalla o se recorre, sin cortarse`, m.sinCortar && (m.entra || m.recorre), `${donde}; ${m.recorre ? "se recorre" : "no se recorre"}`);
   check(`${pre}: todo lo que se toca se alcanza`, m.inalcanzables.length === 0, m.inalcanzables.slice(0, 3).join(" | "));
   check(`${pre}: sin scroll horizontal`, !m.scrollH && !m.cardScrollW);
   if (movil) check(`${pre}: blancos de toque de 44 px`, m.chicos.length === 0, m.chicos.slice(0, 3).join(" | "));
@@ -532,7 +542,7 @@ async function ventanaDeRearmar(page, p, tema) {
   check(`${pre}: se abre la ventana de rearmar`, ok.ok);
   if (ok.ok) {
     await sleep(500);
-    chequearVentana(`${pre}: la ventana de rearmar un comprobante`, JSON.parse(await page.eval(ALCANCE(".modal-back .modal-card"))), p.movil);
+    chequearVentana(`${pre}: la ventana de rearmar un comprobante`, JSON.parse(await page.eval(ALCANCE(".modal-back .modal-card"))), p.movil, { entra: false });
     await tecla(page, "Escape");
     check(`${pre}: Esc cierra la ventana de rearmar`, (await page.eval(`!document.querySelector('.modal-back')`)) === true);
   }
