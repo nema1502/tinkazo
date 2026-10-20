@@ -791,9 +791,10 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     if (phase === "crown" || phase === "dead") return;
     // El chip ya nace con letra legible (CHIP_SCALE); esto lo agranda en las
     // pantallas chicas, donde ni así llegaba a TAG_FONT_PX. En un celular, que
-    // se mira de cerca, se queda en TAG_FONT_PX: con la base entera entraban
-    // tres etiquetas en vez de cinco.
-    const scale = clamp(TAG_FONT_PX / (12 * k * CHIP_SCALE), S.portrait() ? 0 : 1, 1.8);
+    // se mira de cerca, puede quedar más chico que el normal: con la base entera
+    // entraban tres etiquetas en vez de cinco. En una pantalla vertical más
+    // grande (tótem, monitor girado) no baja del tamaño normal.
+    const scale = clamp(TAG_FONT_PX / (12 * k * CHIP_SCALE), g.w <= 520 ? 0 : 1, 1.8);
     const kk = k * scale;
     /** La unidad del chip: lo que mide y lo que se le dibuja encima va en esta. */
     const kc = kk * CHIP_SCALE;
