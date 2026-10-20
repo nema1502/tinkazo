@@ -1264,6 +1264,13 @@ export const T: Record<Lang, Dict> = {
     juegoElegido: "Juego elegido",
     cambiarJuego: "Cambiar de juego",
     againTitleFin: "Sorteo hecho",
+    // UX 19-oct: fondos 2
+    grifoOffTag: "sin grifo",
+    grifoOffHint: "El grifo de prueba está apagado en esta sesión (?grifo=0): ninguna cuenta recibe XLM de regalo. Para volver a prenderlo, abrí el sitio con ?grifo=1.",
+    grifoOffLine: "El grifo de prueba está apagado en esta sesión (?grifo=0).",
+    fundBodyOff: "Para sellar hace falta un poquito. Copiá la dirección y mandale unos XLM de prueba desde otra cuenta.",
+    acctNoTap: "Sin grifo",
+    guestReadyOff: "Cuenta de prueba lista, pero vacía: el grifo está apagado en esta sesión.",
   },
   en: {
     badge: "For whoever has to run the draw",
@@ -2249,6 +2256,13 @@ export const T: Record<Lang, Dict> = {
     juegoElegido: "Chosen game",
     cambiarJuego: "Change game",
     againTitleFin: "Draw done",
+    // UX 19-oct: fondos 2
+    grifoOffTag: "no faucet",
+    grifoOffHint: "The test faucet is off for this session (?grifo=0): no account gets free XLM. To turn it back on, open the site with ?grifo=1.",
+    grifoOffLine: "The test faucet is off for this session (?grifo=0).",
+    fundBodyOff: "Sealing needs a little. Copy the address and send it some test XLM from another account.",
+    acctNoTap: "No faucet",
+    guestReadyOff: "Test account ready, but empty: the faucet is off for this session.",
   },
 };
 

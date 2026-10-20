@@ -48,6 +48,15 @@ describe("panel de la cuenta: quién no ve el saldo", () => {
     // En mainnet no hay grifo.
     expect(moneyLine("Freighter", 0, "mainnet").fund).toBe(false);
   });
+
+  it("con ?grifo=0 el botón no aparece, ni siquiera con la cuenta vacía; el saldo se sigue mostrando", () => {
+    expect(moneyLine("Freighter", 0, "testnet", false)).toEqual({ balance: 0, fund: false });
+    expect(moneyLine("Cuenta de prueba", 0, "testnet", false)).toEqual({ balance: 0, fund: false });
+    expect(moneyLine("Freighter", 5, "testnet", false).fund).toBe(false);
+    // Con el grifo prendido (el valor por defecto) sigue como siempre.
+    expect(moneyLine("Cuenta de prueba", 0, "testnet", true).fund).toBe(true);
+    expect(moneyLine("Cuenta de prueba", 0, "testnet").fund).toBe(true);
+  });
 });
 
 describe("panel de la cuenta: textos", () => {

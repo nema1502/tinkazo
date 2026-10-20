@@ -1,6 +1,7 @@
 import { $, esc } from "../dom";
 import { onLangChange, t } from "../i18n";
 import { anchoringAvailable, accountUrl, network, shortAddress } from "../stellar/config";
+import { grifoApagado, hayAyudaDeFondos } from "../stellar/grifo";
 import { refreshFreezeLabel } from "./freeze";
 import { clearSessionKind, loadSessionKind, pickRestore, saveSessionKind } from "../stellar/session-store";
 
@@ -234,6 +235,13 @@ function render(): void {
   net.className = wrongNetwork ? "netbadge bad" : network.name === "mainnet" ? "netbadge main" : "netbadge";
   net.textContent = network.name === "testnet" ? t("netTest") : network.name;
   net.title = t(network.name === "testnet" ? "netTestHint" : "netMainHint");
+  // `?grifo=0`: que se vea, para que nadie lo deje así sin querer y para que
+  // las capturas lo digan. (Solo existe en testnet: en mainnet se ignora.)
+  if (grifoApagado) {
+    net.classList.add("sin-grifo");
+    net.textContent = `${t("netTest")} · ${t("grifoOffTag")}`;
+    net.title = `${t("netTestHint")} ${t("grifoOffHint")}`;
+  }
   box.appendChild(net);
 
   // Tocar el nombre abre el panel de la cuenta, con todo lo tuyo junto.
@@ -430,7 +438,10 @@ let cajaDeUltimoRecurso = false;
  * verdad está vacía: el saldo se vuelve a mirar antes de afirmar nada.
  */
 async function mostrarSinFondos(): Promise<void> {
-  if (!session) return;
+  // La caja es la del grifo: en mainnet no hay, y con `?grifo=0` tampoco. Quien
+  // avisa (`conFondos`) ya lo mira; acá se vuelve a mirar para que ninguna otra
+  // parte del código pueda mostrarla donde no corresponde.
+  if (!session || !hayAyudaDeFondos(network.name, grifoApagado)) return;
   cajaDeUltimoRecurso = true;
   await refreshFunds(true);
   const box = $("fund-box");
@@ -439,6 +450,9 @@ async function mostrarSinFondos(): Promise<void> {
 
 function renderFundBox(box: HTMLElement, address: string): void {
   const testnet = network.name === "testnet";
+  // Con `?grifo=0` la caja no ofrece el grifo ni manda a pedirlo al sitio de
+  // Stellar: queda la dirección y el explorador, como en mainnet.
+  const conGrifo = testnet && !grifoApagado;
   box.innerHTML = "";
 
   const tag = document.createElement("span");
@@ -451,7 +465,7 @@ function renderFundBox(box: HTMLElement, address: string): void {
   box.appendChild(h);
 
   const p = document.createElement("p");
-  p.textContent = t(testnet ? "fundBody" : "fundBodyMain");
+  p.textContent = t(conGrifo ? "fundBody" : testnet ? "fundBodyOff" : "fundBodyMain");
   box.appendChild(p);
 
   const row = document.createElement("div");
@@ -471,7 +485,7 @@ function renderFundBox(box: HTMLElement, address: string): void {
 
   const actions = document.createElement("div");
   actions.className = "row";
-  if (testnet) {
+  if (conGrifo) {
     const get = button(t("fundGet"), "solid", () => {
       get.disabled = true;
       get.textContent = t("fundWorking");
@@ -495,10 +509,10 @@ function renderFundBox(box: HTMLElement, address: string): void {
   lab.className = "ghost";
   lab.target = "_blank";
   lab.rel = "noopener";
-  lab.href = testnet
+  lab.href = conGrifo
     ? "https://lab.stellar.org/account/fund"
     : accountUrl(address);
-  lab.textContent = t(testnet ? "fundLab" : "fundExplorer");
+  lab.textContent = t(conGrifo ? "fundLab" : "fundExplorer");
   actions.appendChild(lab);
   box.appendChild(actions);
 
@@ -507,6 +521,12 @@ function renderFundBox(box: HTMLElement, address: string): void {
     foot.className = "note";
     foot.textContent = t("fundFoot");
     box.appendChild(foot);
+  }
+  if (grifoApagado) {
+    const off = document.createElement("p");
+    off.className = "note";
+    off.textContent = t("grifoOffLine");
+    box.appendChild(off);
   }
   box.style.display = "block";
 }
@@ -905,7 +925,8 @@ async function afterConnect(
 ): Promise<void> {
   await activate(w, wallet, address);
   saveSessionKind(pick, network.name);
-  if (wallet.kind === "guest") notice(t("guestReady"), false);
+  // Con `?grifo=0` la cuenta de prueba nace vacía: no se dice que tiene fondos.
+  if (wallet.kind === "guest") notice(t(grifoApagado ? "guestReadyOff" : "guestReady"), false);
   // El diálogo no se cierra hasta saber si la cuenta puede pagar. Cerrarlo y
   // dejar el aviso más abajo en la página hacía que nadie lo viera: la
   // persona seguía con su lista y se enteraba recién al intentar sellar.

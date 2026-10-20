@@ -35,15 +35,16 @@ export interface MoneyLine {
  *
  * Google y correo: nada mientras haya menos de 1 XLM (también si no se pudo
  * leer), y nunca el grifo. Las demás (Freighter, la cuenta de prueba): el saldo
- * como siempre, y el grifo en testnet con menos de 20.
+ * como siempre, y el grifo en testnet con menos de 20, salvo que esté apagado
+ * (`grifo` es falso con `?grifo=0`, ver `stellar/grifo.ts`).
  */
-export function moneyLine(label: string, raw: number, net: string): MoneyLine {
+export function moneyLine(label: string, raw: number, net: string, grifo = true): MoneyLine {
   // Un saldo que no es un número (la red contestó algo raro) es un saldo que no se pudo leer.
   const balance = Number.isFinite(raw) ? raw : -1;
   if (feeCovered(label)) return { balance: balance >= 1 ? balance : null, fund: false };
   return {
     balance: balance < 0 ? "unknown" : balance,
-    fund: net === "testnet" && balance >= 0 && balance < 20,
+    fund: grifo && net === "testnet" && balance >= 0 && balance < 20,
   };
 }
 

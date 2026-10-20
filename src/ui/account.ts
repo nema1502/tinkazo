@@ -2,6 +2,7 @@ import { avatar } from "../avatar";
 import { esc } from "../dom";
 import { type Lang, chooseLang, getLang, onLangChange, t } from "../i18n";
 import { accountUrl, network } from "../stellar/config";
+import { grifoApagado, grifoDisponible } from "../stellar/grifo";
 import { PACES, currentPace, paceSeconds, setPace, type Pace } from "../state";
 import { isMuted, toggleSound } from "../sound";
 import { LAST_DRAWS, drawRow, fmtBalance, initialOf, kindText, moneyLine, shortAddr } from "./account-model";
@@ -326,11 +327,15 @@ function paint(s: Open): void {
   const title = name || kindText(view.label);
 
   const mainnet = network.name === "mainnet";
-  const money = moneyLine(view.label, view.balance, network.name);
+  const money = moneyLine(view.label, view.balance, network.name, grifoDisponible());
   const balance =
     money.balance === null
       ? ""
       : `<span class="acct-badge">${esc(money.balance === "unknown" ? t("acctUnknown") : fmtBalance(money.balance))}</span>`;
+  // `?grifo=0`: que el panel también lo diga, además de la insignia de la cabecera.
+  const sinGrifo = grifoApagado
+    ? `<span class="acct-badge sin-grifo" title="${esc(t("grifoOffHint"))}">${esc(t("acctNoTap"))}</span>`
+    : "";
   const fund = money.fund ? `<button type="button" class="mini solid" data-k="fund">${esc(t("fundGet"))}</button>` : "";
 
   const es = getLang() === "es";
@@ -350,7 +355,7 @@ function paint(s: Open): void {
     `<div class="acct-body">` +
     // La red, el saldo y el explorador.
     `<section class="acct-sec"><div class="acct-badges">` +
-    `<span class="acct-badge net${mainnet ? " main" : ""}">${esc(t(mainnet ? "acctNetMain" : "acctNetTest"))}</span>${balance}</div>` +
+    `<span class="acct-badge net${mainnet ? " main" : ""}">${esc(t(mainnet ? "acctNetMain" : "acctNetTest"))}</span>${sinGrifo}${balance}</div>` +
     (fund ? `<div class="acct-badges">${fund}</div>` : "") +
     `<a class="acct-link" data-k="explorer" href="${esc(accountUrl(view.address))}" target="_blank" rel="noopener">${esc(t("fundExplorer"))}</a></section>` +
     // Las preferencias, en una fila con sus etiquetas.
