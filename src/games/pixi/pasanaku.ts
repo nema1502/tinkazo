@@ -594,12 +594,16 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
     // coronar dejaban borrosos justo los bultos que deciden (crítico de
     // juegos, 16 de octubre de 2026). Como en la foto de la carrera.
     if ((susto && tAll >= SUSTO) || tAll >= T_KNOT) cam.noBlur();
+    // En celular de pie la tela se acerca un poco más desde la caída hasta el
+    // apretón: con 27 y los nombres de pasar lista, la tela quedaba chica y los
+    // nombres la tapaban. Todo sube lo mismo, para que no haya un tirón atrás.
+    const pz = S.portrait() ? 0.35 : 0;
     if (phase === "spread") cam.lookAt(x, y, 1.4, 2);
-    else if (phase === "drop") cam.lookAt(x, y, 1.0, 1.5);
-    else if (phase === "weave") cam.lookAt(x, y, 1.0 + 0.12 * clamp((tAll - T_WEAVE) / 2, 0, 1), 1.5, 0.015 * Math.sin(tAll * 0.8));
+    else if (phase === "drop") cam.lookAt(x, y, 1.0 + pz, 1.5);
+    else if (phase === "weave") cam.lookAt(x, y, 1.0 + pz + 0.12 * clamp((tAll - T_WEAVE) / 2, 0, 1), 1.5, 0.015 * Math.sin(tAll * 0.8));
     else if (phase === "cinch") {
       if (susto && tAll >= SUSTO && tAll < SUSTO + 1.3) cam.lookAt(win.x, win.y, 2.2, 5);
-      else cam.lookAt(x, y, 1.12 + 0.55 * cinchTotal, 2.5);
+      else cam.lookAt(x, y, 1.12 + pz + 0.55 * cinchTotal, 2.5);
     } else if (phase === "knot") cam.lookAt(x, y - Rc() * 0.2, 1.9, 2.5);
     else {
       // El atado queda entre el cartel del ganador y el relator.
