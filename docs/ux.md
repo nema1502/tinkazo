@@ -80,7 +80,7 @@ Recorre el flujo de verdad con la cuenta de prueba de testnet (la única que no 
 | `--sello-max` | Segundos que espera al sellado en testnet (por defecto 240). |
 | `--reintentos` | Cuántas veces repite una pantalla si el sellado falla o tarda (por defecto 2, con un respiro de 15 s entre una y otra; lo medido en un intento descartado no cuenta). |
 
-Cada recorrido dura unos dos minutos, casi todo esperando la ronda; las seis pantallas en un tema, un cuarto de hora (y cuatro minutos más los anchos de celular). Como todos los auditores: `CDP_PORT=<puerto>` para tener su propio Chrome (nunca cierres uno que no abriste), la salida marca con ✓ y ✗, y sale con código 1 si algo falla.
+Cada recorrido dura unos dos minutos, casi todo esperando la ronda; las seis pantallas en un tema, un cuarto de hora (y unos diez minutos más el sellado que falla y los anchos de celular). Como todos los auditores: `CDP_PORT=<puerto>` para tener su propio Chrome (nunca cierres uno que no abriste), la salida marca con ✓ y ✗, y sale con código 1 si algo falla.
 
 Un ✗ en "una acción principal a la vista" dice dónde quedó el botón de verdad y si hay barra: es el síntoma que originó todo esto, y es el primero que hay que mirar.
 
