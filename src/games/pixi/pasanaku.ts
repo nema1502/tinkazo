@@ -778,17 +778,29 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
     if (!roll.length && vivos.length <= 8 && phase !== "lift") {
       if (phase === "knot") {
         // En el nudo, grandes y centrados encima de cada bulto; de izquierda
-        // a derecha, uno abajo y el siguiente arriba. Del tamaño de siempre
-        // entraban lado a lado, pero apilados por altura el de más abajo
-        // terminaba encima del bulto del vecino.
+        // a derecha. Cada nombre prueba su altura de siempre, hasta tres
+        // renglones más arriba y dos más abajo, y se queda con la que menos
+        // encima cae de lo ya puesto. Alternar la altura por posición dejaba a
+        // los de los costados a la misma altura (se tapaban), y con la tela
+        // junto a la cabecera el clamp los juntaba: el de arriba del par caía
+        // sobre el de abajo.
         const sc = knotChip(live.length);
-        live.slice().sort((a, b) => a.x - b.x || a.idx - b.idx).forEach((q, i) => {
+        live.slice().sort((a, b) => a.x - b.x || a.idx - b.idx).forEach((q) => {
           const chip = (q.chip ??= chips.addChild(S.chip(names[q.idx] ?? "")));
           chip.scale.set(1);
           chip.scale.set(Math.min(sc, (W - 20 * u) / chip.width));
-          const w = chip.width, h = chip.height;
+          const w = chip.width, h = chip.height, paso = h + 4 * u;
           const p = cam.toScreen(q.x, q.y - r * 2.6 - lift, W, H);
-          const caja: Caja = { x: clamp(p.x - w / 2, 10 * u, W - w - 10 * u), y: clamp(p.y - h / 2 - (i % 2) * (h + 4 * u), lo + h / 2, hi - h / 2), w, h };
+          const xc = clamp(p.x - w / 2, 10 * u, W - w - 10 * u), y0 = p.y - h / 2;
+          let caja: Caja = { x: xc, y: clamp(y0, lo + h / 2, hi - h / 2), w, h };
+          let menor = Infinity;
+          for (const dy of [0, -1, -2, -3, 1, 2]) {
+            const b: Caja = { x: xc, y: clamp(y0 + dy * paso, lo + h / 2, hi - h / 2), w, h };
+            // Lo que tapa pesa mucho; después, cuánto se aleja de su altura, y
+            // hacia abajo cuenta triple (ahí tapa su propio bulto).
+            const costo = puestos.reduce((s, o) => s + 10 * encima(b, o), 0) + Math.abs(b.y - y0) * (dy > 0 ? 3 : 1);
+            if (costo < menor) [menor, caja] = [costo, b];
+          }
           chip.position.set(caja.x, caja.y);
           chip.visible = true;
           puestos.push(caja);
