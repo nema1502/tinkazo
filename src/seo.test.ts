@@ -40,7 +40,7 @@ const NUEVAS: Record<string, { titulo: string; h1: string }> = {
   },
   "sorteo-verificable.html": {
     titulo: "Sorteo verificable: cómo comprobar el resultado",
-    h1: "Sorteo verificable: no hace falta confiar en nosotros",
+    h1: "Sorteo verificable: no hace falta confiar en Tinkazo para rehacerlo",
   },
 };
 
