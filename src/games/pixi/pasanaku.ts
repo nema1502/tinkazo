@@ -782,7 +782,9 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
           const chip = (q.chip ??= chips.addChild(S.chip(names[q.idx] ?? "")));
           chip.scale.set(1);
           const w = chip.width, h = chip.height;
-          const caja: Caja = { x: Math.min(p.x + 4 * u, W - w - 10 * u), y: clamp(Math.max(p.y, prev + 26 * u), lo + h / 2, hi - h / 2), w, h };
+          // Cada nombre queda a su alto de verdad debajo del anterior: el chip
+          // mide unas 40 unidades (CHIP_SCALE) y con 26 se pisaban un tercio.
+          const caja: Caja = { x: Math.min(p.x + 4 * u, W - w - 10 * u), y: clamp(Math.max(p.y, prev + h + 2 * u), lo + h / 2, hi - h / 2), w, h };
           prev = caja.y;
           chip.position.set(caja.x, caja.y);
           chip.visible = true;
