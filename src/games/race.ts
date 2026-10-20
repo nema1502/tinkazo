@@ -7,7 +7,7 @@ import { enOrden, tension, writeStory, type Arc, type Story } from "./drama";
 import { registerSkip, WINNER_HOLD, chrome, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
 import { musicCue, startMusic, stopMusic } from "../music";
 
-/* Modo estadio: carrera de llamas a pantalla completa, sembrada con la semilla. */
+/* Modo estadio: carrera de llamas a pantalla completa, sembrada con el número del sorteo. */
 
 interface Runner {
   i: number;
@@ -67,7 +67,7 @@ export function stadiumRace(
   resize();
   addEventListener("resize", resize);
 
-  // PRNG sembrado con la aleatoriedad de drand: hasta la animación es reproducible.
+  // PRNG sembrado con la aleatoriedad del faro público: hasta la animación es reproducible.
   let s = parseInt(beacon.randomness.slice(0, 8), 16) | 0;
   const rng = (): number => {
     s = (s + 0x6d2b79f5) | 0;
@@ -76,7 +76,7 @@ export function stadiumRace(
     return ((q ^ (q >>> 14)) >>> 0) / 4294967296;
   };
 
-  // Las frases del narrador también salen de la semilla, igual que todo lo
+  // Las frases del narrador también salen del número del sorteo, igual que todo lo
   // demás: la misma ronda tiene que sonar igual en cada corrida.
   setPickSeed(rng);
 

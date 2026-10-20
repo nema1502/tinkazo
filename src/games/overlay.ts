@@ -6,7 +6,7 @@ import { musicCue, startMusic, stopMusic } from "../music";
 /**
  * Lo que comparten todos los juegos.
  *
- * Montar el modo estadio, sembrar el azar con la ronda de drand, registrar el
+ * Montar el modo estadio, sembrar el azar con la ronda del faro público, registrar el
  * botón de saltar y desmontar sin dejar nada colgado es el mismo trabajo en
  * cada juego. Estaba escrito dentro de la carrera, así que cada juego nuevo lo
  * copiaba. Acá vive una sola vez.
@@ -107,7 +107,7 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
   addEventListener("resize", resize);
   takeOverScreen(ov);
 
-  // PRNG sembrado con la aleatoriedad de drand: la misma ronda dibuja siempre
+  // PRNG sembrado con la aleatoriedad del faro público: la misma ronda dibuja siempre
   // la misma animación, en cualquier navegador.
   let s = parseInt(beacon.randomness.slice(0, 8), 16) | 0;
   const rng = (): number => {
@@ -246,7 +246,7 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
     },
   };
 
-  // Las frases del narrador también salen de la semilla: con voz, dos corridas
+  // Las frases del narrador también salen del número del sorteo: con voz, dos corridas
   // de la misma ronda tienen que sonar igual.
   setPickSeed(rng);
   current = { skip: onSkip };

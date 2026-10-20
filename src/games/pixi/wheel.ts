@@ -212,9 +212,9 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     stripes.stroke({ width: 2 * u, color: CREAM, alpha: 0.3 });
     wheel.addChild(stripes);
     // Los foquitos del aro, como en una rueda de feria. Hasta el 7 de octubre
-    // de 2026 eran los 64 dígitos de la semilla: en el primer plano del final
+    // de 2026 eran los 64 dígitos del número del sorteo: en el primer plano del final
     // eran lo más grande después de la flecha, y durante el sorteo no va nada
-    // técnico en pantalla. La semilla se comprueba en la tarjeta de después.
+    // técnico en pantalla. El número del sorteo se comprueba en la tarjeta de después.
     bulbs = new Graphics();
     bulbKey = -1;
     wheel.addChild(bulbs);

@@ -483,7 +483,7 @@ export function wheelSpin(
       }
       return;
     }
-    // Los 64 dígitos de la semilla, escritos en el borde. Sacá la foto y
+    // Los 64 dígitos del número del sorteo, escritos en el borde. Sacá la foto y
     // comprobalos: son los mismos que publicó el faro.
     const shown = Math.min(64, Math.floor(clamp(tAll / 0.7, 0, 1) * 64));
     c.save();
