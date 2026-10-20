@@ -1137,6 +1137,12 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   }
 
   /* ============================================================== cámara */
+  /**
+   * En celular acostado (pantalla baja) la última estación no se acerca tanto:
+   * con más zoom, la cara del que se baja quedaba debajo de la barra de arriba.
+   */
+  const zoomBajo = (z: number, tope: number): number => (!G.vertical && S.sh() < 500 ? Math.min(z, tope) : z);
+
   function direct(): void {
     const k = G.k;
     const head = P.headAt(tAll);
@@ -1161,7 +1167,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     } else if (ult && tAll >= ult.t0 - 0.3 && tAll <= ult.t1) {
       if (puerta && tAll >= P.puertaA - 0.25 && tAll <= P.puertaB + 0.35) {
         const p = cabPoint(winnerCab, tAll);
-        cam.lookAt(p.x, p.y + 60 * k, 2.1, 4);
+        cam.lookAt(p.x, p.y + 60 * k, zoomBajo(2.1, 1.6), 4);
       } else if (mordaza && tAll <= P.mD + 0.2) {
         // Quieta sobre el tramo que resbala, desde la cabina en su lugar hasta
         // donde la agarra la mordaza, y desde que llega a la estación. Antes
@@ -1172,7 +1178,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         cam.lookAt((a.x + b.x) / 2, (a.y + b.y) / 2 + 60 * k, 1.8, 3);
       } else {
         const a = cabPoint(winnerCab, tAll), b = cabPoint(P.loserCab, tAll);
-        cam.lookAt((a.x + b.x) / 2, (a.y + b.y) / 2 + 60 * k, 1.6, 3);
+        cam.lookAt((a.x + b.x) / 2, (a.y + b.y) / 2 + 60 * k, zoomBajo(1.6, 1.3), 3);
       }
     } else if (apagon && tAll >= P.corte - 0.25 && tAll <= P.vuelve + 0.45) {
       // Se va al convoy apenas titila la luz y se sigue metiendo en lo oscuro.
