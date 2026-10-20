@@ -644,6 +644,9 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       const p = slotPos(d, hx, live.length);
       boxAdd(p.x, p.y);
     }
+    // Los que se quedaron hace poco siguen en cuadro mientras la cámara vuelve del primer
+    // plano: si no, la llama de la vereda queda cortada por arriba.
+    for (const d of dancers) if (!d.alive && tAll - d.left < 2) boxAdd(d.wx, d.wy);
   }
   /**
    * Cuánto se acerca la cámara a la comparsa: menos en un celular, que es
