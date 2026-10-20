@@ -11,7 +11,7 @@ import { canAnchor, currentSession } from "./wallet-ui";
 import { parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
 import { NOMBRE } from "./gamecard";
-import { actualizarPaso, barraActiva } from "./siguiente";
+import { actualizarPaso, barraActiva, verError } from "./siguiente";
 
 /**
  * Los botones del selector, en el orden en que se muestran. Hasta el 29 de
@@ -277,6 +277,8 @@ export async function freeze(): Promise<void> {
       status.style.display = "block";
       status.className = "txstatus";
       status.textContent = await anchorErrorText(e);
+      // Si se apretó la barra, el botón de verdad (y este mensaje) están fuera de la pantalla.
+      verError(status);
       return;
     }
   } else {

@@ -284,6 +284,24 @@ export function actualizarPaso(): void {
 }
 
 /**
+ * Un error que la herramienta escribe junto al botón de verdad ("No pude
+ * hablar con la red de Stellar"). Si la persona apretó el de la barra, ese
+ * botón está fuera de la pantalla y el error también: quedaba a la vista un
+ * botón que volvía a estar disponible sin decir por qué. Si el mensaje no se ve
+ * (sin contar la cabecera fija ni la propia barra), se lo lleva a la pantalla;
+ * con el movimiento reducido, sin animación.
+ */
+export function verError(mensaje: HTMLElement): void {
+  const r = mensaje.getBoundingClientRect();
+  const cab = document.querySelector("header");
+  const arriba = cab && getComputedStyle(cab).position === "sticky" ? cab.getBoundingClientRect().height : 0;
+  const abajo = innerHeight - ($("siguiente").classList.contains("on") ? alto : 0);
+  if (r.top >= arriba && r.bottom <= abajo) return;
+  const reducido = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  mensaje.scrollIntoView({ behavior: reducido ? "auto" : "smooth", block: "center" });
+}
+
+/**
  * Se llama una vez, con la herramienta ya armada. `segundos` es la cuenta
  * regresiva de la ronda (la de `freeze.ts`).
  */

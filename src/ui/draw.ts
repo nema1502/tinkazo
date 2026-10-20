@@ -15,7 +15,7 @@ import { usePixi } from "../games/engine";
 import { secondsToRound, unfreeze } from "./freeze";
 import { setList } from "./participants";
 import { CARD_SECONDS, showGameCard } from "./gamecard";
-import { actualizarPaso } from "./siguiente";
+import { actualizarPaso, verError } from "./siguiente";
 import { startMusic, stopMusic } from "../music";
 
 /** Obtiene la ronda objetivo, verifica su firma y selecciona (protocolo §2, §5). */
@@ -66,9 +66,12 @@ export async function draw(): Promise<void> {
     } catch (e) {
       sinShow();
       btn.disabled = false;
+      // Sigue siendo lo único que hay que hacer: el pulso vuelve, y el mensaje se ve aunque se haya apretado la barra.
+      btn.classList.add("lista");
       btn.textContent = t("drawRetry");
       status.className = "txstatus bad";
       status.textContent = t(e instanceof Error && e.message === "bad-signature" ? "badSig" : "drandDown");
+      verError(status);
       return;
     }
 
@@ -130,11 +133,13 @@ export async function draw(): Promise<void> {
         // la consola, para saber qué pasó si se repite.
         console.warn("[tinkazo] el sorteo no se pudo grabar", lastError);
         btn.disabled = false;
+        btn.classList.add("lista");
         btn.textContent = t("drawRetry");
         const status = $("draw-status");
         status.style.display = "block";
         status.className = "txstatus bad";
         status.textContent = await anchorErrorText(lastError);
+        verError(status);
         return;
       }
     } else {
@@ -158,11 +163,13 @@ export async function draw(): Promise<void> {
     sinShow();
     console.warn("[tinkazo] el sorteo se cortó", e);
     btn.disabled = false;
+    btn.classList.add("lista");
     btn.textContent = t("drawRetry");
     const status = $("draw-status");
     status.style.display = "block";
     status.className = "txstatus bad";
     status.textContent = t("errAnchor.unknown");
+    verError(status);
   }
 }
 
