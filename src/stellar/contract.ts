@@ -118,6 +118,21 @@ export function resetClient(): void {
 }
 
 /**
+ * La cuenta no tiene con qué pagar la comisión: está vacía, o ni siquiera
+ * existe todavía en la red. Cada quien lo cuenta a su manera: la red dice
+ * `tx_insufficient_balance` (o `txINSUFFICIENT_BALANCE`), Pollar lo guarda como
+ * `txInsufficientBalance` y le agrega "Insufficient XLM to cover the network
+ * fee…", y una cuenta que no existe falla ya al simular con "Account not
+ * found". `tx_insufficient_fee` NO entra: ahí la cuenta puede tener de sobra y
+ * es la comisión ofrecida la que quedó corta para lo que la red cobra ahora.
+ */
+const SIN_SALDO = /tx_?insufficient_?balance|insufficient\s+(?:xlm|balance|funds)|underfunded|account not found|tx_?no_?account/i;
+const COMISION_CORTA = /tx_?insufficient_?fee/i;
+
+/** Este error es de falta de saldo. */
+export const esSinSaldo = (e: unknown): boolean => errorKey(e) === "noFunds";
+
+/**
  * Traduce un error de una invocación a una clave de i18n.
  * Devuelve `errors.<clave>` para que la interfaz muestre algo entendible.
  */
@@ -128,7 +143,8 @@ export function errorKey(e: unknown): string {
     const named = CONTRACT_ERRORS[Number(m[1])];
     if (named) return named;
   }
-  if (/insufficient|underfunded|txInsufficientBalance/i.test(msg)) return "noFunds";
+  if (COMISION_CORTA.test(msg)) return "busy";
+  if (SIN_SALDO.test(msg)) return "noFunds";
   if (/User (declined|rejected)|denied|cancel/i.test(msg)) return "userRejected";
   if (/fetch|network|timeout|ECONN|Failed to/i.test(msg)) return "rpcDown";
   // La red no la tomó: ocupada, con la secuencia corrida o vencida. No se
