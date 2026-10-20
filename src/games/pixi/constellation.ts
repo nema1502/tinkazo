@@ -607,6 +607,16 @@ export async function constellationPixi(names: string[], winners: readonly numbe
       if (nd.kind !== "star" || !nd.g?.visible) return;
       estorbos.push({ b: cuadrado(S.scene.toGlobal({ x: nd.x, y: nd.y }), nd.g.scale.x * 1.11 * z), peso: conNombreNodo.has(ni) ? 6 : 3 });
     });
+    // En la nova el cartel de la corona va por encima de los nombres: el de un
+    // co-ganador no puede quedar detrás. Es la segunda capa de la corona (ver
+    // `crown` en stage.ts: confeti, placa y destello).
+    if (phase === "nova") {
+      const placa = crown.root.children[1] as Container | undefined;
+      if (placa?.visible) {
+        const pb = placa.getBounds();
+        estorbos.push({ b: { x: pb.x, y: pb.y + pb.height / 2, w: pb.width, h: pb.height }, peso: 40 });
+      }
+    }
     /** Cuánto de `a` cae encima de `b`, en píxeles cuadrados. */
     const pisa = (a: Caja, b: Caja): number => {
       const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
