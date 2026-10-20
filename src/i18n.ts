@@ -2148,7 +2148,7 @@ export const T: Record<Lang, Dict> = {
     jgTitle: "A draw you watch",
     jgLead: "When the animation starts, the winner is already decided: it came out of the beacon's public number. The game only tells it. Each one passes twenty checks before it ships, and the one that matters is that the name on screen is the one the protocol set.",
     jgRaceN: "Llama race",
-    jgRaceB: "Our signature game. Eight lanes across the mountains: with more than eight people, eight run and the draw was still among everyone.",
+    jgRaceB: "Our flagship game. Eight lanes across the mountains: with more than eight people, eight run and the draw was still among everyone.",
     jgWheelN: "Wheel",
     jgWheelB: "The usual one, with the tricolor pin marking each full turn. Slices are interleaved, so it still spins properly with two people. Up to twenty-four.",
     jgStellarN: "Stellar constellation",
