@@ -296,7 +296,25 @@
       <div class="winner-box" id="winner-box">
         <p class="kicker" data-i="winnerLabel">Lo que salió</p>
         <div id="winner-cards" role="status" aria-live="polite"></div>
-        <div class="row grande-row"><button class="primary" id="btn-grande" data-i="pantallaBtn">Mostrar en grande</button><button class="ghost" id="btn-imagen" data-i="imgBtn">Imagen para redes</button></div>
+        <!-- Lo que sigue, pegado al ganador: el siguiente premio si queda con quién
+             sortear, y si no, compartir el comprobante. Lo demás, más abajo. -->
+        <section class="again" id="again-row" style="display:none" aria-labelledby="again-t">
+          <h3 id="again-t" data-i="againTitle">¿Pasamos al siguiente premio?</h3>
+          <p class="again-left" id="again-left"></p>
+          <div class="row" id="again-acciones">
+            <button class="primary" id="btn-again-sin">Siguiente premio</button>
+            <button class="ghost" id="btn-proof" data-i="shareProof">Compartir el comprobante</button>
+            <button class="ghost" id="btn-again-nueva" data-i="againNueva">Usar otra lista</button>
+          </div>
+          <p class="note" data-i="againNote">Después de sellar elegís el juego, el mismo u otro. Este sorteo queda como está, en Mis sorteos y en su comprobante.</p>
+        </section>
+        <div class="demo-fin">
+          <h3 data-i="demoFinT">Así de fácil. ¿Lo hacemos con tu lista?</h3>
+          <div class="hero-ctas">
+            <a class="primary cta" href="/#sortear" data-i="ctaHero">Entrar y sortear, es gratis</a>
+          </div>
+        </div>
+        <div class="row grande-row"><button class="ghost" id="btn-grande" data-i="pantallaBtn">Mostrar en grande</button><button class="ghost" id="btn-imagen" data-i="imgBtn">Imagen para redes</button></div>
         <p class="note" id="motion-note" style="display:none"><span data-i="motionNote">Tu sistema tiene las animaciones reducidas, por eso el sorteo se muestra directo.</span> <button class="ghost" id="btn-replay" data-i="motionReplay">Ver la animación igual</button></p>
         <div class="verify">
           <div>
@@ -310,7 +328,6 @@
             </details>
             <div class="row">
               <button class="ghost" id="btn-reverify" data-i="reverify">Rehacelo acá mismo</button>
-              <button class="ghost" id="btn-proof" data-i="shareProof">Compartir comprobante</button>
               <button class="ghost" id="btn-copy" data-i="copySummary">Copiar resumen</button>
               <a class="ghost" id="btn-whatsapp" target="_blank" rel="noopener" data-i="tellWhatsapp">Avisarle por WhatsApp</a>
               <a class="ghost" id="btn-email" data-i="tellEmail">Avisarle por correo</a>
@@ -322,22 +339,7 @@
             <p class="kicker" data-i="qrCaption">Apuntá el celular y revisalo vos mismo</p>
           </div>
         </div>
-        <section class="again" id="again-row" style="display:none" aria-labelledby="again-t">
-          <h3 id="again-t" data-i="againTitle">¿Hay otro premio?</h3>
-          <p class="again-left" id="again-left"></p>
-          <div class="row">
-            <button class="primary" id="btn-again-sin">Sortear entre los que quedan</button>
-            <button class="ghost" id="btn-again-nueva" data-i="againNueva">Usar otra lista</button>
-          </div>
-          <p class="note" data-i="againNote">Después de sellar elegís el juego, el mismo u otro. Este sorteo queda como está, en Mis sorteos y en su comprobante.</p>
-        </section>
         <aside class="lore" id="lore-box" style="display:none"></aside>
-        <div class="demo-fin">
-          <h3 data-i="demoFinT">Así de fácil. ¿Lo hacemos con tu lista?</h3>
-          <div class="hero-ctas">
-            <a class="primary cta" href="/#sortear" data-i="ctaHero">Entrar y sortear, es gratis</a>
-          </div>
-        </div>
       </div>
     </div>
   </section>

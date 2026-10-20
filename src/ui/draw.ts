@@ -432,8 +432,13 @@ function sinGanadores(): string[] {
 }
 
 /**
- * El panel de "¿hay otro premio?", debajo del resultado: cuántos quedan sin
- * los ganadores y los dos caminos, cada uno empezando por lo que lo distingue.
+ * Lo que sigue después del ganador, pegado al ganador: cuántos quedan sin
+ * premio y qué se hace ahora. Hay una sola acción principal. Si queda con quién
+ * sortear, "Siguiente premio" (con cuántas personas quedan); si no, "Compartir
+ * el comprobante". Lo demás, secundario. Hasta el 19 de octubre de 2026 esto
+ * estaba debajo de la verificación, el QR y la historia, a más de una pantalla
+ * de distancia, y "Sortear entre los que quedan" no decía "siguiente".
+ *
  * Con menos de dos no hay otro sorteo con esta lista: ese botón se va y la
  * razón queda escrita, no escondida en un title que el proyector no muestra.
  */
@@ -442,9 +447,16 @@ function showAgain(): void {
   const quedan = sinGanadores().length;
   const alcanza = quedan >= 2;
   const sin = $<HTMLButtonElement>("btn-again-sin");
+  const comprobante = $<HTMLButtonElement>("btn-proof");
   sin.style.display = alcanza ? "" : "none";
   sin.textContent = L.againSin(quedan);
-  $("btn-again-nueva").className = alcanza ? "ghost" : "primary";
+  comprobante.className = alcanza ? "ghost" : "primary";
+  $("btn-again-nueva").className = "ghost";
+  // La principal va primero, también en el orden del teclado y del lector.
+  $("again-acciones").prepend(alcanza ? sin : comprobante);
+  const titulo = $("again-t");
+  titulo.dataset.i = alcanza ? "againTitle" : "againTitleFin";
+  titulo.textContent = t(titulo.dataset.i);
   $("again-left").textContent = alcanza ? L.againLeft(quedan) : L.againFew(quedan);
   $("again-row").style.display = "block";
   actualizarPaso();

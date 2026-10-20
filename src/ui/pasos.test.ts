@@ -85,3 +85,21 @@ describe("la lista sellada", () => {
     }
   });
 });
+
+describe("lo que sigue después del ganador", () => {
+  it("el botón dice 'siguiente' y cuántos quedan, en los dos idiomas", () => {
+    expect(T.es.againSin(16)).toMatch(/Siguiente premio/);
+    expect(T.es.againSin(16)).toMatch(/16/);
+    expect(T.en.againSin(16)).toMatch(/Next prize/);
+    expect(T.en.againSin(16)).toMatch(/16/);
+  });
+
+  it("el título y el aviso de cuántos quedan existen en los dos idiomas", () => {
+    for (const l of ["es", "en"] as const) {
+      expect(typeof T[l].againTitle).toBe("string");
+      expect(typeof T[l].againTitleFin).toBe("string");
+      expect(T[l].againLeft(16)).toMatch(/16/);
+      expect(T[l].againLeft(1)).toMatch(/1/);
+    }
+  });
+});

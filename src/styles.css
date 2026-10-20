@@ -1452,3 +1452,26 @@
     .wait-line { display: none; }
     .lanzar { margin-top: 12px; }
   }
+
+  /* Después del ganador, lo que sigue va pegado al ganador: el siguiente premio
+     (o, si no queda con quién sortear, compartir el comprobante). Una sola
+     acción principal; "Mostrar en grande" y la verificación van más abajo. */
+  .winner-box > .again { margin-top: 18px; padding: 14px 18px; border-width: var(--bw); box-shadow: var(--sh); }
+  .winner-box > .again h3 { font-size: 19px; }
+  .winner-box > .again .again-left { margin-top: 2px; }
+  .winner-box > .again .row { margin-top: 12px; }
+  .winner-box > .again .row > .primary { min-height: 52px; font-size: 16px; }
+  .winner-box > .again .note { margin-top: 10px; }
+  .grande-row { margin-top: 16px; }
+  /* Una pantalla baja: el ganador y, pegado, lo que sigue, sin la etiqueta de arriba. */
+  @media (max-height: 520px) {
+    #sec-draw .head { padding-top: 8px; padding-bottom: 8px; }
+    .winner-box { padding: 10px 22px 14px; }
+    .winner-box > .kicker { display: none; }
+    .winner-card { padding: 8px 18px; gap: 12px; margin-top: 4px; }
+    .winner-card img { width: 44px; height: 44px; }
+    .winner-name { font-size: clamp(20px, 3.6vw, 28px); }
+    .ausente { margin-top: 4px; }
+    .winner-box > .again { margin-top: 12px; padding: 10px 14px; }
+    .winner-box > .again .row { margin-top: 8px; }
+  }
