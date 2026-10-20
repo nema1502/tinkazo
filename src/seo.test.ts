@@ -367,6 +367,15 @@ describe("la portada y las páginas de lectura no dicen lo que el sitio no puede
 const LISTA_ES = "la huella de la lista, la cantidad de entradas, cuántos ganadores, la ronda, la hora del sello y su número de bloque, el premio o título que escribiste, la dirección de quien organiza y el número del sorteo; y, al sortear, la prueba que publicó la ronda, el número que decidió la ronda, la hora del sorteo, su número de bloque y las posiciones de los ganadores.";
 const LISTA_EN = "the list's fingerprint, the number of entries, how many winners, the round, the seal's time and block number, the prize or title you wrote, the organizer's address and the draw's number; and, when drawn, the proof the round published, the number the round decided, the draw's time, its block number and the winners' positions.";
 
+describe("la lista que sube a Stellar está completa en la documentación, en los dos idiomas", () => {
+  it.each([
+    ["docs/amenazas.md", LISTA_ES],
+    ["docs/threat-model.en.md", LISTA_EN],
+  ])("%s trae la lista completa", (archivo, lista) => {
+    expect(leer(archivo)).toContain(lista);
+  });
+});
+
 describe("frases fijas de la segunda ronda", () => {
   it("el veredicto parcial se dice veredicto amarillo (yellow verdict), y no de otra forma", () => {
     expect(T.es.sgLimit1).toContain("veredicto amarillo");
@@ -404,8 +413,8 @@ describe("frases fijas de la tercera ronda", () => {
 /** La raíz del repo: desde acá salen las carpetas que revisa la prueba de la revisión visual. */
 const RAIZ = fileURLToPath(new URL("..", import.meta.url));
 
-/** Las menciones de la revisión con nombre propio, escritas de cualquier forma (con saltos de línea también). */
-const REVISION_CON_NOMBRE = /agente\s+evaluador|lo\s+(?:encontr[oó]|vio)\s+el\s+agente/i;
+/** Las menciones de la revisión con nombre propio: la palabra entera, sin marcar las palabras que solo la contienen. */
+const REVISION_CON_NOMBRE = /\bagente\b/i;
 
 /** Los archivos de una carpeta del repo, en todos sus niveles, como rutas desde la raíz. */
 const archivosDe = (carpeta: string): string[] =>
