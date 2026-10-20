@@ -258,6 +258,9 @@ function vigilar(boton: HTMLButtonElement | null): void {
  */
 function armar(): void {
   medirBarra();
+  // Sin `IntersectionObserver` (un navegador muy viejo) no hay barra: el botón de verdad sigue donde está y el
+  // resto del sitio funciona igual. La barra es una red de seguridad, no puede romper lo que protege.
+  if (typeof IntersectionObserver === "undefined") return;
   const cab = document.querySelector("header");
   const arriba = cab && getComputedStyle(cab).position === "sticky" ? Math.ceil(cab.getBoundingClientRect().height) : 0;
   io?.disconnect();
