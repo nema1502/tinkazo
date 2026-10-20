@@ -67,6 +67,12 @@ describe("tagBudget / estimateTagSize / tagName", () => {
     expect(MAX_TAGS).toBeLessThanOrEqual(MAX_LABEL_ITEMS);
   });
 
+  it("gives a wide screen 30 % of its area and keeps a phone at 17 %", () => {
+    // Chips de 300 x 60: en 1280 x 720 entran siete (30 %), en un celular uno (17 %).
+    expect(tagBudget(1280, 720, 0, 0, 300, 60)).toBe(7);
+    expect(tagBudget(390, 844, 0, 0, 300, 60)).toBe(1);
+  });
+
   it("returns 0 for degenerate sizes", () => {
     expect(tagBudget(0, 0, 0, 0, 100, 20)).toBe(0);
     expect(tagBudget(390, 844, 100, 118, 0, 20)).toBe(0);
@@ -200,6 +206,18 @@ describe("planRollCall / rollCallAt", () => {
     expect(plan.pages.flat().length + plan.hidden).toBe(200);
     expect(plan.hidden).toBeGreaterThan(0);
     for (const pg of plan.pages) expect(pg.length).toBeLessThanOrEqual(8);
+  });
+
+  it("splits the names into pages of the same size, never a page of one", () => {
+    expect(planRollCall(ids(8), 7).pages.map((p) => p.length)).toEqual([4, 4]);
+    expect(planRollCall(ids(18), 7).pages.map((p) => p.length)).toEqual([6, 6, 6]);
+    for (let n = 2; n <= 60; n++) {
+      for (const cap of [2, 3, 5, 7, 9, 14]) {
+        const sizes = planRollCall(ids(n), cap).pages.map((p) => p.length);
+        expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThanOrEqual(1);
+        expect(Math.max(...sizes)).toBeLessThanOrEqual(cap);
+      }
+    }
   });
 
   it("handles empty input and a bad cap", () => {

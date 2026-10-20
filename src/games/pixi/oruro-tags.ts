@@ -61,12 +61,17 @@ export function estimateTagSize(kk: number, maxChars: number): { w: number; h: n
   return { w: 12 * k * 0.6 * chars + 32 * k, h: 25 * k };
 }
 
-/** How many tags fit: they may cover about a sixth of the usable area. */
+/**
+ * How many tags fit. The chips carry a readable font now, so the tags cover 30 %
+ * of the usable area on a screen wider than a phone (with 17 % a 720-line screen
+ * showed seven names out of eight); a phone keeps 17 %, its chips are the same size.
+ */
 export function tagBudget(w: number, h: number, top: number, bottom: number, tagW: number, tagH: number): number {
   if (![w, h, top, bottom, tagW, tagH].every(fin) || w <= 0 || tagW <= 0 || tagH <= 0) return 0;
   const usable = Math.max(0, h - top - bottom) * w;
   const per = tagW * 1.2 * (tagH * 1.7);
-  return Math.min(MAX_TAGS, Math.max(0, Math.floor((usable * 0.17) / per)));
+  const share = w <= 520 ? 0.17 : 0.3;
+  return Math.min(MAX_TAGS, Math.max(0, Math.floor((usable * share) / per)));
 }
 
 export function tagName(name: string, max: number): string {
@@ -109,7 +114,14 @@ export function planRollCall(ids: readonly number[], cap: number): RollPlan {
   if (m === 0) return { pages: [], dwell: ROLL_DWELL_MAX, hidden: fin(cap) ? ids.length : 0 };
   const sorted = [...ids].sort((a, b) => idHash(a) - idHash(b) || a - b);
   const all: number[][] = [];
-  for (let i = 0; i < sorted.length; i += m) all.push(sorted.slice(i, i + m));
+  // Páginas parejas, que difieren en a lo más un nombre: con tope 7, ocho son 4 + 4.
+  const count = Math.ceil(sorted.length / m);
+  let at = 0;
+  for (let j = 0; j < count; j++) {
+    const size = Math.floor((sorted.length + j) / count);
+    all.push(sorted.slice(at, at + size));
+    at += size;
+  }
   const maxPages = Math.floor(ROLL_MAX_DURATION / ROLL_DWELL_MIN);
   const pages = all.slice(0, maxPages);
   const dwell = pages.length ? Math.min(ROLL_DWELL_MAX, Math.max(ROLL_DWELL_MIN, ROLL_MAX_DURATION / pages.length)) : ROLL_DWELL_MAX;
