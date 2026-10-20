@@ -98,7 +98,10 @@ export function initWalletUI(): void {
       // Nunca durante el sorteo: la librería de Freighter usa Math.random() y
       // el auditor exigente lo contaba dentro del juego (19 de octubre de 2026),
       // y el estadio merece la máquina entera. Se vuelve a intentar al rato.
-      if (document.getElementById("stadium")?.style.display === "block") {
+      // Se mira el estilo calculado, no el de la línea: la escena fija (?pose=) muestra
+      // el estadio sin ponerle display en línea, y la sonda se colaba dentro del juego.
+      const estadio = document.getElementById("stadium");
+      if (estadio && getComputedStyle(estadio).display !== "none") {
         setTimeout(preparar, 5000);
         return;
       }
