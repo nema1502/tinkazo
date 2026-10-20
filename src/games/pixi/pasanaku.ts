@@ -828,6 +828,15 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
     // Como en el trompo: de a cuatro como mucho (los más recientes), con su
     // estrella si se van con premio, y se apagan al llegar. Encima de su
     // bulto, o al costado si ahí hay otro nombre.
+    // Un bulto que ya se apagó no vuelve a llevar nombre: su chip se destruye
+    // en vez de quedar escondido hasta el final (con 200 eran más de 200 textos
+    // de Pixi retenidos con su textura).
+    for (const q of bundles) {
+      if (q.outChip && q.out >= OUT_LIFE) {
+        q.outChip.destroy({ children: true });
+        q.outChip = undefined;
+      }
+    }
     if (phase !== "lift") {
       const salen = bundles.filter((q) => !q.alive && q.out < OUT_LIFE).sort((a, b) => a.out - b.out || b.slot - a.slot).slice(0, OUT_MAX);
       for (const q of salen) {
