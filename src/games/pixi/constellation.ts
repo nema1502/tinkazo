@@ -391,10 +391,12 @@ export async function constellationPixi(names: string[], winners: readonly numbe
     novaG = new Graphics();
     S.scene.addChild(packetG, novaG);
     bar = new Graphics();
-    barText = S.text("", { fontFamily: MONO, fontSize: 13 * k, fontWeight: "700", fill: CREAM });
+    // Con piso de tamaño: en un celular acostado, a 0,54 de la unidad, el texto
+    // de 11 unidades medía 6 píxeles y tenue.
+    barText = S.text("", { fontFamily: MONO, fontSize: Math.max(13, 13 * k), fontWeight: "700", fill: CREAM });
     barText.anchor.set(0.5, 1);
-    hopText = S.text("", { fontFamily: MONO, fontSize: 11 * k, fontWeight: "700", fill: CREAM });
-    hopText.alpha = 0.55;
+    hopText = S.text("", { fontFamily: MONO, fontSize: Math.max(12, 11 * k), fontWeight: "700", fill: CREAM });
+    hopText.alpha = 0.9;
     hopText.position.set(22 * k, S.top() + 12 * k);
     // Los nombres, en la interfaz y no en el cielo: ver `draw`.
     chipsLayer = new Container();
