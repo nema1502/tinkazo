@@ -12,9 +12,9 @@ Y el relato viene solo: "¡Dale, dale, dale! ¡No pierdas el tino!".
 
 ## La mecánica
 
-**La piñata cuelga.** Es un péndulo que se amortigua: cada palo le da un empujón y se hamaca. La cuerda cruje cada vez que pasa por abajo.
+**La piñata cuelga.** Sube colgada de su cuerda, sale de abajo, se pasa y rebota; después es un péndulo que se amortigua: cada palo le da un empujón y se hamaca. La cuerda cruje cada vez que pasa por abajo.
 
-**Los palos.** Entre cinco y nueve, según cuánta gente haya, cada vez más seguidos. Los da un chico con los ojos vendados, como se juega, que cuando la rompe se queda con el palo en alto. Cada palo entra en arco con su estela, y donde pega sale una estrella y se desprenden papelitos; la piñata se aplasta y rebota, se sacude, se raja un poco más y caen caramelos: al principio muchos, al final de a uno. Los caramelos rebotan, ruedan y se apilan en un montoncito que crece, que se desliza por las laderas: antes quedaban todos en el piso, a una altura al azar, y eran tan chicos que se leían como puntitos. **Los nombres.** Todo caramelo que salió de la piñata y sigue en movimiento lleva su propio chip con el nombre (más grande: escala 1,15 en pantalla grande y la base en celular, sobre la letra legible de todos los chips), que lo sigue y se queda 1,25 s después de que se queda quieto. Si hay más de 8 en el aire, se nombran los 8 que cayeron más recientemente y un chip '+N' cuenta el resto. Los chips nunca se solapan entre sí ni con la lista de adentro, y quedan siempre dentro de la pantalla: el cálculo vive en `pinata-labels.ts` (puro, con tests). Abajo a la derecha, sobre el piso, una tira muestra los últimos 5 caídos (el más viejo, más apagado) para quien miró para otro lado; se esconde en la coronación. Iba a la izquierda y le tapaba la cabeza al chico del palo. El narrador nombra a todos si un palo tira 2 o 3, y al primero más un conteo si tira más de 3. Cuando quedan seis o menos adentro, en una columna a la izquierda, debajo del contador, aparece la lista de quiénes siguen, y cuando quedan dos la cámara se acerca a la piñata. La lista se va con la rotura: con un solo nombre era el ganador escrito tres segundos antes del cartel.
+**Los palos.** Entre cinco y nueve, según cuánta gente haya, cada vez más seguidos. Los da un chico con los ojos vendados, como se juega: antes le dan tres vueltas, con el palo de largo fijo, y se arrima hasta donde el palo la alcanza. Cuando la rompe se queda con el palo en alto. Cada palo entra en arco con su estela, y donde pega sale una estrella y se desprenden papelitos; la piñata se aplasta y rebota, se sacude, se raja un poco más y caen caramelos: al principio muchos, al final de a uno. Los caramelos rebotan, ruedan y se apilan en un montoncito que crece, que se desliza por las laderas: antes quedaban todos en el piso, a una altura al azar, y eran tan chicos que se leían como puntitos. **Los nombres.** Todo caramelo que salió de la piñata y sigue en movimiento lleva su propio chip con el nombre (más grande: escala 1,15 en pantalla grande y la base en celular, sobre la letra legible de todos los chips), que lo sigue y se queda 1,25 s después de que se queda quieto. Si hay más de 8 en el aire, se nombran los 8 que cayeron más recientemente y un chip '+N' cuenta el resto. Los chips nunca se solapan entre sí ni con la lista de adentro, ni con el contador ni con el chico del palo, y quedan siempre dentro de la pantalla: el cálculo vive en `pinata-labels.ts` (puro, con tests). Abajo a la derecha, sobre el piso, una tira muestra los últimos 5 caídos (el más viejo, más apagado) para quien miró para otro lado; se esconde en la coronación. Iba a la izquierda y le tapaba la cabeza al chico del palo. El narrador nombra a todos si un palo tira 2 o 3, y al primero más un conteo si tira más de 3. Cuando quedan seis o menos adentro, en una columna a la izquierda, debajo del contador, aparece la lista de quiénes siguen, y cuando quedan dos la cámara se acerca a la piñata y al chico, que tiene que entrar junto a ella. La lista se va con la rotura: con un solo nombre era el ganador escrito tres segundos antes del cartel.
 
 **La rotura.** El último golpe la rompe con un destello: la olla se parte en ocho pedazos que salen girando, y los siete picos salen volando con una lluvia de papel de china. La rival cae primero, rápido. El caramelo ganador cae último, despacio, con un brillo, y toca el piso un momento antes del cartel; los nombres de los caídos se le corren para no taparlo. El empujón de cada palo tiene tope: sin él, los últimos la hamacaban más arriba que su gancho.
 
@@ -45,7 +45,7 @@ En segundos de juego, con 18 participantes y sin estirar.
 
 | Tramo | Qué pasa |
 |---|---|
-| 0,0 – 3,0 s | La piñata cuelga. "¡Arriba la piñata!", "¡18 caramelos adentro, uno por nombre!" |
+| 0,0 – 3,0 s | La piñata sube colgada de su cuerda y rebota. El chico, vendado, da tres vueltas (de 0,75 a 2,15 s). "¡Arriba la piñata!", "¡18 caramelos adentro, uno por nombre!" |
 | 3,5 – 14,9 s | Ocho palos, cada vez más seguidos |
 | 15,5 s | Se rompe. "¡SE ROMPIÓ!" |
 | 16,0 – 17,9 s | Cae el último caramelo, despacio |
@@ -55,11 +55,11 @@ Al principio era más corta y el modo "épico" no llegaba a durar lo elegido: es
 
 ## La cámara
 
-La piñata de cerca en los palos, más cerca cuando se raja y cuando se asoma el caramelo del susto, y cuando se rompe sigue al último caramelo hasta el piso.
+La piñata de cerca en los palos, más cerca cuando se raja y cuando se asoma el caramelo del susto, y cuando se rompe sigue al último caramelo hasta el piso. Con dos adentro encuadra la piñata y al chico juntos, con el zoom que haga falta; con tres premios, la escena baja un poco para que el cartel de la corona no tape la cabeza del chico.
 
 ## El sonido
 
-- **Al colgarla:** tres notas que suben.
+- **Al colgarla:** tres notas que suben. Las tres vueltas del chico, una nota por vuelta, cada una más arriba.
 - **Los caramelos adentro:** un traqueteo cuando se anuncia cuántos hay.
 - **La cuerda:** un crujido cada vez que la piñata pasa por abajo, cambiando de nota para no repetir el mismo golpe.
 - **Cada palo:** un golpe seco, un poco más fuerte cada vez (los dos últimos con un golpe grave), y el repiqueteo de los caramelos que caen.
@@ -79,4 +79,4 @@ node scripts/audit-emocion.mjs pinata
 node scripts/audit-sound.mjs pinata
 ```
 
-> **Estado de verificación (nombres de caramelos):** cubierto por tests unitarios la lógica pura (`pinata-labels.test.ts`), tipos y build. **No verificado en navegador**: la legibilidad a 390 px, el solape con la piñata bajo el zoom de cámara y el costo por frame no se pudieron comprobar.
+> **Estado de verificación (nombres de caramelos):** cubierto por tests unitarios la lógica pura (`pinata-labels.test.ts`), tipos y build. Se verificó en un navegador a 390×844, 844×390 y 1024×768: la legibilidad de los nombres, el contador y la lista de adentro, el encuadre con dos adentro y la corona con tres premios. **Pendiente:** los caramelos apilados forman torres altas y algunos tardan varios segundos en asentarse (física del montón, preexistente); el costo por frame con 200 personas no se midió aquí.
