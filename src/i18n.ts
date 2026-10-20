@@ -806,6 +806,7 @@ export const T: Record<Lang, Dict> = {
     masMeetupT: "Sorteo para meetup", masMeetupB: "Pegá la lista de tu meetup, sellala y sorteá en pantalla grande. Cualquiera la puede comprobar después.",
     masClaseT: "Sorteo en clase", masClaseB: "Para elegir quién pasa a exponer o armar grupos, de forma justa y sin que el ganador lo elija nadie.",
     masVerifT: "Sorteo verificable", masVerifB: "Cómo rehacer un resultado con tus propias herramientas, y qué no promete: la lista la arma quien sortea.",
+    masTermT: "Términos y privacidad", masTermB: "Participar es gratis, y quien organiza responde por su sorteo.",
     // --- Las páginas que la gente busca: meetups, clases y sorteo verificable (20 de octubre de 2026).
     pgCta: "Sortear ahora. Participar es gratis.", pgRelT: "Mirá también",
     navMeetup: "Sorteo para meetup", navClase: "Sorteo en clase", navVerif: "Sorteo verificable",
@@ -1921,6 +1922,7 @@ export const T: Record<Lang, Dict> = {
     masMeetupT: "Meetup draw", masMeetupB: "Paste your meetup list, seal it and draw on the big screen. Anyone can check it afterwards.",
     masClaseT: "Class draw", masClaseB: "To pick who presents or forms groups, fairly and with nobody picking the winner.",
     masVerifT: "Verifiable draw", masVerifB: "How to redo a result with your own tools, and what it does not promise: whoever runs the draw builds the list.",
+    masTermT: "Terms and privacy", masTermB: "Taking part is free, and the organizer is responsible for their draw.",
     // --- The pages people search for: meetups, classes and the verifiable draw (20 October 2026).
     pgCta: "Draw now. Taking part is free.", pgRelT: "See also",
     navMeetup: "Meetup draw", navClase: "Class draw", navVerif: "Verifiable draw",
