@@ -1532,13 +1532,15 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     const chip = (d.chip ??= chips.addChild(S.chip(nm(d.idx), G.portrait ? 0.9 : 1)));
     chip.scale.set(scale);
     chip.visible = true;
-    const cw = chip.width, ch = 24 * k * scale;
-    const lo = S.top() + 14 * k, hi = H - S.bottom() - 16 * k;
+    // El alto de verdad del chip, con la sombra: con los 24 de antes escritos a
+    // mano, los chips de letra legible se encimaban (16 de octubre de 2026).
+    const cw = chip.width, ch = chip.height;
+    const lo = S.top() + ch / 2 + 2 * k, hi = H - S.bottom() - ch / 2 - 4 * k;
     const hits = (cx: number, cy: number): boolean =>
       placed.some((r) => cx < r.x + r.w && cx + cw > r.x && cy - ch / 2 < r.y + r.h / 2 && cy + ch / 2 > r.y - r.h / 2);
     // Primero encima de la cabeza, después a los costados, y recién después apilado.
     const x0 = clamp(s.x - cw / 2, 8 * k, W - cw - 8 * k);
-    const y0 = clamp(abajo ? s.y + ch / 2 + 2 * k : s.y - 14 * k, lo, hi);
+    const y0 = clamp(abajo ? s.y + ch / 2 + 2 * k : s.y - ch / 2 - 2 * k, lo, hi);
     const otra = abajo ? ch + 2 * k : -(ch + 2 * k);
     const cands: [number, number][] = [[x0, y0], [x0 - cw * 0.62, y0], [x0 + cw * 0.62, y0], [x0, y0 + otra], [x0 - cw * 0.62, y0 + otra], [x0 + cw * 0.62, y0 + otra]];
     let cx = x0, cy = y0;
@@ -1621,8 +1623,9 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   function rollCall(x: number, live: Dancer[], placed: Rect[]): void {
     if (live.length > 64 || x < 0.3) return;
     if (live.length <= 6) {
-      // Con cuatro o menos, más grandes: a 12 px no se leían desde el fondo.
-      const s = live.length <= 4 ? (G.portrait ? 1.2 : 1.4) : 1;
+      // Con cuatro o menos, más grandes: a 12 px no se leían desde el fondo. En
+      // un celular, la base legible (CHIP_SCALE) ya alcanza.
+      const s = live.length <= 4 && !G.portrait ? 1.4 : 1;
       for (const d of live) placeChip(d, x, placed, s);
       return;
     }
@@ -1811,7 +1814,8 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       if (finalDuo && x >= F0) {
         for (const d of [win, dancers[rivalIdx] as Dancer]) {
           if (d.outAt >= 0 && x >= d.outAt + 0.9) continue;
-          placeChip(d, x, placed, G.portrait ? 1.5 : 2);
+          // En un celular, la base legible: más grandes ocupaban dos tercios del ancho.
+          placeChip(d, x, placed, G.portrait ? 1 : 2);
         }
       } else if (ev && ev.kind === "stop" && ev.victims.length > 5) {
         usePanel = x >= ev.x0 - 0.15;

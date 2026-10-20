@@ -160,6 +160,8 @@ export async function llamasPixi(
     ends: number[];
     /** Cuánto se corre el chip desde el centro de la celda (la llama va a la izquierda). */
     chipDx: number;
+    /** A qué escala quedó la grilla: cada celda se arma al tamaño de siempre y se escala entera. */
+    scale: number;
   }
 
   function gradientTexture(stops: [number, string][], h = 256): Texture {
@@ -707,7 +709,7 @@ export async function llamasPixi(
     const head = new Container();
     const strikes = new Graphics();
     root.addChild(dim, head);
-    const q: Qual = { root, dim, head, count: null, strikes, cells: [], at: [], ends: [], chipDx: 0 };
+    const q: Qual = { root, dim, head, count: null, strikes, cells: [], at: [], ends: [], chipDx: 0, scale: 1 };
     root.visible = false;
     S.hud.addChild(root);
     if (!waves.length) return q;
@@ -723,33 +725,55 @@ export async function llamasPixi(
     count.position.set(sw / 2, sub.y + sub.height + 6 * u);
     head.addChild(title, sub, count);
     q.count = count;
-    // La grilla: la escala más grande en la que entran todos.
+    // La grilla: la escala más grande en la que entran todos. Cada columna mide
+    // lo que su nombre más largo, con chips armados una vez al tamaño de
+    // siempre y la celda entera escalada. Con celdas fijas de 210 por 36, los
+    // chips de letra legible se salían de su celda y se pisaban con la de al
+    // lado (16 de octubre de 2026).
     const top = count.y + count.height + 14 * u, bottom = sh - S.bottom() - 12 * u;
     const areaW = sw * 0.95, areaH = Math.max(40 * u, bottom - top);
-    const cw = 210 * u, ch = 36 * u;
+    /** De la llama al chip, y del borde de la celda a la llama. */
+    const dx = 20 * u, lead = 17 * u, gapX = 14 * u;
+    const built = names.map((nm, i) => {
+      const cell = new Container();
+      const icon = llamaIcon(FUR[i % FUR.length] ?? 0xf3ead8);
+      icon.scale.set(u);
+      const c = S.chip(shorten(nm, 18), 1, nm);
+      c.position.set(dx, 0);
+      cell.addChild(icon, c);
+      return { cell, w: lead + dx + c.width + gapX, end: dx + c.width };
+    });
+    const ch = (built[0]?.cell.height ?? 40 * u) + 6 * u;
+    /** Lo ancho de cada columna con `cols` columnas: lo que mide su nombre más largo. */
+    const widths = (cols: number): number[] => {
+      const out = new Array<number>(cols).fill(0);
+      built.forEach((b, i) => { out[i % cols] = Math.max(out[i % cols] as number, b.w); });
+      return out;
+    };
     let best = { cols: 1, s: 0 };
-    for (let cols = 1; cols <= names.length; cols++) {
+    // Más de 60 columnas no entran en ninguna pantalla, y con miles de nombres
+    // probarlas todas costaba más que armar la grilla.
+    for (let cols = 1; cols <= Math.min(names.length, 60); cols++) {
       const rows = Math.ceil(names.length / cols);
-      const s = Math.min(1.45, areaW / (cols * cw), areaH / (rows * ch));
+      const s = Math.min(1.25, areaW / widths(cols).reduce((a, w) => a + w, 0), areaH / (rows * ch));
       if (s > best.s) best = { cols, s };
     }
     const s = best.s, cols = best.cols, rows = Math.ceil(names.length / cols);
-    const x0 = (sw - cols * cw * s) / 2, y0 = top + (areaH - rows * ch * s) / 2;
-    q.chipDx = 20 * u * s;
-    names.forEach((nm, i) => {
-      const cell = new Container();
-      const icon = llamaIcon(FUR[i % FUR.length] ?? 0xf3ead8);
-      icon.scale.set(u * s);
-      const c = S.chip(shorten(nm, 18), s, nm);
-      c.position.set(q.chipDx, 0);
-      cell.addChild(icon, c);
-      const at = { x: x0 + (i % cols) * cw * s + 17 * u * s, y: y0 + (Math.floor(i / cols) + 0.5) * ch * s };
+    const colW = widths(cols);
+    const colX: number[] = [];
+    colW.reduce((x, w) => (colX.push(x), x + w), 0);
+    const x0 = (sw - colW.reduce((a, w) => a + w, 0) * s) / 2, y0 = top + (areaH - rows * ch * s) / 2;
+    q.chipDx = dx * s;
+    built.forEach(({ cell, end }, i) => {
+      cell.scale.set(s);
+      const at = { x: x0 + ((colX[i % cols] ?? 0) + lead) * s, y: y0 + (Math.floor(i / cols) + 0.5) * ch * s };
       cell.position.set(at.x, at.y);
       root.addChild(cell);
       q.cells.push(cell);
       q.at.push(at);
-      q.ends.push(q.chipDx + c.width);
+      q.ends.push(end * s);
     });
+    q.scale = s;
     root.addChild(strikes);
     return q;
   }
@@ -1185,6 +1209,33 @@ export async function llamasPixi(
       fl.poly(pts).fill(S.color(i)).stroke({ width: 1.5 * u, color: INK });
     }
 
+    // La tabla y el aviso se deciden antes que los nombres: los nombres no se
+    // meten debajo de ellos.
+    L.board.visible = !G.portrait && phase !== "pre";
+    if (L.aviso) L.aviso.visible = phase !== "pre";
+    /**
+     * El nombre de cada carril va a la izquierda de su llama, y la cámara sigue
+     * a la punta: en un celular los de atrás quedaban cortados contra el borde
+     * izquierdo durante toda la carrera, y con la letra legible pasaba también
+     * en la pantalla grande (crítico de juegos, 16 de octubre de 2026). El que
+     * no entra se corre lo justo para quedar entero, en su carril: pegado al
+     * borde, o a la derecha de la tabla de posiciones si está a su altura.
+     */
+    const o0 = cam.toScreen(0, 0, sw, G.sh);
+    const z = cam.toScreen(1, 0, sw, G.sh).x - o0.x;
+    // En los acercamientos el nombre no crece con la cámara: en la foto, a
+    // 2,1, los chips legibles tapaban a las llamas enteras. Alejándose sí se
+    // achica con la pista, para no encimarse con el del carril de al lado.
+    const comp = 1 / Math.max(1, cam.zoom);
+    const muros = [L.board, L.aviso].filter((b): b is Container => !!b && b.visible).map((b) => b.getBounds());
+    const adentro = (tag: Container): void => {
+      const p = cam.toScreen(tag.x, tag.y, sw, G.sh);
+      const alto = (tag.height / 2) * z;
+      let min = 8 * u;
+      for (const m of muros) if (p.y + alto > m.y && p.y - alto < m.y + m.height) min = Math.max(min, m.x + m.width + 8 * u);
+      if (p.x < min) tag.x += (min - p.x) / z;
+    };
+
     // Los corredores.
     const fx = L.fx;
     fx.clear();
@@ -1223,8 +1274,9 @@ export async function llamasPixi(
       // de la popa de la balsa.
       // El nombre aparece cuando llega su chip de la clasificatoria, y late una vez.
       const late = h > 0.15 && h < 0.55 ? Math.sin(((h - 0.15) / 0.4) * Math.PI) * 0.35 : 0;
-      r.tag.scale.set(1 + late);
+      r.tag.scale.set((1 + late) * comp);
       r.tag.position.set(x - (space ? 82 : lake ? 86 : 70) * sc - r.tag.width, y - 30 * sc);
+      adentro(r.tag);
       r.tag.alpha = (phase === "done" && !premio ? 0.35 : 1) * Math.max(0, Math.min(1, (h + 0.05) / 0.2));
       if (quieto) continue;
       // Polvo (o estela), cada grano calculado desde su hora.
@@ -1289,8 +1341,6 @@ export async function llamasPixi(
     mini.rect(mx, my - 1.5 * u, mw, 3 * u).fill({ color: CREAM, alpha: 0.5 });
     for (let c = 0; c < 4; c++) mini.rect(mx + mw - 6 * u + (c % 2) * 3 * u, my - 7 * u + Math.floor(c / 2) * 7 * u, 3 * u, 7 * u).fill(c % 3 === 0 ? 0xffffff : INK);
     mini.visible = phase !== "pre";
-    L.board.visible = !G.portrait && phase !== "pre";
-    if (L.aviso) L.aviso.visible = phase !== "pre";
     const minis = lanes.map((_, k) => ({ k, p: quieto ? 0 : plan.pos(k, prog) })).sort((a, b) => a.p - b.p);
     for (const { k, p } of minis) {
       const lead = Math.round(rowPos[k] as number) === 0 && !quieto;
@@ -1347,13 +1397,13 @@ export async function llamasPixi(
       const r = L.runners[k];
       let tx = at.x, ty = at.y;
       if (r) {
-        const sc = G.laneScale(k);
-        const s = cam.toScreen(G.X0 - (space ? 82 : lake ? 86 : 70) * sc - r.tag.width, G.laneY(k) - 30 * sc, G.sw, G.sh);
+        // A donde está el nombre de su carril, que ya quedó adentro de la pantalla.
+        const s = cam.toScreen(r.tag.x, r.tag.y, G.sw, G.sh);
         tx = s.x - Q.chipDx;
         ty = s.y;
       }
       cell.position.set(at.x + (tx - at.x) * e, at.y + (ty - at.y) * e);
-      cell.scale.set(f > 0 ? 1 : pulso);
+      cell.scale.set(Q.scale * (f > 0 ? 1 : pulso));
       cell.alpha = f < 0.7 ? 1 : 1 - (f - 0.7) / 0.3;
     });
   }

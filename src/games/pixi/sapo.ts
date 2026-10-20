@@ -273,7 +273,13 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   let gridAt: Point[] = [];
   let gridScale = 1;
   /** El nombre de un agujero, a una letra de 17 px o más en una pantalla de 720 de alto. */
-  const labelScale = (): number => (S.portrait() ? 0.9 : 1.45);
+  /**
+   * El tamaño de los nombres de la mesa, sobre la base legible (CHIP_SCALE).
+   * En un celular no hay lugar entre la mesa y el borde: con la base, y aun a
+   * 0,75, los nombres de los costados no entraban y se apagaban, 5 de 12
+   * (16 de octubre de 2026). Ahí quedan como estaban antes de la base nueva.
+   */
+  const labelScale = (): number => (S.portrait() ? 0.6 : 1.45);
   /** Nombre y `n` letras del apellido: "María Q.", "María Qu.". En la mesa entran doce, y el nombre entero no. */
   const corto = (nm: string, n = 1): string => {
     const p = nm.trim().split(/\s+/);
@@ -329,10 +335,13 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     });
     anchoNombre = chips.map((c) => c.width / k);
     g = G();
-    // La grilla de la clasificatoria: todos los nombres a la vista, del tamaño que entre.
+    // La grilla de la clasificatoria: todos los nombres a la vista, del tamaño
+    // que entre. Las celdas miden lo que el chip más ancho y su alto de verdad:
+    // con las de 150 por 30 de antes, los chips de letra legible se pisaban
+    // (16 de octubre de 2026).
     const top = S.top() + 54 * k, bottom = g.h - S.bottom() - 10 * k;
     const areaW = g.w * 0.94, areaH = Math.max(40, bottom - top);
-    const cw = 150 * k, ch = 30 * k;
+    const cw = chips.reduce((m, c) => Math.max(m, c.width), 0) + 12 * k, ch = (chips[0]?.height ?? 40 * k) + 6 * k;
     let best = { cols: 1, s: 0 };
     for (let cols = 1; cols <= all; cols++) {
       const rows = Math.ceil(all / cols);

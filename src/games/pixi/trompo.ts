@@ -1312,12 +1312,14 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     // Pasar lista: mientras bailan, antes del primer choque, los nombres de a
     // tandas encima de cada trompo, para que cada uno sepa cuál es el suyo.
     const roll = phase === "crown" ? [] : S.batch(n, tAll, T_THROW - 0.8, T_FIGHT - 0.05);
+    // El contador no se tapa: en un celular, con la letra legible, la columna
+    // de nombres subía hasta encima de él.
     S.tags(names, roll, (i) => {
       const q = byIdx.get(i);
       if (!q || !q.alive || tAll < q.land) return null;
       const w = toWorld(q.x, q.y);
       return cam.toScreen(w.x, w.y - size * 1.15, S.sw(), S.sh());
-    });
+    }, [counterBox.getBounds()]);
 
     // Los nombres: los que siguen, cuando quedan pocos, y los que acaban de salir.
     const live = alive();
@@ -1335,8 +1337,10 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       // decía "sale con premio" y nadie sabía cuál era su trompo.
       const OUT_TAG = 1.2;
       const salen = tops.filter((q) => q.tagOut && !q.alive && !q.gone && q.out < OUT_TAG).sort((a, b) => a.out - b.out).slice(0, 4);
-      // En el mano a mano, grandes: a 8 px de mayúscula no se leían desde el fondo.
-      const grande = live.length <= 2 ? (S.portrait() ? 1.4 : 1.7) : live.length <= 4 ? 1.3 : 1;
+      // En el mano a mano, grandes: a 8 px de mayúscula no se leían desde el
+      // fondo. En un celular, la base legible (CHIP_SCALE) ya alcanza: más
+      // grandes tapaban a los dos trompos justo en el choque que decide.
+      const grande = S.portrait() ? 1 : live.length <= 2 ? 1.7 : live.length <= 4 ? 1.3 : 1;
       const W = S.sw(), H = S.sh();
       const at = [...vivos.map((q) => ({ q, out: false })), ...salen.map((q) => ({ q, out: true }))]
         .map(({ q, out }) => {
@@ -1354,7 +1358,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
         const a = cam.toScreen(w.x - size * 0.5, w.y - size * 1.05, W, H), b = cam.toScreen(w.x + size * 0.5, w.y, W, H);
         return { q, x0: a.x, y0: a.y, x1: b.x, y1: b.y };
       });
-      let prev = -Infinity, prevS = 1;
+      let prev = -Infinity, prevH = 0;
       for (const { q, out, p } of at) {
         const nm = names[q.idx] ?? "";
         const chip = out
@@ -1364,10 +1368,13 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
         chip.scale.set(sc);
         chip.alpha = out ? clamp((OUT_TAG - q.out) / 0.5, 0, 1) : 1;
         chip.visible = true;
-        const cy = Math.max(p.y, prev + 13 * k * (prevS + sc));
+        // El medio alto de verdad: con los 13 por escala de antes escritos a
+        // mano, los chips de letra legible se encimaban (16 de octubre de 2026).
+        const ch = chip.height / 2 + k;
+        const cy = Math.max(p.y, prev + prevH + ch);
         prev = cy;
-        prevS = sc;
-        const cw = chip.width, ch = 13 * k * sc;
+        prevH = ch;
+        const cw = chip.width;
         const tapa = (x: number): boolean => cuerpos.some((c) => c.q !== q && x < c.x1 && x + cw > c.x0 && cy - ch < c.y1 && cy + ch > c.y0);
         let x = Math.min(p.x + 4 * k, W - cw - 10 * k);
         // Si a la derecha tapa al otro trompo, a la izquierda del suyo.
