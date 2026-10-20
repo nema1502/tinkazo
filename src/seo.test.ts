@@ -180,6 +180,34 @@ describe("el texto escrito en las páginas nuevas y en las tarjetas es el del di
   });
 });
 
+describe("título y descripción de las páginas nuevas, en el idioma de la página", () => {
+  /** Las claves que el `<html>` de una página pide para su título y su descripción. */
+  const clavesDePagina = (html: string): { titulo: string; desc: string } => {
+    const etiqueta = html.match(/<html\b[^>]*>/)?.[0] ?? "";
+    return {
+      titulo: etiqueta.match(/\sdata-titulo-clave="([^"]+)"/)?.[1] ?? "",
+      desc: etiqueta.match(/\sdata-desc-clave="([^"]+)"/)?.[1] ?? "",
+    };
+  };
+
+  it.each(Object.keys(NUEVAS))("%s pide su título y su descripción por clave, y las dos existen en es y en", (archivo) => {
+    const { titulo, desc } = clavesDePagina(leer(archivo));
+    expect(titulo, "data-titulo-clave").not.toBe("");
+    expect(desc, "data-desc-clave").not.toBe("");
+    for (const clave of [titulo, desc]) {
+      expect(textoEs(clave), `${clave} en es`).not.toBe("");
+      expect(sinVersionEn(clave), `${clave} en en`).toBe(false);
+    }
+  });
+
+  it.each(Object.keys(NUEVAS))("%s: en español, esas claves dan el <title> y la meta description de la página", (archivo) => {
+    const html = leer(archivo);
+    const { titulo, desc } = clavesDePagina(html);
+    expect(T.es[titulo]).toBe(NUEVAS[archivo]?.titulo);
+    expect(T.es[desc]).toBe(descripcion(html));
+  });
+});
+
 /** Lo que el HTML trae escrito en un elemento: el texto de `data-i`, el HTML de `data-i-html` o un atributo `data-i-*`. */
 const sinEtiquetas = (s: string): string => s.replace(/<[^>]+>/g, "");
 const sinEntidades = (s: string): string =>
@@ -346,7 +374,10 @@ const CON_AVISO = ["index.html", "terminos.html"];
 /** Lo que una página dice: sus claves en los dos idiomas, el título y las descripciones. */
 const textosDe = (archivo: string): string[] => {
   const html = leer(archivo);
-  const claves = [...html.matchAll(/data-i(?:-html|-ph|-title|-aria)?="([^"]+)"/g)].map((m) => m[1] ?? "");
+  const claves = [
+    ...html.matchAll(/data-i(?:-html|-ph|-title|-aria)?="([^"]+)"/g),
+    ...html.matchAll(/data-(?:titulo|desc)-clave="([^"]+)"/g),
+  ].map((m) => m[1] ?? "");
   const declarados = [
     html.match(/<title>([^<]*)<\/title>/)?.[1],
     descripcion(html),

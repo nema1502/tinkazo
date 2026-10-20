@@ -16,7 +16,8 @@ type Dict = Record<string, unknown>;
  * herramienta recibe en un `<script type="application/json" id="textos">` solo
  * las cadenas que usa, en español y en inglés, y `src/idioma.ts` las pinta.
  *
- * Qué usa una página sale de dos lugares: los atributos `data-i*` de su HTML, y
+ * Qué usa una página sale de dos lugares: los atributos `data-i*` de su HTML (y
+ * `data-titulo-clave` y `data-desc-clave`, el título y la descripción), y
  * las cadenas entre comillas de su código (la entrada y lo que importa sin
  * `import()`) que son claves del diccionario. Sobra alguna, no falta ninguna:
  * así entran también las que el código pone a mano, como `t("vCheckList")`.
@@ -79,7 +80,7 @@ function textosPorPagina(): Plugin {
 
         const T = await diccionario();
         const claves = new Set<string>();
-        const delHtml = [...fuente.matchAll(/\bdata-(?:i|i-html|i-ph|i-title|i-aria|label-i)="([^"]+)"/g)].map((m) => m[1] as string);
+        const delHtml = [...fuente.matchAll(/\bdata-(?:i|i-html|i-ph|i-title|i-aria|label-i|titulo-clave|desc-clave)="([^"]+)"/g)].map((m) => m[1] as string);
         for (const k of delHtml) {
           if (typeof T.es[k] !== "string" || typeof T.en[k] !== "string") {
             this.warn(`${ctx.path}: la clave "${k}" no es una cadena en los dos idiomas de src/i18n.ts`);

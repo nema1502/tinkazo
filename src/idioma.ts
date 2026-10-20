@@ -113,5 +113,13 @@ export function setLang(l: Lang): void {
     const v = dict[el.dataset.iAria ?? ""];
     if (typeof v === "string") el.setAttribute("aria-label", v);
   });
+  // Las páginas de sorteo dicen su título y su descripción en el idioma de la
+  // página: el `<html>` trae las claves en `data-titulo-clave` y `data-desc-clave`.
+  const { tituloClave, descClave } = document.documentElement.dataset;
+  const titulo = tituloClave ? dict[tituloClave] : undefined;
+  if (typeof titulo === "string") document.title = titulo;
+  const desc = descClave ? dict[descClave] : undefined;
+  const meta = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+  if (typeof desc === "string" && meta) meta.content = desc;
   for (const fn of listeners) fn(l);
 }

@@ -810,6 +810,13 @@ export const T: Record<Lang, Dict> = {
     // --- Las páginas que la gente busca: meetups, clases y sorteo verificable (20 de octubre de 2026).
     pgCta: "Sortear ahora. Participar es gratis.", pgRelT: "Mirá también",
     navMeetup: "Sorteo para meetup", navClase: "Sorteo en clase", navVerif: "Sorteo verificable",
+    // Título y descripción de cada página de sorteo: su <html> trae la clave de cada una.
+    titMeetup: "Sorteo para meetup: en pantalla grande y comprobable",
+    descMeetup: "Sorteá en tu meetup con pantalla grande y un resultado que cualquiera puede comprobar desde su celular. Pegá la lista o subí el CSV de Luma.",
+    titClase: "Sorteo en clase: elegí quién pasa, de forma justa",
+    descClase: "Sorteo en clase para elegir quién pasa a exponer o armar grupos. Pegá la lista, sellala y sorteá con la carrera de llamas o la ruleta, de forma justa.",
+    titVerif: "Sorteo verificable: cómo comprobar el resultado",
+    descVerif: "Cómo rehacer un sorteo con tus propias herramientas: la lista se sella antes, el número sale de una ronda pública y la lista la arma quien sortea.",
     meetKicker: "Para meetups",
     meetH1: "Sorteo para tu meetup, en pantalla grande",
     meetLead: "Pegá la lista de quienes vinieron, sellala y sorteá con el proyector. Después, cualquiera del grupo puede rehacer el sorteo desde su celular.",
@@ -1926,6 +1933,13 @@ export const T: Record<Lang, Dict> = {
     // --- The pages people search for: meetups, classes and the verifiable draw (20 October 2026).
     pgCta: "Draw now. Taking part is free.", pgRelT: "See also",
     navMeetup: "Meetup draw", navClase: "Class draw", navVerif: "Verifiable draw",
+    // The title and description of each draw page: its <html> carries each key.
+    titMeetup: "Meetup draw: on the big screen and checkable",
+    descMeetup: "Run the draw at your meetup on a big screen, with a result anyone can check from their phone. Paste the list or upload the Luma CSV.",
+    titClase: "Class draw: pick who presents, fairly",
+    descClase: "Class draw to pick who presents or forms groups. Paste the list, seal it and draw with the llama race or the wheel, fairly.",
+    titVerif: "Verifiable draw: how to check the result",
+    descVerif: "How to redo a draw with your own tools: the list is sealed first, the number comes from a public round and whoever runs the draw builds the list.",
     meetKicker: "For meetups",
     meetH1: "A draw for your meetup, on the big screen",
     meetLead: "Paste the list of the people who came, seal it and draw on the projector. Afterwards, anyone in the group can redo the draw from their phone.",
