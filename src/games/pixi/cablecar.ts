@@ -1011,7 +1011,6 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       // Con tres a cinco, en escritorio también la base: con 1,3 no entraban a
       // los costados y caían sobre la cabina de al lado.
       const sc = G.vertical ? 1 : quedan <= 2 ? 1.6 : 1;
-      const z = zoomNow();
       // Las cabinas vacías no cuentan: se están yendo cable abajo.
       const boxes = new Map<number, Box>();
       for (let cab = 0; cab < C; cab++) {
@@ -1023,7 +1022,10 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         const box = boxes.get(cab);
         if (who.length !== 1 || !box || cabPoint(cab, tAll).alpha < 1) continue;
         const cy = (box.y0 + box.y1) / 2;
-        if ((box.x0 + box.x1) / 2 < 0 || (box.x0 + box.x1) / 2 > W || cy < lo || cy > hi) continue;
+        // Una cabina fuera de la pantalla no lleva nombre. Una que queda detrás del
+        // cartel del relator o de la barra de arriba sí: su nombre va al borde que
+        // le quede libre (si no, en celular horizontal la finalista se quedaba sin nombre).
+        if ((box.x0 + box.x1) / 2 < 0 || (box.x0 + box.x1) / 2 > W || cy < 0 || cy > H) continue;
         const idx = who[0] as number;
         let e = soloTags.get(cab);
         if (!e || e.idx !== idx || e.sc !== sc) {
@@ -1040,7 +1042,9 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
           // Debajo y encima de la cabina el nombre se corre hasta el borde antes de
           // probar si entra: sin eso ningún costado entraba y caía sobre su propia cabina.
           const x = side === 0 || side === 3 ? clamp(x0, 8 * u, Math.max(8 * u, W - w - 8 * u)) : x0;
-          const y = side === 0 ? box.y1 + gap + h / 2 : side === 3 ? box.y0 - 64 * G.k * z - gap - h / 2 : cy;
+          // Encima, pegado al techo de la cabina: el colgante se alarga con el zoom,
+          // y con 64 * k * zoom el nombre flotaba noventa píxeles arriba de su cabina.
+          const y = side === 0 ? box.y1 + gap + h / 2 : side === 3 ? box.y0 - gap - h / 2 : cy;
           return { x0: x, y0: y - h / 2, x1: x + w, y1: y + h / 2 };
         };
         const fits = (r: Box, m = 0): boolean =>
