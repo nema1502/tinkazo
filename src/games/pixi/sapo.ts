@@ -521,7 +521,9 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       }
       cam.punch(o.final ? 0.1 : 0.05).shake((o.final ? 12 : 6) * k);
       if (o.final) S.say(t("cSapIn"), 1);
-      else S.say(T[getLang()].cSapDone(nameOfSlot(o.slot)), 0.55);
+      // El co-ganador que entra sale con premio, y el relator dice el número del
+      // premio: nombrarlo acá lo anunciaba antes del final.
+      else S.say(T[getLang()].cSapDone(premioDe(o.th.turn)), 0.55);
     }
   };
 

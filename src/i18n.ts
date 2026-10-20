@@ -83,7 +83,7 @@ export interface Dict {
   cSapCount: (n: number) => string;
   cSapNear: (n: string) => string;
   cSapNext: (k: number, of: number) => string;
-  cSapDone: (n: string) => string;
+  cSapDone: (k: number) => string;
   cSapTally: (k: number, of: number) => string;
   cQualStart: (n: number) => string;
   cQualLeft: (n: number) => string;
@@ -526,7 +526,7 @@ export const T: Record<Lang, Dict> = {
     cQuiLeft: "QUEDAN",
     cQuiAlmost: ["¡Casi se da vuelta!", "¡Uy, casi!", "¡Se salvó de milagro!"],
     cSapNext: (k) => `¡Va el premio ${k}!`,
-    cSapDone: (n) => pick([`¡Cayó en el agujero de ${n}: ganador!`, `¡Ahí quedó, en el de ${n}: ganador!`]),
+    cSapDone: (k) => pick([`¡Cayó el premio ${k}!`, `¡Ahí quedó el premio ${k}!`]),
     cSapTally: (k, of) => `Premio ${k} de ${of}`,
     cSapAlmost: "¡Casi!",
     // --- Carnaval de Oruro. La entrada de la Diablada hasta el Socavón.
@@ -1668,7 +1668,7 @@ export const T: Record<Lang, Dict> = {
     cQuiLeft: "LEFT",
     cQuiAlmost: ["It almost flipped!", "Whoa, so close!", "Saved by a hair!"],
     cSapNext: (k) => `Prize ${k}, here it goes!`,
-    cSapDone: (n) => pick([`It dropped into ${n}'s hole: winner!`, `There it rests, in ${n}'s: winner!`]),
+    cSapDone: (k) => pick([`Prize ${k} dropped in!`, `There it rests: prize ${k}!`]),
     cSapTally: (k, of) => `Prize ${k} of ${of}`,
     cSapAlmost: "Almost!",
     cOruStart: ["The entrada begins!", "The band strikes up!", "Let the diablada dance!"],

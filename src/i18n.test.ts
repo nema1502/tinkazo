@@ -32,9 +32,10 @@ describe("diccionario", () => {
     expect(vacias).toEqual([]);
   });
 
-  it("Sapo: the drop line says winner, the tally counts, 'almost' and the frog's lip exist", () => {
-    expect(T.es.cSapDone("Ana")).toContain("ganador");
-    expect(T.en.cSapDone("Ana")).toContain("winner");
+  it("Sapo: the drop line names the prize, never the co-winner, the tally counts, 'almost' and the frog's lip exist", () => {
+    // Al caer el co-ganador la línea dice su número de premio: no hay nombre que decir.
+    expect(T.es.cSapDone(2)).toMatch(/premio 2/i);
+    expect(T.en.cSapDone(2)).toMatch(/prize 2/i);
     expect(T.es.cSapTally(1, 2)).toBe("Premio 1 de 2");
     expect(T.en.cSapTally(1, 2)).toBe("Prize 1 of 2");
     for (const k of ["cSapAlmost", "cSapLip"]) {
