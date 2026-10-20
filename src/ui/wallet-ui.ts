@@ -405,7 +405,9 @@ async function refreshFunds(forzar = false): Promise<void> {
     return;
   }
   const [{ xlmBalance, activeWallet }, { submitsItself }] = await Promise.all([lite(), import("../stellar/wallet-pollar")]);
-  if (!forzar && submitsItself(activeWallet())) {
+  // Una vez que salió como último recurso la caja sigue a la vista hasta que haya
+  // saldo: cambiar de idioma vuelve a pintar la página, y no debe esconderla.
+  if (!forzar && !cajaDeUltimoRecurso && submitsItself(activeWallet())) {
     box.style.display = "none";
     return;
   }
@@ -413,10 +415,14 @@ async function refreshFunds(forzar = false): Promise<void> {
   // -1 es "no pude preguntar". Sin respuesta no se afirma nada.
   if (bal < 0 || bal >= 1) {
     box.style.display = "none";
+    cajaDeUltimoRecurso = false;
     return;
   }
   renderFundBox(box, session.address);
 }
+
+/** La caja de fondos ya salió como último recurso (ver `mostrarSinFondos`). */
+let cajaDeUltimoRecurso = false;
 
 /**
  * Sellar o sortear pidió ayuda con los fondos y no la hubo: la caja de fondos
@@ -425,6 +431,7 @@ async function refreshFunds(forzar = false): Promise<void> {
  */
 async function mostrarSinFondos(): Promise<void> {
   if (!session) return;
+  cajaDeUltimoRecurso = true;
   await refreshFunds(true);
   const box = $("fund-box");
   if (box.style.display !== "none") box.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -935,6 +942,7 @@ async function disconnect(): Promise<void> {
   w.setActiveWallet(null);
   session = null;
   wrongNetwork = false;
+  cajaDeUltimoRecurso = false;
   // Cerrar sesión a propósito es lo único que olvida el tipo de sesión guardado.
   clearSessionKind(network.name);
   render();
