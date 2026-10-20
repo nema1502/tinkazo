@@ -460,6 +460,87 @@ describe("una cuenta de Pollar que todavía no existe en la red", () => {
   });
 });
 
+/**
+ * La caja de fondos es la que pide copiar una dirección y mandarle XLM. Quien entra con Google o
+ * con un correo no tiene por qué verla en mainnet, pase lo que pase: ahí ve el mensaje de lo que
+ * pasó, y nada más.
+ */
+describe("en mainnet una cuenta de Pollar nunca ve la caja de fondos", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    h.red.name = "mainnet";
+    h.red.friendbotUrl = null;
+  });
+  afterEach(() => vi.useRealTimers());
+
+  async function correr<T>(corrida: Promise<T>): Promise<T> {
+    let listo = false;
+    void corrida.then(
+      () => (listo = true),
+      () => (listo = true),
+    );
+    for (let t = 0; t < 200_000 && !listo; t += 250) await vi.advanceTimersByTimeAsync(250);
+    return corrida;
+  }
+
+  it.each([
+    ["sin saldo (como lo guarda Pollar)", () => new Error("txInsufficientBalance")],
+    ["sin saldo (como lo dice la red)", () => new Error("tx_insufficient_balance")],
+    ["sin saldo (el texto de Pollar)", () => new Error("Insufficient XLM to cover the network fee and minimum reserve.")],
+    ["un pago que no alcanza", () => new Error("op_underfunded")],
+    ["comisión corta", () => new Error("txInsufficientFee")],
+    ["secuencia corrida", () => new Error("tx_bad_seq")],
+    ["la cuenta no existe", () => new Error("Account not found: " + DIR)],
+    ["la cuenta no existe (al enviar)", () => new Error("txNoAccount")],
+    ["la red caída", () => new Error("Failed to fetch")],
+    ["la ronda quedó cerca", () => new Error("HostError: Error(Contract, #5)")],
+    ["algo que nadie esperaba", () => new Error("boom")],
+  ])("%s", async (_nombre, hacer) => {
+    h.wallet = pollar(vi.fn().mockRejectedValue(hacer()));
+    const { error } = await correr(sellar());
+    expect(error).toBeInstanceOf(Error);
+    expect(eventos).toEqual([]);
+    expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+  });
+
+  it("tampoco con la cuenta sin abrir al cabo de los 90 segundos", async () => {
+    h.accountOnRpc.mockResolvedValue(false);
+    h.wallet = pollar();
+    await correr(sellar());
+    expect(eventos).toEqual([]);
+  });
+
+  it("la falta de saldo se le dice tal cual, sin mandarla a ningún lado", async () => {
+    h.wallet = pollar(vi.fn().mockRejectedValue(new Error("txInsufficientBalance")));
+    const { error } = await correr(sellar());
+    const { anchorErrorText } = await import("./anchor");
+    expect(await anchorErrorText(error)).toBe("Tu cuenta no tiene saldo para pagar la comisión de la red.");
+  });
+});
+
+describe("una comisión corta no es falta de saldo", () => {
+  it.each(["tx_insufficient_fee", "txInsufficientFee", "txINSUFFICIENT_FEE"])("%s: no prende el grifo, no reintenta y no sale la caja de fondos", async (codigo) => {
+    const enviar = vi.fn().mockRejectedValue(new Error(codigo));
+    h.wallet = pollar(enviar);
+    const { error } = await sellar();
+    expect(enviar).toHaveBeenCalledTimes(1);
+    expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+    expect(eventos).toEqual([]);
+    const { anchorErrorText } = await import("./anchor");
+    // "La red estaba ocupada": hay que probar de nuevo, no conseguir XLM.
+    expect(await anchorErrorText(error)).toBe("La red estaba ocupada y no tomó la transacción. Probá de nuevo en unos segundos.");
+  });
+
+  it("y la secuencia corrida (tx_bad_seq) tampoco", async () => {
+    const enviar = vi.fn().mockRejectedValue(new Error("tx_bad_seq"));
+    h.wallet = pollar(enviar);
+    await sellar();
+    expect(enviar).toHaveBeenCalledTimes(1);
+    expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+    expect(eventos).toEqual([]);
+  });
+});
+
 describe("con ?grifo=0 (testnet, el grifo apagado a propósito)", () => {
   /** La pestaña con el parámetro en la dirección, como si recién se hubiera abierto la página. */
   const conGrifoApagado = (search = "?grifo=0") => {

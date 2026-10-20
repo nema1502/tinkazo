@@ -98,6 +98,66 @@ describe("errorKey: lo que NO es falta de saldo", () => {
     expect(errorKey(new Error("HostError: Error(Contract, #5) tx_insufficient_balance"))).toBe("roundTooSoon");
   });
 
+  /**
+   * Los códigos de resultado de una transacción que la red puede devolver y que
+   * NO son falta de saldo, con las tres grafías con que llegan: la de Horizon y
+   * el SDK (`tx_bad_seq`), la del XDR (`txBAD_SEQ`) y la de Pollar (`txBadSeq`).
+   * Ninguno puede prender el grifo ni decirle a nadie que no tiene XLM.
+   */
+  const OTROS_CODIGOS = [
+    "tx_insufficient_fee",
+    "tx_bad_seq",
+    "tx_too_late",
+    "tx_too_early",
+    "tx_failed",
+    "tx_bad_auth",
+    "tx_bad_auth_extra",
+    "tx_malformed",
+    "tx_internal_error",
+    "tx_not_supported",
+    "tx_fee_bump_inner_failed",
+    "tx_missing_operation",
+    "tx_bad_sponsorship",
+    "tx_bad_min_seq_age_or_gap",
+    "txINSUFFICIENT_FEE",
+    "txBAD_SEQ",
+    "txTOO_LATE",
+    "txBAD_AUTH",
+    "txMALFORMED",
+    "txInsufficientFee",
+    "txBadSeq",
+    "txTooLate",
+    "txFailed",
+    "txBadAuth",
+    "txMalformed",
+  ];
+
+  it.each(OTROS_CODIGOS)("%s no es falta de saldo: no prende la ayuda de fondos", (codigo) => {
+    expect(esSinSaldo(new Error(codigo))).toBe(false);
+    expect(errorKey(new Error(codigo))).not.toBe("noFunds");
+  });
+
+  /** Cómo cuenta el SDK de Stellar que la red rechazó la transacción. */
+  const rechazoDelSdk = (resultado: string): string =>
+    `Sending the transaction to the network failed!\n${JSON.stringify({ status: "ERROR", errorResult: { fee_charged: "100", result: resultado, ext: "v0" } }, null, 2)}`;
+
+  it.each(OTROS_CODIGOS)("%s, dentro del mensaje con que el SDK cuenta el rechazo, tampoco", (codigo) => {
+    const msg = rechazoDelSdk(codigo);
+    expect(esSinSaldo(new Error(msg))).toBe(false);
+    expect(errorKey(new Error(msg))).not.toBe("noFunds");
+  });
+
+  it("y la secuencia corrida o la ventana vencida son 'la red estaba ocupada', y la comisión corta también", () => {
+    for (const codigo of ["tx_bad_seq", "txBadSeq", "tx_too_late", "txTooLate", "tx_insufficient_fee", "txInsufficientFee"]) {
+      expect(errorKey(new Error(codigo))).toBe("busy");
+    }
+  });
+
+  it("el mismo mensaje del SDK con 'tx_insufficient_balance' sí es falta de saldo: la prueba de al lado no es un falso negativo", () => {
+    const msg = rechazoDelSdk("tx_insufficient_balance");
+    expect(esSinSaldo(new Error(msg))).toBe(true);
+    expect(errorKey(new Error(msg))).toBe("noFunds");
+  });
 });
 
 describe("errorKey: lo de siempre sigue igual", () => {
