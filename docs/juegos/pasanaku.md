@@ -26,7 +26,7 @@ Los bultos caen sobre la tela y se tejen los hilos. Entonces empieza a apretar: 
 
 Arriba a la izquierda, un contador dice cuántos bultos quedan en el aguayo, con un retazo que se teje franja por franja mientras caen.
 
-**Los bultos son q'epis**, el atado de aguayo que se carga a la espalda: el cuerpo con el color de la persona, una franja clara con rombos como el pallay, y arriba el nudo con sus dos puntas. Caen de a uno sobre la tela, acelerando, y rebotan aplastándose al tocarla. Se ordenan por profundidad: el de más abajo en la tela tapa al de más arriba. Hasta el 29 de septiembre de 2026 eran cuadrados que se pisaban medio cuerpo, porque el choque era un círculo aplastado en perspectiva y el dibujo un cuadrado entero. Ahora chocan con seis pasadas de separación por paso (diez con más de sesenta) y `scripts/audit-fisica.mjs` mide que ninguno quede encimado: quedan por debajo del 1%. En el nudo, los tres últimos se ponen lado a lado: uno detrás del otro, el de atrás quedaba escondido. Y crecen hasta el tamaño máximo en 0,8 s: eran tres q'epis de unos 50 px apilados durante cinco segundos. La fila de los que salieron conserva su tamaño.
+**Los bultos son q'epis**, el atado de aguayo que se carga a la espalda: el cuerpo con el color de la persona, una franja clara con rombos como el pallay, y arriba el nudo con sus dos puntas. Caen de a uno sobre la tela, acelerando, y rebotan aplastándose al tocarla. Caen por tandas de pasar lista (uno de cada tantos de la lista, las mismas tandas de los nombres), así cada uno ya está en la tela cuando le toca mostrar su nombre: en el orden de la lista, con 18 personas uno no llegaba a mostrarlo nunca y con 50, once (auditor de identificación, 18 de octubre de 2026). Se ordenan por profundidad: el de más abajo en la tela tapa al de más arriba. Hasta el 29 de septiembre de 2026 eran cuadrados que se pisaban medio cuerpo, porque el choque era un círculo aplastado en perspectiva y el dibujo un cuadrado entero. Ahora chocan con seis pasadas de separación por paso (diez con más de sesenta) y `scripts/audit-fisica.mjs` mide que ninguno quede encimado: quedan por debajo del 1%. En el nudo, los tres últimos se ponen lado a lado: uno detrás del otro, el de atrás quedaba escondido. Y crecen hasta el tamaño máximo en 0,8 s: eran tres q'epis de unos 50 px apilados durante cinco segundos. La fila de los que salieron conserva su tamaño.
 
 ## Cómo escala
 
@@ -67,7 +67,9 @@ Vive en [`src/games/pixi/pasanaku.ts`](../../src/games/pixi/pasanaku.ts), en el 
 
 **Ningún co-ganador sale sin nombre.** Si el relator acaba de hablar, el premio queda debido y se dice apenas hay lugar, sin pisar lo agendado (los apretones, el susto, el nudo) y nunca en el último segundo antes del cartel. En el nudo, el tercero y el último se nombran con su premio si lo tienen.
 
-Los que se caen y los nombres viven en la capa de la interfaz, no en la de la cámara: con la cámara pegada a la tela, la fila de abajo y los chips quedan siempre a la vista y del mismo tamaño.
+Los que se caen y los nombres viven en la capa de la interfaz, no en la de la cámara: con la cámara pegada a la tela, la fila de abajo y los chips quedan siempre a la vista y del mismo tamaño. La fila va encima de la caja del relator.
+
+**Ninguno sale sin nombre.** Cada bulto que se cae lleva su cara y su nombre mientras vuela a la fila, de a cuatro como mucho (los más recientes) y con su estrella si sale con premio, como en el trompo. Sale del tamaño que tenía en la tela y se achica volando: en el nudo se achicaba de golpe a un tercio. En el nudo los nombres van más grandes, y en el mano a mano, grandes. Desde el filo, o desde el nudo si no hay filo, la cámara no desenfoca: dejaba borrosos justo los bultos que deciden (crítico de juegos, 16 de octubre de 2026).
 
 ## El detalle boliviano
 

@@ -27,11 +27,14 @@ La carrera de cohetes no se tiró: quedó como juego propio, con el identificado
 - **Los rombos:** nodos intermedios, huecos, violeta, sin nombre. Son las trustlines por donde rebota el pago. La sala aprende en dos saltos que los rombos no son gente.
 - **El paquete:** un cuadrado amarillo girado, girando, con estela de rombos que se achican.
 - **Las líneas:** doble trazo, tinta gruesa debajo y color arriba. Es el borde neobrutalista aplicado a una línea. Durante los saltos, las seis últimas van enteras y las viejas finitas y apagadas, para que se vea por dónde viene el paquete y no veinte líneas iguales cruzadas; en la nova engordan todas a la vez.
-- **Los chips:** avatar y nombre, solo el actual y los anteriores desvaneciéndose. Nunca los doscientos a la vez.
+- **Los chips:** avatar y nombre, solo el actual y los anteriores desvaneciéndose. Nunca los doscientos a la vez; con cuatro o menos, todos. Van en la capa de la interfaz y no en el cielo, al lado de su estrella: del tamaño que les da la cámara sin pasar del 82% del ancho (el 60% si no son de los grandes), enteros dentro de la pantalla, y de los ocho lugares alrededor de su estrella, en el que menos tapa el paquete, las estrellas con nombre y los otros chips. En el cielo quedaban cortados contra el borde del celular y borrosos en los acercamientos (crítico de juegos, 16 de octubre de 2026).
+- **Pasar lista:** los nombres de a tandas encima de cada estrella, desde que nació la última (a los 1,65 s) hasta el quinto salto. Arrancaba antes de que nacieran todas, y con 50 personas dos no llegaban a mostrar su nombre nunca.
 
 ## El ritmo
 
 Veinte saltos. Los primeros seis **aceleran**, de 0,62 a 0,22 segundos. Los catorce restantes se frenan hasta que el último dura 2,17 segundos. Los veinte suman 14,5 segundos de juego, y con el armado del tablero el juego llega a 17,5. En "normal" se estira para que el show entero, con la tarjeta de "cómo se juega" y el cartel, dure treinta segundos; en la escena fija de `?pose=`, sin tarjeta, el juego solo dura treinta. Ver "La duración" en [juegos.md](../juegos.md).
+
+Desde el salto 12, cuando los saltos se vuelven lentos y la cámara se pega al paquete, y en la nova, la cámara no desenfoca: dejaba borrosas justo la estrella y el paquete que la sala está mirando.
 
 Acelerar primero no es un capricho. Una desaceleración pura desde el arranque se lee como "esto ya va a terminar" desde el segundo tres. Así la sala aprende el ritmo y se relaja justo antes de que empiece a costar.
 

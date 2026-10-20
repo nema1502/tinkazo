@@ -43,9 +43,23 @@ type Phase = "spread" | "drop" | "weave" | "cinch" | "knot" | "lift" | "dead";
 interface Bundle {
   idx: number; x: number; y: number; vx: number; vy: number; rot: number; wob: number; ph: number;
   alive: boolean; out: number; slot: number; a: number; b: number; view?: Container; chip?: Container;
-  /** Cuándo cae sobre la tela: de a uno, en el orden de la lista. */
+  /** Cuándo cae sobre la tela: de a uno, por tandas de la lista (ver `dropRank`). */
   drop: number;
+  /** El tamaño que tenía en la tela al salir, y el de su nombre: de ahí se achica al volar. */
+  r0: number; cs0: number;
+  /** El nombre que lleva al salir, con su estrella si sale con premio. */
+  outChip?: Container;
 }
+/** Un nombre ya puesto en la pantalla: `x` es su borde izquierdo y `y` su centro. */
+interface Caja { x: number; y: number; w: number; h: number }
+/**
+ * Cuántos de los que salen llevan su nombre a la vez (los más recientes), y
+ * cuánto rato en segundos de juego: lo que tarda en volar a la fila y un poco
+ * más (en "normal", unos tres segundos y medio). Con 2,5 se juntaban cuatro
+ * nombres apilados encima de la tela justo en el filo.
+ */
+const OUT_MAX = 4;
+const OUT_LIFE = 1.6;
 
 export async function pasanakuPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<void> {
   const winnerIdx = winners[0] ?? 0;
@@ -105,6 +119,28 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
     const big = Math.max(r, Math.min(30 * S.u(), Rc() / 4.8));
     return r + (big - r) * ease.inOutCubic(clamp((tAll - T_KNOT) / 0.8, 0, 1));
   };
+  /**
+   * El tamaño de los nombres en el nudo, que es el momento que decide: con
+   * tres, un poco más grandes, y en el mano a mano, grandes, como en el
+   * trompo. Eran del tamaño de siempre encima de bultos que ya llenaban la
+   * tela (crítico de juegos, 16 de octubre de 2026).
+   */
+  const knotChip = (live: number): number => (live <= 2 ? (S.portrait() ? 1.4 : 1.7) : S.portrait() ? 1.15 : 1.3);
+  /** Lo que tarda en caer un bulto desde arriba hasta la tela. */
+  const FALL = 0.35;
+  /**
+   * El orden en que caen: por tandas de pasar lista (`S.batch` arma las
+   * mismas, uno de cada `B` de la lista), y la primera tanda primero. Caían
+   * en el orden de la lista y cada tanda tenía gente de toda la lista, así
+   * que los últimos de la primera tanda caían cuando su tanda ya había
+   * pasado y nunca mostraban su nombre: con 18 se perdía uno y con 50 once
+   * (auditor de identificación, 18 de octubre de 2026). Así cada uno está en
+   * la tela antes de que pase el 40% del turno de su tanda (pasar lista
+   * arranca con el primero que toca la tela). Siguen cayendo repartidos por
+   * la tela: la tanda es uno de cada `B`.
+   */
+  const B = n > 64 ? 1 : Math.max(1, Math.ceil(n / 8));
+  const dropRank = new Map(names.map((_, i) => i).sort((a, b) => (a % B) - (b % B) || a - b).map((idx, r) => [idx, r] as const));
   {
     const { x, y } = C();
     const r0 = R0();
@@ -114,13 +150,11 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
       bundles.push({
         idx: i, x: x + Math.cos(a) * r0 * d, y: y + Math.sin(a) * r0 * d * 0.62, vx: 0, vy: 0,
         rot: (rng() - 0.5) * 0.5, wob: 1.4 + rng() * 2.2, ph: rng() * 7, alive: true, out: 0, slot: 0,
-        a: (i + 1) % n, b: (i + n - 1) % n, drop: T_DROP + (i / n) * 1.6,
+        a: (i + 1) % n, b: (i + n - 1) % n, drop: T_DROP + ((dropRank.get(i) ?? i) / n) * 1.6, r0: 0, cs0: 1,
       });
     }
   }
   const alive = (): Bundle[] => bundles.filter((q) => q.alive);
-  /** Lo que tarda en caer un bulto desde arriba hasta la tela. */
-  const FALL = 0.35;
 
   // `?auditar=fisica`: lo encimados que quedan después de cada paso, en el
   // plano de la tela, y si alguno se sale, para `scripts/audit-fisica.mjs`.
@@ -248,7 +282,9 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
       const rr2 = radBase();
       const cols = Math.max(1, Math.floor((S.sw() - 120 * S.u()) / (rr2 * 2.2)));
       const tx = 60 * S.u() + (q.slot % cols) * rr2 * 2.2 + rr2;
-      const ty = S.sh() - 56 * S.u() - Math.floor(q.slot / cols) * rr2 * 1.5;
+      // La fila va encima de la caja del relator: a 56 px del borde quedaba
+      // detrás, y con ella los nombres de los que acababan de caer.
+      const ty = S.sh() - S.bottom() - 6 * S.u() - Math.floor(q.slot / cols) * rr2 * 1.5;
       if (q.out > 0.45) {
         const sp = Math.min(1, dt * 6);
         q.x += (tx - q.x) * sp;
@@ -280,11 +316,17 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
     const premiados: number[] = [];
     const out: number[] = [];
     let uno = -1;
+    // El tamaño con que se ve en la tela al salir: en el nudo los tres son
+    // grandes, y el que salía se achicaba de golpe a un tercio en el
+    // instante que decide. Ahora se achica volando (ver `draw`).
+    const r0 = rad();
     for (const q of list) {
       if (alive().length <= keep) break;
       q.alive = false;
       q.out = 0;
       q.slot = collected++;
+      q.r0 = r0;
+      q.cs0 = phase === "knot" ? knotChip(alive().length + 1) : 1;
       out.push(q.idx);
       const a = Math.atan2(q.y - cy, q.x - cx);
       q.vx = Math.cos(a) * 380 * k;
@@ -519,6 +561,8 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
       (q.alive ? inLayer : outLayer).addChild(q.view);
       q.chip?.destroy({ children: true });
       q.chip = undefined;
+      q.outChip?.destroy({ children: true });
+      q.outChip = undefined;
     }
     // La cuenta de bultos sobre la tela, con su retazo de aguayo.
     const pot = new Container();
@@ -543,6 +587,11 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
   function direct(): void {
     const { x, y } = C();
     const win = bundles.find((b) => b.idx === winnerIdx) as Bundle;
+    // Sin desenfoque desde el filo, y si no hay filo desde el nudo: el
+    // acercamiento rápido al bulto del borde, el del nudo y el que se abre al
+    // coronar dejaban borrosos justo los bultos que deciden (crítico de
+    // juegos, 16 de octubre de 2026). Como en la foto de la carrera.
+    if ((susto && tAll >= SUSTO) || tAll >= T_KNOT) cam.noBlur();
     if (phase === "spread") cam.lookAt(x, y, 1.4, 2);
     else if (phase === "drop") cam.lookAt(x, y, 1.0, 1.5);
     else if (phase === "weave") cam.lookAt(x, y, 1.0 + 0.12 * clamp((tAll - T_WEAVE) / 2, 0, 1), 1.5, 0.015 * Math.sin(tAll * 0.8));
@@ -677,7 +726,10 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
       const b = ease.inOutCubic(clamp(q.out / 0.7, 0, 1));
       const p = cam.toScreen(q.x, q.y, S.sw(), S.sh());
       v.position.set(p.x + (q.x - p.x) * b, p.y + (q.y - p.y) * b);
-      v.scale.set(((radBase() * 0.8) / 20) * (zoom + (1 - zoom) * b));
+      // Sale del tamaño que tenía en la tela, con la cámara encima, y se
+      // achica volando hasta el de la fila.
+      const de = (q.r0 / 20) * zoom, hasta = (radBase() * 0.8) / 20;
+      v.scale.set(de + (hasta - de) * b);
     }
     ring.clear();
     const win = byIdx.get(winnerIdx) as Bundle;
@@ -685,33 +737,84 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
       const f = (tAll - SUSTO) / 1.1;
       ring.circle(win.x, win.y - lift - r * 0.9, r * (1.8 + 0.4 * Math.sin(tAll * 18))).stroke({ width: 5 * k, color: 0xe93d9c, alpha: 1 - f });
     }
-    // Pasar lista: mientras se teje, antes del primer apretón, los nombres de
-    // a tandas encima de cada bulto, para que cada uno sepa cuál es el suyo.
-    const roll = phase === "lift" ? [] : S.batch(n, tAll, T_DROP - 0.2, T_CINCH - 0.1);
+    // Pasar lista: mientras caen y se teje, antes del primer apretón, los
+    // nombres de a tandas encima de cada bulto, para que cada uno sepa cuál es
+    // el suyo. Arranca con el primero que toca la tela: antes no había ninguno.
+    const roll = phase === "lift" ? [] : S.batch(n, tAll, T_DROP + FALL, T_CINCH - 0.1);
     S.tags(names, roll, (i) => {
       const q = byIdx.get(i);
       return q && q.alive && tAll >= q.drop + FALL ? cam.toScreen(q.x, q.y - r * 1.7 - lift, S.sw(), S.sh()) : null;
     });
     // Los nombres, cuando quedan pocos: al lado de cada bulto en la pantalla,
-    // y si dos chocan, el de más abajo baja lo que haga falta.
-    const live = alive();
-    for (const q of bundles) if (q.chip) q.chip.visible = false;
+    // y si dos chocan, el de más abajo baja lo que haga falta. Solo de los que
+    // ya cayeron: con ocho flotaban los nombres antes de que bajara ningún bulto.
+    const W = S.sw(), H = S.sh(), u = S.u();
+    const lo = S.top() + 6 * u, hi = H - S.bottom() - 6 * u;
+    const puestos: Caja[] = [];
+    const choca = (a: Caja): boolean => puestos.some((o) => a.x < o.x + o.w && a.x + a.w > o.x && Math.abs(a.y - o.y) < (a.h + o.h) / 2);
+    const live = alive().filter((q) => tAll >= q.drop + FALL);
+    for (const q of bundles) {
+      if (q.chip) q.chip.visible = false;
+      if (q.outChip) q.outChip.visible = false;
+    }
     if (!roll.length && live.length <= 8 && phase !== "lift") {
-      const u = S.u();
-      // En el nudo los bultos son grandes y van lado a lado: el nombre va
-      // centrado encima de cada uno. Al costado caía encima del vecino.
-      const knotted = phase === "knot";
-      const at = live
-        .map((q) => ({ q, p: cam.toScreen(knotted ? q.x : q.x + r, q.y - r * (knotted ? 2.6 : 1.6) - lift, S.sw(), S.sh()) }))
-        .sort((a, b) => a.p.y - b.p.y);
-      let prev = -Infinity;
-      for (const { q, p } of at) {
-        const chip = (q.chip ??= chips.addChild(S.chip(names[q.idx] ?? "")));
+      if (phase === "knot") {
+        // En el nudo, grandes y centrados encima de cada bulto; de izquierda
+        // a derecha, uno abajo y el siguiente arriba. Del tamaño de siempre
+        // entraban lado a lado, pero apilados por altura el de más abajo
+        // terminaba encima del bulto del vecino.
+        const sc = knotChip(live.length);
+        live.slice().sort((a, b) => a.x - b.x || a.idx - b.idx).forEach((q, i) => {
+          const chip = (q.chip ??= chips.addChild(S.chip(names[q.idx] ?? "")));
+          chip.scale.set(1);
+          chip.scale.set(Math.min(sc, (W - 20 * u) / chip.width));
+          const w = chip.width, h = chip.height;
+          const p = cam.toScreen(q.x, q.y - r * 2.6 - lift, W, H);
+          const caja: Caja = { x: clamp(p.x - w / 2, 10 * u, W - w - 10 * u), y: clamp(p.y - h / 2 - (i % 2) * (h + 4 * u), lo + h / 2, hi - h / 2), w, h };
+          chip.position.set(caja.x, caja.y);
+          chip.visible = true;
+          puestos.push(caja);
+        });
+      } else {
+        const at = live.map((q) => ({ q, p: cam.toScreen(q.x + r, q.y - r * 1.6 - lift, W, H) })).sort((a, b) => a.p.y - b.p.y);
+        let prev = -Infinity;
+        for (const { q, p } of at) {
+          const chip = (q.chip ??= chips.addChild(S.chip(names[q.idx] ?? "")));
+          chip.scale.set(1);
+          const w = chip.width, h = chip.height;
+          const caja: Caja = { x: Math.min(p.x + 4 * u, W - w - 10 * u), y: clamp(Math.max(p.y, prev + 26 * u), lo + h / 2, hi - h / 2), w, h };
+          prev = caja.y;
+          chip.position.set(caja.x, caja.y);
+          chip.visible = true;
+          puestos.push(caja);
+        }
+      }
+    }
+    // Los que salen, con su cara y su nombre mientras vuelan a la fila: eran
+    // bultos sin nombre y, salvo el que nombraba el relator, nadie sabía
+    // quién había quedado afuera (crítico de juegos, 16 de octubre de 2026).
+    // Como en el trompo: de a cuatro como mucho (los más recientes), con su
+    // estrella si se van con premio, y se apagan al llegar. Encima de su
+    // bulto, y si choca con otro nombre, sube.
+    if (phase !== "lift") {
+      const salen = bundles.filter((q) => !q.alive && q.out < OUT_LIFE).sort((a, b) => a.out - b.out || b.slot - a.slot).slice(0, OUT_MAX);
+      for (const q of salen) {
+        const v = q.view as Container;
+        const nm = names[q.idx] ?? "";
+        const chip = (q.outChip ??= chips.addChild(S.chip(winners.indexOf(q.idx) > 0 ? `★ ${nm}` : nm, 1, nm)));
+        // Del tamaño que tenía en el nudo al del resto, mientras el bulto se achica.
+        const b = ease.inOutCubic(clamp(q.out / 0.7, 0, 1));
+        chip.scale.set(1);
+        chip.scale.set(Math.min(q.cs0 + (1 - q.cs0) * b, (W - 20 * u) / chip.width));
+        const w = chip.width, h = chip.height;
+        // Por encima de lo que alcanza el bulto girando: gira desde su base.
+        const caja: Caja = { x: clamp(v.x - w / 2, 8 * u, W - 8 * u - w), y: v.y - 47 * v.scale.y - h / 2 - 2 * u, w, h };
+        for (let i = 0; i < 4 && choca(caja); i++) caja.y -= h + 2 * u;
+        caja.y = clamp(caja.y, lo + h / 2, hi - h / 2);
+        chip.position.set(caja.x, caja.y);
+        chip.alpha = clamp((OUT_LIFE - q.out) / 0.5, 0, 1);
         chip.visible = true;
-        const cy = Math.max(p.y, prev + 26 * u);
-        prev = cy;
-        const x = knotted ? Math.max(10 * u, p.x - chip.width / 2) : p.x + 4 * u;
-        chip.position.set(Math.min(x, S.sw() - chip.width - 10 * u), cy);
+        puestos.push(caja);
       }
     }
     // El nudo con el cordón tricolor, al levantar.
