@@ -40,7 +40,7 @@ const NUEVAS: Record<string, { titulo: string; h1: string }> = {
   },
   "sorteo-verificable.html": {
     titulo: "Sorteo verificable: cómo comprobar el resultado",
-    h1: "Sorteo verificable: no hace falta confiar en Tinkazo para rehacerlo",
+    h1: "Sorteo verificable: cualquiera puede rehacer el resultado",
   },
 };
 
@@ -130,7 +130,7 @@ describe("cada página pública", () => {
       NUEVAS[archivo]?.titulo,
       descripcion(html),
     ].filter((v): v is string => typeof v === "string");
-    const prohibidas = /rifa|raffle|apuesta|lotería|loteria|casino|premio en efectivo|premio en dinero|garantiz|imposible de trampear|sin confiar en quien|no hace falta confiar en quien|favoritos|a dedo/i;
+    const prohibidas = /rifa|raffle|apuesta|lotería|loteria|casino|premio en efectivo|premio en dinero|garantiz|imposible de trampear|sin confiar en quien|no hace falta confiar en quien|sin confiar en Tinkazo|no hace falta confiar en Tinkazo|favoritos|a dedo/i;
     expect(textos.filter((t) => prohibidas.test(t))).toEqual([]);
   });
 });

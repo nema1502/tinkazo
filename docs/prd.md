@@ -21,7 +21,7 @@ Parte del demo estático en producción en [tinkazo.app](https://tinkazo.app), q
 
 Toda comunidad hace sorteos: libros, licencias, entradas, swag. Las herramientas que existen son de pago por algo trivial, o gratis y "confía en mí": nadie puede probar que el organizador no agregó un nombre a último minuto ni que el resultado no estaba elegido de antemano.
 
-Tinkazo separa el show de la verdad. El show es una carrera de llamas o una ruleta en pantalla grande. La verdad es matemática: la lista de participantes se sella con un hash antes de que exista la semilla; la semilla la publica un faro público de aleatoriedad que nadie controla; el ganador es una función determinista de ambos. Con Stellar, el sello y el resultado quedan anclados en una red pública con timestamp, y un contrato verifica por sí mismo la firma del faro. Ya no hay que confiar en Tinkazo: cualquiera puede leer la cadena y recomputar.
+Tinkazo separa el show de la verdad. El show es una carrera de llamas o una ruleta en pantalla grande. La verdad es matemática: la lista de participantes se sella con un hash antes de que exista la semilla; la semilla la publica un faro público de aleatoriedad que ni quien organiza ni Tinkazo pueden elegir; el ganador es una función determinista de ambos. Con Stellar, el sello y el resultado quedan anclados en una red pública con timestamp, y un contrato verifica por sí mismo la firma del faro. Ya no hay que confiar en Tinkazo: cualquiera puede leer la cadena y recomputar.
 
 La verificación es gratis siempre. Anclar en Stellar cuesta centavos y lo paga el organizador. Los participantes nunca crean cuenta ni wallet.
 
