@@ -271,8 +271,11 @@ async function copy(s: Open, btn: HTMLElement): Promise<void> {
     }
     return;
   }
-  btn.focus({ preventScroll: true });
-  mark(s, btn);
+  // El panel pudo repintarse mientras el navegador contestaba (llegó el
+  // historial, cambió el idioma): se marca el botón que está, no el que se tocó.
+  const now = s.card.querySelector<HTMLElement>('[data-k="copy"]') ?? btn;
+  now.focus({ preventScroll: true });
+  mark(s, now);
   clearTimeout(s.copiedTimer);
   s.copiedTimer = window.setTimeout(() => {
     const b = s.card.querySelector<HTMLElement>('[data-k="copy"]');

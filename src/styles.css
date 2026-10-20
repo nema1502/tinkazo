@@ -1215,7 +1215,7 @@
      control: sin el anillo amarillo, y conserva su sombra. */
   .acct-card:focus, .acct-card:focus-visible { outline: none; box-shadow: var(--sh); }
   .acct-head {
-    flex: none; display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 14px;
+    flex: none; display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 16px;
     border-bottom: var(--bw) solid var(--ink);
   }
   .acct-face {
@@ -1247,7 +1247,7 @@
 
   .acct-body {
     flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
-    padding: 16px; display: flex; flex-direction: column; gap: 20px;
+    padding: 16px; display: flex; flex-direction: column; gap: 24px;
   }
   .acct-sec { display: flex; flex-direction: column; gap: 8px; }
   .acct-card .kicker { font-size: 11px; font-weight: 600; line-height: 1.3; }
@@ -1260,12 +1260,12 @@
   .acct-badge.net { background: var(--orange); color: var(--on-accent); box-shadow: var(--sh-sm); }
   .acct-badge.net.main { background: var(--teal); }
   .acct-link {
-    align-self: flex-start; display: inline-flex; align-items: center; min-height: 44px; margin: -6px 0;
+    align-self: flex-start; display: inline-flex; align-items: center; min-height: 44px; margin: -8px 0;
     font-size: 13px; font-weight: 700; color: var(--ink); text-underline-offset: 3px;
   }
-  .acct-prefs { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+  .acct-prefs { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; }
   .acct-pref { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-  .acct-pref.pace { flex: 1 1 130px; min-width: 130px; }
+  .acct-pref.pace { flex: 1 1 120px; min-width: 120px; }
   .acct-pref .kicker { font-size: 10.5px; letter-spacing: 0.12em; }
   .acct-pref select { width: 100%; font-size: 13px; padding: 0 10px; }
   .acct-pref .mini { min-width: 56px; }
@@ -1277,7 +1277,7 @@
   .acct-langs button.on { position: relative; }
 
   .acct-rows { list-style: none; padding: 0; display: flex; flex-direction: column; border-top: 2px solid var(--ink); }
-  .acct-row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .acct-row { display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 4px 0; border-bottom: 1px solid var(--line); }
   .acct-rt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .acct-rtitle { font-size: 14px; font-weight: 800; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .acct-rmeta { font-size: 12px; line-height: 1.4; color: var(--ink2); }
@@ -1285,10 +1285,10 @@
     flex: none; display: inline-flex; align-items: center; min-height: 44px; padding: 0 2px;
     font-size: 13px; font-weight: 800; color: var(--ink); white-space: nowrap; text-underline-offset: 3px;
   }
-  .acct-more { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+  .acct-more { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
   .acct-empty { font-size: 14px; line-height: 1.5; color: var(--ink2); }
 
-  .acct-foot { flex: none; display: flex; padding: 6px 10px; border-top: var(--bw) solid var(--ink); background: var(--paper); }
+  .acct-foot { flex: none; display: flex; padding: 8px; border-top: var(--bw) solid var(--ink); background: var(--paper); }
   .acct-out {
     display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 10px; cursor: pointer;
     background: none; border: 0; font: inherit; font-size: 14px; font-weight: 800; color: var(--ink2);
@@ -1297,15 +1297,15 @@
   .acct-out:hover { color: var(--ink); }
   .acct-out svg { width: 16px; height: 16px; flex: none; }
 
-  @media (max-width: 460px) { .acct-body { padding: 14px; } }
   /* Poca altura (un celular acostado, o la pantalla a 200 % de zoom): el
      encabezado y el pie se achican para que el cuerpo tenga dónde recorrerse. */
   @media (max-height: 460px) {
     .acct-head { padding-block: 8px; }
-    .acct-body { padding-block: 12px; gap: 16px; }
-    .acct-foot { padding-block: 2px; }
+    .acct-body { padding-block: 8px 16px; gap: 16px; }
+    .acct-foot { padding-block: 4px; }
   }
   @media (prefers-reduced-motion: no-preference) {
     .acct-card { animation: acct-in 0.16s ease-out; }
     @keyframes acct-in { from { opacity: 0; transform: translateY(10px); } }
   }
+  @media (prefers-reduced-motion: reduce) { .acct-x { transition: none; } }
