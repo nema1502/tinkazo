@@ -1086,6 +1086,14 @@
   .hc-acciones { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 10px; }
   .hc-acciones .mini { min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }
   .hc-acciones a.hc-link { display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; font-size: 13px; color: var(--ink); }
+  /* La cabecera de un evento: los sorteos de la misma cuenta, a doce horas o menos uno del otro. */
+  .hist-evento { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 6px; padding-top: 12px; border-top: 2px dashed var(--ink2); }
+  .hist-evento h3 { font-size: 16px; font-weight: 900; }
+  .hist-evento .note { margin-top: 2px; }
+  .hist-evento .mini { min-height: 44px; display: inline-flex; align-items: center; }
+  /* La página de evento: un bloque por sorteo, con sus comprobaciones. */
+  .ev-sorteo + .ev-sorteo { margin-top: 14px; }
+  .ev-gana { margin-bottom: 6px; overflow-wrap: anywhere; }
   .hist-why { margin: 6px 0 12px; }
   .hist-why summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 800; font-size: 14px; }
   .hist-pie { display: flex; flex-wrap: wrap; gap: 10px; }

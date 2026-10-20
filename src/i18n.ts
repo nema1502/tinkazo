@@ -37,6 +37,8 @@ export interface Dict {
   cWin: (n: string, many?: boolean) => string;
   /** "Copiar el mensaje": lo que se pega en el grupo. Quién ganó, entre cuántos, el premio, el enlace para verificarlo y el pie con la marca. */
   summary: (w: string, n: number, premio: string, enlace: string, varios: boolean) => string;
+  /** "Compartir el evento" en Mis sorteos: lo que se pega en el grupo, con el enlace a evento.html. */
+  summaryEvento: (fecha: string, n: number, enlace: string) => string;
   drawIn: (mmss: string) => string;
   /** Debajo del resultado: cuántos quedan en la lista sin los ganadores. */
   againLeft: (n: number) => string;
@@ -1247,6 +1249,9 @@ export const T: Record<Lang, Dict> = {
     cWin: (n, many) => pick(many ? [`¡GANAN ${n}!`, `¡SE LO LLEVAN ${n}!`, `¡ES PARA ${n}!`, `¡EL TINKAZO ES PARA ${n}!`] : [`¡GANA ${n}!`, `¡SE LO LLEVA ${n}!`, `¡ES PARA ${n}!`, `¡EL TINKAZO ES PARA ${n}!`]),
     summary: (w, n, premio, enlace, varios) =>
       `${premio ? `Sorteo de ${premio}: ${varios ? "ganaron" : "ganó"}` : varios ? "Ganaron" : "Ganó"} ${w}, entre ${n} personas.\nNadie eligió ${varios ? "estos nombres" : "este nombre"}.\nSi querés verificarlo, entrá acá: ${enlace}\n\nSorteado con Tinkazo · https://tinkazo.app`,
+    summaryEvento: (f, n, enlace) =>
+      `Sorteos del ${f} (${n} ${n === 1 ? "sorteo" : "sorteos"}), todos verificables.\nSi querés verificarlos, entrá acá: ${enlace}\n\nSorteado con Tinkazo · https://tinkazo.app`,
+    histGrupoT: "Sorteos del {f}", histGrupoCompartir: "Compartir el evento",
     cTroSpent: (n) => pick([`¡Se le acabó la cuerda a ${n}!`, `¡Se apagó el trompo de ${n}!`, `¡${n} se queda sin cuerda!`]),
     // --- Constelación, sapo y ¿Quién es? (7 de octubre de 2026).
     cConstHeading: (n) => pick([`¿Va para ${n}…?`, `¿Se queda en ${n}…?`]),
@@ -2269,6 +2274,9 @@ export const T: Record<Lang, Dict> = {
     cWin: (n, many) => pick(many ? [`${n} WIN!`, `${n} TAKE IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`] : [`${n} WINS!`, `${n} TAKES IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`]),
     summary: (w, n, premio, enlace, varios) =>
       `${premio ? `${premio} draw: ${varios ? "the winners are" : "the winner is"}` : varios ? "The winners are" : "The winner is"} ${w}, out of ${n} people.\nNobody picked ${varios ? "these names" : "this name"}.\nIf you want to verify it, open this link: ${enlace}\n\nDrawn with Tinkazo · https://tinkazo.app`,
+    summaryEvento: (f, n, enlace) =>
+      `Draws from ${f} (${n} ${n === 1 ? "draw" : "draws"}), all verifiable.\nIf you want to verify them, open this link: ${enlace}\n\nDrawn with Tinkazo · https://tinkazo.app`,
+    histGrupoT: "Draws from {f}", histGrupoCompartir: "Share the event",
     cTroSpent: (n) => pick([`${n}'s top runs out of spin!`, `${n}'s top stops spinning!`, `${n} is out of spin!`]),
     // --- Constellation, sapo and Guess Who (7 October 2026).
     cConstHeading: (n) => pick([`Is it going to ${n}…?`, `Is it stopping at ${n}…?`]),

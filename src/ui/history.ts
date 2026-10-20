@@ -1,7 +1,10 @@
 import { $, esc } from "../dom";
-import { getLang, t } from "../i18n";
+import { getLang, T, t } from "../i18n";
+import { EVENTO_TOPE, eventoUrl, type SorteoDelEvento } from "../protocol/evento";
+import { decodeProof } from "../protocol/proof";
 import { network, txUrl } from "../stellar/config";
 import type { ChainRaffle } from "../stellar/seals";
+import { agrupar, fechaLarga, tieneComprobante } from "./agrupar";
 
 /**
  * El historial de sorteos.
@@ -203,6 +206,12 @@ function enlazarRearmado(): void {
       if (fila?.names?.length) void import("./freeze").then((m) => m.resumeFrozen(fila as Entry & { names: string[] }));
       return;
     }
+    const comparte = el.closest<HTMLButtonElement>("[data-evento]");
+    if (comparte) {
+      const g = eventosPintados[Number(comparte.dataset.evento)];
+      if (g) void compartirEvento(g, comparte);
+      return;
+    }
     const b = el.closest<HTMLElement>("[data-rearmar]");
     if (!b) return;
     const fila = pintadas[Number(b.dataset.rearmar)];
@@ -229,35 +238,131 @@ function paint(organizer: string | null): void {
   $("hist-count").textContent = t("histCount").replace("{n}", String(list.length));
   pintadas = list;
   enlazarRearmado();
-  // Cada sorteo, una tarjeta: el estado, el premio, cuántos y quién ganó, y
-  // una acción principal. Antes era un renglón de registro en monoespaciada.
-  $("hist-list").innerHTML = list
-    .map((e, i) => {
-      const hecho = !!(e.winners?.length || e.winnerIdx?.length || e.drawTx);
-      const titulo = e.prize || (e.id ? `${t("histDraw")} #${e.id}` : t("histDraw"));
-      const id = e.id ? `#${esc(e.id)}` : t("histLocal");
-      const origen = e.fromChain ? ` · ${esc(t("histFromChain"))}` : "";
-      const enCadena = e.drawTx ?? e.sealTx;
-      const acciones: string[] = [];
-      if (!hecho && e.names?.length) acciones.push(`<button class="primary mini" data-retomar="${i}">${esc(t("histResume"))}</button>`);
-      // Sin comprobante pero con id: la lista no está acá, pero el sorteo sí
-      // está en la cadena. Con la lista a mano se rearma.
-      if (e.proof) acciones.push(`<a class="ghost mini" href="${esc(e.proof)}" target="_blank" rel="noopener">${esc(t("histSeeProof"))}</a>`);
-      else if (hecho && e.id) acciones.push(`<button class="ghost mini" data-rearmar="${i}">${esc(t("histRebuild"))}</button>`);
-      if (enCadena) acciones.push(`<a class="hc-link" href="${esc(txUrl(enCadena))}" target="_blank" rel="noopener">${esc(t("histOnChain"))} ↗</a>`);
-      if (!hecho && !e.names?.length) acciones.push(`<span class="note">${esc(t("histOtherDevice"))}</span>`);
-      return (
-        `<article class="hist-card${hecho ? " hecho" : ""}">` +
-        `<div class="hc-top"><span class="hc-estado">${esc(t(hecho ? "histStateDone" : "histStatePending"))}</span>` +
-        `<span class="hc-fecha">${esc(fmtDate(e.sealedAt))}</span></div>` +
-        `<h3>${esc(titulo)}</h3>` +
-        `<p class="hc-meta">${esc(id)} · ${e.count} ${esc(t("histPeople"))}${hecho ? ` · ${esc(t((e.winners?.length ?? 0) > 1 ? "histWonMany" : "histWon"))} <b>${esc(winnerLabel(e))}</b>` : ""}${origen}</p>` +
-        `<div class="hc-acciones">${acciones.join("")}</div>` +
-        `</article>`
-      );
-    })
-    .join("");
+  // Cada sorteo, una tarjeta. Los que tienen comprobante se agrupan en eventos:
+  // una cabecera con "Compartir el evento" y, debajo, sus sorteos en el orden
+  // de la lista.
+  const eventos = agrupar(list);
+  eventoDe = new Map<Entry, number>();
+  eventos.forEach((g, gi) => g.forEach((e) => eventoDe.set(e, gi)));
+  eventosPintados = eventos;
+  const pintados = new Set<number>();
+  let html = "";
+  list.forEach((e, i) => {
+    const gi = eventoDe.get(e);
+    if (gi === undefined) {
+      html += tarjetaDeSorteo(e, i);
+      return;
+    }
+    if (pintados.has(gi)) return;
+    pintados.add(gi);
+    const g = eventos[gi] ?? [];
+    html += cabeceraDeEvento(g, gi);
+    const enOrden = g.map((x) => ({ x, i: list.indexOf(x) })).sort((a, b) => a.i - b.i);
+    html += enOrden.map(({ x, i: j }) => tarjetaDeSorteo(x, j)).join("");
+  });
+  $("hist-list").innerHTML = html;
   box.style.display = "block";
+}
+
+/** Los eventos de la última lista pintada: "Compartir el evento" busca el suyo por su número. */
+let eventosPintados: Entry[][] = [];
+/** De cada sorteo pintado, el número de su evento. */
+let eventoDe = new Map<Entry, number>();
+
+/** Una tarjeta: el estado, el premio, cuántos y quién ganó, y una acción principal. */
+function tarjetaDeSorteo(e: Entry, i: number): string {
+  const hecho = !!(e.winners?.length || e.winnerIdx?.length || e.drawTx);
+  const titulo = e.prize || (e.id ? `${t("histDraw")} #${e.id}` : t("histDraw"));
+  const id = e.id ? `#${esc(e.id)}` : t("histLocal");
+  const origen = e.fromChain ? ` · ${esc(t("histFromChain"))}` : "";
+  const enCadena = e.drawTx ?? e.sealTx;
+  const acciones: string[] = [];
+  if (!hecho && e.names?.length) acciones.push(`<button class="primary mini" data-retomar="${i}">${esc(t("histResume"))}</button>`);
+  // Sin comprobante pero con id: la lista no está acá, pero el sorteo sí
+  // está en la cadena. Con la lista a mano se rearma.
+  if (e.proof) acciones.push(`<a class="ghost mini" href="${esc(e.proof)}" target="_blank" rel="noopener">${esc(t("histSeeProof"))}</a>`);
+  else if (hecho && e.id) acciones.push(`<button class="ghost mini" data-rearmar="${i}">${esc(t("histRebuild"))}</button>`);
+  if (enCadena) acciones.push(`<a class="hc-link" href="${esc(txUrl(enCadena))}" target="_blank" rel="noopener">${esc(t("histOnChain"))} ↗</a>`);
+  if (!hecho && !e.names?.length) acciones.push(`<span class="note">${esc(t("histOtherDevice"))}</span>`);
+  return (
+    `<article class="hist-card${hecho ? " hecho" : ""}">` +
+    `<div class="hc-top"><span class="hc-estado">${esc(t(hecho ? "histStateDone" : "histStatePending"))}</span>` +
+    `<span class="hc-fecha">${esc(fmtDate(e.sealedAt))}</span></div>` +
+    `<h3>${esc(titulo)}</h3>` +
+    `<p class="hc-meta">${esc(id)} · ${e.count} ${esc(t("histPeople"))}${hecho ? ` · ${esc(t((e.winners?.length ?? 0) > 1 ? "histWonMany" : "histWon"))} <b>${esc(winnerLabel(e))}</b>` : ""}${origen}</p>` +
+    `<div class="hc-acciones">${acciones.join("")}</div>` +
+    `</article>`
+  );
+}
+
+/** La cabecera de un evento: "Sorteos del 20 de octubre de 2026", cuántos son y el botón para compartirlo. */
+function cabeceraDeEvento(g: Entry[], gi: number): string {
+  const n = g.length;
+  const fecha = fechaLarga(g[0]?.sealedAt ?? 0, getLang());
+  return (
+    `<div class="hist-evento">` +
+    `<div><h3>${esc(t("histGrupoT").replace("{f}", fecha))}</h3>` +
+    `<p class="note">${esc(n === 1 ? t("evUnSorteo") : t("evNSorteos").replace("{n}", String(n)))}</p></div>` +
+    `<button class="ghost mini" data-evento="${gi}">${esc(t("histGrupoCompartir"))}</button>` +
+    `</div>`
+  );
+}
+
+/**
+ * El mensaje del evento, con el enlace a evento.html que trae sus sorteos.
+ * Solo entran los que tienen comprobante y se pueden leer, con sus ganadores.
+ * Devuelve null si no queda ninguno.
+ */
+async function mensajeDelEvento(g: Entry[]): Promise<string | null> {
+  const sorteos: SorteoDelEvento[] = [];
+  for (const e of g) {
+    if (!tieneComprobante(e) || !e.winners?.length || !e.proof) continue;
+    try {
+      const comprobante = await decodeProof(e.proof.slice(e.proof.indexOf("#")));
+      sorteos.push({ ...comprobante, ganadores: e.winners });
+    } catch {
+      // Un comprobante que no se lee no entra en el evento.
+    }
+  }
+  if (!sorteos.length) return null;
+  const fecha = fechaLarga(g[0]?.sealedAt ?? 0, getLang());
+  const enlace = await eventoUrl(t("histGrupoT").replace("{f}", fecha), sorteos);
+  return T[getLang()].summaryEvento(fecha, Math.min(sorteos.length, EVENTO_TOPE), enlace);
+}
+
+/**
+ * "Compartir el evento": copia el mensaje del evento. El enlace se arma al
+ * clic, así que el portapapeles recibe una promesa: Safari exige que la escritura
+ * venga directo del clic, y armar el enlace tarda un instante.
+ */
+async function compartirEvento(g: Entry[], btn: HTMLButtonElement): Promise<void> {
+  const mensaje = mensajeDelEvento(g);
+  let copiado = false;
+  try {
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        "text/plain": mensaje.then((s) => {
+          if (!s) throw new Error("evento-vacio");
+          return new Blob([s], { type: "text/plain" });
+        }),
+      }),
+    ]);
+    copiado = true;
+  } catch {
+    try {
+      const s = await mensaje;
+      if (s) {
+        await navigator.clipboard.writeText(s);
+        copiado = true;
+      }
+    } catch {
+      /* portapapeles bloqueado: nada que hacer */
+    }
+  }
+  if (!copiado) return;
+  const orig = btn.textContent;
+  btn.textContent = t("copied");
+  setTimeout(() => (btn.textContent = orig), 1600);
 }
 
 /**
