@@ -856,7 +856,11 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
         cam.lookAt(tx, cy, z, 2);
       }
     } else if (tAll < tOutStart) {
-      cam.lookAt(dp.x, dp.y, vertical ? 2 : 2.3, tAll < T_STOP ? 2 : 4);
+      // Sobre la compuerta, la rueda queda a la izquierda del punto que se mira: a
+      // 2,3 de zoom, en una pantalla angosta (4:3) se cortaba casi un tercio. El
+      // zoom máximo para que entere entera es el ancho dividido por 3,62 radios.
+      const zCompuerta = vertical ? 2 : Math.min(2.3, S.sw() / (3.62 * R));
+      cam.lookAt(dp.x, dp.y, zCompuerta, tAll < T_STOP ? 2 : 4);
     } else if (tAll < tLip) {
       const o = winnerOut();
       // Se acerca a la bola mientras baja, y llega al borde ya encima.
