@@ -1,8 +1,11 @@
-import { $, esc } from "../dom";
-import { getLang, onLangChange, setLang, t } from "../i18n";
+import { avatar } from "../avatar";
+import { esc } from "../dom";
+import { type Lang, chooseLang, getLang, onLangChange, t } from "../i18n";
 import { accountUrl, network } from "../stellar/config";
 import { PACES, currentPace, paceSeconds, setPace, type Pace } from "../state";
 import { isMuted, toggleSound } from "../sound";
+import { LAST_DRAWS, drawRow, fmtBalance, initialOf, kindText, moneyLine, shortAddr } from "./account-model";
+import type { Entry } from "./history";
 
 /**
  * El panel de la cuenta.
@@ -14,6 +17,12 @@ import { isMuted, toggleSound } from "../sound";
  *
  * Acá está todo junto: quién sos, en qué red, cuánto tenés, tus sorteos y las
  * preferencias. Se abre tocando tu nombre.
+ *
+ * Es una ventana de tres partes (19 de octubre de 2026): el encabezado y el pie
+ * no se mueven y el cuerpo se recorre. Con diez sorteos en el historial la
+ * tarjeta medía 679 px, y en una laptop de 632 la cortaba por arriba y por
+ * abajo, con "Salir" y "Cancelar" pegados al borde. Ahora la tarjeta nunca es
+ * más alta que la pantalla, y la ✕ y "Cerrar sesión" están siempre a la vista.
  *
  * No guarda nada nuevo. Lee lo que ya existe: la sesión, el saldo que se
  * consulta al conectar y el historial del navegador.
@@ -30,20 +39,55 @@ export interface AccountView {
   onFund: () => void;
 }
 
-let open = false;
+type HistoryMod = typeof import("./history");
 
-/** Cierra el panel si está abierto. */
-export function closeAccount(): void {
-  document.querySelector(".acct-back")?.remove();
-  open = false;
+interface Open {
+  view: AccountView;
+  back: HTMLElement;
+  card: HTMLElement;
+  /** Quién la abrió: el foco vuelve ahí al cerrar. */
+  returnTo: HTMLElement | null;
+  onKey: (e: KeyboardEvent) => void;
+  /** El historial de esta cuenta, cuando el módulo ya cargó. */
+  hist: { mod: HistoryMod; list: Entry[] } | null;
+  /** Para devolver "Copiado ✓" a "Copiar" aunque se vuelva a pintar. */
+  copiedTimer: number;
+}
+
+let current: Open | null = null;
+
+/** Un solo oyente para toda la vida de la página: `onLangChange` no se desuscribe. */
+onLangChange(() => {
+  if (current) paint(current);
+});
+
+const CLOSE =
+  '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const SIGN_OUT =
+  '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4"/><path d="M16 8l4 4-4 4"/><path d="M20 12H9"/></svg>';
+
+const reducedMotion = (): boolean => matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** Cierra el panel si está abierto. `restoreFocus: false` cuando lo que sigue ya se lleva el foco. */
+export function closeAccount(restoreFocus = true): void {
+  const s = current;
+  if (!s) return;
+  current = null;
+  clearTimeout(s.copiedTimer);
+  document.removeEventListener("keydown", s.onKey, true);
+  s.back.remove();
+  if (!restoreFocus) return;
+  // La cabecera se repinta con la sesión y con el idioma: si el botón que abrió
+  // el panel ya no está, el foco vuelve al que lo reemplazó.
+  const target = s.returnTo?.isConnected ? s.returnTo : document.querySelector<HTMLElement>("#wallet-box .hello");
+  target?.focus({ preventScroll: true });
 }
 
 export function openAccount(view: AccountView): void {
-  if (open) {
+  if (current) {
     closeAccount();
     return;
   }
-  open = true;
 
   const back = document.createElement("div");
   back.className = "modal-back acct-back";
@@ -51,166 +95,300 @@ export function openAccount(view: AccountView): void {
   card.className = "modal-card acct-card";
   card.setAttribute("role", "dialog");
   card.setAttribute("aria-modal", "true");
-  card.setAttribute("aria-label", t("acctTitle"));
+  card.setAttribute("aria-labelledby", "acct-title");
   card.tabIndex = -1;
-
-  /* ---------------------------------------------------------------- quién */
-  const who = document.createElement("div");
-  who.className = "acct-who";
-  if (view.avatar) {
-    const img = document.createElement("img");
-    img.src = view.avatar;
-    img.alt = "";
-    img.referrerPolicy = "no-referrer";
-    who.appendChild(img);
-  }
-  const whoText = document.createElement("div");
-  whoText.innerHTML =
-    `<b>${esc(view.name || t("acctNoName"))}</b>` +
-    `<span class="mono">${esc(view.address.slice(0, 6))}…${esc(view.address.slice(-4))}</span>`;
-  who.appendChild(whoText);
-  card.appendChild(who);
-
-  /* ----------------------------------------------------------------- red */
-  const net = document.createElement("p");
-  net.className = "acct-net";
-  const bal = view.balance < 0 ? t("acctUnknown") : `${view.balance.toFixed(2)} XLM`;
-  net.textContent = `${network.name === "testnet" ? t("netTest") : network.name} · ${bal}`;
-  card.appendChild(net);
-
-  const row = document.createElement("div");
-  row.className = "row";
-  row.appendChild(mini(t("fundCopy"), () => void navigator.clipboard.writeText(view.address)));
-  if (network.name === "testnet" && view.balance >= 0 && view.balance < 20) {
-    row.appendChild(mini(t("fundGet"), () => { closeAccount(); view.onFund(); }, "solid"));
-  }
-  const explorer = document.createElement("a");
-  explorer.className = "mini";
-  explorer.href = accountUrl(view.address);
-  explorer.target = "_blank";
-  explorer.rel = "noopener";
-  explorer.textContent = t("fundExplorer");
-  row.appendChild(explorer);
-  card.appendChild(row);
-
-  /* -------------------------------------------------------- preferencias */
-  const prefs = document.createElement("div");
-  prefs.className = "acct-prefs";
-  prefs.appendChild(label(t("acctPrefs")));
-
-  const sound = mini(soundText(), () => {
-    toggleSound();
-    sound.textContent = soundText();
-  });
-  prefs.appendChild(sound);
-
-  const pace = document.createElement("select");
-  pace.className = "mono";
-  for (const p of Object.keys(PACES) as Pace[]) {
-    const o = document.createElement("option");
-    o.value = p;
-    // Con los segundos, igual que en la página: el selector apunta a una
-    // duración y sin el número "Normal" no le dice nada a nadie.
-    const base = t(p === "rapido" ? "paceFast" : p === "normal" ? "paceNormal" : "paceEpic");
-    o.textContent = `${base} · ${paceSeconds(p)} s`;
-    pace.appendChild(o);
-  }
-  pace.value = currentPace();
-  pace.addEventListener("change", () => {
-    setPace(pace.value as Pace);
-    // El selector de la página muestra lo mismo: se mantienen sincronizados.
-    const other = document.getElementById("pace") as HTMLSelectElement | null;
-    if (other) other.value = pace.value;
-  });
-  prefs.appendChild(pace);
-
-  const lang = mini(getLang() === "es" ? "English" : "Español", () => {
-    setLang(getLang() === "es" ? "en" : "es");
-    closeAccount();
-  });
-  prefs.appendChild(lang);
-  card.appendChild(prefs);
-
-  /* ----------------------------------------------------------- historial */
-  const hist = document.createElement("div");
-  hist.className = "acct-hist";
-  card.appendChild(hist);
-  void import("./history").then((h) => {
-    const list = h.historyOf(view.address);
-    hist.appendChild(label(t("histTitle")));
-    if (list.length === 0) {
-      const empty = document.createElement("p");
-      empty.className = "note";
-      empty.textContent = t("acctNoRaffles");
-      hist.appendChild(empty);
-      return;
-    }
-    const ul = document.createElement("div");
-    ul.innerHTML = list
-      .slice(0, 6)
-      .map((e) => {
-        const w = h.winnerLabel(e);
-        const link = e.proof ? ` <a href="${esc(e.proof)}" target="_blank" rel="noopener">${esc(t("histProof"))} ↗</a>` : "";
-        return `<p class="entity"><b>${esc(w)}</b> · ${e.count} ${esc(t("histPeople"))}${link}</p>`;
-      })
-      .join("");
-    hist.appendChild(ul);
-    const more = document.createElement("div");
-    more.className = "row";
-    more.appendChild(mini(t("histCsv"), () => h.downloadCsv(view.address)));
-    more.appendChild(
-      mini(t("acctSeeAll"), () => {
-        closeAccount();
-        // La pestaña se abre por la dirección (main.ts): el scroll solo no
-        // cambiaba de pestaña y el clic no llevaba a ningún lado.
-        if (location.hash !== "#mis-sorteos") location.hash = "#mis-sorteos";
-        requestAnimationFrame(() => document.getElementById("sec-history")?.scrollIntoView({ behavior: "smooth", block: "start" }));
-      }),
-    );
-    hist.appendChild(more);
-  });
-
-  /* --------------------------------------------------------------- salir */
-  const out = document.createElement("div");
-  out.className = "row";
-  out.appendChild(mini(t("disconnect"), () => { closeAccount(); view.onDisconnect(); }));
-  out.appendChild(mini(t("cancel"), () => closeAccount()));
-  card.appendChild(out);
-
   back.appendChild(card);
+
+  const s: Open = {
+    view,
+    back,
+    card,
+    returnTo: document.activeElement instanceof HTMLElement ? document.activeElement : null,
+    onKey: (e) => onKey(s, e),
+    hist: null,
+    copiedTimer: 0,
+  };
+  current = s;
+
+  // Tocar el fondo cierra; tocar adentro, no.
   back.addEventListener("click", (e) => {
     if (e.target === back) closeAccount();
   });
-  const onKey = (e: KeyboardEvent): void => {
-    if (e.key !== "Escape") return;
-    e.preventDefault();
-    document.removeEventListener("keydown", onKey, true);
-    closeAccount();
-  };
-  document.addEventListener("keydown", onKey, true);
+  card.addEventListener("click", (e) => {
+    const el = (e.target as HTMLElement).closest<HTMLElement>("[data-k]");
+    if (el && card.contains(el)) act(s, el);
+  });
+  card.addEventListener("change", (e) => {
+    const el = e.target;
+    if (el instanceof HTMLSelectElement && el.dataset.k === "pace") {
+      setPace(el.value as Pace);
+      // El selector de la página muestra lo mismo: se mantienen sincronizados.
+      const other = document.getElementById("pace") as HTMLSelectElement | null;
+      if (other) other.value = el.value;
+    }
+  });
+  // Google a veces rechaza la foto: sin ella, la letra o el dibujo de la casa.
+  // `error` no sube por el árbol, pero sí se ve en la captura.
+  card.addEventListener(
+    "error",
+    (e) => {
+      const face = e.target instanceof HTMLImageElement ? e.target.closest(".acct-face") : null;
+      if (face) face.outerHTML = faceHtml({ ...view, avatar: "" });
+    },
+    true,
+  );
+
+  document.addEventListener("keydown", s.onKey, true);
+  paint(s);
   document.body.appendChild(back);
-  card.focus();
-  onLangChange(() => closeAccount());
+  card.focus({ preventScroll: true });
+
+  // El historial se lee con el módulo ya cargado (el de la cabecera lo pidió al
+  // conectar): casi siempre llega antes del primer cuadro.
+  void import("./history").then((mod) => {
+    if (current !== s) return;
+    s.hist = { mod, list: mod.historyOf(view.address) };
+    paint(s);
+  });
 }
 
-function soundText(): string {
+/* ---------------------------------------------------------------- teclado */
+
+const FOCUSABLE = 'a[href], button:not([disabled]), select:not([disabled]), input:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
+
+function onKey(s: Open, e: KeyboardEvent): void {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    closeAccount();
+    return;
+  }
+  if (e.key !== "Tab") return;
+  // La trampa de foco: Tab no se escapa a la página de atrás, ni siquiera si el
+  // foco se perdió (se repintó el panel, o se cerró un selector).
+  const items = [...s.card.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.getClientRects().length > 0);
+  const first = items[0];
+  const last = items[items.length - 1];
+  if (!first || !last) {
+    e.preventDefault();
+    s.card.focus({ preventScroll: true });
+    return;
+  }
+  const on = document.activeElement;
+  if (!(on instanceof Node) || !s.card.contains(on)) {
+    e.preventDefault();
+    (e.shiftKey ? last : first).focus();
+  } else if (e.shiftKey && (on === first || on === s.card)) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && on === last) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
+/* ---------------------------------------------------------------- acciones */
+
+function act(s: Open, el: HTMLElement): void {
+  switch (el.dataset.k) {
+    case "x":
+      closeAccount();
+      break;
+    case "copy":
+      void copy(s, el);
+      break;
+    case "sound": {
+      toggleSound();
+      const on = !isMuted();
+      el.classList.toggle("on", on);
+      el.setAttribute("aria-checked", String(on));
+      el.textContent = t(on ? "acctSoundOn" : "acctSoundOff");
+      break;
+    }
+    case "lang":
+      // Con `chooseLang` y no `setLang`: así se recuerda para la próxima visita,
+      // igual que con ES y EN de la cabecera.
+      if (el.dataset.v === "es" || el.dataset.v === "en") chooseLang(el.dataset.v as Lang);
+      break;
+    case "fund":
+      closeAccount();
+      s.view.onFund();
+      break;
+    case "all":
+      closeAccount();
+      // La pestaña se abre por la dirección (main.ts): el scroll solo no
+      // cambiaba de pestaña y el clic no llevaba a ningún lado.
+      if (location.hash !== "#mis-sorteos") location.hash = "#mis-sorteos";
+      requestAnimationFrame(() =>
+        document.getElementById("sec-history")?.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "start" }),
+      );
+      break;
+    case "csv":
+      s.hist?.mod.downloadCsv(s.view.address);
+      break;
+    case "out":
+      closeAccount(false);
+      s.view.onDisconnect();
+      break;
+  }
+}
+
+/** Copia la dirección entera. Sin permiso del navegador, la deja a la vista y elegida. */
+async function copy(s: Open, btn: HTMLElement): Promise<void> {
+  const text = s.view.address;
+  let ok = false;
+  try {
+    await navigator.clipboard.writeText(text);
+    ok = true;
+  } catch {
+    // Sin contexto seguro o sin permiso: la vía vieja.
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0";
+      s.card.appendChild(ta);
+      ta.select();
+      ok = document.execCommand("copy");
+      ta.remove();
+    } catch {
+      ok = false;
+    }
+  }
+  if (current !== s) return;
+  if (!ok) {
+    // Que se pueda copiar a mano: la dirección entera, elegida.
+    const addr = s.card.querySelector<HTMLElement>(".acct-short");
+    if (addr) {
+      addr.textContent = text;
+      addr.classList.add("full");
+      const r = document.createRange();
+      r.selectNodeContents(addr);
+      const sel = getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(r);
+    }
+    return;
+  }
+  btn.focus({ preventScroll: true });
+  mark(s, btn);
+  clearTimeout(s.copiedTimer);
+  s.copiedTimer = window.setTimeout(() => {
+    const b = s.card.querySelector<HTMLElement>('[data-k="copy"]');
+    if (b) unmark(b);
+  }, 2200);
+}
+
+function mark(s: Open, btn: HTMLElement): void {
+  btn.textContent = t("acctCopied");
+  btn.classList.add("done");
+  const live = s.card.querySelector(".acct-live");
+  if (live) live.textContent = t("acctCopied");
+}
+
+function unmark(btn: HTMLElement): void {
+  btn.textContent = t("acctCopy");
+  btn.classList.remove("done");
+}
+
+/* ------------------------------------------------------------------ pintar */
+
+/** La cara: la foto de la cuenta, y sin foto la letra del nombre o el dibujo de la casa. */
+function faceHtml(v: AccountView): string {
+  const name = v.name?.trim() ?? "";
+  if (v.avatar) return `<span class="acct-face"><img src="${esc(v.avatar)}" alt="" referrerpolicy="no-referrer"></span>`;
+  if (name) return `<span class="acct-face initial" aria-hidden="true">${esc(initialOf(name))}</span>`;
+  return `<span class="acct-face"><img src="${esc(avatar(v.address, 88))}" alt=""></span>`;
+}
+
+function paceName(p: Pace): string {
+  return t(p === "rapido" ? "paceFast" : p === "normal" ? "paceNormal" : "paceEpic");
+}
+
+/**
+ * Arma todo el contenido de la tarjeta. Se llama al abrir, cuando llega el
+ * historial y cuando cambia el idioma: conserva dónde estaba el scroll y qué
+ * botón tenía el foco, así que cambiar de idioma no hace perder el lugar.
+ */
+function paint(s: Open): void {
+  const { view, card } = s;
+  const body = card.querySelector<HTMLElement>(".acct-body");
+  const scroll = body?.scrollTop ?? 0;
+  const active = document.activeElement;
+  const focusKey = active instanceof HTMLElement && card.contains(active) ? active.closest<HTMLElement>("[data-k]") : null;
+  const keep = focusKey ? `[data-k="${focusKey.dataset.k}"]${focusKey.dataset.v ? `[data-v="${focusKey.dataset.v}"]` : ""}` : "";
+
+  const name = view.name?.trim() ?? "";
+  const title = name || kindText(view.label);
+
+  const mainnet = network.name === "mainnet";
+  const money = moneyLine(view.label, view.balance, network.name);
+  const balance =
+    money.balance === null
+      ? ""
+      : `<span class="acct-badge">${esc(money.balance === "unknown" ? t("acctUnknown") : fmtBalance(money.balance))}</span>`;
+  const fund = money.fund ? `<button type="button" class="mini solid" data-k="fund">${esc(t("fundGet"))}</button>` : "";
+
   const es = getLang() === "es";
-  return isMuted() ? (es ? "Sonido: no" : "Sound: off") : es ? "Sonido: sí" : "Sound: on";
+  const muted = isMuted();
+  const pace = (Object.keys(PACES) as Pace[])
+    .map((p) => `<option value="${p}"${p === currentPace() ? " selected" : ""}>${esc(paceName(p))} · ${paceSeconds(p)} s</option>`)
+    .join("");
+
+  card.innerHTML =
+    `<div class="acct-head">${faceHtml(view)}` +
+    `<div class="acct-id"><h2 id="acct-title" class="sr-only">${esc(t("acctTitle"))}</h2>` +
+    `<p class="acct-name" title="${esc(title)}">${esc(title)}</p>` +
+    `<p class="acct-addr"><span class="acct-short mono" title="${esc(view.address)}">${esc(shortAddr(view.address))}</span>` +
+    `<button type="button" class="acct-copy" data-k="copy" aria-label="${esc(t("acctCopyAria"))}">${esc(t("acctCopy"))}</button>` +
+    `<span class="acct-live sr-only" role="status" aria-live="polite"></span></p></div>` +
+    `<button type="button" class="acct-x" data-k="x" aria-label="${esc(t("acctClose"))}">${CLOSE}</button></div>` +
+    `<div class="acct-body">` +
+    // La red, el saldo y el explorador.
+    `<section class="acct-sec"><div class="acct-badges">` +
+    `<span class="acct-badge net${mainnet ? " main" : ""}">${esc(t(mainnet ? "acctNetMain" : "acctNetTest"))}</span>${balance}</div>` +
+    (fund ? `<div class="acct-badges">${fund}</div>` : "") +
+    `<a class="acct-link" data-k="explorer" href="${esc(accountUrl(view.address))}" target="_blank" rel="noopener">${esc(t("fundExplorer"))}</a></section>` +
+    // Las preferencias, en una fila con sus etiquetas.
+    `<section class="acct-sec" aria-labelledby="acct-prefs-h"><h3 class="kicker" id="acct-prefs-h">${esc(t("acctPrefs"))}</h3>` +
+    `<div class="acct-prefs">` +
+    `<div class="acct-pref"><span class="kicker" id="acct-snd-l">${esc(t("acctSound"))}</span>` +
+    `<button type="button" role="switch" class="mini acct-snd${muted ? "" : " on"}" data-k="sound" aria-checked="${!muted}" aria-labelledby="acct-snd-l">${esc(t(muted ? "acctSoundOff" : "acctSoundOn"))}</button></div>` +
+    `<div class="acct-pref pace"><label class="kicker" for="acct-pace">${esc(t("acctPace"))}</label>` +
+    `<select id="acct-pace" class="mono" data-k="pace">${pace}</select></div>` +
+    `<div class="acct-pref"><span class="kicker" id="acct-lang-l">${esc(t("acctLang"))}</span>` +
+    `<div class="langs acct-langs" role="group" aria-labelledby="acct-lang-l">` +
+    `<button type="button" data-k="lang" data-v="es" lang="es" aria-pressed="${es}" class="${es ? "on" : ""}">ES</button>` +
+    `<button type="button" data-k="lang" data-v="en" lang="en" aria-pressed="${!es}" class="${es ? "" : "on"}">EN</button></div></div>` +
+    `</div></section>` +
+    // Tus sorteos: los últimos y dos salidas.
+    (s.hist ? drawsHtml(s.hist.list) : "") +
+    `</div>` +
+    `<div class="acct-foot"><button type="button" class="acct-out" data-k="out">${SIGN_OUT}<span>${esc(t("acctSignOut"))}</span></button></div>`;
+
+  const newBody = card.querySelector<HTMLElement>(".acct-body");
+  if (newBody) newBody.scrollTop = scroll;
+  if (keep) card.querySelector<HTMLElement>(keep)?.focus({ preventScroll: true });
 }
 
-function mini(text: string, onClick: () => void, extra = ""): HTMLButtonElement {
-  const b = document.createElement("button");
-  b.className = `mini ${extra}`.trim();
-  b.textContent = text;
-  b.addEventListener("click", onClick);
-  return b;
+function drawsHtml(list: Entry[]): string {
+  const head = `<section class="acct-sec" aria-labelledby="acct-draws-h"><h3 class="kicker" id="acct-draws-h">${esc(t("histTitle"))}</h3>`;
+  if (list.length === 0) return `${head}<p class="acct-empty">${esc(t("acctEmpty"))}</p></section>`;
+  const rows = list
+    .slice(0, LAST_DRAWS)
+    .map(drawRow)
+    .map((r) => {
+      const proof = r.proof
+        ? `<a class="acct-proof" href="${esc(r.proof)}" target="_blank" rel="noopener" aria-label="${esc(t("acctProofOf").replace("{sorteo}", r.title))}">${esc(t("histProof"))} ↗</a>`
+        : "";
+      return (
+        `<li class="acct-row"><div class="acct-rt"><b class="acct-rtitle" title="${esc(r.title)}">${esc(r.title)}</b>` +
+        `<span class="acct-rmeta">${esc(r.meta)}</span></div>${proof}</li>`
+      );
+    })
+    .join("");
+  return (
+    `${head}<ul class="acct-rows">${rows}</ul>` +
+    `<div class="acct-more"><button type="button" class="mini" data-k="all">${esc(t("acctSeeAllN").replace("{n}", String(list.length)))}</button>` +
+    `<button type="button" class="mini" data-k="csv">${esc(t("histCsv"))}</button></div></section>`
+  );
 }
-
-function label(text: string): HTMLElement {
-  const p = document.createElement("p");
-  p.className = "kicker";
-  p.textContent = text;
-  return p;
-}
-
-void $;

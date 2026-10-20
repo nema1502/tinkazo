@@ -1226,6 +1226,23 @@ export const T: Record<Lang, Dict> = {
     cPasTwo: (n) => pick([`¡Sale ${n}! ¡Quedan dos!`, `¡Afuera ${n}! ¡Mano a mano!`, `¡Se cae ${n}! ¡Quedan dos!`]),
     // Tómbola: la bola cae al vaso (responde al "¿Cae o no cae?").
     cTomIn: ["¡ADENTRO!", "¡AL VASO!", "¡CAYÓ!"],
+    // UX 19-oct: panel
+    acctClose: "Cerrar",
+    acctCopy: "Copiar",
+    acctCopied: "Copiado ✓",
+    acctCopyAria: "Copiar la dirección de tu cuenta",
+    acctNetTest: "Red de pruebas",
+    acctNetMain: "Red principal",
+    acctSound: "Sonido",
+    acctSoundOn: "Sí",
+    acctSoundOff: "No",
+    acctPace: "Duración",
+    acctLang: "Idioma",
+    acctSeeAllN: "Ver todos ({n})",
+    acctEmpty: "Todavía no sorteaste con esta cuenta. Tu primer sorteo va a aparecer acá, con su comprobante.",
+    acctPending: "sin sortear",
+    acctProofOf: "Comprobante de {sorteo}",
+    acctSignOut: "Cerrar sesión",
   },
   en: {
     badge: "For whoever has to run the draw",
@@ -2174,6 +2191,23 @@ export const T: Record<Lang, Dict> = {
     cPasTwo: (n) => pick([`${n} is out! Two left!`, `Out goes ${n}! Head to head!`, `${n} drops! Two left!`]),
     // Tómbola: the ball drops into the cup (answers "In or out?").
     cTomIn: ["IN!", "IN THE CUP!", "IT'S IN!"],
+    // UX 19-oct: panel
+    acctClose: "Close",
+    acctCopy: "Copy",
+    acctCopied: "Copied ✓",
+    acctCopyAria: "Copy your account address",
+    acctNetTest: "Test network",
+    acctNetMain: "Main network",
+    acctSound: "Sound",
+    acctSoundOn: "On",
+    acctSoundOff: "Off",
+    acctPace: "Duration",
+    acctLang: "Language",
+    acctSeeAllN: "See all ({n})",
+    acctEmpty: "You haven't drawn with this account yet. Your first draw will show up here, with its receipt.",
+    acctPending: "not drawn yet",
+    acctProofOf: "Receipt for {sorteo}",
+    acctSignOut: "Sign out",
   },
 };
 

@@ -619,18 +619,7 @@
   label.chip.live:focus-within { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 6px var(--yellow); }
   /* Una huella de 64 caracteres desbordaba la tarjeta en celular. */
   .note { word-break: break-word; overflow-wrap: anywhere; }
-  /* El panel de la cuenta. */
-  /* Nunca más ancho que la pantalla, o el diálogo empuja la página entera. */
-  .acct-card { max-width: min(420px, calc(100vw - 28px)); }
-  .acct-who { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-  .acct-who img { width: 44px; height: 44px; border: 2px solid var(--ink); background: var(--card); }
-  .acct-who b { display: block; font-size: 17px; font-weight: 800; }
-  .acct-who span { font-size: 11px; color: var(--muted); }
-  .acct-net { font-family: ui-monospace, Consolas, monospace; font-size: 12px; font-weight: 700; color: var(--ink2); }
-  .acct-prefs, .acct-hist { margin-top: 18px; padding-top: 14px; border-top: 2px dashed var(--ink); display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  .acct-prefs .kicker, .acct-hist .kicker { width: 100%; }
-  .acct-hist { display: block; }
-  .acct-hist .entity { margin-top: 6px; }
+  /* El panel de la cuenta: ver "UX 19-oct: panel" al final del archivo. */
   .modal-by { margin-top: 14px; font-size: 11px; color: var(--muted); text-align: center; line-height: 1.5; }
 
   /* La puerta. Sin cuenta conectada no se sortea, así que el bloque de
@@ -1212,3 +1201,111 @@
   details.tecnico { margin: 8px 0 10px; }
   details.tecnico summary { cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; font-family: ui-monospace, Consolas, monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; color: var(--muted); }
   details.tecnico[open] summary { color: var(--ink2); }
+
+  /* UX 19-oct: panel
+     El panel de la cuenta es una ventana de tres partes: el encabezado (la cara,
+     el nombre, la dirección y la ✕) y el pie ("Cerrar sesión") no se mueven, y
+     el cuerpo se recorre. La tarjeta nunca es más alta que la pantalla: con diez
+     sorteos medía 679 px y en una laptop de 632 se cortaba por los dos lados. */
+  .acct-card {
+    padding: 0; gap: 0; max-width: min(420px, calc(100vw - 28px));
+    max-height: calc(100vh - 2 * var(--modal-pad)); max-height: calc(100dvh - 2 * var(--modal-pad));
+  }
+  /* La tarjeta recibe el foco al abrir para que se anuncie, pero no es un
+     control: sin el anillo amarillo, y conserva su sombra. */
+  .acct-card:focus, .acct-card:focus-visible { outline: none; box-shadow: var(--sh); }
+  .acct-head {
+    flex: none; display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 14px;
+    border-bottom: var(--bw) solid var(--ink);
+  }
+  .acct-face {
+    flex: none; width: 44px; height: 44px; display: grid; place-items: center; overflow: hidden;
+    border: 2px solid var(--ink); background: var(--card);
+  }
+  .acct-face.initial { background: var(--yellow); color: #191919; font-size: 22px; font-weight: 900; line-height: 1; }
+  .acct-face img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .acct-id { flex: 1; min-width: 0; }
+  .acct-name { font-size: 17px; font-weight: 800; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .acct-addr { display: flex; align-items: center; gap: 2px; font-size: 12px; line-height: 1.3; color: var(--muted); min-width: 0; }
+  .acct-short.full { overflow-wrap: anywhere; user-select: all; }
+  /* El botón mide 44 px de alto para el dedo, pero su caja se mete en el aire de
+     arriba y de abajo: así el encabezado no engorda por un enlace. */
+  .acct-copy {
+    flex: none; min-height: 44px; margin: -12px 0; padding: 0 8px; background: none; border: 0; cursor: pointer;
+    font: inherit; font-size: 12px; font-weight: 800; color: var(--ink);
+    text-decoration: underline; text-underline-offset: 3px;
+  }
+  .acct-copy.done { color: var(--teal-ink); text-decoration: none; }
+  .acct-x {
+    flex: none; width: 44px; height: 44px; display: grid; place-items: center; cursor: pointer;
+    background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+    transition: transform 0.08s, box-shadow 0.08s;
+  }
+  .acct-x:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
+  .acct-x:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+  .acct-x svg { width: 18px; height: 18px; }
+
+  .acct-body {
+    flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+    padding: 16px; display: flex; flex-direction: column; gap: 20px;
+  }
+  .acct-sec { display: flex; flex-direction: column; gap: 8px; }
+  .acct-card .kicker { font-size: 11px; font-weight: 600; line-height: 1.3; }
+  .acct-badges { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .acct-badge {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; font-weight: 800;
+    letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.3; padding: 5px 10px;
+    background: var(--card); color: var(--ink); border: 2px solid var(--ink);
+  }
+  .acct-badge.net { background: var(--orange); color: var(--on-accent); box-shadow: var(--sh-sm); }
+  .acct-badge.net.main { background: var(--teal); }
+  .acct-link {
+    align-self: flex-start; display: inline-flex; align-items: center; min-height: 44px; margin: -6px 0;
+    font-size: 13px; font-weight: 700; color: var(--ink); text-underline-offset: 3px;
+  }
+  .acct-prefs { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+  .acct-pref { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .acct-pref.pace { flex: 1 1 130px; min-width: 130px; }
+  .acct-pref .kicker { font-size: 10.5px; letter-spacing: 0.12em; }
+  .acct-pref select { width: 100%; font-size: 13px; padding: 0 10px; }
+  .acct-pref .mini { min-width: 56px; }
+  /* El sonido encendido se marca con el amarillo de la casa, como ES y EN. */
+  .acct-snd.on { background: var(--yellow); color: #191919; }
+  .acct-langs { gap: 0; }
+  .acct-langs button { min-width: 44px; }
+  .acct-langs button + button { margin-left: -2px; }
+  .acct-langs button.on { position: relative; }
+
+  .acct-rows { list-style: none; padding: 0; display: flex; flex-direction: column; border-top: 2px solid var(--ink); }
+  .acct-row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .acct-rt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .acct-rtitle { font-size: 14px; font-weight: 800; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .acct-rmeta { font-size: 12px; line-height: 1.4; color: var(--ink2); }
+  .acct-proof {
+    flex: none; display: inline-flex; align-items: center; min-height: 44px; padding: 0 2px;
+    font-size: 13px; font-weight: 800; color: var(--ink); white-space: nowrap; text-underline-offset: 3px;
+  }
+  .acct-more { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 6px; }
+  .acct-empty { font-size: 14px; line-height: 1.5; color: var(--ink2); }
+
+  .acct-foot { flex: none; display: flex; padding: 6px 10px; border-top: var(--bw) solid var(--ink); background: var(--paper); }
+  .acct-out {
+    display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 10px; cursor: pointer;
+    background: none; border: 0; font: inherit; font-size: 14px; font-weight: 800; color: var(--ink2);
+    text-decoration: underline; text-underline-offset: 3px;
+  }
+  .acct-out:hover { color: var(--ink); }
+  .acct-out svg { width: 16px; height: 16px; flex: none; }
+
+  @media (max-width: 460px) { .acct-body { padding: 14px; } }
+  /* Poca altura (un celular acostado, o la pantalla a 200 % de zoom): el
+     encabezado y el pie se achican para que el cuerpo tenga dónde recorrerse. */
+  @media (max-height: 460px) {
+    .acct-head { padding-block: 8px; }
+    .acct-body { padding-block: 12px; gap: 16px; }
+    .acct-foot { padding-block: 2px; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .acct-card { animation: acct-in 0.16s ease-out; }
+    @keyframes acct-in { from { opacity: 0; transform: translateY(10px); } }
+  }
