@@ -599,10 +599,14 @@ export async function constellationPixi(names: string[], winners: readonly numbe
     const cuadrado = (q: { x: number; y: number }, r: number): Caja => ({ x: q.x - r, y: q.y, w: 2 * r, h: 2 * r });
     const estorbos: { b: Caja; peso: number }[] = [];
     if (phase === "hop") estorbos.push({ b: cuadrado(S.scene.toGlobal(packetPos()), 31 * k * z), peso: 20 });
-    for (const ni of new Set([...conChip.map(([ni]) => ni), enMano, WIN_NODE])) {
-      const nd = nodes[ni];
-      if (nd?.kind === "star" && nd.g?.visible) estorbos.push({ b: cuadrado(S.scene.toGlobal({ x: nd.x, y: nd.y }), nd.g.scale.x * 1.11 * z), peso: 6 });
-    }
+    // Todas las estrellas que se ven, también las de los que no tienen nombre
+    // en este cuadro: un nombre grande tapaba la estrella de otra persona. Las
+    // que llevan nombre, la del paquete y la ganadora pesan el doble.
+    const conNombreNodo = new Set([...conChip.map(([ni]) => ni), enMano, WIN_NODE]);
+    nodes.forEach((nd, ni) => {
+      if (nd.kind !== "star" || !nd.g?.visible) return;
+      estorbos.push({ b: cuadrado(S.scene.toGlobal({ x: nd.x, y: nd.y }), nd.g.scale.x * 1.11 * z), peso: conNombreNodo.has(ni) ? 6 : 3 });
+    });
     /** Cuánto de `a` cae encima de `b`, en píxeles cuadrados. */
     const pisa = (a: Caja, b: Caja): number => {
       const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
