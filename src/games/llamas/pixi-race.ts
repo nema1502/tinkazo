@@ -643,7 +643,7 @@ export async function llamasPixi(
     const rowH = 26 * u;
     for (let k = 0; k < N; k++) {
       const r = new Container();
-      const bgr = new Graphics().roundRect(0, 0, 180 * u, rowH - 3 * u, 4 * u).fill({ color: INK, alpha: 0.72 });
+      const bgr = new Graphics().roundRect(0, 0, 180 * u, rowH - 3 * u, 4 * u).fill({ color: INK, alpha: 0.9 });
       const num = new Graphics().roundRect(2 * u, 2 * u, 18 * u, rowH - 7 * u, 3 * u).fill(S.color(k));
       const pos = S.text("", { fontSize: 12 * u, fontWeight: "900", fill: INK });
       pos.anchor.set(0.5);
