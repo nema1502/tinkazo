@@ -687,6 +687,13 @@ export async function constellationPixi(names: string[], winners: readonly numbe
           h * (Math.abs(b.x - x0) + Math.abs(b.y - y0) + 8 * i - (i === antes ? 12 : 0));
         if (costo < menor) [menor, caja, elegido] = [costo, b, i];
       });
+      // Si ni el mejor lugar se libra de otro nombre (con la estrella pegada al
+      // borde de abajo, los ocho caían en la misma fila), sube encima de él.
+      for (let intento = 0; intento < 4; intento++) {
+        const otro = puestos.find((q) => pisa(caja, q) > 0);
+        if (!otro) break;
+        caja = { ...caja, y: clamp(otro.y - (otro.h + h) / 2 - 4 * k, lo + h / 2, hi - h / 2) };
+      }
       lugarDe.set(key, elegido);
       c.position.set(caja.x, caja.y);
       c.alpha = alpha;
