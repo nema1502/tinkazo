@@ -914,7 +914,7 @@ export const T: Record<Lang, Dict> = {
     uso1t: "Meetups y comunidades",
     uso1b: "El sorteo del final, con el proyector y todos mirando. Desde el CSV de Luma, solo entre los que vinieron.",
     uso2t: "Aulas y talleres",
-    uso2b: "Quién expone primero, quién se lleva el libro. Sin que nadie diga que fue a dedo.",
+    uso2b: "Quién expone primero, quién se lleva el libro. Sin que nadie diga que lo eligió a su antojo.",
     uso3t: "Equipos de trabajo",
     uso3b: "El regalo de fin de año o el orden de los turnos, con un resultado que cualquiera revisa.",
     uso4t: "Ferias y eventos",
