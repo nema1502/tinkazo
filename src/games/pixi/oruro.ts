@@ -569,7 +569,8 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     rollPlan = null;
     // La interfaz.
     counterBox = new Graphics();
-    counter = S.text("", { fontFamily: MONO, fontSize: 14 * k, fontWeight: "700", fill: S.dark ? CREAM : INK });
+    // Con poca altura (un celular acostado) la letra baja de 10 px: no más chica que eso.
+    counter = S.text("", { fontFamily: MONO, fontSize: Math.max(10, 14 * k), fontWeight: "700", fill: S.dark ? CREAM : INK });
     counter.anchor.set(0.5);
     const box = new Container();
     box.addChild(counterBox, counter);
@@ -581,7 +582,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     moreText.anchor.set(0.5);
     moreBox.visible = moreText.visible = false;
     chips.addChild(leaders);
-    blockText = S.text("", { fontFamily: MONO, fontSize: 12 * k, fontWeight: "800", fill: CREAM });
+    blockText = S.text("", { fontFamily: MONO, fontSize: Math.max(10, 12 * k), fontWeight: "800", fill: CREAM });
     blockText.anchor.set(1, 1);
     blockText.position.set(g.w - 22 * k, g.h - S.bottom() - 18 * k);
     blockPlate = new Graphics();
