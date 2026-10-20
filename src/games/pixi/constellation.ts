@@ -434,8 +434,10 @@ export async function constellationPixi(names: string[], winners: readonly numbe
         const w = 0.5 * clamp(hopT / 0.15, 0, 1) * (1 - clamp((hopT - DECOY_AT) / 0.15, 0, 1));
         x += (d.x - x) * w;
         y += (d.y - y) * w;
+        // Entra en la franja libre entre la cabecera y el relator: con el alto
+        // total, en un celular acostado la ganadora quedaba debajo del relator.
         const ancho = Math.abs(d.x - pk.x) + 160 * S.u(), alto = Math.abs(d.y - pk.y) + 160 * S.u();
-        const cabe = Math.max(1, Math.min(W() / ancho, (H() * 0.8) / alto));
+        const cabe = Math.max(1, Math.min(W() / ancho, ((H() - S.top() - S.bottom()) * 0.8) / alto));
         zoom += (Math.min(zoom, cabe) - zoom) * (w / 0.5);
       }
       cam.lookAt(x, y, zoom, 2.4 + 2 * focus, 0.025 * (hopI / K));
