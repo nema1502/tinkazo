@@ -72,7 +72,7 @@ const outDir = opt("--out", "docs/capturas/flujo");
 const lang = opt("--lang", "es");
 const quieren = opt("--vistas", "").split(",").filter(Boolean);
 const temas = opt("--temas", "dark").split(",").filter(Boolean);
-// El caso en que no queda nadie sin premio ("Compartir el comprobante" es la
+// El caso en que no queda nadie sin premio ("Compartir el resultado" es la
 // acción principal) es otro sorteo entero: se mira en las pantallas más justas.
 const sinResto = opt("--sin-resto", "laptop-100,celular-h").split(",").filter(Boolean);
 const selloMax = Number(opt("--sello-max", "240")) * 1000;
@@ -582,8 +582,8 @@ async function recorrer(browser, vista, tema, caso) {
     );
     const t4 = res.m.real?.texto ?? "";
     check(
-      `${quien} · 4 resultado: la acción principal es ${caso === "sin-resto" ? '"Compartir el comprobante"' : '"Siguiente premio" con cuántos quedan'}`,
-      caso === "sin-resto" ? /Compartir el comprobante|Share the receipt/.test(t4) : /Siguiente premio|Next prize/.test(t4) && /\d+/.test(t4),
+      `${quien} · 4 resultado: la acción principal es ${caso === "sin-resto" ? '"Compartir el resultado"' : '"Siguiente premio" con cuántos quedan'}`,
+      caso === "sin-resto" ? /Compartir el resultado|Share the result/.test(t4) : /Siguiente premio|Next prize/.test(t4) && /\d+/.test(t4),
       `"${t4}"`,
     );
     // Lo demás es secundario: el comprobante y "usar otra lista" no llevan el color de la acción principal.
@@ -595,7 +595,7 @@ async function recorrer(browser, vista, tema, caso) {
       `siguiente: ${clases.sin || "—"} · comprobante: ${clases.prueba || "—"} · otra lista: ${clases.otra || "—"}`,
     );
     if (caso === "sin-resto") {
-      info("sin siguiente premio: queda el comprobante");
+      info("sin siguiente premio: queda compartir el resultado");
       return { ok: true, page };
     }
 

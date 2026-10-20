@@ -696,15 +696,51 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
   void paintQr(link);
 }
 
-/** Copia el enlace del comprobante: es lo que se pega en el grupo del evento. */
-export async function shareProof(btn: HTMLButtonElement): Promise<void> {
-  if (!proofLink) return;
+/**
+ * Lo que se pega en el grupo: quién ganó, entre cuántos, el premio y el enlace
+ * para verificarlo. Era un bloque técnico, sin el premio ni el comprobante
+ * (revisión del 16 de octubre de 2026). Lo técnico sigue en "Detalles técnicos"
+ * y en el comprobante.
+ */
+function mensajeDelSorteo(): string {
+  if (!app.frozen || !app.drawn) return "";
+  const { names, prize } = app.frozen;
+  const { beacon, winners } = app.drawn;
+  const lista = winners.map((i) => names[i] ?? "");
+  const quienes = new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(lista);
+  return T[getLang()].summary(quienes, names.length, prize, proofLink || roundUrl(beacon.round), lista.length > 1);
+}
+
+/** Copia el mensaje y avisa en el botón. Devuelve false si el navegador no deja copiar. */
+async function copiarMensaje(btn: HTMLButtonElement, texto: string, aviso: "copied" | "proofCopied", ms: number): Promise<boolean> {
   try {
-    await navigator.clipboard.writeText(proofLink);
-    const orig = btn.textContent;
-    btn.textContent = t("proofCopied");
-    setTimeout(() => (btn.textContent = orig), 1800);
+    await navigator.clipboard.writeText(texto);
   } catch {
+    return false;
+  }
+  const orig = btn.textContent;
+  btn.textContent = t(aviso);
+  setTimeout(() => (btn.textContent = orig), ms);
+  return true;
+}
+
+/**
+ * "Compartir el resultado": en el celular, el menú de compartir del sistema con
+ * el mensaje; en la computadora, copia el mensaje para pegarlo en el grupo.
+ */
+export async function shareProof(btn: HTMLButtonElement): Promise<void> {
+  const texto = mensajeDelSorteo();
+  if (!texto) return;
+  if (matchMedia("(pointer: coarse)").matches && typeof navigator.share === "function") {
+    try {
+      await navigator.share({ text: texto });
+      return;
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      // Si el navegador no deja compartir, se copia como en la computadora.
+    }
+  }
+  if (!(await copiarMensaje(btn, texto, "proofCopied", 1800)) && proofLink) {
     window.open(proofLink, "_blank", "noopener");
   }
 }
@@ -740,29 +776,10 @@ export async function reverify(): Promise<void> {
   out.textContent = ok ? t(winners.length > 1 ? "reverifyOkMany" : "reverifyOk") : "✗";
 }
 
+/** "Copiar el mensaje": el mismo texto que "Compartir el resultado", siempre al portapapeles. */
 export async function copySummary(btn: HTMLButtonElement): Promise<void> {
-  if (!app.frozen || !app.drawn) return;
-  // Lo que se pega en el grupo del evento: quién, entre cuántos, el premio y
-  // el enlace para comprobarlo. Era un bloque técnico, sin el premio ni el
-  // comprobante (revisión del 16 de octubre de 2026). Lo técnico sigue en
-  // "Detalles técnicos" y en el comprobante.
-  const { names, prize } = app.frozen;
-  const { beacon, winners } = app.drawn;
-  const text = T[getLang()].summary(
-    winners.map((i) => names[i] ?? "").join(", "),
-    names.length,
-    prize,
-    proofLink || roundUrl(beacon.round),
-    winners.length > 1,
-  );
-  try {
-    await navigator.clipboard.writeText(text);
-    const orig = btn.textContent;
-    btn.textContent = t("copied");
-    setTimeout(() => (btn.textContent = orig), 1600);
-  } catch {
-    /* portapapeles bloqueado: nada que hacer */
-  }
+  const texto = mensajeDelSorteo();
+  if (texto) await copiarMensaje(btn, texto, "copied", 1600);
 }
 
 export function confetti(): void {

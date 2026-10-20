@@ -8,7 +8,7 @@ Una prueba con alguien que usaba la herramienta por primera vez (19 de octubre d
 
 ## Los principios
 
-1. **En cada paso hay una sola acción principal.** Los pasos son cuatro: 1 Lista, 2 Sellar, 3 Sortear, 4 Compartir. La acción principal es el botón con el color de la casa (magenta); todo lo demás es secundario y no lleva ese color. Si después del ganador queda con quién sortear, la principal es "Siguiente premio" (con cuántas personas quedan); si no, "Compartir el comprobante". "Siguiente premio" vuelve al paso 2 con la lista sin los que ya ganaron.
+1. **En cada paso hay una sola acción principal.** Los pasos son cuatro: 1 Lista, 2 Sellar, 3 Sortear, 4 Compartir. La acción principal es el botón con el color de la casa (magenta); todo lo demás es secundario y no lleva ese color. Si después del ganador queda con quién sortear, la principal es "Siguiente premio" (con cuántas personas quedan); si no, "Compartir el resultado". "Siguiente premio" vuelve al paso 2 con la lista sin los que ya ganaron.
 2. **Se ve sin hacer scroll.** La acción principal tiene que estar a la vista, con la pantalla donde la deja la propia página, en estas cinco pantallas y a 200 % de zoom:
 
    | Etiqueta | Ancho x alto | Qué es |
@@ -55,7 +55,7 @@ Es lo que mira `audit-flujo.mjs` en cada paso (lista cargada, sellada y esperand
 - [ ] Con el botón fuera de la pantalla, la barra lo ofrece encendido y su clic sortea.
 - [ ] Si el sellado o el sorteo falla (la red de Stellar o la de la ronda no contestan), el motivo se ve en la pantalla aunque se haya apretado la barra, y queda a la vista una acción para reintentar. El mensaje se escribe junto al botón de verdad, que con la barra puesta está fuera de la pantalla: por eso hay que llevarlo a la vista.
 - [ ] La barra se va con el estadio, con la espera en grande y con una ventana abierta, y vuelve al cerrarlas.
-- [ ] Después del ganador, lo que sigue va pegado al ganador, antes de "Mostrar en grande" y de la verificación. La acción principal es "Siguiente premio" si queda con quién sortear, o "Compartir el comprobante" si no; lo demás es secundario.
+- [ ] Después del ganador, lo que sigue va pegado al ganador, antes de "Mostrar en grande" y de la verificación. La acción principal es "Siguiente premio" si queda con quién sortear, o "Compartir el resultado" si no; lo demás es secundario.
 - [ ] Una captura de cada paso, para mirarla con los ojos.
 
 ## El auditor
@@ -73,7 +73,7 @@ Recorre el flujo de verdad con la cuenta de prueba de testnet (la única que no 
 | `--out` | Dónde dejar las capturas. |
 | `--vistas` | Cuáles de las pantallas, separadas por coma (`laptop-100,escritorio,tablet-h,celular-h,celular,zoom-200`). |
 | `--temas` | `dark`, `light` o los dos (`dark,light`). Por defecto solo `dark`: la geometría es la misma y el flujo es largo. |
-| `--sin-resto` | En qué pantallas mirar también el caso en que no queda nadie sin premio, donde la principal es "Compartir el comprobante" (por defecto `laptop-100,celular-h`; `none` para saltearlo). |
+| `--sin-resto` | En qué pantallas mirar también el caso en que no queda nadie sin premio, donde la principal es "Compartir el resultado" (por defecto `laptop-100,celular-h`; `none` para saltearlo). |
 | `--fallos` | En qué pantallas se prueba el sellado que falla (por defecto todas; `none` para saltearlo). Corta las llamadas al servidor de Stellar, aprieta lo que se ve (la barra, si es lo que está) y comprueba que el motivo aparece en la pantalla y que queda una acción a la vista para reintentar. Se hace una vez por pantalla, en el primer tema. |
 | `--anchos` | Los anchos de celular que se miran al final, sin Stellar (por defecto `320,360,375,414`; `none` para saltearlos). Miran lo que el ancho rompe: scroll de costado, el indicador de pasos en una línea y con margen, que ningún botón corte su texto y que ninguna caja deje salir lo que lleva adentro. |
 | `--solo-anchos`, `--solo-fallos` | Corren solo los anchos de celular (un minuto por ancho, sin cuenta de prueba ni testnet) o solo el sellado que falla (menos de un minuto por pantalla). |

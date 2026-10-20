@@ -35,7 +35,7 @@ export interface Dict {
   cLead: (n: string) => string;
   /** El anuncio del ganador; `many` con varios premios, para el plural ("¡GANAN…!"). */
   cWin: (n: string, many?: boolean) => string;
-  /** "Copiar resumen": lo que se pega en el grupo. Quién ganó, entre cuántos, el premio y el enlace para comprobarlo. */
+  /** "Copiar el mensaje": lo que se pega en el grupo. Quién ganó, entre cuántos, el premio, el enlace para verificarlo y el pie con la marca. */
   summary: (w: string, n: number, premio: string, enlace: string, varios: boolean) => string;
   drawIn: (mmss: string) => string;
   /** Debajo del resultado: cuántos quedan en la lista sin los ganadores. */
@@ -696,7 +696,7 @@ export const T: Record<Lang, Dict> = {
     tecnicoT: "Detalles técnicos",
     motionNote: "Tu sistema tiene las animaciones reducidas, por eso el sorteo se muestra directo.", motionReplay: "Ver la animación igual",
     reverify: "Rehacelo acá mismo", reverifyOk: "Lo rehicimos delante tuyo y dio el mismo nombre.", reverifyOkMany: "Lo rehicimos delante tuyo y dio los mismos nombres.",
-    copySummary: "Copiar resumen", copied: "¡Copiado!",
+    copySummary: "Copiar el mensaje", copied: "¡Copiado!",
     copyRules: "Copiar las bases",
     rulesNote: "Pegalas en Luma, en WhatsApp o donde avisaste del sorteo. Dicen cómo se elige antes de que se sepa quién gana, y dejan anotado cuál es el sorteo que vale.",
     rules: (p) => [
@@ -1169,7 +1169,7 @@ export const T: Record<Lang, Dict> = {
     vListChanged: "La lista de este enlace no es la que se selló. Alguien la cambió después.",
     vBadSignature: "La firma de la ronda no verifica contra la clave pública del faro.",
     vMismatch: "El ganador recomputado no coincide con el que quedó registrado.",
-    shareProof: "Compartir el comprobante", proofCopied: "¡Enlace copiado!",
+    shareProof: "Compartir el resultado", proofCopied: "¡Copiado! Pegalo en el grupo",
     connectWallet: "Entrar", disconnect: "Salir", cancel: "Cancelar", connecting: "Conectando…",
     connectTitle: "¿Quién organiza?",
     connectLead: "Conectá una cuenta y el sorteo queda grabado en Stellar",
@@ -1220,7 +1220,7 @@ export const T: Record<Lang, Dict> = {
     cLead: (n) => pick([`¡${n} pasa adelante!`, `¡${n} se pone primero!`, `¡Adelante va ${n}!`, `¡${n} se escapa!`, `¡${n} los pasa a todos!`]),
     cWin: (n, many) => pick(many ? [`¡GANAN ${n}!`, `¡SE LO LLEVAN ${n}!`, `¡ES PARA ${n}!`, `¡EL TINKAZO ES PARA ${n}!`] : [`¡GANA ${n}!`, `¡SE LO LLEVA ${n}!`, `¡ES PARA ${n}!`, `¡EL TINKAZO ES PARA ${n}!`]),
     summary: (w, n, premio, enlace, varios) =>
-      `${premio ? `Sorteo de ${premio}: ` : ""}${varios ? "ganaron" : "ganó"} ${w}, entre ${n} personas.\nNadie eligió ${varios ? "estos nombres" : "este nombre"}, y cualquiera lo puede comprobar desde el celular:\n${enlace}`,
+      `${premio ? `Sorteo de ${premio}: ${varios ? "ganaron" : "ganó"}` : varios ? "Ganaron" : "Ganó"} ${w}, entre ${n} personas.\nNadie eligió ${varios ? "estos nombres" : "este nombre"}.\nSi querés verificarlo, entrá acá: ${enlace}\n\nSorteado con Tinkazo · https://tinkazo.app`,
     cTroSpent: (n) => pick([`¡Se le acabó la cuerda a ${n}!`, `¡Se apagó el trompo de ${n}!`, `¡${n} se queda sin cuerda!`]),
     // --- Constelación, sapo y ¿Quién es? (7 de octubre de 2026).
     cConstHeading: (n) => pick([`¿Va para ${n}…?`, `¿Se queda en ${n}…?`]),
@@ -1702,7 +1702,7 @@ export const T: Record<Lang, Dict> = {
     tecnicoT: "Technical details",
     motionNote: "Your system has reduced motion turned on, so the draw is shown directly.", motionReplay: "Watch the animation anyway",
     reverify: "Run it again right here", reverifyOk: "Ran it again in front of you. Same name.", reverifyOkMany: "Ran it again in front of you. Same names.",
-    copySummary: "Copy summary", copied: "Copied!",
+    copySummary: "Copy the message", copied: "Copied!",
     copyRules: "Copy the rules",
     rulesNote: "Paste them on Luma, WhatsApp or wherever you announced the draw. They say how the winner is chosen before anyone knows, and put on record which draw counts.",
     rules: (p) => [
@@ -2165,7 +2165,7 @@ export const T: Record<Lang, Dict> = {
     vListChanged: "The list in this link is not the one that was sealed. Someone changed it afterwards.",
     vBadSignature: "The round signature doesn't verify against the beacon's public key.",
     vMismatch: "The recomputed winner doesn't match the one on record.",
-    shareProof: "Share the receipt", proofCopied: "Link copied!",
+    shareProof: "Share the result", proofCopied: "Copied! Paste it in your group",
     connectWallet: "Sign in", disconnect: "Sign out", cancel: "Cancel", connecting: "Connecting…",
     connectTitle: "Who's running this?",
     connectLead: "Connect an account and the draw gets recorded on Stellar",
@@ -2216,7 +2216,7 @@ export const T: Record<Lang, Dict> = {
     cLead: (n) => pick([`${n} takes the lead!`, `${n} is gone!`, `${n} out in front!`, `${n} pushes past everyone!`, `It's ${n} now!`]),
     cWin: (n, many) => pick(many ? [`${n} WIN!`, `${n} TAKE IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`] : [`${n} WINS!`, `${n} TAKES IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`]),
     summary: (w, n, premio, enlace, varios) =>
-      `${premio ? `${premio} draw: ` : ""}${varios ? "the winners are" : "the winner is"} ${w}, out of ${n} people.\nNobody picked ${varios ? "these names" : "this name"}, and anyone can check it from their phone:\n${enlace}`,
+      `${premio ? `${premio} draw: ${varios ? "the winners are" : "the winner is"}` : varios ? "The winners are" : "The winner is"} ${w}, out of ${n} people.\nNobody picked ${varios ? "these names" : "this name"}.\nIf you want to verify it, open this link: ${enlace}\n\nDrawn with Tinkazo · https://tinkazo.app`,
     cTroSpent: (n) => pick([`${n}'s top runs out of spin!`, `${n}'s top stops spinning!`, `${n} is out of spin!`]),
     // --- Constellation, sapo and Guess Who (7 October 2026).
     cConstHeading: (n) => pick([`Is it going to ${n}…?`, `Is it stopping at ${n}…?`]),
