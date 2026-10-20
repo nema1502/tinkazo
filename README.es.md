@@ -58,7 +58,7 @@ sequenceDiagram
 2. **Esperar el número.** [drand](https://drand.love) quicknet, el faro público de aleatoriedad de la League of Entropy (Cloudflare, Protocol Labs, la EPFL y otros), publica una ronda firmada cada tres segundos. Nadie, ni quien organiza ni Tinkazo, puede conocerla ni elegirla antes.
 3. **Sortear.** `draw` verifica la firma BLS12-381 de la ronda **dentro del contrato**, deriva la semilla y elige a los ganadores de forma determinista. No le pide permiso a nadie: si quien organiza desaparece en medio del evento, cualquiera lo finaliza y el ganador es el mismo.
 4. **El show.** Uno de doce juegos a pantalla completa cuenta el resultado. Cuando arranca la animación, el ganador ya está fijado: el juego solo lo relata.
-5. **Revisar.** El comprobante es un enlace. Quien lo abre ve a la página rehacer el sorteo desde cero y recibe un veredicto: verde si el contrato atestigua la lista, amarillo si el sorteo no se ancló, rojo con el motivo si algo no cuadra.
+5. **Revisar.** El comprobante es un enlace. Quien lo abre ve a la página rehacer el sorteo desde cero y recibe un veredicto: verde si el contrato atestigua la lista, amarillo si el sorteo no se ancló, rojo con el motivo si algo no cuadra. Si sorteaste varias veces en el mismo evento, el [enlace de evento](docs/evento.md) los junta en una sola página.
 
 La selección completa es una especificación normativa, el [protocolo v2](docs/protocolo.md), con vectores de prueba que comparten el contrato en Rust y el cliente en TypeScript ([docs/vectors.json](docs/vectors.json)). Cualquiera puede reimplementarlo y llegar a los mismos ganadores.
 
