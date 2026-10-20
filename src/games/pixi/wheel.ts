@@ -319,9 +319,11 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
   /* ============================================================ estado */
   let tAll = 0, tHold = 0;
   let rot = -startSeg * A;
-  let lastClick = Math.floor(startSeg), lastLap = -1, lastHum = -1, lastSaid = -999, saidUpTo = -1;
+  let lastClick = Math.floor(startSeg), lastLap = -1, lastHum = -1, saidUpTo = -1;
   let pegHits = 0, buildTick = 0, holdBeats = 0;
   let cur = personOf(Math.floor(startSeg));
+  /** El último gajo que el relator nombró mientras la rueda frena. */
+  let namedCur = -1;
   let flash = 0, didLock = false, saidPeg = false, saidLast = false, didCrown = false;
 
   const segUnder = (): number => Math.floor((((-rot / A) % segs) + segs) % segs) % segs;
@@ -430,15 +432,17 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
       if (tAll < cue[0]) break;
       saidUpTo = i;
       cue[1]();
-      lastSaid = tAll;
     }
-    if (tAll >= T_CREEP && tAll < T_HOLD && w < 4.5 && tAll - lastSaid > 0.45) {
-      lastSaid = tAll;
+    // El nombre se dice cuando el puntero cambia de gajo y el gajo va a durar lo
+    // bastante para que se lea (0,4 s: `w` va en gajos por segundo). Antes se
+    // decía cada 0,45 s desde los 4,5 gajos por segundo, y la línea nombraba
+    // un gajo que la flecha ya había pasado, con la placa mostrando otro.
+    if (tAll >= T_CREEP && tAll < T_HOLD && w * scale < 2.5 && cur !== namedCur) {
+      namedCur = cur;
       S.say(T[getLang()].cWheelOn(names[cur] ?? ""), 0.55);
     }
     if (tAll >= T_HOLD && !saidPeg) {
       saidPeg = true;
-      lastSaid = tAll;
       S.say(falsa ? T[getLang()].cWheelFalse(names[cur] ?? "") : t("cWheelPeg"), 0.9);
       cam.punch(0.06);
       // La parada falsa tiene que sonar a parada: un clac como el de la traba,
@@ -450,7 +454,6 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     }
     if (tAll >= (falsa ? T_HOLD + FALSA : T_SETTLE) && !saidLast) {
       saidLast = true;
-      lastSaid = tAll;
       S.say(t(falsa ? "cWheelMoved" : "cWheelLast"), 0.95);
       if (falsa) {
         beep(note(3), 0.08, "square", 0.06);
