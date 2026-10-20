@@ -35,7 +35,7 @@ The product promises that **anyone can check a draw**. This document says what b
 - **Picking a round that already exists:** `seal` requires the round to be born at least 30 seconds later, and at most 30 days.
 - **A game showing another winner:** games receive the winner already decided, and an auditor checks every game against the protocol.
 - **The organizer holding back a result they dislike:** `draw` needs no permission; anyone can finalize, and the verification page offers it.
-- **Names leaking:** what goes on chain is the list's fingerprint, the number of entries, how many winners, the round, the time of the seal, the prize or title you wrote and the organizer's address; and, when drawing, the round's signature and the winners' positions. Names never go on chain; the receipt travels in the URL fragment, which browsers don't send to servers; QR codes and avatars are drawn in the browser. During a draw, the only request that leaves the browser is the beacon round.
+- **Names leaking:** what goes on chain is the list's fingerprint, the number of entries, how many winners, the round, the seal's time and block number, the prize or title you wrote, the organizer's address and the draw's number; and, when drawn, the proof the round published, the draw's time, its block number and the winners' positions. Names never go on chain; the receipt travels in the URL fragment, which browsers don't send to servers; QR codes and avatars are drawn in the browser. During a draw, the only request that leaves the browser is the beacon round.
 - **Taking over the contract:** it has no admin, cannot be upgraded and holds no funds. There is no privilege to take.
 
 ## Open, and said out loud
