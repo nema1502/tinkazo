@@ -11,7 +11,7 @@
  * El reloj es virtual, como en el auditor exigente: cada cuadro avanza un
  * sesenta y cuatroavo de segundo, y al llegar al momento pedido la escena se
  * congela. Con espera de verdad, la oscura y la clara salían en instantes
- * distintos (lo vio el agente evaluador, 5 de octubre de 2026).
+ * distintos (lo vio la revisión visual, 5 de octubre de 2026).
  *
  * Uso:
  *   pnpm preview &

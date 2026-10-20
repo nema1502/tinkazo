@@ -117,8 +117,8 @@
   h1 .hl { position: relative; z-index: -1; }
   /* Las letras del resaltado, posicionadas: se pintan después de todos los
      fondos del resaltado. Sin esto, el fondo del renglón de abajo le cortaba
-     la cola a la "q" de "cualquiera" en el de arriba (lo encontró el agente
-     evaluador, 30 de septiembre de 2026). */
+     la cola a la "q" de "cualquiera" en el de arriba (lo encontró la revisión visual,
+     30 de septiembre de 2026). */
   h1 .hl-t { position: relative; }
   .lead { font-size: 18px; color: var(--ink2); max-width: 560px; font-weight: 500; }
   .mascot { color: var(--magenta); transform: rotate(3deg); }
@@ -143,8 +143,8 @@
   textarea:focus, input:focus, select:focus { outline: 3px solid var(--yellow); outline-offset: 0; }
   .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 16px; }
   /* El botón principal, también cuando es un enlace: "Entrar y sortear, es
-     gratis" se veía como un link azul del navegador (lo encontró el agente
-     evaluador, 30 de septiembre de 2026). */
+     gratis" se veía como un link azul del navegador (lo encontró la revisión visual,
+     30 de septiembre de 2026). */
   button.primary, a.primary {
     background: var(--magenta); color: var(--on-accent); border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm);
     padding: 12px 24px; font-weight: 800; font-size: 15px; cursor: pointer; transition: transform 0.08s, box-shadow 0.08s;

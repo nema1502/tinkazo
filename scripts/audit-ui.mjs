@@ -569,7 +569,7 @@ async function ventanaDeRearmar(page, p, tema) {
  *
  * La primera versión solo miraba las letras de afuera del resaltado, y no vio
  * que el renglón de abajo del resaltado le cortaba la cola a la "q" de
- * "cualquiera", en el renglón de arriba. Lo encontró el agente evaluador.
+ * "cualquiera", en el renglón de arriba. Lo encontró la revisión visual.
  */
 async function resaltadoTapa(page) {
   const box = JSON.parse(await page.eval(`(() => { scrollTo(0, 0); const h = document.querySelector('h1'); if (!h || !h.querySelector('.hl')) return JSON.stringify({ w: 0 }); const r = h.getBoundingClientRect(); return JSON.stringify({ x: r.left, y: r.top, w: r.width, h: r.height }); })()`));
