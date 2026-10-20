@@ -1236,6 +1236,10 @@
     text-decoration: underline; text-underline-offset: 3px;
   }
   .acct-copy.done { color: var(--teal-ink); text-decoration: none; }
+  /* El anillo del foco rodea la palabra y no la caja de 44 px, que se mete
+     debajo del nombre y se lo taparía con el halo amarillo. */
+  .acct-copy:focus-visible { outline: none; box-shadow: none; }
+  .acct-copy:focus-visible span { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 6px var(--yellow); }
   .acct-x {
     flex: none; width: 44px; height: 44px; display: grid; place-items: center; cursor: pointer;
     background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);

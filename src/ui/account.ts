@@ -284,14 +284,14 @@ async function copy(s: Open, btn: HTMLElement): Promise<void> {
 }
 
 function mark(s: Open, btn: HTMLElement): void {
-  btn.textContent = t("acctCopied");
+  (btn.firstElementChild ?? btn).textContent = t("acctCopied");
   btn.classList.add("done");
   const live = s.card.querySelector(".acct-live");
   if (live) live.textContent = t("acctCopied");
 }
 
 function unmark(btn: HTMLElement): void {
-  btn.textContent = t("acctCopy");
+  (btn.firstElementChild ?? btn).textContent = t("acctCopy");
   btn.classList.remove("done");
 }
 
@@ -344,7 +344,7 @@ function paint(s: Open): void {
     `<div class="acct-id"><h2 id="acct-title" class="sr-only">${esc(t("acctTitle"))}</h2>` +
     `<p class="acct-name" title="${esc(title)}">${esc(title)}</p>` +
     `<p class="acct-addr"><span class="acct-short mono" title="${esc(view.address)}">${esc(shortAddr(view.address))}</span>` +
-    `<button type="button" class="acct-copy" data-k="copy" aria-label="${esc(t("acctCopyAria"))}">${esc(t("acctCopy"))}</button>` +
+    `<button type="button" class="acct-copy" data-k="copy" aria-label="${esc(t("acctCopyAria"))}"><span>${esc(t("acctCopy"))}</span></button>` +
     `<span class="acct-live sr-only" role="status" aria-live="polite"></span></p></div>` +
     `<button type="button" class="acct-x" data-k="x" aria-label="${esc(t("acctClose"))}">${CLOSE}</button></div>` +
     `<div class="acct-body">` +
