@@ -173,6 +173,6 @@ El plan de monitoreo, para cuando esté en mainnet.
 | Decisión | Por qué |
 |---|---|
 | No cifrar la lista en el comprobante | Sin los nombres nadie puede recomputar, y recomputar es el producto |
-| No guardar nada en un servidor | Un servidor es algo en lo que habría que confiar, y el argumento entero es que no hace falta confiar en nadie |
+| No guardar nada en un servidor | Un servidor es algo en lo que habría que confiar, y el argumento entero es que cada paso se puede comprobar |
 | No hacer el contrato actualizable | Un contrato actualizable tiene un administrador, y un administrador es alguien que puede cambiar las reglas después |
 | No usar el hash del ledger como semilla | Un validador puede influir en el margen, y no queda una firma que un tercero pueda verificar años después |
