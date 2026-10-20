@@ -152,6 +152,13 @@
   <p class="demo-banner app-only" data-i="demoBanner">Demo con una lista de ejemplo: no se graba nada en Stellar.</p>
   <div class="appbar app-only">
     <h2 data-i="appTitle">Tu sorteo</h2>
+    <!-- Dónde estás y qué falta: lo arma `src/ui/siguiente.ts`. -->
+    <ol class="pasos app-only tab-nuevo" id="pasos" role="list" aria-label="Pasos del sorteo" data-i-aria="pasosAria">
+      <li data-paso="1" class="actual" aria-current="step"><span class="p-n" aria-hidden="true">1</span><span class="p-t" data-i="paso1">Lista</span><span class="sr-only p-e"></span></li>
+      <li data-paso="2"><span class="p-n" aria-hidden="true">2</span><span class="p-t" data-i="paso2">Sellar</span><span class="sr-only p-e"></span></li>
+      <li data-paso="3"><span class="p-n" aria-hidden="true">3</span><span class="p-t" data-i="paso3">Sortear</span><span class="sr-only p-e"></span></li>
+      <li data-paso="4"><span class="p-n" aria-hidden="true">4</span><span class="p-t" data-i="paso4">Compartir</span><span class="sr-only p-e"></span></li>
+    </ol>
     <div class="tabs" role="tablist">
       <button role="tab" id="tab-nuevo" aria-selected="true" data-i="tabNuevo">Nuevo sorteo</button>
       <button role="tab" id="tab-hist" aria-selected="false" data-i="tabHist">Mis sorteos</button>
@@ -164,7 +171,7 @@
     <div class="body">
       <aside class="gate" id="gate" style="display:none"></aside>
       <aside class="onboard" id="onboard" style="display:none" aria-labelledby="ob-t">
-        <h3 id="ob-t" data-i="obTitle">Tu primer sorteo, en tres pasos</h3>
+        <h3 id="ob-t" data-i="obTitle">Tu primer sorteo, paso a paso</h3>
         <ol class="ob-pasos">
           <li><b data-i="ob1T">Cargá la lista</b><span data-i="ob1B">Pegá los nombres, uno por línea, o subí el CSV de Luma con los que hicieron check-in.</span></li>
           <li><b data-i="ob2T">Sellala</b><span data-i="ob2B">Queda cerrada antes de que exista el número que decide. Después nadie la puede cambiar.</span></li>
@@ -383,6 +390,18 @@
   </nav>
   <span data-i="footR">Hecho con ♥ en Bolivia</span>
 </div></footer>
+
+<!-- Lo que sigue: la barra de abajo, que sale solo si el botón de la acción de
+     este paso queda fuera de la pantalla (`src/ui/siguiente.ts`). El aviso de
+     los cambios de paso vive aparte y desde el principio, vacío: un lector de
+     pantalla anuncia los cambios de una región que ya estaba. -->
+<div class="siguiente" id="siguiente" role="region" aria-label="Lo que sigue" data-i-aria="sigRegion" inert>
+  <div class="sig-in">
+    <p class="sig-paso mono" id="sig-paso"></p>
+    <button class="primary" id="sig-btn" type="button"></button>
+  </div>
+</div>
+<p class="sr-only" id="sig-aviso" role="status" aria-live="polite"></p>
 
 <!-- Estadio fullscreen -->
 <div class="stadium" id="stadium">

@@ -15,6 +15,7 @@ import { usePixi } from "../games/engine";
 import { secondsToRound, unfreeze } from "./freeze";
 import { setList } from "./participants";
 import { CARD_SECONDS, showGameCard } from "./gamecard";
+import { actualizarPaso } from "./siguiente";
 import { startMusic, stopMusic } from "../music";
 
 /** Obtiene la ronda objetivo, verifica su firma y selecciona (protocolo §2, §5). */
@@ -445,6 +446,7 @@ function showAgain(): void {
   $("btn-again-nueva").className = alcanza ? "ghost" : "primary";
   $("again-left").textContent = alcanza ? L.againLeft(quedan) : L.againFew(quedan);
   $("again-row").style.display = "block";
+  actualizarPaso();
 }
 onLangChange(() => {
   if (app.drawn && $("again-row").style.display !== "none") showAgain();
@@ -508,6 +510,7 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   if (modo === "sinGanadores") $<HTMLInputElement>("prize").focus({ preventScroll: true });
   else if (modo === "ausente") $<HTMLButtonElement>("btn-freeze").focus({ preventScroll: true });
   else $<HTMLTextAreaElement>("ta").focus({ preventScroll: true });
+  actualizarPaso();
 }
 
 /** El botón "No está" de una tarjeta; describe a quién se refiere con el nombre de la tarjeta. */

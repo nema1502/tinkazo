@@ -5,6 +5,7 @@ import { SAMPLE, app, currentPace, paceSeconds, params, setPace, type Game, type
 import { soundLabel, toggleSound, unlockAudioOnGesture } from "./sound";
 import { bindParticipants, loadSample, renderNames } from "./ui/participants";
 import { GAME_BUTTONS, copyRules, freeze, refreshFreezeLabel, secondsToRound, setGame } from "./ui/freeze";
+import { initSiguiente } from "./ui/siguiente";
 import { adelantarImagen, alTocarGanadores, copySummary, draw, imagenRedes, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
 import { skipGame } from "./games/overlay";
 import { usePixi } from "./games/engine";
@@ -107,6 +108,8 @@ initVistas();
 initOnboarding();
 initWalletUI();
 refreshFreezeLabel();
+// Los pasos de arriba y la barra de "lo que sigue", con la herramienta ya armada.
+initSiguiente({ segundos: secondsToRound });
 
 /**
  * Las dos vistas de "/": la portada para quien llega, y la herramienta para

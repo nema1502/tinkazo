@@ -10,6 +10,7 @@ import { precargarQr } from "./qr";
 import { canAnchor, currentSession } from "./wallet-ui";
 import { parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
+import { actualizarPaso, barraActiva } from "./siguiente";
 
 /**
  * Los botones del selector, en el orden en que se muestran. Hasta el 29 de
@@ -142,11 +143,14 @@ function startCountdown(): void {
       if (countdownTimer !== undefined) clearInterval(countdownTimer);
       countdownTimer = undefined;
       if (!app.drawn) preconectarDrand();
-      // Ya nació: el botón, a la vista y con el foco. Quedaba una pantalla más
-      // abajo, y dos en el celular (revisión del 16 de octubre de 2026).
+      // Ya nació: el botón, con el foco y, si quedó fuera de la pantalla, a la
+      // vista (revisión del 16 de octubre de 2026: quedaba una pantalla más
+      // abajo, y dos en el celular). Con la barra de "lo que sigue" no hace
+      // falta mover la pantalla: quien estaba mirando los juegos sigue ahí, y
+      // la barra ya le muestra el botón encendido.
       if (!app.drawn) {
         const r = btn.getBoundingClientRect();
-        if (r.top < 0 || r.bottom > innerHeight) btn.scrollIntoView({ behavior: "smooth", block: "center" });
+        if (!barraActiva() && (r.top < 0 || r.bottom > innerHeight)) btn.scrollIntoView({ behavior: "smooth", block: "center" });
         btn.focus({ preventScroll: true });
       }
     }
@@ -351,6 +355,7 @@ export function unfreeze(lista: string): void {
   refreshFreezeLabel();
   // El resumen del CSV ya no aplica a la lista nueva: se esconde.
   setList(lista);
+  actualizarPaso();
 }
 
 /** Lo que se ve con la lista ya sellada: los datos del sello, la espera y el selector de juego. */
@@ -390,6 +395,7 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
     if (app.game === "wheel") setGame("tombola");
   }
   startCountdown();
+  actualizarPaso();
   $("sec-frozen").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 

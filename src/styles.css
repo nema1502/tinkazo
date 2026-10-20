@@ -1313,3 +1313,77 @@
     @keyframes acct-in { from { opacity: 0; transform: translateY(10px); } }
   }
   @media (prefers-reduced-motion: reduce) { .acct-x { transition: none; } }
+  /* UX 19-oct: siguiente */
+  /* El indicador de pasos, arriba de la herramienta: 1 Lista, 2 Sellar, 3
+     Sortear, 4 Compartir. Discreto: el actual resaltado, los hechos con ✓. Lo
+     arma `src/ui/siguiente.ts`. En la demo no va: se hace sola. */
+  .pasos { list-style: none; margin: 0; padding: 0; display: flex; align-items: center; gap: 6px; order: 2; flex: 1 0 100%; min-width: 0; }
+  .pasos li {
+    display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
+    font-family: ui-monospace, Consolas, monospace; font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
+    text-transform: uppercase; color: var(--muted);
+  }
+  .pasos li + li::before { content: ""; width: 14px; margin-right: 1px; border-top: 2px dashed var(--muted); }
+  .p-n {
+    display: grid; place-items: center; width: 24px; height: 24px; flex: none;
+    border: 2px solid var(--ink); background: var(--paper); color: var(--ink2); font-weight: 800;
+  }
+  .pasos li.actual { color: var(--ink); }
+  .pasos li.actual .p-n { background: var(--yellow); color: #191919; box-shadow: 2px 2px 0 var(--ink); transform: rotate(-3deg); }
+  .pasos li.hecho { color: var(--ink2); }
+  .pasos li.hecho .p-n { background: var(--teal); color: #191919; }
+  .appbar > .tabs { order: 1; }
+  @media (min-width: 960px) {
+    .pasos { order: 0; flex: 0 1 auto; }
+  }
+  @media (max-width: 480px) {
+    .pasos { gap: 4px; justify-content: space-between; }
+    .pasos li { gap: 4px; font-size: 10.5px; letter-spacing: 0.02em; }
+    .pasos li + li::before { width: 6px; margin-right: 0; }
+    .p-n { width: 20px; height: 20px; font-size: 11px; }
+  }
+  body[data-demo="1"] .pasos { display: none !important; }
+
+  /* La barra de "lo que sigue": la red de seguridad para cuando el botón de la
+     acción de este paso queda fuera de la pantalla. Fija abajo, con un solo
+     botón principal y la línea del paso. Sale solo si el botón de verdad no se
+     ve (así nunca hay dos iguales a la vista), y su clic es un clic en el de
+     verdad. Va debajo del estadio y de las ventanas (z-index 40 y 70), y con
+     alguna abierta `siguiente.ts` la esconde. Con `env(safe-area-inset-bottom)`
+     lista para un celular con barra de gestos; el sitio no usa `viewport-fit=cover`,
+     así que por ahora vale cero y la barra queda por encima de la del navegador. */
+  .siguiente {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    background: var(--card); color: var(--ink); border-top: var(--bw) solid var(--ink);
+    padding: 10px 20px max(10px, env(safe-area-inset-bottom, 0px));
+    visibility: hidden; transform: translateY(100%);
+    transition: transform 0.18s ease, visibility 0s linear 0.18s;
+  }
+  .siguiente.on { visibility: visible; transform: none; transition: transform 0.18s ease; }
+  .sig-in { max-width: 1060px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px 20px; }
+  .sig-paso {
+    margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2);
+  }
+  #sig-btn { flex: 0 0 auto; max-width: 100%; min-height: 52px; }
+  /* Aire abajo: el pie y lo último de la página llegan a verse enteros por encima
+     de la barra. Siempre en la herramienta, esté la barra o no: si el relleno
+     entrara con ella, quien estaba al final de la página la veía subir sobre el
+     pie sin poder alcanzarlo. */
+  body[data-vista="app"][data-tab="nuevo"]:not([data-demo="1"]) { padding-bottom: var(--sig-alto, 0px); }
+  /* El aviso flotante (la cuenta lista, un error) sube para no quedar encima del botón. */
+  body.con-siguiente .wallet-notice { bottom: calc(22px + var(--sig-alto, 0px)); }
+  @media (max-width: 560px) and (min-height: 521px) {
+    .siguiente { padding: 8px 14px max(10px, env(safe-area-inset-bottom, 0px)); }
+    .sig-in { flex-direction: column; align-items: stretch; gap: 6px; }
+    .sig-paso { text-align: center; font-size: 11px; }
+    #sig-btn { width: 100%; }
+  }
+  /* Un celular acostado: la barra, finita y en un renglón. */
+  @media (max-height: 520px) {
+    .siguiente { padding-top: 6px; padding-bottom: max(6px, env(safe-area-inset-bottom, 0px)); }
+    #sig-btn { min-height: 44px; padding: 8px 20px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .siguiente, .siguiente.on { transition: none; }
+  }
