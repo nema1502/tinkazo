@@ -1,7 +1,7 @@
 import { getLang, t } from "../i18n";
 import { network, txUrl } from "../stellar/config";
 import { grifoApagado, grifoDisponible, hayAyudaDeFondos } from "../stellar/grifo";
-import { conAyudaDeFondos, conTope, esperarHasta } from "./reintento";
+import { conAyudaDeFondos, conCuentaLista, conTope, dormirCancelable, esperarCuenta, esperarHasta } from "./reintento";
 
 /**
  * Sellar y sortear contra el contrato.
@@ -14,10 +14,12 @@ import { conAyudaDeFondos, conTope, esperarHasta } from "./reintento";
  */
 
 /**
- * `funding` es el paso que solo ve una cuenta de Pollar sin saldo: se la está
- * preparando para poder pagar la comisión (ver `conFondos`).
+ * Los dos últimos pasos solo los ve una cuenta de Pollar (ver `conFondos`):
+ * `preparing` es la espera a que la red abra la cuenta, que Pollar crea de fondo
+ * después de entrar y tarda unos segundos; `funding`, la carga con el grifo de
+ * testnet cuando la comisión no la paga la app.
  */
-export type AnchorStep = "simulating" | "signing" | "sending" | "confirmed" | "funding";
+export type AnchorStep = "simulating" | "signing" | "sending" | "confirmed" | "funding" | "preparing";
 
 /**
  * `detail` lleva el costo estimado en el paso de firma y el hash de la
@@ -170,63 +172,104 @@ const grifoPedido = new Map<string, number>();
 const ENTRE_PEDIDOS_MS = 90_000;
 
 /**
- * Sellar y sortear con una cuenta de Pollar sin saldo no debe trabar a nadie.
+ * Sellar y sortear con una cuenta de Pollar no debe trabar a nadie.
  *
- * Se intenta como siempre. Si Pollar paga la comisión por la app (con la regla
- * de contrato de su panel prendida) no pasa nada más. Si no la paga y la red
- * dice que la cuenta no tiene con qué, en testnet se la carga sola con el grifo
- * y se reintenta una vez, con una línea de estado y sin que la persona toque
- * nada. Lo que no se puede resolver solo (mainnet, el grifo caído, o que siga
- * sin saldo) avisa con el evento `tinkazo:sin-fondos`, y la pantalla muestra
- * la caja de fondos como último recurso. Con otra wallet no cambia nada.
+ * Primero, que la cuenta exista. Pollar la abre en la red de fondo después de
+ * entrar y tarda de 5 a 62 segundos: antes de simular se espera a que aparezca
+ * (hasta 90 s, con la línea "Preparando tu cuenta…") y nunca se la confunde con
+ * una cuenta sin saldo. Si pasan los 90 segundos, se le dice que todavía no está
+ * lista y que pruebe de nuevo.
+ *
+ * Después se intenta como siempre. Si Pollar paga la comisión por la app (con la
+ * regla de contrato de su panel prendida) no pasa nada más. Si no la paga y la
+ * red dice que la cuenta no tiene con qué, en testnet se la carga sola con el
+ * grifo y se reintenta una vez, con una línea de estado y sin que la persona
+ * toque nada. Lo que no se puede resolver solo avisa con el evento
+ * `tinkazo:sin-fondos` y la pantalla muestra la caja de fondos como último
+ * recurso, pero solo en testnet y con el grifo prendido: en mainnet no hay grifo
+ * y la persona ve el error de falta de saldo, tal cual.
+ *
+ * Con otra wallet no cambia nada.
  */
 async function conFondos<T>(intento: () => Promise<T>, onStep: OnStep): Promise<T> {
-  const [w, { submitsItself }, { esSinSaldo }] = await Promise.all([
+  const [w, { submitsItself }, contrato] = await Promise.all([
     import("../stellar/wallet-lite"),
     import("../stellar/wallet-pollar"),
     import("../stellar/contract"),
   ]);
   const wallet = w.activeWallet();
   const address = wallet?.address ?? "";
+  const esPollar = submitsItself(wallet);
+  // Si la persona cierra la sesión o cambia de cuenta mientras se espera, se deja de esperar.
+  const sesion = esPollar ? cancelarSiCambiaLaSesion(address) : null;
   // El sorteo reintenta varias veces y cada una pasaría por acá: un pedido al
   // grifo cada tanto alcanza, más no cambia nada.
   const reciente = Date.now() - (grifoPedido.get(address) ?? 0) < ENTRE_PEDIDOS_MS;
-  return conAyudaDeFondos(intento, {
-    esPollar: submitsItself(wallet),
-    // Con `?grifo=0` no hay grifo aunque sea testnet: la persona ve el error tal cual.
-    hayGrifo: grifoDisponible() && !reciente,
-    sinSaldo: esSinSaldo,
-    avisar: () => {
-      console.warn("[tinkazo] la cuenta no tiene con qué pagar la comisión: se la carga con el grifo y se reintenta una vez");
-      onStep("funding");
-    },
-    cargar: async () => {
-      grifoPedido.set(address, Date.now());
-      // Una cuenta que todavía no existe puede estar abriéndola Pollar justo
-      // ahora (lo hace de fondo al entrar): se le dan unos segundos antes de
-      // abrirla nosotros con el grifo, para no pisarnos.
-      if (!(await w.accountExists(address))) {
-        await esperarHasta(() => w.accountExists(address), { cadaMs: 1200, hastaMs: 12_000 });
-      }
-      // Con tope: el grifo a veces no contesta, y el sellado no puede quedarse
-      // esperándolo para siempre. Si no llega, se sigue con el último recurso.
-      await conTope(w.fundWithFriendbot(address), 20_000, "friendbot-timeout");
-    },
-    esperar: async () => {
-      // El grifo ya contestó, pero el saldo tarda un instante en verse. Y un
-      // respiro más: el RPC, que es el que simula, puede ir un poco atrás de
-      // Horizon, que es al que se le pregunta.
-      const visto = await esperarHasta(async () => (await w.xlmBalance(address)) >= 1, { cadaMs: 700, hastaMs: 10_000 });
-      if (visto) await new Promise((r) => setTimeout(r, 800));
-    },
-    sinRecurso: () => {
-      // La caja de fondos de último recurso es la del grifo: en mainnet no existe
-      // (quien entra con Google o con un correo nunca ve una caja que le pide
-      // XLM), y con `?grifo=0` quien prueba quiere ver el error y nada más.
-      if (!hayAyudaDeFondos(network.name, grifoApagado)) return;
-      if (typeof document !== "undefined") document.dispatchEvent(new CustomEvent("tinkazo:sin-fondos", { detail: { address } }));
-    },
-  });
+  const cuentaLista = (): Promise<T> =>
+    conCuentaLista(intento, {
+      esPollar,
+      esperar: (hastaMs) =>
+        esperarCuenta({
+          existe: () => contrato.accountOnRpc(address),
+          alEsperar: () => onStep("preparing"),
+          hastaMs,
+          ...(sesion ? { signal: sesion.signal } : {}),
+        }),
+      noExiste: contrato.esCuentaInexistente,
+      respirar: (ms) => dormirCancelable(ms, sesion?.signal),
+    });
+  try {
+    return await conAyudaDeFondos(cuentaLista, {
+      esPollar,
+      // Con `?grifo=0` no hay grifo aunque sea testnet: la persona ve el error tal cual.
+      hayGrifo: grifoDisponible() && !reciente,
+      sinSaldo: contrato.esSinSaldo,
+      avisar: () => {
+        console.warn("[tinkazo] la cuenta no tiene con qué pagar la comisión: se la carga con el grifo y se reintenta una vez");
+        onStep("funding");
+      },
+      cargar: async () => {
+        grifoPedido.set(address, Date.now());
+        // Con tope: el grifo a veces no contesta, y el sellado no puede quedarse
+        // esperándolo para siempre. Si no llega, se sigue con el último recurso.
+        await conTope(w.fundWithFriendbot(address), 20_000, "friendbot-timeout");
+      },
+      esperar: async () => {
+        // El grifo ya contestó, pero el saldo tarda un instante en verse. Y un
+        // respiro más: el RPC, que es el que simula, puede ir un poco atrás de
+        // Horizon, que es al que se le pregunta.
+        const visto = await esperarHasta(async () => (await w.xlmBalance(address)) >= 1, { cadaMs: 700, hastaMs: 10_000 });
+        if (visto) await new Promise((r) => setTimeout(r, 800));
+      },
+      sinRecurso: () => {
+        // La caja de fondos de último recurso es la del grifo: en mainnet no existe
+        // (quien entra con Google o con un correo nunca ve una caja que le pide
+        // XLM), y con `?grifo=0` quien prueba quiere ver el error y nada más.
+        if (!hayAyudaDeFondos(network.name, grifoApagado)) return;
+        if (typeof document !== "undefined") document.dispatchEvent(new CustomEvent("tinkazo:sin-fondos", { detail: { address } }));
+      },
+    });
+  } finally {
+    sesion?.soltar();
+  }
+}
+
+/**
+ * Un `AbortSignal` que se dispara cuando la sesión deja de ser de `address`: se
+ * cerró, o se entró con otra cuenta. La pantalla avisa cada vez que se repinta
+ * con `tinkazo:sesion` (y lo hace también al cambiar de idioma, con la misma
+ * cuenta: ahí no se cancela nada).
+ */
+function cancelarSiCambiaLaSesion(address: string): { signal: AbortSignal; soltar: () => void } {
+  const control = new AbortController();
+  if (typeof document === "undefined" || typeof document.addEventListener !== "function") {
+    return { signal: control.signal, soltar: () => undefined };
+  }
+  const alCambiar = (e: Event): void => {
+    if ((e as CustomEvent<string | null>).detail !== address) control.abort();
+  };
+  document.addEventListener("tinkazo:sesion", alCambiar);
+  return { signal: control.signal, soltar: () => document.removeEventListener("tinkazo:sesion", alCambiar) };
 }
 
 /** Lee lo que devolvió la invocación, ya confirmada en la red. */
@@ -311,7 +354,9 @@ export function stepLabel(step: AnchorStep): string {
           ? "txSending"
           : step === "funding"
             ? "txFunding"
-            : "txConfirmed",
+            : step === "preparing"
+              ? "txPreparing"
+              : "txConfirmed",
   );
 }
 

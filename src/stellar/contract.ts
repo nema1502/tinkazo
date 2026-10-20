@@ -1,4 +1,4 @@
-import { contract, rpc } from "@stellar/stellar-sdk";
+import { Keypair, contract, rpc, xdr } from "@stellar/stellar-sdk";
 import { network } from "./config";
 import { activeWallet, type WalletAdapter } from "./wallet-lite";
 
@@ -118,19 +118,48 @@ export function resetClient(): void {
 }
 
 /**
- * La cuenta no tiene con qué pagar la comisión: está vacía, o ni siquiera
- * existe todavía en la red. Cada quien lo cuenta a su manera: la red dice
- * `tx_insufficient_balance` (o `txINSUFFICIENT_BALANCE`), Pollar lo guarda como
- * `txInsufficientBalance` y le agrega "Insufficient XLM to cover the network
- * fee…", y una cuenta que no existe falla ya al simular con "Account not
- * found". `tx_insufficient_fee` NO entra: ahí la cuenta puede tener de sobra y
- * es la comisión ofrecida la que quedó corta para lo que la red cobra ahora.
+ * La cuenta existe y no tiene con qué pagar la comisión. Cada quien lo cuenta a
+ * su manera: la red dice `tx_insufficient_balance` (o `txINSUFFICIENT_BALANCE`),
+ * Pollar lo guarda como `txInsufficientBalance` y le agrega "Insufficient XLM to
+ * cover the network fee…", y un pago que no alcanza dice `underfunded`.
+ *
+ * Lo que NO entra, aunque se parezca: `tx_insufficient_fee` (ahí la cuenta puede
+ * tener de sobra y es la comisión ofrecida la que quedó corta para lo que la red
+ * cobra ahora), `tx_bad_seq` y el resto de los códigos de la red.
  */
-const SIN_SALDO = /tx_?insufficient_?balance|insufficient\s+(?:xlm|balance|funds)|underfunded|account not found|tx_?no_?account/i;
+const SIN_SALDO = /tx_?insufficient_?balance|insufficient\s+(?:xlm|balance|funds)|underfunded/i;
 const COMISION_CORTA = /tx_?insufficient_?fee/i;
+/**
+ * La cuenta ni siquiera existe todavía en la red: simular falla con "Account not
+ * found", y al enviar la red dice `tx_no_account`. Para quien trae su cuenta de
+ * afuera (Freighter) es lo mismo que no tener saldo. Para una cuenta de Pollar
+ * es que todavía no la abrieron, y se espera (ver `conCuentaLista`).
+ */
+const SIN_CUENTA = /account not found|tx_?no_?account/i;
+/** Lo que lanza `conCuentaLista` cuando se esperó y la cuenta sigue sin existir. */
+const CUENTA_NO_LISTA = /account-not-ready/;
 
-/** Este error es de falta de saldo. */
-export const esSinSaldo = (e: unknown): boolean => errorKey(e) === "noFunds";
+/**
+ * Este error es de falta de saldo, y de nada más: ni una comisión corta, ni una
+ * cuenta que todavía no existe. Es lo único que dispara la ayuda de fondos.
+ */
+export const esSinSaldo = (e: unknown): boolean => errorKey(e) === "noFunds" && !esCuentaInexistente(e);
+
+/** Este error dice que la cuenta no existe todavía en la red. */
+export const esCuentaInexistente = (e: unknown): boolean => SIN_CUENTA.test(e instanceof Error ? e.message : String(e));
+
+/**
+ * La red ya conoce esta cuenta, vista por el RPC: el mismo que simula.
+ *
+ * No se usa `server.getAccount`: ante cualquier fallo, hasta un corte de red, el
+ * SDK contesta "Account not found", y no se podría distinguir una cuenta que
+ * todavía no existe de una consulta que no llegó. Acá un corte lanza, y una
+ * cuenta que no existe devuelve `false`.
+ */
+export async function accountOnRpc(address: string): Promise<boolean> {
+  const key = xdr.LedgerKey.account(new xdr.LedgerKeyAccount({ accountId: Keypair.fromPublicKey(address).xdrPublicKey() }));
+  return (await server.getLedgerEntries(key)).entries.length > 0;
+}
 
 /**
  * Traduce un error de una invocación a una clave de i18n.
@@ -143,8 +172,9 @@ export function errorKey(e: unknown): string {
     const named = CONTRACT_ERRORS[Number(m[1])];
     if (named) return named;
   }
+  if (CUENTA_NO_LISTA.test(msg)) return "accountNotReady";
   if (COMISION_CORTA.test(msg)) return "busy";
-  if (SIN_SALDO.test(msg)) return "noFunds";
+  if (SIN_SALDO.test(msg) || SIN_CUENTA.test(msg)) return "noFunds";
   if (/User (declined|rejected)|denied|cancel/i.test(msg)) return "userRejected";
   if (/fetch|network|timeout|ECONN|Failed to/i.test(msg)) return "rpcDown";
   // La red no la tomó: ocupada, con la secuencia corrida o vencida. No se

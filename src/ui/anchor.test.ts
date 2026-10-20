@@ -19,7 +19,7 @@ const h = vi.hoisted(() => ({
   seal: vi.fn(),
   draw: vi.fn(),
   poll: vi.fn(),
-  accountExists: vi.fn(),
+  accountOnRpc: vi.fn(),
   fundWithFriendbot: vi.fn(),
   xlmBalance: vi.fn(),
 }));
@@ -39,6 +39,7 @@ vi.mock("../stellar/contract", async (orig) => {
     ...real,
     getClient: async () => ({ seal: h.seal, draw: h.draw }),
     server: { pollTransaction: (...a: unknown[]) => h.poll(...a) },
+    accountOnRpc: h.accountOnRpc,
   };
 });
 vi.mock("../stellar/wallet-lite", async (orig) => {
@@ -46,7 +47,6 @@ vi.mock("../stellar/wallet-lite", async (orig) => {
   return {
     ...real,
     activeWallet: () => h.wallet,
-    accountExists: h.accountExists,
     fundWithFriendbot: h.fundWithFriendbot,
     xlmBalance: h.xlmBalance,
   };
@@ -111,7 +111,7 @@ beforeEach(() => {
   h.draw.mockReset().mockImplementation(async () => txSimulada());
   // Lo que la red devuelve al confirmar: el número del sorteo, que es lo que lee `seal`.
   h.poll.mockReset().mockImplementation(async () => ({ status: "SUCCESS", returnValue: nativeToScVal(7n, { type: "u64" }) }));
-  h.accountExists.mockReset().mockResolvedValue(true);
+  h.accountOnRpc.mockReset().mockResolvedValue(true);
   h.fundWithFriendbot.mockReset().mockResolvedValue(undefined);
   h.xlmBalance.mockReset().mockResolvedValue(10_000);
   eventos = [];
@@ -154,13 +154,12 @@ describe("con una cuenta de Pollar", () => {
     expect(eventos).toEqual([]);
   });
 
-  it("si la cuenta todavía no existe, le da unos segundos a Pollar antes de abrirla con el grifo", async () => {
-    h.accountExists.mockResolvedValueOnce(false).mockResolvedValueOnce(false).mockResolvedValue(true);
-    h.wallet = pollar(vi.fn().mockRejectedValueOnce(new Error("Account not found: " + DIR)).mockResolvedValueOnce("deadbeef"));
-    const { r } = await sellar();
-    expect(r?.txHash).toBe("deadbeef");
-    expect(h.accountExists.mock.calls.length).toBeGreaterThanOrEqual(3);
-    expect(h.fundWithFriendbot).toHaveBeenCalledTimes(1);
+  it("antes de simular mira una sola vez si la cuenta existe, y si existe no dice nada ni espera", async () => {
+    h.wallet = pollar();
+    const { pasos } = await sellar();
+    expect(h.accountOnRpc).toHaveBeenCalledTimes(1);
+    expect(h.accountOnRpc).toHaveBeenCalledWith(DIR);
+    expect(pasos.map(([p]) => p)).toEqual(["simulating", "signing", "sending", "confirmed"]);
   });
 
   it("si el grifo no contesta: el error de verdad y la caja de fondos, sin reintentar", async () => {
@@ -240,6 +239,224 @@ describe("con una cuenta de Pollar", () => {
     expect(enviar).toHaveBeenCalledTimes(1);
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
     expect(eventos).toEqual([]);
+  });
+});
+
+/**
+ * Una cuenta de Pollar la abre Pollar de fondo después de entrar y tarda de 5 a 62 segundos.
+ * Con el reloj de mentira: la espera de 90 segundos no se espera de verdad.
+ */
+describe("una cuenta de Pollar que todavía no existe en la red", () => {
+  beforeEach(() => vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] }));
+  afterEach(() => vi.useRealTimers());
+
+  /** Deja correr el reloj de mentira hasta que la corrida termina, y dice cuánto pasó. */
+  async function correr<T>(corrida: Promise<T>, hastaMs = 150_000): Promise<T & { transcurrido: number }> {
+    const t0 = Date.now();
+    let listo = false;
+    void corrida.then(
+      () => (listo = true),
+      () => (listo = true),
+    );
+    // Las piezas de afuera se cargan con import(): el reloj de mentira avanza de a poco.
+    for (let t = 0; t < hastaMs && !listo; t += 250) await vi.advanceTimersByTimeAsync(250);
+    expect(listo).toBe(true);
+    return { ...(await corrida), transcurrido: Date.now() - t0 };
+  }
+
+  /** Un `document` que además guarda los oyentes, para poder avisar que la sesión cambió. */
+  function documentoConOyentes() {
+    const oyentes = new Map<string, Set<(e: Event) => void>>();
+    vi.stubGlobal("document", {
+      dispatchEvent: (e: Event) => {
+        if (e.type === "tinkazo:sin-fondos") eventos.push(e.type);
+        for (const f of oyentes.get(e.type) ?? []) f(e);
+      },
+      addEventListener: (tipo: string, f: (e: Event) => void) => {
+        if (!oyentes.has(tipo)) oyentes.set(tipo, new Set());
+        oyentes.get(tipo)?.add(f);
+      },
+      removeEventListener: (tipo: string, f: (e: Event) => void) => void oyentes.get(tipo)?.delete(f),
+    });
+    return {
+      oyentes: (tipo: string) => oyentes.get(tipo)?.size ?? 0,
+      avisarSesion: (detail: string | null) => document.dispatchEvent(new CustomEvent("tinkazo:sesion", { detail })),
+    };
+  }
+
+  const noExiste = () => new Error("Account not found: " + DIR);
+
+  it("espera a que exista ANTES de simular: lo cuenta con 'Preparando tu cuenta…' y sella cuando aparece", async () => {
+    h.accountOnRpc.mockResolvedValueOnce(false).mockResolvedValueOnce(false).mockResolvedValue(true);
+    h.wallet = pollar();
+    const { pasos, r } = await correr(sellar());
+    expect(r?.txHash).toBe("deadbeef");
+    expect(h.accountOnRpc).toHaveBeenCalledTimes(3);
+    // "Preparando" va primero, antes de la primera simulación, y una sola vez.
+    expect(pasos.map(([p]) => p)).toEqual(["preparing", "simulating", "signing", "sending", "confirmed"]);
+    expect(h.seal).toHaveBeenCalledTimes(1);
+    const { stepLabel } = await import("./anchor");
+    expect(stepLabel("preparing")).toBe("Preparando tu cuenta…");
+    // No era falta de saldo: nada de grifo ni de caja de fondos.
+    expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+    expect(eventos).toEqual([]);
+  });
+
+  it("espera también antes de sortear, no solo antes de sellar", async () => {
+    h.accountOnRpc.mockResolvedValueOnce(false).mockResolvedValue(true);
+    h.wallet = pollar();
+    h.draw.mockRejectedValue(new Error("se corta acá: lo que se mira es el orden"));
+    const { drawOnChain } = await import("./anchor");
+    const pasos: AnchorStep[] = [];
+    await correr(drawOnChain(1n, new Uint8Array(96), (p) => void pasos.push(p)).catch(() => undefined));
+    expect(pasos).toEqual(["preparing", "simulating"]);
+    expect(h.accountOnRpc.mock.invocationCallOrder[0]).toBeLessThan(h.draw.mock.invocationCallOrder[0] as number);
+  });
+
+  it.each(["testnet", "mainnet"] as const)(
+    "si a los 90 segundos no existe (%s): 'todavía no está lista', sin simular, sin grifo y sin caja de fondos",
+    async (red) => {
+      h.red.name = red;
+      h.red.friendbotUrl = red === "testnet" ? "https://friendbot.stellar.org" : null;
+      h.accountOnRpc.mockResolvedValue(false);
+      h.wallet = pollar();
+      const { pasos, error, transcurrido } = await correr(sellar());
+      expect((error as Error).message).toBe("account-not-ready");
+      const { anchorErrorText } = await import("./anchor");
+      // No es "sin saldo" ni "la red rechazó la transacción".
+      expect(await anchorErrorText(error)).toBe("Tu cuenta todavía no está lista. Probá de nuevo en un minuto.");
+      expect(transcurrido).toBeGreaterThanOrEqual(90_000);
+      expect(transcurrido).toBeLessThan(92_000);
+      expect(pasos.map(([p]) => p)).toEqual(["preparing"]);
+      expect(h.seal).not.toHaveBeenCalled();
+      expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+      expect(eventos).toEqual([]);
+    },
+  );
+
+  it("la línea de estado y el mensaje están en los dos idiomas", async () => {
+    const { T } = await import("../i18n");
+    expect(T.es["errAnchor.accountNotReady"]).toBe("Tu cuenta todavía no está lista. Probá de nuevo en un minuto.");
+    expect(T.en["errAnchor.accountNotReady"]).toBe("Your account isn't ready yet. Try again in a minute.");
+    expect(T.es.txPreparing).toBe("Preparando tu cuenta…");
+    expect(T.en.txPreparing).toBe("Setting up your account…");
+  });
+
+  it("mira a lo sumo una vez por segundo", async () => {
+    const cuando: number[] = [];
+    h.accountOnRpc.mockImplementation(async () => {
+      cuando.push(Date.now());
+      return false;
+    });
+    h.wallet = pollar();
+    await correr(sellar());
+    expect(cuando.length).toBeGreaterThan(80);
+    const entre = cuando.slice(1).map((t, i) => t - (cuando[i] as number));
+    expect(Math.min(...entre)).toBeGreaterThanOrEqual(1000);
+  });
+
+  it("un corte de red a ratos no corta la espera", async () => {
+    h.accountOnRpc.mockRejectedValueOnce(new Error("Failed to fetch")).mockRejectedValueOnce(new Error("Failed to fetch")).mockResolvedValueOnce(false).mockResolvedValue(true);
+    h.wallet = pollar();
+    const { r, pasos } = await correr(sellar());
+    expect(r?.txHash).toBe("deadbeef");
+    expect(pasos.map(([p]) => p)[0]).toBe("preparing");
+  });
+
+  it("si la red no contesta en los 90 segundos, se dice como red caída y no como 'sin saldo'", async () => {
+    h.accountOnRpc.mockRejectedValue(new Error("Failed to fetch"));
+    h.wallet = pollar();
+    const { error } = await correr(sellar());
+    const { anchorErrorText } = await import("./anchor");
+    expect(await anchorErrorText(error)).toBe("No pude hablar con la red de Stellar. Probá de nuevo.");
+    expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+    expect(eventos).toEqual([]);
+  });
+
+  describe("la red la mostró pero simular dice 'Account not found'", () => {
+    it("un respiro, se mira otra vez y se reintenta una vez: si ahora sale bien, sella", async () => {
+      h.wallet = pollar();
+      h.seal.mockRejectedValueOnce(noExiste()).mockImplementation(async () => txSimulada());
+      const { r } = await correr(sellar());
+      expect(r?.txHash).toBe("deadbeef");
+      expect(h.seal).toHaveBeenCalledTimes(2);
+      expect(h.accountOnRpc.mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+      expect(eventos).toEqual([]);
+    });
+
+    it("si sigue igual: 'todavía no está lista', y NO el grifo, aunque sea testnet con el grifo prendido", async () => {
+      h.wallet = pollar();
+      h.seal.mockRejectedValue(noExiste());
+      const { error } = await correr(sellar());
+      expect((error as Error).message).toBe("account-not-ready");
+      expect(h.seal).toHaveBeenCalledTimes(2);
+      expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+      expect(eventos).toEqual([]);
+    });
+
+    it("lo mismo si el que lo dice es el servidor de Pollar al recibir la transacción", async () => {
+      const enviar = vi.fn().mockRejectedValue(new Error("txNoAccount"));
+      h.wallet = pollar(enviar);
+      const { error } = await correr(sellar());
+      expect((error as Error).message).toBe("account-not-ready");
+      expect(enviar).toHaveBeenCalledTimes(2);
+      expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+      expect(eventos).toEqual([]);
+    });
+  });
+
+  describe("se puede cancelar", () => {
+    it("si se cierra la sesión mientras se espera, deja de esperar y deja de preguntarle a la red", async () => {
+      const doc = documentoConOyentes();
+      h.accountOnRpc.mockResolvedValue(false);
+      h.wallet = pollar();
+      const corrida = sellar();
+      await vi.advanceTimersByTimeAsync(3500);
+      const preguntas = h.accountOnRpc.mock.calls.length;
+      expect(preguntas).toBeGreaterThanOrEqual(2);
+      expect(doc.oyentes("tinkazo:sesion")).toBe(1);
+      doc.avisarSesion(null);
+      await vi.advanceTimersByTimeAsync(1000);
+      const { error } = await corrida;
+      expect((error as Error).message).toBe("account-wait-cancelled");
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(h.accountOnRpc.mock.calls.length).toBeLessThanOrEqual(preguntas + 1);
+      expect(h.seal).not.toHaveBeenCalled();
+      expect(doc.oyentes("tinkazo:sesion")).toBe(0);
+    });
+
+    it("si se entra con otra cuenta, también", async () => {
+      const doc = documentoConOyentes();
+      h.accountOnRpc.mockResolvedValue(false);
+      h.wallet = pollar();
+      const corrida = sellar();
+      await vi.advanceTimersByTimeAsync(2500);
+      doc.avisarSesion("GOTRACUENTA");
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(((await corrida).error as Error).message).toBe("account-wait-cancelled");
+    });
+
+    it("repintar la pantalla con la misma cuenta (cambiar de idioma) no cancela nada", async () => {
+      const doc = documentoConOyentes();
+      h.accountOnRpc.mockResolvedValueOnce(false).mockResolvedValueOnce(false).mockResolvedValue(true);
+      h.wallet = pollar();
+      const corrida = sellar();
+      await vi.advanceTimersByTimeAsync(1500);
+      doc.avisarSesion(DIR);
+      const { r } = await correr(corrida);
+      expect(r?.txHash).toBe("deadbeef");
+    });
+
+    it("no deja oyentes colgados cuando termina, salga como salga", async () => {
+      const doc = documentoConOyentes();
+      h.wallet = pollar();
+      await correr(sellar());
+      expect(doc.oyentes("tinkazo:sesion")).toBe(0);
+      h.accountOnRpc.mockResolvedValue(false);
+      await correr(sellar());
+      expect(doc.oyentes("tinkazo:sesion")).toBe(0);
+    });
   });
 });
 
@@ -326,6 +543,25 @@ describe("con cualquier otra wallet (Freighter, cuenta de prueba)", () => {
     });
     await sellar();
     expect(lecturas.n).toBe(0);
+  });
+
+  it("no espera a que exista la cuenta ni se la pregunta a la red: eso es solo de Pollar", async () => {
+    h.wallet = otra;
+    h.accountOnRpc.mockResolvedValue(false);
+    h.seal.mockImplementation(async () => ({ ...txSimulada(), signAndSend: async () => ({ result: 9n, sendTransactionResponse: { hash: "ab12" } }) }));
+    const { pasos } = await sellar();
+    expect(h.accountOnRpc).not.toHaveBeenCalled();
+    expect(pasos.map(([p]) => p)).not.toContain("preparing");
+  });
+
+  it("una cuenta que no existe sale como 'sin saldo', como siempre: no se espera ni se reintenta", async () => {
+    h.wallet = otra;
+    h.seal.mockRejectedValue(new Error("Account not found: " + DIR));
+    const { error } = await sellar();
+    const { anchorErrorText } = await import("./anchor");
+    expect(await anchorErrorText(error)).toBe("Tu cuenta no tiene saldo para pagar la comisión de la red.");
+    expect(h.seal).toHaveBeenCalledTimes(1);
+    expect(h.accountOnRpc).not.toHaveBeenCalled();
   });
 
   it("sin saldo, el error sale tal cual: sin grifo, sin reintento y sin caja de fondos", async () => {

@@ -1271,6 +1271,8 @@ export const T: Record<Lang, Dict> = {
     fundBodyOff: "Para sellar hace falta un poquito. Copiá la dirección y mandale unos XLM de prueba desde otra cuenta.",
     acctNoTap: "Sin grifo",
     guestReadyOff: "Cuenta de prueba lista, pero vacía: el grifo está apagado en esta sesión.",
+    txPreparing: "Preparando tu cuenta…",
+    "errAnchor.accountNotReady": "Tu cuenta todavía no está lista. Probá de nuevo en un minuto.",
   },
   en: {
     badge: "For whoever has to run the draw",
@@ -2263,6 +2265,8 @@ export const T: Record<Lang, Dict> = {
     fundBodyOff: "Sealing needs a little. Copy the address and send it some test XLM from another account.",
     acctNoTap: "No faucet",
     guestReadyOff: "Test account ready, but empty: the faucet is off for this session.",
+    txPreparing: "Setting up your account…",
+    "errAnchor.accountNotReady": "Your account isn't ready yet. Try again in a minute.",
   },
 };
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { errorKey, esSinSaldo } from "./contract";
+import { errorKey, esCuentaInexistente, esSinSaldo } from "./contract";
 
 /**
  * `errorKey` decide qué le dice la pantalla a quien no pudo sellar. Los textos de
@@ -18,9 +18,7 @@ describe("errorKey: sin saldo", () => {
     "Insufficient XLM to cover the network fee and minimum reserve. Fund the account with more XLM.",
     // Un pago que no alcanza.
     "op_underfunded",
-    // La cuenta ni existe todavía: la simulación falla antes de enviar nada.
-    "Account not found: GDQ4UYEUGB5TB4LDQNQXRKZJYVRMEXFD6TRAF73KIAWHY6H4B23I6PJU",
-    "txNoAccount",
+    "PAYMENT_UNDERFUNDED",
   ];
 
   it.each(SIN_SALDO)("lo reconoce en: %s", (msg) => {
@@ -36,6 +34,46 @@ describe("errorKey: sin saldo", () => {
     // Así llega cuando el servidor cuenta el rechazo dentro de un error de API.
     expect(errorKey(new Error("txInsufficientBalance · TX_SUBMIT_FAILED"))).toBe("noFunds");
     expect(errorKey(new Error("TX_SUBMIT_FAILED · Insufficient XLM to cover the network fee"))).toBe("noFunds");
+  });
+});
+
+describe("una cuenta que todavía no existe en la red", () => {
+  const SIN_CUENTA = [
+    // Es lo que dice la simulación (el SDK arma la transacción con la secuencia de la cuenta).
+    "Account not found: GDQ4UYEUGB5TB4LDQNQXRKZJYVRMEXFD6TRAF73KIAWHY6H4B23I6PJU",
+    // Y lo que dice la red al recibir una transacción de una cuenta que no existe.
+    "txNoAccount",
+    "tx_no_account",
+    "txNO_ACCOUNT",
+  ];
+
+  it.each(SIN_CUENTA)("para quien trae su cuenta de afuera sigue siendo 'sin saldo': %s", (msg) => {
+    expect(errorKey(new Error(msg))).toBe("noFunds");
+  });
+
+  it.each(SIN_CUENTA)("pero no dispara la ayuda de fondos (grifo): una cuenta de Pollar todavía no abierta no está 'sin saldo': %s", (msg) => {
+    expect(esSinSaldo(new Error(msg))).toBe(false);
+    expect(esCuentaInexistente(new Error(msg))).toBe(true);
+  });
+
+  it("lo que lanza la espera de la cuenta tiene su propio mensaje, y no es 'sin saldo' ni 'unknown'", () => {
+    const e = new Error("account-not-ready");
+    expect(errorKey(e)).toBe("accountNotReady");
+    expect(esSinSaldo(e)).toBe(false);
+    expect(esCuentaInexistente(e)).toBe(false);
+  });
+
+  it("un corte de red durante la espera sale como red caída", () => {
+    expect(errorKey(new Error("account-check-network"))).toBe("rpcDown");
+  });
+
+  it("una espera cancelada (se cerró la sesión) sale como cancelación", () => {
+    expect(errorKey(new Error("account-wait-cancelled"))).toBe("userRejected");
+  });
+
+  it("una cuenta con saldo no se confunde con una sin cuenta", () => {
+    expect(esCuentaInexistente(new Error("txInsufficientBalance"))).toBe(false);
+    expect(esCuentaInexistente(new Error("op_underfunded"))).toBe(false);
   });
 });
 
@@ -59,6 +97,7 @@ describe("errorKey: lo que NO es falta de saldo", () => {
   it("un error del contrato manda sobre cualquier texto de saldo", () => {
     expect(errorKey(new Error("HostError: Error(Contract, #5) tx_insufficient_balance"))).toBe("roundTooSoon");
   });
+
 });
 
 describe("errorKey: lo de siempre sigue igual", () => {
