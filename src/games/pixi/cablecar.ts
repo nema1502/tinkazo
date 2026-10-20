@@ -1006,7 +1006,9 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       // Más grandes cuando quedan dos: es el momento que decide.
       const quedan = P.leftAt(tAll);
       // En vertical, la base legible (19 px): agrandados se salían de la pantalla.
-      const sc = G.vertical ? 1 : quedan <= 2 ? 1.6 : 1.3;
+      // Con tres a cinco, en escritorio también la base: con 1,3 no entraban a
+      // los costados y caían sobre la cabina de al lado.
+      const sc = G.vertical ? 1 : quedan <= 2 ? 1.6 : 1;
       const z = zoomNow();
       // Las cabinas vacías no cuentan: se están yendo cable abajo.
       const boxes = new Map<number, Box>();
