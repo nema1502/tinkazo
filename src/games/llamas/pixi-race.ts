@@ -1020,6 +1020,24 @@ export async function llamasPixi(
     cam.lookAt(x, Math.min(y, cabeza - (techo - G.sh / 2) / z), z, rate);
   }
 
+  /**
+   * El encuadre de la ganadora bajo el cartel de la corona: el zoom y la altura
+   * de la cámara para que la cabeza quede debajo del cartel y el cuerpo entre el
+   * cartel y la caja del relator. Con pocos carriles las llamas son grandes y, a
+   * 1,6 o 2,1, la cabeza quedaba tapada por el GANA. Con muchos carriles la
+   * llama es chica y el zoom no baja de `zMax`.
+   */
+  function encuadreGanadora(zMax: number): { y: number; zoom: number } {
+    const sc = G.laneScale(winnerLane);
+    const placa = S.placaBajo(winners.length);
+    // Margen para el salto de la ganadora al coronarse.
+    const margen = 30 * G.u;
+    const hueco = G.sh - S.bottom() - 6 * G.u - (placa + margen);
+    const zoom = Math.max(0.6, Math.min(zMax, hueco / (84 * sc), (G.sw * 0.9) / (110 * sc)));
+    const cabeza = G.laneY(winnerLane) - 78 * sc;
+    return { y: cabeza - (placa + margen - G.sh / 2) / zoom, zoom };
+  }
+
   /** Lo de antes de la cuenta: la clasificatoria (si hay) y la presentación de los carriles. */
   const dichoPre = new Set<string>();
   function preUpdate(dt: number): void {
@@ -1089,11 +1107,10 @@ export async function llamasPixi(
     }
     if (phase === "done") {
       tFreeze += dt * paceFactor();
-      // Con la ganadora ya en la meta, la cámara se le acerca despacio. Con la
-      // llama más abajo que el centro: si no, le quedaba la cabeza debajo del
-      // cartel, que con varios premios es más alto.
-      const baja = G.portrait ? 70 : winners.length > 1 ? 120 : 95;
-      cam.lookAt(xOf(winnerLane, 1) - 20 * G.u, G.laneY(winnerLane) - baja * G.u, G.portrait ? 1.35 : 1.6, 1.6);
+      // Con la ganadora ya en la meta, la cámara se le acerca despacio, y la
+      // cabeza queda debajo del cartel (su altura sale del mismo cálculo).
+      const corona = encuadreGanadora(G.portrait ? 1.35 : 1.6);
+      cam.lookAt(xOf(winnerLane, 1) - 20 * G.u, corona.y, corona.zoom, 1.6);
       if (tFreeze > WINNER_HOLD) {
         roar?.stop();
         S.cleanup();
@@ -1156,7 +1173,8 @@ export async function llamasPixi(
       // borrosos justo los dos nombres del duelo (revisión de juegos del 16 de
       // octubre de 2026), como pasaba en el último tiro del sapo.
       cam.noBlur();
-      cam.lookAt(G.X0 + G.TL - 30 * G.u, (G.laneY(story.winner) + G.laneY(story.rival)) / 2 - 30 * G.u, G.portrait ? 1.8 : 2.1, 4);
+      const foto = encuadreGanadora(G.portrait ? 1.8 : 2.1);
+      cam.lookAt(G.X0 + G.TL - 30 * G.u, foto.y, foto.zoom, 4);
     } else if (shot) {
       cam.lookAt(xOf(shot.k, prog) + 20 * G.u, G.laneY(shot.k) - 40 * G.u, shot.zoom, 5);
     } else if (prog > 0.8) {

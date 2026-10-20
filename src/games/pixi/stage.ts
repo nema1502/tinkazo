@@ -90,6 +90,16 @@ export const MONO = "ui-monospace, Consolas, monospace";
  */
 export const CHIP_SCALE = 1.6;
 
+/**
+ * Las filas del cartel de la corona con `m` premios: uno solo, grande; o hasta
+ * tres nombres y un "y N más". La altura de cada una, en unidades `k`.
+ */
+export const filasCorona = (m: number, k: number): number[] => {
+  if (m === 1) return [60 * k];
+  const n = m <= 3 ? m : 4;
+  return Array.from({ length: n }, (_, i) => (i === 0 ? 46 : 38) * k * 1.22);
+};
+
 export interface PixiStage {
   app: Application;
   view: HTMLCanvasElement;
@@ -143,6 +153,11 @@ export interface PixiStage {
   mark(key: string, value: string): void;
   /** El cartel del ganador y el papel picado: se arman una vez y se llevan a la hora. */
   crown(names: string[], winners: readonly number[]): Crown;
+  /**
+   * Hasta dónde baja el cartel de la corona con `m` premios, en píxeles de
+   * pantalla, con su sombra. Un juego lo usa para que la ganadora quede debajo.
+   */
+  placaBajo(m: number): number;
   run(fn: (dt: number, now: number) => void): void;
   onResize(fn: () => void): void;
   /** Algo que hay que soltar al cerrar: una línea de tiempo, un sonido. */
@@ -502,7 +517,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       }
       const innerW = Math.max(title.width, ...nameTexts.map((x, i) => x.width + hueco(i)));
       const pw = innerW + (big ? 132 : 56) * k;
-      const altos = nameTexts.map((_, i) => (big ? 60 * k : talla(i) * 1.22));
+      const altos = filasCorona(all.length, k);
       const lineH = altos[0] ?? 60 * k;
       const ph = 40 * k + altos.reduce((a, h) => a + h, 0) + 16 * k;
       const bgp = new Graphics()
@@ -717,6 +732,11 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
 
   const stage: PixiStage = {
     app, view, bg, scene, hud, cam, sw, sh, u, portrait, top, bottom, rng, dark,
+    placaBajo: (m) => {
+      const k = u();
+      const ph = 40 * k + filasCorona(m, k).reduce((a, h) => a + h, 0) + 16 * k;
+      return (portrait() ? sh() * 0.24 : sh() * 0.26) + ph / 2 + 10 * k;
+    },
     color: (k) => P[((k % P.length) + P.length) % P.length] ?? 0xe93d9c,
     say(msg, heat = 0) {
       commentEl.textContent = msg;
