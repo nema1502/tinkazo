@@ -676,8 +676,10 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       if (!winC.inside) cam.lookAt(winC.x, winC.y + g.R * 0.3, 1.5, 4);
       else cam.lookAt(p.x, p.y, 1.1, 2.5);
     } else {
+      // Con tres premios el cartel de la corona es más alto: la escena baja un poco para que no tape la venda del chico.
       const z = 1.3;
-      cam.lookAt(winC.x, winC.y - (g.h * 0.14) / z, z, 1.6);
+      const baja = winners.length > 2 ? 60 * g.k : 0;
+      cam.lookAt(winC.x, winC.y - (g.h * 0.14 + baja) / z, z, 1.6);
     }
   }
 
