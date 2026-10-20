@@ -105,13 +105,14 @@ function textosPorPagina(): Plugin {
 /**
  * Las páginas de lectura se adelantan: cuando el mouse se posa 200 ms sobre un
  * enlace a otra (o al tocarlo, en el celular), Chrome la prerenderiza y al
- * hacer clic se muestra al instante. Solo esas seis: son livianas y no tienen
- * efectos. La herramienta no, que arranca audio, sesiones y miniaturas, y el
+ * hacer clic se muestra al instante. Solo esas nueve: son livianas y no tienen
+ * efectos. Las tres de sorteo (meetup, clase y verificable) son de lectura como
+ * las demás. La herramienta no, que arranca audio, sesiones y miniaturas, y el
  * contador de visitas espera a que la página se muestre (`analytics.ts`). Los
  * navegadores sin speculation rules ignoran el bloque.
  */
 function adelantarLectura(): Plugin {
-  const paginas = ["juegos", "como-funciona", "historia", "seguridad", "precios", "terminos"];
+  const paginas = ["juegos", "como-funciona", "historia", "seguridad", "precios", "terminos", "sorteo-para-meetup", "sorteo-en-clase", "sorteo-verificable"];
   const reglas = {
     prerender: [{ where: { href_matches: paginas.map((p) => `/${p}.html`) }, eagerness: "moderate" }],
   };
