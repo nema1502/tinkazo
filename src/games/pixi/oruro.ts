@@ -120,6 +120,12 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     }
     return { b: -1, f: 0 };
   };
+  /** Cuánto salta ahora el diablo `d` del contrapunto (en unidades del dibujo); -1 si no le toca saltar. */
+  const duelJump = (d: Dancer): number => {
+    const { b, f } = jumpAt(tAll - T_SOCAVON);
+    const mine = b >= 0 && (d === win ? b % 2 === 0 : b % 2 === 1);
+    return mine ? Math.sin(Math.PI * f) * Math.min(60, 30 + 6 * b) : -1;
+  };
   const T_TRIP = arrive(K) + STOP + WALK * 0.45;
 
   // La formación: la ganadora en el medio si es tapada, al fondo si remonta.
@@ -814,7 +820,9 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       const age = d.alive ? -1 : tAll - d.left;
       c.visible = false;
       if (!outTreatment(age).visible) continue;
-      const p = cam.toScreen(d.x, d.y - 100 * g.scale, g.w, g.h);
+      // El nombre va sobre la cabeza también cuando salta en el contrapunto: si no, el salto la tapa.
+      const lift = phase === "duel" && (d === win || d === riv) ? Math.max(0, duelJump(d)) : 0;
+      const p = cam.toScreen(d.x, d.y - (100 + lift) * g.scale, g.w, g.h);
       c.sx = p.x;
       c.sy = p.y;
       c.depth = d.y;
@@ -904,9 +912,8 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       let turn = Math.cos(now * 0.9 + d.ph);
       if (phase === "duel" && (d === win || d === riv)) {
         // Saltan de a uno, alternados, y se miran: cada salto más alto.
-        const { b, f } = jumpAt(tAll - T_SOCAVON);
-        const mine = b >= 0 && (d === win ? b % 2 === 0 : b % 2 === 1);
-        bounce = mine ? Math.sin(Math.PI * f) * Math.min(60, 30 + 6 * b) : 2;
+        const j = duelJump(d);
+        bounce = j >= 0 ? j : 2;
         turn = d === win ? 1 : -1;
       }
       // De frente en la corona y en el susto: con la vuelta quedaba de canto
