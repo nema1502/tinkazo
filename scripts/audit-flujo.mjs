@@ -33,10 +33,17 @@
  * El sellado en testnet a veces tarda (una vez pasó los 120 s): espera hasta
  * `--sello-max` segundos y, si falla, reintenta el recorrido de esa pantalla.
  *
+ * Al final mira también unos anchos de celular que esas pantallas no cubren
+ * (320, 360, 375 y 414 px: 360 y 375 son los más comunes). Es rápido y no graba
+ * nada en Stellar: ahí el ancho rompe el indicador de pasos y el texto de los
+ * botones, y fue donde aparecieron "Siguiente premio" partido con un punto
+ * suelto y el indicador pegado al borde. `--solo-anchos` corre solo eso.
+ *
  * Uso:
  *   node scripts/audit-flujo.mjs [--base http://localhost:4173] [--out DIR]
  *                                [--vistas laptop-100,celular] [--temas dark,light]
  *                                [--sin-resto laptop-100,celular-h] [--lang es|en]
+ *                                [--anchos 320,360,375,414 | none] [--solo-anchos]
  *                                [--sello-max 240] [--reintentos 2]
  *
  * Un Chrome a la vez y con su propio puerto: CDP_PORT=<puerto> node ...
@@ -62,6 +69,9 @@ const temas = opt("--temas", "dark").split(",").filter(Boolean);
 const sinResto = opt("--sin-resto", "laptop-100,celular-h").split(",").filter(Boolean);
 const selloMax = Number(opt("--sello-max", "240")) * 1000;
 const reintentos = Number(opt("--reintentos", "2"));
+// Los anchos de celular que las cinco pantallas no cubren ("none" los saltea).
+const anchos = opt("--anchos", "320,360,375,414").split(",").filter((a) => a && a !== "none").map(Number);
+const soloAnchos = args.includes("--solo-anchos");
 
 // [etiqueta, ancho, alto, dpr, celular]
 const TODAS = [
@@ -76,6 +86,10 @@ const VISTAS = quieren.length ? TODAS.filter((v) => quieren.includes(v[0])) : TO
 const desconocidas = quieren.filter((q) => !TODAS.some((v) => v[0] === q));
 if (desconocidas.length || VISTAS.length === 0 || temas.some((t) => t !== "dark" && t !== "light")) {
   console.error(`uso: --vistas ${TODAS.map((v) => v[0]).join(",")} · --temas dark,light${desconocidas.length ? ` (no existe: ${desconocidas.join(", ")})` : ""}`);
+  process.exit(2);
+}
+if (anchos.some((a) => !Number.isFinite(a) || a < 280 || a > 1000)) {
+  console.error("uso: --anchos 320,360,375,414 (anchos de celular, entre 280 y 1000 px) o --anchos none");
   process.exit(2);
 }
 
@@ -511,11 +525,118 @@ async function recorrer(browser, vista, tema, caso) {
   }
 }
 
+/**
+ * Lo que un ancho de celular puede romper, y las cinco pantallas no miran: el indicador de pasos y los botones del flujo.
+ * Por cada botón visible, si el texto se sale de su caja; y el indicador, en cuántas líneas queda y entre qué bordes.
+ */
+const MEDIR_ANCHO = `JSON.stringify((() => {
+  const ids = ['btn-freeze', 'btn-draw', 'btn-again-sin', 'btn-proof', 'btn-again-nueva', 'sig-btn', 'btn-cambiar', 'btn-espera', 'btn-grande', 'btn-imagen'];
+  const botones = [];
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const cs = getComputedStyle(el);
+    if (cs.display === 'none' || cs.visibility === 'hidden') continue;
+    const r = el.getBoundingClientRect();
+    if (!r.width || !r.height) continue;
+    botones.push({ id, w: Math.round(r.width), corta: el.scrollWidth > el.clientWidth + 1, sw: el.scrollWidth, cw: el.clientWidth, der: Math.round(r.right) });
+  }
+  // Un botón dentro de una fila flexible no corta su texto: se ensancha y se sale de su tarjeta. Por eso se mira
+  // también a las cajas: ninguna debe dejar salir lo que lleva adentro.
+  const cajas = [];
+  for (const id of ['again-row', 'lanzar', 'wait-box', 'siguiente', 'sec-frozen', 'sec-draw', 'winner-box']) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const cs = getComputedStyle(el);
+    if (cs.display === 'none' || cs.visibility === 'hidden' || !el.getBoundingClientRect().width) continue;
+    cajas.push({ id, sw: el.scrollWidth, cw: el.clientWidth, desborda: el.scrollWidth > el.clientWidth + 1 });
+  }
+  const lis = [...document.querySelectorAll('#pasos li')].map((li) => li.getBoundingClientRect());
+  return {
+    vp: document.documentElement.clientWidth,
+    scrollX: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    pasos: lis.length ? { lineas: new Set(lis.map((r) => Math.round(r.top / 4))).size, izq: Math.round(Math.min(...lis.map((r) => r.left))), der: Math.round(Math.max(...lis.map((r) => r.right))) } : null,
+    botones,
+    cajas,
+  };
+})())`;
+
+/**
+ * Los anchos de celular que el flujo largo no cubre (360 y 375 px son los más comunes y no están entre las cinco
+ * pantallas). Es rápido: no graba nada en Stellar (modo libre, con ?lead=3) y no mira la barra ni la acción principal,
+ * que ya mira el flujo largo, sino lo que el ancho rompe: scroll de costado, el indicador de pasos y el texto de los botones.
+ * El 20 de octubre de 2026 esto encontró "Siguiente premio" partido con un punto suelto a 360 y 375 px, y el
+ * indicador pegado al borde a 320.
+ */
+async function anchosDeCelular(browser, ancho) {
+  const quien = `celular ${ancho}px`;
+  const page = await browser.open("about:blank");
+  try {
+    await page.send("Emulation.setDeviceMetricsOverride", { width: ancho, height: 740, deviceScaleFactor: 2, mobile: true, screenWidth: ancho, screenHeight: 740 });
+    await page.send("Page.navigate", { url: `${base}/?theme=${temas[0]}&lang=${lang}&lead=3&pace=rapido#sortear` });
+    await page.waitFor("document.readyState === 'complete'", 20000);
+    await sleep(900);
+    // Sin cuenta, la lista queda apagada detrás de la puerta (solo con CSS): el modo libre arma el mismo flujo.
+    await page.eval(`document.querySelector('#sec-participants .body').classList.remove('locked'); document.getElementById('gate').style.display = 'none'; document.getElementById('onboard').style.display = 'none'; true`);
+    const mirar = async (nombre) => {
+      const m = JSON.parse(await page.eval(MEDIR_ANCHO));
+      check(`${quien} · ${nombre}: sin scroll horizontal`, m.scrollX <= 1, `${m.scrollX}px`);
+      const p = m.pasos;
+      check(
+        `${quien} · ${nombre}: el indicador entra en una sola línea, con margen a los dos lados`,
+        !!p && p.lineas === 1 && p.izq >= 8 && p.der <= m.vp - 8,
+        p ? `${p.lineas} línea, de ${p.izq} a ${p.der} de ${m.vp}` : "no hay indicador",
+      );
+      const cortados = m.botones.filter((b) => b.corta || b.der > m.vp);
+      check(`${quien} · ${nombre}: ningún botón corta su texto ni se sale de la pantalla`, cortados.length === 0, cortados.slice(0, 3).map((b) => `#${b.id} (texto ${b.sw}, caja ${b.cw})`).join(" | "));
+      const desbordan = m.cajas.filter((c) => c.desborda);
+      check(`${quien} · ${nombre}: ninguna caja del flujo deja salir lo que lleva adentro`, desbordan.length === 0, desbordan.slice(0, 3).map((c) => `#${c.id} (contenido ${c.sw}, caja ${c.cw})`).join(" | "));
+      await page.screenshot(join(outDir, `flujo-ancho-${ancho}-${sinTildes(nombre).replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.png`));
+    };
+    console.log(`\n  ${quien}`);
+    await page.eval(`document.getElementById('nw').value = '2'; document.getElementById('btn-sample').click(); true`);
+    await sleep(800);
+    await mirar("lista cargada");
+    await page.eval("document.getElementById('btn-freeze').click(); true");
+    const sello = await page.waitFor("getComputedStyle(document.getElementById('sec-frozen')).display !== 'none'", 20000);
+    hayFalla(!sello.ok, "no se selló la lista de ejemplo");
+    await sleep(1500);
+    await mirar("sellada y esperando");
+    const nacio = await page.waitFor("!document.getElementById('btn-draw').disabled", 60000);
+    hayFalla(!nacio.ok, "la ronda de ejemplo no nació");
+    await sleep(1200);
+    await mirar("ronda lista");
+    await page.eval("document.getElementById('btn-draw').click(); true");
+    const estadio = await page.waitFor("document.getElementById('stadium').style.display === 'block'", 40000);
+    if (estadio.ok) {
+      await sleep(800);
+      await page.eval("document.getElementById('st-skip').click(); true");
+    }
+    const sale = await page.waitFor("getComputedStyle(document.getElementById('winner-box')).display !== 'none' && getComputedStyle(document.getElementById('again-row')).display !== 'none'", 60000);
+    hayFalla(!sale.ok, "no apareció el resultado");
+    await sleep(3500);
+    await page.eval("document.getElementById('again-row').scrollIntoView({ block: 'center' }); true");
+    await sleep(800);
+    await mirar("resultado");
+    check(`${quien}: sin excepciones`, page.exceptions.length === 0, page.exceptions.slice(0, 2).join(" | "));
+  } catch (e) {
+    check(`${quien}: el recorrido llegó hasta el final`, false, String(e?.message ?? e).slice(0, 160));
+  } finally {
+    try {
+      await page.send("Page.close");
+    } catch {
+      /* ya cerrada */
+    }
+  }
+}
+
 async function main() {
   await mkdir(outDir, { recursive: true });
   console.log(`\nAuditando el flujo contra ${base}`);
-  console.log(`  pantallas: ${VISTAS.map((v) => `${v[0]} ${v[1]}x${v[2]}`).join(", ")} · temas: ${temas.join(", ")} · capturas en ${outDir}\n`);
-  for (const tema of temas) {
+  console.log(
+    `  pantallas: ${soloAnchos ? "ninguna (--solo-anchos)" : VISTAS.map((v) => `${v[0]} ${v[1]}x${v[2]}`).join(", ")} · temas: ${soloAnchos ? "—" : temas.join(", ")} · anchos de celular: ${anchos.length ? anchos.map((a) => `${a}px`).join(", ") : "ninguno"} · capturas en ${outDir}\n`,
+  );
+  for (const tema of soloAnchos ? [] : temas) {
     for (const vista of VISTAS) {
       for (const caso of ["resto", ...(sinResto.includes(vista[0]) && tema === temas[0] ? ["sin-resto"] : [])]) {
         let hecho = false;
@@ -547,6 +668,15 @@ async function main() {
           if (!hecho && intento < reintentos) await sleep(15000);
         }
       }
+    }
+  }
+  // Los anchos de celular: rápido, sin Stellar.
+  for (const ancho of anchos) {
+    const browser = await launch({ width: ancho, height: 740 });
+    try {
+      await anchosDeCelular(browser, ancho);
+    } finally {
+      await browser.close();
     }
   }
 }
