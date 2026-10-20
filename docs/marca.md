@@ -97,6 +97,39 @@ Neobrutalismo: bordes gruesos de tinta, sombras duras sin desenfoque, colores pl
 
 **La sombra nunca lleva desenfoque.** Si una diapositiva tiene una sombra difuminada, no es de Tinkazo.
 
+## Las ventanas
+
+El panel de la cuenta, el ingreso, el paso de fondos, el importador de listas y el rearmado de un comprobante son ventanas, y todas cumplen una regla: **una ventana siempre entra en la pantalla o se recorre. Nunca queda cortada, y nada de lo que se toca queda fuera de alcance.**
+
+Hasta el 19 de octubre de 2026 el fondo centraba la tarjeta con `align-items: center`. Una tarjeta más alta que la pantalla se cortaba por arriba y por abajo, y lo cortado no se alcanzaba ni con scroll: el panel con diez sorteos medía 679 px, una laptop a 100 % de zoom tiene 632, y "Salir" y "Cancelar" quedaban pegados al borde o afuera. En un celular acostado (390 px de alto) se perdían 144 px por arriba.
+
+Cómo se cumple:
+
+| Pieza | Regla |
+|---|---|
+| `.modal-back` | Se recorre (`overflow-y: auto`, `overscroll-behavior: contain`). Deja `--modal-pad` de aire: 20 px, y 12 px en un celular o con menos de 560 px de alto. |
+| `.modal-card` | Se centra con `margin: auto`, que cuando no sobra lugar la deja arriba y deja bajar. **Nunca `align-items: center` en el fondo.** |
+| Tarjeta con alto máximo | `max-height: calc(100dvh - 2 * var(--modal-pad))`, con `100vh` de respaldo, y recorre solo su cuerpo. |
+| Ventana con acciones | Tres partes: encabezado fijo, cuerpo que se recorre (`min-height: 0; overflow-y: auto`) y pie fijo. Cerrar y salir no se alejan con el scroll. |
+| Cerrar | Una ✕ de 44 × 44 px en el encabezado. Esc y tocar el fondo también cierran. |
+| Salir de la cuenta | Se llama "Cerrar sesión", nunca "Salir" ni "Cancelar" sueltos, y va como botón de texto en el pie: que no se confunda con cerrar la ventana. |
+| Accesibilidad | `role="dialog"`, `aria-modal` y `aria-labelledby` al título. El foco entra al abrir, no se escapa (Tab da la vuelta) y vuelve al botón que la abrió. Lo que se mueve al entrar respeta `prefers-reduced-motion`. |
+
+En el panel de la cuenta la red va como insignia (naranja en la red de pruebas, turquesa en la principal) y el saldo en otra, chica. Quien entra con Google o con un correo no ve el saldo mientras sea menor que 1, ni el botón del grifo: la comisión de esas cuentas la va a cubrir Tinkazo con Pollar, y quien entra así no tiene por qué saber qué es un XLM. Con Freighter y con la cuenta de prueba el saldo se ve como siempre.
+
+Se mira en cinco pantallas, en los dos temas, y a 200 % de zoom:
+
+| Etiqueta | Ancho × alto | Qué es |
+|---|---|---|
+| laptop-100 | 1362 × 632 | la laptop de Nicolás a 100 % |
+| escritorio | 1280 × 720 | un escritorio |
+| tablet-h | 1024 × 560 | una tablet acostada |
+| celular-h | 844 × 390 | un celular acostado |
+| celular | 390 × 844 | un celular parado |
+| zoom-200 | 681 × 316 | la laptop a 200 % de zoom |
+
+`node scripts/audit-ui.mjs` lo comprueba en cuatro pantallas (1440 × 900, la laptop, el celular acostado y el celular parado), con un historial de diez sorteos de nombres largos, y rechaza una ventana que se corte.
+
 ## Tipografía
 
 Se usa la tipografía del sistema, a propósito: el sitio no carga ninguna fuente y por eso pinta el primer cuadro al instante.
