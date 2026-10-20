@@ -645,11 +645,21 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     } else if (phase === "hits") {
       const near = story.arc === "susto" && tAll >= T_PEEK && tAll < T_PEEK + 1.4;
       // Cuando quedan dos adentro, la piñata de cerca: antes la cámara encuadraba
-      // el papel picado y dejaba la piñata cortada (lo encontró el agente evaluador).
+      // el papel picado y dejaba la piñata cortada.
       const dos = tAll - said2At < 1.4;
-      const z = near ? 1.9 : dos ? 1.6 : 1.2 + 0.25 * (crackLevel / nHits);
-      let x = p.x;
-      if (!near && !dos) {
+      // Con dos, el chico tiene que entrar junto a la piñata: si no, la toma de cerca lo corta.
+      // El zoom baja solo hasta que entren los dos, de costado y de alto.
+      const left = kidX - 40 * g.ks, right = p.x + g.R * 1.75;
+      const topY = Math.min(p.y - g.R * 1.2, g.ky - 140 * g.ks), botY = Math.max(p.y + g.R * 1.2, g.ky + 4 * g.ks);
+      const bandH = g.h - S.bottom() - 6 * g.k - (S.top() + 6 * g.k);
+      const zDos = Math.max(0.8, Math.min(1.6, (g.w - 20 * g.k) / Math.max(1, right - left), bandH / Math.max(1, botY - topY)));
+      const z = near ? 1.9 : dos ? zDos : 1.2 + 0.25 * (crackLevel / nHits);
+      let x = p.x, y = p.y + g.R * (near ? 0.4 : 0.8);
+      if (dos && !near) {
+        x = (left + right) / 2;
+        // El par va al centro de la franja libre, entre la barra de arriba y el relator.
+        y = (topY + botY) / 2 - ((S.top() + g.h - S.bottom()) / 2 - g.h / 2) / zDos;
+      } else if (!near) {
         // Que entre el chico: si mirando la piñata queda afuera, la mira se
         // corre lo justo hacia él, sin sacar de cuadro la punta de la piñata.
         // En un celular le pasaba con cada vaivén.
@@ -658,7 +668,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       }
       // En un celular la cámara la sigue más de cerca: con el mismo retraso que
       // en la pantalla grande, la piñata se le escapaba por el costado.
-      cam.lookAt(x, p.y + g.R * (near ? 0.4 : dos ? 0.2 : 0.8), z, near || dos ? 5 : S.portrait() ? 4 : 2.5);
+      cam.lookAt(x, y, z, near || dos ? 5 : S.portrait() ? 4 : 2.5);
     } else if (phase === "break") {
       // Un poco por debajo del caramelo y más rápido: con la mira encima y a
       // 2,2 la cámara se atrasaba y el caramelo bajaba hasta quedar detrás de
