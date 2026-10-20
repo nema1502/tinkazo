@@ -46,7 +46,7 @@ Si los tres cuadran, el sorteo cuadra. El veredicto de arriba dice si cuadran to
 
 ## Límites
 
-- El enlace crece con los nombres, porque cada sorteo lleva su lista entera. Con listas largas puede quedar muy largo, y algunos chats lo cortan al pegarlo. Cada sorteo sigue teniendo su propio comprobante, que se abre desde Mis sorteos con «Ver comprobante».
+- El enlace crece con los nombres, porque cada sorteo lleva su lista entera. Medido con listas de 200 personas con nombres distintos, 4 sorteos pesan unos 8 KB y 30 sorteos unos 50 KB. Algunos chats cortan los enlaces muy largos al pegarlos; si pasa, cada sorteo sigue teniendo su propio comprobante, que se abre desde Mis sorteos con «Ver comprobante».
 - El tope de 30 es por enlace. Un evento con más sorteos no se reparte en varios enlaces: los que pasan del tope quedan fuera del enlace de evento, y la página lo dice.
 - El título y el mensaje se escriben en el idioma de quien comparte. La página los muestra tal cual.
 
