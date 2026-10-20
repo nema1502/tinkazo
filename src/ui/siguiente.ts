@@ -132,6 +132,21 @@ function calcular(): Toca {
   return { paso, boton, clave, detalle, reloj: restan > 0 ? relojDe(restan) : "" };
 }
 
+/**
+ * Con la lista ya cargada, "Entendido" de la bienvenida deja de ser la acción
+ * principal: lo que sigue es sellar, y dos botones del color de la casa a la
+ * vista (el de la bienvenida y el de la barra o el de sellar) no dicen cuál es
+ * "el siguiente". Quien cargó una lista ya entendió: el botón sigue ahí, pero
+ * como secundario, y vuelve a ser el principal si vacía la lista.
+ */
+function bajarEntendido(paso: Paso): void {
+  const ok = document.getElementById("ob-ok");
+  if (!ok) return;
+  const baja = paso >= 2;
+  ok.classList.toggle("primary", !baja);
+  ok.classList.toggle("ghost", baja);
+}
+
 /** El indicador de arriba: hecho con ✓, el actual resaltado y lo que falta con su número. */
 function pintarPasos(paso: Paso): void {
   for (const li of document.querySelectorAll<HTMLElement>("#pasos li")) {
@@ -190,6 +205,7 @@ function render(): void {
   if (!listo) return;
   const s = calcular();
   pintarPasos(s.paso);
+  bajarEntendido(s.paso);
   anunciar(s);
   vigilar(activa() ? s.boton : null);
   const quiere = activa() && s.boton !== null && !ocupado() && !alVista;
