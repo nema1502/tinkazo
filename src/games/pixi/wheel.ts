@@ -24,13 +24,17 @@ const TAU = Math.PI * 2;
 const W0 = 38.4;
 const W1 = 5.6;
 
-/** Velocidad en gajos por segundo: la misma curva que `wheel.ts`. */
-function omega(tt: number, falsa = false): number {
+/**
+ * Velocidad en gajos por segundo: la misma curva que `wheel.ts`. `w1` es la
+ * velocidad del tramo lento: cada ronda la varía un poco (ver `wheelPixi`), para
+ * que el frenado no sea siempre igual y no se aprenda.
+ */
+function omega(tt: number, falsa = false, w1 = W1): number {
   if (tt < T_WIND) return 0;
   if (tt < T_SPIN) return W0 * Math.pow((tt - T_WIND) / (T_SPIN - T_WIND), 2.2);
   if (tt < T_BRAKE) return W0;
-  if (tt < T_CREEP) return W1 + (W0 - W1) * Math.pow(1 - (tt - T_BRAKE) / (T_CREEP - T_BRAKE), 2);
-  if (tt < T_HOLD) return W1 * Math.pow(1 - (tt - T_CREEP) / (T_HOLD - T_CREEP), 1.6);
+  if (tt < T_CREEP) return w1 + (W0 - w1) * Math.pow(1 - (tt - T_BRAKE) / (T_CREEP - T_BRAKE), 2);
+  if (tt < T_HOLD) return w1 * Math.pow(1 - (tt - T_CREEP) / (T_HOLD - T_CREEP), 1.6);
   if (falsa) {
     const a = T_HOLD + FALSA;
     if (tt < a || tt >= T_LOCK) return 0;
@@ -77,12 +81,18 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
 
   const startSeg = rng() * segs;
   const winSeg = winnerIdx + n * Math.floor(rng() * rep);
-  const landing = winSeg + 0.5;
+  // La flecha para dentro del gajo ganador, nunca en su borde (ahí se confunde
+  // con el vecino), y no siempre en el medio: con el medio fijo el final se
+  // aprendía (auditoría, sección 8.7). Sale de la misma semilla; el gajo que
+  // gana no cambia, lo fija el número público.
+  const landing = winSeg + 0.5 + (rng() - 0.5) * 0.6;
+  // El frenado también varía un poco, de la misma semilla.
+  const w1 = W1 * (0.9 + 0.25 * rng());
   const STEPS = 1200;
   const cumT: number[] = new Array(STEPS + 1);
   cumT[0] = 0;
   const h = T_LOCK / STEPS;
-  for (let i = 1; i <= STEPS; i++) cumT[i] = (cumT[i - 1] as number) + ((omega((i - 1) * h, falsa) + omega(i * h, falsa)) / 2) * h;
+  for (let i = 1; i <= STEPS; i++) cumT[i] = (cumT[i - 1] as number) + ((omega((i - 1) * h, falsa, w1) + omega(i * h, falsa, w1)) / 2) * h;
   const BUDGET = cumT[STEPS] as number;
   let total = BUDGET - ((((BUDGET - (landing - startSeg)) % segs) + segs) % segs);
   if (total < BUDGET - segs / 2) total += segs;
@@ -116,11 +126,13 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     const cx = Math.max(sw * 0.56, sw - R - 110 * u);
     if (n <= 14 && cx - R - 70 * u > 260 * u) return { R, cx, cy: sh * 0.5, u, alto, col: true };
     // Al medio: el poste arranca debajo de la barra de arriba (que es HTML, en
-    // píxeles de pantalla) y el borde de abajo puede meterse un poco detrás de
-    // la caja del relator, donde los gajos van cabeza abajo.
-    const post = S.top() - 22;
-    const Rc = Math.min(R, (sh - S.bottom() + 40 * u - post - 54 * u) / 2);
-    return { R: Rc, cx: sw / 2, cy: post + 54 * u + Rc, u, alto, col: false };
+    // píxeles de pantalla) y el borde de abajo queda encima de la caja del
+    // relator. Antes la caja podía tapar hasta 40 px de la rueda: a 1280x720 con
+    // dieciocho personas tapaba el tercio de abajo (revisión de juegos, 20 de
+    // octubre de 2026).
+    const yTop = S.top() - 22 + 54 * u;
+    const Rc = Math.min(R, (sh - S.bottom() - 12 * u - yTop) / 2);
+    return { R: Rc, cx: sw / 2, cy: yTop + Rc, u, alto, col: false };
   };
   let G = geo();
   /** El acercamiento sobre la flecha mientras frena: en el celular, menos. */
@@ -578,7 +590,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
   S.run((dt, now) => {
     tAll += dt;
     S.breath(tAll, T_CROWN);
-    const w = omega(tAll, falsa);
+    const w = omega(tAll, falsa, w1);
     rot = -(startSeg + cum(tAll) * scale) * A;
     if (tAll < 1.1) {
       const want = Math.floor((tAll / 1.1) * 24);
