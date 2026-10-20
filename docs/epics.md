@@ -289,6 +289,8 @@ Justificación: mientras el proyecto viva en testnet, esta es la forma más ráp
 
 Resultado (2026-09-20): los nueve errores del contrato, más los de wallet, fondos y red, se traducen a mensajes que dicen qué hacer. El costo sale de la simulación y se muestra en el paso de firma, antes de que el organizador apruebe nada.
 
+Cambio (2026-10-19): con una cuenta de Pollar (Google o correo) el costo no se muestra y no hay pantalla de fondos, porque la comisión puede pagarla la app y quien entra solo quiere sortear; si hace falta ayuda, sellar la pide solo (ver D-16 en `docs/architecture.md`). Con Freighter y con la cuenta de prueba sigue como estaba.
+
 Como organizadora,
 quiero mensajes claros y un estado visible en cada paso,
 para saber qué pasó y qué hacer.
