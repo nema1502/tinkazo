@@ -1,5 +1,6 @@
 import freighter from "@stellar/freighter-api";
 import { network } from "./config";
+import { grifoApagado } from "./grifo";
 
 /**
  * Lo de las wallets que no necesita el SDK de Stellar.
@@ -148,9 +149,12 @@ export const guestAvailable = (): boolean => network.name === "testnet";
  * Sirve para cualquier cuenta, no solo la de prueba que genera el navegador:
  * una cuenta de Google recién creada tampoco tiene con qué pagar la comisión,
  * y este es el grifo oficial de testnet.
+ *
+ * Con `?grifo=0` no hace nada ni llama a la red (ver `grifo.ts`): el grifo se
+ * apagó a propósito para probar con una cuenta vacía.
  */
 export async function fundWithFriendbot(address: string): Promise<void> {
-  if (!network.friendbotUrl) return;
+  if (!network.friendbotUrl || grifoApagado) return;
   try {
     const res = await fetch(`${network.friendbotUrl}/?addr=${encodeURIComponent(address)}`);
     // Un 400 suele ser "la cuenta ya existe": eso no es un error para nosotros.

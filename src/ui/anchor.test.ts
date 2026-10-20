@@ -192,17 +192,19 @@ describe("con una cuenta de Pollar", () => {
     expect(eventos).toEqual(["tinkazo:sin-fondos", "tinkazo:sin-fondos"]);
   });
 
-  it("en mainnet nunca hay grifo: no se pide nada, se dice y se muestra la caja de fondos", async () => {
+  it("en mainnet nunca hay grifo: no se pide nada, no se reintenta y no sale la caja de fondos", async () => {
     h.red.name = "mainnet";
     h.red.friendbotUrl = null;
     const enviar = vi.fn().mockRejectedValue(sinSaldo());
     h.wallet = pollar(enviar);
     const { pasos, error } = await sellar();
-    expect(error).toBeInstanceOf(Error);
+    // Quien entra con Google o con un correo ve el mensaje de falta de saldo y nada más:
+    // la caja que pide copiar una dirección y mandarle XLM no es para ella.
+    expect((error as Error).message).toContain("txInsufficientBalance");
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
     expect(enviar).toHaveBeenCalledTimes(1);
     expect(pasos.map(([p]) => p)).not.toContain("funding");
-    expect(eventos).toEqual(["tinkazo:sin-fondos"]);
+    expect(eventos).toEqual([]);
   });
 
   it("si la simulación falló (la ronda quedó cerca) no manda una transacción sin armar: lanza el error del contrato", async () => {
@@ -236,6 +238,65 @@ describe("con una cuenta de Pollar", () => {
     const { error } = await sellar();
     expect((error as Error).message).toBe("Failed to fetch");
     expect(enviar).toHaveBeenCalledTimes(1);
+    expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+    expect(eventos).toEqual([]);
+  });
+});
+
+describe("con ?grifo=0 (testnet, el grifo apagado a propósito)", () => {
+  /** La pestaña con el parámetro en la dirección, como si recién se hubiera abierto la página. */
+  const conGrifoApagado = (search = "?grifo=0") => {
+    vi.stubGlobal("location", { search });
+    vi.stubGlobal("sessionStorage", { getItem: () => null, setItem: () => undefined, removeItem: () => undefined });
+  };
+
+  it("sin saldo: el error sale tal cual, sin pedirle nada al grifo, sin reintento, sin 'preparando' y sin caja de fondos", async () => {
+    conGrifoApagado();
+    const enviar = vi.fn().mockRejectedValue(sinSaldo());
+    h.wallet = pollar(enviar);
+    const { pasos, error } = await sellar();
+    expect((error as Error).message).toContain("txInsufficientBalance");
+    expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+    expect(h.xlmBalance).not.toHaveBeenCalled();
+    expect(enviar).toHaveBeenCalledTimes(1);
+    expect(h.seal).toHaveBeenCalledTimes(1);
+    expect(pasos.map(([p]) => p)).not.toContain("funding");
+    expect(eventos).toEqual([]);
+  });
+
+  it("el error que ve la persona es el de falta de saldo, tal cual", async () => {
+    conGrifoApagado();
+    h.wallet = pollar(vi.fn().mockRejectedValue(sinSaldo()));
+    const { error } = await sellar();
+    const { anchorErrorText } = await import("./anchor");
+    expect(await anchorErrorText(error)).toBe("Tu cuenta no tiene saldo para pagar la comisión de la red.");
+  });
+
+  it("si Pollar paga la comisión, sella igual que siempre: con la cuenta en 0 y sin tocar el grifo", async () => {
+    conGrifoApagado();
+    h.wallet = pollar();
+    const { r, pasos } = await sellar();
+    expect(r?.txHash).toBe("deadbeef");
+    expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+    expect(pasos.map(([p]) => p)).toEqual(["simulating", "signing", "sending", "confirmed"]);
+    expect(eventos).toEqual([]);
+  });
+
+  it("?grifo=1 lo prende de nuevo: el reintento con el grifo vuelve a andar", async () => {
+    conGrifoApagado("?grifo=1");
+    h.wallet = pollar(vi.fn().mockRejectedValueOnce(sinSaldo()).mockResolvedValueOnce("deadbeef"));
+    const { r } = await sellar();
+    expect(r?.txHash).toBe("deadbeef");
+    expect(h.fundWithFriendbot).toHaveBeenCalledTimes(1);
+  });
+
+  it("en mainnet el parámetro se ignora, y sigue sin haber grifo ni caja", async () => {
+    conGrifoApagado();
+    h.red.name = "mainnet";
+    h.red.friendbotUrl = null;
+    h.wallet = pollar(vi.fn().mockRejectedValue(sinSaldo()));
+    const { error } = await sellar();
+    expect((error as Error).message).toContain("txInsufficientBalance");
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
     expect(eventos).toEqual([]);
   });

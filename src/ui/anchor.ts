@@ -1,5 +1,6 @@
 import { getLang, t } from "../i18n";
 import { network, txUrl } from "../stellar/config";
+import { grifoApagado, grifoDisponible, hayAyudaDeFondos } from "../stellar/grifo";
 import { conAyudaDeFondos, conTope, esperarHasta } from "./reintento";
 
 /**
@@ -192,7 +193,8 @@ async function conFondos<T>(intento: () => Promise<T>, onStep: OnStep): Promise<
   const reciente = Date.now() - (grifoPedido.get(address) ?? 0) < ENTRE_PEDIDOS_MS;
   return conAyudaDeFondos(intento, {
     esPollar: submitsItself(wallet),
-    hayGrifo: network.name === "testnet" && !!network.friendbotUrl && !reciente,
+    // Con `?grifo=0` no hay grifo aunque sea testnet: la persona ve el error tal cual.
+    hayGrifo: grifoDisponible() && !reciente,
     sinSaldo: esSinSaldo,
     avisar: () => {
       console.warn("[tinkazo] la cuenta no tiene con qué pagar la comisión: se la carga con el grifo y se reintenta una vez");
@@ -218,6 +220,10 @@ async function conFondos<T>(intento: () => Promise<T>, onStep: OnStep): Promise<
       if (visto) await new Promise((r) => setTimeout(r, 800));
     },
     sinRecurso: () => {
+      // La caja de fondos de último recurso es la del grifo: en mainnet no existe
+      // (quien entra con Google o con un correo nunca ve una caja que le pide
+      // XLM), y con `?grifo=0` quien prueba quiere ver el error y nada más.
+      if (!hayAyudaDeFondos(network.name, grifoApagado)) return;
       if (typeof document !== "undefined") document.dispatchEvent(new CustomEvent("tinkazo:sin-fondos", { detail: { address } }));
     },
   });
