@@ -221,7 +221,7 @@ cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
-Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=race|chovena|trompo|pinata|oruro|tombola|wheel|teleferico|pasanaku|stellar|sapo|quien`, `?instant=1`, `?pose=1` y `?motor=clasico` (el motor anterior).
+Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=race|chovena|trompo|pinata|oruro|tombola|wheel|teleferico|pasanaku|stellar|sapo|quien`, `?instant=1`, `?pose=1`, `?motor=clasico` (el motor anterior) y `?grifo=0` (solo testnet: apaga el grifo de XLM de prueba, para probar con una cuenta de verdad vacía; `?grifo=1` lo vuelve a prender).
 
 ## El repositorio
 
