@@ -2,11 +2,12 @@ import { clamp, ease } from "../overlay";
 import { writeStory, type Story } from "../drama";
 
 /**
- * El plan del teleférico, sin dibujo: el mismo de `cablecar.ts`, copiado tal
- * cual para que el motor nuevo cuente exactamente la misma historia con la
- * misma ronda (el orden de bajada, las cabinas y los cuatro giros; el
- * horario también, salvo `T_RUN`). Consume el azar en el mismo orden que el
- * juego de siempre.
+ * El plan del teleférico, sin dibujo: el mismo de `cablecar.ts`, copiado para
+ * que el motor nuevo cuente la misma historia con la misma ronda (el orden de
+ * bajada, las cabinas y los cuatro giros; el horario también, salvo `T_RUN`).
+ * Aparte de `T_RUN`, lo único distinto es `luzAt`: titila dos veces antes del
+ * corte (más abajo).
+ * Consume el azar en el mismo orden que el juego de siempre.
  *
  * Si el motor nuevo gana, `cablecar.ts` pasa a usar este módulo y la copia
  * desaparece. Hasta entonces el de siempre no se toca.

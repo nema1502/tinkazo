@@ -10,8 +10,10 @@ import { LINES, T_BOARD, T_CROWN, T_DOCK, T_RUN, planCableCar } from "./cablecar
 /**
  * El Teleférico, en PixiJS, con el director de cámara.
  *
- * La misma historia que `cablecar.ts` (el plan es una copia exacta, en
- * `cablecar-plan.ts`): un convoy sube por el cable, en cada estación se baja
+ * La misma historia que `cablecar.ts` (el plan es una copia, en
+ * `cablecar-plan.ts`, salvo `luzAt`, que titila dos veces antes del corte, y
+ * `T_RUN`): un
+ * convoy sube por el cable, en cada estación se baja
  * la mitad, y cada arco tiene su giro: la puerta, la mordaza, el apagón o la
  * ráfaga. Lo nuevo es cómo se mira. La cámara arranca en el andén de la base,
  * sigue al convoy, se acerca a cada andén cuando se baja gente, se mete en la
