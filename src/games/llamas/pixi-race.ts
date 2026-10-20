@@ -640,18 +640,18 @@ export async function llamasPixi(
     S.hud.addChild(mini);
     const board = new Container();
     const rows: Container[] = [];
-    const rowH = 22 * u;
+    const rowH = 26 * u;
     for (let k = 0; k < N; k++) {
       const r = new Container();
-      const bgr = new Graphics().roundRect(0, 0, 168 * u, rowH - 3 * u, 4 * u).fill({ color: INK, alpha: 0.72 });
+      const bgr = new Graphics().roundRect(0, 0, 180 * u, rowH - 3 * u, 4 * u).fill({ color: INK, alpha: 0.72 });
       const num = new Graphics().roundRect(2 * u, 2 * u, 18 * u, rowH - 7 * u, 3 * u).fill(S.color(k));
-      const pos = S.text("", { fontSize: 11 * u, fontWeight: "900", fill: INK });
+      const pos = S.text("", { fontSize: 12 * u, fontWeight: "900", fill: INK });
       pos.anchor.set(0.5);
       pos.position.set(11 * u, (rowH - 3 * u) / 2);
       const av = new Sprite(S.face(nameOf(k)));
       av.width = av.height = 14 * u;
       av.position.set(24 * u, 2.5 * u);
-      const nm = S.text(shorten(nameOf(k), 16), { fontSize: 11 * u, fontWeight: "700", fill: CREAM });
+      const nm = S.text(shorten(nameOf(k), 16), { fontSize: 14 * u, fontWeight: "700", fill: CREAM });
       nm.position.set(42 * u, 3.5 * u);
       r.addChild(bgr, num, pos, av, nm);
       board.addChild(r);
@@ -1427,11 +1427,15 @@ export async function llamasPixi(
       const lead = Math.round(rowPos[k] as number) === 0 && !quieto;
       mini.circle(mx + Math.max(0, Math.min(1, p)) * mw, my, (lead ? 7 : 5) * u).fill(S.color(k)).stroke({ width: 2 * u, color: INK });
     }
-    const rowH = 22 * u;
+    const rowH = 26 * u;
     L.rows.forEach((r, k) => {
-      r.y = (rowPos[k] as number) * rowH;
-      (r.children[2] as Text).text = String(Math.round(rowPos[k] as number) + 1);
-      r.alpha = phase === "done" && !prizedLanes.has(k) ? 0.4 : 1;
+      const pos = rowPos[k] as number;
+      r.y = pos * rowH;
+      (r.children[2] as Text).text = String(Math.round(pos) + 1);
+      // Mientras una fila pasa a otra, se ve apagada: el cruce se lee como un
+      // adelantamiento y no como dos nombres escritos encima.
+      const cruzando = Math.abs(pos - Math.round(pos)) > 0.1;
+      r.alpha = (phase === "done" && !prizedLanes.has(k) ? 0.4 : 1) * (cruzando ? 0.6 : 1);
     });
 
     tlCount.time(phase === "pre" ? 0 : phase === "count" ? tPhase : tGo >= 0 && tGo < 1 ? 3 + tGo : 4);
