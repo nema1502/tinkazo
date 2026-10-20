@@ -6,7 +6,7 @@ import { CHO_BPM, musicHold, musicTempo } from "../../music";
 import { avatarColor } from "../../avatar";
 import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, shorten, winnersLabel } from "../overlay";
-import { CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
+import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 
 /**
  * Chovena.
@@ -1423,14 +1423,17 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
    * El ángulo del brazo, entre `lo` y `hi`. Un vecino casi justo encima (los
    * dos de un costado de una rueda chica, ver `shapeOf`) cae del otro lado de
    * la vuelta, y con el `clamp` solo el brazo apuntaba para abajo, lejos de la
-   * mano que tenía que tomar: ese brazo sube hasta donde llega. Un vecino que
-   * queda cruzando el cuerpo sigue como antes: el brazo cuelga, porque subirlo
-   * lo dejaba señalando a nadie.
+   * mano que tenía que tomar: ese brazo sube hasta donde llega. Si el vecino
+   * está arriba pero del lado de adentro de la vertical, el brazo sube derecho
+   * y no hasta el límite de afuera: con el límite, la mano quedaba del otro
+   * lado de la cabeza y la cadena la cruzaba en horizontal, como una barra. Un
+   * vecino que queda cruzando el cuerpo sigue como antes: el brazo cuelga,
+   * porque subirlo lo dejaba señalando a nadie.
    */
   function aim(a: number, lo: number, hi: number): number {
     if (a >= lo && a <= hi) return a;
     const up = Math.abs(lo) > Math.abs(hi) ? lo : hi;
-    return Math.abs(a) > Math.PI - 0.8 ? up : clamp(a, lo, hi);
+    return Math.abs(a) > Math.PI - 0.8 ? (Math.sign(a) === Math.sign(up) ? up : Math.sign(up) * Math.PI) : clamp(a, lo, hi);
   }
 
   /** Cuánto llega el brazo: estira el brazo y corre la mano hasta la punta. */
@@ -1620,7 +1623,16 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
 
   /* -------------------------------------------------------------- interfaz */
   type Rect = { x: number; y: number; w: number; h: number };
-  function placeChip(d: Dancer, x: number, placed: Rect[], scale = 1): void {
+  /** Los rectángulos de los nombres, para distinguirlos de lo reservado (contador, aviso, conjunto, cartel, lista). */
+  const blandos = new WeakSet<Rect>();
+  /**
+   * Pone el nombre de `d` encima de su cabeza, o lo más cerca que entra sin
+   * pisar nada de `placed`. Lo reservado (el contador, el aviso de la música,
+   * el conjunto, el cartel y la lista de los que salen) no se pisa nunca: si
+   * no queda lugar, el nombre no se dibuja en este cuadro. `suave`, lo mismo
+   * con los otros nombres (pasar lista): mejor uno menos que dos encimados.
+   */
+  function placeChip(d: Dancer, x: number, placed: Rect[], scale = 1, suave = false): void {
     const { W, H, k } = G;
     if (!(wNow[d.idx] as ReturnType<typeof where>).alpha) return;
     const p = pNow[d.idx] as { x: number; y: number; s: number };
@@ -1650,8 +1662,34 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     const cands: [number, number][] = [[x0, y0], [x0 - cw * 0.62, y0], [x0 + cw * 0.62, y0], [x0, y0 + otra], [x0 - cw * 0.62, y0 + otra], [x0 + cw * 0.62, y0 + otra]];
     let cx = x0, cy = y0;
     const libre = cands.map(([a, b]) => [clamp(a, 8 * k, W - cw - 8 * k), clamp(b, lo, hi)] as [number, number]).find(([a, b]) => !hits(a, b));
+    let hallado = !!libre;
     if (libre) [cx, cy] = libre;
-    else {
+    // Si no, apilado en su columna (hacia arriba; hacia abajo, los de los pies)
+    // y, si la columna se queda sin lugar, en la de al lado: la misma búsqueda
+    // que `S.tags` en los demás juegos. El respaldo de antes dejaba el nombre
+    // encima de otro, o corrido contra el borde debajo del aviso de la música.
+    for (const dx of hallado ? [] : [0, 0.62, -0.62, 1.24, -1.24]) {
+      const a = clamp(x0 + dx * cw, 8 * k, W - cw - 8 * k);
+      let b = y0;
+      for (let tries = 0; tries < 12; tries++) {
+        const hit = placed.find((r) => a < r.x + r.w && a + cw > r.x && b - ch / 2 < r.y + r.h / 2 && b + ch / 2 > r.y - r.h / 2);
+        if (!hit) {
+          hallado = true;
+          break;
+        }
+        b = abajo ? hit.y + (hit.h + ch) / 2 + 2 * k : hit.y - (hit.h + ch) / 2 - 2 * k;
+        if (b < lo || b > hi) break;
+      }
+      if (hallado) {
+        [cx, cy] = [a, b];
+        break;
+      }
+    }
+    if (!hallado) {
+      if (suave) {
+        chip.visible = false;
+        return;
+      }
       for (let tries = 0; tries < 8; tries++) {
         const hit = placed.find((r) => cx < r.x + r.w && cx + cw > r.x && cy - ch / 2 < r.y + r.h / 2 && cy + ch / 2 > r.y - r.h / 2);
         if (!hit) break;
@@ -1662,7 +1700,15 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
         }
       }
     }
-    placed.push({ x: cx, y: cy, w: cw, h: ch });
+    // Lo reservado no se pisa nunca: si el nombre sigue encima del contador, del
+    // aviso, del conjunto, del cartel o de la lista, no se dibuja en este cuadro.
+    if (!hallado && placed.some((r) => !blandos.has(r) && cx < r.x + r.w && cx + cw > r.x && cy - ch / 2 < r.y + r.h / 2 && cy + ch / 2 > r.y - r.h / 2)) {
+      chip.visible = false;
+      return;
+    }
+    const mio = { x: cx, y: cy, w: cw, h: ch };
+    blandos.add(mio);
+    placed.push(mio);
     chip.position.set(cx, cy);
     // Si quedó lejos de su dueño, un hilo hasta la cabeza.
     const ax = clamp(head.x, cx + 6 * k, cx + cw - 6 * k);
@@ -1723,7 +1769,10 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   /**
    * Pasar lista: mientras se baila, los nombres de a tandas de ocho
    * repartidas por la rueda, cada tanda un rato largo, para que cada uno sepa
-   * cuál es el suyo también a mitad del juego. Con seis o menos, todos.
+   * cuál es el suyo también a mitad del juego. Con seis o menos, todos. Con
+   * doce o menos, de a cuatro: con la letra legible (`CHIP_SCALE`), ocho
+   * nombres no entran en una rueda chica y se pisaban entre ellos. Si un
+   * nombre no encuentra lugar, ese cuadro no se dibuja (`suave`).
    */
   function rollCall(x: number, live: Dancer[], placed: Rect[]): void {
     if (live.length > 64 || x < 0.3) return;
@@ -1731,14 +1780,14 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       // Con cuatro o menos, más grandes: a 12 px no se leían desde el fondo. En
       // un celular, la base legible (CHIP_SCALE) ya alcanza.
       const s = live.length <= 4 && !G.portrait ? 1.4 : 1;
-      for (const d of live) placeChip(d, x, placed, s);
+      for (const d of live) placeChip(d, x, placed, s, true);
       return;
     }
     const ring = order.filter((i) => live.some((d) => d.idx === i));
-    const B = Math.ceil(ring.length / 8);
+    const B = Math.ceil(ring.length / (ring.length <= 12 ? 4 : 8));
     const b = Math.floor((x - 0.3) / TANDA) % B;
     ring.forEach((idx, j) => {
-      if (j % B === b) placeChip(dancers[idx] as Dancer, x, placed);
+      if (j % B === b) placeChip(dancers[idx] as Dancer, x, placed, 1, true);
     });
   }
 
@@ -1794,10 +1843,12 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
         };
         // Los que van a llevar el nombre encima en este corte: el lugar del
         // nombre también cuenta. Si no, el cartel quedaba entre los nombres y
-        // las cabezas, con los hilos cruzándolo.
+        // las cabezas, con los hilos cruzándolo. Con la escala con que se
+        // dibujan (`placeChip`, más abajo) y el alto de verdad del chip: 26 de
+        // alto en `S.chip`, por `CHIP_SCALE`, más 4 de separación.
         const evNow = evs.find((e) => e.s0 === stopAt);
         const conNombre = new Map<number, number>();
-        if (finalDuo && x >= F0) for (const i of [winnerIdx, rivalIdx]) conNombre.set(i, G.portrait ? 1.5 : 2);
+        if (finalDuo && x >= F0) for (const i of [winnerIdx, rivalIdx]) conNombre.set(i, G.portrait ? 1 : 1.25);
         else if (evNow) {
           if (evNow.victims.length <= 5) for (const v of evNow.victims) conNombre.set(v, 1.1);
           for (const h of evNow.holders) conNombre.set(h, 1);
@@ -1809,7 +1860,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
           const p = pNow[d.idx] as { x: number; y: number; s: number };
           const sc = inRingNow(d, x) ? conNombre.get(d.idx) : undefined;
           // Los que van a tambalearse llevan el nombre más arriba (por el "¡!").
-          enMundo(p.x - 0.3 * p.s, p.y - 1.2 * p.s, p.x + 0.3 * p.s, p.y, p.y - (sc ? 1.56 : 1.2) * p.s, sc ? (24 * sc + 16) * k : 0);
+          enMundo(p.x - 0.3 * p.s, p.y - 1.2 * p.s, p.x + 0.3 * p.s, p.y, p.y - (sc ? 1.56 : 1.2) * p.s, sc ? (26 * CHIP_SCALE * (G.portrait ? 0.9 : 1) * sc + 4) * k : 0);
         }
         // El conjunto (el cajero con los palillos arriba es una señal del corte),
         // el contador, el aviso y, si este corte la tiene, la lista de los que salen.
@@ -1921,8 +1972,11 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       if (finalDuo && x >= F0) {
         for (const d of [win, dancers[rivalIdx] as Dancer]) {
           if (d.outAt >= 0 && x >= d.outAt + 0.9) continue;
-          // En un celular, la base legible: más grandes ocupaban dos tercios del ancho.
-          placeChip(d, x, placed, G.portrait ? 1 : 2);
+          // En un celular, la base legible: más grandes ocupaban dos tercios del
+          // ancho. En escritorio, 1,25 (24 px de letra en 720, el tamaño de
+          // siempre): con 2 eran 38 px, los dos nombres no entraban lado a lado
+          // y el del rival quedaba encima de las cabezas.
+          placeChip(d, x, placed, G.portrait ? 1 : 1.25);
         }
       } else if (ev && ev.kind === "stop" && ev.victims.length > 5) {
         usePanel = x >= ev.x0 - 0.15;
