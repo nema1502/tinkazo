@@ -1,5 +1,5 @@
 import { $ } from "../dom";
-import { T, getLang, t } from "../i18n";
+import { T, getLang, onLangChange, t } from "../i18n";
 import { ANCHOR_LEAD_SECONDS, LEAD_SECONDS, WHEEL_MAX, app, params, type Game } from "../state";
 import { QUICKNET, bytesToHex, roundTime, targetRound } from "../protocol/quicknet";
 import { listHash } from "../protocol/canonical";
@@ -55,6 +55,8 @@ export function pintarJuego(): void {
   const nombre = document.querySelector(`#g-${app.game} span`)?.textContent || t(NOMBRE[app.game]);
   if (el.textContent !== nombre) el.textContent = nombre;
 }
+// Al cambiar de idioma los botones del selector ya están traducidos: se lee de ahí.
+onLangChange(pintarJuego);
 
 /**
  * "Cambiar de juego": lleva al selector, que está debajo, y deja el foco en el
