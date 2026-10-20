@@ -638,8 +638,10 @@ export async function constellationPixi(names: string[], winners: readonly numbe
       // Con la hora de la escena y no la del cuadro anterior: `apply` ya movió la cámara.
       const p = S.scene.toGlobal({ x: nd.x, y: nd.y });
       // La estrella que la cámara dejó afuera no lleva nombre: pegado al borde
-      // engañaba. La que queda al costado del relator, sí.
-      if (p.x < 0 || p.x > W0 || p.y < S.top() || p.y > H0) continue;
+      // engañaba. La que queda al costado del relator, sí, y también la que
+      // queda bajo la cabecera: su nombre busca lugar debajo de ella (si no, en
+      // paisaje la estrella de un costado se quedaba sin nombre).
+      if (p.x < 0 || p.x > W0 || p.y < 0 || p.y > H0) continue;
       const key = ni * 2 + (big ? 1 : 0);
       let c = chipOf.get(key);
       if (!c) {
