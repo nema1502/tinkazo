@@ -13,6 +13,7 @@ import { usePixi } from "./games/engine";
 import { initWalletUI } from "./ui/wallet-ui";
 import { initOnboarding } from "./ui/onboarding";
 import { musicOn, toggleMusic } from "./music";
+import { rotateWords } from "./ui/rotar";
 
 // `?theme=light|dark` fuerza el tema (capturas).
 const themeParam = params.get("theme");
@@ -305,6 +306,8 @@ void import("./ui/thumbs").then((m) => m.initThumbs(GAMES));
 // Siempre se aplica el diccionario al cargar, también en español: si no, el
 // texto que se ve sale del markup y los dos archivos se separan sin que se note.
 setLang(initialLang());
+// La palabra del sticker rota después de traducir: el texto sale del diccionario.
+rotateWords();
 // El contador va aparte y después: no frena la página y queda en su propio
 // archivo, chico, en vez de darle su nombre al código común.
 void import("./analytics").then((m) => m.countVisits());

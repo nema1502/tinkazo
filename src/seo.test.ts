@@ -225,13 +225,31 @@ const espacios = (s: string): string => s.replace(/\s+/g, " ").trim();
 type Copia = { clave: string; tipo: "texto" | "html" | "placeholder" | "title" | "aria-label"; valor: string };
 
 /** Todas las copias estáticas de una página: cada `data-i`, `data-i-html` y atributo `data-i-ph`, `-title` o `-aria`. */
+/** Desde `desde` (justo después de la apertura de `tag`), dónde cierra ese mismo elemento: un span dentro de un span no corta el de afuera. */
+const cierreDe = (html: string, tag: string, desde: number): number => {
+  const marca = new RegExp(`<${tag}\\b[^>]*>|</${tag}>`, "g");
+  marca.lastIndex = desde;
+  let profundidad = 1;
+  for (let m = marca.exec(html); m; m = marca.exec(html)) {
+    profundidad += m[0].startsWith("</") ? -1 : 1;
+    if (profundidad === 0) return m.index;
+  }
+  return -1;
+};
+
 const copiasDe = (html: string): Copia[] => {
   const copias: Copia[] = [];
-  for (const m of html.matchAll(/<([a-z][a-z0-9]*)\b[^>]*?\sdata-i="([^"]+)"[^>]*>([\s\S]*?)<\/\1>/g)) {
-    copias.push({ clave: m[2] ?? "", tipo: "texto", valor: espacios(sinEntidades(sinEtiquetas(m[3] ?? ""))) });
-  }
-  for (const m of html.matchAll(/<([a-z][a-z0-9]*)\b[^>]*?\sdata-i-html="([^"]+)"[^>]*>([\s\S]*?)<\/\1>/g)) {
-    copias.push({ clave: m[2] ?? "", tipo: "html", valor: espacios(m[3] ?? "") });
+  for (const m of html.matchAll(/<([a-z][a-z0-9]*)\b[^>]*?\sdata-i(-html)?="([^"]+)"[^>]*>/g)) {
+    const desde = (m.index ?? 0) + m[0].length;
+    const fin = cierreDe(html, m[1] ?? "", desde);
+    if (fin < 0) continue;
+    const contenido = html.slice(desde, fin);
+    const clave = m[3] ?? "";
+    copias.push(
+      m[2]
+        ? { clave, tipo: "html", valor: espacios(contenido) }
+        : { clave, tipo: "texto", valor: espacios(sinEntidades(sinEtiquetas(contenido))) },
+    );
   }
   const atributos = [
     ["data-i-ph", "placeholder"],

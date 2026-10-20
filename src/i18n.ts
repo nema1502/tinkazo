@@ -254,7 +254,7 @@ export function setPickSeed(rng: (() => number) | null): void {
 
 export const T: Record<Lang, Dict> = {
   es: {
-    badge: "Para el que le toca sortear",
+    badge: 'Sorteá para tu <span class="rotating" data-words="meetup|clase|evento|taller|charla|congreso">meetup</span>',
     h1: 'Sorteos que <span class="hl"><span class="hl-t">cualquiera puede comprobar</span></span>.',
     lead: "Pegá la lista de tu evento y sorteá en pantalla grande, con la carrera de llamas, el trompo o el Carnaval de Oruro. Al ganador lo decide un número al azar que se publica en internet a una hora fija, después de que vos cerraste la lista. Vos no lo elegís. Yo tampoco. Y cualquiera lo revisa desde su celular.",
     ctaHero: "Entrar y sortear, es gratis",
@@ -1406,7 +1406,7 @@ export const T: Record<Lang, Dict> = {
     "errAnchor.accountNotReady": "Tu cuenta todavía no está lista. Probá de nuevo en un minuto.",
   },
   en: {
-    badge: "For whoever has to run the draw",
+    badge: 'Draw for your <span class="rotating" data-words="meetup|class|event|workshop|talk|conference">meetup</span>',
     h1: 'Draws <span class="hl"><span class="hl-t">anyone can check</span></span>.',
     lead: "Paste your attendee list and draw it on the big screen: a llama race, spinning tops or the Oruro Carnival. The winner comes out of a random number published on the internet at a fixed time, after you locked the list. You don't pick it. I don't either. And anyone can check it from their phone.",
     ctaHero: "Sign in and draw, it's free",
