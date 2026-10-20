@@ -272,14 +272,16 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   /** Dónde estaba cada chip en la grilla de la clasificatoria (pantalla). */
   let gridAt: Point[] = [];
   let gridScale = 1;
-  /** El nombre de un agujero, a una letra de 17 px o más en una pantalla de 720 de alto. */
   /**
    * El tamaño de los nombres de la mesa, sobre la base legible (CHIP_SCALE).
    * En un celular no hay lugar entre la mesa y el borde: con la base, y aun a
    * 0,75, los nombres de los costados no entraban y se apagaban, 5 de 12
    * (16 de octubre de 2026). Ahí quedan como estaban antes de la base nueva.
+   * En horizontal, 0,9 sobre CHIP_SCALE (1,6) da la letra de 17 px de antes: con
+   * 1,45 el chip salía 1,6 veces más grande, y en 4:3 y 5:4 los de los costados
+   * no entraban entre la mesa y el borde (revisión del 20 de octubre de 2026).
    */
-  const labelScale = (): number => (S.portrait() ? 0.6 : 1.45);
+  const labelScale = (): number => (S.portrait() ? 0.6 : 0.9);
   /** Nombre y `n` letras del apellido: "María Q.", "María Qu.". En la mesa entran doce, y el nombre entero no. */
   const corto = (nm: string, n = 1): string => {
     const p = nm.trim().split(/\s+/);
@@ -826,7 +828,8 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       const lp = P(labelAt(slot));
       const q = cam.toScreen(lp.x, lp.y, g.w, g.h);
       const u = ease.inOutCubic(clamp((tAll - flyAt(slot)) / Q_FLY, 0, 1));
-      const sc = (gridScale + (ls - gridScale) * u) * (ganador ? 1.3 : 1);
+      // El ganador conserva la letra grande de antes: en horizontal, 1,45 sobre la base.
+      const sc = (gridScale + ((ganador && !S.portrait() ? 1.45 : ls) - gridScale) * u) * (ganador ? 1.3 : 1);
       c.scale.set(sc * (u > 0 ? 1 : ease.outBack(enter)));
       let an = anchorOf(slot);
       let qx = q.x, qy = q.y;
