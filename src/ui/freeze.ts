@@ -10,6 +10,7 @@ import { precargarQr } from "./qr";
 import { canAnchor, currentSession } from "./wallet-ui";
 import { parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
+import { NOMBRE } from "./gamecard";
 import { actualizarPaso, barraActiva } from "./siguiente";
 
 /**
@@ -37,8 +38,33 @@ export function setGame(g: Game): void {
   if (app.drawn) return;
   app.game = g;
   for (const [id, key] of GAME_BUTTONS) $(id).classList.toggle("on", g === key);
+  pintarJuego();
   // Si ya está congelada, la cuenta regresiva corre: se baja el juego nuevo.
   if (app.frozen) preloadGame(g, app.frozen.names.length);
+}
+
+/**
+ * El juego elegido, con su nombre, junto al botón de sortear: se ve sin bajar
+ * hasta el selector. Lee el nombre del botón del selector, que es el que
+ * traduce `data-i`; los juegos que ya no tienen botón (los que siguen
+ * abriendo con `?demo=`) salen con el nombre de su tarjeta.
+ */
+export function pintarJuego(): void {
+  const el = document.getElementById("juego-actual");
+  if (!el) return;
+  const nombre = document.querySelector(`#g-${app.game} span`)?.textContent || t(NOMBRE[app.game]);
+  if (el.textContent !== nombre) el.textContent = nombre;
+}
+
+/**
+ * "Cambiar de juego": lleva al selector, que está debajo, y deja el foco en el
+ * juego elegido para seguir con las flechas y el Tab.
+ */
+export function cambiarJuego(): void {
+  const grilla = $("gamepick");
+  const reducido = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  grilla.scrollIntoView({ behavior: reducido ? "auto" : "smooth", block: "center" });
+  document.getElementById(`g-${app.game}`)?.focus({ preventScroll: true });
 }
 
 /**
@@ -127,14 +153,19 @@ function startCountdown(): void {
         preconectarDrand();
       }
       btn.disabled = true;
+      btn.classList.remove("lista");
       const reloj = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
       btn.textContent = T[getLang()].drawIn(reloj);
-      if (box) box.style.display = "block";
+      // Sin `block` en línea: el CSS decide cómo se ve la caja de la espera.
+      if (box) box.style.display = "";
       if (left) left.textContent = reloj;
       if (line) line.textContent = t("waitLine");
     } else {
       btn.disabled = !!app.drawn;
       btn.textContent = t("draw");
+      // Se enciende con un pulso suave (que se apaga con `prefers-reduced-motion`)
+      // hasta que alguien lo apriete: es lo único que hay que hacer ahora.
+      btn.classList.toggle("lista", !app.drawn);
       // El panel no desaparece de golpe: dice que la ronda ya nació, que es la
       // otra mitad de la idea.
       if (left) left.textContent = t("waitNow");
@@ -348,6 +379,7 @@ export function unfreeze(lista: string): void {
   $<HTMLSelectElement>("nw").disabled = false;
   $("sec-frozen").style.display = "none";
   $("wait-box").style.display = "none";
+  $("btn-draw").classList.remove("lista");
   $("rules-text").style.display = "none";
   $<HTMLButtonElement>("g-wheel").disabled = false;
   $("wheel-cap").style.display = "none";
@@ -394,6 +426,7 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
     $("wheel-cap").style.display = "block";
     if (app.game === "wheel") setGame("tombola");
   }
+  pintarJuego();
   startCountdown();
   actualizarPaso();
   $("sec-frozen").scrollIntoView({ behavior: "smooth", block: "start" });

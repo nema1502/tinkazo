@@ -783,7 +783,7 @@ export const T: Record<Lang, Dict> = {
     obDemo: "Ver una demo primero",
     obOk: "Entendido",
     badSig: "La firma de esa ronda no cuadra con la clave pública de quicknet. Probá de nuevo.",
-    drawIn: (mmss) => `Sortear en ${mmss}`,
+    drawIn: (mmss) => `Se habilita en ${mmss}`,
     moreLink: "Precios y cómo funciona por dentro",
     backHome: "Volver a sortear",
     // --- Las páginas de lectura: juegos, historia y seguridad. Viven aparte de
@@ -1260,6 +1260,8 @@ export const T: Record<Lang, Dict> = {
     sigGano: "Ya salió el ganador",
     sigGanaron: "Ya salieron los ganadores",
     sigAvisoRonda: "La ronda ya nació. Podés lanzar el sorteo.",
+    juegoElegido: "Juego elegido",
+    cambiarJuego: "Cambiar de juego",
   },
   en: {
     badge: "For whoever has to run the draw",
@@ -1768,7 +1770,7 @@ export const T: Record<Lang, Dict> = {
     obDemo: "Watch a demo first",
     obOk: "Got it",
     badSig: "That round's signature doesn't check out against quicknet's public key. Try again.",
-    drawIn: (mmss) => `Draw in ${mmss}`,
+    drawIn: (mmss) => `Unlocks in ${mmss}`,
     moreLink: "Pricing and how it works inside",
     backHome: "Back to the draw",
     masTitle: "More about it",
@@ -2242,6 +2244,8 @@ export const T: Record<Lang, Dict> = {
     sigGano: "The winner is out",
     sigGanaron: "The winners are out",
     sigAvisoRonda: "The round is out. You can run the draw.",
+    juegoElegido: "Chosen game",
+    cambiarJuego: "Change game",
   },
 };
 

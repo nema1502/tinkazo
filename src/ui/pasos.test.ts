@@ -71,3 +71,17 @@ describe("la línea de la barra", () => {
     }
   });
 });
+
+describe("la lista sellada", () => {
+  it("la cuenta regresiva del botón de sortear dice cuánto falta", () => {
+    expect(T.es.drawIn("0:25")).toBe("Se habilita en 0:25");
+    expect(T.en.drawIn("0:25")).toBe("Unlocks in 0:25");
+  });
+
+  it("el juego elegido y 'Cambiar de juego' existen en los dos idiomas", () => {
+    for (const l of ["es", "en"] as const) {
+      expect(typeof T[l].juegoElegido, `${l}.juegoElegido`).toBe("string");
+      expect(typeof T[l].cambiarJuego, `${l}.cambiarJuego`).toBe("string");
+    }
+  });
+});

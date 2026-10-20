@@ -214,31 +214,36 @@
     </div>
   </section>
 
-  <!-- 02 Congelar -->
-  <section class="block app-only tab-nuevo" id="sec-frozen" style="display:none" aria-live="polite">
+  <!-- 02 Congelar. Arriba, lo que se está esperando y el botón que sigue; el
+       juego, los ajustes y los datos del sello, después. Sin `aria-live` en la
+       sección entera: una región viva anuncia cada cambio de lo que tiene
+       adentro, y la cuenta cambia varias veces por segundo. Los pasos se
+       anuncian desde `#sig-aviso`. -->
+  <section class="block app-only tab-nuevo" id="sec-frozen" style="display:none">
     <div class="head"><h2><span data-i="p2">Lista sellada</span></h2><span class="kicker" id="frozen-ts"></span></div>
-    <div class="kpis">
-      <div><b id="k-n">0</b><span data-i="kEntries">participantes</span></div>
-      <div><b id="k-digest" style="font-size:16px" class="mono">···</b><span data-i="kDigest">huella de la lista</span></div>
-      <div><b id="k-status">frozen</b><span data-i="kStatus">estado del sorteo</span></div>
-    </div>
     <div class="body">
-      <details class="tecnico"><summary data-i="tecnicoT">Detalles técnicos</summary><p class="entity" id="entities"></p></details>
-      <p class="note" data-i="frozenNote">Sellaste la lista antes de que exista el número. La ronda que va a decidir todavía no nace, sale en unos segundos. De acá en adelante, agregar o sacar a alguien cambia la huella y se ve.</p>
       <aside class="wait" id="wait-box" style="display:none">
-        <p class="kicker" data-i="waitTitle">La ronda que va a decidir</p>
-        <p class="wait-num mono"><b id="wait-round">·</b><span id="wait-left">0:00</span></p>
-        <p class="wait-id" id="wait-id" style="display:none"></p>
-        <p class="wait-line" data-i="waitLine">Todavía no existe. Nace sola, en la red del faro, y ni vos ni nadie puede saber qué número va a traer. Por eso, con esta lista sellada, el resultado ya no se puede elegir.</p>
+        <div class="wait-main">
+          <p class="kicker" data-i="waitTitle">La ronda que va a decidir</p>
+          <div class="wait-row">
+            <p class="wait-num mono"><b id="wait-round">·</b><span id="wait-left">0:00</span></p>
+            <p class="wait-id" id="wait-id" style="display:none"></p>
+          </div>
+          <p class="wait-line" data-i="waitLine">Todavía no existe. Nace sola, en la red del faro, y ni vos ni nadie puede saber qué número va a traer. Por eso, con esta lista sellada, el resultado ya no se puede elegir.</p>
+        </div>
         <button class="ghost mini" id="btn-espera" type="button" data-i="espVer">Mostrar la espera en grande</button>
       </aside>
-      <div class="row rules-row">
-        <button class="ghost" id="btn-rules" data-i="copyRules">Copiar las bases</button>
-        <p class="note" data-i="rulesNote">Pegalas en Luma, en WhatsApp o donde avisaste del sorteo. Dicen cómo se elige antes de que se sepa quién gana, y dejan anotado cuál es el sorteo que vale.</p>
+      <div class="lanzar" id="lanzar">
+        <button class="primary" id="btn-draw" data-i="draw">Lanzar el sorteo</button>
+        <div class="juego-actual">
+          <span class="kicker" data-i="juegoElegido">Juego elegido</span>
+          <b id="juego-actual">Carrera de llamas</b>
+          <button class="ghost mini" id="btn-cambiar" type="button" data-i="cambiarJuego">Cambiar de juego</button>
+        </div>
       </div>
-      <pre class="entity rules-text" id="rules-text" style="display:none"></pre>
-      <p class="kicker pick-label" data-i="gameLabel">Juego</p>
-      <div class="gamepick">
+      <p class="txstatus" id="draw-status" style="display:none"></p>
+      <p class="kicker pick-label" id="pick-label" data-i="gameLabel">Juego</p>
+      <div class="gamepick" id="gamepick">
         <button id="g-race" class="on"><span data-i="gameRace">Carrera de llamas</span></button>
         <button id="g-chovena"><span data-i="gameCho">Chovena</span></button>
         <button id="g-trompo"><span data-i="gameTrompo">Trompo</span></button>
@@ -252,7 +257,8 @@
         <button id="g-sapo"><span data-i="gameSapo">Sapo</span></button>
         <button id="g-quien"><span data-i="gameQuien">¿Quién es?</span></button>
       </div>
-      <div class="row">
+      <p class="note" id="wheel-cap" style="display:none" data-i="wheelCap">La ruleta se ve linda hasta unos 24 nombres. De ahí para arriba, el sorteo pasa a la tómbola, que muestra a todos.</p>
+      <div class="row ajustes">
         <button class="ghost" id="btn-sound" data-i="soundOn">Sonido: sí</button>
         <button class="ghost" id="btn-music">Música: no</button>
         <label class="kicker" for="pace" data-i="paceLabel">Duración</label>
@@ -261,10 +267,19 @@
           <option value="normal" data-i="paceNormal">Normal</option>
           <option value="epico" data-i="paceEpic">Épica</option>
         </select>
-        <button class="primary" id="btn-draw" data-i="draw">Lanzar el sorteo</button>
       </div>
-      <p class="txstatus" id="draw-status" style="display:none"></p>
-      <p class="note" id="wheel-cap" style="display:none" data-i="wheelCap">La ruleta se ve linda hasta unos 24 nombres. De ahí para arriba, el sorteo pasa a la tómbola, que muestra a todos.</p>
+      <div class="row rules-row">
+        <button class="ghost" id="btn-rules" data-i="copyRules">Copiar las bases</button>
+        <p class="note" data-i="rulesNote">Pegalas en Luma, en WhatsApp o donde avisaste del sorteo. Dicen cómo se elige antes de que se sepa quién gana, y dejan anotado cuál es el sorteo que vale.</p>
+      </div>
+      <pre class="entity rules-text" id="rules-text" style="display:none"></pre>
+      <p class="note" data-i="frozenNote">Sellaste la lista antes de que exista el número. La ronda que va a decidir todavía no nace, sale en unos segundos. De acá en adelante, agregar o sacar a alguien cambia la huella y se ve.</p>
+      <div class="kpis">
+        <div><b id="k-n">0</b><span data-i="kEntries">participantes</span></div>
+        <div><b id="k-digest" style="font-size:16px" class="mono">···</b><span data-i="kDigest">huella de la lista</span></div>
+        <div><b id="k-status">frozen</b><span data-i="kStatus">estado del sorteo</span></div>
+      </div>
+      <details class="tecnico"><summary data-i="tecnicoT">Detalles técnicos</summary><p class="entity" id="entities"></p></details>
     </div>
   </section>
 

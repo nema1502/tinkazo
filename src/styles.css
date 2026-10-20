@@ -1387,3 +1387,68 @@
   @media (prefers-reduced-motion: reduce) {
     .siguiente, .siguiente.on { transition: none; }
   }
+
+  /* En cada paso hay una sola acción principal, y se ve sin hacer scroll: la
+     lista sellada pone arriba lo que se espera y el botón que sigue, y deja el
+     juego, los ajustes y los datos del sello para después (19 de octubre de
+     2026, tras una prueba con alguien que llegaba por primera vez: "me cuesta
+     encontrar el botón del siguiente"). */
+  #sec-frozen .body { padding: 18px 22px 22px; }
+
+  /* La espera, compacta: el número de la ronda, la cuenta y el número del
+     sorteo en una fila; "Mostrar la espera en grande" al costado. La cuenta
+     para la sala está en grande en esa ventana, no hace falta acá. */
+  .wait {
+    margin: 0; padding: 14px 18px; display: grid; align-items: start; gap: 4px 18px;
+    grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "k b" "n b" "i i" "l l";
+  }
+  .wait-main, .wait-row { display: contents; }
+  .wait .kicker { grid-area: k; }
+  .wait-num { grid-area: n; margin: 2px 0 0; gap: 14px; }
+  .wait-num b { font-size: clamp(22px, 3.2vw, 34px); }
+  .wait-num span { font-size: clamp(26px, 4.4vw, 40px); padding: 0 10px; }
+  .wait-id { grid-area: i; justify-self: start; margin: 4px 0 2px; font-size: clamp(13px, 1.4vw, 17px); padding: 5px 10px; max-width: 100%; }
+  .wait-line { grid-area: l; max-width: 92ch; font-size: 14px; line-height: 1.45; }
+  #btn-espera { grid-area: b; align-self: start; }
+  @media (max-width: 560px) {
+    .wait { grid-template-columns: minmax(0, 1fr); grid-template-areas: "k" "n" "i" "l" "b"; padding: 12px 14px; }
+    #btn-espera { justify-self: start; margin-top: 6px; }
+  }
+
+  /* El botón que sigue y el juego elegido. */
+  .lanzar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; margin-top: 16px; }
+  .lanzar #btn-draw { min-height: 56px; padding: 14px 30px; font-size: 17px; flex: 0 0 auto; }
+  .juego-actual { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; min-width: 0; }
+  .juego-actual b { font-size: 17px; font-weight: 800; }
+  @media (max-width: 560px) {
+    .lanzar { flex-direction: column; align-items: stretch; gap: 10px; }
+    .lanzar #btn-draw { width: 100%; }
+    /* La etiqueta arriba, y debajo el nombre del juego con su "Cambiar" a la derecha. */
+    .juego-actual { justify-content: space-between; }
+    .juego-actual .kicker { flex: 0 0 100%; }
+  }
+
+  /* Encendido: la ronda ya nació y es lo único que hay que hacer. Un aro
+     amarillo (que se ve quieto con `prefers-reduced-motion`) y un pulso suave
+     que lo levanta y lo baja, sin desenfoque, como todo lo de la casa. */
+  button.primary.lista { box-shadow: var(--sh-sm), 0 0 0 4px var(--yellow); animation: sig-pulso 1.6s ease-in-out infinite; }
+  @keyframes sig-pulso { 0%, 100% { transform: none; } 50% { transform: translate(-2px, -2px); } }
+  @media (prefers-reduced-motion: reduce) { button.primary.lista { animation: none; } }
+
+  /* Lo de abajo del botón: el selector, los ajustes, las bases y el sello. */
+  #sec-frozen .pick-label { margin-top: 20px; }
+  #sec-frozen .ajustes { margin-top: 16px; }
+  #sec-frozen .rules-row { margin: 14px 0 6px; }
+  #sec-frozen .kpis { margin-top: 16px; border: 2px solid var(--ink); }
+  #sec-frozen .kpis > div { padding: 12px 18px; }
+  #sec-frozen .kpis b { font-size: 24px; }
+
+  /* Una pantalla baja (un celular acostado, o la página al 200 % de zoom):
+     arriba solo lo que se espera y el botón. La explicación de la espera sigue
+     más abajo, en la nota del sello, y en la espera en grande. */
+  @media (max-height: 520px) {
+    #sec-frozen .head { padding-top: 8px; padding-bottom: 8px; }
+    #sec-frozen .body { padding-top: 12px; }
+    .wait-line { display: none; }
+    .lanzar { margin-top: 12px; }
+  }

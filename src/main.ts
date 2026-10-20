@@ -4,7 +4,7 @@ import { chooseLang, initialLang, onLangChange, setLang, t } from "./i18n";
 import { SAMPLE, app, currentPace, paceSeconds, params, setPace, type Game, type Pace } from "./state";
 import { soundLabel, toggleSound, unlockAudioOnGesture } from "./sound";
 import { bindParticipants, loadSample, renderNames } from "./ui/participants";
-import { GAME_BUTTONS, copyRules, freeze, refreshFreezeLabel, secondsToRound, setGame } from "./ui/freeze";
+import { GAME_BUTTONS, cambiarJuego, copyRules, freeze, refreshFreezeLabel, secondsToRound, setGame } from "./ui/freeze";
 import { initSiguiente } from "./ui/siguiente";
 import { adelantarImagen, alTocarGanadores, copySummary, draw, imagenRedes, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
 import { skipGame } from "./games/overlay";
@@ -72,6 +72,7 @@ $("btn-hist-clear").addEventListener("click", () => {
 });
 
 for (const [id, game] of GAME_BUTTONS) $(id).addEventListener("click", () => setGame(game));
+$("btn-cambiar").addEventListener("click", cambiarJuego);
 $("btn-draw").addEventListener("click", () => void draw());
 // La lista a la vista de la sala, antes de sellar: el blindaje contra inflarla.
 $("btn-sala").addEventListener("click", () => void import("./ui/sala").then((m) => m.mostrarLista()));

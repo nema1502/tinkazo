@@ -35,6 +35,7 @@ export async function draw(): Promise<void> {
   // página que nunca recibió uno, y esa habilitación después queda pegada.
   const btn = $<HTMLButtonElement>("btn-draw");
   btn.disabled = true;
+  btn.classList.remove("lista");
   btn.textContent = t("fetching");
   // La pantalla completa, en el mismo clic: con cuenta, grabar el sorteo tarda
   // unos segundos y para cuando salía la tarjeta el navegador ya no la
