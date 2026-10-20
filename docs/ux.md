@@ -52,6 +52,7 @@ Es lo que mira `audit-flujo.mjs` en cada paso (lista cargada, sellada y esperand
 - [ ] El texto se lee: contraste de 4,5 a 1 (3 a 1 el texto grande), en los dos temas.
 - [ ] Mientras corre la cuenta, el botón dice cuánto falta; al llegar a cero se enciende, con pulso y sin él si se pide menos movimiento.
 - [ ] Con el botón fuera de la pantalla, la barra lo ofrece encendido y su clic sortea.
+- [ ] Si el sellado o el sorteo falla (la red de Stellar o la de la ronda no contestan), el motivo se ve en la pantalla aunque se haya apretado la barra, y queda a la vista una acción para reintentar. El mensaje se escribe junto al botón de verdad, que con la barra puesta está fuera de la pantalla: por eso hay que llevarlo a la vista.
 - [ ] La barra se va con el estadio, con la espera en grande y con una ventana abierta, y vuelve al cerrarlas.
 - [ ] Después del ganador, lo que sigue va pegado al ganador, antes de "Mostrar en grande" y de la verificación. La acción principal es "Siguiente premio" si queda con quién sortear, o "Compartir el comprobante" si no; lo demás es secundario.
 - [ ] Una captura de cada paso, para mirarla con los ojos.
@@ -63,7 +64,7 @@ pnpm build && pnpm preview &        # sirve dist/ en :4173
 CDP_PORT=9684 node scripts/audit-flujo.mjs --base http://localhost:4173
 ```
 
-Recorre el flujo de verdad con la cuenta de prueba de testnet (la única que no necesita a nadie y se carga sola con fondos), una vez por pantalla y por tema, y deja una captura por paso en `--out` (por defecto `docs/capturas/flujo`, que no se versiona), más una del inicio de la página con el indicador de pasos arriba. Cada recorrido arranca un Chrome nuevo: es alguien que llega por primera vez, con la bienvenida a la vista. Al final mira además unos anchos de celular (320, 360, 375 y 414 px) con la lista de ejemplo, sin grabar nada en Stellar.
+Recorre el flujo de verdad con la cuenta de prueba de testnet (la única que no necesita a nadie y se carga sola con fondos), una vez por pantalla y por tema, y deja una captura por paso en `--out` (por defecto `docs/capturas/flujo`, que no se versiona), más una del inicio de la página con el indicador de pasos arriba. Cada recorrido arranca un Chrome nuevo: es alguien que llega por primera vez, con la bienvenida a la vista. Después prueba, una vez por pantalla, qué pasa si el sellado falla (se corta la red de Stellar a propósito), y al final mira unos anchos de celular (320, 360, 375 y 414 px) con la lista de ejemplo, sin grabar nada en Stellar.
 
 | Opción | Qué hace |
 |---|---|
@@ -72,8 +73,9 @@ Recorre el flujo de verdad con la cuenta de prueba de testnet (la única que no 
 | `--vistas` | Cuáles de las pantallas, separadas por coma (`laptop-100,escritorio,tablet-h,celular-h,celular,zoom-200`). |
 | `--temas` | `dark`, `light` o los dos (`dark,light`). Por defecto solo `dark`: la geometría es la misma y el flujo es largo. |
 | `--sin-resto` | En qué pantallas mirar también el caso en que no queda nadie sin premio, donde la principal es "Compartir el comprobante" (por defecto `laptop-100,celular-h`; `none` para saltearlo). |
-| `--anchos` | Los anchos de celular que se miran al final, sin Stellar (por defecto `320,360,375,414`; `none` para saltearlos). Miran lo que el ancho rompe: scroll de costado, el indicador de pasos en una línea y con margen, y que ningún botón corte su texto. |
-| `--solo-anchos` | Corre solo los anchos de celular: un minuto por ancho, sin cuenta de prueba ni testnet. |
+| `--fallos` | En qué pantallas se prueba el sellado que falla (por defecto todas; `none` para saltearlo). Corta las llamadas al servidor de Stellar, aprieta lo que se ve (la barra, si es lo que está) y comprueba que el motivo aparece en la pantalla y que queda una acción a la vista para reintentar. Se hace una vez por pantalla, en el primer tema. |
+| `--anchos` | Los anchos de celular que se miran al final, sin Stellar (por defecto `320,360,375,414`; `none` para saltearlos). Miran lo que el ancho rompe: scroll de costado, el indicador de pasos en una línea y con margen, que ningún botón corte su texto y que ninguna caja deje salir lo que lleva adentro. |
+| `--solo-anchos`, `--solo-fallos` | Corren solo los anchos de celular (un minuto por ancho, sin cuenta de prueba ni testnet) o solo el sellado que falla (menos de un minuto por pantalla). |
 | `--lang` | `es` o `en`. |
 | `--sello-max` | Segundos que espera al sellado en testnet (por defecto 240). |
 | `--reintentos` | Cuántas veces repite una pantalla si el sellado falla o tarda (por defecto 2, con un respiro de 15 s entre una y otra; lo medido en un intento descartado no cuenta). |
