@@ -81,6 +81,9 @@ describe("errorKey: lo de siempre sigue igual", () => {
     ["txTooLate", "busy"],
     ["Transaction failed!", "busy"],
     ["tx-FAILED", "busy"],
+    // Pollar cuenta "entró y falló" como txFailed (registro real del 17 de octubre de 2026).
+    ["txFailed", "busy"],
+    ["txFailed · TX_SUBMIT_FAILED", "busy"],
     ["algo que nadie esperaba", "unknown"],
   ];
   it.each(CASOS)("%s -> %s", (msg, clave) => {

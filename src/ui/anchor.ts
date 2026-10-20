@@ -310,6 +310,24 @@ export function hideTxStatus(containerId: string): void {
   if (host) host.style.display = "none";
 }
 
+/**
+ * Si el sello falló sin dejar nada en la cadena, y por el reloj: la ronda
+ * quedó demasiado cerca (el contrato devuelve el error 5 al simular), o la
+ * transacción entró y falló. En los dos casos reintentar no puede dejar dos
+ * sellos. Un plazo vencido o un corte de red no entran: ahí no se sabe si
+ * el primero quedó grabado.
+ *
+ * "Entró y falló" se lee distinto según la wallet: "Transaction failed!" y
+ * `tx-FAILED` salen del SDK de Stellar y de esta capa, y Pollar lo cuenta como
+ * `txFailed`. Sin este último, quien entra con Google veía "la red rechazó la
+ * transacción" y tenía que apretar de nuevo a mano, y el reintento con el grifo,
+ * que suma unos segundos, hace que la ronda quede cerca más seguido.
+ */
+export function selloSinGrabar(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return /Error\(Contract,\s*#5\)|Transaction failed!|tx-FAILED|txFailed|tx_failed/.test(msg);
+}
+
 /** Mensaje de error de una invocación, ya traducido. */
 export async function anchorErrorText(e: unknown): Promise<string> {
   const { errorKey } = await import("../stellar/contract");

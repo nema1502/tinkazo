@@ -1,6 +1,6 @@
 import { nativeToScVal } from "@stellar/stellar-sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AnchorStep, SealResult } from "./anchor";
+import { selloSinGrabar, type AnchorStep, type SealResult } from "./anchor";
 
 /**
  * `sealOnChain` con las piezas de afuera reemplazadas: el cliente del contrato, la
@@ -200,5 +200,27 @@ describe("con cualquier otra wallet (Freighter, cuenta de prueba)", () => {
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
     expect(pasos.map(([p]) => p)).not.toContain("funding");
     expect(eventos).toEqual([]);
+  });
+});
+
+describe("selloSinGrabar: cuándo se reintenta el sello con otra ronda", () => {
+  it.each([
+    ["la ronda quedó cerca, al simular", new Error("HostError: Error(Contract, #5)")],
+    ["entró y falló (SDK de Stellar)", new Error("Transaction failed!")],
+    ["entró y falló (esta capa)", new Error("tx-FAILED")],
+    ["entró y falló (Pollar)", new Error("txFailed")],
+    ["entró y falló (Pollar, con el código de API)", new Error("txFailed · TX_SUBMIT_FAILED")],
+  ])("sí: %s", (_nombre, error) => {
+    expect(selloSinGrabar(error)).toBe(true);
+  });
+
+  it.each([
+    ["no hay saldo: lo resuelve la ayuda de fondos, no una ronda nueva", new Error("txInsufficientBalance")],
+    ["un corte de red: no se sabe si el primero quedó grabado", new Error("Failed to fetch")],
+    ["un plazo vencido: tampoco", new Error("tx-NOT_FOUND")],
+    ["el contrato lo rechazó por otra razón", new Error("HostError: Error(Contract, #3)")],
+    ["la comisión quedó corta", new Error("txInsufficientFee")],
+  ])("no: %s", (_nombre, error) => {
+    expect(selloSinGrabar(error)).toBe(false);
   });
 });

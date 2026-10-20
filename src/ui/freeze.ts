@@ -5,7 +5,7 @@ import { QUICKNET, bytesToHex, roundTime, targetRound } from "../protocol/quickn
 import { listHash } from "../protocol/canonical";
 import { prepararFirma } from "../protocol/firma";
 import { contractUrl, network } from "../stellar/config";
-import { anchorErrorText, hideTxStatus, sealOnChain, showTxStatus, stepLabel } from "./anchor";
+import { anchorErrorText, hideTxStatus, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
 import { precargarQr } from "./qr";
 import { canAnchor, currentSession } from "./wallet-ui";
 import { parseNames, setList } from "./participants";
@@ -173,18 +173,6 @@ export function refreshFreezeLabel(): void {
  * sorteo sigue siendo verificable, pero nadie atestigua que la lista se cerró
  * antes de que existiera la semilla.
  */
-/**
- * Si el sello falló sin dejar nada en la cadena, y por el reloj: la ronda
- * quedó demasiado cerca (el contrato devuelve el error 5 al simular), o la
- * transacción entró y falló. En los dos casos reintentar no puede dejar dos
- * sellos. Un plazo vencido o un corte de red no entran: ahí no se sabe si
- * el primero quedó grabado.
- */
-function selloSinGrabar(e: unknown): boolean {
-  const msg = e instanceof Error ? e.message : String(e);
-  return /Error\(Contract,\s*#5\)|Transaction failed!|tx-FAILED/.test(msg);
-}
-
 export async function freeze(): Promise<void> {
   const names = parseNames();
   if (names.length < 2) return;
