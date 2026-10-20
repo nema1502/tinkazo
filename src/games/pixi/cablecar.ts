@@ -753,10 +753,12 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   function boardGrid(): { sc: number; kc: number; pitch: number; lo: number; hi: number; rowsMax: number; colsMax: number } {
     const u = S.u();
     const sc = G.vertical ? 1.05 : 1.3;
-    const kc = u * sc;
-    const pitch = 28 * kc;
+    // Un chip mide 25 de estas unidades (`CHIP_SCALE` incluido): el renglón
+    // sigue con un espacio chico, y el último entra con su chip entero.
+    const kc = u * sc * CHIP_SCALE;
+    const pitch = 26 * kc + 3 * u;
     const lo = S.top() + 12 * u, hi = S.sh() - S.bottom() - 12 * u;
-    return { sc, kc, pitch, lo, hi, rowsMax: clamp(Math.floor((hi - lo) / pitch), 2, G.vertical ? 7 : 8), colsMax: G.vertical ? 2 : 3 };
+    return { sc, kc, pitch, lo, hi, rowsMax: clamp(Math.floor((hi - lo + pitch - 25 * kc) / pitch), 2, G.vertical ? 7 : 8), colsMax: G.vertical ? 2 : 3 };
   }
 
   /** Quiénes se bajan en una parada, en el orden del andén: los co-ganadores primero. */
@@ -827,7 +829,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     }
     const count = shown + (plus ? 1 : 0);
     const rows = Math.ceil(count / cols);
-    const bw = cols * colW - 8 * u, bh = rows * pitch - 6 * kc;
+    const bw = cols * colW - 8 * u, bh = (rows - 1) * pitch + 25 * kc;
 
     // Lo que no hay que tapar, en la pantalla del encuadre al que va la cámara.
     const pose = cam.snapshot();
@@ -901,7 +903,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     }
     const v = boardView;
     const W = S.sw(), H = S.sh(), u = S.u(), k = G.k;
-    const kc = u * v.sc;
+    const kc = u * v.sc * CHIP_SCALE;
     const shown = v.chips.length;
     const spread = Math.min(0.45, 0.07 * shown);
     // Es parte de lo que se ve iluminado: titila con la luz y se apaga con ella.
