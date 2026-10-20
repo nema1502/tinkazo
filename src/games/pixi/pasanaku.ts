@@ -566,16 +566,18 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
     }
     // La cuenta de bultos sobre la tela, con su retazo de aguayo.
     const pot = new Container();
-    potText = S.text("", { fontFamily: MONO, fontSize: 14 * k, fontWeight: "700", fill: S.dark ? CREAM : INK });
+    potText = S.text("", { fontFamily: MONO, fontSize: Math.max(13, 14 * k), fontWeight: "700", fill: S.dark ? CREAM : INK });
     potText.anchor.set(0.5);
     swatch = new Graphics();
     pot.addChild(swatch, potText);
     pot.position.set(22 * k, S.top() + 10 * k);
     S.hud.addChild(pot);
-    cinchText = S.text("", { fontFamily: MONO, fontSize: 11 * k, fontWeight: "700", fill: S.dark ? CREAM : INK });
-    cinchText.anchor.set(1, 1);
-    cinchText.alpha = 0.55;
-    cinchText.position.set(W - 22 * k, H - S.bottom() - 18 * k);
+    // Arriba a la derecha, a la altura del contador de la tela. Abajo, la fila
+    // de los que salieron pasaba por encima y lo tapaba (con 200 personas).
+    cinchText = S.text("", { fontFamily: MONO, fontSize: Math.max(12, 11 * k), fontWeight: "700", fill: S.dark ? CREAM : INK });
+    cinchText.anchor.set(1, 0.5);
+    cinchText.alpha = 0.9;
+    cinchText.position.set(W - 22 * k, S.top() + 32.5 * k);
     S.hud.addChild(cinchText);
   }
   build();
