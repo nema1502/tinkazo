@@ -46,6 +46,7 @@ const NUEVAS: Record<string, { titulo: string; h1: string }> = {
 
 const canonical = (html: string): string | null => html.match(/<link rel="canonical" href="([^"]+)"/)?.[1] ?? null;
 const descripcion = (html: string): string => html.match(/<meta name="description" content="([^"]*)"/)?.[1] ?? "";
+const ogDescripcion = (html: string): string => html.match(/<meta property="og:description" content="([^"]*)"/)?.[1] ?? "";
 
 /** Todos los bloques `application/ld+json` de una página, ya parseados. */
 const datosEstructurados = (html: string): Array<Record<string, unknown>> =>
@@ -90,6 +91,11 @@ describe("portada: canonical, sin hreflang y datos estructurados", () => {
     expect(app?.description).toBe(descripcion(html));
     expect(JSON.stringify(grafo)).not.toMatch(/"(offers|price|priceCurrency)"/);
   });
+
+  it("og:description es la misma que la meta description, y las dos caben en 160 caracteres", () => {
+    expect(ogDescripcion(html)).toBe(descripcion(html));
+    expect([...descripcion(html)].length).toBeLessThanOrEqual(160);
+  });
 });
 
 describe("cada página pública", () => {
@@ -111,6 +117,12 @@ describe("cada página pública", () => {
     expect(largo).toBeLessThanOrEqual(160);
   });
 
+  it.each(Object.keys(NUEVAS))("%s: og:description igual a la meta, y de 160 caracteres o menos", (archivo) => {
+    const html = leer(archivo);
+    expect(ogDescripcion(html)).toBe(descripcion(html));
+    expect([...descripcion(html)].length).toBeLessThanOrEqual(160);
+  });
+
   it.each(Object.keys(NUEVAS))("%s lleva un WebPage con name, description, url e inLanguage es", (archivo) => {
     const pagina = datosEstructurados(leer(archivo)).find((b) => b["@type"] === "WebPage");
     expect(pagina).toMatchObject({
@@ -120,18 +132,6 @@ describe("cada página pública", () => {
       url: PUBLICAS[archivo],
       inLanguage: "es",
     });
-  });
-
-  it.each(Object.keys(NUEVAS))("%s no usa palabras que el texto nuevo no puede decir", (archivo) => {
-    const html = leer(archivo);
-    const claves = [...html.matchAll(/data-i(?:-html)?="([^"]+)"/g)].map((m) => m[1] ?? "");
-    const textos = [
-      ...claves.flatMap((k) => [T.es[k], T.en[k]]),
-      NUEVAS[archivo]?.titulo,
-      descripcion(html),
-    ].filter((v): v is string => typeof v === "string");
-    const prohibidas = /rifa|raffle|apuesta|lotería|loteria|casino|premio en efectivo|premio en dinero|garantiz|imposible de trampear|sin confiar en quien|no hace falta confiar en quien|sin confiar en Tinkazo|no hace falta confiar en Tinkazo|favoritos|a dedo/i;
-    expect(textos.filter((t) => prohibidas.test(t))).toEqual([]);
   });
 });
 
@@ -172,6 +172,66 @@ describe("el texto escrito en las páginas nuevas y en las tarjetas es el del di
     expect(tarjetas.map((e) => e.clave).sort()).toEqual(["masClaseB", "masClaseT", "masMeetupB", "masMeetupT", "masVerifB", "masVerifT"]);
     expect(tarjetas.filter((e) => e.texto !== textoEs(e.clave)).map((e) => `${e.clave}: ${e.texto}`)).toEqual([]);
     expect(tarjetas.filter((e) => sinVersionEn(e.clave)).map((e) => e.clave)).toEqual([]);
+  });
+});
+
+/** Lo que el HTML trae escrito en un elemento: el texto de `data-i`, el HTML de `data-i-html` o un atributo `data-i-*`. */
+const sinEtiquetas = (s: string): string => s.replace(/<[^>]+>/g, "");
+const sinEntidades = (s: string): string =>
+  s
+    .replace(/&nbsp;/g, " ")
+    .replace(/&rarr;/g, "→")
+    .replace(/&middot;/g, "·")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+const espacios = (s: string): string => s.replace(/\s+/g, " ").trim();
+
+type Copia = { clave: string; tipo: "texto" | "html" | "placeholder" | "title" | "aria-label"; valor: string };
+
+/** Todas las copias estáticas de una página: cada `data-i`, `data-i-html` y atributo `data-i-ph`, `-title` o `-aria`. */
+const copiasDe = (html: string): Copia[] => {
+  const copias: Copia[] = [];
+  for (const m of html.matchAll(/<([a-z][a-z0-9]*)\b[^>]*?\sdata-i="([^"]+)"[^>]*>([\s\S]*?)<\/\1>/g)) {
+    copias.push({ clave: m[2] ?? "", tipo: "texto", valor: espacios(sinEntidades(sinEtiquetas(m[3] ?? ""))) });
+  }
+  for (const m of html.matchAll(/<([a-z][a-z0-9]*)\b[^>]*?\sdata-i-html="([^"]+)"[^>]*>([\s\S]*?)<\/\1>/g)) {
+    copias.push({ clave: m[2] ?? "", tipo: "html", valor: espacios(m[3] ?? "") });
+  }
+  const atributos = [
+    ["data-i-ph", "placeholder"],
+    ["data-i-title", "title"],
+    ["data-i-aria", "aria-label"],
+  ] as const;
+  for (const [dataAttr, atributo] of atributos) {
+    for (const m of html.matchAll(new RegExp(`<[a-z][a-z0-9]*\\b[^>]*?\\s${dataAttr}="([^"]+)"[^>]*>`, "g"))) {
+      const valor = m[0].match(new RegExp(`\\s${atributo}="([^"]*)"`))?.[1] ?? "";
+      copias.push({ clave: m[1] ?? "", tipo: atributo, valor: sinEntidades(valor) });
+    }
+  }
+  return copias;
+};
+
+/** Cuántos atributos `data-i*` tiene el HTML: la extracción de `copiasDe` tiene que encontrarlos todos. */
+const atributosDataI = (html: string): number => (html.match(/\sdata-i(?:-html|-ph|-title|-aria)?="/g) ?? []).length;
+
+/** Cuánto se aparta una copia de lo que dice T.es; null si coincide. Los textos se comparan con los espacios normalizados; los atributos, tal cual. */
+const diferencia = (c: Copia): string | null => {
+  const es = T.es[c.clave];
+  if (typeof es !== "string") return `${c.clave}: sin texto en T.es`;
+  const igual = c.tipo === "texto" || c.tipo === "html" ? c.valor === espacios(es) : c.valor === es;
+  return igual ? null : `${c.clave} (${c.tipo}): el HTML dice «${c.valor}» y T.es dice «${es}»`;
+};
+
+describe("el texto de cada elemento de cada página es el de T.es, y cada clave tiene su versión en inglés", () => {
+  it.each([...Object.keys(PUBLICAS), ...INTERNAS])("%s", (archivo) => {
+    const html = leer(archivo);
+    const copias = copiasDe(html);
+    expect(copias.length).toBe(atributosDataI(html));
+    expect(copias.map(diferencia).filter((d): d is string => d !== null)).toEqual([]);
+    expect(copias.filter((c) => sinVersionEn(c.clave)).map((c) => c.clave)).toEqual([]);
   });
 });
 
@@ -266,5 +326,64 @@ describe("enlaces a las páginas nuevas", () => {
     for (const nueva of Object.keys(NUEVAS)) {
       expect(seccion).toContain(`href="/${nueva}"`);
     }
+  });
+});
+
+/** Lo que no dice la portada ni ninguna página de lectura, en español y en inglés. */
+const NO_SE_DICE = /sin confiar en tinkazo|no hace falta confiar en tinkazo|without trusting tinkazo|you don't have to trust tinkazo|sin confiar en quien|no hace falta confiar en quien|no controla nadie|nadie controla|nobody controls|favoritos|favorites|a dedo|suerte|garantiz|imposible de trampear|premio en efectivo|premio en dinero/i;
+
+/** Lo que solo se nombra para decir que Tinkazo no sirve para eso: rifas, apuestas, casino. */
+const DE_APUESTA = /rifa|raffle|apuesta|lotería|loteria|casino/i;
+
+/** La portada y los términos dicen en qué no sirve Tinkazo, así que ahí no se mira `DE_APUESTA`. */
+const CON_AVISO = ["index.html", "terminos.html"];
+
+/** Lo que una página dice: sus claves en los dos idiomas, el título y las descripciones. */
+const textosDe = (archivo: string): string[] => {
+  const html = leer(archivo);
+  const claves = [...html.matchAll(/data-i(?:-html|-ph|-title|-aria)?="([^"]+)"/g)].map((m) => m[1] ?? "");
+  const declarados = [
+    html.match(/<title>([^<]*)<\/title>/)?.[1],
+    descripcion(html),
+    ogDescripcion(html),
+    ...[...html.matchAll(/"description":\s*"([^"]*)"/g)].map((m) => m[1]),
+  ];
+  return [...claves.flatMap((k) => [T.es[k], T.en[k]]), ...declarados].filter((v): v is string => typeof v === "string");
+};
+
+describe("la portada y las páginas de lectura no dicen lo que el sitio no puede sostener", () => {
+  it.each(Object.keys(PUBLICAS))("%s", (archivo) => {
+    const prohibidas = CON_AVISO.includes(archivo) ? NO_SE_DICE : new RegExp(`${NO_SE_DICE.source}|${DE_APUESTA.source}`, "i");
+    expect(textosDe(archivo).filter((t) => prohibidas.test(t))).toEqual([]);
+  });
+});
+
+/** La lista que sube a Stellar, completa: la misma frase en la interfaz, en las páginas y en la documentación. */
+const LISTA_ES = "la huella de la lista, la cantidad de entradas, cuántos ganadores, la ronda, la hora del sello, el premio o título que escribiste y la dirección de quien organiza; y, al sortear, la firma de la ronda y las posiciones de los ganadores.";
+const LISTA_EN = "the list's fingerprint, the number of entries, how many winners, the round, the time of the seal, the prize or title you wrote and the organizer's address; and, when drawing, the round's signature and the winners' positions.";
+
+describe("frases fijas de la segunda ronda", () => {
+  it("el veredicto parcial se dice veredicto amarillo (yellow verdict), y no de otra forma", () => {
+    expect(T.es.sgLimit1).toContain("veredicto amarillo");
+    expect(T.en.sgLimit1).toContain("yellow verdict");
+    expect(T.es.verifN2).toContain("veredicto amarillo");
+    expect(T.en.verifN2).toContain("yellow verdict");
+    const todos = [...Object.values(T.es), ...Object.values(T.en)].filter((v): v is string => typeof v === "string");
+    expect(todos.filter((t) => /veredicto de advertencia|warning verdict/i.test(t))).toEqual([]);
+  });
+
+  it.each(["sgLimit2", "meetNamesB", "tmQ3B"])("%s dice la lista completa que sube a Stellar, en los dos idiomas", (clave) => {
+    expect(T.es[clave]).toContain(LISTA_ES);
+    expect(T.en[clave]).toContain(LISTA_EN);
+  });
+
+  it.each(["seguridad.html", "sorteo-para-meetup.html", "terminos.html"])("%s repite la lista completa que sube a Stellar", (archivo) => {
+    expect(leer(archivo)).toContain(LISTA_ES);
+  });
+
+  it("la h1 de la verificación es la pedida, en los dos idiomas, y la página la muestra", () => {
+    expect(T.es.verifH1).toBe("Sorteo verificable: cualquiera puede rehacer el resultado");
+    expect(T.en.verifH1).toBe("Verifiable draw: anyone can redo the result");
+    expect(leer("sorteo-verificable.html")).toMatch(/<h1[^>]*data-i="verifH1">Sorteo verificable: cualquiera puede rehacer el resultado<\/h1>/);
   });
 });
