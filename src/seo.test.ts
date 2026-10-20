@@ -53,18 +53,15 @@ const datosEstructurados = (html: string): Array<Record<string, unknown>> =>
     (m) => JSON.parse(m[1] ?? "{}") as Record<string, unknown>,
   );
 
-describe("portada: canonical, idiomas y datos estructurados", () => {
+describe("portada: canonical, sin hreflang y datos estructurados", () => {
   const html = leer("index.html");
 
   it("tiene canonical a la portada", () => {
     expect(canonical(html)).toBe(`${BASE}/`);
   });
 
-  it("declara es, en y x-default con sus URL", () => {
-    const alternos = Object.fromEntries(
-      [...html.matchAll(/<link rel="alternate" hreflang="([^"]+)" href="([^"]+)"/g)].map((m) => [m[1] ?? "", m[2] ?? ""]),
-    );
-    expect(alternos).toEqual({ es: `${BASE}/`, en: `${BASE}/?lang=en`, "x-default": `${BASE}/` });
+  it("no declara hreflang: la portada se indexa en una sola URL, la canónica", () => {
+    expect(html).not.toMatch(/hreflang/);
   });
 
   it("el bloque ld+json se parsea y trae WebSite, Organization y SoftwareApplication", () => {
