@@ -30,8 +30,7 @@ import { HAND, SAPO_MAX, holeLayout, optsForArc, planThrows, throwTime, type Poi
  * vuelan directo. Así la pantalla se mueve desde el primer cuadro.
  *
  * Rediseñado el 2 de octubre de 2026 desde el que propuso Guido Salazar
- * (@GuidoSV7): el
- * la revisión visual lo vio como una mesa de póker (óvalo de paño verde y una
+ * (@GuidoSV7): la revisión visual lo vio como una mesa de póker (óvalo de paño verde y una
  * moneda dorada) y sin un solo nombre en la mesa.
  *
  * Todo sale de la hora del juego (`dt`), nunca del reloj de la pared.
