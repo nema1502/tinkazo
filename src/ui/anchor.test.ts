@@ -839,7 +839,7 @@ describe("el sorteo (drawOnChain) se ayuda igual que el sellado", () => {
     expect(eventos).toEqual(["tinkazo:sin-fondos"]);
   });
 
-  it("en mainnet nunca hay grifo: no se pide nada y se muestra la caja de fondos", async () => {
+  it("en mainnet nunca hay grifo ni caja de fondos: no se pide nada y el error sale tal cual", async () => {
     h.red.name = "mainnet";
     h.red.friendbotUrl = null;
     const enviar = vi.fn().mockRejectedValue(sinSaldo());
@@ -848,7 +848,7 @@ describe("el sorteo (drawOnChain) se ayuda igual que el sellado", () => {
     expect(error).toBeInstanceOf(Error);
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
     expect(enviar).toHaveBeenCalledTimes(1);
-    expect(eventos).toEqual(["tinkazo:sin-fondos"]);
+    expect(eventos).toEqual([]);
   });
 
   it("con otra wallet no cambia nada: el error sale tal cual, sin grifo ni caja de fondos", async () => {
