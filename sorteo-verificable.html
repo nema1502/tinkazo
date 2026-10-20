@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sorteo verificable: cómo comprobar el resultado</title>
+<meta name="description" content="Cómo comprobar un sorteo sin confiar en quien lo hizo: la lista se sella antes, el número sale de una ronda pública y cualquiera rehace el resultado." />
+<link rel="canonical" href="https://tinkazo.app/sorteo-verificable.html" />
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebPage","name":"Sorteo verificable: cómo comprobar el resultado","description":"Cómo comprobar un sorteo sin confiar en quien lo hizo: la lista se sella antes, el número sale de una ronda pública y cualquiera rehace el resultado.","url":"https://tinkazo.app/sorteo-verificable.html","inLanguage":"es"}</script>
+<meta property="og:title" content="Sorteo verificable: cómo comprobar el resultado" />
+<meta property="og:description" content="Cómo comprobar un sorteo sin confiar en quien lo hizo: la lista se sella antes, el número sale de una ronda pública y cualquiera rehace el resultado." />
+<meta property="og:type" content="website" />
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -4 26 30"><g fill="%23e93d9c"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></g></svg>' />
+<meta property="og:site_name" content="Tinkazo" />
+<meta property="og:url" content="https://tinkazo.app/sorteo-verificable.html" />
+<meta property="og:image" content="https://tinkazo.app/og.jpg" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="Tinkazo: sorteos que cualquiera puede comprobar" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#fff6e9" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#171126" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+</head>
+<body>
+<header>
+  <div class="stripe"></div>
+  <div class="bar">
+    <a class="wordmark" href="/" aria-label="Tinkazo"><span class="wm-llama" aria-hidden="true"><svg viewBox="-1 -3 24 28"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></svg></span><span class="wm-text">Tinka<b>zo</b></span></a>
+    <nav class="topnav" aria-label="páginas">
+      <a href="/#sortear" class="nav-app" data-i="navSortear">Sortear</a>
+      <a href="/juegos.html" data-i="navJuegos">Juegos</a>
+      <a href="/como-funciona.html" data-i="navComo">Cómo funciona</a>
+      <a href="/seguridad.html" data-i="navSeguridad">Seguridad</a>
+      <a href="/precios.html" data-i="navPrecios">Precios</a>
+      <a href="/#mis-sorteos" data-i="navMis">Mis sorteos</a>
+    </nav>
+    <nav class="langs" aria-label="idioma">
+      <button id="l-es" class="on">es</button>
+      <button id="l-en">en</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section class="hero" style="padding: 48px 0 8px">
+    <div class="hero-copy">
+      <span class="sticker" style="background:var(--yellow)" data-i="verifKicker">Para comprobar</span>
+      <h1 style="font-size: clamp(32px, 4.6vw, 48px)" data-i="verifH1">Sorteo verificable: no hace falta confiar en nosotros</h1>
+      <p class="lead" data-i="verifLead">Un sorteo verificable deja las pruebas a la vista. Acá se explica qué se comprueba, quién lo comprueba y qué todavía no promete.</p>
+      <div class="hero-ctas">
+        <a class="primary cta" href="/#sortear" data-i="pgCta">Sortear ahora, es gratis</a>
+      </div>
+    </div>
+  </section>
+
+  <section style="padding: 14px 0 0">
+    <h2 class="kicker" data-i="verifIdeaT">La idea en tres frases</h2>
+    <ol class="linea">
+      <li><h3 data-i="verifI1T">Primero, la lista</h3><p data-i="verifI1B">La lista se sella antes de que exista el número que decide.</p></li>
+      <li><h3 data-i="verifI2T">Después, el número</h3><p data-i="verifI2B">El número sale de una ronda pública que no controla nadie.</p></li>
+      <li><h3 data-i="verifI3T">Al final, cualquiera lo rehace</h3><p data-i="verifI3B">Cualquiera puede rehacer el resultado y tiene que dar el mismo nombre.</p></li>
+    </ol>
+  </section>
+
+  <section style="padding: 14px 0 0">
+    <h2 class="kicker" data-i="verifWhatT">Qué se comprueba y quién lo comprueba</h2>
+    <ul style="max-width: 680px; color: var(--ink2); font-size: 14px; margin: 10px 0 0 18px; display: grid; gap: 8px">
+      <li data-i="verifW1">La lista: que no cambió desde que se selló. La comprueba tu celular, con el comprobante.</li>
+      <li data-i="verifW2">El número: que es el de la ronda pública de esa hora. Lo ve cualquiera en internet.</li>
+      <li data-i="verifW3">El ganador: que sale de la lista y del número con la misma cuenta, siempre. Tu celular la rehace.</li>
+      <li data-i="verifW4">El sello: que quedó anotado en Stellar, con su hora. Cualquiera lo ve en un explorador de Stellar.</li>
+    </ul>
+  </section>
+
+  <section style="padding: 14px 0 0">
+    <h2 class="kicker" data-i="verifNotT">Qué no promete</h2>
+    <ul style="max-width: 680px; color: var(--ink2); font-size: 14px; margin: 10px 0 0 18px; display: grid; gap: 8px">
+      <li data-i="verifN1">Quien organiza podría sellar la misma lista varias veces y publicar solo el resultado que le conviene. Por eso los sellos son públicos: la página de verificación muestra los de esa cuenta y marca los que repiten la misma lista. Eso no lo impide del todo: se ve, pero no se evita.</li>
+      <li data-i="verifN2">Sin cuenta, el sello no queda anotado en Stellar. Un sorteo sin cuenta, como la demo, tiene comprobante, pero nadie más que quien organizó atestigua que esa era la lista. La página lo dice con un veredicto amarillo, en vez de un verde fácil.</li>
+      <li data-i="verifN3">Hoy el contrato está en la red de prueba de Stellar, que se reinicia el 16 de diciembre de 2026. El comprobante igual sirve para rehacer la cuenta.</li>
+    </ul>
+    <p class="row" style="margin-top: 12px"><a class="mini" href="/seguridad.html" data-i="masSeguridadT">Cómo se puede romper</a></p>
+  </section>
+
+  <section style="padding: 14px 0 0">
+    <h2 class="kicker" data-i="verifHowT">Cómo comprobarlo vos mismo</h2>
+    <ol class="linea">
+      <li><h3 data-i="verifHow1">Abrí el enlace del comprobante desde tu celular</h3><p data-i="verifHow1B">La página rehace el sorteo sola y te dice si da el mismo nombre.</p></li>
+      <li><h3 data-i="verifHow2">No hace falta creer en Tinkazo</h3><p data-i="verifHow2B">El código es abierto y el protocolo está escrito paso a paso.</p></li>
+      <li><h3 data-i="verifHow3">Los detalles técnicos están en Cómo funciona</h3><p data-i="verifHow3B">Acá no hacen falta. La página principal tampoco los necesita.</p></li>
+    </ol>
+    <p class="row" style="margin-top: 12px">
+      <a class="mini" href="/como-funciona.html" data-i="confMas">Cómo funciona, paso a paso →</a>
+      <a class="mini" href="https://github.com/nema1502/tinkazo/blob/main/docs/protocolo.md" target="_blank" rel="noopener" data-i="cfSin3a">El protocolo, en GitHub →</a>
+    </p>
+  </section>
+
+  <section style="padding: 14px 0 0">
+    <h2 class="kicker" data-i="pgRelT">Mirá también</h2>
+    <p class="row" style="margin-top: 10px">
+      <a class="mini" href="/sorteo-para-meetup.html" data-i="navMeetup">Sorteo para meetup</a>
+      <a class="mini" href="/sorteo-en-clase.html" data-i="navClase">Sorteo en clase</a>
+    </p>
+  </section>
+
+  <section style="padding: 0 0 40px">
+    <p class="note"><a href="/" data-i="backHome">Volver a sortear</a></p>
+  </section>
+</main>
+
+<footer><div class="bar">
+  <span data-i="footL">Tinkazo</span>
+  <nav class="pies" aria-label="secciones">
+    <a href="/juegos.html" data-i="navJuegos">Juegos</a>
+    <a href="/como-funciona.html" data-i="navComo">Cómo funciona</a>
+    <a href="/historia.html" data-i="navHistoria">Historia</a>
+    <a href="/seguridad.html" data-i="navSeguridad">Seguridad</a>
+    <a href="/precios.html" data-i="navPrecios">Precios</a>
+    <a href="/terminos.html" data-i="navTerminos">Términos</a>
+    <a href="/sorteo-para-meetup.html" data-i="navMeetup">Sorteo para meetup</a>
+    <a href="/sorteo-en-clase.html" data-i="navClase">Sorteo en clase</a>
+    <a href="/sorteo-verificable.html" data-i="navVerif">Sorteo verificable</a>
+    <a href="https://github.com/nema1502/tinkazo" target="_blank" rel="noopener" data-i="navCodigo">Código</a>
+  </nav>
+  <span data-i="footR">Hecho con ♥ en Bolivia</span>
+</div></footer>
+<script type="module" src="/src/pagina.ts"></script>
+</body>
+</html>
