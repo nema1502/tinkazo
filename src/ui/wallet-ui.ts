@@ -85,6 +85,10 @@ export function initWalletUI(): void {
   onLangChange(render);
   void restorePollar();
   void restoreSession();
+  // Sellar o sortear no pudo pagar la comisión y no había cómo ayudar solo
+  // (ver `conFondos` en anchor.ts): la caja de fondos aparece pegada al botón,
+  // como último recurso.
+  document.addEventListener("tinkazo:sin-fondos", () => void mostrarSinFondos());
   // La ventana de ingreso, lista antes del clic: con la página quieta se baja
   // lo poco que necesita y se le pregunta a Freighter si está. Así abre sin
   // esperar a la red ni a los dos segundos de Freighter.
@@ -339,9 +343,14 @@ function applyGate(): void {
 /**
  * El paso del grifo, dentro del mismo diálogo de conectar.
  *
- * Una cuenta recién creada no tiene con qué pagar la comisión, y ese es el
+ * Una cuenta recién creada no tiene con qué pagar la comisión, y ese era el
  * primer muro. Aparece acá, con la persona todavía mirando el diálogo, en vez
  * de como un aviso más abajo en la página que nadie lee.
+ *
+ * Quien entra con Google o con un correo (una cuenta de Pollar) no pasa por
+ * acá: solo quiere sortear, y el XLM era un muro que no entiende. Pollar puede
+ * pagar la comisión por la app, y si no puede, sellar lo resuelve solo en
+ * testnet y lo avisa al final (ver `conFondos` en anchor.ts).
  */
 function showFundStep(back: HTMLElement, address: string): void {
   const card = back.querySelector<HTMLElement>(".modal-card");
@@ -384,14 +393,22 @@ function showFundStep(back: HTMLElement, address: string): void {
  * En testnet hay un grifo público que regala XLM de mentira, así que el panel
  * lo ofrece con un botón. En mainnet no hay grifo: ahí solo se muestra la
  * dirección para copiarla y mandarle fondos desde donde sea.
+ *
+ * Con una cuenta de Pollar el aviso no aparece solo: la comisión puede pagarla
+ * la app, y si no, sellar lo resuelve. Solo sale como último recurso, cuando
+ * sellar pidió ayuda y no la hubo (`forzar`).
  */
-async function refreshFunds(): Promise<void> {
+async function refreshFunds(forzar = false): Promise<void> {
   const box = $("fund-box");
   if (!session) {
     box.style.display = "none";
     return;
   }
-  const { xlmBalance } = await lite();
+  const [{ xlmBalance, activeWallet }, { submitsItself }] = await Promise.all([lite(), import("../stellar/wallet-pollar")]);
+  if (!forzar && submitsItself(activeWallet())) {
+    box.style.display = "none";
+    return;
+  }
   const bal = await xlmBalance(session.address);
   // -1 es "no pude preguntar". Sin respuesta no se afirma nada.
   if (bal < 0 || bal >= 1) {
@@ -399,6 +416,18 @@ async function refreshFunds(): Promise<void> {
     return;
   }
   renderFundBox(box, session.address);
+}
+
+/**
+ * Sellar o sortear pidió ayuda con los fondos y no la hubo: la caja de fondos
+ * aparece pegada al botón, con la dirección para copiar. Solo si la cuenta de
+ * verdad está vacía: el saldo se vuelve a mirar antes de afirmar nada.
+ */
+async function mostrarSinFondos(): Promise<void> {
+  if (!session) return;
+  await refreshFunds(true);
+  const box = $("fund-box");
+  if (box.style.display !== "none") box.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function renderFundBox(box: HTMLElement, address: string): void {
@@ -411,7 +440,7 @@ function renderFundBox(box: HTMLElement, address: string): void {
   box.appendChild(tag);
 
   const h = document.createElement("h3");
-  h.textContent = t("fundTitle");
+  h.textContent = t(testnet ? "fundTitle" : "fundTitleMain");
   box.appendChild(h);
 
   const p = document.createElement("p");
@@ -877,7 +906,13 @@ async function afterConnect(
   // La cuenta de prueba se fondea sola al crearse, así que ahí no se
   // pregunta: Horizon tarda unos segundos en reflejarlo y el diálogo
   // mostraría el grifo para una cuenta que ya tiene fondos.
-  if (wallet.kind !== "guest") {
+  //
+  // Una cuenta de Pollar (Google o correo) tampoco: la comisión puede pagarla la
+  // app, y si no, sellar la prepara solo en testnet. Preguntar acá mandaba a
+  // quien solo quiere sortear a una pantalla de XLM que no entiende, y además
+  // esperaba 2,5 segundos de más.
+  const { submitsItself } = await import("../stellar/wallet-pollar");
+  if (wallet.kind !== "guest" && !submitsItself(wallet)) {
     let bal = await w.xlmBalance(address);
     // Una cuenta recién creada puede tardar en aparecer. Se reintenta una vez
     // antes de decirle a alguien que no tiene nada.
