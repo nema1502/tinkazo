@@ -1229,6 +1229,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       const y0 = p.y - 40 * k;
       stn.flag.clear();
       drawFlag(stn.flag, p.x - bw / 2 + 14 * k, y0 - 134 * k, 88 * k, 46 * k, top ? YELLOW : hexOf(LINES[(s + 2) % LINES.length] as string), s * 1.9, false);
+      // La banderita de la cumbre no asoma detrás del cartel del ganador.
+      stn.flag.visible = !(top && tAll >= T_CROWN);
       if (stn.bunting) {
         const g = stn.bunting;
         g.clear();
