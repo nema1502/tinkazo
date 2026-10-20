@@ -1423,9 +1423,11 @@
   @media (max-width: 560px) {
     .lanzar { flex-direction: column; align-items: stretch; gap: 10px; }
     .lanzar #btn-draw { width: 100%; }
-    /* La etiqueta arriba, y debajo el nombre del juego con su "Cambiar" a la derecha. */
+    /* La etiqueta arriba, y debajo el nombre del juego con su "Cambiar" a la
+       derecha; el botón, más ajustado, para que entre al lado de los nombres cortos. */
     .juego-actual { justify-content: space-between; }
     .juego-actual .kicker { flex: 0 0 100%; }
+    .juego-actual #btn-cambiar { padding: 8px 12px; font-size: 12px; }
   }
 
   /* Encendido: la ronda ya nació y es lo único que hay que hacer. Un aro
@@ -1463,6 +1465,10 @@
   .winner-box > .again .row > .primary { min-height: 52px; font-size: 16px; }
   .winner-box > .again .note { margin-top: 10px; }
   .grande-row { margin-top: 16px; }
+  /* En el celular "Siguiente premio · quedan 16" entra en un renglón (con el relleno de siempre se partía en dos). */
+  @media (max-width: 460px) {
+    .winner-box > .again .row > .primary { padding-left: 12px; padding-right: 12px; font-size: 15px; }
+  }
   /* Una pantalla baja: el ganador y, pegado, lo que sigue, sin la etiqueta de arriba. */
   @media (max-height: 520px) {
     #sec-draw .head { padding-top: 8px; padding-bottom: 8px; }
