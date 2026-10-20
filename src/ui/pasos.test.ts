@@ -94,6 +94,12 @@ describe("lo que sigue después del ganador", () => {
     expect(T.en.againSin(16)).toMatch(/16/);
   });
 
+  it("el contador no se separa de su número: en un celular angosto el botón se parte en 'Siguiente premio' y '(quedan 16)', nunca queda '16)' solo", () => {
+    // A 360 y 375 px el botón no entra en un renglón. Con un espacio común entre la palabra y el número, el segundo renglón podía quedar con el número suelto.
+    expect(T.es.againSin(16)).toBe("Siguiente premio (quedan\xa016)");
+    expect(T.en.againSin(16)).toBe("Next prize (16\xa0left)");
+  });
+
   it("el título y el aviso de cuántos quedan existen en los dos idiomas", () => {
     for (const l of ["es", "en"] as const) {
       expect(typeof T[l].againTitle).toBe("string");
