@@ -970,6 +970,19 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     }
   }
 
+  /** Los rótulos de las estaciones en pantalla (el número y el "−N"): los nombres no los tapan. */
+  function stationBoxes(W: number, H: number): Box[] {
+    const out: Box[] = [];
+    for (const stn of stations) {
+      for (const o of [stn.tag, stn.minus]) {
+        // El "−N" está vacío hasta que se bajan, y lo que queda fuera de cuadro no cuenta.
+        const bb = o.getBounds();
+        if (bb.maxX - bb.minX > 1 && bb.maxX > 0 && bb.minX < W && bb.maxY > 0 && bb.minY < H) out.push({ x0: bb.minX, y0: bb.minY, x1: bb.maxX, y1: bb.maxY });
+      }
+    }
+    return out;
+  }
+
   /** Dónde quedaron los nombres de las cabinas en este cuadro: el del que salta no se les encima. */
   let soloPlaced: Box[] = [];
 
@@ -987,6 +1000,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     const seen = new Set<number>();
     // El andén, si está, cuenta como un nombre ya puesto: no se le encima nadie.
     const placed: Box[] = boardView ? [boardView.box] : [];
+    // Los rótulos de las estaciones también tapan, la de la parada y la siguiente.
+    placed.push(...stationBoxes(W, H));
     if (few && tAll < T_CROWN) {
       // Más grandes cuando quedan dos: es el momento que decide.
       const quedan = P.leftAt(tAll);
@@ -1013,7 +1028,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
           soloTags.set(cab, e);
         }
         seen.add(cab);
-        const w = e.chip.width, h = 25 * u * sc, gap = 8 * u;
+        // La caja es del chip de verdad: con 25 * u * sc, que no lleva CHIP_SCALE, era el 62 % del alto.
+        const w = e.chip.width, h = e.chip.height, gap = 8 * u;
         const at = (side: number): Box => {
           const x = side === 0 ? box.x0 + (box.x1 - box.x0) * 0.1 : side === 1 ? box.x0 - gap - w : side === 2 ? box.x1 + gap : box.x0;
           const y = side === 0 ? box.y1 + gap + h / 2 : side === 3 ? box.y0 - 64 * G.k * z - gap - h / 2 : cy;
@@ -1023,12 +1039,23 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
           r.x0 >= 8 * u + m && r.x1 <= W - 8 * u - m && r.y0 >= lo + m && r.y1 <= hi - m &&
           !placed.some((o) => overlap(r, o) > 0) && ![...boxes].some(([c2, o]) => c2 !== cab && overlap(r, o) > 0);
         const order = G.vertical ? [1, 2, 0, 3] : [0, 2, 1, 3];
+        // Si ningún costado entra, el que menos tapa: la cabina pesa tres veces
+        // más que un nombre. No el primero, que a veces caía encima de otra cabina.
+        const tapa = (sd: number): number => {
+          const r0 = at(sd);
+          const x = clamp(r0.x0, 8 * u, W - w - 8 * u), y = clamp((r0.y0 + r0.y1) / 2, lo + h / 2, hi - h / 2);
+          const r = { x0: x, y0: y - h / 2, x1: x + w, y1: y + h / 2 };
+          let c2 = 3 * overlap(r, box);
+          for (const o of placed) c2 += overlap(r, o);
+          for (const [c3, o] of boxes) if (c3 !== cab) c2 += overlap(r, o);
+          return c2;
+        };
         // Vuelve a un costado mejor solo si entra con holgura: así no salta de
         // un costado al otro cuando la cabina pasa justo por el borde.
         const mejor = order.find((s) => fits(at(s), 18 * u));
         const side = mejor !== undefined && (e.side < 0 || order.indexOf(mejor) < order.indexOf(e.side))
           ? mejor
-          : e.side >= 0 && fits(at(e.side)) ? e.side : order.find((s) => fits(at(s))) ?? (order[0] as number);
+          : e.side >= 0 && fits(at(e.side)) ? e.side : order.find((s) => fits(at(s))) ?? order.reduce((a, b) => (tapa(b) < tapa(a) ? b : a));
         e.side = side;
         const r = at(side);
         const x = clamp(r.x0, 8 * u, W - w - 8 * u), y = clamp((r.y0 + r.y1) / 2, lo + h / 2, hi - h / 2);
@@ -1064,7 +1091,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       jumperTag.visible = false;
       return;
     }
-    const w = jumperTag.width, h = 25 * u * (G.vertical ? 1.25 : 1.5), gap = 10 * u;
+    const w = jumperTag.width, h = jumperTag.height, gap = 10 * u;
     const lo = S.top() + 6 * u, hi = H - S.bottom() - 6 * u;
     const at = (s: number): Box => {
       const x = s === 0 ? c.x + half + gap : s === 1 ? c.x - half - gap - w : c.x - w / 2;
@@ -1078,8 +1105,19 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       if (r) others.push(r);
     }
     const fits = (r: Box): boolean => r.x0 >= 8 * u && r.x1 <= W - 8 * u && r.y0 >= lo && r.y1 <= hi && !others.some((o) => overlap(r, o) > 0);
-    const s = jumperSide >= 0 && fits(at(jumperSide)) ? jumperSide : [0, 1, 2, 3].find((q) => fits(at(q))) ?? 0;
+    // Si ningún costado entra, el que menos tapa (la cara pesa tres veces más).
+    const tapa = (q: number): number => {
+      const r0 = at(q);
+      const x = clamp(r0.x0, 8 * u, W - w - 8 * u), y = clamp((r0.y0 + r0.y1) / 2, lo + h / 2, hi - h / 2);
+      const r = { x0: x, y0: y - h / 2, x1: x + w, y1: y + h / 2 };
+      let c2 = 3 * overlap(r, { x0: c.x - half, y0: c.y - half, x1: c.x + half, y1: c.y + half });
+      for (const o of others) c2 += overlap(r, o);
+      return c2;
+    };
+    const s = jumperSide >= 0 && fits(at(jumperSide)) ? jumperSide : [0, 1, 2, 3].find((q) => fits(at(q))) ?? [0, 1, 2, 3].reduce((a, b) => (tapa(b) < tapa(a) ? b : a));
     jumperSide = s;
+    // El que salta va encima de los nombres de las cabinas y de los del andén.
+    if (nameLayer.children[nameLayer.children.length - 1] !== jumperTag) nameLayer.addChild(jumperTag);
     const r = at(s);
     jumperTag.position.set(clamp(r.x0, 8 * u, W - w - 8 * u), clamp((r.y0 + r.y1) / 2, lo + h / 2, hi - h / 2));
     jumperTag.alpha = jumper.alpha;
