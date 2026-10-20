@@ -1502,3 +1502,22 @@
   @media (max-width: 560px) {
     .auth .netbadge.sin-grifo:not(.main):not(.bad) + .hello { border-left-style: dashed; }
   }
+
+  /* Evento: el premio con opciones */
+  /* Los premios que más se sortean y los últimos que usó esta persona, sobre el cuadro de
+     texto. Tocar uno lo escribe; el cuadro sigue ahí para escribir el que sea. */
+  .premio-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; }
+  .premio-chips:empty { display: none; }
+  .premio-chips button {
+    min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0 14px;
+    border: 2px solid var(--ink); background: var(--paper); color: var(--ink2);
+    font: inherit; font-weight: 800; font-size: 14px; cursor: pointer;
+  }
+  .premio-chips button:hover:not(:disabled) { background: var(--card); color: var(--ink); }
+  .premio-chips button[aria-pressed="true"] { background: var(--yellow); color: var(--on-accent); box-shadow: var(--sh-sm); transform: rotate(-1deg); }
+  /* Ya salió en esta sentada: sigue disponible (puede haber dos libros), pero se nota. */
+  .premio-chips button.salio:not([aria-pressed="true"]) { border-style: dashed; color: var(--muted); }
+  .premio-chips button:disabled { cursor: default; color: var(--muted); }
+  .premio-chips button[aria-pressed="true"]:disabled { color: var(--on-accent); }
+  .premio-chips button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 6px var(--yellow); }
+  @media (prefers-reduced-motion: reduce) { .premio-chips button[aria-pressed="true"] { transform: none; } }

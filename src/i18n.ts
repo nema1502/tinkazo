@@ -400,7 +400,7 @@ export const T: Record<Lang, Dict> = {
     impPasted: "Lo que pegaste",
     impMailSame: "mismo correo",
     impMailOther: "otro correo",
-    sample: "Cargar ejemplo", freeze: "Sellar la lista", draw: "Lanzar el sorteo", winners: "Premios",
+    sample: "Cargar ejemplo", freeze: "Sellar la lista", draw: "Lanzar el sorteo", winners: "Cuántos ganan",
     // --- Tarjetas de "¿por qué se llama así?". Cada dato tiene su fuente
     //     primaria anotada en src/games/lore.ts. Ninguno se inventa.
     // --- Ruleta. Cada persona se lleva varios gajos intercalados, así que con
@@ -676,7 +676,10 @@ export const T: Record<Lang, Dict> = {
     cLedgerNo: "LIBRO",
     cLedgerOk: "CONFIRMADO",
     wheelCap: "La ruleta se ve linda hasta unos 24 nombres. De ahí para arriba, el sorteo pasa a la tómbola, que muestra a todos.",
-    prizeLabel: "¿Qué sorteás? (opcional)", prizePh: "Una polera, un libro, la licencia de JetBrains…",
+    prizeLabel: "¿Qué sorteás? (opcional)", prizePh: "O escribí el tuyo…",
+    // Los que más se sortean en un evento, en el orden en que se ofrecen.
+    prizeSugeridos: ["Polera", "Libro", "Entrada", "Stickers", "Termo", "Kit de bienvenida", "Tarjeta de regalo", "Licencia"],
+    prizeRecent: "Lo usaste antes", prizeUsed: "ya salió",
     kEntries: "participantes", kDigest: "huella de la lista", kStatus: "estado del sorteo",
     frozenNote: "Sellaste la lista antes de que exista el número. La ronda que va a decidir todavía no nace, sale en unos segundos. De acá en adelante, agregar o sacar a alguien cambia la huella y se ve.",
     waitTitle: "La ronda que va a decidir",
@@ -1419,7 +1422,7 @@ export const T: Record<Lang, Dict> = {
     impPasted: "What you pasted",
     impMailSame: "same email",
     impMailOther: "different email",
-    sample: "Load sample", freeze: "Seal the list", draw: "Run the draw", winners: "Prizes",
+    sample: "Load sample", freeze: "Seal the list", draw: "Run the draw", winners: "How many win",
     cWheelBuild: ["Building the wheel!", "Slices lining up!", "Here comes the wheel!"],
     cWheelSplit: (segs, rep) => (rep > 1 ? `${segs} slices, ${rep} each!` : `${segs} slices, one apiece!`),
     cWheelCharge: ["Ready?", "It's winding up!", "Hold on!"],
@@ -1680,7 +1683,9 @@ export const T: Record<Lang, Dict> = {
     cLedgerNo: "LEDGER",
     cLedgerOk: "CONFIRMED",
     wheelCap: "The wheel looks great up to about 24 names. Past that, the draw switches to the ball drum, which shows everyone.",
-    prizeLabel: "What are you giving away? (optional)", prizePh: "A t-shirt, a book, that JetBrains license…",
+    prizeLabel: "What are you giving away? (optional)", prizePh: "Or type your own…",
+    prizeSugeridos: ["T-shirt", "Book", "Ticket", "Stickers", "Water bottle", "Welcome kit", "Gift card", "License"],
+    prizeRecent: "You used it before", prizeUsed: "already drawn",
     kEntries: "entries", kDigest: "list fingerprint", kStatus: "draw status",
     frozenNote: "You sealed the list before the number existed. The round that decides this hasn't been published yet, it lands in a few seconds. From here on, adding or removing anyone changes the fingerprint and it shows.",
     waitTitle: "The round that will decide",

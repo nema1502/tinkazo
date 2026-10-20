@@ -16,6 +16,7 @@ import { secondsToRound, unfreeze } from "./freeze";
 import { setList } from "./participants";
 import { CARD_SECONDS, showGameCard } from "./gamecard";
 import { actualizarPaso, verError } from "./siguiente";
+import { marcarSalio, olvidarSalieron, ponerPremio } from "./premios";
 import { startMusic, stopMusic } from "../music";
 
 /** Obtiene la ronda objetivo, verifica su firma y selecciona (protocolo §2, §5). */
@@ -353,6 +354,8 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   $("motion-note").style.display = skippedForReducedMotion() ? "block" : "none";
   renderLore(beacon);
   const prize = app.frozen?.prize ?? "";
+  // Este premio ya salió: en el próximo sorteo queda marcado entre las opciones.
+  marcarSalio(prize);
   // "No está" solo si queda con quién volver a sortear: dos personas, como
   // en "Otro premio".
   const reemplazo = names.length - winners.length >= 2;
@@ -494,6 +497,8 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   anterior = frozen.names;
   app.drawn = null;
   unfreeze(quedan.join("\n"));
+  // Con otra lista empieza otra sentada: los premios ya no figuran como "ya salió".
+  if (modo === "otraLista") olvidarSalieron();
   // "Premios" no puede quedar en más que los que quedan: con 2 personas y 3
   // premios, el próximo sorteo los premiaba a todos sin avisar.
   const nw = $<HTMLSelectElement>("nw");
@@ -502,7 +507,7 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
     // no estaba. Los otros ganadores, si los hubo, se quedan con lo suyo y no
     // entran a este sorteo.
     nw.value = "1";
-    $<HTMLInputElement>("prize").value = premio;
+    ponerPremio(premio);
   } else if (quedan.length) nw.value = String(Math.max(1, Math.min(parseInt(nw.value, 10) || 1, quedan.length - 1)));
   // Arriba del cuadro, qué cambió: quién salió de la lista, o cómo volver.
   const L = T[getLang()];

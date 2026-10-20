@@ -12,6 +12,7 @@ import { parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
 import { NOMBRE } from "./gamecard";
 import { actualizarPaso, barraActiva, verError } from "./siguiente";
+import { ponerPremio, recordarPremio, sincronizarPremios } from "./premios";
 
 /**
  * Los botones del selector, en el orden en que se muestran. Hasta el 29 de
@@ -303,6 +304,9 @@ export async function freeze(): Promise<void> {
     ...(sealTx ? { sealTx } : {}),
   };
 
+  // Los últimos premios que se usaron se ofrecen primero la próxima vez. La demo no cuenta.
+  if (!params.has("demo")) recordarPremio(prize);
+
   // Se anota en el historial de este equipo apenas se sella, no al sortear:
   // si el sorteo queda pendiente, igual hay que poder encontrarlo.
   // Una demo no es un sorteo: no se anota en Mis sorteos, aunque haya cuenta.
@@ -348,7 +352,7 @@ export function resumeFrozen(e: {
   const ta = $<HTMLTextAreaElement>("ta");
   ta.value = e.names.join("\n");
   ta.dispatchEvent(new Event("input"));
-  $<HTMLInputElement>("prize").value = e.prize;
+  ponerPremio(e.prize);
   $<HTMLSelectElement>("nw").value = String(Math.max(1, Math.min(32, e.numWinners)));
   const raffleId = e.id !== undefined ? BigInt(e.id) : undefined;
   app.frozen = {
@@ -377,9 +381,8 @@ export function unfreeze(lista: string): void {
   countdownTimer = undefined;
   app.frozen = null;
   $<HTMLTextAreaElement>("ta").disabled = false;
-  const prize = $<HTMLInputElement>("prize");
-  prize.disabled = false;
-  prize.value = "";
+  $<HTMLInputElement>("prize").disabled = false;
+  ponerPremio("");
   $<HTMLSelectElement>("nw").disabled = false;
   $("sec-frozen").style.display = "none";
   $("wait-box").style.display = "none";
@@ -401,6 +404,7 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   const btn = $<HTMLButtonElement>("btn-freeze");
   $<HTMLTextAreaElement>("ta").disabled = true;
   $<HTMLInputElement>("prize").disabled = true;
+  sincronizarPremios();
   $<HTMLSelectElement>("nw").disabled = true;
   btn.disabled = true;
   btn.dataset.i = raffleId !== undefined ? "sealed" : "frozenOk";

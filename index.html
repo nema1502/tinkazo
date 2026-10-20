@@ -196,11 +196,13 @@
       <p class="again-note" id="again-note" style="display:none" aria-live="polite"></p>
       <textarea id="ta" spellcheck="false" placeholder="Un nombre por línea…"></textarea>
       <div class="field">
-        <label for="prize" data-i="prizeLabel">¿Qué sorteás? (opcional)</label>
-        <input id="prize" type="text" maxlength="60" placeholder="Ej: Licencia JetBrains, libro, entrada…" data-i-ph="prizePh" />
+        <label for="prize" id="prize-etiqueta" data-i="prizeLabel">¿Qué sorteás? (opcional)</label>
+        <!-- Los que más se sortean y los últimos que usaste: se arman en premios.ts. El cuadro de abajo sigue siendo lo que se sella. -->
+        <div class="premio-chips" id="prize-chips" role="group" aria-labelledby="prize-etiqueta"></div>
+        <input id="prize" type="text" maxlength="60" autocomplete="off" placeholder="O escribí el tuyo…" data-i-ph="prizePh" />
       </div>
       <div class="row">
-        <label class="kicker" for="nw" data-i="winners">Premios</label>
+        <label class="kicker" for="nw" data-i="winners">Cuántos ganan</label>
         <select id="nw" class="mono"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option><option>14</option><option>15</option><option>16</option><option>17</option><option>18</option><option>19</option><option>20</option><option>21</option><option>22</option><option>23</option><option>24</option><option>25</option><option>26</option><option>27</option><option>28</option><option>29</option><option>30</option><option>31</option><option>32</option></select>
         <button class="ghost" id="btn-sample" data-i="sample">Cargar ejemplo</button>
         <button class="ghost" id="btn-sala" data-i="salaBtn">Mostrar la lista a la sala</button>
