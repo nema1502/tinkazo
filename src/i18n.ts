@@ -887,8 +887,9 @@ export const T: Record<Lang, Dict> = {
     verifHow1B: "La página rehace el sorteo sola y te dice si da el mismo nombre.",
     verifHow2: "No hace falta creer en Tinkazo",
     verifHow2B: "El código es abierto y el protocolo está escrito paso a paso.",
-    verifHow3: "Los detalles técnicos están en Cómo funciona",
+    verifHow3: "Los detalles técnicos están en el protocolo y en Seguridad",
     verifHow3B: "Acá no hacen falta. La página principal tampoco los necesita.",
+    verifHowSeg: "Seguridad y límites →",
     // --- La portada, la herramienta y Cómo funciona (3 de octubre de 2026).
     navSortear: "Sortear",
     navComo: "Cómo funciona",
@@ -2000,8 +2001,9 @@ export const T: Record<Lang, Dict> = {
     verifHow1B: "The page redoes the draw by itself and tells you whether it gives the same name.",
     verifHow2: "You don't have to believe Tinkazo",
     verifHow2B: "The code is open and the protocol is written step by step.",
-    verifHow3: "The technical details are in How it works",
+    verifHow3: "The technical details are in the protocol and in Security",
     verifHow3B: "You don't need them here. The home page doesn't need them either.",
+    verifHowSeg: "Security and limits →",
     // --- La portada, la herramienta y Cómo funciona (3 de octubre de 2026).
     navSortear: "Draw",
     navComo: "How it works",
