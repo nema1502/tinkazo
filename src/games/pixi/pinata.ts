@@ -5,7 +5,7 @@ import { beep, fanfare, note } from "../../sound";
 import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { capRecent, layoutLabels, type LabelItem } from "./pinata-labels";
-import { CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
+import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 
 /**
  * Piñata.
@@ -936,7 +936,8 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     // media pantalla y tapaban la piñata: ahora, apenas por encima de la base.
     const scaleFly = phone ? 1 : 1.15;
     const scaleSide = phone ? 0.85 : 0.9;
-    const scaleStrip = phone ? 0.7 : 0.75;
+    // Con poca altura (un celular acostado) la letra de la tira baja de 10 px: no más chica que eso.
+    const scaleStrip = Math.max(phone ? 0.7 : 0.75, 10 / (12 * k * CHIP_SCALE));
     const bounds = { w: g.w, h: g.h, top: S.top(), bottom: S.bottom() };
     items.length = 0;
     alphaOf.clear();
