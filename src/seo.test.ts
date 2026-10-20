@@ -359,8 +359,8 @@ describe("la portada y las páginas de lectura no dicen lo que el sitio no puede
 });
 
 /** La lista que sube a Stellar, completa: la misma frase en la interfaz, en las páginas y en la documentación. */
-const LISTA_ES = "la huella de la lista, la cantidad de entradas, cuántos ganadores, la ronda, la hora del sello, el premio o título que escribiste y la dirección de quien organiza; y, al sortear, la firma de la ronda y las posiciones de los ganadores.";
-const LISTA_EN = "the list's fingerprint, the number of entries, how many winners, the round, the time of the seal, the prize or title you wrote and the organizer's address; and, when drawing, the round's signature and the winners' positions.";
+const LISTA_ES = "la huella de la lista, la cantidad de entradas, cuántos ganadores, la ronda, la hora del sello, el premio o título que escribiste, la dirección de quien organiza y el número del sorteo; y, al sortear, el número que decidió la ronda, la hora del sorteo y las posiciones de los ganadores.";
+const LISTA_EN = "the list's fingerprint, the number of entries, how many winners, the round, the time of the seal, the prize or title you wrote, the organizer's address and the draw's number; and, when drawing, the number that decided the round, the time of the draw and the winners' positions.";
 
 describe("frases fijas de la segunda ronda", () => {
   it("el veredicto parcial se dice veredicto amarillo (yellow verdict), y no de otra forma", () => {
