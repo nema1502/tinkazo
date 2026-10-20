@@ -677,7 +677,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       let x = cx(p.x - cw / 2);
       let y = cy(p.y - ch / 2);
       // Primero encima, después a los costados: apilados en escalera quedaban
-      // lejos de su dueño (lo vio el agente evaluador en el trompo, en celular).
+      // lejos de su dueño (lo vio la revisión visual en el trompo, en celular).
       const libre = ([[x, y], [x - cw * 0.62, y], [x + cw * 0.62, y]] as const).map(([a, b]) => [cx(a), cy(b)] as const).find(([a, b]) => !choca(a, b));
       const golpe = (a: number, b: number): { x: number; y: number; w: number; h: number } | undefined =>
         placed.find((r) => a < r.x + r.w && a + cw > r.x && b - ch / 2 < r.y + r.h / 2 && b + ch / 2 > r.y - r.h / 2);

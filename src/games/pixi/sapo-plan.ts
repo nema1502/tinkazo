@@ -32,7 +32,7 @@ export const CAPTURE_CLEAR = 0.02;
  * A near miss rests between these multiples of the hole radius from the hole's
  * centre: the ring (about 0.4 hole radii) rides on the rim, half over the hole,
  * with its centre outside the capture radius. At 1.7 to 2.1 it landed on the
- * neighbour's name and did not read as "almost" (agente evaluador, 2 de octubre
+ * neighbour's name and did not read as "almost" (revisión visual, 2 de octubre
  * de 2026).
  */
 export const NEAR_MIN = 1.2;
@@ -44,7 +44,7 @@ export const MAX_NEARS = 2;
 const HIT_SPREAD = 0.45;
 /** Where the tosser stands (below the table). The hand, not a landing. */
 // Abajo a la derecha de la mesa: abajo al centro quedaba tapada por la caja
-// de subtítulos (agente evaluador, 2 de octubre de 2026).
+// de subtítulos (revisión visual, 2 de octubre de 2026).
 export const HAND = { x: 1.75, y: 1.7 } as const;
 
 export interface Point {

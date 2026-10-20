@@ -172,7 +172,7 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
     const list = alive().filter((q) => tSim >= q.drop + FALL);
     const r = rad();
     // En el nudo, los que quedan se ponen lado a lado: uno detrás del otro se
-    // tapaban durante cinco segundos (lo encontró el agente evaluador).
+    // tapaban durante cinco segundos (lo encontró la revisión visual).
     if ((phase === "knot" || phase === "cinch") && list.length > 1 && list.length <= 3) {
       const fila = list.slice().sort((a, b) => a.x - b.x || a.idx - b.idx);
       // Mano a mano en el nudo: los dos se tironean, se separan y se chocan.

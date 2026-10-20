@@ -86,7 +86,7 @@ const FLAGS = [0xe93d9c, YELLOW, 0x00a896, 0xff7a1a, 0x4361ee, 0xffffff];
  * Quién va de tipoy y quién de camisa y sombrero sale del nombre, no del
  * lugar en la rueda: con la ropa repartida por puesto, "Carlos" bailaba de
  * tipoy y "Elena" de sombrero, y en ropa indígena tradicional eso se lee como
- * burla (lo encontró el agente evaluador, 5 de octubre de 2026). Una lista de
+ * burla (lo encontró la revisión visual, 5 de octubre de 2026). Una lista de
  * nombres comunes y la terminación; los que no se pueden clasificar completan
  * la rueda para que siga alternada. Es solo dibujo: no toca quién gana.
  */
@@ -419,7 +419,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   // Cada fila va en el mismo sentido de giro que la rueda que van a formar: la
   // de atrás de izquierda a derecha y la de adelante al revés. Con las dos en
   // el mismo sentido, los hombres se cruzaban entre ellos camino a la rueda y
-  // se amontonaban en un costado (lo vio el agente evaluador).
+  // se amontonaban en un costado (lo vio la revisión visual).
   const rowOf = (i: number): { u: number; v: number } => {
     if (n <= 4) {
       const j = order.indexOf(i);
@@ -527,7 +527,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   // que las dos filas se abren parejas, cada una hacia los dos costados, con
   // el menor viaje. Sin correrla, la mujer de una punta quedaba al lado del
   // hombre de la otra punta, y las dos puntas daban media vuelta por el mismo
-  // costado: se amontonaban ahí (lo vio el agente evaluador).
+  // costado: se amontonaban ahí (lo vio la revisión visual).
   if (n > 4 && hombres.length > 1) {
     const nm = hombres.length, paso = Math.max(1, Math.floor(nm / 64));
     let mejor = 0, menor = Infinity;
@@ -1381,7 +1381,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
           // la cintura que se zarandea; ellos dan palmadas adelante, con los
           // brazos en V que se juntan justo en el medio en cada tiempo. Con
           // más ángulo las manos se pasaban y se leía como brazos cruzados
-          // (lo vio el agente evaluador); arriba de la cabeza no se veían.
+          // (lo vio la revisión visual); arriba de la cabeza no se veían.
           const ritmo = Math.sin(Math.PI * beat);
           const junta = 0.15 + 0.24 * Math.abs(ritmo);
           const fL = d.tipoy ? 0.55 : -junta;
@@ -1481,7 +1481,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
         const a = near(ha, { x: pb.x, y: pb.y - 0.7 * pb.s }), b = near(hb, { x: pa.x, y: pa.y - 0.7 * pa.s });
         // Mientras la rueda se cierra, siguen de la mano los que ya lo estaban;
         // los vecinos nuevos se toman cuando las manos se alcanzan, no por
-        // encima del hueco del que salió (lo vio el agente evaluador).
+        // encima del hueco del que salió (lo vio la revisión visual).
         if (cerrando && !nbPrev?.get(ia)?.includes(ib) && Math.hypot(a.x - b.x, a.y - b.y) > 0.5 * Math.min(pa.s, pb.s)) continue;
         const wdt = 0.05 * Math.min(pa.s, pb.s);
         chain.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: wdt + 2 * G.k, color: INK, cap: "round" });
@@ -1806,7 +1806,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       // El cartel va donde no tapa a nadie ni a la interfaz, y si no entra,
       // más chico. El lugar se decide una vez, en el cuadro del corte:
       // decidido en cada cuadro, aparecía tarde y saltaba de lugar cuando los
-      // que salían se iban (lo vio el agente evaluador). Si no entra en ningún
+      // que salían se iban (lo vio la revisión visual). Si no entra en ningún
       // lado, no sale: el subtítulo y el aviso rojo dicen lo mismo.
       if (bigFor !== stopAt) {
         bigFor = stopAt;
@@ -1824,7 +1824,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
         // tambalearse se acerca a los que salen, y en la final se acerca más.
         // Se cuenta adónde va a mirar entonces, no solo adónde mira ahora: si
         // no, un nombre que subía con el acercamiento quedaba arriba del
-        // cartel con su hilo cruzándolo (lo vio el agente evaluador).
+        // cartel con su hilo cruzándolo (lo vio la revisión visual).
         const c = cam.snapshot();
         const evCorte = evs.find((e) => e.s0 === stopAt);
         const tFut = evCorte ? evCorte.w0 + 0.05 : finalDuo && stopAt === FS0 ? FW0 + 0.05 : x;
@@ -1882,7 +1882,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
         // costados. Con lugares fijos casi nunca había uno libre con la cámara
         // cerca; con la columna del medio sola, con nueve en la rueda los de
         // atrás y los de adelante se pisaban en alto y el cartel no salía (lo
-        // vio el agente evaluador). En el celular, debajo del contador y del aviso.
+        // vio la revisión visual). En el celular, debajo del contador y del aviso.
         const q1 = poses[2] as { x: number; y: number; z: number };
         // El medio de la rueda, que en una rueda chica se corre hacia la sala (`shapeOf`).
         const midY = G.cy + ringShape(epochs[epochAt(x)] as Epoch).cv * G.ry;

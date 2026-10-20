@@ -153,8 +153,8 @@ export class Camera {
     const speed = dt > 0 ? Math.abs(z - this.lastZoom) / dt : 0;
     this.lastZoom = z;
     // Tope en 0,05: con 0,1 los nombres se volvían ilegibles durante los
-    // acercamientos de Oruro, la constelación y luz roja (lo encontró el agente
-    // evaluador, 30 de septiembre de 2026).
+    // acercamientos de Oruro, la constelación y luz roja (lo encontró la revisión
+    // visual, 30 de septiembre de 2026).
     this.blurK += (Math.min(0.05, speed * 0.055) - this.blurK) * Math.min(1, dt * 12);
   }
 

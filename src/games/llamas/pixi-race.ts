@@ -1010,8 +1010,8 @@ export async function llamasPixi(
   /**
    * La cámara de todos los días, sin dejar el primer carril debajo de la
    * barra de arriba: la barra del recorrido cruzaba el chip del carril 1 y el
-   * recuadro del número público tapaba su nombre (lo encontró el agente
-   * evaluador). Los primeros planos no pasan por acá: miran lo que tienen que
+   * recuadro del número público tapaba su nombre (lo encontró la revisión
+   * visual). Los primeros planos no pasan por acá: miran lo que tienen que
    * mirar aunque el carril 1 quede fuera.
    */
   function look(x: number, y: number, z: number, rate: number): void {

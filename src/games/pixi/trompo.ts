@@ -1084,7 +1084,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       const tense = tAll >= next - D_WIND;
       // Al empezar el mano a mano, un corte rápido a los dos: la cámara venía
       // siguiendo al último que salió volando, y el "¡mano a mano!" se decía
-      // sobre una pantalla vacía (lo encontró el agente evaluador).
+      // sobre una pantalla vacía (lo encontró la revisión visual).
       const recien = tAll - T_DUEL < 0.6;
       if (wob) cam.lookAt(a.x, a.y - 30 * S.u(), 2.4, 4);
       else cam.lookAt((a.x + b.x) / 2, (a.y + b.y) / 2 - 20 * S.u(), slow ? 2.5 : tense ? 2.2 : 2.0, recien ? 9 : slow ? 6 : 3);
