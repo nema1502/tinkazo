@@ -4,7 +4,7 @@ import { musicHold } from "../../music";
 import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, note } from "../../sound";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
-import { CREAM, INK, MONO, YELLOW, hash, mountPixi, seeded, type PixiStage } from "./stage";
+import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, hash, mountPixi, seeded, type PixiStage } from "./stage";
 import { LINES, T_BOARD, T_CROWN, T_DOCK, T_RUN, planCableCar } from "./cablecar-plan";
 
 /**
@@ -739,7 +739,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
 
   /** Un chip sin cara para los que no entran en el andén: "+13". */
   function plusChip(m: number, sc: number): Container {
-    const k = S.u() * sc;
+    const k = S.u() * sc * CHIP_SCALE;
     const c = new Container();
     const label = S.text(`+${m}`, { fontSize: 12 * k, fontWeight: "900", fill: INK });
     label.position.set(9 * k, 3.5 * k);
