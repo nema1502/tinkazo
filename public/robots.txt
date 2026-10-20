@@ -1,4 +1,3 @@
 User-agent: *
 Allow: /
-Disallow: /verificar.html
 Sitemap: https://tinkazo.app/sitemap.xml
