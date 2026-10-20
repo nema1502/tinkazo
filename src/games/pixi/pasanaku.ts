@@ -765,12 +765,17 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
       const oy = (a.h + o.h) / 2 - Math.abs(a.y - o.y);
       return ox > 0 && oy > 0 ? ox * oy : 0;
     };
-    const live = alive().filter((q) => tAll >= q.drop + FALL);
+    // Los nombres se muestran cuando quedan ocho en la tela, y a los que ya
+    // cayeron. Con 65 o más, pasar lista no sale: contar solo a los que
+    // cayeron hacía aparecer los nombres de los primeros ocho y desaparecer de
+    // golpe al caer el noveno.
+    const vivos = alive();
+    const live = vivos.filter((q) => tAll >= q.drop + FALL);
     for (const q of bundles) {
       if (q.chip) q.chip.visible = false;
       if (q.outChip) q.outChip.visible = false;
     }
-    if (!roll.length && live.length <= 8 && phase !== "lift") {
+    if (!roll.length && vivos.length <= 8 && phase !== "lift") {
       if (phase === "knot") {
         // En el nudo, grandes y centrados encima de cada bulto; de izquierda
         // a derecha, uno abajo y el siguiente arriba. Del tamaño de siempre
