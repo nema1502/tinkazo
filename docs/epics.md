@@ -1179,7 +1179,7 @@ Casi todo es renta de almacenamiento y la tarifa la pone la red. Se corrigió en
 - **Testnet se borra el 16 de diciembre de 2026, y ahora se dice.** Lo dicen precios, términos, seguridad y la verificación de un comprobante de testnet. Varias frases prometían que el registro dura para siempre: eso es en mainnet, mientras se pague la renta.
 - **La verificación distingue** un sorteo que el contrato no tiene de una red que no contesta. Antes los dos decían "no es señal de que algo esté mal" y mostraban la tarjeta del ganador.
 - **Promesas medidas:** "cada paso se puede comprobar" en vez de "no hace falta confiar en nadie". Seguridad nombra los dos ataques abiertos, el de sellar varias listas y el de inflar la lista antes de sellar, y aclara que la página ve los sellos repetidos de la misma cuenta, no de otras.
-- **drand** lo firma una red de organizaciones independientes, y ni quien organiza ni Tinkazo lo eligen. Son cuatro relays que se rotan; no se consultan todos.
+- **Antes, drand lo firmaba:** una red de organizaciones independientes, y ni quien organiza ni Tinkazo lo eligen. Son cuatro relays que se rotan; no se consultan todos.
 - **Detalles exactos:**
   - qué guarda la cadena (también la cantidad, el premio y la dirección de quien organiza);
   - que con Google, Pollar recibe el nombre, el correo y la foto;

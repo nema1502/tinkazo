@@ -25,7 +25,7 @@ Sorteado con Tinkazo · https://tinkazo.app
 
 La página rehace en el navegador de quien la abre, sorteo por sorteo, lo que no necesita la cadena:
 
-1. **La firma de la ronda.** La firma BLS de la ronda pública de drand quicknet se verifica con la clave pública del faro. Si no verifica, el sorteo no cuadra.
+1. **La prueba de la ronda (firma BLS).** La firma BLS de la ronda pública de drand quicknet se verifica con la clave pública del faro. Si no verifica, el sorteo no cuadra.
 2. **El ganador.** La firma da la semilla (el SHA-256 de la firma). Con esa semilla y la huella de la lista se rehace la selección del protocolo, y tiene que dar los mismos ganadores que dice el enlace.
 3. **La huella de la lista.** Se recalcula desde los nombres del enlace, con la lista canónica del protocolo, y se muestra para poder compararla con la que quedó en la cadena.
 

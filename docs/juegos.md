@@ -67,7 +67,7 @@ Donde `<juego>` es el valor de `?demo=`: `race`, `chovena`, `trompo`, `pinata`, 
 |---|---|---|
 | 1 | El sorteo termina y muestra un ganador | Un juego que se cuelga deja el evento sin resultado |
 | 2 | **El ganador en pantalla es el que fijó el protocolo** | Es la razón de existir del producto |
-| 3 | La firma de la ronda quedó verificada | El sorteo usó aleatoriedad real, no inventada |
+| 3 | La prueba de la ronda quedó verificada | El sorteo usó aleatoriedad real, no inventada |
 | 4 | El enlace a la ronda apunta a drand | El participante puede auditar |
 | 5 | El aviso al ganador queda armado | El flujo posterior no se rompió |
 | 6 | El juego devolvió la pantalla al terminar | Sin esto el sitio queda inusable |
