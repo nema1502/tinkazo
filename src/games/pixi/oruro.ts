@@ -821,13 +821,16 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     }
     const { shown } = selectTags(inView, cap, shownNow);
     const th = 22 * kc;
+    /** Cuánto se agranda el chip: el tachado 1,15 y el que se presenta 1,25. Se reparte con ese tamaño. */
+    const chipScale = (d: Dancer): number => outTreatment(d.alive ? -1 : tAll - d.left).scale * (d.idx === roll.hi ? 1.25 : 1);
     const items: LabelItem[] = [];
     for (let i = 0; i < shown.length; i++) {
       const d = byIdx.get(shown[i] as number) as Dancer;
       const c = poolOf.get(d.idx) as TagCandidate;
       tagOf(d, kc, scale);
-      const w = (d.tagW ?? sz.w) + 3 * kc;
-      items.push({ id: d.idx, x: c.sx - w / 2, y: c.sy - th - 10 * kk, w, h: th + 3 * kc, priority: (c.out ? 1000 : 0) + c.depth });
+      const sc = chipScale(d);
+      const w = (d.tagW ?? sz.w) * sc + 3 * kc, hh = th * sc + 3 * kc;
+      items.push({ id: d.idx, x: c.sx - w / 2, y: c.sy - hh - 10 * kk, w, h: hh, priority: (c.out ? 1000 : 0) + c.depth });
     }
     // The counter and the "+N" chip are off limits.
     const moreH = 26 * k, moreY = S.top() + 10 * k + ch + 10 * k;
@@ -841,11 +844,12 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       const c = poolOf.get(d.idx) as TagCandidate;
       const chip = d.chip as Container;
       const look = outTreatment(d.alive ? -1 : tAll - d.left);
-      const s = look.scale * (pl.id === hi ? 1.25 : 1);
+      const s = chipScale(d);
       chip.visible = true;
       chip.scale.set(s);
       chip.alpha = look.alpha;
-      chip.position.set(pl.x, pl.y + 11 * kc);
+      // El chip crece desde su centro vertical: va al medio de su lugar, que incluye la sombra.
+      chip.position.set(pl.x, pl.y + (th * s + 3 * kc) / 2);
       const premiado = winners.includes(d.idx);
       (d.strike as Graphics).visible = look.struck && !premiado;
       if (d.prize) d.prize.visible = look.struck && premiado && !d.alive && tAll - d.left < OUT_HOLD;
@@ -853,7 +857,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       shownNext.add(pl.id);
       if (d.alive) aliveTagged++;
       // The leader: from the tag down to the head of its own devil.
-      const w = (d.tagW ?? sz.w) * s, cx = pl.x + w / 2, by = pl.y + th * s - (s - 1) * 11 * kc;
+      const w = (d.tagW ?? sz.w) * s, cx = pl.x + w / 2, by = pl.y + (th * s + 3 * kc) / 2 + 11 * kc * s;
       const col = S.color(d.idx);
       leaders.moveTo(cx, by).lineTo(c.sx, c.sy).stroke({ width: 5 * kk * 0.5, color: INK, alpha: look.alpha })
         .moveTo(cx, by).lineTo(c.sx, c.sy).stroke({ width: 2.4 * kk * 0.5, color: col, alpha: look.alpha })
