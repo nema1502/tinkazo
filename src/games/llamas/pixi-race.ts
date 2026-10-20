@@ -46,13 +46,29 @@ const P_TAIL = 0.7;
 /** Colores de lana de llama: blanca, café, crema, oscura, gris. */
 const FUR = [0xf3ead8, 0xa0683a, 0xe4c99a, 0x5b3a29, 0xc2bab0, 0x8a5a3c, 0xefe3cc, 0x6e4a36];
 
+/** Un rectángulo en unidades del juego (o de pantalla, según de dónde venga). */
+interface Caja {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 interface Runner {
   root: Container;
   tag: Container;
   mark: Text;
+  /** El cuerpo de la llama, en su propio sistema (se mide la primera vez que hace falta). */
+  caja?: Caja;
   /** Pone la postura: `ph` es la fase del paso, `speed` 1 es ir al ritmo de la carrera. */
   pose(ph: number, speed: number, beat: { kind: string; p: number } | null, now: number): void;
 }
+
+/** El cuerpo de una llama, cohete o balsa: lo que ocupa el dibujo sin el nombre. */
+const medirCaja = (root: Container): Caja => {
+  const b = root.getLocalBounds();
+  return { x: b.x, y: b.y, w: b.width, h: b.height };
+};
 
 const dim = (c: number, f: number): number => {
   const r = ((c >> 16) & 255) * f, g = ((c >> 8) & 255) * f, b = (c & 255) * f;
@@ -1228,12 +1244,56 @@ export async function llamasPixi(
     // achica con la pista, para no encimarse con el del carril de al lado.
     const comp = 1 / Math.max(1, cam.zoom);
     const muros = [L.board, L.aviso].filter((b): b is Container => !!b && b.visible).map((b) => b.getBounds());
-    const adentro = (tag: Container): void => {
+    const piso = G.sh - S.bottom();
+    /** El cuerpo de la llama en pantalla, sin el nombre. */
+    const cajaEn = (r: Runner, sc: number): Caja => {
+      const caja = (r.caja ??= medirCaja(r.root));
+      const a = cam.toScreen(r.root.x + caja.x * sc, r.root.y + caja.y * sc, sw, G.sh);
+      const b = cam.toScreen(r.root.x + (caja.x + caja.w) * sc, r.root.y + (caja.y + caja.h) * sc, sw, G.sh);
+      return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+    };
+    /** Qué parte de la llama tapa un rectángulo de pantalla, de 0 a 1. */
+    const tapa = (c: Caja, x: number, y: number, w: number, h: number): number => {
+      const ix = Math.max(0, Math.min(x + w, c.x + c.w) - Math.max(x, c.x));
+      const iy = Math.max(0, Math.min(y + h, c.y + c.h) - Math.max(y, c.y));
+      return (ix * iy) / Math.max(1, c.w * c.h);
+    };
+    /**
+     * El nombre de cada llama va a la izquierda de su cuerpo, entero y adentro
+     * de la pantalla. Si para quedar entero tiene que correrse encima de su
+     * propia llama, se achica (hasta 0,6) o queda solo la cara, pegada al
+     * borde: antes el nombre se corría encima de la llama y tapaba el cuerpo.
+     * Los dos del duelo siempre tienen su nombre entero, y el que cae debajo de
+     * la pista se apaga, porque asomaba cortado detrás de la caja del relator.
+     */
+    const adentro = (r: Runner, sc: number, duo: boolean): void => {
+      const tag = r.tag;
+      const s0 = tag.scale.x;
       const p = cam.toScreen(tag.x, tag.y, sw, G.sh);
       const alto = (tag.height / 2) * z;
+      if (!duo && p.y + alto > piso) {
+        tag.visible = false;
+        return;
+      }
       let min = 8 * u;
       for (const m of muros) if (p.y + alto > m.y && p.y - alto < m.y + m.height) min = Math.max(min, m.x + m.width + 8 * u);
-      if (p.x < min) tag.x += (min - p.x) / z;
+      if (p.x >= min) return;
+      const cuerpo = cajaEn(r, sc);
+      tag.x += (min - p.x) / z;
+      const ancho = tag.width * z;
+      if (tapa(cuerpo, min, p.y - alto, ancho, 2 * alto) <= 0.1) return;
+      const f = (cuerpo.x - 4 * u - min) / Math.max(1, ancho);
+      if (duo || f >= 0.6) {
+        tag.scale.set(s0 * Math.min(1, Math.max(0.6, f)));
+        return;
+      }
+      const cara = tag.children[1];
+      const fondo = tag.children[0];
+      const texto = tag.children[2];
+      if (!cara || !fondo || !texto) return;
+      fondo.visible = false;
+      texto.visible = false;
+      if (tapa(cuerpo, min + cara.x * s0 * z, p.y - alto, cara.width * s0 * z, 2 * alto) > 0.1) tag.visible = false;
     };
 
     // Los corredores.
@@ -1275,8 +1335,11 @@ export async function llamasPixi(
       // El nombre aparece cuando llega su chip de la clasificatoria, y late una vez.
       const late = h > 0.15 && h < 0.55 ? Math.sin(((h - 0.15) / 0.4) * Math.PI) * 0.35 : 0;
       r.tag.scale.set((1 + late) * comp);
+      // Todo el nombre visible para medirlo entero: adentro() puede apagar partes en este cuadro.
+      r.tag.visible = true;
+      for (const c of r.tag.children) c.visible = true;
       r.tag.position.set(x - (space ? 82 : lake ? 86 : 70) * sc - r.tag.width, y - 30 * sc);
-      adentro(r.tag);
+      adentro(r, sc, k === story.winner || k === story.rival);
       r.tag.alpha = (phase === "done" && !premio ? 0.35 : 1) * Math.max(0, Math.min(1, (h + 0.05) / 0.2));
       if (quieto) continue;
       // Polvo (o estela), cada grano calculado desde su hora.
