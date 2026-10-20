@@ -622,14 +622,15 @@ export async function constellationPixi(names: string[], winners: readonly numbe
       const key = ni * 2 + (big ? 1 : 0);
       let c = chipOf.get(key);
       if (!c) {
-        c = S.chip(names[nd.idx] ?? "", big ? 1.7 : names.length <= 4 ? 1.6 : 1);
+        c = S.chip(names[nd.idx] ?? "", big ? (S.portrait() ? 1.2 : 1.7) : names.length <= 4 ? (S.portrait() ? 1.1 : 1.6) : 1);
         chipOf.set(key, c);
         chipsLayer.addChild(c);
       }
       c.scale.set(1);
-      // Nunca más chico que su tamaño ni más ancho que el 82% de la pantalla,
-      // o el 60% si no es de los grandes: con pocos van los cuatro a la vez.
-      c.scale.set(Math.min(Math.max(1, z), (W0 * (big ? 0.82 : 0.6)) / c.width));
+      // Del tamaño de siempre, sin crecer con el zoom de la cámara (en el
+      // amague, con el zoom, el nombre tapaba el paquete), y nunca más ancho
+      // que el 82% de la pantalla, o el 60% si no es de los grandes.
+      c.scale.set(Math.min(1, (W0 * (big ? 0.82 : 0.6)) / c.width));
       const w = c.width, h = c.height;
       const gx = (nd.r + 6 * k) * z, gy = (nd.r + 10 * k) * z;
       // El del amague va del lado contrario a la ganadora, que está pegada:
