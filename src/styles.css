@@ -1521,3 +1521,8 @@
   .premio-chips button[aria-pressed="true"]:disabled { color: var(--on-accent); }
   .premio-chips button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 6px var(--yellow); }
   @media (prefers-reduced-motion: reduce) { .premio-chips button[aria-pressed="true"] { transform: none; } }
+  /* En el celular entran cuatro por renglón en vez de tres: menos alto antes del cuadro. */
+  @media (max-width: 460px) {
+    .premio-chips { gap: 6px; }
+    .premio-chips button { padding: 0 10px; font-size: 13px; }
+  }
