@@ -184,15 +184,26 @@
   .auth .hello.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
   .auth .hello-face { width: 24px; height: 24px; border: 2px solid var(--ink); background: var(--card); flex: 0 0 auto; }
   .auth a.hello:hover { text-decoration: underline; }
+  /* Una ventana siempre entra o se recorre (19 de octubre de 2026). Centrar con
+     `align-items: center` cortaba por arriba y por abajo toda tarjeta más alta
+     que la pantalla, y lo cortado no se alcanzaba ni con scroll: el panel de la
+     cuenta en una laptop a 100 %, el de ingreso en un celular acostado. Ahora el
+     fondo se recorre y la tarjeta se centra con `margin: auto`, que cuando no
+     sobra lugar se queda arriba y deja bajar. Las tarjetas con encabezado y pie
+     fijos (la cuenta, el importador) se topan a la altura de la pantalla con
+     `--modal-pad` y recorren solo su cuerpo. */
   .modal-back {
+    --modal-pad: 20px;
     position: fixed; inset: 0; z-index: 70; background: rgba(12, 8, 20, 0.72);
-    display: flex; align-items: center; justify-content: center; padding: 20px;
+    display: flex; padding: var(--modal-pad);
+    overflow-y: auto; overscroll-behavior: contain;
   }
   .modal-card {
     background: var(--card); color: var(--ink); border: var(--bw) solid var(--ink); box-shadow: var(--sh);
-    padding: 22px; width: 100%; max-width: min(380px, calc(100vw - 28px));
+    padding: 22px; width: 100%; max-width: min(380px, calc(100vw - 28px)); margin: auto;
     display: flex; flex-direction: column; gap: 12px;
   }
+  @media (max-height: 560px), (max-width: 460px) { .modal-back { --modal-pad: 12px; } }
   .modal-card h3 { font-size: 19px; font-weight: 800; }
   /* La lista que se pega para rearmar un comprobante: monoespaciada, porque a
      veces son direcciones y ahí importa cada carácter. */
@@ -214,7 +225,8 @@
      tarjeta redonda del sitio a propósito: se lee como el momento de entrar,
      no como una parte más de la página. */
   .modal-card.login {
-    position: relative; max-width: min(420px, calc(100vw - 28px)); max-height: calc(100dvh - 28px); overflow-y: auto;
+    position: relative; max-width: min(420px, calc(100vw - 28px));
+    max-height: calc(100vh - 2 * var(--modal-pad)); max-height: calc(100dvh - 2 * var(--modal-pad)); overflow-y: auto;
     border: 0; border-radius: 22px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.38);
     padding: 34px 32px 16px; gap: 0;
   }
