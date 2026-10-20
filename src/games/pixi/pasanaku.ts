@@ -757,7 +757,14 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
     const W = S.sw(), H = S.sh(), u = S.u();
     const lo = S.top() + 6 * u, hi = H - S.bottom() - 6 * u;
     const puestos: Caja[] = [];
-    const choca = (a: Caja): boolean => puestos.some((o) => a.x < o.x + o.w && a.x + a.w > o.x && Math.abs(a.y - o.y) < (a.h + o.h) / 2);
+    // La cuenta de la tela, arriba a la izquierda: un nombre que sale no la tapa.
+    puestos.push({ x: 22 * u, y: S.top() + 32.5 * u, w: potText.width + 45 * u, h: 45 * u });
+    /** Cuánto de `a` cae encima de `o`, en píxeles cuadrados (`y` es el centro de cada nombre). */
+    const encima = (a: Caja, o: Caja): number => {
+      const ox = Math.min(a.x + a.w, o.x + o.w) - Math.max(a.x, o.x);
+      const oy = (a.h + o.h) / 2 - Math.abs(a.y - o.y);
+      return ox > 0 && oy > 0 ? ox * oy : 0;
+    };
     const live = alive().filter((q) => tAll >= q.drop + FALL);
     for (const q of bundles) {
       if (q.chip) q.chip.visible = false;
@@ -803,7 +810,7 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
     // quién había quedado afuera (crítico de juegos, 16 de octubre de 2026).
     // Como en el trompo: de a cuatro como mucho (los más recientes), con su
     // estrella si se van con premio, y se apagan al llegar. Encima de su
-    // bulto, y si choca con otro nombre, sube.
+    // bulto, o al costado si ahí hay otro nombre.
     if (phase !== "lift") {
       const salen = bundles.filter((q) => !q.alive && q.out < OUT_LIFE).sort((a, b) => a.out - b.out || b.slot - a.slot).slice(0, OUT_MAX);
       for (const q of salen) {
@@ -815,10 +822,21 @@ export async function pasanakuPixi(names: string[], winners: readonly number[], 
         chip.scale.set(1);
         chip.scale.set(Math.min(q.cs0 + (1 - q.cs0) * b, (W - 20 * u) / chip.width));
         const w = chip.width, h = chip.height;
-        // Por encima de lo que alcanza el bulto girando: gira desde su base.
-        const caja: Caja = { x: clamp(v.x - w / 2, 8 * u, W - 8 * u - w), y: v.y - 47 * v.scale.y - h / 2 - 2 * u, w, h };
-        for (let i = 0; i < 4 && choca(caja); i++) caja.y -= h + 2 * u;
-        caja.y = clamp(caja.y, lo + h / 2, hi - h / 2);
+        // Encima de lo que alcanza el bulto girando, que es donde sale su
+        // nombre. Si ahí choca con otro, prueba a los costados y hasta tres
+        // renglones más arriba, y se queda con el de menos encima, que sea lo
+        // más cerca de su bulto. Antes subía hasta cuatro renglones y quedaba
+        // sobre los nombres de los que siguen en la tela.
+        const x0 = clamp(v.x - w / 2, 8 * u, W - 8 * u - w), y0 = v.y - 47 * v.scale.y - h / 2 - 2 * u;
+        let caja: Caja = { x: x0, y: clamp(y0, lo + h / 2, hi - h / 2), w, h };
+        let menor = Infinity;
+        for (const dx of [0, -(w + 4 * u), w + 4 * u]) {
+          for (let j = 0; j <= 3; j++) {
+            const c: Caja = { x: clamp(x0 + dx, 8 * u, W - 8 * u - w), y: clamp(y0 - j * (h + 2 * u), lo + h / 2, hi - h / 2), w, h };
+            const costo = puestos.reduce((s, o) => s + 10 * encima(c, o), 0) + h * (Math.abs(c.x - x0) + Math.abs(c.y - y0));
+            if (costo < menor) [menor, caja] = [costo, c];
+          }
+        }
         chip.position.set(caja.x, caja.y);
         chip.alpha = clamp((OUT_LIFE - q.out) / 0.5, 0, 1);
         chip.visible = true;
