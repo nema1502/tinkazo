@@ -32,16 +32,17 @@ function hits(x: number, y: number, w: number, h: number, list: Rect[]): boolean
  * so the result covers processed items only. Labels that find no free spot are
  * omitted too (cap them upstream). `blocked` rectangles (e.g. the piñata) are avoided
  * when possible; if that fails, a cheap short search ignores them but still never
- * overlaps another label.
+ * overlaps another label. `hard` rectangles (the counter, the kid) are never overlapped,
+ * not even by that short search.
  */
-export function layoutLabels(items: LabelItem[], bounds: Bounds, blocked: Rect[] = []): Placed[] {
+export function layoutLabels(items: LabelItem[], bounds: Bounds, blocked: Rect[] = [], hard: Rect[] = []): Placed[] {
   const bw = size(bounds.w), top = fin(bounds.top), bot = Math.max(top, fin(bounds.h) - fin(bounds.bottom));
   const order = items
     .map((it, i) => ({ it, i }))
     .sort((a, b) => fin(b.it.priority) - fin(a.it.priority) || a.i - b.i)
     .slice(0, MAX_LABEL_ITEMS);
-  const placed: Rect[] = [];
-  const withBlocked: Rect[] = [...blocked];
+  const placed: Rect[] = [...hard];
+  const withBlocked: Rect[] = [...blocked, ...hard];
   const out: Placed[] = [];
   let w = 0, h = 0, ax = 0, ay = 0, sx = 1, sy = 1, rx = 0, ry = 0;
   const clampX = (x: number): number => Math.min(Math.max(0, x), Math.max(0, bw - w));

@@ -996,8 +996,10 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     // los nombres de los caramelos que le caen cerca le tapaban las piernas.
     const k0 = cam.toScreen(kidX - 38 * g.ks, g.ky - 140 * g.ks, g.w, g.h);
     const k1 = cam.toScreen(kidX + 26 * g.ks, g.ky + 4 * g.ks, g.w, g.h);
-    blocked.push({ x: Math.min(k0.x, k1.x), y: Math.min(k0.y, k1.y), w: Math.abs(k1.x - k0.x), h: Math.abs(k1.y - k0.y) });
-    for (const o of layoutLabels(items, bounds, blocked)) {
+    // El chico y la cuenta no se tapan nunca: si no hay lugar, el nombre no sale.
+    const kidRect = { x: Math.min(k0.x, k1.x), y: Math.min(k0.y, k1.y), w: Math.abs(k1.x - k0.x), h: Math.abs(k1.y - k0.y) };
+    const counterRect = { x: 22 * k, y: S.top() + 10 * k, w: counter.width + 45 * k, h: 45 * k };
+    for (const o of layoutLabels(items, bounds, blocked, [counterRect, kidRect])) {
       if (o.id === -100000) {
         moreBadge.visible = true;
         moreBadge.position.set(o.x, o.y);
