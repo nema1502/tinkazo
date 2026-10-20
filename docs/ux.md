@@ -46,7 +46,9 @@ Es lo que mira `audit-flujo.mjs` en cada paso (lista cargada, sellada y esperand
 - [ ] Lo que está a la vista se puede tocar: nada encima, en el punto del clic.
 - [ ] No hay scroll horizontal.
 - [ ] En el celular, los blancos de toque miden 44 px o más.
-- [ ] El indicador de pasos marca el paso en que se está y los anteriores con ✓.
+- [ ] El indicador de pasos marca el paso en que se está y los anteriores con ✓, y entra en una sola línea sin cortarse, también en un celular de 320 px.
+- [ ] Quien llega por primera vez, con la bienvenida abierta: con la lista cargada, la única acción principal a la vista es la del paso. "Entendido" pasa a secundario, porque dos botones del color de la casa no dicen cuál es "el siguiente".
+- [ ] Ningún botón del flujo corta su texto, y si el texto no entra en un renglón se parte limpio ("Siguiente premio" y debajo "(quedan 16)"), sin un separador ni un número suelto. Se mira de 320 a 414 px: 360 y 375 son los anchos de celular más comunes y las cinco pantallas de arriba no los cubren.
 - [ ] El texto se lee: contraste de 4,5 a 1 (3 a 1 el texto grande), en los dos temas.
 - [ ] Mientras corre la cuenta, el botón dice cuánto falta; al llegar a cero se enciende, con pulso y sin él si se pide menos movimiento.
 - [ ] Con el botón fuera de la pantalla, la barra lo ofrece encendido y su clic sortea.
@@ -61,7 +63,7 @@ pnpm build && pnpm preview &        # sirve dist/ en :4173
 CDP_PORT=9684 node scripts/audit-flujo.mjs --base http://localhost:4173
 ```
 
-Recorre el flujo de verdad con la cuenta de prueba de testnet (la única que no necesita a nadie y se carga sola con fondos), una vez por pantalla y por tema, y deja una captura por paso en `--out` (por defecto `docs/capturas/flujo`, que no se versiona). Cada recorrido arranca un Chrome nuevo: es alguien que llega por primera vez, con la bienvenida a la vista.
+Recorre el flujo de verdad con la cuenta de prueba de testnet (la única que no necesita a nadie y se carga sola con fondos), una vez por pantalla y por tema, y deja una captura por paso en `--out` (por defecto `docs/capturas/flujo`, que no se versiona), más una del inicio de la página con el indicador de pasos arriba. Cada recorrido arranca un Chrome nuevo: es alguien que llega por primera vez, con la bienvenida a la vista. Al final mira además unos anchos de celular (320, 360, 375 y 414 px) con la lista de ejemplo, sin grabar nada en Stellar.
 
 | Opción | Qué hace |
 |---|---|
@@ -70,16 +72,33 @@ Recorre el flujo de verdad con la cuenta de prueba de testnet (la única que no 
 | `--vistas` | Cuáles de las pantallas, separadas por coma (`laptop-100,escritorio,tablet-h,celular-h,celular,zoom-200`). |
 | `--temas` | `dark`, `light` o los dos (`dark,light`). Por defecto solo `dark`: la geometría es la misma y el flujo es largo. |
 | `--sin-resto` | En qué pantallas mirar también el caso en que no queda nadie sin premio, donde la principal es "Compartir el comprobante" (por defecto `laptop-100,celular-h`; `none` para saltearlo). |
+| `--anchos` | Los anchos de celular que se miran al final, sin Stellar (por defecto `320,360,375,414`; `none` para saltearlos). Miran lo que el ancho rompe: scroll de costado, el indicador de pasos en una línea y con margen, y que ningún botón corte su texto. |
+| `--solo-anchos` | Corre solo los anchos de celular: un minuto por ancho, sin cuenta de prueba ni testnet. |
 | `--lang` | `es` o `en`. |
 | `--sello-max` | Segundos que espera al sellado en testnet (por defecto 240). |
 | `--reintentos` | Cuántas veces repite una pantalla si el sellado falla o tarda (por defecto 2, con un respiro de 15 s entre una y otra; lo medido en un intento descartado no cuenta). |
 
-Cada recorrido dura unos dos o tres minutos, casi todo esperando la ronda; las seis pantallas en un tema, un cuarto de hora. Como todos los auditores: `CDP_PORT=<puerto>` para tener su propio Chrome (nunca cierres uno que no abriste), la salida marca con ✓ y ✗, y sale con código 1 si algo falla.
+Cada recorrido dura unos dos minutos, casi todo esperando la ronda; las seis pantallas en un tema, un cuarto de hora (y cuatro minutos más los anchos de celular). Como todos los auditores: `CDP_PORT=<puerto>` para tener su propio Chrome (nunca cierres uno que no abriste), la salida marca con ✓ y ✗, y sale con código 1 si algo falla.
 
 Un ✗ en "una acción principal a la vista" dice dónde quedó el botón de verdad y si hay barra: es el síntoma que originó todo esto, y es el primero que hay que mirar.
 
-## Qué se midió el 19 de octubre de 2026
+## Qué se midió el 19 y el 20 de octubre de 2026
 
-Posición del botón de la acción principal en cada paso, contada en alto de pantalla. Antes de esta tarea y después, con la cuenta de prueba en testnet y la pantalla donde deja la página al usuario (`scripts/audit-flujo.mjs`).
+La acción principal de cada paso, medida por `audit-flujo.mjs` con la cuenta de prueba en testnet, como alguien que llega por primera vez (con la bienvenida a la vista) y con la pantalla donde la deja la propia página. El "antes" es la herramienta del 19 de octubre, sin esta tarea; el "después", la del 20. Entre paréntesis, dónde quedaba el borde de arriba del botón de verdad, en píxeles desde el borde de arriba de la pantalla; el alto de la pantalla va en la primera columna. "Barra" es que el botón de verdad queda fuera y se ve el de la barra de "lo que sigue".
 
-(Se completa con la medida final.)
+| Pantalla (alto) | Sellar la lista | Lanzar, esperando la ronda | Siguiente premio, con el ganador | Sellar de nuevo |
+|---|---|---|---|---|
+| laptop-100 (632) | fuera (768) → barra | fuera (1071) → a la vista | fuera (867) → a la vista | a la vista → a la vista |
+| escritorio (720) | fuera (768) → barra | fuera (1071) → a la vista | fuera (867) → a la vista | a la vista → a la vista |
+| tablet-h (560) | fuera (671) → barra | fuera (990) → a la vista | fuera (770) → a la vista | a la vista → a la vista |
+| celular-h (390) | fuera (808) → barra | fuera (984) → a la vista | fuera (810) → a la vista | fuera (429) → barra |
+| celular (844) | fuera (1063) → barra | fuera (1889) → a la vista | fuera (1574) → a la vista | a la vista → a la vista |
+| zoom-200 (316) | fuera (811) → barra | fuera (1163) → a la vista | fuera (1219) → barra | fuera (485) → barra |
+
+De las 30 mediciones (seis pantallas por cinco pasos), antes 20 no tenían ninguna acción a la vista; después, ninguna. El paso de "ronda lista" ya se veía antes (la página llevaba la pantalla al botón al nacer la ronda) y se sigue viendo, sin mover la pantalla.
+
+El primer paso queda con la barra en todas las pantallas porque quien llega por primera vez tiene la bienvenida arriba de la lista. Quien ya la cerró, y llega arriba de la página con la lista cargada, ve el botón de sellar entero en laptop-100 y en escritorio; en tablet-h, en el celular y a 200 % de zoom queda un poco más abajo (en el celular parado, 57 px) y lo lleva la barra. Es la red de seguridad cumpliendo su papel: la lista se carga arriba, y compactarla para que el botón entre en todas las pantallas es otra decisión, que esta medida deja a la vista.
+
+Los anchos de celular que las cinco pantallas no cubren se miraron aparte, de 320 a 414 px. Ahí aparecieron dos defectos que ninguna medición del flujo veía: a 360 y 375 px (los más comunes) "Siguiente premio" se partía con el separador suelto al principio del segundo renglón, y a 320 px el indicador de pasos llegaba pegado al borde. Con lo corregido no hay scroll de costado ni texto cortado en ninguno de esos anchos.
+
+Con esto pasó el auditor entero sobre la versión definitiva: las seis pantallas en tema oscuro (468 comprobaciones) y claro (362), el caso en que no queda nadie sin premio, y los anchos de celular. En el tema claro testnet rechazó un sellado y el auditor repitió esa pantalla solo, como está previsto.
