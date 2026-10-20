@@ -807,7 +807,7 @@ export const T: Record<Lang, Dict> = {
     masClaseT: "Sorteo en clase", masClaseB: "Para elegir quién pasa a exponer o armar grupos, de forma justa y sin que el ganador lo elija nadie.",
     masVerifT: "Sorteo verificable", masVerifB: "Cómo rehacer un resultado sin confiar en Tinkazo, y qué no promete: la lista la arma quien sortea.",
     // --- Las páginas que la gente busca: meetups, clases y sorteo verificable (20 de octubre de 2026).
-    pgCta: "Sortear ahora, es gratis", pgRelT: "Mirá también",
+    pgCta: "Sortear ahora. Participar es gratis.", pgRelT: "Mirá también",
     navMeetup: "Sorteo para meetup", navClase: "Sorteo en clase", navVerif: "Sorteo verificable",
     meetKicker: "Para meetups",
     meetH1: "Sorteo para tu meetup, en pantalla grande",
@@ -1920,7 +1920,7 @@ export const T: Record<Lang, Dict> = {
     masClaseT: "Class draw", masClaseB: "To pick who presents or forms groups, fairly and with nobody picking the winner.",
     masVerifT: "Verifiable draw", masVerifB: "How to redo a result without trusting Tinkazo, and what it doesn't promise: whoever runs the draw builds the list.",
     // --- The pages people search for: meetups, classes and the verifiable draw (20 October 2026).
-    pgCta: "Draw now, it's free", pgRelT: "See also",
+    pgCta: "Draw now. Taking part is free.", pgRelT: "See also",
     navMeetup: "Meetup draw", navClase: "Class draw", navVerif: "Verifiable draw",
     meetKicker: "For meetups",
     meetH1: "A draw for your meetup, on the big screen",
