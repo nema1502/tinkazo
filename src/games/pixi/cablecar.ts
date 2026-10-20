@@ -1054,6 +1054,12 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     const W = S.sw(), H = S.sh(), u = S.u();
     const half = 22 * G.k * zoomNow();
     const c = cam.toScreen(jumper.x, jumper.y - 22 * G.k, W, H);
+    // Con la cara fuera de cuadro el nombre tampoco va: pegado al borde quedaba
+    // flotando, sin cara, y parecía el nombre de otro pasajero.
+    if (c.x < -half || c.x > W + half || c.y < -half || c.y > H + half) {
+      jumperTag.visible = false;
+      return;
+    }
     const w = jumperTag.width, h = 25 * u * (G.vertical ? 1.25 : 1.5), gap = 10 * u;
     const lo = S.top() + 6 * u, hi = H - S.bottom() - 6 * u;
     const at = (s: number): Box => {
