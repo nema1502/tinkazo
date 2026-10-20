@@ -724,12 +724,12 @@ export const T: Record<Lang, Dict> = {
       varios
         ? `¡Ganaron, ${w}! Se llevan${prize ? " " + prize : " el sorteo"}.\n\n` +
           `Salieron entre ${n} personas y nadie los eligió a dedo. La lista se cerró antes de que existiera el número que los sacó, ` +
-          `y ese número lo publica un faro de azar público que no controlan ni quien organiza ni Tinkazo.\n\n` +
+          `y ese número lo publica un faro público que no controlan ni quien organiza ni Tinkazo.\n\n` +
           `Revísenlo ustedes mismos, toma diez segundos: ${u}\n\n` +
           `Sorteado con Tinkazo · https://tinkazo.app`
         : `¡Ganaste, ${w}! Te llevás${prize ? " " + prize : " el sorteo"}.\n\n` +
           `Saliste entre ${n} personas y nadie te eligió a dedo. La lista se cerró antes de que existiera el número que te sacó, ` +
-          `y ese número lo publica un faro de azar público que no controlan ni quien organiza ni Tinkazo.\n\n` +
+          `y ese número lo publica un faro público que no controlan ni quien organiza ni Tinkazo.\n\n` +
           `Revisalo vos mismo, te toma diez segundos: ${u}\n\n` +
           `Sorteado con Tinkazo · https://tinkazo.app`,
     qrCaption: "Apuntá el celular y revisalo vos mismo",
@@ -1133,7 +1133,7 @@ export const T: Record<Lang, Dict> = {
     tmQ4T: "Lo que queda guardado",
     tmQ4B: "Si conectás una cuenta, su dirección pública queda en el contrato como la de quien organizó el sorteo: es pública a propósito, para que cada sorteo tenga dueño. Si entrás con Google, Pollar recibe tu nombre, tu correo y tu foto, y guarda la llave; Tinkazo nunca la ve. En este equipo quedan tus preferencias, como el idioma, el sonido y el ritmo del show; el historial de tus sorteos con sus listas, que se borra desde el sitio; y la llave de la cuenta de prueba si la usás.",
     tmMoreT: "Y además",
-    tmMore1: "No hay publicidad ni rastreadores que te sigan de un sitio a otro, ni una base de datos de participantes. Durante un sorteo el sitio pide afuera el número público de un faro de azar y, si tenés cuenta, lo que hace falta de la red Stellar y de Pollar.",
+    tmMore1: "No hay publicidad ni rastreadores que te sigan de un sitio a otro, ni una base de datos de participantes. Durante un sorteo el sitio pide afuera el número que publica un faro público y, si tenés cuenta, lo que hace falta de la red Stellar y de Pollar.",
     tmMore2: "El sitio está en Vercel, que como todo alojamiento anota las visitas: dirección IP y navegador. También contamos visitas con la analítica de Vercel: qué página se abrió, desde qué país y en qué tipo de equipo, sin cookies y sin guardar quién sos. Si tu navegador pide que no te sigan, no te contamos. Los nombres no llegan a ninguno de los dos: van después del # de la dirección, que el navegador no le manda al servidor, y esa parte se corta antes de contar.",
     tmMore3: "Tinkazo es código abierto (MIT) y se ofrece tal cual, sin garantías. Hoy el contrato vive en testnet, la red de prueba de Stellar, que se borra entera el 16 de diciembre de 2026. Si algo falla a mitad de un sorteo, cualquiera lo rehace con la lista y la ronda: para eso está el protocolo.",
     tmMore4: "Vigentes desde el 16 de octubre de 2026, cuando sumamos el conteo de visitas. Si cambian, cambia esta página, con su fecha.",
@@ -1846,7 +1846,7 @@ export const T: Record<Lang, Dict> = {
     tellBody: (w, prize, n, u, varios) =>
       `You won, ${w}! You're taking home${prize ? " " + prize : " the draw"}.\n\n` +
       `You came out of ${n} people and nobody hand-picked you. The list was locked before the number that drew you existed, ` +
-      `and that number is published by a public randomness beacon that neither the organizer nor Tinkazo controls.\n\n` +
+      `and that number is published by a public beacon that neither the organizer nor Tinkazo controls.\n\n` +
       `Check it ${varios ? "for yourselves" : "yourself"}, it takes ten seconds: ${u}\n\n` +
       `Drawn with Tinkazo · https://tinkazo.app`,
     qrCaption: "Point your phone at it and check for yourself",
@@ -2246,7 +2246,7 @@ export const T: Record<Lang, Dict> = {
     tmQ4T: "What gets stored",
     tmQ4B: "If you connect an account, its public address is recorded in the contract as the organizer of the draw: public on purpose, so every draw has an owner. If you sign in with Google, Pollar receives your name, email and photo, and holds the key; Tinkazo never sees it. This device keeps your preferences, like language, sound and the show's pace; the history of your draws with their lists, which you can delete from the site; and the key of the test account if you use it.",
     tmMoreT: "Also",
-    tmMore1: "No ads, no trackers that follow you from site to site, no database of participants. During a draw the site fetches the public number from a randomness beacon and, if you have an account, what it needs from the Stellar network and from Pollar.",
+    tmMore1: "No ads, no trackers that follow you from site to site, no database of participants. During a draw the site fetches the number a public beacon publishes and, if you have an account, what it needs from the Stellar network and from Pollar.",
     tmMore2: "The site is hosted on Vercel, which like any host logs visits: IP address and browser. We also count visits with Vercel's analytics: which page was opened, from which country and on what kind of device, with no cookies and without keeping who you are. If your browser asks not to be tracked, we don't count you. Names reach neither: they go after the # in the address, which the browser does not send to the server, and that part is cut off before counting.",
     tmMore3: "Tinkazo is open source (MIT) and provided as is, without warranty. Today the contract lives on testnet, Stellar's test network, which gets wiped on December 16, 2026. If something breaks in the middle of a draw, anyone can run it again with the list and the round: that is what the protocol is for.",
     tmMore4: "In effect since October 16, 2026, when we started counting visits. If they change, this page changes, with its date.",
