@@ -21,8 +21,9 @@
  * de la pantalla sin hacer scroll de la página, que el cuerpo se recorre si es
  * más alto, que no hay scroll de costado, que los botones miden 44 px y que el
  * teclado funciona (el foco entra, no se escapa, Esc cierra y el foco vuelve).
- * Lo mismo, para la ventana de ingreso y para el paso de fondos (se llega con
- * una Freighter de mentira, ver `lib/freighter-falsa.mjs`).
+ * Lo mismo, para la ventana de ingreso, para el paso de fondos (se llega con
+ * una Freighter de mentira, ver `lib/freighter-falsa.mjs`) y para la de rearmar
+ * un comprobante, que no trae alto máximo propio y depende de la regla general.
  *
  * Uso:
  *   node scripts/audit-ui.mjs [--base http://localhost:4173] [--out DIR]
@@ -229,7 +230,8 @@ async function clic(page, selOPunto) {
 /**
  * Diez sorteos de quien ya sorteó mucho, con nombres largos: los cuatro más
  * nuevos (los que muestra el panel) llevan los más largos, uno de ellos sin
- * sortear y sin comprobante. La clave es la que lee `history.ts`.
+ * sortear y sin comprobante, y el sexto es uno hecho, con número y sin
+ * comprobante: el que ofrece "Rearmar". La clave es la que lee `history.ts`.
  */
 const NOMBRES = [
   "Sorteo de camisetas del hackathon de Cochabamba, edición verano 2026",
@@ -244,7 +246,9 @@ async function sembrarHistorial(page) {
     const lista = ${JSON.stringify(NOMBRES)}.map((n, i) => ({
       organizer: dir, listHash: 'a'.repeat(64), count: 20 + i, numWinners: 1, round: 100 + i,
       sealedAt: 1760000000 + (10 - i) * 86400, prize: n,
-      ...(i === 2 ? {} : { winners: ['Ana'], proof: 'https://tinkazo.app/verificar.html#x' + i }),
+      ...(i === 2 ? {} : { winners: ['Ana'] }),
+      ...(i === 2 || i === 5 ? {} : { proof: 'https://tinkazo.app/verificar.html#x' + i }),
+      ...(i === 5 ? { id: '5' } : {}),
     }));
     localStorage.setItem('tinkazo.history.testnet', JSON.stringify(lista));
     return true;
@@ -511,6 +515,32 @@ async function variantesDelPanel(page, p, tema) {
 }
 
 /**
+ * La ventana de rearmar un comprobante: una tarjeta sin alto máximo propio, que
+ * depende de la regla general (el fondo se recorre y la tarjeta se centra con
+ * `margin: auto`). Si esa regla se rompe, esta es la primera que se corta: en un
+ * celular acostado perdía 40 px por arriba y "Rearmar" y "Cancelar" quedaban
+ * fuera de alcance.
+ */
+async function ventanaDeRearmar(page, p, tema) {
+  const pre = `${p.etiqueta} ${tema}`;
+  await page.eval(`location.hash = '#mis-sorteos'`);
+  const hay = await page.waitFor(`document.querySelector('[data-rearmar]')`, 8000);
+  check(`${pre}: el historial ofrece rearmar un comprobante`, hay.ok);
+  if (!hay.ok) return;
+  await page.eval(`document.querySelector('[data-rearmar]').click()`);
+  const ok = await page.waitFor(`document.querySelector('.modal-back .modal-card')`, 5000);
+  check(`${pre}: se abre la ventana de rearmar`, ok.ok);
+  if (ok.ok) {
+    await sleep(500);
+    chequearVentana(`${pre}: la ventana de rearmar un comprobante`, JSON.parse(await page.eval(ALCANCE(".modal-back .modal-card"))), p.movil);
+    await tecla(page, "Escape");
+    check(`${pre}: Esc cierra la ventana de rearmar`, (await page.eval(`!document.querySelector('.modal-back')`)) === true);
+  }
+  await page.eval(`location.hash = '#sortear'`);
+  await sleep(300);
+}
+
+/**
  * Que el resaltado del título no tape letras de otra línea.
  *
  * El 29 de septiembre de 2026 el recuadro amarillo de "cualquiera puede
@@ -637,17 +667,30 @@ async function run() {
         await panelDeLaCuenta(page, p, tema, primera);
         primera = false;
         await variantesDelPanel(page, p, tema);
+        await ventanaDeRearmar(page, p, tema);
         await pasoDeFondos(browser, p, tema);
 
         // El selector de juegos, que aparece al congelar.
         if (tema === "dark" && !sinJuegos) {
           await page.eval(`document.getElementById('btn-sample').click()`);
-          await page.eval(`document.getElementById('btn-freeze').click()`);
-          const cong = await page.waitFor(
-            `getComputedStyle(document.getElementById('sec-frozen')).display !== 'none'`,
-            150000,
-          );
-          check(`${etiqueta}: la lista se congela`, cong.ok);
+          // Sellar en testnet a veces falla de pasada ("La red rechazó la
+          // transacción. Suele ser pasajero"): la pantalla misma dice que se
+          // pruebe de nuevo, y el auditor lo hace hasta tres veces. Cada intento
+          // espera a que la lista se congele o a que el botón vuelva a estar
+          // disponible con el error a la vista. Si no se congela, el detalle
+          // dice qué mostraba la pantalla: así se distingue la red de un defecto.
+          let cong = { ok: false };
+          let estado = "";
+          for (let intento = 1; intento <= 3 && !cong.ok; intento++) {
+            await page.eval(`document.getElementById('btn-freeze').click()`);
+            await page.waitFor(
+              `getComputedStyle(document.getElementById('sec-frozen')).display !== 'none' || (!document.getElementById('btn-freeze').disabled && !!((document.getElementById('seal-status') || {}).textContent || '').trim() && getComputedStyle(document.getElementById('seal-status')).display !== 'none')`,
+              120000,
+            );
+            cong = { ok: (await page.eval(`getComputedStyle(document.getElementById('sec-frozen')).display !== 'none'`)) === true };
+            estado = await page.eval(`((document.getElementById('seal-status') || {}).textContent || '').trim().slice(0, 100)`);
+          }
+          check(`${etiqueta}: la lista se congela`, cong.ok, cong.ok ? "" : `la pantalla decía: "${estado}"`);
           if (cong.ok) {
             // Primero a la vista y después a medir: las miniaturas sólo se
             // animan cuando el selector está en pantalla, que es lo que hace
