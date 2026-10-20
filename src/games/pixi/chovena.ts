@@ -134,7 +134,16 @@ interface Seg { a: number; b: number; spin: number; tempo: number; reset: boolea
 interface Slot { rho: number; base: number; dir: number }
 interface Epoch { at: number; members: number[]; rings: number[][]; slot: Map<number, Slot>; rhoOut: number; gap: number }
 
-interface Polar { rho: number; th: number }
+/**
+ * Un lugar en la plaza: el radio y el ángulo. Una rueda chica no es redonda en
+ * la plaza (ver `shapeOf`): `ru` y `rv` son lo ancho y lo hondo con que se
+ * dibuja, y si no están, los dos son `rho`; `cv` es cuánto se corre su medio
+ * hacia la sala.
+ */
+interface Polar { rho: number; th: number; ru?: number; rv?: number; cv?: number }
+const ruOf = (p: Polar): number => p.ru ?? p.rho;
+const rvOf = (p: Polar): number => p.rv ?? p.rho;
+const cvOf = (p: Polar): number => p.cv ?? 0;
 interface Pt { x: number; y: number }
 
 interface Dancer {
@@ -145,6 +154,8 @@ interface Dancer {
   /** Cuándo se soltó, o -1. */
   outAt: number;
   from: Polar;
+  /** Cuántos había en su rueda cuando se soltó: la forma de donde arranca sale de ahí. */
+  fromM: number;
   seat: Polar;
   /** Sale hacia la sala (adelante) en vez de sentarse al borde de la plaza. */
   away: boolean;
@@ -387,7 +398,8 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     const single = (m * ARC) / (2 * Math.PI);
     if (m === 2) return [PAIR];
     // De tres a seis, la rueda un poco más abierta que de la mano justa: si
-    // no, uno quedaba detrás del otro y su nombre tapaba al de adelante.
+    // no, uno quedaba detrás del otro y su nombre tapaba al de adelante (y en
+    // la pantalla se abre más, ver `shapeOf`).
     // Medido en largos de rueda, no en la plaza: con doscientos, los
     // bailarines son chicos y una rueda fija de 0,28 dejaba la cadena como un
     // palo entre las manos.
@@ -435,6 +447,19 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   };
 
   const wrap = (a: number): number => Math.atan2(Math.sin(a), Math.cos(a));
+  /** De `a` a `b`, una fracción `e`: el radio en línea recta y el ángulo por el lado corto. */
+  const lerpP = (a: Polar, b: Polar, e: number): Polar => ({
+    rho: a.rho + (b.rho - a.rho) * e,
+    th: a.th + wrap(b.th - a.th) * e,
+    ru: ruOf(a) + (ruOf(b) - ruOf(a)) * e,
+    rv: rvOf(a) + (rvOf(b) - rvOf(a)) * e,
+    cv: cvOf(a) + (cvOf(b) - cvOf(a)) * e,
+  });
+  /**
+   * Más lejos o más cerca del medio de su rueda, por un factor y un paso:
+   * también lo ancho y lo hondo, y el medio queda donde está.
+   */
+  const outP = (p: Polar, f: number, add = 0): Polar => ({ rho: p.rho * f + add, th: p.th, ru: ruOf(p) * f + add, rv: rvOf(p) * f + add, cv: cvOf(p) });
   function makeEpoch(at: number, members: number[], prev: Epoch | null): Epoch {
     const m = members.length;
     const radii = ringsFor(m);
@@ -462,9 +487,15 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       const dir = r % 2 === 0 ? 1 : -1;
       const step = (2 * Math.PI) / Math.max(1, ring.length);
       // La rueda nueva arranca donde quedó la vieja (o donde estaban las
-      // filas): el ángulo que menos mueve a todos.
+      // filas): el ángulo que menos mueve a todos. Los dos de la final van
+      // uno a cada costado, y cada uno del lado donde estaba: con el primero
+      // siempre a la derecha, la mitad de las veces se cambiaban de lado al
+      // formar la pareja y se atravesaban en el medio.
       let base = 0;
-      if (m !== 2) {
+      if (m === 2 && prev && ring.length === 2) {
+        const a = polarIn(prev, ring[0] as number, at), b = polarIn(prev, ring[1] as number, at);
+        if (a && b && Math.cos(a.th) < Math.cos(b.th)) base = Math.PI;
+      } else if (m !== 2) {
         let sx = 0, sy = 0;
         ring.forEach((idx, j) => {
           const p = prev ? polarIn(prev, idx, at) : rowPolar(idx);
@@ -566,7 +597,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
 
   const colOf = (i: number): number => parseInt((avatarColor(names[i] ?? "") || "#ffc629").replace("#", ""), 16);
   const dancers: Dancer[] = names.map((_, i) => ({
-    idx: i, tipoy: genero[i] === "f", col: colOf(i), outAt: -1, from: { rho: 0, th: 0 }, seat: { rho: 0, th: 0 }, away: false, row: rowOf(i),
+    idx: i, tipoy: genero[i] === "f", col: colOf(i), outAt: -1, from: { rho: 0, th: 0 }, fromM: 0, seat: { rho: 0, th: 0 }, away: false, row: rowOf(i),
   }));
   // Dónde termina cada uno que se suelta: sentado al borde de la plaza, o
   // yéndose hacia la sala si bailaba adelante. Lejos del conjunto.
@@ -574,6 +605,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     const p = polarIn(e, d.idx, at) ?? { rho: 0.5, th: Math.PI / 2 };
     d.outAt = at;
     d.from = p;
+    d.fromM = e.members.length;
     d.away = Math.sin(p.th) > 0.3;
     let th = p.th;
     const off = wrap(th + Math.PI / 2);
@@ -813,9 +845,54 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   const pairRho = (): number => Math.max(PAIR, (0.55 * G.dh) / G.rx);
   /** De la plaza a la pantalla: dónde quedan los pies y de qué tamaño se ve. */
   const project = (p: Polar): { x: number; y: number; s: number } => {
-    const v = p.rho * Math.sin(p.th);
-    return { x: G.cx + G.rx * p.rho * Math.cos(p.th), y: G.cy + G.ry * v, s: G.dh * (1 + G.dk * clamp(v, -1.4, 1.4)) };
+    const v = cvOf(p) + rvOf(p) * Math.sin(p.th);
+    return { x: G.cx + G.rx * ruOf(p) * Math.cos(p.th), y: G.cy + G.ry * v, s: G.dh * (1 + G.dk * clamp(v, -1.4, 1.4)) };
   };
+  /**
+   * La forma de una rueda de `m` en la plaza: su radio a lo ancho (`ru`) y a
+   * lo hondo (`rv`), en radios de la plaza.
+   *
+   * Vista desde la sala, la plaza se achata (lo hondo se ve a un tercio de lo
+   * ancho), y una rueda de tres a seis medía de alto menos que un bailarín: a
+   * los costados, dos vecinos quedaban a la misma x y a menos de medio cuerpo
+   * de distancia, uno metido en el otro, y al girar se atravesaban (lo
+   * encontró el crítico de juegos, 16 de octubre de 2026). Ahora se abre a lo
+   * hondo hasta verse redonda, con un poco más de un cuerpo (`SEP`) entre
+   * vecino y vecino: los dos de un costado quedan uno arriba del otro, con el
+   * de atrás entero a la vista, y las manos se alcanzan con los brazos
+   * estirados. Un poco más ancha que alta (`ASP`), para que se siga leyendo
+   * como una rueda en el piso. Con más de seis queda como era: abierta así,
+   * una rueda de siete u ocho pisaría la tarima del conjunto.
+   *
+   * La de seis tampoco cabe siempre: en una pantalla menos ancha que 16:9 los
+   * bailarines son más altos para la plaza, y el de atrás quedaba parado
+   * adentro del conjunto, tapando al cajero, que con los palillos arriba es la
+   * señal del corte. Por eso la rueda se corre hacia la sala (`cv`) lo justo
+   * para que el sombrero del de atrás no pase de los pies de los músicos, y
+   * si así el de adelante se sale de la plaza, se abre menos: en 4:3, los dos
+   * de un costado se rozan.
+   *
+   * Sale del alto de los bailarines en la pantalla de ahora, así que se
+   * calcula al dibujar: las épocas y los lugares guardan solo el radio y el
+   * ángulo, que no cambian con la pantalla.
+   */
+  const SEP = 1.12;
+  const ASP = 1.12;
+  const shapeOf = (m: number, rho: number): { ru: number; rv: number; cv: number } => {
+    if (m < 3 || m > 6) return { ru: rho, rv: rho, cv: 0 };
+    const { dh, dk, rx, ry } = G;
+    const r = (SEP * dh) / (2 * Math.sin(Math.PI / m));
+    // Lo más hondo que puede bailar el de atrás: su sombrero (1,02 de alto,
+    // más chico por la distancia) a la altura de la tarima, que está en 1,3.
+    const back = (1.3 * ry - 1.02 * dh) / (ry - 1.02 * dh * dk);
+    // Y lo más adelante, el borde de la plaza apisonada, en 1,12.
+    const rv = Math.max(rho, Math.min(r / ry, (1.12 + back) / 2));
+    return { ru: Math.max(rho, (ASP * r) / rx), rv, cv: Math.max(0, rv - back) };
+  };
+  /** Un lugar en una rueda de `m`, con la forma que esa rueda tiene en la pantalla. */
+  const inShape = (p: Polar, m: number): Polar => ({ rho: p.rho, th: p.th, ...shapeOf(m, p.rho) });
+  /** La forma de la rueda de afuera de una época. */
+  const ringShape = (e: Epoch): { ru: number; rv: number; cv: number } => shapeOf(e.members.length, e.rhoOut);
 
   let sky!: Graphics;
   let back!: Graphics;
@@ -1102,36 +1179,38 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       // La rival sale de donde se la veía, que nunca está encimada al ganador.
       const r0 = lenta ? Math.max(d.from.rho, pairRho()) : d.from.rho;
       const r1 = lenta ? Math.max(d.seat.rho, r0 + Math.min(0.4, 3 * PAIR)) : d.seat.rho;
-      const p = { rho: r0 + (r1 - r0) * e, th: d.from.th + wrap(d.seat.th - d.from.th) * e };
+      // Arranca de su lugar en la rueda, con la forma que tenía la rueda.
+      const p = lerpP(inShape({ rho: r0, th: d.from.th }, d.fromM), { rho: r1, th: d.seat.th }, e);
       // Los que se van hacia la sala salen de la pantalla enteros: con
       // transparencia se veía un brazo a través del cuerpo.
       return { p, alpha: d.away && f >= 1 ? 0 : 1, seated: d.away ? 0 : clamp((f - 0.7) / 0.3, 0, 1), rows: 0 };
     }
     const ei = epochAt(x);
     const ep = epochs[ei] as Epoch;
-    let p = polarIn(ep, d.idx, x) ?? { rho: 0, th: 0 };
+    let p = inShape(polarIn(ep, d.idx, x) ?? { rho: 0, th: 0 }, ep.members.length);
     // Los dos de la final, nunca encimados: con doscientos en el celular el
     // largo de brazos era más chico que un cuerpo.
     if (ep.members.length === 2) p = { rho: Math.max(p.rho, pairRho()), th: p.th };
-    // La rueda se cierra: del lugar que tenía al nuevo.
+    // La rueda se cierra: del lugar que tenía al nuevo (y de su forma a la nueva).
     if (ei > 0 && x - ep.at < CLOSE) {
-      const old = polarIn(epochs[ei - 1] as Epoch, d.idx, ep.at);
+      const prev = epochs[ei - 1] as Epoch;
+      const old = polarIn(prev, d.idx, ep.at);
       if (old) {
         const e = ease.inOutCubic(clamp((x - ep.at) / CLOSE, 0, 1));
-        p = { rho: old.rho + (p.rho - old.rho) * e, th: old.th + wrap(p.th - old.th) * e };
+        p = lerpP(inShape(old, prev.members.length), p, e);
       }
     }
     // Se juntan y se separan como un abanico, cada dos compases.
-    if (x >= T_JOIN + JOIN && ep.members.length > 2) p = { rho: p.rho * (1 + 0.045 * Math.sin((Math.PI * beatAt(x)) / 2)), th: p.th };
+    if (x >= T_JOIN + JOIN && ep.members.length > 2) p = outP(p, 1 + 0.045 * Math.sin((Math.PI * beatAt(x)) / 2));
     // El corte falso: los que se soltaron dan un paso afuera y vuelven. El
     // paso arranca cuando ya soltaron las manos (antes, la cadena se estiraba
     // como un palo), y con dos es más corto: la cámara está encima.
     const fo = fakeOut(d, x);
-    if (fo > 0.3) p = { rho: p.rho + (ep.members.length <= 2 ? 0.1 : 0.25) * ease.outCubic((fo - 0.3) / 0.7), th: p.th };
+    if (fo > 0.3) p = outP(p, 1, (ep.members.length <= 2 ? 0.1 : 0.25) * ease.outCubic((fo - 0.3) / 0.7));
     // La ganadora, coronada, va al medio.
     if (d === win && x >= T_CROWN) {
       const e = ease.inOutCubic(clamp((x - T_CROWN) / 0.8, 0, 1));
-      p = { rho: p.rho * (1 - e), th: p.th };
+      p = outP(p, 1 - e);
     }
     // El arranque: de las dos filas a la rueda, por el costado y no por el
     // medio (en ángulo y en radio).
@@ -1145,7 +1224,9 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       // cruzan sin chocarse.
       const f = Math.sin(Math.PI * (1 - rows));
       const bombeo = d.row.v > 0 ? 1 + 0.2 * f : 1 - 0.12 * f;
-      p = { rho: (r.rho + (p.rho - r.rho) * (1 - rows)) * bombeo, th: r.th + giro * (1 - rows) };
+      // Lo ancho y lo hondo, igual: de la fila a la forma de la rueda.
+      const mix = (a: number): number => (r.rho + (a - r.rho) * (1 - rows)) * bombeo;
+      p = { rho: mix(p.rho), th: r.th + giro * (1 - rows), ru: mix(ruOf(p)), rv: mix(rvOf(p)), cv: cvOf(p) * (1 - rows) };
     }
     return { p, alpha: 1, seated: 0, rows };
   }
@@ -1266,8 +1347,8 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
           const pa = pNow[pair[0]] as { x: number; y: number; s: number }, pb = pNow[pair[1]] as { x: number; y: number; s: number };
           const ta = { x: pa.x, y: pa.y - 0.72 * pa.s }, tb = { x: pb.x, y: pb.y - 0.72 * pb.s };
           const [tl, tr] = pair[0] === pair[1] ? [ta, ta] : ta.x <= tb.x ? [ta, tb] : [tb, ta];
-          aL = clamp(Math.atan2(-(tl.x - shL.x), tl.y - shL.y), 0.35, 2.4);
-          aR = clamp(Math.atan2(-(tr.x - shR.x), tr.y - shR.y), -2.4, -0.35);
+          aL = aim(Math.atan2(-(tl.x - shL.x), tl.y - shL.y), 0.35, 2.4);
+          aR = aim(Math.atan2(-(tr.x - shR.x), tr.y - shR.y), -2.4, -0.35);
           if (pair[0] === pair[1]) {
             // De las dos manos con la pareja: los dos brazos hacia el otro.
             const toward = Math.atan2(-(ta.x - pr.x), ta.y - (pr.y - 0.75 * pr.s));
@@ -1338,6 +1419,20 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     }
   }
 
+  /**
+   * El ángulo del brazo, entre `lo` y `hi`. Un vecino casi justo encima (los
+   * dos de un costado de una rueda chica, ver `shapeOf`) cae del otro lado de
+   * la vuelta, y con el `clamp` solo el brazo apuntaba para abajo, lejos de la
+   * mano que tenía que tomar: ese brazo sube hasta donde llega. Un vecino que
+   * queda cruzando el cuerpo sigue como antes: el brazo cuelga, porque subirlo
+   * lo dejaba señalando a nadie.
+   */
+  function aim(a: number, lo: number, hi: number): number {
+    if (a >= lo && a <= hi) return a;
+    const up = Math.abs(lo) > Math.abs(hi) ? lo : hi;
+    return Math.abs(a) > Math.PI - 0.8 ? up : clamp(a, lo, hi);
+  }
+
   /** Cuánto llega el brazo: estira el brazo y corre la mano hasta la punta. */
   function reach(a: Container, s: number): void {
     (a.children[0] as Graphics).scale.y = s;
@@ -1354,7 +1449,14 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     // nueva, la cadena cruzaba el hueco como un palo.
     const cerrando = ei > 0 && x - ep.at < CLOSE;
     const prevEp = cerrando ? (epochs[ei - 1] as Epoch) : ep;
-    const maxGap = G.rx * Math.min(ep.gap, prevEp.gap) * 1.9 + G.dh;
+    // Lo más que puede haber entre dos de la mano, medido en la rueda vista de
+    // arriba: lo alto se agranda con el achatamiento de la rueda. Con la rueda
+    // chica, abierta a lo hondo (`shapeOf`), es el suyo y no el de la plaza: con
+    // el de la plaza, los dos de un costado quedaban lejos y no se tomaban.
+    const sh = ringShape(ep);
+    const flat = (G.ry / G.rx) * (sh.rv / sh.ru);
+    const arc = (e: Epoch): number => G.rx * e.gap * (ringShape(e).ru / e.rhoOut);
+    const maxGap = Math.min(arc(ep), arc(prevEp)) * 1.9 + G.dh;
     const nbPrev = cerrando ? nbrs[ei - 1] : undefined;
     for (const ring of ep.rings) {
       const m = ring.length;
@@ -1367,7 +1469,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
         // El que se soltó en el corte falso, suelto.
         if (fakeOut(da, x) >= 0.3 || fakeOut(db, x) >= 0.3) continue;
         const pa = pNow[ia] as { x: number; y: number; s: number }, pb = pNow[ib] as { x: number; y: number; s: number };
-        if (m > 3 && Math.hypot(pa.x - pb.x, (pa.y - pb.y) / (G.ry / G.rx)) > maxGap) continue;
+        if (m > 3 && Math.hypot(pa.x - pb.x, (pa.y - pb.y) / flat) > maxGap) continue;
         // La mano de cada uno que queda más cerca del otro.
         const ha = handsNow[ia] as { L: Pt; R: Pt }, hb = handsNow[ib] as { L: Pt; R: Pt };
         const near = (h: { L: Pt; R: Pt }, to: Pt): Pt => (Math.hypot(h.L.x - to.x, h.L.y - to.y) <= Math.hypot(h.R.x - to.x, h.R.y - to.y) ? h.L : h.R);
@@ -1434,11 +1536,11 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   }
 
   /* ---------------------------------------------------------------- cámara */
-  /** El acercamiento que deja la rueda entera en pantalla. */
-  function fitFor(rho: number): number {
+  /** El acercamiento que deja la rueda entera en pantalla: `ru` a lo ancho y `rv` a lo hondo. */
+  function fitFor(ru: number, rv = ru): number {
     const { W, rx, ry, dh, avail, portrait } = G;
-    const zx = (0.86 * W) / (2 * rho * rx + dh);
-    const zy = (0.82 * avail) / (2 * rho * ry + 1.4 * dh);
+    const zx = (0.86 * W) / (2 * ru * rx + dh);
+    const zy = (0.82 * avail) / (2 * rv * ry + 1.4 * dh);
     // Con bailarines chicos (mucha gente) se puede acercar más; en el
     // celular, si la rueda no entra, alejarse un poco.
     const max = clamp((avail * 0.28) / dh, 1.6, 3);
@@ -1473,8 +1575,11 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       ty = H / 2 + (ringY - H / 2) * clamp((z - 1) / 0.3, 0, 1);
       rate = 3;
     } else {
-      z = fitFor(ep.rhoOut);
-      ty = H / 2 + (ringY - H / 2) * clamp((z - 1) / 0.3, 0, 1);
+      // La rueda chica, con su forma: entera, y con su medio corrido hacia la sala.
+      const sh = ringShape(ep);
+      const midY = ringY + sh.cv * ry;
+      z = fitFor(sh.ru, sh.rv);
+      ty = H / 2 + (midY - H / 2) * clamp((z - 1) / 0.3, 0, 1);
       // En el corte, si salen uno o dos, la cámara va hacia ellos.
       const e = evs.find((v) => v.kind === "stop" && x >= v.w0 && x < v.s1);
       if (e && e.victims.length <= 2) {
@@ -1487,14 +1592,14 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
         const m = e.victims.length;
         z = Math.min(fitFor(0.12), z * 1.12);
         tx = cx + (sx / m - cx) * 0.4;
-        ty = ringY + (sy / m - ringY) * 0.35;
+        ty = midY + (sy / m - midY) * 0.35;
         rate = 3;
       }
       // Que el conjunto no quede debajo de la barra de arriba, si la rueda entra igual.
       const bandTop = cy - ry * 1.3 - dh * 0.95;
       // En el celular, también debajo del contador: tapaba al del pífano.
       const maxTy = bandTop + (H / 2 - (S.top() + (G.portrait ? 58 * G.k : 6))) / z;
-      const ringBottom = cy + ep.rhoOut * ry + dh * 0.15;
+      const ringBottom = cy + (sh.cv + sh.rv) * ry + dh * 0.15;
       const minTy = ringBottom - (H / 2 - S.bottom() - 6) / z;
       ty = Math.max(Math.min(ty, maxTy), minTy);
     }
@@ -1726,7 +1831,9 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
         // atrás y los de adelante se pisaban en alto y el cartel no salía (lo
         // vio el agente evaluador). En el celular, debajo del contador y del aviso.
         const q1 = poses[2] as { x: number; y: number; z: number };
-        const cx0 = W / 2 + (G.cx - q1.x) * q1.z, centro = H / 2 + (G.cy - G.dh * 0.35 - q1.y) * q1.z;
+        // El medio de la rueda, que en una rueda chica se corre hacia la sala (`shapeOf`).
+        const midY = G.cy + ringShape(epochs[epochAt(x)] as Epoch).cv * G.ry;
+        const cx0 = W / 2 + (G.cx - q1.x) * q1.z, centro = H / 2 + (midY - G.dh * 0.35 - q1.y) * q1.z;
         const lo = G.portrait ? S.top() + 74 * k : S.top() + 12 * k, hi = H - S.bottom() - 12 * k;
         const libre = (bx: number, cy: number, tw: number, th: number, en: Rect[] = obst): boolean =>
           !en.some((r) => r.x < bx + tw / 2 && r.x + r.w > bx - tw / 2 && r.y < cy + th / 2 && r.y + r.h > cy - th / 2);
