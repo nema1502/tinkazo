@@ -78,9 +78,11 @@ export function closeAccount(restoreFocus = true): void {
   s.back.remove();
   if (!restoreFocus) return;
   // La cabecera se repinta con la sesión y con el idioma: si el botón que abrió
-  // el panel ya no está, el foco vuelve al que lo reemplazó.
-  const target = s.returnTo?.isConnected ? s.returnTo : document.querySelector<HTMLElement>("#wallet-box .hello");
-  target?.focus({ preventScroll: true });
+  // el panel ya no está, el foco vuelve al que lo reemplazó. Y en Safari y
+  // Firefox de Mac un botón no recibe el foco al tocarlo: el foco estaba en la
+  // página, no en el botón, y también vuelve al botón de la cabecera.
+  const opener = s.returnTo && s.returnTo !== document.body && s.returnTo.isConnected ? s.returnTo : null;
+  (opener ?? document.querySelector<HTMLElement>("#wallet-box .hello"))?.focus({ preventScroll: true });
 }
 
 export function openAccount(view: AccountView): void {
