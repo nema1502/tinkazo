@@ -141,6 +141,7 @@ export default defineConfig({
         seguridad: resolve(__dirname, "seguridad.html"),
         "como-funciona": resolve(__dirname, "como-funciona.html"),
         lista: resolve(__dirname, "lista.html"),
+        evento: resolve(__dirname, "evento.html"),
         terminos: resolve(__dirname, "terminos.html"),
       },
     },

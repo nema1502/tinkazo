@@ -78,7 +78,7 @@ export async function encodeProof(proof: Proof): Promise<string> {
 }
 
 /** Cualquier valor al texto que va después del `#`: comprimido si conviene. */
-async function encodeFragment(value: unknown): Promise<string> {
+export async function encodeFragment(value: unknown): Promise<string> {
   const json = enc.encode(JSON.stringify(value));
   if (!hasCompression()) return "r" + toBase64Url(json);
   const packed = await through(new Blob([json as BlobPart]).stream().pipeThrough(new CompressionStream("deflate-raw")));
@@ -87,7 +87,7 @@ async function encodeFragment(value: unknown): Promise<string> {
 }
 
 /** Lo contrario de `encodeFragment`. Lanza si el texto no tiene el formato. */
-async function decodeFragment(fragment: string): Promise<unknown> {
+export async function decodeFragment(fragment: string): Promise<unknown> {
   const raw = fragment.replace(/^#/, "");
   if (raw.length < 2) throw new Error("proof-empty");
   const kind = raw[0];
