@@ -803,6 +803,9 @@ export const T: Record<Lang, Dict> = {
     masSeguridadB: "Qué impide el protocolo, qué ataques siguen abiertos y qué límites tiene.",
     masPreciosT: "Qué cuesta",
     masPreciosB: "Unos 0,76 XLM de comisión de red por sorteo grabado en Stellar, medidos en testnet. Verificar es gratis, siempre.",
+    masMeetupT: "Sorteo para meetup", masMeetupB: "Pegá la lista de tu meetup, sellala y sorteá en pantalla grande. Cualquiera la puede comprobar después.",
+    masClaseT: "Sorteo en clase", masClaseB: "Para elegir quién pasa a exponer o armar grupos, de forma justa y sin favoritos.",
+    masVerifT: "Sorteo verificable", masVerifB: "Cómo comprobar un resultado sin confiar en quien lo hizo, y qué todavía no promete.",
     // --- Las páginas que la gente busca: meetups, clases y sorteo verificable (20 de octubre de 2026).
     pgCta: "Sortear ahora, es gratis", pgRelT: "Mirá también",
     navMeetup: "Sorteo para meetup", navClase: "Sorteo en clase", navVerif: "Sorteo verificable",
@@ -1912,6 +1915,9 @@ export const T: Record<Lang, Dict> = {
     masSeguridadB: "What the protocol prevents, which attacks are still open, and the limits.",
     masPreciosT: "What it costs",
     masPreciosB: "About 0.76 XLM in network fees per draw recorded on Stellar, measured on testnet. Checking is free, always.",
+    masMeetupT: "Meetup draw", masMeetupB: "Paste your meetup list, seal it and draw on the big screen. Anyone can check it afterwards.",
+    masClaseT: "Class draw", masClaseB: "To pick who presents or form groups, fairly and with no favorites.",
+    masVerifT: "Verifiable draw", masVerifB: "How to check a result without trusting whoever ran it, and what it still doesn't promise.",
     // --- The pages people search for: meetups, classes and the verifiable draw (20 October 2026).
     pgCta: "Draw now, it's free", pgRelT: "See also",
     navMeetup: "Meetup draw", navClase: "Class draw", navVerif: "Verifiable draw",
