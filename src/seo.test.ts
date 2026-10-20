@@ -107,12 +107,15 @@ describe("cada página pública", () => {
     expect(leer(archivo)).toMatch(/<meta name="robots" content="[^"]*noindex/);
   });
 
-  it.each(Object.keys(NUEVAS))("%s tiene el título y el h1 pedidos, y una descripción de 120 a 160 caracteres", (archivo) => {
+  it.each(Object.keys(NUEVAS))("%s tiene el título y el h1 pedidos", (archivo) => {
     const html = leer(archivo);
     const esperado = NUEVAS[archivo];
     expect(html.match(/<title>([^<]*)<\/title>/)?.[1]).toBe(esperado?.titulo);
     expect(html.match(/<h1[^>]*>([^<]*)<\/h1>/)?.[1]).toBe(esperado?.h1);
-    const largo = [...descripcion(html)].length;
+  });
+
+  it.each(Object.keys(PUBLICAS))("%s: la meta description tiene de 120 a 160 caracteres", (archivo) => {
+    const largo = [...descripcion(leer(archivo))].length;
     expect(largo).toBeGreaterThanOrEqual(120);
     expect(largo).toBeLessThanOrEqual(160);
   });
