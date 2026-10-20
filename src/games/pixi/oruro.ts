@@ -44,6 +44,17 @@ const TAG_CHARS = 12;
 const TAG_FONT_PX = 14;
 /** The tag roll call starts here (s); it may outlast the intro, but never delays the game. */
 const ROLL_T0 = 0.25;
+/** Lo que ocupa un diablo, en unidades de su dibujo: de la bota a la punta de los cuernos, y de capa a capa. */
+const BODY_H = 130;
+const BODY_HALF_W = 34;
+/** Lugar para los nombres encima de los cuernos, en unidades de pantalla (`u`). */
+const TAG_ROOM = 30;
+/**
+ * Qué tan rápido sigue cada diablo a su lugar en la fila. La cámara sigue a
+ * los lugares con el mismo ritmo: así va exactamente donde van los cuerpos,
+ * sin quedarse atrás ni adelantarse.
+ */
+const FOLLOW = 4;
 
 type Phase = "intro" | "walk" | "stop" | "duel" | "crown" | "dead";
 interface Dancer {
@@ -160,10 +171,23 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     list.forEach((d, i) => { d.slot = i; });
   }
 
-  function slotPos(d: Dancer, hx: number): { x: number; y: number } {
+  /**
+   * Cuántas filas tiene la comparsa. En horizontal, las de siempre. En un
+   * celular es más honda y más angosta: con las filas de la pantalla grande
+   * era el doble de ancha que la pantalla, y la cámara tenía que elegir entre
+   * cortarla por los costados o dejar media pantalla de asfalto abajo
+   * (crítico de juegos, 16 de octubre de 2026).
+   */
+  function depthFor(m: number, g: ReturnType<typeof G>): number {
+    if (!S.portrait()) return clamp(Math.ceil(Math.sqrt(m / 3)), 1, 5);
+    const dx = 58 * g.scale;
+    const cols = Math.max(2, Math.floor((g.w * 0.88 - 2 * BODY_HALF_W * g.scale - dx / 2) / dx));
+    return clamp(Math.ceil(m / cols), 1, 9);
+  }
+
+  function slotPos(d: Dancer, hx: number, m = alive().length): { x: number; y: number } {
     const g = G();
-    const m = alive().length;
-    const depth = clamp(Math.ceil(Math.sqrt(m / 3)), 1, 5);
+    const depth = depthFor(m, g);
     const col = Math.floor(d.slot / depth), row = d.slot % depth;
     const dx = 58 * g.scale;
     return { x: hx - col * dx - (row % 2) * dx * 0.5, y: g.streetTop + ((row + 0.5) / depth) * (g.streetBot - g.streetTop) * 0.8 + (g.streetBot - g.streetTop) * 0.1 };
@@ -173,9 +197,10 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   function step(dt: number): void {
     const hx = headX(tAll);
     const g = G();
+    const m = alive().length;
     for (const d of dancers) {
       if (d.alive) {
-        let target = slotPos(d, hx);
+        let target = slotPos(d, hx, m);
         if (phase === "duel" || phase === "crown") {
           // El contrapunto: frente al Socavón, cara a cara.
           const sx = (K + 1) * g.seg;
@@ -187,7 +212,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
           // que entraba la que perdió.
           if (d === win && (arrived || phase === "crown")) target = { x: sx + 170 * g.k, y: g.streetTop + 24 * g.k };
         }
-        const sp = Math.min(1, dt * 4);
+        const sp = Math.min(1, dt * FOLLOW);
         d.x += (target.x - d.x) * sp;
         d.y += (target.y - d.y) * sp;
       } else {
@@ -557,44 +582,152 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   build();
   const crownUI = S.crown(names, winners);
   S.onResize(build);
+  /*
+   * El encuadre de los cuerpos (crítico de juegos, 16 de octubre de 2026). La
+   * cámara miraba el centro de la calle y medio segundo adelante de la
+   * comparsa: los diablos quedaban arriba a la izquierda y media pantalla era
+   * asfalto vacío. Ahora mira la caja que ocupan los cuerpos, de la punta de
+   * los cuernos a las botas y con lugar arriba para los nombres, y la llena:
+   * centrada en la franja que queda entre la barra de arriba y la caja del
+   * relator, con el acercamiento que entre y dentro de un tope.
+   */
+  const box = { x0: 0, x1: 0, y0: 0, y1: 0 };
+  function boxReset(): void {
+    box.x0 = box.y0 = Infinity;
+    box.x1 = box.y1 = -Infinity;
+  }
+  /** Suma a la caja un diablo parado en (x, y): y son sus botas. */
+  function boxAdd(x: number, y: number): void {
+    box.x0 = Math.min(box.x0, x);
+    box.x1 = Math.max(box.x1, x);
+    box.y0 = Math.min(box.y0, y);
+    box.y1 = Math.max(box.y1, y);
+  }
+  interface Shot { x: number; y: number; z: number }
+  /**
+   * La toma que llena la pantalla con la caja: `jump` es cuánto pueden saltar
+   * (en unidades del dibujo), `mul` acerca o abre sobre lo que entra, y
+   * `extra` suma a la caja un rectángulo del mundo (el Socavón).
+   */
+  function boxShot(zLo: number, zHi: number, jump = 0, mul = 1, extra?: { x0: number; x1: number; y0: number }): Shot | null {
+    if (!(box.x1 >= box.x0)) return null;
+    const g = G();
+    const s = g.scale;
+    let x0 = box.x0 - BODY_HALF_W * s, x1 = box.x1 + BODY_HALF_W * s;
+    let y0 = box.y0 - (BODY_H + jump) * s;
+    const y1 = box.y1 + 4 * s;
+    if (extra) {
+      x0 = Math.min(x0, extra.x0);
+      x1 = Math.max(x1, extra.x1);
+      y0 = Math.min(y0, extra.y0);
+    }
+    const top = S.top() + TAG_ROOM * g.k, bot = g.h - S.bottom() - 6 * g.k;
+    const side = 18 * g.k;
+    const z = clamp(Math.min((g.w - 2 * side) / (x1 - x0), (bot - top) / (y1 - y0)), zLo, zHi) * mul;
+    // El centro de la caja va al centro de la franja libre, no al de la pantalla.
+    return { x: (x0 + x1) / 2, y: (y0 + y1) / 2 - ((top + bot) / 2 - g.h / 2) / z, z };
+  }
+  /** La caja de la comparsa entera, en los lugares de la fila: adonde van los cuerpos. */
+  function boxComparsa(hx: number): void {
+    const live = alive();
+    boxReset();
+    for (const d of live) {
+      const p = slotPos(d, hx, live.length);
+      boxAdd(p.x, p.y);
+    }
+  }
+  /**
+   * Cuánto se acerca la cámara a la comparsa: menos en un celular, que es
+   * angosto. Con 2.2 de tope, una comparsa de dos llena la pantalla; con 1.75
+   * quedaban los dos en el medio y otra vez asfalto abajo.
+   */
+  const zRange = (): [number, number] => (S.portrait() ? [1, 1.8] : [0.85, 2.2]);
+  /** El acercamiento de la comparsa, suavizado: cuando se quedan algunos, la cámara se arrima sin saltar. */
+  let zComparsa = NaN;
+
   {
-    // La formación arranca armada.
+    // La formación arranca armada, y la cámara ya encuadra los cuerpos.
     const hx = headX(0);
     for (const d of dancers) {
       const p = slotPos(d, hx);
       d.x = p.x;
       d.y = p.y;
     }
-    const g = G();
-    cam.cut(hx - 80 * g.k, (g.streetTop + g.streetBot) / 2 - 40 * g.k, 1.3);
+    boxComparsa(hx);
+    const [zLo, zHi] = zRange();
+    const f = boxShot(zLo, zHi, 0, 1.08) as Shot;
+    zComparsa = f.z / 1.08;
+    cam.cut(f.x, f.y, f.z);
   }
 
-  /** La cámara: sigue a la comparsa, se acerca a los que se quedan, abre al Socavón y cierra en el contrapunto. */
-  function direct(): void {
+  /** La cámara: encuadra a la comparsa, se acerca a los que se quedan, abre al Socavón y cierra en el contrapunto. */
+  function direct(dt: number): void {
     const g = G();
-    const live = alive();
-    const cx = live.reduce((a, d) => a + d.x, 0) / Math.max(1, live.length);
-    const my = (g.streetTop + g.streetBot) / 2 - 30 * g.k;
-    if (phase === "intro") cam.lookAt(headX(0) - 60 * g.k, my, 1.3 - 0.15 * clamp(tAll / T_START, 0, 1), 2);
-    else if (phase === "stop" && tAll - arrive(stopsDone) < 0.9 && stopsDone > 0 && story.arc !== "tapada") {
-      const gone = dancers.filter((d) => !d.alive && Math.abs(d.left - arrive(stopsDone)) < 0.05);
-      const gx = gone.length ? gone.reduce((a, d) => a + d.x, 0) / gone.length : cx;
-      cam.lookAt(gx, g.streetTop - 20 * g.k, 1.35, 4);
-    } else if (story.arc === "susto" && tripSaid && tAll < T_TRIP + 1.1) cam.lookAt(win.x, win.y - 60 * g.scale, 2.0, 5);
-    else if (phase === "walk" || phase === "stop") {
+    const [zLo, zHi] = zRange();
+    const closeUp = phase === "stop" && tAll - arrive(stopsDone) < 0.9 && stopsDone > 0 && story.arc !== "tapada";
+    if (phase === "intro" || phase === "walk" || phase === "stop") {
+      // El acercamiento de la comparsa se lleva siempre, aunque la toma sea
+      // otra: al volver de un primer plano ya está donde tiene que estar.
       const nearEnd = clamp((tAll - arrive(K)) / (T_SOCAVON - arrive(K)), 0, 1);
-      // Mira adonde va a estar la comparsa en medio segundo: la cámara que la
-      // perseguía se quedaba unos 400 px atrás, con media pantalla de calle
-      // vacía. Con poca gente, más cerca; en un celular no, que ya no entra.
-      const lead = headX(tAll + 0.5) - headX(tAll);
-      const z = n <= 24 && !S.portrait() ? 1.25 : 1.05;
-      cam.lookAt(cx + lead + 40 * g.k + nearEnd * 140 * g.k, my - nearEnd * 60 * g.k, z - 0.2 * nearEnd, 2.5);
+      boxComparsa(headX(tAll));
+      // Llegando al Socavón la cámara se abre un poco para que se vea venir,
+      // pero recién en el último tramo: antes el templo no entra en cuadro, y
+      // abrir era volver a mostrar asfalto.
+      const open = ease.inOutCubic(clamp((nearEnd - 0.7) / 0.3, 0, 1));
+      const want = boxShot(zLo, zHi - (zHi - Math.min(zHi, 1.2)) * open) as Shot;
+      zComparsa = Number.isFinite(zComparsa) ? zComparsa + (want.z - zComparsa) * Math.min(1, dt * 2) : want.z;
+    }
+    if (closeUp) {
+      // Los que se quedan, donde van a quedarse: en la vereda, bajo la gradería.
+      boxReset();
+      for (const d of dancers) if (!d.alive && Math.abs(d.left - arrive(stopsDone)) < 0.05) boxAdd(d.wx, d.wy);
+      // Un primer plano nunca más abierto que la toma de la comparsa.
+      const f = boxShot(zLo, Math.min(2.6, Math.max(S.portrait() ? 1.5 : 1.9, zComparsa * 1.1)));
+      if (f) {
+        cam.lookAt(f.x, f.y, f.z, 4);
+        return;
+      }
+    }
+    if (story.arc === "susto" && tripSaid && tAll < T_TRIP + 1.1) {
+      // La máscara pasa con la comparsa corriendo hacia el Socavón: mirando
+      // al diablo, la cámara llegaba tarde y lo dejaba al costado. Mira su
+      // lugar en la fila, al ritmo con que él lo sigue.
+      const p = slotPos(win, headX(tAll));
+      boxReset();
+      boxAdd(p.x, p.y);
+      const z = clamp(zComparsa * 1.2, 2, 2.6);
+      const f = boxShot(z, z) as Shot;
+      cam.lookAt(f.x, f.y, f.z, FOLLOW);
+      return;
+    }
+    if (phase === "intro" || phase === "walk" || phase === "stop") {
+      const nearEnd = clamp((tAll - arrive(K)) / (T_SOCAVON - arrive(K)), 0, 1);
+      boxComparsa(headX(tAll));
+      // Con el ritmo de los diablos: la cámara llega a la caja de sus lugares
+      // a la vez que ellos, así los cuerpos quedan en el medio también cuando
+      // la comparsa arranca, corre y frena. En la armada, un acercamiento
+      // apenas más cerrado que se abre despacio.
+      const intro = phase === "intro" ? 1.08 - 0.08 * clamp(tAll / T_START, 0, 1) : 1;
+      const z = zComparsa * intro;
+      const f = boxShot(z, z) as Shot;
+      cam.lookAt(f.x + nearEnd * nearEnd * 110 * g.k, f.y, z, phase === "intro" ? 2 : FOLLOW);
     } else if (phase === "duel") {
       const td = tAll - T_SOCAVON;
-      // Primero el Socavón entero, que antes no se veía (solo la puerta), y
-      // después el contrapunto, cada vez más cerca.
-      if (td < 0.9) cam.lookAt((K + 1) * g.seg + 170 * g.k, g.streetTop - 150 * g.k, 0.9, 3);
-      else if (!arrived) cam.lookAt((K + 1) * g.seg + 20 * g.k, my - 30 * g.k, 1.5 + 0.4 * clamp(td / duelDur, 0, 1), 2.5);
+      const sx = (K + 1) * g.seg, my = (g.streetTop + g.streetBot) / 2;
+      const cx = sx + 170 * g.k;
+      boxReset();
+      boxAdd(sx - 40 * g.scale, my);
+      boxAdd(sx + 70 * g.scale, my + 10 * g.scale);
+      // Primero el Socavón entero con los dos del contrapunto delante (antes se
+      // veía el templo y los dos quedaban cortados abajo, detrás del relator), y
+      // después el contrapunto, cada vez más cerca y con lugar para los saltos.
+      if (td < 0.9) {
+        const f = boxShot(0.5, 1.2, 0, 1, { x0: cx - 165 * g.k, x1: cx + 125 * g.k, y0: g.streetTop - 405 * g.k }) as Shot;
+        cam.lookAt(f.x, f.y, f.z, 3);
+      } else if (!arrived) {
+        const f = boxShot(S.portrait() ? 1.1 : 1.3, S.portrait() ? 1.6 : 2.1, 60, 0.86 + 0.14 * clamp(td / duelDur, 0, 1)) as Shot;
+        cam.lookAt(f.x, f.y, f.z, 2.5);
+      }
       // Llegó: la cámara se abre con el que gana mientras camina a la puerta.
       // Con el plano del contrapunto, en un celular le cortaba la cabeza.
       else cam.lookAt(win.x + 60 * g.k, win.y - 60 * g.scale - (g.h * 0.1) / 1.3, 1.3, 2.5);
@@ -840,7 +973,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       crown();
       tHold += dt * paceFactor();
     }
-    direct();
+    direct(dt);
     cam.update(dt);
     cam.apply(S.scene, S.sw(), S.sh(), now);
     draw(now);

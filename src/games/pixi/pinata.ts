@@ -40,10 +40,24 @@ const MAX_FLIGHT_LABELS = 8;
 const LINGER = 1.25;
 const STRIP_MAX = 5;
 /**
- * Dónde está parado el chico del palo, en fracción del ancho. En 0,14 la
- * cámara, cerca de la piñata, lo dejaba medio fuera de cuadro.
+ * El chico del palo, en unidades de su dibujo: mide 137 de las zapatillas al
+ * pelo y agarra el palo a la altura del pecho. El palo mide 115, lo que un
+ * palo de piñata para un chico, y no se estira nunca: antes salía corto y en
+ * cada golpe crecía hasta la piñata, casi tres veces el alto del chico
+ * (crítico de juegos, 16 de octubre de 2026).
  */
-const KID_X = 0.22;
+const STICK = 115;
+const HAND_X = 20;
+const HAND_Y = -66;
+/**
+ * Los primeros segundos (crítico de juegos, 16 de octubre de 2026): antes la
+ * piñata colgaba quieta más de seis segundos reales hasta el primer palo.
+ * Ahora sube colgada de su cuerda y rebota, y al chico, vendado, le dan tres
+ * vueltas como se juega; queda mareado hasta que levanta el palo.
+ */
+const SPIN_T0 = 0.75;
+const SPIN_T1 = 2.15;
+const SPINS = 3;
 
 type Phase = "hang" | "hits" | "break" | "crown" | "dead";
 interface Candy {
@@ -124,6 +138,11 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   let dropSeq = 0;
   const fallen: number[] = [];
   let said2At = -9;
+  /** Por dónde van las vueltas que le dan al chico, de 0 a SPINS: arrancan despacio y frenan. */
+  const spinAt = (t: number): number => SPINS * ease.inOutCubic(clamp((t - SPIN_T0) / (SPIN_T1 - SPIN_T0), 0, 1));
+  const turnsAt = (t: number): number => Math.floor(spinAt(t));
+  /** Cuántas vueltas ya sonaron. */
+  let spinsDone = 0;
   /** El tamaño de un caramelo: más grandes que antes, que se leían como puntitos. */
   const candySize = (): number => clamp(Math.sqrt(1 / n) * 70 * S.u(), 12 * S.u(), 26 * S.u());
   /**
@@ -135,15 +154,46 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   const hAt = (col: number): number => heights.get(col) ?? 0;
 
   /* -------------------------------------------------------------- geometría */
-  const G = (): { w: number; h: number; k: number; ax: number; ay: number; L: number; floor: number; R: number } => {
+  const G = (): { w: number; h: number; k: number; ax: number; ay: number; L: number; floor: number; R: number; ks: number; ky: number; handY: number; reach: number; restY: number } => {
     const w = S.sw(), h = S.sh(), k = S.u();
     const R = Math.min(h * 0.13, w * 0.12);
-    return { w, h, k, ax: w / 2, ay: S.top() - 10 * k, L: h * 0.3, floor: h - S.bottom() - 58 * k, R };
+    const floor = h - S.bottom() - 58 * k;
+    // El chico, un poco más grande en la pantalla grande para que se lo vea
+    // desde el fondo; en un celular ya ocupa lo suyo.
+    const ks = k * (S.portrait() ? 1 : 1.2);
+    const ky = floor + 24 * k;
+    const handY = ky + HAND_Y * ks;
+    // Lo que alcanza desde la mano: el palo entero, con la punta un poco
+    // adentro de la piñata.
+    const reach = STICK * ks + R * 0.8;
+    // La piñata cuelga donde el palo la alcanza. Antes colgaba siempre a la
+    // misma altura, y en un celular quedaba a más de dos palos del chico. La
+    // cuerda, en un celular, más corta: el vaivén es el mismo en grados, y con
+    // la cuerda larga la piñata se salía de una pantalla tan angosta.
+    const L = Math.min(h * 0.3, w * (S.portrait() ? 0.4 : 0.55));
+    const restY = Math.max(S.top() - 10 * k + h * 0.3, handY - 0.75 * reach);
+    return { w, h, k, ax: w / 2, ay: restY - L, L, floor, R, ks, ky, handY, reach, restY };
   };
+  /** La piñata sube colgada de su cuerda: sale de abajo, se pasa y rebota. En fracción del alto. */
+  const hoist = (t: number): number => (t < 0 || t >= 1.8 ? 0 : 0.3 * Math.exp(-t / 0.33) * Math.cos((t * 2 * Math.PI) / 0.85));
   const pinPos = (): { x: number; y: number } => {
     const g = G();
-    return { x: g.ax + Math.sin(theta) * g.L, y: g.ay + Math.cos(theta) * g.L };
+    return { x: g.ax + Math.sin(theta) * g.L, y: g.ay + Math.cos(theta) * g.L + hoist(tAll) * g.h };
   };
+  /** Dónde está parado el chico (x del mundo), cuánto caminó y qué tan rápido va: las piernas se mueven con eso. */
+  let kidX = NaN, kidWalk = 0, kidSpeed = 0;
+  /**
+   * Dónde se para el chico para pegarle: a la izquierda de la piñata, a la
+   * distancia justa para que el palo la alcance. `py` es la altura de la
+   * piñata que cuenta.
+   */
+  function kidSpot(px: number, py: number): number {
+    const g = G();
+    const dy = clamp(g.handY - py, 0.3 * g.reach, 0.95 * g.reach);
+    return px - Math.sqrt(g.reach * g.reach - dy * dy) - HAND_X * g.ks;
+  }
+  /** El palo que está en el aire, si hay uno: arranca un cuarto de segundo antes del golpe. */
+  const swingAt = (t: number): Swing | undefined => swings.find((s) => t >= s.at - 0.25 && t < s.at + 0.15);
 
   /* ---------------------------------------------------------------- física */
   function step(dt: number): void {
@@ -156,6 +206,22 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       lastCreak = tAll;
       creaks++;
       beep(note([2, 4, 3, 5][creaks % 4] as number), 0.07, "triangle", 0.03);
+    }
+    {
+      // El chico: quieto mientras le dan vueltas; después la busca a tientas,
+      // tambaleándose, y en cada palo se arrima hasta donde el palo la alcanza.
+      const p = pinPos();
+      const sw = swingAt(tAll);
+      const spun = tAll >= SPIN_T1;
+      const dizzy = clamp(1 - (tAll - SPIN_T1) / 1.1, 0, 1);
+      const want = !spun
+        ? kidSpot(g.ax, g.restY)
+        : kidSpot(p.x, p.y) + (sw ? 0 : (Math.sin(tAll * 1.9 + 0.7) * 8 + Math.sin(tAll * 5.3) * 14 * dizzy) * g.ks);
+      const before = kidX;
+      kidX += (want - kidX) * Math.min(1, dt * (sw ? 12 : 2.5));
+      const v = Math.abs(kidX - before) / Math.max(dt, 1e-6);
+      kidWalk += Math.abs(kidX - before);
+      kidSpeed += (v - kidSpeed) * Math.min(1, dt * 10);
     }
     const sz = candySize();
     for (const c of candies) {
@@ -244,10 +310,11 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     for (const c of candies) if (c !== winC && c.inside) drop([c.idx], true);
     brokeDone = true;
     rivalDropped = true;
-    // Saltado, el arpegio de la caída y el golpe del piso no suenan todos
-    // juntos encima de la fanfarria.
+    // Saltado, el arpegio de la caída, el golpe del piso y las vueltas del
+    // chico no suenan todos juntos encima de la fanfarria.
     landed = true;
     fallNote = 8;
+    spinsDone = SPINS;
     const g = G();
     winC.inside = false;
     winC.x = g.w / 2;
@@ -279,6 +346,11 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       saidUpTo = i;
       cue[1]();
     }
+    // Las tres vueltas del chico: una nota por vuelta, cada una más arriba.
+    while (spinsDone < turnsAt(tAll)) {
+      spinsDone++;
+      beep(note(8 + 2 * spinsDone), 0.08, "triangle", 0.035);
+    }
     for (const s of swings) {
       if (s.done || tAll < s.at) continue;
       s.done = true;
@@ -297,9 +369,9 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       omega = clamp(omega, -2.2, 2.2);
       crackLevel++;
       {
-        // Donde pega el palo: el lado de la olla que mira hacia abajo a la izquierda.
+        // Donde pega el palo: el lado de la olla que mira a la mano del chico.
         const pp = pinPos();
-        const bx = g.w * KID_X, by = g.floor + 60 * g.k;
+        const bx = kidX + HAND_X * g.ks, by = g.handY;
         const dx = bx - pp.x, dy = by - pp.y, d = Math.hypot(dx, dy) || 1;
         blows.push({ at: tAll, x: pp.x + (dx / d) * g.R, y: pp.y + (dy / d) * g.R, seed: crackLevel * 13 });
         lastBlow = tAll;
@@ -387,7 +459,16 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   let pin!: Container;
   let cracks!: Graphics;
   let pieces!: Graphics;
-  let stick!: Graphics;
+  /**
+   * El chico del palo, en unidades de su dibujo con los pies en (0, 0):
+   * piernas, cuerpo, el palo, la cabeza y los brazos, en ese orden de atrás
+   * para adelante. El palo y los brazos se redibujan en cada cuadro.
+   */
+  let kid!: Container;
+  let kidLegL!: Graphics;
+  let kidLegR!: Graphics;
+  let kidStick!: Graphics;
+  let kidFx!: Graphics;
   let candyG!: Graphics;
   let glow!: Graphics;
   let pile!: Graphics;
@@ -423,6 +504,35 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     return c;
   }
 
+  /**
+   * El chico con los ojos vendados, como se juega. Las piernas van aparte
+   * para que caminen cuando la busca; el palo y los brazos se redibujan en
+   * cada cuadro, porque se mueven con el golpe. El palo va detrás de la
+   * cabeza: cuando lo carga por encima del hombro, por delante le tapaba la
+   * cara y la venda.
+   */
+  function makeKid(): Container {
+    const c = new Container();
+    const leg = (x: number): Graphics => {
+      // Desde la cadera: la pierna gira ahí al caminar.
+      const l = new Graphics().rect(-5.5, 0, 11, 44).fill(0x2b2d42).roundRect(-7.5, 39, 15, 7, 3).fill(INK);
+      l.position.set(x, -44);
+      return l;
+    };
+    kidLegL = leg(-14.5);
+    kidLegR = leg(-0.5);
+    const body = new Graphics().roundRect(-24, -92, 34, 52, 9).fill(S.color(3)).stroke({ width: 2.5, color: INK });
+    kidStick = new Graphics();
+    const head = new Graphics()
+      .circle(-7, -108, 17).fill(0xc68a5c).stroke({ width: 2.5, color: INK })
+      .poly([-24, -112, 10, -116, 10, -104, -24, -100]).fill(0xd7263d)
+      .poly([-24, -108, -36, -116, -34, -102]).fill(0xd7263d)
+      .circle(-7, -124, 13).fill(0x2b1d14);
+    kidFx = new Graphics();
+    c.addChild(kidLegL, kidLegR, body, kidStick, head, kidFx);
+    return c;
+  }
+
   function build(): void {
     const g = G();
     const k = g.k;
@@ -444,17 +554,19 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     candyG = new Graphics();
     pile = new Graphics();
     glow = new Graphics();
-    stick = new Graphics();
+    kid = makeKid();
     pin = makePinata(g.R);
     cracks = new Graphics();
     pin.addChild(cracks);
     fx = new Graphics();
-    S.scene.addChild(wall, garland, pile, glow, rope, pin, pieces, candyG, stick, fx);
+    S.scene.addChild(wall, garland, pile, glow, rope, pin, pieces, candyG, kid, fx);
     flash = new Graphics().rect(0, 0, g.w, g.h).fill(0xffffff);
     flash.alpha = 0;
-    // El papel picado: tres guirnaldas de banderitas caladas.
+    // El papel picado: tres guirnaldas de banderitas caladas, justo arriba de
+    // la piñata (en un celular la piñata cuelga más abajo, donde el palo llega).
+    const garlandTop = Math.max(S.top() + 8 * k, g.restY - 1.75 * g.R - 150 * k);
     for (let row = 0; row < 3; row++) {
-      const y0 = S.top() + (8 + row * 38) * k;
+      const y0 = garlandTop + row * 38 * k;
       const sag = (26 + row * 8) * k;
       const flags = 16;
       for (let i = 0; i < flags; i++) {
@@ -502,22 +614,50 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   build();
   const crownUI = S.crown(names, winners);
   S.onResize(build);
+  /**
+   * La toma de la colgada: la piñata que sube y el chico al que le dan
+   * vueltas, los dos en cuadro; al final se arrima a la piñata, que es donde
+   * va a pegar. Mira la piñata colgada en su lugar, no la que sube: así se la
+   * ve entrar al cuadro.
+   */
+  function hangShot(t: number): { x: number; y: number; z: number } {
+    const g = G();
+    const f = ease.inOutCubic(clamp((t - 1.9) / (T_HANG - 1.9), 0, 1));
+    const mid = (g.ax + kidSpot(g.ax, g.restY)) / 2;
+    // Termina donde empieza la toma de los palos, para que el primero no la sacuda.
+    return { x: mid + (g.ax - mid) * 0.7 * f, y: g.restY + g.R * (0.55 + 0.25 * f), z: 1.12 + 0.08 * f };
+  }
   {
-    const p = pinPos();
-    cam.cut(p.x, p.y, 1.35);
+    const g = G();
+    kidX = kidSpot(g.ax, g.restY);
+    const s = hangShot(0);
+    cam.cut(s.x, s.y, s.z);
   }
 
-  /** La cámara: la piñata de cerca en los palos, más cerca en la rajadura, la rotura abierta y la ganadora. */
+  /** La cámara: los dos en la colgada, la piñata de cerca en los palos, más cerca en la rajadura, la rotura abierta y la ganadora. */
   function direct(): void {
     const g = G();
     const p = pinPos();
-    if (phase === "hang") cam.lookAt(p.x, p.y + g.R * 0.6, 1.35 - 0.15 * clamp(tAll / T_HANG, 0, 1), 2);
-    else if (phase === "hits") {
+    if (phase === "hang") {
+      const s = hangShot(tAll);
+      cam.lookAt(s.x, s.y, s.z, 2.5);
+    } else if (phase === "hits") {
       const near = story.arc === "susto" && tAll >= T_PEEK && tAll < T_PEEK + 1.4;
       // Cuando quedan dos adentro, la piñata de cerca: antes la cámara encuadraba
       // el papel picado y dejaba la piñata cortada (lo encontró el agente evaluador).
       const dos = tAll - said2At < 1.4;
-      cam.lookAt(p.x, p.y + g.R * (near ? 0.4 : dos ? 0.2 : 0.8), near ? 1.9 : dos ? 1.6 : 1.2 + 0.25 * (crackLevel / nHits), near || dos ? 5 : 2.5);
+      const z = near ? 1.9 : dos ? 1.6 : 1.2 + 0.25 * (crackLevel / nHits);
+      let x = p.x;
+      if (!near && !dos) {
+        // Que entre el chico: si mirando la piñata queda afuera, la mira se
+        // corre lo justo hacia él, sin sacar de cuadro la punta de la piñata.
+        // En un celular le pasaba con cada vaivén.
+        const half = g.w / (2 * z) - 10 * g.k;
+        x = Math.max(Math.min(x, kidX - 40 * g.ks + half), p.x + g.R * 1.75 - half);
+      }
+      // En un celular la cámara la sigue más de cerca: con el mismo retraso que
+      // en la pantalla grande, la piñata se le escapaba por el costado.
+      cam.lookAt(x, p.y + g.R * (near ? 0.4 : dos ? 0.2 : 0.8), z, near || dos ? 5 : S.portrait() ? 4 : 2.5);
     } else if (phase === "break") {
       // Un poco por debajo del caramelo y más rápido: con la mira encima y a
       // 2,2 la cámara se atrasaba y el caramelo bajaba hasta quedar detrás de
@@ -539,6 +679,78 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     gr.ellipse(x - s * 0.35 * c, y - s * 0.25, s * 0.28, s * 0.14).fill({ color: 0xffffff, alpha: 0.6 * alpha });
   }
 
+  /**
+   * El chico y su palo. El palo sale de sus manos y mide siempre lo mismo: en
+   * alto mientras le dan vueltas, atrás cuando toma impulso, en arco hasta la
+   * piñata en cada golpe (ya se arrimó a donde la alcanza) y, rota la piñata,
+   * arriba. Antes el palo flotaba solo, sin brazos que lo agarraran.
+   */
+  function drawKid(p: { x: number; y: number }, broken: boolean): void {
+    const g = G();
+    kid.position.set(kidX, g.ky);
+    // Las vueltas: se da vuelta entero, de frente y de espaldas. De costado
+    // una persona mide más o menos la mitad que de frente: con menos ancho, en
+    // cada vuelta se volvía un palito.
+    let face = 1;
+    if (tAll >= SPIN_T0 && tAll < SPIN_T1) {
+      const c = Math.cos(spinAt(tAll) * 2 * Math.PI);
+      face = (c < 0 ? -1 : 1) * Math.max(0.4, Math.abs(c));
+    }
+    const dizzy = tAll >= SPIN_T1 ? clamp(1 - (tAll - SPIN_T1) / 1.1, 0, 1) : 0;
+    kid.scale.set(g.ks * face, g.ks);
+    kid.rotation = Math.sin(tAll * 11) * 0.13 * dizzy;
+    // Las piernas caminan con lo que camina; quieto, quedan quietas.
+    const gait = kidWalk / (16 * g.ks), amp = clamp(kidSpeed / (60 * g.ks), 0, 1) * 0.45;
+    kidLegL.rotation = Math.sin(gait) * amp;
+    kidLegR.rotation = -Math.sin(gait) * amp;
+    // El ángulo del palo, en el dibujo del chico: de frente a la piñata es el
+    // mismo que en el mundo.
+    const sw = swingAt(tAll);
+    const aim = Math.atan2(p.y - g.handY, p.x - (kidX + HAND_X * g.ks));
+    const f = sw ? clamp((tAll - (sw.at - 0.25)) / 0.4, 0, 1) : 0;
+    const miss = sw?.miss ? 0.5 : 0;
+    const angle = (ff: number): number => aim + miss - 1.1 + 1.1 * ease.outCubic(ff);
+    // En alto mientras le dan vueltas; al terminar la colgada lo lleva atrás,
+    // de a poco, para el primer palo.
+    const up = -Math.PI / 2 + 0.3;
+    const ready = ease.inOutCubic(clamp((tAll - (T_HANG - 0.2)) / 0.45, 0, 1));
+    const a = broken ? -1.25 : up + (angle(f) - up) * ready;
+    kidStick.clear();
+    kidFx.clear();
+    // La estela: dos palos fantasma un poco atrás en el arco, solo al pegar.
+    if (sw && !broken) {
+      for (let gh = 2; gh >= 1; gh--) {
+        const ag = angle(clamp(f - gh * 0.12, 0, 1));
+        kidStick.moveTo(HAND_X, HAND_Y).lineTo(HAND_X + Math.cos(ag) * STICK, HAND_Y + Math.sin(ag) * STICK).stroke({ width: 6, color: 0xffffff, alpha: 0.14 * (3 - gh), cap: "round" });
+      }
+    }
+    const ca = Math.cos(a), sa = Math.sin(a);
+    const ex = HAND_X + ca * STICK, ey = HAND_Y + sa * STICK;
+    // Las dos manos en el palo: la de atrás un poco más arriba.
+    const h2x = HAND_X + ca * 13, h2y = HAND_Y + sa * 13;
+    const shirt = S.color(3);
+    kidStick.moveTo(HAND_X - ca * 8, HAND_Y - sa * 8).lineTo(ex, ey).stroke({ width: 7.5, color: INK, cap: "round" })
+      .moveTo(HAND_X - ca * 8, HAND_Y - sa * 8).lineTo(ex, ey).stroke({ width: 5, color: 0xa0703f, cap: "round" });
+    // Forrado de papel de colores, en vueltas.
+    for (let i = 0; i < 5; i++) {
+      const r = 30 + i * 18, cx = HAND_X + ca * r, cy = HAND_Y + sa * r;
+      kidStick.moveTo(cx - sa * 4 - ca * 2, cy + ca * 4 - sa * 2).lineTo(cx + sa * 4 + ca * 2, cy - ca * 4 + sa * 2).stroke({ width: 3, color: CONE[i] as number });
+    }
+    kidFx.moveTo(-16, -84).lineTo(h2x, h2y).stroke({ width: 7, color: INK, cap: "round" })
+      .moveTo(-16, -84).lineTo(h2x, h2y).stroke({ width: 4, color: shirt, cap: "round" });
+    kidFx.moveTo(2, -84).lineTo(HAND_X, HAND_Y).stroke({ width: 7, color: INK, cap: "round" })
+      .moveTo(2, -84).lineTo(HAND_X, HAND_Y).stroke({ width: 4, color: shirt, cap: "round" })
+      .circle(HAND_X, HAND_Y, 3.6).fill(0xc68a5c).stroke({ width: 1.5, color: INK })
+      .circle(h2x, h2y, 3.6).fill(0xc68a5c).stroke({ width: 1.5, color: INK });
+    // Mareado: tres estrellitas que le dan vueltas a la cabeza.
+    if (dizzy > 0.05) {
+      for (let i = 0; i < 3; i++) {
+        const t = tAll * 7 + (i * 2 * Math.PI) / 3;
+        kidFx.star(-7 + Math.cos(t) * 20, -146 + Math.sin(t) * 6, 5, 5, 2.2).fill({ color: YELLOW, alpha: dizzy }).stroke({ width: 1.2, color: INK, alpha: dizzy });
+      }
+    }
+  }
+
   function draw(now: number): void {
     const g = G();
     const k = g.k;
@@ -548,7 +760,10 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     const broken = brokeDone;
     pin.visible = !broken;
     pin.position.set(p.x, p.y);
-    pin.rotation = theta * 0.6 + Math.sin(tAll * 1.3) * 0.03;
+    // Cuando se anuncian los caramelos, la piñata se sacude con el traqueteo.
+    const jg = tAll - 1.3;
+    const jiggle = jg >= 0 && jg < 0.9 ? 0.09 * Math.sin(jg * 44) * Math.exp(-jg * 4.5) : 0;
+    pin.rotation = theta * 0.6 + Math.sin(tAll * 1.3) * 0.03 + jiggle;
     const ha = tAll - lastBlow;
     const sq = ha >= 0 && ha < 0.6 ? 0.16 * Math.exp(-ha * 7) * Math.cos(ha * 30) : 0;
     pin.scale.set(1 + sq, 1 - sq);
@@ -610,49 +825,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
         pieces.rect(x - w / 2, y - h / 2, w, h).fill({ color: CONE[i % 7] as number, alpha: 1 - age / 2.2 });
       }
     }
-    // El palo: lo sostiene un chico con los ojos vendados, como se juega, y
-    // entra en arco en cada golpe. Antes el palo flotaba solo.
-    stick.clear();
-    const kx = g.w * KID_X, ky = g.floor + 24 * k;
-    {
-      const kid = S.color(3);
-      stick.rect(kx - 20 * k, ky - 44 * k, 11 * k, 44 * k).fill(0x2b2d42).rect(kx - 6 * k, ky - 44 * k, 11 * k, 44 * k).fill(0x2b2d42)
-        .roundRect(kx - 22 * k, ky - 5 * k, 15 * k, 7 * k, 3 * k).fill(INK).roundRect(kx - 8 * k, ky - 5 * k, 15 * k, 7 * k, 3 * k).fill(INK)
-        .roundRect(kx - 24 * k, ky - 92 * k, 34 * k, 52 * k, 9 * k).fill(kid).stroke({ width: 2.5 * k, color: INK })
-        .circle(kx - 7 * k, ky - 108 * k, 17 * k).fill(0xc68a5c).stroke({ width: 2.5 * k, color: INK })
-        .poly([kx - 24 * k, ky - 112 * k, kx + 10 * k, ky - 116 * k, kx + 10 * k, ky - 104 * k, kx - 24 * k, ky - 100 * k]).fill(0xd7263d)
-        .poly([kx - 24 * k, ky - 108 * k, kx - 36 * k, ky - 116 * k, kx - 34 * k, ky - 102 * k]).fill(0xd7263d)
-        .circle(kx - 7 * k, ky - 124 * k, 13 * k).fill(0x2b1d14);
-    }
-    const sw = swings.find((s) => tAll >= s.at - 0.25 && tAll < s.at + 0.15);
-    if (!broken) {
-      const f = sw ? clamp((tAll - (sw.at - 0.25)) / 0.4, 0, 1) : 0;
-      const bx = kx + 20 * k, by = ky - 66 * k;
-      const aim = Math.atan2(p.y - by, p.x - bx) + (sw?.miss ? 0.5 : 0);
-      const a = aim - 1.1 + 1.1 * ease.outCubic(f);
-      // En reposo el palo es corto, en alto; en el golpe se estira hasta la
-      // piñata. Con el largo entero todo el tiempo era una vara que salía de
-      // la pantalla.
-      const full = Math.hypot(p.x - bx, p.y - by) * 0.98, rest = 120 * k;
-      const reach = (x: number): number => rest + (full - rest) * ease.outCubic(x);
-      const len = reach(f);
-      const ex = bx + Math.cos(a) * len, ey = by + Math.sin(a) * len;
-      // La estela: dos palos fantasma un poco atrás en el arco, solo al pegar.
-      for (let gh = 2; gh >= 1 && sw; gh--) {
-        const fg = clamp(f - gh * 0.12, 0, 1);
-        const ag = aim - 1.1 + 1.1 * ease.outCubic(fg);
-        stick.moveTo(bx, by).lineTo(bx + Math.cos(ag) * reach(fg), by + Math.sin(ag) * reach(fg)).stroke({ width: 10 * k, color: 0xffffff, alpha: 0.12 * (3 - gh), cap: "round" });
-      }
-      stick.moveTo(bx, by).lineTo(ex, ey).stroke({ width: 10 * k, color: 0x7a5230, cap: "round" });
-      for (let r = 0.2; r < 0.9; r += 0.14) stick.circle(bx + (ex - bx) * r, by + (ey - by) * r, 5.5 * k).fill(CONE[Math.round(r * 10) % 7] as number);
-    } else {
-      // Rota la piñata, el chico se queda con el palo en alto: antes se
-      // esfumaba en el mismo cuadro del golpe.
-      const bx = kx + 20 * k, by = ky - 66 * k, a = -1.25, len = 120 * k;
-      const ex = bx + Math.cos(a) * len, ey = by + Math.sin(a) * len;
-      stick.moveTo(bx, by).lineTo(ex, ey).stroke({ width: 10 * k, color: 0x7a5230, cap: "round" });
-      for (let r = 0.2; r < 0.9; r += 0.14) stick.circle(bx + (ex - bx) * r, by + (ey - by) * r, 5.5 * k).fill(CONE[Math.round(r * 10) % 7] as number);
-    }
+    drawKid(p, broken);
     // El golpe: la estrella donde pega y los papelitos que se desprenden.
     fx.clear();
     for (const b of blows) {
@@ -814,6 +987,11 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     const a = cam.toScreen(ox - oR, oy - oR, g.w, g.h);
     const b = cam.toScreen(ox + oR, oy + oR, g.w, g.h);
     const blocked = [{ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) }];
+    // El chico también, de la cabeza a los pies: ahora se arrima a la piñata, y
+    // los nombres de los caramelos que le caen cerca le tapaban las piernas.
+    const k0 = cam.toScreen(kidX - 38 * g.ks, g.ky - 140 * g.ks, g.w, g.h);
+    const k1 = cam.toScreen(kidX + 26 * g.ks, g.ky + 4 * g.ks, g.w, g.h);
+    blocked.push({ x: Math.min(k0.x, k1.x), y: Math.min(k0.y, k1.y), w: Math.abs(k1.x - k0.x), h: Math.abs(k1.y - k0.y) });
     for (const o of layoutLabels(items, bounds, blocked)) {
       if (o.id === -100000) {
         moreBadge.visible = true;
