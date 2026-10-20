@@ -177,7 +177,13 @@ function anunciar(s: Toca): void {
   const primera = ultimaClave === "";
   ultimaClave = clave;
   // Lo primero que se calcula al abrir la página no es un cambio: nadie lo anuncia.
-  if (primera || !s.clave) return;
+  if (primera) return;
+  // Sin texto (el paso 1) se vacía el aviso: volver al mismo paso con las mismas palabras tiene que ser un cambio
+  // de nuevo, o el lector de pantalla no lo repite.
+  if (!s.clave) {
+    $("sig-aviso").textContent = "";
+    return;
+  }
   $("sig-aviso").textContent = s.clave === "sigRonda" ? `${t("sigPaso").replace("{n}", String(s.paso))}. ${t("sigAvisoRonda")}` : `${t("sigPaso").replace("{n}", String(s.paso))}. ${s.detalle}.`;
 }
 
@@ -194,6 +200,9 @@ function pintarBarra(s: Toca, mostrar: boolean): void {
     if (p.textContent !== l) p.textContent = l;
   }
   const entra = mostrar && !bar.classList.contains("on");
+  // Si la barra se va con el foco adentro (se llegó con el teclado y la rueda llevó el botón de verdad a la
+  // vista), el foco pasa al botón de verdad: apagar una región con el foco adentro lo deja en el aire.
+  if (!mostrar && s.boton && bar.contains(document.activeElement)) s.boton.focus({ preventScroll: true });
   bar.classList.toggle("on", mostrar);
   // Escondida de verdad: ni el foco ni el lector la encuentran.
   bar.inert = !mostrar;
