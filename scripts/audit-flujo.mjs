@@ -33,6 +33,12 @@
  * El sellado en testnet a veces tarda (una vez pasó los 120 s): espera hasta
  * `--sello-max` segundos y, si falla, reintenta el recorrido de esa pantalla.
  *
+ * Mira también qué pasa cuando el sellado falla (la red de Stellar deja de
+ * contestar): el error se escribe junto al botón de verdad y, si se apretó la
+ * barra, ese botón queda fuera de la pantalla. Tiene que verse el motivo y
+ * quedar a la vista una acción para reintentar. Es otro Chrome por pantalla,
+ * en el primer tema; `--fallos none` lo saltea.
+ *
  * Al final mira también unos anchos de celular que esas pantallas no cubren
  * (320, 360, 375 y 414 px: 360 y 375 son los más comunes). Es rápido y no graba
  * nada en Stellar: ahí el ancho rompe el indicador de pasos y el texto de los
@@ -43,7 +49,9 @@
  *   node scripts/audit-flujo.mjs [--base http://localhost:4173] [--out DIR]
  *                                [--vistas laptop-100,celular] [--temas dark,light]
  *                                [--sin-resto laptop-100,celular-h] [--lang es|en]
- *                                [--anchos 320,360,375,414 | none] [--solo-anchos]
+ *                                [--fallos laptop-100,celular-h | none]
+ *                                [--anchos 320,360,375,414 | none]
+ *                                [--solo-anchos | --solo-fallos]
  *                                [--sello-max 240] [--reintentos 2]
  *
  * Un Chrome a la vez y con su propio puerto: CDP_PORT=<puerto> node ...
@@ -72,6 +80,7 @@ const reintentos = Number(opt("--reintentos", "2"));
 // Los anchos de celular que las cinco pantallas no cubren ("none" los saltea).
 const anchos = opt("--anchos", "320,360,375,414").split(",").filter((a) => a && a !== "none").map(Number);
 const soloAnchos = args.includes("--solo-anchos");
+const soloFallos = args.includes("--solo-fallos");
 
 // [etiqueta, ancho, alto, dpr, celular]
 const TODAS = [
@@ -92,6 +101,8 @@ if (anchos.some((a) => !Number.isFinite(a) || a < 280 || a > 1000)) {
   console.error("uso: --anchos 320,360,375,414 (anchos de celular, entre 280 y 1000 px) o --anchos none");
   process.exit(2);
 }
+// Las pantallas donde se prueba el sellado que falla, apretado desde lo que se ve ("none" lo saltea).
+const fallos = opt("--fallos", TODAS.map((v) => v[0]).join(",")).split(",").filter((f) => f && f !== "none");
 
 let fallas = 0;
 let total = 0;
@@ -371,6 +382,94 @@ async function superpuestos(page, ctx) {
   await quieto(page);
 }
 
+/** La cuenta de prueba: se conecta sola y le carga fondos. Lanza si algo no sale, para repetir el recorrido. */
+async function conectarCuentaDePrueba(page) {
+  await page.waitFor("document.querySelector('#gate button, #wallet-box button')", 20000);
+  await sleep(500);
+  await page.eval("(document.querySelector('#gate button') || document.querySelector('#wallet-box button')).click(); true");
+  const ventana = await page.waitFor("document.querySelector('.login-opt')", 15000);
+  hayFalla(!ventana.ok, "no se abrió la ventana de ingreso");
+  await sleep(300);
+  const i = await page.eval(`String([...document.querySelectorAll('.login-opt')].findIndex((e) => /prueba|Test account/.test(e.textContent)))`);
+  hayFalla(i === "-1", "la ventana de ingreso no ofrece la cuenta de prueba");
+  await page.eval(`[...document.querySelectorAll('.login-opt')][${i}].click(); true`);
+  const entro = await page.waitFor("!document.querySelector('.modal-back') && document.querySelector('#wallet-box .hello')", 120000);
+  hayFalla(!entro.ok, "la cuenta de prueba no quedó conectada");
+  await sleep(900);
+}
+
+/**
+ * Dónde queda el mensaje del sellado, para saber si se ve: sin contar la cabecera fija ni, si está puesta, la barra.
+ */
+const MEDIR_MENSAJE = `JSON.stringify((() => {
+  const s = document.getElementById('seal-status');
+  const cs = getComputedStyle(s);
+  const r = s.getBoundingClientRect();
+  const cab = document.querySelector('header');
+  const arriba = cab && getComputedStyle(cab).position === 'sticky' ? Math.round(cab.getBoundingClientRect().bottom) : 0;
+  const bar = document.getElementById('siguiente');
+  const abajo = bar.classList.contains('on') ? Math.round(bar.getBoundingClientRect().top) : innerHeight;
+  return { visible: cs.display !== 'none', texto: (s.textContent || '').trim().slice(0, 100), top: Math.round(r.top), bottom: Math.round(r.bottom), arriba, abajo, alto: innerHeight };
+})())`;
+
+/**
+ * Sellar con la red de Stellar caída. El error se escribe junto al botón de verdad y, si se apretó la barra, ese
+ * botón y el mensaje quedan fuera de la pantalla: a la vista quedaba un botón que volvía a estar disponible sin decir
+ * por qué (20 de octubre de 2026). Corta las llamadas al servidor de Stellar, aprieta lo que se ve y comprueba que el
+ * motivo aparece en la pantalla y que queda a la vista una acción para reintentar.
+ */
+async function falloDelSello(browser, vista, tema) {
+  const [etiqueta, ancho, alto, dpr, celular] = vista;
+  const quien = `${etiqueta} ${tema} · sellado que falla`;
+  const page = await browser.open("about:blank");
+  try {
+    await page.send("Emulation.setDeviceMetricsOverride", { width: ancho, height: alto, deviceScaleFactor: dpr, mobile: celular, screenWidth: ancho, screenHeight: alto });
+    await page.send("Page.navigate", { url: `${base}/?theme=${tema}&lang=${lang}&pace=rapido` });
+    await page.waitFor("document.readyState === 'complete'", 20000);
+    await conectarCuentaDePrueba(page);
+    await page.eval(`document.getElementById('nw').value = '2'; document.getElementById('nw').dispatchEvent(new Event('change', { bubbles: true })); document.getElementById('btn-sample').click(); true`);
+    await sleep(900);
+    await page.eval("document.getElementById('sec-participants').scrollIntoView({ block: 'start' }); true");
+    await quieto(page);
+    // La red de Stellar deja de contestar: lo que pide la página a su servidor falla enseguida.
+    page.ws.addEventListener("message", (ev) => {
+      const m = JSON.parse(ev.data);
+      if (m.method === "Fetch.requestPaused") page.send("Fetch.failRequest", { requestId: m.params.requestId, errorReason: "ConnectionFailed" }).catch(() => {});
+    });
+    await page.send("Fetch.enable", { patterns: [{ urlPattern: "*soroban-testnet.stellar.org*" }] });
+    const usaBarra = await pulsar(page, { etiqueta, tema, celular }, REAL.lista, "sellar con la red caída");
+    // Termina cuando el motivo ya está escrito y el botón volvió a estar disponible.
+    const fallo = await page.waitFor(
+      "getComputedStyle(document.getElementById('seal-status')).display === 'block' && !document.getElementById('btn-freeze').disabled && !document.getElementById('seal-status').textContent.includes('…') && document.getElementById('seal-status').textContent.trim().length > 0",
+      90000,
+    );
+    check(`${quien}: falla y deja escrito el motivo${usaBarra ? " (se apretó la barra)" : ""}`, fallo.ok, fallo.ok ? "" : "no falló en 90 s: ¿cambió el servidor de Stellar?");
+    if (!fallo.ok) return;
+    await sleep(900);
+    await quieto(page);
+    const msg = JSON.parse(await page.eval(MEDIR_MENSAJE));
+    const seVe = msg.visible && msg.top >= msg.arriba - 1 && msg.bottom <= msg.abajo + 1;
+    check(`${quien}: el mensaje del error se ve en la pantalla`, seVe, seVe ? `"${msg.texto}"` : `queda en ${msg.top}–${msg.bottom}, la pantalla útil va de ${msg.arriba} a ${msg.abajo}`);
+    // Y hay una acción a la vista para volver a intentar: el botón de verdad o la barra, una sola.
+    const m = await medir(page, REAL.lista);
+    const verReal = aLaVista(m.real?.caja ?? null, m);
+    const verBarra = !!(m.barra.existe && m.barra.on && m.barra.btn?.caja && aLaVista(m.barra.btn.caja, m));
+    check(`${quien}: queda una acción a la vista para reintentar`, verReal !== verBarra, verReal ? `el botón "${m.real.texto}"` : verBarra ? `la barra: "${m.barra.btn.texto}"` : "ninguna");
+    await page.screenshot(join(outDir, `flujo-${etiqueta}-${tema}-6-sellado-que-falla.png`));
+  } finally {
+    try {
+      await page.send("Fetch.disable");
+    } catch {
+      /* ya cerrada */
+    }
+    try {
+      await page.send("Page.close");
+    } catch {
+      /* ya cerrada */
+    }
+  }
+}
+
 /** El recorrido de una pantalla, en un tema. Devuelve si llegó hasta el final. */
 async function recorrer(browser, vista, tema, caso) {
   const [etiqueta, ancho, alto, dpr, celular] = vista;
@@ -382,19 +481,7 @@ async function recorrer(browser, vista, tema, caso) {
     await page.send("Page.navigate", { url: `${base}/?theme=${tema}&lang=${lang}&pace=rapido` });
     await page.waitFor("document.readyState === 'complete'", 20000);
 
-    // La cuenta de prueba: se conecta sola y le carga fondos.
-    await page.waitFor("document.querySelector('#gate button, #wallet-box button')", 20000);
-    await sleep(500);
-    await page.eval("(document.querySelector('#gate button') || document.querySelector('#wallet-box button')).click(); true");
-    const ventana = await page.waitFor("document.querySelector('.login-opt')", 15000);
-    hayFalla(!ventana.ok, "no se abrió la ventana de ingreso");
-    await sleep(300);
-    const i = await page.eval(`String([...document.querySelectorAll('.login-opt')].findIndex((e) => /prueba|Test account/.test(e.textContent)))`);
-    hayFalla(i === "-1", "la ventana de ingreso no ofrece la cuenta de prueba");
-    await page.eval(`[...document.querySelectorAll('.login-opt')][${i}].click(); true`);
-    const entro = await page.waitFor("!document.querySelector('.modal-back') && document.querySelector('#wallet-box .hello')", 120000);
-    hayFalla(!entro.ok, "la cuenta de prueba no quedó conectada");
-    await sleep(900);
+    await conectarCuentaDePrueba(page);
 
     // 1. Lista cargada.
     if (caso === "sin-resto") {
@@ -634,9 +721,9 @@ async function main() {
   await mkdir(outDir, { recursive: true });
   console.log(`\nAuditando el flujo contra ${base}`);
   console.log(
-    `  pantallas: ${soloAnchos ? "ninguna (--solo-anchos)" : VISTAS.map((v) => `${v[0]} ${v[1]}x${v[2]}`).join(", ")} · temas: ${soloAnchos ? "—" : temas.join(", ")} · anchos de celular: ${anchos.length ? anchos.map((a) => `${a}px`).join(", ") : "ninguno"} · capturas en ${outDir}\n`,
+    `  pantallas: ${soloAnchos || soloFallos ? "ninguna (solo " + (soloAnchos ? "anchos" : "fallos") + ")" : VISTAS.map((v) => `${v[0]} ${v[1]}x${v[2]}`).join(", ")} · temas: ${soloAnchos || soloFallos ? "—" : temas.join(", ")} · anchos de celular: ${anchos.length ? anchos.map((a) => `${a}px`).join(", ") : "ninguno"} · capturas en ${outDir}\n`,
   );
-  for (const tema of soloAnchos ? [] : temas) {
+  for (const tema of soloAnchos || soloFallos ? [] : temas) {
     for (const vista of VISTAS) {
       for (const caso of ["resto", ...(sinResto.includes(vista[0]) && tema === temas[0] ? ["sin-resto"] : [])]) {
         let hecho = false;
@@ -670,8 +757,25 @@ async function main() {
       }
     }
   }
+  // El sellado que falla, apretado desde lo que se ve: una vez por pantalla, en el primer tema.
+  for (const vista of soloAnchos ? [] : VISTAS.filter((v) => fallos.includes(v[0]))) {
+    let hecho = false;
+    for (let intento = 0; intento <= 1 && !hecho; intento++) {
+      const browser = await launch({ width: vista[1], height: vista[2] });
+      try {
+        await falloDelSello(browser, vista, temas[0]);
+        hecho = true;
+      } catch (e) {
+        const motivo = String(e?.message ?? e).slice(0, 140);
+        if (intento === 1) check(`${vista[0]} ${temas[0]} · sellado que falla: la prueba llegó hasta el final`, false, motivo);
+        else console.log(`  … ${vista[0]} · sellado que falla: se cortó (${motivo}) · se reintenta`);
+      } finally {
+        await browser.close();
+      }
+    }
+  }
   // Los anchos de celular: rápido, sin Stellar.
-  for (const ancho of anchos) {
+  for (const ancho of soloFallos ? [] : anchos) {
     const browser = await launch({ width: ancho, height: 740 });
     try {
       await anchosDeCelular(browser, ancho);
