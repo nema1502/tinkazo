@@ -745,7 +745,8 @@ export const T: Record<Lang, Dict> = {
     pantallaPie: "Nadie eligió este nombre: la lista se cerró antes de que existiera el número que lo decidió.",
     againTitle: "¿Pasamos al siguiente premio?",
     againLeft: (n) => (n === 1 ? "Queda 1 persona sin premio." : `Quedan ${n} personas sin premio.`),
-    againSin: (n) => `Siguiente premio · quedan ${n}`,
+    // El espacio no separable: si el botón se parte (un celular angosto), queda "Siguiente premio" y debajo "(quedan 16)", nunca "16)" solo.
+    againSin: (n) => `Siguiente premio (quedan\xa0${n})`,
     againNueva: "Usar otra lista",
     againFew: (n) => (n === 1 ? "Queda una sola persona sin premio: para otro sorteo, usá otra lista." : "Ya ganaron todos los de la lista: para otro premio, usá otra lista."),
     againQuitados: (nombres, n) => (nombres.length > 3 ? `${nombres.length} personas ya ganaron y no están en esta lista. Quedan ${n}.` : nombres.length === 1 ? `${nombres[0]} ya ganó y no está en esta lista. Quedan ${n}.` : `${nombres.join(", ")} ya ganaron y no están en esta lista. Quedan ${n}.`),
@@ -1733,7 +1734,7 @@ export const T: Record<Lang, Dict> = {
     pantallaPie: "Nobody picked this name: the list was locked before the number that decided it existed.",
     againTitle: "On to the next prize?",
     againLeft: (n) => (n === 1 ? "1 person is left without a prize." : `${n} people are left without a prize.`),
-    againSin: (n) => `Next prize · ${n} left`,
+    againSin: (n) => `Next prize (${n}\xa0left)`,
     againNueva: "Use another list",
     againFew: (n) => (n === 1 ? "Only one person is left without a prize: for another draw, use another list." : "Everyone on the list has already won: for another prize, use another list."),
     againQuitados: (nombres, n) => (nombres.length > 3 ? `${nombres.length} people already won and are off this list. ${n} left.` : nombres.length === 1 ? `${nombres[0]} already won and is off this list. ${n} left.` : `${nombres.join(", ")} already won and are off this list. ${n} left.`),

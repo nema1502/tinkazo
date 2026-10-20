@@ -1342,6 +1342,12 @@
     .pasos li + li::before { width: 6px; margin-right: 0; }
     .p-n { width: 20px; height: 20px; font-size: 11px; }
   }
+  /* Un celular de 320 px: sin los guiones entre un paso y otro entra con margen, y no pegado al borde. */
+  @media (max-width: 340px) {
+    .pasos { gap: 2px; }
+    .pasos li { gap: 3px; }
+    .pasos li + li::before { display: none; }
+  }
   body[data-demo="1"] .pasos { display: none !important; }
 
   /* La barra de "lo que sigue": la red de seguridad para cuando el botón de la
@@ -1465,9 +1471,15 @@
   .winner-box > .again .row > .primary { min-height: 52px; font-size: 16px; }
   .winner-box > .again .note { margin-top: 10px; }
   .grande-row { margin-top: 16px; }
-  /* En el celular "Siguiente premio · quedan 16" entra en un renglón (con el relleno de siempre se partía en dos). */
+  /* En el celular "Siguiente premio (quedan 16)" entra en un renglón: con el relleno de siempre
+     quedaban 258 px de ancho para el botón y el texto se partía en dos. En los celulares más angostos
+     (360 y 375 px, los más comunes) no entra y se parte como "Siguiente premio" y debajo "(quedan 16)":
+     el espacio no separable del texto impide que quede "16)" solo, y `balance` reparte los renglones. */
+  .winner-box > .again .row > .primary { text-wrap: balance; }
   @media (max-width: 460px) {
-    .winner-box > .again .row > .primary { padding-left: 12px; padding-right: 12px; font-size: 15px; }
+    .winner-box { padding-left: 14px; padding-right: 14px; }
+    .winner-box > .again { padding: 12px; }
+    .winner-box > .again .row > .primary { padding-left: 10px; padding-right: 10px; font-size: 15px; }
   }
   /* Una pantalla baja: el ganador y, pegado, lo que sigue, sin la etiqueta de arriba. */
   @media (max-height: 520px) {
