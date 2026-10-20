@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { conAyudaDeFondos, esperarHasta, type Ayuda } from "./reintento";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { conAyudaDeFondos, conTope, esperarHasta, type Ayuda } from "./reintento";
 
 /** Un error de falta de saldo y otros que no lo son: lo único que `sinSaldo` mira es la clase. */
 class SinSaldo extends Error {}
@@ -192,5 +192,34 @@ describe("esperarHasta", () => {
     await expect(esperarHasta(lenta, { cadaMs: 500, hastaMs: 3000, ...r })).resolves.toBe(false);
     expect(r.pasado()).toBeLessThanOrEqual(3000 + 900);
     expect(miradas).toBeLessThan(6);
+  });
+});
+
+describe("conTope", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("devuelve lo que llegó a tiempo y no deja el reloj corriendo", async () => {
+    const p = conTope(new Promise<string>((r) => setTimeout(() => r("listo"), 100)), 1000, "tope");
+    await vi.advanceTimersByTimeAsync(100);
+    await expect(p).resolves.toBe("listo");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("falla con el mensaje si no llega a tiempo", async () => {
+    const p = conTope(new Promise<string>(() => undefined), 1000, "friendbot-timeout");
+    const visto = p.then(
+      () => "llegó",
+      (e: Error) => e.message,
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    await expect(visto).resolves.toBe("friendbot-timeout");
+  });
+
+  it("si lo pedido falla antes del tope, sale ese error y no el del tope", async () => {
+    const original = new Error("friendbot-failed");
+    const p = conTope(Promise.reject(original), 1000, "tope");
+    await expect(p).rejects.toBe(original);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

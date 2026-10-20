@@ -1,6 +1,6 @@
 import { getLang, t } from "../i18n";
 import { network, txUrl } from "../stellar/config";
-import { conAyudaDeFondos, esperarHasta } from "./reintento";
+import { conAyudaDeFondos, conTope, esperarHasta } from "./reintento";
 
 /**
  * Sellar y sortear contra el contrato.
@@ -181,7 +181,9 @@ async function conFondos<T>(intento: () => Promise<T>, onStep: OnStep): Promise<
       if (!(await w.accountExists(address))) {
         await esperarHasta(() => w.accountExists(address), { cadaMs: 1200, hastaMs: 12_000 });
       }
-      await w.fundWithFriendbot(address);
+      // Con tope: el grifo a veces no contesta, y el sellado no puede quedarse
+      // esperándolo para siempre. Si no llega, se sigue con el último recurso.
+      await conTope(w.fundWithFriendbot(address), 20_000, "friendbot-timeout");
     },
     esperar: async () => {
       // El grifo ya contestó, pero el saldo tarda un instante en verse. Y un

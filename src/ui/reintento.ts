@@ -74,6 +74,28 @@ export async function conAyudaDeFondos<T>(intento: () => Promise<T>, ayuda: Ayud
 }
 
 /**
+ * Le pone tope de tiempo a algo que puede quedarse colgado. Si no termina en
+ * `ms`, falla con `mensaje`; lo que se pidió sigue su curso por detrás, sin
+ * que a nadie le importe. Sin esto, un grifo que no contesta dejaba el
+ * sellado en "Preparando tu cuenta…" para siempre, con el botón apagado.
+ */
+export function conTope<T>(promesa: Promise<T>, ms: number, mensaje: string): Promise<T> {
+  return new Promise<T>((resolver, rechazar) => {
+    const reloj = setTimeout(() => rechazar(new Error(mensaje)), ms);
+    promesa.then(
+      (v) => {
+        clearTimeout(reloj);
+        resolver(v);
+      },
+      (e: unknown) => {
+        clearTimeout(reloj);
+        rechazar(e);
+      },
+    );
+  });
+}
+
+/**
  * Espera a que `listo()` sea verdadero, mirando cada `cadaMs`, hasta `hastaMs`.
  * Devuelve si lo logró. Tiene tope de tiempo de verdad (no de vueltas): una
  * consulta lenta no estira la espera.

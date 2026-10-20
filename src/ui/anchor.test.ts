@@ -275,3 +275,26 @@ describe("selloSinGrabar: cuándo se reintenta el sello con otra ronda", () => {
     expect(selloSinGrabar(error)).toBe(false);
   });
 });
+
+describe("un grifo que no contesta", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("no traba el sellado: a los 20 segundos se sigue con el último recurso", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    h.wallet = pollar(vi.fn().mockRejectedValue(sinSaldo()));
+    // El grifo se cuelga: la promesa nunca se resuelve.
+    h.fundWithFriendbot.mockImplementation(() => new Promise<void>(() => undefined));
+    let listo = false;
+    const corrida = sellar().then((r) => {
+      listo = true;
+      return r;
+    });
+    // Las piezas de afuera se cargan con import() y el reloj de mentira avanza de a poco.
+    for (let i = 0; i < 60 && !listo; i++) await vi.advanceTimersByTimeAsync(1000);
+    const { error } = await corrida;
+    expect(listo).toBe(true);
+    expect((error as Error).message).toContain("txInsufficientBalance");
+    expect(h.fundWithFriendbot).toHaveBeenCalledTimes(1);
+    expect(eventos).toEqual(["tinkazo:sin-fondos"]);
+  });
+});
