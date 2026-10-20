@@ -1252,6 +1252,8 @@ export const T: Record<Lang, Dict> = {
     summaryEvento: (f, n, enlace) =>
       `Sorteos del ${f} (${n} ${n === 1 ? "sorteo" : "sorteos"}), todos verificables.\nSi querés verificarlos, entrá acá: ${enlace}\n\nSorteado con Tinkazo · https://tinkazo.app`,
     histGrupoT: "Sorteos del {f}", histGrupoCompartir: "Compartir el evento",
+    evAvisoLargo: "El enlace es largo: algunos chats lo cortan. Si son muchos sorteos, mandalo en partes.",
+    evAvisoTope: "Solo entran los primeros {n} sorteos del evento.",
     cTroSpent: (n) => pick([`¡Se le acabó la cuerda a ${n}!`, `¡Se apagó el trompo de ${n}!`, `¡${n} se queda sin cuerda!`]),
     // --- Constelación, sapo y ¿Quién es? (7 de octubre de 2026).
     cConstHeading: (n) => pick([`¿Va para ${n}…?`, `¿Se queda en ${n}…?`]),
@@ -2277,6 +2279,8 @@ export const T: Record<Lang, Dict> = {
     summaryEvento: (f, n, enlace) =>
       `Draws from ${f} (${n} ${n === 1 ? "draw" : "draws"}), all verifiable.\nIf you want to verify them, open this link: ${enlace}\n\nDrawn with Tinkazo · https://tinkazo.app`,
     histGrupoT: "Draws from {f}", histGrupoCompartir: "Share the event",
+    evAvisoLargo: "The link is long: some chats cut it off. If there are many draws, send it in parts.",
+    evAvisoTope: "Only the first {n} draws of the event fit in the link.",
     cTroSpent: (n) => pick([`${n}'s top runs out of spin!`, `${n}'s top stops spinning!`, `${n} is out of spin!`]),
     // --- Constellation, sapo and Guess Who (7 October 2026).
     cConstHeading: (n) => pick([`Is it going to ${n}…?`, `Is it stopping at ${n}…?`]),

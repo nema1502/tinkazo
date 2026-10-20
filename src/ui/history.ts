@@ -1,6 +1,6 @@
 import { $, esc } from "../dom";
 import { getLang, T, t } from "../i18n";
-import { EVENTO_TOPE, eventoUrl, type SorteoDelEvento } from "../protocol/evento";
+import { EVENTO_AVISO_CARACTERES, EVENTO_TOPE, eventoUrl, type SorteoDelEvento } from "../protocol/evento";
 import { decodeProof } from "../protocol/proof";
 import { network, txUrl } from "../stellar/config";
 import type { ChainRaffle } from "../stellar/seals";
@@ -360,9 +360,15 @@ async function compartirEvento(g: Entry[], btn: HTMLButtonElement): Promise<void
     }
   }
   if (!copiado) return;
+  // Antes de que lo manden: con más sorteos de los que entran, o con un enlace que algunos chats cortan.
+  const s = await mensaje.catch(() => null);
+  const validos = g.filter((e) => tieneComprobante(e) && e.winners?.length && e.proof).length;
+  const aviso = validos > EVENTO_TOPE
+    ? t("evAvisoTope").replace("{n}", String(EVENTO_TOPE))
+    : s && s.length > EVENTO_AVISO_CARACTERES ? t("evAvisoLargo") : "";
   const orig = btn.textContent;
-  btn.textContent = t("copied");
-  setTimeout(() => (btn.textContent = orig), 1600);
+  btn.textContent = aviso || t("copied");
+  setTimeout(() => (btn.textContent = orig), aviso ? 6000 : 1600);
 }
 
 /**

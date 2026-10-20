@@ -14,6 +14,8 @@ export const EVENTO_VERSION = 1;
 
 /** Cuántos sorteos entran en un enlace. Más que esto, el texto se corta al pegarlo en un chat. */
 export const EVENTO_TOPE = 30;
+/** Desde este largo (unos 20 mil caracteres, unos 10 sorteos de 200) algunos chats cortan el enlace: se avisa antes de mandarlo. */
+export const EVENTO_AVISO_CARACTERES = 20_000;
 
 /** Un sorteo del evento: su comprobante y los ganadores por nombre, en el orden en que salieron. */
 export interface SorteoDelEvento extends Proof {
