@@ -580,6 +580,8 @@ export async function constellationPixi(names: string[], winners: readonly numbe
     const W0 = W(), H0 = H();
     const lo = S.top() + 6 * k, hi = H0 - S.bottom() - 6 * k;
     const z = S.scene.scale.x;
+    // El contador de saltos se escribe antes de los nombres, que esquivan su caja.
+    hopText.text = phase === "hop" ? `${t("cHop")} ${hopI + 1}/${K}` : "";
     // Quiénes llevan nombre en este cuadro: estrella, opacidad y si va grande.
     const conChip: [number, number, boolean][] = [];
     if (phase !== "nova") {
@@ -599,6 +601,11 @@ export async function constellationPixi(names: string[], winners: readonly numbe
     const cuadrado = (q: { x: number; y: number }, r: number): Caja => ({ x: q.x - r, y: q.y, w: 2 * r, h: 2 * r });
     const estorbos: { b: Caja; peso: number }[] = [];
     if (phase === "hop") estorbos.push({ b: cuadrado(S.scene.toGlobal(packetPos()), 31 * k * z), peso: 20 });
+    // El contador de saltos, que va arriba a la izquierda: los nombres no lo tapan.
+    if (hopText.text) {
+      const hb = hopText.getBounds();
+      estorbos.push({ b: { x: hb.x, y: hb.y + hb.height / 2, w: hb.width, h: hb.height }, peso: 20 });
+    }
     // Todas las estrellas que se ven, también las de los que no tienen nombre
     // en este cuadro: un nombre grande tapaba la estrella de otra persona. Las
     // que llevan nombre, la del paquete y la ganadora pesan el doble.
@@ -692,7 +699,11 @@ export async function constellationPixi(names: string[], winners: readonly numbe
     S.tags(names, roll, (i) => {
       const nd = nodes[starOf.get(i) ?? -1];
       return nd && tAll > nd.born ? cam.toScreen(nd.x, nd.y - nd.r - 16 * k, S.sw(), S.sh()) : null;
-    }, [...(barText.text ? [barText.getBounds()] : []), ...puestos.map((b) => ({ x: b.x, y: b.y - b.h / 2, width: b.w, height: b.h }))]);
+    }, [
+      ...(barText.text ? [barText.getBounds()] : []),
+      ...(hopText.text ? [hopText.getBounds()] : []),
+      ...puestos.map((b) => ({ x: b.x, y: b.y - b.h / 2, width: b.w, height: b.h })),
+    ]);
     // La barra de "buscando ruta", en el armado.
     bar.clear();
     barText.text = "";
@@ -703,7 +714,6 @@ export async function constellationPixi(names: string[], winners: readonly numbe
       barText.text = p < 1 ? t("cRoute") : t("cRouteFoundShort");
       barText.position.set(W() / 2, by - 10 * k);
     }
-    hopText.text = phase === "hop" ? `${t("cHop")} ${hopI + 1}/${K}` : "";
   }
 
   S.run((dt, now) => {
