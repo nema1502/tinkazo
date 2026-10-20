@@ -49,7 +49,20 @@ const DIR = "GBZQHWXF4I4ERXBLLHLQOENNXIJMHDGIYMFDYZVNX5KZM4OXTY4BDSQY";
 const ARGS = { organizer: DIR, listHash: new Uint8Array(32), count: 5, numWinners: 1, round: 123, meta: "premio" };
 
 /** La transacción ya simulada: con su tope de comisión (0,75 XLM) y lista para entregar. */
-const txSimulada = () => ({ built: { fee: "7500000" }, toXDR: () => "AAAA", signAndSend: vi.fn() });
+const txSimulada = () => ({ built: { fee: "7500000" }, simulationData: {}, toXDR: () => "AAAA", signAndSend: vi.fn() });
+/**
+ * La de una simulación que falló: `client.seal()` no lanza, devuelve la transacción sin armar, y el SDK
+ * recién se queja al leer `simulationData` (que es lo que hace su `signAndSend`).
+ */
+const txConSimulacionFallida = (error: string, lecturas = { n: 0 }) => ({
+  built: { fee: "100" },
+  get simulationData(): never {
+    lecturas.n++;
+    throw new Error(`Transaction simulation failed: "${error}"`);
+  },
+  toXDR: () => "SIN-ARMAR",
+  signAndSend: vi.fn(),
+});
 const sinSaldo = () => new Error("txInsufficientBalance");
 
 const pollar = (signAndSubmit = vi.fn(async () => "deadbeef")) => ({ kind: "external", address: DIR, submitsItself: true, signAndSubmit });
@@ -167,6 +180,31 @@ describe("con una cuenta de Pollar", () => {
     expect(eventos).toEqual(["tinkazo:sin-fondos"]);
   });
 
+  it("si la simulación falló (la ronda quedó cerca) no manda una transacción sin armar: lanza el error del contrato", async () => {
+    const enviar = vi.fn(async () => "deadbeef");
+    h.wallet = pollar(enviar);
+    h.seal.mockImplementation(async () => txConSimulacionFallida("HostError: Error(Contract, #5)"));
+    const { error } = await sellar();
+    expect(enviar).not.toHaveBeenCalled();
+    expect((error as Error).message).toContain("Error(Contract, #5)");
+    // Con ese mensaje freeze.ts reintenta con otra ronda, igual que con las otras wallets.
+    expect(selloSinGrabar(error)).toBe(true);
+    expect(h.fundWithFriendbot).not.toHaveBeenCalled();
+    expect(eventos).toEqual([]);
+  });
+
+  it("si tras cargar la cuenta la ronda quedó cerca, sale ese error y no la caja de fondos: ya hay saldo", async () => {
+    const enviar = vi.fn().mockRejectedValueOnce(sinSaldo());
+    h.wallet = pollar(enviar);
+    h.seal.mockImplementationOnce(async () => txSimulada()).mockImplementationOnce(async () => txConSimulacionFallida("HostError: Error(Contract, #5)"));
+    const { error } = await sellar();
+    expect((error as Error).message).toContain("Error(Contract, #5)");
+    expect(h.fundWithFriendbot).toHaveBeenCalledTimes(1);
+    expect(enviar).toHaveBeenCalledTimes(1);
+    expect(eventos).toEqual([]);
+    expect(selloSinGrabar(error)).toBe(true);
+  });
+
   it("un error de otro tipo no se reintenta ni toca el grifo", async () => {
     const enviar = vi.fn().mockRejectedValue(new Error("Failed to fetch"));
     h.wallet = pollar(enviar);
@@ -189,6 +227,19 @@ describe("con cualquier otra wallet (Freighter, cuenta de prueba)", () => {
     const firma = pasos.find(([p]) => p === "signing");
     expect(firma?.[1]).toMatch(/0,75|0\.75/);
     expect(firma?.[1]).toContain("XLM");
+  });
+
+  it("no cambia nada con la simulación: la revisa el SDK al firmar, no esta capa", async () => {
+    h.wallet = otra;
+    const lecturas = { n: 0 };
+    h.seal.mockImplementation(async () => {
+      // Sin copiar el objeto con `...`: eso ejecutaría el getter y contaría una lectura que no es de la app.
+      const tx = txConSimulacionFallida("HostError: Error(Contract, #5)", lecturas);
+      tx.signAndSend = (async () => ({ result: 9n, sendTransactionResponse: { hash: "ab12" } })) as never;
+      return tx;
+    });
+    await sellar();
+    expect(lecturas.n).toBe(0);
   });
 
   it("sin saldo, el error sale tal cual: sin grifo, sin reintento y sin caja de fondos", async () => {

@@ -99,7 +99,7 @@ async function sellar(args: SealArgs, onStep: OnStep): Promise<SealResult> {
  * normal de firmar acá y enviar nosotros.
  */
 async function submitElsewhere(
-  tx: { toXDR(): string },
+  tx: { toXDR(): string; readonly simulationData: unknown },
   onStep: OnStep,
 ): Promise<{ hash: string; value: unknown } | null> {
   const [{ activeWallet }, { submitsItself }] = await Promise.all([
@@ -108,6 +108,16 @@ async function submitElsewhere(
   ]);
   const wallet = activeWallet();
   if (!submitsItself(wallet)) return null;
+  // `signAndSend` del SDK mira la simulación antes de firmar y lanza si el
+  // contrato dijo que no ("Transaction simulation failed: Error(Contract, #5)":
+  // la ronda quedó demasiado cerca). Esta wallet recibe el XDR sin pasar por ahí,
+  // y `client.seal()` no lanza cuando la simulación falla: devuelve la
+  // transacción sin armar, con la comisión base y sin datos de Soroban, que la
+  // red rechaza como malformada (`txMALFORMED`, que Pollar cuenta como
+  // `txFailed`). Se vio el 19 de octubre de 2026, y es lo que pasaba con una
+  // ronda cerca. Leer la simulación acá lanza el error de verdad, igual que con
+  // las otras wallets, y `freeze.ts` reintenta con otra ronda.
+  void tx.simulationData;
   const hash = await wallet.signAndSubmit(tx.toXDR());
   onStep("sending", hash);
   const value = await readReturnValue(hash);
