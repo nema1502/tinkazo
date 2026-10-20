@@ -752,7 +752,9 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   /** El andén en esta pantalla: la escala de los renglones, su paso, dónde entran y cuántos. */
   function boardGrid(): { sc: number; kc: number; pitch: number; lo: number; hi: number; rowsMax: number; colsMax: number } {
     const u = S.u();
-    const sc = G.vertical ? 1.05 : 1.3;
+    // En escritorio, la base legible (19 px): con 1,3 el andén de doscientas
+    // personas ocupaba casi el 70 % del ancho y tapaba las cabinas con gente.
+    const sc = G.vertical ? 1.05 : 1;
     // Un chip mide 25 de estas unidades (`CHIP_SCALE` incluido): el renglón
     // sigue con un espacio chico, y el último entra con su chip entero.
     const kc = u * sc * CHIP_SCALE;
