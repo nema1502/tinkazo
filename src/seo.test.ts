@@ -330,7 +330,7 @@ describe("enlaces a las páginas nuevas", () => {
 });
 
 /** Lo que no dice la portada ni ninguna página de lectura, en español y en inglés. */
-const NO_SE_DICE = /sin confiar en tinkazo|no hace falta confiar en tinkazo|without trusting tinkazo|you don't have to trust tinkazo|sin confiar en quien|no hace falta confiar en quien|no controla nadie|nadie controla|nobody controls|favoritos|favorites|a dedo|suerte|garantiz|imposible de trampear|premio en efectivo|premio en dinero/i;
+const NO_SE_DICE = /sin confiar en tinkazo|no hace falta confiar en tinkazo|without trusting tinkazo|you don't have to trust tinkazo|no hace falta creer en tinkazo|you don't have to believe tinkazo|sin confiar en quien|no hace falta confiar en quien|no controla nadie|nadie controla|nobody controls|favoritos|favorites|a dedo|suerte|garantiz|imposible de trampear|premio en efectivo|premio en dinero/i;
 
 /** Lo que solo se nombra para decir que Tinkazo no sirve para eso: rifas, apuestas, casino. */
 const DE_APUESTA = /rifa|raffle|apuesta|lotería|loteria|casino/i;
