@@ -1,5 +1,6 @@
 import { getLang, t } from "../i18n";
 import { network, txUrl } from "../stellar/config";
+import { conAyudaDeFondos, esperarHasta } from "./reintento";
 
 /**
  * Sellar y sortear contra el contrato.
@@ -11,12 +12,17 @@ import { network, txUrl } from "../stellar/config";
  * `import()` la primera vez que alguien sella de verdad.
  */
 
-export type AnchorStep = "simulating" | "signing" | "sending" | "confirmed";
+/**
+ * `funding` es el paso que solo ve una cuenta de Pollar sin saldo: se la está
+ * preparando para poder pagar la comisión (ver `conFondos`).
+ */
+export type AnchorStep = "simulating" | "signing" | "sending" | "confirmed" | "funding";
 
 /**
  * `detail` lleva el costo estimado en el paso de firma y el hash de la
- * transacción al confirmar. Antes de firmar, el organizador tiene que ver
- * cuánto le va a salir.
+ * transacción al confirmar. Antes de firmar, quien paga la comisión tiene que
+ * ver cuánto le va a salir. Con una cuenta de Pollar no hay costo que mostrar:
+ * quizá la paga la app, y si no, la persona lo sabrá por la ayuda de fondos.
  */
 export type OnStep = (step: AnchorStep, detail?: string) => void;
 
@@ -54,7 +60,11 @@ const toHex = (b: Uint8Array | ArrayLike<number>): string =>
   [...Array.from(b as ArrayLike<number>)].map((n) => n.toString(16).padStart(2, "0")).join("");
 
 /** Registra el sello en el contrato. Exige la firma del organizador. */
-export async function sealOnChain(args: SealArgs, onStep: OnStep): Promise<SealResult> {
+export function sealOnChain(args: SealArgs, onStep: OnStep): Promise<SealResult> {
+  return conFondos(() => sellar(args, onStep), onStep);
+}
+
+async function sellar(args: SealArgs, onStep: OnStep): Promise<SealResult> {
   const { getClient } = await import("../stellar/contract");
   const client = await getClient();
   onStep("simulating");
@@ -66,7 +76,7 @@ export async function sealOnChain(args: SealArgs, onStep: OnStep): Promise<SealR
     round: BigInt(args.round),
     meta: args.meta.slice(0, 160),
   });
-  onStep("signing", feeInXlm(tx));
+  onStep("signing", await costoVisible(tx));
 
   const delegated = await submitElsewhere(tx, onStep);
   if (delegated) {
@@ -105,6 +115,77 @@ async function submitElsewhere(
   return { hash, value };
 }
 
+/**
+ * El costo que se le muestra a quien firma. Con una cuenta de Pollar no se
+ * muestra: puede que la comisión la pague la app y entonces es cero, y un
+ * número que quizá paga otro asusta a quien solo quiere sortear. Con las demás
+ * wallets es el de siempre, porque ahí lo paga quien firma.
+ */
+async function costoVisible(tx: Parameters<typeof feeInXlm>[0]): Promise<string | undefined> {
+  const [{ activeWallet }, { submitsItself }] = await Promise.all([
+    import("../stellar/wallet-lite"),
+    import("../stellar/wallet-pollar"),
+  ]);
+  return submitsItself(activeWallet()) ? undefined : feeInXlm(tx);
+}
+
+/** Cuándo se le pidió fondos al grifo a cada cuenta, para no insistir. */
+const grifoPedido = new Map<string, number>();
+const ENTRE_PEDIDOS_MS = 90_000;
+
+/**
+ * Sellar y sortear con una cuenta de Pollar sin saldo no debe trabar a nadie.
+ *
+ * Se intenta como siempre. Si Pollar paga la comisión por la app (con la regla
+ * de contrato de su panel prendida) no pasa nada más. Si no la paga y la red
+ * dice que la cuenta no tiene con qué, en testnet se la carga sola con el grifo
+ * y se reintenta una vez, con una línea de estado y sin que la persona toque
+ * nada. Lo que no se puede resolver solo (mainnet, el grifo caído, o que siga
+ * sin saldo) avisa con el evento `tinkazo:sin-fondos`, y la pantalla muestra
+ * la caja de fondos como último recurso. Con otra wallet no cambia nada.
+ */
+async function conFondos<T>(intento: () => Promise<T>, onStep: OnStep): Promise<T> {
+  const [w, { submitsItself }, { esSinSaldo }] = await Promise.all([
+    import("../stellar/wallet-lite"),
+    import("../stellar/wallet-pollar"),
+    import("../stellar/contract"),
+  ]);
+  const wallet = w.activeWallet();
+  const address = wallet?.address ?? "";
+  // El sorteo reintenta varias veces y cada una pasaría por acá: un pedido al
+  // grifo cada tanto alcanza, más no cambia nada.
+  const reciente = Date.now() - (grifoPedido.get(address) ?? 0) < ENTRE_PEDIDOS_MS;
+  return conAyudaDeFondos(intento, {
+    esPollar: submitsItself(wallet),
+    hayGrifo: network.name === "testnet" && !!network.friendbotUrl && !reciente,
+    sinSaldo: esSinSaldo,
+    avisar: () => {
+      console.warn("[tinkazo] la cuenta no tiene con qué pagar la comisión: se la carga con el grifo y se reintenta una vez");
+      onStep("funding");
+    },
+    cargar: async () => {
+      grifoPedido.set(address, Date.now());
+      // Una cuenta que todavía no existe puede estar abriéndola Pollar justo
+      // ahora (lo hace de fondo al entrar): se le dan unos segundos antes de
+      // abrirla nosotros con el grifo, para no pisarnos.
+      if (!(await w.accountExists(address))) {
+        await esperarHasta(() => w.accountExists(address), { cadaMs: 1200, hastaMs: 12_000 });
+      }
+      await w.fundWithFriendbot(address);
+    },
+    esperar: async () => {
+      // El grifo ya contestó, pero el saldo tarda un instante en verse. Y un
+      // respiro más: el RPC, que es el que simula, puede ir un poco atrás de
+      // Horizon, que es al que se le pregunta.
+      const visto = await esperarHasta(async () => (await w.xlmBalance(address)) >= 1, { cadaMs: 700, hastaMs: 10_000 });
+      if (visto) await new Promise((r) => setTimeout(r, 800));
+    },
+    sinRecurso: () => {
+      if (typeof document !== "undefined") document.dispatchEvent(new CustomEvent("tinkazo:sin-fondos", { detail: { address } }));
+    },
+  });
+}
+
 /** Lee lo que devolvió la invocación, ya confirmada en la red. */
 async function readReturnValue(hash: string): Promise<unknown> {
   const { scValToNative } = await import("@stellar/stellar-sdk");
@@ -119,11 +200,15 @@ async function readReturnValue(hash: string): Promise<unknown> {
  * autorización del organizador: cualquiera puede hacerlo una vez que la ronda
  * existe, así que el organizador no puede retener un resultado que no le gusta.
  */
-export async function drawOnChain(
+export function drawOnChain(
   raffleId: bigint,
   signature96: Uint8Array,
   onStep: OnStep,
 ): Promise<DrawResult> {
+  return conFondos(() => sortear(raffleId, signature96, onStep), onStep);
+}
+
+async function sortear(raffleId: bigint, signature96: Uint8Array, onStep: OnStep): Promise<DrawResult> {
   const { getClient } = await import("../stellar/contract");
   const client = await getClient();
   onStep("simulating");
@@ -131,7 +216,7 @@ export async function drawOnChain(
     raffle_id: raffleId,
     signature: signature96 as unknown as Buffer,
   });
-  onStep("signing", feeInXlm(tx));
+  onStep("signing", await costoVisible(tx));
 
   const delegated = await submitElsewhere(tx, onStep);
   if (delegated) {
@@ -181,7 +266,9 @@ export function stepLabel(step: AnchorStep): string {
         ? "txSigning"
         : step === "sending"
           ? "txSending"
-          : "txConfirmed",
+          : step === "funding"
+            ? "txFunding"
+            : "txConfirmed",
   );
 }
 

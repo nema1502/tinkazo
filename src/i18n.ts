@@ -1243,6 +1243,8 @@ export const T: Record<Lang, Dict> = {
     acctPending: "sin sortear",
     acctProofOf: "Comprobante de {sorteo}",
     acctSignOut: "Cerrar sesión",
+    // UX 19-oct: fondos
+    txFunding: "Preparando tu cuenta de prueba…",
   },
   en: {
     badge: "For whoever has to run the draw",
@@ -2208,6 +2210,8 @@ export const T: Record<Lang, Dict> = {
     acctPending: "not drawn yet",
     acctProofOf: "Receipt for {sorteo}",
     acctSignOut: "Sign out",
+    // UX 19-oct: fondos
+    txFunding: "Setting up your test account…",
   },
 };
 

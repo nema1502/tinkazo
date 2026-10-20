@@ -167,9 +167,7 @@ export async function fundWithFriendbot(address: string): Promise<void> {
  * de contrato, y Horizon lo devuelve de una.
  */
 export async function xlmBalance(address: string): Promise<number> {
-  const base = network.name === "mainnet"
-    ? "https://horizon.stellar.org"
-    : "https://horizon-testnet.stellar.org";
+  const base = horizonBase();
   try {
     const res = await fetch(`${base}/accounts/${encodeURIComponent(address)}`, {
       signal: AbortSignal.timeout(12_000),
@@ -183,6 +181,25 @@ export async function xlmBalance(address: string): Promise<number> {
   } catch {
     // Sin respuesta no se afirma nada: -1 significa "no sé".
     return -1;
+  }
+}
+
+const horizonBase = (): string =>
+  network.name === "mainnet" ? "https://horizon.stellar.org" : "https://horizon-testnet.stellar.org";
+
+/**
+ * La red ya conoce esta cuenta, aunque no tenga nada. Una cuenta de Pollar la
+ * abre Pollar de fondo al entrar, y hasta que lo hace no existe: simular contra
+ * ella falla con "Account not found". `false` también si no se pudo preguntar.
+ */
+export async function accountExists(address: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${horizonBase()}/accounts/${encodeURIComponent(address)}`, {
+      signal: AbortSignal.timeout(12_000),
+    });
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 
