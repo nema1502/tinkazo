@@ -374,6 +374,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   let counter!: ReturnType<PixiStage["text"]>;
   let counterBox!: Graphics;
   let blockText!: ReturnType<PixiStage["text"]>;
+  let blockPlate!: Graphics;
   const crowd: { sp: Sprite; ph: number; y: number }[] = [];
 
   function makeDancer(d: Dancer): Container {
@@ -577,7 +578,8 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     blockText = S.text("", { fontFamily: MONO, fontSize: 12 * k, fontWeight: "800", fill: CREAM });
     blockText.anchor.set(1, 1);
     blockText.position.set(g.w - 22 * k, g.h - S.bottom() - 18 * k);
-    S.hud.addChild(box, chips, moreBox, moreText, blockText);
+    blockPlate = new Graphics();
+    S.hud.addChild(box, chips, moreBox, moreText, blockPlate, blockText);
   }
   build();
   const crownUI = S.crown(names, winners);
@@ -966,6 +968,12 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 3 * k, color: INK });
     drawTags(g, live, bw, bh);
     blockText.text = phase === "walk" || phase === "stop" ? T[getLang()].cOruBlock(Math.min(K, stopsDone + (phase === "walk" ? 1 : 0)), K) : "";
+    // Placa oscura detrás de "CUADRA N DE K": en los primeros planos de cada parada cae sobre los diablos amarillos.
+    blockPlate.clear();
+    if (blockText.text) {
+      const pw = blockText.width + 16 * k, ph = blockText.height + 8 * k;
+      blockPlate.roundRect(blockText.x - pw + 8 * k, blockText.y - ph + 4 * k, pw, ph, 5 * k).fill({ color: 0x221a33, alpha: 0.94 }).stroke({ width: 2 * k, color: INK });
+    }
     if (phase === "crown") crownUI.at(tAll - T_CROWN);
   }
 
