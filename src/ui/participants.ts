@@ -56,7 +56,11 @@ export function renderNames(): void {
   $("freeze-hint").style.display = names.length < 2 && !app.frozen ? "block" : "none";
   $("free-rule").style.display = app.frozen ? "none" : "block";
   // Con la lista cerrada, nada la reemplaza: ni el ejemplo ni la selección del archivo.
-  $("btn-sample").style.display = listaCerrada() ? "none" : "";
+  // Y "Cargar ejemplo" es para quien llega sin lista: con nombres en el cuadro,
+  // un toque pisaba la lista (la de Luma ya filtrada, también) y Ctrl+Z no la
+  // devolvía, porque el cambio no es del teclado (buscador de detalles, D08).
+  // Se esconde y no se quita: los auditores lo aprietan con el cuadro vacío.
+  $("btn-sample").style.display = listaCerrada() || names.length > 0 ? "none" : "";
   $("csv-edit").style.display = listaCerrada() ? "none" : "";
 }
 
