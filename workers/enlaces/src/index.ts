@@ -12,8 +12,11 @@
  *   DELETE /v1/<id>   Authorization: Bearer <borrar>    → 204
  *   GET    /<id>                                        → 302 a tinkazo.app/c/<id>
  *
- * Lo guarda un Durable Object con SQLite: es consistente apenas escribe, así que
- * un enlace recién creado abre al instante en cualquier país.
+ * Lo guardan Durable Objects con SQLite: son consistentes apenas escriben, así que
+ * un enlace recién creado abre al instante en cualquier país. Los enlaces se
+ * reparten en 62 objetos según el primer carácter del id (en el plan gratis cada
+ * objeto puede tener hasta 1 GB y la cuenta 5 GB), y un objeto aparte lleva los
+ * cupos.
  */
 import { DurableObject } from "cloudflare:workers";
 
@@ -78,7 +81,7 @@ async function sha256Hex(texto: string): Promise<string> {
   return Array.from(h, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-type Alta = { ok: true; id: string; borrar: string } | { ok: false; motivo: "cupo-ip" | "cupo-dia" };
+type Permiso = { ok: true } | { ok: false; motivo: "cupo-ip" | "cupo-dia" };
 
 export class Almacen extends DurableObject<Env> {
   private porIp = new Map<string, { n: number; vence: number }>();
@@ -91,34 +94,37 @@ export class Almacen extends DurableObject<Env> {
     ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS cuotas (dia TEXT PRIMARY KEY, n INTEGER NOT NULL)");
   }
 
-  async crear(datos: ArrayBuffer, ip: string): Promise<Alta> {
+  /** Solo en el objeto de los cupos: cuenta un alta, o dice por qué no. */
+  async permitir(ip: string): Promise<Permiso> {
     const ahora = Date.now();
     const c = this.porIp.get(ip);
     if (c && c.vence > ahora && c.n >= POR_IP_POR_HORA) return { ok: false, motivo: "cupo-ip" };
     const dia = new Date(ahora).toISOString().slice(0, 10);
     const hoy = this.ctx.storage.sql.exec<{ n: number }>("SELECT n FROM cuotas WHERE dia = ?", dia).toArray()[0]?.n ?? 0;
     if (hoy >= POR_DIA) return { ok: false, motivo: "cupo-dia" };
+    this.ctx.storage.sql.exec("INSERT INTO cuotas (dia, n) VALUES (?, 1) ON CONFLICT(dia) DO UPDATE SET n = n + 1", dia);
+    if (hoy === 0) {
+      // El primer alta del día limpia los días viejos.
+      this.ctx.storage.sql.exec("DELETE FROM cuotas WHERE dia < ?", new Date(ahora - 3 * 86_400_000).toISOString().slice(0, 10));
+    }
+    if (!c || c.vence <= ahora) this.porIp.set(ip, { n: 1, vence: ahora + 3_600_000 });
+    else c.n += 1;
+    if (this.porIp.size > 10_000) this.porIp.clear();
+    return { ok: true };
+  }
 
-    let id = nuevoId();
-    while (this.ctx.storage.sql.exec("SELECT 1 FROM enlaces WHERE id = ?", id).toArray().length) id = nuevoId();
+  /** Guarda bajo `id` y devuelve el token para borrarlo, o null si el id ya estaba usado. */
+  async guardar(id: string, datos: ArrayBuffer): Promise<string | null> {
+    if (this.ctx.storage.sql.exec("SELECT 1 FROM enlaces WHERE id = ?", id).toArray().length) return null;
     const borrar = base64url(crypto.getRandomValues(new Uint8Array(16)));
     this.ctx.storage.sql.exec(
       "INSERT INTO enlaces (id, datos, borrar, creado) VALUES (?, ?, ?, ?)",
       id,
       datos,
       await sha256Hex(borrar),
-      ahora,
+      Date.now(),
     );
-    this.ctx.storage.sql.exec(
-      "INSERT INTO cuotas (dia, n) VALUES (?, 1) ON CONFLICT(dia) DO UPDATE SET n = n + 1",
-      dia,
-    );
-    // Los días viejos no hacen falta.
-    this.ctx.storage.sql.exec("DELETE FROM cuotas WHERE dia < ?", new Date(ahora - 3 * 86_400_000).toISOString().slice(0, 10));
-    if (!c || c.vence <= ahora) this.porIp.set(ip, { n: 1, vence: ahora + 3_600_000 });
-    else c.n += 1;
-    if (this.porIp.size > 10_000) this.porIp.clear();
-    return { ok: true, id, borrar };
+    return borrar;
   }
 
   async leer(id: string): Promise<ArrayBuffer | null> {
@@ -140,7 +146,8 @@ export default {
     const url = new URL(req.url);
     const origen = req.headers.get("Origin");
     const partes = url.pathname.split("/").filter(Boolean);
-    const almacen = env.ALMACEN.get(env.ALMACEN.idFromName("v1"));
+    /** El objeto que guarda un id: uno por primer carácter. */
+    const de = (id: string) => env.ALMACEN.get(env.ALMACEN.idFromName(`s-${id[0]}`));
 
     if (partes[0] === "v1") {
       const id = partes[1];
@@ -157,15 +164,22 @@ export default {
         const datos = await req.arrayBuffer();
         if (datos.byteLength === 0 || datos.byteLength > MAX_BYTES) return json({ error: "tamaño" }, 413, h);
         const ip = req.headers.get("CF-Connecting-IP") ?? "sin-ip";
-        const r = await almacen.crear(datos, ip);
-        if (!r.ok) return json({ error: r.motivo }, 429, { ...h, "Retry-After": r.motivo === "cupo-ip" ? "3600" : "86400" });
-        return json({ id: r.id, borrar: r.borrar }, 201, h);
+        const permiso = await env.ALMACEN.get(env.ALMACEN.idFromName("cupos")).permitir(ip);
+        if (!permiso.ok) {
+          return json({ error: permiso.motivo }, 429, { ...h, "Retry-After": permiso.motivo === "cupo-ip" ? "3600" : "86400" });
+        }
+        for (let intento = 0; intento < 5; intento++) {
+          const nuevo = nuevoId();
+          const borrar = await de(nuevo).guardar(nuevo, datos);
+          if (borrar) return json({ id: nuevo, borrar }, 201, h);
+        }
+        return json({ error: "ocupado" }, 503, h);
       }
 
       if (partes.length === 2 && id && ES_ID.test(id)) {
         if (req.method === "GET" || req.method === "HEAD") {
           const h = cors(origen, "GET, OPTIONS");
-          const datos = await almacen.leer(id);
+          const datos = await de(id).leer(id);
           if (!datos) return json({ error: "no-existe" }, 404, h);
           return new Response(req.method === "HEAD" ? null : datos, {
             status: 200,
@@ -181,7 +195,7 @@ export default {
           const h = cors(origen, "DELETE, OPTIONS");
           const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
           if (!token) return json({ error: "token" }, 401, h);
-          const r = await almacen.borrar(id, token);
+          const r = await de(id).borrar(id, token);
           if (r === "no-existe") return json({ error: "no-existe" }, 404, h);
           if (r === "prohibido") return json({ error: "token" }, 403, h);
           return new Response(null, { status: 204, headers: h });
