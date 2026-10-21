@@ -336,7 +336,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
   let cur = personOf(Math.floor(startSeg));
   /** El último gajo que el relator nombró mientras la rueda frena. */
   let namedCur = -1;
-  let flash = 0, didLock = false, saidPeg = false, saidLast = false, didCrown = false;
+  let flash = 0, bump = 0, didLock = false, saidPeg = false, saidLast = false, didCrown = false;
 
   const segUnder = (): number => Math.floor((((-rot / A) % segs) + segs) % segs) % segs;
   /**
@@ -414,6 +414,9 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     const s = Math.floor((((-rot / A) % segs) + segs) % segs);
     if (s === lastClick) return;
     lastClick = s;
+    // Los últimos clics son los que deciden: en cada gajo que pasa cuando la rueda
+    // casi para, la flecha da un golpecito.
+    if (w < 3) bump = Math.max(bump, 0.1 + 0.08 * (1 - w / 3));
     if (n <= 4) {
       beep(note([5, 8, 10, 12][personOf(s)] ?? 5), 0.05, "triangle", 0.03);
       return;
@@ -547,7 +550,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     flapStep(dt, w);
     pointer.rotation = flapA;
     // Al trabarse, la lengüeta pega un golpe: crece y vuelve.
-    pointer.scale.set(1 + flash * 2.5);
+    pointer.scale.set(1 + (flash + bump) * 2.5);
     // Con el ganador, sus gajos salen hacia afuera y los demás se apagan.
     if (tAll >= T_CROWN) {
       const e = Math.min(1, (tAll - T_CROWN) * 2);
@@ -627,6 +630,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
       camBeat("lock");
     }
     flash = Math.max(0, flash - dt);
+    bump = Math.max(0, bump - dt * 8);
     if (tAll >= T_CROWN) crowned();
     else cur = personOf(segUnder());
     tickAudio(w);
