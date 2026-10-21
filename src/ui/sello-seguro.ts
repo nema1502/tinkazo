@@ -1,3 +1,4 @@
+import { roundTime } from "../protocol/quicknet";
 import { type IntentoDeSello, type Resolucion, esSelloIncierto } from "../stellar/envio";
 import { esDeRed, textoDelError } from "../stellar/errores";
 
@@ -149,10 +150,24 @@ interface Guardado {
 let enMemoria: Guardado | null = null;
 
 /**
- * Lee el intento pendiente de esta cuenta y esta lista, en esta red y con este
- * contrato. Con algo que no se entiende, no hay pendiente.
+ * Cuánto vale un intento pendiente: seis horas después de su ronda. Para
+ * entonces, si había entrado, está en Mis sorteos (que se lee del contrato) y se
+ * retoma desde ahí; buscarlo entre todos los sellos de esas horas sería lento, y
+ * si no se pudiera, la lista quedaría trabada para siempre.
  */
-export function leerPendiente(organizer: string, listHash: string, red: string, contrato: string): { intento: IntentoDeSello; premio: string } | null {
+export const VIDA_DEL_PENDIENTE_S = 6 * 3600;
+
+/**
+ * Lee el intento pendiente de esta cuenta y esta lista, en esta red y con este
+ * contrato. Con algo que no se entiende, o vencido, no hay pendiente.
+ */
+export function leerPendiente(
+  organizer: string,
+  listHash: string,
+  red: string,
+  contrato: string,
+  ahoraS = Date.now() / 1000,
+): { intento: IntentoDeSello; premio: string } | null {
   let g: Partial<Guardado> | null = enMemoria;
   if (!g) {
     try {
@@ -165,6 +180,7 @@ export function leerPendiente(organizer: string, listHash: string, red: string, 
   const i = g?.intento;
   if (!g || !i || typeof i.round !== "number" || typeof i.organizer !== "string" || typeof i.listHash !== "string") return null;
   if (i.organizer !== organizer || i.listHash !== listHash || g.red !== red || g.contrato !== contrato) return null;
+  if (roundTime(i.round) < ahoraS - VIDA_DEL_PENDIENTE_S) return null;
   return { intento: i, premio: typeof g.premio === "string" ? g.premio : "" };
 }
 

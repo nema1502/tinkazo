@@ -289,8 +289,8 @@ export async function resolverSello(intento: IntentoDeSello, f: FuentesDelSello)
   for (;;) {
     try {
       // Primero la hora de la red; después el contrato, leído en ese ledger o en uno posterior.
+      // Cuenta como respuesta solo la vuelta entera: si el contrato no se deja leer, no se sabe.
       const ledger = await f.ultimoLedger();
-      ultimoContacto = ahora();
       if (intento.hash && f.consultarHash && !entroPorHash) {
         const c = await f.consultarHash(intento.hash);
         if (c.status === "FAILED") return { estado: "no-entro" };

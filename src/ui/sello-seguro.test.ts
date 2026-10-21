@@ -309,6 +309,13 @@ describe("el intento pendiente se guarda para después de recargar", () => {
     expect(leerPendiente(ORG, HUELLA, "testnet", "COTRO")).toBeNull();
   });
 
+  it("vence seis horas después de su ronda: si había entrado, se retoma desde Mis sorteos", () => {
+    guardarPendiente(i, "testnet", "CCONTRATO", "");
+    const ronda = roundTime(i.round);
+    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", ronda + 5 * 3600)).not.toBeNull();
+    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", ronda + 6 * 3600 + 1)).toBeNull();
+  });
+
   it("con null lo borra", () => {
     guardarPendiente(i, "testnet", "CCONTRATO", "");
     guardarPendiente(null, "testnet", "CCONTRATO", "");

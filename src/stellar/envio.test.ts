@@ -265,6 +265,20 @@ describe("resolverSello: el sello no se duplica nunca", () => {
     expect(res.estado).toBe("no-se-sabe");
   });
 
+  it("si la hora de la red llega pero el contrato no se deja leer, a los 20 s no sabe: no se queda esperando 3 minutos", async () => {
+    const r = reloj();
+    const red = redDeMentira(r);
+    const t0 = r.ahora();
+    const res = await resolverSello(intento(r), {
+      ...red.fuentes,
+      buscarSello: async () => {
+        throw new Error("rpc-sin-respuesta: demasiados sellos para mirar");
+      },
+    });
+    expect(res.estado).toBe("no-se-sabe");
+    expect(r.ahora() - t0).toBeLessThan(30_000);
+  });
+
   it("la red vuelve antes de rendirse: averigua igual", async () => {
     const r = reloj();
     const red = redDeMentira(r);
