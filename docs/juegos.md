@@ -340,6 +340,7 @@ El ritmo, la legibilidad del cartel y el tartamudeo de los subtítulos ya los mi
 | Constelación Stellar | `stellar` | Módulo propio | 200 | [constelacion-stellar.md](juegos/constelacion-stellar.md) |
 | Sapo | `sapo` | Módulo propio (solo motor nuevo) | 200, con clasificatoria a 12 | [sapo.md](juegos/sapo.md) |
 | ¿Quién es? | `quien` | Módulo propio (solo motor nuevo) | 200 | [quien-es.md](juegos/quien-es.md) |
+| El Trueque (fuera del selector hasta la etapa D) | `trueque` | Módulo propio (solo motor nuevo) | 200, pensado de 12 a 200 | [trueque.md](juegos/trueque.md) |
 
 **Luz roja, luz verde salió del selector** el 5 de octubre de 2026, cuando entró la Chovena: cubría la misma necesidad (parar y seguir), pero sin nombre boliviano, con la sombra de una serie de apuestas y con un Faro que era un concepto técnico escondido.
 

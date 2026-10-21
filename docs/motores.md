@@ -63,6 +63,7 @@ Los momentos de cámara de cada juego:
 | Piñata | En la colgada, la piñata que sube y el chico al que le dan las vueltas; la piñata de cerca en los palos (en el celular la mira se corre lo justo para que entre el chico), más cerca en la rajadura y en el caramelo que se asoma, y cuando se rompe sigue al último caramelo hasta el piso |
 | Carnaval de Oruro | Encuadra los cuerpos de la comparsa, de los cuernos a las botas y con lugar para los nombres, y llena la pantalla con ellos; va al ritmo con que cada diablo sigue su lugar en la fila, así no se atrasa ni se adelanta. En el celular la comparsa forma más honda y angosta. Se acerca a los que se quedan en cada arco y a la máscara que se corre, se abre al Socavón con los dos del contrapunto delante y se cierra en el contrapunto |
 | Constelación | Sigue al paquete desde el primer salto, encima en los saltos lentos del final, golpe en el roce y en el engaño, y se abre en la nova para mostrar la constelación; sin desenfoque desde los saltos lentos |
+| El Trueque | La feria entera al armarse; en cada intento sigue al encargo (1,25×) hasta el puesto que lo recibe; en la entrega se acerca a quien espera (1,45×); al final encuadra todas las rutas, con el cartel por encima; sin desenfoque |
 
 ### Volver a la pestaña con el contexto perdido
 
