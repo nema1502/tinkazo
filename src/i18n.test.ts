@@ -44,6 +44,19 @@ describe("diccionario", () => {
     }
   });
 
+  it("la barra del sorteo dice número público, sin 'ronda' ni '#'", () => {
+    // `${t("seed")} ${ronda}` arriba del estadio y en el rótulo del sorteo, y
+    // `cWheelRound` en el motor anterior. "Ronda" es la palabra de drand, y "#"
+    // ya es el número del sorteo en Mis sorteos ("Sorteo #12").
+    for (const l of ["es", "en"] as const) {
+      for (const k of ["seed", "cWheelRound"]) {
+        const v = T[l][k] as string;
+        expect(v).not.toMatch(/ronda|round|#/i);
+        expect(v).toMatch(/número público|public number/i);
+      }
+    }
+  });
+
   it("Sapo: what gets thrown is a ring, never a chip or a token", () => {
     for (const l of ["es", "en"] as const) {
       const textos = Object.entries(T[l])

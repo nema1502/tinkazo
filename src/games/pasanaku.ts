@@ -707,7 +707,7 @@ export function pasanaku(
     c.textAlign = "left";
     c.fillStyle = dark ? "rgba(246,239,226,0.55)" : "rgba(25,25,25,0.55)";
     c.textAlign = "right";
-    c.fillText(`${t("cWheelRound")} #${beacon.round}`, W() - 22 * k, H() - chrome(c).abajo);
+    c.fillText(`${t("cWheelRound")} ${beacon.round}`, W() - 22 * k, H() - chrome(c).abajo);
     if (phase === "cinch") {
       c.fillText(`${t("cPasCinchLbl")} ${pulls}/${PULLS}`, W() - 22 * k, H() - chrome(c).abajo - 18 * k);
     }
