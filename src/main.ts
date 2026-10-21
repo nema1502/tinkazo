@@ -15,6 +15,9 @@ import { initOnboarding } from "./ui/onboarding";
 import { musicOn, toggleMusic } from "./music";
 import { rotateWords } from "./ui/rotar";
 import { initMenuMas } from "./ui/menu";
+import { MAX_WINNERS, select } from "./protocol/select";
+import { listHash } from "./protocol/canonical";
+import { hexToBytes } from "./protocol/quicknet";
 
 // `?theme=light|dark` fuerza el tema (capturas).
 const themeParam = params.get("theme");
@@ -266,42 +269,68 @@ async function poseScene(): Promise<void> {
     if (!W3.includes(w)) W3.push(w);
   }
   for (let w = 0; W3.length < premios; w++) if (!W3.includes(w)) W3.push(w);
+  const W = ganadoresPedidos(L, fakeBeacon.randomness, premios) ?? W3;
   app.frozen = { names: L, listHash: "32e2099c7a8dde7b6892523dc7d3e34ac06a972fd67f142186c58dced51a21ef", ts: 0, at: "-", prize: "", round: 32254977 };
-  app.drawn = { beacon: fakeBeacon, winners: W3 };
+  app.drawn = { beacon: fakeBeacon, winners: W };
+  // Para los auditores: la lista y los ganadores de esta escena, tal cual.
+  (window as unknown as { __pose?: { names: string[]; winners: number[] } }).__pose = { names: L, winners: W };
   const cual = params.get("pose") ?? "1";
   const nada = (): void => {};
   // La escena fija en el motor nuevo, salvo con `?motor=clasico` o sin WebGL.
   if (usePixi()) {
     const juego = (cual === "1" ? "race" : cual) as Game;
     const px = await import("./games/pixi");
-    if (await px.playPixi(juego, L, W3, fakeBeacon, nada)) return;
+    if (await px.playPixi(juego, L, W, fakeBeacon, nada)) return;
   }
   if (cual === "wheel") {
-    (await import("./games/wheel")).wheelSpin(L, W3, fakeBeacon, nada);
+    (await import("./games/wheel")).wheelSpin(L, W, fakeBeacon, nada);
     return;
   }
   if (cual === "ledger") {
-    (await import("./games/ledger")).ledgerClose(L, W3, fakeBeacon, nada);
+    (await import("./games/ledger")).ledgerClose(L, W, fakeBeacon, nada);
     return;
   }
   if (cual === "pasanaku") {
-    (await import("./games/pasanaku")).pasanaku(L, W3, fakeBeacon, nada);
+    (await import("./games/pasanaku")).pasanaku(L, W, fakeBeacon, nada);
     return;
   }
   if (cual === "teleferico") {
-    (await import("./games/cablecar")).cableCar(L, W3, fakeBeacon, nada);
+    (await import("./games/cablecar")).cableCar(L, W, fakeBeacon, nada);
     return;
   }
   if (cual === "tombola") {
-    (await import("./games/tombola")).tombola(L, W3, fakeBeacon, nada);
+    (await import("./games/tombola")).tombola(L, W, fakeBeacon, nada);
     return;
   }
   if (cual === "stellar") {
-    (await import("./games/constellation")).stellarConstellation(L, W3, fakeBeacon, nada);
+    (await import("./games/constellation")).stellarConstellation(L, W, fakeBeacon, nada);
     return;
   }
   // "rockets" es la carrera con la piel espacial; cualquier otro valor, la andina.
-  (await import("./games/race")).stadiumRace(L, W3, fakeBeacon, nada, cual === "rockets" ? "stellar" : "andes");
+  (await import("./games/race")).stadiumRace(L, W, fakeBeacon, nada, cual === "rockets" ? "stellar" : "andes");
+}
+
+/**
+ * `?ganadores=` en la escena fija: quién gana, en vez de los de siempre.
+ *
+ * Con `sorteo`, los elige la selección del protocolo, con la semilla de la
+ * escena como número público y la huella de la lista, igual que un sorteo de
+ * verdad. Lo usa el auditor de delatores (scripts/audit-delatores.mjs): para
+ * medir si algo de lo que se ve adivina al ganador más que el azar, el ganador
+ * tiene que cambiar de una semilla a otra y salir del mismo cálculo que en
+ * producción. Con los de siempre, el ganador era el cuarto de la lista en todas
+ * las semillas, y el lugar donde arranca cada uno parecía delatarlo.
+ *
+ * Con números (`?ganadores=4,11`), esos puestos de la lista, contando desde
+ * cero. Sin el parámetro, o si no sirve, null: la escena de siempre.
+ */
+function ganadoresPedidos(L: string[], randomness: string, premios: number): number[] | null {
+  const pedido = params.get("ganadores");
+  if (!pedido || L.length < 2) return null;
+  if (pedido === "sorteo") return select(hexToBytes(randomness), listHash(L), L.length, Math.min(premios, MAX_WINNERS));
+  const ws = pedido.split(",").map((s) => Number(s.trim()));
+  const valen = ws.length <= Math.min(MAX_WINNERS, L.length) && ws.every((w) => Number.isInteger(w) && w >= 0 && w < L.length) && new Set(ws).size === ws.length;
+  return valen ? ws : null;
 }
 
 renderNames();
