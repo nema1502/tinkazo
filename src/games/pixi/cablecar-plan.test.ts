@@ -72,6 +72,24 @@ describe("teleférico por grupos: el plan", () => {
     expect(a.groupOfCab).toEqual(b.groupOfCab);
   });
 
+  it.each([2, 8, 18, 50, 200])("con %i personas, el contador baja cuando el relator lo dice y cuenta a los que siguen arriba", (n) => {
+    // El relator dice "Quedan N" en `tOff` (cablecar.ts): el contador tiene que
+    // decir lo mismo desde ese instante, ni antes ni después.
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const P = planCableCar(lista(n), [n > 3 ? 3 : 0], rngOf(seed));
+      for (const s of P.stops) {
+        expect(P.leftAt(s.tOff - 1e-6)).toBe(P.left[s.round]);
+        expect(P.leftAt(s.tOff)).toBe(P.left[s.round + 1]);
+      }
+      // En cualquier momento del viaje, el contador es la gente que sigue en las cabinas.
+      for (let x = 2.05; x < 16.4; x += 0.05) {
+        let arriba = 0;
+        for (let cab = 0; cab < P.C; cab++) arriba += P.aboard(cab, x).length;
+        expect(P.leftAt(x)).toBe(arriba);
+      }
+    }
+  });
+
   it("con una sola persona no hay paradas que dibujar", () => {
     const P = planCableCar(["Sola"], [0], rngOf(3));
     expect(P.rank).toEqual([0]);

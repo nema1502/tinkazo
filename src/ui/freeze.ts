@@ -1,12 +1,13 @@
 import { $ } from "../dom";
 import { T, getLang, onLangChange, t } from "../i18n";
-import { ANCHOR_LEAD_SECONDS, LEAD_SECONDS, WHEEL_MAX, app, params, type Game } from "../state";
+import { ANCHOR_LEAD_SECONDS, LEAD_SECONDS, WHEEL_MAX, app, currentPace, paceSeconds, params, type Game } from "../state";
 import { QUICKNET, bytesToHex, roundTime, targetRound } from "../protocol/quicknet";
 import { listHash } from "../protocol/canonical";
 import { prepararFirma } from "../protocol/firma";
 import { contractUrl, network } from "../stellar/config";
 import { anchorErrorText, hideTxStatus, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
 import { precargarQr } from "./qr";
+import { recomendar } from "./recomendar";
 import { canAnchor, currentSession } from "./wallet-ui";
 import { parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
@@ -19,20 +20,24 @@ import { ponerPremio, recordarPremio, sincronizarPremios } from "./premios";
  * septiembre de 2026 esta lista tenía solo los ocho primeros, y los botones
  * del trompo, las balsas, la piñata y Oruro no hacían nada: solo se llegaba a
  * ellos con `?demo=`, que es lo que usan los auditores.
+ *
+ * Desde el 21 de octubre de 2026 son diez: entró El Trueque y salieron el
+ * Aguayo y la Constelación, que se fundieron en él (la tómbola había salido el
+ * 20). Van en el orden de la auditoría de juegos, de las salas chicas a las
+ * grandes; con la lista sellada los reordena la recomendación (`recomendar.ts`).
+ * Los que salen siguen abriendo con `?demo=`.
  */
 export const GAME_BUTTONS: ReadonlyArray<[string, Game]> = [
   ["g-race", "race"],
-  ["g-chovena", "chovena"],
-  ["g-trompo", "trompo"],
-  ["g-pinata", "pinata"],
-  ["g-oruro", "oruro"],
-  ["g-tombola", "tombola"],
-  ["g-wheel", "wheel"],
-  ["g-teleferico", "teleferico"],
-  ["g-pasanaku", "pasanaku"],
-  ["g-stellar", "stellar"],
   ["g-sapo", "sapo"],
+  ["g-trompo", "trompo"],
+  ["g-chovena", "chovena"],
+  ["g-pinata", "pinata"],
+  ["g-wheel", "wheel"],
   ["g-quien", "quien"],
+  ["g-trueque", "trueque"],
+  ["g-teleferico", "teleferico"],
+  ["g-oruro", "oruro"],
 ];
 
 export function setGame(g: Game): void {
@@ -58,6 +63,76 @@ export function pintarJuego(): void {
 }
 // Al cambiar de idioma los botones del selector ya están traducidos: se lee de ahí.
 onLangChange(pintarJuego);
+
+/** Una frase del diccionario. Las que llevan números son funciones: se les pasan los argumentos. */
+function frase(clave: string, args: readonly number[] = []): string {
+  const v = T[getLang()][clave];
+  if (typeof v === "function") return (v as (...a: number[]) => string)(...args);
+  return typeof v === "string" ? v : clave;
+}
+
+/**
+ * El selector recomienda según la cantidad de personas de la lista (auditoría
+ * de juegos, sección 8.1). Los que encajan van primero, con su etiqueta y una
+ * nota corta de por qué. Los que no encajan se atenúan, pero siguen tocables y
+ * dicen por qué. Los que no tienen rango claro quedan como estaban. Reordena
+ * los botones: no oculta ninguno, y el que estaba elegido sigue elegido.
+ * El selector solo se ve con la lista sellada (`sec-frozen`), así que se pinta
+ * al sellar y de nuevo al cambiar de idioma o de ritmo.
+ */
+export function pintarRecomendacion(n: number): void {
+  const botones = new Map<Game, HTMLElement>();
+  for (const [id, g] of GAME_BUTTONS) {
+    const el = document.getElementById(id);
+    if (el) botones.set(g, el);
+  }
+  const gp = $("gamepick");
+  recomendar(n).games.forEach((r, i) => {
+    const el = botones.get(r.game);
+    if (!el) return;
+    // Cada botón va a su lugar en el orden de la recomendación; se mueve solo el que está fuera de sitio.
+    if (gp.children[i] !== el) gp.insertBefore(el, gp.children[i] ?? null);
+    el.classList.toggle("atenuado", r.fits === false);
+    el.querySelectorAll(":scope > .rec-tag, :scope > .rec-nota").forEach((x) => x.remove());
+    if (r.fits === true) {
+      const etiqueta = document.createElement("em");
+      etiqueta.className = "rec-tag";
+      etiqueta.textContent = t("recBadge");
+      el.appendChild(etiqueta);
+    }
+    if (r.note) {
+      const nota = document.createElement("small");
+      nota.className = "rec-nota";
+      nota.textContent = frase(r.note, r.args);
+      el.appendChild(nota);
+    }
+  });
+  pintarCabecera(n);
+}
+
+/**
+ * La línea de arriba del selector: "Para 8 personas · Duración: Normal · 41 s".
+ * La duración es la del show con el ritmo elegido, que hoy es la misma para
+ * cualquier cantidad (la de la sección 8.2 no se muestra todavía: ver el informe).
+ */
+function pintarCabecera(n: number): void {
+  const el = document.getElementById("rec-head");
+  if (!el) return;
+  const p = currentPace();
+  const nombre = t(p === "rapido" ? "paceFast" : p === "normal" ? "paceNormal" : "paceEpic");
+  el.textContent = `${frase("recHead", [n])} · ${t("paceLabel")}: ${nombre} · ${paceSeconds(p)} s`;
+  el.style.display = "";
+}
+
+/**
+ * Rehace la recomendación con la lista sellada: al cambiar de idioma o de
+ * ritmo, que son los textos y la duración que se ven. Sin lista sellada no hay
+ * selector visible, y no hace nada.
+ */
+export function refrescarRecomendacion(): void {
+  if (app.frozen) pintarRecomendacion(app.frozen.names.length);
+}
+onLangChange(refrescarRecomendacion);
 
 /**
  * "Cambiar de juego": lleva al selector, que está debajo, y deja el foco en el
@@ -425,14 +500,19 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   }
   $("frozen-ts").textContent = t("frozenAt") + " " + f.at;
   renderSealSummary();
+  // Antes de la ruleta: si el juego cambia por la cantidad, el selector ya está ordenado.
+  pintarRecomendacion(names.length);
 
   if (names.length > WHEEL_MAX) {
-    // La ruleta es el único juego con tope. Los demás aguantan doscientos, y
-    // el reemplazo automático va a la tómbola, que muestra a todos con su
-    // número. Iba a la carrera, que pone ocho en pista (16 de octubre de 2026).
+    // La ruleta es el único juego con tope. Los demás aguantan doscientos. El
+    // reemplazo automático es el primer juego del selector que encaja para esa
+    // cantidad (sección 8.1). La tómbola ya no está en el selector, así que no
+    // puede ser el reemplazo: queda solo para más de doscientos, donde ningún
+    // juego encaja y no tiene botón. (Iba a la carrera el 16 de octubre, que
+    // pone ocho en pista.)
     $<HTMLButtonElement>("g-wheel").disabled = true;
     $("wheel-cap").style.display = "block";
-    if (app.game === "wheel") setGame("tombola");
+    if (app.game === "wheel") setGame(recomendar(names.length).games.find((r) => r.fits === true)?.game ?? "tombola");
   }
   pintarJuego();
   startCountdown();

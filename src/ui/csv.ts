@@ -15,6 +15,8 @@
  * en la coma.
  */
 
+import { stripInvisibles, withoutInvisibles } from "../invisibles";
+
 export interface Table {
   /** Nombres de las columnas, o `Columna 1`, `Columna 2`… si no hay cabecera. */
   columns: string[];
@@ -301,14 +303,17 @@ export function fixCase(name: string): string {
     .join("");
 }
 
-/** Una celda de nombre, limpia: sin comas (el protocolo corta ahí) ni espacios de más. */
+/**
+ * Una celda de nombre, limpia: sin los caracteres que no se ven, sin comas
+ * (el protocolo corta ahí) ni espacios de más.
+ */
 export function cleanName(raw: string): string {
-  return raw.replace(/,/g, " ").replace(/\s+/g, " ").trim();
+  return stripInvisibles(raw).replace(/,/g, " ").replace(/\s+/g, " ").trim();
 }
 
-/** Para comparar nombres: sin tildes, sin mayúsculas, sin espacios de más. */
+/** Para comparar nombres: sin invisibles, sin tildes, sin mayúsculas, sin espacios de más. */
 export function nameKey(name: string): string {
-  return name.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
+  return withoutInvisibles(name).normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 export interface Built {
@@ -320,6 +325,8 @@ export interface Built {
   dupes: number[][];
   /** Cuántas filas cambiaron por las mayúsculas. */
   cased: number;
+  /** De cuántas filas marcadas se sacaron caracteres que no se ven. */
+  invisibles: number;
 }
 
 /**
@@ -342,9 +349,12 @@ export function buildList(
   const final = t.rows.map(() => "");
   const groups = new Map<string, number[]>();
   let cased = 0;
+  let invisibles = 0;
   t.rows.forEach((r, i) => {
     if (!picked[i]) return;
-    let n = cleanName(cell(r, nameCol));
+    const raw = cell(r, nameCol);
+    if (stripInvisibles(raw) !== raw) invisibles++;
+    let n = cleanName(raw);
     if (opts.fixCase) {
       const f = fixCase(n);
       if (f !== n) cased++;
@@ -367,7 +377,7 @@ export function buildList(
       final[i] = split ? `${base} (${n + 2})` : "";
     });
   }
-  return { names: final.filter(Boolean), final, dupes, cased };
+  return { names: final.filter(Boolean), final, dupes, cased, invisibles };
 }
 
 /** "ana@example.org" → "a•••@example.org": alcanza para distinguir a dos Anas. */
