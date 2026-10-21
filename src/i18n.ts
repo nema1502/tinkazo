@@ -276,6 +276,8 @@ export const T: Record<Lang, Dict> = {
     gateTitle: "Conectá tu cuenta para sortear",
     gateBody: "El sorteo queda grabado en Stellar bajo tu cuenta, y eso es lo que deja que cualquiera compruebe después que la lista era esa y no otra. Sin cuenta no hay a quién atribuirlo.",
     gateAction: "Conectar cuenta",
+    // Debajo del botón de sellar cuando no hay cuenta: dice qué falta, y el botón queda con aria-disabled.
+    sellarSinCuenta: "Conectá tu cuenta para sellar",
     gateFoot: "Con Google no instalás nada. Tus participantes siguen sin necesitar cuenta ni aplicación: la cuenta es tuya, no de ellos.",
     histTitle: "Tus sorteos",
     histCount: "{n} con tu cuenta",
@@ -1426,6 +1428,8 @@ export const T: Record<Lang, Dict> = {
     gateTitle: "Connect your account to run a draw",
     gateBody: "The draw is recorded on Stellar under your account, and that is what lets anyone check afterwards that the list was that one and not another. With no account there is nobody to attribute it to.",
     gateAction: "Connect account",
+    // Under the seal button when there is no account: it says what is missing, and the button is aria-disabled.
+    sellarSinCuenta: "Connect your account to seal",
     gateFoot: "With Google you install nothing. Your participants still need no account and no app: the account is yours, not theirs.",
     histTitle: "Your draws",
     histCount: "{n} on your account",

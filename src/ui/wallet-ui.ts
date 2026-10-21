@@ -81,6 +81,9 @@ export const currentSession = (): Session | null => session;
 /** Se puede sellar en la cadena: hay contrato, hay sesión y la red coincide. */
 export const canAnchor = (): boolean => anchoringAvailable && session !== null && !wrongNetwork;
 
+/** En una red con contrato, sin cuenta conectada no se sella: lo dicen la puerta del sorteo y el botón de sellar. */
+export const sinCuentaParaSellar = (): boolean => anchoringAvailable && session === null;
+
 export function initWalletUI(): void {
   render();
   onLangChange(render);
@@ -321,8 +324,14 @@ function applyGate(): void {
   const body = gate.parentElement;
   // Si en esta red no hay contrato, no hay nada que conectar: no se traba a
   // nadie con una puerta que no tiene llave.
-  const locked = anchoringAvailable && session === null;
+  const locked = sinCuentaParaSellar();
   body?.classList.toggle("locked", locked);
+  // El botón de sellar no se apaga con la clase: queda a la vista y con
+  // aria-disabled, que es lo que lee un lector de pantalla. freeze() no lo
+  // sella sin cuenta, y la línea debajo dice qué falta.
+  const sellar = document.getElementById("btn-freeze");
+  if (locked) sellar?.setAttribute("aria-disabled", "true");
+  else sellar?.removeAttribute("aria-disabled");
   if (!locked) {
     gate.style.display = "none";
     return;

@@ -101,7 +101,10 @@ const PROBE = `(() => {
     if (own.length > 1 && !apagado) {
       const size = parseFloat(cs.fontSize), w = parseInt(cs.fontWeight) || 400;
       const need = (size >= 24 || (size >= 18.66 && w >= 700)) ? 3 : 4.5;
-      const op = parseFloat(cs.opacity) || 1;
+      // La opacidad de los padres también cuenta: el formulario sin cuenta se
+      // apagaba desde su contenedor y la letra de adentro se medía como si no.
+      let op = 1;
+      for (let e = el; e && e.nodeType === 1; e = e.parentElement) op *= parseFloat(getComputedStyle(e).opacity) || 1;
       const bg = bgOf(el);
       let col = nums(cs.color);
       if (op < 1) col = col.map((v, i) => v * op + bg[i] * (1 - op));
@@ -629,6 +632,25 @@ async function resaltadoTapa(page) {
   return { ok: r.tapadas <= 12, detail: `${r.tapadas} píxeles de letra tapados`, tapadas: r.tapadas };
 }
 
+/**
+ * La lista sin cuenta (la puerta cerrada). Lo que se lee tiene que leerse: la
+ * carga, los premios y las etiquetas no se apagan. Solo el botón de sellar
+ * queda con aria-disabled, y una línea visible dice qué falta.
+ */
+const SIN_CUENTA = `JSON.stringify((() => {
+  const opacidad = (el) => { let o = 1; for (let e = el; e && e.nodeType === 1; e = e.parentElement) o *= parseFloat(getComputedStyle(e).opacity) || 1; return o; };
+  const apagados = ['#ta', '#prize', '#prize-etiqueta', '#btn-sample', '#btn-sala', '#nw', 'label[for="nw"]', '#prize-chips button', 'label.chip.live']
+    .map(s => document.querySelector(s)).filter(e => e && opacidad(e) < 1).map(e => e.id || e.className || e.tagName);
+  const sellar = document.getElementById('btn-freeze');
+  const linea = document.getElementById('sellar-sin-cuenta');
+  return {
+    apagados,
+    ariaSellar: sellar ? sellar.getAttribute('aria-disabled') : null,
+    lineaVisible: !!linea && getComputedStyle(linea).display !== 'none',
+    lineaTexto: linea ? linea.textContent.trim() : '',
+  };
+})())`;
+
 async function run() {
   await mkdir(outDir, { recursive: true });
   const browser = await launch({ width: 1440, height: 900 });
@@ -650,6 +672,50 @@ async function run() {
 
         const tapa = await resaltadoTapa(page);
         check(`${etiqueta} ${tema}: el resaltado del título no tapa letras`, tapa.ok, tapa.detail);
+
+        // Antes de conectar, la lista en su pantalla: sin cuenta se arma igual y
+        // solo el botón de sellar queda apagado. Va en otra pestaña, para no
+        // tocar el recorrido de la cuenta. La lista de ejemplo deja el botón
+        // habilitado (no `disabled`), así su contraste sí se mide.
+        const sinCuenta = await browser.open("about:blank");
+        try {
+          await sinCuenta.send("Emulation.setDeviceMetricsOverride", {
+            width: p.w, height: p.h, deviceScaleFactor: 2, mobile: p.movil,
+            screenWidth: p.w, screenHeight: p.h,
+          });
+          await sinCuenta.send("Page.navigate", { url: `${base}/?theme=${tema}#sortear` });
+          await sinCuenta.waitFor("document.readyState === 'complete' && document.fonts && document.fonts.status === 'loaded'", 15000);
+          await sinCuenta.waitFor(`!!document.querySelector('#gate button') && !!document.getElementById('btn-sample')`, 20000);
+          await sinCuenta.eval(`document.getElementById('btn-sample').click(); true`);
+          await sleep(900);
+          const f = JSON.parse(await sinCuenta.eval(SIN_CUENTA));
+          check(
+            `${etiqueta} ${tema}: sin cuenta, lo que se lee no se apaga`,
+            f.apagados.length === 0,
+            f.apagados.join(", "),
+          );
+          check(
+            `${etiqueta} ${tema}: sin cuenta, el botón de sellar queda aria-disabled y con su línea`,
+            f.ariaSellar === "true" && f.lineaVisible && f.lineaTexto === "Conectá tu cuenta para sellar",
+            `aria-disabled ${f.ariaSellar} · línea ${f.lineaVisible ? "visible" : "oculta"}: "${f.lineaTexto}"`,
+          );
+          const sq = JSON.parse(await sinCuenta.eval(PROBE));
+          check(
+            `${etiqueta} ${tema}: sin cuenta, contraste del texto`,
+            sq.texto.length === 0,
+            sq.texto.slice(0, 3).map((x) => `"${x.t}" ${x.r}<${x.need}`).join(" | "),
+          );
+          check(`${etiqueta} ${tema}: sin cuenta, sin scroll horizontal`, sq.scroll.doc <= sq.scroll.vista + 1, `${sq.scroll.doc} vs ${sq.scroll.vista}`);
+          if (p.movil) {
+            check(`${etiqueta} ${tema}: sin cuenta, blancos de toque de 44 px`, sq.toques.length === 0, sq.toques.slice(0, 3).map((x) => `"${x.t}" ${x.h}px`).join(" | "));
+          }
+        } finally {
+          try {
+            await sinCuenta.send("Page.close");
+          } catch {
+            /* ya cerrada */
+          }
+        }
 
         const ok = await connect(page, p, tema);
         check(`${etiqueta} ${tema}: conecta una cuenta`, ok);

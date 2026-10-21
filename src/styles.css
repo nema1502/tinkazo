@@ -153,12 +153,19 @@
     padding: 12px 24px; font-weight: 800; font-size: 15px; cursor: pointer; transition: transform 0.08s, box-shadow 0.08s;
   }
   a.primary { display: inline-block; text-decoration: none; }
-  button.primary:hover:not(:disabled), a.primary:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
-  button.primary:active:not(:disabled), a.primary:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+  button.primary:hover:not(:disabled):not([aria-disabled="true"]), a.primary:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
+  button.primary:active:not(:disabled):not([aria-disabled="true"]), a.primary:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
   /* Apagar con opacidad dejaba la cuenta regresiva en 1,47 a 1, que es lo que
      toda la sala mira fijo. Un color sólido apagado se sigue leyendo. */
   button.primary:disabled {
     cursor: not-allowed; background: var(--muted); color: var(--paper);
+    box-shadow: 2px 2px 0 var(--ink); transform: none;
+  }
+  /* Sin cuenta, el botón de sellar se ve apagado pero se lee: aria-disabled (y
+     no `disabled`) para que un lector de pantalla lo encuentre y lo explique la
+     línea de abajo. Gris claro con letra oscura: 7,1 a 1 en claro y 6,6 en oscuro. */
+  button.primary[aria-disabled="true"] {
+    cursor: not-allowed; background: var(--line); color: var(--ink2);
     box-shadow: 2px 2px 0 var(--ink); transform: none;
   }
   a.primary.cta { display: inline-block; text-decoration: none; }
@@ -636,9 +643,11 @@
   .gate p { font-size: 14px; line-height: 1.55; }
   .gate .row { margin-top: 14px; }
   .gate .note { color: #3a3529; }
-  /* Lo de abajo queda a la vista pero apagado: se entiende qué vas a poder
-     hacer, y por qué todavía no. */
-  .body.locked > *:not(.gate) { opacity: 0.45; pointer-events: none; filter: saturate(0.5); }
+  /* Sin cuenta, la lista, los premios y sus etiquetas se leen igual: se puede
+     armar la lista antes de conectar. Solo el botón de sellar queda apagado
+     (`aria-disabled`, más arriba) y esta línea dice qué falta. */
+  .sellar-sin-cuenta { display: none; margin: 10px 0 0; font-size: 14px; font-weight: 700; color: var(--ink2); }
+  .body.locked .sellar-sin-cuenta { display: block; }
 
   /* El panel del grifo. Aparece cuando la cuenta conectada no tiene con qué
      pagar la comisión, que es lo primero que le pasa a todo el mundo. */

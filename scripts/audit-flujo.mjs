@@ -663,8 +663,8 @@ async function anchosDeCelular(browser, ancho) {
     await page.send("Page.navigate", { url: `${base}/?theme=${temas[0]}&lang=${lang}&lead=3&pace=rapido#sortear` });
     await page.waitFor("document.readyState === 'complete'", 20000);
     await sleep(900);
-    // Sin cuenta, la lista queda apagada detrás de la puerta (solo con CSS): el modo libre arma el mismo flujo.
-    await page.eval(`document.querySelector('#sec-participants .body').classList.remove('locked'); document.getElementById('gate').style.display = 'none'; document.getElementById('onboard').style.display = 'none'; true`);
+    // Sin cuenta, el botón de sellar queda con aria-disabled detrás de la puerta: el modo libre arma el mismo flujo.
+    await page.eval(`document.querySelector('#sec-participants .body').classList.remove('locked'); document.getElementById('btn-freeze').removeAttribute('aria-disabled'); document.getElementById('gate').style.display = 'none'; document.getElementById('onboard').style.display = 'none'; true`);
     const mirar = async (nombre) => {
       const m = JSON.parse(await page.eval(MEDIR_ANCHO));
       check(`${quien} · ${nombre}: sin scroll horizontal`, m.scrollX <= 1, `${m.scrollX}px`);
