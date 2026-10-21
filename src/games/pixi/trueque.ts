@@ -514,7 +514,8 @@ export async function truequePixi(names: string[], winners: readonly number[], b
     encargos.forEach((en, e) => {
       const aparece = clamp((tt - T_APPEAR - e * 0.05) / 0.3, 0, 1);
       const etiq = etiquetas[e];
-      if (aparece <= 0 || !etiq) {
+      // Desde la entrega, la foto final queda limpia: sin etiquetas de producto debajo del cartel.
+      if (aparece <= 0 || !etiq || tt >= T_ENTREGA) {
         if (etiq) etiq.visible = false;
         return;
       }
@@ -660,6 +661,9 @@ export async function truequePixi(names: string[], winners: readonly number[], b
     cam.update(dt);
     cam.apply(S.scene, S.sw(), S.sh(), now);
     dibujarAdornos(tt);
+    // La leyenda y el contador se van con la entrega: el cartel y la ruta ocupan la pantalla.
+    leyenda.visible = tt < T_ENTREGA;
+    contador.visible = tt < T_ENTREGA;
     dibujarPuestos(tt, paseEn(tt), tt >= T_ENTREGA);
     dibujarEncargos(tt);
     dibujarRuta(tt);
