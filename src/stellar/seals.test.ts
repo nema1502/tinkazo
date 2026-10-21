@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseRaffle, sealsOnChain } from "./seals";
+import { parseRaffle, sealsOnChain, selloDelIntento, ultimoLedger } from "./seals";
 import { RPC_URLS } from "./config";
 import deployments from "./deployments.json";
 
@@ -72,4 +72,29 @@ describe.skipIf(!process.env.TINKAZO_RED)("sealsOnChain contra testnet", () => {
     );
     expect(got?.raffles).toEqual([]);
   }, 60_000);
+
+  it("ultimoLedger: la red dice su último ledger y su hora, cerca de la de esta máquina", async () => {
+    const l = await ultimoLedger(RPC_URLS.testnet);
+    expect(l.secuencia).toBeGreaterThan(5_000_000);
+    expect(Math.abs(l.cierre - Date.now() / 1000)).toBeLessThan(120);
+  }, 60_000);
+
+  it("selloDelIntento: encuentra el último sello del contrato por su cuenta, su huella y su ronda, y no otro", async () => {
+    // El último sorteo del contrato, leído con el SDK: el de una prueba reciente de la app.
+    const { contract, Networks } = await import("@stellar/stellar-sdk");
+    const client = (await contract.Client.from({ contractId, networkPassphrase: Networks.TESTNET, rpcUrl: RPC_URLS.testnet })) as unknown as {
+      next_id: () => Promise<{ result: bigint }>;
+      get_raffle: (a: { raffle_id: bigint }) => Promise<{ result: unknown }>;
+    };
+    const ultimo = Number((await client.next_id()).result) - 1;
+    const r = parseRaffle((await client.get_raffle({ raffle_id: BigInt(ultimo) })).result);
+    expect(r).not.toBeNull();
+    const intento = { organizer: r!.organizer, listHash: r!.listHash, round: r!.round };
+    const hallado = await selloDelIntento(intento, contractId, RPC_URLS.testnet);
+    expect(hallado.id).toBe(String(ultimo));
+    expect(hallado.secuencia).toBeGreaterThan(5_000_000);
+    // La misma lista con otra ronda es otro intento: no está.
+    const otro = await selloDelIntento({ ...intento, round: intento.round + 1 }, contractId, RPC_URLS.testnet);
+    expect(otro.id).toBeUndefined();
+  }, 90_000);
 });
