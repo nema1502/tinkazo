@@ -623,9 +623,9 @@ export class Wardrobe {
       root.addChild(legL, legR, body, avatar, armL, armR, fc, head);
     } else if (woman) {
       // La llamera. De su traje no encontramos una fuente firme: la pollera a la
-      // rodilla, la blusa bordada y el aguayo cargado son lo que se repite en las
-      // fotos de las fraternidades, y el sombrero de flecos es el del baile, que
-      // "se parece al tocado de la Mama T'alla" (en.wikipedia.org/wiki/Llamerada).
+      // rodilla, la blusa bordada y el aguayo cargado son una suposición nuestra.
+      // El sombrero de flecos es el del baile, cuyo tocado se parece al de la Mama
+      // T'alla, la esposa de una autoridad aymara (en.wikipedia.org/wiki/Llamerada).
       legL = this.legSkin(skin, "abarca", -HIP_X);
       legR = this.legSkin(skin, "abarca", HIP_X);
       // El aguayo cargado: se asoma por encima y a los costados de los hombros.

@@ -20,9 +20,9 @@ Y así es la entrada de verdad. Es una peregrinación hasta el Santuario del Soc
 
 **La última fraternidad.** Cuando queda una sola: "¡Solo quedan los Jucumaris!". Adentro de ella se quedan de a varios, en sus propios arcos, hasta que quedan dos. Ahí cada uno lleva su nombre entero encima: los que se quedan, tachados con una raya roja que deja leer el nombre.
 
-**El contrapunto.** Frente al Socavón, los dos se miran y saltan alternados, cada salto un poco antes y más alto que el anterior. En cualquiera de los saltos cualquiera de los dos puede trastabillar: se tambalea, los brazos buscan el equilibrio, la máscara o el sombrero se le corren, y aguanta. El último salto de uno termina en el piso: cae sentado, y la máscara (o el sombrero, o la montera) sale volando. "¡A Diego Rojas se le voló el sombrero!". Perder da risa.
+**El contrapunto.** Frente al Socavón, los dos se miran y saltan alternados, cada salto un poco antes y más alto que el anterior. En cualquiera de los saltos cualquiera de los dos puede trastabillar: se tambalea, los brazos buscan el equilibrio, la máscara o el sombrero se le corren, y aguanta. El último salto de uno termina en el piso: cae sentado, pone ojos grandes y boca en o, y la máscara (o el sombrero, o la montera) sale volando y rueda. "¡A Diego Rojas se le voló el sombrero!". Perder da risa. Lo que vuela es lo de la cabeza, nunca la cara: con la cara adentro de lo que volaba, se veía rodar una cabeza por el piso (21 de octubre de 2026). Abajo de las máscaras hay una cara, que se asoma cuando la máscara se corre.
 
-**La llegada.** El otro da el último salto y llega a la plaza del Socavón, con la campana de tres notas. En el cartel, las campanas del Socavón y los cohetillos.
+**La llegada.** El otro da el último salto y llega a la plaza del Socavón, con la campana de tres notas, y el relator nombra a su fraternidad: "¡Los Jucumaris llegaron al Socavón!", "¡Campanas para las Parabas: llegaron al Socavón!". Es el momento de la sección 7.8: nuestra fraternidad llegó hasta el Socavón. Después el cartel de la corona nombra a la persona, con las campanas del Socavón y los cohetillos.
 
 ## Las fraternidades
 
@@ -40,7 +40,21 @@ El baile de cada fraternidad se sortea con la ronda: los cinco bailes se barajan
 | Tinkus | La montera, un casco duro, con plumas de colores; la almilla tejida con franjas, la chuspa, las abarcas | Agachado, zapateando, con los puños arriba, en zigzag | Casco y abarcas; sombreros con plumas y cintas ([Tinku](https://en.wikipedia.org/wiki/Tinku)) |
 | Llamerada | Sombrero con flecos de colores, poncho, la honda y una llamita | El paso del llamero, con la honda dando vueltas sobre la cabeza y la llamita en la otra mano; los labios fruncidos del que silba a sus llamas | Honda en la derecha y llamita en la izquierda ([Llamerada](https://en.wikipedia.org/wiki/Llamerada)) |
 
-Los trajes van dibujados en blanco una sola vez por baile (`GraphicsContext` compartido) y cada bailarín los tiñe con el color de su fraternidad: con doscientos bailarines, armar cada uno por separado costaba en el primer cuadro. La cara de cada uno va en el pecho.
+Cada pieza de los trajes se dibuja una sola vez y se pasa a una textura, y cada bailarín es un puñado de sprites: lo que lleva el color de la fraternidad se dibuja una vez por fraternidad, lo que es igual en todas se comparte, y lo que es del color de la piel o del pelo se dibuja en blanco y se tiñe. Dibujados como figuras, con doscientos bailarines la escena iba a 25 cuadros por segundo. La cara de cada uno, la de su lista, va en el pecho.
+
+### Ellas
+
+En la entrada de verdad, hombres y mujeres bailan con trajes distintos. Con qué traje baila cada uno sale del nombre, como en la Chovena ([`genero.ts`](../../src/games/genero.ts): una lista de nombres comunes y la terminación); si el nombre no lo dice, con el traje de la tabla de arriba, el de siempre. Es solo dibujo: no toca quién gana.
+
+| Baile | Lo que se dibuja | De dónde |
+|---|---|---|
+| Diablada | La china supay: careta pintada con pestañas largas, cejas de lana, dientes de espejo y dos cuernitos; trenzas con tullmas, pañueleta, pechera dorada, pollera corta con estrellas y botas blancas | "La careta, tullma, pañueleta y botas" ([Los Tiempos](https://www.lostiempos.com/doble-click/cultura/20230212/trajes-estilizados-colores-vivos-son-tendencia-este-carnaval)); una careta de china supay de loza pintada, con dientes de espejo, pestañas largas y cejas de lana ([Horniman Museum](https://horniman.ac.uk/object/HC.1999.1546)) |
+| Morenada | La cholita: pollera corta bordada en el ruedo, corsé con escote en V sobre la blusa blanca, dos trenzas, y el sombrero y las botas del color del traje | "Pollera corta con bordados en los extremos y un corset escote en V", "tanto el sombrero como las botas están forrados con la misma tela de los trajes", "el pelo largo y recogido en dos trenzas" ([Diario de Cuyo](https://www.diariodecuyo.com.ar/noticias/las-danzas-religiosas-en-que-destacan-a-la-mujer-boliviana-336782.html)) |
+| Caporales | Pollera corta plisada que se abre en cada salto, blusa con escote en V y mangas abullonadas en los hombros, bordado en el pecho, el pelo recogido, un sombrerito sujeto al pelo, medias color piel y zapatos de taco | "Pollera corta y una blusa con escote en forma de V, mangas largas y abultadas en los hombros" (Diario de Cuyo); el sombrero redondo sujeto al pelo, las medias y los tacos ([Caporales](https://en.wikipedia.org/wiki/Caporales)) |
+| Tinkus | Vestido largo con franjas tejidas, chaqueta a la cintura, fajero, pañueleta, y el sombrero con plumas largas, cintas y espejitos | "Un vestido largo con una chaqueta a la cintura, tejidos en lana de colores intensos" y "el sombrero incluye detalles de espejos" (Diario de Cuyo); "vestido, chaleco, pañueleta, fajero y sombrero" (Los Tiempos); sombreros con plumas largas y cintas ([Tinku](https://en.wikipedia.org/wiki/Tinku)) |
+| Llamerada | El sombrero de flecos del baile, blusa bordada, pollera a la rodilla y el aguayo cargado, anudado en el pecho | No encontramos una fuente firme del traje de las llameras: la pollera, la blusa y el aguayo son una suposición nuestra, y es lo primero que tiene que revisar alguien de Oruro. El tocado del baile se parece al de la Mama T'alla, la esposa de una autoridad aymara ([Llamerada](https://en.wikipedia.org/wiki/Llamerada)) |
+
+La pollera se mece con el paso de cada baile: va y viene en la morenada, se abre en cada salto de los caporales. Ellas bailan los mismos pasos que ellos; la cholita, sin matraca, y la llamera, sin honda ni llamita, con los dos brazos al paso. Lo que se les cae en el susto y en la caída es el sombrero (a la china supay, la careta).
 
 ## Qué hace la sala
 
@@ -127,7 +141,8 @@ La música con beat, cuando está prendida, hace de banda de fondo. No es músic
 - **La máscara del moreno es de metal plateado,** con los ojos desorbitados y la lengua afuera. Pintada del color de una piel y con labios gruesos, fuera de Bolivia se lee como caricatura.
 - **Los caporales no llevan látigo.** El caporal era el capataz de los esclavos ([Caporales](https://en.wikipedia.org/wiki/Caporales)); el baile se queda con las botas, los saltos y el sombrero.
 - **Nada religioso en los bailarines:** ni la Virgen, ni el arcángel, ni estandartes con imágenes. Cada fraternidad lleva una pancarta con su color y una estrella.
-- **Las figuras no distinguen hombres y mujeres.** Cada fraternidad baila con el traje de su baile, el mismo para todos. En la entrada de verdad, hombres y mujeres llevan trajes distintos (la china supay en la Diablada, las cholitas en la Morenada y en Caporales). Hacerlo como en la Chovena, por el nombre, queda pendiente.
+- **El traje de ellas sale del nombre, no del lugar.** Repartido por puesto, a un hombre le podía tocar la pollera, y eso se lee como burla (lo encontró la revisión de la Chovena, 5 de octubre de 2026). Si el nombre no dice nada, baila con el traje de siempre. Un nombre de hombre que termina en a (Joshua, Mustafa) baila de pollera: la lista de `genero.ts` cubre los nombres de la lista de ejemplo y los comunes en Bolivia, no todos.
+- **La cholita no es caricatura.** La cara es la de todos, con las mejillas rosadas; la pollera, el corsé, las trenzas y el sombrero, como los describen las fuentes, sin exagerar nada.
 - **Lo que no se jugó:** la UNESCO anota "la explotación financiera incontrolada del carnaval" entre lo que lo amenaza ([UNESCO](https://ich.unesco.org/en/RL/carnival-of-oruro-00003)). Nada de marcas, ni de cerveza, ni de premios en plata en la escena.
 
 **Antes de darlo por bueno, que lo vea alguien de Oruro.** Los trajes son una lectura nuestra de las fuentes, no un dibujo de un traje de verdad.
@@ -135,7 +150,8 @@ La música con beat, cuando está prendida, hace de banda de fondo. No es músic
 ## Cómo está hecho
 
 - [`src/games/pixi/entrada-plan.ts`](../../src/games/pixi/entrada-plan.ts): el plan, puro y con sus pruebas. Las fraternidades, el orden del desfile, quién se queda en cada arco, la última fraternidad, los giros de cada arco, el contrapunto y todos los tiempos, escritos con la semilla de la ronda antes del primer cuadro.
-- [`src/games/pixi/entrada-bailes.ts`](../../src/games/pixi/entrada-bailes.ts): los cinco trajes, la banda y la pose de cada uno, sin memoria: la misma hora dibuja el mismo cuerpo.
+- [`src/games/pixi/entrada-bailes.ts`](../../src/games/pixi/entrada-bailes.ts): los cinco trajes, de ellos y de ellas, la banda y la pose de cada uno, sin memoria: la misma hora dibuja el mismo cuerpo.
+- [`src/games/genero.ts`](../../src/games/genero.ts): con qué traje baila cada uno, del nombre. Es el mismo de la Chovena.
 - [`src/games/pixi/oruro.ts`](../../src/games/pixi/oruro.ts): la escena, la cámara, los carteles y el sonido, con el andamiaje del motor nuevo ([`stage.ts`](../../src/games/pixi/stage.ts)). No toca `stage.ts` ni `camera.ts`.
 
 No tiene versión en el motor anterior: en un equipo sin WebGL el sorteo sale con la carrera de llamas, que cuenta el mismo ganador.
