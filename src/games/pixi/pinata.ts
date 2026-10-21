@@ -3,7 +3,7 @@ import { T, getLang, t } from "../../i18n";
 import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, fanfare, note } from "../../sound";
 import { enOrden, writeStory } from "../drama";
-import { WINNER_HOLD, clamp, ease, shorten, winnersLabel } from "../overlay";
+import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { capRecent, layoutLabels, listaCaidos, type LabelItem, type ListaGeo } from "./pinata-labels";
 import { planPalos } from "./pinata-plan";
 import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
@@ -32,6 +32,15 @@ import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage }
  * en un montoncito que crece (antes quedaban todos en el piso, a una altura
  * al azar), y al romperse la olla se parte en pedazos que salen girando.
  */
+
+/** El nombre que entra en una fila de la lista: entero si cabe, si no, el de pila con la inicial del apellido. */
+function etiqueta(nombre: string, max: number): string {
+  if (nombre.length <= max) return nombre;
+  const partes = nombre.trim().split(/\s+/);
+  const pila = partes[0] ?? "";
+  const corto = partes.length > 1 ? `${pila} ${(partes[partes.length - 1] ?? "").charAt(0)}.` : pila;
+  return corto.length <= max ? corto : `${pila.slice(0, Math.max(1, max - 1))}…`;
+}
 
 const DT = 1 / 120;
 const T_HANG = 3.0;
@@ -840,7 +849,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       const id = shown[i];
       r.c.visible = id !== undefined;
       if (id === undefined) return;
-      r.tx.text = shorten(names[id] ?? "", lista.phone ? 14 : 18);
+      r.tx.text = etiqueta(names[id] ?? "", lista.phone ? 15 : 18);
       r.bg.clear().roundRect(0, 0, lista.colW - 4, lista.rowH - 3, 4).fill(i === 0 && hl ? YELLOW : fondo).stroke({ width: 2, color: INK });
       r.sq.clear().rect(4, 4, lista.rowH * 0.3, lista.rowH - 11).fill(S.color(id));
     });
