@@ -223,8 +223,10 @@ La carrera actúa la historia entera. Los demás juegos toman del director el ar
 | Trompo | Duelo | **Un choque más.** El mano a mano dura cuatro choques en vez de tres |
 | Piñata | Susto | **El que se asoma.** En los últimos palos el caramelo ganador asoma por la rajadura y vuelve a entrar |
 | Piñata | Remontada | **Al aire.** Dos palos que no le pegan a nada antes de los últimos |
-| Carnaval de Oruro | Susto | **La máscara.** En la última cuadra a la ganadora casi se le cae la máscara |
-| Carnaval de Oruro | Remontada | **Desde atrás.** Arranca en la última fila de la comparsa y en cada cuadra avanza |
+| La Entrada | Susto | **La máscara.** Antes del último arco de la última fraternidad, a uno de los que siguen bailando casi se le cae la máscara (o se le vuela el sombrero, o la montera). Se sortea entre todos, también el que gana |
+| La Entrada | Remontada | **La que vuelve.** En un arco, una fraternidad arranca para la vereda como si se quedara ("¿se quedan los Tojos?") y vuelve a la comparsa. Se sortea entre las que siguen |
+| La Entrada | Duelo | **Un salto más.** El contrapunto frente al Socavón dura dos saltos más |
+| La Entrada | Tapada | **Se calla la banda.** En un arco la música se corta de golpe y la comparsa se congela a mitad del paso, con la sala que aplaudía; después vuelve la banda |
 | Chovena | Susto | **El que aguanta.** En el último corte la ganadora trastabilla con un "¡!" encima ("¡ojo con fulana!") y aguanta. En la mitad de los cortes trastabilla también alguien que no sale, así que tambalearse no delata a nadie |
 | Chovena | Remontada | **La que vuelve.** En el corte falso la ganadora se había soltado y da un paso afuera; vuelve la música y vuelve a la rueda |
 | Chovena | Duelo | **El amague de la final.** Con los dos de la mano, la música se corta, se tambalean los dos, y vuelve |
@@ -332,7 +334,7 @@ El ritmo, la legibilidad del cartel y el tartamudeo de los subtítulos ya los mi
 | Chovena | `chovena` | Módulo propio (solo motor nuevo), con su propia música | 200, mejor de 12 a 80 | [chovena.md](juegos/chovena.md) |
 | Trompo | `trompo` | Módulo propio (solo motor nuevo) | 200 | [trompo.md](juegos/trompo.md) |
 | Piñata | `pinata` | Módulo propio (solo motor nuevo) | 200 | [pinata.md](juegos/pinata.md) |
-| Carnaval de Oruro | `oruro` | Módulo propio (solo motor nuevo) | 200 | [carnaval-de-oruro.md](juegos/carnaval-de-oruro.md) |
+| La Entrada (antes Carnaval de Oruro) | `oruro` | Módulo propio (solo motor nuevo), por fraternidades | 200, pensado de 30 a 200 | [la-entrada.md](juegos/la-entrada.md) |
 | Tómbola | `tombola` | Módulo propio | 200 | [tombola.md](juegos/tombola.md) |
 | Ruleta | `wheel` | Módulo propio | 24 | [ruleta.md](juegos/ruleta.md) |
 | Teleférico | `teleferico` | Módulo propio | 200 | [teleferico.md](juegos/teleferico.md) |
