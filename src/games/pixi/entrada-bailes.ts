@@ -26,6 +26,11 @@ import type { Dance } from "./entrada-plan";
  * color, una vez por fraternidad; lo que es igual en todas (las piernas, las
  * máscaras, lo que se lleva en la mano) se comparte.
  *
+ * La cara es del cuerpo y lo de la cabeza es aparte: en el tropezón y en la
+ * caída se corre y vuela la máscara, el sombrero o la montera, y la cara queda
+ * en su lugar. Con la cara adentro de lo que volaba, en la caída se veía rodar
+ * una cabeza por el piso (21 de octubre de 2026).
+ *
  * Las unidades son las del dibujo: los pies en (0, 0), la punta de lo que lleva
  * en la cabeza a unos 130 hacia arriba.
  */
@@ -36,6 +41,8 @@ const GOLD_D = 0xb8860b;
 const WHITE = 0xffffff;
 /** Los colores de piel de las caras sin máscara. */
 const SKINS = [0xf1c7a0, 0xdba577, 0xc68a5c, 0x8d5a3b];
+/** Los colores de pelo. */
+const HAIRS = [0x2b1d14, 0x3d2817, 0x151515, 0x4a2f1c];
 /** Las máscaras de la diablada, como las de antes. */
 const DEVIL_MASKS = [0xd52b1e, 0x1f7a3a, 0x1c64c8];
 const FEATHERS = [0xe93d9c, 0xffc629, 0x00a896, 0xd52b1e, 0x6c4ce0];
@@ -48,8 +55,16 @@ export interface DancerParts {
   legR: Container;
   armL: Container;
   armR: Container;
-  /** Lo que lleva en la cabeza, con la cara: lo que casi se cae en el susto y vuela en la caída. */
+  /**
+   * Lo que lleva en la cabeza: la máscara, el sombrero o la montera. Es lo que
+   * casi se cae en el susto y vuela en la caída; la cara queda en su lugar.
+   */
   head: Container;
+  /** La cara de abajo de la máscara: se ve cuando la máscara se corre o se cae. */
+  under: Container | null;
+  /** La cara de siempre y la del susto, que se cambian en el tropezón y en la caída. */
+  feat: Container | null;
+  featOh: Container | null;
   /** Lo que lleva en la mano derecha: el tridente, la matraca, la honda. */
   prop: Container | null;
   cape: Container | null;
@@ -124,11 +139,6 @@ export class Wardrobe {
     this.cache.clear();
   }
 
-  /** Arma de antemano lo de una fraternidad: así el primer cuadro en que aparece no paga el dibujo. */
-  warm(dance: Dance, color: number, face: Texture): void {
-    this.make(dance, color, face, 0).root.destroy({ children: true });
-  }
-
   /** El brazo que cuelga del hombro, del color de la fraternidad: manga y guante. */
   private arm(color: number, x: number): Sprite {
     const s = this.bake("arm", (g) => g.roundRect(-3.6, -1, 7.2, 23, 3.4).fill(WHITE).stroke({ width: 1.6, color: INK }).circle(0, HAND_Y, 4).fill(WHITE).stroke({ width: 1.4, color: INK }), 0, 0, color);
@@ -153,13 +163,56 @@ export class Wardrobe {
     return s;
   }
 
+  /** El pelo de arriba, con la raya al medio, con su color (uno de `HAIRS`). */
+  private hair(h: number): Sprite {
+    const color = HAIRS[h] as number;
+    return this.bake(`hair-cap-${h}`, (g) => g
+      .moveTo(-12.3, -86).bezierCurveTo(-13.2, -101.5, 13.2, -101.5, 12.3, -86)
+      .bezierCurveTo(9, -91, 3, -93.5, 0, -92).bezierCurveTo(-3, -93.5, -9, -91, -12.3, -86)
+      .closePath().fill(color).stroke({ width: 1.4, color: INK }));
+  }
+
+  /**
+   * La cara que queda en el cuerpo: la piel, el pelo y la expresión, la de
+   * siempre (`featKey`) y la del susto, que se cambian en el tropezón y en la
+   * caída.
+   */
+  private face(skin: number, h: number, featKey: string, drawFeat: Draw): { c: Container; feat: Container; featOh: Container } {
+    const c = new Container();
+    const feat = new Container();
+    feat.addChild(this.bake(featKey, drawFeat));
+    const featOh = new Container();
+    featOh.addChild(this.bake("feat-oh", featOhDraw));
+    featOh.visible = false;
+    c.addChild(this.bake("face", (g) => g.circle(0, -85, 12).fill(WHITE).stroke({ width: 2, color: INK }), 0, 0, skin), this.hair(h), feat, featOh);
+    return { c, feat, featOh };
+  }
+
+  /** La cara de abajo de una máscara, asustada: se ve cuando la máscara se corre o se cae. */
+  private underMask(skin: number, h: number): Container {
+    const c = new Container();
+    c.addChild(this.bake("face", (g) => g.circle(0, -85, 12).fill(WHITE).stroke({ width: 2, color: INK }), 0, 0, skin), this.hair(h), this.bake("feat-oh", featOhDraw));
+    c.visible = false;
+    return c;
+  }
+
   /** Un bailarín de `dance` con el color de su fraternidad y su cara en el pecho. */
   make(dance: Dance, color: number, face: Texture, seed: number): DancerParts {
     const root = new Container();
     const skin = SKINS[Math.floor(frac(seed * 7.13) * SKINS.length)] as number;
+    const hairI = Math.floor(frac(seed * 2.71) * HAIRS.length);
     const c = hexKey(color);
     let cape: Container | null = null;
     let prop: Container | null = null;
+    let under: Container | null = null;
+    const faces: { feat: Container | null; featOh: Container | null } = { feat: null, featOh: null };
+    /** La cara a la vista, con el pelo y la expresión. */
+    const bare = (key: string, draw: Draw): Container => {
+      const fc = this.face(skin, hairI, key, draw);
+      faces.feat = fc.feat;
+      faces.featOh = fc.featOh;
+      return fc.c;
+    };
     const head = new Container();
     head.pivot.set(0, HEAD_Y);
     head.position.set(0, HEAD_Y);
@@ -194,6 +247,7 @@ export class Wardrobe {
         .stroke({ width: 2, color: GOLD })));
       armR = r.arm;
       prop = r.prop;
+      under = this.underMask(skin, hairI);
       const mk = Math.floor(frac(seed * 3.7) * DEVIL_MASKS.length);
       head.addChild(this.bake(`dia-mask-${mk}`, (g) => g
         .poly([-12, -90, -26, -106, -34, -128, -22, -114, -8, -96]).fill(GOLD).stroke({ width: 1.8, color: INK })
@@ -208,7 +262,7 @@ export class Wardrobe {
         .circle(-6, -86, 2.2).fill(0x1f7a3a).circle(6, -86, 2.2).fill(0x1f7a3a)
         .rect(-8, -77, 16, 5).fill(WHITE).stroke({ width: 1.2, color: INK })
         .moveTo(-4, -77).lineTo(-4, -72).moveTo(0, -77).lineTo(0, -72).moveTo(4, -77).lineTo(4, -72).stroke({ width: 1, color: INK })));
-      root.addChild(cape, legL, legR, body, avatar, armL, armR, head);
+      root.addChild(cape, legL, legR, body, avatar, armL, armR, under, head);
     } else if (dance === "morenada") {
       const draw: Draw = (g) => g.rect(-3.5, -2, 7, 9).fill(0x2b2d42).stroke({ width: 1.4, color: INK }).roundRect(-5, 6, 11, 7, 2.5).fill(INK);
       legL = this.leg("mor-leg", draw, -HIP_X);
@@ -235,6 +289,7 @@ export class Wardrobe {
         .rect(-2, -16, 15, 2.4).fill(GOLD)));
       armR = r.arm;
       prop = r.prop;
+      under = this.underMask(skin, hairI);
       head.addChild(this.bake("mor-mask", (g) => {
         // La corona con sus plumas.
         g.moveTo(-4, -104).bezierCurveTo(-14, -118, -18, -122, -22, -126).stroke({ width: 3, color: 0xe93d9c, cap: "round" });
@@ -251,7 +306,7 @@ export class Wardrobe {
         g.circle(-5, -86, 2.8).fill(INK).circle(7, -86, 2.8).fill(INK);
         g.ellipse(0, -75, 6, 2.6).fill(INK).roundRect(-3, -76, 6, 9, 3).fill(0xe93d9c).stroke({ width: 1, color: INK });
       }));
-      root.addChild(legL, legR, body, avatar, armL, armR, head);
+      root.addChild(legL, legR, body, avatar, armL, armR, under, head);
     } else if (dance === "caporales") {
       const draw: Draw = (g) => g
         .rect(-3.5, -6, 7, 7).fill(0xf4f4f4).stroke({ width: 1.4, color: INK })
@@ -273,17 +328,13 @@ export class Wardrobe {
       avatar.width = avatar.height = 11;
       armL = this.arm(color, -SHOULDER_X);
       armR = this.arm(color, SHOULDER_X);
-      head.addChild(
-        this.bake("face", (g) => g.circle(0, -85, 12).fill(WHITE).stroke({ width: 2, color: INK }), 0, 0, skin),
-        this.bake("cap-hat", (g) => g
-          .circle(-4.5, -86, 1.8).fill(INK).circle(4.5, -86, 1.8).fill(INK)
-          .moveTo(-4, -79).quadraticCurveTo(0, -76, 4, -79).stroke({ width: 1.4, color: INK })
-          .ellipse(0, -97, 22, 5).fill(INK)
-          .roundRect(-10, -111, 20, 14, 4).fill(INK)
-          .rect(-10, -101, 20, 3).fill(GOLD)
-          .moveTo(9, -104).bezierCurveTo(16, -112, 20, -118, 15, -124).stroke({ width: 2.6, color: WHITE, cap: "round" })),
-      );
-      root.addChild(legL, legR, body, avatar, armL, armR, head);
+      const fc = bare("feat-smile", featSmile);
+      head.addChild(this.bake("cap-hat", (g) => g
+        .ellipse(0, -97, 22, 5).fill(INK)
+        .roundRect(-10, -111, 20, 14, 4).fill(INK)
+        .rect(-10, -101, 20, 3).fill(GOLD)
+        .moveTo(9, -104).bezierCurveTo(16, -112, 20, -118, 15, -124).stroke({ width: 2.6, color: WHITE, cap: "round" })));
+      root.addChild(legL, legR, body, avatar, armL, armR, fc, head);
     } else if (dance === "tinkus") {
       const draw: Draw = (g) => g
         .rect(-4.2, -6, 8.4, 7).fill(0x262626).stroke({ width: 1.4, color: INK })
@@ -302,22 +353,19 @@ export class Wardrobe {
       avatar.width = avatar.height = 12;
       armL = this.arm(color, -SHOULDER_X);
       armR = this.arm(color, SHOULDER_X);
-      head.addChild(
-        this.bake("face", (g) => g.circle(0, -85, 12).fill(WHITE).stroke({ width: 2, color: INK }), 0, 0, skin),
-        this.bake(`tin-head-${c}`, (g) => {
-          g.circle(-4.5, -86, 1.8).fill(INK).circle(4.5, -86, 1.8).fill(INK).ellipse(0, -79, 3, 2.2).fill(INK);
-          // La montera, el casco duro, con sus plumas de colores.
-          for (let i = 0; i < 5; i++) {
-            const a = -0.6 + i * 0.3;
-            const x = Math.sin(a) * 18, y = -103 - Math.cos(a) * 18;
-            g.moveTo(0, -103).quadraticCurveTo(x * 0.4, -110, x, y).stroke({ width: 3.6, color: FEATHERS[i] as number, cap: "round" });
-          }
-          g.moveTo(-14, -92).bezierCurveTo(-14, -108, 14, -108, 14, -92).closePath().fill(color).stroke({ width: 2, color: INK })
-            .ellipse(0, -92, 18, 3.6).fill(color).stroke({ width: 1.8, color: INK })
-            .circle(0, -103, 2.6).fill(GOLD).stroke({ width: 1, color: INK });
-        }),
-      );
-      root.addChild(legL, legR, body, avatar, armL, armR, head);
+      const fc = bare("feat-shout", featShout);
+      head.addChild(this.bake(`tin-head-${c}`, (g) => {
+        // La montera, el casco duro, con sus plumas de colores.
+        for (let i = 0; i < 5; i++) {
+          const a = -0.6 + i * 0.3;
+          const x = Math.sin(a) * 18, y = -103 - Math.cos(a) * 18;
+          g.moveTo(0, -103).quadraticCurveTo(x * 0.4, -110, x, y).stroke({ width: 3.6, color: FEATHERS[i] as number, cap: "round" });
+        }
+        g.moveTo(-14, -92).bezierCurveTo(-14, -108, 14, -108, 14, -92).closePath().fill(color).stroke({ width: 2, color: INK })
+          .ellipse(0, -92, 18, 3.6).fill(color).stroke({ width: 1.8, color: INK })
+          .circle(0, -103, 2.6).fill(GOLD).stroke({ width: 1, color: INK });
+      }));
+      root.addChild(legL, legR, body, avatar, armL, armR, fc, head);
     } else {
       const draw: Draw = (g) => g.rect(-3.6, -6, 7.2, 14).fill(0xf2ece0).stroke({ width: 1.4, color: INK }).roundRect(-4.8, 7, 10, 5, 1.6).fill(0x6b4423).stroke({ width: 1, color: INK });
       legL = this.leg("lla-leg", draw, -HIP_X);
@@ -345,20 +393,17 @@ export class Wardrobe {
       const r = this.armWith(color, this.bake("lla-honda", (g) => g.moveTo(0, 0).lineTo(0, -24).stroke({ width: 1.2, color: 0x6b4423 }).circle(0, -26, 3).fill(0x8a8a8a).stroke({ width: 1, color: INK })));
       armR = r.arm;
       prop = r.prop;
-      head.addChild(
-        this.bake("face", (g) => g.circle(0, -85, 12).fill(WHITE).stroke({ width: 2, color: INK }), 0, 0, skin),
-        // Los labios fruncidos del llamero que silba para que lo sigan sus llamas,
-        // el sombrero y sus flecos de colores.
-        this.bake(`lla-head-${c}`, (g) => {
-          g.circle(-4.5, -84, 1.8).fill(INK).circle(4.5, -84, 1.8).fill(INK).circle(0, -78, 2.2).fill(0xd52b1e).stroke({ width: 1.1, color: INK });
-          g.ellipse(0, -96, 21, 4.6).fill(color).stroke({ width: 1.8, color: INK }).roundRect(-9, -105, 18, 9, 3).fill(color).stroke({ width: 1.8, color: INK });
-          const cs = [0xe93d9c, GOLD, 0x00a896, WHITE, 0xd52b1e, 0x6c4ce0, GOLD];
-          for (let i = 0; i < 7; i++) g.rect(-15 + i * 4.6, -94, 2.4, 6 + (i % 2) * 3).fill(cs[i] as number);
-        }),
-      );
-      root.addChild(legL, legR, body, avatar, armL, armR, head);
+      // Los labios fruncidos del llamero que silba para que lo sigan sus llamas.
+      const fc = bare("feat-whistle", featWhistle);
+      // El sombrero y sus flecos de colores.
+      head.addChild(this.bake(`lla-head-${c}`, (g) => {
+        g.ellipse(0, -96, 21, 4.6).fill(color).stroke({ width: 1.8, color: INK }).roundRect(-9, -105, 18, 9, 3).fill(color).stroke({ width: 1.8, color: INK });
+        const cs = [0xe93d9c, GOLD, 0x00a896, WHITE, 0xd52b1e, 0x6c4ce0, GOLD];
+        for (let i = 0; i < 7; i++) g.rect(-15 + i * 4.6, -94, 2.4, 6 + (i % 2) * 3).fill(cs[i] as number);
+      }));
+      root.addChild(legL, legR, body, avatar, armL, armR, fc, head);
     }
-    return { root, legL, legR, armL, armR, head, prop, cape, dance, seed };
+    return { root, legL, legR, armL, armR, head, under, feat: faces.feat, featOh: faces.featOh, prop, cape, dance, seed };
   }
 
   /**
@@ -417,6 +462,21 @@ export class Wardrobe {
     return { root, armL, armR, horn, kind, seed };
   }
 }
+
+/** Las caras: los ojos y la boca de cada uno. */
+const featSmile: Draw = (g) => g
+  .circle(-4.5, -86, 1.8).fill(INK).circle(4.5, -86, 1.8).fill(INK)
+  .moveTo(-4, -79).quadraticCurveTo(0, -76, 4, -79).stroke({ width: 1.4, color: INK });
+/** El tinku grita. */
+const featShout: Draw = (g) => g.circle(-4.5, -86, 1.8).fill(INK).circle(4.5, -86, 1.8).fill(INK).ellipse(0, -79, 3, 2.2).fill(INK);
+/** El llamero silba para que lo sigan sus llamas. */
+const featWhistle: Draw = (g) => g.circle(-4.5, -84, 1.8).fill(INK).circle(4.5, -84, 1.8).fill(INK).circle(0, -78, 2.2).fill(0xd52b1e).stroke({ width: 1.1, color: INK });
+/** La cara del susto: los ojos grandes y la boca en o. */
+const featOhDraw: Draw = (g) => g
+  .circle(-4.6, -86, 2.7).fill(WHITE).stroke({ width: 1, color: INK }).circle(4.6, -86, 2.7).fill(WHITE).stroke({ width: 1, color: INK })
+  .circle(-4.6, -86, 1.2).fill(INK).circle(4.6, -86, 1.2).fill(INK)
+  .moveTo(-7.2, -90.6).lineTo(-2.6, -91.6).moveTo(7.2, -90.6).lineTo(2.6, -91.6).stroke({ width: 1.2, color: INK })
+  .ellipse(0, -78.6, 2.3, 2.9).fill(INK);
 
 /** Los músicos de la banda de bronces que abre la entrada. */
 export type Instrument = "bombo" | "bajo" | "trompeta" | "platillos";
@@ -492,6 +552,14 @@ function body(p: DancerParts, s: Pose): { lift: number; lean: number } {
   head.y = HEAD_Y;
   head.rotation = 0;
   if (p.cape) p.cape.skew.x = 0;
+  // La cara del susto, en el tropezón y en la caída; la de abajo de la máscara,
+  // cuando la máscara se corre.
+  const scared = s.mode === "stumble" || s.mode === "fall";
+  if (p.feat && p.featOh) {
+    p.feat.visible = !scared;
+    p.featOh.visible = scared;
+  }
+  if (p.under) p.under.visible = scared;
 
   if (s.mode === "salute") {
     // Saludan desde la vereda: los dos brazos arriba, agitándolos.
