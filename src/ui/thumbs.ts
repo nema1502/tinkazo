@@ -819,6 +819,37 @@ const PAINTERS: Record<string, Painter> = {
     }
   },
 
+  /** Una feria de toldos: el atado pasa de puesto en puesto y cambia de color en cada cambio. */
+  trueque(c, t, col) {
+    c.fillStyle = "#1d1428";
+    c.fillRect(0, 0, W, H);
+    const puestos: [number, number][] = [[18, 22], [58, 16], [98, 22], [36, 50], [82, 48]];
+    puestos.forEach(([x, y], i) => {
+      c.fillStyle = col(i);
+      c.fillRect(x - 10, y - 7, 20, 9);
+      c.fillStyle = "#3b2a22";
+      c.fillRect(x - 10, y + 2, 20, 8);
+      c.strokeStyle = INK;
+      c.lineWidth = 1;
+      c.strokeRect(x - 10, y - 7, 20, 17);
+    });
+    // El atado va por la ruta 0 → 1 → 3 → 4 y en cada parada cambia de color.
+    const ruta = [0, 1, 3, 4];
+    const u = (t * 0.55) % ruta.length;
+    const paso = Math.floor(u);
+    const f = u - paso;
+    const a = puestos[ruta[paso] ?? 0] ?? [0, 0];
+    const b = puestos[ruta[(paso + 1) % ruta.length] ?? 0] ?? [0, 0];
+    const x = a[0] + (b[0] - a[0]) * f;
+    const y = a[1] + (b[1] - a[1]) * f - Math.sin(f * Math.PI) * 14;
+    c.fillStyle = col(paso + 2);
+    c.fillRect(x - 6, y - 6, 12, 12);
+    c.fillStyle = "#f6efe2";
+    c.fillRect(x - 6, y - 1, 12, 2);
+    c.strokeStyle = INK;
+    c.strokeRect(x - 6, y - 6, 12, 12);
+  },
+
   /** Tres cabinas subiendo por el cable hasta la estación de arriba. */
   teleferico(c, t) {
     const g = c.createLinearGradient(0, 0, 0, H);

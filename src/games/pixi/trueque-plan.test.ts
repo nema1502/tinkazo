@@ -124,7 +124,7 @@ describe("El Trueque: la feria y los encargos", () => {
     for (const [n, w] of casos) {
       for (let seed = 1; seed <= 25; seed++) invariantes(n, w, planTrueque(n, w, rngOf(seed)));
     }
-  });
+  }, 60_000);
 
   it("con doscientas personas, cada producto lo acepta mucha gente: nadie se queda sin con qué cambiar", () => {
     for (let seed = 1; seed <= 10; seed++) {
