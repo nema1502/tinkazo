@@ -182,6 +182,8 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   const T_CROWN = tt;
   /** Cuándo cae la última argolla: ahí va el respiro de la música. */
   const T_LAND = (tosses[tosses.length - 1] as Toss).land;
+  /** Desde cuándo sube el zoom de emoción: cuando tira la última argolla, hasta la corona. */
+  const T_EMPUJE = (tosses[tosses.length - 1] as Toss).start;
   setGameLength(T_CROWN, WINNER_HOLD);
 
   /* ---------------------------------------------------------------- geometría */
@@ -379,7 +381,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     }));
     badgeLayer.removeChildren().forEach((c) => c.destroy());
     badgeOf.clear();
-    counter.style.fontSize = 14 * k;
+    counter.style.fontSize = S.letra(16);
     counter.style.fill = CREAM;
     almost.style.fontSize = 26 * k;
     almost.text = t("cSapAlmost");
@@ -483,6 +485,8 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   /* ------------------------------------------------------------------ el guion hablado */
   let tAll = 0, tHold = 0, crowned = false, dead = false, introSaid = 0, labioSonado = false, croo = false, silbido = false;
   const saidWave = new Set<number>();
+  /** El empuje del zoom de emoción: una sola vez, desde que tira la última argolla. */
+  let empujeDado = false;
 
   const crownUI = S.crown(names, winners);
   function crown(): void {
@@ -492,7 +496,10 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     beep(note(0), 0.7, "sine", 0.09);
     fanfare();
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);
-    cam.punch(0.08).shake(10 * S.u());
+    // El golpe del zoom de emoción: el acercamiento firme sobre el agujero del
+    // ganador, en el instante en que sale el cartel. Solo presentación.
+    S.mark("golpe", cam.golpe(0.12, 0.3, 1).toFixed(3));
+    cam.shake(10 * S.u());
   }
   skipFn = (): void => {
     if (crowned || dead) return;
@@ -1020,6 +1027,12 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
 
   S.run((dt, now) => {
     tAll += dt;
+    // El empuje del zoom de emoción: lento, desde la última argolla hasta la
+    // corona, para que el golpe llegue con la cámara ya un poco más cerca.
+    if (!empujeDado && tAll >= T_EMPUJE) {
+      empujeDado = true;
+      cam.tension(Math.max(0.5, T_CROWN - T_EMPUJE), 0.05);
+    }
     // El respiro, antes de que caiga la argolla y no antes del cartel:
     // "¡ADENTRO!" ya dispara el remate, y después del remate el respiro no
     // cortaba nada. Silencio, caída, golpe.

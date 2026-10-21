@@ -331,7 +331,7 @@ export async function llamasPixi(
     av.anchor.set(0.5);
     av.position.set(4, -36);
     body.addChild(av);
-    const bib = S.text(String(k + 1), { fontSize: 10, fontWeight: "900", fill: INK });
+    const bib = S.text(String(k + 1), { fontSize: 12, fontWeight: "900", fill: CREAM, stroke: { color: INK, width: 3 } });
     bib.anchor.set(0.5);
     bib.position.set(-8, -36);
     body.addChild(bib);
@@ -408,7 +408,7 @@ export async function llamasPixi(
     const paddle = new Graphics().rect(-1.2, 0, 2.4, 34).fill(0x7a5230).roundRect(-4, 30, 8, 14, 3).fill(0x7a5230).stroke({ width: 1.4, color: INK });
     paddle.position.set(-2, -26);
     body.addChild(rower, paddle);
-    const bib = S.text(String(k + 1), { fontSize: 10, fontWeight: "900", fill: INK });
+    const bib = S.text(String(k + 1), { fontSize: 12, fontWeight: "900", fill: CREAM, stroke: { color: INK, width: 3 } });
     bib.anchor.set(0.5);
     bib.position.set(-18, -5);
     body.addChild(bib);
@@ -605,7 +605,7 @@ export async function llamasPixi(
       const post = new Graphics()
         .rect(x - 2 * u, trackTop - 46 * u, 4 * u, 30 * u).fill(CREAM)
         .roundRect(x - 20 * u, trackTop - 62 * u, 40 * u, 20 * u, 4 * u).fill(dark ? 0x2b2640 : 0xffffff).stroke({ width: 2 * u, color: INK });
-      const tx = S.text(space ? `${(10 - i) * 1000} km` : `${100 - i * 10} m`, { fontFamily: MONO, fontSize: 11 * u, fontWeight: "800", fill: dark ? CREAM : INK });
+      const tx = S.text(space ? `${(10 - i) * 1000} km` : `${100 - i * 10} m`, { fontFamily: MONO, fontSize: S.letra(13), fontWeight: "800", fill: dark ? CREAM : INK, stroke: { color: dark ? INK : CREAM, width: 3 * u } });
       tx.anchor.set(0.5);
       tx.position.set(x, trackTop - 52 * u);
       world.addChild(post, tx);
@@ -658,13 +658,14 @@ export async function llamasPixi(
       const r = new Container();
       const bgr = new Graphics().roundRect(0, 0, 180 * u, rowH - 3 * u, 4 * u).fill({ color: INK, alpha: 0.9 });
       const num = new Graphics().roundRect(2 * u, 2 * u, 18 * u, rowH - 7 * u, 3 * u).fill(S.color(k));
-      const pos = S.text("", { fontSize: 12 * u, fontWeight: "900", fill: INK });
+      // El puesto en crema con contorno: sobre el color de la llama, el negro solo no se leía a 4,5 a 1 (la medición de pantalla, 720 de alto).
+      const pos = S.text("", { fontSize: S.letra(14), fontWeight: "900", fill: CREAM, stroke: { color: INK, width: 3 * u } });
       pos.anchor.set(0.5);
       pos.position.set(11 * u, (rowH - 3 * u) / 2);
       const av = new Sprite(S.face(nameOf(k)));
       av.width = av.height = 14 * u;
       av.position.set(24 * u, 2.5 * u);
-      const nm = S.text(shorten(nameOf(k), 16), { fontSize: 14 * u, fontWeight: "700", fill: CREAM });
+      const nm = S.text(shorten(nameOf(k), 16), { fontSize: S.letra(16), fontWeight: "700", fill: CREAM });
       nm.position.set(42 * u, 3.5 * u);
       r.addChild(bgr, num, pos, av, nm);
       board.addChild(r);
@@ -678,7 +679,7 @@ export async function llamasPixi(
     // Desde la clasificatoria se ven todos antes; el aviso queda para la carrera.
     let avisoBox: Container | null = null;
     if (names.length > N) {
-      const aviso = S.text(T[getLang()].cLanes(N, names.length), { fontFamily: MONO, fontSize: 11 * u, fontWeight: "800", fill: CREAM });
+      const aviso = S.text(T[getLang()].cLanes(N, names.length), { fontFamily: MONO, fontSize: S.letra(14), fontWeight: "800", fill: CREAM });
       const pad = 6 * u;
       aviso.position.set(pad, pad / 2);
       // Sobre la tribuna, sin fondo, no se leía.
@@ -830,6 +831,8 @@ export async function llamasPixi(
   /* ============================================================== estado */
   let phase: "pre" | "count" | "race" | "done" = "pre";
   let tPhase = 3 - CUENTA, tRace = 0, tFreeze = 0, lastLeader = -1, saidLast = false, finished = false, mitadMarcada = false;
+  /** El empuje del zoom de emoción, desde el 80 % de la carrera: una sola vez. */
+  let empujeDado = false;
   /** El reloj de la clasificatoria y la presentación, en segundos de juego. */
   let tPre = 0;
   /** Segundos reales desde la largada, para el "¡YA!", que antes no llegaba a verse: la cuenta terminaba justo cuando aparecía. */
@@ -908,7 +911,10 @@ export async function llamasPixi(
     fanfare();
     // La tribuna explota con la ganadora: venía callada desde el respiro.
     roar?.burst();
-    cam.punch(0.12).shake(14 * G.u);
+    // El golpe del zoom de emoción: el acercamiento firme que vuelve suave, en
+    // el mismo instante en que sale el cartel. Solo presentación.
+    S.mark("golpe", cam.golpe(0.12, 0.3, 1.1).toFixed(3));
+    cam.shake(14 * G.u);
   }
 
   const roar = space ? null : crowdNoise();
@@ -1275,6 +1281,14 @@ export async function llamasPixi(
     // adelante; en la foto va a la meta, bien cerca.
     const tens = tension(story, prog);
     const leadX = G.X0 + (xs[leader] as number) * G.TL;
+    // El zoom de emoción: un empuje lento desde el 80 % hasta el golpe (la
+    // meta). Dura lo que tarda la carrera en llegar, contado en la hora de la
+    // cámara: la foto del duelo corre a 0,4, y ahí el empuje también se estira.
+    if (!empujeDado && prog >= 0.8) {
+      empujeDado = true;
+      const fp = Math.min(1, Math.max(0.8, plan.foto));
+      cam.tension((fp - 0.8) * DUR + ((1 - fp) * DUR) / 0.4, 0.06);
+    }
     if (shot && prog >= shot.until) shot = null;
     if (prog > plan.foto) {
       // En la foto, sin desenfoque: el acercamiento rápido a la meta dejaba
@@ -1477,7 +1491,8 @@ export async function llamasPixi(
       for (const c of r.tag.children) c.visible = true;
       r.tag.position.set(x - (space ? 82 : lake ? 86 : 70) * sc - r.tag.width, y - 30 * sc);
       adentro(r, sc, k === story.winner || k === story.rival);
-      r.tag.alpha = (phase === "done" && !premio ? 0.35 : 1) * Math.max(0, Math.min(1, (h + 0.05) / 0.2));
+      // Las etiquetas de los que no ganaron no se apagan casi nada (0,95): con menos, el nombre no llega a 4,5 a 1 y en Zoom no se lee. El apagado va en la fila.
+      r.tag.alpha = (phase === "done" && !premio ? 0.95 : 1) * Math.max(0, Math.min(1, (h + 0.05) / 0.2));
       if (quieto) continue;
       // Polvo (o estela), cada grano calculado desde su hora.
       const every = 0.006;
@@ -1576,7 +1591,7 @@ export async function llamasPixi(
       // Mientras una fila pasa a otra, se ve apagada: el cruce se lee como un
       // adelantamiento y no como dos nombres escritos encima.
       const cruzando = Math.abs(pos - Math.round(pos)) > 0.1;
-      r.alpha = (phase === "done" && !prizedLanes.has(k) ? 0.4 : 1) * (cruzando ? 0.6 : 1);
+      r.alpha = (phase === "done" && !prizedLanes.has(k) ? 0.75 : 1) * (cruzando ? 0.6 : 1);
     });
 
     tlCount.time(phase === "pre" ? 0 : phase === "count" ? tPhase : tGo >= 0 && tGo < 1 ? 3 + tGo : 4);

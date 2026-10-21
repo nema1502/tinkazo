@@ -1561,6 +1561,10 @@ export const T: Record<Lang, Dict> = {
     guestReadyOff: "Cuenta de prueba lista, pero vacía: el grifo está apagado en esta sesión.",
     txPreparing: "Preparando tu cuenta…",
     "errAnchor.accountNotReady": "Tu cuenta todavía no está lista. Probá de nuevo en un minuto.",
+    // Bloque pantalla
+    compartirOn: "Para compartir: sí",
+    compartirOff: "Para compartir: no",
+    compartirTip: "Más contraste, nombres más grandes y menos partículas, para que se lea en Zoom o en una pantalla compartida. Vale para esta pestaña.",
   },
   en: {
     badge: 'Draw for your <span class="rotating" data-words="meetup|class|event|workshop|talk|conference">meetup</span>',
@@ -2807,6 +2811,10 @@ export const T: Record<Lang, Dict> = {
     guestReadyOff: "Test account ready, but empty: the faucet is off for this session.",
     txPreparing: "Setting up your account…",
     "errAnchor.accountNotReady": "Your account isn't ready yet. Try again in a minute.",
+    // Bloque pantalla
+    compartirOn: "For sharing: on",
+    compartirOff: "For sharing: off",
+    compartirTip: "More contrast, bigger names and fewer particles, so it reads on Zoom or a shared screen. Lasts for this tab.",
   },
 };
 

@@ -80,6 +80,34 @@ export const params = new URLSearchParams(location.search);
 /** `?instant=1`: salta las animaciones (capturas y pruebas). */
 export const instantMode = params.get("instant") === "1";
 
+/**
+ * El modo para compartir: más contraste, nombres más grandes y menos partículas
+ * en el show, para que se lea en Zoom o en una pantalla compartida. Vive en la
+ * pestaña (`sessionStorage`): se prende y apaga desde el sorteo, y dura hasta
+ * cerrar la pestaña. `?compartir=1` lo prende al abrir. Sin almacenamiento
+ * (una ventana privada, por ejemplo) no se recuerda, y no pasa nada más.
+ */
+const COMPARTIR_KEY = "tinkazo.compartir";
+
+export function paraCompartir(): boolean {
+  try {
+    return sessionStorage.getItem(COMPARTIR_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setParaCompartir(on: boolean): void {
+  try {
+    if (on) sessionStorage.setItem(COMPARTIR_KEY, "1");
+    else sessionStorage.removeItem(COMPARTIR_KEY);
+  } catch {
+    /* sin almacenamiento, el modo dura lo que la página */
+  }
+}
+
+if (params.get("compartir") === "1") setParaCompartir(true);
+
 /** `true` si el sistema pide menos movimiento. Seguro sin `matchMedia`. */
 export function motionReduced(): boolean {
   return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
