@@ -797,6 +797,8 @@
     margin: 0 0 12px; padding: 10px 14px; font-size: 14px; font-weight: 700;
     background: var(--yellow); color: var(--on-accent); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
   }
+  /* El sorteo sellado que quedó sin sortear, con "Retomarlo" al lado (history.ts). */
+  .pendiente { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
   /* En el celular los rellenos anidados dejaban 212 px para los botones. */
   @media (max-width: 460px) {
     .again { padding: 14px; }

@@ -245,6 +245,80 @@ async function sorteosDeEntradas(g: Entry[]): Promise<SorteoDelEvento[]> {
   return out;
 }
 
+/* ------------------------------------------------- el sorteo que quedó sin sortear */
+
+/**
+ * Cuánto hace que se selló, como mucho, para ofrecer retomarlo desde "Nuevo
+ * sorteo": es el que la sala está esperando. Los de antes siguen en Mis sorteos.
+ */
+const PENDIENTE_S = 15 * 60;
+
+/** El sorteo que se ofrece retomar, si hay uno. */
+let pendiente: (Entry & { names: string[] }) | null = null;
+let enlazadoPendiente = false;
+
+/**
+ * Un sorteo sellado en este equipo hace un rato y sin sortear, con su lista:
+ * se recargó la página durante la espera, o se cerró la pestaña. La lista
+ * sellada ya no estaba en la pantalla y "Nuevo sorteo" volvía vacío, sin decir
+ * nada; el sorteo seguía en Mis sorteos, pero había que saber ir a buscarlo
+ * con la sala esperando. Y quien no lo encontraba sellaba otra lista: dos
+ * sellos para lo mismo es justo el patrón que la página de seguridad marca como
+ * el ataque abierto (buscador de detalles, D06).
+ *
+ * Es un aviso arriba de la lista, con "Retomarlo" como acción secundaria: en el
+ * paso 1 la principal sigue siendo sellar. Nunca se retoma solo. Ni en la demo,
+ * ni con un sello en pantalla.
+ */
+function pintarPendiente(list: Entry[]): void {
+  const caja = document.getElementById("pendiente");
+  if (!caja) return;
+  const ahora = Date.now() / 1000;
+  const e =
+    hayUnSello() || document.body.dataset.demo === "1"
+      ? undefined
+      : list.find((x) => x.names?.length && !x.winners?.length && !x.winnerIdx?.length && !x.drawTx && ahora - x.sealedAt < PENDIENTE_S);
+  pendiente = e ? (e as Entry & { names: string[] }) : null;
+  if (!e) {
+    caja.style.display = "none";
+    caja.textContent = "";
+    return;
+  }
+  const que = `${e.prize || t("histDraw")} · ${e.count} ${t("histPeople")}`;
+  caja.innerHTML =
+    `<span>${esc(t("pendienteT").replace("{que}", que))}</span>` +
+    `<button class="mini" type="button" data-retomar-pendiente>${esc(t("pendienteBtn"))}</button>`;
+  caja.style.display = "";
+  if (enlazadoPendiente) return;
+  enlazadoPendiente = true;
+  caja.addEventListener("click", (ev) => {
+    const fila = pendiente;
+    if (!fila || !(ev.target as HTMLElement).closest("[data-retomar-pendiente]")) return;
+    void retomar(fila);
+  });
+}
+
+/**
+ * Hay una lista sellada en la pantalla (la muestra `showFrozen` y la suelta
+ * `unfreeze`). Se mira la página y no el estado: este módulo se prueba sin ella.
+ */
+const hayUnSello = (): boolean => document.getElementById("sec-frozen")?.style.display === "block";
+
+/** Retoma un sorteo sellado (`resumeFrozen`) y saca el aviso: ya no hay nada pendiente fuera de la pantalla. */
+async function retomar(fila: Entry & { names: string[] }): Promise<void> {
+  const { resumeFrozen } = await import("./freeze");
+  resumeFrozen(fila);
+  if (!hayUnSello()) return;
+  pendiente = null;
+  const caja = document.getElementById("pendiente");
+  if (caja) {
+    caja.style.display = "none";
+    caja.textContent = "";
+  }
+  // Si la ronda ya nació, la cuenta regresiva ya dejó el foco en "Lanzar el sorteo"; si no, en la espera.
+  if (document.activeElement === document.body) document.getElementById("btn-espera")?.focus({ preventScroll: true });
+}
+
 function enlazarRearmado(): void {
   if (enlazado) return;
   enlazado = true;
@@ -253,7 +327,7 @@ function enlazarRearmado(): void {
     const r = el.closest<HTMLElement>("[data-retomar]");
     if (r) {
       const fila = pintadas[Number(r.dataset.retomar)];
-      if (fila?.names?.length) void import("./freeze").then((m) => m.resumeFrozen(fila as Entry & { names: string[] }));
+      if (fila?.names?.length) void retomar(fila as Entry & { names: string[] });
       return;
     }
     const comparte = el.closest<HTMLButtonElement>("[data-evento]");
@@ -468,6 +542,7 @@ async function etiquetarPartes(): Promise<void> {
 function paint(organizer: string | null): void {
   shown = organizer;
   const box = $("sec-history");
+  pintarPendiente(organizer ? historyOf(organizer) : []);
   if (!organizer) {
     box.style.display = "none";
     return;

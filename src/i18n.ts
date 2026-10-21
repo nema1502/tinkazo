@@ -1096,6 +1096,9 @@ export const T: Record<Lang, Dict> = {
     histOnChain: "Ver en Stellar",
     histStateDone: "Sorteado",
     histStatePending: "Sellado, sin sortear",
+    // Un sorteo que quedó sin sortear en este equipo, arriba de la lista (21 de octubre de 2026).
+    pendienteT: "Tenés un sorteo sellado sin sortear: {que}.",
+    pendienteBtn: "Retomarlo",
     histWon: "ganó",
     histWonMany: "ganaron",
     histOtherDevice: "La lista quedó en el equipo donde se selló.",
@@ -2352,6 +2355,9 @@ export const T: Record<Lang, Dict> = {
     histOnChain: "See it on Stellar",
     histStateDone: "Drawn",
     histStatePending: "Sealed, not drawn yet",
+    // A draw left undrawn on this device, above the list (Oct 21, 2026).
+    pendienteT: "You have a sealed draw that hasn't been drawn: {que}.",
+    pendienteBtn: "Resume it",
     histWon: "won by",
     histWonMany: "won by",
     histOtherDevice: "The list stayed on the device where it was sealed.",
