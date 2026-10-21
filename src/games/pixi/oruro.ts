@@ -947,7 +947,9 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   }
   /** Lo libre de la pantalla: entre la barra de arriba (y las pastillas) y el relator, con margen a los costados. */
   function freeRect(g: Geo): Rect {
-    const top = Math.max(S.top() + TAG_ROOM * g.k, pills.length > 1 && !S.portrait() ? pillsBottom() + 8 * g.k : S.top() + TAG_ROOM * g.k);
+    // Las pastillas tapan arriba cuando se ven (en el celular, desde que arranca el recorrido).
+    const conPastillas = pills.length > 1 && phase !== "crown" && (!S.portrait() || phase !== "pres");
+    const top = Math.max(S.top() + TAG_ROOM * g.k, conPastillas ? pillsBottom() + 8 * g.k : S.top() + TAG_ROOM * g.k);
     const bot = g.h - S.bottom() - 10 * g.k;
     const side = 18 * g.k;
     return { x: side, y: top, w: g.w - 2 * side, h: bot - top };
@@ -1082,7 +1084,11 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       const near = clamp((tAll - (P.T_SOCAVON - 1.2)) / 1.2, 0, 1);
       const z = zCol * (1 - 0.3 * ease.inOutCubic(near));
       const f = boxShot(z, z) as Shot;
-      cam.lookAt(f.x + near * near * 110 * g.k, f.y, z, FOLLOW);
+      // Al volver de un primer plano, más rápido: en una pantalla apaisada baja la
+      // fila de adelante quedaba un instante debajo del relator (revisión de
+      // juegos, vistas-4).
+      const vuelve = a !== null && tAll - (a.tExit + CLOSE_UP) < 0.5;
+      cam.lookAt(f.x + near * near * 110 * g.k, f.y, z, vuelve ? FOLLOW * 1.8 : FOLLOW);
       return;
     }
     if (phase === "duel") {
@@ -1125,7 +1131,8 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   function crownShot(g: Geo): [number, number, number] {
     const top = S.placaBajo(winners.length) + 8 * g.k;
     const bot = g.h - S.bottom() - 8 * g.k;
-    const tall = (DANCE_TOP[win.f.dance] + 26) * g.scale;
+    // Con el salto del festejo: en lo más alto del salto, los cuernos tampoco tocan el cartel.
+    const tall = (DANCE_TOP[win.f.dance] + 26 + 24) * g.scale;
     const zMax = 1.3 * zBoost(g);
     const z = clamp(Math.min(zMax, (bot - top) / Math.max(1, tall)), 0.4, zMax);
     // Los pies en el borde de abajo del lugar libre, la cabeza debajo del cartel.
