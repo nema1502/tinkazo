@@ -5,7 +5,7 @@ import { QUICKNET, bytesToHex, roundTime, targetRound } from "../protocol/quickn
 import { listHash } from "../protocol/canonical";
 import { prepararFirma } from "../protocol/firma";
 import { contractUrl, network } from "../stellar/config";
-import { type AnchorStep, hideTxStatus, margenParaAprobar, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
+import { type AnchorStep, escribirError, hideTxStatus, margenParaAprobar, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
 import { precargarQr } from "./qr";
 import { recomendar } from "./recomendar";
 import { canAnchor, currentSession } from "./wallet-ui";
@@ -376,7 +376,7 @@ export async function freeze(): Promise<void> {
       const status = $("seal-status");
       status.style.display = "block";
       status.className = "txstatus";
-      await (await import("./detalle-error")).mostrarError(status, e, "sello");
+      await escribirError(status, e, "sello");
       // Si se apretó la barra, el botón de verdad (y este mensaje) están fuera de la pantalla.
       verError(status);
       return;
@@ -391,6 +391,8 @@ export async function freeze(): Promise<void> {
   void precargarQr();
   void import("./pantalla").catch(() => undefined);
   void import("./imagen").catch(() => undefined);
+  // Y lo que cuenta un error del sorteo, si el wifi se cae antes de sortear.
+  if (raffleId !== undefined) precargarParaElSorteo();
 
   app.frozen = {
     names,

@@ -7,7 +7,7 @@ import { verifyRoundAsync } from "../protocol/firma";
 import { select } from "../protocol/select";
 import { network, txUrl } from "../stellar/config";
 import { PROOF_VERSION, type Proof, proofUrl } from "../protocol/proof";
-import { drawOnChain, limpiarDetalle, readDraw, showTxStatus, stepLabel } from "./anchor";
+import { drawOnChain, escribirError, limpiarDetalle, readDraw, showTxStatus, stepLabel } from "./anchor";
 import { loreFor } from "../games/lore";
 import { currentSession } from "./wallet-ui";
 import { pintarQr } from "./qr";
@@ -128,7 +128,7 @@ export async function draw(): Promise<void> {
         const status = $("draw-status");
         status.style.display = "block";
         status.className = "txstatus bad";
-        await (await import("./detalle-error")).mostrarError(status, fin.error, "sorteo");
+        await escribirError(status, fin.error, "sorteo");
         verError(status);
         return;
       }
@@ -165,9 +165,7 @@ export async function draw(): Promise<void> {
     status.style.display = "block";
     status.className = "txstatus bad";
     status.textContent = t("errAnchor.unknown");
-    await import("./detalle-error")
-      .then((m) => m.mostrarError(status, e, "sorteo"))
-      .catch(() => undefined);
+    await escribirError(status, e, "sorteo");
     verError(status);
   }
 }

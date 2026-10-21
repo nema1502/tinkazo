@@ -1103,3 +1103,22 @@ describe("un grifo que no contesta", () => {
     expect(eventos).toEqual(["tinkazo:sin-fondos"]);
   });
 });
+
+describe("escribirError: sin conexión, igual dice algo", () => {
+  afterEach(() => vi.doUnmock("./detalle-error"));
+
+  it("si el detalle no se puede bajar (sin red, la página no alcanza ni sus archivos), escribe el mensaje igual", async () => {
+    vi.doMock("./detalle-error", () => {
+      throw new TypeError("Failed to fetch dynamically imported module");
+    });
+    const { escribirError } = await import("./anchor");
+    const status = { id: "seal-status", textContent: "" } as unknown as HTMLElement;
+    vi.stubGlobal("document", { getElementById: () => null, dispatchEvent: () => true });
+    vi.stubGlobal("navigator", { onLine: false });
+    await escribirError(status, new TypeError("Failed to fetch"), "sello");
+    expect(status.textContent).toBe("Estás sin internet. Conectate y probá de nuevo.");
+    vi.stubGlobal("navigator", { onLine: true });
+    await escribirError(status, new TypeError("Failed to fetch"), "sorteo");
+    expect(status.textContent).toBe("No pude conectarme con la red de Stellar. Revisá tu conexión y probá de nuevo.");
+  });
+});

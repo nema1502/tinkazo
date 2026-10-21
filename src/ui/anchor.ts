@@ -523,8 +523,44 @@ export function selloSinGrabar(e: unknown): boolean {
  * pasó. Una clave sin texto cae en el mensaje genérico, nunca en la clave cruda.
  */
 export async function anchorErrorText(e: unknown): Promise<string> {
-  const { errorKey } = await import("../stellar/errores");
-  const clave = "errAnchor." + errorKey(e);
-  const texto = t(clave);
-  return texto && texto !== clave ? texto : t("errAnchor.unknown");
+  try {
+    const { errorKey } = await import("../stellar/errores");
+    const clave = "errAnchor." + errorKey(e);
+    const texto = t(clave);
+    return texto && texto !== clave ? texto : t("errAnchor.unknown");
+  } catch {
+    return sinConexion();
+  }
+}
+
+/**
+ * Si ni siquiera se pudo bajar el módulo que clasifica el error, es que no hay
+ * conexión: la página no alcanza ni sus propios archivos. Se dice eso, con lo
+ * que ya está en la página.
+ */
+const sinConexion = (): string =>
+  t(typeof navigator !== "undefined" && navigator.onLine === false ? "errAnchor.offline" : "errAnchor.rpcDown");
+
+/**
+ * Escribe el error en `status`, con el detalle plegado debajo (`detalle-error.ts`).
+ * Si el detalle no se puede bajar (sin conexión, con la página a medio cargar),
+ * igual queda el mensaje: medido el 21 de octubre de 2026 con DevTools sin red,
+ * sin esto el sellado terminaba sin decir nada.
+ */
+export async function escribirError(status: HTMLElement, e: unknown, paso: "sello" | "sorteo"): Promise<void> {
+  try {
+    await (await import("./detalle-error")).mostrarError(status, e, paso);
+  } catch {
+    limpiarDetalle(status.id);
+    status.textContent = sinConexion();
+  }
+}
+
+/**
+ * Lo que hace falta para contar un error del sorteo, bajado de antemano: el
+ * sorteo es frente a la sala, y el wifi de un evento se cae justo ahí. Se pide
+ * con el sello ya hecho, que es cuando seguro hubo conexión.
+ */
+export function precargarParaElSorteo(): void {
+  for (const m of [import("./sorteo-seguro"), import("./detalle-error"), import("../stellar/errores")]) m.catch(() => undefined);
 }
