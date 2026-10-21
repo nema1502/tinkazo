@@ -185,9 +185,25 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   };
   /** La piñata sube colgada de su cuerda: sale de abajo, se pasa y rebota. En fracción del alto. */
   const hoist = (t: number): number => (t < 0 || t >= 1.8 ? 0 : 0.3 * Math.exp(-t / 0.33) * Math.cos((t * 2 * Math.PI) / 0.85));
+  /**
+   * En cada palo al aire, el que tiene la cuerda la sube de un tirón y la deja
+   * caer, como se juega: la piñata esquiva el palo. En fracción del alto. Con
+   * dos personas los dos palos al aire eran casi siete segundos de pantalla
+   * quieta (auditor exigente, 21 de octubre de 2026).
+   */
+  const dodge = (t: number): number => {
+    let y = 0;
+    for (const s of swings) {
+      if (!s.miss) continue;
+      const a = t - (s.at - 0.18);
+      // Sube en 0,16 s y baja rebotando en la cuerda.
+      if (a > 0 && a < 1.1) y -= 0.09 * (a < 0.16 ? Math.sin((Math.PI / 2) * (a / 0.16)) : Math.exp(-(a - 0.16) * 5) * Math.cos((a - 0.16) * 12));
+    }
+    return y;
+  };
   const pinPos = (): { x: number; y: number } => {
     const g = G();
-    return { x: g.ax + Math.sin(theta) * g.L, y: g.ay + Math.cos(theta) * g.L + hoist(tAll) * g.h };
+    return { x: g.ax + Math.sin(theta) * g.L, y: g.ay + Math.cos(theta) * g.L + (hoist(tAll) + dodge(tAll)) * g.h };
   };
   /** Dónde está parado el chico (x del mundo), cuánto caminó y qué tan rápido va: las piernas se mueven con eso. */
   let kidX = NaN, kidWalk = 0, kidSpeed = 0;
@@ -746,7 +762,9 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       const topY = Math.min(p.y - g.R * 1.2, g.ky - 140 * g.ks), botY = Math.max(p.y + g.R * 1.2, g.ky + 4 * g.ks);
       const bandH = g.h - S.bottom() - 6 * g.k - (S.top() + 6 * g.k);
       const zDos = Math.max(0.8, Math.min(1.6, (g.w - 20 * g.k) / Math.max(1, right - left), bandH / Math.max(1, botY - topY)));
-      const z = near ? 1.9 : dos ? zDos : 1.2 + 0.25 * (crackLevel / nHits);
+      // Con dos personas no hay palos que suelten caramelos (nHits es cero): sin
+      // el tope, el acercamiento salía NaN y la escena quedaba vacía hasta la rotura.
+      const z = near ? 1.9 : dos ? zDos : 1.2 + 0.25 * (crackLevel / Math.max(1, nHits));
       let x = p.x, y = p.y + g.R * (near ? 0.4 : 0.8);
       if (dos && !near) {
         x = (left + right) / 2;
