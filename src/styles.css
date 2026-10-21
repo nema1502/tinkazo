@@ -1102,6 +1102,37 @@
   .hist-why { margin: 6px 0 12px; }
   .hist-why summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 800; font-size: 14px; }
   .hist-pie { display: flex; flex-wrap: wrap; gap: 10px; }
+  /* Mis eventos (eventos.ts) y el diálogo para compartir otra vez (compartir.ts). */
+  .hist-eventos { margin: 4px 0 18px; }
+  .evn { border: var(--bw) solid var(--ink); background: var(--card); box-shadow: var(--sh-sm); padding: 14px 16px; }
+  .evn h3 { font-size: 18px; font-weight: 900; }
+  .evn > .note { margin: 4px 0 10px; }
+  .evn-nuevo { display: grid; gap: 6px; }
+  .evn-fila { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .evn input[type="text"] { flex: 1 1 220px; min-width: 0; min-height: 44px; padding: 8px 10px; font: inherit; color: var(--ink); background: var(--paper); border: var(--bw) solid var(--ink); }
+  .evn .mini { min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }
+  .evn-aviso { font-weight: 800; margin: 10px 0 0; }
+  .evn-card { display: grid; gap: 8px; border-top: 2px dashed var(--ink2); margin-top: 14px; padding-top: 14px; }
+  .evn-detalle summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 800; font-size: 14px; }
+  .evn-sorteos { display: grid; gap: 10px; margin: 6px 0 0; padding: 0; list-style: none; }
+  .evn-sorteo { border: 2px solid var(--ink2); padding: 10px 12px; }
+  .evn-sorteo .hc-meta { margin: 4px 0 0; }
+  .hc-sumar { min-height: 44px; max-width: 100%; padding: 6px 8px; font: inherit; font-size: 14px; color: var(--ink); background: var(--paper); border: var(--bw) solid var(--ink); }
+  /* El margen automático va explícito: el reinicio de márgenes de la hoja lo anula y el diálogo se iba a la esquina. */
+  .cmp-dlg { margin: auto; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; padding: 0; border: var(--bw) solid var(--ink); background: var(--paper); color: var(--ink); box-shadow: var(--sh); }
+  .cmp-dlg::backdrop { background: rgba(10, 6, 18, 0.72); }
+  .cmp-cuerpo { display: grid; gap: 14px; padding: 18px 20px 22px; }
+  .cmp-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .cmp-top h2 { font-size: 22px; font-weight: 900; }
+  .cmp-top .ghost { min-height: 44px; }
+  .cmp-nota { font-weight: 700; }
+  .cmp-imgs { display: grid; gap: 12px; justify-content: center; grid-template-columns: repeat(auto-fit, minmax(0, 300px)); }
+  .cmp-imgs:empty { display: none; }
+  .cmp-imgs > .note { justify-self: center; max-width: 260px; text-align: center; margin: 0; }
+  .cmp-png { display: block; justify-self: center; width: 100%; max-width: 240px; height: auto; border: var(--bw) solid var(--ink); }
+  .cmp-txt { width: 100%; min-height: 120px; padding: 10px; font: inherit; font-size: 14px; line-height: 1.4; color: var(--ink); background: var(--card); border: var(--bw) solid var(--ink); resize: vertical; }
+  .cmp-acc { display: flex; flex-wrap: wrap; gap: 10px; }
+  .cmp-acc a, .cmp-acc button { min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }
   /* Los enlaces de texto, del color de la casa y no del azul del navegador. */
   .note a, .txstatus a, .entity a, main > section > a.sec-link { color: inherit; text-decoration-thickness: 2px; text-underline-offset: 2px; }
 

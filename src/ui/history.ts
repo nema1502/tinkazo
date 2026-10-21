@@ -1,10 +1,26 @@
 import { $, esc } from "../dom";
-import { getLang, T, t } from "../i18n";
-import { eventosUrls, type SorteoDelEvento } from "../protocol/evento";
-import { decodeProof } from "../protocol/proof";
+import { getLang, t } from "../i18n";
+import type { SorteoDelEvento } from "../protocol/evento";
 import { network, txUrl } from "../stellar/config";
 import type { ChainRaffle } from "../stellar/seals";
 import { agrupar, fechaLarga, tieneComprobante } from "./agrupar";
+import { compartirEvento, compartirSorteo, partesDelEvento } from "./compartir";
+import {
+  type EventoGuardado,
+  type SorteoGuardado,
+  aSorteoDelEvento,
+  borrarEvento,
+  crearEvento,
+  enlacesEnEventos,
+  eventosDe,
+  guardarEventos,
+  leerEventos,
+  nuevoId,
+  quitarDeEvento,
+  renombrarEvento,
+  sorteosDelEvento,
+  sumarAEvento,
+} from "./eventos";
 
 /**
  * El historial de sorteos.
@@ -23,6 +39,10 @@ import { agrupar, fechaLarga, tieneComprobante } from "./agrupar";
  * Cuando un sorteo está en los dos lados gana el del equipo, que tiene los
  * nombres. Se guarda por red y por cuenta: quien entra con otra cuenta ve lo
  * suyo.
+ *
+ * Encima va "Mis eventos" (`eventos.ts`): eventos con nombre que arma quien
+ * organiza, con sorteos de esta lista. Un sorteo que está en un evento se ve
+ * dentro de él; los demás se agrupan por fecha, como antes.
  */
 
 export interface Entry {
@@ -150,9 +170,16 @@ export function historyOf(organizer: string): Entry[] {
   return mergeWithChain(local, chain?.who === organizer ? chain.raffles : []);
 }
 
-/** Borra el historial de esta cuenta. Los sorteos anclados siguen en la cadena. */
+/**
+ * Borra el historial de esta cuenta. Los sorteos anclados siguen en la cadena.
+ * Sus eventos con nombre se van también: sus sorteos están en esta lista.
+ */
 export function forget(organizer: string): void {
   writeAll(readAll().filter((e) => e.organizer !== organizer));
+  guardarEventos(
+    network.name,
+    leerEventos(network.name).filter((e) => e.organizer !== organizer),
+  );
 }
 
 /**
@@ -194,6 +221,29 @@ export function renderHistory(organizer: string | null): void {
 /** Lo último que se dibujó, para que el botón de rearmar sepa de qué fila habla. */
 let pintadas: Entry[] = [];
 let enlazado = false;
+let enlazadoEventos = false;
+/** Los eventos con nombre de la cuenta en pantalla: las tarjetas los ofrecen para sumar sorteos. */
+let guardados: EventoGuardado[] = [];
+/** Un aviso corto para la sección de eventos, que se muestra en la próxima pintada. */
+let avisoPendiente = "";
+
+const avisar = (texto: string): void => {
+  avisoPendiente = texto;
+};
+
+/** El título de un evento sin nombre: "Sorteos del 20 de octubre de 2026". */
+const tituloDeGrupo = (g: Entry[]): string => t("histGrupoT").replace("{f}", fechaLarga(g[0]?.sealedAt ?? 0, getLang()));
+
+/** El comprobante y los ganadores de cada sorteo de un grupo: lo que pide el enlace de evento. */
+async function sorteosDeEntradas(g: Entry[]): Promise<SorteoDelEvento[]> {
+  const out: SorteoDelEvento[] = [];
+  for (const e of g) {
+    if (!tieneComprobante(e) || !e.winners?.length || !e.proof) continue;
+    const s = await aSorteoDelEvento(e.proof, e.winners);
+    if (s) out.push(s);
+  }
+  return out;
+}
 
 function enlazarRearmado(): void {
   if (enlazado) return;
@@ -209,7 +259,19 @@ function enlazarRearmado(): void {
     const comparte = el.closest<HTMLButtonElement>("[data-evento]");
     if (comparte) {
       const g = eventosPintados[Number(comparte.dataset.evento)];
-      if (g) void compartirEvento(g, comparte);
+      if (g) void sorteosDeEntradas(g).then((sorteos) => compartirEvento(tituloDeGrupo(g), sorteos));
+      return;
+    }
+    const nombra = el.closest<HTMLButtonElement>("[data-nombrar]");
+    if (nombra) {
+      const g = eventosPintados[Number(nombra.dataset.nombrar)];
+      if (g && shown) nombrarGrupo(shown, g);
+      return;
+    }
+    const compartir = el.closest<HTMLButtonElement>("[data-compartir]");
+    if (compartir) {
+      const fila = pintadas[Number(compartir.dataset.compartir)];
+      if (fila?.proof && fila.winners?.length) void compartirSorteo(fila.proof, fila.winners);
       return;
     }
     const b = el.closest<HTMLElement>("[data-rearmar]");
@@ -217,6 +279,190 @@ function enlazarRearmado(): void {
     const fila = pintadas[Number(b.dataset.rearmar)];
     if (fila) void import("./rebuild").then((m) => m.abrirRearmado(fila));
   });
+  // "Sumar a un evento": el selector de cada sorteo.
+  $("hist-list").addEventListener("change", (e) => {
+    const sel = e.target as HTMLSelectElement;
+    if (!sel.matches("select[data-sumar]") || !shown) return;
+    const fila = pintadas[Number(sel.dataset.sumar)];
+    const id = sel.value;
+    if (!fila?.proof || !fila.winners?.length || !id) return;
+    const lista = leerEventos(network.name);
+    const ev = lista.find((x) => x.id === id);
+    guardarEventos(network.name, sumarAEvento(lista, id, { enlace: fila.proof, ganadores: fila.winners }));
+    avisar(t("evnSumado").replace("{nombre}", ev?.nombre ?? ""));
+    paint(shown);
+  });
+}
+
+/** Un grupo por fecha pasa a ser un evento con nombre: sus sorteos salen de la lista suelta. */
+function nombrarGrupo(organizer: string, g: Entry[]): void {
+  const sorteos: SorteoGuardado[] = g
+    .filter((e) => tieneComprobante(e) && e.winners?.length && e.proof)
+    .map((e) => ({ enlace: e.proof as string, ganadores: e.winners ?? [] }));
+  if (!sorteos.length) return;
+  const nombre = tituloDeGrupo(g);
+  const id = nuevoId();
+  let lista = crearEvento(leerEventos(network.name), organizer, nombre, id);
+  for (const s of sorteos) lista = sumarAEvento(lista, id, s);
+  guardarEventos(network.name, lista);
+  avisar(t("evnCreado").replace("{nombre}", nombre));
+  paint(organizer);
+}
+
+/** La clave "id|posición" de un sorteo dentro de un evento, como la ponen los botones. */
+function sorteoDeClave(clave: string): { ev: EventoGuardado; s: SorteoGuardado } | null {
+  const [id, k] = clave.split("|");
+  const ev = leerEventos(network.name).find((x) => x.id === id);
+  const s = ev?.sorteos[Number(k)];
+  return ev && s ? { ev, s } : null;
+}
+
+/** La sección "Mis eventos": el formulario para armar uno, y cada evento con su lista. */
+function pintarEventos(list: Entry[]): void {
+  const caja = $("hist-eventos");
+  if (!guardados.length && !list.some(tieneComprobante)) {
+    caja.style.display = "none";
+    caja.innerHTML = "";
+    return;
+  }
+  const aviso = avisoPendiente;
+  avisoPendiente = "";
+  caja.style.display = "block";
+  caja.innerHTML =
+    `<section class="evn" aria-labelledby="evn-t">` +
+    `<div class="ev-cabeza"><h3 id="evn-t">${esc(t("evnT"))}</h3></div>` +
+    `<p class="note">${esc(t("evnLead"))}</p>` +
+    `<form class="evn-nuevo" data-nuevo>` +
+    `<label class="kicker" for="evn-nuevo-in">${esc(t("evnNombre"))}</label>` +
+    `<div class="evn-fila"><input id="evn-nuevo-in" type="text" maxlength="80" autocomplete="off" required>` +
+    `<button class="primary mini" type="submit">${esc(t("evnCrear"))}</button></div>` +
+    `</form>` +
+    (aviso ? `<p class="evn-aviso" role="status">${esc(aviso)}</p>` : "") +
+    (guardados.length
+      ? guardados.map((ev) => tarjetaDeEvento(ev, list)).join("")
+      : `<p class="note">${esc(t("evnVacio"))}</p>`) +
+    `</section>`;
+  enlazarEventos();
+}
+
+/** Un evento: su nombre (que se puede cambiar), cuántos sorteos tiene, y su lista de comprobantes. */
+function tarjetaDeEvento(ev: EventoGuardado, list: Entry[]): string {
+  const n = ev.sorteos.length;
+  const id = esc(ev.id);
+  const filas = ev.sorteos.map((s, k) => filaDeEvento(ev, s, k, list)).join("");
+  return (
+    `<article class="evn-card">` +
+    `<label class="kicker" for="evn-n-${id}">${esc(t("evnNombre"))}</label>` +
+    `<div class="evn-fila"><input id="evn-n-${id}" type="text" maxlength="80" value="${esc(ev.nombre)}">` +
+    `<button class="ghost mini" type="button" data-evento-guardar="${id}">${esc(t("evnGuardar"))}</button></div>` +
+    `<p class="hc-meta">${esc(n === 1 ? t("evUnSorteo") : t("evNSorteos").replace("{n}", String(n)))}</p>` +
+    `<div class="hc-acciones">` +
+    `<button class="primary mini" type="button" data-evento-compartir="${id}"${n ? "" : " disabled"}>${esc(t("histGrupoCompartir"))}</button>` +
+    `<button class="ghost mini" type="button" data-evento-borrar="${id}">${esc(t("evnBorrar"))}</button>` +
+    `</div>` +
+    `<details class="evn-detalle"><summary>${esc(t("evnVerLista"))}</summary>` +
+    (n ? `<ol class="evn-sorteos">${filas}</ol>` : `<p class="note">${esc(t("evnSinSorteos"))}</p>`) +
+    `</details>` +
+    `</article>`
+  );
+}
+
+/** Un sorteo dentro del evento: el premio y la fecha (si están en la lista), quién ganó y sus botones. */
+function filaDeEvento(ev: EventoGuardado, s: SorteoGuardado, k: number, list: Entry[]): string {
+  const e = list.find((x) => x.proof === s.enlace);
+  const titulo = e?.prize || t("histDraw");
+  const fecha = e ? fmtDate(e.sealedAt) : "";
+  const quien = `${t(s.ganadores.length > 1 ? "histWonMany" : "histWon")} <b>${esc(s.ganadores.join(", "))}</b>`;
+  const clave = esc(`${ev.id}|${k}`);
+  return (
+    `<li class="evn-sorteo"><div><b>${esc(titulo)}</b>${fecha ? ` <span class="hc-fecha">${esc(fecha)}</span>` : ""}</div>` +
+    `<p class="hc-meta">${quien}</p>` +
+    `<div class="hc-acciones">` +
+    `<a class="ghost mini" href="${esc(s.enlace)}" target="_blank" rel="noopener">${esc(t("histSeeProof"))}</a>` +
+    `<button class="ghost mini" type="button" data-compartir-enlace="${clave}">${esc(t("cmpBtn"))}</button>` +
+    `<button class="ghost mini" type="button" data-evento-quitar="${clave}">${esc(t("evnQuitar"))}</button>` +
+    `</div></li>`
+  );
+}
+
+/** Los clics y envíos de la sección de eventos. Se enlazan una sola vez: la sección se vuelve a dibujar entera. */
+function enlazarEventos(): void {
+  if (enlazadoEventos) return;
+  enlazadoEventos = true;
+  const caja = $("hist-eventos");
+  caja.addEventListener("submit", (e) => {
+    const f = e.target as HTMLFormElement;
+    if (!f.matches("form[data-nuevo]") || !shown) return;
+    e.preventDefault();
+    const nombre = (f.querySelector("input") as HTMLInputElement).value.trim();
+    if (!nombre) {
+      avisar(t("evnNombreVacio"));
+      paint(shown);
+      return;
+    }
+    guardarEventos(network.name, crearEvento(leerEventos(network.name), shown, nombre, nuevoId()));
+    avisar(t("evnCreado").replace("{nombre}", nombre));
+    paint(shown);
+  });
+  caja.addEventListener("click", (e) => {
+    const el = e.target as HTMLElement;
+    const compartir = el.closest<HTMLButtonElement>("[data-evento-compartir]");
+    if (compartir) {
+      const ev = leerEventos(network.name).find((x) => x.id === compartir.dataset.eventoCompartir);
+      if (ev) void sorteosDelEvento(ev).then((sorteos) => compartirEvento(ev.nombre, sorteos));
+      return;
+    }
+    const guardar = el.closest<HTMLButtonElement>("[data-evento-guardar]");
+    if (guardar) {
+      const nombre = guardar.closest(".evn-card")?.querySelector<HTMLInputElement>("input")?.value.trim() ?? "";
+      if (!nombre) avisar(t("evnNombreVacio"));
+      else guardarEventos(network.name, renombrarEvento(leerEventos(network.name), guardar.dataset.eventoGuardar ?? "", nombre));
+      paint(shown);
+      return;
+    }
+    const borrar = el.closest<HTMLButtonElement>("[data-evento-borrar]");
+    if (borrar) {
+      if (!confirm(t("evnBorrarConf"))) return;
+      guardarEventos(network.name, borrarEvento(leerEventos(network.name), borrar.dataset.eventoBorrar ?? ""));
+      paint(shown);
+      return;
+    }
+    const quitar = el.closest<HTMLButtonElement>("[data-evento-quitar]");
+    if (quitar) {
+      const r = sorteoDeClave(quitar.dataset.eventoQuitar ?? "");
+      if (r) {
+        guardarEventos(network.name, quitarDeEvento(leerEventos(network.name), r.ev.id, r.s.enlace));
+        avisar(t("evnQuitado").replace("{nombre}", r.ev.nombre));
+      }
+      paint(shown);
+      return;
+    }
+    const compartirEnlace = el.closest<HTMLButtonElement>("[data-compartir-enlace]");
+    if (compartirEnlace) {
+      const r = sorteoDeClave(compartirEnlace.dataset.compartirEnlace ?? "");
+      if (r) void compartirSorteo(r.s.enlace, r.s.ganadores);
+    }
+  });
+}
+
+/**
+ * Pone en el botón de compartir cuántos enlaces va a tener el evento, cuando
+ * son varios: "Compartir el evento (3 partes)". Se calcula después de dibujar,
+ * porque armar los enlaces es asincrónico.
+ */
+async function etiquetarPartes(): Promise<void> {
+  const grupos = eventosPintados;
+  const evs = guardados;
+  const poner = (boton: Element | null, n: number): void => {
+    if (boton && n > 1) boton.textContent = t("evnCompartirPartes").replace("{n}", String(n));
+  };
+  for (const [gi, g] of grupos.entries()) {
+    poner(document.querySelector(`[data-evento="${gi}"]`), await partesDelEvento(tituloDeGrupo(g), await sorteosDeEntradas(g)));
+  }
+  for (const ev of evs) {
+    const boton = document.querySelector(`[data-evento-compartir="${ev.id}"]`);
+    poner(boton, await partesDelEvento(ev.nombre, await sorteosDelEvento(ev)));
+  }
 }
 
 function paint(organizer: string | null): void {
@@ -227,41 +473,49 @@ function paint(organizer: string | null): void {
     return;
   }
   const list = historyOf(organizer);
-  if (list.length === 0) {
+  guardados = eventosDe(leerEventos(network.name), organizer);
+  if (list.length === 0 && guardados.length === 0) {
     box.style.display = "none";
     return;
   }
 
   // Los sorteos de la cuenta, vengan de este equipo o de la cadena. Quien ya
   // tiene sorteos no necesita la bienvenida de la primera vez (onboarding.ts).
-  document.dispatchEvent(new CustomEvent("tinkazo:con-sorteos"));
+  if (list.length) document.dispatchEvent(new CustomEvent("tinkazo:con-sorteos"));
   $("hist-count").textContent = t("histCount").replace("{n}", String(list.length));
   pintadas = list;
   enlazarRearmado();
-  // Cada sorteo, una tarjeta. Los que tienen comprobante se agrupan en eventos:
-  // una cabecera con "Compartir el evento" y, debajo, sus sorteos en el orden
-  // de la lista.
-  const eventos = agrupar(list);
+  pintarEventos(list);
+
+  // Lo que está en un evento con nombre se ve dentro de él, no suelto.
+  const enEvento = enlacesEnEventos(leerEventos(network.name), organizer);
+  const sueltos = list.filter((e) => !(e.proof && enEvento.has(e.proof)));
+  // Cada sorteo, una tarjeta. Los que tienen comprobante se agrupan por fecha en
+  // eventos: una cabecera con "Compartir el evento" y, debajo, sus sorteos en el
+  // orden de la lista.
+  const grupos = agrupar(sueltos);
   eventoDe = new Map<Entry, number>();
-  eventos.forEach((g, gi) => g.forEach((e) => eventoDe.set(e, gi)));
-  eventosPintados = eventos;
+  grupos.forEach((g, gi) => g.forEach((e) => eventoDe.set(e, gi)));
+  eventosPintados = grupos;
   const pintados = new Set<number>();
   let html = "";
-  list.forEach((e, i) => {
+  for (const e of sueltos) {
+    const i = list.indexOf(e);
     const gi = eventoDe.get(e);
     if (gi === undefined) {
       html += tarjetaDeSorteo(e, i);
-      return;
+      continue;
     }
-    if (pintados.has(gi)) return;
+    if (pintados.has(gi)) continue;
     pintados.add(gi);
-    const g = eventos[gi] ?? [];
+    const g = grupos[gi] ?? [];
     html += cabeceraDeEvento(g, gi);
     const enOrden = g.map((x) => ({ x, i: list.indexOf(x) })).sort((a, b) => a.i - b.i);
     html += enOrden.map(({ x, i: j }) => tarjetaDeSorteo(x, j)).join("");
-  });
+  }
   $("hist-list").innerHTML = html;
   box.style.display = "block";
+  void etiquetarPartes();
 }
 
 /** Los eventos de la última lista pintada: "Compartir el evento" busca el suyo por su número. */
@@ -278,12 +532,22 @@ function tarjetaDeSorteo(e: Entry, i: number): string {
   const enCadena = e.drawTx ?? e.sealTx;
   const acciones: string[] = [];
   if (!hecho && e.names?.length) acciones.push(`<button class="primary mini" data-retomar="${i}">${esc(t("histResume"))}</button>`);
+  // El comprobante se puede compartir otra vez, con el QR y el mensaje: sale del enlace y de los ganadores.
+  const compartible = !!(e.proof && tieneComprobante(e) && e.winners?.length);
+  if (compartible) acciones.push(`<button class="primary mini" type="button" data-compartir="${i}">${esc(t("cmpBtn"))}</button>`);
   // Sin comprobante pero con id: la lista no está acá, pero el sorteo sí
   // está en la cadena. Con la lista a mano se rearma.
   if (e.proof) acciones.push(`<a class="ghost mini" href="${esc(e.proof)}" target="_blank" rel="noopener">${esc(t("histSeeProof"))}</a>`);
   else if (hecho && e.id) acciones.push(`<button class="ghost mini" data-rearmar="${i}">${esc(t("histRebuild"))}</button>`);
   if (enCadena) acciones.push(`<a class="hc-link" href="${esc(txUrl(enCadena))}" target="_blank" rel="noopener">${esc(t("histOnChain"))} ↗</a>`);
   if (!hecho && !e.names?.length) acciones.push(`<span class="note">${esc(t("histOtherDevice"))}</span>`);
+  if (compartible && guardados.length) {
+    const opciones = guardados.map((ev) => `<option value="${esc(ev.id)}">${esc(ev.nombre)}</option>`).join("");
+    acciones.push(
+      `<select class="hc-sumar" data-sumar="${i}" aria-label="${esc(t("evnSumar"))}">` +
+        `<option value="">${esc(t("evnSumar"))}</option>${opciones}</select>`,
+    );
+  }
   return (
     `<article class="hist-card${hecho ? " hecho" : ""}">` +
     `<div class="hc-top"><span class="hc-estado">${esc(t(hecho ? "histStateDone" : "histStatePending"))}</span>` +
@@ -295,79 +559,21 @@ function tarjetaDeSorteo(e: Entry, i: number): string {
   );
 }
 
-/** La cabecera de un evento: "Sorteos del 20 de octubre de 2026", cuántos son y el botón para compartirlo. */
+/**
+ * La cabecera de un evento sin nombre: "Sorteos del 20 de octubre de 2026", cuántos son,
+ * el botón para compartirlo y el de ponerle nombre (que lo vuelve un evento con nombre).
+ */
 function cabeceraDeEvento(g: Entry[], gi: number): string {
   const n = g.length;
-  const fecha = fechaLarga(g[0]?.sealedAt ?? 0, getLang());
   return (
     `<div class="hist-evento">` +
-    `<div><h3>${esc(t("histGrupoT").replace("{f}", fecha))}</h3>` +
+    `<div><h3>${esc(tituloDeGrupo(g))}</h3>` +
     `<p class="note">${esc(n === 1 ? t("evUnSorteo") : t("evNSorteos").replace("{n}", String(n)))}</p></div>` +
-    `<button class="ghost mini" data-evento="${gi}">${esc(t("histGrupoCompartir"))}</button>` +
-    `</div>`
+    `<div class="hc-acciones">` +
+    `<button class="primary mini" type="button" data-evento="${gi}">${esc(t("histGrupoCompartir"))}</button>` +
+    `<button class="ghost mini" type="button" data-nombrar="${gi}">${esc(t("evnNombrar"))}</button>` +
+    `</div></div>`
   );
-}
-
-/**
- * El mensaje del evento, con sus enlaces: uno por parte si el evento es grande.
- * Solo entran los que tienen comprobante y se pueden leer, con sus ganadores.
- * Devuelve null si no queda ninguno.
- */
-async function mensajeDelEvento(g: Entry[]): Promise<{ texto: string; partes: number } | null> {
-  const sorteos: SorteoDelEvento[] = [];
-  for (const e of g) {
-    if (!tieneComprobante(e) || !e.winners?.length || !e.proof) continue;
-    try {
-      const comprobante = await decodeProof(e.proof.slice(e.proof.indexOf("#")));
-      sorteos.push({ ...comprobante, ganadores: e.winners });
-    } catch {
-      // Un comprobante que no se lee no entra en el evento.
-    }
-  }
-  if (!sorteos.length) return null;
-  const fecha = fechaLarga(g[0]?.sealedAt ?? 0, getLang());
-  const parte = (i: number, n: number): string => t("evParte").replace("{i}", String(i)).replace("{n}", String(n));
-  const enlaces = await eventosUrls(t("histGrupoT").replace("{f}", fecha), sorteos, (i, n) => ` · ${parte(i, n)}`);
-  const enlace = enlaces.length === 1 ? (enlaces[0] ?? "") : enlaces.map((u, i) => `${parte(i + 1, enlaces.length)}: ${u}`).join("\n");
-  return { texto: T[getLang()].summaryEvento(fecha, sorteos.length, enlace), partes: enlaces.length };
-}
-
-/**
- * "Compartir el evento": copia el mensaje del evento. El enlace se arma al
- * clic, así que el portapapeles recibe una promesa: Safari exige que la escritura
- * venga directo del clic, y armar el enlace tarda un instante.
- */
-async function compartirEvento(g: Entry[], btn: HTMLButtonElement): Promise<void> {
-  const mensaje = mensajeDelEvento(g);
-  let copiado = false;
-  try {
-    await navigator.clipboard.write([
-      new ClipboardItem({
-        "text/plain": mensaje.then((r) => {
-          if (!r) throw new Error("evento-vacio");
-          return new Blob([r.texto], { type: "text/plain" });
-        }),
-      }),
-    ]);
-    copiado = true;
-  } catch {
-    try {
-      const r = await mensaje;
-      if (r) {
-        await navigator.clipboard.writeText(r.texto);
-        copiado = true;
-      }
-    } catch {
-      /* portapapeles bloqueado: nada que hacer */
-    }
-  }
-  if (!copiado) return;
-  // Si el evento se partió en enlaces, se dice antes de que lo manden: así no se pega uno solo.
-  const r = await mensaje.catch(() => null);
-  const aviso = r && r.partes > 1 ? t("evAvisoPartes").replace("{n}", String(r.partes)) : "";
-  const orig = btn.textContent;
-  btn.textContent = aviso || t("copied");
-  setTimeout(() => (btn.textContent = orig), aviso ? 6000 : 1600);
 }
 
 /**
