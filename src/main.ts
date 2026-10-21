@@ -10,7 +10,7 @@ import { montarPremios } from "./ui/premios";
 import { adelantarImagen, alTocarGanadores, copySummary, draw, imagenRedes, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
 import { skipGame } from "./games/overlay";
 import { usePixi } from "./games/engine";
-import { initWalletUI } from "./ui/wallet-ui";
+import { initWalletUI, openPicker } from "./ui/wallet-ui";
 import { initOnboarding } from "./ui/onboarding";
 import { musicOn, toggleMusic } from "./music";
 import { rotateWords } from "./ui/rotar";
@@ -34,9 +34,14 @@ onLangChange(() => {
 $("l-es").addEventListener("click", () => chooseLang("es"));
 $("l-en").addEventListener("click", () => chooseLang("en"));
 $("btn-sample").addEventListener("click", loadSample);
-// Sin cuenta, el botón de sellar queda con aria-disabled (lo pone `applyGate`): el clic no hace nada.
+// Sin cuenta, el botón de sellar queda con aria-disabled (lo pone `applyGate`) y
+// el clic abre la ventana para elegir una, que es lo que falta. Antes no hacía
+// nada, y parecía un botón roto (evaluador visual, 21 de octubre de 2026).
 $("btn-freeze").addEventListener("click", () => {
-  if ($("btn-freeze").getAttribute("aria-disabled") === "true") return;
+  if ($("btn-freeze").getAttribute("aria-disabled") === "true") {
+    void openPicker();
+    return;
+  }
   void freeze();
 });
 // El ritmo del show. Se guarda, porque quien organiza suele querer siempre el
