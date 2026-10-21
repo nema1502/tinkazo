@@ -60,6 +60,8 @@ export interface ImportResult {
   source: "luma" | null;
   /** Cuántas filas del archivo no se pudieron leer. */
   skipped: number;
+  /** De cuántos nombres se sacaron caracteres que no se ven. */
+  invisibles: number;
 }
 
 /** Lo que `buildList` necesita saber de la ventana. */
@@ -479,6 +481,7 @@ export function openImporter(s: ImportState, onApply: (r: ImportResult) => void)
       hand: s.hand,
       source,
       skipped: tb.skipped.length,
+      invisibles: built.invisibles,
     });
     close();
   });
