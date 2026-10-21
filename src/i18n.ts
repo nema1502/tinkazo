@@ -102,16 +102,27 @@ export interface Dict {
   espPie: (n: number) => string;
   cQuiStart: (n: number) => string;
   cQuiNext: (k: number, of: number) => string;
-  cQuiTwo: (a: string, b: string) => string;
-  cQuiAskShort: (l: string) => string;
-  cQuiAskShortN: (l: string) => string;
-  /** Que cada uno revise su propio nombre, sin buscar su carta en la pantalla. */
-  cQuiMine: (l: string) => string;
-  cQuiMineN: (l: string) => string;
-  cQuiYes: (l: string, k: number) => string;
-  cQuiNo: (l: string, k: number) => string;
-  cQuiNone: (l: string, has: boolean) => string;
+  /** De pie: lo que cada uno revisa en su turno, y la línea grande de cada tipo de pregunta. */
+  cQuiRevisa: (i: number) => string;
+  cQuiAskL: (l: string) => string;
+  cQuiAskD: (d: string) => string;
+  cQuiAskM: () => string;
+  cQuiAskG: (k: number) => string;
+  cQuiAskO: (k: number) => string;
+  /** Quién se sienta, según el tipo de pregunta: "no la tienen", "empiezan de la N a la Z"… */
+  cQuiSitL: (l: string, has: boolean) => string;
+  cQuiSitD: (d: string, has: boolean) => string;
+  cQuiSitM: (has: boolean) => string;
+  cQuiSitG: (k: number, has: boolean) => string;
+  cQuiSitO: (k: number, has: boolean) => string;
+  cQuiSits: (f: string) => string;
+  cQuiYes: (f: string, i: number) => string;
+  cQuiNo: (f: string, i: number) => string;
+  cQuiNone: (has: boolean) => string;
+  cQuiFinal: (names: string) => string;
   cQuiDone: (n: string, k: number) => string;
+  /** La frase de "uy, casi" del susto: por número, sin azar, para que la sala no dependa del sorteo de frases. */
+  cQuiAlmost: (i: number) => string;
   cOruCount: (n: number) => string;
   cOruStop: (k: number, off: number, left: number) => string;
   cOruStay: (n: string) => string;
@@ -231,8 +242,6 @@ const pick = (xs: string[]): string => xs[Math.floor((pickRng ?? Math.random)() 
 const llano = (s: string): string => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 /** "y" se vuelve "e" delante del sonido i ("Jorge e Isabel", "Ana e Hilda"), pero no delante de "hie" ni "hia". */
 const yE = (next: string): string => (/^h?i(?![aeiou])/i.test(llano(next)) ? "e" : "y");
-/** "o" se vuelve "u" delante del sonido o ("Pedro u Óscar", "Ana u Hortensia"). */
-const oU = (next: string): string => (/^h?o/i.test(llano(next)) ? "u" : "o");
 /** "A", "A y B", "A, B e Isabel": names joined for the narrator. */
 const joinList = (ns: string[], and: string): string => {
   if (ns.length <= 1) return ns[0] ?? "";
@@ -513,25 +522,41 @@ export const T: Record<Lang, Dict> = {
     rqLeft: (n, k) => (n <= k ? `¡Estos ${n} van a la final!` : `¡Quedan ${n}!`),
     rqIntro: "¡A la largada, carril por carril!",
     rqLane: (k) => `CARRIL ${k}`,
-    // --- ¿Quién es?: cartas con cara; cada letra da vuelta a las que no coinciden.
-    gameQuien: "¿Quién es?",
-    cQuiStart: (n) => `¡${n} cartas! Letra por letra, queda una.`,
-    cQuiNext: (k) => `¡Va el premio ${k}: otra vez todas!`,
-    cQuiTwo: (a, b) => pick([`¡Quedan dos: ${a} ${yE(b)} ${b}!`, `¿${a} ${oU(b)} ${b}?`, `¡Entre ${a} ${yE(b)} ${b}!`]),
-    cQuiAskShort: (l) => `¿Tiene la ${l}?`,
-    cQuiAskShortN: (l) => `¿Tiene el ${l}?`,
-    cQuiMine: (l) => pick([`¿Tu nombre tiene la ${l}?`, `¿Y el tuyo? ¿Tiene la ${l}?`, `¡Fijate si tu nombre tiene la ${l}!`]),
-    cQuiMineN: (l) => pick([`¿Tu nombre tiene el ${l}?`, `¿Y el tuyo? ¿Tiene el ${l}?`]),
-    cQuiYes: (l, k) => (k === 1 ? `¡Sí tiene ${l}! Se da vuelta una.` : `¡Sí tiene ${l}! Se dan vuelta ${k}.`),
-    cQuiNo: (l, k) => (k === 1 ? `¡No tiene ${l}! Se da vuelta una.` : `¡No tiene ${l}! Se dan vuelta ${k}.`),
-    cQuiNone: (l, has) => (has ? `¡Sí tiene ${l}! Todas la tienen: no se da vuelta ninguna.` : `¡No tiene ${l}! Ninguna la tiene: no se da vuelta ninguna.`),
-    cQuiDone: (n, k) => pick([`¡${n}, premio ${k}!`, `¡Es ${n}: premio ${k}!`]),
-    cQuiTie: ["¡Mismas letras! El sorteo ya eligió.", "¡Empate de letras! Decide el sorteo."],
-    cQuiTieShort: "¿Mismas letras?",
+    // --- De pie (antes ¿Quién es?): la sala se para y se sienta; cada uno revisa su propio nombre.
+    gameQuien: "De pie",
+    cQuiStart: (n) => `¡${n} personas! Todos de pie. Si no podés, levantá la mano.`,
+    cQuiNext: (k) => `¡Va el premio ${k}! Todos de pie, menos los que ya ganaron.`,
+    cQuiRules: "Vale el nombre de la lista, sin tildes. Si alguien quedó parado por error, la pantalla lo corrige.",
+    cQuiRevisa: (i) => ["¡Revisá tu nombre!", "¿Y el tuyo? Revisalo.", "¡Fijate en tu nombre!"][i % 3] as string,
+    cQuiAskA: "¿TU NOMBRE",
+    cQuiAskAN: "¿TU NÚMERO",
+    cQuiAskL: (l) => `TIENE LA ${l}?`,
+    cQuiAskD: (d) => `TIENE EL ${d}?`,
+    cQuiAskM: () => "EMPIEZA DE LA A A LA M?",
+    cQuiAskG: (k) => `TIENE MÁS DE ${k} LETRAS?`,
+    cQuiAskO: (k) => `ES MAYOR QUE ${k}?`,
+    cQuiSitL: (_l, has) => (has ? "no la tienen" : "la tienen"),
+    cQuiSitD: (_d, has) => (has ? "no lo tienen" : "lo tienen"),
+    cQuiSitM: (has) => (has ? "empiezan de la N a la Z" : "empiezan de la A a la M"),
+    cQuiSitG: (k, has) => (has ? `tienen ${k} letras o menos` : `tienen más de ${k} letras`),
+    cQuiSitO: (k, has) => (has ? `tienen un número menor o igual a ${k}` : `tienen un número mayor que ${k}`),
+    cQuiSits: (f) => `Se sientan los que ${f}`,
+    cQuiYes: (f, i) => (i % 2 ? `¡Sí! A sentarse los que ${f}.` : `¡Sí! Se sientan los que ${f}.`),
+    cQuiNo: (f, i) => (i % 2 ? `¡No! A sentarse los que ${f}.` : `¡No! Se sientan los que ${f}.`),
+    cQuiNone: (has) => (has ? "¡Sí! Están todos: nadie se sienta." : "¡No! No hay ninguno: nadie se sienta."),
+    cQuiFinal: (names) => `¡Finalistas, que los vean! ${names}.`,
+    cQuiFinA: "FINALISTAS",
+    cQuiFinB: "¡QUE LOS VEAN!",
+    cQuiDealB: "¡TODOS DE PIE!",
+    cQuiDone: (n, k) => (k % 2 ? `¡${n}, premio ${k}! Se sienta con su premio.` : `¡Es ${n}: premio ${k}! A sentarse con el premio.`),
+    cQuiTie: "¡Mismas letras! El sorteo ya eligió.",
+    cQuiTope: "¡Nombres casi iguales! El sorteo ya eligió.",
+    cQuiTieShort: "¿MISMAS LETRAS?",
+    cQuiTopeShort: "¿NOMBRES CASI IGUALES?",
     cQuiSi: "¡SÍ!",
     cQuiNoStamp: "¡NO!",
-    cQuiLeft: "QUEDAN",
-    cQuiAlmost: ["¡Casi se da vuelta!", "¡Uy, casi!", "¡Se salvó de milagro!"],
+    cQuiLeft: "DE PIE",
+    cQuiAlmost: (i) => ["¡Uy, casi se sienta!", "¡Uy, casi!", "¡Se salvó de milagro!"][i % 3] as string,
     cSapNext: (k) => `¡Va el premio ${k}!`,
     cSapDone: (k) => pick([`¡Cayó el premio ${k}!`, `¡Ahí quedó el premio ${k}!`]),
     cSapTally: (k, of) => `Premio ${k} de ${of}`,
@@ -1105,8 +1130,8 @@ export const T: Record<Lang, Dict> = {
     jgOruB: "La entrada de la Diablada: la comparsa baila por las cuadras, entre las graderías llenas, y en cada arco se quedan algunos. Los dos últimos hacen un contrapunto frente al Socavón, y el que llega entra con campanas y cohetillos. Hasta doscientas.",
     jgSapoN: "Sapo",
     jgSapoB: "El juego de las ferias y los patios: una rana en el medio del cajón y un agujero con el nombre de cada uno. Las argollas pegan en la madera, bailan en el borde de un vecino y salen, y la última cae en el agujero de quien gana. Con más de doce, los nombres se tachan en oleadas hasta que quedan doce. Hasta doscientas, con hasta doce ganadores.",
-    jgQuienN: "¿Quién es?",
-    jgQuienB: "Todos los nombres en cartas, con su cara. En cada turno se pregunta por una letra y se dan vuelta las cartas que no coinciden con el nombre que salió, hasta que queda una sola. Las preguntas se eligen sabiendo quién ganó: el juego no adivina, cuenta. Hasta doscientas.",
+    jgQuienN: "De pie",
+    jgQuienB: "Todos de pie. Cada uno revisa su propio nombre: una letra, un número, la mitad del abecedario o cuántas letras tiene. Los que no siguen se sientan, y el último de pie gana. Hasta doscientas.",
     loreOruroQ: "¿Cuánta gente baila en Oruro?",
     loreOruroA: "Más de 28.000 bailarines y 10.000 músicos, en unos cincuenta conjuntos, según la UNESCO, que lo declaró patrimonio en 2001. La entrada recorre cuatro kilómetros y dura veinte horas sin parar.",
     jgRocketsN: "Carrera de cohetes",
@@ -1121,7 +1146,7 @@ export const T: Record<Lang, Dict> = {
     gcPrizes: (k) => (k === 1 ? "1 premio" : `${k} premios`),
     gcPrizesNote: (k) => `Hay ${k} premios: el juego cuenta el primero y el cartel del final muestra a todos.`,
     gcSapoMany: "Cada nombre tiene su agujero. Cada argolla que entra es un premio.",
-    gcQuienMany: "Una ronda por premio: en cada una se dan vuelta las cartas que no coinciden y gana la última.",
+    gcQuienMany: "Una ronda por premio: los que ganan se sientan con su premio, y gana el último de pie.",
     gcTelefericoMany: "En cada estación se baja un grupo entero. Los últimos en bajarse ganan premio, y el primero llega a la cumbre.",
     gcSapoQual: "Con más de doce, primero se tachan nombres hasta que quedan doce.",
     gcRace: "Gana la primera llama que cruza la meta.",
@@ -1137,7 +1162,7 @@ export const T: Record<Lang, Dict> = {
     gcPasanaku: "La tela se cierra y los bultos se caen. Gana el que queda en el nudo.",
     gcStellar: "Un paquete salta de estrella en estrella. Gana la última que toca.",
     gcSapo: "Cada nombre tiene su agujero. Gana el agujero donde cae la última argolla.",
-    gcQuien: "Las cartas que no coinciden con la respuesta se dan vuelta. Gana la última.",
+    gcQuien: "Todos de pie: en cada pregunta sobre un nombre se sientan los que no siguen. Gana el último de pie.",
     gcLedger: "Las pasadas barren tarjetas. Gana la que queda sellada.",
     gcRockets: "Gana el primer cohete que llega.",
     gcTotora: "Gana la primera balsa que llega a la otra orilla.",
@@ -1699,25 +1724,41 @@ export const T: Record<Lang, Dict> = {
     rqLeft: (n, k) => (n <= k ? `These ${n} go to the final!` : `${n} left!`),
     rqIntro: "To the start, lane by lane!",
     rqLane: (k) => `LANE ${k}`,
-    // --- Who is it?: face cards; each letter flips the ones that don't match.
-    gameQuien: "Who is it?",
-    cQuiStart: (n) => `${n} cards! Letter by letter, one is left.`,
-    cQuiNext: (k) => `Prize ${k} now: all cards back!`,
-    cQuiTwo: (a, b) => pick([`Two left: ${a} and ${b}!`, `${a} or ${b}?`, `Between ${a} and ${b}!`]),
-    cQuiAskShort: (l) => `Letter ${l}?`,
-    cQuiAskShortN: (l) => `Number ${l}?`,
-    cQuiMine: (l) => pick([`Does your name have ${l}?`, `What about yours? Any ${l}?`, `Check: does your name have ${l}?`]),
-    cQuiMineN: (l) => pick([`Does your name have a ${l}?`, `What about yours? Any ${l}?`]),
-    cQuiYes: (l, k) => (k === 1 ? `Yes, it has ${l}! One card flips.` : `Yes, it has ${l}! ${k} cards flip.`),
-    cQuiNo: (l, k) => (k === 1 ? `No ${l}! One card flips.` : `No ${l}! ${k} cards flip.`),
-    cQuiNone: (l, has) => (has ? `Yes, it has ${l}! They all do: no card flips.` : `No ${l}! None of them has it: no card flips.`),
-    cQuiDone: (n, k) => pick([`${n}, prize ${k}!`, `It's ${n}: prize ${k}!`]),
-    cQuiTie: ["Same letters! The draw already chose.", "A letter tie! The draw decides."],
-    cQuiTieShort: "Same letters?",
+    // --- Stand up (antes Who is it?): the room stands; each person checks their own name.
+    gameQuien: "Stand up",
+    cQuiStart: (n) => `${n} people! Everybody up. If you can't stand, raise your hand.`,
+    cQuiNext: (k) => `Prize ${k} now! Everybody up, except the ones who already won.`,
+    cQuiRules: "The name on the list counts, without accents. If someone stays up by mistake, the screen corrects it.",
+    cQuiRevisa: (i) => ["Check your name!", "What about yours? Check it.", "Look at your name!"][i % 3] as string,
+    cQuiAskA: "DOES YOUR NAME",
+    cQuiAskAN: "IS YOUR NUMBER",
+    cQuiAskL: (l) => `HAVE THE LETTER ${l}?`,
+    cQuiAskD: (d) => `HAVE THE NUMBER ${d}?`,
+    cQuiAskM: () => "START BETWEEN A AND M?",
+    cQuiAskG: (k) => `HAVE MORE THAN ${k} LETTERS?`,
+    cQuiAskO: (k) => `GREATER THAN ${k}?`,
+    cQuiSitL: (l, has) => (has ? `don't have the letter ${l}` : `have the letter ${l}`),
+    cQuiSitD: (d, has) => (has ? `don't have the number ${d}` : `have the number ${d}`),
+    cQuiSitM: (has) => (has ? "start between N and Z" : "start between A and M"),
+    cQuiSitG: (k, has) => (has ? `have ${k} letters or fewer` : `have more than ${k} letters`),
+    cQuiSitO: (k, has) => (has ? `have a number ${k} or lower` : `have a number greater than ${k}`),
+    cQuiSits: (f) => `Sit down: those who ${f}`,
+    cQuiYes: (f, i) => (i % 2 ? `Yes! Sitting down: those who ${f}.` : `Yes! Sit down: those who ${f}.`),
+    cQuiNo: (f, i) => (i % 2 ? `No! Sitting down: those who ${f}.` : `No! Sit down: those who ${f}.`),
+    cQuiNone: (has) => (has ? "Yes! Everyone is in: nobody sits." : "No! Nobody is in: nobody sits."),
+    cQuiFinal: (names) => `Finalists, let's see them! ${names}.`,
+    cQuiFinA: "FINALISTS",
+    cQuiFinB: "LET'S SEE THEM!",
+    cQuiDealB: "EVERYBODY UP!",
+    cQuiDone: (n, k) => (k % 2 ? `${n}, prize ${k}! Sit down with your prize.` : `It's ${n}: prize ${k}! Sit down with your prize.`),
+    cQuiTie: "Same letters! The draw already chose.",
+    cQuiTope: "Almost the same names! The draw already chose.",
+    cQuiTieShort: "SAME LETTERS?",
+    cQuiTopeShort: "ALMOST THE SAME NAMES?",
     cQuiSi: "YES!",
     cQuiNoStamp: "NO!",
-    cQuiLeft: "LEFT",
-    cQuiAlmost: ["It almost flipped!", "Whoa, so close!", "Saved by a hair!"],
+    cQuiLeft: "STANDING",
+    cQuiAlmost: (i) => ["Almost sat down!", "Whoa, so close!", "Saved by a hair!"][i % 3] as string,
     cSapNext: (k) => `Prize ${k}, here it goes!`,
     cSapDone: (k) => pick([`Prize ${k} dropped in!`, `There it rests: prize ${k}!`]),
     cSapTally: (k, of) => `Prize ${k} of ${of}`,
@@ -2272,8 +2313,8 @@ export const T: Record<Lang, Dict> = {
     jgOruB: "The Diablada's entrada: the troupe dances block by block between packed stands, and at each arch a few stay behind. The last two face off in front of the Socavón, and the one who arrives goes in with bells and fireworks. Up to two hundred.",
     jgSapoN: "Sapo",
     jgSapoB: "The game of fairs and patios: a frog in the middle of a wooden box and one hole with each name. Rings hit the wood, dance on a neighbor's rim and roll out, and the last one drops into the winner's hole. With more than twelve, names are crossed out in waves until twelve are left. Up to two hundred, with up to twelve winners.",
-    jgQuienN: "Who is it?",
-    jgQuienB: "Every name on a card, with its face. Each turn asks about a letter, and the cards that don't match the drawn name flip over, until only one is left. The questions are picked knowing who won: the game doesn't guess, it tells. Up to two hundred.",
+    jgQuienN: "Stand up",
+    jgQuienB: "Everybody up. Each person checks their own name: a letter, a number, half the alphabet or how many letters it has. Those who don't match sit down, and the last one standing wins. Up to two hundred.",
     loreOruroQ: "How many people dance in Oruro?",
     loreOruroA: "More than 28,000 dancers and 10,000 musicians, in about fifty groups, according to UNESCO, which proclaimed it heritage in 2001. The entrada covers four kilometers and lasts twenty hours without a break.",
     jgRocketsN: "Rocket race",
@@ -2287,7 +2328,7 @@ export const T: Record<Lang, Dict> = {
     gcPrizes: (k) => (k === 1 ? "1 prize" : `${k} prizes`),
     gcPrizesNote: (k) => `There are ${k} prizes: the game tells the first one and the final card shows them all.`,
     gcSapoMany: "Every name has its hole. Every ring that drops in is a prize.",
-    gcQuienMany: "One round per prize: in each one the cards that don't match flip over and the last one wins.",
+    gcQuienMany: "One round per prize: winners sit down with their prize, and the last one standing wins.",
     gcTelefericoMany: "A whole group gets off at every station. The last ones off win a prize, and the first prize reaches the top.",
     gcSapoQual: "With more than twelve, names are crossed out first until twelve are left.",
     gcRace: "The first llama across the finish line wins.",
@@ -2303,7 +2344,7 @@ export const T: Record<Lang, Dict> = {
     gcPasanaku: "The cloth closes and the bundles fall out. The one left in the knot wins.",
     gcStellar: "A packet hops from star to star. The last star it touches wins.",
     gcSapo: "Every name has its hole. The hole where the last ring drops wins.",
-    gcQuien: "Cards that don't match the answer flip over. The last card wins.",
+    gcQuien: "Everybody up: each question about a name sits down the ones who don't match. The last one standing wins.",
     gcLedger: "Each sweep clears cards. The one left sealed wins.",
     gcRockets: "The first rocket to arrive wins.",
     gcTotora: "The first raft to reach the far shore wins.",
