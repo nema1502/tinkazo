@@ -11,6 +11,8 @@ import { decodeProof, isAnchored, type Proof } from "./protocol/proof";
 import { network } from "./stellar/config";
 import { loadSessionKind } from "./stellar/session-store";
 import { buscar, vecesExacto } from "./buscar";
+// Estático, no con import(): así las claves de compartir entran en los textos de esta página.
+import { abrirSorteo } from "./ui/compartir";
 
 /**
  * Página de verificación.
@@ -497,6 +499,12 @@ function renderResult(
   $("v-proof").textContent =
     `round=${proof.round} · signature=${signature.slice(0, 20)}… · randomness=${randomness.slice(0, 20)}… · winners=[${winners.join(",")}]${fromChain ? " · on-chain ✓" : ""}`;
   $<HTMLAnchorElement>("v-drand").href = roundUrl(proof.round);
+  // Compartir otra vez: el enlace de esta página es el comprobante, tal como llegó;
+  // el mensaje y el QR salen de lo que la página acaba de rehacer.
+  const compartir = $<HTMLButtonElement>("btn-compartir");
+  compartir.style.display = "";
+  compartir.onclick = () =>
+    abrirSorteo({ enlace: location.href, ganadores: winners.map((i) => names[i] ?? ""), total: names.length, premio });
   if (isAnchored(proof)) {
     const a = $<HTMLAnchorElement>("v-contract");
     a.style.display = "inline-block";
