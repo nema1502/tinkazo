@@ -82,7 +82,7 @@ Los productos del juego son los de la feria boliviana en general: el altiplano (
 - **La huella tejida del aguayo de la lista** (auditoría, sección 8.5): el dibujo de la huella de la lista como un aguayo único. No se hizo en este juego. Es una pieza aparte, de la página de la lista.
 - **La entrada al selector y la salida de Aguayo y Constelación:** es la etapa D.
 - **La página de juegos:** la frase "Así viaja un pago en Stellar" y la captura del juego.
-- **El golpe del ganador** (auditor de mezcla): no está verificado. En la máquina de la prueba, el mismo juego dio golpes de -18,6 a +6,1 LU entre corridas, y dos juegos de control dieron valores imposibles (chovena 96 LU, sapo -57 LU): el auditor no puede ubicar el cartel en el audio de forma estable acá.
+- **El golpe del ganador** (auditor de mezcla): la última corrida pasó (+5,2 LU), pero el medidor no es estable en la máquina de la prueba: con builds parecidos, el mismo juego dio entre -59 y +6 LU, y dos juegos de control dieron valores imposibles (chovena 96 LU, sapo -57 LU). Hasta que el auditor ubique el cartel en el audio de forma confiable, ese número no prueba nada.
 - **El nombre del encargo en celular:** cuando un nombre queda justo encima del atado, tapa la etiqueta del producto (se ve en la captura de 390 px, tema claro). El atado en su origen también queda recortado en el borde izquierdo del celular.
 
 ## Cómo auditarlo
