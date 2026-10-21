@@ -9,7 +9,7 @@ import { anchorErrorText, hideTxStatus, sealOnChain, selloSinGrabar, showTxStatu
 import { precargarQr } from "./qr";
 import { recomendar } from "./recomendar";
 import { canAnchor, currentSession } from "./wallet-ui";
-import { parseNames, setList } from "./participants";
+import { onListChange, parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
 import { NOMBRE } from "./gamecard";
 import { actualizarPaso, barraActiva, verError } from "./siguiente";
@@ -59,8 +59,12 @@ export function pintarJuego(): void {
 // Al cambiar de idioma los botones del selector ya están traducidos: se lee de ahí.
 onLangChange(pintarJuego);
 
-/** La cantidad con la que se pintó la recomendación, para rehacer los textos al cambiar de idioma o de ritmo. */
-let cantidadRecomendada: number | null = null;
+/**
+ * Lo último que se pintó de la recomendación: cantidad, idioma y ritmo. Si no
+ * cambió, no se vuelve a pintar (el selector no se reacomoda al escribir un
+ * nombre que no cambia la cantidad).
+ */
+let claveRecomendada = "";
 
 /** Una frase del diccionario. Las que llevan números son funciones: se les pasan los argumentos. */
 function frase(clave: string, args: readonly number[] = []): string {
@@ -77,17 +81,20 @@ function frase(clave: string, args: readonly number[] = []): string {
  * los botones: no oculta ninguno, y el que estaba elegido sigue elegido.
  */
 export function pintarRecomendacion(n: number): void {
-  cantidadRecomendada = n;
+  const clave = `${n}|${getLang()}|${currentPace()}`;
+  if (clave === claveRecomendada) return;
+  claveRecomendada = clave;
   const botones = new Map<Game, HTMLElement>();
   for (const [id, g] of GAME_BUTTONS) {
     const el = document.getElementById(id);
     if (el) botones.set(g, el);
   }
-  for (const r of recomendar(n).games) {
+  const gp = $("gamepick");
+  recomendar(n).games.forEach((r, i) => {
     const el = botones.get(r.game);
-    if (!el) continue;
-    // Ponerlos al final, en orden, deja el selector en el orden de la recomendación.
-    $("gamepick").appendChild(el);
+    if (!el) return;
+    // Cada botón va a su lugar en el orden de la recomendación; se mueve solo el que está fuera de sitio.
+    if (gp.children[i] !== el) gp.insertBefore(el, gp.children[i] ?? null);
     el.classList.toggle("atenuado", r.fits === false);
     el.querySelectorAll(":scope > .rec-tag, :scope > .rec-nota").forEach((x) => x.remove());
     if (r.fits === true) {
@@ -102,7 +109,7 @@ export function pintarRecomendacion(n: number): void {
       nota.textContent = frase(r.note, r.args);
       el.appendChild(nota);
     }
-  }
+  });
   pintarCabecera(n);
 }
 
@@ -120,11 +127,34 @@ function pintarCabecera(n: number): void {
   el.style.display = "";
 }
 
-/** Rehace la recomendación con la última cantidad: al cambiar de idioma o de ritmo. */
+/** Quita la recomendación: el selector vuelve al orden de siempre, sin marcas. */
+function quitarRecomendacion(): void {
+  if (!claveRecomendada) return;
+  claveRecomendada = "";
+  const gp = $("gamepick");
+  for (const [id] of GAME_BUTTONS) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    gp.appendChild(el);
+    el.classList.remove("atenuado");
+    el.querySelectorAll(":scope > .rec-tag, :scope > .rec-nota").forEach((x) => x.remove());
+  }
+  const el = document.getElementById("rec-head");
+  if (el) el.style.display = "none";
+}
+
+/**
+ * Rehace la recomendación con la cantidad de ahora: la de la lista sellada, o
+ * la del cuadro mientras no se sella. Corre cuando cambia la lista, el idioma
+ * o el ritmo. Con menos de dos personas no hay sorteo que recomendar.
+ */
 export function refrescarRecomendacion(): void {
-  if (cantidadRecomendada !== null && app.frozen) pintarRecomendacion(cantidadRecomendada);
+  const n = app.frozen ? app.frozen.names.length : parseNames().length;
+  if (n < 2) quitarRecomendacion();
+  else pintarRecomendacion(n);
 }
 onLangChange(refrescarRecomendacion);
+onListChange(refrescarRecomendacion);
 
 /**
  * "Cambiar de juego": lleva al selector, que está debajo, y deja el foco en el
@@ -447,7 +477,6 @@ export function unfreeze(lista: string): void {
   if (countdownTimer !== undefined) clearInterval(countdownTimer);
   countdownTimer = undefined;
   app.frozen = null;
-  cantidadRecomendada = null;
   $<HTMLTextAreaElement>("ta").disabled = false;
   $<HTMLInputElement>("prize").disabled = false;
   ponerPremio("");
