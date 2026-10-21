@@ -1259,6 +1259,15 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   const wNow: ReturnType<typeof where>[] = dancers.map(() => ({ p: { rho: 0, th: 0 }, alpha: 1, seated: 0, rows: 0 }));
   const pNow: { x: number; y: number; s: number }[] = dancers.map(() => ({ x: 0, y: 0, s: 1 }));
   const handsNow: { L: Pt; R: Pt }[] = dancers.map(() => ({ L: { x: 0, y: 0 }, R: { x: 0, y: 0 } }));
+  /** A qué vecino va cada mano (la izquierda y la derecha) en este cuadro, para que la cadena use esa. */
+  const brazos: ([number, number] | null)[] = dancers.map(() => null);
+  /** La fase del tambaleo de cada uno, desde el último corte. */
+  const wobblePh = (d: Dancer, x: number): number => (x - stopAt) * Math.PI * 2 * 3 + hash(d.idx, 53) * 6;
+  /**
+   * Cuánto llega un brazo estirado, en largos de brazo. Más, y parecían de
+   * goma; menos, y en una rueda chica las manos no se alcanzaban.
+   */
+  const ALCANCE = 2;
   /** En la rueda, de la mano, en este momento. */
   const inRingNow = (d: Dancer, x: number): boolean => (d.outAt < 0 || x < d.outAt) && !(d === win && x >= T_CROWN);
 
@@ -1275,6 +1284,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     });
     const nb = nbrs[epochAt(x)] as Map<number, [number, number]>;
     const linked = x >= T_JOIN + JOIN * 0.6;
+    brazos.fill(null);
     for (const d of dancers) {
       const v = d.view as View;
       const w = wNow[d.idx] as ReturnType<typeof where>;
@@ -1308,7 +1318,8 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       let rL = 1, rR = 1;
       const wob = wobbleOf(d, x);
       v.alert.visible = wob > 0.05;
-      const shL = { x: pr.x - 0.11 * pr.s, y: pr.y - 0.75 * pr.s }, shR = { x: pr.x + 0.11 * pr.s, y: pr.y - 0.75 * pr.s };
+      /** De la mano con los vecinos: el tambaleo ya está puesto en el cuerpo y en los brazos. */
+      let tomadas = false;
       if (d === win && x >= T_CROWN) {
         // La ganadora salta con los brazos arriba.
         y -= Math.abs(Math.sin(x * 7)) * 0.3 * pr.s;
@@ -1344,33 +1355,67 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
         const pair = nb.get(d.idx);
         const fo = fakeOut(d, x);
         if (pair && linked && fo < 0.3) {
+          // El que trastabilla se tambalea con el cuerpo, sin soltarse: los
+          // brazos apuntan desde los hombros ya girados y la mano sigue en la
+          // del vecino. Con el brazo sacudido aparte, la mano se iba lejos y la
+          // cadena quedaba como un palo de un cuerpo de largo (revisión de
+          // juegos, 20 de octubre de 2026).
+          tomadas = true;
+          if (wob > 0) v.body.rotation += Math.sin(wobblePh(d, x)) * wob;
+          const rb = v.body.rotation, hipY = y - 0.44 * pr.s;
+          const hombro = (sx: number): Pt => ({
+            x: pr.x + sx * pr.s * Math.cos(rb) + 0.31 * pr.s * Math.sin(rb),
+            y: hipY + sx * pr.s * Math.sin(rb) - 0.31 * pr.s * Math.cos(rb),
+          });
+          const shL = hombro(-0.11), shR = hombro(0.11);
           const pa = pNow[pair[0]] as { x: number; y: number; s: number }, pb = pNow[pair[1]] as { x: number; y: number; s: number };
           const ta = { x: pa.x, y: pa.y - 0.72 * pa.s }, tb = { x: pb.x, y: pb.y - 0.72 * pb.s };
-          const [tl, tr] = pair[0] === pair[1] ? [ta, ta] : ta.x <= tb.x ? [ta, tb] : [tb, ta];
-          aL = aim(Math.atan2(-(tl.x - shL.x), tl.y - shL.y), 0.35, 2.4);
-          aR = aim(Math.atan2(-(tr.x - shR.x), tr.y - shR.y), -2.4, -0.35);
+          /** El ángulo de un brazo hacia `t`, contado desde el cuerpo. */
+          const hacia = (t: Pt, sh: Pt): number => wrap(Math.atan2(-(t.x - sh.x), t.y - sh.y) - rb);
+          let tl = ta, tr = tb, il = pair[0], ir = pair[1];
           if (pair[0] === pair[1]) {
             // De las dos manos con la pareja: los dos brazos hacia el otro.
-            const toward = Math.atan2(-(ta.x - pr.x), ta.y - (pr.y - 0.75 * pr.s));
+            const toward = hacia(ta, { x: (shL.x + shR.x) / 2, y: (shL.y + shR.y) / 2 });
             aL = toward + 0.18;
             aR = toward - 0.18;
+          } else {
+            // Qué mano va con cada vecino: la que menos cruza el cuerpo. Con la
+            // izquierda siempre hacia el de más a la izquierda, al costado de una
+            // rueda chica, con los dos vecinos del mismo lado (uno más atrás y
+            // otro más adelante), un brazo colgaba sin tomar a nadie y la otra
+            // mano llevaba las dos cadenas, una como un palo de un cuerpo de largo.
+            const directo = cruce(hacia(ta, shL), 1) + cruce(hacia(tb, shR), -1);
+            const cambiado = cruce(hacia(tb, shL), 1) + cruce(hacia(ta, shR), -1);
+            if (cambiado < directo - 1e-6 || (Math.abs(cambiado - directo) <= 1e-6 && tb.x < ta.x)) [tl, tr, il, ir] = [tb, ta, pair[1], pair[0]];
+            aL = aim(hacia(tl, shL), 0.35, 2.4, -1.6);
+            aR = aim(hacia(tr, shR), -2.4, -0.35, 1.6);
+            // El brazo que cruza por delante del cuerpo va adelante: de espaldas
+            // queda detrás y asoma la mano.
+            if (facing && aL < 0.2) v.armL.zIndex = 2;
+            if (facing && aR > -0.2) v.armR.zIndex = 2;
           }
+          brazos[d.idx] = [il, ir];
           // La mano del lado del que se soltó y se va, cae: si no, lo seguía
           // señalando mientras caminaba (en la final, a la rival).
           const suelta = (i: number): number => {
             const o = dancers[i] as Dancer;
             return o.outAt >= 0 ? clamp((x - o.outAt) / 0.25, 0, 1) : 0;
           };
-          const [il, ir] = pair[0] === pair[1] || ta.x <= tb.x ? pair : [pair[1], pair[0]];
           aL += (0.3 - aL) * suelta(il);
           aR += (-0.3 - aR) * suelta(ir);
           // Con la rueda chica, cada brazo llega hasta la mitad del camino al
           // vecino, que estira el suyo: sin eso, la cadena hacía de palo.
-          const largo = (t: Pt, sh: Pt): number => clamp(Math.hypot(t.x - sh.x, t.y - sh.y) / 2 / (0.3 * pr.s), 1, 2);
+          const largo = (t: Pt, sh: Pt): number => clamp(Math.hypot(t.x - sh.x, t.y - sh.y) / 2 / (0.3 * pr.s), 1, ALCANCE);
           rL = 1 + (largo(tl, shL) - 1) * (1 - suelta(il));
           rR = 1 + (largo(tr, shR) - 1) * (1 - suelta(ir));
           aL += 0.1 * sb;
           aR += 0.1 * sb;
+          // Del tambaleo, a los brazos les llega un temblor y nada más.
+          if (wob > 0) {
+            const ph = wobblePh(d, x);
+            aL += Math.sin(ph * 1.3) * wob * 0.5;
+            aR -= Math.sin(ph * 1.1 + 1) * wob * 0.5;
+          }
         } else if (fo >= 0.3) {
           // Se soltó antes de tiempo: los brazos caen, con vergüenza.
           aL = 0.3;
@@ -1396,11 +1441,11 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
         v.armL.rotation = aL;
         v.armR.rotation = aR;
       }
-      if (wob > 0) {
-        const ph = (x - stopAt) * Math.PI * 2 * 3 + hash(d.idx, 53) * 6;
+      if (wob > 0 && !tomadas) {
+        // Sin nadie de la mano (se soltó, o en el corte falso), los brazos se
+        // sacuden con el cuerpo.
+        const ph = wobblePh(d, x);
         v.body.rotation += Math.sin(ph) * wob;
-        // Con el brazo estirado (rL), el mismo ángulo mueve la mano el doble:
-        // se divide, para que al tambalearse la cadena no se haga un palo.
         v.armL.rotation += (Math.sin(ph * 1.3) * wob * 3.2) / rL;
         v.armR.rotation -= (Math.sin(ph * 1.1 + 1) * wob * 3.2) / rR;
       }
@@ -1422,20 +1467,38 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   }
 
   /**
-   * El ángulo del brazo, entre `lo` y `hi`. Un vecino casi justo encima (los
-   * dos de un costado de una rueda chica, ver `shapeOf`) cae del otro lado de
-   * la vuelta, y con el `clamp` solo el brazo apuntaba para abajo, lejos de la
-   * mano que tenía que tomar: ese brazo sube hasta donde llega. Si el vecino
-   * está arriba pero del lado de adentro de la vertical, el brazo sube derecho
-   * y no hasta el límite de afuera: con el límite, la mano quedaba del otro
-   * lado de la cabeza y la cadena la cruzaba en horizontal, como una barra. Un
-   * vecino que queda cruzando el cuerpo sigue como antes: el brazo cuelga,
-   * porque subirlo lo dejaba señalando a nadie.
+   * El ángulo del brazo. De `lo` a `hi` va de su lado del cuerpo; hasta
+   * `cruza` puede cruzar por delante, de abajo hasta la horizontal, hacia un
+   * vecino que quedó del otro lado (al costado de una rueda chica los dos
+   * vecinos están del mismo lado: ver `cruce`). Antes no cruzaba: el brazo
+   * colgaba sin tomar a nadie y la cadena salía de la otra mano, como un palo.
+   *
+   * Un vecino casi justo encima (los dos de un costado de una rueda chica, ver
+   * `shapeOf`) cae del otro lado de la vuelta: ese brazo sube hasta donde
+   * llega. Si el vecino está arriba pero del lado de adentro de la vertical, el
+   * brazo sube derecho y no hasta el límite de afuera: con el límite, la mano
+   * quedaba del otro lado de la cabeza y la cadena la cruzaba en horizontal,
+   * como una barra.
    */
-  function aim(a: number, lo: number, hi: number): number {
-    if (a >= lo && a <= hi) return a;
+  function aim(a: number, lo: number, hi: number, cruza: number): number {
+    const min = lo > 0 ? cruza : lo, max = lo > 0 ? hi : cruza;
+    if (a >= min && a <= max) return a;
     const up = Math.abs(lo) > Math.abs(hi) ? lo : hi;
-    return Math.abs(a) > Math.PI - 0.8 ? (Math.sign(a) === Math.sign(up) ? up : Math.sign(up) * Math.PI) : clamp(a, lo, hi);
+    return Math.abs(a) > Math.PI - 0.8 ? (Math.sign(a) === Math.sign(up) ? up : Math.sign(up) * Math.PI) : lo > 0 ? min : max;
+  }
+
+  /**
+   * Cuánto tiene que cruzar el cuerpo un brazo para llegar al ángulo `a`: 0 si
+   * está de su lado (la izquierda, `lado` 1, de 0,35 a 2,4; la derecha, al
+   * revés), lo que pasa de ahí si cruza por delante, y mucho si no llega (por
+   * encima de la cabeza, del otro lado). Con esto se elige qué mano va con
+   * cada vecino.
+   */
+  function cruce(a: number, lado: 1 | -1): number {
+    const b = a * lado;
+    if (b >= 0.35 && b <= 2.4) return 0;
+    if (b >= -1.6 && b < 0.35) return 0.35 - b;
+    return 10;
   }
 
   /** Cuánto llega el brazo: estira el brazo y corre la mano hasta la punta. */
@@ -1475,14 +1538,27 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
         if (fakeOut(da, x) >= 0.3 || fakeOut(db, x) >= 0.3) continue;
         const pa = pNow[ia] as { x: number; y: number; s: number }, pb = pNow[ib] as { x: number; y: number; s: number };
         if (m > 3 && Math.hypot(pa.x - pb.x, (pa.y - pb.y) / flat) > maxGap) continue;
-        // La mano de cada uno que queda más cerca del otro.
+        // La mano que cada uno le da al otro (`brazos`), o la que le queda más
+        // cerca. Con la más cerca sola, al costado de una rueda chica una mano
+        // llevaba las dos cadenas y la otra colgaba.
         const ha = handsNow[ia] as { L: Pt; R: Pt }, hb = handsNow[ib] as { L: Pt; R: Pt };
-        const near = (h: { L: Pt; R: Pt }, to: Pt): Pt => (Math.hypot(h.L.x - to.x, h.L.y - to.y) <= Math.hypot(h.R.x - to.x, h.R.y - to.y) ? h.L : h.R);
-        const a = near(ha, { x: pb.x, y: pb.y - 0.7 * pb.s }), b = near(hb, { x: pa.x, y: pa.y - 0.7 * pa.s });
+        const mano = (i: number, j: number, h: { L: Pt; R: Pt }, to: Pt): Pt => {
+          const br = brazos[i];
+          if (br && br[0] !== br[1]) {
+            if (br[0] === j) return h.L;
+            if (br[1] === j) return h.R;
+          }
+          return Math.hypot(h.L.x - to.x, h.L.y - to.y) <= Math.hypot(h.R.x - to.x, h.R.y - to.y) ? h.L : h.R;
+        };
+        const a = mano(ia, ib, ha, { x: pb.x, y: pb.y - 0.7 * pb.s }), b = mano(ib, ia, hb, { x: pa.x, y: pa.y - 0.7 * pa.s });
         // Mientras la rueda se cierra, siguen de la mano los que ya lo estaban;
         // los vecinos nuevos se toman cuando las manos se alcanzan, no por
-        // encima del hueco del que salió (lo vio la revisión visual).
-        if (cerrando && !nbPrev?.get(ia)?.includes(ib) && Math.hypot(a.x - b.x, a.y - b.y) > 0.5 * Math.min(pa.s, pb.s)) continue;
+        // encima del hueco del que salió (lo vio la revisión visual). Mientras
+        // se arma, lo mismo con todos: en los primeros cuadros de la cadena los
+        // bailarines todavía venían de las filas, y un eslabón cruzaba la plaza
+        // como un palo de hasta dos cuerpos.
+        const nuevo = x < T_JOIN + JOIN || (cerrando && !nbPrev?.get(ia)?.includes(ib));
+        if (nuevo && Math.hypot(a.x - b.x, a.y - b.y) > 0.5 * Math.min(pa.s, pb.s)) continue;
         const wdt = 0.05 * Math.min(pa.s, pb.s);
         chain.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: wdt + 2 * G.k, color: INK, cap: "round" });
         chain.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: wdt, color: 0xc68a5c, cap: "round" });
