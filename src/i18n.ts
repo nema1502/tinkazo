@@ -73,6 +73,7 @@ export interface Dict {
   cTroCount: (n: number) => string;
   cTroEdge: (n: string) => string;
   cTroWobble: (n: string) => string;
+  cTroWobbleAny: string[];
   cTroDuel: (a: string, b: string) => string;
   cPinCount: (n: number) => string;
   cPinOut: (n: string) => string;
@@ -608,6 +609,7 @@ export const T: Record<Lang, Dict> = {
     gameTeleferico: "Teleférico",
     gameTombola: "Tómbola",
     gameTrompo: "Trompo",
+    cTroWobbleAny: ["¡Se tambalea!", "¡Cabecea!", "¡Ojo, se inclina!"],
     gameTotora: "Balsas de totora",
     gamePinata: "Piñata",
     gameOruro: "Carnaval de Oruro",
@@ -1745,6 +1747,7 @@ export const T: Record<Lang, Dict> = {
     gameTeleferico: "Cable car",
     gameTombola: "Ball drum",
     gameTrompo: "Spinning tops",
+    cTroWobbleAny: ["It's wobbling!", "It's staggering!", "Careful, it's leaning!"],
     gameTotora: "Reed boats",
     gamePinata: "Piñata",
     gameOruro: "Oruro Carnival",

@@ -94,6 +94,8 @@ interface Top {
   hitAt: number; hitPow: number; lean: number;
   /** Cuándo se prendió en blanco: solo en los golpes, no en los roces. */
   flashAt: number;
+  /** Cuándo cabeceó en su casi del mano a mano (en la hora del juego): se inclina y la cámara lo mira. */
+  casiAt: number;
   /** Las últimas posiciones para la estela, de a tres: x, y, altura. */
   trail: number[];
   gone: boolean;
@@ -164,7 +166,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       idx: i, x: Math.cos(a) * d, y: Math.sin(a) * d, vx: 0, vy: 0,
       ph: rng() * 7, rate: 18 + rng() * 8, wob: 0.03 + rng() * 0.03, wobPh: rng() * 7, tilt: 0,
       land: 0.2 + (i / Math.max(1, n)) * (T_THROW - 0.6), alive: true, out: -1, kind: "fall", fallDir: rng() < 0.5 ? -1 : 1,
-      z: 0, vz: 0, rot: 0, spin: 0, bounces: 0, groundAt: -1, hitAt: -9, hitPow: 0, lean: 0, flashAt: -9, trail: [], gone: false,
+      z: 0, vz: 0, rot: 0, spin: 0, bounces: 0, groundAt: -1, hitAt: -9, hitPow: 0, lean: 0, flashAt: -9, casiAt: -9, trail: [], gone: false,
     };
   });
   const byIdx = new Map(tops.map((q) => [q.idx, q]));
@@ -174,6 +176,9 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     win.x = 0.74;
     win.y = 0.2;
   }
+  // El casi del mano a mano: en cada embestida menos la última, cabecea uno de
+  // los dos, al azar. Por eso nadie sabe quién va a caer hasta el último choque.
+  const casiDe: (Top | null)[] = clashes.map((_, i) => (duo && i < clashes.length - 1 ? (rng() < 0.5 ? win : riv) : null));
 
   // Los golpes, sembrados: primero salen muchos, al final de a uno.
   const victims = rank.slice(2).reverse();
@@ -220,6 +225,8 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
   let stop = 0, slowUntil = -1, flashAt = -9, flashPow = 0;
   let clashIdx = 0, clashHits = 0;
   let wobbleSaid = false, recoverSaid = false, fewSaid = false, crowned = false;
+  /** Cuándo se endereza el que acaba de cabecear en su casi (-1: nadie). */
+  let recoverAt = -1;
   /** Las notas del trompo de la rival que se apaga: cuándo suena cada una, en segundos desde que se queda sin cuerda. */
   const APAGA = [0, 0.07, 0.16, 0.27, 0.4];
   let apagado = 0, acostada = false, humTick = -1;
@@ -535,6 +542,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     const last = clashIdx === clashes.length - 1;
     clashIdx++;
     clashHits++;
+    const casi = casiDe[clashIdx - 1] ?? null;
     let nx = riv.x - win.x, ny = riv.y - win.y;
     const d = Math.hypot(nx, ny) || 1;
     nx /= d;
@@ -559,6 +567,13 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     win.hitAt = riv.hitAt = win.flashAt = riv.flashAt = tFx;
     win.hitPow = riv.hitPow = pow;
     riv.wob += 0.025;
+    // El casi de esta embestida: cabecea el que le toca y después se endereza. En
+    // la tapada no se nombra a la ganadora: la línea es la misma para los dos.
+    if (casi) {
+      casi.casiAt = tAll;
+      recoverAt = tAll + 1.2;
+      say(story.arc === "tapada" ? t("cTroWobbleAny") : T[getLang()].cTroWobble(names[casi.idx] ?? ""), 0.85);
+    }
     impacts.push({ x: win.x + nx * rn, y: win.y + ny * rn, at: tFx, pow, nx, ny, seed: 400 + clashHits * 13, tier: 3 });
     flashAt = tFx;
     flashPow = last ? 0.34 : 0.24;
@@ -882,6 +897,11 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     }
     if (phase === "duel" && duo) {
       const td = tAll - T_DUEL;
+      if (recoverAt >= 0 && tAll >= recoverAt) {
+        recoverAt = -1;
+        say(t("cTroRecover"), 0.9);
+        beep(note(12), 0.12, "triangle", 0.05);
+      }
       // Si algo los separó y no llegaron a tocarse, el choque se da igual y queda anotado.
       if (clashIdx < clashes.length && td >= (clashes[clashIdx] as number) + GRACE) clash(true);
       if (story.arc === "susto" && !wobbleSaid && td >= duelDur * 0.5) {
@@ -1092,7 +1112,12 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       // siguiendo al último que salió volando, y el "¡mano a mano!" se decía
       // sobre una pantalla vacía (lo encontró la revisión visual).
       const recien = tAll - T_DUEL < 0.6;
-      if (wob) cam.lookAt(a.x, a.y - 30 * S.u(), 2.4, 4);
+      // La cámara va al que cabecea en su casi. En la tapada nunca busca a la ganadora.
+      const cabecea = [win, riv].find((q) => tAll - q.casiAt >= 0 && tAll - q.casiAt < 1 && !(story.arc === "tapada" && q === win));
+      if (cabecea) {
+        const p = toWorld(cabecea.x, cabecea.y);
+        cam.lookAt(p.x, p.y - 30 * S.u(), 2.4, 4);
+      } else if (wob) cam.lookAt(a.x, a.y - 30 * S.u(), 2.4, 4);
       else cam.lookAt((a.x + b.x) / 2, (a.y + b.y) / 2 - 20 * S.u(), slow ? 2.5 : tense ? 2.2 : 2.0, recien ? 9 : slow ? 6 : 3);
     } else {
       const a = toWorld(win.x, win.y);
@@ -1189,6 +1214,9 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
         let wob = q.wob;
         if (phase === "duel" && q === riv) wob += 0.05 * clamp((tAll - T_DUEL) / duelDur, 0, 1);
         if (story.arc === "susto" && q === win && wobbleSaid && !recoverSaid) wob = 0.32;
+        // El casi de cada embestida del mano a mano: se inclina fuerte un instante y se endereza.
+        const casi = tAll - q.casiAt;
+        if (casi >= 0 && casi < 1.2) wob += 0.45 * Math.min(1, casi / 0.15) * (1 - clamp((casi - 0.5) / 0.7, 0, 1));
         // El que se quedó sin cuerda cabecea cada vez más fuerte y más rápido.
         const dying = q.alive ? 0 : q.out / WOBBLE_T;
         wob += 0.55 * dying * dying;

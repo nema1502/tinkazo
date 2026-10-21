@@ -32,6 +32,8 @@ Los dos últimos antes del mano a mano salen siempre sacados. Los que salieron s
 
 **El mano a mano.** Quedan dos y se miden: dan vueltas uno alrededor del otro. Antes de cada choque se echan atrás y embisten a la vez, y chocan tres veces. Después del último choque, la rival se queda sin cuerda y se cae.
 
+**La duda del mano a mano.** En cada choque menos el último, cabecea uno de los dos, al azar y sembrado: se inclina fuerte un instante, la sala oye "¡Cabecea el de X!" y después "¡Y sigue bailando!". Así que el que más cabecea no siempre es el que pierde, y nadie sabe quién va a caer hasta el último choque. En la tapada la línea no nombra a nadie y la cámara nunca va a la ganadora.
+
 **Lo que hace que un golpe se sienta.** Lo que se aprendió del animé y de los juegos de pelea:
 - **La parada.** El juego se congela entre 55 y 110 milésimas en los golpes grandes. En la gresca del principio no hay parada, porque sería tartamudear: solo cuando quedan doce o menos y con medio segundo entre una y otra.
 - **El destello.** Los dos trompos se prenden en blanco un instante, y en el mano a mano toda la pantalla también, uno por segundo como mucho.
