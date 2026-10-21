@@ -18,24 +18,30 @@
  * - **Con 18, se ven 9 de cada 10** en los juegos que prometen 18 o más.
  * - Con 50, cuántos: se informa, sin aprobar ni rechazar todavía.
  *
- * La ruleta llega a 24 (con más pasa a la tómbola) y el resto, a 200: cada juego
- * se mide hasta lo que promete.
+ * Todos prometen hasta 200 (la ruleta, con más de veinticuatro, reúne grupos en
+ * cada gajo; con más de 200 pasa a la tómbola): cada juego se mide hasta lo que promete.
  *
  * Corre sin red, con la escena fija y el reloj en turbo.
  *
  * Uso:
  *   pnpm preview &
- *   node scripts/audit-identidad.mjs [juego|todos] [--base http://localhost:4173]
+ *   node scripts/audit-identidad.mjs [juego|todos] [--base http://localhost:4173] [--gente 8,18,50]
+ *
+ * `--gente` cambia las cantidades que se miden (por defecto 8, 18 y 50). La
+ * ruleta con más de veinticuatro se mide con `--gente 8,18,50,100,200`.
  */
 import { launch } from "./lib/browser.mjs";
 
 const TODOS = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien"];
 /**
- * Hasta cuántos promete cada juego hoy: la ruleta llega a 24, el resto a 200.
- * La carrera prometía ocho hasta el 17 de octubre de 2026; desde la
- * clasificatoria, todos se ven antes de que corran los ocho de la final.
+ * Hasta cuántos promete cada juego, si no es 200. Hoy ninguno tiene menos: la
+ * ruleta llega a 200 desde el 21 de octubre de 2026 (antes, 24). La carrera
+ * prometía ocho hasta el 17 de octubre de 2026; desde la clasificatoria, todos
+ * se ven antes de que corran los ocho de la final.
  */
-const PROMETE = { wheel: 24 };
+const PROMETE = {};
+/** Índice del ganador en la escena fija (`?pose=`): la cuarta persona de la lista. */
+const GANADOR = 3;
 const args = process.argv.slice(2);
 const opt = (name, def) => {
   const i = args.indexOf(name);
@@ -44,6 +50,7 @@ const opt = (name, def) => {
 const cual = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--")) ?? "todos";
 const juegos = cual === "todos" ? TODOS : [cual];
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
+const GENTE = opt("--gente", "8,18,50").split(",").map((x) => Number(x.trim())).filter((x) => x > 0);
 process.env.TINKAZO_GPU = "1";
 
 const TURBO = `(() => {
@@ -94,7 +101,7 @@ try {
     const tope = PROMETE[juego] ?? 200;
     console.log(`\n${juego} (promete hasta ${tope})`);
     const fila = { juego };
-    for (const gente of [8, 18, 50]) {
+    for (const gente of GENTE) {
       if (gente > tope) {
         fila[gente] = "—";
         continue;
@@ -114,6 +121,12 @@ try {
       if (gente === 8) check("con 8, todos se ven", vistos.length === r.est.n, detalle);
       else if (gente === 18) check("con 18, se ven 9 de cada 10", vistos.length >= Math.ceil(r.est.n * 0.9), detalle);
       else console.log(`  · con ${gente}: ${detalle}`);
+      // El ganador lo fija la escena fija: la cuarta persona (`W3` en src/main.ts).
+      // Tiene que leerse antes del cartel, si no nadie sabe de quién es.
+      if (gente >= 4) {
+        const v = r.est.vistos[GANADOR];
+        check(`con ${gente}: el nombre del ganador se lee antes del cartel`, v >= 0, v >= 0 ? `a los ${v.toFixed(1)} s, el cartel a los ${r.est.revelado.toFixed(1)} s` : "no se leyó antes del cartel");
+      }
     }
     resumen.push(fila);
   }
@@ -122,8 +135,8 @@ try {
 }
 
 console.log("\nCuántos se ven antes del ganador:");
-console.log("  juego        con 8   con 18  con 50");
-for (const f of resumen) console.log(`  ${f.juego.padEnd(12)} ${String(f[8] ?? "").padStart(5)}  ${String(f[18] ?? "").padStart(6)}  ${String(f[50] ?? "").padStart(6)}`);
+console.log(`  juego       ${GENTE.map((g) => `con ${g}`.padStart(8)).join("")}`);
+for (const f of resumen) console.log(`  ${f.juego.padEnd(12)}${GENTE.map((g) => String(f[g] ?? "").padStart(8)).join("")}`);
 const malos = checks.filter((c) => !c.ok);
 console.log(`\n${malos.length ? "RECHAZADO" : "APROBADO"}: ${checks.length - malos.length}/${checks.length} comprobaciones`);
 process.exit(malos.length ? 1 : 0);
