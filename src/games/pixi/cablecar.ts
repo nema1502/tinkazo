@@ -321,15 +321,20 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     boardView = null;
     prepared.clear();
     soloTags.clear();
-    const top = S.top() + 18 * k;
-    hudLabel = S.text("", { fontSize: 14 * k, fontWeight: "800", fill: CREAM });
+    // Los contadores van en la unidad de la pantalla (`hu`), no en la del mundo:
+    // en el celular la del mundo es el ancho sobre 720, y dejaba "QUEDAN" en 8 px
+    // y la estación en 9 (evaluador visual, 21 de octubre de 2026). En una
+    // pantalla acostada las dos son la misma.
+    const hu = S.u();
+    const top = S.top() + 18 * hu;
+    hudLabel = S.text("", { fontSize: 14 * hu, fontWeight: "800", fill: CREAM });
     hudLabel.alpha = 0.8;
-    hudLabel.position.set(22 * k, top);
-    hudNum = S.text("", { fontSize: 52 * k, fontWeight: "900", fill: YELLOW, stroke: { color: INK, width: 6 * k } });
-    hudNum.position.set(22 * k, top + 18 * k);
-    hudStation = S.text("", { fontSize: 16 * k, fontWeight: "800", fill: CREAM });
+    hudLabel.position.set(22 * hu, top);
+    hudNum = S.text("", { fontSize: 52 * hu, fontWeight: "900", fill: YELLOW, stroke: { color: INK, width: 6 * hu } });
+    hudNum.position.set(22 * hu, top + 18 * hu);
+    hudStation = S.text("", { fontSize: 16 * hu, fontWeight: "800", fill: CREAM });
     hudStation.alpha = 0.85;
-    hudStation.position.set(22 * k, top + 82 * k);
+    hudStation.position.set(22 * hu, top + 82 * hu);
     // La ronda ya está arriba, en la barra del estadio: abajo se encimaba con las cabinas.
     S.hud.addChild(hudLabel, hudNum, hudStation);
     void span;
@@ -657,6 +662,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) * Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0));
   /** Cuántos píxeles de pantalla mide una unidad del mundo en este cuadro. */
   const zoomNow = (): number => cam.toScreen(1, 0, S.sw(), S.sh()).x - cam.toScreen(0, 0, S.sw(), S.sh()).x;
+  /** Los contadores de arriba a la izquierda, en la pantalla: el andén y los nombres no se les encima. */
+  const hudBox = (): Box => ({ x0: 0, y0: S.top(), x1: 200 * S.u(), y1: S.top() + 140 * S.u() });
   /** Dónde cae en pantalla el cuerpo de una cabina, sin el colgante ni la bandera. */
   function cabBox(cab: number, x: number): Box | null {
     const p = cabPoint(cab, x);
@@ -779,7 +786,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       // La bandera, el rótulo y el "−N".
       { r: area(sp.x - 180 * k, sp.y - 185 * k, sp.x + 35 * k, sp.y - 40 * k), w: 1 },
       // Los contadores de arriba a la izquierda.
-      { r: { x0: 0, y0: S.top(), x1: 200 * k, y1: S.top() + 140 * k }, w: 2 },
+      { r: hudBox(), w: 2 },
     ];
     // Las cabinas que siguen con gente; las que se vaciaron se van cable abajo.
     for (let cab = 0; cab < C; cab++) {
@@ -947,8 +954,9 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     const seen = new Set<number>();
     // El andén, si está, cuenta como un nombre ya puesto: no se le encima nadie.
     const placed: Box[] = boardView ? [boardView.box] : [];
-    // Los rótulos de las estaciones también tapan, la de la parada y la siguiente.
-    placed.push(...stationBoxes(W, H));
+    // Los rótulos de las estaciones también tapan, la de la parada y la siguiente,
+    // y los contadores de arriba a la izquierda.
+    placed.push(...stationBoxes(W, H), hudBox());
     if (few && tAll < T_CROWN) {
       // Más grandes cuando quedan dos: es el momento que decide.
       const quedan = P.leftAt(tAll);
@@ -1293,13 +1301,14 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     // cabina se apilan.
     const firstStop = stops[0]?.t0 ?? T_RUN;
     const roll = S.batch(n, tAll, 0.3, Math.min(T_BOARD + 1.8, firstStop - 0.3));
+    const hud = hudBox();
     S.tags(names, roll, (i) => {
       const cab = cabinOf.get(i);
       if (cab === undefined) return null;
       const p = cabPoint(cab, tAll);
       if (p.alpha < 0.5) return null;
       return cam.toScreen(p.x, p.y - 22 * G.k, S.sw(), S.sh());
-    }, stations.map((s) => s.tag.getBounds()));
+    }, [...stations.map((s) => s.tag.getBounds()), { x: hud.x0, y: hud.y0, width: hud.x1 - hud.x0, height: hud.y1 - hud.y0 }]);
 
     // El andén de la parada, en la pantalla, y lo que se mueve suelto en el
     // mundo: los que saltan sin renglón, el embarque, las chispas.
