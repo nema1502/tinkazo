@@ -55,6 +55,6 @@ export function initOnboarding(): void {
   // aprieta "Sellar" sola, y eso no cuenta: "Ver una demo primero" borraba la
   // bienvenida para siempre (revisión del 16 de octubre de 2026).
   $("btn-freeze").addEventListener("click", () => {
-    if (!params.has("demo")) cerrar();
+    if (!params.has("demo") && $("btn-freeze").getAttribute("aria-disabled") !== "true") cerrar();
   });
 }

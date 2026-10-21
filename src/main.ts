@@ -14,6 +14,7 @@ import { initWalletUI } from "./ui/wallet-ui";
 import { initOnboarding } from "./ui/onboarding";
 import { musicOn, toggleMusic } from "./music";
 import { rotateWords } from "./ui/rotar";
+import { initMenuMas } from "./ui/menu";
 
 // `?theme=light|dark` fuerza el tema (capturas).
 const themeParam = params.get("theme");
@@ -33,7 +34,11 @@ onLangChange(() => {
 $("l-es").addEventListener("click", () => chooseLang("es"));
 $("l-en").addEventListener("click", () => chooseLang("en"));
 $("btn-sample").addEventListener("click", loadSample);
-$("btn-freeze").addEventListener("click", () => void freeze());
+// Sin cuenta, el botón de sellar queda con aria-disabled (lo pone `applyGate`): el clic no hace nada.
+$("btn-freeze").addEventListener("click", () => {
+  if ($("btn-freeze").getAttribute("aria-disabled") === "true") return;
+  void freeze();
+});
 // El ritmo del show. Se guarda, porque quien organiza suele querer siempre el
 // mismo, y no cambia el resultado: el ganador ya estaba decidido.
 const paceSel = $<HTMLSelectElement>("pace");
@@ -111,6 +116,7 @@ montarPremios();
 initVistas();
 initOnboarding();
 initWalletUI();
+initMenuMas();
 refreshFreezeLabel();
 // Los pasos de arriba y la barra de "lo que sigue", con la herramienta ya armada.
 initSiguiente({ segundos: secondsToRound });

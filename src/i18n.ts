@@ -279,6 +279,8 @@ export const T: Record<Lang, Dict> = {
     gateTitle: "Conectá tu cuenta para sortear",
     gateBody: "El sorteo queda grabado en Stellar bajo tu cuenta, y eso es lo que deja que cualquiera compruebe después que la lista era esa y no otra. Sin cuenta no hay a quién atribuirlo.",
     gateAction: "Conectar cuenta",
+    // Debajo del botón de sellar cuando no hay cuenta: dice qué falta, y el botón queda con aria-disabled.
+    sellarSinCuenta: "Conectá tu cuenta para sellar",
     gateFoot: "Con Google no instalás nada. Tus participantes siguen sin necesitar cuenta ni aplicación: la cuenta es tuya, no de ellos.",
     histTitle: "Tus sorteos",
     histCount: "{n} con tu cuenta",
@@ -920,6 +922,8 @@ export const T: Record<Lang, Dict> = {
     navSortear: "Sortear",
     navComo: "Cómo funciona",
     navMis: "Mis sorteos",
+    // En el celular, lo que no entra en la fila de la cabecera (Juegos, Cómo funciona, Seguridad, Precios).
+    navMas: "Más",
     ctaDemo: "Ver una demo",
     pjKicker: "El show",
     pjT: "Doce juegos. Ninguno decide nada.",
@@ -1310,7 +1314,7 @@ export const T: Record<Lang, Dict> = {
     evLead: "Estos sorteos se hicieron con Tinkazo. Tu celular rehace, sin la cadena, lo que se puede rehacer: la prueba de cada ronda pública, el ganador y la huella de la lista.",
     evListT: "Los sorteos",
     evNota: "Lo que atestigua la cadena (que la lista no cambió desde el sello) se comprueba en el enlace de cada sorteo.",
-    connectWallet: "Entrar", disconnect: "Salir", cancel: "Cancelar", connecting: "Conectando…",
+    disconnect: "Salir", cancel: "Cancelar", connecting: "Conectando…",
     connectTitle: "¿Quién organiza?",
     connectLead: "Conectá una cuenta y el sorteo queda grabado en Stellar",
     freighterHint: "La wallet del navegador. Aprobás vos, nadie más.",
@@ -1467,6 +1471,8 @@ export const T: Record<Lang, Dict> = {
     gateTitle: "Connect your account to run a draw",
     gateBody: "The draw is recorded on Stellar under your account, and that is what lets anyone check afterwards that the list was that one and not another. With no account there is nobody to attribute it to.",
     gateAction: "Connect account",
+    // Under the seal button when there is no account: it says what is missing, and the button is aria-disabled.
+    sellarSinCuenta: "Connect your account to seal",
     gateFoot: "With Google you install nothing. Your participants still need no account and no app: the account is yours, not theirs.",
     histTitle: "Your draws",
     histCount: "{n} on your account",
@@ -2081,6 +2087,8 @@ export const T: Record<Lang, Dict> = {
     navSortear: "Draw",
     navComo: "How it works",
     navMis: "My draws",
+    // On a phone, what does not fit in the header row (Games, How it works, Security, Pricing).
+    navMas: "More",
     ctaDemo: "Watch a demo",
     pjKicker: "The show",
     pjT: "Twelve games. None of them decides anything.",
@@ -2470,7 +2478,7 @@ export const T: Record<Lang, Dict> = {
     evLead: "These draws were made with Tinkazo. Without the chain, your phone redoes what can be redone: each public round's proof, the winner and the list's fingerprint.",
     evListT: "The draws",
     evNota: "What the chain attests (that the list didn't change since it was sealed) is checked in each draw's link.",
-    connectWallet: "Sign in", disconnect: "Sign out", cancel: "Cancel", connecting: "Connecting…",
+    disconnect: "Sign out", cancel: "Cancel", connecting: "Connecting…",
     connectTitle: "Who's running this?",
     connectLead: "Connect an account and the draw gets recorded on Stellar",
     freighterHint: "The browser wallet. You approve it, nobody else.",
