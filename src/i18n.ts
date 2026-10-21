@@ -130,6 +130,8 @@ export interface Dict {
   cOruDanza: (d: string) => string;
   cOruFratTitle: (art: string, name: string) => string;
   cOruRosterSub: (dance: string, c: number) => string;
+  /** La llegada nombra a la fraternidad: "nuestra fraternidad llegó hasta el Socavón" (sección 7.8). */
+  cOruArriveFrat: (art: string, name: string) => string;
   cLuzCount: (n: number) => string;
   cLuzCaught: (n: string) => string;
   cLuzMany: (k: number) => string;
@@ -551,7 +553,6 @@ export const T: Record<Lang, Dict> = {
     // --- La Entrada (Carnaval de Oruro): el desfile por fraternidades hasta el Socavón.
     cOruLast: ["¡Ya se ve el Socavón!", "¡La recta final de la entrada!", "¡Al Socavón!"],
     cOruDuel: (a, b) => pick([`¡Contrapunto entre ${a} ${yE(b)} ${b}!`, `¡${a} ${yE(b)} ${b}, cara a cara!`]),
-    cOruArrive: ["¡LLEGÓ AL SOCAVÓN!", "¡SUENAN LAS CAMPANAS!", "¡LLEGÓ CON CAMPANAS!"],
     cOruLeft: "EN LA ENTRADA",
     cOruBlock: (k, of) => `CUADRA ${k} DE ${of}`,
     // --- Luz roja, luz verde. El juego de patio, con el Faro que mira.
@@ -663,6 +664,10 @@ export const T: Record<Lang, Dict> = {
     cOruDanza: (d) => ({ diablada: "Diablada", morenada: "Morenada", caporales: "Caporales", tinkus: "Tinkus", llamerada: "Llamerada" })[d] ?? d,
     cOruFratTitle: (art, name) => `${art} ${name}`,
     cOruRosterSub: (dance, c) => `${dance} · ${c} ${c === 1 ? "bailarín" : "bailarines"}`,
+    cOruArriveFrat: (art, name) => {
+      const Art = `${art.charAt(0).toUpperCase()}${art.slice(1)}`;
+      return pick([`¡${Art} ${name} llegaron al Socavón!`, `¡${Art} ${name}, hasta el Socavón!`, `¡Campanas para ${art} ${name}: llegaron al Socavón!`]);
+    },
     gameLuz: "Luz roja, luz verde",
     gameCho: "Chovena",
     cPasSpread: ["¡Se tiende el aguayo!", "¡Aguayo al piso!", "¡A ver ese aguayo!"],
@@ -1755,7 +1760,6 @@ export const T: Record<Lang, Dict> = {
     cSapAlmost: "Almost!",
     cOruLast: ["The Socavón is in sight!", "The final stretch of the entrada!", "On to the Socavón!"],
     cOruDuel: (a, b) => pick([`A face-off between ${a} and ${b}!`, `${a} and ${b}, face to face!`]),
-    cOruArrive: ["TO THE SOCAVÓN!", "THE BELLS RING!", "ARRIVED, WITH BELLS!"],
     cOruLeft: "IN THE ENTRADA",
     cLuzIntro: ["Everyone to the line!", "Take your places!", "Face the Lighthouse!"],
     cLuzCount: (n) => (n === 2 ? "Two runners face the Lighthouse!" : `${n} runners face the Lighthouse!`),
@@ -1862,6 +1866,7 @@ export const T: Record<Lang, Dict> = {
     cOruDanza: (d) => ({ diablada: "Diablada", morenada: "Morenada", caporales: "Caporales", tinkus: "Tinkus", llamerada: "Llamerada" })[d] ?? d,
     cOruFratTitle: (_art, name) => `the ${name}`,
     cOruRosterSub: (dance, c) => `${dance} · ${c} ${c === 1 ? "dancer" : "dancers"}`,
+    cOruArriveFrat: (_art, name) => pick([`The ${name} made it to the Socavón!`, `All the way to the Socavón: the ${name}!`, `Bells for the ${name}: they reached the Socavón!`]),
     gameLuz: "Red light, green light",
     gameCho: "Chovena",
     cPasSpread: ["The cloth goes down!", "Aguayo on the floor!", "Look at that aguayo!"],

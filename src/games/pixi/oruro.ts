@@ -840,14 +840,14 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
         }
       });
       once("arrive", tAll >= P.T_ARRIVE, () => {
-        say(t("cOruArrive"), 0.95);
+        say(L.cOruArriveFrat(winFrat.article, winFrat.name), 0.95);
         // La campana de la llegada, con cuerpo: una sola nota sonaba a timbre.
         beep(note(12), 0.9, "triangle", 0.06);
         beep(note(17), 0.9, "triangle", 0.04);
         beep(note(19), 0.9, "triangle", 0.03);
       });
     } else {
-      once("arrive", tAll >= P.T_ARRIVE, () => say(t("cOruArrive"), 0.95));
+      once("arrive", tAll >= P.T_ARRIVE, () => say(L.cOruArriveFrat(winFrat.article, winFrat.name), 0.95));
     }
   }
   /** Cuándo cae sentado el que pierde el contrapunto (-1 sin contrapunto). */
