@@ -1059,10 +1059,16 @@ export async function llamasPixi(
   }
   /** Un poco más grande que lo que se mira: lugar para el empuje y el golpe de la cámara sin cortarlo. */
   const holgado = (c: Caja): Caja => crecer(c, c.w * 0.05, c.h * 0.05);
+  /**
+   * Una zona con al menos un cuarto del alto de la pantalla, estirada hacia
+   * arriba: en una pantalla bajísima, entre el cartel y el relator no quedaba
+   * lugar, y la cámara se habría alejado hasta dejar todo como un punto.
+   */
+  const conAlto = (z: Zona): Zona => ({ ...z, y0: Math.max(0, Math.min(z.y0, z.y1 - 0.25 * G.sh)) });
   /** Donde se ve la carrera: debajo de la barra del recorrido, encima del relator y sin pegarse a los costados. */
-  const zonaCarrera = (): Zona => ({ x0: 8 * G.u, y0: S.top() + 30 * G.u, x1: G.sw - 8 * G.u, y1: G.sh - S.bottom() - 6 * G.u });
+  const zonaCarrera = (): Zona => conAlto({ x0: 8 * G.u, y0: S.top() + 30 * G.u, x1: G.sw - 8 * G.u, y1: G.sh - S.bottom() - 6 * G.u });
   /** Donde va todo en la corona: debajo del cartel, encima del relator y a `m` de los costados. */
-  const zonaCorona = (m: number): Zona => ({ x0: m, y0: S.placaBajo(winners.length) + m, x1: G.sw - m, y1: G.sh - S.bottom() - m });
+  const zonaCorona = (m: number): Zona => conAlto({ x0: m, y0: S.placaBajo(winners.length) + m, x1: G.sw - m, y1: G.sh - S.bottom() - m });
 
   /**
    * La cámara de todos los días, sin dejar el primer carril debajo de la

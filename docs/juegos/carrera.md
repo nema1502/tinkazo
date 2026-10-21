@@ -1,6 +1,6 @@
 # La carrera de llamas
 
-Ocho llamas por la cordillera, con hinchada, relator y foto de llegada. Es el juego con el que nació Tinkazo. Con más de ocho personas, primero la clasificatoria: aparecen todas con su llama, se van tachando en oleadas y las ocho de la final bajan a la pista.
+Hasta ocho llamas por la cordillera, con hinchada, relator y foto de llegada. Es el juego con el que nació Tinkazo. Con más de ocho personas, primero la clasificatoria: aparecen todas con su llama, se van tachando en oleadas y las ocho de la final bajan a la pista.
 
 **Identificador:** `race` · **Probarlo:** `/?demo=race` (sorteo real), `/?pose=1` (escena fija, sin red), `/?pose=1&n=3` (con tres personas).
 
