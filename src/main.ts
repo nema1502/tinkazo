@@ -1,7 +1,7 @@
 import "./styles.css";
 import { $ } from "./dom";
 import { chooseLang, initialLang, onLangChange, setLang, t } from "./i18n";
-import { SAMPLE, app, currentPace, paceSeconds, params, setPace, type Game, type Pace } from "./state";
+import { SAMPLE, app, currentPace, paceSeconds, paraCompartir, params, setPace, setParaCompartir, type Game, type Pace } from "./state";
 import { soundLabel, toggleSound, unlockAudioOnGesture } from "./sound";
 import { bindParticipants, loadSample, renderNames, reponerBorrador } from "./ui/participants";
 import { GAME_BUTTONS, cambiarJuego, copyRules, freeze, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
@@ -119,6 +119,20 @@ $("btn-music").addEventListener("click", () => {
 });
 musicLabel();
 onLangChange(musicLabel);
+/** El modo para compartir: más contraste y nombres más grandes en el show, por esta pestaña. */
+const compartirLabel = (): void => {
+  const on = paraCompartir();
+  const b = $("btn-compartir");
+  b.textContent = t(on ? "compartirOn" : "compartirOff");
+  b.title = t("compartirTip");
+  b.setAttribute("aria-pressed", String(on));
+};
+$("btn-compartir").addEventListener("click", () => {
+  setParaCompartir(!paraCompartir());
+  compartirLabel();
+});
+compartirLabel();
+onLangChange(compartirLabel);
 $("st-skip").addEventListener("click", skipGame);
 bindParticipants();
 montarPremios();
