@@ -22,7 +22,7 @@ También es el primero que nació directamente en el motor nuevo, con la cámara
 3. Embiste.
 
 El golpe pasa cuando los dos se tocan de verdad, nunca antes ni a distancia. Hay tres maneras de salir:
-- **Sacado**, la mitad: vuela girando fuera de la tiza, pica dos veces en el piso levantando tierra y queda acostado.
+- **Sacado**, la mitad: vuela girando fuera de la tiza, pica dos veces en el piso levantando tierra y queda acostado. El relator lo llama "¡Picazo de X!", una palabra prestada: en Tarija, en el juego de la moneda, el picazo es el golpe de la púa contra la moneda, no contra otro trompo (El País, 2021). Acá se toma para el golpe entre trompos y no pretende ser el nombre de ese golpe.
 - **De refilón**, tres de cada diez: el golpe entra torcido, el trompo no sale pero queda cabeceando y se acuesta.
 - **Sin cuerda**, el resto: cabecea cada vez más fuerte y se viene abajo solo.
 
