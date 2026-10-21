@@ -68,6 +68,25 @@ Los momentos de cámara de cada juego:
 
 En un celular, el navegador puede soltar el contexto WebGL con la pestaña oculta, y el cartel del ganador (texto dibujado a textura) podría volver en blanco. PixiJS 8 ya cancela el evento de pérdida y, al restaurarse, descarta sus texturas de GPU para subirlas de nuevo (`node_modules/pixi.js/lib/rendering/renderers/gl/context/GlContextSystem.mjs` y `.../gl/texture/GlTextureSystem.mjs`), pero no rearma lo que se dibujó una vez ni pide un cuadro. `pixi/recover.ts` distingue dos caminos: al volver a la pestaña con el contexto sano (`visibilitychange`, con 250 ms de margen) solo se rearman los carteles y se dibuja un cuadro; al restaurarse el contexto (`webglcontextrestored`, nunca descartado) se hace el cambio de tamaño completo, con los rearmados de cada juego, conservando la pose de la cámara. Si la pestaña vuelve con el contexto aún perdido, espera a la restauración. Es una hipótesis: no se pudo verificar en un celular real.
 
+## Pantalla grande, Zoom y compartir
+
+Desde el 20 de octubre de 2026 el show se mira en cuatro lugares: un proyector o una TV, una pantalla compartida en Zoom (que la sala recibe a 720 de alto y comprimido), una laptop y un celular. Cambian la resolución y la compresión, no el sorteo. Tres reglas para que se lea en todos:
+
+- **Letra que se lee en 720.** Lo que la sala tiene que leer (los nombres, los puestos, los avisos, el cartel) tiene al menos 16 px en un diseño de 720. `S.letra(px)` en `stage.ts` escala esa cifra con la pantalla, hasta el doble (1440 y más), y un 20 % más con el modo para compartir.
+- **Contraste.** Cada texto sobre el fondo animado pasa 4,5 a 1, o lleva un contorno oscuro. Los puestos y los dorsales de la carrera van en crema con contorno. Las etiquetas de los que no ganaron casi no se apagan (0,95, no más): con menos, el nombre no llega a 4,5 a 1 y en Zoom se pierde. El apagado de la tabla llega a 0,75.
+- **Sin destellos.** Ninguno pasa de tres cambios fuertes de luminosidad por segundo (WCAG 2.3.1). `scripts/audit-pantalla.mjs` lo mide con la pantalla entera, a 64 cuadros por segundo.
+
+**Modo para compartir.** El botón "Para compartir" está en la fila de ajustes del sorteo, junto a sonido y música. Prendido, los chips llevan un 20 % más de letra y un contorno más grueso, los nombres del cartel crecen un 20 % y cae la mitad del papel picado. Se recuerda en la pestaña (`sessionStorage`, clave `tinkazo.compartir`); `?compartir=1` lo prende al abrir. Lo que se elige en el sorteo vale para el próximo show: no cambia uno que ya corre. No cambia el ganador, el ritmo ni el orden de los juegos.
+
+**Zoom de emoción** (`camera.ts` y `zoom-emocion.ts`). Un juego le pide a la cámara dos cosas:
+
+- `tension(dur, amt)`: un empuje lento, `amt` veces el acercamiento (0,06 es un 6 %), durante `dur` segundos de juego, con curva suave, hasta el golpe.
+- `golpe(amt, hold, vuelta)`: en el instante en que el show revela al ganador, un acercamiento de `amt` que llega en una décima de segundo, se sostiene `hold` segundos y vuelve suave en `vuelta`. La vuelta se lleva también el empuje, sin escalón. Devuelve la hora de la cámara, para anotarla.
+
+El reloj de la cámara es la suma de los `dt` del juego, como el sacudón: la misma ronda se mira igual (lo cubre `audit-rigor`). El golpe no desenfoca, para que los nombres queden nítidos en el acercamiento. La carrera (`pixi-race.ts`) empuja desde el 80 % de la carrera, o desde la foto del duelo, y da el golpe en la meta (`finishNow`). El sapo (`sapo.ts`) lo da en la caída que decide (`crown`). Los demás juegos todavía no lo tienen: cuando lo tengan, anotan `S.mark("golpe", …)` con la hora que devuelve `cam.golpe()`, y `audit-emocion` comprueba que el pico del zoom caiga en el golpe, a menos de 0,35 s después.
+
+**Medir la pantalla** (`scripts/audit-pantalla.mjs`). Por juego y resolución, con el reloj cambiado: los destellos por segundo, el tamaño de los nombres, las etiquetas y el cartel (mediana y percentil 10 de los cuadros), el contraste de cada texto contra el anillo de píxeles que lo rodea, el grosor de los trazos, y el cartel en PNG. Con `--clip` saca un tramo de 3,5 segundos alrededor del golpe, a 31 cuadros por segundo, lo comprime como Zoom (960×540, libx264 a 1,5 Mbps) y guarda el cuadro del golpe.
+
 ## Auditarlo
 
 Los cuatro auditores y el script de capturas miran el motor nuevo por defecto, con la placa de video (`TINKAZO_GPU=1`): sin placa, Chrome dibuja WebGL por software a unos diecisiete cuadros por segundo, y medir la fluidez así sería medir la computadora del auditor. Con `--motor clasico` miran el anterior.
