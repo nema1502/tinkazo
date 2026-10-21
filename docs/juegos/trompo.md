@@ -54,7 +54,7 @@ Los arcos del director de emoción se ven así:
 | Susto | En el mano a mano el trompo ganador cabecea, casi se cae ("¡cabecea el de fulano!") y se endereza |
 | Remontada | A mitad de los choques le pegan y lo mandan contra la tiza: la roza y vuelve |
 | Duelo | El mano a mano dura cuatro choques en vez de tres |
-| Tapada | Baila callado contra el borde y la cámara nunca lo busca |
+| Tapada | Baila callado contra el borde, en un lugar que cambia de un sorteo a otro, y la cámara nunca lo busca |
 
 ## Cómo escala
 

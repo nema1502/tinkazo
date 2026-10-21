@@ -172,9 +172,13 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
   const byIdx = new Map(tops.map((q) => [q.idx, q]));
   const win = byIdx.get(winnerIdx) as Top;
   const riv = byIdx.get(rivalIdx) as Top;
+  // En la tapada la ganadora baila contra el borde, pero no siempre en el mismo
+  // lugar: si siempre estuviera ahí, la sala lo aprendería.
+  const angTapa = story.arc === "tapada" ? rng() * Math.PI * 2 : 0;
+  const tapaX = Math.cos(angTapa) * 0.74, tapaY = Math.sin(angTapa) * 0.74;
   if (story.arc === "tapada") {
-    win.x = 0.74;
-    win.y = 0.2;
+    win.x = tapaX;
+    win.y = tapaY;
   }
   // El casi del mano a mano: en cada embestida menos la última, cabecea uno de
   // los dos, al azar. Por eso nadie sabe quién va a caer hasta el último choque.
@@ -717,8 +721,8 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
         q.vx += (Math.sin(tAll * 1.3 + q.wobPh) * 0.5 - q.x * 0.35) * dt;
         q.vy += (Math.cos(tAll * 1.1 + q.ph) * 0.5 - q.y * 0.35) * dt;
         if (story.arc === "tapada" && q === win && phase !== "duel") {
-          q.vx += (0.74 - q.x) * 1.2 * dt;
-          q.vy += (0.2 - q.y) * 1.2 * dt;
+          q.vx += (tapaX - q.x) * 1.2 * dt;
+          q.vy += (tapaY - q.y) * 1.2 * dt;
         }
         // Al que están por golpear se le va la pierna: frena, y el golpe lo agarra quieto.
         const damp = victimOf.has(q) && q !== win ? 0.955 : 0.975;
