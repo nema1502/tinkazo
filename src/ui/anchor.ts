@@ -191,11 +191,44 @@ async function submitElsewhere(
  * wallets es el de siempre, porque ahí lo paga quien firma.
  */
 async function costoVisible(tx: Parameters<typeof feeInXlm>[0]): Promise<string | undefined> {
+  // Justo antes del paso de firmar: de quién firma dependen el costo y cómo se dice el paso.
+  const { mandaSola } = await quienFirma();
+  return mandaSola ? undefined : feeInXlm(tx);
+}
+
+/**
+ * La cuenta que sella o sortea firma sin abrir ninguna ventana.
+ *
+ * "Aprobá la operación en tu billetera…" solo tiene sentido si se abre una
+ * billetera para aprobar: Freighter. La cuenta de prueba firma en el navegador
+ * y Pollar firma y manda desde su servidor, sin ninguna ventana; con ellas la
+ * pantalla decía "Aprobá…" y "Comisión de la red: hasta 0,81 XLM" durante unos
+ * doce segundos, y la persona buscaba una ventana que no existía (buscador de
+ * detalles, D05; medido el 21 de octubre de 2026 con la cuenta de prueba: de
+ * los 2,7 a los 9,4 s del sello). Con ellas, el paso de firmar se dice como lo
+ * que es, "Mandando a la red…", sin el costo ni la palabra XLM (docs/ux.md,
+ * §7). Con Freighter sigue igual, con la comisión, que paga quien aprueba.
+ *
+ * Los pasos (`AnchorStep`) no cambian: cambia cómo se dicen (`stepLabel`,
+ * `showTxStatus`). Hasta saber qué cuenta es, se supone Freighter: decir
+ * "Aprobá" de más confunde menos que no decirlo con una ventana esperando.
+ */
+let firmaSinVentana = false;
+
+/**
+ * Mira qué cuenta va a firmar y lo anota (`firmaSinVentana`). Lo llama
+ * `costoVisible`, justo antes del paso de firmar. Devuelve si es de las que
+ * firman y mandan solas (Pollar), que no muestran la comisión.
+ */
+export async function quienFirma(): Promise<{ mandaSola: boolean }> {
   const [{ activeWallet }, { submitsItself }] = await Promise.all([
     import("../stellar/wallet-lite"),
     import("../stellar/wallet-pollar"),
   ]);
-  return submitsItself(activeWallet()) ? undefined : feeInXlm(tx);
+  const w = activeWallet();
+  const mandaSola = submitsItself(w);
+  firmaSinVentana = !!w && (w.kind === "guest" || mandaSola);
+  return { mandaSola };
 }
 
 /** Cuándo se le pidió fondos al grifo a cada cuenta, para no insistir. */
@@ -380,7 +413,7 @@ export function stepLabel(step: AnchorStep): string {
     step === "simulating"
       ? "txSimulating"
       : step === "signing"
-        ? "txSigning"
+        ? firmaSinVentana ? "txSending" : "txSigning"
         : step === "sending"
           ? "txSending"
           : step === "funding"
@@ -401,8 +434,8 @@ export function showTxStatus(containerId: string, step: AnchorStep, detail?: str
   host.style.display = "block";
   host.className = step === "confirmed" ? "txstatus ok" : "txstatus";
   host.textContent = stepLabel(step);
-  if (step === "signing" && detail) {
-    // El costo antes de firmar, no después.
+  if (step === "signing" && detail && !firmaSinVentana) {
+    // El costo antes de firmar, no después. Solo a quien aprueba en su billetera.
     host.textContent = `${stepLabel(step)} ${t("txCost")} ${detail}`;
     return;
   }
