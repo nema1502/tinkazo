@@ -61,7 +61,7 @@ node scripts/audit-identidad.mjs <juego>
 
 **El auditor de identificación** (desde el 4 de octubre de 2026) mide si cada participante llega a leer su nombre en pantalla antes de que salga el ganador, con 8, 18 y 50 personas: con `?auditar=identidad`, el estadio anota la primera vez que se ve cada nombre entero, legible (un alto de al menos 1,6% de la pantalla) y sin confundirse con otro. Pide que con 8 se vean todos, y con 18 nueve de cada diez, en los juegos que prometen esas cantidades; con 50, informa. Nació de la tómbola, donde salía el número de la bola ganadora y nadie sabía de quién era.
 
-Donde `<juego>` es el valor de `?demo=`: `race`, `chovena`, `trompo`, `pinata`, `oruro`, `tombola`, `wheel`, `teleferico`, `pasanaku`, `stellar`, `sapo`, `quien`. El auditor abre Chrome, corre un sorteo real contra drand y comprueba veinte cosas:
+Donde `<juego>` es el valor de `?demo=`: uno de los diez del selector (`race`, `sapo`, `trompo`, `chovena`, `pinata`, `wheel`, `quien`, `trueque`, `teleferico`, `oruro`) o uno de los que salieron de él (al final de esta página). El auditor abre Chrome, corre un sorteo real contra drand y comprueba veinte cosas:
 
 | # | Comprobación | Por qué importa |
 |---|---|---|
@@ -101,7 +101,7 @@ node scripts/audit-mezcla.mjs <juego>      # o "todos"; --sin-musica mide solo l
 El auditor de sonido mira la partitura de los efectos. Este escucha la señal: engancha la salida de WebAudio antes de que cargue la página, junta las muestras de la escena fija de punta a punta y mide con las reglas de la radiodifusión (ITU-R BS.1770, EBU R128):
 
 - **Que nada recorte** y que el pico real (sobremuestreado ×4) quede debajo de −1 dBTP.
-- **Que los doce suenen parejo**: la sonoridad integrada de cada uno a ±3 LU de la mediana, para que quien organiza no toque la perilla entre un sorteo y otro.
+- **Que todos suenen parejo**: la sonoridad integrada de cada uno a ±3 LU de la mediana, para que quien organiza no toque la perilla entre un sorteo y otro.
 - **Que ningún tramo de 3 s salte** más de 7 LU sobre la integrada.
 - **El parlante de un proyector**: la mezcla pasada por un paso alto de 150 Hz no puede perder más de 3,5 LU, y por uno de 300 Hz, más de 6. La primera medición dio de 4,1 a 4,9 LU de pérdida a 150 Hz en los doce juegos: el bajo y los bombos vivían por debajo de lo que reproduce una laptop. Con los armónicos nuevos quedó entre 2,6 y 3,5, y el ganador pasó a sonar entre 6,5 y 50 LU más fuerte que el medio segundo de antes (antes, entre −4 y +6 en los juegos con la música andina).
 - **El golpe del ganador**: el medio segundo después del cartel tiene que sonar al menos 2 LU más fuerte que el de antes.
@@ -156,7 +156,7 @@ Era un multiplicador fijo (`0,8 / 1,4 / 2,2`) y el problema no era el número si
 
 **El tope de ×2,2 no es negociable.** Más que eso no es más emoción, es cámara lenta: la ruleta tenía dos segundos de crucero en los que la imagen es un borrón, y multiplicarlos por tres y medio son ocho segundos de nada. Un juego que topa ahí **necesita más contenido, no ir más despacio**. Por eso la ruleta pasó de 7,65 a 17,2 segundos nominales acortando el borrón y alargando la frenada, el Cierre de Libro llegó a seis pasadas y al Pasanaku se le dio tiempo al tejido de los hilos y al apretón.
 
-Hoy, medido por el auditor exigente: "normal" son treinta segundos en los doce del selector.
+Cuando el selector tenía doce juegos, el auditor exigente midió treinta segundos en "normal" en todos; desde el 17 de octubre de 2026, "normal" son treinta y ocho (`PACES`, arriba).
 
 **La tarjeta de "cómo se juega" entra en el mismo total.** Desde el 4 de octubre de 2026, antes de cada juego de un sorteo de verdad o de una demo, una tarjeta a pantalla completa dice el nombre del juego, la regla en una frase, cuántos participan y que el ganador ya salió del número público ([`src/ui/gamecard.ts`](../src/ui/gamecard.ts)). Dura 3,5 segundos, se salta con un toque, y sus segundos salen del total con `setCardSeconds`: "normal" sigue siendo treinta, tarjeta incluida (medido: 30,0 a 30,2 en el motor nuevo). La escena fija de `?pose=`, la de los auditores y las capturas, no la muestra, así que lo que mide el auditor exigente es el juego solo.
 
@@ -278,7 +278,7 @@ Hasta el 28 de septiembre de 2026 esas mismas líneas las decía en voz alta un 
 La música de fondo es [`src/music.ts`](../src/music.ts): andina con beat, generada en el navegador. Charango en ritmo de huayno (larga, corta, corta), bombo legüero, zampoña repartida entre dos cañas que se contestan como los sikuris, y un beat electrónico debajo. Sin archivos de audio y sin licencias.
 
 - **La escala es la pentatónica de la menor,** que tiene las mismas cinco notas que la de do mayor de los efectos: la música y los golpes de los juegos no chocan.
-- **Sigue a los subtítulos.** Cada línea trae su tensión, y la música prende capas con ella: bombo, charango, beat, zampoña, y todo doblado arriba de 0,85. El tempo va de 96 a 132. Un piso que crece con el tiempo hace que siempre vaya de menos a más aunque los subtítulos no cambien. Así sirve para los doce juegos sin que ninguno sepa de música.
+- **Sigue a los subtítulos.** Cada línea trae su tensión, y la música prende capas con ella: bombo, charango, beat, zampoña, y todo doblado arriba de 0,85. El tempo va de 96 a 132. Un piso que crece con el tiempo hace que siempre vaya de menos a más aunque los subtítulos no cambien. Así sirve para todos los juegos sin que ninguno sepa de música.
 - **La sorpresa es silencio.** Un salto de tensión de tres décimos corta la música un tiempo entero, y vuelve con platillo y bombo. El ganador (tensión 1) remata con el charango en trémolo y se apaga.
 - **Sembrada con la ronda,** con otra parte de la aleatoriedad que el juego: prenderla no cambia la animación. Ni un `Math.random`. Desde el 5 de octubre de 2026 la semilla elige entre seis vueltas de acordes y seis ritmos para el motivo (eran tres y cuatro): en un evento de diez sorteos ya no suena siempre igual.
 - **Arranca prendida y por debajo de los efectos** desde el 28 de septiembre de 2026. Se apaga con el botón "Música" de la página, y el sonido apagado también la apaga.
@@ -326,21 +326,22 @@ El ritmo, la legibilidad del cartel y el tartamudeo de los subtítulos ya los mi
 
 ## Juegos actuales
 
+Los diez del selector, en su orden: el de la auditoría de juegos, de las salas chicas a las grandes. Con la lista sellada, el selector los reordena según cuántas personas hay ([`src/ui/recomendar.ts`](../src/ui/recomendar.ts)).
+
 | Juego | `?demo=` | Tipo | Hasta | Documento |
 |---|---|---|---|---|
-| Carrera de llamas | `race` | Motor de carrera, tema andino | Todos en la clasificatoria, 8 en la final | · |
-| Chovena | `chovena` | Módulo propio (solo motor nuevo), con su propia música | 200, mejor de 12 a 80 | [chovena.md](juegos/chovena.md) |
-| Trompo | `trompo` | Módulo propio (solo motor nuevo) | 200 | [trompo.md](juegos/trompo.md) |
-| Piñata | `pinata` | Módulo propio (solo motor nuevo) | 200 | [pinata.md](juegos/pinata.md) |
-| Carnaval de Oruro | `oruro` | Módulo propio (solo motor nuevo) | 200 | [carnaval-de-oruro.md](juegos/carnaval-de-oruro.md) |
-| Tómbola | `tombola` | Módulo propio | 200 | [tombola.md](juegos/tombola.md) |
-| Ruleta | `wheel` | Módulo propio | 200 (con más de 24, cada gajo reúne a un grupo) | [ruleta.md](juegos/ruleta.md) |
-| Teleférico | `teleferico` | Módulo propio | 200 | [teleferico.md](juegos/teleferico.md) |
-| Aguayo (antes Pasanaku) | `pasanaku` | Módulo propio | 200 | [pasanaku.md](juegos/pasanaku.md), que ahora cuenta el Aguayo |
-| Constelación Stellar | `stellar` | Módulo propio | 200 | [constelacion-stellar.md](juegos/constelacion-stellar.md) |
+| Carrera de llamas | `race` | Motor de carrera, tema andino | Todos en la clasificatoria, 8 en la final | [carrera.md](juegos/carrera.md), la cámara y el final con pocas personas |
 | Sapo | `sapo` | Módulo propio (solo motor nuevo) | 200, con clasificatoria a 12 | [sapo.md](juegos/sapo.md) |
+| Trompo | `trompo` | Módulo propio (solo motor nuevo) | 200 | [trompo.md](juegos/trompo.md) |
+| Chovena | `chovena` | Módulo propio (solo motor nuevo), con su propia música | 200, mejor de 12 a 80 | [chovena.md](juegos/chovena.md) |
+| Piñata | `pinata` | Módulo propio (solo motor nuevo) | 200 | [pinata.md](juegos/pinata.md) |
+| Ruleta | `wheel` | Módulo propio | 200 (con más de 24, cada gajo reúne a un grupo) | [ruleta.md](juegos/ruleta.md) |
 | De pie (antes ¿Quién es?) | `quien` | Módulo propio (solo motor nuevo) | 8 a 200 | [quien-es.md](juegos/quien-es.md) |
-| El Trueque (fuera del selector hasta la etapa D) | `trueque` | Módulo propio (solo motor nuevo) | 200, pensado de 12 a 200 | [trueque.md](juegos/trueque.md) |
+| El Trueque | `trueque` | Módulo propio (solo motor nuevo) | 200, pensado de 12 a 200 | [trueque.md](juegos/trueque.md) |
+| Teleférico | `teleferico` | Módulo propio | 200 | [teleferico.md](juegos/teleferico.md) |
+| Carnaval de Oruro | `oruro` | Módulo propio (solo motor nuevo) | 200 | [carnaval-de-oruro.md](juegos/carnaval-de-oruro.md) |
+
+**El selector quedó en diez** el 21 de octubre de 2026, con la auditoría de juegos: entró El Trueque, la fusión del Aguayo y la Constelación, y esos dos salieron. La tómbola había salido el 20, cuando el selector empezó a recomendar según la cantidad de personas. Los tres siguen abriendo con `?demo=` y conservan su captura para la tarjeta de cómo se juega, pero salieron de la página de juegos y de la portada, igual que los que salieron antes: la página muestra lo que se puede elegir. Si la ruleta está elegida y hay más de doscientas personas, el sorteo sigue pasando a la tómbola, aunque no tenga botón (`showFrozen` en `src/ui/freeze.ts` y `playableGame` en `src/state.ts`).
 
 **Luz roja, luz verde salió del selector** el 5 de octubre de 2026, cuando entró la Chovena: cubría la misma necesidad (parar y seguir), pero sin nombre boliviano, con la sombra de una serie de apuestas y con un Faro que era un concepto técnico escondido.
 
@@ -352,3 +353,6 @@ El ritmo, la legibilidad del cartel y el tartamudeo de los subtítulos ya los mi
 | Carrera de cohetes | `rockets` | [carrera-stellar.md](juegos/carrera-stellar.md) |
 | Luz roja, luz verde | `luz` | [luz-roja-luz-verde.md](juegos/luz-roja-luz-verde.md) |
 | Balsas de totora | `totora` | [balsas-de-totora.md](juegos/balsas-de-totora.md) |
+| Tómbola (salió el 20 de octubre de 2026) | `tombola` | [tombola.md](juegos/tombola.md) |
+| Aguayo, antes Pasanaku (salió el 21 de octubre de 2026; lo reemplaza El Trueque) | `pasanaku` | [pasanaku.md](juegos/pasanaku.md), que ahora cuenta el Aguayo |
+| Constelación Stellar (salió el 21 de octubre de 2026; la reemplaza El Trueque) | `stellar` | [constelacion-stellar.md](juegos/constelacion-stellar.md) |
