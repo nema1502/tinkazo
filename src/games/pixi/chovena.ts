@@ -1705,10 +1705,12 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   const blandos = new WeakSet<Rect>();
   /**
    * Pone el nombre de `d` encima de su cabeza, o lo más cerca que entra sin
-   * pisar nada de `placed`. Lo reservado (el contador, el aviso de la música,
-   * el conjunto, el cartel y la lista de los que salen) no se pisa nunca: si
-   * no queda lugar, el nombre no se dibuja en este cuadro. `suave`, lo mismo
-   * con los otros nombres (pasar lista): mejor uno menos que dos encimados.
+   * pisar nada de `placed`: a los costados, apilado en su columna o en la de al
+   * lado, y si arriba no hay lugar, debajo de los pies. Lo reservado (el
+   * contador, el aviso de la música, el conjunto, el cartel y la lista de los
+   * que salen) no se pisa nunca: si no queda lugar, el nombre no se dibuja en
+   * este cuadro. `suave` (pasar lista), lo mismo con los otros nombres: mejor
+   * uno menos que dos encimados.
    */
   function placeChip(d: Dancer, x: number, placed: Rect[], scale = 1, suave = false): void {
     const { W, H, k } = G;
@@ -1717,13 +1719,14 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     // En las filas del arranque, los hombres de adelante llevan el nombre a
     // los pies: arriba tapaba el ruedo de color de las mujeres de atrás.
     const abajo = !d.tipoy && d.row.v >= frontV - 1e-6 && (wNow[d.idx] as ReturnType<typeof where>).rows > 0.5;
-    const head = abajo ? cam.toScreen(p.x, p.y + p.s * 0.05, W, H) : cam.toScreen(p.x, p.y - p.s * 1.08, W, H);
+    const cabeza = cam.toScreen(p.x, p.y - p.s * 1.08, W, H), pies = cam.toScreen(p.x, p.y + p.s * 0.05, W, H);
+    const head = abajo ? pies : cabeza;
     // Si su dueño quedó fuera de cuadro (los que se van, con la cámara cerca),
     // el nombre no va: pegado al borde de la pantalla engañaba.
     if (head.x < -10 * k || head.x > W + 10 * k || head.y < S.top() - 30 * k || head.y > H - S.bottom() + 40 * k) return;
     // Al que se tambalea, el nombre un poco más arriba: si no, el "¡!" lo pinchaba.
     const alto = wobbleOf(d, x) > 0.05 ? 1.54 : 1.22;
-    const s = abajo ? head : cam.toScreen(p.x, p.y - p.s * alto, W, H);
+    const arriba = cam.toScreen(p.x, p.y - p.s * alto, W, H);
     const chip = (d.chip ??= chips.addChild(S.chip(nm(d.idx), G.portrait ? 0.9 : 1)));
     chip.scale.set(scale);
     chip.visible = true;
@@ -1731,69 +1734,74 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     // mano, los chips de letra legible se encimaban (16 de octubre de 2026).
     const cw = chip.width, ch = chip.height;
     const lo = S.top() + ch / 2 + 2 * k, hi = H - S.bottom() - ch / 2 - 4 * k;
-    const hits = (cx: number, cy: number): boolean =>
-      placed.some((r) => cx < r.x + r.w && cx + cw > r.x && cy - ch / 2 < r.y + r.h / 2 && cy + ch / 2 > r.y - r.h / 2);
-    // Primero encima de la cabeza, después a los costados, y recién después apilado.
-    const x0 = clamp(s.x - cw / 2, 8 * k, W - cw - 8 * k);
-    const y0 = clamp(abajo ? s.y + ch / 2 + 2 * k : s.y - ch / 2 - 2 * k, lo, hi);
-    const otra = abajo ? ch + 2 * k : -(ch + 2 * k);
-    const cands: [number, number][] = [[x0, y0], [x0 - cw * 0.62, y0], [x0 + cw * 0.62, y0], [x0, y0 + otra], [x0 - cw * 0.62, y0 + otra], [x0 + cw * 0.62, y0 + otra]];
-    let cx = x0, cy = y0;
-    const libre = cands.map(([a, b]) => [clamp(a, 8 * k, W - cw - 8 * k), clamp(b, lo, hi)] as [number, number]).find(([a, b]) => !hits(a, b));
-    let hallado = !!libre;
-    if (libre) [cx, cy] = libre;
-    // Si no, apilado en su columna (hacia arriba; hacia abajo, los de los pies)
-    // y, si la columna se queda sin lugar, en la de al lado: la misma búsqueda
-    // que `S.tags` en los demás juegos. El respaldo de antes dejaba el nombre
-    // encima de otro, o corrido contra el borde debajo del aviso de la música.
-    for (const dx of hallado ? [] : [0, 0.62, -0.62, 1.24, -1.24]) {
-      const a = clamp(x0 + dx * cw, 8 * k, W - cw - 8 * k);
-      let b = y0;
-      for (let tries = 0; tries < 12; tries++) {
-        const hit = placed.find((r) => a < r.x + r.w && a + cw > r.x && b - ch / 2 < r.y + r.h / 2 && b + ch / 2 > r.y - r.h / 2);
-        if (!hit) {
-          hallado = true;
-          break;
-        }
-        b = abajo ? hit.y + (hit.h + ch) / 2 + 2 * k : hit.y - (hit.h + ch) / 2 - 2 * k;
-        if (b < lo || b > hi) break;
-      }
-      if (hallado) {
-        [cx, cy] = [a, b];
-        break;
-      }
-    }
-    if (!hallado) {
-      if (suave) {
-        chip.visible = false;
-        return;
-      }
-      for (let tries = 0; tries < 8; tries++) {
-        const hit = placed.find((r) => cx < r.x + r.w && cx + cw > r.x && cy - ch / 2 < r.y + r.h / 2 && cy + ch / 2 > r.y - r.h / 2);
-        if (!hit) break;
-        cy = hit.y - (hit.h + ch) / 2 - 2 * k;
-        if (cy < lo) {
-          cy = hit.y + (hit.h + ch) / 2 + 2 * k;
-          cx = clamp(cx + cw * 0.35, 8 * k, W - cw - 8 * k);
+    const enX = (a: number): number => clamp(a, 8 * k, W - cw - 8 * k);
+    const pisa = (a: number, b: number, r: Rect): boolean => a < r.x + r.w && a + cw > r.x && b - ch / 2 < r.y + r.h / 2 && b + ch / 2 > r.y - r.h / 2;
+    const x0 = enX(arriba.x - cw / 2);
+    // Los dos lados, primero el suyo: arriba de la cabeza (las filas, a los
+    // pies) y después el otro. Cada lado se apila alejándose del cuerpo. Con
+    // el lado de abajo, en el celular, los nombres de los que salían en un
+    // corte encontraban lugar: arriba estaban el "¡QUIETOS!" y el conjunto, y
+    // tres de los cuatro no se dibujaban (revisión del 21 de octubre de 2026).
+    const ladoArriba = { y: clamp(arriba.y - ch / 2 - 2 * k, lo, hi), dir: -1 };
+    const ladoAbajo = { y: clamp(pies.y + ch / 2 + 2 * k, lo, hi), dir: 1 };
+    const lados = abajo ? [ladoAbajo, ladoArriba] : [ladoArriba, ladoAbajo];
+    // El lugar libre más cercano: cada paso de costado o de pila cuesta uno, y
+    // cambiar de lado, uno y medio.
+    let mejor: { a: number; b: number; costo: number } | null = null;
+    const ultimos: [number, number][] = [];
+    for (let li = 0; li < lados.length; li++) {
+      const lado = lados[li] as { y: number; dir: number };
+      for (const dx of [0, 0.62, -0.62, 1.24, -1.24]) {
+        const a = enX(x0 + dx * cw);
+        let b = lado.y;
+        for (let pila = 0; pila < 12; pila++) {
+          const hit = placed.find((r) => pisa(a, b, r));
+          if (!hit) {
+            const costo = Math.abs(dx) + Math.abs(b - lado.y) / (ch + 2 * k) + 1.5 * li;
+            if (!mejor || costo < mejor.costo) mejor = { a, b, costo };
+            break;
+          }
+          ultimos.push([a, b]);
+          b = lado.dir > 0 ? hit.y + (hit.h + ch) / 2 + 2 * k : hit.y - (hit.h + ch) / 2 - 2 * k;
+          if (b < lo || b > hi) break;
         }
       }
     }
-    // Lo reservado no se pisa nunca: si el nombre sigue encima del contador, del
-    // aviso, del conjunto, del cartel o de la lista, no se dibuja en este cuadro.
-    if (!hallado && placed.some((r) => !blandos.has(r) && cx < r.x + r.w && cx + cw > r.x && cy - ch / 2 < r.y + r.h / 2 && cy + ch / 2 > r.y - r.h / 2)) {
+    let lugar: { a: number; b: number } | null = mejor;
+    // Lo reservado no se pisa nunca: si no hay lugar, el nombre no se dibuja en este cuadro.
+    if (!lugar && !suave) {
+      // Nada libre. El nombre de uno que sale, que se tambalea o de la final se
+      // dibuja igual, donde menos pisa a otro nombre; lo reservado no se pisa
+      // nunca. El respaldo de antes lo corría a ciegas, y lo dejaba encima de
+      // otro o debajo del aviso de la música.
+      let menos = Infinity;
+      for (const [a, b] of ultimos) {
+        if (placed.some((r) => !blandos.has(r) && pisa(a, b, r))) continue;
+        const area = placed.reduce((s2, r) => s2 + (pisa(a, b, r) ? (Math.min(a + cw, r.x + r.w) - Math.max(a, r.x)) * (Math.min(b + ch / 2, r.y + r.h / 2) - Math.max(b - ch / 2, r.y - r.h / 2)) : 0), 0);
+        if (area < menos) {
+          menos = area;
+          lugar = { a, b };
+        }
+      }
+    }
+    if (!lugar) {
       chip.visible = false;
       return;
     }
+    const cx = lugar.a, cy = lugar.b;
     const mio = { x: cx, y: cy, w: cw, h: ch };
     blandos.add(mio);
     placed.push(mio);
     chip.position.set(cx, cy);
-    // Si quedó lejos de su dueño, un hilo hasta la cabeza.
-    const ax = clamp(head.x, cx + 6 * k, cx + cw - 6 * k);
-    const ay = abajo ? cy - ch / 2 : cy + ch / 2;
-    if (Math.hypot(ax - head.x, ay - head.y) > 22 * k) {
-      leaders.moveTo(ax, ay).lineTo(head.x, head.y).stroke({ width: 2 * k, color: S.dark ? CREAM : INK, alpha: 0.7 });
-      leaders.circle(head.x, head.y, 2.6 * k).fill({ color: S.dark ? CREAM : INK, alpha: 0.8 });
+    // Si quedó lejos de su dueño, un hilo hasta la cabeza, o hasta los pies si
+    // el nombre quedó debajo.
+    const debajo = cy > (cabeza.y + pies.y) / 2;
+    const ancla = debajo ? pies : cabeza;
+    const ax = clamp(ancla.x, cx + 6 * k, cx + cw - 6 * k);
+    const ay = debajo ? cy - ch / 2 : cy + ch / 2;
+    if (Math.hypot(ax - ancla.x, ay - ancla.y) > 22 * k) {
+      leaders.moveTo(ax, ay).lineTo(ancla.x, ancla.y).stroke({ width: 2 * k, color: S.dark ? CREAM : INK, alpha: 0.7 });
+      leaders.circle(ancla.x, ancla.y, 2.6 * k).fill({ color: S.dark ? CREAM : INK, alpha: 0.8 });
     }
   }
 
