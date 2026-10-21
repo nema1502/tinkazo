@@ -136,6 +136,8 @@ export interface Dict {
   cTelCount: (n: number, cabs: number) => string;
   cTelPass: (k: number) => string;
   cTelStop: (k: number, off: number, left: number) => string;
+  cTelGrupo: (k: number, g: { nombre: string; articulo: string }, off: number, left: number) => string;
+  cTelWho: string[];
   cTelOff: (n: string) => string;
   /** El último que se baja, cuando también ganó: con varios premios. */
   cTelPrize: (n: string) => string;
@@ -424,9 +426,8 @@ export const T: Record<Lang, Dict> = {
     cTelCount: (n, cabs) => (cabs > 1 ? `¡${n} pasajeros en ${cabs} cabinas!` : `¡${n} pasajero, una cabina!`),
     cTelGo: ["¡ARRANCA EL TELEFÉRICO!", "¡Para arriba!", "¡Se despega del piso!"],
     cTelPass: (k) => pick([`¡Pasa de largo por la ${k}!`, `¡En la ${k} no se baja nadie!`, `¡La ${k}, de largo!`]),
-    cTelStop: (k, off, left) => (off === 1 ? `¡Estación ${k}! Se baja uno, quedan ${left}` : `¡Estación ${k}! Se bajan ${off}, quedan ${left}`),
     cTelUp: ["¡Sigue subiendo!", "¡Más arriba todavía!", "¡Qué vista!"],
-    cTelLast: ["¡QUEDAN DOS!", "¡Última estación!", "¡Acá se baja uno!"],
+    cTelLast: ["¡QUEDAN DOS!", "¡Última estación!", "¡Acá bajan de a uno!"],
     cTelOff: (n) => pick([`¡Se baja ${n}!`, `¡${n} se queda en el andén!`, `¡Hasta acá llegó ${n}!`]),
     cTelPrize: (n) => pick([`¡Se baja ${n}, y con premio!`, `¡${n} se baja con premio!`]),
     cTelClimb: ["¡Sube solita!", "¡Ya casi llega!", "¡Ya se ve la cumbre!"],
@@ -604,6 +605,9 @@ export const T: Record<Lang, Dict> = {
     //     sorteo antes de que lo fuéramos a buscar.
     gamePasanaku: "Aguayo",
     gameTeleferico: "Teleférico",
+    cTelStop: (k, off, left) => (off === 1 ? `¡Estación ${k}! Se baja uno, quedan ${left}` : `¡Estación ${k}! Se bajan ${off}, quedan ${left}`),
+    cTelGrupo: (k, g, off, left) => `¡Estación ${k}! Se bajan ${g.articulo} ${g.nombre} (${off}). Quedan ${left}`,
+    cTelWho: ["¿Quién llega arriba?", "¡Los dos juntos hasta la cumbre!"],
     gameTombola: "Tómbola",
     gameTrompo: "Trompo",
     gameTotora: "Balsas de totora",
@@ -1097,7 +1101,7 @@ export const T: Record<Lang, Dict> = {
     gcPrizesNote: (k) => `Hay ${k} premios: el juego cuenta el primero y el cartel del final muestra a todos.`,
     gcSapoMany: "Cada nombre tiene su agujero. Cada argolla que entra es un premio.",
     gcQuienMany: "Una ronda por premio: en cada una se dan vuelta las cartas que no coinciden y gana la última.",
-    gcTelefericoMany: "En cada estación se baja la mitad. Los últimos en bajarse ganan premio, y el primero llega a la cumbre.",
+    gcTelefericoMany: "En cada estación se baja un grupo entero. Los últimos en bajarse ganan premio, y el primero llega a la cumbre.",
     gcSapoQual: "Con más de doce, primero se tachan nombres hasta que quedan doce.",
     gcRace: "Gana la primera llama que cruza la meta.",
     gcLuz: "Con luz roja, el que se mueve se sienta. Gana quien toca el Faro.",
@@ -1108,7 +1112,7 @@ export const T: Record<Lang, Dict> = {
     gcOruro: "En cada cuadra se quedan bailarines. Gana el que llega al Socavón.",
     gcTombola: "Cada uno tiene una bola con su número, y la lista está al lado del bombo. Gana la que cae en el vaso.",
     gcWheel: "A cada persona le tocan uno o más gajos. Gana el gajo que queda bajo la flecha.",
-    gcTeleferico: "En cada estación se baja la mitad. Gana quien llega a la cumbre.",
+    gcTeleferico: "En cada estación se baja un grupo entero. Gana quien llega a la cumbre.",
     gcPasanaku: "La tela se cierra y los bultos se caen. Gana el que queda en el nudo.",
     gcStellar: "Un paquete salta de estrella en estrella. Gana la última que toca.",
     gcSapo: "Cada nombre tiene su agujero. Gana el agujero donde cae la última argolla.",
@@ -1568,9 +1572,8 @@ export const T: Record<Lang, Dict> = {
     cTelCount: (n, cabs) => (cabs > 1 ? `${n} riders in ${cabs} cabins!` : `${n} rider, one cabin!`),
     cTelGo: ["THE CABLE CAR IS OFF!", "Up we go!", "Off the ground!"],
     cTelPass: (k) => pick([`Straight through station ${k}!`, `Nobody gets off at ${k}!`, `Station ${k}, no stop!`]),
-    cTelStop: (k, off, left) => (off === 1 ? `Station ${k}! One gets off, ${left} left` : `Station ${k}! ${off} get off, ${left} left`),
     cTelUp: ["Still climbing!", "Higher still!", "What a view!"],
-    cTelLast: ["TWO LEFT!", "Last station!", "One gets off here!"],
+    cTelLast: ["TWO LEFT!", "Last station!", "One by one, here!"],
     cTelOff: (n) => pick([`${n} gets off!`, `${n} stays on the platform!`, `End of the line for ${n}!`]),
     cTelPrize: (n) => pick([`${n} gets off, with a prize!`, `${n} steps off with a prize!`]),
     cTelClimb: ["Climbing alone!", "Almost there!", "Nobody breathe!"],
@@ -1740,6 +1743,9 @@ export const T: Record<Lang, Dict> = {
     cTabla: "STANDINGS",
     gamePasanaku: "Aguayo",
     gameTeleferico: "Cable car",
+    cTelStop: (k, off, left) => (off === 1 ? `Station ${k}! One gets off, ${left} left` : `Station ${k}! ${off} get off, ${left} left`),
+    cTelGrupo: (k, g, off, left) => `Station ${k}! The ${g.nombre} get off (${off}). ${left} left`,
+    cTelWho: ["Who makes it to the top?", "Both of them, all the way up!"],
     gameTombola: "Ball drum",
     gameTrompo: "Spinning tops",
     gameTotora: "Reed boats",
@@ -2219,7 +2225,7 @@ export const T: Record<Lang, Dict> = {
     gcPrizesNote: (k) => `There are ${k} prizes: the game tells the first one and the final card shows them all.`,
     gcSapoMany: "Every name has its hole. Every ring that drops in is a prize.",
     gcQuienMany: "One round per prize: in each one the cards that don't match flip over and the last one wins.",
-    gcTelefericoMany: "Half get off at every station. The last ones off win a prize, and the first prize reaches the top.",
+    gcTelefericoMany: "A whole group gets off at every station. The last ones off win a prize, and the first prize reaches the top.",
     gcSapoQual: "With more than twelve, names are crossed out first until twelve are left.",
     gcRace: "The first llama across the finish line wins.",
     gcLuz: "On red, whoever moves sits down. Whoever touches the Lighthouse wins.",
@@ -2230,7 +2236,7 @@ export const T: Record<Lang, Dict> = {
     gcOruro: "Dancers stay behind at every block. Whoever reaches the Socavón wins.",
     gcTombola: "Everyone has a ball with their number, listed next to the drum. The one that drops into the cup wins.",
     gcWheel: "Everyone gets one or more slices. The slice left under the pointer wins.",
-    gcTeleferico: "Half get off at every station. Whoever reaches the top wins.",
+    gcTeleferico: "A whole group gets off at every station. Whoever reaches the top wins.",
     gcPasanaku: "The cloth closes and the bundles fall out. The one left in the knot wins.",
     gcStellar: "A packet hops from star to star. The last star it touches wins.",
     gcSapo: "Every name has its hole. The hole where the last ring drops wins.",

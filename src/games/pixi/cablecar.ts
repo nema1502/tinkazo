@@ -6,19 +6,20 @@ import { beep, beepFor, fanfare, note } from "../../sound";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, hash, mountPixi, seeded, type PixiStage } from "./stage";
 import { LINES, T_BOARD, T_CROWN, T_DOCK, T_RUN, planCableCar } from "./cablecar-plan";
+import { GRUPOS, grupoDe } from "../grupos";
 
 /**
  * El Teleférico, en PixiJS, con el director de cámara.
  *
- * La misma historia que `cablecar.ts` (el plan es una copia, en
- * `cablecar-plan.ts`, salvo `luzAt`, que titila dos veces antes del corte, y
- * `T_RUN`): un convoy sube por el cable, en cada estación se baja la mitad, y
- * cada arco tiene su giro: la puerta, la mordaza, el apagón o la ráfaga. Lo
- * nuevo es cómo se mira. La cámara arranca en el andén de la base,
- * sigue al convoy, se acerca a cada andén cuando se baja gente, se mete en la
- * cabina de la puerta, se queda quieta sobre el tramo por donde resbala la de
- * la mordaza, se hamaca con el viento, se mete en el convoy apenas titila la
- * luz del apagón, y sigue a la cabina sola hasta la cumbre.
+ * Un convoy sube por el cable con una cabina por grupo (`grupos.ts`, sección
+ * 7.7 del plan de juegos): en cada estación se baja un grupo entero, y en la
+ * última cabina se baja de a uno hasta que quedan dos, que suben juntos. Cada
+ * arco tiene su giro: la puerta, la mordaza, el apagón o la ráfaga. El plan
+ * está en `cablecar-plan.ts`. Lo visual: la cámara arranca en el andén de la
+ * base, sigue al convoy, se acerca a cada andén cuando se baja gente, se queda
+ * quieta sobre el tramo por donde resbala la mordaza, se hamaca con el viento,
+ * se mete en el convoy apenas titila la luz del apagón, y sigue a la cabina
+ * con los dos hasta la cumbre.
  *
  * Los nombres viven en la pantalla, no en el mundo (18 de octubre de 2026): en
  * un celular, los que iban pegados a las cabinas crecían con el acercamiento de
@@ -43,11 +44,15 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   const P = planCableCar(names, winners, rng);
   const { n, C, story, puerta, mordaza, apagon, rafaga, stops, passes, rank, left, cabinOf, winnerCab, slipCab } = P;
   const NS = P.S;
-  /** La última parada, y quién se baja en ella: el segundo del orden de bajada. */
+  /** La última parada: ahí se bajan de a uno hasta que quedan dos. */
   const lastStop = stops.find((s) => s.last);
-  const loserIdx = n >= 2 ? (rank[1] ?? -1) : -1;
-  /** Lo que tarda el salto de la cabina al andén. */
-  const HOP = 0.55;
+  /**
+   * Los dos que llegan juntos a la última cabina: el ganador y otro. El giro de
+   * la puerta y el de la mordaza nombran a uno de los dos, sorteado con la
+   * semilla de la ronda, para que la sala no aprenda que el nombrado es el
+   * ganador.
+   */
+  const quienDeLosDos = (): number => (seedOf(13) < 0.5 ? winnerIdx : ((rank[1] as number | undefined) ?? winnerIdx));
   /** Lo que tarda una cara en volar de su cabina a su renglón del andén. */
   const FLY = 0.5;
   /**
@@ -65,39 +70,6 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     const v = parseInt(beacon.randomness.slice((k * 2) % 56, ((k * 2) % 56) + 8), 16);
     return (v % 1000) / 1000;
   };
-
-  /**
-   * ¿Quién se baja? En la última parada, cuando el arco no tiene ahí su giro
-   * (la puerta o la mordaza), un aro salta de una cabina a la otra en cada
-   * latido, cada vez más lento, como una moneda en el aire, y se apaga sobre
-   * la que pierde justo cuando se abre su puerta. Antes eran dos cabinas
-   * quietas sin nada que mirar en el momento que decide. Se arma hacia atrás
-   * desde esa hora, y cuántos saltos hay sale de la ronda: de qué cabina
-   * arranca no dice nada de cuál pierde. Son horas fijas, sin azar del juego.
-   */
-  const aro: number[] = [];
-  if (lastStop && !puerta && !mordaza && P.loserCab !== winnerCab) {
-    const desde = lastStop.t0 + 0.1;
-    const W = lastStop.tOff - desde;
-    const m = Math.max(2, Math.floor(W / 0.25)) + (seedOf(11) < 0.5 ? 0 : 1);
-    // El primero el más corto y el último el más largo.
-    const pesos = Array.from({ length: m }, (_, k) => Math.pow(0.72, m - 1 - k));
-    const suma = pesos.reduce((a, b) => a + b, 0);
-    let at = desde;
-    for (const w of pesos) {
-      aro.push(at);
-      at += (w / suma) * W;
-    }
-  }
-  /** En qué cabina está el aro a la hora `x`, desde cuándo, y qué salto es. */
-  function aroAt(x: number): { cab: number; since: number; i: number } | null {
-    if (!lastStop || !aro.length || x < (aro[0] as number) || x >= lastStop.tOff + 0.3) return null;
-    let i = 0;
-    while (i + 1 < aro.length && x >= (aro[i + 1] as number)) i++;
-    // El último salto cae siempre en la que pierde: se cuenta desde el final.
-    const cab = (aro.length - 1 - i) % 2 === 0 ? P.loserCab : winnerCab;
-    return { cab, since: x - (aro[i] as number), i };
-  }
 
   /* ============================================================ geometría */
   interface Geo { k: number; dir: { x: number; y: number }; span: number; vertical: boolean; cw: number; ch: number; gap: number }
@@ -141,15 +113,13 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   let blackout!: Graphics;
   let vignette!: Sprite;
   let wind!: Graphics;
-  let jumper: Container | null = null;
-  /** Los nombres, en la pantalla y no en el mundo: los de las cabinas, el andén y el que salta. */
+  /** Los nombres, en la pantalla y no en el mundo: los de las cabinas y el andén. */
   let nameLayer!: Container;
   /** Las caras que vuelan al andén: la sombra abajo, las caras y el marco arriba. */
   let flyBack!: Graphics;
   let flyBox!: Container;
   let flyFrame!: Graphics;
   let flyFaces: Sprite[] = [];
-  let jumperTag: Container | null = null;
   /**
    * El andén de la parada en curso, ya armado: los chips de los que se bajan,
    * dónde va cada uno, y el "+N" cuando no entran todos.
@@ -162,7 +132,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   /** Los renglones del andén de cada estación, armados antes de su parada (`prepareBoards`). */
   const prepared = new Map<number, Container[]>();
   /** El nombre de cada cabina que lleva a una sola persona, y de qué costado va. */
-  const soloTags = new Map<number, { idx: number; sc: number; chip: Container; side: number }>();
+  const soloTags = new Map<number, { txt: string; sc: number; chip: Container; side: number }>();
   let hudLabel!: Text;
   let hudNum!: Text;
   let hudStation!: Text;
@@ -325,25 +295,6 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     fx = new Graphics();
     world.addChild(fx);
 
-    // El que se baja en la última parada, con su cara y su nombre: era un
-    // cuadradito de 14 px, y es la bajada que decide el sorteo.
-    jumper = null;
-    if (lastStop && loserIdx >= 0) {
-      const nm = names[loserIdx] ?? "";
-      const side = 44 * k;
-      const jc = new Container();
-      const sp = new Sprite(S.face(nm));
-      sp.width = sp.height = side;
-      sp.position.set(-side / 2, -side);
-      // El nombre va en la pantalla (ver `placeJumperTag`): pegado a la cara,
-      // en el mundo, crecía con el acercamiento y en un celular quedaba cortado
-      // contra el borde derecho.
-      jc.addChild(new Graphics().rect(-side / 2 + 4 * k, -side + 4 * k, side, side).fill(INK), sp, new Graphics().rect(-side / 2, -side, side, side).stroke({ width: 3 * k, color: INK }));
-      jc.visible = false;
-      world.addChild(jc);
-      jumper = jc;
-    }
-
     // La interfaz: los bordes del apagón, vetas del viento, los nombres y los
     // contadores.
     const vc = document.createElement("canvas");
@@ -370,12 +321,6 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     boardView = null;
     prepared.clear();
     soloTags.clear();
-    jumperTag = null;
-    if (jumper) {
-      jumperTag = S.chip(names[loserIdx] ?? "", S.portrait() ? 1 : 1.5);
-      jumperTag.visible = false;
-      nameLayer.addChild(jumperTag);
-    }
     const top = S.top() + 18 * k;
     hudLabel = S.text("", { fontSize: 14 * k, fontWeight: "800", fill: CREAM });
     hudLabel.alpha = 0.8;
@@ -453,49 +398,42 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         // premio se los nombra aunque se bajen muchos. Hasta el 7 de octubre
         // de 2026 el tercer premio se bajaba con "se baja uno, quedan 2".
         const prem = who.filter((i) => winners.indexOf(i) > 0);
-        const resto = who.filter((i) => winners.indexOf(i) <= 0);
         platform.set(s.station, { off: who.length, t: s.tOff });
-        // En la última parada la cara que salta lleva su nombre; en las demás,
-        // cada uno vuela con su cara a su renglón del andén. El andén se queda
+        // Cada uno vuela con su cara a su renglón del andén. El andén se queda
         // hasta que bajan los de la estación siguiente, y se va antes de que
         // llegue la última, que es de ella. Con el apagón titila con la luz y
         // se apaga con ella (`drawBoard`).
-        if (!(s.last && jumper)) {
-          const next = stops.find((x) => x.t0 > s.t0);
-          let tEnd = next ? (next.last ? next.t0 - 0.1 : next.tOff - 0.02) : T_RUN - 0.1;
-          if (apagon && P.corte > s.tOff) tEnd = Math.min(tEnd, P.corte + 0.08);
-          boards.push({ station: s.station, at: s.at, tOff: s.tOff, tEnd, who: offOf(s.round) });
-        }
-        if (s.last) {
-          // Con varios premios, el último que se baja también ganó, y el relator
-          // decía "¡Hasta acá llegó X!" de un ganador.
+        const next = stops.find((x) => x.t0 > s.t0);
+        let tEnd = next ? (next.last ? next.t0 - 0.1 : next.tOff - 0.02) : T_RUN - 0.1;
+        if (apagon && P.corte > s.tOff) tEnd = Math.min(tEnd, P.corte + 0.08);
+        boards.push({ station: s.station, at: s.at, tOff: s.tOff, tEnd, who: offOf(s.round) });
+        if (s.last && prem.length) {
+          // De a uno, y con premio: los co-ganadores que bajan en la última se
+          // nombran con su premio, y no como "¡Hasta acá llegó X!".
+          sayNow(T[lang].cPrizeOut(prem.slice(0, 3).map((i) => names[i] ?? "")), 0.9);
+        } else if (s.last) {
           const idx = who[0] as number;
-          sayNow((winners.includes(idx) ? T[lang].cTelPrize : T[lang].cTelOff)(names[idx] ?? ""), 0.9);
+          sayNow(T[lang].cTelOff(names[idx] ?? ""), 0.9);
         } else if (prem.length) {
           sayNow(T[lang].cPrizeOut(prem.slice(0, 3).map((i) => names[i] ?? "")), 0.5 + 0.3 * (s.round / Math.max(1, P.R)));
-        } else sayNow(T[lang].cTelStop(s.station, who.length, left[s.round + 1] as number), 0.5 + 0.3 * (s.round / Math.max(1, P.R)));
-        // En la última, el golpe suena cuando la cara toca el andén.
-        if (!silent && !(s.last && jumper)) {
+        } else {
+          // Se baja un grupo entero: el relator dice el nombre del grupo.
+          const grupo = GRUPOS[grupoDe(who[0] ?? 0, n)] ?? GRUPOS[0] as (typeof GRUPOS)[number];
+          sayNow(T[lang].cTelGrupo(s.station, grupo, who.length, left[s.round + 1] as number), 0.5 + 0.3 * (s.round / Math.max(1, P.R)));
+        }
+        // El golpe suena cuando la cara toca el andén.
+        if (!silent) {
           const blips = Math.min(6, who.length);
           for (let i = 0; i < blips; i++) setTimeout(() => beep(note(15 - i), 0.07, "sine", 0.032), i * 70);
         }
       });
-      if (s.last && jumper) {
-        once("landing", tAll >= s.tOff + HOP, () => {
-          if (silent) return;
-          beep(note(3), 0.1, "square", 0.06);
-          beep(note(0), 0.25, "sine", 0.07);
-          beep(note(5), 0.12, "triangle", 0.04);
-          cam.punch(0.04);
-        });
-      }
       once(`detach${s.station}`, tAll >= s.tDetach, () => {
         if (!silent && P.detachT.some((d) => d === s.tDetach)) beep(note(3), 0.08, "square", 0.036);
       });
     }
     if (puerta) {
       once("puerta", tAll >= P.puertaA, () => {
-        sayNow(T[lang].cTelDoor(names[winnerIdx] ?? ""), 0.85);
+        sayNow(T[lang].cTelDoor(names[quienDeLosDos()] ?? ""), 0.85);
         if (!silent) {
           beep(note(12), 0.08, "triangle", 0.04);
           setTimeout(() => beep(note(15), 0.1, "triangle", 0.035), 70);
@@ -515,8 +453,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     if (mordaza) {
       // Se suelta, y mientras resbala el chirrido del cable baja (en `sounds`).
       once("suelta", tAll >= P.mA, () => {
-        const who = slipCab === winnerCab ? winnerIdx : (rank[1] as number);
-        sayNow(T[lang].cTelSlip(names[who] ?? ""), 0.9);
+        sayNow(T[lang].cTelSlip(names[quienDeLosDos()] ?? ""), 0.9);
         if (!silent) {
           musicHold(true);
           [14, 12, 10, 8, 6].forEach((d, i) => setTimeout(() => beep(note(d), 0.06, "square", 0.035), i * 45));
@@ -586,7 +523,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       });
       once("rafaga", tAll >= rt && tAll < rt + 1.4 && tAll - lastSaid > 0.5, () => sayNow(t("cTelWind"), 0.7));
     }
-    once("climb", tAll >= T_RUN + 0.15, () => sayNow(t("cTelClimb"), 0.9));
+    // Los dos que quedan suben juntos: la duda dura hasta la cumbre.
+    once("climb", tAll >= T_RUN + 0.15, () => sayNow(t("cTelWho"), 0.9));
     if (tAll >= T_DOCK && !didDock) {
       didDock = true;
       sayNow(t("cTelDock"), 0.95);
@@ -658,25 +596,12 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
           beep(note(2 + step), 0.12, "sine", 0.06 + 0.02 * p);
           beep(note(7 + step), 0.08, "triangle", 0.035);
         }
-      } else if (aro.length && lastStop && tAll < lastStop.tOff + HOP) {
-        // Con el aro, cada salto es un latido, y se calla mientras la cara
-        // vuela hasta el andén, que tiene su golpe.
-        const a = tAll < lastStop.tOff ? aroAt(tAll) : null;
-        if (a && 2000 + a.i !== beat) {
-          beat = 2000 + a.i;
-          beep(note(a.i % 2 ? 2 : 0), 0.14, "sine", 0.06 + 0.005 * a.i);
-          beep(note(a.i % 2 ? 7 : 5), 0.09, "triangle", 0.035);
-        }
       } else {
-        const b = aro.length && lastStop ? 3000 + Math.floor((tAll - lastStop.tOff - HOP) / 0.5) : Math.floor((tAll - from) / 0.5);
+        const b = Math.floor((tAll - from) / 0.5);
         if (b !== beat) {
-          // Después del aro, el primero cae con el golpe del andén: ese no suena.
-          const pisa = b === 3000;
           beat = b;
-          if (!pisa) {
-            beep(note(0), 0.14, "sine", 0.07);
-            beep(note(5), 0.09, "triangle", 0.035);
-          }
+          beep(note(0), 0.14, "sine", 0.07);
+          beep(note(5), 0.09, "triangle", 0.035);
         }
       }
     }
@@ -788,7 +713,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
    * `prepared`, por estación.
    */
   function prepareBoards(budget: number): void {
-    const s = stops.find((x) => !(x.last && jumper) && x.tOff > tAll);
+    const s = stops.find((x) => x.tOff > tAll);
     if (!s) return;
     const g = boardGrid();
     const who = offOf(s.round);
@@ -995,6 +920,21 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
    * cambia de costado, para que no salte de un cuadro al otro. El de una
    * cabina que salió de cuadro no va: pegado al borde, engañaba.
    */
+  /**
+   * Qué dicen los rótulos de cada cabina: el nombre del grupo, mientras la
+   * cabina lleva a varios; el nombre de la que queda sola; y, al final, el
+   * nombre de cada uno de los dos que llegan juntos (cada uno con su rótulo,
+   * porque en uno solo se cortaban).
+   */
+  function etiquetas(cab: number, who: number[]): string[] {
+    if (who.length === 0) return [];
+    if (who.length === 1) return [names[who[0] as number] ?? ""];
+    if (cab === winnerCab && who.length === 2 && tAll > T_RUN) {
+      return [names[who[0] as number] ?? "", names[who[1] as number] ?? ""];
+    }
+    return [GRUPOS[P.groupOfCab[cab] ?? 0]?.nombre ?? ""];
+  }
+
   function placeSoloTags(few: boolean): void {
     const W = S.sw(), H = S.sh(), u = S.u();
     const lo = S.top() + 6 * u, hi = H - S.bottom() - 6 * u;
@@ -1016,24 +956,26 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         const r = P.aboard(cab, tAll).length ? cabBox(cab, tAll) : null;
         if (r) boxes.set(cab, r);
       }
-      for (let cab = 0; cab < C; cab++) {
+      // Cada cabina lleva uno o dos rótulos (`etiquetas`): la clave es la cabina y su rótulo.
+      for (let key = 0; key < 2 * C; key++) {
+        const cab = key >> 1;
         const who = P.aboard(cab, tAll);
         const box = boxes.get(cab);
-        if (who.length !== 1 || !box || cabPoint(cab, tAll).alpha < 1) continue;
+        const txt = etiquetas(cab, who)[key & 1];
+        if (txt === undefined || !box || cabPoint(cab, tAll).alpha < 1) continue;
         const cy = (box.y0 + box.y1) / 2;
         // Una cabina fuera de la pantalla no lleva nombre. Una que queda detrás del
         // cartel del relator o de la barra de arriba sí: su nombre va al borde que
         // le quede libre (si no, en celular horizontal la finalista se quedaba sin nombre).
         if ((box.x0 + box.x1) / 2 < 0 || (box.x0 + box.x1) / 2 > W || cy < 0 || cy > H) continue;
-        const idx = who[0] as number;
-        let e = soloTags.get(cab);
-        if (!e || e.idx !== idx || e.sc !== sc) {
+        let e = soloTags.get(key);
+        if (!e || e.txt !== txt || e.sc !== sc) {
           e?.chip.destroy({ children: true });
-          e = { idx, sc, chip: S.chip(names[idx] ?? "", sc), side: -1 };
+          e = { txt, sc, chip: S.chip(txt, sc), side: -1 };
           nameLayer.addChild(e.chip);
-          soloTags.set(cab, e);
+          soloTags.set(key, e);
         }
-        seen.add(cab);
+        seen.add(key);
         // La caja es del chip de verdad: con 25 * u * sc, que no lleva CHIP_SCALE, era el 62 % del alto.
         const w = e.chip.width, h = e.chip.height, gap = 8 * u;
         const at = (side: number): Box => {
@@ -1067,6 +1009,14 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         const side = mejor !== undefined && (e.side < 0 || order.indexOf(mejor) < order.indexOf(e.side))
           ? mejor
           : e.side >= 0 && fits(at(e.side)) ? e.side : order.find((s) => fits(at(s))) ?? order.reduce((a, b) => (tapa(b) < tapa(a) ? b : a));
+        // Un rótulo de grupo que no encuentra un costado libre no se pisa con
+        // otro: se oculta (la cabina ya lleva su color y su cuenta). Los nombres
+        // de las personas siempre se ven.
+        const porNombre = who.length === 1 || (cab === winnerCab && who.length === 2 && tAll > T_RUN);
+        if (!porNombre && !fits(at(side))) {
+          e.chip.visible = false;
+          continue;
+        }
         e.side = side;
         const r = at(side);
         const x = clamp(r.x0, 8 * u, W - w - 8 * u), y = clamp((r.y0 + r.y1) / 2, lo + h / 2, hi - h / 2);
@@ -1075,64 +1025,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         placed.push({ x0: x, y0: y - h / 2, x1: x + w, y1: y + h / 2 });
       }
     }
-    for (const [cab, e] of soloTags) if (!seen.has(cab)) e.chip.visible = false;
+    for (const [key, e] of soloTags) if (!seen.has(key)) e.chip.visible = false;
     soloPlaced = placed;
-  }
-
-  /** De qué costado de su cara va el nombre del que salta: 0 derecha, 1 izquierda, 2 arriba, 3 abajo. */
-  let jumperSide = -1;
-  /**
-   * El nombre del que se baja en la última, al costado de su cara mientras
-   * vuela y cuando cae. Primero a la derecha, que en un proyector siempre
-   * entra; en un celular, donde la cara cae contra el borde derecho, a la
-   * izquierda o encima.
-   */
-  function placeJumperTag(): void {
-    if (!jumperTag) return;
-    if (!jumper || !jumper.visible) {
-      jumperTag.visible = false;
-      return;
-    }
-    const W = S.sw(), H = S.sh(), u = S.u();
-    const half = 22 * G.k * zoomNow();
-    const c = cam.toScreen(jumper.x, jumper.y - 22 * G.k, W, H);
-    // Con la cara fuera de cuadro el nombre tampoco va: pegado al borde quedaba
-    // flotando, sin cara, y parecía el nombre de otro pasajero.
-    if (c.x < -half || c.x > W + half || c.y < -half || c.y > H + half) {
-      jumperTag.visible = false;
-      return;
-    }
-    const w = jumperTag.width, h = jumperTag.height, gap = 10 * u;
-    const lo = S.top() + 6 * u, hi = H - S.bottom() - 6 * u;
-    const at = (s: number): Box => {
-      const x = s === 0 ? c.x + half + gap : s === 1 ? c.x - half - gap - w : clamp(c.x - w / 2, 8 * u, Math.max(8 * u, W - w - 8 * u));
-      const y = s === 2 ? c.y - half - gap - h / 2 : s === 3 ? c.y + half + gap + h / 2 : c.y;
-      return { x0: x, y0: y - h / 2, x1: x + w, y1: y + h / 2 };
-    };
-    // Su propia cabina no cuenta, ni ninguna vacía: se están yendo.
-    const others: Box[] = [...soloPlaced];
-    for (let cab = 0; cab < C; cab++) {
-      const r = cab === P.loserCab || !P.aboard(cab, tAll).length ? null : cabBox(cab, tAll);
-      if (r) others.push(r);
-    }
-    const fits = (r: Box): boolean => r.x0 >= 8 * u && r.x1 <= W - 8 * u && r.y0 >= lo && r.y1 <= hi && !others.some((o) => overlap(r, o) > 0);
-    // Si ningún costado entra, el que menos tapa (la cara pesa tres veces más).
-    const tapa = (q: number): number => {
-      const r0 = at(q);
-      const x = clamp(r0.x0, 8 * u, W - w - 8 * u), y = clamp((r0.y0 + r0.y1) / 2, lo + h / 2, hi - h / 2);
-      const r = { x0: x, y0: y - h / 2, x1: x + w, y1: y + h / 2 };
-      let c2 = 3 * overlap(r, { x0: c.x - half, y0: c.y - half, x1: c.x + half, y1: c.y + half });
-      for (const o of others) c2 += overlap(r, o);
-      return c2;
-    };
-    const s = jumperSide >= 0 && fits(at(jumperSide)) ? jumperSide : [0, 1, 2, 3].find((q) => fits(at(q))) ?? [0, 1, 2, 3].reduce((a, b) => (tapa(b) < tapa(a) ? b : a));
-    jumperSide = s;
-    // El que salta va encima de los nombres de las cabinas y de los del andén.
-    if (nameLayer.children[nameLayer.children.length - 1] !== jumperTag) nameLayer.addChild(jumperTag);
-    const r = at(s);
-    jumperTag.position.set(clamp(r.x0, 8 * u, W - w - 8 * u), clamp((r.y0 + r.y1) / 2, lo + h / 2, hi - h / 2));
-    jumperTag.alpha = jumper.alpha;
-    jumperTag.visible = true;
   }
 
   /* ============================================================== cámara */
@@ -1275,8 +1169,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
 
     // Cabinas.
     const sw = P.swingAt(tAll);
-    const few = P.leftAt(tAll) <= C && tAll > T_BOARD;
-    const aroNow = aroAt(tAll);
+    const few = tAll > T_BOARD;
     for (let cab = 0; cab < C; cab++) {
       const cb = cabs[cab] as Cab;
       const p = cabPoint(cab, tAll);
@@ -1296,7 +1189,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       cb.hang.rotation = sw * (1 - slot * 0.06) + sacude;
       const who = P.aboard(cab, tAll);
       const empty = !(who.length || tAll < T_BOARD);
-      const col = hexOf(LINES[cab % LINES.length] as string);
+      const col = hexOf(LINES[P.groupOfCab[cab] ?? 0] as string);
       const topY = 24 * k;
       const glow = cab === winnerCab && tAll > T_DOCK ? 0.6 + 0.4 * Math.sin(tAll * 8) : 0;
       if (cb.lastKey === "" || empty !== cb.empty || glow > 0) {
@@ -1353,45 +1246,13 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       cb.flag.clear().moveTo(-cw / 2 + 14 * k, topY).lineTo(-cw / 2 + 14 * k, topY - 38 * k).stroke({ width: 2.5 * k, color: INK });
       drawFlag(cb.flag, -cw / 2 + 14 * k, topY - 37 * k, 48 * k, 26 * k, 0xf6efe2, cab * 2.3, true);
       cb.flag.alpha = 0.3 + 0.7 * luz;
-      // El aro del "¿quién se baja?": en cada salto aparece un poco más grande
-      // y se cierra sobre la cabina; al abrirse la puerta, se apaga.
       cb.ring.clear();
-      if (aroNow && aroNow.cab === cab && lastStop) {
-        const alpha = clamp(1 - (tAll - lastStop.tOff) / 0.3, 0, 1);
-        const pad = (7 + 10 * Math.exp(-aroNow.since * 14)) * k;
-        const rx = -cw / 2 - pad, ry = topY - pad, rw = cw + 2 * pad, rh = ch + 2 * pad;
-        cb.ring.roundRect(rx, ry, rw, rh, 16 * k).stroke({ width: 10 * k, color: INK, alpha })
-          .roundRect(rx, ry, rw, rh, 16 * k).stroke({ width: 5.5 * k, color: YELLOW, alpha });
-      }
       // La cabina que resbala, en rojo y titilando hasta que la mordaza la agarra.
       if (mordaza && cab === slipCab && tAll > P.mA && tAll < P.mB + 0.25) {
         const on = tAll < P.mB ? (Math.sin((tAll - P.mA) * 30) > -0.2 ? 1 : 0.35) : clamp(1 - (tAll - P.mB) / 0.25, 0, 1);
         const pad = 8 * k;
         cb.ring.roundRect(-cw / 2 - pad, topY - pad, cw + 2 * pad, ch + 2 * pad, 16 * k).stroke({ width: 10 * k, color: INK, alpha: on })
           .roundRect(-cw / 2 - pad, topY - pad, cw + 2 * pad, ch + 2 * pad, 16 * k).stroke({ width: 5.5 * k, color: 0xff3b30, alpha: on });
-      }
-    }
-
-    // La cara del que se baja en la última parada: salta como los demás y se
-    // aplasta un poco al tocar el andén. Cae en la punta derecha del piso de la
-    // estación, que es la única libre: la cabina de adelante cuelga en el
-    // medio y las de atrás quedan a la izquierda.
-    if (jumper && lastStop) {
-      const pr = (tAll - lastStop.tOff) / HOP;
-      const hasta = Math.min(T_CROWN, lastStop.tOff + HOP + 2.2);
-      jumper.visible = pr >= 0 && tAll < hasta;
-      if (jumper.visible) {
-        const q = clamp(pr, 0, 1);
-        const from = pt(lastStop.at, P.slotAt(P.loserCab, lastStop.tOff) * gap);
-        const sp = pt(lastStop.station);
-        const tx = sp.x + 78 * k, ty = sp.y - 40 * k + 160 * k - 18 * k;
-        const fy = from.y + 24 * k + ch * 0.8;
-        // Más alto que los saltos chicos, para pasar por encima de la cabina de adelante.
-        jumper.position.set(from.x + (tx - from.x) * q, fy + (ty - fy) * q - Math.sin(q * Math.PI) * 130 * k);
-        const land = tAll - lastStop.tOff - HOP;
-        const sq = land > 0 ? 0.2 * Math.exp(-land * 9) * Math.cos(land * 28) : 0;
-        jumper.scale.set(1 + sq, 1 - sq);
-        jumper.alpha = clamp((hasta - tAll) / 0.3, 0, 1);
       }
     }
 
@@ -1436,14 +1297,14 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       }
     }
     if (tAll < T_BOARD) {
-      const perCab = Math.ceil(n / C);
-      const show = Math.min(perCab, Math.ceil(40 / C));
       const b = pt(0);
       for (let cab = 0; cab < C; cab++) {
-        const count = Math.min(P.pax[cab]?.length ?? 0, perCab);
-        for (let i = 0; i < Math.min(count, show); i++) {
-          const slot = Math.floor((i * perCab) / show);
-          const tb = 0.25 + ((slot + 1) / perCab) * (T_BOARD - 0.55);
+        // Cada cabina sube a los de su grupo, con sus propias cuentas.
+        const size = P.pax[cab]?.length ?? 0;
+        const show = Math.min(size, Math.ceil(40 / C));
+        for (let i = 0; i < show; i++) {
+          const slot = Math.floor((i * size) / show);
+          const tb = 0.25 + ((slot + 1) / Math.max(1, size)) * (T_BOARD - 0.55);
           const q = (tAll - (tb - 0.35)) / 0.35;
           if (q < 0 || q > 1) continue;
           const to = pt(P.headAt(tAll), P.slotAt(cab, tAll) * gap);
@@ -1493,10 +1354,9 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       }
     }
 
-    // Los nombres de las cabinas de a uno y el del que salta en la última, en
-    // la pantalla. El andén ya se dibujó arriba (`drawBoard`).
+    // Los rótulos de las cabinas (su grupo, o los dos de la última), en la
+    // pantalla. El andén ya se dibujó arriba (`drawBoard`).
     placeSoloTags(few);
-    placeJumperTag();
 
     // El viento y la oscuridad, en la pantalla.
     wind.clear();
