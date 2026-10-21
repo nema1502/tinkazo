@@ -1046,6 +1046,27 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
    */
   const zoomBajo = (z: number, tope: number): number => (!G.vertical && S.sh() < 500 ? Math.min(z, tope) : z);
 
+  /**
+   * El encuadre de la cumbre, desde que llega la cabina hasta el final. El
+   * cartel del ganador sale arriba al centro, y con la estación centrada en la
+   * pantalla tapaba el letrero CUMBRE (evaluador visual, 21 de octubre de 2026).
+   * La estación baja lo justo para que el letrero quede debajo de donde va el
+   * cartel, ya desde la llegada, así no queda tapado mientras la cámara se
+   * abre; y si no entra con la cabina encima de la caja del relator, la cámara
+   * se acerca menos. `dy` es el encuadre de siempre, que vale si ya deja lugar.
+   */
+  function cumbre(zoom: number, dy: number): { y: number; z: number } {
+    const k = G.k, u = S.u();
+    const p = pt(P.TOP);
+    // El borde de arriba del letrero (su centro va 74k por encima del cable) y
+    // el de abajo de la cabina con su sombra.
+    const tagTop = p.y - 92 * k, cabinBottom = p.y + 108 * k;
+    const lo = S.placaBajo(winners.length) + 12 * u;
+    const hi = S.sh() - S.bottom() - 8 * u;
+    const z = Math.max(0.5, Math.min(zoom, (hi - lo) / (cabinBottom - tagTop)));
+    return { y: Math.min(p.y + dy, tagTop - (lo - S.sh() / 2) / z), z };
+  }
+
   function direct(): void {
     const k = G.k;
     const head = P.headAt(tAll);
@@ -1059,11 +1080,11 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       const b = pt(0);
       cam.lookAt(b.x + 40 * k, b.y + 20 * k, 1.55 - 0.3 * (tAll / T_BOARD), 3);
     } else if (tAll >= T_CROWN) {
-      const top = pt(P.TOP);
-      cam.lookAt(top.x, top.y + 20 * k, 1.1, 1.5);
+      const top = pt(P.TOP), c = cumbre(1.1, 20 * k);
+      cam.lookAt(top.x, c.y, c.z, 1.5);
     } else if (tAll >= T_DOCK) {
-      const top = pt(P.TOP);
-      cam.lookAt(top.x, top.y + 40 * k, 1.5, 3);
+      const top = pt(P.TOP), c = cumbre(1.5, 40 * k);
+      cam.lookAt(top.x, c.y, c.z, 3);
     } else if (tAll >= T_RUN) {
       const p = cabPoint(winnerCab, tAll);
       cam.lookAt(p.x + 60 * k, p.y + 40 * k, 1.35, 3);
