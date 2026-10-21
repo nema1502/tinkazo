@@ -981,8 +981,11 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
         boxAdd(p.x, p.y);
       }
     }
-    // Los que se quedaron hace poco siguen en cuadro mientras la cámara vuelve del primer plano.
-    for (const d of dancers) if (!d.alive && tAll - d.left < 1.6 && tAll - d.left > 0) boxAdd(d.wx, d.wy);
+    // Los de la última fraternidad que se quedaron hace poco siguen en cuadro
+    // mientras la cámara vuelve del primer plano: se quedan al lado. Una
+    // fraternidad entera, en cambio, queda atrás mientras la comparsa avanza, y
+    // meterla en la caja abría la toma hasta dejar a los que siguen en el borde.
+    for (const d of dancers) if (!d.alive && d.f === winFrat && tAll - d.left < 1.6 && tAll - d.left > 0) boxAdd(d.wx, d.wy);
     const fr = freeRect(g);
     const maxW = fr.w / zLo - 2 * BODY_HALF_W * g.scale;
     if (box.x1 - box.x0 > maxW) box.x0 = box.x1 - maxW;
