@@ -32,7 +32,7 @@
  */
 import { launch } from "./lib/browser.mjs";
 
-const TODOS = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien"];
+const TODOS = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "trueque"];
 /**
  * Hasta cuántos promete cada juego, si no es 200. Hoy ninguno tiene menos: la
  * ruleta llega a 200 desde el 21 de octubre de 2026 (antes, 24). La carrera

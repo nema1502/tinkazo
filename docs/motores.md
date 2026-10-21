@@ -64,6 +64,7 @@ Los momentos de cámara de cada juego:
 | Carnaval de Oruro | Encuadra los cuerpos de la comparsa, de los cuernos a las botas y con lugar para los nombres, y llena la pantalla con ellos; va al ritmo con que cada diablo sigue su lugar en la fila, así no se atrasa ni se adelanta. En el celular la comparsa forma más honda y angosta. Se acerca a los que se quedan en cada arco y a la máscara que se corre, se abre al Socavón con los dos del contrapunto delante y se cierra en el contrapunto |
 | Constelación | Sigue al paquete desde el primer salto, encima en los saltos lentos del final, golpe en el roce y en el engaño, y se abre en la nova para mostrar la constelación; sin desenfoque desde los saltos lentos |
 | De pie | Abierta sobre la sala mientras cada uno revisa su nombre, con un respiro suave; con cuatro o menos de pie, se acerca a los finalistas; la carta que queda sola se acerca como héroe antes del cartel |
+| El Trueque | La feria entera al armarse; en cada intento sigue al encargo (1,25×) hasta el puesto que lo recibe; en la entrega se acerca a quien espera (1,45×); al final encuadra todas las rutas, con el cartel por encima; sin desenfoque |
 
 ### Volver a la pestaña con el contexto perdido
 

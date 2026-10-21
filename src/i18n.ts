@@ -225,6 +225,15 @@ export interface Dict {
   cTroSpent: (n: string) => string;
   // Constelación, sapo y ¿Quién es? (7 de octubre de 2026).
   cConstHeading: (n: string) => string;
+  /** El Trueque (src/games/pixi/trueque.ts): las frases con un nombre o un número son funciones. */
+  trSale: (p: string) => string;
+  trBusca: (p: string) => string;
+  trCambio: (p: string) => string;
+  trCuenta: (k: number, K: number) => string;
+  trRuta: (pasaron: string, llego: string) => string;
+  trDirecto: (llego: string) => string;
+  trCallejon: string[];
+  trNoEs: string;
   cSapMissBy: (n: string) => string;
   /** La ruleta mientras frena: el trinquete y la pregunta de dónde para. */
   cWheelTick: string[];
@@ -704,6 +713,24 @@ export const T: Record<Lang, Dict> = {
     soundOn: "Sonido: sí",
     paceLabel: "Duración", paceFast: "Rápida", paceNormal: "Normal", paceEpic: "Épica",
     gameLabel: "Juego", gameRace: "Carrera de llamas", gameStellar: "Constelación Stellar",
+    // --- El Trueque: una feria de puestos. Cada uno acepta un producto y da otro; un encargo cambia de mano hasta quien lo espera.
+    gameTrueque: "El Trueque", jgTruequeN: "El Trueque",
+    gcTrueque: "Cada puesto acepta un producto y da otro a cambio. Gana quien recibe el encargo.",
+    gcTruequeMany: "Cada premio es un encargo que cambia de mano hasta llegar a quien lo espera.",
+    loreTruequeQ: "¿Dónde se sigue haciendo el trueque?",
+    loreTruequeA: "En Pongo K'asa, cada sábado en el kilómetro 94 de la carretera Cochabamba–Oruro, y en Confital los martes, la gente cambia papa, chuño y otros productos. Una nota de Opinión lo llama práctica ancestral: el chhalaku.",
+    trFeria: "¡Se abre la feria!",
+    trAcepta: "Cada puesto acepta un producto y da otro a cambio",
+    trLeyenda: "Arriba, lo que acepta · abajo, lo que da",
+    trSale: (p) => `Sale el encargo con ${p}`,
+    trBusca: (p) => `¿Quién acepta ${p}?`,
+    trCambio: (p) => `¡Cambio! Ahora es ${p}`,
+    trCallejon: ["¡Callejón sin salida!", "Por ahí no se puede", "¡Ahí no hay cambio!"],
+    trNoEs: "¡No, es para el otro!",
+    trCuenta: (k, K) => `CAMBIO ${k} DE ${K}`,
+    trRuta: (pasaron, llego) => `Nadie llega solo: pasó por ${pasaron} y llegó a ${llego}`,
+    trDirecto: (llego) => `Llegó directo a ${llego}`,
+    prPapa: "papa", prChuno: "chuño", prQuinua: "quinua", prMaiz: "maíz", prArroz: "arroz", prYuca: "yuca", prPlatano: "plátano", prCafe: "café",
     gameLedger: "Cierre de Libro", gameRockets: "Carrera de cohetes", gameWheel: "Ruleta",
     cWheelGroups: (gajos, max) => `¡${gajos} gajos, hasta ${max} personas en cada uno!`,
     cWheelGroup: (nombres, mas) => (mas ? `${nombres.join(", ")} y ${mas} más` : nombres.length > 1 ? `${nombres[0]} y ${nombres[1]}` : (nombres[0] ?? "")),
@@ -1934,6 +1961,24 @@ export const T: Record<Lang, Dict> = {
     soundOn: "Sound: on",
     paceLabel: "Length", paceFast: "Short", paceNormal: "Normal", paceEpic: "Epic",
     gameLabel: "Game", gameRace: "Llama race", gameStellar: "Stellar Constellation",
+    // --- El Trueque: una feria de puestos. Cada uno acepta un producto y da otro; un encargo cambia de mano hasta quien lo espera.
+    gameTrueque: "El Trueque", jgTruequeN: "El Trueque",
+    gcTrueque: "Each stall takes one product and gives another in return. Whoever receives the order wins.",
+    gcTruequeMany: "Each prize is an order that changes hands until it reaches whoever is waiting for it.",
+    loreTruequeQ: "Where is trueque still done?",
+    loreTruequeA: "At Pongo K'asa, every Saturday at kilometer 94 of the Cochabamba–Oruro highway, and at Confital on Tuesdays, people trade potatoes, chuño and other products. An Opinión article calls it an ancestral practice: the chhalaku.",
+    trFeria: "The fair is open!",
+    trAcepta: "Each stall takes one product and gives another in return",
+    trLeyenda: "Top: what it takes · bottom: what it gives",
+    trSale: (p) => `The order leaves with ${p}`,
+    trBusca: (p) => `Who takes ${p}?`,
+    trCambio: (p) => `Change! Now it's ${p}`,
+    trCallejon: ["Dead end!", "That way is closed", "No trade there!"],
+    trNoEs: "No, it's for the other one!",
+    trCuenta: (k, K) => `CHANGE ${k} OF ${K}`,
+    trRuta: (pasaron, llego) => `Nobody gets there alone: it went through ${pasaron} and reached ${llego}`,
+    trDirecto: (llego) => `It went straight to ${llego}`,
+    prPapa: "potato", prChuno: "chuño", prQuinua: "quinoa", prMaiz: "corn", prArroz: "rice", prYuca: "cassava", prPlatano: "plantain", prCafe: "coffee",
     gameLedger: "Ledger Close", gameRockets: "Rocket race", gameWheel: "Wheel",
     cWheelGroups: (gajos, max) => `${gajos} slices, up to ${max} people on each!`,
     cWheelGroup: (nombres, mas) => (mas ? `${nombres.join(", ")} and ${mas} more` : nombres.length > 1 ? `${nombres[0]} and ${nombres[1]}` : (nombres[0] ?? "")),
