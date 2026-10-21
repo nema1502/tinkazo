@@ -3,6 +3,7 @@ import { onLangChange, t } from "../i18n";
 import { anchoringAvailable, accountUrl, network, shortAddress } from "../stellar/config";
 import { grifoApagado, hayAyudaDeFondos } from "../stellar/grifo";
 import { refreshFreezeLabel } from "./freeze";
+import { guardarBorrador } from "./participants";
 import { clearSessionKind, loadSessionKind, pickRestore, saveSessionKind } from "../stellar/session-store";
 
 /**
@@ -620,6 +621,8 @@ async function abrirPicker(): Promise<void> {
   } catch {
     /* sin almacenamiento, se queda en la portada y el menú lleva a sortear */
   }
+  // Y con la lista que estaba armando: al volver de Google, sigue ahí.
+  guardarBorrador();
   // Sin el SDK: preguntarle a Freighter si está es hablar con su extensión.
   const [w, { pollarConfigured }] = await Promise.all([lite(), import("../stellar/wallet-pollar")]);
   const options: Option[] = [];

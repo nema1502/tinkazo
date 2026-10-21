@@ -9,7 +9,7 @@ import { anchorErrorText, hideTxStatus, sealOnChain, selloSinGrabar, showTxStatu
 import { precargarQr } from "./qr";
 import { recomendar } from "./recomendar";
 import { apruebaAMano, canAnchor, currentSession } from "./wallet-ui";
-import { cerrarLista, parseNames, setList } from "./participants";
+import { cerrarLista, olvidarBorrador, parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
 import { NOMBRE } from "./gamecard";
 import { actualizarPaso, barraActiva, verError } from "./siguiente";
@@ -505,6 +505,8 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   const btn = $<HTMLButtonElement>("btn-freeze");
   // El cuadro, el premio, "Cuántos ganan" y los orígenes: lo que se ve es lo que se selló.
   cerrarLista(true);
+  // Lo que se estaba armando ya quedó sellado (o se retomó un sello): no hay borrador que recuperar.
+  olvidarBorrador();
   btn.disabled = true;
   btn.dataset.i = raffleId !== undefined ? "sealed" : "frozenOk";
   btn.textContent = t(btn.dataset.i);

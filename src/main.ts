@@ -3,7 +3,7 @@ import { $ } from "./dom";
 import { chooseLang, initialLang, onLangChange, setLang, t } from "./i18n";
 import { SAMPLE, app, currentPace, paceSeconds, params, setPace, type Game, type Pace } from "./state";
 import { soundLabel, toggleSound, unlockAudioOnGesture } from "./sound";
-import { bindParticipants, loadSample, renderNames } from "./ui/participants";
+import { bindParticipants, loadSample, renderNames, reponerBorrador } from "./ui/participants";
 import { GAME_BUTTONS, cambiarJuego, copyRules, freeze, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
 import { initSiguiente } from "./ui/siguiente";
 import { montarPremios } from "./ui/premios";
@@ -122,6 +122,8 @@ onLangChange(musicLabel);
 $("st-skip").addEventListener("click", skipGame);
 bindParticipants();
 montarPremios();
+// La lista que se estaba armando en esta pestaña, si se recargó o se volvió de entrar con Google.
+reponerBorrador();
 initVistas();
 initOnboarding();
 initWalletUI();

@@ -1,11 +1,11 @@
 import { $, esc } from "../dom";
-import { SAMPLE, app, avatar } from "../state";
+import { SAMPLE, app, avatar, params } from "../state";
 import { canonicalList } from "../protocol/canonical";
-import { type Dict, T, getLang, onLangChange } from "../i18n";
+import { type Dict, T, getLang, onLangChange, t } from "../i18n";
 import { decodeText, dropListHeader, parseTable } from "./csv";
 import { type ImportResult, type ImportState, initialState, openImporter } from "./importer";
 import { stripInvisibles, stripInvisiblesByLine } from "../invisibles";
-import { sincronizarPremios } from "./premios";
+import { ponerPremio, sincronizarPremios } from "./premios";
 
 /** Lista canónica a partir del textarea (protocolo §1). */
 export function parseNames(): string[] {
@@ -79,7 +79,14 @@ export function bindParticipants(): void {
     hideSummary();
     quitarAvisos();
     renderNames();
+    guardarPronto();
   });
+  // El borrador sigue al premio y a la cantidad de ganadores, y se escribe del
+  // todo al irse de la página: una recarga, o el viaje a Google para entrar.
+  $("prize").addEventListener("input", guardarPronto);
+  $("prize-chips").addEventListener("click", guardarPronto);
+  $("nw").addEventListener("change", guardarPronto);
+  addEventListener("pagehide", guardarBorrador);
   // Pegar una tabla entera es lo mismo que subirla: abre la ventana de
   // importar. Y una columna copiada de una planilla con su encabezado entra
   // sin el encabezado. Solo cuando lo pegado es toda la lista: con algo ya
@@ -283,6 +290,79 @@ export function setList(text: string, clearSummary = true): void {
   quitarAvisos();
   $<HTMLTextAreaElement>("ta").value = text;
   renderNames();
+  guardarPronto();
+}
+
+/* ------------------------------------------------------------ el borrador */
+
+/**
+ * La lista que se está armando, guardada en esta pestaña hasta que se sella.
+ *
+ * Entrar con Google es irse del sitio y volver: Pollar hace un redirect de
+ * página entera. Y desde el 21 de octubre de 2026 "Sellar" sin cuenta abre la
+ * ventana para entrar, así que el camino de la primera vez es pegar la lista,
+ * tocar "Sellar", entrar con Google y volver... con el cuadro vacío. Una
+ * recarga hacía lo mismo, y con un CSV de Luma había que volver a bajarlo y a
+ * elegir "los que vinieron" (buscador de detalles, D03).
+ *
+ * Se guarda en `sessionStorage`, como `tinkazo.abrir`: vive en esta pestaña,
+ * no sale del navegador y se borra al sellar (`freeze.ts`). Lo que se recupera
+ * es el texto, el premio y la cantidad de ganadores; la selección del
+ * importador no. La demo no guarda ni repone nada.
+ */
+const BORRADOR = "tinkazo.borrador";
+let guardarLuego = 0;
+
+/** Guarda ya lo que hay en el cuadro, el premio y la cantidad. Lo llama también la ventana de ingreso, antes de irse a Google. */
+export function guardarBorrador(): void {
+  window.clearTimeout(guardarLuego);
+  if (params.has("demo") || listaCerrada()) return;
+  try {
+    const texto = $<HTMLTextAreaElement>("ta").value;
+    const premio = $<HTMLInputElement>("prize").value;
+    if (!texto.trim() && !premio.trim()) sessionStorage.removeItem(BORRADOR);
+    else sessionStorage.setItem(BORRADOR, JSON.stringify({ texto, premio, nw: $<HTMLSelectElement>("nw").value }));
+  } catch {
+    /* sin almacenamiento, no se recupera: nada más */
+  }
+}
+
+/** Al escribir no se guarda en cada tecla: un momento después. */
+function guardarPronto(): void {
+  window.clearTimeout(guardarLuego);
+  guardarLuego = window.setTimeout(guardarBorrador, 400);
+}
+
+/** Se selló (o se retomó un sorteo sellado): no queda nada por recuperar. La demo no lo toca: es otra lista. */
+export function olvidarBorrador(): void {
+  window.clearTimeout(guardarLuego);
+  if (params.has("demo")) return;
+  try {
+    sessionStorage.removeItem(BORRADOR);
+  } catch {
+    /* sin almacenamiento, no había nada */
+  }
+}
+
+/**
+ * Al abrir la herramienta, si el cuadro está vacío, repone lo que se estaba
+ * armando en esta pestaña, y lo dice. Nunca encima de una lista ni de un sello.
+ */
+export function reponerBorrador(): void {
+  if (params.has("demo") || listaCerrada() || $<HTMLTextAreaElement>("ta").value.trim()) return;
+  type Guardado = { texto?: unknown; premio?: unknown; nw?: unknown } | null;
+  let b: Guardado;
+  try {
+    b = JSON.parse(sessionStorage.getItem(BORRADOR) ?? "null") as Guardado;
+  } catch {
+    return;
+  }
+  if (!b || typeof b.texto !== "string") return;
+  setList(b.texto);
+  if (typeof b.premio === "string" && b.premio.trim()) ponerPremio(b.premio);
+  const nw = Number(b.nw);
+  if (Number.isInteger(nw) && nw >= 1 && nw <= 32) $<HTMLSelectElement>("nw").value = String(nw);
+  if (canonicalList(b.texto).length) avisar(() => t("borradorRepuesto"));
 }
 
 function hideSummary(): void {
