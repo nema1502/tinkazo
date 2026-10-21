@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buscar, normalizar, repetidos, vecesExacto } from "./buscar";
+import { buscar, normalizar, parecidos, repetidos, vecesExacto } from "./buscar";
 
 const lista = ["María Quispe", "Jorge Mamani", "ana quispe", "Ana Quispe", "Mariana Flores"];
 
@@ -18,6 +18,15 @@ describe("buscarse en la lista", () => {
   it("marca los repetidos aunque estén escritos distinto", () => {
     expect([...repetidos(lista)].sort()).toEqual([2, 3]);
     expect(repetidos(["Ana", "Luis"]).size).toBe(0);
+  });
+
+  it("dice qué nombres parecen la misma persona escrita distinto, como se escribieron (D09)", () => {
+    expect(parecidos(lista)).toEqual([["ana quispe", "Ana Quispe"]]);
+    expect(parecidos(["José Pérez", "JOSE PEREZ", "Luis", "luis", "Carla"])).toEqual([
+      ["José Pérez", "JOSE PEREZ"],
+      ["Luis", "luis"],
+    ]);
+    expect(parecidos(["Ana", "Luis"])).toEqual([]);
   });
 
   it("cuenta las veces exactas de un nombre", () => {

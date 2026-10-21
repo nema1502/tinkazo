@@ -2,9 +2,10 @@ import { $, esc } from "../dom";
 import { SAMPLE, app, avatar, params } from "../state";
 import { canonicalList } from "../protocol/canonical";
 import { type Dict, T, getLang, onLangChange, t } from "../i18n";
-import { decodeText, dropListHeader, parseTable } from "./csv";
+import { decodeText, dropListHeader, igualesQuitados, parseTable, quitarNumeracion } from "./csv";
 import { type ImportResult, type ImportState, initialState, openImporter } from "./importer";
 import { stripInvisibles, stripInvisiblesByLine } from "../invisibles";
+import { parecidos } from "../buscar";
 import { ponerPremio, sincronizarPremios } from "./premios";
 
 /** Lista canónica a partir del textarea (protocolo §1). */
@@ -78,12 +79,14 @@ let lastResult: ImportResult | null = null;
 
 export function bindParticipants(): void {
   const ta = $<HTMLTextAreaElement>("ta");
-  ta.addEventListener("input", () => {
+  ta.addEventListener("input", (e) => {
     // Si edita a mano, manda lo que escribió: el resumen del archivo ya no aplica.
     hideSummary();
     quitarAvisos();
     renderNames();
     guardarPronto();
+    // Lo que se pegó tal cual (sin nada que limpiar): si trajo repetidos, se dice.
+    if ((e as InputEvent).inputType === "insertFromPaste") avisarCarga([]);
   });
   // El borrador sigue al premio y a la cantidad de ganadores, y se escribe del
   // todo al irse de la página: una recarga, o el viaje a Google para entrar.
@@ -96,7 +99,8 @@ export function bindParticipants(): void {
   // sin el encabezado. Solo cuando lo pegado es toda la lista: con algo ya
   // escrito, pegar agrega como siempre, y una lista suelta se pega igual que
   // antes, y se puede deshacer. Lo que se pega como siempre entra sin los
-  // caracteres que no se ven, y si traía alguno, lo dice.
+  // caracteres que no se ven y sin la numeración de una lista de WhatsApp
+  // (`quitarNumeracion`), y si traía algo de eso, o repetidos, lo dice.
   ta.addEventListener("paste", (e) => {
     const text = e.clipboardData?.getData("text/plain") ?? "";
     if (listaCerrada() || !text.trim()) return;
@@ -107,10 +111,11 @@ export function bindParticipants(): void {
       return;
     }
     const limpio = stripInvisiblesByLine(text);
-    if (limpio.text === text) return;
+    const num = quitarNumeracion(limpio.text);
+    if (num.text === text) return;
     e.preventDefault();
-    insertar(ta, limpio.text);
-    if (limpio.lines) avisar((L) => L.impInvisibles(limpio.lines));
+    insertar(ta, num.text);
+    avisarCarga([...(limpio.lines ? [(L: Dict) => L.impInvisibles(limpio.lines)] : []), ...avisosDeNumeracion(num)]);
   });
   // El aviso vive desde el principio, vacío: un lector de pantalla anuncia los
   // cambios de una región que ya estaba, no de una que aparece con el texto.
@@ -195,18 +200,48 @@ export function loadFile(raw: string, fileName = "lista.csv"): void {
     return;
   }
   const { text, header } = dropListHeader(raw);
-  // Los caracteres que no se ven salen antes de sellar (src/invisibles.ts).
+  // Los caracteres que no se ven salen antes de sellar (src/invisibles.ts), y la numeración de una lista de WhatsApp también.
   const limpio = stripInvisiblesByLine(text);
-  if (canonicalList(limpio.text).length === 0) {
+  const num = quitarNumeracion(limpio.text);
+  if (canonicalList(num.text).length === 0) {
     avisar((L) => L.impNoNames(fileName));
     return;
   }
-  setList(limpio.text);
-  if (!header && !limpio.lines) return;
-  avisar((L) =>
-    [header ? L.impHeaderOut(stripInvisibles(header)) : "", limpio.lines ? L.impInvisibles(limpio.lines) : ""]
-      .filter(Boolean)
-      .join(" "));
+  setList(num.text);
+  avisarCarga([
+    ...(header ? [(L: Dict) => L.impHeaderOut(stripInvisibles(header))] : []),
+    ...(limpio.lines ? [(L: Dict) => L.impInvisibles(limpio.lines)] : []),
+    ...avisosDeNumeracion(num),
+  ]);
+}
+
+/** Lo que dice el aviso de una lista que llegó numerada: cuántas líneas, cómo quedó la primera y las que no tenían número. */
+function avisosDeNumeracion(num: ReturnType<typeof quitarNumeracion>): Array<(L: Dict) => string> {
+  // Sin ningún nombre (solo lugares libres, "1.", "2."), no hay qué contar: el cuadro queda sin nombres y lo dice el paso.
+  if (!num.lineas || !num.despues) return [];
+  const partes: Array<(L: Dict) => string> = [(L) => L.pegNumeracion(num.lineas, num.antes, num.despues)];
+  const [primera] = num.sueltas;
+  if (primera) partes.push((L) => L.pegSueltas(num.sueltas.length, primera));
+  return partes;
+}
+
+/**
+ * Avisa lo que pasó con lo último que se cargó o se pegó (`partes`), y lo que
+ * la lista canónica hace en silencio: un nombre escrito dos veces igual entra
+ * una sola vez, y dos que parecen la misma persona escrita distinto ("Ana
+ * Quispe" y "ana quispe") entran los dos. Hasta el 21 de octubre de 2026 eso
+ * solo se veía en "Mostrar la lista a la sala" (buscador de detalles, D09). No
+ * frena el sello: avisa.
+ */
+function avisarCarga(partes: Array<(L: Dict) => string>): void {
+  const texto = $<HTMLTextAreaElement>("ta").value;
+  const iguales = igualesQuitados(texto);
+  const pares = parecidos(canonicalList(texto));
+  const todo = [...partes];
+  if (iguales) todo.push((L) => L.pegIguales(iguales));
+  const [par] = pares;
+  if (par) todo.push((L) => L.pegParecidos(par[0], par[1], pares.length - 1));
+  if (todo.length) avisar((L) => todo.map((p) => p(L)).join(" "));
 }
 
 /** ¿Lo pegado es una tabla o trae el encabezado de la columna? Si no, se pega como siempre. */

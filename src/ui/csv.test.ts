@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildList, columnToText, decodeText, detectSource, dropListHeader, filterChoices, filterRows, fixCase, looksTabular,
-  mailNotes, maskEmail, nameKey, parseTable, presets, suggestFilter,
+  buildList, columnToText, decodeText, detectSource, dropListHeader, filterChoices, filterRows, fixCase, igualesQuitados, looksTabular,
+  mailNotes, maskEmail, nameKey, parseTable, presets, quitarNumeracion, suggestFilter,
 } from "./csv";
 import { canonicalList } from "../protocol/canonical";
 
@@ -296,6 +296,66 @@ describe("el encabezado no es un participante", () => {
 
   it("con un número no es encabezado: «Participante 1» es un nombre de prueba", () => {
     expect(dropListHeader("Participante 1\nParticipante 2").header).toBeNull();
+  });
+});
+
+describe("una lista numerada de WhatsApp entra sin los números (D09)", () => {
+  it("«1. Ana Quispe» y «9. Ana Quispe» quedan como una sola persona", () => {
+    const pegado = "1. Ana Quispe\n2. Luis Mamani\n3. Carla Flores\n9. Ana Quispe";
+    const r = quitarNumeracion(pegado);
+    expect(r.lineas).toBe(4);
+    expect(canonicalList(r.text)).toEqual(["Ana Quispe", "Luis Mamani", "Carla Flores"]);
+    expect(r).toMatchObject({ antes: "1. Ana Quispe", despues: "Ana Quispe", sueltas: [] });
+  });
+
+  it("acepta las formas de siempre: 1. 1.- 1) (1) 1º 1 1.Ana, viñetas y números de emoji", () => {
+    const formas = ["1. Ana", "2.- Luis", "3) Carla", "(4) Diego", "5º Elena", "6 Franco", "7.Gabriela", "• Hugo", "- Inés", "* Juan", "8️⃣ Karen", "🔟 Lucía", "1⃣ Mario"];
+    const r = quitarNumeracion(formas.join("\n"));
+    expect(r.lineas).toBe(formas.length);
+    expect(r.text.split("\n")).toEqual(["Ana", "Luis", "Carla", "Diego", "Elena", "Franco", "Gabriela", "Hugo", "Inés", "Juan", "Karen", "Lucía", "Mario"]);
+  });
+
+  it("los lugares libres de la lista («5.») quedan vacíos y no entran", () => {
+    const r = quitarNumeracion("1. Ana Quispe\n2. Luis Mamani\n3.\n4.\n5.");
+    expect(canonicalList(r.text)).toEqual(["Ana Quispe", "Luis Mamani"]);
+  });
+
+  it("el título sin número no se toca, y se avisa", () => {
+    const r = quitarNumeracion("*Sorteo del meetup* 🎁\n1. Ana Quispe\n2. Luis Mamani\n3. Carla Flores");
+    expect(r.text.split("\n")[0]).toBe("*Sorteo del meetup* 🎁");
+    expect(r.sueltas).toEqual(["*Sorteo del meetup* 🎁"]);
+  });
+
+  it("si la mayoría no está numerada, no se toca nada: hay nombres que empiezan con un número", () => {
+    const lista = "3 Marías Café\nAna Quispe\nLuis Mamani";
+    expect(quitarNumeracion(lista)).toEqual({ text: lista, lineas: 0, antes: "", despues: "", sueltas: [] });
+    // Mitad y mitad tampoco: hace falta la mayoría.
+    expect(quitarNumeracion("1. Ana\nLuis Mamani").lineas).toBe(0);
+    // Un solo número no alcanza.
+    expect(quitarNumeracion("1. Ana").lineas).toBe(0);
+  });
+
+  it("la negrita de WhatsApp («*Ana*») no es una viñeta", () => {
+    expect(quitarNumeracion("*Ana Quispe*\n*Luis Mamani*").lineas).toBe(0);
+  });
+
+  it("una lista sin numerar queda exactamente como estaba", () => {
+    const lista = "Diego Rojas\nLucía Flores\nCarlos Choque";
+    expect(quitarNumeracion(lista).text).toBe(lista);
+  });
+});
+
+describe("cuántos repetidos iguales deja afuera la lista canónica", () => {
+  it("cuenta las líneas que repiten un nombre escrito exactamente igual", () => {
+    const texto = "Ana Quispe\nLuis Mamani\nAna Quispe\n  Ana Quispe  \nana quispe\n\nX";
+    expect(igualesQuitados(texto)).toBe(2);
+  });
+
+  it("coincide con lo que de verdad hace la lista canónica", () => {
+    for (const texto of ["Ana\nAna\nLuis", "Ana, ingeniera\nAna, abogada\nLuis", "a\nb\nAna\nAna", "Ana\nana\nANA"]) {
+      const validas = texto.split("\n").filter((l) => (l.split(",")[0] ?? "").trim().length >= 2).length;
+      expect(igualesQuitados(texto), texto).toBe(validas - canonicalList(texto).length);
+    }
   });
 
   it("en una tabla, «Participantes» también es encabezado aunque no haya números", () => {

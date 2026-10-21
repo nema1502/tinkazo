@@ -512,6 +512,67 @@ export function dropListHeader(text: string): { text: string; header: string | n
 }
 
 /**
+ * El número o la viñeta con que empieza una línea de una lista para anotarse:
+ * "1. ", "1.-", "1)", "(1)", "1º", "1 ", "1️⃣", "🔟", "• ", "- ". Un guion o
+ * un asterisco cuentan solo con un espacio después: "*Ana*" es negrita de
+ * WhatsApp, no una viñeta.
+ */
+const MARCA = /^\s*(?:[([]?\d{1,3}\s*[.)\]:\-–—º°]{1,2}\s*|\d{1,3}\s+|(?:\d️?⃣)+\s*|\u{1F51F}\s*|[•·▪◦‣⁃●■►▸➤]\s*|[-*–—]\s+)/u;
+
+/**
+ * Una lista copiada de un grupo de WhatsApp suele venir numerada ("1. Ana
+ * Quispe", "2. Luis Mamani"), y el número entraba al nombre: salía en el
+ * estadio y en el cartel, y escondía los repetidos, porque "1. Ana Quispe" y
+ * "9. Ana Quispe" son dos nombres distintos para la lista canónica: la misma
+ * persona con dos chances (buscador de detalles, D09).
+ *
+ * Saca el número o la viñeta del principio de cada línea, pero solo si la
+ * mayoría de las líneas con algo escrito lo traen (y al menos dos): un nombre
+ * que de verdad empieza con un número no se toca en una lista que no está
+ * numerada. Una línea que era solo el número (un lugar libre de la lista,
+ * "5.") queda vacía y no entra. Devuelve el texto, en cuántas líneas se sacó
+ * algo, la primera con nombre antes y después (para el aviso) y las líneas sin
+ * número, que en una lista numerada suelen ser el título ("*Sorteo del
+ * meetup* 🎁").
+ *
+ * Como `dropListHeader`, pasa antes de que el texto llegue al cuadro: la lista
+ * canónica y el sello no cambian (docs/protocolo.md §1).
+ */
+export function quitarNumeracion(text: string): { text: string; lineas: number; antes: string; despues: string; sueltas: string[] } {
+  const lines = text.split(/\r\n?|\n/);
+  const llenas = lines.filter((l) => l.trim() !== "");
+  const marcadas = llenas.filter((l) => MARCA.test(l));
+  if (marcadas.length < 2 || marcadas.length * 2 <= llenas.length) return { text, lineas: 0, antes: "", despues: "", sueltas: [] };
+  const sin = (l: string): string => l.replace(MARCA, "").trim();
+  const primera = marcadas.find((l) => sin(l) !== "") ?? "";
+  return {
+    text: lines.map((l) => (MARCA.test(l) ? sin(l) : l)).join("\n"),
+    lineas: marcadas.length,
+    antes: primera.trim(),
+    despues: sin(primera),
+    sueltas: llenas.filter((l) => !MARCA.test(l)).map((l) => l.trim()),
+  };
+}
+
+/**
+ * Cuántas líneas repiten, escrito exactamente igual, un nombre que ya estaba
+ * más arriba. La lista canónica las deja entrar una sola vez sin decir nada
+ * (docs/protocolo.md §1: lo de antes de la primera coma, sin espacios en las
+ * puntas, de dos caracteres o más); esto cuenta cuántas fueron, para decirlo.
+ */
+export function igualesQuitados(text: string): number {
+  const vistos = new Set<string>();
+  let n = 0;
+  for (const raw of text.split(/\r?\n/)) {
+    const name = (raw.split(",")[0] ?? "").trim();
+    if (name.length < 2) continue;
+    if (vistos.has(name)) n++;
+    else vistos.add(name);
+  }
+  return n;
+}
+
+/**
  * ¿Esta línea es el encabezado de una columna de nombres? Lo es si dice
  * exactamente uno de los encabezados conocidos o, en pocas palabras y sin
  * números, nombra la columna ("Nombre del participante"). Con un número no:

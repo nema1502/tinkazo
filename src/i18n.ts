@@ -223,6 +223,14 @@ export interface Dict {
   impHeaderOut: (header: string) => string;
   /** Cuántos nombres traían caracteres que no se ven y se limpiaron al cargar la lista. */
   impInvisibles: (n: number) => string;
+  /** Una lista pegada con numeración (D09): en cuántas líneas se sacó, y cómo quedó la primera. */
+  pegNumeracion: (n: number, antes: string, despues: string) => string;
+  /** Las líneas sin número de una lista numerada: suelen ser el título. */
+  pegSueltas: (n: number, ej: string) => string;
+  /** Nombres escritos dos veces exactamente igual: entran una sola vez. */
+  pegIguales: (n: number) => string;
+  /** Dos nombres que parecen la misma persona escrita distinto, y cuántos pares más. */
+  pegParecidos: (a: string, b: string, mas: number) => string;
   impSkipped: (n: number, lines: string) => string;
   impSkippedShort: (n: number) => string;
   /** El mensaje para quien ganó; con `varios`, para todos los que ganaron juntos. */
@@ -432,6 +440,11 @@ export const T: Record<Lang, Dict> = {
     impNotText: (f) => `«${f}» no es un archivo de texto. Si es una planilla, guardala como CSV y subila de nuevo. La lista quedó como estaba.`,
     impHeaderOut: (h) => `«${h}» es el encabezado de la columna: no entra al sorteo.`,
     impInvisibles: (n) => `Se quitaron caracteres invisibles de ${n === 1 ? "1 nombre" : `${n} nombres`}: no se ven, y con ellos el mismo nombre podía entrar dos veces.`,
+    // Una lista pegada de WhatsApp, numerada (21 de octubre de 2026, D09).
+    pegNumeracion: (n, antes, despues) => `Sacamos la numeración de ${n === 1 ? "1 línea" : `${n} líneas`}: «${antes}» entra como «${despues}».`,
+    pegSueltas: (n, ej) => (n === 1 ? `«${ej}» no tenía número: si no es una persona, borralo.` : `${n} líneas no tenían número, como «${ej}»: si no son personas, borralas.`),
+    pegIguales: (n) => (n === 1 ? "Un nombre estaba dos veces igual: entra una sola vez." : `${n} nombres estaban repetidos igual: cada uno entra una sola vez.`),
+    pegParecidos: (a, b, mas) => `«${a}» y «${b}» parecen la misma persona: si lo son, borrá uno.${mas ? ` Y ${mas === 1 ? "otro par" : `${mas} pares más`} así.` : ""}`,
     impSkipped: (n, lines) => (n === 1 ? `No se pudo leer 1 fila (línea ${lines}): quedó afuera.` : `No se pudieron leer ${n} filas (líneas ${lines}): quedaron afuera.`),
     impSkippedHint: "Suele ser una coma sin comillas. Corregila en el archivo y subilo de nuevo, o agregá ese nombre a mano.",
     impSkippedShort: (n) => (n === 1 ? "1 fila no se pudo leer" : `${n} filas no se pudieron leer`),
@@ -1720,6 +1733,11 @@ export const T: Record<Lang, Dict> = {
     impNotText: (f) => `"${f}" isn't a text file. If it's a spreadsheet, save it as CSV and upload it again. The list was left as it was.`,
     impHeaderOut: (h) => `"${h}" is the column header: it doesn't go into the draw.`,
     impInvisibles: (n) => `Removed invisible characters from ${n === 1 ? "1 name" : `${n} names`}: they don't show, and with them the same name could get in twice.`,
+    // A numbered list pasted from WhatsApp (Oct 21, 2026, D09).
+    pegNumeracion: (n, antes, despues) => `We removed the numbering from ${n === 1 ? "1 line" : `${n} lines`}: "${antes}" goes in as "${despues}".`,
+    pegSueltas: (n, ej) => (n === 1 ? `"${ej}" had no number: if it isn't a person, delete it.` : `${n} lines had no number, like "${ej}": if they aren't people, delete them.`),
+    pegIguales: (n) => (n === 1 ? "One name was there twice, exactly the same: it goes in once." : `${n} names were repeated exactly: each goes in once.`),
+    pegParecidos: (a, b, mas) => `"${a}" and "${b}" look like the same person: if they are, delete one.${mas ? ` And ${mas === 1 ? "one more pair" : `${mas} more pairs`} like that.` : ""}`,
     impSkipped: (n, lines) => (n === 1 ? `1 row couldn't be read (line ${lines}) and was left out.` : `${n} rows couldn't be read (lines ${lines}) and were left out.`),
     impSkippedHint: "It's usually a comma without quotes. Fix it in the file and upload it again, or add that name by hand.",
     impSkippedShort: (n) => (n === 1 ? "1 row couldn't be read" : `${n} rows couldn't be read`),

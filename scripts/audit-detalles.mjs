@@ -94,6 +94,24 @@ async function sortearYSaltar(page) {
   if (!fin.ok) throw new Error("no llegó el resultado");
 }
 
+/**
+ * Pega de verdad, con el portapapeles y Ctrl+V, en el cuadro: el evento `paste`
+ * trae el texto y, si la página no lo intercepta, el navegador lo pega
+ * (`insertFromPaste`). Chrome sin interfaz no deja escribir el portapapeles si
+ * la página no tiene el foco: se le simula.
+ */
+async function pegar(page, texto) {
+  await page.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+  const origin = new URL(base).origin;
+  await page.send("Browser.grantPermissions", { origin, permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"] }).catch(() => undefined);
+  const ok = await page.eval(`navigator.clipboard.writeText(${js(texto)}).then(() => true, () => false)`);
+  if (!ok) throw new Error("no se pudo escribir el portapapeles");
+  await page.eval("document.getElementById('ta').focus(); true");
+  await page.send("Input.dispatchKeyEvent", { type: "keyDown", key: "v", code: "KeyV", windowsVirtualKeyCode: 86, modifiers: 2, commands: ["paste"] });
+  await page.send("Input.dispatchKeyEvent", { type: "keyUp", key: "v", code: "KeyV", windowsVirtualKeyCode: 86, modifiers: 2 });
+  await sleep(400);
+}
+
 const visible = (sel) => `(() => { const e = document.querySelector(${js(sel)}); return !!e && getComputedStyle(e).display !== 'none' && e.offsetParent !== null; })()`;
 const foco = (page) => page.eval("document.activeElement && (document.activeElement.id || document.activeElement.className || document.activeElement.tagName)");
 
@@ -228,6 +246,43 @@ const DETALLES = {
         await page.eval("document.getElementById('btn-grande').focus({ preventScroll: true }); true");
         await sleep(1400);
         check(`${quien} · si el foco ya está en otro botón, no se lo quita`, (await foco(page)) === "btn-grande", `foco en ${await foco(page)}`);
+      } finally {
+        await page.send("Page.close").catch(() => undefined);
+      }
+    },
+  },
+
+  D09: {
+    que: "una lista numerada de WhatsApp entra sin los números, y los repetidos se dicen",
+    async correr(browser, v, tema, quien) {
+      const page = await abrir(browser, v, tema);
+      try {
+        const lista = ["*Sorteo del meetup* 🎁", "1. Ana Quispe", "2. Luis Mamani", "3. Carla Flores", "4. ana quispe", "5. Diego Rojas", "9. Ana Quispe"].join("\n");
+        await pegar(page, lista);
+        const st = JSON.parse(
+          await page.eval(
+            "JSON.stringify({ chips: [...document.querySelectorAll('#names i')].map((i) => i.textContent), aviso: document.getElementById('csv-aviso').textContent, visible: getComputedStyle(document.getElementById('csv-aviso')).display !== 'none' })",
+          ),
+        );
+        const conNumero = st.chips.filter((c) => /^\s*\d/.test(c));
+        check(`${quien} · los nombres entran sin el número, y "9. Ana Quispe" no es otra persona`, conNumero.length === 0 && st.chips.length === 6, `${st.chips.length} nombres: ${st.chips.join(" · ")}`);
+        check(
+          `${quien} · el aviso dice qué se sacó, la línea sin número y los repetidos`,
+          st.visible && /numeración de 6 líneas/.test(st.aviso) && /no tenía número/.test(st.aviso) && /dos veces igual/.test(st.aviso) && /parecen la misma persona/.test(st.aviso),
+          `"${st.aviso}"`,
+        );
+        await page.eval("document.getElementById('csv-aviso').scrollIntoView({ block: 'center' }); true");
+        await sleep(300);
+        await captura(page, "D09", v, tema, "numerada");
+        // Se deshace como cualquier pegar.
+        await page.send("Input.dispatchKeyEvent", { type: "keyDown", key: "z", code: "KeyZ", windowsVirtualKeyCode: 90, modifiers: 2, commands: ["undo"] });
+        await page.send("Input.dispatchKeyEvent", { type: "keyUp", key: "z", code: "KeyZ", windowsVirtualKeyCode: 90, modifiers: 2 });
+        await sleep(300);
+        check(`${quien} · Ctrl+Z deshace lo pegado`, (await page.eval("document.getElementById('ta').value")) === "");
+        // Una lista sin numerar se pega como siempre, y los repetidos también se dicen.
+        await pegar(page, "Ana Quispe\nLuis Mamani\nAna Quispe\nana quispe");
+        const st2 = JSON.parse(await page.eval("JSON.stringify({ ta: document.getElementById('ta').value, aviso: document.getElementById('csv-aviso').textContent })"));
+        check(`${quien} · una lista sin numerar entra tal cual, con el aviso de los repetidos`, st2.ta === "Ana Quispe\nLuis Mamani\nAna Quispe\nana quispe" && /dos veces igual/.test(st2.aviso) && /parecen la misma persona/.test(st2.aviso), `"${st2.aviso}"`);
       } finally {
         await page.send("Page.close").catch(() => undefined);
       }
