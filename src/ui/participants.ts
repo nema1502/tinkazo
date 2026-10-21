@@ -5,10 +5,45 @@ import { type Dict, T, getLang, onLangChange } from "../i18n";
 import { decodeText, dropListHeader, parseTable } from "./csv";
 import { type ImportResult, type ImportState, initialState, openImporter } from "./importer";
 import { stripInvisibles, stripInvisiblesByLine } from "../invisibles";
+import { sincronizarPremios } from "./premios";
 
 /** Lista canónica a partir del textarea (protocolo §1). */
 export function parseNames(): string[] {
   return canonicalList($<HTMLTextAreaElement>("ta").value);
+}
+
+/** La lista se está sellando: lo que se sella ya se tomó del cuadro (ver `cerrarLista`). */
+let cerrada = false;
+
+/** La lista no se puede tocar: se está sellando o ya está sellada. */
+const listaCerrada = (): boolean => cerrada || !!app.frozen;
+
+/**
+ * Cierra la lista a los cambios, o la vuelve a abrir.
+ *
+ * El sello fija lo que dice el cuadro al apretar "Sellar". Hasta el 21 de
+ * octubre de 2026, con la lista ya sellada, "Cargar ejemplo", "Editar
+ * selección" y los botones de origen seguían andando: un toque cambiaba el
+ * cuadro y los nombres de abajo, y la pantalla decía "Lista sellada ✓" con otra
+ * lista, en la que a veces no estaba quien ganó (buscador de detalles, D01). Y
+ * mientras se sellaba con cuenta, unos doce segundos, el cuadro, el premio y
+ * "Cuántos ganan" seguían editables, cuando lo que se sella ya estaba tomado.
+ *
+ * Lo llama `freeze.ts`: al empezar a sellar con cuenta, al sellar, si el sello
+ * falla y al soltar el sello para otro sorteo.
+ */
+export function cerrarLista(si: boolean): void {
+  cerrada = si;
+  $<HTMLTextAreaElement>("ta").disabled = si;
+  $<HTMLInputElement>("prize").disabled = si;
+  $<HTMLSelectElement>("nw").disabled = si;
+  for (const id of ["csv", "csv-luma"]) $<HTMLInputElement>(id).disabled = si;
+  $<HTMLButtonElement>("btn-recuperar").disabled = si;
+  // Los orígenes se ven apagados: ya no cargan nada (styles.css).
+  $("sec-participants").classList.toggle("lista-cerrada", si);
+  // Los botones de premios escriben en el cuadro: se apagan con él.
+  sincronizarPremios();
+  renderNames();
 }
 
 export function renderNames(): void {
@@ -16,13 +51,17 @@ export function renderNames(): void {
   $("names").innerHTML = names
     .map((n) => `<i><img src="${avatar(n, 44)}" alt="" loading="lazy" />${esc(n)}</i>`)
     .join("");
-  $<HTMLButtonElement>("btn-freeze").disabled = names.length < 2 || !!app.frozen;
+  $<HTMLButtonElement>("btn-freeze").disabled = names.length < 2 || listaCerrada();
   // Un boton apagado sin explicacion es lo que mas frena a quien recien llega.
   $("freeze-hint").style.display = names.length < 2 && !app.frozen ? "block" : "none";
   $("free-rule").style.display = app.frozen ? "none" : "block";
+  // Con la lista cerrada, nada la reemplaza: ni el ejemplo ni la selección del archivo.
+  $("btn-sample").style.display = listaCerrada() ? "none" : "";
+  $("csv-edit").style.display = listaCerrada() ? "none" : "";
 }
 
 export function loadSample(): void {
+  if (listaCerrada()) return;
   setList(SAMPLE.join("\n"));
 }
 
@@ -49,7 +88,7 @@ export function bindParticipants(): void {
   // caracteres que no se ven, y si traía alguno, lo dice.
   ta.addEventListener("paste", (e) => {
     const text = e.clipboardData?.getData("text/plain") ?? "";
-    if (app.frozen || !text.trim()) return;
+    if (listaCerrada() || !text.trim()) return;
     const toda = !ta.value.trim() || (ta.selectionStart === 0 && ta.selectionEnd === ta.value.length);
     if (toda && pideImportar(text)) {
       e.preventDefault();
@@ -73,7 +112,7 @@ export function bindParticipants(): void {
   $("again-note").before(nota);
 
   const onFile = async (file: File | undefined): Promise<void> => {
-    if (!file || app.frozen) return;
+    if (!file || listaCerrada()) return;
     // Los bytes y no `file.text()`, que lee todo como UTF-8: un CSV de Excel
     // en Windows llegaba con "Mar�a".
     const text = decodeText(new Uint8Array(await file.arrayBuffer()));
@@ -89,7 +128,7 @@ export function bindParticipants(): void {
     });
   }
   $("csv-edit").addEventListener("click", () => {
-    if (imported) openImporter(imported, apply);
+    if (imported && !listaCerrada()) openImporter(imported, apply);
   });
 
   // Soltar el archivo sobre la sección, que es lo primero que se intenta.
@@ -132,6 +171,7 @@ export function bindParticipants(): void {
  * `fileName` vacío es texto pegado.
  */
 export function loadFile(raw: string, fileName = "lista.csv"): void {
+  if (listaCerrada()) return;
   callarAviso();
   const parsed = parseTable(raw);
   if (parsed && parsed.columns.length > 1) {
@@ -179,6 +219,7 @@ function insertar(ta: HTMLTextAreaElement, text: string): void {
 
 /** Lo que eligió en la ventana, al texto, con un resumen para volver a abrirla. */
 function apply(r: ImportResult): void {
+  if (listaCerrada()) return;
   lastResult = r;
   setList(r.names.join("\n"), false);
   showSummary();
@@ -235,7 +276,9 @@ function quitarAvisos(): void {
   }
 }
 
+/** Pone una lista en el cuadro. Con la lista cerrada no hace nada: lo que se ve tiene que ser lo que se selló. */
 export function setList(text: string, clearSummary = true): void {
+  if (listaCerrada()) return;
   if (clearSummary) hideSummary();
   quitarAvisos();
   $<HTMLTextAreaElement>("ta").value = text;

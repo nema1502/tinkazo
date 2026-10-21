@@ -9,11 +9,11 @@ import { anchorErrorText, hideTxStatus, sealOnChain, selloSinGrabar, showTxStatu
 import { precargarQr } from "./qr";
 import { recomendar } from "./recomendar";
 import { apruebaAMano, canAnchor, currentSession } from "./wallet-ui";
-import { parseNames, setList } from "./participants";
+import { cerrarLista, parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
 import { NOMBRE } from "./gamecard";
 import { actualizarPaso, barraActiva, verError } from "./siguiente";
-import { ponerPremio, recordarPremio, sincronizarPremios } from "./premios";
+import { ponerPremio, recordarPremio } from "./premios";
 
 /**
  * Los botones del selector, en el orden en que se muestran. Hasta el 29 de
@@ -334,6 +334,8 @@ export async function freeze(): Promise<void> {
   if (anchoring) {
     const session = currentSession();
     if (!session) return;
+    // Lo que se sella ya se tomó del cuadro: mientras se graba, no se toca.
+    cerrarLista(true);
     btn.disabled = true;
     try {
       // Si la red tarda, la ronda elegida al hacer clic llega a la cadena con
@@ -372,6 +374,7 @@ export async function freeze(): Promise<void> {
       // consola, para saber la causa si "la red rechazó" vuelve a pasar.
       console.warn("[tinkazo] el sello no se pudo grabar", e);
       btn.disabled = false;
+      cerrarLista(false);
       btn.dataset.i = "sealOnStellar";
       btn.textContent = t("sealOnStellar");
       const status = $("seal-status");
@@ -480,10 +483,8 @@ export function unfreeze(lista: string): void {
   if (countdownTimer !== undefined) clearInterval(countdownTimer);
   countdownTimer = undefined;
   app.frozen = null;
-  $<HTMLTextAreaElement>("ta").disabled = false;
-  $<HTMLInputElement>("prize").disabled = false;
+  cerrarLista(false);
   ponerPremio("");
-  $<HTMLSelectElement>("nw").disabled = false;
   $("sec-frozen").style.display = "none";
   $("wait-box").style.display = "none";
   $("btn-draw").classList.remove("lista");
@@ -502,10 +503,8 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   const f = app.frozen;
   if (!f) return;
   const btn = $<HTMLButtonElement>("btn-freeze");
-  $<HTMLTextAreaElement>("ta").disabled = true;
-  $<HTMLInputElement>("prize").disabled = true;
-  sincronizarPremios();
-  $<HTMLSelectElement>("nw").disabled = true;
+  // El cuadro, el premio, "Cuántos ganan" y los orígenes: lo que se ve es lo que se selló.
+  cerrarLista(true);
   btn.disabled = true;
   btn.dataset.i = raffleId !== undefined ? "sealed" : "frozenOk";
   btn.textContent = t(btn.dataset.i);

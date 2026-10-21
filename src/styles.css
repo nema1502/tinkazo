@@ -364,6 +364,10 @@
   /* Apagar con opacidad los dejaba en 2,8 a 1. Un color sólido apagado se
      sigue leyendo y sigue diciendo "todavía no". */
   .chip.soon { background: var(--paper); color: var(--muted); border-style: dashed; box-shadow: none; }
+  label.chip.live { cursor: pointer; }
+  /* Con la lista sellándose o sellada, los orígenes ya no cargan nada: se ven
+     apagados, como los que vienen pronto (participants.ts, cerrarLista). */
+  .lista-cerrada .chip.live { background: var(--paper); color: var(--muted); border-style: dashed; box-shadow: none; transform: none; cursor: not-allowed; }
   /* La espera de la ronda.
      Son los diez segundos en que la lista ya está cerrada y el número que la
      va a decidir todavía no existe: es el momento en que este producto es

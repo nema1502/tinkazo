@@ -65,7 +65,23 @@ function buscarAhora(): void {
   document.querySelector(`#l-lista li[data-p="${puestos[0]}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
+/**
+ * Desde la lista ya sellada (`?sellada=1`, lo agrega "Mostrar la lista a la
+ * sala" durante la espera): es la misma lista, pero "antes de sellar" ya no es
+ * cierto. Cada uno se busca igual; lo que cambia es que ya no se puede arreglar.
+ */
+function sellada(): void {
+  if (new URLSearchParams(location.search).get("sellada") !== "1") return;
+  for (const [sel, clave] of [[".hero .sticker", "salaTSellada"], [".hero .lead", "listaNotaSellada"]] as const) {
+    const el = document.querySelector<HTMLElement>(sel);
+    if (!el) continue;
+    el.dataset.i = clave;
+    el.textContent = t(clave);
+  }
+}
+
 async function main(): Promise<void> {
+  sellada();
   try {
     const p = await decodePreview(location.hash);
     names = canonicalList(p.names.join("\n"));

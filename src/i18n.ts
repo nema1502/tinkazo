@@ -1112,6 +1112,10 @@ export const T: Record<Lang, Dict> = {
     salaCopiado: "Copiado ✓",
     vSealsEjemplo: "Es la lista de ejemplo del sitio: la sella cualquiera que lo prueba con su cuenta, así que verla repetida no dice nada.",
     salaPie: "Si falta alguien o alguien está dos veces, es ahora: después de sellar, la lista no se puede cambiar. Cuando se selle, la huella del sorteo tiene que empezar igual.",
+    // La lista ya sellada, en el proyector y en el celular (21 de octubre de 2026).
+    salaTSellada: "La lista sellada",
+    salaPieSellada: "Esta es la lista que decide el sorteo: ya está sellada y no cambia. Buscate mientras nace el número.",
+    listaNotaSellada: "Esta es la lista sellada: ya no cambia, y entre estos nombres sale quien gana. Buscate. La huella del sorteo empieza con estas letras.",
     buscateL: "¿Estás en la lista?",
     buscatePh: "Escribí tu nombre",
     buscateUno: "Estás en el puesto {p} de {n}.",
@@ -2362,6 +2366,10 @@ export const T: Record<Lang, Dict> = {
     salaCopiado: "Copied ✓",
     vSealsEjemplo: "This is the site's sample list: anyone trying the site with an account seals it, so seeing it repeated means nothing.",
     salaPie: "If someone is missing or listed twice, now is the time: after sealing, the list can't change. Once sealed, the draw's fingerprint has to start the same way.",
+    // The list once sealed, on the projector and on the phone (Oct 21, 2026).
+    salaTSellada: "The sealed list",
+    salaPieSellada: "This is the list that decides the draw: it's sealed and it won't change. Find yourself while the number comes out.",
+    listaNotaSellada: "This is the sealed list: it won't change, and the winner comes from these names. Find yourself. The draw's fingerprint starts with these characters.",
     buscateL: "Are you on the list?",
     buscatePh: "Type your name",
     buscateUno: "You are number {p} of {n}.",
