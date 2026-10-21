@@ -29,7 +29,7 @@
  */
 import { launch } from "./lib/browser.mjs";
 
-const TODOS = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien"];
+const TODOS = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "trueque"];
 /**
  * Hasta cuántos promete cada juego hoy: la ruleta llega a 24, el resto a 200.
  * La carrera prometía ocho hasta el 17 de octubre de 2026; desde la
