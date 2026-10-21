@@ -895,19 +895,24 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       const q = cam.toScreen(lp.x, lp.y, g.w, g.h);
       const u = ease.inOutCubic(clamp((tAll - flyAt(slot)) / Q_FLY, 0, 1));
       // El ganador conserva la letra grande de antes: en horizontal, 1,45 sobre la base.
-      const sc = (gridScale + ((ganador && !S.portrait() ? 1.45 : ls) - gridScale) * u) * (ganador ? 1.3 : 1);
+      // En un celular el ganador va sobre su aro y no puede ser tan grande: con
+      // 1,1 no toca los aros de los vecinos.
+      const sc = (gridScale + ((ganador && !S.portrait() ? 1.45 : ls) - gridScale) * u) * (ganador ? (S.portrait() ? 1.1 : 1.3) : 1);
       c.scale.set(sc * (u > 0 ? 1 : ease.outBack(enter)));
       let an = anchorOf(slot);
       let qx = q.x, qy = q.y;
       if (ganador && S.portrait()) {
-        // En un celular, al lado del agujero no entra el chip grande del ganador: va debajo.
+        // En un celular el chip grande del ganador no entra al lado de su agujero, y
+        // debajo tapaba los aros de los dos vecinos (revisión visual, 20 de octubre
+        // de 2026). Va centrado sobre el aro de su propio agujero: ahí no cubre a nadie más.
         const fin = tosses[tosses.length - 1] as Toss;
         const f = ease.outCubic(clamp((tAll - fin.land) / 0.35, 0, 1));
         const h = L.holes[slot] as Point;
-        const d = cam.toScreen(P({ x: h.x, y: h.y + L.holeR * 1.35 }).x, P({ x: h.x, y: h.y + L.holeR * 1.35 }).y, g.w, g.h);
+        const c = P(h);
+        const d = cam.toScreen(c.x, c.y, g.w, g.h);
         qx = q.x + (d.x - q.x) * f;
         qy = q.y + (d.y - q.y) * f;
-        an = { ax: an.ax + (0.5 - an.ax) * f, ay: an.ay + (0 - an.ay) * f };
+        an = { ax: an.ax + (0.5 - an.ax) * f, ay: an.ay + (0.5 - an.ay) * f };
       }
       // El que no entra entre su punto y el borde se achica, en vez de volver
       // sobre su agujero. Se mide sin zoom: con la cámara cerca se achicaban
