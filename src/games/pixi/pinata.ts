@@ -1,10 +1,11 @@
-import { Container, Graphics } from "pixi.js";
+import { Container, Graphics, Sprite } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
 import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, fanfare, note } from "../../sound";
 import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
-import { capRecent, layoutLabels, type LabelItem } from "./pinata-labels";
+import { capRecent, layoutLabels, listaCaidos, type LabelItem, type ListaGeo } from "./pinata-labels";
+import { planPalos } from "./pinata-plan";
 import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 
 /**
@@ -32,13 +33,21 @@ import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage }
  * al azar), y al romperse la olla se parte en pedazos que salen girando.
  */
 
+/** El nombre que entra en una fila de la lista: entero si cabe, si no, el de pila con la inicial del apellido. */
+function etiqueta(nombre: string, max: number): string {
+  if (nombre.length <= max) return nombre;
+  const partes = nombre.trim().split(/\s+/);
+  const pila = partes[0] ?? "";
+  const corto = partes.length > 1 ? `${pila} ${(partes[partes.length - 1] ?? "").charAt(0)}.` : pila;
+  return corto.length <= max ? corto : `${pila.slice(0, Math.max(1, max - 1))}…`;
+}
+
 const DT = 1 / 120;
 const T_HANG = 3.0;
 const GRAV = 1500;
 /** Falling-candy name chips: how many get their own name, and how long they linger once settled. */
 const MAX_FLIGHT_LABELS = 8;
 const LINGER = 1.25;
-const STRIP_MAX = 5;
 /**
  * El chico del palo, en unidades de su dibujo: mide 137 de las zapatillas al
  * pelo y agarra el palo a la altura del pecho. El palo mide 115, lo que un
@@ -91,29 +100,20 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   const fallOrder = [...rest.reverse()];
 
   // Los palos: al principio caen muchos, al final de a uno. La rival se queda
-  // adentro hasta la rotura.
-  const nHits = clamp(5 + Math.floor(n / 6), 5, 9);
+  // adentro hasta la rotura. El calendario (cuántos sueltan y cuántos fallan)
+  // está en pinata-plan.ts: sin palos vacíos, también con poca gente. Los palos
+  // se apuran (de 1,9 a 0,75 s entre uno y otro): con un palo parejo cada 2,3 s
+  // reales la sala no sentía que la piñata estaba por ceder (7 de octubre de 2026).
+  const base = clamp(5 + Math.floor(n / 6), 5, 9);
   const swings: Swing[] = [];
   let tH = T_HANG + 0.5;
-  const weights = Array.from({ length: nHits }, (_, i) => Math.pow(nHits - i, 1.6));
-  const wsum = weights.reduce((a, b) => a + b, 0);
   let given = 0;
-  for (let i = 0; i < nHits; i++) {
-    if (story.arc === "remontada" && i === nHits - 2) {
-      swings.push({ at: tH, miss: true, drop: [], done: false });
-      tH += 1.0;
-      swings.push({ at: tH, miss: true, drop: [], done: false });
-      tH += 1.05;
-    }
-    const want = i === nHits - 1 ? fallOrder.length - given : Math.round(((weights[i] as number) / wsum) * fallOrder.length);
-    const take = Math.max(0, Math.min(fallOrder.length - given, want));
-    swings.push({ at: tH, miss: false, drop: fallOrder.slice(given, given + take), done: false });
-    given += take;
-    // Los palos se apuran: de 1,9 a 0,75 s entre uno y otro, el "¡dale, dale!"
-    // del final. Con un palo parejo cada 2,3 s reales la sala no sentía que
-    // la piñata estaba por ceder (auditoría con capturas, 7 de octubre de 2026).
-    tH += clamp(1.9 - i * 0.17, 0.75, 1.9);
+  for (const p of planPalos(fallOrder.length, base, story.arc === "remontada")) {
+    swings.push({ at: tH, miss: p.miss, drop: p.miss ? [] : fallOrder.slice(given, given + p.take), done: false });
+    given += p.take;
+    tH += p.wait;
   }
+  const nHits = swings.filter((s) => !s.miss).length;
   const T_BREAK = tH + (story.arc === "duelo" ? 1.2 : 0.6);
   // Rota la piñata, el cartel llega enseguida: el caramelo ganador cae más
   // rápido y toca el piso un poco antes del cartel. Antes eran 3,6 s de
@@ -281,6 +281,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   function drop(ids: number[], strong: boolean): void {
     const p = pinPos();
     const g = G();
+    if (ids.length) lastDropAt = tAll;
     for (const id of ids) {
       const c = candies[id] as Candy;
       if (!c.inside) continue;
@@ -391,9 +392,10 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
         const nm = (id: number): string => names[id] ?? "";
         const w = 0.5 + 0.2 * (1 - left / n);
         // Uno: su nombre. Dos o tres: todos en una línea. Más: el primero y
-        // cuántos más. Si cae un co-ganador, se lo nombra a él, con su premio.
+        // cuántos más. Si cae un co-ganador, no se lo nombra al salir: sale con su
+        // premio (sección 10 de la auditoría: la piñata no nombra a un co-ganador al salir).
         const premiados = s.drop.filter((id) => winners.indexOf(id) > 0);
-        if (premiados.length) S.say(T[getLang()].cPrizeOut(premiados.map(nm)), w);
+        if (premiados.length) S.say(T[getLang()].cPinPrize(premiados.length), w);
         else if (s.drop.length === 1) S.say(T[getLang()].cPinOut(nm(s.drop[0] as number)), w);
         else if (s.drop.length <= 3) S.say(T[getLang()].cPinOutMany(s.drop.map(nm)), w);
         else if (crackLevel === 1) S.say(t("cPinRain"), 0.45);
@@ -476,6 +478,24 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   let counter!: ReturnType<PixiStage["text"]>;
   let counterBox!: Graphics;
   let chipLayer!: Container;
+  /**
+   * La lista de los caídos: una fila por nombre, la más nueva arriba a la
+   * izquierda, hasta `lista.cap`; el resto, un "+N". Se escribe solo cuando
+   * cambia (cada caída, y el resaltado de la última, 1,2 s).
+   */
+  /**
+   * La cara de cada caramelo: el avatar de su dueño, encima del caramelo. Se
+   * crea la primera vez que el caramelo se ve. Antes eran manchas de colores
+   * iguales, y con doscientos no se distinguía uno de otro.
+   */
+  let faceLayer!: Container;
+  const candyFaces = new Map<number, Sprite>();
+  let lista!: ListaGeo;
+  let listaRows: { c: Container; bg: Graphics; sq: Graphics; tx: ReturnType<PixiStage["text"]> }[] = [];
+  let listaMore!: ReturnType<PixiStage["text"]>;
+  let listaKey = -1, listaHl = false;
+  /** Cuándo cayó el último caramelo (para resaltarlo en la lista). */
+  let lastDropAt = -9;
   const chipOf = new Map<number, Container>();
   /** Tamaño de cada chip, medido una sola vez (medir un Container en cada frame sale caro). */
   const chipDim = new Map<number, { w: number; h: number }>();
@@ -560,7 +580,9 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     cracks = new Graphics();
     pin.addChild(cracks);
     fx = new Graphics();
-    S.scene.addChild(wall, garland, pile, glow, rope, pin, pieces, candyG, kid, fx);
+    faceLayer = new Container();
+    candyFaces.clear();
+    S.scene.addChild(wall, garland, pile, glow, rope, pin, pieces, candyG, faceLayer, kid, fx);
     flash = new Graphics().rect(0, 0, g.w, g.h).fill(0xffffff);
     flash.alpha = 0;
     // El papel picado: tres guirnaldas de banderitas caladas, justo arriba de
@@ -609,6 +631,28 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     moreBadge.visible = false;
     chipLayer.addChild(moreBadge);
     S.hud.addChild(flash, box, chipLayer);
+    // La lista de los caídos (ver `drawLista`): filas fijas, que se llenan solas.
+    lista = listaCaidos({ w: g.w, k, top: S.top(), floor: g.floor, phone: g.w <= 520 });
+    const listaCont = new Container();
+    listaRows = [];
+    for (let i = 0; i < lista.cap; i++) {
+      const c = new Container();
+      const bg = new Graphics();
+      const sq = new Graphics();
+      const tx = S.text("", { fontSize: lista.rowH * 0.6, fontWeight: "800", fill: S.dark ? CREAM : INK });
+      tx.anchor.set(0, 0.5);
+      tx.position.set(lista.rowH * 0.85, lista.rowH / 2);
+      c.addChild(bg, sq, tx);
+      c.position.set(lista.x + (i % lista.cols) * lista.colW, lista.y + Math.floor(i / lista.cols) * lista.rowH);
+      c.visible = false;
+      listaCont.addChild(c);
+      listaRows.push({ c, bg, sq, tx });
+    }
+    listaMore = S.text("", { fontFamily: MONO, fontSize: 13 * k, fontWeight: "800", fill: S.dark ? CREAM : INK });
+    listaMore.position.set(lista.x + 4 * k, lista.y + lista.h + 4 * k);
+    listaCont.addChild(listaMore);
+    S.hud.addChild(listaCont);
+    listaKey = -1;
     heights.clear();
     for (const c of candies) c.drawn = false;
   }
@@ -764,6 +808,54 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     }
   }
 
+  /** Pone la cara del caramelo sobre él (el avatar de su dueño, derecho aunque gire). */
+  function placeFace(c: Candy, s: number, alpha: number): void {
+    let sp = candyFaces.get(c.idx);
+    if (!sp) {
+      sp = new Sprite(S.face(names[c.idx] ?? ""));
+      sp.anchor.set(0.5);
+      faceLayer.addChild(sp);
+      candyFaces.set(c.idx, sp);
+    }
+    sp.visible = true;
+    sp.alpha = alpha;
+    sp.position.set(c.x, c.y);
+    sp.width = sp.height = s * 1.05;
+  }
+
+  /**
+   * Escribe la lista de los caídos cuando cambia: en cada caída, y para resaltar
+   * la última 1,2 s. Con doscientos, cada nombre que cae queda escrito hasta que
+   * otros tantos lo empujan; la tira de cinco nombres apagados no alcanzaba.
+   */
+  function drawLista(): void {
+    // Con el cartel del ganador, la lista se va: el cartel tiene el lugar.
+    if (phase === "crown" || phase === "dead") {
+      if (listaKey !== -2) {
+        listaKey = -2;
+        listaRows.forEach((r) => (r.c.visible = false));
+        listaMore.visible = false;
+      }
+      return;
+    }
+    const len = fallen.length;
+    const hl = len > 0 && tAll - lastDropAt < 1.2;
+    if (len === listaKey && hl === listaHl) return;
+    listaKey = len;
+    listaHl = hl;
+    const shown = fallen.slice(-lista.cap).reverse();
+    const fondo = S.dark ? 0x221a33 : 0xffffff;
+    listaRows.forEach((r, i) => {
+      const id = shown[i];
+      r.c.visible = id !== undefined;
+      if (id === undefined) return;
+      r.tx.text = etiqueta(names[id] ?? "", lista.phone ? 15 : 18);
+      r.bg.clear().roundRect(0, 0, lista.colW - 4, lista.rowH - 3, 4).fill(i === 0 && hl ? YELLOW : fondo).stroke({ width: 2, color: INK });
+      r.sq.clear().rect(4, 4, lista.rowH * 0.3, lista.rowH - 11).fill(S.color(id));
+    });
+    listaMore.text = len > lista.cap ? `+${len - lista.cap}` : "";
+  }
+
   function draw(now: number): void {
     const g = G();
     const k = g.k;
@@ -882,9 +974,11 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
           c.drawn = true;
           drawCandy(pile, c.x, c.y, sz, c.rot, S.color(c.idx), 0.8);
         }
+        placeFace(c, sz, 0.8);
         continue;
       }
       drawCandy(candyG, c.x, c.y, sz, c.rot, S.color(c.idx), 1);
+      placeFace(c, sz, 1);
     }
     // El caramelo del susto se asoma por la rajadura y vuelve a entrar.
     if (story.arc === "susto" && winC.inside && tAll >= T_PEEK && tAll < T_PEEK + 1.2) {
@@ -895,9 +989,11 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       const big = sz * (1.8 + (phase === "crown" ? 0.6 * ease.outBack(clamp((tAll - T_CROWN) * 2, 0, 1)) : 0));
       glow.circle(winC.x, winC.y, big * 2.4).fill({ color: YELLOW, alpha: 0.28 }).circle(winC.x, winC.y, big * 1.6).fill({ color: YELLOW, alpha: 0.3 });
       drawCandy(candyG, winC.x, winC.y, big, winC.rot, S.color(winnerIdx), 1);
+      placeFace(winC, big, 1);
     }
+    drawLista();
     drawLabels(p, g, sz);
-    counter.text = `${t("cPinLeft")}  ${inside().length} / ${n}`;
+    counter.text =`${t("cPinLeft")}  ${inside().length} / ${n}`;
     const bw = counter.width + 40 * k, bh = 40 * k;
     counter.position.set(bw / 2, bh / 2);
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 3 * k, color: INK });
@@ -907,12 +1003,11 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   /**
    * Los nombres. Cada caramelo que salió y sigue en movimiento lleva su chip
    * (los 8 más recientes; el resto, un "+N"); los que quedan adentro van en una
-   * columna lateral y los últimos caídos en una tira abajo a la izquierda. La
+   * columna lateral, y los caídos, en la lista de `drawLista`. La
    * posición final la decide `layoutLabels`, que es pura: sin solapes y dentro
    * de la pantalla.
    */
   const FLIGHT_KEY = (id: number): number => -1 - id;
-  const STRIP_KEY = (id: number): number => n + id;
   function chipFor(key: number, name: string, scale: number): Container {
     let ch = chipOf.get(key);
     if (!ch) {
@@ -936,8 +1031,6 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     // media pantalla y tapaban la piñata: ahora, apenas por encima de la base.
     const scaleFly = phone ? 1 : 1.15;
     const scaleSide = phone ? 0.85 : 0.9;
-    // Con poca altura (un celular acostado) la letra de la tira baja de 10 px: no más chica que eso.
-    const scaleStrip = Math.max(phone ? 0.7 : 0.75, 10 / (12 * k * CHIP_SCALE));
     const bounds = { w: g.w, h: g.h, top: S.top(), bottom: S.bottom() };
     items.length = 0;
     alphaOf.clear();
@@ -946,18 +1039,6 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       items.push({ id: key, x, y, w: d.w, h: d.h, priority, ignoreBlocked });
       alphaOf.set(key, alpha);
     };
-    // Los últimos caídos, en una tira fija abajo a la derecha, encima del piso.
-    // A la izquierda le tapaba la cabeza al chico del palo.
-    // Apilados por su alto de verdad: con los 26 de antes, los chips de letra
-    // legible arrancaban encimados y el reparto los desparramaba (16 de octubre de 2026).
-    const tail = fallen.slice(-STRIP_MAX);
-    tail.forEach((id, i) => {
-      const key = STRIP_KEY(id);
-      chipFor(key, names[id] ?? "", scaleStrip);
-      const fromEnd = tail.length - 1 - i;
-      const d = chipDim.get(key) as { w: number; h: number };
-      put(key, g.w - d.w - 8 * k, g.floor - 14 * k - (fromEnd + 1) * (d.h + k), 1000, 0.45 + 0.55 * (1 - fromEnd / STRIP_MAX));
-    });
     // Los que quedan adentro (pocos): una columna al costado, debajo del contador.
     // Con uno solo no: rota la piñata, la lista con un nombre era el ganador
     // escrito tres segundos antes del cartel.
@@ -1013,7 +1094,9 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     // El chico y la cuenta no se tapan nunca: si no hay lugar, el nombre no sale.
     const kidRect = { x: Math.min(k0.x, k1.x), y: Math.min(k0.y, k1.y), w: Math.abs(k1.x - k0.x), h: Math.abs(k1.y - k0.y) };
     const counterRect = { x: 22 * k, y: S.top() + 10 * k, w: counter.width + 45 * k, h: 45 * k };
-    for (const o of layoutLabels(items, bounds, blocked, [counterRect, kidRect])) {
+    // La lista de los caídos tampoco se tapa: los nombres en vuelo buscan otro lugar.
+    const listaRect = { x: lista.x, y: lista.y, w: lista.w, h: lista.h };
+    for (const o of layoutLabels(items, bounds, blocked, [counterRect, kidRect, listaRect])) {
       if (o.id === -100000) {
         moreBadge.visible = true;
         moreBadge.position.set(o.x, o.y);

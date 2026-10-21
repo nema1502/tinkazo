@@ -66,6 +66,18 @@ La piñata de cerca en los palos, más cerca cuando se raja y cuando se asoma el
 - **El palo al aire:** una nota suave.
 - **La rotura:** un golpe en capas (el golpe, la lluvia de caramelos y el papel) y, mientras baja el último caramelo, un arpegio que sube nota por nota. El golpe del piso suena cuando lo toca.
 
+## Qué cambió en la revisión del 20 de octubre
+
+- **Sin palos vacíos.** El calendario de los palos vive en `pinata-plan.ts`. Cada palo que suelta tiene a alguien para soltar. Con pocos caramelos hay un fallo antes de cada palo que suelta, y con dos personas el palo falla dos veces antes de la rotura. Lo prueba `pinata-plan.test.ts`.
+- **El co-ganador que sale no se nombra.** Dice "¡Sale con premio!" (clave `cPinPrize`, en los dos idiomas). El nombre sigue en la lista de caídos y en el cartel del final.
+- **La lista de los caídos.** Cada nombre que cae queda escrito, en vez de la tira de cinco nombres apagados. En escritorio son dos columnas, con unos treinta y seis nombres a la vez: la más nueva arriba y resaltada 1,2 s. En celular, una columna a la derecha. Se oculta con el cartel del ganador. La geometría está en `listaCaidos` (`pinata-labels.ts`) y se prueba en `pinata-lista.test.ts`.
+- **Cada caramelo tiene su cara:** el avatar de su dueño encima del caramelo, así se distinguen unos de otros. Con doscientos, la cara es chica (12 px); la lista es la que se lee.
+- **El copy no afirma tradiciones.** Lo que se dice de la piñata en Bolivia es que es de cumpleaños; la historia de la tarjeta cita su fuente (INAH, 1586).
+
+Medido el 20 de octubre (commit `8a303fa`): el auditor de juego pasa 20/20; el de identificación ve antes del ganador al 100 % con 8 y con 18 personas, y al 98 % con 50 (49 de 50). El auditor de rigor con 200 personas pasa 1/1 (cierra, fluye y el cartel se lee).
+
+**No verificado:** el confeti sobre el HUD en celular con la piñata (no capturado en el cartel); la física del montón con 200 personas (los caramelos apilados en torres y el que no asienta, que venían de la revisión de otra rama y no están en esta base); el auditor de física, que no acepta la piñata.
+
 ## Cómo está hecho
 
 Vive en [`src/games/pixi/pinata.ts`](../../src/games/pixi/pinata.ts) y usa el andamiaje del motor nuevo, [`src/games/pixi/stage.ts`](../../src/games/pixi/stage.ts). No tiene versión en el motor anterior: en un equipo sin WebGL el sorteo sale con la carrera de llamas, que cuenta el mismo ganador.

@@ -84,6 +84,27 @@ La traba suena **una sola vez**. Durante un tiempo se redisparó catorce veces, 
 
 **Con cuatro participantes o menos, cada persona tiene su nota.** Con dos se oye de quién es cada gajo sin mirar la pantalla. Esa es la respuesta sonora al problema que tenía la ruleta.
 
+## Qué cambió en la revisión del 20 de octubre
+
+- **El final no se aprende.** La flecha para en cualquier punto del gajo ganador, entre el 20 % y el 80 % de su ancho, y no siempre en el medio. El frenado también varía: la velocidad del tramo lento cambia entre el 90 % y el 115 %. Todo sale de la semilla de la ronda. El gajo ganador lo sigue fijando el número público: cambia cómo llega la flecha, no quién gana.
+- **Los últimos clics mueven la flecha.** Cuando la rueda va por debajo de tres gajos por segundo, cada gajo que pasa le da un golpecito a la flecha, además del clic.
+- **La caja del relator no tapa la rueda.** En el modo centrado, la rueda queda encima de la caja (antes podía taparle hasta 40 px). A 1280x720 con dieciocho personas, la rueda entera se ve en reposo y girando. En el acercamiento final se corta a propósito, para mirar la flecha y su gajo.
+- **Hasta cuántos.** Se queda en 24 (`WHEEL_MAX`): el selector avisa y el sorteo pasa a la tómbola, que muestra a todos con su número. Escalar con anillos sería otro juego. El límite lo marca la letra del gajo. Calculada con la fórmula de `wheel.ts` (la menor entre 18 px y lo que mide el gajo):
+
+| Personas | Gajos | Letra en escritorio 1280x720 | Letra en celular 390x844 |
+|---|---|---|---|
+| 8 | 24 | 18 px | 13 px |
+| 18 | 18 | 18 px | 17 px |
+| 24 | 24 | 18 px | 13 px |
+| 50 | 50 | 12 px | 6 px |
+| 100 | 100 | 6 px | 3 px |
+
+  Desde 25 personas, en celular la letra baja de 13 px. Con 50 o 100 la rueda no se dibuja: `playableGame` cambia a la tómbola. Esta pasada es de la fórmula, no de una captura con 50 o 100 personas.
+- **La semilla en el borde.** Hasta el 7 de octubre el aro llevaba los 64 caracteres de la semilla de la ronda. Ahora son 64 foquitos, sin texto. Se deja así: nada técnico en pantalla.
+- **`placeChip` y `aim()`.** Son de la chovena (`chovena.ts`), no de la ruleta: aquí no aplican.
+- **La etiqueta con la tómbola.** Al congelar con más de 24 nombres, `freeze.ts` cambia el juego a tómbola, y la etiqueta sale de `pintarJuego`. No se reprodujo en esta base.
+- **El confeti sobre el HUD en celular.** No se reprodujo: al coronar, el HUD de la ruleta queda vacío en celular (la barra de arriba es HTML).
+
 ## Cómo está hecho
 
 Vive en [`src/games/wheel.ts`](../../src/games/wheel.ts) y usa el andamiaje de [`src/games/overlay.ts`](../../src/games/overlay.ts). Antes era un cuadrado de 480 píxeles dentro de la página; ahora monta el estadio a pantalla completa como los otros cuatro, y hereda de paso el narrador con voz, el botón de saltar, el modo `?instant=1` y el desmontaje.
