@@ -196,6 +196,29 @@ describe("errorKey: el corpus", () => {
   });
 });
 
+describe("cada clave tiene su mensaje: qué pasó y qué hacer, sin tecnicismos", () => {
+  const claves = [...new Set([...CORPUS.map(([, , , clave]) => clave), "offline", "unconfirmed", "accountNotReady", "wallet", "unknown"])];
+
+  it.each(claves)("errAnchor.%s", async (clave) => {
+    const { T } = await import("../i18n");
+    for (const l of ["es", "en"] as const) {
+      const texto = T[l][`errAnchor.${clave}`];
+      expect(typeof texto, `${l}: errAnchor.${clave}`).toBe("string");
+      // Dos partes como mínimo: lo que pasó y lo que hay que hacer.
+      expect((texto as string).split(/(?<=[.:!?])\s+/).filter(Boolean).length, `${l}: ${texto}`).toBeGreaterThanOrEqual(2);
+      // La sala puede estar mirando: nada de hash, bytes, firmas, drand ni RPC; y en español, "billetera".
+      expect(texto as string).not.toMatch(/\bhash|\bbytes?\b|\bfirmas?\b|\bsignatures?\b|drand|\bRPC\b|XDR|ledger/i);
+      if (l === "es") expect(texto as string).not.toMatch(/\bwallet\b/i);
+    }
+  });
+
+  it("ya no dice 'la red rechazó la transacción' cuando no se sabe qué pasó", async () => {
+    const { T } = await import("../i18n");
+    expect(T.es["errAnchor.unknown"]).not.toMatch(/rechaz/i);
+    expect(T.en["errAnchor.unknown"]).not.toMatch(/reject/i);
+  });
+});
+
 describe("un sello del que no se sabe si entró", () => {
   /** Como lo arma `envio.ts`: el nombre, el intento y el error de verdad en la causa. */
   const incierto = (causa: unknown): Error =>

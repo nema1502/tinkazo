@@ -441,7 +441,7 @@ describe("una cuenta de Pollar que todavía no existe en la red", () => {
     h.wallet = pollar();
     const { error } = await correr(sellar());
     const { anchorErrorText } = await import("./anchor");
-    expect(await anchorErrorText(error)).toBe("No pude hablar con la red de Stellar. Probá de nuevo.");
+    expect(await anchorErrorText(error)).toBe("No pude conectarme con la red de Stellar. Revisá tu conexión y probá de nuevo.");
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
     expect(eventos).toEqual([]);
   });
@@ -630,7 +630,7 @@ describe("en mainnet una cuenta de Pollar nunca ve la caja de fondos", () => {
     h.wallet = pollar(vi.fn().mockRejectedValue(new Error("txInsufficientBalance")));
     const { error } = await correr(sellar());
     const { anchorErrorText } = await import("./anchor");
-    expect(await anchorErrorText(error)).toBe("Tu cuenta no tiene saldo para pagar la comisión de la red.");
+    expect(await anchorErrorText(error)).toBe("Tu cuenta no tiene saldo para pagar la comisión de la red. Cargale XLM y probá de nuevo.");
   });
 });
 
@@ -729,7 +729,7 @@ describe("con ?grifo=0 (testnet, el grifo apagado a propósito)", () => {
     h.wallet = pollar(vi.fn().mockRejectedValue(sinSaldo()));
     const { error } = await sellar();
     const { anchorErrorText } = await import("./anchor");
-    expect(await anchorErrorText(error)).toBe("Tu cuenta no tiene saldo para pagar la comisión de la red.");
+    expect(await anchorErrorText(error)).toBe("Tu cuenta no tiene saldo para pagar la comisión de la red. Cargale XLM y probá de nuevo.");
   });
 
   it("si Pollar paga la comisión, sella igual que siempre: con la cuenta en 0 y sin tocar el grifo", async () => {
@@ -814,7 +814,7 @@ describe("con cualquier otra wallet (Freighter, cuenta de prueba)", () => {
       h.seal.mockRejectedValue(new Error("Account not found: " + DIR));
       const { error } = await sellar();
       const { anchorErrorText } = await import("./anchor");
-      expect(await anchorErrorText(error)).toBe("Tu cuenta no tiene saldo para pagar la comisión de la red.");
+      expect(await anchorErrorText(error)).toBe("Tu cuenta no tiene saldo para pagar la comisión de la red. Cargale XLM y probá de nuevo.");
       expect(h.seal).toHaveBeenCalledTimes(1);
       expect(h.accountOnRpc).toHaveBeenCalledTimes(1);
     });
@@ -834,7 +834,7 @@ describe("con cualquier otra wallet (Freighter, cuenta de prueba)", () => {
       h.seal.mockRejectedValue(new Error("Account not found: " + DIR));
       const { error } = await sellar();
       const { anchorErrorText } = await import("./anchor");
-      expect(await anchorErrorText(error)).not.toBe("Tu cuenta no tiene saldo para pagar la comisión de la red.");
+      expect(await anchorErrorText(error)).not.toBe("Tu cuenta no tiene saldo para pagar la comisión de la red. Cargale XLM y probá de nuevo.");
       const { errorKey } = await import("../stellar/errores");
       expect(errorKey(error, { enLinea: true })).toBe("rpcDown");
     });
@@ -854,7 +854,7 @@ describe("con cualquier otra wallet (Freighter, cuenta de prueba)", () => {
     const { pasos, error } = await sellar();
     expect((error as Error).message).toBe("tx-REJECTED tx_insufficient_balance");
     const { anchorErrorText } = await import("./anchor");
-    expect(await anchorErrorText(error)).toBe("Tu cuenta no tiene saldo para pagar la comisión de la red.");
+    expect(await anchorErrorText(error)).toBe("Tu cuenta no tiene saldo para pagar la comisión de la red. Cargale XLM y probá de nuevo.");
     expect(h.seal).toHaveBeenCalledTimes(1);
     expect(h.send).toHaveBeenCalledTimes(1);
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
