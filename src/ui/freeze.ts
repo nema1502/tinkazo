@@ -7,6 +7,7 @@ import { prepararFirma } from "../protocol/firma";
 import { contractUrl, network } from "../stellar/config";
 import { anchorErrorText, hideTxStatus, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
 import { precargarQr } from "./qr";
+import { recomendar } from "./recomendar";
 import { canAnchor, currentSession } from "./wallet-ui";
 import { parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
@@ -26,7 +27,6 @@ export const GAME_BUTTONS: ReadonlyArray<[string, Game]> = [
   ["g-trompo", "trompo"],
   ["g-pinata", "pinata"],
   ["g-oruro", "oruro"],
-  ["g-tombola", "tombola"],
   ["g-wheel", "wheel"],
   ["g-teleferico", "teleferico"],
   ["g-pasanaku", "pasanaku"],
@@ -427,12 +427,15 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   renderSealSummary();
 
   if (names.length > WHEEL_MAX) {
-    // La ruleta es el único juego con tope. Los demás aguantan doscientos, y
-    // el reemplazo automático va a la tómbola, que muestra a todos con su
-    // número. Iba a la carrera, que pone ocho en pista (16 de octubre de 2026).
+    // La ruleta es el único juego con tope. Los demás aguantan doscientos. El
+    // reemplazo automático es el primer juego del selector que encaja para esa
+    // cantidad (sección 8.1). La tómbola ya no está en el selector, así que no
+    // puede ser el reemplazo: queda solo para más de doscientos, donde ningún
+    // juego encaja y no tiene botón. (Iba a la carrera el 16 de octubre, que
+    // pone ocho en pista.)
     $<HTMLButtonElement>("g-wheel").disabled = true;
     $("wheel-cap").style.display = "block";
-    if (app.game === "wheel") setGame("tombola");
+    if (app.game === "wheel") setGame(recomendar(names.length).games.find((r) => r.fits === true)?.game ?? "tombola");
   }
   pintarJuego();
   startCountdown();

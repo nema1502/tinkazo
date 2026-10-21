@@ -1,6 +1,19 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { SELECTOR, recomendar, type Recomendacion } from "./recomendar";
 import type { Game } from "../state";
+
+describe("el selector y su recomendación hablan de los mismos juegos", () => {
+  it("SELECTOR son los botones de GAME_BUTTONS en freeze.ts, en el mismo orden", () => {
+    const fuente = readFileSync(new URL("./freeze.ts", import.meta.url), "utf8");
+    const botones = [...fuente.matchAll(/\["g-[a-z]+", "([a-z]+)"\]/g)].map((m) => m[1]);
+    expect(botones).toEqual([...SELECTOR]);
+  });
+
+  it("la tómbola sale del selector: sigue existiendo, pero sin botón", () => {
+    expect(SELECTOR).not.toContain("tombola");
+  });
+});
 
 /** Los juegos de cada grupo, en el orden en que `recomendar` los da. */
 function grupos(n: number) {
