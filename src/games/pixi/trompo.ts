@@ -140,9 +140,14 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     [rest[i], rest[j]] = [rest[j] as number, rest[i] as number];
   }
   const rank = n >= 2 ? [winnerIdx, rivalIdx, ...rest] : [winnerIdx];
-  const fightDur = clamp(2.6 + Math.max(0, n - 2) * 0.32, 2.6, 7.8);
-  const T_DUEL = T_FIGHT + fightDur;
-  const clashes = story.arc === "duelo" ? [0.7, 1.7, 2.7, 3.7] : [0.8, 1.9, 3.0];
+  // Con dos no hay baile ni amagues: el mano a mano arranca cuando los trompos
+  // ya están en el ruedo, y tiene más aire entre choques para que cada casi se lea.
+  const fight0 = n === 2 ? T_THROW : T_FIGHT;
+  const fightDur = n === 2 ? 0 : clamp(2.6 + Math.max(0, n - 2) * 0.32, 2.6, 7.8);
+  const T_DUEL = fight0 + fightDur;
+  const clashes = n === 2
+    ? (story.arc === "duelo" ? [2.5, 4.9, 7.3, 9.7] : [2.5, 4.9, 7.3])
+    : (story.arc === "duelo" ? [0.7, 1.7, 2.7, 3.7] : [0.8, 1.9, 3.0]);
   const duelDur = (clashes.at(-1) as number) + 1.6;
   const T_CROWN = T_DUEL + duelDur;
   const duo = n >= 2 && rivalIdx !== winnerIdx;
@@ -178,11 +183,12 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
   // elegida en el selector se siga cumpliendo.
   let extra = 0;
   let lastBig = -9;
-  const T_EDGE = T_FIGHT + fightDur * 0.45;
-  const edgeHit = story.arc === "remontada" && duo;
+  const T_EDGE = fight0 + fightDur * 0.45;
+  // La tiza de la remontada es parte de la gresca: con dos, el mano a mano no la tiene.
+  const edgeHit = story.arc === "remontada" && duo && n > 2;
   victims.forEach((v, i) => {
     const f = (i + 1) / (victims.length + 1);
-    const at = T_FIGHT + 0.3 + (fightDur - 0.7) * Math.pow(f, 0.8);
+    const at = fight0 + 0.3 + (fightDur - 0.7) * Math.pow(f, 0.8);
     const h = hash(v, 11);
     // Los dos últimos antes del mano a mano salen siempre sacados: es lo que la sala espera ver.
     const kind: HitKind = i >= victims.length - 2 || h < 0.5 ? "kick" : h < 0.8 ? "glance" : "spent";
@@ -812,9 +818,9 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     const cues: [number, () => void][] = [
       [0.05, () => say(t("cTroThrow"), 0.1)],
       [T_THROW - 0.3, () => say(T[getLang()].cTroCount(n), 0.2)],
-      [T_THROW + 1.0, () => say(t("cTroDance"), 0.3)],
-      [T_FIGHT, () => say(t(n > 2 ? "cTroFight" : "cTroFeint"), 0.45)],
     ];
+    // Con dos no hay baile ni gresca: el mano a mano arranca con su propia línea.
+    if (n > 2) cues.push([T_THROW + 1.0, () => say(t("cTroDance"), 0.3)], [T_FIGHT, () => say(t("cTroFight"), 0.45)]);
     for (let i = saidUpTo + 1; i < cues.length; i++) {
       const cue = cues[i] as [number, () => void];
       if (tAll < cue[0]) break;
@@ -866,7 +872,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
         say(t("cTroFew"), 0.6);
       }
       // Con dos o tres, amagues: se acercan, se rozan y suena.
-      if (n <= 3 && Math.floor((tAll - T_FIGHT) / 1.1) > Math.floor((tAll - T_FIGHT - DT) / 1.1)) {
+      if (n <= 3 && Math.floor((tAll - fight0) / 1.1) > Math.floor((tAll - fight0 - DT) / 1.1)) {
         const a = win, b = riv;
         const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1;
         a.vx += (dx / d) * 0.5; a.vy += (dy / d) * 0.5;
@@ -1313,7 +1319,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     // tandas encima de cada trompo, para que cada uno sepa cuál es el suyo.
     // En vertical, de a cinco: con ocho, el chip ancho no entraba entre el
     // contador y el ruedo, y la torre quedaba lejos de su trompo.
-    const roll = phase === "crown" ? [] : S.batch(n, tAll, T_THROW - 0.8, T_FIGHT - 0.05, undefined, S.portrait() ? 5 : 8);
+    const roll = phase === "crown" ? [] : S.batch(n, tAll, T_THROW - 0.8, fight0 - 0.05, undefined, S.portrait() ? 5 : 8);
     // El contador no se tapa: en un celular, con la letra legible, la columna
     // de nombres subía hasta encima de él.
     S.tags(names, roll, (i) => {
@@ -1432,7 +1438,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     if (g > 0 && tFx < slowUntil) g *= SLOW;
     tAll += g;
     S.breath(tAll, T_CROWN, tFx < slowUntil ? SLOW : 1);
-    phase = tAll < T_THROW ? "throw" : tAll < T_FIGHT ? "dance" : tAll < T_DUEL ? "fight" : tAll < T_CROWN ? "duel" : "crown";
+    phase = tAll < T_THROW ? "throw" : tAll < fight0 ? "dance" : tAll < T_DUEL ? "fight" : tAll < T_CROWN ? "duel" : "crown";
     if (phase === "duel" && !duelSaid) {
       duelSaid = true;
       // Los golpes que no llegaron se sueltan, y los que quedaban se caen de

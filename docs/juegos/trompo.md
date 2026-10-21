@@ -60,7 +60,7 @@ El tamaño de cada trompo sale del lugar que hay en el ruedo, con topes.
 
 | Participantes | Qué se ve |
 |---|---|
-| 2 | No hay choques de más: los dos se miden, se buscan y amagan hasta el mano a mano |
+| 2 | Sin baile ni amagues: el mano a mano arranca cuando los dos ya están en el ruedo, con más aire entre choques para que cada casi se lea |
 | 14 | Todos llevan su nombre mientras bailan, y los choques se van dando de a uno |
 | 18 | Un ruedo lleno que se va vaciando de a pocos |
 | 200 | Trompos chicos, con muchos choques al principio; los nombres aparecen cuando quedan ocho |
