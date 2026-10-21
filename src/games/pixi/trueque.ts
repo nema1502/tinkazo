@@ -1,11 +1,21 @@
 import { Container, Graphics, Sprite, Text, Texture } from "pixi.js";
 import { T, getLang, nameList, t } from "../../i18n";
 import { paceFactor, setGameLength, type Beacon } from "../../state";
-import { beep, beepFor, fanfare, note } from "../../sound";
+import { beep as sonido, beepFor as sonidoPor, fanfare, note } from "../../sound";
 import { writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { CREAM, INK, MONO, hash, mountPixi, type PixiStage } from "./stage";
 import { planTrueque, type Encargo } from "./trueque-plan";
+
+/**
+ * Los efectos de la feria suben unos 6 dB más que los de otros juegos. Con la
+ * música andina de fondo, la feria quedaba debajo del bajo: en un parlante de
+ * proyector (corta en 150 Hz) perdía 3,6 LU, y el límite del auditor de mezcla
+ * es 3,5 (sapo, con efectos más fuertes, pierde 2,9). Con este empuje, 3,0 a 3,2.
+ */
+const EMPUJE = 2.0;
+const beep = (f: number, d: number, type: OscillatorType, g: number): void => sonido(f, d, type, g * EMPUJE);
+const beepFor = (f: number, segundos: number, type: OscillatorType, g: number): void => sonidoPor(f, segundos, type, g * EMPUJE);
 
 /**
  * El Trueque, en PixiJS, con el director de cámara.
