@@ -341,6 +341,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   let ident: ReturnType<typeof identidadDe> | null = null;
   let relojId = 0;
   let cuadros = 0;
+  let picoAnotado = -1;
 
   // El estadio aparece recién con el juego armado y el primer cuadro
   // dibujado, justo antes de que corra el bucle (ver `run`). Dos razones:
@@ -761,6 +762,13 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         if (start < 0) start = now;
         loopFn?.(dt, (now - start) / 1000);
         if (dead) return;
+        // El pico del zoom de emoción, en la hora de la cámara, para el auditor
+        // de emoción: si no hubo zoom de emoción, no se anota nada.
+        const pico = cam.pico();
+        if (pico.z > 0 && pico.t !== picoAnotado) {
+          picoAnotado = pico.t;
+          mark("zoomPico", pico.t.toFixed(3));
+        }
         app.renderer.render(app.stage);
         if (ident) {
           relojId = (now - start) / 1000;

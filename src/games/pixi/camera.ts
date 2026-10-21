@@ -1,5 +1,6 @@
 import { Graphics, type Container, type Filter, type Renderer } from "pixi.js";
 import { ZoomBlurFilter } from "pixi-filters";
+import { zoomDeEmocion, type Empuje, type Golpe } from "./zoom-emocion";
 
 /**
  * El director de cámara.
@@ -30,6 +31,12 @@ export interface CameraPose {
   tr: number;
   rate: number;
   lastZoom: number;
+  reloj: number;
+  empuje: Empuje | null;
+  pegada: Golpe | null;
+  emoZ: number;
+  emoPicoZ: number;
+  emoPicoT: number;
 }
 
 export class Camera {
@@ -51,6 +58,19 @@ export class Camera {
   private blurOn = true;
   private readonly blur: ZoomBlurFilter;
   private readonly extra: Filter[] = [];
+  /**
+   * El reloj de la cámara: la suma de los `dt`, es decir, la hora del juego (ya
+   * estirada o acortada por la duración elegida). El zoom de emoción se
+   * programa contra él, así que la misma ronda se mira igual.
+   */
+  private reloj = 0;
+  /** El empuje de tensión y el golpe, como los describe `zoom-emocion.ts`. */
+  private empuje: Empuje | null = null;
+  private pegada: Golpe | null = null;
+  /** El zoom extra de emoción en este cuadro, y el más alto que llegó y cuándo. */
+  private emoZ = 0;
+  private emoPicoZ = 0;
+  private emoPicoT = -1;
 
   constructor() {
     this.blur = new ZoomBlurFilter({ strength: 0, innerRadius: 60 });
@@ -101,10 +121,49 @@ export class Camera {
     return this;
   }
 
+  /**
+   * Un empuje lento hacia el golpe: en `dur` segundos de juego, el acercamiento
+   * sube `amt` veces su valor (0,06 es un 6 %) con una curva suave, y se queda
+   * ahí hasta el golpe. Se suma al encuadre que el juego ya pidió: no cambia a
+   * dónde mira ni cuándo llega.
+   */
+  tension(dur: number, amt: number): this {
+    this.empuje = { t0: this.reloj, dur: Math.max(0.05, dur), amt };
+    return this;
+  }
+
+  /**
+   * El golpe: el instante en que el show revela al ganador. Un acercamiento
+   * corto y firme de `amt` (0,12 es un 12 %) que llega en una décima de segundo,
+   * se sostiene `hold` segundos y vuelve suave en `vuelta` segundos. La vuelta
+   * se lleva también el empuje de `tension`. Devuelve la hora de la cámara en
+   * que cayó el golpe, para anotarla a los auditores.
+   */
+  golpe(amt = 0.12, hold = 0.3, vuelta = 1): number {
+    this.pegada = { t0: this.reloj, amt, hold, vuelta: Math.max(0.05, vuelta) };
+    return this.reloj;
+  }
+
+  /** La hora de la cámara: la del juego, desde que arrancó. */
+  get tiempo(): number {
+    return this.reloj;
+  }
+
+  /** El zoom de emoción más alto que llegó, y en qué hora de la cámara. */
+  pico(): { t: number; z: number } {
+    return { t: this.emoPicoT, z: this.emoPicoZ };
+  }
+
+  /** El zoom extra que dan el empuje y el golpe en este momento (0 si no hay). */
+  private emocionZ(): number {
+    return zoomDeEmocion(this.reloj, this.empuje, this.pegada);
+  }
+
   /** La pose y los objetivos, para devolverlos después de que un juego se rearma. */
   snapshot(): CameraPose {
     const { x, y, zoom, rot, tx, ty, tz, tr, rate, lastZoom } = this;
-    return { x, y, zoom, rot, tx, ty, tz, tr, rate, lastZoom };
+    const { reloj, empuje, pegada, emoZ, emoPicoZ, emoPicoT } = this;
+    return { x, y, zoom, rot, tx, ty, tz, tr, rate, lastZoom, reloj, empuje, pegada, emoZ, emoPicoZ, emoPicoT };
   }
 
   restore(p: CameraPose): void {
@@ -147,6 +206,12 @@ export class Camera {
     this.rot += (this.tr - this.rot) * k;
     this.shakeAmt = Math.max(0, this.shakeAmt - dt * (6 + this.shakeAmt * 0.4));
     this.punchAmt = Math.max(0, this.punchAmt - dt * 1.6);
+    this.reloj += dt;
+    this.emoZ = this.emocionZ();
+    if (this.emoZ > this.emoPicoZ) {
+      this.emoPicoZ = this.emoZ;
+      this.emoPicoT = this.reloj;
+    }
     // El desenfoque sigue a la velocidad del acercamiento, suavizado para que
     // no parpadee de un cuadro al otro.
     const z = this.zoom * (1 + this.punchAmt);
@@ -163,7 +228,7 @@ export class Camera {
     const s = this.shakeAmt;
     const sx = s ? Math.sin(now * 91) * s + Math.sin(now * 37 + 1.3) * s * 0.5 : 0;
     const sy = s ? Math.sin(now * 113 + 0.7) * s * 0.8 : 0;
-    const z = this.zoom * (1 + this.punchAmt);
+    const z = this.zoom * (1 + this.punchAmt + this.emoZ);
     scene.pivot.set(this.x, this.y);
     scene.position.set(sw / 2 + sx, sh / 2 + sy);
     scene.scale.set(z);
@@ -179,7 +244,7 @@ export class Camera {
 
   /** Dónde cae en pantalla un punto del mundo, para la interfaz. */
   toScreen(x: number, y: number, sw: number, sh: number): { x: number; y: number } {
-    const z = this.zoom * (1 + this.punchAmt);
+    const z = this.zoom * (1 + this.punchAmt + this.emoZ);
     return { x: sw / 2 + (x - this.x) * z, y: sh / 2 + (y - this.y) * z };
   }
 }

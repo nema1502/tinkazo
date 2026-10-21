@@ -817,6 +817,8 @@ export async function llamasPixi(
   /* ============================================================== estado */
   let phase: "pre" | "count" | "race" | "done" = "pre";
   let tPhase = 3 - CUENTA, tRace = 0, tFreeze = 0, lastLeader = -1, saidLast = false, finished = false, mitadMarcada = false;
+  /** El empuje del zoom de emoción, desde el 80 % de la carrera: una sola vez. */
+  let empujeDado = false;
   /** El reloj de la clasificatoria y la presentación, en segundos de juego. */
   let tPre = 0;
   /** Segundos reales desde la largada, para el "¡YA!", que antes no llegaba a verse: la cuenta terminaba justo cuando aparecía. */
@@ -870,7 +872,10 @@ export async function llamasPixi(
     fanfare();
     // La tribuna explota con la ganadora: venía callada desde el respiro.
     roar?.burst();
-    cam.punch(0.12).shake(14 * G.u);
+    // El golpe del zoom de emoción: el acercamiento firme que vuelve suave, en
+    // el mismo instante en que sale el cartel. Solo presentación.
+    S.mark("golpe", cam.golpe(0.12, 0.3, 1.1).toFixed(3));
+    cam.shake(14 * G.u);
   }
 
   const roar = space ? null : crowdNoise();
@@ -1167,6 +1172,14 @@ export async function llamasPixi(
     // adelante; en la foto va a la meta, bien cerca.
     const tens = tension(story, prog);
     const leadX = G.X0 + (xs[leader] as number) * G.TL;
+    // El zoom de emoción: un empuje lento desde el 80 % hasta el golpe (la
+    // meta). Dura lo que tarda la carrera en llegar, contado en la hora de la
+    // cámara: la foto del duelo corre a 0,4, y ahí el empuje también se estira.
+    if (!empujeDado && prog >= 0.8) {
+      empujeDado = true;
+      const fp = Math.min(1, Math.max(0.8, plan.foto));
+      cam.tension((fp - 0.8) * DUR + ((1 - fp) * DUR) / 0.4, 0.06);
+    }
     if (shot && prog >= shot.until) shot = null;
     if (prog > plan.foto) {
       // En la foto, sin desenfoque: el acercamiento rápido a la meta dejaba

@@ -457,7 +457,10 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     beep(note(0), 0.7, "sine", 0.09);
     fanfare();
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);
-    cam.punch(0.08).shake(10 * S.u());
+    // El golpe del zoom de emoción: el acercamiento firme sobre el agujero del
+    // ganador, en el instante en que sale el cartel. Solo presentación.
+    S.mark("golpe", cam.golpe(0.12, 0.3, 1).toFixed(3));
+    cam.shake(10 * S.u());
   }
   skipFn = (): void => {
     if (crowned || dead) return;
