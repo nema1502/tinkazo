@@ -230,6 +230,8 @@ function startCountdown(): void {
   const box = document.getElementById("wait-box");
   const num = document.getElementById("wait-round");
   const left = document.getElementById("wait-left");
+  // El "Ya se sorteó" del sorteo anterior (draw.ts) no sigue: ahora escribe la cuenta.
+  if (left) delete left.dataset.i;
   const line = box?.querySelector(".wait-line");
   const grande = document.getElementById("btn-espera");
   if (grande) {

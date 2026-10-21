@@ -153,6 +153,8 @@ export async function draw(): Promise<void> {
     // data-i, el cambio de idioma lo traduce en vez de volver a "Lanzar".
     btn.dataset.i = "drawnDone";
     btn.textContent = t("drawnDone");
+    // Y la caja de la espera deja de decir "Ya nació. Dale.": ya se sorteó.
+    ponerHecho(document.getElementById("wait-left"));
     app.drawn = { beacon, winners, ...(drawTx ? { drawTx } : {}) };
     $("sec-draw").style.display = "block";
     $("seed-label").textContent = `${t("seed")} ${beacon.round}`;
@@ -190,6 +192,13 @@ function pedirPantallaCompleta(): void {
 
 /** La espera en grande está abierta: el sorteo arrancó desde ahí (espera.ts). */
 const enGrande = (): boolean => document.querySelector(".espera") !== null;
+
+/** "Ya se sorteó", también al cambiar de idioma (`data-i`). La cuenta regresiva del próximo sello lo saca. */
+function ponerHecho(el: HTMLElement | null): void {
+  if (!el) return;
+  el.dataset.i = "drawnDone";
+  el.textContent = t("drawnDone");
+}
 
 /**
  * Lo que ve la sala mientras llega el número y, con cuenta, se graba el
@@ -404,7 +413,7 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   const dl = $<HTMLAnchorElement>("drand-link");
   dl.href = url;
   dl.textContent = t("drandLink");
-  showAgain();
+  enfocarDespues(showAgain());
   confetti();
   programarImagen();
   // El juego pidió bajar a "El sorteo" cuando el resultado todavía estaba
@@ -462,7 +471,7 @@ function sinGanadores(): string[] {
  * Con menos de dos no hay otro sorteo con esta lista: ese botón se va y la
  * razón queda escrita, no escondida en un title que el proyector no muestra.
  */
-function showAgain(): void {
+function showAgain(): HTMLButtonElement {
   const L = T[getLang()];
   const quedan = sinGanadores().length;
   const alcanza = quedan >= 2;
@@ -473,13 +482,38 @@ function showAgain(): void {
   comprobante.className = alcanza ? "ghost" : "primary";
   $("btn-again-nueva").className = "ghost";
   // La principal va primero, también en el orden del teclado y del lector.
-  $("again-acciones").prepend(alcanza ? sin : comprobante);
+  const principal = alcanza ? sin : comprobante;
+  $("again-acciones").prepend(principal);
   const titulo = $("again-t");
   titulo.dataset.i = alcanza ? "againTitle" : "againTitleFin";
   titulo.textContent = t(titulo.dataset.i);
   $("again-left").textContent = alcanza ? L.againLeft(quedan) : L.againFew(quedan);
   $("again-row").style.display = "block";
   actualizarPaso();
+  return principal;
+}
+
+/**
+ * Después del ganador, la acción principal con el foco, como "Lanzar el
+ * sorteo" cuando nace la ronda: se sigue con Enter, sin ir a buscar el botón
+ * con el mouse. Al cerrar el estadio el foco quedaba en el cuerpo de la página
+ * (buscador de detalles, D11).
+ *
+ * Con cuidado, porque un Enter de más ya hizo daño: el 4 de octubre de 2026
+ * uno apretó "Ver la animación igual", y "No está" deja el foco en "Cancelar"
+ * para que dos Enter no saquen al ganador. Por eso va un momento después del
+ * resultado, y solo si el foco no está en ningún lado: no se lo quita a nadie.
+ * Nunca al repintar por un cambio de idioma (eso llama a `showAgain` solo).
+ * "Siguiente premio" no borra el sorteo, que sigue en Mis sorteos y en su
+ * comprobante.
+ */
+function enfocarDespues(boton: HTMLButtonElement): void {
+  window.setTimeout(() => {
+    const a = document.activeElement as HTMLElement | null;
+    const enNingunLado = !a || a === document.body || (a instanceof HTMLButtonElement && a.disabled) || a.offsetParent === null;
+    if (!enNingunLado || !app.drawn || boton.offsetParent === null) return;
+    boton.focus({ preventScroll: true });
+  }, 1000);
 }
 onLangChange(() => {
   if (app.drawn && $("again-row").style.display !== "none") showAgain();
