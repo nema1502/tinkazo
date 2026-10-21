@@ -2,7 +2,7 @@ import { Application, Container, Graphics, Sprite, Text, Texture, WebGLRenderer,
 import { gsap } from "gsap";
 import { $ } from "../../dom";
 import { T, getLang, setPickSeed, t } from "../../i18n";
-import { LCOLORS, drawAvatar, paceFactor, params, skipMotion, takeShowGate, type Beacon } from "../../state";
+import { LCOLORS, drawAvatar, paceFactor, paraCompartir, params, skipMotion, takeShowGate, type Beacon } from "../../state";
 import { musicBreath, musicCue, startMusic, stopMusic, type MusicStyle } from "../../music";
 import { beep, note } from "../../sound";
 import { registerSkip, releaseScreen, shorten, takeOverScreen, winnerNames } from "../overlay";
@@ -111,6 +111,14 @@ export interface PixiStage {
   sh(): number;
   /** La unidad: un píxel de un diseño de 720 de alto, o lo que entre en un celular. */
   u(): number;
+  /**
+   * El tamaño de letra de lo que la sala tiene que leer desde el fondo: `px` es
+   * el tamaño en un diseño de 720. Crece con la pantalla (hasta el doble, 1440
+   * y más) y, con el modo para compartir, un veinte por ciento más.
+   */
+  letra(px: number): number;
+  /** El modo para compartir está prendido: más contraste, nombres más grandes y menos partículas. */
+  compartir: boolean;
   portrait(): boolean;
   /** Dónde empieza el juego debajo de la barra de arriba, y dónde termina encima del relator. */
   top(): number;
@@ -380,6 +388,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   const u = (): number => (portrait() ? Math.min(sw() / 420, sh() / 900) : sh() / 720);
   const top = (): number => (innerWidth <= 520 ? 100 : 82);
   const bottom = (): number => (innerWidth <= 520 ? 118 : 106);
+  // El modo para compartir se lee al montar el estadio: lo que se elige en el
+  // sorteo vale para el próximo show, no cambia uno que ya está corriendo.
+  const compartir = paraCompartir();
+  const letra = (px: number): number => px * Math.min(2, u()) * (compartir ? 1.2 : 1);
 
   // Los textos se dibujan al doble: la cámara se acerca hasta 1,5× o más sobre
   // el ganador, y un nombre dibujado a la resolución de la pantalla se veía
@@ -390,7 +402,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     new Text({ text: s, style: { fontFamily: FONT, ...style }, resolution: textRes });
 
   const chip = (name: string, scale = 1, faceOf = name): Container => {
-    const k = u() * scale * CHIP_SCALE;
+    const k = u() * scale * CHIP_SCALE * (compartir ? 1.2 : 1);
     const c = new Container();
     const label = text(shorten(name, 20), { fontSize: 12 * k, fontWeight: "800", fill: INK });
     const av = new Sprite(face(faceOf));
@@ -403,7 +415,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       .fill(INK)
       .roundRect(0, 0, w, 22 * k, 5 * k)
       .fill(dark ? CREAM : 0xffffff)
-      .stroke({ width: 2 * k, color: INK });
+      .stroke({ width: (compartir ? 3 : 2) * k, color: INK });
     c.addChild(bgc, av, label);
     c.pivot.set(0, 11 * k);
     return c;
@@ -496,7 +508,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       flash.clear().rect(0, 0, sw(), sh()).fill(0xffffff);
       const k = u();
       const title = text(getLang() === "es" ? (all.length > 1 ? "GANAN" : "GANA") : all.length > 1 ? "WINNERS" : "WINNER", {
-        fontFamily: MONO, fontSize: 14 * k, fontWeight: "900", fill: INK, letterSpacing: 3 * k,
+        fontFamily: MONO, fontSize: letra(16), fontWeight: "900", fill: INK, letterSpacing: 3 * k,
       });
       // Hasta tres nombres y "y N más", igual que el relator.
       const resto = all.length - 3;
@@ -506,7 +518,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       // cara: antes eran renglones chicos e iguales, sin cara, y desde el fondo
       // no se sabía quién era quién ni cuál era el primero.
       const conCara = (i: number): boolean => !big && (all.length <= 3 || i < 3);
-      const talla = (i: number): number => (big ? 54 : i === 0 ? 46 : 38) * k;
+      const talla = (i: number): number => (big ? 54 : i === 0 ? 46 : 38) * k * (compartir ? 1.2 : 1);
       const nameTexts = lines.map((n, i) =>
         text(conCara(i) ? `${i + 1}. ${n}` : n, { fontSize: talla(i), fontWeight: "900", fill: INK }),
       );
@@ -609,7 +621,9 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         // Papel picado: cada tira se calcula desde la hora, no se acumula.
         confetti.clear();
         const k = u();
-        for (let i = 0; i < 180; i++) {
+        // Con el modo para compartir, menos papel picado: el ruido se pierde en Zoom.
+        const papeles = compartir ? 70 : 180;
+        for (let i = 0; i < papeles; i++) {
           const t0 = hash(i, 7) * 0.4;
           const q = tt - t0;
           if (q < 0) continue;
@@ -732,7 +746,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   };
 
   const stage: PixiStage = {
-    app, view, bg, scene, hud, cam, sw, sh, u, portrait, top, bottom, rng, dark,
+    app, view, bg, scene, hud, cam, sw, sh, u, letra, compartir, portrait, top, bottom, rng, dark,
     placaBajo: (m) => {
       const k = u();
       const ph = 40 * k + filasCorona(m, k).reduce((a, h) => a + h, 0) + 16 * k;

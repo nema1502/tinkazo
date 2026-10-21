@@ -368,7 +368,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     }));
     badgeLayer.removeChildren().forEach((c) => c.destroy());
     badgeOf.clear();
-    counter.style.fontSize = 14 * k;
+    counter.style.fontSize = S.letra(16);
     counter.style.fill = CREAM;
     almost.style.fontSize = 26 * k;
     almost.text = t("cSapAlmost");
