@@ -1122,3 +1122,34 @@ describe("escribirError: sin conexión, igual dice algo", () => {
     expect(status.textContent).toBe("No pude conectarme con la red de Stellar. Revisá tu conexión y probá de nuevo.");
   });
 });
+
+describe("entró pero no se pudo leer el número que devolvió", () => {
+  /** SUCCESS sin `returnValue`: lo que contestaría un RPC que no lo trae. */
+  const entroSinValor = () => ({ status: "SUCCESS", latestLedgerCloseTime: cierre() });
+
+  it("con Freighter o la cuenta de prueba: sello incierto (lo dice el contrato), nunca 'otra ronda', que serían dos sellos", async () => {
+    h.wallet = { kind: "external", address: DIR, signTransaction: vi.fn() };
+    h.getTx.mockResolvedValue(entroSinValor());
+    const { error } = await sellar();
+    expect(esSelloIncierto(error)).toBe(true);
+    expect((error as SelloIncierto).intento.hash).toBe(HASH_FIRMADA);
+    expect(selloSinGrabar(error)).toBe(false);
+  });
+
+  it("con Pollar: lo mismo, con el hash que dio Pollar", async () => {
+    h.wallet = pollar(vi.fn(async () => "cafe"));
+    h.getTx.mockResolvedValue(entroSinValor());
+    const { error } = await sellar();
+    expect(esSelloIncierto(error)).toBe(true);
+    expect((error as SelloIncierto).intento.hash).toBe("cafe");
+    expect(selloSinGrabar(error)).toBe(false);
+  });
+
+  it("con el sorteo no hace falta: draw.ts lee el resultado del contrato (readDraw)", async () => {
+    h.wallet = { kind: "external", address: DIR, signTransaction: vi.fn() };
+    h.getTx.mockResolvedValue(entroSinValor());
+    const { error } = await sortear();
+    expect(esSelloIncierto(error)).toBe(false);
+    expect((error as Error).message).toBe("tx-FAILED");
+  });
+});

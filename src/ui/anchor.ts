@@ -224,7 +224,14 @@ async function sellar(args: SealArgs, onStep: OnStep): Promise<SealResult> {
     if (quedan < MARGEN_AL_MANDAR_S) throw new RondaMuyCerca(quedan);
   });
   if (desenlace.estado === "entro") {
-    const raffleId = unwrap<bigint>(await valorNativo(desenlace.valor));
+    let raffleId: bigint;
+    try {
+      raffleId = unwrap<bigint>(await valorNativo(desenlace.valor));
+    } catch (sinValor) {
+      // Entró, y no se pudo leer el número que devolvió: no es una falla que se
+      // arregle con otra ronda (eso dejaría dos sellos). El número lo dice el contrato.
+      throw new (await envio()).SelloIncierto({ ...intento, hash }, sinValor);
+    }
     onStep("confirmed", hash);
     return { raffleId, txHash: hash };
   }

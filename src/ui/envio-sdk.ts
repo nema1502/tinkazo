@@ -207,7 +207,14 @@ export async function submitElsewhere(tx: TxArmada, onStep: OnStep, sinRedMs: nu
   const { enviarYConfirmar, SelloIncierto } = await import("../stellar/envio");
   const d = await enviarYConfirmar({ consultar: async () => leerConsulta(await server.getTransaction(hash)), venceEn, sinRedMs });
   if (d.estado === "entro") {
-    const value = await valorNativo(d.valor);
+    let value: unknown;
+    try {
+      value = await valorNativo(d.valor);
+    } catch (sinValor) {
+      // Entró y no se pudo leer lo que devolvió: con un sello, nunca "otra ronda" (serían dos).
+      if (intento) throw new SelloIncierto({ ...intento, hash }, sinValor);
+      throw sinValor;
+    }
     onStep("confirmed", hash);
     return { hash, value };
   }
