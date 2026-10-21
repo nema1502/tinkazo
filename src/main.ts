@@ -4,7 +4,7 @@ import { chooseLang, initialLang, onLangChange, setLang, t } from "./i18n";
 import { SAMPLE, app, currentPace, paceSeconds, params, setPace, type Game, type Pace } from "./state";
 import { soundLabel, toggleSound, unlockAudioOnGesture } from "./sound";
 import { bindParticipants, loadSample, renderNames } from "./ui/participants";
-import { GAME_BUTTONS, cambiarJuego, copyRules, freeze, refreshFreezeLabel, secondsToRound, setGame } from "./ui/freeze";
+import { GAME_BUTTONS, cambiarJuego, copyRules, freeze, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
 import { initSiguiente } from "./ui/siguiente";
 import { montarPremios } from "./ui/premios";
 import { adelantarImagen, alTocarGanadores, copySummary, draw, imagenRedes, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
@@ -58,7 +58,11 @@ function paceLabels(): void {
   }
 }
 onLangChange(paceLabels);
-paceSel.addEventListener("change", () => setPace(paceSel.value as Pace));
+paceSel.addEventListener("change", () => {
+  setPace(paceSel.value as Pace);
+  // La línea del selector muestra la duración: se rehace con el ritmo nuevo.
+  refrescarRecomendacion();
+});
 
 $("btn-hist-csv").addEventListener("click", () => {
   void import("./ui/history").then(async (h) => {
