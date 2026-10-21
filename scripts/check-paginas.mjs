@@ -43,6 +43,9 @@ try {
       await page.send("Emulation.setDeviceMetricsOverride", {
         width: ancho, height: alto, deviceScaleFactor: 1, mobile: ancho < 500,
       });
+      // Sin esperar la carga, `document.body` puede no existir todavía: la
+      // revisión se caía en la segunda vista de la misma página.
+      await page.waitFor("document.readyState === 'complete' && !!document.body", 20000);
       // Las imágenes son `loading="lazy"`: sin bajar hasta el final, las de
       // abajo figuran como no cargadas sin estar rotas. Y se baja de a una
       // pantalla, como quien lee: saltando directo al final, en un celular
