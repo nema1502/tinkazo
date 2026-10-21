@@ -1330,7 +1330,10 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       if (q.outChip) q.outChip.visible = false;
     }
     if (!roll.length && phase !== "crown") {
-      const vivos = live.length <= 8 ? live.filter((q) => tAll >= q.land) : [];
+      // Con hasta 14 personas, todos llevan su nombre mientras bailan, no solo
+      // cuando quedan ocho: el que espera su turno ya sabe cuál es su trompo.
+      const hasta = n <= 14 ? 14 : 8;
+      const vivos = live.length <= hasta ? live.filter((q) => tAll >= q.land) : [];
       // La rival conserva su nombre mientras cae: el chip desaparecía justo
       // en el instante que decide.
       if (phase === "duel" && duo && !riv.alive && !riv.gone) vivos.push(riv);
