@@ -38,7 +38,9 @@ export interface Rango {
  * Sin entrada, el juego no tiene rango claro. Piñata y Carnaval de Oruro
  * (la versión de hoy, no La Entrada), Aguayo, Constelación y ¿Quién es? (la
  * versión de hoy, no De pie) quedan así: el rango de su reemplazo no es el
- * suyo. Ruleta tiene solo tope (la sección 5 dice que llega a 24).
+ * suyo. Ruleta tiene solo tope: el WHEEL_MAX de state.ts, 200 desde que reparte la
+ * lista en gajos (21 de octubre de 2026; la sección 5 decía 24). No se importa de
+ * state.ts porque ese módulo lee `location` al cargar: una prueba compara los dos.
  */
 export const RANGOS: Partial<Record<Game, Rango>> = {
   race: { minimo: 2, ideal: [4, 8], maximo: 8, meta: 7.0 },
@@ -46,7 +48,7 @@ export const RANGOS: Partial<Record<Game, Rango>> = {
   trompo: { minimo: 2, ideal: [5, 14], maximo: 14, meta: 6.3 },
   chovena: { minimo: 8, ideal: [12, 60], maximo: 80, meta: 7.9 },
   teleferico: { minimo: 16, ideal: [30, 150], maximo: 200, meta: 7.1 },
-  wheel: { maximo: 24 },
+  wheel: { maximo: 200 },
 };
 
 /**

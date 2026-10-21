@@ -95,35 +95,35 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
     });
   });
 
-  it("con 30, chovena y teleférico están en su ideal; la ruleta ya no llega", () => {
+  it("con 30, chovena y teleférico están en su ideal; la ruleta sigue, neutral, hasta 200", () => {
     expect(grupos(30)).toEqual({
       encajan: ["chovena", "teleferico", "sapo"],
-      neutral: ["pinata", "oruro", "pasanaku", "stellar", "quien"],
-      no: ["race", "trompo", "wheel"],
+      neutral: ["pinata", "oruro", "wheel", "pasanaku", "stellar", "quien"],
+      no: ["race", "trompo"],
     });
   });
 
   it("con 50, solo chovena y teleférico; el sapo pasa de su clasificatoria", () => {
     expect(grupos(50)).toEqual({
       encajan: ["chovena", "teleferico"],
-      neutral: ["pinata", "oruro", "pasanaku", "stellar", "quien"],
-      no: ["race", "trompo", "wheel", "sapo"],
+      neutral: ["pinata", "oruro", "wheel", "pasanaku", "stellar", "quien"],
+      no: ["race", "trompo", "sapo"],
     });
   });
 
   it("con 100, solo teleférico; chovena ya pasa de sus 80", () => {
     expect(grupos(100)).toEqual({
       encajan: ["teleferico"],
-      neutral: ["pinata", "oruro", "pasanaku", "stellar", "quien"],
-      no: ["race", "chovena", "trompo", "wheel", "sapo"],
+      neutral: ["pinata", "oruro", "wheel", "pasanaku", "stellar", "quien"],
+      no: ["race", "chovena", "trompo", "sapo"],
     });
   });
 
-  it("con 200, teleférico llega justo a su máximo", () => {
+  it("con 200, teleférico llega justo a su máximo, y la ruleta también", () => {
     expect(grupos(200)).toEqual({
       encajan: ["teleferico"],
-      neutral: ["pinata", "oruro", "pasanaku", "stellar", "quien"],
-      no: ["race", "chovena", "trompo", "wheel", "sapo"],
+      neutral: ["pinata", "oruro", "wheel", "pasanaku", "stellar", "quien"],
+      no: ["race", "chovena", "trompo", "sapo"],
     });
   });
 
@@ -158,10 +158,20 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
     }
   });
 
-  it("la ruleta solo se atenúa por encima de 24, y nunca se recomienda", () => {
-    expect(recomendar(24).games.find((r) => r.game === "wheel")?.fits).toBeNull();
-    expect(recomendar(25).games.find((r) => r.game === "wheel")?.fits).toBe(false);
-    expect(recomendar(200).games.some((r) => r.game === "wheel" && r.fits === true)).toBe(false);
+  it("la ruleta solo se atenúa por encima de 200, y nunca se recomienda", () => {
+    expect(recomendar(200).games.find((r) => r.game === "wheel")?.fits).toBeNull();
+    expect(recomendar(201).games.find((r) => r.game === "wheel")?.fits).toBe(false);
+    for (const n of [2, 24, 25, 100, 200, 201]) {
+      expect(recomendar(n).games.some((r) => r.game === "wheel" && r.fits === true), `n=${n}`).toBe(false);
+    }
+  });
+
+  it("el tope de la ruleta es el mismo WHEEL_MAX de state.ts", () => {
+    const fuente = readFileSync(new URL("../state.ts", import.meta.url), "utf8");
+    const tope = Number(/export const WHEEL_MAX = (\d+);/.exec(fuente)?.[1]);
+    expect(tope).toBeGreaterThan(0);
+    expect(recomendar(tope).games.find((r) => r.game === "wheel")?.fits).toBeNull();
+    expect(recomendar(tope + 1).games.find((r) => r.game === "wheel")?.fits).toBe(false);
   });
 
   it("la nota dice bajo, alto, largo o corto según de qué lado cae la cantidad", () => {
