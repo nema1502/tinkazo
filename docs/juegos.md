@@ -137,7 +137,7 @@ Para afinar un caso sin correr las once: `node scripts/audit-rigor.mjs <juego> -
 | Saltar al 10%, al 50% y al 90% cierra | Que el estadio se vaya antes de seis segundos reales, sin bucles ni excepciones | El cartel se sostiene tres a propósito |
 | Dura lo que se eligió | Rápido, normal y épico contra 20, 38 y 45 segundos, con 20% de margen | |
 | En celular y en tema claro | Las mismas medidas donde más se rompen | |
-| Con dos y con doscientas | Que cierre, se mueva, fluya y el cartel se lea, con `?n=2` y `?n=200` (veinticuatro en la ruleta, que es su tope) | Contesta la pregunta que antes era "revisalo vos". Con dos personas encontró la Constelación con el cielo casi vacío en el armado y en los saltos finales, y el único apretón del Pasanaku con un tirón cada cuatro segundos |
+| Con dos y con doscientas | Que cierre, se mueva, fluya y el cartel se lea, con `?n=2` y `?n=200` (la ruleta también llega a doscientas: desde el 21 de octubre ya no tiene tope de veinticuatro) | Contesta la pregunta que antes era "revisalo vos". Con dos personas encontró la Constelación con el cielo casi vacío en el armado y en los saltos finales, y el único apretón del Pasanaku con un tirón cada cuatro segundos |
 
 Para medir el cartel, `drawWinnerPlate` anota en el lienzo el rectángulo donde lo dibujó. Buscarlo por el color no alcanzaba: el aguayo del Pasanaku tiene una franja del mismo amarillo, y el auditor la medía como si fuera el cartel.
 
@@ -334,7 +334,7 @@ El ritmo, la legibilidad del cartel y el tartamudeo de los subtítulos ya los mi
 | Piñata | `pinata` | Módulo propio (solo motor nuevo) | 200 | [pinata.md](juegos/pinata.md) |
 | Carnaval de Oruro | `oruro` | Módulo propio (solo motor nuevo) | 200 | [carnaval-de-oruro.md](juegos/carnaval-de-oruro.md) |
 | Tómbola | `tombola` | Módulo propio | 200 | [tombola.md](juegos/tombola.md) |
-| Ruleta | `wheel` | Módulo propio | 24 | [ruleta.md](juegos/ruleta.md) |
+| Ruleta | `wheel` | Módulo propio | 200 (con más de 24, cada gajo reúne a un grupo) | [ruleta.md](juegos/ruleta.md) |
 | Teleférico | `teleferico` | Módulo propio | 200 | [teleferico.md](juegos/teleferico.md) |
 | Aguayo (antes Pasanaku) | `pasanaku` | Módulo propio | 200 | [pasanaku.md](juegos/pasanaku.md), que ahora cuenta el Aguayo |
 | Constelación Stellar | `stellar` | Módulo propio | 200 | [constelacion-stellar.md](juegos/constelacion-stellar.md) |

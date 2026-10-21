@@ -89,20 +89,12 @@ La traba suena **una sola vez**. Durante un tiempo se redisparó catorce veces, 
 - **El final no se aprende.** La flecha para en cualquier punto del gajo ganador, entre el 20 % y el 80 % de su ancho, y no siempre en el medio. El frenado también varía: la velocidad del tramo lento cambia entre el 90 % y el 115 %. Todo sale de la semilla de la ronda. El gajo ganador lo sigue fijando el número público: cambia cómo llega la flecha, no quién gana.
 - **Los últimos clics mueven la flecha.** Cuando la rueda va por debajo de tres gajos por segundo, cada gajo que pasa le da un golpecito a la flecha, además del clic.
 - **La caja del relator no tapa la rueda.** En el modo centrado, la rueda queda encima de la caja (antes podía taparle hasta 40 px). A 1280x720 con dieciocho personas, la rueda entera se ve en reposo y girando. En el acercamiento final se corta a propósito, para mirar la flecha y su gajo.
-- **Hasta cuántos.** Se queda en 24 (`WHEEL_MAX`): el selector avisa y el sorteo pasa a la tómbola, que muestra a todos con su número. Escalar con anillos sería otro juego. El límite lo marca la letra del gajo. Calculada con la fórmula de `wheel.ts` (la menor entre 18 px y lo que mide el gajo):
+- **Hasta cuántos.** Llega a 200 (`WHEEL_MAX`) desde el 21 de octubre de 2026; antes llegaba a 24. Hasta 24, un gajo por persona, con su nombre escrito en el gajo, como antes. Desde 25, la rueda sigue con 24 gajos y cada uno reúne a un grupo seguido de la lista: `repartir`, en [`wheel-layout.ts`](../../src/games/wheel-layout.ts), módulo puro con pruebas. Con 25, el primero lleva a dos; con 50, dos de tres y veintidós de dos; con 200, ocho de nueve y dieciséis de ocho. Los nombres no van escritos en el gajo: al pasar la flecha, una placa lista a las personas del gajo, una por renglón y del color del gajo. Al frenar se enciende el renglón del ganador. Con más de 200, `playableGame` pasa el sorteo a la tómbola, que muestra a todos con su número.
 
-| Personas | Gajos | Letra en escritorio 1280x720 | Letra en celular 390x844 |
-|---|---|---|---|
-| 8 | 24 | 18 px | 13 px |
-| 18 | 18 | 18 px | 17 px |
-| 24 | 24 | 18 px | 13 px |
-| 50 | 50 | 12 px | 6 px |
-| 100 | 100 | 6 px | 3 px |
-
-  Desde 25 personas, en celular la letra baja de 13 px. Con 50 o 100 la rueda no se dibuja: `playableGame` cambia a la tómbola. Esta pasada es de la fórmula, no de una captura con 50 o 100 personas.
+  Medido con `node scripts/audit-identidad.mjs wheel --gente 8,18,50,100,200` (21 de octubre de 2026): con 8 y con 18 se ven todos antes del ganador; con 50, 100 y 200 se leen el 24 %, el 21 % y el 21 % antes del cartel. El nombre del ganador sí se lee antes del cartel en los cinco tamaños, unos 4 s antes en el reloj del auditor. Que se lean todos con 50 o más todavía no se logra: es lo pendiente de la ruleta. El motor anterior (`?motor=clasico`) no reparte en gajos: con 200 dibuja 200.
 - **La semilla en el borde.** Hasta el 7 de octubre el aro llevaba los 64 caracteres de la semilla de la ronda. Ahora son 64 foquitos, sin texto. Se deja así: nada técnico en pantalla.
 - **`placeChip` y `aim()`.** Son de la chovena (`chovena.ts`), no de la ruleta: aquí no aplican.
-- **La etiqueta con la tómbola.** Al congelar con más de 24 nombres, `freeze.ts` cambia el juego a tómbola, y la etiqueta sale de `pintarJuego`. No se reprodujo en esta base.
+- **La etiqueta con la tómbola.** Al congelar con más de 200 nombres, `freeze.ts` cambia el juego a tómbola, y la etiqueta sale de `pintarJuego`. No se reprodujo en esta base.
 - **El confeti sobre el HUD en celular.** No se reprodujo: al coronar, el HUD de la ruleta queda vacío en celular (la barra de arriba es HTML).
 
 ## Cómo está hecho
