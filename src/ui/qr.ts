@@ -53,7 +53,16 @@ export function precargarQr(): Promise<unknown> {
   return import("qrcode-generator").catch(() => undefined);
 }
 
-async function dibujar(text: string, ancho: number): Promise<{ url: string; lado: number } | null> {
+/**
+ * El QR como lienzo, para componerlo en otra imagen (la tarjeta para compartir).
+ * `ancho` es lo que se quiere ocupar en px del equipo, y `dpr` la densidad: con
+ * 1 el lienzo sale del tamaño exacto que se pide, sin el redondeo de la pantalla.
+ */
+export async function qrLienzo(
+  text: string,
+  ancho: number,
+  dpr = Math.min(window.devicePixelRatio || 1, 3),
+): Promise<{ canvas: HTMLCanvasElement; lado: number } | null> {
   const { default: qrcode } = await import("qrcode-generator");
   let qr: ReturnType<typeof qrcode>;
   try {
@@ -68,7 +77,6 @@ async function dibujar(text: string, ancho: number): Promise<{ url: string; lado
 
   const count = qr.getModuleCount();
   const total = count + QUIET * 2;
-  const dpr = Math.min(window.devicePixelRatio || 1, 3);
   // Cada módulo es un número entero de píxeles del equipo, y nunca menos de
   // dos: si no, el redondeo deja costuras y los lectores se confunden. Se
   // muestra a ese mismo tamaño (`lado`), sin que el navegador lo estire.
@@ -94,5 +102,10 @@ async function dibujar(text: string, ancho: number): Promise<{ url: string; lado
       c.fillRect((col + QUIET) * cell, (r + QUIET) * cell, cell, cell);
     }
   }
-  return { url: canvas.toDataURL("image/png"), lado: side / dpr };
+  return { canvas, lado: side / dpr };
+}
+
+async function dibujar(text: string, ancho: number): Promise<{ url: string; lado: number } | null> {
+  const q = await qrLienzo(text, ancho);
+  return q ? { url: q.canvas.toDataURL("image/png"), lado: q.lado } : null;
 }
