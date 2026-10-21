@@ -9,7 +9,7 @@ import { anchorErrorText, hideTxStatus, sealOnChain, selloSinGrabar, showTxStatu
 import { precargarQr } from "./qr";
 import { recomendar } from "./recomendar";
 import { canAnchor, currentSession } from "./wallet-ui";
-import { onListChange, parseNames, setList } from "./participants";
+import { parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
 import { NOMBRE } from "./gamecard";
 import { actualizarPaso, barraActiva, verError } from "./siguiente";
@@ -59,13 +59,6 @@ export function pintarJuego(): void {
 // Al cambiar de idioma los botones del selector ya están traducidos: se lee de ahí.
 onLangChange(pintarJuego);
 
-/**
- * Lo último que se pintó de la recomendación: cantidad, idioma y ritmo. Si no
- * cambió, no se vuelve a pintar (el selector no se reacomoda al escribir un
- * nombre que no cambia la cantidad).
- */
-let claveRecomendada = "";
-
 /** Una frase del diccionario. Las que llevan números son funciones: se les pasan los argumentos. */
 function frase(clave: string, args: readonly number[] = []): string {
   const v = T[getLang()][clave];
@@ -79,11 +72,10 @@ function frase(clave: string, args: readonly number[] = []): string {
  * nota corta de por qué. Los que no encajan se atenúan, pero siguen tocables y
  * dicen por qué. Los que no tienen rango claro quedan como estaban. Reordena
  * los botones: no oculta ninguno, y el que estaba elegido sigue elegido.
+ * El selector solo se ve con la lista sellada (`sec-frozen`), así que se pinta
+ * al sellar y de nuevo al cambiar de idioma o de ritmo.
  */
 export function pintarRecomendacion(n: number): void {
-  const clave = `${n}|${getLang()}|${currentPace()}`;
-  if (clave === claveRecomendada) return;
-  claveRecomendada = clave;
   const botones = new Map<Game, HTMLElement>();
   for (const [id, g] of GAME_BUTTONS) {
     const el = document.getElementById(id);
@@ -127,34 +119,15 @@ function pintarCabecera(n: number): void {
   el.style.display = "";
 }
 
-/** Quita la recomendación: el selector vuelve al orden de siempre, sin marcas. */
-function quitarRecomendacion(): void {
-  if (!claveRecomendada) return;
-  claveRecomendada = "";
-  const gp = $("gamepick");
-  for (const [id] of GAME_BUTTONS) {
-    const el = document.getElementById(id);
-    if (!el) continue;
-    gp.appendChild(el);
-    el.classList.remove("atenuado");
-    el.querySelectorAll(":scope > .rec-tag, :scope > .rec-nota").forEach((x) => x.remove());
-  }
-  const el = document.getElementById("rec-head");
-  if (el) el.style.display = "none";
-}
-
 /**
- * Rehace la recomendación con la cantidad de ahora: la de la lista sellada, o
- * la del cuadro mientras no se sella. Corre cuando cambia la lista, el idioma
- * o el ritmo. Con menos de dos personas no hay sorteo que recomendar.
+ * Rehace la recomendación con la lista sellada: al cambiar de idioma o de
+ * ritmo, que son los textos y la duración que se ven. Sin lista sellada no hay
+ * selector visible, y no hace nada.
  */
 export function refrescarRecomendacion(): void {
-  const n = app.frozen ? app.frozen.names.length : parseNames().length;
-  if (n < 2) quitarRecomendacion();
-  else pintarRecomendacion(n);
+  if (app.frozen) pintarRecomendacion(app.frozen.names.length);
 }
 onLangChange(refrescarRecomendacion);
-onListChange(refrescarRecomendacion);
 
 /**
  * "Cambiar de juego": lleva al selector, que está debajo, y deja el foco en el

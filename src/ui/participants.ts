@@ -10,16 +10,6 @@ export function parseNames(): string[] {
   return canonicalList($<HTMLTextAreaElement>("ta").value);
 }
 
-const alPintarLista: Array<() => void> = [];
-
-/**
- * Avisa cada vez que se pinta la lista. El selector se recomienda según cuántas
- * personas hay (auditoría de juegos, sección 8.1), y eso cambia al escribir.
- */
-export function onListChange(fn: () => void): void {
-  alPintarLista.push(fn);
-}
-
 export function renderNames(): void {
   const names = parseNames();
   $("names").innerHTML = names
@@ -29,7 +19,6 @@ export function renderNames(): void {
   // Un boton apagado sin explicacion es lo que mas frena a quien recien llega.
   $("freeze-hint").style.display = names.length < 2 && !app.frozen ? "block" : "none";
   $("free-rule").style.display = app.frozen ? "none" : "block";
-  for (const fn of alPintarLista) fn();
 }
 
 export function loadSample(): void {
