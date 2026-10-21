@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -97,6 +97,182 @@ describe("portada: canonical, sin hreflang y datos estructurados", () => {
   it("og:description es la misma que la meta description, y las dos caben en 160 caracteres", () => {
     expect(ogDescripcion(html)).toBe(descripcion(html));
     expect([...descripcion(html)].length).toBeLessThanOrEqual(160);
+  });
+});
+
+/** Palabras que una cadena nueva de la portada no puede decir: la cifra vieja y las de apuesta. */
+const PALABRAS_PROHIBIDAS = /doce|rifa|apuesta|loter[ií]a|casino|boleto|raffle/i;
+/** Lo mismo en inglés: la cifra, la rifa, la lotería, la apuesta, el casino y el boleto. */
+const PALABRAS_PROHIBIDAS_EN = /twelve|raffle|lotter|\bbet(s|ting)?\b|casino|\bticket/i;
+const PNG_FIRMA = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+const leerPublico = (ruta: string): Buffer => readFileSync(new URL(`../public/${ruta}`, import.meta.url));
+
+/** Si la ruta, con barra inicial, es un archivo de public/. */
+const esArchivoPublico = (ruta: string): boolean => {
+  const url = new URL(`../public${ruta}`, import.meta.url);
+  return ruta.startsWith("/") && existsSync(url) && statSync(url).isFile();
+};
+
+/** Ancho y alto de un PNG, leídos de su IHDR; null si no es un PNG. */
+const dimensionesPng = (b: Buffer): { ancho: number; alto: number } | null =>
+  b.subarray(0, 8).equals(PNG_FIRMA) && b.toString("ascii", 12, 16) === "IHDR"
+    ? { ancho: b.readUInt32BE(16), alto: b.readUInt32BE(20) }
+    : null;
+
+/** Ancho y alto de un JPEG, leídos del marcador SOF, recorriendo los segmentos desde el SOI. */
+const dimensionesJpeg = (b: Buffer): { ancho: number; alto: number } | null => {
+  if (b.readUInt16BE(0) !== 0xffd8) return null;
+  let i = 2;
+  while (i + 4 <= b.length) {
+    if (b[i] !== 0xff) return null;
+    const marcador = b[i + 1] ?? 0;
+    if (marcador === 0xff) {
+      i += 1;
+      continue;
+    }
+    if (marcador >= 0xc0 && marcador <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marcador)) {
+      return { alto: b.readUInt16BE(i + 5), ancho: b.readUInt16BE(i + 7) };
+    }
+    const sinLargo = marcador === 0xd8 || marcador === 0x01 || (marcador >= 0xd0 && marcador <= 0xd7);
+    i += sinLargo ? 2 : 2 + b.readUInt16BE(i + 2);
+  }
+  return null;
+};
+
+/** Las entradas de un ICO: ancho, alto, tamaño y desplazamiento, según su directorio de 16 bytes. */
+const entradasIco = (b: Buffer): Array<{ ancho: number; alto: number; bytes: number; desde: number }> =>
+  Array.from({ length: b.readUInt16LE(4) }, (_, i) => ({
+    ancho: b[6 + 16 * i] || 256,
+    alto: b[7 + 16 * i] || 256,
+    bytes: b.readUInt32LE(14 + 16 * i),
+    desde: b.readUInt32LE(18 + 16 * i),
+  }));
+
+/** Los `href` de los `<link rel="icon">` de una página, en el orden en que aparecen. */
+const enlacesDeIcono = (pagina: string): string[] =>
+  [...pagina.matchAll(/<link\b[^>]*>/g)]
+    .map((m) => m[0])
+    .filter((etiqueta) => /\brel=["']icon["']/.test(etiqueta))
+    .map((etiqueta) => {
+      const m = etiqueta.match(/\bhref=(?:"([^"]*)"|'([^']*)')/);
+      return m?.[1] ?? m?.[2] ?? "";
+    });
+
+/** Todas las cadenas de un valor JSON, a cualquier profundidad. */
+const cadenasDe = (v: unknown): string[] => {
+  if (typeof v === "string") return [v];
+  if (Array.isArray(v)) return v.flatMap(cadenasDe);
+  if (v && typeof v === "object") return Object.values(v).flatMap(cadenasDe);
+  return [];
+};
+
+describe("ícono y tarjeta de compartir de la portada", () => {
+  const html = leer("index.html");
+  const iconos = enlacesDeIcono(html);
+  const grafo = (datosEstructurados(html)[0]?.["@graph"] ?? []) as Array<Record<string, unknown>>;
+  const nodo = (tipo: string): Record<string, unknown> | undefined => grafo.find((n) => n["@type"] === tipo);
+
+  it("ningún rel=\"icon\" de la portada apunta a un data: (Google no puede rastrearlo)", () => {
+    expect(iconos.filter((href) => href.startsWith("data:"))).toEqual([]);
+  });
+
+  it("cada rel=\"icon\" apunta a un archivo de public/, en el orden ico, png y svg", () => {
+    expect(iconos).toEqual(["/favicon.ico", "/icon-192.png", "/icon.svg"]);
+    for (const ruta of iconos) {
+      expect(esArchivoPublico(ruta), ruta).toBe(true);
+    }
+  });
+
+  it("icon-192.png e icon-512.png son PNG de 192 y 512 px, según su IHDR", () => {
+    expect(dimensionesPng(leerPublico("icon-192.png"))).toEqual({ ancho: 192, alto: 192 });
+    expect(dimensionesPng(leerPublico("icon-512.png"))).toEqual({ ancho: 512, alto: 512 });
+  });
+
+  it("favicon.ico es un ICO con entradas de 16, 32 y 48 px, y cada una es un PNG del tamaño que dice", () => {
+    const ico = leerPublico("favicon.ico");
+    expect(ico.readUInt16LE(0)).toBe(0);
+    expect(ico.readUInt16LE(2)).toBe(1);
+    const entradas = entradasIco(ico);
+    expect(entradas.map((e) => [e.ancho, e.alto])).toEqual([
+      [16, 16],
+      [32, 32],
+      [48, 48],
+    ]);
+    for (const e of entradas) {
+      expect(e.desde + e.bytes).toBeLessThanOrEqual(ico.length);
+      expect(dimensionesPng(ico.subarray(e.desde, e.desde + e.bytes))).toEqual({ ancho: e.ancho, alto: e.alto });
+    }
+  });
+
+  it("og.jpg es un JPEG de 1200x630, según su marcador SOF", () => {
+    expect(dimensionesJpeg(leerPublico("og.jpg"))).toEqual({ ancho: 1200, alto: 630 });
+  });
+
+  it("el título es el de la portada, tiene de 30 a 60 caracteres, empieza con Tinkazo, y og:title lo repite", () => {
+    const titulo = html.match(/<title>([^<]*)<\/title>/)?.[1] ?? "";
+    expect(titulo).toBe("Tinkazo · sorteos verificables para eventos y clases");
+    expect([...titulo].length).toBeGreaterThanOrEqual(30);
+    expect([...titulo].length).toBeLessThanOrEqual(60);
+    expect(titulo.startsWith("Tinkazo")).toBe(true);
+    expect(html.match(/<meta property="og:title" content="([^"]*)"/)?.[1]).toBe(titulo);
+  });
+
+  it("la meta description tiene de 120 a 160 caracteres", () => {
+    const largo = [...descripcion(html)].length;
+    expect(largo).toBeGreaterThanOrEqual(120);
+    expect(largo).toBeLessThanOrEqual(160);
+  });
+
+  it("ninguna cadena nueva de la portada dice doce, rifa, apuesta, lotería, casino, boleto ni raffle", () => {
+    const nuevas = [html.match(/<title>([^<]*)<\/title>/)?.[1] ?? "", descripcion(html), ogDescripcion(html), ...cadenasDe(grafo)];
+    expect(nuevas.filter((c) => PALABRAS_PROHIBIDAS.test(c))).toEqual([]);
+  });
+
+  it("la organización usa el ícono de 512 px como logo, y WebSite y SoftwareApplication usan og.jpg como imagen", () => {
+    expect(nodo("Organization")?.logo).toBe("https://tinkazo.app/icon-512.png");
+    expect(nodo("WebSite")?.image).toBe("https://tinkazo.app/og.jpg");
+    expect(nodo("SoftwareApplication")?.image).toBe("https://tinkazo.app/og.jpg");
+    expect(esArchivoPublico("/icon-512.png")).toBe(true);
+    expect(esArchivoPublico("/og.jpg")).toBe(true);
+  });
+
+  it("el JSON-LD no trae valoraciones ni reseñas: no hay ninguna todavía", () => {
+    expect(JSON.stringify(grafo)).not.toMatch(/aggregateRating|"review"/);
+  });
+
+  // La portada no pide su título ni su descripción por clave. Si el <html> los pidiera, el idioma cambiaría también
+  // la etiqueta <title> y la meta description: el buscador renderiza con JavaScript y podría leer el inglés, mientras
+  // og:title y el JSON-LD quedan en español. Las claves titPortada y descPortada siguen en el diccionario, con su
+  // versión en inglés, por si el autor decide otra cosa.
+  const claveTitulo = "titPortada";
+  const claveDesc = "descPortada";
+  const textoEn = (clave: string): string => {
+    const valor = T.en[clave];
+    return typeof valor === "string" ? valor : "";
+  };
+
+  it("la etiqueta html de la portada no pide título ni descripción por clave: el buscador lee los de la etiqueta y la meta", () => {
+    const etiquetaHtml = html.match(/<html\b[^>]*>/)?.[0] ?? "";
+    expect(etiquetaHtml).not.toMatch(/\sdata-(titulo|desc)-clave=/);
+  });
+
+  it("titPortada y descPortada existen en es y en en: en español son el título y la meta de la portada", () => {
+    expect(T.es[claveTitulo]).toBe(html.match(/<title>([^<]*)<\/title>/)?.[1]);
+    expect(T.es[claveDesc]).toBe(descripcion(html));
+    expect(textoEn(claveTitulo).trim(), "título en inglés").not.toBe("");
+    expect(textoEn(claveDesc).trim(), "descripción en inglés").not.toBe("");
+  });
+
+  it("el título en inglés tiene de 30 a 60 caracteres y empieza con Tinkazo, la descripción de 120 a 160, y ninguna dice palabras prohibidas", () => {
+    const tituloEn = textoEn(claveTitulo);
+    const descEn = textoEn(claveDesc);
+    expect([...tituloEn].length).toBeGreaterThanOrEqual(30);
+    expect([...tituloEn].length).toBeLessThanOrEqual(60);
+    expect(tituloEn.startsWith("Tinkazo")).toBe(true);
+    expect([...descEn].length).toBeGreaterThanOrEqual(120);
+    expect([...descEn].length).toBeLessThanOrEqual(160);
+    expect([tituloEn, descEn].filter((c) => PALABRAS_PROHIBIDAS.test(c) || PALABRAS_PROHIBIDAS_EN.test(c))).toEqual([]);
   });
 });
 

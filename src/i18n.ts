@@ -810,6 +810,9 @@ export const T: Record<Lang, Dict> = {
     // --- Las páginas que la gente busca: meetups, clases y sorteo verificable (20 de octubre de 2026).
     pgCta: "Sortear ahora. Participar es gratis.", pgRelT: "Mirá también",
     navMeetup: "Sorteo para meetup", navClase: "Sorteo en clase", navVerif: "Sorteo verificable",
+    // Título y descripción de la portada en inglés. Su <html> no pide estas claves: así el título y la meta quedan en español para el buscador. Quedan aquí por si el autor decide otra cosa.
+    titPortada: "Tinkazo · sorteos verificables para eventos y clases",
+    descPortada: "Sorteos verificables para tu meetup, clase o evento. El ganador sale de un número público que nadie puede elegir. Participar es gratis.",
     // Título y descripción de cada página de sorteo: su <html> trae la clave de cada una.
     titMeetup: "Sorteo para meetup: en pantalla grande y comprobable",
     descMeetup: "Sorteá en tu meetup con pantalla grande y un resultado que cualquiera puede comprobar desde su celular. Pegá la lista o subí el CSV de Luma.",
@@ -1933,6 +1936,9 @@ export const T: Record<Lang, Dict> = {
     // --- The pages people search for: meetups, classes and the verifiable draw (20 October 2026).
     pgCta: "Draw now. Taking part is free.", pgRelT: "See also",
     navMeetup: "Meetup draw", navClase: "Class draw", navVerif: "Verifiable draw",
+    // The home page's English title and description. Its <html> does not ask for these keys, so the title and the meta stay in Spanish for search engines. They stay here in case that changes.
+    titPortada: "Tinkazo · verifiable draws for events and classes",
+    descPortada: "Verifiable draws for your meetup, class or event. The winner comes from a public number that nobody can choose. Taking part is free.",
     // The title and description of each draw page: its <html> carries each key.
     titMeetup: "Meetup draw: on the big screen and checkable",
     descMeetup: "Run the draw at your meetup on a big screen, with a result anyone can check from their phone. Paste the list or upload the Luma CSV.",
