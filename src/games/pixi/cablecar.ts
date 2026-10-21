@@ -389,7 +389,9 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     for (const s of stops) {
       once(`arrive${s.station}`, tAll >= s.t0, () => {
         ding();
-        if (s.last) sayNow(t("cTelLast"), 0.8);
+        // Con los que siguen arriba, que es lo que dice el contador: decía
+        // "¡QUEDAN DOS!" con tres o cuatro (evaluador visual, 21 de octubre de 2026).
+        if (s.last) sayNow(T[lang].cTelLast(left[s.round] as number), 0.8);
         if (!silent) cam.punch(0.03);
       });
       once(`off${s.station}`, tAll >= s.tOff, () => {
@@ -412,8 +414,12 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
           // nombran con su premio, y no como "¡Hasta acá llegó X!".
           sayNow(T[lang].cPrizeOut(prem.slice(0, 3).map((i) => names[i] ?? "")), 0.9);
         } else if (s.last) {
-          const idx = who[0] as number;
-          sayNow(T[lang].cTelOff(names[idx] ?? ""), 0.9);
+          // Se nombra a todos los que se bajan, que son los que descuenta el
+          // contador en este mismo instante: "¡Se baja X!" nombraba a uno solo
+          // mientras el contador bajaba de cuatro a dos. Si no se baja nadie
+          // (dos personas en total), no hay nada que decir.
+          if (who.length === 1) sayNow(T[lang].cTelOff(names[who[0] as number] ?? ""), 0.9);
+          else if (who.length > 1) sayNow(T[lang].cTelOffN(who.slice(0, 3).map((i) => names[i] ?? ""), Math.max(0, who.length - 3)), 0.9);
         } else if (prem.length) {
           sayNow(T[lang].cPrizeOut(prem.slice(0, 3).map((i) => names[i] ?? "")), 0.5 + 0.3 * (s.round / Math.max(1, P.R)));
         } else {
@@ -1165,7 +1171,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       }
       // Los nombres de los que se bajaron van en el andén de la pantalla (`drawBoard`).
       const pl = platform.get(s);
-      if (pl && !top && s !== 0) {
+      // Sin nadie que se baje (dos personas en total) no va un "−0".
+      if (pl && pl.off > 0 && !top && s !== 0) {
         stn.minus.text = `−${pl.off}`;
         stn.minus.scale.set(ease.outBack(clamp((tAll - pl.t) / 0.4, 0, 1)));
       } else stn.minus.text = "";

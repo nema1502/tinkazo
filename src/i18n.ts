@@ -156,7 +156,11 @@ export interface Dict {
   cTelStop: (k: number, off: number, left: number) => string;
   cTelGrupo: (k: number, g: { nombre: string; articulo: string }, off: number, left: number) => string;
   cTelWho: string[];
+  /** Al llegar a la última estación, con los que siguen arriba: "¡QUEDAN DOS!" solo si son dos. */
+  cTelLast: (left: number) => string;
   cTelOff: (n: string) => string;
+  /** Los que se bajan juntos en la última estación: hasta tres nombres, y los demás como "N más". */
+  cTelOffN: (ns: string[], more: number) => string;
   /** El último que se baja, cuando también ganó: con varios premios. */
   cTelPrize: (n: string) => string;
   cTelOf: (k: number, of: number) => string;
@@ -445,8 +449,13 @@ export const T: Record<Lang, Dict> = {
     cTelGo: ["¡ARRANCA EL TELEFÉRICO!", "¡Para arriba!", "¡Se despega del piso!"],
     cTelPass: (k) => pick([`¡Pasa de largo por la ${k}!`, `¡En la ${k} no se baja nadie!`, `¡La ${k}, de largo!`]),
     cTelUp: ["¡Sigue subiendo!", "¡Más arriba todavía!", "¡Qué vista!"],
-    cTelLast: ["¡QUEDAN DOS!", "¡Última estación!", "¡Acá bajan de a uno!"],
+    cTelLast: (left) =>
+      left <= 2 ? pick(["¡QUEDAN DOS!", "¡Última estación!"]) : pick(["¡Última estación!", "¡Acá bajan de a uno!", `¡Última estación! Quedan ${left}`]),
     cTelOff: (n) => pick([`¡Se baja ${n}!`, `¡${n} se queda en el andén!`, `¡Hasta acá llegó ${n}!`]),
+    cTelOffN: (ns, more) => {
+      const todos = more > 0 ? [...ns, `${more} más`] : ns;
+      return pick([`¡Se bajan ${joinList(todos, "y")}!`, `¡Hasta acá llegaron ${joinList(todos, "y")}!`]);
+    },
     cTelPrize: (n) => pick([`¡Se baja ${n}, y con premio!`, `¡${n} se baja con premio!`]),
     cTelClimb: ["¡Sube solita!", "¡Ya casi llega!", "¡Ya se ve la cumbre!"],
     cTelDock: ["¡LLEGÓ ARRIBA!", "¡TOCÓ LA CUMBRE!", "¡SE ABRE LA PUERTA!"],
@@ -1683,8 +1692,13 @@ export const T: Record<Lang, Dict> = {
     cTelGo: ["THE CABLE CAR IS OFF!", "Up we go!", "Off the ground!"],
     cTelPass: (k) => pick([`Straight through station ${k}!`, `Nobody gets off at ${k}!`, `Station ${k}, no stop!`]),
     cTelUp: ["Still climbing!", "Higher still!", "What a view!"],
-    cTelLast: ["TWO LEFT!", "Last station!", "One by one, here!"],
+    cTelLast: (left) =>
+      left <= 2 ? pick(["TWO LEFT!", "Last station!"]) : pick(["Last station!", "One by one, here!", `Last station! ${left} left`]),
     cTelOff: (n) => pick([`${n} gets off!`, `${n} stays on the platform!`, `End of the line for ${n}!`]),
+    cTelOffN: (ns, more) => {
+      const all = more > 0 ? [...ns, `${more} more`] : ns;
+      return pick([`${joinList(all, "and")} get off!`, `End of the line for ${joinList(all, "and")}!`]);
+    },
     cTelPrize: (n) => pick([`${n} gets off, with a prize!`, `${n} steps off with a prize!`]),
     cTelClimb: ["Climbing alone!", "Almost there!", "Nobody breathe!"],
     cTelDock: ["IT MADE THE TOP!", "TOP OF THE LINE!", "DOORS OPENING!"],
