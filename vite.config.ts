@@ -158,5 +158,9 @@ export default defineConfig({
     // `pnpm test` corría también las pruebas a medias de otra copia y
     // fallaba por trabajo ajeno (18 de octubre de 2026).
     exclude: [...configDefaults.exclude, "**/worktrees/**"],
+    // Con la máquina cargada (los agentes corren al lado), las pruebas que
+    // verifican firmas reales o cargan el SDK de Stellar pasan de 5 segundos.
+    // Subir el margen no esconde fallas: deja de confundir la carga con un error.
+    testTimeout: 30000,
   },
 });
