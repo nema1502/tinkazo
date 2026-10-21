@@ -1118,11 +1118,15 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       const recien = tAll - T_DUEL < 0.6;
       // La cámara va al que cabecea en su casi. En la tapada nunca busca a la ganadora.
       const cabecea = [win, riv].find((q) => tAll - q.casiAt >= 0 && tAll - q.casiAt < 1 && !(story.arc === "tapada" && q === win));
+      // En un celular la pantalla es angosta: el zoom se achica hasta que los dos
+      // entren enteros (con dos en el ruedo, uno quedaba cortado contra el borde).
+      const pareja = Math.hypot(b.x - a.x, b.y - a.y);
+      const cabe = S.portrait() ? clamp((S.sw() * 0.8 - 60 * S.u()) / Math.max(1, pareja), 1.2, 9) : 9;
       if (cabecea) {
         const p = toWorld(cabecea.x, cabecea.y);
-        cam.lookAt(p.x, p.y - 30 * S.u(), 2.4, 4);
-      } else if (wob) cam.lookAt(a.x, a.y - 30 * S.u(), 2.4, 4);
-      else cam.lookAt((a.x + b.x) / 2, (a.y + b.y) / 2 - 20 * S.u(), slow ? 2.5 : tense ? 2.2 : 2.0, recien ? 9 : slow ? 6 : 3);
+        cam.lookAt(p.x, p.y - 30 * S.u(), Math.min(2.4, S.portrait() ? 1.8 : 9), 4);
+      } else if (wob) cam.lookAt(a.x, a.y - 30 * S.u(), Math.min(2.4, cabe), 4);
+      else cam.lookAt((a.x + b.x) / 2, (a.y + b.y) / 2 - 20 * S.u(), Math.min(slow ? 2.5 : tense ? 2.2 : 2.0, cabe), recien ? 9 : slow ? 6 : 3);
     } else {
       const a = toWorld(win.x, win.y);
       const z = 1.5;

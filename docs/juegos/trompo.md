@@ -83,7 +83,7 @@ A eso se suman las paradas de los golpes y la cámara lenta del último choque, 
 
 ## La cámara
 
-Sobre el ruedo al tirar. En los golpes grandes **llega antes que el golpe**: encuadra a los dos mientras el que pega toma impulso, y el golpe cae en el cuadro. Llegar después era mostrar un trompo que ya se iba. Después sigue al que sacan hasta la tiza. En el mano a mano queda pegada, se cierra un poco antes de cada choque, se mete más en la cámara lenta y se acerca al que cabecea.
+Sobre el ruedo al tirar. En los golpes grandes **llega antes que el golpe**: encuadra a los dos mientras el que pega toma impulso, y el golpe cae en el cuadro. Llegar después era mostrar un trompo que ya se iba. Después sigue al que sacan hasta la tiza. En el mano a mano queda pegada, se cierra un poco antes de cada choque, se mete más en la cámara lenta y se acerca al que cabecea. En un celular, el zoom se achica hasta que los dos trompos entren enteros.
 
 ## El sonido
 
