@@ -328,7 +328,7 @@ El ritmo, la legibilidad del cartel y el tartamudeo de los subtítulos ya los mi
 
 | Juego | `?demo=` | Tipo | Hasta | Documento |
 |---|---|---|---|---|
-| Carrera de llamas | `race` | Motor de carrera, tema andino | Todos en la clasificatoria, 8 en la final | · |
+| Carrera de llamas | `race` | Motor de carrera, tema andino | Todos en la clasificatoria, 8 en la final | [carrera.md](juegos/carrera.md), la cámara y el final con pocas personas |
 | Chovena | `chovena` | Módulo propio (solo motor nuevo), con su propia música | 200, mejor de 12 a 80 | [chovena.md](juegos/chovena.md) |
 | Trompo | `trompo` | Módulo propio (solo motor nuevo) | 200 | [trompo.md](juegos/trompo.md) |
 | Piñata | `pinata` | Módulo propio (solo motor nuevo) | 200 | [pinata.md](juegos/pinata.md) |
