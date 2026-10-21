@@ -221,6 +221,8 @@ export interface Dict {
   impNoNames: (file: string) => string;
   impNotText: (file: string) => string;
   impHeaderOut: (header: string) => string;
+  /** Cuántos nombres traían caracteres que no se ven y se limpiaron al cargar la lista. */
+  impInvisibles: (n: number) => string;
   impSkipped: (n: number, lines: string) => string;
   impSkippedShort: (n: number) => string;
   /** El mensaje para quien ganó; con `varios`, para todos los que ganaron juntos. */
@@ -429,6 +431,7 @@ export const T: Record<Lang, Dict> = {
     impNoNames: (f) => (f ? `«${f}» no trae nombres: la lista quedó como estaba.` : "Lo que pegaste no trae nombres: la lista quedó como estaba."),
     impNotText: (f) => `«${f}» no es un archivo de texto. Si es una planilla, guardala como CSV y subila de nuevo. La lista quedó como estaba.`,
     impHeaderOut: (h) => `«${h}» es el encabezado de la columna: no entra al sorteo.`,
+    impInvisibles: (n) => `Se quitaron caracteres invisibles de ${n === 1 ? "1 nombre" : `${n} nombres`}: no se ven, y con ellos el mismo nombre podía entrar dos veces.`,
     impSkipped: (n, lines) => (n === 1 ? `No se pudo leer 1 fila (línea ${lines}): quedó afuera.` : `No se pudieron leer ${n} filas (líneas ${lines}): quedaron afuera.`),
     impSkippedHint: "Suele ser una coma sin comillas. Corregila en el archivo y subilo de nuevo, o agregá ese nombre a mano.",
     impSkippedShort: (n) => (n === 1 ? "1 fila no se pudo leer" : `${n} filas no se pudieron leer`),
@@ -1700,6 +1703,7 @@ export const T: Record<Lang, Dict> = {
     impNoNames: (f) => (f ? `"${f}" has no names: the list was left as it was.` : "What you pasted has no names: the list was left as it was."),
     impNotText: (f) => `"${f}" isn't a text file. If it's a spreadsheet, save it as CSV and upload it again. The list was left as it was.`,
     impHeaderOut: (h) => `"${h}" is the column header: it doesn't go into the draw.`,
+    impInvisibles: (n) => `Removed invisible characters from ${n === 1 ? "1 name" : `${n} names`}: they don't show, and with them the same name could get in twice.`,
     impSkipped: (n, lines) => (n === 1 ? `1 row couldn't be read (line ${lines}) and was left out.` : `${n} rows couldn't be read (lines ${lines}) and were left out.`),
     impSkippedHint: "It's usually a comma without quotes. Fix it in the file and upload it again, or add that name by hand.",
     impSkippedShort: (n) => (n === 1 ? "1 row couldn't be read" : `${n} rows couldn't be read`),

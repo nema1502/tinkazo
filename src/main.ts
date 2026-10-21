@@ -248,6 +248,10 @@ async function autoDemo(mode: string): Promise<void> {
  * "stellar" caía en la carrera andina, así que las comprobaciones de tema claro,
  * tema oscuro y celular del auditor estaban mirando la carrera para los seis
  * juegos: nadie había visto nunca la ruleta ni el pasanaku en tema claro.
+ *
+ * `?ganador=<semilla>` cambia quién gana (src/pose.ts) y `?semilla=` la
+ * historia que cuenta el juego; con el mismo valor de 64 hex en los dos, ganan
+ * los mismos y se cuenta lo mismo que en un sorteo de verdad con ese número.
  */
 async function poseScene(): Promise<void> {
   const fakeBeacon = { round: 32254977, randomness: "6e049991d7e23bdc566d3adfff08cd81798c644bc54dd5daa18eb0a8938b2829", signature: "a77a689daae687c7b16e6f9388d4ebbb7b368d09d7a6c33ad1dfd75d32e4114cfbdcf3e2cc54f4fee659abf2ac7ef9ac" };
@@ -267,16 +271,14 @@ async function poseScene(): Promise<void> {
     })
     : SAMPLE;
   // `?nw=N` también acá: la escena fija con varios premios, sin red, para
-  // auditar cómo anuncia cada juego a cada ganador. Los ganadores son siempre
-  // los mismos y quedan repartidos por la lista.
+  // auditar cómo anuncia cada juego a cada ganador.
   const premios = Math.max(1, Math.min(L.length, Math.floor(Number(params.get("nw")) || 1)));
-  // El primero, el de siempre: con un premio la escena no cambia.
-  const W3: number[] = [Math.min(3, L.length - 1)];
-  for (let i = 1; W3.length < premios && i < L.length * 7; i++) {
-    const w = (3 + i * 7) % L.length;
-    if (!W3.includes(w)) W3.push(w);
-  }
-  for (let w = 0; W3.length < premios; w++) if (!W3.includes(w)) W3.push(w);
+  // Quiénes ganan: los de siempre, repartidos por la lista, o con
+  // `?ganador=<semilla>` los que daría el protocolo con esa semilla, para que
+  // el auditor de delatores vea al ganador en cualquier puesto. Solo la escena
+  // fija lo lee; un sorteo de verdad no pasa por acá (src/pose.ts). Se carga
+  // aparte: quien entra a sortear no lo descarga.
+  const W3 = (await import("./pose")).poseWinners(L, premios, params.get("ganador"));
   app.frozen = { names: L, listHash: "32e2099c7a8dde7b6892523dc7d3e34ac06a972fd67f142186c58dced51a21ef", ts: 0, at: "-", prize: "", round: 32254977 };
   app.drawn = { beacon: fakeBeacon, winners: W3 };
   const cual = params.get("pose") ?? "1";
