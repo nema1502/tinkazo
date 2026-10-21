@@ -5,6 +5,7 @@ import { beep, fanfare, note } from "../../sound";
 import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { capRecent, layoutLabels, type LabelItem } from "./pinata-labels";
+import { planPalos } from "./pinata-plan";
 import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 
 /**
@@ -91,29 +92,20 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   const fallOrder = [...rest.reverse()];
 
   // Los palos: al principio caen muchos, al final de a uno. La rival se queda
-  // adentro hasta la rotura.
-  const nHits = clamp(5 + Math.floor(n / 6), 5, 9);
+  // adentro hasta la rotura. El calendario (cuántos sueltan y cuántos fallan)
+  // está en pinata-plan.ts: sin palos vacíos, también con poca gente. Los palos
+  // se apuran (de 1,9 a 0,75 s entre uno y otro): con un palo parejo cada 2,3 s
+  // reales la sala no sentía que la piñata estaba por ceder (7 de octubre de 2026).
+  const base = clamp(5 + Math.floor(n / 6), 5, 9);
   const swings: Swing[] = [];
   let tH = T_HANG + 0.5;
-  const weights = Array.from({ length: nHits }, (_, i) => Math.pow(nHits - i, 1.6));
-  const wsum = weights.reduce((a, b) => a + b, 0);
   let given = 0;
-  for (let i = 0; i < nHits; i++) {
-    if (story.arc === "remontada" && i === nHits - 2) {
-      swings.push({ at: tH, miss: true, drop: [], done: false });
-      tH += 1.0;
-      swings.push({ at: tH, miss: true, drop: [], done: false });
-      tH += 1.05;
-    }
-    const want = i === nHits - 1 ? fallOrder.length - given : Math.round(((weights[i] as number) / wsum) * fallOrder.length);
-    const take = Math.max(0, Math.min(fallOrder.length - given, want));
-    swings.push({ at: tH, miss: false, drop: fallOrder.slice(given, given + take), done: false });
-    given += take;
-    // Los palos se apuran: de 1,9 a 0,75 s entre uno y otro, el "¡dale, dale!"
-    // del final. Con un palo parejo cada 2,3 s reales la sala no sentía que
-    // la piñata estaba por ceder (auditoría con capturas, 7 de octubre de 2026).
-    tH += clamp(1.9 - i * 0.17, 0.75, 1.9);
+  for (const p of planPalos(fallOrder.length, base, story.arc === "remontada")) {
+    swings.push({ at: tH, miss: p.miss, drop: p.miss ? [] : fallOrder.slice(given, given + p.take), done: false });
+    given += p.take;
+    tH += p.wait;
   }
+  const nHits = swings.filter((s) => !s.miss).length;
   const T_BREAK = tH + (story.arc === "duelo" ? 1.2 : 0.6);
   // Rota la piñata, el cartel llega enseguida: el caramelo ganador cae más
   // rápido y toca el piso un poco antes del cartel. Antes eran 3,6 s de
@@ -391,9 +383,10 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
         const nm = (id: number): string => names[id] ?? "";
         const w = 0.5 + 0.2 * (1 - left / n);
         // Uno: su nombre. Dos o tres: todos en una línea. Más: el primero y
-        // cuántos más. Si cae un co-ganador, se lo nombra a él, con su premio.
+        // cuántos más. Si cae un co-ganador, no se lo nombra al salir: sale con su
+        // premio (sección 10 de la auditoría: la piñata no nombra a un co-ganador al salir).
         const premiados = s.drop.filter((id) => winners.indexOf(id) > 0);
-        if (premiados.length) S.say(T[getLang()].cPrizeOut(premiados.map(nm)), w);
+        if (premiados.length) S.say(T[getLang()].cPinPrize(premiados.length), w);
         else if (s.drop.length === 1) S.say(T[getLang()].cPinOut(nm(s.drop[0] as number)), w);
         else if (s.drop.length <= 3) S.say(T[getLang()].cPinOutMany(s.drop.map(nm)), w);
         else if (crackLevel === 1) S.say(t("cPinRain"), 0.45);

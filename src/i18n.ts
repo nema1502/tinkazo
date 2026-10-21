@@ -79,6 +79,7 @@ export interface Dict {
   cPinOutMany: (ns: string[]) => string;
   cPinOutMore: (n: string, k: number) => string;
   cPinAlmost: (n: string) => string;
+  cPinPrize: (k: number) => string;
   cPinLast: (a: string, b: string) => string;
   cSapCount: (n: number) => string;
   cSapNear: (n: string) => string;
@@ -608,6 +609,7 @@ export const T: Record<Lang, Dict> = {
     gameTrompo: "Trompo",
     gameTotora: "Balsas de totora",
     gamePinata: "Piñata",
+    cPinPrize: (k) => (k > 1 ? pick(["¡Salen con premio!", "¡Se llevan premio y salen!"]) : pick(["¡Sale con premio!", "¡Se lleva premio y sale!"])),
     gameOruro: "Carnaval de Oruro",
     gameLuz: "Luz roja, luz verde",
     gameCho: "Chovena",
@@ -1744,6 +1746,7 @@ export const T: Record<Lang, Dict> = {
     gameTrompo: "Spinning tops",
     gameTotora: "Reed boats",
     gamePinata: "Piñata",
+    cPinPrize: (k) => (k > 1 ? pick(["Out with prizes!", "They take prizes and leave!"]) : pick(["Out with a prize!", "Takes a prize and leaves!"])),
     gameOruro: "Oruro Carnival",
     gameLuz: "Red light, green light",
     gameCho: "Chovena",
