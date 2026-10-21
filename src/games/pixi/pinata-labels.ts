@@ -92,3 +92,23 @@ export function capRecent(items: { id: number; seq: number }[], max: number): { 
   const sorted = [...items].sort((a, b) => b.seq - a.seq || a.id - b.id);
   return { shown: sorted.slice(0, m).map((x) => x.id), more: Math.max(0, sorted.length - m) };
 }
+
+/**
+ * La lista de los caídos, que reemplaza a la tira de cinco: cuántas filas y
+ * columnas entran entre la cuenta de arriba y el piso. En pantalla ancha, dos
+ * columnas (unos cuarenta nombres a la vez, lo que se lee en un proyector); en un
+ * celular, una columna a la derecha, lejos del chico y del palo.
+ */
+export interface ListaGeo { x: number; y: number; colW: number; rowH: number; cols: number; rows: number; cap: number; w: number; h: number; phone: boolean }
+
+export function listaCaidos(p: { w: number; k: number; top: number; floor: number; phone: boolean }): ListaGeo {
+  const k = Math.max(0.01, fin(p.k, 1));
+  const cols = p.phone ? 1 : 2;
+  const colW = (p.phone ? 136 : 176) * k;
+  const rowH = (p.phone ? 22 : 23) * k;
+  const x = Math.max(0, fin(p.w) - cols * colW - (p.phone ? 10 : 12) * k);
+  const y = fin(p.top) + 64 * k;
+  const avail = Math.floor((fin(p.floor) - 14 * k - y) / rowH);
+  const rows = Math.min(20, Math.max(3, avail));
+  return { x, y, colW, rowH, cols, rows, cap: cols * rows, w: cols * colW, h: rows * rowH, phone: p.phone };
+}
