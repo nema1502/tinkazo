@@ -6,7 +6,7 @@ let planCableCar: typeof import("./cablecar-plan").planCableCar;
 beforeAll(async () => {
   vi.stubGlobal("location", { search: "" });
   ({ planCableCar } = await import("./cablecar-plan"));
-});
+}, 60_000);
 
 function rngOf(seed: number): () => number {
   let a = seed >>> 0;

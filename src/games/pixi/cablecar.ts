@@ -968,10 +968,15 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         // cartel del relator o de la barra de arriba sí: su nombre va al borde que
         // le quede libre (si no, en celular horizontal la finalista se quedaba sin nombre).
         if ((box.x0 + box.x1) / 2 < 0 || (box.x0 + box.x1) / 2 > W || cy < 0 || cy > H) continue;
+        // En vertical, el rótulo de un grupo va un poco más chico: son diez en una
+        // columna, y a escala normal solo dos entraban sin pisarse. El nombre de una
+        // persona va a escala normal.
+        const porNombre = who.length === 1 || (cab === winnerCab && who.length === 2 && tAll > T_RUN);
+        const scEtiqueta = porNombre || !G.vertical ? sc : sc * 0.8;
         let e = soloTags.get(key);
-        if (!e || e.txt !== txt || e.sc !== sc) {
+        if (!e || e.txt !== txt || e.sc !== scEtiqueta) {
           e?.chip.destroy({ children: true });
-          e = { txt, sc, chip: S.chip(txt, sc), side: -1 };
+          e = { txt, sc: scEtiqueta, chip: S.chip(txt, scEtiqueta), side: -1 };
           nameLayer.addChild(e.chip);
           soloTags.set(key, e);
         }
@@ -1012,7 +1017,6 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         // Un rótulo de grupo que no encuentra un costado libre no se pisa con
         // otro: se oculta (la cabina ya lleva su color y su cuenta). Los nombres
         // de las personas siempre se ven.
-        const porNombre = who.length === 1 || (cab === winnerCab && who.length === 2 && tAll > T_RUN);
         if (!porNombre && !fits(at(side))) {
           e.chip.visible = false;
           continue;
