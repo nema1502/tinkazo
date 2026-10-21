@@ -66,6 +66,10 @@ export interface Dict {
   cWheelSplit: (segs: number, rep: number) => string;
   cWheelOn: (n: string) => string;
   cWheelFalse: (n: string) => string;
+  /** La ruleta con más de veinticuatro: cuántos gajos, y cuántas personas caben en el más grande. */
+  cWheelGroups: (gajos: number, max: number) => string;
+  /** Quiénes son los del gajo que pasa: los primeros nombres, y cuántos más. */
+  cWheelGroup: (nombres: string[], mas: number) => string;
   cPasOut: (n: string) => string;
   /** Un co-ganador que sale antes del final: nunca se lo narra como perdedor. */
   cPrizeOut: (ns: string[]) => string;
@@ -701,6 +705,8 @@ export const T: Record<Lang, Dict> = {
     paceLabel: "Duración", paceFast: "Rápida", paceNormal: "Normal", paceEpic: "Épica",
     gameLabel: "Juego", gameRace: "Carrera de llamas", gameStellar: "Constelación Stellar",
     gameLedger: "Cierre de Libro", gameRockets: "Carrera de cohetes", gameWheel: "Ruleta",
+    cWheelGroups: (gajos, max) => `¡${gajos} gajos, hasta ${max} personas en cada uno!`,
+    cWheelGroup: (nombres, mas) => (mas ? `${nombres.join(", ")} y ${mas} más` : nombres.length > 1 ? `${nombres[0]} y ${nombres[1]}` : (nombres[0] ?? "")),
     // --- Constelación Stellar. Un pago que salta de nodo en nodo, como el
     //     path payment de Stellar, hasta encontrar ruta al ganador.
     cConstBuild: ["¡Se arma el cielo!", "¡Miren arriba!", "¡Se prenden las estrellas!"],
@@ -725,7 +731,7 @@ export const T: Record<Lang, Dict> = {
     cLedgerFinal: ["¡Estos son los que quedan!", "¡Miren bien, son estos!", "¡Y ahora se sella!"],
     cLedgerNo: "LIBRO",
     cLedgerOk: "CONFIRMADO",
-    wheelCap: "La ruleta se ve linda hasta unos 24 nombres. De ahí para arriba, el sorteo pasa a la tómbola, que muestra a todos.",
+    wheelCap: "La ruleta llega hasta 200 nombres. De ahí para arriba, el sorteo pasa a la tómbola, que muestra a todos.",
     prizeLabel: "¿Qué sorteás? (opcional)", prizePh: "O escribí el tuyo…",
     // Los que más se sortean en un evento, en el orden en que se ofrecen.
     prizeSugeridos: ["Polera", "Libro", "Entrada", "Stickers", "Termo", "Kit de bienvenida", "Tarjeta de regalo", "Licencia"],
@@ -913,7 +919,7 @@ export const T: Record<Lang, Dict> = {
     claseS2T: "Sellala",
     claseS2B: "Queda cerrada antes de que exista el número que decide. Después no se cambia sin que se note.",
     claseS3T: "Sorteá con la carrera de llamas o la ruleta",
-    claseS3B: "La ruleta se ve bien hasta unos 24 nombres. Con más gente, la tómbola muestra a todos.",
+    claseS3B: "La ruleta llega hasta 200 nombres. Con más gente, la tómbola muestra a todos.",
     claseWhyT: "Por qué sirve en clase",
     claseW1T: "Nadie elige el número",
     claseW1B: "El número sale de afuera, a una hora fija. Ni el docente ni los alumnos lo pueden elegir.",
@@ -1098,7 +1104,7 @@ export const T: Record<Lang, Dict> = {
     jgRaceN: "Carrera de llamas",
     jgRaceB: "Lo nuestro. Ocho carriles por la cordillera: con más de ocho personas corren ocho, y el sorteo igual fue entre todos.",
     jgWheelN: "Ruleta",
-    jgWheelB: "La de siempre, con el perno tricolor marcando la vuelta. Los gajos se reparten intercalados, así que con dos personas igual se ve girar. Hasta veinticuatro.",
+    jgWheelB: "La de siempre, con el perno tricolor marcando la vuelta. Con dos personas igual se ve girar. Más de veinticuatro: cada gajo reúne a un grupo. Hasta doscientas.",
     jgStellarN: "Constelación Stellar",
     jgStellarB: "Un pago que salta de estrella en estrella buscando ruta, como un path payment. Deja dibujada una constelación. Hasta doscientas.",
     jgLedgerN: "Cierre de Libro",
@@ -1160,7 +1166,7 @@ export const T: Record<Lang, Dict> = {
     gcPinata: "Con cada palo caen caramelos. Gana el último que queda adentro.",
     gcOruro: "En cada cuadra se quedan bailarines. Gana el que llega al Socavón.",
     gcTombola: "Cada uno tiene una bola con su número, y la lista está al lado del bombo. Gana la que cae en el vaso.",
-    gcWheel: "A cada persona le tocan uno o más gajos. Gana el gajo que queda bajo la flecha.",
+    gcWheel: "Gana el gajo que queda bajo la flecha. Con muchas personas, cada gajo reúne a un grupo.",
     gcTeleferico: "En cada estación se baja un grupo entero. Gana quien llega a la cumbre.",
     gcPasanaku: "La tela se cierra y los bultos se caen. Gana el que queda en el nudo.",
     gcStellar: "Un paquete salta de estrella en estrella. Gana la última que toca.",
@@ -1900,6 +1906,8 @@ export const T: Record<Lang, Dict> = {
     paceLabel: "Length", paceFast: "Short", paceNormal: "Normal", paceEpic: "Epic",
     gameLabel: "Game", gameRace: "Llama race", gameStellar: "Stellar Constellation",
     gameLedger: "Ledger Close", gameRockets: "Rocket race", gameWheel: "Wheel",
+    cWheelGroups: (gajos, max) => `${gajos} slices, up to ${max} people on each!`,
+    cWheelGroup: (nombres, mas) => (mas ? `${nombres.join(", ")} and ${mas} more` : nombres.length > 1 ? `${nombres[0]} and ${nombres[1]}` : (nombres[0] ?? "")),
     cConstBuild: ["The sky is coming together!", "Look up!", "Stars switching on!"],
     cConstReady: ["Everyone gets a star!", "The sky is full!",
       "Eyes up: that's all of you!", "Every one of you is up there!"],
@@ -1921,7 +1929,7 @@ export const T: Record<Lang, Dict> = {
     cLedgerFinal: ["These are the ones left!", "Look close, it's these!", "And now it gets sealed!"],
     cLedgerNo: "LEDGER",
     cLedgerOk: "CONFIRMED",
-    wheelCap: "The wheel looks great up to about 24 names. Past that, the draw switches to the ball drum, which shows everyone.",
+    wheelCap: "The wheel holds up to 200 names. Past that, the draw switches to the ball drum, which shows everyone.",
     prizeLabel: "What are you giving away? (optional)", prizePh: "Or type your own…",
     prizeSugeridos: ["T-shirt", "Book", "Ticket", "Stickers", "Water bottle", "Welcome kit", "Gift card", "License"],
     prizeRecent: "You used it before", prizeUsed: "already drawn",
@@ -2099,7 +2107,7 @@ export const T: Record<Lang, Dict> = {
     claseS2T: "Seal it",
     claseS2B: "It is closed before the number that decides exists. After that, it can't change without it showing.",
     claseS3T: "Draw with the llama race or the wheel",
-    claseS3B: "The wheel looks good up to about 24 names. With more people, the tombola shows everyone.",
+    claseS3B: "The wheel holds up to 200 names. With more people, the tombola shows everyone.",
     claseWhyT: "Why it works in class",
     claseW1T: "Nobody picks the number",
     claseW1B: "The number comes from outside, at a fixed time. Neither the teacher nor the students can pick it.",
@@ -2284,7 +2292,7 @@ export const T: Record<Lang, Dict> = {
     jgRaceN: "Llama race",
     jgRaceB: "Our flagship game. Eight lanes across the mountains: with more than eight people, eight run and the draw was still among everyone.",
     jgWheelN: "Wheel",
-    jgWheelB: "The usual one, with the tricolor pin marking each full turn. Slices are interleaved, so it still spins properly with two people. Up to twenty-four.",
+    jgWheelB: "The usual one, with the tricolor pin marking each full turn. It still spins properly with two people. Past twenty-four, each slice holds a group. Up to two hundred.",
     jgStellarN: "Stellar constellation",
     jgStellarB: "A payment hopping from star to star looking for a route, like a path payment. It leaves a constellation drawn. Up to two hundred.",
     jgLedgerN: "Ledger close",
@@ -2345,7 +2353,7 @@ export const T: Record<Lang, Dict> = {
     gcPinata: "Every swing knocks candies out. The last one left inside wins.",
     gcOruro: "Dancers stay behind at every block. Whoever reaches the Socavón wins.",
     gcTombola: "Everyone has a ball with their number, listed next to the drum. The one that drops into the cup wins.",
-    gcWheel: "Everyone gets one or more slices. The slice left under the pointer wins.",
+    gcWheel: "The slice left under the pointer wins. With many people, each slice holds a group.",
     gcTeleferico: "A whole group gets off at every station. Whoever reaches the top wins.",
     gcPasanaku: "The cloth closes and the bundles fall out. The one left in the knot wins.",
     gcStellar: "A packet hops from star to star. The last star it touches wins.",
