@@ -1120,7 +1120,13 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
         boxReset();
         boxAdd(win.x, win.y);
         boxAdd(arriveAt(g).x, arriveAt(g).y);
-        if (riv) boxAdd(riv.x, riv.y + 26 * g.scale);
+        // El que se cayó, entero: tumbado, la cabeza le queda a un costado y lo
+        // que tenía en la cabeza rueda al otro. En un celular quedaba cortado
+        // contra el borde.
+        if (riv) {
+          boxAdd(riv.x - 60 * g.scale, riv.y + 26 * g.scale);
+          boxAdd(riv.x + 60 * g.scale, riv.y + 26 * g.scale);
+        }
         const f = boxShot(0.8, (S.portrait() ? 1.5 : 1.8) * zb, 30) as Shot;
         cam.lookAt(f.x, f.y, f.z, 2.5);
       }
