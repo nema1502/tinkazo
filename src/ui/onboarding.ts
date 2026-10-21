@@ -1,6 +1,5 @@
 import { $ } from "../dom";
 import { app, params } from "../state";
-import { sinCuentaParaSellar } from "./wallet-ui";
 
 /**
  * La bienvenida de la primera vez que alguien entra con su cuenta: los tres
@@ -56,6 +55,6 @@ export function initOnboarding(): void {
   // aprieta "Sellar" sola, y eso no cuenta: "Ver una demo primero" borraba la
   // bienvenida para siempre (revisión del 16 de octubre de 2026).
   $("btn-freeze").addEventListener("click", () => {
-    if (!params.has("demo") && !sinCuentaParaSellar()) cerrar();
+    if (!params.has("demo") && $("btn-freeze").getAttribute("aria-disabled") !== "true") cerrar();
   });
 }

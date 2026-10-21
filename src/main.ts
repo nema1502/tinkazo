@@ -34,7 +34,11 @@ onLangChange(() => {
 $("l-es").addEventListener("click", () => chooseLang("es"));
 $("l-en").addEventListener("click", () => chooseLang("en"));
 $("btn-sample").addEventListener("click", loadSample);
-$("btn-freeze").addEventListener("click", () => void freeze());
+// Sin cuenta, el botón de sellar queda con aria-disabled (lo pone `applyGate`): el clic no hace nada.
+$("btn-freeze").addEventListener("click", () => {
+  if ($("btn-freeze").getAttribute("aria-disabled") === "true") return;
+  void freeze();
+});
 // El ritmo del show. Se guarda, porque quien organiza suele querer siempre el
 // mismo, y no cambia el resultado: el ganador ya estaba decidido.
 const paceSel = $<HTMLSelectElement>("pace");

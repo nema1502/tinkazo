@@ -82,7 +82,7 @@ export const currentSession = (): Session | null => session;
 export const canAnchor = (): boolean => anchoringAvailable && session !== null && !wrongNetwork;
 
 /** En una red con contrato, sin cuenta conectada no se sella: lo dicen la puerta del sorteo y el botón de sellar. */
-export const sinCuentaParaSellar = (): boolean => anchoringAvailable && session === null;
+const sinCuentaParaSellar = (): boolean => anchoringAvailable && session === null;
 
 export function initWalletUI(): void {
   render();

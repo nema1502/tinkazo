@@ -7,7 +7,7 @@ import { prepararFirma } from "../protocol/firma";
 import { contractUrl, network } from "../stellar/config";
 import { anchorErrorText, hideTxStatus, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
 import { precargarQr } from "./qr";
-import { canAnchor, currentSession, sinCuentaParaSellar } from "./wallet-ui";
+import { canAnchor, currentSession } from "./wallet-ui";
 import { parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
 import { NOMBRE } from "./gamecard";
@@ -214,9 +214,6 @@ export function refreshFreezeLabel(): void {
 export async function freeze(): Promise<void> {
   const names = parseNames();
   if (names.length < 2) return;
-  // Sin cuenta no se sella: el botón lo muestra con aria-disabled y la línea
-  // de abajo dice qué falta. La demo sí sella: es el show, no graba nada.
-  if (sinCuentaParaSellar() && !params.has("demo")) return;
 
   const btn = $<HTMLButtonElement>("btn-freeze");
   // Una demo (`?demo=`) es el show con la lista de ejemplo, nunca un sorteo:
