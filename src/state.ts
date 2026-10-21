@@ -43,8 +43,11 @@ export const app: { game: Game; frozen: Frozen | null; drawn: Drawn | null } = {
 /** Variables CSS de la paleta, en el orden que usan carriles y gajos. */
 export const LCOLORS = ["--magenta", "--orange", "--teal", "--purple", "--yellow"] as const;
 
-/** La ruleta se ve bien hasta esta cantidad de participantes. */
-export const WHEEL_MAX = 24;
+/**
+ * La ruleta llega hasta esta cantidad de participantes. Hasta veinticuatro, un
+ * gajo por persona; con más, cada gajo reúne a un grupo (`games/wheel-layout.ts`).
+ */
+export const WHEEL_MAX = 200;
 
 /**
  * El Sapo tiene doce agujeros: con más nombres juega una clasificatoria hasta
