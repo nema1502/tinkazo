@@ -1033,8 +1033,9 @@
   .portada-sec h2.sec-t { font-size: clamp(24px, 3.4vw, 34px); font-weight: 900; line-height: 1.1; letter-spacing: -0.01em; }
   .portada-sec p.sec-b { color: var(--ink2); max-width: 680px; margin-top: 8px; font-size: 15px; }
 
-  /* Los doce juegos, cada uno con su miniatura animada: tocarlo abre la demo. */
-  .portada-juegos { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+  /* Los diez juegos del selector, cada uno con su miniatura animada: tocarlo
+     abre la demo. En cinco columnas, dos filas parejas; en un celular, dos. */
+  .portada-juegos { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
   .portada-juegos a {
     display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--card); color: var(--ink);
     border: 2px solid var(--ink); box-shadow: var(--sh-sm); text-decoration: none; font-weight: 800; font-size: 13px; line-height: 1.15;
@@ -1043,8 +1044,7 @@
   .portada-juegos a:hover { transform: translate(-2px, -2px); box-shadow: var(--sh); }
   .portada-juegos canvas.thumb { width: 100%; height: auto; aspect-ratio: 16 / 9; display: block; border: 2px solid var(--ink); }
   .portada-juegos .pj-ver { font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
-  @media (max-width: 900px) { .portada-juegos { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-  @media (max-width: 560px) { .portada-juegos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 640px) { .portada-juegos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
   /* Tarjetas: por qué confiar y para quién. */
   .cards3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; margin-top: 18px; }
@@ -1207,7 +1207,6 @@
     .hero-portada h1 { font-size: clamp(38px, 7.2vh, 56px); }
   }
   .portada-juegos .pj-ver { font-size: 12px; }
-  @media (min-width: 901px) and (max-width: 1100px) { .portada-juegos { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 
   /* La demo se presenta: una franja arriba y una invitación al final. */
   .demo-banner { display: none; }
