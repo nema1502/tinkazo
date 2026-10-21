@@ -66,6 +66,10 @@ export interface Dict {
   cWheelSplit: (segs: number, rep: number) => string;
   cWheelOn: (n: string) => string;
   cWheelFalse: (n: string) => string;
+  /** La ruleta con más de veinticuatro: cuántos gajos, y cuántas personas caben en el más grande. */
+  cWheelGroups: (gajos: number, max: number) => string;
+  /** Quiénes son los del gajo que pasa: los primeros nombres, y cuántos más. */
+  cWheelGroup: (nombres: string[], mas: number) => string;
   cPasOut: (n: string) => string;
   /** Un co-ganador que sale antes del final: nunca se lo narra como perdedor. */
   cPrizeOut: (ns: string[]) => string;
@@ -676,6 +680,8 @@ export const T: Record<Lang, Dict> = {
     paceLabel: "Duración", paceFast: "Rápida", paceNormal: "Normal", paceEpic: "Épica",
     gameLabel: "Juego", gameRace: "Carrera de llamas", gameStellar: "Constelación Stellar",
     gameLedger: "Cierre de Libro", gameRockets: "Carrera de cohetes", gameWheel: "Ruleta",
+    cWheelGroups: (gajos, max) => `¡${gajos} gajos, hasta ${max} personas en cada uno!`,
+    cWheelGroup: (nombres, mas) => (mas ? `${nombres.join(", ")} y ${mas} más` : nombres.length > 1 ? `${nombres[0]} y ${nombres[1]}` : (nombres[0] ?? "")),
     // --- Constelación Stellar. Un pago que salta de nodo en nodo, como el
     //     path payment de Stellar, hasta encontrar ruta al ganador.
     cConstBuild: ["¡Se arma el cielo!", "¡Miren arriba!", "¡Se prenden las estrellas!"],
@@ -1856,6 +1862,8 @@ export const T: Record<Lang, Dict> = {
     paceLabel: "Length", paceFast: "Short", paceNormal: "Normal", paceEpic: "Epic",
     gameLabel: "Game", gameRace: "Llama race", gameStellar: "Stellar Constellation",
     gameLedger: "Ledger Close", gameRockets: "Rocket race", gameWheel: "Wheel",
+    cWheelGroups: (gajos, max) => `${gajos} slices, up to ${max} people on each!`,
+    cWheelGroup: (nombres, mas) => (mas ? `${nombres.join(", ")} and ${mas} more` : nombres.length > 1 ? `${nombres[0]} and ${nombres[1]}` : (nombres[0] ?? "")),
     cConstBuild: ["The sky is coming together!", "Look up!", "Stars switching on!"],
     cConstReady: ["Everyone gets a star!", "The sky is full!",
       "Eyes up: that's all of you!", "Every one of you is up there!"],

@@ -4,6 +4,7 @@ import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, note } from "../../sound";
 import { writeStory } from "../drama";
 import { WINNER_HOLD, shorten, winnersLabel } from "../overlay";
+import { gajoDe, repartir } from "../wheel-layout";
 import { FALSA, T_BRAKE, T_CREEP, T_CROWN, T_HOLD, T_LOCK, T_SETTLE, T_SPIN, T_WIND, beatFor, type BeatReason } from "./wheel-beats";
 import { CREAM, INK, YELLOW, mountPixi, type PixiStage } from "./stage";
 
@@ -59,6 +60,26 @@ function sliceLabel(name: string, max: number): string {
   return `${first.slice(0, Math.max(1, max - 1))}…`;
 }
 
+/** El primer nombre: para decirlo en voz alta cuando varias personas comparten un gajo. */
+function primerNombre(name: string): string {
+  return name.trim().split(/\s+/)[0] ?? "";
+}
+
+/** Un renglón de la placa de los grupos. */
+interface PanelRow {
+  row: Container;
+  fondo: Graphics;
+  lugar: Graphics;
+  bar: Graphics;
+  txt: Text;
+  /** Alto del renglón, y el ancho que queda para el nombre después de la barra de color. */
+  h: number;
+  maxW: number;
+  barW: number;
+  /** Índice de la persona en la lista, o -1 si el renglón está vacío. */
+  idx: number;
+}
+
 export async function wheelPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<void> {
   const winnerIdx = winners[0] ?? 0;
   let skipFn = (): void => {};
@@ -73,14 +94,28 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
   const story = writeStory(rng, Math.max(2, n), winnerIdx % Math.max(2, n));
   const falsa = story.arc === "susto" && n >= 2;
   S.mark("arco", story.arc);
+  // Con más de veinticuatro, la rueda sigue con veinticuatro gajos y cada uno
+  // reúne a un grupo seguido de la lista (ver `wheel-layout.ts`).
+  const grupos = n > SEGS ? repartir(n) : null;
   const rep = n <= 12 ? Math.max(1, Math.round(SEGS / n)) : 1;
-  const segs = n * rep;
+  const segs = grupos ? SEGS : n * rep;
   const A = TAU / segs;
-  const personOf = (k: number): number => ((k % n) + n) % n;
+  /** Lo que cae bajo el puntero: una persona, o el grupo de su gajo si hay más de veinticuatro. */
+  const personOf = (k: number): number => (grupos ? ((k % segs) + segs) % segs : ((k % n) + n) % n);
+  /** Lo que gana: su gajo, con grupos, o la persona misma. */
+  const ganUnit = grupos ? gajoDe(grupos, winnerIdx) : winnerIdx;
+  /** El grupo más grande: cuántas filas lleva la placa de los grupos. */
+  const tamMax = grupos ? Math.max(...grupos.map((g) => g.length)) : 1;
+  /** Cómo se nombra lo que pasa bajo la flecha: la persona, o los primeros del grupo. */
+  const etiqueta = (k: number): string => {
+    if (!grupos) return names[k] ?? "";
+    const ns = (grupos[k] ?? []).slice(0, 2).map((i) => primerNombre(names[i] ?? ""));
+    return T[getLang()].cWheelGroup(ns, (grupos[k]?.length ?? 0) - ns.length);
+  };
   setGameLength(T_CROWN, WINNER_HOLD);
 
   const startSeg = rng() * segs;
-  const winSeg = winnerIdx + n * Math.floor(rng() * rep);
+  const winSeg = grupos ? ganUnit : winnerIdx + n * Math.floor(rng() * rep);
   // La flecha para dentro del gajo ganador, nunca en su borde (ahí se confunde
   // con el vecino), y no siempre en el medio: con el medio fijo el final se
   // aprendía (auditoría, sección 8.7). Sale de la misma semilla; el gajo que
@@ -154,6 +189,14 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
   let bigName!: Text;
   let bigAv!: Sprite;
   let bigBar!: Graphics;
+  /**
+   * La placa de los grupos (con más de veinticuatro): una persona por renglón,
+   * las del gajo que pasa bajo la flecha, y el renglón del ganador se enciende.
+   */
+  let panel: Container | null = null;
+  let panelRows: PanelRow[] = [];
+  let panelFor = -1;
+  let lugarPintado = false;
 
   function discGraphics(R: number, u: number, withNames: boolean): Container {
     const c = new Container();
@@ -178,6 +221,87 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
       }
     }
     return c;
+  }
+
+  /**
+   * Arma la placa de los grupos donde le toca según la pantalla: en horizontal,
+   * una columna a la izquierda, a la altura de la rueda; en vertical, dos
+   * columnas bajo la rueda y por encima de la barra de abajo. Cada renglón
+   * lleva el color del gajo, para que se vea de qué gajo es la gente.
+   */
+  function buildPanel(): void {
+    if (!grupos) return;
+    const k = G.u;
+    const sw = S.sw(), sh = S.sh();
+    const gap = 8 * k;
+    const alto = G.alto;
+    const cols = alto ? 2 : 1;
+    const filas = Math.ceil(tamMax / cols);
+    const colW = alto ? Math.min((sw - 32 * k - gap) / 2, 220 * k) : Math.min(340 * k, G.cx - G.R - 64 * k);
+    const rh = Math.max(
+      18 * k,
+      alto
+        ? Math.min(40 * k, (sh - S.bottom() - 10 * k - (G.cy + G.R + 14 * k) - gap * (filas - 1)) / filas)
+        : Math.min(40 * k, (sh * 0.62 - gap * (filas - 1)) / filas),
+    );
+    const x0 = alto ? (sw - (2 * colW + gap)) / 2 : 40 * k;
+    const y0 = alto ? G.cy + G.R + 14 * k : G.cy - (filas * rh + gap * (filas - 1)) / 2;
+    const barW = 10 * k;
+    panel = new Container();
+    panel.visible = false;
+    panelRows = [];
+    panelFor = -1;
+    lugarPintado = false;
+    for (let i = 0; i < tamMax; i++) {
+      const row = new Container();
+      const fondo = new Graphics().rect(4 * k, 4 * k, colW, rh).fill(INK).rect(0, 0, colW, rh).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 3 * k, color: INK });
+      const lugar = new Graphics().rect(0, 0, colW, rh).fill(YELLOW).stroke({ width: 4 * k, color: INK });
+      lugar.visible = false;
+      const bar = new Graphics();
+      const txt = S.text("", { fontSize: Math.min(alto ? 18 * k : 20 * k, rh * 0.5), fontWeight: "800", fill: S.dark ? CREAM : INK });
+      txt.anchor.set(0, 0.5);
+      txt.position.set(barW + 12 * k, rh / 2);
+      row.addChild(fondo, lugar, bar, txt);
+      const col = alto ? i % 2 : 0;
+      const fila = alto ? Math.floor(i / 2) : i;
+      row.position.set(x0 + col * (colW + gap), y0 + fila * (rh + gap));
+      row.visible = false;
+      panel.addChild(row);
+      panelRows.push({ row, fondo, lugar, bar, txt, h: rh, maxW: colW - barW - 24 * k, barW, idx: -1 });
+    }
+    S.hud.addChild(panel);
+  }
+
+  /** Pone en la placa a las personas del gajo `g`, una por renglón. */
+  function setPanel(g: number): void {
+    if (!grupos) return;
+    panelFor = g;
+    lugarPintado = false;
+    const miembros = grupos[g] ?? [];
+    panelRows.forEach((pr, i) => {
+      const idx = miembros[i];
+      pr.idx = idx ?? -1;
+      pr.row.visible = idx !== undefined;
+      pr.row.alpha = 1;
+      pr.lugar.visible = false;
+      pr.txt.style.fill = S.dark ? CREAM : INK;
+      if (idx === undefined) return;
+      pr.txt.text = names[idx] ?? "";
+      pr.txt.scale.set(1);
+      if (pr.txt.width > pr.maxW) pr.txt.scale.set(pr.maxW / pr.txt.width);
+      pr.bar.clear().rect(0, 0, pr.barW, pr.h).fill(S.color(g));
+    });
+  }
+
+  /** El lugar del ganador: su renglón se enciende y los demás se apagan un poco. */
+  function pintarLugar(): void {
+    panelRows.forEach((pr) => {
+      const gana = pr.idx === winnerIdx;
+      pr.lugar.visible = gana;
+      pr.txt.style.fill = gana ? INK : S.dark ? CREAM : INK;
+      pr.row.alpha = gana || pr.idx < 0 ? 1 : 0.5;
+    });
+    lugarPintado = true;
   }
 
   function build(): void {
@@ -316,9 +440,12 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     bigName.position.set(38 * k + 68 * k, ph / 2);
     bigPlate.addChild(bigAv, bigName);
     bigPlate.position.set(mid ? (sw - pw) / 2 : 40 * k, S.top() + 8 * k);
-    plateBox = { x: bigPlate.x, y: bigPlate.y, w: pw, h: ph, mid };
-    bigPlate.visible = rows.length === 0;
+    // Con grupos, la placa grande no sale: la reemplaza la de los renglones, que
+    // va a un costado y no tapa la rueda, así que la cámara no le pone límite.
+    if (!grupos) plateBox = { x: bigPlate.x, y: bigPlate.y, w: pw, h: ph, mid };
+    bigPlate.visible = rows.length === 0 && !grupos;
     S.hud.addChild(bigPlate);
+    buildPanel();
   }
   build();
   const crown = S.crown(names, winners);
@@ -385,7 +512,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
   function crowned(): void {
     if (didCrown) return;
     didCrown = true;
-    cur = winnerIdx;
+    cur = ganUnit;
     S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     fanfare();
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);
@@ -432,7 +559,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     if (didCrown) return;
     const cues: [number, () => void][] = [
       [0.05, () => S.say(t("cWheelBuild"), 0.1)],
-      [0.7, () => S.say(T[getLang()].cWheelSplit(segs, rep), 0.15)],
+      [0.7, () => S.say(grupos ? T[getLang()].cWheelGroups(segs, tamMax) : T[getLang()].cWheelSplit(segs, rep), 0.15)],
       [T_WIND, () => S.say(t("cWheelCharge"), 0.3)],
       [T_SPIN, () => S.say(t("cWheelGo"), 0.45)],
       [3.4, () => S.say(t("cWheelFast"), 0.5)],
@@ -454,11 +581,11 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     // un gajo que la flecha ya había pasado, con la placa mostrando otro.
     if (tAll >= T_CREEP && tAll < T_HOLD && w * scale < 2.5 && cur !== namedCur) {
       namedCur = cur;
-      S.say(T[getLang()].cWheelOn(names[cur] ?? ""), 0.55);
+      S.say(T[getLang()].cWheelOn(etiqueta(cur)), 0.55);
     }
     if (tAll >= T_HOLD && !saidPeg) {
       saidPeg = true;
-      S.say(falsa ? T[getLang()].cWheelFalse(names[cur] ?? "") : t("cWheelPeg"), 0.9);
+      S.say(falsa ? T[getLang()].cWheelFalse(etiqueta(cur)) : t("cWheelPeg"), 0.9);
       cam.punch(0.06);
       // La parada falsa tiene que sonar a parada: un clac como el de la traba,
       // más chico. Hasta el 7 de octubre de 2026 eran 2,7 s sin ningún efecto.
@@ -555,7 +682,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     if (tAll >= T_CROWN) {
       const e = Math.min(1, (tAll - T_CROWN) * 2);
       segG.forEach((g, j) => {
-        const mine = personOf(j) === winnerIdx;
+        const mine = personOf(j) === ganUnit;
         const mid = j * A - Math.PI / 2 + A / 2;
         g.position.set(mine ? Math.cos(mid) * 16 * u * e : 0, mine ? Math.sin(mid) * 16 * u * e : 0);
         g.alpha = mine ? 1 : 1 - 0.55 * e;
@@ -572,10 +699,19 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     // La placa, solo cuando se puede leer: girando cambiaba treinta veces por
     // segundo, y de entrada tapaba la rueda. Mientras gira, cada uno busca su
     // nombre en su gajo.
-    bigPlate.visible = close && w < 4;
+    bigPlate.visible = !grupos && close && w < 4;
     // Arriba, al lado del cartel del ganador: se apaga enseguida, si no son
     // dos placas con el mismo nombre.
     bigPlate.alpha = tAll >= T_CROWN ? Math.max(0, 1 - (tAll - T_CROWN) * 6) : 1;
+    // Con grupos, la placa de los renglones: el gajo que pasa, y al frenar, el lugar del ganador.
+    if (grupos && panel) {
+      panel.visible = close && w < 4;
+      panel.alpha = tAll >= T_CROWN ? Math.max(0, 1 - (tAll - T_CROWN) * 6) : 1;
+      if (panel.visible) {
+        if (panelFor !== cur) setPanel(cur);
+        if (!lugarPintado && tAll >= T_LOCK && panelFor === ganUnit) pintarLugar();
+      }
+    }
     const pname = names[cur] ?? "";
     // Escondida no se reescribe: girando cambiaba treinta veces por segundo, y
     // cada cambio vuelve a dibujar el texto en el hilo principal.
