@@ -44,7 +44,7 @@ Todo sale de la hora del juego (`dt`). Sin `Math.random()`: las variantes de las
 
 ## Cuánta gente
 
-De 8 a 200 probados. Con 2 o 3 nombres, el juego tiene dos o tres preguntas, y no se ofrece (el mínimo es 8). Con 8 a 50 son cinco a siete preguntas; con 200, siete a nueve.
+De 8 a 200 probados. Con 2 o 3 nombres, el juego tiene dos o tres preguntas, y no se ofrece (el mínimo es 8). Con 8 son tres o cuatro preguntas; con 50, cinco a siete; con 200, siete a nueve.
 
 Duración medida con un premio, a "normal" (38 segundos de juego):
 
