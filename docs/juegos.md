@@ -330,7 +330,7 @@ Los diez del selector, en su orden: el de la auditoría de juegos, de las salas 
 
 | Juego | `?demo=` | Tipo | Hasta | Documento |
 |---|---|---|---|---|
-| Carrera de llamas | `race` | Motor de carrera, tema andino | Todos en la clasificatoria, 8 en la final | · |
+| Carrera de llamas | `race` | Motor de carrera, tema andino | Todos en la clasificatoria, 8 en la final | [carrera.md](juegos/carrera.md), la cámara y el final con pocas personas |
 | Sapo | `sapo` | Módulo propio (solo motor nuevo) | 200, con clasificatoria a 12 | [sapo.md](juegos/sapo.md) |
 | Trompo | `trompo` | Módulo propio (solo motor nuevo) | 200 | [trompo.md](juegos/trompo.md) |
 | Chovena | `chovena` | Módulo propio (solo motor nuevo), con su propia música | 200, mejor de 12 a 80 | [chovena.md](juegos/chovena.md) |
