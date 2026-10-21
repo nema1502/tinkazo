@@ -328,12 +328,26 @@ export async function truequePixi(names: string[], winners: readonly number[], b
     sonar(bornAt[i] ?? 0, () => beep(note(4 + (i % 8)), 0.07, "sine", 0.025));
   }
   decir(1.6, t("trAcepta"), 0.15);
+  sonar(1.6, () => beep(note(5), 0.1, "triangle", 0.035));
+  // Un fondo sostenido, suave, en la banda de arriba del corte de los parlantes chicos: la feria tiene cuerpo
+  // durante toda la escena, no solo en los golpes (lo mide el auditor de mezcla).
+  // Notas encadenadas, no un tono largo: si se salta, las que no llegaron a sonar no suenan.
+  for (let s = T_FERIA - 0.5, j = 0; s < T_NOVA; s += 1.6, j++) {
+    const grado = j % 2 ? 5 : 3;
+    sonar(s, () => beepFor(note(grado), 1.8, "sine", 0.02));
+  }
+  // Los atados aparecen en su origen con un sonido, y antes del primer pase un tic que marca la espera.
+  sonar(T_APPEAR, () => beep(note(2), 0.12, "sine", 0.03));
+  sonar(T_APPEAR + 0.2, () => beep(note(7), 0.12, "triangle", 0.035));
+  sonar(4.1, () => beep(note(4), 0.07, "sine", 0.025));
   if (prim) decir(3.2, T[getLang()].trSale(nombre(prim.origen)), 0.2);
   // Cada pase: "¿Quién acepta…?" del encargo principal, un tic a mitad de la búsqueda, y cada intento.
   for (let p = 0; p < P; p++) {
     const q = prim?.pases[p]?.producto ?? prim?.origen ?? 0;
     decir(B[p] ?? 0, T[getLang()].trBusca(nombre(q)), 0.3 + (0.5 * p) / Math.max(1, P), false);
     sonar(B[p] ?? 0, () => beep(note(6), 0.12, "triangle", 0.04));
+    // El cuerpo de la búsqueda, un poco más grave, para que se oiga en un parlante chico (lo mide el auditor de mezcla).
+    sonar(B[p] ?? 0, () => beep(note(2), 0.2, "triangle", 0.04));
     sonar((B[p] ?? 0) + BUSCA / 2, () => beep(note(9), 0.07, "sine", 0.03));
   }
   for (const m of todos) {
@@ -365,6 +379,7 @@ export async function truequePixi(names: string[], winners: readonly number[], b
           S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
           fanfare();
           beep(note(0), 0.8, "sine", 0.08);
+          beep(note(3), 0.7, "triangle", 0.05);
         },
       });
       continue;
