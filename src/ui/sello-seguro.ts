@@ -151,9 +151,10 @@ let enMemoria: Guardado | null = null;
 
 /**
  * Cuánto vale un intento pendiente: seis horas después de su ronda. Para
- * entonces, si había entrado, está en Mis sorteos (que se lee del contrato) y se
- * retoma desde ahí; buscarlo entre todos los sellos de esas horas sería lento, y
- * si no se pudiera, la lista quedaría trabada para siempre.
+ * entonces, si había entrado, figura en Mis sorteos como un sorteo sin sortear
+ * (Mis sorteos también lee el contrato), y buscarlo entre todos los sellos de
+ * esas horas sería lento: si no se pudiera, la lista quedaría trabada para
+ * siempre. Pasado ese tiempo se puede volver a sellar la misma lista.
  */
 export const VIDA_DEL_PENDIENTE_S = 6 * 3600;
 
