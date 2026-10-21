@@ -94,6 +94,6 @@ node scripts/audit-sound.mjs trueque
 node scripts/audit-mezcla.mjs trueque
 ```
 
-`audit-game` comprueba el selector (7) y el nombre en el selector (14): como el juego está fuera del selector, esas dos comprobaciones fallan a propósito hasta la etapa D. Con eso, 18 de 20.
+`audit-game` comprueba el selector (7) y el nombre en el selector (14): mientras el juego estuvo fuera del selector, esas dos fallaban a propósito y daba 18 de 20. Desde que entró (21 de octubre de 2026), 20 de 20.
 
 Las pruebas del plan: `pnpm test` (`src/games/pixi/trueque-plan.test.ts`).
