@@ -87,6 +87,7 @@ const CORPUS: Fila[] = [
   ["SDK: corte en Safari", "fuente", () => axios("Load failed"), "rpcDown"],
   ["SDK: corte en Firefox", "fuente", () => axios("NetworkError when attempting to fetch resource."), "rpcDown"],
   ["SDK: tiempo agotado de su cliente HTTP", "fuente", () => axios("timeout of 10000 ms exceeded", { code: "ECONNABORTED" }), "rpcDown"],
+  ["SDK: corte con palabras que no se conocen (se reconoce por la forma: sin código ni respuesta)", "fuente", () => axios("Ein Netzwerkfehler ist aufgetreten"), "rpcDown"],
   ["SDK: pedido cancelado", "fuente", () => Object.assign(axios("canceled", { code: "ERR_CANCELED" }), { name: "CanceledError" }), "rpcDown"],
   ["SDK: RPC con HTTP 500", "medido", () => http(500), "rpcDown"],
   ["SDK: RPC con HTTP 502", "medido", () => http(502), "rpcDown"],

@@ -164,6 +164,21 @@ const DE_RED = new RegExp(
   "i",
 );
 
+/**
+ * Un pedido del SDK que no llegó, por la forma y no por el texto. Un `fetch` que
+ * falla por la red rechaza siempre con un `TypeError`, y el cliente HTTP del SDK
+ * (feaxios) lo envuelve en un `AxiosError` sin código y sin respuesta (fuente,
+ * y medido en Chrome): así se reconoce el corte aunque el navegador lo cuente
+ * con palabras que este archivo no conoce. Con respuesta (un 4xx, un 5xx) ya no
+ * es un corte, y lo decide el estado.
+ */
+function esCorteDelSdk(e: unknown): boolean {
+  const x = e as { name?: unknown; code?: unknown; response?: unknown; isAxiosError?: unknown } | null;
+  if (!x || typeof x !== "object" || (x.name !== "AxiosError" && x.isAxiosError !== true)) return false;
+  if (x.response !== undefined && x.response !== null) return false;
+  return x.code === undefined || x.code === null || x.code === "ERR_NETWORK" || x.code === "ECONNABORTED" || x.code === "ETIMEDOUT" || x.code === "ERR_CANCELED";
+}
+
 /** Un error de JSON-RPC del servidor (no de quien pide): -32603, o del -32000 al -32099. */
 function esErrorDelServidorRpc(e: unknown): boolean {
   if (e instanceof Error || !e || typeof e !== "object") return false;
@@ -218,7 +233,7 @@ export function esDeRed(e: unknown): boolean {
   if (esIncierto(e)) return false;
   const texto = textoDelError(e);
   if (CANCELO.test(texto)) return false;
-  return esErrorDelServidorRpc(e) || DE_RED.test(texto);
+  return esErrorDelServidorRpc(e) || esCorteDelSdk(e) || DE_RED.test(texto);
 }
 
 /**
@@ -261,7 +276,7 @@ export function errorKey(e: unknown, contexto: { enLinea?: boolean } = {}): stri
   if (SIN_CONFIRMAR.test(texto)) return "unconfirmed";
   if (OCUPADA.test(texto)) return "busy";
   if (ENTRO_Y_FALLO.test(texto)) return "busy";
-  if (esErrorDelServidorRpc(e) || DE_RED.test(texto)) {
+  if (esErrorDelServidorRpc(e) || esCorteDelSdk(e) || DE_RED.test(texto)) {
     const enLinea = contexto.enLinea ?? !sinInternet();
     return enLinea ? "rpcDown" : "offline";
   }
