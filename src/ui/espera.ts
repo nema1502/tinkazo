@@ -38,6 +38,9 @@ import { app } from "../state";
  * - Escape o "Volver a la página" salen, como siempre, y sueltan la pantalla
  *   completa que pidió la espera. Con la pantalla completa, Escape la suelta el
  *   navegador sin avisarle a la página: salir de ella también cierra la espera.
+ * - Y el show desemboca en el resultado en grande, con el QR (`draw.ts` y
+ *   `pantalla.ts`): la sala no ve la página tampoco al final. Al cerrarlo, la
+ *   página sigue con "Siguiente premio" y suelta la pantalla completa.
  *
  * Si no está abierta cuando nace el número, todo queda como antes: el botón de
  * sortear de la página, a la vista y con el foco.
@@ -89,9 +92,13 @@ type Fase = "cuenta" | "lanzar" | "sorteando" | "fallo";
 /** La espera abierta. `nacio`: la ronda nació, y el sorteo arranca solo o, si hay que aprobarlo a mano, se ofrece lanzarlo. */
 let abierta: { nacio: () => void } | null = null;
 
-/** El show o el resultado ya están detrás de la espera: se puede ir sin que se vea el formulario. */
+/**
+ * El show o el resultado ya están detrás de la espera: se puede ir sin que se
+ * vea el formulario. El resultado en grande (sin show, con el movimiento
+ * reducido) cuenta como el show: se queda con la pantalla completa.
+ */
 function relevo(): "show" | "resultado" | null {
-  if (document.querySelector(".game-card") || document.getElementById("stadium")?.style.display === "block") return "show";
+  if (document.querySelector(".game-card, .pantalla") || document.getElementById("stadium")?.style.display === "block") return "show";
   if (document.getElementById("winner-box")?.style.display === "block") return "resultado";
   return null;
 }
@@ -135,7 +142,7 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
 
   /**
    * Cierra la espera. `alShow`: el show ya la tapa y se queda con la pantalla
-   * completa, que suelta él al terminar. Si no, se suelta la que pidió la
+   * completa, que se suelta al cerrar el resultado en grande. Si no, se suelta la que pidió la
    * espera, y el foco vuelve a la página: al botón de sortear si ya se puede, y
    * si no, al que abrió la espera.
    */

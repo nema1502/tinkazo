@@ -20,7 +20,11 @@
  *    página: siempre hay algo que la tapa (la espera, la tarjeta o el estadio);
  *  - la pantalla completa que pidió la espera sigue puesta cuando arranca el
  *    show (la hereda: sin gesto, el navegador no la volvería a dar);
- *  - no aparece la cortina del sorteo encima de la espera: ella hace de cortina.
+ *  - no aparece la cortina del sorteo encima de la espera: ella hace de cortina;
+ *  - el show termina en el resultado en grande, sin un cuadro de la página en
+ *    el medio, con la pantalla completa y el QR del comprobante; y "Cerrar"
+ *    vuelve a la página, suelta la pantalla completa y deja "Siguiente premio"
+ *    con el foco (desde el 21 de octubre de 2026, buscador de detalles D04).
  *
  * Y dos casos más, en la primera pantalla:
  *
@@ -82,6 +86,7 @@ const MUESTREO = `(() => {
       cortina: !!document.querySelector('.cortina'),
       tarjeta: !!document.querySelector('.game-card'),
       estadio: !!est && est.style.display === 'block',
+      grande: !!document.querySelector('.pantalla'),
       fs: !!document.fullscreenElement,
     });
     if (!window.__parar) requestAnimationFrame(paso);
@@ -142,7 +147,6 @@ async function desemboca(browser, v) {
       if (hasta === Infinity && (await page.eval("document.getElementById('stadium').style.display === 'block'"))) hasta = Date.now() + 1500;
       await sleep(cada);
     }
-    await page.eval("window.__parar = true; true");
     const m = await page.eval("window.__muestras");
     const abierta = m.findIndex((x) => x.espera);
     const show = m.findIndex((x, i) => i > abierta && (x.tarjeta || x.estadio));
@@ -163,11 +167,27 @@ async function desemboca(browser, v) {
       const perdio = m.slice(desde, estadio > 0 ? estadio + 1 : m.length).filter((x) => !x.fs);
       check(`${quien} · la pantalla completa que pidió la espera sigue con el show`, perdio.length === 0 && estadio > 0 && m[estadio].fs, perdio.length ? `se soltó a ${perdio[0].t} ms` : "");
     }
-    // Saltar el juego y mirar que el resultado queda en la página.
+    // Saltar el juego: el show desemboca en el resultado en grande, sin pasar por la página.
     await page.eval("document.getElementById('st-skip')?.click(); true");
-    const fin = await page.waitFor("document.getElementById('winner-box').style.display === 'block' && document.getElementById('stadium').style.display !== 'block'", 30000);
-    check(`${quien} · después del show, el resultado`, fin.ok);
-    await sleep(600);
+    const fin = await page.waitFor("document.getElementById('winner-box').style.display === 'block' && document.getElementById('stadium').style.display !== 'block' && document.querySelector('.pantalla')", 30000);
+    check(`${quien} · después del show, el resultado en grande`, fin.ok);
+    await sleep(800);
+    await page.eval("window.__parar = true; true");
+    const m2 = await page.eval("window.__muestras");
+    const ultimoEstadio = m2.findLastIndex((x) => x.estadio);
+    const grande = m2.findIndex((x, i) => i > ultimoEstadio && x.grande);
+    const entre = ultimoEstadio >= 0 && grande > 0 ? m2.slice(ultimoEstadio, grande + 1).filter((x) => !x.estadio && !x.grande) : [null];
+    check(`${quien} · entre el estadio y el resultado en grande no se ve la página`, entre.length === 0, entre.length ? `${entre.length} cuadros sin nada encima` : "");
+    if (conPantalla) check(`${quien} · y sigue en pantalla completa`, !!m2[m2.length - 1]?.fs);
+    const qr = await page.waitFor("document.querySelector('.pantalla .pantalla-qr img[src]')", 8000);
+    check(`${quien} · el resultado en grande trae el QR del comprobante`, qr.ok);
+    await page.screenshot(join(outDir, `espera-${v.etiqueta}-${tema}-resultado-grande.png`));
+    // Cerrarlo vuelve a la página: suelta la pantalla completa y deja lo que sigue con el foco.
+    await clicReal(page, ".pantalla [data-cerrar]");
+    const cerro = await page.waitFor("!document.querySelector('.pantalla') && !document.fullscreenElement", 5000);
+    await sleep(500);
+    const f = await page.eval("document.activeElement && document.activeElement.id");
+    check(`${quien} · "Cerrar" vuelve a la página, sin pantalla completa y con "Siguiente premio" con el foco`, cerro.ok && (f === "btn-again-sin" || f === "sig-btn"), `foco en ${f || "body"}`);
     await page.screenshot(join(outDir, `espera-${v.etiqueta}-${tema}-resultado.png`));
   } finally {
     await page.send("Page.close").catch(() => undefined);

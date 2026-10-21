@@ -201,6 +201,8 @@ const DETALLES = {
         const f = await foco(page);
         const barra = await page.eval("document.getElementById('siguiente').classList.contains('on')");
         check(`${quien} · un momento después del resultado, el foco está en "Siguiente premio"`, f === (barra ? "sig-btn" : "btn-again-sin"), `foco en ${f}${barra ? " (con la barra)" : ""}`);
+        // Sin la espera en grande, el resultado queda en la página, como siempre (D04 es solo desde la espera).
+        check(`${quien} · sin la espera en grande, el resultado no se abre en grande`, !(await page.eval("!!document.querySelector('.pantalla')")));
         const espera = await page.eval("document.getElementById('wait-left').textContent");
         check(`${quien} · la caja de la espera dice que ya se sorteó`, espera === "Ya se sorteó", `"${espera}"`);
         await captura(page, "D11", v, tema, "resultado");
