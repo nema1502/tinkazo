@@ -40,8 +40,8 @@ const BORN_SPAN = 1.2;
 const T_ROLL0 = 1.5;
 const T_ROLL1 = 4.6;
 const T_FERIA = 5.0;
-/** Cuándo aparecen los encargos en su origen. */
-const T_APPEAR = 4.6;
+/** Cuándo aparecen los encargos en su origen: antes del primer pase, así la feria no queda quieta mientras se pasa lista. */
+const T_APPEAR = 3.0;
 /** Un pase: "¿Quién acepta…?", después los intentos, y una pausa. Todo en segundos del juego. */
 const BUSCA = 1.2;
 const BUSCA_DUELO = 0.8;
@@ -161,6 +161,7 @@ export async function truequePixi(names: string[], winners: readonly number[], b
 
   /* ------------------------------------------------------------ escenario */
   let bgG!: Graphics;
+  let adornosG!: Graphics;
   let stallsG!: Graphics;
   let routeG!: Graphics;
   let bundlesG!: Graphics;
@@ -240,9 +241,12 @@ export async function truequePixi(names: string[], winners: readonly number[], b
     bgG.poly(picos.flatMap((p) => [p.x, p.y])).fill(montaña);
     bgG.rect(0, piso, w, h - piso).fill(suelo);
     S.bg.addChild(bgG);
+    // Los banderines, con los colores de los productos, se mecen en cada cuadro: la feria no queda quieta.
+    adornosG = new Graphics();
+    S.bg.addChild(adornosG);
 
-    // La feria: cuadrícula de puestos, como una tabla sin orden.
-    feriaY0 = S.top() + 58 * k;
+    // La feria: cuadrícula de puestos, como una tabla sin orden. Debajo de la leyenda y de la franja de aguayo.
+    feriaY0 = S.top() + 116 * k;
     feriaY1 = h - S.bottom() - 16 * k;
     const x0 = w * 0.07, x1 = w * 0.93;
     const cols = Math.max(1, Math.round(Math.sqrt((n * (x1 - x0)) / Math.max(1, feriaY1 - feriaY0))));
@@ -406,6 +410,35 @@ export async function truequePixi(names: string[], winners: readonly number[], b
   }
 
   /* -------------------------------------------------------------- dibujo */
+  /**
+   * La franja de aguayo de arriba de la feria: rayas con los colores de los
+   * productos que corren despacio de lado a lado, como el tejido que se
+   * desplaza en la mano. Es grande a propósito: la vista de fondo de la sala
+   * tiene que ver que la escena se mueve aunque no pase nada en los puestos.
+   */
+  function dibujarAdornos(tt: number): void {
+    adornosG.clear();
+    const w = S.sw();
+    const h = S.sh();
+    const k = S.u();
+    // Una nube que cruza la feria despacio, sobre el suelo y el cielo (no sobre los puestos): sombra de día,
+    // y de noche una luz suave. Es grande, así que la sala la ve pasar en los dos temas.
+    const yNube = (S.top() + 80 * k + (h - S.bottom() - 16 * k)) / 2;
+    const xNube = ((tt * 60 * k) % (w + 800 * k)) - 400 * k;
+    adornosG.ellipse(xNube, yNube, 380 * k, 170 * k).fill(S.dark ? { color: CREAM, alpha: 0.13 } : { color: 0x1a1030, alpha: 0.2 });
+    // Debajo de la leyenda y encima de los puestos.
+    const y0 = S.top() + 88 * k;
+    const alto = 22 * k;
+    const ancho = 22 * k;
+    const corrimiento = (tt * 60 * k) % (ancho * COLOR.length);
+    for (let s = -COLOR.length; s * ancho + corrimiento < w; s++) {
+      const x = s * ancho + corrimiento;
+      adornosG.rect(x, y0, ancho, alto).fill({ color: COLOR[((s % COLOR.length) + COLOR.length) % COLOR.length] ?? 0, alpha: 0.9 });
+    }
+    adornosG.rect(0, y0, w, Math.max(1, k)).fill({ color: INK, alpha: 0.5 });
+    adornosG.rect(0, y0 + alto - Math.max(1, k), w, Math.max(1, k)).fill({ color: INK, alpha: 0.5 });
+  }
+
   function dibujarPuestos(tt: number, p: number, ruta: boolean): void {
     stallsG.clear();
     const luzPase = p >= 0 ? (luz[p] ?? new Set<number>()) : new Set<number>();
@@ -431,7 +464,13 @@ export async function truequePixi(names: string[], winners: readonly number[], b
       // El toldo: lo que acepta. Las rayas, para que se lea como puesto y no como cuadro.
       stallsG.rect(at.x - r, at.y - r * 0.72, 2 * r, r * 0.82).fill({ color: COLOR[pu.acepta] ?? 0, alpha: alfa });
       if (r > 6 * S.u()) {
-        for (let s = 1; s < 4; s++) stallsG.rect(at.x - r + (s * 2 * r) / 4 - r * 0.07, at.y - r * 0.72, r * 0.14, r * 0.82).fill({ color: CREAM, alpha: 0.35 * alfa });
+        // Las rayas del toldo corren despacio de lado a lado, como el tejido en la mano: el toldo se mueve.
+        const ancho = 2 * r;
+        const corre = (tt * 20 * S.u() + i * 5 * S.u()) % ancho;
+        for (let s = 0; s < 4; s++) {
+          const x = at.x - r + ((s * ancho) / 4 + corre) % ancho;
+          stallsG.rect(x - r * 0.07, at.y - r * 0.72, r * 0.14, r * 0.82).fill({ color: CREAM, alpha: 0.35 * alfa });
+        }
       }
       // El cuerpo del puesto y lo que da: el cuadrito de abajo a la derecha.
       stallsG.rect(at.x - r, at.y + r * 0.1, 2 * r, r * 0.9).fill({ color: S.dark ? 0x3b2a22 : 0xd2b48c, alpha: alfa });
@@ -464,7 +503,9 @@ export async function truequePixi(names: string[], winners: readonly number[], b
         if (etiq) etiq.visible = false;
         return;
       }
-      const q = encargoEn(e, tt);
+      const lugar = encargoEn(e, tt);
+      // Un vaivén chico aun quieto: el atado no queda clavado en su origen mientras se pasa lista.
+      const q = { x: lugar.x, y: lugar.y + Math.sin(tt * 2.4 + e * 1.3) * 1.2 * S.u() };
       const prod = productoEn(en, e, tt);
       const s = radio * 2.1 * aparece;
       bundlesG.ellipse(q.x, q.y + s * 0.5, s * 0.55, s * 0.16).fill({ color: INK, alpha: 0.32 });
@@ -572,6 +613,12 @@ export async function truequePixi(names: string[], winners: readonly number[], b
     cam.noBlur();
   };
 
+  // Un primer dibujo antes de arrancar el bucle: el calentamiento del andamiaje (que compila lo que se ve)
+  // corre con la escena ya armada, y la feria de doscientos puestos no paga la compilación en el show.
+  dibujarAdornos(0);
+  dibujarPuestos(0, -1, false);
+  dibujarEncargos(0);
+  dibujarRuta(0);
   S.run((dt, now) => {
     tAll += dt;
     S.breath(tAll, T_ENTREGA);
@@ -597,6 +644,7 @@ export async function truequePixi(names: string[], winners: readonly number[], b
     dirigir(tt);
     cam.update(dt);
     cam.apply(S.scene, S.sw(), S.sh(), now);
+    dibujarAdornos(tt);
     dibujarPuestos(tt, paseEn(tt), tt >= T_ENTREGA);
     dibujarEncargos(tt);
     dibujarRuta(tt);
