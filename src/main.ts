@@ -10,7 +10,7 @@ import { montarPremios } from "./ui/premios";
 import { adelantarImagen, alTocarGanadores, copySummary, draw, imagenRedes, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
 import { skipGame } from "./games/overlay";
 import { usePixi } from "./games/engine";
-import { initWalletUI } from "./ui/wallet-ui";
+import { initWalletUI, openPicker } from "./ui/wallet-ui";
 import { initOnboarding } from "./ui/onboarding";
 import { musicOn, toggleMusic } from "./music";
 import { rotateWords } from "./ui/rotar";
@@ -34,9 +34,14 @@ onLangChange(() => {
 $("l-es").addEventListener("click", () => chooseLang("es"));
 $("l-en").addEventListener("click", () => chooseLang("en"));
 $("btn-sample").addEventListener("click", loadSample);
-// Sin cuenta, el botón de sellar queda con aria-disabled (lo pone `applyGate`): el clic no hace nada.
+// Sin cuenta, el botón de sellar queda con aria-disabled (lo pone `applyGate`) y
+// el clic abre la ventana para elegir una, que es lo que falta. Antes no hacía
+// nada, y parecía un botón roto (evaluador visual, 21 de octubre de 2026).
 $("btn-freeze").addEventListener("click", () => {
-  if ($("btn-freeze").getAttribute("aria-disabled") === "true") return;
+  if ($("btn-freeze").getAttribute("aria-disabled") === "true") {
+    void openPicker();
+    return;
+  }
   void freeze();
 });
 // El ritmo del show. Se guarda, porque quien organiza suele querer siempre el
@@ -215,9 +220,11 @@ function initVistas(): void {
 }
 
 /* Modo demo y pose para capturas: `?demo=<juego>`, `?pose=1`, `?instant=1`. */
-// Los del selector, y los tres que salieron el 30 de septiembre de 2026 (el
-// Cierre de Libro, la carrera de cohetes y las balsas de totora), que siguen
-// abriendo con `?demo=` y `?pose=` mientras se decide si se borran.
+// Los diez del selector y los que salieron de él, que siguen abriendo con
+// `?demo=` y `?pose=` mientras se decide si se borran: el Cierre de Libro, la
+// carrera de cohetes y las balsas de totora (30 de septiembre de 2026), luz
+// roja, luz verde (5 de octubre), la tómbola (20 de octubre), y el Aguayo y la
+// Constelación, que El Trueque reemplaza (21 de octubre).
 const GAMES: readonly Game[] = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "luz", "ledger", "rockets", "totora", "trueque"];
 
 async function autoDemo(mode: string): Promise<void> {
@@ -241,6 +248,10 @@ async function autoDemo(mode: string): Promise<void> {
  * "stellar" caía en la carrera andina, así que las comprobaciones de tema claro,
  * tema oscuro y celular del auditor estaban mirando la carrera para los seis
  * juegos: nadie había visto nunca la ruleta ni el pasanaku en tema claro.
+ *
+ * `?ganador=<semilla>` cambia quién gana (src/pose.ts) y `?semilla=` la
+ * historia que cuenta el juego; con el mismo valor de 64 hex en los dos, ganan
+ * los mismos y se cuenta lo mismo que en un sorteo de verdad con ese número.
  */
 async function poseScene(): Promise<void> {
   const fakeBeacon = { round: 32254977, randomness: "6e049991d7e23bdc566d3adfff08cd81798c644bc54dd5daa18eb0a8938b2829", signature: "a77a689daae687c7b16e6f9388d4ebbb7b368d09d7a6c33ad1dfd75d32e4114cfbdcf3e2cc54f4fee659abf2ac7ef9ac" };
@@ -260,16 +271,14 @@ async function poseScene(): Promise<void> {
     })
     : SAMPLE;
   // `?nw=N` también acá: la escena fija con varios premios, sin red, para
-  // auditar cómo anuncia cada juego a cada ganador. Los ganadores son siempre
-  // los mismos y quedan repartidos por la lista.
+  // auditar cómo anuncia cada juego a cada ganador.
   const premios = Math.max(1, Math.min(L.length, Math.floor(Number(params.get("nw")) || 1)));
-  // El primero, el de siempre: con un premio la escena no cambia.
-  const W3: number[] = [Math.min(3, L.length - 1)];
-  for (let i = 1; W3.length < premios && i < L.length * 7; i++) {
-    const w = (3 + i * 7) % L.length;
-    if (!W3.includes(w)) W3.push(w);
-  }
-  for (let w = 0; W3.length < premios; w++) if (!W3.includes(w)) W3.push(w);
+  // Quiénes ganan: los de siempre, repartidos por la lista, o con
+  // `?ganador=<semilla>` los que daría el protocolo con esa semilla, para que
+  // el auditor de delatores vea al ganador en cualquier puesto. Solo la escena
+  // fija lo lee; un sorteo de verdad no pasa por acá (src/pose.ts). Se carga
+  // aparte: quien entra a sortear no lo descarga.
+  const W3 = (await import("./pose")).poseWinners(L, premios, params.get("ganador"));
   app.frozen = { names: L, listHash: "32e2099c7a8dde7b6892523dc7d3e34ac06a972fd67f142186c58dced51a21ef", ts: 0, at: "-", prize: "", round: 32254977 };
   app.drawn = { beacon: fakeBeacon, winners: W3 };
   const cual = params.get("pose") ?? "1";

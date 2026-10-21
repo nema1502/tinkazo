@@ -54,6 +54,49 @@ export interface RoundSignature {
   signature: string;
 }
 
+/** Uno de los relays de `QUICKNET.relays`. */
+export type Relay = (typeof QUICKNET.relays)[number];
+
+/**
+ * Las dos rutas por las que un relay entrega una ronda. Las dos devuelven
+ * `round` y `signature`; la v1 agrega `randomness`, que acá no se lee: la
+ * semilla sale de la firma, y la firma se verifica antes de usarla (§2).
+ */
+export type RoundRoute = "v2" | "v1";
+
+/**
+ * La ruta que se le pide primero a cada relay. Los tres de drand.sh sirven
+ * las dos; el de Cloudflare responde 404 a la v2 y sirve la v1 (medido el 21
+ * de octubre de 2026 con la ronda 1000000). Hasta entonces se le pedía la v2 a
+ * los cuatro, y el respaldo de los otros tres fallaba siempre.
+ */
+const FIRST_ROUTE: Readonly<Record<Relay, RoundRoute>> = {
+  "https://api.drand.sh": "v2",
+  "https://api2.drand.sh": "v2",
+  "https://api3.drand.sh": "v2",
+  "https://drand.cloudflare.com": "v1",
+};
+
+/** La dirección de una ronda en un relay; sin `route`, la que ese relay sirve. */
+export function roundEndpoint(relay: Relay, round: number, route: RoundRoute = FIRST_ROUTE[relay]): string {
+  return route === "v2"
+    ? `${relay}/v2/chains/${QUICKNET.chainHash}/rounds/${round}`
+    : `${relay}/${QUICKNET.chainHash}/public/${round}`;
+}
+
+/**
+ * La firma que trae la respuesta de cualquiera de las dos rutas, en hex y en
+ * minúsculas, o `null` si no es la de esa ronda o no tiene forma de firma. No
+ * la verifica: eso es `verifyRound`, en `drand.ts`.
+ */
+export function readRound(body: unknown, round: number): string | null {
+  if (typeof body !== "object" || body === null) return null;
+  const { round: r, signature } = body as { round?: unknown; signature?: unknown };
+  // El número de ronda llega como número; un relay que lo mande como texto también sirve.
+  if ((typeof r !== "number" && typeof r !== "string") || Number(r) !== round) return null;
+  return typeof signature === "string" && /^[0-9a-f]{96}$/i.test(signature) ? signature.toLowerCase() : null;
+}
+
 /** URL legible de una ronda (API v1, incluye `randomness`). */
 export function roundUrl(round: number): string {
   return `${QUICKNET.relays[0]}/${QUICKNET.chainHash}/public/${round}`;
@@ -63,6 +106,11 @@ export function roundUrl(round: number): string {
  * Obtiene la firma de una ronda rotando relays. Reintenta hasta `attempts`
  * veces en total, esperando `delayMs` entre intentos: la ronda puede tardar
  * unos segundos en propagarse tras su `roundTime`.
+ *
+ * A cada relay le pide la ruta que sirve. Si contesta 404, en el mismo
+ * intento le pide la otra: así un relay que deja de servir una ruta no apaga
+ * el respaldo. Una ronda que todavía no nació también da 404 en Cloudflare, y
+ * entonces son dos pedidos en vez de uno, nada más.
  */
 export async function fetchRound(
   round: number,
@@ -80,25 +128,29 @@ export async function fetchRound(
   const doFetch = opts.fetchFn ?? fetch;
   let lastError: unknown = null;
   for (let i = 0; i < attempts; i++) {
-    const relay = QUICKNET.relays[i % QUICKNET.relays.length];
+    const relay = QUICKNET.relays[i % QUICKNET.relays.length] as Relay;
     opts.onAttempt?.(i + 1, attempts);
-    try {
-      const res = await doFetch(`${relay}/v2/chains/${QUICKNET.chainHash}/rounds/${round}`, {
-        signal: opts.signal ?? null,
-        cache: "no-store",
-      });
-      if (res.ok) {
-        const body = (await res.json()) as { round?: number; signature?: string };
-        if (body.round === round && typeof body.signature === "string" && body.signature.length === 96) {
-          return { round, signature: body.signature };
+    const first = FIRST_ROUTE[relay];
+    for (const route of [first, first === "v2" ? "v1" : "v2"] as const) {
+      try {
+        const res = await doFetch(roundEndpoint(relay, round, route), {
+          signal: opts.signal ?? null,
+          cache: "no-store",
+        });
+        if (res.ok) {
+          const signature = readRound(await res.json(), round);
+          if (signature) return { round, signature };
+          lastError = new Error("respuesta inesperada del relay");
+        } else {
+          lastError = new Error(`relay ${res.status}`);
+          // Esta ruta no está en este relay: la otra, sin esperar.
+          if (res.status === 404) continue;
         }
-        lastError = new Error("respuesta inesperada del relay");
-      } else {
-        lastError = new Error(`relay ${res.status}`);
+      } catch (e) {
+        lastError = e;
+        if (opts.signal?.aborted) throw e;
       }
-    } catch (e) {
-      lastError = e;
-      if (opts.signal?.aborted) throw e;
+      break;
     }
     if (i < attempts - 1) await new Promise((r) => setTimeout(r, delayMs));
   }

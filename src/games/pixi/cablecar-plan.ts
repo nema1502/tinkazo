@@ -325,10 +325,15 @@ export function planCableCar(names: string[], winners: readonly number[], rng: (
     return stops.find((s) => s.round === r)?.tDetach ?? Infinity;
   });
 
-  /** Cuántos quedan a la hora `x`: baja en cada parada, cuando se bajan. */
+  /**
+   * Cuántos quedan a la hora `x`. Baja en cada parada en el mismo instante en
+   * que el relator lo dice y los que se bajan dejan su cabina (`tOff`): bajaba
+   * 0,35 s de juego después, y en ese rato arriba decía "QUEDAN 11" con "Quedan
+   * 7" en la caja (evaluador visual, 21 de octubre de 2026).
+   */
   function leftAt(x: number): number {
     let m = n;
-    for (const s of stops) if (x >= s.tOff + 0.35) m = left[s.round + 1] as number;
+    for (const s of stops) if (x >= s.tOff) m = left[s.round + 1] as number;
     return m;
   }
   /** Quiénes siguen arriba de una cabina a la hora `x`. */

@@ -16,9 +16,12 @@ import type { Game } from "../state";
  *   sección 5. Ese puntaje es una meta sin probar: solo desempata.
  */
 
-/** Los juegos del selector, en el orden de sus botones (`GAME_BUTTONS` en `freeze.ts`). */
+/**
+ * Los diez juegos del selector, en el orden de sus botones (`GAME_BUTTONS` en
+ * `freeze.ts`): el de la auditoría, de las salas chicas a las grandes.
+ */
 export const SELECTOR: readonly Game[] = [
-  "race", "chovena", "trompo", "pinata", "oruro", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien",
+  "race", "sapo", "trompo", "chovena", "pinata", "wheel", "quien", "trueque", "teleferico", "oruro",
 ];
 
 export interface Rango {
@@ -35,10 +38,12 @@ export interface Rango {
 /**
  * Lo que dice la auditoría (sección 6) para cada juego del selector hoy.
  *
- * Sin entrada, el juego no tiene rango claro. Piñata y Carnaval de Oruro
- * (la versión de hoy, no La Entrada), Aguayo, Constelación y ¿Quién es? (la
- * versión de hoy, no De pie) quedan así: el rango de su reemplazo no es el
- * suyo. Ruleta tiene solo tope: el WHEEL_MAX de state.ts, 200 desde que reparte la
+ * Sin entrada, el juego no tiene rango claro y queda neutral. La piñata no
+ * está entre los ocho de la auditoría. Carnaval de Oruro es la versión de hoy,
+ * no La Entrada: el rango de su reemplazo no es el suyo. De pie tiene rango en
+ * la sección 6 (de 8 a 200), pero la misma tabla pide que la lista sea la gente
+ * de la sala, y el aviso de la sección 7.5 para cuando no lo es todavía no está:
+ * recomendarlo sin ese aviso queda para el autor. Ruleta tiene solo tope: el WHEEL_MAX de state.ts, 200 desde que reparte la
  * lista en gajos (21 de octubre de 2026; la sección 5 decía 24). No se importa de
  * state.ts porque ese módulo lee `location` al cargar: una prueba compara los dos.
  */
@@ -47,6 +52,7 @@ export const RANGOS: Partial<Record<Game, Rango>> = {
   sapo: { minimo: 2, ideal: [6, 12], maximo: 40, meta: 7.1 },
   trompo: { minimo: 2, ideal: [5, 14], maximo: 14, meta: 6.3 },
   chovena: { minimo: 8, ideal: [12, 60], maximo: 80, meta: 7.9 },
+  trueque: { minimo: 12, ideal: [20, 120], maximo: 200, meta: 8.1 },
   teleferico: { minimo: 16, ideal: [30, 150], maximo: 200, meta: 7.1 },
   wheel: { maximo: 200 },
 };

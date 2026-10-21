@@ -1,3 +1,4 @@
+import { dentro, type Caja, type Zona } from "./encuadre";
 import { Graphics, type Container, type Filter, type Renderer } from "pixi.js";
 import { ZoomBlurFilter } from "pixi-filters";
 
@@ -38,6 +39,11 @@ export class Camera {
   y = 0;
   zoom = 1;
   rot = 0;
+  /**
+   * Lo que ningún acercamiento puede cortar: una caja del mundo y la zona de la
+   * pantalla donde tiene que quedar entera. Ver `proteger`.
+   */
+  private guardia: { caja: Caja; zona: Zona } | null = null;
   private tx = 0;
   private ty = 0;
   private tz = 1;
@@ -139,6 +145,48 @@ export class Camera {
     return this;
   }
 
+  /**
+   * Una caja del mundo que tiene que quedar entera dentro de una zona de la
+   * pantalla, pase lo que pase: el acercamiento que pidió el juego, un golpe, el
+   * sacudón o cualquier zoom que se sume después. Si no entra, la cámara se
+   * aleja lo justo; si se sale por un costado, se corre lo justo. Sin caja, nada.
+   *
+   * Nació con la carrera con pocas personas (feedback de Alejandro, 19 de
+   * octubre de 2026): con el golpe de la meta, la ganadora quedaba cortada
+   * contra el borde del celular. El juego la protege desde que la revela, nunca
+   * antes: proteger a alguien antes sería delatarlo.
+   */
+  proteger(caja: Caja | null, zona?: Zona): this {
+    this.guardia = caja && zona ? { caja, zona } : null;
+    return this;
+  }
+
+  /**
+   * Con algo protegido, la escena se corre o se aleja lo justo para que quede
+   * entero en su zona, con el acercamiento que de verdad se aplicó. La cámara
+   * queda donde terminó y el cuadro siguiente sigue desde ahí, así que no salta
+   * de vuelta; `toScreen` ve lo mismo que la escena. El sacudón se corrige solo
+   * en este cuadro, para que no se acumule en la cámara.
+   */
+  private respetar(scene: Container, sw: number, sh: number): void {
+    const g = this.guardia;
+    const z = scene.scale.x;
+    if (!g || !(z > 0)) return;
+    const v = dentro(g.caja, g.zona, { x: this.x, y: this.y, z }, sw, sh);
+    if (v.z < z) {
+      const f = v.z / z;
+      this.zoom *= f;
+      // El desenfoque mide la velocidad del acercamiento: esto no es un movimiento.
+      this.lastZoom *= f;
+      scene.scale.set(v.z);
+    }
+    this.x = v.x;
+    this.y = v.y;
+    const dx = scene.position.x - sw / 2, dy = scene.position.y - sh / 2;
+    const w = dentro(g.caja, g.zona, v, sw + 2 * dx, sh + 2 * dy);
+    scene.pivot.set(w.x, w.y);
+  }
+
   update(dt: number): void {
     const k = 1 - Math.exp(-this.rate * dt);
     this.x += (this.tx - this.x) * k;
@@ -168,6 +216,8 @@ export class Camera {
     scene.position.set(sw / 2 + sx, sh / 2 + sy);
     scene.scale.set(z);
     scene.rotation = this.rot + (s ? Math.sin(now * 53) * s * 0.0006 : 0);
+    // Lo protegido, entero en su zona con cualquier acercamiento: ver `proteger`.
+    this.respetar(scene, sw, sh);
     const filters: Filter[] = [...this.extra];
     if (this.blurOn && this.blurK > 0.006) {
       this.blur.strength = this.blurK;

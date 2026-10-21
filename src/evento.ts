@@ -103,6 +103,15 @@ function veredicto(estado: "ok" | "partial" | "bad" | "working", kicker: string,
 }
 
 function pintarVeredicto(): void {
+  // Sin evento no hay nombre que poner arriba: el título del error va en el H1,
+  // y la explicación debajo, a tamaño de lectura. Antes el H1 seguía diciendo
+  // "Sorteos del evento", en español también en inglés, y el error quedaba
+  // abajo (evaluador visual, 21 de octubre de 2026). Un evento que se abrió
+  // pero no trae sorteos conserva su nombre arriba.
+  const sinEvento = !!claveError && !evento;
+  ($("ev-veredicto-t").parentElement as HTMLElement).style.display = sinEvento ? "none" : "";
+  $("ev-detalle").className = sinEvento ? "lead" : "note";
+  if (sinEvento) $("ev-titulo").textContent = t("evTituloError");
   if (claveError) return veredicto("bad", "evKickerError", "evTituloError", t(claveError));
   if (revisando) {
     const hechos = revisiones.length;

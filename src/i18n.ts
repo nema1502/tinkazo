@@ -156,7 +156,11 @@ export interface Dict {
   cTelStop: (k: number, off: number, left: number) => string;
   cTelGrupo: (k: number, g: { nombre: string; articulo: string }, off: number, left: number) => string;
   cTelWho: string[];
+  /** Al llegar a la última estación, con los que siguen arriba: "¡QUEDAN DOS!" solo si son dos. */
+  cTelLast: (left: number) => string;
   cTelOff: (n: string) => string;
+  /** Los que se bajan juntos en la última estación: hasta tres nombres, y los demás como "N más". */
+  cTelOffN: (ns: string[], more: number) => string;
   /** El último que se baja, cuando también ganó: con varios premios. */
   cTelPrize: (n: string) => string;
   cTelOf: (k: number, of: number) => string;
@@ -217,6 +221,8 @@ export interface Dict {
   impNoNames: (file: string) => string;
   impNotText: (file: string) => string;
   impHeaderOut: (header: string) => string;
+  /** Cuántos nombres traían caracteres que no se ven y se limpiaron al cargar la lista. */
+  impInvisibles: (n: number) => string;
   impSkipped: (n: number, lines: string) => string;
   impSkippedShort: (n: number) => string;
   /** El mensaje para quien ganó; con `varios`, para todos los que ganaron juntos. */
@@ -293,7 +299,7 @@ export const T: Record<Lang, Dict> = {
     s2t: "Sellá la lista",
     s2b: "Al sellarla, la lista queda con un resumen corto de la lista (su huella) y una hora. Si después alguien mete a su primo o saca a otro, la huella cambia y se nota. Y la huella queda grabada en Stellar.",
     s3t: "Elegí el juego y sorteá",
-    s3b: "Uno de los doce juegos, a pantalla completa. Cuando arranca la animación el ganador ya salió del número público. El show es show. El sorteo ya estaba hecho.",
+    s3b: "Uno de los diez juegos, a pantalla completa. Cuando arranca la animación el ganador ya salió del número público. El show es show. El sorteo ya estaba hecho.",
     p1: "Participantes", p2: "Lista sellada", p3: "El sorteo",
     srcPaste: "Pegar lista", srcCsv: "Subir CSV", srcLuma: "Desde Luma", srcMeetup: "Meetup · pronto",
     srcLumaTip: "Exportá la lista de invitados de tu evento en Luma como CSV",
@@ -425,6 +431,7 @@ export const T: Record<Lang, Dict> = {
     impNoNames: (f) => (f ? `«${f}» no trae nombres: la lista quedó como estaba.` : "Lo que pegaste no trae nombres: la lista quedó como estaba."),
     impNotText: (f) => `«${f}» no es un archivo de texto. Si es una planilla, guardala como CSV y subila de nuevo. La lista quedó como estaba.`,
     impHeaderOut: (h) => `«${h}» es el encabezado de la columna: no entra al sorteo.`,
+    impInvisibles: (n) => `Se quitaron caracteres invisibles de ${n === 1 ? "1 nombre" : `${n} nombres`}: no se ven, y con ellos el mismo nombre podía entrar dos veces.`,
     impSkipped: (n, lines) => (n === 1 ? `No se pudo leer 1 fila (línea ${lines}): quedó afuera.` : `No se pudieron leer ${n} filas (líneas ${lines}): quedaron afuera.`),
     impSkippedHint: "Suele ser una coma sin comillas. Corregila en el archivo y subilo de nuevo, o agregá ese nombre a mano.",
     impSkippedShort: (n) => (n === 1 ? "1 fila no se pudo leer" : `${n} filas no se pudieron leer`),
@@ -454,8 +461,13 @@ export const T: Record<Lang, Dict> = {
     cTelGo: ["¡ARRANCA EL TELEFÉRICO!", "¡Para arriba!", "¡Se despega del piso!"],
     cTelPass: (k) => pick([`¡Pasa de largo por la ${k}!`, `¡En la ${k} no se baja nadie!`, `¡La ${k}, de largo!`]),
     cTelUp: ["¡Sigue subiendo!", "¡Más arriba todavía!", "¡Qué vista!"],
-    cTelLast: ["¡QUEDAN DOS!", "¡Última estación!", "¡Acá bajan de a uno!"],
+    cTelLast: (left) =>
+      left <= 2 ? pick(["¡QUEDAN DOS!", "¡Última estación!"]) : pick(["¡Última estación!", "¡Acá bajan de a uno!", `¡Última estación! Quedan ${left}`]),
     cTelOff: (n) => pick([`¡Se baja ${n}!`, `¡${n} se queda en el andén!`, `¡Hasta acá llegó ${n}!`]),
+    cTelOffN: (ns, more) => {
+      const todos = more > 0 ? [...ns, `${more} más`] : ns;
+      return pick([`¡Se bajan ${joinList(todos, "y")}!`, `¡Hasta acá llegaron ${joinList(todos, "y")}!`]);
+    },
     cTelPrize: (n) => pick([`¡Se baja ${n}, y con premio!`, `¡${n} se baja con premio!`]),
     cTelClimb: ["¡Sube solita!", "¡Ya casi llega!", "¡Ya se ve la cumbre!"],
     cTelDock: ["¡LLEGÓ ARRIBA!", "¡TOCÓ LA CUMBRE!", "¡SE ABRE LA PUERTA!"],
@@ -715,6 +727,7 @@ export const T: Record<Lang, Dict> = {
     gameLabel: "Juego", gameRace: "Carrera de llamas", gameStellar: "Constelación Stellar",
     // --- El Trueque: una feria de puestos. Cada uno acepta un producto y da otro; un encargo cambia de mano hasta quien lo espera.
     gameTrueque: "El Trueque", jgTruequeN: "El Trueque",
+    jgTruequeB: "La feria del trueque: cada puesto acepta un producto y da otro a cambio. El encargo sale con uno, cambia de mano en mano y llega con otro a quien lo esperaba, y al final se prende el camino con los nombres de todos los que cambiaron. Así viaja un pago en Stellar. Mejor de veinte a ciento veinte, y hasta doscientas.",
     gcTrueque: "Cada puesto acepta un producto y da otro a cambio. Gana quien recibe el encargo.",
     gcTruequeMany: "Cada premio es un encargo que cambia de mano hasta llegar a quien lo espera.",
     loreTruequeQ: "¿Dónde se sigue haciendo el trueque?",
@@ -787,6 +800,11 @@ export const T: Record<Lang, Dict> = {
     "rec.teleferico.alto": "Con tanta gente, cada grupo sigue en su cabina.",
     "rec.teleferico.largo": (n: number, _min: number, max: number) => `Con ${n}, no se ofrece: llega a ${max}.`,
     "rec.teleferico.corto": (_n: number, min: number) => `Con menos de ${min}, las paradas se hacen largas.`,
+    "rec.trueque.ideal": "Cada uno espera su producto, y toda la sala mira por dónde va el encargo.",
+    "rec.trueque.bajo": "Con pocos puestos, la feria se ve chica.",
+    "rec.trueque.alto": "Con tanta gente, cada uno sabe por su producto si sigue en juego.",
+    "rec.trueque.largo": (n: number, _min: number, max: number) => `Con ${n}, no se ofrece: llega a ${max}.`,
+    "rec.trueque.corto": (_n: number, min: number) => `Con menos de ${min}, el camino es de tres cambios o menos.`,
     "rec.wheel.largo": (n: number, _min: number, max: number) => `Con ${n}, la ruleta no se ve: llega a ${max} nombres.`,
     prizeLabel: "¿Qué sorteás? (opcional)", prizePh: "O escribí el tuyo…",
     // Los que más se sortean en un evento, en el orden en que se ofrecen.
@@ -905,8 +923,8 @@ export const T: Record<Lang, Dict> = {
     // --- Las páginas de lectura: juegos, historia y seguridad. Viven aparte de
     //     la herramienta: quien entra a sortear no tiene que leer nada antes.
     masTitle: "Para saber más",
-    masJuegosT: "Los doce juegos",
-    masJuegosB: "Carrera de llamas, chovena, trompo, piñata, Carnaval de Oruro, el sapo y seis más, con la captura de cada uno.",
+    masJuegosT: "Los diez juegos",
+    masJuegosB: "Carrera de llamas, chovena, trompo, piñata, Carnaval de Oruro, el sapo y cuatro más, con la captura de cada uno.",
     masHistoriaT: "De dónde sale el nombre",
     masHistoriaB: "Un tinkazo es una corazonada y un tincazo es un golpecito. El sorteo es las dos cosas.",
     masSeguridadT: "Cómo se puede romper",
@@ -939,7 +957,7 @@ export const T: Record<Lang, Dict> = {
     meetS2T: "Sellala antes de sortear",
     meetS2B: "Al sellarla, la lista queda cerrada. Si después alguien mete a otro o saca a uno, se nota.",
     meetS3T: "Elegí un juego",
-    meetS3B: "Doce juegos a pantalla completa: la carrera de llamas, el trompo, la piñata y más.",
+    meetS3B: "Diez juegos a pantalla completa: la carrera de llamas, el trompo, la piñata y más.",
     meetS4T: "Sorteá en pantalla grande",
     meetS4B: "La sala ve el sorteo entero. El ganador ya salió del número público: el juego solo lo cuenta.",
     meetS5T: "Compartí el resultado",
@@ -1020,7 +1038,7 @@ export const T: Record<Lang, Dict> = {
     navMas: "Más",
     ctaDemo: "Ver una demo",
     pjKicker: "El show",
-    pjT: "Doce juegos. Ninguno decide nada.",
+    pjT: "Diez juegos. Ninguno decide nada.",
     pjB: "Tocá uno y miralo sortear con una lista de ejemplo, sin cuenta. Cuando arranca la animación el ganador ya salió: todos cuentan el mismo sorteo.",
     pjVer: "Ver demo",
     confKicker: "Por qué creerle",
@@ -1154,7 +1172,7 @@ export const T: Record<Lang, Dict> = {
     cfCod: "El código, en GitHub →",
     navJuegos: "Juegos", navHistoria: "Historia", navSeguridad: "Seguridad",
     navPrecios: "Precios", navCodigo: "Código",
-    jgKicker: "Doce juegos",
+    jgKicker: "Diez juegos",
     jgTitle: "El sorteo se mira",
     jgLead: "Cuando arranca la animación, el ganador ya está decidido: salió del número público del faro. El juego solo lo cuenta. Cada uno pasa veinte comprobaciones antes de entrar, y la que importa es que el nombre en pantalla sea el que fijó el protocolo.",
     jgRaceN: "Carrera de llamas",
@@ -1289,7 +1307,7 @@ export const T: Record<Lang, Dict> = {
     sgLinkProto: "El protocolo ↗", sgLinkAmen: "Las amenazas ↗", sgLinkIssue: "Abrir un issue ↗",
     prTitle: "Precios", prNote: "Participar y verificar: gratis, siempre. Lo que se cobre se anuncia antes, en tu moneda o en cripto.",
     pr1t: "Gratis", pr1p: "$0 · comunidades, educación y ONG",
-    pr1b: "Los doce juegos y el enlace para que cualquiera compruebe. En mainnet la red la paga Tinkazo, hasta un límite al mes.",
+    pr1b: "Los diez juegos y el enlace para que cualquiera compruebe. En mainnet la red la paga Tinkazo, hasta un límite al mes.",
     pr2t: "Evento", pr2p: "desde US$ 29 · pronto",
     pr2b: "Para empresas: tu logo en el estadio y sin límite. Llave en mano, con alguien en la sala, desde US$ 125.",
     pr3t: "Anual", pr3p: "desde US$ 300 al año · pronto",
@@ -1340,9 +1358,9 @@ export const T: Record<Lang, Dict> = {
     vRound: "Ver la ronda pública ↗", vContract: "Ver el contrato ↗",
     vWorking: "Revisando el sorteo", vWorkingKicker: "Un segundo",
     vVerdictOkKicker: "Cuadra todo", vVerdictBadKicker: "Algo no cuadra",
-    vVerdictOk: "El sorteo es legítimo",
+    vVerdictOk: "El sorteo cuadra",
     vVerdictOkDetail: "Rehicimos el sorteo desde cero acá mismo y dio el mismo nombre. La lista se selló antes de que existiera el número, así que nadie pudo elegir el resultado.",
-    vVerdictOkChain: "El sorteo es legítimo y está en Stellar",
+    vVerdictOkChain: "El sorteo cuadra y está en Stellar",
     vVerdictOkChainDetail: "Lo rehicimos acá y coincide con lo que quedó grabado en el contrato. Ese registro sigue ahí aunque Tinkazo desaparezca, y cualquiera puede leerlo.",
     vVerdictOkChainDetailTest: "Lo rehicimos acá y coincide con lo que quedó grabado en el contrato. Está en testnet, la red de pruebas de Stellar, que se borra entera el 16 de diciembre de 2026: hasta entonces, cualquiera puede leer ese registro.",
     vChainMissing: "el contrato no tiene ese sorteo",
@@ -1557,7 +1575,7 @@ export const T: Record<Lang, Dict> = {
     s2t: "Seal the list",
     s2b: "Sealing stamps the list with a short summary of the list (its fingerprint) and a time. If someone slips in a friend or drops a name later, the fingerprint changes and everybody sees it. And the fingerprint is recorded on Stellar.",
     s3t: "Pick a game and draw",
-    s3b: "One of the twelve games, full screen. By the time the animation starts, the public number has already picked the winner: the animation just tells it.",
+    s3b: "One of the ten games, full screen. By the time the animation starts, the public number has already picked the winner: the animation just tells it.",
     p1: "Participants", p2: "Sealed list", p3: "The draw",
     srcPaste: "Paste list", srcCsv: "Upload CSV", srcLuma: "From Luma", srcMeetup: "Meetup · soon",
     srcLumaTip: "Export your Luma event's guest list as CSV",
@@ -1685,6 +1703,7 @@ export const T: Record<Lang, Dict> = {
     impNoNames: (f) => (f ? `"${f}" has no names: the list was left as it was.` : "What you pasted has no names: the list was left as it was."),
     impNotText: (f) => `"${f}" isn't a text file. If it's a spreadsheet, save it as CSV and upload it again. The list was left as it was.`,
     impHeaderOut: (h) => `"${h}" is the column header: it doesn't go into the draw.`,
+    impInvisibles: (n) => `Removed invisible characters from ${n === 1 ? "1 name" : `${n} names`}: they don't show, and with them the same name could get in twice.`,
     impSkipped: (n, lines) => (n === 1 ? `1 row couldn't be read (line ${lines}) and was left out.` : `${n} rows couldn't be read (lines ${lines}) and were left out.`),
     impSkippedHint: "It's usually a comma without quotes. Fix it in the file and upload it again, or add that name by hand.",
     impSkippedShort: (n) => (n === 1 ? "1 row couldn't be read" : `${n} rows couldn't be read`),
@@ -1710,8 +1729,13 @@ export const T: Record<Lang, Dict> = {
     cTelGo: ["THE CABLE CAR IS OFF!", "Up we go!", "Off the ground!"],
     cTelPass: (k) => pick([`Straight through station ${k}!`, `Nobody gets off at ${k}!`, `Station ${k}, no stop!`]),
     cTelUp: ["Still climbing!", "Higher still!", "What a view!"],
-    cTelLast: ["TWO LEFT!", "Last station!", "One by one, here!"],
+    cTelLast: (left) =>
+      left <= 2 ? pick(["TWO LEFT!", "Last station!"]) : pick(["Last station!", "One by one, here!", `Last station! ${left} left`]),
     cTelOff: (n) => pick([`${n} gets off!`, `${n} stays on the platform!`, `End of the line for ${n}!`]),
+    cTelOffN: (ns, more) => {
+      const all = more > 0 ? [...ns, `${more} more`] : ns;
+      return pick([`${joinList(all, "and")} get off!`, `End of the line for ${joinList(all, "and")}!`]);
+    },
     cTelPrize: (n) => pick([`${n} gets off, with a prize!`, `${n} steps off with a prize!`]),
     cTelClimb: ["Climbing alone!", "Almost there!", "Nobody breathe!"],
     cTelDock: ["IT MADE THE TOP!", "TOP OF THE LINE!", "DOORS OPENING!"],
@@ -1963,6 +1987,7 @@ export const T: Record<Lang, Dict> = {
     gameLabel: "Game", gameRace: "Llama race", gameStellar: "Stellar Constellation",
     // --- El Trueque: una feria de puestos. Cada uno acepta un producto y da otro; un encargo cambia de mano hasta quien lo espera.
     gameTrueque: "El Trueque", jgTruequeN: "El Trueque",
+    jgTruequeB: "The barter fair: each stall takes one product and gives another in return. The order leaves carrying one, changes hands along the way and arrives carrying another at whoever was waiting for it, and at the end the route lights up with the names of everyone who traded. That is how a payment travels on Stellar. Best from twenty to a hundred and twenty, and up to two hundred.",
     gcTrueque: "Each stall takes one product and gives another in return. Whoever receives the order wins.",
     gcTruequeMany: "Each prize is an order that changes hands until it reaches whoever is waiting for it.",
     loreTruequeQ: "Where is trueque still done?",
@@ -2032,6 +2057,11 @@ export const T: Record<Lang, Dict> = {
     "rec.teleferico.alto": "With this many people, each group still has its cabin.",
     "rec.teleferico.largo": (n: number, _min: number, max: number) => `With ${n}, it isn't offered: it goes up to ${max}.`,
     "rec.teleferico.corto": (_n: number, min: number) => `Under ${min}, the stops drag on.`,
+    "rec.trueque.ideal": "Everyone waits for their product, and the whole room watches where the order goes.",
+    "rec.trueque.bajo": "With few stalls, the fair looks small.",
+    "rec.trueque.alto": "With this many people, everyone can tell by their product whether they're still in.",
+    "rec.trueque.largo": (n: number, _min: number, max: number) => `With ${n}, it isn't offered: it goes up to ${max}.`,
+    "rec.trueque.corto": (_n: number, min: number) => `Under ${min}, the route is three trades or fewer.`,
     "rec.wheel.largo": (n: number, _min: number, max: number) => `With ${n}, the wheel doesn't read: it reaches ${max} names.`,
     prizeLabel: "What are you giving away? (optional)", prizePh: "Or type your own…",
     prizeSugeridos: ["T-shirt", "Book", "Ticket", "Stickers", "Water bottle", "Welcome kit", "Gift card", "License"],
@@ -2140,8 +2170,8 @@ export const T: Record<Lang, Dict> = {
     moreLink: "Pricing and how it works inside",
     backHome: "Back to the draw",
     masTitle: "More about it",
-    masJuegosT: "The twelve games",
-    masJuegosB: "Llama race, chovena, spinning tops, piñata, Oruro Carnival, Sapo and six more, with a shot of each one.",
+    masJuegosT: "The ten games",
+    masJuegosB: "Llama race, chovena, spinning tops, piñata, Oruro Carnival, Sapo and four more, with a shot of each one.",
     masHistoriaT: "Where the name comes from",
     masHistoriaB: "A tinkazo is a hunch and a tincazo is a flick. A draw is both.",
     masSeguridadT: "Where it can fail",
@@ -2174,7 +2204,7 @@ export const T: Record<Lang, Dict> = {
     meetS2T: "Seal it before the draw",
     meetS2B: "Once sealed, the list is closed. If someone adds or removes a name later, it shows.",
     meetS3T: "Pick a game",
-    meetS3B: "Twelve full-screen games: the llama race, spinning tops, the piñata and more.",
+    meetS3B: "Ten full-screen games: the llama race, spinning tops, the piñata and more.",
     meetS4T: "Draw on the big screen",
     meetS4B: "The room sees the whole draw. The winner already came out of the public number: the game only tells it.",
     meetS5T: "Share the result",
@@ -2255,7 +2285,7 @@ export const T: Record<Lang, Dict> = {
     navMas: "More",
     ctaDemo: "Watch a demo",
     pjKicker: "The show",
-    pjT: "Twelve games. None of them decides anything.",
+    pjT: "Ten games. None of them decides anything.",
     pjB: "Tap one and watch it draw a sample list, no account needed. When the animation starts the winner is already out: they all tell the same draw.",
     pjVer: "Watch demo",
     confKicker: "Why believe it",
@@ -2389,7 +2419,7 @@ export const T: Record<Lang, Dict> = {
     cfCod: "The code, on GitHub →",
     navJuegos: "Games", navHistoria: "Story", navSeguridad: "Security",
     navPrecios: "Pricing", navCodigo: "Code",
-    jgKicker: "Twelve games",
+    jgKicker: "Ten games",
     jgTitle: "A draw you watch",
     jgLead: "When the animation starts, the winner is already decided: it came out of the beacon's public number. The game only tells it. Each one passes twenty checks before it ships, and the one that matters is that the name on screen is the one the protocol set.",
     jgRaceN: "Llama race",
@@ -2523,7 +2553,7 @@ export const T: Record<Lang, Dict> = {
     sgLinkProto: "The protocol ↗", sgLinkAmen: "The threats ↗", sgLinkIssue: "Open an issue ↗",
     prTitle: "Pricing", prNote: "Taking part and checking: always free. Anything charged is announced beforehand, in your currency or in crypto.",
     pr1t: "Free", pr1p: "$0 · communities, education and nonprofits",
-    pr1b: "All twelve games and a link anyone can check. On mainnet Tinkazo pays the network, up to a monthly limit.",
+    pr1b: "All ten games and a link anyone can check. On mainnet Tinkazo pays the network, up to a monthly limit.",
     pr2t: "Event", pr2p: "from US$ 29 · soon",
     pr2b: "For companies: your logo in the stadium, no limits. Turnkey, with someone in the room, from US$ 125.",
     pr3t: "Annual", pr3p: "from US$ 300 a year · soon",
@@ -2574,9 +2604,9 @@ export const T: Record<Lang, Dict> = {
     vRound: "See the public round ↗", vContract: "See the contract ↗",
     vWorking: "Checking the draw", vWorkingKicker: "One second",
     vVerdictOkKicker: "It all adds up", vVerdictBadKicker: "Something doesn't add up",
-    vVerdictOk: "This draw is legit",
+    vVerdictOk: "This draw checks out",
     vVerdictOkDetail: "We ran the draw again from scratch right here and got the same name. The list was sealed before the number existed, so nobody could pick the result.",
-    vVerdictOkChain: "This draw is legit and it's on Stellar",
+    vVerdictOkChain: "This draw checks out and it's on Stellar",
     vVerdictOkChainDetail: "We ran it again here and it matches what the contract recorded. That record stays there even if Tinkazo disappears, and anyone can read it.",
     vVerdictOkChainDetailTest: "We ran it again here and it matches what the contract recorded. It is on testnet, Stellar's test network, which gets wiped on December 16, 2026: until then, anyone can read that record.",
     vChainMissing: "the contract has no such draw",

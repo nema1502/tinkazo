@@ -197,6 +197,8 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
   let panelRows: PanelRow[] = [];
   let panelFor = -1;
   let lugarPintado = false;
+  /** Dónde empieza la placa de los grupos en el celular: la rueda se encuadra encima. */
+  let panelTop = 0;
 
   function discGraphics(R: number, u: number, withNames: boolean): Container {
     const c = new Container();
@@ -245,7 +247,10 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
         : Math.min(40 * k, (sh * 0.62 - gap * (filas - 1)) / filas),
     );
     const x0 = alto ? (sw - (2 * colW + gap)) / 2 : 40 * k;
-    const y0 = alto ? G.cy + G.R + 14 * k : G.cy - (filas * rh + gap * (filas - 1)) / 2;
+    // En el celular va pegada a la caja del relator, y no pegada a la rueda: así
+    // le deja a la rueda todo el lugar de arriba cuando la cámara la encuadra.
+    const y0 = alto ? sh - S.bottom() - 10 * k - (filas * rh + gap * (filas - 1)) : G.cy - (filas * rh + gap * (filas - 1)) / 2;
+    panelTop = y0;
     const barW = 10 * k;
     panel = new Container();
     panel.visible = false;
@@ -623,11 +628,43 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     return -(Math.sqrt(r * r - dx * dx) + below) / z;
   }
 
+  /**
+   * Dónde mirar para que la rueda entre entera entre dos rayas de la pantalla,
+   * `yTop` arriba y `yBot` abajo, centrada entre las dos, sin salirse por los
+   * costados y sin acercarse más de `zMax`. `conPoste`: con la flecha y su
+   * poste, que van encima del aro. Devuelve el punto del mundo que va al centro
+   * de la pantalla y el acercamiento, como los pide `cam.lookAt`.
+   */
+  function enCaja(yTop: number, yBot: number, zMax: number, conPoste: boolean): { x: number; y: number; z: number } {
+    const u = G.u, R = G.R, sw = S.sw(), sh = S.sh();
+    const arriba = conPoste ? R + 54 * u : R;
+    // El aro y su sombra, corrida 10 a la derecha y 12 hacia abajo.
+    const abajo = R + 12 * u;
+    const z = Math.max(0.3, Math.min(zMax, (yBot - yTop) / (arriba + abajo), (sw - 16 * u) / (2 * R + 10 * u)));
+    const cy = yTop + (yBot - yTop - z * (arriba + abajo)) / 2 + z * arriba;
+    // A lo ancho, donde la deja la disposición, acercada hacia el centro como
+    // la acerca la cámara, y sin cortarse contra los bordes.
+    const media = z * R;
+    const cx = Math.min(Math.max(sw / 2 + (G.cx - sw / 2) * z, media + 8 * u), sw - media - 18 * u);
+    return { x: (sw / 2 - cx) / z, y: (sh / 2 - cy) / z, z };
+  }
+
   /** La cámara: pegada al cubo al armar, abierta al girar, encima del puntero al frenar. */
   function direct(): void {
     const rest = restView();
     const R = G.R;
+    const u = G.u;
     const ptr = { x: 0, y: -R * 0.78 };
+    const cajaArriba = S.sh() - S.bottom() - 10 * u;
+    // En el celular, cuando frena, la rueda entera entre lo de arriba (la placa
+    // del nombre, o la barra si los nombres van en la placa de los grupos) y lo
+    // de abajo (la caja del relator, o la placa de los grupos). Acercada sobre la
+    // flecha se cortaba por los costados y por abajo, y la caja le tapaba la
+    // parte de abajo (evaluador visual, 21 de octubre de 2026). En la pantalla
+    // ancha el acercamiento sigue cortando la rueda a propósito.
+    const celu = G.alto
+      ? enCaja(grupos ? S.top() + 8 * u : plateBox.y + plateBox.h + 12 * u, grupos ? panelTop - 10 * u : cajaArriba, closeZoom(), true)
+      : null;
     if (tAll < T_WIND) {
       const p = tAll / T_WIND;
       cam.lookAt(rest.x * p, rest.y * p, 1.9 - 0.9 * p, 3);
@@ -636,15 +673,25 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     } else if (tAll < T_CREEP) {
       const p = (tAll - T_BRAKE) / (T_CREEP - T_BRAKE);
       const e = p * p;
-      cam.lookAt(rest.x * (1 - e) + ptr.x * e * 0.6, rest.y * (1 - e) + ptr.y * e * 0.6, 1 + 0.45 * e, 2);
+      if (celu) cam.lookAt(rest.x + (celu.x - rest.x) * e, rest.y + (celu.y - rest.y) * e, 1 + (celu.z - 1) * e, 2);
+      else cam.lookAt(rest.x * (1 - e) + ptr.x * e * 0.6, rest.y * (1 - e) + ptr.y * e * 0.6, 1 + 0.45 * e, 2);
     } else if (tAll < T_CROWN) {
-      const close = closeZoom();
-      const z = tAll >= T_HOLD ? close : 1.6 + (close - 1.6) * ((tAll - T_CREEP) / (T_HOLD - T_CREEP));
-      cam.lookAt(ptr.x, Math.min(ptr.y, underPlate(z)), z, 3.5);
+      if (celu) {
+        cam.lookAt(celu.x, celu.y, celu.z, 3.5);
+      } else {
+        const close = closeZoom();
+        const z = tAll >= T_HOLD ? close : 1.6 + (close - 1.6) * ((tAll - T_CREEP) / (T_HOLD - T_CREEP));
+        cam.lookAt(ptr.x, Math.min(ptr.y, underPlate(z)), z, 3.5);
+      }
     } else {
-      // Con el ganador, la rueda baja y se aleja un poco: el cartel sale arriba
-      // al centro y tapaba el gajo ganador, que siempre queda bajo la flecha.
-      cam.lookAt(rest.x, rest.y - S.sh() * (G.alto ? 0.16 : 0.17), G.alto ? 0.96 : 0.84, 2.2);
+      // Con el ganador, la rueda entera entre el cartel, que sale arriba al
+      // centro, y la caja del relator: el gajo ganador queda arriba, bajo la
+      // flecha, y no lo tapa el cartel. Antes bajaba un 17 % de la pantalla y
+      // la caja le tapaba la parte de abajo (evaluador visual, 21 de octubre de
+      // 2026). Llega en un segundo: el cartel dura tres, y al ritmo de antes la
+      // rueda recién terminaba de abrirse cuando el estadio se cerraba.
+      const c = enCaja(S.placaBajo(winners.length) + 10 * u, cajaArriba, G.alto ? 0.96 : 0.84, false);
+      cam.lookAt(c.x, c.y, c.z, 6);
     }
   }
 

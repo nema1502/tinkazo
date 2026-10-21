@@ -2,13 +2,13 @@
 
 Una feria de puestos. Cada persona tiene el suyo: acepta un producto y da otro a cambio. Un encargo (un atado de aguayo, un q'epi) sale de un origen con un producto y va de puesto en puesto hasta llegar a quien lo espera. Cada puesto cambia una sola vez, y el camino no pasa de seis cambios. Gana quien recibe el encargo, y la ruta del final muestra el nombre de cada uno que lo hizo posible.
 
-**Identificador:** `trueque` · **Probalo:** `?demo=trueque` · **Agregado:** 20 de octubre de 2026, fuera del selector (etapa D).
+**Identificador:** `trueque` · **Probalo:** `?demo=trueque` · **Agregado:** 20 de octubre de 2026; entró al selector el 21 de octubre, en el lugar del Aguayo y la Constelación.
 
 ## Por qué existe
 
 Es la fusión de Aguayo y Constelación Stellar (auditoría de los juegos, sección 7.6). El aguayo tenía la mejor idea cultural del catálogo, pero sus hilos de "confianza" se deshacían en vez de sostener. La constelación tenía la idea más Stellar, un pago que busca camino, pero dibujada con estrellas anónimas y veinte saltos, y un pago de Stellar tiene como máximo cinco activos intermedios. El Trueque se queda con las dos ideas, contadas bien.
 
-Todavía no está en el selector: los dos juegos que reemplaza siguen ahí. Entrar al selector y sacar a esos dos es la etapa D.
+Entró al selector el 21 de octubre de 2026, y los dos que reemplaza salieron de él: siguen abriendo con `?demo=pasanaku` y `?demo=stellar`. Con la lista sellada, el selector lo recomienda de 12 a 200 personas, y lo pone entre los ideales de 20 a 120 (auditoría, sección 6).
 
 ## Cómo se juega
 
@@ -63,7 +63,7 @@ En el juego no aparece ninguna palabra técnica. Lo que cada cosa es, por dentro
 - **Liquidez:** un callejón sin salida es falta de liquidez: no hay quien cambie lo que lleva.
 - **Red:** puestos que parecían lejos están a tres cambios.
 
-En la página de juegos, para quien quiera, la frase sería "Así viaja un pago en Stellar". Todavía no está: la página de juegos no se toca en esta etapa.
+En la página de juegos, para quien quiera, la tarjeta del juego lo dice: "Así viaja un pago en Stellar".
 
 ## La cultura adentro
 
@@ -80,8 +80,6 @@ Los productos del juego son los de la feria boliviana en general: el altiplano (
 ## Lo que no va
 
 - **La huella tejida del aguayo de la lista** (auditoría, sección 8.5): el dibujo de la huella de la lista como un aguayo único. No se hizo en este juego. Es una pieza aparte, de la página de la lista.
-- **La entrada al selector y la salida de Aguayo y Constelación:** es la etapa D.
-- **La página de juegos:** la frase "Así viaja un pago en Stellar" y la captura del juego.
 - **El golpe del ganador** (auditor de mezcla): la última corrida pasó (+5,2 LU), pero el medidor no es estable en la máquina de la prueba: con builds parecidos, el mismo juego dio entre -59 y +6 LU, y dos juegos de control dieron valores imposibles (chovena 96 LU, sapo -57 LU). Hasta que el auditor ubique el cartel en el audio de forma confiable, ese número no prueba nada.
 - **El nombre del encargo en celular:** cuando un nombre queda justo encima del atado, tapa la etiqueta del producto (se ve en la captura de 390 px, tema claro). El atado en su origen también queda recortado en el borde izquierdo del celular.
 
@@ -96,6 +94,6 @@ node scripts/audit-sound.mjs trueque
 node scripts/audit-mezcla.mjs trueque
 ```
 
-`audit-game` comprueba el selector (7) y el nombre en el selector (14): como el juego está fuera del selector, esas dos comprobaciones fallan a propósito hasta la etapa D. Con eso, 18 de 20.
+`audit-game` comprueba el selector (7) y el nombre en el selector (14): mientras el juego estuvo fuera del selector, esas dos fallaban a propósito y daba 18 de 20. Desde que entró (21 de octubre de 2026), 20 de 20.
 
 Las pruebas del plan: `pnpm test` (`src/games/pixi/trueque-plan.test.ts`).

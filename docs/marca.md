@@ -172,24 +172,22 @@ El sitio está en español boliviano con voseo, y en inglés neutro. No hay un t
 
 Dentro de los juegos el texto es de relator de partido: mayúsculas, gritos, "¡NO RESPIRA NADIE!". Eso vive solo ahí. No se filtra a la página ni a una presentación.
 
-## Los doce juegos
+## Los diez juegos
 
-Cada uno tiene su color dominante, útil si una diapositiva los muestra. Ocho salen de la cultura boliviana y latinoamericana.
+Los del selector, en su orden. Cada uno tiene su color dominante, útil si una diapositiva los muestra. Ocho salen de la cultura boliviana y latinoamericana.
 
 | Juego | Color | En una frase |
 |---|---|---|
-| Constelación Stellar | Morado y amarillo | Un pago que salta de estrella en estrella hasta encontrar ruta |
-| Aguayo | Los cinco, en franjas | Un aguayo que se cierra hasta que queda uno en el nudo |
-| Teleférico | Los de las líneas, sobre un atardecer | Un convoy que sube y en cada estación se baja la mitad |
-| Tómbola | Naranja y amarillo, con las bolas de los cinco | El bombo de la kermés: la bola que sale es la ganadora |
 | Carrera de llamas | Naranja y magenta | Ocho carriles por la cordillera |
-| Chovena | Tierra colorada y tipoy blanco con las cintas de los cinco | La rueda chiquitana de la mano: cuando se corta la música, el que trastabilla sale |
-| Ruleta | Los cinco, en gajos | La de siempre, pero que se ve girar con dos personas |
-| Trompo | Tierra, con trompos de los cinco | El ruedo de tiza: chocan y se caen hasta el mano a mano |
-| Piñata | Los cinco, en conos | Cada palo tira caramelos; el último que queda adentro gana |
-| Carnaval de Oruro | Rojo de las máscaras y amarillo, de noche | Una comparsa de la Diablada que se queda cuadra por cuadra hasta el Socavón |
 | Sapo | Madera, con la argolla amarilla y los aros de los cinco | La rana del cajón: la última argolla cae en el agujero de quien gana |
-| ¿Quién es? | Cartas de los cinco sobre tinta | Una letra por turno da vuelta las cartas hasta que queda una |
+| Trompo | Tierra, con trompos de los cinco | El ruedo de tiza: chocan y se caen hasta el mano a mano |
+| Chovena | Tierra colorada y tipoy blanco con las cintas de los cinco | La rueda chiquitana de la mano: cuando se corta la música, el que trastabilla sale |
+| Piñata | Los cinco, en conos | Cada palo tira caramelos; el último que queda adentro gana |
+| Ruleta | Los cinco, en gajos | La de siempre, pero que se ve girar con dos personas |
+| De pie | Cartas de los cinco, con la pregunta en amarillo | Toda la sala de pie: en cada pregunta sobre el nombre se sientan los que no siguen |
+| El Trueque | Tierra de feria, con los toldos de los ocho productos y la ruta en dorado | Un encargo que cambia de mano en mano hasta llegar a quien lo espera |
+| Teleférico | Los de las líneas, sobre un atardecer | Un convoy de cabinas por grupos: en cada estación baja un grupo entero |
+| Carnaval de Oruro | Rojo de las máscaras y amarillo, de noche | Una comparsa de la Diablada que se queda cuadra por cuadra hasta el Socavón |
 
 ## Lo boliviano
 
@@ -214,7 +212,7 @@ Todos medidos, no estimados. Si se actualizan, se actualizan acá también.
 | Tests del protocolo en TypeScript | 27 |
 | Tests de TypeScript en total | 196 |
 | Comprobaciones por juego del auditor | 20 |
-| Juegos | 12 |
+| Juegos | 10 |
 | Espera entre sellar y sortear, modo libre | 10 segundos |
 | Espera si el sorteo se ancla en Stellar | 45 segundos |
 | Dependencias en ejecución | 3 (RPC de Stellar, relays de drand, la wallet del organizador) |

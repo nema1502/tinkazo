@@ -20,8 +20,8 @@ describe("index.html, la herramienta", () => {
     const ids = [
       "btn-freeze", "btn-draw", "btn-again-sin", "btn-again-nueva", "btn-proof", "btn-grande", "btn-espera", "btn-sample",
       "sec-frozen", "sec-draw", "sec-participants", "winner-box", "winner-cards", "again-row", "again-note", "wait-box", "wait-left",
-      "st-skip", "stadium", "g-race", "g-chovena", "g-trompo", "g-pinata", "g-oruro", "g-wheel", "g-teleferico",
-      "g-pasanaku", "g-stellar", "g-sapo", "g-quien", "ta", "nw", "names", "pace",
+      "st-skip", "stadium", "g-race", "g-sapo", "g-trompo", "g-chovena", "g-pinata", "g-wheel", "g-quien",
+      "g-trueque", "g-teleferico", "g-oruro", "ta", "nw", "names", "pace",
       // Lo que sigue (siguiente.ts): el indicador de pasos y la barra.
       "pasos", "siguiente", "sig-paso", "sig-btn", "sig-aviso", "juego-actual", "btn-cambiar", "gamepick", "again-acciones",
     ];

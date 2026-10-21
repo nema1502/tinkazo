@@ -4,6 +4,7 @@ import { canonicalList } from "../protocol/canonical";
 import { type Dict, T, getLang, onLangChange } from "../i18n";
 import { decodeText, dropListHeader, parseTable } from "./csv";
 import { type ImportResult, type ImportState, initialState, openImporter } from "./importer";
+import { stripInvisibles, stripInvisiblesByLine } from "../invisibles";
 
 /** Lista canónica a partir del textarea (protocolo §1). */
 export function parseNames(): string[] {
@@ -44,13 +45,22 @@ export function bindParticipants(): void {
   // importar. Y una columna copiada de una planilla con su encabezado entra
   // sin el encabezado. Solo cuando lo pegado es toda la lista: con algo ya
   // escrito, pegar agrega como siempre, y una lista suelta se pega igual que
-  // antes, y se puede deshacer.
+  // antes, y se puede deshacer. Lo que se pega como siempre entra sin los
+  // caracteres que no se ven, y si traía alguno, lo dice.
   ta.addEventListener("paste", (e) => {
     const text = e.clipboardData?.getData("text/plain") ?? "";
+    if (app.frozen || !text.trim()) return;
     const toda = !ta.value.trim() || (ta.selectionStart === 0 && ta.selectionEnd === ta.value.length);
-    if (app.frozen || !toda || !text.trim() || !pideImportar(text)) return;
+    if (toda && pideImportar(text)) {
+      e.preventDefault();
+      loadFile(text, "");
+      return;
+    }
+    const limpio = stripInvisiblesByLine(text);
+    if (limpio.text === text) return;
     e.preventDefault();
-    loadFile(text, "");
+    insertar(ta, limpio.text);
+    if (limpio.lines) avisar((L) => L.impInvisibles(limpio.lines));
   });
   // El aviso vive desde el principio, vacío: un lector de pantalla anuncia los
   // cambios de una región que ya estaba, no de una que aparece con el texto.
@@ -134,12 +144,18 @@ export function loadFile(raw: string, fileName = "lista.csv"): void {
     return;
   }
   const { text, header } = dropListHeader(raw);
-  if (canonicalList(text).length === 0) {
+  // Los caracteres que no se ven salen antes de sellar (src/invisibles.ts).
+  const limpio = stripInvisiblesByLine(text);
+  if (canonicalList(limpio.text).length === 0) {
     avisar((L) => L.impNoNames(fileName));
     return;
   }
-  setList(text);
-  if (header) avisar((L) => L.impHeaderOut(header));
+  setList(limpio.text);
+  if (!header && !limpio.lines) return;
+  avisar((L) =>
+    [header ? L.impHeaderOut(stripInvisibles(header)) : "", limpio.lines ? L.impInvisibles(limpio.lines) : ""]
+      .filter(Boolean)
+      .join(" "));
 }
 
 /** ¿Lo pegado es una tabla o trae el encabezado de la columna? Si no, se pega como siempre. */
@@ -148,11 +164,26 @@ function pideImportar(text: string): boolean {
   return (parsed !== null && parsed.columns.length > 1) || dropListHeader(text).header !== null;
 }
 
+/**
+ * Escribe lo pegado, ya limpio, donde estaba el cursor. Con `execCommand`
+ * queda en el historial del cuadro y se deshace con Ctrl+Z, como cualquier
+ * pegar; donde no existe, se escribe a mano y se avisa del cambio igual.
+ */
+function insertar(ta: HTMLTextAreaElement, text: string): void {
+  const plano = text.replace(/\r\n?/g, "\n");
+  ta.focus();
+  if (document.execCommand("insertText", false, plano)) return;
+  ta.setRangeText(plano, ta.selectionStart, ta.selectionEnd, "end");
+  ta.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 /** Lo que eligió en la ventana, al texto, con un resumen para volver a abrirla. */
 function apply(r: ImportResult): void {
   lastResult = r;
   setList(r.names.join("\n"), false);
   showSummary();
+  // `setList` calla los avisos: el de los invisibles va después.
+  if (r.invisibles) avisar((L) => L.impInvisibles(r.invisibles));
 }
 
 function showSummary(): void {
