@@ -76,7 +76,7 @@ Desde el 20 de octubre de 2026 el show se mira en cuatro lugares: un proyector o
 - **Contraste.** Cada texto sobre el fondo animado pasa 4,5 a 1, o lleva un contorno oscuro. Los puestos y los dorsales de la carrera van en crema con contorno. Las etiquetas de los que no ganaron casi no se apagan (0,95, no más): con menos, el nombre no llega a 4,5 a 1 y en Zoom se pierde. El apagado de la tabla llega a 0,75.
 - **Sin destellos.** Ninguno pasa de tres cambios fuertes de luminosidad por segundo (WCAG 2.3.1). `scripts/audit-pantalla.mjs` lo mide con la pantalla entera, a 64 cuadros por segundo.
 
-**Modo para compartir.** El botón "Para compartir" está en la fila de ajustes del sorteo, junto a sonido y música. Prendido, los chips llevan un 20 % más de letra y un contorno más grueso, los nombres del cartel crecen un 20 % y cae la mitad del papel picado. Se recuerda en la pestaña (`sessionStorage`, clave `tinkazo.compartir`); `?compartir=1` lo prende al abrir. Lo que se elige en el sorteo vale para el próximo show: no cambia uno que ya corre. No cambia el ganador, el ritmo ni el orden de los juegos.
+**Modo para compartir.** El botón "Para compartir" está en la fila de ajustes del sorteo, junto a sonido y música. Prendido, los chips llevan un 20 % más de letra y un contorno más grueso, los nombres del cartel crecen un 20 % y cae más de la mitad del papel picado (70 tiras en lugar de 180). Se recuerda en la pestaña (`sessionStorage`, clave `tinkazo.compartir`); `?compartir=1` lo prende al abrir. Lo que se elige en el sorteo vale para el próximo show: no cambia uno que ya corre. No cambia el ganador, el ritmo ni el orden de los juegos.
 
 **Zoom de emoción** (`camera.ts` y `zoom-emocion.ts`). Un juego le pide a la cámara dos cosas:
 
