@@ -56,15 +56,17 @@ import { SAPO_MAX as SAPO_CAP } from "./games/pixi/sapo-plan";
 
 /**
  * El juego que de verdad se cuenta: si el elegido no aguanta tantos nombres,
- * otro que sí. La ruleta pasados WHEEL_MAX va a la tómbola; el Sapo con más de
- * SAPO_MAX ganadores, a la carrera. No altera quién ganó: el juego solo narra.
+ * otro que sí. La ruleta pasados WHEEL_MAX no se juega: el selector ya cambió el
+ * juego al sellar (el primero que encaja, `ui/recomendar.ts`), y acá queda la
+ * red para quien llegue por otro camino. El Sapo con más de SAPO_MAX ganadores,
+ * a la carrera. No altera quién ganó: el juego solo narra.
  *
  * `names` y `winners` son opcionales: el Sapo mira cuántos ganadores hay.
  */
 export function playableGame(game: Game, people: number, _names?: readonly string[], winners?: readonly number[]): Game {
-  // La ruleta pasa a la tómbola, que muestra a todos con su número: la
-  // carrera ponía ocho en pista y dejaba afuera al resto (revisiones del 16
-  // de octubre de 2026).
+  // Si la ruleta llega acá con más gente, va a la tómbola, que muestra a todos
+  // con su número: la carrera ponía ocho en pista y dejaba afuera al resto
+  // (revisiones del 16 de octubre de 2026).
   if (game === "wheel" && people > WHEEL_MAX) return "tombola";
   if (game === "sapo" && (winners?.length ?? 1) > SAPO_CAP) return "race";
   return game;
