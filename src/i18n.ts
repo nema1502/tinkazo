@@ -84,6 +84,7 @@ export interface Dict {
   cSapNear: (n: string) => string;
   cSapNext: (k: number, of: number) => string;
   cSapDone: (k: number) => string;
+  cSapMouth: string[];
   cSapTally: (k: number, of: number) => string;
   cQualStart: (n: number) => string;
   cQualLeft: (n: number) => string;
@@ -487,6 +488,7 @@ export const T: Record<Lang, Dict> = {
     cPinLeft: "ADENTRO",
     // --- Sapo: la rana del medio, un agujero por nombre y una argolla que se lanza.
     gameSapo: "Sapo",
+    cSapMouth: ["¡La rana se la tragó y la escupió!", "¡Croac! ¡Se la tragó y la escupió!"],
     cSapHang: ["¡Se arma la mesa!", "¡La rana en su lugar!", "¡Cada nombre tiene su agujero!"],
     cSapCount: (n) => `¡${n} agujeros, uno por nombre!`,
     cSapThrow: ["¡Ahí va la argolla!", "¡Tiro!", "¡Se lanza la argolla!"],
@@ -1629,6 +1631,7 @@ export const T: Record<Lang, Dict> = {
     cPinLeft: "INSIDE",
     // --- Sapo: the frog in the middle, one hole per name and a ring to toss.
     gameSapo: "Sapo",
+    cSapMouth: ["The frog swallowed it and spat it out!", "Ribbit! Swallowed, then spat out!"],
     cSapHang: ["The table is going up!", "Frog in place!", "Every name gets a hole!"],
     cSapCount: (n) => `${n} holes, one per name!`,
     cSapThrow: ["Here goes the ring!", "Toss!", "The ring flies!"],

@@ -89,7 +89,16 @@ export interface Throw {
   rimSlot?: number;
   /** Where a non-hit token ends up after it rolls or pops off the table. */
   exit: Point;
+  /**
+   * Solo en un `miss` que entra a la boca de la rana (una vez por show): la rana
+   * la traga, croa y la escupe sobre el aro de un agujero libre, y de ahí rueda
+   * afuera. `landing` y `exit` quedan en la boca, así que nunca cae en un agujero.
+   */
+  boca?: { spit: Point; rimSlot: number; exit: Point };
 }
+
+/** La boca de la rana, en unidades de la mesa: donde pega la argolla que entra. */
+export const MOUTH: Point = { x: 0, y: FROG_R * 0.15 };
 
 export interface PlanOpts {
   /** Misses before the last winner's final throw. */
@@ -210,7 +219,7 @@ function planHit(L: Layout, slot: number, rng: () => number): Point {
  * misses the winner sat right between them, eight seconds early. Now where
  * the ring dances says nothing about who wins.
  */
-export function planThrows(n: number, winnerSlots: readonly number[], rng: () => number, opts: PlanOpts): Throw[] {
+export function planThrows(n: number, winnerSlots: readonly number[], rng: () => number, opts: PlanOpts, boca = false): Throw[] {
   const L = holeLayout(n);
   const holes = L.holes.length;
   if (winnerSlots.length === 0) throw new RangeError("planThrows: at least one winner is needed");
@@ -242,6 +251,22 @@ export function planThrows(n: number, winnerSlots: readonly number[], rng: () =>
     const landing = planHit(L, slot, rng);
     out.push({ kind: "hit", turn, landing, targetSlot: slot, exit: landing });
   });
+  // La boca: un fallo cualquiera, de cualquier arco, entra a la boca de la rana.
+  // Se elige al final, con el mismo azar, así que el resto del guion no cambia.
+  // Lo que escupe cae sobre el aro de un agujero que todavía no ganó nadie (el
+  // del ganador también, a veces): como un casi, sin nombrar a nadie.
+  if (boca) {
+    const fallos = out.flatMap((t, i) => (t.kind === "miss" ? [i] : []));
+    if (fallos.length) {
+      const i = fallos[Math.floor(rng() * fallos.length)] as number;
+      const t = out[i] as Throw;
+      const ganados = new Set(winnerSlots.slice(0, t.turn));
+      const libres = Array.from({ length: holes }, (_, s) => s).filter((s) => !ganados.has(s));
+      const rimSlot = libres[Math.floor(rng() * libres.length)] as number;
+      const spit = planNear(L, rimSlot, rng);
+      out[i] = { ...t, landing: { ...MOUTH }, exit: { ...MOUTH }, boca: { spit, rimSlot, exit: exitFrom(L, spit, rng) } };
+    }
+  }
   return out;
 }
 

@@ -8,7 +8,7 @@ import { CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
 import { avatarColor } from "../../avatar";
 import { assignSlots } from "./slots";
 import { planQualifier } from "./qualifier";
-import { HAND, SAPO_MAX, holeLayout, optsForArc, planThrows, throwTime, type Point, type Throw } from "./sapo-plan";
+import { HAND, MOUTH, SAPO_MAX, holeLayout, optsForArc, planThrows, throwTime, type Point, type Throw } from "./sapo-plan";
 
 /**
  * El sapo.
@@ -61,6 +61,15 @@ const SINK = 0.5;
 const WINDUP = 0.35;
 /** En el susto, qué parte del último vuelo llega hasta el labio de la rana. */
 const LABIO = 0.62;
+/**
+ * La boca (un fallo que entra a la rana, una vez por show): cuánto tarda en
+ * hundirse la argolla, cuándo sale escupida y cuánto vuela hasta el aro.
+ */
+const BOCA_IN = 0.3;
+const BOCA_SPIT = 0.45;
+const BOCA_FLY = 0.5;
+/** Lo que dura la boca entera: tragar, escupir, y rodar afuera como cualquier fallo. */
+const BOCA_AFTER = BOCA_SPIT + BOCA_FLY + AFTER_MISS;
 
 interface Toss {
   th: Throw;
@@ -77,6 +86,8 @@ interface Toss {
   announced: boolean;
   thrown: boolean;
   landed: boolean;
+  /** La boca: si ya se escupió (el sonido y la frase salen una vez). */
+  spat: boolean;
 }
 
 export async function sapoPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<void> {
@@ -126,7 +137,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   const plan = assignSlots(n, prizes, rng);
   let throws: Throw[];
   try {
-    throws = planThrows(n, plan.winnerSlots, rng, optsForArc(story.arc));
+    throws = planThrows(n, plan.winnerSlots, rng, optsForArc(story.arc), true);
   } catch {
     S.cleanup();
     return;
@@ -159,12 +170,12 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     const grand = th.turn === last;
     tt += i === 0 ? HANG_FIRST : final ? HANG_FINAL : HANG_SMALL;
     const flight = throwTime(th.kind, grand);
-    const after = th.kind === "miss" ? AFTER_MISS : th.kind === "near" ? AFTER_NEAR : final ? AFTER_FINAL : AFTER_HIT;
+    const after = th.boca ? BOCA_AFTER : th.kind === "miss" ? AFTER_MISS : th.kind === "near" ? AFTER_NEAR : final ? AFTER_FINAL : AFTER_HIT;
     const start = tt;
     tosses.push({
       th, i, name: prizes[th.turn] as number, slot: plan.winnerSlots[th.turn] as number, grand, final,
       start, land: start + flight, end: start + flight + after, flight,
-      announced: false, thrown: false, landed: false,
+      announced: false, thrown: false, landed: false, spat: false,
     });
     tt = start + flight + after;
   });
@@ -420,6 +431,30 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       const ground = { x: hp.x + (o.th.landing.x - hp.x) * f, y: hp.y + (o.th.landing.y - hp.y) * f };
       return { x: q.x, y: q.y, ground, scale: 1, alpha: 1, height: 4 * apex * f * (1 - f) };
     }
+    if (o.th.boca) {
+      // La boca: la argolla se hunde, la rana la escupe sobre el aro y de ahí rueda.
+      const age = t - o.land;
+      const b = o.th.boca;
+      const m = P(MOUTH);
+      if (age < BOCA_IN) {
+        const u = age / BOCA_IN;
+        return { x: m.x, y: m.y, ground: MOUTH, scale: 1 - 0.6 * u * u, alpha: 1 - u * u, height: 0 };
+      }
+      if (age < BOCA_SPIT) return { x: m.x, y: m.y, ground: MOUTH, scale: 1, alpha: 0, height: 0 };
+      if (age < BOCA_SPIT + BOCA_FLY) {
+        const f = (age - BOCA_SPIT) / BOCA_FLY;
+        const apex = g.sc * 0.5;
+        const q = arc(m, P(b.spit), f, apex);
+        const ground = { x: MOUTH.x + (b.spit.x - MOUTH.x) * f, y: MOUTH.y + (b.spit.y - MOUTH.y) * f };
+        return { x: q.x, y: q.y, ground, scale: 1, alpha: 1, height: 4 * apex * f * (1 - f) };
+      }
+      const u = clamp((age - BOCA_SPIT - BOCA_FLY) / AFTER_MISS, 0, 1);
+      const gp = { x: b.spit.x + (b.exit.x - b.spit.x) * ease.outCubic(u), y: b.spit.y + (b.exit.y - b.spit.y) * ease.outCubic(u) };
+      const q = P(gp);
+      const hop = g.br * 2.6 * (1 - u) * Math.abs(Math.sin(u * Math.PI * 3));
+      const off = clamp((Math.hypot(gp.x, gp.y) - L.tableR) / 0.15, 0, 1);
+      return { x: q.x, y: q.y - hop, ground: gp, scale: 1, alpha: 1 - off, height: hop };
+    }
     const age = t - o.land;
     if (o.th.kind === "hit") {
       const u = clamp(age / SINK, 0, 1);
@@ -487,6 +522,13 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     o.landed = true;
     const big = o.grand;
     const k = g.k;
+    if (o.th.boca) {
+      // Entra a la boca: el croar de la rana, y la frase va al escupir. No nombra a nadie.
+      beep(note(4), 0.12, "triangle", 0.05);
+      setTimeout(() => beep(note(1), 0.18, "triangle", 0.05), 110);
+      cam.punch(0.03).shake(3 * k);
+      return;
+    }
     if (o.th.kind === "miss") {
       // La madera no suena siempre igual, y la argolla rebota: un segundo
       // golpe más bajo con su saltito. Eran cuatro golpes iguales seguidos.
@@ -587,6 +629,13 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
         cam.punch(0.05).shake(5 * g.k);
         S.say(t("cSapLip"), 0.95);
       }
+      // La boca escupe la argolla sobre el aro: un golpe corto, y la frase una vez.
+      if (o.th.boca && !o.spat && tAll >= o.land + BOCA_SPIT) {
+        o.spat = true;
+        beep(note(9), 0.07, "square", 0.035);
+        setTimeout(() => beep(note(12), 0.1, "triangle", 0.04), 90);
+        S.say(t("cSapMouth"), 0.65);
+      }
       if (!o.landed && tAll >= o.land) onLand(o);
     }
   }
@@ -663,6 +712,12 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       if (o.th.kind !== "hit" || tAll < o.land) continue;
       const age = tAll - o.land;
       c = Math.max(c, o.final ? clamp(1 - age / 2.2, 0, 1) * (0.75 + 0.25 * Math.sin(age * 16)) : clamp(1 - age / 0.9, 0, 1));
+    }
+    // La boca: se abre al tragar la argolla y se cierra después de escupirla.
+    for (const o of tosses) {
+      if (!o.th.boca || tAll < o.land) continue;
+      const a = tAll - o.land;
+      c = Math.max(c, Math.min(1, a / 0.1) * (1 - clamp((a - 0.45) / 0.8, 0, 1)));
     }
     return clamp(c, 0, 1);
   };
@@ -894,7 +949,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
         drawToken(tk.x, tk.y, tk.scale, o.final);
       } else {
         const age = tAll - o.land;
-        if (o.th.kind !== "hit" && age < 0.4) {
+        if (o.th.kind !== "hit" && !o.th.boca && age < 0.4) {
           const lp = P(o.th.landing);
           fx.ellipse(lp.x, lp.y, g.br * (1 + 4 * age), g.br * (1 + 4 * age) * g.tilt).stroke({ width: 2 * k, color: YELLOW, alpha: 1 - age / 0.4 });
         }
