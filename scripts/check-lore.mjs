@@ -25,11 +25,13 @@ const ok = [];
 /** Lo que se dice sin trabar la integración: una fuente caída con copia, o de un juego que no se ve. */
 const avisos = [];
 /**
- * Los juegos que salieron del selector el 30 de septiembre de 2026 y solo se
- * abren con `?demo=`. Sus tarjetas nadie las ve en el uso normal: si su fuente
+ * Los juegos que salieron del selector y solo se abren con `?demo=`: el 30 de
+ * septiembre de 2026, el 5 de octubre (luz roja, luz verde) y el 21 de octubre
+ * (el Aguayo y la Constelación, que El Trueque reemplaza; la tómbola no tiene
+ * tarjetas propias). Sus tarjetas nadie las ve en el uso normal: si su fuente
  * se cae, se avisa, pero no traba la integración.
  */
-const FUERA_DEL_SELECTOR = new Set(["ledger", "rockets", "totora"]);
+const FUERA_DEL_SELECTOR = new Set(["ledger", "rockets", "totora", "luz", "pasanaku", "stellar"]);
 
 const lore = await readFile("src/games/lore.ts", "utf8");
 const i18n = await readFile("src/i18n.ts", "utf8");

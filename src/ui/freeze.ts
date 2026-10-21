@@ -20,19 +20,24 @@ import { ponerPremio, recordarPremio, sincronizarPremios } from "./premios";
  * septiembre de 2026 esta lista tenía solo los ocho primeros, y los botones
  * del trompo, las balsas, la piñata y Oruro no hacían nada: solo se llegaba a
  * ellos con `?demo=`, que es lo que usan los auditores.
+ *
+ * Desde el 21 de octubre de 2026 son diez: entró El Trueque y salieron el
+ * Aguayo y la Constelación, que se fundieron en él (la tómbola había salido el
+ * 20). Van en el orden de la auditoría de juegos, de las salas chicas a las
+ * grandes; con la lista sellada los reordena la recomendación (`recomendar.ts`).
+ * Los que salen siguen abriendo con `?demo=`.
  */
 export const GAME_BUTTONS: ReadonlyArray<[string, Game]> = [
   ["g-race", "race"],
-  ["g-chovena", "chovena"],
-  ["g-trompo", "trompo"],
-  ["g-pinata", "pinata"],
-  ["g-oruro", "oruro"],
-  ["g-wheel", "wheel"],
-  ["g-teleferico", "teleferico"],
-  ["g-pasanaku", "pasanaku"],
-  ["g-stellar", "stellar"],
   ["g-sapo", "sapo"],
+  ["g-trompo", "trompo"],
+  ["g-chovena", "chovena"],
+  ["g-pinata", "pinata"],
+  ["g-wheel", "wheel"],
   ["g-quien", "quien"],
+  ["g-trueque", "trueque"],
+  ["g-teleferico", "teleferico"],
+  ["g-oruro", "oruro"],
 ];
 
 export function setGame(g: Game): void {

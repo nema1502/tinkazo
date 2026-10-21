@@ -44,7 +44,7 @@ export const REGLA: Record<Game, string> = {
 export const VARIOS: Partial<Record<Game, string>> = { sapo: "gcSapoMany", quien: "gcQuienMany", teleferico: "gcTelefericoMany", chovena: "gcChovenaMany", trueque: "gcTruequeMany" };
 
 /** Los que tienen captura en public/juegos, para el fondo. */
-const CAPTURA = new Set<Game>(["race", "chovena", "luz", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien"]);
+const CAPTURA = new Set<Game>(["race", "chovena", "luz", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "trueque"]);
 
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c);
 
