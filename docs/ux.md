@@ -38,6 +38,14 @@ Una prueba con alguien que usaba la herramienta por primera vez (19 de octubre d
 - `env(safe-area-inset-bottom)`: la barra lo usa (`max(10px, env(...))`) para un celular con barra de gestos. Ojo: esos valores solo son distintos de cero con `viewport-fit=cover`, y el sitio no lo usa a propósito (obligaría a rellenar los costados en todas las páginas, por los notch). Hoy vale cero y la barra queda sobre la del navegador.
 - **No se rompen ids.** Los auditores y el sitio usan `#btn-draw`, `#btn-freeze`, `#btn-again-sin`, `#g-*`, `#st-skip`, `#winner-box`, `#sec-frozen`, `#sec-draw` y otros. Buscalos antes de renombrar: `grep -rn "getElementById\|\$(\"" scripts/*.mjs`.
 
+## La cabecera
+
+Está en todas las páginas y tiene una sola acción: **Sortear**, el botón amarillo que lleva a la herramienta desde cualquier página. No hay "Entrar" ni otro botón del color de la casa: la portada ("Entrar y sortear, es gratis") y la puerta del sorteo ya tienen el suyo, y la cabecera repetía el de la portada. En el celular, además, un segundo botón de ese color le quitaba la vista a "Sortear". Con una cuenta conectada, la cabecera muestra quién está adentro: el nombre y la red en la portada, y "Mi cuenta" en las páginas de lectura.
+
+En el celular (760 px o menos) la fila tiene tres cosas: "Sortear", "Mis sorteos" y "Más", que abre Juegos, Cómo funciona, Seguridad y Precios. El botón y cada opción miden 44 px de alto como mínimo. La lista se cierra con otro toque, con Escape o al pasar a escritorio. Nada se recorre de costado: antes, "Mis sorteos" quedaba cortado a 390 px (hallazgo H2 del evaluador visual, 20 de octubre de 2026). Entre 761 y 1100 px las seis páginas van en una fila debajo del logo; por encima de 1100 px la cabecera es fija y las seis van en una sola línea.
+
+Lo miden `scripts/audit-ui.mjs` (texto cortado, blancos de toque y scroll horizontal en la cabecera) y `scripts/audit-flujo.mjs --solo-anchos` (de 320 a 414 px). El código está en `src/ui/menu.ts` (la lista de "Más") y en `index.html` y las demás páginas (el bloque `nav.topnav`).
+
 ## La lista de comprobación
 
 Es lo que mira `audit-flujo.mjs` en cada paso (lista cargada, sellada y esperando, ronda lista, resultado, siguiente premio) y en cada pantalla:

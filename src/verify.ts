@@ -10,6 +10,7 @@ import { select } from "./protocol/select";
 import { decodeProof, isAnchored, type Proof } from "./protocol/proof";
 import { network } from "./stellar/config";
 import { loadSessionKind } from "./stellar/session-store";
+import { initMenuMas } from "./ui/menu";
 import { buscar, vecesExacto } from "./buscar";
 
 /**
@@ -87,15 +88,16 @@ function fail(messageKey: string, detail = ""): void {
 async function main(): Promise<void> {
   // Los textos de esta página vienen en su HTML (ver `idioma.ts`).
   textosDeLaPagina();
-  // La cuenta a la vista, como en las demás páginas: "Mi cuenta" o "Entrar".
-  {
-    const kind = loadSessionKind(network.name);
+  // La cuenta a la vista, como en las demás páginas: "Mi cuenta" si hay sesión.
+  // "Entrar" no va en la cabecera (ver pagina.ts).
+  if (loadSessionKind(network.name)) {
     const a = document.createElement("a");
-    a.className = "mini solid pg-auth";
-    a.href = kind ? "/#mis-sorteos" : "/#sortear";
-    a.dataset.i = kind ? "navCuenta" : "connectWallet";
+    a.className = "mini pg-auth";
+    a.href = "/#mis-sorteos";
+    a.dataset.i = "navCuenta";
     document.querySelector("header .bar")?.appendChild(a);
   }
+  initMenuMas();
   setLang(initialLang());
   // El contador va aparte y después: no frena la página y queda en su propio
   // archivo, chico, en vez de darle su nombre al código común.

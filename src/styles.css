@@ -89,6 +89,8 @@
   }
   .langs button.on { background: var(--yellow); color: #191919; box-shadow: var(--sh-sm); }
   .auth { display: flex; gap: 8px; align-items: center; }
+  /* Sin cuenta, la caja de la cuenta va vacía: no debe dejar el hueco de su gap. */
+  .auth:empty { display: none; }
   button.mini, a.mini {
     background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
     padding: 5px 12px; font-weight: 800; font-size: 12px; cursor: pointer; font-family: inherit;
@@ -968,16 +970,41 @@
   .topnav a:hover { border-bottom-color: var(--magenta); }
   .topnav a[aria-current="page"] { border-bottom-color: var(--yellow); }
   .topnav a.nav-app { background: var(--yellow); color: #191919; border: 2px solid var(--ink); box-shadow: var(--sh-sm); margin-right: 8px; }
+  /* "Más" existe solo en el celular: en escritorio la lista entera va a la vista
+     y su contenedor no cuenta como caja. */
+  .topnav .mas, .topnav .mas-lista { display: contents; }
+  .topnav .mas-btn { display: none; }
   /* Cuando el menú baja a una segunda fila, la cabecera fija se comía hasta un
      cuarto de la pantalla: ahí deja de ser fija. */
   @media (max-width: 1100px) { header { position: static; } }
   /* Con la cabecera fija, lo que se encuadra con scrollIntoView queda debajo de ella. */
   @media (min-width: 1101px) { section.block { scroll-margin-top: 97px; } }
   @media (max-width: 1100px) {
-    .topnav { order: 3; flex-basis: 100%; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; margin: 0 -6px; padding: 0 6px 4px; }
-    /* Que se note que el menú sigue a la derecha. */
-    .topnav { -webkit-mask-image: linear-gradient(90deg, #000 86%, transparent); mask-image: linear-gradient(90deg, #000 86%, transparent); }
-    .topnav::-webkit-scrollbar { display: none; }
+    .topnav { order: 3; flex-basis: 100%; justify-content: flex-start; margin: 0 -6px; padding: 0 6px 4px; }
+  }
+  /* En el celular "Sortear" y "Mis sorteos" quedan a la vista, y lo demás va
+     detrás de "Más". Antes el menú se recorría de costado y "Mis sorteos" quedaba
+     cortado a 390 px (hallazgo H2). Botón y lista miden 44 px de alto como
+     mínimo. Entre 761 y 1100 px las seis páginas entran en la fila. */
+  @media (max-width: 760px) {
+    .topnav > a[href="/#mis-sorteos"] { order: 2; }
+    .topnav .mas { display: block; position: relative; order: 3; }
+    .topnav .mas-btn {
+      display: inline-flex; align-items: center; gap: 7px; min-height: 44px; min-width: 44px; padding: 0 11px;
+      background: none; border: 0; border-bottom: 3px solid transparent; color: var(--ink);
+      font-weight: 800; font-size: 13.5px; cursor: pointer;
+    }
+    .topnav .mas-btn::after { content: ""; border: 5px solid transparent; border-top: 6px solid currentColor; border-bottom: 0; }
+    .topnav .mas-btn:hover, .topnav .mas.abierto .mas-btn { border-bottom-color: var(--magenta); }
+    .topnav .mas:has([aria-current="page"]) .mas-btn { border-bottom-color: var(--yellow); }
+    .topnav .mas-lista {
+      display: none; position: absolute; top: 100%; right: 0; z-index: 30; margin-top: 6px;
+      flex-direction: column; min-width: 210px; background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh);
+    }
+    .topnav .mas.abierto .mas-lista { display: flex; }
+    .topnav .mas-lista a { min-height: 44px; padding: 0 16px; border-bottom: 0; }
+    .topnav .mas-lista a + a { border-top: 2px solid var(--line); }
+    .topnav .mas-lista a:hover, .topnav .mas-lista a[aria-current="page"] { background: var(--yellow); color: var(--on-accent); }
   }
 
   /* Los dos botones de la portada. */

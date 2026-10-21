@@ -230,10 +230,10 @@ function render(): void {
   // Sin contrato en esta red, el anclaje no se ofrece y la cabecera calla.
   if (!anchoringAvailable) return;
 
-  if (!session) {
-    box.appendChild(button(t("connectWallet"), "solid", () => void openPicker()));
-    return;
-  }
+  // Sin cuenta, la cabecera no lleva botón para entrar: la portada y la puerta
+  // del sorteo ya tienen el suyo, y en el celular un segundo botón del color de
+  // la casa le quitaba la vista a "Sortear" (ver docs/ux.md, la cabecera).
+  if (!session) return;
 
   const net = document.createElement("span");
   // Naranja en testnet y turquesa en mainnet: el color dice en qué red estás

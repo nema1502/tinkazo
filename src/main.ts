@@ -14,6 +14,7 @@ import { initWalletUI } from "./ui/wallet-ui";
 import { initOnboarding } from "./ui/onboarding";
 import { musicOn, toggleMusic } from "./music";
 import { rotateWords } from "./ui/rotar";
+import { initMenuMas } from "./ui/menu";
 
 // `?theme=light|dark` fuerza el tema (capturas).
 const themeParam = params.get("theme");
@@ -111,6 +112,7 @@ montarPremios();
 initVistas();
 initOnboarding();
 initWalletUI();
+initMenuMas();
 refreshFreezeLabel();
 // Los pasos de arriba y la barra de "lo que sigue", con la herramienta ya armada.
 initSiguiente({ segundos: secondsToRound });

@@ -2,6 +2,7 @@ import "./styles.css";
 import { chooseLang, initialLang, onLangChange, setLang, textosDeLaPagina } from "./idioma";
 import { network } from "./stellar/config";
 import { loadSessionKind } from "./stellar/session-store";
+import { initMenuMas } from "./ui/menu";
 
 /**
  * Las páginas de lectura: precios, juegos, historia y seguridad.
@@ -28,17 +29,18 @@ if (tema === "light" || tema === "dark") {
   });
 }
 
-// La cuenta también se ve acá: "Mi cuenta" si hay una sesión guardada en esta
-// red, "Entrar" si no. Sin cargar ninguna billetera: solo se lee qué tipo de
-// sesión había, y el enlace lleva a la herramienta.
-{
-  const kind = loadSessionKind(network.name);
+// La cuenta también se ve acá, si hay una sesión guardada en esta red: "Mi
+// cuenta" lleva a sus sorteos. Sin sesión no hay nada que mostrar: "Entrar" no
+// va en la cabecera, la portada y la puerta del sorteo ya lo dicen. Sin cargar
+// ninguna billetera: solo se lee qué tipo de sesión había.
+if (loadSessionKind(network.name)) {
   const a = document.createElement("a");
-  a.className = "mini solid pg-auth";
-  a.href = kind ? "/#mis-sorteos" : "/#sortear";
-  a.dataset.i = kind ? "navCuenta" : "connectWallet";
+  a.className = "mini pg-auth";
+  a.href = "/#mis-sorteos";
+  a.dataset.i = "navCuenta";
   document.querySelector("header .bar")?.appendChild(a);
 }
+initMenuMas();
 setLang(initialLang());
 // El contador va aparte y después: no frena la página y queda en su propio
 // archivo, chico, en vez de darle su nombre al código común.
