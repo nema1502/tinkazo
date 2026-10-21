@@ -52,15 +52,28 @@ describe("mensaje del evento: el mismo que el de Mis sorteos", () => {
   });
 });
 
-/** Un comprobante de tamaño real: nombres distintos, para que el enlace pese. */
+/**
+ * Un comprobante de tamaño real. Los nombres salen de letras pseudoaleatorias
+ * (fijas, para que la prueba sea reproducible): con secuencias numéricas el
+ * enlace comprime demasiado y no pasa el presupuesto de una parte.
+ */
 function sorteoGrande(i: number, personas: number): SorteoDelEvento {
-  const names = Array.from({ length: personas }, (_, k) => `Persona ${(k * 2654435761 + i * 40503) % 4294967296} de ${i}`);
+  let x = 7919 * (i + 1);
+  const letra = (): string => {
+    x = (Math.imul(x, 1103515245) + 12345) >>> 0;
+    return "abcdefghijklmnopqrstuvwxyz"[(x >>> 16) % 26] as string;
+  };
+  const names = Array.from({ length: personas }, () => Array.from({ length: 12 }, letra).join(""));
   const comprobante: Proof = { v: PROOF_VERSION, names, round: 32_000_000 + i, prize: `Premio ${i}`, signature: "ab".repeat(48) };
   return { ...comprobante, ganadores: [names[0] as string] };
 }
 
+/** Las pruebas que arman enlaces comprimen; bajo carga de la suite entera pasan de los cinco segundos por defecto. */
+const LENTA = 30_000;
+
 describe("evento con varias partes: títulos, enlaces y mensaje", () => {
-  const sorteos = [sorteoGrande(1, 200), sorteoGrande(2, 200), sorteoGrande(3, 200), sorteoGrande(4, 200), sorteoGrande(5, 200)];
+  // Doce sorteos de 120 personas pasan de sobra el presupuesto de un enlace: se parten en varias partes.
+  const sorteos = Array.from({ length: 12 }, (_, i) => sorteoGrande(i + 1, 120));
 
   it("es: cada parte dice cuál es, y el mensaje trae todos los enlaces, uno por parte", async () => {
     const r = await paqueteDeEvento("Meetup", sorteos, "es", BASE);
@@ -73,7 +86,7 @@ describe("evento con varias partes: títulos, enlaces y mensaje", () => {
       expect(r?.mensaje).toContain(`Parte ${i + 1} de ${partes.length}: ${p.enlace}`);
     });
     expect(r?.mensaje.startsWith(`Meetup (${sorteos.length} sorteos), todos verificables.\n`)).toBe(true);
-  });
+  }, LENTA);
 
   it("en: el título de cada parte dice Part x of y", async () => {
     const r = await paqueteDeEvento("Meetup", sorteos, "en", BASE);
@@ -81,12 +94,12 @@ describe("evento con varias partes: títulos, enlaces y mensaje", () => {
     expect(n).toBeGreaterThan(1);
     expect(r?.partes[0]?.titulo).toBe(`Meetup · Part 1 of ${n}`);
     expect(r?.mensaje).toContain(`Part ${n} of ${n}: `);
-  });
+  }, LENTA);
 
   it("el conteo de partes del botón coincide con el del paquete", async () => {
     const r = await paqueteDeEvento("Meetup", sorteos, "es", BASE);
     expect(await partesDelEvento("Meetup", sorteos)).toBe(r?.partes.length);
-  });
+  }, LENTA);
 
   it("un evento chico es un solo enlace, con el nombre tal cual y sin 'Parte'", async () => {
     const r = await paqueteDeEvento("Meetup", [sorteoGrande(1, 3)], "es", BASE);
@@ -94,7 +107,7 @@ describe("evento con varias partes: títulos, enlaces y mensaje", () => {
     expect(r?.partes[0]?.titulo).toBe("Meetup");
     expect(r?.mensaje).not.toContain("Parte");
     expect(r?.mensaje).toContain(r?.partes[0]?.enlace ?? "");
-  });
+  }, LENTA);
 
   it("sin sorteos no hay paquete", async () => {
     expect(await paqueteDeEvento("Meetup", [], "es", BASE)).toBeNull();
