@@ -196,6 +196,30 @@ describe("errorKey: el corpus", () => {
   });
 });
 
+describe("un sello del que no se sabe si entró", () => {
+  /** Como lo arma `envio.ts`: el nombre, el intento y el error de verdad en la causa. */
+  const incierto = (causa: unknown): Error =>
+    Object.assign(new Error("sin-confirmar", { cause: causa }), { name: "SelloIncierto", intento: { organizer: "G", round: 1 } });
+
+  it.each([
+    ["un corte", new TypeError("Load failed")],
+    ["algo que parece falta de saldo", new Error("txInsufficientBalance")],
+    ["algo que parece una cuenta que no existe", new Error("Account not found: GCZJUPZIUVQVS67RJXYGMRZHV7RIZD4OAWJPQ4YA2UNCQNSVUEDHZIHY")],
+  ])("es 'no se pudo confirmar' aunque la causa diga %s: nadie lo toma por otra cosa ni manda otro sello", async (_nombre, causa) => {
+    const { esSinSaldo, esCuentaInexistente } = await import("./errores");
+    const e = incierto(causa);
+    expect(errorKey(e, { enLinea: true })).toBe("unconfirmed");
+    expect(errorKey(e, { enLinea: false })).toBe("unconfirmed");
+    expect(esSinSaldo(e)).toBe(false);
+    expect(esCuentaInexistente(e)).toBe(false);
+    expect(esDeRed(e)).toBe(false);
+  });
+
+  it("y el que ya se dio por perdido (SelloSinConfirmar) también", () => {
+    expect(errorKey(Object.assign(new Error("sin-confirmar"), { name: "SelloSinConfirmar" }))).toBe("unconfirmed");
+  });
+});
+
 describe("textoDelError", () => {
   it("junta el mensaje, el nombre, el código y la causa", () => {
     const t = textoDelError(new Error("wallet-rejected", { cause: { code: -4, message: "The user rejected this request." } }));

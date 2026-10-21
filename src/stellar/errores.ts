@@ -214,9 +214,22 @@ export function textoDelError(e: unknown): string {
  * cuenta aunque diga "cancelled": eso no se reintenta.
  */
 export function esDeRed(e: unknown): boolean {
+  // Un sello incierto no se reintenta como un corte cualquiera: primero se averigua.
+  if (esIncierto(e)) return false;
   const texto = textoDelError(e);
   if (CANCELO.test(texto)) return false;
   return esErrorDelServidorRpc(e) || DE_RED.test(texto);
+}
+
+/**
+ * Un sello del que no se sabe si entró (`SelloIncierto`, `SelloSinConfirmar` en
+ * `envio.ts` y `sello-seguro.ts`). Manda sobre lo que diga su causa: aunque el
+ * corte haya dicho otra cosa, lo que importa es que no se sabe, y nadie puede
+ * tomarlo por "sin saldo" y mandar otro sello.
+ */
+function esIncierto(e: unknown): boolean {
+  const nombre = (e as { name?: unknown } | null)?.name;
+  return nombre === "SelloIncierto" || nombre === "SelloSinConfirmar";
 }
 
 /** Si la máquina dice que está sin internet. `navigator.onLine` en falso es confiable; en verdadero, no tanto. */
@@ -230,6 +243,7 @@ function sinInternet(): boolean {
  * pasa, se le pregunta al navegador.
  */
 export function errorKey(e: unknown, contexto: { enLinea?: boolean } = {}): string {
+  if (esIncierto(e)) return "unconfirmed";
   const texto = textoDelError(e);
   const m = /Error\(Contract,\s*#(\d+)\)/.exec(texto);
   if (m?.[1]) {
@@ -261,7 +275,7 @@ export function errorKey(e: unknown, contexto: { enLinea?: boolean } = {}): stri
 export const esSinSaldo = (e: unknown): boolean => errorKey(e) === "noFunds" && !esCuentaInexistente(e);
 
 /** Este error dice que la cuenta no existe todavía en la red. */
-export const esCuentaInexistente = (e: unknown): boolean => SIN_CUENTA.test(textoDelError(e));
+export const esCuentaInexistente = (e: unknown): boolean => !esIncierto(e) && SIN_CUENTA.test(textoDelError(e));
 
 /* ------------------------------------------------------- el detalle técnico */
 

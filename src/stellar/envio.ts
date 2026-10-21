@@ -245,7 +245,7 @@ export interface FuentesDelSello {
   consultarHash?: (hash: string) => Promise<{ status: string; raffleId?: string }>;
   ahora?: () => number;
   dormir?: (ms: number) => Promise<void>;
-  /** Cuánto se espera sin poder hablar con la red (30 s). */
+  /** Cuánto se espera sin poder hablar con la red (20 s). */
   sinRedMs?: number;
   /** Un tope de seguridad si la red deja de avanzar (3 min). */
   topeTotalMs?: number;
@@ -271,12 +271,12 @@ export type Resolucion =
  *   contrato, leído en ese ledger o en uno posterior, no lo tiene, no entró ni
  *   puede entrar: cualquier ledger que venga lo rechaza (`RoundTooSoon`).
  * - Si no, todavía puede entrar: se espera.
- * - Sin respuesta de la red durante `sinRedMs`, no se sabe.
+ * - Sin respuesta de la red durante `sinRedMs` (20 s), no se sabe.
  */
 export async function resolverSello(intento: IntentoDeSello, f: FuentesDelSello): Promise<Resolucion> {
   const ahora = f.ahora ?? Date.now;
   const dormir = f.dormir ?? dormirDeVerdad;
-  const sinRedMs = f.sinRedMs ?? 30_000;
+  const sinRedMs = f.sinRedMs ?? 20_000;
   const topeTotal = f.topeTotalMs ?? 180_000;
   const limite = roundTime(intento.round) - MARGEN_DEL_CONTRATO_S;
   const inicio = ahora();
