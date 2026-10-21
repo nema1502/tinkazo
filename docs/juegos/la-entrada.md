@@ -40,7 +40,7 @@ El baile de cada fraternidad se sortea con la ronda: los cinco bailes se barajan
 | Tinkus | La montera, un casco duro, con plumas de colores; la almilla tejida con franjas, la chuspa, las abarcas | Agachado, zapateando, con los puños arriba, en zigzag | Casco y abarcas; sombreros con plumas y cintas ([Tinku](https://en.wikipedia.org/wiki/Tinku)) |
 | Llamerada | Sombrero con flecos de colores, poncho, la honda y una llamita | El paso del llamero, con la honda dando vueltas sobre la cabeza y la llamita en la otra mano; los labios fruncidos del que silba a sus llamas | Honda en la derecha y llamita en la izquierda ([Llamerada](https://en.wikipedia.org/wiki/Llamerada)) |
 
-Cada pieza de los trajes se dibuja una sola vez y se pasa a una textura, y cada bailarín es un puñado de sprites: lo que lleva el color de la fraternidad se dibuja una vez por fraternidad, lo que es igual en todas se comparte, y lo que es del color de la piel o del pelo se dibuja en blanco y se tiñe. Dibujados como figuras, con doscientos bailarines la escena iba a 25 cuadros por segundo. La cara de cada uno, la de su lista, va en el pecho.
+Cada pieza de los trajes se dibuja una sola vez y se pasa a una textura, y cada bailarín es un puñado de sprites: lo que lleva el color de la fraternidad se dibuja una vez por fraternidad, lo que es igual en todas se comparte; lo que es del color de la piel se dibuja en blanco y se tiñe, y el pelo, una vez por color. Dibujados como figuras, con doscientos bailarines la escena iba a 25 cuadros por segundo. La cara de cada uno, la de su lista, va en el pecho.
 
 ### Ellas
 

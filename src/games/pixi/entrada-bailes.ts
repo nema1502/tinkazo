@@ -36,8 +36,8 @@ import type { Dance } from "./entrada-plan";
  * cuadro y la escena iba a 25 cuadros por segundo (auditor exigente, 21 de
  * octubre de 2026). Lo que lleva el color de la fraternidad se dibuja con ese
  * color, una vez por fraternidad; lo que es igual en todas (las piernas, las
- * máscaras, lo que se lleva en la mano) se comparte, y lo que es del color de la
- * piel o del pelo se dibuja en blanco y se tiñe.
+ * máscaras, lo que se lleva en la mano) se comparte; lo que es del color de la
+ * piel se dibuja en blanco y se tiñe, y el pelo, una vez por color.
  *
  * La cara es del cuerpo y lo de la cabeza es aparte: en el tropezón y en la
  * caída se corre y vuela la máscara, el sombrero o la montera, y la cara queda
