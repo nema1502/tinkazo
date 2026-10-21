@@ -1,27 +1,32 @@
 import { clamp, ease } from "../overlay";
 import { writeStory, type Story } from "../drama";
+import { cuantosGrupos, GRUPOS, grupoDe } from "../grupos";
 
 /**
- * El plan del teleférico, sin dibujo: el mismo de `cablecar.ts`, copiado para
- * que el motor nuevo cuente la misma historia con la misma ronda (el orden de
- * bajada, las cabinas y los cuatro giros; el horario también, salvo `T_RUN`).
- * Aparte de `T_RUN`, lo único distinto es `luzAt`: titila dos veces antes del
- * corte (más abajo).
- * Consume el azar en el mismo orden que el juego de siempre.
+ * El plan del teleférico por grupos (sección 7.7 del plan de juegos).
  *
- * Si el motor nuevo gana, `cablecar.ts` pasa a usar este módulo y la copia
- * desaparece. Hasta entonces el de siempre no se toca.
+ * Cada grupo automático (`grupos.ts`) va en una cabina pintada con el color de
+ * una línea de Mi Teleférico. En cada estación se baja un grupo entero, y en la
+ * última cabina se baja de a uno hasta que quedan dos. Esos dos suben juntos, y
+ * la duda dura hasta la cumbre: se resuelve cuando se abre la puerta arriba.
+ *
+ * Los cuatro giros se conservan: la puerta y la mordaza pasan en la última
+ * estación, con la cabina de los dos; el apagón y la ráfaga, como antes.
+ *
+ * Es presentación. El ganador viene de la ronda pública antes de que arranque
+ * esta función; el azar que se consume acá (orden de los grupos, lugar de cada
+ * cabina, quién queda con el ganador, la historia) sale de la semilla de la
+ * ronda y no cambia el resultado.
  */
 
 export const LINES = ["#d7263d", "#e9b000", "#2f9e44", "#1c64c8", "#f2771a", "#ececec", "#5bc0eb", "#7d3c98", "#8b5a2b", "#aab2bd"];
-export const MAXC = 5;
 export const MIN_STATIONS = 4;
 export const T_BOARD = 2.0;
 /**
- * Cuándo arranca el último tramo, el de la cabina sola. Desde el 7 de octubre
- * de 2026 es 14,0 y no 13,4 como en `cablecar.ts`: la subida con el ganador ya
- * sabido duraba 2,4 s de juego, y esos 0,6 se reparten entre las paradas. Es
- * lo único del horario que difiere del motor anterior; el azar se consume igual.
+ * Cuándo arranca el último tramo, el de la cabina sola con los dos. Desde el 7
+ * de octubre de 2026 es 14,0 y no 13,4 como en `cablecar.ts`: la subida con el
+ * ganador ya sabido duraba 2,4 s de juego, y esos 0,6 se reparten entre las
+ * paradas.
  */
 export const T_RUN = 14.0;
 export const T_DOCK = 15.8;
@@ -50,76 +55,101 @@ function tauOf(L: Extract<Leg, { kind: "glide" }>, x: number): number {
 
 export type CableCarPlan = ReturnType<typeof planCableCar>;
 
+/** Baraja con el azar sembrado, en el mismo orden de siempre. */
+function shuffled<T>(xs: readonly T[], rng: () => number): T[] {
+  const a = [...xs];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [a[i], a[j]] = [a[j] as T, a[i] as T];
+  }
+  return a;
+}
+
 export function planCableCar(names: string[], winners: readonly number[], rng: () => number) {
   const winnerIdx = winners[0] ?? 0;
   const n = names.length;
 
-  /* ------------------------------------------------------ orden de bajada */
-  // Los ganadores van primero y por lo tanto son los últimos en bajarse; el
-  // resto, sembrado. `rank[0]` llega a la cumbre.
-  const rest = names.map((_, i) => i).filter((i) => !winners.includes(i));
-  for (let i = rest.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [rest[i], rest[j]] = [rest[j] as number, rest[i] as number];
-  }
-  const rank = [...winners.filter((w) => w >= 0 && w < n), ...rest];
+  /* ------------------------------------------------------------ grupos */
+  // Un grupo por cabina, y los grupos parejos (`grupoDe`). El del ganador es el
+  // último en bajarse: ahí quedan los dos que llegan arriba.
+  const K = Math.max(1, cuantosGrupos(n));
+  const members: number[][] = Array.from({ length: K }, () => []);
+  for (let i = 0; i < n; i++) members[grupoDe(i, n)]?.push(i);
+  const winG = n > 0 ? grupoDe(winnerIdx, n) : 0;
 
-  /** Cuántos quedan después de cada parada: se parte a la mitad hasta uno. */
+  /** El orden en que se bajan los grupos que no son el del ganador. */
+  const otros = shuffled(
+    Array.from({ length: K }, (_, g) => g).filter((g) => g !== winG),
+    rng,
+  );
+
+  /** En el grupo del ganador: primero los premios, después el resto sorteado. Los dos primeros llegan arriba. */
+  const premiosEnGrupo = winners.filter((w) => w >= 0 && w < n && grupoDe(w, n) === winG);
+  const fin = [...premiosEnGrupo, ...shuffled((members[winG] ?? []).filter((i) => !premiosEnGrupo.includes(i)), rng)];
+  const surv = fin.slice(0, 2);
+  /** Los que se bajan en la última estación, de a uno. El último de la lista se baja primero. */
+  const deAUno = fin.slice(2).reverse();
+
+  /**
+   * Las rondas, en orden de bajada: un grupo entero por parada, y la última
+   * parada se baja de a uno en la cabina del ganador.
+   */
+  const rondas: number[][] = [...otros.map((g) => members[g] ?? []), deAUno];
+  const R = rondas.length;
+
+  /** La posición de cada persona en el orden de la lista de bajada: los que llegan arriba, al principio. */
+  const rank = [...surv, ...rondas.flat().reverse()];
+  /** Cuántos quedan después de cada parada: el grupo entero se resta de una vez. */
   const left: number[] = [n];
-  while ((left[left.length - 1] as number) > 1) left.push(Math.ceil((left[left.length - 1] as number) / 2));
-  const R = left.length - 1;
+  for (const r of rondas) left.push((left[left.length - 1] as number) - r.length);
 
   /* ------------------------------------------------------------ cabinas */
-  const C = Math.max(1, Math.min(MAXC, n));
-  // Los últimos C en bajarse, uno por cabina, en un orden sorteado del convoy.
-  const perm = Array.from({ length: C }, (_, i) => i);
-  for (let i = C - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1));
-    [perm[i], perm[j]] = [perm[j] as number, perm[i] as number];
-  }
+  // Cada grupo tiene su cabina; la cabina de cada grupo cae en un puesto
+  // sorteado del convoy, y la del ganador también.
+  const puesto = shuffled(Array.from({ length: K }, (_, g) => g), rng);
   const cabinOf = new Map<number, number>();
-  rank.slice(0, C).forEach((idx, i) => cabinOf.set(idx, perm[i] as number));
-  // El resto, repartido de a uno para que las cabinas vayan parejas.
-  const start = Math.floor(rng() * C);
-  rank.slice(C).forEach((idx, i) => cabinOf.set(idx, (start + i) % C));
+  const groupOfCab: number[] = Array.from({ length: K }, () => 0);
+  for (let g = 0; g < K; g++) {
+    const cab = puesto[g] as number;
+    groupOfCab[cab] = g;
+    for (const idx of members[g] ?? []) cabinOf.set(idx, cab);
+  }
   /** Cuándo se baja cada persona: el índice de la parada, o R si llega arriba. */
   const offAt = new Map<number, number>();
   for (let r = 0; r < R; r++) {
     for (let p = left[r + 1] as number; p < (left[r] as number); p++) offAt.set(rank[p] as number, r);
   }
-  const pax: number[][] = Array.from({ length: C }, () => []);
+  const pax: number[][] = Array.from({ length: K }, () => []);
   for (const idx of rank) pax[cabinOf.get(idx) as number]?.push(idx);
   /** La parada en la que se vacía cada cabina: la de su último pasajero. */
   const emptiesAt = pax.map((ps) => Math.max(...ps.map((p) => offAt.get(p) ?? R)));
   const winnerCab = cabinOf.get(winnerIdx) ?? 0;
+  /** Los dos que quedan van en la misma cabina: la de la mordaza y la de la puerta es esa. */
+  const loserCab = winnerCab;
+  const slipCab = winnerCab;
 
   /* El director de emoción elige el arco, y en el teleférico cada arco tiene
      su giro. Siempre pasa algo, pero nunca lo mismo:
 
-     - Susto, la puerta: en la última estación se abre la de la cabina
-       ganadora, el pasajero se asoma como para bajarse, y la puerta se
-       cierra. El que se baja es el de la otra.
-     - Duelo, la mordaza: en la última estación la cabina de atrás se suelta
-       y resbala cable abajo, hasta que la mordaza la agarra y la vuelve a
-       subir. A veces es la del ganador y a veces la de la otra: la sala no
-       puede aprender que "la del susto se salva".
+     - Susto, la puerta: en la última estación se abre la puerta de la cabina
+       de los dos que quedan; el ganador se asoma como para bajarse, y la puerta
+       se cierra. El que se baja es uno del grupo, de a uno, como siempre.
+     - Duelo, la mordaza: en la última estación la cabina se suelta y resbala
+       cable abajo, hasta que la mordaza la agarra y la vuelve a subir.
      - Tapada, el apagón: justo antes de la última estación se corta la luz,
        el convoy frena en el aire y se hamaca a oscuras. Vuelve la luz,
        titilando, y sigue.
      - Remontada, la ráfaga: a mitad de viaje entra un viento que hamaca a
        todas las cabinas y hace flamear las banderas. */
   const story = writeStory(rng, Math.max(2, n), winnerIdx % Math.max(2, n));
-  const puerta = story.arc === "susto" && R >= 1 && C >= 2;
-  const mordaza = story.arc === "duelo" && R >= 1 && C >= 2;
+  const puerta = story.arc === "susto" && R >= 1;
+  const mordaza = story.arc === "duelo" && R >= 1;
   const apagon = story.arc === "tapada" && R >= 1;
   const rafaga = story.arc === "remontada" || ((story.arc === "susto" || story.arc === "duelo") && !puerta && !mordaza);
-  /** En la mordaza, la cabina que se suelta: la de más atrás de las dos que quedan. */
-  const loserCab = cabinOf.get(rank[1] ?? -1) ?? winnerCab;
-  const slipCab = Math.max(winnerCab, loserCab);
 
   /* ---------------------------------------------------------- estaciones */
-  // Con menos paradas que estaciones, las que sobran son de largo. La última
-  // parada es siempre la última estación: ahí se bajan de a uno.
+  // Una parada por grupo. Con menos paradas que estaciones, las que sobran son
+  // de largo. La última parada es siempre la última estación: ahí se bajan de a uno.
   const S = Math.max(R, MIN_STATIONS);
   const stopOf = new Map<number, number>();
   if (R >= 1) stopOf.set(S, R - 1);
@@ -135,14 +165,14 @@ export function planCableCar(names: string[], winners: readonly number[], rng: (
   }
 
   /* --------------------------------------------------------- el horario */
-  // Pesos: viajar a una estación vale 1, una parada 0,8, la última 1,7 porque
-  // ahí está el amague. El total se reparte entre el fin del embarque y el
-  // arranque del último tramo.
+  // Pesos: viajar a una estación vale 1, una parada 0,8, la última parada lo
+  // que tarda bajar a los de a uno (más por cada uno que se baja) y, con la
+  // puerta o la mordaza, un poco más por el amague. El apagón se lleva su
+  // propio pedazo del viaje.
   const wTravel = 1;
   const wStop = 0.8;
-  // Con la puerta o la mordaza, la última parada se toma más tiempo: primero
-  // el amague. El apagón se lleva su propio pedazo del viaje.
-  const wLast = mordaza ? 2.6 : puerta ? 2.4 : 1.7;
+  const deAUnoN = deAUno.length;
+  const wLast = (mordaza ? 2.6 : puerta ? 2.4 : 1.7) + 0.1 * deAUnoN;
   const W_STALL = 1.3;
   let wSum = apagon ? W_STALL : 0;
   for (let k = 1; k <= S; k++) {
@@ -208,7 +238,7 @@ export function planCableCar(names: string[], winners: readonly number[], rng: (
     tDetach: L.t0 + (L.t1 - L.t0) * (L.last ? (puerta || mordaza ? 0.84 : 0.78) : 0.62),
   }));
 
-  /* ------------------------------------------------------------- los giros */
+  /* ------------------------------------------------------------ los giros */
   /** El tramo del apagón y sus horas: se corta, frena, queda quieto, vuelve. */
   const stallLeg = legs.find((L): L is Extract<Leg, { kind: "glide" }> => L.kind === "glide" && !!L.stall);
   const corte = stallLeg?.stall ? stallLeg.stall.a : Infinity;
@@ -220,12 +250,8 @@ export function planCableCar(names: string[], winners: readonly number[], rng: (
    * Cuánta luz hay, de 0 a 1. Se corta de golpe y vuelve titilando, como
    * vuelve la luz de verdad: prende, se apaga, prende, se apaga, y queda.
    *
-   * Y antes de cortarse titila dos veces, en el último cuarto de segundo. El
-   * crítico de juegos (16 de octubre de 2026) vio que el apagón pasaba sin que
-   * la sala lo notara: el corte llegaba sin aviso, en medio del viaje, y cuando
-   * alguien levantaba la vista ya estaba a oscuras. Los dos parpadeos son el
-   * aviso que hace mirar. Es lo único de la luz que difiere de `cablecar.ts`, y
-   * no toca el azar ni el horario: el corte sigue a la misma hora.
+   * Y antes de cortarse titila dos veces, en el último cuarto de segundo: los
+   * dos parpadeos son el aviso que hace mirar.
    */
   function luzAt(x: number): number {
     if (x < corte) {
@@ -309,13 +335,13 @@ export function planCableCar(names: string[], winners: readonly number[], rng: (
   function aboard(cab: number, x: number): number[] {
     let done_ = -1;
     for (const s of stops) if (x >= s.tOff) done_ = s.round;
-    const boarded = x >= T_BOARD ? Infinity : boardedAt(x);
+    const boarded = x >= T_BOARD ? Infinity : boardedAt(cab, x);
     return (pax[cab] ?? []).filter((p, i) => (offAt.get(p) ?? R) > done_ && i < boarded);
   }
-  /** Durante el embarque: cuántos pasajeros subió cada cabina. */
-  function boardedAt(x: number): number {
-    const perCab = Math.ceil(n / C);
-    return Math.floor(clamp((x - 0.25) / (T_BOARD - 0.55), 0, 1) * perCab + 0.001);
+  /** Durante el embarque: cuántos pasajeros subió cada cabina, de los de su grupo. */
+  function boardedAt(cab: number, x: number): number {
+    const size = pax[cab]?.length ?? 0;
+    return Math.floor(clamp((x - 0.25) / (T_BOARD - 0.55), 0, 1) * size + 0.001);
   }
 
   /** El orden de cada cabina en el convoy, cerrando los huecos de las que se fueron. */
@@ -365,7 +391,9 @@ export function planCableCar(names: string[], winners: readonly number[], rng: (
   }
 
   return {
-    n, rank, left, R, C, cabinOf, offAt, pax, winnerCab, loserCab, slipCab,
+    n, rank, left, R, C: K, cabinOf, offAt, pax, winnerCab, loserCab, slipCab,
+    /** El grupo de cada cabina (0 a K-1): su nombre en `GRUPOS` y su color en `LINES`. */
+    groupOfCab, grupos: GRUPOS, surv, deAUno: deAUno.length,
     story: story as Story, puerta, mordaza, apagon, rafaga,
     S, stopOf, legs, TOP, headAt, stops, passes, detachT,
     corte, quieto, vuelve, luzAt, windAt, rafagaT: () => rafagaT,
