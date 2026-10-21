@@ -52,6 +52,7 @@ export const RANGOS: Partial<Record<Game, Rango>> = {
   sapo: { minimo: 2, ideal: [6, 12], maximo: 40, meta: 7.1 },
   trompo: { minimo: 2, ideal: [5, 14], maximo: 14, meta: 6.3 },
   chovena: { minimo: 8, ideal: [12, 60], maximo: 80, meta: 7.9 },
+  trueque: { minimo: 12, ideal: [20, 120], maximo: 200, meta: 8.1 },
   teleferico: { minimo: 16, ideal: [30, 150], maximo: 200, meta: 7.1 },
   wheel: { maximo: 200 },
 };
