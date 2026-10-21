@@ -8,7 +8,7 @@ import { contractUrl, network } from "../stellar/config";
 import { anchorErrorText, hideTxStatus, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
 import { precargarQr } from "./qr";
 import { recomendar } from "./recomendar";
-import { canAnchor, currentSession } from "./wallet-ui";
+import { apruebaAMano, canAnchor, currentSession } from "./wallet-ui";
 import { parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
 import { NOMBRE } from "./gamecard";
@@ -164,13 +164,35 @@ export function secondsToRound(): number {
 
 let countdownTimer: number | undefined;
 
+/** La espera en grande, ya bajada: la cuenta regresiva le avisa cuando nace el número. */
+let espera: typeof import("./espera") | null = null;
+
 /**
  * La espera en grande (`espera.ts`), que se baja recién cuando hace falta. Es
  * una opción de la caja de la espera: no se abre sola (Nicolás, 17 de octubre
  * de 2026: el "¡Contemos juntos!" y el "¡Nació!" no le gustaron, y salieron).
+ *
+ * Desde el 21 de octubre de 2026 desemboca en el show: si sigue abierta cuando
+ * nace el número, el sorteo arranca solo. La pantalla completa se pide acá,
+ * con el toque, que es el gesto que el navegador exige: bajar la espera puede
+ * tardar más de lo que dura ese permiso. El show la hereda.
  */
 function abrirEspera(): void {
-  void import("./espera").then((m) => m.mostrarEspera(secondsToRound));
+  const raiz = document.documentElement;
+  const pantalla = !document.fullscreenElement && typeof raiz.requestFullscreen === "function";
+  if (pantalla) void raiz.requestFullscreen({ navigationUI: "hide" }).catch(() => undefined);
+  void import("./espera").then((m) => {
+    espera = m;
+    const abrio = m.mostrarEspera(secondsToRound, {
+      sortear: () => $<HTMLButtonElement>("btn-draw").click(),
+      // Sin la cadena no hay nada que aprobar; con Freighter, cada operación se aprueba en su ventana.
+      aMano: () => app.frozen?.raffleId !== undefined && apruebaAMano(),
+      graba: app.frozen?.raffleId !== undefined,
+      pantalla,
+    });
+    // Llegó tarde (el número ya nació): la pantalla completa que se pidió para ella se suelta.
+    if (!abrio && pantalla && document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+  });
 }
 
 /**
@@ -257,7 +279,10 @@ function startCountdown(): void {
       // abajo, y dos en el celular). Con la barra de "lo que sigue" no hace
       // falta mover la pantalla: quien estaba mirando los juegos sigue ahí, y
       // la barra ya le muestra el botón encendido.
-      if (!app.drawn) {
+      // Con la espera en grande abierta, en cambio, el sorteo arranca desde
+      // ahí y el show ocupa la pantalla sin pasar por la página (espera.ts).
+      if (!app.drawn && espera?.esperaAbierta()) espera.nacioElNumero();
+      else if (!app.drawn) {
         const r = btn.getBoundingClientRect();
         if (!barraActiva() && (r.top < 0 || r.bottom > innerHeight)) btn.scrollIntoView({ behavior: "smooth", block: "center" });
         btn.focus({ preventScroll: true });

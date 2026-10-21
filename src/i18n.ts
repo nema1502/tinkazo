@@ -820,6 +820,9 @@ export const T: Record<Lang, Dict> = {
     espVolver: "Volver a la página",
     espVer: "Mostrar la espera en grande",
     espPie: (n) => `${n} en la lista, sellada: ya nadie la puede cambiar.`,
+    // La espera que desemboca en el show (21 de octubre de 2026): cuando nace el número.
+    espStickerYa: "El número que decide ya existe",
+    espAprobar: "Tu billetera te va a pedir que lo apruebes.",
     winnerLabel: "Lo que salió", verifyTitle: "Por si alguien duda",
     verifyHow: "Cualquiera puede rehacer este sorteo desde su celular y le tiene que dar el mismo nombre. No hace falta que me creas.",
     verifyPasos: "Paso a paso: 1) abrí la ronda de quicknet y verificá su prueba con la clave pública del faro · 2) randomness = sha256(prueba) · 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, salteando repetidos. El protocolo entero está en github.com/nema1502/tinkazo, en docs/protocolo.md.",
@@ -2076,6 +2079,9 @@ export const T: Record<Lang, Dict> = {
     espVolver: "Back to the page",
     espVer: "Show the wait on the big screen",
     espPie: (n) => `${n} on the list, sealed: nobody can change it now.`,
+    // The wait that flows into the show (Oct 21, 2026): once the number is out.
+    espStickerYa: "The number that decides is out",
+    espAprobar: "Your wallet will ask you to approve it.",
     winnerLabel: "What came out", verifyTitle: "In case anyone doubts it",
     verifyHow: "Anyone can run this draw again from their phone and has to land on the same name. You don't have to take my word for it.",
     verifyPasos: "Step by step: 1) open the quicknet round and check its proof against the beacon's public key · 2) randomness = sha256(proof) · 3) idx = first 8 bytes of sha256(randomness ‖ list_hash ‖ counter) mod entries, skipping repeats. Whole protocol at github.com/nema1502/tinkazo, in docs/protocolo.md.",

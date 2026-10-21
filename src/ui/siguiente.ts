@@ -299,8 +299,14 @@ export function actualizarPaso(): void {
  * botón que volvía a estar disponible sin decir por qué. Si el mensaje no se ve
  * (sin contar la cabecera fija ni la propia barra), se lo lleva a la pantalla;
  * con el movimiento reducido, sin animación.
+ *
+ * Si el sorteo arrancó desde la espera en grande, la pantalla es ella: se le
+ * ofrece el mensaje primero (`tinkazo:error`), y si lo muestra, con la acción
+ * para reintentar, la página de atrás no se mueve (espera.ts).
  */
 export function verError(mensaje: HTMLElement): void {
+  const enGrande = new CustomEvent("tinkazo:error", { detail: mensaje.textContent?.trim() ?? "", cancelable: true });
+  if (!document.dispatchEvent(enGrande)) return;
   const r = mensaje.getBoundingClientRect();
   const cab = document.querySelector("header");
   const arriba = cab && getComputedStyle(cab).position === "sticky" ? cab.getBoundingClientRect().height : 0;

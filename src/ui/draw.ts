@@ -42,10 +42,12 @@ export async function draw(): Promise<void> {
   // unos segundos y para cuando salía la tarjeta el navegador ya no la
   // concedía. El estadio quedaba dentro de la página.
   pedirPantallaCompleta();
-  const cortina = skipMotion() ? null : abrirCortina(app.frozen.prize, app.frozen.raffleId !== undefined);
+  // Desde la espera en grande, ella misma hace de cortina hasta que el show la
+  // tapa (espera.ts), y si algo falla se queda, con la pantalla completa.
+  const cortina = skipMotion() || enGrande() ? null : abrirCortina(app.frozen.prize, app.frozen.raffleId !== undefined);
   const sinShow = (): void => {
     cortina?.cerrar();
-    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    if (document.fullscreenElement && !enGrande()) void document.exitFullscreen().catch(() => undefined);
   };
 
   try {
@@ -174,12 +176,20 @@ export async function draw(): Promise<void> {
   }
 }
 
-/** Pide la pantalla completa mientras el clic todavía cuenta como gesto. */
+/**
+ * Pide la pantalla completa mientras el clic todavía cuenta como gesto. Sin
+ * gesto no la pide: el navegador la negaría. Pasa cuando el sorteo arranca solo
+ * desde la espera en grande, que ya la pidió con su toque y se la deja al show.
+ */
 function pedirPantallaCompleta(): void {
   const raiz = document.documentElement;
-  if (skipMotion() || document.fullscreenElement || !raiz.requestFullscreen) return;
+  const gesto = (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive ?? true;
+  if (skipMotion() || !gesto || document.fullscreenElement || !raiz.requestFullscreen) return;
   void raiz.requestFullscreen({ navigationUI: "hide" }).catch(() => undefined);
 }
+
+/** La espera en grande está abierta: el sorteo arrancó desde ahí (espera.ts). */
+const enGrande = (): boolean => document.querySelector(".espera") !== null;
 
 /**
  * Lo que ve la sala mientras llega el número y, con cuenta, se graba el
