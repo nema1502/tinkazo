@@ -94,6 +94,8 @@ interface Top {
   hitAt: number; hitPow: number; lean: number;
   /** Cuándo se prendió en blanco: solo en los golpes, no en los roces. */
   flashAt: number;
+  /** Cuándo cabeceó en su casi del mano a mano (en la hora del juego): se inclina y la cámara lo mira. */
+  casiAt: number;
   /** Las últimas posiciones para la estela, de a tres: x, y, altura. */
   trail: number[];
   gone: boolean;
@@ -140,9 +142,14 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     [rest[i], rest[j]] = [rest[j] as number, rest[i] as number];
   }
   const rank = n >= 2 ? [winnerIdx, rivalIdx, ...rest] : [winnerIdx];
-  const fightDur = clamp(2.6 + Math.max(0, n - 2) * 0.32, 2.6, 7.8);
-  const T_DUEL = T_FIGHT + fightDur;
-  const clashes = story.arc === "duelo" ? [0.7, 1.7, 2.7, 3.7] : [0.8, 1.9, 3.0];
+  // Con dos no hay baile ni amagues: el mano a mano arranca cuando los trompos
+  // ya están en el ruedo, y tiene más aire entre choques para que cada casi se lea.
+  const fight0 = n === 2 ? T_THROW : T_FIGHT;
+  const fightDur = n === 2 ? 0 : clamp(2.6 + Math.max(0, n - 2) * 0.32, 2.6, 7.8);
+  const T_DUEL = fight0 + fightDur;
+  const clashes = n === 2
+    ? (story.arc === "duelo" ? [2.5, 4.9, 7.3, 9.7] : [2.5, 4.9, 7.3])
+    : (story.arc === "duelo" ? [0.7, 1.7, 2.7, 3.7] : [0.8, 1.9, 3.0]);
   const duelDur = (clashes.at(-1) as number) + 1.6;
   const T_CROWN = T_DUEL + duelDur;
   const duo = n >= 2 && rivalIdx !== winnerIdx;
@@ -159,16 +166,23 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       idx: i, x: Math.cos(a) * d, y: Math.sin(a) * d, vx: 0, vy: 0,
       ph: rng() * 7, rate: 18 + rng() * 8, wob: 0.03 + rng() * 0.03, wobPh: rng() * 7, tilt: 0,
       land: 0.2 + (i / Math.max(1, n)) * (T_THROW - 0.6), alive: true, out: -1, kind: "fall", fallDir: rng() < 0.5 ? -1 : 1,
-      z: 0, vz: 0, rot: 0, spin: 0, bounces: 0, groundAt: -1, hitAt: -9, hitPow: 0, lean: 0, flashAt: -9, trail: [], gone: false,
+      z: 0, vz: 0, rot: 0, spin: 0, bounces: 0, groundAt: -1, hitAt: -9, hitPow: 0, lean: 0, flashAt: -9, casiAt: -9, trail: [], gone: false,
     };
   });
   const byIdx = new Map(tops.map((q) => [q.idx, q]));
   const win = byIdx.get(winnerIdx) as Top;
   const riv = byIdx.get(rivalIdx) as Top;
+  // En la tapada la ganadora baila contra el borde, pero no siempre en el mismo
+  // lugar: si siempre estuviera ahí, la sala lo aprendería.
+  const angTapa = story.arc === "tapada" ? rng() * Math.PI * 2 : 0;
+  const tapaX = Math.cos(angTapa) * 0.74, tapaY = Math.sin(angTapa) * 0.74;
   if (story.arc === "tapada") {
-    win.x = 0.74;
-    win.y = 0.2;
+    win.x = tapaX;
+    win.y = tapaY;
   }
+  // El casi del mano a mano: en cada embestida menos la última, cabecea uno de
+  // los dos, al azar. Por eso nadie sabe quién va a caer hasta el último choque.
+  const casiDe: (Top | null)[] = clashes.map((_, i) => (duo && i < clashes.length - 1 ? (rng() < 0.5 ? win : riv) : null));
 
   // Los golpes, sembrados: primero salen muchos, al final de a uno.
   const victims = rank.slice(2).reverse();
@@ -178,11 +192,12 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
   // elegida en el selector se siga cumpliendo.
   let extra = 0;
   let lastBig = -9;
-  const T_EDGE = T_FIGHT + fightDur * 0.45;
-  const edgeHit = story.arc === "remontada" && duo;
+  const T_EDGE = fight0 + fightDur * 0.45;
+  // La tiza de la remontada es parte de la gresca: con dos, el mano a mano no la tiene.
+  const edgeHit = story.arc === "remontada" && duo && n > 2;
   victims.forEach((v, i) => {
     const f = (i + 1) / (victims.length + 1);
-    const at = T_FIGHT + 0.3 + (fightDur - 0.7) * Math.pow(f, 0.8);
+    const at = fight0 + 0.3 + (fightDur - 0.7) * Math.pow(f, 0.8);
     const h = hash(v, 11);
     // Los dos últimos antes del mano a mano salen siempre sacados: es lo que la sala espera ver.
     const kind: HitKind = i >= victims.length - 2 || h < 0.5 ? "kick" : h < 0.8 ? "glance" : "spent";
@@ -214,6 +229,8 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
   let stop = 0, slowUntil = -1, flashAt = -9, flashPow = 0;
   let clashIdx = 0, clashHits = 0;
   let wobbleSaid = false, recoverSaid = false, fewSaid = false, crowned = false;
+  /** Cuándo se endereza el que acaba de cabecear en su casi (-1: nadie). */
+  let recoverAt = -1;
   /** Las notas del trompo de la rival que se apaga: cuándo suena cada una, en segundos desde que se queda sin cuerda. */
   const APAGA = [0, 0.07, 0.16, 0.27, 0.4];
   let apagado = 0, acostada = false, humTick = -1;
@@ -529,6 +546,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     const last = clashIdx === clashes.length - 1;
     clashIdx++;
     clashHits++;
+    const casi = casiDe[clashIdx - 1] ?? null;
     let nx = riv.x - win.x, ny = riv.y - win.y;
     const d = Math.hypot(nx, ny) || 1;
     nx /= d;
@@ -553,6 +571,13 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     win.hitAt = riv.hitAt = win.flashAt = riv.flashAt = tFx;
     win.hitPow = riv.hitPow = pow;
     riv.wob += 0.025;
+    // El casi de esta embestida: cabecea el que le toca y después se endereza. En
+    // la tapada no se nombra a la ganadora: la línea es la misma para los dos.
+    if (casi) {
+      casi.casiAt = tAll;
+      recoverAt = tAll + 1.2;
+      say(story.arc === "tapada" ? t("cTroWobbleAny") : T[getLang()].cTroWobble(names[casi.idx] ?? ""), 0.85);
+    }
     impacts.push({ x: win.x + nx * rn, y: win.y + ny * rn, at: tFx, pow, nx, ny, seed: 400 + clashHits * 13, tier: 3 });
     flashAt = tFx;
     flashPow = last ? 0.34 : 0.24;
@@ -696,8 +721,8 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
         q.vx += (Math.sin(tAll * 1.3 + q.wobPh) * 0.5 - q.x * 0.35) * dt;
         q.vy += (Math.cos(tAll * 1.1 + q.ph) * 0.5 - q.y * 0.35) * dt;
         if (story.arc === "tapada" && q === win && phase !== "duel") {
-          q.vx += (0.74 - q.x) * 1.2 * dt;
-          q.vy += (0.2 - q.y) * 1.2 * dt;
+          q.vx += (tapaX - q.x) * 1.2 * dt;
+          q.vy += (tapaY - q.y) * 1.2 * dt;
         }
         // Al que están por golpear se le va la pierna: frena, y el golpe lo agarra quieto.
         const damp = victimOf.has(q) && q !== win ? 0.955 : 0.975;
@@ -812,9 +837,9 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     const cues: [number, () => void][] = [
       [0.05, () => say(t("cTroThrow"), 0.1)],
       [T_THROW - 0.3, () => say(T[getLang()].cTroCount(n), 0.2)],
-      [T_THROW + 1.0, () => say(t("cTroDance"), 0.3)],
-      [T_FIGHT, () => say(t(n > 2 ? "cTroFight" : "cTroFeint"), 0.45)],
     ];
+    // Con dos no hay baile ni gresca: el mano a mano arranca con su propia línea.
+    if (n > 2) cues.push([T_THROW + 1.0, () => say(t("cTroDance"), 0.3)], [T_FIGHT, () => say(t("cTroFight"), 0.45)]);
     for (let i = saidUpTo + 1; i < cues.length; i++) {
       const cue = cues[i] as [number, () => void];
       if (tAll < cue[0]) break;
@@ -866,7 +891,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
         say(t("cTroFew"), 0.6);
       }
       // Con dos o tres, amagues: se acercan, se rozan y suena.
-      if (n <= 3 && Math.floor((tAll - T_FIGHT) / 1.1) > Math.floor((tAll - T_FIGHT - DT) / 1.1)) {
+      if (n <= 3 && Math.floor((tAll - fight0) / 1.1) > Math.floor((tAll - fight0 - DT) / 1.1)) {
         const a = win, b = riv;
         const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1;
         a.vx += (dx / d) * 0.5; a.vy += (dy / d) * 0.5;
@@ -876,6 +901,11 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     }
     if (phase === "duel" && duo) {
       const td = tAll - T_DUEL;
+      if (recoverAt >= 0 && tAll >= recoverAt) {
+        recoverAt = -1;
+        say(t("cTroRecover"), 0.9);
+        beep(note(12), 0.12, "triangle", 0.05);
+      }
       // Si algo los separó y no llegaron a tocarse, el choque se da igual y queda anotado.
       if (clashIdx < clashes.length && td >= (clashes[clashIdx] as number) + GRACE) clash(true);
       if (story.arc === "susto" && !wobbleSaid && td >= duelDur * 0.5) {
@@ -1086,8 +1116,17 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       // siguiendo al último que salió volando, y el "¡mano a mano!" se decía
       // sobre una pantalla vacía (lo encontró la revisión visual).
       const recien = tAll - T_DUEL < 0.6;
-      if (wob) cam.lookAt(a.x, a.y - 30 * S.u(), 2.4, 4);
-      else cam.lookAt((a.x + b.x) / 2, (a.y + b.y) / 2 - 20 * S.u(), slow ? 2.5 : tense ? 2.2 : 2.0, recien ? 9 : slow ? 6 : 3);
+      // La cámara va al que cabecea en su casi. En la tapada nunca busca a la ganadora.
+      const cabecea = [win, riv].find((q) => tAll - q.casiAt >= 0 && tAll - q.casiAt < 1 && !(story.arc === "tapada" && q === win));
+      // En un celular la pantalla es angosta: el zoom se achica hasta que los dos
+      // entren enteros (con dos en el ruedo, uno quedaba cortado contra el borde).
+      const pareja = Math.hypot(b.x - a.x, b.y - a.y);
+      const cabe = S.portrait() ? clamp((S.sw() * 0.8 - 60 * S.u()) / Math.max(1, pareja), 1.2, 9) : 9;
+      if (cabecea) {
+        const p = toWorld(cabecea.x, cabecea.y);
+        cam.lookAt(p.x, p.y - 30 * S.u(), Math.min(2.4, S.portrait() ? 1.8 : 9), 4);
+      } else if (wob) cam.lookAt(a.x, a.y - 30 * S.u(), Math.min(2.4, cabe), 4);
+      else cam.lookAt((a.x + b.x) / 2, (a.y + b.y) / 2 - 20 * S.u(), Math.min(slow ? 2.5 : tense ? 2.2 : 2.0, cabe), recien ? 9 : slow ? 6 : 3);
     } else {
       const a = toWorld(win.x, win.y);
       const z = 1.5;
@@ -1183,6 +1222,9 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
         let wob = q.wob;
         if (phase === "duel" && q === riv) wob += 0.05 * clamp((tAll - T_DUEL) / duelDur, 0, 1);
         if (story.arc === "susto" && q === win && wobbleSaid && !recoverSaid) wob = 0.32;
+        // El casi de cada embestida del mano a mano: se inclina fuerte un instante y se endereza.
+        const casi = tAll - q.casiAt;
+        if (casi >= 0 && casi < 1.2) wob += 0.45 * Math.min(1, casi / 0.15) * (1 - clamp((casi - 0.5) / 0.7, 0, 1));
         // El que se quedó sin cuerda cabecea cada vez más fuerte y más rápido.
         const dying = q.alive ? 0 : q.out / WOBBLE_T;
         wob += 0.55 * dying * dying;
@@ -1313,7 +1355,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     // tandas encima de cada trompo, para que cada uno sepa cuál es el suyo.
     // En vertical, de a cinco: con ocho, el chip ancho no entraba entre el
     // contador y el ruedo, y la torre quedaba lejos de su trompo.
-    const roll = phase === "crown" ? [] : S.batch(n, tAll, T_THROW - 0.8, T_FIGHT - 0.05, undefined, S.portrait() ? 5 : 8);
+    const roll = phase === "crown" ? [] : S.batch(n, tAll, T_THROW - 0.8, fight0 - 0.05, undefined, S.portrait() ? 5 : 8);
     // El contador no se tapa: en un celular, con la letra legible, la columna
     // de nombres subía hasta encima de él.
     S.tags(names, roll, (i) => {
@@ -1330,7 +1372,10 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       if (q.outChip) q.outChip.visible = false;
     }
     if (!roll.length && phase !== "crown") {
-      const vivos = live.length <= 8 ? live.filter((q) => tAll >= q.land) : [];
+      // Con hasta 14 personas, todos llevan su nombre mientras bailan, no solo
+      // cuando quedan ocho: el que espera su turno ya sabe cuál es su trompo.
+      const hasta = n <= 14 ? 14 : 8;
+      const vivos = live.length <= hasta ? live.filter((q) => tAll >= q.land) : [];
       // La rival conserva su nombre mientras cae: el chip desaparecía justo
       // en el instante que decide.
       if (phase === "duel" && duo && !riv.alive && !riv.gone) vivos.push(riv);
@@ -1429,7 +1474,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     if (g > 0 && tFx < slowUntil) g *= SLOW;
     tAll += g;
     S.breath(tAll, T_CROWN, tFx < slowUntil ? SLOW : 1);
-    phase = tAll < T_THROW ? "throw" : tAll < T_FIGHT ? "dance" : tAll < T_DUEL ? "fight" : tAll < T_CROWN ? "duel" : "crown";
+    phase = tAll < T_THROW ? "throw" : tAll < fight0 ? "dance" : tAll < T_DUEL ? "fight" : tAll < T_CROWN ? "duel" : "crown";
     if (phase === "duel" && !duelSaid) {
       duelSaid = true;
       // Los golpes que no llegaron se sueltan, y los que quedaban se caen de

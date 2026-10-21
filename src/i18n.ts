@@ -73,6 +73,7 @@ export interface Dict {
   cTroCount: (n: number) => string;
   cTroEdge: (n: string) => string;
   cTroWobble: (n: string) => string;
+  cTroWobbleAny: string[];
   cTroDuel: (a: string, b: string) => string;
   cPinCount: (n: number) => string;
   cPinOut: (n: string) => string;
@@ -84,7 +85,8 @@ export interface Dict {
   cSapCount: (n: number) => string;
   cSapNear: (n: string) => string;
   cSapNext: (k: number, of: number) => string;
-  cSapDone: (n: string) => string;
+  cSapDone: (k: number) => string;
+  cSapMouth: string[];
   cSapTally: (k: number, of: number) => string;
   cQualStart: (n: number) => string;
   cQualLeft: (n: number) => string;
@@ -466,7 +468,7 @@ export const T: Record<Lang, Dict> = {
     cTroDance: ["¡Cómo bailan!", "¡Todos zumbando!", "¡Parejito, parejito!"],
     cTroFight: ["¡Empiezan los choques!", "¡A sacarse del ruedo!", "¡Ahí van, a chocar!"],
     cTroFeint: ["¡Se miden!", "¡Se buscan!", "¡Nadie afloja!"],
-    cTroOut: (n) => pick([`¡Se cayó el de ${n}!`, `¡Sacaron a ${n}!`, `¡${n} fuera del ruedo!`]),
+    cTroOut: (n) => pick([`¡Se cayó el de ${n}!`, `¡Picazo de ${n}!`, `¡${n} fuera del ruedo!`]),
     cTroFew: ["¡Quedan los mejores!", "¡Esto se pone bravo!", "¡Aguantan pocos!"],
     cTroEdge: (n) => pick([`¡${n} casi se sale!`, `¡${n} en el borde!`, `¡${n} rozó la tiza!`]),
     cTroDuel: (a, b) => pick([`¡Mano a mano, ${a} ${yE(b)} ${b}!`, `¡${a} contra ${b}!`, `¡Quedan ${a} ${yE(b)} ${b}!`]),
@@ -491,13 +493,14 @@ export const T: Record<Lang, Dict> = {
     cPinLeft: "ADENTRO",
     // --- Sapo: la rana del medio, un agujero por nombre y una argolla que se lanza.
     gameSapo: "Sapo",
+    cSapMouth: ["¡La rana se la tragó y la escupió!", "¡Croac! ¡Se la tragó y la escupió!"],
     cSapHang: ["¡Se arma la mesa!", "¡La rana en su lugar!", "¡Cada nombre tiene su agujero!"],
     cSapCount: (n) => `¡${n} agujeros, uno por nombre!`,
     cSapThrow: ["¡Ahí va la argolla!", "¡Tiro!", "¡Se lanza la argolla!"],
     cSapLip: ["¡Pegó en la rana!", "¡Rebotó en la boca!", "¡Le dio a la rana!"],
     cSapMiss: ["¡Pegó en la mesa y se fue!", "¡Afuera!", "¡Qué lástima, rodó lejos!"],
     cSapRim: ["¡Clinc!", "¡Pegó en el borde!", "¡Tocó el aro!"],
-    cSapNear: (n) => pick([`¡Casi cae en el de ${n}!`, `¡Bailó en el borde de ${n}!`, `¡${n} se ilusiona!`]),
+    cSapNear: (n) => pick([`¡Casi cae en el de ${n}!`, `¡Bailó en el borde de ${n}!`]),
     cSapLast: ["¡Último tiro!", "¡Este es el bueno!", "¡Se decide ahora!"],
     cSapIn: ["¡ADENTRO!", "¡Entró!", "¡Cayó justo!"],
     cSapHoles: "AGUJEROS",
@@ -530,7 +533,7 @@ export const T: Record<Lang, Dict> = {
     cQuiLeft: "QUEDAN",
     cQuiAlmost: ["¡Casi se da vuelta!", "¡Uy, casi!", "¡Se salvó de milagro!"],
     cSapNext: (k) => `¡Va el premio ${k}!`,
-    cSapDone: (n) => pick([`¡Cayó en el agujero de ${n}: ganador!`, `¡Ahí quedó, en el de ${n}: ganador!`]),
+    cSapDone: (k) => pick([`¡Cayó el premio ${k}!`, `¡Ahí quedó el premio ${k}!`]),
     cSapTally: (k, of) => `Premio ${k} de ${of}`,
     cSapAlmost: "¡Casi!",
     // --- Carnaval de Oruro. La entrada de la Diablada hasta el Socavón.
@@ -624,6 +627,7 @@ export const T: Record<Lang, Dict> = {
     listaCabina: "{g} · línea {l}",
     gameTombola: "Tómbola",
     gameTrompo: "Trompo",
+    cTroWobbleAny: ["¡Se tambalea!", "¡Cabecea!", "¡Ojo, se inclina!"],
     gameTotora: "Balsas de totora",
     gamePinata: "Piñata",
     cPinPrize: (k) => (k > 1 ? pick(["¡Salen con premio!", "¡Se llevan premio y salen!"]) : pick(["¡Sale con premio!", "¡Se lleva premio y sale!"])),
@@ -1651,7 +1655,7 @@ export const T: Record<Lang, Dict> = {
     cTroDance: ["Look at them dance!", "All of them humming!", "Steady, steady!"],
     cTroFight: ["The clashes begin!", "Knock them out of the ring!", "Here they go!"],
     cTroFeint: ["Sizing each other up!", "They circle!", "Nobody backs down!"],
-    cTroOut: (n) => pick([`${n}'s top fell!`, `${n} is knocked out!`, `${n} is out of the ring!`]),
+    cTroOut: (n) => pick([`${n}'s top fell!`, `Picazo for ${n}!`, `${n} is out of the ring!`]),
     cTroFew: ["Only the best are left!", "It's getting rough!", "Few still standing!"],
     cTroEdge: (n) => pick([`${n} almost went out!`, `${n} on the edge!`, `${n} grazed the chalk!`]),
     cTroDuel: (a, b) => pick([`Head to head, ${a} and ${b}!`, `${a} against ${b}!`, `It's ${a} and ${b}!`]),
@@ -1675,13 +1679,14 @@ export const T: Record<Lang, Dict> = {
     cPinLeft: "INSIDE",
     // --- Sapo: the frog in the middle, one hole per name and a ring to toss.
     gameSapo: "Sapo",
+    cSapMouth: ["The frog swallowed it and spat it out!", "Ribbit! Swallowed, then spat out!"],
     cSapHang: ["The table is going up!", "Frog in place!", "Every name gets a hole!"],
     cSapCount: (n) => `${n} holes, one per name!`,
     cSapThrow: ["Here goes the ring!", "Toss!", "The ring flies!"],
     cSapLip: ["It hit the frog!", "Off the frog's mouth!", "Bounced off the frog!"],
     cSapMiss: ["It hit the table and rolled off!", "Out!", "Too bad, it rolled away!"],
     cSapRim: ["Clink!", "It hit the rim!", "It clipped the rim!"],
-    cSapNear: (n) => pick([`Almost dropped into ${n}'s hole!`, `It danced on ${n}'s rim!`, `${n} gets hopeful!`]),
+    cSapNear: (n) => pick([`Almost dropped into ${n}'s hole!`, `It danced on ${n}'s rim!`]),
     cSapLast: ["Last toss!", "This is the one!", "It's decided now!"],
     cSapIn: ["IN!", "It dropped in!", "Right in!"],
     cSapHoles: "HOLES",
@@ -1714,7 +1719,7 @@ export const T: Record<Lang, Dict> = {
     cQuiLeft: "LEFT",
     cQuiAlmost: ["It almost flipped!", "Whoa, so close!", "Saved by a hair!"],
     cSapNext: (k) => `Prize ${k}, here it goes!`,
-    cSapDone: (n) => pick([`It dropped into ${n}'s hole: winner!`, `There it rests, in ${n}'s: winner!`]),
+    cSapDone: (k) => pick([`Prize ${k} dropped in!`, `There it rests: prize ${k}!`]),
     cSapTally: (k, of) => `Prize ${k} of ${of}`,
     cSapAlmost: "Almost!",
     cOruStart: ["The entrada begins!", "The band strikes up!", "Let the diablada dance!"],
@@ -1802,6 +1807,7 @@ export const T: Record<Lang, Dict> = {
     listaCabina: "{g} · {l} line",
     gameTombola: "Ball drum",
     gameTrompo: "Spinning tops",
+    cTroWobbleAny: ["It's wobbling!", "It's staggering!", "Careful, it's leaning!"],
     gameTotora: "Reed boats",
     gamePinata: "Piñata",
     cPinPrize: (k) => (k > 1 ? pick(["Out with prizes!", "They take prizes and leave!"]) : pick(["Out with a prize!", "Takes a prize and leaves!"])),

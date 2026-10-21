@@ -22,7 +22,7 @@ También es el primero que nació directamente en el motor nuevo, con la cámara
 3. Embiste.
 
 El golpe pasa cuando los dos se tocan de verdad, nunca antes ni a distancia. Hay tres maneras de salir:
-- **Sacado**, la mitad: vuela girando fuera de la tiza, pica dos veces en el piso levantando tierra y queda acostado.
+- **Sacado**, la mitad: vuela girando fuera de la tiza, pica dos veces en el piso levantando tierra y queda acostado. El relator lo llama "¡Picazo de X!", una palabra prestada: en Tarija, en el juego de la moneda, el picazo es el golpe de la púa contra la moneda, no contra otro trompo (El País, 2021). Acá se toma para el golpe entre trompos y no pretende ser el nombre de ese golpe.
 - **De refilón**, tres de cada diez: el golpe entra torcido, el trompo no sale pero queda cabeceando y se acuesta.
 - **Sin cuerda**, el resto: cabecea cada vez más fuerte y se viene abajo solo.
 
@@ -31,6 +31,8 @@ Los dos últimos antes del mano a mano salen siempre sacados. Los que salieron s
 **La física.** El contacto es el de dos masas con rebote: el que embiste pesa más, así que el otro sale disparado y él sigue un poco, frenado. El giro desvía el golpe de costado, como pasa con dos trompos de verdad. Los roces que no están en el guion también rebotan y se desvían, y los fuertes sacan chispas. Nadie atraviesa a nadie: tres pasadas de separación por paso de física, cinco con más de cuarenta personas.
 
 **El mano a mano.** Quedan dos y se miden: dan vueltas uno alrededor del otro. Antes de cada choque se echan atrás y embisten a la vez, y chocan tres veces. Después del último choque, la rival se queda sin cuerda y se cae.
+
+**La duda del mano a mano.** En cada choque menos el último, cabecea uno de los dos, al azar y sembrado: se inclina fuerte un instante, la sala oye "¡Cabecea el de X!" y después "¡Y sigue bailando!". Así que el que más cabecea no siempre es el que pierde, y nadie sabe quién va a caer hasta el último choque. En la tapada la línea no nombra a nadie y la cámara nunca va a la ganadora.
 
 **Lo que hace que un golpe se sienta.** Lo que se aprendió del animé y de los juegos de pelea:
 - **La parada.** El juego se congela entre 55 y 110 milésimas en los golpes grandes. En la gresca del principio no hay parada, porque sería tartamudear: solo cuando quedan doce o menos y con medio segundo entre una y otra.
@@ -52,7 +54,7 @@ Los arcos del director de emoción se ven así:
 | Susto | En el mano a mano el trompo ganador cabecea, casi se cae ("¡cabecea el de fulano!") y se endereza |
 | Remontada | A mitad de los choques le pegan y lo mandan contra la tiza: la roza y vuelve |
 | Duelo | El mano a mano dura cuatro choques en vez de tres |
-| Tapada | Baila callado contra el borde y la cámara nunca lo busca |
+| Tapada | Baila callado contra el borde, en un lugar que cambia de un sorteo a otro, y la cámara nunca lo busca |
 
 ## Cómo escala
 
@@ -60,7 +62,8 @@ El tamaño de cada trompo sale del lugar que hay en el ruedo, con topes.
 
 | Participantes | Qué se ve |
 |---|---|
-| 2 | No hay choques de más: los dos se miden, se buscan y amagan hasta el mano a mano |
+| 2 | Sin baile ni amagues: el mano a mano arranca cuando los dos ya están en el ruedo, con más aire entre choques para que cada casi se lea |
+| 14 | Todos llevan su nombre mientras bailan, y los choques se van dando de a uno |
 | 18 | Un ruedo lleno que se va vaciando de a pocos |
 | 200 | Trompos chicos, con muchos choques al principio; los nombres aparecen cuando quedan ocho |
 
@@ -80,7 +83,7 @@ A eso se suman las paradas de los golpes y la cámara lenta del último choque, 
 
 ## La cámara
 
-Sobre el ruedo al tirar. En los golpes grandes **llega antes que el golpe**: encuadra a los dos mientras el que pega toma impulso, y el golpe cae en el cuadro. Llegar después era mostrar un trompo que ya se iba. Después sigue al que sacan hasta la tiza. En el mano a mano queda pegada, se cierra un poco antes de cada choque, se mete más en la cámara lenta y se acerca al que cabecea.
+Sobre el ruedo al tirar. En los golpes grandes **llega antes que el golpe**: encuadra a los dos mientras el que pega toma impulso, y el golpe cae en el cuadro. Llegar después era mostrar un trompo que ya se iba. Después sigue al que sacan hasta la tiza. En el mano a mano queda pegada, se cierra un poco antes de cada choque, se mete más en la cámara lenta y se acerca al que cabecea. En un celular, el zoom se achica hasta que los dos trompos entren enteros.
 
 ## El sonido
 
