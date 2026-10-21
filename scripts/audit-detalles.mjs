@@ -112,6 +112,28 @@ async function pegar(page, texto) {
   await sleep(400);
 }
 
+/**
+ * Entra con la cuenta de prueba y devuelve su dirección (del panel de la
+ * cuenta). Con `?grifo=0` la cuenta se arma en el navegador y no se le pide
+ * nada a la red: alcanza para Mis sorteos, no para sellar.
+ */
+async function cuentaDePrueba(page) {
+  await page.waitFor("document.querySelector('#gate button')", 20000);
+  await page.eval("document.querySelector('#gate button').click(); true");
+  await page.waitFor("document.querySelector('.login-opt')", 15000);
+  await page.eval("[...document.querySelectorAll('.login-opt')].find((e) => /prueba|Test account/.test(e.textContent))?.click(); true");
+  const entro = await page.waitFor("!document.querySelector('.modal-back') && document.querySelector('#wallet-box .hello')", 60000);
+  if (!entro.ok) throw new Error("no entró la cuenta de prueba");
+  await page.eval("document.querySelector('#wallet-box .hello').click(); true");
+  const panel = await page.waitFor("document.querySelector('.acct-short[title]')", 15000);
+  if (!panel.ok) throw new Error("no se abrió el panel de la cuenta");
+  const addr = await page.eval("document.querySelector('.acct-short').title");
+  await page.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+  await page.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Escape", code: "Escape", windowsVirtualKeyCode: 27 });
+  await sleep(300);
+  return addr;
+}
+
 const visible = (sel) => `(() => { const e = document.querySelector(${js(sel)}); return !!e && getComputedStyle(e).display !== 'none' && e.offsetParent !== null; })()`;
 const foco = (page) => page.eval("document.activeElement && (document.activeElement.id || document.activeElement.className || document.activeElement.tagName)");
 
@@ -283,6 +305,65 @@ const DETALLES = {
         await pegar(page, "Ana Quispe\nLuis Mamani\nAna Quispe\nana quispe");
         const st2 = JSON.parse(await page.eval("JSON.stringify({ ta: document.getElementById('ta').value, aviso: document.getElementById('csv-aviso').textContent })"));
         check(`${quien} · una lista sin numerar entra tal cual, con el aviso de los repetidos`, st2.ta === "Ana Quispe\nLuis Mamani\nAna Quispe\nana quispe" && /dos veces igual/.test(st2.aviso) && /parecen la misma persona/.test(st2.aviso), `"${st2.aviso}"`);
+      } finally {
+        await page.send("Page.close").catch(() => undefined);
+      }
+    },
+  },
+
+  D14: {
+    que: "el nombre del evento se escribe encima de la fecha y se guarda con Enter",
+    async correr(browser, v, tema, quien) {
+      // La cuenta de prueba con el grifo apagado: se arma en el navegador, sin pedirle nada a la red.
+      const page = await abrir(browser, v, tema, "?grifo=0");
+      try {
+        // Las pestañas comparten el almacenamiento: sin la cuenta, los sorteos ni los eventos de una corrida anterior.
+        await page.eval("localStorage.clear(); true");
+        await page.send("Page.reload");
+        await page.waitFor("document.readyState === 'complete'", 20000);
+        await sleep(900);
+        const addr = await cuentaDePrueba(page);
+        const ahora = Math.floor(Date.now() / 1000);
+        const filas = [
+          { organizer: addr, listHash: "a".repeat(64), count: 12, numWinners: 1, round: 33000001, sealedAt: ahora - 3600, prize: "Termo", winners: ["Ana Quispe"], proof: "https://tinkazo.app/verificar.html#p=uno" },
+          { organizer: addr, listHash: "b".repeat(64), count: 11, numWinners: 1, round: 33000101, sealedAt: ahora - 3000, prize: "Polera", winners: ["Luis Mamani"], proof: "https://tinkazo.app/verificar.html#p=dos" },
+        ];
+        await page.eval(`localStorage.setItem('tinkazo.history.testnet', ${js(JSON.stringify(filas))}); localStorage.removeItem('tinkazo.eventos.testnet'); true`);
+        await page.send("Page.navigate", { url: `${base}/?grifo=0&theme=${tema}&lang=es#mis-sorteos` });
+        await page.waitFor("document.readyState === 'complete'", 20000);
+        const hay = await page.waitFor("document.querySelector('[data-nombrar]')", 30000);
+        if (!hay.ok) throw new Error('no apareció "Ponerle nombre"');
+        await page.eval("document.querySelector('[data-nombrar]').click(); true");
+        await sleep(500);
+        const a = JSON.parse(
+          await page.eval(
+            "JSON.stringify((() => { const f = document.activeElement; return { id: f && f.id, marcado: f && f.value ? f.value.slice(f.selectionStart, f.selectionEnd) : '' }; })())",
+          ),
+        );
+        check(`${quien} · "Ponerle nombre" deja el campo con el foco y la fecha marcada`, /^evn-n-/.test(a.id) && /^Sorteos del /.test(a.marcado), `foco en ${a.id} · marcado "${a.marcado}"`);
+        await captura(page, "D14", v, tema, "ponerle-nombre");
+        await page.send("Input.insertText", { text: "Meetup n8n Bolivia" });
+        await page.send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, text: "\r" });
+        await page.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 });
+        await sleep(500);
+        const b = JSON.parse(
+          await page.eval(
+            "JSON.stringify({ nombres: JSON.parse(localStorage.getItem('tinkazo.eventos.testnet') || '[]').map((e) => e.nombre), foco: document.activeElement && document.activeElement.textContent, aviso: (document.querySelector('.evn-aviso') || {}).textContent || '' })",
+          ),
+        );
+        check(`${quien} · Enter guarda el nombre y lo dice`, b.nombres[0] === "Meetup n8n Bolivia" && /Nombre guardado/.test(b.aviso), `${js(b.nombres)} · "${b.aviso}"`);
+        check(`${quien} · y el foco pasa a "Compartir el evento"`, /Compartir el evento/.test(b.foco || ""), `foco en "${b.foco}"`);
+        await captura(page, "D14", v, tema, "guardado");
+        // Escribir otro y salir del campo sin tocar "Guardar": no se pierde.
+        await page.eval("const c = document.querySelector('.evn-card input'); c.focus(); c.select(); true");
+        await page.send("Input.insertText", { text: "Meetup n8n" });
+        await page.eval("document.querySelector('.evn-card input').blur(); true");
+        await sleep(300);
+        await page.send("Page.reload");
+        await page.waitFor("document.readyState === 'complete'", 20000);
+        await page.waitFor("document.querySelector('.evn-card input')", 30000);
+        const c = await page.eval("document.querySelector('.evn-card input').value");
+        check(`${quien} · lo escrito sin tocar "Guardar" sigue después de recargar`, c === "Meetup n8n", `"${c}"`);
       } finally {
         await page.send("Page.close").catch(() => undefined);
       }

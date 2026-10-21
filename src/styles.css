@@ -1185,7 +1185,7 @@
   .evn { border: var(--bw) solid var(--ink); background: var(--card); box-shadow: var(--sh-sm); padding: 14px 16px; }
   .evn h3 { font-size: 18px; font-weight: 900; }
   .evn > .note { margin: 4px 0 10px; }
-  .evn-nuevo { display: grid; gap: 6px; }
+  .evn-nuevo, .evn-nombre { display: grid; gap: 6px; }
   .evn-fila { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
   .evn input[type="text"] { flex: 1 1 220px; min-width: 0; min-height: 44px; padding: 8px 10px; font: inherit; color: var(--ink); background: var(--paper); border: var(--bw) solid var(--ink); }
   .evn .mini { min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }

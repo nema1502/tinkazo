@@ -368,7 +368,13 @@ function enlazarRearmado(): void {
   });
 }
 
-/** Un grupo por fecha pasa a ser un evento con nombre: sus sorteos salen de la lista suelta. */
+/**
+ * Un grupo por fecha pasa a ser un evento con nombre: sus sorteos salen de la
+ * lista suelta. Nace con la fecha de nombre, y el campo queda con el foco y la
+ * fecha marcada: lo que se escribe la reemplaza, y Enter lo guarda. Hasta el
+ * 21 de octubre de 2026 el foco se perdía, Enter no hacía nada y lo escrito se
+ * iba al recargar (buscador de detalles, D14).
+ */
 function nombrarGrupo(organizer: string, g: Entry[]): void {
   const sorteos: SorteoGuardado[] = g
     .filter((e) => tieneComprobante(e) && e.winners?.length && e.proof)
@@ -381,6 +387,35 @@ function nombrarGrupo(organizer: string, g: Entry[]): void {
   guardarEventos(network.name, lista);
   avisar(t("evnCreado").replace("{nombre}", nombre));
   paint(organizer);
+  const campo = document.getElementById(`evn-n-${id}`) as HTMLInputElement | null;
+  campo?.focus();
+  campo?.select();
+}
+
+/**
+ * Guarda el nombre que dice el campo de un evento. Con `repintar`, además
+ * avisa y vuelve a dibujar la sección (Enter o "Guardar el nombre"); sin él
+ * (al salir del campo), solo guarda: repintar ahí rehacía los botones justo
+ * cuando se estaba tocando "Compartir el evento", y el toque se perdía.
+ */
+function guardarNombre(campo: HTMLInputElement, id: string, repintar: boolean): void {
+  const nombre = campo.value.trim();
+  if (!shown) return;
+  if (!nombre) {
+    if (!repintar) return;
+    avisar(t("evnNombreVacio"));
+    paint(shown);
+    return;
+  }
+  const lista = leerEventos(network.name);
+  if (lista.find((x) => x.id === id)?.nombre === nombre && !repintar) return;
+  guardarEventos(network.name, renombrarEvento(lista, id, nombre));
+  if (!repintar) return;
+  avisar(t("evnRenombrado").replace("{nombre}", nombre));
+  paint(shown);
+  // Lo que sigue es mandarlo: el foco a "Compartir el evento", sin volver a abrir el teclado del celular.
+  const sigue = document.querySelector<HTMLButtonElement>(`[data-evento-compartir="${CSS.escape(id)}"]`);
+  if (sigue && !sigue.disabled) sigue.focus({ preventScroll: true });
 }
 
 /** La clave "id|posición" de un sorteo dentro de un evento, como la ponen los botones. */
@@ -426,9 +461,12 @@ function tarjetaDeEvento(ev: EventoGuardado, list: Entry[]): string {
   const filas = ev.sorteos.map((s, k) => filaDeEvento(ev, s, k, list)).join("");
   return (
     `<article class="evn-card">` +
+    // Un formulario, como "Crear evento": Enter guarda el nombre.
+    `<form class="evn-nombre" data-renombrar="${id}">` +
     `<label class="kicker" for="evn-n-${id}">${esc(t("evnNombre"))}</label>` +
-    `<div class="evn-fila"><input id="evn-n-${id}" type="text" maxlength="80" value="${esc(ev.nombre)}">` +
-    `<button class="ghost mini" type="button" data-evento-guardar="${id}">${esc(t("evnGuardar"))}</button></div>` +
+    `<div class="evn-fila"><input id="evn-n-${id}" type="text" maxlength="80" autocomplete="off" value="${esc(ev.nombre)}">` +
+    `<button class="ghost mini" type="submit">${esc(t("evnGuardar"))}</button></div>` +
+    `</form>` +
     `<p class="hc-meta">${esc(n === 1 ? t("evUnSorteo") : t("evNSorteos").replace("{n}", String(n)))}</p>` +
     `<div class="hc-acciones">` +
     `<button class="primary mini" type="button" data-evento-compartir="${id}"${n ? "" : " disabled"}>${esc(t("histGrupoCompartir"))}</button>` +
@@ -466,6 +504,13 @@ function enlazarEventos(): void {
   const caja = $("hist-eventos");
   caja.addEventListener("submit", (e) => {
     const f = e.target as HTMLFormElement;
+    const renombra = f.closest<HTMLFormElement>("form[data-renombrar]");
+    if (renombra) {
+      e.preventDefault();
+      const campo = renombra.querySelector<HTMLInputElement>("input");
+      if (campo) guardarNombre(campo, renombra.dataset.renombrar ?? "", true);
+      return;
+    }
     if (!f.matches("form[data-nuevo]") || !shown) return;
     e.preventDefault();
     const nombre = (f.querySelector("input") as HTMLInputElement).value.trim();
@@ -484,14 +529,6 @@ function enlazarEventos(): void {
     if (compartir) {
       const ev = leerEventos(network.name).find((x) => x.id === compartir.dataset.eventoCompartir);
       if (ev) void sorteosDelEvento(ev).then((sorteos) => compartirEvento(ev.nombre, sorteos));
-      return;
-    }
-    const guardar = el.closest<HTMLButtonElement>("[data-evento-guardar]");
-    if (guardar) {
-      const nombre = guardar.closest(".evn-card")?.querySelector<HTMLInputElement>("input")?.value.trim() ?? "";
-      if (!nombre) avisar(t("evnNombreVacio"));
-      else guardarEventos(network.name, renombrarEvento(leerEventos(network.name), guardar.dataset.eventoGuardar ?? "", nombre));
-      paint(shown);
       return;
     }
     const borrar = el.closest<HTMLButtonElement>("[data-evento-borrar]");
@@ -516,6 +553,12 @@ function enlazarEventos(): void {
       const r = sorteoDeClave(compartirEnlace.dataset.compartirEnlace ?? "");
       if (r) void compartirSorteo(r.s.enlace, r.s.ganadores);
     }
+  });
+  // Al salir del campo con un nombre nuevo, se guarda sin repintar: lo escrito no se pierde aunque no se toque "Guardar".
+  caja.addEventListener("change", (e) => {
+    const campo = e.target;
+    const f = campo instanceof HTMLInputElement ? campo.closest<HTMLFormElement>("form[data-renombrar]") : null;
+    if (f && campo instanceof HTMLInputElement) guardarNombre(campo, f.dataset.renombrar ?? "", false);
   });
 }
 

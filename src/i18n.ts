@@ -1530,6 +1530,7 @@ export const T: Record<Lang, Dict> = {
     evnNombrar: "Ponerle nombre", evnCompartirPartes: "Compartir el evento ({n} partes)",
     evnSumado: "Sumado a {nombre}.", evnQuitado: "Quitado de {nombre}.", evnNombreVacio: "Ponele un nombre al evento.",
     evnCreado: "Evento creado: {nombre}.", evnSinSorteos: "Todavía no tiene sorteos: sumale alguno desde Mis sorteos.",
+    evnRenombrado: "Nombre guardado: {nombre}.",
     vCompartir: "Compartir este sorteo",
     cTroSpent: (n) => pick([`¡Se le acabó la cuerda a ${n}!`, `¡Se apagó el trompo de ${n}!`, `¡${n} se queda sin cuerda!`]),
     // --- Constelación, sapo y ¿Quién es? (7 de octubre de 2026).
@@ -2797,6 +2798,7 @@ export const T: Record<Lang, Dict> = {
     evnNombrar: "Name it", evnCompartirPartes: "Share the event ({n} parts)",
     evnSumado: "Added to {nombre}.", evnQuitado: "Removed from {nombre}.", evnNombreVacio: "Give the event a name.",
     evnCreado: "Event created: {nombre}.", evnSinSorteos: "No draws yet: add one from My draws.",
+    evnRenombrado: "Name saved: {nombre}.",
     vCompartir: "Share this draw",
     cTroSpent: (n) => pick([`${n}'s top runs out of spin!`, `${n}'s top stops spinning!`, `${n} is out of spin!`]),
     // --- Constellation, sapo and Guess Who (7 October 2026).
