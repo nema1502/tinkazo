@@ -1,0 +1,232 @@
+#!/usr/bin/env node
+/**
+ * Los detallitos de la experiencia, uno por uno.
+ *
+ * Nicolás, 21 de octubre de 2026: "detallitos que son bonitos y ahorran tiempo
+ * o hacen mejor la experiencia de usuario". Un buscador los encontró usando la
+ * herramienta de verdad, un revisor los filtró, y cada uno se arregló con su
+ * propio cambio (docs/ux.md, "Los detallitos"). Esto mide que sigan arreglados.
+ *
+ * Corre en el modo libre, sin Stellar ni cuenta: abre la herramienta, quita la
+ * puerta como los demás auditores del modo libre y hace lo que haría una
+ * persona. Cada detallito es una entrada de DETALLES, con sus comprobaciones y
+ * una captura por pantalla y por tema en `--out`. Con `--prefijo antes` sobre
+ * una versión vieja, las mismas capturas sirven para comparar.
+ *
+ * Uso:
+ *   node scripts/audit-detalles.mjs [--base http://localhost:4173] [--out DIR]
+ *                                   [--vistas 1280x720,390x844] [--temas dark,light]
+ *                                   [--solo D01,D03] [--prefijo despues]
+ *
+ * Un Chrome a la vez y con su propio puerto: CDP_PORT=<puerto> node ...
+ * Sale con código 1 si algo falla.
+ */
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+import { launch, sleep } from "./lib/browser.mjs";
+
+const args = process.argv.slice(2);
+const opt = (k, d) => {
+  const i = args.indexOf(`--${k}`);
+  return i >= 0 && args[i + 1] && !args[i + 1].startsWith("--") ? args[i + 1] : d;
+};
+const base = opt("base", "http://localhost:4173").replace(/\/$/, "");
+const outDir = opt("out", "docs/capturas/detalles");
+const vistas = opt("vistas", "1280x720,390x844").split(",").map((s) => {
+  const [w, h] = s.split("x").map(Number);
+  return { etiqueta: s, w, h, celular: w <= 700 };
+});
+const temas = opt("temas", "dark").split(",");
+const solo = opt("solo", "") ? opt("solo", "").split(",") : null;
+const prefijo = opt("prefijo", "");
+mkdirSync(outDir, { recursive: true });
+
+let fallas = 0;
+let pasan = 0;
+const check = (nombre, ok, detalle = "") => {
+  if (ok) pasan++;
+  else fallas++;
+  console.log(`  ${ok ? "✓" : "✗"} ${nombre}${detalle ? ` · ${detalle}` : ""}`);
+};
+
+const NL = JSON.stringify("\n");
+const js = (v) => JSON.stringify(v);
+
+/** Una pestaña nueva con la pantalla y el tema pedidos, en la herramienta. */
+async function abrir(browser, v, tema, query = "", hash = "#sortear") {
+  const page = await browser.open("about:blank");
+  await page.send("Emulation.setDeviceMetricsOverride", { width: v.w, height: v.h, deviceScaleFactor: 1, mobile: v.celular, screenWidth: v.w, screenHeight: v.h });
+  const sep = query ? "&" : "?";
+  await page.send("Page.navigate", { url: `${base}/${query}${sep}theme=${tema}&lang=es${hash}` });
+  await page.waitFor("document.readyState === 'complete'", 20000);
+  await sleep(900);
+  return page;
+}
+
+/** Sin cuenta, el botón de sellar queda detrás de la puerta: el modo libre arma el mismo flujo (como audit-espera). */
+const libre = (page) =>
+  page.eval(
+    "document.querySelector('#sec-participants .body').classList.remove('locked'); document.getElementById('btn-freeze').removeAttribute('aria-disabled'); document.getElementById('gate').style.display = 'none'; document.getElementById('onboard').style.display = 'none'; true",
+  );
+
+/** Escribe en el cuadro como si se tecleara: el evento `input` es el de siempre. */
+const escribir = (page, texto) =>
+  page.eval(`(() => { const ta = document.getElementById('ta'); ta.value = ${js(texto)}; ta.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
+
+/** Sella la lista del cuadro en el modo libre y espera a que se vea la lista sellada. */
+async function sellar(page) {
+  await page.eval("document.getElementById('btn-freeze').click(); true");
+  const ok = await page.waitFor("getComputedStyle(document.getElementById('sec-frozen')).display !== 'none'", 15000);
+  if (!ok.ok) throw new Error("no se selló la lista");
+  await sleep(700);
+}
+
+/** Lanza el sorteo apenas nace el número y salta el juego hasta el resultado. */
+async function sortearYSaltar(page) {
+  const nacio = await page.waitFor("!document.getElementById('btn-draw').disabled", 25000);
+  if (!nacio.ok) throw new Error("no nació el número");
+  await page.eval("document.getElementById('btn-draw').click(); true");
+  const show = await page.waitFor("document.getElementById('stadium').style.display === 'block'", 40000);
+  if (!show.ok) throw new Error("no arrancó el show");
+  await sleep(700);
+  await page.eval("document.getElementById('st-skip')?.click(); true");
+  const fin = await page.waitFor("document.getElementById('winner-box').style.display === 'block' && document.getElementById('stadium').style.display !== 'block'", 30000);
+  if (!fin.ok) throw new Error("no llegó el resultado");
+}
+
+const visible = (sel) => `(() => { const e = document.querySelector(${js(sel)}); return !!e && getComputedStyle(e).display !== 'none' && e.offsetParent !== null; })()`;
+const foco = (page) => page.eval("document.activeElement && (document.activeElement.id || document.activeElement.className || document.activeElement.tagName)");
+
+async function captura(page, id, v, tema, que = "") {
+  const nombre = [prefijo, id, que, v.etiqueta, tema].filter(Boolean).join("-");
+  await page.screenshot(join(outDir, `${nombre}.png`));
+}
+
+/**
+ * Los detallitos. Cada uno recibe el navegador, la pantalla y el tema, y deja
+ * sus comprobaciones y sus capturas. Cada pestaña es nueva: no se arrastra
+ * nada de uno a otro (el `sessionStorage` es de cada pestaña).
+ */
+const DETALLES = {
+  D01: {
+    que: "con la lista sellada, lo que se ve es lo que se selló",
+    async correr(browser, v, tema, quien) {
+      const page = await abrir(browser, v, tema, "?lead=30");
+      try {
+        await libre(page);
+        await escribir(page, Array.from({ length: 22 }, (_, i) => `Persona ${i + 1}`).join("\n"));
+        await page.eval("document.getElementById('prize').value = 'Termo'; true");
+        await sellar(page);
+        const n0 = await page.eval("document.getElementById('names').childElementCount");
+        // Lo que antes cambiaba la lista ya sellada.
+        await page.eval("document.getElementById('btn-sample').click(); document.getElementById('csv-edit').click(); true");
+        await sleep(300);
+        const st = JSON.parse(
+          await page.eval(`JSON.stringify({
+            n: document.getElementById('names').childElementCount,
+            ta: document.getElementById('ta').value.split(${NL}).length,
+            cerrados: ['ta', 'prize', 'nw', 'csv', 'csv-luma'].every((id) => document.getElementById(id).disabled),
+          })`),
+        );
+        check(`${quien} · "Cargar ejemplo" y "Editar selección" no cambian la lista sellada`, n0 === 22 && st.n === 22 && st.ta === 22, `${n0} → ${st.n} nombres`);
+        check(`${quien} · el cuadro, el premio, la cantidad y los archivos quedan cerrados`, st.cerrados);
+        await page.eval("document.getElementById('btn-sala').click(); true");
+        const sala = await page.waitFor("document.querySelector('.sala .sala-nombres li')", 8000);
+        await sleep(900);
+        const s = sala.ok
+          ? JSON.parse(
+              await page.eval(
+                "JSON.stringify({ sticker: document.querySelector('.sala .sticker').textContent, n: document.querySelectorAll('.sala .sala-nombres li').length, huella: document.querySelector('.sala .sala-huella b').textContent, sello: document.getElementById('k-digest').textContent })",
+              ),
+            )
+          : {};
+        check(`${quien} · "Mostrar la lista a la sala" muestra la sellada`, sala.ok && s.n === 22 && /sellada/i.test(s.sticker) && s.sello.startsWith(s.huella), sala.ok ? `"${s.sticker}" · ${s.n} nombres · huella ${s.huella} / sello ${s.sello}` : "no se abrió");
+        await captura(page, "D01", v, tema, "sala");
+        await page.eval("document.querySelector('.sala [data-cerrar]')?.click(); true");
+        await sleep(300);
+        check(`${quien} · al cerrarla, el foco vuelve al botón`, (await foco(page)) === "btn-sala", `foco en ${await foco(page)}`);
+        await page.eval("document.getElementById('sec-participants').scrollIntoView({ block: 'start' }); true");
+        await sleep(300);
+        await captura(page, "D01", v, tema, "sellada");
+      } finally {
+        await page.send("Page.close").catch(() => undefined);
+      }
+    },
+  },
+
+  D03: {
+    que: "la lista sin sellar vuelve al recargar",
+    async correr(browser, v, tema, quien) {
+      const page = await abrir(browser, v, tema);
+      try {
+        await escribir(page, Array.from({ length: 12 }, (_, i) => `Nombre ${i + 1}`).join("\n"));
+        await page.eval(
+          "(() => { [...document.querySelectorAll('#prize-chips button')].find((b) => /Termo/.test(b.textContent))?.click(); const nw = document.getElementById('nw'); nw.value = '2'; nw.dispatchEvent(new Event('change', { bubbles: true })); return true; })()",
+        );
+        await sleep(700);
+        await page.send("Page.reload");
+        await page.waitFor("document.readyState === 'complete'", 20000);
+        await sleep(1000);
+        const st = JSON.parse(
+          await page.eval(
+            "JSON.stringify({ n: document.getElementById('names').childElementCount, premio: document.getElementById('prize').value, nw: document.getElementById('nw').value, aviso: (document.getElementById('csv-aviso') || {}).textContent || '' })",
+          ),
+        );
+        check(`${quien} · después de recargar vuelven los 12 nombres, el premio y la cantidad`, st.n === 12 && st.premio === "Termo" && st.nw === "2", `${st.n} nombres · "${st.premio}" · ${st.nw}`);
+        check(`${quien} · y lo dice`, /Recuperamos/.test(st.aviso), st.aviso ? `"${st.aviso}"` : "sin aviso");
+        await page.eval("(document.getElementById('csv-aviso') || document.getElementById('ta')).scrollIntoView({ block: 'center' }); true");
+        await sleep(300);
+        await captura(page, "D03", v, tema, "recargado");
+        // La demo no repone nada.
+        await page.send("Page.navigate", { url: `${base}/?demo=race&instant=1&theme=${tema}` });
+        await page.waitFor("document.readyState === 'complete'", 20000);
+        await sleep(400);
+        check(`${quien} · la demo no repone nada`, (await page.eval("document.getElementById('prize').value")) === "");
+      } finally {
+        await page.send("Page.close").catch(() => undefined);
+      }
+    },
+  },
+
+  D08: {
+    que: '"Cargar ejemplo" solo con el cuadro vacío',
+    async correr(browser, v, tema, quien) {
+      const page = await abrir(browser, v, tema);
+      try {
+        const vacio = await page.eval(visible("#btn-sample"));
+        await escribir(page, "Ana Quispe\nLuis Mamani");
+        const conNombres = await page.eval(visible("#btn-sample"));
+        await page.eval("document.getElementById('sec-participants').scrollIntoView({ block: 'start' }); true");
+        await sleep(300);
+        await captura(page, "D08", v, tema, "con-nombres");
+        await escribir(page, "");
+        const otraVez = await page.eval(visible("#btn-sample"));
+        check(`${quien} · con el cuadro vacío se ve, con nombres no, y vuelve al vaciarlo`, vacio && !conNombres && otraVez, `${vacio} → ${conNombres} → ${otraVez}`);
+      } finally {
+        await page.send("Page.close").catch(() => undefined);
+      }
+    },
+  },
+};
+
+const browser = await launch({ width: 1280, height: 900 });
+try {
+  for (const [id, d] of Object.entries(DETALLES)) {
+    if (solo && !solo.includes(id)) continue;
+    console.log(`\n${id} · ${d.que}`);
+    for (const tema of temas) {
+      for (const v of vistas) {
+        const quien = `${v.etiqueta} ${tema}`;
+        try {
+          await d.correr(browser, v, tema, quien);
+        } catch (e) {
+          check(`${quien} · ${id}`, false, e.message);
+        }
+      }
+    }
+  }
+} finally {
+  await browser.close();
+}
+console.log(`\n${fallas ? `✗ ${fallas} fallas` : "✓ todo bien"} · ${pasan} comprobaciones bien · capturas en ${outDir}`);
+process.exit(fallas ? 1 : 0);
