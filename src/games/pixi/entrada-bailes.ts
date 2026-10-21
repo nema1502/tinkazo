@@ -2,21 +2,33 @@ import { Container, Graphics, Rectangle, Sprite, type Renderer, type Texture } f
 import type { Dance } from "./entrada-plan";
 
 /**
- * Los bailarines de La Entrada: cinco trajes de la entrada de Oruro y cómo se
- * mueve cada uno al ritmo de la banda.
+ * Los bailarines de La Entrada: cinco trajes de la entrada de Oruro, el de los
+ * hombres y el de las mujeres, y cómo se mueve cada uno al ritmo de la banda.
  *
  * - **Diablada**: máscara con cuernos anillados, ojos saltones y la culebra en
  *   la frente; capa bordada con estrellas, pechera dorada y el tridente. Salta
- *   con la rodilla alta.
+ *   con la rodilla alta. Ellas son la china supay: careta pintada con pestañas
+ *   largas, cejas de lana y dientes de espejo, trenzas con tullmas, pañueleta,
+ *   pollera corta y botas.
  * - **Morenada**: el traje de moreno, una campana pesada y bordada; la máscara
  *   de ojos desorbitados y la lengua afuera, con su corona, y la matraca que
- *   gira en la mano. Paso cansino, de un lado al otro.
+ *   gira en la mano. Paso cansino, de un lado al otro. Ellas son las cholitas:
+ *   pollera corta bordada en el ruedo, corsé con escote en V, dos trenzas, y el
+ *   sombrero y las botas forrados con la tela del traje.
  * - **Caporales**: botas altas con cascabeles, chaqueta con hombreras y
- *   sombrero. Salta y patea al aire.
+ *   sombrero. Salta y patea al aire. Ellas: pollera corta plisada, blusa con
+ *   escote en V y mangas abultadas en los hombros, medias color piel, zapatos
+ *   de taco, el pelo recogido y un sombrerito sujeto al pelo.
  * - **Tinkus**: la montera, un casco duro, con plumas; la almilla tejida, la
- *   chuspa y las abarcas. Agachado, zapateando, con los puños arriba.
+ *   chuspa y las abarcas. Agachado, zapateando, con los puños arriba. Ellas:
+ *   vestido largo de franjas tejidas, chaqueta a la cintura, fajero, pañueleta
+ *   y sombrero con plumas, cintas y espejitos.
  * - **Llamerada**: el sombrero con flecos de colores, el poncho, la honda que da
- *   vueltas sobre la cabeza y la llamita en la otra mano.
+ *   vueltas sobre la cabeza y la llamita en la otra mano. Ellas: el mismo
+ *   sombrero, blusa bordada, pollera a la rodilla y el aguayo cargado.
+ *
+ * Con qué traje baila cada uno sale del nombre (`genero.ts`), como en la
+ * Chovena; si el nombre no lo dice, con el de siempre.
  *
  * Cada pieza se dibuja una sola vez y se pasa a una textura (`bake`), y cada
  * bailarín es un puñado de sprites con esas texturas. Dibujados como Graphics,
@@ -24,7 +36,8 @@ import type { Dance } from "./entrada-plan";
  * cuadro y la escena iba a 25 cuadros por segundo (auditor exigente, 21 de
  * octubre de 2026). Lo que lleva el color de la fraternidad se dibuja con ese
  * color, una vez por fraternidad; lo que es igual en todas (las piernas, las
- * máscaras, lo que se lleva en la mano) se comparte.
+ * máscaras, lo que se lleva en la mano) se comparte, y lo que es del color de la
+ * piel o del pelo se dibuja en blanco y se tiñe.
  *
  * La cara es del cuerpo y lo de la cabeza es aparte: en el tropezón y en la
  * caída se corre y vuela la máscara, el sombrero o la montera, y la cara queda
@@ -39,6 +52,9 @@ const INK = 0x191919;
 const GOLD = 0xffc629;
 const GOLD_D = 0xb8860b;
 const WHITE = 0xffffff;
+const PINK = 0xe93d9c;
+const TEAL = 0x00a896;
+const RED = 0xd52b1e;
 /** Los colores de piel de las caras sin máscara. */
 const SKINS = [0xf1c7a0, 0xdba577, 0xc68a5c, 0x8d5a3b];
 /** Los colores de pelo. */
@@ -46,6 +62,8 @@ const HAIRS = [0x2b1d14, 0x3d2817, 0x151515, 0x4a2f1c];
 /** Las máscaras de la diablada, como las de antes. */
 const DEVIL_MASKS = [0xd52b1e, 0x1f7a3a, 0x1c64c8];
 const FEATHERS = [0xe93d9c, 0xffc629, 0x00a896, 0xd52b1e, 0x6c4ce0];
+/** La blusa bordada de las llameras. */
+const BLOUSE = 0xf6f1e6;
 
 /** Lo que el juego mueve de cada bailarín. */
 export interface DancerParts {
@@ -68,7 +86,11 @@ export interface DancerParts {
   /** Lo que lleva en la mano derecha: el tridente, la matraca, la honda. */
   prop: Container | null;
   cape: Container | null;
+  /** La pollera, que se mece y se abre con el paso. */
+  skirt: Container | null;
   dance: Dance;
+  /** Con el traje de las mujeres de su baile. */
+  woman: boolean;
   /** Un desfase propio, para que no sean robots. */
   seed: number;
 }
@@ -100,8 +122,25 @@ const HIP_Y = -14;
 const HEAD_Y = -86;
 /** Dónde queda la mano, en el brazo que cuelga del hombro. */
 const HAND_Y = 24.5;
+/** La cintura, de donde cuelgan las polleras. */
+const WAIST_Y = -36;
 
 type Draw = (g: Graphics) => void;
+
+/** Una pollera: un trapecio de la cintura (y = 0) al ruedo, con pliegues. */
+function skirtShape(g: Graphics, color: number, top: number, bottom: number, len: number, pleats: number): void {
+  g.poly([-top, 0, top, 0, bottom, len, -bottom, len]).fill(color).stroke({ width: 2.2, color: INK, join: "round" });
+  for (let i = 1; i < pleats; i++) {
+    const u = i / pleats - 0.5;
+    g.moveTo(u * 2 * top * 0.9, 1.5).lineTo(u * 2 * bottom * 0.9, len - 1.5).stroke({ width: 1, color: INK, alpha: 0.22 });
+  }
+}
+
+/** Una franja de la pollera entre `y0` e `y1`, que sigue el borde del trapecio. */
+function skirtBand(g: Graphics, color: number, top: number, bottom: number, len: number, y0: number, y1: number): void {
+  const hw = (y: number): number => top + (bottom - top) * (y / len);
+  g.poly([-hw(y0), y0, hw(y0), y0, hw(y1), y1, -hw(y1), y1]).fill(color);
+}
 
 export class Wardrobe {
   private readonly cache = new Map<string, { tx: Texture; fr: Rectangle }>();
@@ -146,6 +185,23 @@ export class Wardrobe {
     return s;
   }
 
+  /**
+   * El brazo de ellas: la manga del color del traje y la mano sin guante. Con
+   * `puff`, la manga abullonada en el hombro de las caporales.
+   */
+  private armF(sleeve: number, skin: number, x: number, puff = false): Container {
+    const a = new Container();
+    a.position.set(x, SHOULDER_Y);
+    a.addChild(
+      this.bake("armf-hand", (g) => g.circle(0, HAND_Y - 1, 3.6).fill(WHITE).stroke({ width: 1.2, color: INK }), 0, 0, skin),
+      this.bake(puff ? "armf-puff" : "armf-sleeve", (g) => {
+        g.roundRect(-3.3, -1, 6.6, 22, 3.2).fill(WHITE).stroke({ width: 1.5, color: INK });
+        if (puff) g.circle(0, 1, 5.8).fill(WHITE).stroke({ width: 1.5, color: INK });
+      }, 0, 0, sleeve),
+    );
+    return a;
+  }
+
   /** El brazo derecho con lo que lleva en la mano: el brazo y la cosa giran cada uno a su manera. */
   private armWith(color: number, prop: Sprite): { arm: Container; prop: Container } {
     const arm = new Container();
@@ -163,13 +219,55 @@ export class Wardrobe {
     return s;
   }
 
-  /** El pelo de arriba, con la raya al medio, con su color (uno de `HAIRS`). */
-  private hair(h: number): Sprite {
+  /** La pierna con media o piel, teñida, y el calzado aparte: el taco de las caporales o la abarca. */
+  private legSkin(skin: number, shoe: "heel" | "abarca", x: number): Container {
+    const c = new Container();
+    c.position.set(x, HIP_Y);
+    c.addChild(
+      this.bake("legf-skin", (g) => g.roundRect(-3, -6, 6, 15, 2.6).fill(WHITE).stroke({ width: 1.2, color: INK }), 0, 0, skin),
+      shoe === "heel"
+        ? this.bake("legf-heel", (g) => g.roundRect(-4.4, 7.4, 9.4, 3.2, 1.4).fill(INK).rect(-4.4, 9.4, 2.4, 3.4).fill(INK))
+        : this.bake("legf-abarca", (g) => g.roundRect(-4.6, 7.6, 10, 4.4, 1.6).fill(0x6b4423).stroke({ width: 1, color: INK })),
+    );
+    return c;
+  }
+
+  /** La pollera, colgada de la cintura: ahí se mece y se abre. */
+  private skirt(key: string, draw: Draw): Container {
+    const c = new Container();
+    c.position.set(0, WAIST_Y);
+    c.addChild(this.bake(key, draw, 0, 0));
+    return c;
+  }
+
+  /**
+   * El pelo, dibujado con su color (uno de `HAIRS`): `cap` el de arriba, con la
+   * raya al medio; `braids` las dos trenzas por delante de los hombros, con las
+   * tullmas de colores en la punta; `bun` el pelo recogido; `f` el de arriba y
+   * las trenzas juntos.
+   */
+  private hair(h: number, kind: "cap" | "braids" | "bun" | "f"): Sprite {
     const color = HAIRS[h] as number;
-    return this.bake(`hair-cap-${h}`, (g) => g
-      .moveTo(-12.3, -86).bezierCurveTo(-13.2, -101.5, 13.2, -101.5, 12.3, -86)
-      .bezierCurveTo(9, -91, 3, -93.5, 0, -92).bezierCurveTo(-3, -93.5, -9, -91, -12.3, -86)
-      .closePath().fill(color).stroke({ width: 1.4, color: INK }));
+    return this.bake(`hair-${kind}-${h}`, (g) => {
+      if (kind === "bun") g.circle(8.5, -96, 5.4).fill(color).stroke({ width: 1.4, color: INK });
+      if (kind !== "braids") {
+        g.moveTo(-12.3, -86).bezierCurveTo(-13.2, -101.5, 13.2, -101.5, 12.3, -86)
+          .bezierCurveTo(9, -91, 3, -93.5, 0, -92).bezierCurveTo(-3, -93.5, -9, -91, -12.3, -86)
+          .closePath().fill(color).stroke({ width: 1.4, color: INK });
+      }
+      if (kind === "braids" || kind === "f") {
+        for (const s of [-1, 1]) {
+          const tie = s < 0 ? PINK : TEAL;
+          g.moveTo(s * 9.5, -84).quadraticCurveTo(s * 14, -70, s * 11.5, -54).stroke({ width: 5.6, color: INK, cap: "round" });
+          g.moveTo(s * 9.5, -84).quadraticCurveTo(s * 14, -70, s * 11.5, -54).stroke({ width: 3.6, color, cap: "round" });
+          g.moveTo(s * 13.4, -76.5).lineTo(s * 10.6, -75).moveTo(s * 13.6, -68).lineTo(s * 11.2, -66.5).moveTo(s * 13, -60).lineTo(s * 10.8, -58.6)
+            .stroke({ width: 0.9, color: INK, alpha: 0.4 });
+          g.roundRect(s * 11.5 - 2.6, -55, 5.2, 4, 1.4).fill(tie).stroke({ width: 0.9, color: INK });
+          g.moveTo(s * 11.5 - 1.8, -51).lineTo(s * 11.5 - 2.4, -46.5).moveTo(s * 11.5, -51).lineTo(s * 11.5, -46).moveTo(s * 11.5 + 1.8, -51).lineTo(s * 11.5 + 2.4, -46.5)
+            .stroke({ width: 1.3, color: tie });
+        }
+      }
+    });
   }
 
   /**
@@ -177,51 +275,102 @@ export class Wardrobe {
    * siempre (`featKey`) y la del susto, que se cambian en el tropezón y en la
    * caída.
    */
-  private face(skin: number, h: number, featKey: string, drawFeat: Draw): { c: Container; feat: Container; featOh: Container } {
+  private face(skin: number, h: number, hair: "cap" | "f" | "bun", featKey: string, drawFeat: Draw): { c: Container; feat: Container; featOh: Container } {
     const c = new Container();
     const feat = new Container();
     feat.addChild(this.bake(featKey, drawFeat));
     const featOh = new Container();
     featOh.addChild(this.bake("feat-oh", featOhDraw));
     featOh.visible = false;
-    c.addChild(this.bake("face", (g) => g.circle(0, -85, 12).fill(WHITE).stroke({ width: 2, color: INK }), 0, 0, skin), this.hair(h), feat, featOh);
+    c.addChild(this.bake("face", (g) => g.circle(0, -85, 12).fill(WHITE).stroke({ width: 2, color: INK }), 0, 0, skin), this.hair(h, hair), feat, featOh);
     return { c, feat, featOh };
   }
 
   /** La cara de abajo de una máscara, asustada: se ve cuando la máscara se corre o se cae. */
   private underMask(skin: number, h: number): Container {
     const c = new Container();
-    c.addChild(this.bake("face", (g) => g.circle(0, -85, 12).fill(WHITE).stroke({ width: 2, color: INK }), 0, 0, skin), this.hair(h), this.bake("feat-oh", featOhDraw));
+    c.addChild(this.bake("face", (g) => g.circle(0, -85, 12).fill(WHITE).stroke({ width: 2, color: INK }), 0, 0, skin), this.hair(h, "cap"), this.bake("feat-oh", featOhDraw));
     c.visible = false;
     return c;
   }
 
-  /** Un bailarín de `dance` con el color de su fraternidad y su cara en el pecho. */
-  make(dance: Dance, color: number, face: Texture, seed: number): DancerParts {
+  /** Un bailarín de `dance` con el color de su fraternidad y su cara en el pecho; `woman`, con el traje de ellas. */
+  make(dance: Dance, color: number, face: Texture, seed: number, woman = false): DancerParts {
     const root = new Container();
-    const skin = SKINS[Math.floor(frac(seed * 7.13) * SKINS.length)] as number;
+    const skinI = Math.floor(frac(seed * 7.13) * SKINS.length);
+    const skin = SKINS[skinI] as number;
     const hairI = Math.floor(frac(seed * 2.71) * HAIRS.length);
     const c = hexKey(color);
     let cape: Container | null = null;
     let prop: Container | null = null;
+    let skirt: Container | null = null;
     let under: Container | null = null;
     const faces: { feat: Container | null; featOh: Container | null } = { feat: null, featOh: null };
-    /** La cara a la vista, con el pelo y la expresión. */
-    const bare = (key: string, draw: Draw): Container => {
-      const fc = this.face(skin, hairI, key, draw);
-      faces.feat = fc.feat;
-      faces.featOh = fc.featOh;
-      return fc.c;
-    };
     const head = new Container();
     head.pivot.set(0, HEAD_Y);
     head.position.set(0, HEAD_Y);
     const avatar = new Sprite(face);
     avatar.anchor.set(0.5);
     avatar.width = avatar.height = 14;
-    let legL: Sprite, legR: Sprite, armL: Container, armR: Container;
+    let legL: Container, legR: Container, armL: Container, armR: Container;
+    /** La cara a la vista, con el pelo y la expresión. */
+    const bare = (hair: "cap" | "f" | "bun", key: string, draw: Draw): Container => {
+      const fc = this.face(skin, hairI, hair, key, draw);
+      faces.feat = fc.feat;
+      faces.featOh = fc.featOh;
+      return fc.c;
+    };
 
-    if (dance === "diablada") {
+    if (dance === "diablada" && woman) {
+      // La china supay: "la careta, tullma, pañueleta y botas" (Los Tiempos, 12
+      // de febrero de 2023).
+      const boot: Draw = (g) => g
+        .roundRect(-3.8, -6, 7.6, 15, 2.8).fill(WHITE).stroke({ width: 1.4, color: INK })
+        .rect(-3.8, -3.6, 7.6, 2.2).fill(GOLD)
+        .roundRect(-4.6, 7.4, 9.8, 3, 1.2).fill(INK).rect(-4.6, 9.4, 2.8, 3.2).fill(INK);
+      legL = this.leg("diaf-boot", boot, -HIP_X);
+      legR = this.leg("diaf-boot", boot, HIP_X);
+      skirt = this.skirt(`diaf-skirt-${c}`, (g) => {
+        skirtShape(g, color, 11, 21, 22, 5);
+        skirtBand(g, GOLD, 11, 21, 22, 18, 22);
+        for (let i = 0; i < 5; i++) g.star(-12 + i * 6, 11 + (i % 2) * 2, 5, 2.4, 1).fill(GOLD);
+      });
+      const body = this.bake(`diaf-bodice-${c}`, (g) => {
+        g.roundRect(-11, -68, 22, 34, 6).fill(color).stroke({ width: 2.2, color: INK });
+        // La pechera bordada, como la del diablo.
+        g.roundRect(-8.5, -63, 17, 17, 3).fill(GOLD).stroke({ width: 1.4, color: INK });
+        g.rect(-11, -38, 22, 3).fill(GOLD);
+        // La pañueleta.
+        g.poly([-8.5, -70, 8.5, -70, 0, -60.5]).fill(WHITE).stroke({ width: 1.2, color: INK, join: "round" });
+        g.moveTo(-6.5, -69).lineTo(0, -62.5).lineTo(6.5, -69).stroke({ width: 1.2, color: GOLD });
+      });
+      avatar.position.set(0, -54.5);
+      avatar.width = avatar.height = 12;
+      armL = this.armF(color, skin, -SHOULDER_X);
+      armR = this.armF(color, skin, SHOULDER_X);
+      // Las trenzas salen por debajo de la careta; la cara, solo si la careta se corre.
+      const braids = this.hair(hairI, "braids");
+      under = this.underMask(skin, hairI);
+      // La careta de la china: loza pintada, pestañas largas, cejas de lana y
+      // dientes de espejo (Horniman Museum, HC.1999.1546), y dos cuernitos.
+      head.addChild(this.bake("diaf-mask", (g) => {
+        g.poly([-6.5, -95, -11, -103, -13.5, -113, -8, -105, -2.5, -97.5]).fill(GOLD).stroke({ width: 1.4, color: INK, join: "round" });
+        g.poly([6.5, -95, 11, -103, 13.5, -113, 8, -105, 2.5, -97.5]).fill(GOLD).stroke({ width: 1.4, color: INK, join: "round" });
+        g.ellipse(0, -84, 13.5, 14.5).fill(0xf7e0cf).stroke({ width: 2.2, color: INK });
+        for (const s of [-1, 1]) {
+          // La ceja de lana, en arco; el ojo con sus pestañas largas.
+          g.moveTo(s * 10, -91).quadraticCurveTo(s * 6, -96, s * 2, -92.5).stroke({ width: 2, color: 0x2b1d14, cap: "round" });
+          g.ellipse(s * 5.5, -86, 3.6, 2.8).fill(WHITE).stroke({ width: 1, color: INK }).circle(s * 5.5, -86, 1.6).fill(0x1f7a3a);
+          g.moveTo(s * 8.4, -87.5).lineTo(s * 10.2, -89.6).moveTo(s * 7, -88.6).lineTo(s * 7.8, -91).moveTo(s * 5.2, -88.9).lineTo(s * 5.2, -91.4)
+            .stroke({ width: 1, color: INK });
+          g.circle(s * 8, -79, 2.6).fill({ color: 0xe96b8a, alpha: 0.55 });
+        }
+        // La sonrisa roja, con los dientes de espejo.
+        g.moveTo(-5.5, -77.5).quadraticCurveTo(0, -70.5, 5.5, -77.5).quadraticCurveTo(0, -75.5, -5.5, -77.5).closePath().fill(RED).stroke({ width: 1, color: INK, join: "round" });
+        g.moveTo(-3.6, -76.3).quadraticCurveTo(0, -74.6, 3.6, -76.3).stroke({ width: 1.4, color: 0xdfe6ee });
+      }));
+      root.addChild(legL, legR, skirt, body, avatar, armL, armR, braids, under, head);
+    } else if (dance === "diablada") {
       const capeS = this.bake(`dia-cape-${c}`, (g) => {
         g.poly([-16, -70, 16, -70, 30, -18, -30, -18]).fill(color).stroke({ width: 2.4, color: INK, join: "round" });
         for (let i = 0; i < 4; i++) g.star(-12 + i * 8, -40 + (i % 2) * 10, 5, 3.2, 1.4).fill(GOLD);
@@ -263,6 +412,41 @@ export class Wardrobe {
         .rect(-8, -77, 16, 5).fill(WHITE).stroke({ width: 1.2, color: INK })
         .moveTo(-4, -77).lineTo(-4, -72).moveTo(0, -77).lineTo(0, -72).moveTo(4, -77).lineTo(4, -72).stroke({ width: 1, color: INK })));
       root.addChild(cape, legL, legR, body, avatar, armL, armR, under, head);
+    } else if (dance === "morenada" && woman) {
+      // La cholita de la morenada: "pollera corta con bordados en los extremos y
+      // un corset escote en V"; "tanto el sombrero como las botas están forrados
+      // con la misma tela de los trajes"; "el pelo largo y recogido en dos
+      // trenzas" (Diario de Cuyo, 4 de agosto de 2018).
+      const boot: Draw = (g) => g
+        .roundRect(-3.6, -6, 7.2, 15, 2.6).fill(color).stroke({ width: 1.4, color: INK })
+        .rect(-3.6, -4, 7.2, 1.6).fill(GOLD)
+        .roundRect(-4.6, 7.4, 9.6, 3, 1.2).fill(INK).rect(-4.6, 9.4, 2.8, 3.2).fill(INK);
+      legL = this.leg(`morf-boot-${c}`, boot, -HIP_X);
+      legR = this.leg(`morf-boot-${c}`, boot, HIP_X);
+      skirt = this.skirt(`morf-skirt-${c}`, (g) => {
+        skirtShape(g, color, 11, 22, 24, 5);
+        skirtBand(g, GOLD, 11, 22, 24, 19.5, 24);
+        const lent = [PINK, TEAL, WHITE];
+        for (let i = 0; i < 7; i++) g.circle(-15 + i * 5, 15.5, 1.5).fill(lent[i % 3] as number);
+      });
+      const body = this.bake(`morf-corset-${c}`, (g) => {
+        g.roundRect(-11, -68, 22, 34, 6).fill(color).stroke({ width: 2.2, color: INK });
+        g.poly([-7, -68, 7, -68, 0, -56]).fill(WHITE).stroke({ width: 1.2, color: INK, join: "round" });
+        g.moveTo(-7.5, -68).lineTo(0, -55.5).lineTo(7.5, -68).stroke({ width: 2, color: GOLD });
+        for (let i = 0; i < 4; i++) g.circle(-8, -61 + i * 6.5, 1.2).fill(GOLD).circle(8, -61 + i * 6.5, 1.2).fill(GOLD);
+        g.rect(-11, -38, 22, 3).fill(GOLD);
+      });
+      avatar.position.set(0, -46.5);
+      avatar.width = avatar.height = 12;
+      armL = this.armF(color, skin, -SHOULDER_X);
+      armR = this.armF(color, skin, SHOULDER_X);
+      const fc = bare("f", "featf-smile", featSmileF);
+      head.addChild(this.bake(`morf-hat-${c}`, (g) => {
+        g.moveTo(-8.5, -98).bezierCurveTo(-9.5, -115, 9.5, -115, 8.5, -98).closePath().fill(color).stroke({ width: 1.8, color: INK });
+        g.rect(-8.6, -102, 17.2, 2.8).fill(GOLD);
+        g.ellipse(0, -97.5, 15, 3.4).fill(color).stroke({ width: 1.6, color: INK });
+      }));
+      root.addChild(legL, legR, skirt, body, avatar, armL, armR, fc, head);
     } else if (dance === "morenada") {
       const draw: Draw = (g) => g.rect(-3.5, -2, 7, 9).fill(0x2b2d42).stroke({ width: 1.4, color: INK }).roundRect(-5, 6, 11, 7, 2.5).fill(INK);
       legL = this.leg("mor-leg", draw, -HIP_X);
@@ -307,6 +491,36 @@ export class Wardrobe {
         g.ellipse(0, -75, 6, 2.6).fill(INK).roundRect(-3, -76, 6, 9, 3).fill(0xe93d9c).stroke({ width: 1, color: INK });
       }));
       root.addChild(legL, legR, body, avatar, armL, armR, under, head);
+    } else if (dance === "caporales" && woman) {
+      // La caporal: "pollera corta y una blusa con escote en forma de V, mangas
+      // largas y abultadas en los hombros", el pelo recogido (Diario de Cuyo); las
+      // medias color piel, los zapatos de taco y el sombrero redondo sujeto al
+      // pelo (en.wikipedia.org/wiki/Caporales).
+      legL = this.legSkin(skin, "heel", -HIP_X);
+      legR = this.legSkin(skin, "heel", HIP_X);
+      skirt = this.skirt(`capf-skirt-${c}`, (g) => {
+        skirtShape(g, color, 10, 24, 20, 7);
+        skirtBand(g, GOLD, 10, 24, 20, 16.5, 20);
+      });
+      const body = this.bake(`capf-blouse-${c}`, (g) => {
+        g.roundRect(-11, -68, 22, 34, 6).fill(color).stroke({ width: 2.2, color: INK });
+        g.moveTo(-9, -51).quadraticCurveTo(0, -44.5, 9, -51).stroke({ width: 1.6, color: GOLD });
+        g.circle(-5.5, -47.5, 1.3).fill(GOLD).circle(0, -45.6, 1.3).fill(GOLD).circle(5.5, -47.5, 1.3).fill(GOLD);
+        g.moveTo(-6.5, -68).lineTo(0, -57).lineTo(6.5, -68).stroke({ width: 1.8, color: GOLD });
+        g.rect(-11, -38, 22, 3).fill(GOLD);
+      });
+      const neck = this.bake("capf-neck", (g) => g.poly([-5.2, -68.5, 5.2, -68.5, 0, -59.6]).fill(WHITE), 0, 0, skin);
+      avatar.position.set(0, -51.5);
+      avatar.width = avatar.height = 11;
+      armL = this.armF(color, skin, -SHOULDER_X, true);
+      armR = this.armF(color, skin, SHOULDER_X, true);
+      const fc = bare("bun", "featf-smile", featSmileF);
+      head.addChild(this.bake(`capf-hat-${c}`, (g) => {
+        g.roundRect(-8, -110, 12, 12.5, 4.5).fill(color).stroke({ width: 1.6, color: INK });
+        g.rect(-8, -101.5, 12, 2.4).fill(GOLD);
+        g.ellipse(-2, -97.5, 11, 2.8).fill(color).stroke({ width: 1.4, color: INK });
+      }));
+      root.addChild(legL, legR, skirt, body, neck, avatar, armL, armR, fc, head);
     } else if (dance === "caporales") {
       const draw: Draw = (g) => g
         .rect(-3.5, -6, 7, 7).fill(0xf4f4f4).stroke({ width: 1.4, color: INK })
@@ -328,20 +542,61 @@ export class Wardrobe {
       avatar.width = avatar.height = 11;
       armL = this.arm(color, -SHOULDER_X);
       armR = this.arm(color, SHOULDER_X);
-      const fc = bare("feat-smile", featSmile);
+      const fc = bare("cap", "feat-smile", featSmile);
       head.addChild(this.bake("cap-hat", (g) => g
         .ellipse(0, -97, 22, 5).fill(INK)
         .roundRect(-10, -111, 20, 14, 4).fill(INK)
         .rect(-10, -101, 20, 3).fill(GOLD)
         .moveTo(9, -104).bezierCurveTo(16, -112, 20, -118, 15, -124).stroke({ width: 2.6, color: WHITE, cap: "round" })));
       root.addChild(legL, legR, body, avatar, armL, armR, fc, head);
-    } else if (dance === "tinkus") {
-      const draw: Draw = (g) => g
-        .rect(-4.2, -6, 8.4, 7).fill(0x262626).stroke({ width: 1.4, color: INK })
-        .rect(-2.6, 1, 5.2, 7).fill(0x8d5a3b).stroke({ width: 1, color: INK })
-        .roundRect(-4.6, 8, 10, 4.4, 1.6).fill(0x6b4423).stroke({ width: 1, color: INK });
+    } else if (dance === "tinkus" && woman) {
+      // La tinku: "un vestido largo con una chaqueta a la cintura, tejidos en lana
+      // de colores intensos" y "el sombrero incluye detalles de espejos" (Diario de
+      // Cuyo); "vestido, chaleco, pañueleta, fajero y sombrero" (Los Tiempos);
+      // sombreros con plumas largas y cintas (en.wikipedia.org/wiki/Tinku).
+      const draw: Draw = tinLeg;
       legL = this.leg("tin-leg", draw, -HIP_X);
       legR = this.leg("tin-leg", draw, HIP_X);
+      skirt = this.skirt(`tinf-skirt-${c}`, (g) => {
+        skirtShape(g, color, 12, 19, 33, 4);
+        const fr = [PINK, GOLD, TEAL];
+        for (let i = 0; i < 3; i++) skirtBand(g, fr[i] as number, 12, 19, 33, 8 + i * 9, 10.8 + i * 9);
+        for (let i = 0; i < 4; i++) g.poly([-10.5 + i * 7, 22, -8.5 + i * 7, 24.2, -10.5 + i * 7, 26.4, -12.5 + i * 7, 24.2]).fill(WHITE);
+      });
+      const body = this.bake(`tinf-jacket-${c}`, (g) => {
+        g.roundRect(-12, -68, 24, 32, 4).fill(color).stroke({ width: 2.2, color: INK });
+        g.rect(-11, -62, 22, 2.4).fill(PINK).rect(-11, -42.5, 22, 2.4).fill(TEAL);
+        // El fajero tejido.
+        g.rect(-12, -40, 24, 4.4).fill(RED).rect(-12, -38.6, 24, 1.4).fill(GOLD);
+        // La pañueleta.
+        g.poly([-8, -70, 8, -70, 0, -62]).fill(PINK).stroke({ width: 1.1, color: INK, join: "round" });
+      });
+      avatar.position.set(0, -51.5);
+      avatar.width = avatar.height = 12;
+      armL = this.armF(color, skin, -SHOULDER_X);
+      armR = this.armF(color, skin, SHOULDER_X);
+      const fc = bare("f", "featf-smile", featSmileF);
+      head.addChild(this.bake(`tinf-hat-${c}`, (g) => {
+        // Las cintas, que cuelgan por detrás.
+        for (let i = 0; i < 3; i++) {
+          g.moveTo(-15 + i * 2.2, -97).quadraticCurveTo(-19 + i * 2, -86, -16.5 + i * 2.4, -76).stroke({ width: 2, color: FEATHERS[i] as number, cap: "round" });
+          g.moveTo(15 - i * 2.2, -97).quadraticCurveTo(19 - i * 2, -86, 16.5 - i * 2.4, -76).stroke({ width: 2, color: FEATHERS[i + 2] as number, cap: "round" });
+        }
+        // Las plumas largas.
+        for (let i = 0; i < 4; i++) {
+          const a = -0.45 + i * 0.3;
+          const x = Math.sin(a) * 17, y = -105 - Math.cos(a) * 17;
+          g.moveTo(0, -105).quadraticCurveTo(x * 0.35, -112, x, y).stroke({ width: 3, color: FEATHERS[(i + 1) % FEATHERS.length] as number, cap: "round" });
+        }
+        g.roundRect(-10, -107, 20, 10, 3).fill(color).stroke({ width: 1.6, color: INK });
+        g.ellipse(0, -97, 19, 3.8).fill(color).stroke({ width: 1.6, color: INK });
+        // Los espejitos.
+        for (const x of [-5, 0, 5]) g.circle(x, -102, 1.9).fill(0xdfe6ee).stroke({ width: 0.8, color: INK }).circle(x - 0.6, -102.6, 0.6).fill(WHITE);
+      }));
+      root.addChild(legL, legR, skirt, body, avatar, armL, armR, fc, head);
+    } else if (dance === "tinkus") {
+      legL = this.leg("tin-leg", tinLeg, -HIP_X);
+      legR = this.leg("tin-leg", tinLeg, HIP_X);
       const body = this.bake(`tin-almilla-${c}`, (g) => {
         g.roundRect(-14, -70, 28, 52, 4).fill(color).stroke({ width: 2.2, color: INK });
         const franjas = [0xe93d9c, GOLD, 0x00a896, WHITE];
@@ -353,7 +608,7 @@ export class Wardrobe {
       avatar.width = avatar.height = 12;
       armL = this.arm(color, -SHOULDER_X);
       armR = this.arm(color, SHOULDER_X);
-      const fc = bare("feat-shout", featShout);
+      const fc = bare("cap", "feat-shout", featShout);
       head.addChild(this.bake(`tin-head-${c}`, (g) => {
         // La montera, el casco duro, con sus plumas de colores.
         for (let i = 0; i < 5; i++) {
@@ -366,6 +621,42 @@ export class Wardrobe {
           .circle(0, -103, 2.6).fill(GOLD).stroke({ width: 1, color: INK });
       }));
       root.addChild(legL, legR, body, avatar, armL, armR, fc, head);
+    } else if (woman) {
+      // La llamera. De su traje no encontramos una fuente firme: la pollera a la
+      // rodilla, la blusa bordada y el aguayo cargado son lo que se repite en las
+      // fotos de las fraternidades, y el sombrero de flecos es el del baile, que
+      // "se parece al tocado de la Mama T'alla" (en.wikipedia.org/wiki/Llamerada).
+      legL = this.legSkin(skin, "abarca", -HIP_X);
+      legR = this.legSkin(skin, "abarca", HIP_X);
+      // El aguayo cargado: se asoma por encima y a los costados de los hombros.
+      const qepi = this.bake("llaf-aguayo", (g) => {
+        g.roundRect(-20, -79, 40, 26, 10).fill(RED).stroke({ width: 2, color: INK });
+        g.rect(-19, -74, 38, 2.6).fill(GOLD).rect(-19.6, -68.5, 39.2, 2.6).fill(TEAL).rect(-19.6, -63, 39.2, 2.6).fill(PINK).rect(-19, -57.5, 38, 2.6).fill(GOLD);
+      });
+      skirt = this.skirt(`llaf-skirt-${c}`, (g) => {
+        skirtShape(g, color, 11, 20, 27, 5);
+        skirtBand(g, GOLD, 11, 20, 27, 21.5, 24);
+      });
+      const body = this.bake("llaf-blouse", (g) => {
+        g.roundRect(-11, -68, 22, 34, 6).fill(BLOUSE).stroke({ width: 2.2, color: INK });
+        // El bordado de flores.
+        const fl = [PINK, TEAL, GOLD, PINK, TEAL];
+        for (let i = 0; i < 5; i++) g.circle(-8 + i * 4, -39.5, 1.5).fill(fl[i] as number);
+        // El nudo del aguayo, en el pecho.
+        g.moveTo(-10, -67).lineTo(-1.5, -60).moveTo(10, -67).lineTo(1.5, -60).stroke({ width: 3.2, color: RED, cap: "round" });
+        g.moveTo(-10, -67).lineTo(-1.5, -60).moveTo(10, -67).lineTo(1.5, -60).stroke({ width: 1, color: GOLD });
+        g.circle(0, -59.5, 2.8).fill(RED).stroke({ width: 1, color: INK });
+        g.poly([-1, -58, -4.5, -53, 0, -55]).fill(TEAL).poly([1, -58, 4.5, -53, 0, -55]).fill(GOLD);
+      });
+      avatar.position.set(0, -46.5);
+      avatar.width = avatar.height = 12;
+      armL = this.armF(BLOUSE, skin, -SHOULDER_X);
+      armR = this.armF(BLOUSE, skin, SHOULDER_X);
+      // Los ojos un poco más abajo, como los del llamero: los flecos del sombrero
+      // caen sobre la frente.
+      const fc = bare("f", "featf-smile-low", featSmileFLow);
+      head.addChild(this.llaHat(color, c));
+      root.addChild(qepi, legL, legR, skirt, body, avatar, armL, armR, fc, head);
     } else {
       const draw: Draw = (g) => g.rect(-3.6, -6, 7.2, 14).fill(0xf2ece0).stroke({ width: 1.4, color: INK }).roundRect(-4.8, 7, 10, 5, 1.6).fill(0x6b4423).stroke({ width: 1, color: INK });
       legL = this.leg("lla-leg", draw, -HIP_X);
@@ -394,16 +685,20 @@ export class Wardrobe {
       armR = r.arm;
       prop = r.prop;
       // Los labios fruncidos del llamero que silba para que lo sigan sus llamas.
-      const fc = bare("feat-whistle", featWhistle);
-      // El sombrero y sus flecos de colores.
-      head.addChild(this.bake(`lla-head-${c}`, (g) => {
-        g.ellipse(0, -96, 21, 4.6).fill(color).stroke({ width: 1.8, color: INK }).roundRect(-9, -105, 18, 9, 3).fill(color).stroke({ width: 1.8, color: INK });
-        const cs = [0xe93d9c, GOLD, 0x00a896, WHITE, 0xd52b1e, 0x6c4ce0, GOLD];
-        for (let i = 0; i < 7; i++) g.rect(-15 + i * 4.6, -94, 2.4, 6 + (i % 2) * 3).fill(cs[i] as number);
-      }));
+      const fc = bare("cap", "feat-whistle", featWhistle);
+      head.addChild(this.llaHat(color, c));
       root.addChild(legL, legR, body, avatar, armL, armR, fc, head);
     }
-    return { root, legL, legR, armL, armR, head, under, feat: faces.feat, featOh: faces.featOh, prop, cape, dance, seed };
+    return { root, legL, legR, armL, armR, head, under, feat: faces.feat, featOh: faces.featOh, prop, cape, skirt, dance, woman, seed };
+  }
+
+  /** El sombrero de la llamerada y sus flecos de colores. */
+  private llaHat(color: number, c: string): Sprite {
+    return this.bake(`lla-hat-${c}`, (g) => {
+      g.ellipse(0, -96, 21, 4.6).fill(color).stroke({ width: 1.8, color: INK }).roundRect(-9, -105, 18, 9, 3).fill(color).stroke({ width: 1.8, color: INK });
+      const cs = [0xe93d9c, GOLD, 0x00a896, WHITE, 0xd52b1e, 0x6c4ce0, GOLD];
+      for (let i = 0; i < 7; i++) g.rect(-15 + i * 4.6, -94, 2.4, 6 + (i % 2) * 3).fill(cs[i] as number);
+    });
   }
 
   /**
@@ -463,10 +758,24 @@ export class Wardrobe {
   }
 }
 
+/** La pierna del tinku: el pantalón oscuro, la pantorrilla y la abarca. */
+const tinLeg: Draw = (g) => g
+  .rect(-4.2, -6, 8.4, 7).fill(0x262626).stroke({ width: 1.4, color: INK })
+  .rect(-2.6, 1, 5.2, 7).fill(0x8d5a3b).stroke({ width: 1, color: INK })
+  .roundRect(-4.6, 8, 10, 4.4, 1.6).fill(0x6b4423).stroke({ width: 1, color: INK });
+
 /** Las caras: los ojos y la boca de cada uno. */
 const featSmile: Draw = (g) => g
   .circle(-4.5, -86, 1.8).fill(INK).circle(4.5, -86, 1.8).fill(INK)
   .moveTo(-4, -79).quadraticCurveTo(0, -76, 4, -79).stroke({ width: 1.4, color: INK });
+const featSmileF: Draw = (g) => g
+  .circle(-7.5, -80.5, 2.4).fill({ color: 0xe96b8a, alpha: 0.4 }).circle(7.5, -80.5, 2.4).fill({ color: 0xe96b8a, alpha: 0.4 })
+  .circle(-4.5, -86, 1.8).fill(INK).circle(4.5, -86, 1.8).fill(INK)
+  .moveTo(-4, -79).quadraticCurveTo(0, -76, 4, -79).stroke({ width: 1.4, color: INK });
+const featSmileFLow: Draw = (g) => g
+  .circle(-7.5, -79, 2.4).fill({ color: 0xe96b8a, alpha: 0.4 }).circle(7.5, -79, 2.4).fill({ color: 0xe96b8a, alpha: 0.4 })
+  .circle(-4.5, -83.6, 1.8).fill(INK).circle(4.5, -83.6, 1.8).fill(INK)
+  .moveTo(-3.8, -77.6).quadraticCurveTo(0, -74.8, 3.8, -77.6).stroke({ width: 1.4, color: INK });
 /** El tinku grita. */
 const featShout: Draw = (g) => g.circle(-4.5, -86, 1.8).fill(INK).circle(4.5, -86, 1.8).fill(INK).ellipse(0, -79, 3, 2.2).fill(INK);
 /** El llamero silba para que lo sigan sus llamas. */
@@ -540,7 +849,7 @@ export function pose(p: DancerParts, s: Pose, x: number, y: number, sx: number, 
 
 /** Mueve las piernas, los brazos y la cabeza, y dice cuánto sube el cuerpo y cuánto se inclina. */
 function body(p: DancerParts, s: Pose): { lift: number; lean: number } {
-  const { legL, legR, armL, armR, head } = p;
+  const { legL, legR, armL, armR, head, skirt } = p;
   const e = s.e;
   const b = s.b + p.seed * 0.35;
   const sb = Math.sin(b);
@@ -552,6 +861,10 @@ function body(p: DancerParts, s: Pose): { lift: number; lean: number } {
   head.y = HEAD_Y;
   head.rotation = 0;
   if (p.cape) p.cape.skew.x = 0;
+  if (skirt) {
+    skirt.skew.x = 0;
+    skirt.scale.x = 1;
+  }
   // La cara del susto, en el tropezón y en la caída; la de abajo de la máscara,
   // cuando la máscara se corre.
   const scared = s.mode === "stumble" || s.mode === "fall";
@@ -565,6 +878,7 @@ function body(p: DancerParts, s: Pose): { lift: number; lean: number } {
     // Saludan desde la vereda: los dos brazos arriba, agitándolos.
     armL.rotation = 2.45 + Math.sin(s.t * 7 + p.seed) * 0.35;
     armR.rotation = -(2.45 + Math.sin(s.t * 7 + p.seed + 1.3) * 0.35);
+    if (skirt) skirt.skew.x = Math.sin(s.t * 5 + p.seed) * 0.06;
     return { lift: Math.abs(Math.sin(s.t * 5 + p.seed)) * 2.5, lean: 0 };
   }
   if (s.mode === "jump") {
@@ -573,6 +887,7 @@ function body(p: DancerParts, s: Pose): { lift: number; lean: number } {
     legL.rotation = 0.3;
     legR.rotation = -0.3;
     legL.y = legR.y = HIP_Y - Math.min(6, s.f * 0.15);
+    if (skirt) skirt.scale.x = 1 + Math.min(0.14, s.f * 0.006);
     return { lift: s.f, lean: 0 };
   }
   if (s.mode === "stumble") {
@@ -585,6 +900,7 @@ function body(p: DancerParts, s: Pose): { lift: number; lean: number } {
     legL.rotation = 0.25 * (1 - f);
     head.x = Math.sin(f * Math.PI) * 7 * s.dir;
     head.rotation = Math.sin(f * Math.PI) * 0.45 * s.dir;
+    if (skirt) skirt.skew.x = -w * 0.25 * s.dir;
     return { lift: 0, lean: w * 0.32 * s.dir };
   }
   if (s.mode === "fall") {
@@ -600,6 +916,7 @@ function body(p: DancerParts, s: Pose): { lift: number; lean: number } {
     head.x = v * 34 * s.dir;
     head.y = HEAD_Y - Math.sin(v * Math.PI) * 34 + v * 70;
     head.rotation = v * 5.5 * s.dir;
+    if (skirt) skirt.scale.x = 1 + c * 0.12;
     return { lift: -c * 26, lean: -c * 0.5 * s.dir };
   }
 
@@ -613,25 +930,36 @@ function body(p: DancerParts, s: Pose): { lift: number; lean: number } {
       armL.rotation = 0.3 + (0.9 + sb * 0.7) * e;
       armR.rotation = -(0.3 + (0.9 - sb * 0.7) * e);
       if (p.cape) p.cape.skew.x = sb * 0.2 * e;
+      if (skirt) {
+        skirt.skew.x = sb * 0.12 * e;
+        skirt.scale.x = 1 + up * 0.06 * e;
+      }
       return { lift: up * 10 * e, lean: Math.sin(b * 0.5) * 0.05 * e };
     }
     case "morenada": {
-      // Pesado y cadencioso: se mece de un lado al otro, la matraca girando.
+      // Pesado y cadencioso: se mece de un lado al otro, la matraca girando. Las
+      // cholitas, con la pollera que va y viene.
       const half = Math.sin(b * 0.5);
       legL.y = HIP_Y - Math.max(0, half) * 3 * e;
       legR.y = HIP_Y - Math.max(0, -half) * 3 * e;
       armL.rotation = 0.5 + half * 0.25 * e;
-      armR.rotation = -(1.05 + sb * 0.18 * e);
+      armR.rotation = p.woman ? -(0.5 - half * 0.25 * e) : -(1.05 + sb * 0.18 * e);
+      if (skirt) skirt.skew.x = -half * 0.16 * e;
       return { lift: up * 3 * e, lean: half * 0.1 * e };
     }
     case "caporales": {
-      // Salta y patea: una pierna afuera en cada tiempo, los brazos abiertos.
+      // Salta y patea: una pierna afuera en cada tiempo, los brazos abiertos. La
+      // pollera se abre en cada salto.
       legL.rotation = Math.max(0, sb) * 0.95 * e;
       legR.rotation = -Math.max(0, -sb) * 0.95 * e;
       legL.y = HIP_Y - Math.max(0, sb) * 4 * e;
       legR.y = HIP_Y - Math.max(0, -sb) * 4 * e;
       armL.rotation = 0.95 + sb * 0.35 * e;
       armR.rotation = -(0.95 - sb * 0.35 * e);
+      if (skirt) {
+        skirt.scale.x = 1 + up * 0.14 * e;
+        skirt.skew.x = sb * 0.08 * e;
+      }
       return { lift: up * 13 * e, lean: sb * 0.06 * e };
     }
     case "tinkus": {
@@ -642,22 +970,30 @@ function body(p: DancerParts, s: Pose): { lift: number; lean: number } {
       legR.y = HIP_Y - Math.max(0, -sb) * 6 * e;
       armL.rotation = 2.25 + sb * 0.45 * e;
       armR.rotation = -(2.25 - sb * 0.45 * e);
+      if (skirt) skirt.skew.x = Math.sin(b * 0.5) * 0.1 * e;
       return { lift: -up * 6 * e, lean: Math.sin(b * 0.5) * 0.12 * e };
     }
     default: {
-      // El paso del llamero, con la honda dando vueltas arriba.
+      // El paso del llamero, con la honda dando vueltas arriba. La llamera, con
+      // los dos brazos al paso.
       legL.rotation = sb * 0.3 * e;
       legR.rotation = -sb * 0.3 * e;
       armL.rotation = 0.3 + sb * 0.25 * e;
-      armR.rotation = -2.6;
+      armR.rotation = p.woman ? -(0.3 - sb * 0.25 * e) : -2.6;
+      if (skirt) skirt.skew.x = sb * 0.1 * e;
       return { lift: up * 5 * e, lean: sb * 0.04 * e };
     }
   }
 }
 
-/** Lo que mide cada baile de alto, de los pies a la punta, en unidades del dibujo. */
+/** Lo que mide cada baile de alto, de los pies a la punta, en unidades del dibujo (el más alto de los dos trajes). */
 export const DANCE_TOP: Record<Dance, number> = { diablada: 130, morenada: 128, caporales: 126, tinkus: 124, llamerada: 108 };
 
-/** Lo que se le cae a cada baile en el susto y en la caída: la palabra para el relator. */
+/** Lo que se le cae a cada uno en el susto y en la caída: la palabra para el relator. */
 export type Prenda = "mascara" | "sombrero" | "montera";
-export const PRENDA: Record<Dance, Prenda> = { diablada: "mascara", morenada: "mascara", caporales: "sombrero", tinkus: "montera", llamerada: "sombrero" };
+export function prendaDe(dance: Dance, woman: boolean): Prenda {
+  if (dance === "diablada") return "mascara";
+  if (dance === "morenada") return woman ? "sombrero" : "mascara";
+  if (dance === "tinkus") return woman ? "sombrero" : "montera";
+  return "sombrero";
+}

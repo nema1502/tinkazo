@@ -4,12 +4,13 @@ import { musicHold } from "../../music";
 import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, fanfare, note } from "../../sound";
 import { enOrden } from "../drama";
+import { generoDe } from "../genero";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 import { layoutLabels, type LabelItem, type Rect } from "./pinata-labels";
 import { OUT_HOLD, counterText, estimateTagSize, outTreatment, selectTags, tagBudget, tagName, type TagCandidate } from "./oruro-tags";
 import { planEntrada, type Arch, type Frat } from "./entrada-plan";
-import { DANCE_TOP, PRENDA, Wardrobe, pose, poseMusician, type DancerParts, type Instrument, type MusicianParts, type PoseMode } from "./entrada-bailes";
+import { DANCE_TOP, Wardrobe, prendaDe, pose, poseMusician, type DancerParts, type Instrument, type MusicianParts, type PoseMode } from "./entrada-bailes";
 
 /**
  * La Entrada (id `oruro`): el Carnaval de Oruro, por fraternidades. Sección
@@ -80,6 +81,8 @@ interface Dancer {
   wx: number;
   wy: number;
   seed: number;
+  /** Con el traje de las mujeres de su baile: sale del nombre (`genero.ts`). */
+  woman: boolean;
   parts: DancerParts | null;
   chip?: Container;
   strike?: Graphics;
@@ -147,7 +150,8 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   const byIdx = new Map<number, Dancer>();
   for (const f of P.frats) {
     f.members.forEach((idx, slot) => {
-      const d: Dancer = { idx, f, slot, x: 0, y: 0, alive: true, left: -1, wx: 0, wy: 0, seed: hash(idx, 7) * 6, parts: null };
+      const woman = generoDe(names[idx] ?? "") === "f";
+      const d: Dancer = { idx, f, slot, x: 0, y: 0, alive: true, left: -1, wx: 0, wy: 0, seed: hash(idx, 7) * 6, woman, parts: null };
       dancers.push(d);
       byIdx.set(idx, d);
     });
@@ -401,7 +405,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   function makeViews(): void {
     for (const d of dancers) {
       d.parts?.root.destroy({ children: true });
-      const p = wardrobe.make(d.f.dance, d.f.color, S.face(names[d.idx] ?? ""), hash(d.idx, 11));
+      const p = wardrobe.make(d.f.dance, d.f.color, S.face(names[d.idx] ?? ""), hash(d.idx, 11), d.woman);
       d.parts = p;
       dancerLayer.addChild(p.root);
       d.chip?.destroy({ children: true });
@@ -790,7 +794,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     if (sc) {
       once("scare", tAll >= sc.t, () => {
         const d = byIdx.get(sc.who) as Dancer;
-        say(L.cOruScare(names[sc.who] ?? "", PRENDA[d.f.dance]), 0.85);
+        say(L.cOruScare(names[sc.who] ?? "", prendaDe(d.f.dance, d.woman)), 0.85);
         beep(note(1), 0.1, "square", 0.05);
         setTimeout(() => beep(note(8), 0.12, "triangle", 0.045), 80);
         cam.shake(8 * S.u());
@@ -828,7 +832,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
             const d = byIdx.get(j.who) as Dancer;
             // Si el que se cae tiene premio, no se lo nombra.
             const nombre = winners.includes(j.who) ? "" : names[j.who] ?? "";
-            say(L.cOruFall(nombre, PRENDA[d.f.dance]), 0.9);
+            say(L.cOruFall(nombre, prendaDe(d.f.dance, d.woman)), 0.9);
             [9, 6, 2].forEach((dg, k) => setTimeout(() => beep(note(dg), 0.14, "triangle", 0.045), k * 110));
             setTimeout(() => beep(note(0), 0.25, "triangle", 0.06), 330);
             cam.shake(9 * S.u());
