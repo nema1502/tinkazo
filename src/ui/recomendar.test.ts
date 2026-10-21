@@ -1,7 +1,31 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { SELECTOR, recomendar, type Recomendacion } from "./recomendar";
+import { T } from "../i18n";
 import type { Game } from "../state";
+
+describe("los textos de la recomendación, en es y en en", () => {
+  it("cada nota que puede salir tiene su frase en los dos idiomas", () => {
+    const claves = new Set<string>(["recBadge", "recHead"]);
+    for (let n = 1; n <= 210; n++) for (const r of recomendar(n).games) if (r.note) claves.add(r.note);
+    for (const l of ["es", "en"] as const) {
+      const faltan = [...claves].filter((k) => {
+        const v = T[l][k];
+        return typeof v !== "string" && typeof v !== "function";
+      });
+      expect(faltan, l).toEqual([]);
+    }
+  });
+
+  it("no usa palabras de apuesta, rifa, boleto, lotería ni casino", () => {
+    for (const l of ["es", "en"] as const) {
+      const textos = Object.entries(T[l])
+        .filter(([k]) => k.startsWith("rec"))
+        .map(([, v]) => (typeof v === "function" ? (v as (...a: number[]) => string)(3, 2, 8) : String(v)));
+      expect(textos.filter((x) => /apuest|rifa|boleto|loter|casino|\bbet|raffle|lotter|ticket/i.test(x)), l).toEqual([]);
+    }
+  });
+});
 
 describe("el selector y su recomendación hablan de los mismos juegos", () => {
   it("SELECTOR son los botones de GAME_BUTTONS en freeze.ts, en el mismo orden", () => {

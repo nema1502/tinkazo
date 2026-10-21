@@ -1,6 +1,6 @@
 import { $ } from "../dom";
 import { T, getLang, onLangChange, t } from "../i18n";
-import { ANCHOR_LEAD_SECONDS, LEAD_SECONDS, WHEEL_MAX, app, params, type Game } from "../state";
+import { ANCHOR_LEAD_SECONDS, LEAD_SECONDS, WHEEL_MAX, app, currentPace, paceSeconds, params, type Game } from "../state";
 import { QUICKNET, bytesToHex, roundTime, targetRound } from "../protocol/quicknet";
 import { listHash } from "../protocol/canonical";
 import { prepararFirma } from "../protocol/firma";
@@ -58,6 +58,73 @@ export function pintarJuego(): void {
 }
 // Al cambiar de idioma los botones del selector ya están traducidos: se lee de ahí.
 onLangChange(pintarJuego);
+
+/** La cantidad con la que se pintó la recomendación, para rehacer los textos al cambiar de idioma o de ritmo. */
+let cantidadRecomendada: number | null = null;
+
+/** Una frase del diccionario. Las que llevan números son funciones: se les pasan los argumentos. */
+function frase(clave: string, args: readonly number[] = []): string {
+  const v = T[getLang()][clave];
+  if (typeof v === "function") return (v as (...a: number[]) => string)(...args);
+  return typeof v === "string" ? v : clave;
+}
+
+/**
+ * El selector recomienda según la cantidad de personas de la lista (auditoría
+ * de juegos, sección 8.1). Los que encajan van primero, con su etiqueta y una
+ * nota corta de por qué. Los que no encajan se atenúan, pero siguen tocables y
+ * dicen por qué. Los que no tienen rango claro quedan como estaban. Reordena
+ * los botones: no oculta ninguno, y el que estaba elegido sigue elegido.
+ */
+export function pintarRecomendacion(n: number): void {
+  cantidadRecomendada = n;
+  const botones = new Map<Game, HTMLElement>();
+  for (const [id, g] of GAME_BUTTONS) {
+    const el = document.getElementById(id);
+    if (el) botones.set(g, el);
+  }
+  for (const r of recomendar(n).games) {
+    const el = botones.get(r.game);
+    if (!el) continue;
+    // Ponerlos al final, en orden, deja el selector en el orden de la recomendación.
+    $("gamepick").appendChild(el);
+    el.classList.toggle("atenuado", r.fits === false);
+    el.querySelectorAll(":scope > .rec-tag, :scope > .rec-nota").forEach((x) => x.remove());
+    if (r.fits === true) {
+      const etiqueta = document.createElement("em");
+      etiqueta.className = "rec-tag";
+      etiqueta.textContent = t("recBadge");
+      el.appendChild(etiqueta);
+    }
+    if (r.note) {
+      const nota = document.createElement("small");
+      nota.className = "rec-nota";
+      nota.textContent = frase(r.note, r.args);
+      el.appendChild(nota);
+    }
+  }
+  pintarCabecera(n);
+}
+
+/**
+ * La línea de arriba del selector: "Para 8 personas · Duración: Normal · 41 s".
+ * La duración es la del show con el ritmo elegido, que hoy es la misma para
+ * cualquier cantidad (la de la sección 8.2 no se muestra todavía: ver el informe).
+ */
+function pintarCabecera(n: number): void {
+  const el = document.getElementById("rec-head");
+  if (!el) return;
+  const p = currentPace();
+  const nombre = t(p === "rapido" ? "paceFast" : p === "normal" ? "paceNormal" : "paceEpic");
+  el.textContent = `${frase("recHead", [n])} · ${t("paceLabel")}: ${nombre} · ${paceSeconds(p)} s`;
+  el.style.display = "";
+}
+
+/** Rehace la recomendación con la última cantidad: al cambiar de idioma o de ritmo. */
+export function refrescarRecomendacion(): void {
+  if (cantidadRecomendada !== null && app.frozen) pintarRecomendacion(cantidadRecomendada);
+}
+onLangChange(refrescarRecomendacion);
 
 /**
  * "Cambiar de juego": lleva al selector, que está debajo, y deja el foco en el
@@ -380,6 +447,7 @@ export function unfreeze(lista: string): void {
   if (countdownTimer !== undefined) clearInterval(countdownTimer);
   countdownTimer = undefined;
   app.frozen = null;
+  cantidadRecomendada = null;
   $<HTMLTextAreaElement>("ta").disabled = false;
   $<HTMLInputElement>("prize").disabled = false;
   ponerPremio("");
@@ -425,6 +493,8 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   }
   $("frozen-ts").textContent = t("frozenAt") + " " + f.at;
   renderSealSummary();
+  // Antes de la ruleta: si el juego cambia por la cantidad, el selector ya está ordenado.
+  pintarRecomendacion(names.length);
 
   if (names.length > WHEEL_MAX) {
     // La ruleta es el único juego con tope. Los demás aguantan doscientos. El
