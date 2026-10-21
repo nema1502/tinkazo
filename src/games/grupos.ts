@@ -36,6 +36,15 @@ export const GRUPOS: readonly { nombre: string; articulo: string }[] = [
   { nombre: "Tucanes", articulo: "los" },
 ];
 
+/**
+ * El color de cada grupo: el de su línea de Mi Teleférico (Roja, Amarilla,
+ * Verde, Azul, Naranja, Blanca, Celeste, Morada, Café y Plateada), el mismo en
+ * todos los juegos. En el teleférico pinta la cabina (`LINES` en
+ * `pixi/cablecar-plan.ts`, que la prueba compara con esta lista) y en La Entrada
+ * el traje de la fraternidad.
+ */
+export const COLORES: readonly string[] = ["#d7263d", "#e9b000", "#2f9e44", "#1c64c8", "#f2771a", "#ececec", "#5bc0eb", "#7d3c98", "#8b5a2b", "#aab2bd"];
+
 /** Cuántos grupos arma una lista de `n` personas: de a cuatro, hasta diez. */
 export function cuantosGrupos(n: number): number {
   return Math.max(1, Math.min(MAX_GRUPOS, Math.ceil(n / POR_GRUPO)));
