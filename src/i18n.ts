@@ -1325,6 +1325,10 @@ export const T: Record<Lang, Dict> = {
     "errAnchor.rpcDown": "No pude hablar con la red de Stellar. Probá de nuevo.",
     "errAnchor.busy": "La red estaba ocupada y no tomó la transacción. Probá de nuevo en unos segundos.",
     "errAnchor.unknown": "La red rechazó la transacción. Suele ser pasajero: probá de nuevo en unos segundos.",
+    // Transacciones (21-oct): qué pasó, cuando no fue el contrato.
+    "errAnchor.offline": "Estás sin internet. Conectate y probá de nuevo.",
+    "errAnchor.unconfirmed": "Lo mandamos, pero no pudimos confirmar si entró. Revisá tu conexión y apretá de nuevo: no se va a grabar dos veces.",
+    "errAnchor.wallet": "Tu billetera no firmó la operación. Abrila y probá de nuevo.",
     vVerdictPartialKicker: "La cuenta cierra",
     vVerdictPartial: "El cálculo está bien, pero falta un testigo",
     vVerdictPartialDetail: "Con esta lista y este número, el ganador es el que dice. Pero este sorteo no quedó registrado en Stellar, así que nadie más que el organizador puede confirmar que esta era la lista original. Anclarlo cuesta unos centavos y cierra ese hueco.",
@@ -2559,6 +2563,10 @@ export const T: Record<Lang, Dict> = {
     "errAnchor.rpcDown": "Couldn't reach the Stellar network. Try again.",
     "errAnchor.busy": "The network was busy and didn't take the transaction. Try again in a few seconds.",
     "errAnchor.unknown": "The network rejected the transaction. It's usually temporary: try again in a few seconds.",
+    // Transactions (Oct 21): what happened, when it wasn't the contract.
+    "errAnchor.offline": "You're offline. Reconnect and try again.",
+    "errAnchor.unconfirmed": "We sent it but couldn't confirm it went through. Check your connection and press again: it won't be recorded twice.",
+    "errAnchor.wallet": "Your wallet didn't sign the operation. Open it and try again.",
     vVerdictPartialKicker: "The math adds up",
     vVerdictPartial: "The math is right, but there's no witness",
     vVerdictPartialDetail: "With this list and this number, the winner is the one shown. But this draw was not recorded on Stellar, so nobody other than the organizer can confirm this was the original list. Anchoring it costs a few cents and closes that gap.",

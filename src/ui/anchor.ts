@@ -447,8 +447,14 @@ export function selloSinGrabar(e: unknown): boolean {
   return /Error\(Contract,\s*#5\)|Transaction failed!|tx-FAILED|txFailed|tx_failed/.test(msg);
 }
 
-/** Mensaje de error de una invocación, ya traducido. */
+/**
+ * Mensaje de error de una invocación, ya traducido. Clasifica sin el SDK de
+ * Stellar (`errores.ts`): si la red se cayó antes de bajarlo, igual se dice qué
+ * pasó. Una clave sin texto cae en el mensaje genérico, nunca en la clave cruda.
+ */
 export async function anchorErrorText(e: unknown): Promise<string> {
-  const { errorKey } = await import("../stellar/contract");
-  return t("errAnchor." + errorKey(e)) || t("errAnchor.unknown");
+  const { errorKey } = await import("../stellar/errores");
+  const clave = "errAnchor." + errorKey(e);
+  const texto = t(clave);
+  return texto && texto !== clave ? texto : t("errAnchor.unknown");
 }
