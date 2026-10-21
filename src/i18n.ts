@@ -715,6 +715,7 @@ export const T: Record<Lang, Dict> = {
     gameLabel: "Juego", gameRace: "Carrera de llamas", gameStellar: "Constelación Stellar",
     // --- El Trueque: una feria de puestos. Cada uno acepta un producto y da otro; un encargo cambia de mano hasta quien lo espera.
     gameTrueque: "El Trueque", jgTruequeN: "El Trueque",
+    jgTruequeB: "La feria del trueque: cada puesto acepta un producto y da otro a cambio. El encargo sale con uno, cambia de mano en mano y llega con otro a quien lo esperaba, y al final se prende el camino con los nombres de todos los que cambiaron. Así viaja un pago en Stellar. Mejor de veinte a ciento veinte, y hasta doscientas.",
     gcTrueque: "Cada puesto acepta un producto y da otro a cambio. Gana quien recibe el encargo.",
     gcTruequeMany: "Cada premio es un encargo que cambia de mano hasta llegar a quien lo espera.",
     loreTruequeQ: "¿Dónde se sigue haciendo el trueque?",
@@ -1968,6 +1969,7 @@ export const T: Record<Lang, Dict> = {
     gameLabel: "Game", gameRace: "Llama race", gameStellar: "Stellar Constellation",
     // --- El Trueque: una feria de puestos. Cada uno acepta un producto y da otro; un encargo cambia de mano hasta quien lo espera.
     gameTrueque: "El Trueque", jgTruequeN: "El Trueque",
+    jgTruequeB: "The barter fair: each stall takes one product and gives another in return. The order leaves carrying one, changes hands along the way and arrives carrying another at whoever was waiting for it, and at the end the route lights up with the names of everyone who traded. That is how a payment travels on Stellar. Best from twenty to a hundred and twenty, and up to two hundred.",
     gcTrueque: "Each stall takes one product and gives another in return. Whoever receives the order wins.",
     gcTruequeMany: "Each prize is an order that changes hands until it reaches whoever is waiting for it.",
     loreTruequeQ: "Where is trueque still done?",
