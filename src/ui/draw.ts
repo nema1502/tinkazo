@@ -481,9 +481,12 @@ function showAgain(): HTMLButtonElement {
   sin.textContent = L.againSin(quedan);
   comprobante.className = alcanza ? "ghost" : "primary";
   $("btn-again-nueva").className = "ghost";
-  // La principal va primero, también en el orden del teclado y del lector.
+  // La principal va primero, también en el orden del teclado y del lector. Solo
+  // si no lo está: sacarla y volverla a poner le quita el foco, y esto también
+  // corre al cambiar de idioma.
   const principal = alcanza ? sin : comprobante;
-  $("again-acciones").prepend(principal);
+  const acciones = $("again-acciones");
+  if (acciones.firstElementChild !== principal) acciones.prepend(principal);
   const titulo = $("again-t");
   titulo.dataset.i = alcanza ? "againTitle" : "againTitleFin";
   titulo.textContent = t(titulo.dataset.i);
@@ -505,14 +508,17 @@ function showAgain(): HTMLButtonElement {
  * resultado, y solo si el foco no está en ningún lado: no se lo quita a nadie.
  * Nunca al repintar por un cambio de idioma (eso llama a `showAgain` solo).
  * "Siguiente premio" no borra el sorteo, que sigue en Mis sorteos y en su
- * comprobante.
+ * comprobante. Si el botón quedó fuera de la pantalla y la barra de "lo que
+ * sigue" lo ofrece, el foco va al de la barra: es el que se ve.
  */
 function enfocarDespues(boton: HTMLButtonElement): void {
   window.setTimeout(() => {
     const a = document.activeElement as HTMLElement | null;
     const enNingunLado = !a || a === document.body || (a instanceof HTMLButtonElement && a.disabled) || a.offsetParent === null;
     if (!enNingunLado || !app.drawn || boton.offsetParent === null) return;
-    boton.focus({ preventScroll: true });
+    const barra = document.getElementById("siguiente");
+    const deLaBarra = barra?.classList.contains("on") ? document.getElementById("sig-btn") : null;
+    (deLaBarra ?? boton).focus({ preventScroll: true });
   }, 1000);
 }
 onLangChange(() => {

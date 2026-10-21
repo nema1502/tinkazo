@@ -188,6 +188,50 @@ const DETALLES = {
     },
   },
 
+  D11: {
+    que: "después del ganador, la acción que sigue con el foco",
+    async correr(browser, v, tema, quien) {
+      const page = await abrir(browser, v, tema, "?lead=3&pace=rapido");
+      try {
+        await libre(page);
+        await page.eval("document.getElementById('btn-sample').click(); true");
+        await sellar(page);
+        await sortearYSaltar(page);
+        await sleep(1400);
+        const f = await foco(page);
+        const barra = await page.eval("document.getElementById('siguiente').classList.contains('on')");
+        check(`${quien} · un momento después del resultado, el foco está en "Siguiente premio"`, f === (barra ? "sig-btn" : "btn-again-sin"), `foco en ${f}${barra ? " (con la barra)" : ""}`);
+        const espera = await page.eval("document.getElementById('wait-left').textContent");
+        check(`${quien} · la caja de la espera dice que ya se sorteó`, espera === "Ya se sorteó", `"${espera}"`);
+        await captura(page, "D11", v, tema, "resultado");
+        await page.eval("document.getElementById('wait-box').scrollIntoView({ block: 'center' }); true");
+        await sleep(400);
+        await captura(page, "D11", v, tema, "espera");
+        await page.eval("document.getElementById('btn-again-sin').scrollIntoView({ block: 'center' }); true");
+        await sleep(400);
+        await page.eval("document.getElementById('l-en').click(); true");
+        await sleep(300);
+        const en = JSON.parse(await page.eval("JSON.stringify({ espera: document.getElementById('wait-left').textContent, foco: document.activeElement && document.activeElement.id })"));
+        check(`${quien} · en inglés también, y cambiar de idioma no mueve el foco`, en.espera === "Already drawn" && en.foco === f, `"${en.espera}" · foco en ${en.foco}`);
+        await page.eval("document.getElementById('l-es').click(); true");
+        // Cambiar de idioma vuelve a pintar la puerta: el modo libre se arma de nuevo.
+        await libre(page);
+        // El siguiente premio: la caja vuelve a contar, y si el foco ya está en algo, no se lo quita.
+        await page.eval("document.getElementById('btn-again-sin').click(); true");
+        await sleep(400);
+        await sellar(page);
+        const cuenta = await page.eval("document.getElementById('wait-left').textContent");
+        check(`${quien} · con la lista sellada otra vez, la caja vuelve a contar`, /^\d+:\d\d$|^Ya nació/.test(cuenta), `"${cuenta}"`);
+        await sortearYSaltar(page);
+        await page.eval("document.getElementById('btn-grande').focus({ preventScroll: true }); true");
+        await sleep(1400);
+        check(`${quien} · si el foco ya está en otro botón, no se lo quita`, (await foco(page)) === "btn-grande", `foco en ${await foco(page)}`);
+      } finally {
+        await page.send("Page.close").catch(() => undefined);
+      }
+    },
+  },
+
   D08: {
     que: '"Cargar ejemplo" solo con el cuadro vacío',
     async correr(browser, v, tema, quien) {
