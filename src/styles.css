@@ -349,6 +349,13 @@
     background: var(--paper); border: 2px solid var(--ink); padding: 14px; overflow-x: auto;
     font: 12px/1.7 ui-monospace, Consolas, monospace; color: var(--ink2); white-space: pre; margin-top: 12px;
   }
+  /* En el celular las líneas largas (la huella, el enlace a la ronda) se
+     cortaban contra el borde, sin ninguna señal de que el bloque se podía
+     correr de costado (evaluador visual, 21 de octubre de 2026). Ahí se parten:
+     el salto es solo de pantalla, y lo que se copia sigue siendo una línea. */
+  @media (max-width: 760px) {
+    .steps-code { white-space: pre-wrap; overflow-wrap: anywhere; }
+  }
   .chip {
     border: 2px solid var(--ink); padding: 5px 12px; font-family: ui-monospace, Consolas, monospace;
     font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; background: var(--paper); color: var(--ink2);
