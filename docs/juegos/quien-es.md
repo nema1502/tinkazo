@@ -84,7 +84,7 @@ Hasta el 22 de octubre de 2026 tres auditores fallaban, y se arreglaron:
 
 - **Mezcla:** sin los graves de 150 Hz perdía de 3,6 a 3,7 LU (límite 3,5). En cada revisión la tensión de la música se caía hasta el piso y quedaban el bombo y el bajo solos. Desde que cada tic la sostiene, 3,2 LU.
 - **Exigente, con 2:** 4,2 s quieto después de la pregunta de calentamiento (límite 4). Con el saltito, 1,5 s; con 3, 2,0 s.
-- **Identificación, con 50:** no leía a nadie, tampoco al ganador. Con el nombre en un solo texto, 50 de 50. Ojo: con 100 y 200 el auditor mide el alto del bloque de dos líneas y no el de cada línea, así que cuenta como leídos nombres de 7 a 11 píxeles por línea que en la sala no se leen. Con 8, 18 y 50 cada línea pasa sola el umbral (unos 14 píxeles con 50).
+- **Identificación, con 50:** no leía a nadie, tampoco al ganador. Con el nombre en un solo texto, 50 de 50. Ojo: con 100 y 200 el auditor mide el alto del bloque de dos líneas y no el de cada línea, así que cuenta como leídos nombres de 7 a 10 píxeles por línea que en la sala no se leen. Con 8, 18 y 50 cada línea pasa sola el umbral de 11,5 píxeles, con 50 por poco: 14 píxeles al arrancar y 12 cuando el tablero se acomoda a la caja de las reglas, en dos renglones.
 
 ## Lo que queda afuera
 
