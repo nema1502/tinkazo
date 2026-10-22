@@ -554,6 +554,9 @@ describe("La Entrada", () => {
     expect(P.vivos(9)).toEqual([1, 3, 5, 7]);
     expect(senalesEntrada(P)["con-nombre"]["los-que-tienen-nombre"]).toEqual({ acierta: true, azar: 1 / 2 });
     expect(P.corte).toBe(25);
+    // Si la primera cuadra llega antes de que aparezca un nombre, ya es el embudo: no hay apuesta.
+    const tr2 = traza({ ganador: 5, pos: (t) => (t < 4 ? pos(t) : t < 12 ? {} : pos(t)), subs: [[9, "¡8 bailarines en 2 fraternidades: arranca el recorrido!"], [11, "¡Cuadra 1! Se quedan las Parabas"]] });
+    expect(senalesEntrada(preparar(tr2, JUEGOS.oruro))).toEqual({});
   });
 
   it("el que se queda en una cuadra sale aunque siga a la vista", () => {

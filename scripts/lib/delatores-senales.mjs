@@ -792,17 +792,19 @@ export function afueraPinata(P) {
  * y "en juego" por la pantalla los daría por afuera: el auditor no vería que
  * esconderlos es la pista. Por eso esta señal no usa "en juego".
  *
- * - `con-nombre`: en los 4 s después de "arranca el recorrido", cuando todavía
- *   no se quedó nadie, gana uno de los que tienen el nombre a la vista, entre
- *   todos.
+ * - `con-nombre`: desde "arranca el recorrido" hasta la primera cuadra (o 4 s),
+ *   cuando todavía no se quedó nadie, gana uno de los que tienen el nombre a
+ *   la vista, entre todos. Después de esa cuadra ya no es pista: es el embudo.
  */
 export function senalesEntrada(P) {
   const go = cuando(P, { clave: "cOruGo" });
   if (go === null) return {};
+  const cuadra = P.subs.find((s) => s.t > go && MARCADORES.cOruStay.test(s.s));
+  const hasta = Math.min(go + 4, cuadra ? cuadra.t : Infinity);
   const G = new Set();
   for (const f of P.frames) {
     if (f.t < go) continue;
-    if (f.t > go + 4) break;
+    if (f.t >= hasta) break;
     for (const i of f.labs.keys()) G.add(i);
   }
   if (!G.size) return {};
