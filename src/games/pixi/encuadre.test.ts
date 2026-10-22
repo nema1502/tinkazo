@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cabe, centrar, crecer, dentro, enPantalla, tapada, unir, type Caja, type Zona } from "./encuadre";
+import { cabe, centrar, crecer, dentro, enPantalla, guardiaNombre, meter, tapada, unir, type Caja, type Zona } from "./encuadre";
 
 /** Una pantalla de celular en vertical, con el cartel arriba y el relator abajo. */
 const SW = 390, SH = 844;
@@ -77,6 +77,58 @@ describe("encuadre: las cuentas", () => {
     expect(tapada(a, { x: 20, y: 0, w: 10, h: 10 })).toBe(0);
     expect(tapada(a, { x: -5, y: -5, w: 30, h: 30 })).toBe(1);
     expect(tapada({ x: 0, y: 0, w: 0, h: 10 }, a)).toBe(0);
+  });
+
+  it("meter no toca un nombre que ya está entero adentro, ni uno entero afuera", () => {
+    expect(meter({ x: 20, y: 300, w: 120, h: 30 }, ZONA)).toBeNull();
+    // Entero afuera no se ve: no se trae de lejos.
+    expect(meter({ x: 400, y: 300, w: 120, h: 30 }, ZONA)).toBeNull();
+    expect(meter({ x: 20, y: 760, w: 120, h: 30 }, ZONA)).toBeNull();
+    expect(meter({ x: 20, y: 300, w: 0, h: 30 }, ZONA)).toBeNull();
+  });
+
+  it("meter corre lo justo al nombre cortado, de cada lado", () => {
+    // "Valeria T…" contra el borde derecho del celular.
+    expect(meter({ x: 300, y: 300, w: 120, h: 30 }, ZONA)).toEqual({ dx: ZONA.x1 - 420, dy: 0, s: 1 });
+    // "Va", contra el borde izquierdo.
+    expect(meter({ x: -60, y: 300, w: 120, h: 30 }, ZONA)).toEqual({ dx: ZONA.x0 + 60, dy: 0, s: 1 });
+    // Debajo del relator y debajo de la barra de arriba.
+    expect(meter({ x: 20, y: 700, w: 120, h: 30 }, ZONA)).toEqual({ dx: 0, dy: ZONA.y1 - 730, s: 1 });
+    expect(meter({ x: 20, y: 260, w: 120, h: 30 }, ZONA)).toEqual({ dx: 0, dy: ZONA.y0 - 260, s: 1 });
+    // En una esquina, en los dos ejes.
+    expect(meter({ x: 370, y: 700, w: 40, h: 30 }, ZONA)).toEqual({ dx: ZONA.x1 - 410, dy: ZONA.y1 - 730, s: 1 });
+  });
+
+  it("meter achica lo que no entra, y después lo deja adentro", () => {
+    const ancho: Caja = { x: -10, y: 300, w: 736, h: 30 };
+    const m = meter(ancho, ZONA);
+    expect(m?.s).toBeCloseTo((ZONA.x1 - ZONA.x0) / 736, 9);
+    const c: Caja = { x: ancho.x + (m?.dx ?? 0), y: ancho.y + (m?.dy ?? 0), w: ancho.w * (m?.s ?? 1), h: ancho.h * (m?.s ?? 1) };
+    expect(c.x).toBeCloseTo(ZONA.x0, 9);
+    expect(c.x + c.w).toBeLessThanOrEqual(ZONA.x1 + 1e-9);
+    expect(meter(c, ZONA)).toBeNull();
+  });
+
+  it("guardiaNombre: entero adentro o entero fuera de la pantalla, nada", () => {
+    expect(guardiaNombre({ x: 20, y: 300, w: 120, h: 30 }, ZONA, SW, SH)).toEqual({ tipo: "nada" });
+    expect(guardiaNombre({ x: 500, y: 300, w: 120, h: 30 }, ZONA, SW, SH)).toEqual({ tipo: "nada" });
+    expect(guardiaNombre({ x: 20, y: -40, w: 120, h: 30 }, ZONA, SW, SH)).toEqual({ tipo: "nada" });
+  });
+
+  it("guardiaNombre: detrás de la barra o del relator, no se dibuja", () => {
+    expect(guardiaNombre({ x: 20, y: 40, w: 120, h: 30 }, ZONA, SW, SH)).toEqual({ tipo: "tapar" });
+    expect(guardiaNombre({ x: 20, y: 780, w: 120, h: 30 }, ZONA, SW, SH)).toEqual({ tipo: "tapar" });
+  });
+
+  it("guardiaNombre: un poco cortado se corre lo justo; muy afuera no se dibuja", () => {
+    // Un cuarto afuera del borde derecho: se corre.
+    expect(guardiaNombre({ x: 289, y: 300, w: 120, h: 30 }, ZONA, SW, SH)).toEqual({ tipo: "correr", dx: -30, dy: 0, s: 1 });
+    // "Valeria" con "Torrez" afuera: más de la mitad del chip, su dueño quedó fuera de cuadro.
+    expect(guardiaNombre({ x: 310, y: 300, w: 140, h: 30 }, ZONA, SW, SH)).toEqual({ tipo: "tapar" });
+    // Medio metido debajo del relator: se sube.
+    expect(guardiaNombre({ x: 20, y: 700, w: 120, h: 30 }, ZONA, SW, SH)).toEqual({ tipo: "correr", dx: 0, dy: -15, s: 1 });
+    // Con otro tope, otro corte.
+    expect(guardiaNombre({ x: 310, y: 300, w: 140, h: 30 }, ZONA, SW, SH, 0.6)).toEqual({ tipo: "correr", dx: -71, dy: 0, s: 1 });
   });
 
   it("es determinista: las mismas cajas dan la misma vista", () => {

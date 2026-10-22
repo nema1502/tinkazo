@@ -100,6 +100,57 @@ export function centrar(c: Caja, zona: Zona, sw: number, sh: number, z: number):
   };
 }
 
+/**
+ * La guardia de los nombres: cuánto hay que correr un rectángulo de la pantalla
+ * para que quede entero en la zona, y a qué escala, si no entra ni de ancho ni
+ * de alto. Con la escala, el corrimiento es el de la caja achicada desde su
+ * esquina de arriba a la izquierda: quien la achica de otra forma la vuelve a
+ * medir y pregunta de nuevo.
+ *
+ * Null si ya está entera adentro, o si no toca la zona: lo que está entero
+ * afuera no se ve, y no se trae de lejos.
+ *
+ * Nació con un nombre cortado contra el borde del celular en el sapo y en la
+ * carrera (revisión visual del 21 de octubre de 2026): cada juego acomoda sus
+ * nombres, y esta es la última palabra, la misma para todos.
+ */
+export function meter(c: Caja, zona: Zona): { dx: number; dy: number; s: number } | null {
+  if (!(c.w > 0 && c.h > 0)) return null;
+  if (!(c.x < zona.x1 && c.x + c.w > zona.x0 && c.y < zona.y1 && c.y + c.h > zona.y0)) return null;
+  const s = Math.min(1, Math.max(1, zona.x1 - zona.x0) / c.w, Math.max(1, zona.y1 - zona.y0) / c.h);
+  const tramo = (a: number, l: number, lo: number, hi: number): number => (a < lo ? lo - a : a + l > hi ? hi - (a + l) : 0);
+  const dx = tramo(c.x, c.w * s, zona.x0, zona.x1);
+  const dy = tramo(c.y, c.h * s, zona.y0, zona.y1);
+  return dx === 0 && dy === 0 && s === 1 ? null : { dx, dy, s };
+}
+
+/** Lo que hace la guardia con un nombre en un cuadro: nada, correrlo lo justo, o no dibujarlo. */
+export type Guardia = { tipo: "nada" } | { tipo: "tapar" } | { tipo: "correr"; dx: number; dy: number; s: number };
+
+/**
+ * La regla de los nombres: un nombre se ve entero o no se ve. `c` es el chip en
+ * la pantalla de `sw` por `sh`, y `zona` lo que se ve de verdad (sin la barra de
+ * arriba ni la caja del relator).
+ *
+ * - Entero adentro de la zona, o entero fuera de la pantalla: nada.
+ * - En la pantalla pero sin tocar la zona (detrás de la barra o del relator,
+ *   asomando por los costados de la caja): no se dibuja.
+ * - Cortado: se corre lo justo para quedar entero, si para eso no tiene que
+ *   irse más de `max` de su ancho (o de su alto) de donde lo puso el juego. Más
+ *   lejos ya no estaría al lado de su dueño, que seguramente quedó fuera de
+ *   cuadro: no se dibuja. "Pegado al borde engañaba" (el trompo, 16 de octubre).
+ */
+export function guardiaNombre(c: Caja, zona: Zona, sw: number, sh: number, max = 0.5): Guardia {
+  if (!(c.w > 0 && c.h > 0)) return { tipo: "nada" };
+  if (c.x >= sw || c.x + c.w <= 0 || c.y >= sh || c.y + c.h <= 0) return { tipo: "nada" };
+  const toca = c.x < zona.x1 && c.x + c.w > zona.x0 && c.y < zona.y1 && c.y + c.h > zona.y0;
+  if (!toca) return { tipo: "tapar" };
+  const m = meter(c, zona);
+  if (!m) return { tipo: "nada" };
+  const lejos = Math.max(Math.abs(m.dx) / (c.w * m.s), Math.abs(m.dy) / (c.h * m.s));
+  return lejos > max ? { tipo: "tapar" } : { tipo: "correr", ...m };
+}
+
 /** Qué parte de la caja `a` queda debajo de la caja `b`, de 0 a 1, por área de `a`. */
 export function tapada(a: Caja, b: Caja): number {
   const ix = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
