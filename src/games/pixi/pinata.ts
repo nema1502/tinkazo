@@ -4,7 +4,7 @@ import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, fanfare, note } from "../../sound";
 import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
-import { capRecent, layoutLabels, listaCaidos, type LabelItem, type ListaGeo } from "./pinata-labels";
+import { capRecent, juntar, layoutLabels, listaCaidos, type LabelItem, type ListaGeo, type Rect } from "./pinata-labels";
 import { planPalos } from "./pinata-plan";
 import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 
@@ -1084,9 +1084,23 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     // nombres de los últimos caídos lo tapaban justo cuando toca el piso.
     const fuera = !winC.inside;
     const ox = fuera ? winC.x : p.x, oy = fuera ? winC.y : p.y, oR = fuera ? sz * 1.8 * 1.6 : g.R * 1.75;
+    // Abajo, los flecos de los conos cuelgan más que las puntas.
+    const oAbajo = fuera ? oR : g.R * 1.95;
     const a = cam.toScreen(ox - oR, oy - oR, g.w, g.h);
-    const b = cam.toScreen(ox + oR, oy + oR, g.w, g.h);
-    const blocked = [{ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) }];
+    const b = cam.toScreen(ox + oR, oy + oAbajo, g.w, g.h);
+    const blocked: Rect[] = [{ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) }];
+    // Los caramelos de afuera tampoco se tapan, si hay lugar: el nombre de uno
+    // que caía se apoyaba encima de la pila del piso y tapaba las caras de los
+    // otros ("Ana Vargas" y "Diego Rojas" en la revisión visual del 21 de
+    // octubre de 2026). La pila va como unos pocos obstáculos, no uno por caramelo.
+    const caramelos: Rect[] = [];
+    for (const c of candies) {
+      if (c.inside || c === winC) continue;
+      const c0 = cam.toScreen(c.x - sz * 1.6, c.y - sz * 0.8, g.w, g.h);
+      const c1 = cam.toScreen(c.x + sz * 1.6, c.y + sz * 0.8, g.w, g.h);
+      caramelos.push({ x: c0.x, y: c0.y, w: c1.x - c0.x, h: c1.y - c0.y });
+    }
+    blocked.push(...juntar(caramelos, 4 * k));
     // El chico también, de la cabeza a los pies: ahora se arrima a la piñata, y
     // los nombres de los caramelos que le caen cerca le tapaban las piernas.
     const k0 = cam.toScreen(kidX - 38 * g.ks, g.ky - 140 * g.ks, g.w, g.h);

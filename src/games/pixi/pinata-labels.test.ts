@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_LABEL_ITEMS, capRecent, layoutLabels, type LabelItem } from "./pinata-labels";
+import { MAX_LABEL_ITEMS, capRecent, juntar, layoutLabels, type LabelItem } from "./pinata-labels";
 
 const B = { w: 390, h: 844, top: 100, bottom: 118 };
 const item = (id: number, x: number, y: number, priority = 0, w = 100, h = 30): LabelItem => ({ id, x, y, w, h, priority });
@@ -145,5 +145,43 @@ describe("layoutLabels performance guards", () => {
     const out = layoutLabels(its, B, blocked);
     expect(performance.now() - t0).toBeLessThan(200);
     expect(out.length).toBeLessThanOrEqual(MAX_LABEL_ITEMS);
+  });
+});
+
+describe("juntar: la pila de caramelos como pocos obstáculos", () => {
+  it("une los que se tocan y deja aparte a los que no", () => {
+    const pila = juntar([
+      { x: 0, y: 500, w: 40, h: 20 },
+      { x: 35, y: 505, w: 40, h: 20 },
+      { x: 70, y: 490, w: 40, h: 20 },
+      { x: 300, y: 500, w: 40, h: 20 },
+      // Uno que cae alto, encima de la pila: no la estira hasta arriba.
+      { x: 20, y: 200, w: 40, h: 20 },
+    ]);
+    expect(pila).toHaveLength(3);
+    expect(pila).toContainEqual({ x: 0, y: 490, w: 110, h: 35 });
+    expect(pila).toContainEqual({ x: 300, y: 500, w: 40, h: 20 });
+    expect(pila).toContainEqual({ x: 20, y: 200, w: 40, h: 20 });
+  });
+
+  it("une a través de uno que crece después, y con margen", () => {
+    // El tercero toca a los dos primeros, que entre sí no se tocaban.
+    const pila = juntar([
+      { x: 0, y: 0, w: 10, h: 10 },
+      { x: 30, y: 0, w: 10, h: 10 },
+      { x: 5, y: 5, w: 30, h: 10 },
+    ]);
+    expect(pila).toEqual([{ x: 0, y: 0, w: 40, h: 15 }]);
+    expect(juntar([{ x: 0, y: 0, w: 10, h: 10 }, { x: 13, y: 0, w: 10, h: 10 }], 4)).toEqual([{ x: 0, y: 0, w: 23, h: 10 }]);
+    expect(juntar([{ x: 0, y: 0, w: 10, h: 10 }, { x: 13, y: 0, w: 10, h: 10 }])).toHaveLength(2);
+  });
+
+  it("descarta los vacíos y aguanta doscientos", () => {
+    expect(juntar([{ x: 0, y: 0, w: 0, h: 10 }])).toEqual([]);
+    const muchos = Array.from({ length: 200 }, (_, i) => ({ x: (i % 40) * 30, y: 500 + Math.floor(i / 40) * 12, w: 34, h: 14 }));
+    const t0 = performance.now();
+    const pila = juntar(muchos);
+    expect(performance.now() - t0).toBeLessThan(50);
+    expect(pila).toHaveLength(1);
   });
 });

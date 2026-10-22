@@ -84,6 +84,32 @@ export function layoutLabels(items: LabelItem[], bounds: Bounds, blocked: Rect[]
 }
 
 /**
+ * Une los rectángulos que se tocan, o quedan a menos de `gap`, en uno solo: la
+ * pila de caramelos del piso pasa a ser unos pocos obstáculos para los nombres
+ * en vez de doscientos. Dos que no se tocan quedan separados, así un caramelo
+ * que cae alto no tapa con su pila toda la columna.
+ */
+export function juntar(rs: readonly Rect[], gap = 0): Rect[] {
+  const out: Rect[] = [];
+  for (const r0 of rs) {
+    if (!(r0.w > 0 && r0.h > 0)) continue;
+    let r: Rect = { x: r0.x, y: r0.y, w: r0.w, h: r0.h };
+    for (let i = out.length - 1; i >= 0; i--) {
+      const o = out[i] as Rect;
+      if (r.x - gap < o.x + o.w && o.x - gap < r.x + r.w && r.y - gap < o.y + o.h && o.y - gap < r.y + r.h) {
+        const x0 = Math.min(r.x, o.x), y0 = Math.min(r.y, o.y);
+        r = { x: x0, y: y0, w: Math.max(r.x + r.w, o.x + o.w) - x0, h: Math.max(r.y + r.h, o.y + o.h) - y0 };
+        out.splice(i, 1);
+        // El rectángulo creció: puede tocar a otros que ya había pasado.
+        i = out.length;
+      }
+    }
+    out.push(r);
+  }
+  return out;
+}
+
+/**
  * Of the candies still in flight, label the `max` most recently dropped and report
  * how many are left over, for a single compact "+N" chip.
  */
