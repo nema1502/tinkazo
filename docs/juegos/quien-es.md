@@ -40,6 +40,8 @@ Todo sale de la hora del juego (`dt`). Sin `Math.random()`: las variantes de las
 - El contador: "DE PIE  N / M".
 - Las cartas, con la cara y el nombre completo en dos líneas, en un solo texto: con homónimos ("Carlos Choque" y "Carlos Choque 2") el nombre de pila solo no decía de quién era la carta. Las que se sientan se dan vuelta y muestran el dorso con un "?". Las que siguen de pie se mecen.
 - Los ganadores de rondas anteriores, arriba a la derecha, con su marco amarillo.
+- El sello de la respuesta que decide ("¡SÍ!" o "¡NO!"), grande, un segundo: en la pantalla ancha en el medio del tablero, entre las cartas; en vertical, en la franja libre entre la pregunta y las cartas, porque ahí las dos últimas quedan lado a lado en el medio y el sello les tapaba los nombres.
+- El tablero termina encima de la caja del relator, medida de verdad: cuando una frase ocupa dos o tres renglones, el tablero se achica de a poco (sin cambiar de columnas) para que la caja no tape la última fila. Antes se armaba contra la franja de un renglón, y las reglas del arranque tapaban los apellidos de abajo.
 - No hay foco que salte de carta en carta: era una búsqueda en la pantalla, y en la última pregunta delataba a la carta del ganador.
 
 ## Cuánta gente
