@@ -64,6 +64,8 @@ const T_RECHAZA = 1.0;
 const T_VUELVE = 1.4;
 /** La ruta se dibuja en segundos reales, dentro de la espera del cartel. */
 const RUTA_DIBUJA = 2.4;
+/** Lo que mide de alto el nombre de un puesto, con su sombra, en unidades de `S.u()` (el chip a su escala). */
+const NOMBRE_ALTO = 44;
 
 type Fase = "show" | "nova" | "dead";
 
@@ -639,16 +641,26 @@ export async function truequePixi(names: string[], winners: readonly number[], b
         }
       });
       if (!Number.isFinite(x0)) return;
-      const bw = Math.max(1, x1 - x0), bh = Math.max(1, y1 - y0);
       const yTop = S.placaBajo(winners.length), yBot = h - S.bottom() - 8 * S.u();
-      const z = clamp(Math.min((0.88 * w) / bw, Math.max(1, yBot - yTop) / bh), 0.7, 1.7);
+      // Arriba de cada puesto va el nombre de quien lo atiende: entra también,
+      // así el cartel no tapa al ganador. Con cincuenta personas, en la
+      // pantalla ancha su nombre quedaba debajo del cartel (21 de octubre de 2026).
+      let z = 1;
+      for (let vuelta = 0; vuelta < 2; vuelta++) {
+        const arriba = y0 - radio * 1.5 - 8 * S.u() - NOMBRE_ALTO * S.u() / z;
+        z = clamp(Math.min((0.88 * w) / Math.max(1, x1 - x0), Math.max(1, yBot - yTop) / Math.max(1, y1 + radio - arriba)), 0.7, 1.7);
+      }
+      const arriba = y0 - radio * 1.5 - 8 * S.u() - NOMBRE_ALTO * S.u() / z;
       const tx = w / 2, ty = (yTop + yBot) / 2;
-      cam.lookAt((x0 + x1) / 2 - (tx - w / 2) / z, (y0 + y1) / 2 - (ty - h / 2) / z, z, 1.6);
+      cam.lookAt((x0 + x1) / 2 - (tx - w / 2) / z, (arriba + y1 + radio) / 2 - (ty - h / 2) / z, z, 1.6);
       return;
     }
     if (tt >= T_ENTREGA) {
+      // Quien espera, con su nombre debajo del cartel que sale en ese momento.
       const d = pos[prim?.destino ?? 0] ?? { x: w / 2, y: h / 2 };
-      cam.lookAt(d.x, d.y, 1.45, 2.4);
+      const z = 1.45;
+      const yS = Math.max(h / 2, S.placaBajo(winners.length) + (radio * 1.5 + 8 * S.u()) * z + NOMBRE_ALTO * S.u());
+      cam.lookAt(d.x, d.y - (yS - h / 2) / z, z, 2.4);
       return;
     }
     const p = paseEn(tt);
