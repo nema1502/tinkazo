@@ -1,5 +1,6 @@
-import { Application, Container, Graphics, Sprite, Text, Texture, WebGLRenderer, loadEnvironmentExtensions, type TextStyleOptions } from "pixi.js";
+import { Application, CanvasSource, Container, Graphics, Sprite, Text, Texture, WebGLRenderer, loadEnvironmentExtensions, type TextStyleOptions } from "pixi.js";
 import { gsap } from "gsap";
+import { avatarColor } from "../../avatar";
 import { $ } from "../../dom";
 import { T, getLang, setPickSeed, t } from "../../i18n";
 import { LCOLORS, drawAvatar, paceFactor, paraCompartir, params, skipMotion, takeShowGate, type Beacon } from "../../state";
@@ -374,18 +375,52 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     registerSkip(onSkip);
   };
 
-  const faces = new Map<string, Texture>();
+  /**
+   * Las caras: el emblema de 7 por 7 celdas de `avatar.ts`, pasado a textura.
+   * En un lienzo de 48 px las celdas salían de 6 o 7 px, desparejas, y
+   * agrandadas con filtro lineal se veían blandas; más que nada la del cartel
+   * del ganador, que mide 76 px en 720 y 152 en 1440, la que mira toda la sala
+   * (21 de octubre de 2026). Ahora cada celda mide un número entero de píxeles
+   * y el lienzo es potencia de dos, para que tenga mipmaps en cualquier placa:
+   * las caras chicas se achican sin titilar. Las primeras 64 personas que
+   * aparecen tienen la cara de 128 (las cartas de "De pie" la muestran grande);
+   * las demás, de 64: con doscientas las caras son chicas, y la memoria de la
+   * placa es la del celular. La del cartel tiene su textura de 256: son pocas,
+   * una por premio.
+   */
+  const texturas: Texture[] = [];
+  const caras = (lado: number, celda: number): ((name: string) => Texture) => {
+    const memo = new Map<string, Texture>();
+    const m = Math.floor((lado - 7 * celda) / 2);
+    return (name) => {
+      let tx = memo.get(name);
+      if (!tx) {
+        const c = document.createElement("canvas");
+        c.width = c.height = lado;
+        const cx = c.getContext("2d");
+        if (cx) {
+          cx.fillStyle = avatarColor(name);
+          cx.fillRect(0, 0, lado, lado);
+          drawAvatar(cx, name, m, m, 7 * celda);
+        }
+        tx = new Texture({ source: new CanvasSource({ resource: c, autoGenerateMipmaps: true, scaleMode: "linear" }) });
+        memo.set(name, tx);
+        texturas.push(tx);
+      }
+      return tx;
+    };
+  };
+  const caraMedia = caras(128, 18);
+  const caraChica = caras(64, 9);
+  const caraGrande = caras(256, 36);
+  const tallaDe = new Map<string, (name: string) => Texture>();
   const face = (name: string): Texture => {
-    let tx = faces.get(name);
-    if (!tx) {
-      const c = document.createElement("canvas");
-      c.width = c.height = 48;
-      const cx = c.getContext("2d");
-      if (cx) drawAvatar(cx, name, 0, 0, 48);
-      tx = Texture.from(c);
-      faces.set(name, tx);
+    let talla = tallaDe.get(name);
+    if (!talla) {
+      talla = tallaDe.size < 64 ? caraMedia : caraChica;
+      tallaDe.set(name, talla);
     }
-    return tx;
+    return talla(name);
   };
 
   const sw = (): number => innerWidth;
@@ -621,7 +656,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       plate.addChild(bgp);
       const x0 = -pw / 2 + (big ? 112 : 28) * k;
       if (big) {
-        const av = new Sprite(face(all[0] ?? ""));
+        const av = new Sprite(caraGrande(all[0] ?? ""));
         av.width = av.height = 76 * k;
         av.position.set(-pw / 2 + 22 * k, -38 * k);
         const border = new Graphics().rect(-pw / 2 + 20 * k, -40 * k, 80 * k, 80 * k).stroke({ width: 4 * k, color: INK });
@@ -636,7 +671,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         const fila = new Container();
         if (conCara(i)) {
           const lado = cara(i);
-          const av = new Sprite(face(all[i] ?? ""));
+          const av = new Sprite(caraGrande(all[i] ?? ""));
           av.width = av.height = lado;
           av.position.set(0, (altos[i] ?? lineH) / 2 - lado / 2 - 2 * k);
           fila.addChild(av, new Graphics().rect(av.x - 2 * k, av.y - 2 * k, lado + 4 * k, lado + 4 * k).stroke({ width: 3 * k, color: INK }));
@@ -900,7 +935,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       // desde adentro de su propio cuadro, y lo que sigue en ese cuadro todavía
       // la usa (la cámara, el dibujo). Destruirla ahí mismo tiraba un error.
       setTimeout(() => {
-        for (const tx of faces.values()) tx.destroy(true);
+        for (const tx of texturas) tx.destroy(true);
         app.destroy({ removeView: true }, { children: true });
       }, 0);
       base.style.visibility = "";
