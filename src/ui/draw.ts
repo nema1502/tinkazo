@@ -14,7 +14,7 @@ import { pintarQr } from "./qr";
 import { usePixi } from "../games/engine";
 import { secondsToRound, unfreeze } from "./freeze";
 import { setList } from "./participants";
-import { CARD_SECONDS, showGameCard } from "./gamecard";
+import { CARD_SECONDS, type GameCard, showGameCard } from "./gamecard";
 import { actualizarPaso, verError } from "./siguiente";
 import { marcarSalio, olvidarSalieron, ponerPremio } from "./premios";
 import { acortar, alAcortar, cortoGuardado, rutaDe } from "../enlace-corto";
@@ -54,6 +54,8 @@ export async function draw(): Promise<void> {
     cortina?.cerrar();
     if (document.fullscreenElement && !enGrande()) void document.exitFullscreen().catch(() => undefined);
   };
+  /** Con cuenta, la tarjeta del juego sale mientras se graba (ver abajo); si algo falla, se va con la cortina. */
+  let tarjeta: Previa | null = null;
 
   try {
     // Esto pasa con la sala mirando la pantalla grande. Si un relay no responde
@@ -91,6 +93,18 @@ export async function draw(): Promise<void> {
     let drawTx: string | undefined;
 
     if (raffleId !== undefined) {
+      // La tarjeta de "cómo se juega" sale ya, mientras se graba: antes la sala
+      // miraba la cortina siete u ocho segundos y recién después la tarjeta
+      // (evaluación crítica de experiencia, hallazgo 3). No dice quién ganó, y
+      // la cuenta de la sala y el juego esperan a que quede grabado.
+      let grabado: () => void = () => undefined;
+      const espera = new Promise<void>((r) => (grabado = r));
+      const juego = juegoDe(names.length, nWinners);
+      const card = abrirTarjeta(juego, names.length, nWinners, espera);
+      if (card) {
+        tarjeta = { card, game: juego };
+        cortina?.cerrar();
+      }
       // Anclado: el contrato verifica la firma y decide. Lo que muestra la
       // pantalla es lo que quedó registrado, no un cálculo nuestro.
       //
@@ -126,6 +140,7 @@ export async function draw(): Promise<void> {
         },
       });
       if (!fin.ok) {
+        tarjeta?.card.hide();
         sinShow();
         // El mensaje de la pantalla es para la sala; el detalle queda plegado
         // debajo, en este navegador y en la consola, por si se repite.
@@ -144,6 +159,8 @@ export async function draw(): Promise<void> {
       if (fin.valor.txHash) drawTx = fin.valor.txHash;
       // Ya estaba registrado (un intento cortado que sí entró, u otra persona): sin enlace a la transacción.
       if (fin.yaEstaba) showTxStatus("draw-status", "confirmed");
+      // Quedó grabado: la tarjeta sigue con la cuenta de la sala, y después el juego.
+      grabado();
     } else {
       winners = select(hexToBytes(beacon.randomness), hexToBytes(listHash), names.length, nWinners);
     }
@@ -162,7 +179,7 @@ export async function draw(): Promise<void> {
     granFinal = enGrande() ? { pantalla: !!document.fullscreenElement } : null;
     seguirEnPantallaCompleta(granFinal?.pantalla === true);
     const finish = (): void => reveal(names, winners, beacon, listHash);
-    playGame(names, winners, beacon, finish);
+    playGame(names, winners, beacon, finish, tarjeta);
     // La tarjeta ya está arriba: la cortina se va sin dejar ver la página.
     cortina?.cerrar();
   } catch (e) {
@@ -170,6 +187,7 @@ export async function draw(): Promise<void> {
     // pantalla y el botón apagado, con la sala mirando. Se dice lo que fue (un
     // corte de red ya no sale como "la red rechazó la transacción"), con el
     // detalle plegado debajo.
+    tarjeta?.card.hide();
     sinShow();
     console.warn("[tinkazo] el sorteo se cortó", e);
     btn.disabled = false;
@@ -250,24 +268,49 @@ function abrirCortina(premio: string, graba: boolean): { cerrar: () => void } {
   };
 }
 
+/** La tarjeta del juego que ya salió mientras se grababa el sorteo, con el juego que anuncia. */
+interface Previa {
+  card: GameCard;
+  game: Game;
+}
+
+/** El juego que de verdad se juega para esta cantidad: el del motor nuevo, o el del de respaldo. */
+function juegoDe(people: number, prizes: number, names?: string[], winners?: number[]): Game {
+  return usePixi()
+    ? playableGame(app.game, people, names, winners ?? Array.from({ length: prizes }, () => 0))
+    : classicPlayable(app.game, people);
+}
+
+/**
+ * La tarjeta de "cómo se juega", grande para la sala. Sus segundos salen del
+ * mismo total que eligió quien sortea. Sin show (instantáneo o movimiento
+ * reducido), ninguna. "¡Cuenten conmigo!" al final de la tarjeta (state.ts): un
+ * tono por número, más alto en el 1. Los dos en la pentatónica, mi y do: el
+ * 990 Hz de antes era un si, fuera de la escala de los juegos.
+ */
+function abrirTarjeta(game: Game, people: number, prizes: number, espera?: Promise<void>): GameCard | null {
+  if (skipMotion()) return null;
+  const cuenta = conCuenta() ? CUENTA_SECONDS : 0;
+  return showGameCard(game, people, prizes, cuenta, (n) => beep(note(n > 1 ? 12 : 15), 0.16, "triangle", 0.07), app.frozen?.prize ?? "", espera);
+}
+
 /**
  * Le pasa el resultado al juego elegido.
  *
  * Ninguno de estos decide nada: reciben el ganador ya calculado y solo lo
  * cuentan. Si un juego no puede con la cantidad de participantes, se cambia
  * por uno que sí, y eso no altera quién ganó.
+ *
+ * `previa`: la tarjeta que ya está arriba, porque salió mientras se grababa el
+ * sorteo (`draw`). Si con los ganadores de verdad el juego cambia, la tarjeta
+ * pasa a anunciar el que se juega.
  */
-function playGame(names: string[], winners: number[], beacon: Beacon, finish: () => void): void {
+function playGame(names: string[], winners: number[], beacon: Beacon, finish: () => void, previa: Previa | null = null): void {
   const pixi = usePixi();
-  const game = pixi ? playableGame(app.game, names.length, names, winners) : classicPlayable(app.game, names.length);
-  // Antes del juego, la tarjeta de "cómo se juega", grande para la sala. Sus
-  // segundos salen del mismo total que eligió quien sortea.
-  // "¡Cuenten conmigo!" al final de la tarjeta (state.ts): un tono por número, más alto en el 1.
-  // Los dos en la pentatónica, mi y do: el 990 Hz de antes era un si, fuera de la escala de los juegos.
+  const game = juegoDe(names.length, winners.length, names, winners);
   const cuenta = conCuenta() ? CUENTA_SECONDS : 0;
-  const card = skipMotion()
-    ? null
-    : showGameCard(game, names.length, winners.length, cuenta, (n) => beep(note(n > 1 ? 12 : 15), 0.16, "triangle", 0.07), app.frozen?.prize ?? "");
+  if (previa && previa.game !== game) previa.card.update(game);
+  const card = previa ? previa.card : abrirTarjeta(game, names.length, winners.length);
   setCardSeconds(card ? CARD_SECONDS : 0);
   // Si la sala ya contó con la tarjeta, el juego no vuelve a contar.
   setYaContaron(card !== null && cuenta > 0);

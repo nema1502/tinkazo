@@ -4,6 +4,7 @@ import { acortar } from "../enlace-corto";
 import { decodeProof } from "../protocol/proof";
 import { eventoUrl, partirEvento, type SorteoDelEvento } from "../protocol/evento";
 import { fotoPng, type Foto } from "./foto";
+import { type ConOrden, enOrdenDeSalida } from "./agrupar";
 
 /**
  * Compartir un sorteo o un evento: la foto con quién ganó y el QR para
@@ -76,9 +77,12 @@ export function mensajeDeSorteo(lang: Lang, d: DatosSorteo): string {
   ].join("\n");
 }
 
-/** Un renglón por sorteo del evento: el premio (o "Sorteo") y quién ganó. "Polera: Gabriela Flores". */
-export function lineasDeEvento(lang: Lang, sorteos: Array<{ prize?: string; ganadores: string[] }>): string[] {
-  return sorteos.map((s) => `${s.prize?.trim() || cad(lang, "histDraw")}: ${lista(lang, s.ganadores)}`);
+/**
+ * Un renglón por sorteo del evento: el premio (o "Sorteo") y quién ganó.
+ * "Polera: Gabriela Flores". En el orden en que salieron (`enOrdenDeSalida`).
+ */
+export function lineasDeEvento(lang: Lang, sorteos: Array<{ prize?: string; ganadores: string[] } & ConOrden>): string[] {
+  return enOrdenDeSalida(sorteos).map((s) => `${s.prize?.trim() || cad(lang, "histDraw")}: ${lista(lang, s.ganadores)}`);
 }
 
 /**
@@ -135,15 +139,16 @@ export function fotoDeSorteo(lang: Lang, d: DatosSorteo, enlace: string): Foto {
   };
 }
 
-/** Lo que va en la foto de un evento: su nombre, un renglón por sorteo y el QR. */
+/** Lo que va en la foto de un evento: su nombre, un renglón por sorteo (en el orden en que salieron) y el QR. */
 export function fotoDeEvento(lang: Lang, titulo: string, sorteos: SorteoDelEvento[], enlace: string): Foto {
   const n = sorteos.length;
-  const fecha = sorteos.map((s) => s.sealedAt ?? 0).find((x) => x > 0);
+  const enOrden = enOrdenDeSalida(sorteos);
+  const fecha = enOrden.map((s) => s.sealedAt ?? 0).find((x) => x > 0);
   return {
     rotulo: [cad(lang, "fotoEvento"), fechaLarga(lang, fecha)].filter(Boolean).join(" · "),
     titulo,
     sub: rellenar(cad(lang, n === 1 ? "evUnSorteo" : "evNSorteos"), { n }),
-    filas: sorteos.map((s) => ({ premio: s.prize?.trim() || cad(lang, "histDraw"), ganadores: lista(lang, s.ganadores) })),
+    filas: enOrden.map((s) => ({ premio: s.prize?.trim() || cad(lang, "histDraw"), ganadores: lista(lang, s.ganadores) })),
     lineas: [],
     mas: cad(lang, "fotoMas"),
     enlace,
@@ -432,6 +437,8 @@ export async function paqueteDeEvento(
   base?: string,
 ): Promise<{ partes: Array<{ titulo: string; enlace: string; sorteos: SorteoDelEvento[] }>; mensaje: string } | null> {
   if (!sorteos.length) return null;
+  // En el orden en que salieron: el enlace, sus partes y la página de evento cuentan lo mismo que el mensaje.
+  sorteos = enOrdenDeSalida(sorteos);
   const grupos = await partirEvento(titulo, sorteos);
   const n = grupos.length;
   const parte = (i: number): string => rellenar(cad(lang, "evParte"), { i, n });
@@ -456,6 +463,7 @@ export async function prepararEvento(
   lang: Lang = getLang(),
   op: { corto?: boolean; base?: string } = {},
 ): Promise<Listo> {
+  sorteos = enOrdenDeSalida(sorteos);
   const lineas = lineasDeEvento(lang, sorteos);
   const fecha = sorteos.map((s) => s.sealedAt ?? 0).find((x) => x > 0);
   const archivo = archivoDe(undefined, fecha);

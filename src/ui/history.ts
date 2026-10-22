@@ -3,7 +3,7 @@ import { getLang, t } from "../i18n";
 import type { SorteoDelEvento } from "../protocol/evento";
 import { network, txUrl } from "../stellar/config";
 import type { ChainRaffle } from "../stellar/seals";
-import { agrupar, fechaLarga, tieneComprobante } from "./agrupar";
+import { agrupar, enOrdenDeSalida, fechaLarga, tieneComprobante } from "./agrupar";
 import { compartirEvento, compartirSorteo } from "./compartir";
 import {
   type EventoGuardado,
@@ -11,7 +11,6 @@ import {
   aSorteoDelEvento,
   borrarEvento,
   crearEvento,
-  enlacesEnEventos,
   eventosDe,
   guardarEventos,
   leerEventos,
@@ -226,10 +225,33 @@ let enlazadoEventos = false;
 let guardados: EventoGuardado[] = [];
 /** Un aviso corto para la sección de eventos, que se muestra en la próxima pintada. */
 let avisoPendiente = "";
+/** De cada enlace de comprobante que está en un evento con nombre, su evento: la tarjeta del sorteo lo dice. */
+let eventoDelEnlace = new Map<string, EventoGuardado>();
+/**
+ * Los sorteos que se pueden sumar a un evento: con comprobante y ganadores, y
+ * en ningún evento todavía. Del más nuevo al más viejo, con su lugar en la lista.
+ */
+let candidatos: Array<{ e: Entry; i: number }> = [];
+/** El grupo del día que "Ponerle nombre a los sorteos de hoy" vuelve evento, si hay uno. */
+let grupoNombrable: Entry[] | null = null;
+/**
+ * El evento que se está armando: el que se acaba de crear o al que se le acaba
+ * de sumar un sorteo. Ofrece los sorteos para sumar sin plegarlos. Dura lo que
+ * dura la página.
+ */
+let activo: string | null = null;
+/** El formulario de "Nuevo evento" está a la vista: se pliega detrás del botón. */
+let formAbierto = false;
+/** Cuántos sorteos ofrece un evento para sumar, los más nuevos. Los demás se suman desde su tarjeta. */
+const CANDIDATOS_MAX = 8;
 
 const avisar = (texto: string): void => {
   avisoPendiente = texto;
 };
+
+/** Se puede sumar a un evento o compartir: tiene el enlace del comprobante y sus ganadores. */
+const compartible = (e: Entry): e is Entry & { proof: string; winners: string[] } =>
+  !!(e.proof && tieneComprobante(e) && e.winners?.length);
 
 /** El título de un evento sin nombre: "Sorteos del 20 de octubre de 2026". */
 const tituloDeGrupo = (g: Entry[]): string => t("histGrupoT").replace("{f}", fechaLarga(g[0]?.sealedAt ?? 0, getLang()));
@@ -426,9 +448,34 @@ function sorteoDeClave(clave: string): { ev: EventoGuardado; s: SorteoGuardado }
   return ev && s ? { ev, s } : null;
 }
 
-/** La sección "Mis eventos": el formulario para armar uno, y cada evento con su lista. */
-function pintarEventos(list: Entry[]): void {
+/** "Ponerle nombre a los sorteos de hoy", o "… del 20 de octubre de 2026" si el grupo empezó otro día. */
+function rotuloNombrar(g: Entry[]): string {
+  const desde = g[0]?.sealedAt ?? 0;
+  const d = new Date(desde * 1000);
+  const hoy = new Date();
+  const esHoy = d.getFullYear() === hoy.getFullYear() && d.getMonth() === hoy.getMonth() && d.getDate() === hoy.getDate();
+  return esHoy ? t("evnNombrarHoy") : t("evnNombrarDel").replace("{f}", fechaLarga(desde, getLang()));
+}
+
+/**
+ * La sección "Mis eventos": cada evento con su lista y, plegado detrás de
+ * "Nuevo evento", el formulario para armar uno.
+ *
+ * Hasta el 21 de octubre de 2026 la sección abría con el campo vacío y "Crear
+ * evento" como botón principal, y el evento recién creado quedaba vacío, con
+ * "Compartir el evento" apagado sin decir por qué: la pista para sumarle
+ * sorteos estaba plegada, y el selector, en cada sorteo, más abajo. Ahora, sin
+ * eventos, lo primero es "Ponerle nombre a los sorteos de hoy", que es el
+ * camino de cuatro toques; un evento vacío ofrece adentro los sorteos sueltos,
+ * cada uno con su "Sumar"; y el botón apagado dice qué le falta (evaluación
+ * crítica de experiencia, hallazgo 2).
+ */
+function pintarEventos(list: Entry[], sueltos: Entry[], grupos: Entry[][]): void {
   const caja = $("hist-eventos");
+  candidatos = sueltos.filter(compartible).map((e) => ({ e, i: list.indexOf(e) }));
+  // El grupo del sorteo más nuevo que se puede sumar: "Ponerle nombre" lo vuelve un evento entero.
+  const ultimo = candidatos[0]?.e;
+  grupoNombrable = ultimo ? (grupos.find((g) => g.includes(ultimo)) ?? null) : null;
   if (!guardados.length && !list.some(tieneComprobante)) {
     caja.style.display = "none";
     caja.innerHTML = "";
@@ -436,31 +483,48 @@ function pintarEventos(list: Entry[]): void {
   }
   const aviso = avisoPendiente;
   avisoPendiente = "";
+  const nuevo =
+    `<button class="ghost mini" type="button" data-evn-nuevo aria-expanded="${formAbierto}" aria-controls="evn-nuevo-f">` +
+    `${esc(t("evnNuevo"))}</button>`;
+  // Sin eventos: primero el camino corto, y "Nuevo evento" al lado, como secundario.
+  // Con el formulario abierto, la principal es "Crear evento": el camino corto pasa a secundario.
+  const arriba =
+    !guardados.length && grupoNombrable
+      ? `<div class="hc-acciones evn-arriba"><button class="${formAbierto ? "ghost" : "primary"} mini" type="button" data-nombrar-ultimo>${esc(rotuloNombrar(grupoNombrable))}</button>${nuevo}</div>`
+      : (guardados.length ? "" : `<p class="note">${esc(t("evnVacio"))}</p>`) + `<div class="hc-acciones evn-arriba">${nuevo}</div>`;
   caja.style.display = "block";
   caja.innerHTML =
     `<section class="evn" aria-labelledby="evn-t">` +
     `<div class="ev-cabeza"><h3 id="evn-t">${esc(t("evnT"))}</h3></div>` +
     `<p class="note">${esc(t("evnLead"))}</p>` +
-    `<form class="evn-nuevo" data-nuevo>` +
+    arriba +
+    `<form class="evn-nuevo" id="evn-nuevo-f" data-nuevo${formAbierto ? "" : " hidden"}>` +
     `<label class="kicker" for="evn-nuevo-in">${esc(t("evnNombre"))}</label>` +
     `<div class="evn-fila"><input id="evn-nuevo-in" type="text" maxlength="80" autocomplete="off" required>` +
     `<button class="primary mini" type="submit">${esc(t("evnCrear"))}</button></div>` +
     `</form>` +
     (aviso ? `<p class="evn-aviso" role="status">${esc(aviso)}</p>` : "") +
-    (guardados.length
-      ? guardados.map((ev) => tarjetaDeEvento(ev, list)).join("")
-      : `<p class="note">${esc(t("evnVacio"))}</p>`) +
+    // El más nuevo primero, como los sorteos: el que se acaba de crear queda debajo del aviso.
+    [...guardados].reverse().map((ev) => tarjetaDeEvento(ev, list)).join("") +
     `</section>`;
   enlazarEventos();
 }
 
-/** Un evento: su nombre (que se puede cambiar), cuántos sorteos tiene, y su lista de comprobantes. */
+/** Un evento: su nombre (que se puede cambiar), cuántos sorteos tiene, los que se le pueden sumar y su lista de comprobantes. */
 function tarjetaDeEvento(ev: EventoGuardado, list: Entry[]): string {
   const n = ev.sorteos.length;
   const id = esc(ev.id);
-  const filas = ev.sorteos.map((s, k) => filaDeEvento(ev, s, k, list)).join("");
+  // En el orden en que salieron, como el mensaje y la foto; `k` sigue siendo su lugar en el evento guardado.
+  const filas = enOrdenDeSalida(
+    ev.sorteos.map((s, k) => {
+      const e = list.find((x) => x.proof === s.enlace);
+      return { s, k, id: e?.id, sealedAt: e?.sealedAt, round: e?.round };
+    }),
+  )
+    .map(({ s, k }) => filaDeEvento(ev, s, k, list))
+    .join("");
   return (
-    `<article class="evn-card">` +
+    `<article class="evn-card" id="evn-c-${id}" tabindex="-1">` +
     // Un formulario, como "Crear evento": Enter guarda el nombre.
     `<form class="evn-nombre" data-renombrar="${id}">` +
     `<label class="kicker" for="evn-n-${id}">${esc(t("evnNombre"))}</label>` +
@@ -469,14 +533,60 @@ function tarjetaDeEvento(ev: EventoGuardado, list: Entry[]): string {
     `</form>` +
     `<p class="hc-meta">${esc(n === 1 ? t("evUnSorteo") : t("evNSorteos").replace("{n}", String(n)))}</p>` +
     `<div class="hc-acciones">` +
-    `<button class="primary mini" type="button" data-evento-compartir="${id}"${n ? "" : " disabled"}>${esc(t("histGrupoCompartir"))}</button>` +
+    // Apagado, dice por qué a la vista: un botón gris sin explicación parece roto.
+    `<button class="primary mini" type="button" data-evento-compartir="${id}"${n ? "" : ` disabled aria-describedby="evn-pq-${id}"`}>${esc(t("histGrupoCompartir"))}</button>` +
     `<button class="ghost mini" type="button" data-evento-borrar="${id}">${esc(t("evnBorrar"))}</button>` +
     `</div>` +
-    `<details class="evn-detalle"><summary>${esc(t("evnVerLista"))}</summary>` +
-    (n ? `<ol class="evn-sorteos">${filas}</ol>` : `<p class="note">${esc(t("evnSinSorteos"))}</p>`) +
-    `</details>` +
+    (n ? "" : `<p class="note evn-porque" id="evn-pq-${id}">${esc(t("evnPorQue"))}</p>`) +
+    sumarle(ev) +
+    (n ? `<details class="evn-detalle"><summary>${esc(t("evnVerLista"))}</summary><ol class="evn-sorteos">${filas}</ol></details>` : "") +
     `</article>`
   );
+}
+
+/**
+ * Los sorteos sueltos que se le pueden sumar al evento, cada uno con su
+ * "Sumar". A la vista en un evento vacío y en el que se está armando; en los
+ * demás, plegados.
+ */
+function sumarle(ev: EventoGuardado): string {
+  const n = ev.sorteos.length;
+  if (!candidatos.length) return n ? "" : `<p class="note">${esc(t("evnSinSorteos"))}</p>`;
+  const muestra = candidatos.slice(0, CANDIDATOS_MAX);
+  const abierto = n === 0 || ev.id === activo;
+  return (
+    `<details class="evn-sumar"${abierto ? " open" : ""}><summary>${esc(t("evnSumarT").replace("{n}", String(candidatos.length)))}</summary>` +
+    `<ol class="evn-sorteos">${muestra.map(({ e, i }) => filaParaSumar(ev, e, i)).join("")}</ol>` +
+    (candidatos.length > muestra.length ? `<p class="note">${esc(t("evnSumarMas"))}</p>` : "") +
+    `</details>`
+  );
+}
+
+/** Un sorteo suelto que se puede sumar al evento: el premio, la fecha, quién ganó y "Sumar". */
+function filaParaSumar(ev: EventoGuardado, e: Entry, i: number): string {
+  const titulo = e.prize || t("histDraw");
+  const ganadores = e.winners ?? [];
+  const quien = `${e.id ? `#${esc(e.id)} · ` : ""}${esc(t(ganadores.length > 1 ? "histWonMany" : "histWon"))} <b>${esc(ganadores.join(", "))}</b>`;
+  const nombre = t("evnSumarA").replace("{s}", titulo).replace("{e}", ev.nombre);
+  return (
+    `<li class="evn-sorteo"><div><b>${esc(titulo)}</b> <span class="hc-fecha">${esc(fmtDate(e.sealedAt))}</span></div>` +
+    `<p class="hc-meta">${quien}</p>` +
+    `<div class="hc-acciones"><button class="ghost mini" type="button" data-evento-sumar="${esc(`${ev.id}|${i}`)}" aria-label="${esc(nombre)}">${esc(t("evnSumarBtn"))}</button></div></li>`
+  );
+}
+
+/**
+ * Después de sumar o de crear, el foco sigue en el evento: al próximo "Sumar",
+ * o a "Compartir el evento" si ya no queda qué sumar, o a la tarjeta.
+ */
+function enfocarEnEvento(id: string): void {
+  const card = document.getElementById(`evn-c-${id}`);
+  if (!card) return;
+  const sigue =
+    card.querySelector<HTMLElement>("[data-evento-sumar]") ??
+    card.querySelector<HTMLElement>("[data-evento-compartir]:not([disabled])") ??
+    card;
+  sigue.focus();
 }
 
 /** Un sorteo dentro del evento: el premio y la fecha (si están en la lista), quién ganó y sus botones. */
@@ -517,14 +627,52 @@ function enlazarEventos(): void {
     if (!nombre) {
       avisar(t("evnNombreVacio"));
       paint(shown);
+      document.getElementById("evn-nuevo-in")?.focus();
       return;
     }
-    guardarEventos(network.name, crearEvento(leerEventos(network.name), shown, nombre, nuevoId()));
-    avisar(t("evnCreado").replace("{nombre}", nombre));
+    const id = nuevoId();
+    guardarEventos(network.name, crearEvento(leerEventos(network.name), shown, nombre, id));
+    // Lo que sigue es sumarle sorteos: el evento los ofrece adentro, y el formulario se pliega.
+    formAbierto = false;
+    activo = id;
+    avisar(t(candidatos.length ? "evnCreadoSumar" : "evnCreado").replace("{nombre}", nombre));
     paint(shown);
+    enfocarEnEvento(id);
   });
   caja.addEventListener("click", (e) => {
     const el = e.target as HTMLElement;
+    const suma = el.closest<HTMLButtonElement>("[data-evento-sumar]");
+    if (suma) {
+      const [id = "", k = ""] = (suma.dataset.eventoSumar ?? "").split("|");
+      const fila = pintadas[Number(k)];
+      const lista = leerEventos(network.name);
+      const ev = lista.find((x) => x.id === id);
+      if (!ev || !fila || !compartible(fila) || !shown) return;
+      guardarEventos(network.name, sumarAEvento(lista, id, { enlace: fila.proof, ganadores: fila.winners }));
+      activo = id;
+      avisar(t("evnSumado").replace("{nombre}", ev.nombre));
+      paint(shown);
+      enfocarEnEvento(id);
+      return;
+    }
+    // "Nuevo evento" despliega el formulario, con el foco en el nombre; otro toque lo vuelve a plegar.
+    const nuevo = el.closest<HTMLButtonElement>("[data-evn-nuevo]");
+    if (nuevo) {
+      formAbierto = !formAbierto;
+      const form = document.getElementById("evn-nuevo-f");
+      if (form) form.hidden = !formAbierto;
+      for (const b of caja.querySelectorAll("[data-evn-nuevo]")) b.setAttribute("aria-expanded", String(formAbierto));
+      // Dos botones del color de la casa no dicen cuál es el siguiente: con el formulario abierto, "Crear evento".
+      const corto = caja.querySelector("[data-nombrar-ultimo]");
+      corto?.classList.toggle("primary", !formAbierto);
+      corto?.classList.toggle("ghost", formAbierto);
+      if (formAbierto) document.getElementById("evn-nuevo-in")?.focus();
+      return;
+    }
+    if (el.closest("[data-nombrar-ultimo]")) {
+      if (grupoNombrable && shown) nombrarGrupo(shown, grupoNombrable);
+      return;
+    }
     const compartir = el.closest<HTMLButtonElement>("[data-evento-compartir]");
     if (compartir) {
       const ev = leerEventos(network.name).find((x) => x.id === compartir.dataset.eventoCompartir);
@@ -591,34 +739,35 @@ function paint(organizer: string | null): void {
   $("hist-count").textContent = t("histCount").replace("{n}", String(list.length));
   pintadas = list;
   enlazarRearmado();
-  pintarEventos(list);
 
-  // Lo que está en un evento con nombre se ve dentro de él, no suelto.
-  const enEvento = enlacesEnEventos(leerEventos(network.name), organizer);
-  const sueltos = list.filter((e) => !(e.proof && enEvento.has(e.proof)));
-  // Cada sorteo, una tarjeta. Los que tienen comprobante se agrupan por fecha en
-  // eventos: una cabecera con "Compartir el evento" y, debajo, sus sorteos en el
-  // orden de la lista.
+  // Un sorteo que está en un evento con nombre sigue en la lista, con el nombre
+  // de su evento: hasta el 21 de octubre de 2026 se mudaba adentro del evento
+  // plegado y, al sumar el último, la lista quedaba vacía y parecía que se
+  // habían borrado (evaluación crítica de experiencia, hallazgo 2).
+  eventoDelEnlace = new Map<string, EventoGuardado>();
+  for (const ev of guardados) for (const s of ev.sorteos) if (!eventoDelEnlace.has(s.enlace)) eventoDelEnlace.set(s.enlace, ev);
+  const sueltos = list.filter((e) => !(e.proof && eventoDelEnlace.has(e.proof)));
+  // Los sueltos que tienen comprobante se agrupan por fecha en eventos: una
+  // cabecera con "Compartir el evento" y, debajo, sus sorteos en el orden de la lista.
   const grupos = agrupar(sueltos);
   eventoDe = new Map<Entry, number>();
   grupos.forEach((g, gi) => g.forEach((e) => eventoDe.set(e, gi)));
   eventosPintados = grupos;
+  pintarEventos(list, sueltos, grupos);
   const pintados = new Set<number>();
   let html = "";
-  for (const e of sueltos) {
-    const i = list.indexOf(e);
+  list.forEach((e, i) => {
     const gi = eventoDe.get(e);
     if (gi === undefined) {
       html += tarjetaDeSorteo(e, i);
-      continue;
+      return;
     }
-    if (pintados.has(gi)) continue;
+    if (pintados.has(gi)) return;
     pintados.add(gi);
     const g = grupos[gi] ?? [];
-    html += cabeceraDeEvento(g, gi);
     const enOrden = g.map((x) => ({ x, i: list.indexOf(x) })).sort((a, b) => a.i - b.i);
-    html += enOrden.map(({ x, i: j }) => tarjetaDeSorteo(x, j)).join("");
-  }
+    html += `<div class="hist-grupo">${cabeceraDeEvento(g, gi)}${enOrden.map(({ x, i: j }) => tarjetaDeSorteo(x, j)).join("")}</div>`;
+  });
   $("hist-list").innerHTML = html;
   box.style.display = "block";
 }
@@ -646,7 +795,9 @@ function tarjetaDeSorteo(e: Entry, i: number): string {
   else if (hecho && e.id) acciones.push(`<button class="ghost mini" data-rearmar="${i}">${esc(t("histRebuild"))}</button>`);
   if (enCadena) acciones.push(`<a class="hc-link" href="${esc(txUrl(enCadena))}" target="_blank" rel="noopener">${esc(t("histOnChain"))} ↗</a>`);
   if (!hecho && !e.names?.length) acciones.push(`<span class="note">${esc(t("histOtherDevice"))}</span>`);
-  if (compartible && guardados.length) {
+  // Ya en un evento con nombre: lo dice, en vez de ofrecer sumarlo a otro.
+  const suEvento = e.proof ? eventoDelEnlace.get(e.proof) : undefined;
+  if (compartible && guardados.length && !suEvento) {
     const opciones = guardados.map((ev) => `<option value="${esc(ev.id)}">${esc(ev.nombre)}</option>`).join("");
     acciones.push(
       `<select class="hc-sumar" data-sumar="${i}" aria-label="${esc(t("evnSumar"))}">` +
@@ -658,6 +809,7 @@ function tarjetaDeSorteo(e: Entry, i: number): string {
     `<div class="hc-top"><span class="hc-estado">${esc(t(hecho ? "histStateDone" : "histStatePending"))}</span>` +
     `<span class="hc-fecha">${esc(fmtDate(e.sealedAt))}</span></div>` +
     `<h3>${esc(titulo)}</h3>` +
+    (suEvento ? `<p class="hc-en">${esc(t("evnEn").replace("{e}", suEvento.nombre))}</p>` : "") +
     `<p class="hc-meta">${esc(id)} · ${e.count} ${esc(t("histPeople"))}${hecho ? ` · ${esc(t((e.winners?.length ?? 0) > 1 ? "histWonMany" : "histWon"))} <b>${esc(winnerLabel(e))}</b>` : ""}${origen}</p>` +
     `<div class="hc-acciones">${acciones.join("")}</div>` +
     `</article>`

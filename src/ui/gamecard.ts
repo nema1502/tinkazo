@@ -87,8 +87,26 @@ function caja(game: Game, people: number, prizes: number, premio = ""): string {
  * `cuenta` son los segundos de "¡Cuenten conmigo!" (cero, sin cuenta) y `sonar`
  * suena en cada número: los decide quien llama, así la tarjeta no depende del
  * estado ni del sonido y se puede probar sola.
+ *
+ * `espera`: la tarjeta sale antes de que el sorteo quede grabado, mientras se
+ * graba (con cuenta, unos siete segundos). Hasta el 21 de octubre de 2026 la
+ * sala miraba primero la cortina de "Grabando el sorteo…" y recién después la
+ * tarjeta, una cosa detrás de la otra: unos quince segundos de "Lanzar el
+ * sorteo" al juego, en cada premio (evaluación crítica de experiencia,
+ * hallazgo 3). Ahora la tarjeta se lee mientras tanto, con esa línea arriba;
+ * la cuenta de la sala y el juego esperan a que la promesa se cumpla, y la
+ * barra se detiene mientras. La tarjeta no dice quién ganó: el ganador se
+ * sigue mostrando después de grabarlo. Si grabar falla, quien llama la cierra.
  */
-export function showGameCard(game: Game, people: number, prizes: number, cuenta = 0, sonar?: (n: number) => void, premio = ""): GameCard {
+export function showGameCard(
+  game: Game,
+  people: number,
+  prizes: number,
+  cuenta = 0,
+  sonar?: (n: number) => void,
+  premio = "",
+  espera?: Promise<unknown>,
+): GameCard {
   const el = document.createElement("div");
   el.className = "game-card";
   // Un diálogo de verdad para el lector de pantalla: se anuncia porque el foco
@@ -106,6 +124,9 @@ export function showGameCard(game: Game, people: number, prizes: number, cuenta 
   fondo(game);
   el.innerHTML =
     `<div class="gc-fondo" aria-hidden="true"></div>` +
+    (espera
+      ? `<p class="gc-graba" role="status"><span>${esc(t("cortinaGraba"))}</span><span class="cortina-puntos" aria-hidden="true"><i></i><i></i><i></i></span></p>`
+      : "") +
     `<div class="gc-caja">${caja(game, people, prizes, premio)}</div>` +
     `<button class="gc-saltar" type="button">${esc(t("skip"))}</button>` +
     `<div class="gc-barra" aria-hidden="true"><i></i></div>`;
@@ -120,6 +141,8 @@ export function showGameCard(game: Game, people: number, prizes: number, cuenta 
   let resolver: () => void = () => {};
   const ready = new Promise<void>((r) => (resolver = r));
   let listo = false;
+  const pasos: number[] = [];
+  let reloj = 0;
   const terminar = (): void => {
     if (listo) return;
     listo = true;
@@ -127,17 +150,19 @@ export function showGameCard(game: Game, people: number, prizes: number, cuenta 
     for (const p of pasos) clearTimeout(p);
     resolver();
   };
-  const reloj = setTimeout(terminar, total * 1000);
 
   // "¡Cuenten conmigo!": la regla se apaga y la sala cuenta 3, 2, 1 en voz alta.
-  const pasos: number[] = [];
-  if (cuenta > 0) {
+  // `desde` es cuándo sale el primer número, en milisegundos desde ahora.
+  const numero = ((): HTMLElement | null => {
+    if (cuenta <= 0) return null;
     const nodo = document.createElement("div");
     nodo.className = "gc-cuenta";
     nodo.setAttribute("aria-live", "assertive");
     nodo.innerHTML = `<p class="gc-cuenta-t">${esc(t("gcCuenta"))}</p><p class="gc-cuenta-n"></p>`;
     el.appendChild(nodo);
-    const numero = nodo.querySelector<HTMLElement>(".gc-cuenta-n");
+    return nodo.querySelector<HTMLElement>(".gc-cuenta-n");
+  })();
+  const contar = (desde: number): void => {
     for (let i = 0; i < cuenta; i++) {
       pasos.push(window.setTimeout(() => {
         if (listo || !numero) return;
@@ -147,12 +172,57 @@ export function showGameCard(game: Game, people: number, prizes: number, cuenta 
         void numero.offsetWidth; // para que la animación vuelva a empezar
         numero.classList.add("gc-pum");
         sonar?.(cuenta - i);
-      }, (CARD_SECONDS + i) * 1000));
+      }, desde + i * 1000));
     }
+  };
+
+  // Sin espera, todo cuenta desde ya: la lectura y después la cuenta. Con
+  // espera, la cuenta arranca cuando pasaron la lectura y la espera; saltarla
+  // mientras se graba va directo al juego apenas queda grabado.
+  let saltada = false;
+  let grabado = !espera;
+  let tope = 0;
+  const saltar = (): void => {
+    if (grabado) terminar();
+    else saltada = true;
+  };
+  if (!espera) {
+    reloj = window.setTimeout(terminar, total * 1000);
+    contar(CARD_SECONDS * 1000);
+  } else {
+    let leida = false;
+    const seguir = (): void => {
+      if (listo || !leida || !grabado) return;
+      if (saltada) {
+        terminar();
+        return;
+      }
+      reloj = window.setTimeout(terminar, cuenta * 1000);
+      contar(0);
+      clearTimeout(tope);
+      tope = window.setTimeout(hide, (cuenta + 10) * 1000);
+    };
+    pasos.push(window.setTimeout(() => {
+      leida = true;
+      // La barra se detiene donde termina la lectura hasta que quede grabado.
+      if (!grabado) el.classList.add("gc-esperando");
+      seguir();
+    }, CARD_SECONDS * 1000));
+    void espera.then(
+      () => {
+        grabado = true;
+        el.querySelector(".gc-graba")?.remove();
+        el.classList.remove("gc-esperando");
+        // Saltada mientras se grababa: ya no hace falta esperar la lectura.
+        if (saltada) leida = true;
+        seguir();
+      },
+      () => undefined,
+    );
   }
 
   let ido = false;
-  const hide = (): void => {
+  function hide(): void {
     if (ido) return;
     ido = true;
     terminar();
@@ -166,7 +236,7 @@ export function showGameCard(game: Game, people: number, prizes: number, cuenta 
     if (stadium?.style.display !== "block") document.body.style.overflow = overflowAntes;
     el.classList.add("gc-fuera");
     setTimeout(() => el.remove(), 220);
-  };
+  }
 
   // Se va sola cuando aparece el estadio, y como mucho diez segundos después
   // del tiempo de la tarjeta, por si el juego no llegara a mostrarse.
@@ -178,17 +248,21 @@ export function showGameCard(game: Game, people: number, prizes: number, cuenta 
   void ready.then(() => {
     if (stadium?.style.display === "block") hide();
   });
-  const tope = setTimeout(hide, (total + 10) * 1000);
+  // Con espera, el tope corre recién con la cuenta (`seguir`); mientras tanto,
+  // uno largo, más que lo que se insiste en grabar, por si nadie la cerrara.
+  tope = window.setTimeout(hide, (espera ? total + 120 : total + 10) * 1000);
 
   // Saltarla: el botón, un toque en la tarjeta o Enter, espacio o Escape. La
-  // tecla no sigue de largo: ni hace scroll ni aprieta otra cosa.
+  // tecla no sigue de largo: ni hace scroll ni aprieta otra cosa, ni cierra la
+  // espera en grande que queda debajo mientras se graba.
   const tecla = (e: KeyboardEvent): void => {
     if (e.key !== "Enter" && e.key !== " " && e.key !== "Escape") return;
     e.preventDefault();
-    terminar();
+    e.stopPropagation();
+    saltar();
   };
   addEventListener("keydown", tecla, true);
-  el.addEventListener("click", terminar);
+  el.addEventListener("click", saltar);
 
   const update = (g: Game): void => {
     const c = el.querySelector(".gc-caja");

@@ -47,6 +47,16 @@ export function initOnboarding(): void {
   });
   // Quien ya sorteó con esta cuenta, aunque sea en otro equipo, no la necesita.
   document.addEventListener("tinkazo:con-sorteos", cerrar);
+  // En el celular va plegada a una línea, "¿Primera vez? Así funciona, en 3
+  // pasos": abierta ocupaba toda la pantalla y lo primero que se veía era leer,
+  // no dónde pegar (evaluación crítica de experiencia, hallazgo 4). En
+  // escritorio entra entera y el botón no se ve (styles.css).
+  const abrir = $("ob-abrir");
+  abrir.addEventListener("click", () => {
+    const si = !box.classList.contains("abierta");
+    box.classList.toggle("abierta", si);
+    abrir.setAttribute("aria-expanded", String(si));
+  });
   $("ob-ok").addEventListener("click", () => {
     cerrar();
     $<HTMLTextAreaElement>("ta").focus({ preventScroll: true });

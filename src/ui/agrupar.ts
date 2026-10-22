@@ -56,6 +56,38 @@ export function agrupar<T extends Sorteado>(sorteos: T[]): T[][] {
   return eventos;
 }
 
+/** Lo que hace falta de un sorteo para saber cuándo salió: su número en el contrato, la hora del sello y la ronda. */
+export interface ConOrden {
+  id?: string;
+  contract?: string;
+  sealedAt?: number;
+  round?: number;
+}
+
+/**
+ * Los sorteos de un evento en el orden en que salieron: por su número en el
+ * contrato. Si alguno no tiene número, o vienen de contratos distintos (si el
+ * contrato se vuelve a desplegar, los números arrancan de nuevo), por la hora
+ * del sello y después por la ronda. No cambia la lista que recibe.
+ *
+ * Hasta el 21 de octubre de 2026 el mensaje y la foto del evento los contaban
+ * en el orden en que se habían sumado: el mismo evento salía distinto si se
+ * armaba con "Crear evento" o con "Ponerle nombre" (evaluación crítica de
+ * experiencia, hallazgo 10).
+ */
+export function enOrdenDeSalida<T extends ConOrden>(sorteos: readonly T[]): T[] {
+  const numero = (s: T): bigint | null => (s.id && /^\d+$/.test(s.id) ? BigInt(s.id) : null);
+  const contratos = new Set(sorteos.map((s) => s.contract ?? ""));
+  const porNumero = contratos.size <= 1 && sorteos.every((s) => numero(s) !== null);
+  return [...sorteos].sort((a, b) => {
+    if (porNumero) {
+      const d = (numero(a) ?? 0n) - (numero(b) ?? 0n);
+      if (d !== 0n) return d < 0n ? -1 : 1;
+    }
+    return (a.sealedAt ?? 0) - (b.sealedAt ?? 0) || (a.round ?? 0) - (b.round ?? 0);
+  });
+}
+
 /** La fecha larga del sello, en el idioma de la página: "20 de octubre de 2026" o "October 20, 2026". */
 export function fechaLarga(secs: number, lang: "es" | "en"): string {
   return new Date(secs * 1000).toLocaleDateString(lang === "es" ? "es-BO" : "en-US", {

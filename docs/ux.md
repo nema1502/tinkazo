@@ -52,7 +52,7 @@ Entre sellar y poder sortear pasan unos segundos (45 con cuenta): la lista ya es
 
 **Desde el 21 de octubre de 2026 desemboca en el show.** Nicolás: "cuando esté la espera en grande y termina, debería hacer que cuando termine, empiece también, ¿no? Ahora la espera termina y se sale". Hasta ese día, al nacer el número la espera se cerraba y dejaba "Lanzar el sorteo" en la página, con el foco (decisión del 17 de octubre, cuando salieron el "¡Contemos juntos!" y el "¡Nació!" de la primera versión, que no vuelven). Ahora:
 
-- Si la espera está abierta cuando nace el número, el sorteo arranca solo, como si se tocara "Lanzar el sorteo" (la cuenta regresiva de `freeze.ts` aprieta el botón de verdad). La espera hace de cortina: donde estaba la cuenta dice "Está llegando el número que decide…" (o "Grabando el sorteo…", con cuenta), con el mismo alto para que los nombres no salten, y se va recién cuando la tarjeta del juego o el estadio están detrás. La sala no vuelve a ver el formulario.
+- Si la espera está abierta cuando nace el número, el sorteo arranca solo, como si se tocara "Lanzar el sorteo" (la cuenta regresiva de `freeze.ts` aprieta el botón de verdad). La espera hace de cortina: donde estaba la cuenta dice "Está llegando el número que decide…" (o "Grabando el sorteo…", con cuenta), con el mismo alto para que los nombres no salten, y se va recién cuando la tarjeta del juego o el estadio están detrás. La sala no vuelve a ver el formulario. Con cuenta, la tarjeta del juego sale encima de la espera mientras se graba el sorteo (ver la evaluación crítica, más abajo).
 - La pantalla completa se pide al tocar "Mostrar la espera en grande": es el gesto que el navegador exige. El show la hereda y no la vuelve a pedir sin un toque (el navegador la negaría).
 - Y el show desemboca en el resultado en grande, el mismo de "Mostrar en grande": el nombre, el premio y el QR del comprobante, sin soltar la pantalla completa y sin que la sala vea la página en el medio (21 de octubre de 2026, buscador de detalles D04). El QR lleva el enlace corto, como el del botón, para que se lea desde el fondo; si el corto no llega en 2 s sale con el largo y cambia cuando llega, y en la demo nunca se arma. Hasta ese día, al terminar el show se soltaba la pantalla completa y la sala veía la página de quien organiza, con la cabecera y la cuenta; para volver a ponerlo en grande había que tocar "Mostrar en grande" y se notaba el salto. "Cerrar", Escape o salir de la pantalla completa vuelven a la página con "Siguiente premio" con el foco: Enter, Enter, y se sigue. Sin show (movimiento reducido), igual. Si quien organiza salió de la pantalla completa durante el show, el resultado va a la página, como siempre. Sin la espera en grande, nada de esto cambia: el resultado queda en la página.
 - Si la cuenta pide aprobar cada operación en una ventana (Freighter), el sorteo no puede arrancar solo: la espera queda abierta con una sola acción grande, "Lanzar el sorteo", y la línea "Tu billetera te va a pedir que lo apruebes". La cuenta de prueba y la de Google (Pollar) firman sin ventana y arrancan solas. Sin cadena (la demo, el modo libre) no hay nada que aprobar.
@@ -83,14 +83,31 @@ Nicolás: "detallitos que son bonitos y ahorran tiempo o hacen mejor la experien
 | D11 | Después del ganador, "Siguiente premio" queda con el foco (si no estaba en otro lado), y la caja de la espera dice "Ya se sorteó". |
 | D14 | "Ponerle nombre" deja el campo listo para escribir, y Enter guarda el nombre del evento. |
 | D17 | "Entrar y sortear" al final de la demo abre la ventana de ingreso, como el de la portada. |
-| D18 | "Pegar lista" es un botón que lleva al cuadro; una lista pegada al final empieza en un renglón nuevo. |
+| D18 | "Pegar lista" es un botón que lleva al cuadro (y desde la evaluación crítica, además pega); una lista pegada al final empieza en un renglón nuevo. |
 | D19 | La barra dice qué se sortea antes de sellar ("12 personas · Termo", o "sin premio"). |
 
-El revisor descartó D02 (es del selector), D07 (ya estaba hecho), D12 (salvo el "Ya se sorteó"), D13, D16 y D20, con sus motivos en `.claude/progreso/juegos/ux-detalles.md`. D15 (que el mensaje del evento diga quién ganó qué) lo toma el stream de compartir.
+El revisor descartó D02 (es del selector; se hizo después, con la evaluación crítica), D07 (ya estaba hecho), D12 (salvo el "Ya se sorteó"), D13, D16 y D20, con sus motivos en `.claude/progreso/juegos/ux-detalles.md`. D15 (que el mensaje del evento diga quién ganó qué) lo toma el stream de compartir.
 
 ```bash
 CDP_PORT=9982 node scripts/audit-detalles.mjs --base http://localhost:4173 [--vistas 1280x720,390x844] [--temas dark,light] [--solo D01,D09]
 ```
+
+## La evaluación crítica de experiencia (21 de octubre de 2026)
+
+Un crítico usó Tinkazo como alguien que nunca lo vio, en escritorio y en el celular y en los dos temas, contando toques y cada vez que había que bajar la pantalla (`.claude/progreso/juegos/ux-critico.md`). Cada hallazgo se verificó antes de arreglarlo y se arregló con su propio cambio (avance y capturas en `.claude/progreso/juegos/ux-critico-arreglos.md`). El 1, el QR del resultado en grande, va por otro lado.
+
+| | Qué cambió |
+|---|---|
+| 2 | "Mis eventos" sin eventos ofrece primero "Ponerle nombre a los sorteos de hoy" (el camino de cuatro toques); el campo de "Crear evento" queda plegado detrás de "Nuevo evento". Un evento vacío, y el que se está armando, ofrecen adentro los sorteos sueltos, cada uno con su "Sumar"; el "Compartir el evento" apagado dice por qué; un sorteo sumado sigue en la lista con "En: {evento}". Los botones de cada sorteo no cambian (D16). |
+| 3 | Con cuenta, la tarjeta del juego sale apenas llega el número, mientras se graba el sorteo: "Grabando el sorteo…" arriba y la barra quieta al terminar la lectura. La cuenta de la sala y el juego esperan a que quede grabado; la tarjeta no dice quién ganó. De "Lanzar el sorteo" al juego, unos 10 s en vez de 15. |
+| 4 | En 760 px o menos, la bienvenida va plegada a una línea ("¿Primera vez? Así funciona, en 3 pasos") y "Pegar lista" queda a la vista. El aviso de que la cuenta está lista va dentro de la página, arriba de la lista: no tapa ningún control, y se va con el primer toque. |
+| 5 | Mis sorteos abre con los sorteos; "Mis eventos" va después. |
+| 6 | "Pegar lista" pega lo que hay en el portapapeles (con permiso, por el mismo camino que un pegado); sin permiso, lleva al cuadro como antes. |
+| 7 | Desde "Sellar la lista" sin cuenta, la ventana de ingreso dice para qué ("Para sellar tu lista de 20 personas… La lista te espera acá.") y, al entrar, el foco vuelve al botón. |
+| 8 | "¿No está? Sortear de nuevo", en vez de "No está" suelto: en el proyector se leía como que la persona no estaba. |
+| 9 | En la página, "Sorteo #750 en Stellar" sin "anotalo o sacale una foto" (queda en la espera en grande); "Quedó grabado en Stellar ↗" sin el pedazo de hash; el botón se llama "Sellar la lista" con cuenta y sin ella; "Billetera" en la ventana de ingreso. |
+| 10 | El evento cuenta sus sorteos en el orden en que salieron, por el número del sorteo: en el mensaje, en la foto, en el enlace del evento y en Mis eventos. |
+| D02 | Si nadie eligió otro juego, al sellar queda el de siempre cuando encaja para esa cantidad, y si no, el primero que se recomienda (con 20 personas, El Trueque). Quien elige uno en el selector lo conserva. |
 
 ## La lista de comprobación
 

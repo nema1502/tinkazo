@@ -121,6 +121,24 @@ function ordenar(a: Recomendacion, b: Recomendacion): number {
   return indice(a.game) - indice(b.game);
 }
 
+/** El juego que sale elegido cuando nadie eligió otro (`app.game` en state.ts). */
+export const JUEGO_DE_SIEMPRE: Game = "race";
+
+/**
+ * El juego que queda elegido para `n` personas si quien organiza no eligió
+ * otro: el de siempre si encaja, y si no, el primero que se recomienda (el del
+ * ideal y, entre esos, el de mejor puntaje). Si ninguno encaja, el de siempre.
+ *
+ * Hasta el 21 de octubre de 2026, con 20 personas quedaba elegida la carrera,
+ * que llega hasta 8 y no estaba entre los recomendados, mientras los cuatro de
+ * arriba del selector sí (D02, de la evaluación crítica de experiencia).
+ */
+export function juegoPorDefecto(n: number): Game {
+  const r = recomendar(n).games;
+  if (r.find((x) => x.game === JUEGO_DE_SIEMPRE)?.fits === true) return JUEGO_DE_SIEMPRE;
+  return r.find((x) => x.fits === true)?.game ?? JUEGO_DE_SIEMPRE;
+}
+
 /**
  * Qué juegos del selector sirven para `n` personas, con su nota y la duración
  * de la sección 8.2. `n` se toma entero y nunca negativo.

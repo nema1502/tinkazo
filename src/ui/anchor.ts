@@ -558,13 +558,16 @@ export function showTxStatus(containerId: string, step: AnchorStep, detail?: str
   }
   const txHash = step === "confirmed" ? detail : undefined;
   if (step === "confirmed" && txHash) {
-    host.textContent = stepLabel(step) + " ";
+    // "Quedó grabado en Stellar ↗", y el enlace lleva al explorador. El pedazo
+    // de hash que se veía durante el sorteo ("2d1c8019…") queda en el título del
+    // enlace, para quien lo busque (evaluación crítica de experiencia, hallazgo 9).
+    host.textContent = "";
     const a = document.createElement("a");
     a.href = txUrl(txHash);
     a.target = "_blank";
     a.rel = "noopener";
-    a.className = "mono";
-    a.textContent = `${txHash.slice(0, 8)}… ↗`;
+    a.title = txHash;
+    a.textContent = `${stepLabel(step)} ↗`;
     host.appendChild(a);
     const net = document.createElement("span");
     net.className = "kicker";

@@ -104,33 +104,41 @@ export function bindParticipants(): void {
   ta.addEventListener("paste", (e) => {
     const text = e.clipboardData?.getData("text/plain") ?? "";
     if (listaCerrada() || !text.trim()) return;
-    const toda = !ta.value.trim() || (ta.selectionStart === 0 && ta.selectionEnd === ta.value.length);
-    if (toda && pideImportar(text)) {
+    if (pegarTabla(ta, text)) {
       e.preventDefault();
-      loadFile(text, "");
       return;
     }
-    const limpio = stripInvisiblesByLine(text);
-    const num = quitarNumeracion(limpio.text);
-    // Una lista pegada al final de otra empieza en un renglón nuevo: si no, el
-    // primer nombre se pegaba al último ("Luis MamaniCarla Flores").
-    const alFinal = ta.selectionStart === ta.value.length && ta.selectionEnd === ta.value.length && /\S[ \t]*$/.test(ta.value);
-    const pegar = alFinal && /\n/.test(num.text.trim()) ? `\n${num.text}` : num.text;
+    const { pegar, avisos } = limpiarPegado(ta, text);
     if (pegar === text) return;
     e.preventDefault();
     insertar(ta, pegar);
-    avisarCarga([...(limpio.lines ? [(L: Dict) => L.impInvisibles(limpio.lines)] : []), ...avisosDeNumeracion(num)]);
+    avisarCarga(avisos);
   });
-  // "Pegar lista" parecía un botón y no hacía nada (buscador de detalles, D18):
-  // lleva al cuadro con el cursor al final, listo para pegar. En el celular, con
-  // el foco en el cuadro, el sistema ofrece "Pegar". No lee el portapapeles por
-  // su cuenta: el navegador pediría permiso con un cartel.
+  // "Pegar lista" pega. Hasta el 21 de octubre de 2026 solo llevaba al cuadro
+  // (D18), y en el celular había que mantener apretado y tocar "Pegar": dos
+  // toques más en la acción del paso 1, y el nombre prometía otra cosa
+  // (evaluación crítica de experiencia, hallazgo 6). Ahora lee el portapapeles
+  // en el mismo toque (en iOS sale la burbuja "Pegar" del sistema; en Android y
+  // en Chrome de escritorio, el permiso una sola vez) y lo pasa por el mismo
+  // camino que un pegado. Si no hay permiso, no hay portapapeles o está vacío,
+  // queda como antes: el cuadro con el foco y el cursor al final, listo para
+  // pegar a mano.
   $("btn-pegar").addEventListener("click", () => {
     if (listaCerrada()) return;
     ta.focus({ preventScroll: true });
     ta.setSelectionRange(ta.value.length, ta.value.length);
     const reducido = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
     ta.scrollIntoView({ behavior: reducido ? "auto" : "smooth", block: "center" });
+    const antes = ta.value;
+    void leerPortapapeles().then((text) => {
+      // Si mientras tanto se pegó a mano (el permiso tarda lo que tarde la persona), no se pega dos veces.
+      if (!text?.trim() || listaCerrada() || ta.value !== antes) return;
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+      if (pegarTabla(ta, text)) return;
+      const { pegar, avisos } = limpiarPegado(ta, text);
+      insertar(ta, pegar);
+      avisarCarga(avisos);
+    });
   });
   // El aviso vive desde el principio, vacío: un lector de pantalla anuncia los
   // cambios de una región que ya estaba, no de una que aparece con el texto.
@@ -266,6 +274,42 @@ function pideImportar(text: string): boolean {
 }
 
 /**
+ * Pegar una tabla entera es lo mismo que subirla: abre la ventana de importar.
+ * Solo cuando lo pegado es toda la lista (el cuadro vacío, o todo marcado).
+ * Devuelve si la tomó.
+ */
+function pegarTabla(ta: HTMLTextAreaElement, text: string): boolean {
+  const toda = !ta.value.trim() || (ta.selectionStart === 0 && ta.selectionEnd === ta.value.length);
+  if (!toda || !pideImportar(text)) return false;
+  loadFile(text, "");
+  return true;
+}
+
+/**
+ * Lo pegado, sin los caracteres que no se ven ni la numeración de una lista de
+ * WhatsApp, y lo que hay que avisar de eso. Una lista pegada al final de otra
+ * empieza en un renglón nuevo: si no, el primer nombre se pegaba al último
+ * ("Luis MamaniCarla Flores").
+ */
+function limpiarPegado(ta: HTMLTextAreaElement, text: string): { pegar: string; avisos: Array<(L: Dict) => string> } {
+  const limpio = stripInvisiblesByLine(text);
+  const num = quitarNumeracion(limpio.text);
+  const alFinal = ta.selectionStart === ta.value.length && ta.selectionEnd === ta.value.length && /\S[ \t]*$/.test(ta.value);
+  const pegar = alFinal && /\n/.test(num.text.trim()) ? `\n${num.text}` : num.text;
+  return { pegar, avisos: [...(limpio.lines ? [(L: Dict) => L.impInvisibles(limpio.lines)] : []), ...avisosDeNumeracion(num)] };
+}
+
+/** El texto del portapapeles, si el navegador lo da. Sin permiso, sin portapapeles o con un error: null. */
+async function leerPortapapeles(): Promise<string | null> {
+  try {
+    if (typeof navigator === "undefined" || !navigator.clipboard?.readText) return null;
+    return await navigator.clipboard.readText();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Escribe lo pegado, ya limpio, donde estaba el cursor. Con `execCommand`
  * queda en el historial del cuadro y se deshace con Ctrl+Z, como cualquier
  * pegar; donde no existe, se escribe a mano y se avisa del cambio igual.
@@ -273,7 +317,8 @@ function pideImportar(text: string): boolean {
 function insertar(ta: HTMLTextAreaElement, text: string): void {
   const plano = text.replace(/\r\n?/g, "\n");
   ta.focus();
-  if (document.execCommand("insertText", false, plano)) return;
+  // Solo con el foco en el cuadro: si no lo tomó (un toque que ya pasó), `execCommand` escribiría en otro lado.
+  if (document.activeElement === ta && document.execCommand("insertText", false, plano)) return;
   ta.setRangeText(plano, ta.selectionStart, ta.selectionEnd, "end");
   ta.dispatchEvent(new Event("input", { bubbles: true }));
 }

@@ -213,16 +213,21 @@
     <div class="head"><h2><span data-i="p1">Participantes</span></h2><span class="kicker" id="src-label">fuente: pegado / csv</span></div>
     <div class="body">
       <aside class="gate" id="gate" style="display:none"></aside>
+      <!-- En el celular la bienvenida va plegada a una línea: abierta ocupaba la pantalla y
+           "Pegar lista" quedaba abajo, fuera de ella (evaluación crítica de experiencia, hallazgo 4). -->
       <aside class="onboard" id="onboard" style="display:none" aria-labelledby="ob-t">
-        <h3 id="ob-t" data-i="obTitle">Tu primer sorteo, paso a paso</h3>
-        <ol class="ob-pasos">
-          <li><b data-i="ob1T">Cargá la lista</b><span data-i="ob1B">Pegá los nombres, uno por línea, o subí el CSV de Luma con los que hicieron check-in.</span></li>
-          <li><b data-i="ob2T">Sellala</b><span data-i="ob2B">Queda cerrada antes de que exista el número que decide, que sale unos 45 segundos después. Desde ahí nadie la puede cambiar.</span></li>
-          <li><b data-i="ob3T">Lanzá el sorteo</b><span data-i="ob3B">Elegí un juego para la pantalla grande. Cualquiera lo comprueba después desde su celular.</span></li>
-        </ol>
-        <div class="row">
-          <button class="primary" id="ob-ok" data-i="obOk">Entendido</button>
-          <a class="ghost" id="ob-demo" href="/?demo=race&amp;lead=3" data-i="obDemo">Ver una demo primero</a>
+        <button class="ob-abrir" id="ob-abrir" type="button" aria-expanded="false" aria-controls="ob-cuerpo" data-i="obCorto">¿Primera vez? Así funciona, en 3 pasos</button>
+        <div class="ob-cuerpo" id="ob-cuerpo">
+          <h3 id="ob-t" data-i="obTitle">Tu primer sorteo, paso a paso</h3>
+          <ol class="ob-pasos">
+            <li><b data-i="ob1T">Cargá la lista</b><span data-i="ob1B">Pegá los nombres, uno por línea, o subí el CSV de Luma con los que hicieron check-in.</span></li>
+            <li><b data-i="ob2T">Sellala</b><span data-i="ob2B">Queda cerrada antes de que exista el número que decide, que sale unos 45 segundos después. Desde ahí nadie la puede cambiar.</span></li>
+            <li><b data-i="ob3T">Lanzá el sorteo</b><span data-i="ob3B">Elegí un juego para la pantalla grande. Cualquiera lo comprueba después desde su celular.</span></li>
+          </ol>
+          <div class="row">
+            <button class="primary" id="ob-ok" data-i="obOk">Entendido</button>
+            <a class="ghost" id="ob-demo" href="/?demo=race&amp;lead=3" data-i="obDemo">Ver una demo primero</a>
+          </div>
         </div>
       </aside>
       <!-- Un sorteo sellado en este equipo que quedó sin sortear (una recarga en la espera): se ofrece retomarlo. Lo arma history.ts. -->
@@ -396,8 +401,10 @@
   <section class="block app-only tab-hist" id="sec-history" style="display:none">
     <div class="head"><h2 data-i="histTitle">Tus sorteos</h2><span class="kicker" id="hist-count"></span></div>
     <div class="body">
-      <div id="hist-eventos" class="hist-eventos" style="display:none"></div>
+      <!-- Los sorteos primero: volver a mandar un comprobante es lo más común, y en el celular
+           el formulario de eventos lo dejaba abajo (evaluación crítica de experiencia, hallazgo 5). -->
       <div id="hist-list" class="hist-list"></div>
+      <div id="hist-eventos" class="hist-eventos" style="display:none"></div>
       <details class="hist-why">
         <summary data-i="histWhyT">¿Qué se guarda y dónde?</summary>
         <p class="note" data-i="histWhy">Este equipo se acuerda de los sorteos que hiciste acá, con los nombres. Los que anclaste desde otro equipo se traen de la cadena: ahí están la fecha, el premio y qué puesto de la lista ganó, pero no los nombres, que nunca se publican. Si borrás los datos del sitio se pierde la lista de este equipo, no los sorteos, y con el comprobante la cuenta se puede rehacer siempre. Si compartiste un sorteo o lo mostraste en grande, queda además una copia para su enlace corto, que solo se abre con el enlace: Tinkazo no la puede leer, y no vence, para que el sorteo se pueda volver a comprobar. Si hace falta borrarla, escribinos a hola@tinkazo.app.</p>

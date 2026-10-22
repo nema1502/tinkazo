@@ -7,7 +7,7 @@ import { prepararFirma } from "../protocol/firma";
 import { contractUrl, network } from "../stellar/config";
 import { type AnchorStep, clienteListo, escribirError, hideTxStatus, margenParaAprobar, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
 import { precargarQr } from "./qr";
-import { recomendar } from "./recomendar";
+import { juegoPorDefecto, recomendar } from "./recomendar";
 import { apruebaAMano, canAnchor, currentSession } from "./wallet-ui";
 import { cerrarLista, olvidarBorrador, parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
@@ -39,6 +39,15 @@ export const GAME_BUTTONS: ReadonlyArray<[string, Game]> = [
   ["g-teleferico", "teleferico"],
   ["g-oruro", "oruro"],
 ];
+
+/** Quien organiza eligió un juego en el selector: desde ahí, el juego no cambia solo según la cantidad. */
+let juegoAMano = false;
+
+/** Un toque en el selector: el juego que se eligió, y que ya no se cambia solo. */
+export function elegirJuego(g: Game): void {
+  juegoAMano = true;
+  setGame(g);
+}
 
 export function setGame(g: Game): void {
   if (app.drawn) return;
@@ -295,13 +304,16 @@ function startCountdown(): void {
   countdownTimer = window.setInterval(tick, 250);
 }
 
-/** El botón cambia de nombre según haya wallet conectada o no. */
+/**
+ * El botón se llama "Sellar la lista", con cuenta y sin ella, como el paso 2
+ * ("Sellar"). Hasta el 21 de octubre de 2026 decía "Sellar en Stellar" con
+ * cuenta: dos nombres para lo mismo (evaluación crítica de experiencia,
+ * hallazgo 9). Con data-i, el cambio de idioma lo traduce.
+ */
 export function refreshFreezeLabel(): void {
   if (app.frozen) return;
-  // Con data-i, el cambio de idioma traduce el texto que corresponde en vez
-  // de volver a "Sellar la lista" (QA, 16 de octubre de 2026).
   const btn = $("btn-freeze");
-  btn.dataset.i = canAnchor() ? "sealOnStellar" : "freeze";
+  btn.dataset.i = "freeze";
   btn.textContent = t(btn.dataset.i);
 }
 
@@ -414,8 +426,8 @@ export async function freeze(): Promise<void> {
       console.warn("[tinkazo] el sello no se pudo grabar", e);
       btn.disabled = false;
       cerrarLista(false);
-      btn.dataset.i = "sealOnStellar";
-      btn.textContent = t("sealOnStellar");
+      btn.dataset.i = "freeze";
+      btn.textContent = t("freeze");
       const status = $("seal-status");
       status.style.display = "block";
       // Naranja, como el error del sorteo: violeta es "todavía va" (styles.css).
@@ -563,13 +575,20 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   // sello, todos tienen el número del bueno.
   const wid = document.getElementById("wait-id");
   if (wid) {
-    wid.textContent = raffleId !== undefined ? t("waitId").replace("{n}", String(raffleId)) : "";
+    // En la página, solo el número: "anotalo o sacale una foto" es para la sala, en la espera en grande.
+    wid.textContent = raffleId !== undefined ? t("waitIdPagina").replace("{n}", String(raffleId)) : "";
     wid.style.display = raffleId !== undefined ? "block" : "none";
   }
   $("frozen-ts").textContent = t("frozenAt") + " " + f.at;
   renderSealSummary();
   // Antes de la ruleta: si el juego cambia por la cantidad, el selector ya está ordenado.
   pintarRecomendacion(names.length);
+  // Si nadie eligió otro, queda elegido uno que se recomienda para esta
+  // cantidad (D02). La demo juega el que pide su enlace.
+  if (!juegoAMano && !params.has("demo")) {
+    const g = juegoPorDefecto(names.length);
+    if (g !== app.game) setGame(g);
+  }
 
   if (names.length > WHEEL_MAX) {
     // La ruleta es el único juego con tope. Los demás aguantan doscientos. El

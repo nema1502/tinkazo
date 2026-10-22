@@ -619,22 +619,32 @@ const LLAMA =
 /** Un correo con forma de correo. Pollar revisa el resto. */
 const mailOk = (s: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s.trim());
 
+/**
+ * Para qué se abre la ventana de ingreso, cuando no es solo entrar: `motivo`
+ * reemplaza la línea de "Entrá o creá tu cuenta", y `volverA` recibe el foco al
+ * entrar o al cerrar.
+ */
+export interface Pedido {
+  motivo?: string;
+  volverA?: HTMLElement;
+}
+
 /** Ofrece las formas de entrar que tienen sentido en esta red y en este navegador. */
 /** Abre el selector de cuentas. Lo usa también el botón grande de la portada. */
 let abriendo = false;
-export async function openPicker(): Promise<void> {
+export async function openPicker(pedido: Pedido = {}): Promise<void> {
   // La ventana tarda unos segundos en armarse la primera vez: un segundo toque
   // en ese rato abría otra encima (revisión del 16 de octubre de 2026).
   if (abriendo || document.querySelector(".modal-card.login")) return;
   abriendo = true;
   try {
-    await abrirPicker();
+    await abrirPicker(pedido);
   } finally {
     abriendo = false;
   }
 }
 
-async function abrirPicker(): Promise<void> {
+async function abrirPicker(pedido: Pedido): Promise<void> {
   // Quien elige una cuenta va a sortear: al volver del login, incluso del
   // redirect de Google, la página abre la herramienta y no la portada.
   try {
@@ -678,7 +688,7 @@ async function abrirPicker(): Promise<void> {
   }
 
   // El correo también es de Pollar: va solo si Pollar está configurado.
-  showModal(options, pollar);
+  showModal(options, pollar, pedido);
 }
 
 /**
@@ -689,7 +699,7 @@ async function abrirPicker(): Promise<void> {
  * El correo tiene dos pasos dentro de la misma ventana: se pide el código y se
  * escribe el código. La sesión que queda es de Pollar, igual que con Google.
  */
-function showModal(options: Option[], emailOn: boolean): void {
+function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): void {
   const back = document.createElement("div");
   back.className = "modal-back";
   const card = document.createElement("div");
@@ -745,10 +755,15 @@ function showModal(options: Option[], emailOn: boolean): void {
     err.hidden = false;
   }
 
-  /** El primer paso: el correo, y las otras formas de entrar. */
+  /**
+   * El primer paso: el correo, y las otras formas de entrar. Abierta desde
+   * "Sellar la lista", dice para qué y que la lista no se pierde: decía lo mismo
+   * que desde la portada y tapaba la caja que lo explica (evaluación crítica de
+   * experiencia, hallazgo 7).
+   */
   function home(mail = ""): void {
     body.replaceChildren();
-    head("Tinkazo", [t("loginTitle")]);
+    head("Tinkazo", [pedido.motivo ?? t("loginTitle")]);
     if (emailOn) {
       const form = document.createElement("form");
       form.className = "login-form";
@@ -901,7 +916,8 @@ function showModal(options: Option[], emailOn: boolean): void {
     input.focus();
   }
 
-  const returnTo = document.activeElement;
+  // Al entrar o al cerrar, el foco vuelve a donde estaba, o a lo que se pidió (en un celular el toque no deja el foco en el botón).
+  const returnTo = pedido.volverA ?? document.activeElement;
   const onKey = (e: KeyboardEvent): void => {
     if (e.key === "Escape") {
       e.preventDefault();
@@ -1027,12 +1043,44 @@ async function walletErrorText(e: unknown): Promise<string> {
   return t("walletUnknown");
 }
 
-/** Aviso breve sobre el pie de página. Se va solo. */
+/**
+ * Un aviso breve. El de un error flota sobre el pie de página y se va solo.
+ *
+ * El de que algo salió bien ("Cuenta de prueba lista…") va dentro de la página,
+ * arriba de la lista, donde estaba el botón para entrar, así que no tapa nada:
+ * flotando abajo tapaba "Entendido" en el celular y el cuadro de la lista en
+ * escritorio, justo al entrar (evaluación crítica de experiencia, hallazgo 4).
+ * Sin la lista a la vista, va debajo de la cabecera. Se va con el primer toque
+ * o tecla, después de que el toque llegó a su botón (si la página se moviera
+ * antes, el toque caería en otro lado), o a los diez segundos.
+ */
 function notice(text: string, bad: boolean): void {
   document.querySelector(".wallet-notice")?.remove();
   const el = document.createElement("div");
-  el.className = `wallet-notice${bad ? " bad" : ""}`;
+  el.className = `wallet-notice${bad ? " bad" : " arriba"}`;
   el.textContent = text;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), bad ? 7000 : 4500);
+  if (bad) {
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 7000);
+    return;
+  }
+  el.setAttribute("role", "status");
+  const lista = document.querySelector<HTMLElement>("#sec-participants .body");
+  const cabecera = document.querySelector("body > header");
+  if (lista && lista.offsetParent !== null) lista.prepend(el);
+  else if (cabecera) cabecera.after(el);
+  else document.body.prepend(el);
+  const irse = (): void => {
+    clearTimeout(reloj);
+    document.removeEventListener("click", irse);
+    document.removeEventListener("keydown", irse);
+    el.remove();
+  };
+  const reloj = setTimeout(irse, 10000);
+  // Desde el próximo toque: el que abrió la sesión ya pasó.
+  setTimeout(() => {
+    if (!el.isConnected) return;
+    document.addEventListener("click", irse);
+    document.addEventListener("keydown", irse);
+  }, 0);
 }

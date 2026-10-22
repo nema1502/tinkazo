@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PAUSA_EVENTO, type Sorteado, agrupar, fechaLarga, tieneComprobante } from "./agrupar";
+import { PAUSA_EVENTO, type Sorteado, agrupar, enOrdenDeSalida, fechaLarga, tieneComprobante } from "./agrupar";
 
 const HORA = 3600;
 const T0 = Date.UTC(2026, 9, 20, 15) / 1000;
@@ -60,5 +60,23 @@ describe("fecha del evento", () => {
   it("se escribe en largo y en el idioma de la página", () => {
     expect(fechaLarga(T0, "es")).toBe("20 de octubre de 2026");
     expect(fechaLarga(T0, "en")).toBe("October 20, 2026");
+  });
+});
+
+describe("el orden en que salieron los sorteos de un evento (hallazgo 10)", () => {
+  const ids = (l: Array<{ id?: string; prize?: string }>): string[] => l.map((s) => s.id ?? s.prize ?? "");
+
+  it("por el número en el contrato, aunque se hayan sumado al revés, y comparado como número", () => {
+    const sumados = [{ id: "753", sealedAt: 30 }, { id: "100", sealedAt: 10 }, { id: "99", sealedAt: 5 }];
+    expect(ids(enOrdenDeSalida(sumados))).toEqual(["99", "100", "753"]);
+    // La lista que recibe no cambia.
+    expect(ids(sumados)).toEqual(["753", "100", "99"]);
+  });
+
+  it("si alguno no tiene número, o vienen de contratos distintos, por la hora del sello y después por la ronda", () => {
+    expect(ids(enOrdenDeSalida([{ prize: "B", sealedAt: 20, round: 2 }, { id: "5", sealedAt: 10 }, { prize: "A", sealedAt: 20, round: 1 }]))).toEqual(["5", "A", "B"]);
+    // Un contrato vuelto a desplegar empieza de nuevo en 1: el número no dice qué salió antes.
+    const redesplegado = [{ id: "1", contract: "CNUEVO", sealedAt: 90 }, { id: "40", contract: "CVIEJO", sealedAt: 10 }];
+    expect(ids(enOrdenDeSalida(redesplegado))).toEqual(["40", "1"]);
   });
 });
