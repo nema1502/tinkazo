@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="es" data-titulo-clave="cTitulo" data-desc-clave="cDesc">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Comprobante de un sorteo en Tinkazo</title>
+<meta name="description" content="Abrilo para ver quién ganó y comprobarlo vos mismo, desde tu celular." />
+<meta name="robots" content="noindex" />
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -4 26 30"><g fill="%23e93d9c"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></g></svg>' />
+<meta property="og:title" content="Comprobante de un sorteo en Tinkazo" />
+<meta property="og:description" content="Abrilo para ver quién ganó y comprobarlo vos mismo, desde tu celular." />
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Tinkazo" />
+<meta property="og:image" content="https://tinkazo.app/og.jpg" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="Tinkazo: sorteos que cualquiera puede comprobar" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#fff6e9" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#171126" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+</head>
+<body>
+<header>
+  <div class="stripe"></div>
+  <div class="bar">
+    <a class="wordmark" href="/" aria-label="Tinkazo"><span class="wm-llama" aria-hidden="true"><svg viewBox="-1 -3 24 28"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></svg></span><span class="wm-text">Tinka<b>zo</b></span></a>
+    <nav class="topnav" aria-label="páginas">
+      <a href="/#sortear" class="nav-app" data-i="navSortear">Sortear</a>
+      <div class="mas">
+        <button type="button" class="mas-btn" aria-expanded="false" aria-controls="mas-lista" data-i="navMas">Más</button>
+        <div class="mas-lista" id="mas-lista">
+          <a href="/juegos.html" data-i="navJuegos">Juegos</a>
+          <a href="/como-funciona.html" data-i="navComo">Cómo funciona</a>
+          <a href="/seguridad.html" data-i="navSeguridad">Seguridad</a>
+          <a href="/precios.html" data-i="navPrecios">Precios</a>
+        </div>
+      </div>
+      <a href="/#mis-sorteos" data-i="navMis">Mis sorteos</a>
+    </nav>
+    <div style="display:flex; gap:14px; align-items:center">
+      <nav class="langs" aria-label="idioma">
+        <button id="l-es" class="on">es</button>
+        <button id="l-en">en</button>
+      </nav>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- Un enlace corto: se abre el comprobante guardado y se va a su página. Los textos los pone src/c.ts. -->
+  <section class="verdict c-abre" id="c-estado">
+    <p class="kicker" data-i="cKicker">Comprobante de un sorteo</p>
+    <h1 id="c-titulo">Abriendo el comprobante…</h1>
+    <div class="cortina-puntos c-puntos" id="c-puntos" aria-hidden="true"><i></i><i></i><i></i></div>
+    <p class="lead" id="c-detalle" role="status" aria-live="polite"></p>
+    <div class="row c-acciones" id="c-acciones" style="display:none">
+      <button class="primary" type="button" id="c-otra" data-i="cOtraVez">Probar de nuevo</button>
+      <a class="ghost" id="c-portada" href="/" data-i="cPortada">Ir a la portada</a>
+    </div>
+  </section>
+</main>
+
+<footer><div class="bar">
+  <span data-i="footL">Tinkazo</span>
+  <nav class="pies" aria-label="secciones">
+    <a href="/juegos.html" data-i="navJuegos">Juegos</a>
+    <a href="/como-funciona.html" data-i="navComo">Cómo funciona</a>
+    <a href="/historia.html" data-i="navHistoria">Historia</a>
+    <a href="/seguridad.html" data-i="navSeguridad">Seguridad</a>
+    <a href="/precios.html" data-i="navPrecios">Precios</a>
+    <a href="/terminos.html" data-i="navTerminos">Términos</a>
+    <a href="https://github.com/nema1502/tinkazo" target="_blank" rel="noopener" data-i="navCodigo">Código</a>
+  </nav>
+  <span data-i="footR">Hecho con ♥ en Bolivia</span>
+</div></footer>
+
+<script type="module" src="/src/c.ts"></script>
+</body>
+</html>

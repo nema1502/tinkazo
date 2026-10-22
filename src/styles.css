@@ -1193,6 +1193,12 @@
   .cmp-txt { width: 100%; min-height: 120px; padding: 10px; font: inherit; font-size: 14px; line-height: 1.4; color: var(--ink); background: var(--card); border: var(--bw) solid var(--ink); resize: vertical; }
   .cmp-acc { display: flex; flex-wrap: wrap; gap: 10px; }
   .cmp-acc a, .cmp-acc button { min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }
+  /* La página de un enlace corto (c.html): lo que dice mientras abre el comprobante, o por qué no pudo. */
+  .c-abre { min-height: 52vh; }
+  .c-puntos { margin: 22px 0 6px; }
+  @media (prefers-reduced-motion: reduce) { .c-puntos i { animation: none; } }
+  .c-acciones { margin-top: 22px; }
+  .c-acciones a, .c-acciones button { min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }
   /* Los enlaces de texto, del color de la casa y no del azul del navegador. */
   .note a, .txstatus a, .entity a, main > section > a.sec-link { color: inherit; text-decoration-thickness: 2px; text-underline-offset: 2px; }
 

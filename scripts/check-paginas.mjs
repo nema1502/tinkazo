@@ -30,9 +30,9 @@ const VISTAS = [
 ];
 
 /**
- * Las dos páginas que se abren desde un enlace, verificar y evento. No son de
- * lectura: su pie no lleva a las páginas de sorteo y su titular lo escribe el
- * script. Se miran igual, en los dos temas, en celular y en inglés, con lo que
+ * Las páginas que se abren desde un enlace: verificar, evento y la del enlace
+ * corto (c.html). No son de lectura: su pie no lleva a las páginas de sorteo y
+ * su titular lo escribe el script. Se miran igual, en los dos temas, en celular y en inglés, con lo que
  * se les rompió alguna vez (evaluador visual, 21 de octubre de 2026): con
  * `?theme=` verificar no cambiaba de tema, en el celular los pasos para
  * rehacerlo se cortaban contra el borde, y con un enlace roto el titular del
@@ -40,7 +40,9 @@ const VISTAS = [
  *
  * El comprobante de verificar es el de los vectores de prueba (la lista de
  * ejemplo y una ronda real con su firma), sin anclar: se rehace entero en el
- * navegador, sin red. El evento va sin enlace, que es el caso del error.
+ * navegador, sin red. El evento va sin enlace, que es el caso del error, y el
+ * enlace corto también: abierta sin id ni clave, la página dice que el enlace
+ * no se puede abrir sin salir a la red.
  */
 const COMPROBANTE = "r" + Buffer.from(JSON.stringify({
   v: 2,
@@ -59,6 +61,7 @@ const HERRAMIENTAS = [
     listo: "!/working/.test(document.getElementById('verdict').className) && document.getElementById('v-steps').textContent.length > 0",
   },
   { p: "evento", hash: "", listo: "!/working/.test(document.getElementById('ev-veredicto').className)" },
+  { p: "c", hash: "", listo: "!!document.body.dataset.estado && document.body.dataset.estado !== 'abriendo'" },
 ];
 
 let fallos = 0;

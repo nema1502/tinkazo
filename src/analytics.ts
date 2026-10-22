@@ -16,11 +16,15 @@
 const HOST = "tinkazo.app";
 const SCRIPT = "/_vercel/insights/script.js";
 
-/** La dirección hasta la ruta: lo que va después (`?…`, `#…`) no sale. */
+/**
+ * La dirección hasta la ruta: lo que va después (`?…`, `#…`) no sale. Un
+ * enlace corto (`/c/<id>`) se cuenta como `/c/`: su id no tiene por qué
+ * quedar anotado en ningún lado.
+ */
 export function cleanUrl(url: string): string {
   try {
     const u = new URL(url);
-    return u.origin + u.pathname;
+    return u.origin + (u.pathname.startsWith("/c/") ? "/c/" : u.pathname);
   } catch {
     return "";
   }
