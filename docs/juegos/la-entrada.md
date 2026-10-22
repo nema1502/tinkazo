@@ -2,6 +2,8 @@
 
 El Carnaval de Oruro, contado por fraternidades. Una banda de bronces abre el desfile y detrás pasan las fraternidades, cada una con su baile: Diablada, Morenada, Caporales, Tinkus o Llamerada. Cada grupo de la lista es una fraternidad, y mientras pasa frente al palco se leen los nombres de todos sus integrantes. En cada arco se queda una fraternidad entera, que terminó su recorrido y saluda desde la vereda. En la última se quedan de a varios hasta que quedan dos, que hacen el contrapunto frente al Socavón: saltan alternados y en cualquier salto cualquiera de los dos puede trastabillar, hasta que el último salto de uno termina en el piso. El que llega, llega con campanas y cohetillos.
 
+*En inglés: [la-entrada.en.md](la-entrada.en.md).*
+
 **Identificador:** `oruro` · **Probalo:** [tinkazo.app/?demo=oruro](https://tinkazo.app/?demo=oruro) · **Agregado:** 28 de septiembre de 2026, como Carnaval de Oruro · **Por fraternidades:** 21 de octubre de 2026
 
 ## Por qué La Entrada
