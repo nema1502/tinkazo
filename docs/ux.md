@@ -66,6 +66,32 @@ Lo mide `scripts/audit-espera.mjs`, en el modo libre con `?lead=3` y sin Stellar
 CDP_PORT=9982 node scripts/audit-espera.mjs --base http://localhost:4173 [--vistas 1280x720,390x844] [--tema dark|light] [--sin-casos]
 ```
 
+## Los detallitos (21 de octubre de 2026)
+
+Nicolás: "detallitos que son bonitos y ahorran tiempo o hacen mejor la experiencia de usuario". Un buscador los encontró usando la herramienta de verdad (con capturas), un revisor los filtró contra estas reglas y contra las decisiones del autor, y cada uno se arregló con su propio cambio. Los mide `scripts/audit-detalles.mjs` (en el modo libre, con una captura por pantalla y por tema); D04, `audit-espera.mjs`; D05 y D06 se miraron sellando en testnet con la cuenta de prueba.
+
+| | Qué cambió |
+|---|---|
+| D01 | Con la lista sellada (y mientras se sella), nada cambia el cuadro: ni "Cargar ejemplo", ni "Editar selección", ni los orígenes. "Mostrar la lista a la sala" muestra la sellada, con su huella, y lo dice. |
+| D03 | La lista sin sellar, el premio y "Cuántos ganan" vuelven al recargar y al volver de entrar con Google (en la pestaña, hasta sellar). |
+| D04 | Desde la espera en grande, el show termina en el resultado en grande (ver arriba). |
+| D05 | Con la cuenta de prueba o con Google, sellar dice "Mandando a la red…", no "Aprobá la operación en tu billetera… 0,81 XLM". |
+| D06 | Si se recarga en la espera, el sorteo sellado se ofrece arriba de la lista ("Retomarlo", secundario). Nunca se retoma solo. |
+| D08 | "Cargar ejemplo" se ve solo con el cuadro vacío. |
+| D09 | Una lista numerada de WhatsApp entra sin los números, y el aviso dice los repetidos que la lista canónica deja en silencio. |
+| D10 | Una planilla con nombre y apellido separados ofrece la columna "Nombre + Apellido". |
+| D11 | Después del ganador, "Siguiente premio" queda con el foco (si no estaba en otro lado), y la caja de la espera dice "Ya se sorteó". |
+| D14 | "Ponerle nombre" deja el campo listo para escribir, y Enter guarda el nombre del evento. |
+| D17 | "Entrar y sortear" al final de la demo abre la ventana de ingreso, como el de la portada. |
+| D18 | "Pegar lista" es un botón que lleva al cuadro; una lista pegada al final empieza en un renglón nuevo. |
+| D19 | La barra dice qué se sortea antes de sellar ("12 personas · Termo", o "sin premio"). |
+
+El revisor descartó D02 (es del selector), D07 (ya estaba hecho), D12 (salvo el "Ya se sorteó"), D13, D16 y D20, con sus motivos en `.claude/progreso/juegos/ux-detalles.md`. D15 (que el mensaje del evento diga quién ganó qué) lo toma el stream de compartir.
+
+```bash
+CDP_PORT=9982 node scripts/audit-detalles.mjs --base http://localhost:4173 [--vistas 1280x720,390x844] [--temas dark,light] [--solo D01,D09]
+```
+
 ## La lista de comprobación
 
 Es lo que mira `audit-flujo.mjs` en cada paso (lista cargada, sellada y esperando, ronda lista, resultado, siguiente premio) y en cada pantalla:

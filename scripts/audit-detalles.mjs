@@ -13,6 +13,12 @@
  * una captura por pantalla y por tema en `--out`. Con `--prefijo antes` sobre
  * una versión vieja, las mismas capturas sirven para comparar.
  *
+ * D01, D03, D08, D11 (con lo de D12), D09, D14, D18, D17, D19 y D10. D14 entra
+ * con la cuenta de prueba sin grifo (`?grifo=0`), que se arma en el navegador.
+ * Los que necesitan sellar en testnet, D05 y D06, no están: se miraron con la
+ * cuenta de prueba de verdad. D04 lo mide audit-espera.mjs, que es donde vive
+ * la espera en grande.
+ *
  * Uso:
  *   node scripts/audit-detalles.mjs [--base http://localhost:4173] [--out DIR]
  *                                   [--vistas 1280x720,390x844] [--temas dark,light]
@@ -222,6 +228,26 @@ const DETALLES = {
         await page.waitFor("document.readyState === 'complete'", 20000);
         await sleep(400);
         check(`${quien} · la demo no repone nada`, (await page.eval("document.getElementById('prize').value")) === "");
+      } finally {
+        await page.send("Page.close").catch(() => undefined);
+      }
+    },
+  },
+
+  D08: {
+    que: '"Cargar ejemplo" solo con el cuadro vacío',
+    async correr(browser, v, tema, quien) {
+      const page = await abrir(browser, v, tema);
+      try {
+        const vacio = await page.eval(visible("#btn-sample"));
+        await escribir(page, "Ana Quispe\nLuis Mamani");
+        const conNombres = await page.eval(visible("#btn-sample"));
+        await page.eval("document.getElementById('sec-participants').scrollIntoView({ block: 'start' }); true");
+        await sleep(300);
+        await captura(page, "D08", v, tema, "con-nombres");
+        await escribir(page, "");
+        const otraVez = await page.eval(visible("#btn-sample"));
+        check(`${quien} · con el cuadro vacío se ve, con nombres no, y vuelve al vaciarlo`, vacio && !conNombres && otraVez, `${vacio} → ${conNombres} → ${otraVez}`);
       } finally {
         await page.send("Page.close").catch(() => undefined);
       }
@@ -488,26 +514,6 @@ const DETALLES = {
         await sleep(500);
         const nombres = await page.eval("[...document.querySelectorAll('#names i')].map((i) => i.textContent).join(' · ')");
         check(`${quien} · y las tres Anas entran con su apellido`, nombres === "Ana Quispe · Luis Mamani · Ana Flores · Ana Choque", nombres);
-      } finally {
-        await page.send("Page.close").catch(() => undefined);
-      }
-    },
-  },
-
-  D08: {
-    que: '"Cargar ejemplo" solo con el cuadro vacío',
-    async correr(browser, v, tema, quien) {
-      const page = await abrir(browser, v, tema);
-      try {
-        const vacio = await page.eval(visible("#btn-sample"));
-        await escribir(page, "Ana Quispe\nLuis Mamani");
-        const conNombres = await page.eval(visible("#btn-sample"));
-        await page.eval("document.getElementById('sec-participants').scrollIntoView({ block: 'start' }); true");
-        await sleep(300);
-        await captura(page, "D08", v, tema, "con-nombres");
-        await escribir(page, "");
-        const otraVez = await page.eval(visible("#btn-sample"));
-        check(`${quien} · con el cuadro vacío se ve, con nombres no, y vuelve al vaciarlo`, vacio && !conNombres && otraVez, `${vacio} → ${conNombres} → ${otraVez}`);
       } finally {
         await page.send("Page.close").catch(() => undefined);
       }
