@@ -13,11 +13,12 @@
  * una captura por pantalla y por tema en `--out`. Con `--prefijo antes` sobre
  * una versión vieja, las mismas capturas sirven para comparar.
  *
- * D01, D03, D08, D11 (con lo de D12), D09, D14, D18, D17, D19 y D10. D14 entra
- * con la cuenta de prueba sin grifo (`?grifo=0`), que se arma en el navegador.
- * Los que necesitan sellar en testnet, D05 y D06, no están: se miraron con la
- * cuenta de prueba de verdad. D04 lo mide audit-espera.mjs, que es donde vive
- * la espera en grande.
+ * D01, D03, D06, D08, D11 (con lo de D12), D09, D14, D18, D17, D19 y D10. D06 y
+ * D14 entran con la cuenta de prueba sin grifo (`?grifo=0`), que se arma en el
+ * navegador sin pedirle nada a la red, y lo que esa cuenta tendría guardado.
+ * D05, que es lo que dice el sello mientras se graba, necesita sellar en testnet:
+ * lo cuida firma.test. D04 lo mide audit-espera.mjs, que es donde vive la
+ * espera en grande.
  *
  * Uso:
  *   node scripts/audit-detalles.mjs [--base http://localhost:4173] [--out DIR]
@@ -27,6 +28,7 @@
  * Un Chrome a la vez y con su propio puerto: CDP_PORT=<puerto> node ...
  * Sale con código 1 si algo falla.
  */
+import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
@@ -228,6 +230,46 @@ const DETALLES = {
         await page.waitFor("document.readyState === 'complete'", 20000);
         await sleep(400);
         check(`${quien} · la demo no repone nada`, (await page.eval("document.getElementById('prize').value")) === "");
+      } finally {
+        await page.send("Page.close").catch(() => undefined);
+      }
+    },
+  },
+
+  D06: {
+    que: "si se recarga en la espera, el sorteo sellado se ofrece arriba de la lista",
+    async correr(browser, v, tema, quien) {
+      const page = await abrir(browser, v, tema, "?grifo=0");
+      try {
+        await page.eval("localStorage.clear(); true");
+        await page.send("Page.reload");
+        await page.waitFor("document.readyState === 'complete'", 20000);
+        await sleep(900);
+        const addr = await cuentaDePrueba(page);
+        // Lo que deja un sello de esta cuenta en este equipo, hace un minuto y sin sortear: la lista, su huella y la ronda.
+        const names = Array.from({ length: 18 }, (_, i) => `Persona ${i + 1}`);
+        const ahora = Math.floor(Date.now() / 1000);
+        const fila = {
+          organizer: addr, listHash: createHash("sha256").update(names.join("\n"), "utf8").digest("hex"), count: 18, numWinners: 1,
+          round: Math.floor((ahora - 60 - 1692803367) / 3) + 1 + 15, sealedAt: ahora - 60, prize: "Termo", names,
+        };
+        await page.eval(`localStorage.setItem('tinkazo.history.testnet', ${js(JSON.stringify([fila]))}); true`);
+        await page.send("Page.reload");
+        await page.waitFor("document.readyState === 'complete'", 20000);
+        const aviso = await page.waitFor(visible("#pendiente"), 20000);
+        const texto = aviso.ok ? await page.eval("document.getElementById('pendiente').textContent") : "";
+        const solo = await page.eval("getComputedStyle(document.getElementById('sec-frozen')).display === 'none'");
+        check(`${quien} · después de recargar, el aviso dice qué sorteo quedó sin sortear`, aviso.ok && /Termo · 18 personas/.test(texto), texto ? `"${texto}"` : "sin aviso");
+        check(`${quien} · y no se retoma solo`, solo);
+        await page.eval("document.getElementById('pendiente').scrollIntoView({ block: 'center' }); true");
+        await sleep(300);
+        await captura(page, "D06", v, tema, "aviso");
+        await page.eval("document.querySelector('#pendiente [data-retomar-pendiente]')?.click(); true");
+        const ret = await page.waitFor("getComputedStyle(document.getElementById('sec-frozen')).display !== 'none'", 10000);
+        await sleep(900);
+        const st = JSON.parse(await page.eval("JSON.stringify({ n: document.getElementById('k-n').textContent, aviso: getComputedStyle(document.getElementById('pendiente')).display })"));
+        check(`${quien} · "Retomarlo" vuelve a la lista sellada y el aviso se va`, ret.ok && st.n === "18" && st.aviso === "none", js(st));
+        await captura(page, "D06", v, tema, "retomado");
       } finally {
         await page.send("Page.close").catch(() => undefined);
       }
