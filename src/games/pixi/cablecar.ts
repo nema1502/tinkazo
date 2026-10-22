@@ -31,7 +31,6 @@ import { GRUPOS, grupoDe } from "../grupos";
 const hexOf = (css: string): number => parseInt(css.replace("#", ""), 16);
 
 export async function cableCarPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<void> {
-  const winnerIdx = winners[0] ?? 0;
   let skipFn = (): void => {};
   const st = await mountPixi(beacon, done, () => skipFn());
   if (!st) {
@@ -47,12 +46,12 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   /** La última parada: ahí se bajan de a uno hasta que quedan dos. */
   const lastStop = stops.find((s) => s.last);
   /**
-   * Los dos que llegan juntos a la última cabina: el ganador y otro. El giro de
-   * la puerta y el de la mordaza nombran a uno de los dos, sorteado con la
-   * semilla de la ronda, para que la sala no aprenda que el nombrado es el
-   * ganador.
+   * A quién nombran la puerta y la mordaza: uno cualquiera de los que van en la
+   * cabina en la última estación, sorteado en el plan (`nombrado`). Si es uno
+   * de los que se bajan ahí, la puerta se cierra sin el "¡se queda!" y se baja
+   * con los demás.
    */
-  const quienDeLosDos = (): number => (seedOf(13) < 0.5 ? winnerIdx : ((rank[1] as number | undefined) ?? winnerIdx));
+  const nombradoSeQueda = P.surv.includes(P.nombrado);
   /** Lo que tarda una cara en volar de su cabina a su renglón del andén. */
   const FLY = 0.5;
   /**
@@ -444,14 +443,14 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     }
     if (puerta) {
       once("puerta", tAll >= P.puertaA, () => {
-        sayNow(T[lang].cTelDoor(names[quienDeLosDos()] ?? ""), 0.85);
+        sayNow(T[lang].cTelDoor(names[P.nombrado] ?? ""), 0.85);
         if (!silent) {
           beep(note(12), 0.08, "triangle", 0.04);
           setTimeout(() => beep(note(15), 0.1, "triangle", 0.035), 70);
         }
       });
       once("cierra", tAll >= P.puertaB, () => {
-        sayNow(t("cTelStays"), 0.9);
+        if (nombradoSeQueda) sayNow(t("cTelStays"), 0.9);
         if (!silent) {
           beep(note(5), 0.08, "square", 0.05);
           cam.punch(0.05).shake(6 * G.k);
@@ -464,7 +463,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     if (mordaza) {
       // Se suelta, y mientras resbala el chirrido del cable baja (en `sounds`).
       once("suelta", tAll >= P.mA, () => {
-        sayNow(T[lang].cTelSlip(names[quienDeLosDos()] ?? ""), 0.9);
+        sayNow(T[lang].cTelSlip(names[P.nombrado] ?? ""), 0.9);
         if (!silent) {
           musicHold(true);
           [14, 12, 10, 8, 6].forEach((d, i) => setTimeout(() => beep(note(d), 0.06, "square", 0.035), i * 45));
