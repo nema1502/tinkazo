@@ -686,6 +686,10 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       const sub = S.text(L.cOruRosterSub(L.cOruDanza(f.dance), f.members.length), { fontSize: geo.fs * 0.74, fontWeight: "700", fill: S.dark ? CREAM : INK });
       sub.alpha = 0.85;
       sub.position.set(26 * k, geo.fs * 2.65);
+      // En un celular el cartel es angosto y "LOS JUCUMARIS" se salía por la
+      // derecha: el título y la línea de abajo se achican lo justo para entrar.
+      const libre = geo.w - 26 * k - 12 * k;
+      for (const tx of [title, sub]) if (tx.width > libre) tx.scale.set(libre / tx.width);
       roster.addChild(bg, kicker, title, sub);
       roster.position.set(geo.x, geo.y);
       roster.visible = false;
