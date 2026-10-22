@@ -11,7 +11,8 @@
  * Para cada juego corre muchas semillas (doscientas, por defecto) con el reloj
  * en turbo y sin red. En cada una el ganador lo elige la selección del
  * protocolo con esa semilla, igual que un sorteo de verdad
- * (`?ganadores=sorteo` en la escena fija), y la página graba lo que ve la sala:
+ * (`?ganador=` con la misma semilla en la escena fija, src/pose.ts), y la
+ * página graba lo que ve la sala:
  * los subtítulos con su hora, los nombres en pantalla cuadro a cuadro, la
  * cámara y lo que el juego anota (`scripts/lib/delatores-grabador.mjs`).
  * Después, cada señal se mide como una regla de apuesta ("gana el que nombran
@@ -38,21 +39,22 @@
  *
  * `--trazas` guarda lo grabado de cada semilla (comprimido), y `--releer` lo
  * vuelve a medir sin navegador: para revisar una señal nueva sin volver a
- * correr horas de semillas. `--paralelo` abre varias pestañas a la vez en el
- * mismo Chrome (lo medido no cambia; con la máquina cargada casi no acorta).
- * Cada semilla tarda entre 3 y 15 segundos según el juego y la carga: los doce
- * con doscientas son unas tres horas. Un Chrome a la vez, con su puerto: CDP_PORT.
+ * correr horas de semillas. `--paralelo` abre varias ventanas a la vez en el
+ * mismo Chrome: lo medido no cambia, y con cuatro tarda la mitad o menos.
+ * Cada semilla tarda entre 3 y 15 segundos según el juego y la carga: los diez
+ * del selector con doscientas son unas dos o tres horas. Un Chrome a la vez, con su puerto: CDP_PORT.
  */
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
-import { launch } from "./lib/browser.mjs";
+import { CDP, launch } from "./lib/browser.mjs";
 import { grabador } from "./lib/delatores-grabador.mjs";
 import { grabarPara, senales } from "./lib/delatores-senales.mjs";
 import { UMBRAL, evaluarSenal, falsasAlarmas, formatoP, pct } from "./lib/delatores.mjs";
 
-const TODOS = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien"];
+/** Los diez del selector. Los que salieron (tombola, pasanaku, stellar) se piden por nombre. */
+const TODOS = ["race", "sapo", "trompo", "chovena", "pinata", "wheel", "quien", "trueque", "teleferico", "oruro"];
 const args = process.argv.slice(2);
 const opt = (name, def) => {
   const i = args.indexOf(name);
@@ -86,13 +88,51 @@ try {
   console.warn("· sin comprobar el ganador con src/protocol (hace falta Node 22.18 o más nuevo)");
 }
 
-/** Una semilla de un juego, en una pestaña nueva: lo que grabó la página, con `ok` si llegó al ganador. */
-async function grabar(browser, juego, seed) {
+const puerto = Number(process.env.CDP_PORT || 9581);
+let navegador = null;
+
+async function conectar(url) {
+  const ws = new WebSocket(url);
+  await new Promise((res, rej) => {
+    ws.addEventListener("open", res);
+    ws.addEventListener("error", rej);
+  });
+  return new CDP(ws);
+}
+
+/**
+ * Una pestaña en su propia ventana, del tamaño de siempre. En una ventana
+ * compartida, las pestañas de atrás quedan ocultas y no reciben
+ * `requestAnimationFrame`: el reloj en turbo no avanzaba y `--paralelo` no
+ * acortaba nada. En su ventana, cada una está a la vista y corre a la par.
+ */
+async function ventana() {
+  if (!navegador) {
+    const ver = await (await fetch(`http://127.0.0.1:${puerto}/json/version`)).json();
+    navegador = await conectar(ver.webSocketDebuggerUrl);
+  }
+  const { targetId } = await navegador.send("Target.createTarget", { url: "about:blank", newWindow: true, width: 1280, height: 720 });
+  const page = await conectar(`ws://127.0.0.1:${puerto}/devtools/page/${targetId}`);
+  await page.send("Runtime.enable");
+  await page.send("Page.enable");
+  page.cerrar = async () => {
+    try {
+      await navegador.send("Target.closeTarget", { targetId }, 10_000);
+    } catch {
+      /* ya cerrada */
+    }
+    page.ws.close();
+  };
+  return page;
+}
+
+/** Una semilla de un juego, en una ventana nueva: lo que grabó la página, con `ok` si llegó al ganador. */
+async function grabar(juego, seed) {
   let page = null;
   try {
-    page = await browser.open("about:blank");
+    page = await ventana();
     await page.send("Page.addScriptToEvaluateOnNewDocument", { source: grabador(grabarPara(juego)) });
-    const url = `${base}/?pose=${juego}&semilla=${seed}&n=${gente}&ganadores=sorteo&pace=normal&motor=pixi&lang=es`;
+    const url = `${base}/?pose=${juego}&semilla=${seed}&n=${gente}&ganador=${seed}&pace=normal&motor=pixi&lang=es`;
     await page.send("Page.navigate", { url });
     const ok = await page.waitFor("window.__delator && window.__delator.fin !== null", 120_000);
     const tr = JSON.parse(await page.eval("JSON.stringify({ ...(window.__delator || {}), pose: window.__pose || null })"));
@@ -102,11 +142,7 @@ async function grabar(browser, juego, seed) {
   } catch (e) {
     return { ok: false, excepciones: [String(e?.message ?? e)] };
   } finally {
-    try {
-      await page?.send("Page.close");
-    } catch {
-      /* ya cerrada */
-    }
+    await page?.cerrar();
   }
 }
 
@@ -118,7 +154,7 @@ const archivo = (dir, juego, i) => join(dir, `${juego}-n${gente}-${String(i).pad
  * El reloj de cada pestaña es suyo, así que correr varias a la vez cambia
  * cuánto tarda, no lo que se mide.
  */
-async function* trazasDe(browser, juego) {
+async function* trazasDe(juego) {
   if (releer) {
     const nombres = readdirSync(releer).filter((f) => f.startsWith(`${juego}-n${gente}-`) && f.endsWith(".json.gz")).sort();
     for (const f of nombres) yield JSON.parse(gunzipSync(readFileSync(join(releer, f))).toString("utf8"));
@@ -126,9 +162,9 @@ async function* trazasDe(browser, juego) {
   }
   const una = async (i) => {
     const seed = semilla(i);
-    let tr = await grabar(browser, juego, seed);
+    let tr = await grabar(juego, seed);
     // Una vez más si la página no llegó: la máquina puede estar cargada.
-    if (!tr.ok) tr = await grabar(browser, juego, seed);
+    if (!tr.ok) tr = await grabar(juego, seed);
     tr.semilla = seed;
     tr.i = i;
     if (trazas && tr.ok) writeFileSync(archivo(trazas, juego, i), gzipSync(JSON.stringify(tr)));
@@ -157,7 +193,7 @@ if (releer && !existsSync(releer)) {
   console.error(`no existe ${releer}`);
   process.exit(2);
 }
-const browser = releer ? null : await launch({ port: Number(process.env.CDP_PORT || 9581), width: 1280, height: 720 });
+const browser = releer ? null : await launch({ port: puerto, width: 1280, height: 720 });
 const inicio = Date.now();
 try {
   for (const juego of juegos) {
@@ -165,7 +201,7 @@ try {
     const filas = [];
     let malas = 0, distintos = 0, k = 0;
     const desde = Date.now();
-    for await (const tr of trazasDe(browser, juego)) {
+    for await (const tr of trazasDe(juego)) {
       k++;
       if (!tr.ok) {
         malas++;
@@ -180,7 +216,7 @@ try {
         console.log(`  … ${k}/${N} (${seg.toFixed(1)} s por semilla, faltan unos ${Math.ceil((seg * (N - k)) / 60)} min)`);
       }
     }
-    if (distintos) console.log(`  ✗ en ${distintos} semillas el ganador no es el de la selección del protocolo: ¿la página entiende ?ganadores=sorteo?`);
+    if (distintos) console.log(`  ✗ en ${distintos} semillas el ganador no es el de la selección del protocolo: ¿la página entiende ?ganador=?`);
     const errores = filas.reduce((a, f) => a + f.errores, 0);
     const arcos = filas.reduce((m, f) => m.set(f.arco, (m.get(f.arco) ?? 0) + 1), new Map());
     const ganadores = new Set(filas.map((f) => f.ganador)).size;
@@ -235,6 +271,7 @@ try {
     };
   }
 } finally {
+  navegador?.ws.close();
   if (browser) await browser.close();
 }
 
