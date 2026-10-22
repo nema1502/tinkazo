@@ -7,7 +7,7 @@ import { WINNER_HOLD, shorten, winnersLabel } from "../overlay";
 import { gajoDe, repartir } from "../wheel-layout";
 import { FALSA, T_BRAKE, T_CREEP, T_CROWN, T_HOLD, T_LOCK, T_SETTLE, T_SPIN, T_WIND, beatFor, type BeatReason } from "./wheel-beats";
 import { W0, planWheelMotion } from "./wheel-motion";
-import { CREAM, INK, YELLOW, mountPixi, type PixiStage } from "./stage";
+import { CREAM, INK, YELLOW, contorno, mountPixi, type PixiStage } from "./stage";
 
 /**
  * La ruleta, en PixiJS, con el director de cámara.
@@ -143,6 +143,8 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
   let wheel!: Container;
   let ghosts: Container[] = [];
   let segG: Graphics[] = [];
+  /** El nombre escrito en cada gajo (si lo lleva), para apagarlo junto con su gajo. */
+  let segNames: (Text | undefined)[] = [];
   let bulbs!: Graphics;
   let bulbKey = -1;
   let stripes!: Graphics;
@@ -167,6 +169,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
   function discGraphics(R: number, u: number, withNames: boolean): Container {
     const c = new Container();
     const Rd = R * 0.86;
+    if (withNames) segNames = [];
     for (let j = 0; j < segs; j++) {
       const a0 = j * A - Math.PI / 2;
       const g = new Graphics().moveTo(0, 0).arc(0, 0, Rd, a0, a0 + A).closePath().fill(S.color(personOf(j))).stroke({ width: 2.5 * u, color: INK });
@@ -176,7 +179,11 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
         // lee de quién es cada pedazo sin mirar la columna. Hasta el 7 de
         // octubre de 2026 solo con doce o menos; con más, lo único que daba
         // nombres era la placa, que cambiaba treinta veces por segundo.
-        const nm = S.text(sliceLabel(names[personOf(j)] ?? "", n <= 4 ? 12 : 10), { fontSize: Math.min(18 * u, A * Rd * 0.9 * 0.42), fontWeight: "900", fill: INK });
+        // Claro y con contorno de tinta: en tinta sola, sobre el morado del
+        // tema claro no llegaba a 4,5 a 1, y al final, con los gajos apagados,
+        // no se leía en ninguno (la medición de pantalla).
+        const size = Math.min(18 * u, A * Rd * 0.9 * 0.42);
+        const nm = S.text(sliceLabel(names[personOf(j)] ?? "", n <= 4 ? 12 : 10), { fontSize: size, fontWeight: "900", fill: CREAM, stroke: contorno(size) });
         nm.anchor.set(1, 0.5);
         if (nm.width > Rd * 0.55) nm.scale.set((Rd * 0.55) / nm.width);
         const mid = a0 + A / 2;
@@ -184,6 +191,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
         nm.position.set(Math.cos(mid) * Rd * 0.9, Math.sin(mid) * Rd * 0.9);
         nm.alpha = 0.85;
         c.addChild(nm);
+        segNames[j] = nm;
       }
     }
     return c;
@@ -719,6 +727,10 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
         const mid = j * A - Math.PI / 2 + A / 2;
         g.position.set(mine ? Math.cos(mid) * 16 * u * e : 0, mine ? Math.sin(mid) * 16 * u * e : 0);
         g.alpha = mine ? 1 : 1 - 0.55 * e;
+        // El nombre se apaga con su gajo: claro, si no, quedaba más prendido
+        // que el gajo y le competía al del ganador.
+        const nm = segNames[j];
+        if (nm) nm.alpha = 0.85 * g.alpha;
       });
     }
     // La columna: la fila del puntero se enciende; en el acercamiento, placa grande.
