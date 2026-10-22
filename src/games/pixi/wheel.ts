@@ -6,46 +6,26 @@ import { writeStory } from "../drama";
 import { WINNER_HOLD, shorten, winnersLabel } from "../overlay";
 import { gajoDe, repartir } from "../wheel-layout";
 import { FALSA, T_BRAKE, T_CREEP, T_CROWN, T_HOLD, T_LOCK, T_SETTLE, T_SPIN, T_WIND, beatFor, type BeatReason } from "./wheel-beats";
+import { W0, planWheelMotion } from "./wheel-motion";
 import { CREAM, INK, YELLOW, mountPixi, type PixiStage } from "./stage";
 
 /**
  * La ruleta, en PixiJS, con el director de cámara.
  *
- * Es la misma ruleta que `wheel.ts`: la velocidad se integra para que caiga
- * justo en el gajo del ganador, cada persona se lleva varios gajos
- * intercalados, y en el arco "susto" la rueda se para un gajo antes y después
- * avanza uno más. Lo nuevo es cómo se mira: la cámara arranca pegada al cubo,
- * se abre mientras se arma la rueda, y cuando la rueda frena se va acercando
- * al puntero hasta quedar encima en el amague. Con el ganador se abre para que
- * se vean sus gajos encendidos.
+ * Cada persona se lleva varios gajos intercalados, y la rueda gira de modo que
+ * la flecha caiga justo en el gajo del ganador (`wheel-motion.ts`). Cuánto le
+ * falta al empezar el último tramo, cuánto avanza después de trabarse y si la
+ * parada falsa del arco "susto" se queda o avanza uno o dos, sale de la
+ * semilla: así ni el gajo bajo la flecha al empezar el último tramo, ni el
+ * último que nombra el relator, ni el de la parada falsa dicen quién gana.
+ * Cómo se mira: la cámara arranca pegada al cubo, se abre mientras se arma la
+ * rueda, y cuando la rueda frena se va acercando al puntero hasta quedar
+ * encima en el amague. Con el ganador se abre para que se vean sus gajos
+ * encendidos.
  */
 
 const SEGS = 24;
 const TAU = Math.PI * 2;
-const W0 = 38.4;
-const W1 = 5.6;
-
-/**
- * Velocidad en gajos por segundo: la misma curva que `wheel.ts`. `w1` es la
- * velocidad del tramo lento: cada ronda la varía un poco (ver `wheelPixi`), para
- * que el frenado no sea siempre igual y no se aprenda.
- */
-function omega(tt: number, falsa = false, w1 = W1): number {
-  if (tt < T_WIND) return 0;
-  if (tt < T_SPIN) return W0 * Math.pow((tt - T_WIND) / (T_SPIN - T_WIND), 2.2);
-  if (tt < T_BRAKE) return W0;
-  if (tt < T_CREEP) return w1 + (W0 - w1) * Math.pow(1 - (tt - T_BRAKE) / (T_CREEP - T_BRAKE), 2);
-  if (tt < T_HOLD) return w1 * Math.pow(1 - (tt - T_CREEP) / (T_HOLD - T_CREEP), 1.6);
-  if (falsa) {
-    const a = T_HOLD + FALSA;
-    if (tt < a || tt >= T_LOCK) return 0;
-    const d = T_LOCK - a;
-    return (Math.PI / (2 * d)) * Math.sin((Math.PI * (tt - a)) / d);
-  }
-  if (tt < T_SETTLE) return 0.64;
-  if (tt >= T_LOCK) return 0;
-  return 1.7 * Math.pow(1 - (tt - T_SETTLE) / (T_LOCK - T_SETTLE), 2.2);
-}
 
 /**
  * El nombre que entra en un gajo: entero si es corto, si no el nombre de pila
@@ -121,25 +101,9 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
   // aprendía (auditoría, sección 8.7). Sale de la misma semilla; el gajo que
   // gana no cambia, lo fija el número público.
   const landing = winSeg + 0.5 + (rng() - 0.5) * 0.6;
-  // El frenado también varía un poco, de la misma semilla.
-  const w1 = W1 * (0.9 + 0.25 * rng());
-  const STEPS = 1200;
-  const cumT: number[] = new Array(STEPS + 1);
-  cumT[0] = 0;
-  const h = T_LOCK / STEPS;
-  for (let i = 1; i <= STEPS; i++) cumT[i] = (cumT[i - 1] as number) + ((omega((i - 1) * h, falsa, w1) + omega(i * h, falsa, w1)) / 2) * h;
-  const BUDGET = cumT[STEPS] as number;
-  let total = BUDGET - ((((BUDGET - (landing - startSeg)) % segs) + segs) % segs);
-  if (total < BUDGET - segs / 2) total += segs;
-  const scale = total / BUDGET;
-  function cum(tt: number): number {
-    if (tt <= 0) return 0;
-    if (tt >= T_LOCK) return BUDGET;
-    const x = (tt / T_LOCK) * STEPS;
-    const i = Math.floor(x);
-    const a = cumT[i] as number;
-    return a + ((cumT[Math.min(STEPS, i + 1)] as number) - a) * (x - i);
-  }
+  // Cómo gira hasta ahí, también de la semilla. Con grupos, cada gajo es un
+  // grupo y la vuelta de nombres es la rueda entera.
+  const mov = planWheelMotion({ segs, ciclo: grupos ? segs : n, startSeg, landing, falsa, rng });
 
   /* ============================================================ escena */
   /**
@@ -503,7 +467,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
   skipFn = (): void => {
     if (tAll >= T_CROWN) return;
     tAll = T_CROWN;
-    rot = -(startSeg + BUDGET * scale) * A;
+    rot = -(startSeg + mov.total) * A;
     didLock = true;
     crowned();
   };
@@ -528,7 +492,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
 
   function tickAudio(w: number): void {
     if (tAll >= T_SPIN && tAll < T_BRAKE) {
-      const lap = Math.floor((cum(tAll) * scale) / segs);
+      const lap = Math.floor(mov.pos(tAll) / segs);
       if (lap !== lastLap) {
         lastLap = lap;
         beep(note(15), 0.05, "sine", 0.03);
@@ -568,11 +532,24 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
       [T_WIND, () => S.say(t("cWheelCharge"), 0.3)],
       [T_SPIN, () => S.say(t("cWheelGo"), 0.45)],
       [3.4, () => S.say(t("cWheelFast"), 0.5)],
-      [6.4, () => S.say(t("cWheelSlow"), 0.65)],
+      [5.6, () => S.say(t("cWheelSlow"), 0.62)],
       // Mientras frena eran diez segundos con la misma línea, y la música se
       // enfriaba justo antes del final.
-      [8.6, () => S.say(t("cWheelTick"), 0.72)],
-      [10.6, () => S.say(t("cWheelWhere"), 0.78)],
+      [7.8, () => S.say(t("cWheelTick"), 0.7)],
+      // El último tramo: desde acá la rueda se arrastra hasta trabarse. Es el
+      // momento que decide para el auditor de delatores. Antes no se nombra a
+      // nadie, y lo que le falta recorrer sale de la semilla.
+      [
+        T_CREEP,
+        () => {
+          S.say(t("cWheelLast"), 0.8);
+          // El gajo de este momento no se nombra: se nombran los que entran después.
+          namedCur = cur;
+        },
+      ],
+      // Sin parada falsa, después de trabarse la rueda se arrastra hasta el
+      // final: a veces se queda en el último nombrado y a veces pasa al otro.
+      ...(falsa ? [] : ([[T_SETTLE, () => S.say(t("cWheelWhere"), 0.96)]] as [number, () => void][])),
     ];
     for (let i = saidUpTo + 1; i < cues.length; i++) {
       const cue = cues[i] as [number, () => void];
@@ -583,8 +560,10 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     // El nombre se dice cuando el puntero cambia de gajo y el gajo va a durar lo
     // bastante para que se lea (0,4 s: `w` va en gajos por segundo). Antes se
     // decía cada 0,45 s desde los 4,5 gajos por segundo, y la línea nombraba
-    // un gajo que la flecha ya había pasado, con la placa mostrando otro.
-    if (tAll >= T_CREEP && tAll < T_HOLD && w * scale < 2.5 && cur !== namedCur) {
+    // un gajo que la flecha ya había pasado, con la placa mostrando otro. Se
+    // nombra hasta que se traba: después la rueda a veces se queda en el
+    // último nombrado y a veces avanza al siguiente.
+    if (tAll >= T_CREEP + 0.6 && tAll < T_HOLD && w < 2.5 && cur !== namedCur) {
       namedCur = cur;
       S.say(T[getLang()].cWheelOn(etiqueta(cur)), 0.55);
     }
@@ -599,14 +578,21 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
         beep(note(0), 0.25, "sine", 0.06);
       }
     }
-    if (tAll >= (falsa ? T_HOLD + FALSA : T_SETTLE) && !saidLast) {
+    // La parada falsa se resuelve: se destraba y avanza uno o dos gajos, o se
+    // queda en el nombrado. Hasta el 21 de octubre de 2026 avanzaba siempre
+    // uno, y el nombrado no ganaba nunca.
+    if (falsa && tAll >= T_HOLD + FALSA && !saidLast) {
       saidLast = true;
-      S.say(t(falsa ? "cWheelMoved" : "cWheelLast"), 0.95);
-      if (falsa) {
+      if (mov.seQueda) {
+        S.say(t("cWheelStays"), 0.95);
+        beep(note(0), 0.18, "sine", 0.07);
+        setTimeout(() => beep(note(5), 0.1, "triangle", 0.045), 90);
+      } else {
+        S.say(t("cWheelMoved"), 0.95);
         beep(note(3), 0.08, "square", 0.06);
         setTimeout(() => beep(note(10), 0.12, "triangle", 0.05), 60);
-        camBeat("tease");
       }
+      camBeat("tease");
     }
   }
 
@@ -776,8 +762,8 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
   S.run((dt, now) => {
     tAll += dt;
     S.breath(tAll, T_CROWN);
-    const w = omega(tAll, falsa, w1);
-    rot = -(startSeg + cum(tAll) * scale) * A;
+    const w = mov.speed(tAll);
+    rot = -(startSeg + mov.pos(tAll)) * A;
     if (tAll < 1.1) {
       const want = Math.floor((tAll / 1.1) * 24);
       while (buildTick < want) {

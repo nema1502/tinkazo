@@ -86,7 +86,23 @@ export function planCableCar(names: string[], winners: readonly number[], rng: (
   /** En el grupo del ganador: primero los premios, después el resto sorteado. Los dos primeros llegan arriba. */
   const premiosEnGrupo = winners.filter((w) => w >= 0 && w < n && grupoDe(w, n) === winG);
   const fin = [...premiosEnGrupo, ...shuffled((members[winG] ?? []).filter((i) => !premiosEnGrupo.includes(i)), rng)];
-  const surv = fin.slice(0, 2);
+  /**
+   * Los dos que llegan arriba, en un orden sorteado. El primero es el que va
+   * primero en la cabina: su cara a la izquierda y su nombre en el mejor
+   * costado (abajo, a la izquierda). Hasta el 21 de octubre de 2026 el primero
+   * era siempre el ganador, y el auditor de delatores lo medía: en la última
+   * cabina ganaba el nombre de la izquierda en 200 de 200 semillas.
+   */
+  const surv = fin.length >= 2 && rng() < 0.5 ? [fin[1] as number, fin[0] as number] : fin.slice(0, 2);
+  /**
+   * A quién nombra el relator en la puerta y en la mordaza, que pasan en la
+   * última estación con la cabina todavía llena: uno cualquiera de los que van
+   * en ella, sorteado. Antes era uno de los dos que llegan arriba, y como la
+   * línea sale antes de que se bajen los demás, el nombrado llegaba siempre al
+   * final y ganaba la mitad de las veces, con cuatro a bordo (auditor de
+   * delatores, 21 de octubre de 2026).
+   */
+  const nombrado = fin.length ? (fin[Math.floor(rng() * fin.length)] as number) : winnerIdx;
   /** Los que se bajan en la última estación, de a uno. El último de la lista se baja primero. */
   const deAUno = fin.slice(2).reverse();
 
@@ -172,7 +188,12 @@ export function planCableCar(names: string[], winners: readonly number[], rng: (
   const wTravel = 1;
   const wStop = 0.8;
   const deAUnoN = deAUno.length;
-  const wLast = (mordaza ? 2.6 : puerta ? 2.4 : 1.7) + 0.1 * deAUnoN;
+  // Si en la última no se baja nadie (dos personas, o el grupo del ganador de
+  // dos), la parada no tiene nada que mostrar fuera del giro: con dos personas
+  // y la ráfaga eran más de cinco segundos con la pantalla quieta (auditor
+  // exigente, 21 de octubre de 2026). Entonces es una parada como las otras,
+  // o lo justo para el giro.
+  const wLast = deAUnoN ? (mordaza ? 2.6 : puerta ? 2.4 : 1.7) + 0.1 * deAUnoN : mordaza ? 1.7 : puerta ? 1.5 : wStop;
   const W_STALL = 1.3;
   let wSum = apagon ? W_STALL : 0;
   for (let k = 1; k <= S; k++) {
@@ -398,7 +419,7 @@ export function planCableCar(names: string[], winners: readonly number[], rng: (
   return {
     n, rank, left, R, C: K, cabinOf, offAt, pax, winnerCab, loserCab, slipCab,
     /** El grupo de cada cabina (0 a K-1): su nombre en `GRUPOS` y su color en `LINES`. */
-    groupOfCab, grupos: GRUPOS, surv, deAUno: deAUno.length,
+    groupOfCab, grupos: GRUPOS, surv, deAUno: deAUno.length, nombrado,
     story: story as Story, puerta, mordaza, apagon, rafaga,
     S, stopOf, legs, TOP, headAt, stops, passes, detachT,
     corte, quieto, vuelve, luzAt, windAt, rafagaT: () => rafagaT,

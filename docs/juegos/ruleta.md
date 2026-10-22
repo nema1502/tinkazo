@@ -45,16 +45,16 @@ Los tramos van en **segundos de juego**: el selector de duración los estira tod
 | 0,0 – 1,2 s | Los gajos entran, cada uno con su nombre, y se prenden los foquitos del aro |
 | 1,2 – 2,6 s | **Carga.** La rueda toma velocidad a la vista, con el trinquete |
 | 2,6 – 4,2 s | Velocidad de crucero, con desenfoque de movimiento. Un tono por vuelta |
-| 4,2 – 12,0 s | Frena. A mitad del frenado empiezan los clics individuales, y el narrador canta el nombre que va pasando |
-| 12,0 – 14,4 s | Paso de hombre. Los gajos pasan uno por uno bajo la paleta |
-| 14,4 – 15,6 s | **El falso.** La paleta queda trabada contra un perno, vibrando: parece que se queda un gajo antes |
-| 15,6 – 16,8 s | El último empujón la mete al centro del gajo |
+| 4,2 – 10,0 s | Frena. A mitad del frenado empiezan los clics individuales. El relator no nombra a nadie |
+| 10,0 – 14,4 s | **El último tramo.** "¡Ya casi para!", y la rueda se arrastra: los gajos pasan uno por uno bajo la paleta y el relator canta el que entra, cuando ya se puede leer |
+| 14,4 s | "¡Se traba!": desde acá la rueda se sigue arrastrando sin nombres, y la mitad de las veces se queda en el último nombrado. En el susto, **la parada falsa**: se para del todo en un gajo ("¿se queda en fulano?") |
+| 14,4 – 16,8 s | Se arrastra hasta trabarse. En el susto, después de un instante quieta, se destraba y avanza uno o dos gajos ("¡no! ¡se movió!") o tiembla y se queda ("¡se queda!") |
 | 16,8 – 17,6 s | Golpe seco y fogonazo, y un respiro en silencio antes del cartel |
 | 17,6 s en adelante | Todo se apaga menos los gajos del ganador, que salen hacia afuera y se encienden. Tres segundos **reales**, para que la sala alcance a leer y a reaccionar |
 
 Duraba 7,65 segundos y de esos, tres eran tiempo muerto: 1,7 con la rueda completamente quieta, que en una pantalla grande es una foto, y 2,2 de crucero en los que la imagen es un borrón. Lo bueno ·los clics separándose, el puntero arrastrándose, el amague· sumaba segundo y medio.
 
-Ahora dura 17,6 y el reparto está al revés: 1,6 de borrón contra 4,4 de clics sueltos, 2,4 de arrastre y 1,2 de amague. **No es el mismo juego más lento: es el mismo juego con más de lo que vale la pena mirar.**
+Ahora dura 17,6 y el reparto está al revés: 1,6 de borrón contra 5,8 de frenado con clics sueltos, 4,4 de arrastre y 2,4 de traba (con el amague, en el susto). Hasta el 21 de octubre de 2026 el arrastre empezaba a los 12,0 s y duraba 2,4. **No es el mismo juego más lento: es el mismo juego con más de lo que vale la pena mirar.**
 
 ## Lo que se ve y por qué
 
@@ -86,7 +86,7 @@ La traba suena **una sola vez**. Durante un tiempo se redisparó catorce veces, 
 
 ## Qué cambió en la revisión del 20 de octubre
 
-- **El final no se aprende.** La flecha para en cualquier punto del gajo ganador, entre el 20 % y el 80 % de su ancho, y no siempre en el medio. El frenado también varía: la velocidad del tramo lento cambia entre el 90 % y el 115 %. Todo sale de la semilla de la ronda. El gajo ganador lo sigue fijando el número público: cambia cómo llega la flecha, no quién gana.
+- **El final no se aprende.** La flecha para en cualquier punto del gajo ganador, entre el 20 % y el 80 % de su ancho, y no siempre en el medio. Todo sale de la semilla de la ronda. El gajo ganador lo sigue fijando el número público: cambia cómo llega la flecha, no quién gana. Desde el 21 de octubre de 2026 (ver "Lo que no delata", abajo) también sale de la semilla cuánto le falta al empezar el último tramo, cuánto avanza después de trabarse y qué hace la parada falsa; hasta entonces lo que variaba era la velocidad del tramo lento, entre el 90 % y el 115 %.
 - **Los últimos clics mueven la flecha.** Cuando la rueda va por debajo de tres gajos por segundo, cada gajo que pasa le da un golpecito a la flecha, además del clic.
 - **La caja del relator no tapa la rueda.** En el modo centrado, la rueda queda encima de la caja (antes podía taparle hasta 40 px). A 1280x720 con dieciocho personas, la rueda entera se ve en reposo y girando. En la pantalla ancha, el acercamiento final se corta a propósito, para mirar la flecha y su gajo. En el celular parado no, desde el 21 de octubre de 2026: acercada a 1,9 sobre la flecha, la rueda se cortaba por los costados y por abajo, y la caja le tapaba la parte de abajo (evaluador visual). Ahora, cuando frena, la cámara la encuadra entera entre la placa del nombre y la caja del relator (a 390x844, a 1,17, lo que da el ancho). Con más de veinticuatro, la placa de los grupos va pegada a la caja, y la rueda entera encima de ella.
 - **Hasta cuántos.** Llega a 200 (`WHEEL_MAX`) desde el 21 de octubre de 2026; antes llegaba a 24. Hasta 24, un gajo por persona, con su nombre escrito en el gajo, como antes. Desde 25, la rueda sigue con 24 gajos y cada uno reúne a un grupo seguido de la lista: `repartir`, en [`wheel-layout.ts`](../../src/games/wheel-layout.ts), módulo puro con pruebas. Con 25, el primero lleva a dos; con 50, dos de tres y veintidós de dos; con 200, ocho de nueve y dieciséis de ocho. Los nombres no van escritos en el gajo: al pasar la flecha, una placa lista a las personas del gajo, una por renglón y del color del gajo. Al frenar se enciende el renglón del ganador. Con más de 200, `playableGame` pasa el sorteo a la tómbola, que muestra a todos con su número.
@@ -100,6 +100,18 @@ La traba suena **una sola vez**. Durante un tiempo se redisparó catorce veces, 
 ## Cómo está hecho
 
 Vive en [`src/games/wheel.ts`](../../src/games/wheel.ts) y usa el andamiaje de [`src/games/overlay.ts`](../../src/games/overlay.ts). Antes era un cuadrado de 480 píxeles dentro de la página; ahora monta el estadio a pantalla completa como los otros cuatro, y hereda de paso el narrador con voz, el botón de saltar, el modo `?instant=1` y el desmontaje.
+
+## Lo que no delata (21 de octubre de 2026)
+
+El auditor de delatores (`scripts/audit-delatores.mjs`) corrió 200 semillas y encontró que el show adivinaba al ganador: la rueda frenaba siempre igual, el relator nombraba los gajos que pasaban y después avanzaba uno o dos más, así que ganaba el gajo siguiente al último nombrado en 166 de 200 semillas con ocho personas (azar 12,5 %) y en 159 de 200 con dieciocho (azar 5,6 %), 7,7 s antes del cartel. Nadie que el relator nombrara ganaba nunca. En la parada falsa, "¿se queda en X?", la rueda avanzaba justo un gajo: X no ganaba nunca.
+
+Cómo gira la rueda está en `src/games/pixi/wheel-motion.ts`, un módulo puro con pruebas, y sale de la semilla:
+
+- **Lo que le falta al empezar el último tramo** (a los 10 s, con "¡Ya casi para!") es cualquier número de gajos dentro de una vuelta entera de nombres (con dos o tres personas, varias vueltas, para que no sean menos de ocho gajos). El gajo bajo la flecha en ese momento no dice nada: con la cámara encima de la flecha, el último nombre en el centro antes de ese momento gana 25 de 200 con ocho personas, el azar justo. La rueda llega a ese tramo más rápido o más despacio según cuánto le falta, como una rueda que un día roza más que otro.
+- **Antes de eso el relator no nombra a nadie.** En el último tramo nombra los gajos que pasan, hasta que se traba. "¡Ya casi para!" es el momento que decide para el auditor: de ahí en adelante se ve cómo se decide.
+- **Después de trabarse**, la mitad de las veces se queda en el último nombrado y si no pasa al siguiente (con dieciocho personas, a veces al otro). En las 200 semillas, contando las paradas falsas: gana el último nombrado 100 veces con ocho personas y 93 con dieciocho, y el siguiente 90 y 88.
+- **La parada falsa** se queda en el nombrado ("¡se queda!") un tercio de las veces, y si no se destraba y avanza uno o, más raro, dos. En las 200 semillas, el nombrado gana 14 de 56 paradas falsas con ocho personas y 13 de 52 con dieciocho.
+- **Lo que hace falta para caer justo en el gajo del ganador** se agrega o se quita mientras gira a fondo, que es cuando no se nota (la velocidad de crucero varía entre 23 y 53 gajos por segundo). Antes la curva entera se estiraba o se encogía. Y la rueda se arrastra sin cortes hasta trabarse del todo: antes, al trabarse, casi paraba y volvía a acelerar para el empujón de la paleta.
 
 ## Qué mira el auditor
 

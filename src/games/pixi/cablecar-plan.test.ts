@@ -29,9 +29,9 @@ describe("teleférico por grupos: el plan", () => {
       const K = cuantosGrupos(n);
       expect(P.C).toBe(K);
       expect(P.R).toBe(K);
-      // Todos están en una sola lista de bajada, y el ganador llega primero.
+      // Todos están en una sola lista de bajada, y el ganador es uno de los dos que llegan arriba.
       expect([...P.rank].sort((a, b) => a - b)).toEqual(lista(n).map((_, i) => i));
-      expect(P.rank[0]).toBe(winners[0]);
+      expect(P.rank.slice(0, 2)).toContain(winners[0]);
       expect(P.left[0]).toBe(n);
       expect(P.left[P.R]).toBe(2);
       // Cada parada, salvo la última, baja un grupo entero.
@@ -59,7 +59,7 @@ describe("teleférico por grupos: el plan", () => {
     const n = 40;
     const winners = [1, 5, 9];
     const P = planCableCar(lista(n), winners, rngOf(7));
-    expect(P.rank[0]).toBe(1);
+    expect(P.rank.slice(0, 2)).toContain(1);
     expect([...P.rank].sort((a, b) => a - b)).toEqual(lista(n).map((_, i) => i));
     expect(P.left[P.R]).toBe(2);
   });
@@ -88,6 +88,30 @@ describe("teleférico por grupos: el plan", () => {
         expect(P.leftAt(x)).toBe(arriba);
       }
     }
+  });
+
+  it.each([8, 18, 40])("con %i personas, nada del plan dice quién de los dos gana", (n) => {
+    // El auditor de delatores (21 de octubre de 2026): en la última cabina el
+    // nombre de la izquierda ganaba siempre, y la puerta y la mordaza nombraban
+    // siempre a uno de los dos que llegan arriba, con la cabina todavía llena.
+    let primero = 0;
+    let nombraAlGanador = 0;
+    let azar = 0;
+    const N = 400;
+    for (let seed = 1; seed <= N; seed++) {
+      const w = (seed * 7) % n;
+      const P = planCableCar(lista(n), [w], rngOf(seed));
+      if (P.rank[0] === w) primero++;
+      // Los que van en la cabina del ganador en la última estación: los dos que llegan y los que se bajan de a uno.
+      const aBordo = P.rank.slice(0, 2 + P.deAUno);
+      expect(aBordo).toContain(P.nombrado);
+      if (P.nombrado === w) nombraAlGanador++;
+      azar += 1 / aBordo.length;
+    }
+    expect(primero / N).toBeGreaterThan(0.4);
+    expect(primero / N).toBeLessThan(0.6);
+    expect(nombraAlGanador / azar).toBeGreaterThan(0.7);
+    expect(nombraAlGanador / azar).toBeLessThan(1.3);
   });
 
   it("con una sola persona no hay paradas que dibujar", () => {

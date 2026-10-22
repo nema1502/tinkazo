@@ -115,8 +115,21 @@ export function llega(desde: number, meta: number, cambios: number, aristas: rea
 
 /**
  * La cadena de productos de un encargo: el origen, `k` cambios y el producto
- * que acepta el destino (`meta`). Ningún paso intermedio es `meta`, para que el
- * encargo no llegue antes de tiempo, y dos pasos seguidos nunca son iguales.
+ * que acepta el destino (`meta`). Dos pasos seguidos nunca son iguales, así que
+ * el último cambio nunca recibe `meta`.
+ *
+ * El camino puede pasar antes por `meta`, como por cualquier otro producto: ese
+ * pase lo cambia otro puesto que también lo acepta, y quien espera se prende
+ * como todos los que lo aceptan, sin que lo prueben. Hasta el 21 de octubre de
+ * 2026 ningún paso intermedio era `meta`, y la sala podía aprender que un
+ * puesto que ya se había prendido no ganaba nunca (auditor de delatores: 153 de
+ * 153 con ocho personas). Con los pasos al azar, `meta` aparece algo menos que
+ * los demás productos (el paso de antes de la entrega no puede ser `meta`).
+ * Con tres cambios eso ya queda parejo, porque a un puesto prendido lo pueden
+ * probar como callejón y sacar, y a quien espera no. Con cuatro o más, un
+ * octavo de las veces se pone `meta` en un paso al azar. Así quien espera se
+ * prende antes tan seguido como uno cualquiera de los que siguen en juego (lo
+ * mide la prueba, con 8, 12, 18 y 60 personas).
  */
 function cadena(k: number, meta: number, rng: () => number): number[] {
   if (k === 0) return [meta];
@@ -124,8 +137,17 @@ function cadena(k: number, meta: number, rng: () => number): number[] {
     const ok = range(N_PRODUCTOS).filter((p) => !excluir.includes(p));
     return ok[Math.floor(rng() * ok.length)] as number;
   };
-  const productos: number[] = [elegir([meta])];
-  for (let t = 1; t < k; t++) productos.push(elegir([meta, productos[t - 1] as number]));
+  const forzado = k >= 4 && rng() < 1 / N_PRODUCTOS ? Math.floor(rng() * (k - 1)) : -1;
+  const productos: number[] = [];
+  for (let t = 0; t < k; t++) {
+    if (t === forzado) {
+      productos.push(meta);
+      continue;
+    }
+    const excluir = t > 0 ? [productos[t - 1] as number] : [];
+    if (t === k - 1 || t + 1 === forzado) excluir.push(meta);
+    productos.push(elegir(excluir));
+  }
   productos.push(meta);
   return productos;
 }
@@ -164,6 +186,24 @@ export function planTrueque(n: number, ganadores: readonly number[], rng: () => 
     return { destino, origen: productos[0] ?? 0, cambios: quienCambia, productos, pases: [] };
   });
 
+  // En la entrega tiene que haber otro puesto que acepte lo que lleva el
+  // encargo: si no, se prende uno solo, el de quien espera, y la sala sabe
+  // quién gana en cuanto se pregunta "¿quién acepta…?". Con ocho personas cada
+  // producto lo acepta un solo puesto y pasaba en todas las semillas (auditor
+  // de delatores, 21 de octubre de 2026). Si no hay, un puesto libre pasa a
+  // aceptarlo; nunca uno que ya acepta lo de otra entrega.
+  const metas = new Set(encargos.map((e) => puestos[e.destino]?.acepta ?? 0));
+  for (const e of encargos) {
+    const meta = puestos[e.destino]?.acepta ?? 0;
+    const libres = range(n).filter((i) => !esDestino.has(i) && cambioEn[i] === Infinity);
+    if (libres.some((i) => puestos[i]?.acepta === meta)) continue;
+    const candidatos = libres.filter((i) => !metas.has(puestos[i]?.acepta ?? -1));
+    if (!candidatos.length) continue;
+    const s = candidatos[Math.floor(rng() * candidatos.length)] as number;
+    const da = puestos[s]?.da ?? 0;
+    puestos[s] = { acepta: meta, da: da !== meta ? da : (meta + 1 + Math.floor(rng() * (N_PRODUCTOS - 1))) % N_PRODUCTOS };
+  }
+
   const pasesTotal = cambios + 1;
   const prendidos: number[][] = [];
   for (let t = 1; t <= pasesTotal; t++) {
@@ -173,9 +213,9 @@ export function planTrueque(n: number, ganadores: readonly number[], rng: () => 
     for (const e of encargos) {
       const q = e.productos[t - 1] ?? 0;
       for (const i of range(n)) if (libre(i) && puestos[i]?.acepta === q) luz.add(i);
-      // Quien espera se prende solo en la entrega: antes, el puesto del ganador
-      // delataría el final a la sala.
-      if (t === pasesTotal) luz.add(e.destino);
+      // Quien espera se prende como cualquiera que acepta lo que lleva el
+      // encargo: en la entrega, y también antes si el camino pasa por lo suyo.
+      for (const d of destinos) if (puestos[d]?.acepta === q) luz.add(d);
     }
     prendidos.push([...luz]);
 
@@ -189,15 +229,26 @@ export function planTrueque(n: number, ganadores: readonly number[], rng: () => 
       // calcula con todos los demás que todavía no cambiaron, así que es
       // verdad aunque el orden de los pases cambie.
       const callejones = range(n).filter((d) => {
-        if (d === quien || !libre(d) || puestos[d]?.acepta !== q) return false;
+        if (entrega || d === quien || !libre(d) || puestos[d]?.acepta !== q) return false;
         const aristas: [number, number][] = [];
         for (const f of range(n)) if (f !== d && libre(f)) aristas.push([puestos[f]?.acepta ?? 0, puestos[f]?.da ?? 0]);
         return !llega(puestos[d]?.da ?? 0, meta, MAX_CAMBIOS - t, aristas);
       });
       const intentos: Intento[] = [];
-      // En la entrega siempre hay uno que también acepta lo que lleva: "quedan dos puestos".
-      const conCallejon = callejones.length > 0 && (entrega || rng() < 0.6);
-      if (conCallejon) intentos.push({ quien: callejones[Math.floor(rng() * callejones.length)] as number, ok: false });
+      if (entrega) {
+        // La entrega: se prenden quien espera y los otros que aceptan lo que
+        // lleva, y el encargo los prueba hasta llegar. Quien espera puede ser el
+        // primero, el segundo o el tercero que se prueba, y es el primero tan
+        // seguido como cualquiera de los prendidos. Hasta el 21 de octubre de
+        // 2026 se probaba siempre antes el otro: el primero que probaba perdía
+        // (auditor de delatores: 149 de 173 con dieciocho personas).
+        const otros = range(n).filter((d) => d !== quien && libre(d) && puestos[d]?.acepta === q);
+        let antes = 0;
+        if (otros.length && rng() >= 1 / (otros.length + 1)) antes = otros.length >= 2 && rng() < 0.5 ? 2 : 1;
+        for (const d of shuffle([...otros], rng).slice(0, antes)) intentos.push({ quien: d, ok: false });
+      } else if (callejones.length > 0 && rng() < 0.6) {
+        intentos.push({ quien: callejones[Math.floor(rng() * callejones.length)] as number, ok: false });
+      }
       intentos.push({ quien, ok: true });
       e.pases.push({ producto: q, intentos });
     }

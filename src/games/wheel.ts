@@ -3,6 +3,8 @@ import { beep, beepFor, fanfare, note } from "../sound";
 import { drawAvatar, paceFactor, setGameLength, type Beacon } from "../state";
 import { INK, WINNER_HOLD, chrome, clamp, drawFlag, ease, mount, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
 import { writeStory } from "./drama";
+import { FALSA, T_BRAKE, T_CREEP, T_HOLD, T_LOCK, T_SETTLE, T_SPIN, T_WIND } from "./pixi/wheel-beats";
+import { W0, planWheelMotion } from "./pixi/wheel-motion";
 
 /**
  * La ruleta.
@@ -36,75 +38,17 @@ const TAU = Math.PI * 2;
    Ahora dura 17,2 y el reparto está al revés: menos borrón, mucha más frenada.
    No es el mismo juego más lento; es el mismo juego con más de lo que vale la
    pena mirar. */
-const T_WIND = 1.2;
-const T_SPIN = 2.6;
-const T_BRAKE = 4.2;
-const T_CREEP = 12.0;
-const T_HOLD = 14.4;
-const T_SETTLE = 15.6;
-const T_LOCK = 16.8;
+/**
+ * Los tiempos del arco y cómo gira la rueda son los del motor nuevo
+ * (`pixi/wheel-beats.ts` y `pixi/wheel-motion.ts`): la velocidad se define y el
+ * ángulo sale de integrarla, en gajos y no en radianes, así el ritmo de los
+ * clics es el mismo con dos participantes que con veinticuatro. Cuánto le falta
+ * al empezar el último tramo, cuánto avanza después de trabarse y qué hace la
+ * parada falsa salen de la semilla: hasta el 21 de octubre de 2026 la rueda
+ * frenaba siempre igual, y ganaba el gajo siguiente al último que nombraba el
+ * relator (auditor de delatores, en el motor nuevo: 166 de 200 semillas).
+ */
 const T_CROWN = 17.2;
-
-/** Velocidad de crucero y de entrada al arrastre, en gajos por segundo. */
-const W0 = 38.4;
-const W1 = 5.6;
-
-/**
- * Velocidad angular en gajos por segundo.
- *
- * El error de la versión anterior era interpolar el ángulo con una cúbica.
- * Eso da "rápido, rápido, rápido, se paró": la curva llega a cero pero su
- * último tramo sigue siendo veloz, así que los clics se cortan de golpe. Acá
- * se define la velocidad y el ángulo sale de integrarla, que es como frena una
- * rueda de verdad.
- *
- * El presupuesto está en gajos y no en radianes a propósito: así el ritmo de
- * los clics es el mismo con dos participantes que con veinticuatro, y lo único
- * que cambia es cuántas vueltas da.
- */
-/** Cuánto dura la parada falsa, en segundos de juego. */
-const FALSA = 0.75;
-
-/**
- * `falsa`: el arco "susto" del director de emoción. La rueda se para del todo
- * un gajo antes del ganador, la sala cree que ganó ese, y después de un
- * instante avanza un gajo más. Es el truco de las ruletas de feria, y la
- * integral de abajo sigue garantizando que caiga justo donde tiene que caer.
- */
-function omega(tt: number, falsa = false): number {
-  if (tt < T_WIND) return 0;
-  if (tt < T_SPIN) {
-    // La carga. Antes la rueda pasaba 1,7 segundos completamente quieta, que
-    // en una pantalla grande es una foto: nadie sabe si arrancó o si se colgó.
-    // Ahora se ve tomar velocidad.
-    const p = (tt - T_WIND) / (T_SPIN - T_WIND);
-    return W0 * Math.pow(p, 2.2);
-  }
-  if (tt < T_BRAKE) return W0;
-  if (tt < T_CREEP) {
-    const p = (tt - T_BRAKE) / (T_CREEP - T_BRAKE);
-    // Cuadrática: cae fuerte al principio y se aplana. El oído necesita que los
-    // últimos clics se separen de a poco, no de un saque.
-    return W1 + (W0 - W1) * Math.pow(1 - p, 2);
-  }
-  if (tt < T_HOLD) {
-    const p = (tt - T_CREEP) / (T_HOLD - T_CREEP);
-    return W1 * Math.pow(1 - p, 1.6);
-  }
-  if (falsa) {
-    // Quieta del todo, y después un empujón que avanza exactamente un gajo:
-    // la integral del seno sobre el tramo vale uno.
-    const a = T_HOLD + FALSA;
-    if (tt < a || tt >= T_LOCK) return 0;
-    const d = T_LOCK - a;
-    return (Math.PI / (2 * d)) * Math.sin((Math.PI * (tt - a)) / d);
-  }
-  // El falso: la paleta trabada contra el perno, casi sin avanzar.
-  if (tt < T_SETTLE) return 0.64;
-  if (tt >= T_LOCK) return 0;
-  const p = (tt - T_SETTLE) / (T_LOCK - T_SETTLE);
-  return 1.7 * Math.pow(1 - p, 2.2);
-}
 
 export function wheelSpin(
   names: string[],
@@ -146,35 +90,11 @@ export function wheelSpin(
   // Cuál de los gajos del ganador queda bajo el puntero. El ganador ya estaba
   // decidido; esto solo elige cuál de sus pedazos se lleva la foto.
   const winSeg = winnerIdx + n * Math.floor(rng() * rep);
-  const landing = winSeg + 0.5;
-
-  /* La integral acumulada de la velocidad, tabulada una sola vez. */
-  const STEPS = 1200;
-  const cumT: number[] = new Array(STEPS + 1);
-  cumT[0] = 0;
-  const h = T_LOCK / STEPS;
-  for (let i = 1; i <= STEPS; i++) {
-    const a = omega((i - 1) * h, falsa);
-    const b = omega(i * h, falsa);
-    cumT[i] = (cumT[i - 1] as number) + ((a + b) / 2) * h;
-  }
-  const BUDGET = cumT[STEPS] as number;
-  /** Cuánto tiene que girar en total para caer justo donde corresponde. */
-  let total = BUDGET - ((((BUDGET - (landing - startSeg)) % segs) + segs) % segs);
-  if (total < BUDGET - segs / 2) total += segs;
-  const scale = total / BUDGET;
-
-  /** Gajos recorridos hasta el momento `tt`. */
-  function cum(tt: number): number {
-    if (tt <= 0) return 0;
-    if (tt >= T_LOCK) return BUDGET;
-    const x = (tt / T_LOCK) * STEPS;
-    const i = Math.floor(x);
-    const f = x - i;
-    const a = cumT[i] as number;
-    const b = cumT[Math.min(STEPS, i + 1)] as number;
-    return a + (b - a) * f;
-  }
+  // La flecha para dentro del gajo ganador, nunca en su borde, y no siempre en
+  // el medio: con el medio fijo el final se aprendía.
+  const landing = winSeg + 0.5 + (rng() - 0.5) * 0.6;
+  /** Cómo gira hasta ahí: de la semilla, sin tocar quién gana. */
+  const mov = planWheelMotion({ segs, ciclo: n, startSeg, landing, falsa, rng });
 
   /* ----------------------------------------------------------------- estado */
   let tAll = 0;
@@ -182,7 +102,6 @@ export function wheelSpin(
   let lastClick = Math.floor(startSeg);
   let lastLap = -1;
   let lastHum = -1;
-  let lastSaid = -999;
   let saidUpTo = -1;
   let pegHits = 0;
   let cur = personOf(Math.floor(startSeg));
@@ -191,6 +110,8 @@ export function wheelSpin(
   let didLock = false;
   let saidPeg = false;
   let saidLast = false;
+  /** El último gajo que nombró el relator. */
+  let namedCur = -1;
   let tHold = 0;
   let flashK = 0;
   let shake = 0;
@@ -241,7 +162,7 @@ export function wheelSpin(
   function skip(): void {
     if (tAll >= T_CROWN) return;
     tAll = T_CROWN;
-    rot = -(startSeg + BUDGET * scale) * A;
+    rot = -(startSeg + mov.total) * A;
     crowned();
   }
 
@@ -265,7 +186,7 @@ export function wheelSpin(
     // Nunca más de catorce pitidos por segundo: cada uno crea un oscilador, y
     // cuarenta por segundo es basura y latencia.
     if (tAll >= T_SPIN && tAll < T_BRAKE) {
-      const lap = Math.floor(cum(tAll) * scale / segs);
+      const lap = Math.floor(mov.pos(tAll) / segs);
       if (lap !== lastLap) {
         lastLap = lap;
         // Un tono por vuelta, al pasar el perno tricolor: se pueden contar de
@@ -312,17 +233,31 @@ export function wheelSpin(
       [T_WIND, () => say(t("cWheelCharge"), 0.3)],
       [T_SPIN, () => say(t("cWheelGo"), 0.45)],
       [3.4, () => say(t("cWheelFast"), 0.5)],
-      [6.4, () => say(t("cWheelSlow"), 0.65)],
+      [5.6, () => say(t("cWheelSlow"), 0.62)],
+      [7.8, () => say(t("cWheelTick"), 0.7)],
+      // El último tramo: desde acá la rueda se arrastra hasta trabarse. Antes
+      // no se nombra a nadie, y lo que le falta recorrer sale de la semilla.
+      [
+        T_CREEP,
+        () => {
+          say(t("cWheelLast"), 0.8);
+          namedCur = cur;
+        },
+      ],
+      // Sin parada falsa, después de trabarse se arrastra hasta el final: a
+      // veces se queda en el último nombrado y a veces pasa al otro.
+      ...(falsa ? [] : ([[T_SETTLE, () => say(t("cWheelWhere"), 0.96)]] as [number, () => void][])),
     ];
     for (let i = saidUpTo + 1; i < cues.length; i++) {
       const cue = cues[i] as [number, () => void];
       if (tAll < cue[0]) break;
       saidUpTo = i;
       cue[1]();
-      lastSaid = tAll;
     }
-    if (tAll >= T_CREEP && tAll < T_HOLD && w < 3 && tAll - lastSaid > 0.45) {
-      lastSaid = tAll;
+    // Se nombra el gajo que entra bajo la flecha cuando ya se puede leer, hasta
+    // que se traba.
+    if (tAll >= T_CREEP + 0.6 && tAll < T_HOLD && w < 2.5 && cur !== namedCur) {
+      namedCur = cur;
       say(T[getLang()].cWheelOn(names[cur] ?? ""), 0.55);
     }
     // Con cierre, no con ventana. Una ventana de 0,05 s de juego dura cuatro o
@@ -330,16 +265,19 @@ export function wheelSpin(
     // cancelaba a la anterior: el narrador tartamudeaba, y justo en el clímax.
     if (tAll >= T_HOLD && !saidPeg) {
       saidPeg = true;
-      lastSaid = tAll;
       say(falsa ? T[getLang()].cWheelFalse(names[cur] ?? "") : t("cWheelPeg"), 0.9);
     }
-    const reanuda = falsa ? T_HOLD + FALSA : T_SETTLE;
-    if (tAll >= reanuda && !saidLast) {
+    // La parada falsa se resuelve: se destraba y avanza uno o dos gajos, o se
+    // queda en el nombrado.
+    if (falsa && tAll >= T_HOLD + FALSA && !saidLast) {
       saidLast = true;
-      lastSaid = tAll;
-      say(t(falsa ? "cWheelMoved" : "cWheelLast"), 0.95);
-      // El golpe de la paleta que se destraba.
-      if (falsa) {
+      if (mov.seQueda) {
+        say(t("cWheelStays"), 0.95);
+        beep(note(0), 0.18, "sine", 0.07);
+        setTimeout(() => beep(note(5), 0.1, "triangle", 0.045), 90);
+      } else {
+        say(t("cWheelMoved"), 0.95);
+        // El golpe de la paleta que se destraba.
         beep(note(3), 0.08, "square", 0.06);
         setTimeout(() => beep(note(10), 0.12, "triangle", 0.05), 60);
       }
@@ -679,8 +617,8 @@ export function wheelSpin(
   run((dt, now) => {
     tAll += dt;
     shake = Math.max(0, shake - dt * 2.2);
-    const w = omega(tAll, falsa);
-    rot = -(startSeg + cum(tAll) * scale) * A;
+    const w = mov.speed(tAll);
+    rot = -(startSeg + mov.pos(tAll)) * A;
     if (tAll < 1.1) {
       const want = Math.floor((tAll / 1.1) * 24);
       while (buildTick < want) {

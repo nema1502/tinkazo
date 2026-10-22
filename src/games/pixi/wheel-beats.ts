@@ -12,7 +12,13 @@
 export const T_WIND = 1.2;
 export const T_SPIN = 2.6;
 export const T_BRAKE = 4.2;
-export const T_CREEP = 12.0;
+/**
+ * Cuándo empieza el último tramo: la rueda se arrastra hasta trabarse en
+ * `T_HOLD`. Era 12,0; desde el 21 de octubre de 2026 es 10,0, porque lo que le
+ * falta recorrer ahí sale de la semilla (`wheel-motion.ts`) y con muchos
+ * nombres puede ser una vuelta entera: en 2,4 s llegaba casi a fondo.
+ */
+export const T_CREEP = 10.0;
 export const T_HOLD = 14.4;
 export const T_SETTLE = 15.6;
 export const T_LOCK = 16.8;

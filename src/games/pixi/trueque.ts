@@ -389,6 +389,10 @@ export async function truequePixi(names: string[], winners: readonly number[], b
     sonar(B[p] ?? 0, () => beep(note(2), 0.2, "triangle", 0.04));
     sonar((B[p] ?? 0) + BUSCA / 2, () => beep(note(9), 0.07, "sine", 0.03));
   }
+  // En la entrega del encargo principal pueden probarse uno o dos puestos antes
+  // de quien espera: "no, es para el otro" se dice cuando ya queda uno solo.
+  const metaPrim = prim ? (plan.puestos[prim.destino]?.acepta ?? -1) : -1;
+  let quedanEnLaEntrega = [...(luz[P - 1] ?? [])].filter((i) => plan.puestos[i]?.acepta === metaPrim).length;
   for (const m of todos) {
     const en = encargos[m.e];
     if (!en) continue;
@@ -403,7 +407,11 @@ export async function truequePixi(names: string[], winners: readonly number[], b
       if (principal) {
         // Al último puesto que se prueba lo nombra: "no, es para el otro". Los demás, un callejón.
         const variantes = T[getLang()].trCallejon;
-        const frase = m.p === P - 1 ? T[getLang()].trNoEs : (variantes[(m.p + m.e) % variantes.length] ?? "");
+        const enLaEntrega = m.p === P - 1;
+        if (enLaEntrega) quedanEnLaEntrega--;
+        const frase = enLaEntrega
+          ? quedanEnLaEntrega <= 1 ? T[getLang()].trNoEs : (variantes[1] ?? "")
+          : (variantes[(m.p + m.e) % variantes.length] ?? "");
         decir(m.t0 + T_TOCA + 0.05, frase, 0.55);
       }
       continue;
