@@ -156,5 +156,9 @@ export function proofFile(proof: Proof): Blob {
   return new Blob([JSON.stringify(proof, null, 2)], { type: "application/json" });
 }
 
-/** Está anclado en Stellar y por lo tanto se puede leer del contrato. */
+/**
+ * Dice estar anclado en Stellar: trae red, contrato y número. No prueba nada:
+ * cualquiera escribe eso en un enlace. Si el ancla es de Tinkazo y qué dice el
+ * registro lo deciden `anclaDe` y `revisarComprobante` (`verificacion.ts`).
+ */
 export const isAnchored = (p: Proof): boolean => !!(p.net && p.contract && p.id);

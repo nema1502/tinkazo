@@ -42,18 +42,20 @@
   <!-- El veredicto del evento: lo primero que se lee. Los textos los pone el script. -->
   <section class="verdict" id="ev-veredicto">
     <p class="kicker" id="ev-kicker">Revisando</p>
-    <h1 id="ev-titulo">Sorteos del evento</h1>
-    <!-- El título y el detalle van en bloques aparte: juntos en una línea, un error se leía de corrido. -->
-    <p class="lead"><b id="ev-veredicto-t">Revisando los sorteos</b></p>
-    <p class="note" id="ev-detalle"></p>
+    <!-- El titular es el veredicto. El nombre del evento lo escribe quien arma el enlace:
+         va en la lista, aparte, sin el color del veredicto (escépticos, 22 de octubre de 2026). -->
+    <h1 id="ev-veredicto-t">Revisando los sorteos</h1>
+    <p class="lead" id="ev-detalle"></p>
+    <p class="note" id="ev-aviso" style="display:none"></p>
   </section>
 
-  <!-- Los sorteos del enlace, cada uno con lo que se pudo rehacer sin la cadena. -->
+  <!-- Los sorteos del enlace, cada uno rehecho y comparado con su registro en Stellar. -->
   <section class="ev-lista" id="ev-lista-box">
     <div class="ev-cabeza"><h2 data-i="evListT">Los sorteos</h2><span class="kicker" id="ev-count"></span></div>
-    <p class="note" data-i="evLead">Estos sorteos se hicieron con Tinkazo. Tu celular rehace, sin la cadena, lo que se puede rehacer: la prueba de cada ronda pública, el ganador y la huella de la lista.</p>
+    <p class="note" id="ev-nombre-box" style="display:none"><span class="kicker" data-i="evNombreL">Nombre que puso quien compartió el enlace</span><br /><b id="ev-titulo"></b></p>
+    <p class="note" data-i="evLead">Estos sorteos se hicieron con Tinkazo. Tu celular rehace cada uno y lo compara con lo que quedó sellado en Stellar: la lista, el número público y el ganador.</p>
     <div id="ev-lista"></div>
-    <p class="note" data-i="evNota">Lo que atestigua la cadena (que la lista no cambió desde el sello) se comprueba en el enlace de cada sorteo.</p>
+    <p class="note" data-i="evNota">Cada sorteo tiene además su enlace propio, con el detalle de lo que se comprobó.</p>
   </section>
 
   <section style="padding: 14px 0 30px">

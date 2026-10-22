@@ -15,6 +15,7 @@
     "check:qr": "node scripts/check-qr.mjs",
     "check:renta": "node scripts/check-renta.mjs",
     "check:paginas": "node scripts/check-paginas.mjs",
+    "check:verificacion": "node scripts/check-verificacion.mjs",
     "preflight:mainnet": "node scripts/preflight-mainnet.mjs",
     "audit:game": "node scripts/audit-game.mjs",
     "audit:sound": "node scripts/audit-sound.mjs",

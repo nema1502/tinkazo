@@ -85,9 +85,19 @@ export interface ChainHistory {
    * junta en la lista de una sola. Vacío si no se pidió o no hay.
    */
   elsewhere?: ChainRaffle[];
+  /**
+   * Sellos de OTRAS cuentas con la misma cantidad de gente que el sorteo
+   * `matchId` y una ronda a menos de diez minutos de la suya. Es la forma que
+   * además reordena la lista para cambiar la huella. Más débil: puede ser otro
+   * evento a la misma hora. Vacío si no se pidió o no hay.
+   */
+  cercanos?: ChainRaffle[];
   /** No se recorrió el contrato entero: hay sorteos más viejos que no se miraron. */
   truncated: boolean;
 }
+
+/** Diez minutos de rondas de quicknet (una cada tres segundos). */
+export const RONDAS_CERCANAS = 200;
 
 /** Cuántas claves acepta el RPC en un solo `getLedgerEntries`. */
 const KEYS_PER_CALL = 200;
@@ -157,6 +167,43 @@ export async function sealsOnChain(
   matchId?: string,
 ): Promise<ChainHistory | null> {
   try {
+    const escaneo = await escanearContrato(contractId, rpcUrl);
+    if (!escaneo) return null;
+    const { todos, truncated, leerGanadores } = escaneo;
+    const mine = todos.filter((r) => r.organizer === organizer);
+    // Ya se leyeron todos: la misma huella sellada por otra cuenta sale gratis.
+    const match = matchId ? todos.find((r) => r.id === matchId) : undefined;
+    const elsewhere = match ? todos.filter((r) => r.listHash === match.listHash && r.organizer !== organizer) : [];
+    // Y la que además reordena la lista para cambiar la huella: otra cuenta, la
+    // misma cantidad de gente, casi a la misma hora.
+    const cercanos = match
+      ? todos.filter(
+          (r) =>
+            r.organizer !== organizer &&
+            r.id !== match.id &&
+            r.listHash !== match.listHash &&
+            r.count === match.count &&
+            Math.abs(r.round - match.round) <= RONDAS_CERCANAS,
+        )
+      : [];
+    await leerGanadores(mine);
+    mine.sort((a, b) => b.sealedAt - a.sealedAt);
+    return { raffles: mine, truncated, elsewhere, cercanos };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Los sellos de los últimos `SCAN_MAX` sorteos de un contrato, de cualquier
+ * cuenta, y cómo pedir después los ganadores de los que hagan falta. `null` si
+ * el contrato no contestó con su instancia. Lanza si no se pudo preguntar.
+ */
+export async function escanearContrato(
+  contractId: string,
+  rpcUrl: string,
+): Promise<{ todos: ChainRaffle[]; truncated: boolean; leerGanadores: (de: ChainRaffle[]) => Promise<void> } | null> {
+  {
     const { xdr, scValToNative, Address } = await import("@stellar/stellar-sdk");
     const contract = new Address(contractId).toScAddress();
     const keyOf = (val: XdrNs.ScVal): string =>
@@ -199,27 +246,20 @@ export async function sealsOnChain(
     const todos = (await read(ids.map((id) => entryKey("Raffle", id))))
       .map((v) => parseRaffle(scValToNative(v)))
       .filter((r): r is ChainRaffle => r !== null);
-    const mine = todos.filter((r) => r.organizer === organizer);
-    // Ya se leyeron todos: la misma huella sellada por otra cuenta sale gratis.
-    const huella = matchId ? todos.find((r) => r.id === matchId)?.listHash : undefined;
-    const elsewhere = huella ? todos.filter((r) => r.listHash === huella && r.organizer !== organizer) : [];
 
-    // Los ganadores se piden solo de los que ya se sortearon, y solo de esta
-    // cuenta: el registro del resultado es otra entrada.
-    const drawn = mine.filter((r) => r.drawn);
-    if (drawn.length) {
-      const byId = new Map(mine.map((r) => [r.id, r]));
+    // Los ganadores se piden solo de los que ya se sortearon, y solo de los que
+    // hacen falta: el registro del resultado es otra entrada.
+    const leerGanadores = async (de: ChainRaffle[]): Promise<void> => {
+      const drawn = de.filter((r) => r.drawn);
+      if (!drawn.length) return;
+      const byId = new Map(de.map((r) => [r.id, r]));
       for (const v of await read(drawn.map((r) => entryKey("Draw", Number(r.id))))) {
         const d = scValToNative(v) as { raffle_id?: bigint | number; winners?: number[] } | null;
         const r = d?.raffle_id !== undefined ? byId.get(String(d.raffle_id)) : undefined;
         if (r && Array.isArray(d?.winners)) r.winners = d.winners.map(Number);
       }
-    }
-
-    mine.sort((a, b) => b.sealedAt - a.sealedAt);
-    return { raffles: mine, truncated: first > 1, elsewhere };
-  } catch {
-    return null;
+    };
+    return { todos, truncated: first > 1, leerGanadores };
   }
 }
 

@@ -7,12 +7,14 @@ import { $, esc } from "./dom";
 import { getLang, onLangChange, texto as t, textos } from "./idioma";
 import { SAMPLE, avatar } from "./state";
 import { canonicalList, listHash } from "./protocol/canonical";
-import { RPC_URLS } from "./stellar/config";
-import { QUICKNET, bytesToHex, fetchRound, hexToBytes, randomnessOf, roundTime, roundUrl } from "./protocol/quicknet";
+import { QUICKNET, bytesToHex, fetchRound, roundTime, roundUrl } from "./protocol/quicknet";
 import { prepararFirma, verifyRoundAsync } from "./protocol/firma";
-import { select } from "./protocol/select";
-import { decodeProof, isAnchored, type Proof } from "./protocol/proof";
-import { network } from "./stellar/config";
+import { decodeProof, type Proof } from "./protocol/proof";
+import { anclaDe, premioDe, revisarComprobante, type Revision } from "./protocol/verificacion";
+import { network, shortAddress } from "./stellar/config";
+import { leerRegistro } from "./stellar/registro";
+import type { ChainHistory, ChainRaffle } from "./stellar/seals";
+import { detalleTecnico, porQueNoCuadra } from "./verificacion-textos";
 import { buscar, vecesExacto } from "./buscar";
 // Estático, no con import(): así las claves de compartir entran en los textos de esta página.
 import { abrirSorteo } from "./ui/compartir";
@@ -22,7 +24,9 @@ import { abrirSorteo } from "./ui/compartir";
  *
  * Solo lectura y sin wallet. Toma el comprobante del fragmento de la URL,
  * rehace el sorteo desde cero y compara. Si el sorteo está anclado, lee el
- * registro del contrato y comprueba que coincida con lo recomputado.
+ * registro del contrato y comprueba que coincida con lo recomputado. Lo que se
+ * compara y en qué orden vive en `protocol/verificacion.ts`, el mismo que usa la
+ * página de evento: acá solo se cuenta.
  *
  * Todo pasa en el navegador de quien abre el enlace. Los nombres no viajan a
  * ningún servidor: el fragmento de una URL no se envía.
@@ -49,13 +53,29 @@ function paint(): void {
     .join("");
 }
 
-function set(key: string, state: State, detail?: string): void {
+/** `detail` puede ser una función: así se vuelve a escribir en el idioma nuevo. */
+type Detalle = string | (() => string);
+const detalles = new Map<string, Detalle>();
+
+function set(key: string, state: State, detail?: Detalle): void {
+  if (detail !== undefined) detalles.set(key, detail);
+  const d = detalles.get(key);
+  const texto = typeof d === "function" ? d() : d;
   const found = checks.find((c) => c.key === key);
   if (found) {
     found.state = state;
-    if (detail !== undefined) found.detail = detail;
+    if (texto !== undefined) found.detail = texto;
   } else {
-    checks.push({ key, state, ...(detail !== undefined ? { detail } : {}) });
+    checks.push({ key, state, ...(texto !== undefined ? { detail: texto } : {}) });
+  }
+  paint();
+}
+
+/** Vuelve a escribir los detalles que dependen del idioma. */
+function repintarDetalles(): void {
+  for (const c of checks) {
+    const d = detalles.get(c.key);
+    if (typeof d === "function") c.detail = d();
   }
   paint();
 }
@@ -89,12 +109,41 @@ function fail(messageKey: string, detail = ""): void {
   verdict("bad", messageKey, detail);
 }
 
+/** Lo técnico de un veredicto rojo, plegado debajo de la explicación. */
+function pintarTecnico(lineas: string[]): void {
+  const caja = $("verdict-tech");
+  caja.style.display = lineas.length ? "" : "none";
+  $("verdict-tech-body").textContent = lineas.join("\n");
+}
+
+/** Lo de afuera que necesita la revisión: el faro, la firma y la cadena. */
+const DEPENDENCIAS = {
+  verificarFirma: verifyRoundAsync,
+  traerFirma: async (round: number): Promise<string> => (await fetchRound(round, { attempts: 6, delayMs: 1500 })).signature,
+  leerRegistro,
+};
+
+/** El enlace tal como se verificó: compartir manda este, aunque después cambie el fragmento. */
+let enlaceVerificado = "";
+/** Lo que se está mostrando, para volver a contarlo en otro idioma o cuando llegan los otros sellos. */
+let actual: { proof: Proof; r: Revision } | null = null;
+
 async function main(): Promise<void> {
+  let proof: Proof | null = null;
   // Los textos, el tema, la cabecera y el idioma ya los puso `pagina.ts`. Las
   // comprobaciones no viven en `data-i`: se repintan al cambiar de idioma.
-  onLangChange(paint);
+  onLangChange(() => {
+    repintarDetalles();
+    if (actual) contar(actual.proof, actual.r);
+    pintarSellos();
+  });
+  // Si el fragmento cambia con la página abierta (un sitio que abrió esta pestaña
+  // se lo puede cambiar sin recargarla), lo que se ve ya no es lo que dice el
+  // enlace, y "Compartir" mandaba el nuevo con el ganador del viejo: se vuelve a
+  // verificar desde cero.
+  window.addEventListener("hashchange", () => location.reload());
+  enlaceVerificado = location.origin + location.pathname + location.hash;
 
-  let proof: Proof;
   try {
     proof = await decodeProof(location.hash);
   } catch {
@@ -108,119 +157,192 @@ async function main(): Promise<void> {
   verdict("working", "vWorking", "");
   renderList(proof);
 
-  // ---------------------------------------------------- 1. la lista y su huella
-  // Se lee la cadena primero porque es el único testigo capaz de decir si la
-  // lista que trae este enlace es la que se selló. Sin ella, todo lo demás
-  // solo puede comprobar que el comprobante cierra consigo mismo.
+  // El orden de la lista de comprobaciones es el orden en que aparecen.
+  const anclado = anclaDe(proof).tipo !== "libre";
   set("vCheckList", "working");
-
-  // ------------------------------------------------- 2. la ronda y su firma
-  let onChain: { winners: number[]; randomness: string; listHash: string; count: number; meta?: string } | null = null;
-  let chainUnreachable = false;
-  // El contrato contestó y no tiene ese sorteo: no es la red, y no se trata
-  // como si lo fuera (antes salía "no es señal de que algo esté mal").
-  let chainMissing = false;
-
-  if (isAnchored(proof)) {
+  if (anclado) {
+    set("vCheckOfficial", "working");
     set("vCheckChain", "working");
-    try {
-      onChain = await readFromChain(proof);
-      if (!onChain) {
-        set("vCheckChain", "pending", t("vNotDrawnYet"));
-        offerToFinish(proof);
-      } else {
-        set("vCheckChain", "ok", `#${proof.id} · ${proof.net}`);
-      }
-    } catch (e) {
-      if (e instanceof Error && e.message === "raffle-not-found") {
-        // Una red de pruebas borrada, un registro archivado o un número que
-        // no existe: el contrato contestó, y no tiene el sorteo.
-        chainMissing = true;
-        set("vCheckChain", "bad", t("vChainMissing"));
-      } else {
-        // No es que el sorteo no esté anclado: es que no llegamos a leerlo.
-        // Confundir las dos cosas acusaría al organizador por culpa del wifi.
-        chainUnreachable = true;
-        set("vCheckChain", "bad", t("vChainUnreachable"));
-      }
-    }
   }
+  set("vCheckRound", "working");
 
-  const names = canonicalList(proof.names.join("\n"));
-  const hash = bytesToHex(listHash(names));
-  // Con registro en la cadena esto compara contra el testigo, que es lo que
+  const revision = await revisarComprobante(proof, DEPENDENCIAS, { k: 1 });
+  actual = { proof, r: revision };
+  pintarComprobaciones(proof, revision);
+  contar(proof, revision);
+}
+
+/** Cada comprobación, con lo que se vio. */
+function pintarComprobaciones(proof: Proof, r: Revision): void {
+  const tiene = (...m: Revision["motivos"]): boolean => m.some((x) => r.motivos.includes(x));
+  const sello = r.registro?.sello ?? null;
+  const resultado = r.registro?.resultado ?? null;
+
+  // ---------------------------------------------------- 1. la lista y su huella
+  // Con registro en la cadena se compara contra el testigo, que es lo que
   // detecta un nombre cambiado. Sin registro, lo único comprobable es que el
   // comprobante no viene deformado, y el veredicto lo dice sin adornos.
-  const sameList = onChain ? onChain.listHash === hash : names.length === proof.names.length;
-  set("vCheckList", sameList ? "ok" : "bad", `${names.length} · ${hash.slice(0, 16)}…`);
-  $("v-hash").textContent = `list_hash = ${hash}`;
+  // Anclado y sin el sello leído, la lista no se pudo comparar con nada: queda pendiente.
+  set(
+    "vCheckList",
+    tiene("lista-deforme", "lista-cambiada", "cantidad") ? "bad" : r.ancla.tipo !== "libre" && !sello ? "pending" : "ok",
+    `${r.nombres.length} · ${r.huella.slice(0, 16)}…`,
+  );
+  $("v-hash").textContent = `list_hash = ${r.huella}`;
 
-  set("vCheckRound", "working");
-  let signature = proof.signature ?? null;
+  // --------------------------------------- 2. de quién es el registro, y qué dice
+  if (r.ancla.tipo !== "libre") {
+    const contrato = typeof proof.contract === "string" ? shortAddress(proof.contract) : "—";
+    if (r.ancla.tipo === "deforme") set("vCheckOfficial", "bad", () => t("vAnchorBrokenShort"));
+    else if (r.ancla.tipo === "ajeno" || tiene("codigo-ajeno")) {
+      set("vCheckOfficial", "bad", () => `${contrato} · ${t("vNotOfficialShort")}`);
+    } else if (r.registro?.wasm) set("vCheckOfficial", "ok", `${contrato} · ${r.registro.wasm.slice(0, 12)}…`);
+    else set("vCheckOfficial", "pending", () => `${contrato} · ${t(r.falta === "sin-cadena" ? "vChainUnreachable" : "vChainMissing")}`);
 
-  if (!signature) {
-    try {
-      signature = (await fetchRound(proof.round, { attempts: 6, delayMs: 1500 })).signature;
-    } catch {
-      set("vCheckRound", "bad", t("vRoundUnreachable"));
-      fail("vCannotFinish", t("vRoundUnreachable"));
-      return;
+    if (r.ancla.tipo !== "oficial" || tiene("codigo-ajeno")) set("vCheckChain", "bad", () => t("vNotOfficialShort"));
+    else if (r.falta === "sin-cadena") {
+      // No es que el sorteo no esté anclado: es que no llegamos a leerlo.
+      // Confundir las dos cosas acusaría al organizador por culpa del wifi.
+      set("vCheckChain", "pending", () => t("vChainUnreachable"));
+    } else if (tiene("numero-inexistente")) set("vCheckChain", "bad", () => t("vChainNever"));
+    else if (r.falta === "sin-contrato" || r.falta === "sin-sello" || r.falta === "sin-resultado") {
+      // Una red de pruebas borrada, un registro archivado: el contrato contestó, y no lo tiene.
+      set("vCheckChain", "bad", () => t("vChainMissing"));
+    } else if (tiene("registro-incoherente")) set("vCheckChain", "bad", () => t("vRecordOdd"));
+    else if (sello && !resultado) set("vCheckChain", "pending", () => t("vNotDrawnYet"));
+    else set("vCheckChain", r.motivos.length ? "bad" : "ok", `#${proof.id} · ${proof.net}`);
+
+    // La ronda tiene que haber nacido después del sello, con la hora de la cadena.
+    if (sello) {
+      set(
+        "vCheckSealedFirst",
+        tiene("ronda-temprana") ? "bad" : "ok",
+        () => t("vSealedFirstDetail").replace("{s}", String(roundTime(sello.round) - sello.sealedAt)),
+      );
     }
   }
 
-  const sigOk = await verifyRoundAsync(proof.round, signature);
-  set("vCheckRound", sigOk ? "ok" : "bad", `${proof.round} · ${signature.slice(0, 16)}…`);
+  // ------------------------------------------------- 3. la ronda y su firma
+  if (r.firma === null) set("vCheckRound", "bad", () => t(r.falta === "sin-ronda" ? "vRoundUnreachable" : "vBadSignature"));
+  else {
+    const rondaBien = r.firmaOk && !tiene("ronda", "firma-registro");
+    set("vCheckRound", rondaBien ? "ok" : "bad", `${proof.round} · ${r.firma.slice(0, 16)}…`);
+  }
 
-  // ------------------------------------------------------------ 3. la semilla
-  const randomness = bytesToHex(randomnessOf(signature));
+  // ------------------------------------------------------------ 4. la semilla
   // La semilla se deriva de la firma. Si la firma no era válida, esto no
   // comprueba nada: un visto bueno acá sería inflar la cuenta.
-  set("vCheckSeed", sigOk ? "ok" : "bad", randomness.slice(0, 24) + "…");
+  if (r.semilla !== null) set("vCheckSeed", tiene("semilla", "firma-registro") ? "bad" : "ok", r.semilla.slice(0, 24) + "…");
+  else if (r.firma !== null) set("vCheckSeed", "bad");
 
-  // --------------------------------------------- 4. el ganador, recomputado
-  const k = onChain ? onChain.winners.length : 1;
-  const winners = select(hexToBytes(randomness), hexToBytes(hash), names.length, Math.min(k, names.length));
-  const matches = onChain ? JSON.stringify(winners) === JSON.stringify(onChain.winners) : true;
-  const hashMatches = onChain ? onChain.listHash === hash : true;
-  set("vCheckWinner", matches && hashMatches ? "ok" : "bad", winners.map((i) => names[i]).join(", "));
+  // --------------------------------------------- 5. el ganador, recomputado
+  if (r.semilla !== null) {
+    const bien = r.ganadores.length > 0 && !tiene("ganadores", "lista-deforme", "lista-cambiada", "cantidad");
+    set("vCheckWinner", bien ? "ok" : "bad", r.ganadores.map((i) => r.nombres[i]).join(", "));
+  }
 
-  // Los pasos se muestran siempre: son los que dejan rehacer la cuenta a mano
-  // y ver dónde se rompe. La tarjeta de ganador, en cambio, solo si cuadra.
-  renderSteps(proof, hash, randomness, names.length, winners);
+  // Sin registro externo, la cuenta cierra pero la lista no está atestiguada.
+  if (!r.motivos.length && (r.veredicto === "libre" || r.veredicto === "falta")) set("vCheckWitness", "pending", () => t("vNoWitnessShort"));
+}
 
-  const allOk = sameList && sigOk && matches && hashMatches;
-  if (!allOk) {
+let contado = false;
+
+/**
+ * El texto que se sella cuando no se escribe premio: no es un premio. Entre
+ * comillas a propósito: así entra en los textos de esta página (`vite.config.ts`
+ * junta las claves que el código nombra entre comillas). Como `textos("es").defaultMeta`
+ * no entraba, y un sorteo sin premio salía "Se lleva: Sorteo de comunidad".
+ */
+const META_POR_DEFECTO = "defaultMeta";
+
+/** La hora de un instante (segundos), en el idioma de la página. */
+const hora = (s: number): string =>
+  new Date(s * 1000).toLocaleTimeString(getLang() === "es" ? "es-BO" : "en-US", { hour: "2-digit", minute: "2-digit" });
+
+/** El veredicto, el resultado y lo que se puede hacer. Se vuelve a llamar al cambiar de idioma. */
+function contar(proof: Proof, r: Revision): void {
+  const primeraVez = !contado;
+  contado = true;
+  const sello = r.registro?.sello ?? null;
+  pintarTecnico([]);
+  // La lista se llama "sellada" solo si la cadena atestiguó que lo es.
+  const atestiguado = r.veredicto === "verde" || r.veredicto === "pendiente";
+  const cabeza = $("v-list-h");
+  cabeza.dataset.i = atestiguado ? "vList" : "vListLink";
+  cabeza.textContent = t(cabeza.dataset.i);
+  // Los pasos se muestran siempre que haya semilla: son los que dejan rehacer la
+  // cuenta a mano y ver dónde se rompe. La tarjeta de ganador, en cambio, solo si cuadra.
+  if (r.semilla !== null && primeraVez) renderSteps(r.ronda, r.huella, r.semilla, r.nombres.length, r.ganadores);
+
+  if (r.veredicto === "mal") {
     // Nunca un ganador sobre un veredicto rojo: esa tarjeta se saca de pantalla
     // y se comparte, y sería indistinguible de la de un sorteo de verdad.
-    fail(
-      "vVerdictBad",
-      t(!hashMatches || !sameList ? "vListChanged" : !sigOk ? "vBadSignature" : "vMismatch"),
-    );
+    const { titulo, detalle } = porQueNoCuadra(r);
+    fail(titulo, t(detalle));
+    pintarTecnico(detalleTecnico(r, proof));
     return;
   }
 
-  if (chainMissing) {
+  if (r.veredicto === "falta") {
     // Dice estar en la cadena y la cadena no lo tiene: la cuenta cierra, pero
     // nadie atestigua la lista. Sin tarjeta de ganador, que se comparte sola.
-    set("vCheckWitness", "pending", t("vNoWitnessShort"));
     verdict("partial", "vVerdictMissing", t("vVerdictMissingDetail"));
     return;
   }
-  renderResult(proof, names, winners, signature, randomness, !!onChain, premioDe(proof, onChain?.meta));
-  // Los otros sellos se traen al final y sin bloquear: el veredicto no
-  // depende de ellos, y si el RPC no contesta la página ya sirvió.
-  void renderSeals(proof);
 
-  if (onChain) {
-    // En testnet se dice: Stellar la borra entera el 16 de diciembre de 2026.
-    verdict("ok", "vVerdictOkChain", t(proof.net === "testnet" ? "vVerdictOkChainDetailTest" : "vVerdictOkChainDetail"));
-  } else if (chainUnreachable) {
-    // El sorteo dice estar anclado y no pudimos comprobarlo. No es culpa del
-    // organizador y no se le imputa: se pide reintentar.
+  if (r.veredicto === "sin-red") {
+    if (r.falta === "sin-ronda") {
+      // Sin la ronda no hay ganador que mostrar. Si todavía no salió, se dice a
+      // qué hora sale; si salió y no llega, es la conexión. Ninguna de las dos
+      // cosas es culpa del organizador: nada de "Algo no cuadra".
+      const sale = roundTime(r.ronda);
+      if (Number.isFinite(sale) && sale > Math.floor(Date.now() / 1000)) {
+        verdict("partial", "vVerdictWaiting", t("vVerdictWaitingDetail").replace("{h}", hora(sale)));
+      } else {
+        verdict("working", "vCannotFinish", t("vRoundUnreachable"));
+      }
+      return;
+    }
+    // Dice estar anclado y no se pudo leer la cadena. No se le imputa nada al
+    // organizador, pero tampoco se muestra un ganador que nadie atestiguó: con la
+    // red cortada (el wifi del evento), un comprobante inventado salía con su
+    // tarjeta, su premio y el botón de compartir (escépticos, 22 de octubre de 2026).
     verdict("working", "vVerdictUnknown", t("vVerdictUnknownDetail"));
+    return;
+  }
+
+  if (r.firma === null || r.semilla === null) {
+    fail("vCannotFinish", t("vRoundUnreachable"));
+    return;
+  }
+
+  // Lo que se muestra del sorteo sale del sello cuando se leyó: el premio y la
+  // fecha del enlace se pueden cambiar a mano (QA del 16 de octubre de 2026: un
+  // comprobante verde decía "Se lleva: un auto 0 km"). El número del sorteo y la
+  // red van en la foto solo si la cadena los atestiguó.
+  const porDefecto = (["es", "en"] as const).map((l) => textos(l)[META_POR_DEFECTO]).filter((x): x is string => typeof x === "string");
+  const premio = premioDe(r, proof.prize, porDefecto);
+  const fecha = sello?.sealedAt ?? (r.veredicto === "libre" ? proof.sealedAt : undefined);
+  if (primeraVez) {
+    renderResult(proof, r, premio, {
+      fromChain: r.veredicto === "verde",
+      ...(fecha ? { fecha } : {}),
+      ...(atestiguado && proof.id && proof.net ? { numero: proof.id, red: proof.net } : {}),
+    });
+    // Los otros sellos se traen al final y sin bloquear. Si muestran la misma
+    // lista sellada más de una vez, el verde baja a amarillo (`pintarSellos`).
+    if (atestiguado) void cargarSellos(proof);
+    if (r.veredicto === "pendiente") offerToFinish(proof, r);
+  }
+
+  if (r.veredicto === "verde") {
+    if (sellosRepetidos) verdict("partial", "vVerdictSealedAgain", t("vVerdictSealedAgainDetail"));
+    // En testnet se dice: Stellar la borra entera el 16 de diciembre de 2026.
+    else verdict("ok", "vVerdictOkChain", t(proof.net === "testnet" ? "vVerdictOkChainDetailTest" : "vVerdictOkChainDetail"));
+  } else if (r.veredicto === "pendiente") {
+    verdict("partial", "vVerdictPending", t("vVerdictPendingDetail"));
   } else {
     // Sin registro externo, la cuenta cierra pero la lista no está atestiguada.
-    set("vCheckWitness", "pending", t("vNoWitnessShort"));
     verdict("partial", "vVerdictPartial", t("vVerdictPartialDetail"));
   }
 }
@@ -228,8 +350,13 @@ async function main(): Promise<void> {
 /** Cuántos sellos se listan como mucho. Los que repiten la lista entran siempre. */
 const SEALS_SHOWN = 100;
 
+/** Los otros sellos que se leyeron, para volver a pintarlos en otro idioma. */
+let sellos: { proof: Proof; found: ChainHistory } | null = null;
+/** La misma lista, sellada más de una vez (por la misma cuenta o por otra): el verde baja a amarillo. */
+let sellosRepetidos = false;
+
 /**
- * Muestra todos los sellos del mismo organizador que siguen en la cadena.
+ * Trae todos los sellos del mismo organizador que siguen en la cadena.
  *
  * Es la defensa contra el único ataque conocido que sigue abierto: sellar la
  * misma lista varias veces y publicar solo el resultado que conviene. La
@@ -240,129 +367,99 @@ const SEALS_SHOWN = 100;
  *
  * No afirma nada que no pueda comprobar. Si el RPC no contesta, la sección no
  * aparece: decir "hay uno solo" sin haber podido mirar sería peor que callar.
+ * Solo se llama con un contrato oficial (`contar`): de uno ajeno no se lee nada.
  */
-async function renderSeals(proof: Proof): Promise<void> {
-  if (!isAnchored(proof)) return;
-  const box = $("sec-seals");
+async function cargarSellos(proof: Proof): Promise<void> {
   try {
     const { sealsOf } = await import("./stellar/seals");
     const found = await sealsOf(proof);
     if (!found || found.raffles.length === 0) return;
-
-    const mine = String(proof.id ?? "");
-    const self = found.raffles.find((r) => r.id === mine);
-    // La lista de ejemplo la sella cualquiera que prueba el sitio con su
-    // cuenta: que se repita no dice nada, y alarmar por eso sería mentir.
-    const ejemplo = bytesToHex(listHash(canonicalList(SAMPLE.join("\n"))));
-    if (self && self.listHash === ejemplo) {
-      $("v-seals-since").textContent = t("vSealsAll");
-      $("v-seals-list").innerHTML = "";
-      $("v-seals-why").textContent = t("vSealsEjemplo");
-      box.style.display = "block";
-      return;
-    }
-    // Dos señales, de distinta fuerza. La misma huella es la misma lista con
-    // el mismo orden: no tiene otra lectura. La misma cantidad de gente es más
-    // débil, porque puede ser otro sorteo del mismo evento, pero es también lo
-    // que queda si alguien reordena los nombres para cambiar la huella: el
-    // protocolo no ordena la lista (protocolo.md §1), así que eso alcanza.
-    const again = (id: string, listHash: string): boolean => !!self && id !== mine && listHash === self.listHash;
-    const sameCount = (id: string, listHash: string, count: number): boolean =>
-      !!self && id !== mine && listHash !== self.listHash && count === self.count;
-    const flagged = (r: { id: string; listHash: string; count: number }): boolean =>
-      again(r.id, r.listHash) || sameCount(r.id, r.listHash, r.count);
-    const shown = found.raffles.filter((r, i) => i < SEALS_SHOWN || r.id === mine || flagged(r));
-    const repeats = found.raffles.filter((r) => again(r.id, r.listHash)).length;
-    const alike = found.raffles.filter((r) => sameCount(r.id, r.listHash, r.count)).length;
-
-    $("v-seals-since").textContent =
-      found.truncated || shown.length < found.raffles.length ? t("vSealsMany") : t("vSealsAll");
-    // La misma lista, sellada por otra cuenta: va primero y en rojo.
-    const fuera = found.elsewhere ?? [];
-    const fueraHtml = fuera
-      .map(
-        (r) =>
-          `<p class="entity" style="font-weight:800;color:var(--magenta-ink)">⚠ #${esc(r.id)} · ${esc(t("vSealsElsewhere"))} · ` +
-          `${esc(r.organizer.slice(0, 4))}…${esc(r.organizer.slice(-4))} · ${esc(t("vSealsRound"))} ${r.round}</p>`,
-      )
-      .join("");
-    $("v-seals-list").innerHTML = fueraHtml + shown
-      .map((r) => {
-        const yo = r.id === mine;
-        const rep = again(r.id, r.listHash);
-        const like = sameCount(r.id, r.listHash, r.count);
-        const when = r.sealedAt
-          ? new Date(r.sealedAt * 1000).toLocaleString(getLang() === "es" ? "es-BO" : "en-US")
-          : "";
-        const mark = rep ? ` · ⚠ ${esc(t("vSealsAgain"))}` : like ? ` · ${esc(t("vSealsSameCount"))}` : "";
-        return (
-          `<p class="entity"${yo || rep ? ' style="font-weight:800"' : ""}>` +
-          `#${esc(r.id)}${yo ? ` · ${esc(t("vSealsThis"))}` : ""}${mark} · ` +
-          `${r.count} ${esc(t("vSealsPeople"))} · ${esc(t("vSealsRound"))} ${r.round} · ` +
-          `${esc(when)} · ${esc(r.listHash.slice(0, 16))}…</p>`
-        );
-      })
-      .join("");
-    // Con un solo sello no hay nada que sospechar, y conviene decirlo. Y si la
-    // lista se repite, eso va primero.
-    $("v-seals-why").textContent = fuera.length
-      ? t("vSealsElsewhereWhy")
-      : repeats
-      ? t("vSealsAgainWhy")
-      : alike
-        ? t("vSealsSameCountWhy")
-        : found.raffles.length > 1
-          ? t("vSealsWhy")
-          : t("vSealsOnly");
-    box.style.display = "block";
+    sellos = { proof, found };
+    pintarSellos();
   } catch {
     /* sin RPC no se muestra nada: callar es más honesto que suponer */
   }
 }
 
-/** Lee el sello y el registro del contrato. Carga el SDK solo si hace falta. */
-async function readFromChain(
-  proof: Proof,
-): Promise<{ winners: number[]; randomness: string; listHash: string; count: number } | null> {
-  const { contract, rpc } = await import("@stellar/stellar-sdk");
-  const passphrase =
-    proof.net === "mainnet"
-      ? "Public Global Stellar Network ; September 2015"
-      : "Test SDF Network ; September 2015";
-  const rpcUrl = proof.net === "mainnet" ? RPC_URLS.mainnet : RPC_URLS.testnet;
-  void rpc;
-  const client = await contract.Client.from({
-    contractId: proof.contract as string,
-    networkPassphrase: passphrase,
-    rpcUrl,
-  });
-  const id = BigInt(proof.id as string);
-  const raffle = (await (client as never as { get_raffle(a: { raffle_id: bigint }): Promise<{ result: unknown }> }).get_raffle({ raffle_id: id })).result as
-    | { list_hash: Uint8Array; count: number; meta?: string }
-    | undefined;
-  if (!raffle) throw new Error("raffle-not-found");
-  const draw = (await (client as never as { get_draw(a: { raffle_id: bigint }): Promise<{ result: unknown }> }).get_draw({ raffle_id: id })).result as
-    | { winners: number[]; randomness: Uint8Array }
-    | undefined;
-  if (!draw) return null;
-  return {
-    winners: [...draw.winners],
-    randomness: bytesToHex(new Uint8Array(draw.randomness)),
-    listHash: bytesToHex(new Uint8Array(raffle.list_hash)),
-    count: raffle.count,
-    ...(typeof raffle.meta === "string" ? { meta: raffle.meta } : {}),
-  };
-}
+/** Pinta los otros sellos. Se vuelve a llamar al cambiar de idioma: antes el aviso volvía al texto por defecto. */
+function pintarSellos(): void {
+  if (!sellos) return;
+  const { proof, found } = sellos;
+  const box = $("sec-seals");
+  const mine = String(proof.id ?? "");
+  const self = found.raffles.find((r) => r.id === mine);
+  // La lista de ejemplo la sella cualquiera que prueba el sitio con su
+  // cuenta: que se repita no dice nada, y alarmar por eso sería mentir.
+  const ejemplo = bytesToHex(listHash(canonicalList(SAMPLE.join("\n"))));
+  if (self && self.listHash === ejemplo) {
+    $("v-seals-since").textContent = t("vSealsAll");
+    $("v-seals-list").innerHTML = "";
+    $("v-seals-why").textContent = t("vSealsEjemplo");
+    box.style.display = "block";
+    return;
+  }
+  // Dos señales, de distinta fuerza. La misma huella es la misma lista con
+  // el mismo orden: no tiene otra lectura. La misma cantidad de gente es más
+  // débil, porque puede ser otro sorteo del mismo evento, pero es también lo
+  // que queda si alguien reordena los nombres para cambiar la huella: el
+  // protocolo no ordena la lista (protocolo.md §1), así que eso alcanza.
+  const again = (id: string, listHash: string): boolean => !!self && id !== mine && listHash === self.listHash;
+  const sameCount = (id: string, listHash: string, count: number): boolean =>
+    !!self && id !== mine && listHash !== self.listHash && count === self.count;
+  const flagged = (r: { id: string; listHash: string; count: number }): boolean =>
+    again(r.id, r.listHash) || sameCount(r.id, r.listHash, r.count);
+  const shown = found.raffles.filter((r, i) => i < SEALS_SHOWN || r.id === mine || flagged(r));
+  const repeats = found.raffles.filter((r) => again(r.id, r.listHash)).length;
+  const alike = found.raffles.filter((r) => sameCount(r.id, r.listHash, r.count)).length;
 
-/**
- * El premio que se muestra: el que quedó grabado al sellar, si se pudo leer la
- * cadena. El del enlace se puede cambiar a mano, y con él el comprobante salía
- * verde diciendo "Se lleva: un auto 0 km" (QA, 16 de octubre de 2026). El
- * texto por defecto del sello ("Sorteo de comunidad") no es un premio.
- */
-function premioDe(proof: Proof, meta: string | undefined): string {
-  if (meta === undefined) return proof.prize ?? "";
-  return meta === textos("es").defaultMeta || meta === textos("en").defaultMeta ? "" : meta;
+  $("v-seals-since").textContent =
+    found.truncated || shown.length < found.raffles.length ? t("vSealsMany") : t("vSealsAll");
+  // La misma lista, sellada por otra cuenta: va primero y en rojo. Después, otra
+  // cuenta con la misma cantidad de gente casi a la misma hora: la misma jugada
+  // con la lista reordenada.
+  const fuera = found.elsewhere ?? [];
+  const cerca = found.cercanos ?? [];
+  const ajena = (r: ChainRaffle, clave: string, fuerte: boolean): string =>
+    `<p class="entity" style="font-weight:800${fuerte ? ";color:var(--magenta-ink)" : ""}">⚠ #${esc(r.id)} · ${esc(t(clave))} · ` +
+    `${esc(r.organizer.slice(0, 4))}…${esc(r.organizer.slice(-4))} · ${esc(t("vSealsRound"))} ${r.round}</p>`;
+  const fueraHtml = fuera.map((r) => ajena(r, "vSealsElsewhere", true)).join("") + cerca.map((r) => ajena(r, "vSealsNear", false)).join("");
+  $("v-seals-list").innerHTML = fueraHtml + shown
+    .map((r) => {
+      const yo = r.id === mine;
+      const rep = again(r.id, r.listHash);
+      const like = sameCount(r.id, r.listHash, r.count);
+      const when = r.sealedAt
+        ? new Date(r.sealedAt * 1000).toLocaleString(getLang() === "es" ? "es-BO" : "en-US")
+        : "";
+      const mark = rep ? ` · ⚠ ${esc(t("vSealsAgain"))}` : like ? ` · ${esc(t("vSealsSameCount"))}` : "";
+      return (
+        `<p class="entity"${yo || rep ? ' style="font-weight:800"' : ""}>` +
+        `#${esc(r.id)}${yo ? ` · ${esc(t("vSealsThis"))}` : ""}${mark} · ` +
+        `${r.count} ${esc(t("vSealsPeople"))} · ${esc(t("vSealsRound"))} ${r.round} · ` +
+        `${esc(when)} · ${esc(r.listHash.slice(0, 16))}…</p>`
+      );
+    })
+    .join("");
+  // Con un solo sello no hay nada que sospechar, y conviene decirlo. Y si la
+  // lista se repite, eso va primero.
+  $("v-seals-why").textContent = fuera.length
+    ? t("vSealsElsewhereWhy")
+    : repeats
+    ? t("vSealsAgainWhy")
+    : cerca.length
+      ? t("vSealsNearWhy")
+      : alike
+        ? t("vSealsSameCountWhy")
+        : found.raffles.length > 1
+          ? t("vSealsWhy")
+          : t("vSealsOnly");
+  box.style.display = "block";
+  // La misma lista sellada otra vez es la forma directa de quedarse con el
+  // resultado que conviene: el verde no puede quedar como si nada.
+  if ((fuera.length || repeats) && !sellosRepetidos) {
+    sellosRepetidos = true;
+    if (actual) contar(actual.proof, actual.r);
+  }
 }
 
 /**
@@ -371,11 +468,13 @@ function premioDe(proof: Proof, meta: string | undefined): string {
  * que abra el comprobante puede cerrarlo, y el resultado es el mismo: lo fija
  * la ronda del faro, no quien apriete el botón.
  */
-function offerToFinish(proof: Proof): void {
-  // Solo si el comprobante habla de la misma red para la que está compilado
-  // el sitio: firmar contra otra red daría un error confuso.
-  if (proof.net !== network.name) return;
-  if (roundTime(proof.round) > Math.floor(Date.now() / 1000)) return;
+function offerToFinish(proof: Proof, r: Revision): void {
+  // Solo si el sorteo es del contrato con el que habla este sitio: el botón
+  // sortea en `network.contractId`, y con otro contrato (uno anterior, otra red)
+  // cerraría otro sorteo con el mismo número.
+  if (r.ancla.tipo !== "oficial") return;
+  if (r.ancla.contrato.red !== network.name || r.ancla.contrato.contractId !== network.contractId) return;
+  if (roundTime(r.ronda) > Math.floor(Date.now() / 1000)) return;
 
   const box = $("finish-box");
   const btn = $<HTMLButtonElement>("btn-finish");
@@ -408,7 +507,7 @@ function offerToFinish(proof: Proof): void {
       setActiveWallet(wallet);
 
       note.textContent = t("fetching");
-      const { signature } = await drand.fetchRound(proof.round, { attempts: 8, delayMs: 1500 });
+      const { signature } = await drand.fetchRound(r.ronda, { attempts: 8, delayMs: 1500 });
       await anchor.drawOnChain(BigInt(proof.id as string), drand.decompressG1(signature), (step) => {
         note.textContent = anchor.stepLabel(step);
       });
@@ -423,8 +522,9 @@ function offerToFinish(proof: Proof): void {
 }
 
 function renderList(proof: Proof): void {
-  $("v-count").textContent = `${proof.names.length} ${t("kEntries")}`;
-  $("v-names").innerHTML = proof.names
+  const names = Array.isArray(proof.names) ? proof.names.map(String) : [];
+  $("v-count").textContent = `${names.length} ${t("kEntries")}`;
+  $("v-names").innerHTML = names
     .map((n, i) => `<i data-p="${i + 1}"><img src="${avatar(n, 44)}" alt="" loading="lazy" />${esc(n)}</i>`)
     .join("");
   // Cada uno se busca: "estás en el puesto 37 de 120". El que está dos veces
@@ -438,7 +538,7 @@ function renderList(proof: Proof): void {
       out.textContent = "";
       return;
     }
-    const puestos = buscar(proof.names, q);
+    const puestos = buscar(names, q);
     for (const p of puestos) document.querySelector(`#v-names i[data-p="${p}"]`)?.classList.add("match");
     if (!puestos.length) {
       out.textContent = t("buscateNada");
@@ -446,27 +546,29 @@ function renderList(proof: Proof): void {
     }
     let texto =
       puestos.length === 1
-        ? t("buscateUno").replace("{p}", String(puestos[0])).replace("{n}", String(proof.names.length))
+        ? t("buscateUno").replace("{p}", String(puestos[0])).replace("{n}", String(names.length))
         : t("buscateVarios").replace("{k}", String(puestos.length)).replace("{p}", puestos.slice(0, 12).join(", "));
-    const exacto = vecesExacto(proof.names, q);
+    const exacto = vecesExacto(names, q);
     if (exacto > 1) texto += t("buscateDos").replace("{k}", String(exacto));
     out.textContent = texto;
   };
   input.addEventListener("input", buscarAhora);
-  $("v-net").textContent = isAnchored(proof) ? `${proof.net} · #${proof.id}` : t("noAnchor");
+  // Lo que dice el enlace, tal cual: si no es de Tinkazo, lo dice el veredicto.
+  $("v-net").textContent = anclaDe(proof).tipo !== "libre" ? `${String(proof.net ?? "")} · #${String(proof.id ?? "")}` : t("noAnchor");
 }
 
 function renderResult(
   proof: Proof,
-  names: string[],
-  winners: number[],
-  signature: string,
-  randomness: string,
-  fromChain: boolean,
+  r: Revision,
   premio: string,
+  extra: { fromChain: boolean; fecha?: number; numero?: string; red?: string },
 ): void {
+  const names = r.nombres;
+  const winners = r.ganadores;
+  const signature = r.firma ?? "";
+  const randomness = r.semilla ?? "";
   $("sec-result").style.display = "block";
-  $("v-round").textContent = `${t("seed")} ${proof.round}`;
+  $("v-round").textContent = `${t("seed")} ${r.ronda}`;
   $("v-winners").innerHTML = winners
     .map((i) => {
       const name = names[i] ?? "";
@@ -480,8 +582,8 @@ function renderResult(
     })
     .join(" ");
   $("v-proof").textContent =
-    `round=${proof.round} · signature=${signature.slice(0, 20)}… · randomness=${randomness.slice(0, 20)}… · winners=[${winners.join(",")}]${fromChain ? " · on-chain ✓" : ""}`;
-  $<HTMLAnchorElement>("v-drand").href = roundUrl(proof.round);
+    `round=${r.ronda} · signature=${signature.slice(0, 20)}… · randomness=${randomness.slice(0, 20)}… · winners=[${winners.join(",")}]${extra.fromChain ? " · on-chain ✓" : ""}`;
+  $<HTMLAnchorElement>("v-drand").href = roundUrl(r.ronda);
   // Compartir otra vez: el enlace de esta página es el comprobante, tal como llegó
   // (sin la consulta: el idioma o el tema de quien lo mira no viajan); el mensaje y
   // la foto salen de lo que la página acaba de rehacer. Si llegó por un enlace
@@ -490,18 +592,19 @@ function renderResult(
   compartir.style.display = "";
   compartir.onclick = () =>
     abrirSorteo({
-      enlace: location.origin + location.pathname + location.hash,
+      enlace: enlaceVerificado,
       ganadores: winners.map((i) => names[i] ?? ""),
       total: names.length,
       premio,
-      ...(proof.sealedAt ? { fecha: proof.sealedAt } : {}),
-      ...(proof.id ? { numero: proof.id } : {}),
-      ...(proof.net ? { red: proof.net } : {}),
+      ...(extra.fecha ? { fecha: extra.fecha } : {}),
+      ...(extra.numero ? { numero: extra.numero } : {}),
+      ...(extra.red ? { red: extra.red } : {}),
     });
-  if (isAnchored(proof)) {
+  // El contrato, solo si es uno de Tinkazo: el enlace a uno ajeno sería darle crédito.
+  if (r.ancla.tipo === "oficial") {
     const a = $<HTMLAnchorElement>("v-contract");
     a.style.display = "inline-block";
-    a.href = `https://stellar.expert/explorer/${proof.net === "mainnet" ? "public" : "testnet"}/contract/${proof.contract}`;
+    a.href = `https://stellar.expert/explorer/${r.ancla.contrato.red === "mainnet" ? "public" : "testnet"}/contract/${r.ancla.contrato.contractId}`;
   }
 }
 
@@ -512,7 +615,7 @@ function renderResult(
  * traducen: son comandos.
  */
 function renderSteps(
-  proof: Proof,
+  round: number,
   hash: string,
   randomness: string,
   count: number,
@@ -524,8 +627,8 @@ function renderSteps(
     `  → ${hash}`,
     ``,
     `# 2. ${t("vStep2")}`,
-    `curl ${QUICKNET.relays[0]}/v2/chains/${QUICKNET.chainHash}/rounds/${proof.round}`,
-    `  ${t("vStepPublished")} ${new Date(roundTime(proof.round) * 1000).toISOString()}`,
+    `curl ${QUICKNET.relays[0]}/v2/chains/${QUICKNET.chainHash}/rounds/${round}`,
+    `  ${t("vStepPublished")} ${new Date(roundTime(round) * 1000).toISOString()}`,
     ``,
     `# 3. ${t("vStep3")}`,
     `randomness = sha256(${t("vStepSig")})`,

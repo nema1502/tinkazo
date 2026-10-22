@@ -2,10 +2,12 @@
 
 Registro de cada despliegue. La dirección vigente por red también vive en `src/stellar/deployments.json`; ambos se actualizan en el mismo commit. El contrato es inmutable: una nueva versión es una nueva fila y una nueva dirección.
 
+`deployments.json` es además **la lista oficial**: el contrato vigente de cada red (`contractId`) y los anteriores (`anteriores`), cada uno con el sha256 del `.wasm` que corre (`wasmSha256`). `verificar.html` y `evento.html` solo creen en el registro de uno de esos contratos, y solo si la instancia en la cadena corre ese `.wasm` (`src/stellar/oficiales.ts` y `src/stellar/registro.ts`, desde el 22 de octubre de 2026). Un contrato reemplazado pasa a `anteriores` y no se borra nunca: los comprobantes que se anclaron en él siguen verificando. Pasa con `ultimoId`, el último número que dio mientras era el del sitio: el contrato no tiene dueño y sigue aceptando sellos de cualquiera, y lo que se selle en él después no es un sorteo de Tinkazo (un anterior sin `ultimoId` no se acepta). Un contrato que no esté en la lista da rojo, aunque sea un despliegue legítimo del mismo código: por eso cada despliegue nuevo se agrega ahí en el mismo commit, con su `wasmSha256`.
+
 | Fecha | Red | Dirección del contrato | WASM (sha256) | Commit | Cuenta de despliegue | Notas |
 |---|---|---|---|---|---|---|
 | 2026-09-16 | testnet | `CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH` | `c9f3227ffb92ef04…` (11 688 bytes) | `fd558ce` | `GD6P7XJV…R526` | **Vigente.** Sorteo real `id=1`, ronda 32255926, ganadores `[11, 16, 0]` sobre la lista de `docs/vectors.json` |
-| 2026-09-16 | testnet | `CDVAI2RK6DCBP4VVMW5LP7VQ4QH7O2E5WHQQSRNVF367BDIORYDJ3LDJ` | `6008a5e42ca06079…` | `8c98866` | `GD6P7XJV…R526` | Reemplazado el mismo día: `seal`/`draw` extendían el TTL del código y el primer `seal` cobró 15,27 XLM |
+| 2026-09-16 | testnet | `CDVAI2RK6DCBP4VVMW5LP7VQ4QH7O2E5WHQQSRNVF367BDIORYDJ3LDJ` | `6008a5e42ca06079…` | `8c98866` | `GD6P7XJV…R526` | Reemplazado el mismo día: `seal`/`draw` extendían el TTL del código y el primer `seal` cobró 15,27 XLM. Sigue en `anteriores` de `deployments.json` (tiene un sorteo, el `id=1`) |
 | · | mainnet | pendiente (historia 5.1) | · | · | · | · |
 
 Transacciones del despliegue vigente (testnet, explorables en [stellar.expert](https://stellar.expert/explorer/testnet)):
@@ -69,7 +71,9 @@ gh attestation verify tinkazo-raffle_v0.1.0.wasm --repo nema1502/tinkazo \
   --signer-repo stellar-expert/soroban-build-workflow
 
 # 3. Desplegarlo. El script no despliega en mainnet un .wasm sin atestación de GitHub,
-#    y al final compara el hash de la red con el del archivo.
+#    y al final compara el hash de la red con el del archivo. Después, en el mismo commit,
+#    la dirección y el sha256 del .wasm van a deployments.md y a src/stellar/deployments.json:
+#    sin eso, la verificación no cree en el contrato nuevo.
 stellar network add mainnet --rpc-url https://mainnet.sorobanrpc.com \
   --network-passphrase "Public Global Stellar Network ; September 2015"
 scripts/deploy.sh mainnet --wasm tinkazo-raffle_v0.1.0.wasm

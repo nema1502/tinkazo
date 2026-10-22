@@ -1,11 +1,19 @@
 {
-  "$comment": "Direcciones vigentes del contrato tinkazo-raffle por red. Se actualiza junto con docs/deployments.md en el mismo commit.",
+  "$comment": "Los contratos tinkazo-raffle de cada red: el vigente (contractId, con el que sella el sitio) y los anteriores, que siguen valiendo para verificar lo que se selló en ellos. Es la lista oficial: verificar.html y evento.html solo creen en un registro de estos contratos, y solo si su instancia corre el .wasm de wasmSha256. Se actualiza junto con docs/deployments.md en el mismo commit; un contrato reemplazado pasa a anteriores, nunca se borra, con ultimoId: el último número que dio mientras era el del sitio (lo que se selle en él después no cuenta, y un anterior sin ultimoId no se acepta).",
   "testnet": {
     "contractId": "CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH",
     "deployedAt": "2026-09-16",
     "wasmSha256": "c9f3227ffb92ef04ad62911c6b4788f22999242ddaf80f0e638ba4dd97e60d1e",
     "rpcUrl": "https://soroban-testnet.stellar.org",
-    "networkPassphrase": "Test SDF Network ; September 2015"
+    "networkPassphrase": "Test SDF Network ; September 2015",
+    "anteriores": [
+      {
+        "contractId": "CDVAI2RK6DCBP4VVMW5LP7VQ4QH7O2E5WHQQSRNVF367BDIORYDJ3LDJ",
+        "deployedAt": "2026-09-16",
+        "wasmSha256": "6008a5e42ca06079c7a12dddbe3b33629245963853df65ad81df0c3d63eabd75",
+        "ultimoId": 1
+      }
+    ]
   },
   "mainnet": null
 }
