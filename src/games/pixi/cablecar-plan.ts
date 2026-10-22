@@ -188,7 +188,12 @@ export function planCableCar(names: string[], winners: readonly number[], rng: (
   const wTravel = 1;
   const wStop = 0.8;
   const deAUnoN = deAUno.length;
-  const wLast = (mordaza ? 2.6 : puerta ? 2.4 : 1.7) + 0.1 * deAUnoN;
+  // Si en la última no se baja nadie (dos personas, o el grupo del ganador de
+  // dos), la parada no tiene nada que mostrar fuera del giro: con dos personas
+  // y la ráfaga eran más de cinco segundos con la pantalla quieta (auditor
+  // exigente, 21 de octubre de 2026). Entonces es una parada como las otras,
+  // o lo justo para el giro.
+  const wLast = deAUnoN ? (mordaza ? 2.6 : puerta ? 2.4 : 1.7) + 0.1 * deAUnoN : mordaza ? 1.7 : puerta ? 1.5 : wStop;
   const W_STALL = 1.3;
   let wSum = apagon ? W_STALL : 0;
   for (let k = 1; k <= S; k++) {
