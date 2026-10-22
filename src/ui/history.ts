@@ -1,6 +1,6 @@
 import { $, esc } from "../dom";
 import { getLang, t } from "../i18n";
-import { borrarCorto, borrarTodos, cortosBorrables, puedeBorrar } from "../enlace-corto";
+import { alAcortar, borrarCorto, borrarTodos, cortosBorrables, puedeBorrar } from "../enlace-corto";
 import { eventoUrl, type SorteoDelEvento } from "../protocol/evento";
 import { network, txUrl } from "../stellar/config";
 import type { ChainRaffle } from "../stellar/seals";
@@ -465,6 +465,12 @@ function enlazarEventos(): void {
 }
 
 /* ------------------------------------------------------- los enlaces cortos */
+
+// Cuando sale un enlace corto (al compartir), Mis sorteos se vuelve a dibujar:
+// así aparece enseguida su "Borrar el enlace corto".
+alAcortar(() => {
+  if (shown) paint(shown);
+});
 
 /**
  * "Borrar el enlace corto": quien tenga el corto o su QR ya no lo puede abrir.
