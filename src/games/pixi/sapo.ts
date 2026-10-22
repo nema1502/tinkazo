@@ -5,7 +5,7 @@ import { beep, fanfare, note } from "../../sound";
 import { writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, shorten, winnersLabel } from "../overlay";
 import { CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
-import { cabe, centrar, encuadrar, type Caja, type Zona } from "./encuadre";
+import { cabe, centrar, encuadrar, unir, type Caja, type Zona } from "./encuadre";
 import { avatarColor } from "../../avatar";
 import { assignSlots } from "./slots";
 import { planQualifier } from "./qualifier";
@@ -689,8 +689,26 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       // por los dos costados y nombres debajo del relator (revisión visual). En
       // el celular no se acerca más que la mesa de todo el juego: ahí la mesa
       // se mide para que los nombres de los costados entren justo.
-      const caja = mesa(), zona = zonaFinal();
-      const z = Math.min(S.portrait() ? 1 : 1.5, cabe(caja, zona));
+      const zona = zonaFinal();
+      let caja = mesa();
+      let z = Math.min(S.portrait() ? 1 : 1.5, cabe(caja, zona));
+      // En la pantalla ancha el chip grande del ganador sale de su agujero hacia
+      // afuera de la mesa (hacia arriba en la fila de arriba): entra en el
+      // encuadre también, así el cartel no lo pisa ni el relator lo tapa. Con
+      // cincuenta personas el de la fila de arriba quedaba debajo del cartel.
+      const quien = whoAt(ultimo.slot);
+      const ch = chips[quien];
+      if (!S.portrait() && ch) {
+        const an = anchorOf(ultimo.slot);
+        const lp = P(labelAt(ultimo.slot));
+        const sc = 1.45 * 1.3;
+        const w = (anchoNombre[quien] ?? 0) * g.k * sc + 14 * g.k, h = (ch.height / Math.max(1e-6, ch.scale.y)) * sc + 14 * g.k;
+        const base = mesa();
+        for (let vuelta = 0; vuelta < 2; vuelta++) {
+          caja = unir([base, { x: lp.x - (w * an.ax) / z, y: lp.y + (h * (0.5 - an.ay)) / z - h / 2 / z, w: w / z, h: h / z }]);
+          z = Math.min(1.5, cabe(caja, zona));
+        }
+      }
       const v = centrar(caja, zona, g.w, g.h, z);
       cam.lookAt(v.x, v.y, z, 3);
       return;
