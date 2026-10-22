@@ -24,7 +24,12 @@
  *  - el show termina en el resultado en grande, sin un cuadro de la página en
  *    el medio, con la pantalla completa y el QR del comprobante; y "Cerrar"
  *    vuelve a la página, suelta la pantalla completa y deja "Siguiente premio"
- *    con el foco (desde el 21 de octubre de 2026, buscador de detalles D04).
+ *    con el foco (desde el 21 de octubre de 2026, buscador de detalles D04);
+ *  - el QR de ese resultado lleva el enlace corto, como el de "Mostrar en
+ *    grande", y no lo espera más de dos segundos. El servicio de enlaces cortos
+ *    es de mentira (la auditoría no crea enlaces de verdad): en las pantallas
+ *    impares contesta, y el QR tiene que leerse como el corto; en las pares no
+ *    contesta nunca, y el QR tiene que salir con el enlace largo a tiempo.
  *
  * Y dos casos más, en la primera pantalla:
  *
@@ -47,6 +52,7 @@
  */
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import jsQR from "jsqr";
 import { launch, sleep } from "./lib/browser.mjs";
 
 const args = process.argv.slice(2);
@@ -87,6 +93,7 @@ const MUESTREO = `(() => {
       tarjeta: !!document.querySelector('.game-card'),
       estadio: !!est && est.style.display === 'block',
       grande: !!document.querySelector('.pantalla'),
+      qr: !!document.querySelector('.pantalla .pantalla-qr img[src]'),
       fs: !!document.fullscreenElement,
     });
     if (!window.__parar) requestAnimationFrame(paso);
@@ -109,6 +116,55 @@ async function clicReal(page, sel) {
   }
 }
 
+/**
+ * El servicio de enlaces cortos, de mentira: así la auditoría no deja copias
+ * en el de verdad ni gasta su cupo por dirección. `contesta` da un enlace fijo;
+ * `colgado` no contesta nunca (`acortar` se rinde a los 5 s). Devuelve los
+ * pedidos que llegaron.
+ */
+const CORTO_ID = "Au000001";
+async function servicioCorto(page, modo) {
+  const pedidos = [];
+  page.ws.addEventListener("message", (ev) => {
+    const msg = JSON.parse(ev.data);
+    if (msg.method !== "Fetch.requestPaused" || !msg.params.request.url.startsWith("https://c.tinkazo.app/")) return;
+    pedidos.push(msg.params.request.method);
+    if (modo === "colgado") return;
+    const cuerpo = JSON.stringify({ id: CORTO_ID, borrar: "permiso-de-la-auditoria" });
+    void page
+      .send("Fetch.fulfillRequest", {
+        requestId: msg.params.requestId,
+        responseCode: 201,
+        responseHeaders: [
+          { name: "Content-Type", value: "application/json" },
+          { name: "Access-Control-Allow-Origin", value: new URL(base).origin },
+        ],
+        body: Buffer.from(cuerpo).toString("base64"),
+      })
+      .catch(() => undefined);
+  });
+  await page.send("Fetch.enable", { patterns: [{ urlPattern: "https://c.tinkazo.app/*" }] });
+  return pedidos;
+}
+
+/** Lo que dice el QR de una imagen de la página, leído con un lector aparte (jsQR), o null. */
+async function leerQr(page, sel) {
+  const raw = await page.eval(`(async () => {
+    const img = document.querySelector(${JSON.stringify(sel)});
+    if (!img || !img.src) return null;
+    const bmp = await createImageBitmap(await (await fetch(img.src)).blob());
+    const cv = document.createElement('canvas');
+    cv.width = bmp.width; cv.height = bmp.height;
+    const c = cv.getContext('2d');
+    c.drawImage(bmp, 0, 0);
+    const d = c.getImageData(0, 0, bmp.width, bmp.height);
+    return JSON.stringify({ w: bmp.width, h: bmp.height, data: Array.from(d.data) });
+  })()`);
+  if (!raw) return null;
+  const px = JSON.parse(raw);
+  return jsQR(Uint8ClampedArray.from(px.data), px.w, px.h)?.data ?? null;
+}
+
 /** La herramienta en modo libre, con la lista de ejemplo sellada y la espera corriendo. */
 async function sellar(page, v) {
   await page.send("Emulation.setDeviceMetricsOverride", { width: v.w, height: v.h, deviceScaleFactor: 1, mobile: v.celular, screenWidth: v.w, screenHeight: v.h });
@@ -127,12 +183,13 @@ async function sellar(page, v) {
 }
 
 /** El caso principal: la espera abierta cuando nace el número. */
-async function desemboca(browser, v) {
+async function desemboca(browser, v, modo) {
   const quien = `${v.etiqueta} ${tema}`;
-  console.log(`\n  ${quien} · la espera desemboca en el show`);
+  console.log(`\n  ${quien} · la espera desemboca en el show (servicio de enlaces cortos: ${modo === "contesta" ? "contesta" : "no contesta"})`);
   const page = await browser.open("about:blank");
   try {
     await sellar(page, v);
+    const pedidos = await servicioCorto(page, modo);
     await page.eval(MUESTREO);
     await clicReal(page, "#btn-espera");
     const abrio = await page.waitFor("document.querySelector('.espera')", 8000);
@@ -172,6 +229,8 @@ async function desemboca(browser, v) {
     const fin = await page.waitFor("document.getElementById('winner-box').style.display === 'block' && document.getElementById('stadium').style.display !== 'block' && document.querySelector('.pantalla')", 30000);
     check(`${quien} · después del show, el resultado en grande`, fin.ok);
     await sleep(800);
+    // El QR sale con el comprobante y el enlace corto, o con el largo a los 2 s: hasta ahí se sigue mirando.
+    const qr = await page.waitFor("document.querySelector('.pantalla .pantalla-qr img[src]')", 8000);
     await page.eval("window.__parar = true; true");
     const m2 = await page.eval("window.__muestras");
     const ultimoEstadio = m2.findLastIndex((x) => x.estadio);
@@ -179,8 +238,21 @@ async function desemboca(browser, v) {
     const entre = ultimoEstadio >= 0 && grande > 0 ? m2.slice(ultimoEstadio, grande + 1).filter((x) => !x.estadio && !x.grande) : [null];
     check(`${quien} · entre el estadio y el resultado en grande no se ve la página`, entre.length === 0, entre.length ? `${entre.length} cuadros sin nada encima` : "");
     if (conPantalla) check(`${quien} · y sigue en pantalla completa`, !!m2[m2.length - 1]?.fs);
-    const qr = await page.waitFor("document.querySelector('.pantalla .pantalla-qr img[src]')", 8000);
     check(`${quien} · el resultado en grande trae el QR del comprobante`, qr.ok);
+    if (qr.ok) {
+      // Desde que se ve el resultado en grande hasta que se ve el QR, y lo que dice el QR.
+      const conQr = m2.findIndex((x, i) => i >= grande && x.qr);
+      const tarda = grande > 0 && conQr >= 0 ? m2[conQr].t - m2[grande].t : NaN;
+      const leido = await leerQr(page, ".pantalla .pantalla-qr img");
+      const dice = `${leido ? `${leido.slice(0, 44)}…` : "no se pudo leer"} · a ${tarda} ms del resultado`;
+      if (modo === "contesta") {
+        const corto = new RegExp(`/c/${CORTO_ID}#[A-Za-z0-9_-]{22}$`).test(leido ?? "");
+        const altas = pedidos.filter((p) => p === "POST").length;
+        check(`${quien} · el QR lleva el enlace corto, como "Mostrar en grande", pedido una sola vez`, corto && altas === 1, `${dice} · ${altas} pedidos`);
+      } else {
+        check(`${quien} · sin respuesta del servicio, el QR sale con el enlace largo antes de 3 s`, /\/verificar\.html#/.test(leido ?? "") && tarda <= 3000, dice);
+      }
+    }
     await page.screenshot(join(outDir, `espera-${v.etiqueta}-${tema}-resultado-grande.png`));
     // Cerrarlo vuelve a la página: suelta la pantalla completa y deja lo que sigue con el foco.
     await clicReal(page, ".pantalla [data-cerrar]");
@@ -265,9 +337,9 @@ async function sinNumero(browser, v) {
 
 const browser = await launch({ width: 1280, height: 900 });
 try {
-  for (const v of vistas) {
+  for (const [i, v] of vistas.entries()) {
     try {
-      await desemboca(browser, v);
+      await desemboca(browser, v, i % 2 === 0 ? "contesta" : "colgado");
     } catch (e) {
       check(`${v.etiqueta} ${tema} · la espera desemboca en el show`, false, e.message);
     }

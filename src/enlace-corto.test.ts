@@ -10,11 +10,15 @@ import {
   cortoGuardado,
   cortosBorrables,
   descifrar,
+  enlaceParaElQr,
   esRuta,
   olvidarMemoria,
   puedeBorrar,
   rutaDe,
+  type Corto,
 } from "./enlace-corto";
+import { readFileSync } from "node:fs";
+import { T } from "./i18n";
 import { eventoUrl } from "./protocol/evento";
 import { PROOF_VERSION, proofUrl, type Proof } from "./protocol/proof";
 
@@ -392,5 +396,86 @@ describe("enlace corto: borrar todos los de este equipo", () => {
     }) as typeof fetch;
     expect(await borrarTodos({ fetch: caido })).toEqual({ borrados: 0, fallaron: 1 });
     expect(puedeBorrar(largo)).toBe(true);
+  });
+});
+
+describe("enlace corto: el QR del resultado en grande", () => {
+  // Nicolás, 21 de octubre de 2026: mostrar en grande arma el enlace corto, así
+  // el QR se lee desde el fondo de la sala. El final del show que arrancó desde
+  // la espera en grande es mostrarlo en grande: también lo pide, sin que el QR
+  // espere al servicio más que un momento.
+  const CORTO = `${ORIGEN}/c/Ab000001#${"A".repeat(22)}`;
+  const sale = (ms: number, corto: string | null): Promise<Corto | null> =>
+    new Promise((r) => setTimeout(() => r(corto ? { corto, id: "Ab000001", borrar: "permiso" } : null), ms));
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("si el corto sale a tiempo, el QR sale una sola vez, ya corto", async () => {
+    vi.useFakeTimers();
+    const p = enlaceParaElQr(largo, sale(300, CORTO), 2_000);
+    await vi.advanceTimersByTimeAsync(300);
+    const r = await p;
+    expect(r.ahora).toBe(CORTO);
+    await expect(r.despues).resolves.toBeNull();
+  });
+
+  it("si tarda, el QR sale con el largo a los dos segundos y cambia al corto cuando sale", async () => {
+    vi.useFakeTimers();
+    let listo = false;
+    const p = enlaceParaElQr(largo, sale(3_500, CORTO), 2_000).then((r) => {
+      listo = true;
+      return r;
+    });
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(listo).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    const r = await p;
+    expect(r.ahora).toBe(largo);
+    await vi.advanceTimersByTimeAsync(1_500);
+    await expect(r.despues).resolves.toBe(CORTO);
+  });
+
+  it("si el servicio falla, queda el largo, enseguida y sin cambiar después", async () => {
+    vi.useFakeTimers();
+    const p = enlaceParaElQr(largo, sale(200, null), 2_000);
+    await vi.advanceTimersByTimeAsync(200);
+    const r = await p;
+    expect(r.ahora).toBe(largo);
+    await expect(r.despues).resolves.toBeNull();
+  });
+
+  it("si el pedido tira, también queda el largo", async () => {
+    const r = await enlaceParaElQr(largo, Promise.reject(new Error("x")), 2_000);
+    expect(r.ahora).toBe(largo);
+    await expect(r.despues).resolves.toBeNull();
+  });
+
+  it("sin pedido, como en la demo, el largo y nada más, sin esperar", async () => {
+    const t0 = Date.now();
+    const r = await enlaceParaElQr(largo, null, 2_000);
+    expect(r.ahora).toBe(largo);
+    await expect(r.despues).resolves.toBeNull();
+    expect(Date.now() - t0).toBeLessThan(500);
+  });
+
+  it("con el servicio contestando, el corto que arma acortar", async () => {
+    const s = servicioFalso();
+    const r = await enlaceParaElQr(largo, acortar(largo, { fetch: s.f, origen: ORIGEN }), 2_000);
+    expect(r.ahora).toMatch(/^https:\/\/tinkazo\.app\/c\/Ab000000#[A-Za-z0-9_-]{22}$/);
+    expect(s.pedidos.filter((x) => x.metodo === "POST")).toHaveLength(1);
+  });
+
+  it("el final del show que arrancó desde la espera pide el corto, salvo en la demo", () => {
+    const draw = readFileSync("src/ui/draw.ts", "utf8");
+    const resultado = /function resultadoEnGrande[\s\S]*?\n}/.exec(draw)?.[0] ?? "";
+    expect(resultado).toMatch(/mostrarResultado\(enlace, \{ corto: !params\.has\("demo"\), volverA \}\)/);
+  });
+
+  it("los términos dicen que también se arma ahí, en los dos idiomas", () => {
+    expect(T.es.tmCortoB).toContain("al final de un sorteo que arrancó desde la espera en grande");
+    expect(T.en.tmCortoB).toContain("at the end of a draw started from the wait on the big screen");
+    expect(readFileSync("terminos.html", "utf8")).toContain("al final de un sorteo que arrancó desde la espera en grande");
   });
 });

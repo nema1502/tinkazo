@@ -3,6 +3,8 @@ import { onLangChange, t } from "../i18n";
 import { anchoringAvailable, accountUrl, network, shortAddress } from "../stellar/config";
 import { grifoApagado, hayAyudaDeFondos } from "../stellar/grifo";
 import { refreshFreezeLabel } from "./freeze";
+import { precalentarSello } from "./anchor";
+import { params } from "../state";
 import { guardarBorrador } from "./participants";
 import { clearSessionKind, loadSessionKind, pickRestore, saveSessionKind } from "../stellar/session-store";
 
@@ -63,19 +65,27 @@ const hayFreighter = (): Promise<boolean> =>
     .then((w) => w.freighterInstalled())
     .catch(() => false));
 
-let precargado = false;
+/** La cuenta para la que ya se preparó el sello. */
+let precargadoPara: string | null = null;
 /**
- * Con una sesión abierta lo próximo es sellar, y sellar necesita el SDK: se
- * baja unos segundos después, en un momento ocioso, para que el botón no lo
- * espere. Antes se bajaba al cargar la página, compitiendo con el arranque.
+ * Con una sesión abierta lo próximo es sellar, y sellar necesita el SDK y la
+ * interfaz del contrato, que se baja de la red: se preparan unos segundos
+ * después, en un momento ocioso, para que el botón no los espere. (El SDK, al
+ * principio, se bajaba al cargar la página, compitiendo con el arranque.) Hasta
+ * el 21 de octubre de 2026 la interfaz se bajaba recién al apretar, y el botón
+ * quedaba apagado, sin decir nada, de medio segundo a catorce (ver
+ * `clienteListo` en anchor.ts). Una vez por cuenta; en la demo, que no graba
+ * nada, no se le pide nada a la red de Stellar.
  */
 function precargarSello(): void {
-  if (!anchoringAvailable || precargado) return;
-  precargado = true;
+  const para = session?.address ?? null;
+  if (!anchoringAvailable || !para || precargadoPara === para) return;
+  precargadoPara = para;
   const bajar = (): void => {
     void import("../stellar/contract").catch(() => {
-      precargado = false;
+      precargadoPara = null;
     });
+    if (!params.has("demo") && canAnchor() && session?.address === para) precalentarSello();
   };
   setTimeout(() => {
     if (typeof requestIdleCallback === "function") requestIdleCallback(bajar, { timeout: 5000 });

@@ -36,9 +36,11 @@ const sdk = (): Promise<typeof import("./envio-sdk")> => import("./envio-sdk");
  * crea de fondo después de entrar y tarda unos segundos; `funding`, la carga con
  * el grifo de testnet cuando la comisión no la paga la app. `verifying` es la
  * pregunta de si un sello que se cortó llegó a entrar; `retrying`, la espera
- * antes de volver a probar cuando la red no contestó.
+ * antes de volver a probar cuando la red no contestó. `starting` es lo que dice
+ * el botón apenas se aprieta, antes que nada ("Preparando el sello…", ver
+ * `clienteListo`).
  */
-export type AnchorStep = "simulating" | "signing" | "sending" | "confirmed" | "funding" | "preparing" | "verifying" | "retrying";
+export type AnchorStep = "starting" | "simulating" | "signing" | "sending" | "confirmed" | "funding" | "preparing" | "verifying" | "retrying";
 
 /**
  * `detail` lleva el costo estimado en el paso de firma y el hash de la
@@ -84,6 +86,55 @@ const toHex = (b: Uint8Array | ArrayLike<number>): string =>
 /** Registra el sello en el contrato. Exige la firma del organizador. */
 export function sealOnChain(args: SealArgs, onStep: OnStep): Promise<SealResult> {
   return conFondos(() => sellar(args, onStep), onStep);
+}
+
+/* ------------------------------------------ lo que el sello necesita antes */
+
+/**
+ * Antes de "Armando la transacción…" hay que armar el cliente del contrato
+ * (`getClient`), que baja la interfaz del contrato de la red: dos consultas al
+ * RPC, una detrás de la otra, y la primera vez la consulta previa de CORS. Medido
+ * el 21 de octubre de 2026 en la testnet con la cuenta de prueba, del clic a
+ * "Armando la transacción…": de 0,6 a 1,1 s en cinco de ocho sellos, y 5,1, 14,2
+ * y 14,2 s en los otros tres, casi todo en una de esas consultas, con el botón
+ * apagado y diciendo todavía "Sellar en Stellar". No lo agregó la protección contra sellos
+ * duplicados (sin un intento pendiente no consulta nada): la versión de antes de
+ * esa protección midió lo mismo.
+ *
+ * Desde ese día el botón dice "Preparando el sello…" apenas se aprieta
+ * (`starting`), el cliente se arma de antemano al abrir la sesión
+ * (`precalentarSello`), y `freeze.ts` elige la ronda con el cliente ya armado:
+ * con 14 s de espera la ronda quedaba cerca y se pedía otra.
+ *
+ * Lo que se espera al cliente antes de elegir la ronda. Es `CLIENTE_VIEJO_MS` de
+ * contract.ts (no se importa: traería el SDK con la página): pasado ese tiempo,
+ * `sellar` pide un cliente nuevo en vez de esperar uno que quedó colgado.
+ */
+const ESPERA_DEL_CLIENTE_MS = 10_000;
+
+/** Espera a que el cliente del contrato esté armado, hasta `hastaMs`. Nunca tira: si falla, `sellar` lo vuelve a pedir y su error se cuenta como siempre. */
+export function clienteListo(hastaMs = ESPERA_DEL_CLIENTE_MS): Promise<void> {
+  let reloj: ReturnType<typeof setTimeout> | undefined;
+  const tope = new Promise<void>((r) => {
+    reloj = setTimeout(r, hastaMs);
+  });
+  const listo = import("../stellar/contract")
+    .then((m) => m.getClient())
+    .then(
+      () => undefined,
+      () => undefined,
+    );
+  return Promise.race([listo, tope]).finally(() => clearTimeout(reloj));
+}
+
+/**
+ * Con una sesión abierta lo próximo es sellar: el cliente del contrato y lo que
+ * usa el sello se bajan antes, con la página quieta (lo llama `wallet-ui.ts`). Así
+ * el botón pasa enseguida a "Armando la transacción…". Nunca tira.
+ */
+export function precalentarSello(): void {
+  void clienteListo();
+  for (const m of [import("./sello-seguro"), sdk(), envio(), import("../stellar/errores")]) m.catch(() => undefined);
 }
 
 /* ------------------------------------------------- cuánto vive cada envío */
@@ -472,25 +523,21 @@ function unwrap<T>(value: unknown): T {
 
 /* --------------------------------------------------------------- interfaz */
 
+/** La clave de cada paso. Firmar se dice según quién firma (ver `quienFirma`). */
+const CLAVE_DEL_PASO: Record<Exclude<AnchorStep, "signing">, string> = {
+  starting: "txStarting",
+  simulating: "txSimulating",
+  sending: "txSending",
+  confirmed: "txConfirmed",
+  funding: "txFunding",
+  preparing: "txPreparing",
+  verifying: "txVerifying",
+  retrying: "txRetrying",
+};
+
 /** Texto de cada paso, para el botón y la línea de estado. */
 export function stepLabel(step: AnchorStep): string {
-  return t(
-    step === "simulating"
-      ? "txSimulating"
-      : step === "signing"
-        ? firmaSinVentana ? "txSending" : "txSigning"
-        : step === "sending"
-          ? "txSending"
-          : step === "funding"
-            ? "txFunding"
-            : step === "preparing"
-              ? "txPreparing"
-              : step === "verifying"
-                ? "txVerifying"
-                : step === "retrying"
-                  ? "txRetrying"
-                  : "txConfirmed",
-  );
+  return t(step === "signing" ? (firmaSinVentana ? "txSending" : "txSigning") : CLAVE_DEL_PASO[step]);
 }
 
 /**

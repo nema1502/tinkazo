@@ -5,7 +5,7 @@ import { QUICKNET, bytesToHex, roundTime, targetRound } from "../protocol/quickn
 import { listHash } from "../protocol/canonical";
 import { prepararFirma } from "../protocol/firma";
 import { contractUrl, network } from "../stellar/config";
-import { type AnchorStep, escribirError, hideTxStatus, margenParaAprobar, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
+import { type AnchorStep, clienteListo, escribirError, hideTxStatus, margenParaAprobar, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
 import { precargarQr } from "./qr";
 import { recomendar } from "./recomendar";
 import { apruebaAMano, canAnchor, currentSession } from "./wallet-ui";
@@ -343,6 +343,10 @@ export async function freeze(): Promise<void> {
       btn.textContent = stepLabel(step);
       showTxStatus("seal-status", step, detail);
     };
+    // Enseguida, antes de cualquier espera: el botón quedaba apagado y diciendo
+    // "Sellar en Stellar" mientras se armaba el cliente del contrato, de medio
+    // segundo a catorce (`clienteListo` en anchor.ts). Y se va el error de antes.
+    onStep("starting");
     try {
       // Nunca dos sellos de la misma lista (`sello-seguro.ts`, D-17 en docs/architecture.md):
       // - Si la red tarda, la ronda elegida al hacer clic llega a la cadena con menos de los
@@ -352,14 +356,19 @@ export async function freeze(): Promise<void> {
       //   Si no se puede, queda guardado, y el próximo intento empieza por ahí.
       // - Con Freighter hay que aprobar a mano: la ronda va con 45 s más de margen.
       const [seguro, extra] = await Promise.all([import("./sello-seguro"), margenParaAprobar()]);
+      const contrato = network.contractId ?? "";
+      const previo = seguro.leerPendiente(session.address, hash, network.name, contrato);
+      // Sin un intento pendiente lo próximo es armar la transacción: la ronda se elige
+      // con el cliente del contrato listo (suele estarlo: se arma al abrir la sesión),
+      // para que bajarlo no se coma el margen. Con un intento pendiente, primero se
+      // averigua si entró, como siempre, y eso no necesita el cliente.
+      if (!previo) await clienteListo();
       const anclado = lead + extra;
       const rondaNueva = (): { round: number; ts: number } => {
         const ahora = Math.floor(Date.now() / 1000);
         return { round: targetRound(ahora, anclado), ts: ahora };
       };
       ({ round, ts } = rondaNueva());
-      const contrato = network.contractId ?? "";
-      const previo = seguro.leerPendiente(session.address, hash, network.name, contrato);
       const sello = await seguro.sellarSinDuplicar(
         { round, ts },
         {
