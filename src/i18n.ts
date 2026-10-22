@@ -945,7 +945,8 @@ export const T: Record<Lang, Dict> = {
     cortinaSin: "Ya sale el sorteo",
     cortinaGraba: "Grabando el sorteo para que nadie lo pueda cambiar…",
     cortinaNumero: "Está llegando el número que decide…",
-    ausenteBtn: "No está",
+    // Suelto, "No está" se leía en el proyector como que la persona no estaba (evaluación crítica de experiencia, hallazgo 8).
+    ausenteBtn: "¿No está? Sortear de nuevo",
     ausenteQ: "¿Sorteamos de nuevo su premio?",
     ausenteSi: "Sí, sortear de nuevo",
     ausenteNo: "Cancelar",
@@ -2278,7 +2279,7 @@ export const T: Record<Lang, Dict> = {
     cortinaSin: "The draw is coming",
     cortinaGraba: "Recording the draw so nobody can change it…",
     cortinaNumero: "The number that decides is on its way…",
-    ausenteBtn: "Not here",
+    ausenteBtn: "Not here? Draw again",
     ausenteQ: "Draw this prize again?",
     ausenteSi: "Yes, draw again",
     ausenteNo: "Cancel",
