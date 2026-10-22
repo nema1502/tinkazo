@@ -2,6 +2,7 @@ import { Container, Graphics, Sprite, Text } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
 import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, fanfare, note } from "../../sound";
+import { musicCue } from "../../music";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { writeStory } from "../drama";
 import { CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
@@ -52,6 +53,16 @@ const FINAL_HOLD = 0.5;
 const NEXT_GAP = 0.8;
 /** Hasta cuántos de pie se hace el encuadre de los finalistas. */
 const FINALISTAS = 4;
+/**
+ * Cuando nadie se sienta (la pregunta de calentamiento, con dos o tres de pie),
+ * los de pie dan un saltito en el momento en que se darían vuelta las cartas:
+ * la pantalla confirma que siguen todos. Sin eso, con dos personas, de la
+ * respuesta a la pregunta siguiente pasaban 4,2 s sin que se moviera nada
+ * (auditor exigente, 22 de octubre de 2026). Lo que dura, y cuánto sube, en
+ * fracción del alto de la carta.
+ */
+const SALTO = 0.5;
+const SALTO_ALTO = 0.12;
 
 type Kind = "reparto" | "pregunta" | "finalistas" | "empate";
 
@@ -159,20 +170,28 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
       steps.push(paso);
       pasosPregunta[ri]?.push(paso);
       const esUltimaGrande = grand && qi === Q - 1;
+      // La tensión de la revisión queda apenas debajo de la de la respuesta: un salto
+      // grande de tensión suelta el bombo y el platillo de la música, y acá no hace falta.
+      const calor = 0.35 + 0.4 * (qi / Math.max(1, Q));
       at(s0, () => {
-        // La tensión de la revisión queda apenas debajo de la de la respuesta: un salto
-        // grande de tensión suelta el bombo y el platillo de la música, y acá no hace falta.
-        S.say(L.cQuiRevisa(ri + qi), 0.35 + 0.4 * (qi / Math.max(1, Q)));
+        S.say(L.cQuiRevisa(ri + qi), calor);
         beep(note(9), 0.1, "triangle", 0.04);
       });
       // El tic de la revisión: como un reloj de cocina, dos por segundo. Da el pulso
       // de la espera sin señalar a nadie (el sonido no depende del nombre). En la última
       // pregunta de la ronda grande se va frenando de a poco, como el foco de antes.
+      // Cada tic sostiene la música en la tensión de la revisión, sin subirla: sin eso
+      // se caía hasta el piso en cada espera y quedaban el bombo y el bajo solos, que
+      // un parlante de proyector no reproduce (auditor de mezcla, 22 de octubre de
+      // 2026: perdía 3,6 LU sin los graves de 150 Hz; ahora 3,2).
       let tic = s0 + TIC_SONIDO;
       let espacio = TIC_SONIDO;
       for (let k = 1; tic < answer - 0.2; k++) {
         const enEse = tic;
-        at(enEse, () => beep(note(k % 2 ? 10 : 12), 0.05, "triangle", 0.05));
+        at(enEse, () => {
+          beep(note(k % 2 ? 10 : 12), 0.05, "triangle", 0.05);
+          musicCue(calor);
+        });
         espacio = esUltimaGrande ? espacio * 1.1 : espacio;
         tic += espacio;
       }
@@ -297,24 +316,46 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
   };
 
   /* ---------------------------------------------------------------- geometría */
+  /**
+   * La caja del relator, medida de verdad: su borde de arriba, sin el
+   * acercamiento con que entra cada frase. Una frase larga ocupa dos renglones
+   * y la caja crece hacia arriba; con la franja de un renglón, la de las reglas
+   * ("Vale el nombre de la lista, sin tildes…") tapaba los apellidos de la
+   * última fila justo cuando cada uno busca su nombre (evaluador, 22 de octubre
+   * de 2026). El tablero solo se achica, de a poco, y vuelve a medirse con cada
+   * cambio de pantalla: no respira con cada frase.
+   */
+  const relator = document.getElementById("commentary");
+  let techoRelator = Infinity;
+  const fondoDe = (h: number, k: number): number => Math.min(h - S.bottom() - 12 * k, techoRelator - 12 * k);
   const G = (): { w: number; h: number; k: number; top: number; bottom: number } => {
     const w = S.sw(), h = S.sh(), k = S.u();
     // En el celular la pregunta va debajo del contador, así que las cartas arrancan más abajo.
-    return { w, h, k, top: S.top() + (S.portrait() ? 175 : 112) * k, bottom: h - S.bottom() - 12 * k };
+    return { w, h, k, top: S.top() + (S.portrait() ? 175 : 112) * k, bottom: fondoDe(h, k) };
   };
   let g = G();
+  /**
+   * Las columnas del acomodo actual: se eligen al armarlo y no cambian hasta el
+   * próximo. Así, cuando la caja del relator crece, el tablero se achica de a
+   * poco en vez de reacomodarse de golpe (con 8, pasaba de dos filas a una en
+   * pleno reparto).
+   */
+  let colsAcomodo: { m: number; cols: number } | null = null;
   /** La grilla de `m` cartas que mejor llena el tablero: el tamaño de carta y dónde va cada una. */
   const grid = (m: number): { cw: number; ch: number; at: (i: number) => { x: number; y: number } } => {
     const areaW = g.w * 0.94, areaH = Math.max(60, g.bottom - g.top);
     const ratio = 1.32;
-    let best = { cols: 1, cw: 0 };
-    for (let cols = 1; cols <= m; cols++) {
-      const rows = Math.ceil(m / cols);
-      const cw = Math.min(areaW / cols, areaH / rows / ratio) * 0.9;
-      if (cw > best.cw) best = { cols, cw };
+    if (!colsAcomodo || colsAcomodo.m !== m) {
+      let best = { cols: 1, cw: 0 };
+      for (let cols = 1; cols <= m; cols++) {
+        const rows = Math.ceil(m / cols);
+        const cw = Math.min(areaW / cols, areaH / rows / ratio) * 0.9;
+        if (cw > best.cw) best = { cols, cw };
+      }
+      colsAcomodo = { m, cols: best.cols };
     }
-    const cw = Math.min(best.cw, 170 * g.k), ch = cw * ratio;
-    const cols = best.cols, rows = Math.ceil(m / cols);
+    const cols = colsAcomodo.cols, rows = Math.ceil(m / cols);
+    const cw = Math.min(Math.min(areaW / cols, areaH / rows / ratio) * 0.9, 170 * g.k), ch = cw * ratio;
     const gx = areaW / cols, gy = Math.min(areaH / rows, ch * 1.12);
     const x0 = (g.w - cols * gx) / 2, y0 = g.top + (areaH - rows * gy) / 2;
     return { cw, ch, at: (i) => ({ x: x0 + ((i % cols) + 0.5) * gx, y: y0 + (Math.floor(i / cols) + 0.5) * gy }) };
@@ -337,6 +378,8 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
   bannerB.anchor.set(0.5);
   banner.addChild(bannerBg, bannerBar, bannerA, bannerB);
   S.hud.addChild(banner);
+  /** El alto del cartel de la pregunta, sin escala: el sello del celular va debajo de él. */
+  let bannerAlto = 0;
   // El sello de la respuesta que decide, grande y en el medio del tablero.
   const bigStamp = new Container();
   const bigStampBg = new Graphics();
@@ -363,6 +406,9 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
   let latidoAntes = -1;
 
   const build = (): void => {
+    // Otra pantalla, otra caja del relator: se vuelve a medir, y las columnas se eligen de nuevo.
+    techoRelator = Infinity;
+    colsAcomodo = null;
     g = G();
     const k = g.k;
     // Un tablero liso con un marco de colores.
@@ -382,16 +428,16 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
       face.width = face.height = 66;
       face.position.set(W / 2, 47);
       // El nombre completo, en dos líneas: lo que se pregunta tiene que estar a la vista.
+      // Un solo texto con las dos líneas, porque es un nombre y se lee entero:
+      // en dos textos sueltos, con homónimos ("Carlos Choque" y "Carlos Choque 2")
+      // el nombre de pila solo no decía de quién era la carta, y con 50 el auditor
+      // de identificación no leía a nadie (22 de octubre de 2026).
       const partes = nm.trim().split(/\s+/);
       const lineas = partes.length > 1 ? [partes[0] as string, partes.slice(1).join(" ")] : [nm.trim()];
-      const label = new Container();
-      lineas.forEach((ln, j) => {
-        const tx = S.text(ln, { fontSize: 19, fontWeight: "900", fill: INK });
-        tx.anchor.set(0.5);
-        if (tx.width > W - 10) tx.scale.set((W - 10) / tx.width);
-        tx.position.set(W / 2, lineas.length > 1 ? 112 + j * 24 : 124);
-        label.addChild(tx);
-      });
+      const label = S.text(lineas.join("\n"), { fontSize: 19, fontWeight: "900", fill: INK, align: "center", lineHeight: 24 });
+      label.anchor.set(0.5);
+      if (label.width > W - 10) label.scale.set((W - 10) / label.width);
+      label.position.set(W / 2, 124);
       front.addChild(fondo, face, label);
       // El dorso: liso, con un signo de pregunta. Es lo que se ve de los que se sentaron.
       const back = new Graphics()
@@ -516,6 +562,7 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
     const padX = 30 * k, padY = 14 * k;
     const barra = c.cuenta !== null ? 16 * k : 0;
     const bw = inner + padX * 2, bh = padY * 2 + hA + gap + hB + barra;
+    bannerAlto = bh;
     banner.position.set(g.w / 2, S.top() + (S.portrait() ? 100 : 50) * k);
     bannerBg.clear().roundRect(-bw / 2 + 5 * k, -bh / 2 + 5 * k, bw, bh, 8 * k).fill(INK)
       .roundRect(-bw / 2, -bh / 2, bw, bh, 8 * k).fill(YELLOW).stroke({ width: 3 * k, color: INK });
@@ -543,6 +590,8 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
       layoutDeal = !lastLayout.startsWith(`${ri}:`);
       lastLayout = key;
       layoutT0 = tAll;
+      // El acomodo nuevo elige sus columnas contra el tablero de ahora.
+      colsAcomodo = null;
       for (const [i, c] of cards.entries()) from.set(i, { x: c.x, y: c.y, s: c.s });
     }
     const gr = grid(set.length);
@@ -550,6 +599,8 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
     const u = ease.inOutCubic(clamp((tAll - layoutT0) / durLayout, 0, 1));
     const gone = goneAt[ri] as Map<number, number>;
     const winnersBefore = new Set(prizes.slice(0, ri));
+    // La pregunta en la que no se sienta nadie: los de pie saltan en vez de darse vuelta las cartas.
+    const nadieSeSienta = paso.kind === "pregunta" && (r.questions[paso.qi] as Question | undefined)?.out.length === 0;
     fx.clear();
 
     cards.forEach((c, i) => {
@@ -636,7 +687,10 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
         // la sala no se queda quieta mientras se revisa el nombre.
         // La amplitud sigue al tamaño de la carta: con dos cartas grandes, un meneo chico no se ve.
         const vaiven = pos >= 0 && !layoutDeal ? Math.sin(tAll * 2.2 + i * 1.7) * Math.max(3, 0.06 * c.s * 158) * k : 0;
-        c.root.position.set(c.x, c.y + vaiven);
+        // Nadie se sienta: cada uno salta un poco después del anterior.
+        const fs = nadieSeSienta && pos >= 0 ? (tAll - paso.flip - pos * 0.08) / SALTO : -1;
+        const salto = fs > 0 && fs < 1 ? Math.sin(Math.PI * fs) * SALTO_ALTO * c.s * 158 : 0;
+        c.root.position.set(c.x, c.y + vaiven - salto);
         c.root.rotation = pos >= 0 && !layoutDeal ? Math.sin(tAll * 1.6 + i) * 0.025 : 0;
         c.root.scale.set(sx, c.s);
         c.root.alpha = alpha;
@@ -685,9 +739,30 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
       const bw2 = bigStampText.width + 44 * k, bh2 = bigStampText.height + 18 * k;
       bigStampBg.clear().roundRect(-bw2 / 2 + 6 * k, -bh2 / 2 + 6 * k, bw2, bh2, 10 * k).fill(INK)
         .roundRect(-bw2 / 2, -bh2 / 2, bw2, bh2, 10 * k).fill(q.has ? 0x17c3b2 : 0xff5cb3).stroke({ width: 5 * k, color: INK });
-      bigStamp.position.set(g.w / 2, (g.top + g.bottom) / 2);
+      // En el medio del tablero, salvo en vertical: ahí las dos últimas cartas
+      // quedan lado a lado justo en el medio y el sello les tapaba los nombres
+      // (evaluador, 22 de octubre de 2026). Va en la franja libre entre la
+      // pregunta y las cartas, achicado si no entra, y golpea con menos rebote.
+      let sy = (g.top + g.bottom) / 2, base = 1;
+      const cel = S.portrait();
+      if (cel) {
+        const arriba = banner.position.y + (bannerAlto / 2) * banner.scale.y;
+        let cartas = Infinity;
+        for (const i of set) {
+          const c = cards[i];
+          // El borde de arriba de la carta, con el meneo incluido.
+          if (c) cartas = Math.min(cartas, cam.toScreen(c.x, c.y - 79 * c.s - Math.max(3, 0.06 * c.s * 158) * k, g.w, g.h).y);
+        }
+        if (Number.isFinite(cartas) && cartas > arriba) {
+          // Girado, el sello ocupa más alto que su caja.
+          const alto = bh2 * Math.cos(0.12) + bw2 * Math.sin(0.12);
+          base = clamp((cartas - arriba - 8 * k) / alto, 0.45, 1);
+          sy = (arriba + cartas) / 2;
+        }
+      }
+      bigStamp.position.set(g.w / 2, sy);
       bigStamp.rotation = -0.12;
-      bigStamp.scale.set(1 + 1.4 * (1 - ease.outBack(clamp(sello / 0.25, 0, 1))));
+      bigStamp.scale.set(base * (1 + (cel ? 0.35 : 1.4) * (1 - ease.outBack(clamp(sello / 0.25, 0, 1)))));
     } else {
       bigStamp.visible = false;
     }
@@ -711,6 +786,9 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
       crown();
       tHold += dt * paceFactor();
     }
+    // El tablero, contra la caja del relator de verdad (ver `relator`).
+    if (relator?.textContent) techoRelator = Math.min(techoRelator, relator.offsetTop - 4);
+    g.bottom += (fondoDe(g.h, g.k) - g.bottom) * Math.min(1, dt * 8);
     aim();
     cam.update(dt);
     cam.apply(S.scene, S.sw(), S.sh(), now);
