@@ -1256,6 +1256,17 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       { x: 22 * k, y: S.top() + 10 * k, w: cw + 5 * k, h: ch + 5 * k },
       ...pills.map((p) => ({ x: p.x, y: p.y, w: p.w, h: p.h })),
     ];
+    // La placa de la cuadra, abajo a la derecha, y el bombo, arriba: en un
+    // celular con doscientos, un cartel con nombre quedaba encima de "CUADRA 10
+    // DE 12".
+    if (blockText.text) {
+      const pw = blockText.width + 16 * k, ph = blockText.height + 8 * k;
+      blocked.push({ x: blockText.x - pw + 8 * k, y: blockText.y - ph + 4 * k, w: pw, h: ph });
+    }
+    if (drum.visible) {
+      const b = drum.getBounds();
+      blocked.push({ x: b.x, y: b.y, w: b.width, h: b.height });
+    }
     const bounds = { w: g.w, h: g.h, top, bottom };
     // Mientras haya fraternidades enteras, sus carteles.
     const onlyOne = tAll >= lastFratExit || P.fratArches === 0;
