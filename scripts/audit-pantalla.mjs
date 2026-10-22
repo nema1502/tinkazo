@@ -25,9 +25,11 @@
  * Uso:
  *   pnpm build && pnpm preview --port 4606 --strictPort &
  *   node scripts/audit-pantalla.mjs <juego|todos> --base http://localhost:4606
- *       [--res 1280x720,1920x1080] [--out DIR] [--clip] [--compartir] [--semilla HEX]
+ *       [--res 1280x720,1920x1080] [--temas dark,light] [--out DIR] [--clip] [--compartir] [--semilla HEX]
  *
  * `--compartir` mide con el modo para compartir prendido (ver `state.ts`).
+ * `--temas` mide en esos temas (`?theme=`); sin él, en el del navegador, que
+ * en Chrome sin interfaz es el claro.
  *
  * Sale con código 0 si ningún juego tiene más de tres destellos por segundo ni
  * un texto sin contraste ni contorno, y con 1 si los tiene.
@@ -61,6 +63,7 @@ const outDir = opt("--out", join(tmpdir(), "tinkazo-pantalla"));
 const resoluciones = opt("--res", "1280x720").split(",").map((r) => r.split("x").map(Number));
 const clip = flag("--clip");
 const compartir = flag("--compartir");
+const temas = opt("--temas", "").split(",").filter(Boolean);
 const semilla = opt("--semilla", createHash("sha256").update("pantalla-1").digest("hex"));
 // El motor nuevo usa la placa de video, como en el resto de los auditores.
 process.env.TINKAZO_GPU = "1";
@@ -264,12 +267,12 @@ const resumen = (xs) => {
 };
 
 /** Abre la página de un juego a un tamaño, con el reloj cambiado y el estadio listo. */
-async function abrir(browser, juego, [W, H]) {
+async function abrir(browser, juego, [W, H], tema = "") {
   const page = await browser.open("about:blank");
   await page.send("Emulation.setDeviceMetricsOverride", { width: W, height: H, deviceScaleFactor: 1, mobile: false, screenWidth: W, screenHeight: H });
   const previo = compartir ? "try { sessionStorage.setItem('tinkazo.compartir', '1'); } catch (e) {}" : "";
   await page.send("Page.addScriptToEvaluateOnNewDocument", { source: PRELUDIO + ";" + previo });
-  await page.send("Page.navigate", { url: `${base}/?pose=${juego}&semilla=${semilla}&motor=pixi` });
+  await page.send("Page.navigate", { url: `${base}/?pose=${juego}&semilla=${semilla}&motor=pixi${tema ? `&theme=${tema}` : ""}` });
   const listo = await page.waitFor("window.__app && getComputedStyle(document.getElementById('stadium')).display === 'block'", 60_000);
   return listo.ok ? page : null;
 }
@@ -354,11 +357,11 @@ async function recorrer(page, alCartel = null) {
 }
 
 /** Una corrida de un juego en una resolución: medidas y la captura del cartel. */
-async function medirJuego(browser, juego, [W, H]) {
-  const carpeta = join(outDir, `${juego}-${W}x${H}`);
+async function medirJuego(browser, juego, [W, H], tema = "") {
+  const carpeta = join(outDir, `${juego}-${W}x${H}${tema ? `-${tema}` : ""}`);
   await mkdir(carpeta, { recursive: true });
-  const page = await abrir(browser, juego, [W, H]);
-  if (!page) return { juego, res: `${W}x${H}`, ok: false, motivo: "el estadio no apareció" };
+  const page = await abrir(browser, juego, [W, H], tema);
+  if (!page) return { juego, res: `${W}x${H}`, ...(tema ? { tema } : {}), ok: false, motivo: "el estadio no apareció" };
   const r = await recorrer(page, async (p) => {
     const { data } = await p.send("Page.captureScreenshot", { format: "png" });
     await writeFile(join(carpeta, "cartel.png"), Buffer.from(data, "base64"));
@@ -368,10 +371,11 @@ async function medirJuego(browser, juego, [W, H]) {
   const dest = destellos(r.serie);
   const sinContorno = r.contrastes.filter((c) => c.ratio < 4.5 && !c.contorno);
   const peor = r.contrastes.reduce((a, c) => (c.ratio < a.ratio ? c : a), { ratio: Infinity, s: "" });
-  if (clip && r.golpe >= 0) await clipCaptura(browser, juego, r.golpe, carpeta);
+  if (clip && r.golpe >= 0) await clipCaptura(browser, juego, r.golpe, carpeta, tema);
   return {
     juego,
     res: `${W}x${H}`,
+    ...(tema ? { tema } : {}),
     ok: true,
     cuadros: r.cuadros,
     golpeEnCuadro: r.golpe,
@@ -388,11 +392,11 @@ async function medirJuego(browser, juego, [W, H]) {
  * reproducible, así que los cuadros caen igual. Se toma desde 1,5 s antes del
  * golpe hasta 2 s después, un cuadro de cada dos (31 por segundo).
  */
-async function clipCaptura(browser, juego, detectado, carpeta) {
+async function clipCaptura(browser, juego, detectado, carpeta, tema = "") {
   const fr = join(carpeta, "clip-cuadros");
   await rm(fr, { recursive: true, force: true });
   await mkdir(fr, { recursive: true });
-  const page = await abrir(browser, juego, [1280, 720]);
+  const page = await abrir(browser, juego, [1280, 720], tema);
   if (!page) return;
   // El cartel se anota 0,6 s después del golpe (ver `at` en stage.ts).
   const golpe = Math.max(0, detectado - 38);
@@ -419,10 +423,12 @@ async function main() {
   const resultados = [];
   try {
     for (const juego of juegos) {
-      for (const res of resoluciones) {
-        const r = await medirJuego(browser, juego, res);
-        resultados.push(r);
-        console.log(JSON.stringify(r));
+      for (const tema of temas.length ? temas : [""]) {
+        for (const res of resoluciones) {
+          const r = await medirJuego(browser, juego, res, tema);
+          resultados.push(r);
+          console.log(JSON.stringify(r));
+        }
       }
     }
   } finally {

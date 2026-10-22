@@ -36,6 +36,23 @@ export const INK = 0x191919;
 export const CREAM = 0xf6efe2;
 export const YELLOW = 0xffc629;
 
+/**
+ * El contorno de un texto claro que va suelto sobre la escena, donde lo de
+ * atrás cambia (la tierra del patio, los gajos de la rueda, una cabina, la
+ * tribuna): un trazo de tinta maciza alrededor de cada letra, como los dorsales
+ * de la carrera. Con él la letra se lee en un proyector o por Zoom sobre
+ * cualquier color, que es lo que pide `audit-pantalla` (4,5 a 1 contra el
+ * fondo, o un contorno oscuro de 1,5 píxeles o más). Sólido y sin desenfoque,
+ * como manda `docs/marca.md`. PixiJS pinta el trazo debajo del relleno, así que
+ * la letra no adelgaza: el borde que se ve es la mitad del ancho, por fuera.
+ * `size` es el tamaño de letra del texto.
+ */
+export const contorno = (size: number, color: number = INK): { color: number; width: number; join: "round" } => ({
+  color,
+  width: Math.max(3, size / 4),
+  join: "round",
+});
+
 const hex = (css: string, fallback = 0xe93d9c): number => {
   const m = /^#?([0-9a-f]{6})$/i.exec(css.trim());
   return m ? parseInt(m[1] as string, 16) : fallback;
