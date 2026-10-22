@@ -218,8 +218,8 @@ La carrera actúa la historia entera. Los demás juegos toman del director el ar
 | Cierre de Libro | Susto | **La barrida.** La última barrida pasa por la tarjeta ganadora, que tiembla en rojo y suelta pedazos que se vuelven a juntar |
 | Cierre de Libro | Duelo | **El sello que duda.** El último sello flota sobre la ganadora ("¿se lo sellan a fulano?") y a último momento se va a la otra |
 | Aguayo (antes Pasanaku) | Susto | **El filo.** En el último apretón el bulto ganador sale empujado hasta el borde del aguayo, tiembla ahí con un aro rojo, y la tela lo vuelve a meter |
-| Trompo | Susto | **El cabeceo.** En el mano a mano el trompo ganador cabecea, casi se cae ("¡cabecea el de fulano!") y se endereza |
-| Trompo | Remontada | **La tiza.** A mitad de los choques le pegan y lo mandan contra la tiza: la roza y vuelve |
+| Trompo | Susto | **El cabeceo.** En el mano a mano uno de los dos cabecea fuerte, casi se cae ("¡cabecea el de fulano!") y se endereza. Es el que gana la mitad de las veces |
+| Trompo | Remontada | **La tiza.** A mitad de los choques a uno le pegan y lo mandan contra la tiza: la roza y vuelve. Se sortea entre los que siguen bailando un buen rato, así que "¡fulano casi se sale!" no anuncia al que gana |
 | Trompo | Duelo | **Un choque más.** El mano a mano dura cuatro choques en vez de tres |
 | Piñata | Susto | **El que se asoma.** En los últimos palos asoma por la rajadura uno de los dos caramelos que quedan hasta la rotura, y vuelve a entrar. Es el ganador la mitad de las veces: si fuera siempre él, "¡se agarra fulano!" lo anunciaba diez segundos antes del cartel |
 | Piñata | Remontada | **Al aire.** Dos palos que no le pegan a nada antes de los últimos |
