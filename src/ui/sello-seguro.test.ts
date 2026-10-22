@@ -90,7 +90,6 @@ function escenario(guiones: Guion[]) {
     sellar,
     resolver: (i: IntentoDeSello) => resolverSello(i, fuentes),
     rondaNueva: () => ({ round: targetRound(Math.floor(t / 1000), 45), ts: Math.floor(t / 1000) }),
-    faltan: (round: number) => roundTime(round) - t / 1000,
     sinGrabar: (e: unknown) => /tx-FAILED|Error\(Contract, #5\)/.test(e instanceof Error ? e.message : String(e)),
     guardarPendiente: (i: IntentoDeSello | null) => void pendientes.push(i),
     dormir,
@@ -238,6 +237,22 @@ describe("sellarSinDuplicar: el sello no se duplica nunca", () => {
     expect(r.raffleId).toBe(500n);
     expect(e.pasos.sellar).toHaveBeenCalledTimes(3);
     expect(avisos).toEqual(["reintentando", "reintentando"]);
+    expect(e.sellosDeLaLista()).toBe(1);
+  });
+
+  it("después de cada corte antes de mandar elige la ronda de nuevo, con el margen entero: no gasta un cambio de ronda en 'quedó cerca'", async () => {
+    const e = escenario([
+      { entra: "nunca", respuesta: "vuelve", antes: new TypeError("Load failed") },
+      { entra: "nunca", respuesta: "vuelve", antes: new TypeError("Load failed") },
+      { entra: "ya", respuesta: "vuelve" },
+    ]);
+    const rondaNueva = vi.fn(e.pasos.rondaNueva);
+    const r = await sellarSinDuplicar(e.inicial(), { ...e.pasos, rondaNueva });
+    expect(rondaNueva).toHaveBeenCalledTimes(2);
+    // Cada intento sale con la ronda recién elegida: 45 s o más desde que se eligió.
+    const rondas = e.pasos.sellar.mock.calls.map(([round]) => round);
+    expect(new Set(rondas).size).toBe(3);
+    expect(r.round).toBe(rondas[2]);
     expect(e.sellosDeLaLista()).toBe(1);
   });
 

@@ -348,7 +348,6 @@ export async function freeze(): Promise<void> {
             ),
           resolver: (intento) => resolverSelloEnLaRed(intento, onStep),
           rondaNueva,
-          faltan: (r) => roundTime(r) - Date.now() / 1000,
           sinGrabar: (e) => {
             if (selloSinGrabar(e)) console.warn("[tinkazo] el sello no entró; se reintenta con otra ronda", e);
             return selloSinGrabar(e);

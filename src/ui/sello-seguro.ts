@@ -36,8 +36,6 @@ export interface PasosDelSello {
   resolver: (intento: IntentoDeSello) => Promise<Resolucion>;
   /** Una ronda nueva, con el margen de siempre, contada desde ahora. */
   rondaNueva: () => { round: number; ts: number };
-  /** Cuántos segundos faltan para que nazca una ronda. */
-  faltan: (round: number) => number;
   /** Falló sin dejar nada en la cadena, de una forma que se arregla con otra ronda (`selloSinGrabar`). */
   sinGrabar: (e: unknown) => boolean;
   /** Guarda (o borra, con `null`) el intento del que no se sabe si entró. */
@@ -61,8 +59,6 @@ export class SelloSinConfirmar extends Error {
 const OTRAS_RONDAS = 2;
 /** Cuántas veces se reintenta un corte antes de mandar nada. */
 const OTRAS_POR_RED = 2;
-/** Por debajo de esto, la ronda ya no alcanza para volver a armar el sello (ver `MARGEN_DE_RONDA_S` en anchor.ts). */
-const MARGEN_PARA_REARMAR_S = 40;
 
 /**
  * Un corte de red que se puede reintentar sin miedo: pasó antes de mandar nada.
@@ -120,7 +116,12 @@ export async function sellarSinDuplicar(
         otrasPorRed++;
         p.avisar?.("reintentando");
         await dormir(1500 * otrasPorRed);
-        if (p.faltan(round) < MARGEN_PARA_REARMAR_S) ({ round, ts } = p.rondaNueva());
+        // No se mandó nada: la ronda se vuelve a elegir desde ahora, con el margen entero.
+        // Conservarla mientras "todavía alcanzara" competía por décimas de segundo con el
+        // chequeo de `sellar` (anchor.ts, el mismo umbral de 40 s): medido el 21 de octubre
+        // de 2026 en la testnet con la red cortada 4 s, caía en "la ronda quedó cerca" y
+        // gastaba uno de los dos cambios de ronda.
+        ({ round, ts } = p.rondaNueva());
         continue;
       }
       if (p.sinGrabar(e) && otrasRondas < OTRAS_RONDAS) {
