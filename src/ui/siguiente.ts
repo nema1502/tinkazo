@@ -1,7 +1,7 @@
 import { $ } from "../dom";
 import { onLangChange, t } from "../i18n";
 import { app } from "../state";
-import { type Paso, claveDelPaso, lineaDelPaso, pasoDe, relojDe } from "./pasos";
+import { type Paso, claveDelPaso, detalleDeLista, lineaDelPaso, pasoDe, relojDe } from "./pasos";
 
 /**
  * Lo que sigue: que en cada paso se vea cuál es la acción principal.
@@ -128,7 +128,9 @@ function calcular(): Toca {
   const boton = botonDe(paso);
   const restan = paso === 3 ? segundos() : 0;
   const clave = claveDelPaso(paso, { segundos: restan, apagado: boton?.disabled ?? false, ganadores: app.drawn?.winners.length ?? 1 });
-  const detalle = clave ? t(clave).replace("{n}", String(n)) : "";
+  let detalle = clave ? t(clave).replace("{n}", String(n)) : "";
+  // Antes de sellar, qué se sortea: sellar lo fija, y desde la barra no se ve el campo.
+  if (clave === "sigLista") detalle = detalleDeLista(detalle, (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "", t("sigSinPremio"));
   return { paso, boton, clave, detalle, reloj: restan > 0 ? relojDe(restan) : "" };
 }
 
@@ -338,6 +340,9 @@ export function initSiguiente(opciones: { segundos: () => number }): void {
   general.observe($("stadium"), { attributes: true, attributeFilter: ["style"] });
   // La lista cambia sin que nadie toque el sello: pasar de 1 a 2 nombres es pasar de paso.
   general.observe($("names"), { childList: true });
+  // El premio está en la línea del paso 2: se rehace al escribirlo o al tocar uno de los premios.
+  $("prize").addEventListener("input", render);
+  $("prize-chips").addEventListener("click", () => queueMicrotask(render));
   // El sello se apaga y se prende sin cambiar de botón; la puerta, al conectar la cuenta.
   general.observe($("sec-participants"), { attributes: true, subtree: true, attributeFilter: ["class"] });
   onLangChange(render);

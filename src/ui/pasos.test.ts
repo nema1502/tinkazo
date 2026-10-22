@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { T } from "../i18n";
-import { claveDelPaso, lineaDelPaso, pasoDe, relojDe } from "./pasos";
+import { claveDelPaso, detalleDeLista, lineaDelPaso, pasoDe, relojDe } from "./pasos";
 
 describe("en qué paso está el sorteo", () => {
   it("sin dos nombres todavía es la lista", () => {
@@ -59,6 +59,34 @@ describe("la línea de la barra", () => {
   it("nombra el paso, de qué se trata y, si corre, la cuenta", () => {
     expect(lineaDelPaso("Paso 3 de 4", "Esperando la ronda", "0:25")).toBe("Paso 3 de 4 · Esperando la ronda · 0:25");
     expect(lineaDelPaso("Paso 4 de 4", "Ya salió el ganador")).toBe("Paso 4 de 4 · Ya salió el ganador");
+  });
+
+  it("antes de sellar, la línea dice qué se sortea, o que no hay premio (D19)", () => {
+    expect(detalleDeLista("12 personas", "Termo", "sin premio")).toBe("12 personas · Termo");
+    expect(detalleDeLista("12 personas", "   ", "sin premio")).toBe("12 personas · sin premio");
+    expect(detalleDeLista("12 people", "", "no prize")).toBe("12 people · no prize");
+    // Los espacios de más no ocupan lugar.
+    expect(detalleDeLista("12 personas", "  Kit   de  bienvenida ", "sin premio")).toBe("12 personas · Kit de bienvenida");
+  });
+
+  it("un premio largo se corta con puntos suspensivos, sin partir un emoji", () => {
+    const largo = "Una notebook con su mochila y el cargador";
+    const d = detalleDeLista("12 personas", largo, "sin premio");
+    expect(d).toBe("12 personas · Una notebook con…");
+    expect(Array.from(d.split(" · ")[1] ?? "").length).toBeLessThanOrEqual(18);
+    expect(detalleDeLista("2 personas", "🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁", "-")).toBe(`2 personas · ${"🎁".repeat(17)}…`);
+  });
+
+  it("la línea del paso 2 entra en un celular de 320 px con un premio corto", () => {
+    // 292 px de ancho útil, a unos 7,5 px por letra en mayúsculas de 11 px con su espaciado.
+    for (const l of ["es", "en"] as const) {
+      const s = (k: string): string => T[l][k] as string;
+      const paso = s("sigPaso").replace("{n}", "2");
+      const lista = s("sigLista").replace("{n}", "18");
+      const linea = lineaDelPaso(paso, detalleDeLista(lista, "Termo", s("sigSinPremio")));
+      const sinPremio = lineaDelPaso(paso, detalleDeLista(lista, "", s("sigSinPremio")));
+      expect(Math.max(linea.length, sinPremio.length), l).toBeLessThanOrEqual(38);
+    }
   });
 
   it("los textos del indicador y de la barra existen en los dos idiomas, con su número", () => {

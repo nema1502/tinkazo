@@ -82,6 +82,7 @@ Es lo que mira `audit-flujo.mjs` en cada paso (lista cargada, sellada y esperand
 - [ ] El texto se lee: contraste de 4,5 a 1 (3 a 1 el texto grande), en los dos temas.
 - [ ] Mientras corre la cuenta, el botón dice cuánto falta; al llegar a cero se enciende, con pulso y sin él si se pide menos movimiento.
 - [ ] Con el botón fuera de la pantalla, la barra lo ofrece encendido y su clic sortea.
+- [ ] Antes de sellar, la línea de la barra dice qué se sortea ("Paso 2 de 4 · 12 personas · Termo") o "sin premio": sellar fija el premio, y desde la barra no se ve el campo. Un premio largo se corta con puntos suspensivos y la línea entra en 320 px (`scripts/audit-detalles.mjs`, D19).
 - [ ] Si el sellado o el sorteo falla (la red de Stellar o la de la ronda no contestan), el motivo se ve en la pantalla aunque se haya apretado la barra, y queda a la vista una acción para reintentar. El mensaje se escribe junto al botón de verdad, que con la barra puesta está fuera de la pantalla: por eso hay que llevarlo a la vista.
 - [ ] La barra se va con el estadio, con la espera en grande y con una ventana abierta, y vuelve al cerrarlas.
 - [ ] Con la espera en grande abierta cuando nace el número, el show arranca solo y entre la espera y el estadio no se ve la página; con Freighter, una sola acción grande; si algo falla, el motivo y el reintento en la espera; y el show termina en el resultado en grande, con la pantalla completa, hasta que quien organiza lo cierra (`scripts/audit-espera.mjs`).

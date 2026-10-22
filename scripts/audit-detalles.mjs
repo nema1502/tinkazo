@@ -428,6 +428,41 @@ const DETALLES = {
     },
   },
 
+  D19: {
+    que: "la barra dice qué se sortea antes de sellar",
+    async correr(browser, v, tema, quien) {
+      const page = await abrir(browser, v, tema);
+      try {
+        await libre(page);
+        await escribir(page, Array.from({ length: 12 }, (_, i) => `Nombre ${i + 1}`).join("\n"));
+        await page.eval("window.scrollTo(0, 0); true");
+        await sleep(900);
+        const linea = () => page.eval("document.getElementById('sig-paso').textContent");
+        const sin = await linea();
+        check(`${quien} · sin premio, la línea lo dice`, /12 personas · sin premio$/.test(sin), `"${sin}"`);
+        await captura(page, "D19", v, tema, "sin-premio");
+        await page.eval("(() => { const p = document.getElementById('prize'); p.value = 'Termo'; p.dispatchEvent(new Event('input', { bubbles: true })); return true; })()");
+        await sleep(200);
+        const con = await linea();
+        await page.eval("[...document.querySelectorAll('#prize-chips button')].find((b) => /Polera/.test(b.textContent))?.click(); true");
+        await sleep(200);
+        const chip = await linea();
+        check(`${quien} · al escribir el premio o tocar uno, la línea cambia`, /· Termo$/.test(con) && /· Polera$/.test(chip), `"${con}" → "${chip}"`);
+        await captura(page, "D19", v, tema, "con-premio");
+        if (v.celular) {
+          // El ancho más chico que se mira (audit-flujo --solo-anchos): la línea entra entera, con un premio corto.
+          await page.send("Emulation.setDeviceMetricsOverride", { width: 320, height: 700, deviceScaleFactor: 1, mobile: true, screenWidth: 320, screenHeight: 700 });
+          await page.eval("window.scrollTo(0, 0); true");
+          await sleep(900);
+          const m = JSON.parse(await page.eval("JSON.stringify((() => { const e = document.getElementById('sig-paso'); return { entra: e.scrollWidth <= e.clientWidth + 1, barra: document.getElementById('siguiente').classList.contains('on'), texto: e.textContent, scroll: document.documentElement.scrollWidth > innerWidth }; })())"));
+          check(`${quien} · a 320 px la línea entra entera y no hay scroll de costado`, m.entra && !m.scroll, `"${m.texto}"${m.barra ? " (con la barra)" : ""}`);
+        }
+      } finally {
+        await page.send("Page.close").catch(() => undefined);
+      }
+    },
+  },
+
   D08: {
     que: '"Cargar ejemplo" solo con el cuadro vacío',
     async correr(browser, v, tema, quien) {

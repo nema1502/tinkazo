@@ -1567,7 +1567,9 @@ export const T: Record<Lang, Dict> = {
     pasoHecho: "hecho", pasoActual: "paso actual",
     sigRegion: "Lo que sigue",
     sigPaso: "Paso {n} de 4",
-    sigLista: "Lista de {n} personas",
+    // Con el premio, o "sin premio", detrás (pasos.ts, detalleDeLista): sellar lo fija (21 de octubre de 2026, D19).
+    sigLista: "{n} personas",
+    sigSinPremio: "sin premio",
     sigSellando: "Sellando la lista",
     sigEspera: "Esperando la ronda",
     sigRonda: "La ronda ya nació",
@@ -2835,7 +2837,9 @@ export const T: Record<Lang, Dict> = {
     pasoHecho: "done", pasoActual: "current step",
     sigRegion: "What's next",
     sigPaso: "Step {n} of 4",
-    sigLista: "List of {n} people",
+    // With the prize, or "no prize", after it (pasos.ts, detalleDeLista): sealing fixes it (Oct 21, 2026, D19).
+    sigLista: "{n} people",
+    sigSinPremio: "no prize",
     sigSellando: "Sealing the list",
     sigEspera: "Waiting for the round",
     sigRonda: "The round is out",
