@@ -9,7 +9,7 @@ import { grabador } from "./delatores-grabador.mjs";
  */
 describe("el guion del grabador", () => {
   it("es JavaScript válido, con y sin opciones", () => {
-    for (const cfg of [{}, { numeros: true }, { trazos: [{ color: 0xffc629, alpha: 0.9 }] }, { dibujar: true, turbo: 60, cada: 2 }]) {
+    for (const cfg of [{}, { numeros: true }, { trazos: [{ color: 0xffc629, alpha: 0.9 }] }, { trazos: [{ color: 0xf6efe2, capa: 1 }], escena: true }, { dibujar: true, turbo: 60, cada: 2 }]) {
       // eslint-disable-next-line no-new-func
       expect(() => new Function(grabador(cfg))).not.toThrow();
     }
@@ -22,6 +22,15 @@ describe("el guion del grabador", () => {
     expect(s).toContain("const crearReconocedor = function crearReconocedor(nombres)");
     // Por defecto no dibuja: el motor calcula todo igual y la corrida va varias veces más rápido.
     expect(grabador()).toContain('"dibujar":false');
+  });
+
+  it("la escena y la capa de los contornos, solo si se piden", () => {
+    expect(grabador()).toContain('"escena":false');
+    const s = grabador({ trazos: [{ color: 0xf6efe2, capa: 1 }], escena: true });
+    expect(s).toContain('"escena":true');
+    expect(s).toContain('"capa":1');
+    expect(s).toContain("q.capa !== capa");
+    expect(s).toContain("rec.escena.push");
   });
 
   it("engancha lo que ve la sala: la aplicación de PixiJS, el relator y el reloj", () => {

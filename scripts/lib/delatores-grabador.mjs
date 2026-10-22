@@ -33,12 +33,19 @@ import { crearReconocedor } from "./delatores-nombres.mjs";
  *   el puesto en la lista (las bolas de la tómbola). Los de la interfaz no:
  *   ahí están los contadores.
  * - `marcas`: textos que no son nombres pero hay que seguir ("¡Casi!"), como fuentes de expresiones regulares.
- * - `trazos`: contornos que hay que seguir, por color y opacidad
- *   (`{ color: 0xffc629, alpha: 0.9 }`): el foco que salta de carta en carta
- *   en "¿Quién es?" es un rectángulo amarillo, no un texto.
+ * - `trazos`: contornos que hay que seguir, por color, opacidad y capa
+ *   (`{ color: 0xffc629, alpha: 0.9 }`, `{ color: 0xf6efe2, capa: 1 }`): el
+ *   foco que saltaba de carta en carta en "¿Quién es?" era un rectángulo
+ *   amarillo, y el aro de los puestos que se prenden en el trueque es un
+ *   círculo crema; ninguno es un texto. Sin `alpha`, cualquier opacidad; sin
+ *   `capa`, cualquiera de las tres que se leen (1 es la escena).
+ * - `escena`: si se graba, en cada cuadro, cómo lleva la cámara la escena a la
+ *   pantalla (dónde cae su origen y sus dos ejes), para pasar lo que se ve a la
+ *   escena: en el trueque, de qué puesto es cada aro aunque su nombre no esté
+ *   a la vista.
  */
 export function grabador(cfg = {}) {
-  const c = { turbo: 20, cada: 4, dibujar: false, numeros: false, marcas: [], trazos: [], ...cfg };
+  const c = { turbo: 20, cada: 4, dibujar: false, numeros: false, marcas: [], trazos: [], escena: false, ...cfg };
   return `(() => {
   const CFG = ${JSON.stringify(c)};
   const crearReconocedor = ${crearReconocedor.toString()};
@@ -49,7 +56,7 @@ export function grabador(cfg = {}) {
   window.requestAnimationFrame = (cb) => { cbs.set(++id, cb); return id; };
   window.cancelAnimationFrame = (x) => { cbs.delete(x); };
   performance.now = () => virt;
-  const rec = { t0: null, W: innerWidth, H: innerHeight, frames: [], nums: [], marcas: [], trazos: [], subs: [], marks: [], revelado: null, fin: null, fallas: 0, errores: 0, apps: 0 };
+  const rec = { t0: null, W: innerWidth, H: innerHeight, frames: [], nums: [], marcas: [], trazos: [], escena: [], subs: [], marks: [], revelado: null, fin: null, fallas: 0, errores: 0, apps: 0 };
   window.__delator = rec;
   let app = null;
   globalThis.__PIXI_APP_INIT__ = (a) => {
@@ -70,6 +77,7 @@ export function grabador(cfg = {}) {
   let ultimas = {};
   const r1 = (v) => Math.round(v * 10) / 10;
   const r3 = (v) => Math.round(v * 1000) / 1000;
+  const r4 = (v) => Math.round(v * 10000) / 10000;
   function recorrer(nodo, alfa, out, capa, contornos) {
     if (!nodo || nodo.destroyed || !nodo.visible || nodo.renderable === false) return;
     const a = alfa * (nodo.alpha ?? 1);
@@ -84,6 +92,7 @@ export function grabador(cfg = {}) {
         const st = ins.data.style;
         CFG.trazos.forEach((q, k) => {
           if (st.color !== q.color) return;
+          if (q.capa !== undefined && q.capa !== capa) return;
           if (q.alpha !== undefined && Math.abs((st.alpha ?? 1) - q.alpha) > 0.011) return;
           const b = ins.data.path.bounds;
           if (!b || !Number.isFinite(b.minX)) return;
@@ -130,6 +139,10 @@ export function grabador(cfg = {}) {
     const escena = capas[1];
     const z = escena ? r3(escena.scale.x) : 1;
     rec.frames.push([r3(t), z, ...[...mejor.values()].flat()]);
+    if (CFG.escena && escena) {
+      const o = escena.toGlobal({ x: 0, y: 0 }), a = escena.toGlobal({ x: 1, y: 0 }), b = escena.toGlobal({ x: 0, y: 1 });
+      rec.escena.push([r3(t), r1(o.x), r1(o.y), r4(a.x - o.x), r4(a.y - o.y), r4(b.x - o.x), r4(b.y - o.y)]);
+    }
     if (CFG.numeros) rec.nums.push([r3(t), ...[...nums.values()].flat()]);
     if (marcas.length) rec.marcas.push([r3(t), ...marcas]);
     if (contornos && contornos.length) rec.trazos.push([r3(t), ...contornos]);
