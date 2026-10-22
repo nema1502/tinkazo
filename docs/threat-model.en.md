@@ -9,7 +9,7 @@ The product promises that **anyone can check a draw**. This document says what b
 | Asset | Why it matters |
 |---|---|
 | The draw result | It is the product |
-| The participant list | Real people's names; they never need to reach a server |
+| The participant list | Real people's names; they never need to reach a server in readable form. The only stored copy is the short link's, encrypted in the browser |
 | The receipt | It lets a third party redo the draw years later |
 | The organizer's account | It signs the transactions and pays the fees |
 
@@ -23,6 +23,7 @@ The product promises that **anyone can check a draw**. This document says what b
 | A drand relay | Serve a round or not | Forge a round: the signature is checked against the public key |
 | The drand network | Sign rounds | Cheat without compromising the League of Entropy threshold |
 | Whoever hosts the site | Serve a different site | Change what is already on chain |
+| The short-link service (`c.tinkazo.app`, Tinkazo's, on Cloudflare) | Store and return a receipt's encrypted copy; see the IP address of whoever creates or opens it, when, and its size; delete it on request | Read it: the key travels in the link's fragment and never reaches it. Alter it unnoticed: the encryption authenticates it and the page recomputes the draw |
 | The venue's network | Cut or intercept traffic | Forge a signature |
 
 ## Covered
@@ -35,7 +36,8 @@ The product promises that **anyone can check a draw**. This document says what b
 - **Picking a round that already exists:** `seal` requires the round to be born at least 30 seconds later, and at most 30 days.
 - **A game showing another winner:** games receive the winner already decided, and an auditor checks every game against the protocol.
 - **The organizer holding back a result they dislike:** `draw` needs no permission; anyone can finalize, and the verification page offers it.
-- **Names leaking:** what goes on chain is the list's fingerprint, the number of entries, how many winners, the round, the seal's time and block number, the prize or title you wrote, the organizer's address and the draw's number; and, when drawn, the proof the round published, the number the round decided, the draw's time, whether it has been drawn, its block number and the winners' positions. Names never go on chain; the receipt travels in the URL fragment, which browsers don't send to servers; QR codes and avatars are drawn in the browser. During a draw, the only request that leaves the browser is the beacon round.
+- **Names leaking:** what goes on chain is the list's fingerprint, the number of entries, how many winners, the round, the seal's time and block number, the prize or title you wrote, the organizer's address and the draw's number; and, when drawn, the proof the round published, the number the round decided, the draw's time, whether it has been drawn, its block number and the winners' positions. Names never go on chain; the receipt travels in the URL fragment, which browsers don't send to servers; QR codes and avatars are drawn in the browser. During a draw, the only request that leaves the browser is the beacon round. Sharing or showing the result big then makes a short link, which stores on Cloudflare a copy encrypted in the browser (AES-GCM, a fresh 16-byte key per link) with the key only in the link's fragment.
+- **A short link pointing somewhere else:** opening one only accepts a `verificar.html` or `evento.html` path on the same site.
 - **Taking over the contract:** it has no admin, cannot be upgraded and holds no funds. There is no privilege to take.
 
 ## Open, and said out loud
@@ -50,6 +52,8 @@ The product promises that **anyone can check a draw**. This document says what b
 
 **Third-party mainnet RPC.** `mainnet.sorobanrpc.com` is not run by the SDF. The endpoint lives in one place so it can be swapped in one line; a fallback list with retries is pending before mainnet.
 
+**Short links.** Anyone with the link, the photo or the QR code sees the whole list, as with the long link, and the short link's QR scans easily from the back of the room. The copy doesn't expire, so the draw can be checked again; the interface doesn't delete it (that cut verification for everyone who had it), and Tinkazo deletes it on request at hola@tinkazo.app with the Worker's secret. If the service is down, sharing falls back to the long link within five seconds, but a short link already shared won't open until it's back. Creating links is rate-limited (256 KB each, 60 per hour per IP address, 20,000 a day), which doesn't stop someone from spending the daily quota or, since nothing expires, filling the free plan's 5 GB.
+
 **drand's long-term operation.** Randamu, drand's corporate steward, closed in February 2026. The network is run by the League of Entropy, the four relays answer, and the risk is watched, not solved.
 
 ## Decided not to do
@@ -57,6 +61,7 @@ The product promises that **anyone can check a draw**. This document says what b
 | Decision | Why |
 |---|---|
 | Encrypt the list in the receipt | Without the names nobody can recompute, and recomputing is the product |
-| Keep anything on a server | A server is something you'd have to trust |
+| Keep anything readable on a server | A server is something you'd have to trust. Since October 21, 2026 there is one, for short links, and it only holds encrypted copies without the key and decides nothing |
+| Offer a button to delete a short link | Deleting it leaves everyone who got it without a receipt and can look like hiding a result. It is deleted on request |
 | Make the contract upgradable | An upgradable contract has an admin who can change the rules later |
 | Use the ledger hash as seed | A validator can influence it, and it leaves no signature a third party can check years later |

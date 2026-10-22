@@ -142,7 +142,7 @@ Andean music with a beat plays in the background and follows the tension (the Ch
 
 For mainnet: one open draw per account, public cancellation, the round set by the contract and a sorted list in the protocol. The full STRIDE analysis is in [docs/amenazas.md](docs/amenazas.md) ([summary in English](docs/threat-model.en.md)), and the plain-language version on the [security page](https://tinkazo.app/seguridad.html).
 
-**Privacy.** The chain keeps the list's fingerprint and other draw data, never the names. The proof travels in the URL fragment, which browsers do not send to servers. The site counts visits with Vercel Web Analytics, without cookies, and cuts every address down to its path before counting ([src/analytics.ts](src/analytics.ts)). Sharing with a short link stores on Cloudflare a copy encrypted in the browser, with the key only in the link's fragment: Tinkazo can't read it, and it can be deleted from My draws ([workers/enlaces](workers/enlaces/README.md)).
+**Privacy.** The chain keeps the list's fingerprint and other draw data, never the names. The proof travels in the URL fragment, which browsers do not send to servers. The site counts visits with Vercel Web Analytics, without cookies, and cuts every address down to its path before counting ([src/analytics.ts](src/analytics.ts)). Sharing or showing the result big makes a short link, which stores on Cloudflare a copy encrypted in the browser, with the key only in the link's fragment: Tinkazo can't read it. It doesn't expire, so the draw can be checked again; if someone needs it deleted, they ask at hola@tinkazo.app ([workers/enlaces](workers/enlaces/README.md)).
 
 ## How it compares
 

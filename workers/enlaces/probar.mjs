@@ -2,6 +2,10 @@
 //   node probar.mjs http://localhost:8787        (wrangler dev)
 //   node probar.mjs https://c.tinkazo.app        (producción)
 // Crea un enlace, lo lee, prueba los límites y lo borra. No deja nada guardado.
+//
+// El borrado a pedido (el secreto de administración) se prueba solo si está a
+// mano en el entorno; si no, se saltea:
+//   ADMIN_TOKEN=<secreto> node probar.mjs https://c.tinkazo.app
 
 const base = (process.argv[2] ?? "http://localhost:8787").replace(/\/$/, "");
 const SITIO = "https://tinkazo.app";
@@ -54,6 +58,26 @@ r = await fetch(`${base}/v1/${alta?.id}`, { method: "DELETE", headers: { Origin:
 ver("borrar con el token da 204", r.status === 204, `estado ${r.status}`);
 r = await fetch(`${base}/v1/${alta?.id}`);
 ver("después de borrar da 404", r.status === 404, `estado ${r.status}`);
+
+// Borrar a pedido, con el secreto de administración del Worker.
+const admin = process.env.ADMIN_TOKEN ?? "";
+if (!admin) {
+  console.log("SALTA el borrado a pedido: no hay ADMIN_TOKEN en el entorno");
+} else {
+  r = await fetch(`${base}/v1`, { method: "POST", headers: { Origin: SITIO }, body: datos });
+  const otro = r.status === 201 ? await r.json() : null;
+  ver("crear otro enlace para borrarlo a pedido da 201", r.status === 201, `estado ${r.status}`);
+  r = await fetch(`${base}/v1/${otro?.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${admin}x` } });
+  ver("un secreto equivocado no borra (403)", r.status === 403, `estado ${r.status}`);
+  r = await fetch(`${base}/v1/${otro?.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${admin}` } });
+  ver("borrar con el secreto de administración da 204", r.status === 204, `estado ${r.status}`);
+  r = await fetch(`${base}/v1/${otro?.id}`);
+  ver("después del borrado a pedido da 404", r.status === 404, `estado ${r.status}`);
+  r = await fetch(`${base}/v1/${otro?.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${admin}` } });
+  ver("borrar a pedido lo que ya no está da 404", r.status === 404, `estado ${r.status}`);
+  // Si algo falló a mitad de camino, que no quede guardado.
+  if (otro?.borrar) await fetch(`${base}/v1/${otro.id}`, { method: "DELETE", headers: { Authorization: `Bearer ${otro.borrar}` } });
+}
 
 console.log(fallas ? `\n${fallas} fallas` : "\nTodo bien");
 process.exit(fallas ? 1 : 0);

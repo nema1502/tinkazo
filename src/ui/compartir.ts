@@ -310,12 +310,12 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
       nota.style.display = "";
     }
     // Lo que se comparte, dicho: la foto y el enlace abren la lista entera; el
-    // corto deja una copia protegida, que en la herramienta se borra desde Mis sorteos.
-    const misSorteos = !!document.getElementById("sec-history");
+    // corto deja guardada una copia que no vence, y si hace falta borrarla se
+    // pide a Tinkazo (la interfaz no la borra: cortaría la verificación de todos).
     priv.textContent = [
       cad(lang, "cmpPrivLista"),
       listo.corto ? cad(lang, "cmpPrivCorto") : "",
-      listo.corto && misSorteos ? cad(lang, "cmpPrivBorrar") : "",
+      listo.corto ? cad(lang, "cmpPrivBorrar") : "",
     ]
       .filter(Boolean)
       .join(" ");
