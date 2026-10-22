@@ -65,9 +65,11 @@ function invariantes(n: number, ganadores: number[], p: Trueque): void {
       expect(p.puestos[s]?.da).toBe(e.productos[t + 1]);
       expect(e.productos[t]).not.toBe(e.productos[t + 1]);
     }
-    // Llega al destino con lo que él acepta, y antes no llega a él.
+    // Llega al destino con lo que él acepta. El camino puede pasar antes por
+    // ese producto, pero el último cambio nunca lo recibe (dos pasos seguidos
+    // no se repiten).
     expect(p.puestos[e.destino]?.acepta).toBe(e.productos[k]);
-    for (let t = 0; t < k; t++) expect(e.productos[t]).not.toBe(p.puestos[e.destino]?.acepta);
+    if (k > 0) expect(e.productos[k - 1]).not.toBe(p.puestos[e.destino]?.acepta);
 
     expect(e.pases).toHaveLength(k + 1);
     e.pases.forEach((pase, i) => {
@@ -77,12 +79,15 @@ function invariantes(n: number, ganadores: number[], p: Trueque): void {
       const quienCambia = t === k + 1 ? e.destino : (e.cambios[i] as number);
       expect(ultimo).toEqual({ quien: quienCambia, ok: true });
       // Lo que se prueba antes del que cambia son callejones, y son verdaderos.
+      // En la entrega, son otros puestos que aceptan lo que lleva: no es para ellos.
       for (const intento of pase.intentos.slice(0, -1)) {
         expect(intento.ok).toBe(false);
         expect(destinos).not.toContain(intento.quien);
         expect(cambioEn[intento.quien] ?? Infinity).toBeGreaterThanOrEqual(t);
-        expect(esCallejonVerdadero(p, cambioEn, e, t, intento.quien)).toBe(true);
+        if (t === k + 1) expect(p.puestos[intento.quien]?.acepta).toBe(pase.producto);
+        else expect(esCallejonVerdadero(p, cambioEn, e, t, intento.quien)).toBe(true);
       }
+      expect(new Set(pase.intentos.map((x) => x.quien)).size).toBe(pase.intentos.length);
       // Todos los que se prueban están prendidos en ese pase.
       for (const intento of pase.intentos) expect(p.prendidos[i]).toContain(intento.quien);
     });
@@ -134,17 +139,56 @@ describe("El Trueque: la feria y los encargos", () => {
     }
   });
 
-  it("el último pase trae un callejón cuando hay alguien que lo acepte y no llega: son dos puestos", () => {
-    let conDos = 0;
-    let total = 0;
-    for (let seed = 1; seed <= 40; seed++) {
-      const p = planTrueque(60, [seed % 60], rngOf(seed));
-      for (const e of p.encargos) {
-        total++;
-        if ((e.pases[e.pases.length - 1]?.intentos.length ?? 0) === 2) conDos++;
+  /**
+   * Lo que mide el auditor de delatores, en el plan: al empezar la entrega, de
+   * los puestos que siguen en juego (ni cambiaron ni se rechazaron), cuántos se
+   * prendieron antes; y en la entrega, si quien espera es el primero que se
+   * prueba. Devuelve los aciertos de cada regla y lo que acertaría el azar.
+   */
+  function delatores(n: number, semillas: number) {
+    const r = { prendidoAntes: 0, azarAntes: 0, primero: 0, azarPrimero: 0, conDos: 0, entregas: 0 };
+    for (let seed = 1; seed <= semillas; seed++) {
+      const w = (seed * 5) % n;
+      const p = planTrueque(n, [w], rngOf(seed));
+      const e = p.encargos[0];
+      if (!e) continue;
+      const k = p.cambios;
+      const fuera = new Set<number>(e.cambios);
+      for (const pase of e.pases.slice(0, k)) for (const it of pase.intentos) if (!it.ok) fuera.add(it.quien);
+      const antes = new Set(p.prendidos.slice(0, k).flat());
+      const C = Array.from({ length: n }, (_, i) => i).filter((i) => !fuera.has(i));
+      const G = C.filter((i) => antes.has(i));
+      if (G.length > 0 && G.length < C.length) {
+        if (antes.has(w)) r.prendidoAntes++;
+        r.azarAntes += G.length / C.length;
+      }
+      const D = (p.prendidos[k] ?? []).filter((i) => p.puestos[i]?.acepta === p.puestos[w]?.acepta);
+      r.entregas++;
+      if (D.length >= 2) {
+        r.conDos++;
+        if (e.pases[k]?.intentos[0]?.quien === w) r.primero++;
+        r.azarPrimero += 1 / D.length;
       }
     }
-    expect(conDos / total).toBeGreaterThan(0.8);
+    return r;
+  }
+
+  it.each([8, 18, 60])("con %i personas, en la entrega se prenden al menos dos y nada dice cuál es", (n) => {
+    const r = delatores(n, n >= 60 ? 1200 : 600);
+    // Con ocho personas cada producto lo acepta un solo puesto: hasta el 21 de
+    // octubre de 2026 en la entrega se prendía solo el del ganador.
+    expect(r.conDos).toBe(r.entregas);
+    // El primero que prueba la entrega gana tan seguido como el azar.
+    expect(r.primero / r.azarPrimero).toBeGreaterThan(0.75);
+    expect(r.primero / r.azarPrimero).toBeLessThan(1.25);
+  });
+
+  it.each([8, 12, 18, 60])("con %i personas, haberse prendido antes de la entrega no dice quién espera", (n) => {
+    const r = delatores(n, 800);
+    // Hasta el 21 de octubre de 2026 quien espera no se prendía nunca antes de
+    // la entrega: 0 de 153 con ocho personas, 0 de 199 con dieciocho.
+    expect(r.prendidoAntes / r.azarAntes).toBeGreaterThan(0.75);
+    expect(r.prendidoAntes / r.azarAntes).toBeLessThan(1.25);
   });
 
   it("con varios premios, cada encargo tiene su destino y ninguno cambia", () => {
