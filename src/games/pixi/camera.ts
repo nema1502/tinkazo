@@ -62,6 +62,7 @@ export class Camera {
   private lastZoom = 1;
   private blurK = 0;
   private blurOn = true;
+  private blurModo: "pleno" | "simple" | "no" = "simple";
   private readonly blur: ZoomBlurFilter;
   private readonly extra: Filter[] = [];
   /**
@@ -101,6 +102,17 @@ export class Camera {
     g.filters = null;
     this.blur.strength = antes;
     g.destroy();
+  }
+
+  /**
+   * Los filtros de un acercamiento rápido, al máximo: para medir cuánto le
+   * cuestan a la placa antes del show (`calibrar` en `stage.ts`). El cuadro
+   * siguiente los vuelve a poner como corresponda.
+   */
+  filtrosDePrueba(sw: number, sh: number): Filter[] {
+    this.blur.strength = 0.05;
+    this.blur.center = { x: sw / 2, y: sh / 2 };
+    return [...this.extra, this.blur];
   }
 
   /** Mirar a un punto, con un acercamiento, llegando a ese ritmo. */
@@ -205,6 +217,22 @@ export class Camera {
   }
 
   /**
+   * Cómo desenfoca según lo que aguanta el equipo (`calidad.ts`). Un filtro de
+   * PixiJS dibuja lo que filtra a resolución 1 y sin suavizado de bordes si no
+   * se le pide otra cosa: mientras la cámara se acercaba rápido, un celular
+   * (resolución 2) veía la escena entera a la mitad de resolución y con los
+   * bordes en escalera, y al frenar volvía a verse nítida (21 de octubre de
+   * 2026). `pleno` la dibuja como el lienzo; `simple` es lo de antes; `no` lo
+   * apaga, y se ahorra una pasada sobre toda la pantalla.
+   */
+  desenfoque(modo: "pleno" | "simple" | "no"): this {
+    this.blurModo = modo;
+    this.blur.resolution = modo === "pleno" ? "inherit" : 1;
+    this.blur.antialias = modo === "pleno" ? "inherit" : "off";
+    return this;
+  }
+
+  /**
    * Una caja del mundo que tiene que quedar entera dentro de una zona de la
    * pantalla, pase lo que pase: el acercamiento que pidió el juego, un golpe, el
    * sacudón o cualquier zoom que se sume después. Si no entra, la cámara se
@@ -284,7 +312,7 @@ export class Camera {
     // Lo protegido, entero en su zona con cualquier acercamiento: ver `proteger`.
     this.respetar(scene, sw, sh);
     const filters: Filter[] = [...this.extra];
-    if (this.blurOn && this.blurK > 0.006) {
+    if (this.blurOn && this.blurModo !== "no" && this.blurK > 0.006) {
       this.blur.strength = this.blurK;
       this.blur.center = { x: sw / 2, y: sh / 2 };
       filters.push(this.blur);

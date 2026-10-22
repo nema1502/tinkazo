@@ -1,5 +1,6 @@
-import { Application, Container, Graphics, Sprite, Text, Texture, WebGLRenderer, loadEnvironmentExtensions, type TextStyleOptions } from "pixi.js";
+import { Application, CanvasSource, Container, Graphics, Sprite, Text, Texture, WebGLRenderer, loadEnvironmentExtensions, type Filter, type TextStyleOptions } from "pixi.js";
 import { gsap } from "gsap";
+import { avatarColor } from "../../avatar";
 import { $ } from "../../dom";
 import { T, getLang, setPickSeed, t } from "../../i18n";
 import { LCOLORS, drawAvatar, paceFactor, paraCompartir, params, skipMotion, takeShowGate, type Beacon } from "../../state";
@@ -7,7 +8,9 @@ import { musicBreath, musicCue, startMusic, stopMusic, type MusicStyle } from ".
 import { beep, note } from "../../sound";
 import { registerSkip, releaseScreen, shorten, takeOverScreen, winnerNames } from "../overlay";
 import { Camera } from "./camera";
+import { Gobernador, ajustesDe, aprender, dibujaPorSoftware, esPorPlaca, nivelInicial, nivelMedido, type Nivel } from "./calidad";
 import { guardiaNombre, meter } from "./encuadre";
+import { reves, tira } from "./papel-picado";
 import { watchRecovery } from "./recover";
 
 /**
@@ -310,13 +313,22 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
 
   const app = new Application();
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  // El modo para compartir se lee al montar el estadio: lo que se elige en el
+  // sorteo vale para el próximo show, no cambia uno que ya está corriendo.
+  const compartir = paraCompartir();
+  // Lo que se dibuja según lo que aguanta el equipo (`calidad.ts`). Por
+  // software, sin suavizado de bordes: es lo que más le cuesta a un equipo sin
+  // placa, y no se puede apagar después de arrancar.
+  const software = dibujaPorSoftware();
+  const arranque = nivelInicial(params.get("calidad"), software);
+  let aj = ajustesDe(arranque.nivel, window.devicePixelRatio || 1, compartir);
   try {
     await app.init({
       canvas: view,
       width: innerWidth,
       height: innerHeight,
-      antialias: true,
-      resolution: dpr,
+      antialias: !software,
+      resolution: aj.resolucion,
       autoDensity: true,
       backgroundColor: 0x10101c,
       autoStart: false,
@@ -346,7 +358,20 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   // cambia el tamaño de la pantalla, y estos se rearman solos.
   const tagLayer = new Container();
   app.stage.addChild(bg, scene, hud, tagLayer, podium);
-  const cam = new Camera();
+  const cam = new Camera().desenfoque(aj.desenfoque);
+  // El nivel queda anotado en el lienzo, para medirlo y para los auditores.
+  view.dataset.calidad = arranque.nivel;
+  // Si los cuadros empiezan a tardar, baja de nivel en el mismo show y deja
+  // anotado para el próximo. Cambiar la resolución redimensiona el lienzo, no
+  // la escena: lo que se ve es lo mismo, con menos píxeles.
+  const bajarA = (n: Nivel, porPlaca: boolean): void => {
+    aj = ajustesDe(n, window.devicePixelRatio || 1, compartir, porPlaca);
+    view.dataset.calidad = n;
+    cam.desenfoque(aj.desenfoque);
+    if (app.renderer.resolution !== aj.resolucion) app.renderer.resize(innerWidth, innerHeight, aj.resolucion);
+    aprender(n);
+  };
+  const gobernador = new Gobernador(arranque.nivel, bajarA, arranque.fijo);
   // `?auditar=identidad`: ver `identidadDe`. Se arma con los nombres del primer cartel.
   const identPedida = params.get("auditar") === "identidad";
   // `?auditar=mezcla`: el instante del revelado, para que el auditor de mezcla
@@ -374,18 +399,52 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     registerSkip(onSkip);
   };
 
-  const faces = new Map<string, Texture>();
+  /**
+   * Las caras: el emblema de 7 por 7 celdas de `avatar.ts`, pasado a textura.
+   * En un lienzo de 48 px las celdas salían de 6 o 7 px, desparejas, y
+   * agrandadas con filtro lineal se veían blandas; más que nada la del cartel
+   * del ganador, que mide 76 px en 720 y 152 en 1440, la que mira toda la sala
+   * (21 de octubre de 2026). Ahora cada celda mide un número entero de píxeles
+   * y el lienzo es potencia de dos, para que tenga mipmaps en cualquier placa:
+   * las caras chicas se achican sin titilar. Las primeras 64 personas que
+   * aparecen tienen la cara de 128 (las cartas de "De pie" la muestran grande);
+   * las demás, de 64: con doscientas las caras son chicas, y la memoria de la
+   * placa es la del celular. La del cartel tiene su textura de 256: son pocas,
+   * una por premio.
+   */
+  const texturas: Texture[] = [];
+  const caras = (lado: number, celda: number): ((name: string) => Texture) => {
+    const memo = new Map<string, Texture>();
+    const m = Math.floor((lado - 7 * celda) / 2);
+    return (name) => {
+      let tx = memo.get(name);
+      if (!tx) {
+        const c = document.createElement("canvas");
+        c.width = c.height = lado;
+        const cx = c.getContext("2d");
+        if (cx) {
+          cx.fillStyle = avatarColor(name);
+          cx.fillRect(0, 0, lado, lado);
+          drawAvatar(cx, name, m, m, 7 * celda);
+        }
+        tx = new Texture({ source: new CanvasSource({ resource: c, autoGenerateMipmaps: true, scaleMode: "linear" }) });
+        memo.set(name, tx);
+        texturas.push(tx);
+      }
+      return tx;
+    };
+  };
+  const caraMedia = caras(128, 18);
+  const caraChica = caras(64, 9);
+  const caraGrande = caras(256, 36);
+  const tallaDe = new Map<string, (name: string) => Texture>();
   const face = (name: string): Texture => {
-    let tx = faces.get(name);
-    if (!tx) {
-      const c = document.createElement("canvas");
-      c.width = c.height = 48;
-      const cx = c.getContext("2d");
-      if (cx) drawAvatar(cx, name, 0, 0, 48);
-      tx = Texture.from(c);
-      faces.set(name, tx);
+    let talla = tallaDe.get(name);
+    if (!talla) {
+      talla = tallaDe.size < 64 ? caraMedia : caraChica;
+      tallaDe.set(name, talla);
     }
-    return tx;
+    return talla(name);
   };
 
   const sw = (): number => innerWidth;
@@ -394,9 +453,6 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   const u = (): number => (portrait() ? Math.min(sw() / 420, sh() / 900) : sh() / 720);
   const top = (): number => (innerWidth <= 520 ? 100 : 82);
   const bottom = (): number => (innerWidth <= 520 ? 118 : 106);
-  // El modo para compartir se lee al montar el estadio: lo que se elige en el
-  // sorteo vale para el próximo show, no cambia uno que ya está corriendo.
-  const compartir = paraCompartir();
   const letra = (px: number): number => px * Math.min(2, u()) * (compartir ? 1.2 : 1);
 
   // Los textos se dibujan al doble: la cámara se acerca hasta 1,5× o más sobre
@@ -563,6 +619,51 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     } catch {
       /* se paga después, en su momento */
     }
+    calibrar();
+  };
+
+  /**
+   * Antes de mostrar el estadio, con la escena ya armada: cuánto tarda la placa
+   * en dibujarla sin y con el desenfoque pleno (la mediana de tres, esperando a
+   * que termine con la lectura de un píxel). Si el desenfoque le cuesta
+   * demasiado, el show arranca en media; si ni sin él le da, en baja
+   * (`nivelMedido`). Pasa mientras la sala lee la tarjeta de cómo se juega.
+   * Con el reloj cambiado del auditor exigente el reloj no avanza adentro de un
+   * cuadro, todo mide cero y la misma ronda se dibuja igual.
+   */
+  const calibrar = (): void => {
+    if (arranque.fijo || gobernador.nivel !== "alta") return;
+    const gl = (app.renderer as Partial<WebGLRenderer>).gl;
+    if (!gl) return;
+    const px = new Uint8Array(4);
+    const mediana = (v: number[]): number => v.sort((a, b) => a - b)[1] ?? 0;
+    /** Lo que tarda el cuadro entero y lo que se lleva el código antes de esperar a la placa. */
+    const medir = (filtros: Filter[] | null): { total: number; codigo: number } => {
+      const total: number[] = [];
+      const codigo: number[] = [];
+      for (let i = 0; i < 3; i++) {
+        scene.filters = filtros;
+        const t0 = performance.now();
+        app.renderer.render(app.stage);
+        codigo.push(performance.now() - t0);
+        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        total.push(performance.now() - t0);
+      }
+      return { total: mediana(total), codigo: mediana(codigo) };
+    };
+    try {
+      const sin = medir(null);
+      const con = medir(cam.filtrosDePrueba(sw(), sh()));
+      scene.filters = null;
+      view.dataset.calibrado = `${sin.codigo.toFixed(1)}+${(sin.total - sin.codigo).toFixed(1)}/${con.total.toFixed(1)}`;
+      const n = nivelMedido("alta", sin.total, con.total);
+      if (n !== "alta") {
+        gobernador.nivel = n;
+        bajarA(n, esPorPlaca(sin.codigo, sin.total));
+      }
+    } catch {
+      scene.filters = null;
+    }
   };
 
   const crown = (names: string[], winners: readonly number[]): Crown => {
@@ -573,7 +674,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     const root = new Container();
     podium.addChild(root);
     const flash = new Graphics();
-    const confetti = new Graphics();
+    // El papel picado son rectángulos blancos teñidos (`papel-picado.ts`): se
+    // arman una vez y en cada cuadro solo se mueven, sin volver a dibujar.
+    const confetti = new Container();
+    const tiras: Sprite[] = [];
     const plate = new Container();
     root.addChild(confetti, plate, flash);
     const tl = gsap.timeline({ paused: true });
@@ -621,7 +725,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       plate.addChild(bgp);
       const x0 = -pw / 2 + (big ? 112 : 28) * k;
       if (big) {
-        const av = new Sprite(face(all[0] ?? ""));
+        const av = new Sprite(caraGrande(all[0] ?? ""));
         av.width = av.height = 76 * k;
         av.position.set(-pw / 2 + 22 * k, -38 * k);
         const border = new Graphics().rect(-pw / 2 + 20 * k, -40 * k, 80 * k, 80 * k).stroke({ width: 4 * k, color: INK });
@@ -636,7 +740,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         const fila = new Container();
         if (conCara(i)) {
           const lado = cara(i);
-          const av = new Sprite(face(all[i] ?? ""));
+          const av = new Sprite(caraGrande(all[i] ?? ""));
           av.width = av.height = lado;
           av.position.set(0, (altos[i] ?? lineH) / 2 - lado / 2 - 2 * k);
           fila.addChild(av, new Graphics().rect(av.x - 2 * k, av.y - 2 * k, lado + 4 * k, lado + 4 * k).stroke({ width: 3 * k, color: INK }));
@@ -695,25 +799,33 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         // El cartel queda anotado para el auditor exigente, en píxeles del lienzo.
         if (placa && tt > 0.6) {
           const b = plate.getBounds();
-          view.dataset.cartel = [b.x, b.y, b.width, b.height].map((v) => Math.round(v * dpr)).join(",");
+          const res = app.renderer.resolution;
+          view.dataset.cartel = [b.x, b.y, b.width, b.height].map((v) => Math.round(v * res)).join(",");
         }
-        // Papel picado: cada tira se calcula desde la hora, no se acumula.
-        confetti.clear();
+        // Papel picado: cada tira se calcula desde la hora, no se acumula. La
+        // cantidad sale del nivel de calidad (menos con el modo para compartir:
+        // el ruido se pierde en Zoom).
         const k = u();
-        // Con el modo para compartir, menos papel picado: el ruido se pierde en Zoom.
-        const papeles = compartir ? 70 : 180;
-        for (let i = 0; i < papeles; i++) {
-          const t0 = hash(i, 7) * 0.4;
-          const q = tt - t0;
-          if (q < 0) continue;
-          const vx = (hash(i, 1) - 0.5) * 900 * k, vy = -(300 + hash(i, 2) * 700) * k;
-          const x = sw() / 2 + (hash(i, 3) - 0.5) * sw() * 0.3 + vx * q;
-          const y = sh() * 0.3 + vy * q + 900 * k * q * q;
-          if (y > sh() + 20) continue;
-          const rot = hash(i, 4) * 6 + q * (4 + hash(i, 5) * 8);
-          const w = 9 * k, h = Math.max(1, 5 * k * Math.abs(Math.cos(rot)));
-          confetti.rect(x - w / 2, y - h / 2, w, h).fill(P[i % P.length] ?? YELLOW);
+        const W = sw(), H = sh();
+        const n = aj.papeles;
+        while (tiras.length < n) {
+          const s = new Sprite(Texture.WHITE);
+          s.anchor.set(0.5);
+          confetti.addChild(s);
+          tiras.push(s);
         }
+        tiras.forEach((s, i) => {
+          const p = i < n ? tira(i, tt, k, W, H) : null;
+          s.visible = !!p;
+          if (!p) return;
+          s.position.set(p.x, p.y);
+          s.rotation = p.rot;
+          s.scale.set(p.w, p.h);
+          const c = P[i % P.length] ?? YELLOW;
+          // El color cambia solo cuando la tira se da vuelta: teñir cuesta.
+          const tinte = p.reves ? reves(c) : c;
+          if (s.tint !== tinte) s.tint = tinte;
+        });
       },
       rebuild() {
         build();
@@ -848,10 +960,14 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       loopFn = fn;
       let prev = 0;
       let start = -1;
+      /** Lo que se llevó el código del juego en el cuadro anterior: ver `Gobernador`. */
+      let codigo = 0;
       const pace = paceFactor();
       const loop = (now: number): void => {
         if (dead) return;
         const dt = prev ? Math.min(0.05, (now - prev) / 1000) / pace : 0;
+        if (prev) gobernador.cuadro(now - prev, codigo);
+        const c0 = performance.now();
         prev = now;
         if (start < 0) start = now;
         loopFn?.(dt, (now - start) / 1000);
@@ -865,6 +981,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         }
         guardia();
         app.renderer.render(app.stage);
+        codigo = performance.now() - c0;
         if (ident) {
           relojId = (now - start) / 1000;
           if (cuadros++ % 5 === 0) ident.mirar([scene, hud, tagLayer], relojId, sw(), sh());
@@ -900,7 +1017,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       // desde adentro de su propio cuadro, y lo que sigue en ese cuadro todavía
       // la usa (la cámara, el dibujo). Destruirla ahí mismo tiraba un error.
       setTimeout(() => {
-        for (const tx of faces.values()) tx.destroy(true);
+        for (const tx of texturas) tx.destroy(true);
         app.destroy({ removeView: true }, { children: true });
       }, 0);
       base.style.visibility = "";
