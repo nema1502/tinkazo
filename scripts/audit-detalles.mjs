@@ -463,6 +463,37 @@ const DETALLES = {
     },
   },
 
+  D10: {
+    que: "una planilla con nombre y apellido separados entra con los dos",
+    async correr(browser, v, tema, quien) {
+      const page = await abrir(browser, v, tema);
+      try {
+        const forms =
+          "Marca temporal,Nombre,Apellido,Correo,Carrera\n" +
+          "21/10/2026 18:01,Ana,Quispe,ana@example.org,Sistemas\n" +
+          "21/10/2026 18:02,Luis,Mamani,luis@example.org,Industrial\n" +
+          "21/10/2026 18:03,Ana,Flores,anaf@example.org,Sistemas\n" +
+          "21/10/2026 18:04,Ana,Choque,anac@example.org,Civil\n";
+        // Subir el archivo como lo haría el selector de archivos.
+        await page.eval(
+          `(() => { const dt = new DataTransfer(); dt.items.add(new File([${js(forms)}], 'formulario.csv', { type: 'text/csv' })); const i = document.getElementById('csv'); i.files = dt.files; i.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`,
+        );
+        const abrio = await page.waitFor("document.querySelector('.importer .imp-col')", 10000);
+        if (!abrio.ok) throw new Error("no se abrió el importador");
+        await sleep(500);
+        const sel = await page.eval("(() => { const s = document.querySelector('.importer .imp-col'); return s.options[s.selectedIndex].textContent; })()");
+        check(`${quien} · el importador propone "Nombre + Apellido"`, sel === "Nombre + Apellido", `"${sel}"`);
+        await captura(page, "D10", v, tema, "importador");
+        await page.eval("document.querySelector('.importer .imp-use').click(); true");
+        await sleep(500);
+        const nombres = await page.eval("[...document.querySelectorAll('#names i')].map((i) => i.textContent).join(' · ')");
+        check(`${quien} · y las tres Anas entran con su apellido`, nombres === "Ana Quispe · Luis Mamani · Ana Flores · Ana Choque", nombres);
+      } finally {
+        await page.send("Page.close").catch(() => undefined);
+      }
+    },
+  },
+
   D08: {
     que: '"Cargar ejemplo" solo con el cuadro vacío',
     async correr(browser, v, tema, quien) {

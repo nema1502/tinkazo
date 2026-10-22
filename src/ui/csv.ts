@@ -31,6 +31,12 @@ export interface Table {
    * la ventana dice cuántas son y dónde están.
    */
   skipped: number[];
+  /**
+   * La columna que no está en el archivo y une el nombre y el apellido, si la
+   * planilla los trae separados (`unirNombreYApellido`). Va al final; no es un
+   * filtro ni cuenta como columna del archivo.
+   */
+  unida?: number;
 }
 
 /** Separadores que usan las herramientas más comunes, en orden de probabilidad. */
@@ -125,7 +131,51 @@ export function parseTable(text: string): Table | null {
 
   const columns = Array.from({ length: width }, (_, i) =>
     (headerDetected ? first.cells[i]?.trim() : "") || `Columna ${i + 1}`);
-  return { columns, rows, headerDetected, suggested: suggestColumn(columns, rows, headerDetected), skipped };
+  const table: Table = { columns, rows, headerDetected, suggested: suggestColumn(columns, rows, headerDetected), skipped };
+  return headerDetected ? unirNombreYApellido(table) : table;
+}
+
+/** Encabezados del nombre de pila, del apellido y del nombre completo, como los compara `headerKey`. */
+const FIRST_NAME = new Set(["nombre", "nombres", "primer nombre", "first name", "first_name", "firstname", "given name"].map(headerKey));
+const LAST_NAME = new Set(
+  ["apellido", "apellidos", "apellido paterno", "apellido materno", "primer apellido", "segundo apellido", "last name", "last_name", "lastname", "surname", "family name"].map(headerKey),
+);
+const FULL_NAME = new Set(
+  ["name", "full name", "full_name", "nombre completo", "nombre y apellido", "nombre y apellidos", "nombres y apellidos", "apellidos y nombres", "display name", "attendee name", "guest name"].map(headerKey),
+);
+
+/**
+ * Una planilla con "Nombre" y "Apellido" en columnas separadas (la de Google
+ * Forms de una clase o un taller) entraba solo con el nombre: el importador
+ * elegía "Nombre" y no había forma de juntarlas, y en una clase con tres Anas
+ * el cartel decía "Ana" (buscador de detalles, D10). Se agrega al final una
+ * columna que las une con un espacio ("Ana Quispe"), también con el apellido
+ * paterno y el materno, y se la propone primero. Se llama como las del archivo,
+ * unidas con "+" ("Nombre + Apellido"): se entiende en cualquier idioma.
+ *
+ * Solo si no hay una columna de nombre completo (Luma trae "name" además de
+ * first_name y last_name, y lo de Luma no cambia) y si al menos una fila
+ * tiene las dos partes. La lista canónica no se toca: esto arma el texto de un
+ * nombre por línea, como cualquier otra columna.
+ */
+export function unirNombreYApellido(table: Table): Table {
+  const keys = table.columns.map(headerKey);
+  if (keys.some((k) => FULL_NAME.has(k))) return table;
+  const nombre = keys.findIndex((k) => FIRST_NAME.has(k));
+  const apellidos = keys.flatMap((k, i) => (LAST_NAME.has(k) ? [i] : []));
+  if (nombre < 0 || !apellidos.length) return table;
+  const partes = [nombre, ...apellidos];
+  const unir = (r: readonly string[]): string => partes.map((c) => (r[c] ?? "").trim()).filter(Boolean).join(" ");
+  const completas = table.rows.some((r) => (r[nombre] ?? "").trim() && apellidos.some((c) => (r[c] ?? "").trim()));
+  if (!completas) return table;
+  const unida = table.columns.length;
+  return {
+    ...table,
+    columns: [...table.columns, partes.map((c) => table.columns[c]).join(" + ")],
+    rows: table.rows.map((r) => [...r, unir(r)]),
+    suggested: unida,
+    unida,
+  };
 }
 
 /** Una columna, como texto de una entrada por línea, listo para el protocolo. */
@@ -218,7 +268,7 @@ const NOT_FILTER = /^(first|last|full|display|guest|attendee)?[ _]?name$|^nombre
 export function filterChoices(table: Table, except: number): RowFilter[] {
   const out: RowFilter[] = [];
   table.columns.forEach((name, c) => {
-    if (c === except || (table.headerDetected && NOT_FILTER.test(name.trim()))) return;
+    if (c === except || c === table.unida || (table.headerDetected && NOT_FILTER.test(name.trim()))) return;
     const vals = table.rows.map((r) => cell(r, c));
     const empties = vals.filter((v) => v === "").length;
     if (empties > 0 && empties < vals.length) out.push({ column: c, value: null });

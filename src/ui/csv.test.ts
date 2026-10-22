@@ -30,6 +30,43 @@ describe("parseTable", () => {
     expect(t.rows[1]?.[1]).toBe("Mejía, Nicolás");
   });
 
+  it("con «Nombre» y «Apellido» separados (Google Forms), propone la columna que los une (D10)", () => {
+    const forms = "Marca temporal,Nombre,Apellido,Correo,Carrera\n" +
+      "21/10/2026 18:01,Ana,Quispe,ana@example.org,Sistemas\n" +
+      "21/10/2026 18:02,Luis,Mamani,luis@example.org,Industrial\n" +
+      "21/10/2026 18:03,Ana,Flores,anaf@example.org,Sistemas\n" +
+      "21/10/2026 18:04,Carla,,carla@example.org,Civil";
+    const t = parseTable(forms)!;
+    expect(t.columns[t.suggested]).toBe("Nombre + Apellido");
+    expect(t.unida).toBe(t.suggested);
+    expect(columnToText(t, t.suggested)).toBe("Ana Quispe\nLuis Mamani\nAna Flores\nCarla");
+    const b = buildList(t, t.suggested, t.rows.map(() => true), { fixCase: true, numberDupes: false });
+    expect(b.names).toEqual(["Ana Quispe", "Luis Mamani", "Ana Flores", "Carla"]);
+    // No es un filtro, y no cuenta como columna del archivo.
+    expect(filterChoices(t, t.suggested).some((f) => f.column === t.unida)).toBe(false);
+    expect(t.columns.slice(0, -1)).toEqual(["Marca temporal", "Nombre", "Apellido", "Correo", "Carrera"]);
+  });
+
+  it("también con el apellido paterno y el materno, en su orden", () => {
+    const t = parseTable("Nombres;Apellido paterno;Apellido materno\nMaría José;Quispe;Mamani\nJuan;Choque;")!;
+    expect(t.columns[t.suggested]).toBe("Nombres + Apellido paterno + Apellido materno");
+    expect(columnToText(t, t.suggested)).toBe("María José Quispe Mamani\nJuan Choque");
+  });
+
+  it("con un nombre completo en el archivo no se agrega nada: Luma sigue igual", () => {
+    const luma = "api_id,name,first_name,last_name,email\nevt-1,Ana Quispe,Ana,Quispe,ana@example.org\nevt-2,Luis Mamani,Luis,Mamani,luis@example.org";
+    const t = parseTable(luma)!;
+    expect(t.unida).toBeUndefined();
+    expect(t.columns[t.suggested]).toBe("name");
+    expect(parseTable(LUMA)!.unida).toBeUndefined();
+  });
+
+  it("si ninguna fila trae el apellido, no hay nada que unir", () => {
+    const t = parseTable("Nombre,Apellido,Correo\nAna Quispe,,ana@example.org\nLuis Mamani,,luis@example.org")!;
+    expect(t.unida).toBeUndefined();
+    expect(t.columns[t.suggested]).toBe("Nombre");
+  });
+
   it("acepta punto y coma, que es lo que sale de Excel en español", () => {
     const t = parseTable("Nombre;Correo\nAna Quispe;ana@example.org\nLuis Choque;luis@example.org")!;
     expect(t.columns).toEqual(["Nombre", "Correo"]);
