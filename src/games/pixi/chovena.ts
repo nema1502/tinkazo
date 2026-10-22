@@ -31,13 +31,19 @@ import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage }
  * Quién sale en cada corte no depende de dónde baila: el orden está sembrado
  * con la ronda y la ganadora va última. Los arcos del director:
  *
- * - **susto**: en el último corte la ganadora trastabilla y aguanta.
- * - **remontada**: en el corte falso se había soltado, y vuelve a la rueda.
+ * - **susto**: en el último corte trastabilla y aguanta uno de los dos que van
+ *   a la final: la mitad de las veces, la ganadora.
+ * - **remontada**: en el corte falso la ganadora se había soltado, y vuelve a
+ *   la rueda junto con otro que también se soltó. El relator nombra a uno de
+ *   los dos, sorteado.
  * - **duelo**: la final trae un amague, un corte que no saca a nadie.
- * - **tapada**: nadie la nombra hasta el final.
+ * - **tapada**: nadie nombra a los dos de la final hasta el final.
  *
- * Y en los cortes de los demás arcos, a veces trastabilla alguien que no sale:
- * tambalearse no delata a nadie. Con varios premios, los premiados salen
+ * Y en los cortes de todos los arcos a veces trastabilla alguien que no sale,
+ * y en los cortes falsos se suelta alguien y vuelve, sorteados entre todos los
+ * que siguen en la rueda, también la ganadora: tambalearse o volver no delata
+ * a nadie. Hasta el 21 de octubre la ganadora no entraba en ese sorteo, y el
+ * que volvía nombrado era siempre ella (auditor de delatores: 51 de 51). Con varios premios, los premiados salen
  * últimos y "con premio", y la última que queda se lleva el primero.
  *
  * Los bailarines pisan en el tiempo de la música: el paso sale del mismo
@@ -205,6 +211,10 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   }
   const lastStop = plan.map((p) => p.kind).lastIndexOf("stop");
   const sustoInStop = story.arc === "susto" && lastStop >= 0;
+  // Quién trastabilla y aguanta en el susto: uno de los dos de la final, sorteado.
+  const sustoIdx = story.arc === "susto" && rivalIdx >= 0 && rng() < 0.5 ? rivalIdx : winnerIdx;
+  /** En la tapada no se nombra a los dos de la final hasta el final: ni a la ganadora ni a la rival. */
+  const callado = (i: number): boolean => story.arc === "tapada" && (i === winnerIdx || i === rivalIdx);
 
   // La línea de tiempo.
   const alive = new Set(names.map((_, i) => i));
@@ -216,14 +226,19 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     if (c === 0) dance += pocos ? -0.4 : 0.35;
     const d0 = tt, s0 = d0 + dance, w0 = s0 + FREEZE;
     const pool = [...alive].filter((i) => i !== winnerIdx && !p.victims.includes(i));
+    /** Los que pueden trastabillar sin salir o soltarse en un amague: todos los que siguen, también la ganadora. */
+    const todos = [...alive].filter((i) => !p.victims.includes(i));
     if (p.kind === "fake") {
-      // Los que se soltaron antes de tiempo y vuelven. En la remontada, la ganadora (una vez).
-      const holders: number[] = [];
+      // Los que se soltaron antes de tiempo y vuelven, sorteados entre todos. En
+      // la remontada, la ganadora (una vez) y otro más. El relator nombra al
+      // primero de la lista, que queda mezclada: en la remontada, la mitad de
+      // las veces a la ganadora.
+      let holders: number[];
       if (story.arc === "remontada" && !remontadaUsada && c > 0) {
-        holders.push(winnerIdx);
         remontadaUsada = true;
-      }
-      for (const i of shuffle(pool.slice()).slice(0, Math.min(pool.length, n >= 12 ? 2 : 1))) holders.push(i);
+        holders = [winnerIdx, ...shuffle(pool.slice()).slice(0, Math.min(pool.length, n >= 12 ? 2 : 1))];
+      } else holders = shuffle(todos.slice()).slice(0, Math.min(todos.length, n >= 12 ? 2 : 1));
+      shuffle(holders);
       const x0 = s0 + FAKE;
       evs.push({ kind: "fake", d0, s0, w0, x0, s1: x0, victims: [], holders });
       tt = x0;
@@ -232,10 +247,10 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     let holders: number[] = [];
     let hold = 0;
     if (sustoInStop && c === lastStop) {
-      holders = [winnerIdx];
+      holders = [sustoIdx];
       hold = 0.6;
-    } else if (pool.length && rng() < 0.55) {
-      holders = [pool[Math.floor(rng() * pool.length)] as number];
+    } else if (todos.length && rng() < 0.55) {
+      holders = [todos[Math.floor(rng() * todos.length)] as number];
     }
     const x0 = w0 + WOBBLE + hold;
     const s1 = x0 + EXIT;
@@ -251,6 +266,8 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   const FS0 = FD0 + FINAL_DANCE + (fakeFinal ? FINAL_FAKE + 0.5 : 0);
   const FW0 = FS0 + FREEZE + 0.05;
   const FX0 = FW0 + FINAL_WOBBLE + (story.arc === "susto" && !sustoInStop ? 0.35 : 0);
+  /** En el último corte de cada arco el relator sube el tono, sin importar a quién nombra. */
+  const lastCut = evs.reduce((m, e, i) => (e.kind === "stop" ? i : m), -1);
   const T_CROWN = n >= 2 ? FX0 + FINAL_EXIT : FD0 + 1.6;
   setGameLength(T_CROWN, WINNER_HOLD);
   const pace = paceFactor();
@@ -691,8 +708,9 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
         if (x >= e.w0) once(`w${k}`, () => e.holders.forEach((_, i) => setTimeout(() => beep(note(11 - i), 0.1, "square", 0.045), i * 110)));
         if (x >= e.x0) once(`r${k}`, () => {
           musicHold(false);
-          const back = story.arc === "remontada" && e.holders.includes(winnerIdx);
-          if (back) say(L().cChoBack(nm(winnerIdx)), 0.6);
+          // Vuelve el primero de los que se soltaron, a la vista y con su nombre.
+          const back = e.holders[0];
+          if (back !== undefined && !callado(back)) say(L().cChoBack(nm(back)), 0.6);
           else say(t("cChoFake"), 0.45);
           beep(note(7), 0.09, "triangle", 0.05);
           setTimeout(() => beep(note(9), 0.09, "triangle", 0.05), 90);
@@ -704,7 +722,9 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
         const shaky = [...e.victims.slice(0, 3), ...e.holders];
         shaky.forEach((_, i) => setTimeout(() => beep(note(13 - (i % 4)), 0.1, "square", 0.045), i * 120));
         const h = e.holders[0];
-        if (h !== undefined && (story.arc !== "tapada" || h !== winnerIdx)) say(L().cChoWobble(nm(h)), h === winnerIdx ? 0.85 : 0.62);
+        // El tono sube en el último corte, no según a quién nombra: con la
+        // ganadora más fuerte, la música la delataba.
+        if (h !== undefined && !callado(h)) say(L().cChoWobble(nm(h)), c === lastCut ? 0.85 : 0.62);
       });
       if (x >= e.x0) once(`x${k}`, () => {
         const v = e.victims;
@@ -719,7 +739,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       });
       const h = e.holders[0];
       if (h !== undefined && x >= e.x0 + 0.45) once(`h${k}`, () => {
-        if (story.arc !== "tapada" || h !== winnerIdx) say(L().cChoHold(nm(h)), h === winnerIdx ? 0.9 : 0.66);
+        if (!callado(h)) say(L().cChoHold(nm(h)), c === lastCut ? 0.9 : 0.66);
         beep(note(10), 0.14, "triangle", 0.05);
       });
       if (x >= e.s1) once(`g${k}`, () => {
@@ -775,7 +795,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     if (x >= FW0) once("fw", () => {
       beep(note(13), 0.1, "square", 0.045);
       setTimeout(() => beep(note(12), 0.1, "square", 0.045), 160);
-      if (story.arc === "susto" && !sustoInStop) say(L().cChoWobble(nm(winnerIdx)), 0.9);
+      if (story.arc === "susto" && !sustoInStop) say(L().cChoWobble(nm(sustoIdx)), 0.9);
     });
     if (x >= FX0) once("fx", () => {
       say(prized.has(rivalIdx) ? L().cChoPrize(nm(rivalIdx)) : L().cChoOut(nm(rivalIdx)), 0.95);
@@ -1217,7 +1237,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     if (finalDuo && (d.idx === winnerIdx || d.idx === rivalIdx)) {
       if (fakeFinal && x >= FK0 + FREEZE && x < FK1 + 0.3) return 0.1 * (1 - clamp((x - FK1) / 0.3, 0, 1));
       if (x >= FW0 && x < FX0) {
-        const amp = d.idx === winnerIdx ? (story.arc === "susto" && !sustoInStop ? 1.3 : 0.8 + 0.4 * hash(winnerIdx, 52)) : 1;
+        const amp = story.arc === "susto" && !sustoInStop && d.idx === sustoIdx ? 1.3 : d.idx === winnerIdx ? 0.8 + 0.4 * hash(winnerIdx, 52) : 1;
         return (0.07 + 0.17 * ease.outCubic((x - FW0) / (FX0 - FW0))) * amp;
       }
       if (d.idx === winnerIdx && x >= FX0 && x < FX0 + 0.5) return 0.22 * (1 - (x - FX0) / 0.5);
@@ -2070,14 +2090,14 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
           const b = c.getBounds();
           placed.push({ x: b.x, y: b.y + b.height / 2, w: b.width, h: b.height });
         }
-        for (const h of ev.holders) if (x < ev.x0 + 0.6 && (story.arc !== "tapada" || h !== winnerIdx)) placeChip(dancers[h] as Dancer, x, placed);
+        for (const h of ev.holders) if (x < ev.x0 + 0.6 && !callado(h)) placeChip(dancers[h] as Dancer, x, placed);
       } else if (ev) {
         // En el corte, solo los que salen (y los que se tambalean): los demás, después.
         for (const v of ev.victims) {
           const d = dancers[v] as Dancer;
           if (x < d.outAt + EXIT + 0.4) placeChip(d, x, placed, 1.1);
         }
-        for (const h of ev.holders) if (x < ev.x0 + 0.6 && (story.arc !== "tapada" || h !== winnerIdx)) placeChip(dancers[h] as Dancer, x, placed);
+        for (const h of ev.holders) if (x < ev.x0 + 0.6 && !callado(h)) placeChip(dancers[h] as Dancer, x, placed);
       } else if (!held) {
         rollCall(x, live, placed);
       }

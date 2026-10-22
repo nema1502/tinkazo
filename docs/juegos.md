@@ -227,10 +227,10 @@ La carrera actúa la historia entera. Los demás juegos toman del director el ar
 | La Entrada | Remontada | **La que vuelve.** En un arco, una fraternidad arranca para la vereda como si se quedara ("¿se quedan los Tojos?") y vuelve a la comparsa. Se sortea entre las que siguen |
 | La Entrada | Duelo | **Un salto más.** El contrapunto frente al Socavón dura dos saltos más |
 | La Entrada | Tapada | **Se calla la banda.** En un arco la música se corta de golpe y la comparsa se congela a mitad del paso, con la sala que aplaudía; después vuelve la banda |
-| Chovena | Susto | **El que aguanta.** En el último corte la ganadora trastabilla con un "¡!" encima ("¡ojo con fulana!") y aguanta. En la mitad de los cortes trastabilla también alguien que no sale, así que tambalearse no delata a nadie |
-| Chovena | Remontada | **La que vuelve.** En el corte falso la ganadora se había soltado y da un paso afuera; vuelve la música y vuelve a la rueda |
+| Chovena | Susto | **El que aguanta.** En el último corte trastabilla con un "¡!" encima ("¡ojo con fulana!") y aguanta una de las dos que van a la final, la ganadora la mitad de las veces. En la mitad de los cortes trastabilla también alguien que no sale, sorteado entre todos, así que tambalearse no delata a nadie |
+| Chovena | Remontada | **La que vuelve.** En el corte falso la ganadora y otra se habían soltado y dan un paso afuera; vuelve la música y vuelven a la rueda. El relator nombra a una de las dos, y en los amagues de los otros arcos también se suelta y vuelve alguien, sorteado entre todos |
 | Chovena | Duelo | **El amague de la final.** Con los dos de la mano, la música se corta, se tambalean los dos, y vuelve |
-| Chovena | Tapada | **Nadie la nombra.** En la final se dice "¡quedan dos!", sin nombres |
+| Chovena | Tapada | **Nadie las nombra.** A las dos de la final no se las nombra hasta el final, y en la final se dice "¡quedan dos!", sin nombres |
 | Luz roja, luz verde | Susto | **El haz se detiene.** El Faro mira a la ganadora, que se tambalea sin dar un paso, y el haz sigue de largo ("¡por un pelo!") |
 | Luz roja, luz verde | Remontada | **Desde el fondo.** Arranca última y en el último verde pasa a todos |
 | Luz roja, luz verde | Duelo | **Una luz roja más.** La rival va adelante hasta que el haz la agarra en la última |
