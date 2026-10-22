@@ -346,9 +346,9 @@ function filasDeEvento(c: Ctx, f: Foto, s: number): Bloque {
   const tope = 7;
   const vistas = filas.length > tope ? tope - 1 : filas.length;
   const resto = filas.length - vistas;
-  const alto1 = Math.round(66 * s);
-  const tam = Math.round(36 * s);
-  const etiTam = Math.round(28 * s);
+  const alto1 = Math.round(84 * s);
+  const tam = Math.round(44 * s);
+  const etiTam = Math.round(32 * s);
   c.font = `800 ${etiTam}px ${SANS}`;
   // La etiqueta del premio ocupa lo que necesite, hasta el 42 % del ancho; todas del mismo ancho.
   const etiW = Math.min(
