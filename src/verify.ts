@@ -482,12 +482,22 @@ function renderResult(
   $("v-proof").textContent =
     `round=${proof.round} · signature=${signature.slice(0, 20)}… · randomness=${randomness.slice(0, 20)}… · winners=[${winners.join(",")}]${fromChain ? " · on-chain ✓" : ""}`;
   $<HTMLAnchorElement>("v-drand").href = roundUrl(proof.round);
-  // Compartir otra vez: el enlace de esta página es el comprobante, tal como llegó;
-  // el mensaje y el QR salen de lo que la página acaba de rehacer.
+  // Compartir otra vez: el enlace de esta página es el comprobante, tal como llegó
+  // (sin la consulta: el idioma o el tema de quien lo mira no viajan); el mensaje y
+  // la foto salen de lo que la página acaba de rehacer. Si llegó por un enlace
+  // corto, ese mismo se vuelve a compartir.
   const compartir = $<HTMLButtonElement>("btn-compartir");
   compartir.style.display = "";
   compartir.onclick = () =>
-    abrirSorteo({ enlace: location.href, ganadores: winners.map((i) => names[i] ?? ""), total: names.length, premio });
+    abrirSorteo({
+      enlace: location.origin + location.pathname + location.hash,
+      ganadores: winners.map((i) => names[i] ?? ""),
+      total: names.length,
+      premio,
+      ...(proof.sealedAt ? { fecha: proof.sealedAt } : {}),
+      ...(proof.id ? { numero: proof.id } : {}),
+      ...(proof.net ? { red: proof.net } : {}),
+    });
   if (isAnchored(proof)) {
     const a = $<HTMLAnchorElement>("v-contract");
     a.style.display = "inline-block";

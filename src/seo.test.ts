@@ -29,7 +29,7 @@ const PUBLICAS: Record<string, string> = {
 };
 
 /** Las de uso interno: no van al mapa del sitio y llevan noindex. */
-const INTERNAS = ["lista.html", "evento.html", "verificar.html"];
+const INTERNAS = ["lista.html", "evento.html", "verificar.html", "c.html"];
 
 /** Las páginas nuevas, con el título y el h1 que se pidieron para cada una. */
 const NUEVAS: Record<string, { titulo: string; h1: string }> = {
@@ -557,6 +557,44 @@ describe("las páginas nuevas están en la compilación y en la revisión", () =
     const lista = revision.match(/const PAGINAS = \[([^\]]*)\]/)?.[1] ?? "";
     const nombres = lista.split(",").map((s) => s.trim().replace(/^"|"$/g, ""));
     expect(nombres).toContain(archivo.replace(/\.html$/, ""));
+  });
+});
+
+describe("el enlace corto (tinkazo.app/c/<id>) se sirve, no se indexa y se revisa", () => {
+  const vercel = JSON.parse(leer("vercel.json")) as {
+    rewrites?: Array<{ source: string; destination: string }>;
+    headers?: Array<{ source: string; headers: Array<{ key: string; value: string }> }>;
+  };
+  const c = leer("c.html");
+
+  it("vercel.json reescribe /c/:id a c.html y le pone noindex", () => {
+    expect(vercel.rewrites).toContainEqual({ source: "/c/:id", destination: "/c.html" });
+    const h = vercel.headers?.find((x) => x.source === "/c/(.*)");
+    expect(h?.headers).toContainEqual({ key: "X-Robots-Tag", value: "noindex" });
+  });
+
+  it("c.html está en la compilación, con su reescritura en dev y preview, y en check-paginas", () => {
+    const vite = leer("vite.config.ts");
+    expect(vite).toMatch(/\bc:\s*resolve\(__dirname,\s*"c\.html"\)/);
+    expect(vite).toMatch(/configurePreviewServer/);
+    expect(leer("scripts/check-paginas.mjs")).toMatch(/\{\s*p:\s*"c",/);
+  });
+
+  it("la vista previa de WhatsApp es genérica: el título, la imagen del sitio y nada del sorteo", () => {
+    expect(c.match(/<meta property="og:title" content="([^"]*)"/)?.[1]).toBe("Comprobante de un sorteo en Tinkazo");
+    expect(c.match(/<meta property="og:image" content="([^"]*)"/)?.[1]).toBe(`${BASE}/og.jpg`);
+    expect(esArchivoPublico("/og.jpg")).toBe(true);
+    expect(T.es.cTitulo).toBe("Comprobante de un sorteo en Tinkazo");
+    expect(T.en.cTitulo).not.toBe(T.es.cTitulo);
+  });
+
+  it("robots.txt no bloquea /c/: así los que arman la vista previa leen sus etiquetas", () => {
+    const bloqueos = leer("public/robots.txt")
+      .split(/\r?\n/)
+      .filter((l) => /^disallow:/i.test(l.trim()))
+      .map((l) => l.trim().replace(/^disallow:\s*/i, ""))
+      .filter(Boolean);
+    expect(bloqueos.some((b) => "/c/Ab3dE6gH".startsWith(b))).toBe(false);
   });
 });
 

@@ -394,7 +394,7 @@ export async function freeze(): Promise<void> {
   // (QA, 16 de octubre de 2026).
   void precargarQr();
   void import("./pantalla").catch(() => undefined);
-  void import("./imagen").catch(() => undefined);
+  void import("./compartir").catch(() => undefined);
   // Y lo que cuenta un error del sorteo, si el wifi se cae antes de sortear.
   if (raffleId !== undefined) precargarParaElSorteo();
 

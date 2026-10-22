@@ -75,7 +75,7 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 | Pieza | Estado | Evidencia |
 |---|---|---|
 | Contrato Soroban `tinkazo-raffle` | Desplegado en testnet, que Stellar borra entera el 16 de diciembre de 2026 | [`CD2SSHBU…ARENH`](https://stellar.expert/explorer/testnet/contract/CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH) · 19 tests, uno con una ronda real de quicknet · WASM de 11,4 KB |
-| Sitio | En producción | [tinkazo.app](https://tinkazo.app) · español e inglés · tema claro y oscuro · sin servidor |
+| Sitio | En producción | [tinkazo.app](https://tinkazo.app) · español e inglés · tema claro y oscuro · sin servidor para sortear (los enlaces cortos corren en un Worker chico de Cloudflare, [workers/enlaces](workers/enlaces/README.md)) |
 | Importar de Luma | En producción | Se suelta el export de invitados y se elige quién entra: los que hicieron check-in, los aprobados o a mano |
 | Página de verificación | En producción | Rehace cualquier sorteo en el navegador desde su comprobante |
 | Diez juegos de estadio | En producción | Deterministas: la misma ronda dibuja los mismos cuadros en cualquier máquina |
@@ -142,7 +142,7 @@ De fondo suena música andina con beat que sigue la tensión (la Chovena trae su
 
 Para mainnet: un solo sorteo abierto por cuenta, la cancelación pública, la ronda que pone el contrato y la lista ordenada en el protocolo. El análisis completo, con el método STRIDE, está en [docs/amenazas.md](docs/amenazas.md), y la versión para todo público en la [página de seguridad](https://tinkazo.app/seguridad.html).
 
-**Privacidad.** En la cadena va la huella de la lista y otros datos del sorteo, nunca los nombres. El comprobante viaja en el fragmento de la URL, que el navegador no le manda a ningún servidor. El sitio cuenta visitas con la analítica de Vercel, sin cookies, y corta cada dirección hasta la ruta antes de contar ([src/analytics.ts](src/analytics.ts)).
+**Privacidad.** En la cadena va la huella de la lista y otros datos del sorteo, nunca los nombres. El comprobante viaja en el fragmento de la URL, que el navegador no le manda a ningún servidor. El sitio cuenta visitas con la analítica de Vercel, sin cookies, y corta cada dirección hasta la ruta antes de contar ([src/analytics.ts](src/analytics.ts)). Compartir con enlace corto guarda en Cloudflare una copia cifrada en el navegador, con la clave solo en el fragmento del enlace: Tinkazo no la puede leer, y se borra desde Mis sorteos ([workers/enlaces](workers/enlaces/README.md)).
 
 ## Cómo se compara
 

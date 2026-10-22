@@ -17,6 +17,7 @@ import { setList } from "./participants";
 import { CARD_SECONDS, showGameCard } from "./gamecard";
 import { actualizarPaso, verError } from "./siguiente";
 import { marcarSalio, olvidarSalieron, ponerPremio } from "./premios";
+import { acortar, alAcortar, cortoGuardado, rutaDe } from "../enlace-corto";
 import { startMusic, stopMusic } from "../music";
 
 /** Obtiene la ronda objetivo, verifica su firma y selecciona (protocolo §2, §5). */
@@ -393,7 +394,6 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   dl.textContent = t("drandLink");
   showAgain();
   confetti();
-  programarImagen();
   // El juego pidió bajar a "El sorteo" cuando el resultado todavía estaba
   // escondido: quedaba el selector de juegos arriba y el panel fuera de la
   // pantalla. Con el resultado ya puesto, se encuadra la sección entera.
@@ -567,28 +567,6 @@ export function alTocarGanadores(e: Event): void {
   caja.querySelector<HTMLButtonElement>(preguntar ? "[data-ausente-no]" : "[data-ausente]")?.focus({ preventScroll: true });
 }
 
-/** La imagen para redes (imagen.ts): en el celular, el menú de compartir; en la computadora, la descarga. */
-export function imagenRedes(btn: HTMLButtonElement): void {
-  void import("./imagen").then((m) => m.compartirImagen(btn));
-}
-
-/**
- * La imagen se arma de antemano, cuando termina el festejo: compartir desde el
- * celular tiene que salir del mismo toque. En la demo no hay botón.
- */
-function programarImagen(): void {
-  if (document.body.dataset.demo === "1") return;
-  const armar = (): void => {
-    void import("./imagen").then((m) => m.prepararImagen()).catch(() => undefined);
-  };
-  setTimeout(() => ("requestIdleCallback" in window ? requestIdleCallback(armar, { timeout: 2000 }) : armar()), 1200);
-}
-
-/** Al apoyar el dedo en el botón: si todavía no estaba, se empieza a armar antes del toque. */
-export function adelantarImagen(): void {
-  void import("./imagen").then((m) => m.prepararImagen()).catch(() => undefined);
-}
-
 /** La lista del sorteo anterior, para "Recuperar la lista anterior". */
 let anterior: string[] = [];
 
@@ -601,10 +579,34 @@ export function recuperarLista(): void {
 }
 
 let proofLink = "";
+/** El enlace corto del comprobante, cuando lo hay: lo usan el QR, los avisos y el mensaje. */
+let cortoLink = "";
+
+/**
+ * El enlace corto se arma al compartir o al mostrar en grande, nunca solo: no
+ * se guarda nada en ningún lado mientras quien organiza no comparte. Y nunca
+ * en la demo, que no graba nada.
+ */
+const puedeAcortar = (): boolean => !params.has("demo") && !!proofLink;
+
+/** Al apoyar el dedo o el mouse en compartir o en grande: para el clic, el corto ya suele estar. */
+export function adelantarCorto(): void {
+  if (puedeAcortar()) void acortar(proofLink);
+}
+
+/** Cuando sale el corto de este comprobante, el QR del resultado y los avisos pasan a usarlo. */
+alAcortar((ruta, c) => {
+  if (!proofLink || rutaDe(proofLink) !== ruta || cortoLink === c.corto) return;
+  cortoLink = c.corto;
+  const f = app.frozen;
+  const d = app.drawn;
+  if (f && d) setNotifyLinks(f.names, d.winners, cortoLink);
+  void paintQr(cortoLink);
+});
 
 /** El resultado en grande para el proyector, con el QR del comprobante (pantalla.ts). */
 export function mostrarGrande(): void {
-  void import("./pantalla").then((m) => m.mostrarResultado(proofLink));
+  void import("./pantalla").then((m) => m.mostrarResultado(proofLink, { corto: puedeAcortar() }));
 }
 
 /**
@@ -664,6 +666,8 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
     link = roundLink;
   }
   proofLink = link;
+  // Un comprobante nuevo empieza con su enlace largo; si ya se había compartido, con su corto.
+  cortoLink = cortoGuardado(link)?.corto ?? "";
   // Y ahora se completa la fila del historial con el ganador y el comprobante.
   // Una demo no es un sorteo: no se anota en Mis sorteos aunque haya cuenta,
   // igual que en el sello (freeze.ts). Anotarla además borraba la bienvenida.
@@ -690,8 +694,8 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
   // Los avisos primero: el QR carga su librería aparte y tarda, y hacer
   // esperar a los botones de "avisarle por WhatsApp" por un cuadradito los
   // dejaba sin armar justo cuando el ganador aparece en pantalla.
-  setNotifyLinks(names, winners, link);
-  void paintQr(link);
+  setNotifyLinks(names, winners, cortoLink || link);
+  void paintQr(cortoLink || link);
 }
 
 /**
@@ -706,11 +710,11 @@ function mensajeDelSorteo(): string {
   const { beacon, winners } = app.drawn;
   const lista = winners.map((i) => names[i] ?? "");
   const quienes = new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(lista);
-  return T[getLang()].summary(quienes, names.length, prize, proofLink || roundUrl(beacon.round), lista.length > 1);
+  return T[getLang()].summary(quienes, names.length, prize, cortoLink || proofLink || roundUrl(beacon.round), lista.length > 1);
 }
 
 /** Copia el mensaje y avisa en el botón. Devuelve false si el navegador no deja copiar. */
-async function copiarMensaje(btn: HTMLButtonElement, texto: string, aviso: "copied" | "proofCopied", ms: number): Promise<boolean> {
+async function copiarMensaje(btn: HTMLButtonElement, texto: string, aviso: "copied", ms: number): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(texto);
   } catch {
@@ -723,24 +727,23 @@ async function copiarMensaje(btn: HTMLButtonElement, texto: string, aviso: "copi
 }
 
 /**
- * "Compartir el resultado": en el celular, el menú de compartir del sistema con
- * el mensaje; en la computadora, copia el mensaje para pegarlo en el grupo.
+ * "Compartir el resultado": el diálogo de compartir (compartir.ts), con la foto
+ * de quién ganó y el QR, y el mensaje. Intenta el enlace corto, salvo en la demo.
  */
-export async function shareProof(btn: HTMLButtonElement): Promise<void> {
-  const texto = mensajeDelSorteo();
-  if (!texto) return;
-  if (matchMedia("(pointer: coarse)").matches && typeof navigator.share === "function") {
-    try {
-      await navigator.share({ text: texto });
-      return;
-    } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") return;
-      // Si el navegador no deja compartir, se copia como en la computadora.
-    }
-  }
-  if (!(await copiarMensaje(btn, texto, "proofCopied", 1800)) && proofLink) {
-    window.open(proofLink, "_blank", "noopener");
-  }
+export function shareProof(): void {
+  const f = app.frozen;
+  const d = app.drawn;
+  if (!f || !d) return;
+  const enlace = proofLink || roundUrl(d.beacon.round);
+  const datos = {
+    enlace,
+    ganadores: d.winners.map((i) => f.names[i] ?? ""),
+    total: f.names.length,
+    premio: f.prize,
+    fecha: f.ts,
+    ...(f.raffleId !== undefined ? { numero: String(f.raffleId), red: network.name } : {}),
+  };
+  void import("./compartir").then((m) => m.abrirSorteo(datos, getLang(), { corto: puedeAcortar() }));
 }
 
 /**

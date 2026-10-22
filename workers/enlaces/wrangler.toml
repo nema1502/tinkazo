@@ -1,0 +1,16 @@
+# Enlaces cortos para los comprobantes (ver README.md).
+# Se despliega con: npx wrangler@4 deploy   (desde esta carpeta)
+name = "tinkazo-enlaces"
+account_id = "d97c3f7acada21d5ec280704fb34ff17"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+workers_dev = false
+routes = [{ pattern = "c.tinkazo.app/*", zone_name = "tinkazo.app" }]
+
+[[durable_objects.bindings]]
+name = "ALMACEN"
+class_name = "Almacen"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Almacen"]

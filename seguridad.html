@@ -90,6 +90,7 @@
       <li data-i="sgLimit3">Lo que el contrato guarda tiene alquiler: si nadie lo extiende, la entrada se archiva y deja de leerse hasta que alguien la restaure pagando. Y hoy el contrato está en testnet, que Stellar borra entera el 16 de diciembre de 2026: ahí sí se pierde el registro y el veredicto deja de ser verde.</li>
       <li data-i="sgLimit5">El sello impide cambiar la lista después, no armarla mal desde el principio: quien organiza puede meter nombres de relleno o repetidos, o dejar afuera a alguien. Por eso, antes de sellar, la lista se puede mostrar a la sala con un QR para que cada uno se busque en su celular; los repetidos salen marcados, el comprobante tiene un buscador, y la importación de Luma propone solo a los que hicieron check-in.</li>
       <li data-i="sgLimit4">Si el faro público se cayera entero y para siempre, un sorteo sellado quedaría sin número. Hay cuatro relays, tres de drand.sh y uno de Cloudflare, y se rotan hasta que uno contesta.</li>
+      <li data-i="sgLimitCorto">El enlace corto (tinkazo.app/c/…) guarda en Cloudflare una copia del comprobante protegida con una clave que va solo en el enlace: Tinkazo no la puede leer. Tampoco decide nada: la página vuelve a calcular el sorteo y lo compara con Stellar, y si el servicio se cae, el enlace largo de siempre sigue andando.</li>
     </ul>
   </section>
 
