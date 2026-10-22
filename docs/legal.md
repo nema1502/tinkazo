@@ -77,7 +77,7 @@ El GDPR europeo se aplica a cualquier sorteo que tenga participantes en la Unió
 Tinkazo ya cumple la parte difícil por diseño, y está medido en [amenazas.md](amenazas.md):
 
 - **En la cadena viaja solo la huella** de la lista. El contrato nunca ve un nombre.
-- **Los nombres no llegan en claro a ningún servidor**: el comprobante viaja en el fragmento de la URL, el QR y los avatares se dibujan en el navegador. Si se comparte con el enlace corto (desde el 21 de octubre de 2026), en Cloudflare queda una copia del comprobante cifrada en el navegador, con la clave solo en el enlace: Tinkazo no la puede leer, la abre quien tenga el enlace o el QR (que lleva la lista), y se borra con «Borrar el enlace corto» en Mis sorteos ([workers/enlaces](../workers/enlaces/README.md)).
+- **Los nombres no llegan en claro a ningún servidor**: el comprobante viaja en el fragmento de la URL, el QR y los avatares se dibujan en el navegador. Al compartir o al mostrar el resultado en grande se arma un enlace corto (desde el 21 de octubre de 2026): en Cloudflare queda una copia del comprobante cifrada en el navegador, con la clave solo en el enlace: Tinkazo no la puede leer, la abre quien tenga el enlace o el QR (que lleva la lista), y se borra con «Borrar el enlace corto» en Mis sorteos ([workers/enlaces](../workers/enlaces/README.md)).
 - **Quien comparte el enlace comparte la lista**, y eso se dice: sin los nombres nadie puede recomputar.
 
 Para los correos de Luma el plan de [premios.md](premios.md) sigue la misma línea: el CSV se lee en el navegador y los correos no salen de ahí.
