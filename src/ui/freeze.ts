@@ -295,13 +295,16 @@ function startCountdown(): void {
   countdownTimer = window.setInterval(tick, 250);
 }
 
-/** El botón cambia de nombre según haya wallet conectada o no. */
+/**
+ * El botón se llama "Sellar la lista", con cuenta y sin ella, como el paso 2
+ * ("Sellar"). Hasta el 21 de octubre de 2026 decía "Sellar en Stellar" con
+ * cuenta: dos nombres para lo mismo (evaluación crítica de experiencia,
+ * hallazgo 9). Con data-i, el cambio de idioma lo traduce.
+ */
 export function refreshFreezeLabel(): void {
   if (app.frozen) return;
-  // Con data-i, el cambio de idioma traduce el texto que corresponde en vez
-  // de volver a "Sellar la lista" (QA, 16 de octubre de 2026).
   const btn = $("btn-freeze");
-  btn.dataset.i = canAnchor() ? "sealOnStellar" : "freeze";
+  btn.dataset.i = "freeze";
   btn.textContent = t(btn.dataset.i);
 }
 
@@ -405,8 +408,8 @@ export async function freeze(): Promise<void> {
       console.warn("[tinkazo] el sello no se pudo grabar", e);
       btn.disabled = false;
       cerrarLista(false);
-      btn.dataset.i = "sealOnStellar";
-      btn.textContent = t("sealOnStellar");
+      btn.dataset.i = "freeze";
+      btn.textContent = t("freeze");
       const status = $("seal-status");
       status.style.display = "block";
       // Naranja, como el error del sorteo: violeta es "todavía va" (styles.css).
@@ -554,7 +557,8 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   // sello, todos tienen el número del bueno.
   const wid = document.getElementById("wait-id");
   if (wid) {
-    wid.textContent = raffleId !== undefined ? t("waitId").replace("{n}", String(raffleId)) : "";
+    // En la página, solo el número: "anotalo o sacale una foto" es para la sala, en la espera en grande.
+    wid.textContent = raffleId !== undefined ? t("waitIdPagina").replace("{n}", String(raffleId)) : "";
     wid.style.display = raffleId !== undefined ? "block" : "none";
   }
   $("frozen-ts").textContent = t("frozenAt") + " " + f.at;
