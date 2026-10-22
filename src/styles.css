@@ -605,6 +605,10 @@
   /* Sin texto no hay caja: vacía era un recuadro oscuro sin nada adentro. */
   .commentary:empty { display: none; }
   .commentary.pop { animation: popIn 0.28s; }
+  /* Un grito del relator, entero en mayúsculas: en pantalla, porque el texto
+     sigue con el nombre bien escrito para los lectores de pantalla y para
+     quien lo copie. */
+  .commentary.grito { text-transform: uppercase; }
   @keyframes popIn { from { transform: translateX(-50%) scale(0.75); } to { transform: translateX(-50%) scale(1); } }
   @media (max-width: 700px) { .hero { grid-template-columns: 1fr; } .mascot { display: none; } .verify { grid-template-columns: 1fr; } }
   /* En un celular de 390 px la cabecera medía 411 y arrastraba de lado a la

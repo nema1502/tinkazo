@@ -306,7 +306,10 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   function crown(): void {
     if (crowned) return;
     crowned = true;
-    S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
+    // Los gritos de la piñata se ven enteros en mayúsculas, como "¡SE ROMPIÓ!",
+    // y el resto del relato no: "¡EL TINKAZO ES PARA Ana Vargas!" mezclaba las
+    // dos en la misma línea (revisión visual, 21 de octubre de 2026).
+    S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1, true);
     // En triángulo: el seno de 131 Hz no sale por el parlante de un proyector,
     // los armónicos del triángulo sí.
     beep(note(0), 0.7, "triangle", 0.08);
@@ -426,7 +429,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     }
     if (!brokeDone && tAll >= T_BREAK) {
       brokeDone = true;
-      S.say(t("cPinBreak"), 0.95);
+      S.say(t("cPinBreak"), 0.95, true);
       // La rotura en capas: el golpe, la lluvia de caramelos y el papel. Antes
       // era una nota apenas más fuerte que un palo.
       beep(note(0), 0.45, "square", 0.09);

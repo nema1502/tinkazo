@@ -127,7 +127,11 @@ export interface PixiStage {
   rng: () => number;
   dark: boolean;
   color(k: number): number;
-  say(msg: string, heat?: number): void;
+  /**
+   * El relator dice `msg`. Con `grito`, la línea se ve entera en mayúsculas
+   * (en pantalla; el texto queda como se escribió, con el nombre bien escrito).
+   */
+  say(msg: string, heat?: number, grito?: boolean): void;
   face(name: string): Texture;
   text(s: string, style: TextStyleOptions): Text;
   /**
@@ -276,6 +280,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   const base = $<HTMLCanvasElement>("race-canvas");
   const commentEl = $("commentary");
   commentEl.textContent = "";
+  commentEl.classList.remove("grito");
   $("st-round").textContent = `${t("seed")} ${beacon.round}`;
 
   // El lienzo de siempre queda escondido; PixiJS dibuja en uno propio, porque
@@ -819,8 +824,9 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       return (portrait() ? sh() * 0.24 : sh() * 0.26) + ph / 2 + 10 * k;
     },
     color: (k) => P[((k % P.length) + P.length) % P.length] ?? 0xe93d9c,
-    say(msg, heat = 0) {
+    say(msg, heat = 0, grito = false) {
       commentEl.textContent = msg;
+      commentEl.classList.toggle("grito", grito);
       commentEl.animate(
         [{ transform: "translateX(-50%) scale(0.75)" }, { transform: "translateX(-50%) scale(1)" }],
         { duration: 280, easing: "cubic-bezier(.34,1.56,.64,1)" },
@@ -890,6 +896,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         app.destroy({ removeView: true }, { children: true });
       }, 0);
       base.style.visibility = "";
+      commentEl.classList.remove("grito");
       releaseScreen();
       ov.style.display = "none";
       document.body.style.overflow = "";
