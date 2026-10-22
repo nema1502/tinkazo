@@ -124,12 +124,26 @@ export interface Dict {
   cQuiDone: (n: string, k: number) => string;
   /** La frase de "uy, casi" del susto: por número, sin azar, para que la sala no dependa del sorteo de frases. */
   cQuiAlmost: (i: number) => string;
-  cOruCount: (n: number) => string;
-  cOruStop: (k: number, off: number, left: number) => string;
-  cOruStay: (n: string) => string;
-  cOruMask: (n: string) => string;
   cOruDuel: (a: string, b: string) => string;
   cOruBlock: (k: number, of: number) => string;
+  cOruFrat: (art: string, name: string, dance: string) => string;
+  cOruGo: (n: number, f: number) => string;
+  cOruFratStay: (k: number, art: string, name: string, prizes: number) => string;
+  cOruOnly: (art: string, name: string) => string;
+  cOruMemStay: (k: number, ns: string[]) => string;
+  cOruMemMany: (k: number, c: number, art: string, name: string) => string;
+  cOruMemPrize: (k: number, c: number, prizes: number) => string;
+  cOruFake: (art: string, name: string) => string;
+  cOruFakeOne: (n: string) => string;
+  cOruFakeNo: (plural: boolean) => string;
+  cOruScare: (n: string, prenda: string) => string;
+  cOruTrip: (n: string) => string;
+  cOruFall: (n: string, prenda: string) => string;
+  cOruDanza: (d: string) => string;
+  cOruFratTitle: (art: string, name: string) => string;
+  cOruRosterSub: (dance: string, c: number) => string;
+  /** La llegada nombra a la fraternidad: "nuestra fraternidad llegó hasta el Socavón" (sección 7.8). */
+  cOruArriveFrat: (art: string, name: string) => string;
   cLuzCount: (n: number) => string;
   cLuzCaught: (n: string) => string;
   cLuzMany: (k: number) => string;
@@ -584,17 +598,10 @@ export const T: Record<Lang, Dict> = {
     cSapDone: (k) => pick([`¡Cayó el premio ${k}!`, `¡Ahí quedó el premio ${k}!`]),
     cSapTally: (k, of) => `Premio ${k} de ${of}`,
     cSapAlmost: "¡Casi!",
-    // --- Carnaval de Oruro. La entrada de la Diablada hasta el Socavón.
-    cOruStart: ["¡Arranca la entrada!", "¡Suena la banda!", "¡Que baile la diablada!"],
-    cOruCount: (n) => (n === 2 ? "¡Dos diablos en la comparsa!" : `¡${n} diablos en la comparsa!`),
-    cOruDance: ["¡Qué pasos!", "¡Cómo zapatean!", "¡Saltan los diablos!"],
-    cOruStop: (k, off, left) => (off === 0 ? `¡Cuadra ${k}! Siguen los ${left}` : off === 1 ? `¡Cuadra ${k}! Se queda uno, siguen ${left}` : `¡Cuadra ${k}! Se quedan ${off}, siguen ${left}`),
-    cOruStay: (n) => pick([`¡${n} se queda en la cuadra!`, `¡Hasta acá bailó ${n}!`, `¡${n} saluda desde la vereda!`]),
-    cOruLast: ["¡Última cuadra!", "¡Ya se ve el Socavón!", "¡La recta final de la entrada!"],
-    cOruMask: (n) => pick([`¡Casi se le cae la máscara a ${n}!`, `¡${n} tropieza!`, `¡Uy, ${n}!`]),
+    // --- La Entrada (Carnaval de Oruro): el desfile por fraternidades hasta el Socavón.
+    cOruLast: ["¡Ya se ve el Socavón!", "¡La recta final de la entrada!", "¡Al Socavón!"],
     cOruDuel: (a, b) => pick([`¡Contrapunto entre ${a} ${yE(b)} ${b}!`, `¡${a} ${yE(b)} ${b}, cara a cara!`]),
-    cOruArrive: ["¡LLEGÓ AL SOCAVÓN!", "¡SUENAN LAS CAMPANAS!", "¡ENTRA AL SANTUARIO!"],
-    cOruLeft: "EN LA COMPARSA",
+    cOruLeft: "EN LA ENTRADA",
     cOruBlock: (k, of) => `CUADRA ${k} DE ${of}`,
     // --- Luz roja, luz verde. El juego de patio, con el Faro que mira.
     cLuzIntro: ["¡Todos a la línea!", "¡A sus puestos!", "¡Frente al Faro!"],
@@ -679,7 +686,36 @@ export const T: Record<Lang, Dict> = {
     gameTotora: "Balsas de totora",
     gamePinata: "Piñata",
     cPinPrize: (k) => (k > 1 ? pick(["¡Salen con premio!", "¡Se llevan premio y salen!"]) : pick(["¡Sale con premio!", "¡Se lleva premio y sale!"])),
-    gameOruro: "Carnaval de Oruro",
+    gameOruro: "La Entrada",
+    // La Entrada: la sala aplaude con la banda, cada fraternidad se presenta y se queda entera.
+    cOruClap: ["¡Aplaudan al ritmo de la banda!", "¡Palmas con la banda!", "¡Todos a aplaudir con la banda!"],
+    cOruClapHud: "¡APLAUDAN!",
+    cOruEnter: "ENTRAN",
+    cOruFrat: (art, name, dance) => pick([`¡Entran ${art} ${name}, bailando ${dance}!`, `¡Pasan ${art} ${name}, bailando ${dance}!`, `¡Llegan ${art} ${name}, bailando ${dance}!`]),
+    cOruGo: (n, f) => (n === 1 ? "¡Un bailarín: arranca el recorrido!" : n === 2 ? "¡Dos bailarines: arranca el recorrido!" : f > 1 ? `¡${n} bailarines en ${f} fraternidades: arranca el recorrido!` : `¡${n} bailarines: arranca el recorrido!`),
+    cOruFratStay: (k, art, name, prizes) => `¡Cuadra ${k}! Se quedan ${art} ${name}${prizes === 1 ? ", con un premio" : prizes > 1 ? `, con ${prizes} premios` : ""}`,
+    cOruOnly: (art, name) => pick([`¡Solo quedan ${art} ${name}!`, `¡${art.charAt(0).toUpperCase()}${art.slice(1)} ${name}, la última fraternidad!`]),
+    cOruMemStay: (k, ns) => (ns.length === 1 ? `¡Cuadra ${k}! Se queda ${ns[0]}` : `¡Cuadra ${k}! Se quedan ${joinList(ns, "y")}`),
+    cOruMemMany: (k, c, art, name) => `¡Cuadra ${k}! Se quedan ${c} de ${art} ${name}`,
+    cOruMemPrize: (k, c, prizes) => (c === 1 ? `¡Cuadra ${k}! Se queda uno, con premio` : prizes === 1 ? `¡Cuadra ${k}! Se quedan ${c}, uno con premio` : `¡Cuadra ${k}! Se quedan ${c}, ${prizes} con premio`),
+    cOruFake: (art, name) => `¿Se quedan ${art} ${name}?`,
+    cOruFakeOne: (n) => `¿Se queda ${n}?`,
+    cOruFakeNo: (plural) => (plural ? pick(["¡No! ¡Siguen bailando!", "¡Nada! ¡Siguen!"]) : pick(["¡No! ¡Sigue bailando!", "¡Nada! ¡Sigue!"])),
+    cOruFreeze: ["¡Se calló la banda!", "¡Silencio! ¡Quietos!", "¡Se cortó la banda!"],
+    cOruFreezeBack: ["¡Sigue la banda!", "¡Vuelve la banda!", "¡Y sigue la entrada!"],
+    cOruScare: (n, prenda) => (prenda === "sombrero" ? `¡Casi se le vuela el sombrero a ${n}!` : prenda === "montera" ? `¡Casi se le cae la montera a ${n}!` : `¡Casi se le cae la máscara a ${n}!`),
+    cOruTrip: (n) => pick([`¡Trastabilla ${n}!`, `¡Uy, ${n}!`, `¡${n} casi se cae!`]),
+    cOruFall: (n, prenda) => {
+      const que = prenda === "sombrero" ? "se le voló el sombrero" : prenda === "montera" ? "se le cayó la montera" : "se le cayó la máscara";
+      return n ? `¡A ${n} ${que}!` : `¡${que.charAt(0).toUpperCase()}${que.slice(1)}!`;
+    },
+    cOruDanza: (d) => ({ diablada: "Diablada", morenada: "Morenada", caporales: "Caporales", tinkus: "Tinkus", llamerada: "Llamerada" })[d] ?? d,
+    cOruFratTitle: (art, name) => `${art} ${name}`,
+    cOruRosterSub: (dance, c) => `${dance} · ${c} ${c === 1 ? "bailarín" : "bailarines"}`,
+    cOruArriveFrat: (art, name) => {
+      const Art = `${art.charAt(0).toUpperCase()}${art.slice(1)}`;
+      return pick([`¡${Art} ${name} llegaron al Socavón!`, `¡${Art} ${name}, hasta el Socavón!`, `¡Campanas para ${art} ${name}: llegaron al Socavón!`]);
+    },
     gameLuz: "Luz roja, luz verde",
     gameCho: "Chovena",
     cPasSpread: ["¡Se tiende el aguayo!", "¡Aguayo al piso!", "¡A ver ese aguayo!"],
@@ -1206,8 +1242,8 @@ export const T: Record<Lang, Dict> = {
     jgChoB: "El baile chiquitano de Santa Cruz: la rueda gira tomada de la mano y, cuando se corta la música, el que trastabilla se suelta y sale. La sala aplaude al ritmo y se congela con el corte. Mejor de doce a ochenta.",
     loreChoQ: "¿Qué es la chovena?",
     loreChoA: "Un baile de origen chiquitano, de Santa Cruz, en dos por cuatro: las parejas, tomadas de la mano, forman círculos y filas. Se baila en las fiestas religiosas y en carnaval.",
-    jgOruN: "Carnaval de Oruro",
-    jgOruB: "La entrada de la Diablada: la comparsa baila por las cuadras, entre las graderías llenas, y en cada arco se quedan algunos. Los dos últimos hacen un contrapunto frente al Socavón, y el que llega entra con campanas y cohetillos. Hasta doscientas.",
+    jgOruN: "La Entrada",
+    jgOruB: "El Carnaval de Oruro, por fraternidades: cada grupo de la lista baila lo suyo (Diablada, Morenada, Caporales, Tinkus o Llamerada) y pasa frente al palco con el nombre de cada uno. En cada cuadra se queda una fraternidad entera, y en la última se quedan de a varios hasta el contrapunto frente al Socavón. Hasta doscientas.",
     jgSapoN: "Sapo",
     jgSapoB: "El juego de las ferias y los patios: una rana en el medio del cajón y un agujero con el nombre de cada uno. Las argollas pegan en la madera, bailan en el borde de un vecino y salen, y la última cae en el agujero de quien gana. Con más de doce, los nombres se tachan en oleadas hasta que quedan doce. Hasta doscientas, con hasta doce ganadores.",
     jgQuienN: "De pie",
@@ -1235,7 +1271,7 @@ export const T: Record<Lang, Dict> = {
     gcChovenaMany: "Bailan en rueda, de la mano. Cuando se corta la música, el que trastabilla sale. Los últimos en salir ganan premio, y el último que queda bailando se lleva el primero.",
     gcTrompo: "Los trompos chocan y se sacan del ruedo. Gana el último que sigue bailando.",
     gcPinata: "Con cada palo caen caramelos. Gana el último que queda adentro.",
-    gcOruro: "En cada cuadra se quedan bailarines. Gana el que llega al Socavón.",
+    gcOruro: "En cada cuadra se queda una fraternidad entera. Gana quien llega al Socavón.",
     gcTombola: "Cada uno tiene una bola con su número, y la lista está al lado del bombo. Gana la que cae en el vaso.",
     gcWheel: "Gana el gajo que queda bajo la flecha. Con muchas personas, cada gajo reúne a un grupo.",
     gcTeleferico: "En cada estación se baja un grupo entero. Gana quien llega a la cumbre.",
@@ -1892,16 +1928,9 @@ export const T: Record<Lang, Dict> = {
     cSapDone: (k) => pick([`Prize ${k} dropped in!`, `There it rests: prize ${k}!`]),
     cSapTally: (k, of) => `Prize ${k} of ${of}`,
     cSapAlmost: "Almost!",
-    cOruStart: ["The entrada begins!", "The band strikes up!", "Let the diablada dance!"],
-    cOruCount: (n) => (n === 2 ? "Two devils in the troupe!" : `${n} devils in the troupe!`),
-    cOruDance: ["What steps!", "Look at them stomp!", "The devils leap!"],
-    cOruStop: (k, off, left) => (off === 0 ? `Block ${k}! All ${left} go on` : off === 1 ? `Block ${k}! One stays, ${left} go on` : `Block ${k}! ${off} stay, ${left} go on`),
-    cOruStay: (n) => pick([`${n} stays at this block!`, `${n} danced this far!`, `${n} waves from the sidewalk!`]),
-    cOruLast: ["Last block!", "The Socavón is in sight!", "The final stretch of the entrada!"],
-    cOruMask: (n) => pick([`${n}'s mask almost fell off!`, `${n} stumbles!`, `Whoa, ${n}!`]),
+    cOruLast: ["The Socavón is in sight!", "The final stretch of the entrada!", "On to the Socavón!"],
     cOruDuel: (a, b) => pick([`A face-off between ${a} and ${b}!`, `${a} and ${b}, face to face!`]),
-    cOruArrive: ["TO THE SOCAVÓN!", "THE BELLS RING!", "INTO THE SANCTUARY!"],
-    cOruLeft: "IN THE TROUPE",
+    cOruLeft: "IN THE ENTRADA",
     cLuzIntro: ["Everyone to the line!", "Take your places!", "Face the Lighthouse!"],
     cLuzCount: (n) => (n === 2 ? "Two runners face the Lighthouse!" : `${n} runners face the Lighthouse!`),
     cLuzGreen: ["Green light!", "Green, run!", "Go, go!"],
@@ -1981,7 +2010,33 @@ export const T: Record<Lang, Dict> = {
     gameTotora: "Reed boats",
     gamePinata: "Piñata",
     cPinPrize: (k) => (k > 1 ? pick(["Out with prizes!", "They take prizes and leave!"]) : pick(["Out with a prize!", "Takes a prize and leaves!"])),
-    gameOruro: "Oruro Carnival",
+    gameOruro: "La Entrada",
+    // La Entrada: the room claps with the band, every group passes by and stays behind whole.
+    cOruClap: ["Clap along with the band!", "Clap to the band's beat!", "Everyone, clap with the band!"],
+    cOruClapHud: "CLAP!",
+    cOruEnter: "HERE COME",
+    cOruFrat: (_art, name, dance) => pick([`Here come the ${name}, dancing ${dance}!`, `The ${name} pass by, dancing ${dance}!`, `In come the ${name}, dancing ${dance}!`]),
+    cOruGo: (n, f) => (n === 1 ? "One dancer: the parade sets off!" : n === 2 ? "Two dancers: the parade sets off!" : f > 1 ? `${n} dancers in ${f} groups: the parade sets off!` : `${n} dancers: the parade sets off!`),
+    cOruFratStay: (k, _art, name, prizes) => `Block ${k}! The ${name} stay behind${prizes === 1 ? ", with a prize" : prizes > 1 ? `, with ${prizes} prizes` : ""}`,
+    cOruOnly: (_art, name) => pick([`Only the ${name} are left!`, `The ${name}, the last group!`]),
+    cOruMemStay: (k, ns) => (ns.length === 1 ? `Block ${k}! ${ns[0]} stays` : `Block ${k}! ${joinList(ns, "and")} stay`),
+    cOruMemMany: (k, c, _art, name) => `Block ${k}! ${c} of the ${name} stay`,
+    cOruMemPrize: (k, c, prizes) => (c === 1 ? `Block ${k}! One stays, with a prize` : prizes === 1 ? `Block ${k}! ${c} stay, one with a prize` : `Block ${k}! ${c} stay, ${prizes} with prizes`),
+    cOruFake: (_art, name) => `Are the ${name} staying?`,
+    cOruFakeOne: (n) => `Is ${n} staying?`,
+    cOruFakeNo: (plural) => (plural ? pick(["No! They keep dancing!", "Nope! On they go!"]) : pick(["No! Still dancing!", "Nope! Still in!"])),
+    cOruFreeze: ["The band went quiet!", "Silence! Freeze!", "The band stopped!"],
+    cOruFreezeBack: ["The band plays on!", "Here comes the band again!", "And the parade goes on!"],
+    cOruScare: (n, prenda) => (prenda === "sombrero" ? `${n}'s hat almost flew off!` : prenda === "montera" ? `${n}'s montera almost fell off!` : `${n}'s mask almost fell off!`),
+    cOruTrip: (n) => pick([`${n} stumbles!`, `Whoa, ${n}!`, `${n} almost fell!`]),
+    cOruFall: (n, prenda) => {
+      const what = prenda === "sombrero" ? "hat flew off" : prenda === "montera" ? "montera fell off" : "mask fell off";
+      return n ? `${n}'s ${what}!` : `A ${what}!`;
+    },
+    cOruDanza: (d) => ({ diablada: "Diablada", morenada: "Morenada", caporales: "Caporales", tinkus: "Tinkus", llamerada: "Llamerada" })[d] ?? d,
+    cOruFratTitle: (_art, name) => `the ${name}`,
+    cOruRosterSub: (dance, c) => `${dance} · ${c} ${c === 1 ? "dancer" : "dancers"}`,
+    cOruArriveFrat: (_art, name) => pick([`The ${name} made it to the Socavón!`, `All the way to the Socavón: the ${name}!`, `Bells for the ${name}: they reached the Socavón!`]),
     gameLuz: "Red light, green light",
     gameCho: "Chovena",
     cPasSpread: ["The cloth goes down!", "Aguayo on the floor!", "Look at that aguayo!"],
@@ -2491,8 +2546,8 @@ export const T: Record<Lang, Dict> = {
     jgPinB: "The seven-pointed star hanging in the courtyard, under papel picado. Each name is a candy inside; every swing knocks a few out, and when it breaks, the last one left comes down slowly. Up to two hundred.",
     lorePinataQ: "Where does the piñata come from?",
     lorePinataA: "According to Mexico's INAH, it arrived in 1586, when the Augustinian friars of Acolman held the Christmas masses that later became the posadas. The seven-pointed one is the classic.",
-    jgOruN: "Oruro Carnival",
-    jgOruB: "The Diablada's entrada: the troupe dances block by block between packed stands, and at each arch a few stay behind. The last two face off in front of the Socavón, and the one who arrives goes in with bells and fireworks. Up to two hundred.",
+    jgOruN: "La Entrada",
+    jgOruB: "The Oruro Carnival, group by group: each group on the list dances its own dance (Diablada, Morenada, Caporales, Tinkus or Llamerada) and passes the reviewing stand with everyone's name. A whole group stays behind at every block, and in the last one a few stay at a time, until the face-off in front of the Socavón. Up to two hundred.",
     jgSapoN: "Sapo",
     jgSapoB: "The game of fairs and patios: a frog in the middle of a wooden box and one hole with each name. Rings hit the wood, dance on a neighbor's rim and roll out, and the last one drops into the winner's hole. With more than twelve, names are crossed out in waves until twelve are left. Up to two hundred, with up to twelve winners.",
     jgQuienN: "Stand up",
@@ -2519,7 +2574,7 @@ export const T: Record<Lang, Dict> = {
     gcChovenaMany: "They dance in a ring, hand in hand. When the music stops, whoever stumbles is out. The last ones out win a prize, and the last one dancing takes the first.",
     gcTrompo: "The tops clash and knock each other out of the ring. The last one spinning wins.",
     gcPinata: "Every swing knocks candies out. The last one left inside wins.",
-    gcOruro: "Dancers stay behind at every block. Whoever reaches the Socavón wins.",
+    gcOruro: "A whole group stays behind at every block. Whoever reaches the Socavón wins.",
     gcTombola: "Everyone has a ball with their number, listed next to the drum. The one that drops into the cup wins.",
     gcWheel: "The slice left under the pointer wins. With many people, each slice holds a group.",
     gcTeleferico: "A whole group gets off at every station. Whoever reaches the top wins.",

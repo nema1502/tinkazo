@@ -5,6 +5,7 @@ import { beep, fanfare, note } from "../../sound";
 import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { capRecent, juntar, layoutLabels, listaCaidos, type LabelItem, type ListaGeo, type Rect } from "./pinata-labels";
+import { createPile, shouldSettle, type Pile } from "./pinata-monton";
 import { planPalos } from "./pinata-plan";
 import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 
@@ -80,7 +81,13 @@ interface Candy {
   idx: number; inside: boolean; x: number; y: number; vx: number; vy: number; rot: number; spin: number; settled: boolean; out: number; drawn: boolean;
   /** Order in which it left the piñata (for "most recent first") and when it stopped moving. */
   seq: number; settledAt: number;
+  /** Cuándo tocó el piso por primera vez (-1 si todavía no): se asienta a más tardar un rato después. */
+  touch: number;
+  /** El último tramo, cuando ya se asentó: rueda hasta su lugar en el montón y ahí se queda. */
+  slide: { t0: number; x0: number; y0: number; x1: number; y1: number } | null;
 }
+/** Lo que tarda en rodar a su lugar del montón, en segundos de juego: sin esto saltaba de columna. */
+const SLIDE = 0.18;
 interface Swing { at: number; miss: boolean; drop: number[]; done: boolean }
 
 export async function pinataPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<void> {
@@ -129,7 +136,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   setGameLength(T_CROWN, WINNER_HOLD);
   const T_PEEK = swings.filter((s) => !s.miss).at(-2)?.at ?? T_BREAK - 1;
 
-  const candies: Candy[] = names.map((_, i) => ({ idx: i, inside: true, x: 0, y: 0, vx: 0, vy: 0, rot: 0, spin: 0, settled: false, out: 0, drawn: false, seq: -1, settledAt: -9 }));
+  const candies: Candy[] = names.map((_, i) => ({ idx: i, inside: true, x: 0, y: 0, vx: 0, vy: 0, rot: 0, spin: 0, settled: false, out: 0, drawn: false, seq: -1, settledAt: -9, touch: -1, slide: null }));
   const winC = candies[winnerIdx] as Candy;
   const rivC = candies[rivalIdx] as Candy;
 
@@ -153,12 +160,14 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   /** El tamaño de un caramelo: más grandes que antes, que se leían como puntitos. */
   const candySize = (): number => clamp(Math.sqrt(1 / n) * 70 * S.u(), 12 * S.u(), 26 * S.u());
   /**
-   * El montón del piso, por columnas: cada caramelo que se queda quieto sube
-   * su columna y un poco las de al lado, así se apilan como de verdad.
+   * El montón del piso, de arena (`pinata-monton.ts`): el caramelo que se
+   * asienta rueda a la columna vecina más baja mientras la suya quede más alta
+   * que el talud, y sube su columna medio caramelo. Antes cada uno subía la
+   * suya uno entero y con doscientos quedaban torres de treinta caramelos, un
+   * bosque de columnas en el celular (revisión de juegos, 20 de octubre de 2026).
+   * Se arma con la pantalla, en `build`.
    */
-  const heights = new Map<number, number>();
-  const colOf = (x: number): number => Math.floor(x / (candySize() * 2.2));
-  const hAt = (col: number): number => heights.get(col) ?? 0;
+  let monton: Pile = createPile(candySize(), 20 * S.u(), S.sw() - 20 * S.u());
 
   /* -------------------------------------------------------------- geometría */
   const G = (): { w: number; h: number; k: number; ax: number; ay: number; L: number; floor: number; R: number; ks: number; ky: number; handY: number; reach: number; restY: number } => {
@@ -183,9 +192,25 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   };
   /** La piñata sube colgada de su cuerda: sale de abajo, se pasa y rebota. En fracción del alto. */
   const hoist = (t: number): number => (t < 0 || t >= 1.8 ? 0 : 0.3 * Math.exp(-t / 0.33) * Math.cos((t * 2 * Math.PI) / 0.85));
+  /**
+   * En cada palo al aire, el que tiene la cuerda la sube de un tirón y la deja
+   * caer, como se juega: la piñata esquiva el palo. En fracción del alto. Con
+   * dos personas los dos palos al aire eran casi siete segundos de pantalla
+   * quieta (auditor exigente, 21 de octubre de 2026).
+   */
+  const dodge = (t: number): number => {
+    let y = 0;
+    for (const s of swings) {
+      if (!s.miss) continue;
+      const a = t - (s.at - 0.18);
+      // Sube en 0,16 s y baja rebotando en la cuerda.
+      if (a > 0 && a < 1.1) y -= 0.09 * (a < 0.16 ? Math.sin((Math.PI / 2) * (a / 0.16)) : Math.exp(-(a - 0.16) * 5) * Math.cos((a - 0.16) * 12));
+    }
+    return y;
+  };
   const pinPos = (): { x: number; y: number } => {
     const g = G();
-    return { x: g.ax + Math.sin(theta) * g.L, y: g.ay + Math.cos(theta) * g.L + hoist(tAll) * g.h };
+    return { x: g.ax + Math.sin(theta) * g.L, y: g.ay + Math.cos(theta) * g.L + (hoist(tAll) + dodge(tAll)) * g.h };
   };
   /** Dónde está parado el chico (x del mundo), cuánto caminó y qué tan rápido va: las piernas se mueven con eso. */
   let kidX = NaN, kidWalk = 0, kidSpeed = 0;
@@ -235,17 +260,34 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     for (const c of candies) {
       if (c.inside || c.settled) continue;
       c.out += dt;
+      if (c.slide) {
+        // Ya se asentó: rueda hasta su lugar del montón, gira lo que avanza, y queda.
+        const s = c.slide;
+        const f = clamp((tAll - s.t0) / SLIDE, 0, 1);
+        const e = ease.inOutCubic(f);
+        const nx = s.x0 + (s.x1 - s.x0) * e;
+        c.rot += (nx - c.x) / Math.max(1, sz);
+        c.x = nx;
+        c.y = s.y0 + (s.y1 - s.y0) * e;
+        if (f >= 1) {
+          c.slide = null;
+          c.settled = true;
+          c.settledAt = tAll;
+        }
+        continue;
+      }
       // El caramelo ganador baja despacio, pero llega al piso antes del cartel.
       c.vy += GRAV * g.k * dt * (c === winC ? 0.32 : 1);
       if (c === winC) c.vy = Math.min(c.vy, 300 * g.k);
       c.x += c.vx * dt;
       c.y += c.vy * dt;
       c.rot += c.spin * dt;
-      // El piso es el montón: la columna donde cae, sin pasar por encima de sus vecinas.
-      const col = colOf(c.x);
-      const ground = g.floor - sz * 0.62 - (c === winC ? 0 : hAt(col));
+      // El piso es el montón: la columna donde cae.
+      const col = monton.colOf(c.x);
+      const ground = g.floor - sz * 0.62 - (c === winC ? 0 : monton.heightAt(col));
       if (c.y >= ground) {
         c.y = ground;
+        if (c.touch < 0) c.touch = tAll;
         if (c === winC && !landed) {
           // El golpe del ganador va en el primer toque, a la vista: esperar a
           // que se aquietara lo hacía sonar con el cartel ya puesto.
@@ -262,18 +304,25 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
         } else {
           c.vy = 0;
           // En la ladera del montón resbala hacia el lado más bajo.
-          const slope = hAt(col - 1) - hAt(col + 1);
+          const slope = monton.heightAt(col - 1) - monton.heightAt(col + 1);
           c.vx += slope * 6 * dt * g.k;
           c.vx *= 0.9;
           // Rueda: gira lo que avanza.
           c.spin = c.vx / Math.max(1, sz);
-          if (Math.abs(c.vx) < 6 * g.k && Math.abs(slope) < sz * 1.4) {
-            c.settled = true;
-            c.settledAt = tAll;
-            if (c !== winC) {
-              heights.set(col, hAt(col) + sz * 1.05);
-              heights.set(col - 1, Math.max(hAt(col - 1), hAt(col) - sz * 1.2));
-              heights.set(col + 1, Math.max(hAt(col + 1), hAt(col) - sz * 1.2));
+          // Se asienta cuando casi no se mueve, o a más tardar un rato después
+          // de tocar el piso: antes, en una ladera empinada, había caramelos que
+          // no se asentaban nunca y seguían con su nombre (pantalla-9).
+          if (shouldSettle(c.vx, g.k, tAll - c.touch)) {
+            if (c === winC) {
+              c.settled = true;
+              c.settledAt = tAll;
+            } else {
+              // Rueda a la columna más baja que el talud le deja, y reserva su
+              // lugar ya: el que cae detrás lo encuentra ocupado.
+              const spot = monton.settle(col, c.vx > 0 ? 1 : c.vx < 0 ? -1 : hash(c.idx, 11) < 0.5 ? -1 : 1);
+              const x1 = monton.centerOf(spot.col) + (hash(c.idx, 12) - 0.5) * sz * 0.5;
+              c.slide = { t0: tAll, x0: c.x, y0: c.y, x1, y1: g.floor - sz * 0.62 - spot.base };
+              c.vx = 0;
             }
           }
         }
@@ -584,6 +633,12 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     pieces = new Graphics();
     candyG = new Graphics();
     pile = new Graphics();
+    // El montón crece caramelo a caramelo y nunca se borra: en "auto", PixiJS
+    // lo deja de dibujar en lote al pasar los 400 vértices, y en el cuadro de ese
+    // cambio la placa llegó a dibujar una franja de colores desde el palo hasta
+    // una esquina (auditor exigente, 21 de octubre de 2026, a los 31 s). Siempre
+    // aparte, ese cambio no existe.
+    pile.context.batchMode = "no-batch";
     glow = new Graphics();
     kid = makeKid();
     pin = makePinata(g.R);
@@ -674,7 +729,23 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     listaCont.addChild(listaMore);
     S.hud.addChild(listaCont);
     listaKey = -1;
-    heights.clear();
+    // El montón se vuelve a armar con la pantalla nueva, en el orden en que se
+    // asentaron: cada caramelo queda en el montón de esta pantalla, no donde
+    // estaba en la anterior.
+    monton = createPile(candySize(), 20 * k, g.w - 20 * k);
+    const sz = candySize();
+    for (const c of candies) {
+      if (c.slide) {
+        c.slide = null;
+        c.settled = true;
+        c.settledAt = tAll;
+      }
+    }
+    for (const c of candies.filter((x) => x.settled && x !== winC).sort((a, b) => a.settledAt - b.settledAt || a.seq - b.seq)) {
+      const spot = monton.settle(monton.colOf(clamp(c.x, 20 * k, g.w - 20 * k)), hash(c.idx, 11) < 0.5 ? -1 : 1);
+      c.x = monton.centerOf(spot.col) + (hash(c.idx, 12) - 0.5) * sz * 0.5;
+      c.y = g.floor - sz * 0.62 - spot.base;
+    }
     for (const c of candies) c.drawn = false;
   }
   build();
@@ -718,7 +789,9 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       const topY = Math.min(p.y - g.R * 1.2, g.ky - 140 * g.ks), botY = Math.max(p.y + g.R * 1.2, g.ky + 4 * g.ks);
       const bandH = g.h - S.bottom() - 6 * g.k - (S.top() + 6 * g.k);
       const zDos = Math.max(0.8, Math.min(1.6, (g.w - 20 * g.k) / Math.max(1, right - left), bandH / Math.max(1, botY - topY)));
-      const z = near ? 1.9 : dos ? zDos : 1.2 + 0.25 * (crackLevel / nHits);
+      // Con dos personas no hay palos que suelten caramelos (nHits es cero): sin
+      // el tope, el acercamiento salía NaN y la escena quedaba vacía hasta la rotura.
+      const z = near ? 1.9 : dos ? zDos : 1.2 + 0.25 * (crackLevel / Math.max(1, nHits));
       let x = p.x, y = p.y + g.R * (near ? 0.4 : 0.8);
       if (dos && !near) {
         x = (left + right) / 2;

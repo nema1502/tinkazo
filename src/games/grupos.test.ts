@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { GRUPOS, MAX_GRUPOS, cuantosGrupos, grupoDe } from "./grupos";
+import { describe, expect, it, vi } from "vitest";
+import { COLORES, GRUPOS, MAX_GRUPOS, cuantosGrupos, grupoDe } from "./grupos";
 
 describe("grupos automáticos: cuántos", () => {
   it("de a cuatro por grupo, hasta diez", () => {
@@ -17,6 +17,15 @@ describe("grupos automáticos: cuántos", () => {
     expect(GRUPOS.length).toBe(MAX_GRUPOS);
     expect(new Set(GRUPOS.map((g) => g.nombre)).size).toBe(MAX_GRUPOS);
   });
+
+  it("cada grupo tiene su color, el de su línea del teleférico, en todos los juegos", async () => {
+    expect(COLORES.length).toBe(MAX_GRUPOS);
+    expect(new Set(COLORES).size).toBe(MAX_GRUPOS);
+    // El plan del teleférico toma `clamp` de overlay.ts, que lee `location` al cargarse.
+    vi.stubGlobal("location", { search: "" });
+    const { LINES } = await import("./pixi/cablecar-plan");
+    expect([...COLORES]).toEqual(LINES);
+  }, 60_000);
 });
 
 describe("grupos automáticos: el reparto", () => {
