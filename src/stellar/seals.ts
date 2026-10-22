@@ -223,6 +223,98 @@ export async function sealsOnChain(
   }
 }
 
+/* ------------------------------------- si un sello que se mandó entró o no */
+
+/**
+ * El último ledger que conoce la red: su número y su hora de cierre, en
+ * segundos. Es el reloj que manda para saber si un sello todavía puede entrar
+ * (`resolverSello` en `envio.ts`): el del navegador puede estar corrido.
+ */
+export async function ultimoLedger(rpcUrl: string): Promise<{ secuencia: number; cierre: number }> {
+  const r = (await rpc(rpcUrl, "getLatestLedger", null)) as { sequence?: unknown; closeTime?: unknown };
+  const secuencia = Number(r.sequence);
+  const cierre = Number(r.closeTime);
+  if (Number.isFinite(secuencia) && secuencia > 0 && Number.isFinite(cierre) && cierre > 0) return { secuencia, cierre };
+  // Un RPC que todavía no dice la hora en `getLatestLedger`: la dice `getTransaction`, de cualquier hash.
+  const t = (await rpc(rpcUrl, "getTransaction", { hash: "0".repeat(64) })) as { latestLedger?: unknown; latestLedgerCloseTime?: unknown };
+  const s2 = Number(t.latestLedger);
+  const c2 = Number(t.latestLedgerCloseTime);
+  if (!Number.isFinite(s2) || !Number.isFinite(c2)) throw new Error("rpc-sin-respuesta: sin hora de la red");
+  return { secuencia: s2, cierre: c2 };
+}
+
+/** Cuántos sorteos se leen por viaje al buscar el sello de un intento, y cuántos viajes como mucho. */
+const LOTE_DEL_INTENTO = 60;
+const VIAJES_DEL_INTENTO = 10;
+/**
+ * Hasta dónde para atrás se busca: un sello entra a lo sumo 30 segundos antes de
+ * su ronda y se pide con un minuto y medio de margen como mucho. Diez minutos
+ * antes de la ronda (en la hora de la red, que es la que guarda el contrato) ya
+ * no puede haber un sello de este intento.
+ */
+const VENTANA_DEL_INTENTO_S = 600;
+
+/**
+ * Busca en el contrato el sello de un intento: la misma cuenta, la misma huella
+ * de la lista y la misma ronda. Lee del más nuevo para atrás, por lotes, hasta
+ * pasar la ventana del intento. `secuencia` es el ledger del que leyó (el menor
+ * de las lecturas): lo que no estaba ahí, no había entrado hasta ese ledger.
+ *
+ * Si no alcanza a recorrer la ventana (decenas de sellos por minuto), lanza: sin
+ * haber mirado todo no se afirma que no está.
+ */
+export async function selloDelIntento(
+  intento: { organizer: string; listHash: string; round: number },
+  contractId: string,
+  rpcUrl: string,
+): Promise<{ id?: string; secuencia: number }> {
+  const { xdr, scValToNative, Address } = await import("@stellar/stellar-sdk");
+  const { roundTime } = await import("../protocol/quicknet");
+  const contract = new Address(contractId).toScAddress();
+  const keyOf = (val: XdrNs.ScVal): string =>
+    xdr.LedgerKey.contractData(
+      new xdr.LedgerKeyContractData({ contract, key: val, durability: xdr.ContractDataDurability.persistent }),
+    ).toXdr("base64");
+  const leer = async (keys: string[]): Promise<{ vals: XdrNs.ScVal[]; secuencia: number }> => {
+    const got = (await rpc(rpcUrl, "getLedgerEntries", { keys })) as { entries?: { xdr?: string }[]; latestLedger?: unknown };
+    const vals: XdrNs.ScVal[] = [];
+    for (const e of got.entries ?? []) {
+      if (!e.xdr) continue;
+      const data = xdr.LedgerEntryData.fromXdr(e.xdr, "base64");
+      if (data.type === "contractData") vals.push(data.contractData.val);
+    }
+    const secuencia = Number(got.latestLedger);
+    if (!Number.isFinite(secuencia)) throw new Error("rpc-sin-respuesta: getLedgerEntries sin ledger");
+    return { vals, secuencia };
+  };
+
+  const instancia = await leer([keyOf(xdr.ScVal.scvLedgerKeyContractInstance())]);
+  const inst = instancia.vals[0];
+  if (inst?.type !== "scvContractInstance") throw new Error("rpc-sin-respuesta: sin la instancia del contrato");
+  let next = 1;
+  for (const e of inst.instance.storage ?? []) {
+    const k = scValToNative(e.key) as unknown;
+    if (Array.isArray(k) && k[0] === "NextId") next = Number(scValToNative(e.val));
+  }
+  let secuencia = instancia.secuencia;
+  const desde = roundTime(intento.round) - VENTANA_DEL_INTENTO_S;
+  const huella = intento.listHash.toLowerCase();
+  let id = next - 1;
+  for (let viaje = 0; viaje < VIAJES_DEL_INTENTO && id >= 1; viaje++) {
+    const ids: number[] = [];
+    for (let k = 0; k < LOTE_DEL_INTENTO && id >= 1; k++, id--) ids.push(id);
+    const lote = await leer(ids.map((n) => keyOf(xdr.ScVal.scvVec([xdr.ScVal.scvSymbol("Raffle"), xdr.ScVal.scvU64(BigInt(n))]))));
+    secuencia = Math.min(secuencia, lote.secuencia);
+    const filas = lote.vals.map((v) => parseRaffle(scValToNative(v))).filter((r): r is ChainRaffle => r !== null);
+    const mio = filas.find((r) => r.organizer === intento.organizer && r.listHash === huella && r.round === intento.round);
+    if (mio) return { id: mio.id, secuencia };
+    // Ya se pasó la ventana: los que siguen son más viejos que cualquier sello de este intento.
+    if (filas.some((r) => r.sealedAt < desde)) return { secuencia };
+  }
+  if (id < 1) return { secuencia };
+  throw new Error("rpc-sin-respuesta: demasiados sellos para mirar");
+}
+
 /** Quién selló este sorteo, leído del contrato. */
 async function organizerOf(
   url: string,
