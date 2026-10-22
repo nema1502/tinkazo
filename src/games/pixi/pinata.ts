@@ -1018,6 +1018,9 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     const bw = counter.width + 40 * k, bh = 40 * k;
     counter.position.set(bw / 2, bh / 2);
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 3 * k, color: INK });
+    // Con el cartel, la cuenta se va, como en el sapo: "ADENTRO 0 / 18" ya no
+    // dice nada, y en un celular el cartel la tapaba a medias.
+    if (counter.parent) counter.parent.visible = phase !== "crown";
     if (phase === "crown") crownUI.at(tAll - T_CROWN);
   }
 
