@@ -329,7 +329,16 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
     if (a === dlg || a === q("[data-cerrar]") || a === document.body) wa.focus({ preventScroll: true });
   })();
 
-  wa.addEventListener("click", () => void compartirPorWhatsapp(archivos, mensaje, avisar, lang));
+  // Un segundo toque mientras la hoja del sistema está abierta haría fallar al
+  // primero y abriría WhatsApp Web encima: se espera a que termine.
+  let compartiendo = false;
+  wa.addEventListener("click", () => {
+    if (compartiendo) return;
+    compartiendo = true;
+    void compartirPorWhatsapp(archivos, mensaje, avisar, lang).finally(() => {
+      compartiendo = false;
+    });
+  });
   bajar.addEventListener("click", () => {
     archivos.forEach(descargar);
     avisar("");
