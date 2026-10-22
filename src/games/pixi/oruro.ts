@@ -1111,20 +1111,44 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     }
     if (phase === "duel") {
       const td = tAll - P.T_SOCAVON;
-      boxReset();
-      for (const d of [win, riv]) {
-        if (!d) continue;
-        const p = duelPos(d, g);
-        boxAdd(p.x, p.y);
-      }
       const cx = doorX(g);
+      /** La caja de los dos en sus lugares del contrapunto. */
+      const boxDuel = (): void => {
+        boxReset();
+        for (const d of [win, riv]) {
+          if (!d) continue;
+          const p = duelPos(d, g);
+          boxAdd(p.x, p.y);
+        }
+      };
+      /**
+       * El Socavón entero con los dos delante: donde van a estar y donde están
+       * todavía. Con doscientos llegaban desde las filas de adelante, más abajo
+       * que su lugar, y quedaban detrás del relator.
+       */
+      const socavon = (): Shot => {
+        boxDuel();
+        for (const d of [win, riv]) if (d) boxAdd(d.x, d.y);
+        return boxShot(0.5, 1.2, 0, 1, undefined, { x0: cx - 165 * g.k, x1: cx + 125 * g.k, y0: g.streetTop - 405 * g.k }) as Shot;
+      };
       if (td < 0.9) {
-        // Primero el Socavón entero con los dos delante.
-        const f = boxShot(0.5, 1.2, 0, 1, undefined, { x0: cx - 165 * g.k, x1: cx + 125 * g.k, y0: g.streetTop - 405 * g.k }) as Shot;
+        const f = socavon();
         cam.lookAt(f.x, f.y, f.z, 3);
       } else if (tAll < P.T_ARRIVE) {
         const span = Math.max(0.5, P.T_ARRIVE - P.T_SOCAVON);
-        const f = boxShot((S.portrait() ? 1.1 : 1.3) * zb, (S.portrait() ? 1.7 : 2.2) * zb, 70, 0.84 + 0.16 * clamp(td / span, 0, 1)) as Shot;
+        boxDuel();
+        let f = boxShot((S.portrait() ? 1.1 : 1.3) * zb, (S.portrait() ? 1.7 : 2.2) * zb, 70, 0.84 + 0.16 * clamp(td / span, 0, 1)) as Shot;
+        // El acercamiento entra de a poco desde la toma del templo. Con el centro
+        // y el zoom al mismo ritmo, la cámara se acercaba al templo antes de bajar
+        // a los dos, y con doscientos los dejaba casi medio segundo debajo del
+        // relator.
+        const a = ease.inOutCubic(clamp((td - 0.9) / 0.6, 0, 1));
+        if (a < 1) {
+          const zs = socavon().z;
+          const z = zs + (f.z - zs) * a;
+          boxDuel();
+          f = boxShot(z, z, 70) as Shot;
+        }
         cam.lookAt(f.x, f.y, f.z, 2.5);
       } else {
         // Llegó: la puerta del Socavón con el que llega, y el otro sentado en el piso.
