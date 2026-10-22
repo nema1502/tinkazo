@@ -7,7 +7,7 @@ import { beep, beepFor, fanfare, isMuted, audio, note } from "../../sound";
 import { enOrden, tension } from "../drama";
 import { WINNER_HOLD, shorten, winnersLabel } from "../overlay";
 import { wavesAround } from "../pixi/qualifier";
-import { CREAM, INK, MONO, YELLOW, hash, mountPixi, seeded, type PixiStage } from "../pixi/stage";
+import { CREAM, INK, MONO, YELLOW, contorno, hash, mountPixi, seeded, type PixiStage } from "../pixi/stage";
 import { planRace, type Plan } from "./plan";
 
 /**
@@ -602,10 +602,16 @@ export async function llamasPixi(
     world.addChild(ground);
     for (let i = 1; i < 10; i++) {
       const x = X0 + TL * (i / 10);
+      // El cartel de la distancia es el del tema oscuro en los dos temas:
+      // placa oscura y letra crema con contorno. En el claro era tinta sobre
+      // una placa blanca justa, y la medición de pantalla la daba por no
+      // leída cuando la placa quedaba detrás de la tabla, del cartel o del
+      // desenfoque de la cámara. Crema con contorno sobre la placa blanca
+      // empastaba la "m"; sobre la oscura se lee limpia.
       const post = new Graphics()
         .rect(x - 2 * u, trackTop - 46 * u, 4 * u, 30 * u).fill(CREAM)
-        .roundRect(x - 20 * u, trackTop - 62 * u, 40 * u, 20 * u, 4 * u).fill(dark ? 0x2b2640 : 0xffffff).stroke({ width: 2 * u, color: INK });
-      const tx = S.text(space ? `${(10 - i) * 1000} km` : `${100 - i * 10} m`, { fontFamily: MONO, fontSize: S.letra(13), fontWeight: "800", fill: dark ? CREAM : INK, stroke: { color: dark ? INK : CREAM, width: 3 * u } });
+        .roundRect(x - 20 * u, trackTop - 62 * u, 40 * u, 20 * u, 4 * u).fill(0x2b2640).stroke({ width: 2 * u, color: INK });
+      const tx = S.text(space ? `${(10 - i) * 1000} km` : `${100 - i * 10} m`, { fontFamily: MONO, fontSize: S.letra(13), fontWeight: "800", fill: CREAM, stroke: contorno(S.letra(13)) });
       tx.anchor.set(0.5);
       tx.position.set(x, trackTop - 52 * u);
       world.addChild(post, tx);
