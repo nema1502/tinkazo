@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { SELECTOR, recomendar, type Recomendacion } from "./recomendar";
+import { JUEGO_DE_SIEMPRE, SELECTOR, juegoPorDefecto, recomendar, type Recomendacion } from "./recomendar";
 import { T } from "../i18n";
 import type { Game } from "../state";
 
@@ -254,5 +254,27 @@ describe("recomendar: entradas raras", () => {
     expect(recomendar(-5)).toEqual(recomendar(0));
     expect(recomendar(Number.NaN)).toEqual(recomendar(0));
     expect(recomendar(8.9)).toEqual(recomendar(8));
+  });
+});
+
+describe("el juego que queda elegido si nadie eligió otro (D02)", () => {
+  it("el de siempre es el de app.game en state.ts", () => {
+    const state = readFileSync(new URL("../state.ts", import.meta.url), "utf8");
+    expect(state).toMatch(new RegExp(`game: "${JUEGO_DE_SIEMPRE}"`));
+  });
+
+  it("con pocas personas, el de siempre, que encaja", () => {
+    for (const n of [2, 4, 8]) expect(juegoPorDefecto(n), String(n)).toBe(JUEGO_DE_SIEMPRE);
+  });
+
+  it("con 20, uno de los recomendados (el primero), no la carrera que llega hasta 8", () => {
+    const primero = recomendar(20).games.find((r) => r.fits === true)?.game;
+    expect(juegoPorDefecto(20)).toBe(primero);
+    expect(juegoPorDefecto(20)).not.toBe("race");
+    for (const n of [9, 12, 50, 120, 200]) expect(recomendar(n).games.find((r) => r.game === juegoPorDefecto(n))?.fits, String(n)).toBe(true);
+  });
+
+  it("si ninguno encaja (más de doscientos), el de siempre", () => {
+    expect(juegoPorDefecto(500)).toBe(JUEGO_DE_SIEMPRE);
   });
 });

@@ -4,7 +4,7 @@ import { chooseLang, initialLang, onLangChange, setLang, t } from "./i18n";
 import { SAMPLE, app, currentPace, paceSeconds, paraCompartir, params, setPace, setParaCompartir, type Game, type Pace } from "./state";
 import { soundLabel, toggleSound, unlockAudioOnGesture } from "./sound";
 import { bindParticipants, loadSample, parseNames, renderNames, reponerBorrador } from "./ui/participants";
-import { GAME_BUTTONS, cambiarJuego, copyRules, freeze, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
+import { GAME_BUTTONS, cambiarJuego, copyRules, elegirJuego, freeze, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
 import { initSiguiente } from "./ui/siguiente";
 import { montarPremios } from "./ui/premios";
 import { adelantarCorto, alTocarGanadores, copySummary, draw, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
@@ -92,7 +92,7 @@ $("btn-hist-clear").addEventListener("click", () => {
   });
 });
 
-for (const [id, game] of GAME_BUTTONS) $(id).addEventListener("click", () => setGame(game));
+for (const [id, game] of GAME_BUTTONS) $(id).addEventListener("click", () => elegirJuego(game));
 $("btn-cambiar").addEventListener("click", cambiarJuego);
 $("btn-draw").addEventListener("click", () => void draw());
 // La lista a la vista de la sala, antes de sellar: el blindaje contra inflarla.

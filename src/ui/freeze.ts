@@ -7,7 +7,7 @@ import { prepararFirma } from "../protocol/firma";
 import { contractUrl, network } from "../stellar/config";
 import { type AnchorStep, escribirError, hideTxStatus, margenParaAprobar, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
 import { precargarQr } from "./qr";
-import { recomendar } from "./recomendar";
+import { juegoPorDefecto, recomendar } from "./recomendar";
 import { apruebaAMano, canAnchor, currentSession } from "./wallet-ui";
 import { cerrarLista, olvidarBorrador, parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
@@ -39,6 +39,15 @@ export const GAME_BUTTONS: ReadonlyArray<[string, Game]> = [
   ["g-teleferico", "teleferico"],
   ["g-oruro", "oruro"],
 ];
+
+/** Quien organiza eligió un juego en el selector: desde ahí, el juego no cambia solo según la cantidad. */
+let juegoAMano = false;
+
+/** Un toque en el selector: el juego que se eligió, y que ya no se cambia solo. */
+export function elegirJuego(g: Game): void {
+  juegoAMano = true;
+  setGame(g);
+}
 
 export function setGame(g: Game): void {
   if (app.drawn) return;
@@ -565,6 +574,12 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   renderSealSummary();
   // Antes de la ruleta: si el juego cambia por la cantidad, el selector ya está ordenado.
   pintarRecomendacion(names.length);
+  // Si nadie eligió otro, queda elegido uno que se recomienda para esta
+  // cantidad (D02). La demo juega el que pide su enlace.
+  if (!juegoAMano && !params.has("demo")) {
+    const g = juegoPorDefecto(names.length);
+    if (g !== app.game) setGame(g);
+  }
 
   if (names.length > WHEEL_MAX) {
     // La ruleta es el único juego con tope. Los demás aguantan doscientos. El
