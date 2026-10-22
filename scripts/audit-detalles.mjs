@@ -401,6 +401,33 @@ const DETALLES = {
     },
   },
 
+  D17: {
+    que: '"Entrar y sortear" al final de la demo abre la ventana de ingreso',
+    async correr(browser, v, tema, quien) {
+      const page = await abrir(browser, v, tema, "?demo=race&instant=1&lead=3", "");
+      try {
+        const fin = await page.waitFor(visible(".demo-fin a.cta"), 60000);
+        if (!fin.ok) throw new Error("la demo no llegó al final");
+        await page.eval("document.querySelector('.demo-fin').scrollIntoView({ block: 'center' }); true");
+        await sleep(400);
+        await captura(page, "D17", v, tema, "fin-de-la-demo");
+        await page.eval("document.querySelector('.demo-fin a.cta').click(); true");
+        await page.waitFor("location.search === '' && location.hash === '#sortear' && document.readyState === 'complete'", 20000);
+        const ventana = await page.waitFor("document.querySelector('.modal-card.login')", 15000);
+        check(`${quien} · lleva a la herramienta con la ventana para elegir una cuenta`, ventana.ok, ventana.ok ? `a los ${ventana.elapsed} ms` : "llegó a la puerta sin la ventana");
+        await sleep(600);
+        await captura(page, "D17", v, tema, "ventana");
+        // Una sola vez: al recargar, la puerta queda como siempre.
+        await page.send("Page.reload");
+        await page.waitFor("document.readyState === 'complete'", 20000);
+        await sleep(2500);
+        check(`${quien} · y una sola vez: al recargar no vuelve a abrirse`, !(await page.eval("!!document.querySelector('.modal-card.login')")));
+      } finally {
+        await page.send("Page.close").catch(() => undefined);
+      }
+    },
+  },
+
   D08: {
     que: '"Cargar ejemplo" solo con el cuadro vacío',
     async correr(browser, v, tema, quien) {
