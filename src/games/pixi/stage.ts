@@ -8,6 +8,7 @@ import { musicBreath, musicCue, startMusic, stopMusic, type MusicStyle } from ".
 import { beep, note } from "../../sound";
 import { registerSkip, releaseScreen, shorten, takeOverScreen, winnerNames } from "../overlay";
 import { Camera } from "./camera";
+import { Gobernador, ajustesDe, aprender, dibujaPorSoftware, nivelInicial } from "./calidad";
 import { guardiaNombre, meter } from "./encuadre";
 import { reves, tira } from "./papel-picado";
 import { watchRecovery } from "./recover";
@@ -312,13 +313,22 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
 
   const app = new Application();
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  // El modo para compartir se lee al montar el estadio: lo que se elige en el
+  // sorteo vale para el próximo show, no cambia uno que ya está corriendo.
+  const compartir = paraCompartir();
+  // Lo que se dibuja según lo que aguanta el equipo (`calidad.ts`). Por
+  // software, sin suavizado de bordes: es lo que más le cuesta a un equipo sin
+  // placa, y no se puede apagar después de arrancar.
+  const software = dibujaPorSoftware();
+  const arranque = nivelInicial(params.get("calidad"), software);
+  let aj = ajustesDe(arranque.nivel, window.devicePixelRatio || 1, compartir);
   try {
     await app.init({
       canvas: view,
       width: innerWidth,
       height: innerHeight,
-      antialias: true,
-      resolution: dpr,
+      antialias: !software,
+      resolution: aj.resolucion,
       autoDensity: true,
       backgroundColor: 0x10101c,
       autoStart: false,
@@ -348,7 +358,23 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   // cambia el tamaño de la pantalla, y estos se rearman solos.
   const tagLayer = new Container();
   app.stage.addChild(bg, scene, hud, tagLayer, podium);
-  const cam = new Camera();
+  const cam = new Camera().desenfoque(aj.desenfoque);
+  // El nivel queda anotado en el lienzo, para medirlo y para los auditores.
+  view.dataset.calidad = arranque.nivel;
+  // Si los cuadros empiezan a tardar, baja de nivel en el mismo show y deja
+  // anotado para el próximo. Cambiar la resolución redimensiona el lienzo, no
+  // la escena: lo que se ve es lo mismo, con menos píxeles.
+  const gobernador = new Gobernador(
+    arranque.nivel,
+    (n) => {
+      aj = ajustesDe(n, window.devicePixelRatio || 1, compartir);
+      view.dataset.calidad = n;
+      cam.desenfoque(aj.desenfoque);
+      if (app.renderer.resolution !== aj.resolucion) app.renderer.resize(innerWidth, innerHeight, aj.resolucion);
+      aprender(n);
+    },
+    arranque.fijo,
+  );
   // `?auditar=identidad`: ver `identidadDe`. Se arma con los nombres del primer cartel.
   const identPedida = params.get("auditar") === "identidad";
   // `?auditar=mezcla`: el instante del revelado, para que el auditor de mezcla
@@ -430,9 +456,6 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   const u = (): number => (portrait() ? Math.min(sw() / 420, sh() / 900) : sh() / 720);
   const top = (): number => (innerWidth <= 520 ? 100 : 82);
   const bottom = (): number => (innerWidth <= 520 ? 118 : 106);
-  // El modo para compartir se lee al montar el estadio: lo que se elige en el
-  // sorteo vale para el próximo show, no cambia uno que ya está corriendo.
-  const compartir = paraCompartir();
   const letra = (px: number): number => px * Math.min(2, u()) * (compartir ? 1.2 : 1);
 
   // Los textos se dibujan al doble: la cámara se acerca hasta 1,5× o más sobre
@@ -734,13 +757,15 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         // El cartel queda anotado para el auditor exigente, en píxeles del lienzo.
         if (placa && tt > 0.6) {
           const b = plate.getBounds();
-          view.dataset.cartel = [b.x, b.y, b.width, b.height].map((v) => Math.round(v * dpr)).join(",");
+          const res = app.renderer.resolution;
+          view.dataset.cartel = [b.x, b.y, b.width, b.height].map((v) => Math.round(v * res)).join(",");
         }
-        // Papel picado: cada tira se calcula desde la hora, no se acumula.
-        // Con el modo para compartir, menos: el ruido se pierde en Zoom.
+        // Papel picado: cada tira se calcula desde la hora, no se acumula. La
+        // cantidad sale del nivel de calidad (menos con el modo para compartir:
+        // el ruido se pierde en Zoom).
         const k = u();
         const W = sw(), H = sh();
-        const n = compartir ? 70 : 180;
+        const n = aj.papeles;
         while (tiras.length < n) {
           const s = new Sprite(Texture.WHITE);
           s.anchor.set(0.5);
@@ -895,6 +920,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       const loop = (now: number): void => {
         if (dead) return;
         const dt = prev ? Math.min(0.05, (now - prev) / 1000) / pace : 0;
+        if (prev) gobernador.cuadro(now - prev);
         prev = now;
         if (start < 0) start = now;
         loopFn?.(dt, (now - start) / 1000);
