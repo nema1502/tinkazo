@@ -410,7 +410,6 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   let dot!: Texture;
   const crowdPool: Sprite[] = [];
   const lightPool: Sprite[] = [];
-  const archLabels: Container[] = [];
 
   function makeViews(): void {
     for (const d of dancers) {
@@ -439,7 +438,6 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     for (const m of band) m.parts = null;
     crowdPool.length = 0;
     lightPool.length = 0;
-    archLabels.length = 0;
     planRoute(g);
     const x0 = headPres(0) - frontOffsets(g, true).length - g.w * 1.5;
     const x1 = doorX(g) + g.w * 1.2;
@@ -510,19 +508,18 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     street.rect(x0, g.streetTop, x1 - x0, g.h).fill(S.dark ? 0x3a3346 : 0x6b6478);
     for (let x = x0; x < x1; x += 40 * k) street.rect(x, (g.streetTop + g.streetBot) / 2, 20 * k, 2 * k).fill({ color: 0xffffff, alpha: 0.15 });
     street.rect(x0, g.streetBot, x1 - x0, g.h).fill(S.dark ? 0x241f30 : 0x4a4458);
-    // Los arcos de cada cuadra, con discos de plata y banderines, y su número.
-    archX.forEach((ax0, j) => {
+    // Los arcos de cada cuadra, con discos de plata y banderines. Sin número: la
+    // fraternidad que se queda sale de donde esté en la comparsa, no de la
+    // cabeza, y el arco que se veía encima de ella no era el de la cuadra que
+    // cuenta el relator ("¡Cuadra 6!" debajo de un arco con un 2). La cuenta va
+    // en el relator y abajo a la derecha.
+    archX.forEach((ax0) => {
       const ax = ax0 + 30 * k;
       const ah = g.streetBot - g.streetTop + 150 * k;
       const top = g.streetBot - ah;
       arches.rect(ax - 6 * k, top, 12 * k, ah).fill(0xc9ccd6).stroke({ width: 2 * k, color: INK });
       arches.rect(ax - 70 * k, top - 14 * k, 140 * k, 28 * k).fill(0xd52b1e).stroke({ width: 2.4 * k, color: INK });
       for (let i = 0; i < 7; i++) arches.circle(ax - 60 * k + i * 20 * k, top + 22 * k, 6 * k).fill(0xe6e8ee).stroke({ width: 1.4 * k, color: INK });
-      const lab = S.text(`${j + 1}`, { fontFamily: MONO, fontSize: 16 * k, fontWeight: "900", fill: 0xffffff });
-      lab.anchor.set(0.5);
-      lab.position.set(ax, top);
-      S.scene.addChild(lab);
-      archLabels.push(lab);
     });
     // El Santuario del Socavón, al final de la entrada.
     const cx = doorX(g), base = g.streetTop;
