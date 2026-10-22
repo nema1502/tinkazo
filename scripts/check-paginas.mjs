@@ -135,7 +135,10 @@ try {
       await page.send("Emulation.setDeviceMetricsOverride", {
         width: ancho, height: alto, deviceScaleFactor: 1, mobile: ancho < 500,
       });
-      await page.send("Page.navigate", { url: `${base}/${p}.html?theme=${tema}${hash}` });
+      // Estas páginas siguen el idioma del navegador (un enlace compartido se abre
+      // en el idioma de quien lo recibe): el castellano se pide explícito, porque
+      // el Chrome de la CI está en inglés y el titular salía igual en los dos.
+      await page.send("Page.navigate", { url: `${base}/${p}.html?theme=${tema}&lang=es${hash}` });
       await page.waitFor("document.readyState === 'complete' && !!document.body", 20000);
       const termino = await page.waitFor(listo, 30000);
       await sleep(500);
