@@ -52,6 +52,16 @@ const FINAL_HOLD = 0.5;
 const NEXT_GAP = 0.8;
 /** Hasta cuántos de pie se hace el encuadre de los finalistas. */
 const FINALISTAS = 4;
+/**
+ * Cuando nadie se sienta (la pregunta de calentamiento, con dos o tres de pie),
+ * los de pie dan un saltito en el momento en que se darían vuelta las cartas:
+ * la pantalla confirma que siguen todos. Sin eso, con dos personas, de la
+ * respuesta a la pregunta siguiente pasaban 4,2 s sin que se moviera nada
+ * (auditor exigente, 22 de octubre de 2026). Lo que dura, y cuánto sube, en
+ * fracción del alto de la carta.
+ */
+const SALTO = 0.5;
+const SALTO_ALTO = 0.12;
 
 type Kind = "reparto" | "pregunta" | "finalistas" | "empate";
 
@@ -550,6 +560,8 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
     const u = ease.inOutCubic(clamp((tAll - layoutT0) / durLayout, 0, 1));
     const gone = goneAt[ri] as Map<number, number>;
     const winnersBefore = new Set(prizes.slice(0, ri));
+    // La pregunta en la que no se sienta nadie: los de pie saltan en vez de darse vuelta las cartas.
+    const nadieSeSienta = paso.kind === "pregunta" && (r.questions[paso.qi] as Question | undefined)?.out.length === 0;
     fx.clear();
 
     cards.forEach((c, i) => {
@@ -636,7 +648,10 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
         // la sala no se queda quieta mientras se revisa el nombre.
         // La amplitud sigue al tamaño de la carta: con dos cartas grandes, un meneo chico no se ve.
         const vaiven = pos >= 0 && !layoutDeal ? Math.sin(tAll * 2.2 + i * 1.7) * Math.max(3, 0.06 * c.s * 158) * k : 0;
-        c.root.position.set(c.x, c.y + vaiven);
+        // Nadie se sienta: cada uno salta un poco después del anterior.
+        const fs = nadieSeSienta && pos >= 0 ? (tAll - paso.flip - pos * 0.08) / SALTO : -1;
+        const salto = fs > 0 && fs < 1 ? Math.sin(Math.PI * fs) * SALTO_ALTO * c.s * 158 : 0;
+        c.root.position.set(c.x, c.y + vaiven - salto);
         c.root.rotation = pos >= 0 && !layoutDeal ? Math.sin(tAll * 1.6 + i) * 0.025 : 0;
         c.root.scale.set(sx, c.s);
         c.root.alpha = alpha;
