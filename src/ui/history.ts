@@ -3,7 +3,7 @@ import { getLang, t } from "../i18n";
 import type { SorteoDelEvento } from "../protocol/evento";
 import { network, txUrl } from "../stellar/config";
 import type { ChainRaffle } from "../stellar/seals";
-import { agrupar, fechaLarga, tieneComprobante } from "./agrupar";
+import { agrupar, enOrdenDeSalida, fechaLarga, tieneComprobante } from "./agrupar";
 import { compartirEvento, compartirSorteo } from "./compartir";
 import {
   type EventoGuardado,
@@ -513,7 +513,15 @@ function pintarEventos(list: Entry[], sueltos: Entry[], grupos: Entry[][]): void
 function tarjetaDeEvento(ev: EventoGuardado, list: Entry[]): string {
   const n = ev.sorteos.length;
   const id = esc(ev.id);
-  const filas = ev.sorteos.map((s, k) => filaDeEvento(ev, s, k, list)).join("");
+  // En el orden en que salieron, como el mensaje y la foto; `k` sigue siendo su lugar en el evento guardado.
+  const filas = enOrdenDeSalida(
+    ev.sorteos.map((s, k) => {
+      const e = list.find((x) => x.proof === s.enlace);
+      return { s, k, id: e?.id, sealedAt: e?.sealedAt, round: e?.round };
+    }),
+  )
+    .map(({ s, k }) => filaDeEvento(ev, s, k, list))
+    .join("");
   return (
     `<article class="evn-card" id="evn-c-${id}" tabindex="-1">` +
     // Un formulario, como "Crear evento": Enter guarda el nombre.

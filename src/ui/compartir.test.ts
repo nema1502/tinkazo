@@ -66,6 +66,16 @@ describe("mensaje del evento: dice quién ganó qué (D15), igual que summaryEve
     }
   });
 
+  it("en el orden en que salieron, no en el que se sumaron (hallazgo 10)", () => {
+    const sumados = [
+      { prize: "Libro", ganadores: ["Carla Choque"], id: "753", sealedAt: 2 },
+      { prize: "Termo", ganadores: ["Inés Gutiérrez"], id: "750", sealedAt: 1 },
+    ];
+    expect(lineasDeEvento("es", sumados)).toEqual(["Termo: Inés Gutiérrez", "Libro: Carla Choque"]);
+    const f = fotoDeEvento("es", "Meetup", [{ ...sorteoGrande(2, 3), id: "753" }, { ...sorteoGrande(1, 3), id: "750" }], corto);
+    expect(f.filas?.map((x) => x.premio)).toEqual(["Premio 1", "Premio 2"]);
+  });
+
   it("los renglones van entre la cabecera y el enlace", () => {
     const m = mensajeDeEvento("es", { titulo: "Meetup Cochabamba", sorteos: 2, enlaces: enlace, lineas: lineasDeEvento("es", deEvento) });
     expect(m).toBe(
