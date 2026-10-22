@@ -63,6 +63,16 @@ const TAG_ROOM = 30;
 const CLOSE_UP = 0.95;
 /** Lo que se queda arriba el pedido de aplaudir, antes del primer anuncio. */
 const CLAP_HOLD = 1.9;
+/**
+ * Redondea a 1/64 de píxel lo que entra a elegir y acomodar los carteles. El
+ * paso del reloj sale de restar dos horas absolutas (`stage.ts`), y como el
+ * estadio no aparece siempre en el mismo cuadro, dos corridas de la misma ronda
+ * llegan con diferencias de 1e-12 en las posiciones. El acomodo compara bordes
+ * de carteles que se tocan justo, y con eso a veces daba otro lugar: con
+ * doscientas personas, en una de cada tres corridas unos carteles cambiaban de
+ * lugar durante unos cuadros (21 de octubre de 2026).
+ */
+const fino = (v: number): number => Math.round(v * 64) / 64;
 /** La banda: bombo, platillos, dos bajos y dos trompetas, en dos filas. */
 const BAND: readonly Instrument[] = ["bombo", "bajo", "trompeta", "platillos", "bajo", "trompeta"];
 
@@ -1233,7 +1243,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
         const l = fratLabel(gi, k);
         const fx0 = (off.front.get(gi) ?? 0) + hx;
         const p = cam.toScreen(fx0 - g.dx * 0.5, g.streetTop + (g.streetBot - g.streetTop) * 0.1 - 120 * g.scale, g.w, g.h);
-        items.push({ id: gi, x: p.x - l.w / 2, y: p.y - l.h, w: l.w, h: l.h, priority: 1 });
+        items.push({ id: gi, x: fino(p.x - l.w / 2), y: fino(p.y - l.h), w: fino(l.w), h: fino(l.h), priority: 1 });
       }
       for (const pl of layoutLabels(items, bounds, [], blocked)) {
         const l = fratLabels.get(pl.id);
@@ -1262,11 +1272,11 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       // El que se cayó lleva su nombre cerca del piso, no flotando donde tenía la cabeza.
       const tall = d === riv && fellAt >= 0 && tAll >= fellAt ? 50 : DANCE_TOP[d.f.dance] - 26;
       const p = cam.toScreen(d.x, d.y - (tall + lift) * g.scale, g.w, g.h);
-      c.sx = p.x;
-      c.sy = p.y;
-      c.depth = d.y;
+      c.sx = fino(p.x);
+      c.sy = fino(p.y);
+      c.depth = fino(d.y);
       c.out = !d.alive && age < OUT_HOLD;
-      c.visible = p.x > 0 && p.x < g.w && p.y > top && p.y < g.h - bottom;
+      c.visible = c.sx > 0 && c.sx < g.w && c.sy > top && c.sy < g.h - bottom;
       if (c.visible) inView.push(c);
     }
     const { shown } = selectTags(inView, cap, shownNow);
@@ -1277,8 +1287,8 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       const c = poolOf.get(id) as TagCandidate;
       tagOf(d, kc, scale);
       const s = outTreatment(d.alive ? -1 : tAll - d.left).scale;
-      const w = (d.tagW ?? sz.w) * s + 3 * kc, hh = th * s + 3 * kc;
-      items.push({ id, x: c.sx - w / 2, y: c.sy - hh - 10 * kk, w, h: hh, priority: (c.out ? 1000 : 0) + c.depth });
+      const w = fino((d.tagW ?? sz.w) * s + 3 * kc), hh = fino(th * s + 3 * kc);
+      items.push({ id, x: fino(c.sx - w / 2), y: fino(c.sy - hh - 10 * kk), w, h: hh, priority: (c.out ? 1000 : 0) + c.depth });
     }
     const placed = layoutLabels(items, bounds, blocked);
     shownNext.clear();
