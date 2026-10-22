@@ -221,7 +221,7 @@ La carrera actúa la historia entera. Los demás juegos toman del director el ar
 | Trompo | Susto | **El cabeceo.** En el mano a mano el trompo ganador cabecea, casi se cae ("¡cabecea el de fulano!") y se endereza |
 | Trompo | Remontada | **La tiza.** A mitad de los choques le pegan y lo mandan contra la tiza: la roza y vuelve |
 | Trompo | Duelo | **Un choque más.** El mano a mano dura cuatro choques en vez de tres |
-| Piñata | Susto | **El que se asoma.** En los últimos palos el caramelo ganador asoma por la rajadura y vuelve a entrar |
+| Piñata | Susto | **El que se asoma.** En los últimos palos asoma por la rajadura uno de los dos caramelos que quedan hasta la rotura, y vuelve a entrar. Es el ganador la mitad de las veces: si fuera siempre él, "¡se agarra fulano!" lo anunciaba diez segundos antes del cartel |
 | Piñata | Remontada | **Al aire.** Dos palos que no le pegan a nada antes de los últimos |
 | La Entrada | Susto | **La máscara.** Antes del último arco de la última fraternidad, a uno de los que siguen bailando casi se le cae la máscara (o se le vuela el sombrero, o la montera). Se sortea entre todos, también el que gana |
 | La Entrada | Remontada | **La que vuelve.** En un arco, una fraternidad arranca para la vereda como si se quedara ("¿se quedan los Tojos?") y vuelve a la comparsa. Se sortea entre las que siguen |
