@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { Gobernador, ajustesDe, aprender, densidad, nivelInicial, nivelMedido, olvidar, type Nivel } from "./calidad";
+import { Gobernador, ajustesDe, aprender, densidad, esPorPlaca, nivelInicial, nivelMedido, olvidar, type Nivel } from "./calidad";
 
 afterEach(() => olvidar());
 
@@ -115,5 +115,29 @@ describe("nivelMedido", () => {
   it("solo baja desde alta", () => {
     expect(nivelMedido("media", 0, 0)).toBe("media");
     expect(nivelMedido("baja", 0, 0)).toBe("baja");
+  });
+});
+
+describe("por la placa o por el código", () => {
+  it("baja achica la resolución solo si lo que tarda es la placa", () => {
+    expect(ajustesDe("baja", 2, false, true).resolucion).toBe(1.5);
+    expect(ajustesDe("baja", 2, false, false).resolucion).toBe(2);
+    expect(ajustesDe("baja", 2, false, false).desenfoque).toBe("no");
+  });
+
+  it("es la placa si más de la mitad del cuadro no es código del juego", () => {
+    expect(esPorPlaca(3, 10)).toBe(true);
+    expect(esPorPlaca(8, 10)).toBe(false);
+    // El reloj del auditor exigente: todo mide cero, y nadie baja igual.
+    expect(esPorPlaca(0, 0)).toBe(false);
+  });
+
+  it("el gobernador avisa si lo lento es el procesador o la placa", () => {
+    const avisos: [Nivel, boolean][] = [];
+    const g = new Gobernador("alta", (n, p) => avisos.push([n, p]));
+    for (let i = 0; i < 200; i++) g.cuadro(34, 30);
+    const h = new Gobernador("alta", (n, p) => avisos.push([n, p]));
+    for (let i = 0; i < 200; i++) h.cuadro(34, 5);
+    expect(avisos).toEqual([["baja", false], ["baja", true]]);
   });
 });

@@ -13,9 +13,11 @@
  *   suavizado de bordes; papel picado abundante.
  * - `media`: el desenfoque a resolución 1 y sin suavizado, como fue siempre;
  *   menos papel picado.
- * - `baja`: sin desenfoque (es una pasada más sobre toda la pantalla), la
- *   resolución de una pantalla de alta densidad baja a tres cuartos, nunca por
- *   debajo de 1, y el papel picado justo.
+ * - `baja`: sin desenfoque (es una pasada más sobre toda la pantalla) y el
+ *   papel picado justo. Si lo que tarda es la placa, también baja a tres
+ *   cuartos la resolución de una pantalla de alta densidad, nunca por debajo
+ *   de 1; si lo que tarda es el código del juego (un celular con el procesador
+ *   justo), menos píxeles no lo apurarían y la imagen queda nítida.
  *
  * El nivel no toca el sorteo ni el guion: el ganador, los tiempos y lo que
  * pasa en la escena son los mismos en los tres. Se decide con el reloj de los
@@ -40,13 +42,14 @@ const PAPELES: Record<Nivel, number> = { alta: 240, media: 170, baja: 100 };
 
 /**
  * Lo que dibuja cada nivel. Con el modo para compartir, cuatro de cada diez
- * tiras de papel picado: el ruido se pierde en Zoom.
+ * tiras de papel picado: el ruido se pierde en Zoom. `porPlaca`: lo que tarda
+ * es la placa (solo entonces baja achica la resolución).
  */
-export function ajustesDe(nivel: Nivel, dpr: number, compartir: boolean): Ajustes {
+export function ajustesDe(nivel: Nivel, dpr: number, compartir: boolean, porPlaca = true): Ajustes {
   const base = densidad(dpr);
   const papeles = PAPELES[nivel];
   return {
-    resolucion: nivel === "baja" && base > 1 ? Math.max(1, Math.round(base * 0.75 * 4) / 4) : base,
+    resolucion: nivel === "baja" && porPlaca && base > 1 ? Math.max(1, Math.round(base * 0.75 * 4) / 4) : base,
     desenfoque: nivel === "alta" ? "pleno" : nivel === "media" ? "simple" : "no",
     papeles: compartir ? Math.round(papeles * 0.4) : papeles,
   };
@@ -102,6 +105,13 @@ export function nivelMedido(nivel: Nivel, sinDesenfoque: number, conDesenfoque: 
   return "alta";
 }
 
+/**
+ * Si lo que tarda es la placa y no el código: de un cuadro de `total` ms, el
+ * código del juego (armar la escena y mandarla a dibujar) se llevó `codigo`.
+ * Con más de la mitad en la placa, menos píxeles sí apuran.
+ */
+export const esPorPlaca = (codigo: number, total: number): boolean => total - codigo > codigo;
+
 /** Los primeros cuadros no cuentan: el arranque paga texturas, textos y sombreadores. */
 const ARRANQUE = 30;
 /** Cuántos cuadros mira antes de decidir. */
@@ -123,27 +133,35 @@ const HUECO = 250;
 export class Gobernador {
   private vistos = 0;
   private readonly ventana: number[] = [];
+  private readonly codigo: number[] = [];
 
   constructor(
     public nivel: Nivel,
-    private readonly bajar: (n: Nivel) => void,
+    private readonly bajar: (n: Nivel, porPlaca: boolean) => void,
     private readonly fijo = false,
   ) {}
 
-  /** Cuánto tardó el último cuadro, en milisegundos. */
-  cuadro(ms: number): void {
+  /**
+   * Cuánto tardó el último cuadro, en milisegundos, y cuánto de eso se llevó el
+   * código del juego: si es casi todo, el que no da abasto es el procesador, y
+   * bajar la resolución no apuraría nada (`esPorPlaca`).
+   */
+  cuadro(ms: number, codigo = 0): void {
     if (this.fijo || this.nivel === "baja") return;
     if (++this.vistos <= ARRANQUE) return;
     if (!(ms > 0) || ms > HUECO) return;
     this.ventana.push(ms);
+    this.codigo.push(codigo);
     if (this.ventana.length < VENTANA) return;
     const s = [...this.ventana].sort((a, b) => a - b);
+    const c = [...this.codigo].sort((a, b) => a - b);
     this.ventana.length = 0;
-    const q = (p: number): number => s[Math.min(s.length - 1, Math.floor(s.length * p))] ?? 0;
-    const sig: Nivel | null = q(0.5) > LENTO ? "baja" : this.nivel === "alta" && q(0.9) > LENTO ? "media" : null;
+    this.codigo.length = 0;
+    const q = (v: number[], p: number): number => v[Math.min(v.length - 1, Math.floor(v.length * p))] ?? 0;
+    const sig: Nivel | null = q(s, 0.5) > LENTO ? "baja" : this.nivel === "alta" && q(s, 0.9) > LENTO ? "media" : null;
     if (!sig) return;
     this.nivel = sig;
-    this.bajar(sig);
+    this.bajar(sig, esPorPlaca(q(c, 0.5), q(s, 0.5)));
   }
 }
 

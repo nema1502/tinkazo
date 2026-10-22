@@ -8,7 +8,7 @@ import { musicBreath, musicCue, startMusic, stopMusic, type MusicStyle } from ".
 import { beep, note } from "../../sound";
 import { registerSkip, releaseScreen, shorten, takeOverScreen, winnerNames } from "../overlay";
 import { Camera } from "./camera";
-import { Gobernador, ajustesDe, aprender, dibujaPorSoftware, nivelInicial, nivelMedido, type Nivel } from "./calidad";
+import { Gobernador, ajustesDe, aprender, dibujaPorSoftware, esPorPlaca, nivelInicial, nivelMedido, type Nivel } from "./calidad";
 import { guardiaNombre, meter } from "./encuadre";
 import { reves, tira } from "./papel-picado";
 import { watchRecovery } from "./recover";
@@ -364,8 +364,8 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   // Si los cuadros empiezan a tardar, baja de nivel en el mismo show y deja
   // anotado para el próximo. Cambiar la resolución redimensiona el lienzo, no
   // la escena: lo que se ve es lo mismo, con menos píxeles.
-  const bajarA = (n: Nivel): void => {
-    aj = ajustesDe(n, window.devicePixelRatio || 1, compartir);
+  const bajarA = (n: Nivel, porPlaca: boolean): void => {
+    aj = ajustesDe(n, window.devicePixelRatio || 1, compartir, porPlaca);
     view.dataset.calidad = n;
     cam.desenfoque(aj.desenfoque);
     if (app.renderer.resolution !== aj.resolucion) app.renderer.resize(innerWidth, innerHeight, aj.resolucion);
@@ -636,26 +636,30 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     const gl = (app.renderer as Partial<WebGLRenderer>).gl;
     if (!gl) return;
     const px = new Uint8Array(4);
-    const medir = (filtros: Filter[] | null): number => {
-      const v: number[] = [];
+    const mediana = (v: number[]): number => v.sort((a, b) => a - b)[1] ?? 0;
+    /** Lo que tarda el cuadro entero y lo que se lleva el código antes de esperar a la placa. */
+    const medir = (filtros: Filter[] | null): { total: number; codigo: number } => {
+      const total: number[] = [];
+      const codigo: number[] = [];
       for (let i = 0; i < 3; i++) {
         scene.filters = filtros;
         const t0 = performance.now();
         app.renderer.render(app.stage);
+        codigo.push(performance.now() - t0);
         gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
-        v.push(performance.now() - t0);
+        total.push(performance.now() - t0);
       }
-      return v.sort((a, b) => a - b)[1] ?? 0;
+      return { total: mediana(total), codigo: mediana(codigo) };
     };
     try {
       const sin = medir(null);
       const con = medir(cam.filtrosDePrueba(sw(), sh()));
       scene.filters = null;
-      view.dataset.calibrado = `${sin.toFixed(1)}/${con.toFixed(1)}`;
-      const n = nivelMedido("alta", sin, con);
+      view.dataset.calibrado = `${sin.codigo.toFixed(1)}+${(sin.total - sin.codigo).toFixed(1)}/${con.total.toFixed(1)}`;
+      const n = nivelMedido("alta", sin.total, con.total);
       if (n !== "alta") {
         gobernador.nivel = n;
-        bajarA(n);
+        bajarA(n, esPorPlaca(sin.codigo, sin.total));
       }
     } catch {
       scene.filters = null;
@@ -956,11 +960,14 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       loopFn = fn;
       let prev = 0;
       let start = -1;
+      /** Lo que se llevó el código del juego en el cuadro anterior: ver `Gobernador`. */
+      let codigo = 0;
       const pace = paceFactor();
       const loop = (now: number): void => {
         if (dead) return;
         const dt = prev ? Math.min(0.05, (now - prev) / 1000) / pace : 0;
-        if (prev) gobernador.cuadro(now - prev);
+        if (prev) gobernador.cuadro(now - prev, codigo);
+        const c0 = performance.now();
         prev = now;
         if (start < 0) start = now;
         loopFn?.(dt, (now - start) / 1000);
@@ -974,6 +981,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         }
         guardia();
         app.renderer.render(app.stage);
+        codigo = performance.now() - c0;
         if (ident) {
           relojId = (now - start) / 1000;
           if (cuadros++ % 5 === 0) ident.mirar([scene, hud, tagLayer], relojId, sw(), sh());
