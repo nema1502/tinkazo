@@ -487,9 +487,10 @@ function pintarEventos(list: Entry[], sueltos: Entry[], grupos: Entry[][]): void
     `<button class="ghost mini" type="button" data-evn-nuevo aria-expanded="${formAbierto}" aria-controls="evn-nuevo-f">` +
     `${esc(t("evnNuevo"))}</button>`;
   // Sin eventos: primero el camino corto, y "Nuevo evento" al lado, como secundario.
+  // Con el formulario abierto, la principal es "Crear evento": el camino corto pasa a secundario.
   const arriba =
     !guardados.length && grupoNombrable
-      ? `<div class="hc-acciones evn-arriba"><button class="primary mini" type="button" data-nombrar-ultimo>${esc(rotuloNombrar(grupoNombrable))}</button>${nuevo}</div>`
+      ? `<div class="hc-acciones evn-arriba"><button class="${formAbierto ? "ghost" : "primary"} mini" type="button" data-nombrar-ultimo>${esc(rotuloNombrar(grupoNombrable))}</button>${nuevo}</div>`
       : (guardados.length ? "" : `<p class="note">${esc(t("evnVacio"))}</p>`) + `<div class="hc-acciones evn-arriba">${nuevo}</div>`;
   caja.style.display = "block";
   caja.innerHTML =
@@ -661,6 +662,10 @@ function enlazarEventos(): void {
       const form = document.getElementById("evn-nuevo-f");
       if (form) form.hidden = !formAbierto;
       for (const b of caja.querySelectorAll("[data-evn-nuevo]")) b.setAttribute("aria-expanded", String(formAbierto));
+      // Dos botones del color de la casa no dicen cuál es el siguiente: con el formulario abierto, "Crear evento".
+      const corto = caja.querySelector("[data-nombrar-ultimo]");
+      corto?.classList.toggle("primary", !formAbierto);
+      corto?.classList.toggle("ghost", formAbierto);
       if (formAbierto) document.getElementById("evn-nuevo-in")?.focus();
       return;
     }
