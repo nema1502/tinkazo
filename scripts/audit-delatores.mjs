@@ -210,7 +210,7 @@ try {
       }
       if (cotejar && cotejar(tr.pose.names, tr.semilla) !== tr.pose.winners[0]) distintos++;
       const s = senales(tr, juego);
-      filas.push({ i: tr.i ?? k, ganador: tr.pose.winners[0], arco: s.arco, errores: tr.errores + (tr.excepciones?.length ?? 0), senales: s.senales });
+      filas.push({ i: tr.i ?? k, ganador: tr.pose.winners[0], arco: s.arco, errores: tr.errores + (tr.excepciones?.length ?? 0), revelado: s.revelado, tiempos: s.tiempos, senales: s.senales });
       if (!releer && k % 20 === 0) {
         const seg = (Date.now() - desde) / 1000 / k;
         console.log(`  … ${k}/${N} (${seg.toFixed(1)} s por semilla, faltan unos ${Math.ceil((seg * (N - k)) / 60)} min)`);
@@ -228,7 +228,10 @@ try {
       for (const [senal, reglas] of Object.entries(f.senales)) {
         if (!familias.has(senal)) familias.set(senal, {});
         const fam = familias.get(senal);
-        for (const [regla, obs] of Object.entries(reglas)) (fam[regla] ??= []).push(obs && { ...obs, arco: f.arco });
+        // `antes`: cuántos segundos antes del cartel se vio la señal en esta semilla.
+        const t = f.tiempos?.[senal];
+        const antes = t == null ? null : Math.round((f.revelado - t) * 10) / 10;
+        for (const [regla, obs] of Object.entries(reglas)) (fam[regla] ??= []).push(obs && { ...obs, arco: f.arco, antes });
       }
     }
     const medidas = [...familias.entries()].map(([senal, fam]) => ({ senal, fam, ev: evaluarSenal(fam) }));
@@ -249,16 +252,21 @@ try {
       );
       if (ev.veredicto === "delator" || ev.veredicto === "mirar") {
         fila[ev.veredicto].push(senal);
-        // Por arco: un delator suele vivir en uno solo.
+        // Por arco: un delator suele vivir en uno solo. Y cuánto antes del
+        // cartel se ve: a medio segundo no adelanta nada.
         const porArco = new Map();
+        const antes = [];
         for (const o of fam[m.nombre] ?? []) {
           if (!o) continue;
           const x = porArco.get(o.arco) ?? { a: 0, n: 0 };
           x.n++;
           if (o.acierta) x.a++;
           porArco.set(o.arco, x);
+          if (o.antes != null) antes.push(o.antes);
         }
-        console.log(`      por arco: ${[...porArco].map(([a, x]) => `${a} ${x.a}/${x.n}`).join(" · ")}`);
+        antes.sort((a, b) => a - b);
+        const med = antes.length ? antes[Math.floor(antes.length / 2)].toFixed(1).replace(".", ",") : null;
+        console.log(`      por arco: ${[...porArco].map(([a, x]) => `${a} ${x.a}/${x.n}`).join(" · ")}${med ? ` · se ve a ${med} s del cartel (mediana)` : ""}`);
       }
     }
     resumen.push(fila);

@@ -451,9 +451,12 @@ describe("el trueque", () => {
   });
 
   it("los prendidos de antes de la entrega, y el primero que prueba la entrega", () => {
-    const s = senalesTrueque(preparar(feria(), JUEGOS.trueque));
+    const P = preparar(feria(), JUEGOS.trueque);
+    const s = senalesTrueque(P);
     expect(s["prendido-antes"]).toEqual({ prendidos: { acierta: false, azar: 1 / 5 }, "nunca-prendidos": { acierta: true, azar: 4 / 5 } });
     expect(s.entrega).toEqual({ "el-primero": { acierta: false, azar: 1 / 2 }, "los-otros": { acierta: true, azar: 1 / 2 } });
+    // Los prendidos se cuentan al empezar la entrega; el primero, cuando el encargo llega a su puesto.
+    expect(P.tiempos).toEqual({ "prendido-antes": 13.6, entrega: 14.75 });
   });
 
   it("el aro es del puesto de su nombre, no del de la fila de abajo", () => {
@@ -499,5 +502,8 @@ describe("los juegos", () => {
     expect(r.arco).toBe("susto");
     expect(r.corte).toBe(30);
     expect(r.senales["nombra-primero"].el.acierta).toBe(true);
+    // Cuándo se vio cada señal: la línea, a los 3 s; el cartel, a los 30.
+    expect(r.tiempos["nombra-primero"]).toBe(3);
+    expect(r.revelado - r.tiempos["nombra-ultimo"]).toBe(27);
   });
 });

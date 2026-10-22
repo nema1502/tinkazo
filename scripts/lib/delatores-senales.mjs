@@ -3,7 +3,9 @@
  * a las apuestas de cada semilla. Sin navegador, así se prueba con trazas
  * armadas a mano (`delatores-senales.test.mjs`).
  *
- * Cada señal devuelve, por semilla, sus reglas: `{ regla: { acierta, azar } }`.
+ * Cada señal devuelve, por semilla, sus reglas: `{ regla: { acierta, azar } }`,
+ * y anota en `P.tiempos` cuándo se ve (en segundos desde el arranque): lo que
+ * se ve a medio segundo del cartel no adelanta nada; lo que se ve diez antes, sí.
  * `azar` es lo que acertaría esa regla si la señal no supiera nada: el tamaño
  * del grupo por el que apuesta sobre el de los que siguen en juego en ese
  * momento. La estadística está en `delatores.mjs`.
@@ -155,7 +157,7 @@ export function preparar(tr, cfg = {}) {
   }
   const todos = Array.from({ length: n }, (_, i) => i);
   const arco = marks.find((m) => m.k === "arco")?.v ?? "?";
-  const P = { names, n, w, W, H, frames, subs, marks, trazos, escena, revelado, primera, ultima, arco };
+  const P = { names, n, w, W, H, frames, subs, marks, trazos, escena, revelado, primera, ultima, arco, tiempos: {} };
   P.corte = Math.min(cuando(P, cfg.corte) ?? revelado, revelado);
   // Con `afuera` (en los juegos donde los nombres no se ven todo el tiempo,
   // como el trueque), quién sale y cuándo lo dice el juego, no la pantalla.
@@ -268,9 +270,13 @@ export function senalesSubtitulos(P) {
   if (primero) {
     const quien = primero.quienes.find((i) => primero.vivos.includes(i));
     out["nombra-primero"] = { el: apuesta([quien], P.vivos(primero.t), w) };
+    P.tiempos["nombra-primero"] = primero.t;
   }
   const ultimo = conVivos.filter((s) => s.vivos.length === 1).at(-1);
-  if (ultimo) out["nombra-ultimo"] = { el: apuesta(ultimo.vivos, P.vivos(ultimo.t), w) };
+  if (ultimo) {
+    out["nombra-ultimo"] = { el: apuesta(ultimo.vivos, P.vivos(ultimo.t), w) };
+    P.tiempos["nombra-ultimo"] = ultimo.t;
+  }
   const veces = new Map();
   for (const s of conVivos) for (const i of s.quienes) if (s.vivos.includes(i)) veces.set(i, (veces.get(i) ?? 0) + 1);
   const C = P.vivos(P.corte - 0.001);
@@ -283,11 +289,15 @@ export function senalesSubtitulos(P) {
       nombrados: apuesta(nombrados, C, w),
       callados: apuesta(C.filter((i) => !nombrados.includes(i)), C, w),
     };
+    // Quién es el más nombrado, y quién nunca, se sabe con la última línea que nombra a alguien.
+    const ultimaConNombre = conVivos.filter((s) => s.vivos.length).at(-1);
+    if (ultimaConNombre) P.tiempos["nombra-mas"] = P.tiempos.drama = ultimaConNombre.t;
   }
   const dos = conVivos.filter((s) => s.vivos.length === 2 && s.vivos.includes(w)).at(-1);
   if (dos) {
     const [a, b] = dos.quienes.filter((i, k, xs) => dos.vivos.includes(i) && xs.indexOf(i) === k);
     out["orden-dos"] = { "el-primero": apuesta([a], [a, b], w), "el-segundo": apuesta([b], [a, b], w) };
+    P.tiempos["orden-dos"] = dos.t;
   }
   return out;
 }
@@ -314,6 +324,7 @@ export function senalCamara(P, cfg = {}) {
     ultimo = { i: cerca.i, t: f.t };
   });
   if (!tiempo.size) return {};
+  if (ultimo) P.tiempos.camara = ultimo.t;
   const C = P.vivos(P.corte - 0.001);
   const dentro = [...tiempo.entries()].filter(([i]) => C.includes(i));
   const tope = Math.max(0, ...dentro.map(([, v]) => v));
@@ -343,6 +354,7 @@ export function senalArranque(P, cfg) {
     const reglas = {};
     orden.forEach((i, r) => (reglas[`puesto-${r + 1}`] = apuesta([i], orden, P.w)));
     out[`arranque-${a.orden ?? "x"}`] = reglas;
+    P.tiempos[`arranque-${a.orden ?? "x"}`] = f.t;
   }
   return out;
 }
@@ -381,10 +393,12 @@ export function senalesDuelo(P, cfg = {}) {
     if (Math.abs(a.x - b.x) > 4) {
       const izq = a.x < b.x ? P.w : otro;
       out["lado-x"] = { izquierda: apuesta([izq], par, P.w), derecha: apuesta([izq === P.w ? otro : P.w], par, P.w) };
+      P.tiempos["lado-x"] = f.t;
     }
     if (Math.abs(a.y - b.y) > 4) {
       const arriba = a.y < b.y ? P.w : otro;
       out["lado-y"] = { arriba: apuesta([arriba], par, P.w), abajo: apuesta([arriba === P.w ? otro : P.w], par, P.w) };
+      P.tiempos["lado-y"] = f.t;
     }
   }
   if (cfg.salta && ambos.length > 2) {
@@ -395,6 +409,7 @@ export function senalesDuelo(P, cfg = {}) {
       if (Math.abs(d) < umbral) continue;
       const primero = d < 0 ? P.w : otro;
       out["salta-primero"] = { el: apuesta([primero], par, P.w), "el-otro": apuesta([primero === P.w ? otro : P.w], par, P.w) };
+      P.tiempos["salta-primero"] = x.t;
       break;
     }
   }
@@ -416,6 +431,7 @@ export function linea(nombre, claves, { hasta = "corte" } = {}) {
     if (!l) return {};
     const quienes = [...new Set(l.quienes)].filter((i) => P.sigue(i, l.t));
     if (!quienes.length) return {};
+    P.tiempos[nombre] = l.t;
     return { [nombre]: { "el-nombrado": apuesta(quienes, P.vivos(l.t), P.w) } };
   };
   Object.defineProperty(f, "name", { value: `linea-${nombre}` });
@@ -461,9 +477,13 @@ export function senalesCarrera(P) {
     const reglas = {};
     for (const k of lugares) reglas[`puesto-${k}`] = apuesta([k], lugares, p);
     out[`puesto-${Math.round(q * 100)}`] = reglas;
+    P.tiempos[`puesto-${Math.round(q * 100)}`] = go + q * dur;
   }
   const p90 = puestoEn(0.9);
-  if (p90 === 1 || p90 === 2) out.recta = { primera: apuesta([1], [1, 2], p90), segunda: apuesta([2], [1, 2], p90) };
+  if (p90 === 1 || p90 === 2) {
+    out.recta = { primera: apuesta([1], [1, 2], p90), segunda: apuesta([2], [1, 2], p90) };
+    P.tiempos.recta = go + 0.9 * dur;
+  }
   return out;
 }
 
@@ -500,6 +520,7 @@ export function senalesSapo(P) {
   if (ultimo) {
     const c = ultimo.quienes[0];
     out.casi = { "el-del-casi": apuesta([c], mesa, P.w), "sus-vecinos": apuesta(vecinos(c), mesa, P.w) };
+    P.tiempos.casi = ultimo.t;
   }
   if (casis.length >= 2) {
     const a = mesa.indexOf(casis.at(-2).quienes[0]), b = mesa.indexOf(casis.at(-1).quienes[0]);
@@ -507,11 +528,17 @@ export function senalesSapo(P) {
       const ida = (b - a + k) % k, vuelta = (a - b + k) % k;
       const [desde, pasos] = ida <= vuelta ? [a, ida] : [b, vuelta];
       const medio = Array.from({ length: pasos - 1 }, (_, j) => mesa[(desde + j + 1) % k]);
-      if (medio.length) out["entre-casis"] = { medio: apuesta(medio, mesa, P.w) };
+      if (medio.length) {
+        out["entre-casis"] = { medio: apuesta(medio, mesa, P.w) };
+        P.tiempos["entre-casis"] = casis.at(-1).t;
+      }
     }
   }
   const fallo = antes.filter((s) => MARCADORES.cSapMissBy.test(s.s) && s.quienes.length === 1 && mesa.includes(s.quienes[0])).at(-1);
-  if (fallo) out["fallo-cerca"] = { "el-nombrado": apuesta(fallo.quienes, mesa, P.w), "sus-vecinos": apuesta(vecinos(fallo.quienes[0]), mesa, P.w) };
+  if (fallo) {
+    out["fallo-cerca"] = { "el-nombrado": apuesta(fallo.quienes, mesa, P.w), "sus-vecinos": apuesta(vecinos(fallo.quienes[0]), mesa, P.w) };
+    P.tiempos["fallo-cerca"] = fallo.t;
+  }
   return out;
 }
 
@@ -531,6 +558,7 @@ export function senalesRuleta(P) {
   if (!l) return {};
   const i = l.quienes[0], n = P.n;
   const C = P.vivos(l.t);
+  P.tiempos.gajo = l.t;
   return {
     gajo: {
       "el-nombrado": apuesta([i], C, P.w),
@@ -556,6 +584,7 @@ export function senalesTombola(P) {
   const cerca = porDistancia(P, f.labs, P.W / 2, P.H / 2, f.t);
   if (cerca.length < 3) return {};
   const C = P.vivos(f.t);
+  P.tiempos.compuerta = f.t;
   return { compuerta: { "la-de-la-boca": apuesta([cerca[0].i], C, P.w), "las-dos-de-la-boca": apuesta([cerca[0].i, cerca[1].i], C, P.w) } };
 }
 
@@ -576,6 +605,7 @@ export function senalesQuien(P) {
   if (!f) return {};
   const cerca = porDistancia(P, f.labs, foco.x, foco.y, f.t)[0];
   if (!cerca || cerca.d > Math.max(foco.w, foco.h)) return {};
+  P.tiempos.foco = ultimo.t;
   return { foco: { "la-del-foco": apuesta([cerca.i], P.vivos(ultimo.t), P.w) } };
 }
 
@@ -601,6 +631,7 @@ export function senalesConstelacion(P) {
   const yo = cielo.labs.get(d);
   const cerca = [...cielo.labs.entries()].filter(([i]) => i !== d).map(([i, q]) => ({ i, dd: Math.hypot(q.x - yo.x, q.y - yo.y) })).sort((a, b) => a.dd - b.dd).map((x) => x.i);
   const C = P.vivos(l.t);
+  P.tiempos.amague = l.t;
   return {
     amague: {
       "la-del-amague": apuesta([d], C, P.w),
@@ -679,6 +710,7 @@ export function senalesTrueque(P) {
   const antes = prendidos(-Infinity, P.corte - 0.05);
   const C = P.vivos(P.corte - 0.001);
   if (C.length >= 2) {
+    P.tiempos["prendido-antes"] = P.corte;
     out["prendido-antes"] = {
       prendidos: apuesta(C.filter((i) => antes.has(i)), C, P.w),
       "nunca-prendidos": apuesta(C.filter((i) => !antes.has(i)), C, P.w),
@@ -688,7 +720,10 @@ export function senalesTrueque(P) {
   const primero = P.frames.find((f) => f.t > P.corte && f.t < P.revelado && f.labs.size);
   if (D.length >= 2 && primero) {
     const i = [...primero.labs.keys()].find((j) => D.includes(j));
-    if (i !== undefined) out.entrega = { "el-primero": apuesta([i], D, P.w), "los-otros": apuesta(D.filter((j) => j !== i), D, P.w) };
+    if (i !== undefined) {
+      out.entrega = { "el-primero": apuesta([i], D, P.w), "los-otros": apuesta(D.filter((j) => j !== i), D, P.w) };
+      P.tiempos.entrega = primero.t;
+    }
   }
   return out;
 }
@@ -815,7 +850,10 @@ export const grabarPara = (juego) => {
   return { numeros: !!c.numeros, trazos: c.trazos ?? [], escena: !!c.escena };
 };
 
-/** Todas las señales de una semilla: `{ señal: { regla: { acierta, azar } | null } }`. */
+/**
+ * Todas las señales de una semilla: `{ señal: { regla: { acierta, azar } | null } }`,
+ * y `tiempos`: cuándo se vio cada señal, en segundos desde el arranque.
+ */
 export function senales(tr, juego) {
   const cfg = JUEGOS[juego] ?? { candidatos: "visibles" };
   const P = preparar(tr, cfg);
@@ -826,5 +864,5 @@ export function senales(tr, juego) {
     ...senalesDuelo(P, cfg),
   };
   for (const f of cfg.especificas ?? []) Object.assign(out, f(P, cfg));
-  return { arco: P.arco, corte: P.corte, revelado: P.revelado, senales: out };
+  return { arco: P.arco, corte: P.corte, revelado: P.revelado, senales: out, tiempos: P.tiempos };
 }
