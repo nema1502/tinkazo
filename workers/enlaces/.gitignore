@@ -1,2 +1,7 @@
 .wrangler/
 node_modules/
+# Los secretos de wrangler dev: nunca al repo.
+.dev.vars
+.dev.vars.*
+.env
+.env.*
