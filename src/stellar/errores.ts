@@ -346,6 +346,11 @@ export function codigoTecnico(e: unknown): string {
   }
   const respuesta = o.response as { status?: unknown } | undefined;
   if (respuesta && typeof respuesta.status === "number") add(`HTTP ${respuesta.status}`);
+  // La transacción que se mandó y no se sabe cómo terminó: con su hash se la busca en el
+  // explorador. Del intento sale solo el hash, nunca la cuenta ni la huella de la lista.
+  const intento = o.intento as { hash?: unknown } | undefined;
+  const hashTx = typeof o.txHash === "string" ? o.txHash : intento && typeof intento.hash === "string" ? intento.hash : "";
+  if (/^[0-9a-f]{64}$/i.test(hashTx)) add(`tx ${hashTx.toLowerCase()}`);
   if (o.cause !== undefined) {
     const causa = textoDelError(o.cause);
     if (causa) add(`causa: ${causa.split("\n")[0]}`);

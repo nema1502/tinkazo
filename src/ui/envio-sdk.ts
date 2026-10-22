@@ -220,7 +220,7 @@ export async function submitElsewhere(tx: TxArmada, onStep: OnStep, sinRedMs: nu
   }
   if (d.estado === "sin-respuesta") {
     if (intento) throw new SelloIncierto({ ...intento, hash }, d.error);
-    throw new Error("sin-confirmar", { cause: d.error });
+    throw Object.assign(new Error("sin-confirmar", { cause: d.error }), { txHash: hash });
   }
   throw errorDelDesenlace(d);
 }

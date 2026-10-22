@@ -330,6 +330,26 @@ describe("codigoTecnico: el detalle para copiar", () => {
     expect(codigoTecnico({ code: -32603, message: "internal error" })).toBe("internal error · -32603");
   });
 
+  it("de lo que se mandó y no se sabe, el hash de la transacción (público, para el explorador); nunca la cuenta ni la huella", () => {
+    const hash = "93a2c960".repeat(8);
+    const organizer = "GCZJUPZIUVQVS67RJXYGMRZHV7RIZD4OAWJPQ4YA2UNCQNSVUEDHZIHY";
+    const huella = "cd".repeat(32);
+    const sello = Object.assign(new Error("sin-confirmar", { cause: new TypeError("Load failed") }), {
+      name: "SelloSinConfirmar",
+      intento: { organizer, listHash: huella, round: 33274510, hash: hash.toUpperCase() },
+    });
+    const c = codigoTecnico(sello);
+    expect(c).toContain(`tx ${hash}`);
+    expect(c).not.toContain(organizer);
+    expect(c).not.toContain(huella);
+    // El sorteo lo lleva en `txHash`.
+    expect(codigoTecnico(Object.assign(new Error("sin-confirmar", { cause: new TypeError("Failed to fetch") }), { txHash: hash }))).toBe(
+      `sin-confirmar · tx ${hash} · causa: TypeError · Failed to fetch`,
+    );
+    // Algo que no es un hash no entra.
+    expect(codigoTecnico(Object.assign(new Error("sin-confirmar"), { txHash: "no-es-un-hash" }))).toBe("sin-confirmar");
+  });
+
   it("nunca pasa de 240 caracteres ni lleva puntos suspensivos de un solo carácter", () => {
     const c = codigoTecnico(new Error("x".repeat(1000)));
     expect(c.length).toBeLessThanOrEqual(240);

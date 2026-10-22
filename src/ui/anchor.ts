@@ -403,7 +403,8 @@ async function sortear(raffleId: bigint, signature96: Uint8Array, onStep: OnStep
     onStep("confirmed", hash);
     return { winners: [...draw.winners], randomness: toHex(draw.randomness), txHash: hash };
   }
-  if (desenlace.estado === "sin-respuesta") throw new Error("sin-confirmar", { cause: desenlace.error });
+  // Con el hash, para "Ver detalle": es lo que sirve para buscarla en el explorador.
+  if (desenlace.estado === "sin-respuesta") throw Object.assign(new Error("sin-confirmar", { cause: desenlace.error }), { txHash: hash });
   throw errorDelDesenlace(desenlace);
 }
 
