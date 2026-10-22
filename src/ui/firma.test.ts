@@ -24,7 +24,8 @@ const pollar = { kind: "external", label: "Google", address: DIR, submitsItself:
 /** Lo que muestra la línea de estado en el paso de firmar, con el costo que trae. */
 async function lineaAlFirmar(): Promise<string> {
   const host = { style: { display: "" }, className: "", textContent: "" };
-  vi.stubGlobal("document", { getElementById: () => host });
+  // El detalle plegado de un error anterior (`limpiarDetalle`) no está: no hubo error.
+  vi.stubGlobal("document", { getElementById: (id: string) => (id.endsWith("-detalle") ? null : host) });
   const { showTxStatus } = await import("./anchor");
   showTxStatus("seal-status", "signing", "0,81 XLM");
   return host.textContent;
