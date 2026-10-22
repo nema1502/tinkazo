@@ -41,8 +41,12 @@
  * vuelve a medir sin navegador: para revisar una señal nueva sin volver a
  * correr horas de semillas. `--paralelo` abre varias ventanas a la vez en el
  * mismo Chrome: lo medido no cambia, y con cuatro tarda la mitad o menos.
- * Cada semilla tarda entre 3 y 15 segundos según el juego y la carga: los diez
- * del selector con doscientas son unas dos o tres horas. Un Chrome a la vez, con su puerto: CDP_PORT.
+ * Con `--paralelo 4`, cada semilla cuesta de 0,7 a 2 segundos según el juego y
+ * la carga: los diez del selector con doscientas tardan unos 23 minutos en la
+ * máquina del 21 de octubre de 2026 (Ryzen 7 7735HS, placa RTX 4060), y volver
+ * a medirlos con `--releer`, unos 12 segundos. En los delatores, el script dice
+ * también cuántos segundos antes del cartel se ve la señal (la mediana). Un
+ * Chrome a la vez, con su puerto: CDP_PORT.
  */
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
