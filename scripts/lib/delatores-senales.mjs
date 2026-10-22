@@ -69,6 +69,7 @@ export const MARCADORES = {
   cTroSpent: /^¡(Se le acabó la cuerda a .+|Se apagó el trompo de .+|.+ se queda sin cuerda)!$/u,
   // La piñata. `cPinOut` también reconoce `cPinOutMany` y `cPinOutMore`: todas son caídas.
   cPinOut: /^¡(Se cayó .+|Se cayeron .+|Afuera .+|.+ al piso)!$/u,
+  cPinLast: /^¡(Quedan .+ adentro|Adentro solo .+)!$/u,
   cPinAlmost: /^¡(Casi se cae .+|.+ se asoma|Se agarra .+)!$/u,
   cPinBreak: /^¡(SE ROMPIÓ|SE ABRIÓ LA PIÑATA|AHÍ CAE)!$/u,
   // De pie (antes ¿Quién es?): la respuesta que sienta a los que no cumplen, y
@@ -757,18 +758,23 @@ export function afueraTrueque(P) {
 
 /**
  * Quién cae de la piñata y cuándo: el que nombra el relator al caer ("¡Afuera
- * X!", "¡Se cayeron X y Y!"). Los nombres ya no sirven: desde octubre se ven
- * todos, todo el tiempo (la columna de los de adentro y la de los caídos), y
- * hasta el 21 de octubre el auditor tomaba aparecer por caer, así que el susto
- * (el caramelo que se asoma) quedaba sin medir. El que cae sin nombre ("¡Se
- * cayó X y 3 más!", con mucha gente) sigue contando en juego: el azar sube y
- * la prueba se vuelve más prudente, nunca más fácil.
+ * X!", "¡Se cayeron X y Y!"), y, cuando dice quiénes quedan ("¡Adentro solo X
+ * y Y!"), todos los demás. Los nombres en pantalla no sirven: desde octubre se
+ * ven todos (la columna de los de adentro y la de los caídos), y hasta el 21 de
+ * octubre el auditor tomaba aparecer por caer, así que el susto (el caramelo
+ * que se asoma) quedaba sin medir. El que cae sin nombre ("¡Se cayó X y 3
+ * más!", con mucha gente) sigue contando en juego hasta esa línea: el azar
+ * sube y la prueba se vuelve más prudente, nunca más fácil.
  */
 export function afueraPinata(P) {
   const fuera = new Map();
   for (const s of P.subs) {
-    if (s.t > P.revelado || !MARCADORES.cPinOut.test(s.s)) continue;
-    for (const i of s.quienes) if (!fuera.has(i)) fuera.set(i, s.t);
+    if (s.t > P.revelado) continue;
+    if (MARCADORES.cPinOut.test(s.s)) {
+      for (const i of s.quienes) if (!fuera.has(i)) fuera.set(i, s.t);
+    } else if (MARCADORES.cPinLast.test(s.s) && s.quienes.length) {
+      for (let i = 0; i < P.n; i++) if (!s.quienes.includes(i) && !fuera.has(i)) fuera.set(i, s.t);
+    }
   }
   return fuera;
 }

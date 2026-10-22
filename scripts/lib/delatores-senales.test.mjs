@@ -103,6 +103,10 @@ describe("las líneas del relator que marcan momentos coinciden con src/i18n.ts"
     for (const s of variantes("cPinOutMany", [["Ana Vargas", "Diego Rojas"]])) expect(s).toMatch(MARCADORES.cPinOut);
     for (const s of variantes("cPinOutMore", ["Ana Vargas", 3])) expect(s).toMatch(MARCADORES.cPinOut);
     for (const s of variantes("cPinAlmost", ["Ana Vargas"])) expect(s).not.toMatch(MARCADORES.cPinOut);
+    for (const s of variantes("cPinLast", ["Ana Vargas", "Diego Rojas"])) {
+      expect(s).toMatch(MARCADORES.cPinLast);
+      expect(s).not.toMatch(MARCADORES.cPinOut);
+    }
   });
 
   it("el cartel del ganador, con uno y con varios", () => {
@@ -166,6 +170,18 @@ describe("quién sigue en juego", () => {
     expect(P.sigue(2, 25)).toBe(true);
     // El susto se mide: el que se asoma es el que gana, entre los cinco que quedan.
     expect(senales(tr, "pinata").senales.asoma["el-nombrado"]).toEqual({ acierta: true, azar: 1 / 5 });
+  });
+
+  it("en la piñata, cuando el relator dice quiénes quedan, los demás ya cayeron aunque no los haya nombrado", () => {
+    const tr = traza({
+      pos: todosEnFila,
+      subs: [[6, "¡Se cayó María Quispe y 3 más!"], [20, "¡Adentro solo Lucía Flores y Pablo Gutiérrez!"], [26, "¡SE ROMPIÓ!"]],
+    });
+    const P = preparar(tr, JUEGOS.pinata);
+    expect(P.vivos(25)).toEqual([2, 7]);
+    expect(P.vivos(10)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    // Los dos que nombra son los que quedan: nombrarlos no adelanta nada.
+    expect(senales(tr, "pinata").senales["nombra-mas"]?.el ?? null).toBeNull();
   });
 
   it("lo que no se ve no cuenta: transparente, chico o fuera de la pantalla", () => {
