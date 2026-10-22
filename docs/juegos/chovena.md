@@ -30,14 +30,14 @@ Reemplaza a luz roja, luz verde, que cubría la misma necesidad (parar y seguir)
 
 **Quién sale no depende de dónde baila.** El orden está sembrado con la ronda y la ganadora va última. El reparto pone más gente en los primeros cortes y al menos uno en cada uno. Con varios premios, los premiados salen últimos y "con premio", del último premio al segundo, y la última que queda se lleva el primero.
 
-**Tambalearse no delata a nadie.** En la mitad de los cortes trastabilla también alguien que no sale.
+**Tambalearse no delata a nadie.** En la mitad de los cortes trastabilla también alguien que no sale, y en los amagues se suelta alguien y vuelve ("¡fulana vuelve a la rueda!"). Los dos se sortean entre todos los que siguen en la rueda, también la ganadora, y el tono del relator sube en el último corte, no según a quién nombra. Hasta el 21 de octubre la ganadora no entraba en ese sorteo: la que volvía nombrada era siempre ella (auditor de delatores, 51 de 51).
 
 | Arco | Qué pasa |
 |---|---|
-| Susto | En el último corte la ganadora trastabilla ("¡ojo con fulana!") y aguanta |
-| Remontada | En el corte falso se había soltado, y vuelve a la rueda |
+| Susto | En el último corte trastabilla ("¡ojo con fulana!") y aguanta una de las dos que van a la final: la mitad de las veces, la ganadora |
+| Remontada | En el corte falso la ganadora se había soltado, y vuelve a la rueda junto con otra que también se soltó; el relator nombra a una de las dos, sorteada |
 | Duelo | La final trae un amague: la música se corta, los dos se tambalean, y vuelve |
-| Tapada | Nadie la nombra: en la final se dice "¡quedan dos!" |
+| Tapada | Nadie nombra a las dos de la final hasta el final: si trastabillan o se sueltan, sin nombre; en la final se dice "¡quedan dos!". Antes callaba solo a la ganadora, y la nombrada perdía siempre |
 
 ## Cómo escala
 

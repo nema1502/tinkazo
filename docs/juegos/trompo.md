@@ -32,7 +32,7 @@ Los dos últimos antes del mano a mano salen siempre sacados. Los que salieron s
 
 **El mano a mano.** Quedan dos y se miden: dan vueltas uno alrededor del otro. Antes de cada choque se echan atrás y embisten a la vez, y chocan tres veces. Después del último choque, la rival se queda sin cuerda y se cae.
 
-**La duda del mano a mano.** En cada choque menos el último, cabecea uno de los dos, al azar y sembrado: se inclina fuerte un instante, la sala oye "¡Cabecea el de X!" y después "¡Y sigue bailando!". Así que el que más cabecea no siempre es el que pierde, y nadie sabe quién va a caer hasta el último choque. En la tapada la línea no nombra a nadie y la cámara nunca va a la ganadora.
+**La duda del mano a mano.** En cada choque menos el último, cabecea uno de los dos, al azar y sembrado: se inclina fuerte un instante, la sala oye "¡Cabecea el de X!" y después "¡Y sigue bailando!". Así que el que más cabecea no siempre es el que pierde, y nadie sabe quién va a caer hasta el último choque. En la tapada la línea no nombra a nadie y la cámara no va a ninguno de los dos: si fuera solo a la rival, el que mira la cámara sería el que pierde. Y los dos se cansan igual: a medida que pasa el mano a mano los dos cabecean un poco más, no solo la rival.
 
 **Lo que hace que un golpe se sienta.** Lo que se aprendió del animé y de los juegos de pelea:
 - **La parada.** El juego se congela entre 55 y 110 milésimas en los golpes grandes. En la gresca del principio no hay parada, porque sería tartamudear: solo cuando quedan doce o menos y con medio segundo entre una y otra.
@@ -51,8 +51,8 @@ Los arcos del director de emoción se ven así:
 
 | Arco | Qué pasa |
 |---|---|
-| Susto | En el mano a mano el trompo ganador cabecea, casi se cae ("¡cabecea el de fulano!") y se endereza |
-| Remontada | A mitad de los choques le pegan y lo mandan contra la tiza: la roza y vuelve |
+| Susto | En el mano a mano uno de los dos cabecea fuerte, casi se cae ("¡cabecea el de fulano!") y se endereza. Cuál, sorteado: la mitad de las veces el que gana |
+| Remontada | A mitad de los choques a uno le pegan y lo mandan contra la tiza: la roza y vuelve ("¡fulano casi se sale!"). Se sortea entre los que siguen bailando un buen rato: el que gana, la rival y los que salen más tarde |
 | Duelo | El mano a mano dura cuatro choques en vez de tres |
 | Tapada | Baila callado contra el borde, en un lugar que cambia de un sorteo a otro, y la cámara nunca lo busca |
 

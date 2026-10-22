@@ -961,7 +961,6 @@ export async function llamasPixi(
       if (prog < bt.at || fired.has(id)) return;
       fired.add(id);
       const quien = nameOf(bt.actor);
-      const suya = bt.actor === story.winner;
       // La cámara se mete en cada momento de la historia.
       shot = { k: bt.target ?? bt.actor, until: prog + 0.06, zoom: bt.kind === "tropiezo" ? 1.7 : 1.5 };
       const contar = (msg: string, heat: number): void => {
@@ -973,7 +972,9 @@ export async function llamasPixi(
         beep(note(8), 0.12, "triangle", 0.045);
         setTimeout(() => beep(note(3), 0.16, "triangle", 0.04), 120);
       } else if (bt.kind === "tropiezo") {
-        contar((L_[key("cTropiezo")] as (n: string) => string)(quien), suya ? 0.85 : calor);
+        // Un tropiezo sube el tono igual sea de quien sea: con la ganadora más
+        // fuerte, la música se cortaba justo cuando tropezaba ella.
+        contar((L_[key("cTropiezo")] as (n: string) => string)(quien), Math.min(0.85, calor + 0.15));
         beep(note(1), 0.09, "square", 0.05);
         cam.punch(0.06).shake(8 * G.u);
       } else if (bt.kind === "pique") {
@@ -1009,7 +1010,14 @@ export async function llamasPixi(
     };
     const ganadora = nameOf(story.winner);
     const rival = nameOf(story.rival);
-    if (story.arc === "remontada") arco("arco", 0.74, 0.8, () => L_.cRemonta(ganadora));
+    // La remontada nombra a las dos que vienen de atrás, en orden alfabético:
+    // nombrando solo a la ganadora, "¡X viene de atrás!" la anunciaba en todas
+    // las remontadas (auditor de delatores, 21 de octubre de 2026).
+    if (story.arc === "remontada") {
+      const dicho = arco("arco", 0.74, 0.8, () => (plan.decoy >= 0 ? L_.cRemonta2(...enOrden(ganadora, nameOf(plan.decoy))) : L_.cRemonta(ganadora)));
+      // Y la cámara va a una de las dos, sorteada.
+      if (dicho && plan.decoy >= 0) shot = { k: plan.foco, until: Math.max(prog + 0.05, 0.79), zoom: 1.5 };
+    }
     if (story.arc === "duelo") {
       arco("arco", 0.52, 0.7, () => L_.cDuelo(...enOrden(ganadora, rival)));
       once("foto", plan.foto, () => {
@@ -1019,7 +1027,12 @@ export async function llamasPixi(
       });
       arco("fotoTx", plan.foto, 0.95, () => t("cFoto"));
     }
-    if (story.arc === "tapada") arco("arco", 0.88, 0.9, () => L_.cCuela(ganadora));
+    // En la tapada se cuela la que nadie nombró, y tampoco se la nombra ahora:
+    // "¡Y se cuela X!" la anunciaba en todas las tapadas.
+    if (story.arc === "tapada") arco("arco", 0.88, 0.9, () => t("cCuelaAnon"));
+    // En la recta final la tribuna grita por una, sorteada entre todas: la
+    // última que se nombra sola ya no es siempre la que gana ni la que pierde.
+    arco("hinchada", 0.84, 0.75, () => L_.cHinchada(nameOf(plan.hinchada)));
     // El latido del mano a mano: dos golpes con armónicos (un seno solo en el
     // piso del registro no pasaba por el parlante de un proyector), que se
     // apuran en la recta y siguen en la foto. Cuenta en tiempo de juego, así
@@ -1039,7 +1052,7 @@ export async function llamasPixi(
   /** El texto de cada línea del arco, sorteado una sola vez. */
   const arcMsg: Record<string, string> = {};
   /** Cuándo dice el relator las líneas fijas: la del arco, la última recta y la foto. */
-  const hitos = [0.8, plan.foto, ...(story.arc === "remontada" ? [0.74] : story.arc === "duelo" ? [0.52] : story.arc === "tapada" ? [0.88] : [])];
+  const hitos = [0.8, 0.84, plan.foto, ...(story.arc === "remontada" ? [0.74] : story.arc === "duelo" ? [0.52] : story.arc === "tapada" ? [0.88] : [])];
 
   let hoofIn = 0, hoofStep = 0, droneIn = 0;
   function raceAudio(dt: number, prog: number): void {
@@ -1116,7 +1129,10 @@ export async function llamasPixi(
     const caja = unir(duo.flatMap((k) => [cuerpo(k, prog), cuerpo(k, 1)]));
     const alta = Math.max(...duo.map((k) => cuerpo(k, 1).h));
     const z = Math.min(G.portrait ? 1.8 : 2.1, cabe(holgado(caja), zona), (0.78 * (zona.y1 - zona.y0)) / alta);
-    return centrar(caja, zona, G.sw, G.sh, z);
+    // Con aire hacia la meta, si entra: centrada, en el medio de la pantalla
+    // quedaba el nombre de la que llegaba primera.
+    const v = centrar(caja, zona, G.sw, G.sh, z);
+    return dentro(holgado(caja), zona, { ...v, x: v.x + 40 * G.u }, G.sw, G.sh);
   }
 
   /**
@@ -1259,11 +1275,19 @@ export async function llamasPixi(
     // momentos de la historia que están por pasar.
     const cerca = (at: number): boolean => at > prog && at - prog < 0.05;
     const momento = enEspera !== null || story.beats.some((bt) => cerca(bt.at)) || hitos.some(cerca);
-    if (leader !== lastLeader && tRace > 1 && !saidLast && !momento && tReal - lastSayAt >= 2.5) {
+    // En el duelo, desde el mano a mano no se anuncia quién pasa adelante: las
+    // dos se turnan, y con cada cambio la ganadora y la rival quedaban como las
+    // más nombradas de la carrera.
+    const enDuelo = story.arc === "duelo" && prog >= 0.52;
+    if (leader !== lastLeader && tRace > 1 && !saidLast && !momento && !enDuelo && tReal - lastSayAt >= 2.5) {
       lastLeader = leader;
       if (sayIf(T[getLang()].cLead(nameOf(leader)), 0.3 + 0.4 * prog)) {
         beep(note(12), 0.12, "triangle", 0.05);
         setTimeout(() => beep(note(15), 0.1, "triangle", 0.04), 70);
+        // La cámara se acerca un momento a la que pasa adelante, como a los
+        // momentos de la historia. Si se acercara solo a esos, que son de las
+        // que no ganan, la llama que más se mira sería la que pierde.
+        if (!shot) shot = { k: leader, until: prog + 0.06, zoom: 1.5 };
       }
     }
     if (!saidLast && prog > 0.8) {
@@ -1328,8 +1352,11 @@ export async function llamasPixi(
       const alto = Math.abs(G.laneY(leader) - G.laneY(second)) + 120 * G.u;
       const cabe = (G.sh - S.top() - S.bottom() - 80 * G.u) / alto;
       const z = Math.max(base, Math.min(base + 0.55 * Math.pow((prog - 0.8) / 0.2, 1.5), cabe));
-      // Las dos de adelante, enteras: con pocas personas no entraban a ese acercamiento.
-      look((leadX + x2) / 2 + 30 * G.u, y, z, 3, unir([cuerpo(leader, prog), cuerpo(second, prog)]));
+      // Las dos de adelante, enteras (con pocas personas no entraban a ese
+      // acercamiento), con aire hacia la meta. Con poco aire, en el medio de la
+      // pantalla quedaba el nombre de la que iba primera, como si la cámara la
+      // mirara solo a ella (auditor de delatores, 21 de octubre de 2026).
+      look((leadX + x2) / 2 + 100 * G.u, y, z, 3, unir([cuerpo(leader, prog), cuerpo(second, prog)]));
     } else {
       // La que va adelante, entera: en un celular, con pocas personas, la cola quedaba afuera.
       look(leadX - G.sw * 0.08, G.midY, 1 + 0.18 * tens, 2.6, cuerpo(leader, prog));
@@ -1509,6 +1536,15 @@ export async function llamasPixi(
       const capa = w?.parent;
       if (w && capa && capa.children[capa.children.length - 1] !== w) capa.addChild(w);
     }
+    // Los nombres que no se apagan en un primer plano: las dos que van
+    // adelante (las que mira la cámara en la recta final) y, en el duelo, las
+    // dos del mano a mano. Hasta el 21 de octubre eran la ganadora y la rival en
+    // todos los arcos: en un primer plano se apagaban los nombres de las demás,
+    // y el de la ganadora quedaba.
+    const punta = quieto || phase === "done" ? [] : lanes.map((_, k) => k).sort((a, b) => plan.pos(b, prog) - plan.pos(a, prog) || a - b).slice(0, 2);
+    const protegido = (k: number): boolean => phase === "done"
+      ? k === story.winner || k === story.rival
+      : punta.includes(k) || (story.arc === "duelo" && prog >= 0.52 && (k === story.winner || k === story.rival));
     for (let k = 0; k < N; k++) {
       const r = L.runners[k] as Runner;
       const sc = G.laneScale(k);
@@ -1541,7 +1577,7 @@ export async function llamasPixi(
       r.tag.visible = true;
       for (const c of r.tag.children) c.visible = true;
       r.tag.position.set(x - (space ? 82 : lake ? 86 : 70) * sc - r.tag.width, y - 30 * sc);
-      adentro(r, sc, k === story.winner || k === story.rival);
+      adentro(r, sc, protegido(k));
       // Las etiquetas de los que no ganaron no se apagan casi nada (0,95): con menos, el nombre no llega a 4,5 a 1 y en Zoom no se lee. El apagado va en la fila.
       r.tag.alpha = (phase === "done" && !premio ? 0.95 : 1) * Math.max(0, Math.min(1, (h + 0.05) / 0.2));
       if (quieto) continue;

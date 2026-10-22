@@ -218,19 +218,19 @@ La carrera actúa la historia entera. Los demás juegos toman del director el ar
 | Cierre de Libro | Susto | **La barrida.** La última barrida pasa por la tarjeta ganadora, que tiembla en rojo y suelta pedazos que se vuelven a juntar |
 | Cierre de Libro | Duelo | **El sello que duda.** El último sello flota sobre la ganadora ("¿se lo sellan a fulano?") y a último momento se va a la otra |
 | Aguayo (antes Pasanaku) | Susto | **El filo.** En el último apretón el bulto ganador sale empujado hasta el borde del aguayo, tiembla ahí con un aro rojo, y la tela lo vuelve a meter |
-| Trompo | Susto | **El cabeceo.** En el mano a mano el trompo ganador cabecea, casi se cae ("¡cabecea el de fulano!") y se endereza |
-| Trompo | Remontada | **La tiza.** A mitad de los choques le pegan y lo mandan contra la tiza: la roza y vuelve |
+| Trompo | Susto | **El cabeceo.** En el mano a mano uno de los dos cabecea fuerte, casi se cae ("¡cabecea el de fulano!") y se endereza. Es el que gana la mitad de las veces |
+| Trompo | Remontada | **La tiza.** A mitad de los choques a uno le pegan y lo mandan contra la tiza: la roza y vuelve. Se sortea entre los que siguen bailando un buen rato, así que "¡fulano casi se sale!" no anuncia al que gana |
 | Trompo | Duelo | **Un choque más.** El mano a mano dura cuatro choques en vez de tres |
-| Piñata | Susto | **El que se asoma.** En los últimos palos el caramelo ganador asoma por la rajadura y vuelve a entrar |
+| Piñata | Susto | **El que se asoma.** En los últimos palos asoma por la rajadura uno de los dos caramelos que quedan hasta la rotura, y vuelve a entrar. Es el ganador la mitad de las veces: si fuera siempre él, "¡se agarra fulano!" lo anunciaba diez segundos antes del cartel |
 | Piñata | Remontada | **Al aire.** Dos palos que no le pegan a nada antes de los últimos |
 | La Entrada | Susto | **La máscara.** Antes del último arco de la última fraternidad, a uno de los que siguen bailando casi se le cae la máscara (o se le vuela el sombrero, o la montera). Se sortea entre todos, también el que gana |
 | La Entrada | Remontada | **La que vuelve.** En un arco, una fraternidad arranca para la vereda como si se quedara ("¿se quedan los Tojos?") y vuelve a la comparsa. Se sortea entre las que siguen |
 | La Entrada | Duelo | **Un salto más.** El contrapunto frente al Socavón dura dos saltos más |
 | La Entrada | Tapada | **Se calla la banda.** En un arco la música se corta de golpe y la comparsa se congela a mitad del paso, con la sala que aplaudía; después vuelve la banda |
-| Chovena | Susto | **El que aguanta.** En el último corte la ganadora trastabilla con un "¡!" encima ("¡ojo con fulana!") y aguanta. En la mitad de los cortes trastabilla también alguien que no sale, así que tambalearse no delata a nadie |
-| Chovena | Remontada | **La que vuelve.** En el corte falso la ganadora se había soltado y da un paso afuera; vuelve la música y vuelve a la rueda |
+| Chovena | Susto | **El que aguanta.** En el último corte trastabilla con un "¡!" encima ("¡ojo con fulana!") y aguanta una de las dos que van a la final, la ganadora la mitad de las veces. En la mitad de los cortes trastabilla también alguien que no sale, sorteado entre todos, así que tambalearse no delata a nadie |
+| Chovena | Remontada | **La que vuelve.** En el corte falso la ganadora y otra se habían soltado y dan un paso afuera; vuelve la música y vuelven a la rueda. El relator nombra a una de las dos, y en los amagues de los otros arcos también se suelta y vuelve alguien, sorteado entre todos |
 | Chovena | Duelo | **El amague de la final.** Con los dos de la mano, la música se corta, se tambalean los dos, y vuelve |
-| Chovena | Tapada | **Nadie la nombra.** En la final se dice "¡quedan dos!", sin nombres |
+| Chovena | Tapada | **Nadie las nombra.** A las dos de la final no se las nombra hasta el final, y en la final se dice "¡quedan dos!", sin nombres |
 | Luz roja, luz verde | Susto | **El haz se detiene.** El Faro mira a la ganadora, que se tambalea sin dar un paso, y el haz sigue de largo ("¡por un pelo!") |
 | Luz roja, luz verde | Remontada | **Desde el fondo.** Arranca última y en el último verde pasa a todos |
 | Luz roja, luz verde | Duelo | **Una luz roja más.** La rival va adelante hasta que el haz la agarra en la última |

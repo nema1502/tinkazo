@@ -24,7 +24,7 @@ Y el relato viene solo: "¡Dale, dale, dale! ¡No pierdas el tino!".
 
 | Arco | Qué pasa |
 |---|---|
-| Susto | En los últimos palos el caramelo ganador se asoma por la rajadura ("¡casi se cae fulano!") y vuelve a entrar |
+| Susto | En los últimos palos se asoma por la rajadura ("¡casi se cae fulano!") uno de los dos caramelos que quedan hasta la rotura, y vuelve a entrar: la mitad de las veces el ganador, la otra mitad la rival |
 | Remontada | Dos palos al aire antes de los últimos ("¡falló!") |
 | Duelo | Quedan dos adentro hasta el golpe final, y cae la rival |
 | Tapada | La lista de los que quedan adentro no se muestra, y nadie la nombra hasta que se rompe |

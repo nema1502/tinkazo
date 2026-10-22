@@ -21,8 +21,10 @@ import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage }
  * El palo no decide nada: el orden en que caen los caramelos está sembrado
  * con la ronda, y la ganadora va primera en esa lista. Los arcos:
  *
- * - **susto**: en los últimos palos el caramelo ganador se asoma por la
- *   rajadura y vuelve a entrar.
+ * - **susto**: en los últimos palos se asoma por la rajadura uno de los dos
+ *   caramelos que quedan hasta la rotura, y vuelve a entrar. La mitad de las
+ *   veces es el ganador: si fuera siempre él, "¡Se agarra X!" lo anunciaba
+ *   diez segundos antes del cartel (auditor de delatores, 21 de octubre de 2026).
  * - **remontada**: dos palos al aire antes de los últimos.
  * - **duelo**: quedan dos adentro hasta el golpe final, y cae la rival.
  * - **tapada**: nadie la nombra hasta que se rompe.
@@ -139,6 +141,10 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   const candies: Candy[] = names.map((_, i) => ({ idx: i, inside: true, x: 0, y: 0, vx: 0, vy: 0, rot: 0, spin: 0, settled: false, out: 0, drawn: false, seq: -1, settledAt: -9, touch: -1, slide: null }));
   const winC = candies[winnerIdx] as Candy;
   const rivC = candies[rivalIdx] as Candy;
+  // El que se asoma en el susto: la ganadora o la rival, mitad y mitad. Las
+  // dos siguen adentro hasta la rotura, así que asomarse no dice quién gana.
+  const peekIdx = story.arc === "susto" && rivalIdx !== winnerIdx && rng() < 0.5 ? rivalIdx : winnerIdx;
+  const peekC = candies[peekIdx] as Candy;
 
   let phase: Phase = "hang";
   let tAll = 0, acc = 0, tHold = 0, saidUpTo = -1, lastOutSaid = -9, crackLevel = 0;
@@ -467,7 +473,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     }
     if (story.arc === "susto" && !peekSaid && tAll >= T_PEEK + 0.35) {
       peekSaid = true;
-      S.say(T[getLang()].cPinAlmost(names[winnerIdx] ?? ""), 0.8);
+      S.say(T[getLang()].cPinAlmost(names[peekIdx] ?? ""), 0.8);
       beep(note(14), 0.1, "square", 0.05);
       setTimeout(() => beep(note(9), 0.12, "sine", 0.04), 110);
     }
@@ -1075,9 +1081,9 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       placeFace(c, sz, 1);
     }
     // El caramelo del susto se asoma por la rajadura y vuelve a entrar.
-    if (story.arc === "susto" && winC.inside && tAll >= T_PEEK && tAll < T_PEEK + 1.2) {
+    if (story.arc === "susto" && peekC.inside && tAll >= T_PEEK && tAll < T_PEEK + 1.2) {
       const f = Math.sin(Math.PI * ((tAll - T_PEEK) / 1.2));
-      drawCandy(candyG, p.x + g.R * 0.2, p.y + g.R * (0.7 + 0.5 * f), sz * 1.4, 0.3 * Math.sin(now * 12), S.color(winnerIdx), 1);
+      drawCandy(candyG, p.x + g.R * 0.2, p.y + g.R * (0.7 + 0.5 * f), sz * 1.4, 0.3 * Math.sin(now * 12), S.color(peekIdx), 1);
     }
     if (!winC.inside) {
       const big = sz * (1.8 + (phase === "crown" ? 0.6 * ease.outBack(clamp((tAll - T_CROWN) * 2, 0, 1)) : 0));

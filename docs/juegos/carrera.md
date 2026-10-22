@@ -8,18 +8,33 @@ Este documento cuenta cómo mira la cámara de la carrera en el motor nuevo ([`s
 
 ## La regla: el juego no decide nada
 
-La ganadora sale del [protocolo](../protocolo.md) antes de la largada. La carrera recibe `(names, winners, beacon, done)` y solo la cuenta: quiénes corren, en qué carril y dónde va cada una en cada instante salen del plan ([`plan.ts`](../../src/games/llamas/plan.ts)), sembrado con la ronda. La cámara tampoco decide nada: mira lo que el plan ya decidió, y nunca mira a la ganadora antes de la meta, porque mirarla sería delatarla.
+La ganadora sale del [protocolo](../protocolo.md) antes de la largada. La carrera recibe `(names, winners, beacon, done)` y solo la cuenta: quiénes corren, en qué carril y dónde va cada una en cada instante salen del plan ([`plan.ts`](../../src/games/llamas/plan.ts)), sembrado con la ronda. La cámara tampoco decide nada: mira lo que el plan ya decidió, y antes de la meta no mira a la ganadora más que a cualquier otra, porque mirarla de más sería delatarla.
 
 ## La cámara
 
 | Momento | Qué mira |
 |---|---|
 | Presentación y cuenta | Los carriles enteros en la largada, del nombre del primero a las patas del último; en la cuenta se abre de a poco hacia la pista |
-| La carrera | La que va adelante, un poco adelantada, y se acerca a medida que sube la tensión |
+| La carrera | La que va adelante, un poco adelantada, y se acerca a medida que sube la tensión; cuando el relator dice quién pasa adelante, se acerca un momento a ella |
 | Un momento de la historia | Se mete en el carril del tropiezo, la plantada o la escupida, con la llama entera y su "!" |
-| La recta final (desde el 80%) | Las dos de adelante, en un acercamiento que se apura hasta la meta |
-| La foto (en el duelo, desde el 96%) | Cámara lenta, sin desenfoque, las dos del duelo enteras, por igual |
+| Las dos que vienen de atrás (en la remontada, al 74%) | Una de las dos, sorteada |
+| La recta final (desde el 80%) | Las dos de adelante, en un acercamiento que se apura hasta la meta, con aire hacia la meta |
+| La foto (en el duelo, desde el 96%) | Cámara lenta, sin desenfoque, las dos del duelo enteras, por igual, con aire hacia la meta si entra |
 | La meta | Un corte debajo del destello, el golpe y el sacudón, y la cámara se acerca despacio al plano de la corona |
+
+## Lo que se ve no delata a la ganadora
+
+El auditor de delatores (`scripts/audit-delatores.mjs`, 21 de octubre de 2026) corrió doscientas semillas y encontró que la carrera la anunciaba: "¡X viene de atrás!" nombraba a la ganadora en todas las remontadas y "¡Y se cuela X!" en todas las tapadas; en la recta final la que iba primera perdía siempre; en el duelo ganaba la del carril de arriba; las que el relator nunca nombraba nunca ganaban, y en el susto ganaba la que iba primera al principio. Desde entonces:
+
+- **El puesto de la ganadora** al 7%, al 25%, al 50% y al 75% se sortea en una franja de su arco, y las franjas de los cuatro arcos se reparten los puestos: sumando, cada puesto sale cerca de una de cada ocho veces. A la mitad va un poco más adelante que atrás (en la mitad de atrás, cuatro de cada diez carreras): con la mitad justa, el auditor de emoción, que mira dieciséis carreras, encontraba a la ganadora atrás en más de seis de cada diez en una tanda de cada cuatro. En la recta final (90%) va primera o segunda, mitad y mitad. Lo comprueba `plan.test.ts`, sin navegador.
+- **En el duelo** la rival corre arriba o abajo de la ganadora, sorteado, y desde el mano a mano el relator ya no anuncia quién pasa adelante.
+- **En la remontada vienen de atrás dos**, la ganadora y otra que llega a pelear adelante y se desinfla en los últimos metros: "¡X y Y vienen de atrás!", en orden alfabético, y la cámara va a una de las dos.
+- **En la tapada** se cuela la que nadie nombró, y tampoco se la nombra ahora: "¡Alguien aprovecha la pelea!".
+- **En la recta final la tribuna grita por una** ("¡La hinchada de X no para!"), sorteada entre todas: la última que se nombra sola ya no es siempre la que gana ni siempre una que pierde.
+- **El tono** de un tropiezo sube igual sea de quien sea: con la ganadora más fuerte, la música se cortaba justo cuando tropezaba ella.
+- **Los nombres que no se apagan** en un primer plano son los de las dos que van adelante (y en el duelo, los de las dos del mano a mano), no los de la ganadora y la rival.
+
+El motor anterior (`src/games/race.ts`) no cambió: con `?motor=clasico` la historia es la de antes.
 
 ## Con pocas personas
 

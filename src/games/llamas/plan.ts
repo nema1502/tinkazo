@@ -3,13 +3,37 @@ import { writeStory, type Arc, type Story } from "../drama";
 /**
  * El plan de la carrera, sin dibujo.
  *
- * Es la misma carrera de `race.ts` (quiénes corren, en qué carril, la historia
- * del director y dónde va cada una en cada instante), pero medida en fracción
- * de pista: 0 es la largada y 1 la meta. Así la puede dibujar cualquier motor.
- * El prototipo en PixiJS la usa entera; si el prototipo gana, `race.ts` también.
+ * Es la carrera de `race.ts` (quiénes corren, en qué carril, la historia del
+ * director y dónde va cada una en cada instante), pero medida en fracción de
+ * pista: 0 es la largada y 1 la meta. Así la puede dibujar cualquier motor.
  *
  * Todo es función de la ronda y de `q`, la fracción de carrera: nada se
  * acumula cuadro a cuadro.
+ *
+ * **Lo que se ve no delata a la ganadora** (auditor de delatores, 21 de
+ * octubre de 2026). Hasta entonces la ganadora iba primera al 25% en casi
+ * todos los sustos, en la recta final iba siempre segunda (la que iba primera
+ * perdía 157 de 157 veces) y en el duelo corría en el carril de arriba de la
+ * rival. Ahora:
+ *
+ * - **El puesto de la ganadora** apenas largan (cuando el relator anuncia a la
+ *   primera), al 25%, al 50% y al 75% se sortea en una franja de cada arco, y
+ *   las cuatro franjas se reparten los puestos: sumando los arcos, cada puesto
+ *   sale una de cada ocho veces. Al largar y al 25% va adelante en el susto y
+ *   el duelo, y atrás en la remontada y la tapada; al 50%, un poco más
+ *   adelante que atrás, y en el susto adelante si todavía no tropezó y
+ *   última si ya; al 75%, primera o
+ *   segunda en el duelo, tercera o cuarta en el susto y en la mitad de atrás
+ *   en la remontada y la tapada.
+ * - **En la recta final** (90%) va primera o segunda, mitad y mitad: unas
+ *   veces aguanta adelante, otras pasa en los últimos metros.
+ * - **En el duelo** la rival corre en el carril de arriba o en el de abajo,
+ *   sorteado.
+ * - **En la remontada** vienen de atrás dos: la ganadora y otra, que se
+ *   desinfla en los últimos metros. El relator las nombra a las dos.
+ *
+ * El motor anterior (`race.ts`) no se cambió: la misma ronda ya no cuenta ahí
+ * la misma historia, pero el ganador es el mismo, que es lo único que importa.
  */
 
 export interface Plan {
@@ -18,6 +42,12 @@ export interface Plan {
   story: Story;
   /** En el duelo, la llegada en cámara lenta desde acá. */
   foto: number;
+  /** En la remontada, la otra que viene de atrás (un carril), o -1. */
+  decoy: number;
+  /** Por quién grita la tribuna en la recta final: un carril sorteado entre todos. */
+  hinchada: number;
+  /** En la remontada, a cuál de las dos que vienen de atrás va la cámara: sorteada. */
+  foco: number;
   /** Dónde va el actor `k` a la altura `q`, en fracción de pista. */
   pos(k: number, q: number): number;
   /** En qué momento de la historia está un actor, para la postura. */
@@ -28,11 +58,9 @@ export interface Plan {
 const GK = 1 / 2.4;
 
 /**
- * Para comparar lado a lado con `race.ts` con la misma ronda, el azar se
- * consume en el mismo orden: `race.ts` siembra el paisaje (cerros, nubes,
- * estrellas) entre los carriles y la historia, y dice la primera línea (que
- * sortea su variante) antes de ubicar a la ganadora. `sceneryDraws` y
- * `beforePlace` reproducen esas dos cosas.
+ * `sceneryDraws` consume el azar que `race.ts` usa para el paisaje entre los
+ * carriles y la historia, y `beforePlace` sortea la primera línea del relator
+ * antes de ubicar a la ganadora, como siempre.
  */
 export function planRace(
   names: string[],
@@ -78,8 +106,12 @@ export function planRace(
   if (story.arc === "tapada" && Math.abs(story.rival - story.rival2) > 1) {
     swapLanes(story.rival + (story.rival + 1 < lanes.length ? 1 : -1), story.rival2);
   }
-  if (story.arc === "duelo" && Math.abs(story.winner - story.rival) > 1) {
-    swapLanes(story.winner + (story.winner + 1 < lanes.length ? 1 : -1), story.rival);
+  // La rival del duelo, pegada a la ganadora: arriba o abajo, sorteado. Siempre
+  // abajo, la de arriba ganaba 39 de 48 duelos.
+  if (story.arc === "duelo") {
+    const lado = rng() < 0.5 ? -1 : 1;
+    const junto = story.winner + lado >= 0 && story.winner + lado < lanes.length ? story.winner + lado : story.winner - lado;
+    if (story.rival !== junto) swapLanes(junto, story.rival);
   }
   for (const bt of story.beats) {
     if (bt.kind !== "escupida" || bt.actor === story.rival) continue;
@@ -111,10 +143,10 @@ export function planRace(
   const gaps: number[][] = lanes.map((_, k) => {
     if (k === story.winner) {
       const g = dueloTarde ? DUELO_TARDE : ARC_W[story.arc];
-      return story.arc === "remontada" || story.arc === "tapada" ? g.map((v) => v * intensidad) : g;
+      return story.arc === "remontada" || story.arc === "tapada" ? g.map((v) => v * intensidad) : g.slice();
     }
-    if (k === story.rival) return ARC_V[story.arc];
-    if (story.arc === "tapada" && k === story.rival2) return V2_TAPADA;
+    if (k === story.rival) return ARC_V[story.arc].slice();
+    if (story.arc === "tapada" && k === story.rival2) return V2_TAPADA.slice();
     const g = [0];
     let v = 0;
     for (let i = 1; i < GRID.length; i++) {
@@ -168,42 +200,96 @@ export function planRace(
   };
 
   opts.beforePlace?.();
-  // El puesto de la ganadora a mitad de carrera, sorteado según el arco: el
-  // mismo cálculo que en `race.ts`, para que la mitad no la delate.
-  {
-    const L_ = lanes.length;
-    const entre = (a: number, b: number): number => {
-      const lo = Math.max(1, Math.min(a, L_));
-      const hi = Math.max(lo, Math.min(b, L_));
-      return lo + Math.floor(rng() * (hi - lo + 1));
-    };
-    const tropiezo = story.beats.find((bt) => bt.actor === story.winner && bt.kind === "tropiezo");
-    const objetivo =
-      story.arc === "remontada" ? entre(L_ - 3, L_)
-        : story.arc === "tapada" ? entre(3, L_ - 2)
-          : story.arc === "susto" ? (tropiezo && tropiezo.at > 0.5 ? 1 : entre(3, L_ - 2))
-            : dueloTarde ? entre(3, 5) : entre(1, 2);
-    const taper = [0, 0, 0.5, 0.85, 1, 0.6, 0.3, 0, 0, 0];
+
+  // La otra que viene de atrás en la remontada: una de las que no están en el
+  // arco y no tienen un momento que la retrase (una plantada o una escupida le
+  // cuestan para siempre). Se queda atrás hasta el 62%, viene con todo, llega a
+  // pelear adelante y se desinfla en los últimos metros.
+  let decoy = -1;
+  if (story.arc === "remontada") {
+    const fuera = lanes.map((_, k) => k).filter((k) => k !== story.winner && k !== story.rival);
+    const momentos = (k: number): typeof story.beats => story.beats.filter((bt) => bt.actor === k || bt.target === k);
+    // Si todas tuvieron un momento, una que lo tuvo temprano: le cuesta poco.
+    const sinNada = fuera.filter((k) => momentos(k).every((bt) => bt.kind === "pique" && bt.at <= 0.45));
+    const libres = sinNada.length ? sinNada : fuera.filter((k) => momentos(k).every((bt) => bt.at <= 0.45));
+    if (libres.length) {
+      decoy = libres[Math.floor(rng() * libres.length)] as number;
+      const g = gaps[decoy] as number[];
+      g[4] = Math.min(g[4] as number, -0.11);
+      g[5] = -0.13 - 0.03 * rng();
+      g[6] = -0.08 - 0.03 * rng();
+      g[7] = 0.01 + 0.03 * rng();
+      g[8] = 0.015 + 0.025 * rng();
+      g[9] = -0.03 - 0.04 * rng();
+    }
+  }
+
+  /** En qué puesto va el actor `k` a la altura `q`. */
+  const puestoEn = (k: number, q: number): number => {
+    const xs = lanes.map((_, j) => pos(j, q));
+    const x = xs[k] as number;
+    return 1 + xs.filter((v, j) => j !== k && v > x).length;
+  };
+  /**
+   * Lleva a la ganadora al puesto `r` en `q`: le suma a su ventaja una joroba
+   * (`joroba`, por punto de control) hasta que entra en ese puesto, y se queda
+   * en el medio del tramo que lo da, así un cuadro de más o de menos no la
+   * cambia de puesto.
+   */
+  function llevar(q: number, r: number, joroba: number[]): void {
     const base = (gaps[story.winner] as number[]).slice();
-    const puestoCon = (d: number): number => {
-      gaps[story.winner] = base.map((v, i) => v + (taper[i] as number) * d);
-      const xs = lanes.map((_, k) => pos(k, 0.5));
-      const wx = xs[story.winner] as number;
-      return 1 + xs.filter((x, k) => k !== story.winner && x > wx).length;
+    const con = (d: number): number => {
+      gaps[story.winner] = base.map((v, i) => v + (joroba[i] ?? 0) * d);
+      return puestoEn(story.winner, q);
     };
-    const borde = (r: number): number => {
+    const borde = (rr: number): number => {
       let lo = -0.45, hi = 0.25;
       for (let it = 0; it < 28; it++) {
         const m = (lo + hi) / 2;
-        if (puestoCon(m) <= r) hi = m;
+        if (con(m) <= rr) hi = m;
         else lo = m;
       }
       return hi;
     };
-    const d1 = borde(objetivo);
-    const d2 = objetivo > 1 ? borde(objetivo - 1) : d1 + 0.06;
-    puestoCon((d1 + d2) / 2);
+    const d1 = borde(r);
+    const d2 = r > 1 ? borde(r - 1) : d1 + 0.06;
+    con((d1 + d2) / 2);
   }
+
+  // Las franjas de puestos, como fracciones del pelotón: con ocho, la primera
+  // cuarta parte son los puestos 1 y 2; la última, 7 y 8.
+  const L_ = lanes.length;
+  const franja = (a: number, b: number): number => {
+    const lo = Math.min(L_, Math.floor(a * L_) + 1);
+    const hi = Math.max(lo, Math.min(L_, Math.ceil(b * L_)));
+    return lo + Math.floor(rng() * (hi - lo + 1));
+  };
+  const tropiezo = story.beats.find((bt) => bt.actor === story.winner && bt.kind === "tropiezo");
+  const arc = story.arc;
+  const adelante = arc === "duelo" || arc === "susto";
+  const r25 = adelante ? franja(0, 0.5) : franja(0.5, 1);
+  // A la mitad, un poco más adelante que atrás (con ocho: el duelo del 1 al 3,
+  // la remontada del 4 al 8): cada puesto sigue saliendo cerca de una de cada
+  // ocho veces, y la mitad de atrás no se llena más que la de adelante en
+  // pocas carreras seguidas (el auditor de emoción mira dieciséis).
+  const r50 = arc === "duelo" ? franja(0, 0.375)
+    : arc === "tapada" ? franja(0.25, 0.75)
+      : arc === "remontada" ? franja(0.375, 1)
+        : tropiezo && tropiezo.at < 0.5 ? franja(0.75, 1) : franja(0, 0.25);
+  const r75 = arc === "duelo" ? franja(0, 0.25) : arc === "susto" ? franja(0.25, 0.5) : franja(0.5, 1);
+  // En la recta final, primera (aguanta adelante) o segunda (pasa en los
+  // últimos metros), mitad y mitad en cada arco.
+  const r90 = L_ >= 2 && rng() < 0.5 ? 2 : 1;
+  // Apenas largan, el relator anuncia a la que va adelante: también ahí la
+  // ganadora va adelante en el susto y el duelo y atrás en las otras.
+  const r07 = adelante ? franja(0, 0.5) : franja(0.5, 1);
+  llevar(0.25, r25, [0, 0.5, 1, 0.5, 0, 0, 0, 0, 0, 0]);
+  llevar(0.067, r07, [0, 1, 0, 0, 0, 0, 0, 0, 0, 0]);
+  llevar(0.5, r50, [0, 0, 0, 0.5, 1, 0.5, 0, 0, 0, 0]);
+  llevar(0.75, r75, [0, 0, 0, 0, 0, 0.5, 1, 0.3, 0, 0]);
+  llevar(0.9, r90, [0, 0, 0, 0, 0, 0, 0, 1, 1, 0]);
+  const hinchada = Math.floor(rng() * L_);
+  const foco = decoy >= 0 && rng() < 0.5 ? decoy : story.winner;
 
   function beatOf(k: number, q: number): { kind: string; p: number } | null {
     for (const bt of story.beats) {
@@ -215,5 +301,5 @@ export function planRace(
     return null;
   }
 
-  return { lanes, story, foto: story.arc === "duelo" ? 0.962 : 2, pos, beatOf };
+  return { lanes, story, foto: story.arc === "duelo" ? 0.962 : 2, decoy, hinchada, foco, pos, beatOf };
 }

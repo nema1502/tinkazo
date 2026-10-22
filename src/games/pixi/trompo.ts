@@ -19,10 +19,11 @@ import { CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./sta
  * director de emoción es la que llega al mano a mano, la que la sala cree que
  * gana. Los arcos se ven así:
  *
- * - **susto**: en el mano a mano el trompo ganador cabecea, casi se cae y se
- *   endereza.
- * - **remontada**: a mitad de los choques le pegan, la mandan contra la tiza y
- *   vuelve.
+ * - **susto**: en el mano a mano uno de los dos cabecea fuerte, casi se cae y
+ *   se endereza. Cuál de los dos, sorteado: la mitad de las veces el que gana.
+ * - **remontada**: a mitad de los choques a uno le pegan, lo mandan contra la
+ *   tiza y vuelve. Se sortea entre los que siguen bailando un buen rato (el
+ *   que gana, la rival y los que salen más tarde).
  * - **duelo**: un choque más en el mano a mano.
  * - **tapada**: baila callada contra el borde y la cámara nunca la busca.
  *
@@ -183,6 +184,10 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
   // El casi del mano a mano: en cada embestida menos la última, cabecea uno de
   // los dos, al azar. Por eso nadie sabe quién va a caer hasta el último choque.
   const casiDe: (Top | null)[] = clashes.map((_, i) => (duo && i < clashes.length - 1 ? (rng() < 0.5 ? win : riv) : null));
+  // El cabeceo del susto, también al azar entre los dos. Hasta el 21 de octubre
+  // era siempre el que gana, y "¡Cabecea el de X!" lo anunciaba en todos los
+  // sustos, siete segundos antes del cartel (auditor de delatores: 56 de 56).
+  const sustoTop: Top | null = story.arc === "susto" && duo ? (rng() < 0.5 ? win : riv) : null;
 
   // Los golpes, sembrados: primero salen muchos, al final de a uno.
   const victims = rank.slice(2).reverse();
@@ -195,9 +200,24 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
   const T_EDGE = fight0 + fightDur * 0.45;
   // La tiza de la remontada es parte de la gresca: con dos, el mano a mano no la tiene.
   const edgeHit = story.arc === "remontada" && duo && n > 2;
+  /** Cuándo sale el `i`-ésimo de la lista: primero muchos, al final de a uno. */
+  const salidaDe = (i: number): number => fight0 + 0.3 + (fightDur - 0.7) * Math.pow((i + 1) / (victims.length + 1), 0.8);
+  // A quién mandan contra la tiza: uno de los que todavía van a bailar un rato,
+  // sorteado (el que gana, la rival y los que salen más tarde). Hasta el 21 de
+  // octubre era siempre el que gana, y "¡X casi se sale!" lo anunciaba
+  // dieciocho segundos antes del cartel (auditor de delatores: 51 de 51). Si le
+  // toca a uno que iba a salir enseguida, cambia su turno con el último que
+  // sale antes del mano a mano: el que roza la tiza y vuelve tiene que seguir
+  // en el ruedo cuando la sala ya lo vio volver.
+  let edgeIdx = winnerIdx;
+  if (edgeHit) {
+    const pool = [winnerIdx, rivalIdx, ...victims.filter((_, i) => salidaDe(i) >= T_EDGE + 0.9)];
+    edgeIdx = pool[Math.floor(rng() * pool.length)] ?? winnerIdx;
+    const i = victims.indexOf(edgeIdx), j = victims.length - 1;
+    if (i >= 0 && i < j && salidaDe(i) < T_EDGE + 1.6) [victims[i], victims[j]] = [victims[j] as number, victims[i] as number];
+  }
   victims.forEach((v, i) => {
-    const f = (i + 1) / (victims.length + 1);
-    const at = fight0 + 0.3 + (fightDur - 0.7) * Math.pow(f, 0.8);
+    const at = salidaDe(i);
     const h = hash(v, 11);
     // Los dos últimos antes del mano a mano salen siempre sacados: es lo que la sala espera ver.
     const kind: HitKind = i >= victims.length - 2 || h < 0.5 ? "kick" : h < 0.8 ? "glance" : "spent";
@@ -213,9 +233,10 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     outAt.set(v, at);
   });
   if (edgeHit) {
-    hits.push({ at: T_EDGE, victim: winnerIdx, kind: "edge", stop: STOP_KICK, done: false });
+    hits.push({ at: T_EDGE, victim: edgeIdx, kind: "edge", stop: STOP_KICK, done: false });
     extra += STOP_KICK;
   }
+  const edgeTop = byIdx.get(edgeIdx) as Top;
   hits.sort((a, b) => a.at - b.at);
   if (duo) extra += STOP_CLASH * (clashes.length - 1) + STOP_LAST + SLOW_DUR * (1 - SLOW);
   setGameLength(T_CROWN + extra, WINNER_HOLD);
@@ -319,8 +340,9 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     for (const q of tops) {
       if (!q.alive || q === v || tAll < q.land || hitterOf.has(q) || victimOf.has(q)) continue;
       if ((outAt.get(q.idx) ?? Infinity) < tAll + PLAN + 0.4) continue;
-      // La ganadora no pega en la tapada (la cámara la buscaría) ni en la remontada (le pegan a ella).
-      if (q === win && (story.arc === "tapada" || story.arc === "remontada")) continue;
+      // La ganadora no pega en la tapada (la cámara la buscaría), ni el que van a
+      // mandar contra la tiza en la remontada (le pegan a él).
+      if ((q === win && story.arc === "tapada") || (edgeHit && q === edgeTop)) continue;
       // Que venga desde adentro cuenta, y la ganadora pega un poco menos que el resto:
       // si sacara a todos, la sala aprendería a mirarla.
       const score = Math.hypot(q.x - v.x, q.y - v.y) + Math.max(0, Math.hypot(q.x, q.y) - rv) * 0.6 + (q === win ? 0.3 : 0);
@@ -500,7 +522,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       if (edge) {
         tipo = "borde";
         edgeAt = tAll;
-        say(T[getLang()].cTroEdge(names[winnerIdx] ?? ""), 0.7);
+        say(T[getLang()].cTroEdge(names[v.idx] ?? ""), 0.7);
       } else {
         v.vz = 1.2 + pow * 0.9;
         v.spin = (hash(v.idx, 21) < 0.5 ? -1 : 1) * (9 + sp * 1.2);
@@ -738,7 +760,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     for (const q of list) {
       if (!q.alive) continue;
       const d = Math.hypot(q.x, q.y);
-      const lim = (q === win && story.arc === "remontada" ? 0.97 : LIM) - rn;
+      const lim = (edgeHit && q === edgeTop ? 0.97 : LIM) - rn;
       if (d > lim) {
         const ux = q.x / d, uy = q.y / d;
         q.x = ux * lim;
@@ -911,12 +933,12 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       }
       // Si algo los separó y no llegaron a tocarse, el choque se da igual y queda anotado.
       if (clashIdx < clashes.length && td >= (clashes[clashIdx] as number) + GRACE) clash(true);
-      if (story.arc === "susto" && !wobbleSaid && td >= duelDur * 0.5) {
+      if (sustoTop && !wobbleSaid && td >= duelDur * 0.5) {
         wobbleSaid = true;
-        say(T[getLang()].cTroWobble(names[winnerIdx] ?? ""), 0.85);
+        say(T[getLang()].cTroWobble(names[sustoTop.idx] ?? ""), 0.85);
         beep(note(1), 0.12, "square", 0.05);
       }
-      if (story.arc === "susto" && wobbleSaid && !recoverSaid && td >= duelDur * 0.5 + 0.9) {
+      if (sustoTop && wobbleSaid && !recoverSaid && td >= duelDur * 0.5 + 0.9) {
         recoverSaid = true;
         say(t("cTroRecover"), 0.9);
         beep(note(12), 0.12, "triangle", 0.05);
@@ -1100,8 +1122,8 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
         if (story.arc === "tapada" && (ch.hitter === win || ch.victim === win)) continue;
         if (!next || ch.hit.at < next.hit.at) next = ch;
       }
-      if (story.arc === "remontada" && tAll < edgeAt + 0.8) {
-        const w = toWorld(win.x, win.y);
+      if (edgeHit && tAll < edgeAt + 0.8) {
+        const w = toWorld(edgeTop.x, edgeTop.y);
         cam.lookAt(w.x, w.y, 1.7, 5);
       } else if (next) {
         const a = toWorld(next.hitter.x, next.hitter.y), b = toWorld(next.victim.x, next.victim.y);
@@ -1110,7 +1132,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       else cam.lookAt(c.x, c.y, 1.0 + 0.3 * (1 - alive().length / n), 2);
     } else if (phase === "duel") {
       const a = toWorld(win.x, win.y), b = toWorld(riv.x, riv.y);
-      const wob = story.arc === "susto" && wobbleSaid && !recoverSaid;
+      const wob = sustoTop && wobbleSaid && !recoverSaid ? toWorld(sustoTop.x, sustoTop.y) : null;
       const slow = tFx < slowUntil;
       const next = clashIdx < clashes.length ? T_DUEL + (clashes[clashIdx] as number) : Infinity;
       // Antes de cada choque la cámara se cierra un poco: la sala sabe que viene.
@@ -1119,8 +1141,10 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       // siguiendo al último que salió volando, y el "¡mano a mano!" se decía
       // sobre una pantalla vacía (lo encontró la revisión visual).
       const recien = tAll - T_DUEL < 0.6;
-      // La cámara va al que cabecea en su casi. En la tapada nunca busca a la ganadora.
-      const cabecea = [win, riv].find((q) => tAll - q.casiAt >= 0 && tAll - q.casiAt < 1 && !(story.arc === "tapada" && q === win));
+      // La cámara va al que cabecea en su casi. En la tapada no va a ninguno de
+      // los dos: nunca busca a la ganadora, y si fuera solo a la rival, la sala
+      // aprendería que al que mira la cámara le toca perder.
+      const cabecea = story.arc === "tapada" ? undefined : [win, riv].find((q) => tAll - q.casiAt >= 0 && tAll - q.casiAt < 1);
       // En un celular la pantalla es angosta: el zoom se achica hasta que los dos
       // entren enteros (con dos en el ruedo, uno quedaba cortado contra el borde).
       const pareja = Math.hypot(b.x - a.x, b.y - a.y);
@@ -1128,7 +1152,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       if (cabecea) {
         const p = toWorld(cabecea.x, cabecea.y);
         cam.lookAt(p.x, p.y - 30 * S.u(), Math.min(2.4, S.portrait() ? 1.8 : 9), 4);
-      } else if (wob) cam.lookAt(a.x, a.y - 30 * S.u(), Math.min(2.4, cabe), 4);
+      } else if (wob) cam.lookAt(wob.x, wob.y - 30 * S.u(), Math.min(2.4, cabe), 4);
       else cam.lookAt((a.x + b.x) / 2, (a.y + b.y) / 2 - 20 * S.u(), Math.min(slow ? 2.5 : tense ? 2.2 : 2.0, cabe), recien ? 9 : slow ? 6 : 3);
     } else {
       const a = toWorld(win.x, win.y);
@@ -1223,8 +1247,10 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
         // El giro sale de la hora del juego: en la parada, el trompo también se congela.
         const ph = q.ph + q.rate * tAll;
         let wob = q.wob;
-        if (phase === "duel" && q === riv) wob += 0.05 * clamp((tAll - T_DUEL) / duelDur, 0, 1);
-        if (story.arc === "susto" && q === win && wobbleSaid && !recoverSaid) wob = 0.32;
+        // En el mano a mano los dos se cansan igual: si cabeceara cada vez más
+        // solo la rival, se la veía perder antes del último choque.
+        if (phase === "duel" && (q === riv || q === win)) wob += 0.05 * clamp((tAll - T_DUEL) / duelDur, 0, 1);
+        if (q === sustoTop && wobbleSaid && !recoverSaid) wob = 0.32;
         // El casi de cada embestida del mano a mano: se inclina fuerte un instante y se endereza.
         const casi = tAll - q.casiAt;
         if (casi >= 0 && casi < 1.2) wob += 0.45 * Math.min(1, casi / 0.15) * (1 - clamp((casi - 0.5) / 0.7, 0, 1));
