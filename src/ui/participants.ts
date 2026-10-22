@@ -1,14 +1,50 @@
 import { $, esc } from "../dom";
-import { SAMPLE, app, avatar } from "../state";
+import { SAMPLE, app, avatar, params } from "../state";
 import { canonicalList } from "../protocol/canonical";
-import { type Dict, T, getLang, onLangChange } from "../i18n";
-import { decodeText, dropListHeader, parseTable } from "./csv";
+import { type Dict, T, getLang, onLangChange, t } from "../i18n";
+import { decodeText, dropListHeader, igualesQuitados, parseTable, quitarNumeracion } from "./csv";
 import { type ImportResult, type ImportState, initialState, openImporter } from "./importer";
 import { stripInvisibles, stripInvisiblesByLine } from "../invisibles";
+import { parecidos } from "../buscar";
+import { ponerPremio, sincronizarPremios } from "./premios";
 
 /** Lista canónica a partir del textarea (protocolo §1). */
 export function parseNames(): string[] {
   return canonicalList($<HTMLTextAreaElement>("ta").value);
+}
+
+/** La lista se está sellando: lo que se sella ya se tomó del cuadro (ver `cerrarLista`). */
+let cerrada = false;
+
+/** La lista no se puede tocar: se está sellando o ya está sellada. */
+const listaCerrada = (): boolean => cerrada || !!app.frozen;
+
+/**
+ * Cierra la lista a los cambios, o la vuelve a abrir.
+ *
+ * El sello fija lo que dice el cuadro al apretar "Sellar". Hasta el 21 de
+ * octubre de 2026, con la lista ya sellada, "Cargar ejemplo", "Editar
+ * selección" y los botones de origen seguían andando: un toque cambiaba el
+ * cuadro y los nombres de abajo, y la pantalla decía "Lista sellada ✓" con otra
+ * lista, en la que a veces no estaba quien ganó (buscador de detalles, D01). Y
+ * mientras se sellaba con cuenta, unos doce segundos, el cuadro, el premio y
+ * "Cuántos ganan" seguían editables, cuando lo que se sella ya estaba tomado.
+ *
+ * Lo llama `freeze.ts`: al empezar a sellar con cuenta, al sellar, si el sello
+ * falla y al soltar el sello para otro sorteo.
+ */
+export function cerrarLista(si: boolean): void {
+  cerrada = si;
+  $<HTMLTextAreaElement>("ta").disabled = si;
+  $<HTMLInputElement>("prize").disabled = si;
+  $<HTMLSelectElement>("nw").disabled = si;
+  for (const id of ["csv", "csv-luma", "btn-pegar"]) $<HTMLInputElement>(id).disabled = si;
+  $<HTMLButtonElement>("btn-recuperar").disabled = si;
+  // Los orígenes se ven apagados: ya no cargan nada (styles.css).
+  $("sec-participants").classList.toggle("lista-cerrada", si);
+  // Los botones de premios escriben en el cuadro: se apagan con él.
+  sincronizarPremios();
+  renderNames();
 }
 
 export function renderNames(): void {
@@ -16,13 +52,21 @@ export function renderNames(): void {
   $("names").innerHTML = names
     .map((n) => `<i><img src="${avatar(n, 44)}" alt="" loading="lazy" />${esc(n)}</i>`)
     .join("");
-  $<HTMLButtonElement>("btn-freeze").disabled = names.length < 2 || !!app.frozen;
+  $<HTMLButtonElement>("btn-freeze").disabled = names.length < 2 || listaCerrada();
   // Un boton apagado sin explicacion es lo que mas frena a quien recien llega.
   $("freeze-hint").style.display = names.length < 2 && !app.frozen ? "block" : "none";
   $("free-rule").style.display = app.frozen ? "none" : "block";
+  // Con la lista cerrada, nada la reemplaza: ni el ejemplo ni la selección del archivo.
+  // Y "Cargar ejemplo" es para quien llega sin lista: con nombres en el cuadro,
+  // un toque pisaba la lista (la de Luma ya filtrada, también) y Ctrl+Z no la
+  // devolvía, porque el cambio no es del teclado (buscador de detalles, D08).
+  // Se esconde y no se quita: los auditores lo aprietan con el cuadro vacío.
+  $("btn-sample").style.display = listaCerrada() || names.length > 0 ? "none" : "";
+  $("csv-edit").style.display = listaCerrada() ? "none" : "";
 }
 
 export function loadSample(): void {
+  if (listaCerrada()) return;
   setList(SAMPLE.join("\n"));
 }
 
@@ -35,21 +79,31 @@ let lastResult: ImportResult | null = null;
 
 export function bindParticipants(): void {
   const ta = $<HTMLTextAreaElement>("ta");
-  ta.addEventListener("input", () => {
+  ta.addEventListener("input", (e) => {
     // Si edita a mano, manda lo que escribió: el resumen del archivo ya no aplica.
     hideSummary();
     quitarAvisos();
     renderNames();
+    guardarPronto();
+    // Lo que se pegó tal cual (sin nada que limpiar): si trajo repetidos, se dice.
+    if ((e as InputEvent).inputType === "insertFromPaste") avisarCarga([]);
   });
+  // El borrador sigue al premio y a la cantidad de ganadores, y se escribe del
+  // todo al irse de la página: una recarga, o el viaje a Google para entrar.
+  $("prize").addEventListener("input", guardarPronto);
+  $("prize-chips").addEventListener("click", guardarPronto);
+  $("nw").addEventListener("change", guardarPronto);
+  addEventListener("pagehide", guardarBorrador);
   // Pegar una tabla entera es lo mismo que subirla: abre la ventana de
   // importar. Y una columna copiada de una planilla con su encabezado entra
   // sin el encabezado. Solo cuando lo pegado es toda la lista: con algo ya
   // escrito, pegar agrega como siempre, y una lista suelta se pega igual que
   // antes, y se puede deshacer. Lo que se pega como siempre entra sin los
-  // caracteres que no se ven, y si traía alguno, lo dice.
+  // caracteres que no se ven y sin la numeración de una lista de WhatsApp
+  // (`quitarNumeracion`), y si traía algo de eso, o repetidos, lo dice.
   ta.addEventListener("paste", (e) => {
     const text = e.clipboardData?.getData("text/plain") ?? "";
-    if (app.frozen || !text.trim()) return;
+    if (listaCerrada() || !text.trim()) return;
     const toda = !ta.value.trim() || (ta.selectionStart === 0 && ta.selectionEnd === ta.value.length);
     if (toda && pideImportar(text)) {
       e.preventDefault();
@@ -57,10 +111,26 @@ export function bindParticipants(): void {
       return;
     }
     const limpio = stripInvisiblesByLine(text);
-    if (limpio.text === text) return;
+    const num = quitarNumeracion(limpio.text);
+    // Una lista pegada al final de otra empieza en un renglón nuevo: si no, el
+    // primer nombre se pegaba al último ("Luis MamaniCarla Flores").
+    const alFinal = ta.selectionStart === ta.value.length && ta.selectionEnd === ta.value.length && /\S[ \t]*$/.test(ta.value);
+    const pegar = alFinal && /\n/.test(num.text.trim()) ? `\n${num.text}` : num.text;
+    if (pegar === text) return;
     e.preventDefault();
-    insertar(ta, limpio.text);
-    if (limpio.lines) avisar((L) => L.impInvisibles(limpio.lines));
+    insertar(ta, pegar);
+    avisarCarga([...(limpio.lines ? [(L: Dict) => L.impInvisibles(limpio.lines)] : []), ...avisosDeNumeracion(num)]);
+  });
+  // "Pegar lista" parecía un botón y no hacía nada (buscador de detalles, D18):
+  // lleva al cuadro con el cursor al final, listo para pegar. En el celular, con
+  // el foco en el cuadro, el sistema ofrece "Pegar". No lee el portapapeles por
+  // su cuenta: el navegador pediría permiso con un cartel.
+  $("btn-pegar").addEventListener("click", () => {
+    if (listaCerrada()) return;
+    ta.focus({ preventScroll: true });
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+    const reducido = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    ta.scrollIntoView({ behavior: reducido ? "auto" : "smooth", block: "center" });
   });
   // El aviso vive desde el principio, vacío: un lector de pantalla anuncia los
   // cambios de una región que ya estaba, no de una que aparece con el texto.
@@ -73,7 +143,7 @@ export function bindParticipants(): void {
   $("again-note").before(nota);
 
   const onFile = async (file: File | undefined): Promise<void> => {
-    if (!file || app.frozen) return;
+    if (!file || listaCerrada()) return;
     // Los bytes y no `file.text()`, que lee todo como UTF-8: un CSV de Excel
     // en Windows llegaba con "Mar�a".
     const text = decodeText(new Uint8Array(await file.arrayBuffer()));
@@ -89,7 +159,7 @@ export function bindParticipants(): void {
     });
   }
   $("csv-edit").addEventListener("click", () => {
-    if (imported) openImporter(imported, apply);
+    if (imported && !listaCerrada()) openImporter(imported, apply);
   });
 
   // Soltar el archivo sobre la sección, que es lo primero que se intenta.
@@ -132,6 +202,7 @@ export function bindParticipants(): void {
  * `fileName` vacío es texto pegado.
  */
 export function loadFile(raw: string, fileName = "lista.csv"): void {
+  if (listaCerrada()) return;
   callarAviso();
   const parsed = parseTable(raw);
   if (parsed && parsed.columns.length > 1) {
@@ -144,18 +215,48 @@ export function loadFile(raw: string, fileName = "lista.csv"): void {
     return;
   }
   const { text, header } = dropListHeader(raw);
-  // Los caracteres que no se ven salen antes de sellar (src/invisibles.ts).
+  // Los caracteres que no se ven salen antes de sellar (src/invisibles.ts), y la numeración de una lista de WhatsApp también.
   const limpio = stripInvisiblesByLine(text);
-  if (canonicalList(limpio.text).length === 0) {
+  const num = quitarNumeracion(limpio.text);
+  if (canonicalList(num.text).length === 0) {
     avisar((L) => L.impNoNames(fileName));
     return;
   }
-  setList(limpio.text);
-  if (!header && !limpio.lines) return;
-  avisar((L) =>
-    [header ? L.impHeaderOut(stripInvisibles(header)) : "", limpio.lines ? L.impInvisibles(limpio.lines) : ""]
-      .filter(Boolean)
-      .join(" "));
+  setList(num.text);
+  avisarCarga([
+    ...(header ? [(L: Dict) => L.impHeaderOut(stripInvisibles(header))] : []),
+    ...(limpio.lines ? [(L: Dict) => L.impInvisibles(limpio.lines)] : []),
+    ...avisosDeNumeracion(num),
+  ]);
+}
+
+/** Lo que dice el aviso de una lista que llegó numerada: cuántas líneas, cómo quedó la primera y las que no tenían número. */
+function avisosDeNumeracion(num: ReturnType<typeof quitarNumeracion>): Array<(L: Dict) => string> {
+  // Sin ningún nombre (solo lugares libres, "1.", "2."), no hay qué contar: el cuadro queda sin nombres y lo dice el paso.
+  if (!num.lineas || !num.despues) return [];
+  const partes: Array<(L: Dict) => string> = [(L) => L.pegNumeracion(num.lineas, num.antes, num.despues)];
+  const [primera] = num.sueltas;
+  if (primera) partes.push((L) => L.pegSueltas(num.sueltas.length, primera));
+  return partes;
+}
+
+/**
+ * Avisa lo que pasó con lo último que se cargó o se pegó (`partes`), y lo que
+ * la lista canónica hace en silencio: un nombre escrito dos veces igual entra
+ * una sola vez, y dos que parecen la misma persona escrita distinto ("Ana
+ * Quispe" y "ana quispe") entran los dos. Hasta el 21 de octubre de 2026 eso
+ * solo se veía en "Mostrar la lista a la sala" (buscador de detalles, D09). No
+ * frena el sello: avisa.
+ */
+function avisarCarga(partes: Array<(L: Dict) => string>): void {
+  const texto = $<HTMLTextAreaElement>("ta").value;
+  const iguales = igualesQuitados(texto);
+  const pares = parecidos(canonicalList(texto));
+  const todo = [...partes];
+  if (iguales) todo.push((L) => L.pegIguales(iguales));
+  const [par] = pares;
+  if (par) todo.push((L) => L.pegParecidos(par[0], par[1], pares.length - 1));
+  if (todo.length) avisar((L) => todo.map((p) => p(L)).join(" "));
 }
 
 /** ¿Lo pegado es una tabla o trae el encabezado de la columna? Si no, se pega como siempre. */
@@ -179,6 +280,7 @@ function insertar(ta: HTMLTextAreaElement, text: string): void {
 
 /** Lo que eligió en la ventana, al texto, con un resumen para volver a abrirla. */
 function apply(r: ImportResult): void {
+  if (listaCerrada()) return;
   lastResult = r;
   setList(r.names.join("\n"), false);
   showSummary();
@@ -235,11 +337,86 @@ function quitarAvisos(): void {
   }
 }
 
+/** Pone una lista en el cuadro. Con la lista cerrada no hace nada: lo que se ve tiene que ser lo que se selló. */
 export function setList(text: string, clearSummary = true): void {
+  if (listaCerrada()) return;
   if (clearSummary) hideSummary();
   quitarAvisos();
   $<HTMLTextAreaElement>("ta").value = text;
   renderNames();
+  guardarPronto();
+}
+
+/* ------------------------------------------------------------ el borrador */
+
+/**
+ * La lista que se está armando, guardada en esta pestaña hasta que se sella.
+ *
+ * Entrar con Google es irse del sitio y volver: Pollar hace un redirect de
+ * página entera. Y desde el 21 de octubre de 2026 "Sellar" sin cuenta abre la
+ * ventana para entrar, así que el camino de la primera vez es pegar la lista,
+ * tocar "Sellar", entrar con Google y volver... con el cuadro vacío. Una
+ * recarga hacía lo mismo, y con un CSV de Luma había que volver a bajarlo y a
+ * elegir "los que vinieron" (buscador de detalles, D03).
+ *
+ * Se guarda en `sessionStorage`, como `tinkazo.abrir`: vive en esta pestaña,
+ * no sale del navegador y se borra al sellar (`freeze.ts`). Lo que se recupera
+ * es el texto, el premio y la cantidad de ganadores; la selección del
+ * importador no. La demo no guarda ni repone nada.
+ */
+const BORRADOR = "tinkazo.borrador";
+let guardarLuego = 0;
+
+/** Guarda ya lo que hay en el cuadro, el premio y la cantidad. Lo llama también la ventana de ingreso, antes de irse a Google. */
+export function guardarBorrador(): void {
+  window.clearTimeout(guardarLuego);
+  if (params.has("demo") || listaCerrada()) return;
+  try {
+    const texto = $<HTMLTextAreaElement>("ta").value;
+    const premio = $<HTMLInputElement>("prize").value;
+    if (!texto.trim() && !premio.trim()) sessionStorage.removeItem(BORRADOR);
+    else sessionStorage.setItem(BORRADOR, JSON.stringify({ texto, premio, nw: $<HTMLSelectElement>("nw").value }));
+  } catch {
+    /* sin almacenamiento, no se recupera: nada más */
+  }
+}
+
+/** Al escribir no se guarda en cada tecla: un momento después. */
+function guardarPronto(): void {
+  window.clearTimeout(guardarLuego);
+  guardarLuego = window.setTimeout(guardarBorrador, 400);
+}
+
+/** Se selló (o se retomó un sorteo sellado): no queda nada por recuperar. La demo no lo toca: es otra lista. */
+export function olvidarBorrador(): void {
+  window.clearTimeout(guardarLuego);
+  if (params.has("demo")) return;
+  try {
+    sessionStorage.removeItem(BORRADOR);
+  } catch {
+    /* sin almacenamiento, no había nada */
+  }
+}
+
+/**
+ * Al abrir la herramienta, si el cuadro está vacío, repone lo que se estaba
+ * armando en esta pestaña, y lo dice. Nunca encima de una lista ni de un sello.
+ */
+export function reponerBorrador(): void {
+  if (params.has("demo") || listaCerrada() || $<HTMLTextAreaElement>("ta").value.trim()) return;
+  type Guardado = { texto?: unknown; premio?: unknown; nw?: unknown } | null;
+  let b: Guardado;
+  try {
+    b = JSON.parse(sessionStorage.getItem(BORRADOR) ?? "null") as Guardado;
+  } catch {
+    return;
+  }
+  if (!b || typeof b.texto !== "string") return;
+  setList(b.texto);
+  if (typeof b.premio === "string" && b.premio.trim()) ponerPremio(b.premio);
+  const nw = Number(b.nw);
+  if (Number.isInteger(nw) && nw >= 1 && nw <= 32) $<HTMLSelectElement>("nw").value = String(nw);
+  if (canonicalList(b.texto).length) avisar(() => t("borradorRepuesto"));
 }
 
 function hideSummary(): void {

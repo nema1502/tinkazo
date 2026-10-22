@@ -142,7 +142,7 @@ De fondo suena música andina con beat que sigue la tensión (la Chovena trae su
 
 Para mainnet: un solo sorteo abierto por cuenta, la cancelación pública, la ronda que pone el contrato y la lista ordenada en el protocolo. El análisis completo, con el método STRIDE, está en [docs/amenazas.md](docs/amenazas.md), y la versión para todo público en la [página de seguridad](https://tinkazo.app/seguridad.html).
 
-**Privacidad.** En la cadena va la huella de la lista y otros datos del sorteo, nunca los nombres. El comprobante viaja en el fragmento de la URL, que el navegador no le manda a ningún servidor. El sitio cuenta visitas con la analítica de Vercel, sin cookies, y corta cada dirección hasta la ruta antes de contar ([src/analytics.ts](src/analytics.ts)). Compartir con enlace corto guarda en Cloudflare una copia cifrada en el navegador, con la clave solo en el fragmento del enlace: Tinkazo no la puede leer, y se borra desde Mis sorteos ([workers/enlaces](workers/enlaces/README.md)).
+**Privacidad.** En la cadena va la huella de la lista y otros datos del sorteo, nunca los nombres. El comprobante viaja en el fragmento de la URL, que el navegador no le manda a ningún servidor. El sitio cuenta visitas con la analítica de Vercel, sin cookies, y corta cada dirección hasta la ruta antes de contar ([src/analytics.ts](src/analytics.ts)). Compartir o mostrar el resultado en grande arma un enlace corto, que guarda en Cloudflare una copia cifrada en el navegador, con la clave solo en el fragmento del enlace: Tinkazo no la puede leer. No vence, para que el sorteo se pueda volver a comprobar; si alguien necesita que se borre, lo pide a hola@tinkazo.app ([workers/enlaces](workers/enlaces/README.md)).
 
 ## Cómo se compara
 

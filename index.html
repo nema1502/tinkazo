@@ -130,7 +130,7 @@
       <a href="/?demo=quien&amp;lead=3" data-thumb="quien"><span data-i="gameQuien">De pie</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
       <a href="/?demo=trueque&amp;lead=3" data-thumb="trueque"><span data-i="gameTrueque">El Trueque</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
       <a href="/?demo=teleferico&amp;lead=3" data-thumb="teleferico"><span data-i="gameTeleferico">Teleférico</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
-      <a href="/?demo=oruro&amp;lead=3" data-thumb="oruro"><span data-i="gameOruro">Carnaval de Oruro</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
+      <a href="/?demo=oruro&amp;lead=3" data-thumb="oruro"><span data-i="gameOruro">La Entrada</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
     </div>
   </section>
 
@@ -180,7 +180,7 @@
       <details><summary data-i="faq2q">¿Mi gente tiene que instalar algo?</summary><p data-i="faq2a">No. Solo quien organiza entra con una cuenta, con Google en dos toques. Los participantes no instalan ni se crean nada.</p></details>
       <details><summary data-i="faq3q">¿Cuánto cuesta?</summary><p data-i="faq3a">Hoy funciona en testnet, la red de prueba de Stellar, con XLM de prueba: no cuesta nada. Grabar un sorteo usa unos 0,76 XLM de comisión, unos 16 centavos de dólar (medido el 3 de octubre de 2026). La cobra la red, no Tinkazo, y casi toda es renta de almacenamiento, que cambia con la red. Verificar es gratis.</p></details>
       <details><summary data-i="faq4q">¿Cómo sé que no hiciste trampa?</summary><p data-i="faq4a">No hace falta creerme: el comprobante trae la lista, la ronda y la prueba, y tu celular rehace el sorteo. Si alguien tocó algo, da otro resultado.</p></details>
-      <details><summary data-i="faq5q">¿Qué queda guardado y dónde?</summary><p data-i="faq5a">En Stellar queda, a nombre de tu cuenta, la huella de la lista, cuántos son y cuántos ganan, el premio que escribiste, la ronda, la hora del sello y la del sorteo, y los puestos de quien ganó, y los datos que enumera Seguridad. Los nombres no se publican nunca: quedan en tu equipo y en el comprobante que compartís.</p></details>
+      <details><summary data-i="faq5q">¿Qué queda guardado y dónde?</summary><p data-i="faq5a">En Stellar queda, a nombre de tu cuenta, la huella de la lista, cuántos son y cuántos ganan, el premio que escribiste, la ronda, la hora del sello y la del sorteo, y los puestos de quien ganó, y los datos que enumera Seguridad. Los nombres no se publican nunca: quedan en tu equipo y en el comprobante que compartís. Al compartir o mostrar en grande, queda además una copia para el enlace corto, que solo se abre con el enlace y que Tinkazo no puede leer.</p></details>
     </div>
   </section>
 
@@ -225,10 +225,12 @@
           <a class="ghost" id="ob-demo" href="/?demo=race&amp;lead=3" data-i="obDemo">Ver una demo primero</a>
         </div>
       </aside>
+      <!-- Un sorteo sellado en este equipo que quedó sin sortear (una recarga en la espera): se ofrece retomarlo. Lo arma history.ts. -->
+      <aside class="again-note pendiente" id="pendiente" role="status" style="display:none"></aside>
       <div class="row" style="margin: 0 0 14px">
-        <span class="chip live" data-i="srcPaste">Pegar lista</span>
-        <label class="chip live" style="cursor: pointer"><span data-i="srcCsv">Subir CSV</span><input id="csv" type="file" accept=".csv,.txt" class="sr-only" /></label>
-        <label class="chip live" style="cursor: pointer" title="Exportá la lista de invitados de tu evento en Luma como CSV" data-i-title="srcLumaTip"><span data-i="srcLuma">Desde Luma</span><input id="csv-luma" type="file" accept=".csv" class="sr-only" /></label>
+        <button class="chip live" type="button" id="btn-pegar" data-i="srcPaste">Pegar lista</button>
+        <label class="chip live"><span data-i="srcCsv">Subir CSV</span><input id="csv" type="file" accept=".csv,.txt" class="sr-only" /></label>
+        <label class="chip live" title="Exportá la lista de invitados de tu evento en Luma como CSV" data-i-title="srcLumaTip"><span data-i="srcLuma">Desde Luma</span><input id="csv-luma" type="file" accept=".csv" class="sr-only" /></label>
         <span class="chip soon" data-i="srcMeetup">Meetup · pronto</span>
         <button class="mini" type="button" id="btn-recuperar" style="display:none" data-i="recuperarLista">Recuperar la lista anterior</button>
       </div>
@@ -300,7 +302,7 @@
         <button id="g-quien"><span data-i="gameQuien">De pie</span></button>
         <button id="g-trueque"><span data-i="gameTrueque">El Trueque</span></button>
         <button id="g-teleferico"><span data-i="gameTeleferico">Teleférico</span></button>
-        <button id="g-oruro"><span data-i="gameOruro">Carnaval de Oruro</span></button>
+        <button id="g-oruro"><span data-i="gameOruro">La Entrada</span></button>
       </div>
       <p class="note" id="wheel-cap" style="display:none" data-i="wheelCap">La ruleta llega hasta 200 nombres. De ahí para arriba, el sorteo pasa a la tómbola, que muestra a todos.</p>
       <div class="row ajustes">
@@ -398,13 +400,12 @@
       <div id="hist-list" class="hist-list"></div>
       <details class="hist-why">
         <summary data-i="histWhyT">¿Qué se guarda y dónde?</summary>
-        <p class="note" data-i="histWhy">Este equipo se acuerda de los sorteos que hiciste acá, con los nombres. Los que anclaste desde otro equipo se traen de la cadena: ahí están la fecha, el premio y qué puesto de la lista ganó, pero no los nombres, que nunca se publican. Si borrás los datos del sitio se pierde la lista de este equipo, no los sorteos, y con el comprobante la cuenta se puede rehacer siempre. Si compartiste un sorteo con enlace corto, queda una copia protegida que Tinkazo no puede leer, hasta que la borres con «Borrar el enlace corto».</p>
+        <p class="note" data-i="histWhy">Este equipo se acuerda de los sorteos que hiciste acá, con los nombres. Los que anclaste desde otro equipo se traen de la cadena: ahí están la fecha, el premio y qué puesto de la lista ganó, pero no los nombres, que nunca se publican. Si borrás los datos del sitio se pierde la lista de este equipo, no los sorteos, y con el comprobante la cuenta se puede rehacer siempre. Si compartiste un sorteo o lo mostraste en grande, queda además una copia para su enlace corto, que solo se abre con el enlace: Tinkazo no la puede leer, y no vence, para que el sorteo se pueda volver a comprobar. Si hace falta borrarla, escribinos a hola@tinkazo.app.</p>
         <a class="sec-link" href="/como-funciona.html" data-i="histWhyMas">Todo, en Cómo funciona →</a>
       </details>
       <div class="hist-pie">
         <button class="mini" id="btn-hist-csv" data-i="histCsv">Bajar como CSV</button>
         <button class="mini" id="btn-hist-clear" data-i="histClear">Borrar de este equipo</button>
-        <button class="mini" id="btn-hist-cortos" type="button" style="display:none" data-i="cmpBorrarCortos">Borrar los enlaces cortos</button>
       </div>
     </div>
   </section>

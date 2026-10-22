@@ -14,8 +14,17 @@ import { pintarQr } from "./qr";
  * `corto`, el QR lleva el enlace corto (enlace-corto.ts): de menos de cuarenta módulos por
  * lado y no de más de cien, se lee desde las sillas. Si no sale en unos
  * segundos, lleva el largo de siempre.
+ *
+ * La abre el botón "Mostrar en grande" y, desde el 21 de octubre de 2026, el
+ * final del show cuando el sorteo arrancó desde la espera en grande (`draw.ts`):
+ * ahí el enlace llega después (el comprobante se arma aparte) y el QR aparece
+ * cuando está, con el enlace largo: el corto se arma solo cuando quien organiza
+ * lo pide, y abrirse solo no es pedirlo. `volverA` es lo que queda con el foco
+ * al cerrar: "Siguiente premio", que es lo que sigue. Salir de la pantalla
+ * completa también la cierra, como a la espera: Escape la suelta el navegador
+ * sin avisarle a la página, y quedaba la vista en grande dentro de la ventana.
  */
-export async function mostrarResultado(enlace: string, op: { corto?: boolean } = {}): Promise<void> {
+export async function mostrarResultado(enlace: string | Promise<string>, op: { corto?: boolean; volverA?: HTMLElement } = {}): Promise<void> {
   const { frozen, drawn } = app;
   if (!frozen || !drawn || document.querySelector(".pantalla")) return;
   const premio = frozen.prize;
@@ -57,20 +66,33 @@ export async function mostrarResultado(enlace: string, op: { corto?: boolean } =
   // Al pasar a pantalla completa cambia el tamaño: se vuelve a medir.
   addEventListener("resize", ajustar);
 
+  let cerrada = false;
   const cerrar = (): void => {
+    if (cerrada) return;
+    cerrada = true;
     back.remove();
     removeEventListener("keydown", tecla);
     removeEventListener("resize", ajustar);
+    document.removeEventListener("fullscreenchange", pantalla);
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
-    document.getElementById("btn-grande")?.focus({ preventScroll: true });
+    // A lo que sigue, a la vista si hacía falta; sin eso, al botón que la abrió.
+    if (op.volverA && op.volverA.offsetParent !== null) op.volverA.focus();
+    else document.getElementById("btn-grande")?.focus({ preventScroll: true });
   };
   const tecla = (e: KeyboardEvent): void => {
     if (e.key === "Escape") cerrar();
   };
+  let estuvo = !!document.fullscreenElement;
+  const pantalla = (): void => {
+    if (document.fullscreenElement) estuvo = true;
+    else if (estuvo) cerrar();
+  };
   addEventListener("keydown", tecla);
+  document.addEventListener("fullscreenchange", pantalla);
   back.querySelector<HTMLButtonElement>("[data-cerrar]")?.addEventListener("click", cerrar);
   back.querySelector<HTMLButtonElement>("[data-cerrar]")?.focus();
   // Se pide con el clic todavía fresco: pasado ese momento, el navegador la niega.
+  // Desde el show ya está puesta (la heredó de la espera) y no se pide.
   if (!document.fullscreenElement) void document.documentElement.requestFullscreen?.({ navigationUI: "hide" }).catch(() => undefined);
 
   // El comprobante se arma aparte después del sorteo: si todavía no está, el
@@ -86,10 +108,11 @@ export async function mostrarResultado(enlace: string, op: { corto?: boolean } =
       : varios
         ? Math.min(innerHeight * 0.56, innerWidth * 0.32)
         : Math.min(innerHeight * 0.6, innerWidth * 0.36);
-  const corto = enlace && op.corto ? await acortar(enlace) : null;
-  // Si se cerró mientras salía el corto, no hay nada que pintar.
-  if (!back.isConnected) return;
-  const listo = enlace && img ? await pintarQr(img, corto?.corto ?? enlace, lado) : false;
+  const link = await Promise.resolve(enlace).catch(() => "");
+  const corto = link && op.corto && !cerrada ? await acortar(link) : null;
+  // Si se cerró mientras llegaba el comprobante o salía el corto, no hay nada que pintar.
+  if (cerrada || !back.isConnected) return;
+  const listo = link && img ? await pintarQr(img, corto?.corto ?? link, lado) : false;
   if (!listo) back.querySelector(".pantalla-qr")?.remove();
   ajustar();
 }

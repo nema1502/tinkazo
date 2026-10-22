@@ -19,6 +19,7 @@ import { actualizarPaso, verError } from "./siguiente";
 import { marcarSalio, olvidarSalieron, ponerPremio } from "./premios";
 import { acortar, alAcortar, cortoGuardado, rutaDe } from "../enlace-corto";
 import { startMusic, stopMusic } from "../music";
+import { seguirEnPantallaCompleta } from "../games/overlay";
 
 /** Obtiene la ronda objetivo, verifica su firma y selecciona (protocolo §2, §5). */
 async function resolveBeacon(
@@ -43,10 +44,15 @@ export async function draw(): Promise<void> {
   // unos segundos y para cuando salía la tarjeta el navegador ya no la
   // concedía. El estadio quedaba dentro de la página.
   pedirPantallaCompleta();
-  const cortina = skipMotion() ? null : abrirCortina(app.frozen.prize, app.frozen.raffleId !== undefined);
+  // Desde la espera en grande, el resultado también sale en grande: se baja ya,
+  // para abrirlo en el mismo instante en que se va el estadio.
+  if (enGrande()) void import("./pantalla").then((m) => (pantallaLista = m)).catch(() => undefined);
+  // Desde la espera en grande, ella misma hace de cortina hasta que el show la
+  // tapa (espera.ts), y si algo falla se queda, con la pantalla completa.
+  const cortina = skipMotion() || enGrande() ? null : abrirCortina(app.frozen.prize, app.frozen.raffleId !== undefined);
   const sinShow = (): void => {
     cortina?.cerrar();
-    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    if (document.fullscreenElement && !enGrande()) void document.exitFullscreen().catch(() => undefined);
   };
 
   try {
@@ -146,9 +152,15 @@ export async function draw(): Promise<void> {
     // data-i, el cambio de idioma lo traduce en vez de volver a "Lanzar".
     btn.dataset.i = "drawnDone";
     btn.textContent = t("drawnDone");
+    // Y la caja de la espera deja de decir "Ya nació. Dale.": ya se sorteó.
+    ponerHecho(document.getElementById("wait-left"));
     app.drawn = { beacon, winners, ...(drawTx ? { drawTx } : {}) };
     $("sec-draw").style.display = "block";
     $("seed-label").textContent = `${t("seed")} ${beacon.round}`;
+    // Arrancó desde la espera en grande (ella todavía hace de cortina): el show
+    // termina en el resultado en grande, sin soltar la pantalla completa.
+    granFinal = enGrande() ? { pantalla: !!document.fullscreenElement } : null;
+    seguirEnPantallaCompleta(granFinal?.pantalla === true);
     const finish = (): void => reveal(names, winners, beacon, listHash);
     playGame(names, winners, beacon, finish);
     // La tarjeta ya está arriba: la cortina se va sin dejar ver la página.
@@ -172,11 +184,42 @@ export async function draw(): Promise<void> {
   }
 }
 
-/** Pide la pantalla completa mientras el clic todavía cuenta como gesto. */
+/**
+ * Pide la pantalla completa mientras el clic todavía cuenta como gesto. Sin
+ * gesto no la pide: el navegador la negaría. Pasa cuando el sorteo arranca solo
+ * desde la espera en grande, que ya la pidió con su toque y se la deja al show.
+ */
 function pedirPantallaCompleta(): void {
   const raiz = document.documentElement;
-  if (skipMotion() || document.fullscreenElement || !raiz.requestFullscreen) return;
+  const gesto = (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive ?? true;
+  if (skipMotion() || !gesto || document.fullscreenElement || !raiz.requestFullscreen) return;
   void raiz.requestFullscreen({ navigationUI: "hide" }).catch(() => undefined);
+}
+
+/** La espera en grande está abierta: el sorteo arrancó desde ahí (espera.ts). */
+const enGrande = (): boolean => document.querySelector(".espera") !== null;
+
+/**
+ * El sorteo arrancó desde la espera en grande, y termina en el resultado en
+ * grande (buscador de detalles, D04). Hasta el 21 de octubre de 2026 el show
+ * soltaba la pantalla completa al terminar y la sala veía la página de quien
+ * organiza, con la cabecera y la cuenta; para volver a ponerlo en grande había
+ * que tocar "Mostrar en grande" y se notaba el salto. Quien abrió la espera en
+ * grande ya eligió la pantalla grande: sigue ahí hasta que la cierra.
+ *
+ * `pantalla`: había pantalla completa cuando arrancó. Si al terminar ya no está,
+ * quien organiza salió de ella con Escape durante el show, y el resultado va a
+ * la página, como siempre. Sin la espera en grande no cambia nada.
+ */
+let granFinal: { pantalla: boolean } | null = null;
+/** `pantalla.ts`, ya bajado: el resultado en grande se abre en el mismo instante en que se va el estadio, sin dejar ver la página. */
+let pantallaLista: typeof import("./pantalla") | null = null;
+
+/** "Ya se sorteó", también al cambiar de idioma (`data-i`). La cuenta regresiva del próximo sello lo saca. */
+function ponerHecho(el: HTMLElement | null): void {
+  if (!el) return;
+  el.dataset.i = "drawnDone";
+  el.textContent = t("drawnDone");
 }
 
 /**
@@ -392,7 +435,7 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   const dl = $<HTMLAnchorElement>("drand-link");
   dl.href = url;
   dl.textContent = t("drandLink");
-  showAgain();
+  const principal = showAgain();
   confetti();
   // El juego pidió bajar a "El sorteo" cuando el resultado todavía estaba
   // escondido: quedaba el selector de juegos arriba y el panel fuera de la
@@ -400,7 +443,22 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   requestAnimationFrame(() => $("sec-draw").scrollIntoView({ behavior: "smooth", block: "start" }));
   // El comprobante se arma aparte: comprimir la lista es asíncrono y no vale
   // la pena hacer esperar al confeti por eso.
-  void buildProof(names, winners, url);
+  const enlace = buildProof(names, winners, url);
+  // Desde la espera en grande, el resultado sale en grande, con el QR en cuanto
+  // esté el comprobante; al cerrarlo, la página sigue con "Siguiente premio".
+  const final = granFinal;
+  granFinal = null;
+  seguirEnPantallaCompleta(false);
+  if (final && (!final.pantalla || document.fullscreenElement)) resultadoEnGrande(enlace, principal);
+  else enfocarDespues(principal);
+}
+
+/** Abre el resultado en grande en el mismo instante, si `pantalla.ts` ya bajó (siempre, salvo un wifi muy lento). */
+function resultadoEnGrande(enlace: Promise<string>, volverA: HTMLButtonElement): void {
+  // Con el enlace largo: el corto se arma solo si quien organiza lo pide (compartir o "Mostrar en grande").
+  const abrir = (m: typeof import("./pantalla")): void => void m.mostrarResultado(enlace, { volverA });
+  if (pantallaLista) abrir(pantallaLista);
+  else void import("./pantalla").then(abrir, () => enfocarDespues(volverA));
 }
 
 /**
@@ -449,7 +507,7 @@ function sinGanadores(): string[] {
  * Con menos de dos no hay otro sorteo con esta lista: ese botón se va y la
  * razón queda escrita, no escondida en un title que el proyector no muestra.
  */
-function showAgain(): void {
+function showAgain(): HTMLButtonElement {
   const L = T[getLang()];
   const quedan = sinGanadores().length;
   const alcanza = quedan >= 2;
@@ -459,14 +517,45 @@ function showAgain(): void {
   sin.textContent = L.againSin(quedan);
   comprobante.className = alcanza ? "ghost" : "primary";
   $("btn-again-nueva").className = "ghost";
-  // La principal va primero, también en el orden del teclado y del lector.
-  $("again-acciones").prepend(alcanza ? sin : comprobante);
+  // La principal va primero, también en el orden del teclado y del lector. Solo
+  // si no lo está: sacarla y volverla a poner le quita el foco, y esto también
+  // corre al cambiar de idioma.
+  const principal = alcanza ? sin : comprobante;
+  const acciones = $("again-acciones");
+  if (acciones.firstElementChild !== principal) acciones.prepend(principal);
   const titulo = $("again-t");
   titulo.dataset.i = alcanza ? "againTitle" : "againTitleFin";
   titulo.textContent = t(titulo.dataset.i);
   $("again-left").textContent = alcanza ? L.againLeft(quedan) : L.againFew(quedan);
   $("again-row").style.display = "block";
   actualizarPaso();
+  return principal;
+}
+
+/**
+ * Después del ganador, la acción principal con el foco, como "Lanzar el
+ * sorteo" cuando nace la ronda: se sigue con Enter, sin ir a buscar el botón
+ * con el mouse. Al cerrar el estadio el foco quedaba en el cuerpo de la página
+ * (buscador de detalles, D11).
+ *
+ * Con cuidado, porque un Enter de más ya hizo daño: el 4 de octubre de 2026
+ * uno apretó "Ver la animación igual", y "No está" deja el foco en "Cancelar"
+ * para que dos Enter no saquen al ganador. Por eso va un momento después del
+ * resultado, y solo si el foco no está en ningún lado: no se lo quita a nadie.
+ * Nunca al repintar por un cambio de idioma (eso llama a `showAgain` solo).
+ * "Siguiente premio" no borra el sorteo, que sigue en Mis sorteos y en su
+ * comprobante. Si el botón quedó fuera de la pantalla y la barra de "lo que
+ * sigue" lo ofrece, el foco va al de la barra: es el que se ve.
+ */
+function enfocarDespues(boton: HTMLButtonElement): void {
+  window.setTimeout(() => {
+    const a = document.activeElement as HTMLElement | null;
+    const enNingunLado = !a || a === document.body || (a instanceof HTMLButtonElement && a.disabled) || a.offsetParent === null;
+    if (!enNingunLado || !app.drawn || boton.offsetParent === null) return;
+    const barra = document.getElementById("siguiente");
+    const deLaBarra = barra?.classList.contains("on") ? document.getElementById("sig-btn") : null;
+    (deLaBarra ?? boton).focus({ preventScroll: true });
+  }, 1000);
 }
 onLangChange(() => {
   if (app.drawn && $("again-row").style.display !== "none") showAgain();
@@ -635,12 +724,13 @@ async function paintQr(link: string): Promise<void> {
 
 /**
  * Arma el comprobante y apunta el QR y los avisos a la página de verificación,
- * que es donde el participante puede rehacer el sorteo por su cuenta.
+ * que es donde el participante puede rehacer el sorteo por su cuenta. Devuelve
+ * el enlace, para el QR del resultado en grande.
  */
-async function buildProof(names: string[], winners: number[], roundLink: string): Promise<void> {
+async function buildProof(names: string[], winners: number[], roundLink: string): Promise<string> {
   const f = app.frozen;
   const d = app.drawn;
-  if (!f || !d) return;
+  if (!f || !d) return "";
   const proof: Proof = {
     v: PROOF_VERSION,
     names,
@@ -696,6 +786,7 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
   // dejaba sin armar justo cuando el ganador aparece en pantalla.
   setNotifyLinks(names, winners, cortoLink || link);
   void paintQr(cortoLink || link);
+  return link;
 }
 
 /**

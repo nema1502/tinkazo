@@ -24,8 +24,11 @@ import { sha256 } from "@noble/hashes/sha2.js";
  *
  * Este equipo se acuerda de los cortos que armó (en memoria y en
  * `localStorage`, por la huella de la ruta), con el permiso para borrarlos:
- * compartir dos veces lo mismo no crea dos enlaces, y "Borrar el enlace corto"
- * de Mis sorteos sabe cuál borrar.
+ * compartir dos veces lo mismo no crea dos enlaces. Desde el 21 de octubre de
+ * 2026 la interfaz no ofrece borrarlos (cortaba la verificación de todos los
+ * que ya lo tenían y se tocaba sin querer): el permiso se sigue guardando en
+ * silencio, y un enlace se borra a pedido, con el secreto del Worker
+ * (`workers/enlaces/README.md`).
  */
 
 /** El servicio de enlaces cortos. */

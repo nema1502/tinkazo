@@ -223,8 +223,10 @@ La carrera actúa la historia entera. Los demás juegos toman del director el ar
 | Trompo | Duelo | **Un choque más.** El mano a mano dura cuatro choques en vez de tres |
 | Piñata | Susto | **El que se asoma.** En los últimos palos el caramelo ganador asoma por la rajadura y vuelve a entrar |
 | Piñata | Remontada | **Al aire.** Dos palos que no le pegan a nada antes de los últimos |
-| Carnaval de Oruro | Susto | **La máscara.** En la última cuadra a la ganadora casi se le cae la máscara |
-| Carnaval de Oruro | Remontada | **Desde atrás.** Arranca en la última fila de la comparsa y en cada cuadra avanza |
+| La Entrada | Susto | **La máscara.** Antes del último arco de la última fraternidad, a uno de los que siguen bailando casi se le cae la máscara (o se le vuela el sombrero, o la montera). Se sortea entre todos, también el que gana |
+| La Entrada | Remontada | **La que vuelve.** En un arco, una fraternidad arranca para la vereda como si se quedara ("¿se quedan los Tojos?") y vuelve a la comparsa. Se sortea entre las que siguen |
+| La Entrada | Duelo | **Un salto más.** El contrapunto frente al Socavón dura dos saltos más |
+| La Entrada | Tapada | **Se calla la banda.** En un arco la música se corta de golpe y la comparsa se congela a mitad del paso, con la sala que aplaudía; después vuelve la banda |
 | Chovena | Susto | **El que aguanta.** En el último corte la ganadora trastabilla con un "¡!" encima ("¡ojo con fulana!") y aguanta. En la mitad de los cortes trastabilla también alguien que no sale, así que tambalearse no delata a nadie |
 | Chovena | Remontada | **La que vuelve.** En el corte falso la ganadora se había soltado y da un paso afuera; vuelve la música y vuelve a la rueda |
 | Chovena | Duelo | **El amague de la final.** Con los dos de la mano, la música se corta, se tambalean los dos, y vuelve |
@@ -291,7 +293,7 @@ La música de fondo es [`src/music.ts`](../src/music.ts): andina con beat, gener
 Ningún ganador se narra como perdedor, y cada premio tiene su momento (7 de octubre de 2026):
 
 - **El relator los nombra bien.** "¡GANAN Jorge Mamani y Carlos Choque!", con el verbo en plural, y la lista con su "y" (o "e" delante de Isabel): "Carlos Choque, Valeria Torrez y Óscar Limachi". Con más de tres, "y 2 más". Antes los juntaba con comas, en singular y con un "+2".
-- **Un co-ganador que sale antes del final, sale con premio.** En el trompo, la piñata, Oruro y el aguayo, los juegos que cuentan la historia del primer premio, el relator dice "¡Óscar Limachi sale, pero con premio!" y lo nombra siempre, aunque haya mucha gente. La Chovena y el teleférico ya lo hacían, y el sapo tiene un turno por premio.
+- **Un co-ganador que sale antes del final, sale con premio.** En el trompo y el aguayo, los juegos que cuentan la historia del primer premio, el relator dice "¡Óscar Limachi sale, pero con premio!" y lo nombra siempre, aunque haya mucha gente. La Chovena y el teleférico ya lo hacían, y el sapo tiene un turno por premio. La piñata (desde el 20 de octubre de 2026) y La Entrada (desde el 21) dicen el premio y no el nombre ("¡Sale con premio!", "Se quedan 3, uno con premio"), y el nombre se lee recién en el cartel (lista "Chicos" de la sección 10 de la auditoría de juegos).
 - **El cartel de la corona.** Cada ganador va con su cara, el primer premio más grande, y los demás entran de a uno, cada uno con su golpe: dos notas, más graves cuanto más abajo en la lista. Con más de tres, tres nombres y "y 2 más", igual que el relator. Con un solo premio el cartel no cambia.
 - **Para auditarlo sin red:** la escena fija acepta `?nw=N` (`?pose=trompo&nw=3`). El primer ganador es el de siempre y los demás quedan repartidos por la lista.
 
@@ -339,7 +341,7 @@ Los diez del selector, en su orden: el de la auditoría de juegos, de las salas 
 | De pie (antes ¿Quién es?) | `quien` | Módulo propio (solo motor nuevo) | 8 a 200 | [quien-es.md](juegos/quien-es.md) |
 | El Trueque | `trueque` | Módulo propio (solo motor nuevo) | 200, pensado de 12 a 200 | [trueque.md](juegos/trueque.md) |
 | Teleférico | `teleferico` | Módulo propio | 200 | [teleferico.md](juegos/teleferico.md) |
-| Carnaval de Oruro | `oruro` | Módulo propio (solo motor nuevo) | 200 | [carnaval-de-oruro.md](juegos/carnaval-de-oruro.md) |
+| La Entrada (antes Carnaval de Oruro) | `oruro` | Módulo propio (solo motor nuevo), por fraternidades | 200, pensado de 30 a 200 | [la-entrada.md](juegos/la-entrada.md) |
 
 **El selector quedó en diez** el 21 de octubre de 2026, con la auditoría de juegos: entró El Trueque, la fusión del Aguayo y la Constelación, y esos dos salieron. La tómbola había salido el 20, cuando el selector empezó a recomendar según la cantidad de personas. Los tres siguen abriendo con `?demo=` y conservan su captura para la tarjeta de cómo se juega, pero salieron de la página de juegos y de la portada, igual que los que salieron antes: la página muestra lo que se puede elegir. Si la ruleta está elegida y hay más de doscientas personas, el sorteo sigue pasando a la tómbola, aunque no tenga botón (`showFrozen` en `src/ui/freeze.ts` y `playableGame` en `src/state.ts`).
 

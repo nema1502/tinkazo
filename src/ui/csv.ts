@@ -31,6 +31,12 @@ export interface Table {
    * la ventana dice cuántas son y dónde están.
    */
   skipped: number[];
+  /**
+   * La columna que no está en el archivo y une el nombre y el apellido, si la
+   * planilla los trae separados (`unirNombreYApellido`). Va al final; no es un
+   * filtro ni cuenta como columna del archivo.
+   */
+  unida?: number;
 }
 
 /** Separadores que usan las herramientas más comunes, en orden de probabilidad. */
@@ -125,7 +131,51 @@ export function parseTable(text: string): Table | null {
 
   const columns = Array.from({ length: width }, (_, i) =>
     (headerDetected ? first.cells[i]?.trim() : "") || `Columna ${i + 1}`);
-  return { columns, rows, headerDetected, suggested: suggestColumn(columns, rows, headerDetected), skipped };
+  const table: Table = { columns, rows, headerDetected, suggested: suggestColumn(columns, rows, headerDetected), skipped };
+  return headerDetected ? unirNombreYApellido(table) : table;
+}
+
+/** Encabezados del nombre de pila, del apellido y del nombre completo, como los compara `headerKey`. */
+const FIRST_NAME = new Set(["nombre", "nombres", "primer nombre", "first name", "first_name", "firstname", "given name"].map(headerKey));
+const LAST_NAME = new Set(
+  ["apellido", "apellidos", "apellido paterno", "apellido materno", "primer apellido", "segundo apellido", "last name", "last_name", "lastname", "surname", "family name"].map(headerKey),
+);
+const FULL_NAME = new Set(
+  ["name", "full name", "full_name", "nombre completo", "nombre y apellido", "nombre y apellidos", "nombres y apellidos", "apellidos y nombres", "display name", "attendee name", "guest name"].map(headerKey),
+);
+
+/**
+ * Una planilla con "Nombre" y "Apellido" en columnas separadas (la de Google
+ * Forms de una clase o un taller) entraba solo con el nombre: el importador
+ * elegía "Nombre" y no había forma de juntarlas, y en una clase con tres Anas
+ * el cartel decía "Ana" (buscador de detalles, D10). Se agrega al final una
+ * columna que las une con un espacio ("Ana Quispe"), también con el apellido
+ * paterno y el materno, y se la propone primero. Se llama como las del archivo,
+ * unidas con "+" ("Nombre + Apellido"): se entiende en cualquier idioma.
+ *
+ * Solo si no hay una columna de nombre completo (Luma trae "name" además de
+ * first_name y last_name, y lo de Luma no cambia) y si al menos una fila
+ * tiene las dos partes. La lista canónica no se toca: esto arma el texto de un
+ * nombre por línea, como cualquier otra columna.
+ */
+export function unirNombreYApellido(table: Table): Table {
+  const keys = table.columns.map(headerKey);
+  if (keys.some((k) => FULL_NAME.has(k))) return table;
+  const nombre = keys.findIndex((k) => FIRST_NAME.has(k));
+  const apellidos = keys.flatMap((k, i) => (LAST_NAME.has(k) ? [i] : []));
+  if (nombre < 0 || !apellidos.length) return table;
+  const partes = [nombre, ...apellidos];
+  const unir = (r: readonly string[]): string => partes.map((c) => (r[c] ?? "").trim()).filter(Boolean).join(" ");
+  const completas = table.rows.some((r) => (r[nombre] ?? "").trim() && apellidos.some((c) => (r[c] ?? "").trim()));
+  if (!completas) return table;
+  const unida = table.columns.length;
+  return {
+    ...table,
+    columns: [...table.columns, partes.map((c) => table.columns[c]).join(" + ")],
+    rows: table.rows.map((r) => [...r, unir(r)]),
+    suggested: unida,
+    unida,
+  };
 }
 
 /** Una columna, como texto de una entrada por línea, listo para el protocolo. */
@@ -218,7 +268,7 @@ const NOT_FILTER = /^(first|last|full|display|guest|attendee)?[ _]?name$|^nombre
 export function filterChoices(table: Table, except: number): RowFilter[] {
   const out: RowFilter[] = [];
   table.columns.forEach((name, c) => {
-    if (c === except || (table.headerDetected && NOT_FILTER.test(name.trim()))) return;
+    if (c === except || c === table.unida || (table.headerDetected && NOT_FILTER.test(name.trim()))) return;
     const vals = table.rows.map((r) => cell(r, c));
     const empties = vals.filter((v) => v === "").length;
     if (empties > 0 && empties < vals.length) out.push({ column: c, value: null });
@@ -509,6 +559,67 @@ export function dropListHeader(text: string): { text: string; header: string | n
   if (first === undefined || !isHeaderLine(first)) return { text, header: null };
   const header = first.replace(/\uFEFF/g, "").trim().replace(/^"(.*)"$/, "$1").trim();
   return { text: lines.slice(at + 1).join("\n"), header };
+}
+
+/**
+ * El número o la viñeta con que empieza una línea de una lista para anotarse:
+ * "1. ", "1.-", "1)", "(1)", "1º", "1 ", "1️⃣", "🔟", "• ", "- ". Un guion o
+ * un asterisco cuentan solo con un espacio después: "*Ana*" es negrita de
+ * WhatsApp, no una viñeta.
+ */
+const MARCA = /^\s*(?:[([]?\d{1,3}\s*[.)\]:\-–—º°]{1,2}\s*|\d{1,3}\s+|(?:\d️?⃣)+\s*|\u{1F51F}\s*|[•·▪◦‣⁃●■►▸➤]\s*|[-*–—]\s+)/u;
+
+/**
+ * Una lista copiada de un grupo de WhatsApp suele venir numerada ("1. Ana
+ * Quispe", "2. Luis Mamani"), y el número entraba al nombre: salía en el
+ * estadio y en el cartel, y escondía los repetidos, porque "1. Ana Quispe" y
+ * "9. Ana Quispe" son dos nombres distintos para la lista canónica: la misma
+ * persona con dos chances (buscador de detalles, D09).
+ *
+ * Saca el número o la viñeta del principio de cada línea, pero solo si la
+ * mayoría de las líneas con algo escrito lo traen (y al menos dos): un nombre
+ * que de verdad empieza con un número no se toca en una lista que no está
+ * numerada. Una línea que era solo el número (un lugar libre de la lista,
+ * "5.") queda vacía y no entra. Devuelve el texto, en cuántas líneas se sacó
+ * algo, la primera con nombre antes y después (para el aviso) y las líneas sin
+ * número, que en una lista numerada suelen ser el título ("*Sorteo del
+ * meetup* 🎁").
+ *
+ * Como `dropListHeader`, pasa antes de que el texto llegue al cuadro: la lista
+ * canónica y el sello no cambian (docs/protocolo.md §1).
+ */
+export function quitarNumeracion(text: string): { text: string; lineas: number; antes: string; despues: string; sueltas: string[] } {
+  const lines = text.split(/\r\n?|\n/);
+  const llenas = lines.filter((l) => l.trim() !== "");
+  const marcadas = llenas.filter((l) => MARCA.test(l));
+  if (marcadas.length < 2 || marcadas.length * 2 <= llenas.length) return { text, lineas: 0, antes: "", despues: "", sueltas: [] };
+  const sin = (l: string): string => l.replace(MARCA, "").trim();
+  const primera = marcadas.find((l) => sin(l) !== "") ?? "";
+  return {
+    text: lines.map((l) => (MARCA.test(l) ? sin(l) : l)).join("\n"),
+    lineas: marcadas.length,
+    antes: primera.trim(),
+    despues: sin(primera),
+    sueltas: llenas.filter((l) => !MARCA.test(l)).map((l) => l.trim()),
+  };
+}
+
+/**
+ * Cuántas líneas repiten, escrito exactamente igual, un nombre que ya estaba
+ * más arriba. La lista canónica las deja entrar una sola vez sin decir nada
+ * (docs/protocolo.md §1: lo de antes de la primera coma, sin espacios en las
+ * puntas, de dos caracteres o más); esto cuenta cuántas fueron, para decirlo.
+ */
+export function igualesQuitados(text: string): number {
+  const vistos = new Set<string>();
+  let n = 0;
+  for (const raw of text.split(/\r?\n/)) {
+    const name = (raw.split(",")[0] ?? "").trim();
+    if (name.length < 2) continue;
+    if (vistos.has(name)) n++;
+    else vistos.add(name);
+  }
+  return n;
 }
 
 /**

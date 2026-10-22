@@ -4,6 +4,7 @@ import { listHash } from "../protocol/canonical";
 import { bytesToHex } from "../protocol/quicknet";
 import { previewUrl } from "../protocol/proof";
 import { repetidos } from "../buscar";
+import { app } from "../state";
 import { parseNames } from "./participants";
 import { pintarQr } from "./qr";
 
@@ -16,6 +17,11 @@ import { pintarQr } from "./qr";
  * uno se busque en su celular. Abajo va el principio de la huella: cuando se
  * selle, la huella del sorteo tiene que empezar igual, y cualquiera de la sala
  * lo puede comparar con lo que vio.
+ *
+ * Con la lista ya sellada muestra la sellada, con su huella, y lo dice: la
+ * espera sirve para que cada uno se busque. Hasta el 21 de octubre de 2026
+ * leía el cuadro y decía siempre "antes de sellar", aunque el cuadro hubiera
+ * cambiado después del sello (buscador de detalles, D01).
  */
 /**
  * La letra de la lista, lo más grande que entre sin dejar a nadie afuera. Con
@@ -37,20 +43,22 @@ function encajar(ol: HTMLElement): void {
 }
 
 export async function mostrarLista(): Promise<void> {
-  const names = parseNames();
+  const sellada = app.frozen;
+  const names = sellada ? sellada.names : parseNames();
   if (names.length < 2) return;
-  const prize = (document.getElementById("prize") as HTMLInputElement | null)?.value.trim() ?? "";
-  const hash = bytesToHex(listHash(names));
+  const prize = sellada ? sellada.prize : ((document.getElementById("prize") as HTMLInputElement | null)?.value.trim() ?? "");
+  const hash = sellada ? sellada.listHash : bytesToHex(listHash(names));
   const rep = repetidos(names);
+  const titulo = t(sellada ? "salaTSellada" : "salaT");
 
   const back = document.createElement("div");
   back.className = "sala";
   back.setAttribute("role", "dialog");
   back.setAttribute("aria-modal", "true");
-  back.setAttribute("aria-label", t("salaT"));
+  back.setAttribute("aria-label", titulo);
   back.innerHTML =
     `<div class="sala-top">` +
-    `<div><span class="sticker">${esc(t("salaT"))}</span>` +
+    `<div><span class="sticker">${esc(titulo)}</span>` +
     `<h2>${esc(t("salaN").replace("{n}", String(names.length)))}</h2>` +
     `<p class="sala-huella mono">${esc(t("salaHuella"))} <b>${esc(hash.slice(0, 12))}</b>…</p></div>` +
     `<button class="ghost" type="button" data-cerrar>${esc(t("salaCerrar"))}</button>` +
@@ -64,7 +72,7 @@ export async function mostrarLista(): Promise<void> {
     `<aside class="sala-qr"><img alt="" /><p>${esc(t("salaQr"))}</p>` +
     `<button class="ghost mini" type="button" data-copiar>${esc(t("salaCopiar"))}</button></aside>` +
     `</div>` +
-    `<p class="sala-pie">${esc(t("salaPie"))}</p>`;
+    `<p class="sala-pie">${esc(t(sellada ? "salaPieSellada" : "salaPie"))}</p>`;
   document.body.appendChild(back);
   const ol = back.querySelector<HTMLElement>(".sala-nombres");
   const ajustar = (): void => {
@@ -77,6 +85,8 @@ export async function mostrarLista(): Promise<void> {
     back.remove();
     removeEventListener("keydown", tecla);
     removeEventListener("resize", ajustar);
+    // El foco vuelve al botón que la abrió, y no al cuerpo de la página.
+    document.getElementById("btn-sala")?.focus({ preventScroll: true });
   };
   const tecla = (e: KeyboardEvent): void => {
     if (e.key === "Escape") cerrar();
@@ -85,8 +95,11 @@ export async function mostrarLista(): Promise<void> {
   back.querySelector<HTMLButtonElement>("[data-cerrar]")?.addEventListener("click", cerrar);
   back.querySelector<HTMLButtonElement>("[data-cerrar]")?.focus();
 
-  // El QR lleva la misma lista al celular de cada uno, para buscarse.
-  const url = await previewUrl(names, prize);
+  // El QR lleva la misma lista al celular de cada uno, para buscarse. La sellada
+  // lo dice también allá: "antes de sellar" ya no es cierto (lista.ts).
+  const enlace = new URL(await previewUrl(names, prize));
+  if (sellada) enlace.searchParams.set("sellada", "1");
+  const url = enlace.toString();
   // Para pegarlo en el grupo del evento, si alguien no puede escanear.
   const copiar = back.querySelector<HTMLButtonElement>("[data-copiar]");
   copiar?.addEventListener("click", () => {

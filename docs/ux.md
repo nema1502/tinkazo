@@ -46,6 +46,52 @@ En el celular (760 px o menos) la fila tiene tres cosas: "Sortear", "Mis sorteos
 
 Lo miden `scripts/audit-ui.mjs` (texto cortado, blancos de toque y scroll horizontal en la cabecera) y `scripts/audit-flujo.mjs --solo-anchos` (de 320 a 414 px). El código está en `src/ui/menu.ts` (la lista de "Más") y en `index.html` y las demás páginas (el bloque `nav.topnav`).
 
+## La espera en grande
+
+Entre sellar y poder sortear pasan unos segundos (45 con cuenta): la lista ya está cerrada y el número que la va a decidir todavía no existe. "Mostrar la espera en grande", en la caja de la espera, pone esos segundos en escena para la sala: la cuenta gigante, el premio y los nombres de todos pasando. Es una opción y no se abre sola. Vive en `src/ui/espera.ts`.
+
+**Desde el 21 de octubre de 2026 desemboca en el show.** Nicolás: "cuando esté la espera en grande y termina, debería hacer que cuando termine, empiece también, ¿no? Ahora la espera termina y se sale". Hasta ese día, al nacer el número la espera se cerraba y dejaba "Lanzar el sorteo" en la página, con el foco (decisión del 17 de octubre, cuando salieron el "¡Contemos juntos!" y el "¡Nació!" de la primera versión, que no vuelven). Ahora:
+
+- Si la espera está abierta cuando nace el número, el sorteo arranca solo, como si se tocara "Lanzar el sorteo" (la cuenta regresiva de `freeze.ts` aprieta el botón de verdad). La espera hace de cortina: donde estaba la cuenta dice "Está llegando el número que decide…" (o "Grabando el sorteo…", con cuenta), con el mismo alto para que los nombres no salten, y se va recién cuando la tarjeta del juego o el estadio están detrás. La sala no vuelve a ver el formulario.
+- La pantalla completa se pide al tocar "Mostrar la espera en grande": es el gesto que el navegador exige. El show la hereda y no la vuelve a pedir sin un toque (el navegador la negaría).
+- Y el show desemboca en el resultado en grande, el mismo de "Mostrar en grande": el nombre, el premio y el QR del comprobante, sin soltar la pantalla completa y sin que la sala vea la página en el medio (21 de octubre de 2026, buscador de detalles D04). Hasta ese día, al terminar el show se soltaba la pantalla completa y la sala veía la página de quien organiza, con la cabecera y la cuenta; para volver a ponerlo en grande había que tocar "Mostrar en grande" y se notaba el salto. "Cerrar", Escape o salir de la pantalla completa vuelven a la página con "Siguiente premio" con el foco: Enter, Enter, y se sigue. Sin show (movimiento reducido), igual. Si quien organiza salió de la pantalla completa durante el show, el resultado va a la página, como siempre. Sin la espera en grande, nada de esto cambia: el resultado queda en la página.
+- Si la cuenta pide aprobar cada operación en una ventana (Freighter), el sorteo no puede arrancar solo: la espera queda abierta con una sola acción grande, "Lanzar el sorteo", y la línea "Tu billetera te va a pedir que lo apruebes". La cuenta de prueba y la de Google (Pollar) firman sin ventana y arrancan solas. Sin cadena (la demo, el modo libre) no hay nada que aprobar.
+- Si traer el número o grabar el sorteo falla, el motivo y "Reintentar el sorteo" se ven en la espera, en grande y con el foco, sin soltar la pantalla completa: `verError` (`siguiente.ts`) se lo ofrece a la espera antes de mover la página.
+- Escape o "Volver a la página" salen, como siempre, y sueltan la pantalla completa que pidió la espera; el foco vuelve a "Lanzar el sorteo" si ya se puede. Con la pantalla completa, Escape la suelta el navegador sin avisarle a la página, así que salir de ella también cierra la espera (salvo mientras se sortea: ahí un segundo Escape cierra).
+- Si la espera no está abierta cuando nace el número, todo queda como antes: "Lanzar el sorteo" a la vista y con el foco. El recorrido de `audit-flujo.mjs` no cambia.
+
+Lo mide `scripts/audit-espera.mjs`, en el modo libre con `?lead=3` y sin Stellar, cuadro por cuadro desde adentro de la página: que la espera se abre con un clic de verdad, que el show arranca solo, que en ningún cuadro entre la espera y el estadio se ve la página, que la pantalla completa sigue con el show y que la cortina no aparece encima; y al final, que el show desemboca en el resultado en grande sin un cuadro de la página en el medio, con la pantalla completa y el QR, y que "Cerrar" vuelve a la página con "Siguiente premio" con el foco. En la primera pantalla mira también el caso de "Volver a la página" antes de que nazca el número, y el de los relays del número cortados (el reintento en grande, y el show al volver la red). Deja capturas de la transición en `--out`. La fase de Freighter no tiene prueba de punta a punta: hace falta una billetera que firme.
+
+```bash
+CDP_PORT=9982 node scripts/audit-espera.mjs --base http://localhost:4173 [--vistas 1280x720,390x844] [--tema dark|light] [--sin-casos]
+```
+
+## Los detallitos (21 de octubre de 2026)
+
+Nicolás: "detallitos que son bonitos y ahorran tiempo o hacen mejor la experiencia de usuario". Un buscador los encontró usando la herramienta de verdad (con capturas), un revisor los filtró contra estas reglas y contra las decisiones del autor, y cada uno se arregló con su propio cambio. Los mide `scripts/audit-detalles.mjs` (en el modo libre, con una captura por pantalla y por tema); D04, `audit-espera.mjs`; D05 y D06 se miraron sellando en testnet con la cuenta de prueba.
+
+| | Qué cambió |
+|---|---|
+| D01 | Con la lista sellada (y mientras se sella), nada cambia el cuadro: ni "Cargar ejemplo", ni "Editar selección", ni los orígenes. "Mostrar la lista a la sala" muestra la sellada, con su huella, y lo dice. |
+| D03 | La lista sin sellar, el premio y "Cuántos ganan" vuelven al recargar y al volver de entrar con Google (en la pestaña, hasta sellar). |
+| D04 | Desde la espera en grande, el show termina en el resultado en grande (ver arriba). |
+| D05 | Con la cuenta de prueba o con Google, sellar dice "Mandando a la red…", no "Aprobá la operación en tu billetera… 0,81 XLM". |
+| D06 | Si se recarga en la espera, el sorteo sellado se ofrece arriba de la lista ("Retomarlo", secundario). Nunca se retoma solo. |
+| D08 | "Cargar ejemplo" se ve solo con el cuadro vacío. |
+| D09 | Una lista numerada de WhatsApp entra sin los números, y el aviso dice los repetidos que la lista canónica deja en silencio. |
+| D10 | Una planilla con nombre y apellido separados ofrece la columna "Nombre + Apellido". |
+| D11 | Después del ganador, "Siguiente premio" queda con el foco (si no estaba en otro lado), y la caja de la espera dice "Ya se sorteó". |
+| D14 | "Ponerle nombre" deja el campo listo para escribir, y Enter guarda el nombre del evento. |
+| D17 | "Entrar y sortear" al final de la demo abre la ventana de ingreso, como el de la portada. |
+| D18 | "Pegar lista" es un botón que lleva al cuadro; una lista pegada al final empieza en un renglón nuevo. |
+| D19 | La barra dice qué se sortea antes de sellar ("12 personas · Termo", o "sin premio"). |
+
+El revisor descartó D02 (es del selector), D07 (ya estaba hecho), D12 (salvo el "Ya se sorteó"), D13, D16 y D20, con sus motivos en `.claude/progreso/juegos/ux-detalles.md`. D15 (que el mensaje del evento diga quién ganó qué) lo toma el stream de compartir.
+
+```bash
+CDP_PORT=9982 node scripts/audit-detalles.mjs --base http://localhost:4173 [--vistas 1280x720,390x844] [--temas dark,light] [--solo D01,D09]
+```
+
 ## La lista de comprobación
 
 Es lo que mira `audit-flujo.mjs` en cada paso (lista cargada, sellada y esperando, ronda lista, resultado, siguiente premio) y en cada pantalla:
@@ -62,9 +108,11 @@ Es lo que mira `audit-flujo.mjs` en cada paso (lista cargada, sellada y esperand
 - [ ] El texto se lee: contraste de 4,5 a 1 (3 a 1 el texto grande), en los dos temas.
 - [ ] Mientras corre la cuenta, el botón dice cuánto falta; al llegar a cero se enciende, con pulso y sin él si se pide menos movimiento.
 - [ ] Con el botón fuera de la pantalla, la barra lo ofrece encendido y su clic sortea.
+- [ ] Antes de sellar, la línea de la barra dice qué se sortea ("Paso 2 de 4 · 12 personas · Termo") o "sin premio": sellar fija el premio, y desde la barra no se ve el campo. Un premio largo se corta con puntos suspensivos y la línea entra en 320 px (`scripts/audit-detalles.mjs`, D19).
 - [ ] Si el sellado o el sorteo falla (la red de Stellar o la de la ronda no contestan), el motivo se ve en la pantalla aunque se haya apretado la barra, y queda a la vista una acción para reintentar. El mensaje se escribe junto al botón de verdad, que con la barra puesta está fuera de la pantalla: por eso hay que llevarlo a la vista.
 - [ ] La barra se va con el estadio, con la espera en grande y con una ventana abierta, y vuelve al cerrarlas.
-- [ ] Después del ganador, lo que sigue va pegado al ganador, antes de "Mostrar en grande" y de la verificación. La acción principal es "Siguiente premio" si queda con quién sortear, o "Compartir el resultado" si no; lo demás es secundario.
+- [ ] Con la espera en grande abierta cuando nace el número, el show arranca solo y entre la espera y el estadio no se ve la página; con Freighter, una sola acción grande; si algo falla, el motivo y el reintento en la espera; y el show termina en el resultado en grande, con la pantalla completa, hasta que quien organiza lo cierra (`scripts/audit-espera.mjs`).
+- [ ] Después del ganador, lo que sigue va pegado al ganador, antes de "Mostrar en grande" y de la verificación. La acción principal es "Siguiente premio" si queda con quién sortear, o "Compartir el resultado" si no; lo demás es secundario. Un segundo después del resultado esa acción queda con el foco (o el botón de la barra, si es el que se ve), como "Lanzar el sorteo" al nacer la ronda, pero solo si el foco no estaba en otro lado; y la caja de la espera dice "Ya se sorteó", no "Ya nació. Dale." (`scripts/audit-detalles.mjs`, D11).
 - [ ] Una captura de cada paso, para mirarla con los ojos.
 
 ## El auditor

@@ -124,12 +124,26 @@ export interface Dict {
   cQuiDone: (n: string, k: number) => string;
   /** La frase de "uy, casi" del susto: por número, sin azar, para que la sala no dependa del sorteo de frases. */
   cQuiAlmost: (i: number) => string;
-  cOruCount: (n: number) => string;
-  cOruStop: (k: number, off: number, left: number) => string;
-  cOruStay: (n: string) => string;
-  cOruMask: (n: string) => string;
   cOruDuel: (a: string, b: string) => string;
   cOruBlock: (k: number, of: number) => string;
+  cOruFrat: (art: string, name: string, dance: string) => string;
+  cOruGo: (n: number, f: number) => string;
+  cOruFratStay: (k: number, art: string, name: string, prizes: number) => string;
+  cOruOnly: (art: string, name: string) => string;
+  cOruMemStay: (k: number, ns: string[]) => string;
+  cOruMemMany: (k: number, c: number, art: string, name: string) => string;
+  cOruMemPrize: (k: number, c: number, prizes: number) => string;
+  cOruFake: (art: string, name: string) => string;
+  cOruFakeOne: (n: string) => string;
+  cOruFakeNo: (plural: boolean) => string;
+  cOruScare: (n: string, prenda: string) => string;
+  cOruTrip: (n: string) => string;
+  cOruFall: (n: string, prenda: string) => string;
+  cOruDanza: (d: string) => string;
+  cOruFratTitle: (art: string, name: string) => string;
+  cOruRosterSub: (dance: string, c: number) => string;
+  /** La llegada nombra a la fraternidad: "nuestra fraternidad llegó hasta el Socavón" (sección 7.8). */
+  cOruArriveFrat: (art: string, name: string) => string;
   cLuzCount: (n: number) => string;
   cLuzCaught: (n: string) => string;
   cLuzMany: (k: number) => string;
@@ -220,6 +234,14 @@ export interface Dict {
   impHeaderOut: (header: string) => string;
   /** Cuántos nombres traían caracteres que no se ven y se limpiaron al cargar la lista. */
   impInvisibles: (n: number) => string;
+  /** Una lista pegada con numeración (D09): en cuántas líneas se sacó, y cómo quedó la primera. */
+  pegNumeracion: (n: number, antes: string, despues: string) => string;
+  /** Las líneas sin número de una lista numerada: suelen ser el título. */
+  pegSueltas: (n: number, ej: string) => string;
+  /** Nombres escritos dos veces exactamente igual: entran una sola vez. */
+  pegIguales: (n: number) => string;
+  /** Dos nombres que parecen la misma persona escrita distinto, y cuántos pares más. */
+  pegParecidos: (a: string, b: string, mas: number) => string;
   impSkipped: (n: number, lines: string) => string;
   impSkippedShort: (n: number) => string;
   /** El mensaje para quien ganó; con `varios`, para todos los que ganaron juntos. */
@@ -313,7 +335,7 @@ export const T: Record<Lang, Dict> = {
     histCount: "{n} con tu cuenta",
     histCountBoth: "{n} en este equipo · {c} traídos de la cadena",
     histCountChain: "{c} traídos de la cadena",
-    histWhy: "Este equipo se acuerda de los sorteos que hiciste acá, con los nombres. Los que anclaste desde otro equipo se traen de la cadena: ahí están la fecha, el premio y qué puesto de la lista ganó, pero no los nombres, que nunca se publican. Si borrás los datos del sitio se pierde la lista de este equipo, no los sorteos, y con el comprobante la cuenta se puede rehacer siempre. Si compartiste un sorteo con enlace corto, queda una copia protegida que Tinkazo no puede leer, hasta que la borres con «Borrar el enlace corto».",
+    histWhy: "Este equipo se acuerda de los sorteos que hiciste acá, con los nombres. Los que anclaste desde otro equipo se traen de la cadena: ahí están la fecha, el premio y qué puesto de la lista ganó, pero no los nombres, que nunca se publican. Si borrás los datos del sitio se pierde la lista de este equipo, no los sorteos, y con el comprobante la cuenta se puede rehacer siempre. Si compartiste un sorteo o lo mostraste en grande, queda además una copia para su enlace corto, que solo se abre con el enlace: Tinkazo no la puede leer, y no vence, para que el sorteo se pueda volver a comprobar. Si hace falta borrarla, escribinos a hola@tinkazo.app.",
     histFromChain: "traído de la cadena",
     histRebuild: "rearmar comprobante",
     histRebuildTitle: "Rearmá el comprobante",
@@ -429,10 +451,17 @@ export const T: Record<Lang, Dict> = {
     impNotText: (f) => `«${f}» no es un archivo de texto. Si es una planilla, guardala como CSV y subila de nuevo. La lista quedó como estaba.`,
     impHeaderOut: (h) => `«${h}» es el encabezado de la columna: no entra al sorteo.`,
     impInvisibles: (n) => `Se quitaron caracteres invisibles de ${n === 1 ? "1 nombre" : `${n} nombres`}: no se ven, y con ellos el mismo nombre podía entrar dos veces.`,
+    // Una lista pegada de WhatsApp, numerada (21 de octubre de 2026, D09).
+    pegNumeracion: (n, antes, despues) => `Sacamos la numeración de ${n === 1 ? "1 línea" : `${n} líneas`}: «${antes}» entra como «${despues}».`,
+    pegSueltas: (n, ej) => (n === 1 ? `«${ej}» no tenía número: si no es una persona, borralo.` : `${n} líneas no tenían número, como «${ej}»: si no son personas, borralas.`),
+    pegIguales: (n) => (n === 1 ? "Un nombre estaba dos veces igual: entra una sola vez." : `${n} nombres estaban repetidos igual: cada uno entra una sola vez.`),
+    pegParecidos: (a, b, mas) => `«${a}» y «${b}» parecen la misma persona: si lo son, borrá uno.${mas ? ` Y ${mas === 1 ? "otro par" : `${mas} pares más`} así.` : ""}`,
     impSkipped: (n, lines) => (n === 1 ? `No se pudo leer 1 fila (línea ${lines}): quedó afuera.` : `No se pudieron leer ${n} filas (líneas ${lines}): quedaron afuera.`),
     impSkippedHint: "Suele ser una coma sin comillas. Corregila en el archivo y subilo de nuevo, o agregá ese nombre a mano.",
     impSkippedShort: (n) => (n === 1 ? "1 fila no se pudo leer" : `${n} filas no se pudieron leer`),
     impPasted: "Lo que pegaste",
+    // El borrador de la pestaña (21 de octubre de 2026): volvió de Google o se recargó.
+    borradorRepuesto: "Recuperamos la lista que tenías en esta pestaña.",
     impMailSame: "mismo correo",
     impMailOther: "otro correo",
     sample: "Cargar ejemplo", freeze: "Sellar la lista", draw: "Lanzar el sorteo", winners: "Cuántos ganan",
@@ -584,17 +613,10 @@ export const T: Record<Lang, Dict> = {
     cSapDone: (k) => pick([`¡Cayó el premio ${k}!`, `¡Ahí quedó el premio ${k}!`]),
     cSapTally: (k, of) => `Premio ${k} de ${of}`,
     cSapAlmost: "¡Casi!",
-    // --- Carnaval de Oruro. La entrada de la Diablada hasta el Socavón.
-    cOruStart: ["¡Arranca la entrada!", "¡Suena la banda!", "¡Que baile la diablada!"],
-    cOruCount: (n) => (n === 2 ? "¡Dos diablos en la comparsa!" : `¡${n} diablos en la comparsa!`),
-    cOruDance: ["¡Qué pasos!", "¡Cómo zapatean!", "¡Saltan los diablos!"],
-    cOruStop: (k, off, left) => (off === 0 ? `¡Cuadra ${k}! Siguen los ${left}` : off === 1 ? `¡Cuadra ${k}! Se queda uno, siguen ${left}` : `¡Cuadra ${k}! Se quedan ${off}, siguen ${left}`),
-    cOruStay: (n) => pick([`¡${n} se queda en la cuadra!`, `¡Hasta acá bailó ${n}!`, `¡${n} saluda desde la vereda!`]),
-    cOruLast: ["¡Última cuadra!", "¡Ya se ve el Socavón!", "¡La recta final de la entrada!"],
-    cOruMask: (n) => pick([`¡Casi se le cae la máscara a ${n}!`, `¡${n} tropieza!`, `¡Uy, ${n}!`]),
+    // --- La Entrada (Carnaval de Oruro): el desfile por fraternidades hasta el Socavón.
+    cOruLast: ["¡Ya se ve el Socavón!", "¡La recta final de la entrada!", "¡Al Socavón!"],
     cOruDuel: (a, b) => pick([`¡Contrapunto entre ${a} ${yE(b)} ${b}!`, `¡${a} ${yE(b)} ${b}, cara a cara!`]),
-    cOruArrive: ["¡LLEGÓ AL SOCAVÓN!", "¡SUENAN LAS CAMPANAS!", "¡ENTRA AL SANTUARIO!"],
-    cOruLeft: "EN LA COMPARSA",
+    cOruLeft: "EN LA ENTRADA",
     cOruBlock: (k, of) => `CUADRA ${k} DE ${of}`,
     // --- Luz roja, luz verde. El juego de patio, con el Faro que mira.
     cLuzIntro: ["¡Todos a la línea!", "¡A sus puestos!", "¡Frente al Faro!"],
@@ -679,7 +701,36 @@ export const T: Record<Lang, Dict> = {
     gameTotora: "Balsas de totora",
     gamePinata: "Piñata",
     cPinPrize: (k) => (k > 1 ? pick(["¡Salen con premio!", "¡Se llevan premio y salen!"]) : pick(["¡Sale con premio!", "¡Se lleva premio y sale!"])),
-    gameOruro: "Carnaval de Oruro",
+    gameOruro: "La Entrada",
+    // La Entrada: la sala aplaude con la banda, cada fraternidad se presenta y se queda entera.
+    cOruClap: ["¡Aplaudan al ritmo de la banda!", "¡Palmas con la banda!", "¡Todos a aplaudir con la banda!"],
+    cOruClapHud: "¡APLAUDAN!",
+    cOruEnter: "ENTRAN",
+    cOruFrat: (art, name, dance) => pick([`¡Entran ${art} ${name}, bailando ${dance}!`, `¡Pasan ${art} ${name}, bailando ${dance}!`, `¡Llegan ${art} ${name}, bailando ${dance}!`]),
+    cOruGo: (n, f) => (n === 1 ? "¡Un bailarín: arranca el recorrido!" : n === 2 ? "¡Dos bailarines: arranca el recorrido!" : f > 1 ? `¡${n} bailarines en ${f} fraternidades: arranca el recorrido!` : `¡${n} bailarines: arranca el recorrido!`),
+    cOruFratStay: (k, art, name, prizes) => `¡Cuadra ${k}! Se quedan ${art} ${name}${prizes === 1 ? ", con un premio" : prizes > 1 ? `, con ${prizes} premios` : ""}`,
+    cOruOnly: (art, name) => pick([`¡Solo quedan ${art} ${name}!`, `¡${art.charAt(0).toUpperCase()}${art.slice(1)} ${name}, la última fraternidad!`]),
+    cOruMemStay: (k, ns) => (ns.length === 1 ? `¡Cuadra ${k}! Se queda ${ns[0]}` : `¡Cuadra ${k}! Se quedan ${joinList(ns, "y")}`),
+    cOruMemMany: (k, c, art, name) => `¡Cuadra ${k}! Se quedan ${c} de ${art} ${name}`,
+    cOruMemPrize: (k, c, prizes) => (c === 1 ? `¡Cuadra ${k}! Se queda uno, con premio` : prizes === 1 ? `¡Cuadra ${k}! Se quedan ${c}, uno con premio` : `¡Cuadra ${k}! Se quedan ${c}, ${prizes} con premio`),
+    cOruFake: (art, name) => `¿Se quedan ${art} ${name}?`,
+    cOruFakeOne: (n) => `¿Se queda ${n}?`,
+    cOruFakeNo: (plural) => (plural ? pick(["¡No! ¡Siguen bailando!", "¡Nada! ¡Siguen!"]) : pick(["¡No! ¡Sigue bailando!", "¡Nada! ¡Sigue!"])),
+    cOruFreeze: ["¡Se calló la banda!", "¡Silencio! ¡Quietos!", "¡Se cortó la banda!"],
+    cOruFreezeBack: ["¡Sigue la banda!", "¡Vuelve la banda!", "¡Y sigue la entrada!"],
+    cOruScare: (n, prenda) => (prenda === "sombrero" ? `¡Casi se le vuela el sombrero a ${n}!` : prenda === "montera" ? `¡Casi se le cae la montera a ${n}!` : `¡Casi se le cae la máscara a ${n}!`),
+    cOruTrip: (n) => pick([`¡Trastabilla ${n}!`, `¡Uy, ${n}!`, `¡${n} casi se cae!`]),
+    cOruFall: (n, prenda) => {
+      const que = prenda === "sombrero" ? "se le voló el sombrero" : prenda === "montera" ? "se le cayó la montera" : "se le cayó la máscara";
+      return n ? `¡A ${n} ${que}!` : `¡${que.charAt(0).toUpperCase()}${que.slice(1)}!`;
+    },
+    cOruDanza: (d) => ({ diablada: "Diablada", morenada: "Morenada", caporales: "Caporales", tinkus: "Tinkus", llamerada: "Llamerada" })[d] ?? d,
+    cOruFratTitle: (art, name) => `${art} ${name}`,
+    cOruRosterSub: (dance, c) => `${dance} · ${c} ${c === 1 ? "bailarín" : "bailarines"}`,
+    cOruArriveFrat: (art, name) => {
+      const Art = `${art.charAt(0).toUpperCase()}${art.slice(1)}`;
+      return pick([`¡${Art} ${name} llegaron al Socavón!`, `¡${Art} ${name}, hasta el Socavón!`, `¡Campanas para ${art} ${name}: llegaron al Socavón!`]);
+    },
     gameLuz: "Luz roja, luz verde",
     gameCho: "Chovena",
     cPasSpread: ["¡Se tiende el aguayo!", "¡Aguayo al piso!", "¡A ver ese aguayo!"],
@@ -818,6 +869,9 @@ export const T: Record<Lang, Dict> = {
     espVolver: "Volver a la página",
     espVer: "Mostrar la espera en grande",
     espPie: (n) => `${n} en la lista, sellada: ya nadie la puede cambiar.`,
+    // La espera que desemboca en el show (21 de octubre de 2026): cuando nace el número.
+    espStickerYa: "El número que decide ya existe",
+    espAprobar: "Tu billetera te va a pedir que lo apruebes.",
     winnerLabel: "Lo que salió", verifyTitle: "Por si alguien duda",
     verifyHow: "Cualquiera puede rehacer este sorteo desde su celular y le tiene que dar el mismo nombre. No hace falta que me creas.",
     verifyPasos: "Paso a paso: 1) abrí la ronda de quicknet y verificá su prueba con la clave pública del faro · 2) randomness = sha256(prueba) · 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, salteando repetidos. El protocolo entero está en github.com/nema1502/tinkazo, en docs/protocolo.md.",
@@ -964,7 +1018,7 @@ export const T: Record<Lang, Dict> = {
     meetT3T: "El enlace permite rehacer el sorteo",
     meetT3B: "El comprobante trae la lista y el número. Cualquiera lo abre desde su celular y le tiene que dar el mismo nombre.",
     meetNamesT: "Qué pasa con los nombres",
-    meetNamesB: "Los nombres no se publican: quedan en tu equipo y en el comprobante que compartís, que con enlace corto se guarda protegido y Tinkazo no lo puede leer. Si compartís el comprobante, compartís también la lista. En Stellar no queda ningún nombre.",
+    meetNamesB: "Los nombres no se publican: quedan en tu equipo y en el comprobante que compartís. Al compartir o mostrar en grande, queda además una copia para el enlace corto, que solo se abre con el enlace: Tinkazo no la puede leer. Si compartís el comprobante, compartís también la lista. En Stellar no queda ningún nombre.",
     meetListaDet: "En Stellar quedan la huella de la lista, la cantidad de entradas, cuántos ganadores, la ronda, la hora del sello y su número de bloque, el premio o título que escribiste, la dirección de quien organiza y el número del sorteo; y, al sortear, la prueba que publicó la ronda, el número que decidió la ronda, la hora del sorteo, si ya se sorteó, su número de bloque y las posiciones de los ganadores.",
     meetKnowT: "Lo que hay que saber",
     meetK1: "Para sortear hay que entrar con tu cuenta. Con Google, en dos toques.",
@@ -996,7 +1050,7 @@ export const T: Record<Lang, Dict> = {
     claseW3T: "Sin cuentas para los alumnos",
     claseW3B: "Los alumnos no instalan nada ni se crean una cuenta. Solo quien sortea entra con la suya.",
     clasePrivT: "Privacidad",
-    clasePrivB: "Los nombres quedan en el navegador de quien sortea y no se publican. Ningún servidor de Tinkazo los puede leer: si compartís con enlace corto, lo que se guarda es una copia protegida. Si compartís el comprobante, compartís también la lista: mejor que no salga de la clase, sobre todo si hay menores de edad.",
+    clasePrivB: "Los nombres quedan en el navegador de quien sortea y no se publican. Al compartir o mostrar en grande, queda además una copia para el enlace corto, que solo se abre con el enlace: Tinkazo no la puede leer. Pero quien tenga el enlace, la foto o el QR de la pantalla ve la lista entera: mejor que no salga de la clase, sobre todo si hay menores de edad. Si hace falta borrar esa copia, escribinos a hola@tinkazo.app.",
     verifKicker: "Para comprobar",
     verifH1: "Sorteo verificable: cualquiera puede rehacer el resultado",
     verifLead: "Un sorteo verificable deja las pruebas a la vista. Acá se explica qué se comprueba, quién lo comprueba y qué todavía no promete.",
@@ -1072,7 +1126,7 @@ export const T: Record<Lang, Dict> = {
     faq4q: "¿Cómo sé que no hiciste trampa?",
     faq4a: "No hace falta creerme: el comprobante trae la lista, la ronda y la prueba, y tu celular rehace el sorteo. Si alguien tocó algo, da otro resultado.",
     faq5q: "¿Qué queda guardado y dónde?",
-    faq5a: "En Stellar queda, a nombre de tu cuenta, la huella de la lista, cuántos son y cuántos ganan, el premio que escribiste, la ronda, la hora del sello y la del sorteo, y los puestos de quien ganó, y los datos que enumera Seguridad. Los nombres no se publican nunca: quedan en tu equipo y en el comprobante que compartís.",
+    faq5a: "En Stellar queda, a nombre de tu cuenta, la huella de la lista, cuántos son y cuántos ganan, el premio que escribiste, la ronda, la hora del sello y la del sorteo, y los puestos de quien ganó, y los datos que enumera Seguridad. Los nombres no se publican nunca: quedan en tu equipo y en el comprobante que compartís. Al compartir o mostrar en grande, queda además una copia para el enlace corto, que solo se abre con el enlace y que Tinkazo no puede leer.",
     finT: "¿Lo usamos en tu próximo evento?",
     appTitle: "Tu sorteo",
     tabNuevo: "Nuevo sorteo",
@@ -1085,6 +1139,9 @@ export const T: Record<Lang, Dict> = {
     histOnChain: "Ver en Stellar",
     histStateDone: "Sorteado",
     histStatePending: "Sellado, sin sortear",
+    // Un sorteo que quedó sin sortear en este equipo, arriba de la lista (21 de octubre de 2026).
+    pendienteT: "Tenés un sorteo sellado sin sortear: {que}.",
+    pendienteBtn: "Retomarlo",
     histWon: "ganó",
     histWonMany: "ganaron",
     histOtherDevice: "La lista quedó en el equipo donde se selló.",
@@ -1103,6 +1160,10 @@ export const T: Record<Lang, Dict> = {
     salaCopiado: "Copiado ✓",
     vSealsEjemplo: "Es la lista de ejemplo del sitio: la sella cualquiera que lo prueba con su cuenta, así que verla repetida no dice nada.",
     salaPie: "Si falta alguien o alguien está dos veces, es ahora: después de sellar, la lista no se puede cambiar. Cuando se selle, la huella del sorteo tiene que empezar igual.",
+    // La lista ya sellada, en el proyector y en el celular (21 de octubre de 2026).
+    salaTSellada: "La lista sellada",
+    salaPieSellada: "Esta es la lista que decide el sorteo: ya está sellada y no cambia. Buscate mientras nace el número.",
+    listaNotaSellada: "Esta es la lista sellada: ya no cambia, y entre estos nombres sale quien gana. Buscate. La huella del sorteo empieza con estas letras.",
     buscateL: "¿Estás en la lista?",
     buscatePh: "Escribí tu nombre",
     buscateUno: "Estás en el puesto {p} de {n}.",
@@ -1144,7 +1205,7 @@ export const T: Record<Lang, Dict> = {
     cf5t: "Cualquiera lo comprueba",
     cf5b: "El comprobante trae la lista, la ronda y la firma. Desde un celular, el sitio rehace todo y dice si da lo mismo. Si alguien tocó algo, no da.",
     cfGuardaT: "Qué queda guardado y dónde",
-    cfGuardaB: "Lo que se graba en Stellar sigue a tu cuenta en cualquier equipo. Los nombres no: quedan en el navegador donde sellaste y en el comprobante. Si lo compartís con enlace corto, el comprobante queda además guardado, protegido, sin que Tinkazo lo pueda leer.",
+    cfGuardaB: "Lo que se graba en Stellar sigue a tu cuenta en cualquier equipo. Los nombres no: quedan en el navegador donde sellaste y en el comprobante. Si lo compartís o lo mostrás en grande, queda además una copia en Cloudflare para el enlace corto, protegida con una clave que va solo en el enlace: Tinkazo no la puede leer.",
     cfColQue: "Qué",
     cfColDonde: "Dónde",
     cfColQuien: "Quién lo ve",
@@ -1160,9 +1221,9 @@ export const T: Record<Lang, Dict> = {
     cfG4a: "Tu llave",
     cfG4b: "Con Google, la guarda Pollar; con Freighter, tu extensión; con la cuenta de prueba, tu navegador",
     cfG4c: "Nadie más",
-    cfG5a: "El enlace corto, al compartir o mostrar en grande",
-    cfG5b: "Una copia protegida del comprobante, en Cloudflare, hasta que la borres desde Mis sorteos",
-    cfG5c: "Quien tenga el enlace o el QR. Tinkazo no la puede leer",
+    cfG5a: "La copia del enlace corto, al compartir o mostrar en grande",
+    cfG5b: "En Cloudflare, sin vencimiento, para que el sorteo se pueda volver a comprobar. Se borra si lo pedís a hola@tinkazo.app",
+    cfG5c: "Quien tenga el enlace o su QR. Tinkazo no la puede leer",
     cfNoT: "¿Y si no confío en Tinkazo?",
     cfNoB: "El protocolo está escrito y el código es abierto: cualquiera puede rehacer un sorteo sin pasar por este sitio.",
     cfSeg: "Qué impide el protocolo y qué no →",
@@ -1206,8 +1267,8 @@ export const T: Record<Lang, Dict> = {
     jgChoB: "El baile chiquitano de Santa Cruz: la rueda gira tomada de la mano y, cuando se corta la música, el que trastabilla se suelta y sale. La sala aplaude al ritmo y se congela con el corte. Mejor de doce a ochenta.",
     loreChoQ: "¿Qué es la chovena?",
     loreChoA: "Un baile de origen chiquitano, de Santa Cruz, en dos por cuatro: las parejas, tomadas de la mano, forman círculos y filas. Se baila en las fiestas religiosas y en carnaval.",
-    jgOruN: "Carnaval de Oruro",
-    jgOruB: "La entrada de la Diablada: la comparsa baila por las cuadras, entre las graderías llenas, y en cada arco se quedan algunos. Los dos últimos hacen un contrapunto frente al Socavón, y el que llega entra con campanas y cohetillos. Hasta doscientas.",
+    jgOruN: "La Entrada",
+    jgOruB: "El Carnaval de Oruro, por fraternidades: cada grupo de la lista baila lo suyo (Diablada, Morenada, Caporales, Tinkus o Llamerada) y pasa frente al palco con el nombre de cada uno. En cada cuadra se queda una fraternidad entera, y en la última se quedan de a varios hasta el contrapunto frente al Socavón. Hasta doscientas.",
     jgSapoN: "Sapo",
     jgSapoB: "El juego de las ferias y los patios: una rana en el medio del cajón y un agujero con el nombre de cada uno. Las argollas pegan en la madera, bailan en el borde de un vecino y salen, y la última cae en el agujero de quien gana. Con más de doce, los nombres se tachan en oleadas hasta que quedan doce. Hasta doscientas, con hasta doce ganadores.",
     jgQuienN: "De pie",
@@ -1235,7 +1296,7 @@ export const T: Record<Lang, Dict> = {
     gcChovenaMany: "Bailan en rueda, de la mano. Cuando se corta la música, el que trastabilla sale. Los últimos en salir ganan premio, y el último que queda bailando se lleva el primero.",
     gcTrompo: "Los trompos chocan y se sacan del ruedo. Gana el último que sigue bailando.",
     gcPinata: "Con cada palo caen caramelos. Gana el último que queda adentro.",
-    gcOruro: "En cada cuadra se quedan bailarines. Gana el que llega al Socavón.",
+    gcOruro: "En cada cuadra se queda una fraternidad entera. Gana quien llega al Socavón.",
     gcTombola: "Cada uno tiene una bola con su número, y la lista está al lado del bombo. Gana la que cae en el vaso.",
     gcWheel: "Gana el gajo que queda bajo la flecha. Con muchas personas, cada gajo reúne a un grupo.",
     gcTeleferico: "En cada estación se baja un grupo entero. Gana quien llega a la cumbre.",
@@ -1268,14 +1329,16 @@ export const T: Record<Lang, Dict> = {
     tmQ2T: "Quien organiza responde",
     tmQ2B: "El sorteo es tuyo: el premio, las bases, avisarle a quien gana y lo que pida la ley de tu país. En algunos, como Brasil, Colombia o México, hasta un sorteo gratuito pide permiso. Las bases que arma Tinkazo ayudan, pero no reemplazan lo que diga tu ley.",
     tmQ3T: "Dónde van los nombres",
-    tmQ3B: "Los nombres nunca suben a la cadena. Suben la huella de la lista, la cantidad de entradas, cuántos ganadores, la ronda, la hora del sello y su número de bloque, el premio o título que escribiste, la dirección de quien organiza y el número del sorteo; y, al sortear, la prueba que publicó la ronda, el número que decidió la ronda, la hora del sorteo, si ya se sorteó, su número de bloque y las posiciones de los ganadores. El comprobante lleva los nombres en la parte de la dirección que el navegador no le manda a ningún servidor; por eso quien comparte el enlace comparte la lista, y si avisás por WhatsApp, el enlace con la lista pasa por WhatsApp. El QR y las caras se dibujan acá mismo. Al compartir o al mostrar el resultado en grande se arma un enlace corto: en Cloudflare queda una copia del comprobante protegida con una clave que va solo en el enlace. Tinkazo no la puede leer, y la abre quien tenga el enlace o el QR, que lleva la lista. La borrás con «Borrar el enlace corto», en Mis sorteos: el permiso para hacerlo queda en este equipo.",
+    tmQ3B: "Los nombres nunca suben a la cadena. Suben la huella de la lista, la cantidad de entradas, cuántos ganadores, la ronda, la hora del sello y su número de bloque, el premio o título que escribiste, la dirección de quien organiza y el número del sorteo; y, al sortear, la prueba que publicó la ronda, el número que decidió la ronda, la hora del sorteo, si ya se sorteó, su número de bloque y las posiciones de los ganadores. El comprobante lleva los nombres en la parte de la dirección que el navegador no le manda a ningún servidor; por eso quien comparte el enlace comparte la lista, y si avisás por WhatsApp, el enlace con la lista pasa por WhatsApp. El QR y las caras se dibujan acá mismo. Al compartir o al mostrar el resultado en grande, además, queda una copia en Cloudflare para el enlace corto: lo contamos abajo, en «El enlace corto».",
     tmQ4T: "Lo que queda guardado",
-    tmQ4B: "Si conectás una cuenta, su dirección pública queda en el contrato como la de quien organizó el sorteo: es pública a propósito, para que cada sorteo tenga dueño. Si entrás con Google, Pollar recibe tu nombre, tu correo y tu foto, y guarda la llave; Tinkazo nunca la ve. En este equipo quedan tus preferencias, como el idioma, el sonido y el ritmo del show; el historial de tus sorteos con sus listas, que se borra desde el sitio; y la llave de la cuenta de prueba si la usás.",
+    tmQ4B: "Si conectás una cuenta, su dirección pública queda en el contrato como la de quien organizó el sorteo: es pública a propósito, para que cada sorteo tenga dueño. Si entrás con Google, Pollar recibe tu nombre, tu correo y tu foto, y guarda la llave; Tinkazo nunca la ve. En este equipo quedan tus preferencias, como el idioma, el sonido y el ritmo del show; el historial de tus sorteos con sus listas, que se borra desde el sitio; la lista que estás armando, solo en esa pestaña y hasta que la sellás; los enlaces cortos que armaste o abriste acá; y la llave de la cuenta de prueba si la usás.",
+    tmCortoT: "El enlace corto",
+    tmCortoB: "Al compartir un sorteo o mostrarlo en grande se arma un enlace corto, fácil de mandar y con un QR que se lee desde lejos. Para eso queda en Cloudflare una copia del comprobante, con la lista entera, protegida con una clave que va solo en el enlace: Tinkazo no tiene esa clave y no la puede leer, y la abre quien tenga el enlace o su QR. La copia no vence, para que el sorteo se pueda volver a comprobar. Si hace falta borrarla, por ejemplo porque alguien de la lista lo pide, escribinos a hola@tinkazo.app con el enlace y la borramos; alcanza con lo que va antes del #, y sin esa parte ni nosotros podemos abrirla. Borrarla hace que el enlace corto deje de abrir para todos los que lo recibieron, y no le quita la lista a quien ya la abrió.",
     tmMoreT: "Y además",
-    tmMore1: "No hay publicidad ni rastreadores que te sigan de un sitio a otro, ni una base de datos de participantes que podamos leer. Durante un sorteo el sitio pide afuera el número que publica un faro público y, si tenés cuenta, lo que hace falta de la red Stellar y de Pollar; al compartir o mostrar en grande, guarda el enlace corto en Cloudflare.",
-    tmMore2: "El sitio está en Vercel, que como todo alojamiento anota las visitas: dirección IP y navegador. También contamos visitas con la analítica de Vercel: qué página se abrió, desde qué país y en qué tipo de equipo, sin cookies y sin guardar quién sos. Si tu navegador pide que no te sigan, no te contamos. Los nombres no llegan a ninguno de los dos: van después del # de la dirección, que el navegador no le manda al servidor, y esa parte se corta antes de contar.",
+    tmMore1: "No hay publicidad ni rastreadores que te sigan de un sitio a otro, ni una base de datos de participantes que podamos leer. Durante un sorteo el sitio pide afuera el número que publica un faro público y, si tenés cuenta, lo que hace falta de la red Stellar y de Pollar; al compartir o mostrar en grande, guarda en Cloudflare la copia del enlace corto.",
+    tmMore2: "El sitio está en Vercel, que como todo alojamiento anota las visitas: dirección IP y navegador. También contamos visitas con la analítica de Vercel: qué página se abrió, desde qué país y en qué tipo de equipo, sin cookies y sin guardar quién sos. Si tu navegador pide que no te sigan, no te contamos. Los nombres no llegan a ninguno de los dos: van después del # de la dirección, que el navegador no le manda al servidor, y esa parte se corta antes de contar. El enlace corto pasa por Cloudflare, que también ve la dirección IP y el navegador de quien lo arma o lo abre; nosotros usamos la dirección solo para contar cuántos enlaces arma cada una por hora, y no la guardamos.",
     tmMore3: "Tinkazo es código abierto (MIT) y se ofrece tal cual, sin garantías. Hoy el contrato vive en testnet, la red de prueba de Stellar, que se borra entera el 16 de diciembre de 2026. Si algo falla a mitad de un sorteo, cualquiera lo rehace con la lista y la ronda: para eso está el protocolo.",
-    tmMore4: "Vigentes desde el 16 de octubre de 2026, cuando sumamos el conteo de visitas. Si cambian, cambia esta página, con su fecha.",
+    tmMore4: "Vigentes desde el 21 de octubre de 2026, cuando sumamos el enlace corto. Si cambian, cambia esta página, con su fecha.",
     tmMore5: '¿Dudas, o algo que corregir? Escribinos a <a href="mailto:hola@tinkazo.app">hola@tinkazo.app</a>.',
     tmLinkLegal: "Lo que averiguamos de las leyes, país por país ↗",
     sgKicker: "Seguridad",
@@ -1298,7 +1361,7 @@ export const T: Record<Lang, Dict> = {
     sgLimit2: "Los nombres nunca suben a la cadena. Suben la huella de la lista, la cantidad de entradas, cuántos ganadores, la ronda, la hora del sello y su número de bloque, el premio o título que escribiste, la dirección de quien organiza y el número del sorteo; y, al sortear, la prueba que publicó la ronda, el número que decidió la ronda, la hora del sorteo, si ya se sorteó, su número de bloque y las posiciones de los ganadores.",
     sgLimit3: "Lo que el contrato guarda tiene alquiler: si nadie lo extiende, la entrada se archiva y deja de leerse hasta que alguien la restaure pagando. Y hoy el contrato está en testnet, que Stellar borra entera el 16 de diciembre de 2026: ahí sí se pierde el registro y el veredicto deja de ser verde.",
     sgLimit4: "Si el faro público se cayera entero y para siempre, un sorteo sellado quedaría sin número. Hay cuatro relays, tres de drand.sh y uno de Cloudflare, y se rotan hasta que uno contesta.",
-    sgLimitCorto: "El enlace corto (tinkazo.app/c/…) guarda en Cloudflare una copia del comprobante protegida con una clave que va solo en el enlace: Tinkazo no la puede leer. Tampoco decide nada: la página vuelve a calcular el sorteo y lo compara con Stellar, y si el servicio se cae, el enlace largo de siempre sigue andando.",
+    sgLimitCorto: "El enlace corto (tinkazo.app/c/…) guarda en Cloudflare una copia del comprobante, cifrada en el navegador con una clave que va solo en el enlace: Tinkazo no la puede leer, y quien tenga el enlace o su QR ve la lista entera. No decide nada: abre el mismo comprobante, que se rehace como siempre. No vence, para que el sorteo se pueda volver a comprobar; si alguien necesita que se borre, lo pide a hola@tinkazo.app, y borrarla no le quita la lista a quien ya la abrió. Si el servicio se cae, el enlace corto no abre mientras dure la caída: el enlace largo sigue andando, y quien organiza lo tiene en Mis sorteos, en el equipo donde sorteó.",
     sgLimit5: "El sello impide cambiar la lista después, no armarla mal desde el principio: quien organiza puede meter nombres de relleno o repetidos, o dejar afuera a alguien. Por eso, antes de sellar, la lista se puede mostrar a la sala con un QR para que cada uno se busque en su celular; los repetidos salen marcados, el comprobante tiene un buscador, y la importación de Luma propone solo a los que hicieron check-in.",
     sgReportT: "Si encontrás una forma de torcer un sorteo",
     sgReportB: "Abrí un issue. Es el reporte que más sirve, y el proyecto es código abierto justamente para eso: el protocolo completo, el contrato y las amenazas conocidas están escritos y se pueden auditar sin pedirle permiso a nadie.",
@@ -1509,7 +1572,7 @@ export const T: Record<Lang, Dict> = {
     cKicker: "Comprobante de un sorteo",
     cAbriendo: "Abriendo el comprobante…", cAbriendoB: "En un momento ves quién ganó y lo comprobás vos.",
     cRedT: "No pudimos abrir el comprobante", cRedB: "Revisá tu conexión y probá de nuevo.",
-    cNoExisteT: "Este enlace ya no existe", cNoExisteB: "Quien lo compartió lo borró, o se copió mal. Pedile que te lo mande de nuevo.",
+    cNoExisteT: "Este enlace ya no existe", cNoExisteB: "Se borró a pedido de alguien, o se copió mal. Pedile a quien te lo mandó que lo comparta de nuevo.",
     cRotoT: "Este enlace no se puede abrir", cRotoB: "Puede que se haya copiado mal o le falte un pedazo. Pedile a quien te lo mandó que lo comparta de nuevo.",
     cOtraVez: "Probar de nuevo", cPortada: "Ir a la portada",
     cmpVerificarEvUno: "Si querés verificarlo, entrá acá:\n{enlace}",
@@ -1523,13 +1586,8 @@ export const T: Record<Lang, Dict> = {
     cmpFotoAlt: "La foto con quién ganó y el QR para comprobarlo",
     cmpSinFoto: "No se pudo armar la foto: el mensaje trae el enlace igual.",
     cmpPrivLista: "Quien tenga la foto o el enlace puede ver la lista entera.",
-    cmpPrivCorto: "El enlace corto guarda una copia protegida que Tinkazo no puede leer.",
-    cmpPrivBorrar: "La borrás desde Mis sorteos.",
-    cmpBorrarCorto: "Borrar el enlace corto", cmpBorrarCortos: "Borrar los enlaces cortos",
-    cmpBorrarCortoConf: "Quien tenga el enlace corto o su QR ya no lo va a poder abrir. El sorteo y su comprobante quedan como están. ¿Lo borramos?",
-    cmpBorrarCortosConf: "Se borran todos los enlaces cortos que se crearon desde este equipo: quien los tenga, o tenga su QR, ya no los va a poder abrir. Los sorteos y sus comprobantes quedan como están. ¿Dale?",
-    cmpCortoBorrado: "Enlace corto borrado.", cmpCortosBorrados: "Enlaces cortos borrados.",
-    cmpCortoNoSeBorro: "No se pudo borrar: revisá tu conexión y probá de nuevo.",
+    cmpPrivCorto: "El enlace corto guarda una copia que solo se abre con el enlace, para que el sorteo se pueda volver a comprobar. Tinkazo no la puede leer.",
+    cmpPrivBorrar: "Si hace falta borrarla, escribinos a hola@tinkazo.app.",
     fotoEscanear: "Escaneá para comprobarlo",
     fotoSinQr: "Para comprobarlo, abrí el enlace que va con esta foto.",
     fotoNumero: "Sorteo #{n}", fotoPrueba: "red de prueba", fotoEvento: "Evento",
@@ -1543,6 +1601,7 @@ export const T: Record<Lang, Dict> = {
     evnNombrar: "Ponerle nombre",
     evnSumado: "Sumado a {nombre}.", evnQuitado: "Quitado de {nombre}.", evnNombreVacio: "Ponele un nombre al evento.",
     evnCreado: "Evento creado: {nombre}.", evnSinSorteos: "Todavía no tiene sorteos: sumale alguno desde Mis sorteos.",
+    evnRenombrado: "Nombre guardado: {nombre}.",
     vCompartir: "Compartir este sorteo",
     cTroSpent: (n) => pick([`¡Se le acabó la cuerda a ${n}!`, `¡Se apagó el trompo de ${n}!`, `¡${n} se queda sin cuerda!`]),
     // --- Constelación, sapo y ¿Quién es? (7 de octubre de 2026).
@@ -1579,7 +1638,9 @@ export const T: Record<Lang, Dict> = {
     pasoHecho: "hecho", pasoActual: "paso actual",
     sigRegion: "Lo que sigue",
     sigPaso: "Paso {n} de 4",
-    sigLista: "Lista de {n} personas",
+    // Con el premio, o "sin premio", detrás (pasos.ts, detalleDeLista): sellar lo fija (21 de octubre de 2026, D19).
+    sigLista: "{n} personas",
+    sigSinPremio: "sin premio",
     sigSellando: "Sellando la lista",
     sigEspera: "Esperando la ronda",
     sigRonda: "La ronda ya nació",
@@ -1632,7 +1693,7 @@ export const T: Record<Lang, Dict> = {
     histCount: "{n} on your account",
     histCountBoth: "{n} on this device · {c} from the chain",
     histCountChain: "{c} from the chain",
-    histWhy: "This device remembers the draws you ran here, names included. The ones you anchored from another device come from the chain: the date, the prize and which spot on the list won are there, but not the names, which are never published. Clearing the site data loses this device's list, not the draws, and with the receipt the math can always be redone. If you shared a draw with a short link, a protected copy that Tinkazo can't read stays until you delete it with “Delete the short link”.",
+    histWhy: "This device remembers the draws you ran here, names included. The ones you anchored from another device come from the chain: the date, the prize and which spot on the list won are there, but not the names, which are never published. Clearing the site data loses this device's list, not the draws, and with the receipt the math can always be redone. If you shared a draw or showed it big, there is also a copy for its short link, which only opens with the link: Tinkazo can't read it, and it doesn't expire, so the draw can be checked again. If it needs to be deleted, write to hola@tinkazo.app.",
     histFromChain: "from the chain",
     histRebuild: "rebuild receipt",
     histRebuildTitle: "Rebuild the receipt",
@@ -1746,10 +1807,17 @@ export const T: Record<Lang, Dict> = {
     impNotText: (f) => `"${f}" isn't a text file. If it's a spreadsheet, save it as CSV and upload it again. The list was left as it was.`,
     impHeaderOut: (h) => `"${h}" is the column header: it doesn't go into the draw.`,
     impInvisibles: (n) => `Removed invisible characters from ${n === 1 ? "1 name" : `${n} names`}: they don't show, and with them the same name could get in twice.`,
+    // A numbered list pasted from WhatsApp (Oct 21, 2026, D09).
+    pegNumeracion: (n, antes, despues) => `We removed the numbering from ${n === 1 ? "1 line" : `${n} lines`}: "${antes}" goes in as "${despues}".`,
+    pegSueltas: (n, ej) => (n === 1 ? `"${ej}" had no number: if it isn't a person, delete it.` : `${n} lines had no number, like "${ej}": if they aren't people, delete them.`),
+    pegIguales: (n) => (n === 1 ? "One name was there twice, exactly the same: it goes in once." : `${n} names were repeated exactly: each goes in once.`),
+    pegParecidos: (a, b, mas) => `"${a}" and "${b}" look like the same person: if they are, delete one.${mas ? ` And ${mas === 1 ? "one more pair" : `${mas} more pairs`} like that.` : ""}`,
     impSkipped: (n, lines) => (n === 1 ? `1 row couldn't be read (line ${lines}) and was left out.` : `${n} rows couldn't be read (lines ${lines}) and were left out.`),
     impSkippedHint: "It's usually a comma without quotes. Fix it in the file and upload it again, or add that name by hand.",
     impSkippedShort: (n) => (n === 1 ? "1 row couldn't be read" : `${n} rows couldn't be read`),
     impPasted: "What you pasted",
+    // The tab's draft (Oct 21, 2026): back from Google, or reloaded.
+    borradorRepuesto: "We brought back the list you had in this tab.",
     impMailSame: "same email",
     impMailOther: "different email",
     sample: "Load sample", freeze: "Seal the list", draw: "Run the draw", winners: "How many win",
@@ -1895,16 +1963,9 @@ export const T: Record<Lang, Dict> = {
     cSapDone: (k) => pick([`Prize ${k} dropped in!`, `There it rests: prize ${k}!`]),
     cSapTally: (k, of) => `Prize ${k} of ${of}`,
     cSapAlmost: "Almost!",
-    cOruStart: ["The entrada begins!", "The band strikes up!", "Let the diablada dance!"],
-    cOruCount: (n) => (n === 2 ? "Two devils in the troupe!" : `${n} devils in the troupe!`),
-    cOruDance: ["What steps!", "Look at them stomp!", "The devils leap!"],
-    cOruStop: (k, off, left) => (off === 0 ? `Block ${k}! All ${left} go on` : off === 1 ? `Block ${k}! One stays, ${left} go on` : `Block ${k}! ${off} stay, ${left} go on`),
-    cOruStay: (n) => pick([`${n} stays at this block!`, `${n} danced this far!`, `${n} waves from the sidewalk!`]),
-    cOruLast: ["Last block!", "The Socavón is in sight!", "The final stretch of the entrada!"],
-    cOruMask: (n) => pick([`${n}'s mask almost fell off!`, `${n} stumbles!`, `Whoa, ${n}!`]),
+    cOruLast: ["The Socavón is in sight!", "The final stretch of the entrada!", "On to the Socavón!"],
     cOruDuel: (a, b) => pick([`A face-off between ${a} and ${b}!`, `${a} and ${b}, face to face!`]),
-    cOruArrive: ["TO THE SOCAVÓN!", "THE BELLS RING!", "INTO THE SANCTUARY!"],
-    cOruLeft: "IN THE TROUPE",
+    cOruLeft: "IN THE ENTRADA",
     cLuzIntro: ["Everyone to the line!", "Take your places!", "Face the Lighthouse!"],
     cLuzCount: (n) => (n === 2 ? "Two runners face the Lighthouse!" : `${n} runners face the Lighthouse!`),
     cLuzGreen: ["Green light!", "Green, run!", "Go, go!"],
@@ -1984,7 +2045,33 @@ export const T: Record<Lang, Dict> = {
     gameTotora: "Reed boats",
     gamePinata: "Piñata",
     cPinPrize: (k) => (k > 1 ? pick(["Out with prizes!", "They take prizes and leave!"]) : pick(["Out with a prize!", "Takes a prize and leaves!"])),
-    gameOruro: "Oruro Carnival",
+    gameOruro: "La Entrada",
+    // La Entrada: the room claps with the band, every group passes by and stays behind whole.
+    cOruClap: ["Clap along with the band!", "Clap to the band's beat!", "Everyone, clap with the band!"],
+    cOruClapHud: "CLAP!",
+    cOruEnter: "HERE COME",
+    cOruFrat: (_art, name, dance) => pick([`Here come the ${name}, dancing ${dance}!`, `The ${name} pass by, dancing ${dance}!`, `In come the ${name}, dancing ${dance}!`]),
+    cOruGo: (n, f) => (n === 1 ? "One dancer: the parade sets off!" : n === 2 ? "Two dancers: the parade sets off!" : f > 1 ? `${n} dancers in ${f} groups: the parade sets off!` : `${n} dancers: the parade sets off!`),
+    cOruFratStay: (k, _art, name, prizes) => `Block ${k}! The ${name} stay behind${prizes === 1 ? ", with a prize" : prizes > 1 ? `, with ${prizes} prizes` : ""}`,
+    cOruOnly: (_art, name) => pick([`Only the ${name} are left!`, `The ${name}, the last group!`]),
+    cOruMemStay: (k, ns) => (ns.length === 1 ? `Block ${k}! ${ns[0]} stays` : `Block ${k}! ${joinList(ns, "and")} stay`),
+    cOruMemMany: (k, c, _art, name) => `Block ${k}! ${c} of the ${name} stay`,
+    cOruMemPrize: (k, c, prizes) => (c === 1 ? `Block ${k}! One stays, with a prize` : prizes === 1 ? `Block ${k}! ${c} stay, one with a prize` : `Block ${k}! ${c} stay, ${prizes} with prizes`),
+    cOruFake: (_art, name) => `Are the ${name} staying?`,
+    cOruFakeOne: (n) => `Is ${n} staying?`,
+    cOruFakeNo: (plural) => (plural ? pick(["No! They keep dancing!", "Nope! On they go!"]) : pick(["No! Still dancing!", "Nope! Still in!"])),
+    cOruFreeze: ["The band went quiet!", "Silence! Freeze!", "The band stopped!"],
+    cOruFreezeBack: ["The band plays on!", "Here comes the band again!", "And the parade goes on!"],
+    cOruScare: (n, prenda) => (prenda === "sombrero" ? `${n}'s hat almost flew off!` : prenda === "montera" ? `${n}'s montera almost fell off!` : `${n}'s mask almost fell off!`),
+    cOruTrip: (n) => pick([`${n} stumbles!`, `Whoa, ${n}!`, `${n} almost fell!`]),
+    cOruFall: (n, prenda) => {
+      const what = prenda === "sombrero" ? "hat flew off" : prenda === "montera" ? "montera fell off" : "mask fell off";
+      return n ? `${n}'s ${what}!` : `A ${what}!`;
+    },
+    cOruDanza: (d) => ({ diablada: "Diablada", morenada: "Morenada", caporales: "Caporales", tinkus: "Tinkus", llamerada: "Llamerada" })[d] ?? d,
+    cOruFratTitle: (_art, name) => `the ${name}`,
+    cOruRosterSub: (dance, c) => `${dance} · ${c} ${c === 1 ? "dancer" : "dancers"}`,
+    cOruArriveFrat: (_art, name) => pick([`The ${name} made it to the Socavón!`, `All the way to the Socavón: the ${name}!`, `Bells for the ${name}: they reached the Socavón!`]),
     gameLuz: "Red light, green light",
     gameCho: "Chovena",
     cPasSpread: ["The cloth goes down!", "Aguayo on the floor!", "Look at that aguayo!"],
@@ -2119,6 +2206,9 @@ export const T: Record<Lang, Dict> = {
     espVolver: "Back to the page",
     espVer: "Show the wait on the big screen",
     espPie: (n) => `${n} on the list, sealed: nobody can change it now.`,
+    // The wait that flows into the show (Oct 21, 2026): once the number is out.
+    espStickerYa: "The number that decides is out",
+    espAprobar: "Your wallet will ask you to approve it.",
     winnerLabel: "What came out", verifyTitle: "In case anyone doubts it",
     verifyHow: "Anyone can run this draw again from their phone and has to land on the same name. You don't have to take my word for it.",
     verifyPasos: "Step by step: 1) open the quicknet round and check its proof against the beacon's public key · 2) randomness = sha256(proof) · 3) idx = first 8 bytes of sha256(randomness ‖ list_hash ‖ counter) mod entries, skipping repeats. Whole protocol at github.com/nema1502/tinkazo, in docs/protocolo.md.",
@@ -2252,7 +2342,7 @@ export const T: Record<Lang, Dict> = {
     meetT3T: "The link lets anyone redo the draw",
     meetT3B: "The receipt carries the list and the number. Anyone can open it from their phone and must get the same name.",
     meetNamesT: "What happens to the names",
-    meetNamesB: "Names are not published: they stay on your device and in the receipt you share, which with a short link is stored protected and Tinkazo can't read it. If you share the receipt, you also share the list. No name is kept on Stellar.",
+    meetNamesB: "Names are not published: they stay on your device and in the receipt you share. When you share or show it big, a copy is also kept for the short link, which only opens with the link: Tinkazo can't read it. If you share the receipt, you also share the list. No name is kept on Stellar.",
     meetListaDet: "Stellar keeps the list's fingerprint, the number of entries, how many winners, the round, the seal's time and block number, the prize or title you wrote, the organizer's address and the draw's number; and, when drawn, the proof the round published, the number the round decided, the draw's time, whether it has been drawn, its block number and the winners' positions.",
     meetKnowT: "What you should know",
     meetK1: "To run a draw you sign in with your account. With Google, in two taps.",
@@ -2284,7 +2374,7 @@ export const T: Record<Lang, Dict> = {
     claseW3T: "No accounts for students",
     claseW3B: "Students install nothing and create no account. Only the person running the draw signs in.",
     clasePrivT: "Privacy",
-    clasePrivB: "The names stay in the browser of whoever runs the draw and are not published. No Tinkazo server can read them: if you share with a short link, what gets stored is a protected copy. If you share the receipt, you also share the list: better it doesn't leave the class, especially if there are minors.",
+    clasePrivB: "The names stay in the browser of whoever runs the draw and are not published. When you share or show it big, a copy is also kept for the short link, which only opens with the link: Tinkazo can't read it. But anyone with the link, the photo or the QR code on the screen sees the whole list: better it doesn't leave the class, especially if there are minors. If that copy needs to be deleted, write to hola@tinkazo.app.",
     verifKicker: "To check it",
     verifH1: "Verifiable draw: anyone can redo the result",
     verifLead: "A verifiable draw leaves the evidence in plain sight. Here is what gets checked, who checks it and what it doesn't promise yet.",
@@ -2360,7 +2450,7 @@ export const T: Record<Lang, Dict> = {
     faq4q: "How do I know you didn't cheat?",
     faq4a: "You don't have to believe me: the receipt carries the list, the round and the proof, and your phone redoes the draw. If anyone touched anything, it gives a different result.",
     faq5q: "What gets saved, and where?",
-    faq5a: "Stellar keeps, under your account, the list's fingerprint, the head count and the number of winners, the prize you typed, the round, the seal and draw times, and the winners' spots, and the data that the list in Security names. Names are never published: they stay on your device and in the receipt you share.",
+    faq5a: "Stellar keeps, under your account, the list's fingerprint, the head count and the number of winners, the prize you typed, the round, the seal and draw times, and the winners' spots, and the data that the list in Security names. Names are never published: they stay on your device and in the receipt you share. When you share or show it big, a copy is also kept for the short link, which only opens with the link and which Tinkazo can't read.",
     finT: "Use it at your next event.",
     appTitle: "Your draw",
     tabNuevo: "New draw",
@@ -2373,6 +2463,9 @@ export const T: Record<Lang, Dict> = {
     histOnChain: "See it on Stellar",
     histStateDone: "Drawn",
     histStatePending: "Sealed, not drawn yet",
+    // A draw left undrawn on this device, above the list (Oct 21, 2026).
+    pendienteT: "You have a sealed draw that hasn't been drawn: {que}.",
+    pendienteBtn: "Resume it",
     histWon: "won by",
     histWonMany: "won by",
     histOtherDevice: "The list stayed on the device where it was sealed.",
@@ -2391,6 +2484,10 @@ export const T: Record<Lang, Dict> = {
     salaCopiado: "Copied ✓",
     vSealsEjemplo: "This is the site's sample list: anyone trying the site with an account seals it, so seeing it repeated means nothing.",
     salaPie: "If someone is missing or listed twice, now is the time: after sealing, the list can't change. Once sealed, the draw's fingerprint has to start the same way.",
+    // The list once sealed, on the projector and on the phone (Oct 21, 2026).
+    salaTSellada: "The sealed list",
+    salaPieSellada: "This is the list that decides the draw: it's sealed and it won't change. Find yourself while the number comes out.",
+    listaNotaSellada: "This is the sealed list: it won't change, and the winner comes from these names. Find yourself. The draw's fingerprint starts with these characters.",
     buscateL: "Are you on the list?",
     buscatePh: "Type your name",
     buscateUno: "You are number {p} of {n}.",
@@ -2432,7 +2529,7 @@ export const T: Record<Lang, Dict> = {
     cf5t: "Anyone can check it",
     cf5b: "The receipt carries the list, the round and the signature. From a phone, the site redoes everything and says whether it matches. If anyone touched anything, it won't.",
     cfGuardaT: "What gets saved, and where",
-    cfGuardaB: "What goes to Stellar follows your account on any device. The names don't: they stay in the browser where you sealed and in the receipt. If you share it with a short link, the receipt is also stored, protected, without Tinkazo being able to read it.",
+    cfGuardaB: "What goes to Stellar follows your account on any device. The names don't: they stay in the browser where you sealed and in the receipt. If you share it or show it big, a copy is also kept on Cloudflare for the short link, locked with a key that travels only in the link: Tinkazo can't read it.",
     cfColQue: "What",
     cfColDonde: "Where",
     cfColQuien: "Who sees it",
@@ -2448,9 +2545,9 @@ export const T: Record<Lang, Dict> = {
     cfG4a: "Your key",
     cfG4b: "With Google, Pollar keeps it; with Freighter, your extension; with the test account, your browser",
     cfG4c: "Nobody else",
-    cfG5a: "The short link, when you share or show it big",
-    cfG5b: "A protected copy of the receipt, on Cloudflare, until you delete it from My draws",
-    cfG5c: "Anyone with the link or the QR code. Tinkazo can't read it",
+    cfG5a: "The short link's copy, when you share or show it big",
+    cfG5b: "On Cloudflare, with no expiry, so the draw can be checked again. Deleted if you ask at hola@tinkazo.app",
+    cfG5c: "Anyone with the link or its QR code. Tinkazo can't read it",
     cfNoT: "What if I don't trust Tinkazo?",
     cfNoB: "The protocol is written down and the code is open: anyone can redo a draw without going through this site.",
     cfSeg: "What the protocol prevents, and what it doesn't →",
@@ -2494,8 +2591,8 @@ export const T: Record<Lang, Dict> = {
     jgPinB: "The seven-pointed star hanging in the courtyard, under papel picado. Each name is a candy inside; every swing knocks a few out, and when it breaks, the last one left comes down slowly. Up to two hundred.",
     lorePinataQ: "Where does the piñata come from?",
     lorePinataA: "According to Mexico's INAH, it arrived in 1586, when the Augustinian friars of Acolman held the Christmas masses that later became the posadas. The seven-pointed one is the classic.",
-    jgOruN: "Oruro Carnival",
-    jgOruB: "The Diablada's entrada: the troupe dances block by block between packed stands, and at each arch a few stay behind. The last two face off in front of the Socavón, and the one who arrives goes in with bells and fireworks. Up to two hundred.",
+    jgOruN: "La Entrada",
+    jgOruB: "The Oruro Carnival, group by group: each group on the list dances its own dance (Diablada, Morenada, Caporales, Tinkus or Llamerada) and passes the reviewing stand with everyone's name. A whole group stays behind at every block, and in the last one a few stay at a time, until the face-off in front of the Socavón. Up to two hundred.",
     jgSapoN: "Sapo",
     jgSapoB: "The game of fairs and patios: a frog in the middle of a wooden box and one hole with each name. Rings hit the wood, dance on a neighbor's rim and roll out, and the last one drops into the winner's hole. With more than twelve, names are crossed out in waves until twelve are left. Up to two hundred, with up to twelve winners.",
     jgQuienN: "Stand up",
@@ -2522,7 +2619,7 @@ export const T: Record<Lang, Dict> = {
     gcChovenaMany: "They dance in a ring, hand in hand. When the music stops, whoever stumbles is out. The last ones out win a prize, and the last one dancing takes the first.",
     gcTrompo: "The tops clash and knock each other out of the ring. The last one spinning wins.",
     gcPinata: "Every swing knocks candies out. The last one left inside wins.",
-    gcOruro: "Dancers stay behind at every block. Whoever reaches the Socavón wins.",
+    gcOruro: "A whole group stays behind at every block. Whoever reaches the Socavón wins.",
     gcTombola: "Everyone has a ball with their number, listed next to the drum. The one that drops into the cup wins.",
     gcWheel: "The slice left under the pointer wins. With many people, each slice holds a group.",
     gcTeleferico: "A whole group gets off at every station. Whoever reaches the top wins.",
@@ -2555,14 +2652,16 @@ export const T: Record<Lang, Dict> = {
     tmQ2T: "The organizer is responsible",
     tmQ2B: "The draw is yours: the prize, the rules, telling the winner and whatever your country's law asks for. In some countries, like Brazil, Colombia or Mexico, even a free draw needs a permit. The rules Tinkazo writes help, but they do not replace what your law says.",
     tmQ3T: "Where the names go",
-    tmQ3B: "Names never go on chain. What goes on chain is the list's fingerprint, the number of entries, how many winners, the round, the seal's time and block number, the prize or title you wrote, the organizer's address and the draw's number; and, when drawn, the proof the round published, the number the round decided, the draw's time, whether it has been drawn, its block number and the winners' positions. The proof carries the names in the part of the address the browser never sends to any server; that is why sharing the link shares the list, and if you notify by WhatsApp, the link with the list goes through WhatsApp. The QR code and the faces are drawn right here. Sharing or showing the result on the big screen makes a short link: Cloudflare keeps a copy of the receipt locked with a key that travels only in the link. Tinkazo can't read it, and anyone with the link or the QR code, which carries the list, can open it. You delete it with “Delete the short link”, in My draws: the permission to do so stays on this device.",
+    tmQ3B: "Names never go on chain. What goes on chain is the list's fingerprint, the number of entries, how many winners, the round, the seal's time and block number, the prize or title you wrote, the organizer's address and the draw's number; and, when drawn, the proof the round published, the number the round decided, the draw's time, whether it has been drawn, its block number and the winners' positions. The proof carries the names in the part of the address the browser never sends to any server; that is why sharing the link shares the list, and if you notify by WhatsApp, the link with the list goes through WhatsApp. The QR code and the faces are drawn right here. Sharing or showing the result big also keeps a copy on Cloudflare for the short link: more below, in “The short link”.",
     tmQ4T: "What gets stored",
-    tmQ4B: "If you connect an account, its public address is recorded in the contract as the organizer of the draw: public on purpose, so every draw has an owner. If you sign in with Google, Pollar receives your name, email and photo, and holds the key; Tinkazo never sees it. This device keeps your preferences, like language, sound and the show's pace; the history of your draws with their lists, which you can delete from the site; and the key of the test account if you use it.",
+    tmQ4B: "If you connect an account, its public address is recorded in the contract as the organizer of the draw: public on purpose, so every draw has an owner. If you sign in with Google, Pollar receives your name, email and photo, and holds the key; Tinkazo never sees it. This device keeps your preferences, like language, sound and the show's pace; the history of your draws with their lists, which you can delete from the site; the list you're putting together, only in that tab and until you seal it; the short links you made or opened here; and the key of the test account if you use it.",
+    tmCortoT: "The short link",
+    tmCortoB: "Sharing a draw or showing it big makes a short link, easy to send and with a QR code that scans from afar. For that, Cloudflare keeps a copy of the receipt, with the whole list, locked with a key that travels only in the link: Tinkazo doesn't have that key and can't read it, and anyone with the link or its QR code can open it. The copy doesn't expire, so the draw can be checked again. If it needs to be deleted, for example because someone on the list asks, write to hola@tinkazo.app with the link and we delete it; the part before the # is enough, and without the rest not even we can open it. Deleting it makes the short link stop opening for everyone who got it, and doesn't take the list back from those who already opened it.",
     tmMoreT: "Also",
-    tmMore1: "No ads, no trackers that follow you from site to site, no database of participants we can read. During a draw the site fetches the number a public beacon publishes and, if you have an account, what it needs from the Stellar network and from Pollar; when you share or show the big screen, it stores the short link on Cloudflare.",
-    tmMore2: "The site is hosted on Vercel, which like any host logs visits: IP address and browser. We also count visits with Vercel's analytics: which page was opened, from which country and on what kind of device, with no cookies and without keeping who you are. If your browser asks not to be tracked, we don't count you. Names reach neither: they go after the # in the address, which the browser does not send to the server, and that part is cut off before counting.",
+    tmMore1: "No ads, no trackers that follow you from site to site, no database of participants we can read. During a draw the site fetches the number a public beacon publishes and, if you have an account, what it needs from the Stellar network and from Pollar; when you share or show it big, it stores the short link's copy on Cloudflare.",
+    tmMore2: "The site is hosted on Vercel, which like any host logs visits: IP address and browser. We also count visits with Vercel's analytics: which page was opened, from which country and on what kind of device, with no cookies and without keeping who you are. If your browser asks not to be tracked, we don't count you. Names reach neither: they go after the # in the address, which the browser does not send to the server, and that part is cut off before counting. The short link goes through Cloudflare, which also sees the IP address and browser of whoever makes or opens one; we use the address only to count how many links each one makes per hour, and we don't store it.",
     tmMore3: "Tinkazo is open source (MIT) and provided as is, without warranty. Today the contract lives on testnet, Stellar's test network, which gets wiped on December 16, 2026. If something breaks in the middle of a draw, anyone can run it again with the list and the round: that is what the protocol is for.",
-    tmMore4: "In effect since October 16, 2026, when we started counting visits. If they change, this page changes, with its date.",
+    tmMore4: "In effect since October 21, 2026, when we added the short link. If they change, this page changes, with its date.",
     tmMore5: 'Questions, or something to fix? Write to <a href="mailto:hola@tinkazo.app">hola@tinkazo.app</a>.',
     tmLinkLegal: "What we found about the law, country by country ↗",
     sgKicker: "Security",
@@ -2585,7 +2684,7 @@ export const T: Record<Lang, Dict> = {
     sgLimit2: "Names never go on chain. What goes on chain is the list's fingerprint, the number of entries, how many winners, the round, the seal's time and block number, the prize or title you wrote, the organizer's address and the draw's number; and, when drawn, the proof the round published, the number the round decided, the draw's time, whether it has been drawn, its block number and the winners' positions.",
     sgLimit3: "What the contract stores pays rent: if nobody extends it, the entry is archived and stops being readable until someone pays to restore it. And today the contract is on testnet, which Stellar wipes on December 16, 2026: there the record is lost and the verdict is no longer green.",
     sgLimit4: "If the public beacon went down entirely and forever, a sealed draw would be left without its number. There are four relays, three on drand.sh and one at Cloudflare, rotated until one answers.",
-    sgLimitCorto: "The short link (tinkazo.app/c/…) keeps on Cloudflare a copy of the receipt locked with a key that travels only in the link: Tinkazo can't read it. It decides nothing either: the page recomputes the draw and checks it against Stellar, and if the service goes down, the usual long link still works.",
+    sgLimitCorto: "The short link (tinkazo.app/c/…) keeps a copy of the receipt on Cloudflare, encrypted in the browser with a key that travels only in the link: Tinkazo can't read it, and anyone with the link or its QR code sees the whole list. It decides nothing: it opens the same receipt, which is recomputed as always. It doesn't expire, so the draw can be checked again; if someone needs it deleted, they ask at hola@tinkazo.app, and deleting it doesn't take the list back from those who already opened it. If the service goes down, the short link won't open while it lasts: the long link still works, and the organizer has it in My draws, on the device where they ran the draw.",
     sgLimit5: "The seal stops the list from changing afterwards, not from being built wrong in the first place: the organizer can add filler or duplicate names, or leave someone out. That is why, before sealing, the list can be shown to the room with a QR so everyone can find themselves on their phone; duplicates are flagged, the receipt has a search box, and the Luma import proposes only those who checked in.",
     sgReportT: "If you find a way to skew a draw",
     sgReportB: "Open an issue. That is the most useful report there is, and the project is open source precisely for that: the full protocol, the contract and the known threats are written down and can be audited without asking anyone.",
@@ -2796,7 +2895,7 @@ export const T: Record<Lang, Dict> = {
     cKicker: "A draw's receipt",
     cAbriendo: "Opening the receipt…", cAbriendoB: "In a moment you'll see who won and check it yourself.",
     cRedT: "We couldn't open the receipt", cRedB: "Check your connection and try again.",
-    cNoExisteT: "This link no longer exists", cNoExisteB: "Whoever shared it deleted it, or it was copied wrong. Ask them to send it again.",
+    cNoExisteT: "This link no longer exists", cNoExisteB: "It was deleted at someone's request, or it was copied wrong. Ask whoever sent it to share it again.",
     cRotoT: "This link can't be opened", cRotoB: "It may have been copied wrong or be missing a piece. Ask whoever sent it to share it again.",
     cOtraVez: "Try again", cPortada: "Go to the home page",
     cmpVerificarEvUno: "If you want to verify it, open this link:\n{enlace}",
@@ -2810,13 +2909,8 @@ export const T: Record<Lang, Dict> = {
     cmpFotoAlt: "The photo with who won and the QR code to check it",
     cmpSinFoto: "The photo couldn't be made: the message still has the link.",
     cmpPrivLista: "Anyone with the photo or the link can see the whole list.",
-    cmpPrivCorto: "The short link keeps a protected copy that Tinkazo can't read.",
-    cmpPrivBorrar: "You can delete it from My draws.",
-    cmpBorrarCorto: "Delete the short link", cmpBorrarCortos: "Delete the short links",
-    cmpBorrarCortoConf: "Anyone with the short link or its QR code won't be able to open it anymore. The draw and its receipt stay as they are. Delete it?",
-    cmpBorrarCortosConf: "Every short link created from this device gets deleted: anyone who has one, or its QR code, won't be able to open it anymore. The draws and their receipts stay as they are. Go ahead?",
-    cmpCortoBorrado: "Short link deleted.", cmpCortosBorrados: "Short links deleted.",
-    cmpCortoNoSeBorro: "It couldn't be deleted: check your connection and try again.",
+    cmpPrivCorto: "The short link keeps a copy that only opens with the link, so the draw can be checked again. Tinkazo can't read it.",
+    cmpPrivBorrar: "If it needs to be deleted, write to hola@tinkazo.app.",
     fotoEscanear: "Scan to check it",
     fotoSinQr: "To check it, open the link that comes with this photo.",
     fotoNumero: "Draw #{n}", fotoPrueba: "test network", fotoEvento: "Event",
@@ -2830,6 +2924,7 @@ export const T: Record<Lang, Dict> = {
     evnNombrar: "Name it",
     evnSumado: "Added to {nombre}.", evnQuitado: "Removed from {nombre}.", evnNombreVacio: "Give the event a name.",
     evnCreado: "Event created: {nombre}.", evnSinSorteos: "No draws yet: add one from My draws.",
+    evnRenombrado: "Name saved: {nombre}.",
     vCompartir: "Share this draw",
     cTroSpent: (n) => pick([`${n}'s top runs out of spin!`, `${n}'s top stops spinning!`, `${n} is out of spin!`]),
     // --- Constellation, sapo and Guess Who (7 October 2026).
@@ -2866,7 +2961,9 @@ export const T: Record<Lang, Dict> = {
     pasoHecho: "done", pasoActual: "current step",
     sigRegion: "What's next",
     sigPaso: "Step {n} of 4",
-    sigLista: "List of {n} people",
+    // With the prize, or "no prize", after it (pasos.ts, detalleDeLista): sealing fixes it (Oct 21, 2026, D19).
+    sigLista: "{n} people",
+    sigSinPremio: "no prize",
     sigSellando: "Sealing the list",
     sigEspera: "Waiting for the round",
     sigRonda: "The round is out",

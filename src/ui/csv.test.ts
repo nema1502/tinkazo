@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildList, columnToText, decodeText, detectSource, dropListHeader, filterChoices, filterRows, fixCase, looksTabular,
-  mailNotes, maskEmail, nameKey, parseTable, presets, suggestFilter,
+  buildList, columnToText, decodeText, detectSource, dropListHeader, filterChoices, filterRows, fixCase, igualesQuitados, looksTabular,
+  mailNotes, maskEmail, nameKey, parseTable, presets, quitarNumeracion, suggestFilter,
 } from "./csv";
 import { canonicalList } from "../protocol/canonical";
 
@@ -28,6 +28,43 @@ describe("parseTable", () => {
   it("no parte un nombre que tiene una coma adentro", () => {
     const t = parseTable(LUMA)!;
     expect(t.rows[1]?.[1]).toBe("Mejía, Nicolás");
+  });
+
+  it("con «Nombre» y «Apellido» separados (Google Forms), propone la columna que los une (D10)", () => {
+    const forms = "Marca temporal,Nombre,Apellido,Correo,Carrera\n" +
+      "21/10/2026 18:01,Ana,Quispe,ana@example.org,Sistemas\n" +
+      "21/10/2026 18:02,Luis,Mamani,luis@example.org,Industrial\n" +
+      "21/10/2026 18:03,Ana,Flores,anaf@example.org,Sistemas\n" +
+      "21/10/2026 18:04,Carla,,carla@example.org,Civil";
+    const t = parseTable(forms)!;
+    expect(t.columns[t.suggested]).toBe("Nombre + Apellido");
+    expect(t.unida).toBe(t.suggested);
+    expect(columnToText(t, t.suggested)).toBe("Ana Quispe\nLuis Mamani\nAna Flores\nCarla");
+    const b = buildList(t, t.suggested, t.rows.map(() => true), { fixCase: true, numberDupes: false });
+    expect(b.names).toEqual(["Ana Quispe", "Luis Mamani", "Ana Flores", "Carla"]);
+    // No es un filtro, y no cuenta como columna del archivo.
+    expect(filterChoices(t, t.suggested).some((f) => f.column === t.unida)).toBe(false);
+    expect(t.columns.slice(0, -1)).toEqual(["Marca temporal", "Nombre", "Apellido", "Correo", "Carrera"]);
+  });
+
+  it("también con el apellido paterno y el materno, en su orden", () => {
+    const t = parseTable("Nombres;Apellido paterno;Apellido materno\nMaría José;Quispe;Mamani\nJuan;Choque;")!;
+    expect(t.columns[t.suggested]).toBe("Nombres + Apellido paterno + Apellido materno");
+    expect(columnToText(t, t.suggested)).toBe("María José Quispe Mamani\nJuan Choque");
+  });
+
+  it("con un nombre completo en el archivo no se agrega nada: Luma sigue igual", () => {
+    const luma = "api_id,name,first_name,last_name,email\nevt-1,Ana Quispe,Ana,Quispe,ana@example.org\nevt-2,Luis Mamani,Luis,Mamani,luis@example.org";
+    const t = parseTable(luma)!;
+    expect(t.unida).toBeUndefined();
+    expect(t.columns[t.suggested]).toBe("name");
+    expect(parseTable(LUMA)!.unida).toBeUndefined();
+  });
+
+  it("si ninguna fila trae el apellido, no hay nada que unir", () => {
+    const t = parseTable("Nombre,Apellido,Correo\nAna Quispe,,ana@example.org\nLuis Mamani,,luis@example.org")!;
+    expect(t.unida).toBeUndefined();
+    expect(t.columns[t.suggested]).toBe("Nombre");
   });
 
   it("acepta punto y coma, que es lo que sale de Excel en español", () => {
@@ -296,6 +333,66 @@ describe("el encabezado no es un participante", () => {
 
   it("con un número no es encabezado: «Participante 1» es un nombre de prueba", () => {
     expect(dropListHeader("Participante 1\nParticipante 2").header).toBeNull();
+  });
+});
+
+describe("una lista numerada de WhatsApp entra sin los números (D09)", () => {
+  it("«1. Ana Quispe» y «9. Ana Quispe» quedan como una sola persona", () => {
+    const pegado = "1. Ana Quispe\n2. Luis Mamani\n3. Carla Flores\n9. Ana Quispe";
+    const r = quitarNumeracion(pegado);
+    expect(r.lineas).toBe(4);
+    expect(canonicalList(r.text)).toEqual(["Ana Quispe", "Luis Mamani", "Carla Flores"]);
+    expect(r).toMatchObject({ antes: "1. Ana Quispe", despues: "Ana Quispe", sueltas: [] });
+  });
+
+  it("acepta las formas de siempre: 1. 1.- 1) (1) 1º 1 1.Ana, viñetas y números de emoji", () => {
+    const formas = ["1. Ana", "2.- Luis", "3) Carla", "(4) Diego", "5º Elena", "6 Franco", "7.Gabriela", "• Hugo", "- Inés", "* Juan", "8️⃣ Karen", "🔟 Lucía", "1⃣ Mario"];
+    const r = quitarNumeracion(formas.join("\n"));
+    expect(r.lineas).toBe(formas.length);
+    expect(r.text.split("\n")).toEqual(["Ana", "Luis", "Carla", "Diego", "Elena", "Franco", "Gabriela", "Hugo", "Inés", "Juan", "Karen", "Lucía", "Mario"]);
+  });
+
+  it("los lugares libres de la lista («5.») quedan vacíos y no entran", () => {
+    const r = quitarNumeracion("1. Ana Quispe\n2. Luis Mamani\n3.\n4.\n5.");
+    expect(canonicalList(r.text)).toEqual(["Ana Quispe", "Luis Mamani"]);
+  });
+
+  it("el título sin número no se toca, y se avisa", () => {
+    const r = quitarNumeracion("*Sorteo del meetup* 🎁\n1. Ana Quispe\n2. Luis Mamani\n3. Carla Flores");
+    expect(r.text.split("\n")[0]).toBe("*Sorteo del meetup* 🎁");
+    expect(r.sueltas).toEqual(["*Sorteo del meetup* 🎁"]);
+  });
+
+  it("si la mayoría no está numerada, no se toca nada: hay nombres que empiezan con un número", () => {
+    const lista = "3 Marías Café\nAna Quispe\nLuis Mamani";
+    expect(quitarNumeracion(lista)).toEqual({ text: lista, lineas: 0, antes: "", despues: "", sueltas: [] });
+    // Mitad y mitad tampoco: hace falta la mayoría.
+    expect(quitarNumeracion("1. Ana\nLuis Mamani").lineas).toBe(0);
+    // Un solo número no alcanza.
+    expect(quitarNumeracion("1. Ana").lineas).toBe(0);
+  });
+
+  it("la negrita de WhatsApp («*Ana*») no es una viñeta", () => {
+    expect(quitarNumeracion("*Ana Quispe*\n*Luis Mamani*").lineas).toBe(0);
+  });
+
+  it("una lista sin numerar queda exactamente como estaba", () => {
+    const lista = "Diego Rojas\nLucía Flores\nCarlos Choque";
+    expect(quitarNumeracion(lista).text).toBe(lista);
+  });
+});
+
+describe("cuántos repetidos iguales deja afuera la lista canónica", () => {
+  it("cuenta las líneas que repiten un nombre escrito exactamente igual", () => {
+    const texto = "Ana Quispe\nLuis Mamani\nAna Quispe\n  Ana Quispe  \nana quispe\n\nX";
+    expect(igualesQuitados(texto)).toBe(2);
+  });
+
+  it("coincide con lo que de verdad hace la lista canónica", () => {
+    for (const texto of ["Ana\nAna\nLuis", "Ana, ingeniera\nAna, abogada\nLuis", "a\nb\nAna\nAna", "Ana\nana\nANA"]) {
+      const validas = texto.split("\n").filter((l) => (l.split(",")[0] ?? "").trim().length >= 2).length;
+      expect(igualesQuitados(texto), texto).toBe(validas - canonicalList(texto).length);
+    }
   });
 
   it("en una tabla, «Participantes» también es encabezado aunque no haya números", () => {
