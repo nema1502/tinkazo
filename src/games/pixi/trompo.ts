@@ -4,6 +4,7 @@ import { paceFactor, params, setGameLength, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, note } from "../../sound";
 import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
+import { dentro, unir, type Caja, type Zona } from "./encuadre";
 import { CREAM, INK, MONO, YELLOW, contorno, hash, mountPixi, type PixiStage } from "./stage";
 
 /**
@@ -1097,8 +1098,48 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
   }
 
   /** La cámara: el ruedo al tirar, los golpes de cerca, el que sacan hasta la tiza, el mano a mano pegado, la ganadora. */
+  /** Los dos del mano a mano, cada uno de su nombre (encima, a la altura de la cabeza) a la púa. */
+  function cajaDuelo(): Caja {
+    const size = rn * R() * 1.55;
+    return unir([win, riv].map((q) => {
+      const w = toWorld(q.x, q.y);
+      return { x: w.x - size * 0.6, y: w.y - size * 1.1, w: size * 1.2, h: size * 1.25 };
+    }));
+  }
+
+  /**
+   * Dónde tienen que quedar: entre la barra de arriba y el relator, con lugar
+   * arriba para medio nombre, que va centrado a la altura de la cabeza. El alto
+   * es el del chip a la escala del mano a mano (`grande` en `draw`): 1,7 en
+   * escritorio, 1 en el celular.
+   */
+  function zonaDuelo(): Zona {
+    const k = S.u();
+    const q = win.chip ?? riv.chip;
+    const chip = (q ? q.height / (q.scale.y || 1) : 36 * k) * (S.portrait() ? 1 : 1.7);
+    return { x0: 16 * k, y0: S.top() + chip / 2 + 8 * k, x1: S.sw() - 16 * k, y1: S.sh() - S.bottom() - 8 * k };
+  }
+
+  /**
+   * El primer plano del mano a mano sobre uno de los dos (el que cabecea en su
+   * casi, o el del susto): tan cerca como se pidió, pero con los dos trompos y
+   * sus nombres adentro. Se corre lo justo hacia el otro y, si no alcanza, se
+   * aleja lo justo. En escritorio, con 2,4 sobre el que cabeceaba, el otro
+   * quedaba cortado detrás de la barra de arriba y sin su nombre (evaluación de
+   * la subida 2, hallazgo 9). La caja es la de los dos, sea quien sea el que
+   * cabecea: no dice quién gana.
+   */
+  function primerPlano(p: { x: number; y: number }, zoom: number): void {
+    const v = dentro(cajaDuelo(), zonaDuelo(), { x: p.x, y: p.y - 30 * S.u(), z: zoom }, S.sw(), S.sh());
+    cam.lookAt(v.x, v.y, v.z, 4);
+  }
+
   function direct(): void {
     const c = center();
+    // Mientras pelean los dos, ninguna toma los corta ni les saca el nombre:
+    // ni el viaje de la cámara entre una toma y otra, ni un golpe o un sacudón
+    // (ver `proteger` en camera.ts). Son los dos, así que no dice quién gana.
+    cam.proteger(phase === "duel" && duo && win.alive && riv.alive ? cajaDuelo() : null, zonaDuelo());
     const fz = focus && tFx < focus.until ? focus : null;
     const look = (f: NonNullable<typeof focus>): void => {
       // Al sacado lo sigue hasta la tiza y no más allá: afuera del ruedo la
@@ -1152,10 +1193,8 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       // entren enteros (con dos en el ruedo, uno quedaba cortado contra el borde).
       const pareja = Math.hypot(b.x - a.x, b.y - a.y);
       const cabe = S.portrait() ? clamp((S.sw() * 0.8 - 60 * S.u()) / Math.max(1, pareja), 1.2, 9) : 9;
-      if (cabecea) {
-        const p = toWorld(cabecea.x, cabecea.y);
-        cam.lookAt(p.x, p.y - 30 * S.u(), Math.min(2.4, S.portrait() ? 1.8 : 9), 4);
-      } else if (wob) cam.lookAt(wob.x, wob.y - 30 * S.u(), Math.min(2.4, cabe), 4);
+      if (cabecea) primerPlano(toWorld(cabecea.x, cabecea.y), Math.min(2.4, S.portrait() ? 1.8 : 9));
+      else if (wob) primerPlano(wob, Math.min(2.4, cabe));
       else cam.lookAt((a.x + b.x) / 2, (a.y + b.y) / 2 - 20 * S.u(), Math.min(slow ? 2.5 : tense ? 2.2 : 2.0, cabe), recien ? 9 : slow ? 6 : 3);
     } else {
       const a = toWorld(win.x, win.y);
