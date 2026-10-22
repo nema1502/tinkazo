@@ -5,7 +5,7 @@ import { QUICKNET, bytesToHex, roundTime, targetRound } from "../protocol/quickn
 import { listHash } from "../protocol/canonical";
 import { prepararFirma } from "../protocol/firma";
 import { contractUrl, network } from "../stellar/config";
-import { anchorErrorText, hideTxStatus, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
+import { type AnchorStep, escribirError, hideTxStatus, margenParaAprobar, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
 import { precargarQr } from "./qr";
 import { recomendar } from "./recomendar";
 import { canAnchor, currentSession } from "./wallet-ui";
@@ -300,8 +300,8 @@ export async function freeze(): Promise<void> {
   // de 30 el contrato rechaza el sello.
   const lead = anchoring ? Math.max(ANCHOR_LEAD_SECONDS, LEAD_SECONDS) : LEAD_SECONDS;
   let round = targetRound(ts, lead);
-  const prize = $<HTMLInputElement>("prize").value.trim();
-  const numWinners = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, names.length);
+  let prize = $<HTMLInputElement>("prize").value.trim();
+  let numWinners = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, names.length);
 
   let raffleId: bigint | undefined;
   let sealTx: string | undefined;
@@ -310,41 +310,69 @@ export async function freeze(): Promise<void> {
     const session = currentSession();
     if (!session) return;
     btn.disabled = true;
+    const onStep = (step: AnchorStep, detail?: string): void => {
+      btn.textContent = stepLabel(step);
+      showTxStatus("seal-status", step, detail);
+    };
     try {
-      // Si la red tarda, la ronda elegida al hacer clic llega a la cadena con
-      // menos de los 30 s que exige el contrato y el sello falla: con el RPC
-      // público de testnet pasó en 3 de 11 sellos (QA, 16 de octubre de 2026).
-      // Cuando la transacción falló de verdad, no quedó nada grabado y se
-      // reintenta solo, con una ronda nueva. Si no se sabe si entró, no.
-      for (let intento = 1; ; intento++) {
-        try {
-          const res = await sealOnChain(
-            {
-              organizer: session.address,
-              listHash: listHash(names),
-              count: names.length,
-              numWinners,
-              round,
-              meta: prize || t("defaultMeta"),
-            },
-            (step, detail) => {
-              btn.textContent = stepLabel(step);
-              showTxStatus("seal-status", step, detail);
-            },
-          );
-          raffleId = res.raffleId;
-          sealTx = res.txHash;
-          break;
-        } catch (e) {
-          if (intento >= 3 || !selloSinGrabar(e)) throw e;
-          console.warn("[tinkazo] el sello no entró a tiempo; se reintenta con otra ronda", e);
-          ts = Math.floor(Date.now() / 1000);
-          round = targetRound(ts, lead);
-        }
+      // Nunca dos sellos de la misma lista (`sello-seguro.ts`, D-17 en docs/architecture.md):
+      // - Si la red tarda, la ronda elegida al hacer clic llega a la cadena con menos de los
+      //   30 s que exige el contrato y el sello falla (3 de 11 sellos con el RPC público de
+      //   testnet, QA del 16 de octubre de 2026): no quedó nada y se reintenta con otra ronda.
+      // - Si no se sabe si entró (un corte, una respuesta que no llegó), primero se averigua.
+      //   Si no se puede, queda guardado, y el próximo intento empieza por ahí.
+      // - Con Freighter hay que aprobar a mano: la ronda va con 45 s más de margen.
+      const [seguro, extra] = await Promise.all([import("./sello-seguro"), margenParaAprobar()]);
+      const anclado = lead + extra;
+      const rondaNueva = (): { round: number; ts: number } => {
+        const ahora = Math.floor(Date.now() / 1000);
+        return { round: targetRound(ahora, anclado), ts: ahora };
+      };
+      ({ round, ts } = rondaNueva());
+      const contrato = network.contractId ?? "";
+      const previo = seguro.leerPendiente(session.address, hash, network.name, contrato);
+      const sello = await seguro.sellarSinDuplicar(
+        { round, ts },
+        {
+          sellar: (r) =>
+            sealOnChain(
+              {
+                organizer: session.address,
+                listHash: listHash(names),
+                count: names.length,
+                numWinners,
+                round: r,
+                meta: prize || t("defaultMeta"),
+              },
+              onStep,
+            ),
+          resolver: (intento) => resolverSelloEnLaRed(intento, onStep),
+          rondaNueva,
+          sinGrabar: (e) => {
+            if (selloSinGrabar(e)) console.warn("[tinkazo] el sello no entró; se reintenta con otra ronda", e);
+            return selloSinGrabar(e);
+          },
+          guardarPendiente: (intento) => seguro.guardarPendiente(intento, network.name, contrato, prize),
+          avisar: (que) => onStep(que === "verificando" ? "verifying" : "retrying"),
+        },
+        previo?.intento ?? null,
+      );
+      raffleId = sello.raffleId;
+      sealTx = sello.txHash;
+      round = sello.round;
+      ts = sello.ts;
+      if (sello.retomado && previo) {
+        // El que entró es el de antes: queda sellado con su premio y su cantidad de ganadores.
+        prize = previo.premio;
+        numWinners = sello.retomado.numWinners;
+        ponerPremio(prize);
+        $<HTMLSelectElement>("nw").value = String(numWinners);
       }
+      // Si se supo por la red (se cortó y se averiguó), la línea todavía decía "Revisando…".
+      showTxStatus("seal-status", "confirmed", sealTx);
     } catch (e) {
-      // La pantalla dice algo que se entiende; el error de verdad queda en la
-      // consola, para saber la causa si "la red rechazó" vuelve a pasar.
+      // La pantalla dice algo que se entiende; el detalle técnico queda plegado
+      // debajo y en este navegador (`detalle-error.ts`), y en la consola.
       console.warn("[tinkazo] el sello no se pudo grabar", e);
       btn.disabled = false;
       btn.dataset.i = "sealOnStellar";
@@ -352,7 +380,7 @@ export async function freeze(): Promise<void> {
       const status = $("seal-status");
       status.style.display = "block";
       status.className = "txstatus";
-      status.textContent = await anchorErrorText(e);
+      await escribirError(status, e, "sello");
       // Si se apretó la barra, el botón de verdad (y este mensaje) están fuera de la pantalla.
       verError(status);
       return;
@@ -367,6 +395,8 @@ export async function freeze(): Promise<void> {
   void precargarQr();
   void import("./pantalla").catch(() => undefined);
   void import("./compartir").catch(() => undefined);
+  // Y lo que cuenta un error del sorteo, si el wifi se cae antes de sortear.
+  if (raffleId !== undefined) precargarParaElSorteo();
 
   app.frozen = {
     names,

@@ -1,8 +1,17 @@
 import { getLang, t } from "../i18n";
 import { roundTime } from "../protocol/quicknet";
 import { network, txUrl } from "../stellar/config";
+import type { IntentoDeSello, Resolucion } from "../stellar/envio";
+import type { TxArmada } from "./envio-sdk";
 import { grifoApagado, grifoDisponible, hayAyudaDeFondos } from "../stellar/grifo";
 import { conAyudaDeFondos, conCuentaLista, conTope, dormirCancelable, esperarCuenta, esperarHasta } from "./reintento";
+
+export type { IntentoDeSello, Resolucion } from "../stellar/envio";
+
+/** Lo que manda y averigua (`envio.ts`): se baja junto con el SDK, no con la página. */
+const envio = (): Promise<typeof import("../stellar/envio")> => import("../stellar/envio");
+/** Cómo se habla con el SDK al mandar (`envio-sdk.ts`): igual, recién cuando alguien sella o sortea. */
+const sdk = (): Promise<typeof import("./envio-sdk")> => import("./envio-sdk");
 
 /**
  * Sellar y sortear contra el contrato.
@@ -12,15 +21,24 @@ import { conAyudaDeFondos, conCuentaLista, conTope, dormirCancelable, esperarCue
  *
  * El SDK vive en un fragmento aparte, así que estas funciones lo cargan con
  * `import()` la primera vez que alguien sella de verdad.
+ *
+ * Cómo se manda (desde el 21 de octubre de 2026, ver `envio.ts` y la decisión
+ * D-17 de docs/architecture.md): con Freighter o la cuenta de prueba se firma una
+ * vez y se manda esa misma transacción hasta saber cómo terminó, sin otra ventana
+ * de la billetera; con Pollar se le entrega la transacción y se pregunta por su
+ * hash. Un sello del que no se sabe si entró sale como `SelloIncierto`, y
+ * `freeze.ts` no manda otro sin averiguarlo.
  */
 
 /**
- * Los dos últimos pasos solo los ve una cuenta de Pollar (ver `conFondos`):
- * `preparing` es la espera a que la red abra la cuenta, que Pollar crea de fondo
- * después de entrar y tarda unos segundos; `funding`, la carga con el grifo de
- * testnet cuando la comisión no la paga la app.
+ * Los pasos `preparing` y `funding` solo los ve una cuenta de Pollar (ver
+ * `conFondos`): `preparing` es la espera a que la red abra la cuenta, que Pollar
+ * crea de fondo después de entrar y tarda unos segundos; `funding`, la carga con
+ * el grifo de testnet cuando la comisión no la paga la app. `verifying` es la
+ * pregunta de si un sello que se cortó llegó a entrar; `retrying`, la espera
+ * antes de volver a probar cuando la red no contestó.
  */
-export type AnchorStep = "simulating" | "signing" | "sending" | "confirmed" | "funding" | "preparing";
+export type AnchorStep = "simulating" | "signing" | "sending" | "confirmed" | "funding" | "preparing" | "verifying" | "retrying";
 
 /**
  * `detail` lleva el costo estimado en el paso de firma y el hash de la
@@ -68,6 +86,73 @@ export function sealOnChain(args: SealArgs, onStep: OnStep): Promise<SealResult>
   return conFondos(() => sellar(args, onStep), onStep);
 }
 
+/* ------------------------------------------------- cuánto vive cada envío */
+
+/**
+ * Segundos de más para la ronda cuando hay que aprobar a mano en una billetera.
+ *
+ * El contrato no acepta un sello cuya ronda nazca a menos de 30 segundos del
+ * ledger. Con 45 de margen y la cuenta que firma sola (Pollar, la de prueba)
+ * sobra; con Freighter, entre que aparece la ventana y la persona la aprueba
+ * pasan diez, veinte segundos, y el sello entraba tarde y fallaba, con la
+ * comisión cobrada y otra ventana para aprobar. Con 45 más, la persona tiene
+ * casi un minuto para leer y aprobar.
+ */
+export const MARGEN_PARA_APROBAR_S = 45;
+
+/** La billetera activa pide aprobar cada operación a mano (Freighter): Pollar y la cuenta de prueba firman solas. */
+async function apruebaAMano(): Promise<boolean> {
+  const [{ activeWallet }, { submitsItself }] = await Promise.all([import("../stellar/wallet-lite"), import("../stellar/wallet-pollar")]);
+  const w = activeWallet();
+  return !!w && w.kind === "external" && !submitsItself(w);
+}
+
+/** Lo que se suma al margen de la ronda al sellar: 45 s con Freighter, nada con las demás. */
+export async function margenParaAprobar(): Promise<number> {
+  return (await apruebaAMano()) ? MARGEN_PARA_APROBAR_S : 0;
+}
+
+/**
+ * Cuánto vale el sello (`timeoutInSeconds`): hasta 15 segundos después de que el
+ * contrato ya no lo aceptaría (`round_time - 30`). Más tarde no tiene sentido:
+ * entraría al ledger y fallaría, con la comisión cobrada. Así la red lo descarta
+ * gratis y "venció" llega antes. Antes valía cinco minutos.
+ *
+ * El SDK fija el vencimiento al firmar (Freighter: cuando aparece la ventana), así
+ * que con aprobación a mano queda un poco más tarde, nunca antes.
+ */
+export function vidaDelSello(round: number, ahoraS = Date.now() / 1000): number {
+  return Math.max(20, Math.round(roundTime(round) - 15 - ahoraS));
+}
+
+/**
+ * Cuánto vale el sorteo: un minuto si la cuenta firma sola, tres si hay que
+ * aprobar a mano. Un sorteo que entra tarde no hace daño (el contrato acepta uno
+ * solo y el resultado es el mismo), pero la sala está mirando: más que eso es
+ * una ventana abierta de más.
+ */
+async function vidaDelSorteo(): Promise<number> {
+  return (await apruebaAMano()) ? 180 : 60;
+}
+
+/**
+ * Después de aprobar, cuántos segundos tienen que faltar para que valga la pena
+ * mandar el sello: 30 que pide el contrato más lo que tarda en entrar. Con
+ * menos, entraría y fallaría: mejor no mandarlo y pedir otra ronda.
+ */
+const MARGEN_AL_MANDAR_S = 35;
+
+/**
+ * Cuánto se espera, ya mandada la transacción, sin poder hablar con la red antes
+ * de decir que no se sabe. Con el sello, después viene la pregunta de si entró
+ * (otro tanto como mucho): medido el 21 de octubre de 2026 en la testnet, con la
+ * red cortada justo después de mandar, eran 69 segundos hasta el mensaje con 30
+ * y 30; con 20 y 20, unos 45. Con el sorteo la sala está mirando, y `draw.ts`
+ * vuelve a probar (es seguro): 15.
+ */
+const SIN_RED_SELLO_MS = 20_000;
+const SIN_RED_SORTEO_MS = 15_000;
+
 /**
  * Cuántos segundos tienen que faltar para que nazca la ronda al empezar a armar
  * el sello.
@@ -97,91 +182,61 @@ class RondaMuyCerca extends Error {
 }
 
 async function sellar(args: SealArgs, onStep: OnStep): Promise<SealResult> {
-  const { getClient } = await import("../stellar/contract");
-  const client = await getClient();
+  const [{ getClient }, { armar, submitElsewhere, firmarYConfirmar, valorNativo, errorDelDesenlace }] = await Promise.all([import("../stellar/contract"), sdk()]);
+  const client = await armar(() => getClient());
   const faltan = roundTime(args.round) - Date.now() / 1000;
   if (faltan < MARGEN_DE_RONDA_S) throw new RondaMuyCerca(faltan);
   onStep("simulating");
-  const tx = await client.seal({
-    organizer: args.organizer,
-    list_hash: args.listHash as unknown as Buffer,
-    count: args.count,
-    num_winners: args.numWinners,
-    round: BigInt(args.round),
-    meta: args.meta.slice(0, 160),
-  });
+  const tx: TxArmada = await armar(() =>
+    client.seal(
+      {
+        organizer: args.organizer,
+        list_hash: args.listHash as unknown as Buffer,
+        count: args.count,
+        num_winners: args.numWinners,
+        round: BigInt(args.round),
+        meta: args.meta.slice(0, 160),
+      },
+      { timeoutInSeconds: vidaDelSello(args.round) },
+    ),
+  );
   onStep("signing", await costoVisible(tx));
+  // Desde acá, lo que se manda puede entrar: si no se sabe cómo terminó, es un `SelloIncierto`.
+  const intento: IntentoDeSello = {
+    organizer: args.organizer,
+    listHash: toHex(args.listHash),
+    round: args.round,
+    count: args.count,
+    numWinners: args.numWinners,
+    meta: args.meta.slice(0, 160),
+    desde: Math.floor(Date.now() / 1000),
+  };
 
-  const delegated = await submitElsewhere(tx, onStep);
+  const delegated = await submitElsewhere(tx, onStep, SIN_RED_SELLO_MS, intento);
   if (delegated) {
     return { raffleId: unwrap<bigint>(delegated.value), txHash: delegated.hash };
   }
 
-  const sent = await tx.signAndSend();
-  const raffleId = unwrap<bigint>(resultadoDe(sent));
-  const txHash = sent.sendTransactionResponse?.hash ?? "";
-  onStep("confirmed", txHash);
-  return { raffleId, txHash };
-}
-
-/**
- * Lo que devolvió una invocación que `signAndSend` mandó y esperó.
- *
- * Si la transacción entró a un ledger y falló (con el sello, casi siempre porque
- * la ronda quedó a menos de 30 s mientras la red andaba lenta), el SDK no lo
- * dice: con el protocolo 23 o posterior la respuesta trae `returnValue` como una
- * clave sin valor, `sent.result` la lee igual y revienta con
- * `TypeError: Cannot read properties of undefined (reading 'type')`. Ese error
- * no lo reconoce nadie, así que el sello no se reintentaba con otra ronda y
- * quien entraba con Freighter o con la cuenta de prueba veía "la red rechazó la
- * transacción" y tenía que apretar de nuevo (medido el 20 de octubre de 2026 con
- * la cuenta de prueba: 6 de 16 sellos fallaron así, por igual antes y después
- * de los cambios de fondos).
- *
- * Se mira el estado antes de leer el resultado y se lanza `tx-FAILED`, que es lo
- * mismo que dice `readReturnValue` y lo que `selloSinGrabar` y `errorKey` ya
- * entienden. Una transacción fallida no deja nada grabado, así que reintentar no
- * puede dejar dos sellos.
- */
-function resultadoDe(sent: { result: unknown; getTransactionResponse?: { status?: string } }): unknown {
-  const estado = sent.getTransactionResponse?.status;
-  if (estado && estado !== "SUCCESS") throw new Error("tx-" + estado);
-  return sent.result;
-}
-
-/**
- * Algunas wallets firman y envían de una sola vez contra su propio servidor.
- * Ahí no se puede usar `signAndSend`, porque la transacción saldría dos veces:
- * se les entrega el XDR y el resultado de la invocación se lee de la red.
- *
- * Devuelve `null` si la wallet activa no es de ese tipo, y sigue el camino
- * normal de firmar acá y enviar nosotros.
- */
-async function submitElsewhere(
-  tx: { toXDR(): string; readonly simulationData: unknown },
-  onStep: OnStep,
-): Promise<{ hash: string; value: unknown } | null> {
-  const [{ activeWallet }, { submitsItself }] = await Promise.all([
-    import("../stellar/wallet"),
-    import("../stellar/wallet-pollar"),
-  ]);
-  const wallet = activeWallet();
-  if (!submitsItself(wallet)) return null;
-  // `signAndSend` del SDK mira la simulación antes de firmar y lanza si el
-  // contrato dijo que no ("Transaction simulation failed: Error(Contract, #5)":
-  // la ronda quedó demasiado cerca). Esta wallet recibe el XDR sin pasar por ahí,
-  // y `client.seal()` no lanza cuando la simulación falla: devuelve la
-  // transacción sin armar, con la comisión base y sin datos de Soroban, que la
-  // red rechaza como malformada (`txMALFORMED`, que Pollar cuenta como
-  // `txFailed`). Se vio el 19 de octubre de 2026, y es lo que pasaba con una
-  // ronda cerca. Leer la simulación acá lanza el error de verdad, igual que con
-  // las otras wallets, y `freeze.ts` reintenta con otra ronda.
-  void tx.simulationData;
-  const hash = await wallet.signAndSubmit(tx.toXDR());
-  onStep("sending", hash);
-  const value = await readReturnValue(hash);
-  onStep("confirmed", hash);
-  return { hash, value };
+  const { hash, desenlace } = await firmarYConfirmar(tx, onStep, SIN_RED_SELLO_MS, () => {
+    // Recién aprobado (con Freighter puede haber pasado un rato): si la ronda ya
+    // no alcanza, no se manda. Entraría y fallaría, con la comisión cobrada.
+    const quedan = roundTime(args.round) - Date.now() / 1000;
+    if (quedan < MARGEN_AL_MANDAR_S) throw new RondaMuyCerca(quedan);
+  });
+  if (desenlace.estado === "entro") {
+    let raffleId: bigint;
+    try {
+      raffleId = unwrap<bigint>(await valorNativo(desenlace.valor));
+    } catch (sinValor) {
+      // Entró, y no se pudo leer el número que devolvió: no es una falla que se
+      // arregle con otra ronda (eso dejaría dos sellos). El número lo dice el contrato.
+      throw new (await envio()).SelloIncierto({ ...intento, hash }, sinValor);
+    }
+    onStep("confirmed", hash);
+    return { raffleId, txHash: hash };
+  }
+  if (desenlace.estado === "sin-respuesta") throw new (await envio()).SelloIncierto({ ...intento, hash }, desenlace.error);
+  throw errorDelDesenlace(desenlace);
 }
 
 /**
@@ -303,19 +358,14 @@ function cancelarSiCambiaLaSesion(address: string): { signal: AbortSignal; solta
   return { signal: control.signal, soltar: () => document.removeEventListener("tinkazo:sesion", alCambiar) };
 }
 
-/** Lee lo que devolvió la invocación, ya confirmada en la red. */
-async function readReturnValue(hash: string): Promise<unknown> {
-  const { scValToNative } = await import("@stellar/stellar-sdk");
-  const { server } = await import("../stellar/contract");
-  const res = await server.pollTransaction(hash, { attempts: 12 });
-  if (res.status !== "SUCCESS" || !res.returnValue) throw new Error("tx-" + res.status);
-  return scValToNative(res.returnValue);
-}
-
 /**
  * Finaliza el sorteo en el contrato con la firma de la ronda. No exige
  * autorización del organizador: cualquiera puede hacerlo una vez que la ronda
  * existe, así que el organizador no puede retener un resultado que no le gusta.
+ *
+ * Reintentarlo siempre es seguro: el contrato acepta un solo sorteo por sello
+ * (`AlreadyDrawn`) y el resultado no depende de quién ni cuándo lo manda. Los
+ * reintentos los hace `draw.ts`, que antes de cada uno mira si ya está.
  */
 export function drawOnChain(
   raffleId: bigint,
@@ -326,30 +376,45 @@ export function drawOnChain(
 }
 
 async function sortear(raffleId: bigint, signature96: Uint8Array, onStep: OnStep): Promise<DrawResult> {
-  const { getClient } = await import("../stellar/contract");
-  const client = await getClient();
+  const [{ getClient }, { armar, submitElsewhere, firmarYConfirmar, valorNativo, errorDelDesenlace }] = await Promise.all([import("../stellar/contract"), sdk()]);
+  const client = await armar(() => getClient());
   onStep("simulating");
-  const tx = await client.draw({
-    raffle_id: raffleId,
-    signature: signature96 as unknown as Buffer,
-  });
+  const vida = await vidaDelSorteo();
+  const tx: TxArmada = await armar(() =>
+    client.draw(
+      {
+        raffle_id: raffleId,
+        signature: signature96 as unknown as Buffer,
+      },
+      { timeoutInSeconds: vida },
+    ),
+  );
   onStep("signing", await costoVisible(tx));
 
-  const delegated = await submitElsewhere(tx, onStep);
+  const delegated = await submitElsewhere(tx, onStep, SIN_RED_SORTEO_MS);
   if (delegated) {
     const d = unwrap<{ winners: number[]; randomness: Uint8Array }>(delegated.value);
     return { winners: [...d.winners], randomness: toHex(d.randomness), txHash: delegated.hash };
   }
 
-  const sent = await tx.signAndSend();
-  const draw = unwrap<{ winners: number[]; randomness: Uint8Array }>(resultadoDe(sent));
-  const txHash = sent.sendTransactionResponse?.hash ?? "";
-  onStep("confirmed", txHash);
-  return {
-    winners: [...draw.winners],
-    randomness: toHex(draw.randomness),
-    txHash,
-  };
+  const { hash, desenlace } = await firmarYConfirmar(tx, onStep, SIN_RED_SORTEO_MS);
+  if (desenlace.estado === "entro") {
+    const draw = unwrap<{ winners: number[]; randomness: Uint8Array }>(await valorNativo(desenlace.valor));
+    onStep("confirmed", hash);
+    return { winners: [...draw.winners], randomness: toHex(draw.randomness), txHash: hash };
+  }
+  // Con el hash, para "Ver detalle": es lo que sirve para buscarla en el explorador.
+  if (desenlace.estado === "sin-respuesta") throw Object.assign(new Error("sin-confirmar", { cause: desenlace.error }), { txHash: hash });
+  throw errorDelDesenlace(desenlace);
+}
+
+/**
+ * Averigua si un sello que se cortó entró (`resolverSello`), con la red de
+ * testigo: la hora de cierre del último ledger, el contrato y, si se sabe, el
+ * hash de su transacción.
+ */
+export async function resolverSelloEnLaRed(intento: IntentoDeSello, onStep?: OnStep): Promise<Resolucion> {
+  return (await sdk()).resolverSelloEnLaRed(intento, onStep);
 }
 
 /** Lee un sorteo ya registrado. Sirve para reanudar y para `AlreadyDrawn`. */
@@ -387,7 +452,11 @@ export function stepLabel(step: AnchorStep): string {
             ? "txFunding"
             : step === "preparing"
               ? "txPreparing"
-              : "txConfirmed",
+              : step === "verifying"
+                ? "txVerifying"
+                : step === "retrying"
+                  ? "txRetrying"
+                  : "txConfirmed",
   );
 }
 
@@ -398,6 +467,7 @@ export function stepLabel(step: AnchorStep): string {
 export function showTxStatus(containerId: string, step: AnchorStep, detail?: string): void {
   const host = document.getElementById(containerId);
   if (!host) return;
+  limpiarDetalle(containerId);
   host.style.display = "block";
   host.className = step === "confirmed" ? "txstatus ok" : "txstatus";
   host.textContent = stepLabel(step);
@@ -427,28 +497,78 @@ export function showTxStatus(containerId: string, step: AnchorStep, detail?: str
 export function hideTxStatus(containerId: string): void {
   const host = document.getElementById(containerId);
   if (host) host.style.display = "none";
+  limpiarDetalle(containerId);
+}
+
+/** Saca el detalle plegado de un error anterior (`detalle-error.ts`): ya no es de lo que se ve. */
+export function limpiarDetalle(containerId: string): void {
+  document.getElementById(`${containerId}-detalle`)?.remove();
 }
 
 /**
- * Si el sello falló sin dejar nada en la cadena, y por el reloj: la ronda
- * quedó demasiado cerca (el contrato devuelve el error 5 al simular), o la
- * transacción entró y falló. En los dos casos reintentar no puede dejar dos
- * sellos. Un plazo vencido o un corte de red no entran: ahí no se sabe si
- * el primero quedó grabado.
+ * Si el sello falló sin dejar nada en la cadena, de una forma que se arregla con
+ * otra ronda: la ronda quedó demasiado cerca (el contrato devuelve el error 5 al
+ * simular), la transacción entró y falló, venció sin entrar, o la red la rechazó
+ * al recibirla por la secuencia o por tarde. En todos reintentar no puede dejar
+ * dos sellos. Un corte de red o una respuesta que no llegó no entran: ahí no se
+ * sabe si el primero quedó grabado, y eso es un `SelloIncierto`.
  *
  * "Entró y falló" se lee distinto según la wallet: "Transaction failed!" y
  * `tx-FAILED` salen del SDK de Stellar y de esta capa, y Pollar lo cuenta como
- * `txFailed`. Sin este último, quien entra con Google veía "la red rechazó la
- * transacción" y tenía que apretar de nuevo a mano, y el reintento con el grifo,
- * que suma unos segundos, hace que la ronda quede cerca más seguido.
+ * `txFailed` o, desde su API, `TX_CONTRACT_FAILED`. Sin el de Pollar, quien entra
+ * con Google veía "la red rechazó la transacción" y tenía que apretar de nuevo a
+ * mano, y el reintento con el grifo, que suma unos segundos, hace que la ronda
+ * quede cerca más seguido.
  */
 export function selloSinGrabar(e: unknown): boolean {
   const msg = e instanceof Error ? e.message : String(e);
-  return /Error\(Contract,\s*#5\)|Transaction failed!|tx-FAILED|txFailed|tx_failed/.test(msg);
+  return /Error\(Contract,\s*#5\)|Transaction failed!|tx-FAILED|txFailed|tx_failed|TX_CONTRACT_FAILED|tx-EXPIRED|tx_?bad_?seq|TX_BAD_SEQUENCE|tx_?too_?late/i.test(msg);
 }
 
-/** Mensaje de error de una invocación, ya traducido. */
+/**
+ * Mensaje de error de una invocación, ya traducido. Clasifica sin el SDK de
+ * Stellar (`errores.ts`): si la red se cayó antes de bajarlo, igual se dice qué
+ * pasó. Una clave sin texto cae en el mensaje genérico, nunca en la clave cruda.
+ */
 export async function anchorErrorText(e: unknown): Promise<string> {
-  const { errorKey } = await import("../stellar/contract");
-  return t("errAnchor." + errorKey(e)) || t("errAnchor.unknown");
+  try {
+    const { errorKey } = await import("../stellar/errores");
+    const clave = "errAnchor." + errorKey(e);
+    const texto = t(clave);
+    return texto && texto !== clave ? texto : t("errAnchor.unknown");
+  } catch {
+    return sinConexion();
+  }
+}
+
+/**
+ * Si ni siquiera se pudo bajar el módulo que clasifica el error, es que no hay
+ * conexión: la página no alcanza ni sus propios archivos. Se dice eso, con lo
+ * que ya está en la página.
+ */
+const sinConexion = (): string =>
+  t(typeof navigator !== "undefined" && navigator.onLine === false ? "errAnchor.offline" : "errAnchor.rpcDown");
+
+/**
+ * Escribe el error en `status`, con el detalle plegado debajo (`detalle-error.ts`).
+ * Si el detalle no se puede bajar (sin conexión, con la página a medio cargar),
+ * igual queda el mensaje: medido el 21 de octubre de 2026 con DevTools sin red,
+ * sin esto el sellado terminaba sin decir nada.
+ */
+export async function escribirError(status: HTMLElement, e: unknown, paso: "sello" | "sorteo"): Promise<void> {
+  try {
+    await (await import("./detalle-error")).mostrarError(status, e, paso);
+  } catch {
+    limpiarDetalle(status.id);
+    status.textContent = sinConexion();
+  }
+}
+
+/**
+ * Lo que hace falta para contar un error del sorteo, bajado de antemano: el
+ * sorteo es frente a la sala, y el wifi de un evento se cae justo ahí. Se pide
+ * con el sello ya hecho, que es cuando seguro hubo conexión.
+ */
+export function precargarParaElSorteo(): void {
+  for (const m of [import("./sorteo-seguro"), import("./detalle-error"), import("../stellar/errores")]) m.catch(() => undefined);
 }

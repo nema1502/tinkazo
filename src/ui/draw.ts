@@ -7,7 +7,7 @@ import { verifyRoundAsync } from "../protocol/firma";
 import { select } from "../protocol/select";
 import { network, txUrl } from "../stellar/config";
 import { PROOF_VERSION, type Proof, proofUrl } from "../protocol/proof";
-import { anchorErrorText, drawOnChain, readDraw, showTxStatus, stepLabel } from "./anchor";
+import { drawOnChain, escribirError, limpiarDetalle, readDraw, showTxStatus, stepLabel } from "./anchor";
 import { loreFor } from "../games/lore";
 import { currentSession } from "./wallet-ui";
 import { pintarQr } from "./qr";
@@ -58,6 +58,8 @@ export async function draw(): Promise<void> {
     status.style.display = "block";
     status.className = "txstatus";
     status.textContent = t("fetching");
+    // El detalle de un error de antes ya no es de lo que se ve.
+    limpiarDetalle("draw-status");
 
     let beacon: Beacon;
     try {
@@ -86,64 +88,56 @@ export async function draw(): Promise<void> {
       // Anclado: el contrato verifica la firma y decide. Lo que muestra la
       // pantalla es lo que quedó registrado, no un cálculo nuestro.
       //
-      // Se reintenta, y no es capricho. El contrato compara la hora de la ronda
-      // contra la **hora de cierre del ledger**, que va unos segundos atrás del
-      // reloj del navegador. Así que hay una ventana de pocos segundos en la que
-      // acá ya es hora y para la cadena todavía no, y la transacción se cae.
-      // Pedirle a alguien que vuelva a apretar el botón, con la sala mirando, es
-      // inaceptable: se reintenta solo.
-      const TRIES = 4;
-      let lastError: unknown = null;
-      let done = false;
+      // Se reintenta solo, y no es capricho (`sorteo-seguro.ts`). El contrato
+      // compara la hora de la ronda contra la **hora de cierre del ledger**, que
+      // va unos segundos atrás del reloj del navegador: hay una ventana en la que
+      // acá ya es hora y para la cadena todavía no. Y con el wifi de un evento, un
+      // corte. Pedirle a alguien que vuelva a apretar el botón, con la sala
+      // mirando, es inaceptable. Reintentar el sorteo es seguro: el contrato
+      // acepta uno solo por sello.
       // La curva, para pasar la firma al formato del contrato. La cuenta
       // regresiva ya la bajó (ver `freeze`).
-      const { decompressG1 } = await import("../protocol/drand");
-      for (let attempt = 1; attempt <= TRIES && !done; attempt++) {
-        try {
-          const res = await drawOnChain(raffleId, decompressG1(beacon.signature), (step, detail) => {
+      const [{ decompressG1 }, { sortearConReintentos, SORTEO_REINTENTABLE, avisoDelReintento }, { errorKey }] = await Promise.all([
+        import("../protocol/drand"),
+        import("./sorteo-seguro"),
+        import("../stellar/errores"),
+      ]);
+      const fin = await sortearConReintentos<{ winners: number[]; randomness: string; txHash?: string }>({
+        intentar: () =>
+          drawOnChain(raffleId, decompressG1(beacon.signature), (step, detail) => {
             btn.textContent = stepLabel(step);
             showTxStatus("draw-status", step, detail);
-          });
-          winners = res.winners;
-          drawTx = res.txHash;
-          done = true;
-        } catch (e) {
-          lastError = e;
-          // Si alguien más ya lo finalizó, el resultado igual es público. Si la
-          // red tampoco contesta acá, se sigue con los reintentos: antes esto
-          // cortaba draw() y el botón quedaba trabado para siempre (QA, 16 de
-          // octubre de 2026).
-          const already = await readDraw(raffleId).catch(() => null);
-          if (already) {
-            winners = already.winners;
-            showTxStatus("draw-status", "confirmed");
-            done = true;
-            break;
-          }
-          if (attempt < TRIES) {
-            const status = $("draw-status");
-            status.style.display = "block";
-            status.className = "txstatus";
-            status.textContent = T[getLang()].drawTry(attempt + 1, TRIES);
-            await new Promise((r) => setTimeout(r, 5000));
-          }
-        }
-      }
-      if (!done) {
+          }),
+        yaEsta: () => readDraw(raffleId),
+        reintentable: (e) => SORTEO_REINTENTABLE.has(errorKey(e)),
+        alReintentar: (proximo, total, e) => {
+          // Dice lo que pasó: la red no contestó, estaba ocupada, la cadena todavía no ve la ronda u otra cosa.
+          const aviso = avisoDelReintento(errorKey(e));
+          showTxStatus("draw-status", "retrying");
+          const status = $("draw-status");
+          status.textContent =
+            aviso === "drawTry" ? T[getLang()].drawTry(proximo, total) : t(aviso).replace("{i}", String(proximo)).replace("{n}", String(total));
+        },
+      });
+      if (!fin.ok) {
         sinShow();
-        // El mensaje de la pantalla es para la sala; el error de verdad queda en
-        // la consola, para saber qué pasó si se repite.
-        console.warn("[tinkazo] el sorteo no se pudo grabar", lastError);
+        // El mensaje de la pantalla es para la sala; el detalle queda plegado
+        // debajo, en este navegador y en la consola, por si se repite.
+        console.warn("[tinkazo] el sorteo no se pudo grabar", fin.error);
         btn.disabled = false;
         btn.classList.add("lista");
         btn.textContent = t("drawRetry");
         const status = $("draw-status");
         status.style.display = "block";
         status.className = "txstatus bad";
-        status.textContent = await anchorErrorText(lastError);
+        await escribirError(status, fin.error, "sorteo");
         verError(status);
         return;
       }
+      winners = fin.valor.winners;
+      if (fin.valor.txHash) drawTx = fin.valor.txHash;
+      // Ya estaba registrado (un intento cortado que sí entró, u otra persona): sin enlace a la transacción.
+      if (fin.yaEstaba) showTxStatus("draw-status", "confirmed");
     } else {
       winners = select(hexToBytes(beacon.randomness), hexToBytes(listHash), names.length, nWinners);
     }
@@ -161,7 +155,9 @@ export async function draw(): Promise<void> {
     cortina?.cerrar();
   } catch (e) {
     // Lo inesperado, en cualquier paso: sin esto la cortina quedaba tapando la
-    // pantalla y el botón apagado, con la sala mirando.
+    // pantalla y el botón apagado, con la sala mirando. Se dice lo que fue (un
+    // corte de red ya no sale como "la red rechazó la transacción"), con el
+    // detalle plegado debajo.
     sinShow();
     console.warn("[tinkazo] el sorteo se cortó", e);
     btn.disabled = false;
@@ -171,6 +167,7 @@ export async function draw(): Promise<void> {
     status.style.display = "block";
     status.className = "txstatus bad";
     status.textContent = t("errAnchor.unknown");
+    await escribirError(status, e, "sorteo");
     verError(status);
   }
 }
@@ -525,6 +522,7 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   for (const id of ["draw-status", "reverify-out", "again-row", "winner-box", "lore-box", "qr-box", "sec-draw"]) {
     $(id).style.display = "none";
   }
+  limpiarDetalle("draw-status");
   $("winner-cards").innerHTML = "";
   $("sec-participants").scrollIntoView({ behavior: "smooth", block: "start" });
   // Con la lista lista, lo que sigue es nombrar el premio nuevo: si no, el
