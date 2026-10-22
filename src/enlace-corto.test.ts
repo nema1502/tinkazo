@@ -5,8 +5,10 @@ import {
   acortar,
   alAcortar,
   borrarCorto,
+  borrarTodos,
   cifrar,
   cortoGuardado,
+  cortosBorrables,
   descifrar,
   esRuta,
   olvidarMemoria,
@@ -36,7 +38,7 @@ class Almacen {
 }
 
 /** El servicio de enlaces cortos, en memoria, con lo mismo que contesta el de verdad. */
-function servicioFalso() {
+function servicioFalso(prefijo = "Ab") {
   const guardado = new Map<string, { datos: Uint8Array; borrar: string }>();
   const pedidos: Array<{ url: string; metodo: string; init?: RequestInit }> = [];
   let n = 0;
@@ -45,7 +47,7 @@ function servicioFalso() {
     const metodo = init?.method ?? "GET";
     pedidos.push({ url: u, metodo, init });
     if (metodo === "POST") {
-      const id = `Ab${String(n++).padStart(6, "0")}`;
+      const id = `${prefijo}${String(n++).padStart(6, "0")}`;
       const borrar = `permiso-${id}`;
       guardado.set(id, { datos: new Uint8Array(init?.body as Uint8Array), borrar });
       return new Response(JSON.stringify({ id, borrar }), { status: 201 });
@@ -353,5 +355,42 @@ describe("enlace corto: borrarlo", () => {
     const otro = await proofUrl({ ...comprobante, round: 1 }, ORIGEN);
     expect(await borrarCorto(otro, { fetch: s.f })).toBe(false);
     expect(s.pedidos.filter((p) => p.metodo === "DELETE")).toHaveLength(0);
+  });
+});
+
+describe("enlace corto: borrar todos los de este equipo", () => {
+  it("borra los que creó este equipo, también uno que ya no tiene su enlace largo a mano, y deja los abiertos de otros", async () => {
+    const s = servicioFalso();
+    await acortar(largo, { fetch: s.f, origen: ORIGEN });
+    // Un evento al que después se le cambió el nombre: su enlace largo ya es otro, pero su corto sigue guardado.
+    const viejo = await proofUrl({ ...comprobante, prize: "Nombre de antes" }, ORIGEN);
+    await acortar(viejo, { fetch: s.f, origen: ORIGEN });
+    // Uno que llegó de otro equipo: se recuerda para volver a compartirlo, sin permiso de borrar.
+    const ajeno = await proofUrl({ ...comprobante, round: 7 }, ORIGEN);
+    const otro = servicioFalso("Zz");
+    const c = await acortar(ajeno, { fetch: otro.f, origen: ORIGEN });
+    const { id, clave } = partes(c?.corto ?? "");
+    const guardado = (localStorage as unknown as Almacen).getItem("tinkazo.cortos") ?? "{}";
+    const sinPermiso = Object.fromEntries(
+      Object.entries(JSON.parse(guardado) as Record<string, { i: string; b: string }>).map(([k, x]) => [k, x.i === id ? { ...x, b: "" } : x]),
+    );
+    (localStorage as unknown as Almacen).setItem("tinkazo.cortos", JSON.stringify(sinPermiso));
+    olvidarMemoria();
+    expect(cortosBorrables()).toBe(2);
+    expect(await borrarTodos({ fetch: s.f })).toEqual({ borrados: 2, fallaron: 0 });
+    expect(cortosBorrables()).toBe(0);
+    expect(s.guardado.size).toBe(0);
+    expect(cortoGuardado(ajeno)?.id).toBe(id);
+    expect(await abrir(id, clave, { fetch: otro.f, origen: ORIGEN })).toMatchObject({ ruta: ajeno.slice(ORIGEN.length) });
+  });
+
+  it("si la red falla, dice cuántos no se borraron y los deja guardados", async () => {
+    const s = servicioFalso();
+    await acortar(largo, { fetch: s.f, origen: ORIGEN });
+    const caido = (async () => {
+      throw new TypeError("Failed to fetch");
+    }) as typeof fetch;
+    expect(await borrarTodos({ fetch: caido })).toEqual({ borrados: 0, fallaron: 1 });
+    expect(puedeBorrar(largo)).toBe(true);
   });
 });

@@ -1178,18 +1178,27 @@
   .evn-sorteo { border: 2px solid var(--ink2); padding: 10px 12px; }
   .evn-sorteo .hc-meta { margin: 4px 0 0; }
   .hc-sumar { min-height: 44px; max-width: 100%; padding: 6px 8px; font: inherit; font-size: 14px; color: var(--ink); background: var(--paper); border: var(--bw) solid var(--ink); }
-  /* El margen automático va explícito: el reinicio de márgenes de la hoja lo anula y el diálogo se iba a la esquina. */
-  .cmp-dlg { margin: auto; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; padding: 0; border: var(--bw) solid var(--ink); background: var(--paper); color: var(--ink); box-shadow: var(--sh); }
+  /* El margen automático va explícito: el reinicio de márgenes de la hoja lo anula y el diálogo se iba a la esquina.
+     Compartir (compartir.ts): la foto a la izquierda y lo que se hace a la derecha, con
+     "Compartir por WhatsApp" arriba de todo; en el celular, la foto arriba y el botón
+     justo debajo, a la vista sin bajar. */
+  .cmp-dlg { margin: auto; width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow: auto; overscroll-behavior: contain; padding: 0; border: var(--bw) solid var(--ink); background: var(--paper); color: var(--ink); box-shadow: var(--sh); }
   .cmp-dlg::backdrop { background: rgba(10, 6, 18, 0.72); }
   .cmp-cuerpo { display: grid; gap: 14px; padding: 18px 20px 22px; }
   .cmp-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
   .cmp-top h2 { font-size: 22px; font-weight: 900; }
   .cmp-top .ghost { min-height: 44px; }
-  .cmp-nota { font-weight: 700; }
-  .cmp-imgs { display: grid; gap: 12px; justify-content: center; grid-template-columns: repeat(auto-fit, minmax(0, 300px)); }
-  .cmp-imgs:empty { display: none; }
-  .cmp-imgs > .note { justify-self: center; max-width: 260px; text-align: center; margin: 0; }
-  .cmp-png { display: block; justify-self: center; width: 100%; max-width: 240px; height: auto; border: var(--bw) solid var(--ink); }
+  .cmp-main { display: grid; grid-template-columns: minmax(0, 280px) minmax(0, 1fr); gap: 22px; align-items: start; }
+  .cmp-fotos { display: grid; gap: 10px; }
+  .cmp-fotos.varias { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cmp-fotos > .note { margin: 0; }
+  .cmp-espera { aspect-ratio: 4 / 5; display: grid; place-content: center; justify-items: center; gap: 12px; padding: 12px; border: var(--bw) dashed var(--ink2); background: var(--card); color: var(--ink2); font-weight: 700; font-size: 14px; text-align: center; }
+  .cmp-png { display: block; width: 100%; height: auto; border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm); }
+  .cmp-lado { display: grid; gap: 12px; align-content: start; min-width: 0; }
+  .cmp-nota { font-weight: 700; margin: 0; }
+  .cmp-wa { min-height: 52px; font-size: 17px; justify-content: center; text-align: center; }
+  .cmp-aviso { font-weight: 800; margin: 0; }
+  .cmp-aviso:empty { display: none; }
   .cmp-txt { width: 100%; min-height: 120px; padding: 10px; font: inherit; font-size: 14px; line-height: 1.4; color: var(--ink); background: var(--card); border: var(--bw) solid var(--ink); resize: vertical; }
   .cmp-acc { display: flex; flex-wrap: wrap; gap: 10px; }
   .cmp-acc a, .cmp-acc button { min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }
@@ -1199,6 +1208,14 @@
   @media (prefers-reduced-motion: reduce) { .c-puntos i { animation: none; } }
   .c-acciones { margin-top: 22px; }
   .c-acciones a, .c-acciones button { min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }
+  .cmp-priv { margin: 0; }
+  @media (max-width: 640px) {
+    .cmp-cuerpo { padding: 14px 14px 18px; }
+    .cmp-main { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+    .cmp-fotos { width: min(100%, 230px); justify-self: center; }
+    .cmp-fotos.varias { width: 100%; }
+  }
+  @media (prefers-reduced-motion: reduce) { .cmp-espera .cortina-puntos i { animation: none; } }
   /* Los enlaces de texto, del color de la casa y no del azul del navegador. */
   .note a, .txstatus a, .entity a, main > section > a.sec-link { color: inherit; text-decoration-thickness: 2px; text-underline-offset: 2px; }
 
@@ -1233,7 +1250,7 @@
   body[data-demo="1"] .demo-fin { display: block; margin-top: 18px; padding: 18px; background: var(--purple); color: var(--on-purple); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
   body[data-demo="1"] .demo-fin h3 { font-size: 18px; font-weight: 900; margin-bottom: 10px; }
   body[data-demo="1"] #btn-whatsapp, body[data-demo="1"] #btn-email, body[data-demo="1"] #btn-proof, body[data-demo="1"] #gate, body[data-demo="1"] #again-row,
-  body[data-demo="1"] #btn-imagen, body[data-demo="1"] .ausente { display: none !important; }
+  body[data-demo="1"] .ausente { display: none !important; }
 
   /* En el celular con la sesión abierta la cabecera ocupaba tres filas: el
      aviso de la red pasa a ser el borde de la cuenta, del mismo color. Si la

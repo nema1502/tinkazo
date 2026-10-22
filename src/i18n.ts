@@ -37,8 +37,8 @@ export interface Dict {
   cWin: (n: string, many?: boolean) => string;
   /** "Copiar el mensaje": lo que se pega en el grupo. Quién ganó, entre cuántos, el premio, el enlace para verificarlo y el pie con la marca. */
   summary: (w: string, n: number, premio: string, enlace: string, varios: boolean) => string;
-  /** "Compartir el evento" en Mis sorteos: lo que se pega en el grupo, con el enlace a evento.html. */
-  summaryEvento: (fecha: string, n: number, enlace: string) => string;
+  /** "Compartir el evento" en Mis sorteos: lo que se pega en el grupo, con quién ganó qué (un renglón por sorteo) y el enlace a evento.html. */
+  summaryEvento: (fecha: string, n: number, enlace: string, lineas?: string[]) => string;
   drawIn: (mmss: string) => string;
   /** Debajo del resultado: cuántos quedan en la lista sin los ganadores. */
   againLeft: (n: number) => string;
@@ -50,11 +50,6 @@ export interface Dict {
   againQuitados: (nombres: string[], n: number) => string;
   /** "No está": quién no estaba, entre cuántos vuelve a salir su premio y si también salen los otros ganadores. */
   ausenteNota: (nombre: string, n: number, otros: boolean) => string;
-  /** La imagen del resultado: entre cuántas personas salió, con uno o con varios ganadores. */
-  imgEntre: (n: number, varios: boolean) => string;
-  imgMas: (n: number) => string;
-  /** El texto que acompaña a la imagen cuando se comparte desde el celular. */
-  imgTexto: (nombres: string[], premio: string) => string;
   drandTry: (i: number, n: number) => string;
   drawTry: (i: number, n: number) => string;
   cConstPass: (n: string) => string;
@@ -894,19 +889,11 @@ export const T: Record<Lang, Dict> = {
     ausenteSi: "Sí, sortear de nuevo",
     ausenteNo: "Cancelar",
     ausenteNota: (nombre, n, otros) => `${nombre} no está: su premio se sortea de nuevo entre las ${n} personas que quedan${otros ? ", sin quienes ya ganaron" : ""}. Sellá la lista para seguir.`,
-    imgBtn: "Imagen para redes",
-    imgLista: "Imagen compartida",
-    imgDescargada: "Imagen descargada",
-    imgFalla: "No se pudo armar la imagen",
     imgKicker: "Resultado del sorteo",
     imgGano: "Ganó",
     imgGanaron: "Ganaron",
     imgPremio: "Premio:",
-    imgEntre: (n, varios) => `${varios ? "Salieron" : "Salió"} entre ${n} personas`,
-    imgMas: (n) => (n === 1 ? "y 1 más" : `y ${n} más`),
     imgPieVarios: "Nadie eligió estos nombres: la lista se cerró antes de que existiera el número que los decidió.",
-    imgSello: "Sorteo verificable",
-    imgTexto: (nombres, premio) => `${nombres.length > 1 ? `Ganaron ${nombres.join(", ")}` : `Ganó ${nombres[0] ?? ""}`}${premio ? ` (${premio})` : ""}. Un sorteo que cualquiera puede comprobar, hecho con Tinkazo: https://tinkazo.app`,
     obTitle: "Tu primer sorteo, paso a paso",
     ob1T: "Cargá la lista",
     ob1B: "Pegá los nombres, uno por línea, o subí el CSV de Luma con los que hicieron check-in.",
@@ -1400,7 +1387,7 @@ export const T: Record<Lang, Dict> = {
     vListChanged: "La lista de este enlace no es la que se selló. Alguien la cambió después.",
     vBadSignature: "La firma de la ronda no verifica contra la clave pública del faro.",
     vMismatch: "El ganador recomputado no coincide con el que quedó registrado.",
-    shareProof: "Compartir el resultado", proofCopied: "¡Copiado! Pegalo en el grupo",
+    shareProof: "Compartir el resultado",
     // Enlace de evento (evento.html): varios sorteos del mismo evento, en un solo enlace.
     evKickerRevisando: "Revisando", evTituloRevisando: "Revisando los sorteos", evProgreso: "Van {i} de {n}.",
     evKickerOk: "Todo cuadra", evTituloOk: "Los sorteos cuadran",
@@ -1477,17 +1464,14 @@ export const T: Record<Lang, Dict> = {
     cWin: (n, many) => pick(many ? [`¡GANAN ${n}!`, `¡SE LO LLEVAN ${n}!`, `¡ES PARA ${n}!`, `¡EL TINKAZO ES PARA ${n}!`] : [`¡GANA ${n}!`, `¡SE LO LLEVA ${n}!`, `¡ES PARA ${n}!`, `¡EL TINKAZO ES PARA ${n}!`]),
     summary: (w, n, premio, enlace, varios) =>
       `${premio ? `Sorteo de ${premio}: ${varios ? "ganaron" : "ganó"}` : varios ? "Ganaron" : "Ganó"} ${w}, entre ${n} personas.\nNadie eligió ${varios ? "estos nombres" : "este nombre"}.\nSi querés verificarlo, entrá acá: ${enlace}\n\nSorteado con Tinkazo · https://tinkazo.app`,
-    summaryEvento: (f, n, enlace) =>
-      `Sorteos del ${f} (${n} ${n === 1 ? "sorteo" : "sorteos"}), todos verificables.\nSi querés verificarlos, entrá acá:\n${enlace}\n\nSorteado con Tinkazo · https://tinkazo.app`,
+    summaryEvento: (f, n, enlace, lineas = []) =>
+      `Sorteos del ${f} (${n === 1 ? "1 sorteo), verificable" : `${n} sorteos), todos verificables`}.\n${lineas.map((l) => `${l}\n`).join("")}Si querés ${n === 1 ? "verificarlo" : "verificarlos"}, entrá acá:\n${enlace}\n\nSorteado con Tinkazo · https://tinkazo.app`,
     histGrupoT: "Sorteos del {f}", histGrupoCompartir: "Compartir el evento",
     evAvisoPartes: "El evento va en {n} enlaces, para que ninguno se corte al pegarlo.",
     evParte: "Parte {i} de {n}",
     // --- Compartir un comprobante otra vez, y eventos con nombre (20 de octubre de 2026).
     // Los mensajes repiten la forma de T.es.summary y summaryEvento: un test los compara.
     cmpSorteo: "Compartir el sorteo", cmpBtn: "Compartir", cmpMensaje: "Mensaje para el grupo",
-    cmpWhatsapp: "Mandar por WhatsApp", cmpImagenCompartir: "Compartir la imagen con el QR", cmpImagenBajar: "Bajar la imagen con el QR",
-    cmpSinQr: "Es demasiado largo para un QR: el mensaje trae el enlace igual.",
-    cmpCardUno: "Ganó {w}", cmpCardVarios: "Ganaron {w}",
     cmpCabPremioUno: "Sorteo de {premio}: ganó {w}, entre {n} personas.",
     cmpCabPremioVarios: "Sorteo de {premio}: ganaron {w}, entre {n} personas.",
     cmpCabUno: "Ganó {w}, entre {n} personas.", cmpCabVarios: "Ganaron {w}, entre {n} personas.",
@@ -1495,7 +1479,7 @@ export const T: Record<Lang, Dict> = {
     cmpVerificarUno: "Si querés verificarlo, entrá acá: {enlace}",
     cmpVerificarEv: "Si querés verificarlos, entrá acá:\n{enlace}",
     cmpPie: "Sorteado con Tinkazo · https://tinkazo.app",
-    cmpEvUno: "{t} (1 sorteo), todos verificables.", cmpEvVarios: "{t} ({n} sorteos), todos verificables.",
+    cmpEvUno: "{t} (1 sorteo), verificable.", cmpEvVarios: "{t} ({n} sorteos), todos verificables.",
     // --- La página del enlace corto, c.html (21 de octubre de 2026).
     cTitulo: "Comprobante de un sorteo en Tinkazo",
     cDesc: "Abrilo para ver quién ganó y comprobarlo vos mismo, desde tu celular.",
@@ -1505,13 +1489,35 @@ export const T: Record<Lang, Dict> = {
     cNoExisteT: "Este enlace ya no existe", cNoExisteB: "Quien lo compartió lo borró, o se copió mal. Pedile que te lo mande de nuevo.",
     cRotoT: "Este enlace no se puede abrir", cRotoB: "Puede que se haya copiado mal o le falte un pedazo. Pedile a quien te lo mandó que lo comparta de nuevo.",
     cOtraVez: "Probar de nuevo", cPortada: "Ir a la portada",
+    cmpVerificarEvUno: "Si querés verificarlo, entrá acá:\n{enlace}",
+    // --- El enlace corto y la foto con el QR (21 de octubre de 2026).
+    cmpWa: "Compartir por WhatsApp", cmpPreparando: "Preparando la foto…",
+    cmpBajarFoto: "Descargar la foto", cmpBajarFotos: "Descargar las fotos",
+    cmpPegaLaFoto: "Copiamos la foto: pegala en el chat de WhatsApp.",
+    cmpAdjuntaLaFoto: "La foto se descargó: adjuntala en el chat de WhatsApp.",
+    cmpAdjuntaLasFotos: "Las fotos se descargaron: adjuntalas en el chat de WhatsApp.",
+    cmpNoAparece: "¿No estaba WhatsApp? Descargá la foto y copiá el mensaje para pegarlos en el chat.",
+    cmpFotoAlt: "La foto con quién ganó y el QR para comprobarlo",
+    cmpSinFoto: "No se pudo armar la foto: el mensaje trae el enlace igual.",
+    cmpPrivLista: "Quien tenga la foto o el enlace puede ver la lista entera.",
+    cmpPrivCorto: "El enlace corto guarda una copia protegida que Tinkazo no puede leer.",
+    cmpPrivBorrar: "La borrás desde Mis sorteos.",
+    cmpBorrarCorto: "Borrar el enlace corto", cmpBorrarCortos: "Borrar los enlaces cortos",
+    cmpBorrarCortoConf: "Quien tenga el enlace corto o su QR ya no lo va a poder abrir. El sorteo y su comprobante quedan como están. ¿Lo borramos?",
+    cmpBorrarCortosConf: "Se borran todos los enlaces cortos que se crearon desde este equipo: quien los tenga, o tenga su QR, ya no los va a poder abrir. Los sorteos y sus comprobantes quedan como están. ¿Dale?",
+    cmpCortoBorrado: "Enlace corto borrado.", cmpCortosBorrados: "Enlaces cortos borrados.",
+    cmpCortoNoSeBorro: "No se pudo borrar: revisá tu conexión y probá de nuevo.",
+    fotoEscanear: "Escaneá para comprobarlo",
+    fotoSinQr: "Para comprobarlo, abrí el enlace que va con esta foto.",
+    fotoNumero: "Sorteo #{n}", fotoPrueba: "red de prueba", fotoEvento: "Evento",
+    fotoEntreUno: "Salió entre {n} personas", fotoEntreVarios: "Salieron entre {n} personas", fotoMas: "y {n} más",
     evnT: "Mis eventos",
     evnLead: "Un evento junta sorteos bajo un nombre, para mandarlos juntos. Sumale sorteos desde cada uno de tus sorteos.",
     evnNombre: "Nombre del evento", evnCrear: "Crear evento", evnGuardar: "Guardar el nombre",
     evnBorrar: "Borrar el evento", evnBorrarConf: "Se borra el evento. Sus sorteos vuelven a la lista de Mis sorteos. ¿Dale?",
     evnSumar: "Sumar a un evento…", evnQuitar: "Quitar del evento", evnVerLista: "Ver los sorteos",
     evnVacio: "Todavía no hay eventos. Creá uno, o ponele nombre a un grupo de sorteos.",
-    evnNombrar: "Ponerle nombre", evnCompartirPartes: "Compartir el evento ({n} partes)",
+    evnNombrar: "Ponerle nombre",
     evnSumado: "Sumado a {nombre}.", evnQuitado: "Quitado de {nombre}.", evnNombreVacio: "Ponele un nombre al evento.",
     evnCreado: "Evento creado: {nombre}.", evnSinSorteos: "Todavía no tiene sorteos: sumale alguno desde Mis sorteos.",
     vCompartir: "Compartir este sorteo",
@@ -2156,19 +2162,11 @@ export const T: Record<Lang, Dict> = {
     ausenteSi: "Yes, draw again",
     ausenteNo: "Cancel",
     ausenteNota: (nombre, n, otros) => `${nombre} is not here: their prize is drawn again among the ${n} people left${otros ? ", without the other winners" : ""}. Seal the list to go on.`,
-    imgBtn: "Image for social media",
-    imgLista: "Image shared",
-    imgDescargada: "Image downloaded",
-    imgFalla: "Could not make the image",
     imgKicker: "Draw result",
     imgGano: "Winner",
     imgGanaron: "Winners",
     imgPremio: "Prize:",
-    imgEntre: (n) => `Drawn from ${n} people`,
-    imgMas: (n) => `and ${n} more`,
     imgPieVarios: "Nobody picked these names: the list was locked before the number that decided them existed.",
-    imgSello: "Verifiable draw",
-    imgTexto: (nombres, premio) => `${nombres.length > 1 ? `Winners: ${nombres.join(", ")}` : `Winner: ${nombres[0] ?? ""}`}${premio ? ` (${premio})` : ""}. A draw anyone can check, made with Tinkazo: https://tinkazo.app`,
     obTitle: "Your first draw, step by step",
     ob1T: "Load the list",
     ob1B: "Paste the names, one per line, or upload the Luma CSV with those who checked in.",
@@ -2659,7 +2657,7 @@ export const T: Record<Lang, Dict> = {
     vListChanged: "The list in this link is not the one that was sealed. Someone changed it afterwards.",
     vBadSignature: "The round signature doesn't verify against the beacon's public key.",
     vMismatch: "The recomputed winner doesn't match the one on record.",
-    shareProof: "Share the result", proofCopied: "Copied! Paste it in your group",
+    shareProof: "Share the result",
     // Event link (evento.html): several draws from the same event, in one link.
     evKickerRevisando: "Checking", evTituloRevisando: "Checking the draws", evProgreso: "{i} of {n} done.",
     evKickerOk: "All adds up", evTituloOk: "The draws add up",
@@ -2736,17 +2734,14 @@ export const T: Record<Lang, Dict> = {
     cWin: (n, many) => pick(many ? [`${n} WIN!`, `${n} TAKE IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`] : [`${n} WINS!`, `${n} TAKES IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`]),
     summary: (w, n, premio, enlace, varios) =>
       `${premio ? `${premio} draw: ${varios ? "the winners are" : "the winner is"}` : varios ? "The winners are" : "The winner is"} ${w}, out of ${n} people.\nNobody picked ${varios ? "these names" : "this name"}.\nIf you want to verify it, open this link: ${enlace}\n\nDrawn with Tinkazo · https://tinkazo.app`,
-    summaryEvento: (f, n, enlace) =>
-      `Draws from ${f} (${n} ${n === 1 ? "draw" : "draws"}), all verifiable.\nIf you want to verify them, open this link:\n${enlace}\n\nDrawn with Tinkazo · https://tinkazo.app`,
+    summaryEvento: (f, n, enlace, lineas = []) =>
+      `Draws from ${f} (${n === 1 ? "1 draw), verifiable" : `${n} draws), all verifiable`}.\n${lineas.map((l) => `${l}\n`).join("")}If you want to verify ${n === 1 ? "it" : "them"}, open this link:\n${enlace}\n\nDrawn with Tinkazo · https://tinkazo.app`,
     histGrupoT: "Draws from {f}", histGrupoCompartir: "Share the event",
     evAvisoPartes: "The event goes in {n} links, so none gets cut when pasted.",
     evParte: "Part {i} of {n}",
     // --- Sharing a receipt again, and named events (20 October 2026).
     // The messages repeat the shape of T.en.summary and summaryEvento: a test compares them.
     cmpSorteo: "Share the draw", cmpBtn: "Share", cmpMensaje: "Message for the group",
-    cmpWhatsapp: "Send on WhatsApp", cmpImagenCompartir: "Share the image with the QR", cmpImagenBajar: "Download the image with the QR",
-    cmpSinQr: "It's too long for a QR code: the message still has the link.",
-    cmpCardUno: "The winner is {w}", cmpCardVarios: "The winners are {w}",
     cmpCabPremioUno: "{premio} draw: the winner is {w}, out of {n} people.",
     cmpCabPremioVarios: "{premio} draw: the winners are {w}, out of {n} people.",
     cmpCabUno: "The winner is {w}, out of {n} people.", cmpCabVarios: "The winners are {w}, out of {n} people.",
@@ -2754,7 +2749,7 @@ export const T: Record<Lang, Dict> = {
     cmpVerificarUno: "If you want to verify it, open this link: {enlace}",
     cmpVerificarEv: "If you want to verify them, open this link:\n{enlace}",
     cmpPie: "Drawn with Tinkazo · https://tinkazo.app",
-    cmpEvUno: "{t} (1 draw), all verifiable.", cmpEvVarios: "{t} ({n} draws), all verifiable.",
+    cmpEvUno: "{t} (1 draw), verifiable.", cmpEvVarios: "{t} ({n} draws), all verifiable.",
     // --- The short link page, c.html (21 October 2026).
     cTitulo: "A draw's receipt on Tinkazo",
     cDesc: "Open it to see who won and check it yourself, from your phone.",
@@ -2764,13 +2759,35 @@ export const T: Record<Lang, Dict> = {
     cNoExisteT: "This link no longer exists", cNoExisteB: "Whoever shared it deleted it, or it was copied wrong. Ask them to send it again.",
     cRotoT: "This link can't be opened", cRotoB: "It may have been copied wrong or be missing a piece. Ask whoever sent it to share it again.",
     cOtraVez: "Try again", cPortada: "Go to the home page",
+    cmpVerificarEvUno: "If you want to verify it, open this link:\n{enlace}",
+    // --- The short link and the photo with the QR code (21 October 2026).
+    cmpWa: "Share on WhatsApp", cmpPreparando: "Getting the photo ready…",
+    cmpBajarFoto: "Download the photo", cmpBajarFotos: "Download the photos",
+    cmpPegaLaFoto: "We copied the photo: paste it into the WhatsApp chat.",
+    cmpAdjuntaLaFoto: "The photo was downloaded: attach it in the WhatsApp chat.",
+    cmpAdjuntaLasFotos: "The photos were downloaded: attach them in the WhatsApp chat.",
+    cmpNoAparece: "WhatsApp wasn't there? Download the photo and copy the message to paste them in the chat.",
+    cmpFotoAlt: "The photo with who won and the QR code to check it",
+    cmpSinFoto: "The photo couldn't be made: the message still has the link.",
+    cmpPrivLista: "Anyone with the photo or the link can see the whole list.",
+    cmpPrivCorto: "The short link keeps a protected copy that Tinkazo can't read.",
+    cmpPrivBorrar: "You can delete it from My draws.",
+    cmpBorrarCorto: "Delete the short link", cmpBorrarCortos: "Delete the short links",
+    cmpBorrarCortoConf: "Anyone with the short link or its QR code won't be able to open it anymore. The draw and its receipt stay as they are. Delete it?",
+    cmpBorrarCortosConf: "Every short link created from this device gets deleted: anyone who has one, or its QR code, won't be able to open it anymore. The draws and their receipts stay as they are. Go ahead?",
+    cmpCortoBorrado: "Short link deleted.", cmpCortosBorrados: "Short links deleted.",
+    cmpCortoNoSeBorro: "It couldn't be deleted: check your connection and try again.",
+    fotoEscanear: "Scan to check it",
+    fotoSinQr: "To check it, open the link that comes with this photo.",
+    fotoNumero: "Draw #{n}", fotoPrueba: "test network", fotoEvento: "Event",
+    fotoEntreUno: "Drawn from {n} people", fotoEntreVarios: "Drawn from {n} people", fotoMas: "and {n} more",
     evnT: "My events",
     evnLead: "An event groups draws under one name, to send them together. Add draws to it from each of your draws.",
     evnNombre: "Event name", evnCrear: "Create event", evnGuardar: "Save the name",
     evnBorrar: "Delete the event", evnBorrarConf: "The event is deleted. Its draws go back to the list in My draws. Go ahead?",
     evnSumar: "Add to an event…", evnQuitar: "Remove from the event", evnVerLista: "See the draws",
     evnVacio: "No events yet. Create one, or name a group of draws.",
-    evnNombrar: "Name it", evnCompartirPartes: "Share the event ({n} parts)",
+    evnNombrar: "Name it",
     evnSumado: "Added to {nombre}.", evnQuitado: "Removed from {nombre}.", evnNombreVacio: "Give the event a name.",
     evnCreado: "Event created: {nombre}.", evnSinSorteos: "No draws yet: add one from My draws.",
     vCompartir: "Share this draw",

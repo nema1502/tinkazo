@@ -366,7 +366,7 @@ export async function freeze(): Promise<void> {
   // (QA, 16 de octubre de 2026).
   void precargarQr();
   void import("./pantalla").catch(() => undefined);
-  void import("./imagen").catch(() => undefined);
+  void import("./compartir").catch(() => undefined);
 
   app.frozen = {
     names,

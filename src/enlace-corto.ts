@@ -312,22 +312,54 @@ export async function borrarCorto(enlaceLargo: string, op: Opciones = {}): Promi
   const ruta = rutaDe(enlaceLargo);
   const c = ruta ? deRuta(ruta) : null;
   if (!ruta || !c?.borrar) return false;
+  if (!(await borrarId(c.id, c.borrar, op))) return false;
+  olvidar(ruta);
+  return true;
+}
+
+/** El DELETE de un id con su permiso. Borrado, o ya no estaba: true. */
+async function borrarId(id: string, permiso: string, op: Opciones): Promise<boolean> {
   const f = op.fetch ?? fetch;
   try {
     const estado = await conEspera(op.espera ?? ESPERA_CREAR_MS, async (signal) => {
-      const r = await f(`${op.servicio ?? SERVICIO}/v1/${c.id}`, {
+      const r = await f(`${op.servicio ?? SERVICIO}/v1/${id}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${c.borrar}` },
+        headers: { Authorization: `Bearer ${permiso}` },
         signal,
       });
       return r.status;
     });
-    if (estado !== 204 && estado !== 404) return false;
+    return estado === 204 || estado === 404;
   } catch {
     return false;
   }
-  olvidar(ruta);
-  return true;
+}
+
+/** Cuántos enlaces cortos creó este equipo y puede borrar. */
+export function cortosBorrables(): number {
+  return Object.values(leerGuardados()).filter((g) => valido(g) && !!g.b).length;
+}
+
+/**
+ * Borra todos los enlaces cortos que creó este equipo, también los de un
+ * evento al que después se le cambió el nombre o los sorteos (su enlace largo
+ * ya es otro, y no hay otra forma de llegar a ellos).
+ */
+export async function borrarTodos(op: Opciones = {}): Promise<{ borrados: number; fallaron: number }> {
+  const idos: string[] = [];
+  let fallaron = 0;
+  for (const [k, x] of Object.entries(leerGuardados())) {
+    if (!valido(x) || !x.b) continue;
+    if (await borrarId(x.i, x.b, op)) {
+      idos.push(k);
+      for (const [ruta, c] of memoria) if (c.id === x.i) memoria.delete(ruta);
+    } else fallaron++;
+  }
+  // Se vuelve a leer: mientras se borraba pudo nacer otro corto, que se queda.
+  const g = leerGuardados();
+  for (const k of idos) delete g[k];
+  escribirGuardados(g);
+  return { borrados: idos.length, fallaron };
 }
 
 /** Para las pruebas: olvida lo que hay en memoria (lo guardado queda). */

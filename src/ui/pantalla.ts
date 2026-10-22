@@ -1,6 +1,7 @@
 import { esc } from "../dom";
 import { t } from "../i18n";
 import { app, avatar } from "../state";
+import { acortar } from "../enlace-corto";
 import { pintarQr } from "./qr";
 
 /**
@@ -9,9 +10,12 @@ import { pintarQr } from "./qr";
  * resto de la página alrededor, en pantalla completa si el navegador deja.
  *
  * Es el momento en que la sala saca el celular: el QR tiene que leerse desde
- * el fondo, así que es lo segundo más grande después del nombre.
+ * el fondo, así que es lo segundo más grande después del nombre. Con
+ * `corto`, el QR lleva el enlace corto (enlace-corto.ts): de menos de cuarenta módulos por
+ * lado y no de más de cien, se lee desde las sillas. Si no sale en unos
+ * segundos, lleva el largo de siempre.
  */
-export async function mostrarResultado(enlace: string): Promise<void> {
+export async function mostrarResultado(enlace: string, op: { corto?: boolean } = {}): Promise<void> {
   const { frozen, drawn } = app;
   if (!frozen || !drawn || document.querySelector(".pantalla")) return;
   const premio = frozen.prize;
@@ -82,7 +86,10 @@ export async function mostrarResultado(enlace: string): Promise<void> {
       : varios
         ? Math.min(innerHeight * 0.56, innerWidth * 0.32)
         : Math.min(innerHeight * 0.6, innerWidth * 0.36);
-  const listo = enlace && img ? await pintarQr(img, enlace, lado) : false;
+  const corto = enlace && op.corto ? await acortar(enlace) : null;
+  // Si se cerró mientras salía el corto, no hay nada que pintar.
+  if (!back.isConnected) return;
+  const listo = enlace && img ? await pintarQr(img, corto?.corto ?? enlace, lado) : false;
   if (!listo) back.querySelector(".pantalla-qr")?.remove();
   ajustar();
 }

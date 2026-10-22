@@ -22,6 +22,8 @@
 const SIZE = 200;
 /** Margen obligatorio alrededor, en módulos. Sin esto muchos lectores fallan. */
 const QUIET = 4;
+/** Hasta este largo, el enlace es corto y el QR lleva más corrección de errores. */
+const CORTO = 80;
 
 /**
  * Dibuja el QR del enlace y devuelve una imagen lista para `src`.
@@ -62,13 +64,16 @@ export async function qrLienzo(
   text: string,
   ancho: number,
   dpr = Math.min(window.devicePixelRatio || 1, 3),
-): Promise<{ canvas: HTMLCanvasElement; lado: number } | null> {
+): Promise<{ canvas: HTMLCanvasElement; lado: number; modulo: number; modulos: number } | null> {
   const { default: qrcode } = await import("qrcode-generator");
   let qr: ReturnType<typeof qrcode>;
   try {
-    // Versión 0 es automática: elige la más chica que entre. Corrección "L"
-    // porque el enlace es largo y la pantalla está limpia, sin sol ni manchas.
-    qr = qrcode(0, "L");
+    // Versión 0 es automática: elige la más chica que entre. Con el enlace
+    // largo, corrección "L": es largo y la pantalla está limpia, sin sol ni
+    // manchas. Con el corto (tinkazo.app/c/…, unos 55 caracteres) sobra lugar
+    // y va "Q", que aguanta un cuarto del QR tapado o borroso: lo escanean
+    // desde el fondo de la sala o de una foto recomprimida por WhatsApp.
+    qr = qrcode(0, text.length <= CORTO ? "Q" : "L");
     qr.addData(text);
     qr.make();
   } catch {
@@ -102,7 +107,7 @@ export async function qrLienzo(
       c.fillRect((col + QUIET) * cell, (r + QUIET) * cell, cell, cell);
     }
   }
-  return { canvas, lado: side / dpr };
+  return { canvas, lado: side / dpr, modulo: cell / dpr, modulos: total };
 }
 
 async function dibujar(text: string, ancho: number): Promise<{ url: string; lado: number } | null> {
