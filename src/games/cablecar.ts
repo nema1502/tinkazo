@@ -1234,7 +1234,7 @@ export function cableCar(
     c.textBaseline = "alphabetic";
     c.font = `700 ${12 * k}px ui-monospace, monospace`;
     c.fillStyle = "rgba(246,239,226,0.55)";
-    c.fillText(`${t("cWheelRound")} #${beacon.round}`, 22 * k, H() - chrome(c).abajo);
+    c.fillText(`${t("cWheelRound")} ${beacon.round}`, 22 * k, H() - chrome(c).abajo);
   }
 
   function drawCrown(p: number): void {

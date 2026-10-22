@@ -379,7 +379,8 @@ export async function freeze(): Promise<void> {
       btn.textContent = t("sealOnStellar");
       const status = $("seal-status");
       status.style.display = "block";
-      status.className = "txstatus";
+      // Naranja, como el error del sorteo: violeta es "todavía va" (styles.css).
+      status.className = "txstatus bad";
       await escribirError(status, e, "sello");
       // Si se apretó la barra, el botón de verdad (y este mensaje) están fuera de la pantalla.
       verError(status);

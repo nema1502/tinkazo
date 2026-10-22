@@ -74,6 +74,8 @@ export interface Dict {
   cTroWobble: (n: string) => string;
   cTroWobbleAny: string[];
   cTroDuel: (a: string, b: string) => string;
+  /** El cierre del trompo: nombra a quien gana sin decir "GANA", que ya lo dice el cartel de arriba. */
+  cTroWin: (n: string, many?: boolean) => string;
   cPinCount: (n: number) => string;
   cPinOut: (n: string) => string;
   cPinOutMany: (ns: string[]) => string;
@@ -449,7 +451,7 @@ export const T: Record<Lang, Dict> = {
     cWheelLast: ["¡YA CASI PARA!", "¡AHORA SÍ!", "¡SE ACABA EL GIRO!"],
     cWheelFalse: (n) => pick([`¿Se queda en ${n}?`, `¿${n}? ¿Será?`, `¿Paró en ${n}?`]),
     cWheelMoved: ["¡NO! ¡SE MOVIÓ!", "¡NO ERA! ¡UN GAJO MÁS!", "¡CHUTA, SE DESTRABÓ!"],
-    cWheelRound: "RONDA",
+    cWheelRound: "NÚMERO PÚBLICO N.º",
     cWheelSeed: "EL NÚMERO ESTÁ EN EL BORDE",
     cTelBoard: ["¡Suban, suban, que se va!", "¡Todos a bordo!", "¡Se llenan las cabinas!"],
     cTelCount: (n, cabs) => (cabs > 1 ? `¡${n} pasajeros en ${cabs} cabinas!` : `¡${n} pasajero, una cabina!`),
@@ -501,6 +503,7 @@ export const T: Record<Lang, Dict> = {
     cTroFew: ["¡Quedan los mejores!", "¡Esto se pone bravo!", "¡Aguantan pocos!"],
     cTroEdge: (n) => pick([`¡${n} casi se sale!`, `¡${n} en el borde!`, `¡${n} rozó la tiza!`]),
     cTroDuel: (a, b) => pick([`¡Mano a mano, ${a} ${yE(b)} ${b}!`, `¡${a} contra ${b}!`, `¡Quedan ${a} ${yE(b)} ${b}!`]),
+    cTroWin: (n, many) => pick(many ? [`¡Se lo llevan ${n}!`, `¡Los premios, para ${n}!`] : [`¡${n} sigue bailando!`, `¡El ruedo es de ${n}!`, `¡Nadie tumba a ${n}!`]),
     cTroClash: ["¡Chocan!", "¡Qué golpe!", "¡Se dieron!"],
     cTroWobble: (n) => pick([`¡Cabecea el de ${n}!`, `¡${n} se tambalea!`, `¡Se va el de ${n}!`]),
     cTroRecover: ["¡Y sigue bailando!", "¡No se cae!", "¡Se endereza!"],
@@ -859,7 +862,11 @@ export const T: Record<Lang, Dict> = {
     nextTitle: "El sorteo no depende de mí",
     nextBody: "La huella de la lista y la ronda que decide quedan en un contrato de Stellar, que verifica el faro solo. La red cobra unos 0,76 XLM por sorteo (testnet). Hoy está en testnet, que se reinicia el 16 de diciembre de 2026; el comprobante igual sirve para rehacer la cuenta.",
     footL: "Tinkazo", footR: "Hecho con ♥ en Bolivia",
-    src: "fuente: pegado / csv", frozenAt: "sellada:", seed: "número público · ronda", drandLink: "ver la ronda pública ↗", proofOk: "prueba verificada",
+    // `seed` es la barra de arriba del sorteo: "NÚMERO PÚBLICO N.º 32254977".
+    // Decía "· RONDA", que es la palabra de drand, y en el sorteo no va nada
+    // técnico. "N.º" y no "#": "Sorteo #N" ya es el número del sorteo en Mis
+    // sorteos, y este es el del número público que lo decidió.
+    src: "fuente: pegado / csv", frozenAt: "sellada:", seed: "número público n.º", drandLink: "ver la ronda pública ↗", proofOk: "prueba verificada",
     placeholder: "Un nombre por línea…", winsPrize: "Se lleva:", skip: "Saltar",
     fetching: "Esperando el número público…",
     drandTry: (i, n) => `Todavía no llega el número del sorteo. Intento ${i} de ${n}…`,
@@ -1757,7 +1764,7 @@ export const T: Record<Lang, Dict> = {
     cWheelLast: ["ALMOST STOPPED!", "HERE IT IS!", "THE SPIN IS ENDING!"],
     cWheelFalse: (n) => pick([`Does it stay on ${n}?`, `${n}? Could it be?`, `Did it stop on ${n}?`]),
     cWheelMoved: ["NO! IT MOVED!", "NOT THAT ONE! ONE MORE!", "IT SLIPPED!"],
-    cWheelRound: "ROUND",
+    cWheelRound: "PUBLIC NUMBER NO.",
     cWheelSeed: "THE NUMBER IS ON THE RIM",
     cTelBoard: ["All aboard!", "Hop in, hop in, it's leaving!", "The cabins are filling up!"],
     cTelCount: (n, cabs) => (cabs > 1 ? `${n} riders in ${cabs} cabins!` : `${n} rider, one cabin!`),
@@ -1808,6 +1815,7 @@ export const T: Record<Lang, Dict> = {
     cTroFew: ["Only the best are left!", "It's getting rough!", "Few still standing!"],
     cTroEdge: (n) => pick([`${n} almost went out!`, `${n} on the edge!`, `${n} grazed the chalk!`]),
     cTroDuel: (a, b) => pick([`Head to head, ${a} and ${b}!`, `${a} against ${b}!`, `It's ${a} and ${b}!`]),
+    cTroWin: (n, many) => pick(many ? [`${n} take the prizes!`, `The prizes go to ${n}!`] : [`${n} keeps spinning!`, `${n} rules the ring!`, `Nobody topples ${n}!`]),
     cTroClash: ["They clash!", "What a hit!", "Bang!"],
     cTroWobble: (n) => pick([`${n}'s top is wobbling!`, `${n} is staggering!`, `${n}'s top is going!`]),
     cTroRecover: ["And it keeps spinning!", "It won't fall!", "It straightens up!"],
@@ -2149,7 +2157,7 @@ export const T: Record<Lang, Dict> = {
     nextTitle: "The draw doesn't depend on me",
     nextBody: "The list's fingerprint and the deciding round go into a Stellar contract, which checks the beacon on its own. The network charges about 0.76 XLM per draw (testnet). Today it's on testnet, which resets on December 16, 2026; the receipt still lets anyone redo the math.",
     footL: "Tinkazo", footR: "Made with ♥ in Bolivia",
-    src: "source: paste / csv", frozenAt: "sealed:", seed: "public number · round", drandLink: "see the public round ↗", proofOk: "proof verified",
+    src: "source: paste / csv", frozenAt: "sealed:", seed: "public number no.", drandLink: "see the public round ↗", proofOk: "proof verified",
     placeholder: "One name per line…", winsPrize: "Takes home:", skip: "Skip",
     fetching: "Waiting for the public number…",
     drandTry: (i, n) => `The draw's number hasn't arrived yet. Try ${i} of ${n}…`,

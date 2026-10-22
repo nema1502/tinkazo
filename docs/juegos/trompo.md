@@ -77,7 +77,7 @@ En segundos de juego, con 18 participantes y sin estirar.
 | 2,2 – 4,6 s | El baile. "¡Cómo bailan!" |
 | 4,6 – 12,3 s | Los choques |
 | 12,3 – 16,9 s | El mano a mano: tres choques, y la rival se cae |
-| 16,9 s | El cartel, con la ganadora bailando debajo, más grande y con un brillo |
+| 16,9 s | El cartel, con la ganadora bailando debajo, más grande y con un brillo. La caja de abajo lo cuenta con el trompo ("¡X sigue bailando!", "¡El ruedo es de X!", "¡Nadie tumba a X!"), corto para que en un celular entre en un renglón: hasta el 21 de octubre de 2026 decía "¡GANA X!" debajo del "GANA" del cartel |
 
 A eso se suman las paradas de los golpes y la cámara lenta del último choque, un segundo en total. El juego las declara en `setGameLength`, así que el show sigue durando lo que eligió el organizador.
 

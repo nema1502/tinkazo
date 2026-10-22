@@ -5,6 +5,7 @@ import { beep, fanfare, note } from "../../sound";
 import { writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, shorten, winnersLabel } from "../overlay";
 import { CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
+import { cabe, centrar, encuadrar, unir, type Caja, type Zona } from "./encuadre";
 import { avatarColor } from "../../avatar";
 import { assignSlots } from "./slots";
 import { planQualifier } from "./qualifier";
@@ -244,6 +245,16 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     const ux = h.x / d, uy = h.y / d;
     return { ax: ux > 0.35 ? 0 : ux < -0.35 ? 1 : 0.5, ay: uy < -0.6 ? 1 : uy > 0.6 ? 0 : 0.5 };
   };
+  /** El cajón entero en la escena, con su frente: lo que dibuja `drawBox`, sin la sombra. */
+  const mesa = (): Caja => {
+    const R = L.tableR * g.sc;
+    const w = R * 2.1, d = R * 2.05 * g.tilt;
+    return { x: g.cx - w / 2, y: g.cy - d / 2, w, h: d + 46 * g.k };
+  };
+  /** Lo que se ve del juego: debajo de la barra de arriba y encima del relator. */
+  const zonaJuego = (): Zona => ({ x0: 4 * g.k, y0: S.top(), x1: g.w - 4 * g.k, y1: g.h - S.bottom() });
+  /** Debajo de donde sale el cartel del ganador, encima del relator y sin pegarse a los costados. */
+  const zonaFinal = (): Zona => ({ x0: 8 * g.k, y0: S.placaBajo(winners.length) + 4 * g.k, x1: g.w - 8 * g.k, y1: g.h - S.bottom() - 6 * g.k });
 
   /* ------------------------------------------------------------------ capas */
   const floor = new Graphics();
@@ -373,12 +384,30 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       if (s > best.s) best = { cols, s };
     }
     gridScale = best.s;
-    const cols = best.cols, rows = Math.ceil(all / cols);
+    const rows = Math.ceil(all / best.cols);
+    const cols = Math.ceil(all / rows);
     const x0 = (g.w - cols * cw * gridScale) / 2, y0 = top + (areaH - rows * ch * gridScale) / 2;
-    gridAt = names.map((_, i) => ({
-      x: x0 + ((i % cols) + 0.5) * cw * gridScale,
-      y: y0 + (Math.floor(i / cols) + 0.5) * ch * gridScale,
-    }));
+    // Cada nombre en la celda que mira hacia su agujero: las columnas de la
+    // izquierda para los agujeros de la izquierda y, en cada columna, de arriba
+    // abajo. En el orden de la lista los vuelos se cruzaban en el medio de la
+    // mesa y medio segundo los nombres quedaban uno encima de otro: "Valeria
+    // T." asomaba como "Va" (revisión visual, 21 de octubre de 2026). Los que no
+    // llegan a la mesa miran al medio.
+    const destino = names.map((_, i) => {
+      const s = slotOfName.get(i);
+      return s === undefined ? { x: g.w / 2, y: g.h / 2 } : P(labelAt(s));
+    });
+    const porX = names.map((_, i) => i).sort((a, b) => (destino[a] as Point).x - (destino[b] as Point).x || a - b);
+    const celda: number[] = [];
+    for (let c = 0; c < cols; c++) {
+      porX.slice(c * rows, (c + 1) * rows)
+        .sort((a, b) => (destino[a] as Point).y - (destino[b] as Point).y || a - b)
+        .forEach((i, r) => { celda[i] = r * cols + c; });
+    }
+    gridAt = names.map((_, i) => {
+      const at = celda[i] ?? i;
+      return { x: x0 + ((at % cols) + 0.5) * cw * gridScale, y: y0 + (Math.floor(at / cols) + 0.5) * ch * gridScale };
+    });
     badgeLayer.removeChildren().forEach((c) => c.destroy());
     badgeOf.clear();
     counter.style.fontSize = S.letra(16);
@@ -653,12 +682,35 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   function aim(): void {
     const ultimo = tosses[tosses.length - 1] as Toss;
     if (tAll >= ultimo.land) {
-      // El agujero ganador queda en el plano también con el cartel, a un 62%
-      // del alto: en la fila de arriba el cartel lo tapaba. La cámara puede
-      // salir de la escena porque el piso cubre la pantalla entera.
-      const q = P(ultimo.th.landing);
-      const z = 1.5;
-      cam.lookAt(clamp(q.x, g.w / 2 / z, g.w - g.w / 2 / z), q.y - (g.h * 0.12) / z, z, 3);
+      // Desde que cae la última argolla, la mesa entera debajo de donde sale el
+      // cartel y encima del relator: el agujero ganador se ve, los demás también,
+      // y el cartel no tapa ninguno. Hasta el 21 de octubre de 2026 la cámara se
+      // acercaba a 1,5 sobre el agujero, y en el celular dejaba agujeros afuera
+      // por los dos costados y nombres debajo del relator (revisión visual). En
+      // el celular no se acerca más que la mesa de todo el juego: ahí la mesa
+      // se mide para que los nombres de los costados entren justo.
+      const zona = zonaFinal();
+      let caja = mesa();
+      let z = Math.min(S.portrait() ? 1 : 1.5, cabe(caja, zona));
+      // En la pantalla ancha el chip grande del ganador sale de su agujero hacia
+      // afuera de la mesa (hacia arriba en la fila de arriba): entra en el
+      // encuadre también, así el cartel no lo pisa ni el relator lo tapa. Con
+      // cincuenta personas el de la fila de arriba quedaba debajo del cartel.
+      const quien = whoAt(ultimo.slot);
+      const ch = chips[quien];
+      if (!S.portrait() && ch) {
+        const an = anchorOf(ultimo.slot);
+        const lp = P(labelAt(ultimo.slot));
+        const sc = 1.45 * 1.3;
+        const w = (anchoNombre[quien] ?? 0) * g.k * sc + 14 * g.k, h = (ch.height / Math.max(1e-6, ch.scale.y)) * sc + 14 * g.k;
+        const base = mesa();
+        for (let vuelta = 0; vuelta < 2; vuelta++) {
+          caja = unir([base, { x: lp.x - (w * an.ax) / z, y: lp.y + (h * (0.5 - an.ay)) / z - h / 2 / z, w: w / z, h: h / z }]);
+          z = Math.min(1.5, cabe(caja, zona));
+        }
+      }
+      const v = centrar(caja, zona, g.w, g.h, z);
+      cam.lookAt(v.x, v.y, z, 3);
       return;
     }
     const cur = current();
@@ -702,9 +754,11 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       // La fila de abajo, por encima de la caja de subtítulos.
       if (z > 1) y += (S.bottom() * 0.5) / z;
     }
-    x = clamp(x, g.w / 2 / z, g.w - g.w / 2 / z);
-    y = clamp(y, g.h / 2 / z, g.h - g.h / 2 / z);
-    cam.lookAt(x, y, z, rate);
+    // De cerca, la mesa entera si entra; si no, de borde a borde de la
+    // pantalla: antes la cámara se pegaba al borde de la pantalla y mostraba
+    // piso de un lado mientras dejaba agujeros afuera del otro.
+    const v = encuadrar(mesa(), zonaJuego(), { x, y, z }, g.w, g.h);
+    cam.lookAt(v.x, v.y, z, rate);
   }
 
   /** La rana respira, parpadea y abre la boca cuando cae una argolla. */
@@ -901,12 +955,21 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       const lp = P(labelAt(slot));
       const q = cam.toScreen(lp.x, lp.y, g.w, g.h);
       const u = ease.inOutCubic(clamp((tAll - flyAt(slot)) / Q_FLY, 0, 1));
+      // El que no entra entre su punto y el borde se achica, en vez de volver
+      // sobre su agujero. Se mide sin zoom: con la cámara cerca se achicaban
+      // todos los de los bordes. Y vuela ya hacia ese tamaño: si se achicaba
+      // recién al llegar, en el vuelo quedaba pegado al borde, encima del
+      // vecino (el "Va" de la revisión visual del 21 de octubre de 2026).
+      const an0 = anchorOf(slot);
+      const libre = an0.ax <= 0.01 ? g.w - 4 - lp.x : an0.ax >= 0.99 ? lp.x - 4 : g.w - 8;
+      const finalW = (anchoNombre[i] ?? 0) * k * ls;
+      const encoge = !ganador && libre > 0 && finalW > libre ? Math.max(0.7, libre / finalW) : 1;
       // El ganador conserva la letra grande de antes: en horizontal, 1,45 sobre la base.
       // En un celular el ganador va sobre su aro y no puede ser tan grande: con
       // 1,1 no toca los aros de los vecinos.
-      const sc = (gridScale + ((ganador && !S.portrait() ? 1.45 : ls) - gridScale) * u) * (ganador ? (S.portrait() ? 1.1 : 1.3) : 1);
+      const sc = (gridScale + ((ganador && !S.portrait() ? 1.45 : ls * encoge) - gridScale) * u) * (ganador ? (S.portrait() ? 1.1 : 1.3) : 1);
       c.scale.set(sc * (u > 0 ? 1 : ease.outBack(enter)));
-      let an = anchorOf(slot);
+      let an = an0;
       let qx = q.x, qy = q.y;
       if (ganador && S.portrait()) {
         // En un celular el chip grande del ganador no entra al lado de su agujero, y
@@ -921,11 +984,6 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
         qy = q.y + (d.y - q.y) * f;
         an = { ax: an.ax + (0.5 - an.ax) * f, ay: an.ay + (0.5 - an.ay) * f };
       }
-      // El que no entra entre su punto y el borde se achica, en vez de volver
-      // sobre su agujero. Se mide sin zoom: con la cámara cerca se achicaban
-      // todos los de los bordes.
-      const libre = an.ax <= 0.01 ? g.w - 4 - lp.x : an.ax >= 0.99 ? lp.x - 4 : g.w - 8;
-      if (u >= 1 && !ganador && c.width > libre && libre > 0) c.scale.set(c.scale.x * Math.max(0.7, libre / c.width));
       // En la grilla va centrado; al llegar, anclado por su borde de adentro.
       const tx = qx - c.width * an.ax, ty = qy + c.height * (0.5 - an.ay);
       const x = grid.x - c.width / 2 + (tx - (grid.x - c.width / 2)) * u, y = grid.y + (ty - grid.y) * u - Math.sin(Math.PI * u) * 40 * k;

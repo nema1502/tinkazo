@@ -107,9 +107,12 @@
     box-shadow: var(--sh-sm); padding: 5px 14px; font-family: ui-monospace, Consolas, monospace;
     font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; transform: rotate(-1.5deg);
   }
-  /* La palabra del sticker cambia (src/ui/rotar.ts): se funde antes de cambiar. */
-  .rotating { transition: opacity 250ms ease; }
-  .rotating.fading { opacity: 0; }
+  /* La palabra del sticker cambia dándose vuelta (src/ui/rotar.ts): se pone de
+     canto, cambia y vuelve. Sin opacidad: fundida, a mitad de camino quedaba
+     con un contraste de 1,2 a 1 sobre el turquesa. Lo que se ve tiene siempre
+     el color de la letra. */
+  .rotating { display: inline-block; transform-origin: 50% 55%; transition: transform 180ms cubic-bezier(.2, .8, .3, 1); }
+  .rotating.girando { transform: scaleY(0); transition-timing-function: cubic-bezier(.7, 0, .8, .3); }
   /* El resaltado del título queda siempre debajo del resto del texto: con
      el interlineado apretado, el recuadro amarillo de una línea subía hasta la
      de arriba y, como se dibuja después, le tapaba las colas a la "q" y a la
@@ -612,6 +615,10 @@
   /* Sin texto no hay caja: vacía era un recuadro oscuro sin nada adentro. */
   .commentary:empty { display: none; }
   .commentary.pop { animation: popIn 0.28s; }
+  /* Un grito del relator, entero en mayúsculas: en pantalla, porque el texto
+     sigue con el nombre bien escrito para los lectores de pantalla y para
+     quien lo copie. */
+  .commentary.grito { text-transform: uppercase; }
   @keyframes popIn { from { transform: translateX(-50%) scale(0.75); } to { transform: translateX(-50%) scale(1); } }
   @media (max-width: 700px) { .hero { grid-template-columns: 1fr; } .mascot { display: none; } .verify { grid-template-columns: 1fr; } }
   /* En un celular de 390 px la cabecera medía 411 y arrastraba de lado a la
