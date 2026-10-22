@@ -156,9 +156,9 @@ export function cableCar(
   /* El director de emoción elige el arco, y en el teleférico cada arco tiene
      su giro. Siempre pasa algo, pero nunca lo mismo:
 
-     - Susto, la puerta: en la última estación se abre la de la cabina
-       ganadora, el pasajero se asoma como para bajarse, y la puerta se
-       cierra. El que se baja es el de la otra.
+     - Susto, la puerta: en la última estación se abre la de una de las dos
+       cabinas que quedan, sorteada; el pasajero se asoma como para bajarse,
+       y la puerta se cierra. El que se baja es el que no gana.
      - Duelo, la mordaza: en la última estación la cabina de atrás se suelta
        y resbala cable abajo, hasta que la mordaza la agarra y la vuelve a
        subir. A veces es la del ganador y a veces la de la otra: la sala no
@@ -177,6 +177,15 @@ export function cableCar(
   /** En la mordaza, la cabina que se suelta: la de más atrás de las dos que quedan. */
   const loserCab = cabinOf.get(rank[1] ?? -1) ?? winnerCab;
   const slipCab = Math.max(winnerCab, loserCab);
+  /**
+   * En la puerta, la cabina que se abre: la del ganador o la del otro que
+   * queda, sorteada, y el relator nombra a su pasajero. Hasta el 21 de octubre
+   * de 2026 era siempre la del ganador: delataba al ganador en todas las
+   * semillas. Si es la del otro, la puerta se cierra sin el "¡se queda!" y el
+   * otro se baja, como siempre.
+   */
+  const doorCab = loserCab !== winnerCab && rng() < 0.5 ? loserCab : winnerCab;
+  const doorWho = doorCab === winnerCab ? winnerIdx : ((rank[1] as number | undefined) ?? winnerIdx);
 
   /* ---------------------------------------------------------- estaciones */
   // Con menos paradas que estaciones, las que sobran son de largo. La última
@@ -492,14 +501,14 @@ export function cableCar(
     }
     if (puerta) {
       once("puerta", tAll >= puertaA, () => {
-        sayNow(T[lang].cTelDoor(names[winnerIdx] ?? ""), 0.85);
+        sayNow(T[lang].cTelDoor(names[doorWho] ?? ""), 0.85);
         if (!silent) {
           beep(note(12), 0.08, "triangle", 0.04);
           setTimeout(() => beep(note(15), 0.1, "triangle", 0.035), 70);
         }
       });
       once("cierra", tAll >= puertaB, () => {
-        sayNow(t("cTelStays"), 0.9);
+        if (doorCab === winnerCab) sayNow(t("cTelStays"), 0.9);
         if (!silent) beep(note(5), 0.08, "square", 0.05);
       });
     }
@@ -1010,7 +1019,7 @@ export function cableCar(
     c.fillRect(wx, wy, ww, wh);
     const av = wh - 8 * k;
     // En el amague, el pasajero se corre hacia la puerta, que está a la derecha.
-    const asoma = cab === winnerCab ? puertaAt(tAll) : 0;
+    const asoma = cab === doorCab ? puertaAt(tAll) : 0;
     if (who.length === 1) {
       drawAvatar(c, names[who[0] as number] ?? "", -av / 2 + asoma * (ww / 2 - av / 2 - 2 * k), wy + 4 * k, av);
     } else if (who.length > 1) {
@@ -1080,7 +1089,7 @@ export function cableCar(
       const resbala = cab === slipCab ? slipAt(tAll) * gap * 0.62 : 0;
       const p = onCable(head, slot * gap + back + resbala);
       const glow = cab === winnerCab && tAll > T_DOCK ? 0.6 + 0.4 * Math.sin(tAll * 8) : 0;
-      let sacude = cab === winnerCab ? puertaAt(tAll) * 0.07 * Math.sin(tAll * 22) : 0;
+      let sacude = cab === doorCab ? puertaAt(tAll) * 0.07 * Math.sin(tAll * 22) : 0;
       // En la ráfaga cada una se hamaca a su tiempo, no como un bloque.
       sacude += (windAt(tAll) - 0.2) * 0.12 * Math.sin(tAll * 6.3 + cab * 1.7);
       // Cuando la mordaza agarra, el tirón la deja hamacándose fuerte.
