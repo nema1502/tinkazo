@@ -79,8 +79,6 @@ export interface Dict {
   cTroWobble: (n: string) => string;
   cTroWobbleAny: string[];
   cTroDuel: (a: string, b: string) => string;
-  /** El cierre del trompo: nombra a quien gana sin decir "GANA", que ya lo dice el cartel de arriba. */
-  cTroWin: (n: string, many?: boolean) => string;
   cPinCount: (n: number) => string;
   cPinOut: (n: string) => string;
   cPinOutMany: (ns: string[]) => string;
@@ -508,7 +506,6 @@ export const T: Record<Lang, Dict> = {
     cTroFew: ["¡Quedan los mejores!", "¡Esto se pone bravo!", "¡Aguantan pocos!"],
     cTroEdge: (n) => pick([`¡${n} casi se sale!`, `¡${n} en el borde!`, `¡${n} rozó la tiza!`]),
     cTroDuel: (a, b) => pick([`¡Mano a mano, ${a} ${yE(b)} ${b}!`, `¡${a} contra ${b}!`, `¡Quedan ${a} ${yE(b)} ${b}!`]),
-    cTroWin: (n, many) => pick(many ? [`¡Se lo llevan ${n}!`, `¡Los premios, para ${n}!`] : [`¡El trompo de ${n} sigue bailando!`, `¡El ruedo es de ${n}!`, `¡El último trompo en pie es de ${n}!`]),
     cTroClash: ["¡Chocan!", "¡Qué golpe!", "¡Se dieron!"],
     cTroWobble: (n) => pick([`¡Cabecea el de ${n}!`, `¡${n} se tambalea!`, `¡Se va el de ${n}!`]),
     cTroRecover: ["¡Y sigue bailando!", "¡No se cae!", "¡Se endereza!"],
@@ -1796,7 +1793,6 @@ export const T: Record<Lang, Dict> = {
     cTroFew: ["Only the best are left!", "It's getting rough!", "Few still standing!"],
     cTroEdge: (n) => pick([`${n} almost went out!`, `${n} on the edge!`, `${n} grazed the chalk!`]),
     cTroDuel: (a, b) => pick([`Head to head, ${a} and ${b}!`, `${a} against ${b}!`, `It's ${a} and ${b}!`]),
-    cTroWin: (n, many) => pick(many ? [`${n} take the prizes!`, `The prizes go to ${n}!`] : [`${n}'s top is still spinning!`, `The ring belongs to ${n}!`, `The last top standing is ${n}'s!`]),
     cTroClash: ["They clash!", "What a hit!", "Bang!"],
     cTroWobble: (n) => pick([`${n}'s top is wobbling!`, `${n} is staggering!`, `${n}'s top is going!`]),
     cTroRecover: ["And it keeps spinning!", "It won't fall!", "It straightens up!"],

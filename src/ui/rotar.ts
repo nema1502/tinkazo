@@ -1,15 +1,8 @@
 // La palabra del sticker de la portada ("Sorteá para tu meetup", "…tu clase",
 // "…tu evento") cambia una vuelta y se queda en la primera. Con movimiento
 // reducido no cambia: la frase entera ya dice lo mismo.
-//
-// Cambia dándose vuelta, como un cartelito (la regla `.rotating` de
-// styles.css): se pone de canto, cambia y vuelve. Antes se fundía, y a mitad
-// del fundido la palabra quedaba casi transparente sobre el turquesa, con un
-// contraste de 1,2 a 1 (lo midió audit-ui el 21 de octubre de 2026). De canto
-// no se ve, pero lo que se ve tiene siempre el color de la letra.
 export const ROTATE_PAUSE_MS = 2400;
-/** Lo que tarda en ponerse de canto (la transición de styles.css dura un poco menos). */
-const FLIP_MS = 200;
+const FADE_MS = 250;
 
 /** "meetup|clase|evento" → ["meetup", "clase", "evento"]. */
 export function splitWords(list: string | undefined): string[] {
@@ -28,11 +21,11 @@ export function rotateWords(root: ParentNode = document): void {
   let step = 0;
   const timer = setInterval(() => {
     step++;
-    el.classList.add("girando");
+    el.classList.add("fading");
     setTimeout(() => {
       el.textContent = wordAt(words, step);
-      el.classList.remove("girando");
-    }, FLIP_MS);
+      el.classList.remove("fading");
+    }, FADE_MS);
     if (step === words.length) clearInterval(timer);
   }, ROTATE_PAUSE_MS);
 }

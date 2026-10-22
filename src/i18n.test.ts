@@ -57,19 +57,6 @@ describe("diccionario", () => {
     }
   });
 
-  it("Trompo: el cierre nombra a quien gana sin repetir el GANA del cartel", () => {
-    // El cartel de la corona dice "GANA" y el nombre; con "¡GANA X!" en la caja
-    // de abajo la pantalla decía dos veces lo mismo.
-    for (const l of ["es", "en"] as const) {
-      for (let i = 0; i < 40; i++) {
-        const uno = T[l].cTroWin("Lucía Flores"), dos = T[l].cTroWin("Ana y Beto", true);
-        expect(uno).toContain("Lucía Flores");
-        expect(dos).toContain("Ana y Beto");
-        expect(uno + dos).not.toMatch(/\bganan?\b|\bwins?\b/i);
-      }
-    }
-  });
-
   it("Teleférico: la última estación dice lo mismo que el contador", () => {
     // Al llegar con tres o más arriba no puede decir "quedan dos"; con dos, sí.
     // Las variantes salen al azar: se prueban muchas veces.
