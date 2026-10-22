@@ -35,18 +35,9 @@ export interface Draw {
   drawn_ledger: number;
 }
 
-/** Códigos de error del contrato. Son ABI pública: nunca se renumeran. */
-export const CONTRACT_ERRORS: Record<number, string> = {
-  1: "notFound",
-  2: "alreadyDrawn",
-  3: "tooFewEntries",
-  4: "badWinnerCount",
-  5: "roundTooSoon",
-  6: "roundTooFar",
-  7: "roundNotReady",
-  8: "invalidSignature",
-  9: "metaTooLong",
-};
+// Qué le pasó a una transacción vive en `errores.ts`, sin el SDK: la pantalla
+// lo usa sin bajarlo. Se reexporta para quien lo importaba de acá.
+export { CONTRACT_ERRORS, errorKey, esCuentaInexistente, esSinSaldo } from "./errores";
 
 interface TinkazoContract {
   seal: (
@@ -118,37 +109,6 @@ export function resetClient(): void {
 }
 
 /**
- * La cuenta existe y no tiene con qué pagar la comisión. Cada quien lo cuenta a
- * su manera: la red dice `tx_insufficient_balance` (o `txINSUFFICIENT_BALANCE`),
- * Pollar lo guarda como `txInsufficientBalance` y le agrega "Insufficient XLM to
- * cover the network fee…", y un pago que no alcanza dice `underfunded`.
- *
- * Lo que NO entra, aunque se parezca: `tx_insufficient_fee` (ahí la cuenta puede
- * tener de sobra y es la comisión ofrecida la que quedó corta para lo que la red
- * cobra ahora), `tx_bad_seq` y el resto de los códigos de la red.
- */
-const SIN_SALDO = /tx_?insufficient_?balance|insufficient\s+(?:xlm|balance|funds)|underfunded/i;
-const COMISION_CORTA = /tx_?insufficient_?fee/i;
-/**
- * La cuenta ni siquiera existe todavía en la red: simular falla con "Account not
- * found", y al enviar la red dice `tx_no_account`. Para quien trae su cuenta de
- * afuera (Freighter) es lo mismo que no tener saldo. Para una cuenta de Pollar
- * es que todavía no la abrieron, y se espera (ver `conCuentaLista`).
- */
-const SIN_CUENTA = /account not found|tx_?no_?account/i;
-/** Lo que lanza `conCuentaLista` cuando se esperó y la cuenta sigue sin existir. */
-const CUENTA_NO_LISTA = /account-not-ready/;
-
-/**
- * Este error es de falta de saldo, y de nada más: ni una comisión corta, ni una
- * cuenta que todavía no existe. Es lo único que dispara la ayuda de fondos.
- */
-export const esSinSaldo = (e: unknown): boolean => errorKey(e) === "noFunds" && !esCuentaInexistente(e);
-
-/** Este error dice que la cuenta no existe todavía en la red. */
-export const esCuentaInexistente = (e: unknown): boolean => SIN_CUENTA.test(e instanceof Error ? e.message : String(e));
-
-/**
  * La red ya conoce esta cuenta, vista por el RPC: el mismo que simula.
  *
  * No se usa `server.getAccount`: ante cualquier fallo, hasta un corte de red, el
@@ -159,30 +119,4 @@ export const esCuentaInexistente = (e: unknown): boolean => SIN_CUENTA.test(e in
 export async function accountOnRpc(address: string): Promise<boolean> {
   const key = xdr.LedgerKey.account(new xdr.LedgerKeyAccount({ accountId: Keypair.fromPublicKey(address).xdrPublicKey() }));
   return (await server.getLedgerEntries(key)).entries.length > 0;
-}
-
-/**
- * Traduce un error de una invocación a una clave de i18n.
- * Devuelve `errors.<clave>` para que la interfaz muestre algo entendible.
- */
-export function errorKey(e: unknown): string {
-  const msg = e instanceof Error ? e.message : String(e);
-  const m = /Error\(Contract,\s*#(\d+)\)/.exec(msg);
-  if (m?.[1]) {
-    const named = CONTRACT_ERRORS[Number(m[1])];
-    if (named) return named;
-  }
-  if (CUENTA_NO_LISTA.test(msg)) return "accountNotReady";
-  if (COMISION_CORTA.test(msg)) return "busy";
-  if (SIN_SALDO.test(msg) || SIN_CUENTA.test(msg)) return "noFunds";
-  if (/User (declined|rejected)|denied|cancel/i.test(msg)) return "userRejected";
-  if (/fetch|network|timeout|ECONN|Failed to/i.test(msg)) return "rpcDown";
-  // La red no la tomó: ocupada, con la secuencia corrida o vencida. No se
-  // reintenta sola, porque si la primera hubiera entrado igual quedarían dos
-  // sellos para el mismo evento.
-  if (/TRY_AGAIN_LATER|txBadSeq|tx_bad_seq|txTooLate|tx_too_late/i.test(msg)) return "busy";
-  // Entró y falló sin decir por qué (el SDK no puede leer el resultado): con
-  // la red lenta, casi siempre es la ronda que quedó demasiado cerca.
-  if (/Transaction failed!|tx-FAILED|txFailed|tx_failed/.test(msg)) return "busy";
-  return "unknown";
 }
