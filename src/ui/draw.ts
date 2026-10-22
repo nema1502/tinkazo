@@ -96,7 +96,7 @@ export async function draw(): Promise<void> {
       // acepta uno solo por sello.
       // La curva, para pasar la firma al formato del contrato. La cuenta
       // regresiva ya la bajó (ver `freeze`).
-      const [{ decompressG1 }, { sortearConReintentos, SORTEO_REINTENTABLE }, { errorKey }] = await Promise.all([
+      const [{ decompressG1 }, { sortearConReintentos, SORTEO_REINTENTABLE, avisoDelReintento }, { errorKey }] = await Promise.all([
         import("../protocol/drand"),
         import("./sorteo-seguro"),
         import("../stellar/errores"),
@@ -110,11 +110,12 @@ export async function draw(): Promise<void> {
         yaEsta: () => readDraw(raffleId),
         reintentable: (e) => SORTEO_REINTENTABLE.has(errorKey(e)),
         alReintentar: (proximo, total, e) => {
-          const clave = errorKey(e);
-          const red = clave === "rpcDown" || clave === "offline" || clave === "unconfirmed";
+          // Dice lo que pasó: la red no contestó, estaba ocupada, la cadena todavía no ve la ronda u otra cosa.
+          const aviso = avisoDelReintento(errorKey(e));
           showTxStatus("draw-status", "retrying");
           const status = $("draw-status");
-          status.textContent = red ? t("drawTryRed").replace("{i}", String(proximo)).replace("{n}", String(total)) : T[getLang()].drawTry(proximo, total);
+          status.textContent =
+            aviso === "drawTry" ? T[getLang()].drawTry(proximo, total) : t(aviso).replace("{i}", String(proximo)).replace("{n}", String(total));
         },
       });
       if (!fin.ok) {

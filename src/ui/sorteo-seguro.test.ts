@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { errorKey } from "../stellar/errores";
-import { ESPERAS_DEL_SORTEO_MS, SORTEO_REINTENTABLE, sortearConReintentos } from "./sorteo-seguro";
+import { ESPERAS_DEL_SORTEO_MS, SORTEO_REINTENTABLE, avisoDelReintento, sortearConReintentos } from "./sorteo-seguro";
 
 /** Un reloj de mentira: `dormir` lo adelanta en el acto. */
 function reloj() {
@@ -88,5 +88,32 @@ describe("sortearConReintentos: el sorteo reintenta", () => {
       [2, 5],
       [3, 5],
     ]);
+  });
+});
+
+describe("avisoDelReintento: la línea de la sala dice lo que pasó", () => {
+  it.each([
+    ["un corte en Safari", new TypeError("Load failed"), "drawTryRed"],
+    ["un RPC caído", { code: -32603, message: "internal error" }, "drawTryRed"],
+    ["un envío que no se pudo confirmar", new Error("sin-confirmar", { cause: new TypeError("Failed to fetch") }), "drawTryRed"],
+    ["la red ocupada", new Error("tx-REJECTED tx_bad_seq"), "drawTryOcupada"],
+    ["la red con demasiados pedidos", Object.assign(new Error("Request failed with status code 429"), { name: "AxiosError", response: { status: 429 } }), "drawTryOcupada"],
+    ["la ronda que la cadena todavía no ve", new Error("HostError: Error(Contract, #7)"), "drawTry"],
+    ["algo que no se conoce", new Error("tx-REJECTED tx_malformed"), "drawTryOtra"],
+  ])("%s", (_nombre, error, aviso) => {
+    expect(avisoDelReintento(errorKey(error, { enLinea: true }))).toBe(aviso);
+  });
+
+  it("cada aviso existe en es y en, con el número del intento y el total, sin tecnicismos", async () => {
+    const { T } = await import("../i18n");
+    for (const l of ["es", "en"] as const) {
+      for (const k of ["drawTryRed", "drawTryOcupada", "drawTryOtra"]) {
+        const texto = T[l][k];
+        expect(typeof texto, `${l}: ${k}`).toBe("string");
+        expect(texto as string).toContain("{i}");
+        expect(texto as string).toContain("{n}");
+        expect(texto as string).not.toMatch(/hash|bytes?|firmas?|drand|RPC|XDR|ledger/i);
+      }
+    }
   });
 });

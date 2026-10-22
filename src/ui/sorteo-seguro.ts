@@ -62,3 +62,15 @@ export async function sortearConReintentos<T>(p: PasosDelSorteo<T>): Promise<Fin
 
 /** Las claves de error (`errorKey`) con las que vale la pena volver a probar el sorteo. */
 export const SORTEO_REINTENTABLE = new Set(["rpcDown", "offline", "busy", "unconfirmed", "roundNotReady", "unknown"]);
+
+/**
+ * La línea que ve la sala mientras se vuelve a probar, según lo que pasó (la
+ * clave de i18n). Hasta el 21 de octubre de 2026 todo lo que no era la red caída
+ * decía "la cadena todavía no ve esa ronda", también con la red ocupada.
+ */
+export function avisoDelReintento(clave: string): "drawTry" | "drawTryRed" | "drawTryOcupada" | "drawTryOtra" {
+  if (clave === "roundNotReady") return "drawTry";
+  if (clave === "rpcDown" || clave === "offline" || clave === "unconfirmed") return "drawTryRed";
+  if (clave === "busy") return "drawTryOcupada";
+  return "drawTryOtra";
+}
