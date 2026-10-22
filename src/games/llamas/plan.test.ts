@@ -43,16 +43,25 @@ describe("el plan de la carrera", () => {
     }
   });
 
-  it("al 25, al 50 y al 75 por ciento, cualquier puesto sale una de cada ocho veces", () => {
-    for (const q of [0.25, 0.5, 0.75]) {
+  it("al largar y al 25, al 50 y al 75 por ciento, cualquier puesto sale cerca de una de cada ocho veces", () => {
+    for (const q of [0.067, 0.25, 0.5, 0.75]) {
       const cuenta = new Array(9).fill(0);
       for (const p of planes) cuenta[puesto(p, p.story.winner, q)]++;
       for (let r = 1; r <= 8; r++) {
         const f = (cuenta[r] as number) / planes.length;
         expect(f, `puesto ${r} al ${q * 100}%`).toBeGreaterThan(0.08);
-        expect(f, `puesto ${r} al ${q * 100}%`).toBeLessThan(0.17);
+        expect(f, `puesto ${r} al ${q * 100}%`).toBeLessThan(0.18);
       }
     }
+  });
+
+  it("a la mitad, la ganadora va atrás en menos de la mitad de las carreras", () => {
+    // El auditor de emoción mira dieciséis carreras y no acepta que la mitad
+    // de atrás pase de seis de cada diez: con la mitad justa, eso pasaba en una
+    // tanda de cada cuatro.
+    const atras = planes.filter((p) => puesto(p, p.story.winner, 0.5) >= 5).length / planes.length;
+    expect(atras).toBeGreaterThan(0.38);
+    expect(atras).toBeLessThan(0.47);
   });
 
   it("en la recta final, la ganadora va primera o segunda, mitad y mitad", () => {

@@ -20,8 +20,9 @@ import { writeStory, type Arc, type Story } from "../drama";
  *   primera), al 25%, al 50% y al 75% se sortea en una franja de cada arco, y
  *   las cuatro franjas se reparten los puestos: sumando los arcos, cada puesto
  *   sale una de cada ocho veces. Al largar y al 25% va adelante en el susto y
- *   el duelo, y atrás en la remontada y la tapada; al 50%, en el
- *   susto adelante si todavía no tropezó y última si ya; al 75%, primera o
+ *   el duelo, y atrás en la remontada y la tapada; al 50%, un poco más
+ *   adelante que atrás, y en el susto adelante si todavía no tropezó y
+ *   última si ya; al 75%, primera o
  *   segunda en el duelo, tercera o cuarta en el susto y en la mitad de atrás
  *   en la remontada y la tapada.
  * - **En la recta final** (90%) va primera o segunda, mitad y mitad: unas
@@ -267,9 +268,13 @@ export function planRace(
   const arc = story.arc;
   const adelante = arc === "duelo" || arc === "susto";
   const r25 = adelante ? franja(0, 0.5) : franja(0.5, 1);
-  const r50 = arc === "duelo" ? franja(0, 0.5)
+  // A la mitad, un poco más adelante que atrás (con ocho: el duelo del 1 al 3,
+  // la remontada del 4 al 8): cada puesto sigue saliendo cerca de una de cada
+  // ocho veces, y la mitad de atrás no se llena más que la de adelante en
+  // pocas carreras seguidas (el auditor de emoción mira dieciséis).
+  const r50 = arc === "duelo" ? franja(0, 0.375)
     : arc === "tapada" ? franja(0.25, 0.75)
-      : arc === "remontada" ? franja(0.5, 1)
+      : arc === "remontada" ? franja(0.375, 1)
         : tropiezo && tropiezo.at < 0.5 ? franja(0.75, 1) : franja(0, 0.25);
   const r75 = arc === "duelo" ? franja(0, 0.25) : arc === "susto" ? franja(0.25, 0.5) : franja(0.5, 1);
   // En la recta final, primera (aguanta adelante) o segunda (pasa en los
