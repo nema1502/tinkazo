@@ -24,6 +24,7 @@ import {
   senalesTrueque,
   afueraTrueque,
   afueraPinata,
+  senalesEntrada,
 } from "./delatores-senales.mjs";
 
 const NOMBRES = ["María Quispe", "Jorge Mamani", "Lucía Flores", "Carlos Choque", "Ana Vargas", "Diego Rojas", "Elena Condori", "Pablo Gutiérrez"];
@@ -531,6 +532,23 @@ describe("el trueque", () => {
     const tr = feria();
     tr.trazos = tr.trazos.map((f) => (f[0] >= 13.6 ? f.slice(0, 6) : f));
     expect(senalesTrueque(preparar(tr, JUEGOS.trueque)).entrega).toBeUndefined();
+  });
+});
+
+describe("La Entrada", () => {
+  it("al arrancar el recorrido, los que tienen el nombre a la vista contra todos, aunque los otros ya no se vean", () => {
+    // Se presentan las dos fraternidades; después solo llevan nombre las impares, y gana el 5.
+    const pos = (t) => {
+      if (t < 4) return Object.fromEntries([0, 2, 4, 6].map((i) => [i, [200 + i * 60, 300]]));
+      if (t < 8) return Object.fromEntries([1, 3, 5, 7].map((i) => [i, [200 + i * 60, 300]]));
+      return Object.fromEntries([1, 3, 5, 7].map((i) => [i, [300 + i * 60, 320]]));
+    };
+    const tr = traza({ ganador: 5, pos, subs: [[9, "¡8 bailarines en 2 fraternidades: arranca el recorrido!"], [25, "¡A Jorge Mamani se le cayó la máscara!"]] });
+    const P = preparar(tr, JUEGOS.oruro);
+    // "En juego" por la pantalla ya dejó afuera a las pares; esta señal no.
+    expect(P.vivos(9)).toEqual([1, 3, 5, 7]);
+    expect(senalesEntrada(P)["con-nombre"]["los-que-tienen-nombre"]).toEqual({ acierta: true, azar: 1 / 2 });
+    expect(P.corte).toBe(25);
   });
 });
 

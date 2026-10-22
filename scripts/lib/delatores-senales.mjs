@@ -783,6 +783,32 @@ export function afueraPinata(P) {
   return fuera;
 }
 
+/**
+ * La Entrada (Oruro): cada fraternidad se presenta con sus nombres, y después
+ * arranca el recorrido. Si a partir de ahí llevan nombre solo los de una
+ * fraternidad, los demás dejan de verse sin haberse quedado en ninguna cuadra,
+ * y "en juego" por la pantalla los daría por afuera: el auditor no vería que
+ * esconderlos es la pista. Por eso esta señal no usa "en juego".
+ *
+ * - `con-nombre`: en los 4 s después de "arranca el recorrido", cuando todavía
+ *   no se quedó nadie, gana uno de los que tienen el nombre a la vista, entre
+ *   todos.
+ */
+export function senalesEntrada(P) {
+  const go = cuando(P, { clave: "cOruGo" });
+  if (go === null) return {};
+  const G = new Set();
+  for (const f of P.frames) {
+    if (f.t < go) continue;
+    if (f.t > go + 4) break;
+    for (const i of f.labs.keys()) G.add(i);
+  }
+  if (!G.size) return {};
+  P.tiempos["con-nombre"] = go;
+  const todos = Array.from({ length: P.n }, (_, i) => i);
+  return { "con-nombre": { "los-que-tienen-nombre": apuesta([...G], todos, P.w) } };
+}
+
 /* ================================================================== juegos */
 
 /**
@@ -859,7 +885,7 @@ export const JUEGOS = {
       { desde: { clave: "cOruGo" }, orden: "x" },
       { desde: { clave: "cOruGo" }, orden: "y" },
     ],
-    especificas: [linea("mascara", ["cOruScare"]), linea("amague", ["cOruFake"])],
+    especificas: [linea("mascara", ["cOruScare"]), linea("amague", ["cOruFake"]), senalesEntrada],
   },
   chovena: {
     candidatos: "visibles",
