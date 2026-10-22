@@ -4,7 +4,7 @@ import { paceFactor, params, setGameLength, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, note } from "../../sound";
 import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
-import { CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
+import { CREAM, INK, MONO, YELLOW, contorno, hash, mountPixi, type PixiStage } from "./stage";
 
 /**
  * Trompo.
@@ -1058,7 +1058,10 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     const cells: [number, number][] = [[0, 3], [0, 2], [-0.5, 1], [0.5, 1], [0, 0], [-0.5, -1], [0.5, -1], [0, -2]];
     cells.forEach(([cx, cy], i) => {
       ground.rect(hx + cx * hs, hy - cy * hs * 0.6, hs, hs * 0.6).stroke({ width: 2.5 * k, color: chalkCol, alpha: 0.55 });
-      const num = S.text(String(i + 1), { fontFamily: MONO, fontSize: 13 * k, fontWeight: "700", fill: chalkCol });
+      // Con contorno: tiza blanca sobre la tierra clara no llega a 4,5 a 1.
+      // El borde es del color de la tierra del tema oscuro, para que siga
+      // pareciendo tiza en el piso y no una calcomanía.
+      const num = S.text(String(i + 1), { fontFamily: MONO, fontSize: 13 * k, fontWeight: "700", fill: chalkCol, stroke: contorno(13 * k, 0x3a2a1f) });
       num.alpha = 0.5;
       num.anchor.set(0.5);
       num.position.set(hx + cx * hs + hs / 2, hy - cy * hs * 0.6 + hs * 0.3);
