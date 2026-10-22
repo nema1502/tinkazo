@@ -16,10 +16,11 @@ import { writeStory, type Arc, type Story } from "../drama";
  * perdía 157 de 157 veces) y en el duelo corría en el carril de arriba de la
  * rival. Ahora:
  *
- * - **El puesto de la ganadora** al 25%, al 50% y al 75% se sortea en una
- *   franja de cada arco, y las cuatro franjas se reparten los puestos: sumando
- *   los arcos, cada puesto sale una de cada ocho veces. Al 25% va adelante en
- *   el susto y el duelo, y atrás en la remontada y la tapada; al 50%, en el
+ * - **El puesto de la ganadora** apenas largan (cuando el relator anuncia a la
+ *   primera), al 25%, al 50% y al 75% se sortea en una franja de cada arco, y
+ *   las cuatro franjas se reparten los puestos: sumando los arcos, cada puesto
+ *   sale una de cada ocho veces. Al largar y al 25% va adelante en el susto y
+ *   el duelo, y atrás en la remontada y la tapada; al 50%, en el
  *   susto adelante si todavía no tropezó y última si ya; al 75%, primera o
  *   segunda en el duelo, tercera o cuarta en el susto y en la mitad de atrás
  *   en la remontada y la tapada.
