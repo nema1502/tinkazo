@@ -623,6 +623,12 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     pieces = new Graphics();
     candyG = new Graphics();
     pile = new Graphics();
+    // El montón crece caramelo a caramelo y nunca se borra: en "auto", PixiJS
+    // lo deja de dibujar en lote al pasar los 400 vértices, y en el cuadro de ese
+    // cambio la placa llegó a dibujar una franja de colores desde el palo hasta
+    // una esquina (auditor exigente, 21 de octubre de 2026, a los 31 s). Siempre
+    // aparte, ese cambio no existe.
+    pile.context.batchMode = "no-batch";
     glow = new Graphics();
     kid = makeKid();
     pin = makePinata(g.R);
