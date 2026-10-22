@@ -4,7 +4,7 @@ import { musicHold } from "../../music";
 import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, note } from "../../sound";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
-import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, hash, mountPixi, seeded, type PixiStage } from "./stage";
+import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, contorno, hash, mountPixi, seeded, type PixiStage } from "./stage";
 import { LINES, T_BOARD, T_CROWN, T_DOCK, T_RUN, planCableCar } from "./cablecar-plan";
 import { GRUPOS, grupoDe } from "../grupos";
 
@@ -283,7 +283,9 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       const doorG = new Graphics();
       const doors = new Graphics();
       const flag = new Graphics();
-      const count = S.text("", { fontSize: 17 * k, fontWeight: "900", fill: INK });
+      // Cuántos van en la cabina, en su esquina: claro y con contorno, porque
+      // en tinta se perdía contra el marco de la cabina y el cielo de noche.
+      const count = S.text("", { fontSize: 17 * k, fontWeight: "900", fill: CREAM, stroke: contorno(17 * k) });
       count.anchor.set(1, 1);
       count.position.set(G.cw / 2 + 2 * k, 24 * k + G.ch + 2 * k);
       const ring = new Graphics();
