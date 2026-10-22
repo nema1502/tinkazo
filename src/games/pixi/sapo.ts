@@ -196,6 +196,8 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   const handPoint = (): Point => (S.portrait() ? { x: 0.9, y: L.tableR + 0.5 } : { x: HAND.x * 0.86, y: HAND.y * 0.82 });
   /** Lo que mide el chip de cada nombre a escala 1, en unidades de `S.u()`. Se mide al armar. */
   let anchoNombre: number[] = [];
+  /** Lo que mide de alto un chip a escala 1, con su sombra, en unidades de `S.u()`. */
+  let altoNombre = 25;
   const G = (): { w: number; h: number; k: number; cx: number; cy: number; sc: number; br: number; tilt: number } => {
     const w = S.sw(), h = S.sh(), k = S.u();
     const topY = S.top() + 54 * k, botY = h - S.bottom() - 6 * k;
@@ -359,6 +361,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       return c;
     });
     anchoNombre = chips.map((c) => c.width / k);
+    altoNombre = (chips[0]?.height ?? 25 * k) / k;
     g = G();
     // La grilla de la clasificatoria: todos los nombres a la vista, del tamaño
     // que entre. Las celdas miden lo que el chip más ancho y su alto de verdad:
@@ -679,8 +682,64 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   /* -------------------------------------------------------------------- dibujo */
   const current = (): Toss | undefined => tosses.find((o) => tAll >= o.start - 0.4 && tAll < o.end);
 
+  /**
+   * Cuánto se achica el nombre del agujero `s` (de la persona `i`) ya sentado:
+   * el que no entra entre su punto y el borde se achica, en vez de volver sobre
+   * su agujero. Se mide sin zoom: con la cámara cerca se achicaban todos los de
+   * los bordes.
+   */
+  const encogeSentado = (s: number, i: number): number => {
+    const lp = P(labelAt(s));
+    const an = anchorOf(s);
+    const libre = an.ax <= 0.01 ? g.w - 4 - lp.x : an.ax >= 0.99 ? lp.x - 4 : g.w - 8;
+    const finalW = (anchoNombre[i] ?? 0) * g.k * labelScale();
+    return libre > 0 && finalW > libre ? Math.max(0.7, libre / finalW) : 1;
+  };
+
+  /**
+   * La mesa con el nombre de cada agujero ya sentado, en la escena, mirada con
+   * el acercamiento `z`: lo que en un celular tiene que verse entero. Los
+   * nombres son de la interfaz y no crecen con la cámara: en la escena miden lo
+   * que miden en la pantalla dividido por el acercamiento.
+   */
+  const mesaConNombres = (z: number): Caja => {
+    const cajas: Caja[] = [mesa()];
+    const ls = labelScale();
+    for (let s = 0; s < holes; s++) {
+      const i = whoAt(s);
+      const e = ls * encogeSentado(s, i);
+      const w = ((anchoNombre[i] ?? 0) * g.k * e) / z, h = (altoNombre * g.k * e) / z;
+      const lp = P(labelAt(s));
+      const an = anchorOf(s);
+      cajas.push({ x: lp.x - w * an.ax, y: lp.y - h * an.ay, w, h });
+    }
+    return unir(cajas);
+  };
+
+  /** El acercamiento más grande con el que la mesa y todos sus nombres entran en lo que se ve del juego. */
+  const topeConNombres = (): number => {
+    let z = 1;
+    for (let vuelta = 0; vuelta < 3; vuelta++) z = cabe(mesaConNombres(z), zonaJuego());
+    return z;
+  };
+
   function aim(): void {
     const ultimo = tosses[tosses.length - 1] as Toss;
+    // En un celular la mesa ocupa el ancho con los nombres de los costados
+    // pegados al borde: cualquier acercamiento los sacaba de cuadro. En el
+    // último tiro, con el acercamiento lento y el empuje de emoción, quedaban a
+    // la vista 4 de 8 nombres, o 4 de 12, justo cuando cada uno busca su agujero
+    // (evaluación de la subida 2, hallazgo 5). Ahí, desde que los nombres llegan
+    // a la mesa hasta la corona, la mesa con todos sus nombres queda entera: el
+    // acercamiento, los golpes y el empuje llegan hasta donde entran, y la
+    // cámara sigue a la argolla de arriba abajo. Con la corona los demás nombres
+    // se apagan, y el golpe sobre el ganador sigue igual. En la pantalla ancha
+    // no cambia nada. El tope se pide desde el principio, así la cámara llega
+    // suave y no salta cuando los nombres se sientan.
+    const tope = S.portrait() ? topeConNombres() : Infinity;
+    const cuidar = S.portrait() && !crowned && tAll >= T_SEATED;
+    const zEfectivo = Math.max(0.3, cam.toScreen(1, 0, g.w, g.h).x - cam.toScreen(0, 0, g.w, g.h).x);
+    cam.proteger(cuidar ? mesaConNombres(zEfectivo) : null, zonaJuego());
     if (tAll >= ultimo.land) {
       // Desde que cae la última argolla, la mesa entera debajo de donde sale el
       // cartel y encima del relator: el agujero ganador se ve, los demás también,
@@ -691,7 +750,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       // se mide para que los nombres de los costados entren justo.
       const zona = zonaFinal();
       let caja = mesa();
-      let z = Math.min(S.portrait() ? 1 : 1.5, cabe(caja, zona));
+      let z = Math.min(S.portrait() ? Math.min(1, tope) : 1.5, cabe(caja, zona));
       // En la pantalla ancha el chip grande del ganador sale de su agujero hacia
       // afuera de la mesa (hacia arriba en la fila de arriba): entra en el
       // encuadre también, así el cartel no lo pisa ni el relator lo tapa. Con
@@ -745,15 +804,18 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       }
       // En un celular la mesa se mide para que los nombres de los costados
       // entren justo: cualquier acercamiento los sacaba de cuadro. Ahí la
-      // cámara solo se acerca en el último tiro.
+      // cámara queda quieta, y en el último tiro sigue a la argolla sin
+      // acercarse más de lo que dejan entrar los nombres.
       if (S.portrait() && !cur.final) {
         z = 1;
         x = g.w / 2;
         y = g.h / 2;
       }
+      z = Math.min(z, tope);
       // La fila de abajo, por encima de la caja de subtítulos.
       if (z > 1) y += (S.bottom() * 0.5) / z;
     }
+    z = Math.min(z, tope);
     // De cerca, la mesa entera si entra; si no, de borde a borde de la
     // pantalla: antes la cámara se pegaba al borde de la pantalla y mostraba
     // piso de un lado mientras dejaba agujeros afuera del otro.
@@ -961,9 +1023,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       // recién al llegar, en el vuelo quedaba pegado al borde, encima del
       // vecino (el "Va" de la revisión visual del 21 de octubre de 2026).
       const an0 = anchorOf(slot);
-      const libre = an0.ax <= 0.01 ? g.w - 4 - lp.x : an0.ax >= 0.99 ? lp.x - 4 : g.w - 8;
-      const finalW = (anchoNombre[i] ?? 0) * k * ls;
-      const encoge = !ganador && libre > 0 && finalW > libre ? Math.max(0.7, libre / finalW) : 1;
+      const encoge = ganador ? 1 : encogeSentado(slot, i);
       // El ganador conserva la letra grande de antes: en horizontal, 1,45 sobre la base.
       // En un celular el ganador va sobre su aro y no puede ser tan grande: con
       // 1,1 no toca los aros de los vecinos.

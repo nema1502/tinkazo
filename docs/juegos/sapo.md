@@ -41,6 +41,8 @@ El arco sale de [`drama.ts`](../../src/games/drama.ts) y decide cuántos tiros d
 
 La cámara sigue a la argolla mientras está en la mesa y vuelve a la mesa entera cuando se va. Se acerca en el "casi" y en el último vuelo, y termina en el agujero del ganador, a un 62% del alto de la pantalla, y ahí se queda con el cartel arriba, aunque el agujero sea de la fila de arriba. Es el único juego sin el desenfoque de los acercamientos: el último vuelo es un acercamiento lento sobre la argolla, y con desenfoque la mesa entera se veía borrosa justo ahí.
 
+En un celular (vertical) la mesa ocupa el ancho con los nombres de los costados pegados al borde, así que la cámara no se acerca más de lo que dejan entrar la mesa y todos sus nombres: desde que los nombres llegan a la mesa hasta la corona, el acercamiento, los golpes, el sacudón y el empuje de emoción llegan hasta ahí (`cam.proteger`), y en el último vuelo la cámara sigue a la argolla de arriba abajo. Hasta el 22 de octubre de 2026, en el último tiro quedaban a la vista 4 de 8 nombres, o 4 de 12 (evaluación de la subida 2, hallazgo 5); con 12 agujeros y nombres largos, además, dos se apagaban todo el juego. Ahora se ven todos, con 8, 18 y 50 personas, en 390 × 844 y 360 × 800. Con la corona los demás nombres se apagan y el golpe sobre el ganador sigue igual. En la pantalla ancha no cambió nada.
+
 ## Cuánta gente
 
 Cualquier cantidad: con más de doce juega la clasificatoria. Solo con más de doce **ganadores** el sorteo pasa a la carrera de llamas (`playableGame` en `src/state.ts`). Sin WebGL o con `?motor=clasico` no hay versión del motor anterior y cuenta la carrera.
