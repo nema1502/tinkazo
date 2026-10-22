@@ -55,7 +55,7 @@ export const MARCADORES = {
   // La ruleta.
   cWheelOn: /^¡(Pasa por .+|Ahí está .+|Ahora .+)!$/u,
   cWheelFalse: /^¿(Se queda en .+|.+\? ¿Será|Paró en .+)\?$/u,
-  cWheelMoved: /^¡(NO! ¡SE MOVIÓ|NO ERA! ¡UN GAJO MÁS|CHUTA, SE DESTRABÓ)!$/u,
+  cWheelMoved: /^¡(NO! ¡SE MOVIÓ|NO ERA! ¡SIGUE|CHUTA, SE DESTRABÓ)!$/u,
   cWheelLast: /^¡(YA CASI PARA|AHORA SÍ|SE ACABA EL GIRO)!$/u,
   // La tómbola.
   cTomDoor: /^(¡SE ABRE LA PUERTA!|¡Sale una!|¡Ahí viene!)$/u,
