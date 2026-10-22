@@ -1155,6 +1155,19 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
         colTop += (chipDim.get(key) as { h: number }).h + 2 * k;
       });
     }
+    // La ganadora lleva su nombre recién con el golpe del piso: su caramelo toca
+    // el suelo y ahí se lee de quién es, un momento antes del cartel. Antes no
+    // lo llevaba nunca, y en la tapada con mucha gente su nombre no se leía
+    // hasta el cartel (auditor de identificación, 22 de octubre de 2026). Antes
+    // del golpe, no: mientras baja nadie la nombra, y la tapada sigue tapada
+    // hasta que se rompe la piñata.
+    if (!winC.inside && winC.touch >= 0) {
+      const key = FLIGHT_KEY(winnerIdx);
+      chipFor(key, names[winnerIdx] ?? "", scaleFly);
+      const d = chipDim.get(key) as { w: number; h: number };
+      const q = cam.toScreen(winC.x, winC.y - sz * 1.7, g.w, g.h);
+      put(key, q.x - d.w / 2, q.y - d.h, 1000, clamp((tAll - winC.touch) / 0.12, 0, 1), true);
+    }
     // Los que van cayendo (o acaban de quedarse quietos), cada uno con su nombre.
     const flying: { id: number; seq: number }[] = [];
     for (const c of candies) {
