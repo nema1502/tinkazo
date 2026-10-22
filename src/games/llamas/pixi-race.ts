@@ -656,7 +656,8 @@ export async function llamasPixi(
     const rowH = 26 * u;
     for (let k = 0; k < N; k++) {
       const r = new Container();
-      const bgr = new Graphics().roundRect(0, 0, 180 * u, rowH - 3 * u, 4 * u).fill({ color: INK, alpha: 0.9 });
+      // Opaca: con transparencia, la tribuna de colores se veía a través del nombre.
+      const bgr = new Graphics().roundRect(0, 0, 180 * u, rowH - 3 * u, 4 * u).fill(INK);
       const num = new Graphics().roundRect(2 * u, 2 * u, 18 * u, rowH - 7 * u, 3 * u).fill(S.color(k));
       // El puesto en crema con contorno: sobre el color de la llama, el negro solo no se leía a 4,5 a 1 (la medición de pantalla, 720 de alto).
       const pos = S.text("", { fontSize: S.letra(14), fontWeight: "900", fill: CREAM, stroke: { color: INK, width: 3 * u } });
@@ -679,12 +680,16 @@ export async function llamasPixi(
     // Desde la clasificatoria se ven todos antes; el aviso queda para la carrera.
     let avisoBox: Container | null = null;
     if (names.length > N) {
-      const aviso = S.text(T[getLang()].cLanes(N, names.length), { fontFamily: MONO, fontSize: S.letra(14), fontWeight: "800", fill: CREAM });
+      // En la pantalla ancha, a la letra de los nombres de la tabla: a 11 y a 14
+      // se leía como de 9 píxeles desde el fondo (revisión visual, 21 de octubre
+      // de 2026). En el celular ocupa el ancho entero y no puede crecer.
+      const aviso = S.text(T[getLang()].cLanes(N, names.length), { fontFamily: MONO, fontSize: S.letra(G.portrait ? 14 : 16), fontWeight: "800", fill: CREAM });
       const pad = 6 * u;
       aviso.position.set(pad, pad / 2);
       // Sobre la tribuna, sin fondo, no se leía.
       const caja = new Container();
-      caja.addChild(new Graphics().roundRect(0, 0, aviso.width + pad * 2, aviso.height + pad, 4 * u).fill({ color: INK, alpha: 0.72 }), aviso);
+      // Con 0,72, sobre las camisetas claras de la tribuna la letra quedaba por debajo de 4,5 a 1.
+      caja.addChild(new Graphics().roundRect(0, 0, aviso.width + pad * 2, aviso.height + pad, 4 * u).fill({ color: INK, alpha: 0.92 }), aviso);
       caja.position.set(12 * u, S.top() + (G.portrait ? 8 : 12) * u);
       S.hud.addChild(caja);
       avisoBox = caja;
@@ -842,6 +847,8 @@ export async function llamasPixi(
   let hushed = false;
   let lastBeepN = 4;
   const rowPos = lanes.map((_, k) => k);
+  /** El orden de la llegada, de la primera a la última: el de la tabla en la corona. */
+  const ordenFinal = lanes.map((_, k) => k).sort((a, b) => plan.pos(b, 1) - plan.pos(a, 1) || a - b);
   const winnerLane = story.winner;
   /**
    * `?auditar=encuadre`, para `scripts/audit-encuadre.mjs`: en la recta final,
@@ -1219,6 +1226,11 @@ export async function llamasPixi(
     }
     if (phase === "done") {
       tFreeze += dt * paceFactor();
+      // La tabla termina de acomodarse en el orden de la llegada: si dos filas
+      // se estaban cruzando cuando la ganadora llegó, quedaban a mitad de
+      // camino, una encima de la otra, toda la corona (revisión visual, 21 de
+      // octubre de 2026).
+      ordenFinal.forEach((k, puesto) => { rowPos[k] = (rowPos[k] as number) + (puesto - (rowPos[k] as number)) * Math.min(1, dt * 10); });
       // Con la ganadora ya en la meta, la cámara llega despacio al plano de la
       // corona: ella entera debajo del cartel y ninguna otra tapada por él.
       const corona = planoCorona();
@@ -1326,6 +1338,22 @@ export async function llamasPixi(
     if (prog >= 1) finishNow();
   }
 
+  /**
+   * Dónde va el minimapa: arriba, centrado. En la pantalla ancha no se mete
+   * debajo del aviso de cuántos corren, que con la letra legible le tapaba la
+   * largada (21 de octubre de 2026): se achica parejo de los dos lados. En el
+   * celular el aviso ocupa el ancho entero y queda encima, como antes.
+   */
+  function minimapa(): { mw: number; mx: number; my: number } {
+    const { sw, u } = G;
+    let mw = G.portrait ? sw - 40 * u : Math.min(sw * 0.46, 560 * u);
+    if (!G.portrait && L.aviso?.visible) {
+      const b = L.aviso.getBounds();
+      mw = Math.max(160 * u, Math.min(mw, 2 * (sw / 2 - (b.x + b.width) - 24 * u)));
+    }
+    return { mw, mx: (sw - mw) / 2, my: S.top() + 16 * u };
+  }
+
   function draw(now: number): void {
     const prog = qNow();
     const { u, sw } = G;
@@ -1396,6 +1424,12 @@ export async function llamasPixi(
     const comp = 1 / Math.max(1, cam.zoom);
     const muros = [L.board, L.aviso].filter((b): b is Container => !!b && b.visible).map((b) => b.getBounds());
     const piso = G.sh - S.bottom();
+    /** Lo de arriba que un nombre no tapa: el aviso de cuántos corren y el minimapa. */
+    const techos: { x: number; y: number; width: number; height: number }[] = L.aviso?.visible ? [L.aviso.getBounds()] : [];
+    if (phase !== "pre") {
+      const m = minimapa();
+      techos.push({ x: m.mx - 10 * u, y: m.my - 12 * u, width: m.mw + 20 * u, height: 24 * u });
+    }
     /** El cuerpo de la llama en pantalla, sin el nombre. */
     const cajaEn = (r: Runner, sc: number): Caja => {
       const caja = (r.caja ??= medirCaja(r.root));
@@ -1424,6 +1458,23 @@ export async function llamasPixi(
       const alto = (tag.height / 2) * z;
       if (!duo && p.y + alto > piso) {
         tag.visible = false;
+        return;
+      }
+      // Arriba, lo mismo: el carril que un primer plano deja debajo de la barra,
+      // del aviso o del minimapa no lleva nombre. Y si el nombre se sale por la
+      // derecha, su llama (que va a su derecha) ya quedó fuera de cuadro: en el
+      // celular asomaban "Valeria" sin el apellido o un chip partido contra la
+      // barra (revisión visual, 21 de octubre de 2026). Los dos del duelo se
+      // corren lo justo para quedar enteros.
+      const ancho0 = tag.width * z;
+      const debajo = (m: { x: number; y: number; width: number; height: number }): boolean =>
+        p.x < m.x + m.width && p.x + ancho0 > m.x && p.y - alto < m.y + m.height && p.y + alto > m.y;
+      if (!duo && (p.y - alto < S.top() || techos.some(debajo) || p.x + ancho0 > sw - 8 * u)) {
+        tag.visible = false;
+        return;
+      }
+      if (p.x + ancho0 > sw - 8 * u) {
+        tag.x -= (p.x + ancho0 - (sw - 8 * u)) / z;
         return;
       }
       let min = 8 * u;
@@ -1572,8 +1623,7 @@ export async function llamasPixi(
     // El minimapa.
     const mini = L.mini;
     mini.clear();
-    const mw = G.portrait ? sw - 40 * u : Math.min(sw * 0.46, 560 * u);
-    const mx = (sw - mw) / 2, my = S.top() + 16 * u;
+    const { mw, mx, my } = minimapa();
     mini.roundRect(mx - 10 * u, my - 12 * u, mw + 20 * u, 24 * u, 12 * u).fill({ color: INK, alpha: 0.75 });
     mini.rect(mx, my - 1.5 * u, mw, 3 * u).fill({ color: CREAM, alpha: 0.5 });
     for (let c = 0; c < 4; c++) mini.rect(mx + mw - 6 * u + (c % 2) * 3 * u, my - 7 * u + Math.floor(c / 2) * 7 * u, 3 * u, 7 * u).fill(c % 3 === 0 ? 0xffffff : INK);
@@ -1591,7 +1641,12 @@ export async function llamasPixi(
       // Mientras una fila pasa a otra, se ve apagada: el cruce se lee como un
       // adelantamiento y no como dos nombres escritos encima.
       const cruzando = Math.abs(pos - Math.round(pos)) > 0.1;
-      r.alpha = (phase === "done" && !prizedLanes.has(k) ? 0.75 : 1) * (cruzando ? 0.6 : 1);
+      r.alpha = cruzando ? 0.6 : 1;
+      // En la corona, las que no ganan nada se apagan con tinte, como sus llamas,
+      // y la fila sigue opaca: transparentes, sobre la tribuna de colores eran
+      // chips grises que casi no se leían (revisión visual, 21 de octubre de
+      // 2026). El nombre apagado queda a más de 4,5 a 1 sobre su fila.
+      r.tint = phase === "done" && !prizedLanes.has(k) ? 0xb8b8b8 : 0xffffff;
     });
 
     tlCount.time(phase === "pre" ? 0 : phase === "count" ? tPhase : tGo >= 0 && tGo < 1 ? 3 + tGo : 4);
