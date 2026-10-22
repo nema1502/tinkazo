@@ -146,16 +146,60 @@ function enlacesCortos(): Plugin {
   };
 }
 
+/**
+ * El aviso de trozos de más de 500 kB, con una sola excepción con nombre: el SDK
+ * de Stellar.
+ *
+ * El SDK pesa unos 690 kB minificado (138 kB con gzip) y 431 kB de eso son las
+ * definiciones XDR que genera Stellar. No se achica importándolo de otra forma:
+ * `contract.Client` y `rpc.Server` usan casi todas por dentro, y con cualquier
+ * manera de importarlo sale del mismo tamaño (medido el 21 de octubre de 2026).
+ * Tampoco se puede partir en trozos de menos de 500 kB: las definiciones con lo
+ * que usan suman 516 kB, y un corte más fino deja dos trozos que se importan el
+ * uno al otro, y entonces que el SDK arranque depende del orden en que el
+ * navegador los evalúe, que nadie controla. Y no hace falta: se baja recién
+ * cuando se usa (con la página quieta después de entrar con una cuenta, al
+ * sellar, al sortear o al verificar un sorteo anclado). La portada, los juegos y
+ * la verificación de un comprobante sin anclar no lo piden.
+ *
+ * Por eso el aviso de Vite queda para lo enorme (`chunkSizeWarningLimit`, 1 MB)
+ * y este avisa desde 500 kB por cualquier otro trozo, y también por el del SDK
+ * si se mezcla con código nuestro: así un import estático del SDK en la
+ * portada, que la haría bajar todo eso de entrada, no pasa callado.
+ */
+function avisoDeTrozosGrandes(limiteKb = 500): Plugin {
+  // El SDK y lo que usa solo él (con pnpm, el último node_modules de la ruta).
+  const delSdk = /[\\/]node_modules[\\/](?:@stellar[\\/](?:stellar-sdk|js-xdr)|bignumber\.js|feaxios|@noble[\\/]ed25519|@exodus[\\/]bytes|uint8array-extras)[\\/]/;
+  return {
+    name: "tinkazo:aviso-de-trozos-grandes",
+    apply: "build",
+    // Después de Vite, que todavía les agrega a los trozos la lista de lo que precargan.
+    enforce: "post",
+    generateBundle(_salida, bundle) {
+      for (const trozo of Object.values(bundle)) {
+        if (trozo.type !== "chunk") continue;
+        const kb = Buffer.byteLength(trozo.code) / 1000;
+        if (kb <= limiteKb) continue;
+        const ids = Object.keys(trozo.modules);
+        if (ids.length > 0 && ids.every((id) => delSdk.test(id))) continue;
+        this.warn(`${trozo.fileName} pesa ${kb.toFixed(0)} kB minificado, más de ${limiteKb} kB: si no hace falta al abrir la página, que se baje con import() cuando se use.`);
+      }
+    },
+  };
+}
+
 // El sitio, que es la herramienta y nada más; la verificación pública, que se
 // abre desde el QR o el enlace del comprobante y no necesita cuenta; y las
 // páginas de lectura (precios, juegos, historia, seguridad, términos), que
 // salieron de la principal para no meterle nada de eso a quien solo quiere
 // sortear.
 export default defineConfig({
-  plugins: [textosPorPagina(), adelantarLectura(), enlacesCortos()],
+  plugins: [textosPorPagina(), adelantarLectura(), enlacesCortos(), avisoDeTrozosGrandes()],
   build: {
     target: "es2022",
     sourcemap: true,
+    // El de 500 kB lo da `avisoDeTrozosGrandes`, que sabe cuál es el SDK de Stellar.
+    chunkSizeWarningLimit: 1000,
     rollupOptions: {
       input: {
         index: resolve(__dirname, "index.html"),
