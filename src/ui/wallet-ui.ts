@@ -1017,12 +1017,44 @@ async function walletErrorText(e: unknown): Promise<string> {
   return t("walletUnknown");
 }
 
-/** Aviso breve sobre el pie de página. Se va solo. */
+/**
+ * Un aviso breve. El de un error flota sobre el pie de página y se va solo.
+ *
+ * El de que algo salió bien ("Cuenta de prueba lista…") va dentro de la página,
+ * arriba de la lista, donde estaba el botón para entrar, así que no tapa nada:
+ * flotando abajo tapaba "Entendido" en el celular y el cuadro de la lista en
+ * escritorio, justo al entrar (evaluación crítica de experiencia, hallazgo 4).
+ * Sin la lista a la vista, va debajo de la cabecera. Se va con el primer toque
+ * o tecla, después de que el toque llegó a su botón (si la página se moviera
+ * antes, el toque caería en otro lado), o a los diez segundos.
+ */
 function notice(text: string, bad: boolean): void {
   document.querySelector(".wallet-notice")?.remove();
   const el = document.createElement("div");
-  el.className = `wallet-notice${bad ? " bad" : ""}`;
+  el.className = `wallet-notice${bad ? " bad" : " arriba"}`;
   el.textContent = text;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), bad ? 7000 : 4500);
+  if (bad) {
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 7000);
+    return;
+  }
+  el.setAttribute("role", "status");
+  const lista = document.querySelector<HTMLElement>("#sec-participants .body");
+  const cabecera = document.querySelector("body > header");
+  if (lista && lista.offsetParent !== null) lista.prepend(el);
+  else if (cabecera) cabecera.after(el);
+  else document.body.prepend(el);
+  const irse = (): void => {
+    clearTimeout(reloj);
+    document.removeEventListener("click", irse);
+    document.removeEventListener("keydown", irse);
+    el.remove();
+  };
+  const reloj = setTimeout(irse, 10000);
+  // Desde el próximo toque: el que abrió la sesión ya pasó.
+  setTimeout(() => {
+    if (!el.isConnected) return;
+    document.addEventListener("click", irse);
+    document.addEventListener("keydown", irse);
+  }, 0);
 }

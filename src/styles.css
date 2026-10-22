@@ -307,6 +307,11 @@
     padding: 10px 18px; font-size: 13px; font-weight: 700; max-width: 90vw; text-align: center;
   }
   .wallet-notice.bad { background: var(--orange); color: #191919; }
+  /* El que salió bien, dentro de la página (arriba de la lista): no tapa ningún control (wallet-ui.ts). */
+  .wallet-notice.arriba {
+    position: static; transform: none; max-width: none; margin: 0 0 14px; z-index: auto;
+    box-shadow: none; padding: 10px 16px; overflow-wrap: anywhere;
+  }
   .txstatus {
     margin-top: 12px; font-size: 13px; font-weight: 700; color: var(--ink2);
     border-left: 4px solid var(--purple); padding-left: 10px;
@@ -860,6 +865,22 @@
   .ob-pasos b { display: block; font-size: 15px; font-weight: 800; margin-bottom: 4px; }
   .ob-pasos span { display: block; font-size: 13px; color: var(--ink2); line-height: 1.5; }
   @media (max-width: 900px) { .ob-pasos { grid-template-columns: 1fr; } }
+  /* El botón que despliega la bienvenida: solo en el celular, donde va plegada (onboarding.ts). */
+  .ob-abrir { display: none; }
+  @media (max-width: 760px) {
+    .onboard:not(.abierta) { padding: 0; }
+    .ob-abrir {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 48px;
+      padding: 10px 14px; border: 0; background: none; color: var(--ink); font: inherit; font-size: 15px; font-weight: 800;
+      text-align: left; cursor: pointer;
+    }
+    .ob-abrir::after { content: "▾"; font-size: 16px; transition: transform 0.15s; }
+    .onboard.abierta .ob-abrir { padding: 0 0 10px; min-height: 44px; }
+    .onboard.abierta .ob-abrir::after { transform: rotate(180deg); }
+    .onboard:not(.abierta) .ob-cuerpo { display: none; }
+    /* El título repetiría la línea que despliega: ya la dice el botón. */
+    .onboard .ob-cuerpo h3 { display: none; }
+  }
   /* En el celular: sin la explicación quedaban tres títulos sueltos, y con
      la de escritorio ocupaba casi toda la pantalla. Más compacta, con el
      número a la altura del título (revisiones del 16 de octubre de 2026). */
@@ -1555,7 +1576,7 @@
      pie sin poder alcanzarlo. */
   body[data-vista="app"][data-tab="nuevo"]:not([data-demo="1"]) { padding-bottom: var(--sig-alto, 0px); }
   /* El aviso flotante (la cuenta lista, un error) sube para no quedar encima del botón. */
-  body.con-siguiente .wallet-notice { bottom: calc(22px + var(--sig-alto, 0px)); }
+  body.con-siguiente .wallet-notice:not(.arriba) { bottom: calc(22px + var(--sig-alto, 0px)); }
   @media (max-width: 560px) and (min-height: 521px) {
     .siguiente { padding: 8px 14px max(10px, env(safe-area-inset-bottom, 0px)); }
     .sig-in { flex-direction: column; align-items: stretch; gap: 6px; }

@@ -956,6 +956,8 @@ export const T: Record<Lang, Dict> = {
     imgPremio: "Premio:",
     imgPieVarios: "Nadie eligió estos nombres: la lista se cerró antes de que existiera el número que los decidió.",
     obTitle: "Tu primer sorteo, paso a paso",
+    // La bienvenida plegada en el celular (evaluación crítica de experiencia, hallazgo 4).
+    obCorto: "¿Primera vez? Así funciona, en 3 pasos",
     ob1T: "Cargá la lista",
     ob1B: "Pegá los nombres, uno por línea, o subí el CSV de Luma con los que hicieron check-in.",
     ob2T: "Sellala",
@@ -2287,6 +2289,7 @@ export const T: Record<Lang, Dict> = {
     imgPremio: "Prize:",
     imgPieVarios: "Nobody picked these names: the list was locked before the number that decided them existed.",
     obTitle: "Your first draw, step by step",
+    obCorto: "First time? Here's how it works, in 3 steps",
     ob1T: "Load the list",
     ob1B: "Paste the names, one per line, or upload the Luma CSV with those who checked in.",
     ob2T: "Seal it",

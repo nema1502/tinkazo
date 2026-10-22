@@ -213,16 +213,21 @@
     <div class="head"><h2><span data-i="p1">Participantes</span></h2><span class="kicker" id="src-label">fuente: pegado / csv</span></div>
     <div class="body">
       <aside class="gate" id="gate" style="display:none"></aside>
+      <!-- En el celular la bienvenida va plegada a una línea: abierta ocupaba la pantalla y
+           "Pegar lista" quedaba abajo, fuera de ella (evaluación crítica de experiencia, hallazgo 4). -->
       <aside class="onboard" id="onboard" style="display:none" aria-labelledby="ob-t">
-        <h3 id="ob-t" data-i="obTitle">Tu primer sorteo, paso a paso</h3>
-        <ol class="ob-pasos">
-          <li><b data-i="ob1T">Cargá la lista</b><span data-i="ob1B">Pegá los nombres, uno por línea, o subí el CSV de Luma con los que hicieron check-in.</span></li>
-          <li><b data-i="ob2T">Sellala</b><span data-i="ob2B">Queda cerrada antes de que exista el número que decide, que sale unos 45 segundos después. Desde ahí nadie la puede cambiar.</span></li>
-          <li><b data-i="ob3T">Lanzá el sorteo</b><span data-i="ob3B">Elegí un juego para la pantalla grande. Cualquiera lo comprueba después desde su celular.</span></li>
-        </ol>
-        <div class="row">
-          <button class="primary" id="ob-ok" data-i="obOk">Entendido</button>
-          <a class="ghost" id="ob-demo" href="/?demo=race&amp;lead=3" data-i="obDemo">Ver una demo primero</a>
+        <button class="ob-abrir" id="ob-abrir" type="button" aria-expanded="false" aria-controls="ob-cuerpo" data-i="obCorto">¿Primera vez? Así funciona, en 3 pasos</button>
+        <div class="ob-cuerpo" id="ob-cuerpo">
+          <h3 id="ob-t" data-i="obTitle">Tu primer sorteo, paso a paso</h3>
+          <ol class="ob-pasos">
+            <li><b data-i="ob1T">Cargá la lista</b><span data-i="ob1B">Pegá los nombres, uno por línea, o subí el CSV de Luma con los que hicieron check-in.</span></li>
+            <li><b data-i="ob2T">Sellala</b><span data-i="ob2B">Queda cerrada antes de que exista el número que decide, que sale unos 45 segundos después. Desde ahí nadie la puede cambiar.</span></li>
+            <li><b data-i="ob3T">Lanzá el sorteo</b><span data-i="ob3B">Elegí un juego para la pantalla grande. Cualquiera lo comprueba después desde su celular.</span></li>
+          </ol>
+          <div class="row">
+            <button class="primary" id="ob-ok" data-i="obOk">Entendido</button>
+            <a class="ghost" id="ob-demo" href="/?demo=race&amp;lead=3" data-i="obDemo">Ver una demo primero</a>
+          </div>
         </div>
       </aside>
       <!-- Un sorteo sellado en este equipo que quedó sin sortear (una recarga en la espera): se ofrece retomarlo. Lo arma history.ts. -->
