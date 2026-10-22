@@ -5,12 +5,16 @@
  * metiendo a alguien dos veces o dejando afuera a otro. El sello impide
  * cambiarla después, no armarla mal; lo que sí lo descubre es que cada
  * persona se busque. Se compara sin tildes ni mayúsculas y con los espacios
- * juntos, que es como alguien escribe su nombre apurado en el celular.
+ * juntos, que es como alguien escribe su nombre apurado en el celular. Y sin
+ * los caracteres que no se ven: con uno de esos en el medio, "Ana Quispe"
+ * entraba dos veces sin marcarse como repetida (src/invisibles.ts).
  */
 
-/** Un nombre como para compararlo: sin tildes, en minúsculas y con un solo espacio. */
+import { withoutInvisibles } from "./invisibles";
+
+/** Un nombre como para compararlo: sin invisibles ni tildes, en minúsculas y con un solo espacio. */
 export const normalizar = (s: string): string =>
-  s
+  withoutInvisibles(s)
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()

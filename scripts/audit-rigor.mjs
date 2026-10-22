@@ -34,7 +34,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
 
-const TODOS = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien"];
+const TODOS = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "trueque"];
 const args = process.argv.slice(2);
 const opt = (name, def) => {
   const i = args.indexOf(name);
@@ -252,11 +252,12 @@ const urlDe = (juego, extra = "") =>
  * `saltarA` son segundos de juego en los que se aprieta "saltar".
  */
 /**
- * Cuántos nombres aguanta cada juego que tiene tope. Con más, el sorteo pasa a
- * la carrera (`playableGame`), así que medirlos con la lista de ejemplo (18) o
- * con 200 era medir la carrera. Se miden en su tope.
+ * Cuántos nombres aguanta cada juego que tiene tope menor que 200. Con más, el
+ * sorteo pasa a otro juego (`playableGame`), así que medirlos con la lista de
+ * ejemplo (18) o con 200 era medir ese otro. Se miden en su tope. La ruleta
+ * llega a 200 desde el 21 de octubre de 2026 (antes, 24).
  */
-const TOPES = { wheel: 24 };
+const TOPES = {};
 const EJEMPLO = 18;
 
 async function correr(browser, juego, { pace = "normal", tema = "dark", ancho = 1280, alto = 720, saltarA = null, captura = null, gente = 0 } = {}) {
@@ -568,8 +569,8 @@ async function auditar(browser, juego) {
   // ------------------------------------------------- 9. con dos y con muchos
   // La pregunta que estaba en la lista de "revisalo vos": ¿funciona con dos
   // personas y con doscientas? Con dos, que el juego tenga qué mostrar; con
-  // doscientas, que no se ahogue. La ruleta llega a veinticuatro por diseño:
-  // arriba de eso el sorteo pasa solo al Cierre de Libro.
+  // doscientas, que no se ahogue. La ruleta llega a doscientas (con más de
+  // veinticuatro, cada gajo reúne a un grupo): arriba de eso pasa a la tómbola.
   const tope = TOPES[juego] ?? 200;
   for (const gente of [2, tope]) {
     const x = await correr(browser, juego, { gente });

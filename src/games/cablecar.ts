@@ -459,7 +459,8 @@ export function cableCar(
     for (const s of stops) {
       once(`arrive${s.station}`, tAll >= s.t0, () => {
         ding();
-        if (s.last) sayNow(t("cTelLast"), 0.8);
+        // Con los que siguen arriba: "¡QUEDAN DOS!" solo si son dos.
+        if (s.last) sayNow(T[lang].cTelLast(left[s.round] as number), 0.8);
       });
       once(`off${s.station}`, tAll >= s.tOff, () => {
         const who = rank.slice(left[s.round + 1] as number, left[s.round] as number);

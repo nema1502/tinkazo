@@ -1,7 +1,8 @@
 import { Container, Graphics, Sprite, Text, Texture } from "pixi.js";
 import { gsap } from "gsap";
 import { T, getLang, t } from "../../i18n";
-import { paceFactor, setGameLength, yaContaron, type Beacon } from "../../state";
+import { paceFactor, params, setGameLength, yaContaron, type Beacon } from "../../state";
+import { cabe, centrar, crecer, dentro, unir, type Vista, type Zona } from "../pixi/encuadre";
 import { beep, beepFor, fanfare, isMuted, audio, note } from "../../sound";
 import { enOrden, tension } from "../drama";
 import { WINNER_HOLD, shorten, winnersLabel } from "../overlay";
@@ -24,6 +25,8 @@ import { planRace, type Plan } from "./plan";
  */
 
 const DUR = 15;
+/** Cuánto salta la ganadora cuando festeja, en unidades de pantalla: la cámara le deja ese lugar. */
+const SALTO = 22;
 type Skin = "andes" | "stellar" | "lago";
 
 /**
@@ -58,8 +61,10 @@ interface Runner {
   root: Container;
   tag: Container;
   mark: Text;
-  /** El cuerpo de la llama, en su propio sistema (se mide la primera vez que hace falta). */
+  /** El cuerpo de la llama, en su propio sistema (se mide al armarla, quieta y sin el "!"). */
   caja?: Caja;
+  /** Cuánto asoma el "!" de los momentos por encima del cuerpo, en el mismo sistema. */
+  marca?: number;
   /** Pone la postura: `ph` es la fase del paso, `speed` 1 es ir al ritmo de la carrera. */
   pose(ph: number, speed: number, beat: { kind: string; p: number } | null, now: number): void;
 }
@@ -326,7 +331,7 @@ export async function llamasPixi(
     av.anchor.set(0.5);
     av.position.set(4, -36);
     body.addChild(av);
-    const bib = S.text(String(k + 1), { fontSize: 10, fontWeight: "900", fill: INK });
+    const bib = S.text(String(k + 1), { fontSize: 12, fontWeight: "900", fill: CREAM, stroke: { color: INK, width: 3 } });
     bib.anchor.set(0.5);
     bib.position.set(-8, -36);
     body.addChild(bib);
@@ -403,7 +408,7 @@ export async function llamasPixi(
     const paddle = new Graphics().rect(-1.2, 0, 2.4, 34).fill(0x7a5230).roundRect(-4, 30, 8, 14, 3).fill(0x7a5230).stroke({ width: 1.4, color: INK });
     paddle.position.set(-2, -26);
     body.addChild(rower, paddle);
-    const bib = S.text(String(k + 1), { fontSize: 10, fontWeight: "900", fill: INK });
+    const bib = S.text(String(k + 1), { fontSize: 12, fontWeight: "900", fill: CREAM, stroke: { color: INK, width: 3 } });
     bib.anchor.set(0.5);
     bib.position.set(-18, -5);
     body.addChild(bib);
@@ -458,6 +463,10 @@ export async function llamasPixi(
     sky.width = sw;
     sky.height = space ? sh : standsTop + 60 * u;
     S.bg.addChild(sky);
+    // Debajo del cielo, su último color hasta abajo: con pocas personas la
+    // cámara se aleja más que antes, y entre el cielo y la cordillera asomaba
+    // el fondo oscuro del lienzo. De cerca la cordillera lo tapa, como siempre.
+    if (!space) S.bg.addChild(new Graphics().rect(0, sky.height - 1, sw, Math.max(1, sh - sky.height + 1)).fill(dark ? 0xc0603f : 0xffe0a8));
     if (space) {
       const sg = new Graphics();
       for (let i = 0; i < 220; i++) sg.circle(deco() * sw, deco() * sh, (0.4 + deco() * 1.4) * u).fill({ color: 0xffffff, alpha: 0.4 + deco() * 0.6 });
@@ -596,7 +605,7 @@ export async function llamasPixi(
       const post = new Graphics()
         .rect(x - 2 * u, trackTop - 46 * u, 4 * u, 30 * u).fill(CREAM)
         .roundRect(x - 20 * u, trackTop - 62 * u, 40 * u, 20 * u, 4 * u).fill(dark ? 0x2b2640 : 0xffffff).stroke({ width: 2 * u, color: INK });
-      const tx = S.text(space ? `${(10 - i) * 1000} km` : `${100 - i * 10} m`, { fontFamily: MONO, fontSize: 11 * u, fontWeight: "800", fill: dark ? CREAM : INK });
+      const tx = S.text(space ? `${(10 - i) * 1000} km` : `${100 - i * 10} m`, { fontFamily: MONO, fontSize: S.letra(13), fontWeight: "800", fill: dark ? CREAM : INK, stroke: { color: dark ? INK : CREAM, width: 3 * u } });
       tx.anchor.set(0.5);
       tx.position.set(x, trackTop - 52 * u);
       world.addChild(post, tx);
@@ -614,6 +623,10 @@ export async function llamasPixi(
     const runnersLayer = new Container();
     for (let k = 0; k < N; k++) {
       const r = space ? makeRocket(k, G.laneScale(k)) : lake ? makeBoat(k, G.laneScale(k)) : makeLlama(k, G.laneScale(k));
+      // El cuerpo se mide ahora, quieto y sin el "!" (lo invisible no cuenta):
+      // la cámara encuadra con esto.
+      r.caja = medirCaja(r.root);
+      r.marca = Math.max(0, r.caja.y - (r.mark.y - r.mark.height));
       runners.push(r);
       runnersLayer.addChild(r.root);
       tagsLayer.addChild(r.tag);
@@ -645,13 +658,14 @@ export async function llamasPixi(
       const r = new Container();
       const bgr = new Graphics().roundRect(0, 0, 180 * u, rowH - 3 * u, 4 * u).fill({ color: INK, alpha: 0.9 });
       const num = new Graphics().roundRect(2 * u, 2 * u, 18 * u, rowH - 7 * u, 3 * u).fill(S.color(k));
-      const pos = S.text("", { fontSize: 12 * u, fontWeight: "900", fill: INK });
+      // El puesto en crema con contorno: sobre el color de la llama, el negro solo no se leía a 4,5 a 1 (la medición de pantalla, 720 de alto).
+      const pos = S.text("", { fontSize: S.letra(14), fontWeight: "900", fill: CREAM, stroke: { color: INK, width: 3 * u } });
       pos.anchor.set(0.5);
       pos.position.set(11 * u, (rowH - 3 * u) / 2);
       const av = new Sprite(S.face(nameOf(k)));
       av.width = av.height = 14 * u;
       av.position.set(24 * u, 2.5 * u);
-      const nm = S.text(shorten(nameOf(k), 16), { fontSize: 14 * u, fontWeight: "700", fill: CREAM });
+      const nm = S.text(shorten(nameOf(k), 16), { fontSize: S.letra(16), fontWeight: "700", fill: CREAM });
       nm.position.set(42 * u, 3.5 * u);
       r.addChild(bgr, num, pos, av, nm);
       board.addChild(r);
@@ -665,7 +679,7 @@ export async function llamasPixi(
     // Desde la clasificatoria se ven todos antes; el aviso queda para la carrera.
     let avisoBox: Container | null = null;
     if (names.length > N) {
-      const aviso = S.text(T[getLang()].cLanes(N, names.length), { fontFamily: MONO, fontSize: 11 * u, fontWeight: "800", fill: CREAM });
+      const aviso = S.text(T[getLang()].cLanes(N, names.length), { fontFamily: MONO, fontSize: S.letra(14), fontWeight: "800", fill: CREAM });
       const pad = 6 * u;
       aviso.position.set(pad, pad / 2);
       // Sobre la tribuna, sin fondo, no se leía.
@@ -817,6 +831,8 @@ export async function llamasPixi(
   /* ============================================================== estado */
   let phase: "pre" | "count" | "race" | "done" = "pre";
   let tPhase = 3 - CUENTA, tRace = 0, tFreeze = 0, lastLeader = -1, saidLast = false, finished = false, mitadMarcada = false;
+  /** El empuje del zoom de emoción, desde el 80 % de la carrera: una sola vez. */
+  let empujeDado = false;
   /** El reloj de la clasificatoria y la presentación, en segundos de juego. */
   let tPre = 0;
   /** Segundos reales desde la largada, para el "¡YA!", que antes no llegaba a verse: la cuenta terminaba justo cuando aparecía. */
@@ -827,6 +843,24 @@ export async function llamasPixi(
   let lastBeepN = 4;
   const rowPos = lanes.map((_, k) => k);
   const winnerLane = story.winner;
+  /**
+   * `?auditar=encuadre`, para `scripts/audit-encuadre.mjs`: en la recta final,
+   * en la foto y en la corona, dónde cae el cuerpo de cada llama en la pantalla
+   * (sin el nombre), cuál gana y dónde está la zona de la corona. El auditor
+   * comprueba que la ganadora quede entera y que el cartel no tape a ninguna.
+   */
+  const auditoria = params.get("auditar") === "encuadre"
+    ? {
+      n: N,
+      ganadora: story.winner,
+      rival: story.rival,
+      arco: story.arc,
+      muestras: [] as { t: number; fase: string; z: number; cajas: number[][]; zona: number[]; cartel: number[] | null; relator: number[] | null }[],
+      listo: false,
+    }
+    : null;
+  if (auditoria) (window as unknown as { __encuadre: typeof auditoria }).__encuadre = auditoria;
+  let cuadroAud = 0;
   const qNow = (): number => Math.min(1, tRace / DUR);
   const xOf = (k: number, q: number): number => G.X0 + plan.pos(k, q) * G.TL;
 
@@ -866,11 +900,21 @@ export async function llamasPixi(
     finished = true;
     phase = "done";
     tFreeze = 0;
+    // Desde el golpe mismo: ningún acercamiento la corta ni la mete debajo del cartel.
+    protegerGanadora();
+    // Un corte debajo del destello, a un plano apenas más abierto que el de la
+    // corona, y desde ahí la cámara se acerca despacio hasta él. Viajando desde
+    // la recta final, en el camino el cartel tapaba un rato a las de arriba.
+    const corona = planoCorona();
+    cam.cut(corona.x, corona.y, corona.z * 0.92);
     S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     fanfare();
     // La tribuna explota con la ganadora: venía callada desde el respiro.
     roar?.burst();
-    cam.punch(0.12).shake(14 * G.u);
+    // El golpe del zoom de emoción: el acercamiento firme que vuelve suave, en
+    // el mismo instante en que sale el cartel. Solo presentación.
+    S.mark("golpe", cam.golpe(0.12, 0.3, 1.1).toFixed(3));
+    cam.shake(14 * G.u);
   }
 
   const roar = space ? null : crowdNoise();
@@ -1008,34 +1052,102 @@ export async function llamasPixi(
 
   /* ---------------------------------------------------------- el guion */
   /**
+   * El cuerpo de la llama del carril `k` en el mundo, cuando va por `q` de la
+   * carrera: lo que se dibuja sin el nombre. `salto` le suma arriba lo que sube
+   * la ganadora cuando festeja.
+   */
+  function cuerpo(k: number, q: number, salto = 0): Caja {
+    const r = L.runners[k] as Runner;
+    const c = (r.caja ??= medirCaja(r.root));
+    const sc = G.laneScale(k);
+    const x = G.X0 + plan.pos(k, q) * G.TL - 34 * sc;
+    return { x: x + c.x * sc, y: G.laneY(k) + c.y * sc - salto, w: c.w * sc, h: c.h * sc + salto };
+  }
+  /** Un poco más grande que lo que se mira: lugar para el empuje y el golpe de la cámara sin cortarlo. */
+  const holgado = (c: Caja): Caja => crecer(c, c.w * 0.05, c.h * 0.05);
+  /**
+   * Una zona con al menos un cuarto del alto de la pantalla, estirada hacia
+   * arriba: en una pantalla bajísima, entre el cartel y el relator no quedaba
+   * lugar, y la cámara se habría alejado hasta dejar todo como un punto.
+   */
+  const conAlto = (z: Zona): Zona => ({ ...z, y0: Math.max(0, Math.min(z.y0, z.y1 - 0.25 * G.sh)) });
+  /** Donde se ve la carrera: debajo de la barra del recorrido, encima del relator y sin pegarse a los costados. */
+  const zonaCarrera = (): Zona => conAlto({ x0: 8 * G.u, y0: S.top() + 30 * G.u, x1: G.sw - 8 * G.u, y1: G.sh - S.bottom() - 6 * G.u });
+  /** Donde va todo en la corona: debajo del cartel, encima del relator y a `m` de los costados. */
+  const zonaCorona = (m: number): Zona => conAlto({ x0: m, y0: S.placaBajo(winners.length) + m, x1: G.sw - m, y1: G.sh - S.bottom() - m });
+
+  /**
    * La cámara de todos los días, sin dejar el primer carril debajo de la
    * barra de arriba: la barra del recorrido cruzaba el chip del carril 1 y el
    * recuadro del número público tapaba su nombre (lo encontró la revisión
    * visual). Los primeros planos no pasan por acá: miran lo que tienen que
    * mirar aunque el carril 1 quede fuera.
+   *
+   * Con `sujeto`, eso se ve entero: si no entra, la cámara se aleja, y si se
+   * sale por un costado, se corre lo justo. Con pocas personas cada llama mide
+   * más de dos carriles de alto, y los acercamientos pensados para ocho las
+   * cortaban (21 de octubre de 2026). Con ocho entra y nada cambia.
    */
-  function look(x: number, y: number, z: number, rate: number): void {
+  function look(x: number, y: number, z: number, rate: number, sujeto?: Caja): void {
     const techo = S.top() + 46 * G.u;
     const cabeza = G.laneY(0) - 78 * G.laneScale(0);
-    cam.lookAt(x, Math.min(y, cabeza - (techo - G.sh / 2) / z), z, rate);
+    let v: Vista = { x, y: Math.min(y, cabeza - (techo - G.sh / 2) / z), z };
+    if (sujeto) v = dentro(holgado(sujeto), zonaCarrera(), v, G.sw, G.sh);
+    cam.lookAt(v.x, v.y, v.z, rate);
   }
 
   /**
-   * El encuadre de la ganadora bajo el cartel de la corona: el zoom y la altura
-   * de la cámara para que la cabeza quede debajo del cartel y el cuerpo entre el
-   * cartel y la caja del relator. Con pocos carriles las llamas son grandes y, a
-   * 1,6 o 2,1, la cabeza quedaba tapada por el GANA. Con muchos carriles la
-   * llama es chica y el zoom no baja de `zMax`.
+   * La foto del duelo: las dos enteras, de donde van hasta la meta, y debajo
+   * de donde va a salir el cartel, así la corona no tiene que moverlas. Las dos
+   * por igual, sin mirar cuál gana: la cámara no delata a nadie. Hasta el 21 de
+   * octubre de 2026 la foto se medía con la llama ganadora y miraba la meta, y
+   * con pocas personas cortaba a las dos contra el borde.
    */
-  function encuadreGanadora(zMax: number): { y: number; zoom: number } {
-    const sc = G.laneScale(winnerLane);
-    const placa = S.placaBajo(winners.length);
-    // Margen para el salto de la ganadora al coronarse.
-    const margen = 30 * G.u;
-    const hueco = G.sh - S.bottom() - 6 * G.u - (placa + margen);
-    const zoom = Math.max(0.6, Math.min(zMax, hueco / (84 * sc), (G.sw * 0.9) / (110 * sc)));
-    const cabeza = G.laneY(winnerLane) - 78 * sc;
-    return { y: cabeza - (placa + margen - G.sh / 2) / zoom, zoom };
+  function planoFoto(prog: number): Vista {
+    const zona = zonaCorona(12 * G.u);
+    const duo = [story.winner, story.rival];
+    const caja = unir(duo.flatMap((k) => [cuerpo(k, prog), cuerpo(k, 1)]));
+    const alta = Math.max(...duo.map((k) => cuerpo(k, 1).h));
+    const z = Math.min(G.portrait ? 1.8 : 2.1, cabe(holgado(caja), zona), (0.78 * (zona.y1 - zona.y0)) / alta);
+    return centrar(caja, zona, G.sw, G.sh, z);
+  }
+
+  /**
+   * El plano de la corona. La ganadora va entera debajo del cartel y encima
+   * del relator, y ninguna otra llama queda debajo del cartel. Con cinco o
+   * menos se ven todas enteras, como en la foto de una llegada; con más, la
+   * ganadora y las de los carriles de arriba, que son las únicas que podrían
+   * quedar debajo del cartel (las de abajo tienen la cabeza más abajo que ella).
+   *
+   * El acercamiento sale del alto y del ancho de la pantalla: el grupo entra de
+   * alto, la ganadora no pasa del 78% del alto ni del 62% del ancho (queda lugar
+   * para el golpe de la meta) y, como antes, no pasa de 1,6 (1,35 en vertical).
+   * Hasta el 21 de octubre de 2026 se medía solo a la ganadora, y con tres o
+   * cuatro llamas quedaba cortada contra el borde del celular mientras el
+   * cartel tapaba a la del carril de arriba (feedback de Alejandro, 19 de octubre).
+   */
+  function planoCorona(): Vista {
+    const zona = zonaCorona(12 * G.u);
+    const zw = zona.x1 - zona.x0, zh = zona.y1 - zona.y0;
+    const ganadora = cuerpo(winnerLane, 1, SALTO * G.u);
+    const todas = N <= 5;
+    const grupo = unir(lanes.map((_, k) => k).filter((k) => todas || k <= winnerLane).map((k) => (k === winnerLane ? ganadora : cuerpo(k, 1))));
+    const z = Math.max(0.3, Math.min(G.portrait ? 1.35 : 1.6, (0.78 * zh) / ganadora.h, (0.62 * zw) / ganadora.w, zh / grupo.h));
+    const v = centrar(grupo, zona, G.sw, G.sh, z);
+    // Con muchas, pegadas al cartel: debajo quedan las demás, que no tapa nadie.
+    if (!todas) v.y = grupo.y - (zona.y0 - G.sh / 2) / z;
+    // Y la ganadora siempre entera: si el grupo no entra de ancho, se cortan las de atrás.
+    return dentro(ganadora, zona, v, G.sw, G.sh);
+  }
+
+  /**
+   * Desde que se revela, la cámara protege a la ganadora: entera, con su salto,
+   * debajo del cartel y encima del relator, con cualquier acercamiento (el
+   * golpe de la meta, el sacudón, el zoom de emoción). Nunca antes: protegerla
+   * antes de la meta sería delatarla.
+   */
+  function protegerGanadora(): void {
+    cam.proteger(cuerpo(winnerLane, 1, SALTO * G.u), zonaCorona(3 * G.u));
   }
 
   /** Lo de antes de la cuenta: la clasificatoria (si hay) y la presentación de los carriles. */
@@ -1107,11 +1219,13 @@ export async function llamasPixi(
     }
     if (phase === "done") {
       tFreeze += dt * paceFactor();
-      // Con la ganadora ya en la meta, la cámara se le acerca despacio, y la
-      // cabeza queda debajo del cartel (su altura sale del mismo cálculo).
-      const corona = encuadreGanadora(G.portrait ? 1.35 : 1.6);
-      cam.lookAt(xOf(winnerLane, 1) - 20 * G.u, corona.y, corona.zoom, 1.6);
+      // Con la ganadora ya en la meta, la cámara llega despacio al plano de la
+      // corona: ella entera debajo del cartel y ninguna otra tapada por él.
+      const corona = planoCorona();
+      cam.lookAt(corona.x, corona.y, corona.z, 1.6);
+      protegerGanadora();
       if (tFreeze > WINNER_HOLD) {
+        if (auditoria) auditoria.listo = true;
         roar?.stop();
         S.cleanup();
       }
@@ -1167,16 +1281,30 @@ export async function llamasPixi(
     // adelante; en la foto va a la meta, bien cerca.
     const tens = tension(story, prog);
     const leadX = G.X0 + (xs[leader] as number) * G.TL;
+    // El zoom de emoción: un empuje lento desde el 80 % hasta el golpe (la
+    // meta). Dura lo que tarda la carrera en llegar, contado en la hora de la
+    // cámara: la foto del duelo corre a 0,4, y ahí el empuje también se estira.
+    if (!empujeDado && prog >= 0.8) {
+      empujeDado = true;
+      const fp = Math.min(1, Math.max(0.8, plan.foto));
+      cam.tension((fp - 0.8) * DUR + ((1 - fp) * DUR) / 0.4, 0.06);
+    }
     if (shot && prog >= shot.until) shot = null;
     if (prog > plan.foto) {
       // En la foto, sin desenfoque: el acercamiento rápido a la meta dejaba
       // borrosos justo los dos nombres del duelo (revisión de juegos del 16 de
       // octubre de 2026), como pasaba en el último tiro del sapo.
       cam.noBlur();
-      const foto = encuadreGanadora(G.portrait ? 1.8 : 2.1);
-      cam.lookAt(G.X0 + G.TL - 30 * G.u, foto.y, foto.zoom, 4);
+      const foto = planoFoto(prog);
+      cam.lookAt(foto.x, foto.y, foto.z, 4);
     } else if (shot) {
-      cam.lookAt(xOf(shot.k, prog) + 20 * G.u, G.laneY(shot.k) - 40 * G.u, shot.zoom, 5);
+      // El momento, con la llama entera y su "!": con pocas personas, a 1,5 o
+      // 1,7 la cabeza y la marca quedaban arriba, fuera de la pantalla.
+      const r = L.runners[shot.k] as Runner;
+      const c = cuerpo(shot.k, prog);
+      const marca = (r.marca ?? 0) * G.laneScale(shot.k);
+      const v = dentro(holgado({ ...c, y: c.y - marca, h: c.h + marca }), zonaCarrera(), { x: xOf(shot.k, prog) + 20 * G.u, y: G.laneY(shot.k) - 40 * G.u, z: shot.zoom }, G.sw, G.sh);
+      cam.lookAt(v.x, v.y, v.z, 5);
     } else if (prog > 0.8) {
       const second = order[1]?.k ?? leader;
       const x2 = xOf(second, prog);
@@ -1188,9 +1316,11 @@ export async function llamasPixi(
       const alto = Math.abs(G.laneY(leader) - G.laneY(second)) + 120 * G.u;
       const cabe = (G.sh - S.top() - S.bottom() - 80 * G.u) / alto;
       const z = Math.max(base, Math.min(base + 0.55 * Math.pow((prog - 0.8) / 0.2, 1.5), cabe));
-      look((leadX + x2) / 2 + 30 * G.u, y, z, 3);
+      // Las dos de adelante, enteras: con pocas personas no entraban a ese acercamiento.
+      look((leadX + x2) / 2 + 30 * G.u, y, z, 3, unir([cuerpo(leader, prog), cuerpo(second, prog)]));
     } else {
-      look(leadX - G.sw * 0.08, G.midY, 1 + 0.18 * tens, 2.6);
+      // La que va adelante, entera: en un celular, con pocas personas, la cola quedaba afuera.
+      look(leadX - G.sw * 0.08, G.midY, 1 + 0.18 * tens, 2.6, cuerpo(leader, prog));
     }
     S.breath(tRace, DUR, lenta);
     if (prog >= 1) finishNow();
@@ -1215,8 +1345,11 @@ export async function llamasPixi(
     L.clouds.x = -cam.x * 0.05 - now * 6 * u;
     L.sun.x = sw * 0.78 - cam.x * 0.02;
 
-    // La hinchada salta más cuanto más tensa está la carrera.
-    const lo = cam.x * 0.7 - sw, hi = cam.x * 0.7 + sw;
+    // La hinchada salta más cuanto más tensa está la carrera. Se dibuja la que
+    // se ve: con la cámara alejada (pocas personas, en la corona) se ve más de
+    // un ancho de pantalla para cada lado, y sin esto los costados quedaban sin gente.
+    const media = Math.max(sw, sw / (2 * Math.max(0.2, cam.zoom)));
+    const lo = cam.x * 0.7 - media, hi = cam.x * 0.7 + media;
     L.crowd.forEach((sp, i) => {
       const b = L.crowdBase[i];
       if (!b) return;
@@ -1342,7 +1475,7 @@ export async function llamasPixi(
       r.root.position.set(x - 34 * sc, y - salto);
       r.root.alpha = entra;
       r.pose(phase === "pre" ? (1 - llega) * 12 : p * 95, phase === "pre" && entra < 1 ? 1 : speed, phase === "race" ? plan.beatOf(k, prog) : null, now);
-      if (phase === "done" && k === winnerLane) r.root.y = y - Math.abs(Math.sin(tFreeze * 7)) * 22 * u * Math.max(0, 1 - tFreeze / 2.6);
+      if (phase === "done" && k === winnerLane) r.root.y = y - Math.abs(Math.sin(tFreeze * 7)) * SALTO * u * Math.max(0, 1 - tFreeze / 2.6);
       // En la corona, las que no ganan nada se apagan, como sus nombres y la
       // tabla. Con tinte y no con transparencia: transparente, se veían las
       // patas a través del cuerpo.
@@ -1358,7 +1491,8 @@ export async function llamasPixi(
       for (const c of r.tag.children) c.visible = true;
       r.tag.position.set(x - (space ? 82 : lake ? 86 : 70) * sc - r.tag.width, y - 30 * sc);
       adentro(r, sc, k === story.winner || k === story.rival);
-      r.tag.alpha = (phase === "done" && !premio ? 0.35 : 1) * Math.max(0, Math.min(1, (h + 0.05) / 0.2));
+      // Las etiquetas de los que no ganaron no se apagan casi nada (0,95): con menos, el nombre no llega a 4,5 a 1 y en Zoom no se lee. El apagado va en la fila.
+      r.tag.alpha = (phase === "done" && !premio ? 0.95 : 1) * Math.max(0, Math.min(1, (h + 0.05) / 0.2));
       if (quieto) continue;
       // Polvo (o estela), cada grano calculado desde su hora.
       const every = 0.006;
@@ -1413,6 +1547,28 @@ export async function llamasPixi(
       }
     }
 
+    // Para el auditor de encuadre: dónde cayó cada cuerpo en este cuadro.
+    if (auditoria && (phase === "done" || (phase === "race" && prog > 0.8)) && cuadroAud++ % 2 === 0) {
+      const zc = zonaCorona(0);
+      const r1 = (v: number): number => Math.round(v * 10) / 10;
+      // El cartel lo anota el estadio en píxeles del lienzo; acá va en los de la pantalla.
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const cartel = (S.view.dataset.cartel ?? "").split(",").map(Number);
+      const rel = document.getElementById("commentary")?.getBoundingClientRect();
+      auditoria.muestras.push({
+        cartel: phase === "done" && cartel.length === 4 && cartel.every(Number.isFinite) ? cartel.map((v) => r1(v / dpr)) : null,
+        relator: rel ? [r1(rel.x), r1(rel.y), r1(rel.width), r1(rel.height)] : null,
+        t: phase === "done" ? r1(tFreeze * 100) / 100 : -1,
+        fase: phase === "done" ? "corona" : prog > plan.foto ? "foto" : "recta",
+        z: Math.round(z * 1e4) / 1e4,
+        cajas: L.runners.map((r, k) => {
+          const c = cajaEn(r, G.laneScale(k));
+          return [r1(c.x), r1(c.y), r1(c.w), r1(c.h)];
+        }),
+        zona: [zc.x0, zc.y0, zc.x1, zc.y1].map(Math.round),
+      });
+    }
+
     // El minimapa.
     const mini = L.mini;
     mini.clear();
@@ -1435,7 +1591,7 @@ export async function llamasPixi(
       // Mientras una fila pasa a otra, se ve apagada: el cruce se lee como un
       // adelantamiento y no como dos nombres escritos encima.
       const cruzando = Math.abs(pos - Math.round(pos)) > 0.1;
-      r.alpha = (phase === "done" && !prizedLanes.has(k) ? 0.4 : 1) * (cruzando ? 0.6 : 1);
+      r.alpha = (phase === "done" && !prizedLanes.has(k) ? 0.75 : 1) * (cruzando ? 0.6 : 1);
     });
 
     tlCount.time(phase === "pre" ? 0 : phase === "count" ? tPhase : tGo >= 0 && tGo < 1 ? 3 + tGo : 4);

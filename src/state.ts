@@ -1,5 +1,5 @@
 /** `race` y `stellar` son la misma carrera con distinto escenario. */
-export type Game = "race" | "stellar" | "wheel" | "ledger" | "rockets" | "pasanaku" | "teleferico" | "tombola" | "trompo" | "totora" | "pinata" | "oruro" | "luz" | "sapo" | "quien" | "chovena";
+export type Game = "race" | "stellar" | "wheel" | "ledger" | "rockets" | "pasanaku" | "teleferico" | "tombola" | "trompo" | "totora" | "pinata" | "oruro" | "luz" | "sapo" | "quien" | "chovena" | "trueque";
 
 /** Ronda de quicknet ya publicada y verificada. */
 export interface Beacon {
@@ -43,8 +43,11 @@ export const app: { game: Game; frozen: Frozen | null; drawn: Drawn | null } = {
 /** Variables CSS de la paleta, en el orden que usan carriles y gajos. */
 export const LCOLORS = ["--magenta", "--orange", "--teal", "--purple", "--yellow"] as const;
 
-/** La ruleta se ve bien hasta esta cantidad de participantes. */
-export const WHEEL_MAX = 24;
+/**
+ * La ruleta llega hasta esta cantidad de participantes. Hasta veinticuatro, un
+ * gajo por persona; con más, cada gajo reúne a un grupo (`games/wheel-layout.ts`).
+ */
+export const WHEEL_MAX = 200;
 
 /**
  * El Sapo tiene doce agujeros: con más nombres juega una clasificatoria hasta
@@ -56,15 +59,17 @@ import { SAPO_MAX as SAPO_CAP } from "./games/pixi/sapo-plan";
 
 /**
  * El juego que de verdad se cuenta: si el elegido no aguanta tantos nombres,
- * otro que sí. La ruleta pasados WHEEL_MAX va a la tómbola; el Sapo con más de
- * SAPO_MAX ganadores, a la carrera. No altera quién ganó: el juego solo narra.
+ * otro que sí. La ruleta pasados WHEEL_MAX no se juega: el selector ya cambió el
+ * juego al sellar (el primero que encaja, `ui/recomendar.ts`), y acá queda la
+ * red para quien llegue por otro camino. El Sapo con más de SAPO_MAX ganadores,
+ * a la carrera. No altera quién ganó: el juego solo narra.
  *
  * `names` y `winners` son opcionales: el Sapo mira cuántos ganadores hay.
  */
 export function playableGame(game: Game, people: number, _names?: readonly string[], winners?: readonly number[]): Game {
-  // La ruleta pasa a la tómbola, que muestra a todos con su número: la
-  // carrera ponía ocho en pista y dejaba afuera al resto (revisiones del 16
-  // de octubre de 2026).
+  // Si la ruleta llega acá con más gente, va a la tómbola, que muestra a todos
+  // con su número: la carrera ponía ocho en pista y dejaba afuera al resto
+  // (revisiones del 16 de octubre de 2026).
   if (game === "wheel" && people > WHEEL_MAX) return "tombola";
   if (game === "sapo" && (winners?.length ?? 1) > SAPO_CAP) return "race";
   return game;
@@ -74,6 +79,34 @@ export const params = new URLSearchParams(location.search);
 
 /** `?instant=1`: salta las animaciones (capturas y pruebas). */
 export const instantMode = params.get("instant") === "1";
+
+/**
+ * El modo para compartir: más contraste, nombres más grandes y menos partículas
+ * en el show, para que se lea en Zoom o en una pantalla compartida. Vive en la
+ * pestaña (`sessionStorage`): se prende y apaga desde el sorteo, y dura hasta
+ * cerrar la pestaña. `?compartir=1` lo prende al abrir. Sin almacenamiento
+ * (una ventana privada, por ejemplo) no se recuerda, y no pasa nada más.
+ */
+const COMPARTIR_KEY = "tinkazo.compartir";
+
+export function paraCompartir(): boolean {
+  try {
+    return sessionStorage.getItem(COMPARTIR_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setParaCompartir(on: boolean): void {
+  try {
+    if (on) sessionStorage.setItem(COMPARTIR_KEY, "1");
+    else sessionStorage.removeItem(COMPARTIR_KEY);
+  } catch {
+    /* sin almacenamiento, el modo dura lo que la página */
+  }
+}
+
+if (params.get("compartir") === "1") setParaCompartir(true);
 
 /** `true` si el sistema pide menos movimiento. Seguro sin `matchMedia`. */
 export function motionReduced(): boolean {

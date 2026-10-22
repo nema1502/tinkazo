@@ -1,6 +1,8 @@
+import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { T } from "../i18n";
 import { NOMBRE, REGLA, VARIOS } from "./gamecard";
+import { SELECTOR } from "./recomendar";
 
 describe("la tarjeta de cómo se juega", () => {
   it("cada nombre y cada regla existen como texto en los dos idiomas", () => {
@@ -16,6 +18,18 @@ describe("la tarjeta de cómo se juega", () => {
       expect(T[l].gcPeople(18)).toMatch(/18/);
       expect(T[l].gcPrizes(3)).toMatch(/3/);
       expect(T[l].gcPrizesNote(3)).toMatch(/3/);
+    }
+  });
+
+  it("cada juego del selector tiene su captura de fondo, y el archivo existe", () => {
+    // Sin captura la tarjeta sale sobre el color liso: se notaba con El Trueque,
+    // que entró al selector el 21 de octubre de 2026.
+    const fuente = readFileSync(new URL("./gamecard.ts", import.meta.url), "utf8");
+    const conCaptura = [...(/const CAPTURA = new Set<Game>\(\[([^\]]*)\]\)/.exec(fuente)?.[1] ?? "").matchAll(/"([a-z]+)"/g)].map((m) => m[1]);
+    for (const juego of SELECTOR) {
+      expect(conCaptura, juego).toContain(juego);
+      expect(existsSync(new URL(`../../public/juegos/${juego}.webp`, import.meta.url)), `${juego}.webp`).toBe(true);
+      expect(existsSync(new URL(`../../public/juegos/${juego}-light.webp`, import.meta.url)), `${juego}-light.webp`).toBe(true);
     }
   });
 });

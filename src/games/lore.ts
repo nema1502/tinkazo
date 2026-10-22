@@ -251,6 +251,21 @@ export const LORE: Record<string, Lore[]> = {
       hue: "orange",
     },
   ],
+  trueque: [
+    {
+      // Opinión (21 de noviembre de 2021), "Pongo K'asa y Confital: el trueque
+      //  mantiene vigencia en la región Andina": las ferias en el kilómetro 94
+      //  (sábados) y 121 (martes) de la carretera Cochabamba – Oruro; el
+      //  chhalaku, "práctica ancestral", identificado con el trueque. La nota
+      //  no menciona maíz ni oca, ni pisos ecológicos, ni reciprocidad: la
+      //  tarjeta no los dice.
+      q: "loreTruequeQ",
+      a: "loreTruequeA",
+      href: "https://www.opinion.com.bo/articulo/cochabamba/pongo-k-asa-confital-trueque-mantiene-vigencia-region-andina/20211120211759843995.html",
+      src: "opinion.com.bo · Pongo K'asa y Confital (2021)",
+      hue: "orange",
+    },
+  ],
   trompo: [
     {
       // "trompo. II. 1. m. CR, Bo; Ur, obsol. Juego de niños que se practica

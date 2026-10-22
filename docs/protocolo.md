@@ -26,7 +26,7 @@ La **lista canónica** es la secuencia resultante `e_0, e_1, …, e_{n-1}`. `cou
 | Génesis (`genesis_time`) | `1692803367` (Unix, segundos) |
 | Clave pública (G2, comprimida, 96 bytes) | `83cf0f2896adee7eb8b5f01fcad3912212c437e0073e911fb90022d3e760183c8c4b450b6a0a6c3ac6a5776a2d1064510d1fec758c921cc22b0e17e63aaf4bcb5ed66304de9cf809bd274ca73bab4af5a6e9c76a4bc09e76eae8991ef5ece45a` |
 | Relays | `https://api.drand.sh`, `https://api2.drand.sh`, `https://api3.drand.sh`, `https://drand.cloudflare.com` |
-| Endpoint de ronda | `/v2/chains/{chain_hash}/rounds/{round}` → `{ "round", "signature" }` |
+| Endpoint de ronda | API v2: `/v2/chains/{chain_hash}/rounds/{round}` → `{ "round", "signature" }`. API v1: `/{chain_hash}/public/{round}` → `{ "round", "signature", "randomness" }`. Los relays de drand.sh sirven las dos; `drand.cloudflare.com`, solo la v1. Las dos rutas dan la misma firma, y la semilla se calcula de la firma verificada, no del campo `randomness` |
 
 **Tiempo de una ronda:** `round_time(r) = genesis_time + (r − 1) · 3`.
 **Ronda de un instante:** `round_at(t) = 1` si `t < genesis_time`; si no, `⌊(t − genesis_time) / 3⌋ + 1`.

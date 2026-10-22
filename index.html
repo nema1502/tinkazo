@@ -3,13 +3,15 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Tinkazo, sorteos que cualquiera puede comprobar</title>
-<meta name="description" content="El sorteo de tu meetup en pantalla grande, con doce juegos. La lista se congela antes y el ganador sale de un número público que cualquiera puede revisar." />
+<title>Tinkazo · sorteos verificables para eventos y clases</title>
+<meta name="description" content="Sorteos verificables para tu meetup, clase o evento. El ganador sale de un número público que nadie puede elegir. Participar es gratis." />
 <link rel="canonical" href="https://tinkazo.app/" />
-<meta property="og:title" content="Tinkazo, sorteos que cualquiera puede comprobar" />
-<meta property="og:description" content="El sorteo de tu meetup en pantalla grande, con doce juegos. La lista se congela antes y el ganador sale de un número público que cualquiera puede revisar." />
+<meta property="og:title" content="Tinkazo · sorteos verificables para eventos y clases" />
+<meta property="og:description" content="Sorteos verificables para tu meetup, clase o evento. El ganador sale de un número público que nadie puede elegir. Participar es gratis." />
 <meta property="og:type" content="website" />
-<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -4 26 30"><g fill="%23e93d9c"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></g></svg>' />
+<link rel="icon" href="/favicon.ico" sizes="48x48" />
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+<link rel="icon" type="image/svg+xml" href="/icon.svg" />
 <meta property="og:site_name" content="Tinkazo" />
 <meta property="og:url" content="https://tinkazo.app/" />
 <meta property="og:image" content="https://tinkazo.app/og.jpg" />
@@ -30,6 +32,7 @@
       "name": "Tinkazo",
       "url": "https://tinkazo.app/",
       "inLanguage": ["es", "en"],
+      "image": "https://tinkazo.app/og.jpg",
       "publisher": { "@id": "https://tinkazo.app/#organization" }
     },
     {
@@ -37,6 +40,7 @@
       "@id": "https://tinkazo.app/#organization",
       "name": "Tinkazo",
       "url": "https://tinkazo.app/",
+      "logo": "https://tinkazo.app/icon-512.png",
       "sameAs": ["https://github.com/nema1502/tinkazo"]
     },
     {
@@ -48,7 +52,8 @@
       "operatingSystem": "Web",
       "inLanguage": ["es", "en"],
       "isAccessibleForFree": true,
-      "description": "El sorteo de tu meetup en pantalla grande, con doce juegos. La lista se congela antes y el ganador sale de un número público que cualquiera puede revisar.",
+      "image": "https://tinkazo.app/og.jpg",
+      "description": "Sorteos verificables para tu meetup, clase o evento. El ganador sale de un número público que nadie puede elegir. Participar es gratis.",
       "publisher": { "@id": "https://tinkazo.app/#organization" }
     }
   ]
@@ -108,26 +113,24 @@
   <div class="steps portada-only">
     <article><span class="num">01</span><h3 data-i="s1t">Traé tu lista</h3><p data-i="s1b">Entrás con Google y pegás los nombres, o subís el CSV de Luma o de cualquier planilla, y elegís quiénes entran. La cuenta es tuya: tu gente no instala nada ni se crea nada.</p></article>
     <article><span class="num">02</span><h3 data-i="s2t">Sellá la lista</h3><p data-i="s2b">Al sellarla, la lista queda con un resumen corto de la lista (su huella) y una hora. Si después alguien mete a su primo o saca a otro, la huella cambia y se nota. Y la huella queda grabada en Stellar.</p></article>
-    <article><span class="num">03</span><h3 data-i="s3t">Elegí el juego y sorteá</h3><p data-i="s3b">Uno de los doce juegos, a pantalla completa. Cuando arranca la animación el ganador ya salió del número público. El show es show. El sorteo ya estaba hecho.</p></article>
+    <article><span class="num">03</span><h3 data-i="s3t">Elegí el juego y sorteá</h3><p data-i="s3b">Uno de los diez juegos, a pantalla completa. Cuando arranca la animación el ganador ya salió del número público. El show es show. El sorteo ya estaba hecho.</p></article>
   </div>
 
   <section class="portada-sec portada-only" id="juegos">
     <span class="kicker" data-i="pjKicker">El show</span>
-    <h2 class="sec-t" data-i="pjT">Doce juegos. Ninguno decide nada.</h2>
+    <h2 class="sec-t" data-i="pjT">Diez juegos. Ninguno decide nada.</h2>
     <p class="sec-b" data-i="pjB">Tocá uno y miralo sortear con una lista de ejemplo, sin cuenta. Cuando arranca la animación el ganador ya salió: todos cuentan el mismo sorteo.</p>
     <div class="portada-juegos">
       <a href="/?demo=race&amp;lead=3" data-thumb="race"><span data-i="gameRace">Carrera de llamas</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
-      <a href="/?demo=chovena&amp;lead=3" data-thumb="chovena"><span data-i="gameCho">Chovena</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
-      <a href="/?demo=trompo&amp;lead=3" data-thumb="trompo"><span data-i="gameTrompo">Trompo</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
-      <a href="/?demo=pinata&amp;lead=3" data-thumb="pinata"><span data-i="gamePinata">Piñata</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
-      <a href="/?demo=oruro&amp;lead=3" data-thumb="oruro"><span data-i="gameOruro">Carnaval de Oruro</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
-      <a href="/?demo=tombola&amp;lead=3" data-thumb="tombola"><span data-i="gameTombola">Tómbola</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
-      <a href="/?demo=wheel&amp;lead=3" data-thumb="wheel"><span data-i="gameWheel">Ruleta</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
-      <a href="/?demo=teleferico&amp;lead=3" data-thumb="teleferico"><span data-i="gameTeleferico">Teleférico</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
-      <a href="/?demo=pasanaku&amp;lead=3" data-thumb="pasanaku"><span data-i="gamePasanaku">Aguayo</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
-      <a href="/?demo=stellar&amp;lead=3" data-thumb="stellar"><span data-i="gameStellar">Constelación Stellar</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
       <a href="/?demo=sapo&amp;lead=3" data-thumb="sapo"><span data-i="gameSapo">Sapo</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
-      <a href="/?demo=quien&amp;lead=3" data-thumb="quien"><span data-i="gameQuien">¿Quién es?</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
+      <a href="/?demo=trompo&amp;lead=3" data-thumb="trompo"><span data-i="gameTrompo">Trompo</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
+      <a href="/?demo=chovena&amp;lead=3" data-thumb="chovena"><span data-i="gameCho">Chovena</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
+      <a href="/?demo=pinata&amp;lead=3" data-thumb="pinata"><span data-i="gamePinata">Piñata</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
+      <a href="/?demo=wheel&amp;lead=3" data-thumb="wheel"><span data-i="gameWheel">Ruleta</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
+      <a href="/?demo=quien&amp;lead=3" data-thumb="quien"><span data-i="gameQuien">De pie</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
+      <a href="/?demo=trueque&amp;lead=3" data-thumb="trueque"><span data-i="gameTrueque">El Trueque</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
+      <a href="/?demo=teleferico&amp;lead=3" data-thumb="teleferico"><span data-i="gameTeleferico">Teleférico</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
+      <a href="/?demo=oruro&amp;lead=3" data-thumb="oruro"><span data-i="gameOruro">Carnaval de Oruro</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
     </div>
   </section>
 
@@ -162,7 +165,7 @@
   <section class="portada-sec portada-only" id="numeros">
     <span class="kicker" data-i="cifKicker">En números, medidos</span>
     <div class="cifras">
-      <div><b>12</b><span data-i="cif1">juegos a pantalla completa</span></div>
+      <div><b>10</b><span data-i="cif1">juegos a pantalla completa</span></div>
       <div><b data-i="cif2v">0,76 XLM</b><span data-i="cif2">por sorteo grabado, medido en testnet el 3 de octubre de 2026: unos 16 centavos. Lo cobra la red, no Tinkazo</span></div>
       <div><b>0</b><span data-i="cif3">servidores propios: nada que se caiga de este lado</span></div>
       <div><b>MIT</b><span data-i="cif4">código abierto, para que lo revises</span></div>
@@ -286,24 +289,24 @@
       </div>
       <p class="txstatus" id="draw-status" style="display:none"></p>
       <p class="kicker pick-label" id="pick-label" data-i="gameLabel">Juego</p>
+      <p class="note" id="rec-head" style="display:none"></p>
       <div class="gamepick" id="gamepick">
         <button id="g-race" class="on"><span data-i="gameRace">Carrera de llamas</span></button>
-        <button id="g-chovena"><span data-i="gameCho">Chovena</span></button>
-        <button id="g-trompo"><span data-i="gameTrompo">Trompo</span></button>
-        <button id="g-pinata"><span data-i="gamePinata">Piñata</span></button>
-        <button id="g-oruro"><span data-i="gameOruro">Carnaval de Oruro</span></button>
-        <button id="g-tombola"><span data-i="gameTombola">Tómbola</span></button>
-        <button id="g-wheel"><span data-i="gameWheel">Ruleta</span></button>
-        <button id="g-teleferico"><span data-i="gameTeleferico">Teleférico</span></button>
-        <button id="g-pasanaku"><span data-i="gamePasanaku">Aguayo</span></button>
-        <button id="g-stellar"><span data-i="gameStellar">Constelación Stellar</span></button>
         <button id="g-sapo"><span data-i="gameSapo">Sapo</span></button>
-        <button id="g-quien"><span data-i="gameQuien">¿Quién es?</span></button>
+        <button id="g-trompo"><span data-i="gameTrompo">Trompo</span></button>
+        <button id="g-chovena"><span data-i="gameCho">Chovena</span></button>
+        <button id="g-pinata"><span data-i="gamePinata">Piñata</span></button>
+        <button id="g-wheel"><span data-i="gameWheel">Ruleta</span></button>
+        <button id="g-quien"><span data-i="gameQuien">De pie</span></button>
+        <button id="g-trueque"><span data-i="gameTrueque">El Trueque</span></button>
+        <button id="g-teleferico"><span data-i="gameTeleferico">Teleférico</span></button>
+        <button id="g-oruro"><span data-i="gameOruro">Carnaval de Oruro</span></button>
       </div>
-      <p class="note" id="wheel-cap" style="display:none" data-i="wheelCap">La ruleta se ve linda hasta unos 24 nombres. De ahí para arriba, el sorteo pasa a la tómbola, que muestra a todos.</p>
+      <p class="note" id="wheel-cap" style="display:none" data-i="wheelCap">La ruleta llega hasta 200 nombres. De ahí para arriba, el sorteo pasa a la tómbola, que muestra a todos.</p>
       <div class="row ajustes">
         <button class="ghost" id="btn-sound" data-i="soundOn">Sonido: sí</button>
         <button class="ghost" id="btn-music">Música: no</button>
+        <button class="ghost" id="btn-compartir" type="button" aria-pressed="false">Para compartir: no</button>
         <label class="kicker" for="pace" data-i="paceLabel">Duración</label>
         <select id="pace" class="mono">
           <option value="rapido" data-i="paceFast">Rápida</option>
@@ -418,8 +421,8 @@
     <h2 class="kicker" data-i="masTitle">Para saber más</h2>
     <div class="notas" style="margin-top: 12px">
       <a class="nota" href="/juegos.html" style="text-decoration:none;color:inherit">
-        <h3 data-i="masJuegosT">Los doce juegos</h3>
-        <p data-i="masJuegosB">Carrera de llamas, chovena, trompo, piñata, Carnaval de Oruro, tómbola, el sapo y cinco más, con la captura de cada uno.</p>
+        <h3 data-i="masJuegosT">Los diez juegos</h3>
+        <p data-i="masJuegosB">Carrera de llamas, chovena, trompo, piñata, Carnaval de Oruro, el sapo y cuatro más, con la captura de cada uno.</p>
       </a>
       <a class="nota" href="/historia.html" style="text-decoration:none;color:inherit">
         <h3 data-i="masHistoriaT">De dónde sale el nombre</h3>

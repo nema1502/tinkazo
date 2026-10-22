@@ -70,6 +70,23 @@ describe("diccionario", () => {
     }
   });
 
+  it("Teleférico: la última estación dice lo mismo que el contador", () => {
+    // Al llegar con tres o más arriba no puede decir "quedan dos"; con dos, sí.
+    // Las variantes salen al azar: se prueban muchas veces.
+    for (let i = 0; i < 60; i++) {
+      for (const left of [3, 4, 20]) {
+        expect(T.es.cTelLast(left)).not.toMatch(/dos/i);
+        expect(T.en.cTelLast(left)).not.toMatch(/two/i);
+      }
+      expect(T.es.cTelLast(2)).toMatch(/QUEDAN DOS|Última estación/);
+      expect(T.en.cTelLast(2)).toMatch(/TWO LEFT|Last station/);
+      // Los que se bajan juntos se nombran todos, y los que no entran se cuentan.
+      expect(T.es.cTelOffN(["Ana", "Iván"], 0)).toMatch(/Ana e Iván/);
+      expect(T.en.cTelOffN(["Ana", "Bea", "Ciro"], 15)).toMatch(/Ana, Bea, Ciro and 15 more/);
+      expect(T.es.cTelOffN(["Ana", "Bea", "Ciro"], 15)).toMatch(/Ana, Bea, Ciro y 15 más/);
+    }
+  });
+
   it("Sapo: what gets thrown is a ring, never a chip or a token", () => {
     for (const l of ["es", "en"] as const) {
       const textos = Object.entries(T[l])
