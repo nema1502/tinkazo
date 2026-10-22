@@ -29,7 +29,13 @@
 import { createHash } from "node:crypto";
 import { launch, sleep } from "./lib/browser.mjs";
 
-const TODOS = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien"];
+const TODOS = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "trueque"];
+/**
+ * Los juegos que tienen zoom de emoción (`Camera.golpe` en `docs/motores.md`):
+ * el pico del zoom tiene que caer en el golpe, que es el instante en que sale el
+ * cartel. Los demás todavía no lo tienen y no se miran.
+ */
+const CON_ZOOM = ["race", "sapo"];
 const args = process.argv.slice(2);
 const opt = (name, def) => {
   const i = args.indexOf(name);
@@ -80,6 +86,7 @@ try {
     console.log(`\n${juego}`);
     const arcos = [];
     const aMitad = [];
+    const zooms = [];
     for (let i = 1; i <= N; i++) {
       const page = await browser.open("about:blank");
       await page.send("Page.addScriptToEvaluateOnNewDocument", { source: TURBO });
@@ -100,6 +107,18 @@ try {
         await page.waitFor(mitad, 20_000);
         aMitad.push(Number(await page.eval(`${mitad} || 0`)));
       }
+      if (CON_ZOOM.includes(juego) && ok.ok) {
+        // El golpe lo anota el juego al salir el cartel, y el pico del zoom lo
+        // anota el escenario. Los dos están en la hora de la cámara.
+        const g = await page.waitFor("document.getElementById('race-canvas').dataset.golpe", 30_000);
+        if (g.ok) {
+          const golpe = Number(await page.eval("document.getElementById('race-canvas').dataset.golpe"));
+          const pico = Number(await page.eval("document.getElementById('race-canvas').dataset.zoomPico || '-1'"));
+          zooms.push({ golpe, pico });
+        } else {
+          zooms.push(null);
+        }
+      }
       try {
         await page.send("Page.close");
       } catch {
@@ -113,6 +132,16 @@ try {
       c.size >= 3 && peor <= N / 2 && !c.has("?"),
       [...c.entries()].map(([a, k]) => `${a} ${k}`).join(" · "),
     );
+    if (CON_ZOOM.includes(juego)) {
+      // El pico entre el golpe y 0,35 s después: el acercamiento llega en una
+      // décima y se sostiene 0,3 s (`zoom-emocion.ts`).
+      const en = zooms.filter((z) => z && z.pico - z.golpe >= -0.01 && z.pico - z.golpe <= 0.35).length;
+      check(
+        "el zoom de emoción cae en el golpe",
+        zooms.length === N && en === N,
+        zooms.map((z) => (z ? `golpe ${z.golpe.toFixed(2)} pico ${z.pico.toFixed(2)}` : "sin golpe")).slice(0, 4).join(" · ") + ` · ${en}/${N}`,
+      );
+    }
     if (aMitad.length) {
       const p = cuenta(aMitad);
       const mas = Math.max(...p.values());

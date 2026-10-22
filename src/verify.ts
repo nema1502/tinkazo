@@ -1,6 +1,10 @@
-import "./styles.css";
+// Lo mismo que las páginas de lectura: los estilos, los textos, el tema de
+// `?theme=`, la cuenta en la cabecera, el menú, el idioma y el contador. Esta
+// página lo hacía a mano y se había quedado sin el tema: con `?theme=light`
+// salía oscura igual (evaluador visual, 21 de octubre de 2026).
+import "./pagina";
 import { $, esc } from "./dom";
-import { chooseLang, getLang, initialLang, setLang, texto as t, textos, textosDeLaPagina } from "./idioma";
+import { getLang, onLangChange, texto as t, textos } from "./idioma";
 import { SAMPLE, avatar } from "./state";
 import { canonicalList, listHash } from "./protocol/canonical";
 import { RPC_URLS } from "./stellar/config";
@@ -9,8 +13,6 @@ import { prepararFirma, verifyRoundAsync } from "./protocol/firma";
 import { select } from "./protocol/select";
 import { decodeProof, isAnchored, type Proof } from "./protocol/proof";
 import { network } from "./stellar/config";
-import { loadSessionKind } from "./stellar/session-store";
-import { initMenuMas } from "./ui/menu";
 import { buscar, vecesExacto } from "./buscar";
 // Estático, no con import(): así las claves de compartir entran en los textos de esta página.
 import { abrirSorteo } from "./ui/compartir";
@@ -88,30 +90,9 @@ function fail(messageKey: string, detail = ""): void {
 }
 
 async function main(): Promise<void> {
-  // Los textos de esta página vienen en su HTML (ver `idioma.ts`).
-  textosDeLaPagina();
-  // La cuenta a la vista, como en las demás páginas: "Mi cuenta" si hay sesión.
-  // "Entrar" no va en la cabecera (ver pagina.ts).
-  if (loadSessionKind(network.name)) {
-    const a = document.createElement("a");
-    a.className = "mini pg-auth";
-    a.href = "/#mis-sorteos";
-    a.dataset.i = "navCuenta";
-    document.querySelector("header .bar")?.appendChild(a);
-  }
-  initMenuMas();
-  setLang(initialLang());
-  // El contador va aparte y después: no frena la página y queda en su propio
-  // archivo, chico, en vez de darle su nombre al código común.
-  void import("./analytics").then((m) => m.countVisits());
-  $("l-es").addEventListener("click", () => {
-    chooseLang("es");
-    paint();
-  });
-  $("l-en").addEventListener("click", () => {
-    chooseLang("en");
-    paint();
-  });
+  // Los textos, el tema, la cabecera y el idioma ya los puso `pagina.ts`. Las
+  // comprobaciones no viven en `data-i`: se repintan al cambiar de idioma.
+  onLangChange(paint);
 
   let proof: Proof;
   try {
@@ -501,12 +482,22 @@ function renderResult(
   $("v-proof").textContent =
     `round=${proof.round} · signature=${signature.slice(0, 20)}… · randomness=${randomness.slice(0, 20)}… · winners=[${winners.join(",")}]${fromChain ? " · on-chain ✓" : ""}`;
   $<HTMLAnchorElement>("v-drand").href = roundUrl(proof.round);
-  // Compartir otra vez: el enlace de esta página es el comprobante, tal como llegó;
-  // el mensaje y el QR salen de lo que la página acaba de rehacer.
+  // Compartir otra vez: el enlace de esta página es el comprobante, tal como llegó
+  // (sin la consulta: el idioma o el tema de quien lo mira no viajan); el mensaje y
+  // la foto salen de lo que la página acaba de rehacer. Si llegó por un enlace
+  // corto, ese mismo se vuelve a compartir.
   const compartir = $<HTMLButtonElement>("btn-compartir");
   compartir.style.display = "";
   compartir.onclick = () =>
-    abrirSorteo({ enlace: location.href, ganadores: winners.map((i) => names[i] ?? ""), total: names.length, premio });
+    abrirSorteo({
+      enlace: location.origin + location.pathname + location.hash,
+      ganadores: winners.map((i) => names[i] ?? ""),
+      total: names.length,
+      premio,
+      ...(proof.sealedAt ? { fecha: proof.sealedAt } : {}),
+      ...(proof.id ? { numero: proof.id } : {}),
+      ...(proof.net ? { red: proof.net } : {}),
+    });
   if (isAnchored(proof)) {
     const a = $<HTMLAnchorElement>("v-contract");
     a.style.display = "inline-block";

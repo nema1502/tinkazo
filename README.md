@@ -57,7 +57,7 @@ sequenceDiagram
 1. **Seal.** The list is canonicalized and hashed with SHA-256. The contract records, among other things, the fingerprint, the head count, the number of winners and a **future** drand round. The contract refuses a round less than 30 seconds away.
 2. **Wait for the number.** [drand](https://drand.love) quicknet, the public randomness beacon run by the League of Entropy (Cloudflare, Protocol Labs, EPFL and others), publishes a BLS-signed round every 3 seconds. Nobody, including the organizer and Tinkazo, can know or choose it in advance.
 3. **Draw.** `draw` verifies the round's BLS12-381 signature **inside the contract** with a pairing check, derives the seed and selects the winners deterministically. It asks nobody for permission: if the organizer disappears mid-event, anyone can finalize the draw and the winner is the same.
-4. **Show.** One of twelve full-screen games tells the result. The winner is already fixed when the animation starts; the game only narrates it.
+4. **Show.** One of ten full-screen games tells the result. The winner is already fixed when the animation starts; the game only narrates it.
 5. **Verify.** The proof is a link. Whoever opens it watches the page recompute the draw from scratch and gets a verdict: green if the contract attests the list, yellow if the draw was not anchored, red with the reason if anything does not match. If you ran several draws at the same event, the [event link](docs/evento.md) puts them on one page.
 
 The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.md) ([English translation](docs/protocol.en.md)), with test vectors shared by the Rust contract and the TypeScript client ([docs/vectors.json](docs/vectors.json)). Anyone can reimplement it and reach the same winners.
@@ -75,10 +75,10 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 | Component | Status | Evidence |
 |---|---|---|
 | Soroban contract `tinkazo-raffle` | Deployed on testnet, which Stellar wipes on December 16, 2026 | [`CD2SSHBU…ARENH`](https://stellar.expert/explorer/testnet/contract/CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH) · 19 tests, including a real quicknet round · 11.4 KB WASM |
-| Web app | Live | [tinkazo.app](https://tinkazo.app) · Spanish and English · light and dark · no backend |
+| Web app | Live | [tinkazo.app](https://tinkazo.app) · Spanish and English · light and dark · no backend for the draw (short links run on a small Cloudflare Worker, [workers/enlaces](workers/enlaces/README.md)) |
 | Luma import | Live | Drop the guest export and pick who gets in: those who checked in, the approved ones, or by hand |
 | Verification page | Live | Recomputes any draw in the browser from its proof link |
-| Twelve stadium games | Live | Deterministic: the same round draws the same frames on any machine |
+| Ten stadium games | Live | Deterministic: the same round draws the same frames on any machine |
 | Protocol v2 | Specified | [docs/protocolo.md](docs/protocolo.md) ([in English](docs/protocol.en.md)) and shared vectors that both implementations must pass |
 | Quality gates | Tests in CI, auditors before every push | 205 TypeScript tests and the 19 contract tests run in CI; ten custom auditors (below) run against the built site |
 
@@ -96,22 +96,20 @@ Tested with a thousand participants (September 22, with the previous engine): th
 
 ## The show
 
-Fairness is math; the show is what makes a room care. Twelve games, most of them rooted in Bolivian and Latin American culture, each seeded with the same drand round, so a draw's animation is reproducible:
+Fairness is math; the show is what makes a room care. Ten games, most of them rooted in Bolivian and Latin American culture, each seeded with the same drand round, so a draw's animation is reproducible:
 
 | Game | What it is |
 |---|---|
-| Stellar Constellation | A payment hops from star to star looking for a route, like a path payment, and leaves a constellation drawn |
 | Llama Race | Eight lanes across the Andes |
-| Chovena | The Chiquitano dance from Santa Cruz: the ring turns hand in hand, and when the band cuts the music, whoever stumbles lets go and sits down at the edge of the plaza. The one game where the room claps along and freezes with the cut |
-| Aguayo | The Andean carrying cloth: everyone's bundle sits on it, the cloth closes and ties up, and the one left goes off in the knot |
-| Cable Car | Cabins in the colors of the La Paz and El Alto lines climb the cable; half the riders get off at each station |
-| Ball Drum | The fair's drum, one numbered ball per person on the sealed list |
-| Wheel | The classic, readable even with two people |
-| Spinning Tops | The schoolyard game: tops thrown into a chalk ring clash and knock each other out, down to a head-to-head |
-| Piñata | The seven-pointed star from the posadas: every swing knocks names out, and the last candy inside wins |
-| Oruro Carnival | A Diablada troupe dances block by block toward the Socavón; a few stay at every arch |
 | Sapo | The frog toss from fairs and patios: a hole for each name around the frog; rings hit, dance on a rim and roll out, and the last one drops into the winner's |
-| Who Is It? | Everyone on a card; each turn a letter flips the ones that don't match, until one is left |
+| Spinning Tops | The schoolyard game: tops thrown into a chalk ring clash and knock each other out, down to a head-to-head |
+| Chovena | The Chiquitano dance from Santa Cruz: the ring turns hand in hand, and when the band cuts the music, whoever stumbles lets go and sits down at the edge of the plaza. The one game where the room claps along and freezes with the cut |
+| Piñata | The seven-pointed star from the posadas: every swing knocks names out, and the last candy inside wins |
+| Wheel | The classic, readable even with two people |
+| Stand Up | The whole room stands; each question about your own name (a letter, a digit, half the alphabet, how many letters) sits down those who don't match, until one is left standing |
+| El Trueque | The barter fair: each stall takes one product and gives another, and an order changes hands until it reaches whoever was waiting for it, the way a path payment crosses Stellar |
+| Cable Car | Cabins in the colors of the La Paz and El Alto lines climb the cable, one per group; at each station a whole group gets off |
+| Oruro Carnival | A Diablada troupe dances block by block toward the Socavón; a few stay at every arch |
 
 **None of them decides anything.** An *emotion director* writes each draw's story from the same round: in the race a llama stops dead, another trips and two spit at each other; the wheel stops on someone else and then slips one more slice; in the cable car the power goes out mid-air. The ending cannot be guessed, and an auditor checks across sixteen seeds per game that the story does not give the winner away.
 
@@ -131,7 +129,7 @@ Andean music with a beat plays in the background and follows the tension (the Ch
 | Changing the list after sealing | The fingerprint changes, and the one that counts was recorded before the seed |
 | Withholding an unwanted result | `draw` is permissionless: anyone can finalize it, and the winner is the same |
 | Drawing twice | The contract keeps the first result and rejects another |
-| A game showing another winner | Games receive the winner already decided, and an auditor checks it in all twelve |
+| A game showing another winner | Games receive the winner already decided, and an auditor checks it in all ten |
 | Taking over the contract | It has no admin, it can't be upgraded and it holds no funds |
 
 **What stays open, and what stands against it**
@@ -144,7 +142,7 @@ Andean music with a beat plays in the background and follows the tension (the Ch
 
 For mainnet: one open draw per account, public cancellation, the round set by the contract and a sorted list in the protocol. The full STRIDE analysis is in [docs/amenazas.md](docs/amenazas.md) ([summary in English](docs/threat-model.en.md)), and the plain-language version on the [security page](https://tinkazo.app/seguridad.html).
 
-**Privacy.** The chain keeps the list's fingerprint and other draw data, never the names. The proof travels in the URL fragment, which browsers do not send to servers. The site counts visits with Vercel Web Analytics, without cookies, and cuts every address down to its path before counting ([src/analytics.ts](src/analytics.ts)).
+**Privacy.** The chain keeps the list's fingerprint and other draw data, never the names. The proof travels in the URL fragment, which browsers do not send to servers. The site counts visits with Vercel Web Analytics, without cookies, and cuts every address down to its path before counting ([src/analytics.ts](src/analytics.ts)). Sharing with a short link stores on Cloudflare a copy encrypted in the browser, with the key only in the link's fragment: Tinkazo can't read it, and it can be deleted from My draws ([workers/enlaces](workers/enlaces/README.md)).
 
 ## How it compares
 
@@ -221,7 +219,7 @@ cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
-Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?demo=race|chovena|trompo|pinata|oruro|tombola|wheel|teleferico|pasanaku|stellar|sapo|quien`, `?instant=1`, `?pose=1`, `?motor=clasico` (the previous engine) and `?grifo=0` (testnet only: turns off the test-XLM faucet, to try things with a truly empty account; `?grifo=1` turns it back on).
+Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?demo=race|sapo|trompo|chovena|pinata|wheel|quien|trueque|teleferico|oruro` (the games that left the selector still open: `tombola`, `pasanaku`, `stellar`, `luz`, `ledger`, `rockets`, `totora`), `?instant=1`, `?pose=1`, `?motor=clasico` (the previous engine) and `?grifo=0` (testnet only: turns off the test-XLM faucet, to try things with a truly empty account; `?grifo=1` turns it back on).
 
 ## Repository
 
@@ -230,7 +228,7 @@ index.html · verificar.html     The landing and the tool, and the page that re-
 lista.html                      The list to review before sealing, on everyone's phone
 src/protocol/                   Canonical list, selection, drand, proof
 src/stellar/                    Network, wallets and contract client
-src/games/                      The twelve games and the scaffolding they share
+src/games/                      The games and the scaffolding they share
 contracts/raffle/               The Soroban contract, in Rust
 docs/                           Protocol, architecture, threats, deployments, legal, games
 scripts/                        Deployment, smoke test and the auditors

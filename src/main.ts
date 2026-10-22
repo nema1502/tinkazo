@@ -1,23 +1,20 @@
 import "./styles.css";
 import { $ } from "./dom";
 import { chooseLang, initialLang, onLangChange, setLang, t } from "./i18n";
-import { SAMPLE, app, currentPace, paceSeconds, params, setPace, type Game, type Pace } from "./state";
+import { SAMPLE, app, currentPace, paceSeconds, paraCompartir, params, setPace, setParaCompartir, type Game, type Pace } from "./state";
 import { soundLabel, toggleSound, unlockAudioOnGesture } from "./sound";
 import { bindParticipants, loadSample, renderNames } from "./ui/participants";
-import { GAME_BUTTONS, cambiarJuego, copyRules, freeze, refreshFreezeLabel, secondsToRound, setGame } from "./ui/freeze";
+import { GAME_BUTTONS, cambiarJuego, copyRules, freeze, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
 import { initSiguiente } from "./ui/siguiente";
 import { montarPremios } from "./ui/premios";
-import { adelantarImagen, alTocarGanadores, copySummary, draw, imagenRedes, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
+import { adelantarCorto, alTocarGanadores, copySummary, draw, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
 import { skipGame } from "./games/overlay";
 import { usePixi } from "./games/engine";
-import { initWalletUI } from "./ui/wallet-ui";
+import { initWalletUI, openPicker } from "./ui/wallet-ui";
 import { initOnboarding } from "./ui/onboarding";
 import { musicOn, toggleMusic } from "./music";
 import { rotateWords } from "./ui/rotar";
 import { initMenuMas } from "./ui/menu";
-import { MAX_WINNERS, select } from "./protocol/select";
-import { listHash } from "./protocol/canonical";
-import { hexToBytes } from "./protocol/quicknet";
 
 // `?theme=light|dark` fuerza el tema (capturas).
 const themeParam = params.get("theme");
@@ -37,9 +34,14 @@ onLangChange(() => {
 $("l-es").addEventListener("click", () => chooseLang("es"));
 $("l-en").addEventListener("click", () => chooseLang("en"));
 $("btn-sample").addEventListener("click", loadSample);
-// Sin cuenta, el botón de sellar queda con aria-disabled (lo pone `applyGate`): el clic no hace nada.
+// Sin cuenta, el botón de sellar queda con aria-disabled (lo pone `applyGate`) y
+// el clic abre la ventana para elegir una, que es lo que falta. Antes no hacía
+// nada, y parecía un botón roto (evaluador visual, 21 de octubre de 2026).
 $("btn-freeze").addEventListener("click", () => {
-  if ($("btn-freeze").getAttribute("aria-disabled") === "true") return;
+  if ($("btn-freeze").getAttribute("aria-disabled") === "true") {
+    void openPicker();
+    return;
+  }
   void freeze();
 });
 // El ritmo del show. Se guarda, porque quien organiza suele querer siempre el
@@ -61,7 +63,11 @@ function paceLabels(): void {
   }
 }
 onLangChange(paceLabels);
-paceSel.addEventListener("change", () => setPace(paceSel.value as Pace));
+paceSel.addEventListener("change", () => {
+  setPace(paceSel.value as Pace);
+  // La línea del selector muestra la duración: se rehace con el ritmo nuevo.
+  refrescarRecomendacion();
+});
 
 $("btn-hist-csv").addEventListener("click", () => {
   void import("./ui/history").then(async (h) => {
@@ -95,12 +101,13 @@ $("btn-again-sin").addEventListener("click", () => newDraw("sinGanadores"));
 $("btn-again-nueva").addEventListener("click", () => newDraw("otraLista"));
 $("btn-recuperar").addEventListener("click", recuperarLista);
 $("btn-grande").addEventListener("click", mostrarGrande);
-$("btn-imagen").addEventListener("click", () => imagenRedes($<HTMLButtonElement>("btn-imagen")));
-$("btn-imagen").addEventListener("pointerdown", adelantarImagen);
+// Al apoyar el dedo o el mouse en compartir o en grande, el enlace corto ya sale: para el clic suele estar listo.
+$("btn-grande").addEventListener("pointerdown", adelantarCorto);
+$("btn-proof").addEventListener("pointerdown", adelantarCorto);
 $("winner-cards").addEventListener("click", alTocarGanadores);
 $<HTMLButtonElement>("btn-copy").addEventListener("click", (e) => void copySummary(e.currentTarget as HTMLButtonElement));
 $<HTMLButtonElement>("btn-rules").addEventListener("click", (e) => void copyRules(e.currentTarget as HTMLButtonElement));
-$<HTMLButtonElement>("btn-proof").addEventListener("click", (e) => void shareProof(e.currentTarget as HTMLButtonElement));
+$("btn-proof").addEventListener("click", shareProof);
 $("st-sound").addEventListener("click", toggleSound);
 $("btn-sound").addEventListener("click", toggleSound);
 /** El modo con música: andina con beat, que sigue la tensión del relator. */
@@ -113,6 +120,20 @@ $("btn-music").addEventListener("click", () => {
 });
 musicLabel();
 onLangChange(musicLabel);
+/** El modo para compartir: más contraste y nombres más grandes en el show, por esta pestaña. */
+const compartirLabel = (): void => {
+  const on = paraCompartir();
+  const b = $("btn-compartir");
+  b.textContent = t(on ? "compartirOn" : "compartirOff");
+  b.title = t("compartirTip");
+  b.setAttribute("aria-pressed", String(on));
+};
+$("btn-compartir").addEventListener("click", () => {
+  setParaCompartir(!paraCompartir());
+  compartirLabel();
+});
+compartirLabel();
+onLangChange(compartirLabel);
 $("st-skip").addEventListener("click", skipGame);
 bindParticipants();
 montarPremios();
@@ -214,10 +235,12 @@ function initVistas(): void {
 }
 
 /* Modo demo y pose para capturas: `?demo=<juego>`, `?pose=1`, `?instant=1`. */
-// Los del selector, y los tres que salieron el 30 de septiembre de 2026 (el
-// Cierre de Libro, la carrera de cohetes y las balsas de totora), que siguen
-// abriendo con `?demo=` y `?pose=` mientras se decide si se borran.
-const GAMES: readonly Game[] = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "luz", "ledger", "rockets", "totora"];
+// Los diez del selector y los que salieron de él, que siguen abriendo con
+// `?demo=` y `?pose=` mientras se decide si se borran: el Cierre de Libro, la
+// carrera de cohetes y las balsas de totora (30 de septiembre de 2026), luz
+// roja, luz verde (5 de octubre), la tómbola (20 de octubre), y el Aguayo y la
+// Constelación, que El Trueque reemplaza (21 de octubre).
+const GAMES: readonly Game[] = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "luz", "ledger", "rockets", "totora", "trueque"];
 
 async function autoDemo(mode: string): Promise<void> {
   loadSample();
@@ -240,6 +263,10 @@ async function autoDemo(mode: string): Promise<void> {
  * "stellar" caía en la carrera andina, así que las comprobaciones de tema claro,
  * tema oscuro y celular del auditor estaban mirando la carrera para los seis
  * juegos: nadie había visto nunca la ruleta ni el pasanaku en tema claro.
+ *
+ * `?ganador=<semilla>` cambia quién gana (src/pose.ts) y `?semilla=` la
+ * historia que cuenta el juego; con el mismo valor de 64 hex en los dos, ganan
+ * los mismos y se cuenta lo mismo que en un sorteo de verdad con ese número.
  */
 async function poseScene(): Promise<void> {
   const fakeBeacon = { round: 32254977, randomness: "6e049991d7e23bdc566d3adfff08cd81798c644bc54dd5daa18eb0a8938b2829", signature: "a77a689daae687c7b16e6f9388d4ebbb7b368d09d7a6c33ad1dfd75d32e4114cfbdcf3e2cc54f4fee659abf2ac7ef9ac" };
@@ -259,78 +286,52 @@ async function poseScene(): Promise<void> {
     })
     : SAMPLE;
   // `?nw=N` también acá: la escena fija con varios premios, sin red, para
-  // auditar cómo anuncia cada juego a cada ganador. Los ganadores son siempre
-  // los mismos y quedan repartidos por la lista.
+  // auditar cómo anuncia cada juego a cada ganador.
   const premios = Math.max(1, Math.min(L.length, Math.floor(Number(params.get("nw")) || 1)));
-  // El primero, el de siempre: con un premio la escena no cambia.
-  const W3: number[] = [Math.min(3, L.length - 1)];
-  for (let i = 1; W3.length < premios && i < L.length * 7; i++) {
-    const w = (3 + i * 7) % L.length;
-    if (!W3.includes(w)) W3.push(w);
-  }
-  for (let w = 0; W3.length < premios; w++) if (!W3.includes(w)) W3.push(w);
-  const W = ganadoresPedidos(L, fakeBeacon.randomness, premios) ?? W3;
+  // Quiénes ganan: los de siempre, repartidos por la lista, o con
+  // `?ganador=<semilla>` los que daría el protocolo con esa semilla, para que
+  // el auditor de delatores vea al ganador en cualquier puesto. Solo la escena
+  // fija lo lee; un sorteo de verdad no pasa por acá (src/pose.ts). Se carga
+  // aparte: quien entra a sortear no lo descarga.
+  const W3 = (await import("./pose")).poseWinners(L, premios, params.get("ganador"));
   app.frozen = { names: L, listHash: "32e2099c7a8dde7b6892523dc7d3e34ac06a972fd67f142186c58dced51a21ef", ts: 0, at: "-", prize: "", round: 32254977 };
-  app.drawn = { beacon: fakeBeacon, winners: W };
+  app.drawn = { beacon: fakeBeacon, winners: W3 };
   // Para los auditores: la lista y los ganadores de esta escena, tal cual.
-  (window as unknown as { __pose?: { names: string[]; winners: number[] } }).__pose = { names: L, winners: W };
+  (window as unknown as { __pose?: { names: string[]; winners: number[] } }).__pose = { names: L, winners: W3 };
   const cual = params.get("pose") ?? "1";
   const nada = (): void => {};
   // La escena fija en el motor nuevo, salvo con `?motor=clasico` o sin WebGL.
   if (usePixi()) {
     const juego = (cual === "1" ? "race" : cual) as Game;
     const px = await import("./games/pixi");
-    if (await px.playPixi(juego, L, W, fakeBeacon, nada)) return;
+    if (await px.playPixi(juego, L, W3, fakeBeacon, nada)) return;
   }
   if (cual === "wheel") {
-    (await import("./games/wheel")).wheelSpin(L, W, fakeBeacon, nada);
+    (await import("./games/wheel")).wheelSpin(L, W3, fakeBeacon, nada);
     return;
   }
   if (cual === "ledger") {
-    (await import("./games/ledger")).ledgerClose(L, W, fakeBeacon, nada);
+    (await import("./games/ledger")).ledgerClose(L, W3, fakeBeacon, nada);
     return;
   }
   if (cual === "pasanaku") {
-    (await import("./games/pasanaku")).pasanaku(L, W, fakeBeacon, nada);
+    (await import("./games/pasanaku")).pasanaku(L, W3, fakeBeacon, nada);
     return;
   }
   if (cual === "teleferico") {
-    (await import("./games/cablecar")).cableCar(L, W, fakeBeacon, nada);
+    (await import("./games/cablecar")).cableCar(L, W3, fakeBeacon, nada);
     return;
   }
   if (cual === "tombola") {
-    (await import("./games/tombola")).tombola(L, W, fakeBeacon, nada);
+    (await import("./games/tombola")).tombola(L, W3, fakeBeacon, nada);
     return;
   }
   if (cual === "stellar") {
-    (await import("./games/constellation")).stellarConstellation(L, W, fakeBeacon, nada);
+    (await import("./games/constellation")).stellarConstellation(L, W3, fakeBeacon, nada);
     return;
   }
   // "rockets" es la carrera con la piel espacial; cualquier otro valor, la andina.
-  (await import("./games/race")).stadiumRace(L, W, fakeBeacon, nada, cual === "rockets" ? "stellar" : "andes");
-}
-
-/**
- * `?ganadores=` en la escena fija: quién gana, en vez de los de siempre.
- *
- * Con `sorteo`, los elige la selección del protocolo, con la semilla de la
- * escena como número público y la huella de la lista, igual que un sorteo de
- * verdad. Lo usa el auditor de delatores (scripts/audit-delatores.mjs): para
- * medir si algo de lo que se ve adivina al ganador más que el azar, el ganador
- * tiene que cambiar de una semilla a otra y salir del mismo cálculo que en
- * producción. Con los de siempre, el ganador era el cuarto de la lista en todas
- * las semillas, y el lugar donde arranca cada uno parecía delatarlo.
- *
- * Con números (`?ganadores=4,11`), esos puestos de la lista, contando desde
- * cero. Sin el parámetro, o si no sirve, null: la escena de siempre.
- */
-function ganadoresPedidos(L: string[], randomness: string, premios: number): number[] | null {
-  const pedido = params.get("ganadores");
-  if (!pedido || L.length < 2) return null;
-  if (pedido === "sorteo") return select(hexToBytes(randomness), listHash(L), L.length, Math.min(premios, MAX_WINNERS));
-  const ws = pedido.split(",").map((s) => Number(s.trim()));
-  const valen = ws.length <= Math.min(MAX_WINNERS, L.length) && ws.every((w) => Number.isInteger(w) && w >= 0 && w < L.length) && new Set(ws).size === ws.length;
-  return valen ? ws : null;
+  (await import("./games/race")).stadiumRace(L, W3, fakeBeacon, nada, cual === "rockets" ? "stellar" : "andes");
 }
 
 renderNames();

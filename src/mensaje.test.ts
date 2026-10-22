@@ -60,8 +60,22 @@ ${enlace}\n\n${pie.es}`,
     );
   });
 
-  it("es: un solo sorteo en singular", () => {
-    expect(T.es.summaryEvento("20 de octubre de 2026", 1, enlace)).toContain("(1 sorteo), todos verificables.");
+  it("es: un solo sorteo en singular, verificable y no todos", () => {
+    const m = T.es.summaryEvento("20 de octubre de 2026", 1, enlace);
+    expect(m).toContain("(1 sorteo), verificable.");
+    expect(m).toContain("Si querés verificarlo, entrá acá:");
+  });
+
+  it("es: quién ganó qué, un renglón por sorteo antes del enlace", () => {
+    expect(T.es.summaryEvento("20 de octubre de 2026", 2, enlace, ["Polera: Ana", "Sorteo: Beto y Carla"])).toBe(
+      `Sorteos del 20 de octubre de 2026 (2 sorteos), todos verificables.
+Polera: Ana
+Sorteo: Beto y Carla
+Si querés verificarlos, entrá acá:
+${enlace}
+
+${pie.es}`,
+    );
   });
 
   it("en: cuántos sorteos hay, con el enlace y el pie", () => {
@@ -73,6 +87,8 @@ ${enlace}`);
   });
 
   it("en: un solo sorteo en singular", () => {
-    expect(T.en.summaryEvento("October 20, 2026", 1, enlace)).toContain("(1 draw), all verifiable.");
+    const m = T.en.summaryEvento("October 20, 2026", 1, enlace);
+    expect(m).toContain("(1 draw), verifiable.");
+    expect(m).toContain("If you want to verify it, open this link:");
   });
 });

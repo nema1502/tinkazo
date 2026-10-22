@@ -4,51 +4,79 @@ import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, fanfare, note } from "../../sound";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { writeStory } from "../drama";
-import { CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
-import { isDigit, planRounds, type Round } from "./quien-plan";
+import { CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
+import { planRounds, type Question, type Round } from "./quien-plan";
 
 /**
- * ¿Quién es?
+ * De pie (antes ¿Quién es?).
  *
- * Todos los nombres en cartas, con su cara. En cada turno se pregunta por una
- * letra ("¿tiene la R?"), se contesta por quien ganó, y las cartas que no
- * coinciden se dan vuelta. Las que quedan se reacomodan más grandes y la
- * cámara se acerca, hasta que queda una sola carta.
+ * La sala se para. En cada turno aparece la pregunta sobre el nombre ("¿TU
+ * NOMBRE TIENE LA R?"), cada uno la revisa en silencio, y después se contesta
+ * por quien ganó: "¡SÍ! Se sientan los que no la tienen". La sala se sienta, y
+ * recién entonces la pantalla da vuelta las cartas de los que se sentaron, como
+ * un árbitro que confirma. Quedan de pie los que siguen; con cuatro o menos,
+ * "¡Finalistas, que los vean!"; la última pregunta deja a uno solo, que es el
+ * ganador.
  *
- * No decide nada: el ganador sale del protocolo antes y las preguntas se
- * eligen sabiendo quién es (`quien-plan.ts`, puro y probado). Aguanta
- * cualquier cantidad de gente: cada pregunta parte el grupo cerca de la mitad,
- * así que 50 nombres son unas seis preguntas y 200 unas ocho.
+ * No decide nada: el ganador sale del protocolo antes, y las preguntas se
+ * eligen sabiendo quién es (`quien-plan.ts`, puro y probado). Aguanta de 8 a
+ * 200 personas: cada pregunta parte el grupo cerca de la mitad, así que 50
+ * nombres son unas seis y 200 unas ocho.
  *
- * Nació del Ahorcado que propuso Guido Salazar (@GuidoSV7) el 1 de octubre
- * de 2026: se quedó la idea de las letras que achican la lista, y se fueron la
- * horca y los casilleros que delataban el largo del nombre.
+ * Nació del Ahorcado que propuso Guido Salazar (@GuidoSV7) el 1 de octubre de
+ * 2026. Las preguntas son de letra, de número, de la mitad del abecedario y del
+ * largo; el juego no muestra el nombre escondido ni delata con el foco.
  *
  * Todo sale de la hora del juego (`dt`).
  */
 
-const T_DEAL = 1.6;
-const ASK = 0.75;
+/**
+ * La sala se para y se da la regla (primera ronda); en las siguientes, la sala
+ * ya sabe el ritmo: el reparto, la revisión y el aplauso son más cortos. Así
+ * tres premios no pasan de la ventana de la duración.
+ */
+const T_DEAL = 2.6;
+const T_NEXT = 1.2;
+const REVISAR = 2.6;
+const REVISAR_NEXT = 2.2;
+/** Después de la respuesta, la sala se sienta; recién entonces las cartas se dan vuelta. */
+const SIT = 1.0;
 const FLIP = 0.55;
 const REGROUP = 0.6;
-/** Después de la última carta, casi nada: el suspenso va antes de la respuesta. */
+/** Con cuatro o menos de pie: el momento para que los vean, con el aplauso. */
+const FIN = 3.2;
+const FIN_NEXT = 2.4;
+/** El empate de letras: la pantalla lo dice y confirma con las cartas. */
+const TIE_SAY = 1.2;
 const FINAL_HOLD = 0.5;
+const NEXT_GAP = 0.8;
+/** Hasta cuántos de pie se hace el encuadre de los finalistas. */
+const FINALISTAS = 4;
+
+type Kind = "reparto" | "pregunta" | "finalistas" | "empate";
 
 interface Step {
+  kind: Kind;
   round: number;
-  /** -1: el reparto de la ronda; si no, el número de pregunta. */
-  q: number;
+  /** El número de pregunta dentro de la ronda (0 para los demás pasos). */
+  qi: number;
+  /** Cuándo empieza el paso, cuándo se contesta, cuándo se sientan las cartas, cuándo se reacomodan y cuándo termina. */
   start: number;
-  /** Cuándo llega la respuesta. */
   answer: number;
-  /** Cuándo empiezan a darse vuelta las cartas. */
   flip: number;
-  /** Cuándo se reacomodan las que quedan. */
   regroup: number;
   end: number;
-  fired: boolean;
-  answered: boolean;
 }
+
+interface Ev {
+  t: number;
+  run: () => void;
+  fired: boolean;
+}
+
+/** El pulso de la revisión: el cartel late una vez por segundo, y el sonido, dos veces. */
+const TIC = 1.0;
+const TIC_SONIDO = 0.5;
 
 export async function quienPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<void> {
   let skipFn = (): void => {};
@@ -59,12 +87,12 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
   }
   const S: PixiStage = st;
   const { rng, cam } = S;
+  const L = T[getLang()];
   const n = names.length;
   // Una ronda por premio, del último al primero, como en una premiación: la
-  // ronda larga, con el suspenso de la última pregunta y el arco del
-  // director, es la del primer premio. Antes el primero salía a los siete
-  // segundos y todo el suspenso era para el tercero. El cartel y el relator
-  // del final siguen con el orden de `winners`. Con un solo premio no cambia nada.
+  // ronda larga, con el suspenso de la última pregunta y el arco del director,
+  // es la del primer premio. El cartel y el relator del final siguen con el
+  // orden de `winners`. Con un solo premio no cambia nada.
   const prizes = winners.length ? [...winners].reverse() : [0];
   const total = prizes.length;
   let rounds: Round[];
@@ -75,84 +103,197 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
     return;
   }
   S.mark("quien", `${n}x${total}`);
-  // El arco del director, para el último ganador: en el susto su carta
-  // empieza a darse vuelta en la última pregunta y vuelve; en la tapada no se
-  // nombra a los dos últimos y la cámara espera al final.
+  // El arco del director, para el último ganador: en el susto su carta se
+  // medio sienta en la última pregunta y vuelve; en la tapada no se nombra a
+  // los dos últimos y la cámara espera al final.
   const story = writeStory(rng, Math.max(2, n), (prizes[total - 1] as number) % Math.max(2, n));
   S.mark("arco", story.arc);
   S.mark("preguntas", rounds.map((r) => r.questions.length).join(","));
 
   /* ---------------------------------------------------------------- el guion */
-  // Cada pregunta dura más cuando son pocas, para que un sorteo de dos personas
-  // no sea un parpadeo; la última de la última ronda tiene más suspenso.
   const steps: Step[] = [];
-  /** Las rondas en que ya se dijo "quedan dos": con la pregunta de calentamiento se repetía. */
-  const dosDichos = new Set<number>();
+  const evs: Ev[] = [];
+  const at = (t: number, run: () => void): void => {
+    evs.push({ t, run, fired: false });
+  };
+  /** Los pasos de preguntas de cada ronda, por número de pregunta. */
+  const pasosPregunta: Step[][] = rounds.map(() => []);
+  /** Cuándo se contesta la última pregunta de la ronda grande: ahí va el respiro de la música. */
   let tt = 0;
+
+  /** Lo que se dice al contestar una pregunta: las cartas que se sientan, y el sonido. */
+  const frase = (q: Question): string =>
+    q.tipo === "letra" ? L.cQuiSitL(q.valor, q.has)
+      : q.tipo === "numero" ? L.cQuiSitD(q.valor, q.has)
+        : q.tipo === "mitad" ? L.cQuiSitM(q.has)
+          : q.tipo === "largo" ? L.cQuiSitG(Number(q.valor), q.has)
+            : L.cQuiSitO(Number(q.valor), q.has);
+
   rounds.forEach((r, ri) => {
     const grand = ri === total - 1;
-    steps.push({ round: ri, q: -1, start: tt, answer: tt, flip: tt, regroup: tt, end: tt + (ri === 0 ? T_DEAL : 1.0), fired: false, answered: false });
-    tt += ri === 0 ? T_DEAL : 1.0;
-    const Q = Math.max(1, r.questions.length + (r.ties.length ? 1 : 0));
-    const dur = clamp((grand ? 15 : 7) / Q, 2.2, grand ? 5.5 : 3);
-    for (let qi = 0; qi < Q; qi++) {
-      const last = qi === Q - 1;
-      // La última pregunta: el foco frena de a poco entre las cartas.
-      const suspenso = grand && last ? 2.5 : 0;
-      // Con muchas cartas, tiempo para que cada uno revise su nombre.
-      const antes = qi === 0 ? r.pool.length : ((r.questions[qi - 1] as { remaining: number[] } | undefined)?.remaining.length ?? 2);
-      const revisar = antes > 8 ? 1.6 : 0;
-      const answer = tt + Math.max(ASK + Math.min(1.4, dur - 2.2) * 0.5, revisar) + suspenso;
-      const flip = answer + 0.35;
-      const regroup = flip + FLIP + Math.min(0.5, (dur - 2.2) * 0.3);
+    const Q = r.questions.length;
+    const reparto = ri === 0 ? T_DEAL : T_NEXT;
+    steps.push({ kind: "reparto", round: ri, qi: 0, start: tt, answer: tt, flip: tt, regroup: tt, end: tt + reparto });
+    at(tt, () => {
+      if (ri === 0) S.say(L.cQuiStart(n), 0.15);
+      else S.say(L.cQuiNext(total - ri, total), 0.3 + 0.4 * (ri / Math.max(1, total - 1)));
+      for (let i = 0; i < 6; i++) setTimeout(() => beep(note(7 + (i % 3)), 0.04, "square", 0.025), i * 70);
+    });
+    if (ri === 0) at(tt + reparto - 1.3, () => S.say(t("cQuiRules"), 0.2));
+    // Un ruido bajo a mitad del reparto: las cartas que llegan, y no hay silencio de más hasta la primera pregunta.
+    at(tt + reparto * 0.5, () => beep(note(8), 0.05, "triangle", 0.025));
+    tt += reparto;
+
+    let antes = r.pool.length;
+    let finDicho = false;
+    r.questions.forEach((q, qi) => {
+      // Cuanto más tarde la ronda, más tiempo para revisar: las primeras van rápido, las últimas, lento.
+      const ultimas = qi >= Q - 2;
+      const revisar = (ri === 0 ? REVISAR : REVISAR_NEXT) + (ultimas ? 0.4 : 0) + (grand && qi === Q - 1 ? 1.0 : 0);
+      const s0 = tt;
+      const answer = s0 + revisar;
+      const flip = answer + SIT;
+      const regroup = flip + FLIP + 0.1;
       const end = regroup + REGROUP;
-      steps.push({ round: ri, q: qi, start: tt, answer, flip, regroup, end, fired: false, answered: false });
+      const paso: Step = { kind: "pregunta", round: ri, qi, start: s0, answer, flip, regroup, end };
+      steps.push(paso);
+      pasosPregunta[ri]?.push(paso);
+      const esUltimaGrande = grand && qi === Q - 1;
+      at(s0, () => {
+        // La tensión de la revisión queda apenas debajo de la de la respuesta: un salto
+        // grande de tensión suelta el bombo y el platillo de la música, y acá no hace falta.
+        S.say(L.cQuiRevisa(ri + qi), 0.35 + 0.4 * (qi / Math.max(1, Q)));
+        beep(note(9), 0.1, "triangle", 0.04);
+      });
+      // El tic de la revisión: como un reloj de cocina, dos por segundo. Da el pulso
+      // de la espera sin señalar a nadie (el sonido no depende del nombre). En la última
+      // pregunta de la ronda grande se va frenando de a poco, como el foco de antes.
+      let tic = s0 + TIC_SONIDO;
+      let espacio = TIC_SONIDO;
+      for (let k = 1; tic < answer - 0.2; k++) {
+        const enEse = tic;
+        at(enEse, () => beep(note(k % 2 ? 10 : 12), 0.05, "triangle", 0.05));
+        espacio = esUltimaGrande ? espacio * 1.1 : espacio;
+        tic += espacio;
+      }
+      const decisiva = esUltimaGrande;
+      at(answer, () => {
+        const k = q.out.length;
+        const f = frase(q);
+        if (decisiva) {
+          // La respuesta que decide no suena como las otras: cuerpo grave y
+          // dos notas que suben, con la música recién cortada por el respiro.
+          // No abre el remate: el remate queda para el cartel (auditor de
+          // mezcla, 7 de octubre de 2026: −24 LU).
+          beep(note(0), 0.6, "triangle", 0.09);
+          beep(note(q.has ? 10 : 8), 0.4, "triangle", 0.06);
+          setTimeout(() => beep(note(q.has ? 12 : 10), 0.3, "triangle", 0.05), 110);
+        } else if (q.has) {
+          beep(note(4), 0.12, "triangle", 0.05);
+          beep(note(7), 0.18, "triangle", 0.045);
+        } else {
+          beep(note(3), 0.12, "triangle", 0.05);
+          beep(note(-2), 0.18, "triangle", 0.045);
+        }
+        S.say(k ? (q.has ? L.cQuiYes(f, ri + qi) : L.cQuiNo(f, ri + qi)) : L.cQuiNone(q.has), 0.45 + 0.4 * (qi / Math.max(1, Q)));
+        for (let i = 0; i < Math.min(8, k); i++) setTimeout(() => beep(note(10 - (i % 4)), 0.03, "square", 0.02), 350 + i * 45);
+        cam.shake((2 + Math.min(4, k * 0.2)) * g.k);
+      });
+      // Las cartas que se sientan hacen un ruido corto al darse vuelta, y al reacomodarse otro más bajo: la
+      // sala escucha cada paso, también cuando el pace estira el juego.
+      // En la respuesta que decide no: el golpe de quien gana tiene que sonar solo (auditor de mezcla).
+      if (!esUltimaGrande) {
+        if (q.out.length) at(flip, () => beep(note(6), 0.05, "triangle", 0.025));
+        at(regroup, () => beep(note(4), 0.05, "triangle", 0.02));
+      }
+      tt = end;
+      // Cuando quedan cuatro o menos de pie, la sala los mira: "¡Finalistas, que los vean!".
+      const quedan = q.remaining.length;
+      if (!finDicho && quedan <= FINALISTAS && quedan > 1 && antes > FINALISTAS) {
+        finDicho = true;
+        const idx = [...q.remaining];
+        const fin = ri === 0 ? FIN : FIN_NEXT;
+        steps.push({ kind: "finalistas", round: ri, qi: 0, start: tt, answer: tt, flip: tt, regroup: tt, end: tt + fin });
+        at(tt, () => {
+          S.say(L.cQuiFinal(winnersLabel(names, idx, FINALISTAS)), 0.8);
+          beep(note(7), 0.12, "triangle", 0.05);
+          setTimeout(() => beep(note(10), 0.12, "triangle", 0.05), 120);
+          setTimeout(() => beep(note(12), 0.2, "triangle", 0.05), 240);
+        });
+        // El aplauso: unos clics cada medio segundo, que no suenan a melodía.
+        for (let k = 1; k * 0.5 < fin - 0.6; k++) at(tt + k * 0.5, () => beep(note(12), 0.03, "square", 0.02));
+        tt += fin;
+      }
+      antes = quedan;
+    });
+
+    if (r.ties.length) {
+      const s0 = tt;
+      const topes = r.empate === "tope";
+      const answer = s0 + TIE_SAY;
+      const flip = answer + 0.6;
+      const regroup = flip + FLIP + 0.1;
+      const end = regroup + REGROUP;
+      steps.push({ kind: "empate", round: ri, qi: Q, start: s0, answer, flip, regroup, end });
+      at(s0, () => {
+        S.say(t(topes ? "cQuiTope" : "cQuiTie"), 0.8);
+        beep(note(0), 0.5, "triangle", 0.06);
+      });
       tt = end;
     }
-    tt += grand ? FINAL_HOLD : 1.2;
+    if (!grand) {
+      // El que gana un premio que no es el último se sienta con él: se lo dice la pantalla.
+      const ultimo = steps[steps.length - 1];
+      const cuando = ultimo ? ultimo.end - REGROUP * 0.5 : tt;
+      at(cuando, () => S.say(L.cQuiDone(names[r.winner] ?? "", total - ri), 0.6));
+    }
+    tt += grand ? FINAL_HOLD : NEXT_GAP;
   });
   const T_CROWN = tt;
   setGameLength(T_CROWN, WINNER_HOLD);
   /**
    * La respuesta que decide: la última pregunta de la ronda del último premio.
    * La música se corta 0,4 s antes y queda en silencio hasta el cartel, que la
-   * vuelve a abrir con el remate: la carta sola late sin música. Ahí van
-   * también el sello grande y su sonido propio. Si esa ronda termina en un
-   * empate de letras no hay respuesta, y el respiro queda antes del cartel,
-   * como antes.
+   * vuelve a abrir con el remate: la carta sola late sin música. Si esa ronda
+   * termina en un empate no hay respuesta, y el respiro queda antes del cartel.
    */
-  const decisiva = steps.filter((s) => s.round === total - 1 && s.q >= 0).at(-1) as Step;
-  const hayDecisiva = !!(rounds[total - 1] as Round).questions[decisiva.q];
-  const T_BREATH = hayDecisiva ? decisiva.answer : T_CROWN;
+  const grandeQ = pasosPregunta[total - 1] ?? [];
+  const decisivoPaso = grandeQ.at(-1);
+  const T_BREATH = decisivoPaso ? decisivoPaso.answer : T_CROWN;
 
   /** En qué momento se va cada carta de la ronda `ri`: el escalonado dentro de su pregunta. */
   const goneAt: Map<number, number>[] = rounds.map((r, ri) => {
     const m = new Map<number, number>();
-    const qs = steps.filter((s) => s.round === ri && s.q >= 0);
+    const qs = pasosPregunta[ri] ?? [];
     r.questions.forEach((q, qi) => {
-      const s = qs[qi] as Step;
+      const s = qs[qi];
+      if (!s) return;
       q.out.forEach((idx, j) => m.set(idx, s.flip + (j / Math.max(1, q.out.length)) * Math.min(0.45, 0.04 * q.out.length + 0.15)));
     });
-    if (r.ties.length) {
-      const s = qs[qs.length - 1] as Step;
-      r.ties.forEach((idx, j) => m.set(idx, s.flip + j * 0.12));
-    }
+    const tie = steps.find((s) => s.kind === "empate" && s.round === ri);
+    if (tie) r.ties.forEach((idx, j) => m.set(idx, tie.flip + j * 0.12));
     return m;
   });
-  /** Los que siguen en pie en la ronda `ri` al momento `t`. */
+  /** Los que siguen de pie en la ronda `ri` al momento `t`. */
   const alive = (ri: number, t: number): number[] => {
     const r = rounds[ri] as Round;
     const m = goneAt[ri] as Map<number, number>;
     return r.pool.filter((i) => !(m.has(i) && t >= (m.get(i) as number) + FLIP));
   };
-  /** Las que siguen para el acomodo: cambian recién cuando la pregunta reacomoda. */
+  /** Los que siguen para el acomodo: cambian recién cuando la pregunta reacomoda. */
   const layoutSet = (ri: number, t: number): number[] => {
-    const qs = steps.filter((s) => s.round === ri && s.q >= 0 && t >= s.regroup);
     const r = rounds[ri] as Round;
-    if (!qs.length) return r.pool;
-    const last = qs[qs.length - 1] as Step;
-    if (last.q >= r.questions.length) return [r.winner];
-    return (r.questions[last.q] as { remaining: number[] }).remaining;
+    const pasos = steps.filter((s) => s.round === ri && (s.kind === "pregunta" || s.kind === "empate") && t >= s.regroup);
+    const last = pasos.at(-1);
+    if (!last) return r.pool;
+    if (last.kind === "empate") return [r.winner];
+    return (r.questions[last.qi] as Question).remaining;
+  };
+  /** El paso que está corriendo en `t`: el último que empezó. */
+  const stepAt = (t: number): Step => {
+    let s = steps[0] as Step;
+    for (const x of steps) if (x.start <= t) s = x;
+    return s;
   };
 
   /* ---------------------------------------------------------------- geometría */
@@ -186,18 +327,17 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
   const cardLayer = new Container();
   const fx = new Graphics();
   S.scene.addChild(board, cardLayer, fx);
-  // La pregunta, grande arriba, y el sello de la respuesta.
+  // La pregunta, grande arriba: una línea chica y otra grande; la cuenta de la revisión, abajo.
   const banner = new Container();
   const bannerBg = new Graphics();
-  const bannerText = S.text("", { fontSize: 30, fontWeight: "900", fill: INK });
-  bannerText.anchor.set(0.5);
-  const stamp = S.text("", { fontSize: 30, fontWeight: "900", fill: INK });
-  stamp.anchor.set(0.5);
-  const stampBg = new Graphics();
-  banner.addChild(bannerBg, bannerText, stampBg, stamp);
+  const bannerBar = new Graphics();
+  const bannerA = S.text("", { fontSize: 20, fontWeight: "900", fill: INK });
+  bannerA.anchor.set(0.5);
+  const bannerB = S.text("", { fontSize: 40, fontWeight: "900", fill: INK });
+  bannerB.anchor.set(0.5);
+  banner.addChild(bannerBg, bannerBar, bannerA, bannerB);
   S.hud.addChild(banner);
   // El sello de la respuesta que decide, grande y en el medio del tablero.
-  // El de 28 px al lado de la pregunta era igual a los otros cuatro.
   const bigStamp = new Container();
   const bigStampBg = new Graphics();
   const bigStampText = S.text("", { fontSize: 72, fontWeight: "900", fill: INK });
@@ -220,16 +360,12 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
   /** Cuándo empezó el acomodo actual, y si es el reparto del principio de una ronda. */
   let layoutT0 = 0;
   let layoutDeal = true;
-  /** La última carta que tocó el foco, para que cada salto suene una vez. */
-  let focoAntes = -1;
   let latidoAntes = -1;
-
-
 
   const build = (): void => {
     g = G();
     const k = g.k;
-    // Un tablero de juego de mesa: fondo liso con un marco de colores.
+    // Un tablero liso con un marco de colores.
     bg.clear().rect(0, 0, g.w, g.h).fill(S.dark ? 0x1b2340 : 0xdfe9f7);
     board.clear();
     cardLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
@@ -245,9 +381,7 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
       face.anchor.set(0.5);
       face.width = face.height = 66;
       face.position.set(W / 2, 47);
-      // El nombre completo, en dos líneas: las letras se preguntan sobre el
-      // nombre entero, así que tienen que estar todas a la vista. Con el nombre
-      // abreviado ("Carlos C.") la H de "Choque" no se veía y parecía trampa.
+      // El nombre completo, en dos líneas: lo que se pregunta tiene que estar a la vista.
       const partes = nm.trim().split(/\s+/);
       const lineas = partes.length > 1 ? [partes[0] as string, partes.slice(1).join(" ")] : [nm.trim()];
       const label = new Container();
@@ -259,7 +393,7 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
         label.addChild(tx);
       });
       front.addChild(fondo, face, label);
-      // El dorso: liso, con un signo de pregunta. Los rombos se leían como naipes.
+      // El dorso: liso, con un signo de pregunta. Es lo que se ve de los que se sentaron.
       const back = new Graphics()
         .roundRect(4, 5, W, H, 10).fill({ color: INK, alpha: 0.5 })
         .roundRect(0, 0, W, H, 10).fill(S.dark ? 0x3a2f5a : 0x7a5cc4).stroke({ width: 3, color: INK });
@@ -275,10 +409,8 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
       cardLayer.addChild(root);
       return { root, front, back: backC, face, label, x: g.w / 2, y: (g.top + g.bottom) / 2, s: 0 };
     });
-    bannerText.style.fontSize = 30 * k;
-    stamp.style.fontSize = 28 * k;
-    bigStampText.style.fontSize = 72 * k;
     counter.style.fontSize = 14 * k;
+    bigStampText.style.fontSize = 72 * k;
     lastLayout = "";
     from.clear();
     cam.cut(g.w / 2, g.h / 2, 1);
@@ -288,13 +420,13 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
 
   /* ------------------------------------------------------------------ guion hablado */
   let tAll = 0, tHold = 0, crowned = false, dead = false;
-  /** "¡Uy, casi!" va una vez, a mitad del amague de la carta. */
+  /** "¡Uy, casi se sienta!" va una vez, a mitad del amague de la carta. */
   let casiDicho = false;
   const crownUI = S.crown(names, winners);
   function crown(): void {
     if (crowned) return;
     crowned = true;
-    S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
+    S.say(L.cWin(winnersLabel(names, winners), winners.length > 1), 1);
     beep(note(0), 0.7, "sine", 0.09);
     fanfare();
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);
@@ -302,116 +434,111 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
   }
   skipFn = (): void => {
     if (crowned || dead) return;
-    for (const s of steps) s.fired = s.answered = true;
+    for (const e of evs) e.fired = true;
     tAll = T_CROWN;
     crown();
   };
 
-  const roundAt = (t: number): number => {
-    let ri = 0;
-    for (const s of steps) if (t >= s.start) ri = s.round;
-    return ri;
-  };
-
   function script(): void {
-    for (const s of steps) {
-      if (!s.fired && tAll >= s.start) {
-        s.fired = true;
-        const r = rounds[s.round] as Round;
-        const grand = s.round === total - 1;
-        if (s.q < 0) {
-          if (s.round === 0) S.say(T[getLang()].cQuiStart(n), 0.15);
-          else S.say(T[getLang()].cQuiNext(total - s.round, total), 0.3 + 0.4 * (s.round / Math.max(1, total - 1)));
-          for (let i = 0; i < 6; i++) setTimeout(() => beep(note(7 + (i % 3)), 0.04, "square", 0.025), i * 70);
-        } else if (s.q < r.questions.length) {
-          const q = r.questions[s.q] as { letter: string };
-          const quedan = alive(s.round, s.start).length;
-          if (quedan === 2 && grand && r.questions.length > 0 && story.arc !== "tapada" && !dosDichos.has(s.round)) {
-            dosDichos.add(s.round);
-            const [a, b] = alive(s.round, s.start);
-            S.say(T[getLang()].cQuiTwo(names[a as number] ?? "", names[b as number] ?? ""), 0.85);
-          } else {
-            // Cada uno revisa su propio nombre. "¡Revisen su nombre!" se leía como
-            // buscar la carta, y con 200 las cartas tienen letra de 6 píxeles.
-            const mine = T[getLang()][isDigit(q.letter) ? "cQuiMineN" : "cQuiMine"](q.letter);
-            S.say(mine, 0.3 + 0.5 * (1 - quedan / Math.max(2, r.pool.length)));
-          }
-          beep(note(9), 0.1, "triangle", 0.04);
-        } else {
-          S.say(t("cQuiTie"), 0.8);
-        }
-      }
-      if (!s.answered && s.q >= 0 && tAll >= s.answer) {
-        s.answered = true;
-        const r = rounds[s.round] as Round;
-        const q = r.questions[s.q];
-        if (q) {
-          const k = q.out.length;
-          if (s === decisiva) {
-            // La respuesta que decide no suena como las otras: cuerpo grave y
-            // dos notas que suben, con la música recién cortada por el respiro.
-            // No abre el remate: con el remate acá, el cartel llegaba con la
-            // música ya apagada y solo la fanfarria, y el golpe del ganador
-            // salía negativo o enorme según la corrida (auditor de mezcla,
-            // 7 de octubre de 2026: −24 LU). El remate queda para el cartel.
-            beep(note(0), 0.6, "triangle", 0.09);
-            beep(note(q.has ? 10 : 8), 0.4, "triangle", 0.06);
-            setTimeout(() => beep(note(q.has ? 12 : 10), 0.3, "triangle", 0.05), 110);
-          } else if (q.has) {
-            beep(note(4), 0.12, "triangle", 0.05);
-            beep(note(7), 0.18, "triangle", 0.045);
-          } else {
-            beep(note(3), 0.12, "triangle", 0.05);
-            beep(note(-2), 0.18, "triangle", 0.045);
-          }
-          const que = isDigit(q.letter) ? `${q.letter}` : q.letter;
-          const dic = T[getLang()];
-          S.say(k ? dic[q.has ? "cQuiYes" : "cQuiNo"](que, k) : dic.cQuiNone(que, q.has), 0.45 + 0.4 * (s.q / Math.max(1, r.questions.length)));
-          for (let i = 0; i < Math.min(8, k); i++) setTimeout(() => beep(note(10 - (i % 4)), 0.03, "square", 0.02), 350 + i * 45);
-          cam.shake((2 + Math.min(4, k * 0.2)) * g.k);
-        }
-        const fin = s.q === r.questions.length - 1 + (r.ties.length ? 1 : 0);
-        if (fin) {
-          setTimeout(() => {
-            if (crowned) return;
-            if (s.round !== total - 1) S.say(T[getLang()].cQuiDone(names[r.winner] ?? "", total - s.round), 0.6);
-          }, 900);
-        }
+    for (const e of evs) {
+      if (!e.fired && tAll >= e.t) {
+        e.fired = true;
+        e.run();
       }
     }
   }
 
   /* -------------------------------------------------------------------- dibujo */
   function aim(): void {
-    const ri = roundAt(tAll);
+    const paso = stepAt(tAll);
+    const ri = paso.round;
     const set = layoutSet(ri, tAll);
     let z = 1, x = g.w / 2, y = (g.top + g.bottom) / 2;
-    // Con pocas cartas la cámara se acerca a ellas.
-    if (set.length <= (story.arc === "tapada" ? 1 : 6) && !crowned) {
+    // Con pocas cartas de pie la cámara se acerca a ellas: los finalistas.
+    if (set.length <= (story.arc === "tapada" ? 1 : FINALISTAS) && !crowned) {
       const gr = grid(set.length);
       const ps = set.map((_, i) => gr.at(i));
       x = ps.reduce((a, p) => a + p.x, 0) / ps.length;
       y = ps.reduce((a, p) => a + p.y, 0) / ps.length;
-      // Nunca más cerca de lo que entra: con seis cartas cortaba las de los bordes.
+      // Nunca más cerca de lo que entra.
       const ancho = Math.max(...ps.map((p) => p.x)) - Math.min(...ps.map((p) => p.x)) + gr.cw * 1.2;
       const alto = Math.max(...ps.map((p) => p.y)) - Math.min(...ps.map((p) => p.y)) + gr.ch * 1.2;
       // La carta que queda sola es la toma del héroe antes del cartel: más cerca.
       z = Math.max(1, Math.min(set.length === 1 ? 1.55 : set.length === 2 ? 1.25 : 1.12, (g.w * 0.92) / ancho, ((g.bottom - g.top) * 0.95) / alto));
     }
+    // Mientras la sala revisa su nombre o está en el aplauso, la cámara respira
+    // un poco: la pantalla no se queda quieta aunque las cartas no se muevan.
+    const respira = !crowned && (paso.kind === "finalistas" || (paso.kind === "pregunta" && tAll < paso.answer));
+    if (respira) z += 0.012 * (1 + Math.sin(tAll * 1.2));
     x = clamp(x, g.w / 2 / z, g.w - g.w / 2 / z);
     y = clamp(y, g.h / 2 / z, g.h - g.h / 2 / z);
     cam.lookAt(x, y, z, 2.2);
   }
 
+  /** Los textos del cartel de cada paso: la línea chica, la grande, y la cuenta de la revisión. */
+  const cartel = (paso: Step, r: Round, ahora: number): { a: string; b: string; aPx: number; bPx: number; cuenta: number | null } => {
+    if (paso.kind === "reparto") return { a: "", b: t("cQuiDealB"), aPx: 20, bPx: 40, cuenta: null };
+    if (paso.kind === "finalistas") return { a: t("cQuiFinA"), b: t("cQuiFinB"), aPx: 20, bPx: 40, cuenta: null };
+    if (paso.kind === "empate") return { a: "", b: t(r.empate === "tope" ? "cQuiTopeShort" : "cQuiTieShort"), aPx: 20, bPx: 36, cuenta: null };
+    const q = r.questions[paso.qi] as Question;
+    if (ahora < paso.answer) {
+      const a = t(q.tipo === "orden" ? "cQuiAskAN" : "cQuiAskA");
+      const b = q.tipo === "letra" ? L.cQuiAskL(q.valor)
+        : q.tipo === "numero" ? L.cQuiAskD(q.valor)
+          : q.tipo === "mitad" ? L.cQuiAskM()
+            : q.tipo === "largo" ? L.cQuiAskG(Number(q.valor))
+              : L.cQuiAskO(Number(q.valor));
+      return { a, b, aPx: 20, bPx: 40, cuenta: clamp((ahora - paso.start) / Math.max(0.1, paso.answer - paso.start), 0, 1) };
+    }
+    return { a: t(q.has ? "cQuiSi" : "cQuiNoStamp"), b: L.cQuiSits(frase(q)), aPx: 44, bPx: 22, cuenta: null };
+  };
+
+  /**
+   * Pone el cartel como lo pide el paso: los textos, el tamaño, y la cuenta de
+   * la revisión. Se pinta en cada cuadro: así acompaña el tamaño de la
+   * pantalla y la cuenta baja en vivo.
+   */
+  const pintarCartel = (c: { a: string; b: string; aPx: number; bPx: number; cuenta: number | null }): void => {
+    const k = g.k;
+    const maxW = g.w * 0.86 - 40 * k;
+    bannerA.text = c.a;
+    bannerB.text = c.b;
+    bannerA.visible = c.a !== "";
+    if (bannerA.style.fontSize !== c.aPx * k) bannerA.style.fontSize = c.aPx * k;
+    if (bannerB.style.fontSize !== c.bPx * k) bannerB.style.fontSize = c.bPx * k;
+    bannerA.scale.set(1);
+    bannerB.scale.set(1);
+    const fit = (tx: Text): number => (tx.width > maxW ? maxW / tx.width : 1);
+    bannerA.scale.set(c.a ? fit(bannerA) : 1);
+    bannerB.scale.set(fit(bannerB));
+    const hA = c.a ? bannerA.height : 0, gap = c.a ? 4 * k : 0, hB = bannerB.height;
+    const inner = Math.max(c.a ? bannerA.width : 0, bannerB.width);
+    const padX = 30 * k, padY = 14 * k;
+    const barra = c.cuenta !== null ? 16 * k : 0;
+    const bw = inner + padX * 2, bh = padY * 2 + hA + gap + hB + barra;
+    banner.position.set(g.w / 2, S.top() + (S.portrait() ? 100 : 50) * k);
+    bannerBg.clear().roundRect(-bw / 2 + 5 * k, -bh / 2 + 5 * k, bw, bh, 8 * k).fill(INK)
+      .roundRect(-bw / 2, -bh / 2, bw, bh, 8 * k).fill(YELLOW).stroke({ width: 3 * k, color: INK });
+    bannerBar.clear();
+    if (c.cuenta !== null) {
+      // La barra de la revisión: se achica en vivo, a la vista desde el fondo de la sala.
+      const y = bh / 2 - barra / 2;
+      bannerBar.roundRect(-bw / 2 + padX, y - 4 * k, bw - padX * 2, 8 * k, 4 * k).fill({ color: INK, alpha: 0.18 });
+      bannerBar.roundRect(-bw / 2 + padX, y - 4 * k, (bw - padX * 2) * (1 - c.cuenta), 8 * k, 4 * k).fill(INK);
+    }
+    bannerA.position.set(0, -bh / 2 + padY + hA / 2);
+    bannerB.position.set(0, -bh / 2 + padY + hA + gap + hB / 2);
+  };
+
   function draw(): void {
     const k = g.k;
-    const ri = roundAt(tAll);
+    const paso = stepAt(tAll);
+    const ri = paso.round;
     const r = rounds[ri] as Round;
     const set = layoutSet(ri, tAll);
     const key = `${ri}:${set.length}`;
     // Cuando cambia el acomodo, cada carta sale desde donde estaba y viaja
-    // desde ese momento. Antes el viaje se medía contra la próxima pregunta y
-    // las cartas volvían a su punto de partida, afuera de la pantalla.
+    // desde ese momento.
     if (key !== lastLayout) {
       layoutDeal = !lastLayout.startsWith(`${ri}:`);
       lastLayout = key;
@@ -428,19 +555,14 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
     cards.forEach((c, i) => {
       const enRonda = r.pool.includes(i);
       const pos = set.indexOf(i);
-      // Al coronar queda a la vista la carta del último ganador: si se escondía
-      // todo, un instante la pantalla quedaba vacía (lo vio el auditor exigente).
+      // Al coronar queda a la vista la carta del último ganador.
       if ((crowned && !(ri === total - 1 && i === r.winner)) || (!enRonda && !winnersBefore.has(i))) {
         c.root.visible = false;
         return;
       }
       if (winnersBefore.has(i)) {
         // Los ganadores de rondas anteriores esperan arriba a la derecha, con
-        // un marco amarillo y del tamaño que se lee: eran cartas de 38 px con
-        // letra de 6. Quedan fijos en la pantalla aunque la cámara se acerque
-        // (se deshace la cámara): con el acercamiento final se iban de cuadro.
-        // En un celular van más chicos y más arriba, en la franja libre entre
-        // el contador y la pregunta: más abajo pisaban la pregunta.
+        // un marco amarillo: se sentaron con su premio.
         const slot = prizes.indexOf(i);
         const esperan = winnersBefore.size;
         const cel = S.portrait();
@@ -461,8 +583,8 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
         fx.roundRect(c.x - 60 * c.s - (4 * k) / z, c.y - 79 * c.s - (4 * k) / z, 120 * c.s + (8 * k) / z, 158 * c.s + (8 * k) / z, (8 * k) / z).stroke({ width: (4 * k) / z, color: YELLOW });
         return;
       }
-      const at = gone.get(i);
-      const flipping = at !== undefined && tAll >= at;
+      const volteoEn = gone.get(i);
+      const flipping = volteoEn !== undefined && tAll >= volteoEn;
       if (pos >= 0 || flipping) {
         c.root.visible = true;
         let tx = c.x, ts = c.s;
@@ -478,17 +600,15 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
           c.y = ty;
           c.s = ts;
         }
-        // El susto: en la última pregunta la carta de quien gana empieza a
-        // darse vuelta, duda y vuelve.
-        const ult = steps.filter((s) => s.round === ri && s.q >= 0).at(-1);
+        // El susto: en la última pregunta la carta de quien gana se medio
+        // sienta, duda y vuelve.
+        const ult = pasosPregunta[ri]?.at(-1);
         if (story.arc === "susto" && ri === total - 1 && i === r.winner && ult && tAll >= ult.flip && tAll < ult.flip + 0.9) {
           const f = (tAll - ult.flip) / 0.9;
-          // "¡Uy, casi!" a mitad del amague, en el reloj del juego: a los 0,4 s
-          // de la respuesta le comía el "¡Sí tiene…!" y se adelantaba a la carta
-          // (revisión de juegos del 16 de octubre de 2026).
+          // "¡Uy, casi se sienta!" a mitad del amague, en el reloj del juego.
           if (!casiDicho && !crowned && tAll >= ult.flip + 0.45) {
             casiDicho = true;
-            S.say(t("cQuiAlmost"), 0.95);
+            S.say(L.cQuiAlmost(ri), 0.95);
           }
           c.root.position.set(c.x, c.y);
           c.root.scale.set(c.s * (1 - 0.8 * Math.sin(Math.PI * f)), c.s);
@@ -500,7 +620,7 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
         c.front.visible = true;
         c.back.visible = false;
         if (flipping) {
-          const f = clamp((tAll - (at as number)) / FLIP, 0, 1);
+          const f = clamp((tAll - (volteoEn as number)) / FLIP, 0, 1);
           sx = c.s * Math.abs(Math.cos(f * Math.PI));
           if (f > 0.5) {
             c.front.visible = false;
@@ -512,42 +632,15 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
             return;
           }
         }
-        const vaiven = pos >= 0 && !layoutDeal ? Math.sin(tAll * 2.2 + i * 1.7) * 3 * k : 0;
+        // Los que siguen de pie se mecen, cada uno a su ritmo: están parados, y
+        // la sala no se queda quieta mientras se revisa el nombre.
+        // La amplitud sigue al tamaño de la carta: con dos cartas grandes, un meneo chico no se ve.
+        const vaiven = pos >= 0 && !layoutDeal ? Math.sin(tAll * 2.2 + i * 1.7) * Math.max(3, 0.06 * c.s * 158) * k : 0;
         c.root.position.set(c.x, c.y + vaiven);
         c.root.rotation = pos >= 0 && !layoutDeal ? Math.sin(tAll * 1.6 + i) * 0.025 : 0;
         c.root.scale.set(sx, c.s);
         c.root.alpha = alpha;
-        // Mientras se espera la respuesta, un foco salta de carta en carta:
-        // "¿esta? ¿esta?". Más rápido cuantas más cartas quedan.
-        const espera = steps.find((s) => s.round === ri && s.q >= 0 && tAll >= s.start + 0.3 && tAll < s.answer);
-        if (espera && pos >= 0 && set.length > 1) {
-          // En la última pregunta el foco frena de a poco y se
-          // queda en la carta de quien gana justo antes de la respuesta.
-          const ultima = espera === steps.filter((x) => x.round === ri && x.q >= 0).at(-1) && ri === total - 1;
-          let fase: number;
-          if (ultima) {
-            const T0 = espera.start + 0.3, dur = Math.max(0.5, espera.answer - T0);
-            const e = clamp((tAll - T0) / dur, 0, 1);
-            const vueltas = set.length * 2 + 3;
-            const quien = set.indexOf(r.winner);
-            // Más medio paso: la fase se acerca a su lugar desde abajo, y sin eso el piso caía en la carta anterior.
-            fase = vueltas * (1 - (1 - e) * (1 - e)) + ((quien - vueltas) % set.length + set.length) % set.length + 0.5;
-          } else {
-            fase = (tAll - espera.start) * (set.length > 8 ? 7 : 4) + hash(ri, espera.q) * set.length;
-          }
-          const toca = set[Math.floor(fase) % set.length];
-          if (toca === i && toca !== focoAntes) {
-            // Cada salto del foco suena, como algo que busca. En la última
-            // pregunta es un tic-tac de dos notas que se espacia a medida que
-            // el foco frena; era una cuadrada de 30 ms a 0,02, debajo de la música.
-            focoAntes = toca;
-            beep(ultima ? note(set.indexOf(i) % 2 ? 9 : 12) : note(12 + (i % 3)), 0.05, "triangle", ultima ? 0.045 : 0.03);
-          }
-          if (toca === i) {
-            fx.roundRect(c.x - 62 * c.s - 6 * k, c.y + vaiven - 79 * c.s - 6 * k, 124 * c.s + 12 * k, 158 * c.s + 12 * k, 12 * k).stroke({ width: 5 * k, color: YELLOW, alpha: 0.9 });
-          }
-        }
-        // La carta de quien ganó, cuando queda sola, brilla.
+        // La carta de quien gana, cuando queda sola, brilla y late.
         if (set.length === 1 && i === r.winner) {
           const pulse = 0.3 + 0.2 * Math.sin(tAll * 7);
           // Cada latido de la carta sola suena, hasta que se corona.
@@ -561,74 +654,45 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
           }
           fx.roundRect(c.x - 62 * c.s - 8 * k, c.y - 79 * c.s - 8 * k, 124 * c.s + 16 * k, 158 * c.s + 16 * k, 14 * k).stroke({ width: 5 * k, color: YELLOW, alpha: 0.6 + pulse });
         }
+        // Los finalistas, en el aplauso, se mecen más: la pantalla no se queda quieta.
+        if (paso.kind === "finalistas" && pos >= 0) {
+          const latidoF = 1 + 0.05 * Math.sin(tAll * 6 + i);
+          c.root.scale.set(sx * latidoF, c.s * latidoF);
+        }
       } else {
         c.root.visible = false;
       }
     });
 
-    // La pregunta y su respuesta.
-    const cur = [...steps].reverse().find((s) => s.q >= 0 && tAll >= s.start && tAll < s.end + 0.6);
-    banner.visible = !!cur && !crowned;
-    if (cur) {
-      const q = (rounds[cur.round] as Round).questions[cur.q];
-      bannerText.text = q ? T[getLang()][isDigit(q.letter) ? "cQuiAskShortN" : "cQuiAskShort"](q.letter) : t("cQuiTieShort");
-      const appear = ease.outBack(clamp((tAll - cur.start) / 0.3, 0, 1));
-      const bw = bannerText.width + 48 * k, bh = 54 * k;
-      bannerBg.clear().roundRect(-bw / 2 + 5 * k, -bh / 2 + 5 * k, bw, bh, 8 * k).fill(INK)
-        .roundRect(-bw / 2, -bh / 2, bw, bh, 8 * k).fill(YELLOW).stroke({ width: 3 * k, color: INK });
-      banner.position.set(g.w / 2, S.top() + (S.portrait() ? 100 : 50) * k);
-      banner.scale.set(appear);
-      const ans = clamp((tAll - cur.answer) / 0.2, 0, 1);
-      stamp.visible = stampBg.visible = !!q && ans > 0;
-      bigStamp.visible = false;
-      // La respuesta que decide: el sello cae grande y después vuelve a su
-      // lugar al lado de la pregunta. Con dos cartas en una pantalla ancha cae
-      // en el medio, que está vacío; con más cartas, o en un celular, donde
-      // van pegadas, caería encima de los nombres mientras se dan vuelta, así
-      // que cae en el hueco entre la pregunta y las cartas, achicado para que entre.
-      const quieto = 0.75, vuelta = 0.25;
-      const enGrande = tAll - cur.answer;
-      if (q && cur === decisiva && enGrande >= 0 && enGrande < quieto + vuelta) {
-        stamp.visible = stampBg.visible = false;
-        bigStamp.visible = true;
-        bigStampText.text = q.has ? t("cQuiSi") : t("cQuiNoStamp");
-        const bw2 = bigStampText.width + 44 * k, bh2 = bigStampText.height + 18 * k;
-        bigStampBg.clear().roundRect(-bw2 / 2 + 6 * k, -bh2 / 2 + 6 * k, bw2, bh2, 10 * k).fill(INK)
-          .roundRect(-bw2 / 2, -bh2 / 2, bw2, bh2, 10 * k).fill(q.has ? 0x17c3b2 : 0xff5cb3).stroke({ width: 5 * k, color: INK });
-        // Dónde queda el sello chico, para volver ahí.
-        stamp.text = bigStampText.text;
-        const sw0 = stamp.width + 26 * k, sh0 = 44 * k;
-        const chicoX = banner.x + (S.portrait() ? 0 : bw / 2 + sw0 / 2 + 12 * k);
-        const chicoY = banner.y + (S.portrait() ? bh / 2 + sh0 / 2 + 6 * k : 0);
-        let medioY = (g.top + g.bottom) / 2, cabe = 1;
-        if (set.length > 2 || S.portrait()) {
-          const arriba = Math.min(...set.map((_, j) => cam.toScreen(0, gr.at(j).y - gr.ch / 2, g.w, g.h).y));
-          const techo = banner.y + bh / 2;
-          medioY = (techo + arriba) / 2;
-          cabe = clamp((arriba - techo - 6 * k) / bh2, 28 / 72, 1);
-        }
-        const medioX = g.w / 2;
-        const v = ease.inOutCubic(clamp((enGrande - quieto) / vuelta, 0, 1));
-        bigStamp.position.set(medioX + (chicoX - medioX) * v, medioY + (chicoY - medioY) * v);
-        bigStamp.rotation = -0.12;
-        const golpe = 1 + 1.4 * (1 - ease.outBack(clamp(enGrande / 0.25, 0, 1)));
-        bigStamp.scale.set(golpe * (cabe + (28 / 72 - cabe) * v));
-      }
-      if (q && ans > 0 && stamp.visible) {
-        stamp.text = q.has ? t("cQuiSi") : t("cQuiNoStamp");
-        const sw = stamp.width + 26 * k, sh = 44 * k;
-        // En el celular el sello va debajo de la pregunta: al costado se cortaba.
-        const sx = S.portrait() ? 0 : bw / 2 + sw / 2 + 12 * k;
-        const sy = S.portrait() ? bh / 2 + sh / 2 + 6 * k : 0;
-        stamp.position.set(sx, sy);
-        stamp.rotation = -0.12;
-        stampBg.clear().roundRect(sx - sw / 2, sy - sh / 2, sw, sh, 6 * k).fill(q.has ? 0x17c3b2 : 0xff5cb3).stroke({ width: 3 * k, color: INK });
-        stampBg.rotation = 0;
-        stamp.scale.set(1 + 0.6 * (1 - ease.outBack(ans)));
-      }
+    // El cartel: la pregunta, la respuesta que sienta, o el aviso de los finalistas.
+    banner.visible = !crowned;
+    if (!crowned) {
+      pintarCartel(cartel(paso, r, tAll));
+      // Cada tic de la revisión late un poco: el cartel se mueve cada segundo, como un reloj.
+      const enRevision = paso.kind === "pregunta" && tAll < paso.answer;
+      const desdeTic = enRevision ? (tAll - paso.start) % TIC : 1;
+      const latido = 1 + 0.03 * Math.max(0, 1 - desdeTic / 0.3);
+      banner.scale.set(ease.outBack(clamp((tAll - paso.start) / 0.3, 0, 1)) * latido);
     }
 
-    // El contador: cuántas cartas siguen.
+    // La respuesta que decide: el sello grande en el medio del tablero, un segundo.
+    const decisivo = paso.kind === "pregunta" && paso.round === total - 1 && paso.qi === r.questions.length - 1 && r.questions.length > 0;
+    const sello = decisivo ? tAll - paso.answer : -1;
+    if (!crowned && sello >= 0 && sello < 1.2) {
+      const q = r.questions[paso.qi] as Question;
+      bigStamp.visible = true;
+      bigStampText.text = t(q.has ? "cQuiSi" : "cQuiNoStamp");
+      const bw2 = bigStampText.width + 44 * k, bh2 = bigStampText.height + 18 * k;
+      bigStampBg.clear().roundRect(-bw2 / 2 + 6 * k, -bh2 / 2 + 6 * k, bw2, bh2, 10 * k).fill(INK)
+        .roundRect(-bw2 / 2, -bh2 / 2, bw2, bh2, 10 * k).fill(q.has ? 0x17c3b2 : 0xff5cb3).stroke({ width: 5 * k, color: INK });
+      bigStamp.position.set(g.w / 2, (g.top + g.bottom) / 2);
+      bigStamp.rotation = -0.12;
+      bigStamp.scale.set(1 + 1.4 * (1 - ease.outBack(clamp(sello / 0.25, 0, 1))));
+    } else {
+      bigStamp.visible = false;
+    }
+
+    // El contador: cuántos siguen de pie.
     counter.text = `${t("cQuiLeft")}  ${alive(ri, tAll).length} / ${r.pool.length}`;
     const bw = counter.width + 40 * k, bh = 40 * k;
     counter.position.set(bw / 2, bh / 2);

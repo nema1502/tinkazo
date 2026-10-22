@@ -77,7 +77,7 @@ El GDPR europeo se aplica a cualquier sorteo que tenga participantes en la Unió
 Tinkazo ya cumple la parte difícil por diseño, y está medido en [amenazas.md](amenazas.md):
 
 - **En la cadena viaja solo la huella** de la lista. El contrato nunca ve un nombre.
-- **Los nombres no llegan a ningún servidor**: el comprobante viaja en el fragmento de la URL, el QR y los avatares se dibujan en el navegador.
+- **Los nombres no llegan en claro a ningún servidor**: el comprobante viaja en el fragmento de la URL, el QR y los avatares se dibujan en el navegador. Al compartir o al mostrar el resultado en grande se arma un enlace corto (desde el 21 de octubre de 2026): en Cloudflare queda una copia del comprobante cifrada en el navegador, con la clave solo en el enlace: Tinkazo no la puede leer, la abre quien tenga el enlace o el QR (que lleva la lista), y se borra con «Borrar el enlace corto» en Mis sorteos ([workers/enlaces](../workers/enlaces/README.md)).
 - **Quien comparte el enlace comparte la lista**, y eso se dice: sin los nombres nadie puede recomputar.
 
 Para los correos de Luma el plan de [premios.md](premios.md) sigue la misma línea: el CSV se lee en el navegador y los correos no salen de ahí.
@@ -93,7 +93,7 @@ Para los correos de Luma el plan de [premios.md](premios.md) sigue la misma lín
 
 1. **Entrar a un sorteo es gratis, siempre.** Tinkazo nunca vende boletos, ni rifas, ni entradas a un sorteo, ni deja que se cobren por él. Es lo que nos deja del lado del "sorteo gratuito" en casi todo el mundo. Si algún día alguien quiere vender boletos, es otro producto, con licencia, y no es este.
 2. **Tinkazo es una herramienta, como un bolillero.** Quien sortea es el organizador, y responde por su sorteo: las bases, el premio, los permisos y los impuestos de su país. Esto se dice en unos términos de uso.
-3. **Nada de datos personales en servidores.** Ya es así, y se mantiene cuando lleguen los correos.
+3. **Nada de datos personales legibles en servidores.** Ya es así: el enlace corto guarda una copia cifrada que Tinkazo no puede leer y que se borra con un botón. Se mantiene cuando lleguen los correos.
 4. **Premios sin custodia.** El dinero va del organizador al ganador. Si Tinkazo cobra una comisión, se cobra en la misma transacción, a la vista, y antes se resuelve la pregunta 4.
 5. **No es de apuestas, y tiene que notarse desde afuera.** Los programas de fondos de ecosistemas y las tiendas de aplicaciones dejan fuera a los proyectos que "involve, facilitate, or promote gambling". Tinkazo no lo hace, pero en inglés un sorteo se lee *raffle*, y en Estados Unidos una *raffle* casi siempre es con boletos pagados. Por eso, desde el 28 de septiembre de 2026:
    - la interfaz en inglés dice *draw*, como el *free prize draw* británico;

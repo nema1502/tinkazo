@@ -1,12 +1,13 @@
 import { $ } from "../dom";
 import { T, getLang, onLangChange, t } from "../i18n";
-import { ANCHOR_LEAD_SECONDS, LEAD_SECONDS, WHEEL_MAX, app, params, type Game } from "../state";
+import { ANCHOR_LEAD_SECONDS, LEAD_SECONDS, WHEEL_MAX, app, currentPace, paceSeconds, params, type Game } from "../state";
 import { QUICKNET, bytesToHex, roundTime, targetRound } from "../protocol/quicknet";
 import { listHash } from "../protocol/canonical";
 import { prepararFirma } from "../protocol/firma";
 import { contractUrl, network } from "../stellar/config";
-import { anchorErrorText, hideTxStatus, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
+import { type AnchorStep, escribirError, hideTxStatus, margenParaAprobar, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
 import { precargarQr } from "./qr";
+import { recomendar } from "./recomendar";
 import { canAnchor, currentSession } from "./wallet-ui";
 import { parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
@@ -19,20 +20,24 @@ import { ponerPremio, recordarPremio, sincronizarPremios } from "./premios";
  * septiembre de 2026 esta lista tenía solo los ocho primeros, y los botones
  * del trompo, las balsas, la piñata y Oruro no hacían nada: solo se llegaba a
  * ellos con `?demo=`, que es lo que usan los auditores.
+ *
+ * Desde el 21 de octubre de 2026 son diez: entró El Trueque y salieron el
+ * Aguayo y la Constelación, que se fundieron en él (la tómbola había salido el
+ * 20). Van en el orden de la auditoría de juegos, de las salas chicas a las
+ * grandes; con la lista sellada los reordena la recomendación (`recomendar.ts`).
+ * Los que salen siguen abriendo con `?demo=`.
  */
 export const GAME_BUTTONS: ReadonlyArray<[string, Game]> = [
   ["g-race", "race"],
-  ["g-chovena", "chovena"],
-  ["g-trompo", "trompo"],
-  ["g-pinata", "pinata"],
-  ["g-oruro", "oruro"],
-  ["g-tombola", "tombola"],
-  ["g-wheel", "wheel"],
-  ["g-teleferico", "teleferico"],
-  ["g-pasanaku", "pasanaku"],
-  ["g-stellar", "stellar"],
   ["g-sapo", "sapo"],
+  ["g-trompo", "trompo"],
+  ["g-chovena", "chovena"],
+  ["g-pinata", "pinata"],
+  ["g-wheel", "wheel"],
   ["g-quien", "quien"],
+  ["g-trueque", "trueque"],
+  ["g-teleferico", "teleferico"],
+  ["g-oruro", "oruro"],
 ];
 
 export function setGame(g: Game): void {
@@ -58,6 +63,76 @@ export function pintarJuego(): void {
 }
 // Al cambiar de idioma los botones del selector ya están traducidos: se lee de ahí.
 onLangChange(pintarJuego);
+
+/** Una frase del diccionario. Las que llevan números son funciones: se les pasan los argumentos. */
+function frase(clave: string, args: readonly number[] = []): string {
+  const v = T[getLang()][clave];
+  if (typeof v === "function") return (v as (...a: number[]) => string)(...args);
+  return typeof v === "string" ? v : clave;
+}
+
+/**
+ * El selector recomienda según la cantidad de personas de la lista (auditoría
+ * de juegos, sección 8.1). Los que encajan van primero, con su etiqueta y una
+ * nota corta de por qué. Los que no encajan se atenúan, pero siguen tocables y
+ * dicen por qué. Los que no tienen rango claro quedan como estaban. Reordena
+ * los botones: no oculta ninguno, y el que estaba elegido sigue elegido.
+ * El selector solo se ve con la lista sellada (`sec-frozen`), así que se pinta
+ * al sellar y de nuevo al cambiar de idioma o de ritmo.
+ */
+export function pintarRecomendacion(n: number): void {
+  const botones = new Map<Game, HTMLElement>();
+  for (const [id, g] of GAME_BUTTONS) {
+    const el = document.getElementById(id);
+    if (el) botones.set(g, el);
+  }
+  const gp = $("gamepick");
+  recomendar(n).games.forEach((r, i) => {
+    const el = botones.get(r.game);
+    if (!el) return;
+    // Cada botón va a su lugar en el orden de la recomendación; se mueve solo el que está fuera de sitio.
+    if (gp.children[i] !== el) gp.insertBefore(el, gp.children[i] ?? null);
+    el.classList.toggle("atenuado", r.fits === false);
+    el.querySelectorAll(":scope > .rec-tag, :scope > .rec-nota").forEach((x) => x.remove());
+    if (r.fits === true) {
+      const etiqueta = document.createElement("em");
+      etiqueta.className = "rec-tag";
+      etiqueta.textContent = t("recBadge");
+      el.appendChild(etiqueta);
+    }
+    if (r.note) {
+      const nota = document.createElement("small");
+      nota.className = "rec-nota";
+      nota.textContent = frase(r.note, r.args);
+      el.appendChild(nota);
+    }
+  });
+  pintarCabecera(n);
+}
+
+/**
+ * La línea de arriba del selector: "Para 8 personas · Duración: Normal · 41 s".
+ * La duración es la del show con el ritmo elegido, que hoy es la misma para
+ * cualquier cantidad (la de la sección 8.2 no se muestra todavía: ver el informe).
+ */
+function pintarCabecera(n: number): void {
+  const el = document.getElementById("rec-head");
+  if (!el) return;
+  const p = currentPace();
+  const nombre = t(p === "rapido" ? "paceFast" : p === "normal" ? "paceNormal" : "paceEpic");
+  el.textContent = `${frase("recHead", [n])} · ${t("paceLabel")}: ${nombre} · ${paceSeconds(p)} s`;
+  el.style.display = "";
+}
+
+/**
+ * Rehace la recomendación con la lista sellada: al cambiar de idioma o de
+ * ritmo, que son los textos y la duración que se ven. Sin lista sellada no hay
+ * selector visible, y no hace nada.
+ */
+export function refrescarRecomendacion(): void {
+  if (app.frozen) pintarRecomendacion(app.frozen.names.length);
+}
+onLangChange(refrescarRecomendacion);
 
 /**
  * "Cambiar de juego": lleva al selector, que está debajo, y deja el foco en el
@@ -225,8 +300,8 @@ export async function freeze(): Promise<void> {
   // de 30 el contrato rechaza el sello.
   const lead = anchoring ? Math.max(ANCHOR_LEAD_SECONDS, LEAD_SECONDS) : LEAD_SECONDS;
   let round = targetRound(ts, lead);
-  const prize = $<HTMLInputElement>("prize").value.trim();
-  const numWinners = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, names.length);
+  let prize = $<HTMLInputElement>("prize").value.trim();
+  let numWinners = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, names.length);
 
   let raffleId: bigint | undefined;
   let sealTx: string | undefined;
@@ -235,41 +310,69 @@ export async function freeze(): Promise<void> {
     const session = currentSession();
     if (!session) return;
     btn.disabled = true;
+    const onStep = (step: AnchorStep, detail?: string): void => {
+      btn.textContent = stepLabel(step);
+      showTxStatus("seal-status", step, detail);
+    };
     try {
-      // Si la red tarda, la ronda elegida al hacer clic llega a la cadena con
-      // menos de los 30 s que exige el contrato y el sello falla: con el RPC
-      // público de testnet pasó en 3 de 11 sellos (QA, 16 de octubre de 2026).
-      // Cuando la transacción falló de verdad, no quedó nada grabado y se
-      // reintenta solo, con una ronda nueva. Si no se sabe si entró, no.
-      for (let intento = 1; ; intento++) {
-        try {
-          const res = await sealOnChain(
-            {
-              organizer: session.address,
-              listHash: listHash(names),
-              count: names.length,
-              numWinners,
-              round,
-              meta: prize || t("defaultMeta"),
-            },
-            (step, detail) => {
-              btn.textContent = stepLabel(step);
-              showTxStatus("seal-status", step, detail);
-            },
-          );
-          raffleId = res.raffleId;
-          sealTx = res.txHash;
-          break;
-        } catch (e) {
-          if (intento >= 3 || !selloSinGrabar(e)) throw e;
-          console.warn("[tinkazo] el sello no entró a tiempo; se reintenta con otra ronda", e);
-          ts = Math.floor(Date.now() / 1000);
-          round = targetRound(ts, lead);
-        }
+      // Nunca dos sellos de la misma lista (`sello-seguro.ts`, D-17 en docs/architecture.md):
+      // - Si la red tarda, la ronda elegida al hacer clic llega a la cadena con menos de los
+      //   30 s que exige el contrato y el sello falla (3 de 11 sellos con el RPC público de
+      //   testnet, QA del 16 de octubre de 2026): no quedó nada y se reintenta con otra ronda.
+      // - Si no se sabe si entró (un corte, una respuesta que no llegó), primero se averigua.
+      //   Si no se puede, queda guardado, y el próximo intento empieza por ahí.
+      // - Con Freighter hay que aprobar a mano: la ronda va con 45 s más de margen.
+      const [seguro, extra] = await Promise.all([import("./sello-seguro"), margenParaAprobar()]);
+      const anclado = lead + extra;
+      const rondaNueva = (): { round: number; ts: number } => {
+        const ahora = Math.floor(Date.now() / 1000);
+        return { round: targetRound(ahora, anclado), ts: ahora };
+      };
+      ({ round, ts } = rondaNueva());
+      const contrato = network.contractId ?? "";
+      const previo = seguro.leerPendiente(session.address, hash, network.name, contrato);
+      const sello = await seguro.sellarSinDuplicar(
+        { round, ts },
+        {
+          sellar: (r) =>
+            sealOnChain(
+              {
+                organizer: session.address,
+                listHash: listHash(names),
+                count: names.length,
+                numWinners,
+                round: r,
+                meta: prize || t("defaultMeta"),
+              },
+              onStep,
+            ),
+          resolver: (intento) => resolverSelloEnLaRed(intento, onStep),
+          rondaNueva,
+          sinGrabar: (e) => {
+            if (selloSinGrabar(e)) console.warn("[tinkazo] el sello no entró; se reintenta con otra ronda", e);
+            return selloSinGrabar(e);
+          },
+          guardarPendiente: (intento) => seguro.guardarPendiente(intento, network.name, contrato, prize),
+          avisar: (que) => onStep(que === "verificando" ? "verifying" : "retrying"),
+        },
+        previo?.intento ?? null,
+      );
+      raffleId = sello.raffleId;
+      sealTx = sello.txHash;
+      round = sello.round;
+      ts = sello.ts;
+      if (sello.retomado && previo) {
+        // El que entró es el de antes: queda sellado con su premio y su cantidad de ganadores.
+        prize = previo.premio;
+        numWinners = sello.retomado.numWinners;
+        ponerPremio(prize);
+        $<HTMLSelectElement>("nw").value = String(numWinners);
       }
+      // Si se supo por la red (se cortó y se averiguó), la línea todavía decía "Revisando…".
+      showTxStatus("seal-status", "confirmed", sealTx);
     } catch (e) {
-      // La pantalla dice algo que se entiende; el error de verdad queda en la
-      // consola, para saber la causa si "la red rechazó" vuelve a pasar.
+      // La pantalla dice algo que se entiende; el detalle técnico queda plegado
+      // debajo y en este navegador (`detalle-error.ts`), y en la consola.
       console.warn("[tinkazo] el sello no se pudo grabar", e);
       btn.disabled = false;
       btn.dataset.i = "sealOnStellar";
@@ -277,7 +380,7 @@ export async function freeze(): Promise<void> {
       const status = $("seal-status");
       status.style.display = "block";
       status.className = "txstatus";
-      status.textContent = await anchorErrorText(e);
+      await escribirError(status, e, "sello");
       // Si se apretó la barra, el botón de verdad (y este mensaje) están fuera de la pantalla.
       verError(status);
       return;
@@ -291,7 +394,9 @@ export async function freeze(): Promise<void> {
   // (QA, 16 de octubre de 2026).
   void precargarQr();
   void import("./pantalla").catch(() => undefined);
-  void import("./imagen").catch(() => undefined);
+  void import("./compartir").catch(() => undefined);
+  // Y lo que cuenta un error del sorteo, si el wifi se cae antes de sortear.
+  if (raffleId !== undefined) precargarParaElSorteo();
 
   app.frozen = {
     names,
@@ -425,14 +530,19 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   }
   $("frozen-ts").textContent = t("frozenAt") + " " + f.at;
   renderSealSummary();
+  // Antes de la ruleta: si el juego cambia por la cantidad, el selector ya está ordenado.
+  pintarRecomendacion(names.length);
 
   if (names.length > WHEEL_MAX) {
-    // La ruleta es el único juego con tope. Los demás aguantan doscientos, y
-    // el reemplazo automático va a la tómbola, que muestra a todos con su
-    // número. Iba a la carrera, que pone ocho en pista (16 de octubre de 2026).
+    // La ruleta es el único juego con tope. Los demás aguantan doscientos. El
+    // reemplazo automático es el primer juego del selector que encaja para esa
+    // cantidad (sección 8.1). La tómbola ya no está en el selector, así que no
+    // puede ser el reemplazo: queda solo para más de doscientos, donde ningún
+    // juego encaja y no tiene botón. (Iba a la carrera el 16 de octubre, que
+    // pone ocho en pista.)
     $<HTMLButtonElement>("g-wheel").disabled = true;
     $("wheel-cap").style.display = "block";
-    if (app.game === "wheel") setGame("tombola");
+    if (app.game === "wheel") setGame(recomendar(names.length).games.find((r) => r.fits === true)?.game ?? "tombola");
   }
   pintarJuego();
   startCountdown();

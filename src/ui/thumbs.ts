@@ -250,32 +250,36 @@ const PAINTERS: Record<string, Painter> = {
     c.lineWidth = 2.4;
     c.stroke();
   },
-  /** ¿Quién es?: seis cartitas con cara; se dan vuelta de a una hasta que queda la del ganador. */
+  /** De pie: seis personas; en cada vuelta se sientan algunas, y queda de pie la del ganador. */
   quien(c, t, col) {
     c.fillStyle = "#1b2340";
     c.fillRect(0, 0, W, H);
     const f = (t * 0.45) % 1;
     const vueltas = Math.floor(f * 7);
     for (let i = 0; i < 6; i++) {
-      const x = 10 + (i % 3) * 34, y = 6 + Math.floor(i / 3) * 30;
-      const out = i !== 4 && [0, 5, 1, 3, 2].indexOf(i) < vueltas;
+      const x = 10 + (i % 3) * 34, base = 32 + Math.floor(i / 3) * 30;
+      const sentado = i !== 4 && [0, 5, 1, 3, 2].indexOf(i) < vueltas;
+      // De pie: cuerpo alto y cabeza arriba; sentado, el cuerpo queda bajo y la cabeza baja con él.
+      const cuerpo = sentado ? 10 : 20;
+      const cx = x + 13;
       c.fillStyle = INK;
-      c.fillRect(x + 2, y + 2, 26, 26);
-      c.fillStyle = out ? "#7a5cc4" : "#f6efe2";
-      c.fillRect(x, y, 26, 26);
-      if (!out) {
-        c.fillStyle = col(i);
-        c.fillRect(x + 4, y + 3, 18, 13);
-        c.fillStyle = INK;
-        c.fillRect(x + 8, y + 7, 3, 3);
-        c.fillRect(x + 15, y + 7, 3, 3);
-        c.fillRect(x + 5, y + 19, 16, 3);
-      }
+      c.fillRect(x + 4, base - cuerpo + 2, 18, cuerpo);
+      c.fillStyle = col(i);
+      c.fillRect(x + 2, base - cuerpo, 18, cuerpo);
+      c.beginPath();
+      c.arc(cx + 2, base - cuerpo - 6, 6, 0, TAU);
+      c.fillStyle = INK;
+      c.fill();
+      c.beginPath();
+      c.arc(cx, base - cuerpo - 8, 5.2, 0, TAU);
+      c.fillStyle = "#f6efe2";
+      c.fill();
     }
     if (vueltas >= 5) {
       c.strokeStyle = "#ffc629";
       c.lineWidth = 2;
-      c.strokeRect(10 + 34 - 2, 6 + 30 - 2, 30, 30);
+      // La de pie es la del ganador: la fila de abajo, columna del medio.
+      c.strokeRect(10 + 34 - 2, 62 - 36, 30, 38);
     }
   },
   /** La piñata de siete picos balanceándose, y cada tanto caen caramelos. */
@@ -817,6 +821,37 @@ const PAINTERS: Record<string, Painter> = {
       c.fillStyle = col(b + 1);
       c.fillRect(bx - 3.6, by - 3.6, 7.2, 7.2);
     }
+  },
+
+  /** Una feria de toldos: el atado pasa de puesto en puesto y cambia de color en cada cambio. */
+  trueque(c, t, col) {
+    c.fillStyle = "#1d1428";
+    c.fillRect(0, 0, W, H);
+    const puestos: [number, number][] = [[18, 22], [58, 16], [98, 22], [36, 50], [82, 48]];
+    puestos.forEach(([x, y], i) => {
+      c.fillStyle = col(i);
+      c.fillRect(x - 10, y - 7, 20, 9);
+      c.fillStyle = "#3b2a22";
+      c.fillRect(x - 10, y + 2, 20, 8);
+      c.strokeStyle = INK;
+      c.lineWidth = 1;
+      c.strokeRect(x - 10, y - 7, 20, 17);
+    });
+    // El atado va por la ruta 0 → 1 → 3 → 4 y en cada parada cambia de color.
+    const ruta = [0, 1, 3, 4];
+    const u = (t * 0.55) % ruta.length;
+    const paso = Math.floor(u);
+    const f = u - paso;
+    const a = puestos[ruta[paso] ?? 0] ?? [0, 0];
+    const b = puestos[ruta[(paso + 1) % ruta.length] ?? 0] ?? [0, 0];
+    const x = a[0] + (b[0] - a[0]) * f;
+    const y = a[1] + (b[1] - a[1]) * f - Math.sin(f * Math.PI) * 14;
+    c.fillStyle = col(paso + 2);
+    c.fillRect(x - 6, y - 6, 12, 12);
+    c.fillStyle = "#f6efe2";
+    c.fillRect(x - 6, y - 1, 12, 2);
+    c.strokeStyle = INK;
+    c.strokeRect(x - 6, y - 6, 12, 12);
   },
 
   /** Tres cabinas subiendo por el cable hasta la estación de arriba. */

@@ -1,6 +1,7 @@
 /**
  * Las páginas de lectura, revisadas como las mira alguien: en los dos temas,
- * en celular y en los dos idiomas.
+ * en celular y en los dos idiomas. Y las dos que se abren desde un enlace,
+ * verificar y evento (ver `HERRAMIENTAS`).
  *
  * Comprueba lo que se rompe en silencio cuando se agrega una sección: una
  * imagen que no está, un texto sin traducir (queda vacío al cambiar de idioma),
@@ -26,6 +27,41 @@ const VISTAS = [
   { tema: "dark", ancho: 1280, alto: 900, como: "escritorio" },
   { tema: "light", ancho: 1280, alto: 900, como: "escritorio" },
   { tema: "dark", ancho: 390, alto: 844, como: "celular" },
+];
+
+/**
+ * Las páginas que se abren desde un enlace: verificar, evento y la del enlace
+ * corto (c.html). No son de lectura: su pie no lleva a las páginas de sorteo y
+ * su titular lo escribe el script. Se miran igual, en los dos temas, en celular y en inglés, con lo que
+ * se les rompió alguna vez (evaluador visual, 21 de octubre de 2026): con
+ * `?theme=` verificar no cambiaba de tema, en el celular los pasos para
+ * rehacerlo se cortaban contra el borde, y con un enlace roto el titular del
+ * evento quedaba en español también en inglés.
+ *
+ * El comprobante de verificar es el de los vectores de prueba (la lista de
+ * ejemplo y una ronda real con su firma), sin anclar: se rehace entero en el
+ * navegador, sin red. El evento va sin enlace, que es el caso del error, y el
+ * enlace corto también: abierta sin id ni clave, la página dice que el enlace
+ * no se puede abrir sin salir a la red.
+ */
+const COMPROBANTE = "r" + Buffer.from(JSON.stringify({
+  v: 2,
+  names: [
+    "María Quispe", "Jorge Mamani", "Lucía Flores", "Carlos Choque", "Ana Vargas", "Diego Rojas",
+    "Elena Condori", "Pablo Gutiérrez", "Sofía Aguilar", "Rodrigo Peña", "Valeria Torrez", "Miguel Arce",
+    "Camila Suárez", "Andrés Villca", "Paola Mendoza", "Franco Ibáñez", "Daniela Cruz", "Óscar Limachi",
+  ],
+  round: 32254977,
+  signature: "a77a689daae687c7b16e6f9388d4ebbb7b368d09d7a6c33ad1dfd75d32e4114cfbdcf3e2cc54f4fee659abf2ac7ef9ac",
+}), "utf8").toString("base64url");
+const HERRAMIENTAS = [
+  {
+    p: "verificar",
+    hash: `#${COMPROBANTE}`,
+    listo: "!/working/.test(document.getElementById('verdict').className) && document.getElementById('v-steps').textContent.length > 0",
+  },
+  { p: "evento", hash: "", listo: "!/working/.test(document.getElementById('ev-veredicto').className)" },
+  { p: "c", hash: "", listo: "!!document.body.dataset.estado && document.body.dataset.estado !== 'abriendo'" },
 ];
 
 let fallos = 0;
@@ -89,6 +125,53 @@ try {
     await sleep(1200);
     const ingles = await en.eval(`document.querySelector('h1')?.textContent || ''`);
     check(ingles.length > 0, "inglés: el titular está traducido", ingles);
+  }
+
+  for (const { p, hash, listo } of HERRAMIENTAS) {
+    console.log(`\n${p}.html`);
+    let titular = "";
+    for (const { tema, ancho, alto, como } of VISTAS) {
+      const page = await browser.open("about:blank");
+      await page.send("Emulation.setDeviceMetricsOverride", {
+        width: ancho, height: alto, deviceScaleFactor: 1, mobile: ancho < 500,
+      });
+      await page.send("Page.navigate", { url: `${base}/${p}.html?theme=${tema}${hash}` });
+      await page.waitFor("document.readyState === 'complete' && !!document.body", 20000);
+      const termino = await page.waitFor(listo, 30000);
+      await sleep(500);
+      const r = JSON.parse(await page.eval(`JSON.stringify({
+        titulo: document.title,
+        titular: document.querySelector('h1')?.textContent || '',
+        tema: document.documentElement.dataset.theme || '',
+        desborde: document.documentElement.scrollWidth - window.innerWidth,
+        rotas: [...document.images].filter(i => !i.complete || i.naturalWidth === 0).length,
+        vacios: [...document.querySelectorAll('[data-i], [data-i-html]')].filter(e => !e.textContent.trim()).length,
+        enlaces: [...document.querySelectorAll('.pies a')].map((a) => a.getAttribute('href')),
+        toque: [...document.querySelectorAll('.pies a')].every(a => a.getBoundingClientRect().height >= 44),
+        pasos: (() => { const e = document.getElementById('v-steps'); return e ? e.scrollWidth - e.clientWidth : 0; })(),
+      })`));
+      if (!titular) titular = r.titular;
+      const etiqueta = `${tema} ${como}`;
+      check(termino.ok, `${etiqueta}: termina de revisar`);
+      check(!!r.titulo, `${etiqueta}: tiene título`, r.titulo);
+      check(r.tema === tema, `${etiqueta}: ?theme= se aplica`, r.tema || "(sin data-theme)");
+      check(r.desborde <= 1, `${etiqueta}: sin scroll horizontal`, `${r.desborde}px`);
+      check(r.rotas === 0, `${etiqueta}: sin imágenes rotas`);
+      check(r.vacios === 0, `${etiqueta}: sin textos sin traducir`);
+      const ajenas = r.enlaces.filter((h) => h.startsWith("/") && !PAGINAS.some((q) => h === `/${q}.html`));
+      check(r.enlaces.length > 0 && ajenas.length === 0, `${etiqueta}: el pie lleva a páginas que existen`, ajenas.join(", "));
+      if (p === "verificar") check(r.pasos <= 1, `${etiqueta}: los pasos para rehacerlo no se cortan`, `${r.pasos}px de más`);
+      if (como === "celular") check(r.toque, `${etiqueta}: blancos de toque de 44 px`);
+      check(page.exceptions.length === 0, `${etiqueta}: sin excepciones`, page.exceptions[0] ?? "");
+      await page.send("Page.close").catch(() => {});
+    }
+    // En inglés el titular lo pone el script: tiene que cambiar de idioma.
+    const en = await browser.open(`${base}/${p}.html?lang=en${hash}`);
+    await en.waitFor(listo, 30000);
+    await sleep(500);
+    const ingles = await en.eval(`document.querySelector('h1')?.textContent || ''`);
+    check(ingles.length > 0 && ingles !== titular, "inglés: el titular está traducido", `${ingles} · en español: ${titular}`);
+    await en.send("Page.close").catch(() => {});
   }
 } finally {
   await browser.close();

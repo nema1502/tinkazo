@@ -32,6 +32,7 @@ const PIXI: Partial<Record<Game, () => Promise<Launch>>> = {
   pasanaku: async () => (await import("./pasanaku")).pasanakuPixi,
   ledger: async () => (await import("./ledger")).ledgerPixi,
   stellar: async () => (await import("./constellation")).constellationPixi,
+  trueque: async () => (await import("./trueque")).truequePixi,
   rockets: async () => {
     const m = await import("../llamas/pixi-race");
     return (n, w, b, d) => m.llamasPixi(n, w, b, d, "stellar");

@@ -37,8 +37,8 @@ export interface Dict {
   cWin: (n: string, many?: boolean) => string;
   /** "Copiar el mensaje": lo que se pega en el grupo. Quién ganó, entre cuántos, el premio, el enlace para verificarlo y el pie con la marca. */
   summary: (w: string, n: number, premio: string, enlace: string, varios: boolean) => string;
-  /** "Compartir el evento" en Mis sorteos: lo que se pega en el grupo, con el enlace a evento.html. */
-  summaryEvento: (fecha: string, n: number, enlace: string) => string;
+  /** "Compartir el evento" en Mis sorteos: lo que se pega en el grupo, con quién ganó qué (un renglón por sorteo) y el enlace a evento.html. */
+  summaryEvento: (fecha: string, n: number, enlace: string, lineas?: string[]) => string;
   drawIn: (mmss: string) => string;
   /** Debajo del resultado: cuántos quedan en la lista sin los ganadores. */
   againLeft: (n: number) => string;
@@ -50,11 +50,6 @@ export interface Dict {
   againQuitados: (nombres: string[], n: number) => string;
   /** "No está": quién no estaba, entre cuántos vuelve a salir su premio y si también salen los otros ganadores. */
   ausenteNota: (nombre: string, n: number, otros: boolean) => string;
-  /** La imagen del resultado: entre cuántas personas salió, con uno o con varios ganadores. */
-  imgEntre: (n: number, varios: boolean) => string;
-  imgMas: (n: number) => string;
-  /** El texto que acompaña a la imagen cuando se comparte desde el celular. */
-  imgTexto: (nombres: string[], premio: string) => string;
   drandTry: (i: number, n: number) => string;
   drawTry: (i: number, n: number) => string;
   cConstPass: (n: string) => string;
@@ -66,6 +61,10 @@ export interface Dict {
   cWheelSplit: (segs: number, rep: number) => string;
   cWheelOn: (n: string) => string;
   cWheelFalse: (n: string) => string;
+  /** La ruleta con más de veinticuatro: cuántos gajos, y cuántas personas caben en el más grande. */
+  cWheelGroups: (gajos: number, max: number) => string;
+  /** Quiénes son los del gajo que pasa: los primeros nombres, y cuántos más. */
+  cWheelGroup: (nombres: string[], mas: number) => string;
   cPasOut: (n: string) => string;
   /** Un co-ganador que sale antes del final: nunca se lo narra como perdedor. */
   cPrizeOut: (ns: string[]) => string;
@@ -102,16 +101,27 @@ export interface Dict {
   espPie: (n: number) => string;
   cQuiStart: (n: number) => string;
   cQuiNext: (k: number, of: number) => string;
-  cQuiTwo: (a: string, b: string) => string;
-  cQuiAskShort: (l: string) => string;
-  cQuiAskShortN: (l: string) => string;
-  /** Que cada uno revise su propio nombre, sin buscar su carta en la pantalla. */
-  cQuiMine: (l: string) => string;
-  cQuiMineN: (l: string) => string;
-  cQuiYes: (l: string, k: number) => string;
-  cQuiNo: (l: string, k: number) => string;
-  cQuiNone: (l: string, has: boolean) => string;
+  /** De pie: lo que cada uno revisa en su turno, y la línea grande de cada tipo de pregunta. */
+  cQuiRevisa: (i: number) => string;
+  cQuiAskL: (l: string) => string;
+  cQuiAskD: (d: string) => string;
+  cQuiAskM: () => string;
+  cQuiAskG: (k: number) => string;
+  cQuiAskO: (k: number) => string;
+  /** Quién se sienta, según el tipo de pregunta: "no la tienen", "empiezan de la N a la Z"… */
+  cQuiSitL: (l: string, has: boolean) => string;
+  cQuiSitD: (d: string, has: boolean) => string;
+  cQuiSitM: (has: boolean) => string;
+  cQuiSitG: (k: number, has: boolean) => string;
+  cQuiSitO: (k: number, has: boolean) => string;
+  cQuiSits: (f: string) => string;
+  cQuiYes: (f: string, i: number) => string;
+  cQuiNo: (f: string, i: number) => string;
+  cQuiNone: (has: boolean) => string;
+  cQuiFinal: (names: string) => string;
   cQuiDone: (n: string, k: number) => string;
+  /** La frase de "uy, casi" del susto: por número, sin azar, para que la sala no dependa del sorteo de frases. */
+  cQuiAlmost: (i: number) => string;
   cOruCount: (n: number) => string;
   cOruStop: (k: number, off: number, left: number) => string;
   cOruStay: (n: string) => string;
@@ -141,7 +151,11 @@ export interface Dict {
   cTelStop: (k: number, off: number, left: number) => string;
   cTelGrupo: (k: number, g: { nombre: string; articulo: string }, off: number, left: number) => string;
   cTelWho: string[];
+  /** Al llegar a la última estación, con los que siguen arriba: "¡QUEDAN DOS!" solo si son dos. */
+  cTelLast: (left: number) => string;
   cTelOff: (n: string) => string;
+  /** Los que se bajan juntos en la última estación: hasta tres nombres, y los demás como "N más". */
+  cTelOffN: (ns: string[], more: number) => string;
   /** El último que se baja, cuando también ganó: con varios premios. */
   cTelPrize: (n: string) => string;
   cTelOf: (k: number, of: number) => string;
@@ -202,6 +216,8 @@ export interface Dict {
   impNoNames: (file: string) => string;
   impNotText: (file: string) => string;
   impHeaderOut: (header: string) => string;
+  /** Cuántos nombres traían caracteres que no se ven y se limpiaron al cargar la lista. */
+  impInvisibles: (n: number) => string;
   impSkipped: (n: number, lines: string) => string;
   impSkippedShort: (n: number) => string;
   /** El mensaje para quien ganó; con `varios`, para todos los que ganaron juntos. */
@@ -210,6 +226,15 @@ export interface Dict {
   cTroSpent: (n: string) => string;
   // Constelación, sapo y ¿Quién es? (7 de octubre de 2026).
   cConstHeading: (n: string) => string;
+  /** El Trueque (src/games/pixi/trueque.ts): las frases con un nombre o un número son funciones. */
+  trSale: (p: string) => string;
+  trBusca: (p: string) => string;
+  trCambio: (p: string) => string;
+  trCuenta: (k: number, K: number) => string;
+  trRuta: (pasaron: string, llego: string) => string;
+  trDirecto: (llego: string) => string;
+  trCallejon: string[];
+  trNoEs: string;
   cSapMissBy: (n: string) => string;
   /** La ruleta mientras frena: el trinquete y la pregunta de dónde para. */
   cWheelTick: string[];
@@ -231,8 +256,6 @@ const pick = (xs: string[]): string => xs[Math.floor((pickRng ?? Math.random)() 
 const llano = (s: string): string => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 /** "y" se vuelve "e" delante del sonido i ("Jorge e Isabel", "Ana e Hilda"), pero no delante de "hie" ni "hia". */
 const yE = (next: string): string => (/^h?i(?![aeiou])/i.test(llano(next)) ? "e" : "y");
-/** "o" se vuelve "u" delante del sonido o ("Pedro u Óscar", "Ana u Hortensia"). */
-const oU = (next: string): string => (/^h?o/i.test(llano(next)) ? "u" : "o");
 /** "A", "A y B", "A, B e Isabel": names joined for the narrator. */
 const joinList = (ns: string[], and: string): string => {
   if (ns.length <= 1) return ns[0] ?? "";
@@ -271,7 +294,7 @@ export const T: Record<Lang, Dict> = {
     s2t: "Sellá la lista",
     s2b: "Al sellarla, la lista queda con un resumen corto de la lista (su huella) y una hora. Si después alguien mete a su primo o saca a otro, la huella cambia y se nota. Y la huella queda grabada en Stellar.",
     s3t: "Elegí el juego y sorteá",
-    s3b: "Uno de los doce juegos, a pantalla completa. Cuando arranca la animación el ganador ya salió del número público. El show es show. El sorteo ya estaba hecho.",
+    s3b: "Uno de los diez juegos, a pantalla completa. Cuando arranca la animación el ganador ya salió del número público. El show es show. El sorteo ya estaba hecho.",
     p1: "Participantes", p2: "Lista sellada", p3: "El sorteo",
     srcPaste: "Pegar lista", srcCsv: "Subir CSV", srcLuma: "Desde Luma", srcMeetup: "Meetup · pronto",
     srcLumaTip: "Exportá la lista de invitados de tu evento en Luma como CSV",
@@ -288,7 +311,7 @@ export const T: Record<Lang, Dict> = {
     histCount: "{n} con tu cuenta",
     histCountBoth: "{n} en este equipo · {c} traídos de la cadena",
     histCountChain: "{c} traídos de la cadena",
-    histWhy: "Este equipo se acuerda de los sorteos que hiciste acá, con los nombres. Los que anclaste desde otro equipo se traen de la cadena: ahí están la fecha, el premio y qué puesto de la lista ganó, pero no los nombres, que nunca se publican. Si borrás los datos del sitio se pierde la lista de este equipo, no los sorteos, y con el comprobante la cuenta se puede rehacer siempre.",
+    histWhy: "Este equipo se acuerda de los sorteos que hiciste acá, con los nombres. Los que anclaste desde otro equipo se traen de la cadena: ahí están la fecha, el premio y qué puesto de la lista ganó, pero no los nombres, que nunca se publican. Si borrás los datos del sitio se pierde la lista de este equipo, no los sorteos, y con el comprobante la cuenta se puede rehacer siempre. Si compartiste un sorteo con enlace corto, queda una copia protegida que Tinkazo no puede leer, hasta que la borres con «Borrar el enlace corto».",
     histFromChain: "traído de la cadena",
     histRebuild: "rearmar comprobante",
     histRebuildTitle: "Rearmá el comprobante",
@@ -403,6 +426,7 @@ export const T: Record<Lang, Dict> = {
     impNoNames: (f) => (f ? `«${f}» no trae nombres: la lista quedó como estaba.` : "Lo que pegaste no trae nombres: la lista quedó como estaba."),
     impNotText: (f) => `«${f}» no es un archivo de texto. Si es una planilla, guardala como CSV y subila de nuevo. La lista quedó como estaba.`,
     impHeaderOut: (h) => `«${h}» es el encabezado de la columna: no entra al sorteo.`,
+    impInvisibles: (n) => `Se quitaron caracteres invisibles de ${n === 1 ? "1 nombre" : `${n} nombres`}: no se ven, y con ellos el mismo nombre podía entrar dos veces.`,
     impSkipped: (n, lines) => (n === 1 ? `No se pudo leer 1 fila (línea ${lines}): quedó afuera.` : `No se pudieron leer ${n} filas (líneas ${lines}): quedaron afuera.`),
     impSkippedHint: "Suele ser una coma sin comillas. Corregila en el archivo y subilo de nuevo, o agregá ese nombre a mano.",
     impSkippedShort: (n) => (n === 1 ? "1 fila no se pudo leer" : `${n} filas no se pudieron leer`),
@@ -432,8 +456,13 @@ export const T: Record<Lang, Dict> = {
     cTelGo: ["¡ARRANCA EL TELEFÉRICO!", "¡Para arriba!", "¡Se despega del piso!"],
     cTelPass: (k) => pick([`¡Pasa de largo por la ${k}!`, `¡En la ${k} no se baja nadie!`, `¡La ${k}, de largo!`]),
     cTelUp: ["¡Sigue subiendo!", "¡Más arriba todavía!", "¡Qué vista!"],
-    cTelLast: ["¡QUEDAN DOS!", "¡Última estación!", "¡Acá bajan de a uno!"],
+    cTelLast: (left) =>
+      left <= 2 ? pick(["¡QUEDAN DOS!", "¡Última estación!"]) : pick(["¡Última estación!", "¡Acá bajan de a uno!", `¡Última estación! Quedan ${left}`]),
     cTelOff: (n) => pick([`¡Se baja ${n}!`, `¡${n} se queda en el andén!`, `¡Hasta acá llegó ${n}!`]),
+    cTelOffN: (ns, more) => {
+      const todos = more > 0 ? [...ns, `${more} más`] : ns;
+      return pick([`¡Se bajan ${joinList(todos, "y")}!`, `¡Hasta acá llegaron ${joinList(todos, "y")}!`]);
+    },
     cTelPrize: (n) => pick([`¡Se baja ${n}, y con premio!`, `¡${n} se baja con premio!`]),
     cTelClimb: ["¡Sube solita!", "¡Ya casi llega!", "¡Ya se ve la cumbre!"],
     cTelDock: ["¡LLEGÓ ARRIBA!", "¡TOCÓ LA CUMBRE!", "¡SE ABRE LA PUERTA!"],
@@ -513,25 +542,41 @@ export const T: Record<Lang, Dict> = {
     rqLeft: (n, k) => (n <= k ? `¡Estos ${n} van a la final!` : `¡Quedan ${n}!`),
     rqIntro: "¡A la largada, carril por carril!",
     rqLane: (k) => `CARRIL ${k}`,
-    // --- ¿Quién es?: cartas con cara; cada letra da vuelta a las que no coinciden.
-    gameQuien: "¿Quién es?",
-    cQuiStart: (n) => `¡${n} cartas! Letra por letra, queda una.`,
-    cQuiNext: (k) => `¡Va el premio ${k}: otra vez todas!`,
-    cQuiTwo: (a, b) => pick([`¡Quedan dos: ${a} ${yE(b)} ${b}!`, `¿${a} ${oU(b)} ${b}?`, `¡Entre ${a} ${yE(b)} ${b}!`]),
-    cQuiAskShort: (l) => `¿Tiene la ${l}?`,
-    cQuiAskShortN: (l) => `¿Tiene el ${l}?`,
-    cQuiMine: (l) => pick([`¿Tu nombre tiene la ${l}?`, `¿Y el tuyo? ¿Tiene la ${l}?`, `¡Fijate si tu nombre tiene la ${l}!`]),
-    cQuiMineN: (l) => pick([`¿Tu nombre tiene el ${l}?`, `¿Y el tuyo? ¿Tiene el ${l}?`]),
-    cQuiYes: (l, k) => (k === 1 ? `¡Sí tiene ${l}! Se da vuelta una.` : `¡Sí tiene ${l}! Se dan vuelta ${k}.`),
-    cQuiNo: (l, k) => (k === 1 ? `¡No tiene ${l}! Se da vuelta una.` : `¡No tiene ${l}! Se dan vuelta ${k}.`),
-    cQuiNone: (l, has) => (has ? `¡Sí tiene ${l}! Todas la tienen: no se da vuelta ninguna.` : `¡No tiene ${l}! Ninguna la tiene: no se da vuelta ninguna.`),
-    cQuiDone: (n, k) => pick([`¡${n}, premio ${k}!`, `¡Es ${n}: premio ${k}!`]),
-    cQuiTie: ["¡Mismas letras! El sorteo ya eligió.", "¡Empate de letras! Decide el sorteo."],
-    cQuiTieShort: "¿Mismas letras?",
+    // --- De pie (antes ¿Quién es?): la sala se para y se sienta; cada uno revisa su propio nombre.
+    gameQuien: "De pie",
+    cQuiStart: (n) => `¡${n} personas! Todos de pie. Si no podés, levantá la mano.`,
+    cQuiNext: (k) => `¡Va el premio ${k}! Todos de pie, menos los que ya ganaron.`,
+    cQuiRules: "Vale el nombre de la lista, sin tildes. Si alguien quedó parado por error, la pantalla lo corrige.",
+    cQuiRevisa: (i) => ["¡Revisá tu nombre!", "¿Y el tuyo? Revisalo.", "¡Fijate en tu nombre!"][i % 3] as string,
+    cQuiAskA: "¿TU NOMBRE",
+    cQuiAskAN: "¿TU NÚMERO",
+    cQuiAskL: (l) => `TIENE LA ${l}?`,
+    cQuiAskD: (d) => `TIENE EL ${d}?`,
+    cQuiAskM: () => "EMPIEZA DE LA A A LA M?",
+    cQuiAskG: (k) => `TIENE MÁS DE ${k} LETRAS?`,
+    cQuiAskO: (k) => `ES MAYOR QUE ${k}?`,
+    cQuiSitL: (_l, has) => (has ? "no la tienen" : "la tienen"),
+    cQuiSitD: (_d, has) => (has ? "no lo tienen" : "lo tienen"),
+    cQuiSitM: (has) => (has ? "empiezan de la N a la Z" : "empiezan de la A a la M"),
+    cQuiSitG: (k, has) => (has ? `tienen ${k} letras o menos` : `tienen más de ${k} letras`),
+    cQuiSitO: (k, has) => (has ? `tienen un número menor o igual a ${k}` : `tienen un número mayor que ${k}`),
+    cQuiSits: (f) => `Se sientan los que ${f}`,
+    cQuiYes: (f, i) => (i % 2 ? `¡Sí! A sentarse los que ${f}.` : `¡Sí! Se sientan los que ${f}.`),
+    cQuiNo: (f, i) => (i % 2 ? `¡No! A sentarse los que ${f}.` : `¡No! Se sientan los que ${f}.`),
+    cQuiNone: (has) => (has ? "¡Sí! Están todos: nadie se sienta." : "¡No! No hay ninguno: nadie se sienta."),
+    cQuiFinal: (names) => `¡Finalistas, que los vean! ${names}.`,
+    cQuiFinA: "FINALISTAS",
+    cQuiFinB: "¡QUE LOS VEAN!",
+    cQuiDealB: "¡TODOS DE PIE!",
+    cQuiDone: (n, k) => (k % 2 ? `¡${n}, premio ${k}! Se sienta con su premio.` : `¡Es ${n}: premio ${k}! A sentarse con el premio.`),
+    cQuiTie: "¡Mismas letras! El sorteo ya eligió.",
+    cQuiTope: "¡Nombres casi iguales! El sorteo ya eligió.",
+    cQuiTieShort: "¿MISMAS LETRAS?",
+    cQuiTopeShort: "¿NOMBRES CASI IGUALES?",
     cQuiSi: "¡SÍ!",
     cQuiNoStamp: "¡NO!",
-    cQuiLeft: "QUEDAN",
-    cQuiAlmost: ["¡Casi se da vuelta!", "¡Uy, casi!", "¡Se salvó de milagro!"],
+    cQuiLeft: "DE PIE",
+    cQuiAlmost: (i) => ["¡Uy, casi se sienta!", "¡Uy, casi!", "¡Se salvó de milagro!"][i % 3] as string,
     cSapNext: (k) => `¡Va el premio ${k}!`,
     cSapDone: (k) => pick([`¡Cayó el premio ${k}!`, `¡Ahí quedó el premio ${k}!`]),
     cSapTally: (k, of) => `Premio ${k} de ${of}`,
@@ -675,7 +720,28 @@ export const T: Record<Lang, Dict> = {
     soundOn: "Sonido: sí",
     paceLabel: "Duración", paceFast: "Rápida", paceNormal: "Normal", paceEpic: "Épica",
     gameLabel: "Juego", gameRace: "Carrera de llamas", gameStellar: "Constelación Stellar",
+    // --- El Trueque: una feria de puestos. Cada uno acepta un producto y da otro; un encargo cambia de mano hasta quien lo espera.
+    gameTrueque: "El Trueque", jgTruequeN: "El Trueque",
+    jgTruequeB: "La feria del trueque: cada puesto acepta un producto y da otro a cambio. El encargo sale con uno, cambia de mano en mano y llega con otro a quien lo esperaba, y al final se prende el camino con los nombres de todos los que cambiaron. Así viaja un pago en Stellar. Mejor de veinte a ciento veinte, y hasta doscientas.",
+    gcTrueque: "Cada puesto acepta un producto y da otro a cambio. Gana quien recibe el encargo.",
+    gcTruequeMany: "Cada premio es un encargo que cambia de mano hasta llegar a quien lo espera.",
+    loreTruequeQ: "¿Dónde se sigue haciendo el trueque?",
+    loreTruequeA: "En Pongo K'asa, cada sábado en el kilómetro 94 de la carretera Cochabamba–Oruro, y en Confital los martes, la gente cambia papa, chuño y otros productos. Una nota de Opinión lo llama práctica ancestral: el chhalaku.",
+    trFeria: "¡Se abre la feria!",
+    trAcepta: "Cada puesto acepta un producto y da otro a cambio",
+    trLeyenda: "Arriba, lo que acepta · abajo, lo que da",
+    trSale: (p) => `Sale el encargo con ${p}`,
+    trBusca: (p) => `¿Quién acepta ${p}?`,
+    trCambio: (p) => `¡Cambio! Ahora es ${p}`,
+    trCallejon: ["¡Callejón sin salida!", "Por ahí no se puede", "¡Ahí no hay cambio!"],
+    trNoEs: "¡No, es para el otro!",
+    trCuenta: (k, K) => `CAMBIO ${k} DE ${K}`,
+    trRuta: (pasaron, llego) => `Nadie llega solo: pasó por ${pasaron} y llegó a ${llego}`,
+    trDirecto: (llego) => `Llegó directo a ${llego}`,
+    prPapa: "papa", prChuno: "chuño", prQuinua: "quinua", prMaiz: "maíz", prArroz: "arroz", prYuca: "yuca", prPlatano: "plátano", prCafe: "café",
     gameLedger: "Cierre de Libro", gameRockets: "Carrera de cohetes", gameWheel: "Ruleta",
+    cWheelGroups: (gajos, max) => `¡${gajos} gajos, hasta ${max} personas en cada uno!`,
+    cWheelGroup: (nombres, mas) => (mas ? `${nombres.join(", ")} y ${mas} más` : nombres.length > 1 ? `${nombres[0]} y ${nombres[1]}` : (nombres[0] ?? "")),
     // --- Constelación Stellar. Un pago que salta de nodo en nodo, como el
     //     path payment de Stellar, hasta encontrar ruta al ganador.
     cConstBuild: ["¡Se arma el cielo!", "¡Miren arriba!", "¡Se prenden las estrellas!"],
@@ -700,7 +766,41 @@ export const T: Record<Lang, Dict> = {
     cLedgerFinal: ["¡Estos son los que quedan!", "¡Miren bien, son estos!", "¡Y ahora se sella!"],
     cLedgerNo: "LIBRO",
     cLedgerOk: "CONFIRMADO",
-    wheelCap: "La ruleta se ve linda hasta unos 24 nombres. De ahí para arriba, el sorteo pasa a la tómbola, que muestra a todos.",
+    wheelCap: "La ruleta llega hasta 200 nombres. De ahí para arriba, el sorteo pasa a la tómbola, que muestra a todos.",
+    // El selector recomienda según la cantidad (`ui/recomendar.ts`). Las notas
+    // son claves "rec.<juego>.<lado>": ideal, bajo y alto dentro del rango, y
+    // largo o corto cuando no encaja. Las que llevan números son funciones.
+    recBadge: "Recomendado",
+    recHead: (n: number) => `Para ${n} personas`,
+    "rec.race.ideal": "Cada uno hincha por su llama, y se ve quién va adelante.",
+    "rec.race.bajo": "Con tan pocas llamas dura lo mismo y tiene menos momentos.",
+    "rec.race.largo": (n: number, _min: number, max: number) => `Con ${n}, en la carrera solo se ven ${max}.`,
+    "rec.race.corto": "Con una sola persona no hay carrera.",
+    "rec.sapo.ideal": "Un agujero por persona en la mesa: cada tiro se siente.",
+    "rec.sapo.bajo": "Con pocos, la mesa tiene pocos agujeros y pocos tiros.",
+    "rec.sapo.alto": "Más de 12 pasan por una clasificatoria, y los que salen miran.",
+    "rec.sapo.largo": (n: number, _min: number, max: number) => `Con ${n}, el sapo no se ofrece: su clasificatoria llega a ${max}.`,
+    "rec.sapo.corto": "Con una sola persona no hay sapo.",
+    "rec.trompo.ideal": "Cada tiro cuenta, y los choques arman el duelo.",
+    "rec.trompo.bajo": "Con pocos, va directo al duelo, sin amagues.",
+    "rec.trompo.largo": (n: number, _min: number, max: number) => `Con ${n}, no se ofrece: el máximo es ${max}.`,
+    "rec.trompo.corto": "Con una sola persona no hay trompo.",
+    "rec.chovena.ideal": "La rueda se llena y la sala aplaude al ritmo.",
+    "rec.chovena.bajo": "Con pocos, hay pocas rondas y la rueda se ve vacía.",
+    "rec.chovena.alto": "Con tanta gente, la rueda va llena.",
+    "rec.chovena.largo": (n: number, _min: number, max: number) => `Con ${n}, no se ofrece: hace falta una rueda por comparsa. El máximo es ${max}.`,
+    "rec.chovena.corto": (_n: number, min: number) => `Con menos de ${min}, no hay rondas suficientes.`,
+    "rec.teleferico.ideal": "Cada grupo tiene su cabina y hincha por ella.",
+    "rec.teleferico.bajo": "Con pocas cabinas, cada parada se hace larga.",
+    "rec.teleferico.alto": "Con tanta gente, cada grupo sigue en su cabina.",
+    "rec.teleferico.largo": (n: number, _min: number, max: number) => `Con ${n}, no se ofrece: llega a ${max}.`,
+    "rec.teleferico.corto": (_n: number, min: number) => `Con menos de ${min}, las paradas se hacen largas.`,
+    "rec.trueque.ideal": "Cada uno espera su producto, y toda la sala mira por dónde va el encargo.",
+    "rec.trueque.bajo": "Con pocos puestos, la feria se ve chica.",
+    "rec.trueque.alto": "Con tanta gente, cada uno sabe por su producto si sigue en juego.",
+    "rec.trueque.largo": (n: number, _min: number, max: number) => `Con ${n}, no se ofrece: llega a ${max}.`,
+    "rec.trueque.corto": (_n: number, min: number) => `Con menos de ${min}, el camino es de tres cambios o menos.`,
+    "rec.wheel.largo": (n: number, _min: number, max: number) => `Con ${n}, la ruleta no se ve: llega a ${max} nombres.`,
     prizeLabel: "¿Qué sorteás? (opcional)", prizePh: "O escribí el tuyo…",
     // Los que más se sortean en un evento, en el orden en que se ofrecen.
     prizeSugeridos: ["Polera", "Libro", "Entrada", "Stickers", "Termo", "Kit de bienvenida", "Tarjeta de regalo", "Licencia"],
@@ -789,19 +889,11 @@ export const T: Record<Lang, Dict> = {
     ausenteSi: "Sí, sortear de nuevo",
     ausenteNo: "Cancelar",
     ausenteNota: (nombre, n, otros) => `${nombre} no está: su premio se sortea de nuevo entre las ${n} personas que quedan${otros ? ", sin quienes ya ganaron" : ""}. Sellá la lista para seguir.`,
-    imgBtn: "Imagen para redes",
-    imgLista: "Imagen compartida",
-    imgDescargada: "Imagen descargada",
-    imgFalla: "No se pudo armar la imagen",
     imgKicker: "Resultado del sorteo",
     imgGano: "Ganó",
     imgGanaron: "Ganaron",
     imgPremio: "Premio:",
-    imgEntre: (n, varios) => `${varios ? "Salieron" : "Salió"} entre ${n} personas`,
-    imgMas: (n) => (n === 1 ? "y 1 más" : `y ${n} más`),
     imgPieVarios: "Nadie eligió estos nombres: la lista se cerró antes de que existiera el número que los decidió.",
-    imgSello: "Sorteo verificable",
-    imgTexto: (nombres, premio) => `${nombres.length > 1 ? `Ganaron ${nombres.join(", ")}` : `Ganó ${nombres[0] ?? ""}`}${premio ? ` (${premio})` : ""}. Un sorteo que cualquiera puede comprobar, hecho con Tinkazo: https://tinkazo.app`,
     obTitle: "Tu primer sorteo, paso a paso",
     ob1T: "Cargá la lista",
     ob1B: "Pegá los nombres, uno por línea, o subí el CSV de Luma con los que hicieron check-in.",
@@ -818,8 +910,8 @@ export const T: Record<Lang, Dict> = {
     // --- Las páginas de lectura: juegos, historia y seguridad. Viven aparte de
     //     la herramienta: quien entra a sortear no tiene que leer nada antes.
     masTitle: "Para saber más",
-    masJuegosT: "Los doce juegos",
-    masJuegosB: "Carrera de llamas, chovena, trompo, piñata, Carnaval de Oruro, tómbola, el sapo y cinco más, con la captura de cada uno.",
+    masJuegosT: "Los diez juegos",
+    masJuegosB: "Carrera de llamas, chovena, trompo, piñata, Carnaval de Oruro, el sapo y cuatro más, con la captura de cada uno.",
     masHistoriaT: "De dónde sale el nombre",
     masHistoriaB: "Un tinkazo es una corazonada y un tincazo es un golpecito. El sorteo es las dos cosas.",
     masSeguridadT: "Cómo se puede romper",
@@ -833,6 +925,9 @@ export const T: Record<Lang, Dict> = {
     // --- Las páginas que la gente busca: meetups, clases y sorteo verificable (20 de octubre de 2026).
     pgCta: "Sortear ahora. Participar es gratis.", pgRelT: "Mirá también",
     navMeetup: "Sorteo para meetup", navClase: "Sorteo en clase", navVerif: "Sorteo verificable",
+    // Título y descripción de la portada en inglés. Su <html> no pide estas claves: así el título y la meta quedan en español para el buscador. Quedan aquí por si el autor decide otra cosa.
+    titPortada: "Tinkazo · sorteos verificables para eventos y clases",
+    descPortada: "Sorteos verificables para tu meetup, clase o evento. El ganador sale de un número público que nadie puede elegir. Participar es gratis.",
     // Título y descripción de cada página de sorteo: su <html> trae la clave de cada una.
     titMeetup: "Sorteo para meetup: en pantalla grande y comprobable",
     descMeetup: "Sorteá en tu meetup con pantalla grande y un resultado que cualquiera puede comprobar desde su celular. Pegá la lista o subí el CSV de Luma.",
@@ -849,7 +944,7 @@ export const T: Record<Lang, Dict> = {
     meetS2T: "Sellala antes de sortear",
     meetS2B: "Al sellarla, la lista queda cerrada. Si después alguien mete a otro o saca a uno, se nota.",
     meetS3T: "Elegí un juego",
-    meetS3B: "Doce juegos a pantalla completa: la carrera de llamas, el trompo, la piñata y más.",
+    meetS3B: "Diez juegos a pantalla completa: la carrera de llamas, el trompo, la piñata y más.",
     meetS4T: "Sorteá en pantalla grande",
     meetS4B: "La sala ve el sorteo entero. El ganador ya salió del número público: el juego solo lo cuenta.",
     meetS5T: "Compartí el resultado",
@@ -862,7 +957,7 @@ export const T: Record<Lang, Dict> = {
     meetT3T: "El enlace permite rehacer el sorteo",
     meetT3B: "El comprobante trae la lista y el número. Cualquiera lo abre desde su celular y le tiene que dar el mismo nombre.",
     meetNamesT: "Qué pasa con los nombres",
-    meetNamesB: "Los nombres no se publican: quedan en tu equipo y en el comprobante que compartís. Si compartís el comprobante, compartís también la lista. En Stellar no queda ningún nombre.",
+    meetNamesB: "Los nombres no se publican: quedan en tu equipo y en el comprobante que compartís, que con enlace corto se guarda protegido y Tinkazo no lo puede leer. Si compartís el comprobante, compartís también la lista. En Stellar no queda ningún nombre.",
     meetListaDet: "En Stellar quedan la huella de la lista, la cantidad de entradas, cuántos ganadores, la ronda, la hora del sello y su número de bloque, el premio o título que escribiste, la dirección de quien organiza y el número del sorteo; y, al sortear, la prueba que publicó la ronda, el número que decidió la ronda, la hora del sorteo, si ya se sorteó, su número de bloque y las posiciones de los ganadores.",
     meetKnowT: "Lo que hay que saber",
     meetK1: "Para sortear hay que entrar con tu cuenta. Con Google, en dos toques.",
@@ -885,7 +980,7 @@ export const T: Record<Lang, Dict> = {
     claseS2T: "Sellala",
     claseS2B: "Queda cerrada antes de que exista el número que decide. Después no se cambia sin que se note.",
     claseS3T: "Sorteá con la carrera de llamas o la ruleta",
-    claseS3B: "La ruleta se ve bien hasta unos 24 nombres. Con más gente, la tómbola muestra a todos.",
+    claseS3B: "La ruleta llega hasta 200 nombres. Con más gente, la tómbola muestra a todos.",
     claseWhyT: "Por qué sirve en clase",
     claseW1T: "Nadie elige el número",
     claseW1B: "El número sale de afuera, a una hora fija. Ni el docente ni los alumnos lo pueden elegir.",
@@ -894,7 +989,7 @@ export const T: Record<Lang, Dict> = {
     claseW3T: "Sin cuentas para los alumnos",
     claseW3B: "Los alumnos no instalan nada ni se crean una cuenta. Solo quien sortea entra con la suya.",
     clasePrivT: "Privacidad",
-    clasePrivB: "Los nombres quedan en el navegador de quien sortea y no se publican. No llegan a ningún servidor de Tinkazo. Si compartís el comprobante, compartís también la lista: mejor que no salga de la clase, sobre todo si hay menores de edad.",
+    clasePrivB: "Los nombres quedan en el navegador de quien sortea y no se publican. Ningún servidor de Tinkazo los puede leer: si compartís con enlace corto, lo que se guarda es una copia protegida. Si compartís el comprobante, compartís también la lista: mejor que no salga de la clase, sobre todo si hay menores de edad.",
     verifKicker: "Para comprobar",
     verifH1: "Sorteo verificable: cualquiera puede rehacer el resultado",
     verifLead: "Un sorteo verificable deja las pruebas a la vista. Acá se explica qué se comprueba, quién lo comprueba y qué todavía no promete.",
@@ -930,7 +1025,7 @@ export const T: Record<Lang, Dict> = {
     navMas: "Más",
     ctaDemo: "Ver una demo",
     pjKicker: "El show",
-    pjT: "Doce juegos. Ninguno decide nada.",
+    pjT: "Diez juegos. Ninguno decide nada.",
     pjB: "Tocá uno y miralo sortear con una lista de ejemplo, sin cuenta. Cuando arranca la animación el ganador ya salió: todos cuentan el mismo sorteo.",
     pjVer: "Ver demo",
     confKicker: "Por qué creerle",
@@ -957,7 +1052,7 @@ export const T: Record<Lang, Dict> = {
     cif1: "juegos a pantalla completa",
     cif2v: "0,76 XLM",
     cif2: "por sorteo grabado, medido en testnet el 3 de octubre de 2026: unos 16 centavos. Lo cobra la red, no Tinkazo",
-    cif3: "servidores propios: nada que se caiga de este lado",
+    cif3: "servidores propios para sortear: nada que se caiga de este lado",
     cif4: "código abierto, para que lo revises",
     faqKicker: "Preguntas",
     faqT: "Lo que todos preguntan.",
@@ -1042,7 +1137,7 @@ export const T: Record<Lang, Dict> = {
     cf5t: "Cualquiera lo comprueba",
     cf5b: "El comprobante trae la lista, la ronda y la firma. Desde un celular, el sitio rehace todo y dice si da lo mismo. Si alguien tocó algo, no da.",
     cfGuardaT: "Qué queda guardado y dónde",
-    cfGuardaB: "Lo que se graba en Stellar sigue a tu cuenta en cualquier equipo. Los nombres no: quedan en el navegador donde sellaste y en el comprobante.",
+    cfGuardaB: "Lo que se graba en Stellar sigue a tu cuenta en cualquier equipo. Los nombres no: quedan en el navegador donde sellaste y en el comprobante. Si lo compartís con enlace corto, el comprobante queda además guardado, protegido, sin que Tinkazo lo pueda leer.",
     cfColQue: "Qué",
     cfColDonde: "Dónde",
     cfColQuien: "Quién lo ve",
@@ -1058,19 +1153,22 @@ export const T: Record<Lang, Dict> = {
     cfG4a: "Tu llave",
     cfG4b: "Con Google, la guarda Pollar; con Freighter, tu extensión; con la cuenta de prueba, tu navegador",
     cfG4c: "Nadie más",
+    cfG5a: "El enlace corto, al compartir o mostrar en grande",
+    cfG5b: "Una copia protegida del comprobante, en Cloudflare, hasta que la borres desde Mis sorteos",
+    cfG5c: "Quien tenga el enlace o el QR. Tinkazo no la puede leer",
     cfNoT: "¿Y si no confío en Tinkazo?",
     cfNoB: "El protocolo está escrito y el código es abierto: cualquiera puede rehacer un sorteo sin pasar por este sitio.",
     cfSeg: "Qué impide el protocolo y qué no →",
     cfCod: "El código, en GitHub →",
     navJuegos: "Juegos", navHistoria: "Historia", navSeguridad: "Seguridad",
     navPrecios: "Precios", navCodigo: "Código",
-    jgKicker: "Doce juegos",
+    jgKicker: "Diez juegos",
     jgTitle: "El sorteo se mira",
     jgLead: "Cuando arranca la animación, el ganador ya está decidido: salió del número público del faro. El juego solo lo cuenta. Cada uno pasa veinte comprobaciones antes de entrar, y la que importa es que el nombre en pantalla sea el que fijó el protocolo.",
     jgRaceN: "Carrera de llamas",
     jgRaceB: "Lo nuestro. Ocho carriles por la cordillera: con más de ocho personas corren ocho, y el sorteo igual fue entre todos.",
     jgWheelN: "Ruleta",
-    jgWheelB: "La de siempre, con el perno tricolor marcando la vuelta. Los gajos se reparten intercalados, así que con dos personas igual se ve girar. Hasta veinticuatro.",
+    jgWheelB: "La de siempre, con el perno tricolor marcando la vuelta. Con dos personas igual se ve girar. Más de veinticuatro: cada gajo reúne a un grupo. Hasta doscientas.",
     jgStellarN: "Constelación Stellar",
     jgStellarB: "Un pago que salta de estrella en estrella buscando ruta, como un path payment. Deja dibujada una constelación. Hasta doscientas.",
     jgLedgerN: "Cierre de Libro",
@@ -1105,8 +1203,8 @@ export const T: Record<Lang, Dict> = {
     jgOruB: "La entrada de la Diablada: la comparsa baila por las cuadras, entre las graderías llenas, y en cada arco se quedan algunos. Los dos últimos hacen un contrapunto frente al Socavón, y el que llega entra con campanas y cohetillos. Hasta doscientas.",
     jgSapoN: "Sapo",
     jgSapoB: "El juego de las ferias y los patios: una rana en el medio del cajón y un agujero con el nombre de cada uno. Las argollas pegan en la madera, bailan en el borde de un vecino y salen, y la última cae en el agujero de quien gana. Con más de doce, los nombres se tachan en oleadas hasta que quedan doce. Hasta doscientas, con hasta doce ganadores.",
-    jgQuienN: "¿Quién es?",
-    jgQuienB: "Todos los nombres en cartas, con su cara. En cada turno se pregunta por una letra y se dan vuelta las cartas que no coinciden con el nombre que salió, hasta que queda una sola. Las preguntas se eligen sabiendo quién ganó: el juego no adivina, cuenta. Hasta doscientas.",
+    jgQuienN: "De pie",
+    jgQuienB: "Todos de pie. Cada uno revisa su propio nombre: una letra, un número, la mitad del abecedario o cuántas letras tiene. Los que no siguen se sientan, y el último de pie gana. Hasta doscientas.",
     loreOruroQ: "¿Cuánta gente baila en Oruro?",
     loreOruroA: "Más de 28.000 bailarines y 10.000 músicos, en unos cincuenta conjuntos, según la UNESCO, que lo declaró patrimonio en 2001. La entrada recorre cuatro kilómetros y dura veinte horas sin parar.",
     jgRocketsN: "Carrera de cohetes",
@@ -1121,7 +1219,7 @@ export const T: Record<Lang, Dict> = {
     gcPrizes: (k) => (k === 1 ? "1 premio" : `${k} premios`),
     gcPrizesNote: (k) => `Hay ${k} premios: el juego cuenta el primero y el cartel del final muestra a todos.`,
     gcSapoMany: "Cada nombre tiene su agujero. Cada argolla que entra es un premio.",
-    gcQuienMany: "Una ronda por premio: en cada una se dan vuelta las cartas que no coinciden y gana la última.",
+    gcQuienMany: "Una ronda por premio: los que ganan se sientan con su premio, y gana el último de pie.",
     gcTelefericoMany: "En cada estación se baja un grupo entero. Los últimos en bajarse ganan premio, y el primero llega a la cumbre.",
     gcSapoQual: "Con más de doce, primero se tachan nombres hasta que quedan doce.",
     gcRace: "Gana la primera llama que cruza la meta.",
@@ -1132,12 +1230,12 @@ export const T: Record<Lang, Dict> = {
     gcPinata: "Con cada palo caen caramelos. Gana el último que queda adentro.",
     gcOruro: "En cada cuadra se quedan bailarines. Gana el que llega al Socavón.",
     gcTombola: "Cada uno tiene una bola con su número, y la lista está al lado del bombo. Gana la que cae en el vaso.",
-    gcWheel: "A cada persona le tocan uno o más gajos. Gana el gajo que queda bajo la flecha.",
+    gcWheel: "Gana el gajo que queda bajo la flecha. Con muchas personas, cada gajo reúne a un grupo.",
     gcTeleferico: "En cada estación se baja un grupo entero. Gana quien llega a la cumbre.",
     gcPasanaku: "La tela se cierra y los bultos se caen. Gana el que queda en el nudo.",
     gcStellar: "Un paquete salta de estrella en estrella. Gana la última que toca.",
     gcSapo: "Cada nombre tiene su agujero. Gana el agujero donde cae la última argolla.",
-    gcQuien: "Las cartas que no coinciden con la respuesta se dan vuelta. Gana la última.",
+    gcQuien: "Todos de pie: en cada pregunta sobre un nombre se sientan los que no siguen. Gana el último de pie.",
     gcLedger: "Las pasadas barren tarjetas. Gana la que queda sellada.",
     gcRockets: "Gana el primer cohete que llega.",
     gcTotora: "Gana la primera balsa que llega a la otra orilla.",
@@ -1162,12 +1260,12 @@ export const T: Record<Lang, Dict> = {
     tmQ1B: "Tinkazo no cobra por participar y no es para sorteos que cobren: un sorteo con entrada paga es una rifa o una lotería, y en casi todo el mundo pide licencia. Tampoco es para apuestas: nadie apuesta al resultado, no hay un pozo de plata y el contrato no guarda fondos. Usarlo para cobrar la entrada o para recibir apuestas va contra estos términos.",
     tmQ2T: "Quien organiza responde",
     tmQ2B: "El sorteo es tuyo: el premio, las bases, avisarle a quien gana y lo que pida la ley de tu país. En algunos, como Brasil, Colombia o México, hasta un sorteo gratuito pide permiso. Las bases que arma Tinkazo ayudan, pero no reemplazan lo que diga tu ley.",
-    tmQ3T: "Los nombres no salen de tu navegador",
-    tmQ3B: "Los nombres nunca suben a la cadena. Suben la huella de la lista, la cantidad de entradas, cuántos ganadores, la ronda, la hora del sello y su número de bloque, el premio o título que escribiste, la dirección de quien organiza y el número del sorteo; y, al sortear, la prueba que publicó la ronda, el número que decidió la ronda, la hora del sorteo, si ya se sorteó, su número de bloque y las posiciones de los ganadores. El comprobante lleva los nombres en la parte de la dirección que el navegador no le manda a ningún servidor; por eso quien comparte el enlace comparte la lista, y si avisás por WhatsApp, el enlace con la lista pasa por WhatsApp. El QR y las caras se dibujan acá mismo.",
+    tmQ3T: "Dónde van los nombres",
+    tmQ3B: "Los nombres nunca suben a la cadena. Suben la huella de la lista, la cantidad de entradas, cuántos ganadores, la ronda, la hora del sello y su número de bloque, el premio o título que escribiste, la dirección de quien organiza y el número del sorteo; y, al sortear, la prueba que publicó la ronda, el número que decidió la ronda, la hora del sorteo, si ya se sorteó, su número de bloque y las posiciones de los ganadores. El comprobante lleva los nombres en la parte de la dirección que el navegador no le manda a ningún servidor; por eso quien comparte el enlace comparte la lista, y si avisás por WhatsApp, el enlace con la lista pasa por WhatsApp. El QR y las caras se dibujan acá mismo. Al compartir o al mostrar el resultado en grande se arma un enlace corto: en Cloudflare queda una copia del comprobante protegida con una clave que va solo en el enlace. Tinkazo no la puede leer, y la abre quien tenga el enlace o el QR, que lleva la lista. La borrás con «Borrar el enlace corto», en Mis sorteos: el permiso para hacerlo queda en este equipo.",
     tmQ4T: "Lo que queda guardado",
     tmQ4B: "Si conectás una cuenta, su dirección pública queda en el contrato como la de quien organizó el sorteo: es pública a propósito, para que cada sorteo tenga dueño. Si entrás con Google, Pollar recibe tu nombre, tu correo y tu foto, y guarda la llave; Tinkazo nunca la ve. En este equipo quedan tus preferencias, como el idioma, el sonido y el ritmo del show; el historial de tus sorteos con sus listas, que se borra desde el sitio; y la llave de la cuenta de prueba si la usás.",
     tmMoreT: "Y además",
-    tmMore1: "No hay publicidad ni rastreadores que te sigan de un sitio a otro, ni una base de datos de participantes. Durante un sorteo el sitio pide afuera el número que publica un faro público y, si tenés cuenta, lo que hace falta de la red Stellar y de Pollar.",
+    tmMore1: "No hay publicidad ni rastreadores que te sigan de un sitio a otro, ni una base de datos de participantes que podamos leer. Durante un sorteo el sitio pide afuera el número que publica un faro público y, si tenés cuenta, lo que hace falta de la red Stellar y de Pollar; al compartir o mostrar en grande, guarda el enlace corto en Cloudflare.",
     tmMore2: "El sitio está en Vercel, que como todo alojamiento anota las visitas: dirección IP y navegador. También contamos visitas con la analítica de Vercel: qué página se abrió, desde qué país y en qué tipo de equipo, sin cookies y sin guardar quién sos. Si tu navegador pide que no te sigan, no te contamos. Los nombres no llegan a ninguno de los dos: van después del # de la dirección, que el navegador no le manda al servidor, y esa parte se corta antes de contar.",
     tmMore3: "Tinkazo es código abierto (MIT) y se ofrece tal cual, sin garantías. Hoy el contrato vive en testnet, la red de prueba de Stellar, que se borra entera el 16 de diciembre de 2026. Si algo falla a mitad de un sorteo, cualquiera lo rehace con la lista y la ronda: para eso está el protocolo.",
     tmMore4: "Vigentes desde el 16 de octubre de 2026, cuando sumamos el conteo de visitas. Si cambian, cambia esta página, con su fecha.",
@@ -1193,13 +1291,14 @@ export const T: Record<Lang, Dict> = {
     sgLimit2: "Los nombres nunca suben a la cadena. Suben la huella de la lista, la cantidad de entradas, cuántos ganadores, la ronda, la hora del sello y su número de bloque, el premio o título que escribiste, la dirección de quien organiza y el número del sorteo; y, al sortear, la prueba que publicó la ronda, el número que decidió la ronda, la hora del sorteo, si ya se sorteó, su número de bloque y las posiciones de los ganadores.",
     sgLimit3: "Lo que el contrato guarda tiene alquiler: si nadie lo extiende, la entrada se archiva y deja de leerse hasta que alguien la restaure pagando. Y hoy el contrato está en testnet, que Stellar borra entera el 16 de diciembre de 2026: ahí sí se pierde el registro y el veredicto deja de ser verde.",
     sgLimit4: "Si el faro público se cayera entero y para siempre, un sorteo sellado quedaría sin número. Hay cuatro relays, tres de drand.sh y uno de Cloudflare, y se rotan hasta que uno contesta.",
+    sgLimitCorto: "El enlace corto (tinkazo.app/c/…) guarda en Cloudflare una copia del comprobante protegida con una clave que va solo en el enlace: Tinkazo no la puede leer. Tampoco decide nada: la página vuelve a calcular el sorteo y lo compara con Stellar, y si el servicio se cae, el enlace largo de siempre sigue andando.",
     sgLimit5: "El sello impide cambiar la lista después, no armarla mal desde el principio: quien organiza puede meter nombres de relleno o repetidos, o dejar afuera a alguien. Por eso, antes de sellar, la lista se puede mostrar a la sala con un QR para que cada uno se busque en su celular; los repetidos salen marcados, el comprobante tiene un buscador, y la importación de Luma propone solo a los que hicieron check-in.",
     sgReportT: "Si encontrás una forma de torcer un sorteo",
     sgReportB: "Abrí un issue. Es el reporte que más sirve, y el proyecto es código abierto justamente para eso: el protocolo completo, el contrato y las amenazas conocidas están escritos y se pueden auditar sin pedirle permiso a nadie.",
     sgLinkProto: "El protocolo ↗", sgLinkAmen: "Las amenazas ↗", sgLinkIssue: "Abrir un issue ↗",
     prTitle: "Precios", prNote: "Participar y verificar: gratis, siempre. Lo que se cobre se anuncia antes, en tu moneda o en cripto.",
     pr1t: "Gratis", pr1p: "$0 · comunidades, educación y ONG",
-    pr1b: "Los doce juegos y el enlace para que cualquiera compruebe. En mainnet la red la paga Tinkazo, hasta un límite al mes.",
+    pr1b: "Los diez juegos y el enlace para que cualquiera compruebe. En mainnet la red la paga Tinkazo, hasta un límite al mes.",
     pr2t: "Evento", pr2p: "desde US$ 29 · pronto",
     pr2b: "Para empresas: tu logo en el estadio y sin límite. Llave en mano, con alguien en la sala, desde US$ 125.",
     pr3t: "Anual", pr3p: "desde US$ 300 al año · pronto",
@@ -1209,7 +1308,7 @@ export const T: Record<Lang, Dict> = {
     prPayTitle: "Cómo vas a pagar",
     prPayBody: "Como se paga en tu país: con QR o tarjeta en tu moneda (en Bolivia, el QR de tu banco en bolivianos). O en USDC o XLM desde tu wallet, desde cualquier lugar. Llega con mainnet.",
     prNeverTitle: "Lo que nunca vamos a cobrar",
-    prNeverBody: "A quien participa: entrar a un sorteo es gratis, siempre, y por eso no es una apuesta. Una parte de los premios: el premio va del organizador al ganador, sin pasar por Tinkazo. Verificar: cualquiera rehace el sorteo gratis. Y los nombres de tu lista no se venden: no llegan a ningún servidor nuestro.",
+    prNeverBody: "A quien participa: entrar a un sorteo es gratis, siempre, y por eso no es una apuesta. Una parte de los premios: el premio va del organizador al ganador, sin pasar por Tinkazo. Verificar: cualquiera rehace el sorteo gratis. Y los nombres de tu lista no se venden: ningún servidor nuestro los puede leer.",
     prPayM1: "QR o tarjeta, en tu moneda",
     prPayM2: "USDC",
     prPayM3: "XLM",
@@ -1221,20 +1320,32 @@ export const T: Record<Lang, Dict> = {
     noAnchor: "sin registrar en Stellar", onChain: "verlo en la cadena",
     txSimulating: "Armando la transacción…", txSigning: "Aprobá la operación en tu billetera…",
     txSending: "Mandando a la red…", txConfirmed: "Quedó en Stellar ·", txCost: "Comisión de la red: hasta",
-    "errAnchor.notFound": "El contrato no encuentra ese sorteo.",
-    "errAnchor.alreadyDrawn": "Ese sorteo ya se cerró.",
+    "errAnchor.notFound": "No encontramos ese sorteo en Stellar. Sellá la lista de nuevo.",
+    "errAnchor.alreadyDrawn": "Ese sorteo ya tiene ganador. Lo encontrás en Mis sorteos.",
     "errAnchor.tooFewEntries": "Con uno solo no hay sorteo. Metele al menos dos.",
-    "errAnchor.badWinnerCount": "Esa cantidad de ganadores no va.",
+    "errAnchor.badWinnerCount": "Esa cantidad de ganadores no va. Elegí menos que las personas de la lista.",
     "errAnchor.roundTooSoon": "Esa ronda está demasiado cerca. Probá de nuevo.",
-    "errAnchor.roundTooFar": "Esa ronda está a más de 30 días. Elegí una más cerca.",
-    "errAnchor.roundNotReady": "Esa ronda todavía no se publica. Esperá unos segundos.",
-    "errAnchor.invalidSignature": "El contrato rechazó la prueba de la ronda.",
+    "errAnchor.roundTooFar": "La hora de tu equipo está corrida y la ronda quedó a más de 30 días. Corregila y probá de nuevo.",
+    "errAnchor.roundNotReady": "Esa ronda todavía no se publica. Esperá unos segundos y probá de nuevo.",
+    "errAnchor.invalidSignature": "El contrato rechazó la prueba de la ronda. Probá de nuevo en unos segundos.",
     "errAnchor.metaTooLong": "El nombre del premio es muy largo. Cortalo un poco.",
-    "errAnchor.noFunds": "Tu cuenta no tiene saldo para pagar la comisión de la red.",
-    "errAnchor.userRejected": "Cancelaste la aprobación en la wallet.",
-    "errAnchor.rpcDown": "No pude hablar con la red de Stellar. Probá de nuevo.",
+    "errAnchor.noFunds": "Tu cuenta no tiene saldo para pagar la comisión de la red. Cargale XLM y probá de nuevo.",
+    "errAnchor.userRejected": "Cancelaste la aprobación en la billetera. Apretá de nuevo y aprobala.",
+    "errAnchor.rpcDown": "No pude conectarme con la red de Stellar. Revisá tu conexión y probá de nuevo.",
     "errAnchor.busy": "La red estaba ocupada y no tomó la transacción. Probá de nuevo en unos segundos.",
-    "errAnchor.unknown": "La red rechazó la transacción. Suele ser pasajero: probá de nuevo en unos segundos.",
+    "errAnchor.unknown": "No se pudo grabar en Stellar. Probá de nuevo en unos segundos.",
+    // Transacciones (21-oct): qué pasó, cuando no fue el contrato.
+    "errAnchor.offline": "Estás sin internet. Conectate y probá de nuevo.",
+    "errAnchor.unconfirmed": "Lo mandamos, pero no pudimos confirmar si entró. Revisá tu conexión y apretá de nuevo: no se va a grabar dos veces.",
+    "errAnchor.wallet": "Tu billetera no aprobó la operación. Abrila y probá de nuevo.",
+    txVerifying: "Revisando si quedó grabado…",
+    txRetrying: "La red no contestó. Probando de nuevo…",
+    drawTryRed: "La red no contestó. Reintento {i} de {n}…",
+    drawTryOcupada: "La red está ocupada. Reintento {i} de {n}…",
+    drawTryOtra: "Todavía no quedó grabado. Reintento {i} de {n}…",
+    errDetalle: "Ver detalle",
+    errCopiar: "Copiar",
+    errCopiado: "Copiado ✓",
     vVerdictPartialKicker: "La cuenta cierra",
     vVerdictPartial: "El cálculo está bien, pero falta un testigo",
     vVerdictPartialDetail: "Con esta lista y este número, el ganador es el que dice. Pero este sorteo no quedó registrado en Stellar, así que nadie más que el organizador puede confirmar que esta era la lista original. Anclarlo cuesta unos centavos y cierra ese hueco.",
@@ -1250,9 +1361,9 @@ export const T: Record<Lang, Dict> = {
     vRound: "Ver la ronda pública ↗", vContract: "Ver el contrato ↗",
     vWorking: "Revisando el sorteo", vWorkingKicker: "Un segundo",
     vVerdictOkKicker: "Cuadra todo", vVerdictBadKicker: "Algo no cuadra",
-    vVerdictOk: "El sorteo es legítimo",
+    vVerdictOk: "El sorteo cuadra",
     vVerdictOkDetail: "Rehicimos el sorteo desde cero acá mismo y dio el mismo nombre. La lista se selló antes de que existiera el número, así que nadie pudo elegir el resultado.",
-    vVerdictOkChain: "El sorteo es legítimo y está en Stellar",
+    vVerdictOkChain: "El sorteo cuadra y está en Stellar",
     vVerdictOkChainDetail: "Lo rehicimos acá y coincide con lo que quedó grabado en el contrato. Ese registro sigue ahí aunque Tinkazo desaparezca, y cualquiera puede leerlo.",
     vVerdictOkChainDetailTest: "Lo rehicimos acá y coincide con lo que quedó grabado en el contrato. Está en testnet, la red de pruebas de Stellar, que se borra entera el 16 de diciembre de 2026: hasta entonces, cualquiera puede leer ese registro.",
     vChainMissing: "el contrato no tiene ese sorteo",
@@ -1292,7 +1403,7 @@ export const T: Record<Lang, Dict> = {
     vListChanged: "La lista de este enlace no es la que se selló. Alguien la cambió después.",
     vBadSignature: "La firma de la ronda no verifica contra la clave pública del faro.",
     vMismatch: "El ganador recomputado no coincide con el que quedó registrado.",
-    shareProof: "Compartir el resultado", proofCopied: "¡Copiado! Pegalo en el grupo",
+    shareProof: "Compartir el resultado",
     // Enlace de evento (evento.html): varios sorteos del mismo evento, en un solo enlace.
     evKickerRevisando: "Revisando", evTituloRevisando: "Revisando los sorteos", evProgreso: "Van {i} de {n}.",
     evKickerOk: "Todo cuadra", evTituloOk: "Los sorteos cuadran",
@@ -1369,17 +1480,14 @@ export const T: Record<Lang, Dict> = {
     cWin: (n, many) => pick(many ? [`¡GANAN ${n}!`, `¡SE LO LLEVAN ${n}!`, `¡ES PARA ${n}!`, `¡EL TINKAZO ES PARA ${n}!`] : [`¡GANA ${n}!`, `¡SE LO LLEVA ${n}!`, `¡ES PARA ${n}!`, `¡EL TINKAZO ES PARA ${n}!`]),
     summary: (w, n, premio, enlace, varios) =>
       `${premio ? `Sorteo de ${premio}: ${varios ? "ganaron" : "ganó"}` : varios ? "Ganaron" : "Ganó"} ${w}, entre ${n} personas.\nNadie eligió ${varios ? "estos nombres" : "este nombre"}.\nSi querés verificarlo, entrá acá: ${enlace}\n\nSorteado con Tinkazo · https://tinkazo.app`,
-    summaryEvento: (f, n, enlace) =>
-      `Sorteos del ${f} (${n} ${n === 1 ? "sorteo" : "sorteos"}), todos verificables.\nSi querés verificarlos, entrá acá:\n${enlace}\n\nSorteado con Tinkazo · https://tinkazo.app`,
+    summaryEvento: (f, n, enlace, lineas = []) =>
+      `Sorteos del ${f} (${n === 1 ? "1 sorteo), verificable" : `${n} sorteos), todos verificables`}.\n${lineas.map((l) => `${l}\n`).join("")}Si querés ${n === 1 ? "verificarlo" : "verificarlos"}, entrá acá:\n${enlace}\n\nSorteado con Tinkazo · https://tinkazo.app`,
     histGrupoT: "Sorteos del {f}", histGrupoCompartir: "Compartir el evento",
     evAvisoPartes: "El evento va en {n} enlaces, para que ninguno se corte al pegarlo.",
     evParte: "Parte {i} de {n}",
     // --- Compartir un comprobante otra vez, y eventos con nombre (20 de octubre de 2026).
     // Los mensajes repiten la forma de T.es.summary y summaryEvento: un test los compara.
     cmpSorteo: "Compartir el sorteo", cmpBtn: "Compartir", cmpMensaje: "Mensaje para el grupo",
-    cmpWhatsapp: "Mandar por WhatsApp", cmpImagenCompartir: "Compartir la imagen con el QR", cmpImagenBajar: "Bajar la imagen con el QR",
-    cmpSinQr: "Es demasiado largo para un QR: el mensaje trae el enlace igual.",
-    cmpCardUno: "Ganó {w}", cmpCardVarios: "Ganaron {w}",
     cmpCabPremioUno: "Sorteo de {premio}: ganó {w}, entre {n} personas.",
     cmpCabPremioVarios: "Sorteo de {premio}: ganaron {w}, entre {n} personas.",
     cmpCabUno: "Ganó {w}, entre {n} personas.", cmpCabVarios: "Ganaron {w}, entre {n} personas.",
@@ -1387,14 +1495,45 @@ export const T: Record<Lang, Dict> = {
     cmpVerificarUno: "Si querés verificarlo, entrá acá: {enlace}",
     cmpVerificarEv: "Si querés verificarlos, entrá acá:\n{enlace}",
     cmpPie: "Sorteado con Tinkazo · https://tinkazo.app",
-    cmpEvUno: "{t} (1 sorteo), todos verificables.", cmpEvVarios: "{t} ({n} sorteos), todos verificables.",
+    cmpEvUno: "{t} (1 sorteo), verificable.", cmpEvVarios: "{t} ({n} sorteos), todos verificables.",
+    // --- La página del enlace corto, c.html (21 de octubre de 2026).
+    cTitulo: "Comprobante de un sorteo en Tinkazo",
+    cDesc: "Abrilo para ver quién ganó y comprobarlo vos mismo, desde tu celular.",
+    cKicker: "Comprobante de un sorteo",
+    cAbriendo: "Abriendo el comprobante…", cAbriendoB: "En un momento ves quién ganó y lo comprobás vos.",
+    cRedT: "No pudimos abrir el comprobante", cRedB: "Revisá tu conexión y probá de nuevo.",
+    cNoExisteT: "Este enlace ya no existe", cNoExisteB: "Quien lo compartió lo borró, o se copió mal. Pedile que te lo mande de nuevo.",
+    cRotoT: "Este enlace no se puede abrir", cRotoB: "Puede que se haya copiado mal o le falte un pedazo. Pedile a quien te lo mandó que lo comparta de nuevo.",
+    cOtraVez: "Probar de nuevo", cPortada: "Ir a la portada",
+    cmpVerificarEvUno: "Si querés verificarlo, entrá acá:\n{enlace}",
+    // --- El enlace corto y la foto con el QR (21 de octubre de 2026).
+    cmpWa: "Compartir por WhatsApp", cmpPreparando: "Preparando la foto…",
+    cmpBajarFoto: "Descargar la foto", cmpBajarFotos: "Descargar las fotos",
+    cmpPegaLaFoto: "Copiamos la foto: pegala en el chat de WhatsApp.",
+    cmpAdjuntaLaFoto: "La foto se descargó: adjuntala en el chat de WhatsApp.",
+    cmpAdjuntaLasFotos: "Las fotos se descargaron: adjuntalas en el chat de WhatsApp.",
+    cmpNoAparece: "¿No estaba WhatsApp? Descargá la foto y copiá el mensaje para pegarlos en el chat.",
+    cmpFotoAlt: "La foto con quién ganó y el QR para comprobarlo",
+    cmpSinFoto: "No se pudo armar la foto: el mensaje trae el enlace igual.",
+    cmpPrivLista: "Quien tenga la foto o el enlace puede ver la lista entera.",
+    cmpPrivCorto: "El enlace corto guarda una copia protegida que Tinkazo no puede leer.",
+    cmpPrivBorrar: "La borrás desde Mis sorteos.",
+    cmpBorrarCorto: "Borrar el enlace corto", cmpBorrarCortos: "Borrar los enlaces cortos",
+    cmpBorrarCortoConf: "Quien tenga el enlace corto o su QR ya no lo va a poder abrir. El sorteo y su comprobante quedan como están. ¿Lo borramos?",
+    cmpBorrarCortosConf: "Se borran todos los enlaces cortos que se crearon desde este equipo: quien los tenga, o tenga su QR, ya no los va a poder abrir. Los sorteos y sus comprobantes quedan como están. ¿Dale?",
+    cmpCortoBorrado: "Enlace corto borrado.", cmpCortosBorrados: "Enlaces cortos borrados.",
+    cmpCortoNoSeBorro: "No se pudo borrar: revisá tu conexión y probá de nuevo.",
+    fotoEscanear: "Escaneá para comprobarlo",
+    fotoSinQr: "Para comprobarlo, abrí el enlace que va con esta foto.",
+    fotoNumero: "Sorteo #{n}", fotoPrueba: "red de prueba", fotoEvento: "Evento",
+    fotoEntreUno: "Salió entre {n} personas", fotoEntreVarios: "Salieron entre {n} personas", fotoMas: "y {n} más",
     evnT: "Mis eventos",
     evnLead: "Un evento junta sorteos bajo un nombre, para mandarlos juntos. Sumale sorteos desde cada uno de tus sorteos.",
     evnNombre: "Nombre del evento", evnCrear: "Crear evento", evnGuardar: "Guardar el nombre",
     evnBorrar: "Borrar el evento", evnBorrarConf: "Se borra el evento. Sus sorteos vuelven a la lista de Mis sorteos. ¿Dale?",
     evnSumar: "Sumar a un evento…", evnQuitar: "Quitar del evento", evnVerLista: "Ver los sorteos",
     evnVacio: "Todavía no hay eventos. Creá uno, o ponele nombre a un grupo de sorteos.",
-    evnNombrar: "Ponerle nombre", evnCompartirPartes: "Compartir el evento ({n} partes)",
+    evnNombrar: "Ponerle nombre",
     evnSumado: "Sumado a {nombre}.", evnQuitado: "Quitado de {nombre}.", evnNombreVacio: "Ponele un nombre al evento.",
     evnCreado: "Evento creado: {nombre}.", evnSinSorteos: "Todavía no tiene sorteos: sumale alguno desde Mis sorteos.",
     vCompartir: "Compartir este sorteo",
@@ -1453,6 +1592,10 @@ export const T: Record<Lang, Dict> = {
     guestReadyOff: "Cuenta de prueba lista, pero vacía: el grifo está apagado en esta sesión.",
     txPreparing: "Preparando tu cuenta…",
     "errAnchor.accountNotReady": "Tu cuenta todavía no está lista. Probá de nuevo en un minuto.",
+    // Bloque pantalla
+    compartirOn: "Para compartir: sí",
+    compartirOff: "Para compartir: no",
+    compartirTip: "Más contraste, nombres más grandes y menos partículas, para que se lea en Zoom o en una pantalla compartida. Vale para esta pestaña.",
   },
   en: {
     badge: 'Draw for your <span class="rotating" data-words="meetup|class|event|workshop|talk|conference">meetup</span>',
@@ -1467,7 +1610,7 @@ export const T: Record<Lang, Dict> = {
     s2t: "Seal the list",
     s2b: "Sealing stamps the list with a short summary of the list (its fingerprint) and a time. If someone slips in a friend or drops a name later, the fingerprint changes and everybody sees it. And the fingerprint is recorded on Stellar.",
     s3t: "Pick a game and draw",
-    s3b: "One of the twelve games, full screen. By the time the animation starts, the public number has already picked the winner: the animation just tells it.",
+    s3b: "One of the ten games, full screen. By the time the animation starts, the public number has already picked the winner: the animation just tells it.",
     p1: "Participants", p2: "Sealed list", p3: "The draw",
     srcPaste: "Paste list", srcCsv: "Upload CSV", srcLuma: "From Luma", srcMeetup: "Meetup · soon",
     srcLumaTip: "Export your Luma event's guest list as CSV",
@@ -1482,7 +1625,7 @@ export const T: Record<Lang, Dict> = {
     histCount: "{n} on your account",
     histCountBoth: "{n} on this device · {c} from the chain",
     histCountChain: "{c} from the chain",
-    histWhy: "This device remembers the draws you ran here, names included. The ones you anchored from another device come from the chain: the date, the prize and which spot on the list won are there, but not the names, which are never published. Clearing the site data loses this device's list, not the draws, and with the receipt the math can always be redone.",
+    histWhy: "This device remembers the draws you ran here, names included. The ones you anchored from another device come from the chain: the date, the prize and which spot on the list won are there, but not the names, which are never published. Clearing the site data loses this device's list, not the draws, and with the receipt the math can always be redone. If you shared a draw with a short link, a protected copy that Tinkazo can't read stays until you delete it with “Delete the short link”.",
     histFromChain: "from the chain",
     histRebuild: "rebuild receipt",
     histRebuildTitle: "Rebuild the receipt",
@@ -1595,6 +1738,7 @@ export const T: Record<Lang, Dict> = {
     impNoNames: (f) => (f ? `"${f}" has no names: the list was left as it was.` : "What you pasted has no names: the list was left as it was."),
     impNotText: (f) => `"${f}" isn't a text file. If it's a spreadsheet, save it as CSV and upload it again. The list was left as it was.`,
     impHeaderOut: (h) => `"${h}" is the column header: it doesn't go into the draw.`,
+    impInvisibles: (n) => `Removed invisible characters from ${n === 1 ? "1 name" : `${n} names`}: they don't show, and with them the same name could get in twice.`,
     impSkipped: (n, lines) => (n === 1 ? `1 row couldn't be read (line ${lines}) and was left out.` : `${n} rows couldn't be read (lines ${lines}) and were left out.`),
     impSkippedHint: "It's usually a comma without quotes. Fix it in the file and upload it again, or add that name by hand.",
     impSkippedShort: (n) => (n === 1 ? "1 row couldn't be read" : `${n} rows couldn't be read`),
@@ -1620,8 +1764,13 @@ export const T: Record<Lang, Dict> = {
     cTelGo: ["THE CABLE CAR IS OFF!", "Up we go!", "Off the ground!"],
     cTelPass: (k) => pick([`Straight through station ${k}!`, `Nobody gets off at ${k}!`, `Station ${k}, no stop!`]),
     cTelUp: ["Still climbing!", "Higher still!", "What a view!"],
-    cTelLast: ["TWO LEFT!", "Last station!", "One by one, here!"],
+    cTelLast: (left) =>
+      left <= 2 ? pick(["TWO LEFT!", "Last station!"]) : pick(["Last station!", "One by one, here!", `Last station! ${left} left`]),
     cTelOff: (n) => pick([`${n} gets off!`, `${n} stays on the platform!`, `End of the line for ${n}!`]),
+    cTelOffN: (ns, more) => {
+      const all = more > 0 ? [...ns, `${more} more`] : ns;
+      return pick([`${joinList(all, "and")} get off!`, `End of the line for ${joinList(all, "and")}!`]);
+    },
     cTelPrize: (n) => pick([`${n} gets off, with a prize!`, `${n} steps off with a prize!`]),
     cTelClimb: ["Climbing alone!", "Almost there!", "Nobody breathe!"],
     cTelDock: ["IT MADE THE TOP!", "TOP OF THE LINE!", "DOORS OPENING!"],
@@ -1699,25 +1848,41 @@ export const T: Record<Lang, Dict> = {
     rqLeft: (n, k) => (n <= k ? `These ${n} go to the final!` : `${n} left!`),
     rqIntro: "To the start, lane by lane!",
     rqLane: (k) => `LANE ${k}`,
-    // --- Who is it?: face cards; each letter flips the ones that don't match.
-    gameQuien: "Who is it?",
-    cQuiStart: (n) => `${n} cards! Letter by letter, one is left.`,
-    cQuiNext: (k) => `Prize ${k} now: all cards back!`,
-    cQuiTwo: (a, b) => pick([`Two left: ${a} and ${b}!`, `${a} or ${b}?`, `Between ${a} and ${b}!`]),
-    cQuiAskShort: (l) => `Letter ${l}?`,
-    cQuiAskShortN: (l) => `Number ${l}?`,
-    cQuiMine: (l) => pick([`Does your name have ${l}?`, `What about yours? Any ${l}?`, `Check: does your name have ${l}?`]),
-    cQuiMineN: (l) => pick([`Does your name have a ${l}?`, `What about yours? Any ${l}?`]),
-    cQuiYes: (l, k) => (k === 1 ? `Yes, it has ${l}! One card flips.` : `Yes, it has ${l}! ${k} cards flip.`),
-    cQuiNo: (l, k) => (k === 1 ? `No ${l}! One card flips.` : `No ${l}! ${k} cards flip.`),
-    cQuiNone: (l, has) => (has ? `Yes, it has ${l}! They all do: no card flips.` : `No ${l}! None of them has it: no card flips.`),
-    cQuiDone: (n, k) => pick([`${n}, prize ${k}!`, `It's ${n}: prize ${k}!`]),
-    cQuiTie: ["Same letters! The draw already chose.", "A letter tie! The draw decides."],
-    cQuiTieShort: "Same letters?",
+    // --- Stand up (antes Who is it?): the room stands; each person checks their own name.
+    gameQuien: "Stand up",
+    cQuiStart: (n) => `${n} people! Everybody up. If you can't stand, raise your hand.`,
+    cQuiNext: (k) => `Prize ${k} now! Everybody up, except the ones who already won.`,
+    cQuiRules: "The name on the list counts, without accents. If someone stays up by mistake, the screen corrects it.",
+    cQuiRevisa: (i) => ["Check your name!", "What about yours? Check it.", "Look at your name!"][i % 3] as string,
+    cQuiAskA: "DOES YOUR NAME",
+    cQuiAskAN: "IS YOUR NUMBER",
+    cQuiAskL: (l) => `HAVE THE LETTER ${l}?`,
+    cQuiAskD: (d) => `HAVE THE NUMBER ${d}?`,
+    cQuiAskM: () => "START BETWEEN A AND M?",
+    cQuiAskG: (k) => `HAVE MORE THAN ${k} LETTERS?`,
+    cQuiAskO: (k) => `GREATER THAN ${k}?`,
+    cQuiSitL: (l, has) => (has ? `don't have the letter ${l}` : `have the letter ${l}`),
+    cQuiSitD: (d, has) => (has ? `don't have the number ${d}` : `have the number ${d}`),
+    cQuiSitM: (has) => (has ? "start between N and Z" : "start between A and M"),
+    cQuiSitG: (k, has) => (has ? `have ${k} letters or fewer` : `have more than ${k} letters`),
+    cQuiSitO: (k, has) => (has ? `have a number ${k} or lower` : `have a number greater than ${k}`),
+    cQuiSits: (f) => `Sit down: those who ${f}`,
+    cQuiYes: (f, i) => (i % 2 ? `Yes! Sitting down: those who ${f}.` : `Yes! Sit down: those who ${f}.`),
+    cQuiNo: (f, i) => (i % 2 ? `No! Sitting down: those who ${f}.` : `No! Sit down: those who ${f}.`),
+    cQuiNone: (has) => (has ? "Yes! Everyone is in: nobody sits." : "No! Nobody is in: nobody sits."),
+    cQuiFinal: (names) => `Finalists, let's see them! ${names}.`,
+    cQuiFinA: "FINALISTS",
+    cQuiFinB: "LET'S SEE THEM!",
+    cQuiDealB: "EVERYBODY UP!",
+    cQuiDone: (n, k) => (k % 2 ? `${n}, prize ${k}! Sit down with your prize.` : `It's ${n}: prize ${k}! Sit down with your prize.`),
+    cQuiTie: "Same letters! The draw already chose.",
+    cQuiTope: "Almost the same names! The draw already chose.",
+    cQuiTieShort: "SAME LETTERS?",
+    cQuiTopeShort: "ALMOST THE SAME NAMES?",
     cQuiSi: "YES!",
     cQuiNoStamp: "NO!",
-    cQuiLeft: "LEFT",
-    cQuiAlmost: ["It almost flipped!", "Whoa, so close!", "Saved by a hair!"],
+    cQuiLeft: "STANDING",
+    cQuiAlmost: (i) => ["Almost sat down!", "Whoa, so close!", "Saved by a hair!"][i % 3] as string,
     cSapNext: (k) => `Prize ${k}, here it goes!`,
     cSapDone: (k) => pick([`Prize ${k} dropped in!`, `There it rests: prize ${k}!`]),
     cSapTally: (k, of) => `Prize ${k} of ${of}`,
@@ -1855,7 +2020,28 @@ export const T: Record<Lang, Dict> = {
     soundOn: "Sound: on",
     paceLabel: "Length", paceFast: "Short", paceNormal: "Normal", paceEpic: "Epic",
     gameLabel: "Game", gameRace: "Llama race", gameStellar: "Stellar Constellation",
+    // --- El Trueque: una feria de puestos. Cada uno acepta un producto y da otro; un encargo cambia de mano hasta quien lo espera.
+    gameTrueque: "El Trueque", jgTruequeN: "El Trueque",
+    jgTruequeB: "The barter fair: each stall takes one product and gives another in return. The order leaves carrying one, changes hands along the way and arrives carrying another at whoever was waiting for it, and at the end the route lights up with the names of everyone who traded. That is how a payment travels on Stellar. Best from twenty to a hundred and twenty, and up to two hundred.",
+    gcTrueque: "Each stall takes one product and gives another in return. Whoever receives the order wins.",
+    gcTruequeMany: "Each prize is an order that changes hands until it reaches whoever is waiting for it.",
+    loreTruequeQ: "Where is trueque still done?",
+    loreTruequeA: "At Pongo K'asa, every Saturday at kilometer 94 of the Cochabamba–Oruro highway, and at Confital on Tuesdays, people trade potatoes, chuño and other products. An Opinión article calls it an ancestral practice: the chhalaku.",
+    trFeria: "The fair is open!",
+    trAcepta: "Each stall takes one product and gives another in return",
+    trLeyenda: "Top: what it takes · bottom: what it gives",
+    trSale: (p) => `The order leaves with ${p}`,
+    trBusca: (p) => `Who takes ${p}?`,
+    trCambio: (p) => `Change! Now it's ${p}`,
+    trCallejon: ["Dead end!", "That way is closed", "No trade there!"],
+    trNoEs: "No, it's for the other one!",
+    trCuenta: (k, K) => `CHANGE ${k} OF ${K}`,
+    trRuta: (pasaron, llego) => `Nobody gets there alone: it went through ${pasaron} and reached ${llego}`,
+    trDirecto: (llego) => `It went straight to ${llego}`,
+    prPapa: "potato", prChuno: "chuño", prQuinua: "quinoa", prMaiz: "corn", prArroz: "rice", prYuca: "cassava", prPlatano: "plantain", prCafe: "coffee",
     gameLedger: "Ledger Close", gameRockets: "Rocket race", gameWheel: "Wheel",
+    cWheelGroups: (gajos, max) => `${gajos} slices, up to ${max} people on each!`,
+    cWheelGroup: (nombres, mas) => (mas ? `${nombres.join(", ")} and ${mas} more` : nombres.length > 1 ? `${nombres[0]} and ${nombres[1]}` : (nombres[0] ?? "")),
     cConstBuild: ["The sky is coming together!", "Look up!", "Stars switching on!"],
     cConstReady: ["Everyone gets a star!", "The sky is full!",
       "Eyes up: that's all of you!", "Every one of you is up there!"],
@@ -1877,7 +2063,41 @@ export const T: Record<Lang, Dict> = {
     cLedgerFinal: ["These are the ones left!", "Look close, it's these!", "And now it gets sealed!"],
     cLedgerNo: "LEDGER",
     cLedgerOk: "CONFIRMED",
-    wheelCap: "The wheel looks great up to about 24 names. Past that, the draw switches to the ball drum, which shows everyone.",
+    wheelCap: "The wheel holds up to 200 names. Past that, the draw switches to the ball drum, which shows everyone.",
+    // The selector recommends by headcount (`ui/recomendar.ts`). Notes are
+    // "rec.<game>.<side>" keys: ideal, bajo (low) and alto (high) within the
+    // range; largo (too many) and corto (too few) when it doesn't fit.
+    recBadge: "Recommended",
+    recHead: (n: number) => `For ${n} people`,
+    "rec.race.ideal": "Everyone cheers for their own llama, and you can see who's ahead.",
+    "rec.race.bajo": "With so few llamas, it lasts just as long and has fewer moments.",
+    "rec.race.largo": (n: number, _min: number, max: number) => `With ${n}, the race only shows ${max}.`,
+    "rec.race.corto": "With just one person, there's no race.",
+    "rec.sapo.ideal": "One hole per person on the table: every throw counts.",
+    "rec.sapo.bajo": "With few people, the table has few holes and few throws.",
+    "rec.sapo.alto": "Over 12 go through a qualifier, and those who drop out watch.",
+    "rec.sapo.largo": (n: number, _min: number, max: number) => `With ${n}, the frog isn't offered: its qualifier goes up to ${max}.`,
+    "rec.sapo.corto": "With just one person, there's no frog.",
+    "rec.trompo.ideal": "Every throw counts, and the collisions build the duel.",
+    "rec.trompo.bajo": "With few people, it goes straight to the duel, no feints.",
+    "rec.trompo.largo": (n: number, _min: number, max: number) => `With ${n}, it isn't offered: the maximum is ${max}.`,
+    "rec.trompo.corto": "With just one person, there's no spinning top.",
+    "rec.chovena.ideal": "The wheel fills up and the room claps to the beat.",
+    "rec.chovena.bajo": "With few people, there are few rounds and the wheel looks empty.",
+    "rec.chovena.alto": "With this many people, the wheel is full.",
+    "rec.chovena.largo": (n: number, _min: number, max: number) => `With ${n}, it isn't offered: it needs one wheel per comparsa. The maximum is ${max}.`,
+    "rec.chovena.corto": (_n: number, min: number) => `Under ${min}, there aren't enough rounds.`,
+    "rec.teleferico.ideal": "Each group has its cabin and cheers for it.",
+    "rec.teleferico.bajo": "With few cabins, every stop drags on.",
+    "rec.teleferico.alto": "With this many people, each group still has its cabin.",
+    "rec.teleferico.largo": (n: number, _min: number, max: number) => `With ${n}, it isn't offered: it goes up to ${max}.`,
+    "rec.teleferico.corto": (_n: number, min: number) => `Under ${min}, the stops drag on.`,
+    "rec.trueque.ideal": "Everyone waits for their product, and the whole room watches where the order goes.",
+    "rec.trueque.bajo": "With few stalls, the fair looks small.",
+    "rec.trueque.alto": "With this many people, everyone can tell by their product whether they're still in.",
+    "rec.trueque.largo": (n: number, _min: number, max: number) => `With ${n}, it isn't offered: it goes up to ${max}.`,
+    "rec.trueque.corto": (_n: number, min: number) => `Under ${min}, the route is three trades or fewer.`,
+    "rec.wheel.largo": (n: number, _min: number, max: number) => `With ${n}, the wheel doesn't read: it reaches ${max} names.`,
     prizeLabel: "What are you giving away? (optional)", prizePh: "Or type your own…",
     prizeSugeridos: ["T-shirt", "Book", "Ticket", "Stickers", "Water bottle", "Welcome kit", "Gift card", "License"],
     prizeRecent: "You used it before", prizeUsed: "already drawn",
@@ -1958,19 +2178,11 @@ export const T: Record<Lang, Dict> = {
     ausenteSi: "Yes, draw again",
     ausenteNo: "Cancel",
     ausenteNota: (nombre, n, otros) => `${nombre} is not here: their prize is drawn again among the ${n} people left${otros ? ", without the other winners" : ""}. Seal the list to go on.`,
-    imgBtn: "Image for social media",
-    imgLista: "Image shared",
-    imgDescargada: "Image downloaded",
-    imgFalla: "Could not make the image",
     imgKicker: "Draw result",
     imgGano: "Winner",
     imgGanaron: "Winners",
     imgPremio: "Prize:",
-    imgEntre: (n) => `Drawn from ${n} people`,
-    imgMas: (n) => `and ${n} more`,
     imgPieVarios: "Nobody picked these names: the list was locked before the number that decided them existed.",
-    imgSello: "Verifiable draw",
-    imgTexto: (nombres, premio) => `${nombres.length > 1 ? `Winners: ${nombres.join(", ")}` : `Winner: ${nombres[0] ?? ""}`}${premio ? ` (${premio})` : ""}. A draw anyone can check, made with Tinkazo: https://tinkazo.app`,
     obTitle: "Your first draw, step by step",
     ob1T: "Load the list",
     ob1B: "Paste the names, one per line, or upload the Luma CSV with those who checked in.",
@@ -1985,8 +2197,8 @@ export const T: Record<Lang, Dict> = {
     moreLink: "Pricing and how it works inside",
     backHome: "Back to the draw",
     masTitle: "More about it",
-    masJuegosT: "The twelve games",
-    masJuegosB: "Llama race, chovena, spinning tops, piñata, Oruro Carnival, tombola, Sapo and five more, with a shot of each one.",
+    masJuegosT: "The ten games",
+    masJuegosB: "Llama race, chovena, spinning tops, piñata, Oruro Carnival, Sapo and four more, with a shot of each one.",
     masHistoriaT: "Where the name comes from",
     masHistoriaB: "A tinkazo is a hunch and a tincazo is a flick. A draw is both.",
     masSeguridadT: "Where it can fail",
@@ -2000,6 +2212,9 @@ export const T: Record<Lang, Dict> = {
     // --- The pages people search for: meetups, classes and the verifiable draw (20 October 2026).
     pgCta: "Draw now. Taking part is free.", pgRelT: "See also",
     navMeetup: "Meetup draw", navClase: "Class draw", navVerif: "Verifiable draw",
+    // The home page's English title and description. Its <html> does not ask for these keys, so the title and the meta stay in Spanish for search engines. They stay here in case that changes.
+    titPortada: "Tinkazo · verifiable draws for events and classes",
+    descPortada: "Verifiable draws for your meetup, class or event. The winner comes from a public number that nobody can choose. Taking part is free.",
     // The title and description of each draw page: its <html> carries each key.
     titMeetup: "Meetup draw: on the big screen and checkable",
     descMeetup: "Run the draw at your meetup on a big screen, with a result anyone can check from their phone. Paste the list or upload the Luma CSV.",
@@ -2016,7 +2231,7 @@ export const T: Record<Lang, Dict> = {
     meetS2T: "Seal it before the draw",
     meetS2B: "Once sealed, the list is closed. If someone adds or removes a name later, it shows.",
     meetS3T: "Pick a game",
-    meetS3B: "Twelve full-screen games: the llama race, spinning tops, the piñata and more.",
+    meetS3B: "Ten full-screen games: the llama race, spinning tops, the piñata and more.",
     meetS4T: "Draw on the big screen",
     meetS4B: "The room sees the whole draw. The winner already came out of the public number: the game only tells it.",
     meetS5T: "Share the result",
@@ -2029,7 +2244,7 @@ export const T: Record<Lang, Dict> = {
     meetT3T: "The link lets anyone redo the draw",
     meetT3B: "The receipt carries the list and the number. Anyone can open it from their phone and must get the same name.",
     meetNamesT: "What happens to the names",
-    meetNamesB: "Names are not published: they stay on your team and in the receipt you share. If you share the receipt, you also share the list. No name is kept on Stellar.",
+    meetNamesB: "Names are not published: they stay on your device and in the receipt you share, which with a short link is stored protected and Tinkazo can't read it. If you share the receipt, you also share the list. No name is kept on Stellar.",
     meetListaDet: "Stellar keeps the list's fingerprint, the number of entries, how many winners, the round, the seal's time and block number, the prize or title you wrote, the organizer's address and the draw's number; and, when drawn, the proof the round published, the number the round decided, the draw's time, whether it has been drawn, its block number and the winners' positions.",
     meetKnowT: "What you should know",
     meetK1: "To run a draw you sign in with your account. With Google, in two taps.",
@@ -2052,7 +2267,7 @@ export const T: Record<Lang, Dict> = {
     claseS2T: "Seal it",
     claseS2B: "It is closed before the number that decides exists. After that, it can't change without it showing.",
     claseS3T: "Draw with the llama race or the wheel",
-    claseS3B: "The wheel looks good up to about 24 names. With more people, the tombola shows everyone.",
+    claseS3B: "The wheel holds up to 200 names. With more people, the tombola shows everyone.",
     claseWhyT: "Why it works in class",
     claseW1T: "Nobody picks the number",
     claseW1B: "The number comes from outside, at a fixed time. Neither the teacher nor the students can pick it.",
@@ -2061,7 +2276,7 @@ export const T: Record<Lang, Dict> = {
     claseW3T: "No accounts for students",
     claseW3B: "Students install nothing and create no account. Only the person running the draw signs in.",
     clasePrivT: "Privacy",
-    clasePrivB: "The names stay in the browser of whoever runs the draw and are not published. They never reach a Tinkazo server. If you share the receipt, you also share the list: better it doesn't leave the class, especially if there are minors.",
+    clasePrivB: "The names stay in the browser of whoever runs the draw and are not published. No Tinkazo server can read them: if you share with a short link, what gets stored is a protected copy. If you share the receipt, you also share the list: better it doesn't leave the class, especially if there are minors.",
     verifKicker: "To check it",
     verifH1: "Verifiable draw: anyone can redo the result",
     verifLead: "A verifiable draw leaves the evidence in plain sight. Here is what gets checked, who checks it and what it doesn't promise yet.",
@@ -2097,7 +2312,7 @@ export const T: Record<Lang, Dict> = {
     navMas: "More",
     ctaDemo: "Watch a demo",
     pjKicker: "The show",
-    pjT: "Twelve games. None of them decides anything.",
+    pjT: "Ten games. None of them decides anything.",
     pjB: "Tap one and watch it draw a sample list, no account needed. When the animation starts the winner is already out: they all tell the same draw.",
     pjVer: "Watch demo",
     confKicker: "Why believe it",
@@ -2124,7 +2339,7 @@ export const T: Record<Lang, Dict> = {
     cif1: "full-screen games",
     cif2v: "0.76 XLM",
     cif2: "per recorded draw, measured on testnet on October 3, 2026: about 16 US cents. The network charges it, not Tinkazo",
-    cif3: "servers of our own: nothing on this side to go down",
+    cif3: "servers of our own to run a draw: nothing on this side to go down",
     cif4: "open source, so you can check it",
     faqKicker: "Questions",
     faqT: "What everybody asks.",
@@ -2209,7 +2424,7 @@ export const T: Record<Lang, Dict> = {
     cf5t: "Anyone can check it",
     cf5b: "The receipt carries the list, the round and the signature. From a phone, the site redoes everything and says whether it matches. If anyone touched anything, it won't.",
     cfGuardaT: "What gets saved, and where",
-    cfGuardaB: "What goes to Stellar follows your account on any device. The names don't: they stay in the browser where you sealed and in the receipt.",
+    cfGuardaB: "What goes to Stellar follows your account on any device. The names don't: they stay in the browser where you sealed and in the receipt. If you share it with a short link, the receipt is also stored, protected, without Tinkazo being able to read it.",
     cfColQue: "What",
     cfColDonde: "Where",
     cfColQuien: "Who sees it",
@@ -2225,19 +2440,22 @@ export const T: Record<Lang, Dict> = {
     cfG4a: "Your key",
     cfG4b: "With Google, Pollar keeps it; with Freighter, your extension; with the test account, your browser",
     cfG4c: "Nobody else",
+    cfG5a: "The short link, when you share or show it big",
+    cfG5b: "A protected copy of the receipt, on Cloudflare, until you delete it from My draws",
+    cfG5c: "Anyone with the link or the QR code. Tinkazo can't read it",
     cfNoT: "What if I don't trust Tinkazo?",
     cfNoB: "The protocol is written down and the code is open: anyone can redo a draw without going through this site.",
     cfSeg: "What the protocol prevents, and what it doesn't →",
     cfCod: "The code, on GitHub →",
     navJuegos: "Games", navHistoria: "Story", navSeguridad: "Security",
     navPrecios: "Pricing", navCodigo: "Code",
-    jgKicker: "Twelve games",
+    jgKicker: "Ten games",
     jgTitle: "A draw you watch",
     jgLead: "When the animation starts, the winner is already decided: it came out of the beacon's public number. The game only tells it. Each one passes twenty checks before it ships, and the one that matters is that the name on screen is the one the protocol set.",
     jgRaceN: "Llama race",
     jgRaceB: "Our flagship game. Eight lanes across the mountains: with more than eight people, eight run and the draw was still among everyone.",
     jgWheelN: "Wheel",
-    jgWheelB: "The usual one, with the tricolor pin marking each full turn. Slices are interleaved, so it still spins properly with two people. Up to twenty-four.",
+    jgWheelB: "The usual one, with the tricolor pin marking each full turn. It still spins properly with two people. Past twenty-four, each slice holds a group. Up to two hundred.",
     jgStellarN: "Stellar constellation",
     jgStellarB: "A payment hopping from star to star looking for a route, like a path payment. It leaves a constellation drawn. Up to two hundred.",
     jgLedgerN: "Ledger close",
@@ -2272,8 +2490,8 @@ export const T: Record<Lang, Dict> = {
     jgOruB: "The Diablada's entrada: the troupe dances block by block between packed stands, and at each arch a few stay behind. The last two face off in front of the Socavón, and the one who arrives goes in with bells and fireworks. Up to two hundred.",
     jgSapoN: "Sapo",
     jgSapoB: "The game of fairs and patios: a frog in the middle of a wooden box and one hole with each name. Rings hit the wood, dance on a neighbor's rim and roll out, and the last one drops into the winner's hole. With more than twelve, names are crossed out in waves until twelve are left. Up to two hundred, with up to twelve winners.",
-    jgQuienN: "Who is it?",
-    jgQuienB: "Every name on a card, with its face. Each turn asks about a letter, and the cards that don't match the drawn name flip over, until only one is left. The questions are picked knowing who won: the game doesn't guess, it tells. Up to two hundred.",
+    jgQuienN: "Stand up",
+    jgQuienB: "Everybody up. Each person checks their own name: a letter, a number, half the alphabet or how many letters it has. Those who don't match sit down, and the last one standing wins. Up to two hundred.",
     loreOruroQ: "How many people dance in Oruro?",
     loreOruroA: "More than 28,000 dancers and 10,000 musicians, in about fifty groups, according to UNESCO, which proclaimed it heritage in 2001. The entrada covers four kilometers and lasts twenty hours without a break.",
     jgRocketsN: "Rocket race",
@@ -2287,7 +2505,7 @@ export const T: Record<Lang, Dict> = {
     gcPrizes: (k) => (k === 1 ? "1 prize" : `${k} prizes`),
     gcPrizesNote: (k) => `There are ${k} prizes: the game tells the first one and the final card shows them all.`,
     gcSapoMany: "Every name has its hole. Every ring that drops in is a prize.",
-    gcQuienMany: "One round per prize: in each one the cards that don't match flip over and the last one wins.",
+    gcQuienMany: "One round per prize: winners sit down with their prize, and the last one standing wins.",
     gcTelefericoMany: "A whole group gets off at every station. The last ones off win a prize, and the first prize reaches the top.",
     gcSapoQual: "With more than twelve, names are crossed out first until twelve are left.",
     gcRace: "The first llama across the finish line wins.",
@@ -2298,12 +2516,12 @@ export const T: Record<Lang, Dict> = {
     gcPinata: "Every swing knocks candies out. The last one left inside wins.",
     gcOruro: "Dancers stay behind at every block. Whoever reaches the Socavón wins.",
     gcTombola: "Everyone has a ball with their number, listed next to the drum. The one that drops into the cup wins.",
-    gcWheel: "Everyone gets one or more slices. The slice left under the pointer wins.",
+    gcWheel: "The slice left under the pointer wins. With many people, each slice holds a group.",
     gcTeleferico: "A whole group gets off at every station. Whoever reaches the top wins.",
     gcPasanaku: "The cloth closes and the bundles fall out. The one left in the knot wins.",
     gcStellar: "A packet hops from star to star. The last star it touches wins.",
     gcSapo: "Every name has its hole. The hole where the last ring drops wins.",
-    gcQuien: "Cards that don't match the answer flip over. The last card wins.",
+    gcQuien: "Everybody up: each question about a name sits down the ones who don't match. The last one standing wins.",
     gcLedger: "Each sweep clears cards. The one left sealed wins.",
     gcRockets: "The first rocket to arrive wins.",
     gcTotora: "The first raft to reach the far shore wins.",
@@ -2328,12 +2546,12 @@ export const T: Record<Lang, Dict> = {
     tmQ1B: "Tinkazo never charges anyone to take part, and it is not for draws that do: a draw with paid entry is a raffle or a lottery, and almost everywhere that needs a license. It is not for gambling either: nobody bets on the outcome, there is no pot of money and the contract holds no funds. Using it to charge for entry or to take bets goes against these terms.",
     tmQ2T: "The organizer is responsible",
     tmQ2B: "The draw is yours: the prize, the rules, telling the winner and whatever your country's law asks for. In some countries, like Brazil, Colombia or Mexico, even a free draw needs a permit. The rules Tinkazo writes help, but they do not replace what your law says.",
-    tmQ3T: "Names stay in your browser",
-    tmQ3B: "Names never go on chain. What goes on chain is the list's fingerprint, the number of entries, how many winners, the round, the seal's time and block number, the prize or title you wrote, the organizer's address and the draw's number; and, when drawn, the proof the round published, the number the round decided, the draw's time, whether it has been drawn, its block number and the winners' positions. The proof carries the names in the part of the address the browser never sends to any server; that is why sharing the link shares the list, and if you notify by WhatsApp, the link with the list goes through WhatsApp. The QR code and the faces are drawn right here.",
+    tmQ3T: "Where the names go",
+    tmQ3B: "Names never go on chain. What goes on chain is the list's fingerprint, the number of entries, how many winners, the round, the seal's time and block number, the prize or title you wrote, the organizer's address and the draw's number; and, when drawn, the proof the round published, the number the round decided, the draw's time, whether it has been drawn, its block number and the winners' positions. The proof carries the names in the part of the address the browser never sends to any server; that is why sharing the link shares the list, and if you notify by WhatsApp, the link with the list goes through WhatsApp. The QR code and the faces are drawn right here. Sharing or showing the result on the big screen makes a short link: Cloudflare keeps a copy of the receipt locked with a key that travels only in the link. Tinkazo can't read it, and anyone with the link or the QR code, which carries the list, can open it. You delete it with “Delete the short link”, in My draws: the permission to do so stays on this device.",
     tmQ4T: "What gets stored",
     tmQ4B: "If you connect an account, its public address is recorded in the contract as the organizer of the draw: public on purpose, so every draw has an owner. If you sign in with Google, Pollar receives your name, email and photo, and holds the key; Tinkazo never sees it. This device keeps your preferences, like language, sound and the show's pace; the history of your draws with their lists, which you can delete from the site; and the key of the test account if you use it.",
     tmMoreT: "Also",
-    tmMore1: "No ads, no trackers that follow you from site to site, no database of participants. During a draw the site fetches the number a public beacon publishes and, if you have an account, what it needs from the Stellar network and from Pollar.",
+    tmMore1: "No ads, no trackers that follow you from site to site, no database of participants we can read. During a draw the site fetches the number a public beacon publishes and, if you have an account, what it needs from the Stellar network and from Pollar; when you share or show the big screen, it stores the short link on Cloudflare.",
     tmMore2: "The site is hosted on Vercel, which like any host logs visits: IP address and browser. We also count visits with Vercel's analytics: which page was opened, from which country and on what kind of device, with no cookies and without keeping who you are. If your browser asks not to be tracked, we don't count you. Names reach neither: they go after the # in the address, which the browser does not send to the server, and that part is cut off before counting.",
     tmMore3: "Tinkazo is open source (MIT) and provided as is, without warranty. Today the contract lives on testnet, Stellar's test network, which gets wiped on December 16, 2026. If something breaks in the middle of a draw, anyone can run it again with the list and the round: that is what the protocol is for.",
     tmMore4: "In effect since October 16, 2026, when we started counting visits. If they change, this page changes, with its date.",
@@ -2359,13 +2577,14 @@ export const T: Record<Lang, Dict> = {
     sgLimit2: "Names never go on chain. What goes on chain is the list's fingerprint, the number of entries, how many winners, the round, the seal's time and block number, the prize or title you wrote, the organizer's address and the draw's number; and, when drawn, the proof the round published, the number the round decided, the draw's time, whether it has been drawn, its block number and the winners' positions.",
     sgLimit3: "What the contract stores pays rent: if nobody extends it, the entry is archived and stops being readable until someone pays to restore it. And today the contract is on testnet, which Stellar wipes on December 16, 2026: there the record is lost and the verdict is no longer green.",
     sgLimit4: "If the public beacon went down entirely and forever, a sealed draw would be left without its number. There are four relays, three on drand.sh and one at Cloudflare, rotated until one answers.",
+    sgLimitCorto: "The short link (tinkazo.app/c/…) keeps on Cloudflare a copy of the receipt locked with a key that travels only in the link: Tinkazo can't read it. It decides nothing either: the page recomputes the draw and checks it against Stellar, and if the service goes down, the usual long link still works.",
     sgLimit5: "The seal stops the list from changing afterwards, not from being built wrong in the first place: the organizer can add filler or duplicate names, or leave someone out. That is why, before sealing, the list can be shown to the room with a QR so everyone can find themselves on their phone; duplicates are flagged, the receipt has a search box, and the Luma import proposes only those who checked in.",
     sgReportT: "If you find a way to skew a draw",
     sgReportB: "Open an issue. That is the most useful report there is, and the project is open source precisely for that: the full protocol, the contract and the known threats are written down and can be audited without asking anyone.",
     sgLinkProto: "The protocol ↗", sgLinkAmen: "The threats ↗", sgLinkIssue: "Open an issue ↗",
     prTitle: "Pricing", prNote: "Taking part and checking: always free. Anything charged is announced beforehand, in your currency or in crypto.",
     pr1t: "Free", pr1p: "$0 · communities, education and nonprofits",
-    pr1b: "All twelve games and a link anyone can check. On mainnet Tinkazo pays the network, up to a monthly limit.",
+    pr1b: "All ten games and a link anyone can check. On mainnet Tinkazo pays the network, up to a monthly limit.",
     pr2t: "Event", pr2p: "from US$ 29 · soon",
     pr2b: "For companies: your logo in the stadium, no limits. Turnkey, with someone in the room, from US$ 125.",
     pr3t: "Annual", pr3p: "from US$ 300 a year · soon",
@@ -2375,7 +2594,7 @@ export const T: Record<Lang, Dict> = {
     prPayTitle: "How you'll pay",
     prPayBody: "However people pay in your country: QR or card in your local currency (in Bolivia, your bank's QR in bolivianos). Or USDC or XLM from your wallet, from anywhere. Comes with mainnet.",
     prNeverTitle: "What we will never charge for",
-    prNeverBody: "Taking part: entering a draw is always free, which is why it isn't gambling. A cut of the prizes: the prize goes from the organizer to the winner, never through Tinkazo. Checking: anyone reruns the draw for free. And the names on your list are never sold: they never reach a server of ours.",
+    prNeverBody: "Taking part: entering a draw is always free, which is why it isn't gambling. A cut of the prizes: the prize goes from the organizer to the winner, never through Tinkazo. Checking: anyone reruns the draw for free. And the names on your list are never sold: no server of ours can read them.",
     prPayM1: "QR or card, local currency",
     prPayM2: "USDC",
     prPayM3: "XLM",
@@ -2387,20 +2606,32 @@ export const T: Record<Lang, Dict> = {
     noAnchor: "not recorded on Stellar", onChain: "see it on chain",
     txSimulating: "Building the transaction…", txSigning: "Approve the operation in your wallet…",
     txSending: "Sending it to the network…", txConfirmed: "It's on Stellar ·", txCost: "Network fee: up to",
-    "errAnchor.notFound": "The contract can't find that draw.",
-    "errAnchor.alreadyDrawn": "That draw is already closed.",
+    "errAnchor.notFound": "We can't find that draw on Stellar. Seal the list again.",
+    "errAnchor.alreadyDrawn": "That draw already has a winner. You'll find it in My draws.",
     "errAnchor.tooFewEntries": "One name is not a draw. Add at least two.",
-    "errAnchor.badWinnerCount": "That number of winners doesn't work.",
+    "errAnchor.badWinnerCount": "That number of winners doesn't work. Pick fewer than the people on the list.",
     "errAnchor.roundTooSoon": "That round is too close. Try again.",
-    "errAnchor.roundTooFar": "That round is more than 30 days out. Pick a closer one.",
-    "errAnchor.roundNotReady": "That round isn't published yet. Wait a few seconds.",
-    "errAnchor.invalidSignature": "The contract rejected the round's proof.",
+    "errAnchor.roundTooFar": "Your device's clock is off and the round ended up more than 30 days away. Fix it and try again.",
+    "errAnchor.roundNotReady": "That round isn't published yet. Wait a few seconds and try again.",
+    "errAnchor.invalidSignature": "The contract rejected the round's proof. Try again in a few seconds.",
     "errAnchor.metaTooLong": "The prize name is too long. Trim it a bit.",
-    "errAnchor.noFunds": "Your account has no balance to pay the network fee.",
-    "errAnchor.userRejected": "You cancelled the approval in the wallet.",
-    "errAnchor.rpcDown": "Couldn't reach the Stellar network. Try again.",
+    "errAnchor.noFunds": "Your account has no balance to pay the network fee. Add some XLM and try again.",
+    "errAnchor.userRejected": "You cancelled the approval in your wallet. Press again and approve it.",
+    "errAnchor.rpcDown": "Couldn't reach the Stellar network. Check your connection and try again.",
     "errAnchor.busy": "The network was busy and didn't take the transaction. Try again in a few seconds.",
-    "errAnchor.unknown": "The network rejected the transaction. It's usually temporary: try again in a few seconds.",
+    "errAnchor.unknown": "It couldn't be recorded on Stellar. Try again in a few seconds.",
+    // Transactions (Oct 21): what happened, when it wasn't the contract.
+    "errAnchor.offline": "You're offline. Reconnect and try again.",
+    "errAnchor.unconfirmed": "We sent it but couldn't confirm it went through. Check your connection and press again: it won't be recorded twice.",
+    "errAnchor.wallet": "Your wallet didn't approve the operation. Open it and try again.",
+    txVerifying: "Checking whether it was recorded…",
+    txRetrying: "The network didn't answer. Trying again…",
+    drawTryRed: "The network didn't answer. Retry {i} of {n}…",
+    drawTryOcupada: "The network is busy. Retry {i} of {n}…",
+    drawTryOtra: "It isn't recorded yet. Retry {i} of {n}…",
+    errDetalle: "Show details",
+    errCopiar: "Copy",
+    errCopiado: "Copied ✓",
     vVerdictPartialKicker: "The math adds up",
     vVerdictPartial: "The math is right, but there's no witness",
     vVerdictPartialDetail: "With this list and this number, the winner is the one shown. But this draw was not recorded on Stellar, so nobody other than the organizer can confirm this was the original list. Anchoring it costs a few cents and closes that gap.",
@@ -2416,9 +2647,9 @@ export const T: Record<Lang, Dict> = {
     vRound: "See the public round ↗", vContract: "See the contract ↗",
     vWorking: "Checking the draw", vWorkingKicker: "One second",
     vVerdictOkKicker: "It all adds up", vVerdictBadKicker: "Something doesn't add up",
-    vVerdictOk: "This draw is legit",
+    vVerdictOk: "This draw checks out",
     vVerdictOkDetail: "We ran the draw again from scratch right here and got the same name. The list was sealed before the number existed, so nobody could pick the result.",
-    vVerdictOkChain: "This draw is legit and it's on Stellar",
+    vVerdictOkChain: "This draw checks out and it's on Stellar",
     vVerdictOkChainDetail: "We ran it again here and it matches what the contract recorded. That record stays there even if Tinkazo disappears, and anyone can read it.",
     vVerdictOkChainDetailTest: "We ran it again here and it matches what the contract recorded. It is on testnet, Stellar's test network, which gets wiped on December 16, 2026: until then, anyone can read that record.",
     vChainMissing: "the contract has no such draw",
@@ -2458,7 +2689,7 @@ export const T: Record<Lang, Dict> = {
     vListChanged: "The list in this link is not the one that was sealed. Someone changed it afterwards.",
     vBadSignature: "The round signature doesn't verify against the beacon's public key.",
     vMismatch: "The recomputed winner doesn't match the one on record.",
-    shareProof: "Share the result", proofCopied: "Copied! Paste it in your group",
+    shareProof: "Share the result",
     // Event link (evento.html): several draws from the same event, in one link.
     evKickerRevisando: "Checking", evTituloRevisando: "Checking the draws", evProgreso: "{i} of {n} done.",
     evKickerOk: "All adds up", evTituloOk: "The draws add up",
@@ -2535,17 +2766,14 @@ export const T: Record<Lang, Dict> = {
     cWin: (n, many) => pick(many ? [`${n} WIN!`, `${n} TAKE IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`] : [`${n} WINS!`, `${n} TAKES IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`]),
     summary: (w, n, premio, enlace, varios) =>
       `${premio ? `${premio} draw: ${varios ? "the winners are" : "the winner is"}` : varios ? "The winners are" : "The winner is"} ${w}, out of ${n} people.\nNobody picked ${varios ? "these names" : "this name"}.\nIf you want to verify it, open this link: ${enlace}\n\nDrawn with Tinkazo · https://tinkazo.app`,
-    summaryEvento: (f, n, enlace) =>
-      `Draws from ${f} (${n} ${n === 1 ? "draw" : "draws"}), all verifiable.\nIf you want to verify them, open this link:\n${enlace}\n\nDrawn with Tinkazo · https://tinkazo.app`,
+    summaryEvento: (f, n, enlace, lineas = []) =>
+      `Draws from ${f} (${n === 1 ? "1 draw), verifiable" : `${n} draws), all verifiable`}.\n${lineas.map((l) => `${l}\n`).join("")}If you want to verify ${n === 1 ? "it" : "them"}, open this link:\n${enlace}\n\nDrawn with Tinkazo · https://tinkazo.app`,
     histGrupoT: "Draws from {f}", histGrupoCompartir: "Share the event",
     evAvisoPartes: "The event goes in {n} links, so none gets cut when pasted.",
     evParte: "Part {i} of {n}",
     // --- Sharing a receipt again, and named events (20 October 2026).
     // The messages repeat the shape of T.en.summary and summaryEvento: a test compares them.
     cmpSorteo: "Share the draw", cmpBtn: "Share", cmpMensaje: "Message for the group",
-    cmpWhatsapp: "Send on WhatsApp", cmpImagenCompartir: "Share the image with the QR", cmpImagenBajar: "Download the image with the QR",
-    cmpSinQr: "It's too long for a QR code: the message still has the link.",
-    cmpCardUno: "The winner is {w}", cmpCardVarios: "The winners are {w}",
     cmpCabPremioUno: "{premio} draw: the winner is {w}, out of {n} people.",
     cmpCabPremioVarios: "{premio} draw: the winners are {w}, out of {n} people.",
     cmpCabUno: "The winner is {w}, out of {n} people.", cmpCabVarios: "The winners are {w}, out of {n} people.",
@@ -2553,14 +2781,45 @@ export const T: Record<Lang, Dict> = {
     cmpVerificarUno: "If you want to verify it, open this link: {enlace}",
     cmpVerificarEv: "If you want to verify them, open this link:\n{enlace}",
     cmpPie: "Drawn with Tinkazo · https://tinkazo.app",
-    cmpEvUno: "{t} (1 draw), all verifiable.", cmpEvVarios: "{t} ({n} draws), all verifiable.",
+    cmpEvUno: "{t} (1 draw), verifiable.", cmpEvVarios: "{t} ({n} draws), all verifiable.",
+    // --- The short link page, c.html (21 October 2026).
+    cTitulo: "A draw's receipt on Tinkazo",
+    cDesc: "Open it to see who won and check it yourself, from your phone.",
+    cKicker: "A draw's receipt",
+    cAbriendo: "Opening the receipt…", cAbriendoB: "In a moment you'll see who won and check it yourself.",
+    cRedT: "We couldn't open the receipt", cRedB: "Check your connection and try again.",
+    cNoExisteT: "This link no longer exists", cNoExisteB: "Whoever shared it deleted it, or it was copied wrong. Ask them to send it again.",
+    cRotoT: "This link can't be opened", cRotoB: "It may have been copied wrong or be missing a piece. Ask whoever sent it to share it again.",
+    cOtraVez: "Try again", cPortada: "Go to the home page",
+    cmpVerificarEvUno: "If you want to verify it, open this link:\n{enlace}",
+    // --- The short link and the photo with the QR code (21 October 2026).
+    cmpWa: "Share on WhatsApp", cmpPreparando: "Getting the photo ready…",
+    cmpBajarFoto: "Download the photo", cmpBajarFotos: "Download the photos",
+    cmpPegaLaFoto: "We copied the photo: paste it into the WhatsApp chat.",
+    cmpAdjuntaLaFoto: "The photo was downloaded: attach it in the WhatsApp chat.",
+    cmpAdjuntaLasFotos: "The photos were downloaded: attach them in the WhatsApp chat.",
+    cmpNoAparece: "WhatsApp wasn't there? Download the photo and copy the message to paste them in the chat.",
+    cmpFotoAlt: "The photo with who won and the QR code to check it",
+    cmpSinFoto: "The photo couldn't be made: the message still has the link.",
+    cmpPrivLista: "Anyone with the photo or the link can see the whole list.",
+    cmpPrivCorto: "The short link keeps a protected copy that Tinkazo can't read.",
+    cmpPrivBorrar: "You can delete it from My draws.",
+    cmpBorrarCorto: "Delete the short link", cmpBorrarCortos: "Delete the short links",
+    cmpBorrarCortoConf: "Anyone with the short link or its QR code won't be able to open it anymore. The draw and its receipt stay as they are. Delete it?",
+    cmpBorrarCortosConf: "Every short link created from this device gets deleted: anyone who has one, or its QR code, won't be able to open it anymore. The draws and their receipts stay as they are. Go ahead?",
+    cmpCortoBorrado: "Short link deleted.", cmpCortosBorrados: "Short links deleted.",
+    cmpCortoNoSeBorro: "It couldn't be deleted: check your connection and try again.",
+    fotoEscanear: "Scan to check it",
+    fotoSinQr: "To check it, open the link that comes with this photo.",
+    fotoNumero: "Draw #{n}", fotoPrueba: "test network", fotoEvento: "Event",
+    fotoEntreUno: "Drawn from {n} people", fotoEntreVarios: "Drawn from {n} people", fotoMas: "and {n} more",
     evnT: "My events",
     evnLead: "An event groups draws under one name, to send them together. Add draws to it from each of your draws.",
     evnNombre: "Event name", evnCrear: "Create event", evnGuardar: "Save the name",
     evnBorrar: "Delete the event", evnBorrarConf: "The event is deleted. Its draws go back to the list in My draws. Go ahead?",
     evnSumar: "Add to an event…", evnQuitar: "Remove from the event", evnVerLista: "See the draws",
     evnVacio: "No events yet. Create one, or name a group of draws.",
-    evnNombrar: "Name it", evnCompartirPartes: "Share the event ({n} parts)",
+    evnNombrar: "Name it",
     evnSumado: "Added to {nombre}.", evnQuitado: "Removed from {nombre}.", evnNombreVacio: "Give the event a name.",
     evnCreado: "Event created: {nombre}.", evnSinSorteos: "No draws yet: add one from My draws.",
     vCompartir: "Share this draw",
@@ -2619,6 +2878,10 @@ export const T: Record<Lang, Dict> = {
     guestReadyOff: "Test account ready, but empty: the faucet is off for this session.",
     txPreparing: "Setting up your account…",
     "errAnchor.accountNotReady": "Your account isn't ready yet. Try again in a minute.",
+    // Bloque pantalla
+    compartirOn: "For sharing: on",
+    compartirOff: "For sharing: off",
+    compartirTip: "More contrast, bigger names and fewer particles, so it reads on Zoom or a shared screen. Lasts for this tab.",
   },
 };
 
