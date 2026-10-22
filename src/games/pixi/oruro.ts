@@ -1253,7 +1253,11 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       }
       return;
     }
-    // La última fraternidad y el contrapunto: los nombres de cada uno.
+    // La última fraternidad y el contrapunto: los nombres de cada uno. El "+N"
+    // de los que no llevan cartel tiene su lugar: en el celular, debajo de las
+    // pastillas (debajo del contador tapaba la primera).
+    const moreY = moreTop(k, ch);
+    if (S.portrait()) blocked.push({ x: 22 * k, y: moreY, w: 64 * k, h: 26 * k });
     const scale = clamp(TAG_FONT_PX / (12 * k * CHIP_SCALE), g.w <= 520 ? 0 : 1, 1.8);
     const kk = k * scale;
     const kc = kk * CHIP_SCALE;
@@ -1319,13 +1323,18 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     if (more > 0) {
       const label = `+${more}`;
       if (moreText.text !== label) moreText.text = label;
-      const moreH = 26 * k, moreY = S.top() + 10 * k + ch + 10 * k;
+      const moreH = 26 * k;
       const w = moreText.width + 18 * k;
       moreBox.clear().roundRect(22 * k + 2.5 * k, moreY + 2.5 * k, w, moreH, 5 * k).fill(INK)
         .roundRect(22 * k, moreY, w, moreH, 5 * k).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 2 * k, color: INK });
       moreText.position.set(22 * k + w / 2, moreY + moreH / 2);
       moreBox.visible = moreText.visible = true;
     }
+  }
+
+  /** Dónde va el "+N": debajo del contador, o en el celular debajo de las pastillas, que van debajo del contador. */
+  function moreTop(k: number, ch: number): number {
+    return S.portrait() && pillsLayer.visible ? pillsBottom() + 6 * k : S.top() + 10 * k + ch + 10 * k;
   }
 
   /* -------------------------------------------------- saltos del contrapunto */
