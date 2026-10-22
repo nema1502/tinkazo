@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cabe, centrar, crecer, dentro, enPantalla, guardiaNombre, meter, tapada, unir, type Caja, type Zona } from "./encuadre";
+import { cabe, centrar, crecer, dentro, encuadrar, enPantalla, guardiaNombre, meter, tapada, unir, type Caja, type Zona } from "./encuadre";
 
 /** Una pantalla de celular en vertical, con el cartel arriba y el relator abajo. */
 const SW = 390, SH = 844;
@@ -61,6 +61,32 @@ describe("encuadre: las cuentas", () => {
       const w = dentro(c, ZONA, { x: 900, y: 100, z }, SW, SH);
       expect(adentro(c, ZONA, w)).toBe(true);
     }
+  });
+
+  it("encuadrar no toca el acercamiento: lo que entra queda adentro", () => {
+    const mesa: Caja = { x: 30, y: 300, w: 300, h: 200 };
+    // Con 1,1 entra: se corre lo justo para quedar entera.
+    const v = encuadrar(mesa, ZONA, { x: 330, y: 400, z: 1.1 }, SW, SH);
+    expect(v.z).toBe(1.1);
+    expect(adentro(mesa, ZONA, v)).toBe(true);
+    // Si ya estaba adentro, la misma vista.
+    const quieta = { x: 180, y: 400, z: 1 };
+    expect(encuadrar(mesa, ZONA, quieta, SW, SH)).toEqual(quieta);
+  });
+
+  it("encuadrar: lo que no entra cubre la zona entera, sin un costado vacío", () => {
+    const mesa: Caja = { x: 30, y: 300, w: 330, h: 200 };
+    // A 1,5 la mesa mide 495 y la zona 368: mirando el agujero de la derecha,
+    // antes quedaba piso a la derecha y agujeros afuera a la izquierda.
+    const v = encuadrar(mesa, ZONA, { x: 330, y: 400, z: 1.5 }, SW, SH);
+    expect(v.z).toBe(1.5);
+    const p = enPantalla(mesa, v, SW, SH);
+    expect(p.x).toBeLessThanOrEqual(ZONA.x0 + 1e-9);
+    expect(p.x + p.w).toBeCloseTo(ZONA.x1, 9);
+    // Del otro lado, igual.
+    const w = enPantalla(mesa, encuadrar(mesa, ZONA, { x: 20, y: 400, z: 1.5 }, SW, SH), SW, SH);
+    expect(w.x).toBeCloseTo(ZONA.x0, 9);
+    expect(w.x + w.w).toBeGreaterThanOrEqual(ZONA.x1 - 1e-9);
   });
 
   it("centrar pone el medio de la caja en el medio de la zona", () => {

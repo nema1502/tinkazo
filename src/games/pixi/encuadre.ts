@@ -91,6 +91,23 @@ export function dentro(c: Caja, zona: Zona, v: Vista, sw: number, sh: number): V
   };
 }
 
+/**
+ * Como `dentro`, pero sin tocar el acercamiento: en cada eje, si la caja entra
+ * en la zona, queda entera adentro; si no entra, la cubre de punta a punta, sin
+ * dejar un costado vacío mientras el otro se corta. Para los primeros planos:
+ * en el sapo, la cámara se acercaba al agujero y mostraba piso de un lado
+ * mientras dejaba agujeros afuera del otro (revisión visual, 21 de octubre de 2026).
+ */
+export function encuadrar(c: Caja, zona: Zona, v: Vista, sw: number, sh: number): Vista {
+  const ax = (a: number, b: number, lo: number, hi: number, medio: number, p: number): number => {
+    if ((b - a) * v.z <= hi - lo) return eje(a, b, lo, hi, medio, p, v.z);
+    if (medio + (a - p) * v.z > lo) return a - (lo - medio) / v.z;
+    if (medio + (b - p) * v.z < hi) return b - (hi - medio) / v.z;
+    return p;
+  };
+  return { x: ax(c.x, c.x + c.w, zona.x0, zona.x1, sw / 2, v.x), y: ax(c.y, c.y + c.h, zona.y0, zona.y1, sh / 2, v.y), z: v.z };
+}
+
 /** La vista que pone el medio de la caja en el medio de la zona, con el acercamiento `z`. */
 export function centrar(c: Caja, zona: Zona, sw: number, sh: number, z: number): Vista {
   return {
