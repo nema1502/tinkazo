@@ -51,6 +51,22 @@ export function repetidos(names: readonly string[]): Set<number> {
   return out;
 }
 
+/**
+ * Los nombres que parecen la misma persona escrita distinto ("Ana Quispe" y
+ * "ana quispe"): la lista canónica los deja entrar a los dos. De cada grupo,
+ * los dos primeros como se escribieron, en el orden de la lista.
+ */
+export function parecidos(names: readonly string[]): Array<[string, string]> {
+  const por = new Map<string, string[]>();
+  for (const n of names) {
+    const k = normalizar(n);
+    por.set(k, [...(por.get(k) ?? []), n]);
+  }
+  const out: Array<[string, string]> = [];
+  for (const g of por.values()) if (g.length > 1) out.push([g[0] as string, g[1] as string]);
+  return out;
+}
+
 /** Cuántas veces está exactamente ese nombre, comparado sin tildes ni mayúsculas. */
 export function vecesExacto(names: readonly string[], nombre: string): number {
   const k = normalizar(nombre);

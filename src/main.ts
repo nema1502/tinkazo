@@ -3,18 +3,21 @@ import { $ } from "./dom";
 import { chooseLang, initialLang, onLangChange, setLang, t } from "./i18n";
 import { SAMPLE, app, currentPace, paceSeconds, paraCompartir, params, setPace, setParaCompartir, type Game, type Pace } from "./state";
 import { soundLabel, toggleSound, unlockAudioOnGesture } from "./sound";
-import { bindParticipants, loadSample, renderNames } from "./ui/participants";
+import { bindParticipants, loadSample, renderNames, reponerBorrador } from "./ui/participants";
 import { GAME_BUTTONS, cambiarJuego, copyRules, freeze, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
 import { initSiguiente } from "./ui/siguiente";
 import { montarPremios } from "./ui/premios";
 import { adelantarCorto, alTocarGanadores, copySummary, draw, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
 import { skipGame } from "./games/overlay";
 import { usePixi } from "./games/engine";
-import { initWalletUI, openPicker } from "./ui/wallet-ui";
+import { currentSession, initWalletUI, openPicker } from "./ui/wallet-ui";
 import { initOnboarding } from "./ui/onboarding";
 import { musicOn, toggleMusic } from "./music";
 import { rotateWords } from "./ui/rotar";
 import { initMenuMas } from "./ui/menu";
+
+/** La marca que deja "Entrar y sortear" al final de la demo, sin cuenta: la herramienta abre con la ventana de ingreso. */
+const INGRESAR = "tinkazo.ingresar";
 
 // `?theme=light|dark` fuerza el tema (capturas).
 const themeParam = params.get("theme");
@@ -137,9 +140,12 @@ onLangChange(compartirLabel);
 $("st-skip").addEventListener("click", skipGame);
 bindParticipants();
 montarPremios();
+// La lista que se estaba armando en esta pestaña, si se recargó o se volvió de entrar con Google.
+reponerBorrador();
 initVistas();
 initOnboarding();
 initWalletUI();
+ingresarSiLoPidio();
 initMenuMas();
 refreshFreezeLabel();
 // Los pasos de arriba y la barra de "lo que sigue", con la herramienta ya armada.
@@ -213,6 +219,23 @@ function initVistas(): void {
       });
     });
   }
+  // El mismo botón al final de la demo navega (sale de `?demo=`), y caía en la
+  // puerta sin la ventana de ingreso, justo cuando la persona se decidió
+  // (buscador de detalles, D17). Se decide acá, en la página de la demo, que
+  // ya terminó de retomar la sesión: sin cuenta, una marca en la pestaña, y la
+  // página nueva abre la ventana (`ingresarSiLoPidio`). Decidirlo al cargar la
+  // nueva no: retomar la cuenta de Google tarda hasta 8 s, y la ventana se
+  // abría encima de una sesión que estaba volviendo.
+  for (const a of document.querySelectorAll<HTMLAnchorElement>('a.cta[href="/#sortear"]')) {
+    a.addEventListener("click", () => {
+      if (currentSession()) return;
+      try {
+        sessionStorage.setItem(INGRESAR, "1");
+      } catch {
+        /* sin almacenamiento, la puerta tiene su botón */
+      }
+    });
+  }
   document.addEventListener("tinkazo:sesion", (e) => {
     const a = (e as CustomEvent<string | null>).detail;
     body.dataset.sesion = a ? "si" : "no";
@@ -232,6 +255,18 @@ function initVistas(): void {
     if (a && pidio) setVista("app");
     else if (!a && !deApp && !/^#(sortear|mis-sorteos|ta)$/.test(location.hash)) setVista("portada");
   });
+}
+
+/** Llegó desde el final de la demo sin cuenta: la ventana para elegir una, como la de la portada. Una sola vez. */
+function ingresarSiLoPidio(): void {
+  let pidio = false;
+  try {
+    pidio = sessionStorage.getItem(INGRESAR) === "1";
+    sessionStorage.removeItem(INGRESAR);
+  } catch {
+    return;
+  }
+  if (pidio && location.hash === "#sortear" && !params.has("demo") && !currentSession()) void openPicker();
 }
 
 /* Modo demo y pose para capturas: `?demo=<juego>`, `?pose=1`, `?instant=1`. */

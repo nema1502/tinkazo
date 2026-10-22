@@ -132,7 +132,7 @@ export function openImporter(s: ImportState, onApply: (r: ImportResult) => void)
       <div class="imp-title">
         <span class="kicker">${esc(source === "luma" ? t("impLuma") : t("impFile"))}</span>
         <h3 id="imp-title">${esc(s.fileName || t("impPasted"))}</h3>
-        <p class="note">${esc(L.impShape(tb.rows.length, tb.columns.length))}</p>
+        <p class="note">${esc(L.impShape(tb.rows.length, tb.columns.length - (tb.unida !== undefined ? 1 : 0)))}</p>
         ${skippedNote}
       </div>
       <button class="imp-x" type="button" aria-label="${esc(t("impClose"))}">×</button>

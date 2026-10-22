@@ -3,6 +3,7 @@ import { onLangChange, t } from "../i18n";
 import { anchoringAvailable, accountUrl, network, shortAddress } from "../stellar/config";
 import { grifoApagado, hayAyudaDeFondos } from "../stellar/grifo";
 import { refreshFreezeLabel } from "./freeze";
+import { guardarBorrador } from "./participants";
 import { clearSessionKind, loadSessionKind, pickRestore, saveSessionKind } from "../stellar/session-store";
 
 /**
@@ -35,6 +36,12 @@ interface Session {
   /** Nombre y foto, cuando la cuenta los trae. Con Google, sí. */
   name?: string;
   avatar?: string;
+  /**
+   * Cada operación se aprueba a mano, en una ventana de la billetera
+   * (Freighter). La cuenta de prueba firma en el navegador y Pollar firma y
+   * manda por su cuenta: ninguna de las dos abre nada.
+   */
+  aMano: boolean;
 }
 
 let session: Session | null = null;
@@ -77,6 +84,9 @@ function precargarSello(): void {
 }
 
 export const currentSession = (): Session | null => session;
+
+/** La cuenta abierta pide aprobar cada operación en una ventana (Freighter): lo que se firma no puede arrancar solo. */
+export const apruebaAMano = (): boolean => session?.aMano === true;
 
 /** Se puede sellar en la cadena: hay contrato, hay sesión y la red coincide. */
 export const canAnchor = (): boolean => anchoringAvailable && session !== null && !wrongNetwork;
@@ -178,6 +188,7 @@ async function activate(
     label: wallet.label,
     address,
     ...(prof ? { name: prof.name, avatar: prof.avatar } : {}),
+    aMano: wallet.kind === "external" && (wallet as { submitsItself?: unknown }).submitsItself !== true,
   };
   render();
   refreshFreezeLabel();
@@ -200,6 +211,7 @@ async function restorePollar(): Promise<void> {
       label: pollarWallet.label,
       address,
       ...(prof ? { name: prof.name, avatar: prof.avatar } : {}),
+      aMano: false,
     };
     render();
     refreshFreezeLabel();
@@ -609,6 +621,8 @@ async function abrirPicker(): Promise<void> {
   } catch {
     /* sin almacenamiento, se queda en la portada y el menú lleva a sortear */
   }
+  // Y con la lista que estaba armando: al volver de Google, sigue ahí.
+  guardarBorrador();
   // Sin el SDK: preguntarle a Freighter si está es hablar con su extensión.
   const [w, { pollarConfigured }] = await Promise.all([lite(), import("../stellar/wallet-pollar")]);
   const options: Option[] = [];

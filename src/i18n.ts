@@ -234,6 +234,14 @@ export interface Dict {
   impHeaderOut: (header: string) => string;
   /** Cuántos nombres traían caracteres que no se ven y se limpiaron al cargar la lista. */
   impInvisibles: (n: number) => string;
+  /** Una lista pegada con numeración (D09): en cuántas líneas se sacó, y cómo quedó la primera. */
+  pegNumeracion: (n: number, antes: string, despues: string) => string;
+  /** Las líneas sin número de una lista numerada: suelen ser el título. */
+  pegSueltas: (n: number, ej: string) => string;
+  /** Nombres escritos dos veces exactamente igual: entran una sola vez. */
+  pegIguales: (n: number) => string;
+  /** Dos nombres que parecen la misma persona escrita distinto, y cuántos pares más. */
+  pegParecidos: (a: string, b: string, mas: number) => string;
   impSkipped: (n: number, lines: string) => string;
   impSkippedShort: (n: number) => string;
   /** El mensaje para quien ganó; con `varios`, para todos los que ganaron juntos. */
@@ -443,10 +451,17 @@ export const T: Record<Lang, Dict> = {
     impNotText: (f) => `«${f}» no es un archivo de texto. Si es una planilla, guardala como CSV y subila de nuevo. La lista quedó como estaba.`,
     impHeaderOut: (h) => `«${h}» es el encabezado de la columna: no entra al sorteo.`,
     impInvisibles: (n) => `Se quitaron caracteres invisibles de ${n === 1 ? "1 nombre" : `${n} nombres`}: no se ven, y con ellos el mismo nombre podía entrar dos veces.`,
+    // Una lista pegada de WhatsApp, numerada (21 de octubre de 2026, D09).
+    pegNumeracion: (n, antes, despues) => `Sacamos la numeración de ${n === 1 ? "1 línea" : `${n} líneas`}: «${antes}» entra como «${despues}».`,
+    pegSueltas: (n, ej) => (n === 1 ? `«${ej}» no tenía número: si no es una persona, borralo.` : `${n} líneas no tenían número, como «${ej}»: si no son personas, borralas.`),
+    pegIguales: (n) => (n === 1 ? "Un nombre estaba dos veces igual: entra una sola vez." : `${n} nombres estaban repetidos igual: cada uno entra una sola vez.`),
+    pegParecidos: (a, b, mas) => `«${a}» y «${b}» parecen la misma persona: si lo son, borrá uno.${mas ? ` Y ${mas === 1 ? "otro par" : `${mas} pares más`} así.` : ""}`,
     impSkipped: (n, lines) => (n === 1 ? `No se pudo leer 1 fila (línea ${lines}): quedó afuera.` : `No se pudieron leer ${n} filas (líneas ${lines}): quedaron afuera.`),
     impSkippedHint: "Suele ser una coma sin comillas. Corregila en el archivo y subilo de nuevo, o agregá ese nombre a mano.",
     impSkippedShort: (n) => (n === 1 ? "1 fila no se pudo leer" : `${n} filas no se pudieron leer`),
     impPasted: "Lo que pegaste",
+    // El borrador de la pestaña (21 de octubre de 2026): volvió de Google o se recargó.
+    borradorRepuesto: "Recuperamos la lista que tenías en esta pestaña.",
     impMailSame: "mismo correo",
     impMailOther: "otro correo",
     sample: "Cargar ejemplo", freeze: "Sellar la lista", draw: "Lanzar el sorteo", winners: "Cuántos ganan",
@@ -854,6 +869,9 @@ export const T: Record<Lang, Dict> = {
     espVolver: "Volver a la página",
     espVer: "Mostrar la espera en grande",
     espPie: (n) => `${n} en la lista, sellada: ya nadie la puede cambiar.`,
+    // La espera que desemboca en el show (21 de octubre de 2026): cuando nace el número.
+    espStickerYa: "El número que decide ya existe",
+    espAprobar: "Tu billetera te va a pedir que lo apruebes.",
     winnerLabel: "Lo que salió", verifyTitle: "Por si alguien duda",
     verifyHow: "Cualquiera puede rehacer este sorteo desde su celular y le tiene que dar el mismo nombre. No hace falta que me creas.",
     verifyPasos: "Paso a paso: 1) abrí la ronda de quicknet y verificá su prueba con la clave pública del faro · 2) randomness = sha256(prueba) · 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, salteando repetidos. El protocolo entero está en github.com/nema1502/tinkazo, en docs/protocolo.md.",
@@ -1121,6 +1139,9 @@ export const T: Record<Lang, Dict> = {
     histOnChain: "Ver en Stellar",
     histStateDone: "Sorteado",
     histStatePending: "Sellado, sin sortear",
+    // Un sorteo que quedó sin sortear en este equipo, arriba de la lista (21 de octubre de 2026).
+    pendienteT: "Tenés un sorteo sellado sin sortear: {que}.",
+    pendienteBtn: "Retomarlo",
     histWon: "ganó",
     histWonMany: "ganaron",
     histOtherDevice: "La lista quedó en el equipo donde se selló.",
@@ -1139,6 +1160,10 @@ export const T: Record<Lang, Dict> = {
     salaCopiado: "Copiado ✓",
     vSealsEjemplo: "Es la lista de ejemplo del sitio: la sella cualquiera que lo prueba con su cuenta, así que verla repetida no dice nada.",
     salaPie: "Si falta alguien o alguien está dos veces, es ahora: después de sellar, la lista no se puede cambiar. Cuando se selle, la huella del sorteo tiene que empezar igual.",
+    // La lista ya sellada, en el proyector y en el celular (21 de octubre de 2026).
+    salaTSellada: "La lista sellada",
+    salaPieSellada: "Esta es la lista que decide el sorteo: ya está sellada y no cambia. Buscate mientras nace el número.",
+    listaNotaSellada: "Esta es la lista sellada: ya no cambia, y entre estos nombres sale quien gana. Buscate. La huella del sorteo empieza con estas letras.",
     buscateL: "¿Estás en la lista?",
     buscatePh: "Escribí tu nombre",
     buscateUno: "Estás en el puesto {p} de {n}.",
@@ -1306,7 +1331,7 @@ export const T: Record<Lang, Dict> = {
     tmQ3T: "Dónde van los nombres",
     tmQ3B: "Los nombres nunca suben a la cadena. Suben la huella de la lista, la cantidad de entradas, cuántos ganadores, la ronda, la hora del sello y su número de bloque, el premio o título que escribiste, la dirección de quien organiza y el número del sorteo; y, al sortear, la prueba que publicó la ronda, el número que decidió la ronda, la hora del sorteo, si ya se sorteó, su número de bloque y las posiciones de los ganadores. El comprobante lleva los nombres en la parte de la dirección que el navegador no le manda a ningún servidor; por eso quien comparte el enlace comparte la lista, y si avisás por WhatsApp, el enlace con la lista pasa por WhatsApp. El QR y las caras se dibujan acá mismo. Al compartir o al mostrar el resultado en grande, además, queda una copia en Cloudflare para el enlace corto: lo contamos abajo, en «El enlace corto».",
     tmQ4T: "Lo que queda guardado",
-    tmQ4B: "Si conectás una cuenta, su dirección pública queda en el contrato como la de quien organizó el sorteo: es pública a propósito, para que cada sorteo tenga dueño. Si entrás con Google, Pollar recibe tu nombre, tu correo y tu foto, y guarda la llave; Tinkazo nunca la ve. En este equipo quedan tus preferencias, como el idioma, el sonido y el ritmo del show; el historial de tus sorteos con sus listas, que se borra desde el sitio; los enlaces cortos que armaste o abriste acá; y la llave de la cuenta de prueba si la usás.",
+    tmQ4B: "Si conectás una cuenta, su dirección pública queda en el contrato como la de quien organizó el sorteo: es pública a propósito, para que cada sorteo tenga dueño. Si entrás con Google, Pollar recibe tu nombre, tu correo y tu foto, y guarda la llave; Tinkazo nunca la ve. En este equipo quedan tus preferencias, como el idioma, el sonido y el ritmo del show; el historial de tus sorteos con sus listas, que se borra desde el sitio; la lista que estás armando, solo en esa pestaña y hasta que la sellás; los enlaces cortos que armaste o abriste acá; y la llave de la cuenta de prueba si la usás.",
     tmCortoT: "El enlace corto",
     tmCortoB: "Al compartir un sorteo o mostrarlo en grande se arma un enlace corto, fácil de mandar y con un QR que se lee desde lejos. Para eso queda en Cloudflare una copia del comprobante, con la lista entera, protegida con una clave que va solo en el enlace: Tinkazo no tiene esa clave y no la puede leer, y la abre quien tenga el enlace o su QR. La copia no vence, para que el sorteo se pueda volver a comprobar. Si hace falta borrarla, por ejemplo porque alguien de la lista lo pide, escribinos a hola@tinkazo.app con el enlace y la borramos; alcanza con lo que va antes del #, y sin esa parte ni nosotros podemos abrirla. Borrarla hace que el enlace corto deje de abrir para todos los que lo recibieron, y no le quita la lista a quien ya la abrió.",
     tmMoreT: "Y además",
@@ -1576,6 +1601,7 @@ export const T: Record<Lang, Dict> = {
     evnNombrar: "Ponerle nombre",
     evnSumado: "Sumado a {nombre}.", evnQuitado: "Quitado de {nombre}.", evnNombreVacio: "Ponele un nombre al evento.",
     evnCreado: "Evento creado: {nombre}.", evnSinSorteos: "Todavía no tiene sorteos: sumale alguno desde Mis sorteos.",
+    evnRenombrado: "Nombre guardado: {nombre}.",
     vCompartir: "Compartir este sorteo",
     cTroSpent: (n) => pick([`¡Se le acabó la cuerda a ${n}!`, `¡Se apagó el trompo de ${n}!`, `¡${n} se queda sin cuerda!`]),
     // --- Constelación, sapo y ¿Quién es? (7 de octubre de 2026).
@@ -1612,7 +1638,9 @@ export const T: Record<Lang, Dict> = {
     pasoHecho: "hecho", pasoActual: "paso actual",
     sigRegion: "Lo que sigue",
     sigPaso: "Paso {n} de 4",
-    sigLista: "Lista de {n} personas",
+    // Con el premio, o "sin premio", detrás (pasos.ts, detalleDeLista): sellar lo fija (21 de octubre de 2026, D19).
+    sigLista: "{n} personas",
+    sigSinPremio: "sin premio",
     sigSellando: "Sellando la lista",
     sigEspera: "Esperando la ronda",
     sigRonda: "La ronda ya nació",
@@ -1779,10 +1807,17 @@ export const T: Record<Lang, Dict> = {
     impNotText: (f) => `"${f}" isn't a text file. If it's a spreadsheet, save it as CSV and upload it again. The list was left as it was.`,
     impHeaderOut: (h) => `"${h}" is the column header: it doesn't go into the draw.`,
     impInvisibles: (n) => `Removed invisible characters from ${n === 1 ? "1 name" : `${n} names`}: they don't show, and with them the same name could get in twice.`,
+    // A numbered list pasted from WhatsApp (Oct 21, 2026, D09).
+    pegNumeracion: (n, antes, despues) => `We removed the numbering from ${n === 1 ? "1 line" : `${n} lines`}: "${antes}" goes in as "${despues}".`,
+    pegSueltas: (n, ej) => (n === 1 ? `"${ej}" had no number: if it isn't a person, delete it.` : `${n} lines had no number, like "${ej}": if they aren't people, delete them.`),
+    pegIguales: (n) => (n === 1 ? "One name was there twice, exactly the same: it goes in once." : `${n} names were repeated exactly: each goes in once.`),
+    pegParecidos: (a, b, mas) => `"${a}" and "${b}" look like the same person: if they are, delete one.${mas ? ` And ${mas === 1 ? "one more pair" : `${mas} more pairs`} like that.` : ""}`,
     impSkipped: (n, lines) => (n === 1 ? `1 row couldn't be read (line ${lines}) and was left out.` : `${n} rows couldn't be read (lines ${lines}) and were left out.`),
     impSkippedHint: "It's usually a comma without quotes. Fix it in the file and upload it again, or add that name by hand.",
     impSkippedShort: (n) => (n === 1 ? "1 row couldn't be read" : `${n} rows couldn't be read`),
     impPasted: "What you pasted",
+    // The tab's draft (Oct 21, 2026): back from Google, or reloaded.
+    borradorRepuesto: "We brought back the list you had in this tab.",
     impMailSame: "same email",
     impMailOther: "different email",
     sample: "Load sample", freeze: "Seal the list", draw: "Run the draw", winners: "How many win",
@@ -2171,6 +2206,9 @@ export const T: Record<Lang, Dict> = {
     espVolver: "Back to the page",
     espVer: "Show the wait on the big screen",
     espPie: (n) => `${n} on the list, sealed: nobody can change it now.`,
+    // The wait that flows into the show (Oct 21, 2026): once the number is out.
+    espStickerYa: "The number that decides is out",
+    espAprobar: "Your wallet will ask you to approve it.",
     winnerLabel: "What came out", verifyTitle: "In case anyone doubts it",
     verifyHow: "Anyone can run this draw again from their phone and has to land on the same name. You don't have to take my word for it.",
     verifyPasos: "Step by step: 1) open the quicknet round and check its proof against the beacon's public key · 2) randomness = sha256(proof) · 3) idx = first 8 bytes of sha256(randomness ‖ list_hash ‖ counter) mod entries, skipping repeats. Whole protocol at github.com/nema1502/tinkazo, in docs/protocolo.md.",
@@ -2425,6 +2463,9 @@ export const T: Record<Lang, Dict> = {
     histOnChain: "See it on Stellar",
     histStateDone: "Drawn",
     histStatePending: "Sealed, not drawn yet",
+    // A draw left undrawn on this device, above the list (Oct 21, 2026).
+    pendienteT: "You have a sealed draw that hasn't been drawn: {que}.",
+    pendienteBtn: "Resume it",
     histWon: "won by",
     histWonMany: "won by",
     histOtherDevice: "The list stayed on the device where it was sealed.",
@@ -2443,6 +2484,10 @@ export const T: Record<Lang, Dict> = {
     salaCopiado: "Copied ✓",
     vSealsEjemplo: "This is the site's sample list: anyone trying the site with an account seals it, so seeing it repeated means nothing.",
     salaPie: "If someone is missing or listed twice, now is the time: after sealing, the list can't change. Once sealed, the draw's fingerprint has to start the same way.",
+    // The list once sealed, on the projector and on the phone (Oct 21, 2026).
+    salaTSellada: "The sealed list",
+    salaPieSellada: "This is the list that decides the draw: it's sealed and it won't change. Find yourself while the number comes out.",
+    listaNotaSellada: "This is the sealed list: it won't change, and the winner comes from these names. Find yourself. The draw's fingerprint starts with these characters.",
     buscateL: "Are you on the list?",
     buscatePh: "Type your name",
     buscateUno: "You are number {p} of {n}.",
@@ -2609,7 +2654,7 @@ export const T: Record<Lang, Dict> = {
     tmQ3T: "Where the names go",
     tmQ3B: "Names never go on chain. What goes on chain is the list's fingerprint, the number of entries, how many winners, the round, the seal's time and block number, the prize or title you wrote, the organizer's address and the draw's number; and, when drawn, the proof the round published, the number the round decided, the draw's time, whether it has been drawn, its block number and the winners' positions. The proof carries the names in the part of the address the browser never sends to any server; that is why sharing the link shares the list, and if you notify by WhatsApp, the link with the list goes through WhatsApp. The QR code and the faces are drawn right here. Sharing or showing the result big also keeps a copy on Cloudflare for the short link: more below, in “The short link”.",
     tmQ4T: "What gets stored",
-    tmQ4B: "If you connect an account, its public address is recorded in the contract as the organizer of the draw: public on purpose, so every draw has an owner. If you sign in with Google, Pollar receives your name, email and photo, and holds the key; Tinkazo never sees it. This device keeps your preferences, like language, sound and the show's pace; the history of your draws with their lists, which you can delete from the site; the short links you made or opened here; and the key of the test account if you use it.",
+    tmQ4B: "If you connect an account, its public address is recorded in the contract as the organizer of the draw: public on purpose, so every draw has an owner. If you sign in with Google, Pollar receives your name, email and photo, and holds the key; Tinkazo never sees it. This device keeps your preferences, like language, sound and the show's pace; the history of your draws with their lists, which you can delete from the site; the list you're putting together, only in that tab and until you seal it; the short links you made or opened here; and the key of the test account if you use it.",
     tmCortoT: "The short link",
     tmCortoB: "Sharing a draw or showing it big makes a short link, easy to send and with a QR code that scans from afar. For that, Cloudflare keeps a copy of the receipt, with the whole list, locked with a key that travels only in the link: Tinkazo doesn't have that key and can't read it, and anyone with the link or its QR code can open it. The copy doesn't expire, so the draw can be checked again. If it needs to be deleted, for example because someone on the list asks, write to hola@tinkazo.app with the link and we delete it; the part before the # is enough, and without the rest not even we can open it. Deleting it makes the short link stop opening for everyone who got it, and doesn't take the list back from those who already opened it.",
     tmMoreT: "Also",
@@ -2879,6 +2924,7 @@ export const T: Record<Lang, Dict> = {
     evnNombrar: "Name it",
     evnSumado: "Added to {nombre}.", evnQuitado: "Removed from {nombre}.", evnNombreVacio: "Give the event a name.",
     evnCreado: "Event created: {nombre}.", evnSinSorteos: "No draws yet: add one from My draws.",
+    evnRenombrado: "Name saved: {nombre}.",
     vCompartir: "Share this draw",
     cTroSpent: (n) => pick([`${n}'s top runs out of spin!`, `${n}'s top stops spinning!`, `${n} is out of spin!`]),
     // --- Constellation, sapo and Guess Who (7 October 2026).
@@ -2915,7 +2961,9 @@ export const T: Record<Lang, Dict> = {
     pasoHecho: "done", pasoActual: "current step",
     sigRegion: "What's next",
     sigPaso: "Step {n} of 4",
-    sigLista: "List of {n} people",
+    // With the prize, or "no prize", after it (pasos.ts, detalleDeLista): sealing fixes it (Oct 21, 2026, D19).
+    sigLista: "{n} people",
+    sigSinPremio: "no prize",
     sigSellando: "Sealing the list",
     sigEspera: "Waiting for the round",
     sigRonda: "The round is out",

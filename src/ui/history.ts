@@ -245,6 +245,80 @@ async function sorteosDeEntradas(g: Entry[]): Promise<SorteoDelEvento[]> {
   return out;
 }
 
+/* ------------------------------------------------- el sorteo que quedó sin sortear */
+
+/**
+ * Cuánto hace que se selló, como mucho, para ofrecer retomarlo desde "Nuevo
+ * sorteo": es el que la sala está esperando. Los de antes siguen en Mis sorteos.
+ */
+const PENDIENTE_S = 15 * 60;
+
+/** El sorteo que se ofrece retomar, si hay uno. */
+let pendiente: (Entry & { names: string[] }) | null = null;
+let enlazadoPendiente = false;
+
+/**
+ * Un sorteo sellado en este equipo hace un rato y sin sortear, con su lista:
+ * se recargó la página durante la espera, o se cerró la pestaña. La lista
+ * sellada ya no estaba en la pantalla y "Nuevo sorteo" volvía vacío, sin decir
+ * nada; el sorteo seguía en Mis sorteos, pero había que saber ir a buscarlo
+ * con la sala esperando. Y quien no lo encontraba sellaba otra lista: dos
+ * sellos para lo mismo es justo el patrón que la página de seguridad marca como
+ * el ataque abierto (buscador de detalles, D06).
+ *
+ * Es un aviso arriba de la lista, con "Retomarlo" como acción secundaria: en el
+ * paso 1 la principal sigue siendo sellar. Nunca se retoma solo. Ni en la demo,
+ * ni con un sello en pantalla.
+ */
+function pintarPendiente(list: Entry[]): void {
+  const caja = document.getElementById("pendiente");
+  if (!caja) return;
+  const ahora = Date.now() / 1000;
+  const e =
+    hayUnSello() || document.body.dataset.demo === "1"
+      ? undefined
+      : list.find((x) => x.names?.length && !x.winners?.length && !x.winnerIdx?.length && !x.drawTx && ahora - x.sealedAt < PENDIENTE_S);
+  pendiente = e ? (e as Entry & { names: string[] }) : null;
+  if (!e) {
+    caja.style.display = "none";
+    caja.textContent = "";
+    return;
+  }
+  const que = `${e.prize || t("histDraw")} · ${e.count} ${t("histPeople")}`;
+  caja.innerHTML =
+    `<span>${esc(t("pendienteT").replace("{que}", que))}</span>` +
+    `<button class="mini" type="button" data-retomar-pendiente>${esc(t("pendienteBtn"))}</button>`;
+  caja.style.display = "";
+  if (enlazadoPendiente) return;
+  enlazadoPendiente = true;
+  caja.addEventListener("click", (ev) => {
+    const fila = pendiente;
+    if (!fila || !(ev.target as HTMLElement).closest("[data-retomar-pendiente]")) return;
+    void retomar(fila);
+  });
+}
+
+/**
+ * Hay una lista sellada en la pantalla (la muestra `showFrozen` y la suelta
+ * `unfreeze`). Se mira la página y no el estado: este módulo se prueba sin ella.
+ */
+const hayUnSello = (): boolean => document.getElementById("sec-frozen")?.style.display === "block";
+
+/** Retoma un sorteo sellado (`resumeFrozen`) y saca el aviso: ya no hay nada pendiente fuera de la pantalla. */
+async function retomar(fila: Entry & { names: string[] }): Promise<void> {
+  const { resumeFrozen } = await import("./freeze");
+  resumeFrozen(fila);
+  if (!hayUnSello()) return;
+  pendiente = null;
+  const caja = document.getElementById("pendiente");
+  if (caja) {
+    caja.style.display = "none";
+    caja.textContent = "";
+  }
+  // Si la ronda ya nació, la cuenta regresiva ya dejó el foco en "Lanzar el sorteo"; si no, en la espera.
+  if (document.activeElement === document.body) document.getElementById("btn-espera")?.focus({ preventScroll: true });
+}
+
 function enlazarRearmado(): void {
   if (enlazado) return;
   enlazado = true;
@@ -253,7 +327,7 @@ function enlazarRearmado(): void {
     const r = el.closest<HTMLElement>("[data-retomar]");
     if (r) {
       const fila = pintadas[Number(r.dataset.retomar)];
-      if (fila?.names?.length) void import("./freeze").then((m) => m.resumeFrozen(fila as Entry & { names: string[] }));
+      if (fila?.names?.length) void retomar(fila as Entry & { names: string[] });
       return;
     }
     const comparte = el.closest<HTMLButtonElement>("[data-evento]");
@@ -294,7 +368,13 @@ function enlazarRearmado(): void {
   });
 }
 
-/** Un grupo por fecha pasa a ser un evento con nombre: sus sorteos salen de la lista suelta. */
+/**
+ * Un grupo por fecha pasa a ser un evento con nombre: sus sorteos salen de la
+ * lista suelta. Nace con la fecha de nombre, y el campo queda con el foco y la
+ * fecha marcada: lo que se escribe la reemplaza, y Enter lo guarda. Hasta el
+ * 21 de octubre de 2026 el foco se perdía, Enter no hacía nada y lo escrito se
+ * iba al recargar (buscador de detalles, D14).
+ */
 function nombrarGrupo(organizer: string, g: Entry[]): void {
   const sorteos: SorteoGuardado[] = g
     .filter((e) => tieneComprobante(e) && e.winners?.length && e.proof)
@@ -307,6 +387,35 @@ function nombrarGrupo(organizer: string, g: Entry[]): void {
   guardarEventos(network.name, lista);
   avisar(t("evnCreado").replace("{nombre}", nombre));
   paint(organizer);
+  const campo = document.getElementById(`evn-n-${id}`) as HTMLInputElement | null;
+  campo?.focus();
+  campo?.select();
+}
+
+/**
+ * Guarda el nombre que dice el campo de un evento. Con `repintar`, además
+ * avisa y vuelve a dibujar la sección (Enter o "Guardar el nombre"); sin él
+ * (al salir del campo), solo guarda: repintar ahí rehacía los botones justo
+ * cuando se estaba tocando "Compartir el evento", y el toque se perdía.
+ */
+function guardarNombre(campo: HTMLInputElement, id: string, repintar: boolean): void {
+  const nombre = campo.value.trim();
+  if (!shown) return;
+  if (!nombre) {
+    if (!repintar) return;
+    avisar(t("evnNombreVacio"));
+    paint(shown);
+    return;
+  }
+  const lista = leerEventos(network.name);
+  if (lista.find((x) => x.id === id)?.nombre === nombre && !repintar) return;
+  guardarEventos(network.name, renombrarEvento(lista, id, nombre));
+  if (!repintar) return;
+  avisar(t("evnRenombrado").replace("{nombre}", nombre));
+  paint(shown);
+  // Lo que sigue es mandarlo: el foco a "Compartir el evento", sin volver a abrir el teclado del celular.
+  const sigue = document.querySelector<HTMLButtonElement>(`[data-evento-compartir="${CSS.escape(id)}"]`);
+  if (sigue && !sigue.disabled) sigue.focus({ preventScroll: true });
 }
 
 /** La clave "id|posición" de un sorteo dentro de un evento, como la ponen los botones. */
@@ -352,9 +461,12 @@ function tarjetaDeEvento(ev: EventoGuardado, list: Entry[]): string {
   const filas = ev.sorteos.map((s, k) => filaDeEvento(ev, s, k, list)).join("");
   return (
     `<article class="evn-card">` +
+    // Un formulario, como "Crear evento": Enter guarda el nombre.
+    `<form class="evn-nombre" data-renombrar="${id}">` +
     `<label class="kicker" for="evn-n-${id}">${esc(t("evnNombre"))}</label>` +
-    `<div class="evn-fila"><input id="evn-n-${id}" type="text" maxlength="80" value="${esc(ev.nombre)}">` +
-    `<button class="ghost mini" type="button" data-evento-guardar="${id}">${esc(t("evnGuardar"))}</button></div>` +
+    `<div class="evn-fila"><input id="evn-n-${id}" type="text" maxlength="80" autocomplete="off" value="${esc(ev.nombre)}">` +
+    `<button class="ghost mini" type="submit">${esc(t("evnGuardar"))}</button></div>` +
+    `</form>` +
     `<p class="hc-meta">${esc(n === 1 ? t("evUnSorteo") : t("evNSorteos").replace("{n}", String(n)))}</p>` +
     `<div class="hc-acciones">` +
     `<button class="primary mini" type="button" data-evento-compartir="${id}"${n ? "" : " disabled"}>${esc(t("histGrupoCompartir"))}</button>` +
@@ -392,6 +504,13 @@ function enlazarEventos(): void {
   const caja = $("hist-eventos");
   caja.addEventListener("submit", (e) => {
     const f = e.target as HTMLFormElement;
+    const renombra = f.closest<HTMLFormElement>("form[data-renombrar]");
+    if (renombra) {
+      e.preventDefault();
+      const campo = renombra.querySelector<HTMLInputElement>("input");
+      if (campo) guardarNombre(campo, renombra.dataset.renombrar ?? "", true);
+      return;
+    }
     if (!f.matches("form[data-nuevo]") || !shown) return;
     e.preventDefault();
     const nombre = (f.querySelector("input") as HTMLInputElement).value.trim();
@@ -410,14 +529,6 @@ function enlazarEventos(): void {
     if (compartir) {
       const ev = leerEventos(network.name).find((x) => x.id === compartir.dataset.eventoCompartir);
       if (ev) void sorteosDelEvento(ev).then((sorteos) => compartirEvento(ev.nombre, sorteos));
-      return;
-    }
-    const guardar = el.closest<HTMLButtonElement>("[data-evento-guardar]");
-    if (guardar) {
-      const nombre = guardar.closest(".evn-card")?.querySelector<HTMLInputElement>("input")?.value.trim() ?? "";
-      if (!nombre) avisar(t("evnNombreVacio"));
-      else guardarEventos(network.name, renombrarEvento(leerEventos(network.name), guardar.dataset.eventoGuardar ?? "", nombre));
-      paint(shown);
       return;
     }
     const borrar = el.closest<HTMLButtonElement>("[data-evento-borrar]");
@@ -443,6 +554,12 @@ function enlazarEventos(): void {
       if (r) void compartirSorteo(r.s.enlace, r.s.ganadores);
     }
   });
+  // Al salir del campo con un nombre nuevo, se guarda sin repintar: lo escrito no se pierde aunque no se toque "Guardar".
+  caja.addEventListener("change", (e) => {
+    const campo = e.target;
+    const f = campo instanceof HTMLInputElement ? campo.closest<HTMLFormElement>("form[data-renombrar]") : null;
+    if (f && campo instanceof HTMLInputElement) guardarNombre(campo, f.dataset.renombrar ?? "", false);
+  });
 }
 
 /* ------------------------------------------------------- los enlaces cortos */
@@ -456,6 +573,7 @@ function enlazarEventos(): void {
 function paint(organizer: string | null): void {
   shown = organizer;
   const box = $("sec-history");
+  pintarPendiente(organizer ? historyOf(organizer) : []);
   if (!organizer) {
     box.style.display = "none";
     return;

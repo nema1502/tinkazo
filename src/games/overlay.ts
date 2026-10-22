@@ -300,13 +300,24 @@ export function takeOverScreen(el: HTMLElement): void {
   document.addEventListener("visibilitychange", onVisible);
 }
 
+/**
+ * El show termina sin soltar la pantalla completa: arrancó desde la espera en
+ * grande y desemboca en el resultado en grande (`draw.ts`). Soltarla para
+ * volver a pedirla no se puede: sin un toque, el navegador la niega.
+ */
+let seguirEnGrande = false;
+
+export function seguirEnPantallaCompleta(si: boolean): void {
+  seguirEnGrande = si;
+}
+
 export function releaseScreen(): void {
   document.removeEventListener("visibilitychange", onVisible);
   if (sentinel) {
     void sentinel.release().catch(() => undefined);
     sentinel = null;
   }
-  if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+  if (document.fullscreenElement && !seguirEnGrande) void document.exitFullscreen().catch(() => undefined);
 }
 
 /**
