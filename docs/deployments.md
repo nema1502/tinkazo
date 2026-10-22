@@ -53,17 +53,65 @@ Notas:
 # Identidad de la CLI: se guarda en ~/.config/stellar/identity/ (fuera del repo)
 stellar keys generate tinkazo-deployer --network testnet --fund
 
-# Compilar, desplegar y registrar la fila en esta tabla
+# Testnet, para probar: compila acá, despliega y registra la fila en esta tabla
 scripts/deploy.sh testnet
 ```
 
-Para mainnet, la CLI no trae RPC preconfigurado: `stellar network add mainnet --rpc-url https://mainnet.sorobanrpc.com --network-passphrase "Public Global Stellar Network ; September 2015"` y luego `scripts/deploy.sh mainnet`. Antes, pasar las puertas del skill `deploy-stellar-mainnet` (historia 5.1).
+En mainnet no se compila acá: se despliega el `.wasm` del release que arma GitHub Actions, tal cual. Otro compilador u otra máquina dan otro hash, y ese contrato ya no se puede verificar.
+
+```bash
+# 1. Un tag dispara .github/workflows/release.yml: pruebas, compilación, release y atestación
+git tag v0.1.0 && git push origin v0.1.0
+
+# 2. Bajar el .wasm del release (el nombre exacto del release sale en el resumen del workflow)
+gh release download v0.1.0_tinkazo-raffle_cli28.1.0 --repo nema1502/tinkazo --pattern '*.wasm'
+gh attestation verify tinkazo-raffle_v0.1.0.wasm --repo nema1502/tinkazo \
+  --signer-repo stellar-expert/soroban-build-workflow
+
+# 3. Desplegarlo. El script no despliega en mainnet un .wasm sin atestación de GitHub,
+#    y al final compara el hash de la red con el del archivo.
+stellar network add mainnet --rpc-url https://mainnet.sorobanrpc.com \
+  --network-passphrase "Public Global Stellar Network ; September 2015"
+scripts/deploy.sh mainnet --wasm tinkazo-raffle_v0.1.0.wasm
+```
+
+Antes, pasar las puertas del skill `deploy-stellar-mainnet` (historia 5.1).
+
+## Verificar la compilación
+
+Lo que se puede comprobar es que el `.wasm` que corre en la red salió de un commit público de este repositorio, compilado por GitHub Actions. No dice que el código sea correcto: para eso está el código.
+
+1. **stellar.expert.** La página del contrato muestra «Source code» con el enlace al repositorio y al commit; su API, `https://api.stellar.expert/explorer/public/contract/<C…>`, devuelve `"validation": {"status": "verified", …}`. Lo marca el servicio de StellarExpert, que solo acepta lo compilado por `stellar-expert/soroban-build-workflow`: por eso el release usa ese workflow. La marca va por el hash del `.wasm`, así que vale en testnet y en mainnet para cualquier contrato con esos mismos bytes.
+2. **Stellar Lab.** El explorador de contratos de [lab.stellar.org](https://lab.stellar.org) muestra «Verified Build» cuando la atestación de GitHub ([SEP-55](https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0055.md)) coincide con el hash y con el repositorio que declara el contrato. No depende de stellar.expert.
+3. **stellar-cli.** `stellar contract info build --contract-id <C…> --network mainnet` baja el `.wasm` de la red, lee `source_repo` y busca la atestación: muestra el repositorio, el commit, el workflow y la corrida. Con el archivo: `gh attestation verify <archivo.wasm> --repo nema1502/tinkazo --signer-repo stellar-expert/soroban-build-workflow`.
+4. **Recompilarlo.** El `.wasm` guarda con qué se compiló (`stellar contract info meta --wasm <archivo>`: `rsver`, `cliver`). En Linux x86_64, con Rust 1.98.1 (lo fija `rust-toolchain.toml`) y stellar-cli 28.1.0:
+
+```bash
+git checkout <commit del release>
+stellar contract build --optimize --package tinkazo-raffle --out-dir recompilado \
+  --meta source_repo=github:nema1502/tinkazo
+sha256sum recompilado/tinkazo_raffle.wasm      # el mismo que el del release
+stellar contract fetch --id <C…> --network mainnet --out-file red.wasm
+sha256sum red.wasm                              # y el mismo que el de la red
+```
+
+El workflow hace esa recompilación en otra máquina en cada release y falla si el hash no coincide. También sube al release el archivo de fuentes con su sha256 (`stellar contract build archive`), el dato que pide [SEP-58](https://github.com/stellar/stellar-protocol/blob/master/ecosystem/sep-0058.md) para que un verificador independiente lo recompile. El `.wasm` no lleva los campos de SEP-58 (`bldimg`, `bldopt`, `source_sha256`): el workflow de StellarExpert compila sin contenedor y no deja agregar metadatos propios. SEP-58 admite que esos datos vivan fuera del contrato, en un registro.
+
+### Si StellarExpert no lo marca
+
+Ese servicio es de StellarExpert y no depende de nosotros: entre fines de julio y el 13 de octubre de 2026 no verificó contratos ([soroban-build-workflow#9](https://github.com/stellar-expert/soroban-build-workflow/issues/9)). Si una hora después del release el contrato sigue sin marcar:
+
+1. En la corrida, el paso «Respuesta de StellarExpert» del job «Comprobar el release» dice qué respondió: `{"ok":1}` es que lo recibió.
+2. Reintentar con un tag nuevo sobre el mismo commit (por ejemplo `v0.1.0-r2`): compila los mismos bytes, publica otro release y vuelve a avisar.
+3. Si aun así no lo marca, abrir un issue en `stellar-expert/soroban-build-workflow` con el hash, el commit y la corrida.
+
+Mientras tanto la prueba sigue en pie: la atestación (caminos 2 y 3) y la recompilación (camino 4) no dependen de stellar.expert.
 
 ## Redes
 
-| Red | RPC | Passphrase | Protocolo (2026-09-19) | TTL mínimo persistente |
+| Red | RPC | Passphrase | Protocolo (2026-10-22) | TTL mínimo persistente |
 |---|---|---|---|---|
-| testnet | `https://soroban-testnet.stellar.org` | `Test SDF Network ; September 2015` | 28 | 7 días |
-| mainnet | `https://mainnet.sorobanrpc.com` (o un [proveedor](https://developers.stellar.org/docs/data/apis/rpc/providers)) | `Public Global Stellar Network ; September 2015` | 28 | 120 días |
+| testnet | `https://soroban-testnet.stellar.org` | `Test SDF Network ; September 2015` | 29 | 7 días |
+| mainnet | `https://mainnet.sorobanrpc.com` (o un [proveedor](https://developers.stellar.org/docs/data/apis/rpc/providers)) | `Public Global Stellar Network ; September 2015` | 29 | 120 días |
 
 Testnet se reinicia trimestralmente: los sorteos de prueba desaparecen y hay que redesplegar.

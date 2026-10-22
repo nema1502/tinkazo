@@ -1,0 +1,11 @@
+# La versión de Rust que compila el contrato. Fijarla hace que el .wasm salga
+# igual en cada compilación: el release que arma GitHub Actions, la prueba de que
+# se reproduce y cualquiera que quiera recompilarlo para compararlo con el de la
+# red. Es la misma que compiló el contrato vigente de testnet (rsver 1.98.1).
+# Cambiarla cambia el hash del .wasm: se cambia antes de un release, nunca entre
+# el ensayo y el despliegue.
+[toolchain]
+channel = "1.98.1"
+targets = ["wasm32v1-none"]
+components = ["rustfmt", "clippy"]
+profile = "minimal"

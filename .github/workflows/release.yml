@@ -1,0 +1,182 @@
+# Release verificable del contrato tinkazo-raffle.
+#
+# Al subir un tag que empieza con «v» (por ejemplo v0.1.0):
+#   1. corre las pruebas del contrato;
+#   2. lo compila con el workflow de StellarExpert (stellar-expert/soroban-build-workflow),
+#      que publica el release con el .wasm, firma una atestación de GitHub (SEP-55) que
+#      une su hash con este repositorio y este commit, y le avisa a StellarExpert para
+#      que muestre el contrato con su código en GitHub. Su servicio solo acepta los
+#      .wasm compilados por ese workflow exacto;
+#   3. comprueba el release: la atestación, que una compilación aparte da el mismo
+#      .wasm byte por byte y qué respondió StellarExpert. Sube además el archivo de
+#      fuentes, con el hash que pide SEP-58.
+#
+# Lo que se despliega, en testnet o en mainnet, es el .wasm de este release, tal cual.
+# Uno compilado en otra máquina tiene otro hash y no queda verificado.
+# Los pasos y cómo comprobarlo: docs/deployments.md, «Verificar la compilación».
+name: Release del contrato
+
+on:
+  push:
+    tags: ['v*']
+
+permissions: {}
+
+jobs:
+  pruebas:
+    name: Pruebas del contrato
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      # La versión de Rust sale de rust-toolchain.toml; rustup la instala sola.
+      - name: Pruebas
+        run: cargo test --workspace
+
+  contrato:
+    name: Compilar y publicar el release
+    needs: pruebas
+    permissions:
+      id-token: write       # firmar la atestación
+      contents: write       # crear el release
+      attestations: write   # guardar la atestación
+    # @main es lo que piden la documentación de StellarExpert y los contratos que ya
+    # verificó. El commit exacto que corrió queda en el log y en la atestación.
+    uses: stellar-expert/soroban-build-workflow/.github/workflows/release.yml@main
+    with:
+      release_name: ${{ github.ref_name }}
+      release_description: 'Contrato tinkazo-raffle compilado por GitHub Actions desde este commit. Se despliega este .wasm, tal cual. / The tinkazo-raffle contract, built by GitHub Actions from this commit. Deploy this .wasm as is.'
+      package: 'tinkazo-raffle'
+    secrets:
+      release_token: ${{ secrets.GITHUB_TOKEN }}
+
+  comprobar:
+    name: Comprobar el release
+    needs: contrato
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # subir el archivo de fuentes al release
+      attestations: read    # leer la atestación
+      actions: read         # leer en el log qué respondió StellarExpert
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bajar el .wasm del release
+        id: release
+        run: |
+          prefijo="${GITHUB_REF_NAME}_tinkazo-raffle_"
+          etiqueta="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName \
+            --jq "[.[].tagName | select(startswith(\"$prefijo\"))][0] // empty")"
+          if [ -z "$etiqueta" ]; then
+            echo "::error::No hay un release que empiece con $prefijo"
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/release"
+          gh release download "$etiqueta" --repo "$GITHUB_REPOSITORY" --pattern '*.wasm' --dir "$RUNNER_TEMP/release"
+          wasm="$(ls "$RUNNER_TEMP"/release/*.wasm | head -1)"
+          {
+            echo "etiqueta=$etiqueta"
+            echo "cli=${etiqueta##*_cli}"
+            echo "wasm=$wasm"
+            echo "hash=$(sha256sum "$wasm" | cut -d' ' -f1)"
+          } >> "$GITHUB_OUTPUT"
+
+      # La misma versión de stellar-cli que compiló el release (va en el nombre del tag).
+      - uses: stellar/stellar-cli@v28.1.0
+        with:
+          version: ${{ steps.release.outputs.cli }}
+
+      - name: Atestación de GitHub (SEP-55)
+        env:
+          WASM: ${{ steps.release.outputs.wasm }}
+        run: |
+          gh attestation verify "$WASM" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-repo stellar-expert/soroban-build-workflow \
+            --deny-self-hosted-runners
+          # Lo mismo que muestra Stellar Lab. Consulta la API de GitHub sin token,
+          # así que un límite de pedidos no frena el release: queda como aviso.
+          stellar contract info build --wasm "$WASM" \
+            || echo "::warning::stellar contract info build no respondió; la atestación ya se comprobó arriba"
+          stellar contract info meta --wasm "$WASM"
+
+      # Antes de compilar, para que el archivo salga del árbol limpio del commit.
+      - name: Archivo de fuentes (source_sha256 de SEP-58)
+        id: fuentes
+        env:
+          ETIQUETA: ${{ steps.release.outputs.etiqueta }}
+        run: |
+          archivo="$RUNNER_TEMP/tinkazo-${GITHUB_REF_NAME}-fuentes.tar.gz"
+          stellar contract build archive --out-file "$archivo"
+          echo "sha256=$(sha256sum "$archivo" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          gh release upload "$ETIQUETA" "$archivo" --repo "$GITHUB_REPOSITORY" --clobber
+
+      # Otra máquina, otra carpeta, los mismos comandos: tiene que dar el mismo .wasm.
+      - name: Recompilar y comparar
+        id: recompilar
+        env:
+          HASH_RELEASE: ${{ steps.release.outputs.hash }}
+        run: |
+          rustc --version
+          stellar --version
+          salida="$RUNNER_TEMP/recompilado"
+          stellar contract build --optimize --package tinkazo-raffle --out-dir "$salida" \
+            --meta "source_repo=github:${GITHUB_REPOSITORY}"
+          hash="$(sha256sum "$salida/tinkazo_raffle.wasm" | cut -d' ' -f1)"
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+          if [ "$hash" != "$HASH_RELEASE" ]; then
+            echo "::error::La recompilación no da el mismo .wasm: release $HASH_RELEASE, recompilado $hash"
+            exit 1
+          fi
+          echo "Se reproduce: $hash"
+
+      # El paso de StellarExpert da por bueno cualquier 200, aunque no encole nada.
+      # Acá se mira qué respondió de verdad: {"ok":1} es que lo recibió.
+      - name: Respuesta de StellarExpert
+        id: stellar_expert
+        if: always() && steps.release.outcome == 'success'
+        run: |
+          log="$RUNNER_TEMP/compilacion.log"
+          job="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" \
+            --jq '.jobs[] | select(.name | endswith("/ build")) | .id' | head -1)"
+          if [ -n "$job" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs" > "$log" 2>/dev/null || true
+          fi
+          if [ -s "$log" ] && grep -q '{"ok":1}' "$log"; then
+            estado='lo recibió ({"ok":1})'
+          elif [ -s "$log" ] && grep -q 'Forbidden' "$log"; then
+            estado='lo rechazó (403)'
+            echo "::warning::StellarExpert rechazó el aviso. Ver docs/deployments.md, «Si StellarExpert no lo marca»."
+          else
+            estado='sin confirmación'
+            echo "::warning::StellarExpert no confirmó el aviso. Ver docs/deployments.md, «Si StellarExpert no lo marca»."
+          fi
+          echo "estado=$estado" >> "$GITHUB_OUTPUT"
+
+      - name: Resumen
+        if: always()
+        env:
+          ETIQUETA: ${{ steps.release.outputs.etiqueta }}
+          WASM: ${{ steps.release.outputs.wasm }}
+          HASH: ${{ steps.release.outputs.hash }}
+          HASH_RECOMPILADO: ${{ steps.recompilar.outputs.hash }}
+          FUENTES: ${{ steps.fuentes.outputs.sha256 }}
+          ESTADO: ${{ steps.stellar_expert.outputs.estado }}
+        run: |
+          {
+            echo "## Release del contrato"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Release | \`$ETIQUETA\` |"
+            echo "| .wasm | \`$(basename "${WASM:-sin-wasm}")\` |"
+            echo "| sha256 del release | \`$HASH\` |"
+            echo "| sha256 recompilado | \`$HASH_RECOMPILADO\` |"
+            echo "| Archivo de fuentes (sha256) | \`$FUENTES\` |"
+            echo "| StellarExpert | $ESTADO |"
+            echo
+            echo "Se despliega este .wasm, tal cual: \`scripts/deploy.sh <testnet|mainnet> --wasm $(basename "${WASM:-sin-wasm}")\`."
+          } >> "$GITHUB_STEP_SUMMARY"
