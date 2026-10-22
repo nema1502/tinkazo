@@ -24,9 +24,10 @@
  * nombran: la línea que nombra a un eliminado no es una pista, es el embudo.
  * En los juegos donde los nombres no se ven todo el tiempo (la ruleta, la
  * tómbola, la constelación) siguen todos hasta el final, y en la piñata, donde
- * el nombre aparece recién cuando el caramelo cae, sigue el que no cayó. En el
- * trueque, donde cada nombre se ve solo cuando el encargo prueba su puesto,
- * sale el que cambia o es un callejón, en la línea que lo dice.
+ * todos los nombres se ven siempre (los de adentro en una columna, los caídos
+ * en otra), sale el que el relator nombra al caer. En el trueque, donde cada nombre
+ * se ve solo cuando el encargo prueba su puesto, sale el que cambia o es un
+ * callejón, en la línea que lo dice.
  *
  * Cada señal se mide dentro de su arco (sección 8.7): antes del momento que
  * decide (`corte`), que en cada juego es otro: el último tiro del sapo, la
@@ -66,7 +67,8 @@ export const MARCADORES = {
   cTroWobble: /^¡(Cabecea el de .+|.+ se tambalea|Se va el de .+)!$/u,
   cTroEdge: /^¡(.+ casi se sale|.+ en el borde|.+ rozó la tiza)!$/u,
   cTroSpent: /^¡(Se le acabó la cuerda a .+|Se apagó el trompo de .+|.+ se queda sin cuerda)!$/u,
-  // La piñata.
+  // La piñata. `cPinOut` también reconoce `cPinOutMany` y `cPinOutMore`: todas son caídas.
+  cPinOut: /^¡(Se cayó .+|Se cayeron .+|Afuera .+|.+ al piso)!$/u,
   cPinAlmost: /^¡(Casi se cae .+|.+ se asoma|Se agarra .+)!$/u,
   cPinBreak: /^¡(SE ROMPIÓ|SE ABRIÓ LA PIÑATA|AHÍ CAE)!$/u,
   // De pie (antes ¿Quién es?): la respuesta que sienta a los que no cumplen, y
@@ -170,7 +172,6 @@ export function preparar(tr, cfg = {}) {
   P.sigue = (i, t) => {
     if (fuera) return !(fuera.get(i) <= despues(t));
     if (modo === "todos") return true;
-    if (modo === "caidos") return primera[i] === null || primera[i] >= revelado - AL_FINAL || primera[i] > despues(t);
     if (primera[i] === null) return false;
     return ultima[i] >= revelado - AL_FINAL || ultima[i] > despues(t);
   };
@@ -745,13 +746,30 @@ export function afueraTrueque(P) {
   return fuera;
 }
 
+/**
+ * Quién cae de la piñata y cuándo: el que nombra el relator al caer ("¡Afuera
+ * X!", "¡Se cayeron X y Y!"). Los nombres ya no sirven: desde octubre se ven
+ * todos, todo el tiempo (la columna de los de adentro y la de los caídos), y
+ * hasta el 21 de octubre el auditor tomaba aparecer por caer, así que el susto
+ * (el caramelo que se asoma) quedaba sin medir. El que cae sin nombre ("¡Se
+ * cayó X y 3 más!", con mucha gente) sigue contando en juego: el azar sube y
+ * la prueba se vuelve más prudente, nunca más fácil.
+ */
+export function afueraPinata(P) {
+  const fuera = new Map();
+  for (const s of P.subs) {
+    if (s.t > P.revelado || !MARCADORES.cPinOut.test(s.s)) continue;
+    for (const i of s.quienes) if (!fuera.has(i)) fuera.set(i, s.t);
+  }
+  return fuera;
+}
+
 /* ================================================================== juegos */
 
 /**
  * Cómo se mira cada juego:
  *
- * - `candidatos`: `visibles` (siguen los que se vuelven a ver), `todos`, o
- *   `caidos` (siguen los que todavía no aparecieron: la piñata).
+ * - `candidatos`: `visibles` (siguen los que se vuelven a ver) o `todos`.
  * - `corte`: el momento que decide; las señales se miden antes. Sin corte, el
  *   cartel del ganador.
  * - `arranque`: cuándo y en qué orden se mira dónde arranca cada uno.
@@ -790,7 +808,8 @@ export const JUEGOS = {
     especificas: [linea("cabecea", ["cTroWobble"]), linea("borde", ["cTroEdge"])],
   },
   pinata: {
-    candidatos: "caidos",
+    candidatos: "todos",
+    afuera: afueraPinata,
     corte: { clave: "cPinBreak" },
     especificas: [linea("asoma", ["cPinAlmost"])],
   },

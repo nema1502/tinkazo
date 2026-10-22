@@ -23,6 +23,7 @@ import {
   senalesTombola,
   senalesTrueque,
   afueraTrueque,
+  afueraPinata,
 } from "./delatores-senales.mjs";
 
 const NOMBRES = ["María Quispe", "Jorge Mamani", "Lucía Flores", "Carlos Choque", "Ana Vargas", "Diego Rojas", "Elena Condori", "Pablo Gutiérrez"];
@@ -74,7 +75,7 @@ describe("las líneas del relator que marcan momentos coinciden con src/i18n.ts"
     cWheelOn: conNombre, cWheelFalse: conNombre, cWheelMoved: [], cWheelLast: [],
     cTomDoor: [], cTomFake: ["7"], cTomBack: [], cTomBall: ["7"],
     cTroWobble: conNombre, cTroEdge: conNombre, cTroSpent: conNombre,
-    cPinAlmost: conNombre, cPinBreak: [],
+    cPinOut: conNombre, cPinAlmost: conNombre, cPinBreak: [],
     cOruMask: conNombre, cOruArrive: [],
     cChoOut: conNombre, cChoWobble: conNombre, cChoHold: conNombre, cChoBack: conNombre,
     cTelDoor: conNombre, cTelSlip: conNombre, cTelDock: [],
@@ -96,6 +97,12 @@ describe("las líneas del relator que marcan momentos coinciden con src/i18n.ts"
       expect(T.es.cOruCount(n)).toMatch(MARCADORES.cOruCount);
       expect(T.es.cChoCount(n)).toMatch(MARCADORES.cChoCount);
     }
+  });
+
+  it("las caídas de la piñata, de a una, de a varias y con \"y tantos más\"", () => {
+    for (const s of variantes("cPinOutMany", [["Ana Vargas", "Diego Rojas"]])) expect(s).toMatch(MARCADORES.cPinOut);
+    for (const s of variantes("cPinOutMore", ["Ana Vargas", 3])) expect(s).toMatch(MARCADORES.cPinOut);
+    for (const s of variantes("cPinAlmost", ["Ana Vargas"])) expect(s).not.toMatch(MARCADORES.cPinOut);
   });
 
   it("el cartel del ganador, con uno y con varios", () => {
@@ -145,12 +152,20 @@ describe("quién sigue en juego", () => {
     expect(preparar(tr, { candidatos: "todos" }).vivos(29)).toHaveLength(8);
   });
 
-  it("en la piñata sigue el que todavía no cayó", () => {
-    const tr = traza({ pos: (t) => ({ ...(t >= 6 ? { 0: [100, 600] } : {}), ...(t >= 30 ? { 2: [600, 300] } : {}) }) });
-    const P = preparar(tr, { candidatos: "caidos" });
+  it("en la piñata sale el que nombran al caer, aunque todos los nombres estén a la vista", () => {
+    // Todos en la columna de adentro; el 0 y el 5 caen a los 6 y a los 12; el 2,
+    // que gana, se asoma a los 20,5.
+    const tr = traza({
+      pos: todosEnFila,
+      subs: [[6, "¡Afuera María Quispe!"], [12, "¡Se cayeron Diego Rojas y Ana Vargas!"], [20.5, "¡Se agarra Lucía Flores!"], [26, "¡SE ROMPIÓ!"]],
+    });
+    const P = preparar(tr, JUEGOS.pinata);
+    expect([...afueraPinata(P)]).toEqual([[0, 6], [5, 12], [4, 12]]);
     expect(P.sigue(0, 3)).toBe(true);
     expect(P.sigue(0, 6)).toBe(false);
-    expect(P.sigue(2, 28)).toBe(true);
+    expect(P.sigue(2, 25)).toBe(true);
+    // El susto se mide: el que se asoma es el que gana, entre los cinco que quedan.
+    expect(senales(tr, "pinata").senales.asoma["el-nombrado"]).toEqual({ acierta: true, azar: 1 / 5 });
   });
 
   it("lo que no se ve no cuenta: transparente, chico o fuera de la pantalla", () => {
