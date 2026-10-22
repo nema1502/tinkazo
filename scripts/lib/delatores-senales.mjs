@@ -82,6 +82,7 @@ export const MARCADORES = {
   cOruGo: /^¡(Un bailarín|Dos bailarines|\d+ bailarines( en \d+ fraternidades)?): arranca el recorrido!$/u,
   cOruScare: /^¡Casi se le (vuela el sombrero|cae la montera|cae la máscara) a .+!$/u,
   cOruFake: /^¿Se queda(n)? .+\?$/u,
+  cOruStay: /^¡Cuadra \d+! Se queda(n)? .+$/u,
   cOruFall: /^¡(A .+ se le (voló el sombrero|cayó la montera|cayó la máscara)|Se le (voló el sombrero|cayó la montera|cayó la máscara))!$/u,
   cOruArriveFrat: /^¡(.+ llegaron al Socavón|.+, hasta el Socavón|Campanas para .+: llegaron al Socavón)!$/u,
   // La chovena.
@@ -166,8 +167,9 @@ export function preparar(tr, cfg = {}) {
   const arco = marks.find((m) => m.k === "arco")?.v ?? "?";
   const P = { names, n, w, W, H, frames, subs, marks, trazos, escena, revelado, primera, ultima, arco, tiempos: {} };
   P.corte = Math.min(cuando(P, cfg.corte) ?? revelado, revelado);
-  // Con `afuera` (en los juegos donde los nombres no se ven todo el tiempo,
-  // como el trueque), quién sale y cuándo lo dice el juego, no la pantalla.
+  // Con `afuera`, quién sale y cuándo lo dice también el relator: en los
+  // juegos donde los nombres no se ven todo el tiempo (el trueque, la piñata)
+  // es lo único que cuenta, y en los otros se suma a lo que dice la pantalla.
   const fuera = cfg.afuera ? cfg.afuera(P) : null;
   // Sigue en juego en `t` el que se vuelve a ver más de `GRACIA` segundos
   // después, o en el momento que decide: el que cae justo ahí (la rival del
@@ -175,7 +177,7 @@ export function preparar(tr, cfg = {}) {
   const modo = cfg.candidatos ?? "visibles";
   const despues = (t) => Math.min(t + GRACIA, P.corte - 0.001);
   P.sigue = (i, t) => {
-    if (fuera) return !(fuera.get(i) <= despues(t));
+    if (fuera && fuera.get(i) <= despues(t)) return false;
     if (modo === "todos") return true;
     if (primera[i] === null) return false;
     return ultima[i] >= revelado - AL_FINAL || ultima[i] > despues(t);
@@ -809,6 +811,22 @@ export function senalesEntrada(P) {
   return { "con-nombre": { "los-que-tienen-nombre": apuesta([...G], todos, P.w) } };
 }
 
+/**
+ * Quién sale de La Entrada y cuándo, además de lo que dice la pantalla: el que
+ * nombra el relator al quedarse en una cuadra ("¡Cuadra 2! Se queda X") y el
+ * que pierde el contrapunto, cuando se le cae la prenda. Los que se quedan
+ * siguen a la vista un rato: sin esto, la línea que los despide parecía una
+ * pista "al revés".
+ */
+export function afueraEntrada(P) {
+  const fuera = new Map();
+  for (const s of P.subs) {
+    if (s.t > P.revelado || !(MARCADORES.cOruStay.test(s.s) || MARCADORES.cOruFall.test(s.s))) continue;
+    for (const i of s.quienes) if (!fuera.has(i)) fuera.set(i, s.t);
+  }
+  return fuera;
+}
+
 /* ================================================================== juegos */
 
 /**
@@ -885,6 +903,7 @@ export const JUEGOS = {
       { desde: { clave: "cOruGo" }, orden: "x" },
       { desde: { clave: "cOruGo" }, orden: "y" },
     ],
+    afuera: afueraEntrada,
     especificas: [linea("mascara", ["cOruScare"]), linea("amague", ["cOruFake"]), senalesEntrada],
   },
   chovena: {

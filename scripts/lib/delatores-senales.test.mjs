@@ -120,6 +120,11 @@ describe("las líneas del relator que marcan momentos coinciden con src/i18n.ts"
     expect(T.es.cOruFake("los", "Morenos")).toMatch(MARCADORES.cOruFake);
     expect(T.es.cOruFakeOne("Ana Vargas")).toMatch(MARCADORES.cOruFake);
     expect(T.es.cOruGo(1, 1)).toMatch(MARCADORES.cOruGo);
+    expect(T.es.cOruMemStay(2, ["Ana Vargas"])).toMatch(MARCADORES.cOruStay);
+    expect(T.es.cOruMemStay(3, ["Ana Vargas", "Diego Rojas"])).toMatch(MARCADORES.cOruStay);
+    expect(T.es.cOruFratStay(1, "los", "Morenos", 0)).toMatch(MARCADORES.cOruStay);
+    expect(T.es.cOruMemMany(4, 5, "los", "Morenos")).toMatch(MARCADORES.cOruStay);
+    expect(T.es.cOruMemPrize(4, 1, 1)).toMatch(MARCADORES.cOruStay);
     expect(T.es.cOruGo(2, 1)).toMatch(MARCADORES.cOruGo);
   });
 
@@ -549,6 +554,14 @@ describe("La Entrada", () => {
     expect(P.vivos(9)).toEqual([1, 3, 5, 7]);
     expect(senalesEntrada(P)["con-nombre"]["los-que-tienen-nombre"]).toEqual({ acierta: true, azar: 1 / 2 });
     expect(P.corte).toBe(25);
+  });
+
+  it("el que se queda en una cuadra sale aunque siga a la vista", () => {
+    const tr = traza({ ganador: 5, pos: todosEnFila, subs: [[9, "¡8 bailarines: arranca el recorrido!"], [12, "¡Cuadra 2! Se queda Carlos Choque"], [25, "¡A Jorge Mamani se le cayó la máscara!"]] });
+    const P = preparar(tr, JUEGOS.oruro);
+    expect(P.sigue(3, 9)).toBe(true);
+    expect(P.sigue(3, 11)).toBe(false);
+    expect(P.vivos(24)).toEqual([0, 1, 2, 4, 5, 6, 7]);
   });
 });
 
