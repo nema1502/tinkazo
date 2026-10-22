@@ -19,7 +19,7 @@ Documento de decisiones técnicas para implementar el [PRD](prd.md) sobre Stella
 
 **No funcionales que dominan el diseño.**
 - NFR-1 (determinismo verificable) obliga a que todo lo que decide un resultado sea puro y esté especificado. Impone dos implementaciones del mismo algoritmo (Rust y TypeScript) con vectores compartidos.
-- NFR-2 (sin servidor) descarta backend y base de datos: el sitio es estático y las únicas dependencias en ejecución son Stellar RPC, drand y la wallet. La única excepción admitida está acotada en la Decisión D-07.
+- NFR-2 (sin servidor para sortear) descarta un backend en el camino del sorteo y una base de datos legible: el sitio es estático y las dependencias del sorteo en ejecución son Stellar RPC, drand y la wallet. D-07 se resolvió sin servidor. La única pieza con servidor es la de la Decisión D-18, el servicio de enlaces cortos: guarda copias cifradas para compartir, no decide nada y tiene el enlace largo de respaldo.
 - NFR-3 (costo < 0,1 XLM por sorteo) condiciona la verificación BLS on-chain; se mide en testnet en la historia 1.4.
 - NFR-4 (repo público sin secretos) define reglas de configuración y de la CLI de Stellar.
 - NFR-6 (privacidad) fija que en la cadena solo viaja el hash de la lista.
@@ -28,7 +28,7 @@ Documento de decisiones técnicas para implementar el [PRD](prd.md) sobre Stella
 
 - Dominio: aplicación web estática + un contrato Soroban sin custodia de fondos.
 - Complejidad: media. No hay concurrencia ni estado compartido entre usuarios; la dificultad está en criptografía (BLS12-381, RFC 9380), determinismo entre lenguajes y UX de wallet.
-- Componentes: contrato (1), frontend (1 app con 2 entradas), protocolo compartido (2 implementaciones), infraestructura (Vercel + GitHub Actions).
+- Componentes: contrato (1), frontend (1 app con 2 entradas), protocolo compartido (2 implementaciones), infraestructura (Vercel + GitHub Actions) y, para compartir, el Worker de enlaces cortos en Cloudflare (D-18).
 
 ### Restricciones y dependencias
 
@@ -65,11 +65,12 @@ Versiones verificadas el 2026-09-16 en crates.io, npm y las redes.
 | D-10 | BLS en el navegador | `@noble/curves` **2.x** (`bls12_381.shortSignatures`) para verificar la firma de quicknet en modo libre y para descomprimir la firma G1 (48 → 96 bytes) antes de `draw` | Enviar la firma comprimida al contrato: el host de Soroban solo acepta puntos sin comprimir. |
 | D-11 | Redes | Configuración por `VITE_STELLAR_NETWORK` (`testnet` por defecto). Direcciones de contrato en `src/stellar/deployments.ts` y en [deployments.md](deployments.md) | Auto-detectar la red desde la wallet: la app debe declarar contra qué contrato habla. |
 | D-12 | Hosting y CI | Vercel (proyecto existente, preset Vite, `pnpm`) y GitHub Actions (`cargo test`, build WASM, `pnpm test`, `pnpm build`) | Netlify (opción de v1): el proyecto ya vive en Vercel. |
-| D-13 | Comprobante | Enlace con `red`, `contrato`, `id` y la lista canónica comprimida (deflate + base64url) en el fragmento `#`, más descarga JSON | Lista en la cadena: v2, opcional, expone nombres. Servidor de comprobantes: viola NFR-2. |
+| D-13 | Comprobante | Enlace con `red`, `contrato`, `id` y la lista canónica comprimida (deflate + base64url) en el fragmento `#`, más descarga JSON | Lista en la cadena: v2, opcional, expone nombres. Servidor de comprobantes que guarde la lista en claro: viola NFR-2 (el enlace corto de D-18 guarda una copia cifrada que no puede leer, y el comprobante sigue siendo el enlace). |
 | D-14 | Toolchain de contratos | Rust 1.98 (`stable-x86_64-pc-windows-gnu` en la máquina del autor), `wasm32v1-none`, `soroban-sdk` 27.0.6, `stellar-cli` 28.0 | Subir a `soroban-sdk` 28.0.0 (estable desde septiembre de 2026): se evalúa en la historia 5.1, ahora que ambas redes corren protocolo 28. Sin urgencia: el contrato no usa funciones nuevas del 28. |
 | D-15 | Política de renta (TTL) | `seal` y `draw` extienden solo las entradas del propio sorteo (120 días). La renta de la instancia y del código se renueva con `extend`, explícita y a cargo del proyecto | Extender la instancia en cada llamada (patrón habitual): el primer organizador tras el umbral pagaba 15 XLM de renta del código sin saberlo. Medido en testnet el 2026-09-16. |
 | D-16 | Quién paga la comisión de quien entra con Google o con un correo | **Intentar primero, ayudar después.** Pollar puede pagar la comisión por la app (fee-bump) si `seal` y `draw` están en una regla de contrato de su panel. Antes de simular se espera a que la red conozca la cuenta, que Pollar abre de fondo. Si la comisión no la paga la app, en testnet Tinkazo carga la cuenta con el grifo y reintenta una vez; en mainnet no hay grifo y la persona ve el mensaje de falta de saldo, sin ninguna caja que le pida XLM. Quien entra con Pollar no ve la pantalla de fondos ni un costo que quizá paga otro. `?grifo=0` apaga el grifo en testnet para poder probar con 0 XLM de verdad. Detalle más abajo, en "Fondos y comisiones con Pollar" | Pedir XLM antes de sortear (era un muro para quien solo quiere sortear). "Sponsor all contracts" (paga cualquier llamada a cualquier contrato, no solo las nuestras). Un saldo inicial por alta (cuesta XLM por cada registro, incluido el de quien nunca sortea). |
 | D-17 | Reintentos de las transacciones | **Reintentar sin duplicar nunca un sello.** El sorteo se reintenta solo, con espera creciente, ante la red caída u ocupada o la ronda que la cadena todavía no ve: el contrato acepta un solo sorteo por sello y el resultado no depende de quién lo manda. El sello nunca se vuelve a mandar sin saber si el anterior entró: mientras no se sabe se reenvía la misma transacción firmada (la red la aplica una vez como mucho) y, si no se puede saber, se averigua en el contrato con la hora de la red de testigo; sin red, no se manda nada. Detalle más abajo, en "Cuándo se reintenta una transacción" | Reintentar todo a ciegas (dos sellos de la misma lista: el ataque abierto de seguridad.html). No reintentar nada, que era lo de antes: con cada corte de wifi, "la red rechazó la transacción". Dar por vencido un envío con el reloj del navegador. |
+| D-18 | Enlaces cortos para compartir un comprobante | **Un Worker de Cloudflare propio** en `c.tinkazo.app`, desplegado el 21 de octubre de 2026, con Durable Objects de SQLite: 62 objetos según el primer carácter del id y uno aparte para los cupos. El navegador cifra el enlace largo (AES-GCM, una clave nueva de 16 bytes por enlace) y la clave viaja solo en el fragmento de `tinkazo.app/c/<id>#<clave>`: el servicio guarda bytes que no puede leer y no decide nada, porque la página abre el mismo comprobante y lo rehace. Se arma al compartir o al mostrar en grande, nunca en la demo; si no contesta en 5 s se comparte el largo. No vence, y la interfaz no lo borra: Tinkazo lo borra a pedido con el secreto `ADMIN_TOKEN` del Worker, que si no está cargado no existe. Cupos: 256 KB por enlace, 60 altas por hora por dirección IP (en memoria) y 20.000 por día. Es la única pieza con servidor del proyecto y no está en el camino del sorteo (NFR-2). Detalle en [workers/enlaces/README.md](../workers/enlaces/README.md) | Seguir solo con el enlace largo: con doscientos nombres pasa de mil caracteres, su QR no se lee en una foto de WhatsApp y algunos chats lo cortan. Guardarlo sin cifrar: Tinkazo podría leer las listas. Vercel Blob: el plan Hobby no permite uso comercial y trae 2.000 escrituras y 10.000 lecturas por mes. Workers KV: tarda hasta 60 s en verse en otras regiones, y un enlace se abre apenas se comparte. R2: consistente, pero activarlo pide cargar un medio de pago. Un botón para borrarlo desde Mis sorteos (estuvo en la rama del 21 de octubre de 2026 y no llegó a producción): dejaba sin comprobante a todos los que lo tenían, podía parecer que se escondía un resultado y se tocaba sin querer. |
 
 ### Detalle de la capa de confianza
 
@@ -129,6 +130,9 @@ Módulos y responsabilidades:
 | `src/protocol/select.ts` | Selección determinista (protocolo §5) |
 | `src/protocol/drand.ts` | Parámetros de quicknet, `roundAt`, `roundTime`, fetch con relays y reintentos, verificación BLS y descompresión G1 (§2, §6) |
 | `src/protocol/proof.ts` | Comprobante: codificar/decodificar enlace y JSON (D-13) |
+| `src/enlace-corto.ts` | El enlace corto de un comprobante o un evento: lo cifra en el navegador, lo guarda en `c.tinkazo.app` y lo abre; nunca frena compartir (D-18) |
+| `c.html` + `src/c.ts` | La página de `tinkazo.app/c/<id>`: trae la copia, la abre con la clave del fragmento y va a `verificar.html` o `evento.html`, que rehacen todo (D-18) |
+| `workers/enlaces/` | El Worker de los enlaces cortos, con su prueba de punta a punta (`probar.mjs`) y cómo borrar a pedido (D-18) |
 | `src/stellar/config.ts` | Red activa, RPC, passphrase, dirección del contrato |
 | `src/stellar/wallet.ts` | Adaptador de wallet: `connect()`, `address`, `network`, `signTransaction(xdr)` sobre `@stellar/freighter-api`, más la cuenta invitada de testnet |
 | `src/stellar/session-store.ts` | Recuerda qué tipo de sesión había (cuenta de prueba, Freighter o Google), por red, para no cerrarla al recargar. Solo guarda el tipo, nunca llaves. Se olvida únicamente al pulsar "Salir". Freighter se retoma solo si ya tenía permiso: al cargar nunca se abre un popup |
@@ -312,12 +316,13 @@ tinkazo/
 | Wallet (Freighter o cuenta de prueba) | Firmar `seal` y `draw` | Sin wallet: modo libre; red equivocada: bloqueo con aviso |
 | stellar.expert | Enlaces de exploración | Solo enlaces |
 | Pollar (v1.1) | Login social + `signAndSubmitTx` | Si cae, queda la wallet externa |
+| Enlaces cortos (`c.tinkazo.app`, Worker de Cloudflare, D-18) | Guardar y devolver la copia cifrada de un comprobante | Al compartir o mostrar en grande, se usa el enlace largo sin esperar más de 5 s. Un enlace corto ya compartido no abre hasta que vuelva; el largo sigue en Mis sorteos |
 
 ## Validación
 
 **Coherencia.** Las decisiones encajan: quicknet (D-01) habilita la verificación on-chain (D-02) y el compromiso temporal (D-03); la inmutabilidad (D-04) y el `draw` sin permiso (D-05) refuerzan la promesa del producto; Vite vanilla (D-08) preserva la interfaz v1 y admite los SDKs (D-09, D-10).
 
-**Cobertura.** Cada FR del PRD está mapeado a una épica en [epics.md](epics.md). NFR-1 se garantiza con vectores cruzados; NFR-2 con la ausencia de backend (excepción acotada y opcional en D-07); NFR-3 se mide en 1.4; NFR-4 con `.gitignore` y la comprobación previa a mainnet (`pnpm preflight:mainnet`), que revisa que no haya semillas en el repositorio; NFR-6 porque el contrato solo recibe `list_hash`.
+**Cobertura.** Cada FR del PRD está mapeado a una épica en [epics.md](epics.md). NFR-1 se garantiza con vectores cruzados; NFR-2 con la ausencia de backend en el camino del sorteo (D-07 quedó sin servidor; el único es el de los enlaces cortos, D-18, que no decide nada y tiene el enlace largo de respaldo); NFR-3 se mide en 1.4; NFR-4 con `.gitignore` y la comprobación previa a mainnet (`pnpm preflight:mainnet`), que revisa que no haya semillas en el repositorio; NFR-6 porque el contrato solo recibe `list_hash`.
 
 **Brechas.**
 - *Resuelta (2026-09-16):* el costo real de `pairing_check` es despreciable (0,003 XLM); el plan B de D-02 no hace falta. El costo por sorteo lo domina la renta de almacenamiento (0,18 XLM) y NFR-3 se ajustó a 0,25 XLM.

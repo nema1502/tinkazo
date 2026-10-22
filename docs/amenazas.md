@@ -13,7 +13,7 @@ Lo que hay acá no son hipótesis: cada límite del diseño está anotado con lo
 | Activo | Por qué importa |
 |---|---|
 | **El resultado del sorteo** | Es el producto. Si se puede torcer, no hay nada más que discutir |
-| **La lista de participantes** | Son nombres de personas reales. No tienen por qué llegar a ningún servidor |
+| **La lista de participantes** | Son nombres de personas reales. No tienen por qué llegar en claro a ningún servidor: la única copia que se guarda es la del enlace corto, cifrada en el navegador |
 | **El comprobante** | Es lo que deja a un tercero rehacer el sorteo años después |
 | **La cuenta del organizador** | Firma las transacciones y paga las comisiones |
 
@@ -27,6 +27,9 @@ Lo que hay acá no son hipótesis: cada límite del diseño está anotado con lo
 | **Un relay de drand** | Sirve o no sirve una ronda | No puede firmar una ronda falsa: la firma se verifica contra la clave pública |
 | **La red de drand** | Firma las rondas | Necesitaría comprometer el umbral de la League of Entropy |
 | **Quien hospeda el sitio** | Podría servir un sitio distinto | No puede tocar lo que ya quedó en la cadena |
+| **El servicio de enlaces cortos** (`c.tinkazo.app`, de Tinkazo, en Cloudflare) | Guarda y devuelve la copia cifrada de un comprobante; ve la dirección IP de quien la arma o la abre, cuándo, el id y cuánto pesa; la borra a pedido | Leerla: la clave va en el fragmento del enlace y nunca le llega. Cambiarla sin que se note: el cifrado la autentica y la página rehace el sorteo |
+| **Cloudflare** | Lo mismo que el servicio, como proveedor; además podría caerse, perder los datos o cerrar la cuenta | Leer las listas: tampoco tiene la clave |
+| **Quien tiene el enlace corto, la foto o el QR** | Abre el comprobante con la lista entera, como con el enlace largo | Cambiar el resultado |
 | **La red del evento** | Corta o intercepta el tráfico | No puede falsificar una firma |
 
 ## S: Suplantación
@@ -37,6 +40,7 @@ Lo que hay acá no son hipótesis: cada límite del diseño está anotado con lo
 | Hacer pasar una ronda inventada por una de drand | **Cubierto** | `draw` verifica la firma BLS12-381 contra la clave pública fija de quicknet, dentro del contrato. Una firma que no valida devuelve el error 8 |
 | Un relay que devuelve otra ronda | **Cubierto** | El cliente comprueba que el número de ronda que volvió sea el pedido, y la firma se verifica igual |
 | Un sitio clonado que dice ser Tinkazo | **Parcial** | Un clon puede mostrar lo que quiera, pero no puede escribir en el contrato sin la cuenta del organizador. Un comprobante anclado abierto en el sitio de verdad delata la diferencia. **En modo libre no hay defensa**, y eso es parte de lo que compra anclar |
+| Un enlace corto que lleva a otra página | **Cubierto** | Al abrirlo, el navegador solo acepta una ruta de `verificar.html` o `evento.html` de este mismo sitio (`src/enlace-corto.ts`): un enlace corto no puede mandar a otro dominio |
 
 ## T: Alteración
 
@@ -49,6 +53,7 @@ Lo que hay acá no son hipótesis: cada límite del diseño está anotado con lo
 | Reintentar a ciegas hasta que salga el resultado buscado (el ataque de `try_call` sobre el PRNG de la red que describe [rs-soroban-sdk#1748](https://github.com/stellar/rs-soroban-sdk/issues/1748)) | **No aplica** | Tinkazo no usa el PRNG de la red. El resultado sale de la firma de una ronda de drand que no existe cuando se sella y que es una sola por ronda: cada intento de `draw` da exactamente lo mismo, y el contrato guarda el primero |
 | Elegir una ronda que ya existe | **Cubierto** | `seal` exige que la ronda nazca al menos treinta segundos después, y como mucho treinta días |
 | Un juego que muestre otro ganador | **Cubierto** | Los juegos reciben el ganador ya decidido. El auditor lo comprueba en cada juego: el nombre en pantalla tiene que ser el que fijó el protocolo |
+| El servicio de enlaces cortos cambia el comprobante | **Cubierto** | La copia va cifrada con AES-GCM, que la autentica: sin la clave, cualquier cambio hace que no se pueda abrir ("Este enlace no se puede abrir"). Y lo que se abre es el comprobante de siempre: la página rehace el sorteo y, si está anclado, lo compara con Stellar |
 
 ### El ataque real: selección del compromiso
 
@@ -108,9 +113,14 @@ El sello impide cambiar la lista **después**. No impide que se arme mal **desde
 | Los nombres llegan a la cadena | **Cubierto** | En la cadena viajan la huella de la lista, la cantidad de entradas, cuántos ganadores, la ronda, la hora del sello y su número de bloque, el premio o título que escribiste, la dirección de quien organiza y el número del sorteo; y, al sortear, la prueba que publicó la ronda, el número que decidió la ronda, la hora del sorteo, si ya se sorteó, su número de bloque y las posiciones de los ganadores. El contrato nunca ve un nombre |
 | Los nombres llegan a los registros del hosting | **Cubierto** | El comprobante viaja en el fragmento de la URL, que el navegador no envía al servidor |
 | Los nombres llegan a un tercero por el QR | **Cubierto desde el 20 de septiembre de 2026** | Se le pedía el QR a un servicio ajeno, mandándole la URL entera como parámetro de consulta. Los nombres salían del navegador igual, solo que a otro lado. Ahora el QR se dibuja en el navegador, y hay una comprobación que lo verifica |
-| Los avatares de la lista salen a un servicio externo | **Cubierto desde el 20 de septiembre de 2026** | Cada participante generaba una petición a un servicio de avatares con su nombre en la dirección: con doscientos inscritos, doscientas peticiones con nombres reales adentro. Ahora el avatar sale de un hash del nombre y se dibuja en el navegador. **Comprobado: la única petición que sale durante un sorteo es la ronda del faro** |
+| Los avatares de la lista salen a un servicio externo | **Cubierto desde el 20 de septiembre de 2026** | Cada participante generaba una petición a un servicio de avatares con su nombre en la dirección: con doscientos inscritos, doscientas peticiones con nombres reales adentro. Ahora el avatar sale de un hash del nombre y se dibuja en el navegador. **Comprobado: la única petición que sale durante un sorteo es la ronda del faro** (compartir o mostrar en grande, después, va además al servicio de enlaces cortos) |
 | Quien comparte el enlace expone la lista | **Aceptado y explícito** | El comprobante trae los nombres a propósito: sin ellos nadie puede recomputar. Quien comparte el enlace comparte la lista, y eso se dice |
 | La huella filtra la lista | **Cubierto en la práctica** | SHA-256 de la lista canónica completa. Adivinar la lista exige adivinar todos los nombres, en orden, con la forma exacta |
+| Quien tiene la foto, el QR o el enlace corto ve la lista | **Aceptado y explícito** | Es lo mismo que con el enlace largo, pero más fácil: el QR del enlace corto se lee desde el fondo de la sala o desde una foto del proyector, y desde el 21 de octubre de 2026 no hay una imagen sin QR (la "Imagen para redes" salió). El diálogo de compartir lo dice ("Quien tenga la foto o el enlace puede ver la lista entera"), y también los términos y la página para clases |
+| El servicio de enlaces cortos lee las listas | **Cubierto** | El navegador cifra el comprobante con AES-GCM y una clave nueva de 16 bytes por enlace, y la clave viaja solo en el fragmento de `tinkazo.app/c/<id>#<clave>`, que el navegador no envía. **El límite es el de siempre:** si alguien tomara el sitio, podría servir una página que lea la clave al abrir el enlace, igual que hoy podría leer el fragmento del enlace largo. Por eso el código es abierto |
+| Lo que el servicio ve aunque no lea | **Aceptado** | Cloudflare, y con él el Worker, ve la dirección IP de quien arma o abre un enlace, cuándo, el id y cuánto pesa la copia, que da una idea del largo de la lista. El Worker usa la IP solo para el cupo por hora, en memoria, y no guarda registros: `wrangler.toml` no prende la observabilidad |
+| Una copia que no vence | **Aceptado, y se dice** | Queda para que el sorteo se pueda volver a comprobar. La interfaz no la borra (cortaba la verificación de todos los que la tenían y se tocaba sin querer): se pide a hola@tinkazo.app y Tinkazo la borra con el secreto del Worker. Borrarla no le quita la lista a quien ya la abrió: su navegador guarda el enlace largo |
+| Adivinar enlaces cortos ajenos | **Cubierto en la práctica** | El id tiene 8 caracteres de base 62 (unos 2 × 10¹⁴) y, sin la clave, lo que devuelve el servicio no dice nada |
 
 ## La fecha que le pone vencimiento a todo: 16 de diciembre de 2026
 
@@ -135,6 +145,8 @@ Mitigación parcial, ya hecha: **el comprobante lleva siempre la firma de la ron
 | **Randamu, el administrador corporativo de drand, cerró en febrero de 2026** | **Vigilado** | La red es operada por la League of Entropy, que es un conjunto de organizaciones independientes, no por una empresa. Los cuatro relays responden y la ronda última vuelve firmada. Pero el riesgo de abandono a largo plazo es real y hay que decirlo |
 | El RPC de Stellar no responde | **Mitigado** | La verificación distingue "no pude leer el contrato" de "este sorteo no está anclado". Confundirlas acusaba al organizador por culpa del wifi |
 | Se cae el hosting | **Mitigado** | El sitio es estático. Lo que quedó en la cadena sobrevive a que Tinkazo desaparezca, y el protocolo está especificado para que cualquiera lo reimplemente |
+| Se cae el servicio de enlaces cortos | **Mitigado, con un hueco** | Compartir y mostrar en grande no esperan más de cinco segundos y siguen con el enlace largo: el sorteo no depende del servicio. El hueco: un enlace corto que ya se compartió no abre mientras dure la caída, y quien lo recibió solo tiene ese. El comprobante largo sigue andando, y quien organiza lo tiene en Mis sorteos («Ver comprobante»), en el equipo donde sorteó, para mandarlo de nuevo. Si el servicio desapareciera para siempre, mueren los enlaces cortos y no los largos |
+| Abusar del servicio: gastar sus cupos o llenarlo | **Parcial** | Crear un enlace exige el origen del sitio, pero eso solo frena a otras páginas web: un script manda el encabezado que quiera (`probar.mjs` lo hace). Los límites que valen son 256 KB por enlace, 60 altas por hora por dirección IP, contadas en memoria (si el objeto se duerme vuelven a cero), y 20.000 por día en total. Quien gaste el cupo del día deja sin enlace corto al resto hasta el día siguiente, y se comparte el largo. Como nada vence, 20.000 enlaces de 256 KB alcanzan en un día para llenar los 5 GB del plan gratis, y limpiarlos pide una herramienta que hoy no existe: el borrado a pedido va de a un id |
 | Una lista enorme cuelga el navegador | **Parcial** | El auditor exigente corre los diez juegos del selector, y también los que salieron de él, con doscientos participantes en cada auditoría (la ruleta también: desde el 21 de octubre de 2026 llega a doscientos) y mide que cierren y sigan fluidos. Con quinientos y mil se midió a mano el 22 de septiembre en tres juegos. Arriba de eso no está medido |
 | Un sorteo que se queda sin finalizar | **Cubierto** | `draw` no pide permiso: la propia página de verificación le ofrece a quien abra el enlace finalizarlo |
 | La pantalla se apaga en medio del sorteo | **Cubierto** | El estadio le pide al sistema que no apague la pantalla, y lo vuelve a pedir al volver de segundo plano |
@@ -148,6 +160,7 @@ Mitigación parcial, ya hecha: **el comprobante lleva siempre la firma de la ron
 | Un error deja el contrato inutilizable | **Mitigado** | Diecinueve tests, incluida una ronda real de quicknet. Los errores están numerados y son parte de la interfaz pública: nunca se renumeran |
 | El RPC de mainnet se cae o desaparece | **Abierto** | `mainnet.sorobanrpc.com` es de un tercero: la SDF no ofrece un RPC público de mainnet. Si se cae, el sitio no puede sellar ni anclar, aunque el modo libre sigue sorteando y la verificación por drand sigue funcionando en el navegador. Los comprobantes ya emitidos no se pierden: están en la cadena y cualquier otro RPC los lee. Mitigación parcial hecha: el endpoint vive en un solo lugar (`RPC_URLS` en `src/stellar/config.ts`) para que rotarlo sea un cambio de una línea. Falta una lista de respaldo con reintento, que es trabajo pendiente antes de mainnet |
 | La renta se vence y el contrato desaparece | **Mitigado** | Cada sorteo paga la renta de sus dos entradas por ciento veinte días. La renta de la instancia y del código se renueva aparte con `extend`, nunca dentro de `seal` ni de `draw`. **Esto ya costó caro una vez**: extender la renta de la instancia arrastra la del código, y el primer sellado desplegado cobró quince XLM |
+| Alguien borra enlaces cortos ajenos | **Cubierto** | Borrar pide el permiso de ese enlace (16 bytes al azar, que el servicio guarda solo como huella y que la interfaz ya no usa) o el secreto de administración, que se compara en tiempo constante, tiene que medir 32 caracteres o más y, si no está cargado, no existe. Con el secreto se puede borrar cualquier enlace: no se versiona ni se comparte |
 
 ## Lo que se vigila en la cadena
 
@@ -167,12 +180,14 @@ El plan de monitoreo, para cuando esté en mainnet.
 2. ~~Medir con más de doscientos participantes~~: hecho el 22 de septiembre de 2026. Con mil, el sorteo corre a sesenta cuadros por segundo y se ancla igual; el límite real es cuándo deja de leerse la lista en pantalla, no el rendimiento. Números en [epics.md](epics.md), historia 7.11.
 3. **Un aviso cuando la renta del contrato se acerca al vencimiento.**
 4. ~~Reconstruir el historial desde el estado del contrato~~: hecho el 21 de septiembre de 2026, para el historial del organizador y para los sellos de la página de verificación.
+5. **El abuso del servicio de enlaces cortos**, si aparece: un tope por enlace más chico (un evento de treinta sorteos de doscientas personas pesa unos 50 KB), un vencimiento para lo que nadie abre y una forma de limpiar de a muchos. Mientras, se mira en el panel de Cloudflare cuántas altas hay por día y cuánto espacio se usa.
 
 ## Lo que decidimos no hacer
 
 | Decisión | Por qué |
 |---|---|
-| No cifrar la lista en el comprobante | Sin los nombres nadie puede recomputar, y recomputar es el producto |
-| No guardar nada en un servidor | Un servidor es algo en lo que habría que confiar, y el argumento entero es que cada paso se puede comprobar |
+| No cifrar la lista en el comprobante | Sin los nombres nadie puede recomputar, y recomputar es el producto. El enlace corto guarda una copia cifrada, pero la clave va con el enlace: quien lo tiene, la lee |
+| No guardar nada legible en un servidor | Un servidor es algo en lo que habría que confiar, y el argumento entero es que cada paso se puede comprobar. Desde el 21 de octubre de 2026 hay uno, el de los enlaces cortos ([architecture.md](architecture.md), D-18), y por eso guarda la copia cifrada, sin la clave, y no decide nada: la página rehace el sorteo igual |
+| No ofrecer en la interfaz borrar un enlace corto | Borrarlo deja sin comprobante a todos los que ya lo recibieron (el grupo, la foto, el proyector), puede parecer que se esconde un resultado y se toca sin querer. Se borra a pedido, escribiendo a hola@tinkazo.app |
 | No hacer el contrato actualizable | Un contrato actualizable tiene un administrador, y un administrador es alguien que puede cambiar las reglas después |
 | No usar el hash del ledger como semilla | Un validador puede influir en el margen, y no queda una firma que un tercero pueda verificar años después |

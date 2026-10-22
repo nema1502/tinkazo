@@ -7,6 +7,7 @@ import { musicBreath, musicCue, startMusic, stopMusic, type MusicStyle } from ".
 import { beep, note } from "../../sound";
 import { registerSkip, releaseScreen, shorten, takeOverScreen, winnerNames } from "../overlay";
 import { Camera } from "./camera";
+import { guardiaNombre, meter } from "./encuadre";
 import { watchRecovery } from "./recover";
 
 /**
@@ -126,7 +127,11 @@ export interface PixiStage {
   rng: () => number;
   dark: boolean;
   color(k: number): number;
-  say(msg: string, heat?: number): void;
+  /**
+   * El relator dice `msg`. Con `grito`, la línea se ve entera en mayúsculas
+   * (en pantalla; el texto queda como se escribió, con el nombre bien escrito).
+   */
+  say(msg: string, heat?: number, grito?: boolean): void;
   face(name: string): Texture;
   text(s: string, style: TextStyleOptions): Text;
   /**
@@ -275,6 +280,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   const base = $<HTMLCanvasElement>("race-canvas");
   const commentEl = $("commentary");
   commentEl.textContent = "";
+  commentEl.classList.remove("grito");
   $("st-round").textContent = `${t("seed")} ${beacon.round}`;
 
   // El lienzo de siempre queda escondido; PixiJS dibuja en uno propio, porque
@@ -401,9 +407,82 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   const text = (s: string, style: TextStyleOptions): Text =>
     new Text({ text: s, style: { fontFamily: FONT, ...style }, resolution: textRes });
 
+  /**
+   * La guardia de los nombres (revisión visual del 21 de octubre de 2026): en
+   * un celular, el sapo y la carrera dejaban nombres cortados contra el borde,
+   * y cada juego acomoda los suyos a su manera. Esta es la última palabra, la
+   * misma para todos: antes de dibujar cada cuadro, un chip con nombre que
+   * asoma cortado por el borde de la pantalla, o metido debajo de la barra de
+   * arriba o de la caja del relator, se corre lo justo para verse entero; y si
+   * para eso tendría que alejarse más de la mitad de su tamaño de donde lo
+   * puso el juego, en ese cuadro no se dibuja. Un nombre se ve entero o no se
+   * ve (`guardiaNombre`, en `encuadre.ts`).
+   *
+   * No toca lo que el juego decide (el alfa, si se ve): para no dibujar un
+   * chip le apaga `renderable` solo en ese cuadro, y lo vuelve a prender en el
+   * siguiente. Las medidas de PixiJS no miran `renderable`, así que un juego
+   * que mide sus chips mide lo mismo.
+   */
+  const chipsVivos = new Set<Container>();
+  const sinDibujar: Container[] = [];
+  /**
+   * Hasta dónde llega un nombre por abajo: la franja del relator o, si una frase
+   * larga lo hizo crecer más que ella, su borde de arriba de verdad. La ruta del
+   * Trueque, en tres o cuatro renglones en un celular, tapaba nombres que la
+   * franja dejaba pasar (21 de octubre de 2026). `offsetTop` no mira el
+   * acercamiento con que entra cada frase.
+   */
+  const piso = (): number => Math.min(sh() - bottom(), commentEl.textContent ? commentEl.offsetTop - 4 : Infinity);
+  /** Si el chip se dibuja de verdad: él y todos los de arriba, visibles y colgados de la escena. */
+  const seDibuja = (c: Container): boolean => {
+    let a = 1;
+    for (let p: Container | null = c; p; p = p.parent) {
+      if (!p.visible || !p.renderable) return false;
+      a *= p.alpha;
+      if (p === app.stage) return a >= 0.05;
+    }
+    return false;
+  };
+  const guardia = (): void => {
+    for (const c of sinDibujar) if (!c.destroyed) c.renderable = true;
+    sinDibujar.length = 0;
+    const W = sw(), H = sh();
+    const zona = { x0: 2, y0: top(), x1: W - 2, y1: piso() };
+    const correr = (c: Container, dx: number, dy: number): void => {
+      const padre = c.parent;
+      if (!padre || (dx === 0 && dy === 0)) return;
+      const g = padre.toGlobal(c.position);
+      const l = padre.toLocal({ x: g.x + dx, y: g.y + dy });
+      c.position.set(l.x, l.y);
+    };
+    for (const c of chipsVivos) {
+      if (c.destroyed) {
+        chipsVivos.delete(c);
+        continue;
+      }
+      if (!seDibuja(c)) continue;
+      const b = c.getBounds();
+      const g = guardiaNombre({ x: b.x, y: b.y, w: b.width, h: b.height }, zona, W, H);
+      if (g.tipo === "nada") continue;
+      if (g.tipo === "tapar") {
+        c.renderable = false;
+        sinDibujar.push(c);
+        continue;
+      }
+      if (g.s < 1) {
+        // Más grande que lo que se ve: se achica, se vuelve a medir y se corre.
+        c.scale.set(c.scale.x * g.s, c.scale.y * g.s);
+        const b2 = c.getBounds();
+        const m = meter({ x: b2.x, y: b2.y, w: b2.width, h: b2.height }, zona);
+        if (m) correr(c, m.dx, m.dy);
+      } else correr(c, g.dx, g.dy);
+    }
+  };
+
   const chip = (name: string, scale = 1, faceOf = name): Container => {
     const k = u() * scale * CHIP_SCALE * (compartir ? 1.2 : 1);
     const c = new Container();
+    chipsVivos.add(c);
     const label = text(shorten(name, 20), { fontSize: 12 * k, fontWeight: "800", fill: INK });
     const av = new Sprite(face(faceOf));
     av.width = av.height = 16 * k;
@@ -685,7 +764,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       // El alto de verdad, con la sombra: con los 24 de antes escritos a mano,
       // los chips de letra legible se encimaban al apilarse (16 de octubre de 2026).
       const cw = c.width, ch = c.height;
-      const lo = top() + ch / 2 + 2 * k, hi = H - bottom() - ch / 2 - 3 * k;
+      const lo = top() + ch / 2 + 2 * k, hi = piso() - ch / 2 - 3 * k;
       const cx = (v: number): number => Math.max(8 * k, Math.min(W - cw - 8 * k, v));
       const cy = (v: number): number => Math.max(lo, Math.min(hi, v));
       const choca = (a: number, b: number): boolean => placed.some((r) => a < r.x + r.w && a + cw > r.x && b - ch / 2 < r.y + r.h / 2 && b + ch / 2 > r.y - r.h / 2);
@@ -753,8 +832,9 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       return (portrait() ? sh() * 0.24 : sh() * 0.26) + ph / 2 + 10 * k;
     },
     color: (k) => P[((k % P.length) + P.length) % P.length] ?? 0xe93d9c,
-    say(msg, heat = 0) {
+    say(msg, heat = 0, grito = false) {
       commentEl.textContent = msg;
+      commentEl.classList.toggle("grito", grito);
       commentEl.animate(
         [{ transform: "translateX(-50%) scale(0.75)" }, { transform: "translateX(-50%) scale(1)" }],
         { duration: 280, easing: "cubic-bezier(.34,1.56,.64,1)" },
@@ -783,6 +863,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
           picoAnotado = pico.t;
           mark("zoomPico", pico.t.toFixed(3));
         }
+        guardia();
         app.renderer.render(app.stage);
         if (ident) {
           relojId = (now - start) / 1000;
@@ -823,6 +904,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         app.destroy({ removeView: true }, { children: true });
       }, 0);
       base.style.visibility = "";
+      commentEl.classList.remove("grito");
       releaseScreen();
       ov.style.display = "none";
       document.body.style.overflow = "";

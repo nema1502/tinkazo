@@ -4,7 +4,7 @@ import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, fanfare, note } from "../../sound";
 import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
-import { capRecent, layoutLabels, listaCaidos, type LabelItem, type ListaGeo } from "./pinata-labels";
+import { capRecent, juntar, layoutLabels, listaCaidos, type LabelItem, type ListaGeo, type Rect } from "./pinata-labels";
 import { planPalos } from "./pinata-plan";
 import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 
@@ -41,6 +41,13 @@ function etiqueta(nombre: string, max: number): string {
   const corto = partes.length > 1 ? `${pila} ${(partes[partes.length - 1] ?? "").charAt(0)}.` : pila;
   return corto.length <= max ? corto : `${pila.slice(0, Math.max(1, max - 1))}…`;
 }
+
+/**
+ * Cuántas letras entran en una fila de la lista de los caídos. En la pantalla
+ * ancha eran 18; con la letra legible, 16 dejan las dos columnas del ancho de
+ * antes, lejos de la piñata.
+ */
+const listaMax = (phone: boolean): number => (phone ? 15 : 16);
 
 const DT = 1 / 120;
 const T_HANG = 3.0;
@@ -299,7 +306,10 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   function crown(): void {
     if (crowned) return;
     crowned = true;
-    S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
+    // Los gritos de la piñata se ven enteros en mayúsculas, como "¡SE ROMPIÓ!",
+    // y el resto del relato no: "¡EL TINKAZO ES PARA Ana Vargas!" mezclaba las
+    // dos en la misma línea (revisión visual, 21 de octubre de 2026).
+    S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1, true);
     // En triángulo: el seno de 131 Hz no sale por el parlante de un proyector,
     // los armónicos del triángulo sí.
     beep(note(0), 0.7, "triangle", 0.08);
@@ -419,7 +429,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     }
     if (!brokeDone && tAll >= T_BREAK) {
       brokeDone = true;
-      S.say(t("cPinBreak"), 0.95);
+      S.say(t("cPinBreak"), 0.95, true);
       // La rotura en capas: el golpe, la lluvia de caramelos y el papel. Antes
       // era una nota apenas más fuerte que un palo.
       beep(note(0), 0.45, "square", 0.09);
@@ -631,15 +641,26 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     moreBadge.visible = false;
     chipLayer.addChild(moreBadge);
     S.hud.addChild(flash, box, chipLayer);
-    // La lista de los caídos (ver `drawLista`): filas fijas, que se llenan solas.
-    lista = listaCaidos({ w: g.w, k, top: S.top(), floor: g.floor, phone: g.w <= 520 });
+    // La lista de los caídos (ver `drawLista`): filas fijas, que se llenan solas,
+    // con la letra de lo que se lee desde el fondo y tan anchas como el nombre
+    // más largo de la lista.
+    const phone = g.w <= 520;
+    const letraLista = S.letra(phone ? 15 : 16);
+    const medida = S.text("", { fontSize: letraLista, fontWeight: "800" });
+    let anchoLista = 0;
+    for (const nm of names) {
+      medida.text = etiqueta(nm, listaMax(phone));
+      anchoLista = Math.max(anchoLista, medida.width);
+    }
+    medida.destroy();
+    lista = listaCaidos({ w: g.w, k, top: S.top(), floor: g.floor, phone, letra: letraLista, ancho: anchoLista });
     const listaCont = new Container();
     listaRows = [];
     for (let i = 0; i < lista.cap; i++) {
       const c = new Container();
       const bg = new Graphics();
       const sq = new Graphics();
-      const tx = S.text("", { fontSize: lista.rowH * 0.6, fontWeight: "800", fill: S.dark ? CREAM : INK });
+      const tx = S.text("", { fontSize: lista.letra, fontWeight: "800", fill: S.dark ? CREAM : INK });
       tx.anchor.set(0, 0.5);
       tx.position.set(lista.rowH * 0.85, lista.rowH / 2);
       c.addChild(bg, sq, tx);
@@ -849,7 +870,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       const id = shown[i];
       r.c.visible = id !== undefined;
       if (id === undefined) return;
-      r.tx.text = etiqueta(names[id] ?? "", lista.phone ? 15 : 18);
+      r.tx.text = etiqueta(names[id] ?? "", listaMax(lista.phone));
       r.bg.clear().roundRect(0, 0, lista.colW - 4, lista.rowH - 3, 4).fill(i === 0 && hl ? YELLOW : fondo).stroke({ width: 2, color: INK });
       r.sq.clear().rect(4, 4, lista.rowH * 0.3, lista.rowH - 11).fill(S.color(id));
     });
@@ -997,6 +1018,9 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     const bw = counter.width + 40 * k, bh = 40 * k;
     counter.position.set(bw / 2, bh / 2);
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 3 * k, color: INK });
+    // Con el cartel, la cuenta se va, como en el sapo: "ADENTRO 0 / 18" ya no
+    // dice nada, y en un celular el cartel la tapaba a medias.
+    if (counter.parent) counter.parent.visible = phase !== "crown";
     if (phase === "crown") crownUI.at(tAll - T_CROWN);
   }
 
@@ -1084,9 +1108,23 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     // nombres de los últimos caídos lo tapaban justo cuando toca el piso.
     const fuera = !winC.inside;
     const ox = fuera ? winC.x : p.x, oy = fuera ? winC.y : p.y, oR = fuera ? sz * 1.8 * 1.6 : g.R * 1.75;
+    // Abajo, los flecos de los conos cuelgan más que las puntas.
+    const oAbajo = fuera ? oR : g.R * 1.95;
     const a = cam.toScreen(ox - oR, oy - oR, g.w, g.h);
-    const b = cam.toScreen(ox + oR, oy + oR, g.w, g.h);
-    const blocked = [{ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) }];
+    const b = cam.toScreen(ox + oR, oy + oAbajo, g.w, g.h);
+    const blocked: Rect[] = [{ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) }];
+    // Los caramelos de afuera tampoco se tapan, si hay lugar: el nombre de uno
+    // que caía se apoyaba encima de la pila del piso y tapaba las caras de los
+    // otros ("Ana Vargas" y "Diego Rojas" en la revisión visual del 21 de
+    // octubre de 2026). La pila va como unos pocos obstáculos, no uno por caramelo.
+    const caramelos: Rect[] = [];
+    for (const c of candies) {
+      if (c.inside || c === winC) continue;
+      const c0 = cam.toScreen(c.x - sz * 1.6, c.y - sz * 0.8, g.w, g.h);
+      const c1 = cam.toScreen(c.x + sz * 1.6, c.y + sz * 0.8, g.w, g.h);
+      caramelos.push({ x: c0.x, y: c0.y, w: c1.x - c0.x, h: c1.y - c0.y });
+    }
+    blocked.push(...juntar(caramelos, 4 * k));
     // El chico también, de la cabeza a los pies: ahora se arrima a la piñata, y
     // los nombres de los caramelos que le caen cerca le tapaban las piernas.
     const k0 = cam.toScreen(kidX - 38 * g.ks, g.ky - 140 * g.ks, g.w, g.h);

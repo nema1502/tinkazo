@@ -10,7 +10,13 @@
  *   POST   /v1        cuerpo binario, hasta 256 KB      → 201 {"id", "borrar"}
  *   GET    /v1/<id>                                     → 200 los mismos bytes
  *   DELETE /v1/<id>   Authorization: Bearer <borrar>    → 204
+ *   DELETE /v1/<id>   Authorization: Bearer <ADMIN_TOKEN> → 204 (Tinkazo, a pedido)
  *   GET    /<id>                                        → 302 a tinkazo.app/c/<id>
+ *
+ * Un enlace no vence: queda para que el sorteo se pueda volver a comprobar. La
+ * interfaz no ofrece borrarlo (cortaba la verificación de todos los que ya lo
+ * tenían); si alguien necesita que se borre, por ejemplo porque alguien de la
+ * lista lo pide, lo borra Tinkazo con el secreto del Worker (ver README.md).
  *
  * Lo guardan Durable Objects con SQLite: son consistentes apenas escriben, así que
  * un enlace recién creado abre al instante en cualquier país. Los enlaces se
@@ -22,6 +28,12 @@ import { DurableObject } from "cloudflare:workers";
 
 export interface Env {
   ALMACEN: DurableObjectNamespace<Almacen>;
+  /**
+   * El permiso de Tinkazo para borrar cualquier enlace, a pedido. Es un secreto
+   * del Worker (`npx wrangler@4 secret put ADMIN_TOKEN`). Si no está cargado, o
+   * tiene menos de 32 caracteres, ese camino no existe.
+   */
+  ADMIN_TOKEN?: string;
 }
 
 const SITIO = "https://tinkazo.app";
@@ -33,8 +45,13 @@ const ES_ID = /^[0-9A-Za-z]{8}$/;
 const POR_IP_POR_HORA = 60;
 /** Altas por día en total: cuida el plan gratis (100.000 filas escritas por día). */
 const POR_DIA = 20_000;
+/** El largo mínimo del secreto de administración: uno más corto se podría adivinar probando. */
+const ADMIN_MINIMO = 32;
 
-/** Desde dónde se pueden crear y borrar enlaces. Leer, desde cualquier lado: los bytes van cifrados. */
+/**
+ * Desde dónde se pueden crear enlaces. Leer, desde cualquier lado: los bytes van
+ * cifrados. Borrar pide el permiso de ese enlace o el secreto de administración.
+ */
 function origenPermitido(origen: string | null): boolean {
   if (!origen) return false;
   if (origen === SITIO || origen === "https://www.tinkazo.app") return true;
@@ -79,6 +96,20 @@ function base64url(bytes: Uint8Array): string {
 async function sha256Hex(texto: string): Promise<string> {
   const h = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texto)));
   return Array.from(h, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Si `dado` es el secreto de administración. En tiempo constante: se comparan
+ * las huellas SHA-256 de los dos, que siempre miden lo mismo, con la comparación
+ * de Workers que no corta en la primera diferencia. Sin el secreto cargado (o con
+ * uno de menos de 32 caracteres) siempre da false.
+ */
+async function esAdmin(dado: string, env: Env): Promise<boolean> {
+  const secreto = env.ADMIN_TOKEN ?? "";
+  if (secreto.length < ADMIN_MINIMO || !dado) return false;
+  const huella = (s: string) => crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  const [a, b] = await Promise.all([huella(dado), huella(secreto)]);
+  return crypto.subtle.timingSafeEqual(a, b);
 }
 
 type Permiso = { ok: true } | { ok: false; motivo: "cupo-ip" | "cupo-dia" };
@@ -139,6 +170,13 @@ export class Almacen extends DurableObject<Env> {
     this.ctx.storage.sql.exec("DELETE FROM enlaces WHERE id = ?", id);
     return "borrado";
   }
+
+  /** El borrado a pedido, sin el permiso del enlace: lo pide solo quien trae el secreto de administración. */
+  async borrarAPedido(id: string): Promise<"borrado" | "no-existe"> {
+    if (!this.ctx.storage.sql.exec("SELECT 1 FROM enlaces WHERE id = ?", id).toArray().length) return "no-existe";
+    this.ctx.storage.sql.exec("DELETE FROM enlaces WHERE id = ?", id);
+    return "borrado";
+  }
 }
 
 export default {
@@ -195,6 +233,12 @@ export default {
           const h = cors(origen, "DELETE, OPTIONS");
           const token = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
           if (!token) return json({ error: "token" }, 401, h);
+          // Tinkazo, a pedido: con el secreto del Worker se borra cualquier enlace.
+          if (await esAdmin(token, env)) {
+            const a = await de(id).borrarAPedido(id);
+            if (a === "no-existe") return json({ error: "no-existe" }, 404, h);
+            return new Response(null, { status: 204, headers: h });
+          }
           const r = await de(id).borrar(id, token);
           if (r === "no-existe") return json({ error: "no-existe" }, 404, h);
           if (r === "prohibido") return json({ error: "token" }, 403, h);

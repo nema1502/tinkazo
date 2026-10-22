@@ -75,7 +75,7 @@ Si los tres cuadran, el sorteo cuadra. El veredicto de arriba dice si cuadran to
 
 - El enlace lleva **los nombres de todas las personas** de cada sorteo que trae, y los ganadores. Quien lo recibe ve las listas completas. Compartilo solo con quien tenga que revisar esos sorteos, igual que un comprobante.
 - La foto para compartir (`src/ui/foto.ts`) lleva el QR del enlace: quien la tenga abre el comprobante, con la lista entera de cada sorteo. Así lo pidió Nicolás el 21 de octubre de 2026 («mandar también la foto de los ganadores con un QR para comprobarlo y verlo todo»), y el diálogo de compartir lo dice. Hasta ese día había una imagen para redes sin QR; salió.
-- Compartir intenta primero el enlace corto (`tinkazo.app/c/…`, [workers/enlaces](../workers/enlaces/README.md)): el evento entero va en un solo enlace, y en Cloudflare queda una copia cifrada en el navegador, con la clave solo en el enlace, que Tinkazo no puede leer y que se borra desde Mis sorteos. Si el servicio no contesta, el evento va en las partes de siempre.
+- Compartir intenta primero el enlace corto (`tinkazo.app/c/…`, [workers/enlaces](../workers/enlaces/README.md)): el evento entero va en un solo enlace, y en Cloudflare queda una copia cifrada en el navegador, con la clave solo en el enlace, que Tinkazo no puede leer. No vence, para que el evento se pueda volver a revisar, y Mis sorteos no lo borra: si alguien necesita que se borre, lo pide a hola@tinkazo.app. Si el servicio no contesta, el evento va en las partes de siempre.
 - La página del evento no guarda nada, no envía nada y no consulta la cadena. Solo los enlaces de «Verificarlo en la cadena» abren otra página, la de cada comprobante.
 - Revisar un evento es gratis y no hace falta cuenta.
 

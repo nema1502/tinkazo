@@ -272,3 +272,28 @@ describe("textos nuevos de compartir y de eventos", () => {
     }
   });
 });
+
+describe("el enlace corto no se borra desde la interfaz (21 de octubre de 2026)", () => {
+  // Borrarlo cortaba la verificación de todos los que ya lo tenían (el grupo, la
+  // foto, el proyector), podía parecer que se escondía un resultado y se tocaba
+  // sin querer. Si hace falta, se pide a hola@tinkazo.app y lo borra Tinkazo.
+  const cadenas = (l: "es" | "en"): string[] => Object.values(T[l]).filter((v): v is string => typeof v === "string");
+
+  it("Mis sorteos no tiene botones para borrar enlaces cortos", () => {
+    expect(readFileSync("index.html", "utf8")).not.toMatch(/btn-hist-cortos/);
+    expect(readFileSync("src/ui/history.ts", "utf8")).not.toMatch(/data-borrar-corto|borrarCorto|borrarTodos/);
+  });
+
+  it("ningún texto promete borrarlo por cuenta propia", () => {
+    expect(cadenas("es").filter((v) => /Borrar (el|los) enlaces? cortos?|La borrás|borres desde Mis sorteos/.test(v))).toEqual([]);
+    expect(cadenas("en").filter((v) => /Delete the short links?|delete it from My draws/i.test(v))).toEqual([]);
+  });
+
+  it.each(["cmpPrivBorrar", "histWhy", "cfG5b", "tmCortoB", "sgLimitCorto", "clasePrivB"])(
+    "%s dice a quién pedirle que lo borre, en los dos idiomas",
+    (clave) => {
+      expect(T.es[clave]).toContain("hola@tinkazo.app");
+      expect(T.en[clave]).toContain("hola@tinkazo.app");
+    },
+  );
+});
