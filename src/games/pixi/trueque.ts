@@ -5,6 +5,7 @@ import { beep as sonido, beepFor as sonidoPor, fanfare, note } from "../../sound
 import { writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { CREAM, INK, MONO, hash, mountPixi, type PixiStage } from "./stage";
+import type { Caja, Zona } from "./encuadre";
 import { planTrueque, type Encargo } from "./trueque-plan";
 
 /**
@@ -63,6 +64,8 @@ const T_RECHAZA = 1.0;
 const T_VUELVE = 1.4;
 /** La ruta se dibuja en segundos reales, dentro de la espera del cartel. */
 const RUTA_DIBUJA = 2.4;
+/** Lo que mide de alto el nombre de un puesto, con su sombra, en unidades de `S.u()` (el chip a su escala). */
+const NOMBRE_ALTO = 44;
 
 type Fase = "show" | "nova" | "dead";
 
@@ -179,6 +182,8 @@ export async function truequePixi(names: string[], winners: readonly number[], b
   let leyenda!: Container;
   const etiquetas: Container[] = [];
   const etiquetaTexto: string[] = [];
+  /** Lo que mide la etiqueta de cada encargo en el último cuadro (ancho y alto, en la escena). */
+  const etqMide: { w: number; h: number }[] = [];
   let tinta = INK;
 
   /** Lo que se ve de los puestos y del encargo en `tt`: el producto que lleva cada uno. */
@@ -258,19 +263,43 @@ export async function truequePixi(names: string[], winners: readonly number[], b
     // La feria: cuadrícula de puestos, como una tabla sin orden. Debajo de la leyenda y de la franja de aguayo.
     feriaY0 = S.top() + 116 * k;
     feriaY1 = h - S.bottom() - 16 * k;
-    const x0 = w * 0.07, x1 = w * 0.93;
-    const cols = Math.max(1, Math.round(Math.sqrt((n * (x1 - x0)) / Math.max(1, feriaY1 - feriaY0))));
-    const rows = Math.ceil(n / cols);
-    const cw = (x1 - x0) / cols;
-    const ch = (feriaY1 - feriaY0) / rows;
-    // Con pocos puestos los toldos pueden ser grandes; con doscientos, el tope los deja en la cuadrícula.
-    radio = clamp(Math.min(cw, ch) * 0.34, 4.5 * k, 30 * k);
+    const x1 = w * 0.93;
+    const armar = (x0: number): { x0: number; cols: number; cw: number; ch: number; r: number } => {
+      const cols = Math.max(1, Math.round(Math.sqrt((n * (x1 - x0)) / Math.max(1, feriaY1 - feriaY0))));
+      const cw = (x1 - x0) / cols;
+      const ch = (feriaY1 - feriaY0) / Math.ceil(n / cols);
+      // Con pocos puestos los toldos pueden ser grandes; con doscientos, el tope los deja en la cuadrícula.
+      return { x0, cols, cw, ch, r: clamp(Math.min(cw, ch) * 0.34, 4.5 * k, 30 * k) };
+    };
+    let red = armar(w * 0.07);
+    // El atado espera en su origen, a la izquierda de la feria, con la etiqueta
+    // del producto encima: entero, y sin pisar el primer puesto. En un celular
+    // quedaba a doce píxeles del borde y se cortaba la mitad, con la etiqueta
+    // (revisión del Trueque, 21 de octubre de 2026): si no entra, la feria se
+    // corre a la derecha lo justo.
+    const medida = S.text("", { fontFamily: MONO, fontSize: Math.max(12, 13 * k), fontWeight: "800" });
+    let etiq = 0;
+    for (let p = 0; p < CLAVE.length; p++) {
+      medida.text = nombre(p).toUpperCase();
+      etiq = Math.max(etiq, medida.width + 14 * k);
+    }
+    medida.destroy();
+    const lado = (r: number): number => Math.max(r * 2.1, etiq) / 2;
+    const borde = (q: typeof red): number => q.x0 + q.cw * 0.42 - q.r;
+    for (let vuelta = 0; vuelta < 3; vuelta++) {
+      const falta = lado(red.r) * 2 + 12 * k - borde(red);
+      if (falta <= 0.5) break;
+      red = armar(red.x0 + falta);
+    }
+    const { x0, cols, cw, ch } = red;
+    radio = red.r;
     pos = Array.from({ length: n }, (_, i) => ({
       x: x0 + cw * ((i % cols) + 0.5) + (hash(i, 11) - 0.5) * cw * 0.16,
       y: feriaY0 + ch * (Math.floor(i / cols) + 0.5) + (hash(i, 12) - 0.5) * ch * 0.16,
     }));
+    const oX = Math.max(w * 0.07 * 0.45, lado(radio) + 6 * k);
     origen = encargos.map((_, e) => ({
-      x: x0 * 0.45,
+      x: oX,
       y: feriaY0 + ((e + 0.5) / Math.max(1, encargos.length)) * (feriaY1 - feriaY0),
     }));
 
@@ -551,9 +580,28 @@ export async function truequePixi(names: string[], winners: readonly number[], b
       const tx = etiq.children[1] as Text;
       const bg = etiq.children[0] as Graphics;
       const anch = tx.width + 14 * S.u(), alt = tx.height + 6 * S.u();
+      etqMide[e] = { w: anch, h: alt };
       bg.clear().roundRect(-anch / 2, -alt / 2, anch, alt, 5 * S.u()).fill({ color: S.dark ? CREAM : 0xffffff, alpha: 0.95 }).stroke({ width: Math.max(1, S.u()), color: INK });
     });
   }
+
+  /**
+   * El atado `e` con su etiqueta, en la escena, mientras se ve: la cámara no lo
+   * deja afuera y los nombres no lo tapan. Con un nombre encima, la etiqueta
+   * del producto que viaja no se leía (revisión del Trueque, 21 de octubre de 2026).
+   */
+  function cajaAtado(e: number, tt: number): Caja | null {
+    const aparece = clamp((tt - T_APPEAR - e * 0.05) / 0.3, 0, 1);
+    if (aparece <= 0 || tt >= T_ENTREGA) return null;
+    const q = encargoEn(e, tt);
+    const s = radio * 2.1 * aparece;
+    const m = etqMide[e] ?? { w: 0, h: 0 };
+    const ancho = Math.max(s, m.w);
+    const arriba = q.y - s / 2 - s * 0.32 - m.h / 2;
+    return { x: q.x - ancho / 2, y: arriba, w: ancho, h: q.y + s * 0.66 - arriba };
+  }
+  /** Lo que se ve de la feria: debajo de la barra de arriba y encima del relator. */
+  const zonaJuego = (): Zona => ({ x0: 4 * S.u(), y0: S.top() + 4 * S.u(), x1: S.sw() - 4 * S.u(), y1: S.sh() - S.bottom() - 4 * S.u() });
 
   function dibujarRuta(tt: number): void {
     routeG.clear();
@@ -593,16 +641,26 @@ export async function truequePixi(names: string[], winners: readonly number[], b
         }
       });
       if (!Number.isFinite(x0)) return;
-      const bw = Math.max(1, x1 - x0), bh = Math.max(1, y1 - y0);
       const yTop = S.placaBajo(winners.length), yBot = h - S.bottom() - 8 * S.u();
-      const z = clamp(Math.min((0.88 * w) / bw, Math.max(1, yBot - yTop) / bh), 0.7, 1.7);
+      // Arriba de cada puesto va el nombre de quien lo atiende: entra también,
+      // así el cartel no tapa al ganador. Con cincuenta personas, en la
+      // pantalla ancha su nombre quedaba debajo del cartel (21 de octubre de 2026).
+      let z = 1;
+      for (let vuelta = 0; vuelta < 2; vuelta++) {
+        const arriba = y0 - radio * 1.5 - 8 * S.u() - NOMBRE_ALTO * S.u() / z;
+        z = clamp(Math.min((0.88 * w) / Math.max(1, x1 - x0), Math.max(1, yBot - yTop) / Math.max(1, y1 + radio - arriba)), 0.7, 1.7);
+      }
+      const arriba = y0 - radio * 1.5 - 8 * S.u() - NOMBRE_ALTO * S.u() / z;
       const tx = w / 2, ty = (yTop + yBot) / 2;
-      cam.lookAt((x0 + x1) / 2 - (tx - w / 2) / z, (y0 + y1) / 2 - (ty - h / 2) / z, z, 1.6);
+      cam.lookAt((x0 + x1) / 2 - (tx - w / 2) / z, (arriba + y1 + radio) / 2 - (ty - h / 2) / z, z, 1.6);
       return;
     }
     if (tt >= T_ENTREGA) {
+      // Quien espera, con su nombre debajo del cartel que sale en ese momento.
       const d = pos[prim?.destino ?? 0] ?? { x: w / 2, y: h / 2 };
-      cam.lookAt(d.x, d.y, 1.45, 2.4);
+      const z = 1.45;
+      const yS = Math.max(h / 2, S.placaBajo(winners.length) + (radio * 1.5 + 8 * S.u()) * z + NOMBRE_ALTO * S.u());
+      cam.lookAt(d.x, d.y - (yS - h / 2) / z, z, 2.4);
       return;
     }
     const p = paseEn(tt);
@@ -668,6 +726,10 @@ export async function truequePixi(names: string[], winners: readonly number[], b
     if (fase === "dead") return;
     const tt = tAll;
     dirigir(tt);
+    // El atado que sigue la cámara, siempre entero en cuadro: cuando volvía de
+    // un puesto que no lo cambió, iba más rápido que la cámara y salía por el
+    // costado (revisión del Trueque, 21 de octubre de 2026).
+    cam.proteger(fase === "show" ? cajaAtado(0, tt) : null, zonaJuego());
     cam.update(dt);
     cam.apply(S.scene, S.sw(), S.sh(), now);
     dibujarAdornos(tt);
@@ -679,10 +741,17 @@ export async function truequePixi(names: string[], winners: readonly number[], b
     dibujarRuta(tt);
     contar(tt);
     if (tt >= T_ENTREGA) crown.at(tt - T_ENTREGA);
-    // Los nombres: el pasar lista de la feria, los que se prueban, y la ruta con quien espera.
+    // Los nombres: el pasar lista de la feria, los que se prueban, y la ruta con
+    // quien espera. Sin tapar el atado ni la etiqueta de lo que lleva.
+    const evitar = encargos.flatMap((_, e) => {
+      const c = cajaAtado(e, tt);
+      if (!c) return [];
+      const a = cam.toScreen(c.x, c.y, S.sw(), S.sh()), b = cam.toScreen(c.x + c.w, c.y + c.h, S.sw(), S.sh());
+      return [{ x: a.x, y: a.y, width: b.x - a.x, height: b.y - a.y }];
+    });
     S.tags(names, nombresEn(tt), (i) => {
       const p = pos[i];
       return p && tt > (bornAt[i] ?? 0) ? cam.toScreen(p.x, p.y - radio * 1.5 - 8 * S.u(), S.sw(), S.sh()) : null;
-    }, []);
+    }, evitar);
   });
 }

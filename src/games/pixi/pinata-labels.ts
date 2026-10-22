@@ -84,6 +84,32 @@ export function layoutLabels(items: LabelItem[], bounds: Bounds, blocked: Rect[]
 }
 
 /**
+ * Une los rectángulos que se tocan, o quedan a menos de `gap`, en uno solo: la
+ * pila de caramelos del piso pasa a ser unos pocos obstáculos para los nombres
+ * en vez de doscientos. Dos que no se tocan quedan separados, así un caramelo
+ * que cae alto no tapa con su pila toda la columna.
+ */
+export function juntar(rs: readonly Rect[], gap = 0): Rect[] {
+  const out: Rect[] = [];
+  for (const r0 of rs) {
+    if (!(r0.w > 0 && r0.h > 0)) continue;
+    let r: Rect = { x: r0.x, y: r0.y, w: r0.w, h: r0.h };
+    for (let i = out.length - 1; i >= 0; i--) {
+      const o = out[i] as Rect;
+      if (r.x - gap < o.x + o.w && o.x - gap < r.x + r.w && r.y - gap < o.y + o.h && o.y - gap < r.y + r.h) {
+        const x0 = Math.min(r.x, o.x), y0 = Math.min(r.y, o.y);
+        r = { x: x0, y: y0, w: Math.max(r.x + r.w, o.x + o.w) - x0, h: Math.max(r.y + r.h, o.y + o.h) - y0 };
+        out.splice(i, 1);
+        // El rectángulo creció: puede tocar a otros que ya había pasado.
+        i = out.length;
+      }
+    }
+    out.push(r);
+  }
+  return out;
+}
+
+/**
  * Of the candies still in flight, label the `max` most recently dropped and report
  * how many are left over, for a single compact "+N" chip.
  */
@@ -99,16 +125,27 @@ export function capRecent(items: { id: number; seq: number }[], max: number): { 
  * columnas (unos cuarenta nombres a la vez, lo que se lee en un proyector); en un
  * celular, una columna a la derecha, lejos del chico y del palo.
  */
-export interface ListaGeo { x: number; y: number; colW: number; rowH: number; cols: number; rows: number; cap: number; w: number; h: number; phone: boolean }
+export interface ListaGeo { x: number; y: number; colW: number; rowH: number; letra: number; cols: number; rows: number; cap: number; w: number; h: number; phone: boolean }
 
-export function listaCaidos(p: { w: number; k: number; top: number; floor: number; phone: boolean }): ListaGeo {
+/**
+ * `letra` es el tamaño de los nombres en píxeles (el de lo que se lee desde el
+ * fondo de la sala) y `ancho`, lo que mide el más ancho escrito a esa letra: la
+ * fila crece con la letra y la columna con el nombre, sin pasar de un 42% de un
+ * celular ni de un 20% de una pantalla ancha. Sin ellos, las medidas de antes:
+ * 12 píxeles de letra en un celular, que se leían como una lista de precios
+ * (revisión visual, 21 de octubre de 2026).
+ */
+export function listaCaidos(p: { w: number; k: number; top: number; floor: number; phone: boolean; letra?: number; ancho?: number }): ListaGeo {
   const k = Math.max(0.01, fin(p.k, 1));
   const cols = p.phone ? 1 : 2;
-  const colW = (p.phone ? 136 : 176) * k;
-  const rowH = (p.phone ? 22 : 23) * k;
+  const base = (p.phone ? 22 : 23) * k;
+  const letra = fin(p.letra ?? 0) > 0 ? fin(p.letra ?? 0) : base * 0.6;
+  const rowH = Math.max(base, letra / 0.6);
+  const minW = (p.phone ? 136 : 176) * k;
+  const colW = fin(p.ancho ?? 0) > 0 ? Math.min(Math.max(minW, fin(p.ancho ?? 0) + rowH * 0.85 + 10 * k), Math.max(minW, fin(p.w) * (p.phone ? 0.42 : 0.2))) : minW;
   const x = Math.max(0, fin(p.w) - cols * colW - (p.phone ? 10 : 12) * k);
   const y = fin(p.top) + 64 * k;
   const avail = Math.floor((fin(p.floor) - 14 * k - y) / rowH);
   const rows = Math.min(20, Math.max(3, avail));
-  return { x, y, colW, rowH, cols, rows, cap: cols * rows, w: cols * colW, h: rows * rowH, phone: p.phone };
+  return { x, y, colW, rowH, letra, cols, rows, cap: cols * rows, w: cols * colW, h: rows * rowH, phone: p.phone };
 }
