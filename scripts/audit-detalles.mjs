@@ -370,6 +370,37 @@ const DETALLES = {
     },
   },
 
+  D18: {
+    que: '"Pegar lista" es un botón y lleva al cuadro',
+    async correr(browser, v, tema, quien) {
+      const page = await abrir(browser, v, tema);
+      try {
+        const b = JSON.parse(
+          await page.eval(
+            "JSON.stringify((() => { const b = document.getElementById('btn-pegar'); if (!b) return null; const r = b.getBoundingClientRect(); return { tag: b.tagName, alto: Math.round(r.height), cursor: getComputedStyle(b).cursor }; })())",
+          ),
+        );
+        check(`${quien} · es un botón de verdad, de 44 px o más, con la manito`, !!b && b.tag === "BUTTON" && b.alto >= 44 && b.cursor === "pointer", b ? `${b.tag} · ${b.alto} px · cursor ${b.cursor}` : "no está #btn-pegar");
+        await escribir(page, "Ana Quispe\nLuis Mamani");
+        await page.eval("window.scrollTo(0, 0); document.getElementById('btn-pegar')?.click(); true");
+        await sleep(700);
+        const f = JSON.parse(
+          await page.eval(
+            "JSON.stringify((() => { const ta = document.getElementById('ta'); const r = ta.getBoundingClientRect(); return { foco: document.activeElement === ta, alFinal: ta.selectionStart === ta.value.length, aLaVista: r.top < innerHeight && r.bottom > 0 }; })())",
+          ),
+        );
+        check(`${quien} · tocarlo deja el cuadro con el foco, a la vista y con el cursor al final`, f.foco && f.alFinal && f.aLaVista, js(f));
+        await captura(page, "D18", v, tema, "pegar");
+        // Una lista pegada al final empieza en otro renglón: no se pega al último nombre.
+        await pegar(page, "Carla Flores\nDiego Rojas");
+        const nombres = await page.eval("[...document.querySelectorAll('#names i')].map((i) => i.textContent).join(' · ')");
+        check(`${quien} · lo que se pega al final empieza en un renglón nuevo`, nombres === "Ana Quispe · Luis Mamani · Carla Flores · Diego Rojas", nombres);
+      } finally {
+        await page.send("Page.close").catch(() => undefined);
+      }
+    },
+  },
+
   D08: {
     que: '"Cargar ejemplo" solo con el cuadro vacío',
     async correr(browser, v, tema, quien) {

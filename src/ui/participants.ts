@@ -38,7 +38,7 @@ export function cerrarLista(si: boolean): void {
   $<HTMLTextAreaElement>("ta").disabled = si;
   $<HTMLInputElement>("prize").disabled = si;
   $<HTMLSelectElement>("nw").disabled = si;
-  for (const id of ["csv", "csv-luma"]) $<HTMLInputElement>(id).disabled = si;
+  for (const id of ["csv", "csv-luma", "btn-pegar"]) $<HTMLInputElement>(id).disabled = si;
   $<HTMLButtonElement>("btn-recuperar").disabled = si;
   // Los orígenes se ven apagados: ya no cargan nada (styles.css).
   $("sec-participants").classList.toggle("lista-cerrada", si);
@@ -112,10 +112,25 @@ export function bindParticipants(): void {
     }
     const limpio = stripInvisiblesByLine(text);
     const num = quitarNumeracion(limpio.text);
-    if (num.text === text) return;
+    // Una lista pegada al final de otra empieza en un renglón nuevo: si no, el
+    // primer nombre se pegaba al último ("Luis MamaniCarla Flores").
+    const alFinal = ta.selectionStart === ta.value.length && ta.selectionEnd === ta.value.length && /\S[ \t]*$/.test(ta.value);
+    const pegar = alFinal && /\n/.test(num.text.trim()) ? `\n${num.text}` : num.text;
+    if (pegar === text) return;
     e.preventDefault();
-    insertar(ta, num.text);
+    insertar(ta, pegar);
     avisarCarga([...(limpio.lines ? [(L: Dict) => L.impInvisibles(limpio.lines)] : []), ...avisosDeNumeracion(num)]);
+  });
+  // "Pegar lista" parecía un botón y no hacía nada (buscador de detalles, D18):
+  // lleva al cuadro con el cursor al final, listo para pegar. En el celular, con
+  // el foco en el cuadro, el sistema ofrece "Pegar". No lee el portapapeles por
+  // su cuenta: el navegador pediría permiso con un cartel.
+  $("btn-pegar").addEventListener("click", () => {
+    if (listaCerrada()) return;
+    ta.focus({ preventScroll: true });
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+    const reducido = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    ta.scrollIntoView({ behavior: reducido ? "auto" : "smooth", block: "center" });
   });
   // El aviso vive desde el principio, vacío: un lector de pantalla anuncia los
   // cambios de una región que ya estaba, no de una que aparece con el texto.

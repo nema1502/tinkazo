@@ -364,7 +364,7 @@
   /* Apagar con opacidad los dejaba en 2,8 a 1. Un color sólido apagado se
      sigue leyendo y sigue diciendo "todavía no". */
   .chip.soon { background: var(--paper); color: var(--muted); border-style: dashed; box-shadow: none; }
-  label.chip.live { cursor: pointer; }
+  label.chip.live, button.chip.live { cursor: pointer; }
   /* Con la lista sellándose o sellada, los orígenes ya no cargan nada: se ven
      apagados, como los que vienen pronto (participants.ts, cerrarLista). */
   .lista-cerrada .chip.live { background: var(--paper); color: var(--muted); border-style: dashed; box-shadow: none; transform: none; cursor: not-allowed; }
@@ -645,7 +645,7 @@
   }
   /* Un dedo en un evento, con poca luz. 44 px es el minimo que se acierta. */
   .langs button, button.mini, a.mini, button.ghost, a.ghost, .gamepick button,
-  select, .st-actions button, label.chip.live, a.primary.cta, button.primary {
+  select, .st-actions button, label.chip.live, button.chip.live, a.primary.cta, button.primary {
     min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
   }
   /* Visible para el teclado y para el lector, invisible en pantalla. Con
@@ -654,7 +654,7 @@
     position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
     overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
   }
-  label.chip.live:focus-within { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 6px var(--yellow); }
+  label.chip.live:focus-within, button.chip.live:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; box-shadow: 0 0 0 6px var(--yellow); }
   /* Una huella de 64 caracteres desbordaba la tarjeta en celular. */
   .note { word-break: break-word; overflow-wrap: anywhere; }
   /* El panel de la cuenta: ver "UX 19-oct: panel" al final del archivo. */
