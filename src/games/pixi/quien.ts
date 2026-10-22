@@ -316,24 +316,46 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
   };
 
   /* ---------------------------------------------------------------- geometría */
+  /**
+   * La caja del relator, medida de verdad: su borde de arriba, sin el
+   * acercamiento con que entra cada frase. Una frase larga ocupa dos renglones
+   * y la caja crece hacia arriba; con la franja de un renglón, la de las reglas
+   * ("Vale el nombre de la lista, sin tildes…") tapaba los apellidos de la
+   * última fila justo cuando cada uno busca su nombre (evaluador, 22 de octubre
+   * de 2026). El tablero solo se achica, de a poco, y vuelve a medirse con cada
+   * cambio de pantalla: no respira con cada frase.
+   */
+  const relator = document.getElementById("commentary");
+  let techoRelator = Infinity;
+  const fondoDe = (h: number, k: number): number => Math.min(h - S.bottom() - 12 * k, techoRelator - 12 * k);
   const G = (): { w: number; h: number; k: number; top: number; bottom: number } => {
     const w = S.sw(), h = S.sh(), k = S.u();
     // En el celular la pregunta va debajo del contador, así que las cartas arrancan más abajo.
-    return { w, h, k, top: S.top() + (S.portrait() ? 175 : 112) * k, bottom: h - S.bottom() - 12 * k };
+    return { w, h, k, top: S.top() + (S.portrait() ? 175 : 112) * k, bottom: fondoDe(h, k) };
   };
   let g = G();
+  /**
+   * Las columnas del acomodo actual: se eligen al armarlo y no cambian hasta el
+   * próximo. Así, cuando la caja del relator crece, el tablero se achica de a
+   * poco en vez de reacomodarse de golpe (con 8, pasaba de dos filas a una en
+   * pleno reparto).
+   */
+  let colsAcomodo: { m: number; cols: number } | null = null;
   /** La grilla de `m` cartas que mejor llena el tablero: el tamaño de carta y dónde va cada una. */
   const grid = (m: number): { cw: number; ch: number; at: (i: number) => { x: number; y: number } } => {
     const areaW = g.w * 0.94, areaH = Math.max(60, g.bottom - g.top);
     const ratio = 1.32;
-    let best = { cols: 1, cw: 0 };
-    for (let cols = 1; cols <= m; cols++) {
-      const rows = Math.ceil(m / cols);
-      const cw = Math.min(areaW / cols, areaH / rows / ratio) * 0.9;
-      if (cw > best.cw) best = { cols, cw };
+    if (!colsAcomodo || colsAcomodo.m !== m) {
+      let best = { cols: 1, cw: 0 };
+      for (let cols = 1; cols <= m; cols++) {
+        const rows = Math.ceil(m / cols);
+        const cw = Math.min(areaW / cols, areaH / rows / ratio) * 0.9;
+        if (cw > best.cw) best = { cols, cw };
+      }
+      colsAcomodo = { m, cols: best.cols };
     }
-    const cw = Math.min(best.cw, 170 * g.k), ch = cw * ratio;
-    const cols = best.cols, rows = Math.ceil(m / cols);
+    const cols = colsAcomodo.cols, rows = Math.ceil(m / cols);
+    const cw = Math.min(Math.min(areaW / cols, areaH / rows / ratio) * 0.9, 170 * g.k), ch = cw * ratio;
     const gx = areaW / cols, gy = Math.min(areaH / rows, ch * 1.12);
     const x0 = (g.w - cols * gx) / 2, y0 = g.top + (areaH - rows * gy) / 2;
     return { cw, ch, at: (i) => ({ x: x0 + ((i % cols) + 0.5) * gx, y: y0 + (Math.floor(i / cols) + 0.5) * gy }) };
@@ -384,6 +406,9 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
   let latidoAntes = -1;
 
   const build = (): void => {
+    // Otra pantalla, otra caja del relator: se vuelve a medir, y las columnas se eligen de nuevo.
+    techoRelator = Infinity;
+    colsAcomodo = null;
     g = G();
     const k = g.k;
     // Un tablero liso con un marco de colores.
@@ -565,6 +590,8 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
       layoutDeal = !lastLayout.startsWith(`${ri}:`);
       lastLayout = key;
       layoutT0 = tAll;
+      // El acomodo nuevo elige sus columnas contra el tablero de ahora.
+      colsAcomodo = null;
       for (const [i, c] of cards.entries()) from.set(i, { x: c.x, y: c.y, s: c.s });
     }
     const gr = grid(set.length);
@@ -759,6 +786,9 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
       crown();
       tHold += dt * paceFactor();
     }
+    // El tablero, contra la caja del relator de verdad (ver `relator`).
+    if (relator?.textContent) techoRelator = Math.min(techoRelator, relator.offsetTop - 4);
+    g.bottom += (fondoDe(g.h, g.k) - g.bottom) * Math.min(1, dt * 8);
     aim();
     cam.update(dt);
     cam.apply(S.scene, S.sw(), S.sh(), now);
