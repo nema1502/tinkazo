@@ -15,7 +15,7 @@ Entró al selector el 21 de octubre de 2026, y los dos que reemplaza salieron de
 1. **La feria** (5 segundos de juego). Los puestos aparecen de a uno en una cuadrícula, con el color de lo que acepta arriba y el cuadrito de lo que da abajo. La leyenda de arriba dice qué color es cada producto. Se pasa lista: cada nombre aparece encima de su puesto.
 2. **El encargo.** Sale del origen con un producto (papa, chuño, quinua, maíz, arroz, yuca, plátano o café).
 3. **Cada pase.** "¿Quién acepta…?": se prenden todos los puestos que aceptan lo que lleva el encargo. El encargo se acerca a uno de ellos. Si ese puesto lo cambia, el atado cambia de contenido ("¡Cambio! Ahora es…") y el puesto se apaga. Si no hay camino desde ahí, es un **callejón sin salida** y el encargo vuelve.
-4. **La entrega.** Quedan dos puestos que aceptan lo que lleva el atado: el de quien espera y, a veces, otro. El atado se acerca primero al otro ("No, es para el otro"), y después llega a quien espera. El cartel del ganador se abre.
+4. **La entrega.** Se prenden los puestos que aceptan lo que lleva el atado: el de quien espera y al menos otro. El atado llega derecho a quien espera, o antes prueba uno o dos de los otros ("Por ahí no se puede", y "No, es para el otro" cuando ya queda uno solo). El cartel del ganador se abre.
 5. **La ruta.** Se prende el camino de cambios en dorado, con los nombres de todos los que cambiaron, y la frase "Nadie llega solo: pasó por… y llegó a…".
 
 Con varios premios, cada premio es un encargo. Salen juntos, cada uno con su camino, y cada uno llega a quien espera. Ningún puesto cambia dos veces, y quien espera nunca cambia.
@@ -26,7 +26,9 @@ Con varios premios, cada premio es un encargo. Salen juntos, cada uno con su cam
 
 **Los callejones son reales.** Un puesto solo se muestra como callejón si, desde lo que da, no se llega a quien espera dentro del límite de seis cambios, usando solo los puestos que todavía no cambiaron. Si el juego dice "callejón", no hay camino. Lo comprueban las pruebas de `trueque-plan.test.ts`.
 
-**Quien espera no se delata antes.** Su puesto no se prende hasta la entrega. Si se prendiera antes, la sala aprendería el final.
+**Quien espera no se delata antes, ni al revés.** Se prende como cualquier puesto que acepta lo que lleva el encargo: el camino puede pasar antes por su producto, y ese pase lo cambia otro puesto que también lo acepta, sin probar a quien espera. En la entrega siempre hay al menos otro prendido (si nadie más acepta lo que lleva el atado, un puesto libre pasa a aceptarlo), y quien espera es el primero que se prueba tan seguido como cualquiera de los prendidos.
+
+Hasta el 21 de octubre de 2026 era al revés: su puesto no se prendía hasta la entrega y el camino nunca pasaba por lo suyo, así que un puesto que se había prendido antes no ganaba nunca; con ocho personas cada producto lo aceptaba un solo puesto, y en la entrega se prendía solo el del ganador; y en la entrega se probaba siempre antes al otro, así que el primero que probaba perdía. El auditor de delatores lo medía en 200 semillas: 153 de 153, 200 de 200 y 149 de 173. Con el arreglo, en las mismas 200 semillas: los nunca prendidos ganan 89 de 144 (61,8 %, azar 65,6 %) con ocho personas, los prendidos 75 de 200 (37,5 %, azar 41,8 %) con dieciocho, y en la entrega gana uno de los otros 101 de 200 (50,5 %, azar 50 %) y 112 de 200 (56 %, azar 53 %). Para que quien espera se prenda antes tan seguido como uno cualquiera, con cuatro cambios o más el plan pone su producto en un paso al azar un octavo de las veces: con tres cambios no hace falta, porque a un puesto prendido lo pueden probar como callejón y sacar, y a quien espera no.
 
 **El camino no pasa de seis cambios.** Es el límite de Stellar (cinco activos intermedios): `MAX_CAMBIOS = 6` en el plan. Con 2 personas hay un cambio; con 12 o más, cuatro; con 60 o más, cinco.
 
