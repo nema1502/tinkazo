@@ -331,6 +331,21 @@ describe("el mano a mano", () => {
     expect(d["salta-primero"].el).toEqual({ acierta: true, azar: 0.5 });
   });
 
+  it("y a la mitad del mano a mano, después de que se cruzan a su lugar", () => {
+    const P = preparar(
+      traza({
+        pos: (t) => (t < 10 ? todosEnFila(t) : t < 13 ? { 2: [800, 400], 7: [400, 420] } : { 2: [400, 380], 7: [800, 420] }),
+        subs: [[11, "¡Lucía Flores y Pablo Gutiérrez, cara a cara!"], [20, "¡LLEGÓ AL SOCAVÓN!"]],
+      }),
+      { corte: { clave: "cOruArrive" } },
+    );
+    const d = senalesDuelo(P);
+    expect(d["lado-x"].derecha).toEqual({ acierta: true, azar: 0.5 });
+    expect(d["lado-x-medio"].izquierda).toEqual({ acierta: true, azar: 0.5 });
+    expect(d["lado-y-medio"].arriba).toEqual({ acierta: true, azar: 0.5 });
+    expect(P.tiempos["lado-x-medio"]).toBe(15.5);
+  });
+
   it("sin línea de dos, cuando en pantalla quedan dos", () => {
     const P = preparar(traza({ pos: (t) => (t < 10 ? todosEnFila(t) : { 2: [900, 300], 4: [300, 300] }) }));
     expect(senalesDuelo(P)["lado-x"].derecha).toEqual({ acierta: true, azar: 0.5 });

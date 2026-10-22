@@ -363,8 +363,10 @@ export function senalArranque(P, cfg) {
 /**
  * El mano a mano: desde que quedan dos (la última línea que nombra a dos con
  * el ganador adentro, o cuando en pantalla siguen solo dos), de qué lado está
- * cada uno (`lado-x`, `lado-y`) y, en los juegos donde se salta, quién salta
- * primero (`salta-primero`): el primero que sube de golpe respecto del otro.
+ * cada uno al empezar (`lado-x`, `lado-y`) y a la mitad, entre el empiece y el
+ * corte (`lado-x-medio`, `lado-y-medio`), y, en los juegos donde se salta,
+ * quién salta primero (`salta-primero`): el primero que sube de golpe respecto
+ * del otro.
  */
 export function senalesDuelo(P, cfg = {}) {
   const antes = P.subs.filter((s) => s.t < P.corte);
@@ -388,19 +390,26 @@ export function senalesDuelo(P, cfg = {}) {
   const otro = par.find((i) => i !== P.w);
   const ambos = P.frames.filter((x) => x.t >= t2 && x.t < P.corte && x.labs.has(P.w) && x.labs.has(otro));
   const out = {};
-  const f = ambos[0];
-  if (f) {
+  // De qué lado está cada uno al empezar el mano a mano, y a la mitad: en
+  // Oruro, al empezar todavía caminan juntos, y después se cruzan a su lugar.
+  const lados = (f, sufijo) => {
+    if (!f) return;
     const a = f.labs.get(P.w), b = f.labs.get(otro);
     if (Math.abs(a.x - b.x) > 4) {
       const izq = a.x < b.x ? P.w : otro;
-      out["lado-x"] = { izquierda: apuesta([izq], par, P.w), derecha: apuesta([izq === P.w ? otro : P.w], par, P.w) };
-      P.tiempos["lado-x"] = f.t;
+      out[`lado-x${sufijo}`] = { izquierda: apuesta([izq], par, P.w), derecha: apuesta([izq === P.w ? otro : P.w], par, P.w) };
+      P.tiempos[`lado-x${sufijo}`] = f.t;
     }
     if (Math.abs(a.y - b.y) > 4) {
       const arriba = a.y < b.y ? P.w : otro;
-      out["lado-y"] = { arriba: apuesta([arriba], par, P.w), abajo: apuesta([arriba === P.w ? otro : P.w], par, P.w) };
-      P.tiempos["lado-y"] = f.t;
+      out[`lado-y${sufijo}`] = { arriba: apuesta([arriba], par, P.w), abajo: apuesta([arriba === P.w ? otro : P.w], par, P.w) };
+      P.tiempos[`lado-y${sufijo}`] = f.t;
     }
+  };
+  lados(ambos[0], "");
+  if (ambos.length > 2) {
+    const medio = (ambos[0].t + P.corte) / 2;
+    lados(ambos.reduce((m, x) => (Math.abs(x.t - medio) < Math.abs(m.t - medio) ? x : m)), "-medio");
   }
   if (cfg.salta && ambos.length > 2) {
     const umbral = cfg.salta === true ? 8 : cfg.salta;
