@@ -261,7 +261,7 @@ const DETALLES = {
         const solo = await page.eval("getComputedStyle(document.getElementById('sec-frozen')).display === 'none'");
         check(`${quien} · después de recargar, el aviso dice qué sorteo quedó sin sortear`, aviso.ok && /Termo · 18 personas/.test(texto), texto ? `"${texto}"` : "sin aviso");
         check(`${quien} · y no se retoma solo`, solo);
-        await page.eval("document.getElementById('pendiente').scrollIntoView({ block: 'center' }); true");
+        await page.eval("(document.getElementById('pendiente') || document.getElementById('sec-participants')).scrollIntoView({ block: 'center' }); true");
         await sleep(300);
         await captura(page, "D06", v, tema, "aviso");
         await page.eval("document.querySelector('#pendiente [data-retomar-pendiente]')?.click(); true");
@@ -271,6 +271,8 @@ const DETALLES = {
         check(`${quien} · "Retomarlo" vuelve a la lista sellada y el aviso se va`, ret.ok && st.n === "18" && st.aviso === "none", js(st));
         await captura(page, "D06", v, tema, "retomado");
       } finally {
+        // La cuenta de prueba no se queda: los que siguen son del modo libre, sin cuenta.
+        await page.eval("localStorage.clear(); true").catch(() => undefined);
         await page.send("Page.close").catch(() => undefined);
       }
     },
@@ -433,6 +435,8 @@ const DETALLES = {
         const c = await page.eval("document.querySelector('.evn-card input').value");
         check(`${quien} · lo escrito sin tocar "Guardar" sigue después de recargar`, c === "Meetup n8n", `"${c}"`);
       } finally {
+        // La cuenta de prueba no se queda: los que siguen son del modo libre, sin cuenta.
+        await page.eval("localStorage.clear(); true").catch(() => undefined);
         await page.send("Page.close").catch(() => undefined);
       }
     },
