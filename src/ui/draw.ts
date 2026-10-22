@@ -455,8 +455,10 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
 
 /** Abre el resultado en grande en el mismo instante, si `pantalla.ts` ya bajó (siempre, salvo un wifi muy lento). */
 function resultadoEnGrande(enlace: Promise<string>, volverA: HTMLButtonElement): void {
-  // Con el enlace largo: el corto se arma solo si quien organiza lo pide (compartir o "Mostrar en grande").
-  const abrir = (m: typeof import("./pantalla")): void => void m.mostrarResultado(enlace, { volverA });
+  // Con el enlace corto, como "Mostrar en grande": es lo mismo, mostrarlo en grande, y el
+  // QR del corto se lee desde el fondo de la sala (Nicolás, 21 de octubre de 2026). Hasta
+  // ese día iba con el largo. Nunca en la demo; si el corto no llega, va el largo (pantalla.ts).
+  const abrir = (m: typeof import("./pantalla")): void => void m.mostrarResultado(enlace, { corto: !params.has("demo"), volverA });
   if (pantallaLista) abrir(pantallaLista);
   else void import("./pantalla").then(abrir, () => enfocarDespues(volverA));
 }
@@ -672,9 +674,10 @@ let proofLink = "";
 let cortoLink = "";
 
 /**
- * El enlace corto se arma al compartir o al mostrar en grande, nunca solo: no
- * se guarda nada en ningún lado mientras quien organiza no comparte. Y nunca
- * en la demo, que no graba nada.
+ * El enlace corto se arma al compartir o al mostrar en grande (con el botón, o
+ * al final del show que arrancó desde la espera en grande), nunca solo: no se
+ * guarda nada en ningún lado mientras quien organiza no comparte ni lo muestra.
+ * Y nunca en la demo, que no graba nada.
  */
 const puedeAcortar = (): boolean => !params.has("demo") && !!proofLink;
 

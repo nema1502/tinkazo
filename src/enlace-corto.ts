@@ -254,6 +254,37 @@ export function acortar(enlaceLargo: string, op: Opciones = {}): Promise<Corto |
   return p;
 }
 
+/**
+ * El enlace de un QR que la sala mira en ese momento: el del resultado en
+ * grande, que se lee desde las sillas.
+ *
+ * Espera al corto (`pedido`, de `acortar`) hasta `gracia` milisegundos. Si
+ * sale, `ahora` es el corto y el QR se dibuja una sola vez. Si no salió a
+ * tiempo, `ahora` es el largo, para que el QR salga enseguida, y `despues` trae
+ * el corto cuando salga (dentro de la espera de `acortar`) para cambiarlo. Si
+ * falla, o no hay pedido (la demo), el largo y nada más. Nunca tira.
+ */
+export async function enlaceParaElQr(
+  largo: string,
+  pedido: Promise<Corto | null> | null,
+  gracia: number,
+): Promise<{ ahora: string; despues: Promise<string | null> }> {
+  const nada = Promise.resolve(null);
+  if (!pedido) return { ahora: largo, despues: nada };
+  const corto = pedido.then(
+    (c) => c?.corto ?? null,
+    () => null,
+  );
+  let reloj: ReturnType<typeof setTimeout> | undefined;
+  const vence = new Promise<undefined>((r) => {
+    reloj = setTimeout(() => r(undefined), gracia);
+  });
+  const antes = await Promise.race([corto, vence]);
+  clearTimeout(reloj);
+  if (antes === undefined) return { ahora: largo, despues: corto };
+  return { ahora: antes ?? largo, despues: nada };
+}
+
 async function crear(ruta: string, op: Opciones): Promise<Corto | null> {
   const f = op.fetch ?? fetch;
   const origen = op.origen ?? location.origin;

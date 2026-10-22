@@ -1,8 +1,14 @@
 import { esc } from "../dom";
 import { t } from "../i18n";
 import { app, avatar } from "../state";
-import { acortar } from "../enlace-corto";
+import { acortar, enlaceParaElQr } from "../enlace-corto";
 import { pintarQr } from "./qr";
+
+/**
+ * Lo que el QR espera al enlace corto antes de salir con el largo. Si el corto
+ * llega después, el QR cambia a él: es el que se lee desde el fondo.
+ */
+const ESPERA_CORTO_MS = 2_000;
 
 /**
  * El resultado en grande, para el proyector: quién salió, qué se lleva, y el
@@ -12,14 +18,16 @@ import { pintarQr } from "./qr";
  * Es el momento en que la sala saca el celular: el QR tiene que leerse desde
  * el fondo, así que es lo segundo más grande después del nombre. Con
  * `corto`, el QR lleva el enlace corto (enlace-corto.ts): de menos de cuarenta módulos por
- * lado y no de más de cien, se lee desde las sillas. Si no sale en unos
- * segundos, lleva el largo de siempre.
+ * lado y no de más de cien, se lee desde las sillas. El QR no lo espera más de
+ * dos segundos (`ESPERA_CORTO_MS`): si no llegó, sale con el largo de siempre y
+ * cambia al corto cuando llega; si el servicio no contesta, queda el largo.
  *
  * La abre el botón "Mostrar en grande" y, desde el 21 de octubre de 2026, el
  * final del show cuando el sorteo arrancó desde la espera en grande (`draw.ts`):
  * ahí el enlace llega después (el comprobante se arma aparte) y el QR aparece
- * cuando está, con el enlace largo: el corto se arma solo cuando quien organiza
- * lo pide, y abrirse solo no es pedirlo. `volverA` es lo que queda con el foco
+ * cuando está. Las dos con el enlace corto, salvo en la demo: Nicolás decidió
+ * ese día que mostrar en grande arme el corto, y el final del show desde la
+ * espera es mostrarlo en grande. `volverA` es lo que queda con el foco
  * al cerrar: "Siguiente premio", que es lo que sigue. Salir de la pantalla
  * completa también la cierra, como a la espera: Escape la suelta el navegador
  * sin avisarle a la página, y quedaba la vista en grande dentro de la ventana.
@@ -109,12 +117,16 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
         ? Math.min(innerHeight * 0.56, innerWidth * 0.32)
         : Math.min(innerHeight * 0.6, innerWidth * 0.36);
   const link = await Promise.resolve(enlace).catch(() => "");
-  const corto = link && op.corto && !cerrada ? await acortar(link) : null;
+  const { ahora, despues } = await enlaceParaElQr(link, link && op.corto && !cerrada ? acortar(link) : null, ESPERA_CORTO_MS);
   // Si se cerró mientras llegaba el comprobante o salía el corto, no hay nada que pintar.
   if (cerrada || !back.isConnected) return;
-  const listo = link && img ? await pintarQr(img, corto?.corto ?? link, lado) : false;
+  const listo = ahora && img ? await pintarQr(img, ahora, lado) : false;
   if (!listo) back.querySelector(".pantalla-qr")?.remove();
   ajustar();
+  if (!listo || !img) return;
+  // El corto que llegó tarde reemplaza al largo.
+  const corto = await despues;
+  if (corto && !cerrada && back.isConnected && (await pintarQr(img, corto, lado))) ajustar();
 }
 
 /**
