@@ -220,13 +220,24 @@ async function restorePollar(): Promise<void> {
   }
 }
 
+/** Ya se pidió Mis sorteos alguna vez (hubo una sesión): ver `render`. */
+let historialPedido = false;
+
 function render(): void {
   const box = $("wallet-box");
   box.innerHTML = "";
   applyGate();
   // La página decide con esto si muestra la portada o la herramienta.
   document.dispatchEvent(new CustomEvent<string | null>("tinkazo:sesion", { detail: session?.address ?? null }));
-  void import("./history").then((h) => h.renderHistory(session?.address ?? null));
+  // Mis sorteos, recién con una cuenta. Sin ella no hay nada que mostrar: la
+  // sección nace escondida y `renderHistory(null)` no cambiaba nada, pero bajaba
+  // el historial con compartir y los eventos (14 kB con gzip, cuatro archivos)
+  // a toda persona que llegaba a la portada. Después de una sesión se sigue
+  // llamando igual, para esconderlo al salir.
+  if (session || historialPedido) {
+    historialPedido = true;
+    void import("./history").then((h) => h.renderHistory(session?.address ?? null));
+  }
   // Sin contrato en esta red, el anclaje no se ofrece y la cabecera calla.
   if (!anchoringAvailable) return;
 
