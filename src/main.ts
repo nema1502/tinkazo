@@ -331,6 +331,8 @@ async function poseScene(): Promise<void> {
   const W3 = (await import("./pose")).poseWinners(L, premios, params.get("ganador"));
   app.frozen = { names: L, listHash: "32e2099c7a8dde7b6892523dc7d3e34ac06a972fd67f142186c58dced51a21ef", ts: 0, at: "-", prize: "", round: 32254977 };
   app.drawn = { beacon: fakeBeacon, winners: W3 };
+  // Para los auditores: la lista y los ganadores de esta escena, tal cual.
+  (window as unknown as { __pose?: { names: string[]; winners: number[] } }).__pose = { names: L, winners: W3 };
   const cual = params.get("pose") ?? "1";
   const nada = (): void => {};
   // La escena fija en el motor nuevo, salvo con `?motor=clasico` o sin WebGL.
