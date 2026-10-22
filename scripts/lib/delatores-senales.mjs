@@ -76,10 +76,14 @@ export const MARCADORES = {
   // el empate, cuando ninguna pregunta separa a los que quedan.
   cQuiAnswer: /^¡(Sí|No)! (A sentarse los que .+|Se sientan los que .+|Están todos: nadie se sienta|No hay ninguno: nadie se sienta)\.$/u,
   cQuiTie: /^¡(Mismas letras|Nombres casi iguales)! El sorteo ya eligió\.$/u,
-  // Oruro.
-  cOruCount: /^¡(Dos diablos en la comparsa|\d+ diablos en la comparsa)!$/u,
-  cOruMask: /^¡(Casi se le cae la máscara a .+|.+ tropieza|Uy, .+)!$/u,
-  cOruArrive: /^¡(LLEGÓ AL SOCAVÓN|SUENAN LAS CAMPANAS|ENTRA AL SANTUARIO)!$/u,
+  // Oruro (La Entrada, desde el 21 de octubre): arranca el recorrido, el susto
+  // con la prenda, la parada falsa ("¿Se queda X?"), la caída del que pierde
+  // en el contrapunto, que decide, y la llegada de la fraternidad.
+  cOruGo: /^¡(Un bailarín|Dos bailarines|\d+ bailarines( en \d+ fraternidades)?): arranca el recorrido!$/u,
+  cOruScare: /^¡Casi se le (vuela el sombrero|cae la montera|cae la máscara) a .+!$/u,
+  cOruFake: /^¿Se queda(n)? .+\?$/u,
+  cOruFall: /^¡(A .+ se le (voló el sombrero|cayó la montera|cayó la máscara)|Se le (voló el sombrero|cayó la montera|cayó la máscara))!$/u,
+  cOruArriveFrat: /^¡(.+ llegaron al Socavón|.+, hasta el Socavón|Campanas para .+: llegaron al Socavón)!$/u,
   // La chovena.
   cChoCount: /^¡(Dos en la rueda|\d+ en la rueda)!$/u,
   cChoOut: /^¡(.+ trastabilló|.+ se soltó|Afuera, .+)!$/u,
@@ -845,15 +849,17 @@ export const JUEGOS = {
     escena: true,
     especificas: [senalesTrueque],
   },
+  // La Entrada: decide la caída del que pierde en el contrapunto; sin
+  // contrapunto, la llegada.
   oruro: {
     candidatos: "visibles",
-    corte: { clave: "cOruArrive" },
+    corte: { claves: ["cOruFall", "cOruArriveFrat"] },
     salta: true,
     arranque: [
-      { desde: { clave: "cOruCount" }, orden: "x" },
-      { desde: { clave: "cOruCount" }, orden: "y" },
+      { desde: { clave: "cOruGo" }, orden: "x" },
+      { desde: { clave: "cOruGo" }, orden: "y" },
     ],
-    especificas: [linea("mascara", ["cOruMask"])],
+    especificas: [linea("mascara", ["cOruScare"]), linea("amague", ["cOruFake"])],
   },
   chovena: {
     candidatos: "visibles",

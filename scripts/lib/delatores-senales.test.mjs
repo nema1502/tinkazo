@@ -76,7 +76,7 @@ describe("las líneas del relator que marcan momentos coinciden con src/i18n.ts"
     cTomDoor: [], cTomFake: ["7"], cTomBack: [], cTomBall: ["7"],
     cTroWobble: conNombre, cTroEdge: conNombre, cTroSpent: conNombre,
     cPinOut: conNombre, cPinAlmost: conNombre, cPinBreak: [],
-    cOruMask: conNombre, cOruArrive: [],
+    cOruArriveFrat: ["los", "Diablos de Oruro"],
     cChoOut: conNombre, cChoWobble: conNombre, cChoHold: conNombre, cChoBack: conNombre,
     cTelDoor: conNombre, cTelSlip: conNombre, cTelDock: [],
     cPasClose: conNombre, cPasOut: conNombre,
@@ -94,7 +94,7 @@ describe("las líneas del relator que marcan momentos coinciden con src/i18n.ts"
     for (const n of [2, 8, 12]) {
       expect(T.es.cSapCount(n)).toMatch(MARCADORES.cSapCount);
       expect(T.es.cTroCount(n)).toMatch(MARCADORES.cTroCount);
-      expect(T.es.cOruCount(n)).toMatch(MARCADORES.cOruCount);
+      for (const f of [1, 3]) expect(T.es.cOruGo(n, f)).toMatch(MARCADORES.cOruGo);
       expect(T.es.cChoCount(n)).toMatch(MARCADORES.cChoCount);
     }
   });
@@ -107,6 +107,19 @@ describe("las líneas del relator que marcan momentos coinciden con src/i18n.ts"
       expect(s).toMatch(MARCADORES.cPinLast);
       expect(s).not.toMatch(MARCADORES.cPinOut);
     }
+  });
+
+  it("Oruro: el susto y la caída con cada prenda, y la parada falsa de una fraternidad", () => {
+    for (const prenda of ["sombrero", "montera", "mascara"]) {
+      expect(T.es.cOruScare("Ana Vargas", prenda)).toMatch(MARCADORES.cOruScare);
+      expect(T.es.cOruFall("Ana Vargas", prenda)).toMatch(MARCADORES.cOruFall);
+      expect(T.es.cOruFall("", prenda)).toMatch(MARCADORES.cOruFall);
+      expect(T.es.cOruScare("Ana Vargas", prenda)).not.toMatch(MARCADORES.cOruFall);
+    }
+    expect(T.es.cOruFake("los", "Morenos")).toMatch(MARCADORES.cOruFake);
+    expect(T.es.cOruFakeOne("Ana Vargas")).toMatch(MARCADORES.cOruFake);
+    expect(T.es.cOruGo(1, 1)).toMatch(MARCADORES.cOruGo);
+    expect(T.es.cOruGo(2, 1)).toMatch(MARCADORES.cOruGo);
   });
 
   it("el cartel del ganador, con uno y con varios", () => {
@@ -337,9 +350,9 @@ describe("el mano a mano", () => {
           const salto = t > 14 && t < 14.6 ? 40 : 0;
           return { 2: [400, 400 - salto], 7: [800, 420] };
         },
-        subs: [[11, "¡Lucía Flores y Pablo Gutiérrez, cara a cara!"], [20, "¡LLEGÓ AL SOCAVÓN!"]],
+        subs: [[11, "¡Lucía Flores y Pablo Gutiérrez, cara a cara!"], [20, "¡Los Diablos llegaron al Socavón!"]],
       }),
-      { corte: { clave: "cOruArrive" } },
+      { corte: { clave: "cOruArriveFrat" } },
     );
     const d = senalesDuelo(P, { salta: true });
     expect(d["lado-x"].izquierda).toEqual({ acierta: true, azar: 0.5 });
@@ -351,9 +364,9 @@ describe("el mano a mano", () => {
     const P = preparar(
       traza({
         pos: (t) => (t < 10 ? todosEnFila(t) : t < 13 ? { 2: [800, 400], 7: [400, 420] } : { 2: [400, 380], 7: [800, 420] }),
-        subs: [[11, "¡Lucía Flores y Pablo Gutiérrez, cara a cara!"], [20, "¡LLEGÓ AL SOCAVÓN!"]],
+        subs: [[11, "¡Lucía Flores y Pablo Gutiérrez, cara a cara!"], [20, "¡Los Diablos llegaron al Socavón!"]],
       }),
-      { corte: { clave: "cOruArrive" } },
+      { corte: { clave: "cOruArriveFrat" } },
     );
     const d = senalesDuelo(P);
     expect(d["lado-x"].derecha).toEqual({ acierta: true, azar: 0.5 });
