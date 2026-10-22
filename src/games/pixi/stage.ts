@@ -9,6 +9,7 @@ import { beep, note } from "../../sound";
 import { registerSkip, releaseScreen, shorten, takeOverScreen, winnerNames } from "../overlay";
 import { Camera } from "./camera";
 import { guardiaNombre, meter } from "./encuadre";
+import { reves, tira } from "./papel-picado";
 import { watchRecovery } from "./recover";
 
 /**
@@ -608,7 +609,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     const root = new Container();
     podium.addChild(root);
     const flash = new Graphics();
-    const confetti = new Graphics();
+    // El papel picado son rectángulos blancos teñidos (`papel-picado.ts`): se
+    // arman una vez y en cada cuadro solo se mueven, sin volver a dibujar.
+    const confetti = new Container();
+    const tiras: Sprite[] = [];
     const plate = new Container();
     root.addChild(confetti, plate, flash);
     const tl = gsap.timeline({ paused: true });
@@ -733,22 +737,26 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
           view.dataset.cartel = [b.x, b.y, b.width, b.height].map((v) => Math.round(v * dpr)).join(",");
         }
         // Papel picado: cada tira se calcula desde la hora, no se acumula.
-        confetti.clear();
+        // Con el modo para compartir, menos: el ruido se pierde en Zoom.
         const k = u();
-        // Con el modo para compartir, menos papel picado: el ruido se pierde en Zoom.
-        const papeles = compartir ? 70 : 180;
-        for (let i = 0; i < papeles; i++) {
-          const t0 = hash(i, 7) * 0.4;
-          const q = tt - t0;
-          if (q < 0) continue;
-          const vx = (hash(i, 1) - 0.5) * 900 * k, vy = -(300 + hash(i, 2) * 700) * k;
-          const x = sw() / 2 + (hash(i, 3) - 0.5) * sw() * 0.3 + vx * q;
-          const y = sh() * 0.3 + vy * q + 900 * k * q * q;
-          if (y > sh() + 20) continue;
-          const rot = hash(i, 4) * 6 + q * (4 + hash(i, 5) * 8);
-          const w = 9 * k, h = Math.max(1, 5 * k * Math.abs(Math.cos(rot)));
-          confetti.rect(x - w / 2, y - h / 2, w, h).fill(P[i % P.length] ?? YELLOW);
+        const W = sw(), H = sh();
+        const n = compartir ? 70 : 180;
+        while (tiras.length < n) {
+          const s = new Sprite(Texture.WHITE);
+          s.anchor.set(0.5);
+          confetti.addChild(s);
+          tiras.push(s);
         }
+        tiras.forEach((s, i) => {
+          const p = i < n ? tira(i, tt, k, W, H) : null;
+          s.visible = !!p;
+          if (!p) return;
+          s.position.set(p.x, p.y);
+          s.rotation = p.rot;
+          s.scale.set(p.w, p.h);
+          const c = P[i % P.length] ?? YELLOW;
+          s.tint = p.reves ? reves(c) : c;
+        });
       },
       rebuild() {
         build();
