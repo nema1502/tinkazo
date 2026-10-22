@@ -42,6 +42,13 @@ function etiqueta(nombre: string, max: number): string {
   return corto.length <= max ? corto : `${pila.slice(0, Math.max(1, max - 1))}…`;
 }
 
+/**
+ * Cuántas letras entran en una fila de la lista de los caídos. En la pantalla
+ * ancha eran 18; con la letra legible, 16 dejan las dos columnas del ancho de
+ * antes, lejos de la piñata.
+ */
+const listaMax = (phone: boolean): number => (phone ? 15 : 16);
+
 const DT = 1 / 120;
 const T_HANG = 3.0;
 const GRAV = 1500;
@@ -631,15 +638,26 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     moreBadge.visible = false;
     chipLayer.addChild(moreBadge);
     S.hud.addChild(flash, box, chipLayer);
-    // La lista de los caídos (ver `drawLista`): filas fijas, que se llenan solas.
-    lista = listaCaidos({ w: g.w, k, top: S.top(), floor: g.floor, phone: g.w <= 520 });
+    // La lista de los caídos (ver `drawLista`): filas fijas, que se llenan solas,
+    // con la letra de lo que se lee desde el fondo y tan anchas como el nombre
+    // más largo de la lista.
+    const phone = g.w <= 520;
+    const letraLista = S.letra(phone ? 15 : 16);
+    const medida = S.text("", { fontSize: letraLista, fontWeight: "800" });
+    let anchoLista = 0;
+    for (const nm of names) {
+      medida.text = etiqueta(nm, listaMax(phone));
+      anchoLista = Math.max(anchoLista, medida.width);
+    }
+    medida.destroy();
+    lista = listaCaidos({ w: g.w, k, top: S.top(), floor: g.floor, phone, letra: letraLista, ancho: anchoLista });
     const listaCont = new Container();
     listaRows = [];
     for (let i = 0; i < lista.cap; i++) {
       const c = new Container();
       const bg = new Graphics();
       const sq = new Graphics();
-      const tx = S.text("", { fontSize: lista.rowH * 0.6, fontWeight: "800", fill: S.dark ? CREAM : INK });
+      const tx = S.text("", { fontSize: lista.letra, fontWeight: "800", fill: S.dark ? CREAM : INK });
       tx.anchor.set(0, 0.5);
       tx.position.set(lista.rowH * 0.85, lista.rowH / 2);
       c.addChild(bg, sq, tx);
@@ -849,7 +867,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       const id = shown[i];
       r.c.visible = id !== undefined;
       if (id === undefined) return;
-      r.tx.text = etiqueta(names[id] ?? "", lista.phone ? 15 : 18);
+      r.tx.text = etiqueta(names[id] ?? "", listaMax(lista.phone));
       r.bg.clear().roundRect(0, 0, lista.colW - 4, lista.rowH - 3, 4).fill(i === 0 && hl ? YELLOW : fondo).stroke({ width: 2, color: INK });
       r.sq.clear().rect(4, 4, lista.rowH * 0.3, lista.rowH - 11).fill(S.color(id));
     });

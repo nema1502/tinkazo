@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_LABEL_ITEMS, capRecent, juntar, layoutLabels, type LabelItem } from "./pinata-labels";
+import { MAX_LABEL_ITEMS, capRecent, juntar, layoutLabels, listaCaidos, type LabelItem } from "./pinata-labels";
 
 const B = { w: 390, h: 844, top: 100, bottom: 118 };
 const item = (id: number, x: number, y: number, priority = 0, w = 100, h = 30): LabelItem => ({ id, x, y, w, h, priority });
@@ -183,5 +183,29 @@ describe("juntar: la pila de caramelos como pocos obstáculos", () => {
     const pila = juntar(muchos);
     expect(performance.now() - t0).toBeLessThan(50);
     expect(pila).toHaveLength(1);
+  });
+});
+
+describe("listaCaidos: la lista con la letra de la sala", () => {
+  it("sin letra ni ancho, las medidas de antes", () => {
+    const g = listaCaidos({ w: 390, k: 1, top: 100, floor: 600, phone: true });
+    expect(g.rowH).toBe(22);
+    expect(g.colW).toBe(136);
+    expect(g.letra).toBeCloseTo(13.2, 9);
+  });
+
+  it("la fila crece con la letra y la columna con el nombre más ancho, con tope", () => {
+    const g = listaCaidos({ w: 390, k: 0.93, top: 100, floor: 600, phone: true, letra: 14, ancho: 112 });
+    expect(g.letra).toBe(14);
+    expect(g.rowH).toBeCloseTo(14 / 0.6, 9);
+    expect(g.colW).toBeCloseTo(112 + g.rowH * 0.85 + 9.3, 9);
+    expect(g.x + g.w).toBeLessThanOrEqual(390);
+    // Un nombre larguísimo no se come la pantalla.
+    const ancho = listaCaidos({ w: 390, k: 0.93, top: 100, floor: 600, phone: true, letra: 14, ancho: 400 });
+    expect(ancho.colW).toBeCloseTo(390 * 0.42, 9);
+    // En la pantalla ancha, dos columnas, sin pasar del 20% cada una.
+    const ancha = listaCaidos({ w: 1280, k: 1, top: 82, floor: 560, phone: false, letra: 16, ancho: 500 });
+    expect(ancha.cols).toBe(2);
+    expect(ancha.colW).toBeCloseTo(256, 9);
   });
 });
