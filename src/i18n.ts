@@ -198,6 +198,12 @@ export interface Dict {
   cRemonta: (n: string) => string;
   cDuelo: (a: string, b: string) => string;
   cCuela: (n: string) => string;
+  /** La remontada con dos que vienen de atrás: la ganadora y otra, en orden alfabético. */
+  cRemonta2: (a: string, b: string) => string;
+  /** La tapada: se cuela una que nadie nombró, sin nombre. */
+  cCuelaAnon: string[];
+  /** En la recta final la tribuna grita por una, sorteada entre todas. */
+  cHinchada: (n: string) => string;
   csvRows: (n: number) => string;
   csvAll: (n: number) => string;
   csvHas: (col: string, n: number) => string;
@@ -674,6 +680,9 @@ export const T: Record<Lang, Dict> = {
     cRemonta: (n) => pick([`¡${n} viene de atrás!`, `¡${n} se despertó!`, `¡Cuidado con ${n}!`]),
     cDuelo: (a, b) => pick([`¡Mano a mano ${a} ${yE(b)} ${b}!`, `¡${a} ${yE(b)} ${b}, codo a codo!`, `¡Esto es entre ${a} ${yE(b)} ${b}!`]),
     cCuela: (n) => pick([`¡Y se cuela ${n}!`, `¡${n} aprovecha la pelea!`, `¡Por el medio pasa ${n}!`]),
+    cRemonta2: (a, b) => pick([`¡${a} ${yE(b)} ${b} vienen de atrás!`, `¡Cuidado con ${a} ${yE(b)} ${b}!`, `¡${a} ${yE(b)} ${b} se despertaron!`]),
+    cCuelaAnon: ["¡Y alguien se cuela por el medio!", "¡Alguien aprovecha la pelea!", "¡Por el medio pasa alguien más!"],
+    cHinchada: (n) => pick([`¡La hinchada de ${n} no para!`, `¡La tribuna grita por ${n}!`, `¡Vamos, ${n}!`]),
     cFoto: ["¡FOTO FINISH!", "¡POR UNA NARIZ!", "¡HAY QUE VER LA FOTO!"],
     cTabla: "POSICIONES",
     // --- Pasanaku. El diccionario de las academias lo define como "juego que
@@ -2021,6 +2030,9 @@ export const T: Record<Lang, Dict> = {
     cRemonta: (n) => pick([`Watch out for ${n}, coming from behind!`, `${n} just woke up!`, `Keep an eye on ${n}!`]),
     cDuelo: (a, b) => pick([`${a} and ${b}, head to head!`, `${a} and ${b}, neck and neck!`, `It's between ${a} and ${b}!`]),
     cCuela: (n) => pick([`And ${n} slips through!`, `${n} takes advantage of the fight!`, `Right down the middle, ${n}!`]),
+    cRemonta2: (a, b) => pick([`${a} and ${b} are coming from behind!`, `Watch out for ${a} and ${b}!`, `${a} and ${b} just woke up!`]),
+    cCuelaAnon: ["And someone slips through!", "Someone takes advantage of the fight!", "Someone sneaks right down the middle!"],
+    cHinchada: (n) => pick([`${n}'s fans won't stop!`, `The stands are shouting for ${n}!`, `Come on, ${n}!`]),
     cFoto: ["PHOTO FINISH!", "BY A NOSE!", "WE NEED THE PHOTO!"],
     cTabla: "STANDINGS",
     gamePasanaku: "Aguayo",
