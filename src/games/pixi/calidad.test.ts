@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { Gobernador, ajustesDe, aprender, densidad, nivelInicial, olvidar, type Nivel } from "./calidad";
+import { Gobernador, ajustesDe, aprender, densidad, nivelInicial, nivelMedido, olvidar, type Nivel } from "./calidad";
 
 afterEach(() => olvidar());
 
@@ -100,5 +100,20 @@ describe("Gobernador", () => {
 
   it("fijo, no se mueve aunque el equipo no dé abasto", () => {
     expect(correr(gob("alta", true), iguales(800, 60))).toEqual([]);
+  });
+});
+
+describe("nivelMedido", () => {
+  it("con lo que tardó la placa antes del show: alta si le da, media si el desenfoque le cuesta, baja si ni sin él", () => {
+    expect(nivelMedido("alta", 1.2, 2.5)).toBe("alta");
+    // El reloj cambiado del auditor exigente no avanza adentro de un cuadro: todo mide cero.
+    expect(nivelMedido("alta", 0, 0)).toBe("alta");
+    expect(nivelMedido("alta", 4, 12)).toBe("media");
+    expect(nivelMedido("alta", 25, 40)).toBe("baja");
+  });
+
+  it("solo baja desde alta", () => {
+    expect(nivelMedido("media", 0, 0)).toBe("media");
+    expect(nivelMedido("baja", 0, 0)).toBe("baja");
   });
 });

@@ -1,4 +1,4 @@
-import { Application, CanvasSource, Container, Graphics, Sprite, Text, Texture, WebGLRenderer, loadEnvironmentExtensions, type TextStyleOptions } from "pixi.js";
+import { Application, CanvasSource, Container, Graphics, Sprite, Text, Texture, WebGLRenderer, loadEnvironmentExtensions, type Filter, type TextStyleOptions } from "pixi.js";
 import { gsap } from "gsap";
 import { avatarColor } from "../../avatar";
 import { $ } from "../../dom";
@@ -8,7 +8,7 @@ import { musicBreath, musicCue, startMusic, stopMusic, type MusicStyle } from ".
 import { beep, note } from "../../sound";
 import { registerSkip, releaseScreen, shorten, takeOverScreen, winnerNames } from "../overlay";
 import { Camera } from "./camera";
-import { Gobernador, ajustesDe, aprender, dibujaPorSoftware, nivelInicial } from "./calidad";
+import { Gobernador, ajustesDe, aprender, dibujaPorSoftware, nivelInicial, nivelMedido, type Nivel } from "./calidad";
 import { guardiaNombre, meter } from "./encuadre";
 import { reves, tira } from "./papel-picado";
 import { watchRecovery } from "./recover";
@@ -364,17 +364,14 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   // Si los cuadros empiezan a tardar, baja de nivel en el mismo show y deja
   // anotado para el próximo. Cambiar la resolución redimensiona el lienzo, no
   // la escena: lo que se ve es lo mismo, con menos píxeles.
-  const gobernador = new Gobernador(
-    arranque.nivel,
-    (n) => {
-      aj = ajustesDe(n, window.devicePixelRatio || 1, compartir);
-      view.dataset.calidad = n;
-      cam.desenfoque(aj.desenfoque);
-      if (app.renderer.resolution !== aj.resolucion) app.renderer.resize(innerWidth, innerHeight, aj.resolucion);
-      aprender(n);
-    },
-    arranque.fijo,
-  );
+  const bajarA = (n: Nivel): void => {
+    aj = ajustesDe(n, window.devicePixelRatio || 1, compartir);
+    view.dataset.calidad = n;
+    cam.desenfoque(aj.desenfoque);
+    if (app.renderer.resolution !== aj.resolucion) app.renderer.resize(innerWidth, innerHeight, aj.resolucion);
+    aprender(n);
+  };
+  const gobernador = new Gobernador(arranque.nivel, bajarA, arranque.fijo);
   // `?auditar=identidad`: ver `identidadDe`. Se arma con los nombres del primer cartel.
   const identPedida = params.get("auditar") === "identidad";
   // `?auditar=mezcla`: el instante del revelado, para que el auditor de mezcla
@@ -622,6 +619,47 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     } catch {
       /* se paga después, en su momento */
     }
+    calibrar();
+  };
+
+  /**
+   * Antes de mostrar el estadio, con la escena ya armada: cuánto tarda la placa
+   * en dibujarla sin y con el desenfoque pleno (la mediana de tres, esperando a
+   * que termine con la lectura de un píxel). Si el desenfoque le cuesta
+   * demasiado, el show arranca en media; si ni sin él le da, en baja
+   * (`nivelMedido`). Pasa mientras la sala lee la tarjeta de cómo se juega.
+   * Con el reloj cambiado del auditor exigente el reloj no avanza adentro de un
+   * cuadro, todo mide cero y la misma ronda se dibuja igual.
+   */
+  const calibrar = (): void => {
+    if (arranque.fijo || gobernador.nivel !== "alta") return;
+    const gl = (app.renderer as Partial<WebGLRenderer>).gl;
+    if (!gl) return;
+    const px = new Uint8Array(4);
+    const medir = (filtros: Filter[] | null): number => {
+      const v: number[] = [];
+      for (let i = 0; i < 3; i++) {
+        scene.filters = filtros;
+        const t0 = performance.now();
+        app.renderer.render(app.stage);
+        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        v.push(performance.now() - t0);
+      }
+      return v.sort((a, b) => a - b)[1] ?? 0;
+    };
+    try {
+      const sin = medir(null);
+      const con = medir(cam.filtrosDePrueba(sw(), sh()));
+      scene.filters = null;
+      view.dataset.calibrado = `${sin.toFixed(1)}/${con.toFixed(1)}`;
+      const n = nivelMedido("alta", sin, con);
+      if (n !== "alta") {
+        gobernador.nivel = n;
+        bajarA(n);
+      }
+    } catch {
+      scene.filters = null;
+    }
   };
 
   const crown = (names: string[], winners: readonly number[]): Crown => {
@@ -780,7 +818,9 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
           s.rotation = p.rot;
           s.scale.set(p.w, p.h);
           const c = P[i % P.length] ?? YELLOW;
-          s.tint = p.reves ? reves(c) : c;
+          // El color cambia solo cuando la tira se da vuelta: teñir cuesta.
+          const tinte = p.reves ? reves(c) : c;
+          if (s.tint !== tinte) s.tint = tinte;
         });
       },
       rebuild() {

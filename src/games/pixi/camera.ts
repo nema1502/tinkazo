@@ -104,6 +104,17 @@ export class Camera {
     g.destroy();
   }
 
+  /**
+   * Los filtros de un acercamiento rápido, al máximo: para medir cuánto le
+   * cuestan a la placa antes del show (`calibrar` en `stage.ts`). El cuadro
+   * siguiente los vuelve a poner como corresponda.
+   */
+  filtrosDePrueba(sw: number, sh: number): Filter[] {
+    this.blur.strength = 0.05;
+    this.blur.center = { x: sw / 2, y: sh / 2 };
+    return [...this.extra, this.blur];
+  }
+
   /** Mirar a un punto, con un acercamiento, llegando a ese ritmo. */
   lookAt(x: number, y: number, zoom = this.tz, rate = 3, rot = 0): this {
     this.tx = x;

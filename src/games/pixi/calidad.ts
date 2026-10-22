@@ -83,6 +83,25 @@ export function olvidar(): void {
   aprendido = null;
 }
 
+/** Lo que puede costar de más el desenfoque pleno en un cuadro, en ms, antes de bajar a media. */
+const DESENFOQUE_CARO = 6;
+/** Un cuadro sin desenfoque que tarda esto ya no deja lugar para el juego: baja. */
+const ESCENA_CARA = 20;
+
+/**
+ * El nivel con que arranca el show según lo que tardó la placa en dibujar la
+ * escena armada, sin y con el desenfoque pleno, antes de mostrar el estadio
+ * (mientras la sala lee la tarjeta de cómo se juega). Así un equipo que no da
+ * abasto arranca abajo sin tropezar delante de nadie; el gobernador sigue
+ * mirando después. Solo baja desde `alta`.
+ */
+export function nivelMedido(nivel: Nivel, sinDesenfoque: number, conDesenfoque: number): Nivel {
+  if (nivel !== "alta") return nivel;
+  if (sinDesenfoque > ESCENA_CARA) return "baja";
+  if (conDesenfoque - sinDesenfoque > DESENFOQUE_CARO) return "media";
+  return "alta";
+}
+
 /** Los primeros cuadros no cuentan: el arranque paga texturas, textos y sombreadores. */
 const ARRANQUE = 30;
 /** Cuántos cuadros mira antes de decidir. */
