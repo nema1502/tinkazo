@@ -19,7 +19,7 @@ FR-1 Pegar lista · FR-2 Subir CSV · FR-3 Umbral mínimo · FR-4 Conectar walle
 
 ### No funcionales
 
-NFR-1 Determinismo verificable · NFR-2 Sin servidor · NFR-3 Costo < 0,1 XLM · NFR-4 Sin secretos en el repo · NFR-5 < 90 s de sello a show · NFR-6 Solo el hash en la cadena · NFR-7 Testnet y mainnet por configuración.
+NFR-1 Determinismo verificable · NFR-2 Sin servidor para sortear · NFR-3 Costo < 0,1 XLM · NFR-4 Sin secretos en el repo · NFR-5 < 90 s de sello a show · NFR-6 Solo el hash en la cadena · NFR-7 Testnet y mainnet por configuración.
 
 ### Adicionales (arquitectura)
 

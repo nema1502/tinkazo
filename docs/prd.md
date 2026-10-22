@@ -214,17 +214,17 @@ Entre que la lista se sella y que la ronda del faro existe pasan unos segundos, 
 ## Requisitos no funcionales transversales
 
 - **NFR-1 Determinismo verificable.** Todo lo que decide un resultado está en el Protocolo y es recomputable con herramientas públicas; ningún paso depende de un servidor de Tinkazo.
-- **NFR-2 Sin servidor.** El sitio es estático (Vercel); no hay backend propio ni base de datos. Las únicas dependencias en tiempo de ejecución son Stellar RPC, relays de drand y la wallet.
+- **NFR-2 Sin servidor para sortear.** El sitio es estático (Vercel) y ningún paso del sorteo ni de su verificación depende de un servidor propio: las dependencias del sorteo en tiempo de ejecución son Stellar RPC, relays de drand y la wallet. La única pieza con servidor, desde el 21 de octubre de 2026, es el servicio de enlaces cortos (`c.tinkazo.app`, D-18 en [architecture.md](architecture.md)): guarda, para compartir, una copia del comprobante cifrada en el navegador, con la clave solo en el enlace, así que Tinkazo no la puede leer. No decide nada, y si no contesta se comparte el enlace largo. No hay base de datos de participantes que Tinkazo pueda leer.
 - **NFR-3 Costo.** Un Sorteo anclado (Sello + Sorteo) debe costar menos de 0,25 XLM al Organizador. **No se cumple hoy en testnet:** el 2026-10-03 se midieron 0,76 XLM, porque subió la renta de la red; en mainnet se mide al desplegar. Medido en testnet el 2026-09-16: 0,18 XLM (≈ US$ 0,03), casi todo renta de almacenamiento por 120 días; la verificación BLS en sí cuesta 0,003 XLM. Mantener el Contrato vivo cuesta al proyecto unos 49 XLM al año y nunca se le cobra a un Organizador (ver [deployments.md](deployments.md)).
 - **NFR-4 Sin secretos en el repo.** Repositorio público: ninguna llave privada, token ni identidad de la CLI se commitea.
 - **NFR-5 Tiempo de sorteo.** Entre "Sellar" y el inicio del Show pasan menos de 90 segundos en condiciones normales.
-- **NFR-6 Privacidad.** En la cadena solo va el hash de la lista, nunca los nombres. La lista se publica por decisión del Organizador en el Comprobante.
+- **NFR-6 Privacidad.** En la cadena solo va el hash de la lista, nunca los nombres. La lista se publica por decisión del Organizador en el Comprobante; al compartirlo o mostrarlo en grande, el enlace corto guarda además una copia cifrada, que abre solo quien tiene el enlace (D-18).
 - **NFR-7 Redes.** El mismo código funciona en testnet y mainnet cambiando configuración; la dirección del Contrato de cada red se documenta en [deployments.md](deployments.md).
 
 ## 5. No objetivos
 
 - No custodiamos wallets ni llaves de nadie. No hay "cuenta Tinkazo".
-- No hay backend, panel de administración ni base de datos.
+- No hay backend para sortear, panel de administración ni base de datos de participantes que Tinkazo pueda leer.
 - No hay dinero ni tokens en juego: el Contrato no mueve fondos.
 - No hay integración con Luma, Eventbrite o Meetup en v1.
 - No hay sponsor mode, white label ni cobro en v1.
@@ -235,7 +235,9 @@ Entre que la lista se sella y que la ronda del faro existe pasan unos segundos, 
 - **Luma:** se importa el CSV de asistentes, con filtro de check-in, todo en el navegador (historia 11.3).
 - **Entrar con Google:** existe, con Pollar, y desde el 20 de septiembre es la forma de organizar. Pollar guarda la llave del organizador en su infraestructura: "no custodiamos llaves" vale para Tinkazo y para el contrato, no para las cuentas que Pollar crea. Quien no quiera eso entra con su wallet.
 
-El resto sigue igual: sin backend, sin fondos en el contrato, sin cobro por participar.
+**Y el 21 de octubre de 2026, en parte, el del backend: los enlaces cortos.** Para que el enlace de un comprobante sea corto y su QR se lea desde una foto de WhatsApp o desde el fondo de la sala, un Worker de Cloudflare guarda una copia del comprobante cifrada en el navegador, con la clave solo en el enlace (D-18 en [architecture.md](architecture.md)). No está en el camino del sorteo ni decide nada, Tinkazo no puede leer lo que guarda, y si se cae se comparte el enlace largo. La copia no vence y la interfaz no la borra: se borra a pedido, escribiendo a hola@tinkazo.app.
+
+El resto sigue igual: sin backend para sortear, sin fondos en el contrato, sin cobro por participar.
 
 ## 6. Alcance del MVP
 

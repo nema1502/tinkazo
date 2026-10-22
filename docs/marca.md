@@ -215,8 +215,8 @@ Todos medidos, no estimados. Si se actualizan, se actualizan acá también.
 | Juegos | 10 |
 | Espera entre sellar y sortear, modo libre | 10 segundos |
 | Espera si el sorteo se ancla en Stellar | 45 segundos |
-| Dependencias en ejecución | 3 (RPC de Stellar, relays de drand, la wallet del organizador) |
-| Servidores propios | 0 |
+| Dependencias para sortear | 3 (RPC de Stellar, relays de drand, la wallet del organizador) |
+| Servidores propios para sortear | 0. El único servicio propio es el de los enlaces cortos, para compartir: un Worker de Cloudflare que guarda copias cifradas que Tinkazo no puede leer y, si se cae, deja el enlace largo. No decir "0 servidores" a secas |
 
 ## Los enlaces
 
