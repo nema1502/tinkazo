@@ -163,9 +163,10 @@ function enlacesCortos(): Plugin {
  * la verificación de un comprobante sin anclar no lo piden.
  *
  * Por eso el aviso de Vite queda para lo enorme (`chunkSizeWarningLimit`, 1 MB)
- * y este avisa desde 500 kB por cualquier otro trozo, y también por el del SDK
- * si se mezcla con código nuestro: así un import estático del SDK en la
- * portada, que la haría bajar todo eso de entrada, no pasa callado.
+ * y este avisa desde 500 kB por cualquier otro trozo, por el del SDK si se
+ * mezcla con código nuestro y también si alguna página lo baja al abrirse (un
+ * import estático en la portada): la excepción vale mientras se pida cuando se
+ * usa, que es lo que la justifica.
  */
 function avisoDeTrozosGrandes(limiteKb = 500): Plugin {
   // El SDK y lo que usa solo él (con pnpm, el último node_modules de la ruta).
@@ -176,13 +177,29 @@ function avisoDeTrozosGrandes(limiteKb = 500): Plugin {
     // Después de Vite, que todavía les agrega a los trozos la lista de lo que precargan.
     enforce: "post",
     generateBundle(_salida, bundle) {
+      // Lo que baja una página al abrirse: su entrada y lo que importa sin import().
+      const alAbrir = new Set<string>();
+      const pendientes: string[] = [];
+      for (const t of Object.values(bundle)) if (t.type === "chunk" && t.isEntry) pendientes.push(t.fileName);
+      while (pendientes.length) {
+        const f = pendientes.pop() as string;
+        const t = bundle[f];
+        if (alAbrir.has(f) || t?.type !== "chunk") continue;
+        alAbrir.add(f);
+        pendientes.push(...t.imports);
+      }
       for (const trozo of Object.values(bundle)) {
         if (trozo.type !== "chunk") continue;
         const kb = Buffer.byteLength(trozo.code) / 1000;
         if (kb <= limiteKb) continue;
         const ids = Object.keys(trozo.modules);
-        if (ids.length > 0 && ids.every((id) => delSdk.test(id))) continue;
-        this.warn(`${trozo.fileName} pesa ${kb.toFixed(0)} kB minificado, más de ${limiteKb} kB: si no hace falta al abrir la página, que se baje con import() cuando se use.`);
+        const soloSdk = ids.length > 0 && ids.every((id) => delSdk.test(id));
+        if (soloSdk && !alAbrir.has(trozo.fileName)) continue;
+        this.warn(
+          soloSdk
+            ? `${trozo.fileName} es el SDK de Stellar (${kb.toFixed(0)} kB) y una página lo baja al abrirse: tiene que pedirse con import() recién cuando se use.`
+            : `${trozo.fileName} pesa ${kb.toFixed(0)} kB minificado, más de ${limiteKb} kB: si no hace falta al abrir la página, que se baje con import() cuando se use.`,
+        );
       }
     },
   };
