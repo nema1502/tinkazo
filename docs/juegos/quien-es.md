@@ -28,8 +28,8 @@ Todo sale de la hora del juego (`dt`). Sin `Math.random()`: las variantes de las
 ## Cómo va
 
 - **Reparto:** "¡N personas! Todos de pie. Si no podés, levantá la mano." Las cartas llegan de abajo a la grilla. En la primera ronda, además: "Vale el nombre de la lista, sin tildes. Si alguien quedó parado por error, la pantalla lo corrige."
-- **Cada pregunta:** aparece en grande ("¿TU NOMBRE / TIENE LA R?") en una placa con una barra que se achica. Es la revisión: dura 2,6 segundos en la primera ronda y 2,2 en las siguientes; las dos últimas preguntas de cada ronda, 0,4 más, y la última de la ronda grande, 1 más. Mientras tanto la placa late una vez por segundo y suenan tics.
-- **La respuesta:** "¡SÍ!" o "¡NO!", y debajo "Se sientan los que no la tienen" (o "la tienen", según). Un segundo después la sala se sienta, y la pantalla da vuelta las cartas de los que se sentaron.
+- **Cada pregunta:** aparece en grande ("¿TU NOMBRE / TIENE LA R?") en una placa con una barra que se achica. Es la revisión: dura 2,6 segundos en la primera ronda y 2,2 en las siguientes; las dos últimas preguntas de cada ronda, 0,4 más, y la última de la ronda grande, 1 más. Mientras tanto la placa late una vez por segundo y suenan tics, y cada tic sostiene la música en la tensión de la revisión, sin subirla: antes se caía hasta el piso en cada espera.
+- **La respuesta:** "¡SÍ!" o "¡NO!", y debajo "Se sientan los que no la tienen" (o "la tienen", según). Un segundo después la sala se sienta, y la pantalla da vuelta las cartas de los que se sentaron. Si no se sienta nadie (la pregunta de calentamiento, con dos o tres), los de pie dan un saltito, uno detrás del otro: con dos personas eran 4,2 s sin que se moviera nada.
 - **Finalistas:** con cuatro o menos de pie, "¡FINALISTAS, QUE LOS VEAN!" con sus nombres en el subtítulo. La cámara se acerca y los finalistas se mecen unos tres segundos (2,4 en las rondas siguientes).
 - **Final:** el ganador de pie, con el cartel de siempre. Con varios premios, un cartel por ganador y un podio al final.
 
@@ -38,7 +38,7 @@ Todo sale de la hora del juego (`dt`). Sin `Math.random()`: las variantes de las
 - La pregunta, grande y arriba, en una placa amarilla con su barra de revisión.
 - La respuesta, en la misma placa, con la frase de quién se sienta.
 - El contador: "DE PIE  N / M".
-- Las cartas. Las que se sientan se dan vuelta y muestran el dorso con un "?". Las que siguen de pie se mecen.
+- Las cartas, con la cara y el nombre completo en dos líneas, en un solo texto: con homónimos ("Carlos Choque" y "Carlos Choque 2") el nombre de pila solo no decía de quién era la carta. Las que se sientan se dan vuelta y muestran el dorso con un "?". Las que siguen de pie se mecen.
 - Los ganadores de rondas anteriores, arriba a la derecha, con su marco amarillo.
 - No hay foco que salte de carta en carta: era una búsqueda en la pantalla, y en la última pregunta delataba a la carta del ganador.
 
@@ -78,7 +78,11 @@ node scripts/audit-mezcla.mjs quien --base http://localhost:4173
 
 El planificador tiene sus pruebas en [`quien-plan.test.ts`](../../src/games/pixi/quien-plan.test.ts): el ganador nunca se sienta, cada pregunta dice la verdad sobre cada nombre, con homónimos no se dice "mismas letras" sin serlo, y el tipo de pregunta varía.
 
-El auditor de mezcla queda por debajo del límite en la pérdida de graves a 150 Hz (3,6 a 3,7 LU frente a 3,5; la versión anterior daba 3,3). Está anotado como pendiente de la mezcla, y no tiene norma: el límite sale de la calibración del proyecto.
+Hasta el 22 de octubre de 2026 tres auditores fallaban, y se arreglaron:
+
+- **Mezcla:** sin los graves de 150 Hz perdía de 3,6 a 3,7 LU (límite 3,5). En cada revisión la tensión de la música se caía hasta el piso y quedaban el bombo y el bajo solos. Desde que cada tic la sostiene, 3,2 LU.
+- **Exigente, con 2:** 4,2 s quieto después de la pregunta de calentamiento (límite 4). Con el saltito, 1,5 s; con 3, 2,0 s.
+- **Identificación, con 50:** no leía a nadie, tampoco al ganador. Con el nombre en un solo texto, 50 de 50. Ojo: con 100 y 200 el auditor mide el alto del bloque de dos líneas y no el de cada línea, así que cuenta como leídos nombres de 7 a 11 píxeles por línea que en la sala no se leen. Con 8, 18 y 50 cada línea pasa sola el umbral (unos 14 píxeles con 50).
 
 ## Lo que queda afuera
 
