@@ -86,7 +86,7 @@ Nicolás: "detallitos que son bonitos y ahorran tiempo o hacen mejor la experien
 | D18 | "Pegar lista" es un botón que lleva al cuadro (y desde la evaluación crítica, además pega); una lista pegada al final empieza en un renglón nuevo. |
 | D19 | La barra dice qué se sortea antes de sellar ("12 personas · Termo", o "sin premio"). |
 
-El revisor descartó D02 (es del selector; se hizo después, con la evaluación crítica), D07 (ya estaba hecho), D12 (salvo el "Ya se sorteó"), D13, D16 y D20, con sus motivos en `.claude/progreso/juegos/ux-detalles.md`. D15 (que el mensaje del evento diga quién ganó qué) lo toma el stream de compartir.
+Quedaron afuera D02 (es del selector; se hizo después, con la evaluación crítica), D07 (ya estaba hecho), D12 (salvo el "Ya se sorteó"), D13, D16 y D20. D15 (que el mensaje del evento diga quién ganó qué) va con el cambio de compartir.
 
 ```bash
 CDP_PORT=9982 node scripts/audit-detalles.mjs --base http://localhost:4173 [--vistas 1280x720,390x844] [--temas dark,light] [--solo D01,D09]
@@ -94,7 +94,7 @@ CDP_PORT=9982 node scripts/audit-detalles.mjs --base http://localhost:4173 [--vi
 
 ## La evaluación crítica de experiencia (21 de octubre de 2026)
 
-Un crítico usó Tinkazo como alguien que nunca lo vio, en escritorio y en el celular y en los dos temas, contando toques y cada vez que había que bajar la pantalla (`.claude/progreso/juegos/ux-critico.md`). Cada hallazgo se verificó antes de arreglarlo y se arregló con su propio cambio (avance y capturas en `.claude/progreso/juegos/ux-critico-arreglos.md`). El 1, el QR del resultado en grande, va por otro lado.
+Se usó Tinkazo como alguien que nunca lo vio, en escritorio y en el celular y en los dos temas, contando toques y cada vez que había que bajar la pantalla. Cada hallazgo se verificó antes de arreglarlo y se arregló con su propio cambio. El 1, el QR del resultado en grande, va por otro lado.
 
 | | Qué cambió |
 |---|---|
