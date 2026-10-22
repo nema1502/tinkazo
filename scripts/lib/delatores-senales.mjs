@@ -22,7 +22,9 @@
  * nombran: la línea que nombra a un eliminado no es una pista, es el embudo.
  * En los juegos donde los nombres no se ven todo el tiempo (la ruleta, la
  * tómbola, la constelación) siguen todos hasta el final, y en la piñata, donde
- * el nombre aparece recién cuando el caramelo cae, sigue el que no cayó.
+ * el nombre aparece recién cuando el caramelo cae, sigue el que no cayó. En el
+ * trueque, donde cada nombre se ve solo cuando el encargo prueba su puesto,
+ * sale el que cambia o es un callejón, en la línea que lo dice.
  *
  * Cada señal se mide dentro de su arco (sección 8.7): antes del momento que
  * decide (`corte`), que en cada juego es otro: el último tiro del sapo, la
@@ -65,8 +67,10 @@ export const MARCADORES = {
   // La piñata.
   cPinAlmost: /^¡(Casi se cae .+|.+ se asoma|Se agarra .+)!$/u,
   cPinBreak: /^¡(SE ROMPIÓ|SE ABRIÓ LA PIÑATA|AHÍ CAE)!$/u,
-  // ¿Quién es?
-  cQuiAnswer: /^¡(Sí|No) tiene .+! (Se da vuelta una|Se dan vuelta \d+|Todas la tienen: no se da vuelta ninguna|Ninguna la tiene: no se da vuelta ninguna)\.$/u,
+  // De pie (antes ¿Quién es?): la respuesta que sienta a los que no cumplen, y
+  // el empate, cuando ninguna pregunta separa a los que quedan.
+  cQuiAnswer: /^¡(Sí|No)! (A sentarse los que .+|Se sientan los que .+|Están todos: nadie se sienta|No hay ninguno: nadie se sienta)\.$/u,
+  cQuiTie: /^¡(Mismas letras|Nombres casi iguales)! El sorteo ya eligió\.$/u,
   // Oruro.
   cOruCount: /^¡(Dos diablos en la comparsa|\d+ diablos en la comparsa)!$/u,
   cOruMask: /^¡(Casi se le cae la máscara a .+|.+ tropieza|Uy, .+)!$/u,
@@ -84,6 +88,11 @@ export const MARCADORES = {
   // El aguayo.
   cPasClose: /^¡(Casi sale .+|.+ en el borde|Se agarra .+)!$/u,
   cPasOut: /^¡(Se cae el bulto de .+|.+ se queda afuera|Sale .+)!$/u,
+  // El trueque: las líneas nombran productos, no personas.
+  trBusca: /^¿Quién acepta .+\?$/u,
+  trCambio: /^¡Cambio! Ahora es .+$/u,
+  trCallejon: /^(¡Callejón sin salida!|Por ahí no se puede|¡Ahí no hay cambio!)$/u,
+  trNoEs: /^¡No, es para el otro!$/u,
   // La constelación.
   cConstNear: /^¡(Casi toca a .+|Pasó rozando a .+|Uy, .+)!$/u,
   cConstHeading: /^¿(Va para .+|Se queda en .+)…\?$/u,
@@ -132,6 +141,9 @@ export function preparar(tr, cfg = {}) {
     for (let j = 1; j + 4 < f.length; j += 5) items.push({ k: f[j], x: f[j + 1], y: f[j + 2], w: f[j + 3], h: f[j + 4] });
     return { t: T(f[0]), items };
   });
+  // Cómo llevaba la cámara la escena a la pantalla en cada cuadro (con `escena`
+  // en el grabador): el origen y los dos ejes, por la hora del cuadro.
+  const escena = new Map((tr.escena ?? []).map((f) => [T(f[0]), f.slice(1)]));
   const revelado = tr.revelado != null ? T(tr.revelado) : (frames.at(-1)?.t ?? 0);
   const primera = new Array(n).fill(null);
   const ultima = new Array(n).fill(null);
@@ -143,14 +155,18 @@ export function preparar(tr, cfg = {}) {
   }
   const todos = Array.from({ length: n }, (_, i) => i);
   const arco = marks.find((m) => m.k === "arco")?.v ?? "?";
-  const P = { names, n, w, W, H, frames, subs, marks, trazos, revelado, primera, ultima, arco };
+  const P = { names, n, w, W, H, frames, subs, marks, trazos, escena, revelado, primera, ultima, arco };
   P.corte = Math.min(cuando(P, cfg.corte) ?? revelado, revelado);
+  // Con `afuera` (en los juegos donde los nombres no se ven todo el tiempo,
+  // como el trueque), quién sale y cuándo lo dice el juego, no la pantalla.
+  const fuera = cfg.afuera ? cfg.afuera(P) : null;
   // Sigue en juego en `t` el que se vuelve a ver más de `GRACIA` segundos
   // después, o en el momento que decide: el que cae justo ahí (la rival del
   // final) estaba en juego hasta ese momento.
   const modo = cfg.candidatos ?? "visibles";
   const despues = (t) => Math.min(t + GRACIA, P.corte - 0.001);
   P.sigue = (i, t) => {
+    if (fuera) return !(fuera.get(i) <= despues(t));
     if (modo === "todos") return true;
     if (modo === "caidos") return primera[i] === null || primera[i] >= revelado - AL_FINAL || primera[i] > despues(t);
     if (primera[i] === null) return false;
@@ -595,6 +611,105 @@ export function senalesConstelacion(P) {
   };
 }
 
+/**
+ * El trueque: cada persona es un puesto de la feria, con un toldo del color de
+ * lo que acepta. En cada pase el relator pregunta "¿Quién acepta papa?", se
+ * prenden con un aro crema los puestos que la aceptan, y el encargo prueba
+ * uno: cambia ("¡Cambio! Ahora es maíz") o es un callejón. En el último pase,
+ * la entrega, el encargo llega a quien espera, que es el ganador. Los nombres
+ * se ven solo al pasar lista, en el puesto que se prueba y en la ruta del
+ * final, así que el aro se reconoce por el nombre que queda justo encima de su
+ * puesto, pasando lo que se ve a la escena con la cámara de ese cuadro.
+ *
+ * - `prendido-antes`: al empezar la entrega, entre los puestos que siguen en
+ *   juego, los que se prendieron en algún pase anterior contra los que nunca.
+ *   El plan (`trueque-plan.ts`) prende a quien espera recién en la entrega, y
+ *   ningún pase anterior lleva lo que él acepta: si así nunca gana un puesto
+ *   que ya se prendió, la sala lo puede aprender.
+ * - `entrega`: con dos o más prendidos en la entrega, si gana el primero que
+ *   prueba el encargo o uno de los otros. El plan prueba primero el callejón.
+ */
+export function senalesTrueque(P) {
+  if (!P.escena.size) return {};
+  const aEscena = (t, x, y) => {
+    const m = P.escena.get(t);
+    if (!m) return null;
+    const [ox, oy, ax, ay, bx, by] = m;
+    const det = ax * by - ay * bx;
+    if (!det) return null;
+    const dx = x - ox, dy = y - oy;
+    return { x: (dx * by - dy * bx) / det, y: (ax * dy - ay * dx) / det, z: Math.hypot(ax, ay) };
+  };
+  // Dónde queda el nombre de cada puesto en la escena: la primera vez que se ve.
+  const puesto = new Map();
+  for (const f of P.frames) {
+    for (const [i, l] of f.labs) {
+      if (puesto.has(i)) continue;
+      const q = aEscena(f.t, l.x, l.y);
+      if (q) puesto.set(i, q);
+    }
+  }
+  // Un aro es del puesto cuyo nombre queda justo encima: más cerca del borde
+  // de arriba del aro que su radio. El de la fila de abajo queda a casi un
+  // diámetro.
+  const deQuien = (t, it) => {
+    const c = aEscena(t, it.x, it.y);
+    if (!c || Math.abs(it.w - it.h) > 0.25 * Math.max(it.w, it.h)) return null;
+    const R = it.h / 2 / c.z;
+    let mejor = null;
+    for (const [i, q] of puesto) {
+      const d = Math.hypot(q.x - c.x, q.y - (c.y - R));
+      if (d < R && (!mejor || d < mejor.d)) mejor = { i, d };
+    }
+    return mejor ? mejor.i : null;
+  };
+  const prendidos = (desde, hasta) => {
+    const out = new Set();
+    for (const f of P.trazos) {
+      if (f.t < desde || f.t >= hasta) continue;
+      for (const it of f.items) {
+        if (it.k !== 0) continue;
+        const i = deQuien(f.t, it);
+        if (i !== null) out.add(i);
+      }
+    }
+    return out;
+  };
+  const out = {};
+  const antes = prendidos(-Infinity, P.corte - 0.05);
+  const C = P.vivos(P.corte - 0.001);
+  if (C.length >= 2) {
+    out["prendido-antes"] = {
+      prendidos: apuesta(C.filter((i) => antes.has(i)), C, P.w),
+      "nunca-prendidos": apuesta(C.filter((i) => !antes.has(i)), C, P.w),
+    };
+  }
+  const D = [...prendidos(P.corte + 0.05, P.revelado)];
+  const primero = P.frames.find((f) => f.t > P.corte && f.t < P.revelado && f.labs.size);
+  if (D.length >= 2 && primero) {
+    const i = [...primero.labs.keys()].find((j) => D.includes(j));
+    if (i !== undefined) out.entrega = { "el-primero": apuesta([i], D, P.w), "los-otros": apuesta(D.filter((j) => j !== i), D, P.w) };
+  }
+  return out;
+}
+
+/**
+ * Quién sale del trueque y cuándo: el puesto que cambia (ya no vuelve a
+ * cambiar, y la feria lo apaga) y el callejón, en la línea que lo dice. Es el
+ * nombre a la vista en ese momento, el del puesto que se está probando.
+ */
+export function afueraTrueque(P) {
+  const fuera = new Map();
+  const res = [MARCADORES.trCambio, MARCADORES.trCallejon, MARCADORES.trNoEs];
+  for (const s of P.subs) {
+    if (s.t > P.revelado || !res.some((re) => re.test(s.s))) continue;
+    const f = cuadroAntes(P, s.t + 0.001);
+    if (!f) continue;
+    for (const i of f.labs.keys()) if (!fuera.has(i)) fuera.set(i, s.t);
+  }
+  return fuera;
+}
+
 /* ================================================================== juegos */
 
 /**
@@ -606,7 +721,8 @@ export function senalesConstelacion(P) {
  *   cartel del ganador.
  * - `arranque`: cuándo y en qué orden se mira dónde arranca cada uno.
  * - `salta`: si en el mano a mano se salta (Oruro).
- * - `numeros`, `trazos`: qué más tiene que grabar la página.
+ * - `afuera`: quién sale y cuándo, si no se deduce de la pantalla (el trueque).
+ * - `numeros`, `trazos`, `escena`: qué más tiene que grabar la página.
  * - `especificas`: las señales propias del juego.
  */
 export const JUEGOS = {
@@ -643,11 +759,22 @@ export const JUEGOS = {
     corte: { clave: "cPinBreak" },
     especificas: [linea("asoma", ["cPinAlmost"])],
   },
+  // De pie: desde el 20 de octubre ya no hay foco que salte de carta en carta
+  // (quien-plan.ts). El contorno amarillo de opacidad 0,9 se sigue mirando por
+  // si vuelve: hoy no da datos.
   quien: {
     candidatos: "visibles",
-    corte: { clave: "cQuiAnswer", ultima: true },
+    corte: { claves: ["cQuiAnswer", "cQuiTie"], ultima: true },
     trazos: [{ color: 0xffc629, alpha: 0.9 }],
     especificas: [senalesQuien],
+  },
+  trueque: {
+    candidatos: "todos",
+    afuera: afueraTrueque,
+    corte: { clave: "trBusca", ultima: true },
+    trazos: [{ color: 0xf6efe2, capa: 1 }],
+    escena: true,
+    especificas: [senalesTrueque],
   },
   oruro: {
     candidatos: "visibles",
@@ -685,7 +812,7 @@ export const JUEGOS = {
 /** Lo que tiene que grabar la página para un juego. */
 export const grabarPara = (juego) => {
   const c = JUEGOS[juego] ?? {};
-  return { numeros: !!c.numeros, trazos: c.trazos ?? [] };
+  return { numeros: !!c.numeros, trazos: c.trazos ?? [], escena: !!c.escena };
 };
 
 /** Todas las señales de una semilla: `{ señal: { regla: { acierta, azar } | null } }`. */

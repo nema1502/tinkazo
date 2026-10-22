@@ -21,6 +21,8 @@ import {
   senalesSapo,
   senalesSubtitulos,
   senalesTombola,
+  senalesTrueque,
+  afueraTrueque,
 } from "./delatores-senales.mjs";
 
 const NOMBRES = ["María Quispe", "Jorge Mamani", "Lucía Flores", "Carlos Choque", "Ana Vargas", "Diego Rojas", "Elena Condori", "Pablo Gutiérrez"];
@@ -78,6 +80,7 @@ describe("las líneas del relator que marcan momentos coinciden con src/i18n.ts"
     cTelDoor: conNombre, cTelSlip: conNombre, cTelDock: [],
     cPasClose: conNombre, cPasOut: conNombre,
     cConstNear: conNombre, cConstHeading: conNombre, cConstDecoy: [],
+    trBusca: ["papa"], trCambio: ["maíz"], trCallejon: [], trNoEs: [],
   };
 
   it.each(Object.entries(casos))("%s", (clave, args) => {
@@ -99,14 +102,17 @@ describe("las líneas del relator que marcan momentos coinciden con src/i18n.ts"
     for (const many of [false, true]) for (const s of variantes("cWin", ["Ana Vargas", many])) expect(s).toMatch(MARCADORES.cWin);
   });
 
-  it("las respuestas de ¿Quién es?, con una o varias cartas y sin ninguna", () => {
-    for (const l of ["R", "Ñ"]) {
-      for (const k of [1, 3]) {
-        expect(T.es.cQuiYes(l, k)).toMatch(MARCADORES.cQuiAnswer);
-        expect(T.es.cQuiNo(l, k)).toMatch(MARCADORES.cQuiAnswer);
+  it("las respuestas de De pie, que sientan a algunos o a nadie, y el empate", () => {
+    for (const f of [T.es.cQuiSitL("R", true), T.es.cQuiSitM(false), T.es.cQuiSitG(6, true), T.es.cQuiSitO(40, false)]) {
+      for (const k of [0, 1]) {
+        expect(T.es.cQuiYes(f, k)).toMatch(MARCADORES.cQuiAnswer);
+        expect(T.es.cQuiNo(f, k)).toMatch(MARCADORES.cQuiAnswer);
       }
-      for (const has of [true, false]) expect(T.es.cQuiNone(l, has)).toMatch(MARCADORES.cQuiAnswer);
     }
+    for (const has of [true, false]) expect(T.es.cQuiNone(has)).toMatch(MARCADORES.cQuiAnswer);
+    expect(T.es.cQuiTie).toMatch(MARCADORES.cQuiTie);
+    expect(T.es.cQuiTope).toMatch(MARCADORES.cQuiTie);
+    expect(T.es.cQuiFinal("Ana Vargas, Diego Rojas")).not.toMatch(MARCADORES.cQuiAnswer);
   });
 
   it("no se confunden entre sí donde importa", () => {
@@ -400,10 +406,77 @@ describe("las señales de cada juego", () => {
   });
 });
 
-describe("los juegos", () => {
-  const SELECTOR = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien"];
+/**
+ * Una feria de ocho puestos en dos filas, armada como la dibuja el trueque: el
+ * nombre 53 unidades arriba del centro del puesto, el aro de los prendidos de
+ * 45 de radio, y la cámara que se acerca a 1,25 cuando empiezan los pases.
+ * Gana el 2. Pase 1 (5 s): se prenden el 0 y el 5, y cambia el 0. Pase 2
+ * (8,5 s): se prenden el 3 y el 6; el 6 es un callejón y cambia el 3. La
+ * entrega (13,6 s): se prenden el 2 y el 7; prueba el 7, "es para el otro", y
+ * llega al 2.
+ */
+function feria(fila = 200) {
+  const puesto = (i) => [200 + (i % 4) * 250, 250 + Math.floor(i / 4) * fila];
+  const z = (t) => (t < 5 ? 1 : 1.25);
+  const o = (t) => (t < 5 ? [0, 0] : [W / 2 - 1.25 * 640, H / 2 - 1.25 * 360]);
+  const aPantalla = (t, [x, y]) => [o(t)[0] + z(t) * x, o(t)[1] + z(t) * y];
+  const nombre = (t, i) => aPantalla(t, [puesto(i)[0], puesto(i)[1] - 53]);
+  const intentos = [[0, 6.15, 7.6], [6, 9.65, 11.1], [3, 11.25, 12.7], [7, 14.75, 16.2], [2, 16.35, 20]];
+  const pos = (t) => {
+    const out = {};
+    if (t >= 1.5 && t < 4.6) for (let i = 0; i < 8; i++) out[i] = nombre(t, i);
+    for (const [i, a, b] of intentos) if (t >= a && t < b) out[i] = nombre(t, i);
+    return out;
+  };
+  const luces = (t) => (t < 5 ? [] : t < 8.5 ? [0, 5] : t < 13.6 ? [3, 6] : t < 17 ? [2, 7] : []);
+  const tr = traza({
+    pos, zoom: z, revelado: 17, fin: 20,
+    subs: [[5, "¿Quién acepta papa?"], [6.8, "¡Cambio! Ahora es maíz"], [8.5, "¿Quién acepta maíz?"], [10.3, "¡Callejón sin salida!"],
+      [11.9, "¡Cambio! Ahora es quinua"], [13.6, "¿Quién acepta quinua?"], [15.4, "¡No, es para el otro!"], [16.95, "¡ES PARA Lucía Flores!"]],
+  });
+  tr.escena = tr.frames.map(([t]) => [t, ...o(t), z(t), 0, 0, z(t)]);
+  tr.trazos = tr.frames.filter(([t]) => luces(t).length).map(([t]) => [t, ...luces(t).flatMap((i) => [0, ...aPantalla(t, puesto(i)), 90 * z(t), 90 * z(t)])]);
+  return tr;
+}
 
-  it("los doce del selector tienen cómo mirarse, con marcadores que existen", () => {
+describe("el trueque", () => {
+  it("sale el que cambia o es un callejón, cuando lo dice el relator", () => {
+    const P = preparar(feria(), JUEGOS.trueque);
+    expect([...afueraTrueque(P)]).toEqual([[0, 6.8], [6, 10.3], [3, 11.9], [7, 15.4]]);
+    // Como con los que desaparecen: el que sale en menos de `GRACIA` ya está afuera.
+    expect(P.sigue(0, 6.8 - GRACIA - 0.1)).toBe(true);
+    expect(P.sigue(0, 6.8 - GRACIA + 0.1)).toBe(false);
+    expect(P.corte).toBe(13.6);
+    expect(P.vivos(P.corte - 0.001)).toEqual([1, 2, 4, 5, 7]);
+  });
+
+  it("los prendidos de antes de la entrega, y el primero que prueba la entrega", () => {
+    const s = senalesTrueque(preparar(feria(), JUEGOS.trueque));
+    expect(s["prendido-antes"]).toEqual({ prendidos: { acierta: false, azar: 1 / 5 }, "nunca-prendidos": { acierta: true, azar: 4 / 5 } });
+    expect(s.entrega).toEqual({ "el-primero": { acierta: false, azar: 1 / 2 }, "los-otros": { acierta: true, azar: 1 / 2 } });
+  });
+
+  it("el aro es del puesto de su nombre, no del de la fila de abajo", () => {
+    // Con las filas a 90, el nombre del puesto de abajo queda a 37 del centro
+    // del aro y el propio a 53: por cercanía al centro, el aro del 0 sería del 4.
+    const tr = feria(90);
+    expect(senalesTrueque(preparar(tr, JUEGOS.trueque))).toEqual(senalesTrueque(preparar(feria(), JUEGOS.trueque)));
+    // Sin la escena grabada no hay cómo saber de quién es cada aro.
+    expect(senalesTrueque(preparar({ ...tr, escena: [] }, JUEGOS.trueque))).toEqual({});
+  });
+
+  it("con un solo prendido en la entrega no hay mano a mano que medir", () => {
+    const tr = feria();
+    tr.trazos = tr.trazos.map((f) => (f[0] >= 13.6 ? f.slice(0, 6) : f));
+    expect(senalesTrueque(preparar(tr, JUEGOS.trueque)).entrega).toBeUndefined();
+  });
+});
+
+describe("los juegos", () => {
+  // Los diez del selector, y los tres que salieron pero siguen abriendo con ?demo=.
+  const SELECTOR = ["race", "sapo", "trompo", "chovena", "pinata", "wheel", "quien", "trueque", "teleferico", "oruro", "tombola", "pasanaku", "stellar"];
+
+  it("los diez del selector y los que salieron tienen cómo mirarse, con marcadores que existen", () => {
     for (const j of SELECTOR) {
       const cfg = JUEGOS[j];
       expect(cfg, j).toBeDefined();
@@ -414,10 +487,11 @@ describe("los juegos", () => {
   });
 
   it("qué graba la página para cada uno", () => {
-    expect(grabarPara("tombola")).toEqual({ numeros: true, trazos: [] });
+    expect(grabarPara("tombola")).toEqual({ numeros: true, trazos: [], escena: false });
     expect(grabarPara("quien").trazos).toHaveLength(1);
-    expect(grabarPara("race")).toEqual({ numeros: false, trazos: [] });
-    expect(grabarPara("otro")).toEqual({ numeros: false, trazos: [] });
+    expect(grabarPara("trueque")).toEqual({ numeros: false, trazos: [{ color: 0xf6efe2, capa: 1 }], escena: true });
+    expect(grabarPara("race")).toEqual({ numeros: false, trazos: [], escena: false });
+    expect(grabarPara("otro")).toEqual({ numeros: false, trazos: [], escena: false });
   });
 
   it("todas las señales de una semilla, con el arco y el corte", () => {
