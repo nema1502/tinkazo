@@ -2,6 +2,7 @@ import { Container, Graphics, Sprite, Text } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
 import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, fanfare, note } from "../../sound";
+import { musicCue } from "../../music";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { writeStory } from "../drama";
 import { CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
@@ -169,20 +170,28 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
       steps.push(paso);
       pasosPregunta[ri]?.push(paso);
       const esUltimaGrande = grand && qi === Q - 1;
+      // La tensión de la revisión queda apenas debajo de la de la respuesta: un salto
+      // grande de tensión suelta el bombo y el platillo de la música, y acá no hace falta.
+      const calor = 0.35 + 0.4 * (qi / Math.max(1, Q));
       at(s0, () => {
-        // La tensión de la revisión queda apenas debajo de la de la respuesta: un salto
-        // grande de tensión suelta el bombo y el platillo de la música, y acá no hace falta.
-        S.say(L.cQuiRevisa(ri + qi), 0.35 + 0.4 * (qi / Math.max(1, Q)));
+        S.say(L.cQuiRevisa(ri + qi), calor);
         beep(note(9), 0.1, "triangle", 0.04);
       });
       // El tic de la revisión: como un reloj de cocina, dos por segundo. Da el pulso
       // de la espera sin señalar a nadie (el sonido no depende del nombre). En la última
       // pregunta de la ronda grande se va frenando de a poco, como el foco de antes.
+      // Cada tic sostiene la música en la tensión de la revisión, sin subirla: sin eso
+      // se caía hasta el piso en cada espera y quedaban el bombo y el bajo solos, que
+      // un parlante de proyector no reproduce (auditor de mezcla, 22 de octubre de
+      // 2026: perdía 3,6 LU sin los graves de 150 Hz; ahora 3,2).
       let tic = s0 + TIC_SONIDO;
       let espacio = TIC_SONIDO;
       for (let k = 1; tic < answer - 0.2; k++) {
         const enEse = tic;
-        at(enEse, () => beep(note(k % 2 ? 10 : 12), 0.05, "triangle", 0.05));
+        at(enEse, () => {
+          beep(note(k % 2 ? 10 : 12), 0.05, "triangle", 0.05);
+          musicCue(calor);
+        });
         espacio = esUltimaGrande ? espacio * 1.1 : espacio;
         tic += espacio;
       }
