@@ -70,34 +70,73 @@ export type TinkazoClient = contract.Client & TinkazoContract;
 
 export const server = new rpc.Server(network.rpcUrl);
 
-let cached: { client: TinkazoClient; publicKey: string | null; wallet: WalletAdapter | null } | null = null;
+interface ClienteGuardado {
+  client: Promise<TinkazoClient>;
+  publicKey: string | null;
+  wallet: WalletAdapter | null;
+  /** Cuándo se pidió (ms), y si ya está armado. */
+  desde: number;
+  listo: boolean;
+}
+
+let cached: ClienteGuardado | null = null;
+
+/**
+ * Un cliente que se está armando hace más que esto no se espera más: se pide
+ * otro. Puede ser un pedido que quedó colgado (se cambió de wifi mientras se
+ * preparaba el sello) y esperarlo dejaría el sello en "Preparando…" para siempre.
+ * Medido el 21 de octubre de 2026 en la testnet: lo normal es 0,6 a 1,1 s, y la
+ * consulta más lenta que se vio contestó a los 13,8 s.
+ */
+export const CLIENTE_VIEJO_MS = 10_000;
 
 /**
  * Cliente listo para firmar con la wallet activa. Se recrea si cambia la
  * cuenta o la wallet, porque la firma va atada a la dirección que paga la
  * transacción y a quien la firma. Antes había que olvidarlo a mano al cambiar
  * de wallet, y eso obligaba a bajar el SDK solo para retomar una sesión.
+ *
+ * Armarlo baja la interfaz del contrato de la red: dos consultas al RPC, una
+ * detrás de la otra (la instancia del contrato y su código). Por eso se arma de
+ * antemano, al abrir la sesión (`precalentarSello` en anchor.ts), y quien lo pide
+ * mientras se está armando espera ese mismo pedido en vez de hacer otro. Si falla,
+ * no queda guardado: el próximo pedido lo vuelve a intentar.
  */
-export async function getClient(): Promise<TinkazoClient> {
-  if (!network.contractId) throw new Error("no-contract-on-network");
+export function getClient(): Promise<TinkazoClient> {
+  if (!network.contractId) return Promise.reject(new Error("no-contract-on-network"));
   const wallet = activeWallet();
   const publicKey = wallet?.address ?? null;
-  if (cached && cached.publicKey === publicKey && cached.wallet === wallet) return cached.client;
+  const c = cached;
+  if (c && c.publicKey === publicKey && c.wallet === wallet && (c.listo || Date.now() - c.desde < CLIENTE_VIEJO_MS)) return c.client;
 
-  const client = await contract.Client.from<TinkazoContract>({
-    contractId: network.contractId,
-    networkPassphrase: network.networkPassphrase,
-    rpcUrl: network.rpcUrl,
-    ...(publicKey ? { publicKey } : {}),
-    ...(wallet
-      ? {
-          signTransaction: (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
-            wallet.signTransaction(xdr, opts),
-        }
-      : {}),
-  });
-  cached = { client, publicKey, wallet };
-  return client;
+  const nuevo: ClienteGuardado = {
+    client: contract.Client.from<TinkazoContract>({
+      contractId: network.contractId,
+      networkPassphrase: network.networkPassphrase,
+      rpcUrl: network.rpcUrl,
+      ...(publicKey ? { publicKey } : {}),
+      ...(wallet
+        ? {
+            signTransaction: (xdr: string, opts?: { networkPassphrase?: string; address?: string }) =>
+              wallet.signTransaction(xdr, opts),
+          }
+        : {}),
+    }),
+    publicKey,
+    wallet,
+    desde: Date.now(),
+    listo: false,
+  };
+  cached = nuevo;
+  nuevo.client.then(
+    () => {
+      nuevo.listo = true;
+    },
+    () => {
+      if (cached === nuevo) cached = null;
+    },
+  );
+  return nuevo.client;
 }
 
 /**
