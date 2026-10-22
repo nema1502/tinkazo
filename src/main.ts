@@ -3,7 +3,7 @@ import { $ } from "./dom";
 import { chooseLang, initialLang, onLangChange, setLang, t } from "./i18n";
 import { SAMPLE, app, currentPace, paceSeconds, paraCompartir, params, setPace, setParaCompartir, type Game, type Pace } from "./state";
 import { soundLabel, toggleSound, unlockAudioOnGesture } from "./sound";
-import { bindParticipants, loadSample, renderNames, reponerBorrador } from "./ui/participants";
+import { bindParticipants, loadSample, parseNames, renderNames, reponerBorrador } from "./ui/participants";
 import { GAME_BUTTONS, cambiarJuego, copyRules, freeze, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
 import { initSiguiente } from "./ui/siguiente";
 import { montarPremios } from "./ui/premios";
@@ -42,7 +42,9 @@ $("btn-sample").addEventListener("click", loadSample);
 // nada, y parecía un botón roto (evaluador visual, 21 de octubre de 2026).
 $("btn-freeze").addEventListener("click", () => {
   if ($("btn-freeze").getAttribute("aria-disabled") === "true") {
-    void openPicker();
+    // La ventana dice para qué: sellar esta lista, que la espera acá. Al entrar, el foco vuelve a "Sellar la lista".
+    const motivo = t("loginParaSellar").replace("{n}", String(parseNames().length));
+    void openPicker({ motivo, volverA: $("btn-freeze") });
     return;
   }
   void freeze();

@@ -1512,6 +1512,8 @@ export const T: Record<Lang, Dict> = {
     byPollar: "Con Google o con tu correo, tu llave la custodia Pollar en un módulo de seguridad; con Freighter, tu extensión; con la cuenta de prueba, este navegador. Tinkazo nunca la ve.",
     // La ventana de ingreso, con la forma de la de Pollar (8 de octubre de 2026).
     loginTitle: "Entrá o creá tu cuenta",
+    // Desde "Sellar la lista", sin cuenta (evaluación crítica de experiencia, hallazgo 7).
+    loginParaSellar: "Para sellar tu lista de {n} personas, entrá o creá tu cuenta. La lista te espera acá.",
     loginMailLabel: "Tu correo",
     loginMailPh: "Tu correo",
     loginMailGo: "Seguir con el correo",
@@ -2841,6 +2843,7 @@ export const T: Record<Lang, Dict> = {
     byPollar: "With Google or your email, Pollar holds your key in a security module; with Freighter, your extension; with the test account, this browser. Tinkazo never sees it.",
     // The sign-in window, shaped like Pollar's (8 October 2026).
     loginTitle: "Sign in or create your account",
+    loginParaSellar: "To seal your list of {n} people, sign in or create your account. Your list will be waiting here.",
     loginMailLabel: "Your email",
     loginMailPh: "Your email",
     loginMailGo: "Continue with email",

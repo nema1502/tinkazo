@@ -609,22 +609,32 @@ const LLAMA =
 /** Un correo con forma de correo. Pollar revisa el resto. */
 const mailOk = (s: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s.trim());
 
+/**
+ * Para qué se abre la ventana de ingreso, cuando no es solo entrar: `motivo`
+ * reemplaza la línea de "Entrá o creá tu cuenta", y `volverA` recibe el foco al
+ * entrar o al cerrar.
+ */
+export interface Pedido {
+  motivo?: string;
+  volverA?: HTMLElement;
+}
+
 /** Ofrece las formas de entrar que tienen sentido en esta red y en este navegador. */
 /** Abre el selector de cuentas. Lo usa también el botón grande de la portada. */
 let abriendo = false;
-export async function openPicker(): Promise<void> {
+export async function openPicker(pedido: Pedido = {}): Promise<void> {
   // La ventana tarda unos segundos en armarse la primera vez: un segundo toque
   // en ese rato abría otra encima (revisión del 16 de octubre de 2026).
   if (abriendo || document.querySelector(".modal-card.login")) return;
   abriendo = true;
   try {
-    await abrirPicker();
+    await abrirPicker(pedido);
   } finally {
     abriendo = false;
   }
 }
 
-async function abrirPicker(): Promise<void> {
+async function abrirPicker(pedido: Pedido): Promise<void> {
   // Quien elige una cuenta va a sortear: al volver del login, incluso del
   // redirect de Google, la página abre la herramienta y no la portada.
   try {
@@ -668,7 +678,7 @@ async function abrirPicker(): Promise<void> {
   }
 
   // El correo también es de Pollar: va solo si Pollar está configurado.
-  showModal(options, pollar);
+  showModal(options, pollar, pedido);
 }
 
 /**
@@ -679,7 +689,7 @@ async function abrirPicker(): Promise<void> {
  * El correo tiene dos pasos dentro de la misma ventana: se pide el código y se
  * escribe el código. La sesión que queda es de Pollar, igual que con Google.
  */
-function showModal(options: Option[], emailOn: boolean): void {
+function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): void {
   const back = document.createElement("div");
   back.className = "modal-back";
   const card = document.createElement("div");
@@ -735,10 +745,15 @@ function showModal(options: Option[], emailOn: boolean): void {
     err.hidden = false;
   }
 
-  /** El primer paso: el correo, y las otras formas de entrar. */
+  /**
+   * El primer paso: el correo, y las otras formas de entrar. Abierta desde
+   * "Sellar la lista", dice para qué y que la lista no se pierde: decía lo mismo
+   * que desde la portada y tapaba la caja que lo explica (evaluación crítica de
+   * experiencia, hallazgo 7).
+   */
   function home(mail = ""): void {
     body.replaceChildren();
-    head("Tinkazo", [t("loginTitle")]);
+    head("Tinkazo", [pedido.motivo ?? t("loginTitle")]);
     if (emailOn) {
       const form = document.createElement("form");
       form.className = "login-form";
@@ -891,7 +906,8 @@ function showModal(options: Option[], emailOn: boolean): void {
     input.focus();
   }
 
-  const returnTo = document.activeElement;
+  // Al entrar o al cerrar, el foco vuelve a donde estaba, o a lo que se pidió (en un celular el toque no deja el foco en el botón).
+  const returnTo = pedido.volverA ?? document.activeElement;
   const onKey = (e: KeyboardEvent): void => {
     if (e.key === "Escape") {
       e.preventDefault();
