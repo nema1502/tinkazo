@@ -9,6 +9,11 @@ describe("contar visitas", () => {
     expect(cleanUrl("https://tinkazo.app/?demo=race&lang=en#sortear")).toBe("https://tinkazo.app/");
   });
 
+  it("un enlace corto se cuenta sin su id ni su clave", () => {
+    expect(cleanUrl("https://tinkazo.app/c/Ab3dE6gH#AAAAAAAAAAAAAAAAAAAAAA")).toBe("https://tinkazo.app/c/");
+    expect(cleanUrl("https://tinkazo.app/c/Ab3dE6gH?lang=en")).toBe("https://tinkazo.app/c/");
+  });
+
   it("si la dirección no se puede leer, la visita no se cuenta", () => {
     expect(cleanUrl("no es una dirección")).toBe("");
     expect(beforeSend({ type: "pageview", url: "::" })).toBeNull();

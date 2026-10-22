@@ -123,13 +123,36 @@ function adelantarLectura(): Plugin {
   };
 }
 
+/**
+ * Los enlaces cortos de los comprobantes: `tinkazo.app/c/<id>` sirve `c.html`,
+ * que abre el comprobante guardado y va a su página (`src/c.ts`). En Vercel lo
+ * hace la reescritura de `vercel.json`; esto es lo mismo para `pnpm dev` y
+ * `pnpm preview`. La consulta (`?lang=`, `?theme=`) se conserva; el fragmento,
+ * con la clave, nunca llega al servidor.
+ */
+function enlacesCortos(): Plugin {
+  const reescribir = (req: { url?: string }, _res: unknown, next: () => void): void => {
+    const url = req.url ?? "";
+    if (/^\/c\/[^/?#]+\/?(?:\?.*)?$/.test(url)) {
+      const q = url.indexOf("?");
+      req.url = `/c.html${q >= 0 ? url.slice(q) : ""}`;
+    }
+    next();
+  };
+  return {
+    name: "tinkazo:enlaces-cortos",
+    configureServer: (server) => void server.middlewares.use(reescribir),
+    configurePreviewServer: (server) => void server.middlewares.use(reescribir),
+  };
+}
+
 // El sitio, que es la herramienta y nada más; la verificación pública, que se
 // abre desde el QR o el enlace del comprobante y no necesita cuenta; y las
 // páginas de lectura (precios, juegos, historia, seguridad, términos), que
 // salieron de la principal para no meterle nada de eso a quien solo quiere
 // sortear.
 export default defineConfig({
-  plugins: [textosPorPagina(), adelantarLectura()],
+  plugins: [textosPorPagina(), adelantarLectura(), enlacesCortos()],
   build: {
     target: "es2022",
     sourcemap: true,
@@ -147,6 +170,7 @@ export default defineConfig({
         "sorteo-verificable": resolve(__dirname, "sorteo-verificable.html"),
         lista: resolve(__dirname, "lista.html"),
         evento: resolve(__dirname, "evento.html"),
+        c: resolve(__dirname, "c.html"),
         terminos: resolve(__dirname, "terminos.html"),
       },
     },

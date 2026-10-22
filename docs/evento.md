@@ -74,13 +74,14 @@ Si los tres cuadran, el sorteo cuadra. El veredicto de arriba dice si cuadran to
 ## Privacidad
 
 - El enlace lleva **los nombres de todas las personas** de cada sorteo que trae, y los ganadores. Quien lo recibe ve las listas completas. Compartilo solo con quien tenga que revisar esos sorteos, igual que un comprobante.
-- La imagen con el QR lleva lo mismo que el enlace: la lista entera de cada sorteo, no solo a quienes ganaron. Es para el grupo de quien revisa el sorteo. La imagen para redes (la que se publica, con el botón «Imagen para redes») no tiene QR ni la lista: solo lleva a quienes ganaron.
-- La página no guarda nada, no envía nada y no consulta la cadena. Solo los enlaces de «Verificarlo en la cadena» abren otra página, la de cada comprobante.
+- La foto para compartir (`src/ui/foto.ts`) lleva el QR del enlace: quien la tenga abre el comprobante, con la lista entera de cada sorteo. Así lo pidió Nicolás el 21 de octubre de 2026 («mandar también la foto de los ganadores con un QR para comprobarlo y verlo todo»), y el diálogo de compartir lo dice. Hasta ese día había una imagen para redes sin QR; salió.
+- Compartir intenta primero el enlace corto (`tinkazo.app/c/…`, [workers/enlaces](../workers/enlaces/README.md)): el evento entero va en un solo enlace, y en Cloudflare queda una copia cifrada en el navegador, con la clave solo en el enlace, que Tinkazo no puede leer y que se borra desde Mis sorteos. Si el servicio no contesta, el evento va en las partes de siempre.
+- La página del evento no guarda nada, no envía nada y no consulta la cadena. Solo los enlaces de «Verificarlo en la cadena» abren otra página, la de cada comprobante.
 - Revisar un evento es gratis y no hace falta cuenta.
 
 ## Límites
 
-- El enlace crece con los nombres, porque cada sorteo lleva su lista entera. Medido con listas de 200 personas con nombres distintos, 4 sorteos pesan unos 8 KB y 30 sorteos unos 50 KB. Algunos chats cortan los enlaces muy largos al pegarlos; si pasa, cada sorteo sigue teniendo su propio comprobante, que se abre desde Mis sorteos con «Ver comprobante».
+- El enlace crece con los nombres, porque cada sorteo lleva su lista entera. Medido con listas de 200 personas con nombres distintos, 4 sorteos pesan unos 8 KB y 30 sorteos unos 50 KB. Algunos chats cortan los enlaces muy largos al pegarlos: por eso se comparte con el enlace corto, y sin él, en partes; si igual pasa, cada sorteo sigue teniendo su propio comprobante, que se abre desde Mis sorteos con «Ver comprobante».
 - Un sorteo que pesa más que ese tamaño, por ejemplo uno con miles de personas, va en un enlace propio: queda entero, aunque ese enlace sea largo.
 - El QR tiene un tope de unos 2.900 caracteres: un enlace más largo no tiene imagen, pero se sigue pudiendo copiar y mandar.
 - El título y el mensaje se escriben en el idioma de quien comparte. La página los muestra tal cual.
@@ -112,5 +113,5 @@ El texto después del `#` es igual al de un comprobante (`src/protocol/proof.ts`
 
 ## Implementación
 
-- `src/protocol/evento.ts` (formato y partes), `src/ui/agrupar.ts` (los grupos por fecha), `src/ui/eventos.ts` (los eventos con nombre, en este equipo), `src/ui/history.ts` (Mis sorteos y Mis eventos), `src/ui/compartir.ts` (los mensajes y el diálogo), `src/ui/tarjeta-qr.ts` (la imagen con el QR), `src/ui/qr.ts` (el QR), `src/evento.ts` (la página).
+- `src/protocol/evento.ts` (formato y partes), `src/ui/agrupar.ts` (los grupos por fecha), `src/ui/eventos.ts` (los eventos con nombre, en este equipo), `src/ui/history.ts` (Mis sorteos y Mis eventos), `src/ui/compartir.ts` (los mensajes y el diálogo), `src/ui/foto.ts` (la foto con el QR), `src/enlace-corto.ts` y `c.html` (el enlace corto), `src/ui/qr.ts` (el QR), `src/evento.ts` (la página).
 - Pruebas: `src/protocol/evento.test.ts`, `src/ui/agrupar.test.ts`, `src/ui/eventos.test.ts`, `src/ui/compartir.test.ts` (los mensajes son los mismos que `summary` y `summaryEvento`, en es y en), `src/mensaje.test.ts` y `src/evento-textos.test.ts`.

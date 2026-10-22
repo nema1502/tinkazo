@@ -1,10 +1,11 @@
 import { $, esc } from "../dom";
 import { getLang, t } from "../i18n";
-import type { SorteoDelEvento } from "../protocol/evento";
+import { alAcortar, borrarCorto, borrarTodos, cortosBorrables, puedeBorrar } from "../enlace-corto";
+import { eventoUrl, type SorteoDelEvento } from "../protocol/evento";
 import { network, txUrl } from "../stellar/config";
 import type { ChainRaffle } from "../stellar/seals";
 import { agrupar, fechaLarga, tieneComprobante } from "./agrupar";
-import { compartirEvento, compartirSorteo, partesDelEvento } from "./compartir";
+import { compartirEvento, compartirSorteo } from "./compartir";
 import {
   type EventoGuardado,
   type SorteoGuardado,
@@ -348,6 +349,18 @@ function enlazarRearmado(): void {
       if (fila?.proof && fila.winners?.length) void compartirSorteo(fila.proof, fila.winners);
       return;
     }
+    const corto = el.closest<HTMLButtonElement>("[data-borrar-corto]");
+    if (corto) {
+      const fila = pintadas[Number(corto.dataset.borrarCorto)];
+      if (fila?.proof) void borrarElCorto(fila.proof);
+      return;
+    }
+    const cortoGrupo = el.closest<HTMLButtonElement>("[data-borrar-corto-grupo]");
+    if (cortoGrupo) {
+      const g = eventosPintados[Number(cortoGrupo.dataset.borrarCortoGrupo)];
+      if (g) void borrarElCorto(sorteosDeEntradas(g).then((sorteos) => eventoUrl(tituloDeGrupo(g), sorteos)));
+      return;
+    }
     const b = el.closest<HTMLElement>("[data-rearmar]");
     if (!b) return;
     const fila = pintadas[Number(b.dataset.rearmar)];
@@ -552,6 +565,12 @@ function enlazarEventos(): void {
     if (compartirEnlace) {
       const r = sorteoDeClave(compartirEnlace.dataset.compartirEnlace ?? "");
       if (r) void compartirSorteo(r.s.enlace, r.s.ganadores);
+      return;
+    }
+    const corto = el.closest<HTMLButtonElement>("[data-borrar-corto-evn]");
+    if (corto) {
+      const ev = leerEventos(network.name).find((x) => x.id === corto.dataset.borrarCortoEvn);
+      if (ev) void borrarElCorto(sorteosDelEvento(ev).then((sorteos) => eventoUrl(ev.nombre, sorteos)));
     }
   });
   // Al salir del campo con un nombre nuevo, se guarda sin repintar: lo escrito no se pierde aunque no se toque "Guardar".
@@ -562,23 +581,67 @@ function enlazarEventos(): void {
   });
 }
 
+/* ------------------------------------------------------- los enlaces cortos */
+
+// Cuando sale un enlace corto (al compartir), Mis sorteos se vuelve a dibujar:
+// así aparece enseguida su "Borrar el enlace corto".
+alAcortar(() => {
+  if (shown) paint(shown);
+});
+
 /**
- * Pone en el botón de compartir cuántos enlaces va a tener el evento, cuando
- * son varios: "Compartir el evento (3 partes)". Se calcula después de dibujar,
- * porque armar los enlaces es asincrónico.
+ * "Borrar el enlace corto": quien tenga el corto o su QR ya no lo puede abrir.
+ * El sorteo, su comprobante y el enlace largo siguen como estaban.
  */
-async function etiquetarPartes(): Promise<void> {
+async function borrarElCorto(enlace: string | Promise<string>): Promise<void> {
+  if (!confirm(t("cmpBorrarCortoConf"))) return;
+  const ok = await borrarCorto(await enlace);
+  avisar(t(ok ? "cmpCortoBorrado" : "cmpCortoNoSeBorro"));
+  if (shown) paint(shown);
+}
+
+/** El botón de abajo de Mis sorteos: todos los enlaces cortos que creó este equipo. */
+function enlazarBorrarTodos(): void {
+  const b = document.getElementById("btn-hist-cortos");
+  if (!b || b.dataset.enlazado) return;
+  b.dataset.enlazado = "1";
+  b.addEventListener("click", async () => {
+    if (!confirm(t("cmpBorrarCortosConf"))) return;
+    const r = await borrarTodos();
+    avisar(t(r.fallaron ? "cmpCortoNoSeBorro" : "cmpCortosBorrados"));
+    if (shown) paint(shown);
+  });
+}
+
+/**
+ * Los eventos que se compartieron con enlace corto desde este equipo suman
+ * "Borrar el enlace corto". Se mira después de dibujar, porque armar el enlace
+ * del evento es asincrónico. Si mientras tanto se volvió a dibujar, se corta.
+ */
+async function marcarCortosDeEventos(): Promise<void> {
+  // Sin ningún corto en este equipo no hay nada que buscar: armar los enlaces de los eventos comprime listas enteras.
+  if (!cortosBorrables()) return;
   const grupos = eventosPintados;
   const evs = guardados;
-  const poner = (boton: Element | null, n: number): void => {
-    if (boton && n > 1) boton.textContent = t("evnCompartirPartes").replace("{n}", String(n));
+  const vigente = (): boolean => grupos === eventosPintados && evs === guardados;
+  const poner = (caja: Element | null | undefined, atributo: string, valor: string): void => {
+    if (!caja || caja.querySelector(`[${atributo}]`)) return;
+    caja.insertAdjacentHTML("beforeend", `<button class="ghost mini" type="button" ${atributo}="${esc(valor)}">${esc(t("cmpBorrarCorto"))}</button>`);
   };
   for (const [gi, g] of grupos.entries()) {
-    poner(document.querySelector(`[data-evento="${gi}"]`), await partesDelEvento(tituloDeGrupo(g), await sorteosDeEntradas(g)));
+    const sorteos = await sorteosDeEntradas(g);
+    if (!vigente()) return;
+    if (sorteos.length && puedeBorrar(await eventoUrl(tituloDeGrupo(g), sorteos)) && vigente()) {
+      poner(document.querySelector(`[data-evento="${gi}"]`)?.parentElement, "data-borrar-corto-grupo", String(gi));
+    }
   }
   for (const ev of evs) {
-    const boton = document.querySelector(`[data-evento-compartir="${ev.id}"]`);
-    poner(boton, await partesDelEvento(ev.nombre, await sorteosDelEvento(ev)));
+    const sorteos = await sorteosDelEvento(ev);
+    if (!vigente()) return;
+    if (sorteos.length && puedeBorrar(await eventoUrl(ev.nombre, sorteos)) && vigente()) {
+      const boton = [...document.querySelectorAll<HTMLElement>("[data-evento-compartir]")].find((b) => b.dataset.eventoCompartir === ev.id);
+      poner(boton?.parentElement, "data-borrar-corto-evn", ev.id);
+    }
   }
 }
 
@@ -633,7 +696,11 @@ function paint(organizer: string | null): void {
   }
   $("hist-list").innerHTML = html;
   box.style.display = "block";
-  void etiquetarPartes();
+  // Abajo, borrar todos los enlaces cortos de este equipo, si hay alguno.
+  enlazarBorrarTodos();
+  const todos = document.getElementById("btn-hist-cortos");
+  if (todos) todos.style.display = cortosBorrables() ? "" : "none";
+  void marcarCortosDeEventos();
 }
 
 /** Los eventos de la última lista pintada: "Compartir el evento" busca el suyo por su número. */
@@ -658,6 +725,8 @@ function tarjetaDeSorteo(e: Entry, i: number): string {
   if (e.proof) acciones.push(`<a class="ghost mini" href="${esc(e.proof)}" target="_blank" rel="noopener">${esc(t("histSeeProof"))}</a>`);
   else if (hecho && e.id) acciones.push(`<button class="ghost mini" data-rearmar="${i}">${esc(t("histRebuild"))}</button>`);
   if (enCadena) acciones.push(`<a class="hc-link" href="${esc(txUrl(enCadena))}" target="_blank" rel="noopener">${esc(t("histOnChain"))} ↗</a>`);
+  // Si se compartió con enlace corto desde este equipo, se puede borrar.
+  if (e.proof && puedeBorrar(e.proof)) acciones.push(`<button class="ghost mini" type="button" data-borrar-corto="${i}">${esc(t("cmpBorrarCorto"))}</button>`);
   if (!hecho && !e.names?.length) acciones.push(`<span class="note">${esc(t("histOtherDevice"))}</span>`);
   if (compartible && guardados.length) {
     const opciones = guardados.map((ev) => `<option value="${esc(ev.id)}">${esc(ev.nombre)}</option>`).join("");

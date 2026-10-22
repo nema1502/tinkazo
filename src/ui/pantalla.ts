@@ -1,6 +1,7 @@
 import { esc } from "../dom";
 import { t } from "../i18n";
 import { app, avatar } from "../state";
+import { acortar } from "../enlace-corto";
 import { pintarQr } from "./qr";
 
 /**
@@ -9,17 +10,21 @@ import { pintarQr } from "./qr";
  * resto de la página alrededor, en pantalla completa si el navegador deja.
  *
  * Es el momento en que la sala saca el celular: el QR tiene que leerse desde
- * el fondo, así que es lo segundo más grande después del nombre.
+ * el fondo, así que es lo segundo más grande después del nombre. Con
+ * `corto`, el QR lleva el enlace corto (enlace-corto.ts): de menos de cuarenta módulos por
+ * lado y no de más de cien, se lee desde las sillas. Si no sale en unos
+ * segundos, lleva el largo de siempre.
  *
  * La abre el botón "Mostrar en grande" y, desde el 21 de octubre de 2026, el
  * final del show cuando el sorteo arrancó desde la espera en grande (`draw.ts`):
  * ahí el enlace llega después (el comprobante se arma aparte) y el QR aparece
- * cuando está. `volverA` es lo que queda con el foco al cerrar: "Siguiente
- * premio", que es lo que sigue. Salir de la pantalla completa también la
- * cierra, como a la espera: Escape la suelta el navegador sin avisarle a la
- * página, y quedaba la vista en grande dentro de la ventana.
+ * cuando está, con el enlace largo: el corto se arma solo cuando quien organiza
+ * lo pide, y abrirse solo no es pedirlo. `volverA` es lo que queda con el foco
+ * al cerrar: "Siguiente premio", que es lo que sigue. Salir de la pantalla
+ * completa también la cierra, como a la espera: Escape la suelta el navegador
+ * sin avisarle a la página, y quedaba la vista en grande dentro de la ventana.
  */
-export async function mostrarResultado(enlace: string | Promise<string>, volverA?: HTMLElement): Promise<void> {
+export async function mostrarResultado(enlace: string | Promise<string>, op: { corto?: boolean; volverA?: HTMLElement } = {}): Promise<void> {
   const { frozen, drawn } = app;
   if (!frozen || !drawn || document.querySelector(".pantalla")) return;
   const premio = frozen.prize;
@@ -71,7 +76,7 @@ export async function mostrarResultado(enlace: string | Promise<string>, volverA
     document.removeEventListener("fullscreenchange", pantalla);
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
     // A lo que sigue, a la vista si hacía falta; sin eso, al botón que la abrió.
-    if (volverA && volverA.offsetParent !== null) volverA.focus();
+    if (op.volverA && op.volverA.offsetParent !== null) op.volverA.focus();
     else document.getElementById("btn-grande")?.focus({ preventScroll: true });
   };
   const tecla = (e: KeyboardEvent): void => {
@@ -104,8 +109,10 @@ export async function mostrarResultado(enlace: string | Promise<string>, volverA
         ? Math.min(innerHeight * 0.56, innerWidth * 0.32)
         : Math.min(innerHeight * 0.6, innerWidth * 0.36);
   const link = await Promise.resolve(enlace).catch(() => "");
-  if (cerrada) return;
-  const listo = link && img ? await pintarQr(img, link, lado) : false;
+  const corto = link && op.corto && !cerrada ? await acortar(link) : null;
+  // Si se cerró mientras llegaba el comprobante o salía el corto, no hay nada que pintar.
+  if (cerrada || !back.isConnected) return;
+  const listo = link && img ? await pintarQr(img, corto?.corto ?? link, lado) : false;
   if (!listo) back.querySelector(".pantalla-qr")?.remove();
   ajustar();
 }

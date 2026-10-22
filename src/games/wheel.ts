@@ -667,7 +667,7 @@ export function wheelSpin(
     c.font = `700 ${11 * k}px ui-monospace, Consolas, monospace`;
     c.textAlign = "left";
     c.fillStyle = "rgba(246,239,226,0.55)";
-    c.fillText(`${t("cWheelRound")} #${beacon.round}`, 22 * k, H() - chrome(c).abajo);
+    c.fillText(`${t("cWheelRound")} ${beacon.round}`, 22 * k, H() - chrome(c).abajo);
     if (tAll >= T_CROWN) {
       c.fillStyle = "rgba(255,198,41,0.75)";
       c.fillText(t("cWheelSeed"), 22 * k, H() - chrome(c).abajo - 18 * k);

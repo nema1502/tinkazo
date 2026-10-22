@@ -409,7 +409,8 @@ export async function freeze(): Promise<void> {
       btn.textContent = t("sealOnStellar");
       const status = $("seal-status");
       status.style.display = "block";
-      status.className = "txstatus";
+      // Naranja, como el error del sorteo: violeta es "todavía va" (styles.css).
+      status.className = "txstatus bad";
       await escribirError(status, e, "sello");
       // Si se apretó la barra, el botón de verdad (y este mensaje) están fuera de la pantalla.
       verError(status);
@@ -424,7 +425,7 @@ export async function freeze(): Promise<void> {
   // (QA, 16 de octubre de 2026).
   void precargarQr();
   void import("./pantalla").catch(() => undefined);
-  void import("./imagen").catch(() => undefined);
+  void import("./compartir").catch(() => undefined);
   // Y lo que cuenta un error del sorteo, si el wifi se cae antes de sortear.
   if (raffleId !== undefined) precargarParaElSorteo();
 

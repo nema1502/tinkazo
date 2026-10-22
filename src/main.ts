@@ -7,7 +7,7 @@ import { bindParticipants, loadSample, renderNames, reponerBorrador } from "./ui
 import { GAME_BUTTONS, cambiarJuego, copyRules, freeze, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
 import { initSiguiente } from "./ui/siguiente";
 import { montarPremios } from "./ui/premios";
-import { adelantarImagen, alTocarGanadores, copySummary, draw, imagenRedes, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
+import { adelantarCorto, alTocarGanadores, copySummary, draw, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
 import { skipGame } from "./games/overlay";
 import { usePixi } from "./games/engine";
 import { currentSession, initWalletUI, openPicker } from "./ui/wallet-ui";
@@ -104,12 +104,13 @@ $("btn-again-sin").addEventListener("click", () => newDraw("sinGanadores"));
 $("btn-again-nueva").addEventListener("click", () => newDraw("otraLista"));
 $("btn-recuperar").addEventListener("click", recuperarLista);
 $("btn-grande").addEventListener("click", mostrarGrande);
-$("btn-imagen").addEventListener("click", () => imagenRedes($<HTMLButtonElement>("btn-imagen")));
-$("btn-imagen").addEventListener("pointerdown", adelantarImagen);
+// Al apoyar el dedo o el mouse en compartir o en grande, el enlace corto ya sale: para el clic suele estar listo.
+$("btn-grande").addEventListener("pointerdown", adelantarCorto);
+$("btn-proof").addEventListener("pointerdown", adelantarCorto);
 $("winner-cards").addEventListener("click", alTocarGanadores);
 $<HTMLButtonElement>("btn-copy").addEventListener("click", (e) => void copySummary(e.currentTarget as HTMLButtonElement));
 $<HTMLButtonElement>("btn-rules").addEventListener("click", (e) => void copyRules(e.currentTarget as HTMLButtonElement));
-$<HTMLButtonElement>("btn-proof").addEventListener("click", (e) => void shareProof(e.currentTarget as HTMLButtonElement));
+$("btn-proof").addEventListener("click", shareProof);
 $("st-sound").addEventListener("click", toggleSound);
 $("btn-sound").addEventListener("click", toggleSound);
 /** El modo con música: andina con beat, que sigue la tensión del relator. */
