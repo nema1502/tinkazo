@@ -32,8 +32,12 @@ export interface Foto {
   sub?: string;
   /** Un sorteo: quienes ganaron, en orden, cada uno con su cara. */
   personas?: string[];
-  /** Un evento: un renglón por sorteo, el premio y quién ganó. */
-  filas?: Array<{ premio: string; ganadores: string }>;
+  /**
+   * Un evento: una fila por sorteo, el premio y quién ganó. `cortos`, si
+   * vienen, son los mismos ganadores cada vez con un nombre menos y "N más" al
+   * final, para cuando no entran todos: así un nombre no se corta nunca.
+   */
+  filas?: Array<{ premio: string; ganadores: string; cortos?: string[] }>;
   /** Debajo de los nombres: el premio y entre cuántos salió. */
   lineas: string[];
   /** "y {n} más", para lo que no entra. */
@@ -340,40 +344,96 @@ function filasDePersonas(c: Ctx, f: Foto, nombres: string[], s: number): Bloque 
   };
 }
 
-/** Un evento: un renglón por sorteo, el premio en una etiqueta amarilla y quién ganó al lado. */
-function filasDeEvento(c: Ctx, f: Foto, s: number): Bloque {
+/**
+ * Los ganadores de un sorteo del evento: la letra más grande entre `max` y
+ * `min` con la que entran en `maximo` renglones. Si no entran ni con `min`,
+ * la primera de `cortos` que entre: menos nombres y "N más", nunca un nombre
+ * cortado por la mitad.
+ */
+function nombresQueEntran(c: Ctx, texto: string, cortos: readonly string[], ancho: number, maximo: number, max: number, min: number): { tam: number; lineas: string[] } {
+  for (let tam = max; tam > min; tam -= 2) {
+    c.font = `900 ${tam}px ${SANS}`;
+    const l = partir(c, texto, ancho);
+    if (l.length <= maximo) return { tam, lineas: l };
+  }
+  c.font = `900 ${min}px ${SANS}`;
+  for (const t of [texto, ...cortos]) {
+    const l = partir(c, t, ancho);
+    if (l.length <= maximo) return { tam: min, lineas: l };
+  }
+  return { tam: min, lineas: renglones(c, cortos[cortos.length - 1] ?? texto, ancho, maximo) };
+}
+
+/**
+ * Un evento: un bloque por sorteo, con el premio en una etiqueta amarilla y
+ * quién ganó. Con hasta tres sorteos van uno debajo del otro y los nombres
+ * tienen todo el ancho; con más, la etiqueta a la izquierda y los nombres al
+ * lado. El premio y los nombres parten en renglones y achican la letra antes
+ * de cortar, con un piso que se lee en el teléfono (26 px en la foto de 1080);
+ * si los nombres no entran ni así, van los primeros y "N más". Hasta el 22 de
+ * octubre de 2026 cada sorteo iba en un solo renglón con "…" ("Una mochila
+ * del me…", "Elena Condori y Sofía…") aunque sobrara media foto (evaluación de
+ * la subida 2, hallazgo 4). `apretado` es el último recurso, con muchos
+ * sorteos de muchos ganadores: un renglón para cada cosa, antes que pisar el QR.
+ */
+function filasDeEvento(c: Ctx, f: Foto, s: number, apretado = false): Bloque {
   const filas = f.filas ?? [];
   const tope = 7;
   const vistas = filas.length > tope ? tope - 1 : filas.length;
   const resto = filas.length - vistas;
-  const alto1 = Math.round(84 * s);
-  const tam = Math.round(44 * s);
-  const etiTam = Math.round(32 * s);
+  const apilado = vistas <= 3;
+  // Con uno o dos sorteos sobra lugar: el premio y los nombres, más grandes.
+  const pocos = vistas <= 2;
+  const pad = Math.max(10, Math.round(14 * s));
+  const etiTam = Math.max(22, Math.round((pocos ? 40 : apilado ? 34 : 30) * s));
+  const etiPaso = Math.round(etiTam * 1.2);
+  // La etiqueta: todo el ancho uno debajo del otro, o hasta el 40 % al lado de los nombres.
+  const etiMax = apilado ? ANCHO : Math.round(ANCHO * 0.4);
   c.font = `800 ${etiTam}px ${SANS}`;
-  // La etiqueta del premio ocupa lo que necesite, hasta el 42 % del ancho; todas del mismo ancho.
-  const etiW = Math.min(
-    Math.round(ANCHO * 0.42),
-    Math.max(...filas.slice(0, vistas).map((x) => c.measureText(x.premio).width), 60) + 28,
+  const etis = filas.slice(0, vistas).map((x) => renglones(c, x.premio, etiMax - 2 * pad, apretado ? 1 : 2));
+  const etiAncho = (l: string[]): number => Math.max(60, ...l.map((r) => c.measureText(r).width)) + 2 * pad;
+  // Al lado, todas las etiquetas del mismo ancho, como una columna.
+  const etiCol = apilado ? 0 : Math.min(etiMax, Math.max(...etis.map(etiAncho)));
+  const etiW = etis.map((l) => (apilado ? Math.min(etiMax, etiAncho(l)) : etiCol));
+  const etiH = etis.map((l) => l.length * etiPaso + Math.round(pad * 0.9));
+  const ganW = apilado ? ANCHO : ANCHO - etiCol - 24;
+  const gans = filas.slice(0, vistas).map((x) =>
+    nombresQueEntran(c, x.ganadores, x.cortos ?? [], ganW, apretado ? 1 : apilado ? 3 : 2, Math.round((pocos ? 76 : apilado ? 60 : 44) * s), Math.max(26, Math.round((pocos ? 40 : apilado ? 36 : 30) * s))),
   );
+  const ganPaso = (g: { tam: number }): number => Math.round(g.tam * 1.14);
+  const ganH = gans.map((g) => g.lineas.length * ganPaso(g));
+  const entre = Math.round((apilado ? 12 : 0) * s);
+  const sep = Math.round((apilado ? 30 : 18) * s);
+  const altoFila = filas.slice(0, vistas).map((_, i) =>
+    apilado ? (etiH[i] ?? 0) + entre + (ganH[i] ?? 0) : Math.max(etiH[i] ?? 0, ganH[i] ?? 0),
+  );
+  const masTam = Math.max(26, Math.round(40 * s));
+  const alto = altoFila.reduce((n, h) => n + h, 0) + sep * Math.max(0, vistas - 1) + (resto ? sep + Math.round(masTam * 1.2) : 0);
   return {
-    alto: (vistas + (resto ? 1 : 0)) * alto1,
+    alto,
     dibujar: (y) => {
-      filas.slice(0, vistas).forEach((x, i) => {
-        const y0 = y + i * alto1;
-        const etiH = Math.round(alto1 * 0.7);
+      let y0 = y;
+      filas.slice(0, vistas).forEach((_, i) => {
+        const l = etis[i] ?? [];
+        const w = etiW[i] ?? 0, h = etiH[i] ?? 0;
+        const g = gans[i] ?? { tam: 30, lineas: [] };
         c.fillStyle = C.amarillo;
-        c.fillRect(M, y0, etiW, etiH);
+        c.fillRect(M, y0, w, h);
         c.font = `800 ${etiTam}px ${SANS}`;
         c.fillStyle = C.fondo;
-        c.fillText(recortar(c, x.premio, etiW - 28), M + 14, y0 + etiH / 2 + etiTam * 0.36);
-        c.font = `900 ${tam}px ${SANS}`;
+        l.forEach((r, k) => c.fillText(r, M + pad, y0 + Math.round(pad * 0.45) + etiTam * 0.92 + k * etiPaso));
+        // Los nombres: debajo de la etiqueta, o al lado y centrados con ella si son más bajos.
+        const gx = apilado ? M : M + etiCol + 24;
+        const gy = apilado ? y0 + h + entre : y0 + Math.max(0, Math.round((h - (ganH[i] ?? 0)) / 2));
+        c.font = `900 ${g.tam}px ${SANS}`;
         c.fillStyle = C.crema;
-        c.fillText(recortar(c, x.ganadores, ANCHO - etiW - 24), M + etiW + 24, y0 + etiH / 2 + tam * 0.36);
+        g.lineas.forEach((r, k) => c.fillText(r, gx, gy + g.tam * 0.9 + k * ganPaso(g)));
+        y0 += (altoFila[i] ?? 0) + sep;
       });
       if (resto) {
-        c.font = `800 ${tam}px ${SANS}`;
+        c.font = `800 ${masTam}px ${SANS}`;
         c.fillStyle = C.crema2;
-        c.fillText(f.mas.replace("{n}", String(resto)), M, y + vistas * alto1 + Math.round(alto1 * 0.35) + tam * 0.36);
+        c.fillText(f.mas.replace("{n}", String(resto)), M, y0 + masTam * 0.95);
       }
     },
   };
@@ -403,10 +463,10 @@ function cola(c: Ctx, lineas: string[], s: number): Bloque {
   };
 }
 
-function medio(c: Ctx, f: Foto, s: number): Bloque[] {
+function medio(c: Ctx, f: Foto, s: number, apretado = false): Bloque[] {
   const separa = (n: number): Bloque => ({ alto: Math.round(n * s), dibujar: () => undefined });
   const personas = f.personas ?? [];
-  if (!f.personas) return [titulo(c, f, s, null), separa(30), filasDeEvento(c, f, s), separa(24), cola(c, f.lineas, s)];
+  if (!f.personas) return [titulo(c, f, s, null), separa(30), filasDeEvento(c, f, s, apretado), separa(24), cola(c, f.lineas, s)];
   if (personas.length === 1) {
     return [titulo(c, f, s, personas[0] ?? ""), separa(34), nombreGrande(c, personas[0] ?? "", s), separa(34), cola(c, f.lineas, s)];
   }
@@ -515,12 +575,16 @@ export async function dibujarFoto(f: Foto): Promise<HTMLCanvasElement> {
   const abajo = (qr ? QR_Y : SIN_QR_Y) - 48;
 
   // El medio, con la escala más grande que entre entre el rótulo y lo de abajo.
+  // Si no entra ni con la más chica (un evento de muchos sorteos con muchos
+  // ganadores), otra vuelta con un renglón por cosa: nunca encima del QR.
   let bloques: Bloque[] = [];
   let alto = 0;
-  for (let s = 1; s >= 0.55; s -= 0.05) {
-    bloques = medio(c, f, s);
-    alto = bloques.reduce((n, b) => n + b.alto, 0);
-    if (alto <= abajo - ARRIBA) break;
+  buscar: for (const apretado of [false, true]) {
+    for (let s = 1; s >= 0.55; s -= 0.05) {
+      bloques = medio(c, f, s, apretado);
+      alto = bloques.reduce((n, b) => n + b.alto, 0);
+      if (alto <= abajo - ARRIBA) break buscar;
+    }
   }
   let y = ARRIBA + Math.max(0, Math.round((abajo - ARRIBA - alto) / 2));
   for (const b of bloques) {

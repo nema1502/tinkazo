@@ -243,6 +243,17 @@ describe("lo que va en la foto", () => {
     expect(f.filas?.[1]?.premio).toBe("Sorteo");
     expect(f.rotulo.startsWith("Evento · ")).toBe(true);
   });
+
+  it("un evento: si no entran todos los ganadores, la foto tiene los primeros enteros y cuántos más, nunca un nombre a medias", () => {
+    const tres = { ...sorteoGrande(1, 3), ganadores: ["Elena Condori", "Sofía Aguilar", "Pablo Gutiérrez"] };
+    const es = fotoDeEvento("es", "Meetup", [tres], corto);
+    expect(es.filas?.[0]?.ganadores).toBe("Elena Condori, Sofía Aguilar y Pablo Gutiérrez");
+    expect(es.filas?.[0]?.cortos).toEqual(["Elena Condori, Sofía Aguilar y 1 más", "Elena Condori y 2 más"]);
+    const en = fotoDeEvento("en", "Meetup", [tres], corto);
+    expect(en.filas?.[0]?.cortos).toEqual(["Elena Condori, Sofía Aguilar, and 1 more", "Elena Condori and 2 more"]);
+    // Con uno solo no hay nada que acortar.
+    expect(fotoDeEvento("es", "Meetup", [sorteoGrande(2, 3)], corto).filas?.[0]?.cortos).toEqual([]);
+  });
 });
 
 /** Los textos de la página del enlace corto (c.html). */
