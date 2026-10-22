@@ -75,7 +75,7 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 | Component | Status | Evidence |
 |---|---|---|
 | Soroban contract `tinkazo-raffle` | Deployed on testnet, which Stellar wipes on December 16, 2026 | [`CD2SSHBU…ARENH`](https://stellar.expert/explorer/testnet/contract/CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH) · 19 tests, including a real quicknet round · 11.4 KB WASM |
-| Web app | Live | [tinkazo.app](https://tinkazo.app) · Spanish and English · light and dark · no backend |
+| Web app | Live | [tinkazo.app](https://tinkazo.app) · Spanish and English · light and dark · no backend for the draw (short links run on a small Cloudflare Worker, [workers/enlaces](workers/enlaces/README.md)) |
 | Luma import | Live | Drop the guest export and pick who gets in: those who checked in, the approved ones, or by hand |
 | Verification page | Live | Recomputes any draw in the browser from its proof link |
 | Ten stadium games | Live | Deterministic: the same round draws the same frames on any machine |
@@ -142,7 +142,7 @@ Andean music with a beat plays in the background and follows the tension (the Ch
 
 For mainnet: one open draw per account, public cancellation, the round set by the contract and a sorted list in the protocol. The full STRIDE analysis is in [docs/amenazas.md](docs/amenazas.md) ([summary in English](docs/threat-model.en.md)), and the plain-language version on the [security page](https://tinkazo.app/seguridad.html).
 
-**Privacy.** The chain keeps the list's fingerprint and other draw data, never the names. The proof travels in the URL fragment, which browsers do not send to servers. The site counts visits with Vercel Web Analytics, without cookies, and cuts every address down to its path before counting ([src/analytics.ts](src/analytics.ts)).
+**Privacy.** The chain keeps the list's fingerprint and other draw data, never the names. The proof travels in the URL fragment, which browsers do not send to servers. The site counts visits with Vercel Web Analytics, without cookies, and cuts every address down to its path before counting ([src/analytics.ts](src/analytics.ts)). Sharing with a short link stores on Cloudflare a copy encrypted in the browser, with the key only in the link's fragment: Tinkazo can't read it, and it can be deleted from My draws ([workers/enlaces](workers/enlaces/README.md)).
 
 ## How it compares
 
