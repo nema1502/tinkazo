@@ -425,6 +425,14 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
    */
   const chipsVivos = new Set<Container>();
   const sinDibujar: Container[] = [];
+  /**
+   * Hasta dónde llega un nombre por abajo: la franja del relator o, si una frase
+   * larga lo hizo crecer más que ella, su borde de arriba de verdad. La ruta del
+   * Trueque, en tres o cuatro renglones en un celular, tapaba nombres que la
+   * franja dejaba pasar (21 de octubre de 2026). `offsetTop` no mira el
+   * acercamiento con que entra cada frase.
+   */
+  const piso = (): number => Math.min(sh() - bottom(), commentEl.textContent ? commentEl.offsetTop - 4 : Infinity);
   /** Si el chip se dibuja de verdad: él y todos los de arriba, visibles y colgados de la escena. */
   const seDibuja = (c: Container): boolean => {
     let a = 1;
@@ -439,7 +447,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     for (const c of sinDibujar) if (!c.destroyed) c.renderable = true;
     sinDibujar.length = 0;
     const W = sw(), H = sh();
-    const zona = { x0: 2, y0: top(), x1: W - 2, y1: H - bottom() };
+    const zona = { x0: 2, y0: top(), x1: W - 2, y1: piso() };
     const correr = (c: Container, dx: number, dy: number): void => {
       const padre = c.parent;
       if (!padre || (dx === 0 && dy === 0)) return;
@@ -756,7 +764,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       // El alto de verdad, con la sombra: con los 24 de antes escritos a mano,
       // los chips de letra legible se encimaban al apilarse (16 de octubre de 2026).
       const cw = c.width, ch = c.height;
-      const lo = top() + ch / 2 + 2 * k, hi = H - bottom() - ch / 2 - 3 * k;
+      const lo = top() + ch / 2 + 2 * k, hi = piso() - ch / 2 - 3 * k;
       const cx = (v: number): number => Math.max(8 * k, Math.min(W - cw - 8 * k, v));
       const cy = (v: number): number => Math.max(lo, Math.min(hi, v));
       const choca = (a: number, b: number): boolean => placed.some((r) => a < r.x + r.w && a + cw > r.x && b - ch / 2 < r.y + r.h / 2 && b + ch / 2 > r.y - r.h / 2);
