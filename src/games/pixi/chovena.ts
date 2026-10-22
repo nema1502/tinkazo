@@ -1805,49 +1805,75 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     }
   }
 
-  /** La lista de los que salen, cuando son muchos para ponerles el nombre encima. */
+  /**
+   * La lista de los que salen, cuando son muchos para ponerles el nombre
+   * encima. Con la letra de los nombres de la escena (`CHIP_SCALE`, 19 px en 720)
+   * y `S.letra`, que crece con la pantalla y con el modo para compartir: a 13 px
+   * no se leía desde el fondo de la sala (evaluador visual, 21 de octubre de 2026).
+   * Entran las filas que deja el alto de la pantalla, hasta doce por columna y
+   * dos columnas; en el celular, con más de seis, las dos columnas van lado a
+   * lado: una sola, larga, le tapaba la rueda. La de la derecha empieza debajo
+   * del aviso de la música.
+   */
   function buildPanel(e: Ev): void {
     panel.removeChildren().forEach((c) => c.destroy({ children: true }));
-    const { W, k, portrait } = G;
+    const { W, H, k, portrait } = G;
     const v = e.victims;
-    const MAX = 24;
+    const fs = S.letra(12 * CHIP_SCALE) * (portrait ? 0.9 : 1);
+    const rowH = fs * 1.36;
+    const top = fs * 1.9;
+    const pie = 8 * k;
+    const y0 = S.top() + (portrait ? 58 : 62) * k;
+    const yDer = Math.max(y0, S.top() + 72 * k);
+    const filas = clamp(Math.floor((H - S.bottom() - 10 * k - yDer - top - pie) / rowH), 3, 12);
+    const MAX = 2 * filas;
     const shown = v.length > MAX ? v.slice(0, MAX - 1) : v;
     const extra = v.length - shown.length;
     const cells = shown.map((i) => ({ i, label: shorten(nm(i), 18) }));
     if (extra > 0) cells.push({ i: -1, label: `+${extra}` });
-    const rowsMax = 12;
-    const rowH = 19 * k;
-    const colW = Math.min(196 * k, (W - 40 * k) / 2);
-    const makePlate = (part: typeof cells): Container => {
+    const porCol = portrait && cells.length > 6 ? Math.ceil(cells.length / 2) : filas;
+    const left = cells.slice(0, porCol), right = cells.slice(porCol);
+    const r = fs * 0.36;
+    const x0 = 20 * k + 2 * r;
+    const headStyle = { fontFamily: MONO, fontSize: fs * 0.85, fontWeight: "900", fill: INK, letterSpacing: 2 * k } as const;
+    const headText = `${t("cChoOutT")} · ${v.length}`;
+    const labels = cells.map((cell) => S.text(cell.label, { fontSize: fs, fontWeight: "800", fill: INK }));
+    const starred = (cell: (typeof cells)[number]): boolean => cell.i >= 0 && prized.has(cell.i);
+    const tail = (star: boolean): number => (star ? 2.6 * r + 18 * k : 12 * k);
+    // Tan ancha como el nombre más largo, hasta 250 px en 720: fija en 250, con
+    // la letra grande tapaba a los bailarines de la orilla de la rueda.
+    const probe = S.text(headText, headStyle);
+    const need = Math.max(probe.width + 24 * k, ...labels.map((tx, j) => x0 + tx.width + tail(starred(cells[j] as (typeof cells)[number]))));
+    probe.destroy();
+    const colMax = right.length || !portrait ? Math.min(250 * k, (W - 40 * k) / 2) : Math.min(250 * k, W - 40 * k);
+    const colW = Math.min(colMax, need);
+    const makePlate = (part: typeof cells, from: number): Container => {
       const c = new Container();
-      const head = S.text(`${t("cChoOutT")} · ${v.length}`, { fontFamily: MONO, fontSize: 13 * k, fontWeight: "900", fill: INK, letterSpacing: 2 * k });
-      const top = 30 * k;
-      const h = top + part.length * rowH + 8 * k;
+      const head = S.text(headText, headStyle);
+      const h = top + part.length * rowH + pie;
       c.addChild(new Graphics().roundRect(5 * k, 5 * k, colW, h, 8 * k).fill(INK)
         .roundRect(0, 0, colW, h, 8 * k).fill(S.dark ? CREAM : 0xffffff).stroke({ width: 3 * k, color: INK }));
-      head.position.set(12 * k, 8 * k);
+      head.position.set(12 * k, (top - head.height) / 2 + 2 * k);
       c.addChild(head);
-      part.forEach((cell, r) => {
-        const y = top + r * rowH;
-        const star = cell.i >= 0 && prized.has(cell.i);
-        if (cell.i >= 0) c.addChild(new Graphics().circle(18 * k, y + rowH / 2, 5.5 * k).fill((dancers[cell.i] as Dancer).col).stroke({ width: 1.5 * k, color: INK }));
-        if (star) c.addChild(new Graphics().star(colW - 18 * k, y + rowH / 2, 5, 7 * k, 3.2 * k).fill(YELLOW).stroke({ width: 1.5 * k, color: INK }));
-        const tx = S.text(cell.label, { fontSize: 13.5 * k, fontWeight: "800", fill: INK });
-        tx.position.set(30 * k, y + 1 * k);
-        const maxW = colW - (star ? 64 : 42) * k;
+      part.forEach((cell, j) => {
+        const y = top + j * rowH;
+        const star = starred(cell);
+        if (cell.i >= 0) c.addChild(new Graphics().circle(12 * k + r, y + rowH / 2, r).fill((dancers[cell.i] as Dancer).col).stroke({ width: 1.5 * k, color: INK }));
+        if (star) c.addChild(new Graphics().star(colW - 12 * k - 1.3 * r, y + rowH / 2, 5, 1.3 * r, 0.6 * r).fill(YELLOW).stroke({ width: 1.5 * k, color: INK }));
+        const tx = labels[from + j] as Text;
+        const maxW = colW - x0 - tail(star);
         if (tx.width > maxW) tx.scale.set(maxW / tx.width);
+        tx.position.set(x0, y + (rowH - tx.height) / 2);
         c.addChild(tx);
       });
       return c;
     };
-    const left = cells.slice(0, rowsMax), right = cells.slice(rowsMax);
-    const a = makePlate(left);
+    const a = makePlate(left, 0);
     panel.addChild(a);
-    const y0 = S.top() + (portrait ? 58 : 62) * k;
     a.position.set(right.length || !portrait ? 14 * k : (W - colW) / 2, y0);
     if (right.length) {
-      const b = makePlate(right);
-      b.position.set(W - colW - 19 * k, y0);
+      const b = makePlate(right, left.length);
+      b.position.set(W - colW - 19 * k, yDer);
       panel.addChild(b);
     }
   }
