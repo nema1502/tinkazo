@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_LABEL_ITEMS, capRecent, juntar, layoutLabels, listaCaidos, type LabelItem } from "./pinata-labels";
+import { MAX_LABEL_ITEMS, capRecent, enVuelo, juntar, layoutLabels, listaCaidos, type LabelItem } from "./pinata-labels";
 
 const B = { w: 390, h: 844, top: 100, bottom: 118 };
 const item = (id: number, x: number, y: number, priority = 0, w = 100, h = 30): LabelItem => ({ id, x, y, w, h, priority });
@@ -207,5 +207,26 @@ describe("listaCaidos: la lista con la letra de la sala", () => {
     const ancha = listaCaidos({ w: 1280, k: 1, top: 82, floor: 560, phone: false, letra: 16, ancho: 500 });
     expect(ancha.cols).toBe(2);
     expect(ancha.colW).toBeCloseTo(256, 9);
+  });
+});
+
+describe("enVuelo", () => {
+  // La ganadora es la 3; la 0 sigue adentro, la 1 vuela, la 2 se quedó quieta
+  // hace poco, la 4 se quedó quieta hace rato, y la 3 (la ganadora) ya cayó.
+  const cs = [
+    { idx: 0, inside: true, settled: false, settledAt: -9, seq: -1 },
+    { idx: 1, inside: false, settled: false, settledAt: -9, seq: 4 },
+    { idx: 2, inside: false, settled: true, settledAt: 9.5, seq: 3 },
+    { idx: 3, inside: false, settled: false, settledAt: -9, seq: 5 },
+    { idx: 4, inside: false, settled: true, settledAt: 5, seq: 1 },
+  ];
+
+  it("lleva los que vuelan y los recién quietos, nunca a la ganadora ni a los de adentro", () => {
+    expect(enVuelo(cs, 3, 10, 1.25, false)).toEqual([{ id: 1, seq: 4 }, { id: 2, seq: 3 }]);
+  });
+
+  it("rota la piñata, no vuela ningún nombre hasta el cartel", () => {
+    expect(enVuelo(cs, 3, 10, 1.25, true)).toEqual([]);
+    expect(capRecent(enVuelo(cs, 3, 10, 1.25, true), 8)).toEqual({ shown: [], more: 0 });
   });
 });

@@ -109,6 +109,30 @@ export function juntar(rs: readonly Rect[], gap = 0): Rect[] {
   return out;
 }
 
+/** Lo que hace falta saber de un caramelo para decidir si su nombre vuela con él. */
+export interface CaramelVuelo { idx: number; inside: boolean; settled: boolean; settledAt: number; seq: number }
+
+/**
+ * Los caramelos que llevan su nombre en vuelo: los que salieron y siguen en
+ * movimiento, o se quedaron quietos hace menos de `linger`, sin la ganadora
+ * (su nombre va aparte, con el golpe del piso).
+ *
+ * Rota la piñata, ninguno hasta el cartel: el chip del último que cayó (la
+ * rival, o el último eliminado) quedaba pegado al brillo del caramelo que gana,
+ * la sala lo leía como ganador y el cartel decía otro nombre (evaluador, 22 de
+ * octubre de 2026). Los que salen en la rotura quedan en la lista de los caídos.
+ */
+export function enVuelo(cs: readonly CaramelVuelo[], ganadora: number, ahora: number, linger: number, rota: boolean): { id: number; seq: number }[] {
+  if (rota) return [];
+  const out: { id: number; seq: number }[] = [];
+  for (const c of cs) {
+    if (c.inside || c.idx === ganadora) continue;
+    if (c.settled && ahora - c.settledAt >= linger) continue;
+    out.push({ id: c.idx, seq: c.seq });
+  }
+  return out;
+}
+
 /**
  * Of the candies still in flight, label the `max` most recently dropped and report
  * how many are left over, for a single compact "+N" chip.

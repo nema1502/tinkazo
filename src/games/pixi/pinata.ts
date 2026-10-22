@@ -4,7 +4,7 @@ import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, fanfare, note } from "../../sound";
 import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
-import { capRecent, juntar, layoutLabels, listaCaidos, type LabelItem, type ListaGeo, type Rect } from "./pinata-labels";
+import { capRecent, enVuelo, juntar, layoutLabels, listaCaidos, type LabelItem, type ListaGeo, type Rect } from "./pinata-labels";
 import { createPile, shouldSettle, type Pile } from "./pinata-monton";
 import { planPalos } from "./pinata-plan";
 import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
@@ -939,7 +939,9 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       return;
     }
     const len = fallen.length;
-    const hl = len > 0 && tAll - lastDropAt < 1.2;
+    // Rota la piñata, sin resaltar: la rival en amarillo mientras baja el caramelo
+    // que gana se leía como la ganadora, y el amarillo es del cartel.
+    const hl = len > 0 && tAll - lastDropAt < 1.2 && !brokeDone;
     if (len === listaKey && hl === listaHl) return;
     listaKey = len;
     listaHl = hl;
@@ -1169,12 +1171,9 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       put(key, q.x - d.w / 2, q.y - d.h, 1000, clamp((tAll - winC.touch) / 0.12, 0, 1), true);
     }
     // Los que van cayendo (o acaban de quedarse quietos), cada uno con su nombre.
-    const flying: { id: number; seq: number }[] = [];
-    for (const c of candies) {
-      if (c.inside || c === winC) continue;
-      if (c.settled && tAll - c.settledAt >= LINGER) continue;
-      flying.push({ id: c.idx, seq: c.seq });
-    }
+    // Rota la piñata, ninguno hasta el cartel (`enVuelo`): el único nombre en la
+    // escena es el de la ganadora, desde el golpe del piso.
+    const flying = enVuelo(candies, winnerIdx, tAll, LINGER, brokeDone);
     const cap = capRecent(flying, MAX_FLIGHT_LABELS);
     cap.shown.forEach((id, rank) => {
       const c = candies[id] as Candy;
