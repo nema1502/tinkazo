@@ -125,6 +125,11 @@ const CORPUS: Fila[] = [
   ["simulación: la firma no verifica (#8)", "fuente", () => simulacion("Error(Contract, #8)"), "invalidSignature"],
   ["simulación: el premio muy largo (#9)", "medido", () => simulacion("Error(Contract, #9)"), "metaTooLong"],
   ["simulación: la firma ni siquiera es un punto de la curva", "medido", () => simulacion("Error(Crypto, InvalidInput)"), "invalidSignature"],
+  // Los límites de recursos de la red y la autorización: la persona no puede hacer nada, y esperar
+  // tampoco lo arregla. Van al mensaje genérico (que ya no dice "rechazó") y el detalle guarda el error del host.
+  ["simulación: se pasó del presupuesto de CPU o memoria de la red", "documentado", () => simulacion("Error(Budget, ExceededLimit)"), "unknown"],
+  ["simulación: se pasó de un límite de almacenamiento", "documentado", () => simulacion("Error(Storage, ExceededLimit)"), "unknown"],
+  ["simulación: la autorización no corresponde a la cuenta", "documentado", () => simulacion("Error(Auth, InvalidAction)"), "unknown"],
 
   // ---------------------------------------------------------------- Pollar (lo que devuelve signAndSubmitTx con status "error")
   ["Pollar: corte en Chrome (details del TypeError)", "fuente", () => pollar("Failed to fetch"), "rpcDown"],
@@ -316,6 +321,8 @@ describe("codigoTecnico: el detalle para copiar", () => {
     expect(c).toBe("HostError: Error(Contract, #5)");
     expect(c).not.toContain("Premio");
     expect(c).not.toMatch(/G[A-Z2-7]{55}/);
+    // Un límite de recursos también queda dicho, para soporte.
+    expect(codigoTecnico(simulacion("Error(Budget, ExceededLimit)"))).toBe("HostError: Error(Budget, ExceededLimit)");
   });
 
   it("tapa las direcciones de cuenta", () => {
