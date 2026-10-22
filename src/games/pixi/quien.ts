@@ -356,6 +356,8 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
   bannerB.anchor.set(0.5);
   banner.addChild(bannerBg, bannerBar, bannerA, bannerB);
   S.hud.addChild(banner);
+  /** El alto del cartel de la pregunta, sin escala: el sello del celular va debajo de él. */
+  let bannerAlto = 0;
   // El sello de la respuesta que decide, grande y en el medio del tablero.
   const bigStamp = new Container();
   const bigStampBg = new Graphics();
@@ -535,6 +537,7 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
     const padX = 30 * k, padY = 14 * k;
     const barra = c.cuenta !== null ? 16 * k : 0;
     const bw = inner + padX * 2, bh = padY * 2 + hA + gap + hB + barra;
+    bannerAlto = bh;
     banner.position.set(g.w / 2, S.top() + (S.portrait() ? 100 : 50) * k);
     bannerBg.clear().roundRect(-bw / 2 + 5 * k, -bh / 2 + 5 * k, bw, bh, 8 * k).fill(INK)
       .roundRect(-bw / 2, -bh / 2, bw, bh, 8 * k).fill(YELLOW).stroke({ width: 3 * k, color: INK });
@@ -709,9 +712,30 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
       const bw2 = bigStampText.width + 44 * k, bh2 = bigStampText.height + 18 * k;
       bigStampBg.clear().roundRect(-bw2 / 2 + 6 * k, -bh2 / 2 + 6 * k, bw2, bh2, 10 * k).fill(INK)
         .roundRect(-bw2 / 2, -bh2 / 2, bw2, bh2, 10 * k).fill(q.has ? 0x17c3b2 : 0xff5cb3).stroke({ width: 5 * k, color: INK });
-      bigStamp.position.set(g.w / 2, (g.top + g.bottom) / 2);
+      // En el medio del tablero, salvo en vertical: ahí las dos últimas cartas
+      // quedan lado a lado justo en el medio y el sello les tapaba los nombres
+      // (evaluador, 22 de octubre de 2026). Va en la franja libre entre la
+      // pregunta y las cartas, achicado si no entra, y golpea con menos rebote.
+      let sy = (g.top + g.bottom) / 2, base = 1;
+      const cel = S.portrait();
+      if (cel) {
+        const arriba = banner.position.y + (bannerAlto / 2) * banner.scale.y;
+        let cartas = Infinity;
+        for (const i of set) {
+          const c = cards[i];
+          // El borde de arriba de la carta, con el meneo incluido.
+          if (c) cartas = Math.min(cartas, cam.toScreen(c.x, c.y - 79 * c.s - Math.max(3, 0.06 * c.s * 158) * k, g.w, g.h).y);
+        }
+        if (Number.isFinite(cartas) && cartas > arriba) {
+          // Girado, el sello ocupa más alto que su caja.
+          const alto = bh2 * Math.cos(0.12) + bw2 * Math.sin(0.12);
+          base = clamp((cartas - arriba - 8 * k) / alto, 0.45, 1);
+          sy = (arriba + cartas) / 2;
+        }
+      }
+      bigStamp.position.set(g.w / 2, sy);
       bigStamp.rotation = -0.12;
-      bigStamp.scale.set(1 + 1.4 * (1 - ease.outBack(clamp(sello / 0.25, 0, 1))));
+      bigStamp.scale.set(base * (1 + (cel ? 0.35 : 1.4) * (1 - ease.outBack(clamp(sello / 0.25, 0, 1)))));
     } else {
       bigStamp.visible = false;
     }
