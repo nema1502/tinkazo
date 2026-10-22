@@ -392,16 +392,16 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
       face.width = face.height = 66;
       face.position.set(W / 2, 47);
       // El nombre completo, en dos líneas: lo que se pregunta tiene que estar a la vista.
+      // Un solo texto con las dos líneas, porque es un nombre y se lee entero:
+      // en dos textos sueltos, con homónimos ("Carlos Choque" y "Carlos Choque 2")
+      // el nombre de pila solo no decía de quién era la carta, y con 50 el auditor
+      // de identificación no leía a nadie (22 de octubre de 2026).
       const partes = nm.trim().split(/\s+/);
       const lineas = partes.length > 1 ? [partes[0] as string, partes.slice(1).join(" ")] : [nm.trim()];
-      const label = new Container();
-      lineas.forEach((ln, j) => {
-        const tx = S.text(ln, { fontSize: 19, fontWeight: "900", fill: INK });
-        tx.anchor.set(0.5);
-        if (tx.width > W - 10) tx.scale.set((W - 10) / tx.width);
-        tx.position.set(W / 2, lineas.length > 1 ? 112 + j * 24 : 124);
-        label.addChild(tx);
-      });
+      const label = S.text(lineas.join("\n"), { fontSize: 19, fontWeight: "900", fill: INK, align: "center", lineHeight: 24 });
+      label.anchor.set(0.5);
+      if (label.width > W - 10) label.scale.set((W - 10) / label.width);
+      label.position.set(W / 2, 124);
       front.addChild(fondo, face, label);
       // El dorso: liso, con un signo de pregunta. Es lo que se ve de los que se sentaron.
       const back = new Graphics()
