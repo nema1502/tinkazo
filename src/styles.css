@@ -504,6 +504,11 @@
     background: transparent; color: #191919; border: 2px solid #191919;
   }
   .ausente-btn.si { background: #191919; color: #ffd24d; }
+  /* "¿No está? Sortear de nuevo" es más largo que el "No está" de antes: con un solo ganador la
+     tarjeta crece lo que haga falta para que entre en un renglón (no hay otra al lado a la que
+     empujar); con varios, se parte parejo. */
+  #winner-cards > .winner-card:only-child .ausente { width: auto; min-width: 0; }
+  .ausente-btn { text-wrap: balance; }
   .ausente-btn:focus-visible { outline: 3px solid #191919; outline-offset: 2px; }
   .verify { margin-top: 22px; border: 2px solid var(--ink); padding: 16px; background: var(--paper); display: grid; grid-template-columns: 1fr auto; gap: 16px; }
   .verify a { color: var(--ink); font-weight: 700; }
