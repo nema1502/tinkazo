@@ -149,7 +149,8 @@ const CORPUS: Fila[] = [
   ["Pollar: billetera externa sin conectar", "fuente", () => pollar("Wallet not connected. Reconnect your wallet to sign."), "wallet"],
 
   // ---------------------------------------------------------------- Freighter
-  ["Freighter: la persona canceló (código -4, en la causa)", "fuente", () => freighter({ code: -4, message: "The user rejected this request." }), "userRejected"],
+  // El -4 lo arma la extensión, no `@stellar/freighter-api` (que solo trae el -1): por eso es documentado.
+  ["Freighter: la persona canceló (código -4, en la causa)", "documentado", () => freighter({ code: -4, message: "The user rejected this request." }), "userRejected"],
   ["Freighter: error interno (código -1)", "fuente", () => freighter({ code: -1, message: "The wallet encountered an internal error. Please try again or contact the wallet if the problem persists." }), "wallet"],
   ["Freighter: no dijo por qué", "fuente", () => freighter(), "wallet"],
   ["Freighter viejo: negó el acceso", "documentado", () => new Error("User declined access"), "userRejected"],
@@ -161,6 +162,16 @@ const CORPUS: Fila[] = [
   ["app: el SDK no pudo leer el resultado de una fallida", "fuente", () => new Error("tx-FAILED"), "busy"],
   ["app: no se confirmó y la transacción seguía viva", "fuente", () => new Error("tx-NOT_FOUND"), "unconfirmed"],
   ["app: venció sin entrar", "fuente", () => new Error("tx-EXPIRED"), "busy"],
+  // Lo que arma `errorDelDesenlace` (envio-sdk.ts) cuando la red no tomó la transacción al recibirla.
+  ["app: rechazada al recibirla, la secuencia corrida", "fuente", () => new Error("tx-REJECTED tx_bad_seq"), "busy"],
+  ["app: rechazada al recibirla, sin saldo", "fuente", () => new Error("tx-REJECTED tx_insufficient_balance"), "noFunds"],
+  ["app: rechazada al recibirla, la cuenta no existe", "fuente", () => new Error("tx-REJECTED tx_no_account"), "noFunds"],
+  ["app: rechazada al recibirla, vencida", "fuente", () => new Error("tx-REJECTED tx_too_late"), "busy"],
+  ["app: rechazada al recibirla, comisión corta", "fuente", () => new Error("tx-REJECTED tx_insufficient_fee"), "busy"],
+  ["app: rechazada al recibirla, malformada", "fuente", () => new Error("tx-REJECTED tx_malformed"), "unknown"],
+  ["app: rechazada al recibirla, sin código legible", "fuente", () => new Error("tx-REJECTED ERROR"), "unknown"],
+  ["app: el envío no contestó a tiempo (pudo haber llegado)", "fuente", () => new Error("envio-lento"), "unconfirmed"],
+  ["app: el sorteo se mandó y no se pudo confirmar (con el corte en la causa)", "fuente", () => new Error("sin-confirmar", { cause: new TypeError("Failed to fetch") }), "unconfirmed"],
   ["app: el RPC contestó algo que no se entiende al armar", "fuente", () => new Error("rpc-sin-respuesta: Cannot read properties of undefined (reading 'headerXdr')"), "rpcDown"],
   ["app: la ronda quedó cerca antes de mandar", "fuente", () => new Error("la ronda quedó cerca antes de mandar el sello (faltan 12 s): Error(Contract, #5)"), "roundTooSoon"],
 ];
@@ -286,6 +297,11 @@ describe("esDeRed", () => {
     expect(esDeRed(simulacion("Error(Contract, #5)"))).toBe(false);
     expect(esDeRed(freighter({ code: -4, message: "The user rejected this request." }))).toBe(false);
     expect(esDeRed(new Error("account-wait-cancelled"))).toBe(false);
+  });
+
+  it("un envío que no contestó no es un corte antes de mandar: pudo haber llegado, y no se reintenta como si nada", () => {
+    expect(esDeRed(new Error("envio-lento"))).toBe(false);
+    expect(esDeRed(new Error("sin-confirmar", { cause: new TypeError("Failed to fetch") }))).toBe(false);
   });
 });
 

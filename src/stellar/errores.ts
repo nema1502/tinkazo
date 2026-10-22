@@ -87,8 +87,12 @@ const BILLETERA = /wallet-rejected|wallet encountered an internal error|Wallet n
  * Se mandó y no se sabe cómo terminó: quedó en la cola (`DUPLICATE`), la
  * espera se acabó con la transacción todavía viva, o el resultado no llegó.
  * Ver `envio.ts`: un sello nunca se vuelve a mandar sin antes saber esto.
+ *
+ * `envio-lento` es el tope de un envío que no contestó (`enviarYConfirmar`): el
+ * pedido pudo haber llegado. No va con los cortes de red a propósito: un corte
+ * de red antes de mandar nada se reintenta solo (`sello-seguro.ts`), y esto no.
  */
-const SIN_CONFIRMAR = /tx-NOT_FOUND|tx-PENDING|\bDUPLICATE\b|sin-confirmar|pollar-pending|for transaction to complete, but it did not/;
+const SIN_CONFIRMAR = /tx-NOT_FOUND|tx-PENDING|\bDUPLICATE\b|sin-confirmar|envio-lento|pollar-pending|for transaction to complete, but it did not/;
 
 /**
  * La red no la tomó y hay que volver a probar: ocupada (`TRY_AGAIN_LATER`, o un
@@ -232,7 +236,9 @@ export function esDeRed(e: unknown): boolean {
   // Un sello incierto no se reintenta como un corte cualquiera: primero se averigua.
   if (esIncierto(e)) return false;
   const texto = textoDelError(e);
-  if (CANCELO.test(texto)) return false;
+  // Lo que se mandó y no se sabe cómo terminó tampoco, aunque la causa sea un corte:
+  // quien pregunta esto decide si reintentar como si no se hubiera mandado nada.
+  if (CANCELO.test(texto) || SIN_CONFIRMAR.test(texto)) return false;
   return esErrorDelServidorRpc(e) || esCorteDelSdk(e) || DE_RED.test(texto);
 }
 
