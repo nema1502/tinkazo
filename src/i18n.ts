@@ -1600,8 +1600,13 @@ export const T: Record<Lang, Dict> = {
     evnVacio: "Todavía no hay eventos. Creá uno, o ponele nombre a un grupo de sorteos.",
     evnNombrar: "Ponerle nombre",
     evnSumado: "Sumado a {nombre}.", evnQuitado: "Quitado de {nombre}.", evnNombreVacio: "Ponele un nombre al evento.",
-    evnCreado: "Evento creado: {nombre}.", evnSinSorteos: "Todavía no tiene sorteos: sumale alguno desde Mis sorteos.",
+    evnCreado: "Evento creado: {nombre}.", evnSinSorteos: "Todavía no tiene sorteos: cuando sortees, sumalos desde acá.",
     evnRenombrado: "Nombre guardado: {nombre}.",
+    // Un evento recién creado dice cómo seguir (evaluación crítica de experiencia, 21 de octubre de 2026, hallazgo 2).
+    evnNuevo: "Nuevo evento", evnNombrarHoy: "Ponerle nombre a los sorteos de hoy", evnNombrarDel: "Ponerle nombre a los sorteos del {f}",
+    evnCreadoSumar: "Evento creado: {nombre}. Ahora sumale sorteos.", evnPorQue: "Sumale un sorteo para compartirlo.",
+    evnSumarT: "Sumarle sorteos ({n})", evnSumarBtn: "Sumar", evnSumarA: "Sumar {s} a {e}",
+    evnSumarMas: "Los demás se suman desde su tarjeta, en la lista.", evnEn: "En: {e}",
     vCompartir: "Compartir este sorteo",
     cTroSpent: (n) => pick([`¡Se le acabó la cuerda a ${n}!`, `¡Se apagó el trompo de ${n}!`, `¡${n} se queda sin cuerda!`]),
     // --- Constelación, sapo y ¿Quién es? (7 de octubre de 2026).
@@ -2923,8 +2928,12 @@ export const T: Record<Lang, Dict> = {
     evnVacio: "No events yet. Create one, or name a group of draws.",
     evnNombrar: "Name it",
     evnSumado: "Added to {nombre}.", evnQuitado: "Removed from {nombre}.", evnNombreVacio: "Give the event a name.",
-    evnCreado: "Event created: {nombre}.", evnSinSorteos: "No draws yet: add one from My draws.",
+    evnCreado: "Event created: {nombre}.", evnSinSorteos: "No draws yet: once you run one, add it from here.",
     evnRenombrado: "Name saved: {nombre}.",
+    evnNuevo: "New event", evnNombrarHoy: "Name today's draws", evnNombrarDel: "Name the draws from {f}",
+    evnCreadoSumar: "Event created: {nombre}. Now add draws to it.", evnPorQue: "Add a draw to share it.",
+    evnSumarT: "Add draws ({n})", evnSumarBtn: "Add", evnSumarA: "Add {s} to {e}",
+    evnSumarMas: "Add the rest from their card, in the list.", evnEn: "In: {e}",
     vCompartir: "Share this draw",
     cTroSpent: (n) => pick([`${n}'s top runs out of spin!`, `${n}'s top stops spinning!`, `${n} is out of spin!`]),
     // --- Constellation, sapo and Guess Who (7 October 2026).

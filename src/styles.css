@@ -1205,11 +1205,19 @@
   .evn .mini { min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }
   .evn-aviso { font-weight: 800; margin: 10px 0 0; }
   .evn-card { display: grid; gap: 8px; border-top: 2px dashed var(--ink2); margin-top: 14px; padding-top: 14px; }
-  .evn-detalle summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 800; font-size: 14px; }
+  .evn-detalle summary, .evn-sumar summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 800; font-size: 14px; }
   .evn-sorteos { display: grid; gap: 10px; margin: 6px 0 0; padding: 0; list-style: none; }
   .evn-sorteo { border: 2px solid var(--ink2); padding: 10px 12px; }
   .evn-sorteo .hc-meta { margin: 4px 0 0; }
   .hc-sumar { min-height: 44px; max-width: 100%; padding: 6px 8px; font: inherit; font-size: 14px; color: var(--ink); background: var(--paper); border: var(--bw) solid var(--ink); }
+  /* "Nuevo evento" despliega el formulario (el display de arriba le ganaba a hidden); un evento
+     vacío dice por qué no se comparte y ofrece sus sorteos para sumar; un sorteo que ya está en
+     un evento sigue en la lista, con su nombre (evaluación crítica de experiencia, hallazgo 2). */
+  .evn-nuevo[hidden] { display: none; }
+  .evn-arriba { margin: 0 0 4px; }
+  .evn-porque { margin: -2px 0 0; }
+  .hist-grupo { display: grid; gap: 14px; }
+  .hc-en { display: inline-block; margin-top: 6px; padding: 2px 8px; font-size: 12.5px; font-weight: 800; color: var(--ink); border: 2px dashed var(--ink2); overflow-wrap: anywhere; }
   /* El margen automático va explícito: el reinicio de márgenes de la hoja lo anula y el diálogo se iba a la esquina.
      Compartir (compartir.ts): la foto a la izquierda y lo que se hace a la derecha, con
      "Compartir por WhatsApp" arriba de todo; en el celular, la foto arriba y el botón
