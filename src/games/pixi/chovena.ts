@@ -1259,6 +1259,15 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   const wNow: ReturnType<typeof where>[] = dancers.map(() => ({ p: { rho: 0, th: 0 }, alpha: 1, seated: 0, rows: 0 }));
   const pNow: { x: number; y: number; s: number }[] = dancers.map(() => ({ x: 0, y: 0, s: 1 }));
   const handsNow: { L: Pt; R: Pt }[] = dancers.map(() => ({ L: { x: 0, y: 0 }, R: { x: 0, y: 0 } }));
+  /** A qué vecino va cada mano (la izquierda y la derecha) en este cuadro, para que la cadena use esa. */
+  const brazos: ([number, number] | null)[] = dancers.map(() => null);
+  /** La fase del tambaleo de cada uno, desde el último corte. */
+  const wobblePh = (d: Dancer, x: number): number => (x - stopAt) * Math.PI * 2 * 3 + hash(d.idx, 53) * 6;
+  /**
+   * Cuánto llega un brazo estirado, en largos de brazo. Más, y parecían de
+   * goma; menos, y en una rueda chica las manos no se alcanzaban.
+   */
+  const ALCANCE = 2;
   /** En la rueda, de la mano, en este momento. */
   const inRingNow = (d: Dancer, x: number): boolean => (d.outAt < 0 || x < d.outAt) && !(d === win && x >= T_CROWN);
 
@@ -1275,6 +1284,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     });
     const nb = nbrs[epochAt(x)] as Map<number, [number, number]>;
     const linked = x >= T_JOIN + JOIN * 0.6;
+    brazos.fill(null);
     for (const d of dancers) {
       const v = d.view as View;
       const w = wNow[d.idx] as ReturnType<typeof where>;
@@ -1308,7 +1318,8 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       let rL = 1, rR = 1;
       const wob = wobbleOf(d, x);
       v.alert.visible = wob > 0.05;
-      const shL = { x: pr.x - 0.11 * pr.s, y: pr.y - 0.75 * pr.s }, shR = { x: pr.x + 0.11 * pr.s, y: pr.y - 0.75 * pr.s };
+      /** De la mano con los vecinos: el tambaleo ya está puesto en el cuerpo y en los brazos. */
+      let tomadas = false;
       if (d === win && x >= T_CROWN) {
         // La ganadora salta con los brazos arriba.
         y -= Math.abs(Math.sin(x * 7)) * 0.3 * pr.s;
@@ -1344,33 +1355,67 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
         const pair = nb.get(d.idx);
         const fo = fakeOut(d, x);
         if (pair && linked && fo < 0.3) {
+          // El que trastabilla se tambalea con el cuerpo, sin soltarse: los
+          // brazos apuntan desde los hombros ya girados y la mano sigue en la
+          // del vecino. Con el brazo sacudido aparte, la mano se iba lejos y la
+          // cadena quedaba como un palo de un cuerpo de largo (revisión de
+          // juegos, 20 de octubre de 2026).
+          tomadas = true;
+          if (wob > 0) v.body.rotation += Math.sin(wobblePh(d, x)) * wob;
+          const rb = v.body.rotation, hipY = y - 0.44 * pr.s;
+          const hombro = (sx: number): Pt => ({
+            x: pr.x + sx * pr.s * Math.cos(rb) + 0.31 * pr.s * Math.sin(rb),
+            y: hipY + sx * pr.s * Math.sin(rb) - 0.31 * pr.s * Math.cos(rb),
+          });
+          const shL = hombro(-0.11), shR = hombro(0.11);
           const pa = pNow[pair[0]] as { x: number; y: number; s: number }, pb = pNow[pair[1]] as { x: number; y: number; s: number };
           const ta = { x: pa.x, y: pa.y - 0.72 * pa.s }, tb = { x: pb.x, y: pb.y - 0.72 * pb.s };
-          const [tl, tr] = pair[0] === pair[1] ? [ta, ta] : ta.x <= tb.x ? [ta, tb] : [tb, ta];
-          aL = aim(Math.atan2(-(tl.x - shL.x), tl.y - shL.y), 0.35, 2.4);
-          aR = aim(Math.atan2(-(tr.x - shR.x), tr.y - shR.y), -2.4, -0.35);
+          /** El ángulo de un brazo hacia `t`, contado desde el cuerpo. */
+          const hacia = (t: Pt, sh: Pt): number => wrap(Math.atan2(-(t.x - sh.x), t.y - sh.y) - rb);
+          let tl = ta, tr = tb, il = pair[0], ir = pair[1];
           if (pair[0] === pair[1]) {
             // De las dos manos con la pareja: los dos brazos hacia el otro.
-            const toward = Math.atan2(-(ta.x - pr.x), ta.y - (pr.y - 0.75 * pr.s));
+            const toward = hacia(ta, { x: (shL.x + shR.x) / 2, y: (shL.y + shR.y) / 2 });
             aL = toward + 0.18;
             aR = toward - 0.18;
+          } else {
+            // Qué mano va con cada vecino: la que menos cruza el cuerpo. Con la
+            // izquierda siempre hacia el de más a la izquierda, al costado de una
+            // rueda chica, con los dos vecinos del mismo lado (uno más atrás y
+            // otro más adelante), un brazo colgaba sin tomar a nadie y la otra
+            // mano llevaba las dos cadenas, una como un palo de un cuerpo de largo.
+            const directo = cruce(hacia(ta, shL), 1) + cruce(hacia(tb, shR), -1);
+            const cambiado = cruce(hacia(tb, shL), 1) + cruce(hacia(ta, shR), -1);
+            if (cambiado < directo - 1e-6 || (Math.abs(cambiado - directo) <= 1e-6 && tb.x < ta.x)) [tl, tr, il, ir] = [tb, ta, pair[1], pair[0]];
+            aL = aim(hacia(tl, shL), 0.35, 2.4, -1.6);
+            aR = aim(hacia(tr, shR), -2.4, -0.35, 1.6);
+            // El brazo que cruza por delante del cuerpo va adelante: de espaldas
+            // queda detrás y asoma la mano.
+            if (facing && aL < 0.2) v.armL.zIndex = 2;
+            if (facing && aR > -0.2) v.armR.zIndex = 2;
           }
+          brazos[d.idx] = [il, ir];
           // La mano del lado del que se soltó y se va, cae: si no, lo seguía
           // señalando mientras caminaba (en la final, a la rival).
           const suelta = (i: number): number => {
             const o = dancers[i] as Dancer;
             return o.outAt >= 0 ? clamp((x - o.outAt) / 0.25, 0, 1) : 0;
           };
-          const [il, ir] = pair[0] === pair[1] || ta.x <= tb.x ? pair : [pair[1], pair[0]];
           aL += (0.3 - aL) * suelta(il);
           aR += (-0.3 - aR) * suelta(ir);
           // Con la rueda chica, cada brazo llega hasta la mitad del camino al
           // vecino, que estira el suyo: sin eso, la cadena hacía de palo.
-          const largo = (t: Pt, sh: Pt): number => clamp(Math.hypot(t.x - sh.x, t.y - sh.y) / 2 / (0.3 * pr.s), 1, 2);
+          const largo = (t: Pt, sh: Pt): number => clamp(Math.hypot(t.x - sh.x, t.y - sh.y) / 2 / (0.3 * pr.s), 1, ALCANCE);
           rL = 1 + (largo(tl, shL) - 1) * (1 - suelta(il));
           rR = 1 + (largo(tr, shR) - 1) * (1 - suelta(ir));
           aL += 0.1 * sb;
           aR += 0.1 * sb;
+          // Del tambaleo, a los brazos les llega un temblor y nada más.
+          if (wob > 0) {
+            const ph = wobblePh(d, x);
+            aL += Math.sin(ph * 1.3) * wob * 0.5;
+            aR -= Math.sin(ph * 1.1 + 1) * wob * 0.5;
+          }
         } else if (fo >= 0.3) {
           // Se soltó antes de tiempo: los brazos caen, con vergüenza.
           aL = 0.3;
@@ -1396,11 +1441,11 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
         v.armL.rotation = aL;
         v.armR.rotation = aR;
       }
-      if (wob > 0) {
-        const ph = (x - stopAt) * Math.PI * 2 * 3 + hash(d.idx, 53) * 6;
+      if (wob > 0 && !tomadas) {
+        // Sin nadie de la mano (se soltó, o en el corte falso), los brazos se
+        // sacuden con el cuerpo.
+        const ph = wobblePh(d, x);
         v.body.rotation += Math.sin(ph) * wob;
-        // Con el brazo estirado (rL), el mismo ángulo mueve la mano el doble:
-        // se divide, para que al tambalearse la cadena no se haga un palo.
         v.armL.rotation += (Math.sin(ph * 1.3) * wob * 3.2) / rL;
         v.armR.rotation -= (Math.sin(ph * 1.1 + 1) * wob * 3.2) / rR;
       }
@@ -1422,20 +1467,38 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   }
 
   /**
-   * El ángulo del brazo, entre `lo` y `hi`. Un vecino casi justo encima (los
-   * dos de un costado de una rueda chica, ver `shapeOf`) cae del otro lado de
-   * la vuelta, y con el `clamp` solo el brazo apuntaba para abajo, lejos de la
-   * mano que tenía que tomar: ese brazo sube hasta donde llega. Si el vecino
-   * está arriba pero del lado de adentro de la vertical, el brazo sube derecho
-   * y no hasta el límite de afuera: con el límite, la mano quedaba del otro
-   * lado de la cabeza y la cadena la cruzaba en horizontal, como una barra. Un
-   * vecino que queda cruzando el cuerpo sigue como antes: el brazo cuelga,
-   * porque subirlo lo dejaba señalando a nadie.
+   * El ángulo del brazo. De `lo` a `hi` va de su lado del cuerpo; hasta
+   * `cruza` puede cruzar por delante, de abajo hasta la horizontal, hacia un
+   * vecino que quedó del otro lado (al costado de una rueda chica los dos
+   * vecinos están del mismo lado: ver `cruce`). Antes no cruzaba: el brazo
+   * colgaba sin tomar a nadie y la cadena salía de la otra mano, como un palo.
+   *
+   * Un vecino casi justo encima (los dos de un costado de una rueda chica, ver
+   * `shapeOf`) cae del otro lado de la vuelta: ese brazo sube hasta donde
+   * llega. Si el vecino está arriba pero del lado de adentro de la vertical, el
+   * brazo sube derecho y no hasta el límite de afuera: con el límite, la mano
+   * quedaba del otro lado de la cabeza y la cadena la cruzaba en horizontal,
+   * como una barra.
    */
-  function aim(a: number, lo: number, hi: number): number {
-    if (a >= lo && a <= hi) return a;
+  function aim(a: number, lo: number, hi: number, cruza: number): number {
+    const min = lo > 0 ? cruza : lo, max = lo > 0 ? hi : cruza;
+    if (a >= min && a <= max) return a;
     const up = Math.abs(lo) > Math.abs(hi) ? lo : hi;
-    return Math.abs(a) > Math.PI - 0.8 ? (Math.sign(a) === Math.sign(up) ? up : Math.sign(up) * Math.PI) : clamp(a, lo, hi);
+    return Math.abs(a) > Math.PI - 0.8 ? (Math.sign(a) === Math.sign(up) ? up : Math.sign(up) * Math.PI) : lo > 0 ? min : max;
+  }
+
+  /**
+   * Cuánto tiene que cruzar el cuerpo un brazo para llegar al ángulo `a`: 0 si
+   * está de su lado (la izquierda, `lado` 1, de 0,35 a 2,4; la derecha, al
+   * revés), lo que pasa de ahí si cruza por delante, y mucho si no llega (por
+   * encima de la cabeza, del otro lado). Con esto se elige qué mano va con
+   * cada vecino.
+   */
+  function cruce(a: number, lado: 1 | -1): number {
+    const b = a * lado;
+    if (b >= 0.35 && b <= 2.4) return 0;
+    if (b >= -1.6 && b < 0.35) return 0.35 - b;
+    return 10;
   }
 
   /** Cuánto llega el brazo: estira el brazo y corre la mano hasta la punta. */
@@ -1475,14 +1538,27 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
         if (fakeOut(da, x) >= 0.3 || fakeOut(db, x) >= 0.3) continue;
         const pa = pNow[ia] as { x: number; y: number; s: number }, pb = pNow[ib] as { x: number; y: number; s: number };
         if (m > 3 && Math.hypot(pa.x - pb.x, (pa.y - pb.y) / flat) > maxGap) continue;
-        // La mano de cada uno que queda más cerca del otro.
+        // La mano que cada uno le da al otro (`brazos`), o la que le queda más
+        // cerca. Con la más cerca sola, al costado de una rueda chica una mano
+        // llevaba las dos cadenas y la otra colgaba.
         const ha = handsNow[ia] as { L: Pt; R: Pt }, hb = handsNow[ib] as { L: Pt; R: Pt };
-        const near = (h: { L: Pt; R: Pt }, to: Pt): Pt => (Math.hypot(h.L.x - to.x, h.L.y - to.y) <= Math.hypot(h.R.x - to.x, h.R.y - to.y) ? h.L : h.R);
-        const a = near(ha, { x: pb.x, y: pb.y - 0.7 * pb.s }), b = near(hb, { x: pa.x, y: pa.y - 0.7 * pa.s });
+        const mano = (i: number, j: number, h: { L: Pt; R: Pt }, to: Pt): Pt => {
+          const br = brazos[i];
+          if (br && br[0] !== br[1]) {
+            if (br[0] === j) return h.L;
+            if (br[1] === j) return h.R;
+          }
+          return Math.hypot(h.L.x - to.x, h.L.y - to.y) <= Math.hypot(h.R.x - to.x, h.R.y - to.y) ? h.L : h.R;
+        };
+        const a = mano(ia, ib, ha, { x: pb.x, y: pb.y - 0.7 * pb.s }), b = mano(ib, ia, hb, { x: pa.x, y: pa.y - 0.7 * pa.s });
         // Mientras la rueda se cierra, siguen de la mano los que ya lo estaban;
         // los vecinos nuevos se toman cuando las manos se alcanzan, no por
-        // encima del hueco del que salió (lo vio la revisión visual).
-        if (cerrando && !nbPrev?.get(ia)?.includes(ib) && Math.hypot(a.x - b.x, a.y - b.y) > 0.5 * Math.min(pa.s, pb.s)) continue;
+        // encima del hueco del que salió (lo vio la revisión visual). Mientras
+        // se arma, lo mismo con todos: en los primeros cuadros de la cadena los
+        // bailarines todavía venían de las filas, y un eslabón cruzaba la plaza
+        // como un palo de hasta dos cuerpos.
+        const nuevo = x < T_JOIN + JOIN || (cerrando && !nbPrev?.get(ia)?.includes(ib));
+        if (nuevo && Math.hypot(a.x - b.x, a.y - b.y) > 0.5 * Math.min(pa.s, pb.s)) continue;
         const wdt = 0.05 * Math.min(pa.s, pb.s);
         chain.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: wdt + 2 * G.k, color: INK, cap: "round" });
         chain.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: wdt, color: 0xc68a5c, cap: "round" });
@@ -1629,10 +1705,12 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   const blandos = new WeakSet<Rect>();
   /**
    * Pone el nombre de `d` encima de su cabeza, o lo más cerca que entra sin
-   * pisar nada de `placed`. Lo reservado (el contador, el aviso de la música,
-   * el conjunto, el cartel y la lista de los que salen) no se pisa nunca: si
-   * no queda lugar, el nombre no se dibuja en este cuadro. `suave`, lo mismo
-   * con los otros nombres (pasar lista): mejor uno menos que dos encimados.
+   * pisar nada de `placed`: a los costados, apilado en su columna o en la de al
+   * lado, y si arriba no hay lugar, debajo de los pies. Lo reservado (el
+   * contador, el aviso de la música, el conjunto, el cartel y la lista de los
+   * que salen) no se pisa nunca: si no queda lugar, el nombre no se dibuja en
+   * este cuadro. `suave` (pasar lista), lo mismo con los otros nombres: mejor
+   * uno menos que dos encimados.
    */
   function placeChip(d: Dancer, x: number, placed: Rect[], scale = 1, suave = false): void {
     const { W, H, k } = G;
@@ -1641,13 +1719,14 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     // En las filas del arranque, los hombres de adelante llevan el nombre a
     // los pies: arriba tapaba el ruedo de color de las mujeres de atrás.
     const abajo = !d.tipoy && d.row.v >= frontV - 1e-6 && (wNow[d.idx] as ReturnType<typeof where>).rows > 0.5;
-    const head = abajo ? cam.toScreen(p.x, p.y + p.s * 0.05, W, H) : cam.toScreen(p.x, p.y - p.s * 1.08, W, H);
+    const cabeza = cam.toScreen(p.x, p.y - p.s * 1.08, W, H), pies = cam.toScreen(p.x, p.y + p.s * 0.05, W, H);
+    const head = abajo ? pies : cabeza;
     // Si su dueño quedó fuera de cuadro (los que se van, con la cámara cerca),
     // el nombre no va: pegado al borde de la pantalla engañaba.
     if (head.x < -10 * k || head.x > W + 10 * k || head.y < S.top() - 30 * k || head.y > H - S.bottom() + 40 * k) return;
     // Al que se tambalea, el nombre un poco más arriba: si no, el "¡!" lo pinchaba.
     const alto = wobbleOf(d, x) > 0.05 ? 1.54 : 1.22;
-    const s = abajo ? head : cam.toScreen(p.x, p.y - p.s * alto, W, H);
+    const arriba = cam.toScreen(p.x, p.y - p.s * alto, W, H);
     const chip = (d.chip ??= chips.addChild(S.chip(nm(d.idx), G.portrait ? 0.9 : 1)));
     chip.scale.set(scale);
     chip.visible = true;
@@ -1655,115 +1734,146 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     // mano, los chips de letra legible se encimaban (16 de octubre de 2026).
     const cw = chip.width, ch = chip.height;
     const lo = S.top() + ch / 2 + 2 * k, hi = H - S.bottom() - ch / 2 - 4 * k;
-    const hits = (cx: number, cy: number): boolean =>
-      placed.some((r) => cx < r.x + r.w && cx + cw > r.x && cy - ch / 2 < r.y + r.h / 2 && cy + ch / 2 > r.y - r.h / 2);
-    // Primero encima de la cabeza, después a los costados, y recién después apilado.
-    const x0 = clamp(s.x - cw / 2, 8 * k, W - cw - 8 * k);
-    const y0 = clamp(abajo ? s.y + ch / 2 + 2 * k : s.y - ch / 2 - 2 * k, lo, hi);
-    const otra = abajo ? ch + 2 * k : -(ch + 2 * k);
-    const cands: [number, number][] = [[x0, y0], [x0 - cw * 0.62, y0], [x0 + cw * 0.62, y0], [x0, y0 + otra], [x0 - cw * 0.62, y0 + otra], [x0 + cw * 0.62, y0 + otra]];
-    let cx = x0, cy = y0;
-    const libre = cands.map(([a, b]) => [clamp(a, 8 * k, W - cw - 8 * k), clamp(b, lo, hi)] as [number, number]).find(([a, b]) => !hits(a, b));
-    let hallado = !!libre;
-    if (libre) [cx, cy] = libre;
-    // Si no, apilado en su columna (hacia arriba; hacia abajo, los de los pies)
-    // y, si la columna se queda sin lugar, en la de al lado: la misma búsqueda
-    // que `S.tags` en los demás juegos. El respaldo de antes dejaba el nombre
-    // encima de otro, o corrido contra el borde debajo del aviso de la música.
-    for (const dx of hallado ? [] : [0, 0.62, -0.62, 1.24, -1.24]) {
-      const a = clamp(x0 + dx * cw, 8 * k, W - cw - 8 * k);
-      let b = y0;
-      for (let tries = 0; tries < 12; tries++) {
-        const hit = placed.find((r) => a < r.x + r.w && a + cw > r.x && b - ch / 2 < r.y + r.h / 2 && b + ch / 2 > r.y - r.h / 2);
-        if (!hit) {
-          hallado = true;
-          break;
-        }
-        b = abajo ? hit.y + (hit.h + ch) / 2 + 2 * k : hit.y - (hit.h + ch) / 2 - 2 * k;
-        if (b < lo || b > hi) break;
-      }
-      if (hallado) {
-        [cx, cy] = [a, b];
-        break;
-      }
-    }
-    if (!hallado) {
-      if (suave) {
-        chip.visible = false;
-        return;
-      }
-      for (let tries = 0; tries < 8; tries++) {
-        const hit = placed.find((r) => cx < r.x + r.w && cx + cw > r.x && cy - ch / 2 < r.y + r.h / 2 && cy + ch / 2 > r.y - r.h / 2);
-        if (!hit) break;
-        cy = hit.y - (hit.h + ch) / 2 - 2 * k;
-        if (cy < lo) {
-          cy = hit.y + (hit.h + ch) / 2 + 2 * k;
-          cx = clamp(cx + cw * 0.35, 8 * k, W - cw - 8 * k);
+    const enX = (a: number): number => clamp(a, 8 * k, W - cw - 8 * k);
+    const pisa = (a: number, b: number, r: Rect): boolean => a < r.x + r.w && a + cw > r.x && b - ch / 2 < r.y + r.h / 2 && b + ch / 2 > r.y - r.h / 2;
+    const x0 = enX(arriba.x - cw / 2);
+    // Los dos lados, primero el suyo: arriba de la cabeza (las filas, a los
+    // pies) y después el otro. Cada lado se apila alejándose del cuerpo. Con
+    // el lado de abajo, en el celular, los nombres de los que salían en un
+    // corte encontraban lugar: arriba estaban el "¡QUIETOS!" y el conjunto, y
+    // tres de los cuatro no se dibujaban (revisión del 21 de octubre de 2026).
+    const ladoArriba = { y: clamp(arriba.y - ch / 2 - 2 * k, lo, hi), dir: -1 };
+    const ladoAbajo = { y: clamp(pies.y + ch / 2 + 2 * k, lo, hi), dir: 1 };
+    const lados = abajo ? [ladoAbajo, ladoArriba] : [ladoArriba, ladoAbajo];
+    // El lugar libre más cercano: cada paso de costado o de pila cuesta uno, y
+    // cambiar de lado, uno y medio.
+    let mejor: { a: number; b: number; costo: number } | null = null;
+    const ultimos: [number, number][] = [];
+    for (let li = 0; li < lados.length; li++) {
+      const lado = lados[li] as { y: number; dir: number };
+      for (const dx of [0, 0.62, -0.62, 1.24, -1.24]) {
+        const a = enX(x0 + dx * cw);
+        let b = lado.y;
+        for (let pila = 0; pila < 12; pila++) {
+          const hit = placed.find((r) => pisa(a, b, r));
+          if (!hit) {
+            const costo = Math.abs(dx) + Math.abs(b - lado.y) / (ch + 2 * k) + 1.5 * li;
+            if (!mejor || costo < mejor.costo) mejor = { a, b, costo };
+            break;
+          }
+          ultimos.push([a, b]);
+          b = lado.dir > 0 ? hit.y + (hit.h + ch) / 2 + 2 * k : hit.y - (hit.h + ch) / 2 - 2 * k;
+          if (b < lo || b > hi) break;
         }
       }
     }
-    // Lo reservado no se pisa nunca: si el nombre sigue encima del contador, del
-    // aviso, del conjunto, del cartel o de la lista, no se dibuja en este cuadro.
-    if (!hallado && placed.some((r) => !blandos.has(r) && cx < r.x + r.w && cx + cw > r.x && cy - ch / 2 < r.y + r.h / 2 && cy + ch / 2 > r.y - r.h / 2)) {
+    let lugar: { a: number; b: number } | null = mejor;
+    // Lo reservado no se pisa nunca: si no hay lugar, el nombre no se dibuja en este cuadro.
+    if (!lugar && !suave) {
+      // Nada libre. El nombre de uno que sale, que se tambalea o de la final se
+      // dibuja igual, donde menos pisa a otro nombre; lo reservado no se pisa
+      // nunca. El respaldo de antes lo corría a ciegas, y lo dejaba encima de
+      // otro o debajo del aviso de la música.
+      let menos = Infinity;
+      for (const [a, b] of ultimos) {
+        if (placed.some((r) => !blandos.has(r) && pisa(a, b, r))) continue;
+        const area = placed.reduce((s2, r) => s2 + (pisa(a, b, r) ? (Math.min(a + cw, r.x + r.w) - Math.max(a, r.x)) * (Math.min(b + ch / 2, r.y + r.h / 2) - Math.max(b - ch / 2, r.y - r.h / 2)) : 0), 0);
+        if (area < menos) {
+          menos = area;
+          lugar = { a, b };
+        }
+      }
+    }
+    if (!lugar) {
       chip.visible = false;
       return;
     }
+    const cx = lugar.a, cy = lugar.b;
     const mio = { x: cx, y: cy, w: cw, h: ch };
     blandos.add(mio);
     placed.push(mio);
     chip.position.set(cx, cy);
-    // Si quedó lejos de su dueño, un hilo hasta la cabeza.
-    const ax = clamp(head.x, cx + 6 * k, cx + cw - 6 * k);
-    const ay = abajo ? cy - ch / 2 : cy + ch / 2;
-    if (Math.hypot(ax - head.x, ay - head.y) > 22 * k) {
-      leaders.moveTo(ax, ay).lineTo(head.x, head.y).stroke({ width: 2 * k, color: S.dark ? CREAM : INK, alpha: 0.7 });
-      leaders.circle(head.x, head.y, 2.6 * k).fill({ color: S.dark ? CREAM : INK, alpha: 0.8 });
+    // Si quedó lejos de su dueño, un hilo hasta la cabeza, o hasta los pies si
+    // el nombre quedó debajo.
+    const debajo = cy > (cabeza.y + pies.y) / 2;
+    const ancla = debajo ? pies : cabeza;
+    const ax = clamp(ancla.x, cx + 6 * k, cx + cw - 6 * k);
+    const ay = debajo ? cy - ch / 2 : cy + ch / 2;
+    if (Math.hypot(ax - ancla.x, ay - ancla.y) > 22 * k) {
+      leaders.moveTo(ax, ay).lineTo(ancla.x, ancla.y).stroke({ width: 2 * k, color: S.dark ? CREAM : INK, alpha: 0.7 });
+      leaders.circle(ancla.x, ancla.y, 2.6 * k).fill({ color: S.dark ? CREAM : INK, alpha: 0.8 });
     }
   }
 
-  /** La lista de los que salen, cuando son muchos para ponerles el nombre encima. */
+  /**
+   * La lista de los que salen, cuando son muchos para ponerles el nombre
+   * encima. Con la letra de los nombres de la escena (`CHIP_SCALE`, 19 px en 720)
+   * y `S.letra`, que crece con la pantalla y con el modo para compartir: a 13 px
+   * no se leía desde el fondo de la sala (evaluador visual, 21 de octubre de 2026).
+   * Entran las filas que deja el alto de la pantalla, hasta doce por columna y
+   * dos columnas; en el celular, con más de seis, las dos columnas van lado a
+   * lado: una sola, larga, le tapaba la rueda. La de la derecha empieza debajo
+   * del aviso de la música.
+   */
   function buildPanel(e: Ev): void {
     panel.removeChildren().forEach((c) => c.destroy({ children: true }));
-    const { W, k, portrait } = G;
+    const { W, H, k, portrait } = G;
     const v = e.victims;
-    const MAX = 24;
+    const fs = S.letra(12 * CHIP_SCALE) * (portrait ? 0.9 : 1);
+    const rowH = fs * 1.36;
+    const top = fs * 1.9;
+    const pie = 8 * k;
+    const y0 = S.top() + (portrait ? 58 : 62) * k;
+    const yDer = Math.max(y0, S.top() + 72 * k);
+    const filas = clamp(Math.floor((H - S.bottom() - 10 * k - yDer - top - pie) / rowH), 3, 12);
+    const MAX = 2 * filas;
     const shown = v.length > MAX ? v.slice(0, MAX - 1) : v;
     const extra = v.length - shown.length;
     const cells = shown.map((i) => ({ i, label: shorten(nm(i), 18) }));
     if (extra > 0) cells.push({ i: -1, label: `+${extra}` });
-    const rowsMax = 12;
-    const rowH = 19 * k;
-    const colW = Math.min(196 * k, (W - 40 * k) / 2);
-    const makePlate = (part: typeof cells): Container => {
+    const porCol = portrait && cells.length > 6 ? Math.ceil(cells.length / 2) : filas;
+    const left = cells.slice(0, porCol), right = cells.slice(porCol);
+    const r = fs * 0.36;
+    const x0 = 20 * k + 2 * r;
+    const headStyle = { fontFamily: MONO, fontSize: fs * 0.85, fontWeight: "900", fill: INK, letterSpacing: 2 * k } as const;
+    const headText = `${t("cChoOutT")} · ${v.length}`;
+    const labels = cells.map((cell) => S.text(cell.label, { fontSize: fs, fontWeight: "800", fill: INK }));
+    const starred = (cell: (typeof cells)[number]): boolean => cell.i >= 0 && prized.has(cell.i);
+    const tail = (star: boolean): number => (star ? 2.6 * r + 18 * k : 12 * k);
+    // Tan ancha como el nombre más largo, hasta 250 px en 720: fija en 250, con
+    // la letra grande tapaba a los bailarines de la orilla de la rueda.
+    const probe = S.text(headText, headStyle);
+    const need = Math.max(probe.width + 24 * k, ...labels.map((tx, j) => x0 + tx.width + tail(starred(cells[j] as (typeof cells)[number]))));
+    probe.destroy();
+    const colMax = right.length || !portrait ? Math.min(250 * k, (W - 40 * k) / 2) : Math.min(250 * k, W - 40 * k);
+    const colW = Math.min(colMax, need);
+    const makePlate = (part: typeof cells, from: number): Container => {
       const c = new Container();
-      const head = S.text(`${t("cChoOutT")} · ${v.length}`, { fontFamily: MONO, fontSize: 13 * k, fontWeight: "900", fill: INK, letterSpacing: 2 * k });
-      const top = 30 * k;
-      const h = top + part.length * rowH + 8 * k;
+      const head = S.text(headText, headStyle);
+      const h = top + part.length * rowH + pie;
       c.addChild(new Graphics().roundRect(5 * k, 5 * k, colW, h, 8 * k).fill(INK)
         .roundRect(0, 0, colW, h, 8 * k).fill(S.dark ? CREAM : 0xffffff).stroke({ width: 3 * k, color: INK }));
-      head.position.set(12 * k, 8 * k);
+      head.position.set(12 * k, (top - head.height) / 2 + 2 * k);
       c.addChild(head);
-      part.forEach((cell, r) => {
-        const y = top + r * rowH;
-        const star = cell.i >= 0 && prized.has(cell.i);
-        if (cell.i >= 0) c.addChild(new Graphics().circle(18 * k, y + rowH / 2, 5.5 * k).fill((dancers[cell.i] as Dancer).col).stroke({ width: 1.5 * k, color: INK }));
-        if (star) c.addChild(new Graphics().star(colW - 18 * k, y + rowH / 2, 5, 7 * k, 3.2 * k).fill(YELLOW).stroke({ width: 1.5 * k, color: INK }));
-        const tx = S.text(cell.label, { fontSize: 13.5 * k, fontWeight: "800", fill: INK });
-        tx.position.set(30 * k, y + 1 * k);
-        const maxW = colW - (star ? 64 : 42) * k;
+      part.forEach((cell, j) => {
+        const y = top + j * rowH;
+        const star = starred(cell);
+        if (cell.i >= 0) c.addChild(new Graphics().circle(12 * k + r, y + rowH / 2, r).fill((dancers[cell.i] as Dancer).col).stroke({ width: 1.5 * k, color: INK }));
+        if (star) c.addChild(new Graphics().star(colW - 12 * k - 1.3 * r, y + rowH / 2, 5, 1.3 * r, 0.6 * r).fill(YELLOW).stroke({ width: 1.5 * k, color: INK }));
+        const tx = labels[from + j] as Text;
+        const maxW = colW - x0 - tail(star);
         if (tx.width > maxW) tx.scale.set(maxW / tx.width);
+        tx.position.set(x0, y + (rowH - tx.height) / 2);
         c.addChild(tx);
       });
       return c;
     };
-    const left = cells.slice(0, rowsMax), right = cells.slice(rowsMax);
-    const a = makePlate(left);
+    const a = makePlate(left, 0);
     panel.addChild(a);
-    const y0 = S.top() + (portrait ? 58 : 62) * k;
     a.position.set(right.length || !portrait ? 14 * k : (W - colW) / 2, y0);
     if (right.length) {
-      const b = makePlate(right);
-      b.position.set(W - colW - 19 * k, y0);
+      const b = makePlate(right, left.length);
+      b.position.set(W - colW - 19 * k, yDer);
       panel.addChild(b);
     }
   }
