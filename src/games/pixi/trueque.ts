@@ -5,7 +5,7 @@ import { beep as sonido, beepFor as sonidoPor, fanfare, note } from "../../sound
 import { writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { CREAM, INK, MONO, hash, mountPixi, type PixiStage } from "./stage";
-import type { Caja, Zona } from "./encuadre";
+import { dentro, unir, type Caja, type Zona } from "./encuadre";
 import { planTrueque, type Encargo } from "./trueque-plan";
 
 /**
@@ -171,6 +171,9 @@ export async function truequePixi(names: string[], winners: readonly number[], b
   let radio = 10;
   let feriaY0 = 0;
   let feriaY1 = 0;
+  /** Dónde termina la leyenda y dónde va la franja de aguayo, en la pantalla. */
+  let leyendaAbajo = 0;
+  let franjaY = 0;
 
   /* ------------------------------------------------------------ escenario */
   let bgG!: Graphics;
@@ -260,8 +263,45 @@ export async function truequePixi(names: string[], winners: readonly number[], b
     adornosG = new Graphics();
     S.bg.addChild(adornosG);
 
-    // La feria: cuadrícula de puestos, como una tabla sin orden. Debajo de la leyenda y de la franja de aguayo.
-    feriaY0 = S.top() + 116 * k;
+    // Arriba, el contador y la leyenda de los colores, con letra que se lee
+    // desde el fondo de la sala: 14 px o más en 720. Iban en 11 y 12 px, y la
+    // sala solo seguía los subtítulos (evaluación de la subida 2, hallazgo 6).
+    const margen = 10 * k;
+    const fsLey = S.letra(15);
+    const fsCont = S.letra(16);
+    contador = S.text("", { fontFamily: MONO, fontSize: fsCont, fontWeight: "700", fill: tinta });
+    contador.position.set(margen, S.top() + 8 * k);
+    leyenda = new Container();
+    const txtLey = S.text(t("trLeyenda"), { fontFamily: MONO, fontSize: fsLey, fontWeight: "700", fill: tinta, wordWrap: true, wordWrapWidth: w - 2 * margen });
+    txtLey.position.set(margen, S.top() + 8 * k + fsCont * 1.35);
+    leyenda.addChild(txtLey);
+    const cuadro = Math.round(fsLey * 0.85);
+    const renglon = fsLey * 1.45;
+    let lx = margen;
+    let ly = txtLey.y + txtLey.height + 6 * k;
+    for (let p = 0; p < COLOR.length; p++) {
+      const sq = new Graphics().rect(0, 0, cuadro, cuadro).fill(COLOR[p] ?? 0).stroke({ width: Math.max(1, k), color: INK });
+      const tx = S.text(nombre(p), { fontFamily: MONO, fontSize: fsLey, fontWeight: "700", fill: tinta });
+      const ancho = cuadro + 6 * k + tx.width + 16 * k;
+      if (lx > margen && lx + ancho - 16 * k > w - margen) {
+        lx = margen;
+        ly += renglon;
+      }
+      sq.position.set(lx, ly + (tx.height - cuadro) / 2);
+      tx.position.set(lx + cuadro + 6 * k, ly);
+      leyenda.addChild(sq, tx);
+      lx += ancho;
+    }
+    leyendaAbajo = ly + renglon;
+    // La franja, donde estaba (de 170 a 192 en 720, sobre la fila que muestrea
+    // el auditor exigente: docs/juegos/trueque.md), o debajo de la leyenda si la
+    // leyenda llega más abajo, como en un celular.
+    franjaY = Math.max(S.top() + 88 * k, leyendaAbajo + 4 * k);
+
+    // La feria: cuadrícula de puestos, como una tabla sin orden. Debajo de la
+    // leyenda y de la franja de aguayo, con lugar para el nombre que va encima
+    // de cada puesto de la primera fila sin pisar la leyenda.
+    feriaY0 = Math.max(franjaY + 30 * k, leyendaAbajo + (NOMBRE_ALTO + 12) * k);
     feriaY1 = h - S.bottom() - 16 * k;
     const x1 = w * 0.93;
     const armar = (x0: number): { x0: number; cols: number; cw: number; ch: number; r: number } => {
@@ -269,7 +309,8 @@ export async function truequePixi(names: string[], winners: readonly number[], b
       const cw = (x1 - x0) / cols;
       const ch = (feriaY1 - feriaY0) / Math.ceil(n / cols);
       // Con pocos puestos los toldos pueden ser grandes; con doscientos, el tope los deja en la cuadrícula.
-      return { x0, cols, cw, ch, r: clamp(Math.min(cw, ch) * 0.34, 4.5 * k, 30 * k) };
+      // Con 30 de tope medían unos 60 px en 720, y lo que acepta y da cada uno no se leía desde la sala.
+      return { x0, cols, cw, ch, r: clamp(Math.min(cw, ch) * 0.34, 4.5 * k, 37 * k) };
     };
     let red = armar(w * 0.07);
     // El atado espera en su origen, a la izquierda de la feria, con la etiqueta
@@ -277,7 +318,8 @@ export async function truequePixi(names: string[], winners: readonly number[], b
     // quedaba a doce píxeles del borde y se cortaba la mitad, con la etiqueta
     // (revisión del Trueque, 21 de octubre de 2026): si no entra, la feria se
     // corre a la derecha lo justo.
-    const medida = S.text("", { fontFamily: MONO, fontSize: Math.max(12, 13 * k), fontWeight: "800" });
+    const fsEtq = S.letra(16);
+    const medida = S.text("", { fontFamily: MONO, fontSize: fsEtq, fontWeight: "800" });
     let etiq = 0;
     for (let p = 0; p < CLAVE.length; p++) {
       medida.text = nombre(p).toUpperCase();
@@ -310,7 +352,7 @@ export async function truequePixi(names: string[], winners: readonly number[], b
     for (let e = 0; e < encargos.length; e++) {
       const c = new Container();
       const bg = new Graphics();
-      const txt = S.text("", { fontFamily: MONO, fontSize: Math.max(12, 13 * k), fontWeight: "800", fill: INK });
+      const txt = S.text("", { fontFamily: MONO, fontSize: fsEtq, fontWeight: "800", fill: INK });
       txt.anchor.set(0.5, 0.5);
       c.addChild(bg, txt);
       c.visible = false;
@@ -319,29 +361,8 @@ export async function truequePixi(names: string[], winners: readonly number[], b
       etiquetaTexto.push("");
     }
 
-    // Lo que dice cada toldo, arriba de la feria: la leyenda de los colores.
-    leyenda = new Container();
-    const txtLey = S.text(t("trLeyenda"), { fontFamily: MONO, fontSize: Math.max(11, 11 * k), fontWeight: "700", fill: tinta });
-    txtLey.position.set(10 * k, S.top() + 30 * k);
-    leyenda.addChild(txtLey);
-    let lx = 10 * k;
-    let ly = S.top() + 48 * k;
-    for (let p = 0; p < COLOR.length; p++) {
-      const sq = new Graphics().rect(0, 0, 10 * k, 10 * k).fill(COLOR[p] ?? 0).stroke({ width: 1, color: INK });
-      const tx = S.text(nombre(p), { fontFamily: MONO, fontSize: Math.max(11, 11 * k), fontWeight: "700", fill: tinta });
-      const ancho = 10 * k + 5 * k + tx.width + 14 * k;
-      if (lx + ancho > w - 10 * k) {
-        lx = 10 * k;
-        ly += 16 * k;
-      }
-      sq.position.set(lx, ly);
-      tx.position.set(lx + 15 * k, ly - 1 * k);
-      leyenda.addChild(sq, tx);
-      lx += ancho;
-    }
+    // Lo que dice cada toldo, arriba de la feria: la leyenda de los colores (se arma arriba, antes de la feria).
     S.hud.addChild(leyenda);
-    contador = S.text("", { fontFamily: MONO, fontSize: Math.max(12, 12 * k), fontWeight: "700", fill: tinta });
-    contador.position.set(10 * k, S.top() + 10 * k);
     S.hud.addChild(contador);
   }
 
@@ -487,9 +508,10 @@ export async function truequePixi(names: string[], winners: readonly number[], b
     // y de noche una luz suave. Es grande, así que la sala la ve pasar en los dos temas.
     const yNube = (S.top() + 80 * k + (h - S.bottom() - 16 * k)) / 2;
     const xNube = ((tt * 60 * k) % (w + 800 * k)) - 400 * k;
-    adornosG.ellipse(xNube, yNube, 380 * k, 170 * k).fill(S.dark ? { color: CREAM, alpha: 0.13 } : { color: 0x1a1030, alpha: 0.2 });
+    // En el tema claro, con tinta al 20 % se veía como una mancha gris sobre la feria (evaluación de la subida 2).
+    adornosG.ellipse(xNube, yNube, 380 * k, 170 * k).fill(S.dark ? { color: CREAM, alpha: 0.13 } : { color: 0x6b4a2a, alpha: 0.09 });
     // Debajo de la leyenda y encima de los puestos.
-    const y0 = S.top() + 88 * k;
+    const y0 = franjaY;
     const alto = 22 * k;
     const ancho = 22 * k;
     const corrimiento = (tt * 60 * k) % (ancho * COLOR.length);
@@ -610,6 +632,26 @@ export async function truequePixi(names: string[], winners: readonly number[], b
   }
   /** Lo que se ve de la feria: debajo de la barra de arriba y encima del relator. */
   const zonaJuego = (): Zona => ({ x0: 4 * S.u(), y0: S.top() + 4 * S.u(), x1: S.sw() - 4 * S.u(), y1: S.sh() - S.bottom() - 4 * S.u() });
+  /** Donde tienen que quedar los puestos del aro: debajo de la leyenda y encima del relator. */
+  const zonaPuestos = (): Zona => ({ x0: 4 * S.u(), y0: leyendaAbajo + 4 * S.u(), x1: S.sw() - 4 * S.u(), y1: S.sh() - S.bottom() - 4 * S.u() });
+
+  /**
+   * Los puestos que en el pase `p` aceptan lo que lleva el encargo (los del
+   * aro, sin los que ya cambiaron) y el que se está probando, con su aro, en la
+   * escena. Al acercarse, la cámara los deja enteros: en un celular uno con aro
+   * quedaba partido por el borde (evaluación de la subida 2, hallazgo 6). Son
+   * los que la sala ve prendidos, así que encuadrarlos no adelanta nada.
+   */
+  function cajaCandidatos(tt: number, p: number, quien: number): Caja | null {
+    const r = radio * 1.6 + 2 * S.u();
+    const cajas: Caja[] = [];
+    for (const i of [...(luz[p] ?? []), quien]) {
+      if (i !== quien && (cambioAt[i] ?? Infinity) + 0.15 <= tt) continue;
+      const q = pos[i];
+      if (q) cajas.push({ x: q.x - r, y: q.y - r, w: 2 * r, h: 2 * r });
+    }
+    return cajas.length ? unir(cajas) : null;
+  }
 
   function dibujarRuta(tt: number): void {
     routeG.clear();
@@ -634,6 +676,23 @@ export async function truequePixi(names: string[], winners: readonly number[], b
         routeG.circle(p.x, p.y, radio * 0.42).fill({ color: COLOR[en.productos[j] ?? 0] ?? 0 }).stroke({ width: Math.max(1, S.u()), color: INK });
       }
     });
+  }
+
+  /** El intento del encargo principal que está en curso en `tt`: va, responde el puesto y, si no cambió, vuelve. */
+  const intentoEn = (tt: number): Mov | undefined => todos.find((m) => m.e === 0 && tt >= m.t0 && tt < m.t0 + T_VUELVE);
+
+  /**
+   * Lo que la cámara no puede dejar afuera mientras se juega: el atado que
+   * sigue, con su etiqueta, y durante cada pase, hasta la entrega, los del
+   * aro. La vista que pide `dirigir` ya los deja enteros; esto cuida el camino
+   * hasta ahí, que con el acercamiento a medias metía un aro de la fila de
+   * abajo debajo del relator.
+   */
+  function cajaVista(tt: number): Caja | null {
+    const atado = cajaAtado(0, tt);
+    const p = paseEn(tt);
+    const aro = p >= 0 && tt < T_ENTREGA ? cajaCandidatos(tt, p, intentoEn(tt)?.quien ?? -1) : null;
+    return atado && aro ? unir([atado, aro]) : (atado ?? aro);
   }
 
   /** La cámara: la feria entera al armarse, sigue al encargo en cada intento, y al final encuadra la ruta debajo del cartel. */
@@ -672,12 +731,21 @@ export async function truequePixi(names: string[], winners: readonly number[], b
       return;
     }
     const p = paseEn(tt);
-    const activo = todos.find((m) => m.e === 0 && tt >= m.t0 && tt < m.t0 + T_VUELVE);
+    const activo = intentoEn(tt);
     if (activo && p >= 0) {
       const a = encargoEn(0, tt);
       const b = pos[activo.quien] ?? a;
-      cam.lookAt((a.x + b.x) / 2, (a.y + b.y) / 2, 1.25, 2.6);
-    } else cam.lookAt(w / 2, h / 2, 1, 2);
+      // Entre el encargo y el puesto que se prueba, sin dejar afuera a los del aro.
+      const caja = cajaCandidatos(tt, p, activo.quien);
+      const v = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: 1.25 };
+      const ve = caja ? dentro(caja, zonaPuestos(), v, w, h) : v;
+      cam.lookAt(ve.x, ve.y, ve.z, 2.6);
+    } else {
+      // Entre intentos vuelve a la feria entera. Dentro de los pases, más rápido:
+      // con la vuelta lenta, el pase siguiente prendía un puesto de la fila de
+      // abajo cuando la cámara todavía estaba cerca, y quedaba debajo del relator.
+      cam.lookAt(w / 2, h / 2, 1, p >= 0 ? 4 : 2);
+    }
   }
 
   /* -------------------------------------------------------- bucle del juego */
@@ -737,7 +805,7 @@ export async function truequePixi(names: string[], winners: readonly number[], b
     // El atado que sigue la cámara, siempre entero en cuadro: cuando volvía de
     // un puesto que no lo cambió, iba más rápido que la cámara y salía por el
     // costado (revisión del Trueque, 21 de octubre de 2026).
-    cam.proteger(fase === "show" ? cajaAtado(0, tt) : null, zonaJuego());
+    cam.proteger(fase === "show" ? cajaVista(tt) : null, zonaJuego());
     cam.update(dt);
     cam.apply(S.scene, S.sw(), S.sh(), now);
     dibujarAdornos(tt);
