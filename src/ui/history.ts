@@ -242,6 +242,15 @@ let grupoNombrable: Entry[] | null = null;
 let activo: string | null = null;
 /** El formulario de "Nuevo evento" está a la vista: se pliega detrás del botón. */
 let formAbierto = false;
+/**
+ * La acción principal de Mis sorteos, la única con el color de la casa
+ * (docs/ux.md, regla 1): "retomar:<i>", "compartir:<i>", "grupo:<n>" o
+ * "evento:<id>", o "" si no hay. Hasta el 22 de octubre de 2026 eran
+ * principales "Compartir el evento", cada "Compartir" y "Ponerle nombre a los
+ * sorteos de hoy", tres a la vez con un solo sorteo, y no se sabía cuál tocar
+ * (evaluación de la subida 2, hallazgo 8).
+ */
+let principal = "";
 /** Cuántos sorteos ofrece un evento para sumar, los más nuevos. Los demás se suman desde su tarjeta. */
 const CANDIDATOS_MAX = 8;
 
@@ -252,6 +261,32 @@ const avisar = (texto: string): void => {
 /** Se puede sumar a un evento o compartir: tiene el enlace del comprobante y sus ganadores. */
 const compartible = (e: Entry): e is Entry & { proof: string; winners: string[] } =>
   !!(e.proof && tieneComprobante(e) && e.winners?.length);
+
+/**
+ * La principal es lo que sigue con el sorteo más nuevo que tiene algo para
+ * hacer: retomarlo si quedó a medias; si no, compartirlo, y si es parte de un
+ * evento (del día o con nombre) de dos o más sorteos, compartir el evento
+ * entero, que manda lo mismo y más. Lo demás queda secundario, sin sacar nada.
+ */
+function elegirPrincipal(list: Entry[], grupos: Entry[][]): string {
+  for (const [i, e] of list.entries()) {
+    const hecho = !!(e.winners?.length || e.winnerIdx?.length || e.drawTx);
+    if (!hecho && e.names?.length) return `retomar:${i}`;
+    if (!compartible(e)) continue;
+    const suEvento = eventoDelEnlace.get(e.proof);
+    if (suEvento) return suEvento.sorteos.length > 1 ? `evento:${suEvento.id}` : `compartir:${i}`;
+    const gi = eventoDe.get(e);
+    return gi !== undefined && (grupos[gi]?.length ?? 0) > 1 ? `grupo:${gi}` : `compartir:${i}`;
+  }
+  return "";
+}
+
+/**
+ * La clase y la marca de un botón según sea la principal: con el formulario de
+ * "Nuevo evento" abierto, la principal es "Crear evento" y esta espera de secundaria.
+ */
+const comoPrincipal = (clave: string): string =>
+  clave && clave === principal ? `class="${formAbierto ? "ghost" : "primary"} mini" data-principal` : `class="ghost mini"`;
 
 /** El título de un evento sin nombre: "Sorteos del 20 de octubre de 2026". */
 const tituloDeGrupo = (g: Entry[]): string => t("histGrupoT").replace("{f}", fechaLarga(g[0]?.sealedAt ?? 0, getLang()));
@@ -486,11 +521,12 @@ function pintarEventos(list: Entry[], sueltos: Entry[], grupos: Entry[][]): void
   const nuevo =
     `<button class="ghost mini" type="button" data-evn-nuevo aria-expanded="${formAbierto}" aria-controls="evn-nuevo-f">` +
     `${esc(t("evnNuevo"))}</button>`;
-  // Sin eventos: primero el camino corto, y "Nuevo evento" al lado, como secundario.
-  // Con el formulario abierto, la principal es "Crear evento": el camino corto pasa a secundario.
+  // Sin eventos: primero el camino corto, y "Nuevo evento" al lado. Los dos
+  // secundarios: la principal es la de la lista (`principal`), y con el
+  // formulario abierto, "Crear evento".
   const arriba =
     !guardados.length && grupoNombrable
-      ? `<div class="hc-acciones evn-arriba"><button class="${formAbierto ? "ghost" : "primary"} mini" type="button" data-nombrar-ultimo>${esc(rotuloNombrar(grupoNombrable))}</button>${nuevo}</div>`
+      ? `<div class="hc-acciones evn-arriba"><button class="ghost mini" type="button" data-nombrar-ultimo>${esc(rotuloNombrar(grupoNombrable))}</button>${nuevo}</div>`
       : (guardados.length ? "" : `<p class="note">${esc(t("evnVacio"))}</p>`) + `<div class="hc-acciones evn-arriba">${nuevo}</div>`;
   caja.style.display = "block";
   caja.innerHTML =
@@ -534,7 +570,7 @@ function tarjetaDeEvento(ev: EventoGuardado, list: Entry[]): string {
     `<p class="hc-meta">${esc(n === 1 ? t("evUnSorteo") : t("evNSorteos").replace("{n}", String(n)))}</p>` +
     `<div class="hc-acciones">` +
     // Apagado, dice por qué a la vista: un botón gris sin explicación parece roto.
-    `<button class="primary mini" type="button" data-evento-compartir="${id}"${n ? "" : ` disabled aria-describedby="evn-pq-${id}"`}>${esc(t("histGrupoCompartir"))}</button>` +
+    `<button ${comoPrincipal(`evento:${ev.id}`)} type="button" data-evento-compartir="${id}"${n ? "" : ` disabled aria-describedby="evn-pq-${id}"`}>${esc(t("histGrupoCompartir"))}</button>` +
     `<button class="ghost mini" type="button" data-evento-borrar="${id}">${esc(t("evnBorrar"))}</button>` +
     `</div>` +
     (n ? "" : `<p class="note evn-porque" id="evn-pq-${id}">${esc(t("evnPorQue"))}</p>`) +
@@ -663,9 +699,10 @@ function enlazarEventos(): void {
       if (form) form.hidden = !formAbierto;
       for (const b of caja.querySelectorAll("[data-evn-nuevo]")) b.setAttribute("aria-expanded", String(formAbierto));
       // Dos botones del color de la casa no dicen cuál es el siguiente: con el formulario abierto, "Crear evento".
-      const corto = caja.querySelector("[data-nombrar-ultimo]");
-      corto?.classList.toggle("primary", !formAbierto);
-      corto?.classList.toggle("ghost", formAbierto);
+      for (const b of document.querySelectorAll<HTMLElement>("#sec-history [data-principal]")) {
+        b.classList.toggle("primary", !formAbierto);
+        b.classList.toggle("ghost", formAbierto);
+      }
       if (formAbierto) document.getElementById("evn-nuevo-in")?.focus();
       return;
     }
@@ -753,6 +790,7 @@ function paint(organizer: string | null): void {
   eventoDe = new Map<Entry, number>();
   grupos.forEach((g, gi) => g.forEach((e) => eventoDe.set(e, gi)));
   eventosPintados = grupos;
+  principal = elegirPrincipal(list, grupos);
   pintarEventos(list, sueltos, grupos);
   const pintados = new Set<number>();
   let html = "";
@@ -785,10 +823,10 @@ function tarjetaDeSorteo(e: Entry, i: number): string {
   const origen = e.fromChain ? ` · ${esc(t("histFromChain"))}` : "";
   const enCadena = e.drawTx ?? e.sealTx;
   const acciones: string[] = [];
-  if (!hecho && e.names?.length) acciones.push(`<button class="primary mini" data-retomar="${i}">${esc(t("histResume"))}</button>`);
+  if (!hecho && e.names?.length) acciones.push(`<button ${comoPrincipal(`retomar:${i}`)} data-retomar="${i}">${esc(t("histResume"))}</button>`);
   // El comprobante se puede compartir otra vez, con el QR y el mensaje: sale del enlace y de los ganadores.
   const compartible = !!(e.proof && tieneComprobante(e) && e.winners?.length);
-  if (compartible) acciones.push(`<button class="primary mini" type="button" data-compartir="${i}">${esc(t("cmpBtn"))}</button>`);
+  if (compartible) acciones.push(`<button ${comoPrincipal(`compartir:${i}`)} type="button" data-compartir="${i}">${esc(t("cmpBtn"))}</button>`);
   // Sin comprobante pero con id: la lista no está acá, pero el sorteo sí
   // está en la cadena. Con la lista a mano se rearma.
   if (e.proof) acciones.push(`<a class="ghost mini" href="${esc(e.proof)}" target="_blank" rel="noopener">${esc(t("histSeeProof"))}</a>`);
@@ -827,7 +865,7 @@ function cabeceraDeEvento(g: Entry[], gi: number): string {
     `<div><h3>${esc(tituloDeGrupo(g))}</h3>` +
     `<p class="note">${esc(n === 1 ? t("evUnSorteo") : t("evNSorteos").replace("{n}", String(n)))}</p></div>` +
     `<div class="hc-acciones">` +
-    `<button class="primary mini" type="button" data-evento="${gi}">${esc(t("histGrupoCompartir"))}</button>` +
+    `<button ${comoPrincipal(`grupo:${gi}`)} type="button" data-evento="${gi}">${esc(t("histGrupoCompartir"))}</button>` +
     `<button class="ghost mini" type="button" data-nombrar="${gi}">${esc(t("evnNombrar"))}</button>` +
     `</div></div>`
   );

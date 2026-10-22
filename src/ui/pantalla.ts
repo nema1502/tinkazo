@@ -38,9 +38,13 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   const premio = frozen.prize;
   const n = drawn.winners.length;
   const varios = n > 1;
-  // Con varios, el premio va una vez arriba y cada tarjeta lleva su número:
-  // repetido en cada una, partía los nombres y no entraban todos (revisiones
-  // del 16 de octubre de 2026). Con más de cinco, en dos columnas.
+  // Con varios, el premio va una vez, arriba de las tarjetas, y cada tarjeta
+  // lleva su número: repetido en cada una, partía los nombres y no entraban
+  // todos (revisiones del 16 de octubre de 2026). Con más de cinco, en dos
+  // columnas. Hasta el 22 de octubre de 2026 ese premio iba solo en la
+  // calcomanía de arriba, en 11 px, y desde el fondo de la sala se leían los
+  // nombres pero no qué se llevaban (evaluación de la subida 2, hallazgo 7):
+  // ahora va en su propia línea, "Se llevan: …", con la letra de los nombres.
   const muchos = n > 5;
 
   const back = document.createElement("div");
@@ -49,10 +53,11 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   back.setAttribute("aria-modal", "true");
   back.setAttribute("aria-label", t("pantallaT"));
   back.innerHTML =
-    `<div class="sala-top"><span class="sticker">${esc(t("pantallaT"))}${varios && premio ? ` · ${esc(premio)}` : ""}</span>` +
+    `<div class="sala-top"><span class="sticker">${esc(t("pantallaT"))}</span>` +
     `<button class="ghost" type="button" data-cerrar>${esc(t("salaCerrar"))}</button></div>` +
     `<div class="pantalla-body">` +
     `<div class="pantalla-ganadores">` +
+    (varios && premio ? `<p class="pantalla-llevan">${esc(t("pantallaLlevan"))} <b>${esc(premio)}</b></p>` : "") +
     drawn.winners
       .map((i, k) => {
         const nombre = frozen.names[i] ?? "";

@@ -43,6 +43,19 @@ function lista(lang: Lang, nombres: string[]): string {
   return new Intl.ListFormat(lang === "es" ? "es" : "en", { type: "conjunction" }).format(nombres);
 }
 
+/**
+ * La misma lista cada vez con un nombre menos y "N más" al final ("Ana, Beto
+ * y 2 más"), de la más larga a la más corta: la foto de un evento la usa si
+ * no entran todos, para no cortar un nombre por la mitad.
+ */
+function listasCortas(lang: Lang, nombres: string[]): string[] {
+  const out: string[] = [];
+  for (let k = nombres.length - 1; k >= 1; k--) {
+    out.push(lista(lang, [...nombres.slice(0, k), rellenar(cad(lang, "fotoMasNombres"), { n: nombres.length - k })]));
+  }
+  return out;
+}
+
 /* ------------------------------------------------------------------ mensajes */
 
 export interface DatosSorteo {
@@ -148,7 +161,7 @@ export function fotoDeEvento(lang: Lang, titulo: string, sorteos: SorteoDelEvent
     rotulo: [cad(lang, "fotoEvento"), fechaLarga(lang, fecha)].filter(Boolean).join(" · "),
     titulo,
     sub: rellenar(cad(lang, n === 1 ? "evUnSorteo" : "evNSorteos"), { n }),
-    filas: enOrden.map((s) => ({ premio: s.prize?.trim() || cad(lang, "histDraw"), ganadores: lista(lang, s.ganadores) })),
+    filas: enOrden.map((s) => ({ premio: s.prize?.trim() || cad(lang, "histDraw"), ganadores: lista(lang, s.ganadores), cortos: listasCortas(lang, s.ganadores) })),
     lineas: [],
     mas: cad(lang, "fotoMas"),
     enlace,

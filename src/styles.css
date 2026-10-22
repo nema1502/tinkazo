@@ -1366,12 +1366,16 @@
     background: var(--yellow); color: #191919; border: var(--bw) solid var(--ink); box-shadow: var(--sh);
     padding: max(8px, 0.16em) max(14px, 0.3em); transform: rotate(-1.5deg);
   }
-  .pantalla-ganador:nth-child(even) { transform: rotate(1.2deg); }
+  .pantalla-ganador:nth-of-type(even) { transform: rotate(1.2deg); }
   .pantalla-ganador > div { min-width: 0; }
   .pantalla-ganador img { width: clamp(28px, 1.1em, 150px); height: auto; border: 3px solid #191919; background: #fff; flex-shrink: 0; }
   .pantalla-nombre { font-size: 1em; font-weight: 900; line-height: 1.08; letter-spacing: -0.02em; overflow-wrap: normal; }
   .pantalla-premio { font-size: max(14px, 0.3em); font-weight: 800; margin-top: 0.12em; }
   .pantalla.varios .pantalla-premio { font-family: ui-monospace, Consolas, monospace; letter-spacing: 0.06em; }
+  /* Con varios ganadores, lo que se llevan: una vez, arriba de las tarjetas, más grande que el número de cada una. */
+  .pantalla-llevan { font-size: max(18px, 0.42em); font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; }
+  .pantalla-llevan b { font-weight: 900; }
+  .pantalla.muchos .pantalla-llevan { grid-column: 1 / -1; }
   .pantalla.muchos .pantalla-ganadores { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: max(6px, 0.2em) max(10px, 0.4em); align-items: stretch; }
   .pantalla-qr { display: flex; flex-direction: column; align-items: center; gap: 8px; background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); padding: 16px; }
   /* El tamaño lo fija pantalla.ts al dibujarlo, con módulos enteros: estirado por CSS se rompía. */
