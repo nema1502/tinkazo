@@ -6,11 +6,12 @@ Registro de cada despliegue. La dirección vigente por red también vive en `src
 
 | Fecha | Red | Dirección del contrato | WASM (sha256) | Commit | Cuenta de despliegue | Notas |
 |---|---|---|---|---|---|---|
-| 2026-09-16 | testnet | `CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH` | `c9f3227ffb92ef04…` (11 688 bytes) | `fd558ce` | `GD6P7XJV…R526` | **Vigente.** Sorteo real `id=1`, ronda 32255926, ganadores `[11, 16, 0]` sobre la lista de `docs/vectors.json` |
+| 2026-10-25 | testnet | `CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A` | `c2403e081fc2d91e…` (11 687 bytes) | `cf07189` | `GD6P7XJV…R526` | **Vigente.** Entradas de 7 días (`TTL_ENTRADA_*`, solo testnet). Medición y transacciones abajo. |
+| 2026-09-16 | testnet | `CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH` | `c9f3227ffb92ef04…` (11 688 bytes) | `fd558ce` | `GD6P7XJV…R526` | Reemplazado el 25 de octubre (sus entradas duraban 120 días). Sigue en `anteriores` con `ultimoId` 936. Sorteo real `id=1`, ronda 32255926, ganadores `[11, 16, 0]` sobre la lista de `docs/vectors.json` |
 | 2026-09-16 | testnet | `CDVAI2RK6DCBP4VVMW5LP7VQ4QH7O2E5WHQQSRNVF367BDIORYDJ3LDJ` | `6008a5e42ca06079…` | `8c98866` | `GD6P7XJV…R526` | Reemplazado el mismo día: `seal`/`draw` extendían el TTL del código y el primer `seal` cobró 15,27 XLM. Sigue en `anteriores` de `deployments.json` (tiene un sorteo, el `id=1`) |
 | · | mainnet | pendiente (historia 5.1) | · | · | · | · |
 
-Transacciones del despliegue vigente (testnet, explorables en [stellar.expert](https://stellar.expert/explorer/testnet)):
+Transacciones del despliegue del 16 de septiembre (`CD2SSHBU…`, testnet, explorables en [stellar.expert](https://stellar.expert/explorer/testnet)):
 
 | Paso | Hash | Fee cobrado |
 |---|---|---|
