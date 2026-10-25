@@ -480,6 +480,8 @@ export async function freeze(): Promise<void> {
         prize,
         names,
         ...(raffleId !== undefined ? { id: String(raffleId) } : {}),
+        // El número solo no dice de qué contrato es (cada uno arranca en 1).
+        ...(raffleId !== undefined && network.contractId ? { contract: network.contractId } : {}),
         ...(sealTx ? { sealTx } : {}),
       });
       h.renderHistory(who);

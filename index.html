@@ -403,6 +403,8 @@
     <div class="body">
       <!-- Los sorteos primero: volver a mandar un comprobante es lo más común, y en el celular
            el formulario de eventos lo dejaba abajo (evaluación crítica de experiencia, hallazgo 5). -->
+      <!-- Solo se ve si la lista de la cadena se cortó por el tope (history.ts): sin recorte no se avisa. -->
+      <p class="note hist-truncado" id="hist-truncado" data-i="histTruncated" style="display:none">Mostramos los sorteos más recientes. Hay sorteos más viejos que no entran en esta lista.</p>
       <div id="hist-list" class="hist-list"></div>
       <div id="hist-eventos" class="hist-eventos" style="display:none"></div>
       <details class="hist-why">

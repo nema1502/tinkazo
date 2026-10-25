@@ -21,6 +21,11 @@ import { RPC_URLS } from "./config";
  * el contrato (`sealsOnChain`), que no tiene ventana: están todos los que
  * siguen vivos. El mismo recorrido arma el historial de la cuenta en otro
  * equipo.
+ *
+ * Desde el 25 de octubre de 2026 el sitio tiene un contrato vigente y dos
+ * anteriores (`deployments.json`), y los sorteos de una cuenta están repartidos
+ * entre los tres: el historial de otro equipo solo mostraba los del vigente
+ * (`sealsOfAccount` los recorre todos).
  */
 
 const RPC: Record<string, string> = RPC_URLS;
@@ -64,6 +69,12 @@ export async function sealsOf(proof: Proof): Promise<ChainHistory | null> {
  */
 export interface ChainRaffle {
   id: string;
+  /**
+   * El contrato donde está el sello. Los números de sorteo arrancan en 1 en cada
+   * contrato, así que el #12 no dice de cuál es sin esta dirección: con ella el
+   * comprobante y la verificación apuntan al contrato correcto.
+   */
+  contract?: string;
   organizer: string;
   listHash: string;
   count: number;
@@ -92,7 +103,10 @@ export interface ChainHistory {
    * evento a la misma hora. Vacío si no se pidió o no hay.
    */
   cercanos?: ChainRaffle[];
-  /** No se recorrió el contrato entero: hay sorteos más viejos que no se miraron. */
+  /**
+   * No se recorrió el contrato entero: hay sorteos más viejos que no se miraron.
+   * Con varios contratos, basta que se haya cortado uno.
+   */
   truncated: boolean;
 }
 
@@ -105,9 +119,9 @@ const KEYS_PER_CALL = 200;
  * Cuántos sorteos del contrato se recorren como mucho, de los más nuevos para
  * atrás. Son diez viajes. El costo crece con los sorteos de todo el contrato,
  * no con los de la cuenta, así que hace falta un techo para que la página no
- * se cuelgue el día que haya decenas de miles.
+ * se cuelgue el día que haya decenas de miles. El techo es por contrato.
  */
-const SCAN_MAX = 2_000;
+export const SCAN_MAX = 2_000;
 
 const hex = (b: Uint8Array | undefined): string =>
   [...(b ?? [])].map((x) => x.toString(16).padStart(2, "0")).join("");
@@ -115,9 +129,10 @@ const hex = (b: Uint8Array | undefined): string =>
 /**
  * Pasa un `Raffle` del contrato, ya convertido a valores de JavaScript, a la
  * forma de acá. Devuelve `null` si le falta algo: mejor saltar una fila que
- * mostrarla inventada.
+ * mostrarla inventada. `contract` es la dirección del contrato de donde se leyó
+ * (el `Raffle` no la trae): queda anotada en el sello.
  */
-export function parseRaffle(raw: unknown): ChainRaffle | null {
+export function parseRaffle(raw: unknown, contract?: string): ChainRaffle | null {
   const r = raw as {
     id?: bigint | number;
     organizer?: string;
@@ -134,6 +149,7 @@ export function parseRaffle(raw: unknown): ChainRaffle | null {
   const status = Array.isArray(r.status) ? String(r.status[0]) : String(r.status ?? "");
   return {
     id: String(r.id),
+    ...(contract ? { contract } : {}),
     organizer: r.organizer,
     listHash: hex(r.list_hash),
     count: Number(r.count ?? 0),
@@ -159,6 +175,9 @@ export function parseRaffle(raw: unknown): ChainRaffle | null {
  * sorteo no se pierde, pero para leerlo hay que restaurarlo.
  *
  * Devuelve `null` si no se pudo preguntar. Sin respuesta, no se afirma nada.
+ *
+ * Mira UN contrato. Para el historial de una cuenta, que puede estar repartido
+ * entre el contrato vigente y los anteriores, se usa `sealsOfAccount`.
  */
 export async function sealsOnChain(
   organizer: string,
@@ -187,8 +206,79 @@ export async function sealsOnChain(
         )
       : [];
     await leerGanadores(mine);
-    mine.sort((a, b) => b.sealedAt - a.sealedAt);
+    ordenarSellos(mine);
     return { raffles: mine, truncated, elsewhere, cercanos };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Del más nuevo al más viejo. A la misma hora gana el sello del contrato que
+ * viene primero en `contratos` (el vigente va primero) y, dentro de un mismo
+ * contrato, el de número mayor: así el orden no depende de en qué orden
+ * contestó el RPC. Ordena `raffles` en el lugar y lo devuelve.
+ */
+function ordenarSellos(raffles: ChainRaffle[], contratos: readonly { contractId: string }[] = []): ChainRaffle[] {
+  const lugar = new Map(contratos.map((c, i) => [c.contractId, i]));
+  const de = (r: ChainRaffle): number => lugar.get(r.contract ?? "") ?? contratos.length;
+  return raffles.sort((a, b) => b.sealedAt - a.sealedAt || de(a) - de(b) || Number(b.id) - Number(a.id));
+}
+
+/** Un contrato donde buscar sellos: su dirección, su RPC y, si es uno anterior, hasta qué número vale. */
+export interface ContratoALeer {
+  contractId: string;
+  rpcUrl: string;
+  /**
+   * En un contrato anterior, el último número que dio mientras era el del sitio
+   * (`ultimoId` de `deployments.json`). Como el contrato no se puede apagar,
+   * cualquiera puede seguir sellando en él: lo que sellen ahí después no es un
+   * sorteo de Tinkazo y no se lee.
+   */
+  ultimoId?: number;
+}
+
+/**
+ * Todos los sorteos de una cuenta en TODOS los contratos que se le pasan: en
+ * el uso normal, el vigente y los anteriores de la lista oficial
+ * (`contratosOficiales`, en `oficiales.ts`).
+ *
+ * Cuando el sitio cambia de contrato los números de sorteo vuelven a empezar y
+ * los sellos viejos se quedan en el anterior, que sigue leyéndose igual. Antes
+ * el historial de otro equipo (o con los datos del navegador borrados) solo
+ * traía los del vigente, y la cuenta veía desaparecer casi todo lo que había
+ * hecho. Cada sello vuelve con la dirección de su contrato (`contract`) y en
+ * un anterior solo valen los números hasta su `ultimoId`.
+ *
+ * Cada contrato se recorre con el techo de `SCAN_MAX` sorteos, así que el
+ * costo crece con la cantidad de contratos, no con la de sorteos de la cuenta.
+ * `truncated` es verdadero si alguno se cortó por el techo.
+ *
+ * Qué pasa cuando un contrato no contesta:
+ * - Si no se pudo preguntar a alguno (red caída, RPC con error), no se afirma
+ *   nada: devuelve `null` y la pantalla vuelve a intentar. Una lista a medias
+ *   que parece entera es justo el error que esto viene a arreglar.
+ * - Si un contrato no tiene instancia viva (nadie la extendió y se archivó), no
+ *   se puede leer y se salta; solo si ninguno tiene instancia devuelve `null`.
+ *   Es el mismo límite de siempre con la renta: el sorteo no se pierde, pero
+ *   para leerlo hay que restaurarlo.
+ *
+ * Con un solo contrato el resultado es el mismo que el de `sealsOnChain`.
+ */
+export async function sealsOfAccount(organizer: string, contratos: readonly ContratoALeer[]): Promise<ChainHistory | null> {
+  if (contratos.length === 0) return null;
+  try {
+    const escaneos = await Promise.all(contratos.map((c) => escanearContrato(c.contractId, c.rpcUrl, c.ultimoId)));
+    const leidos = escaneos.filter((e): e is NonNullable<typeof e> => e !== null);
+    if (leidos.length === 0) return null;
+    const suyos = await Promise.all(
+      leidos.map(async (e) => {
+        const mine = e.todos.filter((r) => r.organizer === organizer);
+        await e.leerGanadores(mine);
+        return mine;
+      }),
+    );
+    return { raffles: ordenarSellos(suyos.flat(), contratos), truncated: leidos.some((e) => e.truncated) };
   } catch {
     return null;
   }
@@ -198,11 +288,18 @@ export async function sealsOnChain(
  * Los sellos de los últimos `SCAN_MAX` sorteos de un contrato, de cualquier
  * cuenta, y cómo pedir después los ganadores de los que hagan falta. `null` si
  * el contrato no contestó con su instancia. Lanza si no se pudo preguntar.
+ *
+ * `ultimoId` es el tope de un contrato anterior: no se lee ningún número mayor,
+ * aunque el contador del contrato haya seguido subiendo. Cada sello sale con la
+ * dirección del contrato.
  */
 export async function escanearContrato(
   contractId: string,
   rpcUrl: string,
+  ultimoId?: number,
 ): Promise<{ todos: ChainRaffle[]; truncated: boolean; leerGanadores: (de: ChainRaffle[]) => Promise<void> } | null> {
+  // Un tope que no es un entero no se interpreta: mejor no leer nada que leer de más.
+  if (ultimoId !== undefined && !(Number.isSafeInteger(ultimoId) && ultimoId >= 0)) throw new Error("ultimo-id-invalido");
   {
     const { xdr, scValToNative, Address } = await import("@stellar/stellar-sdk");
     const contract = new Address(contractId).toScAddress();
@@ -238,13 +335,14 @@ export async function escanearContrato(
       if (Array.isArray(k) && k[0] === "NextId") next = Number(scValToNative(e.val));
     }
 
-    const last = next - 1;
+    // En un contrato anterior, lo que pasa de `ultimoId` no es del sitio.
+    const last = Math.min(next - 1, ultimoId ?? Infinity);
     const first = Math.max(1, last - SCAN_MAX + 1);
     const ids: number[] = [];
     for (let id = last; id >= first; id--) ids.push(id);
 
     const todos = (await read(ids.map((id) => entryKey("Raffle", id))))
-      .map((v) => parseRaffle(scValToNative(v)))
+      .map((v) => parseRaffle(scValToNative(v), contractId))
       .filter((r): r is ChainRaffle => r !== null);
 
     // Los ganadores se piden solo de los que ya se sortearon, y solo de los que

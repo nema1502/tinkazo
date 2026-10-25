@@ -1208,6 +1208,8 @@
 
   /* Mis sorteos: cada sorteo, una tarjeta con su estado y una acción. */
   .hist-list { display: grid; gap: 14px; margin: 4px 0 16px; }
+  /* El aviso de que la lista de la cadena se cortó: legible, pegado a la lista y sin competir con las acciones. */
+  .hist-truncado { margin: 0 0 12px; font-size: 13px; color: var(--ink2); }
   .hist-card { background: var(--paper); border: 2px solid var(--ink); box-shadow: var(--sh-sm); padding: 14px 16px; }
   .hc-top { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center; }
   .hc-estado { font-family: ui-monospace, Consolas, monospace; font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border: 2px solid var(--ink); background: var(--orange); color: #191919; }

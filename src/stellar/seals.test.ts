@@ -32,6 +32,12 @@ describe("parseRaffle", () => {
     });
   });
 
+  it("anota el contrato de donde se leyó, si se lo dan; si no, no inventa uno", () => {
+    const contrato = "CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH";
+    expect(parseRaffle(RAW, contrato)?.contract).toBe(contrato);
+    expect(parseRaffle(RAW)).not.toHaveProperty("contract");
+  });
+
   it("lee el estado de un enum sin datos, que llega como arreglo", () => {
     expect(parseRaffle({ ...RAW, status: ["Sealed"] })?.drawn).toBe(false);
   });

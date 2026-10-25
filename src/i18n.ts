@@ -343,6 +343,8 @@ export const T: Record<Lang, Dict> = {
     histCountChain: "{c} traídos de la cadena",
     histWhy: "Este equipo se acuerda de los sorteos que hiciste acá, con los nombres. Los que anclaste desde otro equipo se traen de la cadena: ahí están la fecha, el premio y qué puesto de la lista ganó, pero no los nombres, que nunca se publican. Si borrás los datos del sitio se pierde la lista de este equipo, no los sorteos, y con el comprobante la cuenta se puede rehacer siempre. Si compartiste un sorteo o lo mostraste en grande, queda además una copia para su enlace corto, que solo se abre con el enlace: Tinkazo no la puede leer, y no vence, para que el sorteo se pueda volver a comprobar. Si hace falta borrarla, escribinos a hola@tinkazo.app.",
     histFromChain: "traído de la cadena",
+    // Arriba de la lista, solo si algún contrato tiene más sorteos de los que se leen.
+    histTruncated: "Mostramos los sorteos más recientes. Hay sorteos más viejos que no entran en esta lista.",
     histRebuild: "rearmar comprobante",
     histRebuildTitle: "Rearmá el comprobante",
     histRebuildNote: "Los nombres nunca subieron a la cadena, solo su huella. Pegá la lista de ese sorteo y, si es la misma, la huella coincide y el comprobante vuelve a salir.",
@@ -1803,6 +1805,8 @@ export const T: Record<Lang, Dict> = {
     histCountChain: "{c} from the chain",
     histWhy: "This device remembers the draws you ran here, names included. The ones you anchored from another device come from the chain: the date, the prize and which spot on the list won are there, but not the names, which are never published. Clearing the site data loses this device's list, not the draws, and with the receipt the math can always be redone. If you shared a draw or showed it big, there is also a copy for its short link, which only opens with the link: Tinkazo can't read it, and it doesn't expire, so the draw can be checked again. If it needs to be deleted, write to hola@tinkazo.app.",
     histFromChain: "from the chain",
+    // Above the list, only when some contract has more draws than are read.
+    histTruncated: "We're showing the most recent draws. Some older draws don't fit in this list.",
     histRebuild: "rebuild receipt",
     histRebuildTitle: "Rebuild the receipt",
     histRebuildNote: "The names never went on chain, only their fingerprint. Paste that draw's list and, if it is the same one, the fingerprint matches and the receipt comes back.",

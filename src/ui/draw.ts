@@ -832,6 +832,8 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
         winners: winners.map((i) => names[i] ?? ""),
         proof: link,
         ...(f2.raffleId !== undefined ? { id: String(f2.raffleId) } : {}),
+        // El número solo no dice de qué contrato es (cada uno arranca en 1).
+        ...(f2.raffleId !== undefined && network.contractId ? { contract: network.contractId } : {}),
         ...(d.drawTx ? { drawTx: d.drawTx } : {}),
       });
       h.renderHistory(who);

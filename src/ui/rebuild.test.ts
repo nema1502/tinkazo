@@ -3,6 +3,7 @@ import { rearmar } from "./rebuild";
 import { canonicalList, listHash } from "../protocol/canonical";
 import { bytesToHex } from "../protocol/drand";
 import { decodeProof } from "../protocol/proof";
+import { network } from "../stellar/config";
 import type { Entry } from "./history";
 
 const LISTA = "María Quispe\nJorge Mamani\nLucía Flores";
@@ -52,5 +53,28 @@ describe("rearmar el comprobante", () => {
   it("las líneas vacías y los espacios de más no rompen nada", async () => {
     const r = await rearmar(fila(), `  María Quispe  \n\nJorge Mamani\n  Lucía Flores\n\n`, BASE);
     expect(r.ok).toBe(true);
+  });
+});
+
+describe("rearmar el comprobante de un sorteo que está en un contrato anterior", () => {
+  const ANTERIOR = "CD2SSHBU37BSPCLNB2XMOGRL3CLUAURIJAJSG2CZVFZRDTURSIDARENH";
+
+  it("el comprobante apunta al contrato donde está el sello, no al vigente", async () => {
+    // El número 7 de un contrato anterior no es el 7 del vigente: apuntar al vigente sería mostrar un sorteo ajeno.
+    expect(network.contractId).not.toBe(ANTERIOR);
+    const r = await rearmar(fila({ contract: ANTERIOR }), LISTA, BASE);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const proof = await decodeProof(r.url.slice(r.url.indexOf("#")));
+    expect(proof).toMatchObject({ net: network.name, contract: ANTERIOR, id: "7" });
+  });
+
+  it("una fila anotada antes de guardar el contrato sigue apuntando al vigente, como siempre", async () => {
+    const r = await rearmar(fila(), LISTA, BASE);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const proof = await decodeProof(r.url.slice(r.url.indexOf("#")));
+    expect(proof.contract).toBe(network.contractId);
+    expect(proof.id).toBe("7");
   });
 });

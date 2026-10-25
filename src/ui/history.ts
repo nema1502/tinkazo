@@ -2,6 +2,7 @@ import { $, esc } from "../dom";
 import { getLang, t } from "../i18n";
 import type { SorteoDelEvento } from "../protocol/evento";
 import { network, txUrl } from "../stellar/config";
+import { contratosOficiales } from "../stellar/oficiales";
 import type { ChainRaffle } from "../stellar/seals";
 import { agrupar, enOrdenDeSalida, fechaLarga, tieneComprobante } from "./agrupar";
 import { compartirEvento, compartirSorteo } from "./compartir";
@@ -31,9 +32,13 @@ import {
  *   este equipo, con los nombres y el comprobante. Si se borran los datos del
  *   sitio, se pierde la lista; el sorteo no, que sigue en la cadena.
  * - **La cadena, para lo demás.** Los sorteos anclados que esta cuenta hizo en
- *   otro equipo se traen del contrato (`sealsOnChain`). De esos se sabe la
+ *   otro equipo se traen de los contratos (`sealsOfAccount`): el vigente y los
+ *   anteriores de la lista oficial, porque cada vez que el sitio cambia de
+ *   contrato los sellos viejos se quedan en el anterior. De esos se sabe la
  *   fecha, el premio, cuántas personas había y qué puesto de la lista ganó,
- *   pero no los nombres: la lista nunca sube a la cadena, solo su huella.
+ *   pero no los nombres: la lista nunca sube a la cadena, solo su huella. Si
+ *   algún contrato tiene más sorteos de los que se leen (`SCAN_MAX`), la
+ *   pantalla lo dice.
  *
  * Cuando un sorteo está en los dos lados gana el del equipo, que tiene los
  * nombres. Se guarda por red y por cuenta: quien entra con otra cuenta ve lo
@@ -47,6 +52,13 @@ import {
 export interface Entry {
   /** Identificador en el contrato, si el sorteo se ancló. */
   id?: string;
+  /**
+   * La dirección del contrato donde está el sello. Los identificadores
+   * arrancan en 1 en cada contrato, así que el #12 solo dice de cuál es con
+   * esto. Los sorteos que este equipo anotó antes del 25 de octubre de 2026 no
+   * la traen: se completa con la que da la cadena, y si no, vale el vigente.
+   */
+  contract?: string;
   /** La cuenta que selló. */
   organizer: string;
   listHash: string;
@@ -78,7 +90,11 @@ export interface Entry {
   drawTx?: string;
 }
 
-/** Cuántos se guardan. Más que esto y el almacenamiento del navegador molesta. */
+/**
+ * Cuántos se guardan. Más que esto y el almacenamiento del navegador molesta.
+ * Al pasar de 200 se descartan los más viejos sin avisar (pendiente): los
+ * anclados siguen en la cadena, pero sin los nombres ni el comprobante.
+ */
 const MAX = 200;
 
 const key = (): string => `tinkazo.history.${network.name}`;
@@ -122,26 +138,38 @@ export function remember(entry: Entry): void {
  *
  * Un sorteo es el mismo si coinciden el identificador y la huella de la lista.
  * El identificador solo no alcanza: si el contrato se vuelve a desplegar los
- * ids arrancan otra vez desde 1, y el #3 de antes no es el #3 de ahora.
+ * ids arrancan otra vez desde 1, y el #3 de antes no es el #3 de ahora. Si las
+ * dos filas saben en qué contrato están, además tiene que ser el mismo: la
+ * misma lista sellada con el mismo número en dos contratos son dos sorteos.
  */
 export function mergeWithChain(local: Entry[], raffles: ChainRaffle[]): Entry[] {
   const out = [...local];
-  const known = new Map<string, number>();
+  const known = new Map<string, number[]>();
   local.forEach((e, i) => {
-    if (e.id) known.set(`${e.id}:${e.listHash}`, i);
+    if (!e.id) return;
+    const k = `${e.id}:${e.listHash}`;
+    known.set(k, [...(known.get(k) ?? []), i]);
   });
   for (const r of raffles) {
-    const at = known.get(`${r.id}:${r.listHash}`);
+    const at = (known.get(`${r.id}:${r.listHash}`) ?? []).find((i) => {
+      const c = out[i]?.contract;
+      return !c || !r.contract || c === r.contract;
+    });
     if (at !== undefined) {
       // Este equipo ya lo tiene, con los nombres. Lo único que la cadena puede
       // agregar es que se sorteó en otro lado, por ejemplo desde la página de
-      // verificación, con este equipo apagado.
+      // verificación, con este equipo apagado, y en qué contrato está el sello
+      // (los que se anotaron antes de que la fila lo guardara no lo saben).
       const e = out[at] as Entry;
-      if (!e.winners?.length && r.winners?.length) out[at] = { ...e, winnerIdx: r.winners };
+      const dato: Partial<Entry> = {};
+      if (!e.winners?.length && r.winners?.length) dato.winnerIdx = r.winners;
+      if (!e.contract && r.contract) dato.contract = r.contract;
+      if (Object.keys(dato).length) out[at] = { ...e, ...dato };
       continue;
     }
     out.push({
       id: r.id,
+      ...(r.contract ? { contract: r.contract } : {}),
       organizer: r.organizer,
       listHash: r.listHash,
       count: r.count,
@@ -156,8 +184,11 @@ export function mergeWithChain(local: Entry[], raffles: ChainRaffle[]): Entry[] 
   return out.sort((a, b) => b.sealedAt - a.sealedAt);
 }
 
-/** Lo último que se trajo de la cadena. Dura lo que dura la página. */
-let chain: { who: string; raffles: ChainRaffle[] } | null = null;
+/**
+ * Lo último que se trajo de la cadena. Dura lo que dura la página. `truncated`:
+ * algún contrato tiene más sorteos de los que se leen, y los más viejos no están.
+ */
+let chain: { who: string; raffles: ChainRaffle[]; truncated: boolean } | null = null;
 /** La cuenta por la que se está preguntando, para no preguntar dos veces. */
 let asking: string | null = null;
 /** La cuenta cuyo historial está en pantalla. */
@@ -182,18 +213,30 @@ export function forget(organizer: string): void {
 }
 
 /**
- * Pregunta a la cadena una vez por cuenta y por página. Si falla, la próxima
- * vez que se dibuje el historial se vuelve a intentar.
+ * La lista que trajo la cadena para esta cuenta se cortó por el tope: hay
+ * sorteos más viejos que no entraron. La pantalla lo dice, para que no parezca
+ * que lo que se ve es todo lo que hay.
  */
-async function askChain(organizer: string): Promise<void> {
-  const contractId = network.contractId;
-  if (!contractId || chain?.who === organizer || asking === organizer) return;
+export function chainTruncated(organizer: string): boolean {
+  return chain?.who === organizer && chain.truncated;
+}
+
+/**
+ * Pregunta a la cadena una vez por cuenta y por página, en el contrato vigente
+ * y en los anteriores de la lista oficial: los sellos viejos de la cuenta se
+ * quedaron en el anterior. Si falla, la próxima vez que se dibuje el historial
+ * se vuelve a intentar. Se exporta para probarla.
+ */
+export async function askChain(organizer: string): Promise<void> {
+  // Sin contrato vigente en esta red no hay anclaje, y por lo tanto nada que traer.
+  const contratos = network.contractId ? contratosOficiales(network.name) : [];
+  if (!contratos.length || chain?.who === organizer || asking === organizer) return;
   asking = organizer;
-  const { sealsOnChain } = await import("../stellar/seals");
-  const got = await sealsOnChain(organizer, contractId, network.rpcUrl);
+  const { sealsOfAccount } = await import("../stellar/seals");
+  const got = await sealsOfAccount(organizer, contratos);
   if (asking === organizer) asking = null;
   if (!got) return;
-  chain = { who: organizer, raffles: got.raffles };
+  chain = { who: organizer, raffles: got.raffles, truncated: got.truncated };
   // Si mientras tanto se cambió de cuenta, esta respuesta ya no es de nadie
   // en pantalla y no se dibuja.
   if (shown === organizer) paint(organizer);
@@ -765,7 +808,9 @@ function paint(organizer: string | null): void {
   }
   const list = historyOf(organizer);
   guardados = eventosDe(leerEventos(network.name), organizer);
-  if (list.length === 0 && guardados.length === 0) {
+  // Con la lista vacía pero cortada por el tope, la sección se queda para decirlo:
+  // "todavía no hay sorteos" sería mentira si los hay, más atrás de lo que se lee.
+  if (list.length === 0 && guardados.length === 0 && !chainTruncated(organizer)) {
     box.style.display = "none";
     return;
   }
@@ -774,6 +819,9 @@ function paint(organizer: string | null): void {
   // tiene sorteos no necesita la bienvenida de la primera vez (onboarding.ts).
   if (list.length) document.dispatchEvent(new CustomEvent("tinkazo:con-sorteos"));
   $("hist-count").textContent = t("histCount").replace("{n}", String(list.length));
+  // Si algún contrato tiene más sorteos de los que se leen, se dice: sin el
+  // aviso parecería que esta lista es todo lo que hay. Sin recorte, no se avisa.
+  $("hist-truncado").style.display = chainTruncated(organizer) ? "" : "none";
   pintadas = list;
   enlazarRearmado();
 
@@ -881,7 +929,7 @@ function cabeceraDeEvento(g: Entry[], gi: number): string {
 export function toCsv(organizer: string): string {
   const head = [
     "id", "fecha", "cuenta", "list_hash", "participantes", "ganadores",
-    "ronda", "premio", "tx_sello", "tx_sorteo", "comprobante", "origen",
+    "ronda", "premio", "tx_sello", "tx_sorteo", "comprobante", "origen", "contrato",
   ];
   const q = (v: string | number | undefined): string => `"${String(v ?? "").replace(/"/g, '""')}"`;
   const rows = historyOf(organizer).map((e) =>
@@ -900,6 +948,8 @@ export function toCsv(organizer: string): string {
       q(e.drawTx ?? ""),
       q(e.proof ?? ""),
       q(e.fromChain ? "cadena" : "equipo"),
+      // El id solo no dice de qué contrato es: arrancan en 1 en cada uno.
+      q(e.contract ?? ""),
     ].join(","),
   );
   return [head.map(q).join(","), ...rows].join("\n");

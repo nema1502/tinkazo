@@ -33,16 +33,21 @@ export async function rearmar(entry: Entry, texto: string, base?: string): Promi
   if (bytesToHex(listHash(names)) !== entry.listHash) {
     return { ok: false, motivo: "huella" };
   }
+  // El sello está en el contrato que lo guardó, que puede ser uno anterior: los
+  // números de sorteo arrancan en 1 en cada contrato, y un comprobante con el
+  // contrato vigente y el número de otro apuntaría a un sorteo ajeno. Sin la
+  // dirección en la fila (se anotó antes de que se guardara), vale el vigente.
+  const contract = entry.contract ?? network.contractId;
   const proof = {
     v: PROOF_VERSION,
     names,
     round: entry.round,
     prize: entry.prize,
     sealedAt: entry.sealedAt,
-    ...(network.contractId && entry.id
+    ...(contract && entry.id
       ? {
           net: network.name,
-          contract: network.contractId,
+          contract,
           id: entry.id,
           // Si este equipo guardó las transacciones, el comprobante rearmado las lleva (proof.ts descarta lo mal formado).
           ...(entry.sealTx ? { stx: entry.sealTx } : {}),
