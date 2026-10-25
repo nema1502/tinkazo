@@ -69,6 +69,8 @@ export function selloDe(raw: unknown): Sello {
     numWinners: entero(r.num_winners, "ganadores", 0xffff_ffff),
     round: entero(r.round, "ronda"),
     sealedAt: entero(r.sealed_at, "sellado"),
+    // El ledger del sello: con él se cruza el estado con el historial de la transacción (`historial.ts`).
+    ...(r.sealed_ledger !== undefined ? { sealedLedger: entero(r.sealed_ledger, "ledger", 0xffff_ffff) } : {}),
     meta: texto(r.meta, "premio"),
     drawn: estado === "Drawn",
   };

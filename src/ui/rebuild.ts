@@ -40,7 +40,14 @@ export async function rearmar(entry: Entry, texto: string, base?: string): Promi
     prize: entry.prize,
     sealedAt: entry.sealedAt,
     ...(network.contractId && entry.id
-      ? { net: network.name, contract: network.contractId, id: entry.id }
+      ? {
+          net: network.name,
+          contract: network.contractId,
+          id: entry.id,
+          // Si este equipo guardó las transacciones, el comprobante rearmado las lleva (proof.ts descarta lo mal formado).
+          ...(entry.sealTx ? { stx: entry.sealTx } : {}),
+          ...(entry.drawTx ? { dtx: entry.drawTx } : {}),
+        }
       : {}),
   };
   const url = base ? await proofUrl(proof, base) : await proofUrl(proof);

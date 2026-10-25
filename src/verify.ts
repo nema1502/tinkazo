@@ -11,11 +11,13 @@ import { QUICKNET, bytesToHex, fetchRound, roundTime, roundUrl } from "./protoco
 import { prepararFirma, verifyRoundAsync } from "./protocol/firma";
 import { decodeProof, type Proof } from "./protocol/proof";
 import { anclaDe, premioDe, revisarComprobante, type Revision } from "./protocol/verificacion";
-import { network, shortAddress } from "./stellar/config";
+import { network, shortAddress, txUrl } from "./stellar/config";
+import { crearLectorDeHistorial, type SelloDelHistorial } from "./stellar/historial";
 import { leerRegistro } from "./stellar/registro";
 import type { ChainHistory, ChainRaffle } from "./stellar/seals";
-import { detalleTecnico, porQueNoCuadra } from "./verificacion-textos";
+import { codigoDelSello, detalleDelHistorial, detalleTecnico, porQueNoCuadra, porQueSinHistorial } from "./verificacion-textos";
 import { buscar, vecesExacto } from "./buscar";
+import { fechaLarga } from "./ui/agrupar";
 // Estático, no con import(): así las claves de compartir entran en los textos de esta página.
 import { abrirSorteo } from "./ui/compartir";
 
@@ -116,11 +118,17 @@ function pintarTecnico(lineas: string[]): void {
   $("verdict-tech-body").textContent = lineas.join("\n");
 }
 
-/** Lo de afuera que necesita la revisión: el faro, la firma y la cadena. */
+/**
+ * Lo de afuera que necesita la revisión: el faro, la firma, la cadena y el
+ * historial de transacciones. Este último es lo que deja comprobar un sorteo cuando
+ * el contrato ya no lo guarda (vence): se pide solo si el comprobante trae el hash
+ * de la transacción del sello, y el SDK de Stellar se baja recién entonces.
+ */
 const DEPENDENCIAS = {
   verificarFirma: verifyRoundAsync,
   traerFirma: async (round: number): Promise<string> => (await fetchRound(round, { attempts: 6, delayMs: 1500 })).signature,
   leerRegistro,
+  leerHistorial: crearLectorDeHistorial(),
 };
 
 /** El enlace tal como se verificó: compartir manda este, aunque después cambie el fragmento. */
@@ -177,15 +185,18 @@ function pintarComprobaciones(proof: Proof, r: Revision): void {
   const tiene = (...m: Revision["motivos"]): boolean => m.some((x) => r.motivos.includes(x));
   const sello = r.registro?.sello ?? null;
   const resultado = r.registro?.resultado ?? null;
+  // El sello de la transacción, si es el testigo porque el contrato ya no guarda el sorteo.
+  const delHistorial = r.fuente === "historial" && r.historial?.ok ? r.historial.sello : null;
 
   // ---------------------------------------------------- 1. la lista y su huella
   // Con registro en la cadena se compara contra el testigo, que es lo que
   // detecta un nombre cambiado. Sin registro, lo único comprobable es que el
   // comprobante no viene deformado, y el veredicto lo dice sin adornos.
-  // Anclado y sin el sello leído, la lista no se pudo comparar con nada: queda pendiente.
+  // Anclado y sin el sello leído (ni del contrato ni de su transacción), la lista
+  // no se pudo comparar con nada: queda pendiente.
   set(
     "vCheckList",
-    tiene("lista-deforme", "lista-cambiada", "cantidad") ? "bad" : r.ancla.tipo !== "libre" && !sello ? "pending" : "ok",
+    tiene("lista-deforme", "lista-cambiada", "cantidad") ? "bad" : r.ancla.tipo !== "libre" && !sello && !delHistorial ? "pending" : "ok",
     `${r.nombres.length} · ${r.huella.slice(0, 16)}…`,
   );
   $("v-hash").textContent = `list_hash = ${r.huella}`;
@@ -194,9 +205,11 @@ function pintarComprobaciones(proof: Proof, r: Revision): void {
   if (r.ancla.tipo !== "libre") {
     const contrato = typeof proof.contract === "string" ? shortAddress(proof.contract) : "—";
     if (r.ancla.tipo === "deforme") set("vCheckOfficial", "bad", () => t("vAnchorBrokenShort"));
-    else if (r.ancla.tipo === "ajeno" || tiene("codigo-ajeno")) {
+    else if (r.ancla.tipo === "ajeno" || tiene("codigo-ajeno", "contrato-ajeno")) {
       set("vCheckOfficial", "bad", () => `${contrato} · ${t("vNotOfficialShort")}`);
     } else if (r.registro?.wasm) set("vCheckOfficial", "ok", `${contrato} · ${r.registro.wasm.slice(0, 12)}…`);
+    // Sin el contrato en la cadena no se lee su código: queda la dirección, que es de la lista oficial.
+    else if (delHistorial) set("vCheckOfficial", "ok", () => `${contrato} · ${t("vOfficialAddress")}`);
     else set("vCheckOfficial", "pending", () => `${contrato} · ${t(r.falta === "sin-cadena" ? "vChainUnreachable" : "vChainMissing")}`);
 
     if (r.ancla.tipo !== "oficial" || tiene("codigo-ajeno")) set("vCheckChain", "bad", () => t("vNotOfficialShort"));
@@ -205,19 +218,26 @@ function pintarComprobaciones(proof: Proof, r: Revision): void {
       // Confundir las dos cosas acusaría al organizador por culpa del wifi.
       set("vCheckChain", "pending", () => t("vChainUnreachable"));
     } else if (tiene("numero-inexistente")) set("vCheckChain", "bad", () => t("vChainNever"));
-    else if (r.falta === "sin-contrato" || r.falta === "sin-sello" || r.falta === "sin-resultado") {
+    else if (r.falta === "sin-historial") {
+      // El contrato ya no guarda el sorteo y el historial no pudo confirmarlo: no es "no está", es "no se pudo".
+      set("vCheckChain", "pending", () => t("vChainNotConfirmed"));
+    } else if (r.falta === "sin-contrato" || r.falta === "sin-sello" || r.falta === "sin-resultado") {
       // Una red de pruebas borrada, un registro archivado: el contrato contestó, y no lo tiene.
       set("vCheckChain", "bad", () => t("vChainMissing"));
     } else if (tiene("registro-incoherente")) set("vCheckChain", "bad", () => t("vRecordOdd"));
+    // El contrato ya no guarda el sorteo y lo respalda su transacción. El número del sorteo no viaja
+    // en ella, así que no se afirma: se dice de dónde sale el sello y con qué código se lo reconoce.
+    else if (delHistorial) set("vCheckChain", r.motivos.length ? "bad" : "ok", () => `${t("vChainFromHistory")} · ${codigoDelSello(delHistorial)}`);
     else if (sello && !resultado) set("vCheckChain", "pending", () => t("vNotDrawnYet"));
     else set("vCheckChain", r.motivos.length ? "bad" : "ok", `#${proof.id} · ${proof.net}`);
 
     // La ronda tiene que haber nacido después del sello, con la hora de la cadena.
-    if (sello) {
+    const alSellar = sello ? { round: sello.round, en: sello.sealedAt } : delHistorial ? { round: delHistorial.round, en: delHistorial.closedAt } : null;
+    if (alSellar) {
       set(
         "vCheckSealedFirst",
         tiene("ronda-temprana") ? "bad" : "ok",
-        () => t("vSealedFirstDetail").replace("{s}", String(roundTime(sello.round) - sello.sealedAt)),
+        () => t("vSealedFirstDetail").replace("{s}", String(roundTime(alSellar.round) - alSellar.en)),
       );
     }
   }
@@ -259,12 +279,26 @@ const META_POR_DEFECTO = "defaultMeta";
 const hora = (s: number): string =>
   new Date(s * 1000).toLocaleTimeString(getLang() === "es" ? "es-BO" : "en-US", { hour: "2-digit", minute: "2-digit" });
 
+/**
+ * El rótulo de arriba de las comprobaciones: la red y cómo se reconoce el sorteo. Con el sello que
+ * sale del historial, el número del enlace no se comprueba (la transacción no lo trae y el mismo sello
+ * pasa con cualquier número): el sorteo se reconoce por el código del sello, junto con la fecha en que
+ * cerró, y el número va aparte, en lo técnico, como el que figura en el comprobante.
+ */
+function pintarIdentidad(proof: Proof, delHistorial: SelloDelHistorial | null): void {
+  if (!delHistorial) return;
+  $("v-net").textContent = `${String(proof.net ?? "")} · ${t("vSelloCodigo").replace("{c}", codigoDelSello(delHistorial))}`;
+}
+
 /** El veredicto, el resultado y lo que se puede hacer. Se vuelve a llamar al cambiar de idioma. */
 function contar(proof: Proof, r: Revision): void {
   const primeraVez = !contado;
   contado = true;
   const sello = r.registro?.sello ?? null;
+  // El sello de la transacción, si es el testigo porque el contrato ya no guarda el sorteo.
+  const delHistorial = r.fuente === "historial" && r.historial?.ok ? r.historial.sello : null;
   pintarTecnico([]);
+  pintarIdentidad(proof, delHistorial);
   // La lista se llama "sellada" solo si la cadena atestiguó que lo es.
   const atestiguado = r.veredicto === "verde" || r.veredicto === "pendiente";
   const cabeza = $("v-list-h");
@@ -284,8 +318,10 @@ function contar(proof: Proof, r: Revision): void {
   }
 
   if (r.veredicto === "falta") {
-    // Dice estar en la cadena y la cadena no lo tiene: la cuenta cierra, pero
-    // nadie atestigua la lista. Sin tarjeta de ganador, que se comparte sola.
+    // Dice estar en la cadena y la cadena no lo tiene, y no hay a quién preguntar más (el
+    // comprobante no trae el hash del sello): la cuenta cierra, pero nadie atestigua la lista.
+    // Sin tarjeta de ganador, que se comparte sola. Con el hash del sello y el historial
+    // que no contesta no se llega acá: eso es "no pude comprobarlo" (`sin-red`).
     verdict("partial", "vVerdictMissing", t("vVerdictMissingDetail"));
     return;
   }
@@ -301,6 +337,13 @@ function contar(proof: Proof, r: Revision): void {
       } else {
         verdict("working", "vCannotFinish", t("vRoundUnreachable"));
       }
+      return;
+    }
+    // El contrato ya no guarda el sorteo y el historial de transacciones no pudo confirmarlo (sin
+    // red, una respuesta rara, una fuente que ya no guarda algo tan antiguo o que no conoce la
+    // transacción). Se dice por qué, en simple, y que eso no prueba que el sorteo no exista.
+    if (r.falta === "sin-historial") {
+      verdict("working", "vVerdictUnknown", t(porQueSinHistorial(r)));
       return;
     }
     // Dice estar anclado y no se pudo leer la cadena. No se le imputa nada al
@@ -319,24 +362,40 @@ function contar(proof: Proof, r: Revision): void {
   // Lo que se muestra del sorteo sale del sello cuando se leyó: el premio y la
   // fecha del enlace se pueden cambiar a mano (QA del 16 de octubre de 2026: un
   // comprobante verde decía "Se lleva: un auto 0 km"). El número del sorteo y la
-  // red van en la foto solo si la cadena los atestiguó.
+  // red van en la foto solo si la cadena los atestiguó; con el sello del historial, el
+  // número no viaja en la transacción y no se afirma (la red sí: es la de su hash).
   const porDefecto = (["es", "en"] as const).map((l) => textos(l)[META_POR_DEFECTO]).filter((x): x is string => typeof x === "string");
   const premio = premioDe(r, proof.prize, porDefecto);
-  const fecha = sello?.sealedAt ?? (r.veredicto === "libre" ? proof.sealedAt : undefined);
+  const fecha = sello?.sealedAt ?? delHistorial?.closedAt ?? (r.veredicto === "libre" ? proof.sealedAt : undefined);
   if (primeraVez) {
     renderResult(proof, r, premio, {
       fromChain: r.veredicto === "verde",
       ...(fecha ? { fecha } : {}),
-      ...(atestiguado && proof.id && proof.net ? { numero: proof.id, red: proof.net } : {}),
+      ...(atestiguado && proof.id && proof.net && !delHistorial ? { numero: proof.id, red: proof.net } : {}),
+      ...(delHistorial && proof.net ? { red: proof.net } : {}),
     });
     // Los otros sellos se traen al final y sin bloquear. Si muestran la misma
     // lista sellada más de una vez, el verde baja a amarillo (`pintarSellos`).
-    if (atestiguado) void cargarSellos(proof);
+    // Con el sello del historial no se traen: se leen del estado del contrato, que ya no
+    // tiene este sorteo, y "hay uno solo" sin haber podido mirar sería peor que callar.
+    if (atestiguado && !delHistorial) void cargarSellos(proof);
     if (r.veredicto === "pendiente") offerToFinish(proof, r);
   }
 
   if (r.veredicto === "verde") {
     if (sellosRepetidos) verdict("partial", "vVerdictSealedAgain", t("vVerdictSealedAgainDetail"));
+    else if (delHistorial) {
+      // El contrato ya no guarda el sorteo: lo respalda la transacción del sello, en el historial
+      // público. Lo técnico (cuál, en qué ledger) va plegado debajo.
+      verdict(
+        "ok",
+        "vVerdictOkChain",
+        t(proof.net === "testnet" ? "vVerdictOkHistoryDetailTest" : "vVerdictOkHistoryDetail")
+          .replace("{f}", fechaLarga(delHistorial.closedAt, getLang()))
+          .replace("{c}", codigoDelSello(delHistorial)),
+      );
+      pintarTecnico(detalleDelHistorial(r, proof));
+    }
     // En testnet se dice: Stellar la borra entera el 16 de diciembre de 2026.
     else verdict("ok", "vVerdictOkChain", t(proof.net === "testnet" ? "vVerdictOkChainDetailTest" : "vVerdictOkChainDetail"));
   } else if (r.veredicto === "pendiente") {
@@ -605,6 +664,15 @@ function renderResult(
     const a = $<HTMLAnchorElement>("v-contract");
     a.style.display = "inline-block";
     a.href = `https://stellar.expert/explorer/${r.ancla.contrato.red === "mainnet" ? "public" : "testnet"}/contract/${r.ancla.contrato.contractId}`;
+  }
+  // La transacción del sello, en el explorador de la red del comprobante: solo si el historial
+  // la leyó y es un sello de este sorteo (el enlace a una transacción que nadie comprobó no se da).
+  const tx = $<HTMLAnchorElement>("v-tx");
+  if (r.ancla.tipo === "oficial" && r.historial?.ok) {
+    tx.style.display = "inline-block";
+    tx.href = txUrl(r.historial.sello.hash, r.ancla.contrato.red);
+  } else {
+    tx.style.display = "none";
   }
 }
 

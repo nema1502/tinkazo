@@ -35,6 +35,43 @@ export interface Proof {
    * archive. El veredicto verde sigue exigiendo que la cadena atestigüe la lista.
    */
   signature?: string;
+  /**
+   * Hash de la transacción del sello (`seal`): 64 caracteres hexadecimales en
+   * minúsculas. El estado del contrato vence y mantenerlo cuesta renta; la
+   * transacción no necesita renta y sigue en el historial de Stellar mientras la
+   * fuente que lo guarda la conserve (no para siempre: protocolo §7.1). Con este
+   * hash la verificación puede seguir dando verde cuando el estado ya no está
+   * (`stellar/historial.ts`); si el historial no se puede leer, el resultado es
+   * "no confirmado". Opcional: un comprobante sin él se verifica como siempre.
+   */
+  stx?: string;
+  /**
+   * Hash de la transacción del sorteo (`draw`), con la misma forma. Viaja en el
+   * comprobante para quien quiera mirarla en un explorador; hoy no cambia el
+   * veredicto, porque el ganador se rehace con la firma de la ronda.
+   */
+  dtx?: string;
+}
+
+/**
+ * Un hash de transacción bien formado (64 hexadecimales), en minúsculas, o
+ * `null`. Nunca lanza: el comprobante llega de un enlace y trae lo que quiso quien lo armó.
+ */
+export function hashDeTx(valor: unknown): string | null {
+  return typeof valor === "string" && /^[0-9a-fA-F]{64}$/.test(valor) ? valor.toLowerCase() : null;
+}
+
+/**
+ * El mismo objeto con `stx` y `dtx` bien formados, o sin ellos. Lo que no son 64
+ * hexadecimales se descarta en vez de viajar: una transacción que no existe no
+ * puede dar un testigo, y un texto cualquiera no tiene por qué llegar a la
+ * pantalla ni a un pedido a la red.
+ */
+export function conHashesValidos<T extends { stx?: unknown; dtx?: unknown }>(x: T): T {
+  const { stx, dtx, ...resto } = x;
+  const s = hashDeTx(stx);
+  const d = hashDeTx(dtx);
+  return { ...resto, ...(s ? { stx: s } : {}), ...(d ? { dtx: d } : {}) } as unknown as T;
 }
 
 const enc = new TextEncoder();
@@ -74,7 +111,7 @@ const hasCompression = (): boolean => typeof CompressionStream === "function";
 
 /** Serializa un comprobante al texto que va después del `#`. */
 export async function encodeProof(proof: Proof): Promise<string> {
-  return encodeFragment(proof);
+  return encodeFragment(conHashesValidos(proof));
 }
 
 /** Cualquier valor al texto que va después del `#`: comprimido si conviene. */
@@ -137,13 +174,17 @@ export async function decodePreview(fragment: string): Promise<ListPreview> {
   return v as ListPreview;
 }
 
-/** Lee un comprobante. Lanza si el texto no es un comprobante válido. */
+/**
+ * Lee un comprobante. Lanza si el texto no es un comprobante válido. Un
+ * comprobante anterior a `stx` y `dtx` se lee igual; si traen algo que no es un
+ * hash de transacción, se descarta.
+ */
 export async function decodeProof(fragment: string): Promise<Proof> {
   const parsed = (await decodeFragment(fragment)) as Proof;
   if (!Array.isArray(parsed.names) || typeof parsed.round !== "number") {
     throw new Error("proof-malformed");
   }
-  return parsed;
+  return conHashesValidos(parsed);
 }
 
 /** Enlace completo a la página de verificación. */
@@ -153,7 +194,7 @@ export async function proofUrl(proof: Proof, base = location.origin): Promise<st
 
 /** El mismo comprobante como archivo, para quien prefiera guardarlo. */
 export function proofFile(proof: Proof): Blob {
-  return new Blob([JSON.stringify(proof, null, 2)], { type: "application/json" });
+  return new Blob([JSON.stringify(conHashesValidos(proof), null, 2)], { type: "application/json" });
 }
 
 /**

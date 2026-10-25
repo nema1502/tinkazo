@@ -121,6 +121,8 @@ describe("el registro, leído de la cadena", () => {
       numWinners: 1,
       round: 32_769_771,
       sealedAt: 1_791_112_637,
+      // El ledger del sello: con él se cruza el estado con el historial de la transacción.
+      sealedLedger: 5_017_810,
       meta: "Sorteo de demostración, con la lista de ejemplo",
       drawn: true,
     });
@@ -224,7 +226,13 @@ describe("el registro, leído de la cadena", () => {
       round: 32_769_771n, sealed_at: 1_791_112_637n, sealed_ledger: 1, meta: "x", status: ["Drawn"],
     };
     expect(selloDe(sello).drawn).toBe(true);
+    expect(selloDe(sello).sealedLedger).toBe(1);
+    // Un contrato que no guardara el ledger sigue leyéndose: ese dato solo sirve para el cruce con el historial.
+    const { sealed_ledger: _l, ...sinLedger } = sello;
+    expect("sealedLedger" in selloDe(sinLedger)).toBe(false);
     for (const roto of [
+      { ...sello, sealed_ledger: -1 },
+      { ...sello, sealed_ledger: "5" },
       { ...sello, list_hash: new Uint8Array(31) },
       { ...sello, status: ["Otro"] },
       { ...sello, count: -1 },

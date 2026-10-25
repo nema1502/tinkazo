@@ -230,6 +230,12 @@ describe("lo que va en la foto", () => {
     expect(f.mas).toBe("and {n} more");
   });
 
+  it("un sorteo comprobado con el historial de Stellar no trae número, pero en testnet sigue diciendo red de prueba", () => {
+    const f = fotoDeSorteo("es", { enlace, ganadores: ["Ana"], total: 18, premio: "", fecha: 1_792_600_000, red: "testnet" }, enlace);
+    expect(f.rotulo).toMatch(/^Resultado del sorteo · red de prueba · \d{1,2} de [a-z]+ de 2026$/);
+    expect(fotoDeSorteo("es", { enlace, ganadores: ["Ana"], total: 18, premio: "", red: "mainnet" }, enlace).rotulo).toBe("Resultado del sorteo");
+  });
+
   it("en la red principal no dice red de prueba", () => {
     const f = fotoDeSorteo("es", { enlace, ganadores: ["Ana"], total: 5, premio: "", numero: "9", red: "mainnet" }, enlace);
     expect(f.rotulo).toBe("Sorteo #9");

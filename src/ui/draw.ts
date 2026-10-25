@@ -791,7 +791,17 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
     // verde sigue exigiendo que la cadena atestigüe la lista.
     signature: d.beacon.signature,
     ...(f.raffleId !== undefined
-      ? { net: network.name, contract: network.contractId ?? "", id: String(f.raffleId) }
+      ? {
+          net: network.name,
+          contract: network.contractId ?? "",
+          id: String(f.raffleId),
+          // Las transacciones del sello y del sorteo: el estado del contrato vence y mantenerlo
+          // cuesta renta, el historial de Stellar no. Con el hash del sello, este comprobante
+          // se puede verificar aunque el contrato ya no tenga el sorteo (`stellar/historial.ts`).
+          // Si no se sabe alguno (un sello que se retomó, un sorteo que ya estaba grabado), no va.
+          ...(f.sealTx ? { stx: f.sealTx } : {}),
+          ...(d.drawTx ? { dtx: d.drawTx } : {}),
+        }
       : {}),
   };
   let link: string;

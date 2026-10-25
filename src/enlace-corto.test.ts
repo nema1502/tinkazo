@@ -20,7 +20,7 @@ import {
 import { readFileSync } from "node:fs";
 import { T } from "./i18n";
 import { eventoUrl } from "./protocol/evento";
-import { PROOF_VERSION, proofUrl, type Proof } from "./protocol/proof";
+import { PROOF_VERSION, decodeProof, proofUrl, type Proof } from "./protocol/proof";
 
 const ORIGEN = "https://tinkazo.app";
 
@@ -104,6 +104,24 @@ describe("enlace corto: ida y vuelta", () => {
     olvidarMemoria();
     const r = await abrir(id, clave, { fetch: s.f, origen: ORIGEN });
     expect(r).toMatchObject({ ruta: largo.slice(ORIGEN.length) });
+  });
+
+  it("un comprobante con los hashes de sus transacciones (stx, dtx) los conserva al acortarlo y abrirlo", async () => {
+    const stx = "66f498d7b937e20209f765bc995121c9e4c85567cd70232e9890c4e2f07cae0e";
+    const dtx = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    const s = servicioFalso();
+    const conHashes = await proofUrl({ ...comprobante, net: "testnet", contract: "CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A", id: "1", stx, dtx }, ORIGEN);
+    const c = await acortar(conHashes, { fetch: s.f, origen: ORIGEN });
+    expect(c).not.toBeNull();
+    const { id, clave } = partes(c?.corto ?? "");
+    olvidarMemoria();
+    const r = await abrir(id, clave, { fetch: s.f, origen: ORIGEN });
+    if (!("ruta" in r)) throw new Error("tenía que abrir");
+    // La ruta que sale es el largo, tal cual: lo que vea verificar.html trae los dos hashes.
+    expect(r.ruta).toBe(conHashes.slice(ORIGEN.length));
+    const abierto = await decodeProof(r.ruta.slice(r.ruta.indexOf("#")));
+    expect(abierto.stx).toBe(stx);
+    expect(abierto.dtx).toBe(dtx);
   });
 
   it("un evento entero también va y vuelve, aunque su enlace largo pese decenas de KB", async () => {

@@ -25,6 +25,20 @@ export const RPC_URLS: Record<NetworkName, string> = {
   mainnet: "https://mainnet.sorobanrpc.com",
 };
 
+/**
+ * Horizon, el historial de transacciones de cada red.
+ *
+ * El RPC lee el estado del contrato, que vence (7 días en testnet, 120 en
+ * mainnet) y cuesta mantener vivo. Horizon guarda las transacciones mientras la
+ * red exista, sin renta: de ahí sale la verificación por historial
+ * (`historial.ts`, docs/protocolo.md §7.1). También es de un tercero en mainnet:
+ * rotarlo es un cambio de una línea, como el RPC.
+ */
+export const HORIZON_URLS: Record<NetworkName, string> = {
+  testnet: "https://horizon-testnet.stellar.org",
+  mainnet: "https://horizon.stellar.org",
+};
+
 export interface NetworkConfig {
   name: NetworkName;
   rpcUrl: string;
@@ -67,7 +81,11 @@ export const network = pickNetwork();
 export const anchoringAvailable = network.contractId !== null;
 
 export const contractUrl = (): string => `${network.explorerBase}/contract/${network.contractId}`;
-export const txUrl = (hash: string): string => `${network.explorerBase}/tx/${hash}`;
+/**
+ * La transacción en el explorador. Sin `red`, la de este build; un comprobante
+ * puede venir de la otra red, y entonces el enlace tiene que ser el de la suya.
+ */
+export const txUrl = (hash: string, red: NetworkName = network.name): string => `${NETWORKS[red].explorerBase}/tx/${hash}`;
 export const accountUrl = (address: string): string => `${network.explorerBase}/account/${address}`;
 
 /** `GABC…WXYZ` para mostrar una dirección sin ocupar media pantalla. */

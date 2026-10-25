@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import vectors from "../../docs/vectors.json";
-import { EVENTO_PRESUPUESTO_CARACTERES, EVENTO_VERSION, comprobanteDe, decodeEvento, encodeEvento, eventoUrl, eventosUrls, partirEvento, type SorteoDelEvento } from "./evento";
-import { PROOF_VERSION, encodeFragment } from "./proof";
+import { EVENTO_PRESUPUESTO_CARACTERES, EVENTO_VERSION, comprobanteDe, decodeEvento, encodeEvento, eventoUrl, eventosUrls, partirEvento, verificarUrlDe, type SorteoDelEvento } from "./evento";
+import { PROOF_VERSION, decodeProof, encodeFragment } from "./proof";
 
 const sorteo = (i: number, extra: Partial<SorteoDelEvento> = {}): SorteoDelEvento => ({
   v: PROOF_VERSION,
@@ -88,6 +88,31 @@ describe("enlace de evento", () => {
     expect(Object.keys(c)).not.toContain("ganadores");
     expect(c.names).toEqual(s.names);
     expect(c.round).toBe(s.round);
+  });
+
+  it("cada sorteo conserva los hashes de sus transacciones (stx, dtx), y se descarta lo mal formado", async () => {
+    const stx = "66f498d7b937e20209f765bc995121c9e4c85567cd70232e9890c4e2f07cae0e";
+    const dtx = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    const ev = await decodeEvento(await encodeEvento(titulo, [sorteo(0, { stx, dtx }), sorteo(1, { stx })]));
+    expect(ev.sorteos[0]).toMatchObject({ stx, dtx });
+    expect(ev.sorteos[1]?.stx).toBe(stx);
+    expect("dtx" in (ev.sorteos[1] ?? {})).toBe(false);
+    // Un enlace armado a mano con basura en esos campos: no pasa.
+    const roto = { v: 1, kind: "evento", titulo, sorteos: [{ ...sorteo(0), stx: "x", dtx: ["a"] }, { ...sorteo(1), stx: stx.toUpperCase() }] };
+    const leido = await decodeEvento(await encodeFragment(roto));
+    expect("stx" in (leido.sorteos[0] ?? {}) || "dtx" in (leido.sorteos[0] ?? {})).toBe(false);
+    expect(leido.sorteos[1]?.stx).toBe(stx);
+    // El comprobante de un sorteo, el que lee verificar.html, los lleva.
+    expect(comprobanteDe(sorteo(0, { stx, dtx }))).toMatchObject({ stx, dtx });
+  });
+
+  it("un sorteo del evento viaja entero al enlace de verificación, con sus hashes", async () => {
+    const stx = "66f498d7b937e20209f765bc995121c9e4c85567cd70232e9890c4e2f07cae0e";
+    const url = await verificarUrlDe(sorteo(0, { stx }), "https://tinkazo.app");
+    expect(url.startsWith("https://tinkazo.app/verificar.html#")).toBe(true);
+    const proof = await decodeProof(url.slice(url.indexOf("#")));
+    expect(proof.stx).toBe(stx);
+    expect("ganadores" in proof).toBe(false);
   });
 
   it("el enlace va a evento.html, con el texto después del numeral", async () => {

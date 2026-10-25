@@ -35,6 +35,15 @@ export interface ContratoOficial {
    * en los otros sellos del organizador, que se leen del vigente).
    */
   ultimoId?: number;
+  /**
+   * En un contrato anterior, el ledger en que cayó ese último sello (el
+   * `sealed_ledger` del sorteo `ultimoId`). La transacción de un sello no trae el
+   * número del sorteo (lo devuelve el contrato), así que el historial no puede
+   * aplicar `ultimoId`: lo que se selló en el contrato después de este ledger no
+   * es un sorteo de Tinkazo. Un anterior sin esto no se acepta por historial
+   * (`historial.ts`); por estado sigue valiendo con `ultimoId`.
+   */
+  ultimoLedger?: number;
 }
 
 interface Anterior {
@@ -42,6 +51,7 @@ interface Anterior {
   wasmSha256: string;
   deployedAt?: string;
   ultimoId?: number;
+  ultimoLedger?: number;
 }
 
 interface Despliegue extends Anterior {
@@ -71,11 +81,22 @@ export function contratosOficiales(red?: Red): ContratoOficial[] {
       // Un anterior sin `ultimoId` no se acepta: sin ese tope, quien quisiera podría
       // sellar en él hoy, fuera de la vista de los otros sellos.
       if (!Number.isSafeInteger(a.ultimoId) || (a.ultimoId as number) < 0) continue;
-      out.push({ ...comun, contractId: a.contractId, wasmSha256: a.wasmSha256.toLowerCase(), vigente: false, ultimoId: a.ultimoId as number });
+      const ultimoLedger = Number.isSafeInteger(a.ultimoLedger) && (a.ultimoLedger as number) > 0 ? (a.ultimoLedger as number) : null;
+      out.push({
+        ...comun,
+        contractId: a.contractId,
+        wasmSha256: a.wasmSha256.toLowerCase(),
+        vigente: false,
+        ultimoId: a.ultimoId as number,
+        ...(ultimoLedger !== null ? { ultimoLedger } : {}),
+      });
     }
   }
   return out;
 }
+
+/** La passphrase de una red, con la que se calcula el hash de sus transacciones. */
+export const passphraseDe = (red: Red): string => PASSPHRASE[red];
 
 /**
  * El contrato oficial que nombra un comprobante, o `null` si la red o la

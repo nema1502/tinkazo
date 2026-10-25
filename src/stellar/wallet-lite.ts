@@ -1,5 +1,5 @@
 import freighter from "@stellar/freighter-api";
-import { network } from "./config";
+import { HORIZON_URLS, network } from "./config";
 import { grifoApagado } from "./grifo";
 
 /**
@@ -188,8 +188,7 @@ export async function xlmBalance(address: string): Promise<number> {
   }
 }
 
-const horizonBase = (): string =>
-  network.name === "mainnet" ? "https://horizon.stellar.org" : "https://horizon-testnet.stellar.org";
+const horizonBase = (): string => HORIZON_URLS[network.name];
 
 /* -------------------------------------------------------------------- sesión */
 

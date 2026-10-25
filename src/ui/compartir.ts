@@ -127,7 +127,9 @@ function fechaLarga(lang: Lang, segundos?: number): string {
 function rotuloDeSorteo(lang: Lang, d: DatosSorteo): string {
   return [
     d.numero ? rellenar(cad(lang, "fotoNumero"), { n: d.numero }) : cad(lang, "imgKicker"),
-    d.numero && d.red === "testnet" ? cad(lang, "fotoPrueba") : "",
+    // La marca de prueba no depende del número: un sorteo comprobado con el historial de Stellar
+    // (el contrato ya no lo guarda) no trae número, y sigue siendo de la red de prueba.
+    d.red === "testnet" ? cad(lang, "fotoPrueba") : "",
     fechaLarga(lang, d.fecha),
   ]
     .filter(Boolean)

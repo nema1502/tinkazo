@@ -6,11 +6,12 @@ import { canonicalList, listHash } from "./protocol/canonical";
 import { prepararFirma, verifyRoundAsync } from "./protocol/firma";
 import { comprobanteDe, type Evento, decodeEvento, type SorteoDelEvento, verificarUrlDe } from "./protocol/evento";
 import { bytesToHex, fetchRound } from "./protocol/quicknet";
-import { anclaDe, premioDe, type Registro, revisarComprobante, type Revision } from "./protocol/verificacion";
+import { anclaDe, claveDeNumero, clavesDelSorteo, premioDe, type Registro, revisarComprobante, type Revision } from "./protocol/verificacion";
+import { crearLectorDeHistorial } from "./stellar/historial";
 import type { ContratoOficial } from "./stellar/oficiales";
 import { leerRegistros } from "./stellar/registro";
 import type { ChainRaffle } from "./stellar/seals";
-import { detalleTecnico } from "./verificacion-textos";
+import { codigoDelSello, detalleDelHistorial, detalleTecnico, porQueSinHistorial } from "./verificacion-textos";
 import { fechaLarga } from "./ui/agrupar";
 
 /**
@@ -70,13 +71,15 @@ const META_POR_DEFECTO = "defaultMeta";
 /** Diez minutos de rondas de quicknet, como en `seals.ts`. */
 const RONDAS_CERCANAS = 200;
 
-/** Cómo se reconoce un sorteo dentro del enlace: el número en su contrato, o la ronda y la lista si no está anclado. */
-function claveDe(s: SorteoDelEvento, r: Revision): string {
-  const a = r.ancla;
-  if (a.tipo === "oficial") return `${a.contrato.red}:${a.contrato.contractId}:${a.id}`;
-  if (a.tipo === "libre") return `libre:${String(s.round)}:${r.huella}`;
-  return `otro:${String(s.net)}:${String(s.contract)}:${String(s.id)}`;
-}
+/**
+ * Lo que lee el historial de Stellar, para todo el evento: el mismo hash no se pide dos veces y,
+ * si Horizon no contesta, no se espera de nuevo por cada sorteo.
+ */
+const leerHistorial = crearLectorDeHistorial();
+
+// Cómo se reconoce un sorteo dentro del enlace: `clavesDelSorteo` (protocol/verificacion.ts). Un mismo sello
+// citado de dos formas (el hash de afuera de un fee-bump y el de adentro; el estado vivo y la transacción; con
+// números inventados distintos cuando lo respalda el historial) comparte alguna clave y cuenta una sola vez.
 
 /**
  * Los registros de todos los sorteos anclados, de a una consulta por contrato.
@@ -117,6 +120,7 @@ async function revisar(s: SorteoDelEvento, leer: (c: ContratoOficial, id: string
       verificarFirma: verifyRoundAsync,
       traerFirma: async (round) => (await fetchRound(round, { attempts: 3, delayMs: 1500 })).signature,
       leerRegistro: leer,
+      leerHistorial,
     },
     { k: ganadoresDelEnlace.length },
   );
@@ -167,7 +171,7 @@ async function revisar(s: SorteoDelEvento, leer: (c: ContratoOficial, id: string
  */
 async function buscarOtrosSellos(): Promise<void> {
   const ejemplo = bytesToHex(listHash(canonicalList(SAMPLE.join("\n"))));
-  const enElEnlace = new Set(filas.map((f, i) => claveDe(entran[i] as SorteoDelEvento, f.r)));
+  const enElEnlace = new Set(filas.flatMap((f, i) => clavesDelSorteo(entran[i] as SorteoDelEvento, f.r)));
   const porContrato = new Map<string, { contrato: ContratoOficial; filas: Fila[] }>();
   for (const f of filas) {
     const a = f.r.ancla;
@@ -187,7 +191,7 @@ async function buscarOtrosSellos(): Promise<void> {
     } catch {
       continue;
     }
-    const fuera = (x: ChainRaffle): boolean => !enElEnlace.has(`${contrato.red}:${contrato.contractId}:${x.id}`);
+    const fuera = (x: ChainRaffle): boolean => !enElEnlace.has(claveDeNumero(contrato, x.id));
     for (const f of deEste) {
       const sello = f.r.registro?.sello;
       if (!sello || sello.listHash === ejemplo) continue;
@@ -210,12 +214,15 @@ function fila(etiqueta: string, e: Estado | undefined, detalle: string, mono = f
   return `<li class="check ${clase}"><b>${esc(etiqueta)}</b><span${mono ? ' class="mono"' : ""}>${esc(detalle)}</span></li>`;
 }
 
-/** La fila de la cadena: su estado en la lista de comprobaciones y lo que dice. */
-function filaCadena(c: EstadoCadena): string {
+/**
+ * La fila de la cadena: su estado en la lista de comprobaciones y lo que dice. `sinHistorial`: el contrato ya
+ * no guarda el sorteo y el historial no pudo confirmarlo; no es falta de conexión sin más, y el porqué va en la nota.
+ */
+function filaCadena(c: EstadoCadena, delHistorial = false, sinHistorial = false): string {
   const estado: Estado | undefined = c === "ok" ? "ok" : c === "mal" || c === "ajeno" || c === "falta" ? "bad" : "sin-red";
   const texto =
     c === "ok"
-      ? t("evCadenaOk")
+      ? t(delHistorial ? "evCadenaHistorial" : "evCadenaOk")
       : c === "ajeno"
         ? t("evCadenaAjena")
         : c === "mal"
@@ -224,7 +231,7 @@ function filaCadena(c: EstadoCadena): string {
             ? t("evCadenaFalta")
             : c === "pendiente"
               ? t("evCadenaPendiente")
-              : t("evSinRedCorto");
+              : t(sinHistorial ? "evCadenaSinHistorial" : "evSinRedCorto");
   return fila(t("evChkCadena"), estado, texto);
 }
 
@@ -234,24 +241,37 @@ const nombresAislados = (nombres: readonly string[]): string => nombres.map((n) 
 function tarjeta(s: SorteoDelEvento, i: number): string {
   const f = filas[i];
   const sello = f?.r.registro?.sello ?? null;
+  // El sello de la transacción, si es el testigo porque el contrato ya no guarda el sorteo.
+  const delHistorial = f?.r.fuente === "historial" && f.r.historial?.ok ? f.r.historial.sello : null;
   // El premio y la fecha, del sello si se leyó: los del enlace se pueden cambiar a mano.
   const porDefecto = (["es", "en"] as const).map((l) => textos(l)[META_POR_DEFECTO]).filter((x): x is string => typeof x === "string");
   const premioCadena = f ? premioDe(f.r, s.prize, porDefecto) : (s.prize ?? "");
   const premio = premioCadena.trim() ? premioCadena : t("evSinPremio");
   // La fecha del enlace solo en uno sin anclar (lo dice su nota) o mientras se revisa: en uno
   // que dice estar anclado y la cadena no lo atestiguó, sería una fecha que nadie respalda.
-  const fecha = sello?.sealedAt ?? (!f || f.cadena === "libre" ? s.sealedAt : undefined);
+  const fecha = sello?.sealedAt ?? delHistorial?.closedAt ?? (!f || f.cadena === "libre" ? s.sealedAt : undefined);
   // El número del sorteo, solo si la cadena lo atestiguó: es el que la sala anotó durante la espera.
   const numero = sello && f && (f.cadena === "ok" || f.cadena === "pendiente") ? ` · #${sello.id}` : "";
-  const cuando = (fecha ? t("evSellado").replace("{f}", fechaLarga(fecha, getLang())) : "") + numero;
+  // Con el sello del historial el número no se comprueba: el sorteo se reconoce por la fecha en que cerró
+  // y por el código de la transacción del sello. El número del enlace va aparte, en lo técnico.
+  const codigo = delHistorial && f && f.cadena === "ok" ? ` · ${t("evSelloCodigo").replace("{c}", codigoDelSello(delHistorial))}` : "";
+  const cuando = (fecha ? t("evSellado").replace("{f}", fechaLarga(fecha, getLang())) : "") + numero + codigo;
   const estado = (e: Estado | undefined): string => (e === "ok" ? t("evOk") : e === "bad" ? t("evMalo") : e === "sin-red" ? t("evSinRedCorto") : "");
   const filasHtml = [
     fila(t("evChkLista"), f?.lista, f ? (f.lista === "ok" ? `${f.r.huella.slice(0, 16)}…` : t("evListaMal")) : "", true),
     fila(t("evChkFirma"), f?.firma, estado(f?.firma)),
     fila(t("evChkGanador"), f?.ganador, estado(f?.ganador)),
-    ...(f && f.cadena !== "libre" ? [filaCadena(f.cadena)] : []),
+    ...(f && f.cadena !== "libre" ? [filaCadena(f.cadena, !!delHistorial, f.r.falta === "sin-historial")] : []),
   ];
-  const nota = !f ? "" : f.cadena === "libre" ? t("evSinAnclar") : f.cadena === "ok" ? t("evAnclado") : "";
+  const nota = !f
+    ? ""
+    : f.cadena === "libre"
+      ? t("evSinAnclar")
+      : f.cadena === "ok"
+        ? t(delHistorial ? "evAncladoHistorial" : "evAnclado")
+        : f.r.falta === "sin-historial"
+          ? t(porQueSinHistorial(f.r))
+          : "";
   // Los avisos: el repetido y la misma lista sellada otra vez, en rojo; lo parecido, en gris.
   const avisos = f
     ? [
@@ -270,6 +290,8 @@ function tarjeta(s: SorteoDelEvento, i: number): string {
   if (sello && f?.r.ancla.tipo === "oficial") {
     lineas.unshift(`${f.r.ancla.contrato.red} · ${f.r.ancla.contrato.contractId} · #${sello.id} · ${sello.organizer}`);
   }
+  // Lo técnico del verde que salió del historial: la transacción, el ledger y lo que ese camino no revisa.
+  if (f?.r.veredicto === "verde") lineas.push(...detalleDelHistorial(f.r, comprobanteDe(s)));
   const tecnico = lineas.length
     ? `<details class="tecnico"><summary>${esc(t("tecnicoT"))}</summary><p class="entity">${lineas.map(esc).join("<br>")}</p></details>`
     : "";
@@ -378,13 +400,14 @@ async function main(): Promise<void> {
   const vistos = new Set<string>();
   for (const s of entran) {
     const f = await revisar(s, leer);
-    // El mismo sorteo dos veces no son dos sorteos: "3 premios" con uno solo repetido.
-    const clave = claveDe(s, f.r);
-    if (vistos.has(clave)) {
+    // El mismo sorteo dos veces no son dos sorteos: "3 premios" con uno solo repetido. Se reconoce por
+    // cualquiera de sus claves, así que citarlo de otra forma (otro hash del mismo fee-bump, otro número) no lo disimula.
+    const claves = clavesDelSorteo(s, f.r);
+    if (claves.some((c) => vistos.has(c))) {
       f.repetido = true;
       f.mal = true;
     }
-    vistos.add(clave);
+    for (const c of claves) vistos.add(c);
     filas.push(f);
     pintar();
   }
