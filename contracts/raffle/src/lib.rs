@@ -15,7 +15,8 @@
 //! cada versión es un despliegue nuevo y los comprobantes llevan la dirección.
 //!
 //! Renta: cada sorteo paga la renta de sus dos entradas (`Raffle`, `Draw`) por
-//! 120 días. La renta de la instancia y del código del contrato se renueva con
+//! 7 días en esta variante de testnet (mainnet: 120, ver `TTL_ENTRADA_EXTEND_TO`).
+//! La renta de la instancia y del código del contrato se renueva con
 //! `extend`, nunca dentro de `seal` o `draw`.
 
 mod drand;
@@ -41,6 +42,15 @@ pub const MAX_META_LEN: u32 = 160;
 const DAY_LEDGERS: u32 = 17_280;
 const TTL_THRESHOLD: u32 = 60 * DAY_LEDGERS;
 const TTL_EXTEND_TO: u32 = 120 * DAY_LEDGERS;
+// Solo testnet: las entradas del sorteo (`Raffle`, `Draw`) guardan 7 días, no 120.
+// El alquiler de una entrada escala con el tiempo que queda guardada, y en testnet
+// el precio sube cuando el estado de la red pasa su objetivo: un sorteo de prueba
+// no debe pagar 120 días por cada sello. Siete días es el TTL mínimo de una entrada
+// persistente en testnet (docs/deployments.md). Consecuencia: si nadie llama a
+// `extend` antes de que venza, la entrada se archiva y el sorteo deja de leerse
+// hasta restaurarla. Esta variante no se despliega en mainnet.
+const TTL_ENTRADA_THRESHOLD: u32 = 2 * DAY_LEDGERS;
+const TTL_ENTRADA_EXTEND_TO: u32 = 7 * DAY_LEDGERS;
 
 #[contracttype]
 #[derive(Clone)]
@@ -190,7 +200,7 @@ impl TinkazoRaffle {
         env.storage().persistent().set(&key, &raffle);
         env.storage()
             .persistent()
-            .extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
+            .extend_ttl(&key, TTL_ENTRADA_THRESHOLD, TTL_ENTRADA_EXTEND_TO);
 
         Sealed {
             raffle_id: id,
@@ -251,12 +261,12 @@ impl TinkazoRaffle {
         env.storage().persistent().set(&key, &raffle);
         env.storage()
             .persistent()
-            .extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
+            .extend_ttl(&key, TTL_ENTRADA_THRESHOLD, TTL_ENTRADA_EXTEND_TO);
         let dkey = DataKey::Draw(raffle_id);
         env.storage().persistent().set(&dkey, &draw);
         env.storage()
             .persistent()
-            .extend_ttl(&dkey, TTL_THRESHOLD, TTL_EXTEND_TO);
+            .extend_ttl(&dkey, TTL_ENTRADA_THRESHOLD, TTL_ENTRADA_EXTEND_TO);
 
         Drawn {
             raffle_id,
@@ -299,12 +309,12 @@ impl TinkazoRaffle {
         }
         env.storage()
             .persistent()
-            .extend_ttl(&key, TTL_THRESHOLD, TTL_EXTEND_TO);
+            .extend_ttl(&key, TTL_ENTRADA_THRESHOLD, TTL_ENTRADA_EXTEND_TO);
         let dkey = DataKey::Draw(raffle_id);
         if env.storage().persistent().has(&dkey) {
             env.storage()
                 .persistent()
-                .extend_ttl(&dkey, TTL_THRESHOLD, TTL_EXTEND_TO);
+                .extend_ttl(&dkey, TTL_ENTRADA_THRESHOLD, TTL_ENTRADA_EXTEND_TO);
         }
         env.storage()
             .instance()
