@@ -313,15 +313,18 @@ describe("el intento pendiente se guarda para después de recargar", () => {
   });
 
   const i: IntentoDeSello = { organizer: ORG, listHash: HUELLA, round: 33_300_000, count: 8, numWinners: 2, meta: "Una bici", desde: 1_792_600_000, hash: "ab12" };
+  // La hora de estas pruebas es fija: el pendiente vence a las 6 h de su ronda y, con la
+  // hora real, esta ronda ya venció y las pruebas fallaban solo por el paso del tiempo.
+  const AHORA = roundTime(i.round) + 60;
 
   it("lo guarda con la red, el contrato y el premio, y lo devuelve solo para la misma cuenta, lista, red y contrato", () => {
     guardarPendiente(i, "testnet", "CCONTRATO", "Una bici");
     expect(JSON.parse(datos.get(CLAVE_PENDIENTE) as string)).toEqual({ intento: i, red: "testnet", contrato: "CCONTRATO", premio: "Una bici" });
-    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO")).toEqual({ intento: i, premio: "Una bici" });
-    expect(leerPendiente("GOTRA", HUELLA, "testnet", "CCONTRATO")).toBeNull();
-    expect(leerPendiente(ORG, "ef".repeat(32), "testnet", "CCONTRATO")).toBeNull();
-    expect(leerPendiente(ORG, HUELLA, "mainnet", "CCONTRATO")).toBeNull();
-    expect(leerPendiente(ORG, HUELLA, "testnet", "COTRO")).toBeNull();
+    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", AHORA)).toEqual({ intento: i, premio: "Una bici" });
+    expect(leerPendiente("GOTRA", HUELLA, "testnet", "CCONTRATO", AHORA)).toBeNull();
+    expect(leerPendiente(ORG, "ef".repeat(32), "testnet", "CCONTRATO", AHORA)).toBeNull();
+    expect(leerPendiente(ORG, HUELLA, "mainnet", "CCONTRATO", AHORA)).toBeNull();
+    expect(leerPendiente(ORG, HUELLA, "testnet", "COTRO", AHORA)).toBeNull();
   });
 
   it("vence seis horas después de su ronda: si había entrado, se retoma desde Mis sorteos", () => {
@@ -335,7 +338,7 @@ describe("el intento pendiente se guarda para después de recargar", () => {
     guardarPendiente(i, "testnet", "CCONTRATO", "");
     guardarPendiente(null, "testnet", "CCONTRATO", "");
     expect(datos.has(CLAVE_PENDIENTE)).toBe(false);
-    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO")).toBeNull();
+    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", AHORA)).toBeNull();
   });
 
   it("sin almacenamiento, dura en memoria mientras dure la pestaña", () => {
@@ -351,7 +354,7 @@ describe("el intento pendiente se guarda para después de recargar", () => {
       },
     });
     guardarPendiente(i, "testnet", "CCONTRATO", "x");
-    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO")?.intento).toEqual(i);
+    expect(leerPendiente(ORG, HUELLA, "testnet", "CCONTRATO", AHORA)?.intento).toEqual(i);
   });
 
   it("algo que no se entiende en el almacenamiento no es un pendiente", () => {
