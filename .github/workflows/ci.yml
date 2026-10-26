@@ -1,3 +1,11 @@
+# Las acciones de terceros van fijadas por el SHA completo de su commit: una
+# etiqueta (v4) se puede mover y una acción comprometida correría en el repositorio
+# con sus permisos. El comentario dice a qué versión corresponde. Para actualizar una:
+# gh api repos/<org>/<repo>/git/ref/tags/<vN> (si el objeto es un tag anotado,
+# gh api repos/<org>/<repo>/git/tags/<sha> trae el commit) y cambiar el SHA y el
+# comentario. dtolnay/rust-toolchain no tiene etiqueta `stable`: es una rama, y el SHA
+# es su punta del 26 de octubre de 2026. La única excepción es la acción de
+# StellarExpert de release.yml, que tiene que ir con @main (ver ahí por qué).
 name: CI
 
 on:
@@ -10,11 +18,12 @@ jobs:
     name: Contratos Soroban
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
+          toolchain: stable
           targets: wasm32v1-none
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - name: Tests
         run: cargo test --workspace
       - name: Build WASM
@@ -26,11 +35,11 @@ jobs:
     name: Sitio (Vite + TypeScript)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
         with:
           version: 11
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm

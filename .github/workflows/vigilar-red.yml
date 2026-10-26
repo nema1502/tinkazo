@@ -19,9 +19,12 @@
 # aviso se repetiría cada media hora. Sin caché (la primera vez), el nivel de antes
 # es «normal».
 #
-# Solo lee de los RPC públicos: no usa secretos y no instala nada (el guion no
-# tiene dependencias, solo Node). Qué vigila, qué significa cada nivel y cómo
-# actualizar la línea base: docs/deployments.md, «Vigilancia de la red».
+# Solo lee de los RPC públicos: no instala nada (el guion no tiene dependencias, solo
+# Node) y su único secreto es el opcional HEALTHCHECK_URL, el latido del último paso.
+# Las acciones van fijadas por SHA (ver el encabezado de ci.yml).
+#
+# Qué vigila, qué significa cada nivel y cómo actualizar la línea base:
+# docs/deployments.md, «Vigilancia de la red».
 name: Vigilar la red de Stellar
 
 on:
@@ -52,15 +55,15 @@ jobs:
     timeout-minutes: 5
     steps:
       # Solo scripts/: el guion y su línea base. El resto del repo no hace falta.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           sparse-checkout: scripts
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
       - name: Recuperar el nivel de la corrida anterior
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .estado-red
           key: vigilar-red-${{ github.run_id }}
@@ -80,7 +83,23 @@ jobs:
       # Aunque la corrida haya fallado: el aviso de hoy no se repite mañana a esta hora.
       - name: Guardar el nivel para la próxima corrida
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .estado-red
           key: vigilar-red-${{ github.run_id }}
+      # El latido: avisa a un servicio de alarma (healthchecks.io) que el detector corrió, y
+      # lo hace también si la corrida falló por una alarma de la red: lo que el servicio
+      # vigila es que el detector no calle (el cron se saltea, o GitHub desactiva el workflow
+      # tras 60 días sin actividad), no cómo está la red. Si pasan 2 horas sin latido, el
+      # servicio manda un correo. Opcional: sin el secreto HEALTHCHECK_URL no hace nada.
+      # (`secrets` no se puede usar en un `if`, por eso el secreto pasa por `env`.)
+      - name: Latido para el servicio de alarma
+        if: always()
+        env:
+          URL: ${{ secrets.HEALTHCHECK_URL }}
+        run: |
+          if [ -z "$URL" ]; then
+            echo "Sin HEALTHCHECK_URL: no hay latido que mandar."
+            exit 0
+          fi
+          curl -fsS -m 10 --retry 3 "$URL"

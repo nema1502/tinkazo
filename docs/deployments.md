@@ -88,6 +88,9 @@ git add scripts/vigilar-red.base.json && git commit
 
 Mientras no se actualice, cada corrida sigue fallando. Cuando testnet se reinicia (cada tres meses) casi todo cambia: se actualiza su línea base con `--actualizar-base --red testnet`. GitHub desactiva los workflows programados de un repositorio público tras 60 días sin actividad, y las corridas programadas pueden demorarse cuando la plataforma está cargada.
 
+**Latido.** Si el detector mismo calla (el cron se saltea o GitHub desactiva el workflow) no llega ningún correo: por eso el último paso de `vigilar-red.yml` hace `curl` a la dirección del secreto `HEALTHCHECK_URL`, también cuando la corrida falla; sin el secreto no hace nada.
+En healthchecks.io el chequeo va con período de 30 minutos y gracia de 90, para que mande un correo si pasan 2 horas sin latido; el secreto se carga con `gh secret set HEALTHCHECK_URL --repo nema1502/tinkazo` (el chequeo lo crea Nicolás).
+
 ## Cómo desplegar
 
 ```bash
