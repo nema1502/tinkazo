@@ -1,0 +1,10 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "id": "056b895bc9d944fc2ddc3f44157a019cc782828f79c99bf97f10997bd017dc71",
+    "protocolVersion": 29,
+    "sequence": 5391787,
+    "closeTime": "1792982522"
+  }
+}

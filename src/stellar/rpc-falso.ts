@@ -12,6 +12,12 @@
  * se lee más allá de su `ultimoId`.
  */
 import { Address, scValToNative, xdr } from "@stellar/stellar-sdk";
+import redGetFeeStats from "./fixtures/rpc-getFeeStats.json";
+import redGetLatestLedger from "./fixtures/rpc-getLatestLedger.json";
+import redGetNetwork from "./fixtures/rpc-getNetwork.json";
+import redSimulaCaro from "./fixtures/rpc-simulate-sello-caro.json";
+import redSimulaRestaurar from "./fixtures/rpc-simulate-sello-restaurar.json";
+import redSimula from "./fixtures/rpc-simulate-sello.json";
 
 export interface SelloFalso {
   id: number;
@@ -154,4 +160,91 @@ export function rpcFalso(contratos: ContratoFalso[]): {
   };
 
   return { fetch: fetchFalso, pedidos };
+}
+
+/* ------------------------------------------------------ la red, para el chequeo */
+
+/**
+ * Cómo anda un RPC de mentira:
+ * - `ok`: contesta bien.
+ * - `cortado`: el pedido no llega (`TypeError: Failed to fetch`).
+ * - `429` y `503`: contesta eso, con una página que no es JSON.
+ * - `lento`: no contesta nunca (el tope de tiempo lo corta).
+ */
+export type ComoAnda = "ok" | "cortado" | "429" | "503" | "lento";
+
+export interface RpcDeMentira {
+  anda?: ComoAnda;
+  /** Hace cuántos segundos cerró el último ledger que dice conocer (30 por defecto es el límite: 2). */
+  ledgerHace?: number;
+  protocolo?: number;
+  passphrase?: string;
+  /** El p90 de la comisión de inclusión de Soroban, en stroops (la respuesta real de hoy dice "100"). */
+  p90?: string;
+  /** Qué devuelve la simulación de un sello: la de hoy (`normal`), la del 25 de octubre por la mañana (`caro`), una que pide restaurar o una que falla. */
+  simulacion?: "normal" | "caro" | "restaurar" | "error";
+  /** Un costo propio, en stroops, en vez de los de arriba. */
+  minResourceFee?: string;
+}
+
+const copia = <T>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
+
+/**
+ * Una red de mentira para el chequeo (`chequeo-red.ts`): `getNetwork`,
+ * `getLatestLedger`, `getFeeStats` y `simulateTransaction`, con la respuesta real
+ * del 25 de octubre de 2026 de la testnet (`fixtures/rpc-*.json`), una por
+ * dirección de RPC. Se instala con `vi.stubGlobal("fetch", red.fetch)`. Anota
+ * qué se pidió a quién (`pedidos`).
+ */
+export function redFalsa(rpcs: Record<string, RpcDeMentira>, ahora: () => number = Date.now) {
+  const pedidos: { url: string; metodo: string }[] = [];
+  const fetchFalso = async (url: unknown, init?: { body?: unknown }) => {
+    const u = String(url);
+    const pedido = JSON.parse(String(init?.body)) as { method?: string };
+    const metodo = pedido.method ?? "?";
+    pedidos.push({ url: u, metodo });
+    const r = rpcs[u];
+    if (!r) throw new TypeError("Failed to fetch");
+    const anda = r.anda ?? "ok";
+    if (anda === "cortado") throw new TypeError("Failed to fetch");
+    if (anda === "lento") throw new Error("The operation timed out.");
+    if (anda === "429" || anda === "503") {
+      return { status: Number(anda), ok: false, json: async (): Promise<unknown> => Promise.reject(new SyntaxError("Unexpected token <")) };
+    }
+    let cuerpo: { jsonrpc?: string; id?: number; result?: Record<string, unknown> };
+    switch (metodo) {
+      case "getNetwork": {
+        cuerpo = copia(redGetNetwork);
+        if (cuerpo.result) {
+          if (r.protocolo !== undefined) cuerpo.result.protocolVersion = r.protocolo;
+          if (r.passphrase !== undefined) cuerpo.result.passphrase = r.passphrase;
+        }
+        break;
+      }
+      case "getLatestLedger": {
+        cuerpo = copia(redGetLatestLedger);
+        if (cuerpo.result) {
+          cuerpo.result.closeTime = String(Math.floor(ahora() / 1000) - (r.ledgerHace ?? 2));
+          if (r.protocolo !== undefined) cuerpo.result.protocolVersion = r.protocolo;
+        }
+        break;
+      }
+      case "getFeeStats": {
+        cuerpo = copia(redGetFeeStats);
+        if (r.p90 !== undefined && cuerpo.result) (cuerpo.result.sorobanInclusionFee as Record<string, unknown>).p90 = r.p90;
+        break;
+      }
+      case "simulateTransaction": {
+        const cual = r.simulacion ?? "normal";
+        cuerpo = copia(cual === "caro" ? redSimulaCaro : cual === "restaurar" ? redSimulaRestaurar : redSimula);
+        if (cual === "error") cuerpo = { jsonrpc: "2.0", id: 1, result: { error: "HostError: Error(WasmVm, InvalidAction)\n\nEvent log (newest first):\n   0: [Diagnostic Event] ...", latestLedger: 5391787 } };
+        if (r.minResourceFee !== undefined && cuerpo.result) cuerpo.result.minResourceFee = r.minResourceFee;
+        break;
+      }
+      default:
+        throw new Error(`red-falsa: método no previsto ${metodo}`);
+    }
+    return { status: 200, ok: true, json: async () => cuerpo };
+  };
+  return { fetch: fetchFalso as unknown as typeof fetch, pedidos };
 }

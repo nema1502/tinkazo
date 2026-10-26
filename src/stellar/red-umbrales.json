@@ -1,0 +1,29 @@
+{
+  "_nota": "Los umbrales con los que la app decide, antes de sellar, si la red está bien (src/stellar/chequeo-red.ts). Un solo lugar, una constante por red. El detector externo (scripts/vigilar-red.mjs) mira la red cada 30 minutos con los mismos números. Los costos son XLM de un sello simulado.",
+  "testnet": {
+    "_tope": "Max fee de la app de Pollar en testnet: 100 XLM (el máximo que deja su panel).",
+    "topePollarXlm": 100,
+    "factorDelFeeBump": 3,
+    "rojoXlm": 33,
+    "amarilloXlm": 5
+  },
+  "mainnet": {
+    "_tope": "Max fee previsto para la app de Pollar en mainnet: 1 XLM.",
+    "topePollarXlm": 1,
+    "factorDelFeeBump": 3,
+    "rojoXlm": 0.33,
+    "amarilloXlm": 0.26
+  },
+  "comun": {
+    "_factor": "Pollar ofrece un fee-bump de unas 3 veces la tarifa interna (medido el 20 de octubre de 2026): con el costo por encima de rojoXlm la oferta pasa el tope y el patrocinio se apaga en silencio.",
+    "topeDeLlamadaMs": 4000,
+    "ledgerViejoS": 30,
+    "inclusionP90Stroops": 1000,
+    "protocolosConocidos": [29, 30],
+    "margenDeSaldo": 2,
+    "cacheS": 60,
+    "repetirCadaS": 60,
+    "reintentosAntesDeSinSello": 3,
+    "reintentarCadaS": 15
+  }
+}
