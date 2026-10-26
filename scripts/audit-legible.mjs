@@ -171,7 +171,8 @@ async function estadio(browser, juego, tamano, tema) {
     let fin = false;
     while (!fin && Date.now() - t0 < 120_000) {
       encima.push(...JSON.parse(await page.eval(llamar(escanearDom, "#stadium"))));
-      fin = await page.eval("!!(window.__legible && window.__legible.fin)");
+      // El show terminó cuando el estadio, que se vio abierto, se cierra.
+      fin = await page.eval("!!(window.__legible && window.__legible.vio && getComputedStyle(document.getElementById('stadium')).display !== 'block')");
       if (!fin) await sleep(300);
     }
     const r = JSON.parse(await page.eval("JSON.stringify({ textos: window.__legible.resumen(), muestras: window.__legible.muestras, errores: window.__legible.errores.slice(0, 3) })"));

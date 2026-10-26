@@ -173,6 +173,36 @@ describe("el código que corre adentro de la página", () => {
   });
 });
 
+describe("el reloj del estadio", () => {
+  it("sigue muestreando cuando el juego ya no pide cuadros, así se entera de que el show cerró", () => {
+    const reales = [];
+    const ctx = { console, performance: { now: () => 0 }, innerWidth: 1920, innerHeight: 1080, abierto: true };
+    ctx.window = ctx;
+    ctx.requestAnimationFrame = (cb) => reales.push(cb);
+    ctx.cancelAnimationFrame = () => {};
+    ctx.getComputedStyle = () => ({ display: ctx.abierto ? "block" : "none" });
+    ctx.document = { getElementById: () => ({}) };
+    vm.createContext(ctx);
+    vm.runInContext(preludioEstadio({ cada: 4, principal: 48, secundario: 28 }), ctx);
+    ctx.__app = { stage: { children: [] } };
+    let pedidos = 0;
+    const juego = () => {
+      pedidos++;
+      if (pedidos < 30) ctx.requestAnimationFrame(juego);
+    };
+    ctx.requestAnimationFrame(juego);
+    const cuadroReal = () => reales.shift()();
+    for (let i = 0; i < 5; i++) cuadroReal();
+    // El juego pidió sus 30 cuadros (20 por cuadro real) y ya no pide más.
+    expect(pedidos).toBe(30);
+    expect(ctx.__legible.vio).toBe(true);
+    expect(ctx.__legible.fin).toBe(false);
+    ctx.abierto = false;
+    for (let i = 0; i < 6; i++) cuadroReal();
+    expect(ctx.__legible.fin).toBe(true);
+  });
+});
+
 describe("nombres de archivo", () => {
   it("seguros para el disco, sin tildes ni símbolos", () => {
     expect(archivoDe("legible", "celular", "dark", "inicio (la lista)", "a.pie", "14px")).toBe("legible-celular-dark-inicio_la_lista_-a.pie-14px.png");

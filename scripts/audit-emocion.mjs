@@ -190,13 +190,17 @@ try {
     // El zoom del director: en el golpe, cuántas veces más cerca que el plano general.
     if (zoomSemillas > 0) {
       const razones = [];
+      const muestras = [];
       for (let i = 1; i <= zoomSemillas; i++) {
         const page = await browser.open("about:blank");
         await page.send("Page.addScriptToEvaluateOnNewDocument", { source: TURBO_ZOOM });
         await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&semilla=${semilla(i)}&auditar=camara${motor ? `&motor=${motor}` : ""}` });
-        const fin = await page.waitFor("window.__zoom && window.__zoom.fin", 120_000);
-        const z = fin.ok ? JSON.parse(await page.eval("JSON.stringify({ minAntes: window.__zoom.minAntes, enGolpe: window.__zoom.enGolpe, golpe: window.__zoom.golpe })")) : null;
+        // El show terminó cuando el estadio, que se vio abierto, se cierra. Si no
+        // cierra en dos minutos, igual se lee lo que alcanzó a medir.
+        await page.waitFor("window.__zoom && window.__zoom.vio && getComputedStyle(document.getElementById('stadium')).display !== 'block'", 120_000);
+        const z = JSON.parse((await page.eval("window.__zoom ? JSON.stringify({ minAntes: window.__zoom.minAntes, enGolpe: window.__zoom.enGolpe, golpe: window.__zoom.golpe, muestras: window.__zoom.muestras }) : 'null'")) || "null");
         razones.push(razonDeZoom(z));
+        muestras.push(z ? z.muestras : 0);
         try {
           await page.send("Page.close");
         } catch {
@@ -208,7 +212,7 @@ try {
       check(
         `el zoom del golpe llega a ${veces(zoomMin)} el plano general`,
         rz.conGolpe === razones.length && rz.min >= zoomMin,
-        rz.conGolpe ? `mín ${veces(rz.min)} · mediana ${veces(rz.mediana)} · máx ${veces(rz.max)} · con golpe ${rz.conGolpe}/${razones.length}` : "el juego no hace ningún golpe de cámara",
+        rz.conGolpe ? `mín ${veces(rz.min)} · mediana ${veces(rz.mediana)} · máx ${veces(rz.max)} · con golpe ${rz.conGolpe}/${razones.length}` : muestras.every((m) => m === 0) ? "no hubo ninguna muestra de la cámara (¿no existe window.__tinkazo en este build?)" : `el juego no hace ningún golpe de cámara (${muestras.join("/")} muestras)`,
       );
     }
   }

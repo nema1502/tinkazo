@@ -281,13 +281,16 @@ export function preludioEstadio({ cada = 16, principal, secundario }) {
   performance.now = () => virt;
   (${instalarMuestreador.toString()})(${JSON.stringify({ principal, secundario })});
   const bombear = () => {
-    for (let i = 0; i < 20 && cbs.size; i++) {
+    // Al menos un cuadro por cuadro real, aunque el juego ya no pida ninguno: así
+    // el muestreador se entera de que el estadio se cerró.
+    for (let i = 0; i < 20; i++) {
       const lote = [...cbs.values()];
       cbs.clear();
       virt += 1000 / 64;
       cuadro++;
       for (const cb of lote) { try { cb(virt); } catch (e) {} }
       if (cuadro % ${cada} === 0) { try { window.__legible.muestrear(); } catch (e) { window.__legible.errores.push(String(e)); } }
+      if (!cbs.size) break;
     }
     RAF(bombear);
   };
