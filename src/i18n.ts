@@ -1936,6 +1936,7 @@ export const T: Record<Lang, Dict> = {
     redSinSelloEntro: "Entró el sello: este sorteo sí se puede comprobar.",
     redSinSelloNoEntro: "El sello no entró a tiempo. Este sorteo queda sin sello: no se puede comprobar.",
     redSinSelloEtiqueta: "Sin sello: no se puede comprobar.",
+    redSinSelloBoton: "Lista cerrada, sin sello",
     // Bloque pantalla
     vibOn: "Vibración: sí",
     vibOff: "Vibración: no",
@@ -3503,6 +3504,7 @@ export const T: Record<Lang, Dict> = {
     redSinSelloEntro: "The seal went through: this draw can be checked.",
     redSinSelloNoEntro: "The seal didn't go through in time. This draw stays without a seal: it can't be checked.",
     redSinSelloEtiqueta: "No seal: it can't be checked.",
+    redSinSelloBoton: "List closed, no seal",
     // Bloque pantalla
     vibOn: "Vibration: on",
     vibOff: "Vibration: off",

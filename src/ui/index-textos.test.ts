@@ -27,6 +27,8 @@ describe("index.html, la herramienta", () => {
       // El primer sorteo (22 de octubre de 2026): la cuenta, la oferta, el tutorial y el ensayo.
       "gate", "btn-pegar", "primera-vez", "pegar-ayuda", "sellar-resumen", "ya-entraste", "btn-como", "como-panel",
       "btn-ensayo", "ensayo-banda", "ensayo-guia", "ensayo-fin", "ens-mio", "ens-salir",
+      // La red antes de sellar (red.ts): la caja, "¿La red está bien?" y la nota de un sorteo sin sello.
+      "red-estado", "red-fila", "btn-red", "btn-red-txt", "sin-sello-nota",
     ];
     const faltan = ids.filter((id) => !new RegExp(`\\bid="${id}"`).test(html));
     expect(faltan).toEqual([]);

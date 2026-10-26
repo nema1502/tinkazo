@@ -200,7 +200,7 @@ describe("la respuesta del botón '¿La red está bien?'", () => {
 });
 
 describe("los textos: es y en, sin tecnicismos", () => {
-  const claves = new Set<string>(["redAmarilla", "redVerde", "redRoja", "redSaturada", "redSinSaldo", "redSinRpc", "redSinRpcFin", "redCostoAlto", "redCostoMedio", "redProtocolo", "redProtocoloSigue"]);
+  const claves = new Set<string>(["redAmarilla", "redVerde", "redRoja", "redSaturada", "redSinSaldo", "redSinRpc", "redSinRpcFin", "redCostoAlto", "redCostoMedio", "redProtocolo", "redProtocoloSigue", "redConfirma", "redConfirmaSi", "redConfirmaNo", "redSinSelloEspera", "redSinSelloReintento", "redSinSelloIntentando", "redSinSelloEntro", "redSinSelloNoEntro", "redSinSelloEtiqueta", "redSinSelloBoton", "redCargando"]);
   for (const red of ["testnet", "mainnet"] as const) {
     for (const a of ["sellar", "reintentar", "sellar-con-mi-cuenta", "cargar-saldo", "seguir-sin-sello"] as const) claves.add(TEXTO_DE_ACCION(a, red));
   }
@@ -217,6 +217,13 @@ describe("los textos: es y en, sin tecnicismos", () => {
       for (const k of claves) {
         expect(String(T[l][k]), `${l}.${k}`).not.toMatch(/\bRPC\b|\bfee\b|stroop|XLM|hash|firma|drand/i);
       }
+    }
+  });
+
+  it("lo de sin sello nunca dice 'verificable' ni habla de XLM, en los dos idiomas", () => {
+    const sinSello = ["redAccSinSello", "redConfirma", "redConfirmaSi", "redConfirmaNo", "redSinSelloEspera", "redSinSelloReintento", "redSinSelloIntentando", "redSinSelloEntro", "redSinSelloNoEntro", "redSinSelloEtiqueta", "redSinSelloBoton"];
+    for (const l of ["es", "en"] as const) {
+      for (const k of sinSello) expect(String(T[l][k]), `${l}.${k}`).not.toMatch(/verific|verifi|XLM/i);
     }
   });
 

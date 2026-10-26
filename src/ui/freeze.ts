@@ -811,7 +811,8 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   // Lo que se estaba armando ya quedó sellado (o se retomó un sello): no hay borrador que recuperar.
   olvidarBorrador();
   btn.disabled = true;
-  btn.dataset.i = raffleId !== undefined ? "sealed" : "frozenOk";
+  // Sin sello (la red no dejó): no dice "sellada", que es lo que se espera de la cadena.
+  btn.dataset.i = raffleId !== undefined ? "sealed" : f.sinSello ? "redSinSelloBoton" : "frozenOk";
   btn.textContent = t(btn.dataset.i);
   $("freeze-hint").style.display = "none";
   $("free-rule").style.display = "none";
