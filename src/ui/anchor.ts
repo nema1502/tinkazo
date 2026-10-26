@@ -241,7 +241,32 @@ class RondaMuyCerca extends Error {
   }
 }
 
-async function sellar(args: SealArgs, onStep: OnStep): Promise<SealResult> {
+/**
+ * Un intento de sellar usa un solo RPC de principio a fin (`rpc-red.ts`): si falla
+ * porque el RPC no sirve (se cortó, tardó, 429, 5xx), el próximo intento sale por
+ * el otro. Un sello incierto cuenta por su causa: lo que se averigua después lo
+ * hace `resolverSelloEnLaRed`, que lee del vigente.
+ */
+async function conUnSoloRpc<T>(hacer: () => Promise<T>): Promise<T> {
+  const { rpcRed } = await import("../stellar/rpc-red");
+  const rpc = rpcRed();
+  const soltar = rpc.fijar();
+  try {
+    return await hacer();
+  } catch (e) {
+    const x = e as { name?: unknown; cause?: unknown } | null;
+    rpc.fallo(x?.name === "SelloIncierto" ? x.cause : e);
+    throw e;
+  } finally {
+    soltar();
+  }
+}
+
+function sellar(args: SealArgs, onStep: OnStep): Promise<SealResult> {
+  return conUnSoloRpc(() => sellarEnUnRpc(args, onStep));
+}
+
+async function sellarEnUnRpc(args: SealArgs, onStep: OnStep): Promise<SealResult> {
   const [{ getClient }, { armar, submitElsewhere, firmarYConfirmar, valorNativo, errorDelDesenlace }] = await Promise.all([import("../stellar/contract"), sdk()]);
   const client = await armar(() => getClient());
   const faltan = roundTime(args.round) - Date.now() / 1000;
@@ -469,7 +494,11 @@ export function drawOnChain(
   return conFondos(() => sortear(raffleId, signature96, onStep), onStep);
 }
 
-async function sortear(raffleId: bigint, signature96: Uint8Array, onStep: OnStep): Promise<DrawResult> {
+function sortear(raffleId: bigint, signature96: Uint8Array, onStep: OnStep): Promise<DrawResult> {
+  return conUnSoloRpc(() => sortearEnUnRpc(raffleId, signature96, onStep));
+}
+
+async function sortearEnUnRpc(raffleId: bigint, signature96: Uint8Array, onStep: OnStep): Promise<DrawResult> {
   const [{ getClient }, { armar, submitElsewhere, firmarYConfirmar, valorNativo, errorDelDesenlace }] = await Promise.all([import("../stellar/contract"), sdk()]);
   const client = await armar(() => getClient());
   onStep("simulating");

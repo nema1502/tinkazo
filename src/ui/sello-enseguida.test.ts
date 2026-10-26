@@ -82,7 +82,8 @@ describe("el cliente del contrato antes de elegir la ronda", () => {
   });
 
   it("si armarlo falla, no tira: lo vuelve a pedir el sello y cuenta su error como siempre", async () => {
-    h.getClient.mockReturnValue(Promise.reject(new TypeError("Failed to fetch")));
+    // El rechazo se arma al pedirlo: armado antes, quedaba sin atender mientras se bajaba `anchor` y Node lo contaba como no manejado.
+    h.getClient.mockImplementation(() => Promise.reject(new TypeError("Failed to fetch")));
     const { clienteListo } = await import("./anchor");
     await expect(clienteListo()).resolves.toBeUndefined();
   });

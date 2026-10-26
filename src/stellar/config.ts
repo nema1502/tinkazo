@@ -20,9 +20,21 @@ export type NetworkName = "testnet" | "mainnet";
  * haya que rotarlo, o poner una lista de respaldo, tiene que ser un cambio de
  * una línea y no una cacería.
  */
+export const RPC_LISTAS: Record<NetworkName, readonly [string, ...string[]]> = {
+  // El de la SDF y Ankr: los dos con CORS abierto, mismo ledger y mismo costo (medido el 25 de octubre de 2026).
+  testnet: ["https://soroban-testnet.stellar.org", "https://rpc.ankr.com/stellar_testnet_soroban"],
+  // Los mismos que vigila el detector de la red (`scripts/vigilar-red.mjs`): mainnet.sorobanrpc.com y Lightsail.
+  mainnet: ["https://mainnet.sorobanrpc.com", "https://rpc.lightsail.network"],
+};
+
+/**
+ * El primero de cada lista: el RPC de siempre. Lo que lee la verificación, que no
+ * cambia de RPC. Quien sella usa el vigente de la lista (`rpc-red.ts`): si el
+ * primero se cae, sigue con el segundo sin que nadie toque nada.
+ */
 export const RPC_URLS: Record<NetworkName, string> = {
-  testnet: "https://soroban-testnet.stellar.org",
-  mainnet: "https://mainnet.sorobanrpc.com",
+  testnet: RPC_LISTAS.testnet[0],
+  mainnet: RPC_LISTAS.mainnet[0],
 };
 
 /**

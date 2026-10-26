@@ -1,6 +1,7 @@
 import type { xdr as XdrNs } from "@stellar/stellar-sdk";
 import type { Proof } from "../protocol/proof";
 import { RPC_URLS } from "./config";
+import { esFalloDeRpc, respaldoDe, rpcRed } from "./rpc-red";
 
 /**
  * Los sellos de un organizador, leídos del contrato.
@@ -30,16 +31,35 @@ import { RPC_URLS } from "./config";
 
 const RPC: Record<string, string> = RPC_URLS;
 
-async function rpc(url: string, method: string, params: unknown): Promise<Record<string, unknown>> {
+async function rpcUna(url: string, method: string, params: unknown): Promise<Record<string, unknown>> {
   const res = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
     signal: AbortSignal.timeout(15_000),
   });
+  // Un RPC saturado o caído contesta 429 o 5xx, a veces con una página que no es JSON: eso es "el RPC no sirve".
+  if (res.status === 429 || res.status >= 500) throw new Error(`HTTP ${res.status}`);
   const body = (await res.json()) as { result?: Record<string, unknown>; error?: { message?: string } };
   if (body.error) throw new Error(body.error.message ?? "rpc-error");
   return body.result ?? {};
+}
+
+/**
+ * Una lectura al RPC. Si ese RPC no sirve (se cortó, tardó, 429, 5xx) y tiene un
+ * segundo en su lista (`rpc-red.ts`), se lee del otro: leer es seguro en los dos.
+ * La próxima lectura de quien usa el vigente ya sale por el que anduvo.
+ */
+async function rpc(url: string, method: string, params: unknown): Promise<Record<string, unknown>> {
+  try {
+    return await rpcUna(url, method, params);
+  } catch (e) {
+    const respaldo = esFalloDeRpc(e) ? respaldoDe(url) : null;
+    if (!respaldo) throw e;
+    const r = await rpcUna(respaldo.otro, method, params);
+    rpcRed(respaldo.red).fallo(e);
+    return r;
+  }
 }
 
 /**

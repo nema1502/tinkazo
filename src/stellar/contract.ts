@@ -1,5 +1,6 @@
 import { Keypair, contract, rpc, xdr } from "@stellar/stellar-sdk";
 import { network } from "./config";
+import { rpcRed } from "./rpc-red";
 import { activeWallet, type WalletAdapter } from "./wallet-lite";
 
 /**
@@ -68,12 +69,37 @@ interface TinkazoContract {
 
 export type TinkazoClient = contract.Client & TinkazoContract;
 
-export const server = new rpc.Server(network.rpcUrl);
+const servidores = new Map<string, rpc.Server>();
+const servidorDe = (url: string): rpc.Server => {
+  let s = servidores.get(url);
+  if (!s) {
+    s = new rpc.Server(url);
+    servidores.set(url, s);
+  }
+  return s;
+};
+
+/**
+ * El servidor del RPC vigente (`rpc-red.ts`). Cada llamada mira cuál es en ese
+ * momento, así que si el primero se cae y la red pasa al segundo, quien usa
+ * `server.getTransaction(...)` o `server.sendTransaction(...)` no se entera. Un
+ * intento de sellar fija el vigente mientras dura (`rpcRed().fijar()`): no se parte
+ * entre dos RPC.
+ */
+export const server: rpc.Server = new Proxy({} as rpc.Server, {
+  get(_destino, propiedad) {
+    const s = servidorDe(rpcRed().actual());
+    const v = Reflect.get(s, propiedad, s) as unknown;
+    return typeof v === "function" ? (v as (...args: unknown[]) => unknown).bind(s) : v;
+  },
+});
 
 interface ClienteGuardado {
   client: Promise<TinkazoClient>;
   publicKey: string | null;
   wallet: WalletAdapter | null;
+  /** El RPC con el que se armó: el cliente lee la interfaz del contrato de ahí y simula contra él. */
+  rpc: string;
   /** Cuándo se pidió (ms), y si ya está armado. */
   desde: number;
   listo: boolean;
@@ -106,14 +132,15 @@ export function getClient(): Promise<TinkazoClient> {
   if (!network.contractId) return Promise.reject(new Error("no-contract-on-network"));
   const wallet = activeWallet();
   const publicKey = wallet?.address ?? null;
+  const rpcUrl = rpcRed().actual();
   const c = cached;
-  if (c && c.publicKey === publicKey && c.wallet === wallet && (c.listo || Date.now() - c.desde < CLIENTE_VIEJO_MS)) return c.client;
+  if (c && c.publicKey === publicKey && c.wallet === wallet && c.rpc === rpcUrl && (c.listo || Date.now() - c.desde < CLIENTE_VIEJO_MS)) return c.client;
 
   const nuevo: ClienteGuardado = {
     client: contract.Client.from<TinkazoContract>({
       contractId: network.contractId,
       networkPassphrase: network.networkPassphrase,
-      rpcUrl: network.rpcUrl,
+      rpcUrl,
       ...(publicKey ? { publicKey } : {}),
       ...(wallet
         ? {
@@ -124,6 +151,7 @@ export function getClient(): Promise<TinkazoClient> {
     }),
     publicKey,
     wallet,
+    rpc: rpcUrl,
     desde: Date.now(),
     listo: false,
   };

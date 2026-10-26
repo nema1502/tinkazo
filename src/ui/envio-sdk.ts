@@ -234,10 +234,11 @@ export async function resolverSelloEnLaRed(intento: IntentoDeSello, onStep?: OnS
   const contractId = network.contractId;
   if (!contractId) return { estado: "no-se-sabe", error: new Error("no-contract-on-network") };
   onStep?.("verifying");
-  const [{ ultimoLedger, selloDelIntento }, { server }, { resolverSello }] = await Promise.all([import("../stellar/seals"), import("../stellar/contract"), import("../stellar/envio")]);
+  const [{ ultimoLedger, selloDelIntento }, { server }, { resolverSello }, { rpcActual }] = await Promise.all([import("../stellar/seals"), import("../stellar/contract"), import("../stellar/envio"), import("../stellar/rpc-red")]);
   return resolverSello(intento, {
-    ultimoLedger: () => ultimoLedger(network.rpcUrl),
-    buscarSello: (i) => selloDelIntento(i, contractId, network.rpcUrl),
+    // El RPC vigente en cada vuelta: si el que se usaba se cae mientras se averigua, la próxima pregunta sale por el otro.
+    ultimoLedger: () => ultimoLedger(rpcActual()),
+    buscarSello: (i) => selloDelIntento(i, contractId, rpcActual()),
     consultarHash: async (hash) => {
       const c = await server.getTransaction(hash);
       if (c.status !== "SUCCESS") return { status: c.status };
