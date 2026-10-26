@@ -405,12 +405,18 @@ async function poseScene(): Promise<void> {
   // numerados, para medir cada juego con dos personas y con doscientas sin
   // tocar la red. Es solo para la escena fija: no sella ni sortea nada.
   const cantidad = Math.max(0, Math.min(2000, Math.floor(Number(params.get("n")) || 0)));
-  const L = cantidad
+  const base = cantidad
     ? Array.from({ length: cantidad }, (_, i) => {
       const vuelta = Math.floor(i / SAMPLE.length);
       return `${SAMPLE[i % SAMPLE.length]}${vuelta ? ` ${vuelta + 1}` : ""}`;
     })
     : SAMPLE;
+  // `?extremos=1`: los nombres difíciles (de 1 y de 40 caracteres, con acentos,
+  // con emojis, sin espacios) en lugar de otros tantos de la lista, para ver
+  // que se leen enteros sin cortarse. El ganador (el puesto 3) no se toca.
+  const L = params.get("extremos") === "1"
+    ? base.map((nm, i) => ({ 5: "Ñ", 7: "Alvaro", 8: "Maximiliano_Alexander_Constantino_Rosario", 11: "María Fernanda Guadalupe Quispe Mamani Zu", 14: "🌸 Ana 🌸", 16: "Álvaro" } as Record<number, string>)[i] ?? nm)
+    : base;
   // `?nw=N` también acá: la escena fija con varios premios, sin red, para
   // auditar cómo anuncia cada juego a cada ganador.
   const premios = Math.max(1, Math.min(L.length, Math.floor(Number(params.get("nw")) || 1)));

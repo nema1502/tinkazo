@@ -1,3 +1,5 @@
+import { normalCarrera, segundosDe } from "./duraciones";
+
 /** `race` y `stellar` son la misma carrera con distinto escenario. */
 export type Game = "race" | "stellar" | "wheel" | "ledger" | "rockets" | "pasanaku" | "teleferico" | "tombola" | "trompo" | "totora" | "pinata" | "oruro" | "luz" | "sapo" | "quien" | "chovena" | "trueque";
 
@@ -226,6 +228,12 @@ const MIN_STRETCH = 0.55;
 /** Segundos de juego del juego en curso, y los que no se estiran nunca. */
 let nominal = 0;
 let fijo = 0;
+/**
+ * Cuánto promete "Normal" este juego, si no son los `PACES` de todos. La
+ * carrera de hasta 30 dura más cuanta más gente corre (`src/duraciones.ts`):
+ * lo declara el propio juego con su cantidad, y los otros siguen en 38.
+ */
+let normalPropio: number | null = null;
 
 /**
  * Cuánto dura el juego en curso sin estirar, para que el selector pueda
@@ -240,9 +248,10 @@ let fijo = 0;
  * Con cero vuelve al factor neutro, que es lo que corresponde cuando no hay
  * ningún juego corriendo.
  */
-export function setGameLength(nominalSeconds: number, fixedSeconds = 0): void {
+export function setGameLength(nominalSeconds: number, fixedSeconds = 0, normalSeconds: number | null = null): void {
   nominal = Math.max(0, nominalSeconds);
   fijo = Math.max(0, fixedSeconds);
+  normalPropio = normalSeconds;
 }
 
 /**
@@ -278,7 +287,10 @@ export const paceFactor = (): number => {
   if (nominal <= 0) return 1;
   // Un piso de cuatro segundos para que un objetivo chico y un juego con mucho
   // tiempo fijo no den un factor absurdo.
-  const util = Math.max(4, PACES[ritmo()] - fijo - tarjeta);
+  // `ritmo()` y no `pace`: el ensayo va en el rápido sin cambiar el ritmo guardado (`forzarRitmo`).
+  const p = ritmo();
+  const meta = normalPropio !== null ? segundosDe(p, normalPropio) : PACES[p];
+  const util = Math.max(4, meta - fijo - tarjeta);
   return Math.max(MIN_STRETCH, Math.min(MAX_STRETCH, util / nominal));
 };
 export const currentPace = (): Pace => ritmo();
@@ -290,7 +302,12 @@ export const currentPace = (): Pace => ritmo();
  * puede despegar del código. Sin el número, "Normal" no le dice nada a alguien
  * que está preparando un evento y quiere saber cuánto va a durar la pantalla.
  */
-export const paceSeconds = (p: Pace): number => PACES[p] + (conCuenta(p) ? CUENTA_SECONDS : 0);
+export const paceSeconds = (p: Pace): number => {
+  // La carrera de hasta 30 promete según cuánta gente corre; el resto, lo de siempre.
+  // (El motor anterior, con `?motor=clasico`, no tiene pelotón: ahí vale lo de todos.)
+  const propio = app.game === "race" && app.frozen && params.get("motor") !== "clasico" ? normalCarrera(app.frozen.names.length) : null;
+  return (propio !== null ? segundosDe(p, propio) : PACES[p]) + (conCuenta(p) ? CUENTA_SECONDS : 0);
+};
 
 /**
  * "¡Cuenten conmigo!": el 3, 2, 1 que cuenta la sala entera al final de la

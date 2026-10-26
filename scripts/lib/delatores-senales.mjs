@@ -314,9 +314,18 @@ export function senalesSubtitulos(P) {
  * La cámara: en los acercamientos (un 20% más cerca que lo de siempre en ese
  * show), qué nombre queda en el centro de la pantalla. `camara` apuesta por el
  * que más tiempo estuvo en el centro y por el último, antes del corte.
+ *
+ * "Lo de siempre" es la zoom mediana. Si antes de la carrera hay un tramo largo
+ * a otra zoom (el pelotón de la carrera de llamas son 45 a 65 s de cámara quieta
+ * a zoom 1), la mediana de todos los cuadros queda en ese tramo y cada cuadro de
+ * la final pasa por acercamiento: la señal deja de mirar adónde apunta la cámara
+ * y pasa a medir quién va adelante al final, que en una carrera gana más que el
+ * azar. `cfg.camaraDesde` (un momento, como en `cuando`) manda medir la zoom de
+ * siempre solo desde ahí.
  */
 export function senalCamara(P, cfg = {}) {
-  const antes = P.frames.filter((f) => f.t < P.corte);
+  const desde = cuando(P, cfg.camaraDesde) ?? -Infinity;
+  const antes = P.frames.filter((f) => f.t >= desde && f.t < P.corte);
   if (antes.length < 4) return {};
   const zs = antes.map((f) => f.z).sort((a, b) => a - b);
   const base = zs[Math.floor(zs.length / 2)];
@@ -500,6 +509,42 @@ export function senalesCarrera(P) {
   if (p90 === 1 || p90 === 2) {
     out.recta = { primera: apuesta([1], [1, 2], p90), segunda: apuesta([2], [1, 2], p90) };
     P.tiempos.recta = go + 0.9 * dur;
+  }
+  return out;
+}
+
+/**
+ * El pelotón de la carrera (9 a 30 personas, `data-peloton` distinto de cero):
+ * en tres momentos de lo que pasa antes de la final, si gana la que tiene el
+ * nombre más largo o el más corto entre las que siguen en carrera. Los nombres
+ * se completan a medida que queda menos gente, y si el largo de un nombre
+ * adelantara algo, se vería acá. Con 200 semillas y 30 personas, el azar de
+ * cada regla es 1 sobre cuántas siguen.
+ *
+ * - `nombre-largo-25`, `-50`, `-75`: el más largo (o los empatados), a un
+ *   cuarto, a la mitad y a tres cuartos del pelotón.
+ * - `nombre-corto-25`, `-50`, `-75`: lo mismo con el más corto.
+ */
+export function senalesNombresPeloton(P) {
+  const pel = P.marks.find((m) => m.k === "peloton");
+  const go = cuando(P, { clave: "cStart" });
+  if (!pel || Number(pel.v) < 1 || go === null) return {};
+  // El pelotón termina unos ocho segundos antes de la largada de la final (los carriles y la cuenta).
+  const t0 = P.frames[0]?.t ?? 0;
+  const t1 = go - 8;
+  if (t1 <= t0 + 4) return {};
+  const out = {};
+  for (const q of [0.25, 0.5, 0.75]) {
+    const t = t0 + q * (t1 - t0);
+    const C = P.vivos(t);
+    if (C.length < 3 || !C.includes(P.w)) continue;
+    const largo = (i) => [...String(P.names[i])].length;
+    const max = Math.max(...C.map(largo));
+    const min = Math.min(...C.map(largo));
+    const nombre = `${Math.round(q * 100)}`;
+    out[`nombre-largo-${nombre}`] = { el: apuesta(C.filter((i) => largo(i) === max), C, P.w) };
+    out[`nombre-corto-${nombre}`] = { el: apuesta(C.filter((i) => largo(i) === min), C, P.w) };
+    P.tiempos[`nombre-largo-${nombre}`] = P.tiempos[`nombre-corto-${nombre}`] = t;
   }
   return out;
 }
@@ -847,7 +892,9 @@ export const JUEGOS = {
   race: {
     candidatos: "visibles",
     arranque: { desde: { clave: "cStart" }, orden: "y", ventana: 1 },
-    especificas: [senalesCarrera],
+    // La zoom de siempre se mide en la carrera y no en el pelotón de antes (ver `senalCamara`).
+    camaraDesde: { clave: "cStart" },
+    especificas: [senalesCarrera, senalesNombresPeloton],
   },
   sapo: {
     candidatos: "visibles",

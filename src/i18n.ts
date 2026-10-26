@@ -99,6 +99,24 @@ export interface Dict {
   /** La presentación de los carriles antes de la largada. */
   rqIntro: string;
   rqLane: (k: number) => string;
+  /** El pelotón de la carrera (9 a 30 personas): salen todos juntos y se van echando de a uno. */
+  pelCuenta: (k: number, n: number) => string;
+  pelStart: (n: number, k: number) => string;
+  pelFinal: (k: number) => string;
+  pelEcho: (nombre: string, quedan: number) => string;
+  pelEchoDos: (a: string, b: string, quedan: number) => string;
+  pelTambalea: (nombre: string) => string;
+  /** El cartel que se ve en el suelo en cada tramo, y lo que dice el relator al entrar. */
+  pelCuesta: string;
+  pelBarro: string;
+  pelPiedras: string;
+  pelViento: string;
+  pelSubCuesta: string;
+  pelSubBarro: string;
+  pelSubPiedras: string;
+  pelSubViento: string;
+  /** Lo que lleva el cartel grande de quien se echó. */
+  pelEchoTag: string;
   /** La espera en grande: cuántos hay en la lista sellada. */
   espPie: (n: number) => string;
   cQuiStart: (n: number) => string;
@@ -585,6 +603,21 @@ export const T: Record<Lang, Dict> = {
     rqLeft: (n, k) => (n <= k ? `¡Estos ${n} van a la final!` : `¡Quedan ${n}!`),
     rqIntro: "¡A la largada, carril por carril!",
     rqLane: (k) => `CARRIL ${k}`,
+    pelCuenta: (k, n) => `EN CARRERA ${k} DE ${n}`,
+    pelStart: (n, k) => `¡${n} en la largada! Solo ${k} llegan a la final.`,
+    pelFinal: (k) => `¡Quedan ${k}! ¡A la final!`,
+    pelEcho: (nombre, quedan) => [`¡Se echó ${nombre}! Quedan ${quedan}.`, `¡${nombre} se echa a descansar! Quedan ${quedan}.`, `¡No da más ${nombre} y se echa! Quedan ${quedan}.`][quedan % 3] ?? "",
+    pelEchoDos: (a, b, quedan) => `¡Se echaron ${a} y ${b}! Quedan ${quedan}.`,
+    pelTambalea: (nombre) => `¡${nombre} se tambalea!`,
+    pelCuesta: "LA CUESTA",
+    pelBarro: "EL BARRO",
+    pelPiedras: "LAS PIEDRAS",
+    pelViento: "EL VIENTO",
+    pelSubCuesta: "¡La cuesta! Quien no aguanta, se echa a descansar.",
+    pelSubBarro: "¡El barro! Cada paso pesa el doble.",
+    pelSubPiedras: "¡Las piedras! Hay que mirar dónde se pisa.",
+    pelSubViento: "¡El viento! Los que quedan se aprietan.",
+    pelEchoTag: "SE ECHÓ",
     // --- De pie (antes ¿Quién es?): la sala se para y se sienta; cada uno revisa su propio nombre.
     gameQuien: "De pie",
     cQuiStart: (n) => `¡${n} personas! Todos de pie. Si no podés, levantá la mano.`,
@@ -840,9 +873,9 @@ export const T: Record<Lang, Dict> = {
     // largo o corto cuando no encaja. Las que llevan números son funciones.
     recBadge: "Recomendado",
     recHead: (n: number) => `Para ${n} personas`,
-    "rec.race.ideal": "Cada uno hincha por su llama, y se ve quién va adelante.",
+    "rec.race.ideal": "Salen todas juntas, se van echando de a una y quedan ocho en la final.",
     "rec.race.bajo": "Con tan pocas llamas dura lo mismo y tiene menos momentos.",
-    "rec.race.largo": (n: number, _min: number, max: number) => `Con ${n}, en la carrera solo se ven ${max}.`,
+    "rec.race.largo": (n: number, _min: number, max: number) => `Con ${n}, pasa por una clasificatoria: de ${max} para arriba no corren todos juntos.`,
     "rec.race.corto": "Con una sola persona no hay carrera.",
     "rec.sapo.ideal": "Un agujero por persona en la mesa: cada tiro se siente.",
     "rec.sapo.bajo": "Con pocos, la mesa tiene pocos agujeros y pocos tiros.",
@@ -2135,6 +2168,21 @@ export const T: Record<Lang, Dict> = {
     rqLeft: (n, k) => (n <= k ? `These ${n} go to the final!` : `${n} left!`),
     rqIntro: "To the start, lane by lane!",
     rqLane: (k) => `LANE ${k}`,
+    pelCuenta: (k, n) => `${k} OF ${n} STILL RUNNING`,
+    pelStart: (n, k) => `${n} at the start! Only ${k} reach the final.`,
+    pelFinal: (k) => `${k} left! On to the final!`,
+    pelEcho: (nombre, quedan) => [`${nombre} lay down! ${quedan} left.`, `${nombre} stops to rest! ${quedan} left.`, `${nombre} can't go on and lies down! ${quedan} left.`][quedan % 3] ?? "",
+    pelEchoDos: (a, b, quedan) => `${a} and ${b} lay down! ${quedan} left.`,
+    pelTambalea: (nombre) => `${nombre} stumbles!`,
+    pelCuesta: "THE HILL",
+    pelBarro: "THE MUD",
+    pelPiedras: "THE ROCKS",
+    pelViento: "THE WIND",
+    pelSubCuesta: "The hill! Whoever can't keep up lies down to rest.",
+    pelSubBarro: "The mud! Every step weighs double.",
+    pelSubPiedras: "The rocks! Watch where you step.",
+    pelSubViento: "The wind! The ones left huddle together.",
+    pelEchoTag: "RESTING",
     // --- Stand up (antes Who is it?): the room stands; each person checks their own name.
     gameQuien: "Stand up",
     cQuiStart: (n) => `${n} people! Everybody up. If you can't stand, raise your hand.`,
@@ -2378,9 +2426,9 @@ export const T: Record<Lang, Dict> = {
     // range; largo (too many) and corto (too few) when it doesn't fit.
     recBadge: "Recommended",
     recHead: (n: number) => `For ${n} people`,
-    "rec.race.ideal": "Everyone cheers for their own llama, and you can see who's ahead.",
+    "rec.race.ideal": "They all start together, lie down one by one, and eight reach the final.",
     "rec.race.bajo": "With so few llamas, it lasts just as long and has fewer moments.",
-    "rec.race.largo": (n: number, _min: number, max: number) => `With ${n}, the race only shows ${max}.`,
+    "rec.race.largo": (n: number, _min: number, max: number) => `With ${n}, it goes through a qualifier: past ${max}, not everyone runs together.`,
     "rec.race.corto": "With just one person, there's no race.",
     "rec.sapo.ideal": "One hole per person on the table: every throw counts.",
     "rec.sapo.bajo": "With few people, the table has few holes and few throws.",

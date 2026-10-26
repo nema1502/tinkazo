@@ -16,7 +16,10 @@
  *
  * - **Con 8, todos se ven** antes del ganador, en todos los juegos.
  * - **Con 18, se ven 9 de cada 10** en los juegos que prometen 18 o más.
- * - Con 50, cuántos: se informa, sin aprobar ni rechazar todavía.
+ * - Con 30 y con 50, cuántos: se informa, sin aprobar ni rechazar todavía.
+ * - **El nombre entero** (la versión estricta): el texto es igual al nombre, sin
+ *   cortes ni iniciales. La carrera de hasta 30 promete que cada uno lo ve
+ *   completo antes del ganador (`COMPLETOS`): con 8, con 18 y con 30, todos.
  *
  * Todos prometen hasta 200 (la ruleta, con más de veinticuatro, reúne grupos en
  * cada gajo; con más de 200 pasa a la tómbola): cada juego se mide hasta lo que promete.
@@ -27,7 +30,10 @@
  *   pnpm preview &
  *   node scripts/audit-identidad.mjs [juego|todos] [--base http://localhost:4173] [--gente 8,18,50]
  *
- * `--gente` cambia las cantidades que se miden (por defecto 8, 18 y 50). La
+ * `--gente` cambia las cantidades que se miden (por defecto 8, 18, 30 y 50).
+ * `--vista 390x844` cambia la pantalla (celular, tablet, girado).
+ * `--extremos` cambia seis nombres por los difíciles (1 y 40 caracteres, con
+ * acentos, con emojis, sin espacios): `?extremos=1` en la escena fija. La
  * ruleta con más de veinticuatro se mide con `--gente 8,18,50,100,200`.
  */
 import { launch } from "./lib/browser.mjs";
@@ -40,6 +46,12 @@ const TODOS = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel
  * se ven antes de que corran los ocho de la final.
  */
 const PROMETE = {};
+/**
+ * Hasta cuántos promete mostrar a cada uno con su nombre ENTERO antes del
+ * ganador. La carrera lo cumple hasta 30 (el pelotón, y los ocho de la final
+ * con su nombre completo); lo demás se informa sin aprobar ni rechazar.
+ */
+const COMPLETOS = { race: 30 };
 /** Índice del ganador en la escena fija (`?pose=`): la cuarta persona de la lista. */
 const GANADOR = 3;
 const args = process.argv.slice(2);
@@ -50,7 +62,10 @@ const opt = (name, def) => {
 const cual = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--")) ?? "todos";
 const juegos = cual === "todos" ? TODOS : [cual];
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
-const GENTE = opt("--gente", "8,18,50").split(",").map((x) => Number(x.trim())).filter((x) => x > 0);
+const EXTREMOS = args.includes("--extremos");
+/** `--vista 390x844`: la pantalla en que se mide (por defecto 1280x720): celular, tablet, girado. */
+const VISTA = (opt("--vista", "1280x720").match(/^(\d+)x(\d+)$/) ?? [, "1280", "720"]).slice(1).map(Number);
+const GENTE = opt("--gente", "8,18,30,50").split(",").map((x) => Number(x.trim())).filter((x) => x > 0);
 process.env.TINKAZO_GPU = "1";
 
 const TURBO = `(() => {
@@ -75,7 +90,8 @@ const TURBO = `(() => {
 async function correr(browser, juego, gente) {
   const page = await browser.open("about:blank");
   await page.send("Page.addScriptToEvaluateOnNewDocument", { source: TURBO });
-  await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&motor=pixi&pace=normal&auditar=identidad&n=${gente}` });
+  await page.send("Emulation.setDeviceMetricsOverride", { width: VISTA[0], height: VISTA[1], deviceScaleFactor: 1, mobile: VISTA[0] < 600 });
+  await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&motor=pixi&pace=normal&auditar=identidad&n=${gente}${EXTREMOS ? "&extremos=1" : ""}` });
   const ok = await page.waitFor("window.__identidad && window.__identidad.revelado !== null", 120_000);
   const est = ok.ok ? JSON.parse(await page.eval("JSON.stringify(window.__identidad)")) : null;
   const errores = Number(await page.eval("window.__errores || 0").catch(() => 0));
@@ -95,7 +111,7 @@ const check = (name, ok, detail = "") => {
 };
 const resumen = [];
 
-const browser = await launch({ port: Number(process.env.CDP_PORT || 9471), width: 1280, height: 720 });
+const browser = await launch({ port: Number(process.env.CDP_PORT || 9471), width: VISTA[0], height: VISTA[1] });
 try {
   for (const juego of juegos) {
     const tope = PROMETE[juego] ?? 200;
@@ -121,6 +137,13 @@ try {
       if (gente === 8) check("con 8, todos se ven", vistos.length === r.est.n, detalle);
       else if (gente === 18) check("con 18, se ven 9 de cada 10", vistos.length >= Math.ceil(r.est.n * 0.9), detalle);
       else console.log(`  · con ${gente}: ${detalle}`);
+      // El nombre entero, la versión estricta: se informa siempre y se exige donde se promete.
+      const enteros = (r.est.completos ?? []).filter((t) => t >= 0);
+      const faltan = (r.est.completos ?? []).map((t, i) => (t < 0 ? i : -1)).filter((i) => i >= 0);
+      const detalleE = `${enteros.length} de ${r.est.n} con el nombre entero${enteros.length ? `; el último, a los ${Math.max(...enteros).toFixed(1)} s` : ""}`;
+      fila[`e${gente}`] = `${Math.round((enteros.length / r.est.n) * 100)}%`;
+      if (gente <= (COMPLETOS[juego] ?? 0)) check(`con ${gente}, todos ven su nombre entero antes del ganador`, enteros.length === r.est.n, `${detalleE}${faltan.length ? `; faltan los puestos ${faltan.slice(0, 8).join(", ")}` : ""}`);
+      else console.log(`  · con ${gente}: ${detalleE}`);
       // El ganador lo fija la escena fija: la cuarta persona (`W3` en src/main.ts).
       // Tiene que leerse antes del cartel, si no nadie sabe de quién es.
       if (gente >= 4) {
@@ -137,6 +160,8 @@ try {
 console.log("\nCuántos se ven antes del ganador:");
 console.log(`  juego       ${GENTE.map((g) => `con ${g}`.padStart(8)).join("")}`);
 for (const f of resumen) console.log(`  ${f.juego.padEnd(12)}${GENTE.map((g) => String(f[g] ?? "").padStart(8)).join("")}`);
+console.log("\nCuántos ven su nombre entero antes del ganador:");
+for (const f of resumen) console.log(`  ${f.juego.padEnd(12)}${GENTE.map((g) => String(f[`e${g}`] ?? "").padStart(8)).join("")}`);
 const malos = checks.filter((c) => !c.ok);
 console.log(`\n${malos.length ? "RECHAZADO" : "APROBADO"}: ${checks.length - malos.length}/${checks.length} comprobaciones`);
 process.exit(malos.length ? 1 : 0);

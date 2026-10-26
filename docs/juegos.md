@@ -158,6 +158,8 @@ Era un multiplicador fijo (`0,8 / 1,4 / 2,2`) y el problema no era el número si
 
 Cuando el selector tenía doce juegos, el auditor exigente midió treinta segundos en "normal" en todos; desde el 17 de octubre de 2026, "normal" son treinta y ocho (`PACES`, arriba).
 
+**La carrera dura según cuánta gente corre** (desde el 25 de octubre de 2026). Con 9 a 30 personas, "normal" no son 38 segundos sino lo que dice `normalCarrera(n)` en [`src/duraciones.ts`](../src/duraciones.ts): de 39 con 9 a 87 con 30, porque el pelotón tiene más para mostrar cuanta más gente hay (cada echada nombra a alguien). Rápido es la mitad (no menos de 20) y épico un 18 % más. Sigue siendo contenido y no cámara lenta: el estiramiento de cada ritmo queda entre ×0,8 y ×1,45. El juego lo declara con el tercer argumento de `setGameLength` y el selector lo muestra (`paceSeconds` mira la lista sellada); con 8 o menos y con más de 30 vale `PACES`. Los auditores prometen lo mismo: `audit-rigor` lleva la tabla (una prueba la compara con la función) y mide con la lista de ejemplo y con 30.
+
 **La tarjeta de "cómo se juega" entra en el mismo total.** Desde el 4 de octubre de 2026, antes de cada juego de un sorteo de verdad o de una demo, una tarjeta a pantalla completa dice el nombre del juego, la regla en una frase, cuántos participan y que el ganador ya salió del número público ([`src/ui/gamecard.ts`](../src/ui/gamecard.ts)). Dura 3,5 segundos, se salta con un toque, y sus segundos salen del total con `setCardSeconds`: "normal" sigue siendo treinta, tarjeta incluida (medido: 30,0 a 30,2 en el motor nuevo). La escena fija de `?pose=`, la de los auditores y las capturas, no la muestra, así que lo que mide el auditor exigente es el juego solo.
 
 ## El sonido
@@ -332,7 +334,7 @@ Los diez del selector, en su orden: el de la auditoría de juegos, de las salas 
 
 | Juego | `?demo=` | Tipo | Hasta | Documento |
 |---|---|---|---|---|
-| Carrera de llamas | `race` | Motor de carrera, tema andino | Todos en la clasificatoria, 8 en la final | [carrera.md](juegos/carrera.md), la cámara y el final con pocas personas |
+| Carrera de llamas | `race` | Motor de carrera, tema andino | 30 con todo el pelotón; con más, clasificatoria y 8 en la final | [carrera.md](juegos/carrera.md), la cámara, el pelotón y el final con pocas personas |
 | Sapo | `sapo` | Módulo propio (solo motor nuevo) | 200, con clasificatoria a 12 | [sapo.md](juegos/sapo.md) |
 | Trompo | `trompo` | Módulo propio (solo motor nuevo) | 200 | [trompo.md](juegos/trompo.md) |
 | Chovena | `chovena` | Módulo propio (solo motor nuevo), con su propia música | 200, mejor de 12 a 80 | [chovena.md](juegos/chovena.md) |

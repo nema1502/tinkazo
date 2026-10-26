@@ -14,6 +14,7 @@ import {
   senalCamara,
   senales,
   senalesCarrera,
+  senalesNombresPeloton,
   senalesConstelacion,
   senalesDuelo,
   senalesQuien,
@@ -329,6 +330,30 @@ describe("la cámara", () => {
   it("sin acercamientos no hay señal", () => {
     expect(senalCamara(preparar(traza({ pos: todosEnFila })))).toEqual({});
   });
+
+  it("con un tramo largo antes de la carrera, la zoom de siempre se mide desde la largada", () => {
+    // 20 s de cámara quieta a zoom 1 (el pelotón), la carrera a 1,4 y un acercamiento de verdad de 26 a 28.
+    // Diego (el 5) está en el centro en el acercamiento; Lucía (la ganadora, el 2) llega al centro al final.
+    const armar = (conLargada = true) =>
+      preparar(
+        traza({
+          zoom: (t) => (t < 20 ? 1 : t >= 26 && t < 28 ? 2.2 : 1.4),
+          pos: (t) => ({ ...todosEnFila(t), 2: t >= 28 ? [640, 360] : [1000, 100], 5: t >= 26 && t < 28 ? [650, 370] : [100, 100] }),
+          subs: conLargada ? [[20, "¡YA ESTÁN EN CARRERA!"]] : [],
+        }),
+      );
+    // Con la mediana de todos los cuadros (zoom 1), cada cuadro de la carrera es un "acercamiento": el último
+    // nombre del centro es el que llega primero, la ganadora.
+    expect(senalCamara(armar()).camara.ultimo.acierta).toBe(true);
+    // Con la zoom de siempre medida desde la largada (1,4), solo cuenta el acercamiento: el nombre del centro era Diego.
+    expect(senalCamara(armar(), { camaraDesde: { clave: "cStart" } }).camara.ultimo.acierta).toBe(false);
+    // Si la traza no trae la largada, se mide como siempre en vez de romperse.
+    expect(senalCamara(armar(false), { camaraDesde: { clave: "cStart" } }).camara.ultimo.acierta).toBe(true);
+  });
+
+  it("la carrera mide la zoom de siempre desde la largada", () => {
+    expect(JUEGOS.race.camaraDesde).toEqual({ clave: "cStart" });
+  });
 });
 
 describe("dónde arranca cada uno", () => {
@@ -415,6 +440,19 @@ describe("las señales de cada juego", () => {
     expect(c["puesto-75"]["puesto-2"].acierta).toBe(true);
     // Al 90% (15,8 s) va segunda.
     expect(c.recta).toEqual({ primera: { acierta: false, azar: 0.5 }, segunda: { acierta: true, azar: 0.5 } });
+  });
+
+  it("el pelotón: si gana el de nombre más largo o más corto entre los que siguen", () => {
+    // Largada de la final a los 20 s: el pelotón mide 12 s (de 0 a 12), y a los 3, 6 y 9 s miran las reglas.
+    const marks = [[0, "arco", "duelo"], [0, "clasificatoria", "8/8"], [0, "peloton", "20"]];
+    const P = preparar(traza({ pos: todosEnFila, marks, subs: [[20, "¡ALLÁ VAN!"]], ganador: 3, revelado: 40, fin: 43 }));
+    const c = senalesNombresPeloton(P);
+    // "Pablo Gutiérrez" (15) es el más largo, "Ana Vargas" (10) el más corto; gana Carlos Choque (13).
+    expect(c["nombre-largo-50"].el).toEqual({ acierta: false, azar: 1 / 8 });
+    expect(c["nombre-corto-50"].el).toEqual({ acierta: false, azar: 1 / 8 });
+    expect(Object.keys(c)).toHaveLength(6);
+    // Sin pelotón (con 8 o menos), no hay nada que medir.
+    expect(senalesNombresPeloton(preparar(traza({ pos: todosEnFila, marks: [[0, "peloton", "0"]], subs: [[20, "¡ALLÁ VAN!"]] })))).toEqual({});
   });
 
   it("el sapo: el del casi, sus vecinos y el que queda entre dos casi", () => {

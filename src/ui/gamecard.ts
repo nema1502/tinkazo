@@ -1,3 +1,4 @@
+import { hayPeloton } from "../duraciones";
 import { T, getLang, t } from "../i18n";
 import type { Game } from "../state";
 
@@ -63,7 +64,8 @@ function caja(game: Game, people: number, prizes: number, premio = ""): string {
   const lanes = (game === "race" || game === "rockets" || game === "totora") && people > 8;
   const varios = prizes > 1 ? VARIOS[game] : undefined;
   const extras = [
-    lanes ? L.cLanes(8, people) : game === "sapo" && people > 12 ? t("gcSapoQual") : "",
+    // Con 9 a 30, la carrera es el pelotón: salen todas y quedan ocho en la final.
+    lanes ? (game === "race" && hayPeloton(people) ? L.pelStart(people, 8) : L.cLanes(8, people)) : game === "sapo" && people > 12 ? t("gcSapoQual") : "",
     prizes > 1 && !varios ? L.gcPrizesNote(prizes) : "",
   ].filter(Boolean);
   return (

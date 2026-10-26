@@ -54,7 +54,8 @@ export interface Rango {
  * state.ts porque ese módulo lee `location` al cargar: una prueba compara los dos.
  */
 export const RANGOS: Partial<Record<Game, Rango>> = {
-  race: { minimo: 2, ideal: [4, 8], maximo: 8, meta: 7.0 },
+  // La carrera llega a 30 desde el 25 de octubre de 2026: con 9 a 30 sale todo el pelotón y se van echando de a uno.
+  race: { minimo: 2, ideal: [4, 30], maximo: 30, meta: 7.0 },
   sapo: { minimo: 2, ideal: [6, 12], maximo: 40, meta: 7.1 },
   trompo: { minimo: 2, ideal: [5, 14], maximo: 14, meta: 6.3 },
   chovena: { minimo: 8, ideal: [12, 60], maximo: 80, meta: 7.9 },

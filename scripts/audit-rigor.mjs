@@ -53,6 +53,21 @@ const outDir = opt("--out", "docs/capturas/rigor");
 const PACES = { rapido: 20, normal: 38, epico: 45 };
 
 /**
+ * La carrera de llamas con 9 a 30 personas dura según cuánta gente corre
+ * (`normalCarrera` en `src/duraciones.ts`): lo que promete "Normal", por
+ * cantidad. Una prueba (`src/duraciones.test.ts`) compara esta tabla con la
+ * función, así que no se puede despegar. Rápido es la mitad (no menos de 20) y
+ * Épico un 18 % más. Con 8 o menos y con más de 30 vale `PACES`.
+ */
+const NORMAL_CARRERA = { 9: 39, 10: 42, 11: 45, 12: 50, 13: 52, 14: 52, 15: 56, 16: 58, 17: 63, 18: 65, 19: 65, 20: 65, 21: 67, 22: 71, 23: 79, 24: 79, 25: 82, 26: 82, 27: 84, 28: 84, 29: 87, 30: 87 };
+/** Lo que promete cada posición del selector con `gente` personas en este juego. */
+function prometido(juego, pace, gente) {
+  const normal = juego === "race" ? NORMAL_CARRERA[gente] : undefined;
+  if (!normal) return PACES[pace];
+  return pace === "normal" ? normal : pace === "rapido" ? Math.max(20, Math.round(normal / 2)) : Math.round(normal * 1.18);
+}
+
+/**
  * El reloj virtual avanza de a 1/64 de segundo, no 1/60. Un sesentavo no es
  * exacto en binario: sumado cuadro a cuadro, la resta entre dos marcas de
  * tiempo dependía de en qué instante del reloj arrancaba el juego, y en un
@@ -540,12 +555,24 @@ async function auditar(browser, juego) {
   // que un juego corto no se vuelva cámara lenta, y ese juego queda corto.
   const durs = { normal: a.duracion };
   for (const p of ["rapido", "epico"]) durs[p] = (await correr(browser, juego, { pace: p })).duracion;
-  const lejos = Object.entries(durs).filter(([p, d]) => !d || Math.abs(d - PACES[p]) / PACES[p] > 0.2);
+  // La lista de la escena fija tiene EJEMPLO personas: eso es lo que se promete.
+  const lejos = Object.entries(durs).filter(([p, d]) => !d || Math.abs(d - prometido(juego, p, EJEMPLO)) / prometido(juego, p, EJEMPLO) > 0.2);
   check(
     "dura lo que se eligió en el selector",
     lejos.length === 0,
-    Object.entries(durs).map(([p, d]) => `${p} ${d ? d.toFixed(1) : "?"}/${PACES[p]} s`).join(" · "),
+    Object.entries(durs).map(([p, d]) => `${p} ${d ? d.toFixed(1) : "?"}/${prometido(juego, p, EJEMPLO)} s`).join(" · "),
   );
+  // La carrera con 30: lo mismo, con la lista más larga que mira el pelotón.
+  if (juego === "race") {
+    const d30 = {};
+    for (const p of ["rapido", "normal", "epico"]) d30[p] = (await correr(browser, juego, { pace: p, gente: 30 })).duracion;
+    const lejos30 = Object.entries(d30).filter(([p, d]) => !d || Math.abs(d - prometido(juego, p, 30)) / prometido(juego, p, 30) > 0.2);
+    check(
+      "con 30, dura lo que se eligió en el selector",
+      lejos30.length === 0,
+      Object.entries(d30).map(([p, d]) => `${p} ${d ? d.toFixed(1) : "?"}/${prometido(juego, p, 30)} s`).join(" · "),
+    );
+  }
 
   // ------------------------------------------------- 8. celular y tema claro
   // Las mismas medidas donde más se rompen: vertical, y sobre fondo claro.

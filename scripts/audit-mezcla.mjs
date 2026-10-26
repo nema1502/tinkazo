@@ -207,9 +207,10 @@ async function medir(browser, juego) {
     await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&auditar=mezcla` });
     const ok = await page.waitFor("document.getElementById('stadium') && document.getElementById('stadium').style.display === 'block'", 30_000);
     if (!ok.ok) return { error: "el estadio no apareció" };
-    // Hasta que el juego cierra solo, o como mucho 60 s.
+    // Hasta que el juego cierra solo, o como mucho 150 s: la carrera de 30 dura hasta 90 s con el
+    // pelotón (`normalCarrera` en src/duraciones.ts) y con 60 s se cortaba antes del ganador.
     const t0 = Date.now();
-    while (Date.now() - t0 < 60_000) {
+    while (Date.now() - t0 < 150_000) {
       await sleep(500);
       const abierto = await page.eval("document.getElementById('stadium').style.display === 'block'");
       if (!abierto) break;

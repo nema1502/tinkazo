@@ -2,6 +2,7 @@ import { Container, Graphics, Sprite, Text, Texture } from "pixi.js";
 import { gsap } from "gsap";
 import { T, getLang, t } from "../../i18n";
 import { paceFactor, params, setGameLength, yaContaron, type Beacon } from "../../state";
+import { hayPeloton, normalCarrera } from "../../duraciones";
 import { cabe, centrar, crecer, dentro, unir, type Vista, type Zona } from "../pixi/encuadre";
 import { beep, beepFor, fanfare, isMuted, audio, note } from "../../sound";
 import { enOrden, tension } from "../drama";
@@ -9,6 +10,8 @@ import { WINNER_HOLD, shorten, winnersLabel } from "../overlay";
 import { wavesAround } from "../pixi/qualifier";
 import { CREAM, INK, MONO, YELLOW, contorno, hash, mountPixi, seeded, type PixiStage } from "../pixi/stage";
 import { planRace, type Plan } from "./plan";
+import { planPeloton } from "./peloton-plan";
+import { crearPeloton, type Peloton } from "./pixi-peloton";
 
 /**
  * La carrera en PixiJS y GSAP, con el director de cámara. Dos pieles: llamas
@@ -75,6 +78,8 @@ const medirCaja = (root: Container): Caja => {
   return { x: b.x, y: b.y, w: b.width, h: b.height };
 };
 
+const lerpN = (a: number, b: number, k: number): number => a + (b - a) * k;
+
 const dim = (c: number, f: number): number => {
   const r = ((c >> 16) & 255) * f, g = ((c >> 8) & 255) * f, b = (c & 255) * f;
   return (Math.round(Math.min(255, r)) << 16) | (Math.round(Math.min(255, g)) << 8) | Math.round(Math.min(255, b));
@@ -123,12 +128,37 @@ export async function llamasPixi(
   S.mark("arco", story.arc);
   const N = lanes.length;
 
+  /**
+   * El pelotón: de 9 a 30 personas, en la carrera de llamas, salen todas
+   * juntas y se van echando hasta que quedan las ocho de la final (las mismas
+   * de siempre, que eligió el plan de arriba). Con 8 o menos y con más de 30
+   * sigue todo como antes. `?peloton=0` lo apaga y vuelve la clasificatoria.
+   * El azar del pelotón es aparte: la final cuenta la misma historia.
+   */
+  const peloDicho = new Set<string>();
+  const peloton = skin === "andes" && hayPeloton(names.length) && params.get("peloton") !== "0"
+    ? planPeloton(names.length, lanes, seeded(parseInt(beacon.randomness.slice(48, 56), 16)))
+    : null;
+
   // La clasificatoria, con un azar aparte (de la ronda, no el del plan): los
   // ocho de la final son los mismos de siempre, así que la carrera cuenta la
   // misma historia que antes y que en el motor anterior.
-  const waves = names.length > N ? wavesAround(names.length, lanes, seeded(parseInt(beacon.randomness.slice(40, 48), 16))) : [];
-  /** Cuándo entra el primer carril: después de las oleadas, si las hay. */
-  const T_LANES = waves.length ? Q_SHOW + waves.length * Q_WAVE : 0;
+  // El dibujo de los emblemas, solo si hay pelotón, y esperado antes de arrancar: una imagen se
+  // decodifica cuando el navegador quiere y las primeras fichas saldrían sin cara. Si no llega,
+  // el pelotón sigue con la cara de siempre.
+  let dibujoEmblemas: typeof import("../emblemas-dibujo") | null = null;
+  if (peloton) {
+    try {
+      const m = await import("../emblemas-dibujo");
+      await m.cargarEmblemas();
+      dibujoEmblemas = m;
+    } catch {
+      dibujoEmblemas = null;
+    }
+  }
+  const waves = !peloton && names.length > N ? wavesAround(names.length, lanes, seeded(parseInt(beacon.randomness.slice(40, 48), 16))) : [];
+  /** Cuándo entra el primer carril: después del pelotón o de las oleadas, si los hay. */
+  const T_LANES = peloton ? peloton.fin : waves.length ? Q_SHOW + waves.length * Q_WAVE : 0;
   /** Cuándo entra a la pista el carril `k`. */
   const laneAt = (k: number): number => T_LANES + k * P_LANE;
   /** Todo lo de antes de la cuenta, en segundos de juego. */
@@ -136,8 +166,9 @@ export async function llamasPixi(
   /** Cuándo se va cada nombre de la clasificatoria: su oleada, y un escalonado chico adentro. */
   const goneAt = new Map<number, number>();
   waves.forEach((w, wi) => w.forEach((idx, j) => goneAt.set(idx, Q_SHOW + wi * Q_WAVE + 0.1 + (j / Math.max(1, w.length)) * 0.45)));
-  setGameLength(DUR + PRE, WINNER_HOLD + CUENTA);
+  setGameLength(DUR + PRE, WINNER_HOLD + CUENTA, peloton ? normalCarrera(names.length) : null);
   S.mark("clasificatoria", `${N}/${names.length}`);
+  S.mark("peloton", peloton ? `${peloton.eventos.length}` : "0");
   const nameOf = (k: number): string => names[lanes[k] as number] ?? "";
   /** Los carriles de los que ganan algo: en la corona no se apagan. */
   const prizedLanes = new Set(winners.map((w) => lanes.indexOf(w)).filter((k) => k >= 0));
@@ -172,6 +203,8 @@ export async function llamasPixi(
     flags: Graphics; fx: Graphics; runners: Runner[]; clouds: Container; sun: Container;
     mini: Graphics; rows: Container[]; count: Text[]; foto: Container;
     board: Container; aviso: Container | null; qual: Qual;
+    /** El pelotón (de 9 a 30), y el destello con que se abre en los carriles. */
+    pelo: Peloton | null; destello: Graphics | null;
   }
   /** La clasificatoria en pantalla: todos los nombres con su llama, y las oleadas. */
   interface Qual {
@@ -210,8 +243,8 @@ export async function llamasPixi(
   }
 
   /** Una llama armada por partes, mirando a la derecha, con los pies en y = 0. */
-  function makeLlama(k: number, sc: number): Runner {
-    const fur = FUR[(lanes[k] as number) % FUR.length] ?? 0xf3ead8;
+  function makeLlama(k: number, sc: number, pelo?: { persona: number; manta: number; dorsal: string }): Runner {
+    const fur = FUR[((pelo ? pelo.persona : lanes[k]) as number) % FUR.length] ?? 0xf3ead8;
     const root = new Container();
     root.addChild(new Graphics().ellipse(0, 0, 24, 5).fill({ color: 0x000000, alpha: 0.28 }));
     const body = new Container();
@@ -244,14 +277,19 @@ export async function llamasPixi(
     torso.ellipse(0, -36, 24, 13).fill(fur).stroke({ width: 2.2, color: INK });
     body.addChild(torso);
     const blanket = new Graphics()
-      .roundRect(-15, -48, 30, 17, 4).fill(S.color(k)).stroke({ width: 2, color: INK })
+      .roundRect(-15, -48, 30, 17, 4).fill(pelo ? pelo.manta : S.color(k)).stroke({ width: 2, color: INK })
       .rect(-15, -43, 30, 2.4).fill(YELLOW)
       .rect(-15, -38.5, 30, 2.4).fill(0x2f9e44);
     body.addChild(blanket);
-    const bib = S.text(String(k + 1), { fontSize: 11, fontWeight: "900", fill: CREAM, stroke: { color: INK, width: 3 } });
-    bib.anchor.set(0.5);
-    bib.position.set(0, -40);
-    body.addChild(bib, legs[2]!.hip, legs[3]!.hip);
+    // En el pelotón no hay dorsal: la ficha de arriba ya lleva la inicial, y treinta textos
+    // más son treinta texturas y otros tantos cortes del dibujo.
+    if (!pelo) {
+      const bib = S.text(String(k + 1), { fontSize: 11, fontWeight: "900", fill: CREAM, stroke: { color: INK, width: 3 } });
+      bib.anchor.set(0.5);
+      bib.position.set(0, -40);
+      body.addChild(bib);
+    }
+    body.addChild(legs[2]!.hip, legs[3]!.hip);
     const neck = new Container();
     neck.position.set(16, -42);
     const neckG = new Graphics()
@@ -272,10 +310,12 @@ export async function llamasPixi(
     root.addChild(mark);
     root.scale.set(sc);
     return {
-      root, mark, tag: S.chip(nameOf(k)),
+      root, mark, tag: pelo ? new Container() : S.chip(nameOf(k)),
       pose(ph, speed, beat) {
         const sw = 0.55;
         let lean = speed > 1.25 ? 0.07 : 0;
+        // Las patas se pliegan cuando la llama se echa (el pelotón): sin eso, vuelven a su largo.
+        let plegada = 0;
         let legA = [Math.sin(ph) * sw, Math.sin(ph + 0.9) * sw, Math.sin(ph + Math.PI) * sw, Math.sin(ph + Math.PI + 0.9) * sw];
         let neckRot = Math.sin(ph * 2) * 0.05;
         mark.visible = false;
@@ -291,17 +331,28 @@ export async function llamasPixi(
           lean = -0.12 * Math.sin(Math.PI * beat.p * 3);
           mark.visible = true;
           mark.text = "?!";
+        } else if (beat?.kind === "tambalea") {
+          // Se tambalea y sigue: se balancea de un lado al otro con el "¡!".
+          lean = 0.22 * Math.sin(beat.p * Math.PI * 5) * (1 - beat.p * 0.4);
+          neckRot = -0.18 * Math.sin(beat.p * Math.PI * 5 + 1);
+          mark.visible = true;
+          mark.text = "!";
+        } else if (beat?.kind === "echada") {
+          // Se echa: baja el cuerpo, pliega las patas y se queda quieta con el cuello alto.
+          plegada = Math.min(1, beat.p);
+          neckRot = -0.1;
         }
         // La cadera da el paso; la rodilla se dobla mientras la pata va hacia
         // adelante (cuando el ángulo baja) y queda derecha al apoyar.
         const phs = [ph, ph + 0.9, ph + Math.PI, ph + Math.PI + 0.9];
         const stiff = beat?.kind === "plantada" || speed < 0.1;
         legs.forEach((l, i) => {
-          l.hip.rotation = legA[i] ?? 0;
-          l.knee.rotation = stiff ? 0 : Math.max(0, -Math.cos(phs[i] ?? 0)) * (i % 2 === 0 ? 1.05 : 0.8);
+          l.hip.rotation = plegada ? lerpN(legA[i] ?? 0, i % 2 ? 1.25 : -1.25, plegada) : (legA[i] ?? 0);
+          l.knee.rotation = plegada ? plegada * (i % 2 ? -1.9 : 1.9) : stiff ? 0 : Math.max(0, -Math.cos(phs[i] ?? 0)) * (i % 2 === 0 ? 1.05 : 0.8);
+          l.hip.scale.y = 1 - 0.3 * plegada;
         });
         body.rotation = lean;
-        body.y = speed > 0.1 ? -Math.abs(Math.sin(ph)) * 4 : 0;
+        body.y = plegada ? 15 * plegada : speed > 0.1 ? -Math.abs(Math.sin(ph)) * 4 : 0;
         neck.rotation = neckRot;
         earL.rotation = Math.sin(ph * 2 + 1) * 0.25;
         earR.rotation = Math.sin(ph * 2 + 2) * 0.25;
@@ -444,6 +495,26 @@ export async function llamasPixi(
   }
 
   let L!: Layers;
+  /**
+   * Si el pelotón falla (al armarse o a mitad del show), se aparta y la carrera
+   * sigue con la final de siempre: lo que importa es el sorteo, no el pelotón.
+   * Queda anotado en el lienzo para los auditores (`data-pelotonFalla`).
+   */
+  let peloRoto = false;
+  function pelotonRoto(err: unknown): void {
+    if (peloRoto) return;
+    peloRoto = true;
+    S.mark("pelotonFalla", String((err as Error | undefined)?.message ?? err).slice(0, 120));
+    console.error(err);
+    if (L?.pelo) {
+      L.pelo.escena.visible = false;
+      L.pelo.hud.visible = false;
+    }
+    if (L?.destello) L.destello.visible = false;
+    if (L?.world) L.world.visible = true;
+    // Lo que faltaba del pelotón se salta: `preUpdate` adelanta el reloj hasta la entrada de los carriles
+    // (acá todavía no se puede tocar, el primer armado corre antes de que existan los relojes).
+  }
 
   function build(): void {
     G = geo();
@@ -721,7 +792,36 @@ export async function llamasPixi(
     foto.visible = false;
     S.hud.addChild(foto);
 
-    L = { far, mid, near, stands, world, crowd, crowdBase, people, flags, fx, runners, clouds, sun, mini, rows, count, foto, board, aviso: avisoBox, qual: buildQual() };
+    L = { far, mid, near, stands, world, crowd, crowdBase, people, flags, fx, runners, clouds, sun, mini, rows, count, foto, board, aviso: avisoBox, qual: buildQual(), pelo: null, destello: null };
+    if (peloton && !peloRoto) try {
+      // `?pelotonFalla=armar|dibujo`: rompe el pelotón a propósito, para comprobar que la carrera sigue.
+      if (params.get("pelotonFalla") === "armar") throw new Error("falla de prueba al armar el pelotón");
+      const pel = crearPeloton({
+        S, names, plan: peloton, lanes, ronda: beacon.randomness, dark, dicho: peloDicho,
+        emblema: dibujoEmblemas ? (e, lado) => dibujoEmblemas?.emblemaCanvas(e, lado) ?? null : undefined,
+        geo: () => ({ sw: G.sw, sh: G.sh, u: G.u, portrait: G.portrait, trackTop: G.trackTop, trackBot: G.trackBot }),
+        llama: (persona, sc, manta, dorsal) => makeLlama(0, sc, { persona, manta, dorsal }),
+        destino: (k) => {
+          const r = L.runners[k];
+          return r ? cam.toScreen(r.tag.x, r.tag.y, G.sw, G.sh) : null;
+        },
+        laneAt,
+        decir: (msg, heat) => {
+          S.say(msg, heat);
+          lastSayAt = tReal;
+        },
+      });
+      S.scene.addChild(pel.escena);
+      const destello = new Graphics().rect(0, 0, sw, sh).fill(CREAM);
+      destello.alpha = 0;
+      // El destello va encima de las fichas: si no, las de los finalistas quedan nítidas sobre el fondo claro.
+      S.hud.addChild(pel.hud, destello);
+      L.pelo = pel;
+      L.destello = destello;
+    } catch (err) {
+      // Si el pelotón no se puede armar, el show sigue con la final: nunca se queda sin sorteo.
+      pelotonRoto(err);
+    }
     choreograph();
   }
 
@@ -846,6 +946,8 @@ export async function llamasPixi(
   let empujeDado = false;
   /** El reloj de la clasificatoria y la presentación, en segundos de juego. */
   let tPre = 0;
+  /** El pelotón ya se abrió y la cámara ya hizo su corte a la largada. */
+  let cortada = false;
   /** Segundos reales desde la largada, para el "¡YA!", que antes no llegaba a verse: la cuenta terminaba justo cuando aparecía. */
   let tGo = -1;
   /** El reloj de la sala, en segundos reales: el del relator. `tRace` va en segundos de juego y se frena en la foto. */
@@ -897,7 +999,8 @@ export async function llamasPixi(
     const x = G.portrait ? (izq + der) / 2 : Math.min(G.X0 + 60 * G.u, izq + G.sw / (2 * z) - 10 * G.u);
     return { x, y: (arriba + abajo) / 2, z };
   };
-  {
+  if (peloton) cam.cut(G.sw / 2, G.sh / 2, 1);
+  else {
     const l = largada();
     cam.cut(l.x, l.y, l.z);
   }
@@ -1205,16 +1308,34 @@ export async function llamasPixi(
         lastSayAt = tReal;
         for (let i = 0; i < Math.min(6, 2 + w.length); i++) setTimeout(() => beep(note(3 - i), 0.05, "square", 0.03), i * 80);
       }));
-    } else once("intro", 0.05, () => sayIf(L_.rqIntro, 0.3));
+    } else once("intro", T_LANES + 0.05, () => sayIf(L_.rqIntro, 0.3));
+    // El pelotón: sus sonidos y sus subtítulos.
+    if (peloton && !peloRoto) {
+      try {
+        L.pelo?.actualizar(tPre);
+      } catch (err) {
+        pelotonRoto(err);
+      }
+    }
+    // Si el pelotón no se pudo armar, no hay nada que esperar.
+    if (peloton && (peloRoto || !L.pelo) && tPre < T_LANES) tPre = T_LANES;
     // Cada carril entra con su nota, de abajo hacia arriba del pentagrama.
     for (let k = 0; k < N; k++) once(`l${k}`, laneAt(k), () => beep(note(5 + k), 0.09, "triangle", 0.045));
     once("listos", Math.max(laneAt(N - 1), PRE - 0.55), () => {
       S.say(listos, 0.45);
       lastSayAt = tReal;
     });
-    // La cámara, quieta sobre la largada mientras entran.
-    const l = largada();
-    cam.lookAt(l.x, l.y, l.z, 2);
+    // La cámara, quieta sobre la largada mientras entran. Con el pelotón, quieta y
+    // de frente hasta que se abre, y entonces de un corte a la largada, debajo del destello.
+    if (peloton && tPre < T_LANES) cam.lookAt(G.sw / 2, G.sh / 2, 1, 6);
+    else {
+      const l = largada();
+      if (peloton && !cortada) {
+        cortada = true;
+        cam.cut(l.x, l.y, l.z);
+      }
+      cam.lookAt(l.x, l.y, l.z, 2);
+    }
     if (tPre >= PRE) phase = "count";
   }
 
@@ -1395,22 +1516,25 @@ export async function llamasPixi(
     const tens = quieto ? 0.1 : phase === "done" ? 1 : tension(story, prog);
 
     // Paralaje: cada capa se corre una parte de lo que se corre la cámara.
-    const par = (c: Container, f: number): void => {
-      c.x = cam.x * (1 - f);
+    // Con el pelotón corre el suelo y no la cámara: lo de atrás se desplaza con `sc0`.
+    const sc0 = L.pelo && phase === "pre" && tPre < T_LANES ? L.pelo.suelo(tPre) : 0;
+    // La tribuna corre menos que la valla (está más lejos) y no se queda sin gente: `fs` es cuánto.
+    const par = (c: Container, f: number, fs = f): void => {
+      c.x = cam.x * (1 - f) - fs * sc0;
       c.y = (cam.y - G.midY) * (1 - f) * 0.6;
     };
     par(L.far, 0.1);
     par(L.mid, 0.2);
     par(L.near, 0.35);
-    par(L.stands, 0.7);
-    L.clouds.x = -cam.x * 0.05 - now * 6 * u;
+    par(L.stands, 0.7, 0.33);
+    L.clouds.x = -cam.x * 0.05 - 0.05 * sc0 - now * 6 * u;
     L.sun.x = sw * 0.78 - cam.x * 0.02;
 
     // La hinchada salta más cuanto más tensa está la carrera. Se dibuja la que
     // se ve: con la cámara alejada (pocas personas, en la corona) se ve más de
     // un ancho de pantalla para cada lado, y sin esto los costados quedaban sin gente.
     const media = Math.max(sw, sw / (2 * Math.max(0.2, cam.zoom)));
-    const lo = cam.x * 0.7 - media, hi = cam.x * 0.7 + media;
+    const lo = cam.x * 0.7 + sc0 * 0.33 - media, hi = cam.x * 0.7 + sc0 * 0.33 + media;
     L.crowd.forEach((sp, i) => {
       const b = L.crowdBase[i];
       if (!b) return;
@@ -1638,6 +1762,25 @@ export async function llamasPixi(
           }
         }
       }
+    }
+
+    // El pelotón: se ve hasta que se abre en los carriles; el destello tapa el corte.
+    if (L.pelo && !peloRoto) try {
+      const enPelo = phase === "pre" && tPre < T_LANES;
+      L.world.visible = !enPelo;
+      L.pelo.escena.visible = enPelo;
+      L.pelo.hud.visible = phase === "pre" && L.pelo.vivo(tPre);
+      if (phase === "pre") {
+        if (params.get("pelotonFalla") === "dibujo" && tPre > 6) throw new Error("falla de prueba al dibujar el pelotón");
+        L.pelo.dibujar(tPre, now);
+      }
+      if (L.destello) {
+        const d = phase !== "pre" ? 0 : tPre < T_LANES ? Math.max(0, Math.min(1, (tPre - (T_LANES - 0.3)) / 0.3)) : Math.max(0, 1 - (tPre - T_LANES) / 0.45);
+        L.destello.alpha = 0.92 * d;
+        L.destello.visible = d > 0.01;
+      }
+    } catch (err) {
+      pelotonRoto(err);
     }
 
     // Para el auditor de encuadre: dónde cayó cada cuerpo en este cuadro.

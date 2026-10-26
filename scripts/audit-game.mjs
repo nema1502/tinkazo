@@ -86,7 +86,7 @@ async function run() {
     console.log(`\nAuditando "${game}" contra ${base}\n`);
     const url = `${base}/?demo=${encodeURIComponent(game)}&lead=${lead}${conMotor}`;
     const page = await browser.open(url);
-    const drew = await page.waitFor("document.querySelectorAll('.winner-name').length > 0", 120_000);
+    const drew = await page.waitFor("document.querySelectorAll('.winner-name').length > 0", 240_000);
     check("el sorteo termina y muestra un ganador", drew.ok, `${(drew.elapsed / 1000).toFixed(1)} s`);
     if (!drew.ok) return;
 
@@ -253,7 +253,7 @@ async function run() {
 
     // ------------------------------------------------------- 8. en inglés
     const en = await browser.open(`${url}&lang=en&instant=1`);
-    const enOk = await en.waitFor("document.querySelectorAll('.winner-name').length > 0", 120_000);
+    const enOk = await en.waitFor("document.querySelectorAll('.winner-name').length > 0", 240_000);
     const enState = JSON.parse(await en.eval(READ_STATE));
     const enOption = enState.options.find((o) => o.id === `g-${game}`);
     check("el sorteo también corre en inglés", enOk.ok);

@@ -238,6 +238,12 @@ interface Identidad {
   n: number;
   /** Segundos desde que arrancó el juego, o -1 si no se leyó antes del ganador. */
   vistos: number[];
+  /**
+   * Lo mismo, pero solo cuando se leyó el nombre ENTERO (el texto es igual al
+   * nombre, sin cortes ni iniciales): lo que prometen el pelotón de la carrera
+   * y todo juego que complete los nombres. -1 si no se leyó entero.
+   */
+  completos: number[];
   /** Cuándo salió el cartel del ganador; lo que se lee después no cuenta. */
   revelado: number | null;
   muestras: number;
@@ -260,6 +266,12 @@ function identidadDe(names: string[]): { estado: Identidad; mirar: (raices: Cont
   const nombres = names.map(norm);
   const exactos = new Map<string, number[]>();
   nombres.forEach((nm, i) => exactos.set(nm, [...(exactos.get(nm) ?? []), i]));
+  // Para el nombre entero: las mismas letras en el mismo orden, sin mirar los espacios. Un nombre
+  // largo sin espacios se parte en dos líneas después de un guion bajo, y el salto de línea no
+  // estaba en el nombre: sigue siendo el nombre entero.
+  const sinEspacios = (s: string): string => norm(s).replace(/\s+/g, "");
+  const enteros = new Map<string, number[]>();
+  names.forEach((nm, i) => enteros.set(sinEspacios(nm), [...(enteros.get(sinEspacios(nm)) ?? []), i]));
   const memo = new Map<string, number>();
   const quien = (txt: string): number => {
     const s = norm(txt);
@@ -267,7 +279,10 @@ function identidadDe(names: string[]): { estado: Identidad; mirar: (raices: Cont
     if (hecho !== undefined) return hecho;
     let hit = -1;
     const ex = exactos.get(s);
+    const entero = enteros.get(sinEspacios(s));
     if (ex) hit = ex.length === 1 ? (ex[0] as number) : -1;
+    // El nombre partido en dos líneas donde no había un espacio (después de un guion bajo).
+    else if (entero) hit = entero.length === 1 ? (entero[0] as number) : -1;
     else {
       const ts = s.split(" ").map((x) => x.replace(/[.…]+$/, "")).filter(Boolean);
       for (let i = 0; ts.length && i < nombres.length; i++) {
@@ -285,7 +300,7 @@ function identidadDe(names: string[]): { estado: Identidad; mirar: (raices: Cont
     memo.set(s, hit);
     return hit;
   };
-  const estado: Identidad = { n: names.length, vistos: names.map(() => -1), revelado: null, muestras: 0 };
+  const estado: Identidad = { n: names.length, vistos: names.map(() => -1), completos: names.map(() => -1), revelado: null, muestras: 0 };
   const mirar = (raices: Container[], ahora: number, sw: number, sh: number): void => {
     if (estado.revelado !== null) return;
     estado.muestras++;
@@ -296,9 +311,14 @@ function identidadDe(names: string[]): { estado: Identidad; mirar: (raices: Cont
       if (a < 0.05) return;
       if (c instanceof Text) {
         const i = a >= 0.6 ? quien(c.text) : -1;
-        if (i >= 0 && (estado.vistos[i] as number) < 0) {
+        if (i >= 0 && ((estado.vistos[i] as number) < 0 || (estado.completos[i] as number) < 0)) {
           const b = c.getBounds();
-          if (b.height >= min && b.x >= 0 && b.y >= 0 && b.x + b.width <= sw && b.y + b.height <= sh) estado.vistos[i] = ahora;
+          if (b.height >= min && b.x >= 0 && b.y >= 0 && b.x + b.width <= sw && b.y + b.height <= sh) {
+            if ((estado.vistos[i] as number) < 0) estado.vistos[i] = ahora;
+            // Entero: el texto es el nombre, sin cortes (el salto de línea de un nombre partido en dos cuenta como espacio).
+            const unico = enteros.get(sinEspacios(c.text));
+            if (unico?.length === 1 && unico[0] === i && (estado.completos[i] as number) < 0) estado.completos[i] = ahora;
+          }
         }
         return;
       }
