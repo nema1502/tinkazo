@@ -15,23 +15,30 @@
  *   3. la pendiente de las últimas 24 horas y cuántas horas faltan para el rojo
  *      si sigue así (informativo: no hace fallar la corrida).
  *
- * Solo lee, del RPC público de cada red. Sin dependencias: Node 22 y `fetch`.
- * Lo corre `.github/workflows/vigilar-red.yml` cada media hora; GitHub avisa por
- * correo cuando la corrida falla. La explicación está en docs/deployments.md,
+ * Solo lee, del RPC público de cada red (mainnet tiene dos de respaldo). Sin
+ * dependencias: Node 22 y `fetch`. Lo corre `.github/workflows/vigilar-red.yml`
+ * cada media hora, y una vez al día con `--diario`; GitHub avisa por correo
+ * cuando la corrida falla. Para que falle solo cuando hay algo nuevo que decir,
+ * el nivel de cada red se guarda entre corridas (`--anterior` y `--guardar`; en
+ * GitHub, en la caché de Actions). La explicación está en docs/deployments.md,
  * «Vigilancia de la red».
  *
  * Uso:
- *   node scripts/vigilar-red.mjs                       # las dos redes
+ *   node scripts/vigilar-red.mjs                       # las dos redes, sin memoria
  *   node scripts/vigilar-red.mjs --red mainnet         # una sola
  *   node scripts/vigilar-red.mjs --json                # lo mismo, en una línea de JSON
+ *   node scripts/vigilar-red.mjs --anterior N.json --guardar N.json   # con el nivel de la corrida anterior
+ *   node scripts/vigilar-red.mjs --diario              # el recordatorio: falla también con naranja estable
  *   node scripts/vigilar-red.mjs --actualizar-base     # la red cambió y el cambio es legítimo
  *
- * Sale con 0 si todo está igual; con 1 si cambió un parámetro, si mainnet llegó
- * a amarillo o más, o si testnet llegó a 6.000 MB; con 2 si no se pudo mirar
- * (sin RPC o sin línea base).
+ * Sale con 0 si no hay novedades; con 1 si cambió un parámetro, si el nivel de
+ * una red se movió respecto de la corrida anterior (sin memoria, cualquier nivel
+ * cuenta como movimiento), si una red está en rojo o si, con `--diario`, está en
+ * naranja; con 2 si no se pudo mirar (sin RPC, o sin línea base).
  */
 
-import { readFile, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import {
   NETWORKS,
   analyze,
@@ -41,8 +48,13 @@ import {
   describeChange,
   diffParams,
   formatReport,
+  makeCaller,
+  nextState,
+  parseState,
   readNetwork,
   serializeBase,
+  serializeState,
+  summarize,
   toJson,
 } from "./lib/vigilar-red.mjs";
 
@@ -50,50 +62,23 @@ const BASE_FILE = new URL("./vigilar-red.base.json", import.meta.url);
 
 const HELP = `Avisa cuando la red de Stellar cambia lo que cuesta guardar datos en Soroban.
 
-  node scripts/vigilar-red.mjs [--red testnet|mainnet] [--json]
+  node scripts/vigilar-red.mjs [--red testnet|mainnet] [--json] [--diario]
+      [--anterior ARCHIVO] [--guardar ARCHIVO]
   node scripts/vigilar-red.mjs --actualizar-base [--red testnet|mainnet]
 
   --red NOMBRE         Mira solo esa red (por defecto, las dos).
   --json               Imprime el resultado en una sola línea de JSON.
+  --anterior ARCHIVO   Lee de ahí el nivel de cada red en la corrida anterior (si no
+                       existe, es «normal»). Sin esto, cualquier nivel cuenta como nuevo.
+  --guardar ARCHIVO    Escribe ahí el nivel de esta corrida, falle o no la corrida.
+  --diario             El recordatorio de todos los días: falla también si una red
+                       sigue en naranja (en rojo falla siempre).
   --actualizar-base    Guarda como línea base lo que la red dice hoy. Usarlo solo
                        cuando un cambio es legítimo; después hay que commitear
                        scripts/vigilar-red.base.json.
   --ayuda              Esta ayuda.
 
-Sale con 0 si todo está igual, con 1 si hay una alarma y con 2 si no se pudo mirar.`;
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/** Una llamada al RPC, con tres intentos salvo que se pidan menos: los RPC públicos tienen sus malos ratos. */
-async function rpcCall(url, method, params, { attempts = 3 } = {}) {
-  // `getLedgers` trae el ledger entero (en mainnet, varios MB); lo demás es chico.
-  const timeoutMs = method === "getLedgers" ? 40_000 : 20_000;
-  let last;
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const body = await res.json();
-      if (body.error) {
-        const error = new Error(body.error.message ?? "error del RPC");
-        // Parámetros inválidos (-32602) o método inexistente (-32601): pedir lo mismo da lo mismo.
-        error.permanent = body.error.code === -32602 || body.error.code === -32601;
-        throw error;
-      }
-      return body.result;
-    } catch (e) {
-      last = e;
-      if (e.permanent) break;
-      if (attempt < attempts) await sleep(attempt * 3000);
-    }
-  }
-  throw new Error(`${method}: ${last.message}`);
-}
+Sale con 0 si no hay novedades, con 1 si hay una alarma y con 2 si no se pudo mirar.`;
 
 async function readBase() {
   try {
@@ -101,6 +86,16 @@ async function readBase() {
   } catch (e) {
     if (e.code === "ENOENT") return null;
     throw new Error(`no se pudo leer la línea base: ${e.message}`);
+  }
+}
+
+/** El nivel de la corrida anterior; sin archivo (la primera vez, o la caché vacía) es «normal» en todas. */
+async function readState(path) {
+  try {
+    return parseState(await readFile(path, "utf8"));
+  } catch (e) {
+    if (e.code !== "ENOENT") console.error(`No se pudo leer el nivel anterior (${e.message}); se toma como normal.`);
+    return {};
   }
 }
 
@@ -146,9 +141,7 @@ async function main() {
   const names = only ? [only] : Object.keys(NETWORKS);
 
   const when = new Date();
-  const settled = await Promise.allSettled(
-    names.map((network) => readNetwork((method, params, options) => rpcCall(NETWORKS[network].rpcUrl, method, params, options))),
-  );
+  const settled = await Promise.allSettled(names.map((network) => readNetwork(makeCaller(NETWORKS[network].rpcUrls))));
   const reads = {};
   const failures = {};
   settled.forEach((s, i) => {
@@ -165,12 +158,26 @@ async function main() {
   }
   if (args.includes("--actualizar-base")) return updateBase({ names, reads, failures, previous: base, when });
 
+  const previousPath = option(args, "--anterior");
+  const previous = previousPath ? await readState(previousPath) : {};
   const results = names.map((network) =>
     failures[network]
       ? { network, error: failures[network] }
-      : analyze(network, reads[network], base?.networks?.[network] ?? null),
+      : analyze(network, reads[network], base?.networks?.[network] ?? null, previous[network] ?? null),
   );
-  const decision = decide(results);
+  const decision = decide(results, { daily: args.includes("--diario") });
+
+  // El nivel se guarda aunque la corrida falle: si no, el aviso se repetiría en cada corrida.
+  const savePath = option(args, "--guardar");
+  if (savePath) {
+    await mkdir(dirname(savePath), { recursive: true });
+    await writeFile(savePath, serializeState(nextState(previous, results, when)));
+  }
+  // En GitHub, el resumen queda como salida del paso para ponerlo en el nombre de otro.
+  if (process.env.GITHUB_OUTPUT) {
+    await appendFile(process.env.GITHUB_OUTPUT, `resumen=${summarize(results)}\ncodigo=${decision.code}\n`);
+  }
+
   if (args.includes("--json")) {
     console.log(JSON.stringify(toJson({ when, results, decision })));
   } else {
