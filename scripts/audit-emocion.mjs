@@ -29,8 +29,8 @@
 import { createHash } from "node:crypto";
 import { launch, sleep } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
+import { SELECTOR as TODOS } from "./lib/juegos.mjs";
 
-const TODOS = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "trueque"];
 /**
  * Los juegos que tienen zoom de emoción (`Camera.golpe` en `docs/motores.md`):
  * el pico del zoom tiene que caer en el golpe, que es el instante en que sale el

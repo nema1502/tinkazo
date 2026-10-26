@@ -124,6 +124,35 @@ pnpm audit:todo --simular                         # muestra qué correría y cu�
 
 `objetivo` es el juego o la página que se miró (`todos`, `sitio`, `paginas`). Los nombres y detalles de las fallas se acortan a 160 y 240 caracteres, y de más de cien fallas se detallan las primeras cien y se cuenta el resto. El agregador toma la última línea con esa forma de la salida de cada corrida, y la propia batería, con `--json`, termina con una línea igual (`"auditor":"audit-todo"`). `audit-delatores` conserva su `--json <archivo>` (el detalle de las señales); sin archivo, solo agrega la línea. Las pruebas del agregador, sin red ni Chrome, están en `scripts/lib/bateria.test.mjs`, `resumen.test.mjs` y `bateria-proceso.test.mjs`.
 
+### Qué se recortó de la batería (25 de octubre de 2026)
+
+La nota de la investigación de los auditores encontró tres repeticiones. Esto se hizo con cada una:
+
+- **`audit-pantalla` entró a `audit-rigor` como un grupo**: misma corrida, un solo Chrome, las mismas reglas (`scripts/lib/pantalla-comprobaciones.mjs`). Por cada juego, después de las comprobaciones de siempre, mide los destellos (a lo sumo tres por segundo) y que todo texto de contraste bajo lleve contorno. `--sin-pantalla` lo saltea; `--pantalla-res 1280x720,1920x1080` y `--pantalla-temas dark,light` miran más. `audit-pantalla.mjs` sigue sirviendo solo (con `--clip` y `--compartir`) y la batería lo corre con `--solo audit-pantalla`.
+- **Lo que salió del selector dejó de entrar en un `todos`**: rigor, identidad, emoción, sonido, mezcla, pantalla y delatores toman sus juegos de `scripts/lib/juegos.mjs`, los diez del selector. `tombola`, `pasanaku` y `stellar` se piden por nombre o con `pnpm audit:todo --todos-los-juegos`. Pantalla, de paso, se salteaba El Trueque; ahora lo mira.
+- **`audit-espera` y `audit-detalles` se quedan.** La nota decía que `audit-flujo` y `audit-ui` los cubrían. Comparando lo que afirma cada `check(` de los cuatro (espera 24, detalles 35, flujo y ui unas 70 plantillas de nombre), no es así: ninguno de los temas de abajo aparece en flujo ni en ui, así que quitarlos era perder comprobaciones.
+
+| Lo que mira | Está en | ¿Lo mira `audit-flujo` o `audit-ui`? |
+|---|---|---|
+| La espera en grande desemboca en el show sin un cuadro de la página en el medio, con la pantalla completa heredada y sin cortina | espera | No: flujo solo comprueba que con la espera en grande abierta no haya barra |
+| El resultado en grande: el QR con el enlace corto (o el largo antes de 3 s si el servicio no contesta), "Cerrar" y el foco en "Siguiente premio" | espera | No |
+| "Volver a la página", y el motivo y el reintento cuando falla traer el número | espera | No: flujo prueba el sellado que falla, no la espera |
+| La lista sellada no cambia con "Cargar ejemplo" ni "Editar selección"; recargar la devuelve; "Retomarlo" | detalles | No: ui mira cabecera, cuenta y selector |
+| Pegar listas: numeración, Ctrl+Z, repetidos, "Nombre + Apellido" | detalles | No |
+| El foco tras el resultado, en el nombre del evento, con Enter y al tocar el cuadro | detalles | No: ui mira el foco solo en el panel y en las ventanas |
+| La línea del premio y los 320 px | detalles | No: flujo mide anchos de celular, no esa línea |
+
+| `todos` | Antes | Después |
+|---|---|---|
+| Escenas (juego × auditor), sin la mezcla | 84 | 70 |
+| Escenas, con la mezcla (`--noche`) | 97 | 80 |
+| Juegos de rigor, identidad, emoción, sonido y mezcla | 13 | 10 |
+| Juegos de pantalla | 12 (sin El Trueque, con tres que nadie elige) | 10, dentro de rigor |
+| Arranques de Chrome, sin y con la mezcla | 26 y 27 | 25 y 26 |
+| Tiempo en serie, sin y con la mezcla (estimado con los tiempos del 22 de octubre) | 2 h 38 min y 2 h 47 min | 2 h 18 min y 2 h 25 min |
+
+Las mismas comprobaciones por juego, en menos juegos: lo que se pierde son las de `tombola`, `pasanaku` y `stellar`, que se piden por nombre. Los conteos están fijados en `scripts/lib/bateria-recortes.test.mjs`.
+
 ## El auditor de mezcla
 
 ```bash

@@ -16,7 +16,7 @@ export const NIVELES = {
   siempre: "entra en la batería",
   noche: "solo con --noche (es inestable con la máquina cargada)",
   fisica: "solo con --fisica (mira juegos que ya no están en el selector)",
-  aparte: "cubierto por otro auditor: se corre con --solo",
+  aparte: "ya corre dentro de otro auditor (pantalla, dentro de audit-rigor): solo con --solo",
 };
 
 const conBase = ({ base }) => ["--base", base];
@@ -48,9 +48,9 @@ export const AUDITORES = [
   { id: "check-qr", script: "check-qr.mjs", chrome: true, nivel: "siempre", juegos: null, estimado: 30, args: conBase },
   { id: "check-verificacion", script: "check-verificacion.mjs", chrome: true, red: true, nivel: "siempre", juegos: null, estimado: 60, args: conBase },
   { id: "audit-game", script: "audit-game.mjs", chrome: true, red: true, nivel: "siempre", juegos: "uno", estimado: 110, args: conBase },
-  { id: "audit-rigor", script: "audit-rigor.mjs", chrome: true, nivel: "siempre", juegos: "todos", estimado: 175, args: conBase, fuera: TRES_FUERA },
+  { id: "audit-rigor", script: "audit-rigor.mjs", chrome: true, nivel: "siempre", juegos: "todos", estimado: 248, args: conBase, fuera: TRES_FUERA },
   { id: "audit-identidad", script: "audit-identidad.mjs", chrome: true, nivel: "siempre", juegos: "todos", estimado: 120, args: conBase, fuera: TRES_FUERA },
-  { id: "audit-pantalla", script: "audit-pantalla.mjs", chrome: true, nivel: "siempre", juegos: "todos", estimado: 73, args: conBase, fuera: TRES_FUERA },
+  { id: "audit-pantalla", script: "audit-pantalla.mjs", chrome: true, nivel: "aparte", juegos: "todos", estimado: 73, args: conBase, fuera: TRES_FUERA },
   { id: "audit-delatores", script: "audit-delatores.mjs", chrome: true, nivel: "siempre", juegos: "todos", estimado: 102, args: conBase, fuera: TRES_FUERA },
   { id: "audit-emocion", script: "audit-emocion.mjs", chrome: true, nivel: "siempre", juegos: "todos", estimado: 20, args: conBase, fuera: TRES_FUERA },
   { id: "audit-choques", script: "audit-choques.mjs", chrome: true, nivel: "siempre", juegos: null, estimado: 41, args: conBase },

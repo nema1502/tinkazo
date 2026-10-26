@@ -30,8 +30,8 @@
  */
 import { launch, sleep } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
+import { SELECTOR as TODOS } from "./lib/juegos.mjs";
 
-const TODOS = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "trueque"];
 const args = process.argv.slice(2);
 const opt = (name, def) => {
   const i = args.indexOf(name);

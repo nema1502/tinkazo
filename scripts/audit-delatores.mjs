@@ -51,6 +51,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { emitirJson } from "./lib/resumen.mjs";
+import { SELECTOR as TODOS } from "./lib/juegos.mjs";
 import { join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { CDP, launch } from "./lib/browser.mjs";
@@ -58,8 +59,7 @@ import { grabador } from "./lib/delatores-grabador.mjs";
 import { grabarPara, senales } from "./lib/delatores-senales.mjs";
 import { UMBRAL, evaluarSenal, falsasAlarmas, formatoP, pct } from "./lib/delatores.mjs";
 
-/** Los diez del selector. Los que salieron (tombola, pasanaku, stellar) se piden por nombre. */
-const TODOS = ["race", "sapo", "trompo", "chovena", "pinata", "wheel", "quien", "trueque", "teleferico", "oruro"];
+/** Los diez del selector (`lib/juegos.mjs`). Los que salieron (tombola, pasanaku, stellar) se piden por nombre. */
 const args = process.argv.slice(2);
 const opt = (name, def) => {
   const i = args.indexOf(name);

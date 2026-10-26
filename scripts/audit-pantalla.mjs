@@ -31,6 +31,11 @@
  * `--temas` mide en esos temas (`?theme=`); sin él, en el del navegador, que
  * en Chrome sin interfaz es el claro.
  *
+ * Desde el 25 de octubre de 2026 este auditor también corre como un grupo de
+ * `audit-rigor.mjs` (misma corrida, mismo Chrome, mismas comprobaciones), y la
+ * batería (`pnpm audit:todo`) lo pide ahí. Este archivo sigue sirviendo solo,
+ * con más resoluciones, temas, `--clip` y `--compartir`.
+ *
  * Sale con código 0 si ningún juego tiene más de tres destellos por segundo ni
  * un texto sin contraste ni contorno, y con 1 si los tiene.
  */
@@ -43,8 +48,8 @@ import { pathToFileURL } from "node:url";
 import { launch } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 import { comprobacionesDePantalla } from "./lib/pantalla-comprobaciones.mjs";
+import { SELECTOR as TODOS } from "./lib/juegos.mjs";
 
-const TODOS = ["race", "sapo", "trompo", "chovena", "pinata", "wheel", "quien", "teleferico", "oruro", "stellar", "pasanaku", "tombola"];
 /** Los nombres de la escena fija (`?pose=`), para reconocer los que se ven como nombres. */
 const NOMBRES = [
   "María Quispe", "Jorge Mamani", "Lucía Flores", "Carlos Choque", "Ana Vargas", "Diego Rojas",
@@ -57,7 +62,7 @@ const opt = (name, def) => {
   return i >= 0 && args[i + 1] && !args[i + 1].startsWith("--") ? args[i + 1] : def;
 };
 const flag = (name) => args.includes(name);
-// Uno o varios juegos, separados por espacio; "todos" son los doce del selector.
+// Uno o varios juegos, separados por espacio; "todos" son los diez del selector (con El Trueque, que antes se salteaba).
 const pedidos = args.filter((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--"));
 const juegos = pedidos.length === 0 || pedidos.includes("todos") ? TODOS : pedidos;
 const base = opt("--base", "http://localhost:4606").replace(/\/$/, "");
@@ -359,7 +364,7 @@ async function recorrer(page, alCartel = null) {
 }
 
 /** Una corrida de un juego en una resolución: medidas y la captura del cartel. */
-async function medirJuego(browser, juego, [W, H], tema = "") {
+export async function medirJuego(browser, juego, [W, H], tema = "") {
   const carpeta = join(outDir, `${juego}-${W}x${H}${tema ? `-${tema}` : ""}`);
   await mkdir(carpeta, { recursive: true });
   const page = await abrir(browser, juego, [W, H], tema);

@@ -22,6 +22,11 @@
  * seis cuadros. Así dos corridas se comparan cuadro contra cuadro, y lo que se
  * mide no depende de lo cargada que esté la máquina que audita.
  *
+ * Desde el 25 de octubre de 2026 trae también el grupo de pantalla, que era
+ * `audit-pantalla.mjs`: los destellos (más de tres por segundo es un riesgo
+ * para quien tiene epilepsia fotosensible) y el contraste de cada texto, en la
+ * misma corrida y con el mismo Chrome.
+ *
  * Corre sin red: usa la escena fija de `?pose=<juego>`, con una ronda de
  * verdad ya cerrada.
  *
@@ -34,8 +39,9 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
+import { SELECTOR as TODOS } from "./lib/juegos.mjs";
+import { comprobacionesDePantalla } from "./lib/pantalla-comprobaciones.mjs";
 
-const TODOS = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "trueque"];
 const args = process.argv.slice(2);
 const opt = (name, def) => {
   const i = args.indexOf(name);
@@ -49,6 +55,12 @@ if (motor !== "clasico") process.env.TINKAZO_GPU = "1";
 const juegos = cual === "todos" ? TODOS : [cual];
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const outDir = opt("--out", "docs/capturas/rigor");
+// El grupo de pantalla (destellos y contraste de los textos, antes `audit-pantalla.mjs`)
+// corre en la misma corrida y con el mismo Chrome. `--sin-pantalla` lo saltea;
+// `--pantalla-res` y `--pantalla-temas` miran más resoluciones y temas.
+const conPantalla = !args.includes("--sin-pantalla");
+const pantallaRes = opt("--pantalla-res", "1280x720").split(",").map((r) => r.split("x").map(Number));
+const pantallaTemas = opt("--pantalla-temas", "").split(",").filter(Boolean);
 
 /** Lo que el selector de duración promete, en segundos. Debe coincidir con `PACES`. */
 const PACES = { rapido: 20, normal: 38, epico: 45 };
@@ -617,6 +629,37 @@ async function auditar(browser, juego) {
   return { ritmo: r, fluidez: f, cartel: c, duraciones: durs };
 }
 
+/**
+ * El grupo de pantalla. `audit-pantalla.mjs` lee sus opciones de `process.argv`
+ * al cargarse, así que se le arma el suyo para que mire donde mira esta
+ * corrida; después se devuelve el de siempre. Las comprobaciones son las de
+ * ese auditor, cada una con el juego en el nombre.
+ */
+let medirPantalla = null;
+async function pantalla(browser, juego) {
+  if (!medirPantalla) {
+    const antes = process.argv;
+    process.argv = [antes[0], antes[1], "--base", base, "--out", join(outDir, "pantalla")];
+    try {
+      ({ medirJuego: medirPantalla } = await import("./audit-pantalla.mjs"));
+    } finally {
+      process.argv = antes;
+    }
+  }
+  grupo = `${juego} pantalla`;
+  console.log(`
+${juego} · pantalla`);
+  for (const tema of pantallaTemas.length ? pantallaTemas : [""]) {
+    for (const res of pantallaRes) {
+      try {
+        for (const c of comprobacionesDePantalla(await medirPantalla(browser, juego, res, tema))) check(c.name, c.ok, c.detail);
+      } catch (e) {
+        check(`pantalla ${res.join("x")}${tema ? ` ${tema}` : ""}: la medición corrió sin caerse`, false, e.message);
+      }
+    }
+  }
+}
+
 const informe = {};
 const browser = await launch({ port: Number(process.env.CDP_PORT || 9361), width: 1280, height: 720 });
 try {
@@ -643,10 +686,13 @@ try {
       );
     }
   } else {
-    for (const j of juegos) informe[j] = await auditar(browser, j).catch((e) => {
-      check("la auditoría corrió sin caerse", false, e.message);
-      return null;
-    });
+    for (const j of juegos) {
+      informe[j] = await auditar(browser, j).catch((e) => {
+        check("la auditoría corrió sin caerse", false, e.message);
+        return null;
+      });
+      if (conPantalla) await pantalla(browser, j);
+    }
   }
 } finally {
   await browser.close();
