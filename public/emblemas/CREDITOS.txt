@@ -1,0 +1,48 @@
+Emblemas de los participantes: créditos y licencias
+===================================================
+
+Cada participante de un sorteo recibe un emblema (una llama, un charango, una
+salteña...) que sale de su nombre y de la ronda. Son 32 dibujos en una sola
+hoja de imágenes SVG (src/games/emblemas/hoja.svg), con una clave por dibujo.
+Este set es provisorio: se puede cambiar por otro sin tocar el código de los
+juegos, porque las claves no cambian.
+
+Grupo 1. Twemoji (17 dibujos)
+-----------------------------
+Claves: llama, flamenco, paraba, jaguar, caiman, perezoso, rana, bufeo, papa,
+maiz, aji, teleferico, cactus, palmera, mariposa, montana, sol.
+
+Origen:    https://github.com/jdecked/twemoji (etiqueta v17.0.3, assets/svg)
+Autoría:   Copyright 2014-2021 Twitter, Inc. y otras personas colaboradoras;
+           Copyright 2022 en adelante Jason Sofonia y Justine De Caires.
+Licencia:  Creative Commons Atribución 4.0 Internacional (CC BY 4.0),
+           https://creativecommons.org/licenses/by/4.0/
+           El texto completo está en LICENCIA-TWEMOJI-CC-BY-4.0.txt.
+Cambios:   los dibujos se juntan en una sola hoja y se renombran por clave.
+           Dos cambian de color: "bufeo" (el delfín, de azul a rosado, por el
+           bufeo colorado del Amazonas) y "jaguar" (el leopardo, de amarillo
+           a ocre con manchas oscuras en anillo). El resto no se modificó.
+Qué es cada uno: llama, flamenco, loro (paraba), leopardo (jaguar), cocodrilo
+           (caimán), perezoso, rana, delfín (bufeo), papa, choclo (maíz), ají,
+           teleférico, cactus, palmera, mariposa, montaña (el Illimani, para
+           quien quiera verlo así) y sol.
+
+Grupo 2. Dibujos propios (15 dibujos)
+-------------------------------------
+Claves: condor, tucan, oso, capibara, tatu, saltena, cunape, charango,
+zampona, aguayo, trompo, sombrero, bombo, toborochi, cantuta.
+
+Dibujados para Tinkazo en el mismo estilo (formas planas sobre 36 por 36), a
+mano en SVG. Licencia MIT, la del repositorio (archivo LICENSE).
+
+Lo que no se usa a propósito
+----------------------------
+Nada ritual ni sagrado: ni la hoja de coca ni las máscaras de la diablada. Un
+emblema es una ficha de juego y esas cosas no lo son.
+
+Cómo se arma la hoja
+--------------------
+Los dibujos sueltos viven en src/games/emblemas/twemoji/ y
+src/games/emblemas/propios/ (un archivo <clave>.svg cada uno). Se juntan con
+node scripts/emblemas-hoja.mjs. La prueba de legibilidad a 24 y 36 px, en
+tema claro y oscuro, es scripts/audit-emblemas.mjs.
