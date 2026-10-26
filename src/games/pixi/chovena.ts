@@ -7,7 +7,9 @@ import { avatarColor } from "../../avatar";
 import { enOrden, writeStory } from "../drama";
 import { generoDe } from "../genero";
 import { WINNER_HOLD, clamp, ease, shorten, winnersLabel } from "../overlay";
-import { CHIP_SCALE, medidasContador, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
+import { tiemposFoco } from "./foco";
+import { colorDeNombre } from "./foco-vista";
+import { CHIP_SCALE, medidasContador, CREAM, INK, MONO, YELLOW, hash, mountPixi, type FocoAt, type PixiStage } from "./stage";
 
 /**
  * Chovena.
@@ -269,7 +271,11 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   /** En el último corte de cada arco el relator sube el tono, sin importar a quién nombra. */
   const lastCut = evs.reduce((m, e, i) => (e.kind === "stop" ? i : m), -1);
   const T_CROWN = n >= 2 ? FX0 + FINAL_EXIT : FD0 + 1.6;
-  setGameLength(T_CROWN, WINNER_HOLD);
+  /** El foco de la coronación: cuándo golpea y cuándo sale el cartel (`foco.ts`). */
+  const FOCO = tiemposFoco(story.arc);
+  setGameLength(T_CROWN, WINNER_HOLD + FOCO.placa);
+  /** La hora del golpe en segundos de juego: ahí los que salieron se paran a festejar. */
+  const T_GOLPE = T_CROWN + FOCO.golpe / paceFactor();
   const pace = paceFactor();
   /** Golpes de la música por segundo de juego, al tempo de siempre. */
   const BPS = (CHO_BPM / 60) * pace;
@@ -667,7 +673,9 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   }
   skipFn = (): void => {
     if (crowned || dead) return;
-    tAll = Math.max(tAll, T_CROWN);
+    // Saltar es ir al golpe: el silencio del foco no se espera.
+    tAll = Math.max(tAll, T_CROWN + FOCO.golpe / paceFactor());
+    tHold = Math.max(tHold, FOCO.golpe);
     crown();
   };
 
@@ -1144,7 +1152,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     S.hud.addChild(tint, big, leaders, chips, panel, counterRoot, badge);
   }
   build();
-  const crownUI = S.crown(names, winners);
+  const crownUI = S.crown(names, winners, true);
   S.onResize(build);
   cam.cut(G.W / 2, G.H / 2, 1);
 
@@ -1173,7 +1181,9 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       const p = lerpP(inShape({ rho: r0, th: d.from.th }, d.fromM), { rho: r1, th: d.seat.th }, e);
       // Los que se van hacia la sala salen de la pantalla enteros: con
       // transparencia se veía un brazo a través del cuerpo.
-      return { p, alpha: d.away && f >= 1 ? 0 : 1, seated: d.away ? 0 : clamp((f - 0.7) / 0.3, 0, 1), rows: 0 };
+      // Con el golpe de la coronación, los que salieron se paran a festejar.
+      const sentado = d.away ? 0 : clamp((f - 0.7) / 0.3, 0, 1) * (1 - clamp((x - T_GOLPE) / 0.25, 0, 1));
+      return { p, alpha: d.away && f >= 1 ? 0 : 1, seated: sentado, rows: 0 };
     }
     const ei = epochAt(x);
     const ep = epochs[ei] as Epoch;
@@ -1318,6 +1328,12 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
         v.body.rotation = Math.sin(x * 7) * 0.05;
         v.face.visible = v.buttons.visible = true;
         v.back.visible = false;
+      } else if (fuera && x >= T_GOLPE) {
+        // De pie, con los brazos arriba: festejan a la ganadora.
+        v.armL.rotation = 2.5 + 0.35 * clap;
+        v.armR.rotation = -2.5 - 0.35 * clap;
+        v.body.rotation = Math.sin(x * 6 + d.idx) * 0.04;
+        y -= Math.abs(Math.sin(x * 6 + d.idx * 1.7)) * 0.07 * pr.s;
       } else if (fuera && seated > 0.5) {
         // Sentados al borde: aplauden arriba de la cabeza.
         v.armL.rotation = 2.5 + 0.35 * clap;
@@ -2111,6 +2127,21 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     counterBox.clear().rect(5 * k, 5 * k, bw2, bh2).fill(INK).rect(0, 0, bw2, bh2).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 3 * k, color: INK });
   }
 
+  /** Dónde está la ganadora en la pantalla, para el foco: el cuerpo entero, de los pies a la cabeza. */
+  function focoDeLaGanadora(): FocoAt {
+    const { W, H } = G;
+    const p = pNow[win.idx] as { x: number; y: number; s: number };
+    const c = cam.toScreen(p.x, p.y - p.s * 0.55, W, H);
+    const z = cam.toScreen(1, 0, W, H).x - cam.toScreen(0, 0, W, H).x;
+    let rival: FocoAt["rival"] = null;
+    if (finalDuo) {
+      const q = pNow[rivalIdx] as { x: number; y: number; s: number };
+      const rc = cam.toScreen(q.x, q.y - q.s * 0.55, W, H);
+      rival = { x: rc.x, y: rc.y, r: q.s * z * 0.6 };
+    }
+    return { arco: story.arc, x: c.x, y: c.y, r: p.s * z * 0.62, color: colorDeNombre(nm(winnerIdx)), rival };
+  }
+
   /* ---------------------------------------------------------------- dibujo */
   function draw(now: number): void {
     const { W, H, k, yB, hs, cx } = G;
@@ -2149,15 +2180,16 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     drawPeople(tAll);
     drawChain(tAll);
     drawHud(tAll);
-    if (tAll >= T_CROWN) crownUI.at(tAll - T_CROWN);
+    if (tAll >= T_CROWN) crownUI.at(tAll - T_CROWN, true, focoDeLaGanadora());
   }
 
   S.run((dt, now) => {
     if (dead) return;
     tAll += dt;
     if (tAll >= T_CROWN) {
-      crown();
       tHold += dt * paceFactor();
+      // El silencio del foco: la fanfarria y el relator esperan al golpe.
+      if (tHold >= FOCO.golpe) crown();
     } else {
       script();
       sayPending();
@@ -2166,7 +2198,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     cam.update(dt);
     cam.apply(S.scene, S.sw(), S.sh(), now);
     draw(now);
-    if (tHold >= WINNER_HOLD) {
+    if (tHold >= WINNER_HOLD + FOCO.placa) {
       dead = true;
       S.cleanup();
     }

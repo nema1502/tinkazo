@@ -10,9 +10,12 @@ import { registerSkip, releaseScreen, shorten, takeOverScreen, winnerNames } fro
 import { Camera } from "./camera";
 import { Gobernador, ajustesDe, aprender, dibujaPorSoftware, esPorPlaca, nivelInicial, nivelMedido, type Nivel } from "./calidad";
 import { guardiaNombre, meter } from "./encuadre";
+import { GOLPE_GANADOR, vibrar } from "../../vibrar";
+import { estadoFoco, latidosFoco, tiemposFoco } from "./foco";
+import { FocoVista, type FocoPunto } from "./foco-vista";
+import type { Arc } from "../drama";
 import { reves, tira } from "./papel-picado";
 import { watchRecovery } from "./recover";
-import { vibrar } from "../../vibrar";
 
 /**
  * El andamiaje de los juegos en PixiJS: lo mismo que `overlay.ts` hace para
@@ -205,8 +208,11 @@ export interface PixiStage {
   breath(t: number, at: number, speed?: number): void;
   /** Deja anotado un dato para los auditores (arco, puesto…). */
   mark(key: string, value: string): void;
-  /** El cartel del ganador y el papel picado: se arman una vez y se llevan a la hora. */
-  crown(names: string[], winners: readonly number[]): Crown;
+  /**
+   * El cartel del ganador y el papel picado: se arman una vez y se llevan a la
+   * hora. Con `conFoco`, el cartel espera al foco (`foco.ts`): ver `Crown.at`.
+   */
+  crown(names: string[], winners: readonly number[], conFoco?: boolean): Crown;
   /**
    * Hasta dónde baja el cartel de la corona con `m` premios, en píxeles de
    * pantalla, con su sombra. Un juego lo usa para que la ganadora quede debajo.
@@ -219,14 +225,24 @@ export interface PixiStage {
   cleanup(): void;
 }
 
+/** Dónde está quien gana en la pantalla y cómo se corona: lo que pide el foco. */
+export interface FocoAt extends FocoPunto {
+  arco: Arc;
+}
+
 export interface Crown {
   root: Container;
   /**
    * Lleva el cartel, el destello y el papel picado a `t` segundos del final.
    * Sin `placa`, solo el destello y el papel picado: para un juego que arma su
    * propio cartel.
+   *
+   * Con `foco` (y una corona armada `conFoco`), antes del cartel viene el foco:
+   * la penumbra, la luz sobre quien gana y la onda. El cartel y el papel picado
+   * esperan al golpe (`tiemposFoco`), y el juego tiene que sostener el cartel
+   * esos segundos más. Sin `foco`, todo sale como siempre.
    */
-  at(t: number, placa?: boolean): void;
+  at(t: number, placa?: boolean, foco?: FocoAt | null): void;
   /** Vuelve a armarse para otro tamaño de pantalla. */
   rebuild(): void;
   /** Dibuja el cartel una vez a una textura que se tira: ver `warmUp`. */
@@ -754,7 +770,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     }
   };
 
-  const crown = (names: string[], winners: readonly number[]): Crown => {
+  const crown = (names: string[], winners: readonly number[], conFoco = false): Crown => {
     if (identPedida && !ident) {
       ident = identidadDe(names);
       (window as unknown as { __identidad: Identidad }).__identidad = ident.estado;
@@ -767,9 +783,13 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     const confetti = new Container();
     const tiras: Sprite[] = [];
     const plate = new Container();
-    root.addChild(confetti, plate, flash);
+    // El foco va debajo del papel picado y del cartel: lo que oscurece es la
+    // escena, nunca el nombre.
+    const vista = conFoco ? new FocoVista() : null;
+    root.addChild(...(vista ? [vista.root] : []), confetti, plate, flash);
     const tl = gsap.timeline({ paused: true });
     cleaners.push(() => tl.kill());
+    if (vista) cleaners.push(() => vista.soltar());
     const all = winnerNames(names, winners);
     /** Cuándo entra cada premio después del primero, en segundos de la corona. */
     let entradas: number[] = [];
@@ -864,30 +884,62 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     // The last pose, to put a rebuilt plate back where it was.
     let lastT = 0;
     let lastPlaca = true;
+    let lastFoco: FocoAt | null = null;
+    // El celular vibra una sola vez, en el golpe; y en el silencio, los latidos.
+    let vibro = false;
+    const latidosSonados = new Set<number>();
+    // Con foco, el destello lo da el foco en el golpe, no el cartel.
+    flash.visible = !vista;
     const c: Crown = {
       root,
-      at(tt: number, placa = true) {
+      at(tt: number, placa = true, foco: FocoAt | null = null) {
         if (ident && ident.estado.revelado === null) ident.estado.revelado = relojId;
+        // Con foco, el cartel y el papel picado esperan: `tp` es la hora del
+        // cartel y `tg` la del golpe, en segundos del juego (los tiempos del
+        // foco son reales, y el selector de duración estira los del juego).
+        const pace = paceFactor();
+        const T = vista && foco ? tiemposFoco(foco.arco) : null;
+        const tr = tt * pace;
+        const tp = T ? tt - T.placa / pace : tt;
+        const tg = T ? tt - T.golpe / pace : tt;
         const w = window as unknown as { __revelado?: number };
-        if (mezclaPedida && w.__revelado === undefined) w.__revelado = performance.now();
+        if (mezclaPedida && w.__revelado === undefined && tg >= 0) w.__revelado = performance.now();
         lastT = tt;
         lastPlaca = placa;
+        lastFoco = foco;
         root.visible = true;
-        plate.visible = placa;
-        tl.time(Math.max(0, tt));
+        plate.visible = placa && tp >= 0;
+        tl.time(Math.max(0, tp));
+        if (vista) {
+          if (foco && T) {
+            // Un latido grave por cada marca, si no se saltó el silencio.
+            latidosFoco(foco.arco).forEach((te, i) => {
+              if (tr < te || latidosSonados.has(i)) return;
+              latidosSonados.add(i);
+              if (tr - te > 0.15) return;
+              beep(note(0), 0.22, "sine", i === 0 ? 0.06 : 0.05);
+            });
+            if (!vibro && tr >= T.golpe) {
+              vibro = true;
+              vibrar(GOLPE_GANADOR);
+            }
+            vista.pintar(estadoFoco(foco.arco, tr), foco, sw(), sh(), u());
+            view.dataset.foco = tr.toFixed(2);
+          } else vista.esconder();
+        }
         // Cada premio que entra suena, más grave cuanto más abajo en la lista.
         // Si se saltó la animación, no suenan todos juntos de golpe.
         entradas.forEach((te, i) => {
-          if (tt < te || sonados.has(i)) return;
+          if (tp < te || sonados.has(i)) return;
           sonados.add(i);
-          if (tt - te > 0.3) return;
+          if (tp - te > 0.3) return;
           // El golpe del ganador, también en la mano (solo donde el celular vibra).
           if (i === 0) vibrar("cartel");
           beep(note(12 - 2 * i), 0.42, "triangle", 0.055);
           beep(note(7 - 2 * i), 0.6, "triangle", 0.04);
         });
         // El cartel queda anotado para el auditor exigente, en píxeles del lienzo.
-        if (placa && tt > 0.6) {
+        if (placa && tp > 0.6) {
           const b = plate.getBounds();
           const res = app.renderer.resolution;
           view.dataset.cartel = [b.x, b.y, b.width, b.height].map((v) => Math.round(v * res)).join(",");
@@ -905,7 +957,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
           tiras.push(s);
         }
         tiras.forEach((s, i) => {
-          const p = i < n ? tira(i, tt, k, W, H) : null;
+          const p = i < n && tg >= 0 ? tira(i, tg, k, W, H) : null;
           s.visible = !!p;
           if (!p) return;
           s.position.set(p.x, p.y);
@@ -921,7 +973,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         build();
         // `build` leaves the plate at scale 0 (the entrance animation starts
         // there): if it was already shown, replay it to the same moment.
-        if (root.visible) c.at(lastT, lastPlaca);
+        if (root.visible) c.at(lastT, lastPlaca, lastFoco);
       },
       warm() {
         // El cartel arranca en escala cero por su animación: sin tamaño no se
@@ -931,6 +983,18 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         plate.scale.set(1);
         app.renderer.generateTexture(plate).destroy(true);
         plate.scale.set(sx, sy);
+        // El foco: sus texturas y sus formas, dibujadas una vez en el aire para
+        // que el golpe que mira toda la sala no pague el primer cuadro.
+        if (vista) {
+          vista.calentar();
+          vista.pintar({ ...estadoFoco("remontada", 0.62), marco: 1, marcoRival: 1, onda2: 0.3, destello: 0.2 }, { x: sw() / 2, y: sh() / 2, r: sh() * 0.1, rival: { x: sw() / 3, y: sh() / 2, r: sh() * 0.08 } }, sw(), sh(), u());
+          root.visible = true;
+          plate.visible = false;
+          app.renderer.render(app.stage);
+          root.visible = false;
+          plate.visible = true;
+          vista.esconder();
+        }
       },
     };
     crowns.push(c);

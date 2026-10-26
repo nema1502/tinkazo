@@ -4,7 +4,9 @@ import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, fanfare, note } from "../../sound";
 import { writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, shorten, winnersLabel } from "../overlay";
-import { CONTADOR, medidasContador, CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
+import { CONTADOR, medidasContador, CREAM, INK, MONO, YELLOW, mountPixi, type FocoAt, type PixiStage } from "./stage";
+import { tiemposFoco } from "./foco";
+import { colorDeNombre } from "./foco-vista";
 import { cabe, centrar, encuadrar, unir, type Caja, type Zona } from "./encuadre";
 import { avatarColor } from "../../avatar";
 import { assignSlots } from "./slots";
@@ -185,7 +187,9 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   const T_LAND = (tosses[tosses.length - 1] as Toss).land;
   /** Desde cuándo sube el zoom de emoción: cuando tira la última argolla, hasta la corona. */
   const T_EMPUJE = (tosses[tosses.length - 1] as Toss).start;
-  setGameLength(T_CROWN, WINNER_HOLD);
+  /** El foco de la coronación: cuándo golpea y cuándo sale el cartel (`foco.ts`). */
+  const FOCO = tiemposFoco(story.arc);
+  setGameLength(T_CROWN, WINNER_HOLD + FOCO.placa);
 
   /* ---------------------------------------------------------------- geometría */
   /**
@@ -520,7 +524,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   /** El empuje del zoom de emoción: una sola vez, desde que tira la última argolla. */
   let empujeDado = false;
 
-  const crownUI = S.crown(names, winners);
+  const crownUI = S.crown(names, winners, true);
   function crown(): void {
     if (crowned) return;
     crowned = true;
@@ -536,7 +540,9 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   skipFn = (): void => {
     if (crowned || dead) return;
     for (const o of tosses) o.announced = o.thrown = o.landed = true;
-    tAll = T_CROWN;
+    // Saltar es ir al golpe: el silencio del foco no se espera.
+    tAll = T_CROWN + FOCO.golpe / paceFactor();
+    tHold = Math.max(tHold, FOCO.golpe);
     crown();
   };
 
@@ -830,6 +836,12 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     if (labio && fin) {
       const a = tAll - (fin.start + fin.flight * LABIO);
       if (a >= 0 && a < 0.8) c = Math.max(c, 1 - a / 0.8);
+    }
+    // La rana se ríe con el golpe de la coronación, con la boca bien abierta.
+    const tGolpe = T_CROWN + FOCO.golpe / paceFactor();
+    if (tAll >= tGolpe) {
+      const a = tAll - tGolpe;
+      c = Math.max(c, clamp(1 - a / 2.4, 0, 1) * (0.8 + 0.2 * Math.sin(a * 18)));
     }
     for (const o of tosses) {
       if (o.th.kind !== "hit" || tAll < o.land) continue;
@@ -1143,6 +1155,15 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     }
   }
 
+  /** Dónde está el agujero de quien gana en la pantalla, para el foco. */
+  function focoDelAgujero(): FocoAt {
+    const slot = (tosses[tosses.length - 1] as Toss).slot;
+    const c = P(L.holes[slot] as Point);
+    const s = cam.toScreen(c.x, c.y, g.w, g.h);
+    const z = Math.max(0.3, cam.toScreen(1, 0, g.w, g.h).x - cam.toScreen(0, 0, g.w, g.h).x);
+    return { arco: story.arc, x: s.x, y: s.y, r: L.holeR * g.sc * z * 1.7, color: colorDeNombre(nameOfSlot(slot)), rival: null };
+  }
+
   S.run((dt, now) => {
     tAll += dt;
     // El empuje del zoom de emoción: lento, desde la última argolla hasta la
@@ -1157,15 +1178,16 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     S.breath(tAll, T_LAND);
     script();
     if (tAll >= T_CROWN) {
-      crown();
       tHold += dt * paceFactor();
+      // El silencio del foco: la fanfarria, el golpe de cámara y el relator esperan al golpe.
+      if (tHold >= FOCO.golpe) crown();
     }
     aim();
     cam.update(dt);
     cam.apply(S.scene, S.sw(), S.sh(), now);
     draw();
-    if (crowned) crownUI.at(tAll - T_CROWN);
-    if (tHold >= WINNER_HOLD) {
+    if (tAll >= T_CROWN) crownUI.at(tAll - T_CROWN, true, focoDelAgujero());
+    if (tHold >= WINNER_HOLD + FOCO.placa) {
       dead = true;
       S.cleanup();
     }

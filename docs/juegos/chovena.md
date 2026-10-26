@@ -49,6 +49,10 @@ Reemplaza a luz roja, luz verde, que cubría la misma necesidad (parar y seguir)
 
 Funciona mejor de doce a ochenta. Con más de ochenta, más adelante, una rueda por comparsa.
 
+## La coronación
+
+Con el foco (docs/motores.md, "El foco del ganador"), apenas corona la escena se oscurece, un cono de luz baja sobre la ganadora, que ya viene al medio con los brazos arriba y la música ya viene cortada: no suena nada hasta el golpe. El golpe llega según el arco del director (0,5 s en la remontada, 0,55 en el duelo, 0,85 en la tapada y 0,95 en el susto): sale una onda blanca y otra del color de quien gana, giran los rayos, suena la fanfarria, el relator dice el nombre y, una décima después, sube el cartel. La luz queda encendida mientras se sostiene el cartel, que sigue siendo de tres segundos reales. En el golpe, los que salieron se paran del borde de la plaza y festejan con los brazos arriba. Saltar el show va directo al golpe.
+
 ## La cámara
 
 Arranca con la plaza entera. Cuando la rueda se achica, se acerca hasta que la rueda llena la pantalla, hasta 1,6× con poca gente y hasta 3× con mucha (los bailarines son más chicos). La rueda de tres a seis, abierta a lo hondo, se encuadra entera: cuando la rueda baja de siete o más a seis o menos la cámara se abre (en 720, de 1,6× a entre 1,1× y 1,5×), y desde ahí se vuelve a acercar con cada corte. En los cortes donde salen uno o dos, se corre hacia ellos. En la final, encima de la pareja, y en el último tambaleo, más cerca. Sin el desenfoque de los acercamientos (`cam.noBlur()`), para que los nombres se lean nítidos.

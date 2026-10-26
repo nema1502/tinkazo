@@ -68,6 +68,10 @@ La pollera se mece con el paso de cada baile: va y viene en la morenada, se abre
 
 Tu fraternidad se queda en una cuadra, entera, y saluda desde la vereda: pasás a ser público, en grupo. "A los Tojos nos dejaron en la segunda". En la última fraternidad, te quedás con otros pocos, con tu nombre tachado arriba. Y en el contrapunto, te caés sentado y se te vuela el sombrero.
 
+## La coronación
+
+Con el foco (docs/motores.md, "El foco del ganador"), apenas corona la escena se oscurece, un cono de luz baja sobre quien gana, a la puerta del Socavón y la música ya viene cortada: no suena nada hasta el golpe. El golpe llega según el arco del director (0,5 s en la remontada, 0,55 en el duelo, 0,85 en la tapada y 0,95 en el susto): sale una onda blanca y otra del color de quien gana, giran los rayos, suena la fanfarria, el relator dice el nombre y, una décima después, sube el cartel. La luz queda encendida mientras se sostiene el cartel, que sigue siendo de tres segundos reales. Los cohetillos y las campanas del Socavón salen con el golpe, no en el silencio. Saltar el show va directo al golpe.
+
 ## Lo que la entrada hace a propósito
 
 Nada de lo que se ve dice quién gana más que el azar. Lo comprueban las pruebas del plan ([`entrada-plan.test.ts`](../../src/games/pixi/entrada-plan.test.ts)) con seiscientas semillas:

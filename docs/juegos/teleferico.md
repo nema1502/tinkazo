@@ -58,6 +58,10 @@ El apagón no alarga el juego: se lleva un pedazo del viaje, igual que la últim
 
 Los tiempos no cambian con la cantidad: las paradas se reparten entre el fin del embarque y el último tramo. La parada de la última estación se alarga con la cantidad que baja de a uno.
 
+## La coronación
+
+Con el foco (docs/motores.md, "El foco del ganador"), apenas corona la escena se oscurece, un cono de luz baja sobre la cabina que llegó a la cumbre y la música ya viene cortada: no suena nada hasta el golpe. El golpe llega según el arco del director (0,5 s en la remontada, 0,55 en el duelo, 0,85 en la tapada y 0,95 en el susto): sale una onda blanca y otra del color de quien gana, giran los rayos, suena la fanfarria, el relator dice el nombre y, una décima después, sube el cartel. La luz queda encendida mientras se sostiene el cartel, que sigue siendo de tres segundos reales. Con el golpe amanece sobre la cumbre (un resplandor del horizonte), se sacuden los banderines y la cámara da un golpe corto. Saltar el show va directo al golpe.
+
 ## Los tiempos
 
 En segundos de juego, sin estirar. En "normal" se estiran para que el show entero dure treinta segundos (ver "La duración" en [juegos.md](../juegos.md)).
@@ -69,7 +73,7 @@ En segundos de juego, sin estirar. En "normal" se estiran para que el show enter
 | 2,0 – 14,0 s | Viajes y paradas. Viajar pesa 1, parar 0,8, y la última parada 1,7 más 0,1 por cada uno que baja de a uno (2,4 con la puerta, 2,6 con la mordaza). El apagón pesa 1,3 |
 | 14,0 – 15,8 s | El último tramo, con los dos juntos |
 | 15,8 s | Llega a la cumbre: destello, temblor y golpe |
-| 16,4 s | Se abren las puertas y sale el cartel, que se sostiene tres segundos reales |
+| 16,4 s | Corona: se abren las puertas y arranca el foco (silencio y penumbra). El golpe llega a los 0,5 a 0,95 s reales según el arco, y el cartel una décima después; se sostiene tres segundos reales |
 
 ## El sonido
 

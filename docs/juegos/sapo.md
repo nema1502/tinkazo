@@ -43,6 +43,10 @@ La cámara sigue a la argolla mientras está en la mesa y vuelve a la mesa enter
 
 En un celular (vertical) la mesa ocupa el ancho con los nombres de los costados pegados al borde, así que la cámara no se acerca más de lo que dejan entrar la mesa y todos sus nombres: desde que los nombres llegan a la mesa hasta la corona, el acercamiento, los golpes, el sacudón y el empuje de emoción llegan hasta ahí (`cam.proteger`), y en el último vuelo la cámara sigue a la argolla de arriba abajo. Hasta el 22 de octubre de 2026, en el último tiro quedaban a la vista 4 de 8 nombres, o 4 de 12 (evaluación de la subida 2, hallazgo 5); con 12 agujeros y nombres largos, además, dos se apagaban todo el juego. Ahora se ven todos, con 8, 18 y 50 personas, en 390 × 844 y 360 × 800. Con la corona los demás nombres se apagan y el golpe sobre el ganador sigue igual. En la pantalla ancha no cambió nada.
 
+## La coronación
+
+Con el foco (docs/motores.md, "El foco del ganador"), apenas corona la escena se oscurece, un cono de luz baja sobre el agujero ganador y la música ya viene cortada: no suena nada hasta el golpe. El golpe llega según el arco del director (0,5 s en la remontada, 0,55 en el duelo, 0,85 en la tapada y 0,95 en el susto): sale una onda blanca y otra del color de quien gana, giran los rayos, suena la fanfarria, el relator dice el nombre y, una décima después, sube el cartel. La luz queda encendida mientras se sostiene el cartel, que sigue siendo de tres segundos reales. La rana se ríe con la boca abierta desde el golpe y el golpe de cámara del zoom de emoción cae ahí (`S.mark("golpe")`), no en el silencio. Saltar el show va directo al golpe.
+
 ## Cuánta gente
 
 Cualquier cantidad: con más de doce juega la clasificatoria. Solo con más de doce **ganadores** el sorteo pasa a la carrera de llamas (`playableGame` en `src/state.ts`). Sin WebGL o con `?motor=clasico` no hay versión del motor anterior y cuenta la carrera.

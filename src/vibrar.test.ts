@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PATRONES, setVibracion, vibracionDisponible, vibracionOn, vibrar } from "./vibrar";
+import { GOLPE_CAIDA, GOLPE_GANADOR, PATRONES, setVibracion, vibracionActiva, vibracionDisponible, vibracionOn, vibrar } from "./vibrar";
 
 const guardado = new Map<string, string>();
 const memoria = {
@@ -28,14 +28,28 @@ describe("la vibración del celular", () => {
   it("vibra con el patrón pedido donde el sistema la ofrece y la persona ya tocó la página", () => {
     const v = aparato();
     expect(vibracionDisponible()).toBe(true);
+    expect(vibracionActiva()).toBe(true);
     expect(vibrar("cartel")).toBe(true);
     expect(v).toHaveBeenCalledWith([70, 50, 70, 50, 220]);
     expect(vibrar("caida")).toBe(true);
     expect(v).toHaveBeenLastCalledWith([30]);
   });
 
-  it("los golpes son cortos: ningún toque pasa de 300 ms y el de una caída, de 60", () => {
+  it("el golpe del foco se pide por nombre o con el arreglo, y suena igual", () => {
+    const v = aparato();
+    expect(vibrar(GOLPE_GANADOR)).toBe(true);
+    expect(v).toHaveBeenLastCalledWith([45, 55, 110]);
+    expect(vibrar("ganador")).toBe(true);
+    expect(v).toHaveBeenLastCalledWith([45, 55, 110]);
+    expect(vibrar(GOLPE_CAIDA)).toBe(true);
+    expect(v).toHaveBeenLastCalledWith([30]);
+    expect(PATRONES.ganador).toBe(GOLPE_GANADOR);
+    expect(PATRONES.caida).toBe(GOLPE_CAIDA);
+  });
+
+  it("los golpes son cortos: ningún toque pasa de 300 ms, el del foco dura menos de un cuarto de segundo y el de una caída, menos de 60", () => {
     for (const p of Object.values(PATRONES)) expect(Math.max(...p)).toBeLessThanOrEqual(300);
+    expect(GOLPE_GANADOR.reduce((a, b) => a + b, 0)).toBeLessThan(250);
     expect(PATRONES.caida.reduce((a, b) => a + b, 0)).toBeLessThan(60);
   });
 
@@ -44,35 +58,43 @@ describe("la vibración del celular", () => {
     expect(vibracionOn()).toBe(true);
     setVibracion(false);
     expect(vibracionOn()).toBe(false);
+    expect(vibracionActiva()).toBe(false);
     expect(vibrar("cartel")).toBe(false);
+    expect(vibrar(GOLPE_GANADOR)).toBe(false);
     expect(v).not.toHaveBeenCalled();
   });
 
   it("con el movimiento reducido no vibra", () => {
     const v = aparato({ reducido: true });
     expect(vibrar("golpe")).toBe(false);
+    expect(vibrar(GOLPE_GANADOR)).toBe(false);
     expect(v).not.toHaveBeenCalled();
   });
 
   it("sin la API (un iPhone, la compu) no hace nada ni falla", () => {
     aparato({ vibrate: null });
     expect(vibracionDisponible()).toBe(false);
+    expect(vibracionActiva()).toBe(false);
     expect(vibrar("cartel")).toBe(false);
+    expect(vibrar(GOLPE_GANADOR)).toBe(false);
   });
 
   it("sin un toque previo no vibra: el navegador la bloquearía con un aviso", () => {
     const v = aparato({ activo: false });
     expect(vibrar("cartel")).toBe(false);
+    expect(vibrar(GOLPE_GANADOR)).toBe(false);
     expect(v).not.toHaveBeenCalled();
   });
 
   it("se apaga con ?vibrar=0 y con la preferencia guardada, y se vuelve a prender", () => {
     const v = aparato({ busqueda: "?vibrar=0" });
     expect(vibracionOn()).toBe(false);
+    expect(vibracionActiva()).toBe(false);
     expect(vibrar("cartel")).toBe(false);
     expect(v).not.toHaveBeenCalled();
     aparato();
     expect(vibracionOn()).toBe(true);
+    expect(vibracionActiva()).toBe(true);
     setVibracion(false);
     expect(vibracionOn()).toBe(false);
     setVibracion(true);
@@ -92,6 +114,7 @@ describe("la vibración del celular", () => {
     expect(vibracionOn()).toBe(true);
     expect(() => setVibracion(false)).not.toThrow();
     expect(vibrar("cartel")).toBe(true);
+    expect(vibrar(GOLPE_GANADOR)).toBe(true);
     expect(v).toHaveBeenCalled();
   });
 
@@ -102,5 +125,6 @@ describe("la vibración del celular", () => {
       },
     });
     expect(vibrar("cartel")).toBe(false);
+    expect(vibrar(GOLPE_GANADOR)).toBe(false);
   });
 });

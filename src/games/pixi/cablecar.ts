@@ -4,7 +4,9 @@ import { musicHold } from "../../music";
 import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, note } from "../../sound";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
-import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, contorno, hash, mountPixi, seeded, type PixiStage } from "./stage";
+import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, contorno, hash, mountPixi, seeded, type FocoAt, type PixiStage } from "./stage";
+import { tiemposFoco } from "./foco";
+import { colorDeNombre } from "./foco-vista";
 import { LINES, T_BOARD, T_CROWN, T_DOCK, T_RUN, planCableCar } from "./cablecar-plan";
 import { GRUPOS, grupoDe } from "../grupos";
 
@@ -39,8 +41,10 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   }
   const S: PixiStage = st;
   const { rng, cam } = S;
-  setGameLength(T_CROWN, WINNER_HOLD);
   const P = planCableCar(names, winners, rng);
+  /** El foco de la coronación: cuándo golpea y cuándo sale el cartel (`foco.ts`). */
+  const FOCO = tiemposFoco(P.story.arc);
+  setGameLength(T_CROWN, WINNER_HOLD + FOCO.placa);
   const { n, C, story, puerta, mordaza, apagon, rafaga, stops, passes, rank, left, cabinOf, winnerCab, slipCab } = P;
   const NS = P.S;
   /** La última parada: ahí se bajan de a uno hasta que quedan dos. */
@@ -95,6 +99,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     door: Graphics; flag: Graphics; doors: Graphics; ring: Graphics; lastKey: string; empty: boolean;
   }
   interface Station { root: Container; flag: Graphics; bunting: Graphics | null; tag: Container; minus: Text }
+  /** El amanecer de la coronación: un resplandor del horizonte que se enciende con el golpe. */
+  let alba!: Sprite;
   let far!: Container;
   let lightsA!: Graphics;
   let lightsB!: Graphics;
@@ -157,6 +163,23 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     sky.width = sw;
     sky.height = sh;
     S.bg.addChild(sky);
+    // El amanecer: del horizonte hacia arriba, de dorado a transparente.
+    const av = document.createElement("canvas");
+    av.width = 2;
+    av.height = 256;
+    const ax = av.getContext("2d") as CanvasRenderingContext2D;
+    const ag = ax.createLinearGradient(0, 256, 0, 0);
+    ag.addColorStop(0, "rgba(255,196,92,0.95)");
+    ag.addColorStop(0.45, "rgba(255,140,110,0.5)");
+    ag.addColorStop(1, "rgba(255,120,160,0)");
+    ax.fillStyle = ag;
+    ax.fillRect(0, 0, 2, 256);
+    alba = new Sprite(Texture.from(av));
+    alba.width = sw;
+    alba.height = sh;
+    alba.alpha = 0;
+    alba.blendMode = "screen";
+    S.bg.addChild(alba);
     const stars = new Graphics();
     for (let i = 0; i < 90; i++) stars.circle(deco() * sw, deco() * sh * 0.5, (0.5 + deco()) * k).fill({ color: 0xffffff, alpha: 0.3 + deco() * 0.5 });
     S.bg.addChild(stars);
@@ -341,7 +364,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     void span;
   }
   build();
-  const crown = S.crown(names, winners);
+  const crown = S.crown(names, winners, true);
   S.onResize(build);
 
   /* ================================================================ estado */
@@ -548,7 +571,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       }
     }
     S.breath(tAll, T_CROWN);
-    if (tAll >= T_CROWN) crowned();
+    // El silencio del foco: la fanfarria y el relator esperan al golpe.
+    if (tAll >= T_CROWN && tHold >= FOCO.golpe) crowned();
     const moving = P.headAt(tAll + 0.05) - P.headAt(tAll) > 0.002;
     if (moving && tAll > T_BOARD && tAll < T_RUN && tAll - lastSaid > 2.4) sayNow(t("cTelUp"), 0.4);
   }
@@ -624,6 +648,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     didCrown = true;
     S.say(T[lang].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     fanfare();
+    cam.punch(0.07).shake(6 * G.k);
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);
     setTimeout(() => beep(note(19), 0.12, "triangle", 0.035), 700);
   }
@@ -631,7 +656,9 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   skipFn = (): void => {
     if (tAll >= T_CROWN) return;
     silent = true;
-    tAll = T_CROWN;
+    // Saltar es ir al golpe: el silencio del foco no se espera.
+    tAll = T_CROWN + FOCO.golpe / paceFactor();
+    tHold = Math.max(tHold, FOCO.golpe);
     events();
     silent = false;
     boards.length = 0;
@@ -1076,6 +1103,15 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     return { y: Math.min(p.y + dy, tagTop - (lo - S.sh() / 2) / z), z };
   }
 
+  /** Dónde está la cabina de quien gana en la pantalla, para el foco. */
+  function focoDeLaCabina(): FocoAt {
+    const b = cabBox(winnerCab, tAll);
+    const W = S.sw(), H = S.sh();
+    const x = b ? (b.x0 + b.x1) / 2 : W / 2, y = b ? (b.y0 + b.y1) / 2 : H * 0.55;
+    const r = b ? Math.max(b.x1 - b.x0, b.y1 - b.y0) * 0.62 : H * 0.12;
+    return { arco: P.story.arc, x, y, r, color: colorDeNombre(names[winners[winners.length - 1] ?? 0] ?? ""), rival: null };
+  }
+
   function direct(): void {
     const k = G.k;
     const head = P.headAt(tAll);
@@ -1154,6 +1190,10 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   function draw(now: number): void {
     const { k, cw, ch, gap } = G;
     const luz = P.luzAt(tAll);
+    // Con el golpe de la coronación amanece y los banderines se sacuden.
+    const sinGolpe = tAll - T_CROWN - FOCO.golpe / paceFactor();
+    alba.alpha = sinGolpe > 0 ? 0.6 * ease.outCubic(clamp(sinGolpe / 1.2, 0, 1)) : 0;
+    const festejo = sinGolpe > 0 ? Math.exp(-sinGolpe * 0.9) : 0;
     // Paralaje: la cordillera casi quieta, la ciudad a medio camino.
     far.position.set(cam.x * 0.85, cam.y * 0.85);
     cities.position.set(cam.x * 0.45, cam.y * 0.45);
@@ -1182,7 +1222,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         g.clear();
         const x0 = p.x - bw / 2, x1 = p.x + bw / 2;
         const sag = 28 * k;
-        const fiesta = tAll > T_DOCK ? Math.exp(-(tAll - T_DOCK) * 0.6) : 0;
+        const fiesta = Math.max(tAll > T_DOCK ? Math.exp(-(tAll - T_DOCK) * 0.6) : 0, festejo);
         const at = (q: number): { x: number; y: number } => ({ x: x0 + (x1 - x0) * q, y: y0 + 4 * k + sag * 4 * q * (1 - q) });
         for (let i = 0; i <= 20; i++) {
           const pp = at(i / 20);
@@ -1422,7 +1462,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     hudNum.text = String(m);
     const at = Math.min(NS, Math.floor(P.headAt(tAll) + 0.02));
     hudStation.text = tAll >= T_BOARD && tAll < T_RUN ? T[lang].cTelOf(Math.max(1, at), NS) : "";
-    if (tAll >= T_CROWN) crown.at(tAll - T_CROWN);
+    if (tAll >= T_CROWN) crown.at(tAll - T_CROWN, true, focoDeLaCabina());
   }
 
   cam.cut(pt(0).x + 40 * G.k, pt(0).y + 20 * G.k, 1.55);
@@ -1435,6 +1475,6 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     cam.apply(S.scene, S.sw(), S.sh(), now);
     draw(now);
     if (tAll >= T_CROWN) tHold += dt * paceFactor();
-    if (tHold >= WINNER_HOLD) S.cleanup();
+    if (tHold >= WINNER_HOLD + FOCO.placa) S.cleanup();
   });
 }

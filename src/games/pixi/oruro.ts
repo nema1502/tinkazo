@@ -6,7 +6,9 @@ import { beep, fanfare, note } from "../../sound";
 import { enOrden } from "../drama";
 import { generoDe } from "../genero";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
-import { CHIP_SCALE, medidasContador, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
+import { CHIP_SCALE, medidasContador, CREAM, INK, MONO, YELLOW, hash, mountPixi, type FocoAt, type PixiStage } from "./stage";
+import { tiemposFoco } from "./foco";
+import { colorDeNombre } from "./foco-vista";
 import { layoutLabels, type LabelItem, type Rect } from "./pinata-labels";
 import { OUT_HOLD, counterText, estimateTagSize, outTreatment, selectTags, tagBudget, tagName, type TagCandidate } from "./oruro-tags";
 import { planEntrada, type Arch, type Frat } from "./entrada-plan";
@@ -140,7 +142,9 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   const n = names.length;
   const P = planEntrada(n, winners, rng);
   S.mark("arco", P.arc);
-  setGameLength(P.T_CROWN, WINNER_HOLD);
+  /** El foco de la coronación: cuándo golpea y cuándo sale el cartel (`foco.ts`). */
+  const FOCO = tiemposFoco(P.arc);
+  setGameLength(P.T_CROWN, WINNER_HOLD + FOCO.placa);
   /** El golpe de la banda en segundos de juego: los segundos reales no cambian con la duración. */
   const BEAT = BEAT_REAL / paceFactor();
   const winnerIdx = P.winner;
@@ -913,14 +917,33 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     });
     if (fz && tAll >= fz.t0 && tAll < fz.t1) musicHold(false);
     said.add("freezeBack");
-    tAll = P.T_CROWN;
+    // Saltar es ir al golpe: el silencio del foco no se espera.
+    tAll = P.T_CROWN + FOCO.golpe / paceFactor();
+    tHold = Math.max(tHold, FOCO.golpe);
     beatsDone = Math.floor(beatT / BEAT);
     phase = "crown";
     crown();
   };
 
   build();
-  const crownUI = S.crown(names, winners);
+  const crownUI = S.crown(names, winners, true);
+
+  /** Dónde está quien gana en la pantalla, para el foco: el cuerpo entero con su traje. */
+  function focoDelGanador(g: Geo): FocoAt {
+    const alto = DANCE_TOP[win.f.dance] * g.scale * cam.zoom;
+    const cuerpo = (d: Dancer): { x: number; y: number; pies: number } => {
+      const s = cam.toScreen(d.x, d.y, g.w, g.h);
+      return { x: s.x, y: s.y - alto * 0.5, pies: s.y + 3 * g.k };
+    };
+    const c = cuerpo(win);
+    let rival: FocoAt["rival"] = null;
+    if (riv) {
+      const q = cuerpo(riv);
+      rival = { x: q.x, y: q.y, r: alto * 0.55 };
+    }
+    return { arco: P.arc, x: c.x, y: c.y, r: alto * 0.6, pies: c.pies, color: colorDeNombre(names[winnerIdx] ?? ""), rival };
+  }
+
   S.onResize(build);
 
   /* ------------------------------------------------------------- la cámara */
@@ -1543,7 +1566,8 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     if (phase === "crown") {
       const cxx = doorX(g);
       for (let b = 0; b < 6; b++) {
-        const t0 = P.T_CROWN + b * 0.35, age = tAll - t0;
+        // Los cohetillos salen con el golpe, no en el silencio.
+        const t0 = P.T_CROWN + FOCO.golpe / paceFactor() + b * 0.35, age = tAll - t0;
         if (age < 0 || age > 1.4) continue;
         const bx = cxx + (hash(b, 1) - 0.5) * 420 * k, by = g.streetTop - (260 + hash(b, 2) * 160) * k;
         for (let i = 0; i < 16; i++) {
@@ -1574,7 +1598,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       const pw = blockText.width + 16 * k, ph = blockText.height + 8 * k;
       blockPlate.roundRect(blockText.x - pw + 8 * k, blockText.y - ph + 4 * k, pw, ph, 5 * k).fill({ color: 0x221a33, alpha: 0.94 }).stroke({ width: 2 * k, color: INK });
     }
-    if (phase === "crown") crownUI.at(tAll - P.T_CROWN);
+    if (phase === "crown") crownUI.at(tAll - P.T_CROWN, true, focoDelGanador(g));
   }
 
   /** Las pastillas: las que todavía no pasaron, apagadas; la que pasa, con borde; las que se quedaron, tachadas. */
@@ -1675,14 +1699,15 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     if (acc > DT) acc = 0;
     S.breath(tAll, P.T_CROWN);
     if (phase === "crown") {
-      crown();
       tHold += dt * paceFactor();
+      // El silencio del foco: la fanfarria, las campanas y el relator esperan al golpe.
+      if (tHold >= FOCO.golpe) crown();
     }
     direct(dt);
     cam.update(dt);
     cam.apply(S.scene, S.sw(), S.sh(), now);
     draw(now);
-    if (tHold >= WINNER_HOLD) {
+    if (tHold >= WINNER_HOLD + FOCO.placa) {
       phase = "dead";
       S.cleanup();
     }

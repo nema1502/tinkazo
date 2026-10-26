@@ -72,6 +72,24 @@ Los momentos de cámara de cada juego:
 
 En un celular, el navegador puede soltar el contexto WebGL con la pestaña oculta, y el cartel del ganador (texto dibujado a textura) podría volver en blanco. PixiJS 8 ya cancela el evento de pérdida y, al restaurarse, descarta sus texturas de GPU para subirlas de nuevo (`node_modules/pixi.js/lib/rendering/renderers/gl/context/GlContextSystem.mjs` y `.../gl/texture/GlTextureSystem.mjs`), pero no rearma lo que se dibujó una vez ni pide un cuadro. `pixi/recover.ts` distingue dos caminos: al volver a la pestaña con el contexto sano (`visibilitychange`, con 250 ms de margen) solo se rearman los carteles y se dibuja un cuadro; al restaurarse el contexto (`webglcontextrestored`, nunca descartado) se hace el cambio de tamaño completo, con los rearmados de cada juego, conservando la pose de la cámara. Si la pestaña vuelve con el contexto aún perdido, espera a la restauración. Es una hipótesis: no se pudo verificar en un celular real.
 
+### El foco del ganador
+
+Hasta el 24 de octubre de 2026 lo único que separaba a quien gana de los demás era la placa amarilla: había que leerla. El foco (`pixi/foco.ts` para la forma, `pixi/foco-vista.ts` para el dibujo, y `crown` de `stage.ts` para engancharlo) hace que la sala lo sepa antes de leer, en tres tiempos:
+
+1. **El silencio y la penumbra.** Apenas corona, la escena se oscurece y pierde color, con un hueco de bordes suaves alrededor de quien gana, y un cono de luz baja desde arriba hasta sus pies. La música ya venía cortada por el respiro (`stage.breath`).
+2. **El golpe.** Sale una onda blanca y, un instante después, otra del color de quien gana; giran los rayos, el flash, suena la fanfarria, el relator dice el nombre y los demás reaccionan.
+3. **El nombre.** Una décima de segundo más tarde sube la placa con la cara y el papel picado. La penumbra se afloja hasta la mitad y la luz queda encendida mientras se sostiene el cartel.
+
+Cada arco del director le da su sabor: la **remontada** sube rayos desde el piso y golpea enseguida (0,5 s); el **susto** se queda un latido más con un hilo de luz que late dos veces y se abre con una exhalación (0,95 s); el **duelo** es la foto, con un marco de cámara y un flash entero, y un marco chico sobre la rival (0,55 s); la **tapada** se apaga del todo, chispea dos veces y prende sobre quien nadie había nombrado (0,85 s).
+
+Todo es una función pura de los segundos reales desde que corona y del arco (`estadoFoco`, probada en `foco.test.ts`): sin azar, sin reloj, sin acumular. El foco no se enciende antes de que el ganador haya cruzado: nace en `crown.at`, que cada juego llama recién en la coronación (si no, sería un delator de cámara).
+
+Un juego lo usa así: arma `S.crown(names, winners, true)`; calcula `tiemposFoco(arco)`; llama `crown.at(t, true, { arco, x, y, r, pies, color, rival })` con el cuerpo de quien gana en píxeles de pantalla; **demora su propio golpe** (fanfarria, relator, sacudón) hasta `FOCO.golpe` segundos reales después de coronar; y sostiene el cartel `WINNER_HOLD + FOCO.placa` (`setGameLength` también). Saltar el show va al golpe, sin esperar el silencio. Sin el último argumento, `crown.at` se comporta como antes.
+
+**En el celular y la tablet.** El foco se calcula sobre el cuerpo de quien gana en la pantalla (su centro, su radio y dónde pisa), así que sigue a la persona en vertical, apaisado y en tablet (mirado en 360x800, 390x844, 844x390, 768x1024 y 1024x768 con 30 personas). Se dibuja con sprites de texturas horneadas antes de mostrar el estadio, sin `Graphics` que se rearmen por cuadro: con la CPU cuatro veces más lenta (390x844 a densidad 3, 30 personas) la corona no mide más lenta que la de antes, dentro del ruido de la máquina. En el golpe el celular vibra una vez (`src/vibrar.ts`: 45, 55 y 110 ms), solo donde el sistema lo permite (Android; el iPhone no tiene `navigator.vibrate`) y después de un toque en la página; se apaga con `?vibrar=0` o con `setVibracion(false)`.
+
+Lo usan la Chovena, el Teleférico, La Entrada y el sapo. Cada uno suma su momento: en la Chovena los que salieron se paran a festejar con los brazos arriba; en el Teleférico amanece sobre la cumbre y se sacuden los banderines; en La Entrada los cohetillos y las campanas salen con el golpe; en el sapo la rana se ríe con la boca abierta. Los demás juegos siguen con la placa de siempre.
+
 ## Pantalla grande, Zoom y compartir
 
 Desde el 20 de octubre de 2026 el show se mira en cuatro lugares: un proyector o una TV, una pantalla compartida en Zoom (que la sala recibe a 720 de alto y comprimido), una laptop y un celular. Cambian la resolución y la compresión, no el sorteo. Tres reglas para que se lea en todos:
