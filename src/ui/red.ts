@@ -468,6 +468,29 @@ export async function chequearAntesDeSellar(): Promise<boolean> {
   return true;
 }
 
+/**
+ * Un sello falló porque el RPC no contestó, y lo último que se midió (hace menos de 60 s) decía que la red
+ * andaba bien. Se mira de nuevo, sin caché: si de verdad está caída, la persona ve el caso 2 con su acción en
+ * vez de un error genérico. Devuelve si lo mostró; si la red está bien, el error era otra cosa y se cuenta
+ * como siempre.
+ */
+export async function verLaRedTrasFallar(): Promise<boolean> {
+  origen = "sellar";
+  chequeo.olvidar();
+  let d: Diagnostico;
+  try {
+    d = await chequeo.verificar({ forzar: true });
+  } catch {
+    return false;
+  }
+  if (d.nivel !== "rojo") return false;
+  sellando = false;
+  await mostrar(d, "panel");
+  const caja = document.getElementById("red-estado");
+  if (caja) verError(caja);
+  return true;
+}
+
 /** El sello de verdad devolvió un costo por encima de lo que el patrocinador paga. */
 export async function mostrarCostoAlto(costoXlm: number, restaurar: boolean): Promise<void> {
   origen = "sellar";

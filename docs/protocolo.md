@@ -170,6 +170,8 @@ Mientras los archivos públicos de Stellar existan, tu comprobante se puede volv
 
 El mismo protocolo, sin §3 ni §4. El navegador sella la lista (§1), toma la ronda más reciente del faro posterior al sello, verifica la firma (§2) y ejecuta la selección (§5). El comprobante lo indica explícitamente: el orden temporal entre sello y semilla no está atestiguado por un tercero.
 
+**Sorteo sin sello.** Es también el modo libre cuando una cuenta que podría sellar sigue sin sello porque la red no lo dejó (la comisión por encima de lo que cubre el patrocinador, el RPC caído, un protocolo que la app todavía no conoce): quien organiza lo decide y confirma, y el comprobante, el resultado, lo que se comparte, Mis sorteos y el evento dicen "Sin sello: no se puede comprobar". La ronda se elige a 90 segundos (no a 45) y es una sola, R. Hasta `round_time(R) − 40` la app sigue intentando sellar **la misma lista con la misma R**; si el sello entra antes de `round_time(R) − 30`, el sorteo es anclado (§3) y el ganador es el mismo, porque lo decide la lista y R y no el momento del sello. Sellar otra ronda no es "anclar" ese sorteo: es otro sorteo. El mecanismo (§1 a §5) no cambia: solo cambia cómo se presentan los estados.
+
 ## 9. Diferencias con v1
 
 El demo original (agosto de 2026) usaba la cadena *default* de drand (30 s, firmas encadenadas) y la fórmula `sha256("randomness|digest|p") mod pool` con extracción sin reemplazo. v2 cambia a quicknet, compromete una ronda futura, incluye `list_hash` en cada iteración de la selección y define la compresión de la firma para que `randomness` coincida con drand. Los sorteos v1 no son verificables con este documento.

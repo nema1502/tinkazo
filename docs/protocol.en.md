@@ -172,6 +172,8 @@ As long as Stellar's public archives exist, your proof can be checked again with
 
 The same protocol without §3 and §4. The browser seals the list (§1), takes the beacon's most recent round after the seal, verifies the signature (§2) and runs the selection (§5). The receipt says so explicitly: the time order between seal and seed is not witnessed by a third party.
 
+**Draw without a seal.** This is also free mode when an account that could seal goes on without a seal because the network wouldn't let it (the fee above what the sponsor covers, the RPC down, a protocol version the app doesn't know yet): the organizer decides and confirms it, and the receipt, the result, what gets shared, My draws and the event all say "No seal: it can't be checked". The round is picked 90 seconds ahead (not 45) and it is a single one, R. Until `round_time(R) − 40` the app keeps trying to seal **the same list with the same R**; if the seal lands before `round_time(R) − 30` the draw is anchored (§3) and the winner is the same, because the list and R decide it, not the moment of the seal. Sealing another round is not "anchoring" that draw: it is another draw. The mechanism (§1 to §5) does not change: only how the states are presented.
+
 ## 9. Differences from v1
 
 The original demo (August 2026) used drand's *default* chain (30 s, chained signatures) and the formula `sha256("randomness|digest|p") mod pool`, drawing without replacement. v2 moves to quicknet, commits to a future round, includes `list_hash` in every selection iteration and defines the signature compression so that `randomness` matches drand's. v1 draws cannot be verified with this document.

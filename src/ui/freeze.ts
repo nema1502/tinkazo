@@ -18,7 +18,7 @@ import { actualizarPaso, barraActiva, verError } from "./siguiente";
 import { ponerPremio, recordarPremio } from "./premios";
 import { ENSAYO_ESPERA_S, enEnsayo, sinGrabar } from "../ensayo-modo";
 import { contar, errorContable } from "../contar";
-import { type OpcionesDeSellado, chequearAntesDeSellar, hayAccionDeRed, limpiarRed, marcarSellado, mostrarCostoAlto, mostrarSinSaldo, verSinSello } from "./red";
+import { type OpcionesDeSellado, chequearAntesDeSellar, hayAccionDeRed, limpiarRed, marcarSellado, mostrarCostoAlto, mostrarSinSaldo, verLaRedTrasFallar, verSinSello } from "./red";
 import { type Reintento, reintentarSello } from "./sin-sello";
 
 /**
@@ -503,6 +503,11 @@ export async function freeze(opciones: OpcionesDeSellado = {}): Promise<void> {
       btn.dataset.i = "freeze";
       btn.textContent = t("freeze");
       marcarSellado(false);
+      // Para el contador, la clave del motivo (la misma del mensaje), nunca el detalle. Se cuenta
+      // antes de cualquier camino de la red: un sello que empezó y no entró es un fallo siempre.
+      void import("../stellar/errores")
+        .then(({ errorKey }) => contar("seal_failed", { network: network.name, error: errorContable(errorKey(e)) }))
+        .catch(() => undefined);
       // Dos cosas que la red explica mejor que el error de siempre, con su acción:
       // el sello de verdad cuesta más de lo que el patrocinador paga, o el patrocinador no tiene con qué.
       if (esCostoAlto(e)) {
@@ -515,15 +520,18 @@ export async function freeze(opciones: OpcionesDeSellado = {}): Promise<void> {
         await mostrarSinSaldo();
         return;
       }
+      // Un corte del RPC con la red "bien" de hace un momento: se mira de nuevo, y si está caída se dice con su acción.
+      if (await esCorteDelRpc(e)) {
+        if (await verLaRedTrasFallar()) {
+          hideTxStatus("seal-status");
+          return;
+        }
+      }
       const status = $("seal-status");
       status.style.display = "block";
       // Naranja, como el error del sorteo: violeta es "todavía va" (styles.css).
       status.className = "txstatus bad";
       await escribirError(status, e, "sello");
-      // Para el contador, la clave del motivo (la misma del mensaje), nunca el detalle.
-      void import("../stellar/errores")
-        .then(({ errorKey }) => contar("seal_failed", { network: network.name, error: errorContable(errorKey(e)) }))
-        .catch(() => undefined);
       // Si se apretó la barra, el botón de verdad (y este mensaje) están fuera de la pantalla.
       verError(status);
       return;
@@ -679,6 +687,8 @@ function alEntrarElSello(hecho: { raffleId: bigint; txHash?: string }, c: Sorteo
   btn.textContent = t("sealed");
   renderSealSummary();
   precargarParaElSorteo();
+  // Anclado, el contrato pide la firma descomprimida: la curva se baja ahora, con la espera en marcha.
+  void import("../protocol/drand").catch(() => undefined);
   void import("./history").then((h) => {
     h.remember({
       organizer: c.organizer,
@@ -697,6 +707,16 @@ function alEntrarElSello(hecho: { raffleId: bigint; txHash?: string }, c: Sorteo
     h.renderHistory(c.organizer);
   });
   verSinSello("entro");
+}
+
+/** El error dice que el RPC no contestó (y no que no hay internet: eso lo cuenta el aviso de siempre). */
+async function esCorteDelRpc(e: unknown): Promise<boolean> {
+  try {
+    const { errorKey } = await import("../stellar/errores");
+    return errorKey(e) === "rpcDown";
+  } catch {
+    return false;
+  }
 }
 
 /** El sello no entró porque el patrocinador no tiene con qué pagar (mainnet, sin grifo): se explica con su acción. */
@@ -726,6 +746,8 @@ export function resumeFrozen(e: {
   numWinners: number;
   id?: string;
   sealTx?: string;
+  /** Se había seguido sin sello (la red no dejó sellar): retomarlo no lo vuelve comprobable. */
+  sinSello?: boolean;
 }): void {
   if (bytesToHex(listHash(e.names)) !== e.listHash || app.drawn) return;
   const ta = $<HTMLTextAreaElement>("ta");
@@ -743,6 +765,7 @@ export function resumeFrozen(e: {
     round: e.round,
     ...(raffleId !== undefined ? { raffleId } : {}),
     ...(e.sealTx ? { sealTx: e.sealTx } : {}),
+    ...(e.sinSello && raffleId === undefined ? { sinSello: true } : {}),
   };
   history.replaceState(null, "", "#sortear");
   dispatchEvent(new HashChangeEvent("hashchange"));

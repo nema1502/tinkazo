@@ -33,11 +33,23 @@
  * El sellado en testnet a veces tarda (una vez pasó los 120 s): espera hasta
  * `--sello-max` segundos y, si falla, reintenta el recorrido de esa pantalla.
  *
- * Mira también qué pasa cuando el sellado falla (la red de Stellar deja de
- * contestar): el error se escribe junto al botón de verdad y, si se apretó la
- * barra, ese botón queda fuera de la pantalla. Tiene que verse el motivo y
- * quedar a la vista una acción para reintentar. Es otro Chrome por pantalla,
- * en el primer tema; `--fallos none` lo saltea.
+ * Mira también qué pasa cuando la red falla (`--fallos`, la contingencia de la
+ * red, docs/ux.md "Cuando la red falla"). La app mira la red ANTES de que la
+ * sala espere y, si no deja sellar, dice una frase y ofrece una sola acción que
+ * reemplaza a "Sellar la lista". Cuatro casos, cada uno en otro Chrome y en el
+ * primer tema:
+ *  1. los dos RPC cortados: "Stellar no contesta", la acción es "Probar ahora",
+ *     se ve en la pantalla (aunque se apriete la barra) y no se selló nada; y,
+ *     en la primera pantalla, al volver la red la app sella sola;
+ *  2. solo el primer RPC cortado (primera pantalla): se sella por el segundo, sin
+ *     avisar nada;
+ *  3. costo alto: la simulación del sello devuelve el costo del 25 de octubre
+ *     (69 XLM, `Fetch.fulfillRequest` con el fixture). Pide restaurar el contrato
+ *     (rojo): la frase del caso 1, "Seguir sin sello" con su confirmación (sin
+ *     "verificable" ni XLM) y "Esperar a la red". Y con la cuenta de prueba, que
+ *     paga ella, el costo alto solo avisa (amarillo) y se puede sellar;
+ *  4. sin saldo: Horizon dice que la cuenta tiene 0,01 XLM; "Cargar saldo de prueba".
+ * Ninguno manda una transacción a la red. `--fallos none` los saltea.
  *
  * Al final mira también unos anchos de celular que esas pantallas no cubren
  * (320, 360, 375 y 414 px: 360 y 375 son los más comunes). Es rápido y no graba
@@ -58,6 +70,7 @@
  * Sale con código 1 si algo falla.
  */
 
+import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
@@ -419,60 +432,282 @@ const MEDIR_MENSAJE = `JSON.stringify((() => {
 })())`;
 
 /**
- * Sellar con la red de Stellar caída. El error se escribe junto al botón de verdad y, si se apretó la barra, ese
- * botón y el mensaje quedan fuera de la pantalla: a la vista quedaba un botón que volvía a estar disponible sin decir
- * por qué (20 de octubre de 2026). Corta las llamadas al servidor de Stellar, aprieta lo que se ve y comprueba que el
- * motivo aparece en la pantalla y que queda a la vista una acción para reintentar.
+ * Lo que se lee de la caja de la red (`#red-estado`) y del botón de sellar, para saber si se ve:
+ * sin contar la cabecera fija ni, si está puesta, la barra.
  */
-async function falloDelSello(browser, vista, tema) {
-  const [etiqueta, ancho, alto, dpr, celular] = vista;
-  const quien = `${etiqueta} ${tema} · sellado que falla`;
-  const page = await browser.open("about:blank");
+const MEDIR_RED = `JSON.stringify((() => {
+  const c = document.getElementById('red-estado');
+  const cs = getComputedStyle(c);
+  const r = c.getBoundingClientRect();
+  const cab = document.querySelector('header');
+  const arriba = cab && getComputedStyle(cab).position === 'sticky' ? Math.round(cab.getBoundingClientRect().bottom) : 0;
+  const bar = document.getElementById('siguiente');
+  const abajo = bar.classList.contains('on') ? Math.round(bar.getBoundingClientRect().top) : innerHeight;
+  const f = document.getElementById('btn-freeze');
+  return {
+    visible: cs.display !== 'none',
+    texto: (c.textContent || '').trim().slice(0, 240),
+    clase: c.className,
+    top: Math.round(r.top), bottom: Math.round(r.bottom), arriba, abajo,
+    boton: (f.textContent || '').trim(),
+    botones: [...c.querySelectorAll('button')].map((b) => (b.textContent || '').trim()),
+    sellada: getComputedStyle(document.getElementById('sec-frozen')).display !== 'none',
+  };
+})())`;
+
+/** Los textos de la contingencia, en los dos idiomas: lo que se espera ver. */
+const TEXTO = {
+  sinRpc: /Stellar no contesta|Stellar isn't answering/i,
+  costoAlto: /cuesta más de lo que Tinkazo puede pagar|costs more today than Tinkazo can cover/i,
+  costoMedio: /cuesta más de lo normal|costs more than usual/i,
+  sinSaldo: /no tiene saldo para sellar|has no balance to seal/i,
+  probar: /^(Probar ahora|Try now)$/,
+  cargar: /^(Cargar saldo de prueba|Add test funds)$/,
+  seguirSin: /^(Seguir sin sello|Continue without a seal)$/,
+  seguirIgual: /^(Seguir igual|Continue anyway)$/,
+  esperar: /^(Esperar a la red|Wait for the network)$/,
+  confirma: /Sin sello, nadie va a poder comprobar|Without a seal, nobody will be able to check/i,
+};
+
+/**
+ * Corta, falsea o deja pasar lo que la página le pide a otros servidores. `decidir(request)` devuelve
+ * "fallar", "seguir" o `{ cuerpo, estado }` para contestar en su lugar. Nunca cierra ni habilita nada
+ * más que lo que pide: la prueba no manda transacciones.
+ */
+async function interceptar(page, patrones, decidir) {
+  page.ws.addEventListener("message", (ev) => {
+    const m = JSON.parse(ev.data);
+    if (m.method !== "Fetch.requestPaused") return;
+    const { requestId, request } = m.params;
+    const accion = decidir(request) ?? "seguir";
+    if (accion === "fallar") {
+      page.send("Fetch.failRequest", { requestId, errorReason: "ConnectionFailed" }).catch(() => {});
+    } else if (accion === "seguir") {
+      page.send("Fetch.continueRequest", { requestId }).catch(() => {});
+    } else {
+      page
+        .send("Fetch.fulfillRequest", {
+          requestId,
+          responseCode: accion.estado ?? 200,
+          responseHeaders: [
+            { name: "content-type", value: "application/json" },
+            { name: "access-control-allow-origin", value: "*" },
+          ],
+          body: Buffer.from(accion.cuerpo).toString("base64"),
+        })
+        .catch(() => {});
+    }
+  });
+  await page.send("Fetch.enable", { patterns: patrones.map((urlPattern) => ({ urlPattern })) });
+}
+
+/** El nombre del método de JSON-RPC de un pedido al RPC, o "" si no lo es. */
+const metodoRpc = (request) => {
+  if (request.method !== "POST" || !request.postData) return "";
   try {
-    await page.send("Emulation.setDeviceMetricsOverride", { width: ancho, height: alto, deviceScaleFactor: dpr, mobile: celular, screenWidth: ancho, screenHeight: alto });
-    await page.send("Page.navigate", { url: `${base}/?theme=${tema}&lang=${lang}&pace=rapido` });
-    await page.waitFor("document.readyState === 'complete'", 20000);
-    await conectarCuentaDePrueba(page);
-    await page.eval(`document.getElementById('nw').value = '2'; document.getElementById('nw').dispatchEvent(new Event('change', { bubbles: true })); document.getElementById('btn-sample').click(); true`);
-    await sleep(900);
-    await page.eval("document.getElementById('sec-participants').scrollIntoView({ block: 'start' }); true");
-    await quieto(page);
-    // La red de Stellar deja de contestar: lo que pide la página a su servidor falla enseguida.
-    page.ws.addEventListener("message", (ev) => {
-      const m = JSON.parse(ev.data);
-      if (m.method === "Fetch.requestPaused") page.send("Fetch.failRequest", { requestId: m.params.requestId, errorReason: "ConnectionFailed" }).catch(() => {});
-    });
-    await page.send("Fetch.enable", { patterns: [{ urlPattern: "*soroban-testnet.stellar.org*" }] });
+    return String(JSON.parse(request.postData).method ?? "");
+  } catch {
+    return "";
+  }
+};
+
+const fixture = (nombre) => readFileSync(new URL(`../src/stellar/fixtures/${nombre}`, import.meta.url), "utf8");
+
+/** Una pantalla lista para probar la red: la cuenta de prueba conectada, el ejemplo cargado y la tarjeta arriba. */
+async function abrirParaLaRed(browser, vista, tema, antesDeLaLista) {
+  const [, ancho, alto, dpr, celular] = vista;
+  const page = await browser.open("about:blank");
+  await page.send("Emulation.setDeviceMetricsOverride", { width: ancho, height: alto, deviceScaleFactor: dpr, mobile: celular, screenWidth: ancho, screenHeight: alto });
+  await page.send("Page.navigate", { url: `${base}/?theme=${tema}&lang=${lang}&pace=rapido` });
+  await page.waitFor("document.readyState === 'complete'", 20000);
+  await conectarCuentaDePrueba(page);
+  await antesDeLaLista?.(page);
+  await page.eval(`document.getElementById('nw').value = '2'; document.getElementById('nw').dispatchEvent(new Event('change', { bubbles: true })); document.getElementById('btn-sample').click(); true`);
+  await sleep(900);
+  await page.eval("document.getElementById('sec-participants').scrollIntoView({ block: 'start' }); true");
+  await quieto(page);
+  return page;
+}
+
+async function cerrar(page) {
+  for (const metodo of ["Fetch.disable", "Page.close"]) {
+    try {
+      await page.send(metodo);
+    } catch {
+      /* ya cerrada */
+    }
+  }
+}
+
+/** La caja de la red se ve en la pantalla y queda una sola acción a la vista (el botón de verdad o la barra). */
+async function cajaYAccionAlaVista(page, quien, ctx) {
+  await sleep(600);
+  await quieto(page);
+  const msg = JSON.parse(await page.eval(MEDIR_RED));
+  const seVe = msg.visible && msg.top >= msg.arriba - 1 && msg.bottom <= msg.abajo + 1;
+  check(`${quien}: lo que dice la red se ve en la pantalla`, seVe, seVe ? `"${msg.texto.slice(0, 70)}"` : `queda en ${msg.top}–${msg.bottom}, la pantalla útil va de ${msg.arriba} a ${msg.abajo}`);
+  const m = await medir(page, REAL.lista);
+  const verReal = aLaVista(m.real?.caja ?? null, m);
+  const verBarra = !!(m.barra.existe && m.barra.on && m.barra.btn?.caja && aLaVista(m.barra.btn.caja, m));
+  check(`${quien}: una sola acción principal a la vista`, verReal !== verBarra, verReal ? `el botón "${m.real.texto}"` : verBarra ? `la barra: "${m.barra.btn.texto}"` : "ninguna");
+  const prin = m.principales.filter((p) => aLaVista(p.caja, m));
+  check(`${quien}: nunca dos botones principales a la vista`, prin.length <= 1, prin.map((p) => `#${p.id}`).join(" y "));
+  const s = JSON.parse(await page.eval(SONDA));
+  if (ctx.celular) check(`${quien}: blancos de toque de 44 px`, s.toques.length === 0, s.toques.slice(0, 3).map((x) => `"${x.t}" ${x.h}px`).join(" | "));
+  check(`${quien}: contraste del texto`, s.texto.length === 0, s.texto.slice(0, 3).map((x) => `"${x.t}" ${x.r}<${x.pide}`).join(" | "));
+  check(`${quien}: sin scroll horizontal`, m.scrollX <= 1, `${m.scrollX}px`);
+  return { msg, m, verReal, verBarra };
+}
+
+/**
+ * La red de Stellar no contesta: los dos RPC cortados. Antes la app dejaba apretar "Sellar" y fallaba al rato,
+ * con el motivo escrito junto a un botón que, si se apretaba la barra, quedaba fuera de la pantalla (20 de octubre
+ * de 2026). Ahora lo mira antes: dice "Stellar no contesta", la acción de ahí en adelante es "Probar ahora" (que
+ * reemplaza a "Sellar la lista") y no se selló nada. En la primera pantalla, además, al volver la red la app
+ * sella sola: la persona había apretado "Sellar la lista" y la red volvió.
+ */
+async function falloDelSello(browser, vista, tema, completo) {
+  const [etiqueta, , , , celular] = vista;
+  const quien = `${etiqueta} ${tema} · la red no contesta`;
+  const page = await abrirParaLaRed(browser, vista, tema);
+  try {
+    // Los dos RPC de testnet dejan de contestar DESPUÉS de cargar la lista: lo último que se midió (hace menos de
+    // 60 s) decía "bien", y es lo difícil: el sello falla, y la app tiene que mirar de nuevo y decirlo en vez de
+    // dejar un error genérico.
+    await interceptar(page, ["*soroban-testnet.stellar.org*", "*rpc.ankr.com*"], () => "fallar");
     const usaBarra = await pulsar(page, { etiqueta, tema, celular }, REAL.lista, "sellar con la red caída");
-    // Termina cuando el motivo ya está escrito y el botón volvió a estar disponible.
-    const fallo = await page.waitFor(
-      "getComputedStyle(document.getElementById('seal-status')).display === 'block' && !document.getElementById('btn-freeze').disabled && !document.getElementById('seal-status').textContent.includes('…') && document.getElementById('seal-status').textContent.trim().length > 0",
-      90000,
-    );
-    check(`${quien}: falla y deja escrito el motivo${usaBarra ? " (se apretó la barra)" : ""}`, fallo.ok, fallo.ok ? "" : "no falló en 90 s: ¿cambió el servidor de Stellar?");
-    if (!fallo.ok) return;
-    await sleep(900);
-    await quieto(page);
-    const msg = JSON.parse(await page.eval(MEDIR_MENSAJE));
-    const seVe = msg.visible && msg.top >= msg.arriba - 1 && msg.bottom <= msg.abajo + 1;
-    check(`${quien}: el mensaje del error se ve en la pantalla`, seVe, seVe ? `"${msg.texto}"` : `queda en ${msg.top}–${msg.bottom}, la pantalla útil va de ${msg.arriba} a ${msg.abajo}`);
-    // Y hay una acción a la vista para volver a intentar: el botón de verdad o la barra, una sola.
-    const m = await medir(page, REAL.lista);
-    const verReal = aLaVista(m.real?.caja ?? null, m);
-    const verBarra = !!(m.barra.existe && m.barra.on && m.barra.btn?.caja && aLaVista(m.barra.btn.caja, m));
-    check(`${quien}: queda una acción a la vista para reintentar`, verReal !== verBarra, verReal ? `el botón "${m.real.texto}"` : verBarra ? `la barra: "${m.barra.btn.texto}"` : "ninguna");
-    await page.screenshot(join(outDir, `flujo-${etiqueta}-${tema}-6-sellado-que-falla.png`));
-  } finally {
-    try {
+    const dijo = await page.waitFor(`(() => { const c = document.getElementById('red-estado'); return getComputedStyle(c).display !== 'none' && /Stellar no contesta|Stellar isn't answering/i.test(c.textContent || ''); })()`, 60000);
+    check(`${quien}: lo dice antes de sellar${usaBarra ? " (se apretó la barra)" : ""}`, dijo.ok, dijo.ok ? "" : "no apareció la frase en 60 s: ¿cambió el servidor de Stellar o el RPC de respaldo?");
+    if (!dijo.ok) return;
+    const { msg } = await cajaYAccionAlaVista(page, quien, { celular });
+    check(`${quien}: la acción de ahora reemplaza a "Sellar la lista" y es "Probar ahora"`, TEXTO.probar.test(msg.boton), `el botón dice "${msg.boton}"`);
+    check(`${quien}: no se selló nada`, !msg.sellada, msg.sellada ? "la lista quedó sellada" : "");
+    check(`${quien}: la frase no dice RPC, fee ni XLM`, !/\bRPC\b|\bfee\b|XLM|stroop/i.test(msg.texto + msg.boton), msg.texto.slice(0, 80));
+    await page.screenshot(join(outDir, `flujo-${etiqueta}-${tema}-6-la-red-no-contesta.png`));
+
+    if (completo) {
+      // La red vuelve: a los 15 s la app vuelve a probar sola y, como la persona había apretado "Sellar la lista", sella.
       await page.send("Fetch.disable");
-    } catch {
-      /* ya cerrada */
+      const sello = await page.waitFor("getComputedStyle(document.getElementById('sec-frozen')).display !== 'none'", selloMax);
+      check(`${quien}: al volver la red, sella sola`, sello.ok, sello.ok ? `en ${(sello.elapsed / 1000).toFixed(0)} s` : `no selló en ${Math.round(selloMax / 1000)} s`);
     }
-    try {
-      await page.send("Page.close");
-    } catch {
-      /* ya cerrada */
-    }
+  } finally {
+    await cerrar(page);
+  }
+}
+
+/**
+ * Solo el primer RPC cortado: se sella por el segundo, sin avisar nada. Es el cambio automático de RPC; manda una
+ * transacción real a la testnet, como el recorrido de siempre, y por eso va en una sola pantalla.
+ */
+async function primerRpcCortado(browser, vista, tema) {
+  const [etiqueta, , , , celular] = vista;
+  const quien = `${etiqueta} ${tema} · el primer RPC cortado`;
+  const page = await abrirParaLaRed(browser, vista, tema);
+  try {
+    await interceptar(page, ["*soroban-testnet.stellar.org*"], () => "fallar");
+    await pulsar(page, { etiqueta, tema, celular }, REAL.lista, "sellar con el primer RPC caído");
+    const sello = await page.waitFor("getComputedStyle(document.getElementById('sec-frozen')).display !== 'none'", selloMax);
+    check(`${quien}: sella igual, por el segundo`, sello.ok, sello.ok ? `en ${(sello.elapsed / 1000).toFixed(0)} s` : `no selló en ${Math.round(selloMax / 1000)} s`);
+    const caja = JSON.parse(await page.eval(MEDIR_RED));
+    check(`${quien}: no avisó nada de la red`, !caja.visible || !TEXTO.sinRpc.test(caja.texto), caja.texto.slice(0, 80));
+  } finally {
+    await cerrar(page);
+  }
+}
+
+/**
+ * El costo alto: la simulación del sello devuelve lo del 25 de octubre. Con el contrato por restaurar (rojo) la
+ * app lo dice antes de sellar y la acción es "Seguir sin sello", que pide confirmar; con la cuenta de prueba (que
+ * paga ella) un costo alto solo avisa. No manda nada: corta todo `sendTransaction`.
+ */
+async function costoAlto(browser, vista, tema) {
+  const [etiqueta, , , , celular] = vista;
+  const ctx = { etiqueta, tema, celular };
+  let quien = `${etiqueta} ${tema} · costo alto (pide restaurar)`;
+  let page = await abrirParaLaRed(browser, vista, tema, (p) =>
+    interceptar(p, ["*soroban-testnet.stellar.org*"], (r) => {
+      const metodo = metodoRpc(r);
+      if (metodo === "simulateTransaction") return { cuerpo: fixture("rpc-simulate-sello-restaurar.json") };
+      return metodo === "sendTransaction" ? "fallar" : "seguir";
+    }),
+  );
+  try {
+    // Sin apretar nada: con la cuenta y la lista a la vista la app mira la red sola y lo dice enseguida.
+    const dijo = await page.waitFor(`(() => { const c = document.getElementById('red-estado'); return getComputedStyle(c).display !== 'none' && c.textContent.trim().length > 0; })()`, 60000);
+    check(`${quien}: lo dice antes de sellar, sin que se apriete nada`, dijo.ok);
+    if (!dijo.ok) return;
+    let { msg } = await cajaYAccionAlaVista(page, quien, ctx);
+    check(`${quien}: la frase del caso`, TEXTO.costoAlto.test(msg.texto), `"${msg.texto.slice(0, 80)}"`);
+    check(`${quien}: la acción es "Seguir sin sello" y "Probar ahora" queda aparte`, TEXTO.seguirSin.test(msg.boton) && msg.botones.length === 1 && TEXTO.probar.test(msg.botones[0]), `${msg.boton} / ${msg.botones.join(", ")}`);
+    check(`${quien}: no se selló nada`, !msg.sellada);
+    await page.screenshot(join(outDir, `flujo-${etiqueta}-${tema}-7-costo-alto.png`));
+
+    // "Seguir sin sello" nunca sigue de un solo toque: pide confirmar, y desalienta.
+    await pulsar(page, ctx, REAL.lista, "seguir sin sello (primer toque)");
+    await sleep(600);
+    ({ msg } = await cajaYAccionAlaVista(page, `${etiqueta} ${tema} · seguir sin sello`, ctx));
+    check(`${etiqueta} ${tema} · seguir sin sello: pide confirmar`, TEXTO.confirma.test(msg.texto), `"${msg.texto.slice(0, 90)}"`);
+    check(`${etiqueta} ${tema} · seguir sin sello: la acción pasa a ser "Seguir igual", con "Esperar a la red" aparte`, TEXTO.seguirIgual.test(msg.boton) && msg.botones.length === 1 && TEXTO.esperar.test(msg.botones[0]), `${msg.boton} / ${msg.botones.join(", ")}`);
+    check(`${etiqueta} ${tema} · seguir sin sello: nada de "verificable" ni de XLM`, !/verific|XLM/i.test(msg.texto + msg.boton + msg.botones.join(" ")), msg.texto.slice(0, 80));
+    check(`${etiqueta} ${tema} · seguir sin sello: todavía no se siguió`, !msg.sellada);
+    await page.screenshot(join(outDir, `flujo-${etiqueta}-${tema}-8-seguir-sin-sello.png`));
+    // "Esperar a la red" vuelve a mirar y no sigue.
+    await page.eval("[...document.querySelectorAll('#red-estado button')].find((b) => /Esperar a la red|Wait for the network/.test(b.textContent)).click(); true");
+    const volvio = await page.waitFor(`/Seguir sin sello|Continue without a seal/.test(document.getElementById('btn-freeze').textContent) && !/Sin sello, nadie|Without a seal, nobody/.test(document.getElementById('red-estado').textContent)`, 30000);
+    check(`${etiqueta} ${tema} · seguir sin sello: "Esperar a la red" vuelve a la frase del caso y no sigue`, volvio.ok);
+  } finally {
+    await cerrar(page);
+  }
+
+  // Con la cuenta de prueba (paga ella) el costo del 25 de octubre (69 XLM) solo avisa: se puede sellar.
+  quien = `${etiqueta} ${tema} · costo alto con la cuenta de prueba`;
+  let mandadas = 0;
+  page = await abrirParaLaRed(browser, vista, tema, (p) =>
+    interceptar(p, ["*soroban-testnet.stellar.org*"], (r) => {
+      const metodo = metodoRpc(r);
+      if (metodo === "simulateTransaction") return { cuerpo: fixture("rpc-simulate-sello-caro.json") };
+      if (metodo === "sendTransaction") {
+        mandadas++;
+        return "fallar";
+      }
+      return "seguir";
+    }),
+  );
+  try {
+    // Tampoco se aprieta nada: el aviso sale solo, y la prueba no llega a sellar.
+    const aviso = await page.waitFor(`(() => { const c = document.getElementById('red-estado'); return getComputedStyle(c).display !== 'none' && /cuesta más de lo normal|costs more than usual/i.test(c.textContent || ''); })()`, 60000);
+    check(`${quien}: avisa antes de sellar que cuesta más de lo normal`, aviso.ok);
+    const msg = JSON.parse(await page.eval(MEDIR_RED));
+    check(`${quien}: es un aviso (amarillo): el botón sigue siendo "Sellar la lista"`, /amarillo/.test(msg.clase) && !TEXTO.seguirSin.test(msg.boton) && !TEXTO.probar.test(msg.boton), `${msg.clase} · "${msg.boton}"`);
+    check(`${quien}: sin XLM ni fee en lo que se lee`, !/XLM|\bfee\b|RPC/i.test(msg.texto), msg.texto.slice(0, 80));
+    info(`transacciones que intentó mandar (todas cortadas por la prueba): ${mandadas}`);
+  } finally {
+    await cerrar(page);
+  }
+}
+
+/** Sin saldo: Horizon dice que la cuenta de prueba tiene 0,01 XLM. "Cargar saldo de prueba" reemplaza a "Sellar la lista". */
+async function sinSaldo(browser, vista, tema) {
+  const [etiqueta, , , , celular] = vista;
+  const quien = `${etiqueta} ${tema} · sin saldo`;
+  const page = await abrirParaLaRed(browser, vista, tema, (p) =>
+    interceptar(p, ["*horizon-testnet.stellar.org/accounts/*"], (r) =>
+      r.method === "GET" && /\/accounts\/G[A-Z2-7]{55}$/.test(r.url.split("?")[0])
+        ? { cuerpo: JSON.stringify({ id: "G", balances: [{ asset_type: "native", balance: "0.0100000" }] }) }
+        : "seguir",
+    ),
+  );
+  try {
+    const dijo = await page.waitFor(`(() => { const c = document.getElementById('red-estado'); return getComputedStyle(c).display !== 'none' && /no tiene saldo para sellar|has no balance to seal/i.test(c.textContent || ''); })()`, 60000);
+    check(`${quien}: lo dice antes de sellar, sin que se apriete nada`, dijo.ok, dijo.ok ? "" : "no apareció en 60 s");
+    if (!dijo.ok) return;
+    const { msg } = await cajaYAccionAlaVista(page, quien, { celular });
+    check(`${quien}: la acción es "Cargar saldo de prueba" y "Seguir sin sello" queda aparte`, TEXTO.cargar.test(msg.boton) && msg.botones.length === 1 && TEXTO.seguirSin.test(msg.botones[0]), `${msg.boton} / ${msg.botones.join(", ")}`);
+    check(`${quien}: no se selló nada`, !msg.sellada);
+    await page.screenshot(join(outDir, `flujo-${etiqueta}-${tema}-9-sin-saldo.png`));
+  } finally {
+    await cerrar(page);
   }
 }
 
@@ -771,20 +1006,31 @@ async function main() {
       }
     }
   }
-  // El sellado que falla, apretado desde lo que se ve: una vez por pantalla, en el primer tema.
-  for (const vista of soloAnchos ? [] : VISTAS.filter((v) => fallos.includes(v[0]))) {
-    let hecho = false;
-    for (let intento = 0; intento <= 1 && !hecho; intento++) {
-      const browser = await launch({ width: vista[1], height: vista[2] });
-      try {
-        await falloDelSello(browser, vista, temas[0]);
-        hecho = true;
-      } catch (e) {
-        const motivo = String(e?.message ?? e).slice(0, 140);
-        if (intento === 1) check(`${vista[0]} ${temas[0]} · sellado que falla: la prueba llegó hasta el final`, false, motivo);
-        else console.log(`  … ${vista[0]} · sellado que falla: se cortó (${motivo}) · se reintenta`);
-      } finally {
-        await browser.close();
+  // La red que falla, apretado desde lo que se ve: una vez por pantalla, en el primer tema. Cada caso en su Chrome.
+  // Dos RPC cortados y el costo alto no mandan nada; "al volver la red, sella sola" y "el primer RPC cortado" sellan
+  // de verdad en la testnet, y van solo en la primera pantalla.
+  const pantallasDeFallos = soloAnchos ? [] : VISTAS.filter((v) => fallos.includes(v[0]));
+  const casosDeFallos = [
+    ["la red no contesta", (b, v, t, primera) => falloDelSello(b, v, t, primera)],
+    ["costo alto", (b, v, t) => costoAlto(b, v, t)],
+    ["sin saldo", (b, v, t) => sinSaldo(b, v, t)],
+  ];
+  for (const [i, vista] of pantallasDeFallos.entries()) {
+    const casos = i === 0 ? [...casosDeFallos, ["el primer RPC cortado", (b, v, t) => primerRpcCortado(b, v, t)]] : casosDeFallos;
+    for (const [nombre, correr] of casos) {
+      let hecho = false;
+      for (let intento = 0; intento <= 1 && !hecho; intento++) {
+        const browser = await launch({ width: vista[1], height: vista[2] });
+        try {
+          await correr(browser, vista, temas[0], i === 0);
+          hecho = true;
+        } catch (e) {
+          const motivo = String(e?.message ?? e).slice(0, 140);
+          if (intento === 1) check(`${vista[0]} ${temas[0]} · ${nombre}: la prueba llegó hasta el final`, false, motivo);
+          else console.log(`  … ${vista[0]} · ${nombre}: se cortó (${motivo}) · se reintenta`);
+        } finally {
+          await browser.close();
+        }
       }
     }
   }

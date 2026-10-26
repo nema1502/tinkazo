@@ -434,6 +434,27 @@ describe("caso 2: Stellar no contesta", () => {
     expect(boton().textContent).toBe("Sellar la lista");
   });
 
+  it("un sello que falla por un corte, con la red 'bien' de hace un momento: se mira de nuevo y se dice con su acción", async () => {
+    red(bien());
+    const { r } = await cargar();
+    // Lo último que se midió decía que la red andaba bien (la caché de 60 s)...
+    expect(await r.chequearAntesDeSellar()).toBe(true);
+    expect(visible()).toBe(false);
+    // ...y después se cortó: el sello falla, y en vez de un error genérico se ve el caso 2.
+    red(caidos());
+    expect(await r.verLaRedTrasFallar()).toBe(true);
+    expect(frase()).toBe("Stellar no contesta. Vuelvo a probar en 0:15.");
+    expect(boton().textContent).toBe("Probar ahora");
+  });
+
+  it("si al mirar de nuevo la red está bien, el error era otra cosa: no se dice nada de la red", async () => {
+    red(bien());
+    const { r } = await cargar();
+    expect(await r.verLaRedTrasFallar()).toBe(false);
+    expect(visible()).toBe(false);
+    expect(boton().textContent).toBe("Sellar la lista");
+  });
+
   it("si falla uno solo de los dos RPC no se entera nadie", async () => {
     red({ [SDF as string]: { anda: "503" }, [ANKR]: {} });
     const { r } = await cargar();
