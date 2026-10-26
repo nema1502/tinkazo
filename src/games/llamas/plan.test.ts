@@ -3,9 +3,17 @@ import { planRace, type Plan } from "./plan";
 
 /**
  * El plan de la carrera no delata a la ganadora con su puesto: el auditor de
- * delatores (scripts/audit-delatores.mjs) lo mide en el navegador con
- * doscientas semillas; esto lo mira sin navegador, en el plan, con muchas más.
+ * delatores (scripts/audit-delatores.mjs race) lo mide en el plan con 1.500
+ * rondas; esto lo mira acá con 1.600 planes de ocho, sin pasar por la selección.
  */
+
+/** El chi cuadrado de un reparto parejo entre `k` casilleros (k − 1 grados de libertad). */
+const chi2 = (cuenta: number[], total: number): number => {
+  const e = total / cuenta.length;
+  return cuenta.reduce((s, o) => s + (o - e) ** 2 / e, 0);
+};
+/** El crítico de 1 en 1000 con 7 grados de libertad (ocho puestos). */
+const CRITICO_7 = 24.322;
 
 /** Un azar sembrado chico (mulberry32), alcanza para las pruebas. */
 function rngOf(seed: number): () => number {
@@ -43,25 +51,57 @@ describe("el plan de la carrera", () => {
     }
   });
 
-  it("al largar y al 25, al 50 y al 75 por ciento, cualquier puesto sale cerca de una de cada ocho veces", () => {
+  it("al largar y al 25, al 50 y al 75 por ciento, cualquier puesto sale una de cada ocho veces", () => {
     for (const q of [0.067, 0.25, 0.5, 0.75]) {
       const cuenta = new Array(9).fill(0);
       for (const p of planes) cuenta[puesto(p, p.story.winner, q)]++;
+      // Cuatro desvíos de una binomial de 1.600 con 1/8: de 9,2 a 15,8 %.
       for (let r = 1; r <= 8; r++) {
         const f = (cuenta[r] as number) / planes.length;
-        expect(f, `puesto ${r} al ${q * 100}%`).toBeGreaterThan(0.08);
-        expect(f, `puesto ${r} al ${q * 100}%`).toBeLessThan(0.18);
+        expect(f, `puesto ${r} al ${q * 100}%`).toBeGreaterThan(0.092);
+        expect(f, `puesto ${r} al ${q * 100}%`).toBeLessThan(0.158);
+      }
+      // Y todos juntos: ninguna diferencia con el reparto parejo a 1 en 1000 (chi cuadrado, 7 grados de libertad).
+      expect(chi2(cuenta.slice(1), planes.length), `al ${q * 100}%`).toBeLessThan(CRITICO_7);
+    }
+  });
+
+  it("a la mitad, la ganadora va atrás (5.º a 8.º) y adelante (1.º a 4.º) mitad y mitad", () => {
+    // Hasta el 26 de octubre iba atrás en 43 de cada 100 y el 1.º salía 1,3 veces lo que toca:
+    // quien iba primera a la mitad ganaba más que una de cada ocho (auditor de delatores, 1.500 rondas).
+    const atras = planes.filter((p) => puesto(p, p.story.winner, 0.5) >= 5).length / planes.length;
+    expect(atras).toBeGreaterThan(0.46);
+    expect(atras).toBeLessThan(0.54);
+  });
+
+  it("el puesto que se sortea es el que se ve, en los cinco puntos de control", () => {
+    for (const p of planes) {
+      expect(p.puestos.map((x) => x.q).sort()).toEqual([0.067, 0.25, 0.5, 0.75, 0.9]);
+      for (const { q, r } of p.puestos) expect(puesto(p, p.story.winner, q), `al ${q * 100}% (${p.story.arc})`).toBe(r);
+    }
+  });
+
+  it("nadie corre en el mismo punto que otra (el empate lo rompe el carril): la ganadora puede ser cualquier puesto", () => {
+    for (const p of planes.slice(0, 300)) {
+      for (const q of [0.067, 0.25, 0.5, 0.75, 0.9]) {
+        const xs = p.lanes.map((_, j) => p.pos(j, q));
+        expect(new Set(xs).size, `al ${q * 100}%`).toBe(xs.length);
       }
     }
   });
 
-  it("a la mitad, la ganadora va atrás en menos de la mitad de las carreras", () => {
-    // El auditor de emoción mira dieciséis carreras y no acepta que la mitad
-    // de atrás pase de seis de cada diez: con la mitad justa, eso pasaba en una
-    // tanda de cada cuatro.
-    const atras = planes.filter((p) => puesto(p, p.story.winner, 0.5) >= 5).length / planes.length;
-    expect(atras).toBeGreaterThan(0.38);
-    expect(atras).toBeLessThan(0.47);
+  it("en el susto, la ganadora tropieza antes y después de la mitad, mitad y mitad, entre el 38 % y el 66 %", () => {
+    const sustos = planes.filter((p) => p.story.arc === "susto");
+    expect(sustos.length).toBeGreaterThan(300);
+    const antes = sustos.filter((p) => (p.story.beats.find((b) => b.kind === "tropiezo" && b.actor === p.story.winner) as { at: number }).at < 0.5).length / sustos.length;
+    expect(antes).toBeGreaterThan(0.42);
+    expect(antes).toBeLessThan(0.58);
+    for (const p of sustos) {
+      const at = (p.story.beats.find((b) => b.kind === "tropiezo" && b.actor === p.story.winner) as { at: number }).at;
+      expect(at).toBeGreaterThanOrEqual(0.38);
+      expect(at).toBeLessThanOrEqual(0.66);
+      expect(p.story.beats.map((b) => b.at)).toEqual(p.story.beats.map((b) => b.at).sort((x, y) => x - y));
+    }
   });
 
   it("en la recta final, la ganadora va primera o segunda, mitad y mitad", () => {

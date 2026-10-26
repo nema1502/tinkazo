@@ -58,8 +58,8 @@ export interface Rango {
  * state.ts porque ese módulo lee `location` al cargar: una prueba compara los dos.
  */
 const RANGOS_BASE: Partial<Record<Game, Rango>> = {
-  // La carrera llega a 30 desde el 25 de octubre de 2026: con 9 a 30 sale todo el pelotón y se van echando de a uno.
-  race: { minimo: 2, ideal: [4, 30], maximo: 30, meta: 7.0 },
+  // La carrera llega a 200 desde el 26 de octubre de 2026: con 9 a 30 salen todas y se van echando de a una; con más, pasa por tandas.
+  race: { minimo: 2, ideal: [4, 30], maximo: 200, meta: 7.0 },
   sapo: { minimo: 2, ideal: [6, 12], maximo: 40, meta: 7.1 },
   trompo: { minimo: 2, ideal: [5, 14], maximo: 14, meta: 6.3 },
   chovena: { minimo: 8, ideal: [12, 60], maximo: 80, meta: 7.9 },
@@ -90,6 +90,13 @@ const VENTANA_NORMAL: ReadonlyArray<{ personas: readonly [number, number]; seg: 
   { personas: [101, 200], seg: [32, 34] },
 ];
 
+/**
+ * Los carriles de la recta final de la carrera: con más premios que carriles, los que no entran se echarían del
+ * grupo y después se anunciarían ganadores. Es `FINALISTAS` de `games/llamas/carrera-base.ts` (una prueba compara
+ * los dos: ese módulo no se importa acá porque este viaja con la portada).
+ */
+export const CARRILES_CARRERA = 8;
+
 export interface Recomendacion {
   game: Game;
   /** `true`: encaja (Recomendado). `false`: no encaja (se atenúa). `null`: sin rango claro (neutral). */
@@ -113,10 +120,12 @@ export interface Recomendaciones {
   duracionNormal: { desde: number; hasta: number } | null;
 }
 
-function evaluar(game: Game, n: number): Recomendacion {
+function evaluar(game: Game, n: number, premios = 1): Recomendacion {
   const r = RANGOS[game];
   const args = [n, r?.minimo ?? 0, r?.maximo ?? 0];
   if (!r) return { game, fits: null, ideal: false, note: null, args };
+  // Cada premio es un carril de la recta: con más de ocho, la carrera echaría a quien después anuncia como ganadora.
+  if (game === "race" && premios > CARRILES_CARRERA) return { game, fits: false, ideal: false, note: "rec.race.premios", args: [n, premios, CARRILES_CARRERA] };
   if (r.maximo !== undefined && n > r.maximo) return { game, fits: false, ideal: false, note: `rec.${game}.largo`, args };
   if (r.minimo === undefined) return { game, fits: null, ideal: false, note: null, args };
   if (n < r.minimo) return { game, fits: false, ideal: false, note: `rec.${game}.corto`, args };
@@ -153,10 +162,12 @@ export const JUEGO_DE_SIEMPRE: Game = "race";
  * que llega hasta 8 y no estaba entre los recomendados, mientras los cuatro de
  * arriba del selector sí (D02, de la evaluación crítica de experiencia).
  */
-export function juegoPorDefecto(n: number): Game {
-  const r = recomendar(n).games;
-  if (r.find((x) => x.game === JUEGO_DE_SIEMPRE)?.fits === true) return JUEGO_DE_SIEMPRE;
-  return r.find((x) => x.fits === true)?.game ?? JUEGO_DE_SIEMPRE;
+export function juegoPorDefecto(n: number, premios = 1): Game {
+  const r = recomendar(n, premios).games;
+  // Hasta 30 sale la carrera sola; con más encaja (pasa por tandas) pero no es lo ideal: se recomienda otro primero.
+  if (n <= 30 && r.find((x) => x.game === JUEGO_DE_SIEMPRE)?.fits === true) return JUEGO_DE_SIEMPRE;
+  // Si ninguno encaja, el de siempre, salvo que no entren los premios: ahí el primero del selector que no sea la carrera.
+  return r.find((x) => x.fits === true)?.game ?? (premios > CARRILES_CARRERA ? (r.find((x) => x.game !== JUEGO_DE_SIEMPRE)?.game ?? JUEGO_DE_SIEMPRE) : JUEGO_DE_SIEMPRE);
 }
 
 /**
@@ -168,8 +179,8 @@ export function juegoPorDefecto(n: number): Game {
  * encaja, o encaja uno solo, queda `actual`. Siempre el mismo para la misma
  * entrada: no hay azar.
  */
-export function juegoSiguiente(n: number, actual: Game): Game {
-  const buenos = recomendar(n).games.filter((x) => x.fits === true).map((x) => x.game);
+export function juegoSiguiente(n: number, actual: Game, premios = 1): Game {
+  const buenos = recomendar(n, premios).games.filter((x) => x.fits === true).map((x) => x.game);
   if (!buenos.length) return actual;
   const i = buenos.indexOf(actual);
   return buenos[(i + 1) % buenos.length] ?? actual;
@@ -177,11 +188,13 @@ export function juegoSiguiente(n: number, actual: Game): Game {
 
 /**
  * Qué juegos del selector sirven para `n` personas, con su nota y la duración
- * de la sección 8.2. `n` se toma entero y nunca negativo.
+ * de la sección 8.2. `n` se toma entero y nunca negativo. `premios` (uno, si no
+ * se dice) solo le importa a la carrera: con más de ocho no encaja.
  */
-export function recomendar(n: number): Recomendaciones {
+export function recomendar(n: number, premios = 1): Recomendaciones {
   const k = Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
-  const games = SELECTOR.map((g) => evaluar(g, k)).sort(ordenar);
+  const p = Number.isFinite(premios) ? Math.max(1, Math.floor(premios)) : 1;
+  const games = SELECTOR.map((g) => evaluar(g, k, p)).sort(ordenar);
   const tramo = VENTANA_NORMAL.find(({ personas: [de, a] }) => k >= de && k <= a);
   return {
     games,

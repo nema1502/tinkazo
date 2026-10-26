@@ -44,7 +44,7 @@ import { bolasEn, nombresEn } from "./delatores-nombres.mjs";
 export const MARCADORES = {
   cWin: /^¡(GANAN?|SE LO LLEVAN?|ES PARA|EL TINKAZO ES PARA) .+!$/u,
   // La carrera.
-  cStart: /^¡(ALLÁ VAN|Y SALIERON|ARRANCÓ|YA ESTÁN EN CARRERA)!$/u,
+  cStart: /^¡(ALLÁ VAN|Y SALIERON|ARRANCÓ|YA ESTÁN EN CARRERA|Salida)!$/u,
   cLast: /^¡(ÚLTIMA RECTA|LOS ÚLTIMOS METROS|YA SE VE LA META|AHÍ ESTÁ LA META)!$/u,
   cFoto: /^¡(FOTO FINISH|POR UNA NARIZ|HAY QUE VER LA FOTO)!$/u,
   // El sapo.
@@ -889,12 +889,17 @@ export function afueraEntrada(P) {
  * - `especificas`: las señales propias del juego.
  */
 export const JUEGOS = {
+  // La carrera nueva (`carrera-show.ts`) se juzga a nivel del plan: `delatores-carrera.mjs`, sin navegador
+  // (la punta, el tiempo en la punta, las echadas, las tandas, el portón, la entrada a la recta y el
+  // relator, que dice nombres cortos). Acá, con `--navegador`, quedan solo las señales de la pantalla:
+  // dónde arranca cada una y adónde apunta la cámara. `senalesCarrera` y `senalesNombresPeloton` eran
+  // del pelotón de antes (marcas `puesto` y nombres que se completaban): ya no se registran.
   race: {
     candidatos: "visibles",
     arranque: { desde: { clave: "cStart" }, orden: "y", ventana: 1 },
     // La zoom de siempre se mide en la carrera y no en el pelotón de antes (ver `senalCamara`).
     camaraDesde: { clave: "cStart" },
-    especificas: [senalesCarrera, senalesNombresPeloton],
+    especificas: [],
   },
   sapo: {
     candidatos: "visibles",

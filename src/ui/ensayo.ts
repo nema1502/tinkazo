@@ -48,7 +48,7 @@ function montar(): void {
   document.body.dataset.ensayo = "1";
   medirCabecera();
   addEventListener("resize", medirCabecera, { passive: true });
-  forzarRitmo("rapido");
+  // El ensayo corre en el ritmo de quien organiza: en Rápido la carrera echaba una por segundo y no se alcanzaba a ver a nadie.
   const ritmo = document.getElementById("pace");
   if (ritmo instanceof HTMLSelectElement) ritmo.value = currentPace();
   setList(LISTA_ENSAYO.join("\n"));

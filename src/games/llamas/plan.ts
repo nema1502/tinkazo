@@ -19,12 +19,16 @@ import { writeStory, type Arc, type Story } from "../drama";
  * - **El puesto de la ganadora** apenas largan (cuando el relator anuncia a la
  *   primera), al 25%, al 50% y al 75% se sortea en una franja de cada arco, y
  *   las cuatro franjas se reparten los puestos: sumando los arcos, cada puesto
- *   sale una de cada ocho veces. Al largar y al 25% va adelante en el susto y
- *   el duelo, y atrás en la remontada y la tapada; al 50%, un poco más
- *   adelante que atrás, y en el susto adelante si todavía no tropezó y
- *   última si ya; al 75%, primera o
+ *   sale exactamente una de cada ocho veces, en cada uno de esos cuatro
+ *   momentos (el auditor de delatores lo mide con 1.500 rondas: chi cuadrado
+ *   con siete grados de libertad). Al largar y al 25% va adelante en el susto y
+ *   el duelo, y atrás en la remontada y la tapada; al 50%, en el duelo del 1.º
+ *   al 4.º, en la tapada del 3.º al 6.º, en la remontada del 5.º al 8.º y en
+ *   el susto 1.ª o 2.ª si todavía no tropezó y 7.ª u 8.ª si ya (el tropiezo
+ *   cae antes o después de la mitad, mitad y mitad); al 75%, primera o
  *   segunda en el duelo, tercera o cuarta en el susto y en la mitad de atrás
- *   en la remontada y la tapada.
+ *   en la remontada y la tapada. Cada puesto sorteado se cumple en la
+ *   pantalla: lo que se ve es lo que se sorteó (`puestos`).
  * - **En la recta final** (90%) va primera o segunda, mitad y mitad: unas
  *   veces aguanta adelante, otras pasa en los últimos metros.
  * - **En el duelo** la rival corre en el carril de arriba o en el de abajo,
@@ -48,6 +52,8 @@ export interface Plan {
   hinchada: number;
   /** En la remontada, a cuál de las dos que vienen de atrás va la cámara: sorteada. */
   foco: number;
+  /** Los puestos que se sortearon para la ganadora, a la altura `q` de la pista (y que `pos` cumple). */
+  puestos: { q: number; r: number }[];
   /** Dónde va el actor `k` a la altura `q`, en fracción de pista. */
   pos(k: number, q: number): number;
   /** En qué momento de la historia está un actor, para la postura. */
@@ -194,9 +200,11 @@ export function planRace(
     return d;
   }
 
+  // Varias corren pegadas al tope de ventaja (0,045) y quedan en el mismo punto: con un empate la ganadora
+  // no puede ser 2.ª entre tres iguales. Un desempate de una cienmillonésima por carril (invisible) lo evita.
   const pos = (k: number, q: number): number => {
     const tau = Math.max(0, Math.min(1, q - delayAt(k, q)));
-    return tau + gapAt(k, tau) * GK;
+    return tau + gapAt(k, tau) * GK + k * 1e-8;
   };
 
   opts.beforePlace?.();
@@ -267,14 +275,22 @@ export function planRace(
   const tropiezo = story.beats.find((bt) => bt.actor === story.winner && bt.kind === "tropiezo");
   const arc = story.arc;
   const adelante = arc === "duelo" || arc === "susto";
+  // En el susto, la ganadora tropieza antes de la mitad o después, mitad y
+  // mitad (el director la sortea entre el 38% y el 66%, y eso deja el 43% antes
+  // de la mitad): así a la mitad va atrás o adelante la mitad de las veces.
+  if (arc === "susto" && tropiezo) {
+    tropiezo.at = rng() < 0.5 ? 0.38 + rng() * 0.12 : 0.5 + rng() * 0.16;
+    story.beats.sort((a, b) => a.at - b.at);
+  }
   const r25 = adelante ? franja(0, 0.5) : franja(0.5, 1);
-  // A la mitad, un poco más adelante que atrás (con ocho: el duelo del 1 al 3,
-  // la remontada del 4 al 8): cada puesto sigue saliendo cerca de una de cada
-  // ocho veces, y la mitad de atrás no se llena más que la de adelante en
-  // pocas carreras seguidas (el auditor de emoción mira dieciséis).
-  const r50 = arc === "duelo" ? franja(0, 0.375)
+  // A la mitad, cuatro franjas que juntas dan un octavo por puesto (con ocho):
+  // el duelo del 1.º al 4.º, la tapada del 3.º al 6.º, la remontada del 5.º al
+  // 8.º y el susto 1.ª o 2.ª (si todavía no tropezó) o 7.ª u 8.ª (si ya). Antes
+  // era un poco más adelante que atrás (el 1.º salía 1,3 veces lo que toca) y
+  // eso se veía: quien iba primera a la mitad ganaba más que una de cada ocho.
+  const r50 = arc === "duelo" ? franja(0, 0.5)
     : arc === "tapada" ? franja(0.25, 0.75)
-      : arc === "remontada" ? franja(0.375, 1)
+      : arc === "remontada" ? franja(0.5, 1)
         : tropiezo && tropiezo.at < 0.5 ? franja(0.75, 1) : franja(0, 0.25);
   const r75 = arc === "duelo" ? franja(0, 0.25) : arc === "susto" ? franja(0.25, 0.5) : franja(0.5, 1);
   // En la recta final, primera (aguanta adelante) o segunda (pasa en los
@@ -283,11 +299,22 @@ export function planRace(
   // Apenas largan, el relator anuncia a la que va adelante: también ahí la
   // ganadora va adelante en el susto y el duelo y atrás en las otras.
   const r07 = adelante ? franja(0, 0.5) : franja(0.5, 1);
-  llevar(0.25, r25, [0, 0.5, 1, 0.5, 0, 0, 0, 0, 0, 0]);
-  llevar(0.067, r07, [0, 1, 0, 0, 0, 0, 0, 0, 0, 0]);
-  llevar(0.5, r50, [0, 0, 0, 0.5, 1, 0.5, 0, 0, 0, 0]);
-  llevar(0.75, r75, [0, 0, 0, 0, 0, 0.5, 1, 0.3, 0, 0]);
-  llevar(0.9, r90, [0, 0, 0, 0, 0, 0, 0, 1, 1, 0]);
+  const jorobas: { q: number; r: number; joroba: number[] }[] = [
+    { q: 0.25, r: r25, joroba: [0, 0.5, 1, 0.5, 0, 0, 0, 0, 0, 0] },
+    { q: 0.067, r: r07, joroba: [0, 1, 0, 0, 0, 0, 0, 0, 0, 0] },
+    { q: 0.5, r: r50, joroba: [0, 0, 0, 0.5, 1, 0.5, 0, 0, 0, 0] },
+    { q: 0.75, r: r75, joroba: [0, 0, 0, 0, 0, 0.5, 1, 0.3, 0, 0] },
+    { q: 0.9, r: r90, joroba: [0, 0, 0, 0, 0, 0, 0, 1, 1, 0] },
+  ];
+  for (const j of jorobas) llevar(j.q, j.r, j.joroba);
+  // Cada joroba mueve un poco lo que dejaron las anteriores (la del 90% corre el
+  // puesto del 75%, y el susto caía en 3.º, 4.º y a veces 5.º): se repiten las
+  // que quedaron flojas hasta que valen todas a la vez.
+  for (let vuelta = 0; vuelta < 12; vuelta++) {
+    const flojas = jorobas.filter((j) => puestoEn(story.winner, j.q) !== j.r);
+    if (!flojas.length) break;
+    for (const j of flojas) llevar(j.q, j.r, j.joroba);
+  }
   const hinchada = Math.floor(rng() * L_);
   const foco = decoy >= 0 && rng() < 0.5 ? decoy : story.winner;
 
@@ -301,5 +328,5 @@ export function planRace(
     return null;
   }
 
-  return { lanes, story, foto: story.arc === "duelo" ? 0.962 : 2, decoy, hinchada, foco, pos, beatOf };
+  return { lanes, story, foto: story.arc === "duelo" ? 0.962 : 2, decoy, hinchada, foco, puestos: jorobas.map(({ q, r }) => ({ q, r })), pos, beatOf };
 }

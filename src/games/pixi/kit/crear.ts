@@ -6,6 +6,7 @@ import { azarDe } from "./azar";
 import { crearDirector, type Pantalla } from "./director";
 import { figurasDe, tamanoMinimoFigura } from "./figuras";
 import { crearGuion, type EjecutorGuion } from "./guion";
+import { anotarMarcas } from "./marcas";
 import { crearMarcadorVista } from "./marcador-vista";
 import { tamanoLetra } from "./nombres";
 import { crearSonido } from "./sonido";
@@ -60,11 +61,10 @@ export function crearJuego<P, E>(def: DefJuego<P, E>, anf: Anfitrion = anfitrion
       S.cleanup();
       return;
     }
-    if (plan.marcas) for (const [clave, valor] of Object.entries(plan.marcas)) S.mark(clave, valor);
-    S.mark("arco", plan.arco);
+    anotarMarcas(anf.auditar(), plan, (clave, valor) => S.mark(clave, valor));
     const conFoco = def.foco !== false;
     const F = conFoco ? tiemposFoco(plan.arco) : { golpe: 0, placa: 0 };
-    anf.duracion(plan.duracion, anf.espera + F.placa);
+    anf.duracion(plan.duracion, anf.espera + F.placa, plan.normal ?? null);
 
     /* ----------------------------------------------------------- las figuras */
     // La hoja de emblemas viaja aparte: se espera un momento y, si no llegó, todos con su cara.

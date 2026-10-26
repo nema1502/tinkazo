@@ -2007,8 +2007,9 @@
   .stadium { height: 100vh; height: 100dvh; overscroll-behavior: none; touch-action: none; }
   .stadium canvas { touch-action: none; }
   #st-round { display: none; }
-  body[data-ensayo="1"] #st-round { display: inline-block; }
-  body[data-ensayo="1"] #st-round::after { font-size: clamp(20px, 2.6vw, 40px); padding: 8px 18px; }
+  /* "ENSAYO · no se graba" es una etiqueta chica, en la esquina de la marca: lo grande de la pantalla es el juego. */
+  body[data-ensayo="1"] #st-round { display: inline-block; margin-right: auto; margin-left: 10px; }
+  body[data-ensayo="1"] #st-round::after { font-size: clamp(14px, 1vw, 16px); padding: 3px 9px; letter-spacing: 0.05em; }
   .st-brand > span:last-child { display: none; }
   .st-brand { padding: 4px 6px; }
   .st-top {
@@ -2029,9 +2030,9 @@
     .st-actions button { padding: 8px 14px; }
     /* El ensayo lleva su rótulo en un renglón propio, centrado, debajo de la marca y los botones: apretado entre los
        dos se partía en cuatro renglones ("ENSAYO / · NO / SE / GRABA") y subía hasta pegarse al cartel del ganador. */
-    body[data-ensayo="1"] .st-top { flex-wrap: wrap; row-gap: 8px; }
-    body[data-ensayo="1"] #st-round { flex: 1 0 100%; order: 3; text-align: center; }
-    body[data-ensayo="1"] #st-round::after { white-space: nowrap; font-size: clamp(14px, 5vw, 20px); padding: 6px 12px; }
+    body[data-ensayo="1"] .st-top { flex-wrap: nowrap; row-gap: 0; }
+    body[data-ensayo="1"] #st-round { flex: 0 1 auto; order: 0; text-align: left; margin-left: 6px; }
+    body[data-ensayo="1"] #st-round::after { white-space: nowrap; font-size: 14px; padding: 3px 7px; letter-spacing: 0.02em; }
   }
 
   /* La tarjeta de "cómo se juega" y la cortina, que también se proyectan. */

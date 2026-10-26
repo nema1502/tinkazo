@@ -119,7 +119,8 @@ try {
     for (let i = 1; i <= N; i++) {
       const page = await browser.open("about:blank");
       await page.send("Page.addScriptToEvaluateOnNewDocument", { source: TURBO });
-      await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&semilla=${semilla(i)}${motor ? `&motor=${motor}` : ""}` });
+      // `auditar=marcas`: el juego anota su arco y el puesto de la ganadora en el lienzo solo si se lo piden (`kit/marcas.ts`).
+      await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&semilla=${semilla(i)}&auditar=marcas${motor ? `&motor=${motor}` : ""}` });
       const ok = await page.waitFor("document.getElementById('race-canvas').dataset.arco", 20_000);
       if (!ok.ok) {
         arcos.push("?");

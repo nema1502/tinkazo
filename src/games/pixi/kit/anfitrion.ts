@@ -41,14 +41,14 @@ export interface Anfitrion {
   frase(clave: string, args: readonly unknown[]): string | undefined;
   /** El anuncio de quien gana, para el relator. */
   anuncio(nombres: string[], ganadores: readonly number[]): string;
-  /** El valor de `?auditar=`: lo que un auditor le pide al juego que deje a la vista (`nino`, `camara`, `identidad`). */
+  /** El valor de `?auditar=`: lo que un auditor le pide al juego que deje a la vista (`nino`, `camara`, `identidad`, `marcas`: sin ninguno no se anotan las marcas del plan, `kit/marcas.ts`). */
   auditar(): string | null;
   /** Sostiene la música en una tensión de 0 a 1, sin que nadie diga nada. */
   calor(tension: number): void;
   /** Cuánto estira el reloj del juego la duración elegida (1 en Normal). */
   ritmo(): number;
   /** Le cuenta al selector de duración cuánto dura el juego y cuánto de eso es fijo (segundos reales). */
-  duracion(segundos: number, fijos: number): void;
+  duracion(segundos: number, fijos: number, normal?: number | null): void;
   /** Cuánto se sostiene el cartel de quien gana, en segundos reales. */
   readonly espera: number;
   readonly voz: Voz;
@@ -74,7 +74,7 @@ export const anfitrionTinkazo: Anfitrion = {
   auditar: () => params.get("auditar"),
   calor: (c) => musicCue(c),
   ritmo: () => paceFactor(),
-  duracion: (segundos, fijos) => setGameLength(segundos, fijos),
+  duracion: (segundos, fijos, normal) => setGameLength(segundos, fijos, normal ?? null),
   espera: WINNER_HOLD,
   voz: {
     tono: (hz, dur, timbre, vol) => beep(hz, dur, timbre, vol),

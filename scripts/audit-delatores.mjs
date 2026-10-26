@@ -31,9 +31,24 @@
  * cada ocho veces. Con doscientas, un delator de 1,7 veces el azar ya no se
  * esconde.
  *
+ * **La carrera se juzga a nivel del plan, sin navegador.** Su show es puro (quién
+ * se echa y cuándo, quién lleva la punta, la tanda, el portón, cómo entran a la
+ * recta, qué dice el relator): cada ronda cuesta unos milisegundos, así que
+ * corre 1.500 rondas con 18, 30, 60, 100 y 200 personas en medio minuto
+ * (`scripts/lib/delatores-carrera.mjs`). Ahí delata con solo salir de la
+ * casualidad, con la probabilidad en 1 contra 1000 y sin pedirle además un
+ * tamaño: con tantas rondas, un desvío chico y real se ve y no se esconde.
+ * Además de las reglas de apuesta de siempre, mide **repartos** (¿cae parejo
+ * la ganadora entre los puestos de la entrada, las tandas, los lugares del
+ * portón?, chi cuadrado con casilleros menos uno grados de libertad) y
+ * **promedios** (lo que sin señal vale cero). `--navegador` la mide en la
+ * página como a los otros, con las señales genéricas (relator, cámara,
+ * arranque).
+ *
  * Uso:
+ *   node scripts/audit-delatores.mjs race [--semillas 1500] [--n 18,30,60,100,200] [--json salida.json]
  *   pnpm build && pnpm preview --port 4173 &
- *   node scripts/audit-delatores.mjs [juego|todos|race,sapo] [--semillas 200] [--n 8]
+ *   node scripts/audit-delatores.mjs [juego|todos|sapo,wheel] [--semillas 200] [--n 8]
  *        [--base http://localhost:4173] [--json salida.json] [--trazas carpeta] [--paralelo 1]
  *   node scripts/audit-delatores.mjs [juego|todos] --releer carpeta [--n 8]
  *
@@ -48,16 +63,16 @@
  * también cuántos segundos antes del cartel se ve la señal (la mediana). Un
  * Chrome a la vez, con su puerto: CDP_PORT.
  */
-import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { emitirJson } from "./lib/resumen.mjs";
 import { SELECTOR as TODOS } from "./lib/juegos.mjs";
 import { join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { CDP, launch } from "./lib/browser.mjs";
+import { cargarCarrera, observar, rondaDe, semillaDe } from "./lib/delatores-carrera.mjs";
 import { grabador } from "./lib/delatores-grabador.mjs";
 import { grabarPara, senales } from "./lib/delatores-senales.mjs";
-import { UMBRAL, evaluarSenal, falsasAlarmas, formatoP, pct } from "./lib/delatores.mjs";
+import { UMBRAL, evaluarMedia, evaluarReparto, evaluarSenal, falsasAlarmas, formatoP, pct } from "./lib/delatores.mjs";
 
 /** Los diez del selector (`lib/juegos.mjs`). Los que salieron (tombola, pasanaku, stellar) se piden por nombre. */
 const args = process.argv.slice(2);
@@ -68,8 +83,15 @@ const opt = (name, def) => {
 const cual = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--")) ?? "todos";
 const juegos = cual === "todos" ? TODOS : cual.split(",");
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
-const N = Math.max(1, Number(opt("--semillas", "200")));
-const gente = Math.max(2, Number(opt("--n", "8")));
+/** Los juegos que se juzgan a nivel del plan (puro, sin navegador). `--navegador` los mide en la página como a los otros. */
+const DEL_PLAN = new Set(["race"]);
+const delPlan = (juego) => DEL_PLAN.has(juego) && !args.includes("--navegador");
+const pedidas = opt("--semillas", "");
+const N = Math.max(1, Number(pedidas || "200"));
+const rondas = Math.max(1, Number(pedidas || "1500"));
+const listaN = opt("--n", "").split(",").map(Number).filter((x) => x >= 2);
+const gente = listaN[0] ?? 8;
+const tamanos = listaN.length ? listaN : [18, 30, 60, 100, 200];
 // `--json archivo` guarda el detalle ahí (como siempre); `--json` solo agrega al final la línea de resumen.
 const json = (() => {
   const i = args.indexOf("--json");
@@ -81,7 +103,7 @@ const paralelo = Math.max(1, Math.min(6, Number(opt("--paralelo", "1"))));
 process.env.TINKAZO_GPU = "1";
 
 /** La semilla `i`: 64 hex, distintas de las del auditor de emoción. */
-const semilla = (i) => createHash("sha256").update(`delator-${i}`).digest("hex");
+const semilla = semillaDe;
 
 /**
  * El ganador de cada semilla, con la selección del protocolo (src/protocol),
@@ -141,7 +163,7 @@ async function grabar(juego, seed) {
   try {
     page = await ventana();
     await page.send("Page.addScriptToEvaluateOnNewDocument", { source: grabador(grabarPara(juego)) });
-    const url = `${base}/?pose=${juego}&semilla=${seed}&n=${gente}&ganador=${seed}&pace=normal&motor=pixi&lang=es`;
+    const url = `${base}/?pose=${juego}&semilla=${seed}&n=${gente}&ganador=${seed}&pace=normal&motor=pixi&lang=es&auditar=marcas`;
     await page.send("Page.navigate", { url });
     const ok = await page.waitFor("window.__delator && window.__delator.fin !== null", 120_000);
     const tr = JSON.parse(await page.eval("JSON.stringify({ ...(window.__delator || {}), pose: window.__pose || null })"));
@@ -193,19 +215,172 @@ async function* trazasDe(juego) {
 }
 
 const iconos = { delator: "✗", mirar: "!", limpia: "✓", pocos: "·" };
+const coma = (x, d = 1) => x.toFixed(d).replace(".", ",");
+const firmado = (x, d = 3) => `${x >= 0 ? "+" : "−"}${coma(Math.abs(x), d)}`;
+/** Qué es cada casillero de un reparto, para decirlo con palabras. */
+const CASILLERO = { tanda: "tanda", porton: "lugar", carril: "carril" };
+const casilleroDe = (senal) => CASILLERO[senal] ?? "puesto";
+
 const resumen = [];
-const salida = { umbral: UMBRAL, n: gente, semillas: N, juegos: {} };
+const soloPlan = juegos.every(delPlan);
+const salida = { umbral: UMBRAL, n: soloPlan ? tamanos : gente, semillas: soloPlan ? rondas : N, juegos: {} };
 let juzgadas = 0;
+
+/**
+ * Mide y cuenta lo que dejaron las semillas de un juego: las reglas de apuesta
+ * (`senales`), los repartos (¿cae parejo la ganadora?) y los promedios (lo que
+ * sin señal vale cero). `delPlan` juzga a nivel del plan: delata con solo salir
+ * de la casualidad (1 en 1000), sin pedir además un tamaño (`UMBRAL.arriba`).
+ */
+function informar({ clave, etiqueta, filas, malas = 0, distintos = 0, delPlan = false }) {
+  if (distintos) console.log(`  ✗ en ${distintos} semillas el ganador no es el de la selección del protocolo: ¿la página entiende ?ganador=?`);
+  const errores = filas.reduce((a, f) => a + f.errores, 0);
+  const arcos = filas.reduce((m, f) => m.set(f.arco, (m.get(f.arco) ?? 0) + 1), new Map());
+  const ganadores = new Set(filas.map((f) => f.ganador)).size;
+  console.log(`  ${filas.length} ${delPlan ? "rondas medidas" : "semillas medidas"}${malas ? `, ${malas} sin ganador` : ""}${errores ? `, ${errores} errores en la página` : ""} · ganadores distintos: ${ganadores} · arcos: ${[...arcos].map(([a, c]) => `${a} ${c}`).join(", ")}`);
+
+  const fila = { juego: etiqueta, delator: [], mirar: [] };
+  const detalle = { semillas: filas.length, sinGanador: malas, arcos: Object.fromEntries(arcos), senales: {}, repartos: {}, medias: {} };
+  const sumar = (senal, veredicto) => {
+    if (veredicto !== "pocos") juzgadas++;
+    if (veredicto === "delator" || veredicto === "mirar") fila[veredicto].push(senal);
+  };
+
+  // Cada señal, con sus reglas, sobre todas las semillas.
+  const familias = new Map();
+  for (const f of filas) {
+    for (const [senal, reglas] of Object.entries(f.senales)) {
+      if (!familias.has(senal)) familias.set(senal, {});
+      const fam = familias.get(senal);
+      // `antes`: cuántos segundos antes del cartel se vio la señal en esta semilla.
+      const t = f.tiempos?.[senal];
+      const antes = t == null ? null : Math.round((f.revelado - t) * 10) / 10;
+      for (const [regla, obs] of Object.entries(reglas)) (fam[regla] ??= []).push(obs && { ...obs, arco: f.arco, antes });
+    }
+  }
+  const medidas = [...familias.entries()].map(([senal, fam]) => ({ senal, fam, ev: evaluarSenal(fam, { tamano: !delPlan }) }));
+  const orden = { delator: 0, mirar: 1, limpia: 2, pocos: 3 };
+  medidas.sort((a, b) => orden[a.ev.veredicto] - orden[b.ev.veredicto] || a.ev.p - b.ev.p);
+  console.log(`  ${"señal".padEnd(18)} ${"regla".padEnd(14)} ${"aciertos".padStart(9)} ${"tasa".padStart(7)} ${"azar".padStart(7)} ${"veces".padStart(6)} ${"p".padStart(8)}`);
+  for (const { senal, fam, ev } of medidas) {
+    sumar(senal, ev.veredicto);
+    const m = ev.mejor;
+    if (!m) {
+      console.log(`  ${iconos.pocos} ${senal.padEnd(16)} sin datos`);
+      continue;
+    }
+    const veces = m.lift.toFixed(2).replace(".", ",");
+    console.log(
+      `  ${iconos[ev.veredicto]} ${senal.padEnd(16)} ${m.nombre.padEnd(14)} ${`${m.aciertos}/${m.n}`.padStart(9)} ${pct(m.tasa).padStart(7)} ${pct(m.azar).padStart(7)} ${veces.padStart(6)} ${formatoP(ev.p).padStart(8)}${ev.veredicto === "pocos" ? "  pocos datos" : ev.veredicto === "limpia" ? "" : `  ${ev.veredicto.toUpperCase()}${ev.sentido === "abajo" ? " (al revés: lo que señala pierde)" : ""}`}`,
+    );
+    if (ev.veredicto === "delator" || ev.veredicto === "mirar") {
+      // Por arco: un delator suele vivir en uno solo. Y cuánto antes del
+      // cartel se ve: a medio segundo no adelanta nada.
+      const porArco = new Map();
+      const antes = [];
+      for (const o of fam[m.nombre] ?? []) {
+        if (!o) continue;
+        const x = porArco.get(o.arco) ?? { a: 0, n: 0 };
+        x.n++;
+        if (o.acierta) x.a++;
+        porArco.set(o.arco, x);
+        if (o.antes != null) antes.push(o.antes);
+      }
+      antes.sort((a, b) => a - b);
+      const med = antes.length ? antes[Math.floor(antes.length / 2)].toFixed(1).replace(".", ",") : null;
+      console.log(`      por arco: ${[...porArco].map(([a, x]) => `${a} ${x.a}/${x.n}`).join(" · ")}${med ? ` · se ve a ${med} s del cartel (mediana)` : ""}`);
+    }
+  }
+  detalle.senales = Object.fromEntries(medidas.map(({ senal, ev }) => [senal, { veredicto: ev.veredicto, p: ev.p, sentido: ev.sentido, m: ev.m, reglas: ev.reglas }]));
+
+  // Los repartos: en cuál de K casilleros cae la ganadora, contra el reparto parejo (chi cuadrado con K − 1 grados).
+  const repartos = new Map();
+  for (const f of filas) {
+    for (const [senal, r] of Object.entries(f.repartos ?? {})) {
+      const x = repartos.get(senal) ?? { K: r.K, conteos: new Array(r.K).fill(0), probs: r.probs ?? null, porArco: new Map(), antes: [], malos: 0 };
+      if (r.K !== x.K) {
+        x.malos++;
+        repartos.set(senal, x);
+        continue;
+      }
+      x.conteos[r.k]++;
+      const pa = x.porArco.get(f.arco) ?? new Array(r.K).fill(0);
+      pa[r.k]++;
+      x.porArco.set(f.arco, pa);
+      const t = f.tiempos?.[senal];
+      if (t != null) x.antes.push(Math.round((f.revelado - t) * 10) / 10);
+      repartos.set(senal, x);
+    }
+  }
+  if (repartos.size) {
+    console.log(`\n  ${"reparto".padEnd(18)} ${"casilleros".padStart(10)} ${"chi²".padStart(8)} ${"gl".padStart(3)} ${"p".padStart(8)}   el que más se aleja`);
+    const evs = [...repartos].map(([senal, x]) => ({ senal, x, ev: evaluarReparto(x.conteos, x.probs) }));
+    evs.sort((a, b) => orden[a.ev.veredicto] - orden[b.ev.veredicto] || a.ev.p - b.ev.p);
+    for (const { senal, x, ev } of evs) {
+      sumar(senal, ev.veredicto);
+      const mas = ev.mas;
+      const donde = mas ? `${casilleroDe(senal)} ${mas.indice + 1}: ${mas.observado} de ${coma(mas.esperado)} esperadas (${coma(mas.veces, 2)} veces)` : "";
+      console.log(
+        `  ${iconos[ev.veredicto]} ${senal.padEnd(16)} ${String(ev.K).padStart(10)} ${coma(ev.chi2).padStart(8)} ${String(ev.gl).padStart(3)} ${formatoP(ev.p).padStart(8)}   ${ev.veredicto === "pocos" ? "pocos datos" : donde}${ev.veredicto === "limpia" || ev.veredicto === "pocos" ? "" : `  ${ev.veredicto.toUpperCase()}`}`,
+      );
+      if (ev.veredicto === "delator" || ev.veredicto === "mirar") {
+        console.log(`      cuántas veces en cada ${casilleroDe(senal)}: ${ev.conteos.join(" ")}`);
+        for (const [arco, pa] of [...x.porArco].sort()) console.log(`      ${arco.padEnd(10)} ${pa.join(" ")}`);
+        const antes = [...x.antes].sort((a, b) => a - b);
+        if (antes.length) console.log(`      se ve a ${coma(antes[Math.floor(antes.length / 2)])} s del cartel (mediana)`);
+      }
+      if (x.malos) console.log(`      ${x.malos} rondas con otra cantidad de casilleros: no se cuentan`);
+      detalle.repartos[senal] = { veredicto: ev.veredicto, K: ev.K, gl: ev.gl, chi2: ev.chi2, p: ev.p, conteos: ev.conteos, esperados: ev.esperados };
+    }
+  }
+
+  // Los promedios: lo que sin señal vale cero.
+  const medias = new Map();
+  for (const f of filas) for (const [senal, m] of Object.entries(f.medias ?? {})) (medias.get(senal) ?? medias.set(senal, { v: [], sd: m.sd ?? null }).get(senal)).v.push(m.v);
+  if (medias.size) {
+    console.log(`\n  ${"promedio".padEnd(18)} ${"rondas".padStart(7)} ${"media".padStart(8)} ${"desvío".padStart(7)} ${"z".padStart(7)} ${"p".padStart(8)}`);
+    const evs = [...medias].map(([senal, x]) => ({ senal, ev: evaluarMedia(x.v, { sd: x.sd }) }));
+    evs.sort((a, b) => orden[a.ev.veredicto] - orden[b.ev.veredicto] || a.ev.p - b.ev.p);
+    for (const { senal, ev } of evs) {
+      sumar(senal, ev.veredicto);
+      console.log(
+        `  ${iconos[ev.veredicto]} ${senal.padEnd(16)} ${String(ev.n).padStart(7)} ${firmado(ev.media).padStart(8)} ${coma(ev.de, 3).padStart(7)} ${firmado(ev.z, 2).padStart(7)} ${formatoP(ev.p).padStart(8)}${ev.veredicto === "pocos" ? "  pocos datos" : ev.veredicto === "limpia" ? "" : `  ${ev.veredicto.toUpperCase()}`}`,
+      );
+      detalle.medias[senal] = { veredicto: ev.veredicto, n: ev.n, media: ev.media, de: ev.de, z: ev.z, p: ev.p };
+    }
+  }
+
+  resumen.push(fila);
+  salida.juegos[clave] = { ...detalle, ...(delPlan ? {} : { observaciones: filas }) };
+}
 
 if (trazas) mkdirSync(trazas, { recursive: true });
 if (releer && !existsSync(releer)) {
   console.error(`no existe ${releer}`);
   process.exit(2);
 }
-const browser = releer ? null : await launch({ port: puerto, width: 1280, height: 720 });
+// El navegador solo se abre si algún juego se mide ahí: la carrera se juzga en el plan.
+const browser = releer || juegos.every(delPlan) ? null : await launch({ port: puerto, width: 1280, height: 720 });
 const inicio = Date.now();
+let lib = null;
 try {
   for (const juego of juegos) {
+    if (delPlan(juego)) {
+      lib ??= await cargarCarrera();
+      for (const n of tamanos) {
+        console.log(`\n${juego} · ${rondas} rondas del plan · ${n} personas`);
+        const desde = Date.now();
+        const filas = [];
+        for (let i = 1; i <= rondas; i++) {
+          const { ctx } = rondaDe(lib, n, i);
+          const o = observar(lib, lib.planCarrera(ctx), ctx);
+          filas.push({ i, errores: 0, ...o });
+        }
+        console.log(`  (${((Date.now() - desde) / 1000).toFixed(1).replace(".", ",")} s)`);
+        informar({ clave: `${juego}-n${n}`, etiqueta: `${juego} (${n} personas)`, filas, delPlan: true });
+      }
+      continue;
+    }
     console.log(`\n${juego} · ${releer ? "trazas guardadas" : `${N} semillas`} · ${gente} personas`);
     const filas = [];
     let malas = 0, distintos = 0, k = 0;
@@ -225,67 +400,7 @@ try {
         console.log(`  … ${k}/${N} (${seg.toFixed(1)} s por semilla, faltan unos ${Math.ceil((seg * (N - k)) / 60)} min)`);
       }
     }
-    if (distintos) console.log(`  ✗ en ${distintos} semillas el ganador no es el de la selección del protocolo: ¿la página entiende ?ganador=?`);
-    const errores = filas.reduce((a, f) => a + f.errores, 0);
-    const arcos = filas.reduce((m, f) => m.set(f.arco, (m.get(f.arco) ?? 0) + 1), new Map());
-    const ganadores = new Set(filas.map((f) => f.ganador)).size;
-    console.log(`  ${filas.length} semillas medidas${malas ? `, ${malas} sin ganador` : ""}${errores ? `, ${errores} errores en la página` : ""} · ganadores distintos: ${ganadores} · arcos: ${[...arcos].map(([a, c]) => `${a} ${c}`).join(", ")}`);
-
-    // Cada señal, con sus reglas, sobre todas las semillas.
-    const familias = new Map();
-    for (const f of filas) {
-      for (const [senal, reglas] of Object.entries(f.senales)) {
-        if (!familias.has(senal)) familias.set(senal, {});
-        const fam = familias.get(senal);
-        // `antes`: cuántos segundos antes del cartel se vio la señal en esta semilla.
-        const t = f.tiempos?.[senal];
-        const antes = t == null ? null : Math.round((f.revelado - t) * 10) / 10;
-        for (const [regla, obs] of Object.entries(reglas)) (fam[regla] ??= []).push(obs && { ...obs, arco: f.arco, antes });
-      }
-    }
-    const medidas = [...familias.entries()].map(([senal, fam]) => ({ senal, fam, ev: evaluarSenal(fam) }));
-    const orden = { delator: 0, mirar: 1, limpia: 2, pocos: 3 };
-    medidas.sort((a, b) => orden[a.ev.veredicto] - orden[b.ev.veredicto] || a.ev.p - b.ev.p);
-    console.log(`  ${"señal".padEnd(18)} ${"regla".padEnd(14)} ${"aciertos".padStart(9)} ${"tasa".padStart(7)} ${"azar".padStart(7)} ${"veces".padStart(6)} ${"p".padStart(8)}`);
-    const fila = { juego, delator: [], mirar: [] };
-    for (const { senal, fam, ev } of medidas) {
-      if (ev.veredicto !== "pocos") juzgadas++;
-      const m = ev.mejor;
-      if (!m) {
-        console.log(`  ${iconos.pocos} ${senal.padEnd(16)} sin datos`);
-        continue;
-      }
-      const veces = m.lift.toFixed(2).replace(".", ",");
-      console.log(
-        `  ${iconos[ev.veredicto]} ${senal.padEnd(16)} ${m.nombre.padEnd(14)} ${`${m.aciertos}/${m.n}`.padStart(9)} ${pct(m.tasa).padStart(7)} ${pct(m.azar).padStart(7)} ${veces.padStart(6)} ${formatoP(ev.p).padStart(8)}${ev.veredicto === "pocos" ? "  pocos datos" : ev.veredicto === "limpia" ? "" : `  ${ev.veredicto.toUpperCase()}${ev.sentido === "abajo" ? " (al revés: lo que señala pierde)" : ""}`}`,
-      );
-      if (ev.veredicto === "delator" || ev.veredicto === "mirar") {
-        fila[ev.veredicto].push(senal);
-        // Por arco: un delator suele vivir en uno solo. Y cuánto antes del
-        // cartel se ve: a medio segundo no adelanta nada.
-        const porArco = new Map();
-        const antes = [];
-        for (const o of fam[m.nombre] ?? []) {
-          if (!o) continue;
-          const x = porArco.get(o.arco) ?? { a: 0, n: 0 };
-          x.n++;
-          if (o.acierta) x.a++;
-          porArco.set(o.arco, x);
-          if (o.antes != null) antes.push(o.antes);
-        }
-        antes.sort((a, b) => a - b);
-        const med = antes.length ? antes[Math.floor(antes.length / 2)].toFixed(1).replace(".", ",") : null;
-        console.log(`      por arco: ${[...porArco].map(([a, x]) => `${a} ${x.a}/${x.n}`).join(" · ")}${med ? ` · se ve a ${med} s del cartel (mediana)` : ""}`);
-      }
-    }
-    resumen.push(fila);
-    salida.juegos[juego] = {
-      semillas: filas.length,
-      sinGanador: malas,
-      arcos: Object.fromEntries(arcos),
-      senales: Object.fromEntries(medidas.map(({ senal, ev }) => [senal, { veredicto: ev.veredicto, p: ev.p, sentido: ev.sentido, m: ev.m, reglas: ev.reglas }])),
-      observaciones: filas,
-    };
+    informar({ clave: juego, etiqueta: juego, filas, malas, distintos });
   }
 } finally {
   navegador?.ws.close();
@@ -294,7 +409,7 @@ try {
 
 const min = ((Date.now() - inicio) / 60000).toFixed(1).replace(".", ",");
 console.log(`\nResumen (${min} min):`);
-for (const f of resumen) console.log(`  ${f.juego.padEnd(12)} ${f.delator.length ? `DELATA: ${f.delator.join(", ")}` : "sin delatores"}${f.mirar.length ? ` · a mirar: ${f.mirar.join(", ")}` : ""}`);
+for (const f of resumen) console.log(`  ${f.juego.padEnd(24)} ${f.delator.length ? `DELATA: ${f.delator.join(", ")}` : "sin delatores"}${f.mirar.length ? ` · a mirar: ${f.mirar.join(", ")}` : ""}`);
 const esperadas = falsasAlarmas(juzgadas);
 console.log(`  ${juzgadas} señales juzgadas: por pura casualidad se esperan ${esperadas.toFixed(2).replace(".", ",")} falsas alarmas con el umbral de 1 en ${Math.round(1 / UMBRAL.alfa)}.`);
 if (json) {

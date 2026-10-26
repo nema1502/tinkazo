@@ -1,14 +1,15 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { JUEGO_DE_SIEMPRE, SELECTOR, juegoPorDefecto, juegoSiguiente, recomendar, type Recomendacion } from "./recomendar";
+import { CARRILES_CARRERA, JUEGO_DE_SIEMPRE, SELECTOR, juegoPorDefecto, juegoSiguiente, recomendar, type Recomendacion } from "./recomendar";
 import { T } from "../i18n";
 import { JUEGOS } from "../games/pixi/kit/catalogo";
+import { FINALISTAS } from "../games/llamas/carrera-base";
 import type { Game } from "../state";
 
 describe("los textos de la recomendación, en es y en en", () => {
   it("cada nota que puede salir tiene su frase en los dos idiomas", () => {
     const claves = new Set<string>(["recBadge", "recHead"]);
-    for (let n = 1; n <= 210; n++) for (const r of recomendar(n).games) if (r.note) claves.add(r.note);
+    for (let n = 1; n <= 210; n++) for (const premios of [1, 9]) for (const r of recomendar(n, premios).games) if (r.note) claves.add(r.note);
     for (const l of ["es", "en"] as const) {
       const faltan = [...claves].filter((k) => {
         const v = T[l][k];
@@ -125,25 +126,25 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
 
   it("con 50, El Trueque, chovena y teleférico; el sapo pasa de su clasificatoria", () => {
     expect(grupos(50)).toEqual({
-      encajan: ["trueque", "chovena", "teleferico", "quien", "oruro"],
+      encajan: ["trueque", "chovena", "teleferico", "race", "quien", "oruro"],
       neutral: ["pinata", "wheel"],
-      no: ["race", "sapo", "trompo"],
+      no: ["sapo", "trompo"],
     });
   });
 
-  it("con 100, El Trueque y teleférico; chovena ya pasa de sus 80", () => {
+  it("con 100, El Trueque y teleférico; la carrera, con sus tandas, también encaja; chovena ya pasa de sus 80", () => {
     expect(grupos(100)).toEqual({
-      encajan: ["trueque", "teleferico", "quien", "oruro"],
+      encajan: ["trueque", "teleferico", "race", "quien", "oruro"],
       neutral: ["pinata", "wheel"],
-      no: ["race", "sapo", "trompo", "chovena"],
+      no: ["sapo", "trompo", "chovena"],
     });
   });
 
   it("con 200, El Trueque, teleférico y La Entrada llegan justo a su máximo, y la piñata y la ruleta también; De pie ya pasó de sus 100", () => {
     expect(grupos(200)).toEqual({
-      encajan: ["trueque", "teleferico", "oruro"],
+      encajan: ["trueque", "teleferico", "race", "oruro"],
       neutral: ["pinata", "wheel"],
-      no: ["race", "sapo", "trompo", "chovena", "quien"],
+      no: ["sapo", "trompo", "chovena", "quien"],
     });
   });
 
@@ -223,7 +224,9 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
     expect(nota("race", 4)).toBe("rec.race.ideal");
     expect(nota("race", 2)).toBe("rec.race.bajo");
     expect(nota("race", 9)).toBe("rec.race.ideal");
-    expect(nota("race", 31)).toBe("rec.race.largo");
+    expect(nota("race", 31)).toBe("rec.race.alto");
+    expect(nota("race", 200)).toBe("rec.race.alto");
+    expect(nota("race", 201)).toBe("rec.race.largo");
     expect(nota("race", 1)).toBe("rec.race.corto");
     expect(nota("sapo", 20)).toBe("rec.sapo.alto");
     expect(nota("chovena", 70)).toBe("rec.chovena.alto");
@@ -300,7 +303,7 @@ describe("el juego que queda elegido si nadie eligió otro (D02)", () => {
     expect(juegoPorDefecto(30)).toBe("race");
   });
 
-  it("con más de 30, el primero de los recomendados, no la carrera (con más pasa por una clasificatoria)", () => {
+  it("con más de 30, el primero de los recomendados, no la carrera (con más pasa por tandas: encaja, pero no es lo ideal)", () => {
     const primero = recomendar(31).games.find((r) => r.fits === true)?.game;
     expect(juegoPorDefecto(31)).toBe(primero);
     expect(juegoPorDefecto(31)).not.toBe("race");
@@ -326,5 +329,47 @@ describe("el juego que sigue después de un premio", () => {
   });
   it("siempre da lo mismo con la misma entrada", () => {
     expect(juegoSiguiente(20, "race")).toBe(juegoSiguiente(20, "race"));
+  });
+});
+
+describe("la carrera y los premios: cada premio es un carril de la recta", () => {
+  const carrera = (n: number, premios?: number): Recomendacion => recomendar(n, premios).games.find((r) => r.game === "race") as Recomendacion;
+
+  it("los carriles de acá son los de la carrera (este módulo no puede importar su medida: viaja con la portada)", () => {
+    expect(CARRILES_CARRERA).toBe(FINALISTAS);
+  });
+
+  it("con ocho premios o menos la carrera encaja como siempre; con nueve o más, no, y dice por qué", () => {
+    for (const n of [12, 20, 60, 200]) {
+      for (const premios of [undefined, 1, 4, 8]) expect(carrera(n, premios).fits, `${n} personas, ${premios} premios`).toBe(true);
+      for (const premios of [9, 12, 32]) {
+        const r = carrera(n, premios);
+        expect(r.fits, `${n} personas, ${premios} premios`).toBe(false);
+        expect(r.note).toBe("rec.race.premios");
+        expect(r.args).toEqual([n, premios, 8]);
+      }
+    }
+    // Y la nota dice los números, en español y en inglés.
+    expect((T.es["rec.race.premios"] as (...a: number[]) => string)(20, 9, 8)).toContain("9 premios");
+    expect((T.en["rec.race.premios"] as (...a: number[]) => string)(20, 9, 8)).toContain("9 prizes");
+  });
+
+  it("los premios no cambian a ningún otro juego, y la carrera queda entre los que no encajan", () => {
+    for (const g of SELECTOR) {
+      if (g === "race") continue;
+      expect(recomendar(20, 9).games.find((r) => r.game === g)?.fits, g).toBe(recomendar(20).games.find((r) => r.game === g)?.fits);
+    }
+    const orden = recomendar(20, 9).games;
+    expect(orden.indexOf(orden.find((r) => r.game === "race") as Recomendacion)).toBeGreaterThanOrEqual(orden.filter((r) => r.fits !== false).length);
+  });
+
+  it("con nueve premios o más no queda elegida la carrera, ni de siempre ni de siguiente", () => {
+    for (const n of [8, 9, 12, 20, 30]) {
+      expect(juegoPorDefecto(n, 9), `${n} personas`).not.toBe("race");
+      for (const actual of SELECTOR) expect(juegoSiguiente(n, actual, 9), `${n} personas, después de ${actual}`).not.toBe("race");
+    }
+    // Con uno, como siempre.
+    expect(juegoPorDefecto(20)).toBe("race");
+    expect(juegoPorDefecto(20, 8)).toBe("race");
   });
 });

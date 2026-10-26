@@ -133,6 +133,9 @@ function frase(clave: string, args: readonly number[] = []): string {
  * El selector solo se ve con la lista sellada (`sec-frozen`), así que se pinta
  * al sellar y de nuevo al cambiar de idioma o de ritmo.
  */
+/** Cuántos premios se sortean: el selector de "Cuántos ganan", que con la lista sellada ya no cambia. */
+const premiosElegidos = (): number => Math.max(1, parseInt($<HTMLSelectElement>("nw").value, 10) || 1);
+
 export function pintarRecomendacion(n: number): void {
   const botones = new Map<Game, HTMLElement>();
   for (const [id, g] of GAME_BUTTONS) {
@@ -140,7 +143,7 @@ export function pintarRecomendacion(n: number): void {
     if (el) botones.set(g, el);
   }
   const gp = $("gamepick");
-  recomendar(n).games.forEach((r, i) => {
+  recomendar(n, premiosElegidos()).games.forEach((r, i) => {
     const el = botones.get(r.game);
     if (!el) return;
     // Cada botón va a su lugar en el orden de la recomendación; se mueve solo el que está fuera de sitio.
@@ -865,7 +868,7 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   // cantidad (D02). La demo juega el que pide su enlace.
   if (!juegoAMano && !params.has("demo")) {
     // Después de un premio, otro juego; la primera vez, el de siempre (D02).
-    const g = juegoAnterior ? juegoSiguiente(names.length, juegoAnterior) : juegoPorDefecto(names.length);
+    const g = juegoAnterior ? juegoSiguiente(names.length, juegoAnterior, premiosElegidos()) : juegoPorDefecto(names.length, premiosElegidos());
     juegoAnterior = null;
     if (g !== app.game) setGame(g);
   }
@@ -879,7 +882,7 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
     // pone ocho en pista.)
     $<HTMLButtonElement>("g-wheel").disabled = true;
     $("wheel-cap").style.display = "block";
-    if (app.game === "wheel") setGame(recomendar(names.length).games.find((r) => r.fits === true)?.game ?? "tombola");
+    if (app.game === "wheel") setGame(recomendar(names.length, premiosElegidos()).games.find((r) => r.fits === true)?.game ?? "tombola");
   }
   pintarJuego();
   startCountdown();

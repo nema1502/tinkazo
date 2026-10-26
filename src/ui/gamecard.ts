@@ -75,7 +75,7 @@ function caja(game: Game, people: number, prizes: number, premio = ""): string {
   const varios = prizes > 1 ? claveVarios(game) : undefined;
   const extras = [
     // Con 9 a 30, la carrera es el pelotón: salen todas y quedan ocho en la final.
-    lanes ? (game === "race" && hayPeloton(people) ? L.pelStart(people, 8) : L.cLanes(8, people)) : game === "sapo" && people > 12 ? t("gcSapoQual") : "",
+    lanes ? (game === "race" && hayPeloton(people) ? (people > 30 ? L.pelTandas(people, 8) : L.pelStart(people, 8)) : L.cLanes(8, people)) : game === "sapo" && people > 12 ? t("gcSapoQual") : "",
     prizes > 1 && !varios ? L.gcPrizesNote(prizes) : "",
   ].filter(Boolean);
   return (

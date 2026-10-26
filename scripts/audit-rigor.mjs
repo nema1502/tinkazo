@@ -66,18 +66,18 @@ const pantallaTemas = opt("--pantalla-temas", "").split(",").filter(Boolean);
 const PACES = { rapido: 20, normal: 38, epico: 45 };
 
 /**
- * La carrera de llamas con 9 a 30 personas dura según cuánta gente corre
+ * La carrera de llamas dura según cuánta gente corre
  * (`normalCarrera` en `src/duraciones.ts`): lo que promete "Normal", por
  * cantidad. Una prueba (`src/duraciones.test.ts`) compara esta tabla con la
- * función, así que no se puede despegar. Rápido es la mitad (no menos de 20) y
- * Épico un 18 % más. Con 8 o menos y con más de 30 vale `PACES`.
+ * función, así que no se puede despegar. Rápido es el 90 % (no menos de 20: con
+ * menos, las echadas quedarían a menos de 1 s) y Épico un 18 % más. Con 8 o menos y con más de 30 vale `PACES`.
  */
-const NORMAL_CARRERA = { 9: 39, 10: 42, 11: 45, 12: 50, 13: 52, 14: 52, 15: 56, 16: 58, 17: 63, 18: 65, 19: 65, 20: 65, 21: 67, 22: 71, 23: 79, 24: 79, 25: 82, 26: 82, 27: 84, 28: 84, 29: 87, 30: 87 };
+const NORMAL_CARRERA = { 9: 39, 10: 41, 11: 44, 12: 48, 13: 51, 14: 53, 15: 55, 16: 57, 17: 61, 18: 63, 19: 65, 20: 66, 21: 68, 22: 69, 23: 72, 24: 73, 25: 74, 26: 75, 27: 76, 28: 76, 29: 77, 30: 78 };
 /** Lo que promete cada posición del selector con `gente` personas en este juego. */
 function prometido(juego, pace, gente) {
   const normal = juego === "race" ? NORMAL_CARRERA[gente] : undefined;
   if (!normal) return PACES[pace];
-  return pace === "normal" ? normal : pace === "rapido" ? Math.max(20, Math.round(normal / 2)) : Math.round(normal * 1.18);
+  return pace === "normal" ? normal : pace === "rapido" ? Math.max(20, Math.round(normal * 0.9)) : Math.round(normal * 1.18);
 }
 
 /**

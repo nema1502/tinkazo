@@ -53,6 +53,14 @@ export const CATALOGO = [
     rango: { minimo: 8, maximo: 100 },
     captura: true,
   },
+  // La carrera de llamas, reescrita sobre el kit: una sola carrera con salida, grupo que se echa y recta final.
+  {
+    id: "race",
+    cargar: () => import("../../llamas/carrera").then((m) => m.carreraPixi),
+    selector: true,
+    rango: { minimo: 2, ideal: [4, 30], maximo: 200 },
+    captura: true,
+  },
   // >>> kit:catalogo (scripts/nuevo-juego.mjs escribe entre estas marcas)
   // <<< kit:catalogo
 ] as const satisfies readonly EntradaCatalogo[];

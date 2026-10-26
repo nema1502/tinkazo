@@ -135,6 +135,11 @@ export interface Plan<P> {
   marcador(t: number): number;
   /** La prueba del niño: en el segundo `t`, quién va adelante, hacia dónde, cuánto falta y qué acaba de pasar. */
   respuestas(t: number): Respuestas;
+  /**
+   * Cuánto promete "Normal" este juego, en segundos de show, si no es lo de todos los juegos (la carrera dura más
+   * cuanta más gente corre). `null` o sin decir: vale el de siempre.
+   */
+  normal?: number | null;
   /** Datos que quedan anotados para los auditores (`data-*` del lienzo). */
   marcas?: Readonly<Record<string, string>>;
   /** Lo propio del juego: el kit no lo mira. */

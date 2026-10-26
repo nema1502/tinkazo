@@ -1,89 +1,62 @@
 # La carrera de llamas
 
-Hasta ocho llamas por la cordillera, con hinchada, relator y foto de llegada. Es el juego con el que nació Tinkazo. Con más de ocho personas, primero la clasificatoria: aparecen todas con su llama, se van tachando en oleadas y las ocho de la final bajan a la pista.
+Una sola carrera, de izquierda a derecha, hacia la meta: la salida, un grupo que se va echando de a una y la recta final de ocho carriles. Es el juego con el que nació Tinkazo. Se entiende sin leer: un chico de 5 años y alguien del fondo de la sala saben quién va adelante, hacia dónde van, cuánto falta y qué acaba de pasar (la regla del niño, [`docs/juegos.md`](../juegos.md)).
 
-**Identificador:** `race` · **Probarlo:** `/?demo=race` (sorteo real), `/?pose=1` (escena fija, sin red), `/?pose=1&n=3` (con tres personas).
+**Identificador:** `race` · **Probarlo:** `/?demo=race` (sorteo real), `/?pose=1` (escena fija, sin red), `/?pose=1&n=60` (con sesenta personas).
 
-Este documento cuenta cómo mira la cámara de la carrera en el motor nuevo ([`src/games/llamas/pixi-race.ts`](../../src/games/llamas/pixi-race.ts)), y sobre todo cómo encuadra el final cuando corren pocas. La historia de cada carrera (el arco, los tropiezos, las plantadas, la escupida y el duelo) está en "El director de emoción" de [juegos.md](../juegos.md).
+Está hecha sobre el kit de juegos (`src/games/pixi/kit/`, "Cómo nace un juego" en [`docs/juegos.md`](../juegos.md)): el show es puro y la escena es una función de la hora.
+
+| Archivo | Qué es |
+|---|---|
+| `src/games/llamas/carrera-show.ts` | El plan puro: vuelo, nombres, tandas, salida, grupo, recta, relator, marcador y respuestas |
+| `src/games/llamas/carrera-tiempos.ts` | Cuándo cambia el terreno y cuándo se echa cada una |
+| `src/games/llamas/carrera-orden.ts` | `orden(t)`: quién va primera, segunda... en cada instante |
+| `src/games/llamas/carrera-tandas.ts` | De 31 a 200: las tandas, el portón y quiénes pasan |
+| `src/games/llamas/carrera-forma.ts` | Dónde va cada una en la pantalla (grupo, carriles, cinta) |
+| `src/games/llamas/carrera.ts` | La escena de PixiJS y `crearJuego` |
+| `src/games/llamas/llama.ts` | La llama, la postura de echarse y la borla del líder |
+| `src/games/llamas/plan.ts` | La recta final: la historia del director de emoción (`planRace`), sin tocar |
 
 ## La regla: el juego no decide nada
 
-La ganadora sale del [protocolo](../protocolo.md) antes de la largada. La carrera recibe `(names, winners, beacon, done)` y solo la cuenta: quiénes corren, en qué carril y dónde va cada una en cada instante salen del plan ([`plan.ts`](../../src/games/llamas/plan.ts)), sembrado con la ronda. La cámara tampoco decide nada: mira lo que el plan ya decidió, y antes de la meta no mira a la ganadora más que a cualquier otra, porque mirarla de más sería delatarla.
+La ganadora sale del [protocolo](../protocolo.md) antes de la salida. La carrera recibe `(names, winners, beacon, done)` y solo la cuenta: quiénes corren, quién se echa y cuándo, y cómo es la recta. Quién gana lo decide el protocolo, no el juego; y lo que se ve no lo adelanta: el puesto de la ganadora en cada punto de la recta, su tanda, su lugar en el portón, el puesto con que entra a la recta y los nombres del relator salen parejos (1.500 rondas con 18 a 200 personas, `audit-delatores race`, más abajo).
 
-## La cámara
+## La ficha del niño
 
-| Momento | Qué mira |
+| Pregunta | Qué la contesta, sin leer |
 |---|---|
-| Presentación y cuenta | Los carriles enteros en la largada, del nombre del primero a las patas del último; en la cuenta se abre de a poco hacia la pista |
-| La carrera | La que va adelante, un poco adelantada, y se acerca a medida que sube la tensión; cuando el relator dice quién pasa adelante, se acerca un momento a ella |
-| Un momento de la historia | Se mete en el carril del tropiezo, la plantada o la escupida, con la llama entera y su "!" |
-| Las dos que vienen de atrás (en la remontada, al 74%) | Una de las dos, sorteada |
-| La recta final (desde el 80%) | Las dos de adelante, en un acercamiento que se apura hasta la meta, con aire hacia la meta |
-| La foto (en el duelo, desde el 96%) | Cámara lenta, sin desenfoque, las dos del duelo enteras, por igual, con aire hacia la meta si entra |
-| La meta | Un corte debajo del destello, el golpe y el sacudón, y la cámara se acerca despacio al plano de la corona |
+| ¿Quién va adelante? | La de más a la derecha: lleva **la borla amarilla** (un objeto que pasa de una a otra) y es la única con ficha grande, amarilla. Su cara es el cursor de la cinta. Con tandas, "adelante" es el corral: la última que pasó por el portón |
+| ¿Hacia dónde? | Siempre a la derecha, de punta a punta: el eje no se cruza. La bandera a cuadros de la meta está en la cinta de arriba desde el segundo 1 y, desde el 80 %, el arco de la meta entra entero |
+| ¿Cuánto falta? | El cursor en la cinta (que muestra el camino entero con sus terrenos), los postes que pasan, el suelo de cada terreno y el arco de la meta que se acerca. Cuántas quedan: el marcador del kit, el único número en pantalla |
+| ¿Qué acaba de pasar? | Una echada: la llama dobla las patas, baja el cuerpo, se pone gris, levanta polvo y queda así, donde pasó, con su nombre y una "zZ"; a los 0,3 s de la línea del relator ya va más de la mitad. Una por vez, a 1,2 s o más. Un cambio de punta: la borla vuela a otra llama. Un portón: pasa una y se pone amarilla en el cartel |
+
+Hechos (`respuestas(t)`): `empezo` (la salida), `salio` (una se echa, o al cerrarse el portón las que no pasaron), `adelante` (cambia la punta o pasa una por el portón), `freno` (tropiezo, plantada, escupida en la recta) y `gano`.
+
+## Lo que se ve, en orden
+
+1. **El vuelo** (3 s): la cámara va de la meta a la salida, y se ve el camino entero.
+2. **Los nombres** (3,7 s, hasta 30): todos, enteros y en orden alfabético, en un cartel. En Rápido el show se comprime hasta 0,82: 3,7 s del plan son 3 de verdad. Con más de 30, el cartel es el de cada tanda.
+3. **Las tandas** (de 31 a 200): hasta 25 por tanda, parejas, y de cada una pasa el mismo número por el portón, de a una y a 1,2 s (de 151 a 175 son ocho tandas más chicas, de a una: con siete no entra en los 90 s). El cartel de la tanda va a un costado (arriba en el celular), 3,7 s y sigue mientras corre (en Rápido, 3 s de verdad); quien pasa se pone amarilla y, cuando se cierra el portón, las demás se echan juntas y se apagan. Las que pasaron esperan del otro lado del portón y después se acomodan en el corral.
+4. **La salida y el grupo**: corren todas, la punta cambia de dueña cada 4 a 6 s y de a una se van echando, con un terreno por tramo (la cuesta, el barro, las piedras, el viento). El grupo es una flecha que apunta a la derecha.
+5. **La recta**: quedan las ocho de la final, que entran sin frenar en el orden de la final y corren en carriles hasta la meta. La historia (remontada, susto, duelo, tapada) es la del director de emoción de siempre: un momento y una línea del relator sin nombre; los nombres de la final son los de la tribuna.
+6. **El golpe**: el silencio, el acercamiento del 20 %, el foco sobre quien gana y su nombre en grande; el cartel nunca queda encima de ella.
+
+## El relator
+
+Seis palabras o menos, un nombre por línea como mucho, ningún número (los números van en el marcador). El ritmo lo llevan el cuerpo y el sonido. En la final los momentos ("¡Alguien se plantó!", "¡Vienen de atrás!", "¡Mano a mano!") no llevan nombre: se ven en la pista, y nombrar a quien los protagoniza decía quién gana. Los nombres de la final son los de la tribuna ("¡Vamos, Ana!"): hasta cuatro de las ocho, sorteadas aparte sin mirar quién gana ni quién va adelante, en los huecos de lo que ya se dice. Tres tiempos por tramo: qué pasó (la echada), qué pasa (quién va adelante) y qué sigue (el terreno nuevo). "Salida", no "largada".
+
+## Cuánto dura
+
+`normalCarrera(n)` sale del plan y nunca pasa de 90 s de show, con 9 a 200 personas (la tarjeta de "cómo se juega" cuenta dentro del total): de 39 s con 9 a 78 s con 30, de 71 a 84 con tandas y 71 con 200. Rápido es el 90 % de Normal, no la mitad: por debajo de eso las echadas caen a menos de 1 s y no se ven. El ensayo corre en el ritmo de quien organiza.
 
 ## Lo que se ve no delata a la ganadora
 
-El auditor de delatores (`scripts/audit-delatores.mjs`, 21 de octubre de 2026) corrió doscientas semillas y encontró que la carrera la anunciaba: "¡X viene de atrás!" nombraba a la ganadora en todas las remontadas y "¡Y se cuela X!" en todas las tapadas; en la recta final la que iba primera perdía siempre; en el duelo ganaba la del carril de arriba; las que el relator nunca nombraba nunca ganaban, y en el susto ganaba la que iba primera al principio. Desde entonces:
+- **El orden del grupo no mira a nadie.** Es un paseo sembrado con la ronda; la punta cambia entre las que siguen en ese momento (también una que se echa después); al final las finalistas se ordenan como entran a la recta, que es el orden de la final al 7 %, parejo sumando los cuatro arcos. Probado con 600 rondas: la ganadora entra a la recta en cualquier puesto con la misma frecuencia y lleva la punta tanto como cualquiera.
+- **Las echadas salen de una fila barajada.** Se echa cualquiera, también la primera; nadie frena antes de echarse.
+- **Las tandas son parejas.** Mismo tamaño (±1), mismas plazas, y el orden del portón es otro sorteo: la tanda de la ganadora y su lugar en el portón son parejos (600 rondas con 60, 100 y 200).
+- **La recta** conserva lo de siempre: el puesto de la ganadora al 7, 25, 50 y 75 % se sortea por arco, y las cuatro franjas se reparten los puestos para que cada uno salga una de cada ocho veces (a la mitad: el duelo del 1.º al 4.º, la tapada del 3.º al 6.º, la remontada del 5.º al 8.º y el susto 1.ª o 2.ª si todavía no tropezó y 7.ª u 8.ª si ya, antes o después de la mitad mitad y mitad); lo que se sortea es lo que se ve, aunque varias corran pegadas. La rival del duelo corre arriba o abajo, sorteado; en la remontada vienen de atrás dos.
+- **Lo que mide el auditor** (`audit-delatores race`, a nivel del plan, sin navegador: 1.500 rondas con 18, 30, 60, 100 y 200 personas, y la ganadora de la selección del protocolo). La punta (primera, última, mitad de adelante, al empezar y a un cuarto, a la mitad y a tres cuartos del grupo), el tiempo en la punta, de dónde sale quien se echa, la tanda, el lugar en el portón, la última en pasar, el puesto con que entra a la recta y el carril salen parejos: ninguna señal con una probabilidad menor que 1 en 1000 (los repartos, con chi cuadrado de casilleros menos uno grados de libertad). También lo que dice el relator en la final: a quién nombra, quién primero, quién último, la más nombrada y nombradas contra nunca nombradas. Dos cosas no lo eran hasta el 26 de octubre y se arreglaron: el puesto de la ganadora a mitad de la recta (el 1.º salía 1,3 veces lo que toca, por cómo se repartían las franjas de los arcos) y el relator (nombraba a la ganadora por su momento y la ponía última en la remontada: quien se nombraba último ganaba 1,5 a 1,8 veces lo que toca). Con 6.000 rondas, ninguna señal sale de la casualidad.
 
-- **El puesto de la ganadora** al 7%, al 25%, al 50% y al 75% se sortea en una franja de su arco, y las franjas de los cuatro arcos se reparten los puestos: sumando, cada puesto sale cerca de una de cada ocho veces. A la mitad va un poco más adelante que atrás (en la mitad de atrás, cuatro de cada diez carreras): con la mitad justa, el auditor de emoción, que mira dieciséis carreras, encontraba a la ganadora atrás en más de seis de cada diez en una tanda de cada cuatro. En la recta final (90%) va primera o segunda, mitad y mitad. Lo comprueba `plan.test.ts`, sin navegador.
-- **En el duelo** la rival corre arriba o abajo de la ganadora, sorteado, y desde el mano a mano el relator ya no anuncia quién pasa adelante.
-- **En la remontada vienen de atrás dos**, la ganadora y otra que llega a pelear adelante y se desinfla en los últimos metros: "¡X y Y vienen de atrás!", en orden alfabético, y la cámara va a una de las dos.
-- **En la tapada** se cuela la que nadie nombró, y tampoco se la nombra ahora: "¡Alguien aprovecha la pelea!".
-- **En la recta final la tribuna grita por una** ("¡La hinchada de X no para!"), sorteada entre todas: la última que se nombra sola ya no es siempre la que gana ni siempre una que pierde.
-- **El tono** de un tropiezo sube igual sea de quien sea: con la ganadora más fuerte, la música se cortaba justo cuando tropezaba ella.
-- **Los nombres que no se apagan** en un primer plano son los de las dos que van adelante (y en el duelo, los de las dos del mano a mano), no los de la ganadora y la rival.
+## Pruebas
 
-El motor anterior (`src/games/race.ts`) no cambió: con `?motor=clasico` la historia es la de antes.
-
-## Con pocas personas
-
-El 19 de octubre de 2026 Alejandro (Vaquita y Pollar) probó el sitio y preguntó: "¿probaron esto en mobile?". Con tres o cuatro personas, al final de la carrera la ganadora quedaba cortada contra el borde del celular y el cartel del ganador tapaba a la llama del carril de arriba.
-
-**La causa.** Cada llama se dibuja a la escala de su carril y mide unos dos carriles y medio de alto: con ocho, unos 160 píxeles en una pantalla de 900; con tres, entre 380 y 480. Los acercamientos de la cámara (1,5 en un momento, hasta 1,9 en la recta final, 2,1 en la foto, 1,6 en la corona) se pensaron para ocho, y con pocas personas cortaban a las llamas. En la corona, además, la cámara medía solo a la ganadora: la ponía debajo del cartel, y las de los carriles de arriba quedaban justo detrás de él.
-
-**El arreglo (21 de octubre de 2026).**
-
-- **El encuadre, en un archivo aparte** ([`src/games/pixi/encuadre.ts`](../../src/games/pixi/encuadre.ts), con sus pruebas): dado lo que tiene que verse entero (cajas del mundo) y dónde (una zona de la pantalla), el acercamiento más grande con el que entra y el centro que lo deja ahí, moviendo la vista lo menos posible.
-- **La corona encuadra según el ancho y el alto de la pantalla.** Con cinco personas o menos se ven todas las llamas enteras debajo del cartel y encima del relator, como en la foto de una llegada. Con más, la ganadora y las de los carriles de arriba, que son las únicas que podrían quedar detrás del cartel (las de abajo tienen la cabeza más abajo que la ganadora), pegadas al cartel. La ganadora no pasa del 78% del alto de esa zona ni del 62% del ancho, y el acercamiento no pasa de 1,6 (1,35 en vertical): queda lugar para el golpe de la meta.
-- **La cámara protege a la ganadora desde el golpe** (`Camera.proteger` en [`camera.ts`](../../src/games/pixi/camera.ts)): ningún acercamiento, sea el del juego, el golpe, el sacudón o un zoom que se sume después, la corta ni la mete debajo del cartel. Si no entra, la cámara se aleja lo justo; si se sale por un costado, se corre lo justo. Nunca antes de la meta.
-- **Al golpe, un corte debajo del destello** a un plano un 8% más abierto que el de la corona, y desde ahí la cámara se acerca despacio. Viajando desde la recta final, en el camino el cartel tapaba un rato a las de arriba.
-- **La carrera tampoco corta lo que mira:** la que va adelante, la llama de cada momento con su "!", las dos de la recta final y las dos de la foto. Si no entran a ese acercamiento, la cámara se aleja, y si se salen por un costado, se corre lo justo. Con ocho las llamas son chicas y casi siempre entran; cuando las dos de adelante van en carriles lejanos, ahora la cámara se aleja hasta que se ven las dos, que es lo que ya pedía el comentario de la recta final.
-- **La foto mira a las dos del duelo por igual**, de donde van hasta la meta, y debajo de donde va a salir el cartel. Antes se medía con la llama ganadora.
-- **Lo que asomaba al alejarse:** debajo del cielo va su último color, y la tribuna se dibuja en todo lo que se ve. Antes, con la cámara más lejos que nunca, entre el cielo y la cordillera asomaba el fondo oscuro del lienzo y los costados de la tribuna quedaban sin gente.
-
-## Auditoría
-
-```bash
-node scripts/audit-game.mjs race --base http://localhost:4173
-node scripts/audit-encuadre.mjs --base http://localhost:4173
-node scripts/audit-identidad.mjs race --base http://localhost:4173
-node scripts/audit-emocion.mjs race --base http://localhost:4173
-node scripts/audit-rigor.mjs race --base http://localhost:4173
-```
-
-**El auditor de encuadre** (`scripts/audit-encuadre.mjs`). Con `?auditar=encuadre` la carrera anota, en la recta final, en la foto y en la corona, dónde cae el cuerpo de cada llama en la pantalla (sin el nombre), dónde está el cartel y dónde la caja del relator. Corre sin red, con la escena fija, en la duración rápida y con el reloj en turbo, en 1440x900, 1024x768, 844x390 y 390x844, con 2, 3, 4, 5 y 8 personas, en los dos temas y en varias semillas (cambia el carril de la ganadora y el arco). Comprueba:
-
-- que la ganadora quede entera en la pantalla desde el golpe, debajo del cartel y encima del relator;
-- que, con la cámara ya en su lugar (desde 1,8 s después del golpe), el cartel no tape más del 2% de ninguna otra llama;
-- que el cartel quede adentro de la pantalla;
-- que la ganadora mida al menos el 10% del alto;
-- y, en el duelo, que las dos de la foto queden enteras.
-
-Los cuerpos son rectángulos, de la cola al hocico y de las orejas a la sombra, así que mide de más. Con `--capturas <carpeta>` saca una foto de cada corrida a los 2,2 s del golpe.
-
-## El pelotón que se echa: de 9 a 30 personas (25 de octubre de 2026)
-
-Con 9 a 30 personas la carrera de llamas no tiene clasificatoria: **salen todas juntas** y se van echando hasta que quedan las ocho de la final, que corren en los carriles de siempre. Con 8 o menos y con más de 30 es la de antes (con más de 30, la lista que se tacha y las ocho de la final). `?peloton=0` lo apaga.
-
-- **El plan** ([`src/games/llamas/peloton-plan.ts`](../../src/games/llamas/peloton-plan.ts)) es puro y sale de la ronda, con un azar aparte del de la final: las ocho finalistas son las que ya elegía `planRace`, así que la final cuenta la misma historia. Cuatro tramos (la cuesta, el barro, las piedras, el viento) según cuántas hay que echar; se echan de a una o de a dos, con al menos un segundo entre línea y línea del relator.
-- **Nada delata a la ganadora.** Quién se echa y en qué orden es un sorteo sin reglas; la posición en el pelotón es otro sorteo. Los **tambaleos** (la llama se bambolea con un "!") caen un segundo antes de una echada y la persona se sortea **pareja entre todas las que siguen**: puede ser la que se echa, otra que se echará después o una finalista, con la probabilidad que le toca por cantidad. La línea del relator ("¡X se tambalea!") es la misma para todas y habla una moneda que mira solo la hora: nombrar a alguien no dice qué le pasa. Una prueba con 1500 rondas lo comprueba.
-- **Los nombres se completan** ([`src/games/nombres.ts`](../../src/games/nombres.ts)): con muchas, el emblema y la inicial; con menos, el nombre de pila, el nombre con la inicial del apellido y por último el nombre entero. Todas suben de nivel a la vez, por cuántas quedan y por cuánto entra en la pantalla (nunca por quién es). Un nombre no se corta nunca: se achica la letra o se parte en dos líneas por un espacio. Al echarse, la ficha crece con el nombre entero. `audit-identidad` mide la versión estricta (cada una lo ve entero antes del ganador): con 8, 18 y 30, todas.
-- **Los emblemas** salen de [`src/games/emblemas.ts`](../../src/games/emblemas.ts) (clave y color por persona, sin repetir hasta 32). Mientras llega el dibujo propio, la ficha usa la cara de siempre con el color del emblema como aro.
-- **La forma de la pantalla.** En vertical y en una pantalla baja el pelotón usa todo el alto: la tribuna de las que se echaron son dos filas arriba, la valla debajo y el suelo hasta el relator. En una pantalla ancha y alta queda como la pista de siempre. Las columnas se eligen por tamaño de llama y por si cabe el nombre del nivel. Probado a 390x844, 360x800, 768x1024, 1024x768, 844x390 y 1280x720.
-- **Fluidez.** Las fichas se arman antes de que hagan falta y, con la calidad baja, hay menos polvo y menos piezas de decorado: nunca menos jugadoras.
-- **Cierra filas sin cruzarse.** Al echarse una, cada llama va a la celda que la mueve menos (`reasignarCeldas` en [`src/games/llamas/peloton-forma.ts`](../../src/games/llamas/peloton-forma.ts): la asignación de menor suma de distancias al cuadrado entre dónde estaba y las celdas nuevas). Se queda o se corre un lugar, y las que sobran del final van al hueco más cercano; con otras columnas se mueven todas, pero sin montarse una sobre otra. Solo mira dónde está cada una, nunca quién es. Antes cada una tomaba la celda de su lugar en la lista y las puntas de fila cruzaban todo el pelotón.
-- **La ficha grande de quien se echa** se queda donde cayó la llama; si se echan dos juntas, la segunda va arriba de la primera (o abajo si arriba no hay lugar). El destello de la apertura a los carriles va encima de las fichas.
-- **El sonido del pelotón.** Los cascos (onda cuadrada, una octava arriba de los de la final, 0,045 y 70 ms) tienen el cuerpo justo para que la mezcla aguante un parlante de proyector (`audit-mezcla`: pierde 3,5 LU o menos al cortar los graves de 150 Hz; medido 3,3 con 18 personas y 3,4 con 30) y no bajan del murmullo de `audit-sound` (0,019). `audit-mezcla` espera hasta 150 s la carrera de 30.
-- **Los auditores.** `audit-identidad` mide el nombre entero (con 3, 4, 8, 18 y 30, todos). `audit-delatores` mide la zoom "de siempre" de la señal de cámara desde la largada de la final (`camaraDesde`), y no sobre todo el show: con 45 a 65 s de pelotón a zoom 1, la mediana de todos los cuadros hacía que cada cuadro de la final pasara por acercamiento y marcaba un delator que no era (23,5 % contra 13,7 % medido bien, con 12,5 % de azar).
-
+`carrera-show.test.ts` (guion de seis palabras, un nombre y sin números; momentos; marcador; respuestas; tres tiempos por tramo), `carrera-orden.test.ts` (la punta y que no delata), `carrera-tiempos.test.ts` (el presupuesto), `carrera-tandas.test.ts` (las tandas y que no delatan), `carrera-forma.test.ts` (cuatro pantallas) y `src/duraciones.test.ts` (90 s). Los delatores, sin navegador: `scripts/lib/delatores-carrera.test.mjs` y `node scripts/audit-delatores.mjs race`. En el navegador: `audit-game race`, `audit-rigor race`, `audit-identidad race`, `audit-delatores`, `audit-emocion` y el evaluador.
