@@ -372,6 +372,7 @@ function contar(proof: Proof, r: Revision): void {
     // transacción). Se dice por qué, en simple, y que eso no prueba que el sorteo no exista.
     if (r.falta === "sin-historial") {
       verdict("working", "vVerdictUnknown", t(porQueSinHistorial(r)));
+      if (primeraVez) contarFin("error");
       return;
     }
     // Dice estar anclado y no se pudo leer la cadena. No se le imputa nada al
