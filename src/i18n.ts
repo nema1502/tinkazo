@@ -35,8 +35,11 @@ export interface Dict {
   cLead: (n: string) => string;
   /** El anuncio del ganador; `many` con varios premios, para el plural ("¡GANAN…!"). */
   cWin: (n: string, many?: boolean) => string;
-  /** "Copiar el mensaje": lo que se pega en el grupo. Quién ganó, entre cuántos, el premio, el enlace para verificarlo y el pie con la marca. */
-  summary: (w: string, n: number, premio: string, enlace: string, varios: boolean) => string;
+  /**
+   * "Copiar el mensaje": lo que se pega en el grupo. Quién ganó, entre cuántos, el premio, el enlace para verificarlo y el pie con la marca.
+   * `sinSello`: se siguió sin sello. El mensaje lo dice y no promete nada que no se pueda comprobar ("Nadie eligió…", "verificarlo").
+   */
+  summary: (w: string, n: number, premio: string, enlace: string, varios: boolean, sinSello?: boolean) => string;
   /** "Compartir el evento" en Mis sorteos: lo que se pega en el grupo, con quién ganó qué (un renglón por sorteo) y el enlace a evento.html. */
   summaryEvento: (fecha: string, n: number, enlace: string, lineas?: string[]) => string;
   drawIn: (mmss: string) => string;
@@ -268,8 +271,8 @@ export interface Dict {
   pegParecidos: (a: string, b: string, mas: number) => string;
   impSkipped: (n: number, lines: string) => string;
   impSkippedShort: (n: number) => string;
-  /** El mensaje para quien ganó; con `varios`, para todos los que ganaron juntos. */
-  tellBody: (w: string, prize: string, n: number, u: string, varios?: boolean) => string;
+  /** El mensaje para quien ganó; con `varios`, para todos los que ganaron juntos. `sinSello`: no promete que se pueda comprobar. */
+  tellBody: (w: string, prize: string, n: number, u: string, varios?: boolean, sinSello?: boolean) => string;
   /** Trompo: la rival del mano a mano se queda sin cuerda y cae. */
   cTroSpent: (n: string) => string;
   // Constelación, sapo y ¿Quién es? (7 de octubre de 2026).
@@ -956,8 +959,14 @@ export const T: Record<Lang, Dict> = {
     ].join("\n"),
     tellWhatsapp: "Avisarle por WhatsApp", tellEmail: "Avisarle por correo",
     tellSubject: "Ganaste el sorteo 🦙",
-    tellBody: (w, prize, n, u, varios) =>
-      varios
+    tellBody: (w, prize, n, u, varios, sinSello) =>
+      // Sin sello no se promete lo que no se puede comprobar: ni "nadie los eligió" ni "revisalo".
+      sinSello
+        ? `${varios ? `¡Ganaron, ${w}! Se llevan` : `¡Ganaste, ${w}! Te llevás`}${prize ? " " + prize : " el sorteo"}.\n\n` +
+          `${varios ? "Salieron" : "Saliste"} entre ${n} personas.\n\n` +
+          `Sin sello: no se puede comprobar. Si ${varios ? "quieren" : "querés"} ver la lista y la cuenta: ${u}\n\n` +
+          `Sorteado con Tinkazo · https://tinkazo.app`
+        : varios
         ? `¡Ganaron, ${w}! Se llevan${prize ? " " + prize : " el sorteo"}.\n\n` +
           `Salieron entre ${n} personas y nadie los eligió a dedo. La lista se cerró antes de que existiera el número que los sacó, ` +
           `y ese número lo publica un faro público que no controlan ni quien organiza ni Tinkazo.\n\n` +
@@ -988,6 +997,7 @@ export const T: Record<Lang, Dict> = {
     pantallaT: "Lo que salió",
     pantallaLlevan: "Se llevan:",
     pantallaQr: "Escaneá y comprobalo vos",
+    pantallaQrSinSello: "Escaneá y mirá la lista y la cuenta",
     pantallaPie: "Nadie eligió este nombre: la lista se cerró antes de que existiera el número que lo decidió.",
     againTitle: "¿Pasamos al siguiente premio?",
     againLeft: (n) => (n === 1 ? "Queda 1 persona sin premio." : `Quedan ${n} personas sin premio.`),
@@ -1789,8 +1799,13 @@ export const T: Record<Lang, Dict> = {
     cLast: ["¡ÚLTIMA RECTA!", "¡LOS ÚLTIMOS METROS!", "¡YA SE VE LA META!", "¡AHÍ ESTÁ LA META!"],
     cLead: (n) => pick([`¡${n} pasa adelante!`, `¡${n} se pone primero!`, `¡Adelante va ${n}!`, `¡${n} se escapa!`, `¡${n} los pasa a todos!`]),
     cWin: (n, many) => pick(many ? [`¡GANAN ${n}!`, `¡SE LO LLEVAN ${n}!`, `¡ES PARA ${n}!`, `¡EL TINKAZO ES PARA ${n}!`] : [`¡GANA ${n}!`, `¡SE LO LLEVA ${n}!`, `¡ES PARA ${n}!`, `¡EL TINKAZO ES PARA ${n}!`]),
-    summary: (w, n, premio, enlace, varios) =>
-      `${premio ? `Sorteo de ${premio}: ${varios ? "ganaron" : "ganó"}` : varios ? "Ganaron" : "Ganó"} ${w}, entre ${n} personas.\nNadie eligió ${varios ? "estos nombres" : "este nombre"}.\nSi querés verificarlo, entrá acá: ${enlace}\n\nSorteado con Tinkazo · https://tinkazo.app`,
+    summary: (w, n, premio, enlace, varios, sinSello) =>
+      `${premio ? `Sorteo de ${premio}: ${varios ? "ganaron" : "ganó"}` : varios ? "Ganaron" : "Ganó"} ${w}, entre ${n} personas.\n` +
+      // Sin sello no se promete lo que no se puede comprobar: ni "nadie eligió" ni "verificarlo".
+      (sinSello
+        ? `Sin sello: no se puede comprobar.\nPara ver la lista y la cuenta, entrá acá: ${enlace}`
+        : `Nadie eligió ${varios ? "estos nombres" : "este nombre"}.\nSi querés verificarlo, entrá acá: ${enlace}`) +
+      `\n\nSorteado con Tinkazo · https://tinkazo.app`,
     summaryEvento: (f, n, enlace, lineas = []) =>
       `Sorteos del ${f} (${n === 1 ? "1 sorteo), verificable" : `${n} sorteos), todos verificables`}.\n${lineas.map((l) => `${l}\n`).join("")}Si querés ${n === 1 ? "verificarlo" : "verificarlos"}, entrá acá:\n${enlace}\n\nSorteado con Tinkazo · https://tinkazo.app`,
     histGrupoT: "Sorteos del {f}", histGrupoCompartir: "Compartir el evento",
@@ -1807,6 +1822,11 @@ export const T: Record<Lang, Dict> = {
     cmpVerificarEv: "Si querés verificarlos, entrá acá:\n{enlace}",
     cmpPie: "Sorteado con Tinkazo · https://tinkazo.app",
     cmpEvUno: "{t} (1 sorteo), verificable.", cmpEvVarios: "{t} ({n} sorteos), todos verificables.",
+    // Sin sello (26 de octubre de 2026): si algún sorteo del evento se siguió sin sello, el mensaje no dice
+    // "verificable" de ninguno ni "verificarlos", y el renglón de cada uno lleva `redSinSelloEtiqueta`.
+    cmpVerSinSello: "Para ver la lista y la cuenta, entrá acá: {enlace}",
+    cmpEvUnoSin: "{t} (1 sorteo), sin sello.", cmpEvMezcla: "{t} ({n} sorteos), {s} sin sello.",
+    cmpVerEvUnoSin: "Para ver el sorteo, entrá acá:\n{enlace}", cmpVerEvSin: "Para ver cada sorteo, entrá acá:\n{enlace}",
     // --- La página del enlace corto, c.html (21 de octubre de 2026).
     cTitulo: "Comprobante de un sorteo en Tinkazo",
     cDesc: "Abrilo para ver quién ganó y comprobarlo vos mismo, desde tu celular.",
@@ -1831,6 +1851,9 @@ export const T: Record<Lang, Dict> = {
     cmpPrivBorrar: "Si hace falta borrarla, escribinos a hola@tinkazo.app.",
     fotoEscanear: "Escaneá para comprobarlo",
     fotoSinQr: "Para comprobarlo, abrí el enlace que va con esta foto.",
+    // La foto de un sorteo sin sello no dice "comprobarlo" junto al QR: lo que el QR muestra es la lista y la cuenta.
+    fotoEscanearSinSello: "Escaneá para ver la lista y la cuenta",
+    fotoSinQrSinSello: "Para ver la lista y la cuenta, abrí el enlace que va con esta foto.",
     fotoNumero: "Sorteo #{n}", fotoPrueba: "red de prueba", fotoEvento: "Evento",
     fotoEntreUno: "Salió entre {n} personas", fotoEntreVarios: "Salieron entre {n} personas", fotoMas: "y {n} más", fotoMasNombres: "{n} más",
     evnT: "Mis eventos",
@@ -2545,12 +2568,18 @@ export const T: Record<Lang, Dict> = {
     ].join("\n"),
     tellWhatsapp: "Tell them on WhatsApp", tellEmail: "Tell them by email",
     tellSubject: "You won the draw 🦙",
-    tellBody: (w, prize, n, u, varios) =>
-      `You won, ${w}! You're taking home${prize ? " " + prize : " the draw"}.\n\n` +
-      `You came out of ${n} people and nobody hand-picked you. The list was locked before the number that drew you existed, ` +
-      `and that number is published by a public beacon that neither the organizer nor Tinkazo controls.\n\n` +
-      `Check it ${varios ? "for yourselves" : "yourself"}, it takes ten seconds: ${u}\n\n` +
-      `Drawn with Tinkazo · https://tinkazo.app`,
+    tellBody: (w, prize, n, u, varios, sinSello) =>
+      sinSello
+        ? // Without a seal it promises nothing that can't be checked: neither "nobody hand-picked you" nor "check it".
+          `You won, ${w}! You're taking home${prize ? " " + prize : " the draw"}.\n\n` +
+          `You came out of ${n} people.\n\n` +
+          `No seal: it can't be checked. To see the list and the math: ${u}\n\n` +
+          `Drawn with Tinkazo · https://tinkazo.app`
+        : `You won, ${w}! You're taking home${prize ? " " + prize : " the draw"}.\n\n` +
+          `You came out of ${n} people and nobody hand-picked you. The list was locked before the number that drew you existed, ` +
+          `and that number is published by a public beacon that neither the organizer nor Tinkazo controls.\n\n` +
+          `Check it ${varios ? "for yourselves" : "yourself"}, it takes ten seconds: ${u}\n\n` +
+          `Drawn with Tinkazo · https://tinkazo.app`,
     qrCaption: "Scan to check",
     nextTitle: "What happens inside",
     nextBody: "When you close the list, it is sealed on Stellar before the number that decides exists, and any later change shows. The Stellar network charges a fee to record each draw, and that fee changes with how much the network is used; on the Free plan we pay it. Today Tinkazo runs on Stellar's test network (testnet), which is wiped on December 16, 2026: your receipt still lets anyone redo the math.",
@@ -2567,6 +2596,7 @@ export const T: Record<Lang, Dict> = {
     pantallaT: "The result",
     pantallaLlevan: "They take home:",
     pantallaQr: "Scan it and check it yourself",
+    pantallaQrSinSello: "Scan it to see the list and the math",
     pantallaPie: "Nobody picked this name: the list was locked before the number that decided it existed.",
     againTitle: "On to the next prize?",
     againLeft: (n) => (n === 1 ? "1 person is left without a prize." : `${n} people are left without a prize.`),
@@ -3358,8 +3388,13 @@ export const T: Record<Lang, Dict> = {
     cLast: ["FINAL STRETCH!", "LAST FEW METERS!", "THE FINISH IS IN SIGHT!", "THERE'S THE FINISH!"],
     cLead: (n) => pick([`${n} takes the lead!`, `${n} is gone!`, `${n} out in front!`, `${n} pushes past everyone!`, `It's ${n} now!`]),
     cWin: (n, many) => pick(many ? [`${n} WIN!`, `${n} TAKE IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`] : [`${n} WINS!`, `${n} TAKES IT!`, `IT'S ${n}!`, `THE TINKAZO GOES TO ${n}!`]),
-    summary: (w, n, premio, enlace, varios) =>
-      `${premio ? `${premio} draw: ${varios ? "the winners are" : "the winner is"}` : varios ? "The winners are" : "The winner is"} ${w}, out of ${n} people.\nNobody picked ${varios ? "these names" : "this name"}.\nIf you want to verify it, open this link: ${enlace}\n\nDrawn with Tinkazo · https://tinkazo.app`,
+    summary: (w, n, premio, enlace, varios, sinSello) =>
+      `${premio ? `${premio} draw: ${varios ? "the winners are" : "the winner is"}` : varios ? "The winners are" : "The winner is"} ${w}, out of ${n} people.\n` +
+      // Without a seal it promises nothing that can't be checked: neither "nobody picked" nor "verify it".
+      (sinSello
+        ? `No seal: it can't be checked.\nTo see the list and the math, open this link: ${enlace}`
+        : `Nobody picked ${varios ? "these names" : "this name"}.\nIf you want to verify it, open this link: ${enlace}`) +
+      `\n\nDrawn with Tinkazo · https://tinkazo.app`,
     summaryEvento: (f, n, enlace, lineas = []) =>
       `Draws from ${f} (${n === 1 ? "1 draw), verifiable" : `${n} draws), all verifiable`}.\n${lineas.map((l) => `${l}\n`).join("")}If you want to verify ${n === 1 ? "it" : "them"}, open this link:\n${enlace}\n\nDrawn with Tinkazo · https://tinkazo.app`,
     histGrupoT: "Draws from {f}", histGrupoCompartir: "Share the event",
@@ -3376,6 +3411,11 @@ export const T: Record<Lang, Dict> = {
     cmpVerificarEv: "If you want to verify them, open this link:\n{enlace}",
     cmpPie: "Drawn with Tinkazo · https://tinkazo.app",
     cmpEvUno: "{t} (1 draw), verifiable.", cmpEvVarios: "{t} ({n} draws), all verifiable.",
+    // Without a seal (26 October 2026): if any draw of the event went on without a seal, the message says
+    // neither "verifiable" of any of them nor "verify them", and each one's line carries `redSinSelloEtiqueta`.
+    cmpVerSinSello: "To see the list and the math, open this link: {enlace}",
+    cmpEvUnoSin: "{t} (1 draw), no seal.", cmpEvMezcla: "{t} ({n} draws), {s} without a seal.",
+    cmpVerEvUnoSin: "To see the draw, open this link:\n{enlace}", cmpVerEvSin: "To see each draw, open this link:\n{enlace}",
     // --- The short link page, c.html (21 October 2026).
     cTitulo: "A draw's receipt on Tinkazo",
     cDesc: "Open it to see who won and check it yourself, from your phone.",
@@ -3400,6 +3440,9 @@ export const T: Record<Lang, Dict> = {
     cmpPrivBorrar: "If it needs to be deleted, write to hola@tinkazo.app.",
     fotoEscanear: "Scan to check it",
     fotoSinQr: "To check it, open the link that comes with this photo.",
+    // The photo of a draw without a seal doesn't say "check it" next to the QR: what the QR shows is the list and the math.
+    fotoEscanearSinSello: "Scan to see the list and the math",
+    fotoSinQrSinSello: "To see the list and the math, open the link that comes with this photo.",
     fotoNumero: "Draw #{n}", fotoPrueba: "test network", fotoEvento: "Event",
     fotoEntreUno: "Drawn from {n} people", fotoEntreVarios: "Drawn from {n} people", fotoMas: "and {n} more", fotoMasNombres: "{n} more",
     evnT: "My events",

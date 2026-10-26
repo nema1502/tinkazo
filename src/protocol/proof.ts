@@ -51,6 +51,32 @@ export interface Proof {
    * veredicto, porque el ganador se rehace con la firma de la ronda.
    */
   dtx?: string;
+  /**
+   * Se siguió sin sello: la cuenta podía sellar y la red no lo dejó (protocolo §8).
+   * Es la marca que lleva el comprobante para que todo lo que sale de la app (el
+   * mensaje, la foto, el enlace del evento, la página de verificación) lo diga y
+   * nada lo llame verificable. Opcional y solo `true`: falta en los demás, un
+   * comprobante sin ella se lee como siempre y una página anterior la ignora.
+   * Solo cuenta si el comprobante no dice estar anclado (`esSinSello`): un sello
+   * que entró a tiempo la apaga, y el ancla manda.
+   */
+  sinSello?: boolean;
+}
+
+/**
+ * ¿Es un sorteo hecho sin sello? Lleva la marca y no trae red, contrato ni número
+ * (el mismo "libre" que `anclaDe`, en `verificacion.ts`). La marca no prueba nada
+ * por sí sola: quien arma un enlace puede quitarla, pero entonces queda un sorteo
+ * libre, que la página ya muestra sin anclar y nunca como verificable.
+ */
+export function esSinSello(p: { sinSello?: unknown; net?: unknown; contract?: unknown; id?: unknown }): boolean {
+  return p.sinSello === true && p.net === undefined && p.contract === undefined && p.id === undefined;
+}
+
+/** El mismo objeto con la marca `sinSello` solo si es `true`; cualquier otra cosa se descarta al leer. */
+export function conMarcaValida<T extends { sinSello?: unknown }>(x: T): T {
+  const { sinSello, ...resto } = x;
+  return (sinSello === true ? { ...resto, sinSello: true } : resto) as unknown as T;
 }
 
 /**
@@ -72,6 +98,15 @@ export function conHashesValidos<T extends { stx?: unknown; dtx?: unknown }>(x: 
   const s = hashDeTx(stx);
   const d = hashDeTx(dtx);
   return { ...resto, ...(s ? { stx: s } : {}), ...(d ? { dtx: d } : {}) } as unknown as T;
+}
+
+/**
+ * Lo que un comprobante deja pasar al armarse o leerse: los hashes de transacción
+ * bien formados (`conHashesValidos`) y la marca `sinSello` solo si es `true`
+ * (`conMarcaValida`). Todo lo demás va tal cual.
+ */
+export function conCamposValidos<T extends { stx?: unknown; dtx?: unknown; sinSello?: unknown }>(x: T): T {
+  return conMarcaValida(conHashesValidos(x));
 }
 
 const enc = new TextEncoder();
@@ -111,7 +146,7 @@ const hasCompression = (): boolean => typeof CompressionStream === "function";
 
 /** Serializa un comprobante al texto que va después del `#`. */
 export async function encodeProof(proof: Proof): Promise<string> {
-  return encodeFragment(conHashesValidos(proof));
+  return encodeFragment(conCamposValidos(proof));
 }
 
 /** Cualquier valor al texto que va después del `#`: comprimido si conviene. */
@@ -176,15 +211,15 @@ export async function decodePreview(fragment: string): Promise<ListPreview> {
 
 /**
  * Lee un comprobante. Lanza si el texto no es un comprobante válido. Un
- * comprobante anterior a `stx` y `dtx` se lee igual; si traen algo que no es un
- * hash de transacción, se descarta.
+ * comprobante anterior a `stx`, `dtx` y `sinSello` se lee igual; si traen algo
+ * que no es un hash de transacción, o una marca que no es `true`, se descarta.
  */
 export async function decodeProof(fragment: string): Promise<Proof> {
   const parsed = (await decodeFragment(fragment)) as Proof;
   if (!Array.isArray(parsed.names) || typeof parsed.round !== "number") {
     throw new Error("proof-malformed");
   }
-  return conHashesValidos(parsed);
+  return conCamposValidos(parsed);
 }
 
 /** Enlace completo a la página de verificación. */
@@ -194,7 +229,7 @@ export async function proofUrl(proof: Proof, base = location.origin): Promise<st
 
 /** El mismo comprobante como archivo, para quien prefiera guardarlo. */
 export function proofFile(proof: Proof): Blob {
-  return new Blob([JSON.stringify(conHashesValidos(proof), null, 2)], { type: "application/json" });
+  return new Blob([JSON.stringify(conCamposValidos(proof), null, 2)], { type: "application/json" });
 }
 
 /**

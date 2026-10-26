@@ -646,6 +646,13 @@ function sumarle(ev: EventoGuardado): string {
   );
 }
 
+/**
+ * "Sin sello: no se puede comprobar.", si ese sorteo se hizo sin sello y el sello no entró a tiempo.
+ * Dentro de un evento también: el evento no puede mostrarlo como uno más.
+ */
+const marcaSinSello = (e: Entry | undefined): string =>
+  e?.sinSello && !e.id ? `<p class="hc-meta sin-sello hc-sin-sello">${esc(t("redSinSelloEtiqueta"))}</p>` : "";
+
 /** Un sorteo suelto que se puede sumar al evento: el premio, la fecha, quién ganó y "Sumar". */
 function filaParaSumar(ev: EventoGuardado, e: Entry, i: number): string {
   const titulo = e.prize || t("histDraw");
@@ -655,6 +662,7 @@ function filaParaSumar(ev: EventoGuardado, e: Entry, i: number): string {
   return (
     `<li class="evn-sorteo"><div><b>${esc(titulo)}</b> <span class="hc-fecha">${esc(fmtDate(e.sealedAt))}</span></div>` +
     `<p class="hc-meta">${quien}</p>` +
+    marcaSinSello(e) +
     `<div class="hc-acciones"><button class="ghost mini" type="button" data-evento-sumar="${esc(`${ev.id}|${i}`)}" aria-label="${esc(nombre)}">${esc(t("evnSumarBtn"))}</button></div></li>`
   );
 }
@@ -683,6 +691,7 @@ function filaDeEvento(ev: EventoGuardado, s: SorteoGuardado, k: number, list: En
   return (
     `<li class="evn-sorteo"><div><b>${esc(titulo)}</b>${fecha ? ` <span class="hc-fecha">${esc(fecha)}</span>` : ""}</div>` +
     `<p class="hc-meta">${quien}</p>` +
+    marcaSinSello(e) +
     `<div class="hc-acciones">` +
     `<a class="ghost mini" href="${esc(s.enlace)}" target="_blank" rel="noopener">${esc(t("histSeeProof"))}</a>` +
     `<button class="ghost mini" type="button" data-compartir-enlace="${clave}">${esc(t("cmpBtn"))}</button>` +

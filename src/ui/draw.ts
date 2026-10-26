@@ -811,6 +811,9 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
   const f = app.frozen;
   const d = app.drawn;
   if (!f || !d) return "";
+  // Se siguió sin sello y el sello no llegó a entrar: el comprobante lo lleva marcado, para que el
+  // mensaje, la foto, el enlace del evento y la página de verificación lo digan (protocolo §8).
+  const sinSello = !!f.sinSello && f.raffleId === undefined;
   const proof: Proof = {
     v: PROOF_VERSION,
     names,
@@ -837,6 +840,7 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
           ...(d.drawTx ? { dtx: d.drawTx } : {}),
         }
       : {}),
+    ...(sinSello ? { sinSello: true } : {}),
   };
   let link: string;
   try {
@@ -848,7 +852,7 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
   proofLink = link;
   // El resultado dice si ese sorteo no se puede comprobar porque se siguió sin sello.
   const nota = document.getElementById("sin-sello-nota");
-  if (nota) nota.style.display = f.sinSello && f.raffleId === undefined ? "block" : "none";
+  if (nota) nota.style.display = sinSello ? "block" : "none";
   // Un comprobante nuevo empieza con su enlace largo; si ya se había compartido, con su corto.
   cortoLink = cortoGuardado(link)?.corto ?? "";
   // Y ahora se completa la fila del historial con el ganador y el comprobante.
@@ -873,7 +877,7 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
         ...(f2.raffleId !== undefined && network.contractId ? { contract: network.contractId } : {}),
         ...(d.drawTx ? { drawTx: d.drawTx } : {}),
         // Sin sello (la red no dejó sellar): Mis sorteos lo dice.
-        ...(f2.sinSello && f2.raffleId === undefined ? { sinSello: true } : {}),
+        ...(sinSello ? { sinSello: true } : {}),
       });
       h.renderHistory(who);
     });
@@ -898,9 +902,9 @@ function mensajeDelSorteo(): string {
   const { beacon, winners } = app.drawn;
   const lista = winners.map((i) => names[i] ?? "");
   const quienes = new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(lista);
-  const mensaje = T[getLang()].summary(quienes, names.length, prize, cortoLink || proofLink || roundUrl(beacon.round), lista.length > 1);
-  // Sin sello: que lo diga también lo que se pega en el grupo.
-  return app.frozen.sinSello && app.frozen.raffleId === undefined ? `${mensaje}\n${t("redSinSelloEtiqueta")}` : mensaje;
+  // Sin sello: que lo diga también lo que se pega en el grupo, y que no prometa lo que no se puede comprobar.
+  const sinSello = !!app.frozen.sinSello && app.frozen.raffleId === undefined;
+  return T[getLang()].summary(quienes, names.length, prize, cortoLink || proofLink || roundUrl(beacon.round), lista.length > 1, sinSello);
 }
 
 /** Copia el mensaje y avisa en el botón. Devuelve false si el navegador no deja copiar. */
@@ -949,7 +953,9 @@ function setNotifyLinks(names: string[], winners: number[], url: string): void {
   // "Ana, Beto y Carla", no "Ana, Beto, Carla"; y en plural si son varios.
   const lista = winners.map((i) => names[i] ?? "");
   const who = new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(lista);
-  const body = T[getLang()].tellBody(who, prize, names.length, url, lista.length > 1);
+  // Al ganador de un sorteo sin sello tampoco se le dice que nadie lo eligió a dedo ni que lo revise: no se puede comprobar.
+  const sinSello = !!app.frozen?.sinSello && app.frozen.raffleId === undefined;
+  const body = T[getLang()].tellBody(who, prize, names.length, url, lista.length > 1, sinSello);
   $<HTMLAnchorElement>("btn-whatsapp").href = `https://wa.me/?text=${encodeURIComponent(body)}`;
   $<HTMLAnchorElement>("btn-email").href =
     `mailto:?subject=${encodeURIComponent(t("tellSubject"))}&body=${encodeURIComponent(body)}`;

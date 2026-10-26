@@ -115,3 +115,7 @@ El texto después del `#` es igual al de un comprobante (`src/protocol/proof.ts`
 
 - `src/protocol/evento.ts` (formato y partes), `src/ui/agrupar.ts` (los grupos por fecha), `src/ui/eventos.ts` (los eventos con nombre, en este equipo), `src/ui/history.ts` (Mis sorteos y Mis eventos), `src/ui/compartir.ts` (los mensajes y el diálogo), `src/ui/foto.ts` (la foto con el QR), `src/enlace-corto.ts` y `c.html` (el enlace corto), `src/ui/qr.ts` (el QR), `src/evento.ts` (la página).
 - Pruebas: `src/protocol/evento.test.ts`, `src/ui/agrupar.test.ts`, `src/ui/eventos.test.ts`, `src/ui/compartir.test.ts` (los mensajes son los mismos que `summary` y `summaryEvento`, en es y en), `src/mensaje.test.ts` y `src/evento-textos.test.ts`.
+
+## Sorteos hechos sin sello
+
+Cada sorteo del enlace de evento es su comprobante, y el comprobante de un sorteo que se siguió sin sello lleva `sinSello: true` (protocolo §8). La página del evento muestra esa frase en la tarjeta de ese sorteo, además de su estado de siempre (sin anclar), y el mensaje y la foto del evento marcan cuál es: un evento con alguno sin sello no dice «todos verificables». Un enlace de evento sin la marca se lee como siempre.

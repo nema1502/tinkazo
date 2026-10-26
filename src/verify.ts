@@ -9,7 +9,7 @@ import { SAMPLE, avatar } from "./state";
 import { canonicalList, listHash } from "./protocol/canonical";
 import { QUICKNET, bytesToHex, fetchRound, roundTime, roundUrl } from "./protocol/quicknet";
 import { prepararFirma, verifyRoundAsync } from "./protocol/firma";
-import { decodeProof, type Proof } from "./protocol/proof";
+import { decodeProof, esSinSello, type Proof } from "./protocol/proof";
 import { anclaDe, premioDe, revisarComprobante, type Revision } from "./protocol/verificacion";
 import { network, shortAddress, txUrl } from "./stellar/config";
 import { crearLectorDeHistorial, type SelloDelHistorial } from "./stellar/historial";
@@ -314,6 +314,18 @@ function pintarIdentidad(proof: Proof, delHistorial: SelloDelHistorial | null): 
   $("v-net").textContent = `${String(proof.net ?? "")} · ${t("vSelloCodigo").replace("{c}", codigoDelSello(delHistorial))}`;
 }
 
+/**
+ * Un sorteo que se siguió sin sello (el comprobante lo marca) muestra el estado de siempre para uno sin
+ * anclar (`libre`: la cuenta cierra, sin testigo) y además esta frase. Solo si el comprobante no dice
+ * estar anclado: el ancla manda, y la marca de un comprobante anclado no se lee.
+ */
+function pintarSinSello(proof: Proof, r: Revision): void {
+  const caja = $("verdict-sin-sello");
+  const marcado = esSinSello(proof) && r.ancla.tipo === "libre";
+  caja.textContent = marcado ? t("redSinSelloEtiqueta") : "";
+  caja.style.display = marcado ? "" : "none";
+}
+
 /** El veredicto, el resultado y lo que se puede hacer. Se vuelve a llamar al cambiar de idioma. */
 function contar(proof: Proof, r: Revision): void {
   const primeraVez = !contado;
@@ -322,6 +334,7 @@ function contar(proof: Proof, r: Revision): void {
   // El sello de la transacción, si es el testigo porque el contrato ya no guarda el sorteo.
   const delHistorial = r.fuente === "historial" && r.historial?.ok ? r.historial.sello : null;
   pintarTecnico([]);
+  pintarSinSello(proof, r);
   pintarIdentidad(proof, delHistorial);
   // La lista se llama "sellada" solo si la cadena atestiguó que lo es.
   const atestiguado = r.veredicto === "verde" || r.veredicto === "pendiente";
@@ -694,6 +707,8 @@ function renderResult(
       ...(extra.red ? { red: extra.red } : {}),
       // Para el contador, la referencia del sorteo solo si la cadena lo atestiguó (la verificación estricta).
       ...(extra.numero && extra.red ? { ref: refDe(proof) } : {}),
+      // Compartirlo otra vez no lo vuelve verificable: el mensaje y la foto dicen que se hizo sin sello.
+      ...(esSinSello(proof) ? { sinSello: true } : {}),
     });
   // El contrato, solo si es uno de Tinkazo: el enlace a uno ajeno sería darle crédito.
   if (r.ancla.tipo === "oficial") {

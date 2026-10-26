@@ -1,4 +1,4 @@
-import { conHashesValidos, decodeFragment, encodeFragment, proofUrl, type Proof } from "./proof";
+import { conCamposValidos, decodeFragment, encodeFragment, proofUrl, type Proof } from "./proof";
 
 /**
  * El enlace de evento: varios sorteos del mismo evento, en uno o varios enlaces.
@@ -39,8 +39,9 @@ export interface Evento {
 
 /** Serializa un grupo de sorteos al texto que va después del `#`. */
 export async function encodeEvento(titulo: string, sorteos: SorteoDelEvento[]): Promise<string> {
-  // Los hashes de transacción de cada comprobante (`stx`, `dtx`) viajan con él, si están bien formados.
-  const evento: Evento = { v: EVENTO_VERSION, kind: "evento", titulo, sorteos: sorteos.map(conHashesValidos) };
+  // Los hashes de transacción de cada comprobante (`stx`, `dtx`) viajan con él, si están bien formados,
+  // y también la marca `sinSello` de cada uno: el evento dice cuáles se hicieron sin sello.
+  const evento: Evento = { v: EVENTO_VERSION, kind: "evento", titulo, sorteos: sorteos.map((s) => conCamposValidos(s)) };
   return encodeFragment(evento);
 }
 
@@ -88,8 +89,8 @@ export async function decodeEvento(fragment: string): Promise<Evento> {
       s.ganadores.every((n) => typeof n === "string");
     if (!bien) throw new Error("evento-malformed");
   }
-  // Lo que no es un hash de transacción no pasa: el enlace trae lo que quiso quien lo armó.
-  return { ...(raw as Evento), sorteos: (raw as Evento).sorteos.map(conHashesValidos) };
+  // Lo que no es un hash de transacción no pasa, ni una marca que no sea `true`: el enlace trae lo que quiso quien lo armó.
+  return { ...(raw as Evento), sorteos: (raw as Evento).sorteos.map((s) => conCamposValidos(s)) };
 }
 
 /** Enlace completo a la página de evento, para un grupo de sorteos. */

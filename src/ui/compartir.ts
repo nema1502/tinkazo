@@ -1,7 +1,7 @@
 import { esc } from "../dom";
 import { getLang, textos, type Lang } from "../idioma";
 import { acortar } from "../enlace-corto";
-import { decodeProof } from "../protocol/proof";
+import { decodeProof, esSinSello, type Proof } from "../protocol/proof";
 import { eventoUrl, partirEvento, type SorteoDelEvento } from "../protocol/evento";
 import { fotoPng, type Foto } from "./foto";
 import { type ConOrden, enOrdenDeSalida } from "./agrupar";
@@ -80,7 +80,12 @@ export interface DatosSorteo {
   sinSello?: boolean;
 }
 
-/** El mensaje de un sorteo: quién ganó, entre cuántos, el enlace y el pie. */
+/**
+ * El mensaje de un sorteo: quién ganó, entre cuántos, el enlace y el pie. Sin
+ * sello no promete lo que no se puede comprobar: dice "Sin sello: no se puede
+ * comprobar." y ofrece el enlace para ver la lista y la cuenta, sin "nadie eligió"
+ * ni "verificarlo". Palabra por palabra igual a `T.summary` (una prueba lo compara).
+ */
 export function mensajeDeSorteo(lang: Lang, d: DatosSorteo): string {
   const varios = d.ganadores.length > 1;
   const w = lista(lang, d.ganadores);
@@ -89,36 +94,53 @@ export function mensajeDeSorteo(lang: Lang, d: DatosSorteo): string {
     : rellenar(cad(lang, varios ? "cmpCabVarios" : "cmpCabUno"), { w, n: d.total });
   return [
     cabeza,
-    cad(lang, varios ? "cmpNadieVarios" : "cmpNadieUno"),
-    rellenar(cad(lang, "cmpVerificarUno"), { enlace: d.enlace }),
-    ...(d.sinSello ? [cad(lang, "redSinSelloEtiqueta")] : []),
+    ...(d.sinSello
+      ? [cad(lang, "redSinSelloEtiqueta"), rellenar(cad(lang, "cmpVerSinSello"), { enlace: d.enlace })]
+      : [cad(lang, varios ? "cmpNadieVarios" : "cmpNadieUno"), rellenar(cad(lang, "cmpVerificarUno"), { enlace: d.enlace })]),
     "",
     cad(lang, "cmpPie"),
   ].join("\n");
 }
+
+/** Lo que hace falta de un sorteo del evento para saber si se hizo sin sello (`esSinSello`). */
+type ConMarca = Parameters<typeof esSinSello>[0];
 
 /**
  * Un renglón por sorteo del evento: el premio (o "Sorteo") y quién ganó.
  * "Polera: Gabriela Flores". En el orden en que salieron (`enOrdenDeSalida`).
+ * Un sorteo hecho sin sello lo dice en su renglón: "Polera: Gabriela Flores ·
+ * Sin sello: no se puede comprobar."
  */
-export function lineasDeEvento(lang: Lang, sorteos: Array<{ prize?: string; ganadores: string[] } & ConOrden>): string[] {
-  return enOrdenDeSalida(sorteos).map((s) => `${s.prize?.trim() || cad(lang, "histDraw")}: ${lista(lang, s.ganadores)}`);
+export function lineasDeEvento(lang: Lang, sorteos: Array<{ prize?: string; ganadores: string[] } & ConOrden & ConMarca>): string[] {
+  return enOrdenDeSalida(sorteos).map((s) => {
+    const linea = `${s.prize?.trim() || cad(lang, "histDraw")}: ${lista(lang, s.ganadores)}`;
+    return esSinSello(s) ? `${linea} · ${cad(lang, "redSinSelloEtiqueta")}` : linea;
+  });
 }
 
 /**
  * El mensaje de un evento: cuántos sorteos hay, quién ganó qué, el o los
- * enlaces y el pie. `titulo` es el nombre, o la fecha por defecto.
+ * enlaces y el pie. `titulo` es el nombre, o la fecha por defecto. `sinSello`:
+ * cuántos de esos sorteos se hicieron sin sello. Con alguno, el mensaje no dice
+ * "verificable" ni "verificarlos" de ninguno (el renglón de cada uno ya dice cuál
+ * no se puede comprobar) y el enlace se ofrece para ver cada sorteo.
  */
-export function mensajeDeEvento(lang: Lang, d: { titulo: string; sorteos: number; enlaces: string; lineas?: string[] }): string {
+export function mensajeDeEvento(
+  lang: Lang,
+  d: { titulo: string; sorteos: number; enlaces: string; lineas?: string[]; sinSello?: number },
+): string {
   const uno = d.sorteos === 1;
-  return [
-    rellenar(cad(lang, uno ? "cmpEvUno" : "cmpEvVarios"), { t: d.titulo, n: d.sorteos }),
-    ...(d.lineas ?? []),
-    rellenar(cad(lang, uno ? "cmpVerificarEvUno" : "cmpVerificarEv"), { enlace: d.enlaces }),
-    "",
-    cad(lang, "cmpPie"),
-  ].join("\n");
+  const sin = d.sinSello ?? 0;
+  const cabeza =
+    sin > 0
+      ? rellenar(cad(lang, uno ? "cmpEvUnoSin" : "cmpEvMezcla"), { t: d.titulo, n: d.sorteos, s: sin })
+      : rellenar(cad(lang, uno ? "cmpEvUno" : "cmpEvVarios"), { t: d.titulo, n: d.sorteos });
+  const ver = sin > 0 ? (uno ? "cmpVerEvUnoSin" : "cmpVerEvSin") : uno ? "cmpVerificarEvUno" : "cmpVerificarEv";
+  return [cabeza, ...(d.lineas ?? []), rellenar(cad(lang, ver), { enlace: d.enlaces }), "", cad(lang, "cmpPie")].join("\n");
 }
+
+/** Cuántos de estos sorteos se hicieron sin sello. */
+const cuantosSinSello = (sorteos: readonly ConMarca[]): number => sorteos.filter((s) => esSinSello(s)).length;
 
 /* --------------------------------------------------------------------- la foto */
 
@@ -157,26 +179,38 @@ export function fotoDeSorteo(lang: Lang, d: DatosSorteo, enlace: string): Foto {
     ].filter(Boolean),
     mas: cad(lang, "fotoMas"),
     enlace,
-    escanear: cad(lang, "fotoEscanear"),
-    sinQr: cad(lang, "fotoSinQr"),
+    // Sin sello, junto al QR no dice "comprobarlo": lo que el QR muestra es la lista y la cuenta.
+    escanear: cad(lang, d.sinSello ? "fotoEscanearSinSello" : "fotoEscanear"),
+    sinQr: cad(lang, d.sinSello ? "fotoSinQrSinSello" : "fotoSinQr"),
   };
 }
 
-/** Lo que va en la foto de un evento: su nombre, un renglón por sorteo (en el orden en que salieron) y el QR. */
+/**
+ * Lo que va en la foto de un evento: su nombre, un renglón por sorteo (en el
+ * orden en que salieron) y el QR. El sorteo hecho sin sello lleva en su renglón
+ * "Sin sello: no se puede comprobar."; con alguno, junto al QR tampoco dice
+ * "comprobarlo" (el QR abre la página del evento, que dice cuál es cuál).
+ */
 export function fotoDeEvento(lang: Lang, titulo: string, sorteos: SorteoDelEvento[], enlace: string): Foto {
   const n = sorteos.length;
   const enOrden = enOrdenDeSalida(sorteos);
   const fecha = enOrden.map((s) => s.sealedAt ?? 0).find((x) => x > 0);
+  const hayUnoSinSello = cuantosSinSello(sorteos) > 0;
   return {
     rotulo: [cad(lang, "fotoEvento"), fechaLarga(lang, fecha)].filter(Boolean).join(" · "),
     titulo,
     sub: rellenar(cad(lang, n === 1 ? "evUnSorteo" : "evNSorteos"), { n }),
-    filas: enOrden.map((s) => ({ premio: s.prize?.trim() || cad(lang, "histDraw"), ganadores: lista(lang, s.ganadores), cortos: listasCortas(lang, s.ganadores) })),
+    filas: enOrden.map((s) => ({
+      premio: s.prize?.trim() || cad(lang, "histDraw"),
+      ganadores: lista(lang, s.ganadores),
+      cortos: listasCortas(lang, s.ganadores),
+      ...(esSinSello(s) ? { nota: cad(lang, "redSinSelloEtiqueta") } : {}),
+    })),
     lineas: [],
     mas: cad(lang, "fotoMas"),
     enlace,
-    escanear: cad(lang, "fotoEscanear"),
-    sinQr: cad(lang, "fotoSinQr"),
+    escanear: cad(lang, hayUnoSinSello ? "fotoEscanearSinSello" : "fotoEscanear"),
+    sinQr: cad(lang, hayUnoSinSello ? "fotoSinQrSinSello" : "fotoSinQr"),
   };
 }
 
@@ -448,22 +482,30 @@ export function abrirSorteo(d: DatosSorteo, lang: Lang = getLang(), op: { corto?
   );
 }
 
+/**
+ * Lo que se sabe de un sorteo por su comprobante: el número de personas, el premio,
+ * la fecha, el número del sorteo y, si el comprobante lleva la marca, que se hizo
+ * sin sello (el mensaje y la foto lo dicen, y no prometen que se pueda comprobar).
+ */
+export function datosDeComprobante(comprobante: Proof, enlace: string, ganadores: string[]): DatosSorteo {
+  return {
+    enlace,
+    ganadores,
+    total: comprobante.names.length,
+    premio: comprobante.prize ?? "",
+    ...(comprobante.sealedAt ? { fecha: comprobante.sealedAt } : {}),
+    ...(comprobante.id ? { numero: comprobante.id } : {}),
+    ...(comprobante.net ? { red: comprobante.net } : {}),
+    ...(esSinSello(comprobante) ? { sinSello: true } : {}),
+    // Para el contador (`src/contar.ts`): la referencia, solo si el comprobante la trae entera.
+    ref: refDe(comprobante),
+  };
+}
+
 /** Desde Mis sorteos: el comprobante trae el número de personas, el premio, la fecha y el número del sorteo. */
 export async function compartirSorteo(enlace: string, ganadores: string[], lang: Lang = getLang()): Promise<void> {
   const comprobante = await decodeProof(enlace.slice(enlace.indexOf("#")));
-  abrirSorteo(
-    {
-      enlace,
-      ganadores,
-      total: comprobante.names.length,
-      premio: comprobante.prize ?? "",
-      ...(comprobante.sealedAt ? { fecha: comprobante.sealedAt } : {}),
-      ...(comprobante.id ? { numero: comprobante.id } : {}),
-      ...(comprobante.net ? { red: comprobante.net } : {}),
-      ref: refDe(comprobante),
-    },
-    lang,
-  );
+  abrirSorteo(datosDeComprobante(comprobante, enlace, ganadores), lang);
 }
 
 /* -------------------------------------------------------------------- evento */
@@ -493,7 +535,16 @@ export async function paqueteDeEvento(
     }),
   );
   const enlaces = n > 1 ? partes.map((p, i) => `${parte(i + 1)}: ${p.enlace}`).join("\n") : (partes[0]?.enlace ?? "");
-  return { partes, mensaje: mensajeDeEvento(lang, { titulo, sorteos: sorteos.length, enlaces, lineas: lineasDeEvento(lang, sorteos) }) };
+  return {
+    partes,
+    mensaje: mensajeDeEvento(lang, {
+      titulo,
+      sorteos: sorteos.length,
+      enlaces,
+      lineas: lineasDeEvento(lang, sorteos),
+      sinSello: cuantosSinSello(sorteos),
+    }),
+  };
 }
 
 /**
@@ -509,13 +560,14 @@ export async function prepararEvento(
 ): Promise<Listo> {
   sorteos = enOrdenDeSalida(sorteos);
   const lineas = lineasDeEvento(lang, sorteos);
+  const sinSello = cuantosSinSello(sorteos);
   const fecha = sorteos.map((s) => s.sealedAt ?? 0).find((x) => x > 0);
   const archivo = archivoDe(undefined, fecha);
   if (op.corto !== false) {
     const c = await acortar(await eventoUrl(titulo, sorteos, op.base));
     if (c) {
       return {
-        mensaje: mensajeDeEvento(lang, { titulo, sorteos: sorteos.length, enlaces: c.corto, lineas }),
+        mensaje: mensajeDeEvento(lang, { titulo, sorteos: sorteos.length, enlaces: c.corto, lineas, sinSello }),
         fotos: [fotoDeEvento(lang, titulo, sorteos, c.corto)],
         archivo,
         corto: true,

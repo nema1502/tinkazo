@@ -5,6 +5,7 @@ import { SAMPLE } from "./state";
 import { canonicalList, listHash } from "./protocol/canonical";
 import { prepararFirma, verifyRoundAsync } from "./protocol/firma";
 import { comprobanteDe, type Evento, decodeEvento, type SorteoDelEvento, verificarUrlDe } from "./protocol/evento";
+import { esSinSello } from "./protocol/proof";
 import { bytesToHex, fetchRound } from "./protocol/quicknet";
 import { anclaDe, claveDeNumero, clavesDelSorteo, premioDe, type Registro, revisarComprobante, type Revision } from "./protocol/verificacion";
 import { crearLectorDeHistorial } from "./stellar/historial";
@@ -307,6 +308,8 @@ function tarjeta(s: SorteoDelEvento, i: number): string {
     `<div class="body">` +
     `<p class="ev-gana"><span class="kicker">${esc(t(s.ganadores.length > 1 ? "evGanaron" : "evGano"))}</span> <b>${nombresAislados(s.ganadores)}</b></p>` +
     `<p class="note">${esc(t("evPersonas").replace("{n}", String(s.names.length)))}</p>` +
+    // Un sorteo que se hizo sin sello (el comprobante lo marca) lo dice con la frase, además de su estado de siempre.
+    (esSinSello(s) ? `<p class="note sin-sello">${esc(t("redSinSelloEtiqueta"))}</p>` : "") +
     avisos +
     `<ul class="checks">${filasHtml.join("")}</ul>` +
     tecnico +

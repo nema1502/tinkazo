@@ -222,7 +222,10 @@ describe("los textos: es y en, sin tecnicismos", () => {
 
   it("lo de sin sello nunca dice 'verificable' ni habla de XLM, en los dos idiomas", () => {
     const sinSello = ["redAccSinSello", "redConfirma", "redConfirmaSi", "redConfirmaNo", "redSinSelloEspera", "redSinSelloReintento", "redSinSelloIntentando", "redSinSelloEntro", "redSinSelloNoEntro", "redSinSelloEtiqueta", "redSinSelloBoton"];
+    // Y lo que sale con la marca en el comprobante (mensaje, foto, evento, pantalla grande): ni "verificable" ni "verify".
+    const conMarca = ["cmpVerSinSello", "cmpEvUnoSin", "cmpEvMezcla", "cmpVerEvUnoSin", "cmpVerEvSin", "fotoEscanearSinSello", "fotoSinQrSinSello", "pantallaQrSinSello"];
     for (const l of ["es", "en"] as const) {
+      for (const k of conMarca) expect(String(T[l][k]), `${l}.${k}`).not.toMatch(/verif|XLM/i);
       for (const k of sinSello) expect(String(T[l][k]), `${l}.${k}`).not.toMatch(/verific|verifi|XLM/i);
     }
   });

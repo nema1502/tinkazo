@@ -375,6 +375,9 @@
   }
   :root[data-theme="dark"] { --verdict-bad: var(--orange); --verdict-partial: var(--yellow); --verdict-franja: none; }
   .verdict .lead { margin-top: 12px; }
+  /* "Sin sello: no se puede comprobar." (resultado, Mis sorteos, verificar y evento): se lee como aviso, no como un dato más. */
+  .sin-sello { font-weight: 800; color: var(--magenta-ink); }
+  .verdict .sin-sello { margin-top: 10px; font-size: 1.05em; }
   .checks { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 10px; }
   .check {
     border-left: 5px solid var(--muted); padding: 8px 0 8px 12px;

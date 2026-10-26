@@ -38,7 +38,7 @@ export interface Foto {
    * vienen, son los mismos ganadores cada vez con un nombre menos y "N más" al
    * final, para cuando no entran todos: así un nombre no se corta nunca.
    */
-  filas?: Array<{ premio: string; ganadores: string; cortos?: string[] }>;
+  filas?: Array<{ premio: string; ganadores: string; cortos?: string[]; nota?: string }>;
   /** Debajo de los nombres: el premio y entre cuántos salió. */
   lineas: string[];
   /** "y {n} más", para lo que no entra. */
@@ -403,10 +403,19 @@ function filasDeEvento(c: Ctx, f: Foto, s: number, apretado = false): Bloque {
   );
   const ganPaso = (g: { tam: number }): number => Math.round(g.tam * 1.14);
   const ganH = gans.map((g) => g.lineas.length * ganPaso(g));
+  // Un sorteo hecho sin sello lo dice debajo de sus nombres, chico y en magenta: no puede quedar como uno más.
+  const notaTam = Math.max(22, Math.round(28 * s));
+  const notaPaso = Math.round(notaTam * 1.2);
+  const notaAire = Math.round(8 * s);
+  c.font = `800 ${notaTam}px ${SANS}`;
+  const notas = filas.slice(0, vistas).map((x) => (x.nota ? renglones(c, x.nota, ganW, 2) : []));
+  const notaH = notas.map((l) => (l.length ? notaAire + l.length * notaPaso : 0));
+  /** Los nombres y, si hay, la nota de debajo. */
+  const bloqueH = (i: number): number => (ganH[i] ?? 0) + (notaH[i] ?? 0);
   const entre = Math.round((apilado ? 12 : 0) * s);
   const sep = Math.round((apilado ? 30 : 18) * s);
   const altoFila = filas.slice(0, vistas).map((_, i) =>
-    apilado ? (etiH[i] ?? 0) + entre + (ganH[i] ?? 0) : Math.max(etiH[i] ?? 0, ganH[i] ?? 0),
+    apilado ? (etiH[i] ?? 0) + entre + bloqueH(i) : Math.max(etiH[i] ?? 0, bloqueH(i)),
   );
   const masTam = Math.max(26, Math.round(40 * s));
   const alto = altoFila.reduce((n, h) => n + h, 0) + sep * Math.max(0, vistas - 1) + (resto ? sep + Math.round(masTam * 1.2) : 0);
@@ -425,10 +434,17 @@ function filasDeEvento(c: Ctx, f: Foto, s: number, apretado = false): Bloque {
         l.forEach((r, k) => c.fillText(r, M + pad, y0 + Math.round(pad * 0.45) + etiTam * 0.92 + k * etiPaso));
         // Los nombres: debajo de la etiqueta, o al lado y centrados con ella si son más bajos.
         const gx = apilado ? M : M + etiCol + 24;
-        const gy = apilado ? y0 + h + entre : y0 + Math.max(0, Math.round((h - (ganH[i] ?? 0)) / 2));
+        const gy = apilado ? y0 + h + entre : y0 + Math.max(0, Math.round((h - bloqueH(i)) / 2));
         c.font = `900 ${g.tam}px ${SANS}`;
         c.fillStyle = C.crema;
         g.lineas.forEach((r, k) => c.fillText(r, gx, gy + g.tam * 0.9 + k * ganPaso(g)));
+        const nota = notas[i] ?? [];
+        if (nota.length) {
+          c.font = `800 ${notaTam}px ${SANS}`;
+          c.fillStyle = C.magenta;
+          const ny = gy + (ganH[i] ?? 0) + notaAire;
+          nota.forEach((r, k) => c.fillText(r, gx, ny + notaTam * 0.9 + k * notaPaso));
+        }
         y0 += (altoFila[i] ?? 0) + sep;
       });
       if (resto) {
