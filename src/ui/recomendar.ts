@@ -38,12 +38,16 @@ export interface Rango {
 /**
  * Lo que dice la auditoría (sección 6) para cada juego del selector hoy.
  *
- * Sin entrada, el juego no tiene rango claro y queda neutral. La piñata no
- * está entre los ocho de la auditoría. Carnaval de Oruro es la versión de hoy,
- * no La Entrada: el rango de su reemplazo no es el suyo. De pie tiene rango en
- * la sección 6 (de 8 a 200), pero la misma tabla pide que la lista sea la gente
- * de la sala, y el aviso de la sección 7.5 para cuando no lo es todavía no está:
- * recomendarlo sin ese aviso queda para el autor. Ruleta tiene solo tope: el WHEEL_MAX de state.ts, 200 desde que reparte la
+ * Sin entrada, el juego no tiene rango claro y queda neutral. Piñata, De pie y
+ * La Entrada (`oruro`) no están entre los ocho de la auditoría: sus rangos son
+ * los de `docs/juegos.md` (25 de octubre de 2026) y no traen ideal ni puntaje.
+ * Sin `ideal`, todo su tramo cae del lado «alto» de la nota, y sin puntaje se
+ * recomiendan al final: nunca antes de un juego con ideal, y el juego de
+ * siempre sigue siendo el que era. La piñata solo tiene tope (anda con dos
+ * personas), así que queda neutral. De pie va de 8 a 200 y pide que la lista
+ * sea la gente de la sala: el aviso de la sección 7.5 para cuando no lo es
+ * todavía no está, y por eso su nota lo dice. La Entrada se pensó de 30 a 200:
+ * con menos anda, con pocas fraternidades. Ruleta tiene solo tope: el WHEEL_MAX de state.ts, 200 desde que reparte la
  * lista en gajos (21 de octubre de 2026; la sección 5 decía 24). No se importa de
  * state.ts porque ese módulo lee `location` al cargar: una prueba compara los dos.
  */
@@ -55,6 +59,9 @@ export const RANGOS: Partial<Record<Game, Rango>> = {
   trueque: { minimo: 12, ideal: [20, 120], maximo: 200, meta: 8.1 },
   teleferico: { minimo: 16, ideal: [30, 150], maximo: 200, meta: 7.1 },
   wheel: { maximo: 200 },
+  pinata: { maximo: 200 },
+  quien: { minimo: 8, maximo: 200 },
+  oruro: { minimo: 30, maximo: 200 },
 };
 
 /**

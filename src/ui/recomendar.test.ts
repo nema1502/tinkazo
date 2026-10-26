@@ -72,76 +72,99 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
   // primero (los del ideal antes), los neutrales (sin rango claro) en medio, y
   // los que no encajan al final, atenuados.
 
-  it("con 1 persona no encaja nadie que tenga rango", () => {
+  it("con 1 persona no encaja nadie que tenga rango; la piñata y la ruleta, que solo tienen tope, quedan neutrales", () => {
     expect(grupos(1)).toEqual({
       encajan: [],
-      neutral: ["pinata", "wheel", "quien", "oruro"],
-      no: ["race", "sapo", "trompo", "chovena", "trueque", "teleferico"],
+      neutral: ["pinata", "wheel"],
+      no: ["race", "sapo", "trompo", "chovena", "quien", "trueque", "teleferico", "oruro"],
     });
   });
 
-  it("con 2, la mesa y la carrera y el trompo encajan (ninguno ideal); chovena, El Trueque y teleférico no llegan", () => {
+  it("con 2, la mesa y la carrera y el trompo encajan (ninguno ideal); chovena, De pie, El Trueque, teleférico y La Entrada no llegan", () => {
     expect(grupos(2)).toEqual({
       encajan: ["sapo", "race", "trompo"],
-      neutral: ["pinata", "wheel", "quien", "oruro"],
-      no: ["chovena", "trueque", "teleferico"],
+      neutral: ["pinata", "wheel"],
+      no: ["chovena", "quien", "trueque", "teleferico", "oruro"],
     });
   });
 
-  it("con 8, el ideal de la carrera, el sapo y el trompo va primero, y chovena encaja justo en el mínimo", () => {
+  it("con 8, el ideal de la carrera, el sapo y el trompo va primero, y chovena y De pie encajan justo en el mínimo", () => {
     expect(grupos(8)).toEqual({
-      encajan: ["sapo", "race", "trompo", "chovena"],
-      neutral: ["pinata", "wheel", "quien", "oruro"],
-      no: ["trueque", "teleferico"],
+      encajan: ["sapo", "race", "trompo", "chovena", "quien"],
+      neutral: ["pinata", "wheel"],
+      no: ["trueque", "teleferico", "oruro"],
     });
   });
 
   it("con 12, chovena, el sapo y el trompo están en su ideal, El Trueque entra por su mínimo y la carrera ya es muy chica", () => {
     expect(grupos(12)).toEqual({
-      encajan: ["chovena", "sapo", "trompo", "trueque"],
-      neutral: ["pinata", "wheel", "quien", "oruro"],
-      no: ["race", "teleferico"],
+      encajan: ["chovena", "sapo", "trompo", "trueque", "quien"],
+      neutral: ["pinata", "wheel"],
+      no: ["race", "teleferico", "oruro"],
     });
   });
 
   it("con 16, teleférico entra por su mínimo, y el sapo por la clasificatoria; El Trueque los pasa por puntaje", () => {
     expect(grupos(16)).toEqual({
-      encajan: ["chovena", "trueque", "sapo", "teleferico"],
-      neutral: ["pinata", "wheel", "quien", "oruro"],
-      no: ["race", "trompo"],
+      encajan: ["chovena", "trueque", "sapo", "teleferico", "quien"],
+      neutral: ["pinata", "wheel"],
+      no: ["race", "trompo", "oruro"],
     });
   });
 
-  it("con 30, El Trueque, chovena y teleférico están en su ideal; la ruleta sigue, neutral, hasta 200", () => {
+  it("con 30, El Trueque, chovena y teleférico están en su ideal; La Entrada entra por su mínimo y va al final; la ruleta sigue, neutral, hasta 200", () => {
     expect(grupos(30)).toEqual({
-      encajan: ["trueque", "chovena", "teleferico", "sapo"],
-      neutral: ["pinata", "wheel", "quien", "oruro"],
+      encajan: ["trueque", "chovena", "teleferico", "sapo", "quien", "oruro"],
+      neutral: ["pinata", "wheel"],
       no: ["race", "trompo"],
     });
   });
 
   it("con 50, El Trueque, chovena y teleférico; el sapo pasa de su clasificatoria", () => {
     expect(grupos(50)).toEqual({
-      encajan: ["trueque", "chovena", "teleferico"],
-      neutral: ["pinata", "wheel", "quien", "oruro"],
+      encajan: ["trueque", "chovena", "teleferico", "quien", "oruro"],
+      neutral: ["pinata", "wheel"],
       no: ["race", "sapo", "trompo"],
     });
   });
 
   it("con 100, El Trueque y teleférico; chovena ya pasa de sus 80", () => {
     expect(grupos(100)).toEqual({
-      encajan: ["trueque", "teleferico"],
-      neutral: ["pinata", "wheel", "quien", "oruro"],
+      encajan: ["trueque", "teleferico", "quien", "oruro"],
+      neutral: ["pinata", "wheel"],
       no: ["race", "sapo", "trompo", "chovena"],
     });
   });
 
-  it("con 200, El Trueque y teleférico llegan justo a su máximo, y la ruleta también", () => {
+  it("con 200, El Trueque, teleférico, De pie y La Entrada llegan justo a su máximo, y la piñata y la ruleta también", () => {
     expect(grupos(200)).toEqual({
-      encajan: ["trueque", "teleferico"],
-      neutral: ["pinata", "wheel", "quien", "oruro"],
+      encajan: ["trueque", "teleferico", "quien", "oruro"],
+      neutral: ["pinata", "wheel"],
       no: ["race", "sapo", "trompo", "chovena"],
     });
+  });
+
+  it("Piñata solo tiene tope (200), De pie va de 8 a 200 y La Entrada de 30 a 200 (docs/juegos.md)", () => {
+    const juego = (g: Game, n: number) => recomendar(n).games.find((r) => r.game === g);
+    for (const n of [1, 2, 30, 200]) expect(juego("pinata", n), `pinata ${n}`).toMatchObject({ fits: null, note: null });
+    expect(juego("pinata", 201)).toMatchObject({ fits: false, note: "rec.pinata.largo" });
+    expect(juego("quien", 7)).toMatchObject({ fits: false, note: "rec.quien.corto" });
+    expect(juego("quien", 8)).toMatchObject({ fits: true, ideal: false, note: "rec.quien.alto" });
+    expect(juego("quien", 200)).toMatchObject({ fits: true, ideal: false, note: "rec.quien.alto" });
+    expect(juego("quien", 201)).toMatchObject({ fits: false, note: "rec.quien.largo" });
+    expect(juego("oruro", 29)).toMatchObject({ fits: false, note: "rec.oruro.corto" });
+    expect(juego("oruro", 30)).toMatchObject({ fits: true, ideal: false, note: "rec.oruro.alto" });
+    expect(juego("oruro", 200)).toMatchObject({ fits: true, ideal: false, note: "rec.oruro.alto" });
+    expect(juego("oruro", 201)).toMatchObject({ fits: false, note: "rec.oruro.largo" });
+  });
+
+  it("De pie y La Entrada, sin ideal ni puntaje, van al final de los recomendados y nunca son el primero si otro encaja", () => {
+    for (let n = 2; n <= 200; n++) {
+      const encajan = recomendar(n).games.filter((r) => r.fits === true).map((r) => r.game);
+      const finales = encajan.filter((g) => g === "quien" || g === "oruro");
+      expect(encajan.slice(encajan.length - finales.length), `n=${n}`).toEqual(finales);
+      if (encajan.length > finales.length) expect(finales, `n=${n}`).not.toContain(encajan[0]);
+    }
   });
 
   it("nunca pierde ni repite un juego del selector", () => {
