@@ -311,10 +311,27 @@ describe("el encadenado de cabeceras", () => {
     expect(r.ok).toBe(false);
     expect(r.problemas[0]).toMatch(/ledger 70 no es el SHA-256/);
   });
-  it("faltan ledgers, o la hora no crece", () => {
+  it("faltan ledgers, o la hora retrocede", () => {
     const cs = cabeceras({});
     expect(verificarEncadenado([cs[0], cs[2]]).problemas.join(" ")).toMatch(/faltan ledgers/);
-    expect(verificarEncadenado([cs[0], { ...cs[1], cierre: cs[0].cierre }]).problemas.join(" ")).toMatch(/no es posterior/);
+    expect(verificarEncadenado([cs[0], { ...cs[1], cierre: cs[0].cierre - 1 }]).problemas.join(" ")).toMatch(/retrocede/);
+  });
+  it("dos ledgers seguidos pueden cerrar en el mismo segundo (Protocolo 30), pero la hora no retrocede", () => {
+    const hash = Buffer.alloc(32, 1);
+    // cabeceras armadas y leídas de verdad: pasan por el mismo decodificador que las del archivo
+    const armar = (ledger, previo, cierre) => {
+      const c = cabecera({ ledger, previo, txSetHash: hash, txSetResultHash: hash, cierre });
+      return { hash: c.hash, leida: leerCabecera(c.registro) };
+    };
+    const a = armar(100, Buffer.alloc(32, 7), 1_790_000_000);
+    const mismoSegundo = armar(101, a.hash, 1_790_000_000);
+    expect(mismoSegundo.leida.cierre).toBe(a.leida.cierre);
+    expect(verificarEncadenado([a.leida, mismoSegundo.leida])).toEqual({ ok: true, problemas: [] });
+    const otraMas = armar(102, mismoSegundo.hash, 1_790_000_000);
+    expect(verificarEncadenado([a.leida, mismoSegundo.leida, otraMas.leida]).ok).toBe(true);
+    const retrocede = verificarEncadenado([a.leida, armar(101, a.hash, 1_790_000_000 - 1).leida]);
+    expect(retrocede.ok).toBe(false);
+    expect(retrocede.problemas).toEqual(["la hora de cierre del ledger 101 retrocede respecto de la del 100"]);
   });
 });
 

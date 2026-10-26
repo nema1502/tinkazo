@@ -141,7 +141,7 @@ node scripts/verificar-archivo.mjs --enlace <enlace de verificación | comproban
 
 Cada 64 ledgers los validadores publican un punto de control. El del ledger `L` termina en `P = L − (L mod 64) + 63` y son tres archivos comprimidos: `ledger` (las cabeceras de los 64 ledgers), `transactions` (el conjunto de transacciones de cada uno) y `results` (sus resultados), en `<base>/<categoría>/xx/yy/zz/<categoría>-xxyyzzww.xdr.gz`, con `xxyyzzww` igual a `P` en ocho hexadecimales. Para cada fuente se comprueba:
 
-1. **Cabeceras.** El hash de cada una es el SHA-256 de su XDR, los ledgers son seguidos, cada cabecera apunta (`previousLedgerHash`) al hash de la anterior, la hora de cierre solo crece y el archivo termina en `P`.
+1. **Cabeceras.** El hash de cada una es el SHA-256 de su XDR, los ledgers son seguidos, cada cabecera apunta (`previousLedgerHash`) al hash de la anterior, la hora de cierre no retrocede (desde el Protocolo 30 dos ledgers seguidos pueden cerrar en el mismo segundo) y el archivo termina en `P`.
 2. **La transacción.** Un sobre del conjunto de `L` tiene el hash buscado, SHA-256(id de red ‖ tipo de sobre ‖ transacción), con el id de red igual al SHA-256 de la frase de la red. En un fee-bump el sello es la transacción interior: vale el hash de la de adentro o el de afuera, y el resultado se busca por el de afuera.
 3. **El ledger.** El SHA-256 del conjunto (el del conjunto generalizado, o el del hash del ledger anterior seguido de los sobres) es el `txSetHash` de la cabecera de `L`, y el SHA-256 de los resultados es su `txSetResultHash`.
 4. **El éxito.** El resultado de la transacción es un éxito (en un fee-bump, también el de la interior).

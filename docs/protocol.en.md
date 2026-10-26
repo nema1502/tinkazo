@@ -143,7 +143,7 @@ node scripts/verificar-archivo.mjs --enlace <verification link | comprobante.jso
 
 Every 64 ledgers the validators publish a checkpoint. The one for ledger `L` ends at `P = L − (L mod 64) + 63` and is three compressed files: `ledger` (the headers of the 64 ledgers), `transactions` (each one's transaction set) and `results` (their results), at `<base>/<category>/xx/yy/zz/<category>-xxyyzzww.xdr.gz`, with `xxyyzzww` being `P` in eight hex digits. For each source the tool checks:
 
-1. **Headers.** Each hash is the SHA-256 of its XDR, the ledgers are consecutive, each header points (`previousLedgerHash`) to the hash of the one before, close times only grow, and the file ends at `P`.
+1. **Headers.** Each hash is the SHA-256 of its XDR, the ledgers are consecutive, each header points (`previousLedgerHash`) to the hash of the one before, the close time does not go backwards (since Protocol 30 two consecutive ledgers can close in the same second), and the file ends at `P`.
 2. **The transaction.** An envelope in `L`'s transaction set has the wanted hash, SHA-256(network id ‖ envelope type ‖ transaction), the network id being the SHA-256 of the network passphrase. In a fee bump the seal is the inner transaction: the inner or the outer hash is accepted, and the result is looked up by the outer one.
 3. **The ledger.** The SHA-256 of the set (the generalized set's, or the previous ledger hash followed by the envelopes) is the `txSetHash` of `L`'s header, and the SHA-256 of the results is its `txSetResultHash`.
 4. **Success.** The transaction's result is a success (in a fee bump, the inner one too).

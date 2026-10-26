@@ -254,7 +254,7 @@ export function leerCabecera(registro) {
   };
 }
 
-/** Las cabeceras forman una cadena: hash = SHA-256(cabecera), ledgers seguidos, cada una apunta a la anterior y la hora solo crece. */
+/** Las cabeceras forman una cadena: hash = SHA-256(cabecera), ledgers seguidos, cada una apunta a la anterior y la hora de cierre no retrocede. */
 export function verificarEncadenado(cabeceras) {
   const problemas = [];
   for (let i = 0; i < cabeceras.length; i++) {
@@ -264,7 +264,8 @@ export function verificarEncadenado(cabeceras) {
     const p = cabeceras[i - 1];
     if (c.ledger !== p.ledger + 1) problemas.push(`entre el ledger ${p.ledger} y el ${c.ledger} faltan ledgers`);
     if (c.previo !== p.hash) problemas.push(`la cabecera del ledger ${c.ledger} no apunta al hash de la del ${p.ledger}`);
-    if (c.cierre <= p.cierre) problemas.push(`la hora de cierre del ledger ${c.ledger} no es posterior a la del ${p.ledger}`);
+    // Desde el Protocolo 30 dos ledgers seguidos pueden cerrar en el mismo segundo: la hora puede repetirse, no retroceder.
+    if (c.cierre < p.cierre) problemas.push(`la hora de cierre del ledger ${c.ledger} retrocede respecto de la del ${p.ledger}`);
   }
   return { ok: problemas.length === 0, problemas };
 }
