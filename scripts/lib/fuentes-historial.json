@@ -1,0 +1,20 @@
+{
+  "actualizado": "2026-10-25",
+  "nota": "Direcciones de archivos de historial de Stellar de organizaciones distintas, una por organización, tomadas de la lista de validadores de Obsrvr Radar del 25 de octubre de 2026 (no es una lista oficial de la SDF) y probadas ese día. Las direcciones se pudren: SatoshiPay ya cayó y LOBSTR retiró dos. Para cambiarlas sin tocar el código, editar este archivo o pasar --fuentes. Dos direcciones del mismo dominio cuentan como una sola organización.",
+  "redes": {
+    "mainnet": {
+      "fuentes": [
+        { "nombre": "Stellar Development Foundation", "url": "https://history.stellar.org/prd/core-live/core_live_001" },
+        { "nombre": "Franklin Templeton", "url": "https://stellar-history1.franklintempleton.com/history1" },
+        { "nombre": "LOBSTR", "url": "https://archive.v1.stellar.lobstr.co" },
+        { "nombre": "Blockdaemon", "url": "https://stellar-full-history1.bdnodes.net" },
+        { "nombre": "MoneyGram", "url": "https://stellar-history.moneygram.com/v1" }
+      ],
+      "reserva": [{ "nombre": "PublicNode", "url": "https://hercules-history.publicnode.org" }]
+    },
+    "testnet": {
+      "fuentes": [{ "nombre": "Stellar Development Foundation", "url": "https://history.stellar.org/prd/core-testnet/core_testnet_001" }],
+      "reserva": []
+    }
+  }
+}
