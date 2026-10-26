@@ -51,8 +51,13 @@ const ALFABETO = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz
 const ES_ID = /^[0-9A-Za-z]{8}$/;
 /** Altas por dirección IP y por hora. Se cuentan en memoria: si el objeto se duerme, vuelven a cero. */
 const POR_IP_POR_HORA = 60;
-/** Altas por día en total: cuida el plan gratis (100.000 filas escritas por día). */
-const POR_DIA = 20_000;
+/**
+ * Altas por día en total: cuida el plan gratis, sobre todo sus 5 GB de Durable
+ * Objects. Un enlace no vence, así que 20.000 altas de 256 KB (el tope anterior)
+ * llenaban la cuenta entera en un solo día de abuso; con 2.000 son 512 MB, y llenar
+ * los 5 GB lleva unos diez días seguidos, tiempo de verlo y de limpiar.
+ */
+const POR_DIA = 2_000;
 /** El largo mínimo del secreto de administración: uno más corto se podría adivinar probando. */
 const ADMIN_MINIMO = 32;
 

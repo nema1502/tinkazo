@@ -17,7 +17,7 @@ Un Worker de Cloudflare en `c.tinkazo.app` que guarda el comprobante de un sorte
 | `DELETE /v1/<id>` con `Authorization: Bearer <ADMIN_TOKEN>` | Lo borra Tinkazo, a pedido. Existe solo si el Worker tiene el secreto `ADMIN_TOKEN`, de 32 caracteres o más; se compara en tiempo constante |
 | `GET /<id>` | Redirige a `https://tinkazo.app/c/<id>`; el navegador conserva el fragmento |
 
-Límites: 256 KB por enlace, 60 altas por hora por dirección IP (se cuentan en memoria, sin guardar la IP) y 20.000 altas por día en total.
+Límites: 256 KB por enlace, 60 altas por hora por dirección IP (se cuentan en memoria, sin guardar la IP) y 2.000 altas por día en total (`POR_DIA` en `src/index.ts`). El tope del día era de 20.000, y 20.000 × 256 KB llenan los 5 GB gratis de la cuenta en un día; con 2.000 son 512 MB por día y llenarlos lleva unos diez. Si el uso real pasa de 2.000 enlaces por día, se sube `POR_DIA` a la vez que se pasa a Workers Paid.
 
 ## Borrar a pedido
 
