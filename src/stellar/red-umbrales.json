@@ -1,18 +1,26 @@
 {
-  "_nota": "Los umbrales con los que la app decide, antes de sellar, si la red está bien (src/stellar/chequeo-red.ts). Un solo lugar, una constante por red. El detector externo (scripts/vigilar-red.mjs) mira la red cada 30 minutos con los mismos números. Los costos son XLM de un sello simulado.",
+  "_nota": "Un solo lugar para los números de la red. La app (src/stellar/chequeo-red.ts) decide con ellos, antes de sellar, si la red está bien. El detector externo (scripts/vigilar-red.mjs, cada 30 minutos) lee de acá, con scripts/lib/umbrales-red.mjs, los niveles de estado vivo con los que avisa a quien mantiene, y no tiene números propios. Los costos son XLM de un sello simulado; el estado es el promedio de la ventana, en MB (1 MB = 10^6 bytes).",
   "testnet": {
     "_tope": "Max fee de la app de Pollar en testnet: 100 XLM (el máximo que deja su panel).",
     "topePollarXlm": 100,
     "factorDelFeeBump": 3,
     "rojoXlm": 33,
-    "amarilloXlm": 5
+    "amarilloXlm": 5,
+    "_estado": "Estado vivo de Soroban en testnet (objetivo 7.000 MB): un solo nivel, el rojo a 6.000 MB.",
+    "estadoMb": [{ "name": "rojo", "mb": 6000 }]
   },
   "mainnet": {
     "_tope": "Max fee previsto para la app de Pollar en mainnet: 1 XLM.",
     "topePollarXlm": 1,
     "factorDelFeeBump": 3,
     "rojoXlm": 0.33,
-    "amarilloXlm": 0.26
+    "amarilloXlm": 0.26,
+    "_estado": "Estado vivo de Soroban en mainnet (objetivo 3.000 MB): amarillo a 2.000 MB (2/3, donde la renta deja el piso), naranja a 2.500 y rojo a 2.850 (quedan 150 MB).",
+    "estadoMb": [
+      { "name": "amarillo", "mb": 2000 },
+      { "name": "naranja", "mb": 2500 },
+      { "name": "rojo", "mb": 2850 }
+    ]
   },
   "comun": {
     "_factor": "Pollar ofrece un fee-bump de unas 3 veces la tarifa interna (medido el 20 de octubre de 2026): con el costo por encima de rojoXlm la oferta pasa el tope y el patrocinio se apaga en silencio.",
@@ -24,6 +32,8 @@
     "cacheS": 60,
     "repetirCadaS": 60,
     "reintentosAntesDeSinSello": 3,
-    "reintentarCadaS": 15
+    "reintentarCadaS": 15,
+    "_rojoPorcientoDelObjetivo": "Seguro por si la red cambia su objetivo de estado: al 95 % del objetivo vigente es rojo aunque el nivel de arriba no lo diga.",
+    "rojoPorcientoDelObjetivo": 95
   }
 }
