@@ -4,7 +4,7 @@
  * Lo comparten el Worker, que valida cada conteo con esto antes de sumarlo, y
  * el sitio (`src/contar.ts`), que toma de acá los tipos: un evento, una
  * propiedad o un valor que no está en la lista no compila. Es la tabla de §4.5
- * y §4.8 de la arquitectura de métricas (`Tinkazo_Grants/arquitectura.md`),
+ * y §4.8 de la arquitectura de métricas del proyecto,
  * con los agregados del onboarding que aceptó §4.9 el 22 de octubre de 2026.
  *
  * Las reglas (§4.1): nada de nombres, listas, huellas de listas, direcciones de
@@ -17,7 +17,7 @@
  */
 import deployments from "../../../src/stellar/deployments.json";
 
-/** Las redes del contrato. Las de testnet se guardan igual y no van al tablero del SCF. */
+/** Las redes del contrato. Las de testnet se guardan igual y no van al tablero público. */
 export const REDES = ["mainnet", "testnet"] as const;
 
 /**

@@ -59,7 +59,7 @@ La dirección `c.tinkazo.app` es un registro AAAA a `100::` con el proxy de Clou
 
 ## El contador anónimo del embudo
 
-Para medir el recorrido del organizador (pedido de Nicolás del 22 de octubre de 2026: "medible y computable para mandarlo al SCF") sin nombres y sin rastreadores de terceros. Es la sección 4.8 de la arquitectura de métricas (`Tinkazo_Grants/arquitectura.md`); los eventos y sus propiedades son los de la 4.5, con los agregados del onboarding que aceptó la 4.9.
+Para medir el recorrido del organizador sin datos personales: sin nombres y sin rastreadores de terceros. Es la sección 4.8 de la arquitectura de métricas del proyecto; los eventos y sus propiedades son los de la 4.5, con los agregados del onboarding que aceptó la 4.9.
 
 | Pedido | Qué hace |
 | --- | --- |
@@ -85,7 +85,7 @@ Para medir el recorrido del organizador (pedido de Nicolás del 22 de octubre de
 
 **Lo que guarda:** una fila por día (UTC), evento, propiedades y sorteo, con cuántas veces pasó. Nada más: ni el evento suelto, ni la hora, ni la dirección IP, ni el navegador, ni cookies, ni un identificador de persona, de equipo o de sesión. Cada conteo se escribe al llegar, una fila escrita por conteo: con el tope de 20.000 por día, el contador no puede usar más de una quinta parte de las 100.000 filas escritas por día de la cuenta, y los enlaces siguen teniendo las suyas. Juntarlos en memoria y escribir una vez por minuto, como sugiere §4.8, se probó el 22 de octubre y se descartó: un objeto quieto se apaga antes de su alarma y pierde lo que tenía, sin aviso, justo cuando hay poco movimiento. Fuera de la cadena no hay nada que una un paso con el siguiente, a propósito: el seguimiento por cuenta (cuánto tarda alguien en hacer su primer sorteo, quién vuelve) sale de la cadena, con el script de métricas.
 
-**Lo que no puede evitar, y se dice:** cualquiera puede mandar conteos inventados con un script. Por eso los conteos son señal y no prueba: en la postulación van al lado de lo que sí está en la cadena, y se publican crudos.
+**Lo que no puede evitar, y se dice:** cualquiera puede mandar conteos inventados con un script. Por eso los conteos son señal y no prueba: se muestran al lado de lo que sí está en la cadena, y se publican crudos.
 
 **Los topes**, para que nadie lo llene ni le quite el plan gratis a los enlaces (los dos comparten las 100.000 filas escritas y los 5 millones de filas leídas por día de la cuenta):
 

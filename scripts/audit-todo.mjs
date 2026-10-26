@@ -26,7 +26,7 @@
  *   `--base`. Cada corrida lleva su `CDP_PORT` (9680, 9690; `--cdp` lo cambia).
  * - Con `--json`, la última línea es el resumen de la batería, con la forma de
  *   cualquier auditor: {"auditor":"audit-todo","aprobadas","total","fallas",…}.
- * - El archivo va a `.claude/progreso/auditorias/<fecha-hora>.json` (no se
+ * - El archivo va a `docs/capturas/auditorias/<fecha-hora>.json` (no se
  *   versiona) y la salida entera de cada corrida, a una carpeta al lado.
  * - Apaga solo lo que lanzó, por PID. Nunca todos los Chrome.
  * - Sale con 1 si algo falló o si algún auditor se cayó sin dejar resumen.
@@ -50,7 +50,7 @@ const lista = (v) => (v ? v.split(",").map((x) => x.trim()).filter(Boolean) : []
 
 const inicio = new Date();
 const sello = `${inicio.getFullYear()}-${String(inicio.getMonth() + 1).padStart(2, "0")}-${String(inicio.getDate()).padStart(2, "0")}_${String(inicio.getHours()).padStart(2, "0")}-${String(inicio.getMinutes()).padStart(2, "0")}`;
-const salida = resolve(opt("--out", join(".claude", "progreso", "auditorias", `${sello}.json`)));
+const salida = resolve(opt("--out", join("docs", "capturas", "auditorias", `${sello}.json`)));
 const carpetaLogs = salida.replace(/\.json$/, "") + "-logs";
 // Dos Chrome como máximo, siempre.
 const paralelo = Math.max(1, Math.min(2, Number(opt("--paralelo", "2")) || 2));

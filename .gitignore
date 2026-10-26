@@ -27,6 +27,5 @@ Thumbs.db
 
 # Lo que dejan los auditores en cada corrida: se regenera, no se versiona.
 # Las imágenes del README sí.
-.claude/progreso/auditorias/
 docs/capturas/*
 !docs/capturas/readme/

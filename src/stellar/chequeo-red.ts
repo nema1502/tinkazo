@@ -11,7 +11,8 @@ import umbralesJson from "./red-umbrales.json";
  * mira el último ledger, las comisiones de inclusión y la versión del protocolo, y
  * dice verde, amarillo o rojo con la razón.
  *
- * Los cinco fallos (docs de la especificación, `.claude/progreso/juegos/contingencia-red-spec.md`):
+ * Los cinco fallos (la especificación de la contingencia de red del 25 de octubre
+ * de 2026, resumida en docs/ux.md, "Cuando la red falla"):
  *
  * 1. `costo-alto`: sellar cuesta más de lo que el patrocinador paga (Pollar apaga el
  *    patrocinio en silencio por encima de su tope), o pide restaurar el contrato.
