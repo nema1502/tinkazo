@@ -39,7 +39,7 @@ export function normalizar(c) {
 }
 
 /** El resumen de una corrida, a partir de sus comprobaciones. */
-export function resumenDe({ auditor, objetivo, checks, segundos }) {
+export function resumenDe({ auditor, objetivo, checks, segundos, datos }) {
   const lista = checks.map(normalizar);
   const malas = lista.filter((c) => !c.ok);
   const fallas = malas.slice(0, MAX_FALLAS).map(({ nombre, detalle }) => ({ nombre, detalle }));
@@ -51,6 +51,8 @@ export function resumenDe({ auditor, objetivo, checks, segundos }) {
     total: lista.length,
     fallas,
     segundos: Math.round(segundos),
+    // Lo que el auditor quiera dejar además de las comprobaciones (el zoom por juego, por ejemplo).
+    ...(datos ? { datos } : {}),
   };
 }
 
@@ -58,9 +60,9 @@ export function resumenDe({ auditor, objetivo, checks, segundos }) {
  * Imprime la línea de resumen si se pidió `--json`. Los segundos son los del
  * proceso entero (arranque de Chrome incluido), que es lo que cuesta correrlo.
  */
-export function emitirJson({ auditor, objetivo, checks, args = process.argv.slice(2), segundos = process.uptime() }) {
+export function emitirJson({ auditor, objetivo, checks, datos, args = process.argv.slice(2), segundos = process.uptime() }) {
   if (!quiereJson(args)) return null;
-  const r = resumenDe({ auditor, objetivo, checks, segundos });
+  const r = resumenDe({ auditor, objetivo, checks, segundos, datos });
   console.log(JSON.stringify(r));
   return r;
 }

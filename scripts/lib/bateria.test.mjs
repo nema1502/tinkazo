@@ -172,6 +172,13 @@ describe("juntar los resultados", () => {
     expect(g[0].corridas[1].fallas).toEqual([{ nombre: "ganador", detalle: "difiere" }]);
   });
 
+  it("los datos que dejó el auditor (el zoom por juego) pasan a la corrida del informe", () => {
+    const r = corrida("audit-emocion", "todos", 3, 3);
+    r.resumen.datos = { zoom: { race: { min: 1.9 } } };
+    expect(agrupar([r])[0].corridas[0].datos).toEqual({ zoom: { race: { min: 1.9 } } });
+    expect(agrupar([corrida("audit-ui", "sitio", 1, 1)])[0].corridas[0]).not.toHaveProperty("datos");
+  });
+
   it("un auditor que se cae sin dejar resumen cuenta como falla, no como silencio", () => {
     const g = agrupar([{ tarea: { auditor: "smoke", objetivo: "sitio", id: "smoke" }, codigo: 1, segundos: 5, resumen: null, error: null, cola: ["Error: no encontré Chrome"] }]);
     expect(g[0].estado).toBe("error");

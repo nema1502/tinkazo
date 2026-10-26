@@ -49,6 +49,12 @@ describe("el resumen de una línea de un auditor", () => {
     expect(r.fallas.at(-1).nombre).toBe(`… y ${250 - MAX_FALLAS} fallas más`);
   });
 
+  it("deja `datos` en la línea cuando el auditor los trae, y nada cuando no", () => {
+    const con = resumenDe({ auditor: "a", objetivo: "o", checks: [], segundos: 1, datos: { zoom: { race: { min: 1.8 } } } });
+    expect(con.datos).toEqual({ zoom: { race: { min: 1.8 } } });
+    expect("datos" in resumenDe({ auditor: "a", objetivo: "o", checks: [], segundos: 1 })).toBe(false);
+  });
+
   it("sin comprobaciones no inventa ninguna", () => {
     expect(resumenDe({ auditor: "a", objetivo: "o", checks: [], segundos: 0 })).toMatchObject({ aprobadas: 0, total: 0, fallas: [] });
   });

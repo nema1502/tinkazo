@@ -17,6 +17,13 @@
  *   aprende. Ningún puesto puede repetirse en más de la mitad de las carreras,
  *   y la ganadora tiene que ir adelante en algunas y atrás en otras.
  *
+ * - **El zoom del golpe.** Cuántas veces más cerca está la cámara en el golpe que
+ *   en el plano general (la escala de la escena, que es la que se ve): al menos
+ *   1,6×. Corre el show entero con `?auditar=camara`, así que se mide en las
+ *   primeras `--semillas-zoom` (2) y no en las dieciséis. Con `--json`, la línea
+ *   trae `datos.zoom` por juego (mínimo, mediana, máximo y cuántas semillas
+ *   tuvieron golpe) y `datos.arcos`.
+ *
  * Para no esperar treinta segundos por semilla, cambia el reloj como el
  * auditor exigente, pero en turbo: cada cuadro real despacha veinte cuadros de
  * juego. La animación es función del tiempo de juego, así que el resultado es
@@ -30,6 +37,7 @@ import { createHash } from "node:crypto";
 import { launch, sleep } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 import { SELECTOR as TODOS } from "./lib/juegos.mjs";
+import { ZOOM_MINIMO, instalarZoom, razonDeZoom, resumirZoom, veces } from "./lib/zoom.mjs";
 
 /**
  * Los juegos que tienen zoom de emoción (`Camera.golpe` en `docs/motores.md`):
@@ -46,6 +54,10 @@ const cual = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith
 const juegos = cual === "todos" ? TODOS : [cual];
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const N = Number(opt("--semillas", "16"));
+// El zoom del golpe necesita correr el show entero (el golpe cae al final) y no
+// depende del arco: se mira en las primeras semillas nada más. 0 lo saltea.
+const zoomSemillas = Number(opt("--semillas-zoom", "2"));
+const zoomMin = Number(opt("--zoom-min", String(ZOOM_MINIMO)));
 // El motor nuevo es el de todos desde el 28 de septiembre (docs/motores.md);
 // `--motor clasico` mide los juegos del motor anterior. El nuevo usa la placa de video.
 const motor = opt("--motor", "pixi");
@@ -72,6 +84,18 @@ const TURBO = `(() => {
   RAF(bombear);
 })()`;
 
+/**
+ * Lo mismo, y además mide el zoom del director: la escala de la escena antes del
+ * golpe (el plano general más ancho) y en el golpe (`scripts/lib/zoom.mjs`).
+ */
+const TURBO_ZOOM = TURBO.replace("performance.now = () => virt;", () => `performance.now = () => virt;
+  (${instalarZoom.toString()})();`).replace(
+  "for (const cb of lote) { try { cb(virt); } catch (e) {} }",
+  () => `for (const cb of lote) { try { cb(virt); } catch (e) {} }
+      try { window.__zoom.medir(); } catch (e) {}`,
+);
+if (!TURBO_ZOOM.includes("__zoom.medir") || !TURBO_ZOOM.includes("window.__zoom = Z")) throw new Error("no pude armar el reloj con zoom");
+
 const checks = [];
 const check = (name, ok, detail = "") => {
   checks.push({ name, ok, detail });
@@ -80,6 +104,9 @@ const check = (name, ok, detail = "") => {
 
 const semilla = (i) => createHash("sha256").update(`semilla-${i}`).digest("hex");
 const cuenta = (xs) => xs.reduce((m, x) => m.set(x, (m.get(x) ?? 0) + 1), new Map());
+
+// Lo que `--json` deja además de las comprobaciones: el zoom del golpe y los arcos, por juego.
+const datos = { zoom: {}, arcos: {} };
 
 const browser = await launch({ port: Number(process.env.CDP_PORT || 9401), width: 1280, height: 720 });
 try {
@@ -128,6 +155,7 @@ try {
     }
     const c = cuenta(arcos);
     const peor = Math.max(...c.values());
+    datos.arcos[juego] = Object.fromEntries(c);
     check(
       "los arcos varían",
       c.size >= 3 && peor <= N / 2 && !c.has("?"),
@@ -159,6 +187,30 @@ try {
         `puestos ${aMitad.join(" ")} · primera en ${primera}, última en ${ultima}, adelante en ${adelante}, atrás en ${atras}`,
       );
     }
+    // El zoom del director: en el golpe, cuántas veces más cerca que el plano general.
+    if (zoomSemillas > 0) {
+      const razones = [];
+      for (let i = 1; i <= zoomSemillas; i++) {
+        const page = await browser.open("about:blank");
+        await page.send("Page.addScriptToEvaluateOnNewDocument", { source: TURBO_ZOOM });
+        await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&semilla=${semilla(i)}&auditar=camara${motor ? `&motor=${motor}` : ""}` });
+        const fin = await page.waitFor("window.__zoom && window.__zoom.fin", 120_000);
+        const z = fin.ok ? JSON.parse(await page.eval("JSON.stringify({ minAntes: window.__zoom.minAntes, enGolpe: window.__zoom.enGolpe, golpe: window.__zoom.golpe })")) : null;
+        razones.push(razonDeZoom(z));
+        try {
+          await page.send("Page.close");
+        } catch {
+          /* ya cerrada */
+        }
+      }
+      const rz = resumirZoom(razones);
+      datos.zoom[juego] = { ...rz, pedido: zoomMin };
+      check(
+        `el zoom del golpe llega a ${veces(zoomMin)} el plano general`,
+        rz.conGolpe === razones.length && rz.min >= zoomMin,
+        rz.conGolpe ? `mín ${veces(rz.min)} · mediana ${veces(rz.mediana)} · máx ${veces(rz.max)} · con golpe ${rz.conGolpe}/${razones.length}` : "el juego no hace ningún golpe de cámara",
+      );
+    }
   }
 } finally {
   await browser.close();
@@ -166,5 +218,5 @@ try {
 
 const malos = checks.filter((c) => !c.ok);
 console.log(`\n${malos.length ? "RECHAZADO" : "APROBADO"}: ${checks.length - malos.length}/${checks.length} comprobaciones`);
-emitirJson({ auditor: "audit-emocion", objetivo: cual, checks });
+emitirJson({ auditor: "audit-emocion", objetivo: cual, checks, datos });
 process.exit(malos.length ? 1 : 0);

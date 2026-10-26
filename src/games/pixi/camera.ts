@@ -167,6 +167,11 @@ export class Camera {
     return this.reloj;
   }
 
+  /** La hora de la cámara en que cayó el golpe, o null si el juego no pidió ninguno (para los auditores). */
+  get golpeEn(): number | null {
+    return this.pegada ? this.pegada.t0 : null;
+  }
+
   /** El zoom de emoción más alto que llegó, y en qué hora de la cámara. */
   pico(): { t: number; z: number } {
     return { t: this.emoPicoT, z: this.emoPicoZ };

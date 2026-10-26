@@ -52,7 +52,7 @@ export const AUDITORES = [
   { id: "audit-identidad", script: "audit-identidad.mjs", chrome: true, nivel: "siempre", juegos: "todos", estimado: 120, args: conBase, fuera: TRES_FUERA },
   { id: "audit-pantalla", script: "audit-pantalla.mjs", chrome: true, nivel: "aparte", juegos: "todos", estimado: 73, args: conBase, fuera: TRES_FUERA },
   { id: "audit-delatores", script: "audit-delatores.mjs", chrome: true, nivel: "siempre", juegos: "todos", estimado: 102, args: conBase, fuera: TRES_FUERA },
-  { id: "audit-emocion", script: "audit-emocion.mjs", chrome: true, nivel: "siempre", juegos: "todos", estimado: 20, args: conBase, fuera: TRES_FUERA },
+  { id: "audit-emocion", script: "audit-emocion.mjs", chrome: true, nivel: "siempre", juegos: "todos", estimado: 60, args: conBase, fuera: TRES_FUERA },
   { id: "audit-legible", script: "audit-legible.mjs", chrome: true, red: true, nivel: "siempre", juegos: "todos", estimado: 45, args: conBase, fuera: TRES_FUERA },
   { id: "audit-choques", script: "audit-choques.mjs", chrome: true, nivel: "siempre", juegos: null, estimado: 41, args: conBase },
   { id: "audit-encuadre", script: "audit-encuadre.mjs", chrome: true, nivel: "siempre", juegos: null, estimado: 164, args: conBase },
@@ -245,7 +245,7 @@ export function agrupar(resultados) {
       aprobadas,
       total,
       fallas,
-      ...(resumen ? {} : { cola: r.cola ?? [] }),
+      ...(resumen ? (resumen.datos ? { datos: resumen.datos } : {}) : { cola: r.cola ?? [] }),
     });
     porAuditor.set(tarea.auditor, g);
   }

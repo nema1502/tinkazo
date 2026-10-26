@@ -457,6 +457,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   const tagLayer = new Container();
   app.stage.addChild(bg, scene, hud, tagLayer, podium);
   const cam = new Camera().desenfoque(aj.desenfoque);
+  // `?auditar=camara`: la cámara y la escena a mano de los auditores
+  // (`window.__tinkazo`), para medir el zoom del golpe (`scripts/lib/zoom.mjs`).
+  // Sin el parámetro no se expone nada.
+  if (params.get("auditar") === "camara") (window as unknown as { __tinkazo: unknown }).__tinkazo = { camara: cam, escena: scene };
   // El nivel queda anotado en el lienzo, para medirlo y para los auditores.
   view.dataset.calidad = arranque.nivel;
   // Si los cuadros empiezan a tardar, baja de nivel en el mismo show y deja
