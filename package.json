@@ -23,6 +23,7 @@
     "audit:sound": "node scripts/audit-sound.mjs",
     "audit:mezcla": "node scripts/audit-mezcla.mjs",
     "audit:ui": "node scripts/audit-ui.mjs",
+    "audit:legible": "node scripts/audit-legible.mjs",
     "audit:todo": "node scripts/audit-todo.mjs",
     "smoke": "node scripts/smoke.mjs"
   },

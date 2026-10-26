@@ -124,6 +124,27 @@ pnpm audit:todo --simular                         # muestra qué correría y cu�
 
 `objetivo` es el juego o la página que se miró (`todos`, `sitio`, `paginas`). Los nombres y detalles de las fallas se acortan a 160 y 240 caracteres, y de más de cien fallas se detallan las primeras cien y se cuenta el resto. El agregador toma la última línea con esa forma de la salida de cada corrida, y la propia batería, con `--json`, termina con una línea igual (`"auditor":"audit-todo"`). `audit-delatores` conserva su `--json <archivo>` (el detalle de las señales); sin archivo, solo agrega la línea. Las pruebas del agregador, sin red ni Chrome, están en `scripts/lib/bateria.test.mjs`, `resumen.test.mjs` y `bateria-proceso.test.mjs`.
 
+### El auditor de legibilidad
+
+```bash
+node scripts/audit-legible.mjs [juego|todos] [--temas dark,light] [--tamanos proyector,celular] [--json]
+```
+
+Nació del pedido de Nicolás del 25 de octubre de 2026: "tiene mucha letra chiquita; cuando estás proyectando se ve feo, igual en celular". Mide el tamaño en píxeles de pantalla de cada texto visible y falla por los que quedan debajo de la regla:
+
+| Pantalla | Secundario | Principal |
+|---|---|---|
+| Proyector, 1920×1080 | 28 px | 48 px |
+| Celular, 390×844 | 16 px | 22 px |
+
+Principal es lo que se lee primero: títulos, el botón de la acción, el nombre del ganador y el cartel del estadio. La regla se cambia con `--reglas proyector=28:48,celular=16:22` (quedó escrita antes de que exista el inventario del barrido de letra, y esa regla manda cuando se escriba).
+
+- **Los pasos del sorteo**, con el DOM: la herramienta al abrir (la lista) y un sorteo de demostración (`?demo=wheel&instant=1&lead=3`, con drand de verdad) en los pasos que se alcanzan a ver: sellada y esperando, ronda lista y resultado. El tamaño es el de CSS por la escala con que se dibuja. Los textos que comparten selector y tamaño son una sola falla (el pie son cuarenta enlaces con el mismo estilo), y dice cuántos son.
+- **El estadio de cada juego** (`?pose=<juego>`, sin red), con el reloj en turbo de `audit-emocion`: cada 16 cuadros mira los textos que dibuja Pixi, a los que llega por `window.__PIXI_APP_INIT__` como `audit-pantalla.mjs`, y los del DOM del estadio (subtítulos y marcador). De cada texto del lienzo se juzga la **mediana** de su tamaño mientras estuvo a la vista (no el instante en que entra o sale) y su capa decide la regla: el cartel del ganador es lo principal, y los nombres, el marcador y la escena son lo secundario.
+- **Capturas recortadas** en `docs/capturas/legible/`, una por falla (hasta 12 por pantalla del DOM y 6 por juego): las del DOM con DevTools, y las del lienzo con un recorte que saca la propia página en el momento, porque el lienzo conserva el cuadro.
+
+Corre en los dos tamaños y los dos temas, y está pensado para menos de 4 minutos por tema. Lo que todavía no mira, porque se abre con un gesto: la espera en grande y el resultado en grande. Las pruebas del código que corre adentro de la página, contra una página de mentira, están en `scripts/lib/legible.test.mjs`.
+
 ### Qué se recortó de la batería (25 de octubre de 2026)
 
 La nota de la investigación de los auditores encontró tres repeticiones. Esto se hizo con cada una:

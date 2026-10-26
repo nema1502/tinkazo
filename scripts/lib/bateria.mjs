@@ -53,6 +53,7 @@ export const AUDITORES = [
   { id: "audit-pantalla", script: "audit-pantalla.mjs", chrome: true, nivel: "aparte", juegos: "todos", estimado: 73, args: conBase, fuera: TRES_FUERA },
   { id: "audit-delatores", script: "audit-delatores.mjs", chrome: true, nivel: "siempre", juegos: "todos", estimado: 102, args: conBase, fuera: TRES_FUERA },
   { id: "audit-emocion", script: "audit-emocion.mjs", chrome: true, nivel: "siempre", juegos: "todos", estimado: 20, args: conBase, fuera: TRES_FUERA },
+  { id: "audit-legible", script: "audit-legible.mjs", chrome: true, red: true, nivel: "siempre", juegos: "todos", estimado: 45, args: conBase, fuera: TRES_FUERA },
   { id: "audit-choques", script: "audit-choques.mjs", chrome: true, nivel: "siempre", juegos: null, estimado: 41, args: conBase },
   { id: "audit-encuadre", script: "audit-encuadre.mjs", chrome: true, nivel: "siempre", juegos: null, estimado: 164, args: conBase },
   { id: "audit-sound", script: "audit-sound.mjs", chrome: true, nivel: "siempre", juegos: "todos", estimado: 50, exclusivo: true, args: conBase, fuera: TRES_FUERA },

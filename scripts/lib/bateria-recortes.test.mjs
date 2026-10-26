@@ -82,10 +82,11 @@ describe("cuánto se recortó el `todos` (juego × auditor, y arranques de Chrom
     expect(escenasDespues(planDe({ noche: true }))).toBe(80);
   });
 
-  it("un arranque de Chrome menos: pantalla ya no tiene el suyo", () => {
-    // Antes: 10 de audit-game, 7 de los que miran juegos (rigor, identidad,
+  it("un arranque de Chrome menos por pantalla, y uno más por el auditor de legibilidad (nuevo)", () => {
+    // Antes: 10 de audit-game, 6 de los que miran juegos (rigor, identidad,
     // pantalla, delatores, emoción, sonido; la mezcla de noche) y 10 sueltos.
-    expect(contar(planDe()).chromes).toBe(10 + 5 + 10);
-    expect(contar(planDe({ noche: true })).chromes).toBe(10 + 6 + 10);
+    // Ahora: pantalla ya no tiene el suyo y entra audit-legible.
+    expect(contar(planDe()).chromes).toBe(10 + 5 + 10 + 1);
+    expect(contar(planDe({ noche: true })).chromes).toBe(10 + 6 + 10 + 1);
   });
 });
