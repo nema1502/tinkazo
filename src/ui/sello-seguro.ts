@@ -34,8 +34,13 @@ export interface PasosDelSello {
   sellar: (round: number) => Promise<{ raffleId: bigint; txHash: string }>;
   /** Averigua si un intento entró (`resolverSelloEnLaRed`). */
   resolver: (intento: IntentoDeSello) => Promise<Resolucion>;
-  /** Una ronda nueva, con el margen de siempre, contada desde ahora. */
-  rondaNueva: () => { round: number; ts: number };
+  /**
+   * Una ronda nueva, con el margen de siempre, contada desde ahora. Sin ella (el sello
+   * que se vuelve a intentar después de "Seguir sin sello") la ronda es una sola: lo
+   * que se arregla con otra ronda no se arregla, y sale el error. Sellar otra ronda
+   * sería otro sorteo, nunca "anclar" el que ya se sorteó.
+   */
+  rondaNueva?: () => { round: number; ts: number };
   /** Falló sin dejar nada en la cadena, de una forma que se arregla con otra ronda (`selloSinGrabar`). */
   sinGrabar: (e: unknown) => boolean;
   /** Guarda (o borra, con `null`) el intento del que no se sabe si entró. */
@@ -107,7 +112,7 @@ export async function sellarSinDuplicar(
         if (r.estado === "no-se-sabe") throw new SelloSinConfirmar(e.intento, e.cause ?? r.error);
         // No entró ni va a entrar: es como una ronda que quedó cerca.
         p.guardarPendiente(null);
-        if (otrasRondas >= OTRAS_RONDAS) throw e.cause instanceof Error ? e.cause : e;
+        if (otrasRondas >= OTRAS_RONDAS || !p.rondaNueva) throw e.cause instanceof Error ? e.cause : e;
         otrasRondas++;
         ({ round, ts } = p.rondaNueva());
         continue;
@@ -121,10 +126,10 @@ export async function sellarSinDuplicar(
         // chequeo de `sellar` (anchor.ts, el mismo umbral de 40 s): medido el 21 de octubre
         // de 2026 en la testnet con la red cortada 4 s, caía en "la ronda quedó cerca" y
         // gastaba uno de los dos cambios de ronda.
-        ({ round, ts } = p.rondaNueva());
+        if (p.rondaNueva) ({ round, ts } = p.rondaNueva());
         continue;
       }
-      if (p.sinGrabar(e) && otrasRondas < OTRAS_RONDAS) {
+      if (p.rondaNueva && p.sinGrabar(e) && otrasRondas < OTRAS_RONDAS) {
         otrasRondas++;
         ({ round, ts } = p.rondaNueva());
         continue;
