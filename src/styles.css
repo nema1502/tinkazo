@@ -2089,7 +2089,18 @@
   /* verificar.html: lo primero para quien llega por el QR es quién ganó, y un botón grande para comprobarlo. */
   .v-comprobar { margin: 18px 0 8px; }
   .v-comprobar .cta { display: flex; align-items: center; justify-content: center; min-height: 56px; font-size: 20px; padding: 14px 28px; width: 100%; max-width: 420px; }
-  html { scroll-padding-top: 76px; }
+  /* Con la cabecera fija (más de 1100 px) lo que la página lleva a la vista se para debajo de ella. Con la cabecera
+     suelta no hay nada que esquivar: este relleno dejaba 76 px vacíos arriba de cada paso y, en una laptop chica a
+     200 % de zoom (681 × 316), empujaba la espera y el primer ganador debajo de la barra de "lo que sigue"
+     (batería de cierre del 26 de octubre de 2026). */
+  @media (min-width: 1101px) { html { scroll-padding-top: 76px; } }
+  /* Una pantalla baja (una laptop chica con zoom, un celular de lado): con la letra grande el primer ganador crece
+     (el botón de "¿No está?" y la letra), así que lo de arriba se aprieta para que entero quede sobre la barra. */
+  @media (max-height: 520px) {
+    #sec-draw .body { padding-top: 10px; }
+    .winner-box { padding-top: 6px; }
+    .winner-card { margin-top: 0; }
+  }
 
   /* El resultado en grande: "Siguiente premio" es el único botón de color, grande y a la vista de la sala. */
   .pantalla .sala-top { align-items: center; }
