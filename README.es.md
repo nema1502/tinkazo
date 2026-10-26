@@ -18,7 +18,7 @@
 
 ---
 
-Toda comunidad regala cosas: entradas, libros, licencias, becas, turnos para hablar, quién expone primero. Y cada vez alguien en la sala piensa que el organizador eligió a un amigo. Lo que se usa hoy es un `ALEATORIO()` en una planilla, una ruleta en una página web o "confíen en mí". Nada de eso se puede revisar después.
+Toda comunidad tiene algo que repartir: entradas, libros, licencias, becas, turnos para hablar, quién expone primero. Y cada vez alguien en la sala piensa que el organizador eligió a un amigo. Lo que se usa hoy es un `ALEATORIO()` en una planilla, una ruleta en una página web o "confíen en mí". Nada de eso se puede revisar después.
 
 **Tinkazo hace que cualquiera pueda revisar el sorteo, desde su celular.** Quien organiza pega la lista, la lista se sella en Stellar, y el ganador sale de un número público que todavía no existía cuando se selló. Un contrato de Soroban verifica la firma de ese número dentro de la cadena. El resultado se cuenta en pantalla grande con un juego, y cualquiera rehace el sorteo entero en su navegador desde un enlace.
 
@@ -33,6 +33,7 @@ Tinkazo decide quién se lleva algo que ya se está regalando. No sirve para apo
 - **Participar es gratis, siempre.** No hay boletos ni entrada paga. Los [términos](https://tinkazo.app/terminos.html) prohíben usar Tinkazo para sorteos que cobren por participar.
 - **Nadie puede apostar al resultado.** No hay cuotas ni pozo: nadie pone plata, así que nadie gana la plata de otro.
 - **El contrato no guarda fondos.** Guarda la huella de la lista y el resultado, nada más.
+- **Tinkazo nunca toca lo que se reparte.** Lo entrega quien organiza, como siempre, y Tinkazo no se queda con ninguna parte.
 
 Un sorteo gratuito, sin compra obligatoria, queda fuera de las reglas de juegos de azar en casi todo el mundo; la investigación país por país está en [docs/legal.md](docs/legal.md). Algunos identificadores del contrato todavía dicen *raffle* (`tinkazo-raffle`, `raffle_id`), de antes de que el nombre se asentara. Son parte de la interfaz del contrato desplegado, así que quedan como están.
 
@@ -68,7 +69,6 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 - **Sin oráculo que operar.** La prueba es la firma del propio drand, verificable contra su clave pública dentro de años. No hay nodo que mantener vivo ni operador en quien confiar.
 - **Inmutable y sin custodia.** El contrato no tiene administrador ni forma de actualizarse, y no guarda fondos. Una versión nueva es una dirección nueva, anotada en [docs/deployments.md](docs/deployments.md).
 - **Entrar funciona en un meetup.** Quien organiza entra con Google mediante Pollar, que guarda la llave de su cuenta (el recorrido con una sesión real de Google todavía se está probando), con Freighter, o con una cuenta de prueba que el navegador crea y fondea. Los participantes no tocan Stellar nunca.
-- **Lo que sigue es nativo de Stellar:** recompensas y becas en USDC que pone quien organiza y que la persona elegida cobra como saldo reclamable, entrando con Google ([diseño](docs/premios.md)). Los participantes no pagan nada y Tinkazo nunca toca la plata, así que no hay pozo ni nada que apostar.
 
 ## Qué está andando hoy
 
@@ -141,7 +141,7 @@ De fondo suena música andina con beat que sigue la tensión (la Chovena trae su
 | **Sellar varias veces** y publicar el resultado que convino | El número del sorteo se muestra bien grande durante la espera, para que quede en las fotos. La verificación marca los sellos repetidos de la cuenta y la misma lista sellada desde otra |
 | **Un sitio falso** en el proyector | Lo que vale es el contrato, y un sitio falso no puede escribir ahí. El sorteo se puede comprobar en stellar.expert y con la ronda pública de drand, [sin pasar por Tinkazo](https://tinkazo.app/como-funciona.html#sin-nosotros) |
 
-Para mainnet: un solo sorteo abierto por cuenta, la cancelación pública, la ronda que pone el contrato y la lista ordenada en el protocolo. El análisis completo, con el método STRIDE, está en [docs/amenazas.md](docs/amenazas.md), y la versión para todo público en la [página de seguridad](https://tinkazo.app/seguridad.html).
+En mainnet va a estar este mismo contrato, sin cambios y con la compilación verificada ([despliegues](docs/deployments.md)). No limita los sorteos abiertos de una cuenta ni deja cancelar uno, y la ronda la elige quien sella (el contrato solo exige que falten al menos treinta segundos). Como no se puede actualizar, cualquiera de esas cosas pediría un contrato nuevo, en otra dirección. El análisis completo, con el método STRIDE, está en [docs/amenazas.md](docs/amenazas.md), y la versión para todo público en la [página de seguridad](https://tinkazo.app/seguridad.html).
 
 **Privacidad.** En la cadena va la huella de la lista y otros datos del sorteo, nunca los nombres. El comprobante viaja en el fragmento de la URL, que el navegador no le manda a ningún servidor. El sitio cuenta visitas con la analítica de Vercel, sin cookies, y corta cada dirección hasta la ruta antes de contar ([src/analytics.ts](src/analytics.ts)). Compartir o mostrar el resultado en grande arma un enlace corto, que guarda en Cloudflare una copia cifrada en el navegador, con la clave solo en el fragmento del enlace: Tinkazo no la puede leer. No vence, para que el sorteo se pueda volver a comprobar; si alguien necesita que se borre, lo pide a hola@tinkazo.app ([workers/enlaces](workers/enlaces/README.md)).
 
@@ -154,7 +154,7 @@ El azar de drand en Stellar ya lo resolvió más de un proyecto, y vale nombrarl
 | Qué es | Un botón | Un oráculo: un contrato pide y un nodo de afuera entrega la ronda | Un relé que sube las rondas de drand y un contrato que las verifica | Un sorteo para quien organiza y una sala |
 | Quién puede revisar | Nadie | Cualquiera que lea la cadena | Cualquiera que lea la cadena | Cualquiera con el enlace, desde el celular |
 | Qué hay que operar | Nada | El nodo del oráculo | El que sube las rondas | Nada: el navegador arma la transacción |
-| Para quién | Cualquiera, sin prueba | Otros contratos | Otros contratos | Gente que regala cosas |
+| Para quién | Cualquiera, sin prueba | Otros contratos | Otros contratos | Comunidades que reparten turnos, cupos y premios |
 
 Los tres verifican la firma BLS de drand quicknet en la cadena con CAP-0059. Stellar-VRF y Drand-Relay son primitivas para otros contratos, y buenas. Tinkazo es el producto para la gente, encima de la misma idea: una lista comprometida antes de que exista la semilla, un `draw` que cualquiera puede disparar y una página de prueba que corre en el celular. Fuera de la cadena, [Wallop](https://wallop.run) hace compromiso y drand para sorteos sin un ledger.
 
@@ -183,7 +183,7 @@ Diez auditores en [`scripts/`](scripts) corren el sitio de verdad en Chrome sin 
 - **El de emoción**, dieciséis semillas por juego: los arcos de la historia varían y el puesto de la ganadora a mitad de carrera no la delata.
 - **El de sonido**, que engancha cada oscilador y mide afinación, registro, volumen y silencios de los efectos, con la música contada aparte.
 - **El de interfaz**, en escritorio y celular, en los dos temas: imágenes rotas, texto cortado, contraste y blancos de toque.
-- **El de física**, para la tómbola y el aguayo: nadie encimado, nadie se escapa, y la misma ronda da los mismos rebotes.
+- **El de física**, para el bombo y el aguayo: nadie encimado, nadie se escapa, y la misma ronda da los mismos rebotes.
 - **El de choques**, para el trompo: cada golpe toca de verdad, con acción y reacción, y nadie atraviesa a nadie.
 - **El de identificación**, con 8, 18 y 50 personas: cuántos llegan a leer su nombre antes del ganador.
 - **El de mezcla**, que graba lo que sale por el parlante y mide la sonoridad con la norma BS.1770, los picos, cuánto se pierde en un parlante de proyector y el golpe del ganador.
@@ -200,7 +200,7 @@ Cuatro entregables, cada uno con una comprobación que cualquiera puede hacer de
 | Un kit para organizadores, en español y en inglés | Una guía de una página, las bases generadas y un texto de resultado para Luma con la prueba de cada participante, enlazados desde el sitio |
 | Una guía sobre aleatoriedad en contratos de Soroban, para la documentación de Stellar | Un pull request listo para revisar y enlazado a [stellar-docs#2874](https://github.com/stellar/stellar-docs/issues/2874), que cubre el [alcance que se aceptó](https://github.com/stellar/stellar-docs/issues/2874#issuecomment-5888723019) con los costos medidos en testnet |
 
-Después: recompensas en USDC como saldos reclamables, que pone quien organiza y que se cobran entrando con Google, primero en testnet. Los participantes siguen sin pagar nada, y Tinkazo nunca toca la plata.
+Después, solo si las comunidades lo piden: una constancia de entrega, para que quien organiza deje anotado que entregó el premio (por ejemplo, con un pago en USDC de su cuenta a la de quien ganó). Los participantes siguen sin pagar nada, y Tinkazo no custodia ni mueve la plata ([diseño](docs/premios.md)).
 
 ## Correr en local
 
@@ -220,7 +220,7 @@ cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
-Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=race|sapo|trompo|chovena|pinata|wheel|quien|trueque|teleferico|oruro` (los que salieron del selector siguen abriendo: `tombola`, `pasanaku`, `stellar`, `luz`, `ledger`, `rockets`, `totora`), `?instant=1`, `?pose=1`, `?motor=clasico` (el motor anterior) y `?grifo=0` (solo testnet: apaga el grifo de XLM de prueba, para probar con una cuenta de verdad vacía; `?grifo=1` lo vuelve a prender).
+Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=race|sapo|trompo|chovena|pinata|wheel|quien|trueque|teleferico|oruro` (los que salieron del selector siguen abriendo con su identificador, que está en [docs/juegos.md](docs/juegos.md)), `?instant=1`, `?pose=1`, `?motor=clasico` (el motor anterior) y `?grifo=0` (solo testnet: apaga el grifo de XLM de prueba, para probar con una cuenta de verdad vacía; `?grifo=1` lo vuelve a prender).
 
 ## El repositorio
 

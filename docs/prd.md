@@ -44,7 +44,7 @@ La verificación es gratis siempre. Anclar en Stellar cuesta centavos y lo paga 
 ### 2.3 No usuarios (v1)
 
 - Loterías con dinero en juego, apuestas o cualquier sorteo que cobre por participar. Tinkazo es para sorteos comunitarios de lo que ya se está regalando: bienes, servicios, cupos, turnos.
-- Premios en efectivo: fuera de la v1. Si vuelven, es como recompensas que pone quien organiza, con la entrada gratis y sin que Tinkazo toque la plata ([premios.md](premios.md)), y no antes de tener mainnet andando.
+- Quien quiera que Tinkazo pague los premios. Tinkazo decide a quién le toca algo; si es dinero (una beca, un viático), lo paga quien organiza, desde su cuenta, y Tinkazo no lo toca ([premios.md](premios.md)). Una constancia de entrega, sin custodia, queda como opción para más adelante.
 - Empresas que necesitan white label o cumplimiento regulatorio. Eso es v2 o posterior.
 
 ### 2.4 Recorridos clave

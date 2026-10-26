@@ -6,7 +6,7 @@ El bombo de las kermeses. Una bola por persona, con su número en la lista sella
 
 ## Por qué una tómbola
 
-Porque es el sorteo que todo el mundo ya conoce. Cualquiera que haya ido a una kermés de colegio, a la fiesta de un barrio o a una rifa de la parroquia vio un bombo girar y una bola salir. No hay nada que explicar: el organizador lo proyecta y la sala entiende sola qué va a pasar.
+Porque es el sorteo que todo el mundo ya conoce. Cualquiera que haya ido a una kermés de colegio o a la fiesta de un barrio vio un bombo girar y una bola salir. No hay nada que explicar: el organizador lo proyecta y la sala entiende sola qué va a pasar.
 
 Y es el único de los juegos donde **la bola que sale es la ganadora**, como en la tómbola de verdad. En los demás el juego va sacando gente hasta que queda una; acá sale una sola y es esa.
 

@@ -18,7 +18,7 @@
 
 ---
 
-Every community gives things away: conference tickets, books, software licenses, scholarships, speaking slots, who presents first. And every time, someone in the room wonders whether the organizer picked a friend. The tools people use today are a spreadsheet `RAND()`, a spinning wheel on a website, or "trust me". None of them can be checked afterwards.
+Every community has things to share out: conference tickets, books, software licenses, scholarships, speaking slots, who presents first. And every time, someone in the room wonders whether the organizer picked a friend. The tools people use today are a spreadsheet `RAND()`, a spinning wheel on a website, or "trust me". None of them can be checked afterwards.
 
 **Tinkazo makes the draw checkable by anyone, from their phone.** The organizer pastes a list, the list is sealed on Stellar, and the winner comes from a public random number that did not exist yet when the list was sealed. A Soroban contract verifies that number's signature on chain. The result is shown on the big screen as a full-screen game, and anyone can re-run the whole draw in their browser from a link.
 
@@ -33,6 +33,7 @@ Tinkazo decides who gets something that is already being given away. It is not a
 - **Entering is free, always.** No tickets and no entry fees. The [terms](https://tinkazo.app/terminos.html) forbid using Tinkazo for draws that charge to take part.
 - **Nobody can bet on the outcome.** There are no odds and no pot: nobody puts money in, so nobody wins anyone else's money.
 - **The contract holds no funds.** It stores a list fingerprint and a result, nothing else.
+- **Tinkazo never touches what is shared out.** The organizer hands it over, as always, and Tinkazo takes no cut of it.
 
 A free draw with no purchase required stays outside gambling rules almost everywhere; the country-by-country research is in [docs/legal.md](docs/legal.md). A few identifiers in the contract still say *raffle* (`tinkazo-raffle`, `raffle_id`), from before the name settled. They are part of the deployed contract's interface, so they stay.
 
@@ -68,7 +69,6 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 - **No oracle to run.** The proof is drand's own signature, checkable against its public key years from now. There is no node to keep alive and no operator to trust.
 - **Immutable and custody-free.** The contract has no admin, no upgrade path and holds no funds. A new version is a new address, recorded in [docs/deployments.md](docs/deployments.md).
 - **Onboarding that works at a meetup.** Organizers sign in with Google through Pollar, which holds the key for them (the full flow with a real Google session is still being tested), with Freighter, or with a testnet account the browser creates and funds. Participants never touch Stellar at all.
-- **Where it goes next is native to Stellar:** rewards and stipends in USDC that the organizer puts up and the person picked claims as a claimable balance, by signing in with Google ([design](docs/premios.md)). Participants never pay anything and Tinkazo never touches the money, so there is no pot and nothing to bet.
 
 ## What is live today
 
@@ -141,7 +141,7 @@ Andean music with a beat plays in the background and follows the tension (the Ch
 | **Sealing several times** and publishing the convenient result | The draw number is shown big during the wait, so it ends up in the photos. The verification flags repeated seals from the account and the same list sealed from another |
 | **A fake site** on the projector | What counts is the contract, and a fake site can't write to it. The draw can be checked on stellar.expert and with drand's public round, [without going through Tinkazo](https://tinkazo.app/como-funciona.html#sin-nosotros) |
 
-For mainnet: one open draw per account, public cancellation, the round set by the contract and a sorted list in the protocol. The full STRIDE analysis is in [docs/amenazas.md](docs/amenazas.md) ([summary in English](docs/threat-model.en.md)), and the plain-language version on the [security page](https://tinkazo.app/seguridad.html).
+On mainnet it will be this same contract, unchanged, with a verified build ([deployments](docs/deployments.md)). It does not cap open draws per account or let anyone cancel one, and the round is picked by whoever seals (the contract only requires it to be at least thirty seconds away). Since it cannot be upgraded, any of that would take a new contract at a new address. The full STRIDE analysis is in [docs/amenazas.md](docs/amenazas.md) ([summary in English](docs/threat-model.en.md)), and the plain-language version on the [security page](https://tinkazo.app/seguridad.html).
 
 **Privacy.** The chain keeps the list's fingerprint and other draw data, never the names. The proof travels in the URL fragment, which browsers do not send to servers. The site counts visits with Vercel Web Analytics, without cookies, and cuts every address down to its path before counting ([src/analytics.ts](src/analytics.ts)). Sharing or showing the result big makes a short link, which stores on Cloudflare a copy encrypted in the browser, with the key only in the link's fragment: Tinkazo can't read it. It doesn't expire, so the draw can be checked again; if someone needs it deleted, they ask at hola@tinkazo.app ([workers/enlaces](workers/enlaces/README.md)).
 
@@ -154,7 +154,7 @@ Randomness from drand on Stellar is already solved more than once, and it is wor
 | What it is | A button | An oracle: a contract asks, an off-chain worker delivers the round | A relay that posts drand rounds and a contract that verifies them | A draw for an organizer and a room |
 | Who can verify | Nobody | Anyone reading the chain | Anyone reading the chain | Anyone with the link, from a phone |
 | Infrastructure to run | None | The oracle worker | The feeder that posts rounds | None: the browser builds the transaction |
-| Built for | Anyone, unverifiable | Other contracts | Other contracts | People who run giveaways |
+| Built for | Anyone, unverifiable | Other contracts | Other contracts | Communities sharing out turns, spots and prizes |
 
 All three verify drand quicknet's BLS signature on chain with CAP-0059. Stellar-VRF and Drand-Relay are primitives for other contracts, and good ones. Tinkazo is the end-user product on top of the same idea: a list committed before the seed exists, a `draw` anyone can trigger, and a proof page that runs on a phone. Off chain, [Wallop](https://wallop.run) does commit and drand for draws without a ledger.
 
@@ -200,7 +200,7 @@ Four deliverables, each with a check anyone can run from outside:
 | An organizer kit, in English and Spanish | A one-page guide, the generated rules and a results text for Luma with each participant's proof, linked from the site |
 | A guide to randomness in Soroban contracts, for the Stellar docs | A pull request, ready for review and linked to [stellar-docs#2874](https://github.com/stellar/stellar-docs/issues/2874), that covers the [accepted scope](https://github.com/stellar/stellar-docs/issues/2874#issuecomment-5888723019) with costs measured on testnet |
 
-After that: USDC rewards as claimable balances, put up by the organizer and claimed by signing in with Google, first on testnet. Participants will still pay nothing, and Tinkazo never touches the money.
+After that, only if communities ask for it: a delivery receipt, so the organizer can record that the prize was handed over (for example, with a USDC payment from their account to the winner's). Participants still pay nothing, and Tinkazo never holds or moves the money ([design](docs/premios.md)).
 
 ## Run it locally
 
@@ -220,7 +220,7 @@ cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
-Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?demo=race|sapo|trompo|chovena|pinata|wheel|quien|trueque|teleferico|oruro` (the games that left the selector still open: `tombola`, `pasanaku`, `stellar`, `luz`, `ledger`, `rockets`, `totora`), `?instant=1`, `?pose=1`, `?motor=clasico` (the previous engine) and `?grifo=0` (testnet only: turns off the test-XLM faucet, to try things with a truly empty account; `?grifo=1` turns it back on).
+Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?demo=race|sapo|trompo|chovena|pinata|wheel|quien|trueque|teleferico|oruro` (the games that left the selector still open with their identifier, listed in [docs/juegos.md](docs/juegos.md)), `?instant=1`, `?pose=1`, `?motor=clasico` (the previous engine) and `?grifo=0` (testnet only: turns off the test-XLM faucet, to try things with a truly empty account; `?grifo=1` turns it back on).
 
 ## Repository
 

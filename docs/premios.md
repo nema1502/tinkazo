@@ -1,100 +1,57 @@
-# Premios que se cobran, y avisos por correo
+# El premio y los avisos
 
-Propuesta, no decisión. Escrita el 25 de septiembre de 2026 para pensarla antes de construir nada. Reemplaza, si se aprueba, a la sección "Sobre pagar a los ganadores con USDC" de [epics.md](epics.md), que decía que no.
+Qué hace Tinkazo con lo que se reparte, cómo se le avisa a cada participante y por qué hoy Tinkazo no mueve dinero. Nació el 25 de septiembre de 2026 como una propuesta de premios que se cobraban en USDC. El 22 de octubre de 2026 esa propuesta se pospuso: el USDC queda como una opción para más adelante, de otra forma y sin custodia (la constancia de entrega, más abajo). Acá queda lo que sigue en pie.
 
-## Lo que se quiere
+## Lo que hace Tinkazo, y lo que no
 
-1. Traer la lista desde Luma, con los correos.
-2. Avisar a todos por correo cuando se sortea, y al ganador en particular.
-3. Que el ganador pueda **cobrar** el premio desde ese correo: en USDC sobre Stellar, sin haber tenido nunca una billetera.
+- **Decide a quién le toca.** Un libro, una entrada, un turno para exponer, un cupo en un viaje, una beca. Quien organiza escribe qué se sortea antes de sellar, y eso queda en el sello, a la vista.
+- **No lo entrega.** Lo entrega quien organiza, como siempre. Si es dinero (una beca, un viático), lo paga desde su cuenta, por fuera de Tinkazo.
+- **No toca dinero.** Ni el contrato ni un servidor nuestro guardan fondos, y Tinkazo no se queda con nada de lo que se reparte: ni un porcentaje ni un monto fijo.
+- **Participar es gratis, siempre.** Nadie pone plata para entrar, así que nadie gana la plata de otro.
 
-## Lo que no se negocia
+## Por qué hoy no hay premios en dinero
 
-Las dos razones por las que antes se dijo que no siguen valiendo, así que el diseño las tiene que respetar:
+En septiembre se propuso que quien ganara cobrara un premio en USDC desde un enlace, entrando con Google, con un saldo reclamable que el organizador apartaba desde su cuenta. Por ahora no se hace, por tres razones:
 
-- **Los participantes no necesitan nada para participar.** Ni billetera, ni cuenta, ni saber qué es Stellar. Solo el que gana, y solo si quiere cobrar en USDC, pasa por un alta, y esa alta tiene que ser "entrar con Google".
-- **Tinkazo no custodia dinero.** Ni el contrato ni un servidor nuestro guardan fondos en ningún momento. El dinero va de la cuenta del organizador al ganador, y las reglas las pone Stellar, no nosotros.
+1. **Desde afuera se lee como un juego por plata**, aunque entrar sea gratis y nadie ponga nada. Y un premio en dinero con fines de propaganda es justo lo que regulan Brasil, Colombia y México ([legal.md](legal.md)).
+2. **Rompe la promesa de que nadie necesita nada.** Para cobrar, quien gana necesita una cuenta, y un momento de dos segundos se vuelve una fila.
+3. **Cambia lo que es Tinkazo.** Una herramienta que no toca dinero se revisa en una tarde. Una que lo mueve pide otra auditoría y otro modelo de amenazas.
 
-Y una tercera, que sale de la promesa del producto: **la lista no llega a nuestro servidor.** Los correos menos que los nombres.
+Para quien paga por su cuenta, el sorteo igual sirve: el comprobante dice por qué le tocó a esa persona.
 
-## 1. La lista desde Luma
+## La opción que sigue abierta: la constancia de entrega
 
-Luma deja exportar los invitados de un evento como CSV. Lo sensato:
+El USDC no está descartado. Si más adelante varias comunidades lo piden, lo que se estudia no es que Tinkazo pague, sino una **constancia de entrega**: que quien organiza deje anotado, a la vista y desde su cuenta, que le entregó el premio a quien ganó (por ejemplo, con un pago en USDC de su cuenta a la de esa persona).
 
-- Tomar **nombre** para la lista que se sella, y **correo** solo para avisar. El correo nunca entra en el sello: la huella es pública, y una lista de correos no se tiene que poder reconstruir ni probar.
-- Filtrar por quienes **hicieron check-in**, con un botón para usar todos los aprobados. "Entre los que vinieron" es el caso más pedido en un evento.
-- Los correos quedan en el navegador del organizador, como hoy la lista.
+- **Sin custodia.** El dinero va de la cuenta de quien organiza a la de quien ganó. Ni el contrato ni un servidor nuestro lo guardan o lo mueven, y Tinkazo no se queda con ninguna parte.
+- **Entrar sigue siendo gratis.** Nadie pone plata para participar.
+- **Sin fecha.** Antes de hacerlo hay que volver sobre las tres razones de arriba y revisar el marco legal ([legal.md](legal.md)) con un abogado.
 
-Falta: el CSV real de un evento, para ver las columnas exactas. Nicolás pasa links de eventos propios.
+## La lista desde Luma
 
-## 2. Los avisos
+Hecho. La importación toma el nombre para la lista que se sella y propone a quienes hicieron check-in; deja usar a todos los aprobados o marcar a mano. El archivo, con sus correos, se lee en el navegador del organizador y no sale de ahí.
+
+El correo nunca entra en el sello: la huella es pública, y una lista de correos no se tiene que poder reconstruir ni probar.
+
+## Los avisos
 
 Tres caminos, de menos a más infraestructura:
 
 | Camino | Cómo | Servidor | Límite |
 |---|---|---|---|
-| **A. Texto listo para Luma** | Tinkazo arma el anuncio del resultado y el del ganador; el organizador los pega en el envío masivo de Luma | Ninguno | Un paso manual. Pero el correo sale de Luma, que los invitados ya conocen: no cae en spam |
+| **A. Texto listo para Luma** | Tinkazo arma el anuncio del resultado y el aviso a quien le tocó; el organizador los pega en el envío masivo de Luma | Ninguno | Un paso manual. Pero el correo sale de Luma, que los invitados ya conocen: no cae en spam |
 | **B. El correo del organizador** | `mailto:` con el texto armado (ya existe para el ganador) | Ninguno | Para todos no sirve: los clientes de correo cortan con cien destinatarios |
 | **C. Envío desde Tinkazo** | Una función mínima que manda con Resend o Postmark, sin guardar nada | Uno chico, sin base de datos | Hace falta dominio propio con SPF y DKIM, y cuidar el abuso: solo organizadores con sesión, solo a los correos de la lista que sellaron, uno por persona y sorteo |
 
 **Recomendación: A primero, C después si hace falta.** A se hace en un día, no rompe nada y resuelve el caso real.
 
-Un detalle que convierte el aviso en algo que ninguna otra herramienta tiene: **a cada participante, su prueba.** "Estuviste en la lista sellada en el puesto 37; el sorteo se hizo con la ronda 32.507.924; verificalo acá." Cada uno puede comprobar que estuvo, no solo que el ganador existe.
+Lo que más vale del aviso: **a cada participante, su prueba.** "Estuviste en la lista sellada en el puesto 37; el sorteo se hizo con la ronda 32.507.924; verificalo acá." Cada uno puede comprobar que estuvo, no solo que quien ganó existe.
 
-## 3. El premio que se cobra
+## El orden
 
-### El mecanismo: un saldo reclamable con vencimiento
-
-Stellar tiene **saldos reclamables** (*claimable balances*, [CAP-23](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0023.md), [guía](https://developers.stellar.org/docs/build/guides/transactions/claimable-balances)): una operación que aparta fondos para uno o más reclamantes, cada uno con una condición. Y **reservas patrocinadas** ([CAP-33](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0033.md), [guía](https://developers.stellar.org/docs/build/guides/transactions/sponsored-reserves)): una cuenta paga las reservas de otra. El organizador, desde su propia cuenta:
-
-1. Genera en su navegador un **par de llaves nuevo**, que es el "cupón".
-2. Crea un saldo reclamable de X USDC con dos reclamantes: **el cupón**, que puede cobrar antes de una fecha, y **el propio organizador**, que puede recuperarlo después de esa fecha.
-3. Pone la llave secreta del cupón en el enlace del correo del ganador, **después del `#`**. Lo que va después del `#` no viaja al servidor: queda en el navegador de quien abre el enlace.
-
-El ganador abre el enlace, entra con Google (Pollar le crea la cuenta) y firma una sola transacción que da de alta la cuenta del cupón con reservas patrocinadas, cobra el saldo, le pasa el USDC a su cuenta y cierra la del cupón. Todo o nada.
-
-Lo que sale de esto:
-
-- **No custodiamos nada.** El dinero sale de la cuenta del organizador y llega a la del ganador. Tinkazo arma la transacción, no la ejecuta con fondos propios.
-- **Vence solo.** Si nadie cobra, el organizador recupera el premio después de la fecha, sin pedirle nada a nadie.
-- **El contrato del sorteo no se toca.** Sigue sin fondos, sin admin y sin actualizaciones. El sorteo es el comprobante de por qué ese premio fue a esa persona.
-- **Se puede comprobar.** El saldo reclamable es público en la cadena: cualquiera ve que el premio existe y está apartado, antes de que el ganador lo cobre.
-
-Lo que no resuelve, dicho claro: **quien tenga el enlace, cobra.** Un correo reenviado es un premio regalado. Para premios chicos alcanza; para grandes, un segundo factor (un código que el organizador dice en voz alta en el evento, o que el enlace pida entrar con el mismo correo al que se mandó).
-
-### Las reservas
-
-Una cuenta nueva en Stellar necesita 1 XLM de reserva, y medio más por la línea de confianza al USDC. El ganador no tiene XLM. Dos salidas, a medir con Pollar:
-
-- que Pollar patrocine las reservas de sus cuentas nuevas, o
-- que el saldo reclamable del organizador lleve, además del USDC, unos 2 XLM para las reservas.
-
-### Cobrar en plata
-
-USDC en una cuenta de Stellar se puede pasar a moneda local por los anclas del ecosistema. **Qué opciones hay en Bolivia está por verificar** antes de prometerlo en ninguna pantalla: el caso de MoneyGram con USDC, qué países cubre hoy, y si hay anclas locales.
-
-## Tinkazo no toca el premio
-
-- **El sorteo, gratis, como hoy.** Participar también, siempre.
-- **El premio lo pone quien organiza, entero.** Tinkazo no se queda con nada: ni un porcentaje ni un monto fijo. El saldo reclamable va de la cuenta del organizador al ganador, sin pasar por una cuenta nuestra.
-- **Lo que sí puede cobrar Tinkazo es el show** (el plan de [precios.html](../precios.html)), nunca el premio.
-
-Lo que esto le da a la gente: **alguien que nunca usó Stellar recibe USDC en su primer sorteo, entrando con Google, sin instalar nada.** Y sirve igual para lo que no es premio: una beca, un viático, el pago a un jurado.
-
-## Antes de construir
-
-1. **Legal.** Lo investigado está en [legal.md](legal.md), para Bolivia y para el resto del mundo. En corto: donde entrar es gratis casi nadie lo regula; en Bolivia la Ley 1733 sacó la autorización y los impuestos de las promociones empresariales; Brasil, Colombia y México piden permiso incluso para sorteos gratuitos. Quedan cinco preguntas para un abogado. Como Tinkazo no toca el premio ni lo custodia, la de si eso lo vuelve un proveedor de activos virtuales pierde peso, pero se pregunta igual.
-2. **El CSV de Luma** real.
-3. **Pollar**: si patrocina reservas, y si su SDK permite firmar la transacción de cobro junto con la llave del cupón.
-4. **Cobrar en Bolivia**: qué anclas y qué opciones reales hay.
-
-## El orden que propongo
-
-| Paso | Qué | Servidor | Dinero |
+| Paso | Qué | Servidor | Estado |
 |---|---|---|---|
-| 1 | Importar el CSV de Luma, filtrar por check-in, correos solo en el navegador. **Hecho el filtro**; falta probarlo con un export real | No | No |
-| 2 | Textos listos para el envío de Luma: resultado para todos, con la prueba de cada uno, y aviso al ganador | No | No |
-| 2b | Las bases del sorteo, generadas, y unos términos de uso y privacidad (ver [legal.md](legal.md)). **Hecho** | No | No |
-| 3 | Cobro en testnet, con USDC de prueba, de punta a punta | No | De prueba |
-| 4 | Con lo legal claro: cobro en mainnet | No | Sí |
-| 5 | Si hace falta: envío de correos desde Tinkazo | Uno chico | No |
+| 1 | Importar el CSV de Luma, filtrar por check-in, correos solo en el navegador | No | Hecho |
+| 2 | Las bases del sorteo, generadas, y los términos de uso y privacidad (ver [legal.md](legal.md)) | No | Hecho |
+| 3 | Textos listos para el envío de Luma: el resultado para todos, con la prueba de cada uno, y el aviso a quien le tocó | No | Va en el kit para organizadores |
+| 4 | Si hace falta: envío de correos desde Tinkazo | Uno chico | Sin fecha |

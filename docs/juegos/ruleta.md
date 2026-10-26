@@ -26,7 +26,7 @@ Todo lo demás (colores, tipografía, duración) era secundario a eso.
 | 12 | 2 | 24 |
 | 13 a 24 | 1 | 13 a 24 |
 
-Con dos nombres se ven doce y doce alternados, que es justamente lo que hace mirable a una ruleta de casino: rojo, negro, rojo, negro. Y de paso la probabilidad se lee de un vistazo.
+Con dos nombres se ven doce y doce alternados, que es justamente lo que hace que una rueda se vea girar: dos colores que se turnan. Y de paso la probabilidad se lee de un vistazo.
 
 Como el gajo `k` es de la persona `k % n`, dos gajos vecinos son siempre de personas distintas, así que nunca hay dos del mismo color pegados.
 

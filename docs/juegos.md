@@ -248,7 +248,7 @@ node scripts/audit-emocion.mjs <juego>      # o "todos"
 Los otros auditores miran un sorteo por vez. Lo que mata la emoción no se ve en uno solo: se ve cuando la sala ya aprendió cómo termina. Este corre dieciséis semillas por juego, con el reloj en turbo (veinte cuadros de juego por cuadro real), y mide:
 
 - **Que los arcos varíen**: al menos tres de los cuatro, y ninguno en más de la mitad.
-- **En la carrera, que el puesto de la ganadora a la mitad no la delate**: apostar por la que va primera a la mitad, o por la última, no puede acertar en más del 40% de las carreras (al azar se acierta en una de ocho), y la ganadora no puede ir adelante, ni atrás, en más del 60%.
+- **En la carrera, que el puesto de la ganadora a la mitad no la delate**: elegir a la que va primera a la mitad, o a la última, no puede acertar en más del 40% de las carreras (al azar se acierta en una de ocho), y la ganadora no puede ir adelante, ni atrás, en más del 60%.
 
 La primera vez que corrió encontró justo eso: con las curvas de cada arco fijas, a la mitad la ganadora iba primera o última en casi todas las carreras, y en los cohetes iba atrás en trece de dieciséis. Ahora el puesto a la mitad se sortea según el arco (en la remontada, entre los últimos cuatro; en la tapada, en el medio; en el susto, primera si el tropiezo viene después, en el medio si ya tropezó; en el duelo, arriba o en el medio según arranque temprano o tarde), y la curva de la ganadora se corrige por bisección hasta ocuparlo. La corrección vale cero en la largada y desde el 86%, así que la llegada no cambia.
 

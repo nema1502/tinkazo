@@ -482,7 +482,7 @@ Resultado (2026-09-20): con dos o tres participantes no se veía girar, y no era
 
 ### Historia 7.9: Pasanaku: hecho (desde el 28 de septiembre se llama Aguayo)
 
-Resultado (2026-09-20): el juego con nombre boliviano. El *Diccionario de americanismos* define `pasanacu` como "juego que consiste en sortear el dinero de las cuotas" de un grupo, así que ya era un sorteo. Un aguayo que se cierra sobre los bultos hasta que queda uno en el nudo, y los hilos entre vecinos son las trustlines. Detalle en [pasanaku.md](juegos/pasanaku.md).
+Resultado (2026-09-20): el juego con nombre boliviano. El *Diccionario de americanismos* define `pasanacu` como "juego que consiste en sortear el dinero de las cuotas" de un grupo, así que ya era un sorteo. Por eso mismo dejó de llamarse así el 28 de septiembre: un pasanaku de verdad es plata, con cuota y pozo, y en Tinkazo nadie pone nada. Un aguayo que se cierra sobre los bultos hasta que queda uno en el nudo, y los hilos entre vecinos son las trustlines. Detalle en [pasanaku.md](juegos/pasanaku.md).
 
 ### Historia 7.10: El andamiaje compartido: hecho
 
@@ -1203,7 +1203,7 @@ Resultado (2026-10-04): lo que queda abierto en Tinkazo no es cripto, es humano:
 - **La misma lista sellada por otra cuenta,** marcada en la verificación. La lista de ejemplo no alarma: la sella cualquiera que prueba el sitio.
 - **"Verificalo sin nosotros"** en Cómo funciona: el contrato en stellar.expert, la ronda en la API pública de drand y la cuenta en el protocolo.
 
-Quedan para mainnet, con el contrato v2:
+Quedan para un contrato v2, en otra dirección (en mainnet va este mismo, sin cambios):
 - un solo sorteo abierto por cuenta;
 - la cancelación pública;
 - la ronda que pone el contrato;
@@ -1295,6 +1295,8 @@ Y hay un segundo costo, más serio: hoy el contrato **no custodia valor**. No ti
 Si algún día se hace, el camino es no custodiar: Pollar ya expone `setTrustline` y `sendPayment`, así que el organizador podría pagarle al ganador desde su propia cuenta, con el sorteo como comprobante. El contrato no se entera y sigue sin tocar dinero.
 
 Actualización (2026-09-25): hay una propuesta que respeta las dos razones de arriba, en [premios.md](premios.md). El premio va de la cuenta del organizador a un saldo reclamable con vencimiento, el ganador lo cobra desde un enlace entrando con Google, y ni el contrato ni un servidor nuestro tocan el dinero. Está para discutir, no aprobada.
+
+Actualización (2026-10-22): esa propuesta se pospuso. Hoy Tinkazo decide a quién le toca y no mueve dinero; [premios.md](premios.md) cuenta por qué, lo que quedó en pie (la importación de Luma y los avisos) y la opción que sigue abierta para más adelante: una constancia de entrega, por ejemplo con un pago en USDC de la cuenta de quien organiza a la de quien ganó, sin que Tinkazo lo custodie.
 
 ---
 
