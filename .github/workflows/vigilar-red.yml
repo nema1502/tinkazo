@@ -1,0 +1,43 @@
+# Vigilancia de la red de Stellar.
+#
+# Cada media hora mira, en testnet y en mainnet, los parámetros de costo de
+# Soroban y cuánto estado vivo tiene la red frente a su objetivo, y falla si
+# algún parámetro cambió o si el estado llegó a un nivel de alerta. Que falle es
+# el aviso: GitHub manda un correo por la corrida fallida a quien editó el `cron`
+# por última vez, sin depender de ninguna laptop prendida.
+#
+# Solo lee del RPC público de cada red: no usa secretos y no instala nada
+# (el guion no tiene dependencias, solo Node). Qué vigila, qué significa cada
+# nivel y cómo actualizar la línea base: docs/deployments.md, «Vigilancia de la red».
+name: Vigilar la red de Stellar
+
+on:
+  schedule:
+    # Cada media hora, pero fuera de los minutos 0 y 30, donde GitHub se
+    # congestiona y suele demorar o saltear corridas.
+    - cron: '13,43 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vigilar-red
+  cancel-in-progress: false
+
+jobs:
+  vigilar:
+    name: Mirar testnet y mainnet
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Solo scripts/: el guion y su línea base. El resto del repo no hace falta.
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Vigilar la red
+        run: node scripts/vigilar-red.mjs
