@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 /**
  * Qué juegos mira cada auditor cuando se le pide "todos".
  *
@@ -28,6 +30,18 @@ export function detalleDelBoton(opcion, juego) {
   if (!opcion) return `falta #g-${juego}`;
   const nombre = `"${String(opcion.text ?? "").trim()}"`;
   return opcion.apagado ? `${nombre} · apagado: el botón está oculto en el selector` : nombre;
+}
+
+/**
+ * Los juegos del kit (`src/games/pixi/kit/catalogo.ts`), en el orden del catálogo.
+ * Los lee del archivo, así que un juego que nace con `nuevo-juego.mjs` entra a
+ * los auditores sin tocar esta lista. Todos tienen el golpe del director de
+ * cámara (`kit/director.ts`): el pico de su zoom se mide dentro del golpe.
+ */
+export function juegosDelKit(raiz = new URL("../..", import.meta.url)) {
+  const ruta = new URL("src/games/pixi/kit/catalogo.ts", raiz);
+  const texto = readFileSync(ruta, "utf8");
+  return [...texto.matchAll(/^\s*id:\s*"([a-z]{3,12})",/gm)].map((m) => m[1]);
 }
 
 /** Los juegos de un pedido: "todos" son los del selector; una lista con comas, esos. */

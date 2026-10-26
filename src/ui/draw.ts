@@ -10,6 +10,7 @@ import { network, txUrl } from "../stellar/config";
 import { PROOF_VERSION, type Proof, proofUrl } from "../protocol/proof";
 import { drawOnChain, escribirError, limpiarDetalle, readDraw, showTxStatus, stepLabel } from "./anchor";
 import { loreFor } from "../games/lore";
+import { pintarLeyenda } from "./leyenda";
 import { currentSession } from "./wallet-ui";
 import { pintarQrDelComprobante } from "./qr";
 import { usePixi } from "../games/engine";
@@ -452,6 +453,8 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   // Con el movimiento reducido el juego se salteó: se avisa, para que no parezca roto.
   $("motion-note").style.display = skippedForReducedMotion() ? "block" : "none";
   renderLore(beacon);
+  // La leyenda del juego, si trae una: plegada y después del resultado, nunca durante el show.
+  pintarLeyenda($("leyenda-box"), app.game, getLang(), { titulo: t("leyendaTitulo"), fuente: t("leyendaFuente") });
   const prize = app.frozen?.prize ?? "";
   // Este premio ya salió: en el próximo sorteo queda marcado entre las opciones.
   marcarSalio(prize);
@@ -681,7 +684,7 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   btn.textContent = t("draw");
   // Sin restos del anterior: con el movimiento reducido el próximo resultado
   // sale sin juego, y no puede asomar el ganador viejo mientras tanto.
-  for (const id of ["draw-status", "reverify-out", "again-row", "winner-box", "lore-box", "qr-box", "sec-draw"]) {
+  for (const id of ["draw-status", "reverify-out", "again-row", "winner-box", "lore-box", "leyenda-box", "qr-box", "sec-draw"]) {
     $(id).style.display = "none";
   }
   limpiarDetalle("draw-status");

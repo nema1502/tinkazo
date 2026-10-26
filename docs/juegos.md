@@ -31,7 +31,90 @@ Obligaciones:
 - **Respetar el mudo**: usar `beep` y `fanfare` de `src/sound.ts`, que ya respetan el botón de sonido.
 - **No tocar el estado del sorteo**: el juego lee, no escribe.
 
-## Dos formas de agregar un juego
+## Cómo nace un juego (el kit)
+
+Desde el 26 de octubre de 2026 un juego nuevo se escribe sobre el **kit** (`src/games/pixi/kit/`). Un juego es un **plan puro** (de la lista y la ronda, qué pasa y cuándo), una **escena** y un **cuadro**; el kit pone lo que antes cada juego repetía a mano: el montaje y el cierre (`done()` siempre llega), la cámara con sus cinco arcos, los nombres legibles, el foco de quien gana, los subtítulos con cola, el sonido afinado, el español y el inglés, y los ganchos de los auditores. Un juego pasa de unas 1.300 líneas y veinte archivos tocados a mano a un puñado de archivos propios y ninguno ajeno.
+
+```ts
+export const miJuegoPixi = crearJuego<Datos, Escena>({
+  id: "mijuego",                        // el valor de ?demo= y la clave de los auditores
+  textos: TEXTOS,                       // lo que dice el relator, en es y en (opcional)
+  plan: (ctx) => ({ duracion, arco, momentos, guion, datos }),  // puro: se prueba en Node
+  arma: (k, plan, previa) => escena,    // dibuja; se repite al cambiar el tamaño
+  cuadro: (k, plan, escena, t) => {},   // una función de t: saltar da lo mismo que mirar
+});
+```
+
+La lista y la ronda llegan con cada sorteo, y los momentos dependen de las dos: por eso salen del **plan**, no de la definición. El plan recibe la ronda (`ctx.ronda`), el azar sembrado (`ctx.rng`), los textos (`ctx.txt`) y la historia del director de emoción (`ctx.historia`, que gasta `rng` cuando se la pide). **El kit nunca llama a `rng`**: si el plan lo gasta en otro orden, la misma ronda cuenta otra historia.
+
+### Los cinco pasos
+
+1. **Diseño.** Una página, `docs/juegos/<id>.md` (el generador la deja con la plantilla): el momento que hace gritar a la sala, el rango real de personas, el giro de cada arco, cómo cada uno lee su nombre antes del ganador, nada con cara de casino y lo cultural validado con quien mantiene el proyecto. Pasa con su sí.
+2. **Kit.** `node scripts/nuevo-juego.mjs <id> [--nombre "El Guajojó"]` crea el juego, y primero se escribe el plan con sus pruebas, después la escena, las tomas y el guion en es y en. Pasa con `pnpm typecheck` y `pnpm test`.
+3. **Batería.** `audit-game` 20/20, `rigor`, `identidad` (con 8, todos; con 18, nueve de cada diez), `emocion`, `sound`, `mezcla`, `pantalla`, `delatores` y la de física si hay choques. Pasa con todo APROBADO y los JSON guardados.
+4. **Evaluador.** Capturas en escritorio y celular, en los dos temas; cada hallazgo se verifica antes de arreglarlo. Pasa sin nada grave.
+5. **Selector.** `node scripts/nuevo-juego.mjs --encender <id>`: pide la captura (`capturas-juegos.mjs <id> --en 6.5`), la historia sin borrador y con fuente primaria verificada, el rango y la batería guardada en JSON; después se suman la ficha de `juegos.html` y la fila de la tabla de abajo. Con `pnpm check:paginas`, `pnpm check:lore` y el ok de quien mantiene el proyecto.
+
+### El generador
+
+```bash
+node scripts/nuevo-juego.mjs prueba            # crea el juego "prueba" (apagado en el selector)
+node scripts/nuevo-juego.mjs prueba --dry-run  # lo que haría, sin escribir nada
+node scripts/nuevo-juego.mjs --encender prueba # recién con todo lo del paso 5
+```
+
+El id son de tres a doce letras minúsculas. Crea `src/games/pixi/<id>.ts` (la escena), `<id>-plan.ts` y `<id>-plan.test.ts` (el plan puro y sus pruebas: misma ronda, mismo plan; los ganadores intactos; momentos en orden; guion sin huecos de cuatro segundos; textos en los dos idiomas), `<id>-textos.ts` y `docs/juegos/<id>.md`, y escribe entre marcas (`kit:catalogo`, `kit:i18n-es`, `kit:i18n-en`) la entrada de `kit/catalogo.ts` y las claves del sitio. Dos corridas con el mismo id no duplican nada: la segunda se rechaza.
+
+El juego nace **apagado**: `?demo=<id>` y `?pose=<id>` lo abren, su botón existe en el selector pero oculto, y pasa `audit-game` 20/20 sin tocar nada a mano (la corrida de prueba, con `prueba`, dio 20/20 el 26 de octubre de 2026). Su historia nace en borrador y no sale en ningún sorteo hasta que se escriba con su fuente.
+
+### Qué trae el kit
+
+| Módulo | Qué pone |
+|---|---|
+| `director.ts` | Los cinco arcos: **presentación** (plano entero que respira un 1 %, nunca cuatro segundos quieto), **tensión** (`tension`, un 12 % hacia lo que decide, nunca sobre quien gana solo), **silencio** (la música se corta 0,4 s antes y, coronado, el foco y sus latidos), **golpe** (`golpe`, un 20 % sostenido 0,5 s, con sacudón y fanfarria, a la hora del foco) y **foco** (la luz sobre quien gana, y la cámara lo protege debajo del cartel). `SABOR[arco]` da el ritmo de cada arco de la historia (remontada, susto, duelo, tapada). Anota `data-momento` y `data-golpe` para los auditores. |
+| `guion.ts` | Subtítulos con cola: nunca dos a menos de 0,3 s; ninguno pisa a otro más importante antes de 1,2 s; lo que espera más de 1,5 s se tira; quien gana pisa todo; al saltar, lo pendiente se tira. Una línea también puede ser una acción (un sonido, un sacudón). |
+| `nombres.ts` | La regla de letra: el nombre mide **al menos el 2,6 % del alto** en un proyector (28,5 px en 1080p) y **16 px** en un celular; el apoyo, 14; el cartel, el 4,5 %. Con más gente se acorta el texto, nunca la letra (`nombreLegible`: de nombre entero a pila a inicial, dos líneas, nunca "…"), y `compensarZoom` evita que la cámara los baje del mínimo. |
+| `figuras.ts` | La cara de siempre o un emblema por persona, sin azar y sin repetir hasta 32 (hasta 256 con el color). Si la hoja no carga, la cara. |
+| `sonido.ts` | La paleta sobre los osciladores de siempre: grados de 0 a 20, volumen por categoría (fondo 0,02–0,03, evento 0,04–0,06, clímax 0,08–0,12), `una(clave)` contra redisparos, `tic`, `latido`, `escalera` y `fanfarria`. Son las reglas de `audit-sound`, en la firma. |
+| `crear.ts` | `crearJuego`: monta (con `?instant=1`, cierra sin dibujar), pide el plan, declara la duración con lo que se sostiene el foco, lleva el guion y la cámara, corona con foco, **saltar va directo al golpe** y vuelve a armar la escena si cambia el tamaño. |
+| `catalogo.ts` | Lo que el sitio sabe de cada juego: id, rango, si está en el selector, captura, historia, leyenda. El botón, la tarjeta de "cómo se juega", las recomendaciones y la historia se arman desde acá, con las claves de texto por convención: `game<Id>`, `jg<Id>N`, `gc<Id>` y `gc<Id>Many`. |
+
+Los parámetros de la URL funcionan solos: `?instant` lo resuelve el estadio, y `?pose`, `?n`, `?nw`, `?semilla` y `?ganador` llegan por `playPixi`. Con el kit entran gratis a `audit-emocion` (`data-golpe`, `data-zoomPico`), a `audit-identidad` (los nombres son `Text`) y a `audit-rigor` (el cartel anotado).
+
+### La regla del niño, en el kit
+
+Desde el 26 de octubre de 2026 los juegos se piensan, como la tele, para un niño de 5 a 9 años: el de 9 lee nombres pero no el relator, el de 5 no lee nada. La regla: **cualquier cuadro del juego, sin leer, dice quién va adelante, hacia dónde van, cuánto falta y qué acaba de pasar.** El kit la garantiza con piezas que el plan declara y las pruebas de cada juego verifican:
+
+| Qué pide la regla | Dónde vive en el kit |
+|---|---|
+| **Un solo contador**, en la misma esquina en todos los juegos, que solo baja y llega a 1 con el golpe; ningún otro número en el relator ni en un cartel | `marcador.ts`: el plan declara `marcador(t)` y `crearJuego` lo dibuja arriba a la izquierda ("QUEDAN 18"), así ningún juego puede tener otro. `problemasDeMarcador` |
+| **El nombre pegado al cuerpo** y, cuando alguien sale, su nombre legible donde pasó; nunca una fila aparte de emblemas | `nombres.ts`: `pegarAlCuerpo`, `estaPegado` (a lo sumo un cuarto del alto del cuerpo), `nombreDeSalida` y `enFilaAparte` |
+| **La persona es una figura con cara y nombre**, no un emblema de 30 px | `figuras.ts`: cada `Figura` lleva su `nombre`; `tamanoMinimoFigura` (56 px de diseño, nunca menos de 40) y `cuantasCaben` (con más gente, por tandas); `Kit.escalaDeFigura()` da la escala del chip del estadio |
+| **Un solo sentido** de avance, **la meta en todo cuadro** y el cartel nunca encima del ganador | `director.ts`: `plan.sentido`; `momentos.meta` y `guardarMeta` no dejan que ninguna toma la suelte; con el golpe la cámara protege a quien gana debajo del cartel (`tapaAlGanador`, `cajaDelFoco`) aunque el plan no lo pida |
+| **El relator, de seis palabras o menos**, un nombre, ningún número | `guion.ts`: `validarGuion(líneas, duración, { nino: true, nombres })` y `problemasDeLinea` |
+| **Cada hecho se ve en el cuerpo a los 0,3 s de su línea**, dos salidas van a 1 s o más, y salir no suena a fracaso | `LineaGuion.hecho`, `POSE_MAX` y `SALIDAS_APARTE` (en `respuestas.ts`); `sonido.salida()`, un solo tono suave igual en todos |
+| **Las respuestas, en cada instante**: quién va adelante, hacia dónde, cuánto falta y qué acaba de pasar | `plan.respuestas(t)`, obligatorio: sin él `crearJuego` no compila. `problemasDeRespuestas` lo recorre; con `?auditar=nino` el juego deja `window.__nino.verdad()` para `audit-nino`, que saca tres capturas sin subtítulo (al 25 %, al 60 % y al final) y las compara con esto |
+
+`nuevo-juego.mjs` deja puestos estos ganchos y sus pruebas (`sentido`, `marcador`, `respuestas`, `hecho`, `meta`, el relator de seis palabras y figuras del tamaño de una figura), y la página de diseño trae la **ficha del niño**, que se aprueba antes del código: qué es ir adelante, hacia dónde, cómo se ve lo que falta y cada hecho con su tipo y su pose. De pie declara `respuestas`, `marcador` y `sentido`, pero todavía no cumple el resto de la regla (sienta a varios a la vez y su relator pasa de seis palabras): es de los diez que se rediseñan. Todavía no entran las poses de las figuras (correr, frenar, tropezar, echarse, saludar, ganar), que cada capa declare su clase, ni `audit-nino` mismo.
+
+### Lo que el kit no abstrae
+
+- **El plan.** La mecánica de cada juego (qué pasa y cuándo) es lo que lo hace distinto y se escribe aparte, pura y con pruebas. Ocho de diez ya lo tenían (`*-plan.ts`).
+- **El dibujo y la física** (el trompo, la tómbola, el aguayo) y el reloj propio de cada llama.
+- **Las cámaras propias.** La carrera sigue a la punta, la chovena se acerca con la rueda y La Entrada va en perspectiva: toman del kit solo la tensión, el golpe y el foco.
+- **Un marco que ahogue el giro.** La parada falsa, la mordaza o el apagón son tomas y giros de cada juego.
+
+### La leyenda
+
+Los juegos con raíz local (el Guajojó, el Toborochi) **no cuentan su leyenda durante el show**: durante el show, solo el juego. La entrada del catálogo trae un campo opcional `leyenda` (`kit/leyenda.ts`): hasta cinco líneas en español y en inglés, con su fuente en `https`. Se muestra siempre **después** del resultado, en tres lugares: una tarjeta plegada debajo del resultado ("¿De dónde viene este juego?", `src/ui/leyenda.ts`), la página de verificación (`verificar.html?juego=<id>`) y la ficha del juego en `juegos.html`. Ningún dato sin fuente primaria: la prueba del catálogo (`catalogo.test.ts`) exige que cumpla las reglas.
+
+### La frontera, para quien lo use desde afuera
+
+El kit se diseña para publicarse después como paquete aparte, para que en una hackatón un equipo pueda hacer **su propio juego** sobre Tinkazo: el juego recibe la semilla, la lista y los momentos, y devuelve el show. Para eso, nada de `kit/` depende de los textos, las rutas ni el estado de tinkazo.app, salvo por **un puerto**: `anfitrion.ts` (qué le pide el kit al sitio: montar el estadio, el idioma y las frases, el ritmo y la duración, cómo suena una nota, los emblemas) y `catalogo.ts` (la entrada del sitio para cada juego). `frontera.test.ts` lee los imports y falla si otro archivo se cuela. Los textos del relator viajan con el juego (`textos`, es y en); el selector, el diccionario del sitio y los auditores se conectan por fuera. Todavía no se publica: solo la frontera quedó limpia y vigilada.
+
+## Dos formas de agregar un juego (el camino de antes del kit)
+
+Lo normal, desde el 26 de octubre de 2026, es el kit (arriba). Lo que sigue es el camino de antes, que sigue valiendo para los juegos que todavía no migraron y para entender el contrato.
 
 **Como tema de la carrera** (lo barato). El motor de `src/games/race.ts` ya resuelve carriles, cámara, parallax, narrador, cuenta regresiva y meta. Un tema nuevo es una entrada en `src/games/themes.ts`: paleta del cielo, cordillera, pista, forma del horizonte, texto de largada y una función que dibuja al corredor. Así se hizo la [Carrera Stellar](juegos/carrera-stellar.md).
 
@@ -111,6 +194,7 @@ pnpm audit:todo --simular                         # muestra qué correría y cu�
 | Cambió | Corré | Tarda |
 |---|---|---|
 | Un juego | `--solo audit-game,audit-rigor,audit-identidad,audit-delatores --juegos <juego>`, y el evaluador si es visual | unos 10 min |
+| Un juego nuevo, rediseñado o pasado al kit | lo de arriba y [`audit-nino <juego>`](#la-prueba-del-niño), con un modelo que describa las fotos (no corre solo: necesita al describidor) | unos minutos de fotos (6 s por corrida en De pie), más la descripción |
 | `stage.ts` o `camera.ts` | `--solo audit-game,audit-identidad,audit-rigor,audit-encuadre` | cerca de 1 h |
 | La interfaz | `--solo audit-ui,check-paginas,check-glosario` | 5 min |
 | Antes de subir | `--solo smoke,audit-ui,audit-flujo` más lo de arriba | 25 min |
@@ -174,6 +258,52 @@ La nota de la investigación de los auditores encontró tres repeticiones. Esto 
 | Tiempo en serie, sin y con la mezcla (estimado con los tiempos del 22 de octubre) | 2 h 38 min y 2 h 47 min | 2 h 18 min y 2 h 25 min |
 
 Las mismas comprobaciones por juego, en menos juegos: lo que se pierde son las de `tombola`, `pasanaku` y `stellar`, que se piden por nombre. Los conteos están fijados en `scripts/lib/bateria-recortes.test.mjs`.
+
+## La prueba del niño
+
+La regla del niño (26 de octubre de 2026, [en el kit](#la-regla-del-niño-en-el-kit)) dice que **cualquier cuadro del juego, sin leer, muestra quién va adelante, hacia dónde van, cuánto falta y qué acaba de pasar**. Sin una medida es una opinión: [`scripts/audit-nino.mjs`](../scripts/audit-nino.mjs) la mide. No llama a ninguna API (no hace falta llave ni cuesta): saca las fotos y la verdad del plan, un modelo que solo ve las fotos las describe, y un juez compara.
+
+```bash
+pnpm preview --port 4192 &
+CDP_PORT=9692 node scripts/audit-nino.mjs <juego|todos> --personas 18 --semillas 8 --base http://localhost:4192
+# el describidor lee preguntas.json con scripts/prompt-nino.md y escribe respuestas-modelo.json
+node scripts/audit-nino.mjs --juzgar docs/capturas/nino/<juego> [--json]
+# el caso de control: la carrera de hoy, la que no se entendía, tiene que reprobar
+CDP_PORT=9692 node scripts/audit-nino.mjs --control --semillas 2 --base http://localhost:4192
+node scripts/audit-nino.mjs --control --juzgar docs/capturas/nino/control
+```
+
+1. **Capturar.** Por semilla (`?semilla=` y `?ganador=` iguales: cambian la ronda y quién gana) y por tamaño (proyector 1920×1080 oscuro y celular 390×844 claro), corre el show con el reloj en turbo y lo congela al 25 % y al 60 % de su duración y un segundo después del golpe. En cada parada esconde el subtítulo y saca dos fotos: **con letras** (la edad de 9 años, que lee nombres) y **sin letras** (la de 5, que no lee nada: mientras `window.__nino.sinLetras` esté prendido el estadio no dibuja ningún texto del motor, y el auditor esconde la barra de arriba). Son 12 fotos por semilla. Deja en `docs/capturas/nino/<juego>/` (sin versionar) `preguntas.json` (por foto, un id sin sentido, la variante y las cuatro preguntas, en un orden que no es el del show: ni el juego, ni la verdad, ni cuál es la última), `capturas/<id>.png`, el `prompt-nino.md` y, aparte, `oculto/verdad.json`.
+2. **Describir.** Un modelo que solo ve las fotos (uno barato; si una foto falla la repite otro más fuerte, en `respuestas-desempate.json`, y decide la segunda) las contesta con el [prompt fijo](../scripts/prompt-nino.md): `adelante`, `hacia`, `falta` y `paso`.
+3. **Juzgar.** `--juzgar` compara con la verdad y escribe `veredicto.json` y `repetir.json` (las fotos para el segundo describidor). Con `--json` deja la línea de resumen de los demás auditores.
+
+**El contrato.** Es el del kit (`kit/respuestas.ts`): con `?auditar=nino`, `window.__nino` trae `verdad()` (las `Respuestas`: `adelante` con `quienes` y `lugar`, `hacia`, `progreso` de 0 a 1 que solo sube, y `paso` con tipo, quién y desde cuándo), `t()` (la hora del juego), `duracion` (la hora del golpe, el 100 %) y `sinLetras`. Los juegos del kit lo dejan solos con `crearJuego`. La ruleta (`wheel-nino.ts`) y la carrera de hoy (`race-nino.ts`) lo exponen desde su plan sin cambiar el show: sin el parámetro no se expone nada.
+
+**Qué decide la verdad.** Tres cosas las tiene que declarar el juego, y el veredicto depende de ellas (la primera pasada de la ruleta dio 0 de 2 con la zona declarada, `hacia` «arriba» y una ventana de 4 s; con las de abajo, 2 de 2):
+
+- **La zona** en que está quien va adelante no es del plan: depende de la cámara. La mide el juego donde cae en la pantalla (`lugarDe`, con el tercio del medio como centro): la ruleta, el gajo bajo la flecha; la carrera, la llama de la que va primera en la pista y de la ganadora.
+- **`hacia`.** La ruleta gira: «alrededor». La flecha, adónde mirar, es la zona de `adelante`.
+- **«Qué acaba de pasar»** es de hace 3 s o menos; pasado eso, `nada`. Que la flecha pase de un gajo a otro no es un hecho: es la rueda.
+
+**Las tolerancias del juez** (`scripts/lib/nino.mjs`, con sus pruebas sin red):
+
+- Nombres sin tildes ni mayúsculas y con las cinco primeras letras de cada palabra («María Q.» vale por «María Quispe»); donde van adelante varios, vale cualquiera.
+- Sin letras, la zona exacta: puede nombrar dos, no más. «Hacia», igual o una parte de la diagonal, y nunca también el sentido contrario.
+- «Falta»: empieza 0, mucho 0,25, mitad 0,5, poco 0,75, termino 1; acierta a 0,2 o menos del progreso.
+- «Paso»: el tipo (`empezo`, `salio`, `adelante`, `freno`, `casi`, `gano`, `nada`) y, con letras, el nombre si el hecho dice quién.
+- Una foto pasa con 3 de 4; en la final «hacia» no cuenta y las otras tres son obligatorias. Una corrida (una semilla: los dos tamaños y las dos edades) pasa si pasan todas sus fotos, y el juego con 7 de cada 8 corridas (con 2 semillas, las 2).
+
+**El control.** `--control` corre la carrera de producción de hoy. Si la prueba la aprueba, la prueba está mal: con `--control --juzgar` el éxito es que **no** apruebe.
+
+**Primera corrida (26 de octubre de 2026)**, 18 personas, 2 semillas, los dos tamaños y las dos edades (24 fotos por juego):
+
+| | Ruleta | Carrera de hoy (control) |
+|---|---|---|
+| Corridas que pasan | 2 de 2 | 0 de 2 |
+| Fotos que pasan | 24 de 24 | 12 de 24 |
+| Lo que falla | `falta`: no se ve en ninguna de las 16 fotos del 25 % y del 60 %; pasan con 3 de 4 justos | `paso` (dicen «nada» donde se acaba de echar alguien o de abrir los carriles), `adelante` (el cartel grande va sobre quien ya salió) y `falta`; la final, con su cartel, pasa |
+
+**Comprobaciones.** Con la prueba, las 40 comprobaciones (20 de `audit-game` y 20 de `audit-rigor`) pasan a 42: N1 (9 años, con letras) y N2 (5 años, sin letras). La regla pide 47; las otras cinco (la meta en cada cuadro, el sentido fijo, un solo número fuera del cartel, el hecho en el cuerpo a los 0,3 s, cinco clases y un panel) siguen por hacer, y `problemasDeRespuestas` ya cubre las del plan.
 
 ## El auditor de mezcla
 
@@ -401,7 +531,7 @@ Las grillas se reparten con la proporción real de la pantalla y no con una cons
 
 El ritmo, la legibilidad del cartel y el tartamudeo de los subtítulos ya los mide el auditor exigente. Lo que sigue no, y lo revisás vos antes de subirlo:
 
-- ¿Se entiende quién va ganando sin leer texto?
+- ¿Se entiende quién va ganando sin leer texto? Ya no es de ojo: lo mide [`audit-nino`](#la-prueba-del-niño), con la foto sin letras y la verdad del plan.
 - ¿Se lee desde el fondo de la sala, proyectado?
 - ¿Dura lo suficiente para generar tensión y lo bastante poco para no aburrir? La ventana útil en modo normal son 24 a 34 segundos: menos y la sala no llega a girar la cabeza, más y se va.
 - ¿Hay un hecho legible nuevo cada 1,5 a 2,5 segundos, y nunca más de 4 segundos sin novedad?
@@ -424,7 +554,7 @@ Los diez del selector, en su orden: el de la auditoría de juegos, de las salas 
 | Chovena | `chovena` | Módulo propio (solo motor nuevo), con su propia música | 200, mejor de 12 a 80 | [chovena.md](juegos/chovena.md) |
 | Piñata | `pinata` | Módulo propio (solo motor nuevo) | 200 | [pinata.md](juegos/pinata.md) |
 | Ruleta | `wheel` | Módulo propio | 200 (con más de 24, cada gajo reúne a un grupo) | [ruleta.md](juegos/ruleta.md) |
-| De pie (antes ¿Quién es?) | `quien` | Módulo propio (solo motor nuevo) | 200, pensado de 8 a 100 | [quien-es.md](juegos/quien-es.md) |
+| De pie (antes ¿Quién es?) | `quien` | Sobre el kit (`crearJuego`; el primero en migrar, el 26 de octubre de 2026) | 200, pensado de 8 a 100 | [quien-es.md](juegos/quien-es.md) |
 | El Trueque | `trueque` | Módulo propio (solo motor nuevo) | 200, pensado de 12 a 200 | [trueque.md](juegos/trueque.md) |
 | Teleférico | `teleferico` | Módulo propio | 200 | [teleferico.md](juegos/teleferico.md) |
 | La Entrada (antes Carnaval de Oruro) | `oruro` | Módulo propio (solo motor nuevo), por fraternidades | 200, pensado de 30 a 200 | [la-entrada.md](juegos/la-entrada.md) |

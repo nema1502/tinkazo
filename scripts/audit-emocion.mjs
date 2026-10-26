@@ -36,7 +36,7 @@
 import { createHash } from "node:crypto";
 import { launch, sleep } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
-import { SELECTOR as TODOS } from "./lib/juegos.mjs";
+import { SELECTOR as TODOS, juegosDelKit } from "./lib/juegos.mjs";
 import { ZOOM_MINIMO, instalarZoom, razonDeZoom, resumirZoom, veces } from "./lib/zoom.mjs";
 
 /**
@@ -44,7 +44,8 @@ import { ZOOM_MINIMO, instalarZoom, razonDeZoom, resumirZoom, veces } from "./li
  * el pico del zoom tiene que caer en el golpe, que es el instante en que sale el
  * cartel. Los demás todavía no lo tienen y no se miran.
  */
-const CON_ZOOM = ["race", "sapo"];
+// Todo juego del kit lo tiene: el director de cámara hace el golpe (`kit/director.ts`).
+const CON_ZOOM = ["race", "sapo", ...juegosDelKit()];
 const args = process.argv.slice(2);
 const opt = (name, def) => {
   const i = args.indexOf(name);

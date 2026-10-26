@@ -4,6 +4,7 @@
 // salía oscura igual (evaluador visual, 21 de octubre de 2026).
 import "./pagina";
 import { $, esc } from "./dom";
+import { pintarLeyenda } from "./ui/leyenda";
 import { getLang, onLangChange, texto as t, textos } from "./idioma";
 import { SAMPLE, avatar } from "./state";
 import { canonicalList, listHash } from "./protocol/canonical";
@@ -161,7 +162,9 @@ async function main(): Promise<void> {
   let proof: Proof | null = null;
   // Los textos, el tema, la cabecera y el idioma ya los puso `pagina.ts`. Las
   // comprobaciones no viven en `data-i`: se repintan al cambiar de idioma.
+  const pintarLaLeyenda = (): void => pintarLeyenda($("leyenda-box"), new URLSearchParams(location.search).get("juego"), getLang(), { titulo: t("leyendaTitulo"), fuente: t("leyendaFuente") });
   onLangChange(() => {
+    pintarLaLeyenda();
     repintarDetalles();
     if (actual) contar(actual.proof, actual.r);
     pintarSellos();
@@ -202,6 +205,8 @@ async function main(): Promise<void> {
   actual = { proof, r: revision };
   pintarComprobaciones(proof, revision);
   contar(proof, revision);
+  // Después del resultado y de las comprobaciones, la leyenda del juego (si el enlace trae `?juego=`).
+  pintarLaLeyenda();
 }
 
 /** Cada comprobación, con lo que se vio. */

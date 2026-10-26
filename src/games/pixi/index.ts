@@ -1,4 +1,5 @@
 import { playableGame, type Beacon, type Game } from "../../state";
+import { JUEGOS } from "./kit/catalogo";
 import { PixiInitError, warmPixi } from "./stage";
 
 /**
@@ -11,6 +12,8 @@ import { PixiInitError, warmPixi } from "./stage";
 type Launch = (names: string[], winners: readonly number[], beacon: Beacon, done: () => void) => Promise<void>;
 
 const PIXI: Partial<Record<Game, () => Promise<Launch>>> = {
+  // Los del kit se cargan desde su catálogo: un juego nuevo no toca este archivo.
+  ...Object.fromEntries(JUEGOS.map((j) => [j.id, j.cargar])),
   race: async () => {
     const m = await import("../llamas/pixi-race");
     return (n, w, b, d) => m.llamasPixi(n, w, b, d, "andes");
@@ -20,7 +23,6 @@ const PIXI: Partial<Record<Game, () => Promise<Launch>>> = {
   trompo: async () => (await import("./trompo")).trompoPixi,
   pinata: async () => (await import("./pinata")).pinataPixi,
   sapo: async () => (await import("./sapo")).sapoPixi,
-  quien: async () => (await import("./quien")).quienPixi,
   oruro: async () => (await import("./oruro")).oruroPixi,
   luz: async () => (await import("./luz")).luzPixi,
   chovena: async () => (await import("./chovena")).chovenaPixi,

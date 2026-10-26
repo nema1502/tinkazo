@@ -6,7 +6,10 @@ import { writeStory } from "../drama";
 import { WINNER_HOLD, shorten, winnersLabel } from "../overlay";
 import { gajoDe, repartir } from "../wheel-layout";
 import { FALSA, T_BRAKE, T_CREEP, T_CROWN, T_HOLD, T_LOCK, T_SETTLE, T_SPIN, T_WIND, beatFor, type BeatReason } from "./wheel-beats";
+import { lugarDe } from "./kit/respuestas";
+import { exponerNino } from "./nino";
 import { W0, planWheelMotion } from "./wheel-motion";
+import { respuestasRuleta } from "./wheel-nino";
 import { CREAM, INK, YELLOW, contorno, mountPixi, type PixiStage } from "./stage";
 
 /**
@@ -441,6 +444,17 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
   /** El último gajo que el relator nombró mientras la rueda frena. */
   let namedCur = -1;
   let flash = 0, bump = 0, didLock = false, saidPeg = false, saidLast = false, didCrown = false;
+  // `?auditar=nino`: la prueba del niño (`scripts/audit-nino.mjs`) lee del plan quién va adelante, hacia dónde, cuánto falta y qué pasó. Solo lee.
+  exponerNino({
+    duracion: T_CROWN,
+    t: () => tAll,
+    verdad: () => {
+      const r = respuestasRuleta({ n, segs, grupos, startSeg, mov, ganador: winnerIdx, falsa }, tAll);
+      // En qué parte de la pantalla cae el gajo que está bajo la flecha: lo decide la cámara, que el plan no conoce.
+      const p = S.scene.toGlobal({ x: 0, y: -G.R * 0.78 });
+      return { ...r, adelante: { ...r.adelante, lugar: lugarDe(p.x, p.y, S.sw(), S.sh()) } };
+    },
+  });
 
   const segUnder = (): number => Math.floor((((-rot / A) % segs) + segs) % segs) % segs;
   /**

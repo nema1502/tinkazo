@@ -1,7 +1,12 @@
 import { normalCarrera, segundosDe } from "./duraciones";
+import type { JuegoKit } from "./games/pixi/kit/catalogo";
 
-/** `race` y `stellar` son la misma carrera con distinto escenario. */
-export type Game = "race" | "stellar" | "wheel" | "ledger" | "rockets" | "pasanaku" | "teleferico" | "tombola" | "trompo" | "totora" | "pinata" | "oruro" | "luz" | "sapo" | "quien" | "chovena" | "trueque";
+/**
+ * `race` y `stellar` son la misma carrera con distinto escenario. Los juegos del
+ * kit (`src/games/pixi/kit/`) suman su id desde el catálogo: nacen apagados y se
+ * abren con `?demo=<id>`.
+ */
+export type Game = "race" | "stellar" | "wheel" | "ledger" | "rockets" | "pasanaku" | "teleferico" | "tombola" | "trompo" | "totora" | "pinata" | "oruro" | "luz" | "sapo" | "quien" | "chovena" | "trueque" | JuegoKit;
 
 /** Ronda de quicknet ya publicada y verificada. */
 export interface Beacon {

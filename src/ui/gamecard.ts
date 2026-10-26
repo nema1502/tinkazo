@@ -1,4 +1,5 @@
 import { hayPeloton } from "../duraciones";
+import { entradaDe, clavesDe } from "../games/pixi/kit/catalogo";
 import { T, getLang, t } from "../i18n";
 import type { Game } from "../state";
 
@@ -21,7 +22,7 @@ import type { Game } from "../state";
 export const CARD_SECONDS = 3.5;
 
 /** El nombre de cada juego, el mismo del selector. */
-export const NOMBRE: Record<Game, string> = {
+export const NOMBRE: Partial<Record<Game, string>> = {
   race: "jgRaceN", luz: "jgLuzN", trompo: "jgTroN", pinata: "jgPinN", oruro: "jgOruN",
   tombola: "jgTomN", wheel: "jgWheelN", teleferico: "jgTelN", pasanaku: "jgPasN", stellar: "jgStellarN",
   sapo: "jgSapoN", quien: "jgQuienN", ledger: "jgLedgerN", rockets: "jgRocketsN", totora: "jgTotN",
@@ -29,7 +30,7 @@ export const NOMBRE: Record<Game, string> = {
 };
 
 /** La regla de cada uno, en una línea corta: qué mirar y quién gana. */
-export const REGLA: Record<Game, string> = {
+export const REGLA: Partial<Record<Game, string>> = {
   race: "gcRace", luz: "gcLuz", trompo: "gcTrompo", pinata: "gcPinata", oruro: "gcOruro",
   tombola: "gcTombola", wheel: "gcWheel", teleferico: "gcTeleferico", pasanaku: "gcPasanaku", stellar: "gcStellar",
   sapo: "gcSapo", quien: "gcQuien", ledger: "gcLedger", rockets: "gcRockets", totora: "gcTotora",
@@ -47,6 +48,15 @@ export const VARIOS: Partial<Record<Game, string>> = { sapo: "gcSapoMany", quien
 /** Los que tienen captura en public/juegos, para el fondo. */
 const CAPTURA = new Set<Game>(["race", "chovena", "luz", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "trueque"]);
 
+/**
+ * Las claves de texto de un juego: las de la tabla y, para los del kit, las de
+ * la convención (`clavesDe`): `jg<Id>N`, `gc<Id>` y `gc<Id>Many`.
+ */
+export const claveNombre = (g: Game): string => NOMBRE[g] ?? clavesDe(g).nombre;
+export const claveRegla = (g: Game): string => REGLA[g] ?? clavesDe(g).regla;
+const claveVarios = (g: Game): string | undefined => VARIOS[g] ?? (entradaDe(g) ? clavesDe(g).varios : undefined);
+const tieneCaptura = (g: Game): boolean => CAPTURA.has(g) || entradaDe(g)?.captura === true;
+
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c);
 
 export interface GameCard {
@@ -62,7 +72,7 @@ export interface GameCard {
 function caja(game: Game, people: number, prizes: number, premio = ""): string {
   const L = T[getLang()];
   const lanes = (game === "race" || game === "rockets" || game === "totora") && people > 8;
-  const varios = prizes > 1 ? VARIOS[game] : undefined;
+  const varios = prizes > 1 ? claveVarios(game) : undefined;
   const extras = [
     // Con 9 a 30, la carrera es el pelotón: salen todas y quedan ocho en la final.
     lanes ? (game === "race" && hayPeloton(people) ? L.pelStart(people, 8) : L.cLanes(8, people)) : game === "sapo" && people > 12 ? t("gcSapoQual") : "",
@@ -70,8 +80,8 @@ function caja(game: Game, people: number, prizes: number, premio = ""): string {
   ].filter(Boolean);
   return (
     `<p class="gc-kicker">${esc(t("gcKicker"))}</p>` +
-    `<h2 class="gc-nombre" id="gc-nombre"><span>${esc(t(NOMBRE[game]))}</span></h2>` +
-    `<p class="gc-regla" id="gc-regla">${esc(t(varios ?? REGLA[game]))}</p>` +
+    `<h2 class="gc-nombre" id="gc-nombre"><span>${esc(t(claveNombre(game)))}</span></h2>` +
+    `<p class="gc-regla" id="gc-regla">${esc(t(varios ?? claveRegla(game)))}</p>` +
     extras.map((x) => `<p class="gc-extra">${esc(x)}</p>`).join("") +
     // Qué se sortea, con el nombre que le puso quien organiza: la tarjeta decía
     // "1 premio" sin decir cuál (revisión del experto en sorteos).
@@ -120,7 +130,7 @@ export function showGameCard(
   const total = CARD_SECONDS + cuenta;
   el.style.setProperty("--gc-ms", `${total * 1000}ms`);
   const fondo = (g: Game): void => {
-    if (CAPTURA.has(g)) el.style.setProperty("--gc-img", `url("/juegos/${g}.webp")`);
+    if (tieneCaptura(g)) el.style.setProperty("--gc-img", `url("/juegos/${g}.webp")`);
     else el.style.removeProperty("--gc-img");
   };
   fondo(game);

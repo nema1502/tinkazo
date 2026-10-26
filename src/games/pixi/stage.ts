@@ -461,6 +461,38 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   // (`window.__tinkazo`), para medir el zoom del golpe (`scripts/lib/zoom.mjs`).
   // Sin el parámetro no se expone nada.
   if (params.get("auditar") === "camara") (window as unknown as { __tinkazo: unknown }).__tinkazo = { camara: cam, escena: scene };
+  // `?auditar=nino`: la foto de los cinco años no lleva letras (`scripts/audit-nino.mjs`).
+  // Mientras `window.__nino.sinLetras` esté prendido, todo texto del motor queda sin
+  // dibujar (`renderable`, no `visible`: los juegos mandan la visibilidad), y al
+  // apagarlo vuelve. `__ninoRepintar` dibuja el mismo cuadro otra vez sin avanzar
+  // el juego. Sin el parámetro no se expone nada y el cuadro no cambia.
+  const ninoPedido = params.get("auditar") === "nino";
+  const letrasOcultas = new Set<Container>();
+  const letrasNino = (): void => {
+    const sin = !!(window as unknown as { __nino?: { sinLetras?: boolean } }).__nino?.sinLetras;
+    if (!sin) {
+      for (const h of letrasOcultas) h.renderable = true;
+      letrasOcultas.clear();
+      return;
+    }
+    const recorrer = (c: Container): void => {
+      for (const h of c.children as Container[]) {
+        if (typeof (h as unknown as { text?: unknown }).text === "string") {
+          if (h.renderable) {
+            h.renderable = false;
+            letrasOcultas.add(h);
+          }
+        } else recorrer(h);
+      }
+    };
+    recorrer(app.stage);
+  };
+  if (ninoPedido) {
+    (window as unknown as { __ninoRepintar: () => void }).__ninoRepintar = () => {
+      letrasNino();
+      app.renderer.render(app.stage);
+    };
+  }
   // El nivel queda anotado en el lienzo, para medirlo y para los auditores.
   view.dataset.calidad = arranque.nivel;
   // Si los cuadros empiezan a tardar, baja de nivel en el mismo show y deja
@@ -1138,6 +1170,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
           mark("zoomPico", pico.t.toFixed(3));
         }
         guardia();
+        if (ninoPedido) letrasNino();
         app.renderer.render(app.stage);
         codigo = performance.now() - c0;
         if (ident) {

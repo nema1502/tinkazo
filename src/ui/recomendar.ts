@@ -1,3 +1,4 @@
+import { JUEGOS } from "../games/pixi/kit/catalogo";
 import type { Game } from "../state";
 
 /**
@@ -20,9 +21,12 @@ import type { Game } from "../state";
  * Los diez juegos del selector, en el orden de sus botones (`GAME_BUTTONS` en
  * `freeze.ts`): el de la auditoría, de las salas chicas a las grandes.
  */
-export const SELECTOR: readonly Game[] = [
+const SELECTOR_BASE: readonly Game[] = [
   "race", "sapo", "trompo", "chovena", "pinata", "wheel", "quien", "trueque", "teleferico", "oruro",
 ];
+
+/** Los diez y, al final, los del kit que ya se encendieron (`kit/catalogo.ts`). */
+export const SELECTOR: readonly Game[] = [...SELECTOR_BASE, ...JUEGOS.filter((j) => j.selector && !SELECTOR_BASE.includes(j.id)).map((j): Game => j.id)];
 
 export interface Rango {
   /** Mínimo real: con menos, el juego no se sostiene. */
@@ -53,7 +57,7 @@ export interface Rango {
  * lista en gajos (21 de octubre de 2026; la sección 5 decía 24). No se importa de
  * state.ts porque ese módulo lee `location` al cargar: una prueba compara los dos.
  */
-export const RANGOS: Partial<Record<Game, Rango>> = {
+const RANGOS_BASE: Partial<Record<Game, Rango>> = {
   // La carrera llega a 30 desde el 25 de octubre de 2026: con 9 a 30 sale todo el pelotón y se van echando de a uno.
   race: { minimo: 2, ideal: [4, 30], maximo: 30, meta: 7.0 },
   sapo: { minimo: 2, ideal: [6, 12], maximo: 40, meta: 7.1 },
@@ -65,6 +69,12 @@ export const RANGOS: Partial<Record<Game, Rango>> = {
   pinata: { maximo: 200 },
   quien: { minimo: 8, maximo: 100 },
   oruro: { minimo: 30, maximo: 200 },
+};
+
+/** Los rangos de la tabla y los de los juegos del kit encendidos; la tabla manda. */
+export const RANGOS: Partial<Record<Game, Rango>> = {
+  ...Object.fromEntries(JUEGOS.filter((j) => j.selector).map((j) => [j.id, j.rango])),
+  ...RANGOS_BASE,
 };
 
 /**

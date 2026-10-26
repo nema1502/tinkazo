@@ -799,6 +799,7 @@ export const T: Record<Lang, Dict> = {
     cPasPot: "EN EL AGUAYO",
     cPasCinchLbl: "APRETÓN",
     loreTitle: "DE PASO",
+    leyendaTitulo: "¿De dónde viene este juego?", leyendaFuente: "Fuente", marcadorQuedan: "QUEDAN",
     loreTinkazoQ: "¿Por qué “Tinkazo”?",
     loreTinkazoA: "El Diccionario de americanismos trae dos: tinkazo, en Bolivia, es un presentimiento. Y tincazo es el golpecito que se da haciendo resbalar el dedo sobre el pulgar. Este sorteo es las dos cosas.",
     loreDrandQ: "¿De dónde sale el número?",
@@ -1977,6 +1978,8 @@ export const T: Record<Lang, Dict> = {
     compartirOn: "Para compartir: sí",
     compartirOff: "Para compartir: no",
     compartirTip: "Más contraste, nombres más grandes y menos partículas, para que se lea en Zoom o en una pantalla compartida. Vale para esta pestaña.",
+    // >>> kit:i18n-es (scripts/nuevo-juego.mjs escribe entre estas marcas)
+    // <<< kit:i18n-es
   },
   en: {
     badge: 'Draw for your <span class="rotating" data-words="meetup|class|event|workshop|talk|conference">meetup</span>',
@@ -2422,6 +2425,7 @@ export const T: Record<Lang, Dict> = {
     cPasPot: "ON THE AGUAYO",
     cPasCinchLbl: "PULL",
     loreTitle: "BY THE WAY",
+    leyendaTitulo: "Where does this game come from?", leyendaFuente: "Source", marcadorQuedan: "LEFT",
     loreTinkazoQ: "Why “Tinkazo”?",
     loreTinkazoA: "The Spanish academies' dictionary of Americanisms has two: in Bolivia a tinkazo is a hunch. Its twin tincazo is the flick you give with a finger off your thumb. This draw is both.",
     loreDrandQ: "Where does the number come from?",
@@ -3574,6 +3578,8 @@ export const T: Record<Lang, Dict> = {
     compartirOn: "For sharing: on",
     compartirOff: "For sharing: off",
     compartirTip: "More contrast, bigger names and fewer particles, so it reads on Zoom or a shared screen. Lasts for this tab.",
+    // >>> kit:i18n-en (scripts/nuevo-juego.mjs escribe entre estas marcas)
+    // <<< kit:i18n-en
   },
 };
 

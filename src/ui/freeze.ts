@@ -13,7 +13,8 @@ import { juegoPorDefecto, juegoSiguiente, recomendar } from "./recomendar";
 import { apruebaAMano, canAnchor, currentSession } from "./wallet-ui";
 import { cerrarLista, olvidarBorrador, parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
-import { NOMBRE } from "./gamecard";
+import { claveNombre } from "./gamecard";
+import { JUEGOS } from "../games/pixi/kit/catalogo";
 import { actualizarPaso, barraActiva, verError } from "./siguiente";
 import { ponerPremio, recordarPremio } from "./premios";
 import { ENSAYO_ESPERA_S, enEnsayo, sinGrabar } from "../ensayo-modo";
@@ -34,7 +35,7 @@ import { claveDelSello, ponerTextoDelSello, sinSelloAhora } from "./sin-sello-te
  * grandes; con la lista sellada los reordena la recomendación (`recomendar.ts`).
  * Los que salen siguen abriendo con `?demo=`.
  */
-export const GAME_BUTTONS: ReadonlyArray<[string, Game]> = [
+const BOTONES_DEL_SELECTOR: ReadonlyArray<[string, Game]> = [
   ["g-race", "race"],
   ["g-sapo", "sapo"],
   ["g-trompo", "trompo"],
@@ -45,6 +46,16 @@ export const GAME_BUTTONS: ReadonlyArray<[string, Game]> = [
   ["g-trueque", "trueque"],
   ["g-teleferico", "teleferico"],
   ["g-oruro", "oruro"],
+];
+
+/**
+ * Los diez y, al final, los del kit que ya se encendieron (`selector: true` en
+ * `kit/catalogo.ts`). Los que nacieron apagados tienen su botón oculto
+ * (`ui/botones-kit.ts`) y no entran acá: nadie los puede elegir.
+ */
+export const GAME_BUTTONS: ReadonlyArray<[string, Game]> = [
+  ...BOTONES_DEL_SELECTOR,
+  ...JUEGOS.filter((j) => j.selector && !BOTONES_DEL_SELECTOR.some(([, g]) => g === j.id)).map((j): [string, Game] => [`g-${j.id}`, j.id]),
 ];
 
 /** Quien organiza eligió un juego en el selector: desde ahí, el juego no cambia solo según la cantidad. */
@@ -86,7 +97,7 @@ export function setGame(g: Game): void {
 export function pintarJuego(): void {
   const el = document.getElementById("juego-actual");
   if (!el) return;
-  const nombre = document.querySelector(`#g-${app.game} span`)?.textContent || t(NOMBRE[app.game]);
+  const nombre = document.querySelector(`#g-${app.game} span`)?.textContent || t(claveNombre(app.game));
   if (el.textContent !== nombre) el.textContent = nombre;
   pintarNotaElegida();
 }

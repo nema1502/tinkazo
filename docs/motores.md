@@ -90,6 +90,10 @@ Un juego lo usa así: arma `S.crown(names, winners, true)`; calcula `tiemposFoco
 
 Lo usan la Chovena, el Teleférico, La Entrada y el sapo. Cada uno suma su momento: en la Chovena los que salieron se paran a festejar con los brazos arriba; en el Teleférico amanece sobre la cumbre y se sacuden los banderines; en La Entrada los cohetillos y las campanas salen con el golpe; en el sapo la rana se ríe con la boca abierta. Los demás juegos siguen con la placa de siempre.
 
+### El kit de juegos
+
+Los juegos nuevos se escriben sobre el kit (`src/games/pixi/kit/`, ver [Cómo nace un juego](juegos.md#cómo-nace-un-juego-el-kit)). `crearJuego` monta el estadio con `mountPixi`, lleva el reloj, el guion y la coronación con foco, y le pide la cámara a `Camera` con los cinco arcos del director: presentación (plano entero que respira), tensión (`tension`, un 12 %), silencio, golpe (`golpe`, un 20 % sostenido 0,5 s) y foco (`foco.ts`, con `proteger` para dejar a quien gana debajo del cartel). `camera.ts` y `stage.ts` no cambian: el kit usa lo que ya tienen. Los nombres siguen la regla de letra del kit (`kit/nombres.ts`: el 2,6 % del alto en un proyector y 16 px en un celular). De pie (`quien`) fue el primero en migrar; los demás se pasan de a uno.
+
 ## Pantalla grande, Zoom y compartir
 
 Desde el 20 de octubre de 2026 el show se mira en cuatro lugares: un proyector o una TV, una pantalla compartida en Zoom (que la sala recibe a 720 de alto y comprimido), una laptop y un celular. Cambian la resolución y la compresión, no el sorteo. Tres reglas para que se lea en todos:

@@ -875,6 +875,8 @@
   .lore .lore-q { font-size: 17px; font-weight: 800; margin: 6px 0 6px; text-wrap: balance; }
   .lore .lore-a { font-size: 16px; color: var(--ink2); line-height: 1.55; }
   .lore .lore-src { display: inline-block; margin-top: 10px; font-size: 14px; color: var(--muted); }
+  .leyenda summary { cursor: pointer; font-weight: 800; font-size: 16px; }
+  .leyenda-det p { margin: 8px 0 0; font-size: 16px; line-height: 1.45; }
 
   /* Debajo de la verificación: otro premio, con la misma lista sin los
      ganadores o con una nueva. Tres premios suelen ser tres sorteos. */

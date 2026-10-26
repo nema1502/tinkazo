@@ -6,6 +6,8 @@ import { soundLabel, toggleSound, unlockAudioOnGesture } from "./sound";
 import { bindParticipants, loadSample, parseNames, renderNames, reponerBorrador } from "./ui/participants";
 import { GAME_BUTTONS, cambiarJuego, copyRules, elegirJuego, freeze, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
 import { initSiguiente } from "./ui/siguiente";
+import { crearBotonesDelKit } from "./ui/botones-kit";
+import { JUEGOS } from "./games/pixi/kit/catalogo";
 import { alApretarSellar, iniciarRed } from "./ui/red";
 import { montarPremios } from "./ui/premios";
 import { adelantarCorto, alTocarGanadores, contarCompartido, copySummary, draw, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
@@ -101,6 +103,8 @@ $("btn-hist-clear").addEventListener("click", () => {
   });
 });
 
+// Los juegos del kit tienen su botón desde el catálogo (los apagados, ocultos).
+crearBotonesDelKit();
 for (const [id, game] of GAME_BUTTONS) $(id).addEventListener("click", () => elegirJuego(game));
 $("btn-cambiar").addEventListener("click", cambiarJuego);
 $("btn-draw").addEventListener("click", () => void draw());
@@ -371,7 +375,7 @@ function avisarQueYaEntro(): void {
 // carrera de cohetes y las balsas de totora (30 de septiembre de 2026), luz
 // roja, luz verde (5 de octubre), la tómbola (20 de octubre), y el Aguayo y la
 // Constelación, que El Trueque reemplaza (21 de octubre).
-const GAMES: readonly Game[] = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "luz", "ledger", "rockets", "totora", "trueque"];
+const GAMES: readonly Game[] = [...new Set<Game>(["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "luz", "ledger", "rockets", "totora", "trueque", ...JUEGOS.map((j): Game => j.id)])];
 
 async function autoDemo(mode: string): Promise<void> {
   loadSample();

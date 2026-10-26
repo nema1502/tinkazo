@@ -1,4 +1,5 @@
 import type { Beacon, Game } from "../state";
+import { entradaDe } from "./pixi/kit/catalogo";
 
 /**
  * La tarjeta de "¿por qué se llama así?".
@@ -280,11 +281,21 @@ export const LORE: Record<string, Lore[]> = {
 };
 
 /**
+ * La historia de un juego del kit, desde su entrada del catálogo. Un borrador
+ * (el texto de partida del generador, sin fuente verificada) nunca sale en un
+ * sorteo: la regla uno de arriba.
+ */
+function historiaDelKit(game: Game): Lore[] {
+  const h = entradaDe(game)?.historia;
+  return h && !h.borrador ? [{ q: h.q, a: h.a, href: h.href, src: h.src, hue: h.hue }] : [];
+}
+
+/**
  * La tarjeta de este sorteo. Sale de la ronda, así que es parte del
  * comprobante: quien rehace el sorteo ve la misma.
  */
 export function loreFor(game: Game, beacon: Beacon): Lore | null {
-  const pool = [...(LORE[game] ?? []), ...(LORE.any ?? [])].filter((l) => !l.tecnica);
+  const pool = [...(LORE[game] ?? []), ...historiaDelKit(game), ...(LORE.any ?? [])].filter((l) => !l.tecnica);
   if (!pool.length) return null;
   const k = parseInt(beacon.randomness.slice(-4), 16) % pool.length;
   return pool[k] ?? null;

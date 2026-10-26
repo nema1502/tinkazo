@@ -9,7 +9,10 @@ import { enOrden, tension } from "../drama";
 import { WINNER_HOLD, shorten, winnersLabel } from "../overlay";
 import { wavesAround } from "../pixi/qualifier";
 import { CREAM, INK, MONO, YELLOW, contorno, hash, mountPixi, seeded, type PixiStage } from "../pixi/stage";
+import { lugarDe } from "../pixi/kit/respuestas";
+import { exponerNino } from "../pixi/nino";
 import { planRace, type Plan } from "./plan";
+import { duracionDeLaCarrera, horaDeLaCarrera, respuestasCarrera, type PlanDeLaCarrera } from "./race-nino";
 import { planPeloton } from "./peloton-plan";
 import { crearPeloton, type Peloton } from "./pixi-peloton";
 
@@ -977,6 +980,23 @@ export async function llamasPixi(
   if (auditoria) (window as unknown as { __encuadre: typeof auditoria }).__encuadre = auditoria;
   let cuadroAud = 0;
   const qNow = (): number => Math.min(1, tRace / DUR);
+  // `?auditar=nino`: la prueba del niño (`scripts/audit-nino.mjs`) lee del plan quién va adelante, hacia dónde, cuánto falta y qué pasó. Solo lee: es el caso de control, la carrera de hoy.
+  {
+    const planNino: PlanDeLaCarrera = { lanes, ganador: story.winner, pos: plan.pos, beats: story.beats, pre: PRE, cuenta: CUENTA, dur: DUR, peloton };
+    const reloj = () => ({ fase: phase, tPre, tPhase, tRace, tFreeze });
+    exponerNino({
+      duracion: duracionDeLaCarrera(planNino),
+      t: () => horaDeLaCarrera(planNino, reloj()),
+      verdad: () => {
+        const r = respuestasCarrera(planNino, reloj());
+        // En la pista y con el cartel, en qué parte de la pantalla cae la que va adelante: lo decide la cámara, que el plan no conoce.
+        const corredor = phase === "race" || phase === "done" ? L?.runners[lanes.indexOf(r.adelante.quienes[0] as number)] : undefined;
+        if (!corredor?.root.parent) return r;
+        const p = corredor.root.getGlobalPosition();
+        return { ...r, adelante: { ...r.adelante, lugar: lugarDe(p.x, p.y, S.sw(), S.sh()) } };
+      },
+    });
+  }
   const xOf = (k: number, q: number): number => G.X0 + plan.pos(k, q) * G.TL;
 
   // Arranca pegada a la largada.

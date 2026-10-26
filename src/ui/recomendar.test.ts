@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { JUEGO_DE_SIEMPRE, SELECTOR, juegoPorDefecto, juegoSiguiente, recomendar, type Recomendacion } from "./recomendar";
 import { T } from "../i18n";
+import { JUEGOS } from "../games/pixi/kit/catalogo";
 import type { Game } from "../state";
 
 describe("los textos de la recomendación, en es y en en", () => {
@@ -30,8 +31,10 @@ describe("los textos de la recomendación, en es y en en", () => {
 describe("el selector y su recomendación hablan de los mismos juegos", () => {
   it("SELECTOR son los botones de GAME_BUTTONS en freeze.ts, en el mismo orden", () => {
     const fuente = readFileSync(new URL("./freeze.ts", import.meta.url), "utf8");
-    const botones = [...fuente.matchAll(/\["g-[a-z]+", "([a-z]+)"\]/g)].map((m) => m[1]);
-    expect(botones).toEqual([...SELECTOR]);
+    const botones = [...fuente.matchAll(/\["g-[a-z]+", "([a-z]+)"\]/g)].map((m) => m[1] as string);
+    // Más los del kit ya encendidos, que freeze.ts y recomendar.ts suman del catálogo.
+    const encendidos = JUEGOS.filter((j) => j.selector && !botones.includes(j.id)).map((j) => j.id as string);
+    expect([...botones, ...encendidos]).toEqual([...SELECTOR]);
   });
 
   it("la tómbola sale del selector: sigue existiendo, pero sin botón", () => {
