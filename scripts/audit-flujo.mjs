@@ -46,8 +46,12 @@
  *  3. costo alto: la simulación del sello devuelve el costo del 25 de octubre
  *     (69 XLM, `Fetch.fulfillRequest` con el fixture). Pide restaurar el contrato
  *     (rojo): la frase del caso 1, "Seguir sin sello" con su confirmación (sin
- *     "verificable" ni XLM) y "Esperar a la red". Y con la cuenta de prueba, que
- *     paga ella, el costo alto solo avisa (amarillo) y se puede sellar;
+ *     "verificable" ni XLM) y "Esperar a la red". Y si de verdad se sigue ("Seguir
+ *     igual"), nada de lo que se lee dice "sellada" ni invita a comprobar lo que
+ *     no se puede comprobar: el título de la sección, la línea de la cuenta, la
+ *     espera en grande y, en la primera pantalla (espera la ronda de 90 s), el QR
+ *     del resultado y la pantalla grande (protocolo §8). Y con la cuenta de prueba,
+ *     que paga ella, el costo alto solo avisa (amarillo) y se puede sellar;
  *  4. sin saldo: Horizon dice que la cuenta tiene 0,01 XLM; "Cargar saldo de prueba".
  * Solo dos mandan una transacción, y de verdad, a la testnet con la cuenta de prueba (y solo en la primera pantalla):
  * "al volver la red, sella sola" y "el primer RPC cortado sella por el segundo". En los demás se corta todo
@@ -65,7 +69,7 @@
  *                                [--sin-resto laptop-100,celular-h] [--lang es|en]
  *                                [--fallos laptop-100,celular-h | none]
  *                                [--anchos 320,360,375,414 | none]
- *                                [--solo-anchos | --solo-fallos]
+ *                                [--solo-anchos | --solo-fallos] [--casos "costo alto,sin saldo"]
  *                                [--sello-max 240] [--reintentos 2]
  *
  * Un Chrome a la vez y con su propio puerto: CDP_PORT=<puerto> node ...
@@ -119,6 +123,8 @@ if (anchos.some((a) => !Number.isFinite(a) || a < 280 || a > 1000)) {
 }
 // Las pantallas donde se prueba el sellado que falla, apretado desde lo que se ve ("none" lo saltea).
 const fallos = opt("--fallos", TODAS.map((v) => v[0]).join(",")).split(",").filter((f) => f && f !== "none");
+// `--casos "costo alto"`: solo los casos de red cuyo nombre lleve alguna de esas palabras (para repetir uno).
+const soloCasos = opt("--casos", "").split(",").map((c) => c.trim().toLowerCase()).filter(Boolean);
 
 let fallas = 0;
 let total = 0;
@@ -627,11 +633,131 @@ async function primerRpcCortado(browser, vista, tema) {
 }
 
 /**
+ * Un sorteo que se siguió sin sello nunca suena a sellado ni invita a comprobar (protocolo §8: lo que no está anclado
+ * jamás se presenta como verificable). "Sin sello: no se puede comprobar" no invita a nada, es lo que se quiere decir;
+ * cualquier otro "comprobar", "verificar" o "check" sí.
+ */
+const NEGADO = /no se (?:puede|va a poder) comprobar|(?:can't|cannot|won't be able to) be (?:checked|verified)/gi;
+const sueleASellada = (texto) => /sellad[oa]s?|sealed/i.test(texto);
+const invitaAComprobar = (texto) => /comprob|verific|\bverif|\bcheck/i.test(texto.replace(NEGADO, ""));
+const DICE_SIN_SELLO = /sin sello|no seal/i;
+/** El texto no promete nada. */
+const honesto = (texto) => !sueleASellada(texto) && !invitaAComprobar(texto);
+
+/** Lo que se lee de la página de un sorteo sin sello: el título, la línea de la cuenta, el botón, los pasos, la nota y el QR. */
+const LEER_SIN_SELLO = `JSON.stringify((() => {
+  const txt = (s) => { const e = document.querySelector(s); return e ? (e.textContent || '').trim() : ''; };
+  const vis = (s) => { const e = document.querySelector(s); return !!e && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().height > 0; };
+  const bar = document.getElementById('siguiente');
+  return {
+    titulo: txt('#sec-frozen .head h2'),
+    linea: txt('#wait-box .wait-line'),
+    boton: txt('#btn-freeze'),
+    pasos: txt('#pasos'),
+    barra: bar && bar.classList.contains('on') ? (bar.textContent || '').trim() : '',
+    qr: txt('#qr-box .kicker'),
+    qrVisible: vis('#qr-box'),
+    nota: txt('#sin-sello-nota'),
+    notaVisible: vis('#sin-sello-nota'),
+  };
+})())`;
+
+/** Lo que se lee de una pantalla grande (la espera o el resultado): todo su texto, su pie y la leyenda del QR. */
+const leerGrande = (sel) => `JSON.stringify((() => {
+  const e = document.querySelector(${JSON.stringify(sel)});
+  if (!e) return null;
+  const pie = e.querySelector('.espera-pie, .sala-pie');
+  const qr = e.querySelector('.pantalla-qr p');
+  const vis = (x) => !!x && getComputedStyle(x).display !== 'none' && x.getBoundingClientRect().height > 0;
+  return { texto: (e.innerText || '').replace(/\\s+/g, ' ').trim(), pie: pie ? (pie.textContent || '').trim() : '', pieVisible: vis(pie), pieClase: pie ? pie.className : '', qr: qr ? (qr.textContent || '').trim() : '' };
+})())`;
+
+/**
+ * "Seguir sin sello" de verdad (con la confirmación): lo que se lee mientras se espera, en la página y en la espera en
+ * grande, y, si `completo`, en el resultado (el QR y la pantalla grande), no dice "sellada" ni invita a comprobar. El
+ * resultado espera la ronda de 90 s: va solo en la primera pantalla. No manda nada: `sendTransaction` está cortado.
+ */
+async function seguirSinSelloDeVerdad(page, ctx, completo, quien) {
+  const { etiqueta, tema } = ctx;
+  await pulsar(page, ctx, REAL.lista, "seguir sin sello (para seguir de verdad)");
+  const confirma = await page.waitFor(`/Seguir igual|Continue anyway/.test(document.getElementById('btn-freeze').textContent)`, 10000);
+  check(`${quien} · seguir sin sello: vuelve a pedir confirmar`, confirma.ok);
+  if (!confirma.ok) return;
+  // La pregunta ignora el toque de los primeros 800 ms (el del botón de antes): se espera un poco más.
+  await sleep(1300);
+  await pulsar(page, ctx, REAL.lista, "seguir igual");
+  const sigue = await page.waitFor(`getComputedStyle(document.getElementById('sec-frozen')).display !== 'none' && getComputedStyle(document.getElementById('wait-box')).display !== 'none'`, 30000);
+  check(`${quien} · seguir sin sello: la lista queda cerrada y corre la cuenta`, sigue.ok);
+  if (!sigue.ok) return;
+  await sleep(1500);
+  await quieto(page);
+
+  const en = `${quien} · seguir sin sello, esperando`;
+  let p = JSON.parse(await page.eval(LEER_SIN_SELLO));
+  check(`${en}: el título de la sección dice que no hay sello y no dice "sellada"`, honesto(p.titulo) && DICE_SIN_SELLO.test(p.titulo), `"${p.titulo}"`);
+  check(`${en}: la línea bajo la cuenta lo dice y no promete nada`, honesto(p.linea) && DICE_SIN_SELLO.test(p.linea), `"${p.linea}"`);
+  check(`${en}: el botón, los pasos y la barra no dicen "sellada"`, honesto(`${p.boton} ${p.pasos} ${p.barra}`), `"${p.boton}" / "${p.pasos}" / "${p.barra}"`);
+  await page.screenshot(join(outDir, `flujo-${etiqueta}-${tema}-10-sin-sello-esperando.png`));
+
+  // La espera en grande es la que se proyecta a la sala: ahí se lee desde el fondo.
+  await page.eval("document.getElementById('btn-espera').click(); true");
+  const abrio = await page.waitFor("document.querySelector('.espera')", 15000);
+  check(`${en}: se abre la espera en grande`, abrio.ok);
+  if (abrio.ok) {
+    await sleep(600);
+    const g = JSON.parse(await page.eval(leerGrande(".espera")));
+    check(`${en}: el pie de la espera en grande dice que no hay sello y no dice "sellada"`, !!g && honesto(g.pie) && DICE_SIN_SELLO.test(g.pie) && g.pieVisible, g ? `"${g.pie}"` : "no está");
+    check(`${en}: nada de la espera en grande dice "sellada" ni invita a comprobar`, !!g && honesto(g.texto), g ? `"${g.texto.slice(0, 160)}"` : "no está");
+    await page.screenshot(join(outDir, `flujo-${etiqueta}-${tema}-11-sin-sello-espera-grande.png`));
+    await page.eval("document.querySelector('.espera [data-volver]')?.click(); true");
+    await page.waitFor("!document.querySelector('.espera')", 8000);
+  }
+  if (!completo) return;
+
+  // El resultado: la ronda nace a los 90 s, se lanza el sorteo y se salta el show.
+  const en2 = `${quien} · seguir sin sello, el resultado`;
+  const nacio = await page.waitFor("!document.getElementById('btn-draw').disabled", 180000);
+  check(`${en2}: la ronda nació`, nacio.ok, nacio.ok ? `a los ${(nacio.elapsed / 1000).toFixed(0)} s` : "no nació en tres minutos");
+  if (!nacio.ok) return;
+  await sleep(500);
+  await pulsar(page, ctx, REAL.ronda, "lanzar el sorteo sin sello");
+  const estadio = await page.waitFor("document.getElementById('stadium').style.display === 'block'", 120000);
+  check(`${en2}: se abre el estadio`, estadio.ok);
+  if (!estadio.ok) return;
+  await sleep(1200);
+  await page.eval("document.getElementById('st-skip').click(); true");
+  const sale = await page.waitFor("getComputedStyle(document.getElementById('winner-box')).display !== 'none' && getComputedStyle(document.getElementById('again-row')).display !== 'none'", 120000);
+  check(`${en2}: aparece el resultado`, sale.ok);
+  if (!sale.ok) return;
+  await sleep(1500);
+  await quieto(page, 1200, 6000);
+  p = JSON.parse(await page.eval(LEER_SIN_SELLO));
+  check(`${en2}: la nota dice que no se puede comprobar`, p.notaVisible && DICE_SIN_SELLO.test(p.nota), `"${p.nota}"`);
+  check(`${en2}: el QR dice que no hay sello y no invita a comprobar`, p.qrVisible && honesto(p.qr) && DICE_SIN_SELLO.test(p.qr), p.qrVisible ? `"${p.qr}"` : "el QR no se ve");
+  await page.screenshot(join(outDir, `flujo-${etiqueta}-${tema}-12-sin-sello-resultado.png`));
+
+  // La pantalla grande del resultado: el pie "Sin sello" no se esconde y el QR no invita a comprobar.
+  await page.eval("document.getElementById('btn-grande').click(); true");
+  const grande = await page.waitFor("document.querySelector('.pantalla')", 15000);
+  check(`${en2}: se abre el resultado en grande`, grande.ok);
+  if (grande.ok) {
+    await sleep(1500);
+    const g = JSON.parse(await page.eval(leerGrande(".pantalla")));
+    check(`${en2}: la pantalla grande dice "sin sello" a la vista`, !!g && g.pieVisible && /\bsin-sello\b/.test(g.pieClase) && DICE_SIN_SELLO.test(g.pie) && honesto(g.pie), g ? `"${g.pie}" ${g.pieVisible ? "(se ve)" : "(escondido)"}` : "no está");
+    check(`${en2}: el QR de la pantalla grande no invita a comprobar`, !!g && honesto(g.qr), g ? `"${g.qr}"` : "no está");
+    check(`${en2}: nada de la pantalla grande dice "sellada" ni invita a comprobar`, !!g && honesto(g.texto), g ? `"${g.texto.slice(0, 160)}"` : "no está");
+    await page.screenshot(join(outDir, `flujo-${etiqueta}-${tema}-13-sin-sello-pantalla-grande.png`));
+    await page.eval("document.querySelector('.pantalla [data-cerrar]')?.click(); true");
+  }
+}
+
+/**
  * El costo alto: la simulación del sello devuelve lo del 25 de octubre. Con el contrato por restaurar (rojo) la
  * app lo dice antes de sellar y la acción es "Seguir sin sello", que pide confirmar; con la cuenta de prueba (que
- * paga ella) un costo alto solo avisa. No manda nada: corta todo `sendTransaction`.
+ * paga ella) un costo alto solo avisa. No manda nada: corta todo `sendTransaction`. `completo`: sigue sin sello
+ * hasta el resultado (espera la ronda de 90 s).
  */
-async function costoAlto(browser, vista, tema) {
+async function costoAlto(browser, vista, tema, completo = false) {
   const [etiqueta, , , , celular] = vista;
   const ctx = { etiqueta, tema, celular };
   let quien = `${etiqueta} ${tema} · costo alto (pide restaurar)`;
@@ -666,6 +792,8 @@ async function costoAlto(browser, vista, tema) {
     await page.eval("[...document.querySelectorAll('#red-estado button')].find((b) => /Esperar a la red|Wait for the network/.test(b.textContent)).click(); true");
     const volvio = await page.waitFor(`/Seguir sin sello|Continue without a seal/.test(document.getElementById('btn-freeze').textContent) && !/Sin sello, nadie|Without a seal, nobody/.test(document.getElementById('red-estado').textContent)`, 30000);
     check(`${etiqueta} ${tema} · seguir sin sello: "Esperar a la red" vuelve a la frase del caso y no sigue`, volvio.ok);
+    // Y si de verdad se sigue: nada de lo que se lee dice "sellada" ni invita a comprobar (protocolo §8).
+    if (volvio.ok) await seguirSinSelloDeVerdad(page, ctx, completo, `${etiqueta} ${tema}`);
   } finally {
     await cerrar(page);
   }
@@ -1022,12 +1150,13 @@ async function main() {
   const pantallasDeFallos = soloAnchos ? [] : VISTAS.filter((v) => fallos.includes(v[0]));
   const casosDeFallos = [
     ["la red no contesta", (b, v, t, primera) => falloDelSello(b, v, t, primera)],
-    ["costo alto", (b, v, t) => costoAlto(b, v, t)],
+    ["costo alto", (b, v, t, primera) => costoAlto(b, v, t, primera)],
     ["sin saldo", (b, v, t) => sinSaldo(b, v, t)],
   ];
   for (const [i, vista] of pantallasDeFallos.entries()) {
     const casos = i === 0 ? [...casosDeFallos, ["el primer RPC cortado", (b, v, t) => primerRpcCortado(b, v, t)]] : casosDeFallos;
     for (const [nombre, correr] of casos) {
+      if (soloCasos.length && !soloCasos.some((c) => nombre.toLowerCase().includes(c))) continue;
       let hecho = false;
       for (let intento = 0; intento <= 1 && !hecho; intento++) {
         const browser = await launch({ width: vista[1], height: vista[2] });

@@ -3,6 +3,7 @@ import { t } from "../i18n";
 import { app, avatar } from "../state";
 import { acortar, enlaceParaElQr } from "../enlace-corto";
 import { pintarQrDelComprobante } from "./qr";
+import { claveDelSello, sinSelloAhora } from "./sin-sello-textos";
 
 /**
  * Lo que el QR espera al enlace corto antes de salir con el largo. Si el corto
@@ -47,7 +48,7 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   // ahora va en su propia línea, "Se llevan: …", con la letra de los nombres.
   const muchos = n > 5;
   // Un sorteo que se siguió sin sello no promete lo que no se puede comprobar: ni "comprobalo vos" ni "nadie eligió".
-  const sinSello = !!frozen.sinSello && frozen.raffleId === undefined;
+  const sinSello = sinSelloAhora(frozen);
 
   // "Siguiente premio (quedan 11)", si es lo que sigue: el mismo botón de la página, con su texto.
   const sig = op.volverA?.id === "btn-again-sin" && op.volverA.offsetParent !== null ? op.volverA : null;
@@ -77,7 +78,7 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
       })
       .join("") +
     `</div>` +
-    `<aside class="pantalla-qr"><img alt="" /><p>${esc(t(sinSello ? "pantallaQrSinSello" : "pantallaQr"))}</p><p class="mono">tinkazo.app</p></aside>` +
+    `<aside class="pantalla-qr"><img alt="" /><p>${esc(t(claveDelSello("qrEnGrande", sinSello)))}</p><p class="mono">tinkazo.app</p></aside>` +
     `</div>` +
     `<p class="sala-pie${sinSello ? " sin-sello" : ""}">${esc(t(sinSello ? "redSinSelloEtiqueta" : varios ? "imgPieVarios" : "pantallaPie"))}</p>`;
   document.body.appendChild(back);

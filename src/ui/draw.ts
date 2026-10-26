@@ -22,6 +22,7 @@ import { acortar, alAcortar, cortoGuardado, rutaDe } from "../enlace-corto";
 import { startMusic, stopMusic } from "../music";
 import { seguirEnPantallaCompleta } from "../games/overlay";
 import { contar, contarPractica, errorContable, refDe } from "../contar";
+import { ponerTextoDelSello } from "./sin-sello-textos";
 
 /** Obtiene la ronda objetivo, verifica su firma y selecciona (protocolo §2, §5). */
 async function resolveBeacon(
@@ -853,6 +854,8 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
   // El resultado dice si ese sorteo no se puede comprobar porque se siguió sin sello.
   const nota = document.getElementById("sin-sello-nota");
   if (nota) nota.style.display = sinSello ? "block" : "none";
+  // Y el QR no invita a comprobar lo que no se puede comprobar: dice que no hay sello y qué se ve al escanearlo.
+  ponerTextoDelSello(document.querySelector<HTMLElement>("#qr-box .kicker"), "qrDelResultado", sinSello);
   // Un comprobante nuevo empieza con su enlace largo; si ya se había compartido, con su corto.
   cortoLink = cortoGuardado(link)?.corto ?? "";
   // Y ahora se completa la fila del historial con el ganador y el comprobante.

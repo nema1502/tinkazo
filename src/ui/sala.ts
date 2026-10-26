@@ -7,6 +7,7 @@ import { repetidos } from "../buscar";
 import { app } from "../state";
 import { parseNames } from "./participants";
 import { pintarQr } from "./qr";
+import { claveDelSello, sinSelloAhora } from "./sin-sello-textos";
 import { contar } from "../contar";
 
 /**
@@ -52,7 +53,9 @@ export async function mostrarLista(): Promise<void> {
   const prize = sellada ? sellada.prize : ((document.getElementById("prize") as HTMLInputElement | null)?.value.trim() ?? "");
   const hash = sellada ? sellada.listHash : bytesToHex(listHash(names));
   const rep = repetidos(names);
-  const titulo = t(sellada ? "salaTSellada" : "salaT");
+  // Sin sello (la red no dejó sellar) la lista está cerrada, no sellada: la sala no debe creer que se puede comprobar.
+  const sin = sinSelloAhora(sellada);
+  const titulo = t(sellada ? claveDelSello("tituloDeLaSala", sin) : "salaT");
 
   const back = document.createElement("div");
   back.className = "sala";
@@ -75,7 +78,7 @@ export async function mostrarLista(): Promise<void> {
     `<aside class="sala-qr"><img alt="" /><p>${esc(t("salaQr"))}</p>` +
     `<button class="ghost mini" type="button" data-copiar>${esc(t("salaCopiar"))}</button></aside>` +
     `</div>` +
-    `<p class="sala-pie">${esc(t(sellada ? "salaPieSellada" : "salaPie"))}</p>`;
+    `<p class="sala-pie${sin ? " sin-sello" : ""}">${esc(t(sellada ? claveDelSello("pieDeLaSala", sin) : "salaPie"))}</p>`;
   document.body.appendChild(back);
   const ol = back.querySelector<HTMLElement>(".sala-nombres");
   const ajustar = (): void => {
@@ -101,7 +104,8 @@ export async function mostrarLista(): Promise<void> {
   // El QR lleva la misma lista al celular de cada uno, para buscarse. La sellada
   // lo dice también allá: "antes de sellar" ya no es cierto (lista.ts).
   const enlace = new URL(await previewUrl(names, prize));
-  if (sellada) enlace.searchParams.set("sellada", "1");
+  // "sin": lo que el celular de cada uno lee tampoco dice "sellada" (lista.ts).
+  if (sellada) enlace.searchParams.set("sellada", sin ? "sin" : "1");
   const url = enlace.toString();
   // Para pegarlo en el grupo del evento, si alguien no puede escanear.
   const copiar = back.querySelector<HTMLButtonElement>("[data-copiar]");

@@ -1,8 +1,9 @@
 import { esc } from "../dom";
-import { T, getLang, t } from "../i18n";
+import { getLang, t } from "../i18n";
 import { app, avatar } from "../state";
 import { beep, note } from "../sound";
 import { enEnsayo } from "../ensayo-modo";
+import { pieDeLaEspera, sinSelloAhora } from "./sin-sello-textos";
 
 /**
  * La espera en grande: los segundos entre sellar y poder sortear, puestos en
@@ -113,7 +114,6 @@ function relevo(): "show" | "resultado" | null {
 export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   const f = app.frozen;
   if (!f || app.drawn || abierta || segundos() <= 0) return false;
-  const L_ = T[getLang()];
   const back = document.createElement("div");
   back.className = "espera";
   back.setAttribute("role", "dialog");
@@ -132,7 +132,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     `<div class="espera-sigue" hidden></div>` +
     `<p class="espera-t">${esc(t("espFaltan"))}</p>` +
     `<div class="espera-nombres">${cintas(f.names)}</div>` +
-    `<p class="espera-pie">${esc(L_.espPie(f.names.length))}</p>` +
+    // Sin sello (la red no dejó sellar) no dice "sellada": la sala lo lee desde el fondo y no debe creer que se puede comprobar.
+    `<p class="espera-pie">${esc(pieDeLaEspera(getLang(), f.names.length, sinSelloAhora(f)))}</p>` +
     // Para que la sala lo lea y quien organiza lo repita (diseño del onboarding, 22 de octubre de 2026).
     `<p class="espera-nadie">${esc(t("espNadie"))}</p>` +
     // El número del sorteo, para las fotos de la sala: si después aparece otro sello, todos tienen el del bueno.
@@ -159,6 +160,7 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     removeEventListener("keydown", tecla);
     document.removeEventListener("fullscreenchange", pantalla);
     document.removeEventListener("tinkazo:error", alError);
+    document.removeEventListener("tinkazo:sello", alSello);
     back.remove();
     if (abierta === yo) abierta = null;
     if (alShow) return;
@@ -226,6 +228,12 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     accion("fallo", String((e as CustomEvent<string>).detail ?? ""), t("drawRetry"));
   };
   document.addEventListener("tinkazo:error", alError);
+  // El sello entró tarde (el reintento de "Seguir sin sello", `freeze.ts`): el pie deja de decir que no se puede comprobar.
+  const alSello = (): void => {
+    const pie = back.querySelector<HTMLElement>(".espera-pie");
+    if (pie && app.frozen) pie.textContent = pieDeLaEspera(getLang(), app.frozen.names.length, sinSelloAhora(app.frozen));
+  };
+  document.addEventListener("tinkazo:sello", alSello);
 
   const yo = {
     nacio: (): void => {

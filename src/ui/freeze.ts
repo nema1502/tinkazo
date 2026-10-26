@@ -20,6 +20,7 @@ import { ENSAYO_ESPERA_S, enEnsayo, sinGrabar } from "../ensayo-modo";
 import { contar, errorContable } from "../contar";
 import { type OpcionesDeSellado, chequearAntesDeSellar, hayAccionDeRed, limpiarRed, marcarSellado, mostrarCostoAlto, mostrarSinSaldo, verLaRedTrasFallar, verSinSello } from "./red";
 import { type Reintento, reintentarSello } from "./sin-sello";
+import { claveDelSello, ponerTextoDelSello, sinSelloAhora } from "./sin-sello-textos";
 
 /**
  * Los botones del selector, en el orden en que se muestran. Hasta el 29 de
@@ -306,7 +307,8 @@ function startCountdown(): void {
       // Sin `block` en línea: el CSS decide cómo se ve la caja de la espera.
       if (box) box.style.display = "";
       if (left) left.textContent = reloj;
-      if (line) line.textContent = t("waitLine");
+      // Sin sello no dice "nadie puede elegirlo" como si hubiera algo sellado: dice que no se puede comprobar.
+      if (line) line.textContent = t(claveDelSello("lineaDeLaEspera", sinSelloAhora(app.frozen)));
     } else {
       btn.disabled = !!app.drawn;
       btn.textContent = t("draw");
@@ -686,6 +688,9 @@ function alEntrarElSello(hecho: { raffleId: bigint; txHash?: string }, c: Sorteo
   btn.dataset.i = "sealed";
   btn.textContent = t("sealed");
   renderSealSummary();
+  // Ya es comprobable: el título, la línea de la espera y la espera en grande dejan de decir "sin sello".
+  textosDelSello();
+  document.dispatchEvent(new CustomEvent("tinkazo:sello"));
   precargarParaElSorteo();
   // Anclado, el contrato pide la firma descomprimida: la curva se baja ahora, con la espera en marcha.
   void import("../protocol/drand").catch(() => undefined);
@@ -801,6 +806,17 @@ export function unfreeze(lista: string): void {
   actualizarPaso();
 }
 
+/**
+ * El título de la sección y la línea bajo la cuenta. Sin sello (la red no dejó sellar) no
+ * dicen "sellada" ni que nadie puede cambiar nada: la lista está cerrada, nada más
+ * (`sin-sello-textos.ts`). Si el sello entra tarde, vuelven a los de siempre.
+ */
+function textosDelSello(): void {
+  const sin = sinSelloAhora(app.frozen);
+  ponerTextoDelSello(document.querySelector<HTMLElement>("#sec-frozen .head h2 [data-i]"), "titulo", sin);
+  ponerTextoDelSello(document.querySelector<HTMLElement>("#wait-box .wait-line"), "lineaDeLaEspera", sin);
+}
+
 /** Lo que se ve con la lista ya sellada: los datos del sello, la espera y el selector de juego. */
 function showFrozen(names: string[], hash: string, raffleId: bigint | undefined): void {
   const f = app.frozen;
@@ -817,6 +833,7 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   $("freeze-hint").style.display = "none";
   $("free-rule").style.display = "none";
   $("sec-frozen").style.display = "block";
+  textosDelSello();
   $("k-n").textContent = String(names.length);
   $("k-digest").textContent = hash.slice(0, 16) + "…";
   $("k-status").textContent = raffleId !== undefined ? `Stellar #${raffleId}` : "local";

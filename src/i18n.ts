@@ -122,6 +122,8 @@ export interface Dict {
   pelEchoTag: string;
   /** La espera en grande: cuántos hay en la lista sellada. */
   espPie: (n: number) => string;
+  /** Lo mismo cuando se siguió sin sello: no dice "sellada" ni deja creer que se puede comprobar. */
+  espPieSinSello: (n: number) => string;
   cQuiStart: (n: number) => string;
   cQuiNext: (k: number, of: number) => string;
   /** De pie: lo que cada uno revisa en su turno, y la línea grande de cada tipo de pregunta. */
@@ -349,6 +351,8 @@ export const T: Record<Lang, Dict> = {
     s3t: "Elegí el juego y sorteá",
     s3b: "Uno de los diez juegos, a pantalla completa. Cuando arranca la animación el ganador ya salió del número público. El show es show. El sorteo ya estaba hecho.",
     p1: "Participantes", p2: "Lista sellada", p3: "El sorteo",
+    // Se siguió sin sello (la red no dejó sellar): ni el título ni la línea de la espera dicen "sellada" (ui/sin-sello-textos.ts).
+    p2SinSello: "Lista cerrada, sin sello",
     srcPaste: "Pegar lista", srcCsv: "Subir CSV", srcLuma: "Desde Luma", srcMeetup: "Meetup · pronto",
     srcLumaTip: "Exportá la lista de invitados de tu evento en Luma como CSV",
     csvColumn: "¿Cuál columna tiene los nombres?",
@@ -921,6 +925,7 @@ export const T: Record<Lang, Dict> = {
     // Sin "ronda" ni "faro": eran las dudas de quien sorteaba por primera vez (diseño del onboarding, 22 de octubre de 2026).
     waitTitle: "El número que va a decidir",
     waitLine: "Lo publica una red independiente en unos segundos. Nadie puede elegirlo, ni quien organiza.",
+    waitLineSinSello: "Lo publica una red independiente en unos segundos. Sin sello: este sorteo no se puede comprobar.",
     volAviso: "Subí el volumen del celular: el show tiene música.",
     waitNow: "Ya nació. Dale.",
     espSticker: "El número que decide todavía no existe",
@@ -928,6 +933,7 @@ export const T: Record<Lang, Dict> = {
     espVolver: "Volver a la página",
     espVer: "Mostrar la espera en grande",
     espPie: (n) => `${n} en la lista, sellada: ya nadie la puede cambiar.`,
+    espPieSinSello: (n) => `${n} en la lista, cerrada sin sello: este sorteo no se puede comprobar.`,
     // La espera que desemboca en el show (21 de octubre de 2026): cuando nace el número.
     espStickerYa: "El número que decide ya existe",
     espAprobar: "Tu billetera te va a pedir que lo apruebes.",
@@ -978,6 +984,7 @@ export const T: Record<Lang, Dict> = {
           `Revisalo vos mismo, te toma diez segundos: ${u}\n\n` +
           `Sorteado con Tinkazo · https://tinkazo.app`,
     qrCaption: "Escaneá para comprobar",
+    qrCaptionSinSello: "Sin sello: escaneá para ver la lista y la cuenta",
     nextTitle: "Qué pasa por dentro",
     nextBody: "Al cerrar la lista, se sella en Stellar antes de que exista el número que decide, y cualquier cambio posterior se nota. La red de Stellar cobra una comisión por grabar cada sorteo, que cambia con el uso de la red; en el plan Gratis la pagamos nosotros. Hoy Tinkazo funciona en la red de prueba de Stellar (testnet), que se borra entera el 16 de diciembre de 2026: tu comprobante sigue sirviendo para rehacer la cuenta.",
     footL: "Tinkazo", footR: "Hecho con ♥ en Bolivia",
@@ -1287,6 +1294,10 @@ export const T: Record<Lang, Dict> = {
     salaTSellada: "La lista sellada",
     salaPieSellada: "La lista está sellada y ya no cambia. Buscate mientras sale el número.",
     listaNotaSellada: "Esta es la lista sellada: ya no cambia, y entre estos nombres sale quien gana. Buscate. La huella del sorteo empieza con estas letras.",
+    // Sin sello (la red no dejó sellar): la lista está cerrada en la herramienta, pero nadie atestigua que lo esté.
+    salaTCerrada: "Lista cerrada, sin sello",
+    salaPieCerrada: "Lista cerrada, sin sello: este sorteo no se puede comprobar. Buscate mientras sale el número.",
+    listaNotaCerrada: "Esta es la lista cerrada, sin sello: este sorteo no se puede comprobar. Entre estos nombres sale quien gana. Buscate. La huella del sorteo empieza con estas letras.",
     buscateL: "¿Estás en la lista?",
     buscatePh: "Escribí tu nombre",
     buscateUno: "Estás en el puesto {p} de {n}.",
@@ -1982,6 +1993,8 @@ export const T: Record<Lang, Dict> = {
     s3t: "Pick a game and draw",
     s3b: "One of the ten games, full screen. By the time the animation starts, the public number has already picked the winner: the animation just tells it.",
     p1: "Participants", p2: "Sealed list", p3: "The draw",
+    // Continued without a seal (the network wouldn't let it seal): neither the title nor the wait line say "sealed" (ui/sin-sello-textos.ts).
+    p2SinSello: "List closed, no seal",
     srcPaste: "Paste list", srcCsv: "Upload CSV", srcLuma: "From Luma", srcMeetup: "Meetup · soon",
     srcLumaTip: "Export your Luma event's guest list as CSV",
     csvColumn: "Which column has the names?",
@@ -2530,6 +2543,7 @@ export const T: Record<Lang, Dict> = {
     frozenNote: "You sealed the list before the number that will decide existed: it comes out in a few seconds. From here on, adding or removing anyone changes the fingerprint and it shows.",
     waitTitle: "The number that will decide",
     waitLine: "An independent network publishes it in a few seconds. Nobody can pick it, not even the organizer.",
+    waitLineSinSello: "An independent network publishes it in a few seconds. No seal: this draw can't be checked.",
     volAviso: "Turn your phone's volume up: the show has music.",
     waitNow: "It is out. Go.",
     espSticker: "The number that decides does not exist yet",
@@ -2537,6 +2551,7 @@ export const T: Record<Lang, Dict> = {
     espVolver: "Back to the page",
     espVer: "Show the wait on the big screen",
     espPie: (n) => `${n} on the list, sealed: nobody can change it now.`,
+    espPieSinSello: (n) => `${n} on the list, closed with no seal: this draw can't be checked.`,
     // The wait that flows into the show (Oct 21, 2026): once the number is out.
     espStickerYa: "The number that decides is out",
     espAprobar: "Your wallet will ask you to approve it.",
@@ -2581,6 +2596,7 @@ export const T: Record<Lang, Dict> = {
           `Check it ${varios ? "for yourselves" : "yourself"}, it takes ten seconds: ${u}\n\n` +
           `Drawn with Tinkazo · https://tinkazo.app`,
     qrCaption: "Scan to check",
+    qrCaptionSinSello: "No seal: scan to see the list and the math",
     nextTitle: "What happens inside",
     nextBody: "When you close the list, it is sealed on Stellar before the number that decides exists, and any later change shows. The Stellar network charges a fee to record each draw, and that fee changes with how much the network is used; on the Free plan we pay it. Today Tinkazo runs on Stellar's test network (testnet), which is wiped on December 16, 2026: your receipt still lets anyone redo the math.",
     footL: "Tinkazo", footR: "Made with ♥ in Bolivia",
@@ -2879,6 +2895,10 @@ export const T: Record<Lang, Dict> = {
     salaTSellada: "The sealed list",
     salaPieSellada: "The list is sealed and can't change. Find yourself while the number comes out.",
     listaNotaSellada: "This is the sealed list: it won't change, and the winner comes from these names. Find yourself. The draw's fingerprint starts with these characters.",
+    // No seal (the network wouldn't let it seal): the list is closed in the tool, but nobody attests that it is.
+    salaTCerrada: "List closed, no seal",
+    salaPieCerrada: "List closed, no seal: this draw can't be checked. Find yourself while the number comes out.",
+    listaNotaCerrada: "This is the closed list, with no seal: this draw can't be checked. The winner comes from these names. Find yourself. The draw's fingerprint starts with these characters.",
     buscateL: "Are you on the list?",
     buscatePh: "Type your name",
     buscateUno: "You are number {p} of {n}.",

@@ -71,8 +71,15 @@ function buscarAhora(): void {
  * cierto. Cada uno se busca igual; lo que cambia es que ya no se puede arreglar.
  */
 function sellada(): void {
-  if (new URLSearchParams(location.search).get("sellada") !== "1") return;
-  for (const [sel, clave] of [[".hero .sticker", "salaTSellada"], [".hero .lead", "listaNotaSellada"]] as const) {
+  const v = new URLSearchParams(location.search).get("sellada");
+  if (v !== "1" && v !== "sin") return;
+  // "sin": la lista se cerró sin sello (la red no dejó sellar). No dice "sellada" ni "ya no cambia", y
+  // avisa que ese sorteo no se puede comprobar (`ui/sin-sello-textos.ts`, `ui/sala.ts`).
+  const sin = v === "sin";
+  for (const [sel, clave] of [
+    [".hero .sticker", sin ? "salaTCerrada" : "salaTSellada"],
+    [".hero .lead", sin ? "listaNotaCerrada" : "listaNotaSellada"],
+  ] as const) {
     const el = document.querySelector<HTMLElement>(sel);
     if (!el) continue;
     el.dataset.i = clave;

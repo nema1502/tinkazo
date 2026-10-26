@@ -2060,7 +2060,9 @@
   .sala-top .ghost, .sala-qr .ghost { min-height: 48px; font-size: 16px; }
   .sala-qr p { font-size: clamp(18px, 1.8vw, 28px); }
   .sala-pie { font-size: clamp(18px, 1.9vw, 30px); }
-  .pantalla .sala-pie { display: none; }
+  /* El pie del resultado en grande se esconde, salvo en un sorteo sin sello: ese se lee desde el fondo de la sala
+     ("Sin sello: no se puede comprobar."), igual que en la página (pantalla.ts). */
+  .pantalla .sala-pie:not(.sin-sello) { display: none; }
   .pantalla-premio { font-size: max(18px, 0.3em); }
   .pantalla-qr p { font-size: clamp(20px, 2.4vw, 40px); }
 
