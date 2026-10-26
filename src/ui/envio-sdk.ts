@@ -89,11 +89,19 @@ function leerConsulta(c: { status: string; latestLedgerCloseTime?: number | stri
  * sello, quizás un segundo sello). Ahora un corte se arregla mandando la misma,
  * que la red aplica una sola vez.
  */
+/** La red devolvió `TRY_AGAIN_LATER`: se anota para que el chequeo de la red avise que anda saturada. */
+const avisarSaturacion = (): void => void import("../stellar/registro-red").then((m) => m.anotarSaturacion());
+
 export async function firmarYConfirmar(tx: TxArmada, onStep: OnStep, sinRedMs: number, revisar?: () => void): Promise<{ hash: string; desenlace: Desenlace }> {
   await tx.sign();
   revisar?.();
   const firmada = tx.signed;
   if (!firmada) throw new Error("tx-sin-firma");
+  return mandarYConfirmar(firmada, onStep, sinRedMs);
+}
+
+/** Manda esa transacción firmada (la misma, las veces que haga falta) hasta saber cómo terminó. */
+async function mandarYConfirmar(firmada: NonNullable<TxArmada["signed"]>, onStep: OnStep, sinRedMs: number): Promise<{ hash: string; desenlace: Desenlace }> {
   const hash = toHex(firmada.hash());
   const venceEn = Number(firmada.timeBounds?.maxTime) || Math.floor(Date.now() / 1000) + 300;
   onStep("sending", hash);
@@ -104,8 +112,24 @@ export async function firmarYConfirmar(tx: TxArmada, onStep: OnStep, sinRedMs: n
     consultar: async () => leerConsulta(await server.getTransaction(hash)),
     venceEn,
     sinRedMs,
+    alSaturada: avisarSaturacion,
   });
   return { hash, desenlace };
+}
+
+/**
+ * Pollar firma la transacción SIN patrocinio (la comisión la paga la cuenta de la persona)
+ * y devuelve la firmada; el envío lo hace esta capa, como con Freighter. Es "Sellar pagando
+ * con mi cuenta" cuando el sello cuesta más de lo que el patrocinador cubre.
+ */
+async function firmarSinPatrocinio(tx: TxArmada, wallet: { signUnsponsored?: (xdr: string) => Promise<string> }): Promise<NonNullable<TxArmada["signed"]> & { timeBounds?: { maxTime?: string | number } }> {
+  if (!wallet.signUnsponsored) throw new Error("pollar-sin-pago-propio");
+  const firmado = await wallet.signUnsponsored(tx.toXDR());
+  const { TransactionBuilder } = await import("@stellar/stellar-sdk");
+  const leida = TransactionBuilder.fromXDR(firmado, network.networkPassphrase);
+  // Un fee-bump quiere decir que Pollar patrocinó igual: no es lo que se pidió.
+  if ("innerTransaction" in leida) throw new Error("pollar-patrocino-no-se-quito");
+  return leida;
 }
 
 /**
@@ -175,7 +199,7 @@ async function pollarNoSabe(e: unknown): Promise<boolean> {
  * comisión, y el RPC la encuentra igual por ese hash (medido el 21 de octubre de
  * 2026 con el sello patrocinado 93a2c960…).
  */
-export async function submitElsewhere(tx: TxArmada, onStep: OnStep, sinRedMs: number, intento?: IntentoDeSello): Promise<{ hash: string; value: unknown } | null> {
+export async function submitElsewhere(tx: TxArmada, onStep: OnStep, sinRedMs: number, intento?: IntentoDeSello, opciones: { pagarConMiCuenta?: boolean } = {}): Promise<{ hash: string; value: unknown } | null> {
   const [{ activeWallet }, { submitsItself }] = await Promise.all([
     import("../stellar/wallet"),
     import("../stellar/wallet-pollar"),
@@ -193,19 +217,29 @@ export async function submitElsewhere(tx: TxArmada, onStep: OnStep, sinRedMs: nu
   // `freeze.ts` reintenta con otra ronda.
   void tx.simulationData;
   const propio = tx.built ? toHex(tx.built.hash()) : undefined;
-  const venceEn = Number(tx.built?.timeBounds?.maxTime) || Math.floor(Date.now() / 1000) + 300;
+  let venceEn = Number(tx.built?.timeBounds?.maxTime) || Math.floor(Date.now() / 1000) + 300;
+  const { server } = await import("../stellar/contract");
   let hash: string;
-  try {
-    hash = await wallet.signAndSubmit(tx.toXDR());
-  } catch (e) {
-    if (intento && (await pollarNoSabe(e))) throw new (await import("../stellar/envio")).SelloIncierto({ ...intento, ...(propio ? { hash: propio } : {}) }, e);
-    throw e;
+  let enviar: (() => Promise<RespuestaEnvio>) | undefined;
+  if (opciones.pagarConMiCuenta) {
+    // Pollar solo firma (sin patrocinio) y la manda esta capa: la misma transacción las veces que haga
+    // falta, con el mismo hash. Un fallo al firmar es antes de mandar nada: no hay nada en el aire.
+    const firmada = await firmarSinPatrocinio(tx, wallet);
+    hash = toHex(firmada.hash());
+    venceEn = Number(firmada.timeBounds?.maxTime) || venceEn;
+    enviar = async () => leerEnvio(await server.sendTransaction(firmada as unknown as Parameters<typeof server.sendTransaction>[0]));
+  } else {
+    try {
+      hash = await wallet.signAndSubmit(tx.toXDR());
+    } catch (e) {
+      if (intento && (await pollarNoSabe(e))) throw new (await import("../stellar/envio")).SelloIncierto({ ...intento, ...(propio ? { hash: propio } : {}) }, e);
+      throw e;
+    }
   }
   onStep("sending", hash);
-  const { server } = await import("../stellar/contract");
-  // Pollar ya la mandó (y a veces ya la vio entrar): solo se pregunta, mientras siga viva.
+  // Con Pollar patrocinando, ya la mandó (y a veces ya la vio entrar): solo se pregunta, mientras siga viva.
   const { enviarYConfirmar, SelloIncierto } = await import("../stellar/envio");
-  const d = await enviarYConfirmar({ consultar: async () => leerConsulta(await server.getTransaction(hash)), venceEn, sinRedMs });
+  const d = await enviarYConfirmar({ ...(enviar ? { enviar } : {}), consultar: async () => leerConsulta(await server.getTransaction(hash)), venceEn, sinRedMs, alSaturada: avisarSaturacion });
   if (d.estado === "entro") {
     let value: unknown;
     try {

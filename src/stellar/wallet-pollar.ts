@@ -38,6 +38,11 @@ export interface SubmittingWallet extends WalletAdapter {
   readonly submitsItself: true;
   /** Firma y envía en un solo paso. Devuelve el hash de la transacción. */
   signAndSubmit(xdr: string): Promise<string>;
+  /**
+   * Solo firma, sin pedirle a Pollar que patrocine la comisión: la paga la cuenta de la
+   * persona y la transacción la manda quien la pidió. Devuelve el XDR firmado.
+   */
+  signUnsponsored?(xdr: string): Promise<string>;
 }
 
 export const pollarConfigured = (): boolean => !!import.meta.env.VITE_POLLAR_PUBLISHABLE_KEY;
@@ -191,6 +196,15 @@ class PollarWallet implements SubmittingWallet {
       throw new Error(mensajeDeRechazo(outcome));
     }
     return outcome.hash;
+  }
+
+  async signUnsponsored(xdr: string): Promise<string> {
+    const client = await this.#ensureClient();
+    const outcome = (await client.signTx(xdr, { skipSponsorship: true })) as { status?: string; signedXdr?: string } & ResultadoDeEnvio;
+    if (outcome.status !== "signed" || !outcome.signedXdr) {
+      throw new Error(mensajeDeRechazo(outcome));
+    }
+    return outcome.signedXdr;
   }
 }
 

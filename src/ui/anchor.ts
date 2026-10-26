@@ -91,10 +91,20 @@ const toHex = (b: Uint8Array | ArrayLike<number>): string =>
  */
 export const SIN_GRABAR = "ensayo-sin-grabar";
 
+/** Cómo se sella esta vez. */
+export interface OpcionesDeSello {
+  /**
+   * La comisión la paga la cuenta de la persona, sin el patrocinador (Pollar). Es la salida
+   * cuando el sello cuesta más de lo que el patrocinador cubre (`red.ts`). Con Freighter o
+   * la cuenta de prueba no cambia nada: ya pagan ellas.
+   */
+  pagarConMiCuenta?: boolean;
+}
+
 /** Registra el sello en el contrato. Exige la firma del organizador. Nunca en la demo ni en el ensayo. */
-export function sealOnChain(args: SealArgs, onStep: OnStep): Promise<SealResult> {
+export function sealOnChain(args: SealArgs, onStep: OnStep, opciones: OpcionesDeSello = {}): Promise<SealResult> {
   if (sinGrabar()) return Promise.reject(new Error(SIN_GRABAR));
-  return conFondos(() => sellar(args, onStep), onStep);
+  return conFondos(() => sellar(args, onStep, opciones), onStep);
 }
 
 /* ------------------------------------------ lo que el sello necesita antes */
@@ -262,11 +272,29 @@ async function conUnSoloRpc<T>(hacer: () => Promise<T>): Promise<T> {
   }
 }
 
-function sellar(args: SealArgs, onStep: OnStep): Promise<SealResult> {
-  return conUnSoloRpc(() => sellarEnUnRpc(args, onStep));
+function sellar(args: SealArgs, onStep: OnStep, opciones: OpcionesDeSello): Promise<SealResult> {
+  return conUnSoloRpc(() => sellarEnUnRpc(args, onStep, opciones));
 }
 
-async function sellarEnUnRpc(args: SealArgs, onStep: OnStep): Promise<SealResult> {
+/**
+ * El costo de la simulación de verdad (`tx.built.fee`, lo que se firmaría), antes de
+ * firmar o de entregárselo a Pollar. Si el sello lo paga el patrocinador y cuesta más de
+ * lo que cubre (la oferta del fee-bump, unas 3 veces el costo, pasa el tope de Pollar), se
+ * corta acá, antes de mandar nada: no se gastó ni se grabó nada, y la pantalla ofrece
+ * el camino del caso 1 (`red.ts`). Antes el rechazo de Pollar llegaba como error genérico,
+ * después de la espera.
+ */
+async function revisarCosto(tx: TxArmada, opciones: OpcionesDeSello): Promise<void> {
+  const stroops = Number(tx.built?.fee);
+  if (!Number.isFinite(stroops)) return;
+  const costoXlm = stroops / 1e7;
+  const [{ mandaSola }, { CostoAlto, nivelDelCosto, umbralesDe }, { anotar }] = await Promise.all([quienFirma(), import("../stellar/chequeo-red"), import("../stellar/registro-red")]);
+  const nivel = nivelDelCosto(costoXlm, mandaSola ? "patrocinado" : "propio", network.name);
+  anotar({ red: network.name, paso: "sellar", nivel, costoXlm, umbralXlm: umbralesDe(network.name).red.rojoXlm, ...(opciones.pagarConMiCuenta ? { accion: "pagar-con-mi-cuenta" } : {}) });
+  if (mandaSola && !opciones.pagarConMiCuenta && nivel === "rojo") throw new CostoAlto(costoXlm);
+}
+
+async function sellarEnUnRpc(args: SealArgs, onStep: OnStep, opciones: OpcionesDeSello): Promise<SealResult> {
   const [{ getClient }, { armar, submitElsewhere, firmarYConfirmar, valorNativo, errorDelDesenlace }] = await Promise.all([import("../stellar/contract"), sdk()]);
   const client = await armar(() => getClient());
   const faltan = roundTime(args.round) - Date.now() / 1000;
@@ -285,6 +313,8 @@ async function sellarEnUnRpc(args: SealArgs, onStep: OnStep): Promise<SealResult
       { timeoutInSeconds: vidaDelSello(args.round) },
     ),
   );
+  // Con el costo de la simulación de verdad, antes de firmar nada.
+  await revisarCosto(tx, opciones);
   onStep("signing", await costoVisible(tx));
   // Desde acá, lo que se manda puede entrar: si no se sabe cómo terminó, es un `SelloIncierto`.
   const intento: IntentoDeSello = {
@@ -297,7 +327,7 @@ async function sellarEnUnRpc(args: SealArgs, onStep: OnStep): Promise<SealResult
     desde: Math.floor(Date.now() / 1000),
   };
 
-  const delegated = await submitElsewhere(tx, onStep, SIN_RED_SELLO_MS, intento);
+  const delegated = await submitElsewhere(tx, onStep, SIN_RED_SELLO_MS, intento, { pagarConMiCuenta: !!opciones.pagarConMiCuenta });
   if (delegated) {
     return { raffleId: unwrap<bigint>(delegated.value), txHash: delegated.hash };
   }

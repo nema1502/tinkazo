@@ -83,6 +83,8 @@ export interface OpcionesEnvio {
   dormir?: (ms: number) => Promise<void>;
   /** Cada vuelta en que todavía no se sabe: la pantalla puede decir "confirmando…". */
   alEsperar?: (vuelta: number) => void;
+  /** La red contestó `TRY_AGAIN_LATER`: no tomó la transacción por estar llena. El chequeo de la red lo cuenta (amarillo). */
+  alSaturada?: () => void;
 }
 
 /** Tope de tiempo para una promesa que puede quedarse colgada. */
@@ -151,6 +153,7 @@ export async function enviarYConfirmar(op: OpcionesEnvio): Promise<Desenlace> {
           proximoEnvio = Number.POSITIVE_INFINITY;
         } else {
           // TRY_AGAIN_LATER (o algo que no se conoce): la misma, más tarde.
+          if (r.status === "TRY_AGAIN_LATER") op.alSaturada?.();
           reintentosEnvio++;
           proximoEnvio = ahora() + Math.min(8000, 1000 * 2 ** reintentosEnvio);
         }

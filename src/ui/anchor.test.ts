@@ -68,12 +68,14 @@ const HASH_FIRMADA = "02".repeat(32);
 const cierre = () => Math.floor(Date.now() / 1000);
 
 /**
- * La transacción ya simulada: con su tope de comisión (0,75 XLM), su hash y su vencimiento, lista para
- * entregar (Pollar) o para firmar acá (`sign` deja la firmada en `signed`, como el SDK).
+ * La transacción ya simulada: con su tope de comisión (0,75 XLM en testnet, 0,082 en mainnet: lo que
+ * cuesta un sello en cada red cuando el estado está en el piso), su hash y su vencimiento, lista para
+ * entregar (Pollar) o para firmar acá (`sign` deja la firmada en `signed`, como el SDK). `fee` en
+ * stroops pisa el costo: así se prueba el sello caro (ver "el costo del sello de verdad").
  */
-const txSimulada = () => {
+const txSimulada = (fee?: string) => {
   const tx = {
-    built: { fee: "7500000", hash: () => new Uint8Array(32).fill(1), timeBounds: { maxTime: String(cierre() + 60) } },
+    built: { fee: fee ?? (h.red.name === "mainnet" ? "820000" : "7500000"), hash: () => new Uint8Array(32).fill(1), timeBounds: { maxTime: String(cierre() + 60) } },
     simulationData: {},
     toXDR: () => "AAAA",
     signed: undefined as undefined | { hash: () => Uint8Array; timeBounds: { maxTime: string } },
@@ -1151,5 +1153,148 @@ describe("entró pero no se pudo leer el número que devolvió", () => {
     const { error } = await sortear();
     expect(esSelloIncierto(error)).toBe(false);
     expect((error as Error).message).toBe("tx-FAILED");
+  });
+});
+
+/* ----------------------------------------------- el costo del sello de verdad */
+
+/**
+ * La simulación de verdad, antes de firmar o de entregarla a Pollar: si el patrocinador paga y el
+ * sello cuesta más de lo que cubre (la oferta del fee-bump, unas tres veces el costo, pasa el tope de
+ * Pollar), se corta ahí, sin gastar nada, para decirlo con su acción (`red.ts`). El 25 de octubre de
+ * 2026 el sello de testnet llegó a 69 XLM: el rechazo de Pollar llegaba como error genérico y tarde.
+ */
+describe("el costo del sello de verdad (antes de firmar o de entregarlo)", () => {
+  const nombre = (e: unknown): string => (e as { name?: string }).name ?? "";
+
+  it("con Pollar y un costo por encima del tope (69 XLM en testnet): CostoAlto, sin entregar nada", async () => {
+    const entregar = vi.fn(async () => "deadbeef");
+    h.wallet = pollar(entregar);
+    h.seal.mockImplementation(async () => txSimulada("690000000"));
+    const { pasos, error } = await sellar();
+    expect(nombre(error)).toBe("CostoAlto");
+    expect((error as { costoXlm: number }).costoXlm).toBeCloseTo(69, 3);
+    expect(entregar).not.toHaveBeenCalled();
+    expect(h.send).not.toHaveBeenCalled();
+    expect(pasos.map(([p]) => p)).toEqual(["simulating"]);
+  });
+
+  it("justo en el umbral todavía se sella, y por encima no: 33 XLM en testnet", async () => {
+    h.wallet = pollar();
+    h.seal.mockImplementation(async () => txSimulada("330000000"));
+    expect((await sellar()).r?.txHash).toBe("deadbeef");
+    h.seal.mockImplementation(async () => txSimulada("331000000"));
+    expect(nombre((await sellar()).error)).toBe("CostoAlto");
+  });
+
+  it("en mainnet el tope es otro: 0,5 XLM ya corta, 0,1 no", async () => {
+    h.red.name = "mainnet";
+    h.red.friendbotUrl = null;
+    h.wallet = pollar();
+    h.seal.mockImplementation(async () => txSimulada("5000000"));
+    expect(nombre((await sellar()).error)).toBe("CostoAlto");
+    h.seal.mockImplementation(async () => txSimulada("1000000"));
+    expect((await sellar()).r?.txHash).toBe("deadbeef");
+  });
+
+  it("con un costo normal no pasa nada raro: sella como siempre", async () => {
+    h.wallet = pollar();
+    const { pasos, r } = await sellar();
+    expect(r?.txHash).toBe("deadbeef");
+    expect(pasos.map(([p]) => p)).toEqual(["simulating", "signing", "sending", "confirmed"]);
+  });
+
+  it("con Freighter o la cuenta de prueba el costo es de quien firma: no hay tope que corte", async () => {
+    h.wallet = { kind: "external", address: DIR, signTransaction: vi.fn() };
+    h.seal.mockImplementation(async () => txSimulada("690000000"));
+    const { pasos, r, error } = await sellar();
+    expect(error).toBeUndefined();
+    expect(r?.raffleId).toBe(7n);
+    // Antes de firmar se le muestra lo que cuesta, como siempre.
+    expect(pasos.find(([p]) => p === "signing")?.[1]).toContain("XLM");
+  });
+
+  it("el costo que se mira queda anotado en el registro, sin la cuenta", async () => {
+    const { leerRegistro, olvidarRegistro } = await import("../stellar/registro-red");
+    vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => undefined, removeItem: () => undefined });
+    olvidarRegistro();
+    h.wallet = pollar();
+    h.seal.mockImplementation(async () => txSimulada("690000000"));
+    await sellar();
+    const e = leerRegistro()[0];
+    expect(e).toMatchObject({ paso: "sellar", red: "testnet", nivel: "rojo", umbralXlm: 33 });
+    expect(e?.costoXlm).toBeCloseTo(69, 3);
+    expect(JSON.stringify(leerRegistro())).not.toContain(DIR);
+  });
+});
+
+describe("'Sellar pagando con mi cuenta': Pollar solo firma, sin patrocinio, y se manda acá", () => {
+  /** Una transacción firmada de mentira que `TransactionBuilder.fromXDR` devuelve. */
+  const firmadaSinPatrocinio = { hash: () => new Uint8Array(32).fill(3), timeBounds: { maxTime: String(cierre() + 60) } };
+
+  beforeEach(() => {
+    vi.doMock("@stellar/stellar-sdk", async (orig) => {
+      const real = await orig<typeof import("@stellar/stellar-sdk")>();
+      return { ...real, TransactionBuilder: { ...real.TransactionBuilder, fromXDR: () => firmadaSinPatrocinio } };
+    });
+  });
+  afterEach(() => {
+    vi.doUnmock("@stellar/stellar-sdk");
+  });
+
+  const pollarConPagoPropio = (firmar = vi.fn(async () => "FIRMADA")) => ({ ...pollar(vi.fn(async () => "no-se-usa")), signUnsponsored: firmar });
+  const sellarPagando = async () => {
+    const { sealOnChain } = await import("./anchor");
+    const pasos: [AnchorStep, string | undefined][] = [];
+    try {
+      const r = await sealOnChain(argsDeAhora(), (paso, detalle) => void pasos.push([paso, detalle]), { pagarConMiCuenta: true });
+      return { pasos, r };
+    } catch (error) {
+      return { pasos, error };
+    }
+  };
+
+  it("con un costo por encima del tope no corta: firma sin patrocinio y manda la misma transacción", async () => {
+    const firmar = vi.fn(async () => "FIRMADA");
+    const w = pollarConPagoPropio(firmar);
+    h.wallet = w;
+    h.seal.mockImplementation(async () => txSimulada("690000000"));
+    h.send.mockImplementation(async () => ({ status: "PENDING", hash: "03".repeat(32), latestLedgerCloseTime: cierre() }));
+    const { pasos, r, error } = await sellarPagando();
+    expect(error).toBeUndefined();
+    expect(firmar).toHaveBeenCalledTimes(1);
+    expect(firmar).toHaveBeenCalledWith("AAAA");
+    // No se le entregó a Pollar para que la mande (eso sería con patrocinio).
+    expect((w as unknown as { signAndSubmit: ReturnType<typeof vi.fn> }).signAndSubmit).not.toHaveBeenCalled();
+    expect(h.send).toHaveBeenCalledTimes(1);
+    expect(r?.raffleId).toBe(7n);
+    expect(r?.txHash).toBe("03".repeat(32));
+    expect(pasos.map(([p]) => p)).toEqual(["simulating", "signing", "sending", "confirmed"]);
+  });
+
+  it("si Pollar no sabe firmar sin patrocinio, falla antes de mandar nada", async () => {
+    h.wallet = pollar();
+    const { error } = await sellarPagando();
+    expect((error as Error).message).toMatch(/pollar-sin-pago-propio/);
+    expect(h.send).not.toHaveBeenCalled();
+  });
+
+  it("si Pollar devuelve un fee-bump (siguió patrocinando), no se manda", async () => {
+    vi.doMock("@stellar/stellar-sdk", async (orig) => {
+      const real = await orig<typeof import("@stellar/stellar-sdk")>();
+      return { ...real, TransactionBuilder: { ...real.TransactionBuilder, fromXDR: () => ({ innerTransaction: {}, hash: () => new Uint8Array(32) }) } };
+    });
+    h.wallet = pollarConPagoPropio();
+    const { error } = await sellarPagando();
+    expect((error as Error).message).toMatch(/patrocino-no-se-quito/);
+    expect(h.send).not.toHaveBeenCalled();
+  });
+
+  it("si la red la rechaza por falta de saldo, es la red diciendo que no (no un sello incierto)", async () => {
+    h.wallet = pollarConPagoPropio();
+    h.send.mockImplementation(async () => ({ status: "ERROR", errorResult: { result: "txInsufficientBalance" } }));
+    const { error } = await sellarPagando();
+    expect(esSelloIncierto(error)).toBe(false);
+    expect((error as Error).message).toMatch(/tx-REJECTED/);
   });
 });
