@@ -99,7 +99,7 @@ function imprimir(salida, detalle, porDefecto) {
       console.log(`     cierre ${fechaUtc(r.cierre)} · ledger ${r.ledger} · protocolo ${r.version}${r.interna ? " · transacción interior de un fee bump" : ""}`);
       console.log(`     cabecera ${r.hashCabecera}`);
     } else {
-      console.log(`     ${r.estado === "invalida" ? "no cuadra" : "sin respuesta"}: ${r.motivo}`);
+      console.log(`     ${r.estado === "invalida" ? r.motivo : `sin respuesta: ${r.motivo}`}`);
     }
     if (r.bytes) console.log(`     ${miles(r.bytes)} bytes · ${seg(r.segundos)}`);
     if (detalle) for (const c of r.comprobaciones) console.log(`     ${c.ok ? "+" : "-"} ${c.nombre}${c.detalle ? ` (${c.detalle})` : ""}`);
@@ -125,7 +125,9 @@ function imprimir(salida, detalle, porDefecto) {
       console.log("Si la transacción es muy reciente, el punto de control todavía puede no estar publicado: probá de nuevo en unos 10 minutos.");
     }
   }
-  console.log("Esto prueba que esas fuentes publican un historial coherente con la transacción adentro; no comprueba las firmas SCP con las que la red lo aceptó.");
+  if (decision.codigo !== 1) {
+    console.log("Esto prueba que esas fuentes publican un historial coherente con la transacción adentro; no comprueba las firmas SCP con las que la red lo aceptó.");
+  }
 }
 
 async function principal(argv) {

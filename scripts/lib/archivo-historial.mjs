@@ -375,7 +375,7 @@ export async function comprobarEnFuente({ fuente, hash, ledger, frase, sesion })
   };
   const comprobar = (nombre, ok, detalle = "") => {
     r.comprobaciones.push({ nombre, ok, detalle });
-    if (!ok) throw new ErrorDeArchivo("invalida", `${nombre}${detalle ? ` (${detalle})` : ""}`);
+    if (!ok) throw new ErrorDeArchivo("invalida", `no se cumple: ${nombre}${detalle ? ` (${detalle})` : ""}`);
   };
   try {
     const cp = puntoDeControl(ledger);
