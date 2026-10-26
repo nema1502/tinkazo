@@ -325,8 +325,8 @@ function empezarReloj(d: Diagnostico): void {
   detenerReloj();
   reloj = setInterval(() => {
     restan = Math.max(0, restan - 1);
-    const t = document.querySelector("#red-estado .red-texto");
-    if (t && vista.tipo === "panel" && vista.p.frase === "redSinRpc") t.textContent = fraseDelCaso(vista.p);
+    const caja = document.querySelector("#red-estado .red-texto");
+    if (caja && (vista.tipo === "panel" || vista.tipo === "respuesta") && vista.p.frase === "redSinRpc") caja.textContent = frase(vista.p, vista.d, vista.tipo);
     if (restan <= 0) {
       detenerReloj();
       void volverAMirar("automatico", d);
@@ -390,6 +390,8 @@ function hacer(a: AccionRed): void {
     case "cargar-saldo":
       void (async () => {
         if (!(await cargarSaldoDePrueba())) return volver(t("friendbotFailed"));
+        // Cargar saldo no es sellar: al volver a mirar, la persona decide (a diferencia de volver a probar tras un corte).
+        origen = "chequeo";
         await volverAMirar("manual");
       })();
       return;
@@ -498,12 +500,14 @@ export function limpiarRed(): void {
   intentos = 0;
   origen = "chequeo";
   if (vista.tipo !== "sin-sello") ver({ tipo: "nada" });
+  mostrarElBoton();
 }
 
 /** "Seguir sin sello": lo que se ve mientras se sigue intentando sellar la misma ronda. */
 export function verSinSello(estado: "esperando" | "intentando" | "entro" | "vencio", reintentar?: () => void): void {
   sellando = false;
   ver({ tipo: "sin-sello", estado, ...(reintentar ? { reintentar } : {}) });
+  mostrarElBoton();
 }
 
 /* ----------------------------------------------------- cuándo se mira la red */
@@ -513,7 +517,8 @@ const puedeMirar = (): boolean => canAnchor() && !params.has("demo") && !app.fro
 
 function mostrarElBoton(): void {
   const fila = document.getElementById("red-fila");
-  if (fila) fila.style.display = canAnchor() && !params.has("demo") ? "" : "none";
+  // Con la lista ya sellada no hay nada que preguntarle a la red: el botón se va.
+  if (fila) fila.style.display = canAnchor() && !params.has("demo") && !app.frozen ? "" : "none";
 }
 
 let pendiente: ReturnType<typeof setTimeout> | undefined;
@@ -540,7 +545,7 @@ function programar(): void {
 
 /** El botón de un toque: dice verde, amarillo o rojo, con la razón. Y deja la red vigilada cada 60 s. */
 async function preguntar(): Promise<void> {
-  if (pidiendo) return;
+  if (pidiendo || sellando) return;
   pidiendo = true;
   origen = "boton";
   const boton = $<HTMLButtonElement>("btn-red");
@@ -573,9 +578,14 @@ export function iniciarRed(o: { sellar: (op: OpcionesDeSellado) => Promise<void>
   sellarFn = o.sellar;
   document.getElementById("btn-red")?.addEventListener("click", () => void preguntar());
   // Cambió la cuenta: lo medido era de otra.
-  document.addEventListener("tinkazo:sesion", () => {
-    chequeo.olvidar();
-    if (vista.tipo !== "sin-sello") ver({ tipo: "nada" });
+  let cuenta: string | null | undefined;
+  document.addEventListener("tinkazo:sesion", (e) => {
+    const nueva = (e as CustomEvent<string | null>).detail;
+    if (nueva !== cuenta) {
+      cuenta = nueva;
+      chequeo.olvidar();
+      if (vista.tipo !== "sin-sello") ver({ tipo: "nada" });
+    }
     programar();
   });
   const names = document.getElementById("names");
