@@ -2,22 +2,32 @@
 #
 # Cada media hora mira, en testnet y en mainnet, los parámetros de costo de
 # Soroban y cuánto estado vivo tiene la red frente a su objetivo. La corrida falla
-# solo cuando hay algo nuevo que decir: un parámetro o el protocolo cambió, el
-# nivel de alguna red se movió respecto de la corrida anterior (hacia arriba o
-# hacia abajo), una red está en rojo, o no se pudo mirar una red. Que falle es el
-# aviso: GitHub manda un correo por la corrida fallida a quien editó el `cron` por
-# última vez, sin depender de ninguna laptop prendida. Un nivel que sigue igual
-# pasa, y queda en el nombre del paso: si no, el correo sería un ruido que alguien
-# acaba silenciando.
+# solo cuando hay algo nuevo que decir: un parámetro o el protocolo cambió y es la
+# primera vez que se ve ese estado de la red, el nivel de alguna red se movió
+# respecto de la corrida anterior (hacia arriba o hacia abajo), una red está en
+# rojo, o no se pudo mirar una red. Que falle es el aviso: GitHub manda un correo
+# por la corrida fallida a quien editó el `cron` por última vez, sin depender de
+# ninguna laptop prendida. Lo que sigue igual pasa, y queda en el nombre del paso:
+# un nivel que no se movió («mainnet amarillo (igual que antes)») y una línea base
+# vieja que ya se avisó («línea base vieja: testnet, <parámetro>»), hasta que se
+# actualice la base. Si no, el correo sería un ruido que alguien acaba silenciando.
 #
 # Una vez al día (12:07 UTC) corre con `--diario` y falla también si una red sigue
-# en naranja, aunque no haya cambiado: un recordatorio mientras dure.
+# en naranja o si la línea base sigue vieja, aunque no haya cambiado nada: un
+# recordatorio mientras dure. Puede caer poco después de un aviso (el de las 11:43
+# y el recordatorio de las 12:07 están a 24 minutos): se acepta.
 #
-# El nivel de la corrida anterior vive en la caché de Actions: una clave nueva por
-# corrida (`vigilar-red-<número de corrida>`, que nunca existe) y `restore-keys`
-# trae la más reciente. Se guarda también cuando la corrida falla; si no, el mismo
-# aviso se repetiría cada media hora. Sin caché (la primera vez), el nivel de antes
-# es «normal».
+# Lo que ya se avisó vive en la caché de Actions: el nivel de cada red y, de cada
+# red con la línea base vieja, lo que se avisó: la huella (sha256) del estado de la
+# red, la de la línea base contra la que se avisó y la de cada parámetro. Se olvida
+# cuando alguien commitea una base nueva; si la red coincide con la base una sola
+# corrida (un RPC atrasado), se queda. Una clave nueva por corrida
+# (`vigilar-red-<número de corrida>`, que nunca existe) y `restore-keys` trae la
+# más reciente. Se guarda también cuando la corrida falla; si no, el mismo aviso se
+# repetiría cada media hora. Sin caché (la primera vez), el nivel de antes es
+# «normal» y nada se avisó: se comporta como un detector sin memoria. Si la red
+# cambia otra vez, la huella es otra y vuelve a avisar, y dice qué cambió desde el
+# último aviso.
 #
 # Solo lee de los RPC públicos: no instala nada (el guion no tiene dependencias, solo
 # Node) y su único secreto es el opcional HEALTHCHECK_URL, el latido del último paso.
@@ -37,7 +47,7 @@ on:
   workflow_dispatch:
     inputs:
       diario:
-        description: 'Correr como el recordatorio diario (falla también si una red sigue en naranja)'
+        description: 'Correr como el recordatorio diario (falla también si una red sigue en naranja o la línea base sigue vieja)'
         type: boolean
         default: false
 
@@ -65,7 +75,7 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
-      - name: Recuperar el nivel de la corrida anterior
+      - name: Recuperar lo que se avisó en la corrida anterior
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .estado-red
@@ -76,15 +86,18 @@ jobs:
         env:
           # La corrida de las 12:07 UTC (o la manual con la casilla) es el recordatorio.
           DIARIO: "${{ (github.event.schedule == '7 12 * * *' || inputs.diario) && '--diario' || '' }}"
+        # `niveles.json` conserva el nombre de cuando solo guardaba el nivel de cada red:
+        # ahora trae también la huella de los parámetros que ya se avisaron.
         run: node scripts/vigilar-red.mjs --anterior .estado-red/niveles.json --guardar .estado-red/niveles.json $DIARIO
-      # El nivel de cada red, a la vista en la lista de pasos sin abrir el log.
+      # El nivel de cada red y, si la línea base está vieja, cuál parámetro: a la vista
+      # en la lista de pasos sin abrir el log.
       - name: "Nivel: ${{ steps.vigilar.outputs.resumen }}"
         if: always()
         env:
           RESUMEN: ${{ steps.vigilar.outputs.resumen }}
         run: echo "$RESUMEN"
       # Aunque la corrida haya fallado: el aviso de hoy no se repite mañana a esta hora.
-      - name: Guardar el nivel para la próxima corrida
+      - name: Guardar lo avisado para la próxima corrida
         if: always()
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:

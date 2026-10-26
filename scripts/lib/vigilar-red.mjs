@@ -15,11 +15,24 @@
  * del ledger de entonces (`getLedgers` guarda 7 días).
  *
  * Para que el aviso sirva, la corrida falla solo cuando hay algo nuevo que
- * decir: un parámetro cambió, el nivel de alguna red se movió respecto de la
- * corrida anterior (hacia arriba o hacia abajo) o está en rojo. Un nivel que
- * sigue igual no hace fallar la corrida (salvo el recordatorio diario, desde
- * naranja): un correo cada media hora se acaba silenciando. El nivel anterior
- * lo guarda quien llama (en GitHub, la caché de Actions) en un archivo chico.
+ * decir: un parámetro cambió y es la primera vez que se ve ese estado de la red,
+ * el nivel de alguna red se movió respecto de la corrida anterior (hacia arriba o
+ * hacia abajo) o está en rojo. Un nivel que sigue igual, o una línea base vieja
+ * que ya se avisó, no hacen fallar la corrida (salvo el recordatorio diario:
+ * desde naranja, o mientras la línea base siga vieja): un correo cada media hora
+ * se acaba silenciando. La memoria de la corrida anterior (el nivel de cada red y
+ * lo que ya se avisó de sus parámetros) la guarda quien llama (en GitHub, la
+ * caché de Actions) en un archivo chico.
+ *
+ * De los parámetros se guarda, por red, un estado avisado: la huella del estado
+ * de la red que se avisó (`state`), la de la línea base contra la que se avisó
+ * (`base`) y la de cada parámetro (`params`, para decir cuáles cambiaron entre un
+ * aviso y el siguiente). Es el mismo aviso mientras el estado de la red y la
+ * línea base sigan siendo esos; se olvida solo cuando la huella de la base
+ * cambia, es decir, cuando alguien commiteó una base nueva. Si la red coincide
+ * con la base una sola corrida (un RPC atrasado) o vuelve atrás de verdad, la
+ * entrada se queda: es inofensiva hasta la próxima base y evita un segundo correo
+ * por el mismo estado.
  *
  * Todo acá es puro y se prueba sin red. `readNetwork` recibe la función que
  * habla con el RPC (`makeCaller` hace la de verdad, con reintentos y RPC de
@@ -28,6 +41,8 @@
  * Un MB son 10^6 bytes, como en la documentación de la red (3.000 MB = 3 GB).
  */
 
+import { createHash } from "node:crypto";
+import { costTypeName } from "./tipos-de-costo.mjs";
 import { LEVELS, RED_PERCENT_OF_TARGET } from "./umbrales-red.mjs";
 
 /**
@@ -238,6 +253,39 @@ export function diffParams(base, current) {
   return changes;
 }
 
+/** JSON con las llaves en orden: el mismo valor da siempre el mismo texto, venga como venga. */
+function canonical(value) {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${canonical(value[k])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/**
+ * La huella de los parámetros de una red: el sha256 de los 17 parámetros y el
+ * protocolo (`read.params`), en JSON canónico. Es lo que se guarda entre
+ * corridas para saber qué estado de la red ya se avisó: la misma huella es el
+ * mismo estado, y cualquier valor distinto, otra.
+ */
+export function fingerprint(params) {
+  return createHash("sha256").update(canonical(params)).digest("hex");
+}
+
+/** La huella de cada parámetro por separado: dice cuáles cambiaron entre un aviso y el siguiente. */
+function fingerprintEach(params) {
+  return Object.fromEntries(Object.entries(params).map(([name, value]) => [name, fingerprint(value)]));
+}
+
+/** Los parámetros cuya huella es distinta, o que están en uno solo de los dos, en orden. */
+function changedNames(before, after) {
+  const names = new Set([...Object.keys(before), ...Object.keys(after)]);
+  return [...names].filter((name) => before[name] !== after[name]).sort();
+}
+
 /** Los umbrales de una red; el rojo nunca pasa del 95 % del objetivo vigente. */
 export function thresholdsFor(network, targetMb = null) {
   const levels = (LEVELS[network] ?? []).map((l) => ({ ...l }));
@@ -349,9 +397,14 @@ const ledgersToMinutes = (ledgers) => (ledgers * 5) / 60;
 /**
  * Lo que sale de una lectura: porcentaje, pendiente de 24 horas, horas hasta el
  * rojo, nivel (y el que tenía en la corrida anterior, `previousLevel`) y cambios
- * contra la línea base (null si no hay línea base).
+ * contra la línea base (null si no hay línea base). `notice` es lo que se avisó
+ * de esta red en una corrida anterior (`{ state, base, params }`, ver
+ * `parseState`): si hay cambios y el estado de la red y la línea base son los de
+ * ese aviso, `alreadyNotified` es verdadero y el aviso no se repite. Si la línea
+ * base es la misma pero el estado de la red es otro, `sinceNotice` nombra los
+ * parámetros que cambiaron desde el último aviso.
  */
-export function analyze(network, read, baseNetwork, previousLevel = null) {
+export function analyze(network, read, baseNetwork, previousLevel = null, notice = null) {
   const percent = read.targetMb ? (read.stateMb / read.targetMb) * 100 : null;
   const hasPast = read.past && !read.past.error;
   const slope = hasPast ? slopeMbPerHour(read.stateMb, read.closeTime, read.past.stateMb, read.past.closeTime) : null;
@@ -363,6 +416,13 @@ export function analyze(network, read, baseNetwork, previousLevel = null) {
         minutesAgo: read.modified[c.name] ? Math.round(ledgersToMinutes(read.ledger - read.modified[c.name])) : null,
       }))
     : null;
+  const print = fingerprint(read.params);
+  const baseFingerprint = baseNetwork ? fingerprint(baseNetwork.params) : null;
+  const paramFingerprints = fingerprintEach(read.params);
+  const differs = (changes?.length ?? 0) > 0;
+  // El aviso vale para esta línea base: si alguien commiteó otra, es un aviso nuevo.
+  const sameBase = differs && notice?.base === baseFingerprint;
+  const alreadyNotified = sameBase && notice.state === print;
   return {
     network,
     protocol: read.protocol,
@@ -381,6 +441,11 @@ export function analyze(network, read, baseNetwork, previousLevel = null) {
     levelBefore: LEVEL_NAMES.has(previousLevel) ? previousLevel : null,
     watched: Object.keys(read.params).length - 1,
     changes,
+    fingerprint: print,
+    baseFingerprint,
+    paramFingerprints,
+    alreadyNotified,
+    sinceNotice: sameBase && !alreadyNotified && notice.params ? changedNames(notice.params, paramFingerprints) : null,
   };
 }
 
@@ -416,14 +481,44 @@ function show(value) {
   return text.length > 60 ? `${text.slice(0, 57)}...` : text;
 }
 
-/** Una línea por parámetro cambiado: el nombre, los primeros campos y cuándo cambió. */
+/** Las dos listas de costo traen un elemento por tipo de costo; el aviso las nombra con este prefijo. */
+const COST_LISTS = { contract_cost_params_cpu_instructions: "cpu", contract_cost_params_memory_bytes: "mem" };
+
+/**
+ * Cómo se nombra un campo cambiado en el aviso. En las dos listas de costo,
+ * `[9].const_term` es `cpu[9] computeEd25519PubKey.const_term` (o `mem[9] …`); un
+ * índice que la lista de nombres no conoce, y cualquier otro parámetro, se nombran
+ * como llegan.
+ */
+export function fieldLabel(param, path) {
+  const prefix = COST_LISTS[param];
+  const match = prefix ? /^\[(\d+)\](.*)$/.exec(path) : null;
+  const name = match ? costTypeName(Number(match[1])) : undefined;
+  return name ? `${prefix}[${match[1]}] ${name}${match[2]}` : path;
+}
+
+/** «a, b, c y 2 más»: los primeros `max` nombres y cuántos quedan. */
+function listNames(names, max) {
+  const more = names.length > max ? ` y ${names.length - max} más` : "";
+  return `${names.slice(0, max).join(", ")}${more}`;
+}
+
+/** La pista que acompaña a todo aviso de parámetros: el comando exacto, con la red que cambió. */
+const baseHint = (network) =>
+  `Si el cambio es legítimo: node scripts/vigilar-red.mjs --actualizar-base --red ${network} y commitear la línea base.`;
+
+/**
+ * Una línea por parámetro cambiado: el nombre, los primeros tres campos (con el
+ * nombre del tipo de costo en las listas de costo) y cuándo cambió. El resto queda
+ * en «y N más»: `--json` los trae todos.
+ */
 export function describeChange(change) {
   const when = change.ledger ? ` (ledger ${fmt(change.ledger)}, ${fmtAge(change.minutesAgo)})` : "";
   if (change.kind === "added") return `${change.name}${when}: parámetro nuevo, vale ${show(change.fields[0].after)}`;
   if (change.kind === "removed") return `${change.name}: ya no está en la red (valía ${show(change.fields[0].before)})`;
   const shown = change.fields
     .slice(0, 3)
-    .map((f) => `${f.path || "valor"} ${show(f.before)} -> ${show(f.after)}`)
+    .map((f) => `${fieldLabel(change.name, f.path) || "valor"} ${show(f.before)} -> ${show(f.after)}`)
     .join("; ");
   const more = change.total > 3 ? ` y ${change.total - 3} más` : "";
   return `${change.name}${when}: ${shown}${more}`;
@@ -432,11 +527,19 @@ export function describeChange(change) {
 /**
  * Veredicto de una corrida. `results` trae, por red, un análisis (`analyze`) o
  * `{ network, error }` si no se pudo preguntar. Código 1 (falla y avisa) solo si:
- *   - cambió un parámetro de costo o el protocolo (`params`);
+ *   - cambió un parámetro de costo o el protocolo y es la primera vez que se ve
+ *     ese estado de la red (`params`): el aviso sale una sola vez, y las corridas
+ *     que siguen, con los mismos valores, pasan mientras la línea base no se
+ *     actualice (`alreadyNotified`). Si la red cambia otra vez, avisa de nuevo y
+ *     dice qué parámetros cambiaron desde el último aviso. Todo aviso de
+ *     parámetros termina con el comando que actualiza la base de esa red, así
+ *     sale también en la anotación de GitHub;
  *   - el nivel de la red se movió respecto de la corrida anterior, hacia arriba
  *     o hacia abajo, incluido salir de un nivel y volver a «normal» (`level`);
  *   - la red está en rojo, en cada corrida (`red`);
- *   - es el recordatorio diario (`daily`) y la red está en naranja (`daily`).
+ *   - es el recordatorio diario (`daily`) y la red está en naranja (`daily`);
+ *   - es el recordatorio diario y la línea base sigue vieja: hay parámetros
+ *     distintos que ya se avisaron y nadie actualizó la base (`stale`).
  * El mismo nivel que antes, amarillo o naranja, pasa con código 0. Código 2 si
  * solo hubo redes que no se pudieron mirar (ni tras los reintentos y el RPC de
  * respaldo) o falta la línea base: el vigilante ciego también avisa. Una alarma
@@ -452,9 +555,22 @@ export function decide(results, { daily = false } = {}) {
     }
     if (r.changes === null) {
       errors.push({ network: r.network, message: "no hay línea base de esta red (node scripts/vigilar-red.mjs --actualizar-base)" });
-    } else if (r.changes.length > 0) {
+    } else if (r.changes.length > 0 && !r.alreadyNotified) {
       const count = r.changes.length === 1 ? "cambió 1 parámetro" : `cambiaron ${r.changes.length} parámetros`;
-      alerts.push({ network: r.network, kind: "params", message: `${count}: ${r.changes.map(describeChange).join(" | ")}` });
+      // Con la misma línea base vieja y otro estado de la red: qué cambió desde el último aviso.
+      const again = r.sinceNotice?.length > 0 ? `cambió otra vez desde el último aviso: ${listNames(r.sinceNotice, 5)}. Contra la línea base, ` : "";
+      alerts.push({
+        network: r.network,
+        kind: "params",
+        message: `${again}${count}: ${r.changes.map(describeChange).join(" | ")}. ${baseHint(r.network)}`,
+      });
+    } else if (r.changes.length > 0 && daily) {
+      const count = r.changes.length === 1 ? "1 parámetro distinto" : `${r.changes.length} parámetros distintos`;
+      alerts.push({
+        network: r.network,
+        kind: "stale",
+        message: `recordatorio diario: la línea base sigue vieja, ${count} (ya se avisó): ${r.changes.map(describeChange).join(" | ")}. ${baseHint(r.network)}`,
+      });
     }
     const before = r.levelBefore ?? null;
     const detail =
@@ -483,9 +599,15 @@ export function decide(results, { daily = false } = {}) {
   return { code: alerts.length > 0 ? 1 : errors.length > 0 ? 2 : 0, alerts, errors, daily };
 }
 
+/** «testnet, contract_cost_params_cpu_instructions»: la red y los primeros parámetros que la separan de la línea base. */
+const staleLabel = (r) => `${r.network}, ${listNames(r.changes.map((c) => c.name), 3)}`;
+
 /**
- * El nivel de cada red en una línea: va primera en el log y es el nombre del paso
- * en GitHub. «mainnet amarillo (igual que antes) · testnet normal».
+ * El nivel de cada red en una línea, testnet primero: va primera en el log y es el
+ * nombre del paso en GitHub. «testnet normal · mainnet amarillo (igual que antes)». Si los
+ * parámetros cambiaron desde la última corrida dice «PARÁMETROS CAMBIADOS» (esa
+ * corrida falla); si la línea base sigue vieja pero ya se avisó, dice cuál:
+ * «línea base vieja: testnet, contract_cost_params_cpu_instructions».
  */
 export function summarize(results) {
   const parts = results.map((r) => {
@@ -494,37 +616,97 @@ export function summarize(results) {
     if (r.level === before) return r.level ? `${r.network} ${r.level} (igual que antes)` : `${r.network} normal`;
     return `${r.network} ${r.level ?? "normal"} (antes ${before ?? "normal"})`;
   });
-  if (results.some((r) => r.changes?.length > 0)) parts.push("PARÁMETROS CAMBIADOS");
+  if (results.some((r) => r.changes?.length > 0 && !r.alreadyNotified)) parts.push("PARÁMETROS CAMBIADOS");
+  const stale = results.filter((r) => r.alreadyNotified);
+  if (stale.length > 0) parts.push(`línea base vieja: ${stale.map(staleLabel).join("; ")}`);
   return parts.join(" · ");
 }
 
-/** El nivel que se guarda entre corridas: `{ mainnet: "amarillo" }`; lo que no se entiende se descarta. */
+const FINGERPRINT = /^[0-9a-f]{64}$/;
+const isFingerprint = (x) => typeof x === "string" && FINGERPRINT.test(x);
+
+/** La memoria de «nunca hubo una corrida anterior»: sin archivo (la primera vez, o la caché vacía) todo cuenta como nuevo. */
+export const emptyState = () => ({ levels: {}, notified: {} });
+
+/**
+ * Lo que se guarda entre corridas: `levels`, el nivel de cada red (`{ mainnet:
+ * "amarillo" }`), y `notified`, lo que ya se avisó de los parámetros de cada red
+ * (`{ testnet: { state, base, params } }`: las huellas del estado de la red, de la
+ * línea base y de cada parámetro). Lo que no se entiende se descarta, y un archivo
+ * de antes de que existiera `notified` se lee sin avisos.
+ */
 export function parseState(text) {
+  const state = emptyState();
   let data;
   try {
     data = JSON.parse(text);
   } catch {
-    return {};
+    return state;
   }
-  const levels = {};
   for (const [network, level] of Object.entries(data?.levels ?? {})) {
-    if (LEVEL_NAMES.has(level)) levels[network] = level;
+    if (LEVEL_NAMES.has(level)) state.levels[network] = level;
   }
-  return levels;
+  for (const [network, entry] of Object.entries(data?.notified ?? {})) {
+    if (!isFingerprint(entry?.state) || !isFingerprint(entry?.base)) continue;
+    const notice = { state: entry.state, base: entry.base };
+    const params = Object.fromEntries(Object.entries(entry.params ?? {}).filter(([, print]) => isFingerprint(print)));
+    if (Object.keys(params).length > 0) notice.params = params;
+    state.notified[network] = notice;
+  }
+  return state;
 }
 
 /**
- * El estado para la próxima corrida: el nivel de cada red que se pudo mirar hoy
- * (null es «normal»); una red que no se pudo mirar conserva el de antes, así un
- * RPC caído un rato no inventa un cambio de nivel cuando vuelve.
+ * La memoria para la próxima corrida. Del nivel, el de cada red que se pudo mirar
+ * hoy (null es «normal»). De los parámetros, lo avisado de cada red que hoy difiere
+ * de la línea base (el aviso de ahora, o el de antes si es el mismo). Se olvida
+ * solo cuando la huella de la base cambió, es decir, cuando alguien commiteó una
+ * base nueva y la red ya coincide con ella: que la red coincida con la base una
+ * sola corrida (un RPC atrasado) o vuelva atrás de verdad no borra nada. Esa
+ * entrada queda inofensiva hasta la próxima base, y evita un segundo correo por el
+ * mismo estado. Una red que no se pudo mirar, o que no tiene línea base, conserva
+ * lo de antes: un RPC caído un rato no inventa un cambio de nivel ni repite un
+ * aviso cuando vuelve.
  */
 export function nextState(previous, results, when) {
-  const levels = { ...previous };
-  for (const r of results) if (!r.error) levels[r.network] = r.level;
-  return { version: 1, when: when.toISOString(), levels };
+  const levels = { ...previous?.levels };
+  const notified = { ...previous?.notified };
+  for (const r of results) {
+    if (r.error) continue;
+    levels[r.network] = r.level;
+    if (!r.changes) continue;
+    if (r.changes.length > 0) {
+      notified[r.network] = { state: r.fingerprint, base: r.baseFingerprint, params: r.paramFingerprints };
+    } else if (notified[r.network] && notified[r.network].base !== r.baseFingerprint) {
+      delete notified[r.network];
+    }
+  }
+  return { version: 1, when: when.toISOString(), levels, notified };
 }
 
 export const serializeState = (state) => `${JSON.stringify(state)}\n`;
+
+/**
+ * Una corrida entera, sin red ni archivos: lo que se leyó de cada red (`reads`) o
+ * por qué no se pudo (`failures`), la línea base y la memoria de la corrida anterior
+ * (`memory`, de `parseState`) dan el análisis de cada red, el veredicto y la memoria
+ * para la siguiente. Lo usa `scripts/vigilar-red.mjs`, y por eso se prueba igual.
+ */
+export function evaluate({ names, reads, failures = {}, base = null, memory = emptyState(), daily = false, when }) {
+  const results = names.map((network) =>
+    failures[network]
+      ? { network, error: failures[network] }
+      : analyze(
+          network,
+          reads[network],
+          base?.networks?.[network] ?? null,
+          memory.levels?.[network] ?? null,
+          memory.notified?.[network] ?? null,
+        ),
+  );
+  const decision = decide(results, { daily });
+  return { results, decision, next: nextState(memory, results, when) };
+}
 
 /** La anotación de GitHub Actions: se ve arriba de la corrida, sin abrir el log. */
 export function annotation(text) {
@@ -573,21 +755,32 @@ export function formatReport({ when, results, decision }) {
     } else if (r.changes.length === 0) {
       lines.push(`  parámetros  ${r.watched} y el protocolo, sin cambios`);
     } else {
-      lines.push(`  parámetros  CAMBIARON ${r.changes.length} de ${r.watched}:`);
+      lines.push(`  parámetros  CAMBIARON ${r.changes.length} de ${r.watched}${r.alreadyNotified ? " (ya se avisó)" : ""}:`);
       for (const c of r.changes) lines.push(`              - ${describeChange(c)}`);
     }
     lines.push("");
   }
-  if (decision.code === 0) lines.push("Sin novedades: ningún parámetro cambió y ningún nivel se movió.");
+  if (decision.code === 0) {
+    const stale = results.filter((r) => r.alreadyNotified).map((r) => r.network);
+    lines.push(
+      stale.length === 0
+        ? "Sin novedades: ningún parámetro cambió y ningún nivel se movió."
+        : `Sin novedades nuevas: la línea base de ${stale.join(" y ")} sigue vieja y ya se avisó; el recordatorio diario vuelve a fallar hasta que se actualice.`,
+    );
+  }
   for (const a of decision.alerts) lines.push(`ALERTA ${a.network}: ${a.message}`);
   for (const e of decision.errors) lines.push(`SIN MIRAR ${e.network}: ${e.message}`);
-  if (decision.alerts.some((a) => a.kind === "params")) {
-    lines.push("Si el cambio es legítimo: node scripts/vigilar-red.mjs --actualizar-base [--red testnet|mainnet] y commitear la línea base.");
-  }
+  // La pista ya va dentro del aviso de parámetros; aparte, una línea por red, solo para la que sigue vieja sin avisar.
+  const hinted = new Set(decision.alerts.filter((a) => a.kind === "params" || a.kind === "stale").map((a) => a.network));
+  for (const r of results) if (r.changes?.length > 0 && !hinted.has(r.network)) lines.push(baseHint(r.network));
   return lines.join("\n");
 }
 
 const round = (n, decimals) => (n === null || n === undefined ? null : Number(n.toFixed(decimals)));
+
+/** Los cambios con todos sus campos (el texto corta a tres), cada uno con su nombre como en el aviso. */
+const labeledChanges = (changes) =>
+  changes?.map((c) => ({ ...c, fields: c.fields.map((f) => ({ ...f, label: fieldLabel(c.name, f.path) })) })) ?? changes;
 
 /** Lo mismo que `formatReport`, para una máquina: un objeto que va en una sola línea. */
 export function toJson({ when, results, decision }) {
@@ -619,7 +812,9 @@ export function toJson({ when, results, decision }) {
               redMb: r.redMb,
               hoursToRed: round(r.hoursToRed, 1),
               watched: r.watched,
-              changes: r.changes,
+              changes: labeledChanges(r.changes),
+              fingerprint: r.fingerprint,
+              alreadyNotified: r.alreadyNotified,
             },
       ]),
     ),
@@ -628,7 +823,8 @@ export function toJson({ when, results, decision }) {
 
 export const BASE_NOTE =
   "Línea base de los parámetros de costo de Soroban y del protocolo, por red. La compara scripts/vigilar-red.mjs; " +
-  "si la red cambia alguno, la corrida falla. Cuando el cambio es legítimo: node scripts/vigilar-red.mjs --actualizar-base, " +
+  "si la red cambia alguno, la primera corrida que lo ve falla y avisa, y el recordatorio diario sigue fallando mientras la base esté vieja. " +
+  "Cuando el cambio es legítimo: node scripts/vigilar-red.mjs --actualizar-base --red <red>, " +
   "y se commitea. Explicación en docs/deployments.md, Vigilancia de la red.";
 
 /** La línea base como la guarda el repo: un parámetro por línea, así el diff de git lee. */

@@ -8,7 +8,7 @@ Cómo se nota que una pieza falló y qué tocar. Subir, desplegar y firmar esper
 
 1. Probá el reemplazo: `curl -s -X POST -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"getHealth"}' <url>`. Segundo RPC (los del detector): `https://rpc.lightsail.network` o `https://rpc.ankr.com/stellar_soroban`.
 2. Cambiá `RPC_URLS.mainnet` en `src/stellar/config.ts`, `RPC` en `scripts/check-renta.mjs`, `rpcUrls` en `scripts/lib/vigilar-red.mjs` y `MAINNET_RPC` en `scripts/preflight-mainnet.mjs`. Corré `pnpm typecheck` y `pnpm test`, y subí.
-3. `RPC_LISTAS` (salto automático al segundo RPC) y `red-umbrales.json` (los números de la red, no URLs) vienen en la rama `contingencia-red`.
+3. `RPC_LISTAS` (salto automático al segundo RPC) y `red-umbrales.json` (los números de la red, no URLs) ya están en `main`.
 
 ## Pollar (Google y comisión patrocinada)
 
@@ -17,7 +17,7 @@ Cómo se nota que una pieza falló y qué tocar. Subir, desplegar y firmar esper
 - **Tope:** Max fee de la app en el panel de Pollar: 1 XLM en mainnet (100 en testnet). Pollar ofrece unas 3 veces la tarifa: pasado ≈ 0,33 XLM de sello, el patrocinio se apaga sin avisar.
 - **Saldo:** la billetera patrocinadora (su dirección, en el panel) necesita XLM de sobra: `node scripts/verificar-patrocinio.mjs --red mainnet --billetera G…`.
 - **Qué hacer:** recargala; subí el Max fee solo si el costo real lo justifica; mientras tanto, entrar con Freighter, que paga con su cuenta.
-- **Política si la red no deja sellar** (viene en `contingencia-red`): «volver a probar»; después «pagar con mi cuenta» (paga quien organiza); al final «Seguir sin sello», con confirmación y el comprobante marcado como no comprobable en la cadena.
+- **Política si la red no deja sellar** (ya está en `main`): «volver a probar»; después «pagar con mi cuenta» (paga quien organiza); al final «Seguir sin sello», con confirmación y el comprobante marcado como no comprobable en la cadena.
 
 ## Worker de enlaces (`c.tinkazo.app`)
 
@@ -46,13 +46,13 @@ stellar contract extend --wasm-hash <sha256 del .wasm> --ledgers-to-extend 20736
 
 ## Detector de la red
 
-`vigilar-red.yml` corre `scripts/vigilar-red.mjs` cada media hora; **que la corrida falle es el aviso** (correo de GitHub). A mano: `pnpm check:red`. Niveles de mainnet (objetivo 3.000 MB):
+`vigilar-red.yml` corre `scripts/vigilar-red.mjs` cada media hora; **que la corrida falle es el aviso** (correo de GitHub). Avisa una sola vez por cada cambio de parámetros o de nivel; el rojo falla en cada corrida, y la de las 12:07 UTC (`--diario`) falla también con naranja estable o con la línea base vieja. A mano: `pnpm check:red`. Niveles de mainnet (objetivo 3.000 MB):
 
 - **Amarillo, 2.000 MB:** la renta deja el piso. Mirá la pendiente y las horas hasta el rojo.
 - **Naranja, 2.500 MB:** el sello cuesta ≈ 0,5 XLM. Pedí ya que suban el objetivo (SLP y votación, de 13 a 17 días).
 - **Rojo, 2.850 MB:** quedan 13 a 19 horas. Al cruzar el objetivo la renta se multiplica y el tope de Pollar corta los sellos: avisá a quien tenga eventos y aplicá la política de Pollar.
 
-Parámetro cambiado y entendido: `node scripts/vigilar-red.mjs --actualizar-base` y commit de `scripts/vigilar-red.base.json`. Si el detector mismo calla, el latido (`HEALTHCHECK_URL`) manda un correo a las 2 horas: [deployments.md](deployments.md#vigilancia-de-la-red).
+Parámetro cambiado y entendido: `node scripts/vigilar-red.mjs --actualizar-base --red <la red que cambió>` y commit de `scripts/vigilar-red.base.json`; mientras no se actualice, las corridas pasan («línea base vieja: …» en el nombre del paso) y solo la diaria sigue fallando. Si el detector mismo calla, el latido (`HEALTHCHECK_URL`) manda un correo a las 2 horas. El camino paso a paso para cuando cambie mainnet, y el latido: [deployments.md](deployments.md#vigilancia-de-la-red).
 
 ## Vercel (el sitio)
 

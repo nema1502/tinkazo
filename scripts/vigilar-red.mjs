@@ -19,37 +19,39 @@
  * dependencias: Node 22 y `fetch`. Lo corre `.github/workflows/vigilar-red.yml`
  * cada media hora, y una vez al día con `--diario`; GitHub avisa por correo
  * cuando la corrida falla. Para que falle solo cuando hay algo nuevo que decir,
- * el nivel de cada red se guarda entre corridas (`--anterior` y `--guardar`; en
- * GitHub, en la caché de Actions). La explicación está en docs/deployments.md,
+ * lo que ya se avisó se guarda entre corridas (`--anterior` y `--guardar`; en
+ * GitHub, en la caché de Actions): el nivel de cada red y la huella de los
+ * parámetros que ya se avisaron. La explicación está en docs/deployments.md,
  * «Vigilancia de la red».
  *
  * Uso:
  *   node scripts/vigilar-red.mjs                       # las dos redes, sin memoria
  *   node scripts/vigilar-red.mjs --red mainnet         # una sola
  *   node scripts/vigilar-red.mjs --json                # lo mismo, en una línea de JSON
- *   node scripts/vigilar-red.mjs --anterior N.json --guardar N.json   # con el nivel de la corrida anterior
- *   node scripts/vigilar-red.mjs --diario              # el recordatorio: falla también con naranja estable
- *   node scripts/vigilar-red.mjs --actualizar-base     # la red cambió y el cambio es legítimo
+ *   node scripts/vigilar-red.mjs --anterior N.json --guardar N.json   # con lo que ya se avisó
+ *   node scripts/vigilar-red.mjs --diario              # el recordatorio: falla también con naranja estable o con la base vieja
+ *   node scripts/vigilar-red.mjs --actualizar-base --red mainnet   # la red cambió y el cambio es legítimo
  *
- * Sale con 0 si no hay novedades; con 1 si cambió un parámetro, si el nivel de
- * una red se movió respecto de la corrida anterior (sin memoria, cualquier nivel
- * cuenta como movimiento), si una red está en rojo o si, con `--diario`, está en
- * naranja; con 2 si no se pudo mirar (sin RPC, o sin línea base).
+ * Sale con 0 si no hay novedades; con 1 si cambió un parámetro y es la primera
+ * vez que se ve (con la base todavía vieja, las corridas que siguen pasan y
+ * `--diario` la recuerda), si el nivel de una red se movió respecto de la corrida
+ * anterior (sin memoria, cualquier nivel y cualquier cambio cuentan como nuevos),
+ * si una red está en rojo o si, con `--diario`, está en naranja; con 2 si no se
+ * pudo mirar (sin RPC, o sin línea base).
  */
 
 import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
   NETWORKS,
-  analyze,
   annotation,
   buildBase,
-  decide,
   describeChange,
   diffParams,
+  emptyState,
+  evaluate,
   formatReport,
   makeCaller,
-  nextState,
   parseState,
   readNetwork,
   serializeBase,
@@ -68,11 +70,14 @@ const HELP = `Avisa cuando la red de Stellar cambia lo que cuesta guardar datos 
 
   --red NOMBRE         Mira solo esa red (por defecto, las dos).
   --json               Imprime el resultado en una sola línea de JSON.
-  --anterior ARCHIVO   Lee de ahí el nivel de cada red en la corrida anterior (si no
-                       existe, es «normal»). Sin esto, cualquier nivel cuenta como nuevo.
-  --guardar ARCHIVO    Escribe ahí el nivel de esta corrida, falle o no la corrida.
+  --anterior ARCHIVO   Lee de ahí lo que ya se avisó: el nivel de cada red en la corrida
+                       anterior y la huella de los parámetros que ya se avisaron (si no
+                       existe, es «normal» y nada se avisó). Sin esto, cualquier nivel y
+                       cualquier cambio de parámetros cuentan como nuevos.
+  --guardar ARCHIVO    Escribe ahí lo mismo de esta corrida, falle o no la corrida.
   --diario             El recordatorio de todos los días: falla también si una red
-                       sigue en naranja (en rojo falla siempre).
+                       sigue en naranja o si la línea base sigue vieja (en rojo falla
+                       siempre).
   --actualizar-base    Guarda como línea base lo que la red dice hoy. Usarlo solo
                        cuando un cambio es legítimo; después hay que commitear
                        scripts/vigilar-red.base.json.
@@ -89,13 +94,13 @@ async function readBase() {
   }
 }
 
-/** El nivel de la corrida anterior; sin archivo (la primera vez, o la caché vacía) es «normal» en todas. */
+/** Lo que ya se avisó en la corrida anterior; sin archivo (la primera vez, o la caché vacía) es «normal» en todas y sin nada avisado. */
 async function readState(path) {
   try {
     return parseState(await readFile(path, "utf8"));
   } catch (e) {
-    if (e.code !== "ENOENT") console.error(`No se pudo leer el nivel anterior (${e.message}); se toma como normal.`);
-    return {};
+    if (e.code !== "ENOENT") console.error(`No se pudo leer lo avisado antes (${e.message}); se toma como si nada se hubiera avisado.`);
+    return emptyState();
   }
 }
 
@@ -159,19 +164,14 @@ async function main() {
   if (args.includes("--actualizar-base")) return updateBase({ names, reads, failures, previous: base, when });
 
   const previousPath = option(args, "--anterior");
-  const previous = previousPath ? await readState(previousPath) : {};
-  const results = names.map((network) =>
-    failures[network]
-      ? { network, error: failures[network] }
-      : analyze(network, reads[network], base?.networks?.[network] ?? null, previous[network] ?? null),
-  );
-  const decision = decide(results, { daily: args.includes("--diario") });
+  const memory = previousPath ? await readState(previousPath) : emptyState();
+  const { results, decision, next } = evaluate({ names, reads, failures, base, memory, daily: args.includes("--diario"), when });
 
-  // El nivel se guarda aunque la corrida falle: si no, el aviso se repetiría en cada corrida.
+  // Lo avisado se guarda aunque la corrida falle: si no, el aviso se repetiría en cada corrida.
   const savePath = option(args, "--guardar");
   if (savePath) {
     await mkdir(dirname(savePath), { recursive: true });
-    await writeFile(savePath, serializeState(nextState(previous, results, when)));
+    await writeFile(savePath, serializeState(next));
   }
   // En GitHub, el resumen queda como salida del paso para ponerlo en el nombre de otro.
   if (process.env.GITHUB_OUTPUT) {
