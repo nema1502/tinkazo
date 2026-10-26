@@ -330,6 +330,17 @@ describe("codigoTecnico: el detalle para copiar", () => {
     expect(c).toBe("Account not found: G***");
   });
 
+  it("tapa también las direcciones multiplexadas, de 69 caracteres (M… de cuenta y W… de contrato, CAP-84)", () => {
+    const w = "WABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCD";
+    const m = "MXYZ234567ABCDEFGHIJKLMNOPQRSTUVWXYZ234567ABCDEFGHIJKLMNOPQRSTUVWXYZ2";
+    expect(w).toHaveLength(69);
+    expect(m).toHaveLength(69);
+    expect(codigoTecnico(new Error(`Invalid contract address: ${w}`))).toBe("Invalid contract address: W***");
+    expect(codigoTecnico(new Error(`Account not found: ${m}`))).toBe("Account not found: M***");
+    // Y las de 56 siguen tapadas, junto a una de 69 en el mismo mensaje.
+    expect(codigoTecnico(new Error(`${w} paga a GCZJUPZIUVQVS67RJXYGMRZHV7RIZD4OAWJPQ4YA2UNCQNSVUEDHZIHY`))).toBe("W*** paga a G***");
+  });
+
   it("dice el tipo, el código y la causa", () => {
     expect(codigoTecnico(http(503))).toBe("AxiosError · Request failed with status code 503 · ERR_BAD_RESPONSE · HTTP 503");
     expect(codigoTecnico(new TypeError("Load failed"))).toBe("TypeError · Load failed");

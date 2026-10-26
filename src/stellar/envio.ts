@@ -22,8 +22,11 @@ import { roundTime } from "../protocol/quicknet";
  * - **Venció se sabe por la hora de la red, no por la del navegador**:
  *   `getTransaction` dice la hora de cierre del último ledger, y si pasó el
  *   `maxTime` de la transacción sin que apareciera, ya no puede aparecer.
- * - Para un sello hay además una ventana que pone el contrato: no acepta una ronda
- *   que nazca a menos de 30 segundos del ledger. Pasado `round_time - 30` por la
+ * - Para un sello hay además una ventana que pone el contrato: lo acepta mientras
+ *   `now <= round_time - 30` (no toma una ronda que nazca a menos de 30 segundos
+ *   del ledger). Un ledger que cierra justo en `round_time - 30` todavía lo acepta,
+ *   y desde el Protocolo 30 (CAP-88) el ledger que sigue puede cerrar en el mismo
+ *   segundo. Recién con un ledger que cierra después de `round_time - 30`, por la
  *   hora de la red, ese sello ya no puede entrar, venga de donde venga.
  * - Si la red no contesta, no se adivina: queda "no se sabe", y el próximo
  *   intento empieza por averiguarlo.
@@ -267,9 +270,15 @@ export type Resolucion =
  * - Si está en el contrato (la misma cuenta, la misma lista, la misma ronda),
  *   entró: ese es el sorteo.
  * - Si su transacción falló adentro de un ledger, no entró.
- * - Si la red ya cerró un ledger a la hora `round_time - 30` o después y el
+ * - Si la red ya cerró un ledger a una hora posterior a `round_time - 30` y el
  *   contrato, leído en ese ledger o en uno posterior, no lo tiene, no entró ni
- *   puede entrar: cualquier ledger que venga lo rechaza (`RoundTooSoon`).
+ *   puede entrar: cualquier ledger que venga lo rechaza (`RoundTooSoon`). Posterior
+ *   de verdad (`>`, no `>=`): el contrato acepta mientras `now <= round_time - 30`
+ *   y, desde el Protocolo 30 (CAP-88), dos ledgers seguidos pueden cerrar en el
+ *   mismo segundo. Tras un ledger que cierra justo en `round_time - 30` sin el
+ *   sello puede venir otro, del mismo segundo, que sí lo incluye: darlo por
+ *   perdido ahí diría "no entró" con el sello vivo y dejaría sellar de nuevo.
+ *   Cuesta, como mucho, un ledger más de espera.
  * - Si no, todavía puede entrar: se espera.
  * - Sin respuesta de la red durante `sinRedMs` (20 s), no se sabe.
  */
@@ -278,6 +287,7 @@ export async function resolverSello(intento: IntentoDeSello, f: FuentesDelSello)
   const dormir = f.dormir ?? dormirDeVerdad;
   const sinRedMs = f.sinRedMs ?? 20_000;
   const topeTotal = f.topeTotalMs ?? 180_000;
+  // La última hora de cierre en que el contrato todavía acepta el sello: `now <= round_time - 30`.
   const limite = roundTime(intento.round) - MARGEN_DEL_CONTRATO_S;
   const inicio = ahora();
   let ultimoContacto = inicio;
@@ -303,7 +313,8 @@ export async function resolverSello(intento: IntentoDeSello, f: FuentesDelSello)
       const s = await f.buscarSello(intento);
       ultimoContacto = ahora();
       if (s.id) return { estado: "entro", raffleId: s.id, ...(intento.hash && entroPorHash ? { hash: intento.hash } : {}) };
-      if (!entroPorHash && ledger.cierre >= limite && s.secuencia >= ledger.secuencia) return { estado: "no-entro" };
+      // Estricto: con `cierre == limite` el contrato todavía acepta, y otro ledger del mismo segundo puede traerlo.
+      if (!entroPorHash && ledger.cierre > limite && s.secuencia >= ledger.secuencia) return { estado: "no-entro" };
     } catch (e) {
       // Un corte, o una respuesta que no se entiende: se vuelve a preguntar hasta `sinRedMs`.
       ultimoError = e;

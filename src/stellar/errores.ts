@@ -300,8 +300,13 @@ export const esCuentaInexistente = (e: unknown): boolean => !esIncierto(e) && SI
 
 /* ------------------------------------------------------- el detalle técnico */
 
-/** Una dirección de cuenta (G…) o de contrato (C…) de Stellar. */
-const DIRECCION = /\b[GCM][A-Z2-7]{55}\b/g;
+/**
+ * Una dirección de Stellar: de cuenta (G…) o de contrato (C…), de 56 caracteres, o
+ * multiplexada (M… de cuenta, W… de contrato; CAP-84), de 69. Hoy no aparece ninguna
+ * multiplexada (los organizadores son G y los contratos C), pero si un error trae una
+ * también se tapa.
+ */
+const DIRECCION = /\b(?:[GC][A-Z2-7]{55}|[MW][A-Z2-7]{68})\b/g;
 
 /**
  * El código técnico de un error, para "Ver detalle": una línea que alguien puede

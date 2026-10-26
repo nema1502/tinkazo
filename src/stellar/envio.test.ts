@@ -192,6 +192,35 @@ const intento = (r: ReturnType<typeof reloj>, segundos = 45): IntentoDeSello => 
   return { organizer: ORG, listHash: "ab".repeat(32), round: targetRound(ahora, segundos), count: 5, numWinners: 1, meta: "premio", desde: ahora };
 };
 
+/**
+ * Una red de mentira con los ledgers escritos a mano, uno por uno: su hora de cierre
+ * en segundos y si el sello ya está adentro. Desde el Protocolo 30 (CAP-88) dos
+ * ledgers seguidos pueden cerrar en el mismo segundo, cosa que `redDeMentira` (un
+ * ledger cada 5 s) no puede mostrar. Aparece un ledger nuevo cada vez que
+ * `resolverSello` espera; si se acaban, se repite el último.
+ */
+function ledgersAMano(r: ReturnType<typeof reloj>, ledgers: { cierre: number; conSello?: boolean }[]) {
+  let k = 0;
+  /** Las horas de cierre que `resolverSello` fue viendo, una por vuelta. */
+  const cierres: number[] = [];
+  const actual = () => ledgers[Math.min(k, ledgers.length - 1)]!;
+  return {
+    cierres,
+    fuentes: {
+      ultimoLedger: async () => {
+        cierres.push(actual().cierre);
+        return { secuencia: 5_000_000 + k, cierre: actual().cierre };
+      },
+      buscarSello: async () => ({ ...(actual().conSello ? { id: "777" } : {}), secuencia: 5_000_000 + k }),
+      ahora: r.ahora,
+      dormir: async (ms: number) => {
+        await r.dormir(ms);
+        k++;
+      },
+    },
+  };
+}
+
 describe("resolverSello: el sello no se duplica nunca", () => {
   it("el envío anterior entró: lo encuentra en el contrato y ese es el sorteo", async () => {
     const r = reloj();
@@ -311,5 +340,30 @@ describe("resolverSello: el sello no se duplica nunca", () => {
     const id = red.sellar(i);
     const res = await resolverSello(i, { ...red.fuentes, consultarHash: async () => ({ status: "NOT_FOUND" }) });
     expect(res).toEqual({ estado: "entro", raffleId: id });
+  });
+});
+
+describe("resolverSello con el Protocolo 30 (CAP-88): dos ledgers pueden cerrar en el mismo segundo", () => {
+  it("un ledger cierra justo en round_time - 30 sin el sello y el siguiente, del mismo segundo, lo trae: entró, nunca 'no entró'", async () => {
+    const r = reloj();
+    const i = intento(r);
+    const limite = roundTime(i.round) - 30;
+    // El contrato acepta mientras `now <= round_time - 30`: los dos ledgers del segundo `limite` todavía lo aceptan.
+    const red = ledgersAMano(r, [{ cierre: limite - 5 }, { cierre: limite }, { cierre: limite, conSello: true }]);
+    const res = await resolverSello(i, red.fuentes);
+    expect(res).toEqual({ estado: "entro", raffleId: "777" });
+    // Vio el ledger del límite sin el sello y no se apuró: esperó al que venía en el mismo segundo.
+    expect(red.cierres).toEqual([limite - 5, limite, limite]);
+  });
+
+  it("un ledger cierra un segundo después del límite sin el sello: ahí sí, no entró ni puede entrar", async () => {
+    const r = reloj();
+    const i = intento(r);
+    const limite = roundTime(i.round) - 30;
+    const red = ledgersAMano(r, [{ cierre: limite - 4 }, { cierre: limite }, { cierre: limite + 1 }]);
+    const res = await resolverSello(i, red.fuentes);
+    expect(res).toEqual({ estado: "no-entro" });
+    // Con el ledger del límite todavía esperó; lo dio por perdido con el que ya está fuera de la ventana del contrato.
+    expect(red.cierres).toEqual([limite - 4, limite, limite + 1]);
   });
 });
