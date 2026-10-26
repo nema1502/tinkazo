@@ -4,7 +4,7 @@ import { paceFactor, params, setGameLength, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, note } from "../../sound";
 import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
-import { CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
+import { medidasContador, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 
 /**
  * Luz roja, luz verde.
@@ -538,7 +538,7 @@ export async function luzPixi(names: string[], winners: readonly number[], beaco
     lamp = new Graphics();
     chips = new Container();
     counterBox = new Graphics();
-    counter = S.text("", { fontFamily: MONO, fontSize: 14 * k, fontWeight: "700", fill: S.dark ? CREAM : INK });
+    counter = S.text("", { fontFamily: MONO, fontSize: medidasContador(k).fuente, fontWeight: "700", fill: S.dark ? CREAM : INK });
     counter.anchor.set(0.5);
     const box = new Container();
     box.addChild(counterBox, counter);
@@ -798,7 +798,7 @@ export async function luzPixi(names: string[], winners: readonly number[], beaco
       for (const it of pila) it.chip.position.set(Math.max(10 * k, Math.min(it.x, W - it.chip.width - 10 * k)), it.y);
     }
     counter.text = `${t("cLuzLeft")}  ${live.length} / ${n}`;
-    const bw = counter.width + 40 * k, bh = 40 * k;
+    const bw = counter.width + medidasContador(k).aire, bh = medidasContador(k).alto;
     counter.position.set(bw / 2, bh / 2);
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 3 * k, color: INK });
     if (light === "crown") crownUI.at(tAll - T_CROWN);

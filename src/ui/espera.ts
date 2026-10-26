@@ -1,6 +1,8 @@
 import { esc } from "../dom";
 import { T, getLang, t } from "../i18n";
-import { app } from "../state";
+import { app, avatar } from "../state";
+import { beep, note } from "../sound";
+import { enEnsayo } from "../ensayo-modo";
 
 /**
  * La espera en grande: los segundos entre sellar y poder sortear, puestos en
@@ -76,7 +78,8 @@ function cintas(names: string[]): string {
     if (!fila.length) continue;
     const una = Array.from({ length: vueltas(fila.length) }, () => fila).flat();
     // Dos copias seguidas: la cinta corre media vuelta y empieza de nuevo sin salto.
-    const chips = [...una, ...una].map((n) => `<span>${esc(n)}</span>`).join("");
+    // Cada nombre con su cara: la sala se busca en la cinta (el dibujo es el de toda la herramienta).
+    const chips = [...una, ...una].map((n) => `<span><img src="${avatar(n, 56)}" alt="" />${esc(n)}</span>`).join("");
     const dur = Math.max(22, una.length * 2.2);
     html += `<div class="espera-cinta${f % 2 ? " al-reves" : ""}" style="--dur:${dur.toFixed(1)}s" aria-hidden="true">${chips}</div>`;
   }
@@ -121,6 +124,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     `<span class="sticker">${esc(t("espSticker"))}</span>` +
     `<button class="ghost" type="button" data-volver>${esc(t("espVolver"))}</button>` +
     `</div>` +
+    // En el ensayo también se ve que no se graba, como en el estadio (ensayo.ts).
+    (enEnsayo() ? `<p class="espera-ensayo">${esc(t("ensEstadio"))}</p>` : "") +
     (f.prize ? `<p class="espera-premio">${esc(t("cortinaSe"))} <b>${esc(f.prize)}</b></p>` : "") +
     `<div class="espera-reloj mono">0:00</div>` +
     // Lo que pasa cuando nace el número: la línea de la cortina, la acción grande o el error.
@@ -128,6 +133,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     `<p class="espera-t">${esc(t("espFaltan"))}</p>` +
     `<div class="espera-nombres">${cintas(f.names)}</div>` +
     `<p class="espera-pie">${esc(L_.espPie(f.names.length))}</p>` +
+    // Para que la sala lo lea y quien organiza lo repita (diseño del onboarding, 22 de octubre de 2026).
+    `<p class="espera-nadie">${esc(t("espNadie"))}</p>` +
     // El número del sorteo, para las fotos de la sala: si después aparece otro sello, todos tienen el del bueno.
     (f.raffleId !== undefined ? `<p class="espera-id mono">${esc(t("waitId").replace("{n}", String(f.raffleId)))}</p>` : "");
   document.body.appendChild(back);
@@ -139,6 +146,7 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   const volver = back.querySelector<HTMLButtonElement>("[data-volver]");
   let fase: Fase = "cuenta";
   let timer = 0;
+  let ultimoTic = -1;
 
   /**
    * Cierra la espera. `alShow`: el show ya la tapa y se queda con la pantalla
@@ -243,6 +251,11 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     if (fase !== "cuenta" || !reloj) return;
     const s = Math.max(0, segundos());
     reloj.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+    // Los últimos cinco segundos suben de tono, uno por uno: el pre-show sube hasta el show.
+    if (s <= 5 && s !== ultimoTic) {
+      ultimoTic = s;
+      beep(note(12 - s * 2), 0.18, "triangle", 0.05);
+    }
   };
   tick();
   timer = window.setInterval(tick, 250);

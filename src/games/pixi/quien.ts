@@ -5,7 +5,7 @@ import { beep, fanfare, note } from "../../sound";
 import { musicCue } from "../../music";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { writeStory } from "../drama";
-import { CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
+import { CONTADOR, medidasContador, CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
 import { planRounds, type Question, type Round } from "./quien-plan";
 
 /**
@@ -389,7 +389,7 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
   bigStamp.visible = false;
   S.hud.addChild(bigStamp);
   const counterBox = new Graphics();
-  const counter = S.text("", { fontFamily: MONO, fontSize: 14, fontWeight: "700", fill: CREAM });
+  const counter = S.text("", { fontFamily: MONO, fontSize: CONTADOR.fuente, fontWeight: "700", fill: CREAM });
   counter.anchor.set(0.5);
   const counterG = new Container();
   counterG.addChild(counterBox, counter);
@@ -455,7 +455,7 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
       cardLayer.addChild(root);
       return { root, front, back: backC, face, label, x: g.w / 2, y: (g.top + g.bottom) / 2, s: 0 };
     });
-    counter.style.fontSize = 14 * k;
+    counter.style.fontSize = medidasContador(k).fuente;
     bigStampText.style.fontSize = 72 * k;
     lastLayout = "";
     from.clear();
@@ -769,7 +769,7 @@ export async function quienPixi(names: string[], winners: readonly number[], bea
 
     // El contador: cuántos siguen de pie.
     counter.text = `${t("cQuiLeft")}  ${alive(ri, tAll).length} / ${r.pool.length}`;
-    const bw = counter.width + 40 * k, bh = 40 * k;
+    const bw = counter.width + medidasContador(k).aire, bh = medidasContador(k).alto;
     counter.position.set(bw / 2, bh / 2);
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(0x221a33).stroke({ width: 3 * k, color: INK });
     counterG.position.set(22 * k, S.top() + 10 * k);

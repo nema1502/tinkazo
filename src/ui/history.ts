@@ -368,14 +368,14 @@ let enlazadoPendiente = false;
  *
  * Es un aviso arriba de la lista, con "Retomarlo" como acción secundaria: en el
  * paso 1 la principal sigue siendo sellar. Nunca se retoma solo. Ni en la demo,
- * ni con un sello en pantalla.
+ * ni en el ensayo, ni con un sello en pantalla.
  */
 function pintarPendiente(list: Entry[]): void {
   const caja = document.getElementById("pendiente");
   if (!caja) return;
   const ahora = Date.now() / 1000;
   const e =
-    hayUnSello() || document.body.dataset.demo === "1"
+    hayUnSello() || document.body.dataset.demo === "1" || document.body.dataset.ensayo === "1"
       ? undefined
       : list.find((x) => x.names?.length && !x.winners?.length && !x.winnerIdx?.length && !x.drawTx && ahora - x.sealedAt < PENDIENTE_S);
   pendiente = e ? (e as Entry & { names: string[] }) : null;

@@ -13,6 +13,11 @@
  *   DELETE /v1/<id>   Authorization: Bearer <ADMIN_TOKEN> → 204 (Tinkazo, a pedido)
  *   GET    /<id>                                        → 302 a tinkazo.app/c/<id>
  *
+ * Y el contador anónimo del embudo (ver `conteo.ts` y README.md):
+ *
+ *   POST   /v1/contar    {"e", "p"?, "ref"?}, hasta 512 bytes → 204
+ *   GET    /v1/conteos?desde=AAAA-MM-DD&hasta=AAAA-MM-DD      → 200 [{dia, e, p, ref?, n}]
+ *
  * Un enlace no vence: queda para que el sorteo se pueda volver a comprobar. La
  * interfaz no ofrece borrarlo (cortaba la verificación de todos los que ya lo
  * tenían); si alguien necesita que se borre, por ejemplo porque alguien de la
@@ -25,9 +30,12 @@
  * cupos.
  */
 import { DurableObject } from "cloudflare:workers";
+import { type ConteoValido, type Fila, MAX_CUERPO, claveDeProps, claveDeRef, diaUtc, filaDe, grupoDeIp, rangoDeDias, validarConteo } from "./conteo";
 
 export interface Env {
   ALMACEN: DurableObjectNamespace<Almacen>;
+  /** El contador del embudo: un solo objeto, "conteos". */
+  CONTADOR: DurableObjectNamespace<Contador>;
   /**
    * El permiso de Tinkazo para borrar cualquier enlace, a pedido. Es un secreto
    * del Worker (`npx wrangler@4 secret put ADMIN_TOKEN`). Si no está cargado, o
@@ -179,6 +187,207 @@ export class Almacen extends DurableObject<Env> {
   }
 }
 
+/* ------------------------------------------------------------- el contador */
+
+/** Conteos por IP (en IPv6, por /64) y por hora. En memoria: la IP no se guarda, y si el objeto se duerme vuelven a cero. */
+const CONTEOS_POR_IP_POR_HORA = 1_000;
+/** Conteos por día en total. */
+const CONTEOS_POR_DIA = 20_000;
+/** Combinaciones distintas por día (evento, propiedades y sorteo): con el día lleno, solo suman las que ya existen. */
+const FILAS_POR_DIA = 2_000;
+/** Consultas por IP (en IPv6, por /64) y por hora, también en memoria. */
+const CONSULTAS_POR_IP_POR_HORA = 60;
+/** Consultas por día que leen la base: las repetidas salen de la memoria. Cuida las filas leídas por día, que comparten los enlaces. */
+const CONSULTAS_POR_DIA = 500;
+/** Filas por consulta, como mucho. */
+const FILAS_POR_CONSULTA = 5_000;
+/** Lo que vive una consulta en la memoria, como el `max-age` de la respuesta. */
+const CONSULTA_VIVE_MS = 300_000;
+/** Direcciones distintas que se recuerdan por hora; con el mapa lleno, una nueva espera (no se vacía: vaciarlo se podía forzar). */
+const DIRECCIONES = 20_000;
+const HORA_MS = 3_600_000;
+
+type Cupos = Map<string, { n: number; vence: number }>;
+
+/**
+ * Cuenta una vez más para la dirección en esta hora, o dice que no. Con el
+ * mapa lleno, primero se van las horas vencidas; si sigue lleno, una dirección
+ * nueva no entra hasta que se libere lugar.
+ */
+function dentroDelCupo(cupos: Cupos, ip: string, max: number, ahora: number): boolean {
+  const clave = grupoDeIp(ip);
+  const c = cupos.get(clave);
+  if (c && c.vence > ahora) {
+    if (c.n >= max) return false;
+    c.n += 1;
+    return true;
+  }
+  if (!c && cupos.size >= DIRECCIONES) {
+    for (const [k, v] of cupos) if (v.vence <= ahora) cupos.delete(k);
+    if (cupos.size >= DIRECCIONES) return false;
+  }
+  cupos.set(clave, { n: 1, vence: ahora + HORA_MS });
+  return true;
+}
+
+export type Suma = "ok" | "cupo-ip" | "cupo-dia" | "cupo-filas";
+export type Consulta = { ok: true; filas: Fila[] } | { ok: false; motivo: "cupo-ip" | "cupo-dia" | "muchas" };
+
+interface Hoy {
+  dia: string;
+  /** Conteos del día. */
+  total: number;
+  /** Las combinaciones del día que ya existen, para el tope de filas sin leer la base en cada conteo. */
+  claves: Set<string>;
+  consultas: number;
+}
+
+/**
+ * Las sumas por día del embudo, en un solo objeto ("conteos"). Guarda
+ * (día, evento, propiedades, sorteo) → cuántas veces: nunca un evento suelto,
+ * ni la hora, ni la IP, ni nada que diga quién fue.
+ *
+ * Cada conteo se escribe al llegar: una fila escrita por conteo, con el tope de
+ * 20.000 por día (una quinta parte de las 100.000 filas escritas por día de la
+ * cuenta, que comparten los enlaces). Juntarlos en memoria y escribir una vez
+ * por minuto (lo que sugería §4.8) se probó el 22-oct y se descartó: un objeto
+ * quieto se apaga antes de su alarma y lo que tenía en memoria se pierde sin
+ * aviso, justo cuando hay poco movimiento.
+ */
+export class Contador extends DurableObject<Env> {
+  private porIp: Cupos = new Map();
+  private consultasPorIp: Cupos = new Map();
+  private hoy: Hoy | null = null;
+  private recientes = new Map<string, { vence: number; filas: Fila[] }>();
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    ctx.storage.sql.exec(
+      "CREATE TABLE IF NOT EXISTS conteos (dia TEXT NOT NULL, e TEXT NOT NULL, p TEXT NOT NULL, ref TEXT NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (dia, e, p, ref))",
+    );
+  }
+
+  /** Lo de hoy. Se rehace al cambiar el día o al despertar, desde la base. */
+  private delDia(ahora: number): Hoy {
+    const dia = diaUtc(ahora);
+    if (this.hoy?.dia !== dia) {
+      const filas = this.ctx.storage.sql
+        .exec<{ e: string; p: string; ref: string; n: number }>("SELECT e, p, ref, n FROM conteos WHERE dia = ?", dia)
+        .toArray();
+      this.hoy = {
+        dia,
+        total: filas.reduce((s, f) => s + f.n, 0),
+        claves: new Set(filas.map((f) => `${f.e}\u0000${f.p}\u0000${f.ref}`)),
+        consultas: 0,
+      };
+    }
+    return this.hoy;
+  }
+
+  /** Suma uno a lo de hoy, o dice qué tope se pasó. Sin esperas en el medio: dos conteos no se pisan. */
+  async sumar(c: ConteoValido, ip: string): Promise<Suma> {
+    const ahora = Date.now();
+    if (!dentroDelCupo(this.porIp, ip, CONTEOS_POR_IP_POR_HORA, ahora)) return "cupo-ip";
+    const hoy = this.delDia(ahora);
+    if (hoy.total >= CONTEOS_POR_DIA) return "cupo-dia";
+    const p = claveDeProps(c.p);
+    const ref = claveDeRef(c.ref);
+    const combinacion = `${c.e}\u0000${p}\u0000${ref}`;
+    if (!hoy.claves.has(combinacion)) {
+      if (hoy.claves.size >= FILAS_POR_DIA) return "cupo-filas";
+      hoy.claves.add(combinacion);
+    }
+    this.ctx.storage.sql.exec(
+      "INSERT INTO conteos (dia, e, p, ref, n) VALUES (?, ?, ?, ?, 1) ON CONFLICT (dia, e, p, ref) DO UPDATE SET n = n + 1",
+      hoy.dia,
+      c.e,
+      p,
+      ref,
+    );
+    hoy.total += 1;
+    return "ok";
+  }
+
+  /** Las sumas de `desde` a `hasta`, inclusive, en orden. */
+  async leer(desde: string, hasta: string, ip: string): Promise<Consulta> {
+    const ahora = Date.now();
+    if (!dentroDelCupo(this.consultasPorIp, ip, CONSULTAS_POR_IP_POR_HORA, ahora)) return { ok: false, motivo: "cupo-ip" };
+    const clave = `${desde}/${hasta}`;
+    const guardada = this.recientes.get(clave);
+    if (guardada && guardada.vence > ahora) return { ok: true, filas: guardada.filas };
+    const hoy = this.delDia(ahora);
+    if (hoy.consultas >= CONSULTAS_POR_DIA) return { ok: false, motivo: "cupo-dia" };
+    hoy.consultas += 1;
+    const filas = this.ctx.storage.sql
+      .exec<{ dia: string; e: string; p: string; ref: string; n: number }>(
+        "SELECT dia, e, p, ref, n FROM conteos WHERE dia >= ? AND dia <= ? ORDER BY dia, e, p, ref LIMIT ?",
+        desde,
+        hasta,
+        FILAS_POR_CONSULTA + 1,
+      )
+      .toArray();
+    if (filas.length > FILAS_POR_CONSULTA) return { ok: false, motivo: "muchas" };
+    const publicadas = filas.map(filaDe);
+    if (this.recientes.size >= 50) this.recientes.clear();
+    this.recientes.set(clave, { vence: ahora + CONSULTA_VIVE_MS, filas: publicadas });
+    return { ok: true, filas: publicadas };
+  }
+}
+
+/** Desde dónde se cuenta: solo el sitio. El sitio tampoco cuenta desde otro lado (`src/contar.ts`). */
+function origenDelSitio(origen: string | null): boolean {
+  return origen === SITIO || origen === "https://www.tinkazo.app";
+}
+
+/**
+ * `POST /v1/contar`. El sitio lo manda con `navigator.sendBeacon` y un cuerpo
+ * de texto: sin consulta previa (CORS) y sin esperar la respuesta. Lo que no
+ * está en la lista cerrada se rechaza entero.
+ */
+async function recibirConteo(req: Request, env: Env, origen: string | null): Promise<Response> {
+  const h = cors(origenDelSitio(origen) ? origen : null, "POST, OPTIONS");
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: h });
+  if (req.method !== "POST") return json({ error: "metodo" }, 405, { ...h, Allow: "POST, OPTIONS" });
+  if (!origenDelSitio(origen)) return json({ error: "origen" }, 403, h);
+  const largo = Number(req.headers.get("Content-Length") ?? "NaN");
+  if (!Number.isFinite(largo)) return json({ error: "largo" }, 411, h);
+  if (largo <= 0 || largo > MAX_CUERPO) return json({ error: "tamaño" }, 413, h);
+  const bytes = await req.arrayBuffer();
+  if (bytes.byteLength === 0 || bytes.byteLength > MAX_CUERPO) return json({ error: "tamaño" }, 413, h);
+  let cuerpo: unknown;
+  try {
+    cuerpo = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } catch {
+    return json({ error: "json" }, 400, h);
+  }
+  const v = validarConteo(cuerpo);
+  if (!v.ok) return json({ error: v.motivo }, 400, h);
+  const ip = req.headers.get("CF-Connecting-IP") ?? "sin-ip";
+  const r = await env.CONTADOR.get(env.CONTADOR.idFromName("conteos")).sumar(v.conteo, ip);
+  if (r !== "ok") return json({ error: r }, 429, { ...h, "Retry-After": r === "cupo-ip" ? "3600" : "86400" });
+  return new Response(null, { status: 204, headers: h });
+}
+
+/** `GET /v1/conteos`: las sumas por día, crudas y públicas, para el tablero y el script de métricas. */
+async function publicarConteos(req: Request, env: Env, url: URL): Promise<Response> {
+  const h: Record<string, string> = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+  };
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: h });
+  if (req.method !== "GET") return json({ error: "metodo" }, 405, { ...h, Allow: "GET, OPTIONS" });
+  const rango = rangoDeDias(url.searchParams.get("desde"), url.searchParams.get("hasta"), Date.now());
+  if (!rango) return json({ error: "rango" }, 400, h);
+  const ip = req.headers.get("CF-Connecting-IP") ?? "sin-ip";
+  const r = await env.CONTADOR.get(env.CONTADOR.idFromName("conteos")).leer(rango.desde, rango.hasta, ip);
+  if (!r.ok) {
+    if (r.motivo === "muchas") return json({ error: "muchas" }, 413, h);
+    return json({ error: r.motivo }, 429, { ...h, "Retry-After": r.motivo === "cupo-ip" ? "3600" : "86400" });
+  }
+  return json(r.filas, 200, { ...h, "Cache-Control": "public, max-age=300" });
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url);
@@ -186,6 +395,10 @@ export default {
     const partes = url.pathname.split("/").filter(Boolean);
     /** El objeto que guarda un id: uno por primer carácter. */
     const de = (id: string) => env.ALMACEN.get(env.ALMACEN.idFromName(`s-${id[0]}`));
+
+    // El contador: sus nombres no tienen 8 caracteres, así que no se cruzan con un enlace.
+    if (partes[0] === "v1" && partes.length === 2 && partes[1] === "contar") return recibirConteo(req, env, origen);
+    if (partes[0] === "v1" && partes.length === 2 && partes[1] === "conteos") return publicarConteos(req, env, url);
 
     if (partes[0] === "v1") {
       const id = partes[1];

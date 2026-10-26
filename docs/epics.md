@@ -1209,6 +1209,28 @@ Quedan para un contrato v2, en otra dirección (en mainnet va este mismo, sin ca
 - la ronda que pone el contrato;
 - la lista ordenada en el protocolo v3.
 
+### Historia 12.5: El primer sorteo sin trabas, y "¿Cómo se usa?" siempre a mano: hecho (rama c/onboarding)
+
+Como organizador que entra por primera vez, quizá con el celular y en un evento ruidoso,
+quiero entrar, pegar mi lista y sortear sin dudar qué tocar, y poder volver a ver cómo se usa,
+para hacer mi primer sorteo rápido y sin miedo de grabar algo por error.
+
+Resultado (2026-10-22): el diseño salió de tres propuestas y dos jueces (fase 1 de la tarea, en las notas de trabajo); la regla y lo que mide cada auditor, en [ux.md](ux.md), "El primer sorteo y el tutorial".
+
+Criterios de aceptación:
+- **Dado** que llego a la portada sin cuenta, **cuando** toco "Entrar con Google y sortear", **entonces** voy directo a Google (sin la ventana de cuatro caminos) y al volver estoy en la herramienta. Sin Pollar o desde el navegador de una app, se abre la ventana, con el correo primero en el segundo caso. "Otras formas de entrar" abre la ventana de siempre.
+- **Dado** que abro la ventana de ingreso, **entonces** Google está primero y grande, el correo después, y la billetera y la cuenta de prueba plegadas en "Más formas de entrar"; en una pantalla táctil ningún campo toma el foco.
+- **Dado** que estoy en la herramienta sin cuenta, **entonces** la cuenta es una línea con su botón secundario; mientras se retoma una sesión guardada dice "Retomando tu cuenta…" sin ofrecer entrar.
+- **Dado** que la lista está vacía, **entonces** lo único del color de la casa es "Pegar lista"; **cuando** la pego, el cuadro no se queda con el foco en el celular y lo único de color pasa a ser "Sellar la lista", con el resumen de lo que se va a sellar debajo.
+- **Dado** que toco "Sellar la lista" sin cuenta y entro, **entonces** veo "Ya entraste. Sellá tu lista de N personas." con el foco en el botón, y nada se sella solo.
+- **Dado** cualquier paso del sorteo nuevo, **cuando** toco "¿Cómo se usa?", **entonces** se abre en el lugar (empuja, no tapa) en la tarjeta de mi paso, sin botones de color adentro; Escape lo cierra y el foco vuelve al botón. Está también en el menú "Más" de todas las páginas. Nunca se abre solo, ni en la demo ni en el ensayo.
+- **Dado** que pruebo con un ejemplo, con o sin cuenta, **cuando** sello y sorteo, **entonces** nada va a la cadena, nada queda en Mis sorteos ni en el servicio de enlaces cortos, el premio no se recuerda y mi borrador vuelve al salir; se ve que es un ensayo (banda, línea que guía, "ENSAYO · no se graba" en el estadio) y al final "Sortear con mi lista". "Cargar ejemplo" no se ve en una red con contrato.
+- **Dado** que espero el número, **entonces** no leo "ronda", "faro" ni "transacción" en el camino del sorteo.
+
+Pruebas: `src/ensayo-modo.test.ts` (el ensayo no graba: la decisión y la capa de la cadena), `src/ui/pasos.test.ts`, `src/ui/index-textos.test.ts`; `scripts/audit-primer-sorteo.mjs` (de punta a punta, con la red anotada), `scripts/audit-flujo.mjs` (paso 0, lista vacía) y `scripts/audit-ui.mjs` (el tutorial en cuatro pantallas y a 200 %).
+
+Los eventos del embudo de esta interfaz los cuenta el contador anónimo (`src/contar.ts`, apagado hasta encenderlo): `tutorial_open` {step, from} al abrir "¿Cómo se usa?" (`src/ui/tutorial.ts`) y `practice_done` {kind} cuando el ensayo (`tinkazo:ensayo-fin`) o la demo llegan al ganador; de la práctica no sale nada más (`enPractica()` es `sinGrabar()`).
+
 ---
 
 ## Épica 11: Recordatorios y aviso a los ganadores

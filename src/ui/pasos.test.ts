@@ -30,7 +30,8 @@ describe("de qué se trata cada paso", () => {
   const ok = { segundos: 0, apagado: false, ganadores: 1 };
 
   it("cada paso tiene su texto, y el de la cuenta no cambia con el reloj", () => {
-    expect(claveDelPaso(1, ok)).toBe("");
+    // El 1 también: la barra ofrece "Pegar lista" cuando el botón queda fuera de la pantalla.
+    expect(claveDelPaso(1, ok)).toBe("sigPegar");
     expect(claveDelPaso(2, ok)).toBe("sigLista");
     expect(claveDelPaso(2, { ...ok, apagado: true })).toBe("sigSellando");
     expect(claveDelPaso(3, { ...ok, segundos: 25, apagado: true })).toBe("sigEspera");
@@ -42,7 +43,7 @@ describe("de qué se trata cada paso", () => {
   });
 
   it("todos esos textos existen en los dos idiomas", () => {
-    const claves = ["sigLista", "sigSellando", "sigEspera", "sigRonda", "sigSorteando", "sigGano", "sigGanaron", "sigAvisoRonda"];
+    const claves = ["sigPegar", "sigLista", "sigSellando", "sigEspera", "sigRonda", "sigSorteando", "sigGano", "sigGanaron", "sigAvisoRonda"];
     const faltan = (["es", "en"] as const).flatMap((l) => claves.filter((k) => typeof T[l][k] !== "string" || !(T[l][k] as string).trim()).map((k) => `${l}.${k}`));
     expect(faltan).toEqual([]);
   });

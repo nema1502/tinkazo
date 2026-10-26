@@ -7,17 +7,23 @@ import { bindParticipants, loadSample, parseNames, renderNames, reponerBorrador 
 import { GAME_BUTTONS, cambiarJuego, copyRules, elegirJuego, freeze, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
 import { initSiguiente } from "./ui/siguiente";
 import { montarPremios } from "./ui/premios";
-import { adelantarCorto, alTocarGanadores, copySummary, draw, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
+import { adelantarCorto, alTocarGanadores, contarCompartido, copySummary, draw, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
+import { contarPractica } from "./contar";
 import { skipGame } from "./games/overlay";
 import { usePixi } from "./games/engine";
-import { currentSession, initWalletUI, openPicker } from "./ui/wallet-ui";
+import { MARCA_INGRESAR, currentSession, entraConGoogle, entrar, initWalletUI, openPicker } from "./ui/wallet-ui";
 import { initOnboarding } from "./ui/onboarding";
+import { initEnsayo, salirDelEnsayo } from "./ui/ensayo";
+import { abrirTutorial, initTutorial } from "./ui/tutorial";
+import { enEnsayo } from "./ensayo-modo";
 import { musicOn, toggleMusic } from "./music";
 import { rotateWords } from "./ui/rotar";
 import { initMenuMas } from "./ui/menu";
+import { iniciarControlesDelEstadio } from "./ui/estadio-controles";
+import { setVibracion, vibracionDisponible, vibracionOn, vibrar } from "./vibrar";
 
 /** La marca que deja "Entrar y sortear" al final de la demo, sin cuenta: la herramienta abre con la ventana de ingreso. */
-const INGRESAR = "tinkazo.ingresar";
+const INGRESAR = MARCA_INGRESAR;
 
 // `?theme=light|dark` fuerza el tema (capturas).
 const themeParam = params.get("theme");
@@ -113,6 +119,11 @@ $("winner-cards").addEventListener("click", alTocarGanadores);
 $<HTMLButtonElement>("btn-copy").addEventListener("click", (e) => void copySummary(e.currentTarget as HTMLButtonElement));
 $<HTMLButtonElement>("btn-rules").addEventListener("click", (e) => void copyRules(e.currentTarget as HTMLButtonElement));
 $("btn-proof").addEventListener("click", shareProof);
+// El contador del embudo (src/contar.ts): avisarle al ganador también es compartir.
+$("btn-whatsapp").addEventListener("click", () => contarCompartido("whatsapp"));
+$("btn-email").addEventListener("click", () => contarCompartido("email"));
+// El ensayo llegó al ganador (lo avisa su final, en draw.ts): es lo único que se cuenta de él.
+document.addEventListener("tinkazo:ensayo-fin", () => contarPractica("practice"));
 $("st-sound").addEventListener("click", toggleSound);
 $("btn-sound").addEventListener("click", toggleSound);
 /** El modo con música: andina con beat, que sigue la tensión del relator. */
@@ -139,19 +150,41 @@ $("btn-compartir").addEventListener("click", () => {
 });
 compartirLabel();
 onLangChange(compartirLabel);
+/** La vibración, solo donde el celular la ofrece: prendida por defecto, apagable. */
+const vibrarLabel = (): void => {
+  const b = $("btn-vibrar");
+  b.textContent = t(vibracionOn() ? "vibOn" : "vibOff");
+  b.setAttribute("aria-pressed", String(vibracionOn()));
+};
+if (vibracionDisponible()) {
+  $("btn-vibrar").hidden = false;
+  $("btn-vibrar").addEventListener("click", () => {
+    setVibracion(!vibracionOn());
+    vibrarLabel();
+    vibrar("golpe");
+  });
+  vibrarLabel();
+  onLangChange(vibrarLabel);
+}
 $("st-skip").addEventListener("click", skipGame);
+// Los botones del estadio se esconden solos: en el proyector no son parte del juego.
+iniciarControlesDelEstadio();
 bindParticipants();
 montarPremios();
 // La lista que se estaba armando en esta pestaña, si se recargó o se volvió de entrar con Google.
 reponerBorrador();
 initVistas();
-initOnboarding();
 initWalletUI();
+// El ensayo, si se recargó en él, después de la cuenta (la puerta) y antes de los pasos.
+initEnsayo();
 ingresarSiLoPidio();
 initMenuMas();
 refreshFreezeLabel();
 // Los pasos de arriba y la barra de "lo que sigue", con la herramienta ya armada.
 initSiguiente({ segundos: secondsToRound });
+// "¿Cómo se usa?" y la oferta de la primera vez, que miran en qué paso se está.
+initTutorial();
+initOnboarding(() => abrirTutorial("offer"));
 
 /**
  * Las dos vistas de "/": la portada para quien llega, y la herramienta para
@@ -193,7 +226,14 @@ function initVistas(): void {
     if (h === "#sortear" || h === "#ta") setVista("app", "nuevo");
     else if (h === "#mis-sorteos") setVista("app", "historial");
     else if (h === "#portada") setVista("portada");
-    else return false;
+    else if (h === "#como-se-usa" || h === "#como-se-usa-fin") {
+      // "Cómo se usa" del menú "Más", desde cualquier página (o del final de la
+      // demo o del ensayo, `-fin`): la herramienta con el tutorial abierto. La
+      // dirección vuelve a "#sortear": recargar no lo vuelve a abrir solo.
+      history.replaceState(null, "", `${location.pathname}${location.search}#sortear`);
+      setVista("app", "nuevo");
+      void import("./ui/tutorial").then((m) => m.abrirTutorial(h === "#como-se-usa-fin" ? "end" : "menu"));
+    } else return false;
     return true;
   };
   body.dataset.tab = "nuevo";
@@ -213,12 +253,25 @@ function initVistas(): void {
   $("hist-entrar").addEventListener("click", () => {
     void import("./ui/wallet-ui").then((w) => void w.openPicker());
   });
-  // El botón grande: a la herramienta y, si no hay cuenta, directo a elegir una.
+  // El botón grande: a la herramienta y, si no hay cuenta, directo a Google
+  // (sin la ventana de cuatro caminos); sin Pollar o desde el navegador de una
+  // app, la ventana. "Otras formas de entrar" abre la ventana de siempre.
   for (const a of document.querySelectorAll<HTMLAnchorElement>('a.cta[href="#sortear"]')) {
-    a.addEventListener("click", () => {
-      void import("./ui/wallet-ui").then((w) => {
-        if (!w.currentSession()) void w.openPicker();
-      });
+    a.addEventListener("click", (e) => {
+      // Desde el ensayo, primero se sale de él: al volver, se sortea con la lista propia.
+      if (enEnsayo()) {
+        e.preventDefault();
+        salirDelEnsayo({ conMiLista: true });
+        return;
+      }
+      if (!currentSession()) void entrar(a.querySelector<HTMLElement>(".cta-t") ?? undefined);
+    });
+  }
+  for (const b of document.querySelectorAll<HTMLElement>("[data-otras-formas]")) {
+    b.addEventListener("click", () => {
+      history.replaceState(null, "", `${location.pathname}${location.search}#sortear`);
+      setVista("app", "nuevo");
+      void openPicker();
     });
   }
   // El mismo botón al final de la demo navega (sale de `?demo=`), y caía en la
@@ -238,13 +291,17 @@ function initVistas(): void {
       }
     });
   }
+  // La G de Google en el botón grande, solo cuando va de verdad a Google (styles.css).
+  body.dataset.google = entraConGoogle() ? "1" : "0";
   document.addEventListener("tinkazo:sesion", (e) => {
     const a = (e as CustomEvent<string | null>).detail;
     body.dataset.sesion = a ? "si" : "no";
-    // Con la cuenta abierta, el botón grande de la portada lleva directo a sortear.
-    for (const el of document.querySelectorAll<HTMLElement>('a.cta[href="#sortear"]')) {
-      el.dataset.i = a ? "ctaGo" : "ctaHero";
-      el.textContent = t(a ? "ctaGo" : "ctaHero");
+    // Con la cuenta abierta, el botón grande lleva directo a sortear; sin ella,
+    // dice adónde va: "Entrar con Google y sortear", o el de siempre sin Pollar.
+    const clave = a ? "ctaGo" : entraConGoogle() ? "ctaGoogle" : "ctaHero";
+    for (const el of document.querySelectorAll<HTMLElement>("[data-cta-entrar] .cta-t")) {
+      el.dataset.i = clave;
+      el.textContent = t(clave);
     }
     if (location.hash === "#portada") return;
     let pidio = false;
@@ -254,12 +311,17 @@ function initVistas(): void {
     } catch {
       /* sin almacenamiento, la portada */
     }
-    if (a && pidio) setVista("app");
-    else if (!a && !deApp && !/^#(sortear|mis-sorteos|ta)$/.test(location.hash)) setVista("portada");
+    if (a && pidio) {
+      setVista("app");
+      avisarQueYaEntro();
+    } else if (!a && !deApp && !/^#(sortear|mis-sorteos|ta)$/.test(location.hash)) setVista("portada");
   });
 }
 
-/** Llegó desde el final de la demo sin cuenta: la ventana para elegir una, como la de la portada. Una sola vez. */
+/**
+ * Llegó desde el final de la demo o del ensayo sin cuenta: la entrada, como la
+ * del botón de la portada (directo a Google, o la ventana). Una sola vez.
+ */
 function ingresarSiLoPidio(): void {
   let pidio = false;
   try {
@@ -268,7 +330,34 @@ function ingresarSiLoPidio(): void {
   } catch {
     return;
   }
-  if (pidio && location.hash === "#sortear" && !params.has("demo") && !currentSession()) void openPicker();
+  if (pidio && location.hash === "#sortear" && !params.has("demo") && !enEnsayo() && !currentSession()) void entrar();
+}
+
+/**
+ * Recién entró (con la ventana o volviendo de Google) y tiene una lista lista:
+ * "Ya entraste. Sellá tu lista de 20 personas.", arriba del botón, con el foco
+ * en "Sellar la lista". Nunca sella solo: sellar es público y no se deshace.
+ */
+function avisarQueYaEntro(): void {
+  const n = parseNames().length;
+  const linea = document.getElementById("ya-entraste");
+  if (!linea || n < 2 || app.frozen || enEnsayo()) return;
+  linea.dataset.n = String(n);
+  linea.textContent = t("yaEntraste").replace("{n}", String(n));
+  linea.style.display = "";
+  const sellar = $<HTMLButtonElement>("btn-freeze");
+  // Con la ventana todavía abierta se espera a que cierre: si se abrió desde la
+  // línea de la cuenta, el foco volvía a un botón que ya no está.
+  const hasta = Date.now() + 60_000;
+  const enfocar = (): void => {
+    if (document.querySelector(".modal-back")) {
+      if (Date.now() < hasta) setTimeout(enfocar, 200);
+      return;
+    }
+    const a = document.activeElement as HTMLElement | null;
+    if (!a || a === document.body || a.offsetParent === null || a === sellar) sellar.focus({ preventScroll: true });
+  };
+  enfocar();
 }
 
 /* Modo demo y pose para capturas: `?demo=<juego>`, `?pose=1`, `?instant=1`. */

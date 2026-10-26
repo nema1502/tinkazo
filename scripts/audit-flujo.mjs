@@ -117,6 +117,8 @@ const info = (texto) => console.log(`    ${texto}`);
 
 /** Qué botón de verdad hace avanzar cada paso. */
 const REAL = {
+  // Con la lista vacía, "Pegar lista" (desde el 22 de octubre de 2026, diseño del onboarding).
+  vacia: "#btn-pegar",
   lista: "#btn-freeze",
   espera: "#btn-draw",
   ronda: "#btn-draw",
@@ -155,8 +157,9 @@ const MEDIR = (selReal) => `JSON.stringify((() => {
   // La geometría del indicador, para saber si entra en una sola línea y sin cortarse: no importa si se ve ahora.
   const lis = [...document.querySelectorAll('#pasos li')].map((li) => li.getBoundingClientRect());
   const pasosGeo = lis.length ? { arriba: Math.round(Math.min(...lis.map((r) => r.top))), abajo: Math.round(Math.max(...lis.map((r) => r.bottom))), alto: Math.round(Math.max(...lis.map((r) => r.height))), izq: Math.round(Math.min(...lis.map((r) => r.left))), der: Math.round(Math.max(...lis.map((r) => r.right))), lineas: new Set(lis.map((r) => Math.round(r.top / 4))).size } : null;
-  // "Entendido" de la bienvenida cuenta: quien llega por primera vez la tiene arriba de la lista, y con la lista cargada no puede competir con "Sellar".
-  const principales = ['#btn-freeze', '#btn-draw', '#btn-again-sin', '#btn-proof', '#btn-again-nueva', '#sig-btn', '#ob-ok']
+  // "Pegar lista" es la principal con la lista vacía y vuelve a ser un origen con la lista cargada; "¿Cómo se usa?"
+  // y la oferta de primera vez no tienen nunca el color de la casa (diseño del onboarding, 22 de octubre de 2026).
+  const principales = ['#btn-freeze', '#btn-draw', '#btn-again-sin', '#btn-proof', '#btn-again-nueva', '#sig-btn', '#btn-pegar', '#btn-como', '#primera-vez button', '#como-panel button']
     .map((s) => document.querySelector(s))
     .filter((e) => e && e.classList.contains('primary'))
     .map((e) => ({ id: e.id, caja: caja(e), off: !!e.disabled }))
@@ -483,6 +486,14 @@ async function recorrer(browser, vista, tema, caso) {
 
     await conectarCuentaDePrueba(page);
 
+    // 0. Recién entrado, con la lista vacía: la principal es "Pegar lista", y la oferta de primera vez y
+    //    "¿Cómo se usa?" no compiten con ella (diseño del onboarding, 22 de octubre de 2026).
+    if (caso !== "sin-resto") {
+      await page.eval("scrollTo(0, 0); true");
+      await quieto(page);
+      await paso(page, ctx, 0, "lista vacia", { paso: 1, real: REAL.vacia });
+    }
+
     // 1. Lista cargada.
     if (caso === "sin-resto") {
       await page.eval(`(() => { const ta = document.getElementById('ta'); ta.value = 'Ana Quispe\\nBeto Mamani'; ta.dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('nw').value = '2'; document.getElementById('nw').dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
@@ -664,7 +675,7 @@ async function anchosDeCelular(browser, ancho) {
     await page.waitFor("document.readyState === 'complete'", 20000);
     await sleep(900);
     // Sin cuenta, el botón de sellar queda con aria-disabled detrás de la puerta: el modo libre arma el mismo flujo.
-    await page.eval(`document.querySelector('#sec-participants .body').classList.remove('locked'); document.getElementById('btn-freeze').removeAttribute('aria-disabled'); document.getElementById('gate').style.display = 'none'; document.getElementById('onboard').style.display = 'none'; true`);
+    await page.eval(`document.querySelector('#sec-participants .body').classList.remove('locked'); document.getElementById('btn-freeze').removeAttribute('aria-disabled'); document.getElementById('gate').style.display = 'none'; document.getElementById('primera-vez')?.style.setProperty('display', 'none'); true`);
     const mirar = async (nombre) => {
       const m = JSON.parse(await page.eval(MEDIR_ANCHO));
       check(`${quien} · ${nombre}: sin scroll horizontal`, m.scrollX <= 1, `${m.scrollX}px`);

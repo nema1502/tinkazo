@@ -2,7 +2,7 @@ import { esc } from "../dom";
 import { t } from "../i18n";
 import { app, avatar } from "../state";
 import { acortar, enlaceParaElQr } from "../enlace-corto";
-import { pintarQr } from "./qr";
+import { pintarQrDelComprobante } from "./qr";
 
 /**
  * Lo que el QR espera al enlace corto antes de salir con el largo. Si el corto
@@ -47,6 +47,10 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   // ahora va en su propia línea, "Se llevan: …", con la letra de los nombres.
   const muchos = n > 5;
 
+  // "Siguiente premio (quedan 11)", si es lo que sigue: el mismo botón de la página, con su texto.
+  const sig = op.volverA?.id === "btn-again-sin" && op.volverA.offsetParent !== null ? op.volverA : null;
+  const siguiente = sig ? (sig.textContent ?? "").replace(/\s+/g, " ").trim() : "";
+
   const back = document.createElement("div");
   back.className = `sala pantalla${varios ? " varios" : ""}${muchos ? " muchos" : ""}`;
   back.setAttribute("role", "dialog");
@@ -54,6 +58,8 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   back.setAttribute("aria-label", t("pantallaT"));
   back.innerHTML =
     `<div class="sala-top"><span class="sticker">${esc(t("pantallaT"))}</span>` +
+    // Lo que sigue, a un toque desde la sala: con gente sin premio, "Siguiente premio" es el botón grande.
+    (siguiente ? `<button class="primary pantalla-sig" type="button" data-siguiente>${esc(siguiente)}</button>` : "") +
     `<button class="ghost" type="button" data-cerrar>${esc(t("salaCerrar"))}</button></div>` +
     `<div class="pantalla-body">` +
     `<div class="pantalla-ganadores">` +
@@ -103,6 +109,10 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   addEventListener("keydown", tecla);
   document.addEventListener("fullscreenchange", pantalla);
   back.querySelector<HTMLButtonElement>("[data-cerrar]")?.addEventListener("click", cerrar);
+  back.querySelector<HTMLButtonElement>("[data-siguiente]")?.addEventListener("click", () => {
+    cerrar();
+    sig?.click();
+  });
   back.querySelector<HTMLButtonElement>("[data-cerrar]")?.focus();
   // Se pide con el clic todavía fresco: pasado ese momento, el navegador la niega.
   // Desde el show ya está puesta (la heredó de la espera) y no se pide.
@@ -125,13 +135,13 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   const { ahora, despues } = await enlaceParaElQr(link, link && op.corto && !cerrada ? acortar(link) : null, ESPERA_CORTO_MS);
   // Si se cerró mientras llegaba el comprobante o salía el corto, no hay nada que pintar.
   if (cerrada || !back.isConnected) return;
-  const listo = ahora && img ? await pintarQr(img, ahora, lado) : false;
+  const listo = ahora && img ? await pintarQrDelComprobante(img, ahora, lado) : false;
   if (!listo) back.querySelector(".pantalla-qr")?.remove();
   ajustar();
   if (!listo || !img) return;
   // El corto que llegó tarde reemplaza al largo.
   const corto = await despues;
-  if (corto && !cerrada && back.isConnected && (await pintarQr(img, corto, lado))) ajustar();
+  if (corto && !cerrada && back.isConnected && (await pintarQrDelComprobante(img, corto, lado))) ajustar();
 }
 
 /**

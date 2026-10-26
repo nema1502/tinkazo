@@ -2,6 +2,7 @@ import { $ } from "../dom";
 import { LCOLORS, drawAvatar, paceFactor, skipMotion, type Beacon } from "../state";
 import { nameList, setPickSeed, t } from "../i18n";
 import { musicCue, startMusic, stopMusic } from "../music";
+import { mantenerDespierta, soltarDespierta } from "../ui/despierta";
 
 /**
  * Lo que comparten todos los juegos.
@@ -266,29 +267,6 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
    que volver a pedirlo al regresar. Si no, la pantalla se apaga en la mitad de
    una carrera de quince segundos porque alguien miró el celular. */
 
-interface WakeLockSentinelLike {
-  release(): Promise<void>;
-}
-interface WakeLockLike {
-  request(type: "screen"): Promise<WakeLockSentinelLike>;
-}
-type NavWithWakeLock = Navigator & { wakeLock?: WakeLockLike };
-
-let sentinel: WakeLockSentinelLike | null = null;
-
-async function keepAwake(): Promise<void> {
-  const nav = navigator as NavWithWakeLock;
-  if (!nav.wakeLock) return;
-  try {
-    sentinel = await nav.wakeLock.request("screen");
-  } catch {
-    /* sin permiso o con la batería baja: la pantalla se apagará, y no es fatal */
-  }
-}
-
-const onVisible = (): void => {
-  if (document.visibilityState === "visible" && sentinel) void keepAwake();
-};
 
 export function takeOverScreen(el: HTMLElement): void {
   // Esconder la barra del navegador solo funciona en escritorio. En iPhone no
@@ -296,8 +274,8 @@ export function takeOverScreen(el: HTMLElement): void {
   if (!document.fullscreenElement && el.requestFullscreen) {
     void el.requestFullscreen({ navigationUI: "hide" }).catch(() => undefined);
   }
-  void keepAwake();
-  document.addEventListener("visibilitychange", onVisible);
+  // El bloqueo de pantalla es compartido (src/ui/despierta.ts): lo pide también la espera del número.
+  mantenerDespierta("estadio");
 }
 
 /**
@@ -312,11 +290,7 @@ export function seguirEnPantallaCompleta(si: boolean): void {
 }
 
 export function releaseScreen(): void {
-  document.removeEventListener("visibilitychange", onVisible);
-  if (sentinel) {
-    void sentinel.release().catch(() => undefined);
-    sentinel = null;
-  }
+  soltarDespierta("estadio");
   if (document.fullscreenElement && !seguirEnGrande) void document.exitFullscreen().catch(() => undefined);
 }
 

@@ -7,13 +7,15 @@ import { prepararFirma } from "../protocol/firma";
 import { contractUrl, network } from "../stellar/config";
 import { type AnchorStep, clienteListo, escribirError, hideTxStatus, margenParaAprobar, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
 import { precargarQr } from "./qr";
-import { juegoPorDefecto, recomendar } from "./recomendar";
+import { juegoPorDefecto, juegoSiguiente, recomendar } from "./recomendar";
 import { apruebaAMano, canAnchor, currentSession } from "./wallet-ui";
 import { cerrarLista, olvidarBorrador, parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
 import { NOMBRE } from "./gamecard";
 import { actualizarPaso, barraActiva, verError } from "./siguiente";
 import { ponerPremio, recordarPremio } from "./premios";
+import { ENSAYO_ESPERA_S, enEnsayo, sinGrabar } from "../ensayo-modo";
+import { contar, errorContable } from "../contar";
 
 /**
  * Los botones del selector, en el orden en que se muestran. Hasta el 29 de
@@ -43,6 +45,18 @@ export const GAME_BUTTONS: ReadonlyArray<[string, Game]> = [
 /** Quien organiza eligió un juego en el selector: desde ahí, el juego no cambia solo según la cantidad. */
 let juegoAMano = false;
 
+/**
+ * Con "Siguiente premio", el juego que se acaba de jugar: al sellar la lista que
+ * queda, se sugiere otro que encaje, sin pedirle nada a quien organiza.
+ */
+let juegoAnterior: Game | null = null;
+
+/** Lo llama "Siguiente premio": el próximo sello sugiere otro juego (`juegoSiguiente`). */
+export function rotarJuego(): void {
+  juegoAnterior = app.game;
+  juegoAMano = false;
+}
+
 /** Un toque en el selector: el juego que se eligió, y que ya no se cambia solo. */
 export function elegirJuego(g: Game): void {
   juegoAMano = true;
@@ -69,6 +83,20 @@ export function pintarJuego(): void {
   if (!el) return;
   const nombre = document.querySelector(`#g-${app.game} span`)?.textContent || t(NOMBRE[app.game]);
   if (el.textContent !== nombre) el.textContent = nombre;
+  pintarNotaElegida();
+}
+
+/**
+ * La nota de por qué el juego elegido encaja o no con esta cantidad de gente,
+ * en una línea legible bajo el selector. Las notas de cada botón se quedan para
+ * el lector de pantalla: a 11 px dentro de una tarjeta de 132 no las leía nadie
+ * (letra grande, 24 de octubre de 2026).
+ */
+function pintarNotaElegida(): void {
+  const el = document.getElementById("rec-sel-nota");
+  if (!el) return;
+  const nota = document.querySelector(`#g-${app.game} .rec-nota`)?.textContent ?? "";
+  if (el.textContent !== nota) el.textContent = nota;
 }
 // Al cambiar de idioma los botones del selector ya están traducidos: se lee de ahí.
 onLangChange(pintarJuego);
@@ -106,17 +134,21 @@ export function pintarRecomendacion(n: number): void {
     if (r.fits === true) {
       const etiqueta = document.createElement("em");
       etiqueta.className = "rec-tag";
-      etiqueta.textContent = t("recBadge");
+      // Una estrella a la vista; la palabra, para el lector de pantalla.
+      etiqueta.textContent = "★";
+      etiqueta.setAttribute("aria-label", t("recBadge"));
+      etiqueta.title = t("recBadge");
       el.appendChild(etiqueta);
     }
     if (r.note) {
       const nota = document.createElement("small");
-      nota.className = "rec-nota";
+      nota.className = "rec-nota sr-only";
       nota.textContent = frase(r.note, r.args);
       el.appendChild(nota);
     }
   });
   pintarCabecera(n);
+  pintarNotaElegida();
 }
 
 /**
@@ -317,6 +349,10 @@ export function refreshFreezeLabel(): void {
   btn.textContent = t(btn.dataset.i);
 }
 
+/** Cuándo se soltó el último sorteo para armar el siguiente (`unfreeze`), y cuánto no responde "Sellar" después. */
+let soltadoEn = -Infinity;
+export const GUARDA_DESPUES_DE_SOLTAR_MS = 700;
+
 /**
  * Sella la lista.
  *
@@ -328,16 +364,26 @@ export function refreshFreezeLabel(): void {
 export async function freeze(): Promise<void> {
   const names = parseNames();
   if (names.length < 2) return;
+  // Recién se soltó el sorteo anterior con "Siguiente premio": un doble toque
+  // nervioso caía en "Sellar la lista" y sellaba el próximo premio sin premio,
+  // para siempre (diseño del onboarding, 22 de octubre de 2026).
+  if (performance.now() - soltadoEn < GUARDA_DESPUES_DE_SOLTAR_MS) return;
 
   const btn = $<HTMLButtonElement>("btn-freeze");
-  // Una demo (`?demo=`) es el show con la lista de ejemplo, nunca un sorteo:
-  // aunque haya una cuenta abierta no se graba nada ni se espera la cadena.
-  const anchoring = canAnchor() && !params.has("demo");
+  // La demo (`?demo=`) y el ensayo son el show con una lista de ejemplo, nunca
+  // un sorteo: aunque haya una cuenta abierta no se graba nada ni se espera la
+  // cadena (`ensayo-modo.ts`).
+  const anchoring = canAnchor() && !sinGrabar();
   const hash = bytesToHex(listHash(names));
   let ts = Math.floor(Date.now() / 1000);
   // Anclando, el margen no baja de 45 s aunque la URL pida menos: por debajo
-  // de 30 el contrato rechaza el sello.
-  const lead = anchoring ? Math.max(ANCHOR_LEAD_SECONDS, LEAD_SECONDS) : LEAD_SECONDS;
+  // de 30 el contrato rechaza el sello. En el ensayo, 15 s: lo bastante para
+  // elegir el juego, y la línea que guía dice que de verdad son unos 45.
+  const lead = anchoring
+    ? Math.max(ANCHOR_LEAD_SECONDS, LEAD_SECONDS)
+    : enEnsayo() && !params.has("lead")
+      ? ENSAYO_ESPERA_S
+      : LEAD_SECONDS;
   let round = targetRound(ts, lead);
   let prize = $<HTMLInputElement>("prize").value.trim();
   let numWinners = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, names.length);
@@ -359,6 +405,8 @@ export async function freeze(): Promise<void> {
     // "Sellar en Stellar" mientras se armaba el cliente del contrato, de medio
     // segundo a catorce (`clienteListo` en anchor.ts). Y se va el error de antes.
     onStep("starting");
+    // El contador del embudo (src/contar.ts): un intento de sellar, y después cómo terminó. La verdad del sello es la cadena.
+    contar("seal_sent", { network: network.name });
     try {
       // Nunca dos sellos de la misma lista (`sello-seguro.ts`, D-17 en docs/architecture.md):
       // - Si la red tarda, la ronda elegida al hacer clic llega a la cadena con menos de los
@@ -420,6 +468,7 @@ export async function freeze(): Promise<void> {
       }
       // Si se supo por la red (se cortó y se averiguó), la línea todavía decía "Revisando…".
       showTxStatus("seal-status", "confirmed", sealTx);
+      contar("seal_confirmed", { network: network.name });
     } catch (e) {
       // La pantalla dice algo que se entiende; el detalle técnico queda plegado
       // debajo y en este navegador (`detalle-error.ts`), y en la consola.
@@ -433,6 +482,10 @@ export async function freeze(): Promise<void> {
       // Naranja, como el error del sorteo: violeta es "todavía va" (styles.css).
       status.className = "txstatus bad";
       await escribirError(status, e, "sello");
+      // Para el contador, la clave del motivo (la misma del mensaje), nunca el detalle.
+      void import("../stellar/errores")
+        .then(({ errorKey }) => contar("seal_failed", { network: network.name, error: errorContable(errorKey(e)) }))
+        .catch(() => undefined);
       // Si se apretó la barra, el botón de verdad (y este mensaje) están fuera de la pantalla.
       verError(status);
       return;
@@ -461,13 +514,17 @@ export async function freeze(): Promise<void> {
     ...(sealTx ? { sealTx } : {}),
   };
 
-  // Los últimos premios que se usaron se ofrecen primero la próxima vez. La demo no cuenta.
-  if (!params.has("demo")) recordarPremio(prize);
+  // Los últimos premios que se usaron se ofrecen primero la próxima vez. La demo y el ensayo no cuentan.
+  if (!sinGrabar()) {
+    recordarPremio(prize);
+    // El primer sello de este equipo: la oferta de primera vez y los números del tutorial dejan de verse siempre.
+    document.dispatchEvent(new CustomEvent("tinkazo:sellado"));
+  }
 
   // Se anota en el historial de este equipo apenas se sella, no al sortear:
   // si el sorteo queda pendiente, igual hay que poder encontrarlo.
-  // Una demo no es un sorteo: no se anota en Mis sorteos, aunque haya cuenta.
-  const who = params.has("demo") ? undefined : currentSession()?.address;
+  // La demo y el ensayo no son sorteos: no se anotan en Mis sorteos, aunque haya cuenta.
+  const who = sinGrabar() ? undefined : currentSession()?.address;
   if (who) {
     void import("./history").then((h) => {
       h.remember({
@@ -536,6 +593,7 @@ export function resumeFrozen(e: {
  * anterior no se toca: sigue en la cadena, en Mis sorteos y en su comprobante.
  */
 export function unfreeze(lista: string): void {
+  soltadoEn = performance.now();
   if (countdownTimer !== undefined) clearInterval(countdownTimer);
   countdownTimer = undefined;
   app.frozen = null;
@@ -588,7 +646,9 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   // Si nadie eligió otro, queda elegido uno que se recomienda para esta
   // cantidad (D02). La demo juega el que pide su enlace.
   if (!juegoAMano && !params.has("demo")) {
-    const g = juegoPorDefecto(names.length);
+    // Después de un premio, otro juego; la primera vez, el de siempre (D02).
+    const g = juegoAnterior ? juegoSiguiente(names.length, juegoAnterior) : juegoPorDefecto(names.length);
+    juegoAnterior = null;
     if (g !== app.game) setGame(g);
   }
 

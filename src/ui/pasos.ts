@@ -34,7 +34,8 @@ export function pasoDe(e: { nombres: number; sellada: boolean; revelado: boolean
 export function claveDelPaso(paso: Paso, e: { segundos: number; apagado: boolean; ganadores: number }): string {
   switch (paso) {
     case 1:
-      return "";
+      // Desde el 22 de octubre de 2026 la barra también ofrece "Pegar lista" (siguiente.ts): su línea dice qué falta.
+      return "sigPegar";
     case 2:
       return e.apagado ? "sigSellando" : "sigLista";
     case 3:

@@ -18,6 +18,8 @@
  * descubre cuando alguien no puede escanearlo.
  */
 
+import { marcarQr } from "../contar";
+
 /** Cuánto mide el QR chico en píxeles de CSS, como mínimo. */
 const SIZE = 200;
 /** Margen obligatorio alrededor, en módulos. Sin esto muchos lectores fallan. */
@@ -48,6 +50,16 @@ export async function pintarQr(img: HTMLImageElement, text: string, ancho = SIZE
   img.src = qr.url;
   img.style.width = img.style.height = `${qr.lado}px`;
   return true;
+}
+
+/**
+ * El QR de un comprobante: con la marca `o=qr` antes del `#` (`marcarQr` en
+ * src/contar.ts), para que la página sepa que se abrió desde el QR, y sin ella
+ * si así no entra.
+ */
+export async function pintarQrDelComprobante(img: HTMLImageElement, enlace: string, ancho = SIZE): Promise<boolean> {
+  const marcado = marcarQr(enlace);
+  return (await pintarQr(img, marcado, ancho)) || (marcado !== enlace && (await pintarQr(img, enlace, ancho)));
 }
 
 /** Baja la librería del QR de antemano: con el wifi caído al final del show, igual se dibuja. */

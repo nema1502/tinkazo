@@ -4,9 +4,11 @@ import { anchoringAvailable, accountUrl, network, shortAddress } from "../stella
 import { grifoApagado, hayAyudaDeFondos } from "../stellar/grifo";
 import { refreshFreezeLabel } from "./freeze";
 import { precalentarSello } from "./anchor";
-import { params } from "../state";
 import { guardarBorrador } from "./participants";
+import { enEnsayo, sinGrabar } from "../ensayo-modo";
+import { enNavegadorDeApp as esDeApp } from "../navegador";
 import { clearSessionKind, loadSessionKind, pickRestore, saveSessionKind } from "../stellar/session-store";
+import { contarEntrada, tomarEntrada } from "../contar";
 
 /**
  * Identidad del organizador en la cabecera.
@@ -85,7 +87,7 @@ function precargarSello(): void {
     void import("../stellar/contract").catch(() => {
       precargadoPara = null;
     });
-    if (!params.has("demo") && canAnchor() && session?.address === para) precalentarSello();
+    if (!sinGrabar() && canAnchor() && session?.address === para) precalentarSello();
   };
   setTimeout(() => {
     if (typeof requestIdleCallback === "function") requestIdleCallback(bajar, { timeout: 5000 });
@@ -95,20 +97,120 @@ function precargarSello(): void {
 
 export const currentSession = (): Session | null => session;
 
+/**
+ * La marca que deja un botón que lleva a entrar desde otra página (el final de
+ * la demo, "Sortear con mi lista" del ensayo): la página nueva, ya en la
+ * herramienta, abre la entrada (`ingresarSiLoPidio` en main.ts). Vive en la pestaña.
+ */
+export const MARCA_INGRESAR = "tinkazo.ingresar";
+
 /** La cuenta abierta pide aprobar cada operación en una ventana (Freighter): lo que se firma no puede arrancar solo. */
 export const apruebaAMano = (): boolean => session?.aMano === true;
 
 /** Se puede sellar en la cadena: hay contrato, hay sesión y la red coincide. */
 export const canAnchor = (): boolean => anchoringAvailable && session !== null && !wrongNetwork;
 
-/** En una red con contrato, sin cuenta conectada no se sella: lo dicen la puerta del sorteo y el botón de sellar. */
-const sinCuentaParaSellar = (): boolean => anchoringAvailable && session === null;
+/**
+ * En una red con contrato, sin cuenta conectada no se sella: lo dicen la puerta
+ * del sorteo y el botón de sellar. En el ensayo sí, porque no se graba nada.
+ */
+const sinCuentaParaSellar = (): boolean => anchoringAvailable && session === null && !enEnsayo();
+
+/** Vuelve a pintar la puerta: al entrar al ensayo, que no pide cuenta. */
+export function refrescarPuerta(): void {
+  applyGate();
+}
+
+/** Se está retomando una sesión guardada (ver `initWalletUI`). */
+let retomando = false;
+
+/**
+ * Si quedó una sesión guardada en este navegador para esta red: la cuenta de
+ * prueba o Freighter (`session-store`), o la marca de Pollar
+ * (`tinkazo.pollar.intent`, en wallet-pollar.ts, que no se carga para esto).
+ */
+function haySesionGuardada(): boolean {
+  if (loadSessionKind(network.name)) return true;
+  try {
+    return !!import.meta.env.VITE_POLLAR_PUBLISHABLE_KEY && localStorage.getItem("tinkazo.pollar.intent") !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** El navegador de una app, donde Google no deja entrar (src/navegador.ts). */
+export const enNavegadorDeApp = (): boolean => typeof navigator !== "undefined" && esDeApp(navigator.userAgent);
+
+/** Si "Entrar con Google y sortear" va directo a Google: hay Pollar y no es el navegador de una app. */
+export const entraConGoogle = (): boolean => !!import.meta.env.VITE_POLLAR_PUBLISHABLE_KEY && !enNavegadorDeApp();
+
+/** Quien entra va a sortear: al volver del login, incluso del redirect de Google, la página abre la herramienta. */
+function marcarQueVaASortear(): void {
+  try {
+    sessionStorage.setItem("tinkazo.abrir", "app");
+  } catch {
+    /* sin almacenamiento, se queda en la portada y el menú lleva a sortear */
+  }
+}
+
+/**
+ * "Entrar con Google y sortear": directo a Google, sin la ventana de cuatro
+ * caminos (diseño del onboarding, 22 de octubre de 2026: la ventana era la
+ * primera duda, con 157 palabras en el celular). Sin Pollar (local, vistas
+ * previas) o desde el navegador de una app, la ventana de siempre, con el
+ * correo primero. `boton` dice "Conectando…" mientras sale para Google.
+ */
+export async function entrar(boton?: HTMLElement): Promise<void> {
+  if (session) return;
+  // La sesión guardada todavía está volviendo: no se la manda a entrar de nuevo.
+  // La herramienta ya se abrió; la línea de la cuenta dice "Retomando tu cuenta…".
+  if (retomando) {
+    marcarQueVaASortear();
+    return;
+  }
+  if (!entraConGoogle()) {
+    await openPicker();
+    return;
+  }
+  marcarQueVaASortear();
+  // Y con la lista que estaba armando: al volver de Google, sigue ahí.
+  guardarBorrador();
+  const antes = boton?.textContent ?? "";
+  if (boton) {
+    boton.textContent = t("connecting");
+    boton.setAttribute("aria-busy", "true");
+  }
+  try {
+    const [w, { pollarWallet }] = await Promise.all([lite(), import("../stellar/wallet-pollar")]);
+    // El navegador se va a Google y vuelve: esto puede no terminar nunca, y la página se recarga.
+    const address = await pollarWallet.connect();
+    await afterConnect(w, pollarWallet, address, "google", document.createElement("div"), () => undefined);
+  } catch (e) {
+    notice(await walletErrorText(e), true);
+  } finally {
+    if (boton) {
+      boton.textContent = antes;
+      boton.removeAttribute("aria-busy");
+    }
+  }
+}
 
 export function initWalletUI(): void {
+  // Hay una sesión guardada (de Pollar, de la cuenta de prueba o de Freighter):
+  // mientras vuelve, la línea de la cuenta dice "Retomando tu cuenta…" y no
+  // ofrece entrar. Con Google eso tarda hasta 8 s, y antes se veía la caja de
+  // conectar, como si hubiera que entrar otra vez (diseño del onboarding).
+  retomando = anchoringAvailable && haySesionGuardada();
   render();
   onLangChange(render);
-  void restorePollar();
-  void restoreSession();
+  const fin = (): void => {
+    if (!retomando) return;
+    retomando = false;
+    render();
+  };
+  void Promise.allSettled([restorePollar(), restoreSession()]).then(fin);
+  // Por si algo queda colgado: nunca más de 12 s diciendo que se retoma.
+  setTimeout(fin, 12_000);
   // Sellar o sortear no pudo pagar la comisión y no había cómo ayudar solo
   // (ver `conFondos` en anchor.ts): la caja de fondos aparece pegada al botón,
   // como último recurso.
@@ -369,26 +471,22 @@ function applyGate(): void {
     gate.style.display = "none";
     return;
   }
-  gate.innerHTML = "";
-  const h = document.createElement("h3");
-  h.textContent = t("gateTitle");
-  gate.appendChild(h);
+  // Una línea, no una caja: la caja amarilla ocupaba 374 de 844 px del celular,
+  // hablaba de grabar en Stellar y de a quién atribuirlo, y dejaba "Sellar la
+  // lista" una pantalla más abajo (diseño del onboarding, 22 de octubre de
+  // 2026). La cuenta se resuelve al principio, desde la portada; acá queda la
+  // línea con su botón secundario, que es lo que usan los auditores.
+  gate.replaceChildren();
   const p = document.createElement("p");
-  p.textContent = t("gateBody");
+  p.textContent = t(retomando ? "gateRetomando" : "gateLinea");
   gate.appendChild(p);
-  const row = document.createElement("div");
-  row.className = "row";
-  const b = button(t("gateAction"), "solid", () => void openPicker());
-  // Es lo único que se puede hacer en esta pantalla: el botón grande de la
-  // casa, no el chico de la cabecera (revisión de arte del 16 de octubre).
-  b.className = "primary";
-  row.appendChild(b);
-  gate.appendChild(row);
-  const foot = document.createElement("p");
-  foot.className = "note";
-  foot.textContent = t("gateFoot");
-  gate.appendChild(foot);
-  gate.style.display = "block";
+  gate.classList.toggle("retomando", retomando);
+  if (!retomando) {
+    const b = button(t("gateEntrar"), "ghost", () => void openPicker());
+    b.type = "button";
+    gate.appendChild(b);
+  }
+  gate.style.display = "";
 }
 
 /* -------------------------------------------------------------------- grifo */
@@ -647,11 +745,7 @@ export async function openPicker(pedido: Pedido = {}): Promise<void> {
 async function abrirPicker(pedido: Pedido): Promise<void> {
   // Quien elige una cuenta va a sortear: al volver del login, incluso del
   // redirect de Google, la página abre la herramienta y no la portada.
-  try {
-    sessionStorage.setItem("tinkazo.abrir", "app");
-  } catch {
-    /* sin almacenamiento, se queda en la portada y el menú lleva a sortear */
-  }
+  marcarQueVaASortear();
   // Y con la lista que estaba armando: al volver de Google, sigue ahí.
   guardarBorrador();
   // Sin el SDK: preguntarle a Freighter si está es hablar con su extensión.
@@ -664,7 +758,7 @@ async function abrirPicker(pedido: Pedido): Promise<void> {
   // probar el producto.
   const pollar = pollarConfigured();
   if (pollar) {
-    options.push({ label: "Google", hint: t("googleHint"), icon: "google", pick: "google" });
+    options.push({ label: t("loginGoogle"), hint: t("googleHint"), icon: "google", pick: "google" });
   }
   // Freighter contesta en milisegundos si está; si no está, su librería espera
   // dos segundos enteros antes de rendirse, y la ventana tardaba eso en abrir
@@ -761,57 +855,100 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
    * que desde la portada y tapaba la caja que lo explica (evaluación crítica de
    * experiencia, hallazgo 7).
    */
+  /**
+   * Desde el 22 de octubre de 2026 (diseño del onboarding): Google primero y
+   * grande, que es lo que va a tomar casi todo el mundo; después "o con tu
+   * correo"; y la billetera y la cuenta de prueba plegadas en "Más formas de
+   * entrar". Antes eran cuatro caminos a la vista, el correo primero y con el
+   * foco, y en el celular el teclado tapaba a Google. Desde el navegador de una
+   * app, donde Google no deja entrar, el correo va primero y una línea lo dice.
+   * Sin Pollar (local, vistas previas) no hay Google ni correo: las dos que
+   * quedan van a la vista.
+   */
   function home(mail = ""): void {
     body.replaceChildren();
     head("Tinkazo", [pedido.motivo ?? t("loginTitle")]);
-    if (emailOn) {
-      const form = document.createElement("form");
-      form.className = "login-form";
-      form.noValidate = true;
-      form.innerHTML =
-        `<label class="sr-only" for="login-mail">${esc(t("loginMailLabel"))}</label>` +
-        `<input id="login-mail" type="email" inputmode="email" autocomplete="email" spellcheck="false" placeholder="${esc(t("loginMailPh"))}">` +
-        `<button class="login-go" type="submit">${esc(t("loginMailGo"))}</button>` +
-        `<p class="login-err" role="alert" hidden></p>`;
-      const input = form.querySelector("input") as HTMLInputElement;
-      const go = form.querySelector("button") as HTMLButtonElement;
-      const err = form.querySelector(".login-err") as HTMLElement;
-      input.value = mail;
-      go.disabled = !mailOk(mail);
-      input.addEventListener("input", () => {
-        go.disabled = !mailOk(input.value);
-        err.hidden = true;
-      });
-      form.addEventListener("submit", (e) => {
-        e.preventDefault();
-        void sendCode(input.value.trim(), go, err);
-      });
-      body.appendChild(form);
-      const or = document.createElement("p");
-      or.className = "login-or";
-      or.textContent = t("loginOr");
-      body.appendChild(or);
+    const conGoogle = options.find((o) => o.pick === "google");
+    const otras = options.filter((o) => o !== conGoogle);
+    const enApp = enNavegadorDeApp();
+    if (conGoogle && enApp) {
+      const aviso = document.createElement("p");
+      aviso.className = "login-app";
+      aviso.textContent = t("loginEnApp");
+      body.appendChild(aviso);
     }
-
+    if (conGoogle && !enApp) {
+      body.appendChild(opcion(conGoogle, "login-google"));
+      if (emailOn) separador(t("loginCorreoO"));
+    }
+    if (emailOn) correo(mail);
+    if (conGoogle && enApp) {
+      separador(t("loginOr"));
+      body.appendChild(opcion(conGoogle, "login-google"));
+    }
     const list = document.createElement("div");
     list.className = "login-opts";
-    for (const o of options) {
-      const row = document.createElement(o.href ? "a" : "button");
-      row.className = "login-opt";
-      row.title = o.hint;
-      row.innerHTML = `${ICONS[o.icon]}<span>${esc(o.label)}</span>${o.small ? `<small>${esc(o.small)}</small>` : ""}`;
-      if (o.href && row instanceof HTMLAnchorElement) {
-        row.href = o.href;
-        row.target = "_blank";
-        row.rel = "noopener";
-      } else if (o.pick) {
-        const pick = o.pick;
-        (row as HTMLButtonElement).type = "button";
-        row.addEventListener("click", () => void connect(pick, back, row, shut));
-      }
-      list.appendChild(row);
+    for (const o of otras) list.appendChild(opcion(o));
+    if (conGoogle) {
+      const mas = document.createElement("details");
+      mas.className = "login-mas";
+      const s = document.createElement("summary");
+      s.textContent = t("loginMas");
+      mas.append(s, list);
+      body.appendChild(mas);
+    } else body.appendChild(list);
+  }
+
+  /** La raya con una palabra en el medio: "o con tu correo". */
+  function separador(texto: string): void {
+    const or = document.createElement("p");
+    or.className = "login-or";
+    or.textContent = texto;
+    body.appendChild(or);
+  }
+
+  /** Una forma de entrar: un botón, o un enlace si hay que instalar algo. */
+  function opcion(o: Option, extra = ""): HTMLElement {
+    const row = document.createElement(o.href ? "a" : "button");
+    row.className = `login-opt ${extra}`.trim();
+    row.title = o.hint;
+    row.innerHTML = `${ICONS[o.icon]}<span>${esc(o.label)}</span>${o.small ? `<small>${esc(o.small)}</small>` : ""}`;
+    if (o.href && row instanceof HTMLAnchorElement) {
+      row.href = o.href;
+      row.target = "_blank";
+      row.rel = "noopener";
+    } else if (o.pick) {
+      const pick = o.pick;
+      (row as HTMLButtonElement).type = "button";
+      row.addEventListener("click", () => void connect(pick, back, row, shut));
     }
-    body.appendChild(list);
+    return row;
+  }
+
+  /** El correo, en dos pasos dentro de la misma ventana: se pide el código y se escribe el código. */
+  function correo(mail = ""): void {
+    const form = document.createElement("form");
+    form.className = "login-form";
+    form.noValidate = true;
+    form.innerHTML =
+      `<label class="sr-only" for="login-mail">${esc(t("loginMailLabel"))}</label>` +
+      `<input id="login-mail" type="email" inputmode="email" autocomplete="email" spellcheck="false" placeholder="${esc(t("loginMailPh"))}">` +
+      `<button class="login-go" type="submit">${esc(t("loginMailGo"))}</button>` +
+      `<p class="login-err" role="alert" hidden></p>`;
+    const input = form.querySelector("input") as HTMLInputElement;
+    const go = form.querySelector("button") as HTMLButtonElement;
+    const err = form.querySelector(".login-err") as HTMLElement;
+    input.value = mail;
+    go.disabled = !mailOk(mail);
+    input.addEventListener("input", () => {
+      go.disabled = !mailOk(input.value);
+      err.hidden = true;
+    });
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      void sendCode(input.value.trim(), go, err);
+    });
+    body.appendChild(form);
   }
 
   async function sendCode(mail: string, go: HTMLButtonElement, err: HTMLElement): Promise<void> {
@@ -949,7 +1086,15 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
   home();
   document.addEventListener("keydown", onKey, true);
   document.body.appendChild(back);
-  (card.querySelector<HTMLElement>("#login-mail, .login-opt") ?? card).focus();
+  // El foco, en Google. Nunca en el correo en una pantalla táctil: abría el
+  // teclado y el teclado tapaba a Google, que es lo que casi todos quieren.
+  const tactil = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+  const primero = enNavegadorDeApp()
+    ? tactil
+      ? null
+      : card.querySelector<HTMLElement>("#login-mail")
+    : (card.querySelector<HTMLElement>(".login-google") ?? card.querySelector<HTMLElement>(".login-opts > .login-opt"));
+  (primero ?? card).focus();
 }
 
 async function connect(
@@ -988,6 +1133,12 @@ async function afterConnect(
 ): Promise<void> {
   await activate(w, wallet, address);
   saveSessionKind(pick, network.name);
+  // El contador del embudo (src/contar.ts): la primera cuenta conectada de la
+  // pestaña, por la vía. El correo también es de Pollar y llega como "google";
+  // lo distingue su etiqueta. Retomar una sesión no pasa por acá, y la vuelta
+  // de Google la cuenta `wallet-pollar.ts`: la marca de ida ya no hace falta.
+  tomarEntrada();
+  contarEntrada(pick === "guest" ? "test" : pick === "freighter" ? "freighter" : wallet.label === "Email" ? "email" : "google");
   // Con `?grifo=0` la cuenta de prueba nace vacía: no se dice que tiene fondos.
   if (wallet.kind === "guest") notice(t(grifoApagado ? "guestReadyOff" : "guestReady"), false);
   // El diálogo no se cierra hasta saber si la cuenta puede pagar. Cerrarlo y

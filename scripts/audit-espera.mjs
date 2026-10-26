@@ -173,7 +173,7 @@ async function sellar(page, v) {
   await sleep(900);
   // Sin cuenta, el botón de sellar queda con aria-disabled detrás de la puerta: el modo libre arma el mismo flujo.
   await page.eval(
-    "document.querySelector('#sec-participants .body').classList.remove('locked'); document.getElementById('btn-freeze').removeAttribute('aria-disabled'); document.getElementById('gate').style.display = 'none'; document.getElementById('onboard').style.display = 'none'; true",
+    "document.querySelector('#sec-participants .body').classList.remove('locked'); document.getElementById('btn-freeze').removeAttribute('aria-disabled'); document.getElementById('gate').style.display = 'none'; document.getElementById('primera-vez')?.style.setProperty('display', 'none'); true",
   );
   await page.eval("document.getElementById('btn-sample').click(); document.getElementById('btn-freeze').click(); true");
   const ok = await page.waitFor("getComputedStyle(document.getElementById('btn-espera')).display !== 'none' && document.getElementById('btn-draw').disabled", 15000);
@@ -246,11 +246,12 @@ async function desemboca(browser, v, modo) {
       const leido = await leerQr(page, ".pantalla .pantalla-qr img");
       const dice = `${leido ? `${leido.slice(0, 44)}…` : "no se pudo leer"} · a ${tarda} ms del resultado`;
       if (modo === "contesta") {
-        const corto = new RegExp(`/c/${CORTO_ID}#[A-Za-z0-9_-]{22}$`).test(leido ?? "");
+        // Con la marca del QR antes del `#` (`?o=qr`, src/contar.ts).
+        const corto = new RegExp(`/c/${CORTO_ID}[?]o=qr#[A-Za-z0-9_-]{22}$`).test(leido ?? "");
         const altas = pedidos.filter((p) => p === "POST").length;
         check(`${quien} · el QR lleva el enlace corto, como "Mostrar en grande", pedido una sola vez`, corto && altas === 1, `${dice} · ${altas} pedidos`);
       } else {
-        check(`${quien} · sin respuesta del servicio, el QR sale con el enlace largo antes de 3 s`, /\/verificar\.html#/.test(leido ?? "") && tarda <= 3000, dice);
+        check(`${quien} · sin respuesta del servicio, el QR sale con el enlace largo antes de 3 s`, /\/verificar\.html\?o=qr#/.test(leido ?? "") && tarda <= 3000, dice);
       }
     }
     await page.screenshot(join(outDir, `espera-${v.etiqueta}-${tema}-resultado-grande.png`));

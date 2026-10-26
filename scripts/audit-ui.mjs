@@ -36,6 +36,7 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { launch } from "./lib/browser.mjs";
 import { CUENTA_FALSA, freighterFalsa } from "./lib/freighter-falsa.mjs";
+import { UMBRALES, sondaTexto } from "./lib/texto-minimo.mjs";
 
 const args = process.argv.slice(2);
 const opt = (name, def) => {
@@ -254,7 +255,7 @@ const NOMBRES = [
   "Fabiola", "Oscar", "Meetup de Cochabamba", "Cumpleaños de Dani", "Clerk + WTM", "Taller de Rust",
 ];
 async function sembrarHistorial(page) {
-  await page.eval(`(() => {
+  await page.eval(`(async () => {
     const dir = document.querySelector('#wallet-box .hello').title.split(' · ').pop();
     const lista = ${JSON.stringify(NOMBRES)}.map((n, i) => ({
       organizer: dir, listHash: 'a'.repeat(64), count: 20 + i, numWinners: 1, round: 100 + i,
@@ -264,6 +265,11 @@ async function sembrarHistorial(page) {
       ...(i === 5 ? { id: '5' } : {}),
     }));
     localStorage.setItem('tinkazo.history.testnet', JSON.stringify(lista));
+    // Se escribió por fuera de la página, y ella solo dibuja "Mis sorteos" al conectar y cuando contesta la consulta a
+    // la cadena. Si esa contestación llegaba antes, el historial quedaba sin dibujar (una de cada dos pasadas, desde
+    // que el ingreso es más rápido) y "ofrece rearmar" fallaba por una carrera del auditor. Se le pide que dibuje ya.
+    const u = (performance.getEntriesByType('resource').find((e) => /\\/assets\\/history-[^/?#]+\\.js/.test(e.name)) || {}).name;
+    if (u) (await import(u)).renderHistory(dir);
     return true;
   })()`);
 }
@@ -319,6 +325,7 @@ async function pasoDeFondos(browser, p, tema) {
       width: p.w, height: p.h, deviceScaleFactor: 2, mobile: p.movil, screenWidth: p.w, screenHeight: p.h,
     });
     await page.send("Page.addScriptToEvaluateOnNewDocument", { source: freighterFalsa() });
+    await sinSesionGuardada(page);
     await page.send("Page.navigate", { url: `${base}/?theme=${tema}` });
     await page.waitFor("document.readyState === 'complete' && document.fonts && document.fonts.status === 'loaded'", 15000);
     await page.waitFor(`document.querySelector('#gate button, #wallet-box button')`, 20000);
@@ -651,6 +658,78 @@ const SIN_CUENTA = `JSON.stringify((() => {
   };
 })())`;
 
+/**
+ * "¿Cómo se usa?" (src/ui/tutorial.ts, diseño del onboarding del 22 de octubre
+ * de 2026): un panel en el lugar, que empuja la página y no tapa nada, sin
+ * botones del color de la casa, con las cuatro tarjetas a la vista en
+ * escritorio y de a una en el celular, el foco en su título al abrir y de
+ * vuelta en el botón al cerrar con Escape. Y lo de siempre: contraste, blancos
+ * de toque, sin scroll de costado.
+ */
+async function tutorialEnLaPagina(page, etiqueta, tema, movil) {
+  const quien = `${etiqueta} ${tema}: "¿Cómo se usa?"`;
+  const hay = await page.eval("!!document.getElementById('btn-como') && document.getElementById('btn-como').offsetParent !== null");
+  check(`${quien} está a la vista en la fila del título`, hay);
+  if (!hay) return;
+  await page.eval("document.getElementById('btn-como').scrollIntoView({ block: 'center' }); document.getElementById('btn-como').click(); true");
+  await sleep(700);
+  const t = JSON.parse(await page.eval(`JSON.stringify((() => {
+    const p = document.getElementById('como-panel');
+    const cs = getComputedStyle(p);
+    const ver = [...p.querySelectorAll('.como-tarjeta')].filter((li) => getComputedStyle(li).display !== 'none');
+    return {
+      abierto: !p.hidden && cs.display !== 'none',
+      enElFlujo: cs.position === 'static' || cs.position === 'relative',
+      foco: document.activeElement && document.activeElement.id,
+      tarjetas: ver.length,
+      aca: (p.querySelector('.como-tarjeta.aca') || {}).dataset?.paso || '',
+      principales: p.querySelectorAll('.primary').length,
+      expandido: document.getElementById('btn-como').getAttribute('aria-expanded'),
+    };
+  })())`));
+  check(`${quien} se abre en el lugar, empujando la página`, t.abierto && t.enElFlujo, JSON.stringify(t));
+  check(`${quien}: el foco va a su título`, t.foco === "como-titulo", `foco en ${t.foco}`);
+  check(`${quien}: sin ningún botón de color adentro`, t.principales === 0, `${t.principales}`);
+  check(`${quien}: ${movil ? "una tarjeta a la vez" : "las cuatro tarjetas"}`, movil ? t.tarjetas === 1 : t.tarjetas === 4, `${t.tarjetas} a la vista`);
+  check(`${quien}: abre en el paso en que se está ("Estás acá")`, t.aca === "2", `marca el ${t.aca || "ninguno"}`);
+  const q = JSON.parse(await page.eval(PROBE));
+  check(`${quien}: contraste del texto`, q.texto.length === 0, q.texto.slice(0, 3).map((x) => `"${x.t}" ${x.r}<${x.need}`).join(" | "));
+  check(`${quien}: sin scroll horizontal`, q.scroll.doc <= q.scroll.vista + 1, `${q.scroll.doc} vs ${q.scroll.vista}`);
+  check(`${quien}: nada se sale de su caja`, q.desbordes.length === 0, q.desbordes.slice(0, 3).map((x) => `"${x.t}" ${x.sw}>${x.cw}`).join(" | "));
+  if (movil) check(`${quien}: blancos de toque de 44 px`, q.toques.length === 0, q.toques.slice(0, 3).map((x) => `"${x.t}" ${x.h}px`).join(" | "));
+  await page.eval("document.getElementById('como-panel').scrollIntoView({ block: 'start' }); true");
+  await sleep(300);
+  await page.screenshot(join(outDir, `ui-tutorial-${etiqueta}-${tema}.png`));
+  // De a una: "Siguiente" pasa a la tarjeta que sigue.
+  if (movil) {
+    await page.eval("document.getElementById('como-sig').click(); true");
+    await sleep(200);
+    const paso = await page.eval("[...document.querySelectorAll('#como-panel .como-tarjeta')].find((li) => getComputedStyle(li).display !== 'none')?.dataset.paso || ''");
+    check(`${quien}: "Siguiente" pasa de tarjeta`, paso === "3", `se ve la ${paso}`);
+  }
+  await page.eval("document.getElementById('como-titulo').focus(); true");
+  await tecla(page, "Escape");
+  await sleep(300);
+  const c = JSON.parse(await page.eval("JSON.stringify({ cerrado: document.getElementById('como-panel').hidden, foco: document.activeElement && document.activeElement.id })"));
+  check(`${quien}: Escape lo cierra y el foco vuelve al botón`, c.cerrado && c.foco === "btn-como", JSON.stringify(c));
+}
+
+/**
+ * Cada pestaña empieza sin una sesión guardada. Todas comparten el almacenamiento del
+ * sitio, y la cuenta de prueba de una pantalla volvía sola en la siguiente: desde el
+ * 22 de octubre de 2026, mientras vuelve una sesión guardada la puerta dice
+ * "Retomando tu cuenta…" sin botón, y la que vuelve deja la cabecera con la cuenta, así
+ * que "sin cuenta", la ventana de ingreso y el paso de fondos no se podían mirar.
+ * Antes funcionaba de casualidad: el botón de la puerta aparecía antes de que la
+ * sesión terminara de volver. Solo se borra qué tipo de sesión había (la pestaña que ya
+ * tiene la suya la conserva en memoria) y la marca de Google.
+ */
+async function sinSesionGuardada(page) {
+  await page.send("Page.addScriptToEvaluateOnNewDocument", {
+    source: "(() => { try { for (const k of Object.keys(localStorage)) if (/^tinkazo\.session\.kind\.|^tinkazo\.pollar\.intent$/.test(k)) localStorage.removeItem(k); } catch {} })()",
+  });
+}
+
 async function run() {
   await mkdir(outDir, { recursive: true });
   const browser = await launch({ width: 1440, height: 900 });
@@ -667,6 +746,7 @@ async function run() {
           width: p.w, height: p.h, deviceScaleFactor: 2, mobile: p.movil,
           screenWidth: p.w, screenHeight: p.h,
         });
+        await sinSesionGuardada(page);
         await page.send("Page.navigate", { url: `${base}/?theme=${tema}` });
         await page.waitFor("document.readyState === 'complete' && document.fonts && document.fonts.status === 'loaded'", 15000);
 
@@ -683,6 +763,7 @@ async function run() {
             width: p.w, height: p.h, deviceScaleFactor: 2, mobile: p.movil,
             screenWidth: p.w, screenHeight: p.h,
           });
+          await sinSesionGuardada(sinCuenta);
           await sinCuenta.send("Page.navigate", { url: `${base}/?theme=${tema}#sortear` });
           await sinCuenta.waitFor("document.readyState === 'complete' && document.fonts && document.fonts.status === 'loaded'", 15000);
           await sinCuenta.waitFor(`!!document.querySelector('#gate button') && !!document.getElementById('btn-sample')`, 20000);
@@ -709,6 +790,19 @@ async function run() {
           if (p.movil) {
             check(`${etiqueta} ${tema}: sin cuenta, blancos de toque de 44 px`, sq.toques.length === 0, sq.toques.slice(0, 3).map((x) => `"${x.t}" ${x.h}px`).join(" | "));
           }
+          // La cuenta, en una línea con su botón (desde el 22 de octubre de 2026 no es una caja).
+          const g = JSON.parse(await sinCuenta.eval("JSON.stringify({ alto: Math.round(document.getElementById('gate').getBoundingClientRect().height), boton: !!document.querySelector('#gate button:not(.primary)') })"));
+          check(`${etiqueta} ${tema}: sin cuenta, la cuenta es una línea con su botón secundario`, g.boton && g.alto <= (p.w <= 400 ? 130 : 80), `${g.alto} px`);
+          await tutorialEnLaPagina(sinCuenta, etiqueta, tema, p.w <= 760);
+          // La letra grande (docs/ux.md): ningún texto del flujo por debajo de 16 px (13 en rótulos, pasos y cuenta).
+          const tx = JSON.parse(await sinCuenta.eval(sondaTexto({ solo: "main" })));
+          check(
+            `${etiqueta} ${tema}: letra grande, ningún texto del flujo por debajo de ${UMBRALES.flujo} px`,
+            !tx.error && tx.chicos.length === 0,
+            tx.error || tx.chicos.slice(0, 3).map((x) => `"${x.texto}" ${x.px} px (${x.donde})`).join(" | "),
+          );
+          const campos = JSON.parse(await sinCuenta.eval(`JSON.stringify([...document.querySelectorAll('main textarea, main input:not([type=file]):not([type=hidden]), main select')].filter((e) => e.getClientRects().length && parseFloat(getComputedStyle(e).fontSize) < 16).map((e) => (e.id || e.tagName) + ' ' + getComputedStyle(e).fontSize))`));
+          check(`${etiqueta} ${tema}: los campos son de 16 px, para que el celular no agrande la página al tocarlos`, campos.length === 0, campos.join(", "));
         } finally {
           try {
             await sinCuenta.send("Page.close");
@@ -804,6 +898,60 @@ async function run() {
           await page.send("Page.close");
         } catch {
           /* ya cerrada */
+        }
+      }
+    }
+    // El estadio en un proyector (1920x1080) y en una laptop (1366x768): el subtítulo y los botones se leen
+    // desde el fondo, y no queda el número de la ronda ni la marca con texto. Los nombres y los contadores
+    // de adentro del lienzo los mide audit-identidad.
+    if (!soloPantalla || soloPantalla === "proyector") {
+      for (const [w, h] of [[1920, 1080], [1366, 768]]) {
+        const e = await browser.open("about:blank");
+        try {
+          await e.send("Emulation.setDeviceMetricsOverride", { width: w, height: h, deviceScaleFactor: 1, mobile: false, screenWidth: w, screenHeight: h });
+          await sinSesionGuardada(e);
+          await e.send("Page.navigate", { url: `${base}/?demo=wheel&lead=6&theme=dark` });
+          const abrio = await e.waitFor("document.getElementById('stadium') && document.getElementById('stadium').style.display === 'block' && document.getElementById('commentary').textContent.trim() !== ''", 60000);
+          check(`proyector ${w}x${h}: el estadio arranca con subtítulo`, abrio.ok);
+          if (abrio.ok) {
+            const m = JSON.parse(await e.eval(`JSON.stringify((() => {
+              const vis = (el) => { const cs = getComputedStyle(el); return cs.display !== 'none' && cs.visibility !== 'hidden'; };
+              const px = (sel) => { const el = document.querySelector(sel); return el ? parseFloat(getComputedStyle(el).fontSize) : 0; };
+              const cont = document.querySelector('#stadium .st-actions');
+              return {
+                alto: innerHeight,
+                sub: px('#commentary'),
+                boton: Math.min(px('#st-sound'), px('#st-skip')),
+                ronda: vis(document.getElementById('st-round')),
+                marca: [...document.querySelectorAll('.st-brand > span')].filter((s) => s.textContent.trim() && vis(s) && !s.querySelector('svg')).length,
+                escondidos: !!cont && getComputedStyle(cont).transitionProperty.includes('opacity'),
+              };
+            })())`));
+            check(`proyector ${w}x${h}: el subtítulo mide ${Math.round(m.sub)} px (${((m.sub / m.alto) * 100).toFixed(1)} % del alto)`, m.sub / m.alto >= UMBRALES.estadio.subtitulo);
+            check(`proyector ${w}x${h}: Sonido y Saltar miden ${Math.round(m.boton)} px (${((m.boton / m.alto) * 100).toFixed(1)} % del alto)`, m.boton / m.alto >= UMBRALES.estadio.botones);
+            check(`proyector ${w}x${h}: sin el número de la ronda ni la marca con texto`, !m.ronda && m.marca === 0, `ronda visible ${m.ronda}, marca ${m.marca}`);
+          }
+          check(`proyector ${w}x${h}: sin excepciones`, e.exceptions.length === 0, e.exceptions.slice(0, 2).join(" | "));
+        } finally {
+          await e.send("Page.close").catch(() => undefined);
+        }
+      }
+    }
+    // "¿Cómo se usa?" también a 200 % de zoom (la laptop de 1362x632 al doble: 681x316), sin cuenta.
+    if (!soloPantalla || soloPantalla === "zoom-200") {
+      for (const tema of ["dark", "light"]) {
+        const z = await browser.open("about:blank");
+        try {
+          await z.send("Emulation.setDeviceMetricsOverride", { width: 681, height: 316, deviceScaleFactor: 2, mobile: false, screenWidth: 681, screenHeight: 316 });
+          await sinSesionGuardada(z);
+          await z.send("Page.navigate", { url: `${base}/?theme=${tema}#sortear` });
+          await z.waitFor("document.readyState === 'complete' && !!document.getElementById('btn-sample')", 20000);
+          await z.eval("document.getElementById('btn-sample').click(); true");
+          await sleep(900);
+          await tutorialEnLaPagina(z, "zoom-200", tema, true);
+          check(`zoom-200 ${tema}: sin excepciones`, z.exceptions.length === 0, z.exceptions.slice(0, 2).join(" | "));
+        } finally {
+          await z.send("Page.close").catch(() => undefined);
         }
       }
     }

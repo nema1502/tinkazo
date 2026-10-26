@@ -20,6 +20,8 @@ import { buscar, vecesExacto } from "./buscar";
 import { fechaLarga } from "./ui/agrupar";
 // Estático, no con import(): así las claves de compartir entran en los textos de esta página.
 import { abrirSorteo } from "./ui/compartir";
+import { contarApertura, contarVeredicto, quitarMarca, refDe, viaDe } from "./contar";
+import { type PropsDe, type Ref, contratoOficial } from "../workers/enlaces/src/conteo";
 
 /**
  * Página de verificación.
@@ -43,6 +45,25 @@ interface Check {
 }
 
 const checks: Check[] = [];
+
+// Por dónde llegó (el QR, el enlace corto o el largo), para el contador del
+// embudo (src/contar.ts). La marca se saca de la dirección enseguida: si alguien
+// copia el enlace de la barra, no viaja con él.
+const via = viaDe(location.search);
+quitarMarca();
+/** La referencia pública del sorteo, si está anclado: sin ella no se cuenta nada. */
+let ref: Ref | undefined;
+
+/**
+ * Cómo terminó la verificación, para el contador: verde, amarillo, rojo, o que
+ * no se pudo terminar. Lo decide la verificación estricta (`src/protocol/verificacion.ts`):
+ * su verde ya exige un contrato oficial; un verde de otro contrato, si llegara, se
+ * cuenta como rojo (§4.5 de la arquitectura de métricas), y el Worker no cuenta
+ * sorteos de otros contratos. Se cuenta lo primero que se le muestra a la persona.
+ */
+function contarFin(verdict: PropsDe<"proof_verdict">["verdict"]): void {
+  if (ref) contarVeredicto(verdict === "green" && !contratoOficial(ref) ? "red" : verdict, ref);
+}
 
 function paint(): void {
   $("checks").innerHTML = checks
@@ -158,6 +179,9 @@ async function main(): Promise<void> {
     fail("vNoProof", t("vNoProofDetail"));
     return;
   }
+  // Un comprobante anclado: se abrió. Uno sin anclar (la demo, el modo libre) no es un sorteo y no se cuenta.
+  ref = refDe(proof);
+  if (ref) contarApertura(via, ref);
   // El worker que verifica la firma se levanta ya: baja la curva mientras se
   // lee la cadena, y el cálculo no traba la página.
   prepararFirma();
@@ -313,6 +337,7 @@ function contar(proof: Proof, r: Revision): void {
     // y se comparte, y sería indistinguible de la de un sorteo de verdad.
     const { titulo, detalle } = porQueNoCuadra(r);
     fail(titulo, t(detalle));
+    if (primeraVez) contarFin("red");
     pintarTecnico(detalleTecnico(r, proof));
     return;
   }
@@ -323,6 +348,7 @@ function contar(proof: Proof, r: Revision): void {
     // Sin tarjeta de ganador, que se comparte sola. Con el hash del sello y el historial
     // que no contesta no se llega acá: eso es "no pude comprobarlo" (`sin-red`).
     verdict("partial", "vVerdictMissing", t("vVerdictMissingDetail"));
+    if (primeraVez) contarFin("yellow");
     return;
   }
 
@@ -334,8 +360,10 @@ function contar(proof: Proof, r: Revision): void {
       const sale = roundTime(r.ronda);
       if (Number.isFinite(sale) && sale > Math.floor(Date.now() / 1000)) {
         verdict("partial", "vVerdictWaiting", t("vVerdictWaitingDetail").replace("{h}", hora(sale)));
+        if (primeraVez) contarFin("yellow");
       } else {
         verdict("working", "vCannotFinish", t("vRoundUnreachable"));
+        if (primeraVez) contarFin("error");
       }
       return;
     }
@@ -351,11 +379,13 @@ function contar(proof: Proof, r: Revision): void {
     // red cortada (el wifi del evento), un comprobante inventado salía con su
     // tarjeta, su premio y el botón de compartir (escépticos, 22 de octubre de 2026).
     verdict("working", "vVerdictUnknown", t("vVerdictUnknownDetail"));
+    if (primeraVez) contarFin("error");
     return;
   }
 
   if (r.firma === null || r.semilla === null) {
     fail("vCannotFinish", t("vRoundUnreachable"));
+    if (primeraVez) contarFin("error");
     return;
   }
 
@@ -398,11 +428,14 @@ function contar(proof: Proof, r: Revision): void {
     }
     // En testnet se dice: Stellar la borra entera el 16 de diciembre de 2026.
     else verdict("ok", "vVerdictOkChain", t(proof.net === "testnet" ? "vVerdictOkChainDetailTest" : "vVerdictOkChainDetail"));
+    if (primeraVez) contarFin(sellosRepetidos ? "yellow" : "green");
   } else if (r.veredicto === "pendiente") {
     verdict("partial", "vVerdictPending", t("vVerdictPendingDetail"));
+    if (primeraVez) contarFin("yellow");
   } else {
     // Sin registro externo, la cuenta cierra pero la lista no está atestiguada.
     verdict("partial", "vVerdictPartial", t("vVerdictPartialDetail"));
+    if (primeraVez) contarFin("yellow");
   }
 }
 
@@ -658,6 +691,8 @@ function renderResult(
       ...(extra.fecha ? { fecha: extra.fecha } : {}),
       ...(extra.numero ? { numero: extra.numero } : {}),
       ...(extra.red ? { red: extra.red } : {}),
+      // Para el contador, la referencia del sorteo solo si la cadena lo atestiguó (la verificación estricta).
+      ...(extra.numero && extra.red ? { ref: refDe(proof) } : {}),
     });
   // El contrato, solo si es uno de Tinkazo: el enlace a uno ajeno sería darle crédito.
   if (r.ancla.tipo === "oficial") {

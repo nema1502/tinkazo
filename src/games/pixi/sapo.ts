@@ -4,7 +4,7 @@ import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, fanfare, note } from "../../sound";
 import { writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, shorten, winnersLabel } from "../overlay";
-import { CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
+import { CONTADOR, medidasContador, CREAM, INK, MONO, YELLOW, mountPixi, type PixiStage } from "./stage";
 import { cabe, centrar, encuadrar, unir, type Caja, type Zona } from "./encuadre";
 import { avatarColor } from "../../avatar";
 import { assignSlots } from "./slots";
@@ -272,7 +272,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   S.hud.addChild(chipLayer, strikeG);
   // El contador de la casa, como el de la piñata: arriba a la izquierda.
   const counterBox = new Graphics();
-  const counter = S.text("", { fontFamily: MONO, fontSize: 14, fontWeight: "700", fill: CREAM });
+  const counter = S.text("", { fontFamily: MONO, fontSize: CONTADOR.fuente, fontWeight: "700", fill: CREAM });
   counter.anchor.set(0.5);
   const counterG = new Container();
   counterG.addChild(counterBox, counter);
@@ -413,7 +413,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     });
     badgeLayer.removeChildren().forEach((c) => c.destroy());
     badgeOf.clear();
-    counter.style.fontSize = S.letra(16);
+    counter.style.fontSize = medidasContador(k).fuente;
     counter.style.fill = CREAM;
     almost.style.fontSize = 26 * k;
     almost.text = t("cSapAlmost");
@@ -1099,7 +1099,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     counter.text = !started
       ? (tAll < T_FLY && all > holes ? `${t("cQualIn")}  ${quedan}` : `${t("cSapHoles")}  ${holes}`)
       : total > 1 ? T[getLang()].cSapTally(premioDe(turn), total).toUpperCase() : `${t("cSapHoles")}  ${holes}`;
-    const bw = counter.width + 40 * k, bh = 40 * k;
+    const bw = counter.width + medidasContador(k).aire, bh = medidasContador(k).alto;
     counter.position.set(bw / 2, bh / 2);
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(0x221a33).stroke({ width: 3 * k, color: INK });
     counterG.position.set(22 * k, S.top() + 10 * k);

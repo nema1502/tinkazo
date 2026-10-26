@@ -41,7 +41,12 @@ function pintar(): void {
   $("c-portada").className = red ? "ghost" : "primary";
 }
 
-/** Lo que la persona eligió en la dirección (idioma y tema) sigue en la página del comprobante. */
+/**
+ * Lo que la persona eligió en la dirección (idioma y tema) sigue en la página
+ * del comprobante. Y por dónde llegó, para el contador del embudo
+ * (src/contar.ts): desde el QR (`o=qr`, que trae el enlace corto del QR) o
+ * desde el enlace corto (`o=short`). La página la saca de la dirección al abrir.
+ */
 function preferencias(): string {
   const q = new URLSearchParams(location.search);
   const sigue = new URLSearchParams();
@@ -49,8 +54,8 @@ function preferencias(): string {
   const tema = q.get("theme");
   if (lang === "es" || lang === "en") sigue.set("lang", lang);
   if (tema === "light" || tema === "dark") sigue.set("theme", tema);
-  const s = sigue.toString();
-  return s ? `?${s}` : "";
+  sigue.set("o", q.get("o") === "qr" ? "qr" : "short");
+  return `?${sigue.toString()}`;
 }
 
 async function intentar(): Promise<void> {

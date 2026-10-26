@@ -12,6 +12,7 @@ import { Gobernador, ajustesDe, aprender, dibujaPorSoftware, esPorPlaca, nivelIn
 import { guardiaNombre, meter } from "./encuadre";
 import { reves, tira } from "./papel-picado";
 import { watchRecovery } from "./recover";
+import { vibrar } from "../../vibrar";
 
 /**
  * El andamiaje de los juegos en PixiJS: lo mismo que `overlay.ts` hace para
@@ -33,6 +34,26 @@ import { watchRecovery } from "./recover";
 gsap.config({ autoSleep: 20 });
 
 export const INK = 0x191919;
+
+/**
+ * El contador de "quedan N" que llevan los juegos, arriba a la izquierda: lo
+ * que la sala mira para saber cuánto falta. A 14 px en una pantalla de 720 (el
+ * 1,9 % del alto) no se leía desde el fondo del proyector (24 de octubre de
+ * 2026): ahora, 22 px de letra en una caja de 52, que son un 3 % del alto. Todo
+ * en unidades `k` del juego (un píxel del diseño de 720 de alto).
+ */
+export const CONTADOR = { fuente: 22, alto: 52, aire: 44 } as const;
+
+/**
+ * Las medidas del contador para la unidad `k` del juego: la letra nunca baja de
+ * 15 px aunque la pantalla sea chica (un celular girado, 390 de alto, donde `k`
+ * vale 0,54 y los 22 del diseño quedaban en 12), y la caja crece con ella.
+ */
+export function medidasContador(k: number): { fuente: number; alto: number; aire: number } {
+  const fuente = Math.max(15, CONTADOR.fuente * k);
+  const e = fuente / CONTADOR.fuente;
+  return { fuente, alto: CONTADOR.alto * e, aire: CONTADOR.aire * e };
+}
 export const CREAM = 0xf6efe2;
 export const YELLOW = 0xffc629;
 
@@ -288,6 +309,30 @@ function identidadDe(names: string[]): { estado: Identidad; mirar: (raices: Cont
   return { estado, mirar };
 }
 
+/**
+ * Los márgenes que el sistema reserva (muesca, esquinas redondeadas, barra de
+ * gestos), en píxeles de la ventana. Se leen del CSS (`env(safe-area-inset-*)`),
+ * que solo vale algo con `viewport-fit=cover` (index.html).
+ */
+export function leerZonaSegura(): { top: number; right: number; bottom: number; left: number } {
+  const cero = { top: 0, right: 0, bottom: 0, left: 0 };
+  if (typeof document === "undefined" || !document.body) return cero;
+  const sonda = document.createElement("div");
+  sonda.style.cssText =
+    "position:fixed;left:0;top:0;width:0;height:0;visibility:hidden;pointer-events:none;" +
+    "padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)";
+  document.body.appendChild(sonda);
+  const cs = getComputedStyle(sonda);
+  const z = {
+    top: parseFloat(cs.paddingTop) || 0,
+    right: parseFloat(cs.paddingRight) || 0,
+    bottom: parseFloat(cs.paddingBottom) || 0,
+    left: parseFloat(cs.paddingLeft) || 0,
+  };
+  sonda.remove();
+  return z;
+}
+
 /** Lo que un juego pide al montar el estadio. */
 export interface MountOptions {
   /** La música del juego: la andina de siempre, salvo que pida otra. */
@@ -468,8 +513,14 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   const sh = (): number => innerHeight;
   const portrait = (): boolean => sh() > sw() * 1.1;
   const u = (): number => (portrait() ? Math.min(sw() / 420, sh() / 900) : sh() / 720);
-  const top = (): number => (innerWidth <= 520 ? 100 : 82);
-  const bottom = (): number => (innerWidth <= 520 ? 118 : 106);
+  // La zona segura de la pantalla (muescas y barra de gestos de un celular): el
+  // juego no pone nada importante debajo. Vale cero donde no hay muesca, así que
+  // en una computadora el diseño es el de siempre.
+  let seguro = leerZonaSegura();
+  addEventListener("resize", () => (seguro = leerZonaSegura()));
+  addEventListener("orientationchange", () => (seguro = leerZonaSegura()));
+  const top = (): number => (innerWidth <= 520 ? 100 : 82) + seguro.top;
+  const bottom = (): number => (innerWidth <= 520 ? 118 : 106) + seguro.bottom;
   const letra = (px: number): number => px * Math.min(2, u()) * (compartir ? 1.2 : 1);
 
   // Los textos se dibujan al doble: la cámara se acerca hasta 1,5× o más sobre
@@ -520,7 +571,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     for (const c of sinDibujar) if (!c.destroyed) c.renderable = true;
     sinDibujar.length = 0;
     const W = sw(), H = sh();
-    const zona = { x0: 2, y0: top(), x1: W - 2, y1: piso() };
+    const zona = { x0: 2 + seguro.left, y0: top(), x1: W - 2 - seguro.right, y1: piso() };
     const correr = (c: Container, dx: number, dy: number): void => {
       const padre = c.parent;
       if (!padre || (dx === 0 && dy === 0)) return;
@@ -810,6 +861,8 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
           if (tt < te || sonados.has(i)) return;
           sonados.add(i);
           if (tt - te > 0.3) return;
+          // El golpe del ganador, también en la mano (solo donde el celular vibra).
+          if (i === 0) vibrar("cartel");
           beep(note(12 - 2 * i), 0.42, "triangle", 0.055);
           beep(note(7 - 2 * i), 0.6, "triangle", 0.04);
         });

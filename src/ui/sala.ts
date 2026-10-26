@@ -7,6 +7,7 @@ import { repetidos } from "../buscar";
 import { app } from "../state";
 import { parseNames } from "./participants";
 import { pintarQr } from "./qr";
+import { contar } from "../contar";
 
 /**
  * La lista a la vista de la sala, antes de sellar.
@@ -46,6 +47,8 @@ export async function mostrarLista(): Promise<void> {
   const sellada = app.frozen;
   const names = sellada ? sellada.names : parseNames();
   if (names.length < 2) return;
+  // El contador del embudo (src/contar.ts): que se mostró, nada de la lista.
+  contar("list_shown", {});
   const prize = sellada ? sellada.prize : ((document.getElementById("prize") as HTMLInputElement | null)?.value.trim() ?? "");
   const hash = sellada ? sellada.listHash : bytesToHex(listHash(names));
   const rep = repetidos(names);

@@ -1,4 +1,4 @@
-# Enlaces cortos para los comprobantes (ver README.md).
+# Enlaces cortos para los comprobantes y el contador anónimo del embudo (ver README.md).
 # Se despliega con: npx wrangler@4 deploy   (desde esta carpeta)
 name = "tinkazo-enlaces"
 account_id = "d97c3f7acada21d5ec280704fb34ff17"
@@ -11,6 +11,15 @@ routes = [{ pattern = "c.tinkazo.app/*", zone_name = "tinkazo.app" }]
 name = "ALMACEN"
 class_name = "Almacen"
 
+# El contador: sumas por día, en su propio objeto.
+[[durable_objects.bindings]]
+name = "CONTADOR"
+class_name = "Contador"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Almacen"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Contador"]

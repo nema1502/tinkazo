@@ -5,6 +5,8 @@ import { decodeProof } from "../protocol/proof";
 import { eventoUrl, partirEvento, type SorteoDelEvento } from "../protocol/evento";
 import { fotoPng, type Foto } from "./foto";
 import { type ConOrden, enOrdenDeSalida } from "./agrupar";
+import { contar, refDe } from "../contar";
+import type { PropsDe, Ref } from "../../workers/enlaces/src/conteo";
 
 /**
  * Compartir un sorteo o un evento: la foto con quién ganó y el QR para
@@ -72,6 +74,8 @@ export interface DatosSorteo {
   numero?: string;
   /** La red donde se ancló: "testnet" o "mainnet". */
   red?: string;
+  /** La referencia pública del sorteo, si se ancló: solo para el contador (`src/contar.ts`). */
+  ref?: Ref | undefined;
 }
 
 /** El mensaje de un sorteo: quién ganó, entre cuántos, el enlace y el pie. */
@@ -191,6 +195,19 @@ export interface Paquete {
   titulo: string;
   /** Arma lo que se comparte: intenta el enlace corto y, si no sale, usa el largo. No falla. */
   preparar: () => Promise<Listo>;
+  /**
+   * Lo que sabe el contador (`src/contar.ts`) de lo que se comparte: un evento
+   * (sin referencia) o el sorteo anclado, con su referencia pública.
+   */
+  medir?: { evento?: boolean; ref?: Ref | undefined };
+}
+
+type Canal = PropsDe<"share">["channel"];
+
+/** Se compartió, por `canal`: un evento cuenta como `event`, sea por donde sea. */
+function contarCompartido(p: Paquete, canal: Canal): void {
+  if (p.medir?.evento) contar("share", { channel: "event" });
+  else contar("share", { channel: canal }, p.medir?.ref);
 }
 
 let abierto: HTMLDialogElement | null = null;
@@ -216,18 +233,18 @@ type Aviso = (texto: string) => void;
  * portapapeles (o se baja, si no se puede) y se abre WhatsApp con el mensaje
  * escrito, avisando que hay que pegar la foto.
  */
-async function compartirPorWhatsapp(archivos: File[], mensaje: string, avisar: Aviso, lang: Lang): Promise<void> {
+async function compartirPorWhatsapp(archivos: File[], mensaje: string, avisar: Aviso, lang: Lang): Promise<"native" | "whatsapp" | null> {
   const datos: ShareData = archivos.length ? { files: archivos, text: mensaje } : { text: mensaje };
   if (typeof navigator.canShare === "function" && navigator.canShare(datos)) {
     try {
       await navigator.share(datos);
       avisar("");
-      return;
+      return "native";
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") {
         // En la computadora, la hoja del sistema puede no tener WhatsApp: se dice qué hacer, sin insistir.
         if (!matchMedia("(pointer: coarse)").matches) avisar(cad(lang, "cmpNoAparece"));
-        return;
+        return null;
       }
       // Si el navegador no deja (por ejemplo, porque se venció el toque), sigue como en la computadora.
     }
@@ -249,6 +266,7 @@ async function compartirPorWhatsapp(archivos: File[], mensaje: string, avisar: A
   if (copiada) avisar(cad(lang, "cmpPegaLaFoto"));
   else if (archivos.length) avisar(cad(lang, archivos.length > 1 ? "cmpAdjuntaLasFotos" : "cmpAdjuntaLaFoto"));
   else avisar("");
+  return "whatsapp";
 }
 
 /** Abre el diálogo de compartir y prepara la foto y el mensaje. Reemplaza al que estuviera abierto. */
@@ -355,9 +373,13 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
   wa.addEventListener("click", () => {
     if (compartiendo) return;
     compartiendo = true;
-    void compartirPorWhatsapp(archivos, mensaje, avisar, lang).finally(() => {
-      compartiendo = false;
-    });
+    void compartirPorWhatsapp(archivos, mensaje, avisar, lang)
+      .then((canal) => {
+        if (canal) contarCompartido(p, canal);
+      })
+      .finally(() => {
+        compartiendo = false;
+      });
   });
   bajar.addEventListener("click", () => {
     archivos.forEach(descargar);
@@ -368,6 +390,7 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
     try {
       await navigator.clipboard.writeText(mensaje);
       copiar.textContent = cad(lang, "copied");
+      contarCompartido(p, "copy");
     } catch {
       // Sin portapapeles: el mensaje queda seleccionado para copiarlo a mano.
       txt.select();
@@ -415,6 +438,7 @@ export function abrirSorteo(d: DatosSorteo, lang: Lang = getLang(), op: { corto?
           corto: !!c,
         };
       },
+      medir: { ref: d.ref },
     },
     lang,
   );
@@ -432,6 +456,7 @@ export async function compartirSorteo(enlace: string, ganadores: string[], lang:
       ...(comprobante.sealedAt ? { fecha: comprobante.sealedAt } : {}),
       ...(comprobante.id ? { numero: comprobante.id } : {}),
       ...(comprobante.net ? { red: comprobante.net } : {}),
+      ref: refDe(comprobante),
     },
     lang,
   );
@@ -507,5 +532,5 @@ export async function prepararEvento(
 /** Compartir un evento: la foto (o una por parte) y el mensaje con quién ganó qué. */
 export async function compartirEvento(titulo: string, sorteos: SorteoDelEvento[], lang: Lang = getLang()): Promise<void> {
   if (!sorteos.length) return;
-  abrirCompartir({ titulo: cad(lang, "histGrupoCompartir"), preparar: () => prepararEvento(titulo, sorteos, lang) }, lang);
+  abrirCompartir({ titulo: cad(lang, "histGrupoCompartir"), preparar: () => prepararEvento(titulo, sorteos, lang), medir: { evento: true } }, lang);
 }

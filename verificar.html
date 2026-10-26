@@ -67,6 +67,8 @@
     <div class="head"><h2 data-i="vResult">Quién ganó</h2><span class="kicker" id="v-round"></span></div>
     <div class="body">
       <div id="v-winners"></div>
+      <!-- Quien llega por el QR ve primero quién ganó; el detalle para auditar, cuando lo pide. -->
+      <p class="v-comprobar"><a class="primary cta" id="btn-comprobar" href="#sec-checks" data-i="vQuieroComprobar">Quiero comprobarlo</a></p>
       <p class="entity" id="v-proof"></p>
       <div class="row">
         <a id="v-drand" target="_blank" rel="noopener" class="ghost" data-i="vRound">Ver la ronda pública ↗</a>
@@ -90,7 +92,7 @@
   </section>
 
   <!-- Los cuatro pasos de la comprobación -->
-  <section class="block">
+  <section class="block" id="sec-checks">
     <div class="head"><h2 data-i="vChecks">Lo que se comprobó</h2><span class="kicker" id="v-net"></span></div>
     <div class="body">
       <ul class="checks" id="checks"></ul>

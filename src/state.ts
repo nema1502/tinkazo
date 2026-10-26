@@ -202,6 +202,17 @@ function initialPace(): Pace {
 let pace: Pace = initialPace();
 
 /**
+ * Un ritmo de paso, que no se guarda: el ensayo va en el rápido sin cambiar
+ * el que eligió la persona para sus sorteos (`ensayo.ts`). Elegir uno en el
+ * selector lo suelta.
+ */
+let forzado: Pace | null = null;
+export function forzarRitmo(p: Pace | null): void {
+  forzado = p;
+}
+const ritmo = (): Pace => forzado ?? pace;
+
+/**
  * Hasta dónde se deja estirar un juego.
  *
  * Más que esto no es más emoción, es cámara lenta. La ruleta tenía dos segundos
@@ -267,10 +278,10 @@ export const paceFactor = (): number => {
   if (nominal <= 0) return 1;
   // Un piso de cuatro segundos para que un objetivo chico y un juego con mucho
   // tiempo fijo no den un factor absurdo.
-  const util = Math.max(4, PACES[pace] - fijo - tarjeta);
+  const util = Math.max(4, PACES[ritmo()] - fijo - tarjeta);
   return Math.max(MIN_STRETCH, Math.min(MAX_STRETCH, util / nominal));
 };
-export const currentPace = (): Pace => pace;
+export const currentPace = (): Pace => ritmo();
 
 /**
  * Cómo se llama cada posición del selector, con su duración.
@@ -288,7 +299,7 @@ export const paceSeconds = (p: Pace): number => PACES[p] + (conCuenta(p) ? CUENT
  * lo cuenta. En la duración rápida no va: es la que se elige para ir al grano.
  */
 export const CUENTA_SECONDS = 3;
-export const conCuenta = (p: Pace = pace): boolean => p !== "rapido";
+export const conCuenta = (p: Pace = ritmo()): boolean => p !== "rapido";
 
 /**
  * Si la sala ya contó "3, 2, 1" con la tarjeta: el juego larga directo, sin
@@ -303,6 +314,7 @@ export const yaContaron = (): boolean => contaron;
 
 export function setPace(p: Pace): void {
   pace = p;
+  forzado = null;
   try {
     localStorage.setItem(PACE_KEY, p);
   } catch {

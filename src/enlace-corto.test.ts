@@ -485,10 +485,11 @@ describe("enlace corto: el QR del resultado en grande", () => {
     expect(s.pedidos.filter((x) => x.metodo === "POST")).toHaveLength(1);
   });
 
-  it("el final del show que arrancó desde la espera pide el corto, salvo en la demo", () => {
+  it("el final del show que arrancó desde la espera pide el corto, salvo en la demo y en el ensayo", () => {
     const draw = readFileSync("src/ui/draw.ts", "utf8");
     const resultado = /function resultadoEnGrande[\s\S]*?\n}/.exec(draw)?.[0] ?? "";
-    expect(resultado).toMatch(/mostrarResultado\(enlace, \{ corto: !params\.has\("demo"\), volverA \}\)/);
+    // `sinGrabar()` es la demo o el ensayo (ensayo-modo.ts): ninguno guarda nada en ningún lado.
+    expect(resultado).toMatch(/mostrarResultado\(enlace, \{ corto: !sinGrabar\(\), volverA \}\)/);
   });
 
   it("los términos dicen que también se arma ahí, en los dos idiomas", () => {

@@ -24,9 +24,29 @@ describe("index.html, la herramienta", () => {
       "g-trueque", "g-teleferico", "g-oruro", "ta", "nw", "names", "pace",
       // Lo que sigue (siguiente.ts): el indicador de pasos y la barra.
       "pasos", "siguiente", "sig-paso", "sig-btn", "sig-aviso", "juego-actual", "btn-cambiar", "gamepick", "again-acciones",
+      // El primer sorteo (22 de octubre de 2026): la cuenta, la oferta, el tutorial y el ensayo.
+      "gate", "btn-pegar", "primera-vez", "pegar-ayuda", "sellar-resumen", "ya-entraste", "btn-como", "como-panel",
+      "btn-ensayo", "ensayo-banda", "ensayo-guia", "ensayo-fin", "ens-mio", "ens-salir",
     ];
     const faltan = ids.filter((id) => !new RegExp(`\\bid="${id}"`).test(html));
     expect(faltan).toEqual([]);
+  });
+
+  it("el tutorial, la oferta de primera vez y la línea de la cuenta no tienen ningún botón de color", () => {
+    // La única acción principal de la pantalla es la del paso (docs/ux.md). "¿Cómo se usa?" es secundario.
+    const bloque = (id: string): string => {
+      const i = html.indexOf(`id="${id}"`);
+      const etiqueta = html.lastIndexOf("<", i);
+      const nombre = /^<(\w+)/.exec(html.slice(etiqueta))?.[1] ?? "";
+      return html.slice(etiqueta, html.indexOf(`</${nombre}>`, i));
+    };
+    for (const id of ["como-panel", "primera-vez", "gate"]) expect(bloque(id), id).not.toMatch(/class="[^"]*\bprimary\b/);
+    expect(bloque("btn-como")).not.toMatch(/\bprimary\b/);
+  });
+
+  it("\"Cargar ejemplo\" ya no está a la vista en el markup: en una red con contrato lo reemplaza el ensayo", () => {
+    // participants.ts lo esconde en una red con contrato; queda en la página para los auditores (.click()).
+    expect(html).toMatch(/id="btn-ensayo"[^>]*data-entrar-ensayo/);
   });
 
   it("lo que sigue después del ganador va pegado al ganador, antes de 'Mostrar en grande' y de la verificación", () => {

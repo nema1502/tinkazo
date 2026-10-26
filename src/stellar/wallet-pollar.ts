@@ -1,6 +1,7 @@
 import type { PollarClient, WalletInfo } from "@pollar/core";
 import { network } from "./config";
 import type { SignedTx, WalletAdapter } from "./wallet";
+import { contarEntrada, marcarEntrada, tomarEntrada } from "../contar";
 
 /**
  * Entrar con Google o con un correo, sin instalar nada.
@@ -82,6 +83,8 @@ class PollarWallet implements SubmittingWallet {
   async connect(): Promise<string> {
     const client = await this.#ensureClient();
     this.#remember("google");
+    // Al volver, `restore` sabe que es una cuenta recién conectada y no una sesión retomada (el contador, src/contar.ts).
+    marcarEntrada();
     const ready = waitForWallet(client, 120_000);
     client.login({ provider: "google" });
     const wallet = await ready;
@@ -136,6 +139,8 @@ class PollarWallet implements SubmittingWallet {
     const client = await this.#ensureClient();
     const wallet = await waitForWallet(client, 8_000).catch(() => null);
     this.address = wallet?.address ?? null;
+    // Volvió de Google con la cuenta: para el contador es una cuenta conectada, no una sesión retomada.
+    if (this.address && tomarEntrada()) contarEntrada(this.#via === "email" ? "email" : "google");
     return this.address;
   }
 

@@ -52,7 +52,7 @@
   /* Sin esto los botones salían en Arial, la letra por defecto del navegador. */
   button { font-family: inherit; }
   .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
-  .kicker { font-family: ui-monospace, Consolas, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--muted); font-weight: 600; }
+  .kicker { font-family: ui-monospace, Consolas, monospace; font-size: 14px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--muted); font-weight: 600; }
   header { position: sticky; top: 0; z-index: 10; background: var(--paper); border-bottom: var(--bw) solid var(--ink); }
   .stripe { height: 10px; background: repeating-linear-gradient(90deg, var(--magenta) 0 44px, var(--orange) 44px 88px, var(--yellow) 88px 132px, var(--teal) 132px 176px, var(--purple) 176px 220px); }
   .bar { max-width: 1060px; margin: 0 auto; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
@@ -84,7 +84,7 @@
   @media (prefers-reduced-motion: reduce) { .wm-llama svg { animation: none; } }
   .langs { display: flex; gap: 4px; }
   .langs button {
-    font-family: ui-monospace, Consolas, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    font-family: ui-monospace, Consolas, monospace; font-size: 14px; text-transform: uppercase; letter-spacing: 0.08em;
     background: var(--card); color: var(--muted); border: 2px solid var(--ink); padding: 4px 9px; cursor: pointer; font-weight: 700;
   }
   .langs button.on { background: var(--yellow); color: #191919; box-shadow: var(--sh-sm); }
@@ -93,11 +93,11 @@
   .auth:empty { display: none; }
   button.mini, a.mini {
     background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
-    padding: 5px 12px; font-weight: 800; font-size: 12px; cursor: pointer; font-family: inherit;
+    padding: 5px 12px; font-weight: 800; font-size: 16px; cursor: pointer; font-family: inherit;
   }
   a.mini { text-decoration: none; }
   button.mini.solid, a.mini.solid { background: var(--magenta); color: var(--on-accent); }
-  .auth .hello { font-size: 12px; font-weight: 700; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .auth .hello { font-size: 14px; font-weight: 700; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #wheel { max-width: 88vw; height: auto; }
   main { flex: 1; width: 100%; max-width: 1060px; margin: 0 auto; padding: 0 20px; }
   .hero { padding: 64px 0 40px; display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; }
@@ -105,7 +105,7 @@
   .sticker {
     display: inline-block; background: var(--teal); color: var(--on-accent); border: var(--bw) solid var(--ink);
     box-shadow: var(--sh-sm); padding: 5px 14px; font-family: ui-monospace, Consolas, monospace;
-    font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; transform: rotate(-1.5deg);
+    font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; transform: rotate(-1.5deg);
   }
   /* La palabra del sticker cambia dándose vuelta (src/ui/rotar.ts): se pone de
      canto, cambia y vuelve. Sin opacidad: fundida, a mitad de camino quedaba
@@ -155,7 +155,7 @@
      30 de septiembre de 2026). */
   button.primary, a.primary {
     background: var(--magenta); color: var(--on-accent); border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm);
-    padding: 12px 24px; font-weight: 800; font-size: 15px; cursor: pointer; transition: transform 0.08s, box-shadow 0.08s;
+    padding: 12px 24px; font-weight: 800; font-size: 17px; cursor: pointer; transition: transform 0.08s, box-shadow 0.08s;
   }
   a.primary { display: inline-block; text-decoration: none; }
   button.primary:hover:not(:disabled):not([aria-disabled="true"]), a.primary:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
@@ -176,15 +176,17 @@
   a.primary.cta { display: inline-block; text-decoration: none; }
   button.ghost, a.ghost {
     background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
-    padding: 10px 18px; font-size: 13px; font-weight: 700; cursor: pointer; transition: transform 0.08s, box-shadow 0.08s;
+    padding: 10px 18px; font-size: 16px; font-weight: 700; cursor: pointer; transition: transform 0.08s, box-shadow 0.08s;
   }
   a.ghost { display: inline-block; text-decoration: none; }
-  button.ghost:hover, a.ghost:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
+  button.ghost:hover:not(:disabled), a.ghost:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
+  /* "Sellar la lista" mientras faltan nombres: apagado y sin el color de la casa (participants.ts). */
+  button.ghost:disabled { cursor: not-allowed; color: var(--muted); border-color: var(--muted); box-shadow: none; }
   /* Que la red se vea. Alguien que entra con Google no tiene por qué saber
      que está en una red de pruebas, y confundirla con la de verdad sería lo
      peor que puede pasar. */
   .netbadge {
-    font-family: ui-monospace, Consolas, monospace; font-size: 12px; text-transform: uppercase;
+    font-family: ui-monospace, Consolas, monospace; font-size: 13px; text-transform: uppercase;
     letter-spacing: 0.12em; font-weight: 800; border: 2px solid var(--ink);
     box-shadow: var(--sh-sm); background: var(--orange);
     color: var(--on-accent); padding: 5px 11px;
@@ -224,7 +226,7 @@
      veces son direcciones y ahí importa cada carácter. */
   .modal-card textarea {
     width: 100%; box-sizing: border-box; resize: vertical; margin-top: 10px;
-    font-family: ui-monospace, Consolas, monospace; font-size: 13px; line-height: 1.5;
+    font-family: ui-monospace, Consolas, monospace; font-size: 16px; line-height: 1.5;
     background: var(--paper); color: var(--ink); border: 2px solid var(--ink); padding: 10px;
   }
   .wallet-row {
@@ -233,8 +235,8 @@
     padding: 12px 14px; font-family: inherit; transition: transform 0.08s, box-shadow 0.08s;
   }
   .wallet-row:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
-  .wallet-row b { display: block; font-size: 15px; font-weight: 800; }
-  .wallet-row span { display: block; font-size: 12px; color: var(--ink2); margin-top: 3px; }
+  .wallet-row b { display: block; font-size: 16px; font-weight: 800; }
+  .wallet-row span { display: block; font-size: 14px; color: var(--ink2); margin-top: 3px; }
   /* La ventana de ingreso, con la forma de la de Pollar (8 de octubre de 2026):
      redonda, limpia y centrada, con los colores de Tinkazo. Es la única
      tarjeta redonda del sitio a propósito: se lee como el momento de entrar,
@@ -258,7 +260,7 @@
   }
   .login-logo svg { width: 38px; height: 38px; fill: currentColor; }
   .login-head h3 { font-size: 21px; font-weight: 800; }
-  .login-head p { font-size: 14px; color: var(--ink2); line-height: 1.45; overflow-wrap: anywhere; }
+  .login-head p { font-size: 16px; color: var(--ink2); line-height: 1.45; overflow-wrap: anywhere; }
   .login-form { display: flex; flex-direction: column; gap: 10px; }
   .login-form input {
     min-height: 48px; width: 100%; box-sizing: border-box; padding: 0 16px;
@@ -269,30 +271,42 @@
   .login-form input.login-code { text-align: center; letter-spacing: 0.4em; font-family: ui-monospace, Consolas, monospace; font-size: 22px; }
   .login-go {
     min-height: 48px; border: 0; border-radius: 12px; cursor: pointer;
-    background: var(--magenta); color: var(--on-accent); font-family: inherit; font-size: 15px; font-weight: 800;
+    background: var(--magenta); color: var(--on-accent); font-family: inherit; font-size: 17px; font-weight: 800;
   }
   .login-go:disabled { opacity: 0.45; cursor: default; }
-  .login-err { font-size: 13px; font-weight: 700; color: var(--magenta-ink); text-align: center; }
+  .login-err { font-size: 16px; font-weight: 700; color: var(--magenta-ink); text-align: center; }
   .login-err.ok { color: var(--teal-ink); }
-  .login-or { display: flex; align-items: center; gap: 12px; margin: 22px 0 14px; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .login-or { display: flex; align-items: center; gap: 12px; margin: 22px 0 14px; font-size: 16px; font-weight: 600; color: var(--muted); }
   .login-or::before, .login-or::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
   .login-opts { display: flex; flex-direction: column; gap: 10px; }
   .login-opt {
     display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; padding: 0 16px;
     background: var(--field); color: var(--ink); border: 1px solid var(--line); border-radius: 12px;
-    font-family: inherit; font-size: 15px; font-weight: 700; text-decoration: none; cursor: pointer;
+    font-family: inherit; font-size: 16px; font-weight: 700; text-decoration: none; cursor: pointer;
     transition: border-color 0.12s, background 0.12s;
   }
   .login-opt:hover { border-color: var(--ink2); background: var(--card); }
   .login-opt svg { width: 20px; height: 20px; flex: 0 0 auto; }
-  .login-opt small { font-size: 12px; font-weight: 600; color: var(--muted); }
+  .login-opt small { font-size: 14px; font-weight: 600; color: var(--muted); }
+  /* Google primero y grande: es lo que va a tomar casi todo el mundo (diseño del onboarding). */
+  .login-opt.login-google { min-height: 56px; font-size: 17px; font-weight: 800; background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
+  .login-opt.login-google svg { width: 22px; height: 22px; }
+  /* La billetera y la cuenta de prueba, plegadas: casi nadie las necesita. */
+  .login-mas { margin-top: 18px; }
+  .login-mas > summary {
+    display: flex; align-items: center; justify-content: center; min-height: 44px; cursor: pointer;
+    color: var(--ink2); font-size: 16px; font-weight: 700; text-decoration: underline; text-underline-offset: 3px;
+  }
+  .login-mas[open] > summary { margin-bottom: 10px; }
+  /* Desde el navegador de una app: por qué el correo va primero. */
+  .login-app { margin: 0 0 14px; padding: 10px 12px; border-left: 6px solid var(--orange); background: var(--field); font-size: 16px; font-weight: 600; color: var(--ink); line-height: 1.45; }
   .login-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 0 18px; margin-top: 8px; }
   .login-link {
     min-height: 44px; padding: 0 4px; background: none; border: 0; cursor: pointer;
-    color: var(--ink2); font-family: inherit; font-size: 13px; font-weight: 700; text-decoration: underline;
+    color: var(--ink2); font-family: inherit; font-size: 16px; font-weight: 700; text-decoration: underline;
   }
   .login-link:disabled { opacity: 0.5; cursor: default; }
-  .login-foot { margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--line); text-align: center; font-size: 12px; color: var(--muted); }
+  .login-foot { margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--line); text-align: center; font-size: 14px; color: var(--muted); }
   .login-by { display: inline-flex; align-items: center; gap: 6px; }
   .login-by svg { width: 15px; height: 15px; color: var(--purple-ink); }
   .login-by b { color: var(--ink); font-weight: 800; }
@@ -304,7 +318,7 @@
   .wallet-notice {
     position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 80;
     background: var(--teal); color: var(--on-accent); border: var(--bw) solid var(--ink); box-shadow: var(--sh);
-    padding: 10px 18px; font-size: 13px; font-weight: 700; max-width: 90vw; text-align: center;
+    padding: 10px 18px; font-size: 16px; font-weight: 700; max-width: 90vw; text-align: center;
   }
   .wallet-notice.bad { background: var(--orange); color: #191919; }
   /* El que salió bien, dentro de la página (arriba de la lista): no tapa ningún control (wallet-ui.ts). */
@@ -313,18 +327,18 @@
     box-shadow: none; padding: 10px 16px; overflow-wrap: anywhere;
   }
   .txstatus {
-    margin-top: 12px; font-size: 13px; font-weight: 700; color: var(--ink2);
+    margin-top: 12px; font-size: 16px; font-weight: 700; color: var(--ink2);
     border-left: 4px solid var(--purple); padding-left: 10px;
   }
   .txstatus.ok { border-left-color: var(--teal); }
   .txstatus.bad { border-left-color: var(--orange); }
   .txstatus a { color: var(--ink); }
   /* El detalle técnico de un error, plegado debajo del mensaje (detalle-error.ts): para copiarlo y mandarlo. */
-  .txdetalle { margin: 2px 0 0 14px; font-size: 12px; color: var(--ink2); }
+  .txdetalle { margin: 2px 0 0 14px; font-size: 16px; color: var(--ink2); }
   .txdetalle summary { display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
   .txdetalle code {
     display: block; margin: 0 0 8px; padding: 8px 10px; background: var(--card); color: var(--ink);
-    border: 1px solid var(--line); font-size: 12px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere;
+    border: 1px solid var(--line); font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere;
   }
   .verdict { padding: 44px 0 26px; }
   .verdict h1 { font-size: clamp(30px, 5vw, 48px); line-height: 1.05; font-weight: 900; margin-top: 8px; }
@@ -349,9 +363,9 @@
   .checks { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 10px; }
   .check {
     border-left: 5px solid var(--muted); padding: 8px 0 8px 12px;
-    display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; font-size: 14px; font-weight: 700;
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; font-size: 16px; font-weight: 700;
   }
-  .check span { font-size: 12px; color: var(--ink2); font-weight: 600; overflow-wrap: anywhere; }
+  .check span { font-size: 14px; color: var(--ink2); font-weight: 600; overflow-wrap: anywhere; }
   .check.ok { border-left-color: var(--teal); }
   .check.bad { border-left-color: var(--orange); }
   .check.pending { border-left-color: var(--yellow); }
@@ -373,7 +387,7 @@
   }
   .chip {
     border: 2px solid var(--ink); padding: 5px 12px; font-family: ui-monospace, Consolas, monospace;
-    font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; background: var(--paper); color: var(--ink2);
+    font-size: 16px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700; background: var(--paper); color: var(--ink2);
   }
   .chip.live { background: var(--teal); color: var(--on-accent); transform: rotate(-1deg); box-shadow: var(--sh-sm); }
   /* Apagar con opacidad los dejaba en 2,8 a 1. Un color sólido apagado se
@@ -383,6 +397,20 @@
   /* Con la lista sellándose o sellada, los orígenes ya no cargan nada: se ven
      apagados, como los que vienen pronto (participants.ts, cerrarLista). */
   .lista-cerrada .chip.live { background: var(--paper); color: var(--muted); border-style: dashed; box-shadow: none; transform: none; cursor: not-allowed; }
+  /* Con la lista vacía, "Pegar lista" es la acción del paso: el botón de la
+     casa, no un chip (participants.ts). Con la lista cargada vuelve a ser chip. */
+  #btn-pegar.primary {
+    font-family: inherit; text-transform: none; letter-spacing: 0; font-size: 17px; font-weight: 800;
+    padding: 12px 24px; min-height: 48px; transform: none;
+    background: var(--magenta); color: var(--on-accent); border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm);
+  }
+  /* Un enlace que es un botón: "o probá con un ejemplo, sin grabar nada". */
+  .enlace {
+    display: inline-flex; align-items: center; min-height: 44px; padding: 6px 2px; margin: 2px 0 6px;
+    background: none; border: 0; font: inherit; font-size: 16px; font-weight: 700; color: var(--purple-ink);
+    text-decoration: underline; text-underline-offset: 3px; cursor: pointer; text-align: left;
+  }
+  .enlace:hover { color: var(--ink); }
   /* La espera de la ronda.
      Son los diez segundos en que la lista ya está cerrada y el número que la
      va a decidir todavía no existe: es el momento en que este producto es
@@ -397,6 +425,10 @@
   .wait .kicker { color: var(--on-purple); }
   .wait-num { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin: 6px 0 8px; }
   .wait-num b { font-size: clamp(26px, 5vw, 40px); font-weight: 900; letter-spacing: -0.01em; }
+  /* El número de la ronda ("#33290446") no va en la página: era una de las dudas
+     de quien sorteaba por primera vez (diseño del onboarding). Sigue en los
+     detalles técnicos y en el comprobante. La cuenta regresiva queda. */
+  #wait-round { display: none; }
   .wait-num span {
     font-size: clamp(30px, 6vw, 48px); font-weight: 900; font-variant-numeric: tabular-nums;
     background: var(--yellow); color: #191919; border: 2px solid var(--ink); padding: 0 12px;
@@ -404,7 +436,7 @@
   }
   @keyframes latido { 50% { transform: scale(1.06); } }
   @media (prefers-reduced-motion: reduce) { .wait-num span { animation: none; } }
-  .wait-line { font-size: 14px; line-height: 1.55; max-width: 62ch; }
+  .wait-line { font-size: 16px; line-height: 1.55; max-width: 62ch; }
   .rules-row { margin: 4px 0 14px; }
   #csv-pick .pick { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: 100%; }
   #csv-pick select { max-width: 100%; }
@@ -414,7 +446,7 @@
   .gamepick { display: flex; gap: 10px; flex-wrap: wrap; }
   .gamepick button {
     border: 2px solid var(--ink); background: var(--paper); color: var(--ink2); padding: 9px 16px;
-    font-weight: 800; font-size: 13px; cursor: pointer; font-family: inherit;
+    font-weight: 800; font-size: 16px; cursor: pointer; font-family: inherit;
   }
   .gamepick button.on { background: var(--purple); color: var(--on-purple); box-shadow: var(--sh-sm); transform: rotate(-1deg); }
   /* La miniatura de cada juego, dentro de su botón.
@@ -440,7 +472,7 @@
      lleva una etiqueta y una nota corta. Lo que no encaja se atenúa, pero sigue
      tocable: su nota dice por qué. */
   .gamepick .rec-tag {
-    align-self: center; font-style: normal; font-size: 10px; font-weight: 800; letter-spacing: 0.06em;
+    align-self: center; font-style: normal; font-size: 14px; font-weight: 800; letter-spacing: 0.06em;
     text-transform: uppercase; line-height: 1.4; padding: 1px 6px;
     background: var(--teal); color: var(--on-accent); border: 2px solid var(--ink);
   }
@@ -465,11 +497,11 @@
   .kpis > div:nth-child(3) b { color: var(--purple-ink); }
   .kpis span { font-family: ui-monospace, Consolas, monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); font-weight: 700; }
   .names { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
-  .names i { font-style: normal; border: 2px solid var(--ink); background: var(--paper); padding: 3px 11px 3px 4px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 7px; }
+  .names i { font-style: normal; border: 2px solid var(--ink); background: var(--paper); padding: 3px 11px 3px 4px; font-size: 16px; font-weight: 600; display: inline-flex; align-items: center; gap: 7px; }
   .names i img { width: 22px; height: 22px; border: 1.5px solid var(--ink); background: #fff; }
   .names i:nth-child(5n+1) { transform: rotate(-1deg); }
   .names i:nth-child(5n+3) { transform: rotate(1.2deg); }
-  .entity { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--muted); line-height: 1.7; overflow-wrap: anywhere; }
+  .entity { font-family: ui-monospace, Consolas, monospace; font-size: 14px; color: var(--muted); line-height: 1.7; overflow-wrap: anywhere; }
   .wheel-wrap { display: none; text-align: center; padding: 10px 0; }
   .wheel-box { position: relative; display: inline-block; }
   .pointer {
@@ -493,14 +525,14 @@
     font-size: clamp(22px, 3.6vw, 34px); font-weight: 900; letter-spacing: -0.01em;
     overflow-wrap: anywhere;
   }
-  .winner-prize { font-size: 14px; font-weight: 700; margin-top: 2px; }
+  .winner-prize { font-size: 18px; font-weight: 700; margin-top: 2px; }
   /* "No está", dentro de la tarjeta: siempre tinta sobre amarillo, en los dos
      temas. Chico, para que no le compita al nombre en el proyector. */
   /* `width: 0` con `min-width: 100%`: toma el ancho de la tarjeta sin agrandarla, así la pregunta no empuja a la de al lado. */
   .ausente { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 8px; width: 0; min-width: 100%; }
-  .ausente-q { flex-basis: 100%; font-size: 14px; font-weight: 800; }
+  .ausente-q { flex-basis: 100%; font-size: 16px; font-weight: 800; }
   .ausente-btn {
-    min-height: 44px; padding: 4px 12px; font: inherit; font-size: 13px; font-weight: 800; cursor: pointer;
+    min-height: 44px; padding: 4px 12px; font: inherit; font-size: 16px; font-weight: 800; cursor: pointer;
     background: transparent; color: #191919; border: 2px solid #191919;
   }
   .ausente-btn.si { background: #191919; color: #ffd24d; }
@@ -514,13 +546,13 @@
   .verify a { color: var(--ink); font-weight: 700; }
   .qr { text-align: center; }
   .qr img { width: 132px; height: 132px; border: 2px solid var(--ink); background: #fff; padding: 6px; }
-  .qr p { font-size: 10px; margin-top: 6px; max-width: 140px; }
-  .ok { border-left: 4px solid var(--teal); padding-left: 10px; margin-top: 10px; font-size: 13px; color: var(--ink2); }
+  .qr p { font-size: 16px; margin-top: 6px; max-width: 140px; }
+  .ok { border-left: 4px solid var(--teal); padding-left: 10px; margin-top: 10px; font-size: 16px; color: var(--ink2); }
   footer { border-top: var(--bw) solid var(--ink); margin-top: 44px; }
   footer .bar { font-family: ui-monospace, Consolas, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); font-weight: 700; }
   /* El pie lleva emoji, y en versalitas con mucho espaciado quedan feos. */
   footer .bar [data-i="footR"] { text-transform: none; letter-spacing: 0.04em; font-size: 13px; }
-  .note { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .note { font-size: 16px; color: var(--muted); margin-top: 10px; }
   select { background: var(--card); color: var(--ink); border: 2px solid var(--ink); padding: 9px 12px; font-weight: 700; }
   /* Detrás de la tarjeta del ganador, no encima: caía justo sobre el nombre
      en los primeros segundos, que es cuando la gente saca la foto. */
@@ -528,7 +560,7 @@
   .confetti i { position: absolute; width: 10px; height: 14px; top: -20px; animation: fall linear forwards; }
   @keyframes fall { to { transform: translateY(105vh) rotate(720deg); } }
   .field { margin-top: 16px; }
-  .field label { display: block; font-family: ui-monospace, Consolas, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); font-weight: 700; margin-bottom: 6px; }
+  .field label { display: block; font-family: ui-monospace, Consolas, monospace; font-size: 14px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); font-weight: 700; margin-bottom: 6px; }
   /* ---------- La tarjeta de "cómo se juega" ----------
      Antes de cada juego, encima de todo y del estadio que arranca abajo.
      Oscura en los dos temas, como el estadio: es para el proyector. */
@@ -567,7 +599,7 @@
      mismo lugar, un segundo clic se saltaba el juego entero. */
   .gc-saltar {
     position: absolute; bottom: 20px; right: 18px; z-index: 1; min-height: 44px; padding: 6px 16px; cursor: pointer;
-    background: #f6efe2; color: #10101c; border: 2px solid #000; box-shadow: 3px 3px 0 #000; font-weight: 800; font-size: 13px;
+    background: #f6efe2; color: #10101c; border: 2px solid #000; box-shadow: 3px 3px 0 #000; font-weight: 800; font-size: 16px;
   }
   .gc-barra { position: absolute; left: 0; right: 0; bottom: 0; height: 8px; background: rgba(246, 239, 226, 0.12); }
   .gc-barra i { display: block; width: 100%; height: 100%; background: #ffc629; transform-origin: left; animation: gc-barra var(--gc-ms, 3500ms) linear forwards; }
@@ -617,7 +649,7 @@
   .st-actions { display: flex; gap: 8px; }
   .st-actions button {
     background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
-    padding: 6px 14px; font-weight: 800; font-size: 12px; cursor: pointer;
+    padding: 6px 14px; font-weight: 800; font-size: 16px; cursor: pointer;
   }
   /* En un celular la barra no entra en un renglón: al número de ronda le
      quedaban noventa píxeles entre la marca y los botones, y se partía en
@@ -660,7 +692,7 @@
     .langs button { padding: 4px 7px; min-width: 44px; }
     .bar { gap: 10px; padding: 12px 14px; }
     .auth { gap: 6px; }
-    .netbadge { font-size: 11px; padding: 5px 8px; letter-spacing: 0.08em; }
+    .netbadge { font-size: 12px; padding: 5px 8px; letter-spacing: 0.08em; }
     .auth .hello { max-width: 104px; }
     .gamepick button { width: calc(50% - 6px); }
   }
@@ -693,23 +725,26 @@
   /* Una huella de 64 caracteres desbordaba la tarjeta en celular. */
   .note { word-break: break-word; overflow-wrap: anywhere; }
   /* El panel de la cuenta: ver "UX 19-oct: panel" al final del archivo. */
-  .modal-by { margin-top: 14px; font-size: 11px; color: var(--muted); text-align: center; line-height: 1.5; }
+  .modal-by { margin-top: 14px; font-size: 14px; color: var(--muted); text-align: center; line-height: 1.5; }
 
   /* La puerta. Sin cuenta conectada no se sortea, así que el bloque de
      participantes aparece apagado y esto explica por qué. */
+  /* Desde el 22 de octubre de 2026 es una línea con su botón secundario, no una
+     caja: la caja ocupaba la primera pantalla del celular y "Sellar la lista"
+     quedaba una pantalla más abajo (diseño del onboarding). */
   .gate {
-    display: block; margin: 0 0 18px; padding: 18px 20px;
-    background: var(--yellow); color: var(--on-accent);
-    border: var(--bw) solid var(--ink); box-shadow: var(--sh);
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 14px;
+    margin: 0 0 14px; padding: 6px 6px 6px 14px;
+    background: var(--card); color: var(--ink);
+    border: 2px solid var(--ink); border-left: 8px solid var(--yellow);
   }
-  .gate h3 { font-size: 19px; font-weight: 800; margin-bottom: 6px; text-wrap: balance; }
-  .gate p { font-size: 14px; line-height: 1.55; }
-  .gate .row { margin-top: 14px; }
-  .gate .note { color: #3a3529; }
+  .gate p { flex: 1 1 220px; font-size: 16px; font-weight: 700; line-height: 1.45; padding: 4px 0; }
+  .gate button { min-height: 44px; }
+  .gate.retomando p { color: var(--ink2); }
   /* Sin cuenta, la lista, los premios y sus etiquetas se leen igual: se puede
      armar la lista antes de conectar. Solo el botón de sellar queda apagado
      (`aria-disabled`, más arriba) y esta línea dice qué falta. */
-  .sellar-sin-cuenta { display: none; margin: 10px 0 0; font-size: 14px; font-weight: 700; color: var(--ink2); }
+  .sellar-sin-cuenta { display: none; margin: 10px 0 0; font-size: 16px; font-weight: 700; color: var(--ink2); }
   .body.locked .sellar-sin-cuenta { display: block; }
 
   /* El panel del grifo. Aparece cuando la cuenta conectada no tiene con qué
@@ -721,16 +756,16 @@
   .fund .fund-tag {
     display: inline-block; background: var(--orange); color: var(--on-accent);
     border: 2px solid var(--ink); box-shadow: var(--sh-sm);
-    font-family: ui-monospace, Consolas, monospace; font-size: 12px; font-weight: 800;
+    font-family: ui-monospace, Consolas, monospace; font-size: 14px; font-weight: 800;
     letter-spacing: 0.14em; text-transform: uppercase; padding: 5px 12px; transform: rotate(-1deg);
   }
   .fund h3 { font-size: 18px; font-weight: 800; margin: 12px 0 6px; text-wrap: balance; }
-  .fund p { font-size: 14px; color: var(--ink2); line-height: 1.55; }
+  .fund p { font-size: 16px; color: var(--ink2); line-height: 1.55; }
   .fund .fund-addr {
     display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 14px 0 4px;
   }
   .fund .fund-addr code {
-    font-family: ui-monospace, Consolas, monospace; font-size: 13px; font-weight: 700;
+    font-family: ui-monospace, Consolas, monospace; font-size: 14px; font-weight: 700;
     background: var(--paper); border: 2px solid var(--ink); padding: 8px 12px;
     overflow-wrap: anywhere; flex: 1 1 260px; min-width: 0;
   }
@@ -782,6 +817,11 @@
     font-weight: 800; font-size: clamp(14px, 1.7vw, 24px); white-space: nowrap;
   }
   .espera-pie { font-size: clamp(13px, 1.5vw, 18px); color: var(--muted); max-width: 60ch; }
+  .espera-nadie { font-size: clamp(14px, 1.7vw, 22px); font-weight: 800; color: var(--ink); max-width: 46ch; text-wrap: balance; }
+  .espera-ensayo {
+    font-size: clamp(13px, 1.6vw, 22px); font-weight: 900; letter-spacing: 0.08em; max-width: 100%;
+    background: var(--yellow); color: #191919; border: 2px solid #191919; box-shadow: 3px 3px 0 #191919; padding: 4px 12px;
+  }
   .espera-id { font-size: clamp(13px, 1.5vw, 18px); font-weight: 800; }
   /* Cuando nace el número, en el lugar de la cuenta y con su alto (lo mide
      espera.ts: los nombres no saltan): la línea de la cortina mientras se
@@ -815,8 +855,8 @@
   }
   .lore .lore-tab { position: absolute; left: 0; top: 0; bottom: 0; width: 10px; }
   .lore .lore-q { font-size: 17px; font-weight: 800; margin: 6px 0 6px; text-wrap: balance; }
-  .lore .lore-a { font-size: 14px; color: var(--ink2); line-height: 1.55; }
-  .lore .lore-src { display: inline-block; margin-top: 10px; font-size: 11px; color: var(--muted); }
+  .lore .lore-a { font-size: 16px; color: var(--ink2); line-height: 1.55; }
+  .lore .lore-src { display: inline-block; margin-top: 10px; font-size: 14px; color: var(--muted); }
 
   /* Debajo de la verificación: otro premio, con la misma lista sin los
      ganadores o con una nueva. Tres premios suelen ser tres sorteos. */
@@ -825,11 +865,11 @@
     border: 2px solid var(--ink); box-shadow: var(--sh-sm);
   }
   .again h3 { font-size: 18px; font-weight: 800; text-wrap: balance; }
-  .again-left { font-size: 14px; color: var(--ink2); margin-top: 4px; }
+  .again-left { font-size: 18px; color: var(--ink2); margin-top: 4px; }
   .again .row { margin-top: 12px; }
   /* Arriba del cuadro, después de "sin los ganadores": quién salió de la lista. */
   .again-note {
-    margin: 0 0 12px; padding: 10px 14px; font-size: 14px; font-weight: 700;
+    margin: 0 0 12px; padding: 10px 14px; font-size: 16px; font-weight: 700;
     background: var(--yellow); color: var(--on-accent); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
   }
   /* El sorteo sellado que quedó sin sortear, con "Retomarlo" al lado (history.ts). */
@@ -845,59 +885,133 @@
   }
   button.primary, button.ghost, a.primary, a.ghost { text-wrap: balance; }
 
-  /* La bienvenida de la primera vez: los tres pasos, en el mismo idioma
-     visual que la puerta y el grifo. */
-  .onboard {
-    display: block; margin: 0 0 18px; padding: 18px 20px;
-    background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh);
+  /* --- El primer sorteo (diseño del onboarding, 22 de octubre de 2026). --- */
+
+  /* La portada: "Entrar con Google y sortear" con la G, "Probar con un ejemplo"
+     al lado y "Otras formas de entrar" debajo, chico. La G solo cuando el botón
+     va de verdad a Google (main.ts): con Pollar, sin sesión y fuera del
+     navegador de una app. */
+  .cta-entrar { display: inline-flex; align-items: center; gap: 10px; }
+  .cta-entrar .g-ico { display: none; }
+  body[data-google="1"][data-sesion="no"] .cta-entrar .g-ico {
+    display: inline-block; flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--ink);
+    background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath fill='%23EA4335' d='M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z'/%3E%3Cpath fill='%234285F4' d='M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z'/%3E%3Cpath fill='%23FBBC05' d='M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z'/%3E%3Cpath fill='%2334A853' d='M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z'/%3E%3C/svg%3E") center / 16px 16px no-repeat;
   }
-  .onboard h3 { font-size: 19px; font-weight: 800; margin-bottom: 12px; text-wrap: balance; }
-  .ob-pasos {
-    list-style: none; counter-reset: paso; margin: 0; padding: 0;
-    display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+  .hero-ctas button.ghost { min-height: 52px; font-size: 16px; padding: 0 22px; }
+  .hero-otras { margin-top: 2px; }
+  /* Con la sesión abierta no hay otra forma de entrar que ofrecer. */
+  body[data-sesion="si"] .hero-otras { display: none; }
+  /* Sobre el morado del final de la portada y de la demo, el enlace va del color de la letra de ahí. */
+  .demo-fin .hero-ctas .enlace, .portada-fin .enlace, .ensayo-fin .enlace:hover,
+  .demo-fin .hero-ctas .enlace:hover, .portada-fin .enlace:hover { color: var(--on-purple); }
+  .portada-fin .hero-otras { margin-top: 10px; }
+
+  /* La primera vez, una línea sin botones de color (onboarding.ts). */
+  .primera-vez {
+    display: flex; align-items: center; justify-content: space-between; gap: 6px 10px;
+    margin: 0 0 14px; padding: 2px 2px 2px 14px; background: var(--card);
+    border: 2px dashed var(--ink2);
   }
-  .ob-pasos li {
-    counter-increment: paso; position: relative; padding: 12px 14px 12px 54px;
+  .primera-vez p { flex: 1 1 auto; font-size: 16px; line-height: 1.45; padding: 4px 0; }
+  /* En el renglón, pero con su blanco de toque de 44 px. */
+  .primera-vez .enlace { display: inline-flex; min-height: 44px; padding: 0 2px; margin: 0; font-size: 16px; vertical-align: middle; }
+  .pv-x {
+    flex: 0 0 auto; width: 44px; height: 44px; display: grid; place-items: center;
+    background: none; border: 0; color: var(--ink2); font: inherit; font-size: 18px; font-weight: 800; cursor: pointer;
+  }
+  .pv-x:hover { color: var(--ink); }
+  .pegar-ayuda { margin: -4px 0 10px; }
+  .lista-cuenta { margin: 8px 0 2px; font-size: 20px; font-weight: 900; color: var(--ink); }
+  /* Lo que se va a sellar, debajo del botón; y al volver de entrar, lo que sigue. */
+  .sellar-resumen { margin: 10px 0 0; font-size: 16px; color: var(--ink2); }
+  .ya-entraste {
+    margin: 14px 0 0; padding: 10px 14px; background: var(--card); color: var(--ink);
+    border: 2px solid var(--ink); border-left: 8px solid var(--teal); font-weight: 800; font-size: 16px;
+  }
+
+  /* "¿Cómo se usa?" en la fila del título: secundario, 44 px, con texto. En 360 px o menos, solo "?". */
+  .appbar-t { display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap; }
+  button.btn-como { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; }
+  .btn-como .como-q {
+    display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+    background: var(--yellow); color: #191919; border: 2px solid var(--ink); font-weight: 900; font-size: 16px; line-height: 1;
+  }
+  .btn-como[aria-expanded="true"] { background: var(--yellow); color: #191919; }
+  @media (max-width: 360px) {
+    .btn-como .como-bt { display: none; }
+    button.btn-como { padding: 0 10px; min-width: 44px; justify-content: center; }
+  }
+  /* Nunca en la demo: se hace sola. */
+  body[data-demo="1"] .btn-como, body[data-demo="1"] .como-panel { display: none !important; }
+
+  /* El panel, en el lugar: empuja la página y no tapa nada. */
+  .como-panel[hidden] { display: none; }
+  .como-panel {
+    margin: -6px 0 20px; padding: 14px 16px 12px; background: var(--card); color: var(--ink);
+    border: var(--bw) solid var(--ink); box-shadow: var(--sh);
+  }
+  .como-cab { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+  .como-cab h3 { font-size: 19px; font-weight: 900; text-wrap: balance; }
+  .como-cab h3:focus { outline: none; }
+  .como-cab h3:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
+  .como-x {
+    flex: 0 0 auto; width: 44px; height: 44px; display: grid; place-items: center; background: none; border: 0;
+    color: var(--ink2); font: inherit; font-size: 20px; font-weight: 800; cursor: pointer;
+  }
+  .como-tarjetas { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  @media (min-width: 761px) and (max-width: 959px) { .como-tarjetas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .como-tarjeta {
+    position: relative; display: flex; flex-direction: column; gap: 6px; padding: 14px 12px 12px 14px;
     background: var(--paper); border: 2px solid var(--ink);
   }
-  .ob-pasos li::before {
-    content: counter(paso); position: absolute; left: 12px; top: 12px; width: 30px; height: 30px;
-    display: grid; place-items: center; font-weight: 900; font-size: 15px;
-    background: var(--yellow); color: var(--on-accent); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+  .como-tarjeta.aca { border-width: 3px; border-color: var(--ink); box-shadow: 0 0 0 3px var(--yellow); }
+  .como-n {
+    display: grid; place-items: center; width: 30px; height: 30px; font-weight: 900; font-size: 16px;
+    background: var(--yellow); color: #191919; border: 2px solid var(--ink); box-shadow: var(--sh-sm);
   }
-  .ob-pasos li:nth-child(2)::before { background: var(--magenta); }
-  .ob-pasos li:nth-child(3)::before { background: var(--teal); }
-  .ob-pasos b { display: block; font-size: 15px; font-weight: 800; margin-bottom: 4px; }
-  .ob-pasos span { display: block; font-size: 13px; color: var(--ink2); line-height: 1.5; }
-  @media (max-width: 900px) { .ob-pasos { grid-template-columns: 1fr; } }
-  /* El botón que despliega la bienvenida: solo en el celular, donde va plegada (onboarding.ts). */
-  .ob-abrir { display: none; }
+  .como-tarjeta[data-paso="2"] .como-n { background: var(--magenta); }
+  .como-tarjeta[data-paso="3"] .como-n { background: var(--teal); }
+  .como-tarjeta[data-paso="4"] .como-n { background: var(--orange); }
+  /* Con `.como-tarjeta` adelante: `.como-tarjeta p` le ponía el color de la letra de la tarjeta (1,18 a 1 en oscuro, audit-ui). */
+  .como-tarjeta .como-aca { display: none; position: absolute; top: 14px; right: 12px; font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.08em; color: #191919; background: var(--yellow); padding: 2px 6px; border: 2px solid var(--ink); }
+  .como-tarjeta.aca .como-aca { display: block; }
+  .como-tarjeta h4 { font-size: 17px; font-weight: 900; line-height: 1.25; }
+  .como-tarjeta p { font-size: 16px; line-height: 1.45; color: var(--ink2); }
+  .como-tarjeta .como-nota { font-size: 16px; color: var(--ink); font-weight: 600; }
+  /* El dibujo del botón de verdad: su color y su texto, chico, inclinado y con
+     borde punteado, como una figurita. No es un botón: no se toca ni recibe el foco. */
+  .como-boton {
+    align-self: flex-start; margin-top: auto; padding: 3px 10px; font-size: 14px; font-weight: 800;
+    background: var(--magenta); color: var(--on-accent); border: 2px dashed var(--ink);
+    transform: rotate(-2deg); pointer-events: none; user-select: none;
+  }
+  .como-nav { display: none; }
+  .como-pie { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin-top: 12px; }
+  .como-pie button.ghost { min-height: 44px; }
   @media (max-width: 760px) {
-    .onboard:not(.abierta) { padding: 0; }
-    .ob-abrir {
-      display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 48px;
-      padding: 10px 14px; border: 0; background: none; color: var(--ink); font: inherit; font-size: 15px; font-weight: 800;
-      text-align: left; cursor: pointer;
-    }
-    .ob-abrir::after { content: "▾"; font-size: 16px; transition: transform 0.15s; }
-    .onboard.abierta .ob-abrir { padding: 0 0 10px; min-height: 44px; }
-    .onboard.abierta .ob-abrir::after { transform: rotate(180deg); }
-    .onboard:not(.abierta) .ob-cuerpo { display: none; }
-    /* El título repetiría la línea que despliega: ya la dice el botón. */
-    .onboard .ob-cuerpo h3 { display: none; }
+    .como-panel { padding: 12px 12px 10px; }
+    .como-tarjetas { grid-template-columns: 1fr; }
+    .como-tarjeta:not(.ver) { display: none; }
+    .como-tarjeta { min-height: 196px; }
+    .como-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; }
+    .como-nav button { min-height: 44px; min-width: 96px; }
+    .como-nav button:disabled { opacity: 0.45; cursor: default; }
+    .como-de { font-size: 16px; color: var(--ink2); }
   }
-  /* En el celular: sin la explicación quedaban tres títulos sueltos, y con
-     la de escritorio ocupaba casi toda la pantalla. Más compacta, con el
-     número a la altura del título (revisiones del 16 de octubre de 2026). */
-  @media (max-width: 700px) {
-    .onboard { padding: 14px 14px; }
-    .onboard h3 { font-size: 17px; margin-bottom: 10px; }
-    .ob-pasos { gap: 8px; }
-    .ob-pasos li { padding: 8px 10px 8px 44px; }
-    .ob-pasos li::before { left: 8px; top: 7px; width: 26px; height: 26px; font-size: 13px; }
-    .ob-pasos b { font-size: 14px; margin-bottom: 2px; }
-    .ob-pasos span { font-size: 12.5px; line-height: 1.35; }
+
+  /* El mapa: los controles de verdad con su número, mientras el tutorial está
+     abierto y, siempre, hasta el primer sello del equipo (tutorial.ts). El
+     número es un dibujo: el lector de pantalla no lo lee ("" después de la barra). */
+  body[data-mapa="1"] :is(#btn-pegar, #btn-freeze, #btn-draw, #btn-again-sin, #btn-proof) { position: relative; }
+  body[data-mapa="1"] :is(#btn-pegar, #btn-freeze, #btn-draw, #btn-again-sin, #btn-proof)::before {
+    position: absolute; top: -12px; left: -12px; z-index: 1; display: grid; place-items: center; width: 24px; height: 24px;
+    border-radius: 50%; background: var(--yellow); color: #191919; border: 2px solid var(--ink);
+    font: 900 12px/1 system-ui, -apple-system, "Segoe UI", sans-serif; letter-spacing: 0; text-transform: none; pointer-events: none;
   }
+  body[data-mapa="1"] #btn-pegar::before { content: "1"; content: "1" / ""; }
+  body[data-mapa="1"] #btn-freeze::before { content: "2"; content: "2" / ""; }
+  body[data-mapa="1"] #btn-draw::before { content: "3"; content: "3" / ""; }
+  body[data-mapa="1"] :is(#btn-again-sin, #btn-proof)::before { content: "4"; content: "4" / ""; }
   .entity { overflow-wrap: anywhere; }
   #wheel { max-width: 100%; }
 
@@ -969,25 +1083,25 @@
   .imp-opt:hover { transform: translate(-2px, -2px); box-shadow: 4px 4px 0 var(--ink); }
   .imp-opt input { accent-color: var(--magenta); width: 18px; height: 18px; flex: 0 0 auto; }
   .imp-opt span { flex: 1; display: flex; flex-direction: column; }
-  .imp-opt b { font-size: 15px; font-weight: 800; }
-  .imp-opt small { font-size: 12px; color: var(--ink2); }
+  .imp-opt b { font-size: 16px; font-weight: 800; }
+  .imp-opt small { font-size: 14px; color: var(--ink2); }
   .imp-opt em { font-style: normal; font-weight: 800; font-size: 18px; }
   .imp-opt:has(input:checked) { background: var(--teal); color: var(--on-accent); box-shadow: 4px 4px 0 var(--ink); }
   .imp-opt:has(input:checked) small { color: var(--on-accent); opacity: 0.85; }
   .imp-more summary::before { content: "▸"; margin-right: 6px; }
   .imp-more[open] summary::before { content: "▾"; }
   .imp-group { padding: 14px 8px 6px; border-bottom: 2px solid var(--ink) !important; color: var(--ink2); }
-  .imp-more summary { list-style: none; cursor: pointer; font-size: 13px; font-weight: 700; min-height: 32px; display: flex; align-items: center; }
+  .imp-more summary { list-style: none; cursor: pointer; font-size: 16px; font-weight: 700; min-height: 32px; display: flex; align-items: center; }
   .imp-more select { margin-top: 6px; }
-  .imp-out { border-left: 4px solid var(--orange); padding-left: 12px; font-size: 13px; }
+  .imp-out { border-left: 4px solid var(--orange); padding-left: 12px; font-size: 16px; }
   .imp-out-h { font-weight: 800; }
   .imp-out ul { margin: 6px 0 0; padding-left: 18px; color: var(--ink2); }
   .imp-out .note { margin-top: 0; }
-  .imp-fix { display: flex; flex-direction: column; gap: 10px; border-left: 4px solid var(--purple); padding-left: 12px; font-size: 13px; }
+  .imp-fix { display: flex; flex-direction: column; gap: 10px; border-left: 4px solid var(--purple); padding-left: 12px; font-size: 16px; }
   .imp-check { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; min-height: 32px; }
   .imp-check input { accent-color: var(--magenta); width: 18px; height: 18px; margin-top: 1px; flex: 0 0 auto; }
   .imp-check span { display: flex; flex-direction: column; }
-  .imp-check small { color: var(--ink2); font-size: 12px; overflow-wrap: anywhere; }
+  .imp-check small { color: var(--ink2); font-size: 14px; overflow-wrap: anywhere; }
   .imp-dupes { display: flex; flex-direction: column; gap: 6px; }
   .imp-priv { margin-top: auto; }
   .imp-list { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
@@ -996,10 +1110,10 @@
     padding: 12px 16px; border-bottom: 2px solid var(--ink);
   }
   .imp-search {
-    flex: 1 1 180px; min-width: 0; min-height: 44px; font: inherit; font-size: 14px;
+    flex: 1 1 180px; min-width: 0; min-height: 44px; font: inherit; font-size: 16px;
     background: var(--paper); color: var(--ink); border: 2px solid var(--ink); padding: 0 12px;
   }
-  .imp-count { font-size: 12px; font-weight: 700; color: var(--ink2); margin-left: auto; }
+  .imp-count { font-size: 14px; font-weight: 700; color: var(--ink2); margin-left: auto; }
   .imp-rows { list-style: none; margin: 0; padding: 4px 8px 10px; overflow: auto; flex: 1; }
   .imp-rows li { border-bottom: 1px dashed var(--muted); }
   .imp-rows label {
@@ -1009,8 +1123,8 @@
   .imp-rows input { accent-color: var(--magenta); width: 20px; height: 20px; flex: 0 0 auto; }
   .imp-rows img, .imp-noface { width: 32px; height: 32px; border: 2px solid var(--ink); flex: 0 0 auto; background: var(--paper); }
   .imp-name { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  .imp-name .n { font-weight: 700; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .imp-was { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .imp-name .n { font-weight: 700; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .imp-was { font-size: 14px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .imp-rows li.off .n { color: var(--muted); }
   .imp-rows li.off img { opacity: 0.45; }
   .imp-badges { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
@@ -1058,7 +1172,7 @@
   .topnav { display: flex; align-items: center; justify-content: center; flex: 1 1 auto; min-width: 0; gap: 2px; }
   .topnav a {
     min-height: 44px; display: inline-flex; align-items: center; padding: 0 11px; white-space: nowrap;
-    font-weight: 800; font-size: 13.5px; color: var(--ink); text-decoration: none; border-bottom: 3px solid transparent;
+    font-weight: 800; font-size: 16px; color: var(--ink); text-decoration: none; border-bottom: 3px solid transparent;
   }
   .topnav a:hover { border-bottom-color: var(--magenta); }
   .topnav a[aria-current="page"] { border-bottom-color: var(--yellow); }
@@ -1075,6 +1189,10 @@
   @media (max-width: 1100px) {
     .topnav { order: 3; flex-basis: 100%; justify-content: flex-start; margin: 0 -6px; padding: 0 6px 4px; }
   }
+  /* Con "Cómo se usa" son siete en la fila (22 de octubre de 2026): entre 1101 y
+     1279 px, con la cuenta abierta, se apretaban contra el nombre. Un poco menos
+     de aire en cada una alcanza. */
+  @media (min-width: 1101px) and (max-width: 1279px) { .topnav a { padding: 0 8px; } }
   /* En el celular "Sortear" y "Mis sorteos" quedan a la vista, y lo demás va
      detrás de "Más". Antes el menú se recorría de costado y "Mis sorteos" quedaba
      cortado a 390 px (hallazgo H2). Botón y lista miden 44 px de alto como
@@ -1085,7 +1203,7 @@
     .topnav .mas-btn {
       display: inline-flex; align-items: center; gap: 7px; min-height: 44px; min-width: 44px; padding: 0 11px;
       background: none; border: 0; border-bottom: 3px solid transparent; color: var(--ink);
-      font-weight: 800; font-size: 13.5px; cursor: pointer;
+      font-weight: 800; font-size: 16px; cursor: pointer;
     }
     .topnav .mas-btn::after { content: ""; border: 5px solid transparent; border-top: 6px solid currentColor; border-bottom: 0; }
     .topnav .mas-btn:hover, .topnav .mas.abierto .mas-btn { border-bottom-color: var(--magenta); }
@@ -1173,11 +1291,11 @@
   .appbar h2 { font-size: clamp(24px, 3.2vw, 32px); font-weight: 900; }
   .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
   .tabs button {
-    min-height: 44px; padding: 0 18px; font-weight: 800; font-size: 14px; background: var(--card); color: var(--ink);
+    min-height: 44px; padding: 0 18px; font-weight: 800; font-size: 16px; background: var(--card); color: var(--ink);
     border: 2px solid var(--ink); box-shadow: var(--sh-sm); cursor: pointer; font-family: inherit;
   }
   .tabs button[aria-selected="true"] { background: var(--yellow); color: #191919; }
-  .appbar-links a { display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; font-size: 13px; color: var(--ink2); }
+  .appbar-links a { display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; font-size: 16px; color: var(--ink2); }
   #hist-vacio { display: none; }
   body[data-tab="historial"] #sec-history[style*="none"] + #hist-vacio { display: block; }
   #hist-vacio .con-sesion { display: none; }
@@ -1212,14 +1330,14 @@
   .hist-truncado { margin: 0 0 12px; font-size: 13px; color: var(--ink2); }
   .hist-card { background: var(--paper); border: 2px solid var(--ink); box-shadow: var(--sh-sm); padding: 14px 16px; }
   .hc-top { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: center; }
-  .hc-estado { font-family: ui-monospace, Consolas, monospace; font-size: 11px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border: 2px solid var(--ink); background: var(--orange); color: #191919; }
+  .hc-estado { font-family: ui-monospace, Consolas, monospace; font-size: 13px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 8px; border: 2px solid var(--ink); background: var(--orange); color: #191919; }
   .hist-card.hecho .hc-estado { background: var(--teal); }
-  .hc-fecha { font-size: 12.5px; color: var(--ink2); }
+  .hc-fecha { font-size: 15px; color: var(--ink2); }
   .hist-card h3 { font-size: 18px; font-weight: 900; margin-top: 8px; }
-  .hc-meta { font-size: 13.5px; color: var(--ink2); margin-top: 4px; }
+  .hc-meta { font-size: 16px; color: var(--ink2); margin-top: 4px; }
   .hc-acciones { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 10px; }
   .hc-acciones .mini { min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }
-  .hc-acciones a.hc-link { display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; font-size: 13px; color: var(--ink); }
+  .hc-acciones a.hc-link { display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; font-size: 16px; color: var(--ink); }
   /* La cabecera de un evento: los sorteos de la misma cuenta, a doce horas o menos uno del otro. */
   .hist-evento { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 6px; padding-top: 12px; border-top: 2px dashed var(--ink2); }
   .hist-evento h3 { font-size: 16px; font-weight: 900; }
@@ -1231,7 +1349,7 @@
   .ev-lista > .note { margin: 0 0 18px; }
   .ev-gana { margin-bottom: 6px; overflow-wrap: anywhere; }
   .hist-why { margin: 6px 0 12px; }
-  .hist-why summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 800; font-size: 14px; }
+  .hist-why summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 800; font-size: 16px; }
   .hist-pie { display: flex; flex-wrap: wrap; gap: 10px; }
   /* Mis eventos (eventos.ts) y el diálogo para compartir otra vez (compartir.ts). */
   .hist-eventos { margin: 4px 0 18px; }
@@ -1244,11 +1362,11 @@
   .evn .mini { min-height: 44px; display: inline-flex; align-items: center; text-decoration: none; }
   .evn-aviso { font-weight: 800; margin: 10px 0 0; }
   .evn-card { display: grid; gap: 8px; border-top: 2px dashed var(--ink2); margin-top: 14px; padding-top: 14px; }
-  .evn-detalle summary, .evn-sumar summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 800; font-size: 14px; }
+  .evn-detalle summary, .evn-sumar summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 800; font-size: 16px; }
   .evn-sorteos { display: grid; gap: 10px; margin: 6px 0 0; padding: 0; list-style: none; }
   .evn-sorteo { border: 2px solid var(--ink2); padding: 10px 12px; }
   .evn-sorteo .hc-meta { margin: 4px 0 0; }
-  .hc-sumar { min-height: 44px; max-width: 100%; padding: 6px 8px; font: inherit; font-size: 14px; color: var(--ink); background: var(--paper); border: var(--bw) solid var(--ink); }
+  .hc-sumar { min-height: 44px; max-width: 100%; padding: 6px 8px; font: inherit; font-size: 16px; color: var(--ink); background: var(--paper); border: var(--bw) solid var(--ink); }
   /* "Nuevo evento" despliega el formulario (el display de arriba le ganaba a hidden); un evento
      vacío dice por qué no se comparte y ofrece sus sorteos para sumar; un sorteo que ya está en
      un evento sigue en la lista, con su nombre (evaluación crítica de experiencia, hallazgo 2). */
@@ -1256,7 +1374,7 @@
   .evn-arriba { margin: 0 0 4px; }
   .evn-porque { margin: -2px 0 0; }
   .hist-grupo { display: grid; gap: 14px; }
-  .hc-en { display: inline-block; margin-top: 6px; padding: 2px 8px; font-size: 12.5px; font-weight: 800; color: var(--ink); border: 2px dashed var(--ink2); overflow-wrap: anywhere; }
+  .hc-en { display: inline-block; margin-top: 6px; padding: 2px 8px; font-size: 15px; font-weight: 800; color: var(--ink); border: 2px dashed var(--ink2); overflow-wrap: anywhere; }
   /* El margen automático va explícito: el reinicio de márgenes de la hoja lo anula y el diálogo se iba a la esquina.
      Compartir (compartir.ts): la foto a la izquierda y lo que se hace a la derecha, con
      "Compartir por WhatsApp" arriba de todo; en el celular, la foto arriba y el botón
@@ -1317,6 +1435,15 @@
     .hero-portada { padding-top: 24px; }
     .hero-portada h1 { font-size: clamp(38px, 7.2vh, 56px); }
   }
+  /* Lo mismo en un celular bajo, como un iPhone con las barras de Safari
+     (390x664): "Entrar con Google y sortear" quedaba cortado en el borde y
+     "Probar con un ejemplo" debajo (auditor del primer sorteo, 22 de octubre de 2026). */
+  @media (max-width: 700px) and (max-height: 740px) {
+    .hero-portada { padding-top: 14px; }
+    .hero-portada .hero-copy { gap: 12px; }
+    .hero-portada h1 { font-size: clamp(30px, 8.4vw, 38px); }
+    .hero-portada .lead { font-size: 15.5px; line-height: 1.45; }
+  }
   .portada-juegos .pj-ver { font-size: 12px; }
 
   /* La demo se presenta: una franja arriba y una invitación al final. */
@@ -1330,6 +1457,61 @@
   body[data-demo="1"] .demo-fin h3 { font-size: 18px; font-weight: 900; margin-bottom: 10px; }
   body[data-demo="1"] #btn-whatsapp, body[data-demo="1"] #btn-email, body[data-demo="1"] #btn-proof, body[data-demo="1"] #gate, body[data-demo="1"] #again-row,
   body[data-demo="1"] .ausente { display: none !important; }
+
+  /* El ensayo (src/ui/ensayo.ts): la herramienta de verdad con una lista de
+     ejemplo, que nunca graba nada. Se ve que es un ensayo: una banda arriba que
+     acompaña al bajar, la línea que guía debajo de los pasos, su final en el
+     resultado y, en el estadio, "ENSAYO · no se graba" donde va el número. */
+  .ensayo-banda, .ensayo-fin { display: none; }
+  body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px;
+    position: sticky; top: 0; z-index: 9; margin: 22px 0 0; padding: 10px 14px;
+    background: var(--purple); color: var(--on-purple); border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm);
+  }
+  /* Con la cabecera fija (más de 1100 px), la banda queda justo debajo de ella.
+     Y lo que la página lleva a la vista se para debajo de la banda, no detrás. */
+  body[data-ensayo="1"] section.block { scroll-margin-top: calc(var(--banda-alto, 0px) + 8px); }
+  @media (min-width: 1101px) {
+    body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda { top: var(--cab-alto, 0px); }
+    body[data-ensayo="1"] section.block { scroll-margin-top: calc(var(--cab-alto, 0px) + var(--banda-alto, 0px) + 8px); }
+  }
+  .ensayo-banda p { font-weight: 800; font-size: 16px; line-height: 1.35; flex: 1 1 260px; }
+  .ensayo-banda button.ghost { min-height: 44px; }
+  /* En el celular, en un renglón y chica: acompaña al bajar y no se come la pantalla (390x664 con Safari). */
+  @media (max-width: 760px) {
+    body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda { flex-wrap: nowrap; gap: 8px; padding: 6px 6px 6px 12px; margin-top: 14px; }
+    .ensayo-banda p { font-size: 16px; line-height: 1.3; flex: 1 1 auto; }
+    .ensayo-banda button.ghost { flex: 0 0 auto; padding: 0 10px; font-size: 16px; }
+  }
+  .ensayo-guia[hidden] { display: none; }
+  body:not([data-ensayo="1"]) .ensayo-guia { display: none; }
+  body[data-ensayo="1"][data-tab="nuevo"] .ensayo-guia:not([hidden]) {
+    display: block; margin: -8px 0 18px; padding: 10px 14px; background: var(--card); color: var(--ink);
+    border: 2px solid var(--ink); border-left: 8px solid var(--yellow); font-weight: 700; font-size: 16px; line-height: 1.45;
+  }
+  body[data-ensayo="1"] .ensayo-fin {
+    display: block; margin-top: 18px; padding: 18px; background: var(--purple); color: var(--on-purple);
+    border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+  }
+  .ensayo-fin h3 { font-size: 20px; font-weight: 900; margin-bottom: 6px; }
+  .ensayo-fin p { font-size: 16px; line-height: 1.5; }
+  .ensayo-fin .row { margin-top: 14px; }
+  .ensayo-fin button { min-height: 48px; }
+  .ensayo-fin .enlace { color: var(--on-purple); }
+  /* Lo que el ensayo no tiene: la cuenta, los orígenes (la lista no se cambia),
+     las bases, compartir, el QR, el siguiente premio, el resultado en grande. */
+  body[data-ensayo="1"] #gate, body[data-ensayo="1"] #origenes, body[data-ensayo="1"] #btn-ensayo, body[data-ensayo="1"] #btn-sample,
+  body[data-ensayo="1"] #pendiente, body[data-ensayo="1"] .rules-row, body[data-ensayo="1"] #again-row, body[data-ensayo="1"] .grande-row,
+  body[data-ensayo="1"] .verify, body[data-ensayo="1"] #lore-box, body[data-ensayo="1"] .ausente,
+  body[data-ensayo="1"] #primera-vez, body[data-ensayo="1"] #btn-como, body[data-ensayo="1"] #como-panel { display: none !important; }
+  /* El cuadro se lee, pero no se escribe. */
+  body[data-ensayo="1"] #ta { cursor: default; background: var(--field); }
+  /* En el estadio, donde va el número público. Grande y en amarillo: se lee desde el fondo. */
+  body[data-ensayo="1"] #st-round { font-size: 0; padding: 0; border: 0; box-shadow: none; background: none; }
+  body[data-ensayo="1"] #st-round::after {
+    content: attr(data-ens); display: inline-block; font-size: clamp(14px, 1.9vw, 26px); font-weight: 900; letter-spacing: 0.08em;
+    background: var(--yellow); color: #191919; border: 2px solid #191919; box-shadow: 3px 3px 0 #191919; padding: 6px 14px;
+  }
 
   /* En el celular con la sesión abierta la cabecera ocupaba tres filas: el
      aviso de la red pasa a ser el borde de la cuenta, del mismo color. Si la
@@ -1408,7 +1590,7 @@
 
   /* Lo técnico, plegado: está para quien lo busca, no para la sala. */
   details.tecnico { margin: 8px 0 10px; }
-  details.tecnico summary { cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; font-family: ui-monospace, Consolas, monospace; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; color: var(--muted); }
+  details.tecnico summary { cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; font-family: ui-monospace, Consolas, monospace; font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; color: var(--muted); }
   details.tecnico[open] summary { color: var(--ink2); }
 
   /* UX 19-oct: panel
@@ -1435,13 +1617,13 @@
   .acct-face img { display: block; width: 100%; height: 100%; object-fit: cover; }
   .acct-id { flex: 1; min-width: 0; }
   .acct-name { font-size: 17px; font-weight: 800; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .acct-addr { display: flex; align-items: center; gap: 2px; font-size: 12px; line-height: 1.3; color: var(--muted); min-width: 0; }
+  .acct-addr { display: flex; align-items: center; gap: 2px; font-size: 14px; line-height: 1.3; color: var(--muted); min-width: 0; }
   .acct-short.full { overflow-wrap: anywhere; user-select: all; }
   /* El botón mide 44 px de alto para el dedo, pero su caja se mete en el aire de
      arriba y de abajo: así el encabezado no engorda por un enlace. */
   .acct-copy {
     flex: none; min-height: 44px; margin: -12px 0; padding: 0 8px; background: none; border: 0; cursor: pointer;
-    font: inherit; font-size: 12px; font-weight: 800; color: var(--ink);
+    font: inherit; font-size: 14px; font-weight: 800; color: var(--ink);
     text-decoration: underline; text-underline-offset: 3px;
   }
   .acct-copy.done { color: var(--teal-ink); text-decoration: none; }
@@ -1463,10 +1645,10 @@
     padding: 16px; display: flex; flex-direction: column; gap: 24px;
   }
   .acct-sec { display: flex; flex-direction: column; gap: 8px; }
-  .acct-card .kicker { font-size: 11px; font-weight: 600; line-height: 1.3; }
+  .acct-card .kicker { font-size: 14px; font-weight: 600; line-height: 1.3; }
   .acct-badges { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .acct-badge {
-    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; font-weight: 800;
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 14px; font-weight: 800;
     letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.3; padding: 5px 10px;
     background: var(--card); color: var(--ink); border: 2px solid var(--ink);
   }
@@ -1474,13 +1656,13 @@
   .acct-badge.net.main { background: var(--teal); }
   .acct-link {
     align-self: flex-start; display: inline-flex; align-items: center; min-height: 44px; margin: -8px 0;
-    font-size: 13px; font-weight: 700; color: var(--ink); text-underline-offset: 3px;
+    font-size: 16px; font-weight: 700; color: var(--ink); text-underline-offset: 3px;
   }
   .acct-prefs { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-end; }
   .acct-pref { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .acct-pref.pace { flex: 1 1 120px; min-width: 120px; }
-  .acct-pref .kicker { font-size: 10.5px; letter-spacing: 0.12em; }
-  .acct-pref select { width: 100%; font-size: 13px; padding: 0 10px; }
+  .acct-pref .kicker { font-size: 14px; letter-spacing: 0.12em; }
+  .acct-pref select { width: 100%; font-size: 16px; padding: 0 10px; }
   .acct-pref .mini { min-width: 56px; }
   /* El sonido encendido se marca con el amarillo de la casa, como ES y EN. */
   .acct-snd.on { background: var(--yellow); color: #191919; }
@@ -1492,19 +1674,19 @@
   .acct-rows { list-style: none; padding: 0; display: flex; flex-direction: column; border-top: 2px solid var(--ink); }
   .acct-row { display: flex; align-items: center; gap: 16px; min-height: 56px; padding: 4px 0; border-bottom: 1px solid var(--line); }
   .acct-rt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  .acct-rtitle { font-size: 14px; font-weight: 800; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .acct-rmeta { font-size: 12px; line-height: 1.4; color: var(--ink2); }
+  .acct-rtitle { font-size: 16px; font-weight: 800; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .acct-rmeta { font-size: 14px; line-height: 1.4; color: var(--ink2); }
   .acct-proof {
     flex: none; display: inline-flex; align-items: center; min-height: 44px; padding: 0 2px;
-    font-size: 13px; font-weight: 800; color: var(--ink); white-space: nowrap; text-underline-offset: 3px;
+    font-size: 16px; font-weight: 800; color: var(--ink); white-space: nowrap; text-underline-offset: 3px;
   }
   .acct-more { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-  .acct-empty { font-size: 14px; line-height: 1.5; color: var(--ink2); }
+  .acct-empty { font-size: 16px; line-height: 1.5; color: var(--ink2); }
 
   .acct-foot { flex: none; display: flex; padding: 8px; border-top: var(--bw) solid var(--ink); background: var(--paper); }
   .acct-out {
     display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 10px; cursor: pointer;
-    background: none; border: 0; font: inherit; font-size: 14px; font-weight: 800; color: var(--ink2);
+    background: none; border: 0; font: inherit; font-size: 16px; font-weight: 800; color: var(--ink2);
     text-decoration: underline; text-underline-offset: 3px;
   }
   .acct-out:hover { color: var(--ink); }
@@ -1529,7 +1711,7 @@
   .pasos { list-style: none; margin: 0; padding: 0; display: flex; align-items: center; gap: 6px; order: 2; flex: 1 0 100%; min-width: 0; }
   .pasos li {
     display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
-    font-family: ui-monospace, Consolas, monospace; font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
+    font-family: ui-monospace, Consolas, monospace; font-size: 14px; font-weight: 700; letter-spacing: 0.06em;
     text-transform: uppercase; color: var(--muted);
   }
   .pasos li + li::before { content: ""; width: 14px; margin-right: 1px; border-top: 2px dashed var(--muted); }
@@ -1547,15 +1729,21 @@
   }
   @media (max-width: 480px) {
     .pasos { gap: 4px; justify-content: space-between; }
-    .pasos li { gap: 4px; font-size: 10.5px; letter-spacing: 0.02em; }
+    .pasos li { gap: 4px; font-size: 13px; letter-spacing: 0.02em; }
     .pasos li + li::before { width: 6px; margin-right: 0; }
-    .p-n { width: 20px; height: 20px; font-size: 11px; }
+    .p-n { width: 20px; height: 20px; font-size: 13px; }
   }
-  /* Un celular de 320 px: sin los guiones entre un paso y otro entra con margen, y no pegado al borde. */
+  /* Un celular de 360 px o menos: con la letra de 13 px (la mínima de docs/ux.md) los guiones entre un paso y otro
+     ya no entran, y el indicador quedaba pegado al borde derecho (2 px de margen a 360 y a 320). Sin ellos entra
+     dentro de su caja. A 375 px y más siguen. */
+  @media (max-width: 370px) {
+    .pasos li + li::before { display: none; }
+  }
+  /* Y a 320 px, además, la letra sin espaciado y los números un poco más chicos: la letra no baja de 13 px. */
   @media (max-width: 340px) {
     .pasos { gap: 2px; }
-    .pasos li { gap: 3px; }
-    .pasos li + li::before { display: none; }
+    .pasos li { gap: 2px; letter-spacing: 0; }
+    .p-n { width: 18px; height: 18px; }
   }
   body[data-demo="1"] .pasos { display: none !important; }
 
@@ -1578,7 +1766,7 @@
   .sig-in { max-width: 1060px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px 20px; }
   .sig-paso {
     margin: 0; min-width: 0; min-height: 1.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2);
+    font-size: 14px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2);
   }
   #sig-btn { flex: 0 0 auto; max-width: 100%; min-height: 52px; }
   /* Aire abajo: el pie y lo último de la página llegan a verse enteros por encima
@@ -1591,7 +1779,7 @@
   @media (max-width: 560px) and (min-height: 521px) {
     .siguiente { padding: 8px 14px max(10px, env(safe-area-inset-bottom, 0px)); }
     .sig-in { flex-direction: column; align-items: stretch; gap: 6px; }
-    .sig-paso { text-align: center; font-size: 11px; }
+    .sig-paso { text-align: center; font-size: 13px; }
     #sig-btn { width: 100%; }
   }
   /* Un celular acostado: la barra, finita y en un renglón. */
@@ -1623,7 +1811,7 @@
   .wait-num b { font-size: clamp(22px, 3.2vw, 34px); }
   .wait-num span { font-size: clamp(26px, 4.4vw, 40px); padding: 0 10px; }
   .wait-id { grid-area: i; justify-self: start; margin: 4px 0 2px; font-size: clamp(13px, 1.4vw, 17px); padding: 5px 10px; max-width: 100%; }
-  .wait-line { grid-area: l; max-width: 92ch; font-size: 14px; line-height: 1.45; }
+  .wait-line { grid-area: l; max-width: 92ch; font-size: 16px; line-height: 1.45; }
   #btn-espera { grid-area: b; align-self: start; }
   @media (max-width: 560px) {
     .wait { grid-template-columns: minmax(0, 1fr); grid-template-areas: "k" "n" "i" "l" "b"; padding: 12px 14px; }
@@ -1642,7 +1830,7 @@
        derecha; el botón, más ajustado, para que entre al lado de los nombres cortos. */
     .juego-actual { justify-content: space-between; }
     .juego-actual .kicker { flex: 0 0 100%; }
-    .juego-actual #btn-cambiar { padding: 8px 12px; font-size: 12px; }
+    .juego-actual #btn-cambiar { padding: 8px 12px; font-size: 16px; }
   }
 
   /* Encendido: la ronda ya nació y es lo único que hay que hacer. Un aro
@@ -1688,7 +1876,7 @@
   @media (max-width: 460px) {
     .winner-box { padding-left: 14px; padding-right: 14px; }
     .winner-box > .again { padding: 12px; }
-    .winner-box > .again .row > .primary { padding-left: 10px; padding-right: 10px; font-size: 15px; }
+    .winner-box > .again .row > .primary { padding-left: 10px; padding-right: 10px; font-size: 16px; }
   }
   /* Una pantalla baja: el ganador y, pegado, lo que sigue, sin la etiqueta de arriba. */
   @media (max-height: 520px) {
@@ -1720,7 +1908,7 @@
   .premio-chips button {
     min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0 14px;
     border: 2px solid var(--ink); background: var(--paper); color: var(--ink2);
-    font: inherit; font-weight: 800; font-size: 14px; cursor: pointer;
+    font: inherit; font-weight: 800; font-size: 16px; cursor: pointer;
   }
   .premio-chips button:hover:not(:disabled) { background: var(--card); color: var(--ink); }
   .premio-chips button[aria-pressed="true"] { background: var(--yellow); color: var(--on-accent); box-shadow: var(--sh-sm); transform: rotate(-1deg); }
@@ -1733,5 +1921,164 @@
   /* En el celular entran cuatro por renglón en vez de tres: menos alto antes del cuadro. */
   @media (max-width: 460px) {
     .premio-chips { gap: 6px; }
-    .premio-chips button { padding: 0 10px; font-size: 13px; }
+    .premio-chips button { padding: 0 10px; font-size: 16px; }
   }
+
+  /* ================================================================ La letra grande
+     24 de octubre de 2026. Nicolás: "la gente lo va a ver en un proyector gigante
+     y dice «no entiendo nada, ¿qué es esa letra chica?»". Los umbrales y su
+     auditor están en docs/ux.md ("La letra grande") y en scripts/audit-ui.mjs:
+     en el flujo, 16 px (14 en rótulos, el indicador de pasos y la cuenta); en lo
+     que se proyecta, un 2,6 % del alto o más. Este bloque va al final a propósito:
+     lo que está arriba son los tamaños de siempre, y acá se acomoda lo que se ve. */
+
+  /* Un campo de menos de 16 px hace que el iPhone agrande la página al tocarlo. */
+  textarea, input, select, input[type="text"], input[type="search"], input[type="email"] { font-size: 16px; }
+  textarea { line-height: 1.5; }
+
+  /* Sin esperar el doble toque, sin el fogonazo gris al tocar y sin seleccionar por accidente
+     lo que se proyecta. */
+  html { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  .stadium, .game-card, .espera, .sala, .cortina, .siguiente, .pasos {
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  }
+
+  /* Lo que es para quien audita no está en el flujo: vive en verificar.html. Los
+     nodos quedan en la página porque el código los escribe y los auditores los leen. */
+  .solo-verificar { display: none !important; }
+  .head #src-label, .head #frozen-ts, .head #seed-label { display: none; }
+
+  /* La espera de la página: un título de verdad, no un rótulo de 11 px. */
+  .wait .kicker { font-size: 18px; font-weight: 800; letter-spacing: 0; text-transform: none; }
+  .wait-line { font-size: 17px; }
+  #wait-box #btn-espera { min-height: 48px; font-size: 16px; }
+
+  /* El juego elegido y el selector. */
+  .juego-actual .kicker { font-size: 16px; letter-spacing: 0; text-transform: none; font-weight: 700; }
+  .juego-actual #juego-actual { font-size: 18px; }
+  .pick-label { font-size: 16px; letter-spacing: 0; text-transform: none; font-weight: 800; color: var(--ink); }
+  .gamepick button { position: relative; }
+  .gamepick button span { font-size: 16px; line-height: 1.2; }
+  .gamepick .rec-tag { font-size: 18px; line-height: 1; padding: 2px 8px; text-transform: none; letter-spacing: 0; }
+  /* La nota de cada botón queda para el lector de pantalla; la del juego elegido se lee debajo. */
+  .gamepick .rec-nota {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+  }
+  .rec-sel-nota { font-size: 16px; font-weight: 700; color: var(--ink2); margin: 8px 0 0; }
+  .rec-sel-nota:empty { display: none; }
+  #rec-head { font-size: 16px; }
+  .ajustes button, .ajustes select { font-size: 16px; }
+
+  /* Para el pulgar: 48 px en las pantallas táctiles. */
+  @media (pointer: coarse), (max-width: 760px) {
+    button.mini, a.mini, button.ghost, a.ghost, button.primary, a.primary.cta, select, label.chip.live, button.chip.live,
+    .premio-chips button, .tabs button, .enlace, .gate button, .langs button { min-height: 48px; }
+  }
+
+  /* ---------------------------------------------------------------- el proyector
+     Lo que se queda en el estadio: los nombres, el contador, los subtítulos y el
+     ganador. El número de la ronda y la marca con texto se van; los botones
+     aparecen al tocar, al mover el mouse o al usar el teclado, y se vuelven a
+     esconder (src/ui/estadio-controles.ts). */
+  .stadium { height: 100vh; height: 100dvh; overscroll-behavior: none; touch-action: none; }
+  .stadium canvas { touch-action: none; }
+  #st-round { display: none; }
+  body[data-ensayo="1"] #st-round { display: inline-block; }
+  body[data-ensayo="1"] #st-round::after { font-size: clamp(20px, 2.6vw, 40px); padding: 8px 18px; }
+  .st-brand > span:last-child { display: none; }
+  .st-brand { padding: 4px 6px; }
+  .st-top {
+    padding: max(12px, env(safe-area-inset-top, 0px)) max(18px, env(safe-area-inset-right, 0px)) 12px max(18px, env(safe-area-inset-left, 0px));
+    pointer-events: none;
+  }
+  .st-top > * { pointer-events: auto; }
+  .st-actions { gap: 12px; transition: opacity 0.35s ease; }
+  .st-actions button { min-height: 48px; font-size: clamp(16px, 1.5vw, 24px); padding: 8px 18px; }
+  .stadium:not(.st-vivo) .st-actions { opacity: 0; pointer-events: none; }
+  .stadium:not(.st-vivo) .st-actions:focus-within { opacity: 1; pointer-events: auto; }
+  .commentary {
+    font-size: clamp(18px, 2.6vw, 42px);
+    bottom: max(26px, calc(env(safe-area-inset-bottom, 0px) + 14px));
+  }
+  @media (max-width: 520px) {
+    .st-top { flex-wrap: nowrap; row-gap: 0; padding-top: max(10px, env(safe-area-inset-top, 0px)); }
+    .st-actions button { padding: 8px 14px; }
+    /* El ensayo lleva su rótulo en un renglón propio, centrado, debajo de la marca y los botones: apretado entre los
+       dos se partía en cuatro renglones ("ENSAYO / · NO / SE / GRABA") y subía hasta pegarse al cartel del ganador. */
+    body[data-ensayo="1"] .st-top { flex-wrap: wrap; row-gap: 8px; }
+    body[data-ensayo="1"] #st-round { flex: 1 0 100%; order: 3; text-align: center; }
+    body[data-ensayo="1"] #st-round::after { white-space: nowrap; font-size: clamp(14px, 5vw, 20px); padding: 6px 12px; }
+  }
+
+  /* La tarjeta de "cómo se juega" y la cortina, que también se proyectan. */
+  .gc-kicker { font-size: clamp(16px, 2.8vh, 32px); }
+  .gc-extra { font-size: clamp(18px, 3vh, 34px); }
+  .gc-chips span { font-size: clamp(16px, 2.8vh, 30px); }
+  .gc-honesta { display: none; }
+  .gc-graba { font-size: clamp(16px, 2.6vh, 28px); }
+  .gc-saltar { min-height: 48px; font-size: 16px; bottom: max(20px, env(safe-area-inset-bottom, 0px)); right: max(18px, env(safe-area-inset-right, 0px)); }
+  .game-card { padding-left: max(clamp(16px, 5vw, 64px), env(safe-area-inset-left, 0px)); padding-right: max(clamp(16px, 5vw, 64px), env(safe-area-inset-right, 0px)); }
+  .cortina-t { font-size: clamp(22px, 2.6vw, 40px); }
+
+  /* La espera en grande: el pre-show. Nombres grandes, cuenta gigante, nada técnico. */
+  .espera { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .espera-top { top: max(16px, env(safe-area-inset-top, 0px)); }
+  .espera-top .sticker { font-size: clamp(16px, 1.7vw, 26px); letter-spacing: 0.04em; padding: 8px 16px; }
+  .espera-top .ghost { min-height: 48px; font-size: 16px; }
+  .espera-t { font-size: clamp(22px, 2.8vw, 44px); }
+  .espera-cinta span { font-size: clamp(20px, 2.6vw, 40px); padding: 6px 16px; }
+  .espera-pie { font-size: clamp(18px, 2.2vw, 34px); color: var(--ink2); font-weight: 700; }
+  .espera-nadie { font-size: clamp(20px, 2.4vw, 38px); }
+  .espera-id { font-size: clamp(18px, 2vw, 30px); }
+  .espera-ensayo { font-size: clamp(18px, 2vw, 30px); }
+
+  /* La lista y el resultado en grande. */
+  .sala { padding-left: max(clamp(16px, 4vw, 48px), env(safe-area-inset-left, 0px)); padding-right: max(clamp(16px, 4vw, 48px), env(safe-area-inset-right, 0px)); padding-top: max(22px, env(safe-area-inset-top, 0px)); padding-bottom: max(22px, env(safe-area-inset-bottom, 0px)); }
+  .sala-huella { display: none; }
+  .sala-top .ghost, .sala-qr .ghost { min-height: 48px; font-size: 16px; }
+  .sala-qr p { font-size: clamp(18px, 1.8vw, 28px); }
+  .sala-pie { font-size: clamp(18px, 1.9vw, 30px); }
+  .pantalla .sala-pie { display: none; }
+  .pantalla-premio { font-size: max(18px, 0.3em); }
+  .pantalla-qr p { font-size: clamp(20px, 2.4vw, 40px); }
+
+  /* El resultado en la página: lo que sigue, grande. */
+  .winner-prize { font-size: 18px; }
+  .again-left { font-size: 18px; }
+  .qr p.kicker { font-size: 16px; letter-spacing: 0; text-transform: none; font-weight: 700; max-width: 200px; }
+  .qr img { width: 168px; height: 168px; }
+  .lore .kicker { font-size: 14px; }
+
+  /* La zona segura (muescas y barra de gestos): index.html pide viewport-fit=cover para que el
+     estadio ocupe la pantalla entera, y entonces la cabecera, la página y la barra de abajo
+     tienen que dejar lugar. Sin muesca todo vale cero y el diseño es el de siempre. */
+  header { padding-top: env(safe-area-inset-top, 0px); }
+  .bar { padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+  main { padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+  .siguiente { padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); }
+  .modal-back { padding-left: max(var(--modal-pad), env(safe-area-inset-left, 0px)); padding-right: max(var(--modal-pad), env(safe-area-inset-right, 0px)); }
+  @media (max-width: 460px) {
+    .bar { padding-left: max(14px, env(safe-area-inset-left, 0px)); padding-right: max(14px, env(safe-area-inset-right, 0px)); }
+    .siguiente { padding-left: max(14px, env(safe-area-inset-left, 0px)); padding-right: max(14px, env(safe-area-inset-right, 0px)); }
+  }
+
+  /* verificar.html: lo primero para quien llega por el QR es quién ganó, y un botón grande para comprobarlo. */
+  .v-comprobar { margin: 18px 0 8px; }
+  .v-comprobar .cta { display: flex; align-items: center; justify-content: center; min-height: 56px; font-size: 20px; padding: 14px 28px; width: 100%; max-width: 420px; }
+  html { scroll-padding-top: 76px; }
+
+  /* El resultado en grande: "Siguiente premio" es el único botón de color, grande y a la vista de la sala. */
+  .pantalla .sala-top { align-items: center; }
+  .pantalla .pantalla-sig { margin-left: auto; font-size: clamp(20px, 2.4vw, 38px); min-height: 64px; padding: 10px 32px; max-width: 100%; text-wrap: balance; }
+  @media (max-width: 700px) { .pantalla .pantalla-sig { margin-left: 0; width: 100%; } }
+
+  /* El volumen: el navegador no sabe si el celular está en silencio, así que, solo en pantallas táctiles, se recuerda. */
+  .wait-vol { display: none; margin-top: 8px; font-size: 17px; font-weight: 800; }
+  @media (pointer: coarse) { .wait-vol { display: block; } }
+
+  /* La cinta de la espera: cada nombre con su cara. */
+  .espera-cinta span { display: inline-flex; align-items: center; gap: 0.5em; }
+  .espera-cinta span img { width: 1.5em; height: 1.5em; flex: none; image-rendering: pixelated; border: 2px solid var(--ink); background: #fff; }
+
+  /* Un boton con hidden se esconde aunque la regla de button.ghost le ponga display. */
+  button[hidden], a[hidden] { display: none !important; }

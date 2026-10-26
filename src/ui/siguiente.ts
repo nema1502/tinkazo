@@ -1,6 +1,7 @@
 import { $ } from "../dom";
 import { onLangChange, t } from "../i18n";
 import { app } from "../state";
+import { mantenerDespierta, soltarDespierta } from "./despierta";
 import { type Paso, claveDelPaso, detalleDeLista, lineaDelPaso, pasoDe, relojDe } from "./pasos";
 
 /**
@@ -76,9 +77,6 @@ let reintento = 0;
 /** Cuántos nombres hay en la lista: los que dibuja `renderNames`, sin pedirle nada a `participants.ts`. */
 const nombres = (): number => document.getElementById("names")?.childElementCount ?? 0;
 
-/** Sin la cuenta conectada la lista queda apagada: no hay acción que señalar, la puerta ya lo dice. */
-const bloqueada = (): boolean => document.querySelector("#sec-participants .body.locked") !== null;
-
 /** La barra solo existe en la herramienta, en la pestaña del sorteo nuevo y fuera de la demo, que se hace sola. */
 function activa(): boolean {
   const d = document.body.dataset;
@@ -94,13 +92,21 @@ function ocupado(): boolean {
 export const barraActiva = (): boolean => listo && activa();
 
 /**
- * El botón de verdad que hace avanzar cada paso. En el 4, "Siguiente premio" si
- * queda con quién sortear y, si no, el del comprobante (`draw.ts` esconde uno y
- * muestra el otro). Sin cuenta la lista está apagada y no hay botón que señalar.
+ * El botón de verdad que hace avanzar cada paso. En el 1, "Pegar lista". En el
+ * 4, "Siguiente premio" si queda con quién sortear y, si no, el del comprobante
+ * (`draw.ts` esconde uno y muestra el otro); en el ensayo, "Sortear con mi
+ * lista", que es su final.
+ *
+ * Sin cuenta también: "Sellar la lista" abre la ventana para entrar, con su
+ * motivo (`main.ts`), y eso es lo que sigue. Hasta el 22 de octubre de 2026 la
+ * barra no salía sin cuenta, y en el celular "Sellar" quedaba una pantalla más
+ * abajo sin que nada lo ofreciera (diseño del onboarding).
  */
 function botonDe(paso: Paso): HTMLButtonElement | null {
   switch (paso) {
     case 4: {
+      const fin = document.body.dataset.ensayo === "1" ? document.getElementById("ens-mio") : null;
+      if (fin instanceof HTMLButtonElement) return fin;
       const sin = $<HTMLButtonElement>("btn-again-sin");
       const sigue = $("again-row").style.display !== "none" && sin.style.display !== "none";
       return sigue ? sin : $<HTMLButtonElement>("btn-proof");
@@ -108,10 +114,18 @@ function botonDe(paso: Paso): HTMLButtonElement | null {
     case 3:
       return $<HTMLButtonElement>("btn-draw");
     case 2:
-      return bloqueada() ? null : $<HTMLButtonElement>("btn-freeze");
-    default:
-      return null;
+      return $<HTMLButtonElement>("btn-freeze");
+    default: {
+      const pegar = $<HTMLButtonElement>("btn-pegar");
+      return pegar.disabled ? null : pegar;
+    }
   }
+}
+
+/** El paso en que está el sorteo ahora (lo usa el tutorial para abrir en su tarjeta). */
+export function pasoActual(): Paso {
+  if (!listo) return 1;
+  return calcular().paso;
 }
 
 /**
@@ -135,18 +149,16 @@ function calcular(): Toca {
 }
 
 /**
- * Con la lista ya cargada, "Entendido" de la bienvenida deja de ser la acción
- * principal: lo que sigue es sellar, y dos botones del color de la casa a la
- * vista (el de la bienvenida y el de la barra o el de sellar) no dicen cuál es
- * "el siguiente". Quien cargó una lista ya entendió: el botón sigue ahí, pero
- * como secundario, y vuelve a ser el principal si vacía la lista.
+ * Avisa a la página cuando cambia de qué se trata el paso (`tinkazo:paso`), con
+ * el paso y su clave: lo escuchan la línea que guía el ensayo y los números del
+ * tutorial. Nunca con cada segundo de la cuenta.
  */
-function bajarEntendido(paso: Paso): void {
-  const ok = document.getElementById("ob-ok");
-  if (!ok) return;
-  const baja = paso >= 2;
-  ok.classList.toggle("primary", !baja);
-  ok.classList.toggle("ghost", baja);
+let ultimoAvisado = "";
+function avisarPaso(s: Toca): void {
+  const clave = `${s.paso}:${s.clave}`;
+  if (clave === ultimoAvisado) return;
+  ultimoAvisado = clave;
+  document.dispatchEvent(new CustomEvent("tinkazo:paso", { detail: { paso: s.paso, clave: s.clave } }));
 }
 
 /** El indicador de arriba: hecho con ✓, el actual resaltado y lo que falta con su número. */
@@ -214,10 +226,14 @@ function pintarBarra(s: Toca, mostrar: boolean): void {
 
 function render(): void {
   if (!listo) return;
+  // Con la lista sellada, la pantalla no se apaga: la espera del número, el juego y el
+  // resultado se miran en el celular o se proyectan desde él. Se suelta al pasar a otra lista.
+  if (app.frozen) mantenerDespierta("sorteo");
+  else soltarDespierta("sorteo");
   const s = calcular();
   pintarPasos(s.paso);
-  bajarEntendido(s.paso);
   anunciar(s);
+  avisarPaso(s);
   vigilar(activa() ? s.boton : null);
   const quiere = activa() && s.boton !== null && !ocupado() && !alVista;
   const puesta = $("siguiente").classList.contains("on");
@@ -336,12 +352,13 @@ export function initSiguiente(opciones: { segundos: () => number }): void {
   moBoton = new MutationObserver(render);
   const general = new MutationObserver(render);
   // Ventanas, tarjeta y cortina se agregan al cuerpo; el estadio es fijo y cambia de estilo.
-  general.observe(document.body, { childList: true, attributes: true, attributeFilter: ["data-vista", "data-tab", "data-sesion"] });
+  general.observe(document.body, { childList: true, attributes: true, attributeFilter: ["data-vista", "data-tab", "data-sesion", "data-ensayo"] });
   general.observe($("stadium"), { attributes: true, attributeFilter: ["style"] });
   // La lista cambia sin que nadie toque el sello: pasar de 1 a 2 nombres es pasar de paso.
   general.observe($("names"), { childList: true });
-  // El premio está en la línea del paso 2: se rehace al escribirlo o al tocar uno de los premios.
+  // El premio está en la línea del paso 2: se rehace al escribirlo, al tocar uno de los premios o cuando la página lo pone.
   $("prize").addEventListener("input", render);
+  $("prize").addEventListener("tinkazo:premio", render);
   $("prize-chips").addEventListener("click", () => queueMicrotask(render));
   // El sello se apaga y se prende sin cambiar de botón; la puerta, al conectar la cuenta.
   general.observe($("sec-participants"), { attributes: true, subtree: true, attributeFilter: ["class"] });

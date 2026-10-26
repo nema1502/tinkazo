@@ -6,7 +6,7 @@ import { beep, fanfare, note } from "../../sound";
 import { enOrden } from "../drama";
 import { generoDe } from "../genero";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
-import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
+import { CHIP_SCALE, medidasContador, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 import { layoutLabels, type LabelItem, type Rect } from "./pinata-labels";
 import { OUT_HOLD, counterText, estimateTagSize, outTreatment, selectTags, tagBudget, tagName, type TagCandidate } from "./oruro-tags";
 import { planEntrada, type Arch, type Frat } from "./entrada-plan";
@@ -564,7 +564,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   function buildHud(g: Geo): void {
     const k = g.k;
     counterBox = new Graphics();
-    counter = S.text("", { fontFamily: MONO, fontSize: Math.max(10, 14 * k), fontWeight: "700", fill: S.dark ? CREAM : INK });
+    counter = S.text("", { fontFamily: MONO, fontSize: medidasContador(k).fuente, fontWeight: "700", fill: S.dark ? CREAM : INK });
     counter.anchor.set(0.5);
     const box = new Container();
     box.addChild(counterBox, counter);
@@ -576,14 +576,14 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     moreText.anchor.set(0.5);
     moreBox.visible = moreText.visible = false;
     chips.addChild(leaders);
-    blockText = S.text("", { fontFamily: MONO, fontSize: Math.max(10, 12 * k), fontWeight: "800", fill: CREAM });
+    blockText = S.text("", { fontFamily: MONO, fontSize: Math.max(14, 18 * k), fontWeight: "800", fill: CREAM });
     blockText.anchor.set(1, 1);
     blockText.position.set(g.w - 22 * k, g.h - S.bottom() - 18 * k);
     blockPlate = new Graphics();
     // El bombo de arriba a la derecha: late con la banda, para que la sala aplauda al ritmo.
     drum = new Container();
     drumG = new Graphics();
-    drumText = S.text(t("cOruClapHud"), { fontFamily: MONO, fontSize: Math.max(11, 15 * k), fontWeight: "900", fill: INK });
+    drumText = S.text(t("cOruClapHud"), { fontFamily: MONO, fontSize: Math.max(14, 20 * k), fontWeight: "900", fill: INK });
     drumText.anchor.set(0.5);
     drum.addChild(drumG, drumText);
     pillsLayer = new Container();
@@ -1556,7 +1556,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     // La interfaz.
     const live = dancers.filter((d) => d.alive).length;
     counter.text = counterText(t("cOruLeft"), live, n);
-    const bw = counter.width + 40 * k, bh = 40 * k;
+    const bw = counter.width + medidasContador(k).aire, bh = medidasContador(k).alto;
     if (Math.abs(bw - counterW) > 0.5) {
       counterW = bw;
       placePills(g);

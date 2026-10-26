@@ -151,6 +151,8 @@ export function ponerPremio(valor: string): void {
   if (!p) return;
   p.campo.value = recortar(valor);
   sincronizarPremios();
+  // Sin `input`, que es del teclado: lo escuchan el resumen de "Sellar la lista" y la barra, que lo muestran.
+  p.campo.dispatchEvent(new CustomEvent("tinkazo:premio"));
 }
 
 /**

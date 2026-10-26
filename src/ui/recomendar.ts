@@ -140,6 +140,22 @@ export function juegoPorDefecto(n: number): Game {
 }
 
 /**
+ * El juego que sigue para el próximo premio: otro de los que encajan con `n`
+ * personas, el que viene después de `actual` en el orden de la recomendación
+ * (y vuelve al primero al llegar al último). Así un evento con varios premios
+ * no repite el mismo juego sin que nadie tenga que elegir (24 de octubre de
+ * 2026: "seguir sorteando y seguir jugando, viendo juegos"). Si ninguno
+ * encaja, o encaja uno solo, queda `actual`. Siempre el mismo para la misma
+ * entrada: no hay azar.
+ */
+export function juegoSiguiente(n: number, actual: Game): Game {
+  const buenos = recomendar(n).games.filter((x) => x.fits === true).map((x) => x.game);
+  if (!buenos.length) return actual;
+  const i = buenos.indexOf(actual);
+  return buenos[(i + 1) % buenos.length] ?? actual;
+}
+
+/**
  * Qué juegos del selector sirven para `n` personas, con su nota y la duración
  * de la sección 8.2. `n` se toma entero y nunca negativo.
  */

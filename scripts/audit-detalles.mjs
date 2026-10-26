@@ -74,7 +74,7 @@ async function abrir(browser, v, tema, query = "", hash = "#sortear") {
 /** Sin cuenta, el botón de sellar queda detrás de la puerta: el modo libre arma el mismo flujo (como audit-espera). */
 const libre = (page) =>
   page.eval(
-    "document.querySelector('#sec-participants .body').classList.remove('locked'); document.getElementById('btn-freeze').removeAttribute('aria-disabled'); document.getElementById('gate').style.display = 'none'; document.getElementById('onboard').style.display = 'none'; true",
+    "document.querySelector('#sec-participants .body').classList.remove('locked'); document.getElementById('btn-freeze').removeAttribute('aria-disabled'); document.getElementById('gate').style.display = 'none'; document.getElementById('primera-vez')?.style.setProperty('display', 'none'); true",
   );
 
 /** Escribe en el cuadro como si se tecleara: el evento `input` es el de siempre. */
@@ -279,19 +279,24 @@ const DETALLES = {
   },
 
   D08: {
-    que: '"Cargar ejemplo" solo con el cuadro vacío',
+    // Desde el 22 de octubre de 2026, en una red con contrato "Cargar ejemplo" no se ve nunca (con una
+    // cuenta abierta, sellarlo grababa un sorteo de nombres inventados): en su lugar está el ensayo,
+    // "o probá con un ejemplo, sin grabar nada", con la misma regla (diseño del onboarding).
+    que: 'el ejemplo ("o probá con un ejemplo") solo con el cuadro vacío',
     async correr(browser, v, tema, quien) {
       const page = await abrir(browser, v, tema);
       try {
-        const vacio = await page.eval(visible("#btn-sample"));
+        const sel = (await page.eval("!!document.getElementById('btn-ensayo') && getComputedStyle(document.getElementById('btn-sample')).display === 'none'")) ? "#btn-ensayo" : "#btn-sample";
+        const vacio = await page.eval(visible(sel));
         await escribir(page, "Ana Quispe\nLuis Mamani");
-        const conNombres = await page.eval(visible("#btn-sample"));
+        const conNombres = await page.eval(visible(sel));
         await page.eval("document.getElementById('sec-participants').scrollIntoView({ block: 'start' }); true");
         await sleep(300);
         await captura(page, "D08", v, tema, "con-nombres");
         await escribir(page, "");
-        const otraVez = await page.eval(visible("#btn-sample"));
-        check(`${quien} · con el cuadro vacío se ve, con nombres no, y vuelve al vaciarlo`, vacio && !conNombres && otraVez, `${vacio} → ${conNombres} → ${otraVez}`);
+        const otraVez = await page.eval(visible(sel));
+        check(`${quien} · ${sel}: con el cuadro vacío se ve, con nombres no, y vuelve al vaciarlo`, vacio && !conNombres && otraVez, `${vacio} → ${conNombres} → ${otraVez}`);
+        if (sel === "#btn-ensayo") check(`${quien} · "Cargar ejemplo" no se ve en una red con contrato`, !(await page.eval(visible("#btn-sample"))));
       } finally {
         await page.send("Page.close").catch(() => undefined);
       }
@@ -329,8 +334,9 @@ const DETALLES = {
         // Cambiar de idioma vuelve a pintar la puerta: el modo libre se arma de nuevo.
         await libre(page);
         // El siguiente premio: la caja vuelve a contar, y si el foco ya está en algo, no se lo quita.
+        // "Sellar" no responde los primeros 700 ms después de "Siguiente premio" (freeze.ts): un doble toque no sella.
         await page.eval("document.getElementById('btn-again-sin').click(); true");
-        await sleep(400);
+        await sleep(900);
         await sellar(page);
         const cuenta = await page.eval("document.getElementById('wait-left').textContent");
         check(`${quien} · con la lista sellada otra vez, la caja vuelve a contar`, /^\d+:\d\d$|^Ya nació/.test(cuenta), `"${cuenta}"`);

@@ -75,7 +75,9 @@ describe("el paso de firmar", () => {
     h.wallet = deprueba;
     const { quienFirma, stepLabel } = await import("./anchor");
     await quienFirma();
-    expect(stepLabel("simulating")).toBe("Armando la transacción…");
+    // Sin "transacción" (diseño del onboarding, 22 de octubre de 2026): se arma el sello, o el sorteo.
+    expect(stepLabel("simulating")).toBe("Armando el sello…");
+    expect(stepLabel("simulating", "sorteo")).toBe("Armando el sorteo…");
     expect(stepLabel("sending")).toBe("Mandando a la red…");
   });
 });

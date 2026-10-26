@@ -7,7 +7,7 @@ import { avatarColor } from "../../avatar";
 import { enOrden, writeStory } from "../drama";
 import { generoDe } from "../genero";
 import { WINNER_HOLD, clamp, ease, shorten, winnersLabel } from "../overlay";
-import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
+import { CHIP_SCALE, medidasContador, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 
 /**
  * Chovena.
@@ -1136,7 +1136,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     panelFor = -1;
     bigFor = -9;
     counterBox = new Graphics();
-    counter = S.text("", { fontFamily: MONO, fontSize: 14 * k, fontWeight: "700", fill: S.dark ? CREAM : INK });
+    counter = S.text("", { fontFamily: MONO, fontSize: medidasContador(k).fuente, fontWeight: "700", fill: S.dark ? CREAM : INK });
     counter.anchor.set(0.5);
     counterRoot = new Container();
     counterRoot.addChild(counterBox, counter);
@@ -1813,7 +1813,8 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     const rowH = fs * 1.36;
     const top = fs * 1.9;
     const pie = 8 * k;
-    const y0 = S.top() + (portrait ? 58 : 62) * k;
+    // Debajo del contador, que mide más desde la letra grande (CONTADOR) y en un celular girado no escala con `k`.
+    const y0 = S.top() + Math.max((portrait ? 58 : 62) * k, 10 * k + medidasContador(k).alto + 8 * k);
     const yDer = Math.max(y0, S.top() + 72 * k);
     const filas = clamp(Math.floor((H - S.bottom() - 10 * k - yDer - top - pie) / rowH), 3, 12);
     const MAX = 2 * filas;
@@ -2105,7 +2106,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     panel.visible = usePanel;
 
     counter.text = `${t("cChoLeft")}  ${remainingAt(x)} / ${n}`;
-    const bw2 = counter.width + 40 * k, bh2 = 40 * k;
+    const bw2 = counter.width + medidasContador(k).aire, bh2 = medidasContador(k).alto;
     counter.position.set(bw2 / 2, bh2 / 2);
     counterBox.clear().rect(5 * k, 5 * k, bw2, bh2).fill(INK).rect(0, 0, bw2, bh2).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 3 * k, color: INK });
   }

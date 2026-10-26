@@ -7,7 +7,7 @@ import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { capRecent, enVuelo, juntar, layoutLabels, listaCaidos, type LabelItem, type ListaGeo, type Rect } from "./pinata-labels";
 import { createPile, shouldSettle, type Pile } from "./pinata-monton";
 import { planPalos } from "./pinata-plan";
-import { CHIP_SCALE, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
+import { CHIP_SCALE, medidasContador, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 
 /**
  * Piñata.
@@ -688,7 +688,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     }
     // La interfaz: la cuenta y la lista de los que quedan adentro.
     counterBox = new Graphics();
-    counter = S.text("", { fontFamily: MONO, fontSize: 14 * k, fontWeight: "700", fill: S.dark ? CREAM : INK });
+    counter = S.text("", { fontFamily: MONO, fontSize: medidasContador(k).fuente, fontWeight: "700", fill: S.dark ? CREAM : INK });
     counter.anchor.set(0.5);
     const box = new Container();
     box.addChild(counterBox, counter);
@@ -730,7 +730,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       listaCont.addChild(c);
       listaRows.push({ c, bg, sq, tx });
     }
-    listaMore = S.text("", { fontFamily: MONO, fontSize: 13 * k, fontWeight: "800", fill: S.dark ? CREAM : INK });
+    listaMore = S.text("", { fontFamily: MONO, fontSize: 18 * k, fontWeight: "800", fill: S.dark ? CREAM : INK });
     listaMore.position.set(lista.x + 4 * k, lista.y + lista.h + 4 * k);
     listaCont.addChild(listaMore);
     S.hud.addChild(listaCont);
@@ -1096,7 +1096,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     drawLista();
     drawLabels(p, g, sz);
     counter.text =`${t("cPinLeft")}  ${inside().length} / ${n}`;
-    const bw = counter.width + 40 * k, bh = 40 * k;
+    const bw = counter.width + medidasContador(k).aire, bh = medidasContador(k).alto;
     counter.position.set(bw / 2, bh / 2);
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 3 * k, color: INK });
     // Con el cartel, la cuenta se va, como en el sapo: "ADENTRO 0 / 18" ya no
@@ -1222,7 +1222,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     const k1 = cam.toScreen(kidX + 26 * g.ks, g.ky + 4 * g.ks, g.w, g.h);
     // El chico y la cuenta no se tapan nunca: si no hay lugar, el nombre no sale.
     const kidRect = { x: Math.min(k0.x, k1.x), y: Math.min(k0.y, k1.y), w: Math.abs(k1.x - k0.x), h: Math.abs(k1.y - k0.y) };
-    const counterRect = { x: 22 * k, y: S.top() + 10 * k, w: counter.width + 45 * k, h: 45 * k };
+    const counterRect = { x: 22 * k, y: S.top() + 10 * k, w: counter.width + medidasContador(k).aire + 5 * k, h: medidasContador(k).alto + 5 * k };
     // La lista de los caídos tampoco se tapa: los nombres en vuelo buscan otro lugar.
     const listaRect = { x: lista.x, y: lista.y, w: lista.w, h: lista.h };
     for (const o of layoutLabels(items, bounds, blocked, [counterRect, kidRect, listaRect])) {

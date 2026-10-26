@@ -1,6 +1,7 @@
 import { $, esc } from "../dom";
 import { T, getLang, onLangChange, t } from "../i18n";
 import { CUENTA_SECONDS, LCOLORS, WHEEL_MAX, app, conCuenta, params, playableGame, avatar, forceMotion, setCardSeconds, setShowGate, setYaContaron, skipMotion, skippedForReducedMotion, type Beacon, type Game } from "../state";
+import { enEnsayo, sinGrabar } from "../ensayo-modo";
 import { beep, note } from "../sound";
 import { bytesToHex, fetchRound, hexToBytes, randomnessOf, roundUrl } from "../protocol/quicknet";
 import { verifyRoundAsync } from "../protocol/firma";
@@ -10,9 +11,9 @@ import { PROOF_VERSION, type Proof, proofUrl } from "../protocol/proof";
 import { drawOnChain, escribirError, limpiarDetalle, readDraw, showTxStatus, stepLabel } from "./anchor";
 import { loreFor } from "../games/lore";
 import { currentSession } from "./wallet-ui";
-import { pintarQr } from "./qr";
+import { pintarQrDelComprobante } from "./qr";
 import { usePixi } from "../games/engine";
-import { secondsToRound, unfreeze } from "./freeze";
+import { rotarJuego, secondsToRound, unfreeze } from "./freeze";
 import { setList } from "./participants";
 import { CARD_SECONDS, type GameCard, showGameCard } from "./gamecard";
 import { actualizarPaso, verError } from "./siguiente";
@@ -20,6 +21,7 @@ import { marcarSalio, olvidarSalieron, ponerPremio } from "./premios";
 import { acortar, alAcortar, cortoGuardado, rutaDe } from "../enlace-corto";
 import { startMusic, stopMusic } from "../music";
 import { seguirEnPantallaCompleta } from "../games/overlay";
+import { contar, contarPractica, errorContable, refDe } from "../contar";
 
 /** Obtiene la ronda objetivo, verifica su firma y selecciona (protocolo §2, §5). */
 async function resolveBeacon(
@@ -56,6 +58,8 @@ export async function draw(): Promise<void> {
   };
   /** Con cuenta, la tarjeta del juego sale mientras se graba (ver abajo); si algo falla, se va con la cortina. */
   let tarjeta: Previa | null = null;
+  /** Para el contador: un sorteo sin anclar no se cuenta, y uno anclado se cuenta una vez, al saber cómo terminó. */
+  let contado = app.frozen.raffleId === undefined;
 
   try {
     // Esto pasa con la sala mirando la pantalla grande. Si un relay no responde
@@ -125,7 +129,7 @@ export async function draw(): Promise<void> {
       const fin = await sortearConReintentos<{ winners: number[]; randomness: string; txHash?: string }>({
         intentar: () =>
           drawOnChain(raffleId, decompressG1(beacon.signature), (step, detail) => {
-            btn.textContent = stepLabel(step);
+            btn.textContent = stepLabel(step, "sorteo");
             showTxStatus("draw-status", step, detail);
           }),
         yaEsta: () => readDraw(raffleId),
@@ -139,7 +143,9 @@ export async function draw(): Promise<void> {
             aviso === "drawTry" ? T[getLang()].drawTry(proximo, total) : t(aviso).replace("{i}", String(proximo)).replace("{n}", String(total));
         },
       });
+      contado = true;
       if (!fin.ok) {
+        contar("draw_failed", { network: network.name, error: errorContable(errorKey(fin.error)) });
         tarjeta?.card.hide();
         sinShow();
         // El mensaje de la pantalla es para la sala; el detalle queda plegado
@@ -161,6 +167,7 @@ export async function draw(): Promise<void> {
       if (fin.yaEstaba) showTxStatus("draw-status", "confirmed");
       // Quedó grabado: la tarjeta sigue con la cuenta de la sala, y después el juego.
       grabado();
+      contar("draw_confirmed", { network: network.name });
     } else {
       winners = select(hexToBytes(beacon.randomness), hexToBytes(listHash), names.length, nWinners);
     }
@@ -190,6 +197,11 @@ export async function draw(): Promise<void> {
     tarjeta?.card.hide();
     sinShow();
     console.warn("[tinkazo] el sorteo se cortó", e);
+    if (!contado) {
+      void import("../stellar/errores")
+        .then(({ errorKey }) => contar("draw_failed", { network: network.name, error: errorContable(errorKey(e)) }))
+        .catch(() => undefined);
+    }
     btn.disabled = false;
     btn.classList.add("lista");
     btn.textContent = t("drawRetry");
@@ -434,6 +446,8 @@ function renderLore(beacon: Beacon): void {
 
 export function reveal(names: string[], winners: number[], beacon: Beacon, listHash: string): void {
   $("winner-box").style.display = "block";
+  // La demo llegó al ganador: es lo único que se cuenta de ella (src/contar.ts). El ensayo avisa con `tinkazo:ensayo-fin`.
+  if (params.has("demo")) contarPractica("demo");
   // Con el movimiento reducido el juego se salteó: se avisa, para que no parezca roto.
   $("motion-note").style.display = skippedForReducedMotion() ? "block" : "none";
   renderLore(beacon);
@@ -478,7 +492,12 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   const dl = $<HTMLAnchorElement>("drand-link");
   dl.href = url;
   dl.textContent = t("drandLink");
-  const principal = showAgain();
+  // En el ensayo, lo que sigue es su final (ensayo.ts): "Sortear con mi lista".
+  // "Siguiente premio" y compartir no van: no se sorteó nada.
+  const siguiente = showAgain();
+  const principal = enEnsayo() ? (document.getElementById("ens-mio") as HTMLButtonElement | null) ?? siguiente : siguiente;
+  // El final del ensayo: su línea se va, y el contador cuenta que llegó al ganador (main.ts, `contarPractica`).
+  if (enEnsayo()) document.dispatchEvent(new CustomEvent("tinkazo:ensayo-fin"));
   confetti();
   // El juego pidió bajar a "El sorteo" cuando el resultado todavía estaba
   // escondido: quedaba el selector de juegos arriba y el panel fuera de la
@@ -492,7 +511,12 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   const final = granFinal;
   granFinal = null;
   seguirEnPantallaCompleta(false);
-  if (final && (!final.pantalla || document.fullscreenElement)) resultadoEnGrande(enlace, principal);
+  // En el ensayo el resultado se queda en la página, con su final: en grande
+  // mostraría un QR de un sorteo que no existe. Se suelta la pantalla completa.
+  if (final && enEnsayo()) {
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    enfocarDespues(principal);
+  } else if (final && (!final.pantalla || document.fullscreenElement)) resultadoEnGrande(enlace, principal);
   else enfocarDespues(principal);
 }
 
@@ -501,7 +525,8 @@ function resultadoEnGrande(enlace: Promise<string>, volverA: HTMLButtonElement):
   // Con el enlace corto, como "Mostrar en grande": es lo mismo, mostrarlo en grande, y el
   // QR del corto se lee desde el fondo de la sala (Nicolás, 21 de octubre de 2026). Hasta
   // ese día iba con el largo. Nunca en la demo; si el corto no llega, va el largo (pantalla.ts).
-  const abrir = (m: typeof import("./pantalla")): void => void m.mostrarResultado(enlace, { corto: !params.has("demo"), volverA });
+  const abrir = (m: typeof import("./pantalla")): void => void m.mostrarResultado(enlace, { corto: !sinGrabar(), volverA });
+  contarCompartido("qr_big");
   if (pantallaLista) abrir(pantallaLista);
   else void import("./pantalla").then(abrir, () => enfocarDespues(volverA));
 }
@@ -627,6 +652,8 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   // equivocado frente a la sala no puede costar la lista de Luma filtrada.
   anterior = frozen.names;
   app.drawn = null;
+  // Con "Siguiente premio", el próximo sello sugiere otro juego: seguir sorteando es seguir jugando.
+  if (modo === "sinGanadores") rotarJuego();
   unfreeze(quedan.join("\n"));
   // Con otra lista empieza otra sentada: los premios ya no figuran como "ya salió".
   if (modo === "otraLista") olvidarSalieron();
@@ -664,7 +691,13 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   // lista vacía, lo que sigue es cargarla.
   // Con "No está" ya están la lista, el premio y la cantidad: lo que sigue es
   // sellar.
-  if (modo === "sinGanadores") $<HTMLInputElement>("prize").focus({ preventScroll: true });
+  // En una pantalla táctil el foco en el premio abre el teclado y tapa el botón: ahí se ofrecen los
+  // premios de siempre y lo que sigue es sellar.
+  const tactil = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+  if (modo === "sinGanadores") {
+    if (tactil) $<HTMLButtonElement>("btn-freeze").focus({ preventScroll: true });
+    else $<HTMLInputElement>("prize").focus({ preventScroll: true });
+  }
   else if (modo === "ausente") $<HTMLButtonElement>("btn-freeze").focus({ preventScroll: true });
   else $<HTMLTextAreaElement>("ta").focus({ preventScroll: true });
   actualizarPaso();
@@ -722,7 +755,7 @@ let cortoLink = "";
  * guarda nada en ningún lado mientras quien organiza no comparte ni lo muestra.
  * Y nunca en la demo, que no graba nada.
  */
-const puedeAcortar = (): boolean => !params.has("demo") && !!proofLink;
+const puedeAcortar = (): boolean => !sinGrabar() && !!proofLink;
 
 /** Al apoyar el dedo o el mouse en compartir o en grande: para el clic, el corto ya suele estar. */
 export function adelantarCorto(): void {
@@ -741,6 +774,7 @@ alAcortar((ruta, c) => {
 
 /** El resultado en grande para el proyector, con el QR del comprobante (pantalla.ts). */
 export function mostrarGrande(): void {
+  contarCompartido("qr_big");
   void import("./pantalla").then((m) => m.mostrarResultado(proofLink, { corto: puedeAcortar() }));
 }
 
@@ -756,7 +790,7 @@ async function paintQr(link: string): Promise<void> {
   const box = $("qr-box");
   const img = $<HTMLImageElement>("qr-img");
   try {
-    if (!(await pintarQr(img, link))) {
+    if (!(await pintarQrDelComprobante(img, link))) {
       // Una lista enorme no entra en un QR. El enlace se sigue pudiendo
       // copiar y compartir, así que se esconde el recuadro y ya.
       box.style.display = "none";
@@ -815,10 +849,10 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
   // Un comprobante nuevo empieza con su enlace largo; si ya se había compartido, con su corto.
   cortoLink = cortoGuardado(link)?.corto ?? "";
   // Y ahora se completa la fila del historial con el ganador y el comprobante.
-  // Una demo no es un sorteo: no se anota en Mis sorteos aunque haya cuenta,
-  // igual que en el sello (freeze.ts). Anotarla además borraba la bienvenida.
+  // La demo y el ensayo no son sorteos: no se anotan en Mis sorteos aunque haya
+  // cuenta, igual que en el sello (freeze.ts).
   const f2 = app.frozen;
-  const who = params.has("demo") ? undefined : currentSession()?.address;
+  const who = sinGrabar() ? undefined : currentSession()?.address;
   if (f2 && who) {
     void import("./history").then((h) => {
       h.remember({
@@ -891,6 +925,7 @@ export function shareProof(): void {
     premio: f.prize,
     fecha: f.ts,
     ...(f.raffleId !== undefined ? { numero: String(f.raffleId), red: network.name } : {}),
+    ref: refDelSorteo(),
   };
   void import("./compartir").then((m) => m.abrirSorteo(datos, getLang(), { corto: puedeAcortar() }));
 }
@@ -929,7 +964,24 @@ export async function reverify(): Promise<void> {
 /** "Copiar el mensaje": el mismo texto que "Compartir el resultado", siempre al portapapeles. */
 export async function copySummary(btn: HTMLButtonElement): Promise<void> {
   const texto = mensajeDelSorteo();
-  if (texto) await copiarMensaje(btn, texto, "copied", 1600);
+  if (texto && (await copiarMensaje(btn, texto, "copied", 1600))) contarCompartido("copy");
+}
+
+/** La referencia pública del sorteo de la pantalla, si se ancló: va al contador al compartir. */
+function refDelSorteo(): ReturnType<typeof refDe> {
+  const id = app.frozen?.raffleId;
+  return id === undefined ? undefined : refDe({ net: network.name, contract: network.contractId ?? "", id });
+}
+
+/**
+ * El contador del embudo (src/contar.ts): se compartió el resultado de la
+ * pantalla, por dónde, y de qué sorteo. Lo de la ventana de compartir lo
+ * cuenta `compartir.ts`.
+ */
+export function contarCompartido(canal: "copy" | "qr_big" | "whatsapp" | "email"): void {
+  // Sin un resultado no hay nada que compartir (los botones viven en la tarjeta del resultado).
+  if (!app.frozen || !app.drawn) return;
+  contar("share", { channel: canal }, refDelSorteo());
 }
 
 export function confetti(): void {

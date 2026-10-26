@@ -1,5 +1,6 @@
 import { drawAvatar } from "../avatar";
 import { qrLienzo } from "./qr";
+import { marcarQr } from "../contar";
 
 /**
  * La foto para compartir: quién ganó, qué se lleva y el QR para comprobarlo,
@@ -481,8 +482,12 @@ function medio(c: Ctx, f: Foto, s: number, apretado = false): Bloque[] {
  * lienzo mide justo lo que dice).
  */
 async function elQr(enlace: string): Promise<{ lienzo: HTMLCanvasElement; lado: number; modulo: number } | null> {
-  const qr = await qrLienzo(enlace, QR_LADO - 2 * 8, 1);
-  return qr && qr.modulo >= MODULO_MINIMO ? { lienzo: qr.canvas, lado: qr.lado, modulo: qr.modulo } : null;
+  // Con la marca del QR (`o=qr`, src/contar.ts), y sin ella si así no entra con módulos que se lean.
+  for (const texto of new Set([marcarQr(enlace), enlace])) {
+    const qr = await qrLienzo(texto, QR_LADO - 2 * 8, 1);
+    if (qr && qr.modulo >= MODULO_MINIMO) return { lienzo: qr.canvas, lado: qr.lado, modulo: qr.modulo };
+  }
+  return null;
 }
 
 function abajoConQr(c: Ctx, f: Foto, qr: { lienzo: HTMLCanvasElement; lado: number }): void {

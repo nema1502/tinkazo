@@ -5,6 +5,7 @@ import type { IntentoDeSello, Resolucion } from "../stellar/envio";
 import type { TxArmada } from "./envio-sdk";
 import { grifoApagado, grifoDisponible, hayAyudaDeFondos } from "../stellar/grifo";
 import { conAyudaDeFondos, conCuentaLista, conTope, dormirCancelable, esperarCuenta, esperarHasta } from "./reintento";
+import { sinGrabar } from "../ensayo-modo";
 
 export type { IntentoDeSello, Resolucion } from "../stellar/envio";
 
@@ -83,8 +84,16 @@ export interface DrawResult {
 const toHex = (b: Uint8Array | ArrayLike<number>): string =>
   [...Array.from(b as ArrayLike<number>)].map((n) => n.toString(16).padStart(2, "0")).join("");
 
-/** Registra el sello en el contrato. Exige la firma del organizador. */
+/**
+ * El error con que la cadena se niega a grabar en la demo o en el ensayo. No
+ * debería verse nunca: `freeze.ts` y `draw.ts` ya no llaman a la cadena ahí.
+ * Es la segunda llave, por si algún camino nuevo se olvida de mirar.
+ */
+export const SIN_GRABAR = "ensayo-sin-grabar";
+
+/** Registra el sello en el contrato. Exige la firma del organizador. Nunca en la demo ni en el ensayo. */
 export function sealOnChain(args: SealArgs, onStep: OnStep): Promise<SealResult> {
+  if (sinGrabar()) return Promise.reject(new Error(SIN_GRABAR));
   return conFondos(() => sellar(args, onStep), onStep);
 }
 
@@ -456,6 +465,7 @@ export function drawOnChain(
   signature96: Uint8Array,
   onStep: OnStep,
 ): Promise<DrawResult> {
+  if (sinGrabar()) return Promise.reject(new Error(SIN_GRABAR));
   return conFondos(() => sortear(raffleId, signature96, onStep), onStep);
 }
 
@@ -535,8 +545,14 @@ const CLAVE_DEL_PASO: Record<Exclude<AnchorStep, "signing">, string> = {
   retrying: "txRetrying",
 };
 
-/** Texto de cada paso, para el botón y la línea de estado. */
-export function stepLabel(step: AnchorStep): string {
+/**
+ * Texto de cada paso, para el botón y la línea de estado. Armar es "Armando el
+ * sello…" o "Armando el sorteo…": hasta el 22 de octubre de 2026 era "Armando la
+ * transacción…" en los dos, una de las palabras que frenaban a quien sorteaba
+ * por primera vez (diseño del onboarding).
+ */
+export function stepLabel(step: AnchorStep, que: "sello" | "sorteo" = "sello"): string {
+  if (step === "simulating" && que === "sorteo") return t("txSimulatingSorteo");
   return t(step === "signing" ? (firmaSinVentana ? "txSending" : "txSigning") : CLAVE_DEL_PASO[step]);
 }
 
@@ -550,7 +566,7 @@ export function showTxStatus(containerId: string, step: AnchorStep, detail?: str
   limpiarDetalle(containerId);
   host.style.display = "block";
   host.className = step === "confirmed" ? "txstatus ok" : "txstatus";
-  host.textContent = stepLabel(step);
+  host.textContent = stepLabel(step, containerId === "draw-status" ? "sorteo" : "sello");
   if (step === "signing" && detail && !firmaSinVentana) {
     // El costo antes de firmar, no después. Solo a quien aprueba en su billetera.
     host.textContent = `${stepLabel(step)} ${t("txCost")} ${detail}`;

@@ -5,7 +5,7 @@ import { beep, beepFor, fanfare, note } from "../../sound";
 import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { dentro, unir, type Caja, type Zona } from "./encuadre";
-import { CREAM, INK, MONO, YELLOW, contorno, hash, mountPixi, type PixiStage } from "./stage";
+import { medidasContador, CREAM, INK, MONO, YELLOW, contorno, hash, mountPixi, type PixiStage } from "./stage";
 
 /**
  * Trompo.
@@ -1075,7 +1075,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     S.hud.addChild(linesG, flashG);
     // El contador.
     counterBox = new Graphics();
-    counter = S.text("", { fontFamily: MONO, fontSize: 14 * k, fontWeight: "700", fill: S.dark ? CREAM : INK });
+    counter = S.text("", { fontFamily: MONO, fontSize: medidasContador(k).fuente, fontWeight: "700", fill: S.dark ? CREAM : INK });
     counter.anchor.set(0.5);
     const box = new Container();
     box.addChild(counterBox, counter);
@@ -1083,9 +1083,9 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     S.hud.addChild(box);
     chips = new Container();
     S.hud.addChild(chips);
-    duelText = S.text("", { fontFamily: MONO, fontSize: 11 * k, fontWeight: "700", fill: S.dark ? CREAM : INK });
+    duelText = S.text("", { fontFamily: MONO, fontSize: 18 * k, fontWeight: "700", fill: S.dark ? CREAM : INK });
     duelText.anchor.set(1, 1);
-    duelText.alpha = 0.6;
+    duelText.alpha = 0.9;
     duelText.position.set(W - 22 * k, H - S.bottom() - 18 * k);
     S.hud.addChild(duelText);
   }
@@ -1524,7 +1524,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     // El contador.
     const inRing = phase === "throw" ? Math.min(landed, n) : live.length;
     counter.text = `${t("cTroLeft")}  ${inRing} / ${n}`;
-    const bw = counter.width + 40 * k, bh = 40 * k;
+    const bw = counter.width + medidasContador(k).aire, bh = medidasContador(k).alto;
     counter.position.set(bw / 2, bh / 2);
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 3 * k, color: INK });
     duelText.text = phase === "duel" ? `${t("cTroDuelLbl")} ${Math.min(clashHits, clashes.length)}/${clashes.length}` : "";

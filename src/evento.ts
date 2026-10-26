@@ -13,6 +13,7 @@ import { leerRegistros } from "./stellar/registro";
 import type { ChainRaffle } from "./stellar/seals";
 import { codigoDelSello, detalleDelHistorial, detalleTecnico, porQueSinHistorial } from "./verificacion-textos";
 import { fechaLarga } from "./ui/agrupar";
+import { contarAperturaDeEvento, quitarMarca, refDe, viaDe } from "./contar";
 
 /**
  * La página de un evento: varios sorteos del mismo día, en un solo enlace.
@@ -64,6 +65,11 @@ let entran: SorteoDelEvento[] = [];
 let verificar: string[] = [];
 let filas: Fila[] = [];
 let revisando = true;
+
+// Por dónde llegó (el QR de la foto, el enlace corto o el largo), para el
+// contador del embudo (src/contar.ts); la marca sale de la dirección enseguida.
+const via = viaDe(location.search);
+quitarMarca();
 
 /** El texto que se sella cuando no se escribe premio (entre comillas: así entra en los textos de la página). */
 const META_POR_DEFECTO = "defaultMeta";
@@ -396,6 +402,10 @@ async function main(): Promise<void> {
   prepararFirma();
   const leer = lectorDeRegistros(entran);
   verificar = await Promise.all(entran.map((s) => verificarUrlDe(s)));
+  // Un evento con al menos un sorteo anclado: se abrió. Va sin referencia (son
+  // varios sorteos); la del primero solo evita contarlo dos veces en la pestaña.
+  const primero = entran.map((s) => refDe(s)).find((r) => r !== undefined);
+  if (primero) contarAperturaDeEvento(via, `${primero.net}:${primero.contract}:${primero.id}`);
   pintar();
   const vistos = new Set<string>();
   for (const s of entran) {

@@ -61,6 +61,9 @@ try {
         ta.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     }
     await page.eval(`document.getElementById('g-wheel').click()`);
+    // Sin cuenta, "Sellar" abre la ventana para entrar (desde el 20 de septiembre
+    // de 2026): el auditor sella en el modo libre, como los demás, sin esa puerta.
+    await page.eval(`document.getElementById('btn-freeze').removeAttribute('aria-disabled')`);
     await page.eval(`document.getElementById('btn-freeze').click()`);
     await page.waitFor(
       `document.getElementById('btn-draw').textContent.indexOf('0:') < 0 && !document.getElementById('btn-draw').disabled`,
@@ -106,9 +109,10 @@ try {
       continue;
     }
     const link = await page.eval(`(document.getElementById('btn-proof') && window.location.origin) || ''`);
-    const okLink = found.data.includes("/verificar.html#");
+    // Con la marca del QR antes del `#` (`?o=qr`): la página sabe que se abrió desde el QR (src/contar.ts).
+    const okLink = /\/verificar\.html\?o=qr#/.test(found.data);
     console.log(
-      `  ${okLink ? "✓" : "✗"} ${etiqueta}: ${px.w}×${px.h}, ${found.data.length} caracteres leídos${okLink ? "" : " — NO apunta a la verificación"}`,
+      `  ${okLink ? "✓" : "✗"} ${etiqueta}: ${px.w}×${px.h}, ${found.data.length} caracteres leídos${okLink ? "" : " — NO apunta a la verificación con la marca del QR"}`,
     );
     if (!okLink) bad++;
     void link;

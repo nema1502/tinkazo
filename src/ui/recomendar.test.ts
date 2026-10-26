@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { JUEGO_DE_SIEMPRE, SELECTOR, juegoPorDefecto, recomendar, type Recomendacion } from "./recomendar";
+import { JUEGO_DE_SIEMPRE, SELECTOR, juegoPorDefecto, juegoSiguiente, recomendar, type Recomendacion } from "./recomendar";
 import { T } from "../i18n";
 import type { Game } from "../state";
 
@@ -276,5 +276,22 @@ describe("el juego que queda elegido si nadie eligió otro (D02)", () => {
 
   it("si ninguno encaja (más de doscientos), el de siempre", () => {
     expect(juegoPorDefecto(500)).toBe(JUEGO_DE_SIEMPRE);
+  });
+});
+
+describe("el juego que sigue después de un premio", () => {
+  it("es otro de los que encajan, el siguiente en el orden, y vuelve al primero", () => {
+    for (const n of [12, 20, 40]) {
+      const buenos = recomendar(n).games.filter((x) => x.fits === true).map((x) => x.game);
+      expect(buenos.length, String(n)).toBeGreaterThan(1);
+      buenos.forEach((g, i) => expect(juegoSiguiente(n, g), `${n} ${g}`).toBe(buenos[(i + 1) % buenos.length]));
+      expect(juegoSiguiente(n, "tombola")).toBe(buenos[0]);
+    }
+  });
+  it("con un juego que no encaja o sin ninguno que encaje, deja el que estaba", () => {
+    expect(juegoSiguiente(1, "pinata")).toBe("pinata");
+  });
+  it("siempre da lo mismo con la misma entrada", () => {
+    expect(juegoSiguiente(20, "race")).toBe(juegoSiguiente(20, "race"));
   });
 });
