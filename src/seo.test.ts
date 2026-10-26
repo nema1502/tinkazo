@@ -751,7 +751,7 @@ describe("«Qué queda de tu sorteo y por cuánto tiempo», en Cómo funciona", 
 
   it("la frase de la promesa es la aprobada, textual, en los dos idiomas", () => {
     expect(T.es.cfDuraPromesa).toBe("Este comprobante lleva lo necesario para volver a comprobar el sorteo con herramientas abiertas. La hora del sello la confirman los archivos públicos de Stellar mientras existan: nadie garantiza ese plazo, tampoco nosotros. Guardalo.");
-    expect(T.en.cfDuraPromesa).toBe("This proof carries what is needed to re-check the draw with open tools. The seal time is confirmed by Stellar's public archives for as long as they exist: nobody guarantees that term, and neither do we. Keep it.");
+    expect(T.en.cfDuraPromesa).toBe("This receipt carries what is needed to re-check the draw with open tools. The seal time is confirmed by Stellar's public archives for as long as they exist: nobody guarantees that term, and neither do we. Keep it.");
   });
 
   it("dice que la red de prueba se borra el 16 de diciembre de 2026 y cuánto dura la memoria del contrato", () => {

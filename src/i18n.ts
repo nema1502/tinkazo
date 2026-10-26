@@ -2837,7 +2837,7 @@ export const T: Record<Lang, Dict> = {
     cfDura1: "<b>Your receipt:</b> it lasts as long as you keep it. While you have it, you can redo the math whenever you want.",
     cfDura2: "<b>The contract's memory:</b> 7 days on the test network (testnet) and 120 on the main network (mainnet). It is short and it is not what proves the draw: the seal is.",
     cfDura3: "<b>The test network:</b> Tinkazo runs there today, and Stellar wipes all of it on December 16, 2026, seals and their times included. Your receipt still lets anyone redo the math, but nobody will be able to confirm the seal time.",
-    cfDuraPromesa: "This proof carries what is needed to re-check the draw with open tools. The seal time is confirmed by Stellar's public archives for as long as they exist: nobody guarantees that term, and neither do we. Keep it.",
+    cfDuraPromesa: "This receipt carries what is needed to re-check the draw with open tools. The seal time is confirmed by Stellar's public archives for as long as they exist: nobody guarantees that term, and neither do we. Keep it.",
     cfSinT: "Check it without us",
     cfSinB: "You don't need this site. With the draw number, which is in the rules and in the receipt:",
     cfSin1t: "The seal and the result, in an explorer",
