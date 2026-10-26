@@ -81,6 +81,9 @@ function leerConsulta(c: { status: string; latestLedgerCloseTime?: number | stri
   return { status: c.status, cierre: Number(c.latestLedgerCloseTime), ...(c.returnValue !== undefined ? { valor: c.returnValue } : {}) };
 }
 
+/** La red devolvió `TRY_AGAIN_LATER`: se anota para que el chequeo de la red avise que anda saturada. */
+const avisarSaturacion = (): void => void import("../stellar/registro-red").then((m) => m.anotarSaturacion());
+
 /**
  * Firma acá (Freighter o la cuenta de prueba) y manda esa misma transacción
  * hasta saber cómo terminó (`enviarYConfirmar`). Antes era `signAndSend` del SDK:
@@ -89,9 +92,6 @@ function leerConsulta(c: { status: string; latestLedgerCloseTime?: number | stri
  * sello, quizás un segundo sello). Ahora un corte se arregla mandando la misma,
  * que la red aplica una sola vez.
  */
-/** La red devolvió `TRY_AGAIN_LATER`: se anota para que el chequeo de la red avise que anda saturada. */
-const avisarSaturacion = (): void => void import("../stellar/registro-red").then((m) => m.anotarSaturacion());
-
 export async function firmarYConfirmar(tx: TxArmada, onStep: OnStep, sinRedMs: number, revisar?: () => void): Promise<{ hash: string; desenlace: Desenlace }> {
   await tx.sign();
   revisar?.();
