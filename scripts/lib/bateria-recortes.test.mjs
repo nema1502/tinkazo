@@ -23,8 +23,10 @@ describe("los auditores que entienden `todos`", () => {
     }
   });
 
-  it("el trueque, que pantalla se salteaba, está en el selector", () => {
-    expect(SELECTOR).toContain("trueque");
+  it("el trueque salió del selector el 26 de octubre de 2026 (y De pie): quedan ocho", () => {
+    expect(SELECTOR).not.toContain("trueque");
+    expect(SELECTOR).not.toContain("quien");
+    expect(SELECTOR).toHaveLength(8);
   });
 });
 
@@ -75,18 +77,18 @@ describe("cuánto se recortó el `todos` (juego × auditor, y arranques de Chrom
     return n;
   };
 
-  it("de 84 a 70 escenas de juego sin la mezcla, y de 97 a 80 con ella", () => {
+  it("de 84 a 56 escenas de juego sin la mezcla, y de 97 a 64 con ella (con los ocho del selector)", () => {
     expect(escenasAntes(false)).toBe(84);
     expect(escenasAntes(true)).toBe(97);
-    expect(escenasDespues(planDe())).toBe(70);
-    expect(escenasDespues(planDe({ noche: true }))).toBe(80);
+    expect(escenasDespues(planDe())).toBe(56);
+    expect(escenasDespues(planDe({ noche: true }))).toBe(64);
   });
 
   it("un arranque de Chrome menos por pantalla, y uno más por el auditor de legibilidad (nuevo)", () => {
     // Antes: 10 de audit-game, 6 de los que miran juegos (rigor, identidad,
     // pantalla, delatores, emoción, sonido; la mezcla de noche) y 10 sueltos.
     // Ahora: pantalla ya no tiene el suyo y entra audit-legible.
-    expect(contar(planDe()).chromes).toBe(10 + 5 + 10 + 1);
-    expect(contar(planDe({ noche: true })).chromes).toBe(10 + 6 + 10 + 1);
+    expect(contar(planDe()).chromes).toBe(8 + 5 + 10 + 1);
+    expect(contar(planDe({ noche: true })).chromes).toBe(8 + 6 + 10 + 1);
   });
 });

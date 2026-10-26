@@ -99,8 +99,8 @@ describe("leer el resumen de la salida de un auditor", () => {
 });
 
 describe("los juegos de un `todos`", () => {
-  it("son los diez del selector, sin ninguno de los que salieron", () => {
-    expect(SELECTOR).toHaveLength(10);
+  it("son los ocho del selector, sin ninguno de los que salieron", () => {
+    expect(SELECTOR).toHaveLength(8);
     expect(juegosDe("todos")).toEqual(SELECTOR);
     expect(juegosDe()).toEqual(SELECTOR);
     for (const j of FUERA_DEL_SELECTOR) expect(SELECTOR).not.toContain(j);
@@ -112,7 +112,7 @@ describe("los juegos de un `todos`", () => {
 
   it("devuelve una copia: tocar el resultado no cambia la lista de todos", () => {
     juegosDe("todos").pop();
-    expect(SELECTOR).toHaveLength(10);
+    expect(SELECTOR).toHaveLength(8);
   });
 });
 

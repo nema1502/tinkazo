@@ -33,30 +33,35 @@ describe("el selector y su recomendación hablan de los mismos juegos", () => {
   it("SELECTOR son los botones de GAME_BUTTONS en freeze.ts, en el mismo orden", () => {
     const fuente = readFileSync(new URL("./freeze.ts", import.meta.url), "utf8");
     const botones = [...fuente.matchAll(/\["g-[a-z]+", "([a-z]+)"\]/g)].map((m) => m[1] as string);
+    // De pie y El Trueque (26 de octubre de 2026) siguen en GAME_BUTTONS: sus botones quedan en el HTML, apagados.
     // Más los del kit ya encendidos, que freeze.ts y recomendar.ts suman del catálogo.
     const encendidos = JUEGOS.filter((j) => j.selector && !botones.includes(j.id)).map((j) => j.id as string);
-    expect([...botones, ...encendidos]).toEqual([...SELECTOR]);
+    expect([...botones.filter((b) => b !== "quien" && b !== "trueque"), ...encendidos]).toEqual([...SELECTOR]);
   });
 
   it("la tómbola sale del selector: sigue existiendo, pero sin botón", () => {
     expect(SELECTOR).not.toContain("tombola");
   });
 
-  it("son los diez que decidió el autor el 21 de octubre de 2026, de las salas chicas a las grandes", () => {
-    expect([...SELECTOR]).toEqual(["race", "sapo", "trompo", "chovena", "pinata", "wheel", "quien", "trueque", "teleferico", "oruro"]);
+  it("son los ocho que quedaron el 26 de octubre de 2026 (De pie y El Trueque salieron), de las salas chicas a las grandes", () => {
+    expect([...SELECTOR]).toEqual(["race", "sapo", "trompo", "chovena", "pinata", "wheel", "teleferico", "oruro"]);
   });
 
-  it("el Aguayo y la Constelación salen del selector: El Trueque los reemplaza", () => {
+  it("el Aguayo y la Constelación salen del selector, y el 26 de octubre de 2026 también De pie y El Trueque", () => {
     expect(SELECTOR).not.toContain("pasanaku");
     expect(SELECTOR).not.toContain("stellar");
-    expect(SELECTOR).toContain("trueque");
+    expect(SELECTOR).not.toContain("trueque");
+    expect(SELECTOR).not.toContain("quien");
   });
 
   it("los botones g-* de index.html son los mismos, en el mismo orden", () => {
     const html = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
     const selector = html.slice(html.indexOf('id="gamepick"'), html.indexOf("</div>", html.indexOf('id="gamepick"')));
     const botones = [...selector.matchAll(/<button id="g-([a-z]+)"/g)].map((m) => m[1]);
-    expect(botones).toEqual([...SELECTOR]);
+    // Los dos que salieron (De pie y El Trueque) quedan en el HTML, apagados (`hidden`): audit-game los marca así.
+    const apagados = [...selector.matchAll(/<button id="g-([a-z]+)"( hidden)?/g)].filter((m) => m[2]).map((m) => m[1]);
+    expect(apagados).toEqual(["quien", "trueque"]);
+    expect(botones.filter((b) => !apagados.includes(b))).toEqual([...SELECTOR]);
   });
 });
 
@@ -80,7 +85,7 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
     expect(grupos(1)).toEqual({
       encajan: [],
       neutral: ["pinata", "wheel"],
-      no: ["race", "sapo", "trompo", "chovena", "quien", "trueque", "teleferico", "oruro"],
+      no: ["race", "sapo", "trompo", "chovena", "teleferico", "oruro"],
     });
   });
 
@@ -88,21 +93,21 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
     expect(grupos(2)).toEqual({
       encajan: ["sapo", "race", "trompo"],
       neutral: ["pinata", "wheel"],
-      no: ["chovena", "quien", "trueque", "teleferico", "oruro"],
+      no: ["chovena", "teleferico", "oruro"],
     });
   });
 
   it("con 8, el ideal de la carrera, el sapo y el trompo va primero, y chovena y De pie encajan justo en el mínimo", () => {
     expect(grupos(8)).toEqual({
-      encajan: ["sapo", "race", "trompo", "chovena", "quien"],
+      encajan: ["sapo", "race", "trompo", "chovena"],
       neutral: ["pinata", "wheel"],
-      no: ["trueque", "teleferico", "oruro"],
+      no: ["teleferico", "oruro"],
     });
   });
 
   it("con 12, chovena, el sapo, la carrera (el pelotón) y el trompo están en su ideal, y El Trueque entra por su mínimo", () => {
     expect(grupos(12)).toEqual({
-      encajan: ["chovena", "sapo", "race", "trompo", "trueque", "quien"],
+      encajan: ["chovena", "sapo", "race", "trompo"],
       neutral: ["pinata", "wheel"],
       no: ["teleferico", "oruro"],
     });
@@ -110,7 +115,7 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
 
   it("con 16, teleférico entra por su mínimo, y el sapo por la clasificatoria; El Trueque los pasa por puntaje", () => {
     expect(grupos(16)).toEqual({
-      encajan: ["chovena", "race", "trueque", "sapo", "teleferico", "quien"],
+      encajan: ["chovena", "race", "sapo", "teleferico"],
       neutral: ["pinata", "wheel"],
       no: ["trompo", "oruro"],
     });
@@ -118,55 +123,50 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
 
   it("con 30, El Trueque, chovena, teleférico y la carrera (el pelotón entero) están en su ideal; La Entrada entra por su mínimo y va al final; la ruleta sigue, neutral, hasta 200", () => {
     expect(grupos(30)).toEqual({
-      encajan: ["trueque", "chovena", "teleferico", "race", "sapo", "quien", "oruro"],
+      encajan: ["chovena", "teleferico", "race", "sapo", "oruro"],
       neutral: ["pinata", "wheel"],
       no: ["trompo"],
     });
   });
 
-  it("con 50, El Trueque, chovena y teleférico; el sapo pasa de su clasificatoria", () => {
+  it("con 50, chovena y teleférico están en su ideal, y la carrera y La Entrada también encajan; el sapo pasa de su clasificatoria", () => {
     expect(grupos(50)).toEqual({
-      encajan: ["trueque", "chovena", "teleferico", "race", "quien", "oruro"],
+      encajan: ["chovena", "teleferico", "race", "oruro"],
       neutral: ["pinata", "wheel"],
       no: ["sapo", "trompo"],
     });
   });
 
-  it("con 100, El Trueque y teleférico; la carrera, con sus tandas, también encaja; chovena ya pasa de sus 80", () => {
+  it("con 100, teleférico en su ideal; la carrera, con sus tandas, y La Entrada también encajan; chovena ya pasa de sus 80", () => {
     expect(grupos(100)).toEqual({
-      encajan: ["trueque", "teleferico", "race", "quien", "oruro"],
+      encajan: ["teleferico", "race", "oruro"],
       neutral: ["pinata", "wheel"],
       no: ["sapo", "trompo", "chovena"],
     });
   });
 
-  it("con 200, El Trueque, teleférico y La Entrada llegan justo a su máximo, y la piñata y la ruleta también; De pie ya pasó de sus 100", () => {
+  it("con 200, teleférico, la carrera y La Entrada llegan justo a su máximo, y la piñata y la ruleta también", () => {
     expect(grupos(200)).toEqual({
-      encajan: ["trueque", "teleferico", "race", "oruro"],
+      encajan: ["teleferico", "race", "oruro"],
       neutral: ["pinata", "wheel"],
-      no: ["sapo", "trompo", "chovena", "quien"],
+      no: ["sapo", "trompo", "chovena"],
     });
   });
 
-  it("Piñata solo tiene tope (200), De pie va de 8 a 100 (se juega hasta 200, pero el tablero no se lee) y La Entrada de 30 a 200 (docs/juegos.md)", () => {
+  it("Piñata solo tiene tope (200) y La Entrada va de 30 a 200 (docs/juegos.md)", () => {
     const juego = (g: Game, n: number) => recomendar(n).games.find((r) => r.game === g);
     for (const n of [1, 2, 30, 200]) expect(juego("pinata", n), `pinata ${n}`).toMatchObject({ fits: null, note: null });
     expect(juego("pinata", 201)).toMatchObject({ fits: false, note: "rec.pinata.largo" });
-    expect(juego("quien", 7)).toMatchObject({ fits: false, note: "rec.quien.corto" });
-    expect(juego("quien", 8)).toMatchObject({ fits: true, ideal: false, note: "rec.quien.alto" });
-    expect(juego("quien", 100)).toMatchObject({ fits: true, ideal: false, note: "rec.quien.alto" });
-    expect(juego("quien", 101)).toMatchObject({ fits: false, note: "rec.quien.largo" });
-    expect(juego("quien", 200)).toMatchObject({ fits: false, note: "rec.quien.largo" });
     expect(juego("oruro", 29)).toMatchObject({ fits: false, note: "rec.oruro.corto" });
     expect(juego("oruro", 30)).toMatchObject({ fits: true, ideal: false, note: "rec.oruro.alto" });
     expect(juego("oruro", 200)).toMatchObject({ fits: true, ideal: false, note: "rec.oruro.alto" });
     expect(juego("oruro", 201)).toMatchObject({ fits: false, note: "rec.oruro.largo" });
   });
 
-  it("De pie y La Entrada, sin ideal ni puntaje, van al final de los recomendados y nunca son el primero si otro encaja", () => {
+  it("La Entrada, sin ideal ni puntaje, va al final de los recomendados y nunca es el primero si otro encaja", () => {
     for (let n = 2; n <= 200; n++) {
       const encajan = recomendar(n).games.filter((r) => r.fits === true).map((r) => r.game);
-      const finales = encajan.filter((g) => g === "quien" || g === "oruro");
+      const finales = encajan.filter((g) => g === "oruro");
       expect(encajan.slice(encajan.length - finales.length), `n=${n}`).toEqual(finales);
       if (encajan.length > finales.length) expect(finales, `n=${n}`).not.toContain(encajan[0]);
     }
@@ -231,17 +231,6 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
     expect(nota("sapo", 20)).toBe("rec.sapo.alto");
     expect(nota("chovena", 70)).toBe("rec.chovena.alto");
     expect(nota("teleferico", 170)).toBe("rec.teleferico.alto");
-  });
-
-  it("El Trueque, de 12 a 200 y mejor de 20 a 120 (auditoría, sección 6)", () => {
-    const trueque = (n: number) => recomendar(n).games.find((r) => r.game === "trueque");
-    expect(trueque(11)).toMatchObject({ fits: false, note: "rec.trueque.corto" });
-    expect(trueque(12)).toMatchObject({ fits: true, ideal: false, note: "rec.trueque.bajo" });
-    expect(trueque(20)).toMatchObject({ fits: true, ideal: true, note: "rec.trueque.ideal" });
-    expect(trueque(120)).toMatchObject({ fits: true, ideal: true, note: "rec.trueque.ideal" });
-    expect(trueque(121)).toMatchObject({ fits: true, ideal: false, note: "rec.trueque.alto" });
-    expect(trueque(200)).toMatchObject({ fits: true, ideal: false, note: "rec.trueque.alto" });
-    expect(trueque(201)).toMatchObject({ fits: false, note: "rec.trueque.largo" });
   });
 
   it("los que salieron del selector no se ofrecen nunca, para ninguna cantidad", () => {

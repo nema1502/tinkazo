@@ -45,11 +45,12 @@ export interface EntradaCatalogo {
 }
 
 export const CATALOGO = [
-  // De pie, el primer juego migrado al kit: sigue en el selector con sus claves y su rango de siempre.
+  // De pie, el primer juego migrado al kit. Salió del selector el 26 de octubre de 2026 (su botón queda oculto en
+  // index.html) y sigue abriendo con ?demo=quien, con sus claves y su rango de siempre.
   {
     id: "quien",
     cargar: () => import("../quien").then((m) => m.quienPixi),
-    selector: true,
+    selector: false,
     rango: { minimo: 8, maximo: 100 },
     captura: true,
   },

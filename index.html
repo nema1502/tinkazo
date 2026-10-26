@@ -123,12 +123,12 @@
   <div class="steps portada-only">
     <article><span class="num">01</span><h3 data-i="s1t">Traé tu lista</h3><p data-i="s1b">Entrás con Google y pegás los nombres, o subís el CSV de Luma o de cualquier hoja de cálculo, y elegís quiénes entran. La cuenta es tuya: tu gente no instala nada ni se crea nada.</p></article>
     <article><span class="num">02</span><h3 data-i="s2t">Sellá la lista</h3><p data-i="s2b">Al sellarla, la lista queda con un resumen corto de la lista (su huella) y una hora. Si después alguien mete a su primo o saca a otro, la huella cambia y se nota. Y la huella queda grabada en Stellar.</p></article>
-    <article><span class="num">03</span><h3 data-i="s3t">Elegí el juego y sorteá</h3><p data-i="s3b">Uno de los diez juegos, a pantalla completa. Cuando arranca la animación el ganador ya salió del número público. El show es show. El sorteo ya estaba hecho.</p></article>
+    <article><span class="num">03</span><h3 data-i="s3t">Elegí el juego y sorteá</h3><p data-i="s3b">Uno de los ocho juegos, a pantalla completa. Cuando arranca la animación el ganador ya salió del número público. El show es show. El sorteo ya estaba hecho.</p></article>
   </div>
 
   <section class="portada-sec portada-only" id="juegos">
     <span class="kicker" data-i="pjKicker">El show</span>
-    <h2 class="sec-t" data-i="pjT">Diez juegos. Ninguno decide nada.</h2>
+    <h2 class="sec-t" data-i="pjT">Ocho juegos. Ninguno decide nada.</h2>
     <p class="sec-b" data-i="pjB">Tocá uno y miralo sortear con una lista de ejemplo, sin cuenta. Cuando arranca la animación el ganador ya salió: todos cuentan el mismo sorteo.</p>
     <div class="portada-juegos">
       <a href="/?demo=race&amp;lead=3" data-thumb="race"><span data-i="gameRace">Carrera de llamas</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
@@ -137,8 +137,6 @@
       <a href="/?demo=chovena&amp;lead=3" data-thumb="chovena"><span data-i="gameCho">Chovena</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
       <a href="/?demo=pinata&amp;lead=3" data-thumb="pinata"><span data-i="gamePinata">Piñata</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
       <a href="/?demo=wheel&amp;lead=3" data-thumb="wheel"><span data-i="gameWheel">Ruleta</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
-      <a href="/?demo=quien&amp;lead=3" data-thumb="quien"><span data-i="gameQuien">De pie</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
-      <a href="/?demo=trueque&amp;lead=3" data-thumb="trueque"><span data-i="gameTrueque">El Trueque</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
       <a href="/?demo=teleferico&amp;lead=3" data-thumb="teleferico"><span data-i="gameTeleferico">Teleférico</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
       <a href="/?demo=oruro&amp;lead=3" data-thumb="oruro"><span data-i="gameOruro">La Entrada</span><span class="pj-ver" data-i="pjVer">Ver demo</span></a>
     </div>
@@ -393,8 +391,9 @@
         <button id="g-chovena"><span data-i="gameCho">Chovena</span></button>
         <button id="g-pinata"><span data-i="gamePinata">Piñata</span></button>
         <button id="g-wheel"><span data-i="gameWheel">Ruleta</span></button>
-        <button id="g-quien"><span data-i="gameQuien">De pie</span></button>
-        <button id="g-trueque"><span data-i="gameTrueque">El Trueque</span></button>
+        <!-- De pie y El Trueque salieron del selector el 26 de octubre de 2026: el botón queda apagado, y los dos siguen abriendo con ?demo=. -->
+        <button id="g-quien" hidden><span data-i="gameQuien">De pie</span></button>
+        <button id="g-trueque" hidden><span data-i="gameTrueque">El Trueque</span></button>
         <button id="g-teleferico"><span data-i="gameTeleferico">Teleférico</span></button>
         <button id="g-oruro"><span data-i="gameOruro">La Entrada</span></button>
       </div>
@@ -537,8 +536,8 @@
     <h2 class="kicker" data-i="masTitle">Para saber más</h2>
     <div class="notas" style="margin-top: 12px">
       <a class="nota" href="/juegos.html" style="text-decoration:none;color:inherit">
-        <h3 data-i="masJuegosT">Los diez juegos</h3>
-        <p data-i="masJuegosB">Carrera de llamas, chovena, trompo, piñata, Carnaval de Oruro, el sapo y cuatro más, con la captura de cada uno.</p>
+        <h3 data-i="masJuegosT">Los ocho juegos</h3>
+        <p data-i="masJuegosB">Carrera de llamas, chovena, trompo, piñata, Carnaval de Oruro, el sapo y dos más, con la captura de cada uno.</p>
       </a>
       <a class="nota" href="/historia.html" style="text-decoration:none;color:inherit">
         <h3 data-i="masHistoriaT">De dónde sale el nombre</h3>

@@ -8,15 +8,22 @@ import { readFileSync } from "node:fs";
  * midiendo trece, con tres que nadie puede elegir.
  */
 
-/** Los diez del selector, en el orden de `docs/juegos.md`: son los que se pueden elegir. */
-export const SELECTOR = ["race", "sapo", "trompo", "chovena", "pinata", "wheel", "quien", "trueque", "teleferico", "oruro"];
+/** Los ocho del selector, en el orden de `docs/juegos.md`: son los que se pueden elegir. */
+// De pie y El Trueque salieron del selector el 26 de octubre de 2026 (siguen abriendo con ?demo=): quedan ocho.
+export const SELECTOR = ["race", "sapo", "trompo", "chovena", "pinata", "wheel", "teleferico", "oruro"];
 
 /**
  * Los que salieron del selector y siguen abriendo con `?demo=`. No entran en un
  * `todos`: se piden por nombre (`audit-rigor.mjs tombola`) o con
  * `pnpm audit:todo --todos-los-juegos`.
  */
-export const FUERA_DEL_SELECTOR = ["tombola", "pasanaku", "stellar", "luz", "ledger", "rockets", "totora"];
+export const FUERA_DEL_SELECTOR = ["tombola", "pasanaku", "stellar", "luz", "ledger", "rockets", "totora", "quien", "trueque"];
+
+/**
+ * De los que salieron, los dos que conservan el golpe de cámara del barrido del 26 de octubre de 2026 (los otros
+ * nunca lo tuvieron): `audit-emocion` les mide el zoom si se piden por nombre.
+ */
+export const FUERA_CON_GOLPE = ["quien", "trueque"];
 
 /**
  * El detalle de la comprobación 7 de `audit-game` ("el juego tiene su botón en

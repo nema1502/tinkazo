@@ -18,14 +18,15 @@ import type { Game } from "../state";
  */
 
 /**
- * Los diez juegos del selector, en el orden de sus botones (`GAME_BUTTONS` en
- * `freeze.ts`): el de la auditoría, de las salas chicas a las grandes.
+ * Los ocho juegos del selector, en el orden de sus botones (`GAME_BUTTONS` en
+ * `freeze.ts`): el de la auditoría, de las salas chicas a las grandes. De pie y
+ * El Trueque salieron el 26 de octubre de 2026: siguen abriendo con `?demo=`.
  */
 const SELECTOR_BASE: readonly Game[] = [
-  "race", "sapo", "trompo", "chovena", "pinata", "wheel", "quien", "trueque", "teleferico", "oruro",
+  "race", "sapo", "trompo", "chovena", "pinata", "wheel", "teleferico", "oruro",
 ];
 
-/** Los diez y, al final, los del kit que ya se encendieron (`kit/catalogo.ts`). */
+/** Los ocho y, al final, los del kit que ya se encendieron (`kit/catalogo.ts`). */
 export const SELECTOR: readonly Game[] = [...SELECTOR_BASE, ...JUEGOS.filter((j) => j.selector && !SELECTOR_BASE.includes(j.id)).map((j): Game => j.id)];
 
 export interface Rango {
@@ -63,11 +64,9 @@ const RANGOS_BASE: Partial<Record<Game, Rango>> = {
   sapo: { minimo: 2, ideal: [6, 12], maximo: 40, meta: 7.1 },
   trompo: { minimo: 2, ideal: [5, 14], maximo: 14, meta: 6.3 },
   chovena: { minimo: 8, ideal: [12, 60], maximo: 80, meta: 7.9 },
-  trueque: { minimo: 12, ideal: [20, 120], maximo: 200, meta: 8.1 },
   teleferico: { minimo: 16, ideal: [30, 150], maximo: 200, meta: 7.1 },
   wheel: { maximo: 200 },
   pinata: { maximo: 200 },
-  quien: { minimo: 8, maximo: 100 },
   oruro: { minimo: 30, maximo: 200 },
 };
 

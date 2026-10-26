@@ -36,7 +36,7 @@
 import { createHash } from "node:crypto";
 import { launch, sleep } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
-import { SELECTOR as TODOS, juegosDelKit } from "./lib/juegos.mjs";
+import { SELECTOR as TODOS, FUERA_CON_GOLPE, juegosDelKit } from "./lib/juegos.mjs";
 import { ZOOM_MINIMO, instalarZoom, razonDeZoom, resumirZoom, veces } from "./lib/zoom.mjs";
 
 /**
@@ -44,9 +44,9 @@ import { ZOOM_MINIMO, instalarZoom, razonDeZoom, resumirZoom, veces } from "./li
  * el pico del zoom tiene que caer en el golpe, que es el instante en que sale el
  * cartel. Los demás todavía no lo tienen y no se miran.
  */
-// Todo juego del selector tiene el golpe de cámara (barrido de letra, 26 de octubre de 2026), y todo juego del kit:
-// el director de cámara hace el golpe (`kit/director.ts`).
-const CON_ZOOM = [...new Set([...TODOS, ...juegosDelKit()])];
+// Todo juego del selector tiene el golpe de cámara (barrido de letra, 26 de octubre de 2026), también los dos que
+// salieron y se piden por nombre, y todo juego del kit: el director de cámara hace el golpe (`kit/director.ts`).
+const CON_ZOOM = [...new Set([...TODOS, ...FUERA_CON_GOLPE, ...juegosDelKit()])];
 const args = process.argv.slice(2);
 const opt = (name, def) => {
   const i = args.indexOf(name);
