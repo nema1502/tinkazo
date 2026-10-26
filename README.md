@@ -78,6 +78,7 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 | Web app | Live | [tinkazo.app](https://tinkazo.app) · Spanish and English · light and dark · no backend for the draw (short links run on a small Cloudflare Worker, [workers/enlaces](workers/enlaces/README.md)) |
 | Luma import | Live | Drop the guest export and pick who gets in: those who checked in, the approved ones, or by hand |
 | Verification page | Live | Recomputes any draw in the browser from its proof link |
+| History-archive check | Command-line tool | `node scripts/verificar-archivo.mjs <network> <tx hash>` reads the public Stellar history archives of several organizations and confirms that a seal or draw transaction was in a ledger and when it closed. Green only when two organizations return the same ledger header ([protocol §7.2](docs/protocol.en.md)) |
 | Ten stadium games | Live | Deterministic: the same round draws the same frames on any machine |
 | Protocol v2 | Specified | [docs/protocolo.md](docs/protocolo.md) ([in English](docs/protocol.en.md)) and shared vectors that both implementations must pass |
 | Quality gates | Tests in CI, auditors before every push | 205 TypeScript tests and the 19 contract tests run in CI; ten custom auditors (below) run against the built site |

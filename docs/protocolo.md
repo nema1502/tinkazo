@@ -130,6 +130,42 @@ Si el estado sí tiene el sorteo, manda el estado, y la transacción solo se cru
 - **Una sola fuente.** Que la transacción entró, que salió bien, en qué ledger y a qué hora cerró ese ledger se le cree a Horizon, igual que el estado se le cree al RPC. Si Horizon mintiera en la hora o el ledger, el verde por historial se equivocaría. Una segunda fuente independiente y los sobres de las transacciones dentro del comprobante (para no depender de que una fuente conserve la transacción) están previstos para más adelante; esta versión no los incluye.
 - **Dura lo que la fuente guarde.** Con los tiempos de arriba: pasada la ventana, o si la fuente desaparece, el resultado vuelve a ser «no confirmado». Nunca «no existe», y tampoco para siempre.
 
+### 7.2 Comprobación contra los archivos de historial
+
+§7.1 le cree a una sola fuente, Horizon, que la transacción entró, en qué ledger y a qué hora cerró ese ledger. Esta comprobación no se lo cree: lo rehace con los archivos de historial que publican, cada una por su cuenta, organizaciones distintas de la SDF, y para dar verde exige que al menos dos devuelvan lo mismo. La hace una herramienta de línea de comandos, `scripts/verificar-archivo.mjs`, con el hash de una transacción (el `stx` o el `dtx` del comprobante) o con el comprobante entero. La página de verificación todavía no la usa.
+
+```bash
+node scripts/verificar-archivo.mjs mainnet <hash de la transacción>
+node scripts/verificar-archivo.mjs --enlace <enlace de verificación | comprobante.json>
+```
+
+Cada 64 ledgers los validadores publican un punto de control. El del ledger `L` termina en `P = L − (L mod 64) + 63` y son tres archivos comprimidos: `ledger` (las cabeceras de los 64 ledgers), `transactions` (el conjunto de transacciones de cada uno) y `results` (sus resultados), en `<base>/<categoría>/xx/yy/zz/<categoría>-xxyyzzww.xdr.gz`, con `xxyyzzww` igual a `P` en ocho hexadecimales. Para cada fuente se comprueba:
+
+1. **Cabeceras.** El hash de cada una es el SHA-256 de su XDR, los ledgers son seguidos, cada cabecera apunta (`previousLedgerHash`) al hash de la anterior, la hora de cierre solo crece y el archivo termina en `P`.
+2. **La transacción.** Un sobre del conjunto de `L` tiene el hash buscado, SHA-256(id de red ‖ tipo de sobre ‖ transacción), con el id de red igual al SHA-256 de la frase de la red. En un fee-bump el sello es la transacción interior: vale el hash de la de adentro o el de afuera, y el resultado se busca por el de afuera.
+3. **El ledger.** El SHA-256 del conjunto (el del conjunto generalizado, o el del hash del ledger anterior seguido de los sobres) es el `txSetHash` de la cabecera de `L`, y el SHA-256 de los resultados es su `txSetResultHash`.
+4. **El éxito.** El resultado de la transacción es un éxito (en un fee-bump, también el de la interior).
+5. **La hora.** La hora de cierre es la `closeTime` de esa cabecera. Horizon solo sirve, si se lo deja, para saber en qué ledger buscar (`--ledger` lo evita): si dice un ledger equivocado, la transacción no aparece en él y no hay verde.
+
+| Qué pasó | Veredicto | Salida |
+|---|---|---|
+| Dos o más organizaciones distintas confirman y devuelven la misma cabecera de `L` (y la del punto de control) | verde | 0 |
+| Una sola organización confirma | una sola fuente | 2 |
+| Ninguna confirma, o una fuente cuyo archivo llegó y no cuadra contradice a las que sí, o dos devuelven cabeceras distintas | no verificado | 1 |
+
+Una fuente que no responde (caída, 404, descarga cortada) ni suma ni resta. Dos direcciones del mismo dominio cuentan como una sola organización. Las fuentes de siempre están en `scripts/lib/fuentes-historial.json` (mainnet: la SDF, Franklin Templeton, LOBSTR, Blockdaemon y MoneyGram, con PublicNode de reserva; testnet: solo la SDF) y se reemplazan con `--fuentes`. Las direcciones se pudren (ya se vio una que desapareció y otra que retiró dos nodos): la lista es un archivo de datos que se actualiza, y el comprobante no apunta a ninguna.
+
+**Qué prueba y qué no.**
+
+- **Prueba** que esas organizaciones publican el mismo historial y que en él la transacción estuvo en ese ledger, salió bien y el ledger cerró a esa hora. Entre fuentes se compara el hash de la cabecera, que ata todo lo anterior.
+- **No comprueba las firmas SCP** (la categoría `scp` del archivo), que son lo que prueba que la red aceptó esa cabecera. Un archivo malicioso podría fabricar 64 cabeceras coherentes; lo que lo frena es que habría que fabricar la misma en cada organización que se consulta. Es una confirmación social, no criptográfica, y «independientes» quiere decir dominios distintos, no una garantía sobre quién opera qué.
+- No dice nada del sorteo: ni que el sello sea de un contrato oficial ni que la huella sea la de la lista. Eso lo comprueba §7.1, con el comprobante.
+- **Testnet.** Hasta donde se sabe, solo la SDF publica el historial de testnet: con las fuentes de siempre el resultado es, como mucho, «una sola fuente». Y como la red entera se borra el 16 de diciembre de 2026, después de esa fecha no hay de dónde comprobar; quien quiera conservar la prueba de un sorteo de testnet tiene que guardar los tres archivos de su punto de control (unos 0,5 MB).
+- **Mainnet.** Funciona mientras al menos dos de esas organizaciones sigan publicando, y ninguna se comprometió a hacerlo. Un punto de control recién cerrado tarda en publicarse (hasta 64 ledgers, unos 5 a 10 minutos, más la demora de publicación): antes da 404 y el resultado es «no verificado». Baja unos 10 MB por fuente.
+- **Protocolo 30.** Se espera que cambie la cabecera del ledger (votación en testnet el 3 de noviembre de 2026 y en mainnet el 23 de noviembre). La herramienta lee los registros con el XDR del SDK de Stellar (17.3.0 o posterior) y exige que al volver a codificarlos den los mismos bytes, así que una cabecera que el SDK no lee entera falla en voz alta. Está probada con cabeceras anteriores a la votación (`ledgerVersion` 29); falta probarla con una posterior.
+
+Mientras los archivos públicos de Stellar existan, tu comprobante se puede volver a comprobar con herramientas abiertas. Nadie nos garantiza ese plazo, ni nosotros.
+
 ## 8. Modo libre (sin contrato)
 
 El mismo protocolo, sin §3 ni §4. El navegador sella la lista (§1), toma la ronda más reciente del faro posterior al sello, verifica la firma (§2) y ejecuta la selección (§5). El comprobante lo indica explícitamente: el orden temporal entre sello y semilla no está atestiguado por un tercero.

@@ -132,6 +132,42 @@ If the state does have the draw, the state governs and the transaction is only c
 - **A single source.** That the transaction was included, that it succeeded, in which ledger and at what time that ledger closed is taken from Horizon, just as the state is taken from the RPC. If Horizon lied about the time or the ledger, the green from history would be wrong. A second independent source and the transactions' envelopes inside the receipt (so as not to depend on a source keeping the transaction) are planned for later; this version doesn't include them.
 - **It lasts as long as the source keeps it.** With the times above: past the window, or if the source disappears, the result goes back to "not confirmed". Never "it doesn't exist", and not forever either.
 
+### 7.2 Check against the history archives
+
+§7.1 trusts a single source, Horizon, for the transaction having been included, in which ledger and when that ledger closed. This check does not: it redoes it with the history archives that organizations other than the SDF publish on their own, and it only says green when at least two return the same thing. It is a command-line tool, `scripts/verificar-archivo.mjs`, given the hash of a transaction (the proof's `stx` or `dtx`) or the whole proof. The verification page does not use it yet.
+
+```bash
+node scripts/verificar-archivo.mjs mainnet <transaction hash>
+node scripts/verificar-archivo.mjs --enlace <verification link | comprobante.json>
+```
+
+Every 64 ledgers the validators publish a checkpoint. The one for ledger `L` ends at `P = L − (L mod 64) + 63` and is three compressed files: `ledger` (the headers of the 64 ledgers), `transactions` (each one's transaction set) and `results` (their results), at `<base>/<category>/xx/yy/zz/<category>-xxyyzzww.xdr.gz`, with `xxyyzzww` being `P` in eight hex digits. For each source the tool checks:
+
+1. **Headers.** Each hash is the SHA-256 of its XDR, the ledgers are consecutive, each header points (`previousLedgerHash`) to the hash of the one before, close times only grow, and the file ends at `P`.
+2. **The transaction.** An envelope in `L`'s transaction set has the wanted hash, SHA-256(network id ‖ envelope type ‖ transaction), the network id being the SHA-256 of the network passphrase. In a fee bump the seal is the inner transaction: the inner or the outer hash is accepted, and the result is looked up by the outer one.
+3. **The ledger.** The SHA-256 of the set (the generalized set's, or the previous ledger hash followed by the envelopes) is the `txSetHash` of `L`'s header, and the SHA-256 of the results is its `txSetResultHash`.
+4. **Success.** The transaction's result is a success (in a fee bump, the inner one too).
+5. **The time.** The close time is that header's `closeTime`. Horizon, if allowed, is only used to learn which ledger to look in (`--ledger` avoids it): if it names the wrong ledger the transaction is not in it and there is no green.
+
+| What happened | Verdict | Exit code |
+|---|---|---|
+| Two or more distinct organizations confirm and return the same header for `L` (and for the checkpoint) | green | 0 |
+| Only one organization confirms | single source | 2 |
+| None confirms, or a source whose file arrived and does not add up contradicts those that do, or two return different headers | not verified | 1 |
+
+A source that does not answer (down, 404, cut download) neither adds nor subtracts. Two addresses on the same domain count as one organization. The usual sources are in `scripts/lib/fuentes-historial.json` (mainnet: the SDF, Franklin Templeton, LOBSTR, Blockdaemon and MoneyGram, with PublicNode as a spare; testnet: the SDF only) and `--fuentes` replaces them. Addresses rot (one has already vanished and another retired two nodes): the list is a data file that gets updated, and the proof does not point to any of them.
+
+**What it proves and what it does not.**
+
+- **It proves** that those organizations publish the same history and that in it the transaction was in that ledger, succeeded, and the ledger closed at that time. What is compared across sources is the header hash, which binds everything before it.
+- **It does not check the SCP signatures** (the archive's `scp` category), which are what show the network accepted that header. A malicious archive could fabricate 64 coherent headers; what stops it is that the same one would have to be fabricated at every organization consulted. This is social confirmation, not cryptographic, and "independent" means distinct domains, not a guarantee about who operates what.
+- It says nothing about the draw: not whether the seal is from an official contract nor whether the fingerprint is the list's. §7.1 checks that, with the proof.
+- **Testnet.** As far as is known only the SDF publishes testnet history: with the usual sources the result is at most "single source". And since the whole network is wiped on December 16, 2026, there is nothing to check against afterwards; whoever wants to keep the evidence of a testnet draw has to keep the three files of its checkpoint (about 0.5 MB).
+- **Mainnet.** It works as long as at least two of those organizations keep publishing, and none has committed to it. A checkpoint that just closed takes a while to be published (up to 64 ledgers, about 5 to 10 minutes, plus publication delay): before that it answers 404 and the result is "not verified". It downloads about 10 MB per source.
+- **Protocol 30.** The ledger header is expected to change (vote on testnet on November 3, 2026 and on mainnet on November 23). The tool reads the records with the Stellar SDK's XDR (17.3.0 or later) and requires that re-encoding them gives the same bytes, so a header the SDK does not read in full fails loudly. It has been tested with headers from before the vote (`ledgerVersion` 29); one from after it is still to be tried.
+
+As long as Stellar's public archives exist, your proof can be checked again with open tools. Nobody guarantees that period, not even us.
+
 ## 8. Free mode (no contract)
 
 The same protocol without §3 and §4. The browser seals the list (§1), takes the beacon's most recent round after the seal, verifies the signature (§2) and runs the selection (§5). The receipt says so explicitly: the time order between seal and seed is not witnessed by a third party.

@@ -78,6 +78,7 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 | Sitio | En producción | [tinkazo.app](https://tinkazo.app) · español e inglés · tema claro y oscuro · sin servidor para sortear (los enlaces cortos corren en un Worker chico de Cloudflare, [workers/enlaces](workers/enlaces/README.md)) |
 | Importar de Luma | En producción | Se suelta el export de invitados y se elige quién entra: los que hicieron check-in, los aprobados o a mano |
 | Página de verificación | En producción | Rehace cualquier sorteo en el navegador desde su comprobante |
+| Comprobación por archivos de historial | Herramienta de línea de comandos | `node scripts/verificar-archivo.mjs <red> <hash de la transacción>` lee los archivos públicos de historial de Stellar de varias organizaciones y confirma que una transacción de sello o de sorteo estuvo en un ledger y a qué hora cerró. Verde solo si dos organizaciones devuelven la misma cabecera de ledger ([protocolo §7.2](docs/protocolo.md)) |
 | Diez juegos de estadio | En producción | Deterministas: la misma ronda dibuja los mismos cuadros en cualquier máquina |
 | Protocolo v2 | Especificado | [docs/protocolo.md](docs/protocolo.md) y vectores que las dos implementaciones tienen que pasar |
 | Controles de calidad | Tests en la CI, auditores antes de cada subida | 205 tests de TypeScript y los 19 del contrato corren en la CI; diez auditores propios (abajo) corren contra el sitio construido |
