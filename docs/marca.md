@@ -157,6 +157,7 @@ El sitio está en español boliviano con voseo, y en inglés neutro. No hay un t
 **Lo que sí:**
 
 - Voseo: "pegá la lista", "sorteá", "probalo", "si encontrás".
+- Vocabulario neutral: el voseo y los nombres de los juegos se quedan, pero lo cotidiano se escribe como se entiende en cualquier país ("ahora" y no "ahorita", "comprobar" y no "chequear"). La lista de lo que se evita, con su alternativa, es `scripts/lib/glosario-neutral.json`; `pnpm check:glosario` falla si aparece fuera de los nombres de los juegos y de `historia.html`, y corre en la CI. Una entrada en `"estado": "avisar"` no falla: es un uso que ya está en el texto y falta decidir (hoy `plata` en el grifo de testnet y `cancha` en "¡A la cancha!").
 - Frases cortas, de una idea cada una.
 - Decir el precio y el costo con el número y la fecha: "0,76 XLM, unos 16 centavos, medido el 3 de octubre", no "es muy barato".
 - Admitir los límites. El veredicto amarillo de la página de verificación dice que la cuenta cierra pero que nadie atestigua la lista. Esa honestidad es la marca.

@@ -31,6 +31,7 @@ const TRES_FUERA = ["tombola", "pasanaku", "stellar"];
  * (miden el sonido real y se desafinan con la máquina cargada).
  */
 export const AUDITORES = [
+  { id: "check-glosario", script: "check-glosario.mjs", chrome: false, nivel: "siempre", juegos: null, estimado: 2 },
   { id: "check-lore", script: "check-lore.mjs", chrome: false, red: true, nivel: "siempre", juegos: null, estimado: 20 },
   { id: "check-renta", script: "check-renta.mjs", chrome: false, red: true, nivel: "siempre", juegos: null, estimado: 10 },
   {

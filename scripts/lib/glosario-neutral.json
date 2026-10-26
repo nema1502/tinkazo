@@ -1,0 +1,135 @@
+{
+  "version": 1,
+  "nota": "Palabras y giros cotidianos que un hispanohablante de otro país no entiende o lee raro. El sitio mantiene el voseo y los nombres de los juegos; esto es solo vocabulario. Primera versión del 25 de octubre de 2026: quince regionalismos evidentes y unos pocos más, para que Nicolás la complete. Cada entrada: 'evitar' es una expresión regular (sin bordes: se agregan solos, palabra entera, sin distinguir mayúsculas); 'alternativa' lo que se escribe; 'estado' es 'activa' (falla) o 'avisar' (se cuenta y se muestra con --todo, pero no falla: es un uso que ya está en el texto y falta decidir). 'rifa' no está: es el término legal de los términos de uso (no es una rifa), y 'sorteo' diría otra cosa. 'plata' y 'cancha' ya aparecen en el texto ('plata de mentira' del grifo de testnet, '¡A la cancha!'): quedan en 'avisar' hasta que Nicolás decida.",
+  "nombresDeJuegos": [
+    "Carrera de llamas",
+    "Carrera",
+    "Sapo",
+    "Trompo",
+    "Chovena",
+    "Piñata",
+    "Ruleta",
+    "De pie",
+    "El Trueque",
+    "Trueque",
+    "Teleférico",
+    "La Entrada",
+    "Pasanaku",
+    "Tómbola",
+    "Aguayo",
+    "Constelación",
+    "Totora"
+  ],
+  "paginasExentas": [
+    "historia.html"
+  ],
+  "entradas": [
+    {
+      "evitar": "ahorita",
+      "tipo": "andino, mexicano",
+      "alternativa": "ahora, en un momento"
+    },
+    {
+      "evitar": "nomás",
+      "tipo": "andino, mexicano",
+      "alternativa": "solamente, o se omite"
+    },
+    {
+      "evitar": "hart[oa]s?",
+      "tipo": "andino, chileno",
+      "alternativa": "mucho, mucha"
+    },
+    {
+      "evitar": "a full",
+      "tipo": "andino, coloquial",
+      "alternativa": "al máximo, completo"
+    },
+    {
+      "evitar": "yapa",
+      "tipo": "andino",
+      "alternativa": "de regalo, extra"
+    },
+    {
+      "evitar": "un toque(?! de)",
+      "tipo": "andino",
+      "alternativa": "un momento"
+    },
+    {
+      "evitar": "ya pues|ya po",
+      "tipo": "andino, chileno",
+      "alternativa": "se omite"
+    },
+    {
+      "evitar": "cancha",
+      "tipo": "andino, rioplatense",
+      "alternativa": "campo, pista, estadio",
+      "estado": "avisar"
+    },
+    {
+      "evitar": "chequea(?:r|rlo|rla|rse|do|ndo|mos|n)?|chequeo",
+      "tipo": "anglicismo",
+      "alternativa": "comprobar, revisar"
+    },
+    {
+      "evitar": "tipea(?:r|rlo|rla|do|ndo)?",
+      "tipo": "rioplatense",
+      "alternativa": "escribir"
+    },
+    {
+      "evitar": "logue(?:ar|arse|o|ado)",
+      "tipo": "anglicismo",
+      "alternativa": "iniciar sesión"
+    },
+    {
+      "evitar": "cliquea(?:r|rlo|rla)?",
+      "tipo": "anglicismo",
+      "alternativa": "hacer clic, tocar"
+    },
+    {
+      "evitar": "setea(?:r|rlo|rla)?|reseteo|resetea(?:r|rlo|rla)?",
+      "tipo": "anglicismo",
+      "alternativa": "configurar, restablecer"
+    },
+    {
+      "evitar": "bot(?:ar|arlo|arla|ó)",
+      "tipo": "andino, caribeño",
+      "alternativa": "tirar, descartar"
+    },
+    {
+      "evitar": "ordenadores?",
+      "tipo": "de España",
+      "alternativa": "computadora, equipo"
+    },
+    {
+      "evitar": "guay|chévere|bacán|chido|copado|piola",
+      "tipo": "jerga",
+      "alternativa": "genial, muy bueno"
+    },
+    {
+      "evitar": "pibes?|wey|güey|parce|pana|boludo|che",
+      "tipo": "jerga",
+      "alternativa": "persona, amigo"
+    },
+    {
+      "evitar": "chamba|chambear|laburo|laburar|curro|currar",
+      "tipo": "jerga",
+      "alternativa": "trabajo, trabajar"
+    },
+    {
+      "evitar": "coger|cogerlo|cogerla|cogen|cogemos|cogió",
+      "tipo": "de España, vulgar en otros países",
+      "alternativa": "tomar, agarrar"
+    },
+    {
+      "evitar": "platica(?:r|rlo|mos|n)?",
+      "tipo": "mexicano",
+      "alternativa": "conversar, hablar"
+    },
+    {
+      "evitar": "plata",
+      "tipo": "andino, rioplatense",
+      "alternativa": "dinero",
+      "estado": "avisar"
+    }
+  ]
+}
