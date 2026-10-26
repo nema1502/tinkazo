@@ -535,8 +535,8 @@ const DETALLES = {
           await page.send("Emulation.setDeviceMetricsOverride", { width: 320, height: 700, deviceScaleFactor: 1, mobile: true, screenWidth: 320, screenHeight: 700 });
           await page.eval("window.scrollTo(0, 0); true");
           await sleep(900);
-          const m = JSON.parse(await page.eval("JSON.stringify((() => { const e = document.getElementById('sig-paso'); return { entra: e.scrollWidth <= e.clientWidth + 1, barra: document.getElementById('siguiente').classList.contains('on'), texto: e.textContent, scroll: document.documentElement.scrollWidth > innerWidth }; })())"));
-          check(`${quien} · a 320 px la línea entra entera y no hay scroll de costado`, m.entra && !m.scroll, `"${m.texto}"${m.barra ? " (con la barra)" : ""}`);
+          const m = JSON.parse(await page.eval("JSON.stringify((() => { const e = document.getElementById('sig-paso'); return { entra: e.scrollWidth <= e.clientWidth + 1, barra: document.getElementById('siguiente').classList.contains('on'), texto: e.textContent, scroll: document.documentElement.scrollWidth > innerWidth, linea: e.scrollWidth, caja: e.clientWidth, pagina: document.documentElement.scrollWidth }; })())"));
+          check(`${quien} · a 320 px la línea entra entera y no hay scroll de costado`, m.entra && !m.scroll, `"${m.texto}"${m.barra ? " (con la barra)" : ""} · la línea mide ${m.linea} px en una caja de ${m.caja}, la página ${m.pagina} de 320`);
         }
       } finally {
         await page.send("Page.close").catch(() => undefined);
