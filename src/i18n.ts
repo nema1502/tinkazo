@@ -1935,7 +1935,7 @@ export const T: Record<Lang, Dict> = {
     redRegion: "Estado de la red",
     redVerde: "La red está bien: podés sellar.",
     redAmarilla: "La red anda lenta: se puede sellar, puede tardar.",
-    redRoja: "Hoy no se puede sellar: {motivo}",
+    redRoja: "Ahora no se puede sellar: {motivo}",
     redCostoAlto: "Hoy sellar cuesta más de lo que Tinkazo puede pagar.",
     redCostoMedio: "Hoy sellar cuesta más de lo normal, pero se puede.",
     redSinRpc: "Stellar no contesta. Vuelvo a probar en {t}.",

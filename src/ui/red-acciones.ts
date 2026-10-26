@@ -154,11 +154,17 @@ export function panelDe(d: Diagnostico, c: ContextoDelPanel): Panel {
   }
 }
 
+/**
+ * Las frases rojas que ya dicen que hoy no se puede sellar: con "Hoy no se puede sellar:" delante quedaban
+ * repetidas ("Hoy no se puede sellar: Hoy sellar cuesta más…", "…: Tu cuenta no tiene saldo para sellar.").
+ */
+const FRASES_QUE_BASTAN = new Set(["redCostoAlto", "redSinSaldo"]);
+
 /** Lo que dice el botón "¿La red está bien?": la clave, la frase del caso si es rojo y la segunda frase si la hay. */
 export function respuestaDelBoton(d: Diagnostico, p: Panel): { clave: string; motivo?: string; aparte?: string; nivel: Nivel } {
   if (d.sinInternet) return { clave: "errAnchor.offline", nivel: "rojo" };
   if (p.nivel === "verde") return { clave: "redVerde", nivel: "verde" };
-  if (p.nivel === "rojo") return { clave: "redRoja", motivo: p.frase, nivel: "rojo" };
+  if (p.nivel === "rojo") return FRASES_QUE_BASTAN.has(p.frase) ? { clave: p.frase, nivel: "rojo" } : { clave: "redRoja", motivo: p.frase, nivel: "rojo" };
   // Amarillo: la razón, en una frase (la de lento es la general).
   return { clave: p.frase, ...(p.aparte ? { aparte: p.aparte } : {}), nivel: "amarillo" };
 }

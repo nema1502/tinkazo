@@ -335,10 +335,10 @@
   .txstatus a { color: var(--ink); }
   /* La red antes de sellar (red.ts): una frase, una acción y el detalle plegado. El color del borde dice cómo está. */
   .red-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; }
-  .red-fila .mini { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; }
+  .red-fila .mini { display: inline-flex; align-items: center; gap: 8px; min-height: 48px; }
   .red-fila svg { width: 16px; height: 16px; flex: none; }
   .red-estado {
-    margin-top: 12px; padding: 10px 14px; font-size: 14px; font-weight: 700; color: var(--ink);
+    margin-top: 12px; padding: 10px 14px; font-size: 16px; font-weight: 700; color: var(--ink);
     background: var(--field); border: 2px solid var(--ink); border-left-width: 6px; border-left-color: var(--purple);
   }
   .red-estado.verde { border-left-color: var(--teal); }
@@ -347,10 +347,10 @@
   .red-estado .red-frase { margin: 0; display: flex; align-items: baseline; gap: 10px; }
   .red-estado .red-ico { flex: none; width: 1.4em; text-align: center; font-weight: 800; }
   .red-estado .red-sub { margin-top: 10px; gap: 8px; }
-  .red-estado .red-sub .mini { min-height: 44px; }
+  .red-estado .red-sub .mini { min-height: 48px; }
   /* El detalle técnico de un error, plegado debajo del mensaje (detalle-error.ts): para copiarlo y mandarlo. */
   .txdetalle { margin: 2px 0 0 14px; font-size: 16px; color: var(--ink2); }
-  .txdetalle summary { display: inline-flex; align-items: center; min-height: 44px; cursor: pointer; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
+  .txdetalle summary { display: inline-flex; align-items: center; min-height: 48px; cursor: pointer; font-weight: 700; text-decoration: underline; text-underline-offset: 2px; }
   .txdetalle code {
     display: block; margin: 0 0 8px; padding: 8px 10px; background: var(--card); color: var(--ink);
     border: 1px solid var(--line); font-size: 14px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere;
@@ -1028,6 +1028,8 @@
   }
   body[data-mapa="1"] #btn-pegar::before { content: "1"; content: "1" / ""; }
   body[data-mapa="1"] #btn-freeze::before { content: "2"; content: "2" / ""; }
+  /* Mientras el botón lleva la acción de la red ("Probar ahora", "Seguir sin sello"…) no es el paso 2: sin número. */
+  body[data-mapa="1"] #btn-freeze.red-accion::before { content: none; }
   body[data-mapa="1"] #btn-draw::before { content: "3"; content: "3" / ""; }
   body[data-mapa="1"] :is(#btn-again-sin, #btn-proof)::before { content: "4"; content: "4" / ""; }
   .entity { overflow-wrap: anywhere; }

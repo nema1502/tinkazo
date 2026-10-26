@@ -25,12 +25,26 @@ class El {
   texto = "";
   oyentes: Record<string, Array<(e: unknown) => void>> = {};
   constructor(public tag = "div") {}
+  /** Con `replaceChildren(a, b, c)` el orden de los pedazos importa (texto, <span>, texto). */
+  partes: Array<El | string> | null = null;
+  classList = {
+    toggle: (clase: string, forzar?: boolean): boolean => {
+      const resto = this.className.split(" ").filter((c) => c && c !== clase);
+      const poner = forzar ?? !this.className.split(" ").includes(clase);
+      this.className = (poner ? [...resto, clase] : resto).join(" ");
+      return poner;
+    },
+    add: (clase: string): void => void this.classList.toggle(clase, true),
+    remove: (clase: string): void => void this.classList.toggle(clase, false),
+  };
   get textContent(): string {
+    if (this.partes) return this.partes.map((p) => (typeof p === "string" ? p : p.textContent)).join("");
     return this.texto + this.hijos.map((h) => h.textContent).join("");
   }
   set textContent(v: string) {
     this.texto = v;
     this.hijos = [];
+    this.partes = null;
   }
   get childElementCount(): number {
     return this.hijos.length;
@@ -41,9 +55,10 @@ class El {
       else this.hijos.push(x);
     }
   }
-  replaceChildren(): void {
-    this.hijos = [];
+  replaceChildren(...xs: Array<El | string>): void {
+    this.hijos = xs.filter((x): x is El => typeof x !== "string");
     this.texto = "";
+    this.partes = xs.length ? xs : null;
   }
   addEventListener(tipo: string, f: (e: unknown) => void): void {
     (this.oyentes[tipo] ??= []).push(f);
@@ -122,7 +137,8 @@ function montar(): void {
   vi.stubGlobal("document", {
     getElementById: (id: string) => els[id] ?? null,
     createElement: (tag: string) => new El(tag),
-    querySelector: (sel: string) => (sel === "#red-estado .red-texto" ? (els["red-estado"] as El).buscar("red-texto") : null),
+    querySelector: (sel: string) =>
+      sel === "#red-estado .red-texto" ? (els["red-estado"] as El).buscar("red-texto") : sel === "#red-estado .red-cuenta" ? (els["red-estado"] as El).buscar("red-cuenta") : null,
     addEventListener: (tipo: string, f: (e: unknown) => void) => void (oyentesDoc[tipo] ??= []).push(f),
     visibilityState: "visible",
   });
@@ -317,7 +333,14 @@ describe("mainnet: pagar con mi cuenta antes de seguir sin sello", () => {
     r.alApretarSellar();
     expect(sellar).not.toHaveBeenCalled();
     expect(boton().textContent).toBe("Seguir igual");
-    r.alApretarSellar();
+    // Pasada la guarda de la pregunta (un doble toque no la contesta), el segundo toque sigue.
+    const reloj = vi.spyOn(performance, "now");
+    try {
+      reloj.mockReturnValue(performance.now() + r.GUARDA_DE_LA_PREGUNTA_MS + 500);
+      r.alApretarSellar();
+    } finally {
+      reloj.mockRestore();
+    }
     await esperar(() => expect(sellar).toHaveBeenCalledWith({ sinSello: true, saltarChequeo: true }));
   });
 
@@ -552,10 +575,34 @@ describe("'Seguir sin sello' pide confirmar y desalienta", () => {
 
   it("el segundo toque sigue sin sello, sin volver a frenar por el chequeo", async () => {
     const { r, sellar } = await enRojo();
-    r.alApretarSellar();
-    r.alApretarSellar();
+    const reloj = vi.spyOn(performance, "now");
+    try {
+      reloj.mockReturnValue(10_000);
+      r.alApretarSellar();
+      reloj.mockReturnValue(10_000 + r.GUARDA_DE_LA_PREGUNTA_MS + 100);
+      r.alApretarSellar();
+    } finally {
+      reloj.mockRestore();
+    }
     await esperar(() => expect(sellar).toHaveBeenCalledWith({ sinSello: true, saltarChequeo: true }));
     expect(visible()).toBe(false);
+  });
+
+  it("un doble toque no atraviesa la pregunta: el segundo, dentro de la guarda, no hace nada", async () => {
+    const { r, sellar } = await enRojo();
+    const reloj = vi.spyOn(performance, "now");
+    try {
+      reloj.mockReturnValue(10_000);
+      expect(r.alApretarSellar()).toBe(true);
+      reloj.mockReturnValue(10_000 + r.GUARDA_DE_LA_PREGUNTA_MS - 100);
+      // Se atiende (el clic no cae en "Sellar la lista" de siempre) pero no contesta la pregunta.
+      expect(r.alApretarSellar()).toBe(true);
+      await new Promise((ok) => setTimeout(ok, 50));
+      expect(sellar).not.toHaveBeenCalled();
+      expect(boton().textContent).toBe("Seguir igual");
+    } finally {
+      reloj.mockRestore();
+    }
   });
 
   it("'Esperar a la red' vuelve a mirar y no sigue", async () => {

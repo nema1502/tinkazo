@@ -327,10 +327,10 @@
         <button class="ghost" id="btn-sala" data-i="salaBtn">Mostrar la lista a la sala</button>
         <button class="primary" id="btn-freeze" data-i="freeze" aria-describedby="sellar-sin-cuenta sellar-resumen">Sellar la lista</button>
       </div>
+      <!-- La red antes de sellar (src/ui/red.ts): una frase, una acción, el detalle plegado. Nace escondida. Va pegada a los botones: explica la acción que reemplaza a "Sellar la lista". -->
+      <aside class="red-estado" id="red-estado" role="status" aria-live="polite" data-i-aria="redRegion" aria-label="Estado de la red" style="display:none"></aside>
       <!-- Lo que se va a sellar, antes de sellar (participants.ts): "20 personas · 1 ganador · Termo. Al sellar, la lista queda cerrada." -->
       <p class="note sellar-resumen" id="sellar-resumen" style="display:none"></p>
-      <!-- La red antes de sellar (src/ui/red.ts): una frase, una acción, el detalle plegado. Nace escondida. -->
-      <aside class="red-estado" id="red-estado" role="status" aria-live="polite" data-i-aria="redRegion" aria-label="Estado de la red" style="display:none"></aside>
       <p class="note sellar-sin-cuenta" id="sellar-sin-cuenta" data-i="sellarSinCuenta">Conectá tu cuenta para sellar</p>
       <p class="note" id="freeze-hint" data-i="freezeHint">Hacen falta al menos dos nombres.</p>
       <p class="note" id="free-rule" data-i-html="freeRule">Participar tiene que ser gratis: Tinkazo no es para sorteos con entrada paga ni para apuestas. Al sellar la lista aceptás los <a href="/terminos.html">términos</a>.</p>

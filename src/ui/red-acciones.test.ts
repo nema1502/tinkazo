@@ -188,9 +188,14 @@ describe("la respuesta del botón '¿La red está bien?'", () => {
     expect(respuestaDelBoton(proto, panelDe(proto, ctx()))).toMatchObject({ clave: "redProtocolo", aparte: "redProtocoloSigue" });
   });
 
-  it("rojo: 'Hoy no se puede sellar: ' y la frase del caso", () => {
+  it("rojo: 'Ahora no se puede sellar: ' y la frase del caso, salvo la que ya lo dice", () => {
+    const sinRpc = diag("rpc-caido", "rojo");
+    expect(respuestaDelBoton(sinRpc, panelDe(sinRpc, ctx()))).toEqual({ clave: "redRoja", motivo: "redSinRpc", nivel: "rojo" });
+    // Con "Hoy sellar cuesta más…" y "Tu cuenta no tiene saldo para sellar." el prefijo repetía lo mismo.
     const rojo = diag("costo-alto", "rojo");
-    expect(respuestaDelBoton(rojo, panelDe(rojo, ctx()))).toEqual({ clave: "redRoja", motivo: "redCostoAlto", nivel: "rojo" });
+    expect(respuestaDelBoton(rojo, panelDe(rojo, ctx()))).toEqual({ clave: "redCostoAlto", nivel: "rojo" });
+    const sinSaldo = diag("sin-saldo", "rojo");
+    expect(respuestaDelBoton(sinSaldo, panelDe(sinSaldo, ctx()))).toEqual({ clave: "redSinSaldo", nivel: "rojo" });
   });
 
   it("sin internet: el aviso de siempre", () => {

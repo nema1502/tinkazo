@@ -49,7 +49,9 @@
  *     "verificable" ni XLM) y "Esperar a la red". Y con la cuenta de prueba, que
  *     paga ella, el costo alto solo avisa (amarillo) y se puede sellar;
  *  4. sin saldo: Horizon dice que la cuenta tiene 0,01 XLM; "Cargar saldo de prueba".
- * Ninguno manda una transacción a la red. `--fallos none` los saltea.
+ * Solo dos mandan una transacción, y de verdad, a la testnet con la cuenta de prueba (y solo en la primera pantalla):
+ * "al volver la red, sella sola" y "el primer RPC cortado sella por el segundo". En los demás se corta todo
+ * `sendTransaction`. `--fallos none` los saltea.
  *
  * Al final mira también unos anchos de celular que esas pantallas no cubren
  * (320, 360, 375 y 414 px: 360 y 375 son los más comunes). Es rápido y no graba
@@ -403,6 +405,14 @@ async function superpuestos(page, ctx) {
 
 /** La cuenta de prueba: se conecta sola y le carga fondos. Lanza si algo no sale, para repetir el recorrido. */
 async function conectarCuentaDePrueba(page) {
+  // Una segunda pantalla en el mismo Chrome (el costo alto abre dos) ya trae la cuenta de prueba de la primera, en el
+  // almacenamiento del navegador: la sesión se retoma sola y no hay ventana de ingreso que abrir.
+  if (await page.eval("String(!!localStorage.getItem('tinkazo.guest.secret.testnet'))") === "true") {
+    const vuelta = await page.waitFor("document.querySelector('#wallet-box .hello')", 30000);
+    hayFalla(!vuelta.ok, "la cuenta de prueba de antes no se retomó");
+    await sleep(900);
+    return;
+  }
   await page.waitFor("document.querySelector('#gate button, #wallet-box button')", 20000);
   await sleep(500);
   await page.eval("(document.querySelector('#gate button') || document.querySelector('#wallet-box button')).click(); true");

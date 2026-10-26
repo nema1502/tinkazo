@@ -1,6 +1,7 @@
 import { $ } from "../dom";
 import { onLangChange, t } from "../i18n";
-import { app, params } from "../state";
+import { sinGrabar } from "../ensayo-modo";
+import { app } from "../state";
 import { type Diagnostico, type FuentesDelChequeo, chequearRed, crearChequeo, llamarRpc, simularConRpc, umbralesDe } from "../stellar/chequeo-red";
 import { network } from "../stellar/config";
 import { grifoDisponible } from "../stellar/grifo";
@@ -124,6 +125,22 @@ let alApretar: (() => void) | null = null;
 let sellando = false;
 /** Quién pidió mirar: si fue "Sellar la lista" y la red vuelve, se sigue sellando. */
 let origen: "sellar" | "chequeo" | "boton" = "chequeo";
+/** La lista que había cuando la red frenó el sello: si la persona la cambia mientras espera, no se sella otra a sus espaldas. */
+let listaAlFrenar = "";
+const listaDeAhora = (): string => document.getElementById("names")?.textContent ?? "";
+/** La persona apretó "Sellar la lista" y la red no dejó: si vuelve, se sigue con esa lista. */
+function queriaSellar(): void {
+  origen = "sellar";
+  listaAlFrenar = listaDeAhora();
+}
+/** El caso rojo que ya se llevó a la pantalla: una cuenta atrás de reintentos no vuelve a mover la página cada vez. */
+let ultimaRoja = "";
+/**
+ * Cuándo apareció la pregunta "¿Seguir igual?" y cuánto no responde: el botón queda en el mismo lugar que "Seguir sin
+ * sello", y un doble toque nervioso la contestaba sin leerla (como los 700 ms de "Siguiente premio" en freeze.ts).
+ */
+let preguntadaEn = -Infinity;
+export const GUARDA_DE_LA_PREGUNTA_MS = 800;
 let reloj: ReturnType<typeof setInterval> | undefined;
 let restan = 0;
 let ocultar: ReturnType<typeof setTimeout> | undefined;
@@ -148,6 +165,7 @@ function aplicarAlBoton(): void {
   // Mientras se mira la red o se carga saldo el botón lo dice, y no se toca.
   if (vista.tipo === "ocupado") {
     alApretar = null;
+    btn.classList.add("red-accion");
     btn.textContent = vista.texto;
     btn.disabled = true;
     return;
@@ -160,6 +178,8 @@ function aplicarAlBoton(): void {
     accion = "seguir-sin-sello";
     clave = "redConfirmaSi";
   }
+  // El número del paso (el mapa del tutorial) es de "Sellar la lista", no de la acción de la red.
+  btn.classList.toggle("red-accion", accion !== "sellar");
   if (accion === "sellar") {
     alApretar = null;
     btn.dataset.i = "freeze";
@@ -189,6 +209,23 @@ function fraseDelCaso(p: Panel): string {
 }
 
 const ICONO = { verde: "✓", amarillo: "!", rojo: "✕" } as const;
+
+/**
+ * La cuenta atrás ("0:14") en su propio `<span role="timer">`: la caja es una región viva (`role="status"`) y,
+ * con la frase entera reescrita cada segundo, un lector de pantalla la repetiría hasta el cansancio. El texto
+ * que se lee no cambia.
+ */
+function ponerCuenta(texto: HTMLElement): void {
+  const cuenta = mmss(restan);
+  const todo = texto.textContent ?? "";
+  const i = todo.lastIndexOf(cuenta);
+  if (i < 0) return;
+  const span = document.createElement("span");
+  span.className = "red-cuenta";
+  span.setAttribute("role", "timer");
+  span.textContent = cuenta;
+  texto.replaceChildren(todo.slice(0, i), span, todo.slice(i + cuenta.length));
+}
 
 function pintar(): void {
   const caja = document.getElementById("red-estado");
@@ -231,6 +268,7 @@ function pintar(): void {
     case "respuesta": {
       nivel = vista.p.nivel === "verde" ? "verde" : vista.p.nivel;
       texto.textContent = vista.p.nivel === "verde" && vista.tipo === "respuesta" ? t("redVerde") : frase(vista.p, vista.d, vista.tipo);
+      if (vista.p.frase === "redSinRpc") ponerCuenta(texto);
       // Lo secundario va en chiquito. "Seguir sin sello" nunca es la principal si hay otra cosa que hacer.
       for (const a of vista.p.secundarias) sub(a);
       break;
@@ -267,7 +305,8 @@ function pintar(): void {
   ico.textContent = ICONO[nivel];
   if (fila.childElementCount) caja.append(fila);
   // El detalle técnico plegado: para quien tenga que contar qué pasó.
-  if (vista.tipo !== "sin-sello" && nivel !== "verde") ponerDetalle(caja, registroParaCopiar(8) || "—");
+  // (en la pregunta de "¿Seguir igual?" sobra: compite con la decisión)
+  if (vista.tipo !== "sin-sello" && vista.tipo !== "confirmar" && nivel !== "verde") ponerDetalle(caja, registroParaCopiar(8) || "—");
   aplicarAlBoton();
 }
 
@@ -277,6 +316,7 @@ const tipoDeVista = (): Vista["tipo"] => vista.tipo;
 /** Cambia lo que se ve. Todo pasa por acá: una sola cosa a la vez. */
 function ver(v: Vista): void {
   vista = v;
+  if (v.tipo === "nada") ultimaRoja = "";
   if (ocultar !== undefined) clearTimeout(ocultar);
   ocultar = undefined;
   // Un "está bien" no se queda: se va solo.
@@ -315,9 +355,21 @@ async function mostrar(d: Diagnostico, como: "panel" | "respuesta"): Promise<Pan
   }
   if (!(d.caso === "rpc-caido" && d.nivel === "rojo")) intentos = 0;
   restan = umbralesDe(network.name).comun.reintentarCadaS;
+  const roja = p.nivel === "rojo" ? (p.caso ?? "rojo") : "";
+  const nueva = roja !== "" && roja !== ultimaRoja;
+  ultimaRoja = roja;
   ver({ tipo: como, d, p });
+  // La acción del caso reemplazó a "Sellar la lista": si la frase que la explica queda fuera de la pantalla (la barra de
+  // "lo que sigue" muestra solo la acción), se la trae. Una vez por caso, no en cada reintento.
+  if (nueva) llevarALaVista();
   if (p.reintentaSola) empezarReloj(d);
   return p;
+}
+
+/** La caja de la red a la pantalla, si no se ve (sin contar la cabecera fija ni la barra): lo mismo que un error del sello. */
+function llevarALaVista(): void {
+  const caja = document.getElementById("red-estado");
+  if (caja) verError(caja);
 }
 
 /** "Vuelvo a probar en 0:15": cuenta atrás, y al llegar a cero mira de nuevo. */
@@ -325,8 +377,8 @@ function empezarReloj(d: Diagnostico): void {
   detenerReloj();
   reloj = setInterval(() => {
     restan = Math.max(0, restan - 1);
-    const caja = document.querySelector("#red-estado .red-texto");
-    if (caja && (vista.tipo === "panel" || vista.tipo === "respuesta") && vista.p.frase === "redSinRpc") caja.textContent = frase(vista.p, vista.d, vista.tipo);
+    const cuenta = document.querySelector("#red-estado .red-cuenta");
+    if (cuenta && (vista.tipo === "panel" || vista.tipo === "respuesta") && vista.p.frase === "redSinRpc") cuenta.textContent = mmss(restan);
     if (restan <= 0) {
       detenerReloj();
       void volverAMirar("automatico", d);
@@ -345,7 +397,8 @@ async function volverAMirar(como: "automatico" | "manual", _antes?: Diagnostico)
   // Volvió la red y la persona había apretado "Sellar la lista": se sigue sellando, sin otro toque.
   if (p.nivel !== "rojo" && origen === "sellar" && sellarFn) {
     origen = "chequeo";
-    void sellarFn({ saltarChequeo: true });
+    // Si cambió la lista mientras se esperaba, la persona decide: no se sella otra a sus espaldas.
+    if (listaDeAhora() === listaAlFrenar) void sellarFn({ saltarChequeo: true });
   }
 }
 
@@ -383,8 +436,11 @@ function hacer(a: AccionRed): void {
       void sellarFn?.({ saltarChequeo: true });
       return;
     case "reintentar":
-      // Desde "Esperar a la red" se vuelve a empezar la cuenta de intentos.
-      if (actual?.tipo === "confirmar") intentos = 0;
+      // Desde "Esperar a la red" se vuelve a empezar la cuenta de intentos, y la red queda vigilada: esperar es esperar.
+      if (actual?.tipo === "confirmar") {
+        intentos = 0;
+        vigilar();
+      }
       void volverAMirar("manual");
       return;
     case "cargar-saldo":
@@ -407,8 +463,10 @@ function hacer(a: AccionRed): void {
       // Pide confirmar: sin sello, ese sorteo no se podrá comprobar. Nunca de un solo toque.
       if (actual && actual.tipo !== "confirmar") {
         detenerReloj();
+        preguntadaEn = performance.now();
         ver({ tipo: "confirmar", d: actual.d, p: actual.p });
         botonDeSellar().focus({ preventScroll: true });
+        llevarALaVista();
       }
       return;
   }
@@ -425,6 +483,8 @@ async function seguirSinSello(): Promise<void> {
 /** Mientras haya una acción del caso en el botón de sellar, su clic es de ella. Devuelve si lo atendió. */
 export function alApretarSellar(): boolean {
   if (!alApretar) return false;
+  // Recién apareció la pregunta: el toque es del anterior, no una respuesta (se atiende, pero no se hace nada).
+  if (vista.tipo === "confirmar" && performance.now() - preguntadaEn < GUARDA_DE_LA_PREGUNTA_MS) return true;
   const a = alApretar;
   a();
   return true;
@@ -449,7 +509,7 @@ export function marcarSellado(v: boolean): void {
  * Un chequeo que se rompe nunca frena.
  */
 export async function chequearAntesDeSellar(): Promise<boolean> {
-  origen = "sellar";
+  queriaSellar();
   let d: Diagnostico;
   try {
     d = await chequeo.verificar();
@@ -475,7 +535,7 @@ export async function chequearAntesDeSellar(): Promise<boolean> {
  * como siempre.
  */
 export async function verLaRedTrasFallar(): Promise<boolean> {
-  origen = "sellar";
+  queriaSellar();
   chequeo.olvidar();
   let d: Diagnostico;
   try {
@@ -493,7 +553,7 @@ export async function verLaRedTrasFallar(): Promise<boolean> {
 
 /** El sello de verdad devolvió un costo por encima de lo que el patrocinador paga. */
 export async function mostrarCostoAlto(costoXlm: number, restaurar: boolean): Promise<void> {
-  origen = "sellar";
+  queriaSellar();
   chequeo.olvidar();
   const base = diagnosticoRoto(new Error("costo-alto"));
   const d: Diagnostico = { ...base, sinChequeo: false, nivel: "rojo", caso: "costo-alto", casos: [{ caso: "costo-alto", nivel: "rojo" }], pagador: "patrocinado", costoXlm, restaurar, motivo: "la simulación del sello de verdad" };
@@ -506,7 +566,7 @@ export async function mostrarCostoAlto(costoXlm: number, restaurar: boolean): Pr
 
 /** Una cuenta que paga con el patrocinador se quedó sin con qué: el patrocinador no tiene saldo (mainnet, sin grifo). */
 export async function mostrarSinSaldo(): Promise<void> {
-  origen = "sellar";
+  queriaSellar();
   chequeo.olvidar();
   const base = diagnosticoRoto(new Error("sin-saldo"));
   const d: Diagnostico = { ...base, sinChequeo: false, nivel: "rojo", caso: "sin-saldo", casos: [{ caso: "sin-saldo", nivel: "rojo" }], pagador: "patrocinado", costoXlm: chequeo.ultimo()?.costoXlm ?? null, motivo: "no alcanzó la comisión" };
@@ -535,13 +595,13 @@ export function verSinSello(estado: "esperando" | "intentando" | "entro" | "venc
 
 /* ----------------------------------------------------- cuándo se mira la red */
 
-/** Hay con qué mirar: cuenta que sella, dos nombres o más, y nada sellado todavía. */
-const puedeMirar = (): boolean => canAnchor() && !params.has("demo") && !app.frozen && (document.getElementById("names")?.childElementCount ?? 0) >= 2;
+/** Hay con qué mirar: cuenta que sella, dos nombres o más, y nada sellado todavía. Ni la demo ni el ensayo graban: ahí la red no tiene nada que decir. */
+const puedeMirar = (): boolean => canAnchor() && !sinGrabar() && !app.frozen && (document.getElementById("names")?.childElementCount ?? 0) >= 2;
 
 function mostrarElBoton(): void {
   const fila = document.getElementById("red-fila");
   // Con la lista ya sellada no hay nada que preguntarle a la red: el botón se va.
-  if (fila) fila.style.display = canAnchor() && !params.has("demo") && !app.frozen ? "" : "none";
+  if (fila) fila.style.display = canAnchor() && !sinGrabar() && !app.frozen ? "" : "none";
 }
 
 let pendiente: ReturnType<typeof setTimeout> | undefined;
@@ -558,12 +618,26 @@ function programar(): void {
     void (async () => {
       const d = await chequeo.verificar();
       if (sellando || pidiendo || !puedeMirar() || tipoDeVista() === "confirmar" || tipoDeVista() === "ocupado") return;
-      origen = "chequeo";
+      // No pisa "sellar": al fallar el sello, la lista se vuelve a dibujar y este chequeo corre solo; la persona
+      // sigue queriendo sellar, y si la red vuelve se sigue (`volverAMirar`).
+      if (origen !== "sellar") origen = "chequeo";
       // Solo se muestra si no es verde; el "está bien" es del botón.
       if (d.nivel === "verde" && tipoDeVista() === "respuesta") return;
       await mostrar(d, "panel");
     })();
   }, 900);
+}
+
+/** La red vigilada: cada 60 s se vuelve a mirar, y si mejoró la caja se va sola. Arranca con el botón y con "Esperar a la red". */
+function vigilar(): void {
+  if (vigilando !== undefined) return;
+  vigilando = setInterval(() => {
+    if (document.visibilityState === "hidden" || !puedeMirar() || sellando || vista.tipo === "ocupado" || vista.tipo === "confirmar") return;
+    void chequeo.verificar({ forzar: true }).then((nuevo) => {
+      if (nuevo.nivel !== "verde") void mostrar(nuevo, "panel");
+      else if (vista.tipo === "panel") ver({ tipo: "nada" });
+    });
+  }, umbralesDe(network.name).comun.repetirCadaS * 1000);
 }
 
 /** El botón de un toque: dice verde, amarillo o rojo, con la razón. Y deja la red vigilada cada 60 s. */
@@ -579,16 +653,10 @@ async function preguntar(): Promise<void> {
     const d = await chequeo.verificar({ forzar: true });
     anotarChequeo("boton", d);
     await mostrar(d, "respuesta");
+    // La persona apretó y espera ver la respuesta: si la caja quedó fuera de la pantalla, se la trae (verde, amarillo o rojo).
+    llevarALaVista();
     // Con la red a la vista, se vuelve a mirar cada 60 s mientras se arma el evento.
-    if (vigilando === undefined) {
-      vigilando = setInterval(() => {
-        if (document.visibilityState === "hidden" || !puedeMirar() || sellando || vista.tipo === "ocupado" || vista.tipo === "confirmar") return;
-        void chequeo.verificar({ forzar: true }).then((nuevo) => {
-          if (nuevo.nivel !== "verde") void mostrar(nuevo, "panel");
-          else if (vista.tipo === "panel") ver({ tipo: "nada" });
-        });
-      }, umbralesDe(network.name).comun.repetirCadaS * 1000);
-    }
+    vigilar();
   } finally {
     pidiendo = false;
     boton.disabled = false;
