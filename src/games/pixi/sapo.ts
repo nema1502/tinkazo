@@ -310,7 +310,8 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
    * 1,45 el chip salía 1,6 veces más grande, y en 4:3 y 5:4 los de los costados
    * no entraban entre la mesa y el borde (revisión del 20 de octubre de 2026).
    */
-  const labelScale = (): number => (S.portrait() ? 0.6 : 0.9);
+  // En horizontal, 1 (antes 0,9): con la regla de la letra de la sala (28 px en 1080) la mesa de 12 pasa de 26 a 29 px (barrido de letra, 26 de octubre de 2026).
+  const labelScale = (): number => (S.portrait() ? 0.6 : 1);
   /** Nombre y `n` letras del apellido: "María Q.", "María Qu.". En la mesa entran doce, y el nombre entero no. */
   const corto = (nm: string, n = 1): string => {
     const p = nm.trim().split(/\s+/);
@@ -534,7 +535,8 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);
     // El golpe del zoom de emoción: el acercamiento firme sobre el agujero del
     // ganador, en el instante en que sale el cartel. Solo presentación.
-    S.mark("golpe", cam.golpe(0.12, 0.3, 1).toFixed(3));
+    // El primer plano del borde: el golpe grande sobre el agujero ganador, que la cámara no deja salir de cuadro (aim()).
+    S.mark("golpe", cam.golpe(0.7, 0.5, 1.2).toFixed(3));
     cam.shake(10 * S.u());
   }
   skipFn = (): void => {
@@ -729,6 +731,13 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     return z;
   };
 
+  /** El agujero del ganador, que el golpe de la cámara no puede sacar de cuadro. */
+  const cajaGanador = (): { x: number; y: number; w: number; h: number } => {
+    const q = P(((tosses[tosses.length - 1] as Toss).th.landing));
+    const r = 90 * g.k;
+    return { x: q.x - r, y: q.y - r, w: 2 * r, h: 2 * r };
+  };
+
   function aim(): void {
     const ultimo = tosses[tosses.length - 1] as Toss;
     // En un celular la mesa ocupa el ancho con los nombres de los costados
@@ -745,7 +754,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     const tope = S.portrait() ? topeConNombres() : Infinity;
     const cuidar = S.portrait() && !crowned && tAll >= T_SEATED;
     const zEfectivo = Math.max(0.3, cam.toScreen(1, 0, g.w, g.h).x - cam.toScreen(0, 0, g.w, g.h).x);
-    cam.proteger(cuidar ? mesaConNombres(zEfectivo) : null, zonaJuego());
+    cam.proteger(cuidar ? mesaConNombres(zEfectivo) : crowned ? cajaGanador() : null, zonaJuego());
     if (tAll >= ultimo.land) {
       // Desde que cae la última argolla, la mesa entera debajo de donde sale el
       // cartel y encima del relator: el agujero ganador se ve, los demás también,
@@ -1170,7 +1179,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     // corona, para que el golpe llegue con la cámara ya un poco más cerca.
     if (!empujeDado && tAll >= T_EMPUJE) {
       empujeDado = true;
-      cam.tension(Math.max(0.5, T_CROWN - T_EMPUJE), 0.05);
+      cam.tension(Math.max(0.5, T_CROWN - T_EMPUJE), 0.1);
     }
     // El respiro, antes de que caiga la argolla y no antes del cartel:
     // "¡ADENTRO!" ya dispara el remate, y después del remate el respiro no

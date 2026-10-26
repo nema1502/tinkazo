@@ -1,3 +1,4 @@
+import { LEGIBLE } from "./letra";
 import { Container, Graphics, Sprite, Text, Texture } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
 import { musicHold } from "../../music";
@@ -351,12 +352,12 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     // pantalla acostada las dos son la misma.
     const hu = S.u();
     const top = S.top() + 18 * hu;
-    hudLabel = S.text("", { fontSize: 20 * hu, fontWeight: "800", fill: CREAM });
+    hudLabel = S.text("", { fontSize: Math.max(20 * hu, LEGIBLE.secPx), fontWeight: "800", fill: CREAM });
     hudLabel.alpha = 0.9;
     hudLabel.position.set(22 * hu, top);
     hudNum = S.text("", { fontSize: 52 * hu, fontWeight: "900", fill: YELLOW, stroke: { color: INK, width: 6 * hu } });
     hudNum.position.set(22 * hu, top + 24 * hu);
-    hudStation = S.text("", { fontSize: 22 * hu, fontWeight: "800", fill: CREAM });
+    hudStation = S.text("", { fontSize: Math.max(22 * hu, LEGIBLE.secPx), fontWeight: "800", fill: CREAM });
     hudStation.alpha = 0.95;
     hudStation.position.set(22 * hu, top + 92 * hu);
     // La ronda ya está arriba, en la barra del estadio: abajo se encimaba con las cabinas.
@@ -648,7 +649,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     didCrown = true;
     S.say(T[lang].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     fanfare();
-    cam.punch(0.07).shake(6 * G.k);
+    S.mark("golpe", cam.golpe(0.4, 0.6, 1.1).toFixed(3));
+    cam.shake(8 * G.k);
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);
     setTimeout(() => beep(note(19), 0.12, "triangle", 0.035), 700);
   }

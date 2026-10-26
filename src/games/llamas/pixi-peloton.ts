@@ -1,3 +1,4 @@
+import { LEGIBLE } from "../pixi/letra";
 import { CanvasSource, Container, Graphics, Sprite, Text, Texture } from "pixi.js";
 import { T, getLang } from "../../i18n";
 import { beep, note } from "../../sound";
@@ -185,7 +186,7 @@ export function crearPeloton(h: Anfitrion): Peloton {
   /* ---------------------------------------------------------------- los textos */
   // Nada por debajo de 13 px en el celular ni de 12 en una pantalla baja: la
   // `letra` de la escena se achica con la altura y un celular girado quedaba en 8.
-  const fs = Math.max(S.letra(15), portrait ? 13 : 12);
+  const fs = Math.max(S.letra(LEGIBLE.sec), portrait ? 16 : 14);
   const medidor = S.text("", { fontSize: fs, fontWeight: "800", fill: INK });
   const anchos = new Map<string, number>();
   const medir = (s: string): number => {
@@ -361,7 +362,7 @@ export function crearPeloton(h: Anfitrion): Peloton {
     capaFichas.addChild(f.caja);
   }
   const tribuna = new Container();
-  const contador = S.text("", { fontFamily: MONO, fontSize: S.letra(16), fontWeight: "800", fill: CREAM });
+  const contador = S.text("", { fontFamily: MONO, fontSize: S.letra(LEGIBLE.sec), fontWeight: "800", fill: CREAM });
   const contadorFondo = new Graphics();
   const cajaContador = new Container();
   cajaContador.addChild(contadorFondo, contador);

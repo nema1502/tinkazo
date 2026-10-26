@@ -1,3 +1,4 @@
+import { LEGIBLE } from "./letra";
 import { Container, Graphics, Sprite, Text } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
 import { paceFactor, setGameLength, type Beacon } from "../../state";
@@ -185,7 +186,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
         // Claro y con contorno de tinta: en tinta sola, sobre el morado del
         // tema claro no llegaba a 4,5 a 1, y al final, con los gajos apagados,
         // no se leía en ninguno (la medición de pantalla).
-        const size = Math.min(18 * u, A * Rd * 0.9 * 0.42);
+        const size = Math.min(LEGIBLE.sec * u, A * Rd * 0.9 * 0.42);
         const nm = S.text(sliceLabel(names[personOf(j)] ?? "", n <= 4 ? 12 : 10), { fontSize: size, fontWeight: "900", fill: CREAM, stroke: contorno(size) });
         nm.anchor.set(1, 0.5);
         if (nm.width > Rd * 0.55) nm.scale.set((Rd * 0.55) / nm.width);
@@ -508,7 +509,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     fanfare();
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);
     setTimeout(() => beep(note(19), 0.12, "triangle", 0.035), 700);
-    cam.punch(0.1);
+    S.mark("golpe", cam.golpe(0.3, 0.6, 1.1).toFixed(3));
     camBeat("crown");
   }
 

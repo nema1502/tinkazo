@@ -9,7 +9,8 @@ import { contractUrl, network } from "../stellar/config";
 import { anotar } from "../stellar/registro-red";
 import { type AnchorStep, clienteListo, escribirError, hideTxStatus, margenParaAprobar, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
 import { precargarQr } from "./qr";
-import { juegoPorDefecto, juegoSiguiente, recomendar } from "./recomendar";
+import { juegoPorDefecto, juegoSiguiente, rangoVisible, recomendar } from "./recomendar";
+import { esperaSola, leerGuardado } from "./vista-grande";
 import { apruebaAMano, canAnchor, currentSession } from "./wallet-ui";
 import { cerrarLista, olvidarBorrador, parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
@@ -149,7 +150,7 @@ export function pintarRecomendacion(n: number): void {
     // Cada botón va a su lugar en el orden de la recomendación; se mueve solo el que está fuera de sitio.
     if (gp.children[i] !== el) gp.insertBefore(el, gp.children[i] ?? null);
     el.classList.toggle("atenuado", r.fits === false);
-    el.querySelectorAll(":scope > .rec-tag, :scope > .rec-nota").forEach((x) => x.remove());
+    el.querySelectorAll(":scope > .rec-tag, :scope > .rec-nota, :scope > .rec-rango").forEach((x) => x.remove());
     if (r.fits === true) {
       const etiqueta = document.createElement("em");
       etiqueta.className = "rec-tag";
@@ -158,6 +159,15 @@ export function pintarRecomendacion(n: number): void {
       etiqueta.setAttribute("aria-label", t("recBadge"));
       etiqueta.title = t("recBadge");
       el.appendChild(etiqueta);
+    }
+    // El rango de personas, a la vista: miniatura, nombre y rango (barrido de letra, 26 de octubre de 2026).
+    const rango = rangoVisible(r.game);
+    if (rango) {
+      const em = document.createElement("em");
+      em.className = "rec-rango";
+      em.textContent = rango;
+      em.setAttribute("aria-label", t("recRangoAria").replace("{r}", rango.replace("–", " a ")));
+      el.appendChild(em);
     }
     if (r.note) {
       const nota = document.createElement("small");
@@ -223,6 +233,9 @@ export function secondsToRound(): number {
 }
 
 let countdownTimer: number | undefined;
+
+/** De qué lista sellada la espera ya se abrió sola: una vez por lista, y si la persona vuelve, no se la vuelve a poner. */
+let esperaAutoDe = "";
 
 /** La espera en grande, ya bajada: la cuenta regresiva le avisa cuando nace el número. */
 let espera: typeof import("./espera") | null = null;
@@ -297,6 +310,14 @@ function startCountdown(): void {
   if (grande) {
     grande.onclick = abrirEspera;
     grande.style.display = "";
+  }
+  // En una laptop o un proyector la espera pasa sola a la vista grande, con "Volver" a mano (src/ui/vista-grande.ts).
+  if (app.frozen) {
+    const clave = `${app.frozen.round}|${app.frozen.raffleId ?? ""}`;
+    if (esperaAutoDe !== clave && esperaSola({ ancho: innerWidth, tactil: matchMedia("(pointer: coarse)").matches, busqueda: location.search, guardado: leerGuardado() })) {
+      esperaAutoDe = clave;
+      abrirEspera();
+    }
   }
   if (num && app.frozen) num.textContent = `#${app.frozen.round}`;
   // La conexión está ociosa hasta que nazca la ronda: se baja el motor, y se

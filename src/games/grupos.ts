@@ -20,14 +20,14 @@ export const MAX_GRUPOS = 10;
 export const POR_GRUPO = 4;
 
 /**
- * Los nombres, con su artículo para leerlos en una frase ("las Parabas"). El
+ * Los nombres, con su artículo para leerlos en una frase ("las Guacamayas"). El
  * orden importa: el grupo `g` lleva el color de la línea `g` del teleférico.
  */
 export const GRUPOS: readonly { nombre: string; articulo: string }[] = [
-  { nombre: "Parabas", articulo: "las" },
+  { nombre: "Guacamayas", articulo: "las" },
   { nombre: "Cóndores", articulo: "los" },
   { nombre: "Vicuñas", articulo: "las" },
-  { nombre: "Jucumaris", articulo: "los" },
+  { nombre: "Osos andinos", articulo: "los" },
   { nombre: "Tojos", articulo: "los" },
   { nombre: "Tatús", articulo: "los" },
   { nombre: "Surubís", articulo: "los" },

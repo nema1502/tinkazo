@@ -669,7 +669,8 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     fanfare();
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);
     setTimeout(() => beep(note(19), 0.12, "triangle", 0.045), 700);
-    cam.punch(0.08).shake(10 * S.u());
+    S.mark("golpe", cam.golpe(0.3, 0.6, 1.1).toFixed(3));
+    cam.shake(10 * S.u());
   }
   skipFn = (): void => {
     if (crowned || dead) return;
@@ -1842,7 +1843,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     const left = cells.slice(0, porCol), right = cells.slice(porCol);
     const r = fs * 0.36;
     const x0 = 20 * k + 2 * r;
-    const headStyle = { fontFamily: MONO, fontSize: fs * 0.85, fontWeight: "900", fill: INK, letterSpacing: 2 * k } as const;
+    const headStyle = { fontFamily: MONO, fontSize: fs, fontWeight: "900", fill: INK, letterSpacing: 2 * k } as const;
     const headText = `${t("cChoOutT")} · ${v.length}`;
     const labels = cells.map((cell) => S.text(cell.label, { fontSize: fs, fontWeight: "800", fill: INK }));
     const starred = (cell: (typeof cells)[number]): boolean => cell.i >= 0 && prized.has(cell.i);

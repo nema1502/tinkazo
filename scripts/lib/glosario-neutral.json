@@ -128,8 +128,62 @@
     {
       "evitar": "plata",
       "tipo": "andino, rioplatense",
-      "alternativa": "dinero",
-      "estado": "avisar"
+      "alternativa": "dinero"
+    },
+    {
+      "evitar": "guagua",
+      "tipo": "andino, caribeño",
+      "alternativa": "bebé"
+    },
+    {
+      "evitar": "¿dale\\?|nació\\. dale",
+      "tipo": "rioplatense, andino",
+      "alternativa": "seguimos, adelante"
+    },
+    {
+      "evitar": "metele|metelo",
+      "tipo": "rioplatense, andino",
+      "alternativa": "agregá, poné"
+    },
+    {
+      "evitar": "en un rato|ratito",
+      "tipo": "andino, rioplatense",
+      "alternativa": "en unos minutos"
+    },
+    {
+      "evitar": "chuta",
+      "tipo": "andino, ecuatoriano",
+      "alternativa": "uy"
+    },
+    {
+      "evitar": "largada",
+      "tipo": "andino, rioplatense",
+      "alternativa": "salida"
+    },
+    {
+      "evitar": "delante (?:tuyo|mío|suyo)",
+      "tipo": "andino, rioplatense",
+      "alternativa": "frente a vos, frente a mí"
+    },
+    {
+      "evitar": "planillas?",
+      "tipo": "andino, rioplatense",
+      "alternativa": "hoja de cálculo"
+    },
+    {
+      "evitar": "este equipo",
+      "tipo": "ambiguo (se confunde con un equipo de trabajo)",
+      "alternativa": "este navegador"
+    },
+    {
+      "evitar": "bajar como",
+      "tipo": "anglicismo (to download)",
+      "alternativa": "descargar como"
+    },
+    {
+      "evitar": "hamac(?:a|ar|ó)",
+      "tipo": "andino, rioplatense",
+      "alternativa": "balancea, columpia"
     }
   ]
 }

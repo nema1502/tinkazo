@@ -1,3 +1,4 @@
+import { LEGIBLE } from "./letra";
 import { Container, Graphics, Sprite, Text, Texture } from "pixi.js";
 import { T, getLang, nameList, t } from "../../i18n";
 import { paceFactor, setGameLength, type Beacon } from "../../state";
@@ -267,18 +268,20 @@ export async function truequePixi(names: string[], winners: readonly number[], b
     // desde el fondo de la sala: 14 px o más en 720. Iban en 11 y 12 px, y la
     // sala solo seguía los subtítulos (evaluación de la subida 2, hallazgo 6).
     const margen = 10 * k;
-    const fsLey = S.letra(15);
-    const fsCont = S.letra(16);
+    const fsLey = S.letra(LEGIBLE.sec);
+    const fsCont = S.letra(LEGIBLE.sec);
     contador = S.text("", { fontFamily: MONO, fontSize: fsCont, fontWeight: "700", fill: tinta });
     contador.position.set(margen, S.top() + 8 * k);
     leyenda = new Container();
     const txtLey = S.text(t("trLeyenda"), { fontFamily: MONO, fontSize: fsLey, fontWeight: "700", fill: tinta, wordWrap: true, wordWrapWidth: w - 2 * margen });
     txtLey.position.set(margen, S.top() + 8 * k + fsCont * 1.35);
+    // La frase de la leyenda se fue: los colores con su producto se entienden solos (barrido de letra).
+    txtLey.visible = false;
     leyenda.addChild(txtLey);
     const cuadro = Math.round(fsLey * 0.85);
     const renglon = fsLey * 1.45;
     let lx = margen;
-    let ly = txtLey.y + txtLey.height + 6 * k;
+    let ly = txtLey.y;
     for (let p = 0; p < COLOR.length; p++) {
       const sq = new Graphics().rect(0, 0, cuadro, cuadro).fill(COLOR[p] ?? 0).stroke({ width: Math.max(1, k), color: INK });
       const tx = S.text(nombre(p), { fontFamily: MONO, fontSize: fsLey, fontWeight: "700", fill: tinta });
@@ -318,7 +321,7 @@ export async function truequePixi(names: string[], winners: readonly number[], b
     // quedaba a doce píxeles del borde y se cortaba la mitad, con la etiqueta
     // (revisión del Trueque, 21 de octubre de 2026): si no entra, la feria se
     // corre a la derecha lo justo.
-    const fsEtq = S.letra(16);
+    const fsEtq = S.letra(LEGIBLE.sec);
     const medida = S.text("", { fontFamily: MONO, fontSize: fsEtq, fontWeight: "800" });
     let etiq = 0;
     for (let p = 0; p < CLAVE.length; p++) {
@@ -368,6 +371,8 @@ export async function truequePixi(names: string[], winners: readonly number[], b
 
   build();
   const crown = S.crown(names, winners);
+  /** El golpe de la cámara cae una sola vez, cuando entra la entrega y sale el cartel. */
+  let golpeDado = false;
   S.onResize(build);
   cam.noBlur();
   cam.cut(S.sw() / 2, S.sh() / 2, 1);
@@ -816,6 +821,11 @@ export async function truequePixi(names: string[], winners: readonly number[], b
     dibujarEncargos(tt);
     dibujarRuta(tt);
     contar(tt);
+    if (tt >= T_ENTREGA && !golpeDado) {
+      golpeDado = true;
+      S.mark("golpe", cam.golpe(0.3, 0.8, 1.2).toFixed(3));
+      cam.shake(12 * S.u());
+    }
     if (tt >= T_ENTREGA) crown.at(tt - T_ENTREGA);
     // Los nombres: el pasar lista de la feria, los que se prueban, y la ruta con
     // quien espera. Sin tapar el atado ni la etiqueta de lo que lleva.

@@ -202,6 +202,8 @@ async function nuevaPagina(browser, vista, tema, url) {
     red.push({ url: r.url, metodo: r.method, cuerpo: (r.postData || "").slice(0, 200) });
   });
   await page.send("Network.enable").catch(() => {});
+  // Los flujos se miran con la página y la espera a mano: la espera en grande que se abre sola en una laptop (src/ui/vista-grande.ts) se apaga.
+  await page.send("Page.addScriptToEvaluateOnNewDocument", { source: "try { sessionStorage.setItem('tinkazo.grande', '0'); } catch (e) {}" }).catch(() => {});
   await page.send("Page.navigate", { url });
   return { page, red };
 }

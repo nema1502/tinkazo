@@ -1,3 +1,4 @@
+import { LEGIBLE } from "./letra";
 import { Container, Graphics } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
 import { paceFactor, params, setGameLength, type Beacon } from "../../state";
@@ -841,7 +842,9 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     beep(note(5), 0.6, "sawtooth", 0.04);
     fanfare();
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);
-    cam.punch(0.1).shake(12 * S.u());
+    // El golpe de la cámara cae con el cartel: un acercamiento firme sobre el ganador que vuelve suave (docs/motores.md).
+    S.mark("golpe", cam.golpe(0.25, 0.6, 1.1).toFixed(3));
+    cam.shake(12 * S.u());
   }
   skipFn = (): void => {
     if (phase === "crown" || phase === "dead") return;
@@ -1083,7 +1086,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     S.hud.addChild(box);
     chips = new Container();
     S.hud.addChild(chips);
-    duelText = S.text("", { fontFamily: MONO, fontSize: 18 * k, fontWeight: "700", fill: S.dark ? CREAM : INK });
+    duelText = S.text("", { fontFamily: MONO, fontSize: Math.max(18, LEGIBLE.sec) * k, fontWeight: "700", fill: S.dark ? CREAM : INK });
     duelText.anchor.set(1, 1);
     duelText.alpha = 0.9;
     duelText.position.set(W - 22 * k, H - S.bottom() - 18 * k);

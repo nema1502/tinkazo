@@ -76,7 +76,8 @@ describe("las palabras de la lista", () => {
   });
 
   it("una entrada en `avisar` se devuelve marcada, para contarla sin fallar", () => {
-    const f = buscarFaltas([{ texto: "plata de mentira", linea: 4 }], entradas, []);
+    // `plata` ya no es de aviso (26 de octubre de 2026: se cambió todo por «dinero»): queda `cancha` en «¡A la cancha!».
+    const f = buscarFaltas([{ texto: "¡A la cancha!", linea: 4 }], entradas, []);
     expect(f).toHaveLength(1);
     expect(f[0]).toMatchObject({ estado: "avisar", linea: 4 });
   });

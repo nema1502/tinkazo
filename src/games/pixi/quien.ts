@@ -1,3 +1,4 @@
+import { LEGIBLE } from "./letra";
 import { Container, Graphics, Sprite, Text } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
 import { clamp, ease } from "../overlay";
@@ -262,8 +263,15 @@ function crearEscena(kit: Kit, d: Datos) {
     bannerA.text = c.a;
     bannerB.text = c.b;
     bannerA.visible = c.a !== "";
-    if (bannerA.style.fontSize !== c.aPx * k) bannerA.style.fontSize = c.aPx * k;
-    if (bannerB.style.fontSize !== c.bPx * k) bannerB.style.fontSize = c.bPx * k;
+    if (bannerA.style.fontSize !== Math.max(c.aPx * k, LEGIBLE.secPx)) bannerA.style.fontSize = Math.max(c.aPx * k, LEGIBLE.secPx);
+    if (bannerB.style.fontSize !== Math.max(c.bPx * k, LEGIBLE.secPx)) bannerB.style.fontSize = Math.max(c.bPx * k, LEGIBLE.secPx);
+    // En un celular parado la frase larga se parte en renglones en vez de achicarse: con la regla de la letra
+    // ("Se sientan los que tienen 11 letras o más" a 14 px no se lee desde las sillas).
+    for (const tx of [bannerA, bannerB]) {
+      tx.style.wordWrap = g.w < 700;
+      tx.style.wordWrapWidth = maxW;
+      tx.style.align = "center";
+    }
     bannerA.scale.set(1);
     bannerB.scale.set(1);
     const fit = (tx: Text): number => (tx.width > maxW ? maxW / tx.width : 1);

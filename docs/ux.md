@@ -144,8 +144,8 @@ Nicolás, ante un evento de verdad con proyector: "la gente ve la pantalla compl
 | Campos (`textarea`, `input`, `select`) | 16 px: con menos, el iPhone agranda la página al tocarlos | `audit-ui.mjs` |
 | Blancos de toque en pantallas táctiles | 48 px de alto (el mínimo anterior era 44) | `audit-ui.mjs`, `audit-flujo.mjs` |
 | Subtítulo del estadio | 3 % del alto de la pantalla o más (en 1080: 42 px; en 768: 36 px) | `audit-ui.mjs`, "proyector" |
-| Botones del estadio (Sonido, Saltar) | 2 % del alto o más; se esconden solos | `audit-ui.mjs`, "proyector" |
-| Nombres dentro de los juegos | 1,6 % del alto (lo que ya pedía el auditor de identidad) | `audit-identidad.mjs` |
+| Botones del estadio (Sonido, Saltar) | 2,6 % del alto o más (28 px en 1080); se esconden solos | `audit-ui.mjs`, "proyector" |
+| Nombres dentro de los juegos | 2,6 % del alto (28 px en 1080; la regla de la letra de `docs/marca.md`, que antes era 1,6 %) | `audit-identidad.mjs`, `audit-legible.mjs` |
 | Contadores de los juegos ("EN LA RUEDA 14 / 32") | 22 en un diseño de 720 (3 % del alto) | `CONTADOR` en `src/games/pixi/stage.ts` |
 
 ### Qué se queda en el estadio
@@ -163,6 +163,15 @@ Después del resultado, "Siguiente premio" es el botón grande (ya lo era). Con 
 ### La espera, como pre-show
 
 Los unos 45 segundos de la espera son tres cuartos de un sorteo. La espera en grande es el pre-show: el reloj gigante, el premio, la cinta con los nombres de todos **con su cara** (el dibujo de cada uno, que los juegos también usan: la sala se busca), un sonido que sube de tono en cada uno de los últimos cinco segundos hasta el show, y una sola frase ("Nadie puede elegir el número: tampoco quien organiza."). Sin ronda, huella ni cadena. En un celular, un recordatorio de subir el volumen (el navegador no puede saber si está en silencio; solo se ve en pantallas táctiles). Falta el emblema de cada persona de `c/emblemas`: cuando se integre, `avatar()` de `src/avatar.ts` es el lugar de cambiarlo.
+
+### Directo a lo bonito (26 de octubre de 2026)
+
+Pedido del 25 de octubre: "tiene mucha letra chiquita y media fea; quitemos la letra chiquita y directamente el juego, directamente a lo bonito". Decisiones sobre el barrido de letra y emoción:
+
+- **La portada** dice el título, una línea y "Entrar y sortear, es gratis". La explicación larga está más abajo, en los pasos.
+- **La lista** deja a la vista el cuadro, "Pegar lista" y "Sellar la lista". El premio, cuántos ganan, el CSV, Luma y "Mostrar la lista a la sala" van detrás de "Premio y más opciones" (`#mas-lista`; se abre sola si ya hay algo elegido: `src/ui/plegable.ts`), y lo que se eligió se lee igual arriba del botón de sellar. Gratis y los términos nunca se pliegan: quedan en una línea ("Participar es gratis, siempre. Al sellar la lista aceptás los términos.").
+- **La espera** sin la línea larga ("Nadie puede elegir este número, ni quien organiza.") y con el sonido, la duración y las bases detrás de "Sonido, duración y más" (`#mas-ajustes`). Con 1280 px o más de ancho y sin pantalla táctil, **al sellar la espera en grande se abre sola** con "Volver a la página" a mano, y como el sorteo arranca desde ahí, el resultado también sale en grande (`src/ui/vista-grande.ts`). Los enlaces de prueba (`?demo=`, `?instant=`, `?lead=`, `?pace=`, `?pose=`) la llevan a mano; `?grande=0` o `sessionStorage["tinkazo.grande"] = "0"` la apagan y `?grande=1` la fuerza (los auditores de flujo usan la primera).
+- **El selector** muestra la miniatura, el nombre, la estrella de "recomendado" y el rango de personas del juego ("6–12": el ideal de `RANGOS` en `src/ui/recomendar.ts`, o del mínimo al máximo); la nota de cada juego queda para el lector de pantalla y para la línea de abajo.
 
 ### El celular y el proyector, inmersivos
 

@@ -1,4 +1,6 @@
-import { Container, Graphics, Sprite, Text, Texture } from "pixi.js";
+import { LEGIBLE } from "../pixi/letra";
+import { CanvasSource, Container, Graphics, Sprite, Text, Texture } from "pixi.js";
+import { emblemasDe } from "../emblemas";
 import { gsap } from "gsap";
 import { T, getLang, t } from "../../i18n";
 import { paceFactor, params, setGameLength, yaContaron, type Beacon } from "../../state";
@@ -159,6 +161,32 @@ export async function llamasPixi(
       dibujoEmblemas = null;
     }
   }
+  // Una persona, una cara (hallazgo de la batería de cierre, 26 de octubre de 2026): con pelotón, la final y el cartel del
+  // ganador usan el mismo emblema de figura que el pelotón; antes llevaban el glifo cuadrado y la misma persona tenía dos caras.
+  const texEmblemas: Texture[] = [];
+  const emblemaCara = ((): ((persona: number, lado: number) => Texture | null) | null => {
+    if (!peloton || !dibujoEmblemas) return null;
+    const dibujo = dibujoEmblemas;
+    const emb = emblemasDe(names, beacon.randomness);
+    const memo = new Map<string, Texture>();
+    return (persona, lado) => {
+      const key = `${persona}|${lado}`;
+      let tex = memo.get(key);
+      if (!tex) {
+        const e = emb[persona];
+        const lienzo = e ? dibujo.emblemaCanvas(e, lado) : null;
+        if (!lienzo) return null;
+        tex = new Texture({ source: new CanvasSource({ resource: lienzo, autoGenerateMipmaps: true, scaleMode: "linear" }) });
+        memo.set(key, tex);
+        texEmblemas.push(tex);
+      }
+      return tex;
+    };
+  })();
+  S.onCleanup(() => {
+    for (const tx of texEmblemas) tx.destroy(true);
+    texEmblemas.length = 0;
+  });
   const waves = !peloton && names.length > N ? wavesAround(names.length, lanes, seeded(parseInt(beacon.randomness.slice(40, 48), 16))) : [];
   /** Cuándo entra el primer carril: después del pelotón o de las oleadas, si los hay. */
   const T_LANES = peloton ? peloton.fin : waves.length ? Q_SHOW + waves.length * Q_WAVE : 0;
@@ -313,7 +341,7 @@ export async function llamasPixi(
     root.addChild(mark);
     root.scale.set(sc);
     return {
-      root, mark, tag: pelo ? new Container() : S.chip(nameOf(k)),
+      root, mark, tag: pelo ? new Container() : S.chip(nameOf(k), 1, nameOf(k), emblemaCara?.(lanes[k] as number, 64) ?? null),
       pose(ph, speed, beat) {
         const sw = 0.55;
         let lean = speed > 1.25 ? 0.07 : 0;
@@ -380,7 +408,7 @@ export async function llamasPixi(
       .rect(-22, -50, 6, 28).fill(col)
       .circle(4, -36, 10).fill(0x1d2336).stroke({ width: 2.4, color: INK });
     body.addChild(hull);
-    const av = new Sprite(S.face(nameOf(k)));
+    const av = new Sprite(emblemaCara?.(lanes[k] as number, 64) ?? S.face(nameOf(k)));
     av.width = av.height = 14;
     av.anchor.set(0.5);
     av.position.set(4, -36);
@@ -396,7 +424,7 @@ export async function llamasPixi(
     root.addChild(mark);
     root.scale.set(sc);
     return {
-      root, mark, tag: S.chip(nameOf(k)),
+      root, mark, tag: S.chip(nameOf(k), 1, nameOf(k), emblemaCara?.(lanes[k] as number, 64) ?? null),
       pose(ph, speed, beat, now) {
         // La llama del motor: larga cuando acelera, corta y roja cuando se apaga.
         const off = beat?.kind === "plantada";
@@ -473,7 +501,7 @@ export async function llamasPixi(
     root.addChild(mark);
     root.scale.set(sc);
     return {
-      root, mark, tag: S.chip(nameOf(k)),
+      root, mark, tag: S.chip(nameOf(k), 1, nameOf(k), emblemaCara?.(lanes[k] as number, 64) ?? null),
       pose(ph, speed, beat, now) {
         // El remo va y viene con el paso; sin viento se queda quieto.
         let rot = Math.sin(ph * 0.5 + k) * 0.03;
@@ -684,11 +712,9 @@ export async function llamasPixi(
       // empastaba la "m"; sobre la oscura se lee limpia.
       const post = new Graphics()
         .rect(x - 2 * u, trackTop - 46 * u, 4 * u, 30 * u).fill(CREAM)
-        .roundRect(x - 20 * u, trackTop - 62 * u, 40 * u, 20 * u, 4 * u).fill(0x2b2640).stroke({ width: 2 * u, color: INK });
-      const tx = S.text(space ? `${(10 - i) * 1000} km` : `${100 - i * 10} m`, { fontFamily: MONO, fontSize: S.letra(13), fontWeight: "800", fill: CREAM, stroke: contorno(S.letra(13)) });
-      tx.anchor.set(0.5);
-      tx.position.set(x, trackTop - 52 * u);
-      world.addChild(post, tx);
+        // Un banderín sin número: los "90 m" de 13 px no se leían desde el fondo y sobraban (barrido de letra, 26 de octubre de 2026).
+        .rect(x - 9 * u, trackTop - 46 * u, 18 * u, 9 * u).fill(0x2b2640).stroke({ width: 2 * u, color: INK });
+      world.addChild(post);
     }
     const arch = new Graphics()
       .rect(finishX - 4 * u, trackTop - 110 * u, 8 * u, 110 * u).fill(CREAM).stroke({ width: 2 * u, color: INK })
@@ -733,20 +759,21 @@ export async function llamasPixi(
     S.hud.addChild(mini);
     const board = new Container();
     const rows: Container[] = [];
-    const rowH = 26 * u;
+    // La tabla con la letra de la sala (28 px en 1080): renglones de 31 y ancho de 228 (barrido de letra, 26 de octubre de 2026).
+    const rowH = 31 * u;
     for (let k = 0; k < N; k++) {
       const r = new Container();
       // Opaca: con transparencia, la tribuna de colores se veía a través del nombre.
-      const bgr = new Graphics().roundRect(0, 0, 180 * u, rowH - 3 * u, 4 * u).fill(INK);
+      const bgr = new Graphics().roundRect(0, 0, 228 * u, rowH - 3 * u, 4 * u).fill(INK);
       const num = new Graphics().roundRect(2 * u, 2 * u, 18 * u, rowH - 7 * u, 3 * u).fill(S.color(k));
       // El puesto en crema con contorno: sobre el color de la llama, el negro solo no se leía a 4,5 a 1 (la medición de pantalla, 720 de alto).
       const pos = S.text("", { fontSize: S.letra(14), fontWeight: "900", fill: CREAM, stroke: { color: INK, width: 3 * u } });
       pos.anchor.set(0.5);
       pos.position.set(11 * u, (rowH - 3 * u) / 2);
-      const av = new Sprite(S.face(nameOf(k)));
+      const av = new Sprite(emblemaCara?.(lanes[k] as number, 64) ?? S.face(nameOf(k)));
       av.width = av.height = 14 * u;
-      av.position.set(24 * u, 2.5 * u);
-      const nm = S.text(shorten(nameOf(k), 16), { fontSize: S.letra(16), fontWeight: "700", fill: CREAM });
+      av.position.set(24 * u, 6.5 * u);
+      const nm = S.text(shorten(nameOf(k), 16), { fontSize: S.letra(LEGIBLE.sec), fontWeight: "700", fill: CREAM });
       nm.position.set(42 * u, 3.5 * u);
       r.addChild(bgr, num, pos, av, nm);
       board.addChild(r);
@@ -763,7 +790,7 @@ export async function llamasPixi(
       // En la pantalla ancha, a la letra de los nombres de la tabla: a 11 y a 14
       // se leía como de 9 píxeles desde el fondo (revisión visual, 21 de octubre
       // de 2026). En el celular ocupa el ancho entero y no puede crecer.
-      const aviso = S.text(T[getLang()].cLanes(N, names.length), { fontFamily: MONO, fontSize: S.letra(G.portrait ? 14 : 16), fontWeight: "800", fill: CREAM });
+      const aviso = S.text(T[getLang()].cLanes(N, names.length), { fontFamily: MONO, fontSize: S.letra(LEGIBLE.sec), fontWeight: "800", fill: CREAM, wordWrap: true, wordWrapWidth: Math.max(120, G.sw - 36 * u) });
       const pad = 6 * u;
       aviso.position.set(pad, pad / 2);
       // Sobre la tribuna, sin fondo, no se leía.
@@ -936,7 +963,7 @@ export async function llamasPixi(
   }
 
   build();
-  const crown = S.crown(names, winners);
+  const crown = S.crown(names, winners, false, emblemaCara ? (persona) => emblemaCara(persona, 256) : undefined);
   S.onResize(() => {
     build();
     // La cámara conserva lo que mira: solo cambia el tamaño.
@@ -1838,7 +1865,7 @@ export async function llamasPixi(
       const lead = Math.round(rowPos[k] as number) === 0 && !quieto;
       mini.circle(mx + Math.max(0, Math.min(1, p)) * mw, my, (lead ? 7 : 5) * u).fill(S.color(k)).stroke({ width: 2 * u, color: INK });
     }
-    const rowH = 26 * u;
+    const rowH = 31 * u;
     L.rows.forEach((r, k) => {
       const pos = rowPos[k] as number;
       r.y = pos * rowH;

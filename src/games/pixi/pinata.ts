@@ -1,3 +1,4 @@
+import { LEGIBLE } from "./letra";
 import { Container, Graphics, Sprite } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
 import { paceFactor, setGameLength, type Beacon } from "../../state";
@@ -370,7 +371,8 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     beep(note(0), 0.7, "triangle", 0.08);
     fanfare();
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);
-    cam.punch(0.08).shake(10 * S.u());
+    S.mark("golpe", cam.golpe(0.3, 0.6, 1.1).toFixed(3));
+    cam.shake(10 * S.u());
   }
   skipFn = (): void => {
     if (phase === "crown" || phase === "dead") return;
@@ -695,7 +697,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     box.position.set(22 * k, S.top() + 10 * k);
     chipLayer = new Container();
     moreBg = new Graphics();
-    moreTxt = S.text("", { fontFamily: MONO, fontSize: 14 * k * (g.w <= 520 ? 1.35 : 1.15), fontWeight: "800", fill: INK });
+    moreTxt = S.text("", { fontFamily: MONO, fontSize: Math.max(14 * k * (g.w <= 520 ? 1.35 : 1.15), LEGIBLE.sec * k), fontWeight: "800", fill: INK });
     moreTxt.anchor.set(0, 0.5);
     moreBadge = new Container();
     moreBadge.addChild(moreBg, moreTxt);
@@ -706,7 +708,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     // con la letra de lo que se lee desde el fondo y tan anchas como el nombre
     // más largo de la lista.
     const phone = g.w <= 520;
-    const letraLista = S.letra(phone ? 15 : 16);
+    const letraLista = S.letra(LEGIBLE.sec);
     const medida = S.text("", { fontSize: letraLista, fontWeight: "800" });
     let anchoLista = 0;
     for (const nm of names) {
@@ -730,7 +732,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       listaCont.addChild(c);
       listaRows.push({ c, bg, sq, tx });
     }
-    listaMore = S.text("", { fontFamily: MONO, fontSize: 18 * k, fontWeight: "800", fill: S.dark ? CREAM : INK });
+    listaMore = S.text("", { fontFamily: MONO, fontSize: Math.max(18, LEGIBLE.sec) * k, fontWeight: "800", fill: S.dark ? CREAM : INK });
     listaMore.position.set(lista.x + 4 * k, lista.y + lista.h + 4 * k);
     listaCont.addChild(listaMore);
     S.hud.addChild(listaCont);

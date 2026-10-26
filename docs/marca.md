@@ -144,6 +144,18 @@ Los títulos van muy apretados (`letter-spacing: -0.02em`) y los rótulos en ver
 
 **Todo lo que sea un dato verificable va en monoespaciada.** Una huella, un hash, una dirección de contrato, un número de ronda. Es una señal: lo que está en monoespaciada se puede comprobar.
 
+### La letra
+
+Lo que cuenta es el ángulo de la altura de la x, y la `system-ui` tiene una x de unos 0,52 em. Una imagen de 1,5 m de alto vista a 6 m (un proyector desde el fondo de la sala) y un celular de 390 px a 35 cm piden el mismo ángulo, así que la regla es una sola, en dos medidas:
+
+| Dónde | Secundario | Principal | Cómo se mide |
+|---|---|---|---|
+| Lo que mira la sala, en 1080 de alto | 28 px (2,6 % del alto) | 48 px (4,4 %) | `scripts/audit-legible.mjs` |
+| Lo que mira la sala, en un celular parado | 16 px | 22 px | `scripts/audit-legible.mjs` |
+| La herramienta (la página de quien organiza) | 16 px | 22 px | `scripts/audit-legible.mjs`, `scripts/audit-ui.mjs` |
+
+Principal es lo que se lee primero: los títulos, el botón de la acción del paso, el nombre del ganador y el cartel del estadio. Las versalitas ganan un 35 %: un rótulo de 14 px en mayúsculas vale como uno de 19. La monoespaciada tiene la x más chica y no sirve para nombres. En el CSS son `--letra-sec` y `--letra-prin` (y `--letra-sala-sec` y `--letra-sala-prin` para el estadio); en los juegos, `LEGIBLE` y `letraMinima(k)` de `src/games/pixi/letra.ts` (los juegos dibujan en unidades `k`, un píxel del diseño de 720 de alto: 18,7 y 32). Con mucha gente los nombres de un juego pueden bajar, pero nunca de la regla en 1080 con las personas que promete el juego con nombre entero.
+
 ## La llama
 
 La mascota es una llama pixelada, dibujada con rectángulos, sin curvas. Va en magenta con sombra dura de tinta, rotada unos tres grados.
@@ -157,7 +169,7 @@ El sitio está en español boliviano con voseo, y en inglés neutro. No hay un t
 **Lo que sí:**
 
 - Voseo: "pegá la lista", "sorteá", "probalo", "si encontrás".
-- Vocabulario neutral: el voseo y los nombres de los juegos se quedan, pero lo cotidiano se escribe como se entiende en cualquier país ("ahora" y no "ahorita", "comprobar" y no "chequear"). La lista de lo que se evita, con su alternativa, es `scripts/lib/glosario-neutral.json`; `pnpm check:glosario` falla si aparece fuera de los nombres de los juegos y de `historia.html`, y corre en la CI. Una entrada en `"estado": "avisar"` no falla: es un uso que ya está en el texto y falta decidir (hoy `plata` en el grifo de testnet y `cancha` en "¡A la cancha!").
+- Vocabulario neutral: el voseo y los nombres de los juegos se quedan, pero lo cotidiano se escribe como se entiende en cualquier país ("ahora" y no "ahorita", "comprobar" y no "chequear"). La lista de lo que se evita, con su alternativa, es `scripts/lib/glosario-neutral.json`; `pnpm check:glosario` falla si aparece fuera de los nombres de los juegos y de `historia.html`, y corre en la CI. Una entrada en `"estado": "avisar"` no falla: es un uso que ya está en el texto y falta decidir (hoy `cancha` en "¡A la cancha!"). El 26 de octubre de 2026 se cambiaron 21 giros de todos los días (`guagua` por bebé, `plata de mentira` por dinero de prueba, `¿Dale?` por ¿Seguimos?, `Metele` por Agregá, `en un rato` por en unos minutos, `largada` por salida, `planilla` por hoja de cálculo, `este equipo` por este navegador, `Bajar como CSV` por Descargar, `anclados` por guardados en Stellar, `EN EL RUEDO` por SIGUEN, `¡CHUTA!` por ¡UY!, entre otros), y las Parabas y los Jucumaris pasaron a Guacamayas y Osos andinos. Se quedan el voseo, `acá`, `celular` y los nombres culturales (chovena, trueque, La Entrada, cuadra, fraternidad, Diablada, Socavón), con una línea que los explica donde hace falta; los Tojos quedan a confirmar. Nada de tuteo.
 - Frases cortas, de una idea cada una.
 - Decir el precio y el costo con el número y la fecha: "0,76 XLM, unos 16 centavos, medido el 3 de octubre", no "es muy barato".
 - Admitir los límites. El veredicto amarillo de la página de verificación dice que la cuenta cierra pero que nadie atestigua la lista. Esa honestidad es la marca.

@@ -1,3 +1,4 @@
+import { LEGIBLE } from "./letra";
 import { Container, Graphics, Sprite, type Texture } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
 import { musicHold } from "../../music";
@@ -576,11 +577,11 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     chips = new Container();
     leaders = new Graphics();
     moreBox = new Graphics();
-    moreText = S.text("", { fontFamily: MONO, fontSize: TAG_FONT_PX * k, fontWeight: "800", fill: S.dark ? CREAM : INK });
+    moreText = S.text("", { fontFamily: MONO, fontSize: Math.max(TAG_FONT_PX, LEGIBLE.sec) * k, fontWeight: "800", fill: S.dark ? CREAM : INK });
     moreText.anchor.set(0.5);
     moreBox.visible = moreText.visible = false;
     chips.addChild(leaders);
-    blockText = S.text("", { fontFamily: MONO, fontSize: Math.max(14, 18 * k), fontWeight: "800", fill: CREAM });
+    blockText = S.text("", { fontFamily: MONO, fontSize: Math.max(16, LEGIBLE.sec * k), fontWeight: "800", fill: CREAM });
     blockText.anchor.set(1, 1);
     blockText.position.set(g.w - 22 * k, g.h - S.bottom() - 18 * k);
     blockPlate = new Graphics();
@@ -599,7 +600,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     S.hud.addChild(box, pillsLayer, roster, chips, moreBox, moreText, blockPlate, blockText, drum);
     // Las pastillas de las fraternidades, con lo que cada una mide.
     pills = [];
-    const fs = Math.max(10, 12 * k);
+    const fs = Math.max(12, LEGIBLE.sec * k);
     for (const gi of P.order) {
       const f = P.frats[gi] as Frat;
       const c = new Container();
@@ -651,7 +652,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     const avail = g.h - S.bottom() - 10 * k - top0;
     const rows = Math.ceil(m / cols);
     // La letra más grande que entre: los renglones y la cabecera en el alto libre.
-    const fs = clamp(Math.min(19 * k, avail / (rows * 1.4 + 4.5)), 11, 24);
+    const fs = clamp(Math.min(LEGIBLE.sec * k, avail / (rows * 1.4 + 4.5)), 11, 40);
     const rh = fs * 1.4;
     const top = fs * 4.0;
     const colW = Math.min((S.portrait() ? 176 : 232) * Math.max(0.85, k), (g.w - 40 * k) / cols);
@@ -679,12 +680,13 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
         .roundRect(0, 0, 14 * k, geo.head, 10 * k).fill(f.color).rect(7 * k, 0, 7 * k, geo.head).fill(f.color)
         .rect(14 * k, geo.top - geo.fs * 0.28, geo.w - 14 * k, 2 * k).fill({ color: f.color, alpha: 0.9 });
       // Tres renglones: "ENTRAN", el nombre de la fraternidad y su baile con cuántos son.
-      const kicker = S.text(t("cOruEnter"), { fontFamily: MONO, fontSize: geo.fs * 0.62, fontWeight: "900", fill: S.dark ? CREAM : INK, letterSpacing: 2 * k });
+      // El rótulo "ENTRAN" se fue (13 px en mayúsculas; el título ya dice quién entra): barrido de letra.
+      const kicker = S.text("", { fontFamily: MONO, fontSize: geo.fs * 0.62, fontWeight: "900", fill: S.dark ? CREAM : INK, letterSpacing: 2 * k });
       kicker.position.set(26 * k, geo.fs * 0.45);
       const L = T[getLang()];
       const title = S.text(L.cOruFratTitle(f.article, f.name).toUpperCase(), { fontSize: geo.fs * 1.2, fontWeight: "900", fill: S.dark ? CREAM : INK });
       title.position.set(26 * k, geo.fs * 1.15);
-      const sub = S.text(L.cOruRosterSub(L.cOruDanza(f.dance), f.members.length), { fontSize: geo.fs * 0.74, fontWeight: "700", fill: S.dark ? CREAM : INK });
+      const sub = S.text(L.cOruRosterSub(L.cOruDanza(f.dance), f.members.length), { fontSize: geo.fs, fontWeight: "700", fill: S.dark ? CREAM : INK });
       sub.alpha = 0.85;
       sub.position.set(26 * k, geo.fs * 2.65);
       // En un celular el cartel es angosto y "LOS JUCUMARIS" se salía por la
@@ -886,7 +888,8 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     // Las campanas del Socavón, después de la fanfarria: adentro quedaban
     // tapadas por notas que suenan al doble.
     [520, 700, 880, 1060].forEach((ms, i) => setTimeout(() => beep(note(i % 2 ? 12 : 14), 0.4, "triangle", 0.05), ms));
-    cam.punch(0.08).shake(10 * S.u());
+    S.mark("golpe", cam.golpe(0.3, 0.6, 1.1).toFixed(3));
+    cam.shake(10 * S.u());
   }
   skipFn = (): void => {
     if (phase === "crown" || phase === "dead") return;

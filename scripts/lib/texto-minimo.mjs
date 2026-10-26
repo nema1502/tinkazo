@@ -17,8 +17,11 @@ export const UMBRALES = {
   flujo: 16,
   /** Rótulos, el indicador de pasos y lo de la cuenta (`EXCEPCIONES`): un poco menos, y nunca debajo de esto. */
   excepcion: 13,
-  /** Lo que se proyecta, como parte del alto de la pantalla (en 1080: 32 px el subtítulo y 22 px los botones). */
-  estadio: { subtitulo: 0.03, botones: 0.02 },
+  /**
+   * Lo que se proyecta, como parte del alto de la pantalla (en 1080: 32 px el subtítulo y 28 px los botones). Los 28 son la regla de
+   * la letra secundaria de la sala (`docs/marca.md`, "La letra"); principal es el 4,4 % (48 px).
+   */
+  estadio: { subtitulo: 0.03, botones: 0.026, secundario: 0.026, principal: 0.044 },
 };
 
 /**

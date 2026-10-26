@@ -77,6 +77,15 @@ export const RANGOS: Partial<Record<Game, Rango>> = {
   ...RANGOS_BASE,
 };
 
+/** El rango de personas que muestra el selector bajo el nombre: el ideal si lo tiene, y si no, del mínimo al máximo ("6–12"). */
+export function rangoVisible(game: Game): string | null {
+  const r = RANGOS[game];
+  if (!r) return null;
+  const desde = r.ideal?.[0] ?? r.minimo ?? 2;
+  const hasta = r.ideal?.[1] ?? r.maximo;
+  return hasta === undefined ? null : `${desde}–${hasta}`;
+}
+
 /**
  * La duración de la sección 8.2 para "Normal", en segundos, por tramo de
  * personas. No se muestra todavía: `state.ts` dice 38 s para Normal desde el 17

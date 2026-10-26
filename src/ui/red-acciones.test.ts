@@ -5,7 +5,7 @@ import { type ContextoDelPanel, NOMBRE_DE_ACCION, TEXTO_DE_ACCION, panelDe, resp
 
 /**
  * Para cada uno de los cinco casos: qué se dice y cuál es la única acción principal,
- * en testnet y en mainnet. Con las dos reglas de Fable del 25 de octubre de 2026:
+ * en testnet y en mainnet. Con las dos reglas del 25 de octubre de 2026:
  *
  * 1. El caso 5 (protocolo cambiado) es un aviso amarillo que nunca frena por sí solo;
  *    solo frena, en rojo, si la simulación del sello falla.

@@ -1,4 +1,5 @@
 import { esc } from "../dom";
+import { LEGIBLE } from "../games/pixi/letra";
 import { t } from "../i18n";
 import { app, avatar } from "../state";
 import { acortar, enlaceParaElQr } from "../enlace-corto";
@@ -164,7 +165,8 @@ function encajar(back: HTMLElement, n: number): void {
     nombres.every((e) => e.scrollWidth <= e.clientWidth + 1) &&
     cuerpo.scrollWidth <= cuerpo.clientWidth + 1 &&
     (celular || cuerpo.scrollHeight <= cuerpo.clientHeight + 1);
-  let chico = 14;
+  // Los nombres no bajan de la letra secundaria de la sala (2,6 % del alto) mientras entren; en el celular, que se desplaza, vale el 14 de siempre.
+  let chico = celular ? 14 : Math.max(14, Math.round(innerHeight * LEGIBLE.fraccionSec));
   let grande = n === 1 ? 132 : n <= 5 ? 84 : 52;
   caja.style.setProperty("--letra", `${grande}px`);
   if (entra()) return;

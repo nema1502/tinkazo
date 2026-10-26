@@ -9,6 +9,7 @@ import { parseNames } from "./participants";
 import { pintarQr } from "./qr";
 import { claveDelSello, sinSelloAhora } from "./sin-sello-textos";
 import { contar } from "../contar";
+import { LEGIBLE } from "../games/pixi/letra";
 
 /**
  * La lista a la vista de la sala, antes de sellar.
@@ -33,8 +34,14 @@ import { contar } from "../contar";
  */
 function encajar(ol: HTMLElement): void {
   const entra = (): boolean => ol.scrollHeight <= ol.clientHeight + 1 && ol.scrollWidth <= ol.clientWidth + 1;
+  // La regla de la letra de la sala (docs/marca.md): 2,6 % del alto, 28 px en 1080. Si con ella entran todos, la
+  // lista usa la más grande que entre; si no (200 personas), baja hasta que entren, como siempre.
+  const piso = Math.max(11, Math.round(innerHeight * LEGIBLE.fraccionSec));
   let chico = 11;
-  let grande = 46;
+  let grande = Math.max(46, Math.round(innerHeight * 0.06));
+  ol.style.fontSize = `${piso}px`;
+  if (entra()) chico = piso;
+  else grande = piso;
   while (grande - chico > 1) {
     const medio = Math.floor((chico + grande) / 2);
     ol.style.fontSize = `${medio}px`;

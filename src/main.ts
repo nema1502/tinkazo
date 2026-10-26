@@ -8,6 +8,7 @@ import { GAME_BUTTONS, cambiarJuego, copyRules, elegirJuego, freeze, refreshFree
 import { initSiguiente } from "./ui/siguiente";
 import { crearBotonesDelKit } from "./ui/botones-kit";
 import { JUEGOS } from "./games/pixi/kit/catalogo";
+import { initPlegables } from "./ui/plegable";
 import { alApretarSellar, iniciarRed } from "./ui/red";
 import { montarPremios } from "./ui/premios";
 import { adelantarCorto, alTocarGanadores, contarCompartido, copySummary, draw, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
@@ -107,6 +108,7 @@ $("btn-hist-clear").addEventListener("click", () => {
 crearBotonesDelKit();
 for (const [id, game] of GAME_BUTTONS) $(id).addEventListener("click", () => elegirJuego(game));
 $("btn-cambiar").addEventListener("click", cambiarJuego);
+initPlegables();
 $("btn-draw").addEventListener("click", () => void draw());
 // La lista a la vista de la sala, antes de sellar: el blindaje contra inflarla.
 $("btn-sala").addEventListener("click", () => void import("./ui/sala").then((m) => m.mostrarLista()));

@@ -1,4 +1,3 @@
-import { hayPeloton } from "../duraciones";
 import { entradaDe, clavesDe } from "../games/pixi/kit/catalogo";
 import { T, getLang, t } from "../i18n";
 import type { Game } from "../state";
@@ -71,13 +70,11 @@ export interface GameCard {
 /** El contenido de la tarjeta para un juego. */
 function caja(game: Game, people: number, prizes: number, premio = ""): string {
   const L = T[getLang()];
-  const lanes = (game === "race" || game === "rockets" || game === "totora") && people > 8;
   const varios = prizes > 1 ? claveVarios(game) : undefined;
-  const extras = [
-    // Con 9 a 30, la carrera es el pelotón: salen todas y quedan ocho en la final.
-    lanes ? (game === "race" && hayPeloton(people) ? (people > 30 ? L.pelTandas(people, 8) : L.pelStart(people, 8)) : L.cLanes(8, people)) : game === "sapo" && people > 12 ? t("gcSapoQual") : "",
-    prizes > 1 && !varios ? L.gcPrizesNote(prizes) : "",
-  ].filter(Boolean);
+  // Lo único que la tarjeta suma a la regla: con varios premios, en un juego que cuenta solo el primero, que el
+  // cartel del final los muestra a todos. El pelotón, las tandas, la clasificatoria y cuántas personas y premios son
+  // se fueron (barrido de letra, 26 de octubre de 2026): la sala los ve en el juego, y la tarjeta se lee en tres segundos.
+  const extras = [prizes > 1 && !varios ? L.gcPrizesNote(prizes) : ""].filter(Boolean);
   return (
     `<p class="gc-kicker">${esc(t("gcKicker"))}</p>` +
     `<h2 class="gc-nombre" id="gc-nombre"><span>${esc(t(claveNombre(game)))}</span></h2>` +
@@ -86,7 +83,6 @@ function caja(game: Game, people: number, prizes: number, premio = ""): string {
     // Qué se sortea, con el nombre que le puso quien organiza: la tarjeta decía
     // "1 premio" sin decir cuál (revisión del experto en sorteos).
     (premio ? `<p class="gc-premio"><span>${esc(t("cortinaSe"))}</span> ${esc(premio)}</p>` : "") +
-    `<p class="gc-chips"><span>${esc(L.gcPeople(people))}</span><span>${esc(L.gcPrizes(prizes))}</span></p>` +
     `<p class="gc-honesta" id="gc-honesta">${esc(t("gcHonest"))}</p>`
   );
 }

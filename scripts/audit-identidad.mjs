@@ -8,7 +8,7 @@
  * por primera vez cada nombre, en la escena o en el HUD, antes de que salga el
  * cartel del ganador (`identidadDe` en src/games/pixi/stage.ts). Un nombre cuenta
  * si se ve entero en pantalla, con opacidad de 0,6 o más y un alto de al menos
- * 1,6% de la pantalla; las etiquetas cortas ("María Q.") cuentan si no se
+ * 2,6% de la pantalla (la regla de la letra, `docs/marca.md`); las etiquetas cortas ("María Q.") cuentan si no se
  * confunden con otro nombre.
  *
  * Lo pidió Nicolás el 4 de octubre de 2026, mirando la tómbola: salía el número

@@ -44,8 +44,9 @@ import { ZOOM_MINIMO, instalarZoom, razonDeZoom, resumirZoom, veces } from "./li
  * el pico del zoom tiene que caer en el golpe, que es el instante en que sale el
  * cartel. Los demás todavía no lo tienen y no se miran.
  */
-// Todo juego del kit lo tiene: el director de cámara hace el golpe (`kit/director.ts`).
-const CON_ZOOM = ["race", "sapo", ...juegosDelKit()];
+// Todo juego del selector tiene el golpe de cámara (barrido de letra, 26 de octubre de 2026), y todo juego del kit:
+// el director de cámara hace el golpe (`kit/director.ts`).
+const CON_ZOOM = [...new Set([...TODOS, ...juegosDelKit()])];
 const args = process.argv.slice(2);
 const opt = (name, def) => {
   const i = args.indexOf(name);

@@ -868,12 +868,12 @@ async function run() {
             // que no gasten batería mientras nadie las mira.
             await page.eval(`document.querySelector('.gamepick').scrollIntoView({block:'center'})`);
             await sleep(1500);
-            const t1 = await page.eval(`JSON.stringify([...document.querySelectorAll('.gamepick canvas.thumb')].map(cv => {
+            const t1 = await page.eval(`JSON.stringify([...document.querySelectorAll('.gamepick button:not([hidden]) canvas.thumb')].map(cv => {
               const c = cv.getContext('2d');
               return [...c.getImageData(0, 0, cv.width, cv.height).data].reduce((a, v) => a + v, 0);
             }))`);
             await sleep(700);
-            const t2 = await page.eval(`JSON.stringify([...document.querySelectorAll('.gamepick canvas.thumb')].map(cv => {
+            const t2 = await page.eval(`JSON.stringify([...document.querySelectorAll('.gamepick button:not([hidden]) canvas.thumb')].map(cv => {
               const c = cv.getContext('2d');
               return [...c.getImageData(0, 0, cv.width, cv.height).data].reduce((a, v) => a + v, 0);
             }))`);
@@ -881,7 +881,7 @@ async function run() {
             const bb = JSON.parse(t2);
             // Contra los botones del selector, no contra un número escrito a
             // mano: eran seis, y al sumar juegos el auditor fallaba solo.
-            const botones = Number(await page.eval(`document.querySelectorAll('.gamepick button').length`));
+            const botones = Number(await page.eval(`document.querySelectorAll('.gamepick button:not([hidden])').length`));
             check(`${etiqueta}: hay una miniatura por juego`, a.length === botones && botones > 0, `${a.length} de ${botones}`);
             const quietas = a.filter((v, k) => v === bb[k]).length;
             check(

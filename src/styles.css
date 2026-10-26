@@ -10,6 +10,11 @@
        El teal de relleno sobre blanco da 2,98 a 1: no se puede escribir con él. */
     --magenta-ink: #c9247f; --teal-ink: #00776a; --purple-ink: #5b3ad0;
     --bw: 3px; --sh: 6px 6px 0 var(--ink); --sh-sm: 3px 3px 0 var(--ink);
+    /* La regla de la letra (docs/marca.md, "La letra"; la mide scripts/audit-legible.mjs). En la herramienta y en un
+       celular, 16 px lo secundario y 22 lo principal. Lo que mira la sala, en 1080 de alto: 28 y 48 px, que son el 2,6 % y el
+       4,4 % del alto de la pantalla; en un celular parado no baja de 16 y 22. */
+    --letra-sec: 16px; --letra-prin: 22px;
+    --letra-sala-sec: max(16px, 2.7vh); --letra-sala-prin: max(22px, 4.5vh);
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
@@ -136,12 +141,12 @@
   .steps article:nth-child(1) .num { background: var(--magenta); }
   .steps article:nth-child(2) .num { background: var(--orange); }
   .steps article:nth-child(3) .num { background: var(--purple); color: var(--on-purple); }
-  .num { display: inline-block; color: var(--on-accent); border: 2px solid var(--ink); font-family: ui-monospace, Consolas, monospace; font-weight: 800; font-size: 12px; padding: 2px 9px; transform: rotate(-2deg); }
+  .num { display: inline-block; color: var(--on-accent); border: 2px solid var(--ink); font-family: ui-monospace, Consolas, monospace; font-weight: 800; font-size: 16px; padding: 2px 10px; transform: rotate(-2deg); }
   .steps h3 { font-size: 17px; margin-top: 10px; font-weight: 800; }
-  .steps p { font-size: 13.5px; color: var(--ink2); margin-top: 6px; }
+  .steps p { font-size: var(--letra-sec); color: var(--ink2); margin-top: 6px; }
   section.block { background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); margin-bottom: 34px; }
   .head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 14px 22px; border-bottom: var(--bw) solid var(--ink); flex-wrap: wrap; }
-  .head h2 { font-size: 19px; font-weight: 800; }
+  .head h2 { font-size: var(--letra-prin); font-weight: 800; }
   .body { padding: 22px; }
   textarea, input[type="text"] {
     width: 100%; background: var(--paper); color: var(--ink);
@@ -155,7 +160,7 @@
      30 de septiembre de 2026). */
   button.primary, a.primary {
     background: var(--magenta); color: var(--on-accent); border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm);
-    padding: 12px 24px; font-weight: 800; font-size: 17px; cursor: pointer; transition: transform 0.08s, box-shadow 0.08s;
+    padding: 12px 24px; font-weight: 800; font-size: var(--letra-prin); cursor: pointer; transition: transform 0.08s, box-shadow 0.08s;
   }
   a.primary { display: inline-block; text-decoration: none; }
   button.primary:hover:not(:disabled):not([aria-disabled="true"]), a.primary:hover { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
@@ -418,7 +423,7 @@
   /* Con la lista vacía, "Pegar lista" es la acción del paso: el botón de la
      casa, no un chip (participants.ts). Con la lista cargada vuelve a ser chip. */
   #btn-pegar.primary {
-    font-family: inherit; text-transform: none; letter-spacing: 0; font-size: 17px; font-weight: 800;
+    font-family: inherit; text-transform: none; letter-spacing: 0; font-size: var(--letra-prin); font-weight: 800;
     padding: 12px 24px; min-height: 48px; transform: none;
     background: var(--magenta); color: var(--on-accent); border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm);
   }
@@ -540,7 +545,7 @@
   .winner-card > div { min-width: 0; }
   .winner-card img { width: 64px; height: 64px; border: 2px solid #191919; background: #fff; }
   .winner-name {
-    font-size: clamp(22px, 3.6vw, 34px); font-weight: 900; letter-spacing: -0.01em;
+    font-size: clamp(28px, 4.4vw, 64px); font-weight: 900; letter-spacing: -0.01em;
     overflow-wrap: anywhere;
   }
   .winner-prize { font-size: 18px; font-weight: 700; margin-top: 2px; }
@@ -567,9 +572,9 @@
   .qr p { font-size: 16px; margin-top: 6px; max-width: 140px; }
   .ok { border-left: 4px solid var(--teal); padding-left: 10px; margin-top: 10px; font-size: 16px; color: var(--ink2); }
   footer { border-top: var(--bw) solid var(--ink); margin-top: 44px; }
-  footer .bar { font-family: ui-monospace, Consolas, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); font-weight: 700; }
+  footer .bar { font-family: ui-monospace, Consolas, monospace; font-size: 12px; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); font-weight: 700; }
   /* El pie lleva emoji, y en versalitas con mucho espaciado quedan feos. */
-  footer .bar [data-i="footR"] { text-transform: none; letter-spacing: 0.04em; font-size: 13px; }
+  footer .bar [data-i="footR"] { text-transform: none; letter-spacing: 0.04em; font-size: 16px; }
   .note { font-size: 16px; color: var(--muted); margin-top: 10px; }
   select { background: var(--card); color: var(--ink); border: 2px solid var(--ink); padding: 9px 12px; font-weight: 700; }
   /* Detrás de la tarjeta del ganador, no encima: caía justo sobre el nombre
@@ -604,9 +609,9 @@
   .gc-nombre { font-size: clamp(42px, min(10vw, 13vh), 140px); line-height: 1.05; font-weight: 900; letter-spacing: -0.02em; }
   .gc-nombre span { background: #ffc629; color: #10101c; padding: 0 0.16em; box-decoration-break: clone; -webkit-box-decoration-break: clone; box-shadow: 6px 6px 0 #000; }
   .gc-regla { font-size: clamp(22px, min(4.4vw, 6vh), 58px); line-height: 1.18; font-weight: 800; max-width: 22em; text-wrap: balance; }
-  .gc-extra { font-family: ui-monospace, Consolas, monospace; font-weight: 800; letter-spacing: 0.06em; font-size: clamp(12px, 2vh, 18px); color: #ffc629; }
-  .gc-premio { font-size: clamp(18px, min(3.2vw, 4.2vh), 42px); font-weight: 900; line-height: 1.15; max-width: 24em; text-wrap: balance; overflow-wrap: anywhere; }
-  .gc-premio span { font-family: ui-monospace, Consolas, monospace; font-size: 0.55em; letter-spacing: 0.14em; text-transform: uppercase; color: #ffc629; margin-right: 0.4em; }
+  .gc-extra { font-family: ui-monospace, Consolas, monospace; font-weight: 800; letter-spacing: 0.04em; font-size: clamp(18px, 2.6vh, 30px); color: #ffc629; max-width: 34em; text-wrap: balance; }
+  .gc-premio { font-size: clamp(22px, min(3.4vw, 4.6vh), 52px); font-weight: 900; line-height: 1.15; max-width: 24em; text-wrap: balance; overflow-wrap: anywhere; }
+  .gc-premio span { font-family: ui-monospace, Consolas, monospace; font-size: max(16px, 0.55em); letter-spacing: 0.14em; text-transform: uppercase; color: #ffc629; margin-right: 0.4em; }
   .gc-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
   .gc-chips span {
     font-family: ui-monospace, Consolas, monospace; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase;
@@ -694,7 +699,7 @@
      sigue con el nombre bien escrito para los lectores de pantalla y para
      quien lo copie. */
   .commentary.grito { text-transform: uppercase; }
-  @keyframes popIn { from { transform: translateX(-50%) scale(0.75); } to { transform: translateX(-50%) scale(1); } }
+  @keyframes popIn { from { transform: translateX(-50%) scale(0.92); } to { transform: translateX(-50%) scale(1); } }
   @media (max-width: 700px) { .hero { grid-template-columns: 1fr; } .mascot { display: none; } .verify { grid-template-columns: 1fr; } }
   /* En un celular de 390 px la cabecera medía 411 y arrastraba de lado a la
      página entera, incluido el panel de la cuenta. Todo lo de la barra se
@@ -819,7 +824,7 @@
   }
   .espera-top { position: absolute; top: 16px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
   .espera-top .sticker { max-width: 60vw; text-align: left; }
-  .espera-premio { font-size: clamp(20px, 3.2vw, 44px); font-weight: 800; max-width: 30ch; text-wrap: balance; overflow-wrap: anywhere; }
+  .espera-premio { font-size: clamp(24px, 3.2vw, 56px); font-weight: 800; max-width: 30ch; text-wrap: balance; overflow-wrap: anywhere; }
   .espera-premio b { background: var(--yellow); color: #191919; padding: 0 0.2em; }
   .espera-reloj { font-size: clamp(88px, 26vmin, 340px); font-weight: 900; line-height: 0.95; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
   .espera-t { font-size: clamp(16px, 2.3vw, 30px); font-weight: 700; color: var(--ink2); max-width: 34ch; text-wrap: balance; }
@@ -874,7 +879,7 @@
   .lore .lore-tab { position: absolute; left: 0; top: 0; bottom: 0; width: 10px; }
   .lore .lore-q { font-size: 17px; font-weight: 800; margin: 6px 0 6px; text-wrap: balance; }
   .lore .lore-a { font-size: 16px; color: var(--ink2); line-height: 1.55; }
-  .lore .lore-src { display: inline-block; margin-top: 10px; font-size: 14px; color: var(--muted); }
+  .lore .lore-src { display: inline-block; margin-top: 10px; font-size: 16px; color: var(--muted); }
   .leyenda summary { cursor: pointer; font-weight: 800; font-size: 16px; }
   .leyenda-det p { margin: 8px 0 0; font-size: 16px; line-height: 1.45; }
 
@@ -1047,20 +1052,20 @@
   .juego { background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); overflow: hidden; }
   .juego img { display: block; width: 100%; height: auto; border-bottom: var(--bw) solid var(--ink); }
   .juego-txt { padding: 16px 18px 18px; }
-  .juego-txt p { font-size: 13.5px; color: var(--ink2); margin-top: 10px; }
+  .juego-txt p { font-size: 16px; color: var(--ink2); margin-top: 10px; }
   /* Notas sueltas: párrafos cortos con título, en dos columnas cuando entra. */
   /* Cuatro en una fila en pantalla ancha: con 300 px de mínimo quedaba una sola abajo. */
   .notas { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; margin: 18px 0 10px; }
   .nota { background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm); padding: 18px 20px; }
   .nota h3 { font-size: 17px; font-weight: 800; text-wrap: balance; }
-  .nota p { font-size: 13.5px; color: var(--ink2); margin-top: 8px; }
+  .nota p { font-size: 16px; color: var(--ink2); margin-top: 8px; }
   /* La navegación del pie, en todas las páginas. */
   .pies { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
   /* El blanco de toque manda sobre el tamaño de la letra: en un celular, un
      enlace de 18 px de alto no se acierta con el pulgar. El auditor de
      interfaz exige 44. */
   .pies a {
-    color: var(--ink2); text-decoration: none; font-size: 12px; font-weight: 700;
+    color: var(--ink2); text-decoration: none; font-size: 14px; font-weight: 700;
     display: inline-flex; align-items: center; min-height: 44px; padding: 0 10px;
   }
   .pies a:hover { color: var(--ink); text-decoration: underline; }
@@ -1249,7 +1254,7 @@
   .portada-sec { margin: 0 0 56px; }
   .portada-sec > .kicker { display: block; margin-bottom: 8px; }
   .portada-sec h2.sec-t { font-size: clamp(24px, 3.4vw, 34px); font-weight: 900; line-height: 1.1; letter-spacing: -0.01em; }
-  .portada-sec p.sec-b { color: var(--ink2); max-width: 680px; margin-top: 8px; font-size: 15px; }
+  .portada-sec p.sec-b { color: var(--ink2); max-width: 680px; margin-top: 8px; font-size: var(--letra-sec); }
   /* La promesa de «Qué queda de tu sorteo»: amarillo con tinta, el par más fuerte de la marca (docs/marca.md). */
   .portada-sec p.promesa { background: var(--yellow); color: #191919; border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm); padding: 14px 18px; margin-top: 18px; font-weight: 700; }
 
@@ -1258,19 +1263,19 @@
   .portada-juegos { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
   .portada-juegos a {
     display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--card); color: var(--ink);
-    border: 2px solid var(--ink); box-shadow: var(--sh-sm); text-decoration: none; font-weight: 800; font-size: 13px; line-height: 1.15;
+    border: 2px solid var(--ink); box-shadow: var(--sh-sm); text-decoration: none; font-weight: 800; font-size: var(--letra-sec); line-height: 1.15;
     min-height: 44px; transition: transform 0.12s ease, box-shadow 0.12s ease;
   }
   .portada-juegos a:hover { transform: translate(-2px, -2px); box-shadow: var(--sh); }
   .portada-juegos canvas.thumb { width: 100%; height: auto; aspect-ratio: 16 / 9; display: block; border: 2px solid var(--ink); }
-  .portada-juegos .pj-ver { font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+  .portada-juegos .pj-ver { font-family: ui-monospace, Consolas, monospace; font-size: 14px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
   @media (max-width: 640px) { .portada-juegos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
   /* Tarjetas: por qué confiar y para quién. */
   .cards3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; margin-top: 18px; }
   .cards3 article { background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); padding: 20px; }
   .cards3 h3 { font-size: 18px; font-weight: 900; margin-top: 12px; }
-  .cards3 p { font-size: 14px; color: var(--ink2); margin-top: 6px; }
+  .cards3 p { font-size: var(--letra-sec); color: var(--ink2); margin-top: 6px; }
   .cards3 .ico {
     width: 44px; height: 44px; display: grid; place-items: center; border: 2px solid var(--ink);
     font-family: ui-monospace, Consolas, monospace; font-weight: 800; font-size: 15px; color: #191919; transform: rotate(-3deg);
@@ -1286,7 +1291,7 @@
   .cifras > div { padding: 18px 20px; border-right: 2px dashed var(--ink); }
   .cifras > div:last-child { border-right: 0; }
   .cifras b { display: block; font-size: 30px; font-weight: 900; line-height: 1; }
-  .cifras span { display: block; margin-top: 6px; font-size: 13px; color: var(--ink2); }
+  .cifras span { display: block; margin-top: 6px; font-size: var(--letra-sec); color: var(--ink2); }
   @media (max-width: 560px) {
     .cifras > div { border-right: 0; border-bottom: 2px dashed var(--ink); }
     .cifras > div:last-child { border-bottom: 0; }
@@ -1296,13 +1301,13 @@
   .faq { margin-top: 18px; display: grid; gap: 10px; max-width: 820px; }
   .faq details { background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
   .faq summary {
-    cursor: pointer; padding: 12px 18px; min-height: 44px; font-weight: 800; font-size: 15px; list-style: none;
+    cursor: pointer; padding: 12px 18px; min-height: 44px; font-weight: 800; font-size: var(--letra-sec); list-style: none;
     display: flex; justify-content: space-between; gap: 12px; align-items: center;
   }
   .faq summary::-webkit-details-marker { display: none; }
   .faq summary::after { content: "+"; font-family: ui-monospace, Consolas, monospace; font-size: 20px; }
   .faq details[open] summary::after { content: "\2212"; }
-  .faq details p { padding: 0 18px 16px; color: var(--ink2); font-size: 14px; }
+  .faq details p { padding: 0 18px 16px; color: var(--ink2); font-size: var(--letra-sec); }
 
   /* El cierre de la portada. */
   .portada-fin { text-align: center; padding: 34px 20px; background: var(--purple); color: var(--on-purple); border: var(--bw) solid var(--ink); box-shadow: var(--sh); margin-bottom: 52px; }
@@ -1335,7 +1340,7 @@
     background: var(--yellow); color: #191919; transform: rotate(-3deg);
   }
   .linea h3 { font-size: 18px; font-weight: 900; }
-  .linea p { color: var(--ink2); font-size: 14px; margin-top: 6px; }
+  .linea p { color: var(--ink2); font-size: 16px; margin-top: 6px; }
   .guarda { width: 100%; max-width: 820px; border-collapse: collapse; margin-top: 18px; background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); font-size: 14px; }
   .guarda th, .guarda td { text-align: left; padding: 12px 14px; border-bottom: 2px dashed var(--ink); vertical-align: top; }
   .guarda th { font-family: ui-monospace, Consolas, monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
@@ -1369,7 +1374,7 @@
   .hist-evento .mini { min-height: 44px; display: inline-flex; align-items: center; }
   /* La página de evento: la lista va sin marco y cada sorteo es un bloque con sus comprobaciones. */
   .ev-cabeza { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin: 4px 0 12px; }
-  .ev-cabeza h2 { font-size: 19px; font-weight: 800; }
+  .ev-cabeza h2 { font-size: var(--letra-prin); font-weight: 800; }
   .ev-lista > .note { margin: 0 0 18px; }
   .ev-gana { margin-bottom: 6px; overflow-wrap: anywhere; }
   .hist-why { margin: 6px 0 12px; }
@@ -1466,15 +1471,15 @@
     .hero-portada { padding-top: 14px; }
     .hero-portada .hero-copy { gap: 12px; }
     .hero-portada h1 { font-size: clamp(30px, 8.4vw, 38px); }
-    .hero-portada .lead { font-size: 15.5px; line-height: 1.45; }
+    .hero-portada .lead { font-size: var(--letra-sec); line-height: 1.45; }
   }
-  .portada-juegos .pj-ver { font-size: 12px; }
+  .portada-juegos .pj-ver { font-size: 14px; }
 
   /* La demo se presenta: una franja arriba y una invitación al final. */
   .demo-banner { display: none; }
   body[data-demo="1"] .demo-banner {
     display: block; margin: 22px 0 0; padding: 12px 16px; background: var(--yellow); color: #191919;
-    border: 2px solid var(--ink); box-shadow: var(--sh-sm); font-weight: 800; font-size: 14px;
+    border: 2px solid var(--ink); box-shadow: var(--sh-sm); font-weight: 800; font-size: 16px;
   }
   .demo-fin { display: none; }
   body[data-demo="1"] .demo-fin { display: block; margin-top: 18px; padding: 18px; background: var(--purple); color: var(--on-purple); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
@@ -1581,7 +1586,7 @@
   .pantalla-premio { font-size: max(14px, 0.3em); font-weight: 800; margin-top: 0.12em; }
   .pantalla.varios .pantalla-premio { font-family: ui-monospace, Consolas, monospace; letter-spacing: 0.06em; }
   /* Con varios ganadores, lo que se llevan: una vez, arriba de las tarjetas, más grande que el número de cada una. */
-  .pantalla-llevan { font-size: max(18px, 0.42em); font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; }
+  .pantalla-llevan { font-size: max(var(--letra-sala-sec), 0.42em); font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; }
   .pantalla-llevan b { font-weight: 900; }
   .pantalla.muchos .pantalla-llevan { grid-column: 1 / -1; }
   .pantalla.muchos .pantalla-ganadores { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: max(6px, 0.2em) max(10px, 0.4em); align-items: stretch; }
@@ -1844,7 +1849,7 @@
 
   /* El botón que sigue y el juego elegido. */
   .lanzar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; margin-top: 16px; }
-  .lanzar #btn-draw { min-height: 56px; padding: 14px 30px; font-size: 17px; flex: 0 0 auto; }
+  .lanzar #btn-draw { min-height: 56px; padding: 14px 30px; font-size: var(--letra-prin); flex: 0 0 auto; }
   .juego-actual { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; min-width: 0; }
   .juego-actual b { font-size: 17px; font-weight: 800; }
   @media (max-width: 560px) {
@@ -1889,7 +1894,7 @@
   .winner-box > .again h3 { font-size: 19px; }
   .winner-box > .again .again-left { margin-top: 2px; }
   .winner-box > .again .row { margin-top: 12px; }
-  .winner-box > .again .row > .primary { min-height: 52px; font-size: 16px; }
+  .winner-box > .again .row > .primary { min-height: 52px; font-size: var(--letra-prin); }
   .winner-box > .again .note { margin-top: 10px; }
   .grande-row { margin-top: 16px; }
   /* En el celular "Siguiente premio (quedan 16)" entra en un renglón: con el relleno de siempre
@@ -1900,7 +1905,7 @@
   @media (max-width: 460px) {
     .winner-box { padding-left: 14px; padding-right: 14px; }
     .winner-box > .again { padding: 12px; }
-    .winner-box > .again .row > .primary { padding-left: 10px; padding-right: 10px; font-size: 16px; }
+    .winner-box > .again .row > .primary { padding-left: 10px; padding-right: 10px; font-size: var(--letra-prin); }
   }
   /* Una pantalla baja: el ganador y, pegado, lo que sigue, sin la etiqueta de arriba. */
   @media (max-height: 520px) {
@@ -1909,7 +1914,7 @@
     .winner-box > .kicker { display: none; }
     .winner-card { padding: 8px 18px; gap: 12px; margin-top: 4px; }
     .winner-card img { width: 44px; height: 44px; }
-    .winner-name { font-size: clamp(20px, 3.6vw, 28px); }
+    .winner-name { font-size: clamp(24px, 3.6vw, 28px); }
     .ausente { margin-top: 4px; }
     .winner-box > .again { margin-top: 12px; padding: 10px 14px; }
     .winner-box > .again .row { margin-top: 8px; }
@@ -2018,11 +2023,11 @@
   }
   .st-top > * { pointer-events: auto; }
   .st-actions { gap: 12px; transition: opacity 0.35s ease; }
-  .st-actions button { min-height: 48px; font-size: clamp(16px, 1.5vw, 24px); padding: 8px 18px; }
+  .st-actions button { min-height: 48px; font-size: clamp(16px, 2.7vh, 44px); padding: 8px 18px; }
   .stadium:not(.st-vivo) .st-actions { opacity: 0; pointer-events: none; }
   .stadium:not(.st-vivo) .st-actions:focus-within { opacity: 1; pointer-events: auto; }
   .commentary {
-    font-size: clamp(18px, 2.6vw, 42px);
+    font-size: clamp(20px, 2.7vw, 52px);
     bottom: max(26px, calc(env(safe-area-inset-bottom, 0px) + 14px));
   }
   @media (max-width: 520px) {
@@ -2041,14 +2046,14 @@
   .gc-chips span { font-size: clamp(16px, 2.8vh, 30px); }
   .gc-honesta { display: none; }
   .gc-graba { font-size: clamp(16px, 2.6vh, 28px); }
-  .gc-saltar { min-height: 48px; font-size: 16px; bottom: max(20px, env(safe-area-inset-bottom, 0px)); right: max(18px, env(safe-area-inset-right, 0px)); }
+  .gc-saltar { min-height: 48px; font-size: var(--letra-sala-sec); bottom: max(20px, env(safe-area-inset-bottom, 0px)); right: max(18px, env(safe-area-inset-right, 0px)); }
   .game-card { padding-left: max(clamp(16px, 5vw, 64px), env(safe-area-inset-left, 0px)); padding-right: max(clamp(16px, 5vw, 64px), env(safe-area-inset-right, 0px)); }
   .cortina-t { font-size: clamp(22px, 2.6vw, 40px); }
 
   /* La espera en grande: el pre-show. Nombres grandes, cuenta gigante, nada técnico. */
   .espera { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
   .espera-top { top: max(16px, env(safe-area-inset-top, 0px)); }
-  .espera-top .sticker { font-size: clamp(16px, 1.7vw, 26px); letter-spacing: 0.04em; padding: 8px 16px; }
+  .espera-top .sticker { font-size: clamp(16px, 1.7vw, 32px); letter-spacing: 0.04em; padding: 8px 16px; }
   .espera-top .ghost { min-height: 48px; font-size: 16px; }
   .espera-t { font-size: clamp(22px, 2.8vw, 44px); }
   .espera-cinta span { font-size: clamp(20px, 2.6vw, 40px); padding: 6px 16px; }
@@ -2066,11 +2071,11 @@
   /* El pie del resultado en grande se esconde, salvo en un sorteo sin sello: ese se lee desde el fondo de la sala
      ("Sin sello: no se puede comprobar."), igual que en la página (pantalla.ts). */
   .pantalla .sala-pie:not(.sin-sello) { display: none; }
-  .pantalla-premio { font-size: max(18px, 0.3em); }
+  .pantalla-premio { font-size: max(var(--letra-sala-sec), 0.3em); }
   .pantalla-qr p { font-size: clamp(20px, 2.4vw, 40px); }
 
   /* El resultado en la página: lo que sigue, grande. */
-  .winner-prize { font-size: 18px; }
+  .winner-prize { font-size: clamp(18px, 2.4vw, 30px); }
   .again-left { font-size: 18px; }
   .qr p.kicker { font-size: 16px; letter-spacing: 0; text-transform: none; font-weight: 700; max-width: 200px; }
   .qr img { width: 168px; height: 168px; }
@@ -2120,3 +2125,21 @@
 
   /* Un boton con hidden se esconde aunque la regla de button.ghost le ponga display. */
   button[hidden], a[hidden] { display: none !important; }
+
+  /* Lo que no es pegar ni sellar va plegado: el premio, cuántos ganan, CSV y Luma en la lista; el sonido, la duración y las
+     bases en la espera (barrido de letra, 26 de octubre de 2026). Lo que se eligió se lee igual en el resumen que va arriba
+     del botón de sellar. */
+  details.mas { margin: 12px 0 14px; }
+  details.mas > summary {
+    cursor: pointer; min-height: 48px; display: inline-flex; align-items: center; gap: 10px; padding: 8px 16px;
+    font-weight: 800; font-size: var(--letra-sec); list-style: none; color: var(--ink);
+    background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+  }
+  details.mas > summary::-webkit-details-marker { display: none; }
+  details.mas > summary::after { content: "+"; font-family: ui-monospace, Consolas, monospace; font-size: 20px; line-height: 1; }
+  details.mas[open] > summary::after { content: "\2212"; }
+  details.mas > :not(summary) { margin-top: 14px; }
+  /* El rango de personas de cada juego, bajo su nombre en el selector. */
+  .gamepick .rec-rango { font-family: ui-monospace, Consolas, monospace; font-style: normal; font-size: var(--letra-sec); font-weight: 800; color: var(--ink2); line-height: 1.2; }
+  .gamepick button.on .rec-rango { color: var(--on-purple); }
+  .gamepick button.atenuado:not(.on) .rec-rango { color: var(--muted); }

@@ -11,6 +11,7 @@ import { Camera } from "./camera";
 import { Gobernador, ajustesDe, aprender, dibujaPorSoftware, esPorPlaca, nivelInicial, nivelMedido, type Nivel } from "./calidad";
 import { guardiaNombre, meter } from "./encuadre";
 import { GOLPE_GANADOR, vibrar } from "../../vibrar";
+import { LEGIBLE } from "./letra";
 import { estadoFoco, latidosFoco, tiemposFoco } from "./foco";
 import { FocoVista, type FocoPunto } from "./foco-vista";
 import type { Arc } from "../drama";
@@ -57,6 +58,7 @@ export function medidasContador(k: number): { fuente: number; alto: number; aire
   const e = fuente / CONTADOR.fuente;
   return { fuente, alto: CONTADOR.alto * e, aire: CONTADOR.aire * e };
 }
+export { LEGIBLE, letraMinima, letraSala } from "./letra";
 export const CREAM = 0xf6efe2;
 export const YELLOW = 0xffc629;
 
@@ -183,7 +185,8 @@ export interface PixiStage {
    * `scale` es relativo al tamaño legible de `CHIP_SCALE`; `faceOf`, de quién
    * es la cara, cuando la etiqueta es una versión corta del nombre.
    */
-  chip(name: string, scale?: number, faceOf?: string): Container;
+  /** `textura` reemplaza a la cara del glifo cuadrado (el emblema de la carrera con pelotón: una persona, una cara). */
+  chip(name: string, scale?: number, faceOf?: string, textura?: Texture | null): Container;
   /**
    * Los nombres de `who` encima de cada uno, en una capa propia que los juegos
    * no vacían: repartidos para que no se pisen y adentro de la pantalla. `at(i)`
@@ -212,7 +215,11 @@ export interface PixiStage {
    * El cartel del ganador y el papel picado: se arman una vez y se llevan a la
    * hora. Con `conFoco`, el cartel espera al foco (`foco.ts`): ver `Crown.at`.
    */
-  crown(names: string[], winners: readonly number[], conFoco?: boolean): Crown;
+  /**
+   * `caraPropia` da la textura que reemplaza al glifo cuadrado de la persona (el emblema de figura de la carrera con
+   * pelotón): así la misma persona no tiene una cara en el pelotón y otra en el cartel del ganador.
+   */
+  crown(names: string[], winners: readonly number[], conFoco?: boolean, caraPropia?: (persona: number) => Texture | null): Crown;
   /**
    * Hasta dónde baja el cartel de la corona con `m` premios, en píxeles de
    * pantalla, con su sombra. Un juego lo usa para que la ganadora quede debajo.
@@ -274,7 +281,7 @@ interface Identidad {
  * Recorre los textos de la escena, del HUD y de pasar lista, no los del
  * cartel del ganador.
  * Un nombre cuenta si se ve entero en pantalla, con opacidad de 0,6 o más y
- * un alto de al menos 1,6% de la pantalla. Las etiquetas cortas ("María Q.",
+ * un alto de al menos 2,6% de la pantalla (la regla de la letra, `letra.ts`). Las etiquetas cortas ("María Q.",
  * "Valeria Torr…") cuentan solo si no se confunden con otro nombre.
  */
 function identidadDe(names: string[]): { estado: Identidad; mirar: (raices: Container[], ahora: number, sw: number, sh: number) => void } {
@@ -320,7 +327,7 @@ function identidadDe(names: string[]): { estado: Identidad; mirar: (raices: Cont
   const mirar = (raices: Container[], ahora: number, sw: number, sh: number): void => {
     if (estado.revelado !== null) return;
     estado.muestras++;
-    const min = Math.max(10, sh * 0.016);
+    const min = Math.max(10, sh * LEGIBLE.fraccionSec);
     const visitar = (c: Container, alfa: number): void => {
       if (!c.visible || !c.renderable) return;
       const a = alfa * c.alpha;
@@ -675,12 +682,12 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     }
   };
 
-  const chip = (name: string, scale = 1, faceOf = name): Container => {
+  const chip = (name: string, scale = 1, faceOf = name, textura: Texture | null = null): Container => {
     const k = u() * scale * CHIP_SCALE * (compartir ? 1.2 : 1);
     const c = new Container();
     chipsVivos.add(c);
     const label = text(shorten(name, 20), { fontSize: 12 * k, fontWeight: "800", fill: INK });
-    const av = new Sprite(face(faceOf));
+    const av = new Sprite(textura ?? face(faceOf));
     av.width = av.height = 16 * k;
     av.position.set(5 * k, 3 * k);
     label.position.set(25 * k, 3.5 * k);
@@ -806,7 +813,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     }
   };
 
-  const crown = (names: string[], winners: readonly number[], conFoco = false): Crown => {
+  const crown = (names: string[], winners: readonly number[], conFoco = false, caraPropia?: (persona: number) => Texture | null): Crown => {
     if (identPedida && !ident) {
       ident = identidadDe(names);
       (window as unknown as { __identidad: Identidad }).__identidad = ident.estado;
@@ -835,7 +842,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       flash.clear().rect(0, 0, sw(), sh()).fill(0xffffff);
       const k = u();
       const title = text(getLang() === "es" ? (all.length > 1 ? "GANAN" : "GANA") : all.length > 1 ? "WINNERS" : "WINNER", {
-        fontFamily: MONO, fontSize: letra(16), fontWeight: "900", fill: INK, letterSpacing: 3 * k,
+        fontFamily: MONO, fontSize: letra(LEGIBLE.prin), fontWeight: "900", fill: INK, letterSpacing: 3 * k,
       });
       // Hasta tres nombres y "y N más", igual que el relator.
       const resto = all.length - 3;
@@ -859,7 +866,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       const pw = innerW + (big ? 132 : 56) * k;
       const altos = filasCorona(all.length, k);
       const lineH = altos[0] ?? 60 * k;
-      const ph = 40 * k + altos.reduce((a, h) => a + h, 0) + 16 * k;
+      // «GANA» es lo principal de la sala (48 px en 1080): los nombres arrancan debajo de él, no encima.
+      const arriba = 12 * k + title.height + 6 * k;
+      const ph = arriba + altos.reduce((a, h) => a + h, 0) + 20 * k;
+      const dy = arriba / 2 - 18 * k;
       const bgp = new Graphics()
         .roundRect(-pw / 2 + 10 * k, -ph / 2 + 10 * k, pw, ph, 14 * k)
         .fill(INK)
@@ -869,25 +879,30 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       plate.addChild(bgp);
       const x0 = -pw / 2 + (big ? 112 : 28) * k;
       if (big) {
-        const av = new Sprite(caraGrande(all[0] ?? ""));
+        const propia = caraPropia?.(winners[0] as number) ?? null;
+        const av = new Sprite(propia ?? caraGrande(all[0] ?? ""));
         av.width = av.height = 76 * k;
-        av.position.set(-pw / 2 + 22 * k, -38 * k);
-        const border = new Graphics().rect(-pw / 2 + 20 * k, -40 * k, 80 * k, 80 * k).stroke({ width: 4 * k, color: INK });
-        plate.addChild(av, border);
+        av.position.set(-pw / 2 + 22 * k, -38 * k + dy);
+        const border = new Graphics().rect(-pw / 2 + 20 * k, -40 * k + dy, 80 * k, 80 * k).stroke({ width: 4 * k, color: INK });
+        plate.addChild(av);
+        // El emblema ya trae su propio borde: el marco de siempre solo va con el glifo cuadrado.
+        if (!propia) plate.addChild(border);
       }
-      title.position.set(x0, -ph / 2 + 16 * k);
+      title.position.set(x0, -ph / 2 + 12 * k);
       plate.addChild(title);
       // Cada renglón en su contenedor, para que con varios premios entren de a uno.
       const renglones: Container[] = [];
-      let y = -ph / 2 + 36 * k;
+      let y = -ph / 2 + arriba;
       nameTexts.forEach((tx, i) => {
         const fila = new Container();
         if (conCara(i)) {
           const lado = cara(i);
-          const av = new Sprite(caraGrande(all[i] ?? ""));
+          const propia = caraPropia?.(winners[i] as number) ?? null;
+          const av = new Sprite(propia ?? caraGrande(all[i] ?? ""));
           av.width = av.height = lado;
           av.position.set(0, (altos[i] ?? lineH) / 2 - lado / 2 - 2 * k);
-          fila.addChild(av, new Graphics().rect(av.x - 2 * k, av.y - 2 * k, lado + 4 * k, lado + 4 * k).stroke({ width: 3 * k, color: INK }));
+          fila.addChild(av);
+          if (!propia) fila.addChild(new Graphics().rect(av.x - 2 * k, av.y - 2 * k, lado + 4 * k, lado + 4 * k).stroke({ width: 3 * k, color: INK }));
         }
         tx.position.set(hueco(i), 0);
         fila.addChild(tx);
@@ -1058,7 +1073,8 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     for (const { i, p } of pts) {
       let c = tagChips.get(i);
       if (!c) {
-        c = chip(names[i] ?? "", portrait() ? 0.9 : 1);
+        // Sin el 0,9 de antes en el celular: con él la letra quedaba en 15 px, debajo de la regla (docs/marca.md, "La letra").
+        c = chip(names[i] ?? "", 1);
         tagChips.set(i, c);
         tagLayer.addChild(c);
       }
@@ -1138,7 +1154,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       commentEl.textContent = msg;
       commentEl.classList.toggle("grito", grito);
       commentEl.animate(
-        [{ transform: "translateX(-50%) scale(0.75)" }, { transform: "translateX(-50%) scale(1)" }],
+        [{ transform: "translateX(-50%) scale(0.92)" }, { transform: "translateX(-50%) scale(1)" }],
         { duration: 280, easing: "cubic-bezier(.34,1.56,.64,1)" },
       );
       musicCue(heat);
