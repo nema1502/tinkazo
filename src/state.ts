@@ -26,6 +26,13 @@ export interface Frozen {
   raffleId?: bigint;
   /** Hash de la transacción del sello. */
   sealTx?: string;
+  /**
+   * Se siguió sin sello porque la red no dejaba sellar (`ui/red.ts`): el sorteo corre en
+   * modo libre y **no se puede comprobar**, salvo que el sello entre a tiempo con la misma
+   * lista y la misma ronda (entonces `raffleId` se completa y esto se apaga). Mientras
+   * esté, el resultado, lo compartido y Mis sorteos lo dicen.
+   */
+  sinSello?: boolean;
 }
 
 export interface Drawn {
@@ -156,6 +163,16 @@ export const LEAD_SECONDS = Math.max(3, Number(params.get("lead")) || 10);
  * navegador. Cuarenta y cinco es lo que aguantó sin fallar en testnet.
  */
 export const ANCHOR_LEAD_SECONDS = 45;
+
+/**
+ * Margen de "Seguir sin sello" (la red no deja sellar y quien organiza decide seguir).
+ *
+ * Más que los 45 de siempre a propósito: la ronda nace a 90 segundos y quedan unos 50
+ * para seguir intentando el sello de esa misma ronda (hasta 40 segundos antes de que
+ * nazca, `ui/sin-sello.ts`). Si entra, el sorteo queda anclado con el mismo ganador. La
+ * ronda es una sola: sellar otra sería otro sorteo, nunca "anclar" este.
+ */
+export const SIN_SELLO_LEAD_SECONDS = 90;
 
 /**
  * Cuánto dura el show, **en segundos**.

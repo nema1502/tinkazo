@@ -1,10 +1,12 @@
 import { $ } from "../dom";
 import { T, getLang, onLangChange, t } from "../i18n";
-import { ANCHOR_LEAD_SECONDS, LEAD_SECONDS, WHEEL_MAX, app, currentPace, paceSeconds, params, type Game } from "../state";
+import { ANCHOR_LEAD_SECONDS, LEAD_SECONDS, SIN_SELLO_LEAD_SECONDS, WHEEL_MAX, app, currentPace, paceSeconds, params, type Game } from "../state";
 import { QUICKNET, bytesToHex, roundTime, targetRound } from "../protocol/quicknet";
 import { listHash } from "../protocol/canonical";
 import { prepararFirma } from "../protocol/firma";
+import { esCostoAlto } from "../stellar/chequeo-red";
 import { contractUrl, network } from "../stellar/config";
+import { anotar } from "../stellar/registro-red";
 import { type AnchorStep, clienteListo, escribirError, hideTxStatus, margenParaAprobar, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
 import { precargarQr } from "./qr";
 import { juegoPorDefecto, juegoSiguiente, recomendar } from "./recomendar";
@@ -16,6 +18,8 @@ import { actualizarPaso, barraActiva, verError } from "./siguiente";
 import { ponerPremio, recordarPremio } from "./premios";
 import { ENSAYO_ESPERA_S, enEnsayo, sinGrabar } from "../ensayo-modo";
 import { contar, errorContable } from "../contar";
+import { type OpcionesDeSellado, chequearAntesDeSellar, hayAccionDeRed, limpiarRed, marcarSellado, mostrarCostoAlto, mostrarSinSaldo, verSinSello } from "./red";
+import { type Reintento, reintentarSello } from "./sin-sello";
 
 /**
  * Los botones del selector, en el orden en que se muestran. Hasta el 29 de
@@ -344,6 +348,8 @@ function startCountdown(): void {
  */
 export function refreshFreezeLabel(): void {
   if (app.frozen) return;
+  // Si la red no deja sellar, el botón lleva la acción del caso (`red.ts`): no se pisa.
+  if (hayAccionDeRed()) return;
   const btn = $("btn-freeze");
   btn.dataset.i = "freeze";
   btn.textContent = t(btn.dataset.i);
@@ -361,7 +367,7 @@ export const GUARDA_DESPUES_DE_SOLTAR_MS = 700;
  * sorteo sigue siendo verificable, pero nadie atestigua que la lista se cerró
  * antes de que existiera la semilla.
  */
-export async function freeze(): Promise<void> {
+export async function freeze(opciones: OpcionesDeSellado = {}): Promise<void> {
   const names = parseNames();
   if (names.length < 2) return;
   // Recién se soltó el sorteo anterior con "Siguiente premio": un doble toque
@@ -373,7 +379,11 @@ export async function freeze(): Promise<void> {
   // La demo (`?demo=`) y el ensayo son el show con una lista de ejemplo, nunca
   // un sorteo: aunque haya una cuenta abierta no se graba nada ni se espera la
   // cadena (`ensayo-modo.ts`).
-  const anchoring = canAnchor() && !sinGrabar();
+  const conCuenta = canAnchor() && !sinGrabar();
+  // "Seguir sin sello": la red no dejaba sellar y quien organiza decidió seguir. Es el modo
+  // libre, con la ronda a 90 s para seguir intentando sellar esa misma ronda (`sin-sello.ts`).
+  const sinSello = conCuenta && !!opciones.sinSello;
+  const anchoring = conCuenta && !sinSello;
   const hash = bytesToHex(listHash(names));
   let ts = Math.floor(Date.now() / 1000);
   // Anclando, el margen no baja de 45 s aunque la URL pida menos: por debajo
@@ -381,9 +391,11 @@ export async function freeze(): Promise<void> {
   // elegir el juego, y la línea que guía dice que de verdad son unos 45.
   const lead = anchoring
     ? Math.max(ANCHOR_LEAD_SECONDS, LEAD_SECONDS)
-    : enEnsayo() && !params.has("lead")
-      ? ENSAYO_ESPERA_S
-      : LEAD_SECONDS;
+    : sinSello
+      ? SIN_SELLO_LEAD_SECONDS
+      : enEnsayo() && !params.has("lead")
+        ? ENSAYO_ESPERA_S
+        : LEAD_SECONDS;
   let round = targetRound(ts, lead);
   let prize = $<HTMLInputElement>("prize").value.trim();
   let numWinners = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, names.length);
@@ -405,9 +417,21 @@ export async function freeze(): Promise<void> {
     // "Sellar en Stellar" mientras se armaba el cliente del contrato, de medio
     // segundo a catorce (`clienteListo` en anchor.ts). Y se va el error de antes.
     onStep("starting");
-    // El contador del embudo (src/contar.ts): un intento de sellar, y después cómo terminó. La verdad del sello es la cadena.
-    contar("seal_sent", { network: network.name });
+    // El botón es nuestro mientras se sella: la caja de la red no lo toca (`red.ts`).
+    marcarSellado(true);
     try {
+      // La red, antes de armar nada: si no deja sellar, se dice acá y la acción del caso
+      // reemplaza a este botón. Si anda lenta, se avisa y se sigue. Un chequeo que se rompe no frena.
+      if (!opciones.saltarChequeo && !(await chequearAntesDeSellar())) {
+        btn.disabled = false;
+        cerrarLista(false);
+        hideTxStatus("seal-status");
+        marcarSellado(false);
+        return;
+      }
+      // El contador del embudo (src/contar.ts): un intento de sellar, y después cómo terminó. La verdad
+      // del sello es la cadena. Un toque que la red frenó antes de mandar nada no es un intento.
+      contar("seal_sent", { network: network.name });
       // Nunca dos sellos de la misma lista (`sello-seguro.ts`, D-17 en docs/architecture.md):
       // - Si la red tarda, la ronda elegida al hacer clic llega a la cadena con menos de los
       //   30 s que exige el contrato y el sello falla (3 de 11 sellos con el RPC público de
@@ -443,6 +467,7 @@ export async function freeze(): Promise<void> {
                 meta: prize || t("defaultMeta"),
               },
               onStep,
+              { pagarConMiCuenta: !!opciones.pagarConMiCuenta },
             ),
           resolver: (intento) => resolverSelloEnLaRed(intento, onStep),
           rondaNueva,
@@ -477,6 +502,19 @@ export async function freeze(): Promise<void> {
       cerrarLista(false);
       btn.dataset.i = "freeze";
       btn.textContent = t("freeze");
+      marcarSellado(false);
+      // Dos cosas que la red explica mejor que el error de siempre, con su acción:
+      // el sello de verdad cuesta más de lo que el patrocinador paga, o el patrocinador no tiene con qué.
+      if (esCostoAlto(e)) {
+        hideTxStatus("seal-status");
+        await mostrarCostoAlto(e.costoXlm, e.restaurar);
+        return;
+      }
+      if (await esSinSaldoDelPatrocinador(e)) {
+        hideTxStatus("seal-status");
+        await mostrarSinSaldo();
+        return;
+      }
       const status = $("seal-status");
       status.style.display = "block";
       // Naranja, como el error del sorteo: violeta es "todavía va" (styles.css).
@@ -512,7 +550,11 @@ export async function freeze(): Promise<void> {
     round,
     ...(raffleId !== undefined ? { raffleId } : {}),
     ...(sealTx ? { sealTx } : {}),
+    ...(sinSello ? { sinSello: true } : {}),
   };
+  // Ya está sellada (o se sigue sin sello): el botón y la caja de la red dejan de ser de este paso.
+  marcarSellado(false);
+  limpiarRed();
 
   // Los últimos premios que se usaron se ofrecen primero la próxima vez. La demo y el ensayo no cuentan.
   if (!sinGrabar()) {
@@ -540,11 +582,132 @@ export async function freeze(): Promise<void> {
         // El número solo no dice de qué contrato es (cada uno arranca en 1).
         ...(raffleId !== undefined && network.contractId ? { contract: network.contractId } : {}),
         ...(sealTx ? { sealTx } : {}),
+        // Sin sello: Mis sorteos lo dice, y no figura como comprobable.
+        ...(sinSello ? { sinSello: true } : {}),
       });
       h.renderHistory(who);
     });
   }
   showFrozen(names, hash, raffleId);
+  // Sin sello pero con cuenta: mientras corre la cuenta regresiva se sigue intentando la misma ronda.
+  const quien = currentSession()?.address;
+  if (sinSello && quien) {
+    anotar({ red: network.name, paso: "sin-sello", accion: "seguir-sin-sello", final: `la ronda nace en ${Math.max(0, roundTime(round) - Math.floor(Date.now() / 1000))} s` });
+    seguirIntentandoElSello({ names, hash, round, ts, prize, numWinners, organizer: quien });
+  }
+}
+
+/* ------------------------------------------------- seguir sin sello, y sellar después */
+
+/** Lo que identifica el sorteo que se sigue sin sello: el mismo que si entra el sello tarde. */
+interface SorteoSinSello {
+  names: string[];
+  hash: string;
+  round: number;
+  ts: number;
+  prize: string;
+  numWinners: number;
+  organizer: string;
+}
+
+let reintentoActual: Reintento | null = null;
+
+/** Si la lista que está sellada ahora es la de este sorteo (no se empezó otro). */
+const sigueSiendo = (c: SorteoSinSello): boolean => app.frozen?.round === c.round && app.frozen.listHash === c.hash;
+
+/**
+ * "Seguir sin sello": hasta 40 segundos antes de la ronda se vuelve a intentar sellar la
+ * MISMA lista con la MISMA ronda, cada 15 segundos o cuando se toca "Volver a intentar el
+ * sello". Si entra, el sorteo queda anclado y el ganador es el mismo; si no, queda sin
+ * sello. Nunca se sella otra ronda: sería otro sorteo (ver `sin-sello.ts`).
+ */
+function seguirIntentandoElSello(c: SorteoSinSello): void {
+  reintentoActual?.cancelar();
+  const contrato = network.contractId ?? "";
+  const reintento = reintentarSello({
+    round: c.round,
+    ts: c.ts,
+    sellar: (r) =>
+      sealOnChain(
+        { organizer: c.organizer, listHash: listHash(c.names), count: c.names.length, numWinners: c.numWinners, round: r, meta: c.prize || t("defaultMeta") },
+        () => undefined,
+      ),
+    resolver: (intento) => resolverSelloEnLaRed(intento),
+    sinGrabar: selloSinGrabar,
+    guardarPendiente: (intento) => void import("./sello-seguro").then((seguro) => seguro.guardarPendiente(intento, network.name, contrato, c.prize)),
+    alIntento: (n) => {
+      if (!sigueSiendo(c)) return;
+      verSinSello("intentando");
+      anotar({ red: network.name, paso: "reintento", accion: "volver-a-sellar", final: `intento ${n}` });
+    },
+    alFallar: (n, e) => {
+      if (!sigueSiendo(c)) return;
+      verSinSello("esperando", () => reintento.reintentarYa());
+      void import("../stellar/errores").then((m) => anotar({ red: network.name, paso: "reintento", final: `intento ${n}: ${esCostoAlto(e) ? "costo-alto" : m.errorKey(e)}` }));
+    },
+  });
+  reintentoActual = reintento;
+  verSinSello("esperando", () => reintento.reintentarYa());
+  void reintento.fin.then((fin) => {
+    if (reintentoActual === reintento) reintentoActual = null;
+    if (fin.estado === "cancelado" || !sigueSiendo(c)) return;
+    if (fin.estado === "entro") {
+      alEntrarElSello(fin.hecho, c);
+      return;
+    }
+    anotar({ red: network.name, paso: "sello-tarde", accion: "volver-a-sellar", final: fin.estado === "vencio" ? "no entró a tiempo" : "no se pudo saber" });
+    verSinSello("vencio");
+  });
+}
+
+/** El sello entró a tiempo, con la misma lista y la misma ronda: el sorteo pasa a ser comprobable. */
+function alEntrarElSello(hecho: { raffleId: bigint; txHash?: string }, c: SorteoSinSello): void {
+  const f = app.frozen;
+  if (!f) return;
+  f.raffleId = hecho.raffleId;
+  if (hecho.txHash) f.sealTx = hecho.txHash;
+  delete f.sinSello;
+  anotar({ red: network.name, paso: "sello-tarde", accion: "volver-a-sellar", final: "entró" });
+  $("k-status").textContent = `Stellar #${hecho.raffleId}`;
+  const wid = document.getElementById("wait-id");
+  if (wid) {
+    wid.textContent = t("waitIdPagina").replace("{n}", String(hecho.raffleId));
+    wid.style.display = "block";
+  }
+  const btn = $<HTMLButtonElement>("btn-freeze");
+  btn.dataset.i = "sealed";
+  btn.textContent = t("sealed");
+  renderSealSummary();
+  precargarParaElSorteo();
+  void import("./history").then((h) => {
+    h.remember({
+      organizer: c.organizer,
+      listHash: c.hash,
+      count: c.names.length,
+      numWinners: c.numWinners,
+      round: c.round,
+      sealedAt: c.ts,
+      prize: c.prize,
+      names: c.names,
+      id: String(hecho.raffleId),
+      ...(network.contractId ? { contract: network.contractId } : {}),
+      ...(hecho.txHash ? { sealTx: hecho.txHash } : {}),
+      sinSello: false,
+    });
+    h.renderHistory(c.organizer);
+  });
+  verSinSello("entro");
+}
+
+/** El sello no entró porque el patrocinador no tiene con qué pagar (mainnet, sin grifo): se explica con su acción. */
+async function esSinSaldoDelPatrocinador(e: unknown): Promise<boolean> {
+  if (network.name !== "mainnet") return false;
+  try {
+    const [{ esSinSaldo }, { activeWallet }, { submitsItself }] = await Promise.all([import("../stellar/errores"), import("../stellar/wallet-lite"), import("../stellar/wallet-pollar")]);
+    return submitsItself(activeWallet()) && esSinSaldo(e);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -594,6 +757,9 @@ export function resumeFrozen(e: {
  */
 export function unfreeze(lista: string): void {
   soltadoEn = performance.now();
+  reintentoActual?.cancelar();
+  reintentoActual = null;
+  limpiarRed();
   if (countdownTimer !== undefined) clearInterval(countdownTimer);
   countdownTimer = undefined;
   app.frozen = null;
@@ -720,7 +886,8 @@ function renderSealSummary(): void {
     const tag = document.createElement("span");
     tag.className = "kicker";
     tag.style.marginLeft = "8px";
-    tag.textContent = t("noAnchor");
+    // Sin sello porque la red no dejó: lo dice con todas las letras (no es solo "sin registrar").
+    tag.textContent = t(f.sinSello ? "redSinSelloEtiqueta" : "noAnchor");
     el.appendChild(tag);
     return;
   }

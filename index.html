@@ -329,9 +329,15 @@
       </div>
       <!-- Lo que se va a sellar, antes de sellar (participants.ts): "20 personas · 1 ganador · Termo. Al sellar, la lista queda cerrada." -->
       <p class="note sellar-resumen" id="sellar-resumen" style="display:none"></p>
+      <!-- La red antes de sellar (src/ui/red.ts): una frase, una acción, el detalle plegado. Nace escondida. -->
+      <aside class="red-estado" id="red-estado" role="status" aria-live="polite" data-i-aria="redRegion" aria-label="Estado de la red" style="display:none"></aside>
       <p class="note sellar-sin-cuenta" id="sellar-sin-cuenta" data-i="sellarSinCuenta">Conectá tu cuenta para sellar</p>
       <p class="note" id="freeze-hint" data-i="freezeHint">Hacen falta al menos dos nombres.</p>
       <p class="note" id="free-rule" data-i-html="freeRule">Participar tiene que ser gratis: Tinkazo no es para sorteos con entrada paga ni para apuestas. Al sellar la lista aceptás los <a href="/terminos.html">términos</a>.</p>
+      <!-- "¿La red está bien?": un toque antes de empezar un evento; dice verde, amarillo o rojo con la razón. Solo con cuenta. -->
+      <div class="red-fila" id="red-fila" style="display:none">
+        <button class="ghost mini" type="button" id="btn-red"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l3-8 4 16 3-8h6"/></svg><span id="btn-red-txt" data-i="redBtn">¿La red está bien?</span></button>
+      </div>
       <aside class="fund" id="fund-box" style="display:none"></aside>
       <p class="txstatus" id="seal-status" style="display:none"></p>
       <div class="names" id="names"></div>
@@ -422,6 +428,8 @@
       <div class="winner-box" id="winner-box">
         <p class="kicker" data-i="winnerLabel">Lo que salió</p>
         <div id="winner-cards" role="status" aria-live="polite"></div>
+        <!-- Se siguió sin sello porque la red no dejaba sellar: este sorteo no se puede comprobar. Lo muestra draw.ts. -->
+        <p class="note sin-sello" id="sin-sello-nota" data-i="redSinSelloEtiqueta" style="display:none">Sin sello: no se puede comprobar.</p>
         <!-- Lo que sigue, pegado al ganador: el siguiente premio si queda con quién
              sortear, y si no, compartir el comprobante. Lo demás, más abajo. -->
         <section class="again" id="again-row" style="display:none" aria-labelledby="again-t">

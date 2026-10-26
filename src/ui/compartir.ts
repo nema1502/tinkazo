@@ -76,6 +76,8 @@ export interface DatosSorteo {
   red?: string;
   /** La referencia pública del sorteo, si se ancló: solo para el contador (`src/contar.ts`). */
   ref?: Ref | undefined;
+  /** Se siguió sin sello: el mensaje y la foto lo dicen, para que nadie crea que se puede comprobar. */
+  sinSello?: boolean;
 }
 
 /** El mensaje de un sorteo: quién ganó, entre cuántos, el enlace y el pie. */
@@ -89,6 +91,7 @@ export function mensajeDeSorteo(lang: Lang, d: DatosSorteo): string {
     cabeza,
     cad(lang, varios ? "cmpNadieVarios" : "cmpNadieUno"),
     rellenar(cad(lang, "cmpVerificarUno"), { enlace: d.enlace }),
+    ...(d.sinSello ? [cad(lang, "redSinSelloEtiqueta")] : []),
     "",
     cad(lang, "cmpPie"),
   ].join("\n");
@@ -150,6 +153,7 @@ export function fotoDeSorteo(lang: Lang, d: DatosSorteo, enlace: string): Foto {
     lineas: [
       d.premio ? `${cad(lang, varios ? "imgPremio" : "winsPrize")} ${d.premio}` : "",
       rellenar(cad(lang, varios ? "fotoEntreVarios" : "fotoEntreUno"), { n: d.total }),
+      d.sinSello ? cad(lang, "redSinSelloEtiqueta") : "",
     ].filter(Boolean),
     mas: cad(lang, "fotoMas"),
     enlace,

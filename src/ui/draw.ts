@@ -846,6 +846,9 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
     link = roundLink;
   }
   proofLink = link;
+  // El resultado dice si ese sorteo no se puede comprobar porque se siguió sin sello.
+  const nota = document.getElementById("sin-sello-nota");
+  if (nota) nota.style.display = f.sinSello && f.raffleId === undefined ? "block" : "none";
   // Un comprobante nuevo empieza con su enlace largo; si ya se había compartido, con su corto.
   cortoLink = cortoGuardado(link)?.corto ?? "";
   // Y ahora se completa la fila del historial con el ganador y el comprobante.
@@ -869,6 +872,8 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
         // El número solo no dice de qué contrato es (cada uno arranca en 1).
         ...(f2.raffleId !== undefined && network.contractId ? { contract: network.contractId } : {}),
         ...(d.drawTx ? { drawTx: d.drawTx } : {}),
+        // Sin sello (la red no dejó sellar): Mis sorteos lo dice.
+        ...(f2.sinSello && f2.raffleId === undefined ? { sinSello: true } : {}),
       });
       h.renderHistory(who);
     });
@@ -893,7 +898,9 @@ function mensajeDelSorteo(): string {
   const { beacon, winners } = app.drawn;
   const lista = winners.map((i) => names[i] ?? "");
   const quienes = new Intl.ListFormat(getLang() === "es" ? "es" : "en", { type: "conjunction" }).format(lista);
-  return T[getLang()].summary(quienes, names.length, prize, cortoLink || proofLink || roundUrl(beacon.round), lista.length > 1);
+  const mensaje = T[getLang()].summary(quienes, names.length, prize, cortoLink || proofLink || roundUrl(beacon.round), lista.length > 1);
+  // Sin sello: que lo diga también lo que se pega en el grupo.
+  return app.frozen.sinSello && app.frozen.raffleId === undefined ? `${mensaje}\n${t("redSinSelloEtiqueta")}` : mensaje;
 }
 
 /** Copia el mensaje y avisa en el botón. Devuelve false si el navegador no deja copiar. */
@@ -926,6 +933,7 @@ export function shareProof(): void {
     fecha: f.ts,
     ...(f.raffleId !== undefined ? { numero: String(f.raffleId), red: network.name } : {}),
     ref: refDelSorteo(),
+    ...(f.sinSello && f.raffleId === undefined ? { sinSello: true } : {}),
   };
   void import("./compartir").then((m) => m.abrirSorteo(datos, getLang(), { corto: puedeAcortar() }));
 }

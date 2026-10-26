@@ -6,6 +6,7 @@ import { soundLabel, toggleSound, unlockAudioOnGesture } from "./sound";
 import { bindParticipants, loadSample, parseNames, renderNames, reponerBorrador } from "./ui/participants";
 import { GAME_BUTTONS, cambiarJuego, copyRules, elegirJuego, freeze, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
 import { initSiguiente } from "./ui/siguiente";
+import { alApretarSellar, iniciarRed } from "./ui/red";
 import { montarPremios } from "./ui/premios";
 import { adelantarCorto, alTocarGanadores, contarCompartido, copySummary, draw, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
 import { contarPractica } from "./contar";
@@ -53,6 +54,8 @@ $("btn-freeze").addEventListener("click", () => {
     void openPicker({ motivo, volverA: $("btn-freeze") });
     return;
   }
+  // Si la red no deja sellar, la acción del caso reemplaza a "Sellar la lista" y este clic es de ella.
+  if (alApretarSellar()) return;
   void freeze();
 });
 // El ritmo del show. Se guarda, porque quien organiza suele querer siempre el
@@ -177,6 +180,8 @@ initVistas();
 initWalletUI();
 // El ensayo, si se recargó en él, después de la cuenta (la puerta) y antes de los pasos.
 initEnsayo();
+// La red a la vista antes de sellar: "¿La red está bien?" y el aviso cuando algo anda mal.
+iniciarRed({ sellar: (op) => freeze(op) });
 ingresarSiLoPidio();
 initMenuMas();
 refreshFreezeLabel();

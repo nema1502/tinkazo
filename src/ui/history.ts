@@ -88,6 +88,11 @@ export interface Entry {
   names?: string[];
   sealTx?: string;
   drawTx?: string;
+  /**
+   * Se siguió sin sello porque la red no dejaba sellar: ese sorteo no se puede comprobar
+   * (salvo que el sello haya entrado a tiempo, y entonces esto se apaga). Mis sorteos lo dice.
+   */
+  sinSello?: boolean;
 }
 
 /**
@@ -896,6 +901,7 @@ function tarjetaDeSorteo(e: Entry, i: number): string {
     `<span class="hc-fecha">${esc(fmtDate(e.sealedAt))}</span></div>` +
     `<h3>${esc(titulo)}</h3>` +
     (suEvento ? `<p class="hc-en">${esc(t("evnEn").replace("{e}", suEvento.nombre))}</p>` : "") +
+    (e.sinSello && !e.id ? `<p class="hc-en hc-sin-sello">${esc(t("redSinSelloEtiqueta"))}</p>` : "") +
     `<p class="hc-meta">${esc(id)} · ${e.count} ${esc(t("histPeople"))}${hecho ? ` · ${esc(t((e.winners?.length ?? 0) > 1 ? "histWonMany" : "histWon"))} <b>${esc(winnerLabel(e))}</b>` : ""}${origen}</p>` +
     `<div class="hc-acciones">${acciones.join("")}</div>` +
     `</article>`
