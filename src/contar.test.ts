@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { validarConteo } from "../workers/enlaces/src/conteo";
+import { T } from "./i18n";
 import deployments from "./stellar/deployments.json";
 import {
+  CONTADOR,
   contar,
   contarApertura,
   contarAperturaDeEvento,
@@ -313,5 +315,14 @@ describe("la referencia de un sorteo", () => {
     expect(errorContable("noFunds")).toBe("noFunds");
     expect(errorContable("userRejected")).toBe("userRejected");
     expect(errorContable("algo nuevo")).toBe("unknown");
+  });
+});
+
+describe("los términos dicen lo que hace el contador", () => {
+  it("con el contador apagado dicen que todavía no se cuenta nada, y con el contador prendido ya no lo dicen", () => {
+    // Al prender CONTADOR hay que cambiar tmMore2 y tmMore4 en el mismo cambio (es, en y terminos.html): ver src/contar.ts.
+    const apagado = CONTADOR === "";
+    expect(/todavía no se cuenta nada/.test(String(T.es.tmMore2)), "es").toBe(apagado);
+    expect(/None of this is counted yet/.test(String(T.en.tmMore2)), "en").toBe(apagado);
   });
 });

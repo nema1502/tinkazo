@@ -136,22 +136,23 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
     });
   });
 
-  it("con 200, El Trueque, teleférico, De pie y La Entrada llegan justo a su máximo, y la piñata y la ruleta también", () => {
+  it("con 200, El Trueque, teleférico y La Entrada llegan justo a su máximo, y la piñata y la ruleta también; De pie ya pasó de sus 100", () => {
     expect(grupos(200)).toEqual({
-      encajan: ["trueque", "teleferico", "quien", "oruro"],
+      encajan: ["trueque", "teleferico", "oruro"],
       neutral: ["pinata", "wheel"],
-      no: ["race", "sapo", "trompo", "chovena"],
+      no: ["race", "sapo", "trompo", "chovena", "quien"],
     });
   });
 
-  it("Piñata solo tiene tope (200), De pie va de 8 a 200 y La Entrada de 30 a 200 (docs/juegos.md)", () => {
+  it("Piñata solo tiene tope (200), De pie va de 8 a 100 (se juega hasta 200, pero el tablero no se lee) y La Entrada de 30 a 200 (docs/juegos.md)", () => {
     const juego = (g: Game, n: number) => recomendar(n).games.find((r) => r.game === g);
     for (const n of [1, 2, 30, 200]) expect(juego("pinata", n), `pinata ${n}`).toMatchObject({ fits: null, note: null });
     expect(juego("pinata", 201)).toMatchObject({ fits: false, note: "rec.pinata.largo" });
     expect(juego("quien", 7)).toMatchObject({ fits: false, note: "rec.quien.corto" });
     expect(juego("quien", 8)).toMatchObject({ fits: true, ideal: false, note: "rec.quien.alto" });
-    expect(juego("quien", 200)).toMatchObject({ fits: true, ideal: false, note: "rec.quien.alto" });
-    expect(juego("quien", 201)).toMatchObject({ fits: false, note: "rec.quien.largo" });
+    expect(juego("quien", 100)).toMatchObject({ fits: true, ideal: false, note: "rec.quien.alto" });
+    expect(juego("quien", 101)).toMatchObject({ fits: false, note: "rec.quien.largo" });
+    expect(juego("quien", 200)).toMatchObject({ fits: false, note: "rec.quien.largo" });
     expect(juego("oruro", 29)).toMatchObject({ fits: false, note: "rec.oruro.corto" });
     expect(juego("oruro", 30)).toMatchObject({ fits: true, ideal: false, note: "rec.oruro.alto" });
     expect(juego("oruro", 200)).toMatchObject({ fits: true, ideal: false, note: "rec.oruro.alto" });

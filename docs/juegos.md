@@ -338,7 +338,7 @@ Los diez del selector, en su orden: el de la auditoría de juegos, de las salas 
 | Chovena | `chovena` | Módulo propio (solo motor nuevo), con su propia música | 200, mejor de 12 a 80 | [chovena.md](juegos/chovena.md) |
 | Piñata | `pinata` | Módulo propio (solo motor nuevo) | 200 | [pinata.md](juegos/pinata.md) |
 | Ruleta | `wheel` | Módulo propio | 200 (con más de 24, cada gajo reúne a un grupo) | [ruleta.md](juegos/ruleta.md) |
-| De pie (antes ¿Quién es?) | `quien` | Módulo propio (solo motor nuevo) | 8 a 200 | [quien-es.md](juegos/quien-es.md) |
+| De pie (antes ¿Quién es?) | `quien` | Módulo propio (solo motor nuevo) | 200, pensado de 8 a 100 | [quien-es.md](juegos/quien-es.md) |
 | El Trueque | `trueque` | Módulo propio (solo motor nuevo) | 200, pensado de 12 a 200 | [trueque.md](juegos/trueque.md) |
 | Teleférico | `teleferico` | Módulo propio | 200 | [teleferico.md](juegos/teleferico.md) |
 | La Entrada (antes Carnaval de Oruro) | `oruro` | Módulo propio (solo motor nuevo), por fraternidades | 200, pensado de 30 a 200 | [la-entrada.md](juegos/la-entrada.md) |

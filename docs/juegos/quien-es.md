@@ -88,7 +88,7 @@ Hasta el 22 de octubre de 2026 tres auditores fallaban, y se arreglaron:
 
 ## Lo que queda afuera
 
-- La duración por cantidad, en el selector (ver [docs/juegos.md](../juegos.md), la sección de duración). El rango, de 8 a 200, ya está: `RANGOS` de `src/ui/recomendar.ts`, desde el 25 de octubre de 2026.
+- La duración por cantidad, en el selector (ver [docs/juegos.md](../juegos.md), la sección de duración). El rango del selector, de 8 a 100, ya está (`RANGOS` de `src/ui/recomendar.ts`, 26 de octubre de 2026): se juega hasta 200, pero pasados unos 100 el nombre de cada carta no se lee desde el fondo.
 - La lista de la sala: el importador propone filtrar por el check-in de Luma, y el selector tiene que avisar cuando De pie se ofrece con una lista que no es la de la sala.
 - Las comparsas (grupos por color): De pie no las necesita, pero en salas grandes sumarían.
 - Con tres premios y muchas personas, la duración (ver arriba).

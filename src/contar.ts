@@ -33,7 +33,13 @@ import { sinGrabar } from "./ensayo-modo";
  * Adónde se manda. Vacío: no sale nada. Pasa a ser
  * `https://c.tinkazo.app/v1/contar` cuando el Worker esté desplegado con el
  * contador (el despliegue espera el ok de Nicolás; ver
- * `workers/enlaces/README.md`), y ese día cambia la fecha de los términos.
+ * `workers/enlaces/README.md`).
+ *
+ * Al prenderlo (no antes del 3 de noviembre de 2026), en el mismo cambio: la URL
+ * acá; `tmMore2` (es y en, y su texto de respaldo en terminos.html) pasa del
+ * futuro al presente y deja de decir que hoy no se cuenta nada; y `tmMore4`
+ * lleva la fecha de ese día. Mientras esté vacío, los términos dicen que todavía
+ * no se cuenta nada, y una prueba de `src/contar.test.ts` lo vigila.
  */
 export const CONTADOR: string = "";
 
