@@ -50,6 +50,38 @@ Notas:
 - La renta del código depende del tamaño del módulo compilado, no del WASM crudo: un contrato de 11,4 KB paga como si ocupara unos 110 KB. Mantenerlo chico importa.
 - `extend` puede llamarlo cualquiera; el mantenedor lo corre cuando el TTL baja de 60 días. Si nadie lo hace y las entradas se archivan, la siguiente transacción las restaura pagando la renta (protocolo 23+).
 
+## Vigilancia de la red
+
+El costo de guardar datos en Soroban lo pone la red, y la red lo cambia sin avisar. El 25 de octubre de 2026 el sello de testnet pasó de 0,7 a 69 XLM porque el estado vivo cruzó su objetivo (`soroban_state_target_size_bytes`, 4.000 MB), y a las 13:34 la SDF subió ese objetivo a 7.000 MB sin anunciarlo en ningún lado. La renta por KB depende del promedio del estado frente al objetivo: piso hasta 2/3 del objetivo, ×10 al 100 %, ×1.360 al 101 %.
+
+`.github/workflows/vigilar-red.yml` corre `scripts/vigilar-red.mjs` cada media hora (minutos 13 y 43), sin secretos y sin depender de ninguna laptop. Solo lee del RPC público de cada red. Si algo cambia, la corrida falla, y GitHub avisa por correo a quien editó el `cron` por última vez.
+
+| Qué mira | Cómo | Cuándo falla |
+|---|---|---|
+| Los 17 parámetros de costo de Soroban y el protocolo, en las dos redes | Contra `scripts/vigilar-red.base.json` | Cualquier cambio: nombra el parámetro, el campo, el antes y el ahora, y en qué ledger cambió |
+| El estado vivo: el promedio de la ventana de 30 muestras, que es lo que paga la renta | Contra los niveles de abajo | Mainnet desde 2.000 MB, testnet desde 6.000 MB |
+| La pendiente de 24 horas y las horas hasta el rojo | El promedio de hoy contra el del ledger de hace un día (`getLedgers` guarda 7 días) | Nunca: es información. La de 3 horas engaña, porque el estado crece en sierra |
+
+Niveles de mainnet (objetivo 3.000 MB). Testnet tiene uno solo, rojo a 6.000 MB (objetivo 7.000 MB):
+
+- **Amarillo, 2.000 MB** (2/3 del objetivo): la renta deja el piso. Mirar la pendiente.
+- **Naranja, 2.500 MB:** el sello ya cuesta ≈ 0,5 XLM. Pedir ya que suban el objetivo: en mainnet exige un SLP y una votación, de 13 a 17 días desde la propuesta.
+- **Rojo, 2.850 MB** (95 %): quedan 150 MB, de 13 a 19 horas al ritmo más alto de la semana. Al cruzar el objetivo la renta se multiplica y el tope de 1 XLM de Pollar corta los sellos.
+
+El rojo nunca pasa del 95 % del objetivo vigente: si la red baja el objetivo, el aviso baja con él. Los umbrales están en `scripts/lib/vigilar-red.mjs` (`LEVELS`); si el objetivo sube de verdad, hay que revisarlos.
+
+Códigos de salida: **0** todo igual; **1** cambió un parámetro o el estado llegó a un nivel; **2** no se pudo mirar (el RPC no contestó en tres intentos, o falta la línea base). Cualquier código distinto de 0 hace fallar la corrida.
+
+**Cuando el cambio es legítimo** (la red cambió un parámetro y ya se entendió qué hace), se guarda lo de hoy como línea base y se commitea:
+
+```bash
+node scripts/vigilar-red.mjs                                    # qué cambió (también: pnpm check:red; --json para una línea de JSON)
+node scripts/vigilar-red.mjs --actualizar-base [--red testnet]  # imprime el cambio contra la anterior y reescribe la línea base
+git add scripts/vigilar-red.base.json && git commit
+```
+
+Mientras no se actualice, cada corrida sigue fallando. GitHub desactiva los workflows programados de un repositorio público tras 60 días sin actividad, y las corridas programadas pueden demorarse cuando la plataforma está cargada.
+
 ## Cómo desplegar
 
 ```bash
