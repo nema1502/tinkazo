@@ -177,7 +177,7 @@ async function main() {
     console.log(formatReport({ when, results, decision }));
     if (process.env.GITHUB_ACTIONS === "true") {
       for (const a of decision.alerts) console.log(annotation(`${a.network}: ${a.message}`));
-      for (const e of decision.errors) console.log(annotation(`${e.network}: no se pudo mirar (${e.message})`));
+      for (const e of decision.errors) console.log(annotation(`${e.network}: sin mirar: ${e.message}`));
     }
   }
   return decision.code;

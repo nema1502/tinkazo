@@ -80,7 +80,7 @@ node scripts/vigilar-red.mjs --actualizar-base [--red testnet]  # imprime el cam
 git add scripts/vigilar-red.base.json && git commit
 ```
 
-Mientras no se actualice, cada corrida sigue fallando. GitHub desactiva los workflows programados de un repositorio público tras 60 días sin actividad, y las corridas programadas pueden demorarse cuando la plataforma está cargada.
+Mientras no se actualice, cada corrida sigue fallando. Cuando testnet se reinicia (cada tres meses) casi todo cambia: se actualiza su línea base con `--actualizar-base --red testnet`. GitHub desactiva los workflows programados de un repositorio público tras 60 días sin actividad, y las corridas programadas pueden demorarse cuando la plataforma está cargada.
 
 ## Cómo desplegar
 
