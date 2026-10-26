@@ -168,7 +168,9 @@ describe("cada lugar que graba pregunta lo mismo", () => {
 
   it("el sello va a la cadena solo si se puede grabar", () => {
     const f = fuente("./ui/freeze.ts");
-    expect(f).toContain("const anchoring = canAnchor() && !sinGrabar();");
+    // Con cuenta y que se pueda grabar; "seguir sin sello" (la red no deja sellar) es lo único que lo apaga después.
+    expect(f).toContain("const conCuenta = canAnchor() && !sinGrabar();");
+    expect(f).toContain("const anchoring = conCuenta && !sinSello;");
     expect(f).toMatch(/if \(!sinGrabar\(\)\) \{\s+recordarPremio\(prize\);/);
     expect(f).toContain("const who = sinGrabar() ? undefined : currentSession()?.address;");
   });

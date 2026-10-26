@@ -28,6 +28,8 @@
  * Un MB son 10^6 bytes, como en la documentación de la red (3.000 MB = 3 GB).
  */
 
+import { LEVELS, RED_PERCENT_OF_TARGET } from "./umbrales-red.mjs";
+
 /**
  * Los RPC públicos de cada red, en orden de preferencia. El primero de mainnet
  * es el de `src/stellar/config.ts`. Los otros dos salen de la lista de
@@ -48,31 +50,26 @@ export const LEDGERS_PER_DAY = 17_280;
 const BYTES_PER_MB = 1_000_000;
 
 /**
- * Los niveles por red, en MB de estado (promedio de la ventana).
+ * Los niveles por red, en MB de estado (promedio de la ventana), y el seguro del
+ * porcentaje del objetivo: viven en `src/stellar/red-umbrales.json`, el mismo
+ * archivo con el que decide la app antes de sellar (`src/stellar/chequeo-red.ts`),
+ * y llegan por `./umbrales-red.mjs`, que lo comprueba y lanza con el motivo si no
+ * tiene la forma que el detector espera. Se vuelven a exportar acá para quien los
+ * importa de este módulo (`vigilar-red.test.mjs`).
  *
  * Mainnet (objetivo 3.000 MB): amarillo a 2.000 (2/3, donde la renta deja el
  * piso), naranja a 2.500 (el sello ya cuesta ≈ 0,5 XLM) y rojo a 2.850 (quedan
  * 150 MB, de 13 a 19 horas al ritmo más alto de la semana). Testnet (objetivo
  * 7.000 MB): un solo nivel, rojo a 6.000. Cambiar el objetivo exige un
  * proceso de la red que tarda de 13 a 17 días; por eso se avisa con tiempo.
+ *
+ * `RED_PERCENT_OF_TARGET` es el seguro por si el objetivo cambia: al 95 % del
+ * objetivo vigente es rojo aunque los niveles no lo digan (con los objetivos de
+ * hoy no cambia nada: mainnet 95 % = 2.850 y testnet 95 % = 6.650, más que 6.000).
  */
-export const LEVELS = {
-  mainnet: [
-    { name: "amarillo", mb: 2000 },
-    { name: "naranja", mb: 2500 },
-    { name: "rojo", mb: 2850 },
-  ],
-  testnet: [{ name: "rojo", mb: 6000 }],
-};
+export { LEVELS, RED_PERCENT_OF_TARGET };
 
 const LEVEL_NAMES = new Set(["amarillo", "naranja", "rojo"]);
-
-/**
- * Seguro por si el objetivo cambia: al 95 % del objetivo vigente es rojo aunque
- * los umbrales de arriba no lo digan (con los objetivos de hoy no cambia nada:
- * mainnet 95 % = 2.850 y testnet 95 % = 6.650, más que 6.000).
- */
-export const RED_PERCENT_OF_TARGET = 95;
 
 /** Los ajustes que cambian solos en cada ledger: no son parámetros. */
 const IGNORED_SETTINGS = new Set(["live_soroban_state_size_window", "eviction_iterator"]);
