@@ -1,0 +1,22 @@
+{
+  "red": "testnet",
+  "fuente": "https://history.stellar.org/prd/core-testnet/core_testnet_001/ledger/00/52/1f/ledger-00521fff.xdr.gz",
+  "obtenida": "2026-10-25",
+  "nota": "Dos cabeceras seguidas de testnet bajadas del archivo de historial de la SDF el 25 de octubre de 2026, anteriores a la votación del Protocolo 30 (ledgerVersion 29). Cada una es el registro tal cual está en el archivo (LedgerHeaderHistoryEntry en base64: hash, cabecera y ext). El ledger 5382106 es el del sello 66f498d7b937e20209f765bc995121c9e4c85567cd70232e9890c4e2f07cae0e. Falta probar con una cabecera posterior al 3 de noviembre de 2026.",
+  "cabeceras": [
+    {
+      "ledger": 5382105,
+      "version": 29,
+      "hash": "09dce13a47d0670977e2abdc67ec933e644c8f09fc006670e5d74e7fd97c2259",
+      "cierre": 1792934112,
+      "xdr": "CdzhOkfQZwl34qvcZ+yTPmRMjwn8AGZw5ddOf9l8IlkAAAAdpXRfQO+7X8rBymim6jrRCR2mSn8izrCFS/c3FeHb+LQquHMnaOzKzM6pV3n9glU+aHTskVnt7Ak3xnts0OL+IQAAAABq3gDgAAAAAAAAAAEAAAAA1XJp2WJQ90ltB5vi6DUSNu//6NOcLga/q7FCHxf8ZxwAAABAbqUk1+gTqFK5a8rfsQ1Vq6hvIUs1uxassk/D1tzBU2zfE27x7DvzTe4aNeZolXXmcCva2yOhQpdEIGsltyvKArNjTr4/tEU0aYsFGM+5DvvRCA9iaj1l4U3n9Z1BZKDSem++qm1LPbM0ApDnisKuhqf8zQvhLOUOMg78D6QSMoUAUh/ZDeC2s6dkAAAAABGjg4hntgAAAAAAAAAAAA42rQAAAGQATEtAAAAAyL7BtINdHIuHReqISOGlLy8B314Booh7R0q8jNTTufGZOOJXdhxowVVYyF5H4RzhckurK9j60D52gjaLxYA+NwZLSVCTyou4ZK2LUHLcwwGCcdABMXSsxjhe0y8R7XY4dLZybqvx5w3/rvnIFyg6izRzhopGHpoNuKi7sOm3GcvVAAAAAAAAAAA="
+    },
+    {
+      "ledger": 5382106,
+      "version": 29,
+      "hash": "9d58425a1cad062b531e6144b8cac7239f7960cfccc906019568f25bade931fa",
+      "cierre": 1792934117,
+      "xdr": "nVhCWhytBitTHmFEuMrHI595YM/MyQYBlWjyW63pMfoAAAAdCdzhOkfQZwl34qvcZ+yTPmRMjwn8AGZw5ddOf9l8IlkBUbKeok8U8vgZx9XP/ezkyqbFR9zMBlo6oj4bY4qjzQAAAABq3gDlAAAAAAAAAAEAAAAA1XJp2WJQ90ltB5vi6DUSNu//6NOcLga/q7FCHxf8ZxwAAABApScvcz1CBW21Scsq4gk+FJGKw4Z4vgSPiZNbVfxAfCn0ofmZZ1nMlBrcevbyxf3yr111PraoWljmovZ1DMBdBPaCXBg53r3qV/zqTiXjHETq+f2NqWLYqFuNmAVbr12mFBdfoMD3BSiDVXHcK5tgGHCWxl1o4fKCrm4hRo5VPFsAUh/aDeC2s6dkAAAAABGjhlOqYwAAAAAAAAAAAA42rQAAAGQATEtAAAAAyL7BtINdHIuHReqISOGlLy8B314Booh7R0q8jNTTufGZOOJXdhxowVVYyF5H4RzhckurK9j60D52gjaLxYA+NwZLSVCTyou4ZK2LUHLcwwGCcdABMXSsxjhe0y8R7XY4dLZybqvx5w3/rvnIFyg6izRzhopGHpoNuKi7sOm3GcvVAAAAAAAAAAA="
+    }
+  ]
+}
