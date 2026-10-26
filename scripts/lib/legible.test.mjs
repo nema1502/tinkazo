@@ -60,6 +60,50 @@ describe("juzgar los textos del DOM", () => {
     const { grupos } = evaluarDom([t("a", 20, "x"), t("b", 8, "y"), t("c", 13, "z")], REGLAS.celular);
     expect(grupos.map((g) => g.ruta)).toEqual(["y", "z"]);
   });
+
+  it("perdona medio píxel, que es un 16 escrito en rem o en vh, y nada más", () => {
+    const { grupos } = evaluarDom([t("casi", 15.9, "button#st-skip"), t("chico", 15.4, "span.nota")], REGLAS.celular);
+    expect(grupos.map((g) => g.ruta)).toEqual(["span.nota"]);
+  });
+
+  describe("la herramienta, que usa quien organiza, no se mide con la regla del proyector", () => {
+    it("es 16 y 22, en cualquier tamaño, y se cambia con --reglas", () => {
+      expect(REGLAS.herramienta).toMatchObject({ secundario: 16, principal: 22 });
+      expect(reglasDe("herramienta=18:24").herramienta).toMatchObject({ secundario: 18, principal: 24 });
+      expect(REGLAS.herramienta.secundario).toBe(16);
+    });
+
+    it("a 1920 un cuerpo de 17 px pasa con la herramienta y falla con el proyector", () => {
+      const cuerpo = [t("Pegá la lista", 17, "p.ayuda")];
+      expect(evaluarDom(cuerpo, REGLAS.proyector).grupos).toHaveLength(1);
+      expect(evaluarDom(cuerpo, REGLAS.proyector, REGLAS.herramienta).grupos).toEqual([]);
+    });
+
+    it("lo de la herramienta falla con su mínimo y lo dice; lo principal pide 22", () => {
+      const { grupos } = evaluarDom([t("nota", 13, "p.nota"), t("Sellar la lista", 17, "button#btn-freeze", true)], REGLAS.proyector, REGLAS.herramienta);
+      expect(grupos).toHaveLength(2);
+      expect(grupos.find((g) => g.ruta === "p.nota")).toMatchObject({ minimo: 16, herramienta: true });
+      expect(grupos.find((g) => g.ruta === "button#btn-freeze")).toMatchObject({ minimo: 22, principal: true, herramienta: true });
+    });
+
+    it("un rótulo en mayúsculas de 14 px vale como uno de 16 (barrido de letra), y uno de 11 no", () => {
+      const { grupos } = evaluarDom(
+        [t("EL SHOW", 14, "span.kicker", false, { mayusculas: true }), t("PIE", 11, "span.pie", false, { mayusculas: true }), t("el show", 14, "span.nota")],
+        REGLAS.celular,
+        REGLAS.herramienta,
+      );
+      expect(grupos.map((g) => g.ruta).sort()).toEqual(["span.nota", "span.pie"]);
+      expect(grupos.find((g) => g.ruta === "span.pie")).toMatchObject({ mayusculas: true, px: 11 });
+    });
+
+    it("el nombre del ganador es para la sala: se mide con el tamaño aunque la página sea la herramienta", () => {
+      const ganador = t("María Quispe", 34, "span.winner-name", true, { sala: true });
+      const { grupos } = evaluarDom([ganador], REGLAS.proyector, REGLAS.herramienta);
+      expect(grupos).toHaveLength(1);
+      expect(grupos[0]).toMatchObject({ minimo: 48, herramienta: false });
+      expect(evaluarDom([ganador], REGLAS.celular, REGLAS.herramienta).grupos).toEqual([]);
+    });
+  });
 });
 
 describe("juzgar los textos del lienzo", () => {

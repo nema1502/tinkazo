@@ -9,6 +9,15 @@
  *
  *   proyector 1920×1080: 28 px lo secundario, 48 px lo principal
  *   celular    390×844:  16 px lo secundario, 22 px lo principal
+ *   herramienta:         16 px lo secundario, 22 px lo principal
+ *
+ * El proyector es lo que mira la sala: el lienzo y los subtítulos del estadio, y
+ * el nombre del ganador. La herramienta es la página que usa quien organiza (la
+ * portada, la lista, la espera, la ronda lista, el resultado), en el tamaño que
+ * sea: el barrido de letra dice que "lo que mira la sala se mide con 28/48 a
+ * 1920 y 16/22 a 390; la herramienta, con 16/22". Medir la herramienta con la
+ * regla del proyector llenaba el informe de textos que nadie proyecta (primera
+ * corrida con Chrome, 26 de octubre de 2026).
  *
  * Principal es lo que se lee primero: los títulos, el botón de la acción, el
  * nombre del ganador y el cartel del estadio. Todo lo demás es secundario.
@@ -17,14 +26,28 @@
 export const REGLAS = {
   proyector: { nombre: "proyector", ancho: 1920, alto: 1080, celular: false, secundario: 28, principal: 48 },
   celular: { nombre: "celular", ancho: 390, alto: 844, celular: true, secundario: 16, principal: 22 },
+  herramienta: { nombre: "herramienta", secundario: 16, principal: 22 },
 };
 
-/** `proyector=28:48,celular=16:22`: otra regla, sin tocar el código. */
+/**
+ * Cuánto se perdona por debajo del mínimo, en píxeles: un 15,9 que sale de un
+ * tamaño en `rem` o en `vh` es un 16 que no se ve distinto.
+ */
+export const TOLERANCIA = 0.5;
+
+/**
+ * Lo que ganan las mayúsculas: lo que cuenta es el ángulo de la altura de la x,
+ * y la letra versal de la marca gana un 35 %: "un rótulo de 14 en mayúsculas
+ * vale como uno de 16" (barrido de letra, 25 de octubre de 2026).
+ */
+export const FACTOR_MAYUSCULAS = 1.35;
+
+/** `proyector=28:48,celular=16:22,herramienta=16:22`: otra regla, sin tocar el código. */
 export function reglasDe(texto = "") {
-  const r = { proyector: { ...REGLAS.proyector }, celular: { ...REGLAS.celular } };
+  const r = { proyector: { ...REGLAS.proyector }, celular: { ...REGLAS.celular }, herramienta: { ...REGLAS.herramienta } };
   for (const par of texto.split(",").filter(Boolean)) {
-    const m = /^(proyector|celular)=(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(par.trim());
-    if (!m) throw new Error(`regla mal escrita: «${par}» (se espera proyector=28:48 o celular=16:22)`);
+    const m = /^(proyector|celular|herramienta)=(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(par.trim());
+    if (!m) throw new Error(`regla mal escrita: «${par}» (se espera proyector=28:48, celular=16:22 o herramienta=16:22)`);
     r[m[1]].secundario = Number(m[2]);
     r[m[1]].principal = Number(m[3]);
   }
@@ -43,8 +66,13 @@ const mediana = (xs) => {
  * rol se juntan en una sola falla (el pie de página son cuarenta enlaces con
  * el mismo estilo: se arregla una vez), y la falla cuenta cuántos son.
  * Devuelve `{ medidos, grupos }`, cada grupo con su primer texto (`caja`) para la captura.
+ *
+ * Con `herramienta` (la regla de la página de quien organiza), los textos que no
+ * son para la sala se juzgan con ella y solo los marcados `sala` (el nombre del
+ * ganador) con la del tamaño. Sin ella, todos con la del tamaño: así se juzga el
+ * DOM del estadio, que es todo para la sala.
  */
-export function evaluarDom(textos, tamano) {
+export function evaluarDom(textos, tamano, herramienta = null) {
   const vistos = new Map();
   for (const t of textos) {
     const k = `${t.ruta}|${t.texto}`;
@@ -54,10 +82,11 @@ export function evaluarDom(textos, tamano) {
   const unicos = [...vistos.values()];
   const grupos = new Map();
   for (const t of unicos) {
-    const minimo = minimoPara(tamano, t.principal);
-    if (t.px >= minimo - 0.01) continue;
-    const k = `${t.ruta}|${t.px.toFixed(1)}|${t.principal ? "p" : "s"}`;
-    const g = grupos.get(k) ?? { ruta: t.ruta, px: t.px, minimo, principal: !!t.principal, textos: [], caja: { x: t.x, y: t.y, w: t.w, h: t.h } };
+    const deHerramienta = !!herramienta && !t.sala;
+    const minimo = minimoPara(deHerramienta ? herramienta : tamano, t.principal);
+    if ((t.mayusculas ? t.px * FACTOR_MAYUSCULAS : t.px) >= minimo - TOLERANCIA) continue;
+    const k = `${t.ruta}|${t.px.toFixed(1)}|${t.principal ? "p" : "s"}|${deHerramienta ? "h" : "r"}|${t.mayusculas ? "m" : "n"}`;
+    const g = grupos.get(k) ?? { ruta: t.ruta, px: t.px, minimo, principal: !!t.principal, herramienta: deHerramienta, mayusculas: !!t.mayusculas, textos: [], caja: { x: t.x, y: t.y, w: t.w, h: t.h } };
     g.textos.push(t.texto);
     grupos.set(k, g);
   }
@@ -77,7 +106,7 @@ export function evaluarEstadio(textos, tamano) {
     if (t.n < 2) continue;
     medidos++;
     const minimo = minimoPara(tamano, t.capa === "podio");
-    if (t.mediana >= minimo - 0.01) continue;
+    if (t.mediana >= minimo - TOLERANCIA) continue;
     malos.push({ texto: t.s, capa: t.capa, mediana: t.mediana, max: t.max, n: t.n, minimo, caja: t.box, recorte: t.recorte ?? null });
   }
   malos.sort((a, b) => a.mediana / a.minimo - b.mediana / b.minimo);
@@ -112,8 +141,12 @@ export function agruparEstadio(malos) {
 export function escanearDom(raizSel) {
   const raiz = raizSel ? document.querySelector(raizSel) : document.body;
   if (!raiz) return [];
-  const PRINCIPAL = "h1, h2, .winner-name, #btn-draw, #btn-freeze, #btn-again-sin, button.primary";
-  const OCULTOS = "script, style, noscript, template, svg, canvas, [aria-hidden='true']";
+  // Un `h2.kicker` es un rótulo (una etiqueta sobre el título), no el título.
+  const PRINCIPAL = "h1, h2:not(.kicker), .winner-name, #btn-draw, #btn-freeze, #btn-again-sin, button.primary";
+  // Lo que mira la sala aunque esté en la página de quien organiza: el nombre del ganador.
+  const SALA = ".winner-name, #winner-cards";
+  // `.sr-only` es texto solo para lectores de pantalla (una caja de 1 px): no se ve, no se mide.
+  const OCULTOS = "script, style, noscript, template, svg, canvas, [aria-hidden='true'], .sr-only, [inert]";
   const ruta = (el) => {
     const id = el.id ? `#${el.id}` : "";
     const cls = el.classList.length ? `.${[...el.classList].slice(0, 2).join(".")}` : "";
@@ -142,6 +175,8 @@ export function escanearDom(raizSel) {
     const rect = r.getBoundingClientRect();
     if (rect.width < 2 || rect.height < 2) continue;
     const caja = p.getBoundingClientRect();
+    // Una caja de 2 px o menos no es texto a la vista (lo escondido con recorte, como `.sr-only`).
+    if (caja.width <= 2 || caja.height <= 2) continue;
     const escala = p.offsetWidth > 0 && caja.width > 0 ? caja.width / p.offsetWidth : 1;
     const px = parseFloat(getComputedStyle(p).fontSize) * (escala > 0.05 && escala < 20 ? escala : 1);
     salida.push({
@@ -149,6 +184,8 @@ export function escanearDom(raizSel) {
       px: Math.round(px * 100) / 100,
       ruta: ruta(p),
       principal: !!p.closest(PRINCIPAL),
+      sala: !!p.closest(SALA),
+      mayusculas: getComputedStyle(p).textTransform === "uppercase",
       x: rect.left + window.scrollX,
       y: rect.top + window.scrollY,
       w: rect.width,

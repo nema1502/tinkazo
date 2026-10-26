@@ -132,14 +132,15 @@ node scripts/audit-legible.mjs [juego|todos] [--temas dark,light] [--tamanos pro
 
 Nació del pedido de Nicolás del 25 de octubre de 2026: "tiene mucha letra chiquita; cuando estás proyectando se ve feo, igual en celular". Mide el tamaño en píxeles de pantalla de cada texto visible y falla por los que quedan debajo de la regla:
 
-| Pantalla | Secundario | Principal |
+| Qué se mide | Secundario | Principal |
 |---|---|---|
-| Proyector, 1920×1080 | 28 px | 48 px |
-| Celular, 390×844 | 16 px | 22 px |
+| Lo que mira la sala a 1920×1080 (el estadio, el nombre del ganador) | 28 px | 48 px |
+| Lo que mira la sala en un celular de 390×844 | 16 px | 22 px |
+| La herramienta (la página de quien organiza), en cualquiera de los dos tamaños | 16 px | 22 px |
 
-Principal es lo que se lee primero: títulos, el botón de la acción, el nombre del ganador y el cartel del estadio. La regla se cambia con `--reglas proyector=28:48,celular=16:22` (quedó escrita antes de que exista el inventario del barrido de letra, y esa regla manda cuando se escriba).
+Es la regla del barrido de letra (`barrido-letra-emocion.md`, 25 de octubre de 2026): "lo que mira la sala se mide con 28/48 a 1920 y 16/22 a 390; la herramienta, con 16/22". La primera corrida con Chrome (26 de octubre) midió también la herramienta a 1920 con 28/48 y dio 370 fallas con el trompo, casi todas textos que nadie proyecta; con la regla de la herramienta bajó a 198, y son los que el barrido ya tenía en su inventario (la portada, la espera, el resultado). Principal es lo que se lee primero: títulos (no los rótulos `h2.kicker`), el botón de la acción, el nombre del ganador y el cartel del estadio. La regla se cambia con `--reglas proyector=28:48,celular=16:22,herramienta=16:22`. Se perdona medio píxel (un 15,9 que viene de un `rem` es un 16) y un rótulo en mayúsculas vale ×1,35, porque la letra versal de la marca gana un 35 % ("un rótulo de 14 en mayúsculas vale como uno de 16"). El texto solo para lectores de pantalla (`.sr-only`, una caja de 1 px) no se mide.
 
-- **Los pasos del sorteo**, con el DOM: la herramienta al abrir (la lista) y un sorteo de demostración (`?demo=wheel&instant=1&lead=3`, con drand de verdad) en los pasos que se alcanzan a ver: sellada y esperando, ronda lista y resultado. El tamaño es el de CSS por la escala con que se dibuja. Los textos que comparten selector y tamaño son una sola falla (el pie son cuarenta enlaces con el mismo estilo), y dice cuántos son.
+- **Los pasos del sorteo**, con el DOM: la herramienta al abrir (la lista) y un sorteo de demostración (`?demo=wheel&instant=1&lead=3`, con drand de verdad) en los pasos que se alcanzan a ver: sellada y esperando, ronda lista y resultado. El tamaño es el de CSS por la escala con que se dibuja. Los textos que comparten selector y tamaño son una sola falla (el pie son cuarenta enlaces con el mismo estilo), y dice cuántos son. Con la herramienta se juzga todo menos el nombre del ganador, que es para la sala y se mide con la regla del tamaño.
 - **El estadio de cada juego** (`?pose=<juego>`, sin red), con el reloj en turbo de `audit-emocion`: cada 16 cuadros mira los textos que dibuja Pixi, a los que llega por `window.__PIXI_APP_INIT__` como `audit-pantalla.mjs`, y los del DOM del estadio (subtítulos y marcador). De cada texto del lienzo se juzga la **mediana** de su tamaño mientras estuvo a la vista (no el instante en que entra o sale) y su capa decide la regla: el cartel del ganador es lo principal, y los nombres, el marcador y la escena son lo secundario.
 - **Capturas recortadas** en `docs/capturas/legible/`, una por falla (hasta 12 por pantalla del DOM y 6 por juego): las del DOM con DevTools, y las del lienzo con un recorte que saca la propia página en el momento, porque el lienzo conserva el cuadro.
 

@@ -9,10 +9,15 @@
  *
  *   proyector 1920×1080: 28 px lo secundario, 48 px lo principal
  *   celular    390×844:  16 px lo secundario, 22 px lo principal
+ *   herramienta:         16 px lo secundario, 22 px lo principal
  *
- * Principal es lo que se lee primero (títulos, el botón de la acción, el nombre
- * del ganador, el cartel del estadio). La regla se cambia con
- * `--reglas proyector=28:48,celular=16:22`.
+ * El proyector es lo que mira la sala (el estadio y el nombre del ganador); la
+ * herramienta es la página de quien organiza, en cualquiera de los dos tamaños:
+ * el barrido de letra dice que "lo que mira la sala se mide con 28/48 a 1920 y
+ * 16/22 a 390; la herramienta, con 16/22". Principal es lo que se lee primero
+ * (títulos, el botón de la acción, el nombre del ganador, el cartel del
+ * estadio). La regla se cambia con
+ * `--reglas proyector=28:48,celular=16:22,herramienta=16:22`.
  *
  * Qué recorre, en los dos tamaños y los dos temas:
  *
@@ -47,7 +52,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
 import { SELECTOR } from "./lib/juegos.mjs";
-import { archivoDe, agruparEstadio, escanearDom, estadoDelSorteo, evaluarDom, evaluarEstadio, llamar, preludioEstadio, reglasDe } from "./lib/legible.mjs";
+import { FACTOR_MAYUSCULAS, archivoDe, agruparEstadio, escanearDom, estadoDelSorteo, evaluarDom, evaluarEstadio, llamar, preludioEstadio, reglasDe } from "./lib/legible.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
@@ -107,8 +112,8 @@ async function recortar(page, caja, archivo) {
 }
 
 /** Los textos de una pantalla del DOM contra la regla, con una captura por falla. */
-async function juzgarDom(page, textos, pantalla, tamano, tema, { conCaptura = true, presupuesto = { n: MAX_CAPTURAS } } = {}) {
-  const { medidos, grupos } = evaluarDom(textos, tamano);
+async function juzgarDom(page, textos, pantalla, tamano, tema, { conCaptura = true, herramienta = true, presupuesto = { n: MAX_CAPTURAS } } = {}) {
+  const { medidos, grupos } = evaluarDom(textos, tamano, herramienta ? reglas.herramienta : null);
   const donde = `${tamano.nombre} ${tema} · ${pantalla}`;
   if (!grupos.length) {
     check(`${donde}: ${medidos} textos, ninguno bajo la regla`, medidos > 0, medidos ? "" : "no se midió ningún texto");
@@ -124,7 +129,7 @@ async function juzgarDom(page, textos, pantalla, tamano, tema, { conCaptura = tr
         /* sin captura: la falla se informa igual */
       }
     }
-    check(`${donde}: ${g.ruta} mide ${g.px.toFixed(1)} px y la regla pide ${g.minimo}${g.principal ? " (principal)" : ""}`, false, `${g.textos.length} texto(s), p. ej. «${g.textos.slice(0, 2).join("», «")}»${captura}`);
+    check(`${donde}: ${g.ruta} mide ${g.px.toFixed(1)} px y la regla pide ${g.minimo}${g.principal ? " (principal)" : ""}${g.herramienta ? " en la herramienta" : ""}${g.mayusculas ? ` (en mayúsculas vale ×${FACTOR_MAYUSCULAS})` : ""}`, false, `${g.textos.length} texto(s), p. ej. «${g.textos.slice(0, 2).join("», «")}»${captura}`);
   }
   if (grupos.length > MAX_GRUPOS) check(`${donde}: ${grupos.length - MAX_GRUPOS} grupos más bajo la regla`, false, "se corta en --max-grupos");
 }
@@ -194,7 +199,8 @@ async function estadio(browser, juego, tamano, tema) {
         check(`${donde}: ${g.textos.length} texto(s) de la capa ${g.capa} miden ${g.mediana.toFixed(1)} px y la regla pide ${g.minimo}`, false, `p. ej. «${g.textos.slice(0, 2).join("», «")}», hasta ${g.max.toFixed(1)} px${captura}`);
       }
     }
-    await juzgarDom(null, encima, `${juego} · subtítulos y marcador`, tamano, tema, { conCaptura: false });
+    // Los subtítulos y el marcador son para la sala: la regla del tamaño, no la de la herramienta.
+    await juzgarDom(null, encima, `${juego} · subtítulos y marcador`, tamano, tema, { conCaptura: false, herramienta: false });
   } finally {
     await page.send("Page.close").catch(() => {});
   }
