@@ -628,7 +628,7 @@ describe("enlaces a las páginas nuevas", () => {
 });
 
 /** Lo que no dice la portada ni ninguna página de lectura, en español y en inglés. */
-const NO_SE_DICE = /sin confiar en|without trusting|sin confiar en tinkazo|no hace falta confiar en tinkazo|without trusting tinkazo|you don't have to trust tinkazo|no hace falta creer en tinkazo|you don't have to believe tinkazo|sin confiar en quien|no hace falta confiar en quien|no controla nadie|nadie controla|nobody controls|favoritos|favorites|a dedo|suerte|garantiz|imposible de trampear|premio en efectivo|premio en dinero/i;
+const NO_SE_DICE = /sin confiar en|without trusting|sin confiar en tinkazo|no hace falta confiar en tinkazo|without trusting tinkazo|you don't have to trust tinkazo|no hace falta creer en tinkazo|you don't have to believe tinkazo|sin confiar en quien|no hace falta confiar en quien|no controla nadie|nadie controla|nobody controls|favoritos|favorites|a dedo|suerte|(?<!nadie )garantiz|imposible de trampear|premio en efectivo|premio en dinero/i;
 
 /** Lo que solo se nombra para decir que Tinkazo no sirve para eso: rifas, apuestas, casino. */
 const DE_APUESTA = /rifa|raffle|apuesta|lotería|loteria|casino/i;
@@ -732,6 +732,49 @@ describe("la página de precios, revisada con mirada de marketing (26 de octubre
 
   it("no pone el costo de la red en una cifra que cambia sola", () => {
     expect(`${T.es.nextBody} ${T.en.nextBody}`).not.toMatch(/0,76|0\.76|XLM por sorteo|XLM per draw/);
+  });
+});
+
+describe("«Qué queda de tu sorteo y por cuánto tiempo», en Cómo funciona", () => {
+  const html = leer("como-funciona.html");
+  const claves = ["cfDuraT", "cfDuraB1", "cfDura1", "cfDura2", "cfDura3", "cfDuraPromesa"];
+  const dichoEn = (idioma: "es" | "en"): string => claves.map((c) => String(T[idioma][c])).join(" ");
+
+  it("está en la página, con su ancla, y cada clave existe en los dos idiomas", () => {
+    expect(html).toContain('id="que-queda"');
+    for (const clave of claves) {
+      expect(html, clave).toMatch(new RegExp(`data-i(-html)?="${clave}"`));
+      expect(textoEs(clave), `${clave} en es`).not.toBe("");
+      expect(sinVersionEn(clave), `${clave} en en`).toBe(false);
+    }
+  });
+
+  it("la frase de la promesa es la aprobada, textual, en los dos idiomas", () => {
+    expect(T.es.cfDuraPromesa).toBe("Este comprobante lleva lo necesario para volver a comprobar el sorteo con herramientas abiertas. La hora del sello la confirman los archivos públicos de Stellar mientras existan: nadie garantiza ese plazo, tampoco nosotros. Guardalo.");
+    expect(T.en.cfDuraPromesa).toBe("This proof carries what is needed to re-check the draw with open tools. The seal time is confirmed by Stellar's public archives for as long as they exist: nobody guarantees that term, and neither do we. Keep it.");
+  });
+
+  it("dice que la red de prueba se borra el 16 de diciembre de 2026 y cuánto dura la memoria del contrato", () => {
+    expect(dichoEn("es")).toContain("16 de diciembre de 2026");
+    expect(dichoEn("en")).toContain("December 16, 2026");
+    for (const idioma of ["es", "en"] as const) {
+      expect(dichoEn(idioma)).toMatch(/\b7 (días|days)\b/);
+      expect(dichoEn(idioma)).toMatch(/\b120\b/);
+    }
+  });
+
+  it("no promete que dure para siempre ni que no se pueda alterar", () => {
+    expect(`${dichoEn("es")} ${dichoEn("en")}`).not.toMatch(/para siempre|inalterable|inmutable|forever|unalterable|immutable|tamper-proof/i);
+  });
+
+  it("«garantiz» solo pasa en «nadie garantiza»: una garantía afirmada sigue prohibida", () => {
+    expect(NO_SE_DICE.test("Este plazo está garantizado")).toBe(true);
+    expect(NO_SE_DICE.test("Garantizamos el resultado")).toBe(true);
+    expect(NO_SE_DICE.test("nadie garantiza ese plazo, tampoco nosotros")).toBe(false);
+  });
+
+  it("la página de precios lleva a la sección", () => {
+    expect(leer("precios.html")).toContain('href="/como-funciona.html#que-queda"');
   });
 });
 

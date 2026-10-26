@@ -1228,6 +1228,8 @@
   .portada-sec > .kicker { display: block; margin-bottom: 8px; }
   .portada-sec h2.sec-t { font-size: clamp(24px, 3.4vw, 34px); font-weight: 900; line-height: 1.1; letter-spacing: -0.01em; }
   .portada-sec p.sec-b { color: var(--ink2); max-width: 680px; margin-top: 8px; font-size: 15px; }
+  /* La promesa de «Qué queda de tu sorteo»: amarillo con tinta, el par más fuerte de la marca (docs/marca.md). */
+  .portada-sec p.promesa { background: var(--yellow); color: #191919; border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm); padding: 14px 18px; margin-top: 18px; font-weight: 700; }
 
   /* Los diez juegos del selector, cada uno con su miniatura animada: tocarlo
      abre la demo. En cinco columnas, dos filas parejas; en un celular, dos. */
