@@ -35,6 +35,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { launch } from "./lib/browser.mjs";
+import { emitirJson } from "./lib/resumen.mjs";
 import { CUENTA_FALSA, freighterFalsa } from "./lib/freighter-falsa.mjs";
 import { UMBRALES, sondaTexto } from "./lib/texto-minimo.mjs";
 
@@ -971,5 +972,6 @@ run()
     console.log("");
     console.log(malas ? `RECHAZADO: ${checks.length - malas}/${checks.length}` : `APROBADO: ${checks.length}/${checks.length} comprobaciones`);
     console.log(`Capturas en ${outDir}/ui-*.png\n`);
+    emitirJson({ auditor: "audit-ui", objetivo: "sitio", checks });
     process.exit(malas ? 1 : 0);
   });

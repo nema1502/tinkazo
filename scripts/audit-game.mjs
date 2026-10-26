@@ -17,6 +17,7 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { launch } from "./lib/browser.mjs";
+import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
 const game = args.find((a) => !a.startsWith("--"));
@@ -345,5 +346,6 @@ run()
       `\n${failed.length === 0 ? "APROBADO" : "RECHAZADO"}: ${checks.length - failed.length}/${checks.length} comprobaciones\n`,
     );
     if (failed.length) console.log("Fallaron:\n" + failed.map((c) => `  · ${c.name}`).join("\n") + "\n");
+    emitirJson({ auditor: "audit-game", objetivo: game, checks });
     process.exitCode = failed.length === 0 ? 0 : 1;
   });

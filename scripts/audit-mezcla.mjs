@@ -29,6 +29,7 @@
  *   node scripts/audit-mezcla.mjs [juego|todos] [--base http://localhost:4173] [--sin-musica]
  */
 import { launch, sleep } from "./lib/browser.mjs";
+import { emitirJson } from "./lib/resumen.mjs";
 
 const TODOS = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "trueque"];
 const args = process.argv.slice(2);
@@ -248,14 +249,18 @@ async function run() {
   const orden = buenos.map((r) => r.I).sort((a, b) => a - b);
   const mediana = orden.length ? orden[Math.floor(orden.length / 2)] : 0;
   let pasan = 0, total = 0;
+  const registro = [];
+  let juegoActual = "";
   const check = (ok, txt, det) => {
     total++;
+    registro.push({ nombre: `${juegoActual}: ${txt}`, ok, detalle: det ?? "" });
     if (ok) pasan++;
     console.log(`  ${ok ? "✓" : "✗"} ${txt}${det ? ` · ${det}` : ""}`);
   };
   console.log("");
   for (const r of res) {
     console.log(r.juego);
+    juegoActual = r.juego;
     if (r.error) {
       check(false, "se pudo medir", r.error);
       continue;
@@ -270,6 +275,7 @@ async function run() {
   }
   const ok = pasan === total;
   console.log(`\n${ok ? "APROBADO" : "RECHAZADO"}: ${pasan}/${total} comprobaciones`);
+  emitirJson({ auditor: "audit-mezcla", objetivo: cual, checks: registro });
   process.exit(ok ? 0 : 1);
 }
 

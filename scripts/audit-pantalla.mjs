@@ -41,6 +41,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { launch } from "./lib/browser.mjs";
+import { emitirJson } from "./lib/resumen.mjs";
+import { comprobacionesDePantalla } from "./lib/pantalla-comprobaciones.mjs";
 
 const TODOS = ["race", "sapo", "trompo", "chovena", "pinata", "wheel", "quien", "teleferico", "oruro", "stellar", "pasanaku", "tombola"];
 /** Los nombres de la escena fija (`?pose=`), para reconocer los que se ven como nombres. */
@@ -437,6 +439,7 @@ async function main() {
   await writeFile(join(outDir, "resumen.json"), JSON.stringify(resultados, null, 2));
   const malos = resultados.filter((r) => !r.ok || r.destellos?.peorPorSegundo > 3 || (r.contraste?.sinContorno?.length ?? 0) > 0);
   console.log(`\n${malos.length ? "CON HALLAZGOS" : "SIN HALLAZGOS"}: ${resultados.length - malos.length}/${resultados.length} sin problemas`);
+  emitirJson({ auditor: "audit-pantalla", objetivo: pedidos.length === 0 || pedidos.includes("todos") ? "todos" : juegos.join(","), checks: resultados.flatMap(comprobacionesDePantalla) });
   process.exit(malos.length ? 1 : 0);
 }
 

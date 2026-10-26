@@ -18,6 +18,7 @@
  */
 
 import { readFile } from "node:fs/promises";
+import { emitirJson } from "./lib/resumen.mjs";
 
 const offline = process.argv.includes("--offline");
 const fails = [];
@@ -137,6 +138,16 @@ if (!offline) {
   }
 }
 
+const emitirResumen = () =>
+  emitirJson({
+    auditor: "check-lore",
+    objetivo: "tarjetas",
+    checks: [
+      ...ok.map((h) => ({ name: `fuente viva: ${h}`, ok: true })),
+      ...fails.map((f) => ({ name: f, ok: false })),
+      ...(ok.length + fails.length === 0 ? [{ name: `${cards.length} tarjetas con textos en los dos idiomas`, ok: true }] : []),
+    ],
+  });
 console.log("");
 if (avisos.length) {
   console.log(`AVISOS: ${avisos.length}\n`);
@@ -147,6 +158,8 @@ if (fails.length) {
   console.log(`FALLÓ: ${fails.length} problema(s)\n`);
   for (const f of fails) console.log(`  · ${f}`);
   console.log("");
+  emitirResumen();
   process.exit(1);
 }
 console.log(`BIEN: ${cards.length} tarjetas, textos en los dos idiomas${offline ? "" : ` y ${ok.length} fuentes vivas`}.\n`);
+emitirResumen();

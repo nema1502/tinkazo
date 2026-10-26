@@ -19,6 +19,7 @@
  */
 
 import { launch } from "./lib/browser.mjs";
+import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
 const opt = (name, def) => {
@@ -33,6 +34,7 @@ const pedido = args[0] && !args[0].startsWith("--") ? args[0] : "todos";
 const motor = opt("--motor", "pixi");
 if (motor !== "clasico") process.env.TINKAZO_GPU = "1";
 const lista = pedido === "todos" ? JUEGOS : [pedido];
+const registro = [];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /* ------------------------------------------------------------------ reglas */
@@ -255,6 +257,7 @@ async function run() {
       const r = await correr(browser, juego);
       if (r.error) {
         console.log(`${juego.padEnd(9)} ✗ ${r.error}`);
+        registro.push({ nombre: juego, ok: false, detalle: String(r.error) });
         malas++;
         continue;
       }
@@ -281,6 +284,7 @@ async function run() {
 
       const cortes = v.cortadas.length ? ` · ${v.cortadas.length} cortada(s)` : "";
       const cab = `${juego.padEnd(10)} ${String(m.total).padStart(3)} notas de efectos y ${String(r.musica ?? 0).padStart(4)} de música en ${m.dur.toFixed(1)} s · hueco máximo ${m.hueco.toFixed(1)} s${cortes}`;
+      registro.push({ nombre: juego, ok: fallas.length === 0, detalle: fallas.join("; ") });
       if (fallas.length) {
         malas++;
         console.log(`✗ ${cab}`);
@@ -295,6 +299,7 @@ async function run() {
   console.log("");
   console.log(malas ? `RECHAZADO: ${lista.length - malas}/${lista.length} juegos` : `APROBADO: ${lista.length}/${lista.length} juegos`);
   console.log("");
+  emitirJson({ auditor: "audit-sound", objetivo: pedido, checks: registro });
   process.exit(malas ? 1 : 0);
 }
 

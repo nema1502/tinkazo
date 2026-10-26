@@ -28,6 +28,7 @@
  */
 import { createHash } from "node:crypto";
 import { launch, sleep } from "./lib/browser.mjs";
+import { emitirJson } from "./lib/resumen.mjs";
 
 const TODOS = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "trueque"];
 /**
@@ -165,4 +166,5 @@ try {
 
 const malos = checks.filter((c) => !c.ok);
 console.log(`\n${malos.length ? "RECHAZADO" : "APROBADO"}: ${checks.length - malos.length}/${checks.length} comprobaciones`);
+emitirJson({ auditor: "audit-emocion", objetivo: cual, checks });
 process.exit(malos.length ? 1 : 0);

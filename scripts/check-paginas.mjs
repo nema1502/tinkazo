@@ -15,6 +15,7 @@
  */
 
 import { launch, sleep } from "./lib/browser.mjs";
+import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
 const base = (() => {
@@ -65,7 +66,9 @@ const HERRAMIENTAS = [
 ];
 
 let fallos = 0;
+const registro = [];
 const check = (ok, que, detalle = "") => {
+  registro.push({ nombre: que, ok, detalle });
   if (!ok) fallos++;
   console.log(`  ${ok ? "✓" : "✗"} ${que}${detalle ? ` · ${detalle}` : ""}`);
 };
@@ -181,4 +184,5 @@ try {
 }
 
 console.log(fallos ? `\nRECHAZADO: ${fallos} comprobaciones` : "\nAPROBADO: las páginas de lectura están sanas");
+emitirJson({ auditor: "check-paginas", objetivo: "paginas", checks: registro });
 process.exit(fallos ? 1 : 0);

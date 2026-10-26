@@ -54,6 +54,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import jsQR from "jsqr";
 import { launch, sleep } from "./lib/browser.mjs";
+import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
 const opt = (k, d) => {
@@ -73,7 +74,9 @@ const conCasos = !args.includes("--sin-casos");
 mkdirSync(outDir, { recursive: true });
 
 let fallas = 0;
+const registro = [];
 const check = (nombre, ok, detalle = "") => {
+  registro.push({ nombre, ok, detalle });
   if (!ok) fallas++;
   console.log(`  ${ok ? "✓" : "✗"} ${nombre}${detalle ? ` · ${detalle}` : ""}`);
 };
@@ -359,4 +362,5 @@ try {
   await browser.close();
 }
 console.log(`\n${fallas ? `✗ ${fallas} fallas` : "✓ todo bien"} · capturas en ${outDir}`);
+emitirJson({ auditor: "audit-espera", objetivo: "sitio", checks: registro });
 process.exit(fallas ? 1 : 0);

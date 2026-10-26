@@ -33,6 +33,7 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
+import { emitirJson } from "./lib/resumen.mjs";
 
 const TODOS = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "trueque"];
 const args = process.argv.slice(2);
@@ -657,4 +658,5 @@ await writeFile(join(outDir, "informe.json"), JSON.stringify({ checks, informe }
 const malos = checks.filter((c) => !c.ok);
 console.log(`\n${malos.length ? "RECHAZADO" : "APROBADO"}: ${checks.length - malos.length}/${checks.length} comprobaciones`);
 if (malos.length) for (const m of malos) console.log(`  ✗ ${m.grupo}: ${m.name}${m.detail ? ` · ${m.detail}` : ""}`);
+emitirJson({ auditor: "audit-rigor", objetivo: cual, checks });
 process.exit(malos.length ? 1 : 0);

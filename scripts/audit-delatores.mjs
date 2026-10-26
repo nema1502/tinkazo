@@ -50,6 +50,7 @@
  */
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { emitirJson } from "./lib/resumen.mjs";
 import { join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { CDP, launch } from "./lib/browser.mjs";
@@ -69,7 +70,11 @@ const juegos = cual === "todos" ? TODOS : cual.split(",");
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const N = Math.max(1, Number(opt("--semillas", "200")));
 const gente = Math.max(2, Number(opt("--n", "8")));
-const json = opt("--json", "");
+// `--json archivo` guarda el detalle ahí (como siempre); `--json` solo agrega al final la línea de resumen.
+const json = (() => {
+  const i = args.indexOf("--json");
+  return i >= 0 && args[i + 1] && !args[i + 1].startsWith("--") ? args[i + 1] : "";
+})();
 const trazas = opt("--trazas", "");
 const releer = opt("--releer", "");
 const paralelo = Math.max(1, Math.min(6, Number(opt("--paralelo", "1"))));
@@ -298,4 +303,13 @@ if (json) {
 }
 const hay = resumen.some((f) => f.delator.length);
 console.log(`\n${hay ? "RECHAZADO: hay delatores" : "APROBADO: ningún delator"}`);
+emitirJson({
+  auditor: "audit-delatores",
+  objetivo: cual,
+  checks: resumen.map((f) => ({
+    name: `${f.juego}: ninguna señal adivina al ganador`,
+    ok: !f.delator.length,
+    detail: f.delator.length ? `delata: ${f.delator.join(", ")}` : f.mirar.length ? `a mirar: ${f.mirar.join(", ")}` : "",
+  })),
+});
 process.exit(hay ? 1 : 0);

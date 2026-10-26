@@ -61,6 +61,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
+import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
 const opt = (name, def) => {
@@ -106,8 +107,10 @@ const fallos = opt("--fallos", TODAS.map((v) => v[0]).join(",")).split(",").filt
 
 let fallas = 0;
 let total = 0;
+const registro = [];
 /** Cada comprobación sale apenas se hace: el recorrido dura minutos y se tiene que ver cómo va. */
 function check(nombre, ok, detalle = "") {
+  registro.push({ nombre, ok, detalle });
   total++;
   if (!ok) fallas++;
   console.log(`  ${ok ? "✓" : "✗"} ${nombre}${detalle ? ` · ${detalle}` : ""}`);
@@ -798,6 +801,7 @@ async function main() {
 
 main()
   .catch((e) => {
+    registro.push({ nombre: "la auditoría corrió sin caerse", ok: false, detalle: String(e).slice(0, 200) });
     total++;
     fallas++;
     console.log(`  ✗ la auditoría corrió sin caerse · ${String(e).slice(0, 200)}`);
@@ -806,5 +810,6 @@ main()
     console.log("");
     console.log(fallas ? `RECHAZADO: ${total - fallas}/${total} comprobaciones` : `APROBADO: ${total}/${total} comprobaciones`);
     console.log(`Capturas en ${outDir}/flujo-*.png\n`);
+    emitirJson({ auditor: "audit-flujo", objetivo: "sitio", checks: registro });
     process.exit(fallas ? 1 : 0);
   });

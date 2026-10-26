@@ -21,6 +21,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { Address, xdr } from "@stellar/stellar-sdk";
+import { emitirJson } from "./lib/resumen.mjs";
 
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..");
 const RPC = {
@@ -113,16 +114,21 @@ async function main() {
   );
   if (redes.length === 0) {
     console.log("No hay contrato desplegado en ninguna red configurada.");
+    emitirJson({ auditor: "check-renta", objetivo: "contrato", checks: [{ name: "no hay contrato desplegado", ok: true }] });
     return;
   }
   console.log(`Renta del contrato · avisa por debajo de ${UMBRAL} días\n`);
   let alarma = false;
+  const comprobaciones = [];
   for (const [red, d] of redes) {
     console.log(`${red}: ${d.contractId}`);
     try {
-      alarma = (await revisar(red, d.contractId)) || alarma;
+      const mal = await revisar(red, d.contractId);
+      comprobaciones.push({ name: `renta de ${red}`, ok: !mal, detail: mal ? `menos de ${UMBRAL} días` : "" });
+      alarma = mal || alarma;
     } catch (e) {
       console.log(`  ${red}: no se pudo preguntar (${e.message})`);
+      comprobaciones.push({ name: `renta de ${red}`, ok: false, detail: `no se pudo preguntar: ${e.message}` });
       alarma = true;
     }
   }
@@ -135,6 +141,7 @@ async function main() {
   } else {
     console.log("\nTodo con renta de sobra.");
   }
+  emitirJson({ auditor: "check-renta", objetivo: "contrato", checks: comprobaciones });
 }
 
 await main();

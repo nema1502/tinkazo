@@ -92,6 +92,38 @@ Y el auditor de sonido engancha `OscillatorNode` antes de que cargue la página,
 
 Un juego no entra a `main` hasta que las tres auditorías dicen APROBADO.
 
+## La batería entera, con un solo comando
+
+```bash
+pnpm build
+pnpm audit:todo                                   # la batería de noche (--noche suma la mezcla y el segundo tema de flujo)
+pnpm audit:todo --json --solo audit-ui,smoke      # solo esos, y una línea JSON al final
+pnpm audit:todo --solo audit-game,audit-rigor,audit-identidad,audit-delatores --juegos trompo   # el mínimo para un cambio en un juego
+pnpm audit:todo --simular                         # muestra qué correría y cuánto tardaría, sin correrlo
+```
+
+`scripts/audit-todo.mjs` levanta `vite preview` sobre `dist/` en el primer puerto libre desde el 4180 (o usa `--base`), corre los auditores de a dos Chrome como máximo, cada uno con su `CDP_PORT` (9680 y 9690; `--cdp` cambia el primero), y al terminar junta lo que cada uno dejó en un archivo: `.claude/progreso/auditorias/<fecha-hora>.json` (esa carpeta no se versiona), con la salida entera de cada corrida en una carpeta al lado. Imprime un resumen de a lo sumo 20 líneas: aprobadas sobre total por auditor y las fallas, las de los que fallaron primero. Un auditor que se cae sin dejar su resumen cuenta como una falla: la batería no se da por buena si alguien se calló. Apaga solo lo que lanzó, por PID, nunca todos los Chrome; y corta lo que pasa del triple de su tiempo medido más cinco minutos.
+
+**Los niveles** (decisión D6 del plan): en cada cambio, a mano, lo que toca al cambio (`--solo`); antes de subir, el mínimo de abajo; de noche, la batería sin opciones. Sin `--solo` corren los de nivel `siempre`. La mezcla de sonido solo con `--noche`: mide la señal real y se desafina con la máquina cargada (el golpe del ganador dio de −59 a +6 LU entre dos builds iguales), así que corre sola, igual que el sonido. La física solo con `--fisica`: sirve a juegos que ya no están en el selector. `--juegos trompo,oruro` limita los auditores de juegos a esos, y `--todos-los-juegos` suma los que salieron del selector (`tombola`, `pasanaku`, `stellar`, `luz`, `ledger`, `rockets`, `totora`): sin la opción, un `todos` son los diez del selector (`scripts/lib/juegos.mjs`).
+
+**Qué corre según lo que cambió** (estimado con los tiempos de la corrida del 22 de octubre de 2026):
+
+| Cambió | Corré | Tarda |
+|---|---|---|
+| Un juego | `--solo audit-game,audit-rigor,audit-identidad,audit-delatores --juegos <juego>`, y el evaluador si es visual | unos 10 min |
+| `stage.ts` o `camera.ts` | `--solo audit-game,audit-identidad,audit-rigor,audit-encuadre` | cerca de 1 h |
+| La interfaz | `--solo audit-ui,check-paginas,check-glosario` | 5 min |
+| Antes de subir | `--solo smoke,audit-ui,audit-flujo` más lo de arriba | 25 min |
+| De noche | `pnpm audit:todo --noche --json` | más de una hora, con dos Chrome |
+
+**`--json` en cada auditor.** Todos (`audit-*.mjs`, `smoke.mjs`, `check-*.mjs`) aceptan `--json`: al final de su salida de texto, que no cambia, imprimen UNA línea con la forma
+
+```json
+{"auditor":"audit-ui","objetivo":"sitio","aprobadas":460,"total":461,"fallas":[{"nombre":"…","detalle":"…"}],"segundos":210}
+```
+
+`objetivo` es el juego o la página que se miró (`todos`, `sitio`, `paginas`). Los nombres y detalles de las fallas se acortan a 160 y 240 caracteres, y de más de cien fallas se detallan las primeras cien y se cuenta el resto. El agregador toma la última línea con esa forma de la salida de cada corrida, y la propia batería, con `--json`, termina con una línea igual (`"auditor":"audit-todo"`). `audit-delatores` conserva su `--json <archivo>` (el detalle de las señales); sin archivo, solo agrega la línea. Las pruebas del agregador, sin red ni Chrome, están en `scripts/lib/bateria.test.mjs`, `resumen.test.mjs` y `bateria-proceso.test.mjs`.
+
 ## El auditor de mezcla
 
 ```bash

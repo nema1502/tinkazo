@@ -16,6 +16,7 @@
 
 import jsQR from "jsqr";
 import { launch } from "./lib/browser.mjs";
+import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
 const i = args.indexOf("--base");
@@ -121,9 +122,13 @@ try {
   await browser.close();
 }
 
+const emitirResumen = () =>
+  emitirJson({ auditor: "check-qr", objetivo: "comprobante", checks: [{ name: "el QR se dibuja y un lector independiente lo decodifica", ok: bad === 0, detail: bad ? `${bad} caso(s) fallan` : "" }] });
 console.log("");
 if (bad) {
   console.log(`FALLÓ: ${bad} caso(s).\n`);
+  emitirResumen();
   process.exit(1);
 }
 console.log("BIEN: el QR se dibuja en el navegador y un lector independiente lo decodifica.\n");
+emitirResumen();

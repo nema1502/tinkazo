@@ -32,6 +32,7 @@
  */
 
 import { launch, sleep } from "./lib/browser.mjs";
+import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
 const opt = (k, d) => {
@@ -210,6 +211,7 @@ async function veredicto(cdp, pagina) {
 const casos = solo.length ? CASOS.filter((c) => solo.includes(c.id)) : CASOS;
 const browser = await launch({ width: 1280, height: 900 });
 let fallas = 0;
+const registro = [];
 try {
   for (const c of casos) {
     // Con `bloquear`, la pestaña nace sin acceso a esas direcciones: la red del evento cortada.
@@ -230,6 +232,7 @@ try {
     if (c.titularNoEs && (await cdp.eval(`document.querySelector("h1")?.textContent ?? ""`)).includes(c.titularNoEs)) {
       problemas.push("el título del enlace es el titular de la página");
     }
+    registro.push({ nombre: `${c.id} ${c.que}`, ok: problemas.length === 0, detalle: problemas.join("; ") });
     if (problemas.length) fallas++;
     console.log(`${problemas.length ? "FALLA" : "ok  "} ${c.id} ${c.que}: ${problemas.length ? problemas.join("; ") : `dio ${v.estado}`}${v.aTiempo ? "" : " (sin terminar)"} · «${v.texto}»`);
     await cdp.send("Page.close").catch(() => {});
@@ -238,4 +241,5 @@ try {
   await browser.close();
 }
 console.log(fallas ? `\n${fallas} caso(s) no dan lo que tienen que dar.` : "\nTodos los casos dan lo que tienen que dar.");
+emitirJson({ auditor: "check-verificacion", objetivo: "verificar", checks: registro });
 process.exit(fallas ? 1 : 0);

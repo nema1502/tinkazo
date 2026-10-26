@@ -37,6 +37,7 @@
  * ruleta con más de veinticuatro se mide con `--gente 8,18,50,100,200`.
  */
 import { launch } from "./lib/browser.mjs";
+import { emitirJson } from "./lib/resumen.mjs";
 
 const TODOS = ["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "trueque"];
 /**
@@ -164,4 +165,5 @@ console.log("\nCuántos ven su nombre entero antes del ganador:");
 for (const f of resumen) console.log(`  ${f.juego.padEnd(12)}${GENTE.map((g) => String(f[`e${g}`] ?? "").padStart(8)).join("")}`);
 const malos = checks.filter((c) => !c.ok);
 console.log(`\n${malos.length ? "RECHAZADO" : "APROBADO"}: ${checks.length - malos.length}/${checks.length} comprobaciones`);
+emitirJson({ auditor: "audit-identidad", objetivo: cual, checks });
 process.exit(malos.length ? 1 : 0);

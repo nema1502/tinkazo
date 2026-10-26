@@ -32,6 +32,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
+import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
 const opt = (k, d) => {
@@ -51,7 +52,9 @@ mkdirSync(outDir, { recursive: true });
 
 let fallas = 0;
 let pasan = 0;
+const registro = [];
 const check = (nombre, ok, detalle = "") => {
+  registro.push({ nombre, ok, detalle });
   if (ok) pasan++;
   else fallas++;
   console.log(`  ${ok ? "✓" : "✗"} ${nombre}${detalle ? ` · ${detalle}` : ""}`);
@@ -593,4 +596,5 @@ try {
   await browser.close();
 }
 console.log(`\n${fallas ? `✗ ${fallas} fallas` : "✓ todo bien"} · ${pasan} comprobaciones bien · capturas en ${outDir}`);
+emitirJson({ auditor: "audit-detalles", objetivo: "sitio", checks: registro });
 process.exit(fallas ? 1 : 0);

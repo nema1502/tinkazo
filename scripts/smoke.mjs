@@ -12,6 +12,7 @@
  * Para revisar un juego a fondo, usá `scripts/audit-game.mjs`.
  */
 import { launch } from "./lib/browser.mjs";
+import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
 const url = args.find((a) => !a.startsWith("--"));
@@ -50,7 +51,13 @@ try {
   }
   if (page.exceptions.length) console.log("  excepciones:", page.exceptions.slice(0, 3));
   if (page.consoleErrors.length) console.log("  console.error:", page.consoleErrors.slice(0, 3));
-  process.exitCode = ok && page.exceptions.length === 0 ? 0 : 1;
+  const bien = ok && page.exceptions.length === 0;
+  emitirJson({
+    auditor: "smoke",
+    objetivo: url,
+    checks: [{ name: "el sorteo termina y no hay excepciones", ok: bien, detail: ok ? page.exceptions.slice(0, 2).join(" | ") : `no terminó en ${timeoutMs / 1000} s` }],
+  });
+  process.exitCode = bien ? 0 : 1;
 } finally {
   await browser.close();
 }

@@ -37,6 +37,7 @@
  */
 import { createHash } from "node:crypto";
 import { launch } from "./lib/browser.mjs";
+import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
 const opt = (name, def) => {
@@ -198,4 +199,5 @@ try {
 
 const malos = checks.filter((c) => !c.ok);
 console.log(`\n${malos.length ? "RECHAZADO" : "APROBADO"}: ${checks.length - malos.length}/${checks.length} comprobaciones`);
+emitirJson({ auditor: "audit-choques", objetivo: "trompo", checks });
 process.exit(malos.length ? 1 : 0);

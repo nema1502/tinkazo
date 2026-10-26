@@ -42,6 +42,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
+import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
 const opt = (name, def) => {
@@ -234,4 +235,5 @@ for (const f of filas) {
 }
 const malos = checks.filter((c) => !c.ok);
 console.log(`\n${malos.length ? "RECHAZADO" : "APROBADO"}: ${checks.length - malos.length}/${checks.length} comprobaciones`);
+emitirJson({ auditor: "audit-encuadre", objetivo: "race", checks });
 process.exit(malos.length ? 1 : 0);
