@@ -706,6 +706,35 @@ describe("frases fijas de la tercera ronda", () => {
   });
 });
 
+describe("la página de precios, revisada con mirada de marketing (26 de octubre de 2026)", () => {
+  const textos = textosDe("precios.html");
+
+  it("no cobra distinto fuera de Latinoamérica y no promete un SDK gratis", () => {
+    expect(textos.filter((t) => /doble|double|SDK gratis|free SDK/i.test(t))).toEqual([]);
+    expect(leer("precios.html")).not.toMatch(/doble|double/i);
+  });
+
+  it("abre diciendo que hoy es gratis y que los números son los precios previstos", () => {
+    expect(T.es.prNote).toMatch(/^Hoy Tinkazo es gratis\. Estos son los precios previstos para cuando empecemos a cobrar/);
+    expect(T.en.prNote).toMatch(/^Today Tinkazo is free\. These are the planned prices for when we start charging/);
+  });
+
+  it("los números de la tabla siguen siendo los aprobados", () => {
+    expect(T.es.prP1b).toContain("20 sorteos por mes por cuenta (50 si la comunidad está verificada)");
+    expect(T.en.prP1b).toContain("20 draws a month per account (50 if the community is verified)");
+    expect(T.es.prP2b).toBe("10 sorteos por Bs 20; 50 por Bs 90");
+    expect(T.es.prP2l).toBe("10 sorteos por US$ 2; 50 por US$ 9");
+    expect(T.en.prP2b).toBe("10 draws for Bs 20; 50 for Bs 90");
+    expect(T.en.prP2l).toBe("10 draws for US$ 2; 50 for US$ 9");
+    expect(T.es.prP3b).toBe("Bs 100 hasta 100 personas; Bs 200 hasta 500; Bs 400 hasta 5.000; Bs 1.500 con más");
+    expect(T.es.prP5b).toBe("Bs 1.200 al año");
+  });
+
+  it("no pone el costo de la red en una cifra que cambia sola", () => {
+    expect(`${T.es.nextBody} ${T.en.nextBody}`).not.toMatch(/0,76|0\.76|XLM por sorteo|XLM per draw/);
+  });
+});
+
 /** La raíz del repo: desde acá salen las carpetas que revisa la prueba de la revisión visual. */
 const RAIZ = fileURLToPath(new URL("..", import.meta.url));
 
