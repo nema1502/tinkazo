@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MAX_FALLAS, emitirJson, esResumen, leerResumen, normalizar, quiereJson, resumenDe } from "./resumen.mjs";
-import { FUERA_DEL_SELECTOR, SELECTOR, juegosDe } from "./juegos.mjs";
+import { FUERA_DEL_SELECTOR, SELECTOR, detalleDelBoton, juegosDe } from "./juegos.mjs";
 import { MAX_DESTELLOS, comprobacionesDePantalla, hayHallazgo } from "./pantalla-comprobaciones.mjs";
 
 afterEach(() => vi.restoreAllMocks());
@@ -113,6 +113,24 @@ describe("los juegos de un `todos`", () => {
   it("devuelve una copia: tocar el resultado no cambia la lista de todos", () => {
     juegosDe("todos").pop();
     expect(SELECTOR).toHaveLength(10);
+  });
+});
+
+describe("el detalle de la comprobación 7 de audit-game (el botón del selector)", () => {
+  it("un botón visible dice su nombre y nada más", () => {
+    expect(detalleDelBoton({ text: "  Trompo  ", apagado: false }, "trompo")).toBe('"Trompo"');
+  });
+
+  it("un botón oculto dice que el juego está apagado, con el nombre", () => {
+    const d = detalleDelBoton({ text: "Trompo", apagado: true }, "trompo");
+    expect(d).toContain('"Trompo"');
+    expect(d).toContain("apagado");
+  });
+
+  it("un botón que falta sigue diciendo cuál falta, y no dice apagado", () => {
+    const d = detalleDelBoton(undefined, "tombola");
+    expect(d).toBe("falta #g-tombola");
+    expect(d).not.toContain("apagado");
   });
 });
 

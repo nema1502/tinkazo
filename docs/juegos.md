@@ -71,7 +71,7 @@ Donde `<juego>` es el valor de `?demo=`: uno de los diez del selector (`race`, `
 | 4 | El enlace a la ronda apunta a drand | El participante puede auditar |
 | 5 | El aviso al ganador queda armado | El flujo posterior no se rompió |
 | 6 | El juego devolvió la pantalla al terminar | Sin esto el sitio queda inusable |
-| 7 | El juego tiene su botón en el selector | Si no, nadie lo puede elegir |
+| 7 | El juego tiene su botón en el selector | Si no, nadie lo puede elegir. Si el botón está pero oculto (`hidden`, `display: none` o `visibility: hidden`), el detalle dice «apagado»: el juego abre con `?demo=` y nadie lo elige. El resultado no cambia: pasa si el botón existe |
 | 8 | No hubo excepciones en consola | Errores silenciosos hoy son fallas en vivo mañana |
 | 9 | La tarjeta de historia sale **después** del ganador | Durante el sorteo nadie lee. Y una clave sin traducir se delata sola |
 | 10 | Esa tarjeta cita una fuente | Un dato sin fuente es un dato inventado a los seis meses |

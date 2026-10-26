@@ -16,6 +16,20 @@ export const SELECTOR = ["race", "sapo", "trompo", "chovena", "pinata", "wheel",
  */
 export const FUERA_DEL_SELECTOR = ["tombola", "pasanaku", "stellar", "luz", "ledger", "rockets", "totora"];
 
+/**
+ * El detalle de la comprobación 7 de `audit-game` ("el juego tiene su botón en
+ * el selector"). El resultado de la comprobación depende solo de que el botón
+ * exista; esto solo cambia lo que cuenta. Un botón que está pero oculto (el
+ * atributo `hidden`, `display: none` o `visibility: hidden` en el propio botón)
+ * es un juego apagado: se puede abrir con `?demo=` y nadie lo puede elegir, y
+ * el detalle lo dice. Un botón que falta es otra cosa y sigue diciendo cuál.
+ */
+export function detalleDelBoton(opcion, juego) {
+  if (!opcion) return `falta #g-${juego}`;
+  const nombre = `"${String(opcion.text ?? "").trim()}"`;
+  return opcion.apagado ? `${nombre} · apagado: el botón está oculto en el selector` : nombre;
+}
+
 /** Los juegos de un pedido: "todos" son los del selector; una lista con comas, esos. */
 export function juegosDe(cual) {
   if (!cual || cual === "todos") return [...SELECTOR];
