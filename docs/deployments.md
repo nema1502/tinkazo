@@ -54,12 +54,12 @@ Notas:
 
 El costo de guardar datos en Soroban lo pone la red, y la red lo cambia sin avisar. El 25 de octubre de 2026 el sello de testnet pasó de 0,7 a 69 XLM porque el estado vivo cruzó su objetivo (`soroban_state_target_size_bytes`, 4.000 MB), y a las 13:34 la SDF subió ese objetivo a 7.000 MB sin anunciarlo en ningún lado. La renta por KB depende del promedio del estado frente al objetivo: piso hasta 2/3 del objetivo, ×10 al 100 %, ×1.360 al 101 %.
 
-`.github/workflows/vigilar-red.yml` corre `scripts/vigilar-red.mjs` cada media hora (minutos 13 y 43), sin secretos y sin depender de ninguna laptop. Solo lee del RPC público de cada red. Si algo cambia, la corrida falla, y GitHub avisa por correo a quien editó el `cron` por última vez.
+`.github/workflows/vigilar-red.yml` corre `scripts/vigilar-red.mjs` cada media hora (minutos 13 y 43) y una vez al día (12:07 UTC), sin secretos y sin depender de ninguna laptop. Solo lee de los RPC públicos. Si hay algo nuevo, la corrida falla, y GitHub avisa por correo a quien editó el `cron` por última vez.
 
 | Qué mira | Cómo | Cuándo falla |
 |---|---|---|
 | Los 17 parámetros de costo de Soroban y el protocolo, en las dos redes | Contra `scripts/vigilar-red.base.json` | Cualquier cambio: nombra el parámetro, el campo, el antes y el ahora, y en qué ledger cambió |
-| El estado vivo: el promedio de la ventana de 30 muestras, que es lo que paga la renta | Contra los niveles de abajo | Mainnet desde 2.000 MB, testnet desde 6.000 MB |
+| El estado vivo: el promedio de la ventana de 30 muestras, que es lo que paga la renta | Contra los niveles de abajo: mainnet desde 2.000 MB, testnet desde 6.000 MB | Cuando el nivel cambia o es rojo (ver abajo) |
 | La pendiente de 24 horas y las horas hasta el rojo | El promedio de hoy contra el del ledger de hace un día (`getLedgers` guarda 7 días) | Nunca: es información. La de 3 horas engaña, porque el estado crece en sierra |
 
 Niveles de mainnet (objetivo 3.000 MB). Testnet tiene uno solo, rojo a 6.000 MB (objetivo 7.000 MB):
@@ -70,7 +70,13 @@ Niveles de mainnet (objetivo 3.000 MB). Testnet tiene uno solo, rojo a 6.000 MB 
 
 El rojo nunca pasa del 95 % del objetivo vigente: si la red baja el objetivo, el aviso baja con él. Los umbrales están en `scripts/lib/vigilar-red.mjs` (`LEVELS`); si el objetivo sube de verdad, hay que revisarlos.
 
-Códigos de salida: **0** todo igual; **1** cambió un parámetro o el estado llegó a un nivel; **2** no se pudo mirar (el RPC no contestó en tres intentos, o falta la línea base). Cualquier código distinto de 0 hace fallar la corrida.
+**Cuándo falla la corrida** (y manda el correo), en tres líneas, para que el correo no se vuelva ruido:
+
+- **Algo cambió:** un parámetro de costo o el protocolo (hasta que se actualice la línea base), o el nivel de alguna red respecto de la corrida anterior, hacia arriba o hacia abajo (ninguno → amarillo, amarillo → naranja, naranja → amarillo, amarillo → ninguno). **Rojo falla en cada corrida.**
+- **Recordatorio diario:** a las 12:07 UTC la corrida va con `--diario` y falla también si una red sigue en naranja, aunque no haya cambiado.
+- **No se pudo mirar** una red tras los reintentos: mainnet prueba `mainnet.sorobanrpc.com`, después `rpc.lightsail.network` y después `rpc.ankr.com` (de la lista de proveedores de la documentación de Stellar); testnet, solo el de la SDF.
+
+El mismo nivel que antes (amarillo o naranja estables) pasa con código 0 y queda en la primera línea del log y en el nombre del paso («Nivel: mainnet amarillo (igual que antes) · testnet normal»). El nivel anterior vive en la caché de Actions (clave rodante `vigilar-red-<corrida>`), se guarda aunque la corrida falle y, sin caché, es «normal»; a mano, sin `--anterior`, cualquier nivel cuenta como nuevo. Códigos de salida: **0** sin novedades, **1** alarma, **2** no se pudo mirar o falta la línea base; los dos últimos hacen fallar la corrida.
 
 **Cuando el cambio es legítimo** (la red cambió un parámetro y ya se entendió qué hace), se guarda lo de hoy como línea base y se commitea:
 

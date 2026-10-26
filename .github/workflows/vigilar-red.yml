@@ -1,14 +1,27 @@
 # Vigilancia de la red de Stellar.
 #
 # Cada media hora mira, en testnet y en mainnet, los parámetros de costo de
-# Soroban y cuánto estado vivo tiene la red frente a su objetivo, y falla si
-# algún parámetro cambió o si el estado llegó a un nivel de alerta. Que falle es
-# el aviso: GitHub manda un correo por la corrida fallida a quien editó el `cron`
-# por última vez, sin depender de ninguna laptop prendida.
+# Soroban y cuánto estado vivo tiene la red frente a su objetivo. La corrida falla
+# solo cuando hay algo nuevo que decir: un parámetro o el protocolo cambió, el
+# nivel de alguna red se movió respecto de la corrida anterior (hacia arriba o
+# hacia abajo), una red está en rojo, o no se pudo mirar una red. Que falle es el
+# aviso: GitHub manda un correo por la corrida fallida a quien editó el `cron` por
+# última vez, sin depender de ninguna laptop prendida. Un nivel que sigue igual
+# pasa, y queda en el nombre del paso: si no, el correo sería un ruido que alguien
+# acaba silenciando.
 #
-# Solo lee del RPC público de cada red: no usa secretos y no instala nada
-# (el guion no tiene dependencias, solo Node). Qué vigila, qué significa cada
-# nivel y cómo actualizar la línea base: docs/deployments.md, «Vigilancia de la red».
+# Una vez al día (12:07 UTC) corre con `--diario` y falla también si una red sigue
+# en naranja, aunque no haya cambiado: un recordatorio mientras dure.
+#
+# El nivel de la corrida anterior vive en la caché de Actions: una clave nueva por
+# corrida (`vigilar-red-<número de corrida>`, que nunca existe) y `restore-keys`
+# trae la más reciente. Se guarda también cuando la corrida falla; si no, el mismo
+# aviso se repetiría cada media hora. Sin caché (la primera vez), el nivel de antes
+# es «normal».
+#
+# Solo lee de los RPC públicos: no usa secretos y no instala nada (el guion no
+# tiene dependencias, solo Node). Qué vigila, qué significa cada nivel y cómo
+# actualizar la línea base: docs/deployments.md, «Vigilancia de la red».
 name: Vigilar la red de Stellar
 
 on:
@@ -16,7 +29,14 @@ on:
     # Cada media hora, pero fuera de los minutos 0 y 30, donde GitHub se
     # congestiona y suele demorar o saltear corridas.
     - cron: '13,43 * * * *'
+    # El recordatorio diario. Si se cambia esta hora, cambiar también la de abajo.
+    - cron: '7 12 * * *'
   workflow_dispatch:
+    inputs:
+      diario:
+        description: 'Correr como el recordatorio diario (falla también si una red sigue en naranja)'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -39,5 +59,28 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Vigilar la red
-        run: node scripts/vigilar-red.mjs
+      - name: Recuperar el nivel de la corrida anterior
+        uses: actions/cache/restore@v4
+        with:
+          path: .estado-red
+          key: vigilar-red-${{ github.run_id }}
+          restore-keys: vigilar-red-
+      - name: Mirar testnet y mainnet
+        id: vigilar
+        env:
+          # La corrida de las 12:07 UTC (o la manual con la casilla) es el recordatorio.
+          DIARIO: "${{ (github.event.schedule == '7 12 * * *' || inputs.diario) && '--diario' || '' }}"
+        run: node scripts/vigilar-red.mjs --anterior .estado-red/niveles.json --guardar .estado-red/niveles.json $DIARIO
+      # El nivel de cada red, a la vista en la lista de pasos sin abrir el log.
+      - name: "Nivel: ${{ steps.vigilar.outputs.resumen }}"
+        if: always()
+        env:
+          RESUMEN: ${{ steps.vigilar.outputs.resumen }}
+        run: echo "$RESUMEN"
+      # Aunque la corrida haya fallado: el aviso de hoy no se repite mañana a esta hora.
+      - name: Guardar el nivel para la próxima corrida
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .estado-red
+          key: vigilar-red-${{ github.run_id }}
