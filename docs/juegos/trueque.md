@@ -4,6 +4,8 @@ Una feria de puestos. Cada persona tiene el suyo: acepta un producto y da otro a
 
 **Identificador:** `trueque` · **Probalo:** `?demo=trueque` · **Agregado:** 20 de octubre de 2026; entró al selector el 21 de octubre, en el lugar del Aguayo y la Constelación.
 
+**Fuera del selector desde el 26 de octubre de 2026** (decisión del proyecto): no pasa la prueba del niño, que pide que cualquier cuadro diga, sin leer, quién va adelante, hacia dónde van, cuánto falta y qué acaba de pasar. Sigue abriendo con `?demo=trueque`; su captura se queda como fondo de su tarjeta.
+
 ## Por qué existe
 
 Es la fusión de Aguayo y Constelación Stellar (auditoría de los juegos, sección 7.6). El aguayo tenía la mejor idea cultural del catálogo, pero sus hilos de "confianza" se deshacían en vez de sostener. La constelación tenía la idea más Stellar, un pago que busca camino, pero dibujada con estrellas anónimas y veinte saltos, y un pago de Stellar tiene como máximo cinco activos intermedios. El Trueque se queda con las dos ideas, contadas bien.

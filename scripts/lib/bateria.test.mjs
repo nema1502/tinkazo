@@ -34,7 +34,7 @@ describe("qué corre la batería", () => {
     expect(auditores(planDe({ fisica: true }))).not.toContain("audit-mezcla");
   });
 
-  it("los que miran juegos corren los diez del selector, nunca los que salieron", () => {
+  it("los que miran juegos corren los ocho del selector, nunca los que salieron", () => {
     const plan = planDe();
     const game = plan.filter((t) => t.auditor === "audit-game").map((t) => t.objetivo);
     expect(game).toEqual(SELECTOR);

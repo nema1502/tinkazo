@@ -686,6 +686,9 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   for (const id of ["draw-status", "reverify-out", "again-row", "winner-box", "lore-box", "leyenda-box", "qr-box", "sec-draw"]) {
     $(id).style.display = "none";
   }
+  // El pliegue del resultado («Otra lista, copiar el mensaje y más») vuelve a salir cerrado con el próximo ganador.
+  const masResultado = document.getElementById("mas-resultado");
+  if (masResultado instanceof HTMLDetailsElement) masResultado.open = false;
   limpiarDetalle("draw-status");
   $("winner-cards").innerHTML = "";
   $("sec-participants").scrollIntoView({ behavior: "smooth", block: "start" });

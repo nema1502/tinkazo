@@ -38,7 +38,7 @@
  */
 import { launch } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
-import { SELECTOR as TODOS } from "./lib/juegos.mjs";
+import { juegosDe } from "./lib/juegos.mjs";
 
 /**
  * Hasta cuántos promete cada juego, si no es 200. Hoy ninguno tiene menos: la
@@ -61,7 +61,7 @@ const opt = (name, def) => {
   return i >= 0 && args[i + 1] ? args[i + 1] : def;
 };
 const cual = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--")) ?? "todos";
-const juegos = cual === "todos" ? TODOS : [cual];
+const juegos = juegosDe(cual);
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const EXTREMOS = args.includes("--extremos");
 /** `--vista 390x844`: la pantalla en que se mide (por defecto 1280x720): celular, tablet, girado. */

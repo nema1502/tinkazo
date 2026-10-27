@@ -11,7 +11,8 @@ import { Camera } from "./camera";
 import { Gobernador, ajustesDe, aprender, dibujaPorSoftware, esPorPlaca, nivelInicial, nivelMedido, type Nivel } from "./calidad";
 import { guardiaNombre, meter } from "./encuadre";
 import { GOLPE_GANADOR, vibrar } from "../../vibrar";
-import { LEGIBLE } from "./letra";
+import { CHIP_SCALE, LEGIBLE, letraMinima, seLee } from "./letra";
+import { ajustarEnRenglones, formaQueEntra } from "../nombres";
 import { estadoFoco, latidosFoco, tiemposFoco } from "./foco";
 import { FocoVista, type FocoPunto } from "./foco-vista";
 import type { Arc } from "../drama";
@@ -135,7 +136,7 @@ export const MONO = "ui-monospace, Consolas, monospace";
  * antes. Un juego que dibuja sobre el chip o reparte chips usa su alto de
  * verdad (`chip.height`) o esta escala, nunca los 22 de alto de antes.
  */
-export const CHIP_SCALE = 1.6;
+export { CHIP_SCALE, escalaChipLegible } from "./letra";
 
 /**
  * Las filas del cartel de la corona con `m` premios: uno solo, grande; o hasta
@@ -185,8 +186,12 @@ export interface PixiStage {
    * `scale` es relativo al tamaño legible de `CHIP_SCALE`; `faceOf`, de quién
    * es la cara, cuando la etiqueta es una versión corta del nombre.
    */
-  /** `textura` reemplaza a la cara del glifo cuadrado (el emblema de la carrera con pelotón: una persona, una cara). */
-  chip(name: string, scale?: number, faceOf?: string, textura?: Texture | null): Container;
+  /**
+   * `textura` reemplaza a la cara del glifo cuadrado (el emblema de la carrera con pelotón: una persona, una cara).
+   * `conCara: false` es el chip compacto, solo con el nombre: para donde la cara ya está a la vista (el aro de un
+   * agujero) y el ancho es lo que falta.
+   */
+  chip(name: string, scale?: number, faceOf?: string, textura?: Texture | null, conCara?: boolean): Container;
   /**
    * Los nombres de `who` encima de cada uno, en una capa propia que los juegos
    * no vacían: repartidos para que no se pisen y adentro de la pantalla. `at(i)`
@@ -225,6 +230,13 @@ export interface PixiStage {
    * pantalla, con su sombra. Un juego lo usa para que la ganadora quede debajo.
    */
   placaBajo(m: number): number;
+  /**
+   * Dónde está quien gana en la pantalla (la caja de su cuerpo o su agujero y, donde lo lleva al lado, su nombre, en
+   * píxeles de la pantalla), para el auditor de emoción: con el golpe de la cámara tiene que quedar entero a la vista y
+   * sin el cartel encima. El juego da una función que lo calcula con la cámara de ese cuadro; solo se llama con
+   * `?auditar=camara`. En el sorteo de verdad no hace nada.
+   */
+  ganadorEn(fn: () => { x: number; y: number; w: number; h: number } | null): void;
   run(fn: (dt: number, now: number) => void): void;
   onResize(fn: () => void): void;
   /** Algo que hay que soltar al cerrar: una línea de tiempo, un sonido. */
@@ -281,7 +293,8 @@ interface Identidad {
  * Recorre los textos de la escena, del HUD y de pasar lista, no los del
  * cartel del ganador.
  * Un nombre cuenta si se ve entero en pantalla, con opacidad de 0,6 o más y
- * un alto de al menos 2,6% de la pantalla (la regla de la letra, `letra.ts`). Las etiquetas cortas ("María Q.",
+ * una letra que llegue a la regla de la sala (`seLee` en `letra.ts`: 28 px de letra en 1080 y 17 en un celular parado: la misma
+ * vara de `audit-legible`, no el alto de la caja del texto). Las etiquetas cortas ("María Q.",
  * "Valeria Torr…") cuentan solo si no se confunden con otro nombre.
  */
 function identidadDe(names: string[]): { estado: Identidad; mirar: (raices: Container[], ahora: number, sw: number, sh: number) => void } {
@@ -327,7 +340,6 @@ function identidadDe(names: string[]): { estado: Identidad; mirar: (raices: Cont
   const mirar = (raices: Container[], ahora: number, sw: number, sh: number): void => {
     if (estado.revelado !== null) return;
     estado.muestras++;
-    const min = Math.max(10, sh * LEGIBLE.fraccionSec);
     const visitar = (c: Container, alfa: number): void => {
       if (!c.visible || !c.renderable) return;
       const a = alfa * c.alpha;
@@ -336,7 +348,10 @@ function identidadDe(names: string[]): { estado: Identidad; mirar: (raices: Cont
         const i = a >= 0.6 ? quien(c.text) : -1;
         if (i >= 0 && ((estado.vistos[i] as number) < 0 || (estado.completos[i] as number) < 0)) {
           const b = c.getBounds();
-          if (b.height >= min && b.x >= 0 && b.y >= 0 && b.x + b.width <= sw && b.y + b.height <= sh) {
+          // La letra, como en `audit-legible` (tamaño de fuente por la escala con que se dibuja), y no el alto de la caja.
+          const escala = Math.hypot(c.worldTransform.a, c.worldTransform.b);
+          const letraPx = (parseFloat(String(c.style.fontSize)) || 0) * (Number.isFinite(escala) ? escala : 1);
+          if (seLee(letraPx, sw, sh) && b.x >= 0 && b.y >= 0 && b.x + b.width <= sw && b.y + b.height <= sh) {
             if ((estado.vistos[i] as number) < 0) estado.vistos[i] = ahora;
             // Entero: el texto es el nombre, sin cortes (el salto de línea de un nombre partido en dos cuenta como espacio).
             const unico = enteros.get(sinEspacios(c.text));
@@ -467,7 +482,8 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   // `?auditar=camara`: la cámara y la escena a mano de los auditores
   // (`window.__tinkazo`), para medir el zoom del golpe (`scripts/lib/zoom.mjs`).
   // Sin el parámetro no se expone nada.
-  if (params.get("auditar") === "camara") (window as unknown as { __tinkazo: unknown }).__tinkazo = { camara: cam, escena: scene };
+  // Los campos «cartel» y «ganador» los llenan la corona y el juego (`ganadorEn`): dónde está el cartel y dónde quien gana.
+  if (params.get("auditar") === "camara") (window as unknown as { __tinkazo: unknown }).__tinkazo = { camara: cam, escena: scene, cartel: null, ganador: null, pantalla: () => ({ w: innerWidth, h: innerHeight, top: top(), bottom: bottom() }) };
   // `?auditar=nino`: la foto de los cinco años no lleva letras (`scripts/audit-nino.mjs`).
   // Mientras `window.__nino.sinLetras` esté prendido, todo texto del motor queda sin
   // dibujar (`renderable`, no `visible`: los juegos mandan la visibilidad), y al
@@ -682,7 +698,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     }
   };
 
-  const chip = (name: string, scale = 1, faceOf = name, textura: Texture | null = null): Container => {
+  const chip = (name: string, scale = 1, faceOf = name, textura: Texture | null = null, conCara = true): Container => {
     const k = u() * scale * CHIP_SCALE * (compartir ? 1.2 : 1);
     const c = new Container();
     chipsVivos.add(c);
@@ -690,15 +706,19 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     const av = new Sprite(textura ?? face(faceOf));
     av.width = av.height = 16 * k;
     av.position.set(5 * k, 3 * k);
-    label.position.set(25 * k, 3.5 * k);
-    const w = label.width + 32 * k;
+    label.position.set((conCara ? 25 : 7) * k, 3.5 * k);
+    const w = label.width + (conCara ? 32 : 14) * k;
     const bgc = new Graphics()
       .roundRect(3 * k, 3 * k, w, 22 * k, 5 * k)
       .fill(INK)
       .roundRect(0, 0, w, 22 * k, 5 * k)
       .fill(dark ? CREAM : 0xffffff)
       .stroke({ width: (compartir ? 3 : 2) * k, color: INK });
-    c.addChild(bgc, av, label);
+    if (conCara) c.addChild(bgc, av, label);
+    else {
+      av.destroy();
+      c.addChild(bgc, label);
+    }
     c.pivot.set(0, 11 * k);
     return c;
   };
@@ -813,6 +833,9 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     }
   };
 
+  /** Lo que mide de alto el cartel de la corona armada, para `placaBajo`. */
+  let cartelAlto: { m: number; k: number; ph: number } | null = null;
+
   const crown = (names: string[], winners: readonly number[], conFoco = false, caraPropia?: (persona: number) => Texture | null): Crown => {
     if (identPedida && !ident) {
       ident = identidadDe(names);
@@ -858,17 +881,56 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       );
       const cara = (i: number): number => (conCara(i) ? talla(i) * 1.1 : 0);
       const hueco = (i: number): number => (conCara(i) ? cara(i) + 12 * k : 0);
+      const altos = filasCorona(all.length, k);
+      // El cartel entra con un rebote (`REBOTE`: la elástica llega a 1,18 de su tamaño) y un poco girado, y a ese tamaño
+      // tiene que entrar en la pantalla: en un celular de 390 rebotaba a 414 y se cortaba contra los dos costados. Su ancho
+      // máximo sale de ahí (y no del 86 % de la pantalla de antes), descontando su sombra y lo que da el giro.
+      const REBOTE = 1.2;
+      const phAprox = 12 * k + title.height + 6 * k + altos.reduce((a, h) => a + h, 0) + 20 * k;
+      const pwMax = Math.min(sw() * 0.86, (sw() - 4 - 12 * k) / REBOTE - 0.12 * phAprox);
       for (const [i, tx] of nameTexts.entries()) {
-        const maxW = sw() * 0.86 - (big ? 130 : 40) * k - hueco(i);
-        if (tx.width > maxW) tx.scale.set(maxW / tx.width);
+        const maxW = pwMax - (big ? 132 : 56) * k - hueco(i);
+        const piso = Math.min(1, letraMinima(k, true) / talla(i));
+        if (tx.width <= maxW) continue;
+        const nombre = lines[i] as string;
+        const prefijo = conCara(i) ? `${i + 1}. ` : "";
+        const medir = (s: string): number => {
+          tx.text = prefijo + s;
+          return tx.width;
+        };
+        if (big) {
+          // Un solo ganador: el nombre entero en los renglones que haga falta, a su tamaño antes que achicado; nunca bajo la regla.
+          const a = ajustarEnRenglones(nombre, maxW, medir, piso);
+          tx.text = a.lineas.join("\n");
+          tx.style.lineHeight = talla(i) * 1.08;
+          tx.scale.set(a.escala);
+        } else {
+          // Varios premios: hasta dos renglones por premio, a la letra más grande que se pueda y nunca bajo la regla; si ni
+          // así entra, se muestra menos del nombre.
+          const a = ajustarEnRenglones(prefijo + nombre, maxW, (s) => { tx.text = s; return tx.width; }, piso, 2);
+          if (!a.partida) {
+            tx.text = a.lineas.join("\n");
+            tx.style.lineHeight = talla(i) * 1.08;
+            tx.scale.set(a.escala);
+          } else {
+            const forma = formaQueEntra(nombre, maxW / piso, medir);
+            tx.text = prefijo + forma;
+            tx.scale.set(Math.min(1, Math.max(piso, maxW / tx.width)));
+          }
+          altos[i] = Math.max(altos[i] ?? 0, tx.height + 6 * k);
+        }
       }
+      // Con el nombre en varios renglones el renglón del cartel crece. `width` y `height` de PixiJS ya vienen con la
+      // escala puesta: multiplicarlos otra vez por `scale` dejaba el cartel angosto y bajo para el nombre achicado, y el
+      // nombre se salía por el costado y por abajo.
+      if (big && nameTexts[0]) altos[0] = Math.max(altos[0] ?? 0, nameTexts[0].height + 6 * k);
       const innerW = Math.max(title.width, ...nameTexts.map((x, i) => x.width + hueco(i)));
       const pw = innerW + (big ? 132 : 56) * k;
-      const altos = filasCorona(all.length, k);
       const lineH = altos[0] ?? 60 * k;
       // «GANA» es lo principal de la sala (48 px en 1080): los nombres arrancan debajo de él, no encima.
       const arriba = 12 * k + title.height + 6 * k;
       const ph = arriba + altos.reduce((a, h) => a + h, 0) + 20 * k;
+      cartelAlto = { m: winners.length, k, ph };
       const dy = arriba / 2 - 18 * k;
       const bgp = new Graphics()
         .roundRect(-pw / 2 + 10 * k, -ph / 2 + 10 * k, pw, ph, 14 * k)
@@ -931,6 +993,15 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       }
     };
     build();
+    // Para el auditor de emoción (`?auditar=camara`): dónde está el cartel en cada cuadro, en píxeles de la pantalla.
+    const aud = (window as unknown as { __tinkazo?: { cartel: unknown } }).__tinkazo;
+    if (aud) {
+      aud.cartel = () => {
+        if (!plate.visible || !root.visible) return null;
+        const b = plate.getBounds();
+        return { x: b.x, y: b.y, w: b.width, h: b.height };
+      };
+    }
     root.visible = false;
     // The last pose, to put a rebuilt plate back where it was.
     let lastT = 0;
@@ -1146,8 +1217,17 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     app, view, bg, scene, hud, cam, sw, sh, u, letra, compartir, portrait, top, bottom, rng, dark,
     placaBajo: (m) => {
       const k = u();
-      const ph = 40 * k + filasCorona(m, k).reduce((a, h) => a + h, 0) + 16 * k;
+      // El alto de verdad del cartel, si la corona de `m` premios ya se armó; si no, la estimación con las mismas partes.
+      // Hasta el 26 de octubre de 2026 esto era 40k + filas + 16k, de cuando «GANA» era chico: con «GANA» a 48 px en 1080
+      // el cartel bajaba 12 px más de lo que decía, y lo protegido quedaba debajo de él.
+      const ph = cartelAlto && cartelAlto.m === m && cartelAlto.k === k
+        ? cartelAlto.ph
+        : 18 * k + 1.2 * letra(LEGIBLE.prin) + filasCorona(m, k).reduce((a, h) => a + h, 0) + 20 * k;
       return (portrait() ? sh() * 0.24 : sh() * 0.26) + ph / 2 + 10 * k;
+    },
+    ganadorEn(fn) {
+      const T = (window as unknown as { __tinkazo?: { ganador: unknown } }).__tinkazo;
+      if (T) T.ganador = fn;
     },
     color: (k) => P[((k % P.length) + P.length) % P.length] ?? 0xe93d9c,
     say(msg, heat = 0, grito = false) {

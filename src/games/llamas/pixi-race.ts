@@ -1,4 +1,4 @@
-import { LEGIBLE } from "../pixi/letra";
+import { LEGIBLE, escalaChipLegible } from "../pixi/letra";
 import { CanvasSource, Container, Graphics, Sprite, Text, Texture } from "pixi.js";
 import { emblemasDe } from "../emblemas";
 import { gsap } from "gsap";
@@ -8,7 +8,7 @@ import { hayPeloton, normalCarrera } from "../../duraciones";
 import { cabe, centrar, crecer, dentro, unir, type Vista, type Zona } from "../pixi/encuadre";
 import { beep, beepFor, fanfare, isMuted, audio, note } from "../../sound";
 import { enOrden, tension } from "../drama";
-import { WINNER_HOLD, shorten, winnersLabel } from "../overlay";
+import { WINNER_HOLD, clamp, shorten, winnersLabel } from "../overlay";
 import { wavesAround } from "../pixi/qualifier";
 import { CREAM, INK, MONO, YELLOW, contorno, hash, mountPixi, seeded, type PixiStage } from "../pixi/stage";
 import { lugarDe } from "../pixi/kit/respuestas";
@@ -35,6 +35,12 @@ import { crearPeloton, type Peloton } from "./pixi-peloton";
 const DUR = 15;
 /** Cuánto salta la ganadora cuando festeja, en unidades de pantalla: la cámara le deja ese lugar. */
 const SALTO = 22;
+/** Cuántas veces más cerca que el plano más abierto de la carrera tiene que llegar el golpe de la meta (`audit-emocion` pide 1,6). */
+const GOLPE_VECES = 1.7;
+/** Lo que el empuje de la tensión (`cam.tension`, 0,06) ya suma cuando llega el golpe. */
+const EMPUJE = 0.06;
+/** Lo más que puede pedir el golpe de la meta. */
+const GOLPE_TOPE = 0.9;
 type Skin = "andes" | "stellar" | "lago";
 
 /**
@@ -974,6 +980,8 @@ export async function llamasPixi(
   let tPhase = 3 - CUENTA, tRace = 0, tFreeze = 0, lastLeader = -1, saidLast = false, finished = false, mitadMarcada = false;
   /** El empuje del zoom de emoción, desde el 80 % de la carrera: una sola vez. */
   let empujeDado = false;
+  /** El plano más abierto que mostró la carrera (la escala de la escena): contra él se mide el golpe de la meta. */
+  let escalaAncha = Infinity;
   /** El reloj de la clasificatoria y la presentación, en segundos de juego. */
   let tPre = 0;
   /** El pelotón ya se abrió y la cámara ya hizo su corte a la largada. */
@@ -1076,7 +1084,14 @@ export async function llamasPixi(
     roar?.burst();
     // El golpe del zoom de emoción: el acercamiento firme que vuelve suave, en
     // el mismo instante en que sale el cartel. Solo presentación.
-    S.mark("golpe", cam.golpe(0.12, 0.3, 1.1).toFixed(3));
+    // En un celular el plano de la corona llega a 1,35 y el golpe de 0,12 se quedaba en 1,58 veces el plano general (se
+    // pide 1,6): sube a 0,18. La ganadora sigue protegida, así que la cámara se aleja lo justo si no entra.
+    // Y si la ganadora es de uno de los carriles de abajo, el plano de la corona es abierto (todas las de arriba tienen que
+    // entrar debajo del cartel) y un golpe fijo se quedaba en 1,1 a 1,25 veces el plano general: el golpe pide lo que falta
+    // para llegar a `GOLPE_VECES` veces el plano más abierto de esta carrera, y la ganadora sigue protegida.
+    const base = G.portrait ? 0.18 : 0.12;
+    const falta = Number.isFinite(escalaAncha) ? (GOLPE_VECES * escalaAncha) / Math.max(0.1, cam.zoom) - 1 - EMPUJE : 0;
+    S.mark("golpe", cam.golpe(clamp(falta, base, GOLPE_TOPE), 0.3, 1.1).toFixed(3));
     cam.shake(14 * G.u);
   }
 
@@ -1625,7 +1640,9 @@ export async function llamasPixi(
     // En los acercamientos el nombre no crece con la cámara: en la foto, a
     // 2,1, los chips legibles tapaban a las llamas enteras. Alejándose sí se
     // achica con la pista, para no encimarse con el del carril de al lado.
-    const comp = 1 / Math.max(1, cam.zoom);
+    // Alejándose, el nombre se achica con la pista para no encimarse con el del carril de al lado, pero no por debajo
+    // de la regla de la letra: con la cámara a 0,6 (la corona en un celular) los nombres medían 10,7 px.
+    const comp = Math.max(1 / Math.max(1, cam.zoom), escalaChipLegible(S.u()) / Math.max(0.05, cam.zoom));
     const muros = [L.board, L.aviso].filter((b): b is Container => !!b && b.visible).map((b) => b.getBounds());
     const piso = G.sh - S.bottom();
     /** Lo de arriba que un nombre no tapa: el aviso de cuántos corren y el minimapa. */
@@ -1689,8 +1706,10 @@ export async function llamasPixi(
       const ancho = tag.width * z;
       if (tapa(cuerpo, min, p.y - alto, ancho, 2 * alto) <= 0.1) return;
       const f = (cuerpo.x - 4 * u - min) / Math.max(1, ancho);
-      if (duo || f >= 0.6) {
-        tag.scale.set(s0 * Math.min(1, Math.max(0.6, f)));
+      // Hasta dónde puede achicarse para entrar: lo que deja la letra en la regla (0,97 de su tamaño en pantalla), no 0,6.
+      const escalaMin = Math.min(1, escalaChipLegible(S.u()) / Math.max(0.05, s0 * z));
+      if (duo || f >= escalaMin) {
+        tag.scale.set(s0 * Math.min(1, Math.max(escalaMin, f)));
         return;
       }
       const cara = tag.children[1];
@@ -1936,10 +1955,18 @@ export async function llamasPixi(
     });
   }
 
+  // Para el auditor de emoción: el cuerpo de la ganadora, con su salto, en la pantalla.
+  S.ganadorEn(() => {
+    const b = cuerpo(winnerLane, 1, SALTO * G.u);
+    const a = cam.toScreen(b.x, b.y, G.sw, G.sh), c = cam.toScreen(b.x + b.w, b.y + b.h, G.sw, G.sh);
+    return { x: a.x, y: a.y, w: c.x - a.x, h: c.y - a.y };
+  });
+
   S.run((dt, now) => {
     update(dt);
     cam.update(dt);
     cam.apply(S.scene, G.sw, G.sh, now);
+    if (!finished && S.scene.scale.x > 0) escalaAncha = Math.min(escalaAncha, S.scene.scale.x);
     draw(now);
   });
 }

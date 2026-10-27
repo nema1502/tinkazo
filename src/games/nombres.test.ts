@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  ajustar, formasDe, grafemas, inicialDe, mediana, nivelBase, nivelPorCantidad, nivelQueCabe, nivelesDe, palabras, planNombres,
+  ajustar, ajustarEnRenglones, envolver, formaQueEntra, formasDe, grafemas, inicialDe, mediana, nivelBase, nivelPorCantidad, nivelQueCabe, nivelesDe, palabras, planNombres,
   type Nivel,
 } from "./nombres";
 
@@ -236,6 +236,122 @@ describe("ajustar: el nombre entra entero o se achica, nunca se corta", () => {
     const a = ajustar(nombre, 40, medir);
     expect(a.lineas.join("")).toBe(nombre);
     for (const l of a.lineas) expect(grafemas(l).every((g) => g === "👨🏽‍🚀")).toBe(true);
+  });
+});
+
+describe("envolver: un nombre larguísimo en los renglones que haga falta, a la letra que se pide", () => {
+  const u = (s: string): number => grafemas(s).length * 8;
+
+  it("un nombre que entra queda en un renglón, y uno más largo se parte en los espacios", () => {
+    expect(envolver("María Quispe", 12 * 8, u)).toEqual(["María Quispe"]);
+    expect(envolver("María Quispe", 11 * 8, u)).toEqual(["María", "Quispe"]);
+    expect(envolver("María Fernanda Guadalupe Quispe Mamani Zu", 15 * 8, u)).toEqual(["María Fernanda", "Guadalupe", "Quispe Mamani", "Zu"]);
+  });
+
+  it("parte después de un guion bajo o un guion, y solo si hace falta", () => {
+    expect(envolver("Maximiliano_Alexander_Constantino_Rosario", 26 * 8, u)).toEqual(["Maximiliano_Alexander_", "Constantino_Rosario"]);
+    expect(envolver("Pérez-Gil Soto", 9 * 8, u)).toEqual(["Pérez-Gil", "Soto"]);
+    expect(envolver("Pérez-Gil Soto", 6 * 8, u)).toEqual(["Pérez-", "Gil", "Soto"]);
+  });
+
+  it("una palabra más ancha que la caja se parte por letras enteras, sin puntos suspensivos", () => {
+    const l = envolver("Anticonstitucionalmente", 8 * 8, u);
+    expect(l.join("")).toBe("Anticonstitucionalmente");
+    for (const x of l) {
+      expect(u(x)).toBeLessThanOrEqual(8 * 8);
+      expect(x.endsWith("…")).toBe(false);
+    }
+    // Una letra con tilde combinada o un emoji no se parte por el medio.
+    expect(envolver("🌸🌸🌸🌸", 2 * 8, u)).toEqual(["🌸🌸", "🌸🌸"]);
+  });
+
+  it("nunca pierde ni inventa letras: unir los renglones devuelve el nombre", () => {
+    for (const nombre of [...SAMPLE, ...FIXTURES]) {
+      for (const ancho of [3, 6, 10, 16, 40].map((n) => n * 8)) {
+        const l = envolver(nombre, ancho, u);
+        const quitar = (x: string): string => x.normalize("NFC").replace(/\s+/gu, "");
+        expect(quitar(l.join(" "))).toBe(quitar(nombre));
+        for (const x of l) expect(u(x)).toBeLessThanOrEqual(Math.max(ancho, 8));
+      }
+    }
+  });
+});
+
+describe("ajustarEnRenglones: el nombre del cartel entero, en los renglones que haga falta y nunca bajo la regla", () => {
+  const u = (s: string): number => grafemas(s).length * 8;
+
+  it("un nombre que entra queda en un renglón a escala 1", () => {
+    expect(ajustarEnRenglones("María Quispe", 200, u)).toEqual({ lineas: ["María Quispe"], escala: 1, partida: false });
+  });
+
+  it("prefiere un renglón apenas achicado (0,85) a partirlo, y partirlo a la letra normal a achicar más", () => {
+    const a = ajustarEnRenglones("María Quispe", 12 * 8 * 0.9, u);
+    expect(a.lineas).toEqual(["María Quispe"]);
+    expect(a.escala).toBe(0.85);
+    const b = ajustarEnRenglones("María Quispe", 12 * 8 * 0.7, u);
+    expect(b).toEqual({ lineas: ["María", "Quispe"], escala: 1, partida: false });
+  });
+
+  it("un nombre larguísimo lo escribe entero en varios renglones, y la escala nunca baja del piso", () => {
+    const nombre = "María Fernanda Guadalupe Quispe Mamani Zuleta";
+    for (const piso of [0.45, 0.6, 0.8]) {
+      for (const ancho of [6, 9, 12, 20].map((n) => n * 8)) {
+        const a = ajustarEnRenglones(nombre, ancho, u, piso);
+        expect(a.escala).toBeGreaterThanOrEqual(piso);
+        expect(a.escala).toBeLessThanOrEqual(1);
+        const quitar = (x: string): string => x.replace(/\s+/gu, "");
+        expect(quitar(a.lineas.join(" "))).toBe(quitar(nombre));
+        // Lo que se dibuja, a esa escala, entra en la caja.
+        for (const l of a.lineas) expect(u(l) * a.escala).toBeLessThanOrEqual(Math.max(ancho, 8 * a.escala) + 1e-9);
+        expect(a.lineas.some((l) => l.endsWith("…"))).toBe(false);
+      }
+    }
+  });
+
+  it("con un tope de renglones, si ni a la escala del piso entra, lo dice (partida) para que se use otra forma del nombre", () => {
+    const entra = ajustarEnRenglones("Elena Condori", 9 * 8, u, 0.8, 2);
+    expect(entra.partida).toBe(false);
+    expect(entra.lineas).toEqual(["Elena", "Condori"]);
+    const largo = ajustarEnRenglones("María Fernanda Guadalupe Quispe Mamani Zuleta", 14 * 8, u, 0.8, 2);
+    expect(largo.partida).toBe(true);
+    expect(largo.lineas.length).toBeGreaterThan(2);
+    expect(largo.escala).toBe(0.8);
+    // Sin tope no hace falta partirlo: a la escala del piso entra en tres renglones.
+    const libre = ajustarEnRenglones("María Fernanda Guadalupe Quispe Mamani Zuleta", 14 * 8, u, 0.8);
+    expect(libre.partida).toBe(false);
+    expect(libre.lineas).toEqual(["María Fernanda", "Guadalupe Quispe", "Mamani Zuleta"]);
+  });
+
+  it("con espacio para unas pocas letras por renglón lo escribe en cuatro renglones a lo sumo mientras el piso lo permita", () => {
+    const a = ajustarEnRenglones("María Fernanda Guadalupe Quispe", 12 * 8, u, 0.6);
+    expect(a.lineas.length).toBeLessThanOrEqual(4);
+    expect(a.escala).toBeGreaterThanOrEqual(0.6);
+  });
+});
+
+describe("formaQueEntra: la letra no se achica, se muestra menos del nombre", () => {
+  it("el nombre entero si entra, y si no el más largo que sí entra, siempre por palabras", () => {
+    const u = (s: string): number => grafemas(s).length * 8;
+    expect(formaQueEntra("María Quispe", 12 * 8, u)).toBe("María Quispe");
+    expect(formaQueEntra("María Quispe", 11 * 8, u)).toBe("María Q.");
+    expect(formaQueEntra("María Quispe", 7 * 8, u)).toBe("María");
+    expect(formaQueEntra("María Quispe", 3 * 8, u)).toBe("M");
+    // Un solo nombre de pila largo: la inicial, nunca la mitad del nombre ni "…".
+    expect(formaQueEntra("Maximiliano", 5 * 8, u)).toBe("M");
+    expect(formaQueEntra("Maximiliano", 11 * 8, u)).toBe("Maximiliano");
+  });
+  it("nunca devuelve un texto más ancho que la caja salvo la inicial, y nunca termina en puntos suspensivos", () => {
+    const u = (s: string): number => grafemas(s).length * 8;
+    for (const nombre of [...SAMPLE, ...FIXTURES]) {
+      for (const ancho of [8, 24, 48, 64, 96, 200]) {
+        const f = formaQueEntra(nombre, ancho, u);
+        expect(f.endsWith("…")).toBe(false);
+        if (f !== inicialDe(nombre)) expect(u(f)).toBeLessThanOrEqual(ancho);
+      }
+    }
+  });
+  it("es una de las formas del nombre", () => {
+    for (const nombre of SAMPLE) expect(formasDe(nombre)).toContain(formaQueEntra(nombre, 80, medir));
   });
 });
 

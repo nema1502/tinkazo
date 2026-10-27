@@ -8,8 +8,10 @@ import { readFileSync } from "node:fs";
  * midiendo trece, con tres que nadie puede elegir.
  */
 
-/** Los ocho del selector, en el orden de `docs/juegos.md`: son los que se pueden elegir. */
-// De pie y El Trueque salieron del selector el 26 de octubre de 2026 (siguen abriendo con ?demo=): quedan ocho.
+/**
+ * Los ocho del selector, en el orden de `docs/juegos.md`: son los que se pueden elegir.
+ * De pie y El Trueque salieron el 26 de octubre de 2026 (siguen abriendo con `?demo=`).
+ */
 export const SELECTOR = ["race", "sapo", "trompo", "chovena", "pinata", "wheel", "teleferico", "oruro"];
 
 /**
@@ -20,10 +22,12 @@ export const SELECTOR = ["race", "sapo", "trompo", "chovena", "pinata", "wheel",
 export const FUERA_DEL_SELECTOR = ["tombola", "pasanaku", "stellar", "luz", "ledger", "rockets", "totora", "quien", "trueque"];
 
 /**
- * De los que salieron, los dos que conservan el golpe de cámara del barrido del 26 de octubre de 2026 (los otros
- * nunca lo tuvieron): `audit-emocion` les mide el zoom si se piden por nombre.
+ * Un botón del selector está «apagado» cuando está pero no se ve: el propio botón (no el paso que lo contiene) con el
+ * atributo `hidden`, `display: none` o `visibility: hidden`. Es una función para correr en la página (se pega en el
+ * texto que se evalúa) y la usan igual `audit-game` (comprobación 7: dice «apagado») y `audit-ui` (qué botones cuentan
+ * para las miniaturas): así los dos auditores no se desacuerdan sobre qué es un juego apagado.
  */
-export const FUERA_CON_GOLPE = ["quien", "trueque"];
+export const BOTON_APAGADO_JS = "((b) => b.hidden || getComputedStyle(b).display === 'none' || getComputedStyle(b).visibility === 'hidden')";
 
 /**
  * El detalle de la comprobación 7 de `audit-game` ("el juego tiene su botón en
@@ -51,8 +55,19 @@ export function juegosDelKit(raiz = new URL("../..", import.meta.url)) {
   return [...texto.matchAll(/^\s*id:\s*"([a-z]{3,12})",/gm)].map((m) => m[1]);
 }
 
-/** Los juegos de un pedido: "todos" son los del selector; una lista con comas, esos. */
+/**
+ * Los diez que hoy se pueden abrir y se auditan por completo: los ocho del selector y los dos que salieron el 26 de
+ * octubre de 2026 (De pie y El Trueque, que siguen con su juego, su letra y su golpe de cámara). Un `todos` mira los ocho;
+ * `diez` mira estos.
+ */
+export const LOS_DIEZ = [...SELECTOR, "quien", "trueque"];
+
+/**
+ * Los juegos de un pedido: "todos" son los del selector; "diez", los del selector más los dos que salieron (De pie y El
+ * Trueque), para que ningún juego que todavía abre se quede sin auditar; una lista con comas, esos.
+ */
 export function juegosDe(cual) {
   if (!cual || cual === "todos") return [...SELECTOR];
+  if (cual === "diez") return [...LOS_DIEZ];
   return String(cual).split(",").map((j) => j.trim()).filter(Boolean);
 }

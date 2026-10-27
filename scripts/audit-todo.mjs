@@ -19,7 +19,7 @@
  * - Sin `--solo` corren los de nivel `siempre`; `--noche` suma la mezcla de
  *   sonido (inestable con carga) y los dos temas de la QA de flujo; `--fisica`
  *   suma el auditor de física (mira juegos que ya no están en el selector).
- * - Los que miran juegos corren los diez del selector. `--juegos` los limita
+ * - Los que miran juegos corren los ocho del selector. `--juegos` los limita
  *   (`--juegos trompo` es el mínimo para un cambio en ese juego) y
  *   `--todos-los-juegos` suma los que salieron de él.
  * - Levanta `vite preview` en el primer puerto libre desde el 4180, salvo con

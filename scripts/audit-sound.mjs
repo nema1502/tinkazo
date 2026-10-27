@@ -20,7 +20,7 @@
 
 import { launch } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
-import { SELECTOR as JUEGOS } from "./lib/juegos.mjs";
+import { juegosDe } from "./lib/juegos.mjs";
 
 const args = process.argv.slice(2);
 const opt = (name, def) => {
@@ -33,7 +33,7 @@ const pedido = args[0] && !args[0].startsWith("--") ? args[0] : "todos";
 // `--motor clasico` escucha los juegos del motor anterior. El nuevo usa la placa de video.
 const motor = opt("--motor", "pixi");
 if (motor !== "clasico") process.env.TINKAZO_GPU = "1";
-const lista = pedido === "todos" ? JUEGOS : [pedido];
+const lista = juegosDe(pedido);
 const registro = [];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 

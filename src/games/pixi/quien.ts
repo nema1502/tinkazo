@@ -79,16 +79,36 @@ function crearEscena(kit: Kit, d: Datos) {
   };
   let g = G();
   /**
+   * El alto de una carta, en las unidades de su dibujo (ancho 120). La de siempre lleva la cara y el nombre; en un
+   * celular va la compacta, solo con el nombre: así entran más cartas por pantalla y la letra del nombre queda en la
+   * regla (16 px). Con la de siempre, doce cartas en 390 px de ancho dejaban el nombre en 10 px (barrido de letra, cierre
+   * del 26 de octubre de 2026).
+   */
+  let cartaH = 158;
+  /** Cuántas veces más grande que su tamaño en el tablero tiene que poder llegar la carta que gana con el golpe. */
+  const GOLPE_CARTA = 1.75;
+  /**
    * Las columnas del acomodo actual: se eligen al armarlo y no cambian hasta el
    * próximo. Así, cuando la caja del relator crece, el tablero se achica de a
    * poco en vez de reacomodarse de golpe (con 8, pasaba de dos filas a una en
    * pleno reparto).
    */
   let colsAcomodo: { m: number; cols: number } | null = null;
+  /** La carta de quien gana, entera, en el mundo. */
+  function cajaGanador(): Caja | null {
+    const c = cards[(rounds[total - 1] as Round).winner];
+    if (!c || !c.root.visible) return null;
+    const w = 120 * c.s, h = cartaH * c.s;
+    return { x: c.x - w / 2, y: c.y - h / 2, w, h };
+  }
+  /** Con la corona: debajo de donde sale el cartel y encima del relator. */
+  function zonaGanador(): Zona {
+    return { x0: 4 * g.k, y0: S.placaBajo(winners.length) + 8 * g.k, x1: g.w - 4 * g.k, y1: g.h - S.bottom() - 8 * g.k };
+  }
   /** La grilla de `m` cartas que mejor llena el tablero: el tamaño de carta y dónde va cada una. */
   const grid = (m: number): { cw: number; ch: number; at: (i: number) => { x: number; y: number } } => {
     const areaW = g.w * 0.94, areaH = Math.max(60, g.bottom - g.top);
-    const ratio = 1.32;
+    const ratio = cartaH === 158 ? 1.32 : cartaH / 120;
     if (!colsAcomodo || colsAcomodo.m !== m) {
       let best = { cols: 1, cw: 0 };
       for (let cols = 1; cols <= m; cols++) {
@@ -99,7 +119,12 @@ function crearEscena(kit: Kit, d: Datos) {
       colsAcomodo = { m, cols: best.cols };
     }
     const cols = colsAcomodo.cols, rows = Math.ceil(m / cols);
-    const cw = Math.min(Math.min(areaW / cols, areaH / rows / ratio) * 0.9, 170 * g.k), ch = cw * ratio;
+    // La que queda sola es la que gana: con lugar, debajo del cartel y encima del relator, para que el golpe la acerque
+    // `GOLPE_CARTA` veces sin que la cámara tenga que alejarse para meterla (con la de 170, el golpe llegaba a 1,48 veces el
+    // plano general en 1280×720: la carta ya llenaba lo que queda libre).
+    const zg = zonaGanador();
+    const cwUnica = m === 1 ? (zg.y1 - zg.y0) / GOLPE_CARTA / ratio : Infinity;
+    const cw = Math.min(Math.min(areaW / cols, areaH / rows / ratio) * 0.9, 170 * g.k, Math.max(40 * g.k, cwUnica)), ch = cw * ratio;
     const gx = areaW / cols, gy = Math.min(areaH / rows, ch * 1.12);
     const x0 = (g.w - cols * gx) / 2, y0 = g.top + (areaH - rows * gy) / 2;
     return { cw, ch, at: (i) => ({ x: x0 + ((i % cols) + 0.5) * gx, y: y0 + (Math.floor(i / cols) + 0.5) * gy }) };
@@ -154,18 +179,23 @@ function crearEscena(kit: Kit, d: Datos) {
     bg.clear().rect(0, 0, g.w, g.h).fill(S.dark ? 0x1b2340 : 0xdfe9f7);
     board.clear();
     cardLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
+    const compacta = S.portrait();
+    cartaH = compacta ? 70 : 158;
     cards = names.map((nm, i) => {
       const root = new Container();
       const front = new Container();
-      const W = 120, H = 158;
+      const W = 120, H = cartaH;
       const fondo = new Graphics()
         .roundRect(4, 5, W, H, 10).fill({ color: INK, alpha: 0.5 })
-        .roundRect(0, 0, W, H, 10).fill(S.dark ? CREAM : 0xffffff).stroke({ width: 3, color: INK })
-        .rect(8, 8, W - 16, 78).fill(S.color(i));
+        .roundRect(0, 0, W, H, 10).fill(S.dark ? CREAM : 0xffffff).stroke({ width: 3, color: INK });
+      // Con cara, el recuadro de color de la persona arriba; compacta, una franja a un costado.
+      if (compacta) fondo.rect(8, 8, 9, H - 16).fill(S.color(i));
+      else fondo.rect(8, 8, W - 16, 78).fill(S.color(i));
       const face = new Sprite(S.face(nm));
       face.anchor.set(0.5);
       face.width = face.height = 66;
       face.position.set(W / 2, 47);
+      face.visible = !compacta;
       // El nombre completo, en dos líneas: lo que se pregunta tiene que estar a la vista.
       // Un solo texto con las dos líneas, porque es un nombre y se lee entero:
       // en dos textos sueltos, con homónimos ("Carlos Choque" y "Carlos Choque 2")
@@ -175,8 +205,10 @@ function crearEscena(kit: Kit, d: Datos) {
       const lineas = partes.length > 1 ? [partes[0] as string, partes.slice(1).join(" ")] : [nm.trim()];
       const label = S.text(lineas.join("\n"), { fontSize: 19, fontWeight: "900", fill: INK, align: "center", lineHeight: 24 });
       label.anchor.set(0.5);
-      if (label.width > W - 10) label.scale.set((W - 10) / label.width);
-      label.position.set(W / 2, 124);
+      // La compacta deja la franja de color a un costado: el nombre va en lo que queda, y se achica solo lo justo.
+      const ancho = compacta ? W - 30 : W - 10;
+      if (label.width > ancho) label.scale.set(ancho / label.width);
+      label.position.set(compacta ? W / 2 + 8 : W / 2, compacta ? H / 2 : 124);
       front.addChild(fondo, face, label);
       // El dorso: liso, con un signo de pregunta. Es lo que se ve de los que se sentaron.
       const back = new Graphics()
@@ -350,13 +382,24 @@ function crearEscena(kit: Kit, d: Datos) {
         c.s = ((cel ? 0.4 : 0.5) * k) / z;
         c.back.visible = false;
         c.front.visible = true;
+        // La carta que espera es una insignia: la cara y el marco. Su nombre ya se dijo al sentarse y, a este tamaño,
+        // quedaba en 14 px en un proyector (bajo la regla); la carta compacta no tiene cara, y aquí la lleva.
+        c.label.visible = false;
+        c.face.visible = true;
+        if (S.portrait()) {
+          c.face.position.set(60, cartaH / 2);
+          c.face.width = c.face.height = cartaH * 0.82;
+        }
         c.root.position.set(c.x, c.y);
         c.root.scale.set(c.s, c.s);
         c.root.rotation = 0;
         c.root.alpha = 1;
-        fx.roundRect(c.x - 60 * c.s - (4 * k) / z, c.y - 79 * c.s - (4 * k) / z, 120 * c.s + (8 * k) / z, 158 * c.s + (8 * k) / z, (8 * k) / z).stroke({ width: (4 * k) / z, color: YELLOW });
+        fx.roundRect(c.x - 60 * c.s - (4 * k) / z, c.y - (cartaH / 2) * c.s - (4 * k) / z, 120 * c.s + (8 * k) / z, cartaH * c.s + (8 * k) / z, (8 * k) / z).stroke({ width: (4 * k) / z, color: YELLOW });
         return;
       }
+      // Una carta en juego lleva su nombre; la cara solo en la de siempre (la compacta no la tiene).
+      c.label.visible = true;
+      c.face.visible = !S.portrait();
       const volteoEn = gone.get(i);
       const flipping = volteoEn !== undefined && tAll >= volteoEn;
       if (pos >= 0 || flipping) {
@@ -405,10 +448,10 @@ function crearEscena(kit: Kit, d: Datos) {
         // Los que siguen de pie se mecen, cada uno a su ritmo: están parados, y
         // la sala no se queda quieta mientras se revisa el nombre.
         // La amplitud sigue al tamaño de la carta: con dos cartas grandes, un meneo chico no se ve.
-        const vaiven = pos >= 0 && !layoutDeal ? Math.sin(tAll * 2.2 + i * 1.7) * Math.max(3, 0.06 * c.s * 158) * k : 0;
+        const vaiven = pos >= 0 && !layoutDeal ? Math.sin(tAll * 2.2 + i * 1.7) * Math.max(3, 0.06 * c.s * cartaH) * k : 0;
         // Nadie se sienta: cada uno salta un poco después del anterior.
         const fs = nadieSeSienta && pos >= 0 ? (tAll - paso.flip - pos * 0.08) / SALTO : -1;
-        const salto = fs > 0 && fs < 1 ? Math.sin(Math.PI * fs) * SALTO_ALTO * c.s * 158 : 0;
+        const salto = fs > 0 && fs < 1 ? Math.sin(Math.PI * fs) * SALTO_ALTO * c.s * cartaH : 0;
         c.root.position.set(c.x, c.y + vaiven - salto);
         c.root.rotation = pos >= 0 && !layoutDeal ? Math.sin(tAll * 1.6 + i) * 0.025 : 0;
         c.root.scale.set(sx, c.s);
@@ -424,7 +467,7 @@ function crearEscena(kit: Kit, d: Datos) {
             // reproduce el parlante de un proyector.
             kit.sonido.latido();
           }
-          fx.roundRect(c.x - 62 * c.s - 8 * k, c.y - 79 * c.s - 8 * k, 124 * c.s + 16 * k, 158 * c.s + 16 * k, 14 * k).stroke({ width: 5 * k, color: YELLOW, alpha: 0.6 + pulse });
+          fx.roundRect(c.x - 62 * c.s - 8 * k, c.y - (cartaH / 2) * c.s - 8 * k, 124 * c.s + 16 * k, cartaH * c.s + 16 * k, 14 * k).stroke({ width: 5 * k, color: YELLOW, alpha: 0.6 + pulse });
         }
         // Los finalistas, en el aplauso, se mecen más: la pantalla no se queda quieta.
         if (paso.kind === "finalistas" && pos >= 0) {
@@ -469,7 +512,7 @@ function crearEscena(kit: Kit, d: Datos) {
         for (const i of set) {
           const c = cards[i];
           // El borde de arriba de la carta, con el meneo incluido.
-          if (c) cartas = Math.min(cartas, cam.toScreen(c.x, c.y - 79 * c.s - Math.max(3, 0.06 * c.s * 158) * k, g.w, g.h).y);
+          if (c) cartas = Math.min(cartas, cam.toScreen(c.x, c.y - (cartaH / 2) * c.s - Math.max(3, 0.06 * c.s * cartaH) * k, g.w, g.h).y);
         }
         if (Number.isFinite(cartas) && cartas > arriba) {
           // Girado, el sello ocupa más alto que su caja.
@@ -512,7 +555,7 @@ function crearEscena(kit: Kit, d: Datos) {
     if (!c) return { x: g.w / 2, y: (g.top + g.bottom) / 2, r: 60 * g.k };
     const p = cam.toScreen(c.x, c.y, g.w, g.h);
     const z = Math.max(0.3, cam.toScreen(1, 0, g.w, g.h).x - cam.toScreen(0, 0, g.w, g.h).x);
-    return { x: p.x, y: p.y, r: 79 * c.s * z, color: colorDeNombre(names[(rounds[total - 1] as Round).winner] ?? "") };
+    return { x: p.x, y: p.y, r: (cartaH / 2) * c.s * z, color: colorDeNombre(names[(rounds[total - 1] as Round).winner] ?? "") };
   }
 
   /** Lo que ningún zoom puede cortar con quien gana a la vista: su carta, debajo del cartel y encima del relator. */
@@ -521,10 +564,19 @@ function crearEscena(kit: Kit, d: Datos) {
     if (!c) return null;
     return {
       // Lo de abajo de la carta (el nombre y casi toda la cara): el borde de arriba puede quedar un poco debajo del cartel.
-      caja: { x: c.x - 60 * c.s, y: c.y - 79 * c.s + 0.2 * 158 * c.s, w: 120 * c.s, h: 0.8 * 158 * c.s },
+      caja: { x: c.x - 60 * c.s, y: c.y - (cartaH / 2) * c.s + 0.2 * cartaH * c.s, w: 120 * c.s, h: 0.8 * cartaH * c.s },
       zona: { x0: 8 * g.k, y0: S.placaBajo(winners.length) + 4 * g.k, x1: g.w - 8 * g.k, y1: g.h - S.bottom() - 6 * g.k },
     };
   }
+
+  // Para el auditor de emoción: la carta de quien gana, en la pantalla.
+  S.ganadorEn(() => {
+    const b = cajaGanador();
+    if (!b) return null;
+    const z = cam.toScreen(1, 0, g.w, g.h).x - cam.toScreen(0, 0, g.w, g.h).x;
+    const s = cam.toScreen(b.x, b.y, g.w, g.h);
+    return { x: s.x, y: s.y, w: b.w * z, h: b.h * z };
+  });
 
   build();
   return { rebuild: build, aim, draw, foco, protegida };

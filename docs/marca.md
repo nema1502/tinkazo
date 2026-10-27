@@ -185,9 +185,9 @@ El sitio está en español boliviano con voseo, y en inglés neutro. No hay un t
 
 Dentro de los juegos el texto es de relator de partido: mayúsculas, gritos, "¡NO RESPIRA NADIE!". Eso vive solo ahí. No se filtra a la página ni a una presentación.
 
-## Los diez juegos
+## Los ocho juegos
 
-Los del selector, en su orden. Cada uno tiene su color dominante, útil si una diapositiva los muestra. Ocho salen de la cultura boliviana y latinoamericana.
+Los del selector, en su orden. Cada uno tiene su color dominante, útil si una diapositiva los muestra. Siete salen de la cultura boliviana y latinoamericana (la ruleta es de todos). De pie y El Trueque salieron del selector el 26 de octubre de 2026 y siguen abriendo con `?demo=`.
 
 | Juego | Color | En una frase |
 |---|---|---|
@@ -197,8 +197,6 @@ Los del selector, en su orden. Cada uno tiene su color dominante, útil si una d
 | Chovena | Tierra colorada y tipoy blanco con las cintas de los cinco | La rueda chiquitana de la mano: cuando se corta la música, el que trastabilla sale |
 | Piñata | Los cinco, en conos | Cada palo tira caramelos; el último que queda adentro gana |
 | Ruleta | Los cinco, en gajos | La de siempre, pero que se ve girar con dos personas |
-| De pie | Cartas de los cinco, con la pregunta en amarillo | Toda la sala de pie: en cada pregunta sobre el nombre se sientan los que no siguen |
-| El Trueque | Tierra de feria, con los toldos de los ocho productos y la ruta en dorado | Un encargo que cambia de mano en mano hasta llegar a quien lo espera |
 | Teleférico | Los de las líneas, sobre un atardecer | Un convoy de cabinas por grupos: en cada estación baja un grupo entero |
 | Carnaval de Oruro | Rojo de las máscaras y amarillo, de noche | Una comparsa de la Diablada que se queda cuadra por cuadra hasta el Socavón |
 
@@ -225,7 +223,7 @@ Todos medidos, no estimados. Si se actualizan, se actualizan acá también.
 | Tests del protocolo en TypeScript | 27 |
 | Tests de TypeScript en total | 196 |
 | Comprobaciones por juego del auditor | 20 |
-| Juegos | 10 |
+| Juegos | 8 |
 | Espera entre sellar y sortear, modo libre | 10 segundos |
 | Espera si el sorteo se ancla en Stellar | 45 segundos |
 | Dependencias para sortear | 3 (RPC de Stellar, relays de drand, la wallet del organizador) |

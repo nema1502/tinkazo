@@ -84,7 +84,7 @@ export function buscarAuditor(token, catalogo = AUDITORES) {
  * Qué se corre: una tarea por (auditor, objetivo). Sin `solo` entran los de
  * nivel `siempre`, más `noche` con `--noche` y `fisica` con `--fisica`; con
  * `solo`, esos, pidan lo que pidan. Sin `juegos`, los que miran juegos corren
- * los diez del selector; `todosLosJuegos` suma los que salieron de él.
+ * los ocho del selector; `todosLosJuegos` suma los que salieron de él.
  */
 export function planDe(
   { solo = [], juegos = null, noche = false, fisica = false, todosLosJuegos = false, base = "http://localhost:4180" } = {},

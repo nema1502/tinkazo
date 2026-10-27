@@ -62,9 +62,11 @@ describe("espera y detalles siguen en la batería", () => {
 });
 
 describe("cuánto se recortó el `todos` (juego × auditor, y arranques de Chrome)", () => {
-  // Cuántos juegos miraba cada uno antes: rigor, identidad, emoción, sonido y
+  // Cuántos juegos miraba cada uno antes del recorte del 25 de octubre de 2026,
+  // con el selector de diez de entonces: rigor, identidad, emoción, sonido y
   // mezcla, trece (los diez y tres que nadie puede elegir); pantalla, doce
-  // (sin El Trueque); audit-game y delatores, los diez.
+  // (sin El Trueque); audit-game y delatores, los diez.  Hoy el selector tiene
+  // ocho (SELECTOR.length) y `escenasDespues` los cuenta.
   const ANTES = { "audit-game": 10, "audit-rigor": 13, "audit-identidad": 13, "audit-pantalla": 12, "audit-delatores": 10, "audit-emocion": 13, "audit-sound": 13, "audit-mezcla": 13 };
   const escenasAntes = (conMezcla) => Object.entries(ANTES).filter(([a]) => conMezcla || a !== "audit-mezcla").reduce((s, [, n]) => s + n, 0);
   const escenasDespues = (plan) => {

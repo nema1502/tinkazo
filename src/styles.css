@@ -498,12 +498,17 @@
   .gamepick button.atenuado:not(.on) .rec-nota { color: var(--muted); }
   .gamepick button.on .rec-nota { color: var(--on-purple); }
   #rec-head { margin: 4px 0 10px; }
-  /* Diez juegos en cinco columnas: dos filas parejas, sin huecos. El ancho
-     tope deja cada botón del ancho que tenía con seis columnas en 860 px, así
-     la miniatura no se estira. */
-  @media (min-width: 760px) {
-    .gamepick { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); max-width: 720px; }
+  /* Ocho juegos en cuatro columnas: dos filas parejas, sin huecos (con cinco
+     quedaba una segunda fila de tres). El ancho tope deja cada botón del ancho
+     que tenía con seis columnas en 860 px, así la miniatura no se estira. Por
+     debajo de 640 px, de a dos (cuatro filas): entre 461 y 760 px, de a tres
+     dejaba 3 + 3 + 2 (cierre del barrido, 26 de octubre de 2026). */
+  @media (min-width: 640px) {
+    .gamepick { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 576px; }
     .gamepick button { width: auto; }
+  }
+  @media (max-width: 639px) {
+    .gamepick button { width: calc(50% - 6px); }
   }
   .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0; border-bottom: var(--bw) solid var(--ink); }
   .kpis > div { padding: 16px 22px; border-right: 2px dashed var(--ink); }
@@ -681,6 +686,8 @@
     background: var(--card); color: var(--ink); border: var(--bw) solid var(--ink); box-shadow: var(--sh);
     padding: 12px 28px; font-weight: 900; font-size: clamp(16px, 2.6vw, 38px); white-space: nowrap; z-index: 2;
     max-width: 92vw; overflow: hidden; text-overflow: ellipsis;
+    /* Un nombre sin espacios más ancho que la caja se parte en otro renglón y no se corta con «…». */
+    overflow-wrap: anywhere;
     /* Ancho según lo que dice. Con `left: 50%` el ancho automático se corta en
        la mitad de la pantalla, y en un celular una frase larga quedaba en
        cuatro renglones tapando el último carril de la carrera. */
@@ -1044,9 +1051,9 @@
   #wheel { max-width: 100%; }
 
   /* --- Las páginas de lectura: juegos, historia y seguridad -------------- */
-  /* La grilla de los diez juegos del selector. Cada tarjeta es la captura de
+  /* La grilla de los ocho juegos del selector. Cada tarjeta es la captura de
      verdad del juego corriendo, no un dibujo: si un juego cambia, la página
-     miente hasta que se vuelva a capturar. En dos columnas, cinco filas
+     miente hasta que se vuelva a capturar. En dos columnas, cuatro filas
      parejas: con 300 px de mínimo eran tres por fila y quedaba una sola abajo.
      Con 340, en el ancho máximo de la página (1020 px) nunca entran tres. */
   .juegos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 20px; margin: 18px 0 34px; }
@@ -1263,9 +1270,9 @@
   /* La promesa de «Qué queda de tu sorteo»: amarillo con tinta, el par más fuerte de la marca (docs/marca.md). */
   .portada-sec p.promesa { background: var(--yellow); color: #191919; border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm); padding: 14px 18px; margin-top: 18px; font-weight: 700; }
 
-  /* Los diez juegos del selector, cada uno con su miniatura animada: tocarlo
-     abre la demo. En cinco columnas, dos filas parejas; en un celular, dos. */
-  .portada-juegos { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+  /* Los ocho juegos del selector, cada uno con su miniatura animada: tocarlo
+     abre la demo. En cuatro columnas, dos filas parejas; en un celular, dos. */
+  .portada-juegos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
   .portada-juegos a {
     display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--card); color: var(--ink);
     border: 2px solid var(--ink); box-shadow: var(--sh-sm); text-decoration: none; font-weight: 800; font-size: var(--letra-sec); line-height: 1.15;
@@ -1904,6 +1911,10 @@
   .winner-box > .again .row { margin-top: 12px; }
   .winner-box > .again .row > .primary { min-height: 52px; font-size: var(--letra-prin); }
   .winner-box > .again .note { margin-top: 10px; }
+  /* «Otra lista, copiar el mensaje y más» (src/ui/plegable.ts): lo que se usa poco va plegado, dentro de la misma caja y
+     debajo de los botones de siempre. Los tres botones de adentro llevan los ids de siempre. */
+  .winner-box > .again details.mas { margin: 12px 0 0; }
+  .winner-box > .again details.mas .row > a.ghost { display: inline-flex; align-items: center; justify-content: center; }
   .grande-row { margin-top: 16px; }
   /* En el celular "Siguiente premio (quedan 16)" entra en un renglón: con el relleno de siempre
      quedaban 258 px de ancho para el botón y el texto se partía en dos. En los celulares más angostos
@@ -1914,6 +1925,9 @@
     .winner-box { padding-left: 14px; padding-right: 14px; }
     .winner-box > .again { padding: 12px; }
     .winner-box > .again .row > .primary { padding-left: 10px; padding-right: 10px; font-size: var(--letra-prin); }
+    /* El pliegue ocupa el ancho de la caja, como los botones de arriba, y el enlace del correo como los botones. */
+    .winner-box > .again details.mas > summary { display: flex; justify-content: space-between; }
+    .winner-box > .again details.mas .row > a.ghost { flex: 1 1 100%; }
   }
   /* Una pantalla baja: el ganador y, pegado, lo que sigue, sin la etiqueta de arriba. */
   @media (max-height: 520px) {
@@ -2168,12 +2182,20 @@
      200 % de zoom (681 × 316), empujaba la espera y el primer ganador debajo de la barra de "lo que sigue"
      (batería de cierre del 26 de octubre de 2026). */
   @media (min-width: 1101px) { html { scroll-padding-top: 76px; } }
-  /* Una pantalla baja (una laptop chica con zoom, un celular de lado): con la letra grande el primer ganador crece
-     (el botón de "¿No está?" y la letra), así que lo de arriba se aprieta para que entero quede sobre la barra. */
-  @media (max-height: 520px) {
+  /* Una pantalla baja (una laptop chica con zoom, un celular de lado, una laptop de 1362 x 632): con la letra grande el
+     primer ganador crece (el botón de "¿No está?" y la letra), así que lo de arriba se aprieta para que entero quede
+     sobre la barra. Hasta el 26 de octubre de 2026 esto valía hasta 520 px de alto y en 632 la tarjeta, girada, quedaba
+     3 px debajo del borde de la barra (audit-flujo, laptop-100, paso 4). */
+  @media (max-height: 660px) {
     #sec-draw .body { padding-top: 10px; }
     .winner-box { padding-top: 6px; }
     .winner-card { margin-top: 0; }
+  }
+  /* Y en una de 520 px o menos (una laptop a 200 % de zoom, 681 x 316), con dos ganadores lado a lado el botón de «¿No está?»
+     se parte en tres renglones y la tarjeta seguía 5 px debajo del borde de la barra: un poco menos de aire arriba y adentro. */
+  @media (max-height: 520px) {
+    .winner-box { padding-top: 0; }
+    .winner-card { padding-top: 6px; padding-bottom: 6px; }
   }
 
   /* El resultado en grande: "Siguiente premio" es el único botón de color, grande y a la vista de la sala. */

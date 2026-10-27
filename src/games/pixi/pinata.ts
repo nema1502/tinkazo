@@ -1,4 +1,4 @@
-import { LEGIBLE } from "./letra";
+import { LEGIBLE, escalaChipLegible } from "./letra";
 import { Container, Graphics, Sprite } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
 import { paceFactor, setGameLength, type Beacon } from "../../state";
@@ -1136,8 +1136,10 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     // Relativos a la base legible (CHIP_SCALE). En un celular iban más grandes
     // que en la pantalla ancha, y con la letra nueva los que vuelan ocupaban
     // media pantalla y tapaban la piñata: ahora, apenas por encima de la base.
-    const scaleFly = phone ? 1 : 1.15;
-    const scaleSide = phone ? 0.85 : 0.9;
+    // Nunca por debajo de la regla de la letra de la sala (28 px en 1080, 16 en un celular): 0,85 y 0,9 daban 15,2 y 25,9.
+    const piso = escalaChipLegible(S.u());
+    const scaleFly = Math.max(phone ? 1 : 1.15, piso);
+    const scaleSide = Math.max(phone ? 0.85 : 0.9, piso);
     const bounds = { w: g.w, h: g.h, top: S.top(), bottom: S.bottom() };
     items.length = 0;
     alphaOf.clear();
@@ -1241,6 +1243,24 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       ch.position.set(o.x, o.y + d.h / 2);
     }
   }
+
+  // Para el auditor de emoción: el caramelo ganador y su nombre, en la pantalla.
+  S.ganadorEn(() => {
+    if (winC.inside) return null;
+    const g = G();
+    const z = cam.toScreen(1, 0, g.w, g.h).x - cam.toScreen(0, 0, g.w, g.h).x;
+    const r = candySize() * 2.4 * z;
+    const s = cam.toScreen(winC.x, winC.y, g.w, g.h);
+    let x0 = s.x - r, y0 = s.y - r, x1 = s.x + r, y1 = s.y + r;
+    const ch = chipOf.get(FLIGHT_KEY(winnerIdx));
+    const d = chipDim.get(FLIGHT_KEY(winnerIdx));
+    if (ch && d && ch.visible && ch.alpha > 0.05) {
+      x0 = Math.min(x0, ch.x);
+      x1 = Math.max(x1, ch.x + d.w);
+      y0 = Math.min(y0, ch.y - d.h / 2);
+    }
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  });
 
   S.run((dt, now) => {
     tAll += dt;

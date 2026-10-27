@@ -30,7 +30,7 @@
  */
 import { launch, sleep } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
-import { SELECTOR as TODOS } from "./lib/juegos.mjs";
+import { juegosDe } from "./lib/juegos.mjs";
 
 const args = process.argv.slice(2);
 const opt = (name, def) => {
@@ -40,7 +40,7 @@ const opt = (name, def) => {
 const cual = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--")) ?? "todos";
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const sinMusica = args.includes("--sin-musica");
-const lista = cual === "todos" ? TODOS : [cual];
+const lista = juegosDe(cual);
 
 /** Los umbrales. */
 const PICO_REAL_MAX = -1.0;

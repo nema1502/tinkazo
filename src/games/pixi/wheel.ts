@@ -1,10 +1,11 @@
-import { LEGIBLE } from "./letra";
+import { LEGIBLE, letraMinima } from "./letra";
 import { Container, Graphics, Sprite, Text } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
 import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, beepFor, fanfare, note } from "../../sound";
 import { writeStory } from "../drama";
 import { WINNER_HOLD, shorten, winnersLabel } from "../overlay";
+import { formaQueEntra } from "../nombres";
 import { gajoDe, repartir } from "../wheel-layout";
 import { FALSA, T_BRAKE, T_CREEP, T_CROWN, T_HOLD, T_LOCK, T_SETTLE, T_SPIN, T_WIND, beatFor, type BeatReason } from "./wheel-beats";
 import { lugarDe } from "./kit/respuestas";
@@ -186,10 +187,22 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
         // Claro y con contorno de tinta: en tinta sola, sobre el morado del
         // tema claro no llegaba a 4,5 a 1, y al final, con los gajos apagados,
         // no se leía en ninguno (la medición de pantalla).
-        const size = Math.min(LEGIBLE.sec * u, A * Rd * 0.9 * 0.42);
-        const nm = S.text(sliceLabel(names[personOf(j)] ?? "", n <= 4 ? 12 : 10), { fontSize: size, fontWeight: "900", fill: CREAM, stroke: contorno(size) });
+        //
+        // La letra de la regla (28 px en 1080, 16 en un celular) y nunca menos: hasta el 26 de octubre de 2026 el gajo
+        // le ponía tope (13 px con veinticuatro gajos en un celular) y un nombre largo se achicaba para entrar. Ahora lo
+        // que se acorta es el nombre ("Valeria T.", "Valeria"), hasta donde el gajo deja que dos nombres vecinos no se
+        // pisen mucho (la cuerda del gajo, a esa distancia del centro, no baja de seis décimas de la letra).
+        const size = letraMinima(u);
+        const nm = S.text("", { fontSize: size, fontWeight: "900", fill: CREAM, stroke: contorno(size) });
         nm.anchor.set(1, 0.5);
-        if (nm.width > Rd * 0.55) nm.scale.set((Rd * 0.55) / nm.width);
+        const hastaElCentro = (0.6 * size) / (2 * Math.sin(A / 2));
+        const cabe = Math.max(Rd * 0.2, Math.min(Rd * 0.62, Rd * 0.9 - hastaElCentro));
+        const largo = sliceLabel(names[personOf(j)] ?? "", n <= 4 ? 12 : 10);
+        const forma = formaQueEntra(largo, cabe, (s) => {
+          nm.text = s;
+          return nm.width;
+        });
+        nm.text = forma;
         const mid = a0 + A / 2;
         nm.rotation = mid;
         nm.position.set(Math.cos(mid) * Rd * 0.9, Math.sin(mid) * Rd * 0.9);
@@ -509,7 +522,11 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     fanfare();
     setTimeout(() => beep(note(17), 0.12, "triangle", 0.045), 520);
     setTimeout(() => beep(note(19), 0.12, "triangle", 0.035), 700);
-    S.mark("golpe", cam.golpe(0.3, 0.6, 1.1).toFixed(3));
+    // En un celular la rueda entera ya llena la pantalla y el golpe de 0,3 llegaba a 1,4 veces el plano general (se pide
+    // 1,6): sube a 0,55. El gajo ganador, debajo de la flecha, queda entero debajo del cartel y encima del relator con
+    // cualquier acercamiento: la cámara se corre lo justo (nunca antes del golpe: protegerlo antes lo delataría).
+    S.mark("golpe", cam.golpe(G.alto ? 0.55 : 0.3, 0.6, 1.1).toFixed(3));
+    cam.proteger({ x: -0.2 * G.R, y: -1.02 * G.R, w: 0.4 * G.R, h: 0.62 * G.R }, { x0: 8 * G.u, y0: S.placaBajo(winners.length) + 12 * G.u, x1: S.sw() - 8 * G.u, y1: S.sh() - S.bottom() - 10 * G.u });
     camBeat("crown");
   }
 
@@ -785,6 +802,16 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     }
     if (tAll >= T_CROWN) crown.at(tAll - T_CROWN);
   }
+
+  // Para el auditor de emoción: el gajo ganador, debajo de la flecha, en la pantalla.
+  S.ganadorEn(() => {
+    const sw = S.sw(), sh = S.sh();
+    const z = cam.toScreen(1, 0, sw, sh).x - cam.toScreen(0, 0, sw, sh).x;
+    // La rueda está en el origen del mundo; la cámara es la que la lleva adonde manda la disposición.
+    const a = cam.toScreen(0, -G.R * 0.95, sw, sh), b = cam.toScreen(0, -G.R * 0.4, sw, sh);
+    const ancho = G.R * 0.34 * z;
+    return { x: a.x - ancho / 2, y: a.y, w: ancho, h: b.y - a.y };
+  });
 
   S.run((dt, now) => {
     tAll += dt;

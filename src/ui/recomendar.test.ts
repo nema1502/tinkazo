@@ -248,6 +248,39 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
   });
 });
 
+describe("rangoVisible: lo que dice la tarjeta del selector bajo el nombre", () => {
+  it("va del mínimo (2 si el juego no tiene) al máximo", () => {
+    expect(Object.fromEntries(SELECTOR.map((g) => [g, rangoVisible(g)]))).toEqual({
+      race: "2–200", sapo: "2–40", trompo: "2–14", chovena: "8–80", pinata: "2–200", wheel: "2–200", teleferico: "16–200", oruro: "30–200",
+    });
+  });
+
+  it("una tarjeta con estrella nunca muestra un rango que no incluye a la lista (de 2 a 200 personas)", () => {
+    const rango = (g: Game): [number, number] => {
+      const [a, b] = (rangoVisible(g) ?? "0–0").split("–").map(Number);
+      return [a as number, b as number];
+    };
+    let estrellas = 0;
+    for (let n = 2; n <= 200; n++) {
+      for (const r of recomendar(n).games.filter((x) => x.fits === true)) {
+        const [desde, hasta] = rango(r.game);
+        expect(n >= desde && n <= hasta, `${r.game} con ${n}: «${rangoVisible(r.game)}»`).toBe(true);
+        estrellas++;
+      }
+    }
+    expect(estrellas).toBeGreaterThan(300);
+  });
+
+  it("y un juego atenuado (que no encaja) tampoco incluye a la lista en su rango", () => {
+    for (let n = 2; n <= 200; n++) {
+      for (const r of recomendar(n).games.filter((x) => x.fits === false)) {
+        const [a, b] = (rangoVisible(r.game) ?? "0–0").split("–").map(Number);
+        expect(n >= (a as number) && n <= (b as number), `${r.game} con ${n}`).toBe(false);
+      }
+    }
+  });
+});
+
 describe("recomendar: la duración de la sección 8.2 (Normal)", () => {
   it("sigue la tabla de la auditoría, tramo por tramo", () => {
     const d = (n: number) => recomendar(n).duracionNormal;

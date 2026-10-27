@@ -9,6 +9,8 @@ import { tiemposFoco } from "./foco";
 import { colorDeNombre } from "./foco-vista";
 import { cabe, centrar, encuadrar, unir, type Caja, type Zona } from "./encuadre";
 import { avatarColor } from "../../avatar";
+import { formasDe } from "../nombres";
+import { escalaChipLegible } from "./letra";
 import { assignSlots } from "./slots";
 import { planQualifier } from "./qualifier";
 import { HAND, MOUTH, SAPO_MAX, holeLayout, optsForArc, planThrows, throwTime, type Point, type Throw } from "./sapo-plan";
@@ -200,6 +202,15 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   const handPoint = (): Point => (S.portrait() ? { x: 0.9, y: L.tableR + 0.5 } : { x: HAND.x * 0.86, y: HAND.y * 0.82 });
   /** Lo que mide el chip de cada nombre a escala 1, en unidades de `S.u()`. Se mide al armar. */
   let anchoNombre: number[] = [];
+  /**
+   * En un celular, el nombre ya sentado en su agujero va en un chip compacto, sin la cara (la lleva el aro del
+   * agujero) y con la forma del nombre que entra a su lado a la letra de la regla (`construirSentados`). `anchoSentado`
+   * es lo que mide a escala 1, en unidades de `S.u()`, igual que `anchoNombre`.
+   */
+  let sentados: (Container | undefined)[] = [];
+  let anchoSentado: number[] = [];
+  /** Lo que mide el nombre de la persona `i` cuando se sienta: el compacto en un celular, el chip de siempre en una pantalla ancha. */
+  const anchoDe = (i: number): number => (S.portrait() ? (anchoSentado[i] ?? anchoNombre[i] ?? 0) : (anchoNombre[i] ?? 0));
   /** Lo que mide de alto un chip a escala 1, con su sombra, en unidades de `S.u()`. */
   let altoNombre = 25;
   const G = (): { w: number; h: number; k: number; cx: number; cy: number; sc: number; br: number; tilt: number } => {
@@ -212,15 +223,18 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     if (S.portrait() && anchoNombre.length) {
       // En un celular la mesa ocupaba casi todo el ancho y los nombres de los
       // costados volvían sobre su agujero. Se achica lo justo para que el más
-      // largo entre afuera, y no menos de un tercio del ancho.
+      // largo entre afuera. Con la letra de la regla (17 px) el piso de dos
+      // quintos del ancho ya no deja lugar a ningún nombre de un costado: la mesa
+      // puede bajar hasta un cuarto del ancho, y los nombres son compactos y se
+      // acortan para que no haga falta (`construirSentados`).
       for (let s = 0; s < holes; s++) {
         const h = L.holes[s] as Point;
         const ux = h.x / (Math.hypot(h.x, h.y) || 1);
         if (Math.abs(ux) <= 0.35) continue;
-        const W = (anchoNombre[whoAt(s)] ?? 0) * k * labelScale();
+        const W = anchoDe(whoAt(s)) * k * labelScale();
         ancho = Math.min(ancho, (w / 2 - 6 * k - W) / (Math.abs(h.x) + L.holeR * 1.45 * Math.abs(ux)));
       }
-      ancho = Math.max(ancho, (w * 0.4) / L.tableR);
+      ancho = Math.max(ancho, (w * 0.26) / L.tableR);
     }
     // Lo que ocupa de alto: desde el borde de arriba del cajón hasta lo más bajo
     // entre su borde de abajo y la mano, más el frente con los cajoncitos.
@@ -311,7 +325,8 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
    * no entraban entre la mesa y el borde (revisión del 20 de octubre de 2026).
    */
   // En horizontal, 1 (antes 0,9): con la regla de la letra de la sala (28 px en 1080) la mesa de 12 pasa de 26 a 29 px (barrido de letra, 26 de octubre de 2026).
-  const labelScale = (): number => (S.portrait() ? 0.6 : 1);
+  // En un celular, la escala de la regla (0,97: 17 px): era 0,6, que dejaba los nombres de la mesa en 9 a 11 px.
+  const labelScale = (): number => (S.portrait() ? escalaChipLegible(S.u()) : 1);
   /** Nombre y `n` letras del apellido: "María Q.", "María Qu.". En la mesa entran doce, y el nombre entero no. */
   const corto = (nm: string, n = 1): string => {
     const p = nm.trim().split(/\s+/);
@@ -346,6 +361,62 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     return names.map((nm, i) => ((veces.get(out[i] as string) ?? 0) > 1 ? shorten(nm, 18) : (out[i] as string)));
   })();
 
+  /**
+   * Los chips compactos de los nombres sentados (solo en un celular): a cada uno de los que llegan a la mesa, la forma
+   * más larga de su nombre (la etiqueta, el de pila o la inicial) cuyo chip, sin cara, entra a su lado a la letra de la
+   * regla: no más de un cuarto del ancho de la pantalla. Dos personas no quedan con el mismo texto: si pasa, las dos
+   * vuelven a su etiqueta, que es única en la lista. Hasta el 26 de octubre de 2026 el nombre se achicaba a 0,6 para
+   * entrar (9 a 11 px); ahora se muestra menos del nombre y a la letra de la regla (barrido de letra, cierre).
+   */
+  function construirSentados(k: number): void {
+    sentados = [];
+    anchoSentado = [];
+    if (!S.portrait()) return;
+    const tope = 0.27 * S.sw();
+    const esc = labelScale();
+    const texto = new Map<number, string>();
+    for (const [i] of slotOfName) {
+      const nm = names[i] ?? "";
+      const f = formasDe(nm);
+      const candidatos = [etiqueta[i] ?? corto(nm), f[1], f[0]];
+      for (let j = 0; j < candidatos.length; j++) {
+        const cand = candidatos[j] as string;
+        const c = S.chip(cand, 1, nm, null, false);
+        if (j === candidatos.length - 1 || c.width * esc <= tope) {
+          sentados[i] = c;
+          texto.set(i, cand);
+          break;
+        }
+        c.destroy({ children: true });
+      }
+    }
+    const veces = new Map<string, number[]>();
+    for (const [i, tx] of texto) veces.set(tx.toLowerCase(), [...(veces.get(tx.toLowerCase()) ?? []), i]);
+    for (const idxs of veces.values()) {
+      if (idxs.length < 2) continue;
+      for (const i of idxs) {
+        sentados[i]?.destroy({ children: true });
+        // La etiqueta única de la lista; si es larga (dos "Jorge Mamani" se llaman "Jorge Mamani 2" y "Jorge Mamani 3"),
+        // el nombre, la inicial del apellido y el número: "Jorge M. 3".
+        const nm = names[i] ?? "";
+        const num = /^(.*\S)\s+(\d+)$/.exec(nm.trim());
+        const corta = num ? `${formasDe(num[1] as string)[2]} ${num[2]}` : formasDe(nm)[2];
+        let c = S.chip(etiqueta[i] ?? corto(nm), 1, nm, null, false);
+        if (c.width * esc > tope * 1.2) {
+          c.destroy({ children: true });
+          c = S.chip(corta, 1, nm, null, false);
+        }
+        sentados[i] = c;
+      }
+    }
+    sentados.forEach((c, i) => {
+      if (!c) return;
+      c.visible = false;
+      chipLayer.addChild(c);
+      anchoSentado[i] = c.width / k;
+    });
+  }
+
   const build = (): void => {
     g = G();
     const k = g.k;
@@ -367,6 +438,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     });
     anchoNombre = chips.map((c) => c.width / k);
     altoNombre = (chips[0]?.height ?? 25 * k) / k;
+    construirSentados(k);
     g = G();
     // La grilla de la clasificatoria: todos los nombres a la vista, del tamaño
     // que entre. Las celdas miden lo que el chip más ancho y su alto de verdad:
@@ -697,6 +769,8 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
    * los bordes.
    */
   const encogeSentado = (s: number, i: number): number => {
+    // En un celular el nombre nunca se achica: la mesa se hizo para que entre, y el nombre se acorta si hace falta.
+    if (S.portrait()) return 1;
     const lp = P(labelAt(s));
     const an = anchorOf(s);
     const libre = an.ax <= 0.01 ? g.w - 4 - lp.x : an.ax >= 0.99 ? lp.x - 4 : g.w - 8;
@@ -716,7 +790,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     for (let s = 0; s < holes; s++) {
       const i = whoAt(s);
       const e = ls * encogeSentado(s, i);
-      const w = ((anchoNombre[i] ?? 0) * g.k * e) / z, h = (altoNombre * g.k * e) / z;
+      const w = (anchoDe(i) * g.k * e) / z, h = (altoNombre * g.k * e) / z;
       const lp = P(labelAt(s));
       const an = anchorOf(s);
       cajas.push({ x: lp.x - w * an.ax, y: lp.y - h * an.ay, w, h });
@@ -731,12 +805,25 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     return z;
   };
 
-  /** El agujero del ganador, que el golpe de la cámara no puede sacar de cuadro. */
-  const cajaGanador = (): { x: number; y: number; w: number; h: number } => {
-    const q = P(((tosses[tosses.length - 1] as Toss).th.landing));
+  /**
+   * El agujero del ganador y su nombre, que el golpe de la cámara no puede sacar de cuadro ni dejar debajo del cartel. El
+   * nombre es de la interfaz y no crece con la cámara: en la escena mide lo que mide en la pantalla dividido por el
+   * acercamiento (igual que en `mesaConNombres`).
+   */
+  const cajaGanador = (): Caja => {
+    const ultimo = tosses[tosses.length - 1] as Toss;
+    const q = P(ultimo.th.landing);
     const r = 90 * g.k;
-    return { x: q.x - r, y: q.y - r, w: 2 * r, h: 2 * r };
+    const hoyo = { x: q.x - r, y: q.y - r, w: 2 * r, h: 2 * r };
+    const z = Math.max(0.3, cam.toScreen(1, 0, g.w, g.h).x - cam.toScreen(0, 0, g.w, g.h).x);
+    const i = whoAt(ultimo.slot);
+    const e = labelScale() * encogeSentado(ultimo.slot, i);
+    const w = (anchoDe(i) * g.k * e) / z, h = (altoNombre * g.k * e) / z;
+    const lp = P(labelAt(ultimo.slot)), an = anchorOf(ultimo.slot);
+    return unir([hoyo, { x: lp.x - w * an.ax, y: lp.y - h * an.ay, w, h }]);
   };
+  /** Con la corona: debajo de donde sale el cartel y encima del relator. */
+  const zonaGanador = (): Zona => ({ x0: 4 * g.k, y0: S.placaBajo(winners.length) + 6 * g.k, x1: g.w - 4 * g.k, y1: g.h - S.bottom() });
 
   function aim(): void {
     const ultimo = tosses[tosses.length - 1] as Toss;
@@ -754,7 +841,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     const tope = S.portrait() ? topeConNombres() : Infinity;
     const cuidar = S.portrait() && !crowned && tAll >= T_SEATED;
     const zEfectivo = Math.max(0.3, cam.toScreen(1, 0, g.w, g.h).x - cam.toScreen(0, 0, g.w, g.h).x);
-    cam.proteger(cuidar ? mesaConNombres(zEfectivo) : crowned ? cajaGanador() : null, zonaJuego());
+    cam.proteger(cuidar ? mesaConNombres(zEfectivo) : crowned ? cajaGanador() : null, crowned ? zonaGanador() : zonaJuego());
     if (tAll >= ultimo.land) {
       // Desde que cae la última argolla, la mesa entera debajo de donde sale el
       // cartel y encima del relator: el agujero ganador se ve, los demás también,
@@ -1030,14 +1117,20 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
         return;
       }
       const ganador = lit.get(slot) === 1;
+      const sit = S.portrait() ? sentados[i] : undefined;
       if (crowned && !ganador) {
         c.visible = false;
+        if (sit) sit.visible = false;
         return;
       }
-      c.visible = enter > 0;
       const lp = P(labelAt(slot));
       const q = cam.toScreen(lp.x, lp.y, g.w, g.h);
       const u = ease.inOutCubic(clamp((tAll - flyAt(slot)) / Q_FLY, 0, 1));
+      // En un celular, ya sentado el nombre es el chip compacto; antes de sentarse, y el del ganador, el de siempre con su cara.
+      const llegado = !!sit && !ganador && u >= 1;
+      const cc = llegado ? (sit as Container) : c;
+      if (sit) (llegado ? c : sit).visible = false;
+      cc.visible = enter > 0;
       // El que no entra entre su punto y el borde se achica, en vez de volver
       // sobre su agujero. Se mide sin zoom: con la cámara cerca se achicaban
       // todos los de los bordes. Y vuela ya hacia ese tamaño: si se achicaba
@@ -1049,7 +1142,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       // En un celular el ganador va sobre su aro y no puede ser tan grande: con
       // 1,1 no toca los aros de los vecinos.
       const sc = (gridScale + ((ganador && !S.portrait() ? 1.45 : ls * encoge) - gridScale) * u) * (ganador ? (S.portrait() ? 1.1 : 1.3) : 1);
-      c.scale.set(sc * (u > 0 ? 1 : ease.outBack(enter)));
+      cc.scale.set(sc * (u > 0 ? 1 : ease.outBack(enter)));
       let an = an0;
       let qx = q.x, qy = q.y;
       if (ganador && S.portrait()) {
@@ -1066,15 +1159,15 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
         an = { ax: an.ax + (0.5 - an.ax) * f, ay: an.ay + (0.5 - an.ay) * f };
       }
       // En la grilla va centrado; al llegar, anclado por su borde de adentro.
-      const tx = qx - c.width * an.ax, ty = qy + c.height * (0.5 - an.ay);
-      const x = grid.x - c.width / 2 + (tx - (grid.x - c.width / 2)) * u, y = grid.y + (ty - grid.y) * u - Math.sin(Math.PI * u) * 40 * k;
-      const xx = clamp(x, 4, Math.max(4, g.w - c.width - 4));
-      c.position.set(xx, y);
+      const tx = qx - cc.width * an.ax, ty = qy + cc.height * (0.5 - an.ay);
+      const x = grid.x - cc.width / 2 + (tx - (grid.x - cc.width / 2)) * u, y = grid.y + (ty - grid.y) * u - Math.sin(Math.PI * u) * 40 * k;
+      const xx = clamp(x, 4, Math.max(4, g.w - cc.width - 4));
+      cc.position.set(xx, y);
       // Con la cámara cerca, el nombre que quedaría cortado contra el borde se
       // apaga en vez de arrastrarse encima de los agujeros o de la rana.
-      c.alpha = ganador || u < 1 || (Math.abs(xx - x) < 6 * k && qx > 0 && qx < g.w) ? 1 : 0;
+      cc.alpha = ganador || u < 1 || (Math.abs(xx - x) < 6 * k && qx > 0 && qx < g.w) ? 1 : 0;
       if (ganador) {
-        glowG.roundRect(c.x - 7 * k, c.y - c.height / 2 - 7 * k, c.width + 14 * k, c.height + 14 * k, 10 * k).fill({ color: YELLOW, alpha: 0.9 });
+        glowG.roundRect(cc.x - 7 * k, cc.y - cc.height / 2 - 7 * k, cc.width + 14 * k, cc.height + 14 * k, 10 * k).fill({ color: YELLOW, alpha: 0.9 });
       }
     });
 
@@ -1172,6 +1265,20 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     const z = Math.max(0.3, cam.toScreen(1, 0, g.w, g.h).x - cam.toScreen(0, 0, g.w, g.h).x);
     return { arco: story.arc, x: s.x, y: s.y, r: L.holeR * g.sc * z * 1.7, color: colorDeNombre(nameOfSlot(slot)), rival: null };
   }
+
+  // Para el auditor de emoción: el agujero de quien gana y su nombre, en la pantalla.
+  S.ganadorEn(() => {
+    const f = focoDelAgujero();
+    let x0 = f.x - f.r, y0 = f.y - f.r, x1 = f.x + f.r, y1 = f.y + f.r;
+    const c = chips[whoAt((tosses[tosses.length - 1] as Toss).slot)];
+    if (c && c.visible && c.alpha > 0.05) {
+      x0 = Math.min(x0, c.x);
+      x1 = Math.max(x1, c.x + c.width);
+      y0 = Math.min(y0, c.y - c.height / 2);
+      y1 = Math.max(y1, c.y + c.height / 2);
+    }
+    return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  });
 
   S.run((dt, now) => {
     tAll += dt;

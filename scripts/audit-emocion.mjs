@@ -31,38 +31,54 @@
  *
  * Uso:
  *   pnpm preview &
- *   node scripts/audit-emocion.mjs [juego|todos] [--semillas 16]
+ *   node scripts/audit-emocion.mjs [juego|todos] [--semillas 16] [--vista 390x844]
+ *
+ * `--vista 390x844` mira el show en la pantalla de un celular parado (por defecto, la
+ * ventana de 1280x720): el golpe tiene que llegar también ahí. `--solo-zoom` se salta las
+ * dieciséis semillas de los arcos y mira nada más el zoom y el cuadro del golpe (unos
+ * minutos para los diez juegos en lugar de media hora).
  */
 import { createHash } from "node:crypto";
 import { launch, sleep } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
-import { SELECTOR as TODOS, FUERA_CON_GOLPE, juegosDelKit } from "./lib/juegos.mjs";
-import { ZOOM_MINIMO, instalarZoom, razonDeZoom, resumirZoom, veces } from "./lib/zoom.mjs";
+import { LOS_DIEZ as CON_ZOOM_TODOS, juegosDe, juegosDelKit } from "./lib/juegos.mjs";
+import { ZOOM_MINIMO, fallasDeCuadro, instalarZoom, juntarCuadros, razonDeZoom, resumirZoom, veces } from "./lib/zoom.mjs";
 
 /**
  * Los juegos que tienen zoom de emoción (`Camera.golpe` en `docs/motores.md`):
  * el pico del zoom tiene que caer en el golpe, que es el instante en que sale el
  * cartel. Los demás todavía no lo tienen y no se miran.
  */
-// Todo juego del selector tiene el golpe de cámara (barrido de letra, 26 de octubre de 2026), también los dos que
-// salieron y se piden por nombre, y todo juego del kit: el director de cámara hace el golpe (`kit/director.ts`).
-const CON_ZOOM = [...new Set([...TODOS, ...FUERA_CON_GOLPE, ...juegosDelKit()])];
+// Los diez que todavía abren tienen el golpe de cámara (barrido de letra, 26 de octubre de 2026), y todo juego del kit:
+// el director de cámara hace el golpe (`kit/director.ts`).
+const CON_ZOOM = [...new Set([...CON_ZOOM_TODOS, ...juegosDelKit()])];
 const args = process.argv.slice(2);
 const opt = (name, def) => {
   const i = args.indexOf(name);
   return i >= 0 && args[i + 1] ? args[i + 1] : def;
 };
 const cual = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--")) ?? "todos";
-const juegos = cual === "todos" ? TODOS : [cual];
+const juegos = juegosDe(cual);
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const N = Number(opt("--semillas", "16"));
 // El zoom del golpe necesita correr el show entero (el golpe cae al final) y no
 // depende del arco: se mira en las primeras semillas nada más. 0 lo saltea.
 const zoomSemillas = Number(opt("--semillas-zoom", "2"));
 const zoomMin = Number(opt("--zoom-min", String(ZOOM_MINIMO)));
+/** `--solo-zoom`: sin las semillas de los arcos ni la carrera a mitad de camino. */
+const soloZoom = args.includes("--solo-zoom");
 // El motor nuevo es el de todos desde el 28 de septiembre (docs/motores.md);
 // `--motor clasico` mide los juegos del motor anterior. El nuevo usa la placa de video.
 const motor = opt("--motor", "pixi");
+/** `--vista 390x844`: otra pantalla (celular, tablet, girado); sin ella, la ventana de siempre. */
+const vista = (opt("--vista", "").match(/^(\d+)x(\d+)$/) ?? []).slice(1).map(Number);
+const conVista = vista.length === 2;
+/** Una pestaña nueva, en la pantalla pedida. */
+async function abrir() {
+  const page = await browser.open("about:blank");
+  if (conVista) await page.send("Emulation.setDeviceMetricsOverride", { width: vista[0], height: vista[1], deviceScaleFactor: 1, mobile: (vista[0] ?? 1280) < 700, screenWidth: vista[0], screenHeight: vista[1] });
+  return page;
+}
 if (motor !== "clasico") process.env.TINKAZO_GPU = "1";
 
 /** El reloj en turbo: veinte cuadros de juego por cuadro real, de a 1/64 s. */
@@ -117,8 +133,8 @@ try {
     const arcos = [];
     const aMitad = [];
     const zooms = [];
-    for (let i = 1; i <= N; i++) {
-      const page = await browser.open("about:blank");
+    for (let i = 1; i <= (soloZoom ? 0 : N); i++) {
+      const page = await abrir();
       await page.send("Page.addScriptToEvaluateOnNewDocument", { source: TURBO });
       // `auditar=marcas`: el juego anota su arco y el puesto de la ganadora en el lienzo solo si se lo piden (`kit/marcas.ts`).
       await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&semilla=${semilla(i)}&auditar=marcas${motor ? `&motor=${motor}` : ""}` });
@@ -159,12 +175,12 @@ try {
     const c = cuenta(arcos);
     const peor = Math.max(...c.values());
     datos.arcos[juego] = Object.fromEntries(c);
-    check(
+    if (!soloZoom) check(
       "los arcos varían",
       c.size >= 3 && peor <= N / 2 && !c.has("?"),
       [...c.entries()].map(([a, k]) => `${a} ${k}`).join(" · "),
     );
-    if (CON_ZOOM.includes(juego)) {
+    if (CON_ZOOM.includes(juego) && !soloZoom) {
       // El pico entre el golpe y 0,35 s después: el acercamiento llega en una
       // décima y se sostiene 0,3 s (`zoom-emocion.ts`).
       const en = zooms.filter((z) => z && z.pico - z.golpe >= -0.01 && z.pico - z.golpe <= 0.35).length;
@@ -194,16 +210,18 @@ try {
     if (zoomSemillas > 0) {
       const razones = [];
       const muestras = [];
+      const cuadros = [];
       for (let i = 1; i <= zoomSemillas; i++) {
-        const page = await browser.open("about:blank");
+        const page = await abrir();
         await page.send("Page.addScriptToEvaluateOnNewDocument", { source: TURBO_ZOOM });
         await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&semilla=${semilla(i)}&auditar=camara${motor ? `&motor=${motor}` : ""}` });
         // El show terminó cuando el estadio, que se vio abierto, se cierra. Si no
         // cierra en dos minutos, igual se lee lo que alcanzó a medir.
         await page.waitFor("window.__zoom && window.__zoom.vio && getComputedStyle(document.getElementById('stadium')).display !== 'block'", 120_000);
-        const z = JSON.parse((await page.eval("window.__zoom ? JSON.stringify({ minAntes: window.__zoom.minAntes, enGolpe: window.__zoom.enGolpe, golpe: window.__zoom.golpe, muestras: window.__zoom.muestras }) : 'null'")) || "null");
+        const z = JSON.parse((await page.eval("window.__zoom ? JSON.stringify({ minAntes: window.__zoom.minAntes, enGolpe: window.__zoom.enGolpe, golpe: window.__zoom.golpe, muestras: window.__zoom.muestras, cuadro: window.__zoom.cuadro }) : 'null'")) || "null");
         razones.push(razonDeZoom(z));
         muestras.push(z ? z.muestras : 0);
+        cuadros.push(z ? z.cuadro : null);
         try {
           await page.send("Page.close");
         } catch {
@@ -215,7 +233,16 @@ try {
       check(
         `el zoom del golpe llega a ${veces(zoomMin)} el plano general`,
         rz.conGolpe === razones.length && rz.min >= zoomMin,
-        rz.conGolpe ? `mín ${veces(rz.min)} · mediana ${veces(rz.mediana)} · máx ${veces(rz.max)} · con golpe ${rz.conGolpe}/${razones.length}` : muestras.every((m) => m === 0) ? "no hubo ninguna muestra de la cámara (¿no existe window.__tinkazo en este build?)" : `el juego no hace ningún golpe de cámara (${muestras.join("/")} muestras)`,
+        rz.conGolpe ? `mín ${veces(rz.min)} · mediana ${veces(rz.mediana)} · máx ${veces(rz.max)} · con golpe ${rz.conGolpe}/${razones.length}${rz.min < zoomMin ? ` · por semilla ${razones.map((r) => veces(r)).join(" ")}` : ""}` : muestras.every((m) => m === 0) ? "no hubo ninguna muestra de la cámara (¿no existe window.__tinkazo en este build?)" : `el juego no hace ningún golpe de cámara (${muestras.join("/")} muestras)`,
+      );
+      // Y con el golpe, quien gana y el cartel siguen a la vista: el acercamiento no corta a nadie ni lo mete debajo del cartel.
+      const cuadro = juntarCuadros(cuadros);
+      datos.zoom[juego].cuadro = cuadro;
+      const fallas = fallasDeCuadro(cuadro);
+      check(
+        "el golpe deja a quien gana y al cartel a la vista",
+        fallas.length === 0,
+        fallas.length ? fallas.join(" · ") : `ganador fuera ${Math.round(cuadro.ganadorFuera * 100)} % · tapado por el cartel ${Math.round(cuadro.ganadorTapado * 100)} % · cartel afuera ${Math.round(cuadro.cartelFuera)} px (${cuadro.n} cuadros)`,
       );
     }
   }

@@ -32,8 +32,10 @@
  *    `window.__PIXI_APP_INIT__`, como `audit-pantalla.mjs`) y los del DOM del
  *    estadio (subtítulos, marcador). De cada texto del lienzo se juzga la
  *    mediana de su tamaño mientras estuvo a la vista, no el instante de entrar
- *    o salir. El cartel del ganador es lo principal; nombres, marcador y
- *    escena, lo secundario.
+ *    o salir, y también cuánto tiempo pasó leyéndose chico: dos segundos o más
+ *    por debajo del mínimo (sin contar lo que se achica hasta desaparecer) es
+ *    una falla aunque la mediana pase. El cartel del ganador es lo principal;
+ *    nombres, marcador y escena, lo secundario.
  *
  * Capturas recortadas en `--out`, una por falla, hasta 12 por pantalla y 6 por
  * juego: del DOM con el protocolo de DevTools, y del lienzo con un recorte que
@@ -51,8 +53,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
-import { SELECTOR } from "./lib/juegos.mjs";
-import { FACTOR_MAYUSCULAS, archivoDe, agruparEstadio, escanearDom, estadoDelSorteo, evaluarDom, evaluarEstadio, llamar, preludioEstadio, reglasDe } from "./lib/legible.mjs";
+import { juegosDe } from "./lib/juegos.mjs";
+import { FACTOR_MAYUSCULAS, SEGUNDOS_POR_MUESTRA, archivoDe, agruparEstadio, escanearDom, estadoDelSorteo, evaluarDom, evaluarEstadio, llamar, preludioEstadio, reglasDe } from "./lib/legible.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
@@ -62,7 +64,7 @@ const opt = (n, d) => {
 };
 const flag = (n) => args.includes(n);
 const cual = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--")) ?? "todos";
-const juegos = cual === "todos" ? SELECTOR : cual.split(",");
+const juegos = juegosDe(cual);
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const outDir = opt("--out", "docs/capturas/legible");
 const reglas = reglasDe(opt("--reglas", ""));
@@ -196,7 +198,10 @@ async function estadio(browser, juego, tamano, tema) {
           captura = ` · ${archivo}`;
           capturas++;
         }
-        check(`${donde}: ${g.textos.length} texto(s) de la capa ${g.capa} miden ${g.mediana.toFixed(1)} px y la regla pide ${g.minimo}`, false, `p. ej. «${g.textos.slice(0, 2).join("», «")}», hasta ${g.max.toFixed(1)} px${captura}`);
+        const que = g.sostenido
+          ? `${g.textos.length} texto(s) de la capa ${g.capa} pasan ${(g.bajo * SEGUNDOS_POR_MUESTRA).toFixed(1)} s o más por debajo de la regla, hasta ${g.mediana.toFixed(1)} px, y la regla pide ${g.minimo}`
+          : `${g.textos.length} texto(s) de la capa ${g.capa} miden ${g.mediana.toFixed(1)} px y la regla pide ${g.minimo}`;
+        check(`${donde}: ${que}`, false, `p. ej. «${g.textos.slice(0, 2).join("», «")}», hasta ${g.max.toFixed(1)} px${captura}`);
       }
     }
     // Los subtítulos y el marcador son para la sala: la regla del tamaño, no la de la herramienta.

@@ -18,7 +18,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { launch } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
-import { detalleDelBoton } from "./lib/juegos.mjs";
+import { BOTON_APAGADO_JS, detalleDelBoton } from "./lib/juegos.mjs";
 
 const args = process.argv.slice(2);
 const game = args.find((a) => !a.startsWith("--"));
@@ -61,8 +61,8 @@ const READ_STATE = `JSON.stringify({
   options: [...document.querySelectorAll('.gamepick button')].map(b => ({
     id: b.id, text: b.textContent, key: b.getAttribute('data-i') || b.querySelector('[data-i]')?.getAttribute('data-i') || '',
     on: b.classList.contains('on'), disabled: b.disabled,
-    // Apagado: el botón está pero oculto (él mismo, no el paso que lo contiene).
-    apagado: b.hidden || getComputedStyle(b).display === 'none' || getComputedStyle(b).visibility === 'hidden',
+    // Apagado: el botón está pero oculto (él mismo, no el paso que lo contiene); la misma definición que audit-ui.
+    apagado: ${BOTON_APAGADO_JS}(b),
   })),
   drandLink: document.getElementById('drand-link')?.getAttribute('href') || '',
   whatsapp: document.getElementById('btn-whatsapp')?.getAttribute('href') || '',

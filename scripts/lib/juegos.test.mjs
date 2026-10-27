@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { FUERA_CON_GOLPE, FUERA_DEL_SELECTOR, SELECTOR, juegosDe, juegosDelKit } from "./juegos.mjs";
+import { FUERA_DEL_SELECTOR, LOS_DIEZ, SELECTOR, juegosDe, juegosDelKit } from "./juegos.mjs";
 import { aplicar } from "./nuevo-juego.mjs";
 
 describe("los juegos del kit, para los auditores", () => {
@@ -32,7 +32,9 @@ describe("los juegos del kit, para los auditores", () => {
   it("los del selector y los que salieron no se pisan, y 'todos' son los ocho del selector", () => {
     expect(SELECTOR).toHaveLength(8);
     for (const j of FUERA_DEL_SELECTOR) expect(SELECTOR).not.toContain(j);
-    for (const j of FUERA_CON_GOLPE) expect(FUERA_DEL_SELECTOR).toContain(j);
+    expect(LOS_DIEZ).toHaveLength(10);
+    for (const j of LOS_DIEZ.filter((x) => !SELECTOR.includes(x))) expect(FUERA_DEL_SELECTOR).toContain(j);
+    expect(juegosDe("diez")).toEqual(LOS_DIEZ);
     expect(juegosDe("todos")).toEqual(SELECTOR);
     expect(juegosDe("quien, sapo")).toEqual(["quien", "sapo"]);
   });

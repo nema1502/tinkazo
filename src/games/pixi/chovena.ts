@@ -2184,6 +2184,11 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     if (tAll >= T_CROWN) crownUI.at(tAll - T_CROWN, true, focoDeLaGanadora());
   }
 
+  S.ganadorEn(() => {
+    const f = focoDeLaGanadora();
+    return { x: f.x - f.r, y: f.y - f.r, w: 2 * f.r, h: 2 * f.r };
+  });
+
   S.run((dt, now) => {
     if (dead) return;
     tAll += dt;

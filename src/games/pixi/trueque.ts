@@ -637,6 +637,15 @@ export async function truequePixi(names: string[], winners: readonly number[], b
   }
   /** Lo que se ve de la feria: debajo de la barra de arriba y encima del relator. */
   const zonaJuego = (): Zona => ({ x0: 4 * S.u(), y0: S.top() + 4 * S.u(), x1: S.sw() - 4 * S.u(), y1: S.sh() - S.bottom() - 4 * S.u() });
+  /** Debajo de donde sale el cartel de la entrega y encima del relator. */
+  const zonaEntrega = (): Zona => ({ x0: 4 * S.u(), y0: S.placaBajo(winners.length) + 6 * S.u(), x1: S.sw() - 4 * S.u(), y1: S.sh() - S.bottom() - 4 * S.u() });
+  /** El puesto de quien espera el encargo con su nombre arriba, en el mundo (el nombre mide lo mismo en pantalla: se pasa al mundo con el acercamiento de ahora). */
+  function cajaGanador(): Caja | null {
+    const d = pos[prim?.destino ?? 0];
+    if (!d) return null;
+    const r = radio * 1.5, nombre = (NOMBRE_ALTO * S.u() + 8 * S.u()) / Math.max(0.3, cam.zoom);
+    return { x: d.x - r, y: d.y - r - nombre, w: 2 * r, h: 2 * r + nombre };
+  }
   /** Donde tienen que quedar los puestos del aro: debajo de la leyenda y encima del relator. */
   const zonaPuestos = (): Zona => ({ x0: 4 * S.u(), y0: leyendaAbajo + 4 * S.u(), x1: S.sw() - 4 * S.u(), y1: S.sh() - S.bottom() - 4 * S.u() });
 
@@ -784,6 +793,17 @@ export async function truequePixi(names: string[], winners: readonly number[], b
   dibujarPuestos(0, -1, false);
   dibujarEncargos(0);
   dibujarRuta(0);
+  // Para el auditor de emoción: el puesto de quien recibe el encargo, con su nombre arriba, en la pantalla.
+  S.ganadorEn(() => {
+    const d = pos[prim?.destino ?? 0];
+    if (!d) return null;
+    const w = S.sw(), h = S.sh();
+    const z = cam.toScreen(1, 0, w, h).x - cam.toScreen(0, 0, w, h).x;
+    const s = cam.toScreen(d.x, d.y, w, h);
+    const r = radio * 1.5 * z, nombre = NOMBRE_ALTO * S.u();
+    return { x: s.x - r, y: s.y - r - nombre, w: 2 * r, h: 2 * r + nombre };
+  });
+
   S.run((dt, now) => {
     tAll += dt;
     S.breath(tAll, T_ENTREGA);
@@ -810,7 +830,9 @@ export async function truequePixi(names: string[], winners: readonly number[], b
     // El atado que sigue la cámara, siempre entero en cuadro: cuando volvía de
     // un puesto que no lo cambió, iba más rápido que la cámara y salía por el
     // costado (revisión del Trueque, 21 de octubre de 2026).
-    cam.proteger(fase === "show" ? cajaVista(tt) : null, zonaJuego());
+    // Desde la entrega, quien espera con su puesto y su nombre, entero debajo del cartel y encima del relator con cualquier
+    // acercamiento (el golpe cayó con el cartel tapándolo en un celular).
+    cam.proteger(fase === "show" ? (tt >= T_ENTREGA ? cajaGanador() : cajaVista(tt)) : null, tt >= T_ENTREGA ? zonaEntrega() : zonaJuego());
     cam.update(dt);
     cam.apply(S.scene, S.sw(), S.sh(), now);
     dibujarAdornos(tt);

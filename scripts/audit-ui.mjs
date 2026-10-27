@@ -25,6 +25,11 @@
  * una Freighter de mentira, ver `lib/freighter-falsa.mjs`) y para la de rearmar
  * un comprobante, que no trae alto máximo propio y depende de la regla general.
  *
+ * Los botones del selector que están apagados (el propio botón con `hidden`, `display: none` o `visibility: hidden`: De pie
+ * y El Trueque salieron del selector el 26 de octubre de 2026 y quedan en el HTML así) no cuentan para las miniaturas:
+ * ni se miran ni se suman a «hay una miniatura por juego». La definición es la de `audit-game` («apagado», comprobación 7)
+ * y está en un solo lugar, `BOTON_APAGADO_JS` en `lib/juegos.mjs`, para que los dos auditores no se desacuerden.
+ *
  * Uso:
  *   node scripts/audit-ui.mjs [--base http://localhost:4173] [--out DIR]
  *                             [--pantalla laptop-100] [--sin-juegos]
@@ -35,6 +40,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { launch } from "./lib/browser.mjs";
+import { BOTON_APAGADO_JS } from "./lib/juegos.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 import { CUENTA_FALSA, freighterFalsa } from "./lib/freighter-falsa.mjs";
 import { UMBRALES, sondaTexto } from "./lib/texto-minimo.mjs";
@@ -1004,12 +1010,12 @@ async function run() {
             // que no gasten batería mientras nadie las mira.
             await page.eval(`document.querySelector('.gamepick').scrollIntoView({block:'center'})`);
             await sleep(1500);
-            const t1 = await page.eval(`JSON.stringify([...document.querySelectorAll('.gamepick button:not([hidden]) canvas.thumb')].map(cv => {
+            const t1 = await page.eval(`JSON.stringify([...document.querySelectorAll('.gamepick button')].filter((b) => !${BOTON_APAGADO_JS}(b)).map((b) => b.querySelector('canvas.thumb')).filter(Boolean).map(cv => {
               const c = cv.getContext('2d');
               return [...c.getImageData(0, 0, cv.width, cv.height).data].reduce((a, v) => a + v, 0);
             }))`);
             await sleep(700);
-            const t2 = await page.eval(`JSON.stringify([...document.querySelectorAll('.gamepick button:not([hidden]) canvas.thumb')].map(cv => {
+            const t2 = await page.eval(`JSON.stringify([...document.querySelectorAll('.gamepick button')].filter((b) => !${BOTON_APAGADO_JS}(b)).map((b) => b.querySelector('canvas.thumb')).filter(Boolean).map(cv => {
               const c = cv.getContext('2d');
               return [...c.getImageData(0, 0, cv.width, cv.height).data].reduce((a, v) => a + v, 0);
             }))`);
@@ -1017,7 +1023,7 @@ async function run() {
             const bb = JSON.parse(t2);
             // Contra los botones del selector, no contra un número escrito a
             // mano: eran seis, y al sumar juegos el auditor fallaba solo.
-            const botones = Number(await page.eval(`document.querySelectorAll('.gamepick button:not([hidden])').length`));
+            const botones = Number(await page.eval(`[...document.querySelectorAll('.gamepick button')].filter((b) => !${BOTON_APAGADO_JS}(b)).length`));
             check(`${etiqueta}: hay una miniatura por juego`, a.length === botones && botones > 0, `${a.length} de ${botones}`);
             const quietas = a.filter((v, k) => v === bb[k]).length;
             check(

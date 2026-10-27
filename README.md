@@ -58,7 +58,7 @@ sequenceDiagram
 1. **Seal.** The list is canonicalized and hashed with SHA-256. The contract records, among other things, the fingerprint, the head count, the number of winners and a **future** drand round. The contract refuses a round less than 30 seconds away.
 2. **Wait for the number.** [drand](https://drand.love) quicknet, the public randomness beacon run by the League of Entropy (Cloudflare, Protocol Labs, EPFL and others), publishes a BLS-signed round every 3 seconds. Nobody, including the organizer and Tinkazo, can know or choose it in advance.
 3. **Draw.** `draw` verifies the round's BLS12-381 signature **inside the contract** with a pairing check, derives the seed and selects the winners deterministically. It asks nobody for permission: if the organizer disappears mid-event, anyone can finalize the draw and the winner is the same.
-4. **Show.** One of ten full-screen games tells the result. The winner is already fixed when the animation starts; the game only narrates it.
+4. **Show.** One of eight full-screen games tells the result. The winner is already fixed when the animation starts; the game only narrates it.
 5. **Verify.** The proof is a link. Whoever opens it watches the page recompute the draw from scratch and gets a verdict: green if the contract attests the list, yellow if the draw was not anchored, red with the reason if anything does not match. If you ran several draws at the same event, the [event link](docs/evento.md) puts them on one page.
 
 The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.md) ([English translation](docs/protocol.en.md)), with test vectors shared by the Rust contract and the TypeScript client ([docs/vectors.json](docs/vectors.json)). Anyone can reimplement it and reach the same winners.
@@ -79,7 +79,7 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 | Luma import | Live | Drop the guest export and pick who gets in: those who checked in, the approved ones, or by hand |
 | Verification page | Live | Recomputes any draw in the browser from its proof link |
 | History-archive check | Command-line tool | `node scripts/verificar-archivo.mjs <network> <tx hash>` reads the public Stellar history archives of several organizations and confirms that a seal or draw transaction was in a ledger and when it closed. Green only when two organizations return the same ledger header ([protocol §7.2](docs/protocol.en.md)) |
-| Ten stadium games | Live | Deterministic: the same round draws the same frames on any machine |
+| Eight stadium games | Live | Deterministic: the same round draws the same frames on any machine |
 | Protocol v2 | Specified | [docs/protocolo.md](docs/protocolo.md) ([in English](docs/protocol.en.md)) and shared vectors that both implementations must pass |
 | Quality gates | Tests in CI, auditors before every push | 205 TypeScript tests and the 19 contract tests run in CI; ten custom auditors (below) run against the built site |
 
@@ -97,7 +97,7 @@ Tested with a thousand participants (September 22, with the previous engine): th
 
 ## The show
 
-Fairness is math; the show is what makes a room care. Ten games, most of them rooted in Bolivian and Latin American culture, each seeded with the same drand round, so a draw's animation is reproducible:
+Fairness is math; the show is what makes a room care. Eight games, most of them rooted in Bolivian and Latin American culture, each seeded with the same drand round, so a draw's animation is reproducible:
 
 | Game | What it is |
 |---|---|
@@ -107,8 +107,6 @@ Fairness is math; the show is what makes a room care. Ten games, most of them ro
 | Chovena | The Chiquitano dance from Santa Cruz: the ring turns hand in hand, and when the band cuts the music, whoever stumbles lets go and sits down at the edge of the plaza. The one game where the room claps along and freezes with the cut |
 | Piñata | The seven-pointed star from the posadas: every swing knocks names out, and the last candy inside wins |
 | Wheel | The classic, readable even with two people |
-| Stand Up | The whole room stands; each question about your own name (a letter, a digit, half the alphabet, how many letters) sits down those who don't match, until one is left standing |
-| El Trueque | The barter fair: each stall takes one product and gives another, and an order changes hands until it reaches whoever was waiting for it, the way a path payment crosses Stellar |
 | Cable Car | Cabins in the colors of the La Paz and El Alto lines climb the cable, one per group; at each station a whole group gets off |
 | Oruro Carnival | A Diablada troupe dances block by block toward the Socavón; a few stay at every arch |
 
@@ -130,7 +128,7 @@ Andean music with a beat plays in the background and follows the tension (the Ch
 | Changing the list after sealing | The fingerprint changes, and the one that counts was recorded before the seed |
 | Withholding an unwanted result | `draw` is permissionless: anyone can finalize it, and the winner is the same |
 | Drawing twice | The contract keeps the first result and rejects another |
-| A game showing another winner | Games receive the winner already decided, and an auditor checks it in all ten |
+| A game showing another winner | Games receive the winner already decided, and an auditor checks it in all eight |
 | Taking over the contract | It has no admin, it can't be upgraded and it holds no funds |
 
 **What stays open, and what stands against it**
@@ -220,7 +218,7 @@ cargo test --workspace
 cargo build --release --target wasm32v1-none -p tinkazo-raffle
 ```
 
-Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?demo=race|sapo|trompo|chovena|pinata|wheel|quien|trueque|teleferico|oruro` (the games that left the selector still open with their identifier, listed in [docs/juegos.md](docs/juegos.md)), `?instant=1`, `?pose=1`, `?motor=clasico` (the previous engine) and `?grifo=0` (testnet only: turns off the test-XLM faucet, to try things with a truly empty account; `?grifo=1` turns it back on).
+Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?demo=race|sapo|trompo|chovena|pinata|wheel|teleferico|oruro` (the games that left the selector, among them `quien` and `trueque`, still open with their identifier, listed in [docs/juegos.md](docs/juegos.md)), `?instant=1`, `?pose=1`, `?motor=clasico` (the previous engine) and `?grifo=0` (testnet only: turns off the test-XLM faucet, to try things with a truly empty account; `?grifo=1` turns it back on).
 
 ## Repository
 

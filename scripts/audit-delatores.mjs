@@ -57,15 +57,15 @@
  * correr horas de semillas. `--paralelo` abre varias ventanas a la vez en el
  * mismo Chrome: lo medido no cambia, y con cuatro tarda la mitad o menos.
  * Con `--paralelo 4`, cada semilla cuesta de 0,7 a 2 segundos según el juego y
- * la carga: los diez del selector con doscientas tardan unos 23 minutos en la
- * máquina del 21 de octubre de 2026 (Ryzen 7 7735HS, placa RTX 4060), y volver
+ * la carga: los diez que entonces tenía el selector, con doscientas, tardaban unos
+ * 23 minutos en la máquina del 21 de octubre de 2026 (Ryzen 7 7735HS, placa RTX 4060), y volver
  * a medirlos con `--releer`, unos 12 segundos. En los delatores, el script dice
  * también cuántos segundos antes del cartel se ve la señal (la mediana). Un
  * Chrome a la vez, con su puerto: CDP_PORT.
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { emitirJson } from "./lib/resumen.mjs";
-import { SELECTOR as TODOS } from "./lib/juegos.mjs";
+import { juegosDe } from "./lib/juegos.mjs";
 import { join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
 import { CDP, launch } from "./lib/browser.mjs";
@@ -74,14 +74,14 @@ import { grabador } from "./lib/delatores-grabador.mjs";
 import { grabarPara, senales } from "./lib/delatores-senales.mjs";
 import { UMBRAL, evaluarMedia, evaluarReparto, evaluarSenal, falsasAlarmas, formatoP, pct } from "./lib/delatores.mjs";
 
-/** Los diez del selector (`lib/juegos.mjs`). Los que salieron (tombola, pasanaku, stellar) se piden por nombre. */
+/** Los ocho del selector (`lib/juegos.mjs`). Los que salieron (tombola, pasanaku, stellar, quien, trueque…) se piden por nombre. */
 const args = process.argv.slice(2);
 const opt = (name, def) => {
   const i = args.indexOf(name);
   return i >= 0 && args[i + 1] ? args[i + 1] : def;
 };
 const cual = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--")) ?? "todos";
-const juegos = cual === "todos" ? TODOS : cual.split(",");
+const juegos = juegosDe(cual);
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 /** Los juegos que se juzgan a nivel del plan (puro, sin navegador). `--navegador` los mide en la página como a los otros. */
 const DEL_PLAN = new Set(["race"]);

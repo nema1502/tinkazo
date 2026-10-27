@@ -36,6 +36,23 @@ export const REGLAS = {
 export const TOLERANCIA = 0.5;
 
 /**
+ * Cada cuántos cuadros mira el muestreador del estadio (a 1/64 s de juego cada uno): un cuarto de segundo entre muestras.
+ */
+export const CADA_CUADROS = 16;
+export const SEGUNDOS_POR_MUESTRA = CADA_CUADROS / 64;
+
+/**
+ * Cuántas muestras (dos segundos de juego) a un tamaño parecido y por debajo del mínimo hacen una falla aunque la
+ * mediana pase. La mediana dice el tamaño de la mayor parte del tiempo y dejó pasar a los nombres de la carrera, que en
+ * el remate de un celular bajaban a 10,7 px durante diez segundos de veintiséis (cierre del barrido, 26 de octubre de
+ * 2026). Solo cuenta la letra que se queda chica: de la mitad del mínimo para arriba, y a un tamaño que no cambia más
+ * de `VARIACION_SOSTENIDO`. Un nombre que entra, sale o se da vuelta, como las cartas de De pie al repartirse, pasa por
+ * esos tamaños de camino y no es letra chica.
+ */
+export const MUESTRAS_SOSTENIDO = 8;
+export const VARIACION_SOSTENIDO = 1.3;
+
+/**
  * Lo que ganan las mayúsculas: lo que cuenta es el ángulo de la altura de la x,
  * y la letra versal de la marca gana un 35 %: "un rótulo de 14 en mayúsculas
  * vale como uno de 16" (barrido de letra, 25 de octubre de 2026).
@@ -106,10 +123,17 @@ export function evaluarEstadio(textos, tamano) {
     if (t.n < 2) continue;
     medidos++;
     const minimo = minimoPara(tamano, t.capa === "podio");
-    if (t.mediana >= minimo - TOLERANCIA) continue;
-    malos.push({ texto: t.s, capa: t.capa, mediana: t.mediana, max: t.max, n: t.n, minimo, caja: t.box, recorte: t.recorte ?? null });
+    const chico = t.mediana < minimo - TOLERANCIA;
+    // Aunque la mediana pase: pasó dos segundos o más leyéndose chico (`MUESTRAS_SOSTENIDO`).
+    const sostenido = !chico && (t.estable ?? 0) >= MUESTRAS_SOSTENIDO;
+    if (!chico && !sostenido) continue;
+    malos.push({
+      texto: t.s, capa: t.capa, mediana: t.mediana, max: t.max, n: t.n, minimo, caja: t.box, recorte: t.recorte ?? null,
+      sostenido, bajo: t.estable ?? 0, min: t.menorBajo ?? t.min,
+    });
   }
-  malos.sort((a, b) => a.mediana / a.minimo - b.mediana / b.minimo);
+  const peor = (m) => (m.sostenido ? m.min : m.mediana) / m.minimo;
+  malos.sort((a, b) => peor(a) - peor(b));
   return { medidos, malos };
 }
 
@@ -121,10 +145,15 @@ export function evaluarEstadio(textos, tamano) {
 export function agruparEstadio(malos) {
   const g = new Map();
   for (const m of malos) {
-    const k = `${m.capa}|${Math.round(m.mediana)}`;
-    const x = g.get(k) ?? { capa: m.capa, mediana: m.mediana, minimo: m.minimo, textos: [], max: m.max, recorte: null };
+    // Los que se leen chico la mayor parte del tiempo, por su mediana; los que solo lo pasan un rato, por lo más chico
+    // que sostuvieron, de a dos píxeles (un nombre a 10,7 y otro a 10,9 son la misma falla).
+    const medida = m.sostenido ? m.min : m.mediana;
+    const k = `${m.capa}|${m.sostenido ? "s" : "m"}|${m.sostenido ? Math.round(medida / 2) * 2 : Math.round(medida)}`;
+    const x = g.get(k) ?? { capa: m.capa, mediana: medida, minimo: m.minimo, textos: [], max: m.max, recorte: null, sostenido: !!m.sostenido, bajo: 0 };
     x.textos.push(m.texto);
     x.max = Math.max(x.max, m.max);
+    x.mediana = Math.min(x.mediana, medida);
+    x.bajo = Math.max(x.bajo, m.bajo ?? 0);
     if (!x.recorte && m.recorte) x.recorte = m.recorte;
     g.set(k, x);
   }
@@ -226,6 +255,18 @@ export function instalarMuestreador(config) {
   window.__legible = L;
   const CAPAS = ["fondo", "escena", "hud", "nombres", "podio"];
   const minimo = (capa) => (capa === "podio" ? config.principal : config.secundario);
+  // Cuántas de las medidas chicas caben en una ventana de tamaños parecidos: la más grande no pasa de `variacion`
+  // veces la más chica (1,3 si no se pide otra). Es lo que distingue letra chica de letra que pasa por esos tamaños.
+  const estables = (medidas) => {
+    const variacion = config.variacion ?? 1.3;
+    const v = [...medidas].sort((a, b) => a - b);
+    let mejor = 0;
+    for (let i = 0, j = 0; i < v.length; i++) {
+      while (v[i] > v[j] * variacion) j++;
+      mejor = Math.max(mejor, i - j + 1);
+    }
+    return mejor;
+  };
   const recortar = (b) => {
     const cv = document.getElementById("pixi-canvas");
     if (!cv || !cv.width || !window.innerWidth) return null;
@@ -245,10 +286,17 @@ export function instalarMuestreador(config) {
     const k = `${capa}|${s.slice(0, 40)}`;
     let r = L.textos.get(k);
     if (!r) {
-      r = { s: s.slice(0, 40), capa, px: [], max: 0, box: null, recorte: null, pxRecorte: 0, veces: 0 };
+      r = { s: s.slice(0, 40), capa, px: [], max: 0, box: null, recorte: null, pxRecorte: 0, veces: 0, bajo: 0, menorBajo: 1e9, chicos: [] };
       L.textos.set(k, r);
     }
     if (r.px.length < 400) r.px.push(px);
+    // Cuántas muestras se leyó chico (de la mitad del mínimo para arriba, y sin el medio píxel de tolerancia):
+    // la mediana no ve al nombre que pasa un rato achicado.
+    if (px >= 0.5 * minimo(capa) && px < minimo(capa) - 0.5) {
+      r.bajo++;
+      if (r.chicos.length < 400) r.chicos.push(px);
+      if (px < r.menorBajo) r.menorBajo = px;
+    }
     const b = nodo.getBounds();
     if (px > r.max) {
       r.max = px;
@@ -277,7 +325,9 @@ export function instalarMuestreador(config) {
       const s = nodo.text.trim();
       if (s.length >= 2) {
         const wt = nodo.worldTransform;
-        const px = (parseFloat(nodo.style.fontSize) || 0) * (Math.hypot(wt.a, wt.b) || 1);
+        // Un texto a escala cero (la carta que todavía no entró) mide cero, no uno: con `|| 1` se anotaba a su tamaño natural.
+        const escala = Math.hypot(wt.a, wt.b);
+        const px = (parseFloat(nodo.style.fontSize) || 0) * (Number.isFinite(escala) ? escala : 1);
         if (px > 0) registrar(s, capa, px, nodo);
       }
     }
@@ -296,7 +346,7 @@ export function instalarMuestreador(config) {
   L.resumen = () =>
     [...L.textos.values()].map((r) => {
       const v = [...r.px].sort((x, y) => x - y);
-      return { s: r.s, capa: r.capa, n: v.length, mediana: v[v.length >> 1], max: r.max, min: v[0], box: r.box, recorte: r.recorte };
+      return { s: r.s, capa: r.capa, n: v.length, mediana: v[v.length >> 1], max: r.max, min: v[0], bajo: r.bajo, estable: estables(r.chicos), menorBajo: r.bajo ? r.menorBajo : null, box: r.box, recorte: r.recorte };
     });
 }
 
@@ -306,7 +356,7 @@ export function instalarMuestreador(config) {
  * 1/64 s, así que la animación es la misma que a velocidad normal), el gancho
  * de Pixi y el muestreador, que mira cada `cada` cuadros.
  */
-export function preludioEstadio({ cada = 16, principal, secundario }) {
+export function preludioEstadio({ cada = CADA_CUADROS, principal, secundario }) {
   return `(() => {
   const RAF = window.requestAnimationFrame.bind(window);
   let virt = 0, id = 0, cuadro = 0;
@@ -316,7 +366,7 @@ export function preludioEstadio({ cada = 16, principal, secundario }) {
   window.requestAnimationFrame = (cb) => { cbs.set(++id, cb); return id; };
   window.cancelAnimationFrame = (x) => { cbs.delete(x); };
   performance.now = () => virt;
-  (${instalarMuestreador.toString()})(${JSON.stringify({ principal, secundario })});
+  (${instalarMuestreador.toString()})(${JSON.stringify({ principal, secundario, variacion: VARIACION_SOSTENIDO })});
   const bombear = () => {
     // Al menos un cuadro por cuadro real, aunque el juego ya no pida ninguno: así
     // el muestreador se entera de que el estadio se cerró.

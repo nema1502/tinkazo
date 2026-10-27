@@ -409,11 +409,11 @@ function avisarQueYaEntro(): void {
 }
 
 /* Modo demo y pose para capturas: `?demo=<juego>`, `?pose=1`, `?instant=1`. */
-// Los diez del selector y los que salieron de él, que siguen abriendo con
+// Los ocho del selector y los que salieron de él, que siguen abriendo con
 // `?demo=` y `?pose=` mientras se decide si se borran: el Cierre de Libro, la
 // carrera de cohetes y las balsas de totora (30 de septiembre de 2026), luz
-// roja, luz verde (5 de octubre), la tómbola (20 de octubre), y el Aguayo y la
-// Constelación, que El Trueque reemplaza (21 de octubre).
+// roja, luz verde (5 de octubre), la tómbola (20 de octubre), el Aguayo y la
+// Constelación (21 de octubre), y De pie y El Trueque (26 de octubre).
 const GAMES: readonly Game[] = [...new Set<Game>(["race", "chovena", "trompo", "pinata", "oruro", "tombola", "wheel", "teleferico", "pasanaku", "stellar", "sapo", "quien", "luz", "ledger", "rockets", "totora", "trueque", ...JUEGOS.map((j): Game => j.id)])];
 
 async function autoDemo(mode: string): Promise<void> {

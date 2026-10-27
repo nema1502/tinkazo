@@ -4,6 +4,8 @@ La sala se para. En cada turno aparece una pregunta sobre el nombre ("¿TU NOMBR
 
 **Identificador:** `quien` (no cambió: `/?demo=quien`, `/?pose=quien` y `/?pose=quien&n=200` siguen andando) · **Nombre visible:** "De pie" en español y "Stand up" en inglés · **Probarlo:** `/?demo=quien`, `/?pose=quien`, `/?pose=quien&n=200`.
 
+**Fuera del selector desde el 26 de octubre de 2026** (decisión del proyecto): es un juego de leer, y la prueba del niño pide que cualquier cuadro diga, sin leer, quién va adelante, hacia dónde van, cuánto falta y qué acaba de pasar. Sigue abriendo con `?demo=quien`; su captura se queda como fondo de su tarjeta.
+
 ## De dónde sale
 
 Del Ahorcado que propuso Guido Salazar ([@GuidoSV7](https://github.com/GuidoSV7)) el 1 de octubre de 2026. La revisión visual de ese día encontró dos problemas: la horca (un muñeco colgado evoca amenazas, en Bolivia más aún) y el largo del nombre, que delataba al ganador antes de la primera letra. Se quedó la idea de las preguntas que achican la lista.

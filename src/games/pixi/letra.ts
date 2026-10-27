@@ -27,6 +27,41 @@ export function letraMinima(k: number, principal = false): number {
 }
 
 /**
+ * El tamaño de los chips con nombre (`chip()` de `stage.ts`) sobre el de 12 px de letra en una pantalla de 720 con
+ * que nacieron: la letra de un chip a escala 1 es `12 * CHIP_SCALE * k`, 19 px en 720.
+ */
+export const CHIP_SCALE = 1.6;
+
+/**
+ * La escala más chica con que un chip con nombre cumple la regla en una pantalla de unidad `k`: lo que se le pasa
+ * a `chip(nombre, escala)`, o el piso de un juego que achica sus nombres para que entren. En 1080 y en un celular
+ * parado vale 0,97 (28 de 28,8 px y 17,3 de 17,8); en un celular girado, donde manda el piso de 16 px, más que 1.
+ * Un juego nunca achica un nombre por debajo de esto: si no entra, muestra menos nombres o los acorta.
+ */
+export function escalaChipLegible(k: number, principal = false): number {
+  return letraMinima(k, principal) / (12 * CHIP_SCALE * k);
+}
+
+/**
+ * La unidad `k` de una pantalla de `sw` por `sh`: un píxel del diseño de 720 de alto, o lo que entre en un celular parado.
+ * Es la `u()` de `stage.ts`, aparte para poder medir la regla sin una placa de video.
+ */
+export function unidadDePantalla(sw: number, sh: number): number {
+  return sw < sh ? Math.min(sw / 420, sh / 900) : sh / 720;
+}
+
+/**
+ * Un nombre «se lee» cuando su letra, en píxeles de pantalla, llega a la regla de la sala (`letraMinima`), con medio píxel
+ * de margen por el redondeo. Es la vara de `audit-legible` y `audit-pantalla`: la letra (el tamaño de fuente por la escala
+ * con que se dibuja), no el alto de la caja del texto, que con la interlínea es un cuarto más grande y dejaba pasar en
+ * `audit-identidad` un nombre de 23 px de letra en 1080 que los otros dos rechazan (cierre del barrido, 26 de octubre
+ * de 2026).
+ */
+export function seLee(letraPx: number, sw: number, sh: number): boolean {
+  return Number.isFinite(letraPx) && letraPx >= letraMinima(unidadDePantalla(sw, sh)) - 0.5;
+}
+
+/**
  * El tamaño de un texto en unidades `k` que no baja de la regla: `diseño` es el
  * que el juego quiere (en `k`); `k` la unidad del juego en este momento.
  */

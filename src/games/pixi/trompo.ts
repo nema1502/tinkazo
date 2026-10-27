@@ -1110,6 +1110,19 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     }));
   }
 
+  /** El trompo que gana entero, de la púa a lo más alto del cuerpo, en el mundo. */
+  function cajaGanador(): Caja {
+    const w = toWorld(win.x, win.y);
+    const r = rn * R();
+    return { x: w.x - r * 1.1, y: w.y - r * 2.2, w: r * 2.2, h: r * 2.4 };
+  }
+
+  /** Con la corona: debajo de donde sale el cartel y encima del relator. */
+  function zonaGanador(): Zona {
+    const k = S.u();
+    return { x0: 8 * k, y0: S.placaBajo(winners.length) + 8 * k, x1: S.sw() - 8 * k, y1: S.sh() - S.bottom() - 8 * k };
+  }
+
   /**
    * Dónde tienen que quedar: entre la barra de arriba y el relator, con lugar
    * arriba para medio nombre, que va centrado a la altura de la cabeza. El alto
@@ -1142,7 +1155,9 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     // Mientras pelean los dos, ninguna toma los corta ni les saca el nombre:
     // ni el viaje de la cámara entre una toma y otra, ni un golpe o un sacudón
     // (ver `proteger` en camera.ts). Son los dos, así que no dice quién gana.
-    cam.proteger(phase === "duel" && duo && win.alive && riv.alive ? cajaDuelo() : null, zonaDuelo());
+    // Con la corona, el trompo que gana entero debajo del cartel con cualquier acercamiento (el golpe lo dejaba con la
+    // mitad de arriba tapada por el cartel); antes, ni el del mano a mano. Recién desde la corona: antes sería delatarlo.
+    cam.proteger(crowned ? cajaGanador() : phase === "duel" && duo && win.alive && riv.alive ? cajaDuelo() : null, crowned ? zonaGanador() : zonaDuelo());
     const fz = focus && tFx < focus.until ? focus : null;
     const look = (f: NonNullable<typeof focus>): void => {
       // Al sacado lo sigue hasta la tiza y no más allá: afuera del ruedo la
@@ -1535,6 +1550,15 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
   }
 
   let duelSaid = false;
+  // Para el auditor de emoción: el trompo ganador, en la pantalla.
+  S.ganadorEn(() => {
+    const sw = S.sw(), sh = S.sh();
+    const b = cajaGanador();
+    const z = cam.toScreen(1, 0, sw, sh).x - cam.toScreen(0, 0, sw, sh).x;
+    const s = cam.toScreen(b.x, b.y, sw, sh);
+    return { x: s.x, y: s.y, w: b.w * z, h: b.h * z };
+  });
+
   S.run((dt, now) => {
     tFx += dt;
     // La parada congela el juego; la cámara lenta lo lleva al 30%. Los efectos

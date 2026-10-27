@@ -269,6 +269,90 @@ export function ajustar(texto: string, ancho: number, medir: (s: string) => numb
   return { lineas: [a, b], escala: Math.max(piso, Math.min(1, ancho / m)), partida: true };
 }
 
+/**
+ * El texto en renglones de a lo sumo `ancho`, partidos donde se puede: en los espacios y después de un guion o un guion
+ * bajo. Una palabra más ancha que la caja se parte por letras enteras (nunca por el medio de una letra con tilde o de un
+ * emoji) y nunca termina en «…». Es para el cartel de quien gana con un nombre larguísimo, que tiene que leerse entero a
+ * la letra de la regla: `ajustar` parte en dos y, cuando no alcanza, achica hasta que no se lee.
+ * `medir(s)` es el ancho del texto a la letra que se va a dibujar.
+ */
+export function envolver(texto: string, ancho: number, medir: (s: string) => number): string[] {
+  const t = texto.normalize("NFC").replace(/\s+/gu, " ").trim();
+  if (!t) return [""];
+  // Trozos: cada palabra se parte después de un guion o de un guion bajo ("Maximiliano_", "Alexander_"); el primer trozo de
+  // cada palabra, menos la primera, va después de un espacio.
+  const trozos: { s: string; espacio: boolean }[] = [];
+  t.split(" ").forEach((p, i) => {
+    (p.match(/[^_-]*[_-]|[^_-]+/gu) ?? [p]).forEach((trozo, j) => trozos.push({ s: trozo, espacio: i > 0 && j === 0 }));
+  });
+  const lineas: string[] = [];
+  /** Una palabra más ancha que la caja se parte por letras enteras; devuelve lo que queda sin partir. */
+  const partir = (palabra: string): string => {
+    let resto = palabra;
+    while (medir(resto) > ancho) {
+      const gs = grafemas(resto);
+      if (gs.length < 2) break;
+      let n = gs.length - 1;
+      while (n > 1 && medir(gs.slice(0, n).join("")) > ancho) n--;
+      lineas.push(gs.slice(0, n).join(""));
+      resto = gs.slice(n).join("");
+    }
+    return resto;
+  };
+  let actual = "";
+  for (const { s: trozo, espacio } of trozos) {
+    if (!actual) {
+      actual = partir(trozo);
+      continue;
+    }
+    const candidata = espacio ? `${actual} ${trozo}` : actual + trozo;
+    if (medir(candidata) <= ancho) actual = candidata;
+    else {
+      lineas.push(actual);
+      actual = partir(trozo);
+    }
+  }
+  lineas.push(actual);
+  return lineas;
+}
+
+/**
+ * Como `ajustar`, para un cartel que puede crecer hacia abajo (el de quien gana): el nombre entero en los renglones que
+ * hagan falta, a la letra más grande que se pueda y **nunca bajo `piso`** (la regla de la sala: `letraMinima / talla`).
+ * Prefiere, en este orden, a la escala 1 un renglón, uno achicado a 0,85 (apenas se nota), dos renglones, tres, y recién
+ * después achica de a poco hasta `piso`; con una palabra más ancha que la caja, la parte por letras enteras. Nunca «…».
+ * Con `maxLineas` (por defecto 4) no usa más renglones que esos: si ni a `piso` entra, devuelve lo que sale a `piso`
+ * (con más renglones que `maxLineas`) y `partida: true`, para que quien llama elija otra forma (un nombre más corto).
+ * `medir(s)` es el ancho del texto a la letra normal (escala 1).
+ */
+export function ajustarEnRenglones(texto: string, ancho: number, medir: (s: string) => number, piso = 0.6, maxLineas = 4): Ajuste {
+  const t = texto.normalize("NFC").replace(/\s+/gu, " ").trim();
+  const p = Math.min(1, Math.max(0.05, piso));
+  const todos: ReadonlyArray<readonly [number, number]> = [[1, 1], [0.85, 1], [1, 2], [0.85, 2], [0.7, 2], [1, 3], [0.7, 3], [p, 3], [p, 4]];
+  const orden = [...todos.filter(([, m]) => m < maxLineas), [p, maxLineas] as const];
+  for (const [e0, maximo] of orden) {
+    const e = Math.min(1, Math.max(p, e0));
+    const lineas = envolver(t, ancho / e, medir);
+    if (lineas.length <= maximo) return { lineas, escala: e, partida: false };
+  }
+  return { lineas: envolver(t, ancho / p, medir), escala: p, partida: true };
+}
+
+/**
+ * La forma más larga de un nombre que entra en `ancho` **sin achicar la letra** (barrido de letra, 26 de octubre de
+ * 2026): el nombre entero, "María Q.", el de pila y, si ni eso, la inicial. Donde el nombre no entra a la letra de
+ * la regla (un celular, un gajo angosto), un juego muestra menos del nombre y no un nombre chico. Cada forma corta
+ * por palabras, nunca por el medio de una (`formasDe`). `medir(s)` es el ancho del texto a la letra que se va a dibujar.
+ */
+export function formaQueEntra(nombre: string, ancho: number, medir: (s: string) => number): string {
+  const f = formasDe(nombre);
+  for (const nivel of [3, 2, 1] as const) {
+    const forma = f[nivel];
+    if (medir(forma) <= ancho) return forma;
+  }
+  return f[0];
+}
+
 /** La mediana de una lista de números: 0 si está vacía. */
 export function mediana(xs: readonly number[]): number {
   if (!xs.length) return 0;

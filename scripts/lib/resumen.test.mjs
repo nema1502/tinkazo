@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MAX_FALLAS, emitirJson, esResumen, leerResumen, normalizar, quiereJson, resumenDe } from "./resumen.mjs";
-import { FUERA_DEL_SELECTOR, SELECTOR, detalleDelBoton, juegosDe } from "./juegos.mjs";
+import { BOTON_APAGADO_JS, FUERA_DEL_SELECTOR, LOS_DIEZ, SELECTOR, detalleDelBoton, juegosDe } from "./juegos.mjs";
 import { MAX_DESTELLOS, comprobacionesDePantalla, hayHallazgo } from "./pantalla-comprobaciones.mjs";
 
 afterEach(() => vi.restoreAllMocks());
@@ -106,6 +106,21 @@ describe("los juegos de un `todos`", () => {
     for (const j of FUERA_DEL_SELECTOR) expect(SELECTOR).not.toContain(j);
   });
 
+  it("«diez» suma De pie y El Trueque, que salieron del selector pero siguen auditándose", () => {
+    expect(LOS_DIEZ).toHaveLength(10);
+    expect(juegosDe("diez")).toEqual([...SELECTOR, "quien", "trueque"]);
+    expect(new Set(LOS_DIEZ).size).toBe(10);
+  });
+
+  it("cada auditor que acepta «todos» resuelve el pedido con juegosDe, así «diez» funciona en todos", async () => {
+    const { readFileSync } = await import("node:fs");
+    for (const f of ["audit-emocion", "audit-delatores", "audit-identidad", "audit-legible", "audit-mezcla", "audit-rigor", "audit-sound", "audit-pantalla"]) {
+      const src = readFileSync(new URL(`../${f}.mjs`, import.meta.url), "utf8");
+      expect(src, f).toContain("juegosDe(");
+      expect(src, f).not.toMatch(/=== "todos" \? (TODOS|SELECTOR|JUEGOS)/);
+    }
+  });
+
   it("una lista con comas se respeta tal cual, incluso con juegos fuera del selector", () => {
     expect(juegosDe("trompo, tombola")).toEqual(["trompo", "tombola"]);
   });
@@ -113,6 +128,37 @@ describe("los juegos de un `todos`", () => {
   it("devuelve una copia: tocar el resultado no cambia la lista de todos", () => {
     juegosDe("todos").pop();
     expect(SELECTOR).toHaveLength(8);
+  });
+});
+
+describe("qué es un botón apagado del selector (audit-game y audit-ui)", () => {
+  const apagado = (b, cs) => {
+    const antes = globalThis.getComputedStyle;
+    globalThis.getComputedStyle = () => cs;
+    try {
+      return (0, eval)(BOTON_APAGADO_JS)(b);
+    } finally {
+      globalThis.getComputedStyle = antes;
+    }
+  };
+
+  it("el atributo hidden, display none y visibility hidden del propio botón lo apagan", () => {
+    expect(apagado({ hidden: true }, { display: "block", visibility: "visible" })).toBe(true);
+    expect(apagado({ hidden: false }, { display: "none", visibility: "visible" })).toBe(true);
+    expect(apagado({ hidden: false }, { display: "block", visibility: "hidden" })).toBe(true);
+  });
+
+  it("un botón visible no está apagado", () => {
+    expect(apagado({ hidden: false }, { display: "flex", visibility: "visible" })).toBe(false);
+  });
+
+  it("los dos auditores usan la misma definición y ninguno tiene la suya a mano", async () => {
+    const { readFileSync } = await import("node:fs");
+    for (const f of ["audit-game.mjs", "audit-ui.mjs"]) {
+      const src = readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
+      expect(src, f).toContain("BOTON_APAGADO_JS");
+      expect(src, f).not.toContain("button:not([hidden])");
+    }
   });
 });
 

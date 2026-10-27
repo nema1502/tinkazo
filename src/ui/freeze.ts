@@ -32,11 +32,13 @@ import { claveDelSello, ponerTextoDelSello, sinSelloAhora } from "./sin-sello-te
  * del trompo, las balsas, la piñata y Oruro no hacían nada: solo se llegaba a
  * ellos con `?demo=`, que es lo que usan los auditores.
  *
- * Desde el 21 de octubre de 2026 son diez: entró El Trueque y salieron el
+ * Desde el 21 de octubre de 2026 eran diez: entró El Trueque y salieron el
  * Aguayo y la Constelación, que se fundieron en él (la tómbola había salido el
- * 20). Van en el orden de la auditoría de juegos, de las salas chicas a las
- * grandes; con la lista sellada los reordena la recomendación (`recomendar.ts`).
- * Los que salen siguen abriendo con `?demo=`.
+ * 20). Desde el 26 quedan ocho en el selector: De pie y El Trueque salieron, y
+ * sus botones siguen en esta lista y en `index.html`, ocultos (`hidden`), para que
+ * `?demo=` y los auditores los encuentren. Van en el orden de la auditoría de
+ * juegos, de las salas chicas a las grandes; con la lista sellada los reordena la
+ * recomendación (`recomendar.ts`). Los que salen siguen abriendo con `?demo=`.
  */
 const BOTONES_DEL_SELECTOR: ReadonlyArray<[string, Game]> = [
   ["g-race", "race"],

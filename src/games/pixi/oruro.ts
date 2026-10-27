@@ -1,4 +1,5 @@
-import { LEGIBLE } from "./letra";
+import { LEGIBLE, escalaChipLegible, letraMinima } from "./letra";
+import { formaQueEntra } from "../nombres";
 import { Container, Graphics, Sprite, type Texture } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
 import { musicHold } from "../../music";
@@ -56,7 +57,10 @@ const BEAT_REAL = 0.5;
  * doce, con nombres repetidos y numerados no se sabía cuál se quedaba.
  */
 const TAG_CHARS = 20;
-/** Los carteles con nombre miden por lo menos esto de letra en la pantalla. */
+/**
+ * Los carteles con nombre miden por lo menos esto de letra en la pantalla: antes 14 px fijos, hoy la regla de la
+ * letra de la sala (`letraMinima`). Con ella entran menos carteles a la vez (`tagBudget`), y es lo que se quiere.
+ */
 const TAG_FONT_PX = 14;
 /** Medio ancho de un bailarín, en unidades de su dibujo. */
 const BODY_HALF_W = 34;
@@ -645,21 +649,45 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
    * pantalla de 720), que se lee desde el fondo. Hasta diez nombres en una
    * columna; más, en dos. `top` es dónde empiezan los renglones.
    */
-  function rosterGeo(g: Geo, m: number): { x: number; y: number; w: number; cols: number; fs: number; rh: number; top: number; head: number } {
+  function rosterGeo(g: Geo, m: number, minW = 0): { x: number; y: number; w: number; cols: number; fs: number; rh: number; top: number; head: number } {
     const k = g.k;
     const cols = m > 10 ? 2 : 1;
     const top0 = S.portrait() ? S.top() + 54 * k : Math.max(S.top() + 56 * k, pillsBottom() + 10 * k);
     const avail = g.h - S.bottom() - 10 * k - top0;
     const rows = Math.ceil(m / cols);
     // La letra más grande que entre: los renglones y la cabecera en el alto libre.
-    const fs = clamp(Math.min(LEGIBLE.sec * k, avail / (rows * 1.4 + 4.5)), 11, 40);
+    const fs = clamp(Math.min(letraMinima(k), avail / (rows * 1.4 + 4.5)), 11, 40);
     const rh = fs * 1.4;
     const top = fs * 4.0;
     const colW = Math.min((S.portrait() ? 176 : 232) * Math.max(0.85, k), (g.w - 40 * k) / cols);
-    const w = cols * colW + 24 * k;
+    // Ancho para que el título y la línea de abajo entren sin achicarse: un celular los achicaba a 15 y 14 px.
+    const w = Math.min(g.w - 16 * k, Math.max(cols * colW + 24 * k, minW));
     const h = top + rows * rh + 12 * k;
     if (S.portrait()) return { x: Math.max(8 * k, (g.w - w) / 2), y: top0, w, cols, fs, rh, top, head: h };
     return { x: g.w - w - 22 * k, y: top0 + Math.max(0, (avail - h) / 2), w, cols, fs, rh, top, head: h };
+  }
+
+  /**
+   * El ancho que piden el título y la línea de abajo del cartel de una fraternidad a la letra de la regla (el título
+   * puede bajar hasta ahí, la línea no). Sin esto, en un celular el cartel era de 185 px y achicaba el título a 15 px
+   * y "Llamerada · 4 bailarines" a 14.
+   */
+  const anchoCartel = new Map<string, number>();
+  function anchoDelCartel(g: Geo, gi: number): number {
+    const k = g.k;
+    const clave = `${gi}|${getLang()}|${Math.round(k * 100)}`;
+    const ya = anchoCartel.get(clave);
+    if (ya !== undefined) return ya;
+    const f = P.frats[gi] as Frat;
+    const L = T[getLang()];
+    const fs = letraMinima(k);
+    const a = S.text(L.cOruFratTitle(f.article, f.name).toUpperCase(), { fontSize: fs, fontWeight: "900" });
+    const b = S.text(L.cOruRosterSub(L.cOruDanza(f.dance), f.members.length), { fontSize: fs, fontWeight: "700" });
+    const w = Math.max(a.width, b.width) + 26 * k + 12 * k;
+    a.destroy();
+    b.destroy();
+    anchoCartel.set(clave, w);
+    return w;
   }
 
   /** Arma el cartel de una fraternidad de a pocos renglones por cuadro: armar veinte de una trababa la escena. */
@@ -672,7 +700,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       rosterRows = [];
       rosterBuilt = 0;
       rosterFor = gi;
-      const geo = rosterGeo(g, f.members.length);
+      const geo = rosterGeo(g, f.members.length, anchoDelCartel(g, gi));
       rosterBox = { x: geo.x, y: geo.y, w: geo.w, h: geo.head };
       const bg = new Graphics()
         .roundRect(6 * k, 6 * k, geo.w, geo.head, 10 * k).fill(INK)
@@ -689,15 +717,15 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       const sub = S.text(L.cOruRosterSub(L.cOruDanza(f.dance), f.members.length), { fontSize: geo.fs, fontWeight: "700", fill: S.dark ? CREAM : INK });
       sub.alpha = 0.85;
       sub.position.set(26 * k, geo.fs * 2.65);
-      // En un celular el cartel es angosto y "LOS JUCUMARIS" se salía por la
-      // derecha: el título y la línea de abajo se achican lo justo para entrar.
+      // El cartel se ensancha para que entren (`anchoDelCartel`). Si aun así no entran, el título baja hasta la letra de
+      // los renglones y no más; la línea de abajo no baja nunca.
       const libre = geo.w - 26 * k - 12 * k;
-      for (const tx of [title, sub]) if (tx.width > libre) tx.scale.set(libre / tx.width);
+      if (title.width > libre) title.scale.set(Math.max(1 / 1.2, libre / title.width));
       roster.addChild(bg, kicker, title, sub);
       roster.position.set(geo.x, geo.y);
       roster.visible = false;
     }
-    const geo = rosterGeo(g, f.members.length);
+    const geo = rosterGeo(g, f.members.length, anchoDelCartel(g, gi));
     const per = Math.ceil(f.members.length / geo.cols);
     const colW = (geo.w - 24 * k) / geo.cols;
     while (rosterBuilt < f.members.length && budget-- > 0) {
@@ -708,9 +736,14 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       const av = new Sprite(S.face(names[idx] ?? ""));
       av.width = av.height = geo.fs * 1.15;
       av.position.set(x - 4 * k, y + (geo.rh - geo.fs * 1.15) / 2);
-      const tx = S.text(names[idx] ?? "", { fontSize: geo.fs, fontWeight: "800", fill: S.dark ? CREAM : INK });
+      const tx = S.text("", { fontSize: geo.fs, fontWeight: "800", fill: S.dark ? CREAM : INK });
+      // El nombre que entra en el renglón a la letra del cartel: entero, "Andrés V.", "Andrés". Antes se achicaba hasta 0,72.
       const maxW = colW - geo.fs * 1.5 - 12 * k;
-      if (tx.width > maxW) tx.scale.set(Math.max(0.72, maxW / tx.width));
+      const forma = formaQueEntra(names[idx] ?? "", maxW, (s) => {
+        tx.text = s;
+        return tx.width;
+      });
+      tx.text = forma;
       tx.anchor.set(0, 0.5);
       tx.position.set(x + geo.fs * 1.3, y + geo.rh / 2);
       roster.addChild(av, tx);
@@ -1041,7 +1074,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     boxAdd(-w / 2, rowY(0, g.depth, g));
     boxAdd(w / 2, rowY(g.depth - 1, g.depth, g));
     const fr = freeRect(g);
-    const geo = rosterGeo(g, f.members.length);
+    const geo = rosterGeo(g, f.members.length, anchoDelCartel(g, gi));
     // Sin el cartel: a su izquierda en la pantalla grande, debajo en el celular.
     const free: Rect = S.portrait()
       ? { x: fr.x, y: Math.max(fr.y, geo.y + geo.head + 8 * g.k), w: fr.w, h: fr.y + fr.h - Math.max(fr.y, geo.y + geo.head + 8 * g.k) }
@@ -1249,7 +1282,8 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     let l = fratLabels.get(gi);
     if (l) return l;
     const f = P.frats[gi] as Frat;
-    const fs = Math.max(10, 13 * k);
+    // La letra de la regla (17 px en un celular, 28 en 1080); eran 13 * k: 12 y 19 px.
+    const fs = Math.max(13 * k, letraMinima(k));
     const c = new Container();
     const tx = S.text(f.name, { fontSize: fs, fontWeight: "900", fill: INK });
     tx.position.set(fs * 1.3, fs * 0.35);
@@ -1320,7 +1354,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     // pastillas (debajo del contador tapaba la primera).
     const moreY = moreTop(k, ch);
     if (S.portrait()) blocked.push({ x: 22 * k, y: moreY, w: 64 * k, h: 26 * k });
-    const scale = clamp(TAG_FONT_PX / (12 * k * CHIP_SCALE), g.w <= 520 ? 0 : 1, 1.8);
+    const scale = clamp(Math.max(TAG_FONT_PX / (12 * k * CHIP_SCALE), escalaChipLegible(k)), g.w <= 520 ? 0 : 1, 1.8);
     const kk = k * scale;
     const kc = kk * CHIP_SCALE;
     const sz = estimateTagSize(kc, 16);
@@ -1686,6 +1720,15 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     drumG.moveTo(hx, hy).lineTo(ex, ey).stroke({ width: 3 * k, color: 0x6b4423, cap: "round" }).circle(ex, ey, 5 * k).fill(0xf6efe2).stroke({ width: 1.6 * k, color: INK });
     drumText.position.set(lx + lw / 2, y);
   }
+
+  // Para el auditor de emoción: el cuerpo de quien gana (de la punta de los cuernos a los pies), en la pantalla. El círculo del
+  // foco pasa de los pies y de los costados: la caja es la del bailarín, que es lo que no puede quedar cortado.
+  S.ganadorEn(() => {
+    const f = focoDelGanador(G());
+    const alto = f.r / 0.6;
+    const y0 = f.y - alto * 0.5;
+    return { x: f.x - alto * 0.4, y: y0, w: alto * 0.8, h: (f.pies ?? f.y + alto * 0.5) - y0 };
+  });
 
   S.run((dt, now) => {
     tAll += dt;

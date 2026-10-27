@@ -7,6 +7,8 @@ import {
   escanearDom,
   estadoDelSorteo,
   evaluarDom,
+  MUESTRAS_SOSTENIDO,
+  SEGUNDOS_POR_MUESTRA,
   evaluarEstadio,
   instalarMuestreador,
   llamar,
@@ -119,6 +121,20 @@ describe("juzgar los textos del lienzo", () => {
     expect(malos.find((m) => m.texto === "GANA Jorge").minimo).toBe(48);
   });
 
+  it("un texto que pasa dos segundos o más leyéndose chico falla aunque su mediana pase", () => {
+    // Los nombres de la carrera en el remate de un celular: 17,8 px casi todo el show y 10,7 durante diez segundos.
+    const nombre = (s, estable) => ({ ...e(s, "escena", 100, 17.8, 23.9), min: 3, menorBajo: estable ? 10.7 : null, bajo: estable, estable });
+    const { malos } = evaluarEstadio([nombre("Camila Suárez", MUESTRAS_SOSTENIDO), nombre("Jorge Mamani", MUESTRAS_SOSTENIDO - 1), nombre("Paola Mendoza", 0)], REGLAS.celular);
+    expect(malos.map((m) => m.texto)).toEqual(["Camila Suárez"]);
+    expect(malos[0]).toMatchObject({ sostenido: true, bajo: MUESTRAS_SOSTENIDO, min: 10.7, minimo: 16 });
+    // La falla dice cuánto tiempo y lo más chico que se leyó, agrupada con las parecidas.
+    const g = agruparEstadio(evaluarEstadio([nombre("A B", 9), nombre("C D", 12)], REGLAS.celular).malos);
+    expect(g).toHaveLength(1);
+    expect(g[0]).toMatchObject({ sostenido: true, bajo: 12, mediana: 10.7 });
+    expect(g[0].textos).toEqual(["A B", "C D"]);
+    expect(MUESTRAS_SOSTENIDO * SEGUNDOS_POR_MUESTRA).toBe(2);
+  });
+
   it("agrupa por capa y tamaño: veinte etiquetas iguales son una falla", () => {
     const nombres = Array.from({ length: 20 }, (_, i) => e(`Nombre ${i}`, "nombres", 30, 14.2 + (i % 2) * 0.1));
     const { malos } = evaluarEstadio([...nombres, e("Marcador", "hud", 30, 10)], REGLAS.proyector);
@@ -186,6 +202,41 @@ describe("el código que corre adentro de la página", () => {
     expect(n).toMatchObject({ capa: "escena", n: 5, mediana: 16, max: 16 });
     expect(r.find((x) => x.s === "GANA María")).toMatchObject({ capa: "podio", mediana: 80 });
     expect(ctx.__legible.muestras).toBe(5);
+  });
+
+  it("cuenta cuántas muestras un texto se leyó chico, y no las de lo que se achica hasta desaparecer", () => {
+    const ctx = pagina();
+    // Secundario de 28: 20 px es chico (cuenta); 6 px es una carta que se da vuelta o un nombre que entra (no cuenta); 30 se lee.
+    ctx.__app = { stage: { children: [caja(), caja(), caja(), caja(texto("Chico", 20), texto("Vuelta", 6), texto("Grande", 30))] } };
+    for (let i = 0; i < 3; i++) ctx.__legible.muestrear();
+    const r = ctx.__legible.resumen();
+    expect(r.find((x) => x.s === "Chico")).toMatchObject({ bajo: 3, estable: 3, menorBajo: 20 });
+    expect(r.find((x) => x.s === "Vuelta")).toMatchObject({ bajo: 0, estable: 0, menorBajo: null });
+    expect(r.find((x) => x.s === "Grande")).toMatchObject({ bajo: 0, estable: 0 });
+  });
+
+  it("un texto que cambia de tamaño de camino (se reparte, se aleja la cámara) no es letra chica sostenida: solo la que se queda", () => {
+    const ctx = pagina();
+    // Dieciséis muestras de 10 a 27 px (de 28): una carta que crece al repartirse. Después, diez muestras seguidas a 20 px.
+    const t = texto("Carta", 10);
+    ctx.__app = { stage: { children: [caja(), caja(), caja(), caja(t)] } };
+    for (let i = 0; i < 16; i++) {
+      t.style.fontSize = 10 + i * (17 / 15);
+      ctx.__legible.muestrear();
+    }
+    const camino = ctx.__legible.resumen().find((x) => x.s === "Carta");
+    expect(camino.bajo).toBeGreaterThanOrEqual(11);
+    expect(camino.estable).toBeLessThan(MUESTRAS_SOSTENIDO);
+    t.style.fontSize = 20;
+    for (let i = 0; i < 10; i++) ctx.__legible.muestrear();
+    expect(ctx.__legible.resumen().find((x) => x.s === "Carta").estable).toBeGreaterThanOrEqual(MUESTRAS_SOSTENIDO);
+  });
+
+  it("un texto a escala cero (la carta que todavía no entró) no se anota a su tamaño natural", () => {
+    const ctx = pagina();
+    ctx.__app = { stage: { children: [caja(), caja(texto("Todavía no entró", 19, 0))] } };
+    ctx.__legible.muestrear();
+    expect(ctx.__legible.resumen()).toEqual([]);
   });
 
   it("no cuenta lo invisible, lo apenas visible ni los textos de un solo carácter", () => {

@@ -48,7 +48,7 @@ import { pathToFileURL } from "node:url";
 import { launch } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 import { comprobacionesDePantalla } from "./lib/pantalla-comprobaciones.mjs";
-import { SELECTOR as TODOS } from "./lib/juegos.mjs";
+import { juegosDe } from "./lib/juegos.mjs";
 
 /** Los nombres de la escena fija (`?pose=`), para reconocer los que se ven como nombres. */
 const NOMBRES = [
@@ -62,9 +62,9 @@ const opt = (name, def) => {
   return i >= 0 && args[i + 1] && !args[i + 1].startsWith("--") ? args[i + 1] : def;
 };
 const flag = (name) => args.includes(name);
-// Uno o varios juegos, separados por espacio; "todos" son los diez del selector (con El Trueque, que antes se salteaba).
+// Uno o varios juegos, separados por espacio; "todos" son los ocho del selector (El Trueque, que antes se salteaba, salió del selector el 26 de octubre de 2026: se pide por nombre).
 const pedidos = args.filter((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--"));
-const juegos = pedidos.length === 0 || pedidos.includes("todos") ? TODOS : pedidos;
+const juegos = pedidos.length === 0 || pedidos.includes("todos") ? juegosDe("todos") : pedidos.includes("diez") ? juegosDe("diez") : pedidos;
 const base = opt("--base", "http://localhost:4606").replace(/\/$/, "");
 const outDir = opt("--out", join(tmpdir(), "tinkazo-pantalla"));
 const resoluciones = opt("--res", "1280x720").split(",").map((r) => r.split("x").map(Number));

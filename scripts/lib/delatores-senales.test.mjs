@@ -607,10 +607,10 @@ describe("La Entrada", () => {
 });
 
 describe("los juegos", () => {
-  // Los diez del selector, y los tres que salieron pero siguen abriendo con ?demo=.
+  // Los ocho del selector, y los cinco que salieron pero siguen abriendo con ?demo= (De pie, El Trueque, la tómbola, el aguayo y la constelación).
   const SELECTOR = ["race", "sapo", "trompo", "chovena", "pinata", "wheel", "quien", "trueque", "teleferico", "oruro", "tombola", "pasanaku", "stellar"];
 
-  it("los diez del selector y los que salieron tienen cómo mirarse, con marcadores que existen", () => {
+  it("los ocho del selector y los que salieron tienen cómo mirarse, con marcadores que existen", () => {
     for (const j of SELECTOR) {
       const cfg = JUEGOS[j];
       expect(cfg, j).toBeDefined();

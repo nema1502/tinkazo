@@ -39,7 +39,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
-import { SELECTOR as TODOS } from "./lib/juegos.mjs";
+import { juegosDe } from "./lib/juegos.mjs";
 import { comprobacionesDePantalla } from "./lib/pantalla-comprobaciones.mjs";
 
 const args = process.argv.slice(2);
@@ -52,7 +52,7 @@ const cual = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith
 // `--motor clasico` audita los juegos en el motor anterior. El nuevo usa la placa de video.
 const motor = opt("--motor", "pixi");
 if (motor !== "clasico") process.env.TINKAZO_GPU = "1";
-const juegos = cual === "todos" ? TODOS : [cual];
+const juegos = juegosDe(cual);
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const outDir = opt("--out", "docs/capturas/rigor");
 // El grupo de pantalla (destellos y contraste de los textos, antes `audit-pantalla.mjs`)

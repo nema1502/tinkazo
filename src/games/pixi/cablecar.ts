@@ -1,4 +1,4 @@
-import { LEGIBLE } from "./letra";
+import { LEGIBLE, escalaChipLegible, letraMinima } from "./letra";
 import { Container, Graphics, Sprite, Text, Texture } from "pixi.js";
 import { T, getLang, t } from "../../i18n";
 import { musicHold } from "../../music";
@@ -692,6 +692,11 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) * Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0));
   /** Cuántos píxeles de pantalla mide una unidad del mundo en este cuadro. */
   const zoomNow = (): number => cam.toScreen(1, 0, S.sw(), S.sh()).x - cam.toScreen(0, 0, S.sw(), S.sh()).x;
+  /**
+   * Cuánto agrandar un texto del mundo (de `fuente` unidades) para que en la pantalla mida lo que pide la regla de la
+   * letra de la sala. Con la cámara alejada, en un celular, el "×4" de las cabinas y el rótulo CUMBRE medían 9 y 11 px.
+   */
+  const aLaRegla = (fuente: number): number => Math.max(1, letraMinima(S.u()) / (fuente * Math.max(0.05, zoomNow())));
   /** Los contadores de arriba a la izquierda, en la pantalla: el andén y los nombres no se les encima. */
   const hudBox = (): Box => ({ x0: 0, y0: S.top(), x1: 200 * S.u(), y1: S.top() + 140 * S.u() });
   /** Dónde cae en pantalla el cuerpo de una cabina, sin el colgante ni la bandera. */
@@ -993,7 +998,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       // En vertical, la base legible (19 px): agrandados se salían de la pantalla.
       // Con tres a cinco, en escritorio también la base: con 1,3 no entraban a
       // los costados y caían sobre la cabina de al lado.
-      const sc = G.vertical ? 1 : quedan <= 2 ? 1.6 : 1;
+      const sc = Math.max(G.vertical ? 1 : quedan <= 2 ? 1.6 : 1, escalaChipLegible(S.u()));
       // Las cabinas vacías no cuentan: se están yendo cable abajo.
       const boxes = new Map<number, Box>();
       for (let cab = 0; cab < C; cab++) {
@@ -1012,11 +1017,11 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         // cartel del relator o de la barra de arriba sí: su nombre va al borde que
         // le quede libre (si no, en celular horizontal la finalista se quedaba sin nombre).
         if ((box.x0 + box.x1) / 2 < 0 || (box.x0 + box.x1) / 2 > W || cy < 0 || cy > H) continue;
-        // En vertical, el rótulo de un grupo va un poco más chico: son diez en una
-        // columna, y a escala normal solo dos entraban sin pisarse. El nombre de una
-        // persona va a escala normal.
+        // El nombre de una persona y el rótulo de un grupo van a la misma escala. En vertical el rótulo del grupo iba
+        // a 0,8 para que entraran los diez de la columna (14 px, bajo la regla): ahora, si no entra, se oculta, y la
+        // cabina ya lleva su color y su cuenta (barrido de letra, cierre del 26 de octubre de 2026).
         const porNombre = who.length === 1 || (cab === winnerCab && who.length === 2 && tAll > T_RUN);
-        const scEtiqueta = porNombre || !G.vertical ? sc : sc * 0.8;
+        const scEtiqueta = sc;
         let e = soloTags.get(key);
         if (!e || e.txt !== txt || e.sc !== scEtiqueta) {
           e?.chip.destroy({ children: true });
@@ -1208,6 +1213,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       const top = s === NS + 1;
       const bw = (top ? 230 : s === 0 ? 210 : 160) * k;
       const y0 = p.y - 40 * k;
+      // El número, BASE y CUMBRE se agrandan en el mundo lo justo para no bajar de la regla cuando la cámara se aleja.
+      stn.tag.scale.set(aLaRegla((top || s === 0 ? 24 : 30) * k));
       stn.flag.clear();
       drawFlag(stn.flag, p.x - bw / 2 + 14 * k, y0 - 134 * k, 88 * k, 46 * k, top ? YELLOW : hexOf(LINES[(s + 2) % LINES.length] as string), s * 1.9, false);
       // La banderita de la cumbre no asoma detrás del cartel del ganador.
@@ -1306,6 +1313,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         });
       }
       cb.count.text = who.length > 1 ? `×${who.length}` : "";
+      cb.count.scale.set(aLaRegla(17 * k));
       cb.door.clear();
       if (asoma > 0) cb.door.rect(cw / 2 - cw * 0.26 * asoma - 2 * k, topY + 6 * k, cw * 0.26 * asoma, ch - 12 * k).fill(INK);
       if (luz < 1) {
@@ -1468,6 +1476,11 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   }
 
   cam.cut(pt(0).x + 40 * G.k, pt(0).y + 20 * G.k, 1.55);
+  S.ganadorEn(() => {
+    const f = focoDeLaCabina();
+    return { x: f.x - f.r, y: f.y - f.r, w: 2 * f.r, h: 2 * f.r };
+  });
+
   S.run((dt, now) => {
     tAll += dt;
     events();

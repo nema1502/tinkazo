@@ -76,13 +76,17 @@ export const RANGOS: Partial<Record<Game, Rango>> = {
   ...RANGOS_BASE,
 };
 
-/** El rango de personas que muestra el selector bajo el nombre: el ideal si lo tiene, y si no, del mínimo al máximo ("6–12"). */
+/**
+ * El rango de personas que muestra el selector bajo el nombre: del mínimo (2 si el juego no tiene) al máximo ("2–40").
+ * Es el mismo tramo en que `recomendar` dice que el juego encaja (la estrella), así que una tarjeta con estrella nunca
+ * muestra un rango que no incluye a la lista: hasta el 26 de octubre de 2026 mostraba el ideal ("6–12" en el sapo) y la
+ * estrella se veía sobre 106 de las 199 cantidades de 2 a 200 con un rango que no las incluía. El ideal, donde el juego
+ * luce más, sigue ordenando los juegos (los del ideal van primero) y dice su nota.
+ */
 export function rangoVisible(game: Game): string | null {
   const r = RANGOS[game];
-  if (!r) return null;
-  const desde = r.ideal?.[0] ?? r.minimo ?? 2;
-  const hasta = r.ideal?.[1] ?? r.maximo;
-  return hasta === undefined ? null : `${desde}–${hasta}`;
+  if (!r || r.maximo === undefined) return null;
+  return `${r.minimo ?? 2}–${r.maximo}`;
 }
 
 /**
