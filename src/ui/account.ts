@@ -5,7 +5,8 @@ import { accountUrl, network } from "../stellar/config";
 import { grifoApagado, grifoDisponible } from "../stellar/grifo";
 import { PACES, currentPace, paceSeconds, setPace, type Pace } from "../state";
 import { isMuted, toggleSound } from "../sound";
-import { LAST_DRAWS, drawRow, fmtBalance, initialOf, kindText, moneyLine, shortAddr } from "./account-model";
+import { LAST_DRAWS, drawRow, feeCovered, fmtBalance, initialOf, kindText, moneyLine, shortAddr } from "./account-model";
+import { CLAVES_DE_VIA, ocultarCorreo, viaDe } from "./cuenta-estado";
 import type { Entry } from "./history";
 
 /**
@@ -36,6 +37,10 @@ export interface AccountView {
   label: string;
   /** XLM disponibles. `-1` si no se pudo preguntar. */
   balance: number;
+  /** El saldo todavía viene en camino: el panel abre ya y lo completa después (`actualizarSaldo`). */
+  cargando?: boolean;
+  /** El correo de la cuenta de Google o de correo. Se muestra tapado ("n•••@gmail.com"), nunca entero. */
+  mail?: string;
   onDisconnect: () => void;
   onFund: () => void;
 }
@@ -84,6 +89,17 @@ export function closeAccount(restoreFocus = true): void {
   // página, no en el botón, y también vuelve al botón de la cabecera.
   const opener = s.returnTo && s.returnTo !== document.body && s.returnTo.isConnected ? s.returnTo : null;
   (opener ?? document.querySelector<HTMLElement>("#wallet-box .hello"))?.focus({ preventScroll: true });
+}
+
+/**
+ * Llegó el saldo de la cuenta que tiene el panel abierto. El panel abre ya, sin esperarlo: hasta el 26 de octubre de
+ * 2026 esperaba a la red (hasta 12 s) y el toque en la cuenta parecía no hacer nada.
+ */
+export function actualizarSaldo(address: string, balance: number): void {
+  const s = current;
+  if (!s || s.view.address !== address) return;
+  s.view = { ...s.view, balance, cargando: false };
+  paint(s);
 }
 
 export function openAccount(view: AccountView): void {
@@ -327,11 +343,21 @@ function paint(s: Open): void {
   const title = name || kindText(view.label);
 
   const mainnet = network.name === "mainnet";
-  const money = moneyLine(view.label, view.balance, network.name, grifoDisponible());
-  const balance =
-    money.balance === null
+  // Con el saldo en camino no se afirma nada: ni el número, ni "saldo sin leer", ni el botón de conseguir XLM.
+  const money = view.cargando ? { balance: null, fund: false } : moneyLine(view.label, view.balance, network.name, grifoDisponible());
+  const balance = view.cargando
+    ? feeCovered(view.label)
+      ? ""
+      : `<span class="acct-badge" aria-busy="true" aria-label="${esc(t("acctCargando"))}" title="${esc(t("acctCargando"))}">…</span>`
+    : money.balance === null
       ? ""
       : `<span class="acct-badge">${esc(money.balance === "unknown" ? t("acctUnknown") : fmtBalance(money.balance))}</span>`;
+  // Por dónde entró, y el correo tapado: "Entraste con Google · n•••@gmail.com". La cuenta de prueba y Freighter ya se
+  // llaman así arriba: no se repite.
+  const correo = ocultarCorreo(view.mail);
+  const porDonde = t(CLAVES_DE_VIA[viaDe(view.label)].larga);
+  const linea = correo ? `${porDonde} · ${correo}` : porDonde;
+  const via = linea === title ? "" : `<p class="acct-via" title="${esc(linea)}">${esc(linea)}</p>`;
   // `?grifo=0`: que el panel también lo diga, además de la insignia de la cabecera.
   const sinGrifo = grifoApagado
     ? `<span class="acct-badge sin-grifo" title="${esc(t("grifoOffHint"))}">${esc(t("acctNoTap"))}</span>`
@@ -347,7 +373,7 @@ function paint(s: Open): void {
   card.innerHTML =
     `<div class="acct-head">${faceHtml(view)}` +
     `<div class="acct-id"><h2 id="acct-title" class="sr-only">${esc(t("acctTitle"))}</h2>` +
-    `<p class="acct-name" title="${esc(title)}">${esc(title)}</p>` +
+    `<p class="acct-name" title="${esc(title)}">${esc(title)}</p>${via}` +
     `<p class="acct-addr"><span class="acct-short mono" title="${esc(view.address)}">${esc(shortAddr(view.address))}</span>` +
     `<button type="button" class="acct-copy" data-k="copy" aria-label="${esc(t("acctCopyAria"))}"><span>${esc(t("acctCopy"))}</span></button>` +
     `<span class="acct-live sr-only" role="status" aria-live="polite"></span></p></div>` +

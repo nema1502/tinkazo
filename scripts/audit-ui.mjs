@@ -501,7 +501,8 @@ async function variantesDelPanel(page, p, tema) {
   const abrirCon = async (vista) => {
     await page.eval(`(async () => {
       const m = await import(${JSON.stringify(url)});
-      m.closeAccount();
+      // El panel que hubiera quedado abierto se cierra con su ✕ (el trozo ya no exporta closeAccount: nadie de afuera lo usa, y el empaquetador lo saca).
+      document.querySelector('.acct-card [data-k="x"]')?.click();
       m.openAccount({ ...${JSON.stringify(vista)}, onDisconnect() {}, onFund() {} });
       return true;
     })()`);
@@ -509,7 +510,7 @@ async function variantesDelPanel(page, p, tema) {
     await sleep(900);
     return ok.ok;
   };
-  const cerrar = () => page.eval(`import(${JSON.stringify(url)}).then((m) => { m.closeAccount(); return true; })`);
+  const cerrar = () => page.eval(`(() => { document.querySelector('.acct-card [data-k="x"]')?.click(); return true; })()`);
 
   if (await abrirCon({ address: CUENTA_FALSA, name: "Nicolás Emir Mejía Agreda de la Torre Quispe Mamani", label: "Google", balance: 0 })) {
     const g = JSON.parse(
@@ -731,6 +732,127 @@ async function sinSesionGuardada(page) {
   });
 }
 
+/**
+ * La cuenta, siempre a la vista (26 de octubre de 2026, docs/ux.md, "La cabecera"). Lo que se mide del chip de la
+ * cabecera, en la herramienta (`#wallet-box .cuenta-chip`) y en las páginas de lectura (`header .pg-auth`).
+ */
+const SONDA_CHIP = `JSON.stringify((() => {
+  const chip = document.querySelector('#wallet-box .cuenta-chip, header .pg-auth');
+  const marca = document.querySelector('header .wordmark');
+  if (!chip || !marca) return { hay: false };
+  const r = chip.getBoundingClientRect();
+  const m = marca.getBoundingClientRect();
+  const vp = document.documentElement.clientWidth;
+  const aviso = document.getElementById('cuenta-aviso');
+  return {
+    hay: true,
+    estado: chip.dataset.estado || '',
+    etiqueta: chip.tagName.toLowerCase(),
+    texto: (chip.textContent || '').replace(/\\s+/g, ' ').trim(),
+    aria: chip.getAttribute('aria-label') || '',
+    ocupado: chip.getAttribute('aria-busy') === 'true',
+    rol: chip.getAttribute('role') || '',
+    titulo: chip.getAttribute('title') || '',
+    boton: chip.tagName === 'BUTTON' || chip.tagName === 'A',
+    alto: Math.round(r.height), ancho: Math.round(r.width),
+    arriba: Math.round(r.top), derecha: Math.round(r.right), vp, barDer: Math.round(document.querySelector('header .bar').getBoundingClientRect().right),
+    mismaFila: Math.abs(r.top + r.height / 2 - (m.top + m.height / 2)) < 40,
+    cabecera: Math.round(document.querySelector('header').getBoundingClientRect().height),
+    desborda: chip.scrollWidth > chip.clientWidth + 2,
+    primaria: chip.classList.contains('primary'),
+    cara: !!chip.querySelector('.hello-face'),
+    visto: !!chip.querySelector('.cc-ok'),
+    fotoRota: [...chip.querySelectorAll('img')].some((i) => i.complete && i.naturalWidth === 0),
+    scrollX: document.documentElement.scrollWidth - vp,
+    avisoVivo: aviso ? { texto: (aviso.textContent || '').trim(), rol: aviso.getAttribute('role'), live: aviso.getAttribute('aria-live') } : null,
+  };
+})())`;
+
+/** Lo común a los tres estados: está, arriba a la derecha y en la fila del logo, de 44 px, sin salirse ni agrandar la página. */
+function chequearChip(pre, c, p) {
+  check(`${pre}: la cuenta se ve en la cabecera`, c.hay);
+  if (!c.hay) return;
+  check(`${pre}: arriba a la derecha, en la fila del logo`, c.mismaFila && c.arriba < 130 && c.derecha <= c.vp + 1 && c.derecha >= c.barDer - 48, `arriba ${c.arriba}, derecha ${c.derecha} (la cabecera termina en ${c.barDer}) de ${c.vp}, ${c.mismaFila ? "misma fila" : "otra fila"}`);
+  check(`${pre}: mide 44 px de alto como mínimo`, c.alto >= 43.5, `${c.alto} px`);
+  check(`${pre}: no se corta ni agranda la página`, !c.desborda && c.scrollX <= 1 + (p.w === 761 ? 10 : 0), `desborda ${c.desborda}, scroll de costado ${c.scrollX} px`);
+  // Una sola fila de cabecera donde la cabecera es de una línea (más de 1100 px): la cuenta no cae debajo del logo.
+  if (p.w > 1100) check(`${pre}: la cabecera queda en una sola fila`, c.cabecera <= 100, `${c.cabecera} px de alto`);
+  check(`${pre}: no lleva el color de la casa`, !c.primaria);
+}
+
+/**
+ * Los tres estados del chip y las páginas de lectura. `sinCuenta` es la herramienta sin sesión. Después, una página
+ * con una sesión guardada que tarda en volver (Freighter, que no está: la librería tarda dos segundos en rendirse) para
+ * ver "Retomando…", y las páginas de lectura, sin cuenta y con una guardada.
+ */
+async function chipsFueraYRetomando(browser, sinCuenta, p, tema) {
+  const pre = `${p.etiqueta} ${tema}`;
+  const f = JSON.parse(await sinCuenta.eval(SONDA_CHIP));
+  chequearChip(`${pre}: sin cuenta`, f, p);
+  if (f.hay) {
+    check(`${pre}: sin cuenta, dice "Entrar" y es un botón con nombre`, f.estado === "fuera" && f.etiqueta === "button" && /Entrar/.test(f.aria) && /Entrar/.test(f.texto), `"${f.texto}" · ${f.aria}`);
+    await sinCuenta.screenshot(join(outDir, `ui-chip-fuera-${p.etiqueta}-${tema}.png`));
+  }
+
+  // Retomando: una sesión de Freighter guardada que no vuelve (no hay extensión) tarda un par de segundos en rendirse.
+  const r = await browser.open("about:blank");
+  try {
+    await r.send("Emulation.setDeviceMetricsOverride", { width: p.w, height: p.h, deviceScaleFactor: 2, mobile: p.movil, screenWidth: p.w, screenHeight: p.h });
+    await r.send("Page.addScriptToEvaluateOnNewDocument", { source: "(() => { try { localStorage.setItem('tinkazo.session.kind.testnet', 'freighter'); } catch {} })()" });
+    await r.send("Page.navigate", { url: `${base}/?theme=${tema}#sortear` });
+    const vi = await r.waitFor("document.querySelector('#wallet-box [data-estado=\"retomando\"]')", 6000);
+    check(`${pre}: mientras la sesión guardada vuelve, el chip dice "Retomando…"`, vi.ok);
+    if (vi.ok) {
+      const c = JSON.parse(await r.eval(SONDA_CHIP));
+      check(`${pre}: "Retomando…" no es un botón y avisa que está ocupado`, !c.boton && c.ocupado && c.rol === "status", `${c.etiqueta} · aria-busy ${c.ocupado} · role ${c.rol}`);
+      check(`${pre}: "Retomando…" no agranda la cabecera`, c.mismaFila && c.scrollX <= 1, `${c.mismaFila ? "misma fila" : "otra fila"}, ${c.scrollX} px de costado`);
+      const gate = JSON.parse(await r.eval("JSON.stringify({ texto: document.getElementById('gate').textContent.trim(), botones: document.querySelectorAll('#gate button').length })"));
+      check(`${pre}: y la puerta no ofrece entrar de nuevo`, gate.botones === 0 && /Retomando/.test(gate.texto), JSON.stringify(gate));
+      await r.screenshot(join(outDir, `ui-chip-retomando-${p.etiqueta}-${tema}.png`));
+    }
+    // Sin la extensión, la sesión no vuelve: la cuenta queda como "Entrar" y no se repite la espera.
+    const fin = await r.waitFor("document.querySelector('#wallet-box [data-estado=\"fuera\"]')", 15000);
+    check(`${pre}: si la sesión no vuelve, el chip pasa a "Entrar"`, fin.ok);
+  } finally {
+    await r.send("Page.close").catch(() => undefined);
+  }
+
+  // Las páginas de lectura (juegos.html): "Entrar" y, con una sesión guardada, "Mi cuenta · Google".
+  for (const guardada of [null, "google"]) {
+    const l = await browser.open("about:blank");
+    try {
+      await l.send("Emulation.setDeviceMetricsOverride", { width: p.w, height: p.h, deviceScaleFactor: 2, mobile: p.movil, screenWidth: p.w, screenHeight: p.h });
+      await l.send("Page.addScriptToEvaluateOnNewDocument", {
+        source: guardada
+          ? `(() => { try { localStorage.setItem('tinkazo.session.kind.testnet', '${guardada}'); localStorage.setItem('tinkazo.pollar.intent', 'google'); } catch {} })()`
+          : "(() => { try { for (const k of Object.keys(localStorage)) if (/^tinkazo\\.session\\.kind\\.|^tinkazo\\.pollar\\.intent$/.test(k)) localStorage.removeItem(k); } catch {} })()",
+      });
+      await l.send("Page.navigate", { url: `${base}/juegos.html?theme=${tema}` });
+      await l.waitFor("document.readyState === 'complete' && !!document.querySelector('header .pg-auth')", 20000);
+      await sleep(400);
+      const c = JSON.parse(await l.eval(SONDA_CHIP));
+      const quien = `${pre}: en juegos.html ${guardada ? "con una sesión guardada" : "sin cuenta"}`;
+      chequearChip(quien, c, p);
+      if (c.hay) {
+        if (guardada) check(`${quien}, dice "Mi cuenta" y por dónde entró`, c.estado === "dentro" && c.etiqueta === "a" && /Mi cuenta/.test(c.texto) && /Google/.test(c.texto) && c.cara && c.visto, `"${c.texto}"`);
+        else check(`${quien}, dice "Entrar" y lleva a la herramienta`, c.estado === "fuera" && c.etiqueta === "a" && /Entrar/.test(c.texto), `"${c.texto}"`);
+        // En inglés se lee en inglés (los textos de la página traen "Sign in" y "My account").
+        await l.eval("document.getElementById('l-en').click(); true");
+        await sleep(300);
+        const en = JSON.parse(await l.eval(SONDA_CHIP));
+        check(`${quien}, en inglés se lee en inglés`, guardada ? /My account/.test(en.texto) && /Google/.test(en.texto) : /Sign in/.test(en.texto) || /Sign in/.test(en.aria), `"${en.texto}"`);
+        await l.screenshot(join(outDir, `ui-chip-lectura-${guardada ? "dentro" : "fuera"}-${p.etiqueta}-${tema}.png`));
+        // El idioma se recuerda en el navegador: sin esto, todo lo que se mira después (otra página, otro tema, otra
+        // pantalla) se leía en inglés y las comprobaciones en español fallaban.
+        await l.eval("document.getElementById('l-es').click(); true");
+      }
+      check(`${pre}: juegos.html ${guardada ? "con sesión" : "sin cuenta"}, sin excepciones`, l.exceptions.length === 0, l.exceptions.slice(0, 2).join(" | "));
+    } finally {
+      await l.send("Page.close").catch(() => undefined);
+    }
+  }
+}
+
 async function run() {
   await mkdir(outDir, { recursive: true });
   const browser = await launch({ width: 1440, height: 900 });
@@ -778,7 +900,7 @@ async function run() {
           );
           check(
             `${etiqueta} ${tema}: sin cuenta, el botón de sellar queda aria-disabled y con su línea`,
-            f.ariaSellar === "true" && f.lineaVisible && f.lineaTexto === "Conectá tu cuenta para sellar",
+            f.ariaSellar === "true" && f.lineaVisible && f.lineaTexto === "Entrá con tu cuenta para sellar",
             `aria-disabled ${f.ariaSellar} · línea ${f.lineaVisible ? "visible" : "oculta"}: "${f.lineaTexto}"`,
           );
           const sq = JSON.parse(await sinCuenta.eval(PROBE));
@@ -794,6 +916,8 @@ async function run() {
           // La cuenta, en una línea con su botón (desde el 22 de octubre de 2026 no es una caja).
           const g = JSON.parse(await sinCuenta.eval("JSON.stringify({ alto: Math.round(document.getElementById('gate').getBoundingClientRect().height), boton: !!document.querySelector('#gate button:not(.primary)') })"));
           check(`${etiqueta} ${tema}: sin cuenta, la cuenta es una línea con su botón secundario`, g.boton && g.alto <= (p.w <= 400 ? 130 : 80), `${g.alto} px`);
+          // La cuenta, siempre a la vista: "Entrar", "Retomando…" y las páginas de lectura.
+          await chipsFueraYRetomando(browser, sinCuenta, p, tema);
           await tutorialEnLaPagina(sinCuenta, etiqueta, tema, p.w <= 760);
           // La letra grande (docs/ux.md): ningún texto del flujo por debajo de 16 px (13 en rótulos, pasos y cuenta).
           const tx = JSON.parse(await sinCuenta.eval(sondaTexto({ solo: "main" })));
@@ -831,6 +955,18 @@ async function run() {
         })())`));
         check(`${etiqueta} ${tema}: la cabecera entra en la pantalla`, cab.dentro);
         check(`${etiqueta} ${tema}: el nombre no queda cortado`, !cab.cortado, cab.nombre);
+        // La cuenta de adentro: la cara con su ✓, el nombre y por dónde entró, arriba a la derecha.
+        const dentro = JSON.parse(await page.eval(SONDA_CHIP));
+        chequearChip(`${etiqueta} ${tema}: con la cuenta adentro`, dentro, p);
+        if (dentro.hay) {
+          check(
+            `${etiqueta} ${tema}: con la cuenta adentro, el chip es el de la cuenta (cara con su ✓), sin imagen rota, y su título termina en la dirección`,
+            dentro.estado === "dentro" && dentro.cara && dentro.visto && !dentro.fotoRota && /· G[A-Z0-9]{20,}$/.test(dentro.titulo) && /Cuenta de prueba|Test account/.test(dentro.aria),
+            `${dentro.estado} · "${dentro.texto}" · ${dentro.aria}`,
+          );
+          check(`${etiqueta} ${tema}: al entrar se anuncia a los lectores de pantalla`, !!dentro.avisoVivo && /cuenta de prueba|test account/i.test(dentro.avisoVivo.texto) && dentro.avisoVivo.rol === "status", dentro.avisoVivo ? `"${dentro.avisoVivo.texto}"` : "no hay #cuenta-aviso");
+          await page.screenshot(join(outDir, `ui-chip-dentro-${etiqueta}-${tema}.png`));
+        }
 
         await page.screenshot(join(outDir, `ui-cabecera-${etiqueta}-${tema}.png`));
 

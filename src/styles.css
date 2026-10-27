@@ -102,7 +102,6 @@
   }
   a.mini { text-decoration: none; }
   button.mini.solid, a.mini.solid { background: var(--magenta); color: var(--on-accent); }
-  .auth .hello { font-size: 14px; font-weight: 700; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #wheel { max-width: 88vw; height: auto; }
   main { flex: 1; width: 100%; max-width: 1060px; margin: 0 auto; padding: 0 20px; }
   .hero { padding: 64px 0 40px; display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: center; }
@@ -198,14 +197,6 @@
   }
   .netbadge.main { background: var(--teal); }
   .netbadge.bad { background: var(--orange); }
-  .auth a.hello, .auth button.hello { text-decoration: none; display: inline-flex; align-items: center; gap: 8px; }
-  .auth .hello { max-width: 190px; min-width: 0; }
-  /* La dirección, de ancho fijo: `button.mini` hereda la letra de la página y
-     le ganaba a `.mono`, así que el ancho dependía de qué letras salían y en
-     el celular algunas direcciones se cortaban. */
-  .auth .hello.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
-  .auth .hello-face { width: 24px; height: 24px; border: 2px solid var(--ink); background: var(--card); flex: 0 0 auto; }
-  .auth a.hello:hover { text-decoration: underline; }
   /* Una ventana siempre entra o se recorre (19 de octubre de 2026). Centrar con
      `align-items: center` cortaba por arriba y por abajo toda tarjeta más alta
      que la pantalla, y lo cortado no se alcanzaba ni con scroll: el panel de la
@@ -294,7 +285,8 @@
   .login-opt svg { width: 20px; height: 20px; flex: 0 0 auto; }
   .login-opt small { font-size: 14px; font-weight: 600; color: var(--muted); }
   /* Google primero y grande: es lo que va a tomar casi todo el mundo (diseño del onboarding). */
-  .login-opt.login-google { min-height: 56px; font-size: 17px; font-weight: 800; background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
+  /* Ancho completo, como las demás filas: un botón no se estira solo y fuera de `.login-opts` quedaba de 218 px, pegado a la izquierda. */
+  .login-opt.login-google { width: 100%; box-sizing: border-box; min-height: 56px; font-size: 17px; font-weight: 800; background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
   .login-opt.login-google svg { width: 22px; height: 22px; }
   /* La billetera y la cuenta de prueba, plegadas: casi nadie las necesita. */
   .login-mas { margin-top: 18px; }
@@ -323,12 +315,14 @@
   .wallet-notice {
     position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 80;
     background: var(--teal); color: var(--on-accent); border: var(--bw) solid var(--ink); box-shadow: var(--sh);
-    padding: 10px 18px; font-size: 16px; font-weight: 700; max-width: 90vw; text-align: center;
+    padding: 10px 18px; font-size: 16px; font-weight: 700; width: max-content; max-width: min(92vw, 520px); text-align: center;
   }
   .wallet-notice.bad { background: var(--orange); color: #191919; }
+  /* Con una ventana abierta (la de ingreso), el aviso de un error va arriba: abajo tapaba el campo del correo y el botón que él mismo recomienda. */
+  body:has(.modal-back) .wallet-notice:not(.arriba) { bottom: auto; top: max(12px, env(safe-area-inset-top, 0px)); }
   /* El que salió bien, dentro de la página (arriba de la lista): no tapa ningún control (wallet-ui.ts). */
   .wallet-notice.arriba {
-    position: static; transform: none; max-width: none; margin: 0 0 14px; z-index: auto;
+    position: static; transform: none; width: auto; max-width: none; margin: 0 0 14px; z-index: auto;
     box-shadow: none; padding: 10px 16px; overflow-wrap: anywhere;
   }
   .txstatus {
@@ -716,7 +710,6 @@
     .bar { gap: 10px; padding: 12px 14px; }
     .auth { gap: 6px; }
     .netbadge { font-size: 12px; padding: 5px 8px; letter-spacing: 0.08em; }
-    .auth .hello { max-width: 104px; }
     .gamepick button { width: calc(50% - 6px); }
   }
 
@@ -819,17 +812,25 @@
   /* La espera en grande: entre el sello y el número, la sala mira una cuenta
      gigante, el premio y sus nombres pasando (espera.ts). */
   .espera {
-    position: fixed; inset: 0; z-index: 65; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: clamp(6px, 1.4vh, 16px); padding: 72px 16px 24px; text-align: center; background: var(--paper); color: var(--ink); overflow: hidden;
+    position: fixed; inset: 0; z-index: 65; display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    gap: calc(clamp(6px, 1.4vh, 16px) * var(--ajuste, 1)); padding: 72px 16px calc(24px * var(--ajuste, 1)); text-align: center; background: var(--paper); color: var(--ink);
+    overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none;
   }
-  .espera-top { position: absolute; top: 16px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .espera::-webkit-scrollbar { display: none; }
+  /* Centrada sin cortar nada: si todo entra, queda en el medio; si no (una laptop chica a 200 % de zoom, un celular
+     acostado), empieza arriba y se recorre por dentro, como toda ventana (docs/ux.md, "Ninguna ventana se corta"). Con
+     `justify-content: center` lo de arriba quedaba debajo de la calcomanía y lo de abajo, fuera de la pantalla. */
+  .espera::before, .espera::after { content: ""; flex: 1 0 0; }
+  /* La capa recibe el foco al abrirse sola (espera.ts): sin el aro que le pone el foco a todo lo demás. */
+  .espera:focus, .espera:focus-visible { outline: none; box-shadow: none; }
+  .espera-top { position: fixed; top: 16px; left: 16px; right: 16px; z-index: 2; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
   .espera-top .sticker { max-width: 60vw; text-align: left; }
-  .espera-premio { font-size: clamp(24px, 3.2vw, 56px); font-weight: 800; max-width: 30ch; text-wrap: balance; overflow-wrap: anywhere; }
+  .espera-premio { font-size: calc(clamp(24px, 3.2vw, 56px) * var(--ajuste, 1)); font-weight: 800; max-width: 30ch; text-wrap: balance; overflow-wrap: anywhere; }
   .espera-premio b { background: var(--yellow); color: #191919; padding: 0 0.2em; }
-  .espera-reloj { font-size: clamp(88px, 26vmin, 340px); font-weight: 900; line-height: 0.95; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
+  .espera-reloj { font-size: calc(clamp(88px, 26vmin, 340px) * var(--ajuste, 1)); font-weight: 900; line-height: 0.95; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; }
   .espera-t { font-size: clamp(16px, 2.3vw, 30px); font-weight: 700; color: var(--ink2); max-width: 34ch; text-wrap: balance; }
   .espera-nombres {
-    width: 100vw; display: grid; gap: 10px; margin: clamp(4px, 1.6vh, 18px) 0;
+    width: 100vw; display: grid; gap: calc(10px * var(--ajuste, 1)); margin: calc(clamp(4px, 1.6vh, 18px) * var(--ajuste, 1)) 0;
     -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
     mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
   }
@@ -1219,7 +1220,11 @@
   /* Con "Cómo se usa" son siete en la fila (22 de octubre de 2026): entre 1101 y
      1279 px, con la cuenta abierta, se apretaban contra el nombre. Un poco menos
      de aire en cada una alcanza. */
-  @media (min-width: 1101px) and (max-width: 1279px) { .topnav a { padding: 0 8px; } }
+  @media (min-width: 1101px) and (max-width: 1439px) { .topnav a { padding: 0 8px; } }
+  /* Con la cuenta (26 de octubre de 2026): la insignia de la red y el chip de la cuenta no entraban en la fila de 1240 px
+     y la cuenta caía a una segunda fila, a la izquierda, debajo del logo: donde nadie la mira. Desde 1440 px la fila es más
+     ancha y entra todo. */
+  @media (min-width: 1440px) { header .bar { max-width: 1440px; } }
   /* En el celular "Sortear" y "Mis sorteos" quedan a la vista, y lo demás va
      detrás de "Más". Antes el menú se recorría de costado y "Mis sorteos" quedaba
      cortado a 390 px (hallazgo H2). Botón y lista miden 44 px de alto como
@@ -1518,6 +1523,14 @@
     display: block; margin: -8px 0 18px; padding: 10px 14px; background: var(--card); color: var(--ink);
     border: 2px solid var(--ink); border-left: 8px solid var(--yellow); font-weight: 700; font-size: 16px; line-height: 1.45;
   }
+  /* El recordatorio de crear la cuenta: una frase debajo de la línea que guía, solo en el ensayo (aviso-cuenta.ts). */
+  .aviso-cuenta[hidden], body:not([data-ensayo="1"]) .aviso-cuenta { display: none; }
+  body[data-ensayo="1"][data-tab="nuevo"] .aviso-cuenta:not([hidden]) {
+    display: block; margin: -8px 0 18px; padding: 10px 14px; background: var(--card); color: var(--ink);
+    border: 2px solid var(--ink); border-left: 8px solid var(--teal); font-weight: 700; font-size: 16px; line-height: 1.45;
+  }
+  /* En el renglón, pero con su blanco de toque de 44 px. */
+  .aviso-cuenta .enlace { display: inline-flex; align-items: center; min-height: 44px; padding: 0 2px; margin: 0; font-size: 16px; vertical-align: middle; }
   body[data-ensayo="1"] .ensayo-fin {
     display: block; margin-top: 18px; padding: 18px; background: var(--purple); color: var(--on-purple);
     border: 2px solid var(--ink); box-shadow: var(--sh-sm);
@@ -1529,7 +1542,7 @@
   .ensayo-fin .enlace { color: var(--on-purple); }
   /* Lo que el ensayo no tiene: la cuenta, los orígenes (la lista no se cambia),
      las bases, compartir, el QR, el siguiente premio, el resultado en grande. */
-  body[data-ensayo="1"] #gate, body[data-ensayo="1"] #origenes, body[data-ensayo="1"] #btn-ensayo, body[data-ensayo="1"] #btn-sample,
+  body[data-ensayo="1"] #gate, body[data-ensayo="1"] #origenes, body[data-ensayo="1"] .mas-origenes, body[data-ensayo="1"] #btn-ensayo, body[data-ensayo="1"] #btn-sample,
   body[data-ensayo="1"] #pendiente, body[data-ensayo="1"] .rules-row, body[data-ensayo="1"] #again-row, body[data-ensayo="1"] .grande-row,
   body[data-ensayo="1"] .verify, body[data-ensayo="1"] #lore-box, body[data-ensayo="1"] .ausente,
   body[data-ensayo="1"] #primera-vez, body[data-ensayo="1"] #btn-como, body[data-ensayo="1"] #como-panel { display: none !important; }
@@ -1545,11 +1558,6 @@
   /* En el celular con la sesión abierta la cabecera ocupaba tres filas: el
      aviso de la red pasa a ser el borde de la cuenta, del mismo color. Si la
      red es la equivocada, el aviso sigue a la vista. */
-  @media (max-width: 560px) {
-    .auth .netbadge:not(.bad) { display: none; }
-    .auth .netbadge:not(.main):not(.bad) + .hello { border-left: 7px solid var(--orange); }
-    .auth .netbadge.main + .hello { border-left: 7px solid var(--teal); }
-  }
   .sec-links { display: flex; flex-wrap: wrap; gap: 4px 26px; }
 
   /* La lista a la vista de la sala: el proyector, antes de sellar. */
@@ -2055,12 +2063,70 @@
   .espera-top { top: max(16px, env(safe-area-inset-top, 0px)); }
   .espera-top .sticker { font-size: clamp(16px, 1.7vw, 32px); letter-spacing: 0.04em; padding: 8px 16px; }
   .espera-top .ghost { min-height: 48px; font-size: 16px; }
-  .espera-t { font-size: clamp(22px, 2.8vw, 44px); }
-  .espera-cinta span { font-size: clamp(20px, 2.6vw, 40px); padding: 6px 16px; }
-  .espera-pie { font-size: clamp(18px, 2.2vw, 34px); color: var(--ink2); font-weight: 700; }
-  .espera-nadie { font-size: clamp(20px, 2.4vw, 38px); }
-  .espera-id { font-size: clamp(18px, 2vw, 30px); }
-  .espera-ensayo { font-size: clamp(18px, 2vw, 30px); }
+  .espera-t { font-size: calc(clamp(22px, 2.8vw, 44px) * var(--ajuste, 1)); }
+  .espera-cinta span { font-size: calc(clamp(20px, 2.6vw, 40px) * var(--ajuste, 1)); padding: calc(6px * var(--ajuste, 1)) 16px; }
+  /* Si ni achicada entra (`ajustar`, espera.ts): se quitan cintas de nombres, que son decoración. */
+  .espera[data-apretada] .espera-cinta:nth-child(n+3), .espera[data-apretada="2"] .espera-cinta:nth-child(n+2) { display: none; }
+  .espera-pie { font-size: calc(clamp(18px, 2.2vw, 34px) * var(--ajuste, 1)); color: var(--ink2); font-weight: 700; }
+  .espera-nadie { font-size: calc(clamp(20px, 2.4vw, 38px) * var(--ajuste, 1)); }
+  .espera-id { font-size: calc(clamp(18px, 2vw, 30px) * var(--ajuste, 1)); }
+  .espera-ensayo { font-size: calc(clamp(18px, 2vw, 30px) * var(--ajuste, 1)); }
+
+  /* El juego, en la espera en grande: "Juego: Carrera de llamas" y, aparte, "Cambiar de juego" (secundario: la acción
+     principal sigue siendo una sola). El selector queda detrás de esta capa y se elige sin salir (26 de octubre de 2026). */
+  .espera-top-acc { display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-width: 0; }
+  .espera-juego { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 16px; }
+  .espera-juego.en-flujo { margin-top: clamp(2px, 1vh, 10px); }
+  /* En una pantalla ancha va arriba, junto a "Volver a la página", sin gastar alto (en una laptop a 100 %, 632 px, no sobra);
+     en una angosta, abajo del todo. */
+  .espera-juego.en-barra { display: none; flex-wrap: nowrap; justify-content: flex-end; gap: 12px; }
+  @media (min-width: 1180px), (max-height: 560px) and (min-width: 700px) {
+    .espera-juego.en-barra { display: flex; }
+    .espera-juego.en-flujo { display: none; }
+  }
+  .espera-juego[hidden], .espera-juegos[hidden] { display: none !important; }
+  .espera-juego-n { font-size: var(--letra-sala-sec); font-weight: 700; color: var(--ink2); }
+  .espera-juego-n b { color: var(--ink); font-weight: 900; }
+  .espera-juego .ghost { min-height: 48px; font-size: 16px; }
+  /* La lista de juegos, sobre toda la espera: una tarjeta que se recorre por dentro si no entra. */
+  .espera-juegos {
+    position: fixed; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 12px;
+    padding: 16px; background: color-mix(in srgb, var(--paper) 94%, transparent); overflow-y: auto; overscroll-behavior: contain;
+  }
+  .espera-juegos::before, .espera-juegos::after { content: ""; flex: 1 0 0; }
+  .espera-juegos-t { font-size: var(--letra-sala-prin); font-weight: 900; }
+  .espera-juegos-lista { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 10px; width: min(100%, 760px); }
+  .espera-juego-op {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 64px; padding: 8px 12px;
+    background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm); font-weight: 800; font-size: var(--letra-sec); cursor: pointer;
+  }
+  .espera-juego-op i { font-style: normal; color: var(--magenta-ink); }
+  .espera-juego-op small { font-family: ui-monospace, Consolas, monospace; font-size: var(--letra-sec); font-weight: 800; color: var(--ink2); }
+  .espera-juego-op[aria-pressed="true"] { background: var(--purple); color: var(--on-purple); }
+  .espera-juego-op[aria-pressed="true"] small, .espera-juego-op[aria-pressed="true"] i { color: inherit; }
+  .espera-juegos .ghost { min-height: 48px; font-size: 16px; }
+
+  /* Una pantalla baja (una laptop chica a 200 % de zoom, un celular acostado): la espera se aprieta para que entre, y si
+     aun así no entra se recorre por dentro, con la calcomanía y "Volver" siempre arriba. */
+  @media (max-height: 560px) {
+    .espera { padding-top: 64px; padding-bottom: 12px; gap: 4px; }
+    .espera-top { top: 0; left: 0; right: 0; padding: max(8px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 8px max(16px, env(safe-area-inset-left, 0px)); background: var(--paper); }
+    .espera-top .sticker { padding: 4px 12px; font-size: 13px; letter-spacing: 0.02em; max-width: 48vw; }
+    .espera-top .ghost { min-height: 44px; white-space: nowrap; }
+    /* En la barra, solo "Cambiar de juego": el nombre del juego no entra y el botón abre la lista con el actual marcado. */
+    .espera-juego.en-barra .espera-juego-n { display: none; }
+    .espera-premio { font-size: clamp(18px, 6vh, 30px); }
+    .espera-ensayo { font-size: clamp(13px, 3.4vh, 20px); padding: 2px 10px; }
+    .espera-reloj { font-size: clamp(52px, 20vmin, 340px); }
+    .espera-t { font-size: clamp(16px, 4vh, 28px); }
+    .espera-cinta span { font-size: clamp(16px, 4.4vh, 28px); padding: 2px 12px; }
+    .espera-nombres { gap: 6px; margin: 2px 0; }
+    .espera-pie { font-size: clamp(14px, 3.4vh, 22px); }
+    .espera-nadie { font-size: clamp(16px, 3.6vh, 24px); }
+    .espera-id { font-size: clamp(14px, 3.2vh, 20px); }
+    .espera-juego-n { font-size: clamp(16px, 3.6vh, 22px); }
+    .espera-juego .ghost { min-height: 44px; }
+  }
 
   /* La lista y el resultado en grande. */
   .sala { padding-left: max(clamp(16px, 4vw, 48px), env(safe-area-inset-left, 0px)); padding-right: max(clamp(16px, 4vw, 48px), env(safe-area-inset-right, 0px)); padding-top: max(22px, env(safe-area-inset-top, 0px)); padding-bottom: max(22px, env(safe-area-inset-bottom, 0px)); }
@@ -2143,3 +2209,107 @@
   .gamepick .rec-rango { font-family: ui-monospace, Consolas, monospace; font-style: normal; font-size: var(--letra-sec); font-weight: 800; color: var(--ink2); line-height: 1.2; }
   .gamepick button.on .rec-rango { color: var(--on-purple); }
   .gamepick button.atenuado:not(.on) .rec-rango { color: var(--muted); }
+
+  /* ------------------------------------------------------------------ la cuenta, siempre a la vista
+     (26 de octubre de 2026) Alguien usó tinkazo.app y no se notaba si había iniciado sesión ni con qué cuenta: fuera era
+     ausencia, y dentro una caja chica con el nombre. La cabecera lleva uno de tres chips (src/ui/cuenta-chip.ts), y se
+     ven distintos a primera vista: "Entrar" (secundario: sin el magenta ni el amarillo de la casa, que son de la acción
+     de la página), "Conectando… / Retomando…" (algo está pasando: no se toca) y la cuenta de adentro, con su cara y un ✓,
+     su nombre de pila y por dónde entró. El correo, nunca. */
+  .auth { gap: 10px; }
+  /* Las páginas de lectura: "es / en" y la cuenta, juntos (src/pagina.ts), como en la herramienta. */
+  .pg-lado { display: flex; gap: 14px; align-items: center; }
+  /* El lugar del chip se reserva antes de que llegue (el JS lo pinta unos cientos de milisegundos después, con una conexión lenta):
+     sin esto, "es / en" saltaba hasta 120 px a la izquierda cuando aparecía. */
+  #wallet-box:empty { min-width: 110px; min-height: 44px; }
+  @media (max-width: 460px), (min-width: 1101px) and (max-width: 1199px) { #wallet-box:empty { min-width: 46px; } }
+  .cuenta-chip {
+    display: inline-flex; align-items: center; gap: 8px; box-sizing: border-box; min-width: 0; min-height: 44px;
+    padding: 4px 14px 4px 10px; background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+    font-family: inherit; font-size: 16px; font-weight: 800; line-height: 1.15; text-decoration: none; white-space: nowrap;
+  }
+  .cuenta-chip.fuera, .cuenta-chip.ocupado { padding: 4px 14px 4px 10px; }
+  button.cuenta-chip, a.cuenta-chip { cursor: pointer; transition: transform 0.08s, box-shadow 0.08s; }
+  button.cuenta-chip:hover, a.cuenta-chip:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--ink); }
+  .cuenta-chip.ocupado { cursor: progress; color: var(--ink2); }
+  .cc-ico { display: grid; place-items: center; flex: none; width: 22px; height: 22px; }
+  .cc-ico svg { width: 20px; height: 20px; }
+  .cc-gira { flex: none; width: 18px; height: 18px; border: 3px solid var(--line); border-top-color: var(--magenta-ink); border-radius: 50%; animation: cc-gira 0.8s linear infinite; }
+  @keyframes cc-gira { to { transform: rotate(360deg); } }
+
+  /* La cuenta de adentro. */
+  .cuenta-chip.dentro { padding: 3px 14px 3px 6px; gap: 9px; }
+  .cc-cara { position: relative; flex: none; width: 30px; height: 30px; }
+  .cuenta-chip .hello-face {
+    display: grid; place-items: center; box-sizing: border-box; width: 30px; height: 30px; border-radius: 50%; overflow: hidden;
+    border: 2px solid var(--ink); background: var(--card); object-fit: cover;
+  }
+  .cuenta-chip .hello-face.cc-letra, .cuenta-chip .hello-face.cc-icono { background: var(--yellow); color: #191919; font-size: 16px; font-weight: 900; line-height: 1; }
+  .cc-icono svg { width: 18px; height: 18px; }
+  .cc-ok {
+    position: absolute; right: -5px; bottom: -5px; display: grid; place-items: center; box-sizing: border-box; width: 16px; height: 16px;
+    border-radius: 50%; background: var(--teal); color: #191919; border: 2px solid var(--ink); font-style: normal;
+  }
+  .cc-ok svg { width: 9px; height: 9px; }
+  .cc-txt { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; min-width: 0; gap: 1px; text-align: left; }
+  .cc-nombre { max-width: 13ch; overflow: hidden; text-overflow: ellipsis; font-size: 15px; font-weight: 800; color: var(--ink); line-height: 1.15; }
+  /* La cuenta de prueba y Freighter ya se llaman por su vía: una sola línea, con lugar para la palabra entera. */
+  .cc-txt.sin-via .cc-nombre { max-width: 17ch; }
+  .cc-via { font-size: 13px; font-weight: 700; color: var(--ink2); line-height: 1.15; }
+  .cc-via-l { display: none; }
+  /* Debajo del nombre, la frase entera ("Entraste con Google") donde sobra lugar (la cabecera de dos filas, y la de una
+     fila desde 1440 px) y la palabra sola donde no: entre 1101 y 1439 px la fila lleva siete enlaces. */
+  @media (min-width: 761px) and (max-width: 1100px), (min-width: 1440px) {
+    .cc-via-l { display: inline; }
+    .cc-via-c { display: none; }
+  }
+  /* Con la cuenta abierta, el color de la red va en el borde del chip, y la insignia se esconde donde no entra: en un
+     celular, y en la fila de una línea entre 1101 y 1439 px. */
+  @media (max-width: 760px), (min-width: 1101px) and (max-width: 1439px) {
+    .auth .netbadge:not(.bad) { display: none; }
+    .auth .netbadge:not(.main):not(.bad) + .hello { border-left: 7px solid var(--orange); }
+    .auth .netbadge.main + .hello { border-left: 7px solid var(--teal); }
+  }
+  /* En la fila de una línea más angosta (1101 a 1199 px) solo la cara, como en un celular. */
+  @media (min-width: 1101px) and (max-width: 1199px) {
+    .cuenta-chip.fuera, .cuenta-chip.ocupado { padding: 4px 10px; }
+    .cuenta-chip.dentro { padding: 3px 12px 3px 6px; }
+    .cuenta-chip.dentro .cc-txt { display: none; }
+    .cuenta-chip.fuera .cc-t, .cuenta-chip.ocupado .cc-t {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+    }
+  }
+  /* Y donde el nombre tiene poco lugar (entre 1200 y 1279 px), de a ocho letras. */
+  @media (min-width: 1200px) and (max-width: 1279px) { .cc-nombre { max-width: 8ch; } .cc-txt.sin-via .cc-nombre { max-width: 8ch; } }
+  /* Un celular parado: los tres chips caben en la fila del logo y el idioma, sin mandar la cuenta a una fila de más (la cabecera
+     crecía 54 px). "Entrar" es la silueta de una persona; "Conectando…" y "Retomando…", la ruedita; y la cuenta de adentro, la
+     cara con su ✓ (la foto de Google se reconoce). Las palabras siguen para el lector de pantalla y para el panel. */
+  @media (max-width: 460px) {
+    .cuenta-chip.fuera, .cuenta-chip.ocupado { padding: 4px 10px; }
+    .cuenta-chip.dentro { padding: 3px 12px 3px 6px; }
+    .cuenta-chip.dentro .cc-txt { display: none; }
+    .cuenta-chip.fuera .cc-t, .cuenta-chip.ocupado .cc-t {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+    }
+  }
+  /* La cuenta que acaba de abrirse aparece con un pulso corto, y sin movimiento queda el aro quieto un instante. */
+  .cuenta-chip.recien { animation: cc-recien 1.4s ease-out 1; }
+  @keyframes cc-recien {
+    0% { transform: scale(0.88); box-shadow: 0 0 0 0 var(--teal); }
+    35% { transform: scale(1.06); box-shadow: 0 0 0 7px var(--teal); }
+    100% { transform: scale(1); box-shadow: var(--sh-sm); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cc-gira { animation: none; border-top-color: var(--ink2); }
+    .cta-entrar[aria-busy="true"] .cta-t::before { animation: none; }
+    .cuenta-chip.recien { animation: none; box-shadow: 0 0 0 4px var(--teal); }
+    button.cuenta-chip:hover, a.cuenta-chip:hover { transform: none; }
+  }
+  /* El botón grande de la portada mientras Google abre su ventana o la sesión vuelve: sin la G, y apagado. */
+  .cta-entrar[aria-busy="true"] .g-ico { display: none !important; }
+  .cta-entrar[aria-busy="true"] { cursor: progress; }
+  /* Y la misma ruedita que la cabecera: sin ella, "Conectando…" parecía un botón que no responde. */
+  .cta-entrar[aria-busy="true"] .cta-t::before {
+    content: ""; display: inline-block; vertical-align: -0.12em; width: 0.8em; height: 0.8em; margin-right: 0.5em; box-sizing: border-box;
+    border: 3px solid color-mix(in srgb, currentColor 30%, transparent); border-top-color: currentColor; border-radius: 50%; animation: cc-gira 0.8s linear infinite;
+  }

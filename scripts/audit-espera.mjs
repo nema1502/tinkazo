@@ -31,6 +31,19 @@
  *    impares contesta, y el QR tiene que leerse como el corto; en las pares no
  *    contesta nunca, y el QR tiene que salir con el enlace largo a tiempo.
  *
+ * Desde el 26 de octubre de 2026 la espera se abre sola al sellar, con la pantalla completa pedida en el clic de "Sellar la
+ * lista" (src/ui/freeze.ts). Cinco casos más lo miran, sin cuenta y sin Stellar, con un clic de verdad y `?grande=1`
+ * (un enlace de prueba no fuerza nada):
+ *
+ *  - al sellar: la pantalla completa se pide una sola vez, dentro del evento del clic (antes de cualquier await), la
+ *    espera se abre sola, el foco queda en la capa y no en "Volver", y "Cambiar de juego" cambia el juego sin salir;
+ *  - sin la pantalla completa (el iPhone no la ofrece para elementos) o con el navegador que la niega: la vista grande
+ *    se abre igual y no cuenta como que la persona la soltó;
+ *  - lo que la persona suelta (Escape, salir de la pantalla completa, "Volver a la página") no se vuelve a forzar en la
+ *    sesión, y "Mostrar la espera en grande" lo vuelve a permitir;
+ *  - el ensayo hace lo mismo que el sorteo de verdad, y sus chips de CSV y Luma no quedan a la vista (no hacen nada);
+ *  - un enlace de prueba (`?lead=`) no fuerza nada.
+ *
  * Y dos casos más, en la primera pantalla:
  *
  *  - con la espera cerrada antes de que nazca el número ("Volver a la página"),
@@ -339,8 +352,221 @@ async function sinNumero(browser, v) {
   }
 }
 
+/**
+ * Instrumenta la pantalla completa antes de que cargue la página: guarda cada pedido con el evento en el que se hizo
+ * (`window.event` es "click" si se pidió dentro del manejador del clic, y nada si se pidió después de un await). Con
+ * `sin-api` la quita (el iPhone no ofrece `requestFullscreen` para elementos); con `niega` la rechaza.
+ */
+const INSTRUMENTO = (modo) => `(() => {
+  window.__fs = [];
+  const orig = Element.prototype.requestFullscreen;
+  if (${JSON.stringify(modo)} === 'sin-api') { delete Element.prototype.requestFullscreen; return; }
+  Element.prototype.requestFullscreen = function (...a) {
+    window.__fs.push({ evento: window.event ? window.event.type : null });
+    if (${JSON.stringify(modo)} === 'niega') return Promise.reject(new TypeError('negado a propósito'));
+    return orig.apply(this, a);
+  };
+})()`;
+
+/** La herramienta en modo libre, con la lista de ejemplo cargada y sin sellar. `url` lleva los parámetros que no son de prueba. */
+async function abrirSinSellar(browser, v, { modo = "normal", url = "?lead=40&pace=rapido&grande=1", ensayo = false } = {}) {
+  const page = await browser.open("about:blank");
+  await page.send("Emulation.setDeviceMetricsOverride", { width: v.w, height: v.h, deviceScaleFactor: 1, mobile: v.celular, screenWidth: v.w, screenHeight: v.h });
+  await page.send("Page.addScriptToEvaluateOnNewDocument", { source: INSTRUMENTO(modo) });
+  await page.send("Page.navigate", { url: `${base}/${url}${url.includes("?") ? "&" : "?"}theme=${tema}&lang=${lang}#sortear` });
+  await page.waitFor("document.readyState === 'complete'", 20000);
+  await sleep(900);
+  if (ensayo) {
+    await clicReal(page, "#btn-ensayo");
+    await page.waitFor("document.body.dataset.ensayo === '1'", 8000);
+    await sleep(400);
+    return page;
+  }
+  // Sin cuenta, el botón de sellar queda con aria-disabled detrás de la puerta: el modo libre arma el mismo flujo.
+  await page.eval(
+    "document.querySelector('#sec-participants .body').classList.remove('locked'); document.getElementById('btn-freeze').removeAttribute('aria-disabled'); document.getElementById('gate').style.display = 'none'; document.getElementById('primera-vez')?.style.setProperty('display', 'none'); true",
+  );
+  await page.eval("document.getElementById('btn-sample').click(); true");
+  await sleep(500);
+  return page;
+}
+
+/** El juego que dice la espera y el que está marcado en el selector. */
+const juegoDeLaEspera = (page) => page.eval("document.querySelector('.espera-juego-n b')?.textContent");
+
+/** Al sellar, todo en grande: la pantalla completa en el clic, la espera sola, el foco en la capa y el juego a mano. */
+async function alSellar(browser, v) {
+  const quien = `${v.etiqueta} ${tema}`;
+  console.log(`\n  ${quien} · al sellar, todo en grande`);
+  const page = await abrirSinSellar(browser, v);
+  try {
+    await clicReal(page, "#btn-freeze");
+    const abrio = await page.waitFor("document.querySelector('.espera')", 15000);
+    check(`${quien} · al apretar "Sellar la lista" la espera en grande se abre sola`, abrio.ok);
+    if (!abrio.ok) return;
+    await sleep(500);
+    const r = JSON.parse(await page.eval("JSON.stringify({ fs: window.__fs, pantalla: !!document.fullscreenElement, foco: document.activeElement && document.activeElement.className, volver: !!document.querySelector('.espera [data-volver]'), juego: !!document.querySelector('[data-juego]') })"));
+    check(`${quien} · pidió la pantalla completa una sola vez, dentro del clic (antes de cualquier await)`, r.fs.length === 1 && r.fs[0].evento === "click", JSON.stringify(r.fs));
+    if (!r.pantalla) info("(el navegador no dio la pantalla completa: la vista grande se abrió igual)");
+    else check(`${quien} · y la tiene`, r.pantalla);
+    check(`${quien} · el foco queda en la capa y no en "Volver" (un Enter de más no la cierra)`, /\bespera\b/.test(r.foco || "") && !/ghost/.test(r.foco || ""), String(r.foco));
+    check(`${quien} · "Volver a la página" y "Cambiar de juego" están`, r.volver && r.juego);
+    await page.screenshot(join(outDir, `espera-${v.etiqueta}-${tema}-al-sellar.png`));
+    // El juego se cambia sin salir.
+    const antes = await juegoDeLaEspera(page);
+    await page.eval("[...document.querySelectorAll('[data-juego]')].find((b) => b.offsetParent !== null)?.click(); true");
+    await sleep(300);
+    const lista = JSON.parse(await page.eval("JSON.stringify({ abierta: !document.querySelector('.espera-juegos').hidden, opciones: [...document.querySelectorAll('.espera-juego-op')].length, cabe: (() => { const r = document.querySelector('.espera-juegos-lista').getBoundingClientRect(); return r.right <= innerWidth + 1 && r.left >= -1; })() })"));
+    check(`${quien} · "Cambiar de juego" abre la lista de los que se pueden elegir (más de uno, entra en la pantalla)`, lista.abierta && lista.opciones > 1 && lista.cabe, JSON.stringify(lista));
+    await page.screenshot(join(outDir, `espera-${v.etiqueta}-${tema}-juegos.png`));
+    const otro = await page.eval("(() => { const b = [...document.querySelectorAll('.espera-juego-op')].find((x) => x.getAttribute('aria-pressed') !== 'true'); b.click(); return b.dataset.game; })()");
+    await sleep(300);
+    const despues = await juegoDeLaEspera(page);
+    const marcado = await page.eval("document.querySelector('#gamepick button.on')?.id");
+    check(`${quien} · elegir otro lo cambia, también en el selector de la página, sin salir de la espera`, despues !== antes && marcado === `g-${otro}` && (await page.eval("!!document.querySelector('.espera')")), `${antes} → ${despues} (${marcado})`);
+    check(`${quien} · y la lista se cierra y el foco vuelve al botón`, await page.eval("document.querySelector('.espera-juegos').hidden && !!document.activeElement && document.activeElement.hasAttribute('data-juego')"));
+  } finally {
+    await page.send("Page.close").catch(() => undefined);
+  }
+}
+
+/** Sin la pantalla completa (el iPhone) o con el navegador que la niega: la vista grande se abre igual. */
+async function sinPantallaCompleta(browser, v) {
+  const quien = `${v.etiqueta} ${tema}`;
+  console.log(`\n  ${quien} · sin pantalla completa`);
+  for (const [modo, nombre] of [["sin-api", "el iPhone no la ofrece"], ["niega", "el navegador la niega"]]) {
+    const page = await abrirSinSellar(browser, v, { modo });
+    try {
+      await clicReal(page, "#btn-freeze");
+      const abrio = await page.waitFor("document.querySelector('.espera')", 15000);
+      const r = JSON.parse(await page.eval("JSON.stringify({ fs: window.__fs.length, pantalla: !!document.fullscreenElement, grande: sessionStorage.getItem('tinkazo.grande'), api: typeof document.documentElement.requestFullscreen })"));
+      check(`${quien} · si ${nombre}, la vista grande se abre igual y sin pantalla completa`, abrio.ok && !r.pantalla, JSON.stringify(r));
+      check(`${quien} · y eso no cuenta como que la persona la soltó`, r.grande === null, String(r.grande));
+      if (modo === "sin-api") {
+        // Con Escape sin pantalla completa (un teclado en el iPad): se cierra y no se vuelve a forzar.
+        await page.eval("dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); true");
+        const cerro = await page.waitFor("!document.querySelector('.espera')", 4000);
+        const g = await page.eval("sessionStorage.getItem('tinkazo.grande')");
+        check(`${quien} · Escape la cierra y queda anotado que no se vuelva a forzar`, cerro.ok && g === "0", `cerró ${cerro.ok}, guardado ${g}`);
+      }
+      if (modo === "sin-api") await page.screenshot(join(outDir, `espera-${v.etiqueta}-${tema}-sin-pantalla-completa.png`));
+    } finally {
+      await page.send("Page.close").catch(() => undefined);
+    }
+  }
+}
+
+/** Lo que la persona suelta no se vuelve a forzar en la sesión; el botón a mano lo permite de nuevo. */
+async function loQueSeSuelta(browser, v) {
+  const quien = `${v.etiqueta} ${tema}`;
+  console.log(`\n  ${quien} · lo que la persona suelta no se fuerza`);
+  // Salir de la pantalla completa (lo que hace Escape: el navegador la suelta sin avisarle a la página).
+  let page = await abrirSinSellar(browser, v);
+  try {
+    await clicReal(page, "#btn-freeze");
+    const dentro = await page.waitFor("document.querySelector('.espera') && document.fullscreenElement", 15000);
+    if (!dentro.ok) {
+      info("(el navegador no dio la pantalla completa: no se puede medir la salida con Escape)");
+    } else {
+      await page.eval("document.exitFullscreen(); true");
+      const cerro = await page.waitFor("!document.querySelector('.espera')", 4000);
+      const g = await page.eval("sessionStorage.getItem('tinkazo.grande')");
+      check(`${quien} · salir de la pantalla completa cierra la espera y se recuerda`, cerro.ok && g === "0", `cerró ${cerro.ok}, guardado ${g}`);
+    }
+  } finally {
+    await page.send("Page.close").catch(() => undefined);
+  }
+  // "Volver a la página", y el siguiente sello de la misma pestaña: no fuerza nada.
+  page = await abrirSinSellar(browser, v);
+  try {
+    await clicReal(page, "#btn-freeze");
+    await page.waitFor("document.querySelector('.espera [data-volver]')", 15000);
+    await clicReal(page, ".espera [data-volver]");
+    await page.waitFor("!document.querySelector('.espera')", 4000);
+    const g = await page.eval("sessionStorage.getItem('tinkazo.grande')");
+    check(`${quien} · "Volver a la página" también se recuerda`, g === "0", String(g));
+  } finally {
+    await page.send("Page.close").catch(() => undefined);
+  }
+  // Una pestaña con el "no" ya guardado: sellar no pide nada ni abre la espera; el botón a mano sí, y lo vuelve a permitir.
+  page = await abrirSinSellar(browser, v);
+  try {
+    await page.eval("sessionStorage.setItem('tinkazo.grande', '0'); true");
+    await clicReal(page, "#btn-freeze");
+    await page.waitFor("getComputedStyle(document.getElementById('btn-espera')).display !== 'none'", 15000);
+    await sleep(1200);
+    const r = JSON.parse(await page.eval("JSON.stringify({ fs: window.__fs.length, espera: !!document.querySelector('.espera') })"));
+    check(`${quien} · después de soltarla, sellar no pide la pantalla completa ni abre la espera`, r.fs === 0 && !r.espera, JSON.stringify(r));
+    await clicReal(page, "#btn-espera");
+    const abrio = await page.waitFor("document.querySelector('.espera')", 8000);
+    const a = JSON.parse(await page.eval("JSON.stringify({ fs: window.__fs.length, grande: sessionStorage.getItem('tinkazo.grande') })"));
+    check(`${quien} · "Mostrar la espera en grande" la abre, pide la pantalla completa con su clic y vuelve a permitirla`, abrio.ok && a.fs === 1 && a.grande === null, JSON.stringify(a));
+  } finally {
+    await page.send("Page.close").catch(() => undefined);
+  }
+}
+
+/** El ensayo hace lo mismo que el sorteo de verdad (así se practica como va a ser), y sus chips de CSV y Luma no quedan a la vista. */
+async function enElEnsayo(browser, v) {
+  const quien = `${v.etiqueta} ${tema}`;
+  console.log(`\n  ${quien} · el ensayo`);
+  const page = await abrirSinSellar(browser, v, { url: "?lang=" + lang, ensayo: true });
+  try {
+    const o = JSON.parse(await page.eval("JSON.stringify({ fila: (() => { const e = document.querySelector('.mas-origenes'); return !!e && getComputedStyle(e).display !== 'none' && e.getClientRects().length > 0; })(), csvOff: document.getElementById('csv').disabled, lumaOff: document.getElementById('csv-luma').disabled })"));
+    check(`${quien} · en el ensayo la lista es de ejemplo: los chips de CSV y Luma no están a la vista`, !o.fila && o.csvOff && o.lumaOff, JSON.stringify(o));
+    await clicReal(page, "#btn-freeze");
+    const abrio = await page.waitFor("document.querySelector('.espera')", 15000);
+    check(`${quien} · en el ensayo la espera en grande también se abre sola`, abrio.ok);
+    if (!abrio.ok) return;
+    await sleep(500);
+    const r = JSON.parse(await page.eval("JSON.stringify({ fs: window.__fs, ensayo: (document.querySelector('.espera-ensayo') || {}).textContent || '', juego: !!document.querySelector('[data-juego]') })"));
+    check(`${quien} · pidió la pantalla completa dentro del clic, una sola vez`, r.fs.length === 1 && r.fs[0].evento === "click", JSON.stringify(r.fs));
+    check(`${quien} · dice que es un ensayo y que no se graba, y "Cambiar de juego" está`, /ENSAYO|REHEARSAL/i.test(r.ensayo) && r.juego, r.ensayo);
+    await page.screenshot(join(outDir, `espera-${v.etiqueta}-${tema}-ensayo.png`));
+    const show = await page.waitFor("document.querySelector('.game-card') || document.getElementById('stadium').style.display === 'block'", 40000);
+    check(`${quien} · y nace el número y el show arranca solo desde la espera`, show.ok);
+  } finally {
+    await page.send("Page.close").catch(() => undefined);
+  }
+}
+
+/** Un enlace de prueba no fuerza nada: es el que usan todos los auditores. */
+async function enlaceDePrueba(browser, v) {
+  const quien = `${v.etiqueta} ${tema}`;
+  console.log(`\n  ${quien} · enlace de prueba (?lead=)`);
+  const page = await abrirSinSellar(browser, v, { url: "?lead=40&pace=rapido" });
+  try {
+    await clicReal(page, "#btn-freeze");
+    await page.waitFor("getComputedStyle(document.getElementById('btn-espera')).display !== 'none'", 15000);
+    await sleep(1200);
+    const r = JSON.parse(await page.eval("JSON.stringify({ fs: window.__fs.length, espera: !!document.querySelector('.espera') })"));
+    check(`${quien} · con un enlace de prueba no pide la pantalla completa ni abre la espera`, r.fs === 0 && !r.espera, JSON.stringify(r));
+  } finally {
+    await page.send("Page.close").catch(() => undefined);
+  }
+}
+
 const browser = await launch({ width: 1280, height: 900 });
 try {
+  for (const v of vistas) {
+    for (const caso of [alSellar, enElEnsayo]) {
+      try {
+        await caso(browser, v);
+      } catch (e) {
+        check(`${v.etiqueta} ${tema} · ${caso.name}`, false, e.message);
+      }
+    }
+  }
+  if (conCasos) {
+    const v = vistas[0];
+    for (const caso of [sinPantallaCompleta, loQueSeSuelta, enlaceDePrueba]) {
+      try {
+        await caso(browser, v);
+      } catch (e) {
+        check(`${v.etiqueta} ${tema} · ${caso.name}`, false, e.message);
+      }
+    }
+  }
   for (const [i, v] of vistas.entries()) {
     try {
       await desemboca(browser, v, i % 2 === 0 ? "contesta" : "colgado");

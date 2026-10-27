@@ -1,7 +1,9 @@
 import "./styles.css";
-import { chooseLang, initialLang, onLangChange, setLang, textosDeLaPagina } from "./idioma";
+import { chooseLang, initialLang, onLangChange, setLang, texto, textosDeLaPagina } from "./idioma";
 import { network } from "./stellar/config";
 import { loadSessionKind } from "./stellar/session-store";
+import { crearChip } from "./ui/cuenta-chip";
+import { MARCA_INGRESAR, viaDeLaSesionGuardada } from "./ui/cuenta-estado";
 import { initMenuMas } from "./ui/menu";
 
 /**
@@ -29,19 +31,57 @@ if (tema === "light" || tema === "dark") {
   });
 }
 
-// La cuenta también se ve acá, si hay una sesión guardada en esta red: "Mi
-// cuenta" lleva a sus sorteos. Sin sesión no hay nada que mostrar: "Entrar" no
-// va en la cabecera, la portada y la puerta del sorteo ya lo dicen. Sin cargar
-// ninguna billetera: solo se lee qué tipo de sesión había.
-if (loadSessionKind(network.name)) {
-  const a = document.createElement("a");
-  a.className = "mini pg-auth";
-  a.href = "/#mis-sorteos";
-  a.dataset.i = "navCuenta";
-  document.querySelector("header .bar")?.appendChild(a);
+/**
+ * La cuenta, siempre a la vista también acá (26 de octubre de 2026): "Entrar" si no hay cuenta (un enlace a la
+ * herramienta, que al abrirse pide entrar) y, si hay una sesión guardada en esta red, "Mi cuenta · Google" (o la vía
+ * que sea), que lleva a sus sorteos. Sin cargar ninguna billetera: solo se lee qué tipo de sesión había, así que no hay
+ * nombre ni foto (el perfil vive solo en memoria, en la herramienta) y, con una marca vieja, puede decir "Mi cuenta"
+ * hasta que se abra la herramienta, que la limpia.
+ */
+function montarLaCuenta(): void {
+  const cabecera = document.querySelector("header .bar");
+  if (!cabecera) return;
+  cabecera.querySelector(".pg-auth")?.remove();
+  // "es / en" y la cuenta, juntos a la derecha, como en la herramienta: sueltos, con la cabecera de dos filas (de 761 a
+  // 1100 px) "es / en" quedaba flotando en el medio, entre el logo y el chip.
+  let lado = cabecera.querySelector<HTMLElement>(".pg-lado");
+  if (!lado) {
+    lado = document.createElement("div");
+    lado.className = "pg-lado";
+    const idiomas = cabecera.querySelector(".langs");
+    if (idiomas) {
+      idiomas.before(lado);
+      lado.appendChild(idiomas);
+    } else cabecera.appendChild(lado);
+  }
+  let marcaPollar: string | null = null;
+  try {
+    marcaPollar = localStorage.getItem("tinkazo.pollar.intent");
+  } catch {
+    /* sin almacenamiento no hay marca */
+  }
+  const via = viaDeLaSesionGuardada(loadSessionKind(network.name), marcaPollar);
+  const chip = via
+    ? crearChip({ estado: "dentro", via, nombre: "", inicial: "", foto: "", direccion: "" }, { tx: texto, enlace: "/#mis-sorteos", titulo: texto("navCuenta") })
+    : crearChip({ estado: "fuera" }, { tx: texto, enlace: "/#sortear" });
+  chip.classList.add("pg-auth");
+  // "Entrar": la herramienta se abre en otra página y, sin un toque ahí, el navegador bloquearía la ventana de Google; la marca
+  // hace que la herramienta deje a la vista un solo botón para entrar, con el foco.
+  if (!via) {
+    chip.addEventListener("click", () => {
+      try {
+        sessionStorage.setItem(MARCA_INGRESAR, "1");
+      } catch {
+        /* sin almacenamiento, la herramienta tiene su propio "Entrar" */
+      }
+    });
+  }
+  lado.appendChild(chip);
 }
 initMenuMas();
 setLang(initialLang());
+montarLaCuenta();
+onLangChange(montarLaCuenta);
 // El contador va aparte y después: no frena la página y queda en su propio
 // archivo, chico, en vez de darle su nombre al código común.
 void import("./analytics").then((m) => m.countVisits());

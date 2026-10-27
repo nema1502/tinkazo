@@ -86,6 +86,15 @@ export function rangoVisible(game: Game): string | null {
 }
 
 /**
+ * El rango para leerlo en voz alta (el `aria-label` del selector): "4–30" dicho con la plantilla del idioma. La raya
+ * se lee con la palabra de cada idioma: "Para 4 a 30 personas", pero "For 4 to 30 people". Hasta el 26 de octubre de
+ * 2026 la unión era siempre " a ", y en inglés salía "For 4 a 30 people".
+ */
+export function rangoParaLeer(rango: string, plantilla: string, union: string): string {
+  return plantilla.replace("{r}", rango.replace("–", union));
+}
+
+/**
  * La duración de la sección 8.2 para "Normal", en segundos, por tramo de
  * personas. No se muestra todavía: `state.ts` dice 38 s para Normal desde el 17
  * de octubre de 2026, y la ventana de 24 a 34 no cabe ahí (ver el informe).

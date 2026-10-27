@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { CARRILES_CARRERA, JUEGO_DE_SIEMPRE, SELECTOR, juegoPorDefecto, juegoSiguiente, recomendar, type Recomendacion } from "./recomendar";
+import { CARRILES_CARRERA, JUEGO_DE_SIEMPRE, SELECTOR, juegoPorDefecto, juegoSiguiente, rangoParaLeer, rangoVisible, recomendar, type Recomendacion } from "./recomendar";
 import { T } from "../i18n";
 import { JUEGOS } from "../games/pixi/kit/catalogo";
 import { FINALISTAS } from "../games/llamas/carrera-base";
@@ -301,6 +301,22 @@ describe("el juego que queda elegido si nadie eligió otro (D02)", () => {
 
   it("si ninguno encaja (más de doscientos), el de siempre", () => {
     expect(juegoPorDefecto(500)).toBe(JUEGO_DE_SIEMPRE);
+  });
+});
+
+describe("el rango de personas dicho en voz alta (el aria-label del selector)", () => {
+  it("en español se une con \"a\" y en inglés con \"to\": nunca \"For 4 a 30 people\"", () => {
+    expect(rangoParaLeer("4–30", T.es.recRangoAria as string, T.es.recRangoUnion as string)).toBe("Para 4 a 30 personas");
+    expect(rangoParaLeer("4–30", T.en.recRangoAria as string, T.en.recRangoUnion as string)).toBe("For 4 to 30 people");
+  });
+
+  it("para todos los juegos del selector, en inglés no queda ninguna \"a\" entre los números", () => {
+    for (const g of SELECTOR) {
+      const rango = rangoVisible(g);
+      if (!rango) continue;
+      expect(rangoParaLeer(rango, T.en.recRangoAria as string, T.en.recRangoUnion as string), g).not.toMatch(/\d\s+a\s+\d/);
+      expect(rangoParaLeer(rango, T.es.recRangoAria as string, T.es.recRangoUnion as string), g).toMatch(/^Para \d+ a \d+ personas$/);
+    }
   });
 });
 

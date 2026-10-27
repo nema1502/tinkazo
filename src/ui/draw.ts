@@ -22,6 +22,7 @@ import { marcarSalio, olvidarSalieron, ponerPremio } from "./premios";
 import { acortar, alAcortar, cortoGuardado, rutaDe } from "../enlace-corto";
 import { startMusic, stopMusic } from "../music";
 import { seguirEnPantallaCompleta } from "../games/overlay";
+import { pedirPantallaCompleta, soltarPantallaCompleta } from "./pantalla-completa";
 import { contar, contarPractica, errorContable, refDe } from "../contar";
 import { ponerTextoDelSello } from "./sin-sello-textos";
 
@@ -46,8 +47,9 @@ export async function draw(): Promise<void> {
   btn.textContent = t("fetching");
   // La pantalla completa, en el mismo clic: con cuenta, grabar el sorteo tarda
   // unos segundos y para cuando salía la tarjeta el navegador ya no la
-  // concedía. El estadio quedaba dentro de la página.
-  pedirPantallaCompleta();
+  // concedía. El estadio quedaba dentro de la página. Si no se está en grande
+  // todavía, es el momento (26 de octubre de 2026: lo mismo que al sellar).
+  pedirPantallaDelSorteo();
   // Desde la espera en grande, el resultado también sale en grande: se baja ya,
   // para abrirlo en el mismo instante en que se va el estadio.
   if (enGrande()) void import("./pantalla").then((m) => (pantallaLista = m)).catch(() => undefined);
@@ -56,7 +58,7 @@ export async function draw(): Promise<void> {
   const cortina = skipMotion() || enGrande() ? null : abrirCortina(app.frozen.prize, app.frozen.raffleId !== undefined);
   const sinShow = (): void => {
     cortina?.cerrar();
-    if (document.fullscreenElement && !enGrande()) void document.exitFullscreen().catch(() => undefined);
+    if (!enGrande()) soltarPantallaCompleta();
   };
   /** Con cuenta, la tarjeta del juego sale mientras se graba (ver abajo); si algo falla, se va con la cortina. */
   let tarjeta: Previa | null = null;
@@ -219,13 +221,14 @@ export async function draw(): Promise<void> {
 /**
  * Pide la pantalla completa mientras el clic todavía cuenta como gesto. Sin
  * gesto no la pide: el navegador la negaría. Pasa cuando el sorteo arranca solo
- * desde la espera en grande, que ya la pidió con su toque y se la deja al show.
+ * desde la espera en grande, que ya la tiene (la pidió el clic de "Sellar la
+ * lista") y se la deja al show. Si la persona la soltó con Escape o con "Volver
+ * a la página", no se la fuerza otra vez en esta sesión (`vista-grande.ts`).
+ * Con el movimiento reducido no hay show, y no hay nada que poner en grande.
  */
-function pedirPantallaCompleta(): void {
-  const raiz = document.documentElement;
-  const gesto = (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive ?? true;
-  if (skipMotion() || !gesto || document.fullscreenElement || !raiz.requestFullscreen) return;
-  void raiz.requestFullscreen({ navigationUI: "hide" }).catch(() => undefined);
+function pedirPantallaDelSorteo(): void {
+  if (skipMotion()) return;
+  pedirPantallaCompleta();
 }
 
 /** La espera en grande está abierta: el sorteo arrancó desde ahí (espera.ts). */
@@ -331,11 +334,7 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   // La pantalla completa se pide con la tarjeta, mientras el clic de "Sortear"
   // todavía cuenta como gesto: el navegador la niega pasados unos cinco
   // segundos, y el estadio aparece recién cuando la tarjeta termina.
-  const raiz = document.documentElement;
-  const gesto = (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive;
-  if (card && gesto && !document.fullscreenElement && raiz.requestFullscreen) {
-    void raiz.requestFullscreen({ navigationUI: "hide" }).catch(() => undefined);
-  }
+  if (card) pedirPantallaCompleta();
   let cerrado = false;
   const fin = (): void => {
     if (cerrado) return;
@@ -518,7 +517,7 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   // En el ensayo el resultado se queda en la página, con su final: en grande
   // mostraría un QR de un sorteo que no existe. Se suelta la pantalla completa.
   if (final && enEnsayo()) {
-    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    soltarPantallaCompleta();
     enfocarDespues(principal);
   } else if (final && (!final.pantalla || document.fullscreenElement)) resultadoEnGrande(enlace, principal);
   else enfocarDespues(principal);
@@ -690,20 +689,14 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   limpiarDetalle("draw-status");
   $("winner-cards").innerHTML = "";
   $("sec-participants").scrollIntoView({ behavior: "smooth", block: "start" });
-  // Con la lista lista, lo que sigue es nombrar el premio nuevo: si no, el
-  // cartel no dice qué se lleva y en Mis sorteos todos se llaman igual. Con la
-  // lista vacía, lo que sigue es cargarla.
-  // Con "No está" ya están la lista, el premio y la cantidad: lo que sigue es
-  // sellar.
-  // En una pantalla táctil el foco en el premio abre el teclado y tapa el botón: ahí se ofrecen los
-  // premios de siempre y lo que sigue es sellar.
-  const tactil = typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
-  if (modo === "sinGanadores") {
-    if (tactil) $<HTMLButtonElement>("btn-freeze").focus({ preventScroll: true });
-    else $<HTMLInputElement>("prize").focus({ preventScroll: true });
-  }
-  else if (modo === "ausente") $<HTMLButtonElement>("btn-freeze").focus({ preventScroll: true });
-  else $<HTMLTextAreaElement>("ta").focus({ preventScroll: true });
+  // El foco va a la acción principal del paso que sigue, como en cada paso (docs/ux.md): con la lista lista
+  // (sin los que ya ganaron, o con "No está"), sellar; con otra lista, cargarla. Hasta el 26 de octubre de 2026,
+  // con un mouse caía en el premio, para nombrar el próximo, pero el premio quedó dentro del pliegue "Premio,
+  // cuántos ganan y subir CSV", que está cerrado: `focus()` sobre algo escondido no hace nada, y el foco se
+  // perdía junto con el botón "Siguiente premio" que acababa de desaparecer. El premio se escribe igual, un Tab
+  // más arriba, y el resumen de arriba del botón dice qué se va a sellar ("sin premio" o el que quedó).
+  if (modo === "otraLista") $<HTMLTextAreaElement>("ta").focus({ preventScroll: true });
+  else $<HTMLButtonElement>("btn-freeze").focus({ preventScroll: true });
   actualizarPaso();
 }
 

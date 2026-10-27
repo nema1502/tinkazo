@@ -15,9 +15,10 @@ import { adelantarCorto, alTocarGanadores, contarCompartido, copySummary, draw, 
 import { contarPractica } from "./contar";
 import { skipGame } from "./games/overlay";
 import { usePixi } from "./games/engine";
-import { MARCA_INGRESAR, currentSession, entraConGoogle, entrar, initWalletUI, openPicker } from "./ui/wallet-ui";
+import { MARCA_INGRESAR, currentSession, entraConGoogle, entrar, estadoDeLaCuenta, initWalletUI, openPicker, pedirEntrar } from "./ui/wallet-ui";
 import { initOnboarding } from "./ui/onboarding";
 import { initEnsayo, salirDelEnsayo } from "./ui/ensayo";
+import { initAvisoCuenta } from "./ui/aviso-cuenta";
 import { abrirTutorial, initTutorial } from "./ui/tutorial";
 import { enEnsayo } from "./ensayo-modo";
 import { musicOn, toggleMusic } from "./music";
@@ -186,6 +187,8 @@ initVistas();
 initWalletUI();
 // El ensayo, si se recargó en él, después de la cuenta (la puerta) y antes de los pasos.
 initEnsayo();
+// El recordatorio de crear la cuenta, solo en el ensayo y una vez por sesión.
+initAvisoCuenta();
 // La red a la vista antes de sellar: "¿La red está bien?" y el aviso cuando algo anda mal.
 iniciarRed({ sellar: (op) => freeze(op) });
 ingresarSiLoPidio();
@@ -275,7 +278,15 @@ function initVistas(): void {
         salirDelEnsayo({ conMiLista: true });
         return;
       }
-      if (!currentSession()) void entrar(a.querySelector<HTMLElement>(".cta-t") ?? undefined);
+      // Con la cuenta adentro, a la herramienta, como siempre.
+      if (currentSession()) return;
+      // Sin cuenta no se va a la herramienta hasta entrar: el enlace navegaba antes de que Google hiciera nada, y
+      // quien tocaba "Entrar con Google" aterrizaba en el sorteo sin que Pollar se hubiera abierto (26 de octubre
+      // de 2026). Al entrar, la página abre la herramienta sola (más abajo, `tinkazo:sesion`).
+      e.preventDefault();
+      void entrar().then(() => {
+        if (currentSession()) history.replaceState(null, "", `${location.pathname}${location.search}#sortear`);
+      });
     });
   }
   for (const b of document.querySelectorAll<HTMLElement>("[data-otras-formas]")) {
@@ -304,16 +315,41 @@ function initVistas(): void {
   }
   // La G de Google en el botón grande, solo cuando va de verdad a Google (styles.css).
   body.dataset.google = entraConGoogle() ? "1" : "0";
+  /**
+   * El botón grande dice lo que va a pasar: con la cuenta abierta, "Ir a sortear"; sin ella, adónde va ("Entrar con
+   * Google y sortear", o el de siempre sin Pollar); y mientras Google abre su ventana o la sesión guardada vuelve,
+   * "Conectando…" o "Retomando tu cuenta…", sin la G y sin invitar a tocar otra vez. Lo mismo dice la cabecera.
+   */
+  const pintarCta = (): void => {
+    const estado = estadoDeLaCuenta().estado;
+    const ocupado = estado === "conectando" || estado === "retomando";
+    const clave = estado === "conectando" ? "connecting" : estado === "retomando" ? "gateRetomando" : currentSession() ? "ctaGo" : entraConGoogle() ? "ctaGoogle" : "ctaHero";
+    for (const el of document.querySelectorAll<HTMLElement>("[data-cta-entrar] .cta-t")) {
+      const boton = el.closest<HTMLElement>("[data-cta-entrar]");
+      // El botón no se achica mientras dice "Conectando…": lo que tiene al lado ("Probar con un ejemplo") no salta de
+      // lugar y vuelve a saltar al terminar (en el celular "Entrar con Google y sortear" ocupa dos renglones y
+      // "Conectando…" uno). Se mide antes de cambiar el texto, con el tamaño de siempre.
+      if (boton && ocupado && !boton.style.minWidth) {
+        const r = boton.getBoundingClientRect();
+        boton.style.minWidth = `${Math.ceil(r.width)}px`;
+        boton.style.minHeight = `${Math.ceil(r.height)}px`;
+      }
+      el.dataset.i = clave;
+      el.textContent = t(clave);
+      if (!boton) continue;
+      if (ocupado) boton.setAttribute("aria-busy", "true");
+      else {
+        boton.removeAttribute("aria-busy");
+        boton.style.minWidth = "";
+        boton.style.minHeight = "";
+      }
+    }
+  };
+  document.addEventListener("tinkazo:cuenta", pintarCta);
   document.addEventListener("tinkazo:sesion", (e) => {
     const a = (e as CustomEvent<string | null>).detail;
     body.dataset.sesion = a ? "si" : "no";
-    // Con la cuenta abierta, el botón grande lleva directo a sortear; sin ella,
-    // dice adónde va: "Entrar con Google y sortear", o el de siempre sin Pollar.
-    const clave = a ? "ctaGo" : entraConGoogle() ? "ctaGoogle" : "ctaHero";
-    for (const el of document.querySelectorAll<HTMLElement>("[data-cta-entrar] .cta-t")) {
-      el.dataset.i = clave;
-      el.textContent = t(clave);
-    }
+    pintarCta();
     if (location.hash === "#portada") return;
     let pidio = false;
     try {
@@ -330,8 +366,9 @@ function initVistas(): void {
 }
 
 /**
- * Llegó desde el final de la demo o del ensayo sin cuenta: la entrada, como la
- * del botón de la portada (directo a Google, o la ventana). Una sola vez.
+ * Llegó desde el final de la demo o del ensayo sin cuenta: la entrada. Una sola vez. Con la ventana de la propia
+ * página se abre sola; con Google no puede: sin un toque en esta página el navegador bloquea la ventana, así que la
+ * puerta dice lo que hay que hacer y deja un solo botón con el foco (`pedirEntrar`).
  */
 function ingresarSiLoPidio(): void {
   let pidio = false;
@@ -341,7 +378,7 @@ function ingresarSiLoPidio(): void {
   } catch {
     return;
   }
-  if (pidio && location.hash === "#sortear" && !params.has("demo") && !enEnsayo() && !currentSession()) void entrar();
+  if (pidio && location.hash === "#sortear" && !params.has("demo") && !enEnsayo() && !currentSession()) pedirEntrar();
 }
 
 /**

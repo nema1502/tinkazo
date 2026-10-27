@@ -89,6 +89,34 @@ describe("diccionario", () => {
     }
   });
 
+  it("en inglés ningún número se une con \"a\" (\"4 a 30\"): es la palabra del español, y en inglés se lee \"4 to 30\"", () => {
+    const sueltas = Object.entries(T.en)
+      .flatMap(([k, v]) => (typeof v === "string" ? [[k, v] as const] : Array.isArray(v) ? v.map((x) => [k, x] as const) : []))
+      .filter(([, v]) => /\d\s+a\s+\d/.test(v))
+      .map(([k]) => k);
+    expect(sueltas).toEqual([]);
+  });
+
+  it("la línea de \"gratis\" junto a \"Sellar la lista\" dice que no es para entrada paga ni para apuestas, y enlaza los términos (docs/legal.md, medida 5)", () => {
+    expect(T.es.freeRule).toMatch(/gratis/i);
+    expect(T.es.freeRule).toMatch(/entrada paga/i);
+    expect(T.es.freeRule).toMatch(/apuestas/i);
+    expect(T.es.freeRule).toContain("/terminos.html");
+    expect(T.en.freeRule).toMatch(/free/i);
+    expect(T.en.freeRule).toMatch(/paid entry/i);
+    expect(T.en.freeRule).toMatch(/gambling/i);
+    expect(T.en.freeRule).toContain("/terminos.html");
+  });
+
+  it("el rótulo del pliegue de la lista nombra lo que guarda: el premio, cuántos ganan y el CSV", () => {
+    expect(T.es.masOpciones).toMatch(/premio/i);
+    expect(T.es.masOpciones).toMatch(/ganan/i);
+    expect(T.es.masOpciones).toMatch(/CSV/);
+    expect(T.en.masOpciones).toMatch(/prize/i);
+    expect(T.en.masOpciones).toMatch(/win/i);
+    expect(T.en.masOpciones).toMatch(/CSV/);
+  });
+
   it("Sapo: what gets thrown is a ring, never a chip or a token", () => {
     for (const l of ["es", "en"] as const) {
       const textos = Object.entries(T[l])

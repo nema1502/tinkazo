@@ -205,7 +205,10 @@ function pintarBarra(s: Toca, mostrar: boolean): void {
   const bar = $("siguiente");
   const btn = $<HTMLButtonElement>("sig-btn");
   if (s.boton) {
-    const texto = s.boton.textContent?.trim() ?? "";
+    // Sin cuenta, "Sellar la lista" está apagado (aria-disabled) y tocarlo abre la ventana para entrar: la barra dice lo
+    // que va a pasar y no promete un sello (26 de octubre de 2026).
+    const pideCuenta = s.paso === 2 && s.boton.getAttribute("aria-disabled") === "true";
+    const texto = pideCuenta ? t("sigEntrarSellar") : (s.boton.textContent?.trim() ?? "");
     if (btn.textContent !== texto) btn.textContent = texto;
     btn.disabled = s.boton.disabled;
     btn.classList.toggle("lista", s.boton.classList.contains("lista"));
@@ -268,7 +271,7 @@ function vigilar(boton: HTMLButtonElement | null): void {
   alVista = !$("siguiente").classList.contains("on");
   if (!boton) return;
   io?.observe(boton);
-  moBoton?.observe(boton, { attributes: true, attributeFilter: ["disabled", "class", "style"], childList: true, characterData: true, subtree: true });
+  moBoton?.observe(boton, { attributes: true, attributeFilter: ["disabled", "aria-disabled", "class", "style"], childList: true, characterData: true, subtree: true });
 }
 
 /**
@@ -371,6 +374,10 @@ export function initSiguiente(opciones: { segundos: () => number }): void {
       render();
     });
   });
+  // La barra cambia de alto mientras está puesta: el botón pasa de "Sellar la lista" a "Se habilita en 0:25" y la
+  // línea del paso se acomoda. Medirla solo al entrar dejaba el aire de abajo de la página en el alto de antes, y el
+  // pie quedaba hasta 8 px debajo de la barra (audit-flujo, "sellada y esperando", 26 de octubre de 2026).
+  if (typeof ResizeObserver !== "undefined") new ResizeObserver(medirBarra).observe($("siguiente"));
   listo = true;
   armar();
   render();

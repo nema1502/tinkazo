@@ -3,6 +3,7 @@ import { LCOLORS, drawAvatar, paceFactor, skipMotion, type Beacon } from "../sta
 import { nameList, setPickSeed, t } from "../i18n";
 import { musicCue, startMusic, stopMusic } from "../music";
 import { mantenerDespierta, soltarDespierta } from "../ui/despierta";
+import { entornoDeAhora, grandeRechazada } from "../ui/vista-grande";
 
 /**
  * Lo que comparten todos los juegos.
@@ -270,8 +271,9 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
 
 export function takeOverScreen(el: HTMLElement): void {
   // Esconder la barra del navegador solo funciona en escritorio. En iPhone no
-  // hay pantalla completa de elementos, y ahí el CSS es todo lo que hay.
-  if (!document.fullscreenElement && el.requestFullscreen) {
+  // hay pantalla completa de elementos, y ahí el CSS es todo lo que hay. Si la
+  // persona la soltó (Escape, "Volver a la página"), no se la fuerza otra vez.
+  if (!document.fullscreenElement && el.requestFullscreen && !grandeRechazada(entornoDeAhora())) {
     void el.requestFullscreen({ navigationUI: "hide" }).catch(() => undefined);
   }
   // El bloqueo de pantalla es compartido (src/ui/despierta.ts): lo pide también la espera del número.

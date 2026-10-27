@@ -189,8 +189,12 @@ const MEDIR = (selReal) => `JSON.stringify((() => {
     .map((e) => ({ id: e.id, caja: caja(e), off: !!e.disabled }))
     .filter((p) => p.caja);
   const pie = document.querySelector('footer');
+  // La cuenta, siempre a la vista (26 de octubre de 2026): el chip de la cabecera, que dice si hay cuenta y cuál.
+  const chip = document.querySelector('#wallet-box .cuenta-chip');
   return {
     vp: { w: document.documentElement.clientWidth, h: innerHeight },
+    cuenta: chip ? { estado: chip.dataset.estado || '', texto: (chip.textContent || '').replace(/\\s+/g, ' ').trim(), caja: caja(chip) } : null,
+    cabeceraFija: !!cab && getComputedStyle(cab).position === 'sticky',
     scrollY: Math.round(scrollY),
     arriba,
     real: real ? { caja: caja(real), off: !!real.disabled, texto: (real.textContent || '').trim(), clases: real.className, tocable: tocable(real), anim: getComputedStyle(real).animationName } : null,
@@ -342,6 +346,14 @@ async function paso(page, ctx, n, nombre, esperado) {
     !!pg && pg.lineas === 1 && pg.izq >= -1 && pg.der <= m.vp.w + 1,
     pg ? `${pg.lineas} línea, de ${pg.izq} a ${pg.der} de ${m.vp.w}` : "no hay indicador",
   );
+  // 6c. La cuenta se ve: la cuenta de prueba, adentro, en todos los pasos. Con la cabecera fija (más de 1100 px) está a la
+  //     vista arriba a la derecha; con la suelta, en su lugar de arriba de la página (se baja a verla).
+  const cu = m.cuenta;
+  check(
+    `${quien} · ${n} ${nombre}: la cuenta está en la cabecera`,
+    !!cu && cu.estado === "dentro" && /Cuenta de prueba|Test account/.test(cu.texto) && (!m.cabeceraFija || (!!cu.caja && cu.caja.top >= 0 && cu.caja.bottom <= m.vp.h && cu.caja.right <= m.vp.w + 1)),
+    cu ? `${cu.estado} · "${cu.texto}"${m.cabeceraFija ? " · cabecera fija" : ""}` : "no hay chip de la cuenta",
+  );
   // 7. Toques y contraste de lo que se ve.
   const s = JSON.parse(await page.eval(SONDA));
   if (celular) check(`${quien} · ${n} ${nombre}: blancos de toque de 44 px`, s.toques.length === 0, s.toques.slice(0, 3).map((x) => `"${x.t}" ${x.h}px`).join(" | "));
@@ -371,9 +383,12 @@ const hayFalla = (cond, que) => {
 /** La barra se esconde con el estadio, la espera en grande y una ventana. */
 async function superpuestos(page, ctx) {
   const quien = `${ctx.etiqueta} ${ctx.tema}`;
-  // Se saca el botón de la pantalla para que la barra esté puesta: si no, esconderla no prueba nada.
-  await page.eval("scrollTo(0, document.documentElement.scrollHeight); true");
-  await sleep(700);
+  // Se saca el botón de la pantalla para que la barra esté puesta: si no, esconderla no prueba nada. Se baja de golpe y se
+  // espera a que la pantalla esté quieta: medir a los 700 ms agarraba la página 8 px antes del fondo, con la barra recién
+  // medida, y el pie quedaba debajo de ella (26 de octubre de 2026; la causa de verdad, el alto de la barra que no se
+  // volvía a medir, se arregló en src/ui/siguiente.ts).
+  await page.eval("scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' }); true");
+  await quieto(page, 900, 6000);
   let m = await medir(page, REAL.espera);
   if (!(m.barra.existe && m.barra.on)) {
     check(`${quien} · la barra está puesta con el botón fuera de la pantalla`, false, "no apareció al bajar al pie");

@@ -48,6 +48,12 @@ export const WALLET_ERRORS = {
   guestTestnetOnly: "guest-testnet-only",
   guestNotConnected: "guest-not-connected",
   friendbot: "friendbot-failed",
+  /** El navegador no dejó abrir la ventana de Google (wallet-pollar.ts: `ENTRADA_BLOQUEADA`). */
+  popupBlocked: "popup-blocked",
+  /** La persona cerró la ventana de Google antes de entrar (wallet-pollar.ts: `ENTRADA_CERRADA`). */
+  popupClosed: "popup-closed",
+  /** Pollar no pudo armar la entrada con Google (wallet-pollar.ts: `ENTRADA_SIN_SESION`). */
+  popupNoSession: "popup-nosession",
 } as const;
 
 /* ----------------------------------------------------------------- Freighter */

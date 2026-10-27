@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { T } from "../i18n";
 
@@ -32,6 +32,27 @@ describe("index.html, la herramienta", () => {
     ];
     const faltan = ids.filter((id) => !new RegExp(`\\bid="${id}"`).test(html));
     expect(faltan).toEqual([]);
+  });
+
+  it("ningún id se repite dentro de una misma página: getElementById toma el primero y lo otro queda muerto", () => {
+    // Hasta el 26 de octubre de 2026 el pliegue de la lista y la lista del menú "Más" se llamaban los dos "mas-lista":
+    // plegable.ts encontraba el menú, que no es un <details>, y no abría nada.
+    const raiz = new URL("../../", import.meta.url);
+    const paginas = readdirSync(raiz).filter((f) => f.endsWith(".html"));
+    expect(paginas).toContain("index.html");
+    for (const pagina of paginas) {
+      const fuente = readFileSync(new URL(pagina, raiz), "utf8");
+      const ids = [...fuente.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1] as string);
+      const repetidos = [...new Set(ids.filter((id, i) => ids.indexOf(id) !== i))];
+      expect({ pagina, repetidos }).toEqual({ pagina, repetidos: [] });
+    }
+  });
+
+  it("el pliegue de la lista es un <details> con el id que busca plegable.ts", () => {
+    const codigo = readFileSync(new URL("./plegable.ts", import.meta.url), "utf8");
+    const id = /getElementById\("([^"]+)"\) as HTMLDetailsElement/.exec(codigo)?.[1];
+    expect(id).toBeTruthy();
+    expect(html).toMatch(new RegExp(`<details[^>]*\\bid="${id}"`));
   });
 
   it("el tutorial, la oferta de primera vez y la línea de la cuenta no tienen ningún botón de color", () => {

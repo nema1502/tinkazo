@@ -90,7 +90,10 @@
         <button id="l-es" class="on">es</button>
         <button id="l-en">en</button>
       </nav>
+      <!-- La cuenta, siempre a la vista (src/ui/wallet-ui.ts, pintarCuenta): Entrar, Conectando… o la cuenta de adentro. -->
       <div class="auth" id="wallet-box"></div>
+      <!-- Lo que pasó al entrar, para los lectores de pantalla ("Entraste con Google como Ana"). -->
+      <span class="sr-only" id="cuenta-aviso" role="status" aria-live="polite"></span>
     </div>
   </div>
 </header>
@@ -245,7 +248,7 @@
         <p class="como-aca" data-i="comoAca">Estás acá</p>
         <h4 data-i="como2T">Sellala</h4>
         <p data-i="como2B">Queda cerrada: desde ahí nadie entra ni sale sin que se note.</p>
-        <p class="como-nota" data-i="como2N">Para sellar entrás con tu cuenta. Tu gente no necesita nada.</p>
+        <p class="como-nota" data-i="como2N">Para sellar entrás con tu cuenta. Tu gente no necesita crear cuenta.</p>
         <span class="como-boton" aria-hidden="true" data-i="freeze">Sellar la lista</span>
       </li>
       <li class="como-tarjeta" data-paso="3">
@@ -277,6 +280,8 @@
   </section>
   <!-- La línea que guía el ensayo, debajo de los pasos. Cambia con el paso y nunca bloquea. -->
   <p class="ensayo-guia app-only tab-nuevo" id="ensayo-guia" role="status" aria-live="polite" hidden></p>
+  <!-- El recordatorio de crear la cuenta: solo en el ensayo, antes de sellar, una sola vez por sesión (src/ui/aviso-cuenta.ts). Sin ventana ni color de la casa. -->
+  <p class="aviso-cuenta app-only tab-nuevo" id="aviso-cuenta" hidden><span data-i="cuentaPideGoogle">Para sortear con tu lista, entrá con Google: es gratis y tu cuenta se crea sola.</span> <button class="enlace" type="button" id="aviso-cuenta-entrar" data-i="cuentaPideEntrar">Entrar con Google</button></p>
 
   <!-- 01 Participantes -->
   <section class="block app-only tab-nuevo" id="sec-participants">
@@ -312,8 +317,8 @@
       <p class="ya-entraste" id="ya-entraste" role="status" style="display:none"></p>
       <!-- Todo lo que no es pegar ni sellar va plegado (barrido de letra, 26 de octubre de 2026): el premio, cuántos ganan, CSV y Luma.
            Lo que se eligió se lee igual arriba del botón de sellar (sellar-resumen). src/ui/plegable.ts lo abre si ya hay algo elegido. -->
-      <details class="mas" id="mas-lista">
-        <summary data-i="masOpciones">Premio y cuántos ganan</summary>
+      <details class="mas" id="mas-opciones">
+        <summary data-i="masOpciones">Premio, cuántos ganan y subir CSV</summary>
         <div class="row mas-origenes">
           <label class="chip live"><span data-i="srcCsv">Subir CSV</span><input id="csv" type="file" accept=".csv,.txt" class="sr-only" /></label>
           <label class="chip live" title="Exportá la lista de invitados de tu evento en Luma como CSV" data-i-title="srcLumaTip"><span data-i="srcLuma">Desde Luma</span><input id="csv-luma" type="file" accept=".csv" class="sr-only" /></label>
@@ -338,9 +343,9 @@
       <aside class="red-estado" id="red-estado" role="status" aria-live="polite" data-i-aria="redRegion" aria-label="Estado de la red" style="display:none"></aside>
       <!-- Lo que se va a sellar, antes de sellar (participants.ts): "20 personas · 1 ganador · Termo. Al sellar, la lista queda cerrada." -->
       <p class="note sellar-resumen" id="sellar-resumen" style="display:none"></p>
-      <p class="note sellar-sin-cuenta" id="sellar-sin-cuenta" data-i="sellarSinCuenta">Conectá tu cuenta para sellar</p>
+      <p class="note sellar-sin-cuenta" id="sellar-sin-cuenta" data-i="sellarSinCuenta">Entrá con tu cuenta para sellar</p>
       <p class="note" id="freeze-hint" data-i="freezeHint">Hacen falta al menos dos nombres.</p>
-      <p class="note" id="free-rule" data-i-html="freeRule">Participar es gratis, siempre. Al sellar la lista aceptás los <a href="/terminos.html">términos</a>.</p>
+      <p class="note" id="free-rule" data-i-html="freeRule">Participar es gratis, siempre: no es para sorteos con entrada paga ni para apuestas. Al sellar la lista aceptás los <a href="/terminos.html">términos</a>.</p>
       <!-- "¿La red está bien?": un toque antes de empezar un evento; dice verde, amarillo o rojo con la razón. Solo con cuenta. -->
       <div class="red-fila" id="red-fila" style="display:none">
         <button class="ghost mini" type="button" id="btn-red"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h4l3-8 4 16 3-8h6"/></svg><span id="btn-red-txt" data-i="redBtn">¿La red está bien?</span></button>

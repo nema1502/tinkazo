@@ -9,6 +9,8 @@ import { enEnsayo, sinGrabar } from "../ensayo-modo";
 import { enNavegadorDeApp as esDeApp } from "../navegador";
 import { clearSessionKind, loadSessionKind, pickRestore, saveSessionKind } from "../stellar/session-store";
 import { contarEntrada, tomarEntrada } from "../contar";
+import { crearChip } from "./cuenta-chip";
+import { type EstadoCuenta, claveDelAviso, estadoCuenta } from "./cuenta-estado";
 
 /**
  * Identidad del organizador en la cabecera.
@@ -37,9 +39,11 @@ interface Session {
   kind: "external" | "guest";
   label: string;
   address: string;
-  /** Nombre y foto, cuando la cuenta los trae. Con Google, sí. */
+  /** Nombre y foto, cuando la cuenta los trae. Con Google, sí; el correo no es un nombre (`cuenta-estado.ts`). */
   name?: string;
   avatar?: string;
+  /** El correo de la cuenta de Google o de correo: se muestra tapado, y solo en el panel. */
+  mail?: string;
   /**
    * Cada operación se aprueba a mano, en una ventana de la billetera
    * (Freighter). La cuenta de prueba firma en el navegador y Pollar firma y
@@ -99,10 +103,11 @@ export const currentSession = (): Session | null => session;
 
 /**
  * La marca que deja un botón que lleva a entrar desde otra página (el final de
- * la demo, "Sortear con mi lista" del ensayo): la página nueva, ya en la
- * herramienta, abre la entrada (`ingresarSiLoPidio` en main.ts). Vive en la pestaña.
+ * la demo, "Sortear con mi lista" del ensayo, "Entrar" de las páginas de lectura): la página nueva, ya en la
+ * herramienta, pide entrar (`ingresarSiLoPidio` en main.ts). Vive en la pestaña, y se define aparte
+ * (`cuenta-estado.ts`) para que las páginas de lectura la usen sin cargar la herramienta.
  */
-export const MARCA_INGRESAR = "tinkazo.ingresar";
+export { MARCA_INGRESAR } from "./cuenta-estado";
 
 /** La cuenta abierta pide aprobar cada operación en una ventana (Freighter): lo que se firma no puede arrancar solo. */
 export const apruebaAMano = (): boolean => session?.aMano === true;
@@ -123,6 +128,17 @@ export function refrescarPuerta(): void {
 
 /** Se está retomando una sesión guardada (ver `initWalletUI`). */
 let retomando = false;
+/** Google (o el correo) está abriendo su ventana: la cabecera dice "Conectando…" (`pintarCuenta`). */
+let conectando = false;
+/**
+ * Termina de retomar la sesión guardada, con cuenta o sin ella. Quien toca "Entrar con Google" mientras la sesión
+ * vuelve espera esto en lugar de irse a la herramienta a mirar "Retomando tu cuenta…" (`entrar`).
+ */
+let retomaTerminada: Promise<void> = Promise.resolve();
+/** Se llegó con ganas de entrar pero sin un toque (el final de la demo o del ensayo): la ventana de Google no se abre sola. */
+let pidiendoEntrar = false;
+/** La cuenta se acaba de abrir: la cabecera aparece con un pulso corto. */
+let recienEntro = false;
 
 /**
  * Si quedó una sesión guardada en este navegador para esta red: la cuenta de
@@ -158,41 +174,64 @@ function marcarQueVaASortear(): void {
  * caminos (diseño del onboarding, 22 de octubre de 2026: la ventana era la
  * primera duda, con 157 palabras en el celular). Sin Pollar (local, vistas
  * previas) o desde el navegador de una app, la ventana de siempre, con el
- * correo primero. `boton` dice "Conectando…" mientras sale para Google.
+ * correo primero. Mientras Google abre su ventana la cabecera y los botones de
+ * entrar dicen "Conectando…" (`pintarCuenta`); si el navegador la bloquea o la
+ * persona la cierra, la pantalla lo dice y se puede volver a intentar.
+ *
+ * Si la sesión guardada todavía está volviendo, se espera a que termine, con
+ * cuenta o sin ella. Hasta el 26 de octubre de 2026 se mandaba a la persona a la
+ * herramienta a mirar "Retomando tu cuenta…" hasta ocho segundos, y si la marca
+ * era vieja caía en "Para sellar, entrá con tu cuenta" sin que Google se
+ * hubiera abierto nunca: "Entrar con Google a veces lleva al sorteo sin pasar por Pollar".
  */
-export async function entrar(boton?: HTMLElement): Promise<void> {
+export async function entrar(): Promise<void> {
+  if (session || conectando) return;
+  // Quien entra va a sortear: al terminar, la página abre la herramienta (main.ts).
+  marcarQueVaASortear();
+  if (retomando) await retomaTerminada;
   if (session) return;
-  // La sesión guardada todavía está volviendo: no se la manda a entrar de nuevo.
-  // La herramienta ya se abrió; la línea de la cuenta dice "Retomando tu cuenta…".
-  if (retomando) {
-    marcarQueVaASortear();
-    return;
-  }
   if (!entraConGoogle()) {
     await openPicker();
     return;
   }
-  marcarQueVaASortear();
   // Y con la lista que estaba armando: al volver de Google, sigue ahí.
   guardarBorrador();
-  const antes = boton?.textContent ?? "";
-  if (boton) {
-    boton.textContent = t("connecting");
-    boton.setAttribute("aria-busy", "true");
-  }
+  pidiendoEntrar = false;
+  conectando = true;
+  pintarCuenta();
   try {
     const [w, { pollarWallet }] = await Promise.all([lite(), import("../stellar/wallet-pollar")]);
-    // El navegador se va a Google y vuelve: esto puede no terminar nunca, y la página se recarga.
     const address = await pollarWallet.connect();
     await afterConnect(w, pollarWallet, address, "google", document.createElement("div"), () => undefined);
   } catch (e) {
     notice(await walletErrorText(e), true);
   } finally {
-    if (boton) {
-      boton.textContent = antes;
-      boton.removeAttribute("aria-busy");
-    }
+    conectando = false;
+    // Con la cuenta adentro ya se pintó (con su pulso): no se repinta, o el pulso arrancaba dos veces.
+    if (!session) pintarCuenta();
   }
+}
+
+/**
+ * Se llegó con ganas de entrar pero sin un toque: el final de la demo o del ensayo ("Entrar y sortear" / "Sortear con
+ * mi lista") abre la herramienta en otra carga, y sin un gesto en esta página el navegador bloquea la ventana de
+ * Google. En vez de intentar y que no pase nada, la puerta dice lo que hay que hacer ("Para sortear con tu lista, entrá
+ * con Google: es gratis y tu cuenta se crea sola.") y deja un solo botón, con el foco: Enter y se abre, con su gesto.
+ * Con la ventana de la propia página (sin Google) no hace falta: se abre sola.
+ */
+export function pedirEntrar(): void {
+  if (session) return;
+  if (!entraConGoogle()) {
+    void openPicker();
+    return;
+  }
+  void (async () => {
+    if (retomando) await retomaTerminada;
+    if (session) return;
+    pidiendoEntrar = true;
+    applyGate();
+    document.querySelector<HTMLElement>("#gate button")?.focus({ preventScroll: true });
+  })();
 }
 
 export function initWalletUI(): void {
@@ -201,12 +240,15 @@ export function initWalletUI(): void {
   // ofrece entrar. Con Google eso tarda hasta 8 s, y antes se veía la caja de
   // conectar, como si hubiera que entrar otra vez (diseño del onboarding).
   retomando = anchoringAvailable && haySesionGuardada();
+  let terminarDeRetomar: () => void = () => undefined;
+  retomaTerminada = retomando ? new Promise<void>((resolver) => (terminarDeRetomar = resolver)) : Promise.resolve();
   render();
   onLangChange(render);
   const fin = (): void => {
     if (!retomando) return;
     retomando = false;
     render();
+    terminarDeRetomar();
   };
   void Promise.allSettled([restorePollar(), restoreSession()]).then(fin);
   // Por si algo queda colgado: nunca más de 12 s diciendo que se retoma.
@@ -231,7 +273,9 @@ export function initWalletUI(): void {
         return;
       }
       void hayFreighter();
-      void import("../stellar/wallet-pollar").catch(() => undefined);
+      // Y el SDK de Pollar: entrar abre una ventana, y el navegador solo la deja abrir poco después del toque. Con el
+      // SDK sin bajar, bajarlo se come ese margen y la ventana se bloquea (wallet-pollar.ts, `precargarSdk`).
+      void import("../stellar/wallet-pollar").then((m) => m.precargarSdk(), () => undefined);
     };
     const luego = (): void => {
       setTimeout(() => {
@@ -294,17 +338,44 @@ async function activate(
   // Si la wallet no sabe decir su red, no bloqueamos: la transacción fallaría
   // igual, y con un error más claro que una suposición nuestra.
   wrongNetwork = passphrase !== null && passphrase !== network.networkPassphrase;
-  const prof = (wallet as { profile?: () => { name: string; avatar: string } | null }).profile?.();
+  const prof = (wallet as { profile?: () => { name: string; avatar: string; mail: string } | null }).profile?.();
   session = {
     kind: wallet.kind,
     label: wallet.label,
     address,
-    ...(prof ? { name: prof.name, avatar: prof.avatar } : {}),
+    ...(prof ? { name: prof.name, avatar: prof.avatar, mail: prof.mail } : {}),
     aMano: wallet.kind === "external" && (wallet as { submitsItself?: unknown }).submitsItself !== true,
   };
+  pidiendoEntrar = false;
+  // Una cuenta que se acaba de abrir se nota: la cabecera aparece con un pulso y una línea lo dice. Retomar una
+  // sesión guardada no es entrar: no hace nada de eso.
+  if (!restoring) {
+    recienEntro = true;
+    setTimeout(() => {
+      recienEntro = false;
+    }, 1800);
+  }
   render();
   refreshFreezeLabel();
   precargarSello();
+  if (!restoring) anunciarEntrada();
+}
+
+/**
+ * Lo que pasó al entrar, dicho: la cabecera ya apareció con su pulso; esto lo anuncia a los lectores de pantalla y,
+ * a la vista, lo escribe en una línea ("Entraste con Google como Ana"). La cuenta de prueba ya dice lo suyo
+ * ("lista y con fondos"), y si la página ofrece sellar la lista que ya está armada ("Ya entraste. Sellá tu lista de 20
+ * personas.") esa línea es la que sigue: dos líneas seguidas diciendo lo mismo sobraban.
+ */
+function anunciarEntrada(): void {
+  const e = estadoDeLaCuenta();
+  if (e.estado !== "dentro") return;
+  const texto = t(claveDelAviso(e)).replace("{n}", e.nombre);
+  const vivo = document.getElementById("cuenta-aviso");
+  if (vivo) vivo.textContent = texto;
+  const ya = document.getElementById("ya-entraste");
+  if (e.via === "prueba" || (ya && ya.style.display !== "none")) return;
+  notice(texto, false);
 }
 
 /** Al volver del redirect de Google, la sesión se retoma sola. */
@@ -313,7 +384,12 @@ async function restorePollar(): Promise<void> {
     const { pollarConfigured, pollarWallet } = await import("../stellar/wallet-pollar");
     if (!pollarConfigured()) return;
     const address = await pollarWallet.restore();
-    if (!address) return;
+    if (!address) {
+      // Sin cuenta y sin la marca de Pollar (`restore` la olvida si la sesión ya no existe), la de "sesión de Google
+      // guardada" tampoco vale: si quedaba, cada carga repetía "Retomando…" y las páginas de lectura decían "Mi cuenta".
+      if (!pollarWallet.hayMarca() && loadSessionKind(network.name) === "google") clearSessionKind(network.name);
+      return;
+    }
     const { setActiveWallet } = await lite();
     if (session) return;
     setActiveWallet(pollarWallet);
@@ -322,34 +398,42 @@ async function restorePollar(): Promise<void> {
       kind: "external",
       label: pollarWallet.label,
       address,
-      ...(prof ? { name: prof.name, avatar: prof.avatar } : {}),
+      ...(prof ? { name: prof.name, avatar: prof.avatar, mail: prof.mail } : {}),
       aMano: false,
     };
     render();
     refreshFreezeLabel();
     precargarSello();
-    // Al retomar la sesión, el perfil puede llegar un instante después que la
-    // dirección. Sin este reintento la cabecera se quedaba con la dirección y
-    // el nombre no volvía a aparecer hasta el próximo ingreso.
-    if (!prof) {
-      setTimeout(() => {
-        const late = pollarWallet.profile();
-        if (!late || !session) return;
-        session = { ...session, name: late.name, avatar: late.avatar };
-        render();
-      }, 2000);
-    }
+    // Al retomar la sesión, el perfil (nombre y foto) vive solo en memoria y llega después de la dirección, a veces
+    // varios segundos después. Se mira cada tanto hasta que llega; mientras, la cabecera dice por dónde entró y
+    // nunca muestra la dirección ni el correo como si fueran el nombre.
+    if (!prof) esperarPerfil(pollarWallet);
   } catch {
     /* sin sesion previa, la cabecera queda como estaba */
   }
+}
+
+/** Mira cada tanto si llegó el perfil de la cuenta retomada: hasta ~15 s, y sin tocar nada más que la cabecera. */
+function esperarPerfil(wallet: { profile: () => { name: string; avatar: string; mail: string } | null }, intento = 0): void {
+  setTimeout(
+    () => {
+      if (!session) return;
+      const llego = wallet.profile();
+      if (llego) {
+        session = { ...session, name: llego.name, avatar: llego.avatar, mail: llego.mail };
+        pintarCuenta();
+        return;
+      }
+      if (intento < 20) esperarPerfil(wallet, intento + 1);
+    },
+    intento === 0 ? 1000 : 700,
+  );
 }
 
 /** Ya se pidió Mis sorteos alguna vez (hubo una sesión): ver `render`. */
 let historialPedido = false;
 
 function render(): void {
-  const box = $("wallet-box");
-  box.innerHTML = "";
   applyGate();
   // La página decide con esto si muestra la portada o la herramienta.
   document.dispatchEvent(new CustomEvent<string | null>("tinkazo:sesion", { detail: session?.address ?? null }));
@@ -362,73 +446,91 @@ function render(): void {
     historialPedido = true;
     void import("./history").then((h) => h.renderHistory(session?.address ?? null));
   }
+  pintarCuenta();
+  // Sin contrato en esta red, el anclaje no se ofrece y la cabecera calla.
+  if (!anchoringAvailable || !session) return;
+  if (wrongNetwork) notice(t("wrongNetwork").replace("{red}", network.name), true);
+  void refreshFunds();
+}
+
+/** La sesión como la ve la cabecera: sin el resto. */
+const vistaDeLaSesion = (): Parameters<typeof estadoCuenta>[0]["sesion"] =>
+  session
+    ? {
+        label: session.label,
+        address: session.address,
+        ...(session.name ? { name: session.name } : {}),
+        ...(session.avatar ? { avatar: session.avatar } : {}),
+        ...(session.mail ? { mail: session.mail } : {}),
+      }
+    : null;
+
+/** En qué está la cuenta ahora: afuera, conectando, retomando o adentro (`cuenta-estado.ts`). */
+export const estadoDeLaCuenta = (): EstadoCuenta => estadoCuenta({ sesion: vistaDeLaSesion(), retomando: anchoringAvailable && retomando, conectando });
+
+/**
+ * La cuenta, siempre a la vista (26 de octubre de 2026). Alguien usó tinkazo.app y no se notaba si había iniciado
+ * sesión ni con qué cuenta: fuera era ausencia, y dentro una caja chica. Ahora la cabecera lleva uno de tres chips
+ * (`cuenta-chip.ts`): **Entrar**, **Conectando… / Retomando…** o la cuenta de adentro, con su cara, su nombre de pila y
+ * por dónde entró. Cada vez que cambia avisa con `tinkazo:cuenta`, y los botones de entrar de la portada dicen lo mismo
+ * (main.ts). El estadio y la espera en grande no la llevan: son de la sala.
+ */
+function pintarCuenta(): void {
+  const box = $("wallet-box");
+  const teniaElFoco = box.contains(document.activeElement);
+  box.innerHTML = "";
+  const e = estadoDeLaCuenta();
+  document.dispatchEvent(new CustomEvent("tinkazo:cuenta", { detail: { estado: e.estado } }));
   // Sin contrato en esta red, el anclaje no se ofrece y la cabecera calla.
   if (!anchoringAvailable) return;
 
-  // Sin cuenta, la cabecera no lleva botón para entrar: la portada y la puerta
-  // del sorteo ya tienen el suyo, y en el celular un segundo botón del color de
-  // la casa le quitaba la vista a "Sortear" (ver docs/ux.md, la cabecera).
-  if (!session) return;
-
-  const net = document.createElement("span");
-  // Naranja en testnet y turquesa en mainnet: el color dice en qué red estás
-  // antes de que alcances a leer la palabra.
-  net.className = wrongNetwork ? "netbadge bad" : network.name === "mainnet" ? "netbadge main" : "netbadge";
-  net.textContent = network.name === "testnet" ? t("netTest") : network.name;
-  net.title = t(network.name === "testnet" ? "netTestHint" : "netMainHint");
-  // `?grifo=0`: que se vea, para que nadie lo deje así sin querer y para que
-  // las capturas lo digan. (Solo existe en testnet: en mainnet se ignora.)
-  if (grifoApagado) {
-    net.classList.add("sin-grifo");
-    net.textContent = `${t("netTest")} · ${t("grifoOffTag")}`;
-    net.title = `${t("netTestHint")} ${t("grifoOffHint")}`;
+  if (e.estado === "dentro" && session) {
+    const net = document.createElement("span");
+    // Naranja en testnet y turquesa en mainnet: el color dice en qué red estás
+    // antes de que alcances a leer la palabra.
+    net.className = wrongNetwork ? "netbadge bad" : network.name === "mainnet" ? "netbadge main" : "netbadge";
+    net.textContent = network.name === "testnet" ? t("netTest") : network.name;
+    net.title = t(network.name === "testnet" ? "netTestHint" : "netMainHint");
+    // `?grifo=0`: que se vea, para que nadie lo deje así sin querer y para que
+    // las capturas lo digan. (Solo existe en testnet: en mainnet se ignora.)
+    if (grifoApagado) {
+      net.classList.add("sin-grifo");
+      net.textContent = `${t("netTest")} · ${t("grifoOffTag")}`;
+      net.title = `${t("netTestHint")} ${t("grifoOffHint")}`;
+    }
+    box.appendChild(net);
   }
-  box.appendChild(net);
 
-  // Tocar el nombre abre el panel de la cuenta, con todo lo tuyo junto.
-  const link = document.createElement("button");
-  link.className = session.name ? "hello mini" : "hello mini mono";
-  link.type = "button";
-  link.title = `${session.label} · ${session.address}`;
-  link.addEventListener("click", () => void showAccount());
-  // Si la cuenta trae nombre, se muestra el nombre: una dirección de 56
-  // caracteres no le dice nada a nadie, y menos en una pantalla grande.
-  if (session.avatar) {
-    const img = document.createElement("img");
-    img.className = "hello-face";
-    img.alt = "";
-    // Google a veces rechaza la foto cuando no llega el origen, y entonces el
-    // navegador pinta el icono de imagen rota. Mejor no mostrar nada.
-    img.addEventListener("error", () => img.remove());
-    img.referrerPolicy = "no-referrer";
-    img.src = session.avatar;
-    link.appendChild(img);
+  const chip = crearChip(e, { tx: t, recien: recienEntro });
+  if (e.estado === "dentro" && session) {
+    // Tocar la cuenta abre el panel, con todo lo tuyo junto. El `title` termina en la dirección: lo leen los auditores.
+    chip.title = `${session.label} · ${session.address}`;
+    chip.addEventListener("click", () => void showAccount());
+  } else if (e.estado === "fuera") {
+    // La ventana de ingreso de siempre (Google primero), con el foco de vuelta en el chip al cerrarla.
+    chip.addEventListener("click", () => void openPicker({ volverA: chip }));
   }
-  // Solo el nombre de pila: "Nicolás Emir Mejía Agreda" no entra en una
-  // cabecera y quedaba cortado a la mitad.
-  const short = (session.name ?? "").trim().split(/\s+/)[0] ?? "";
-  link.appendChild(document.createTextNode(short || shortAddress(session.address)));
-  box.appendChild(link);
-
-  // El botón de salir vive adentro del panel: la cabecera de un celular no
-  // aguanta insignia, nombre y dos botones sin romperse.
-
-  if (wrongNetwork) notice(t("wrongNetwork").replace("{red}", network.name), true);
-  void refreshFunds();
+  box.appendChild(chip);
+  // Si el chip que se cambió tenía el foco (alguien lo tocó con el teclado), el foco sigue en el chip nuevo.
+  if (teniaElFoco && chip.matches("button, a")) chip.focus({ preventScroll: true });
 }
 
 /** Abre el panel con todo lo de la cuenta: quién sos, red, saldo, sorteos. */
 async function showAccount(): Promise<void> {
   if (!session) return;
-  const [{ openAccount }, w] = await Promise.all([import("./account"), lite()]);
-  const balance = await w.xlmBalance(session.address);
+  const { openAccount, actualizarSaldo } = await import("./account");
   if (!session) return;
+  const direccion = session.address;
+  // El panel abre ya, con el saldo "cargando": hasta el 26 de octubre de 2026 esperaba la respuesta de la red (hasta 12 s)
+  // antes de abrir, y el toque en la cuenta parecía no hacer nada.
   openAccount({
-    address: session.address,
+    address: direccion,
     label: session.label,
-    balance,
+    balance: -1,
+    cargando: true,
     ...(session.name ? { name: session.name } : {}),
     ...(session.avatar ? { avatar: session.avatar } : {}),
+    ...(session.mail ? { mail: session.mail } : {}),
     onDisconnect: () => void disconnect(),
     onFund: () => {
       const box = $("fund-box");
@@ -436,6 +538,8 @@ async function showAccount(): Promise<void> {
       box.scrollIntoView({ behavior: "smooth", block: "center" });
     },
   });
+  const w = await lite();
+  actualizarSaldo(direccion, await w.xlmBalance(direccion));
 }
 
 /* -------------------------------------------------------------------- puerta */
@@ -476,15 +580,22 @@ function applyGate(): void {
   // lista" una pantalla más abajo (diseño del onboarding, 22 de octubre de
   // 2026). La cuenta se resuelve al principio, desde la portada; acá queda la
   // línea con su botón secundario, que es lo que usan los auditores.
+  // La puerta se vuelve a armar cada vez que cambia algo de la cuenta (el idioma, entrar, el ensayo): si el botón tenía el
+  // foco, el botón nuevo lo recibe. Sin esto, "Entrar" desde una página de lectura dejaba el foco en el aire en cuanto
+  // la herramienta terminaba de armarse (pedirEntrar).
+  const teniaElFoco = gate.contains(document.activeElement);
   gate.replaceChildren();
   const p = document.createElement("p");
-  p.textContent = t(retomando ? "gateRetomando" : "gateLinea");
+  // Retomando o conectando no se ofrece entrar de nuevo; sin un toque (el final de la demo), se pide el toque (`pedirEntrar`).
+  const ocupada = retomando || conectando;
+  p.textContent = t(retomando ? "gateRetomando" : conectando ? "connecting" : pidiendoEntrar ? "cuentaPideGoogle" : "gateLinea");
   gate.appendChild(p);
-  gate.classList.toggle("retomando", retomando);
-  if (!retomando) {
-    const b = button(t("gateEntrar"), "ghost", () => void openPicker());
+  gate.classList.toggle("retomando", ocupada);
+  if (!ocupada) {
+    const b = pidiendoEntrar ? button(t("cuentaPideEntrar"), "ghost", () => void entrar()) : button(t("gateEntrar"), "ghost", () => void openPicker());
     b.type = "button";
     gate.appendChild(b);
+    if (teniaElFoco) b.focus({ preventScroll: true });
   }
   gate.style.display = "";
 }
@@ -1080,7 +1191,9 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
   function shut(): void {
     document.removeEventListener("keydown", onKey, true);
     back.remove();
-    if (returnTo instanceof HTMLElement) returnTo.focus();
+    // El chip de la cabecera se vuelve a dibujar al conectar (`pintarCuenta`): el que estaba ya no está, y el foco va al nuevo.
+    const vuelve = returnTo instanceof HTMLElement && returnTo.isConnected ? returnTo : document.querySelector<HTMLElement>("#wallet-box .cuenta-chip");
+    if (vuelve && vuelve.matches("button, a")) vuelve.focus();
   }
 
   home();
@@ -1105,6 +1218,8 @@ async function connect(
 ): Promise<void> {
   const original = row.innerHTML;
   row.innerHTML = `<span>${esc(t("connecting"))}</span>`;
+  conectando = true;
+  pintarCuenta();
   try {
     const w = await lite();
     // Solo la cuenta de prueba necesita el SDK, para armar su par de llaves.
@@ -1119,6 +1234,10 @@ async function connect(
   } catch (e) {
     row.innerHTML = original;
     notice(await walletErrorText(e), true);
+  } finally {
+    conectando = false;
+    // Con la cuenta adentro ya se pintó (con su pulso): no se repinta, o el pulso arrancaba dos veces.
+    if (!session) pintarCuenta();
   }
 }
 
@@ -1182,6 +1301,11 @@ async function disconnect(): Promise<void> {
   clearSessionKind(network.name);
   render();
   refreshFreezeLabel();
+  // El panel se cerró sin devolver el foco y el chip de la cuenta ya no existe: el foco pasa al chip nuevo ("Entrar") y
+  // los lectores de pantalla oyen que la sesión se cerró (26 de octubre de 2026).
+  $("wallet-box").querySelector<HTMLElement>(".cuenta-chip")?.focus({ preventScroll: true });
+  const vivo = document.getElementById("cuenta-aviso");
+  if (vivo) vivo.textContent = t("cuentaSalio");
 }
 
 async function walletErrorText(e: unknown): Promise<string> {
@@ -1191,6 +1315,10 @@ async function walletErrorText(e: unknown): Promise<string> {
   if (msg === WALLET_ERRORS.rejected) return t("walletRejected");
   if (msg === WALLET_ERRORS.friendbot) return t("friendbotFailed");
   if (msg === WALLET_ERRORS.guestTestnetOnly) return t("guestTestnetOnly");
+  // La ventana de Google que el navegador no dejó abrir, o que la persona cerró antes de entrar (wallet-pollar.ts).
+  if (msg === WALLET_ERRORS.popupBlocked) return t("cuentaBloqueada");
+  if (msg === WALLET_ERRORS.popupClosed) return t("cuentaCerrada");
+  if (msg === WALLET_ERRORS.popupNoSession) return t("cuentaSinSesion");
   return t("walletUnknown");
 }
 
@@ -1211,6 +1339,8 @@ function notice(text: string, bad: boolean): void {
   el.className = `wallet-notice${bad ? " bad" : " arriba"}`;
   el.textContent = text;
   if (bad) {
+    // Un error se anuncia enseguida a los lectores de pantalla (y se va solo a los siete segundos).
+    el.setAttribute("role", "alert");
     document.body.appendChild(el);
     setTimeout(() => el.remove(), 7000);
     return;

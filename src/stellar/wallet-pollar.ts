@@ -1,4 +1,4 @@
-import type { PollarClient, WalletInfo } from "@pollar/core";
+import type { AuthOpenContext, PollarClient, WalletInfo } from "@pollar/core";
 import { network } from "./config";
 import type { SignedTx, WalletAdapter } from "./wallet";
 import { contarEntrada, marcarEntrada, tomarEntrada } from "../contar";
@@ -27,11 +27,45 @@ import { contarEntrada, marcarEntrada, tomarEntrada } from "../contar";
 const KEY = "tinkazo.pollar.intent";
 type Via = "google" | "email";
 
-/** Lo que Pollar sabe de quien entró. Todo sale de la cuenta de Google. */
+/**
+ * Lo que Pollar sabe de quien entró. Todo sale de la cuenta de Google.
+ *
+ * `name` es el nombre de verdad, o vacío si la cuenta no trae uno (una cuenta de correo): hasta el 26 de octubre de
+ * 2026 se ponía el correo como nombre y la cabecera lo mostraba entero, también en una pantalla grande. Sin nombre,
+ * la cabecera dice por dónde entró (`cuenta-estado.ts`); el correo va aparte, para el panel, y siempre tapado.
+ */
 export interface Profile {
   name: string;
   mail: string;
   avatar: string;
+}
+
+/** Cuánto se espera al SDK a que lea su sesión guardada, que no necesita la red salvo para renovar una vencida. */
+export const LISTO_MS = 8_000;
+
+/** Lo que quedó de una entrada que no se completó, para que la pantalla diga qué pasó y se pueda reintentar. */
+export const ENTRADA_BLOQUEADA = "popup-blocked";
+export const ENTRADA_CERRADA = "popup-closed";
+/** Pollar no pudo abrir la entrada (sin red, o la llave no vale en este sitio): no hay a dónde mandar la ventana. */
+export const ENTRADA_SIN_SESION = "popup-nosession";
+
+/** Cuánto se espera, con la ventana de Google cerrada, a que llegue la cuenta: el SDK tarda un instante en enterarse. */
+export const GRACIA_CIERRE_MS = 6_000;
+
+/**
+ * ¿La marca de Pollar sigue valiendo? Con el SDK ya leyó su sesión (`ready()`) y sin cuenta, la marca vale solo si
+ * el SDK **sí** guardó una sesión que parece buena (se está renovando, o no hay red): si no hay ninguna, o está rota,
+ * la marca es de una sesión que ya no existe, y quedaba para siempre diciendo "Retomando…" en cada carga.
+ */
+export function marcaViva(e: { listo: boolean; hayCuenta: boolean; guardada: string | null; esValida: (s: unknown) => boolean }): boolean {
+  // Con una cuenta, o sin saber (el SDK no terminó de leer), no se toca.
+  if (e.hayCuenta || !e.listo) return true;
+  if (!e.guardada) return false;
+  try {
+    return e.esValida(JSON.parse(e.guardada));
+  } catch {
+    return false;
+  }
 }
 
 export interface SubmittingWallet extends WalletAdapter {
@@ -53,6 +87,10 @@ class PollarWallet implements SubmittingWallet {
   address: string | null = null;
   #client: PollarClient | null = null;
   #via: Via = "google";
+  /** Cómo avisar que la ventana de Google no se abrió o se cerró antes de entrar (lo arma `connect`). */
+  #falla: ((e: Error) => void) | null = null;
+  /** La ventana de Google, para saber si la persona la cerró sin entrar. */
+  #ventana: Window | null = null;
 
   /** Lo que muestra el panel de la cuenta: por dónde entró, no un nombre fijo. */
   get label(): string {
@@ -76,14 +114,56 @@ class PollarWallet implements SubmittingWallet {
     this.#client = new Ctor({
       apiKey,
       stellarNetwork: network.name === "mainnet" ? "mainnet" : "testnet",
+      // La misma ventana que abre el SDK, pero que avisa si el navegador la bloqueó (`abrirVentana`).
+      openAuthUrl: (ctx) => this.#abrirVentana(ctx),
     });
     return this.#client;
   }
 
   /**
-   * Arranca el login con Google. El navegador se va a Google y vuelve, así que
-   * esta promesa puede no resolver nunca: quien la llama debe estar preparado
-   * para que la página se recargue en el medio.
+   * Abre la ventana de Google, como lo hace el SDK por su cuenta (una ventana en blanco en el mismo toque, y recién
+   * después la dirección, que hay que pedirle a Pollar), y avisa lo que el SDK calla. Si el navegador no la deja
+   * abrir, no hay a dónde ir: se corta la entrada y la pantalla lo dice ("Permití las ventanas emergentes"). Antes la
+   * herramienta quedaba diciendo "Conectando…" hasta dos minutos, sin ventana (26 de octubre de 2026).
+   */
+  async #abrirVentana({ getUrl }: AuthOpenContext): Promise<void> {
+    const ventana = typeof window !== "undefined" ? window.open("about:blank", "_blank") : null;
+    if (!ventana) {
+      this.#falla?.(new Error(ENTRADA_BLOQUEADA));
+      return;
+    }
+    this.#ventana = ventana;
+    try {
+      ventana.opener = null;
+    } catch {
+      /* ya cortada */
+    }
+    let url: string | null = null;
+    try {
+      url = await getUrl();
+    } catch {
+      url = null;
+    }
+    if (!url) {
+      // Pollar no pudo armar la entrada: la ventana en blanco no sirve de nada y esperar a que "se cierre" diría que la
+      // cerró la persona. Se corta ya, con su motivo.
+      ventana.close();
+      this.#falla?.(new Error(ENTRADA_SIN_SESION));
+      return;
+    }
+    ventana.location.href = url;
+    try {
+      ventana.opener = null;
+    } catch {
+      /* ya cortada */
+    }
+  }
+
+  /**
+   * Arranca el login con Google. Se abre una ventana (SDK 0.11.3) y esta promesa resuelve cuando la cuenta está
+   * lista. Falla con `popup-blocked` si el navegador no dejó abrir la ventana y con `popup-closed` si la persona la
+   * cerró sin entrar: en los dos casos la entrada se corta y se puede volver a intentar. (La versión anterior del SDK
+   * se iba a Google y volvía a la página; `restore` sigue sirviendo si la página se recarga.)
    */
   async connect(): Promise<string> {
     const client = await this.#ensureClient();
@@ -91,10 +171,34 @@ class PollarWallet implements SubmittingWallet {
     // Al volver, `restore` sabe que es una cuenta recién conectada y no una sesión retomada (el contador, src/contar.ts).
     marcarEntrada();
     const ready = waitForWallet(client, 120_000);
-    client.login({ provider: "google" });
-    const wallet = await ready;
-    this.address = wallet.address;
-    return wallet.address;
+    ready.catch(() => undefined);
+    let cierre = 0;
+    let vigia = 0;
+    const cortada = new Promise<never>((_, rechazar) => {
+      this.#falla = rechazar;
+      // Si la persona cierra la ventana antes de entrar, no se espera dos minutos: se le da un respiro (el SDK se
+      // entera de que terminó un instante después de que la ventana se cierra sola) y se corta.
+      vigia = window.setInterval(() => {
+        if (!this.#ventana?.closed || cierre) return;
+        cierre = window.setTimeout(() => rechazar(new Error(ENTRADA_CERRADA)), GRACIA_CIERRE_MS);
+      }, 500);
+    });
+    cortada.catch(() => undefined);
+    try {
+      client.login({ provider: "google" });
+      const wallet = await Promise.race([ready, cortada]);
+      this.address = wallet.address;
+      return wallet.address;
+    } catch (e) {
+      // El SDK sigue esperando una ventana que ya no está: se le dice que deje de hacerlo.
+      if (e instanceof Error && (e.message === ENTRADA_BLOQUEADA || e.message === ENTRADA_CERRADA || e.message === ENTRADA_SIN_SESION)) client.cancelLogin();
+      throw e;
+    } finally {
+      window.clearInterval(vigia);
+      window.clearTimeout(cierre);
+      this.#falla = null;
+      this.#ventana = null;
+    }
   }
 
   /**
@@ -130,7 +234,14 @@ class PollarWallet implements SubmittingWallet {
     return wallet.address;
   }
 
-  /** Retoma la sesión al volver del redirect de Google. */
+  /**
+   * Retoma la sesión al recargar la página (o al volver del redirect de Google, en el SDK anterior).
+   *
+   * Le pregunta al SDK, que lee su propia sesión guardada al armarse (`ready()`): no hay que esperar ocho segundos a ver
+   * si aparece una cuenta que no existe. Y si el SDK terminó y no tiene ninguna (la sesión venció, se borró, o la marca
+   * de acá era de otra época), la marca se olvida: antes quedaba para siempre y cada carga repetía ocho segundos de
+   * "Retomando…" para caer en "Para sellar, entrá con tu cuenta" (diagnóstico del 26 de octubre de 2026).
+   */
   async restore(): Promise<string | null> {
     let via: string | null = null;
     try {
@@ -142,11 +253,45 @@ class PollarWallet implements SubmittingWallet {
     // "1" es como se guardaba antes del correo: siempre era Google.
     this.#via = via === "email" ? "email" : "google";
     const client = await this.#ensureClient();
-    const wallet = await waitForWallet(client, 8_000).catch(() => null);
+    const listo = await Promise.race([client.ready().then(() => true, () => false), new Promise<boolean>((r) => setTimeout(() => r(false), LISTO_MS))]);
+    const wallet = client.getWallet();
     this.address = wallet?.address ?? null;
+    if (!this.address) {
+      if (!(await this.#marcaViva(client, listo))) this.#olvidarMarca();
+      return null;
+    }
     // Volvió de Google con la cuenta: para el contador es una cuenta conectada, no una sesión retomada.
-    if (this.address && tomarEntrada()) contarEntrada(this.#via === "email" ? "email" : "google");
+    if (tomarEntrada()) contarEntrada(this.#via === "email" ? "email" : "google");
     return this.address;
+  }
+
+  /** Mira lo que el SDK guardó (`pollar:<huella>:session`) para saber si la marca de esta app sigue valiendo. */
+  async #marcaViva(client: PollarClient, listo: boolean): Promise<boolean> {
+    let guardada: string | null = null;
+    try {
+      guardada = listo ? localStorage.getItem(`pollar:${client.apiKeyHash}:session`) : null;
+    } catch {
+      /* sin almacenamiento no hay sesión que valga */
+    }
+    const { isValidSession } = await import("@pollar/core");
+    return marcaViva({ listo, hayCuenta: false, guardada, esValida: (s) => isValidSession(s) });
+  }
+
+  /** ¿Sigue la marca de que esta app tenía una cuenta de Pollar? `restore` la olvida cuando la sesión ya no existe. */
+  hayMarca(): boolean {
+    try {
+      return localStorage.getItem(KEY) !== null;
+    } catch {
+      return false;
+    }
+  }
+
+  #olvidarMarca(): void {
+    try {
+      localStorage.removeItem(KEY);
+    } catch {
+      /* ya no está */
+    }
   }
 
   /**
@@ -160,7 +305,8 @@ class PollarWallet implements SubmittingWallet {
     const p = this.#client?.getUserProfile?.();
     if (!p) return null;
     const name = [p.first_name, p.last_name].filter(Boolean).join(" ").trim();
-    return { name: name || p.mail, mail: p.mail, avatar: p.avatar };
+    // Sin nombre, vacío: el correo no es un nombre (cuenta-estado.ts).
+    return { name, mail: p.mail, avatar: p.avatar };
   }
 
   async disconnect(): Promise<void> {
@@ -302,6 +448,17 @@ function waitForStep(client: PollarClient, step: string, timeoutMs: number): Pro
 }
 
 export const pollarWallet = new PollarWallet();
+
+/**
+ * Baja el SDK de Pollar con la página quieta, sin armar nada. Entrar abre una ventana, y el navegador solo la deja
+ * abrir poco después del toque (Chrome, unos segundos; Safari, casi nada): si bajar el SDK (~250 KB) se come ese
+ * margen, la ventana se bloquea y la persona ve "Conectando…" sin que pase nada. Con el SDK ya bajado, el toque lo
+ * encuentra listo. Un chunk del que nadie se acuerda no cuesta nada: no crea cuenta ni llama a Pollar.
+ */
+export function precargarSdk(): void {
+  if (!pollarConfigured()) return;
+  void import("@pollar/core").catch(() => undefined);
+}
 
 /** Una wallet que envía sus propias transacciones. */
 export const submitsItself = (w: WalletAdapter | null): w is SubmittingWallet =>

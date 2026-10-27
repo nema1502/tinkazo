@@ -1,10 +1,10 @@
 /**
- * Lo plegado de la lista («Premio y más opciones», `#mas-lista`): se abre solo si la persona ya eligió algo
+ * Lo plegado de la lista («Premio, cuántos ganan y subir CSV», `#mas-opciones`): se abre solo si la persona ya eligió algo
  * ahí adentro, para que lo que eligió no quede escondido (un premio escrito, más de un ganador). Lo que se
  * eligió se lee igual arriba del botón de sellar.
  */
 export function initPlegables(): void {
-  const mas = document.getElementById("mas-lista") as HTMLDetailsElement | null;
+  const mas = document.getElementById("mas-opciones") as HTMLDetailsElement | null;
   if (!mas) return;
   const prize = document.getElementById("prize") as HTMLInputElement | null;
   const nw = document.getElementById("nw") as HTMLSelectElement | null;

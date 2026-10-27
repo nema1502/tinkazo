@@ -9,8 +9,10 @@ import { contractUrl, network } from "../stellar/config";
 import { anotar } from "../stellar/registro-red";
 import { type AnchorStep, clienteListo, escribirError, hideTxStatus, margenParaAprobar, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
 import { precargarQr } from "./qr";
-import { juegoPorDefecto, juegoSiguiente, rangoVisible, recomendar } from "./recomendar";
-import { esperaSola, leerGuardado } from "./vista-grande";
+import { juegoPorDefecto, juegoSiguiente, rangoParaLeer, rangoVisible, recomendar } from "./recomendar";
+import { entornoDeAhora, grandeAlSellar } from "./vista-grande";
+import { pedirPantallaCompleta, soltarPantallaCompleta } from "./pantalla-completa";
+import type { OpcionDeJuego } from "./espera";
 import { apruebaAMano, canAnchor, currentSession } from "./wallet-ui";
 import { cerrarLista, olvidarBorrador, parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
@@ -166,7 +168,7 @@ export function pintarRecomendacion(n: number): void {
       const em = document.createElement("em");
       em.className = "rec-rango";
       em.textContent = rango;
-      em.setAttribute("aria-label", t("recRangoAria").replace("{r}", rango.replace("–", " a ")));
+      em.setAttribute("aria-label", rangoParaLeer(rango, t("recRangoAria"), t("recRangoUnion")));
       el.appendChild(em);
     }
     if (r.note) {
@@ -234,26 +236,54 @@ export function secondsToRound(): number {
 
 let countdownTimer: number | undefined;
 
-/** De qué lista sellada la espera ya se abrió sola: una vez por lista, y si la persona vuelve, no se la vuelve a poner. */
-let esperaAutoDe = "";
+/**
+ * Se apretó "Sellar la lista" con la pantalla en grande pedida (`vista-grande.ts`): cuando el sello esté, la
+ * espera en grande se abre sola. Vive solo mientras se sella: si no se selló, no queda pedido, y retomar un
+ * sorteo desde Mis sorteos no abre nada por su cuenta.
+ */
+let grandePendiente = false;
 
 /** La espera en grande, ya bajada: la cuenta regresiva le avisa cuando nace el número. */
 let espera: typeof import("./espera") | null = null;
 
+/** El nombre de un juego, el que se lee en su botón del selector (que traduce `data-i`). */
+const nombreDeJuego = (g: Game): string => document.querySelector(`#g-${g} span`)?.textContent || t(claveNombre(g));
+
 /**
- * La espera en grande (`espera.ts`), que se baja recién cuando hace falta. Es
- * una opción de la caja de la espera: no se abre sola (Nicolás, 17 de octubre
- * de 2026: el "¡Contemos juntos!" y el "¡Nació!" no le gustaron, y salieron).
- *
- * Desde el 21 de octubre de 2026 desemboca en el show: si sigue abierta cuando
- * nace el número, el sorteo arranca solo. La pantalla completa se pide acá,
- * con el toque, que es el gesto que el navegador exige: bajar la espera puede
- * tardar más de lo que dura ese permiso. El show la hereda.
+ * Los juegos que se pueden elegir desde la espera en grande: los del selector, en el orden en que los recomienda
+ * esta cantidad de gente, sin los que no aplican (la ruleta con más de doscientos) ni los que ya no están en el selector.
  */
-function abrirEspera(): void {
-  const raiz = document.documentElement;
-  const pantalla = !document.fullscreenElement && typeof raiz.requestFullscreen === "function";
-  if (pantalla) void raiz.requestFullscreen({ navigationUI: "hide" }).catch(() => undefined);
+function juegosParaElegir(): OpcionDeJuego[] {
+  const f = app.frozen;
+  if (!f) return [];
+  return recomendar(f.names.length)
+    .games.filter((r) => {
+      const b = document.getElementById(`g-${r.game}`) as HTMLButtonElement | null;
+      return !!b && !b.hidden && !b.disabled;
+    })
+    .map((r) => ({
+      game: r.game,
+      nombre: nombreDeJuego(r.game),
+      rango: rangoVisible(r.game) ?? "",
+      recomendado: r.fits === true,
+      elegido: r.game === app.game,
+    }));
+}
+
+/**
+ * La espera en grande (`espera.ts`), que se baja recién cuando hace falta.
+ *
+ * Se abre de dos maneras. Al sellar (`alSellar`): el propio sello la abre cuando está listo, con la pantalla
+ * completa ya pedida en el clic de "Sellar la lista" (`freeze`), que es el gesto que el navegador exige: pedirla acá,
+ * después de esperar al sello, ya no la concedería (26 de octubre de 2026). Y a mano, con "Mostrar la espera en
+ * grande" (pedido del 17 de octubre de 2026: el "¡Contemos juntos!" y el "¡Nació!" de la primera versión no le
+ * gustaron y salieron; esto es otra cosa): ese toque es el gesto, y vuelve a valer lo que la persona había soltado.
+ *
+ * Desde el 21 de octubre de 2026 desemboca en el show: si sigue abierta cuando nace el número, el sorteo arranca
+ * solo. El show hereda la pantalla completa: bajar la espera puede tardar más de lo que dura el permiso.
+ */
+function abrirEspera(alSellar = false): void {
+  const pedida = !alSellar && pedirPantallaCompleta({ aMano: true }) === "pedida";
   void import("./espera").then((m) => {
     espera = m;
     const abrio = m.mostrarEspera(secondsToRound, {
@@ -261,10 +291,12 @@ function abrirEspera(): void {
       // Sin la cadena no hay nada que aprobar; con Freighter, cada operación se aprueba en su ventana.
       aMano: () => app.frozen?.raffleId !== undefined && apruebaAMano(),
       graba: app.frozen?.raffleId !== undefined,
-      pantalla,
+      juegos: juegosParaElegir,
+      elegirJuego: (g) => elegirJuego(g as Game),
+      alSellar,
     });
     // Llegó tarde (el número ya nació): la pantalla completa que se pidió para ella se suelta.
-    if (!abrio && pantalla && document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    if (!abrio && (pedida || alSellar)) soltarPantallaCompleta();
   });
 }
 
@@ -308,16 +340,14 @@ function startCountdown(): void {
   const line = box?.querySelector(".wait-line");
   const grande = document.getElementById("btn-espera");
   if (grande) {
-    grande.onclick = abrirEspera;
+    grande.onclick = () => abrirEspera();
     grande.style.display = "";
   }
-  // En una laptop o un proyector la espera pasa sola a la vista grande, con "Volver" a mano (src/ui/vista-grande.ts).
-  if (app.frozen) {
-    const clave = `${app.frozen.round}|${app.frozen.raffleId ?? ""}`;
-    if (esperaAutoDe !== clave && esperaSola({ ancho: innerWidth, tactil: matchMedia("(pointer: coarse)").matches, busqueda: location.search, guardado: leerGuardado() })) {
-      esperaAutoDe = clave;
-      abrirEspera();
-    }
+  // Se apretó "Sellar la lista" con la pantalla en grande pedida: la espera se abre sola, con "Volver" a mano
+  // (`vista-grande.ts`). La pantalla completa ya se pidió en ese clic; esto es solo la vista.
+  if (app.frozen && grandePendiente) {
+    grandePendiente = false;
+    abrirEspera(true);
   }
   if (num && app.frozen) num.textContent = `#${app.frozen.round}`;
   // La conexión está ociosa hasta que nazca la ronda: se baja el motor, y se
@@ -405,12 +435,33 @@ export const GUARDA_DESPUES_DE_SOLTAR_MS = 700;
  * antes de que existiera la semilla.
  */
 export async function freeze(opciones: OpcionesDeSellado = {}): Promise<void> {
-  const names = parseNames();
-  if (names.length < 2) return;
+  // El clic de "Sellar la lista" es el gesto que el navegador exige para la pantalla completa: se pide acá,
+  // sincrónica y antes de cualquier `await` (la firma con Pollar o con Freighter abre después, y para entonces
+  // el gesto ya no vale). Si la niega o no la ofrece (el iPhone), la vista grande se abre igual cuando el sello
+  // esté. En el ensayo, lo mismo: se practica como va a ser. Sin gesto (la red volvió sola, la demo), solo la vista.
+  if (puedeSellar() && grandeAlSellar(entornoDeAhora())) {
+    pedirPantallaCompleta();
+    grandePendiente = true;
+  }
+  try {
+    await sellar(opciones);
+  } finally {
+    // Si no se selló (un error, la red, un clic de más), no queda nada pedido para la próxima lista.
+    grandePendiente = false;
+  }
+}
+
+/** Hay con qué sellar ahora: dos nombres o más, y no se acaba de soltar el sorteo anterior. */
+function puedeSellar(): boolean {
   // Recién se soltó el sorteo anterior con "Siguiente premio": un doble toque
   // nervioso caía en "Sellar la lista" y sellaba el próximo premio sin premio,
   // para siempre (diseño del onboarding, 22 de octubre de 2026).
-  if (performance.now() - soltadoEn < GUARDA_DESPUES_DE_SOLTAR_MS) return;
+  return parseNames().length >= 2 && performance.now() - soltadoEn >= GUARDA_DESPUES_DE_SOLTAR_MS;
+}
+
+async function sellar(opciones: OpcionesDeSellado): Promise<void> {
+  const names = parseNames();
+  if (!puedeSellar()) return;
 
   const btn = $<HTMLButtonElement>("btn-freeze");
   // La demo (`?demo=`) y el ensayo son el show con una lista de ejemplo, nunca
