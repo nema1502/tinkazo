@@ -47,5 +47,5 @@ _Nada con cara de casino: ni dados, ni cartas, ni apuestas. Lo cultural, validad
 - [ ] `audit-game` 20/20
 - [ ] `audit-nino` (tres capturas sin subtítulo contra `respuestas(t)`)
 - [ ] `audit-rigor`, `audit-identidad`, `audit-emocion`, `audit-sound`, `audit-mezcla`, `audit-pantalla`, `audit-delatores`
-- [ ] Capturas en escritorio y celular, dos temas, con el evaluador
+- [ ] Capturas en escritorio y celular, dos temas, con la revisión visual
 - [ ] `node scripts/nuevo-juego.mjs --encender __ID__`

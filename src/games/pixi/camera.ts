@@ -213,7 +213,7 @@ export class Camera {
   /**
    * Sin desenfoque en los acercamientos. Para los juegos donde el acercamiento
    * lento cae sobre el ganador: en el sapo, la mesa entera se veía borrosa
-   * justo en el último tiro (lo notó Nicolás, 4 de octubre de 2026).
+   * justo en el último tiro (4 de octubre de 2026).
    */
   noBlur(): this {
     this.blurOn = false;

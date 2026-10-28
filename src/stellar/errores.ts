@@ -6,8 +6,8 @@
  * 700 KB. `contract.ts` lo reexporta como siempre.
  *
  * Hasta el 21 de octubre de 2026 se miraba solo `e.message` con una lista de
- * palabras, y "es muy común que por el internet salga 'la red rechazó tu
- * transacción'" (Nicolás). El corpus de `errores.test.ts`, armado provocando
+ * palabras, y con un corte de internet era muy común ver "la red rechazó tu
+ * transacción". El corpus de `errores.test.ts`, armado provocando
  * cada error de verdad (en Chrome por DevTools, en la testnet con el SDK) y
  * con la documentación de lo que no se puede provocar acá (Safari, Firefox,
  * Pollar, Freighter), mostró por qué:

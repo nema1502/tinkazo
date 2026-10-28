@@ -49,7 +49,7 @@ import { ZOOM_MINIMO, fallasDeCuadro, instalarZoom, juntarCuadros, razonDeZoom, 
  * el pico del zoom tiene que caer en el golpe, que es el instante en que sale el
  * cartel. Los demás todavía no lo tienen y no se miran.
  */
-// Los diez que todavía abren tienen el golpe de cámara (barrido de letra, 26 de octubre de 2026), y todo juego del kit:
+// Los diez que todavía abren tienen el golpe de cámara (regla de letra, 26 de octubre de 2026), y todo juego del kit:
 // el director de cámara hace el golpe (`kit/director.ts`).
 const CON_ZOOM = [...new Set([...CON_ZOOM_TODOS, ...juegosDelKit()])];
 const args = process.argv.slice(2);

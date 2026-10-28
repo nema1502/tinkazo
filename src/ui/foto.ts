@@ -8,8 +8,7 @@ import { marcarQr } from "../contar";
  * sola para todo: hasta el 21 de octubre de 2026 había dos, la de los
  * ganadores sin QR (imagen.ts) y la tarjeta con el QR (tarjeta-qr.ts).
  *
- * Lleva el QR a pedido de Nicolás ("mandar también la foto de los ganadores
- * con un QR para comprobarlo y verlo todo"): quien tenga la foto puede abrir el
+ * Lleva el QR para comprobarlo y verlo todo: quien tenga la foto puede abrir el
  * comprobante, que trae la lista entera. El diálogo lo dice al compartir.
  *
  * Se dibuja en el navegador, a 1080 × 1350: el 4:5 que WhatsApp, Instagram y X

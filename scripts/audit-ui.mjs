@@ -61,7 +61,7 @@ const check = (name, ok, detail = "") => checks.push({ name, ok, detail });
 
 /**
  * Las pantallas con las que se prueba. Las dos de siempre y las dos que se
- * habían quedado afuera: la laptop de Nicolás a 100 % de zoom (1362x632, donde
+ * habían quedado afuera: una laptop a 100 % de zoom (1362x632, donde
  * el panel medía 679 px) y el celular acostado (844x390, donde quedaba cortado
  * 144 px por arriba).
  */
@@ -518,7 +518,7 @@ async function variantesDelPanel(page, p, tema) {
   };
   const cerrar = () => page.eval(`(() => { document.querySelector('.acct-card [data-k="x"]')?.click(); return true; })()`);
 
-  if (await abrirCon({ address: CUENTA_FALSA, name: "Nicolás Emir Mejía Agreda de la Torre Quispe Mamani", label: "Google", balance: 0 })) {
+  if (await abrirCon({ address: CUENTA_FALSA, name: "Mateo Emir Mejía Agreda de la Torre Quispe Mamani", label: "Google", balance: 0 })) {
     const g = JSON.parse(
       await page.eval(`JSON.stringify({
         saldo: !!document.querySelector('.acct-badge:not(.net)'), grifo: !!document.querySelector('[data-k=fund]'),

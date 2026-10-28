@@ -418,7 +418,7 @@ describe("enlace corto: borrar todos los de este equipo", () => {
 });
 
 describe("enlace corto: el QR del resultado en grande", () => {
-  // Nicolás, 21 de octubre de 2026: mostrar en grande arma el enlace corto, así
+  // Desde el 21 de octubre de 2026, mostrar en grande arma el enlace corto, así
   // el QR se lee desde el fondo de la sala. El final del show que arrancó desde
   // la espera en grande es mostrarlo en grande: también lo pide, sin que el QR
   // espere al servicio más que un momento.

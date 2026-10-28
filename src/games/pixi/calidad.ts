@@ -5,8 +5,8 @@
  * proyector de una laptop sin placa o un celular de gama media. Lo que se ve
  * mejor y cuesta se prende solo donde el equipo aguanta, y se apaga solo si
  * los cuadros empiezan a tardar. Nunca al revés: un equipo lento nunca dibuja
- * más que antes, y uno que tropieza baja (pedido de Nicolás, 21 de octubre de
- * 2026: "mejorar la calidad gráfica y que siga siendo rápido").
+ * más que antes, y uno que tropieza baja (21 de octubre de
+ * 2026: mejorar la calidad gráfica y que siga siendo rápido).
  *
  * Tres niveles:
  * - `alta`: el desenfoque de la cámara a la resolución del lienzo y con el

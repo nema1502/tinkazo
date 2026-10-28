@@ -1,7 +1,7 @@
 // Lo mismo que las páginas de lectura: los estilos, los textos, el tema de
 // `?theme=`, la cuenta en la cabecera, el menú, el idioma y el contador. Esta
 // página lo hacía a mano y se había quedado sin el tema: con `?theme=light`
-// salía oscura igual (evaluador visual, 21 de octubre de 2026).
+// salía oscura igual (revisión visual, 21 de octubre de 2026).
 import "./pagina";
 import { $, esc } from "./dom";
 import { pintarLeyenda } from "./ui/leyenda";

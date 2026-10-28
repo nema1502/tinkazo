@@ -275,7 +275,7 @@ export async function truequePixi(names: string[], winners: readonly number[], b
     leyenda = new Container();
     const txtLey = S.text(t("trLeyenda"), { fontFamily: MONO, fontSize: fsLey, fontWeight: "700", fill: tinta, wordWrap: true, wordWrapWidth: w - 2 * margen });
     txtLey.position.set(margen, S.top() + 8 * k + fsCont * 1.35);
-    // La frase de la leyenda se fue: los colores con su producto se entienden solos (barrido de letra).
+    // La frase de la leyenda se fue: los colores con su producto se entienden solos (regla de letra).
     txtLey.visible = false;
     leyenda.addChild(txtLey);
     const cuadro = Math.round(fsLey * 0.85);

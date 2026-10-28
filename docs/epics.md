@@ -631,7 +631,7 @@ Resultado (2026-09-27): la misma carrera, dibujada con la placa de video, para d
 - **El dibujo** en [`src/games/llamas/pixi-race.ts`](../src/games/llamas/pixi-race.ts): paisaje en capas con paralaje, una tribuna con la hinchada que salta con la tensión y levanta los brazos con el ganador, llamas armadas por partes con galope, manta de aguayo y número, polvo, líneas de velocidad, escupidas, minimapa de la carrera, tabla de posiciones, cuenta regresiva y podio con papel picado. La cuenta y el podio son líneas de tiempo de GSAP en pausa que se llevan a la hora del juego; el polvo y el papel picado se calculan desde la hora, no se acumulan.
 - **Medido:** 60 cuadros por segundo parejos en una placa integrada Intel Iris Xe, igual que la carrera de siempre. En Chrome sin interfaz, que dibuja WebGL sin placa, baja a unos 31: los auditores van a necesitar una placa o un reloj propio.
 
-Falta decidir si se sigue: el video lado a lado está en la carpeta de videos del autor. Si se sigue, `race.ts` pasa a usar el plan, se adaptan los auditores al lienzo de WebGL y se prueba en celulares de verdad.
+La decisión se tomó al día siguiente con un video lado a lado (que no se versiona): seguir implicaba que `race.ts` pasara a usar el plan, adaptar los auditores al lienzo de WebGL y probar en celulares de verdad.
 
 Después (2026-09-28): se siguió. Los ocho juegos pasaron al motor nuevo con un director de cámara compartido (`src/games/pixi/`), cada uno con 20/20 en el auditor exigente y en el de juegos contra drand real, y el motor nuevo pasó a ser el de todos. El anterior queda de respaldo: con `?motor=clasico`, en un equipo sin WebGL o si el motor nuevo no arranca. El detalle está en [docs/motores.md](motores.md).
 
@@ -1008,7 +1008,7 @@ De paso, un arreglo que encontró el auditor de interfaz: la dirección de la cu
 
 ### Historia 10.15: Saber cuál es el tuyo: la tarjeta, la leyenda y el auditor de identificación: hecho
 
-Resultado (2026-10-04): salió de la auditoría psicológica de los juegos y de un pedido de Nicolás. La sala tiene que entender qué va a pasar antes de que pase, y cada persona tiene que poder saber en dos segundos si sigue en juego.
+Resultado (2026-10-04): salió de la auditoría psicológica de los juegos y de un pedido de producto. La sala tiene que entender qué va a pasar antes de que pase, y cada persona tiene que poder saber en dos segundos si sigue en juego.
 
 **La tarjeta de "cómo se juega"** ([`src/ui/gamecard.ts`](../src/ui/gamecard.ts)):
 - Antes de cada juego de un sorteo de verdad o de una demo, a pantalla completa: el nombre, la regla en una frase, cuántos participan, cuántos premios y que el ganador ya salió del número público.
@@ -1022,7 +1022,7 @@ Resultado (2026-10-04): salió de la auditoría psicológica de los juegos y de 
 
 ### Historia 10.16: La Chovena, y pasar lista en los juegos que no la tenían: hecho
 
-Resultado (2026-10-05): el juego cruceño que pidió Nicolás ("pongamos la chovena"), en el lugar de luz roja, luz verde. Es el único juego donde la sala se mueve al ritmo: aplaude con la música y se congela con el corte. La ficha completa, con sus fuentes, está en [juegos/chovena.md](juegos/chovena.md).
+Resultado (2026-10-05): el juego cruceño que se pidió (la chovena), en el lugar de luz roja, luz verde. Es el único juego donde la sala se mueve al ritmo: aplaude con la música y se congela con el corte. La ficha completa, con sus fuentes, está en [juegos/chovena.md](juegos/chovena.md).
 
 **El juego** ([`src/games/pixi/chovena.ts`](../src/games/pixi/chovena.ts)):
 - Empieza como la coreografía, en dos filas que se toman de la mano y forman la rueda.
@@ -1083,7 +1083,7 @@ Medido con la batería, la Chovena:
 
 ### Historia 10.17: El audio, medido y no a oído: hecho
 
-Resultado (2026-10-05): Nicolás pidió mejorar mucho la música y el sonido, con "auditores extremos". Primero una investigación con fuentes (librerías gratuitas, música adaptativa, cómo auditar sin oídos), después un auditor nuevo y recién ahí los cambios, medidos antes y después.
+Resultado (2026-10-05): se pidió mejorar mucho la música y el sonido, con auditores extremos. Primero una investigación con fuentes (librerías gratuitas, música adaptativa, cómo auditar sin oídos), después un auditor nuevo y recién ahí los cambios, medidos antes y después.
 
 **El auditor de mezcla** ([`scripts/audit-mezcla.mjs`](../scripts/audit-mezcla.mjs)) escucha la señal que sale por el parlante y mide sonoridad integrada (ITU-R BS.1770), pico real, recortes, cuánto se pierde en el parlante de una laptop o un proyector (pasos altos de 150 y 300 Hz) y el golpe del ganador (el medio segundo después del cartel contra el de antes).
 
@@ -1215,7 +1215,7 @@ Como organizador que entra por primera vez, quizá con el celular y en un evento
 quiero entrar, pegar mi lista y sortear sin dudar qué tocar, y poder volver a ver cómo se usa,
 para hacer mi primer sorteo rápido y sin miedo de grabar algo por error.
 
-Resultado (2026-10-22): el diseño salió de tres propuestas y dos jueces (fase 1 de la tarea, en las notas de trabajo); la regla y lo que mide cada auditor, en [ux.md](ux.md), "El primer sorteo y el tutorial".
+Resultado (2026-10-22): el diseño salió de tres propuestas y dos jueces; la regla y lo que mide cada auditor, en [ux.md](ux.md), "El primer sorteo y el tutorial".
 
 Criterios de aceptación:
 - **Dado** que llego a la portada sin cuenta, **cuando** toco "Entrar con Google y sortear", **entonces** voy directo a Google (sin la ventana de cuatro caminos) y al volver estoy en la herramienta. Sin Pollar o desde el navegador de una app, se abre la ventana, con el correo primero en el segundo caso. "Otras formas de entrar" abre la ventana de siempre.
@@ -1324,4 +1324,4 @@ Actualización (2026-10-22): esa propuesta se pospuso. Hoy Tinkazo decide a qui�
 
 ## Fuera de alcance (v2)
 
-Importación desde Luma y Eventbrite · lista opcional en la cadena · sponsor mode · avatares con IA · passkeys (cuando Pollar soporte `signAuthEntry` con C-addresses).
+Importación desde Luma y Eventbrite · lista opcional en la cadena · sponsor mode · avatares generados · passkeys (cuando Pollar soporte `signAuthEntry` con C-addresses).

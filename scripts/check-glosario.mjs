@@ -8,7 +8,7 @@
  * nombres de los juegos se borran antes de mirar. El voseo se mantiene: lo que
  * se pide neutral es el vocabulario cotidiano.
  *
- * Sin Chrome ni red. La lista es de Nicolás: se completa en el JSON. Una
+ * Sin Chrome ni red. La lista se completa en el JSON. Una
  * entrada con `"estado": "avisar"` no falla; sus usos se ven con `--todo`.
  *
  * Uso:

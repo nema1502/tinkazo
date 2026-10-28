@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 /**
  * El primer sorteo, medido como lo vive alguien que llega por primera vez
- * (diseño del onboarding, 22 de octubre de 2026; nace del robot de la fase 1,
- * el robot del diseño).
+ * (diseño del onboarding, 22 de octubre de 2026).
  *
  * Un robot que toca como una persona apurada, en un Chrome nuevo por recorrido,
  * y cuenta toques, scrolls y segundos hasta el ganador, y en cada paso qué
@@ -62,13 +61,13 @@ const VISTAS = {
 
 const NOMBRES = [
   "Ana Quispe", "Beto Mamani", "Carla Choque", "Diego Rojas", "Elena Condori", "Fabián Torrez", "Gabriela Flores",
-  "Hugo Vargas", "Inés Gutiérrez", "Jorge Mamani", "Karen López", "Luis Apaza", "María Quispe", "Nicolás Arce",
+  "Hugo Vargas", "Inés Gutiérrez", "Jorge Mamani", "Karen López", "Luis Apaza", "María Quispe", "Nicanor Arce",
   "Olga Ticona", "Pablo Gutiérrez", "Rosa Limachi", "Sergio Cruz", "Tania Poma", "Ulises Chura",
 ].join("\n");
 
-/** Lo técnico que no debería ver quien sortea (docs/ux.md, principio 7). Las tres primeras son las de la tarea. */
-const TAREA = ["ronda", "faro", "transacción"];
-const JERGA = [...TAREA, "drand", "hash", "huella", "firma", "bytes", "XLM", "testnet", "Stellar", "billetera", "wallet", "Soroban", "contrato", "quicknet", "comisión", "ledger"];
+/** Lo técnico que no debería ver quien sortea (docs/ux.md, principio 7). Las tres primeras son las básicas. */
+const BASICAS = ["ronda", "faro", "transacción"];
+const JERGA = [...BASICAS, "drand", "hash", "huella", "firma", "bytes", "XLM", "testnet", "Stellar", "billetera", "wallet", "Soroban", "contrato", "quicknet", "comisión", "ledger"];
 
 let fallas = 0;
 const check = (que, ok, detalle = "") => {
@@ -114,10 +113,10 @@ const CAJA = (sel) => `JSON.stringify((() => {
   const cs = getComputedStyle(el);
   if (cs.display === 'none' || r.width === 0) return { oculto: true };
   const cab = document.querySelector('header');
-  // La cabecera fija tapa lo de arriba, pero no a lo que está en ella ("Sortear"): el robot de la fase 1 contaba un scroll ahí.
+  // La cabecera fija tapa lo de arriba, pero no a lo que está en ella ("Sortear"): antes se contaba un scroll ahí.
   const arriba = cab && !cab.contains(el) && getComputedStyle(cab).position === 'sticky' ? cab.getBoundingClientRect().bottom : 0;
   const bar = document.getElementById('siguiente');
-  // La barra tapa lo de abajo, pero no a su propio botón (el robot de la fase 1 contaba un scroll ahí).
+  // La barra tapa lo de abajo, pero no a su propio botón (antes se contaba un scroll ahí).
   const abajo = bar && bar.classList.contains('on') && !bar.contains(el) ? bar.getBoundingClientRect().top : innerHeight;
   return { top: Math.round(r.top), x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2), aLaVista: r.top >= arriba - 1 && r.bottom <= abajo + 1 };
 })())`;
@@ -219,8 +218,8 @@ function unaPrincipal(s, quien, esperado) {
   return p[0];
 }
 
-const sinJergaDeLaTarea = (s, quien) => {
-  const j = (s.jerga || []).filter((x) => TAREA.includes(x));
+const sinJergaBasica = (s, quien) => {
+  const j = (s.jerga || []).filter((x) => BASICAS.includes(x));
   check(`${quien}: sin "ronda", "faro" ni "transacción" a la vista`, j.length === 0, JSON.stringify(j));
 };
 
@@ -288,14 +287,14 @@ async function flujoCuenta(browser, vista, tema) {
     const tSello = Date.now();
     await sleep(800);
     const sellando = await m.foto("sellando");
-    sinJergaDeLaTarea(sellando, `${nombre} · sellando`);
+    sinJergaBasica(sellando, `${nombre} · sellando`);
     const sellada = await page.waitFor("getComputedStyle(document.getElementById('sec-frozen')).display !== 'none' && getComputedStyle(document.getElementById('wait-box')).display !== 'none'", 240000);
     log(`  sellada a los ${m.t()} s (${((Date.now() - tSello) / 1000).toFixed(1)} s sellando)`);
     if (!sellada.ok) throw new Error("no se selló: " + (await page.eval("document.getElementById('seal-status').textContent")));
     await sleep(1500);
     const esperando = await m.foto("esperando");
     unaPrincipal(esperando, `${nombre} · esperando`, /Se habilita|Available/);
-    sinJergaDeLaTarea(esperando, `${nombre} · esperando`);
+    sinJergaBasica(esperando, `${nombre} · esperando`);
     const nacio = await page.waitFor("!document.getElementById('btn-draw').disabled", 180000);
     if (!nacio.ok) throw new Error("el número no salió");
     await sleep(800);
@@ -396,7 +395,7 @@ async function flujoEnsayo(browser, vista, tema, conCuenta) {
     await page.waitFor("getComputedStyle(document.getElementById('sec-frozen')).display !== 'none'", 20000);
     await sleep(1200);
     const espera = await m.foto("ensayo-esperando");
-    sinJergaDeLaTarea(espera, `${nombre} · esperando`);
+    sinJergaBasica(espera, `${nombre} · esperando`);
     const nacio = await page.waitFor("!document.getElementById('btn-draw').disabled", 60000);
     if (!nacio.ok) throw new Error("el número no salió");
     log(`  el número salió a los ${m.t()} s`);

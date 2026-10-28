@@ -348,7 +348,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     soloTags.clear();
     // Los contadores van en la unidad de la pantalla (`hu`), no en la del mundo:
     // en el celular la del mundo es el ancho sobre 720, y dejaba "QUEDAN" en 8 px
-    // y la estación en 9 (evaluador visual, 21 de octubre de 2026). En una
+    // y la estación en 9 (revisión visual, 21 de octubre de 2026). En una
     // pantalla acostada las dos son la misma.
     const hu = S.u();
     const top = S.top() + 18 * hu;
@@ -420,7 +420,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       once(`arrive${s.station}`, tAll >= s.t0, () => {
         ding();
         // Con los que siguen arriba, que es lo que dice el contador: decía
-        // "¡QUEDAN DOS!" con tres o cuatro (evaluador visual, 21 de octubre de 2026).
+        // "¡QUEDAN DOS!" con tres o cuatro (revisión visual, 21 de octubre de 2026).
         if (s.last) sayNow(T[lang].cTelLast(left[s.round] as number), 0.8);
         if (!silent) cam.punch(0.03);
       });
@@ -1019,7 +1019,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         if ((box.x0 + box.x1) / 2 < 0 || (box.x0 + box.x1) / 2 > W || cy < 0 || cy > H) continue;
         // El nombre de una persona y el rótulo de un grupo van a la misma escala. En vertical el rótulo del grupo iba
         // a 0,8 para que entraran los diez de la columna (14 px, bajo la regla): ahora, si no entra, se oculta, y la
-        // cabina ya lleva su color y su cuenta (barrido de letra, cierre del 26 de octubre de 2026).
+        // cabina ya lleva su color y su cuenta (regla de letra, 26 de octubre de 2026).
         const porNombre = who.length === 1 || (cab === winnerCab && who.length === 2 && tAll > T_RUN);
         const scEtiqueta = sc;
         let e = soloTags.get(key);
@@ -1092,7 +1092,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   /**
    * El encuadre de la cumbre, desde que llega la cabina hasta el final. El
    * cartel del ganador sale arriba al centro, y con la estación centrada en la
-   * pantalla tapaba el letrero CUMBRE (evaluador visual, 21 de octubre de 2026).
+   * pantalla tapaba el letrero CUMBRE (revisión visual, 21 de octubre de 2026).
    * La estación baja lo justo para que el letrero quede debajo de donde va el
    * cartel, ya desde la llegada, así no queda tapado mientras la cámara se
    * abre; y si no entra con la cabina encima de la caja del relator, la cámara

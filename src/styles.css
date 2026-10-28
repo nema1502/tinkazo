@@ -397,7 +397,7 @@
   }
   /* En el celular las líneas largas (la huella, el enlace a la ronda) se
      cortaban contra el borde, sin ninguna señal de que el bloque se podía
-     correr de costado (evaluador visual, 21 de octubre de 2026). Ahí se parten:
+     correr de costado (revisión visual, 21 de octubre de 2026). Ahí se parten:
      el salto es solo de pantalla, y lo que se copia sigue siendo una línea. */
   @media (max-width: 760px) {
     .steps-code { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -502,7 +502,7 @@
      quedaba una segunda fila de tres). El ancho tope deja cada botón del ancho
      que tenía con seis columnas en 860 px, así la miniatura no se estira. Por
      debajo de 640 px, de a dos (cuatro filas): entre 461 y 760 px, de a tres
-     dejaba 3 + 3 + 2 (cierre del barrido, 26 de octubre de 2026). */
+     dejaba 3 + 3 + 2 (26 de octubre de 2026). */
   @media (min-width: 640px) {
     .gamepick { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); max-width: 576px; }
     .gamepick button { width: auto; }
@@ -1976,8 +1976,8 @@
   }
 
   /* ================================================================ La letra grande
-     24 de octubre de 2026. Nicolás: "la gente lo va a ver en un proyector gigante
-     y dice «no entiendo nada, ¿qué es esa letra chica?»". Los umbrales y su
+     24 de octubre de 2026. La gente lo ve en un proyector gigante
+     y se pregunta qué es esa letra chica. Los umbrales y su
      auditor están en docs/ux.md ("La letra grande") y en scripts/audit-ui.mjs:
      en el flujo, 16 px (14 en rótulos, el indicador de pasos y la cuenta); en lo
      que se proyecta, un 2,6 % del alto o más. Este bloque va al final a propósito:
@@ -2215,7 +2215,7 @@
   button[hidden], a[hidden] { display: none !important; }
 
   /* Lo que no es pegar ni sellar va plegado: el premio, cuántos ganan, CSV y Luma en la lista; el sonido, la duración y las
-     bases en la espera (barrido de letra, 26 de octubre de 2026). Lo que se eligió se lee igual en el resumen que va arriba
+     bases en la espera (regla de letra, 26 de octubre de 2026). Lo que se eligió se lee igual en el resumen que va arriba
      del botón de sellar. */
   details.mas { margin: 12px 0 14px; }
   details.mas > summary {

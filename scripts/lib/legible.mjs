@@ -4,7 +4,7 @@
  * la página (se escribe como funciones de verdad y se manda con `toString()`,
  * así `legible.test.mjs` lo ejecuta contra una página de mentira).
  *
- * La regla (la de la tarea del barrido de letra, 25 de octubre de 2026), en
+ * La regla (la del 25 de octubre de 2026), en
  * píxeles CSS de la pantalla:
  *
  *   proyector 1920×1080: 28 px lo secundario, 48 px lo principal
@@ -14,7 +14,7 @@
  * El proyector es lo que mira la sala: el lienzo y los subtítulos del estadio, y
  * el nombre del ganador. La herramienta es la página que usa quien organiza (la
  * portada, la lista, la espera, la ronda lista, el resultado), en el tamaño que
- * sea: el barrido de letra dice que "lo que mira la sala se mide con 28/48 a
+ * sea: la regla de letra dice que "lo que mira la sala se mide con 28/48 a
  * 1920 y 16/22 a 390; la herramienta, con 16/22". Medir la herramienta con la
  * regla del proyector llenaba el informe de textos que nadie proyecta (primera
  * corrida con Chrome, 26 de octubre de 2026).
@@ -44,7 +44,7 @@ export const SEGUNDOS_POR_MUESTRA = CADA_CUADROS / 64;
 /**
  * Cuántas muestras (dos segundos de juego) a un tamaño parecido y por debajo del mínimo hacen una falla aunque la
  * mediana pase. La mediana dice el tamaño de la mayor parte del tiempo y dejó pasar a los nombres de la carrera, que en
- * el remate de un celular bajaban a 10,7 px durante diez segundos de veintiséis (cierre del barrido, 26 de octubre de
+ * el remate de un celular bajaban a 10,7 px durante diez segundos de veintiséis (26 de octubre de
  * 2026). Solo cuenta la letra que se queda chica: de la mitad del mínimo para arriba, y a un tamaño que no cambia más
  * de `VARIACION_SOSTENIDO`. Un nombre que entra, sale o se da vuelta, como las cartas de De pie al repartirse, pasa por
  * esos tamaños de camino y no es letra chica.
@@ -55,7 +55,7 @@ export const VARIACION_SOSTENIDO = 1.3;
 /**
  * Lo que ganan las mayúsculas: lo que cuenta es el ángulo de la altura de la x,
  * y la letra versal de la marca gana un 35 %: "un rótulo de 14 en mayúsculas
- * vale como uno de 16" (barrido de letra, 25 de octubre de 2026).
+ * vale como uno de 16" (regla de letra, 25 de octubre de 2026).
  */
 export const FACTOR_MAYUSCULAS = 1.35;
 

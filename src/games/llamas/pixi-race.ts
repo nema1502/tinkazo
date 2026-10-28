@@ -48,8 +48,8 @@ type Skin = "andes" | "stellar" | "lago";
  *
  * Con más de ocho, la clasificatoria: aparecen todos con su llama del color de
  * su lana, se van tachando en oleadas, y los ocho de la final bajan a la pista.
- * En el evento del 17 de octubre de 2026 corrieron 8 de 27 y Nicolás no vio a
- * las otras 19: "no sentí que aparecieran las 25 o 26 llamas".
+ * En el evento del 17 de octubre de 2026 corrieron 8 de 27 y no se vio a
+ * las otras 19.
  *
  * Con ocho o menos, la presentación: cada carril entra con su nombre, como los
  * atletas antes de una final. Le da a cada uno su momento y a la sala unos
@@ -718,7 +718,7 @@ export async function llamasPixi(
       // empastaba la "m"; sobre la oscura se lee limpia.
       const post = new Graphics()
         .rect(x - 2 * u, trackTop - 46 * u, 4 * u, 30 * u).fill(CREAM)
-        // Un banderín sin número: los "90 m" de 13 px no se leían desde el fondo y sobraban (barrido de letra, 26 de octubre de 2026).
+        // Un banderín sin número: los "90 m" de 13 px no se leían desde el fondo y sobraban (regla de letra, 26 de octubre de 2026).
         .rect(x - 9 * u, trackTop - 46 * u, 18 * u, 9 * u).fill(0x2b2640).stroke({ width: 2 * u, color: INK });
       world.addChild(post);
     }
@@ -765,7 +765,7 @@ export async function llamasPixi(
     S.hud.addChild(mini);
     const board = new Container();
     const rows: Container[] = [];
-    // La tabla con la letra de la sala (28 px en 1080): renglones de 31 y ancho de 228 (barrido de letra, 26 de octubre de 2026).
+    // La tabla con la letra de la sala (28 px en 1080): renglones de 31 y ancho de 228 (regla de letra, 26 de octubre de 2026).
     const rowH = 31 * u;
     for (let k = 0; k < N; k++) {
       const r = new Container();

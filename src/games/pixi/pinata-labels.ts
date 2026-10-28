@@ -119,7 +119,7 @@ export interface CaramelVuelo { idx: number; inside: boolean; settled: boolean; 
  *
  * Rota la piñata, ninguno hasta el cartel: el chip del último que cayó (la
  * rival, o el último eliminado) quedaba pegado al brillo del caramelo que gana,
- * la sala lo leía como ganador y el cartel decía otro nombre (evaluador, 22 de
+ * la sala lo leía como ganador y el cartel decía otro nombre (revisión visual, 22 de
  * octubre de 2026). Los que salen en la rotura quedan en la lista de los caídos.
  */
 export function enVuelo(cs: readonly CaramelVuelo[], ganadora: number, ahora: number, linger: number, rota: boolean): { id: number; seq: number }[] {

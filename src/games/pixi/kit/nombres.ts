@@ -5,7 +5,7 @@ import { ajustar, mediana, nivelBase, nivelPorCantidad, nivelesDe, planNombres, 
  *
  * Los nombres dentro de un juego miden **al menos el 2,6 % del alto** de la
  * pantalla en un proyector (28 px en 1080p) y **16 px** en un celular. Con más
- * gente se acorta el texto, nunca la letra por debajo de eso (barrido de letra,
+ * gente se acorta el texto, nunca la letra por debajo de eso (regla de letra,
  * 25 de octubre de 2026): lo que cuenta es el ángulo de la altura de la x. 28 px
  * a 6 m de una imagen de 1,5 m de alto dan 11,6 minutos de arco, el mínimo para
  * leer; 16 px a 35 cm dan 13,4.

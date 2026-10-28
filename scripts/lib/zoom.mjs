@@ -7,8 +7,8 @@
  * ese instante que en el plano general, el más ancho antes de que empiece la
  * tensión. Se mide la escala de la escena, que es la que se ve.
  *
- * El mínimo es el que propone la tarea del barrido de emoción (25 de octubre
- * de 2026) para cuando no haya inventario de momentos: 1,6×.
+ * El mínimo es el que propuso la revisión de emoción del 25 de octubre
+ * de 2026 para cuando no haya inventario de momentos: 1,6×.
  */
 
 /** Cuántas veces más cerca tiene que estar la cámara en el golpe que en el plano general. */

@@ -339,7 +339,7 @@ export function ajustarEnRenglones(texto: string, ancho: number, medir: (s: stri
 }
 
 /**
- * La forma más larga de un nombre que entra en `ancho` **sin achicar la letra** (barrido de letra, 26 de octubre de
+ * La forma más larga de un nombre que entra en `ancho` **sin achicar la letra** (regla de letra, 26 de octubre de
  * 2026): el nombre entero, "María Q.", el de pila y, si ni eso, la inicial. Donde el nombre no entra a la letra de
  * la regla (un celular, un gajo angosto), un juego muestra menos del nombre y no un nombre chico. Cada forma corta
  * por palabras, nunca por el medio de una (`formasDe`). `medir(s)` es el ancho del texto a la letra que se va a dibujar.

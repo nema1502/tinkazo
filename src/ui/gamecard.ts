@@ -7,7 +7,7 @@ import type { Game } from "../state";
  *
  * Grande, para que la lea la sala entera en el proyector: el nombre del juego,
  * la regla en una línea corta y una línea de honestidad, que el ganador ya
- * salió del número público y el juego solo lo cuenta. La pidió Nicolás el 4 de
+ * salió del número público y el juego solo lo cuenta. Se agregó el 4 de
  * octubre de 2026, y va con la regla de los juegos: los primeros segundos son
  * para llamar la atención de una sala que, entre el clic y "todos mirando",
  * está hablando (docs/juegos.md).
@@ -73,7 +73,7 @@ function caja(game: Game, people: number, prizes: number, premio = ""): string {
   const varios = prizes > 1 ? claveVarios(game) : undefined;
   // Lo único que la tarjeta suma a la regla: con varios premios, en un juego que cuenta solo el primero, que el
   // cartel del final los muestra a todos. El pelotón, las tandas, la clasificatoria y cuántas personas y premios son
-  // se fueron (barrido de letra, 26 de octubre de 2026): la sala los ve en el juego, y la tarjeta se lee en tres segundos.
+  // se fueron (regla de letra, 26 de octubre de 2026): la sala los ve en el juego, y la tarjeta se lee en tres segundos.
   const extras = [prizes > 1 && !varios ? L.gcPrizesNote(prizes) : ""].filter(Boolean);
   return (
     `<p class="gc-kicker">${esc(t("gcKicker"))}</p>` +

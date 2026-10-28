@@ -93,13 +93,13 @@ Para medir el recorrido del organizador sin datos personales: sin nombres y sin 
 - 20.000 conteos por día en total, y 2.000 combinaciones distintas por día (evento, propiedades y sorteo): con el día lleno, solo suman las que ya existen.
 - 500 consultas por día que leen la base; una consulta repetida sale de la memoria durante 5 minutos.
 
-**Lo que los topes no cuidan:** en el plan gratis, la cuenta de Cloudflare tiene 100.000 pedidos por día para todos sus Workers, y un conteo rechazado también es un pedido. Pasado eso, `c.tinkazo.app` deja de abrir enlaces y QR hasta la medianoche UTC. Por eso, antes de encenderlo, una de dos, que decide Nicolás (§4.8): Workers Paid (US$5 por mes; 10 millones de pedidos por mes) o una regla de límite de pedidos de Cloudflare delante de `/v1/contar`.
+**Lo que los topes no cuidan:** en el plan gratis, la cuenta de Cloudflare tiene 100.000 pedidos por día para todos sus Workers, y un conteo rechazado también es un pedido. Pasado eso, `c.tinkazo.app` deja de abrir enlaces y QR hasta la medianoche UTC. Por eso, antes de encenderlo, una de dos, que decide quien mantiene el proyecto (§4.8): Workers Paid (US$5 por mes; 10 millones de pedidos por mes) o una regla de límite de pedidos de Cloudflare delante de `/v1/contar`.
 
 **Del lado del sitio** (`src/contar.ts`): solo en `tinkazo.app` (ni localhost, ni las vistas previas, ni los auditores), ni desde un navegador automatizado (`navigator.webdriver`), ni si el navegador pide que no lo sigan (`globalPrivacyControl` o `doNotTrack`). En la demo (`?demo=`) y en el ensayo salen solo `practice_done` y `tutorial_open`. Un verde de un contrato que no es oficial se cuenta como `red` (y el Worker, igual, no lo suma). Se manda con `navigator.sendBeacon` y un cuerpo de texto: sin consulta previa (CORS), sin esperar respuesta y sin frenar nada; si falla, no pasa nada. El QR de un comprobante lleva `?o=qr` antes del `#`, y la página del enlace corto pasa `?o=short`, para saber por dónde se abrió; la página lo saca de la dirección al abrir. Los términos lo cuentan (`tmMore2`, en `terminos.html` y `src/i18n.ts`).
 
 ### Desplegarlo y encenderlo
 
-Desplegar espera el ok de Nicolás. Son tres pasos, y el sitio no manda nada hasta el último:
+Desplegar espera la aprobación de quien mantiene el proyecto. Son tres pasos, y el sitio no manda nada hasta el último:
 
 ```bash
 # 1. El Worker, con la clase nueva: la migración v2 crea el objeto del contador

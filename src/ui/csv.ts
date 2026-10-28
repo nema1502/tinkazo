@@ -11,7 +11,7 @@
  * y entrega texto plano de un nombre por línea. Recién ahí entra el protocolo.
  *
  * Sin esto, un export real se rompía de dos formas: la primera columna suele
- * ser un identificador de orden, y un nombre como "Mejía, Nicolás" se partía
+ * ser un identificador de orden, y un nombre como "Rojas, Mateo" se partía
  * en la coma.
  */
 
@@ -95,7 +95,7 @@ export function looksTabular(text: string): boolean {
  * Lee el texto como tabla. Devuelve `null` si no hay nada escrito.
  *
  * Una fila con otro ancho ya no descarta la tabla entera: hasta el QA del 16
- * de octubre de 2026, una sola coma sin comillas ("Mejía, Nicolás" escrito a
+ * de octubre de 2026, una sola coma sin comillas ("Rojas, Mateo" escrito a
  * mano) hacía que el archivo entrara como texto suelto, con el encabezado de
  * participante y los nombres cortados en la coma. Ahora el ancho lo da el
  * encabezado (o el de la mayoría de las filas), una fila corta se completa con
@@ -765,7 +765,7 @@ function fits(kind: Kind, value: string): boolean {
 /**
  * La clase de cada columna. La de nombres, si el encabezado la nombra, es
  * siempre texto libre aunque las filas sanas tengan nombres de una palabra:
- * es justo donde suele estar la coma sin comillas ("Mejía, Nicolás").
+ * es justo donde suele estar la coma sin comillas ("Rojas, Mateo").
  */
 function columnKinds(rows: readonly Row[], width: number, names: number): Kind[] {
   const sane = rows.filter((r) => r.cells.length === width);

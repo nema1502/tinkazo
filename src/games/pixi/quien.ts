@@ -65,7 +65,7 @@ function crearEscena(kit: Kit, d: Datos) {
    * acercamiento con que entra cada frase. Una frase larga ocupa dos renglones
    * y la caja crece hacia arriba; con la franja de un renglón, la de las reglas
    * ("Vale el nombre de la lista, sin tildes…") tapaba los apellidos de la
-   * última fila justo cuando cada uno busca su nombre (evaluador, 22 de octubre
+   * última fila justo cuando cada uno busca su nombre (revisión visual, 22 de octubre
    * de 2026). El tablero solo se achica, de a poco, y vuelve a medirse con cada
    * cambio de pantalla: no respira con cada frase.
    */
@@ -81,8 +81,8 @@ function crearEscena(kit: Kit, d: Datos) {
   /**
    * El alto de una carta, en las unidades de su dibujo (ancho 120). La de siempre lleva la cara y el nombre; en un
    * celular va la compacta, solo con el nombre: así entran más cartas por pantalla y la letra del nombre queda en la
-   * regla (16 px). Con la de siempre, doce cartas en 390 px de ancho dejaban el nombre en 10 px (barrido de letra, cierre
-   * del 26 de octubre de 2026).
+   * regla (16 px). Con la de siempre, doce cartas en 390 px de ancho dejaban el nombre en 10 px (regla de letra,
+   * 26 de octubre de 2026).
    */
   let cartaH = 158;
   /** Cuántas veces más grande que su tamaño en el tablero tiene que poder llegar la carta que gana con el golpe. */
@@ -502,7 +502,7 @@ function crearEscena(kit: Kit, d: Datos) {
         .roundRect(-bw2 / 2, -bh2 / 2, bw2, bh2, 10 * k).fill(q.has ? 0x17c3b2 : 0xff5cb3).stroke({ width: 5 * k, color: INK });
       // En el medio del tablero, salvo en vertical: ahí las dos últimas cartas
       // quedan lado a lado justo en el medio y el sello les tapaba los nombres
-      // (evaluador, 22 de octubre de 2026). Va en la franja libre entre la
+      // (revisión visual, 22 de octubre de 2026). Va en la franja libre entre la
       // pregunta y las cartas, achicado si no entra, y golpea con menos rebote.
       let sy = (g.top + g.bottom) / 2, base = 1;
       const cel = S.portrait();

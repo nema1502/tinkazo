@@ -686,7 +686,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     // del nombre, o la barra si los nombres van en la placa de los grupos) y lo
     // de abajo (la caja del relator, o la placa de los grupos). Acercada sobre la
     // flecha se cortaba por los costados y por abajo, y la caja le tapaba la
-    // parte de abajo (evaluador visual, 21 de octubre de 2026). En la pantalla
+    // parte de abajo (revisión visual, 21 de octubre de 2026). En la pantalla
     // ancha el acercamiento sigue cortando la rueda a propósito.
     const celu = G.alto
       ? enCaja(grupos ? S.top() + 8 * u : plateBox.y + plateBox.h + 12 * u, grupos ? panelTop - 10 * u : cajaArriba, closeZoom(), true)
@@ -713,7 +713,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
       // Con el ganador, la rueda entera entre el cartel, que sale arriba al
       // centro, y la caja del relator: el gajo ganador queda arriba, bajo la
       // flecha, y no lo tapa el cartel. Antes bajaba un 17 % de la pantalla y
-      // la caja le tapaba la parte de abajo (evaluador visual, 21 de octubre de
+      // la caja le tapaba la parte de abajo (revisión visual, 21 de octubre de
       // 2026). Llega en un segundo: el cartel dura tres, y al ritmo de antes la
       // rueda recién terminaba de abrirse cuando el estadio se cerraba.
       const c = enCaja(S.placaBajo(winners.length) + 10 * u, cajaArriba, G.alto ? 0.96 : 0.84, false);

@@ -66,7 +66,7 @@ describe("panel de la cuenta: textos", () => {
   });
 
   it("la inicial es la primera letra del nombre, en mayúscula, sin partir una letra con tilde", () => {
-    expect(initialOf("Nicolás Emir")).toBe("N");
+    expect(initialOf("Mateo Emir")).toBe("M");
     expect(initialOf("  ana quispe")).toBe("A");
     expect(initialOf("ñandú")).toBe("Ñ");
     expect(initialOf("")).toBe("");

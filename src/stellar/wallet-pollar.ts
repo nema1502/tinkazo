@@ -297,7 +297,7 @@ class PollarWallet implements SubmittingWallet {
   /**
    * El nombre y la foto de quien entró.
    *
-   * Sale de la cuenta de Google, así que la cabecera puede decir "Nicolás" en
+   * Sale de la cuenta de Google, así que la cabecera puede decir "Mateo" en
    * vez de una dirección de 56 caracteres que no le dice nada a nadie. No se
    * guarda en ningún lado: vive mientras dura la sesión de Pollar.
    */

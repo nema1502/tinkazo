@@ -708,7 +708,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
         .roundRect(0, 0, 14 * k, geo.head, 10 * k).fill(f.color).rect(7 * k, 0, 7 * k, geo.head).fill(f.color)
         .rect(14 * k, geo.top - geo.fs * 0.28, geo.w - 14 * k, 2 * k).fill({ color: f.color, alpha: 0.9 });
       // Tres renglones: "ENTRAN", el nombre de la fraternidad y su baile con cuántos son.
-      // El rótulo "ENTRAN" se fue (13 px en mayúsculas; el título ya dice quién entra): barrido de letra.
+      // El rótulo "ENTRAN" se fue (13 px en mayúsculas; el título ya dice quién entra): regla de letra.
       const kicker = S.text("", { fontFamily: MONO, fontSize: geo.fs * 0.62, fontWeight: "900", fill: S.dark ? CREAM : INK, letterSpacing: 2 * k });
       kicker.position.set(26 * k, geo.fs * 0.45);
       const L = T[getLang()];

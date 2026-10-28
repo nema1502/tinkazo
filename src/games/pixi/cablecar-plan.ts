@@ -350,7 +350,7 @@ export function planCableCar(names: string[], winners: readonly number[], rng: (
    * Cuántos quedan a la hora `x`. Baja en cada parada en el mismo instante en
    * que el relator lo dice y los que se bajan dejan su cabina (`tOff`): bajaba
    * 0,35 s de juego después, y en ese rato arriba decía "QUEDAN 11" con "Quedan
-   * 7" en la caja (evaluador visual, 21 de octubre de 2026).
+   * 7" en la caja (revisión visual, 21 de octubre de 2026).
    */
   function leftAt(x: number): number {
     let m = n;

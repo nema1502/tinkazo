@@ -27,8 +27,8 @@ const ESPERA_CORTO_MS = 2_000;
  * La abre el botón "Mostrar en grande" y, desde el 21 de octubre de 2026, el
  * final del show cuando el sorteo arrancó desde la espera en grande (`draw.ts`):
  * ahí el enlace llega después (el comprobante se arma aparte) y el QR aparece
- * cuando está. Las dos con el enlace corto, salvo en la demo: Nicolás decidió
- * ese día que mostrar en grande arme el corto, y el final del show desde la
+ * cuando está. Las dos con el enlace corto, salvo en la demo: desde ese día
+ * mostrar en grande arme el corto, y el final del show desde la
  * espera es mostrarlo en grande. `volverA` es lo que queda con el foco
  * al cerrar: "Siguiente premio", que es lo que sigue. Salir de la pantalla
  * completa también la cierra, como a la espera: Escape la suelta el navegador

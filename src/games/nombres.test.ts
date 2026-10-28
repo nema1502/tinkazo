@@ -11,7 +11,7 @@ const SAMPLE = [
   "Camila Suárez", "Andrés Villca", "Paola Mendoza", "Franco Ibáñez", "Daniela Cruz", "Óscar Limachi",
 ];
 
-/** Los nombres de la tarea: 1, 12 y 40 caracteres, con acentos, emojis y sin espacios. */
+/** Los nombres de prueba: 1, 12 y 40 caracteres, con acentos, emojis y sin espacios. */
 const FIXTURES = [
   "Ñ",
   "María Quispe",

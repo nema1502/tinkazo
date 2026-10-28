@@ -49,7 +49,7 @@ export interface Sabor {
   marco: boolean;
 }
 
-/** El empuje del 12 % y el golpe del 20 % sostenido 0,5 s: los valores por defecto del barrido de emoción. */
+/** El empuje del 12 % y el golpe del 20 % sostenido 0,5 s: los valores por defecto de la revisión de emoción. */
 export const POR_DEFECTO = { empuje: 0.12, golpe: { amt: 0.2, hold: 0.5, vuelta: 1.2 }, sacudon: 10, empujeDur: 4 } as const;
 
 const sabor = (arco: Arc, extra: Partial<Pick<Sabor, "empujeDur" | "sacudon">> & { vuelta?: number } = {}): Sabor => ({

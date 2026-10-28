@@ -24,7 +24,7 @@ import { type ContratoOficial, contratoOficial, contratosOficiales } from "../st
 const { round: R, signature: FIRMA, randomness: SEMILLA } = vectors.quicknet;
 const TESTNET = "CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A";
 const WASM_TESTNET = "c2403e081fc2d91ee86ea5faf58861e2d91d38f4846585b4f08ad215d85a546e";
-/** El contrato ajeno de la prueba de la fase 1 (scripts/check-verificacion.mjs). */
+/** El contrato ajeno de la prueba de verificación (scripts/check-verificacion.mjs). */
 const AJENO = "CDIBBDORQC4KD2XKHEHUVJRMRBX2JUVN3WBGTPFRO632G6BBDJMMJUU3";
 const OTRA_FIRMA = "8d2c0e2b0d9a1b0f6f2b7d6f0f4b7c8f9a8b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1";
 const GANADORES = vectors.cases.find((c) => c.k === 3)?.winners as number[];

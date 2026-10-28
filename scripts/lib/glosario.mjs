@@ -3,7 +3,7 @@
  * sin leer ni escribir nada: reciben texto y devuelven hallazgos, para probarlas
  * sin tocar el repo.
  *
- * La regla (la de la tarea del barrido de letra, 25 de octubre de 2026): el
+ * La regla (la del 25 de octubre de 2026): el
  * sitio mantiene el voseo y los nombres culturales de los juegos; lo que se
  * pide neutral es el vocabulario cotidiano, el que un hispanohablante de otro
  * país no entiende o lee raro. La lista vive en `glosario-neutral.json`.

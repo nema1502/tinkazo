@@ -18,7 +18,7 @@ import {
 } from "./legible.mjs";
 
 describe("la regla de tamaños", () => {
-  it("es la del barrido: 28 y 48 en el proyector, 16 y 22 en el celular", () => {
+  it("es la regla de letra: 28 y 48 en el proyector, 16 y 22 en el celular", () => {
     expect(REGLAS.proyector).toMatchObject({ ancho: 1920, alto: 1080, secundario: 28, principal: 48 });
     expect(REGLAS.celular).toMatchObject({ ancho: 390, alto: 844, secundario: 16, principal: 22 });
     expect(minimoPara(REGLAS.proyector, true)).toBe(48);
@@ -88,7 +88,7 @@ describe("juzgar los textos del DOM", () => {
       expect(grupos.find((g) => g.ruta === "button#btn-freeze")).toMatchObject({ minimo: 22, principal: true, herramienta: true });
     });
 
-    it("un rótulo en mayúsculas de 14 px vale como uno de 16 (barrido de letra), y uno de 11 no", () => {
+    it("un rótulo en mayúsculas de 14 px vale como uno de 16 (regla de letra), y uno de 11 no", () => {
       const { grupos } = evaluarDom(
         [t("EL SHOW", 14, "span.kicker", false, { mayusculas: true }), t("PIE", 11, "span.pie", false, { mayusculas: true }), t("el show", 14, "span.nota")],
         REGLAS.celular,

@@ -2,8 +2,8 @@
 /**
  * Los detallitos de la experiencia, uno por uno.
  *
- * Nicolás, 21 de octubre de 2026: "detallitos que son bonitos y ahorran tiempo
- * o hacen mejor la experiencia de usuario". Un buscador los encontró usando la
+ * Decisión del 21 de octubre de 2026: arreglar los detallitos que son bonitos y
+ * ahorran tiempo o mejoran la experiencia de usuario. Un buscador los encontró usando la
  * herramienta de verdad, un revisor los filtró, y cada uno se arregló con su
  * propio cambio (docs/ux.md, "Los detallitos"). Esto mide que sigan arreglados.
  *

@@ -835,7 +835,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     if (log) log.aliveAtCrown = alive().map((q) => q.idx);
     // El cartel de arriba ya dice "GANA" y el nombre: la caja de abajo lo
     // cuenta con el trompo, sin repetirlo (con "¡GANA X!" debajo de "GANA X",
-    // la pantalla decía dos veces lo mismo; evaluador visual, 21 de octubre de 2026).
+    // la pantalla decía dos veces lo mismo; revisión visual, 21 de octubre de 2026).
     say(T[getLang()].cTroWin(winnersLabel(names, winners), winners.length > 1), 1);
     beep(note(0), 0.7, "sine", 0.09);
     // La octava de arriba, con armónicos: la que reconstruye el grave en un parlante chico.

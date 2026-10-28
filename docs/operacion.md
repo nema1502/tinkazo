@@ -1,6 +1,6 @@
 # Operación: qué hacer si algo cae
 
-Cómo se nota que una pieza falló y qué tocar. Subir, desplegar y firmar esperan el ok de Nicolás. Costos y niveles: [deployments.md](deployments.md). Revisado el 26 de octubre de 2026.
+Cómo se nota que una pieza falló y qué tocar. Subir, desplegar y firmar esperan la aprobación de quien mantiene el proyecto. Costos y niveles: [deployments.md](deployments.md). Revisado el 26 de octubre de 2026.
 
 ## RPC de Stellar
 
@@ -56,19 +56,19 @@ Parámetro cambiado y entendido: `node scripts/vigilar-red.mjs --actualizar-base
 
 ## Vercel (el sitio)
 
-**Se nota:** tinkazo.app da error tras una subida. **Qué hacer:** volver a la última versión buena, en el panel (Deployments, «Instant Rollback») o con `vercel rollback <url de esa versión>`. En Hobby solo a la anterior; en Pro, a cualquiera. Después, las subidas nuevas no salen solas hasta promover una (`vercel promote`). Subí el arreglo con el ok de Nicolás.
+**Se nota:** tinkazo.app da error tras una subida. **Qué hacer:** volver a la última versión buena, en el panel (Deployments, «Instant Rollback») o con `vercel rollback <url de esa versión>`. En Hobby solo a la anterior; en Pro, a cualquiera. Después, las subidas nuevas no salen solas hasta promover una (`vercel promote`). Subí el arreglo con la aprobación de quien mantiene el proyecto.
 
 ## Dominio tinkazo.app
 
-Registrado en Cloudflare el 16 de octubre de 2026. **Renovarlo por varios años, con renovación automática:** lo hace Nicolás. Si se pierde, mueren los enlaces compartidos (`tinkazo.app/c/…`, `c.tinkazo.app/…` y sus QR), hola@tinkazo.app y los orígenes que aceptan Pollar y el Worker.
+Registrado en Cloudflare el 16 de octubre de 2026. **Renovarlo por varios años, con renovación automática:** lo hace quien mantiene el proyecto. Si se pierde, mueren los enlaces compartidos (`tinkazo.app/c/…`, `c.tinkazo.app/…` y sus QR), hola@tinkazo.app y los orígenes que aceptan Pollar y el Worker.
 
 ## Quién entra a qué
 
-Hoy, solo Nicolás; quien se sume se anota acá, con el nombre del lugar y nunca la llave.
+Hoy, solo quien mantiene el proyecto; quien se sume se anota acá, con el nombre del lugar y nunca la llave.
 
-- **Código y CI:** cuenta de GitHub `nema1502`; el único secreto de los workflows es el opcional `HEALTHCHECK_URL`.
+- **Código y CI:** la cuenta de GitHub del proyecto; el único secreto de los workflows es el opcional `HEALTHCHECK_URL`.
 - **Sitio:** cuenta de Vercel y la CLI `vercel` de su máquina.
 - **Worker, dominio, DNS:** cuenta de Cloudflare y `wrangler login`; el secreto `ADMIN_TOKEN`, en su gestor de contraseñas.
 - **Pollar:** su panel; las llaves de la app, en `.env.local` (git la ignora).
 - **Contrato:** identidad `tinkazo-deployer` de la CLI de Stellar, en `~/.config/stellar/identity/`, fuera del repo.
-- **Latido:** la cuenta de healthchecks.io que cree Nicolás.
+- **Latido:** la cuenta de healthchecks.io que cree quien mantiene el proyecto.

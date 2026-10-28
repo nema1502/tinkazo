@@ -2017,7 +2017,7 @@ export const T: Record<Lang, Dict> = {
     cuentaAriaSola: "Tu cuenta: {n}. Abrir el panel de la cuenta.",
     sigEntrarSellar: "Entrar para sellar",
     cuentaSalio: "Cerraste tu sesión.",
-    // Bloque cierre del barrido
+    // Textos del 26 de octubre de 2026
     masResultado: "Otra lista, copiar el mensaje y más",
     // >>> kit:i18n-es (scripts/nuevo-juego.mjs escribe entre estas marcas)
     // <<< kit:i18n-es
@@ -3657,7 +3657,7 @@ export const T: Record<Lang, Dict> = {
     cuentaAriaSola: "Your account: {n}. Open the account panel.",
     sigEntrarSellar: "Sign in to seal",
     cuentaSalio: "You signed out.",
-    // Bloque cierre del barrido
+    // Textos del 26 de octubre de 2026
     masResultado: "Another list, copy the message and more",
     // >>> kit:i18n-en (scripts/nuevo-juego.mjs escribe entre estas marcas)
     // <<< kit:i18n-en

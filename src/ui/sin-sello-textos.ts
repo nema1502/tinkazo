@@ -11,7 +11,7 @@ import { T, t, type Lang } from "../i18n";
  * la cuenta, la espera en grande, la lista de la sala, y el QR del resultado en la página
  * y en grande. Hasta el 26 de octubre de 2026 solo cambiaban el botón y la nota del
  * resultado, y la sala, que es lo que se proyecta, seguía leyendo "sellada: ya nadie la
- * puede cambiar" (revisión del evaluador, batería de cierre).
+ * puede cambiar" (revisión visual de la batería de cierre).
  *
  * Si el sello entra más tarde (el reintento de `sin-sello.ts`), el sorteo deja de estar
  * sin sello y los textos vuelven a los de siempre.

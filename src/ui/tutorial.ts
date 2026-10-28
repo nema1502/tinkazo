@@ -9,8 +9,8 @@ import { marcarOfertaVista } from "./onboarding";
 /**
  * "¿Cómo se usa?": el tutorial siempre a mano.
  *
- * Nicolás, 22 de octubre de 2026: "que haya tutorial siempre para volver a
- * revisar; claro, bonito, pocos pasos y directo a la acción". Hasta ese día la
+ * Desde el 22 de octubre de 2026 hay un tutorial siempre disponible para volver a
+ * revisar; claro, bonito, de pocos pasos y directo a la acción. Hasta ese día la
  * bienvenida se veía una vez y no volvía.
  *
  * - **Dónde:** un botón secundario en la fila del título de la herramienta, en

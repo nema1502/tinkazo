@@ -59,7 +59,7 @@ describe("diccionario", () => {
 
   it("Trompo: el cierre nombra a quien gana sin repetir el GANA del cartel", () => {
     // El cartel de la corona dice "GANA" y el nombre; con "¡GANA X!" en la caja
-    // de abajo la pantalla decía dos veces lo mismo (evaluador visual, 21 de
+    // de abajo la pantalla decía dos veces lo mismo (revisión visual, 21 de
     // octubre de 2026). Con dos premios tiene que nombrar a los dos: lo mira
     // audit-game.
     for (const l of ["es", "en"] as const) {

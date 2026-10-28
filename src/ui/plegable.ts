@@ -25,8 +25,8 @@ export function initPlegables(): void {
 }
 
 /**
- * El resultado, con una sola acción principal y lo demás detrás de un pliegue (barrido de letra, 26 de octubre de
- * 2026; se cerró en el cierre del barrido): después del ganador queda "Siguiente premio" (o "Compartir el
+ * El resultado, con una sola acción principal y lo demás detrás de un pliegue (regla de letra, 26 de octubre de
+ * 2026): después del ganador queda "Siguiente premio" (o "Compartir el
  * resultado" si no queda con quién sortear), "Mostrar en grande" y "Avisarle por WhatsApp". "Usar otra lista",
  * "Copiar el mensaje" y "Avisarle por correo" se usan poco y estaban todos a la vista: eran siete botones en una
  * pantalla donde se pide uno. Se pliegan en «Otra lista, copiar el mensaje y más», debajo de la acción principal.

@@ -197,8 +197,8 @@ export const SIN_SELLO_LEAD_SECONDS = 90;
  * cuánto dura sin estirar. "Normal" significa treinta y ocho segundos en todos.
  *
  * Era treinta hasta el 17 de octubre de 2026. En el primer evento después de
- * Stellar Elite, Nicolás lo sintió corto: "deberían durar más los juegos para
- * tener más emoción y expectativa". Treinta y ocho y cuarenta y cinco son
+ * Stellar Elite, los juegos se sintieron cortos: hacía falta más
+ * emoción y expectativa. Treinta y ocho y cuarenta y cinco son
  * lo que alcanzan los doce juegos sin pasar de `MAX_STRETCH`, o sea sin
  * volverse cámara lenta: con cincuenta, el teleférico y el aguayo quedaban en
  * 39,5 (auditor exigente, 17 de octubre). La carrera, además, ganó contenido: la clasificatoria y la

@@ -526,7 +526,7 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
 /** Abre el resultado en grande en el mismo instante, si `pantalla.ts` ya bajó (siempre, salvo un wifi muy lento). */
 function resultadoEnGrande(enlace: Promise<string>, volverA: HTMLButtonElement): void {
   // Con el enlace corto, como "Mostrar en grande": es lo mismo, mostrarlo en grande, y el
-  // QR del corto se lee desde el fondo de la sala (Nicolás, 21 de octubre de 2026). Hasta
+  // QR del corto se lee desde el fondo de la sala (21 de octubre de 2026). Hasta
   // ese día iba con el largo. Nunca en la demo; si el corto no llega, va el largo (pantalla.ts).
   const abrir = (m: typeof import("./pantalla")): void => void m.mostrarResultado(enlace, { corto: !sinGrabar(), volverA });
   contarCompartido("qr_big");

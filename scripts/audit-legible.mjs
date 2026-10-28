@@ -2,8 +2,8 @@
 /**
  * El auditor de legibilidad: ¿se lee desde el fondo de la sala y en el celular?
  *
- * Nicolás, 25 de octubre de 2026: "tiene mucha letra chiquita y media fea;
- * cuando estás proyectando se ve feo, igual en celular". Esto mide el tamaño de
+ * Desde el 25 de octubre de 2026 hay un problema concreto que medir: la letra
+ * chica se ve mal al proyectar y en el celular. Esto mide el tamaño de
  * cada texto visible, en píxeles de pantalla, y falla por cada uno que queda
  * debajo de la regla (`scripts/lib/legible.mjs`):
  *
@@ -13,7 +13,7 @@
  *
  * El proyector es lo que mira la sala (el estadio y el nombre del ganador); la
  * herramienta es la página de quien organiza, en cualquiera de los dos tamaños:
- * el barrido de letra dice que "lo que mira la sala se mide con 28/48 a 1920 y
+ * la regla de letra dice que "lo que mira la sala se mide con 28/48 a 1920 y
  * 16/22 a 390; la herramienta, con 16/22". Principal es lo que se lee primero
  * (títulos, el botón de la acción, el nombre del ganador, el cartel del
  * estadio). La regla se cambia con

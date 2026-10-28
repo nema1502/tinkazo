@@ -2,9 +2,8 @@
 /**
  * La espera en grande desemboca en el show.
  *
- * Nicolás, 21 de octubre de 2026: "cuando esté la espera en grande y termina,
- * debería hacer que cuando termine, empiece también, ¿no? Ahora la espera
- * termina y se sale". Desde ese día, si la espera en grande está abierta cuando
+ * Desde el 21 de octubre de 2026, cuando la espera en grande termina el sorteo
+ * tiene que empezar también (antes la espera terminaba y se salía). Desde ese día, si la espera en grande está abierta cuando
  * nace el número, el sorteo arranca solo y el show ocupa la pantalla sin pasar
  * por la página (src/ui/espera.ts).
  *

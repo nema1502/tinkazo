@@ -121,7 +121,7 @@ Se mira en cinco pantallas, en los dos temas, y a 200 % de zoom:
 
 | Etiqueta | Ancho × alto | Qué es |
 |---|---|---|
-| laptop-100 | 1362 × 632 | la laptop de Nicolás a 100 % |
+| laptop-100 | 1362 × 632 | una laptop de 1362 × 632 a 100 % |
 | escritorio | 1280 × 720 | un escritorio |
 | tablet-h | 1024 × 560 | una tablet acostada |
 | celular-h | 844 × 390 | un celular acostado |
@@ -169,7 +169,7 @@ El sitio está en español boliviano con voseo, y en inglés neutro. No hay un t
 **Lo que sí:**
 
 - Voseo: "pegá la lista", "sorteá", "probalo", "si encontrás".
-- Vocabulario neutral: el voseo y los nombres de los juegos se quedan, pero lo cotidiano se escribe como se entiende en cualquier país ("ahora" y no "ahorita", "comprobar" y no "chequear"). La lista de lo que se evita, con su alternativa, es `scripts/lib/glosario-neutral.json`; `pnpm check:glosario` falla si aparece fuera de los nombres de los juegos y de `historia.html`, y corre en la CI. Una entrada en `"estado": "avisar"` no falla: es un uso que ya está en el texto y falta decidir (hoy `cancha` en "¡A la cancha!"). El 26 de octubre de 2026 se cambiaron 21 giros de todos los días (`guagua` por bebé, `plata de mentira` por dinero de prueba, `¿Dale?` por ¿Seguimos?, `Metele` por Agregá, `en un rato` por en unos minutos, `largada` por salida, `planilla` por hoja de cálculo, `este equipo` por este navegador, `Bajar como CSV` por Descargar, `anclados` por guardados en Stellar, `EN EL RUEDO` por SIGUEN, `¡CHUTA!` por ¡UY!, entre otros), y las Parabas y los Jucumaris pasaron a Guacamayas y Osos andinos. Se quedan el voseo, `acá`, `celular` y los nombres culturales (chovena, trueque, La Entrada, cuadra, fraternidad, Diablada, Socavón), con una línea que los explica donde hace falta; los Tojos quedan a confirmar. Nada de tuteo.
+- Vocabulario neutral: el voseo y los nombres de los juegos se quedan, pero lo cotidiano se escribe como se entiende en cualquier país ("ahora" y no "ahorita", "comprobar" y no "chequear"). La lista de lo que se evita, con su alternativa, es `scripts/lib/glosario-neutral.json`; `pnpm check:glosario` falla si aparece fuera de los nombres de los juegos y de `historia.html`, y corre en la CI. Una entrada en `"estado": "avisar"` no falla: es un uso que ya está en el texto y se revisa aparte (hoy `cancha` en "¡A la cancha!"). El 26 de octubre de 2026 se cambiaron 21 giros de todos los días (`guagua` por bebé, `plata de mentira` por dinero de prueba, `¿Dale?` por ¿Seguimos?, `Metele` por Agregá, `en un rato` por en unos minutos, `largada` por salida, `planilla` por hoja de cálculo, `este equipo` por este navegador, `Bajar como CSV` por Descargar, `anclados` por guardados en Stellar, `EN EL RUEDO` por SIGUEN, `¡CHUTA!` por ¡UY!, entre otros), y las Parabas y los Jucumaris pasaron a Guacamayas y Osos andinos. Se quedan el voseo, `acá`, `celular` y los nombres culturales (chovena, trueque, La Entrada, cuadra, fraternidad, Diablada, Socavón), con una línea que los explica donde hace falta; los Tojos quedan a confirmar. Nada de tuteo.
 - Frases cortas, de una idea cada una.
 - Decir el precio y el costo con el número y la fecha: "0,76 XLM, unos 16 centavos, medido el 3 de octubre", no "es muy barato".
 - Admitir los límites. El veredicto amarillo de la página de verificación dice que la cuenta cierra pero que nadie atestigua la lista. Esa honestidad es la marca.
@@ -206,7 +206,7 @@ Entra por la función, nunca por la decoración. Si el elemento se puede sacar s
 
 Cada cosa boliviana del producto hace algo: el nombre, la llama de la mascota, el perno tricolor de la ruleta que marca la vuelta, el aguayo que es el tablero de juego, el teleférico, cuyo cable es la barra de progreso y cuyas cabinas llevan los colores de las diez líneas de La Paz y El Alto, la entrada del Carnaval de Oruro, cuyas cuadras son las rondas de eliminación, y la rueda de la chovena, que se achica cada vez que alguien se suelta. El trompo y la piñata son de toda Latinoamérica y siguen la misma regla: el choque y el palo son los que eliminan. Los nombres de la lista de ejemplo (Quispe, Mamani, Choque, Condori, Limachi, Villca) son el detalle más sutil y el que más gusta.
 
-**Lo que no va:** wiphalas, cholitas, el Illimani, Tiwanaku, ni la palabra "Bolivia" escrita en pantalla. El pie de página dice "Hecho en Bolivia por Nicolás" y con eso alcanza.
+**Lo que no va:** wiphalas, cholitas, el Illimani, Tiwanaku, ni la palabra "Bolivia" escrita en pantalla. El pie de página dice "Hecho en Bolivia" con el nombre de quien lo hizo, y con eso alcanza.
 
 ## Los números que se pueden decir
 

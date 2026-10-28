@@ -92,7 +92,7 @@ Todo por la escala de `note()` y dentro de los grados 0 a 20.
 - **El apagón:** un chasquido en cada parpadeo de antes; cuando se va la luz se calla la banda y caen cuatro notas; un golpe seco cuando el convoy queda quieto, y después el latido a oscuras; un clic por cada vez que prende, y la banda vuelve cuando la luz se queda.
 - **La ráfaga:** un soplido grave que dura lo que dura el viento.
 
-## Lo que dejó el evaluador visual (21 de octubre de 2026)
+## Lo que dejó la revisión visual (21 de octubre de 2026)
 
 - **El contador y la caja cuentan lo mismo.** El contador de arriba baja en el mismo instante en que el relator dice "Quedan N" y los que se bajan dejan su cabina (`tOff` de cada parada). Bajaba 0,35 s de juego después, y en ese rato se leía "QUEDAN 11" arriba con "Quedan 7" en la caja. `cablecar-plan.test.ts` lo fija, y que el contador sea siempre la gente que sigue en las cabinas.
 - **La última estación dice la verdad.** Al llegar, el relator cuenta a los que siguen arriba, como el contador: "¡QUEDAN DOS!" solo si son dos; si son más, "¡Última estación!", "¡Acá bajan de a uno!" o "¡Última estación! Quedan 4". Al bajarse, nombra a todos los que descuenta el contador ("¡Se bajan Ana, Iván y Luis!", y con más de tres, "y 15 más"): antes decía "¡Se baja Ana!" mientras el contador bajaba de cuatro a dos. Con dos personas en total no se baja nadie y no dice nada.

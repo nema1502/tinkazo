@@ -34,7 +34,7 @@ const VISTAS = [
  * Las páginas que se abren desde un enlace: verificar, evento y la del enlace
  * corto (c.html). No son de lectura: su pie no lleva a las páginas de sorteo y
  * su titular lo escribe el script. Se miran igual, en los dos temas, en celular y en inglés, con lo que
- * se les rompió alguna vez (evaluador visual, 21 de octubre de 2026): con
+ * se les rompió alguna vez (revisión visual, 21 de octubre de 2026): con
  * `?theme=` verificar no cambiaba de tema, en el celular los pasos para
  * rehacerlo se cortaban contra el borde, y con un enlace roto el titular del
  * evento quedaba en español también en inglés.

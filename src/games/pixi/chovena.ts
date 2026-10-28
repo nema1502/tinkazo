@@ -1816,7 +1816,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
    * La lista de los que salen, cuando son muchos para ponerles el nombre
    * encima. Con la letra de los nombres de la escena (`CHIP_SCALE`, 19 px en 720)
    * y `S.letra`, que crece con la pantalla y con el modo para compartir: a 13 px
-   * no se leía desde el fondo de la sala (evaluador visual, 21 de octubre de 2026).
+   * no se leía desde el fondo de la sala (revisión visual, 21 de octubre de 2026).
    * Entran las filas que deja el alto de la pantalla, hasta doce por columna y
    * dos columnas; en el celular, con más de seis, las dos columnas van lado a
    * lado: una sola, larga, le tapaba la rueda. La de la derecha empieza debajo

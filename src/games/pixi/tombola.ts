@@ -561,7 +561,7 @@ export async function tombolaPixi(names: string[], winners: readonly number[], b
    * La leyenda de las bolas, mientras gira el bombo: cada nombre con su bola y
    * su número, en orden alfabético para encontrarse rápido. Antes el número de
    * la ganadora salía tres segundos y medio antes que su nombre y nadie sabía
-   * de quién era (lo pidió Nicolás el 4 de octubre de 2026). Con mucha gente
+   * de quién era (cambio del 4 de octubre de 2026). Con mucha gente
    * pasa en páginas, y se va antes de que se abra la compuerta: la canaleta y
    * el vaso quedan libres para la bola.
    */

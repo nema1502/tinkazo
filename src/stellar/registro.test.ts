@@ -12,7 +12,7 @@ import { RegistroDeforme, leerRegistro, leerRegistros, resultadoDe, selloDe } fr
  * `Draw(id)`):
  * - el #165 del contrato de Tinkazo en testnet: la lista de ejemplo, sellada y
  *   sorteada por la QA de flujo el 4 de octubre;
- * - el "#278" del contrato ajeno de la prueba de la fase 1 (`CDIBBDOR…JUU3`):
+ * - el "#278" del contrato ajeno de la prueba de verificación (`CDIBBDOR…JUU3`):
  *   un sorteo inventado, con la misma forma que los de Tinkazo.
  */
 const XDR_165 = {

@@ -51,7 +51,7 @@ export interface Rango {
  * siempre sigue siendo el que era. La piñata solo tiene tope (anda con dos
  * personas), así que queda neutral. De pie va de 8 a 100: el doc lo prueba
  * hasta 200, pero pasados unos 100 el nombre de cada carta no se lee desde el
- * fondo de la sala (evaluador, 26 de octubre de 2026). Y pide que la lista
+ * fondo de la sala (revisión visual, 26 de octubre de 2026). Y pide que la lista
  * sea la gente de la sala: el aviso de la sección 7.5 para cuando no lo es
  * todavía no está, y por eso su nota lo dice. La Entrada se pensó de 30 a 200:
  * con menos anda, con pocas fraternidades. Ruleta tiene solo tope: el WHEEL_MAX de state.ts, 200 desde que reparte la

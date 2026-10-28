@@ -11,7 +11,7 @@
  * 2,6% de la pantalla (la regla de la letra, `docs/marca.md`); las etiquetas cortas ("María Q.") cuentan si no se
  * confunden con otro nombre.
  *
- * Lo pidió Nicolás el 4 de octubre de 2026, mirando la tómbola: salía el número
+ * Se pidió el 4 de octubre de 2026, mirando la tómbola: salía el número
  * de la bola ganadora y nadie sabía de quién era. Comprueba:
  *
  * - **Con 8, todos se ven** antes del ganador, en todos los juegos.

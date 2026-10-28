@@ -164,7 +164,7 @@ export function pintarRecomendacion(n: number): void {
       etiqueta.title = t("recBadge");
       el.appendChild(etiqueta);
     }
-    // El rango de personas, a la vista: miniatura, nombre y rango (barrido de letra, 26 de octubre de 2026).
+    // El rango de personas, a la vista: miniatura, nombre y rango (regla de letra, 26 de octubre de 2026).
     const rango = rangoVisible(r.game);
     if (rango) {
       const em = document.createElement("em");

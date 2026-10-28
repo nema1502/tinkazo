@@ -216,7 +216,7 @@ export function encender({ raiz = RAIZ, id, dryRun = false }) {
     id,
     siguientes: [
       `Sumá la ficha de ${id} en juegos.html (con la captura) y la fila de docs/juegos.md.`,
-      "Corré pnpm check:paginas y pnpm check:lore, y pedí el ok de quien mantiene el proyecto antes de subirlo.",
+      "Corré pnpm check:paginas y pnpm check:lore, y pedí la aprobación de quien mantiene el proyecto antes de subirlo.",
     ],
   };
 }

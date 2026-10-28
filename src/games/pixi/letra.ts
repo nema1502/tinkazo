@@ -54,7 +54,7 @@ export function unidadDePantalla(sw: number, sh: number): number {
  * Un nombre «se lee» cuando su letra, en píxeles de pantalla, llega a la regla de la sala (`letraMinima`), con medio píxel
  * de margen por el redondeo. Es la vara de `audit-legible` y `audit-pantalla`: la letra (el tamaño de fuente por la escala
  * con que se dibuja), no el alto de la caja del texto, que con la interlínea es un cuarto más grande y dejaba pasar en
- * `audit-identidad` un nombre de 23 px de letra en 1080 que los otros dos rechazan (cierre del barrido, 26 de octubre
+ * `audit-identidad` un nombre de 23 px de letra en 1080 que los otros dos rechazan (26 de octubre
  * de 2026).
  */
 export function seLee(letraPx: number, sw: number, sh: number): boolean {

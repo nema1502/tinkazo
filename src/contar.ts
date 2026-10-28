@@ -32,7 +32,7 @@ import { sinGrabar } from "./ensayo-modo";
 /**
  * Adónde se manda. Vacío: no sale nada. Pasa a ser
  * `https://c.tinkazo.app/v1/contar` cuando el Worker esté desplegado con el
- * contador (el despliegue espera el ok de Nicolás; ver
+ * contador (el despliegue espera la aprobación de quien mantiene el proyecto; ver
  * `workers/enlaces/README.md`).
  *
  * Al prenderlo (no antes del 3 de noviembre de 2026), en el mismo cambio: la URL

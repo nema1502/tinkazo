@@ -50,7 +50,7 @@ $("l-en").addEventListener("click", () => chooseLang("en"));
 $("btn-sample").addEventListener("click", loadSample);
 // Sin cuenta, el botón de sellar queda con aria-disabled (lo pone `applyGate`) y
 // el clic abre la ventana para elegir una, que es lo que falta. Antes no hacía
-// nada, y parecía un botón roto (evaluador visual, 21 de octubre de 2026).
+// nada, y parecía un botón roto (revisión visual, 21 de octubre de 2026).
 $("btn-freeze").addEventListener("click", () => {
   if ($("btn-freeze").getAttribute("aria-disabled") === "true") {
     // La ventana dice para qué: sellar esta lista, que la espera acá. Al entrar, el foco vuelve a "Sellar la lista".

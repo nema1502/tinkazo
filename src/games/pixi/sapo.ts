@@ -34,8 +34,8 @@ import { HAND, MOUTH, SAPO_MAX, holeLayout, optsForArc, planThrows, throwTime, t
  * ganadores adentro) y esos vuelan a sus agujeros. Con 12 o menos, los nombres
  * vuelan directo. Así la pantalla se mueve desde el primer cuadro.
  *
- * Rediseñado el 2 de octubre de 2026 desde el que propuso Guido Salazar
- * (@GuidoSV7): la revisión visual lo vio como una mesa de póker (óvalo de paño verde y una
+ * Rediseñado el 2 de octubre de 2026 desde el que propuso Guido Salazar (@GuidoSV7):
+ * la revisión visual lo vio como una mesa de póker (óvalo de paño verde y una
  * moneda dorada) y sin un solo nombre en la mesa.
  *
  * Todo sale de la hora del juego (`dt`), nunca del reloj de la pared.
@@ -324,7 +324,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
    * 1,45 el chip salía 1,6 veces más grande, y en 4:3 y 5:4 los de los costados
    * no entraban entre la mesa y el borde (revisión del 20 de octubre de 2026).
    */
-  // En horizontal, 1 (antes 0,9): con la regla de la letra de la sala (28 px en 1080) la mesa de 12 pasa de 26 a 29 px (barrido de letra, 26 de octubre de 2026).
+  // En horizontal, 1 (antes 0,9): con la regla de la letra de la sala (28 px en 1080) la mesa de 12 pasa de 26 a 29 px (regla de letra, 26 de octubre de 2026).
   // En un celular, la escala de la regla (0,97: 17 px): era 0,6, que dejaba los nombres de la mesa en 9 a 11 px.
   const labelScale = (): number => (S.portrait() ? escalaChipLegible(S.u()) : 1);
   /** Nombre y `n` letras del apellido: "María Q.", "María Qu.". En la mesa entran doce, y el nombre entero no. */
@@ -366,7 +366,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
    * más larga de su nombre (la etiqueta, el de pila o la inicial) cuyo chip, sin cara, entra a su lado a la letra de la
    * regla: no más de un cuarto del ancho de la pantalla. Dos personas no quedan con el mismo texto: si pasa, las dos
    * vuelven a su etiqueta, que es única en la lista. Hasta el 26 de octubre de 2026 el nombre se achicaba a 0,6 para
-   * entrar (9 a 11 px); ahora se muestra menos del nombre y a la letra de la regla (barrido de letra, cierre).
+   * entrar (9 a 11 px); ahora se muestra menos del nombre y a la letra de la regla.
    */
   function construirSentados(k: number): void {
     sentados = [];

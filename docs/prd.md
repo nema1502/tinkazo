@@ -254,7 +254,7 @@ El resto sigue igual: sin backend para sortear, sin fondos en el contrato, sin c
 - Wallets adicionales vía Stellar Wallets Kit y cuentas con passkeys más relayer sin gas (v2: quita la fricción de Freighter).
 - Lista opcional en la cadena para Sorteos chicos (v2: comprobante autocontenido, a cambio de exponer nombres). `[NOTE FOR PM]` Emocionalmente importante para la narrativa "todo en la cadena"; revisar tras medir costos.
 - Sponsor mode y branding.
-- Avatares generados con IA y otros juegos.
+- Avatares generados y otros juegos.
 
 ## 7. Métricas de éxito
 

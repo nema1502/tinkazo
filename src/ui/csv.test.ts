@@ -8,7 +8,7 @@ import { canonicalList } from "../protocol/canonical";
 /** Lo que exporta Luma: la primera columna es el identificador, no el nombre. */
 const LUMA = `api_id,name,email,created_at,checked_in_at
 evt-guest-a1,Ana Quispe,ana@example.org,2026-09-01T14:02:00Z,2026-09-03T18:10:00Z
-evt-guest-b2,"Mejía, Nicolás",nico@example.org,2026-09-01T15:40:00Z,
+evt-guest-b2,"Rojas, Mateo",nico@example.org,2026-09-01T15:40:00Z,
 evt-guest-c3,Rodrigo Mamani,rodrigo@example.org,2026-09-02T09:12:00Z,2026-09-03T18:22:00Z`;
 
 describe("parseTable", () => {
@@ -27,7 +27,7 @@ describe("parseTable", () => {
 
   it("no parte un nombre que tiene una coma adentro", () => {
     const t = parseTable(LUMA)!;
-    expect(t.rows[1]?.[1]).toBe("Mejía, Nicolás");
+    expect(t.rows[1]?.[1]).toBe("Rojas, Mateo");
   });
 
   it("con «Nombre» y «Apellido» separados (Google Forms), propone la columna que los une (D10)", () => {
@@ -154,7 +154,7 @@ describe("quiénes entran", () => {
 describe("columnToText", () => {
   it("entrega un nombre por línea, listo para el protocolo", () => {
     const t = parseTable(LUMA)!;
-    expect(columnToText(t, t.suggested)).toBe("Ana Quispe\nMejía Nicolás\nRodrigo Mamani");
+    expect(columnToText(t, t.suggested)).toBe("Ana Quispe\nRojas Mateo\nRodrigo Mamani");
   });
 
   it("no deja comas, porque el protocolo corta en la primera", () => {
@@ -162,7 +162,7 @@ describe("columnToText", () => {
     const text = columnToText(t, t.suggested);
     expect(text).not.toContain(",");
     // Sin esta capa, el protocolo se quedaba con "Mejía" y perdía el nombre.
-    expect(canonicalList(text)).toEqual(["Ana Quispe", "Mejía Nicolás", "Rodrigo Mamani"]);
+    expect(canonicalList(text)).toEqual(["Ana Quispe", "Rojas Mateo", "Rodrigo Mamani"]);
   });
 
   it("salta las celdas vacías en vez de sortear a un fantasma", () => {
@@ -411,21 +411,21 @@ describe("cuántos repetidos iguales deja afuera la lista canónica", () => {
 
 describe("una fila que no encaja no descarta la tabla", () => {
   it("una coma sin comillas en el nombre se arregla", () => {
-    const t = parseTable("Nombre,Correo\nAna Vargas,ana@example.org\nMejía, Nicolás,nico@example.org\nPablo Gutiérrez,pablo@example.org")!;
+    const t = parseTable("Nombre,Correo\nAna Vargas,ana@example.org\nRojas, Mateo,nico@example.org\nPablo Gutiérrez,pablo@example.org")!;
     expect(t.columns).toEqual(["Nombre", "Correo"]);
     expect(t.rows).toEqual([
       ["Ana Vargas", "ana@example.org"],
-      ["Mejía, Nicolás", "nico@example.org"],
+      ["Rojas, Mateo", "nico@example.org"],
       ["Pablo Gutiérrez", "pablo@example.org"],
     ]);
     expect(t.skipped).toEqual([]);
   });
 
   it("en un export de Luma, también: la coma estaba en el nombre y no en el código", () => {
-    const t = parseTable(LUMA.replace('"Mejía, Nicolás"', "Mejía, Nicolás"))!;
+    const t = parseTable(LUMA.replace('"Rojas, Mateo"', "Rojas, Mateo"))!;
     expect(t.skipped).toEqual([]);
-    expect(t.rows[1]?.slice(0, 3)).toEqual(["evt-guest-b2", "Mejía, Nicolás", "nico@example.org"]);
-    expect(columnToText(t, t.suggested)).toBe("Ana Quispe\nMejía Nicolás\nRodrigo Mamani");
+    expect(t.rows[1]?.slice(0, 3)).toEqual(["evt-guest-b2", "Rojas, Mateo", "nico@example.org"]);
+    expect(columnToText(t, t.suggested)).toBe("Ana Quispe\nRojas Mateo\nRodrigo Mamani");
   });
 
   it("si la coma pudo estar en dos columnas, no adivina: salta la fila y dice en qué línea está", () => {
@@ -456,13 +456,13 @@ describe("una fila que no encaja no descarta la tabla", () => {
   });
 
   it("una lista con alguna coma suelta sigue siendo una lista", () => {
-    expect(looksTabular("Mejía, Nicolás\nAna Vargas\nLuis Choque")).toBe(false);
+    expect(looksTabular("Rojas, Mateo\nAna Vargas\nLuis Choque")).toBe(false);
   });
 
   it("el punto y coma de Excel en español gana aunque los nombres tengan comas", () => {
-    const t = parseTable("Nombre;Correo\nMejía, Nicolás;nico@example.org\nQuispe, María;maria@example.org")!;
+    const t = parseTable("Nombre;Correo\nRojas, Mateo;nico@example.org\nQuispe, María;maria@example.org")!;
     expect(t.columns).toEqual(["Nombre", "Correo"]);
-    expect(t.rows.map((r) => r[0])).toEqual(["Mejía, Nicolás", "Quispe, María"]);
+    expect(t.rows.map((r) => r[0])).toEqual(["Rojas, Mateo", "Quispe, María"]);
   });
 });
 
