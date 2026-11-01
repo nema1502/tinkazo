@@ -1,4 +1,5 @@
 import { esc } from "../dom";
+import type { EventoError } from "./error-accion";
 import { getLang, t } from "../i18n";
 import { app, avatar } from "../state";
 import { beep, note } from "../sound";
@@ -386,10 +387,10 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   };
 
   /** Una sola acción, grande: lanzar el sorteo o reintentarlo. Con el foco, para seguir con Enter. */
-  const accion = (a: Fase, texto: string, boton: string): void => {
+  const accion = (a: Fase, texto: string, boton: string, hacer = sortear): void => {
     pasar(a, `<p class="espera-motivo" role="${a === "fallo" ? "alert" : "status"}">${esc(texto)}</p><button class="primary espera-accion" type="button">${esc(boton)}</button>`);
     const b = sigue?.querySelector<HTMLButtonElement>(".espera-accion");
-    b?.addEventListener("click", sortear);
+    b?.addEventListener("click", hacer);
     b?.focus({ preventScroll: true });
   };
 
@@ -401,7 +402,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   const alError = (e: Event): void => {
     if (fase !== "sorteando") return;
     e.preventDefault();
-    accion("fallo", String((e as CustomEvent<string>).detail ?? ""), t("drawRetry"));
+    const evento = e as EventoError;
+    accion("fallo", String(evento.detail ?? ""), evento.accion?.texto ?? t("drawRetry"), evento.accion?.ejecutar ?? sortear);
   };
   document.addEventListener("tinkazo:error", alError);
   // El sello entró tarde (el reintento de "Seguir sin sello", `freeze.ts`): el pie deja de decir que no se puede comprobar.

@@ -1,4 +1,5 @@
 import { $ } from "../dom";
+import { eventoError, type AccionError } from "./error-accion";
 import { onLangChange, t } from "../i18n";
 import { app } from "../state";
 import { mantenerDespierta, soltarDespierta } from "./despierta";
@@ -325,8 +326,8 @@ export function actualizarPaso(): void {
  * ofrece el mensaje primero (`tinkazo:error`), y si lo muestra, con la acción
  * para reintentar, la página de atrás no se mueve (espera.ts).
  */
-export function verError(mensaje: HTMLElement): void {
-  const enGrande = new CustomEvent("tinkazo:error", { detail: mensaje.textContent?.trim() ?? "", cancelable: true });
+export function verError(mensaje: HTMLElement, accion?: AccionError): void {
+  const enGrande = eventoError(mensaje.textContent?.trim() ?? "", accion);
   if (!document.dispatchEvent(enGrande)) return;
   const r = mensaje.getBoundingClientRect();
   const cab = document.querySelector("header");
