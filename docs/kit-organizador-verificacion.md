@@ -47,3 +47,12 @@ Los PDF son evidencia de una preview local propia, no de producción. Las anotac
 - Chromium local no tiene sandbox utilizable; no se desactivó. Se utilizaron WebKit y Firefox disponibles.
 - Preview Vercel auténtica y CI remoto pendientes de la publicación. Un HTTP 200 de Login–Vercel no cuenta como aceptación en computadora o celular.
 - Sin integración ni despliegue de producción. `Risk: none`: se agregan claves de datos y módulos locales; no se altera lógica compartida ni valores anteriores consumidos por otras páginas.
+
+
+## Entrega y vista previa
+
+PR [#5](https://github.com/nema1502/tinkazo/pull/5), en borrador y sin integración ni despliegue de producción. El código funcional `9b1a3ab4e3d7fa2f9b29804573fc9d0979036a16` pasó [CI 41343215427](https://github.com/nema1502/tinkazo/actions/runs/41343215427). Los [checks del último HEAD](https://github.com/nema1502/tinkazo/pull/5/checks) distinguen las recepciones documentales posteriores.
+
+La preview del deployment `7478088101` se abrió en WebKit real a 1280×900: redirección a **Login – Vercel**, HTTP 200, sin errores JavaScript. No es una revisión de la aplicación; la vista celular no se ejecutó tras detectar la protección. Evidencia local: `.evidence/kit-parent/preview-zeKvaD/results.json`. No se usaron cookies, credenciales ni mecanismos para eludir la protección.
+
+La etiqueta única `type:feature` está aplicada. Falta indicar el issue aprobado para vincularlo sin cierre automático y proporcionar acceso autorizado a la preview. Las comprobaciones digitales locales siguen válidas porque esta recepción solo cambia documentación; no sustituye la aceptación remota ni las pruebas físicas pendientes.
