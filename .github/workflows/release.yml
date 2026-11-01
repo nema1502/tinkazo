@@ -148,7 +148,7 @@ jobs:
           job="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs" \
             --jq '.jobs[] | select(.name | endswith("/ build")) | .id' | head -1)"
           if [ -n "$job" ]; then
-            gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs" > "$log" 2>/dev/null || true
+            gh api --allow-escape-sequences "repos/$GITHUB_REPOSITORY/actions/jobs/$job/logs" > "$log" 2>/dev/null || true
           fi
           if [ -s "$log" ] && grep -q '{"ok":1}' "$log"; then
             estado='lo recibió ({"ok":1})'

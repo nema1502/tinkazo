@@ -1,0 +1,59 @@
+# Le vuelve a avisar a StellarExpert de un .wasm que ya compiló su workflow.
+#
+# El aviso original sale una sola vez, dentro de la compilación: antes de la atestación
+# y, si el contrato se despliega después, antes de que el .wasm esté en la red. Repetir
+# el release no sirve para reintentar: crearía otro release y otra atestación del mismo
+# hash. Esto manda el mismo pedido, sin compilar ni tocar nada, cuando ya está todo en
+# su lugar. Su servicio solo acepta pedidos desde los runners de GitHub Actions.
+# Los pasos: docs/deployments.md, «Si StellarExpert no lo marca».
+name: Reenviar el aviso de verificación
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Commit del release
+        required: true
+        default: 2466bda763493c3fd5bb50e5cb29cc6db77fde31
+      corrida:
+        description: Corrida del release que compiló el .wasm
+        required: true
+        default: '39787005483'
+      hash:
+        description: sha256 del .wasm
+        required: true
+        default: c0c7a1dda9e1f7c17721542b17da589d6f5ed89936c095145c89410ff1aaa61b
+      paquete:
+        description: Paquete de Cargo
+        required: true
+        default: tinkazo-raffle
+
+permissions: {}
+
+jobs:
+  avisar:
+    name: Avisar a StellarExpert
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Reenviar el pedido
+        env:
+          COMMIT: ${{ inputs.commit }}
+          CORRIDA: ${{ inputs.corrida }}
+          HASH: ${{ inputs.hash }}
+          PAQUETE: ${{ inputs.paquete }}
+        run: |
+          cuerpo="$(jq -cn \
+            --arg repository "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --arg commitHash "$COMMIT" \
+            --arg runId "$CORRIDA" \
+            --arg contractHash "$HASH" \
+            --arg packageName "$PAQUETE" \
+            '{$repository, $commitHash, jobId: "build", $runId, $contractHash, $packageName}')"
+          echo "Pedido: $cuerpo"
+          respuesta="$(curl -sS -X POST "https://api.stellar.expert/explorer/public/contract-validation/match" \
+            -H "Content-Type: application/json" -d "$cuerpo" --max-time 30)"
+          echo "Respuesta: $respuesta"
+          echo "StellarExpert respondió: \`$respuesta\`" >> "$GITHUB_STEP_SUMMARY"
+          # {"ok":1} es que lo recibió, no que ya lo marcó: eso se mira después en su API.
+          [ "$respuesta" = '{"ok":1}' ]

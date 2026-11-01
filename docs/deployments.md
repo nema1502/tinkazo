@@ -174,8 +174,8 @@ El workflow hace esa recompilación en otra máquina en cada release y falla si 
 Ese servicio es de StellarExpert y no depende de nosotros: entre fines de julio y el 13 de octubre de 2026 no verificó contratos ([soroban-build-workflow#9](https://github.com/stellar-expert/soroban-build-workflow/issues/9)). Si una hora después del release el contrato sigue sin marcar:
 
 1. En la corrida, el paso «Respuesta de StellarExpert» del job «Comprobar el release» dice qué respondió: `{"ok":1}` es que lo recibió.
-2. Reintentar con un tag nuevo sobre el mismo commit (por ejemplo `v0.1.0-r2`): compila los mismos bytes, publica otro release y vuelve a avisar.
-3. Si aun así no lo marca, abrir un issue en `stellar-expert/soroban-build-workflow` con el hash, el commit y la corrida.
+2. Reenviar el aviso con el workflow «Reenviar el aviso de verificación»: `gh workflow run reenviar-verificacion.yml`. Manda el mismo pedido, sin compilar ni crear otro release. Conviene repetirlo después de desplegar en mainnet, con el `.wasm` ya en la red.
+3. Si aun así no lo marca, escribir en `stellar-expert/soroban-build-workflow` con el hash, el commit y la corrida.
 
 Mientras tanto la prueba sigue en pie: la atestación (caminos 2 y 3) y la recompilación (camino 4) no dependen de stellar.expert.
 
