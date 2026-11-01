@@ -370,7 +370,7 @@ function pintarLista(): void {
   const nombre = evento.titulo.trim();
   $("ev-titulo").textContent = nombre;
   $("ev-nombre-box").style.display = nombre ? "" : "none";
-  document.title = nombre ? `${nombre} · Tinkazo` : "Tinkazo";
+  document.title = nombre ? `${nombre}, en Tinkazo` : "Tinkazo";
   $("ev-count").textContent = entran.length === 1 ? t("evUnSorteo") : t("evNSorteos").replace("{n}", String(entran.length));
   $("ev-lista").innerHTML = entran.length ? entran.map((s, i) => tarjeta(s, i)).join("") : `<p class="note">${esc(t("evVacio"))}</p>`;
 }

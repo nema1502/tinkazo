@@ -1124,7 +1124,7 @@ export const T: Record<Lang, Dict> = {
     pgCta: "Sortear ahora. Participar es gratis.", pgRelT: "Mirá también",
     navMeetup: "Sorteo para meetup", navClase: "Sorteo en clase", navVerif: "Sorteo verificable",
     // Título y descripción de la portada en inglés. Su <html> no pide estas claves: así el título y la meta quedan en español para el buscador. Quedan aquí por si el autor decide otra cosa.
-    titPortada: "Tinkazo · sorteos verificables para eventos y clases",
+    titPortada: "Tinkazo, sorteos verificables para eventos y clases",
     descPortada: "Sorteos verificables para tu meetup, clase o evento. El ganador sale de un número público que nadie puede elegir. Participar es gratis.",
     // Título y descripción de cada página de sorteo: su <html> trae la clave de cada una.
     titMeetup: "Sorteo para meetup: en pantalla grande y comprobable",
@@ -1339,7 +1339,7 @@ export const T: Record<Lang, Dict> = {
     cfSin3a: "El protocolo, en GitHub →",
     demoBanner: "Demo con una lista de ejemplo: no se graba nada en Stellar.",
     demoFinT: "Así de fácil. ¿Lo hacemos con tu lista?",
-    cfTitle: "Cómo funciona · Tinkazo",
+    cfTitle: "Cómo funciona Tinkazo",
     cfKicker: "Cómo funciona",
     cfH1: "Cinco pasos, y cada uno se puede comprobar.",
     cfLead: "Así sale un ganador en Tinkazo, sin jerga. Si querés el detalle técnico, está en el protocolo y en la página de seguridad.",
@@ -2768,7 +2768,7 @@ export const T: Record<Lang, Dict> = {
     pgCta: "Draw now. Taking part is free.", pgRelT: "See also",
     navMeetup: "Meetup draw", navClase: "Class draw", navVerif: "Verifiable draw",
     // The home page's English title and description. Its <html> does not ask for these keys, so the title and the meta stay in Spanish for search engines. They stay here in case that changes.
-    titPortada: "Tinkazo · verifiable draws for events and classes",
+    titPortada: "Tinkazo, verifiable draws for events and classes",
     descPortada: "Verifiable draws for your meetup, class or event. The winner comes from a public number that nobody can choose. Taking part is free.",
     // The title and description of each draw page: its <html> carries each key.
     titMeetup: "Meetup draw: on the big screen and checkable",
@@ -2982,7 +2982,7 @@ export const T: Record<Lang, Dict> = {
     cfSin3a: "The protocol, on GitHub →",
     demoBanner: "Demo with a sample list: nothing is recorded on Stellar.",
     demoFinT: "That easy. Shall we do it with your list?",
-    cfTitle: "How it works · Tinkazo",
+    cfTitle: "How Tinkazo works",
     cfKicker: "How it works",
     cfH1: "Five steps, and every one of them can be checked.",
     cfLead: "This is how a winner comes out in Tinkazo, without jargon. For the technical detail, see the protocol and the security page.",

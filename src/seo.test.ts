@@ -212,7 +212,7 @@ describe("ícono y tarjeta de compartir de la portada", () => {
 
   it("el título es el de la portada, tiene de 30 a 60 caracteres, empieza con Tinkazo, y og:title lo repite", () => {
     const titulo = html.match(/<title>([^<]*)<\/title>/)?.[1] ?? "";
-    expect(titulo).toBe("Tinkazo · sorteos verificables para eventos y clases");
+    expect(titulo).toBe("Tinkazo, sorteos verificables para eventos y clases");
     expect([...titulo].length).toBeGreaterThanOrEqual(30);
     expect([...titulo].length).toBeLessThanOrEqual(60);
     expect(titulo.startsWith("Tinkazo")).toBe(true);
