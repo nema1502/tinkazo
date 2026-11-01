@@ -1,0 +1,47 @@
+# Celular — task 1
+Implement the approved mobile header and actionable flow errors. Branch: `guido/celular` from current remote main.
+Delivery: single PR to `main` as explicitly requested; Spanish commits; no merge or production deployment. Runner: pnpm/Vitest and browser audits.
+
+## Specs
+S1. “A 320 px, la cabecera cerrada debe conservar exactamente dos filas: logo, idioma y cuenta arriba; «Sortear», «Mis sorteos» y «Más» debajo. No debe haber controles cortados, superpuestos ni scroll horizontal.”
+S2. “En el flujo de entrar, sellar, sortear y mostrar en grande, cada error confirmado debe explicar qué pasó y ofrecer una acción que realmente resuelva ese caso, visible también desde la barra «lo que sigue» y la espera grande.”
+S3. “Conservá las reglas actuales de `docs/ux.md`: una sola acción principal visible por paso; controles táctiles de al menos 44 px; cuenta visible sin correo en la cabecera; menú «Más» con los cierres actuales; respaldo de vista grande en iPhone cuando no hay Fullscreen API.”
+S4. “Conservá la marca de `docs/marca.md`: «Sortear» es la única acción amarilla de navegación; colores planos, bordes de tinta, temas claro y oscuro. Todo texto nuevo debe estar en español e inglés.”
+S5. “Reproducí los candidatos H1 y E1–E4 **antes de corregirlos**. Si uno ya funciona, dejalo intacto y mostrá la evidencia. Instalá las dependencias y un navegador de prueba que falten en el entorno; la falta inicial de `node_modules`, `dist`, Chrome o Edge no es un defecto del producto.”
+S6. “Clasificá los fallos solo cuando haya evidencia. Para causas desconocidas, usá un mensaje neutral con reintento u otra vía de ingreso; no atribuyas el fallo a internet, correo o billetera sin saberlo. Los ejemplos de correo en la interfaz son texto, no enlaces `mailto:`.”
+S7. “Para `notFound`, ofrecé volver a preparar la lista **solo cuando esté confirmado que ese sorteo no existe**, conservando los datos y exigiendo otro gesto explícito para sellar. Para `alreadyDrawn`, comprobá primero si puede recuperarse y mostrarse el resultado registrado; si no, ofrecé la ruta de consulta que realmente lo encuentre. Conservá el manejo de operaciones inciertas: nunca crees otro sello como respuesta automática.”
+S8. “Verificá 320, 360, 375 y 414 px; ES/EN; temas claro/oscuro; estados de cuenta; ingreso, sello, espera, sorteo y resultado grande. Probá los errores corregidos desde su superficie real, incluida la barra y la espera. Entregá capturas antes/después, resultados de tu flujo RED→GREEN, dispositivos o perfiles usados y cualquier limitación para pruebas físicas. Antes de subir, ejecutá `pnpm typecheck`, `pnpm test` y `pnpm build`.”
+S9. “No toques el contrato ni el protocolo Stellar, la selección de ganadores, los juegos, el Worker, la paleta o las otras tareas del sprint.” “No despliegues producción ni integres el PR.”
+S10. “Hacé commits en español, sin notas personales. Abrí un PR a `main`” “Nosotros integraremos el PR.” Author and exact additional constraints are in L1.
+
+## Tasks
+- T1 | S5,S8,S10 | inline environment/base preparation | done | base e05a802; pnpm install exit 0; Playwright 1.63.0 and cached Chromium 1243 available; author configured; setup logs job-1/job-2
+- T2 | S1,S3,S4,S5,S8,S9 | delegated header writer, independent unit | in_progress | commit: pending
+- T3 | S2,S3,S4,S5,S6,S7,S8,S9 | delegated error-flow writer, independent unit | in_progress | commit: pending
+- T4 | S1–S9 | independent verification of shared UI contracts + parent seam checks | pending | commit: pending
+- T5 | S8,S10 | inline Spanish commits, PR and preview review | pending | commit: pending
+
+## Log
+L1 — Original approved implementation request (verbatim):
+
+Gentle Shell: implementá la tarea 1, **«Celular»**, siguiendo el plan que entregaste y estas decisiones. Trabajá en una rama `guido/celular` creada desde el `main` más reciente. Configurá el autor como `Guido Salazar Vargas <guido.salazar.vargas7@gmail.com>`.
+
+**Problema y resultado esperado.** A 320 px, la cabecera cerrada debe conservar exactamente dos filas: logo, idioma y cuenta arriba; «Sortear», «Mis sorteos» y «Más» debajo. No debe haber controles cortados, superpuestos ni scroll horizontal. En el flujo de entrar, sellar, sortear y mostrar en grande, cada error confirmado debe explicar qué pasó y ofrecer una acción que realmente resuelva ese caso, visible también desde la barra «lo que sigue» y la espera grande.
+
+**Decisiones que aplican.**
+
+- Conservá las reglas actuales de `docs/ux.md`: una sola acción principal visible por paso; controles táctiles de al menos 44 px; cuenta visible sin correo en la cabecera; menú «Más» con los cierres actuales; respaldo de vista grande en iPhone cuando no hay Fullscreen API.
+- Conservá la marca de `docs/marca.md`: «Sortear» es la única acción amarilla de navegación; colores planos, bordes de tinta, temas claro y oscuro. Todo texto nuevo debe estar en español e inglés.
+- Reproducí los candidatos H1 y E1–E4 **antes de corregirlos**. Si uno ya funciona, dejalo intacto y mostrá la evidencia. Instalá las dependencias y un navegador de prueba que falten en el entorno; la falta inicial de `node_modules`, `dist`, Chrome o Edge no es un defecto del producto.
+- Clasificá los fallos solo cuando haya evidencia. Para causas desconocidas, usá un mensaje neutral con reintento u otra vía de ingreso; no atribuyas el fallo a internet, correo o billetera sin saberlo. Los ejemplos de correo en la interfaz son texto, no enlaces `mailto:`. Referencia: [WCAG, sugerencias para corregir errores](https://www.w3.org/WAI/WCAG22/Understanding/error-suggestion.html).
+- Para `notFound`, ofrecé volver a preparar la lista **solo cuando esté confirmado que ese sorteo no existe**, conservando los datos y exigiendo otro gesto explícito para sellar. Para `alreadyDrawn`, comprobá primero si puede recuperarse y mostrarse el resultado registrado; si no, ofrecé la ruta de consulta que realmente lo encuentre. Conservá el manejo de operaciones inciertas: nunca crees otro sello como respuesta automática.
+- La emulación ayuda a cubrir anchos y navegadores, pero reportala como emulación. No afirmes que probaste un Android o iPhone físico si no tuviste el equipo. [Playwright documenta qué emula](https://playwright.dev/docs/emulation); en iPhone conservá la vista grande interna según el comportamiento documentado por [WebKit](https://bugs.webkit.org/show_bug.cgi?id=328773).
+
+**Criterios de aceptación.** Verificá 320, 360, 375 y 414 px; ES/EN; temas claro/oscuro; estados de cuenta; ingreso, sello, espera, sorteo y resultado grande. Probá los errores corregidos desde su superficie real, incluida la barra y la espera. Entregá capturas antes/después, resultados de tu flujo RED→GREEN, dispositivos o perfiles usados y cualquier limitación para pruebas físicas. Antes de subir, ejecutá `pnpm typecheck`, `pnpm test` y `pnpm build`.
+
+Hacé commits en español, sin notas personales. Abrí un PR a `main`, revisá la [preview de Vercel](https://vercel.com/docs/git) en computadora y en los móviles a los que tengas acceso, y pasanos URL, capturas y estado de las pruebas. Nosotros integraremos el PR.
+
+**Qué no cambiar.** No toques el contrato ni el protocolo Stellar, la selección de ganadores, los juegos, el Worker, la paleta o las otras tareas del sprint. Los defectos de altura 521–600 px y zoom final en horizontal corresponden a la tarea 5; registralos si aparecen, sin ampliar este cambio salvo que bloqueen el flujo solicitado. No despliegues producción ni integres el PR.
+
+L2 — Baseline: e05a802c6bf6932962d766bdcb7b4e276be33c28; remote main matches. Prior planning findings were source-only. Reproduce H1: header first-row wrapping at 320; E1: selector import rejection; E2: disappearing actionless connection notice; E3: generic code send/verify feedback; E4: generic drawRetry versus notFound/alreadyDrawn. Existing menu/privacy/fullscreen fallback must remain.
+L3 — Routing: parallel writers because header and flow-error behavior are independent multi-file units; disjoint surfaces. Parent owns setup, integration, commits and delivery. Forecast ~700–1100 authored lines with regression tests/browser probes; one PR explicitly requested, coherent commits, no scope growth for line count. Risk: item 3 (shared header styles and error handoff contracts consumed by existing UI); one independent verification after integration. No physical devices confirmed accessible. RDD switch reports on; candidate consent remains separate.
