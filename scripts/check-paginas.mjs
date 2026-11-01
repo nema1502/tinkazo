@@ -23,7 +23,7 @@ const base = (() => {
   return i >= 0 && args[i + 1] ? args[i + 1] : "http://localhost:4173";
 })();
 
-const PAGINAS = ["juegos", "como-funciona", "historia", "seguridad", "precios", "terminos", "sorteo-para-meetup", "sorteo-en-clase", "sorteo-verificable"];
+const PAGINAS = ["juegos", "como-funciona", "historia", "seguridad", "precios", "terminos", "sorteo-para-meetup", "sorteo-en-clase", "sorteo-verificable", "marca"];
 const VISTAS = [
   { tema: "dark", ancho: 1280, alto: 900, como: "escritorio" },
   { tema: "light", ancho: 1280, alto: 900, como: "escritorio" },
@@ -118,8 +118,11 @@ try {
       // Cada página de lectura, más el código. Se compara contra la lista de
       // arriba y no contra un número: con un número, agregar una página
       // obligaba a acordarse de cambiarlo acá.
-      const faltan = PAGINAS.filter((p) => !r.enlaces.includes(`/${p}.html`));
-      check(faltan.length === 0 && r.enlaces.length === PAGINAS.length + 1, `${etiqueta}: el pie lleva a todas`, faltan.length ? `falta ${faltan.join(", ")}` : `${r.enlaces.length} enlaces`);
+      // Marca se descubre desde la portada: no exige reescribir los pies anteriores.
+      const esperadas = PAGINAS.filter((q) => q !== "marca" || p === "marca");
+      const faltan = esperadas.filter((q) => !r.enlaces.includes(`/${q}.html`));
+      const conocidas = [...PAGINAS.map((q) => `/${q}.html`), "https://github.com/nema1502/tinkazo"];
+      check(faltan.length === 0 && r.enlaces.includes("https://github.com/nema1502/tinkazo") && new Set(r.enlaces).size === r.enlaces.length && r.enlaces.every((h) => conocidas.includes(h)), `${etiqueta}: el pie lleva a todas`, faltan.length ? `falta ${faltan.join(", ")}` : `${r.enlaces.length} enlaces`);
       if (como === "celular") check(r.toque, `${etiqueta}: blancos de toque de 44 px`);
       check(page.exceptions.length === 0, `${etiqueta}: sin excepciones`, page.exceptions[0] ?? "");
     }

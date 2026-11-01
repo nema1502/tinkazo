@@ -19,6 +19,7 @@ const PUBLICAS: Record<string, string> = {
   "index.html": `${BASE}/`,
   "juegos.html": `${BASE}/juegos.html`,
   "historia.html": `${BASE}/historia.html`,
+  "marca.html": `${BASE}/marca.html`,
   "como-funciona.html": `${BASE}/como-funciona.html`,
   "seguridad.html": `${BASE}/seguridad.html`,
   "precios.html": `${BASE}/precios.html`,
