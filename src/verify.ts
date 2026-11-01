@@ -21,6 +21,7 @@ import { buscar, vecesExacto } from "./buscar";
 import { fechaLarga } from "./ui/agrupar";
 // Estático, no con import(): así las claves de compartir entran en los textos de esta página.
 import { abrirSorteo } from "./ui/compartir";
+import { montarConfianza } from "./ui/confianza";
 import { contarApertura, contarVeredicto, quitarMarca, refDe, viaDe } from "./contar";
 import { type PropsDe, type Ref, contratoOficial } from "../workers/enlaces/src/conteo";
 
@@ -205,6 +206,7 @@ async function main(): Promise<void> {
   actual = { proof, r: revision };
   pintarComprobaciones(proof, revision);
   contar(proof, revision);
+  if (ref) montarConfianza($("confianza"), ref);
   // Después del resultado y de las comprobaciones, la leyenda del juego (si el enlace trae `?juego=`).
   pintarLaLeyenda();
 }
