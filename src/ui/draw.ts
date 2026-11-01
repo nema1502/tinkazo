@@ -8,7 +8,8 @@ import { verifyRoundAsync } from "../protocol/firma";
 import { select } from "../protocol/select";
 import { network, txUrl } from "../stellar/config";
 import { PROOF_VERSION, type Proof, proofUrl } from "../protocol/proof";
-import { drawOnChain, escribirError, limpiarDetalle, readDraw, showTxStatus, stepLabel } from "./anchor";
+import { drawOnChain, escribirError, existenciaDelSorteo, limpiarDetalle, readDraw, showTxStatus, stepLabel } from "./anchor";
+import type { AccionError } from "./error-accion";
 import { loreFor } from "../games/lore";
 import { pintarLeyenda } from "./leyenda";
 import { currentSession } from "./wallet-ui";
@@ -37,7 +38,15 @@ async function resolveBeacon(
   return { round, randomness: bytesToHex(randomnessOf(signature)), signature };
 }
 
+/** La acción corresponde al sello que falló; nunca se hereda al siguiente sorteo. */
+let recuperacion: { sello: NonNullable<typeof app.frozen>; accion: AccionError } | null = null;
+
 export async function draw(): Promise<void> {
+  if (recuperacion?.sello === app.frozen) {
+    recuperacion.accion.ejecutar();
+    return;
+  }
+  recuperacion = null;
   if (!app.frozen || app.drawn || secondsToRound() > 0) return;
   // Tiene que correr dentro del clic: los navegadores no dejan hablar a una
   // página que nunca recibió uno, y esa habilitación después queda pegada.
@@ -162,7 +171,10 @@ export async function draw(): Promise<void> {
         status.style.display = "block";
         status.className = "txstatus bad";
         await escribirError(status, fin.error, "sorteo");
-        verError(status);
+        const clave = errorKey(fin.error);
+        if (clave === "notFound" || clave === "alreadyDrawn") {
+          await ofrecerRecuperacion(status, clave, beacon);
+        } else verError(status);
         return;
       }
       winners = fin.valor.winners;
@@ -216,6 +228,48 @@ export async function draw(): Promise<void> {
     await escribirError(status, e, "sorteo");
     verError(status);
   }
+}
+
+/** Recupera el paso, no la operación: preparar no sella y consultar no vuelve a sortear. */
+async function ofrecerRecuperacion(status: HTMLElement, causa: "notFound" | "alreadyDrawn", beacon: Beacon): Promise<void> {
+  const sello = app.frozen;
+  if (!sello || sello.raffleId === undefined) return;
+  const ausencia = causa === "notFound" && await existenciaDelSorteo(sello.raffleId) === "ausente";
+  // El comprobante consulta exactamente este número, contrato y red; no depende
+  // de que el historial local lo contenga, y conserva el hash del sello si existe.
+  const enlace = ausencia ? "" : await proofUrl({
+    v: PROOF_VERSION, names: sello.names, round: sello.round, sealedAt: sello.ts,
+    prize: sello.prize, net: network.name, contract: network.contractId ?? "",
+    id: String(sello.raffleId), signature: beacon.signature,
+    ...(sello.sealTx ? { stx: sello.sealTx } : {}),
+  });
+  if (app.frozen !== sello) return;
+  const clave = ausencia ? "drawPreparar" : "drawConsultar";
+  const accion: AccionError = {
+    texto: t(clave),
+    ejecutar: () => {
+      if (app.frozen !== sello) return;
+      if (!ausencia) { location.assign(enlace); return; }
+      const cantidad = $<HTMLSelectElement>("nw").value;
+      recuperacion = null;
+      // Usa el camino existente: cancela esperas/reintentos, abre los campos y
+      // activa la guarda contra doble toque. No toca la sesión ni la red.
+      unfreeze(sello.names.join("\n"));
+      ponerPremio(sello.prize);
+      $<HTMLSelectElement>("nw").value = cantidad;
+      status.style.display = "none";
+      $<HTMLButtonElement>("btn-draw").dataset.i = "draw";
+      $("sec-participants").scrollIntoView({ block: "start" });
+      $("btn-freeze").focus({ preventScroll: true });
+      actualizarPaso();
+    },
+  };
+  recuperacion = { sello, accion };
+  const btn = $("btn-draw");
+  btn.dataset.i = clave;
+  btn.textContent = accion.texto;
+  status.textContent = t(ausencia ? "drawAusente" : causa === "notFound" ? "drawSinConfirmar" : "errAnchor.alreadyDrawn");
+  verError(status, accion);
 }
 
 /**

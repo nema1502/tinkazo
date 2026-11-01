@@ -582,6 +582,22 @@ export async function readDraw(
   return { winners: [...d.winners], randomness: toHex(d.randomness as unknown as Uint8Array) };
 }
 
+/**
+ * Un vacío puede ser estado archivado, no inexistencia. Solo un número todavía
+ * no asignado por el contador del mismo contrato confirma que nunca existió.
+ */
+export async function existenciaDelSorteo(raffleId: bigint): Promise<"ausente" | "existe" | "desconocida"> {
+  try {
+    const { getClient } = await import("../stellar/contract");
+    const client = await getClient();
+    if ((await client.get_raffle({ raffle_id: raffleId })).result) return "existe";
+    const siguiente = (await client.next_id()).result;
+    return typeof siguiente === "bigint" && siguiente > 0n && raffleId >= siguiente ? "ausente" : "desconocida";
+  } catch {
+    return "desconocida";
+  }
+}
+
 /** Los métodos que devuelven `Result` traen un envoltorio con `unwrap`. */
 function unwrap<T>(value: unknown): T {
   if (value && typeof value === "object" && "unwrap" in value) {
@@ -700,12 +716,11 @@ export async function anchorErrorText(e: unknown): Promise<string> {
 }
 
 /**
- * Si ni siquiera se pudo bajar el módulo que clasifica el error, es que no hay
- * conexión: la página no alcanza ni sus propios archivos. Se dice eso, con lo
- * que ya está en la página.
+ * Si no se pudo bajar el clasificador no se deduce una causa. Solo el estado
+ * sin conexión confirmado por el navegador permite atribuirlo a internet.
  */
 const sinConexion = (): string =>
-  t(typeof navigator !== "undefined" && navigator.onLine === false ? "errAnchor.offline" : "errAnchor.rpcDown");
+  t(typeof navigator !== "undefined" && navigator.onLine === false ? "errAnchor.offline" : "errAnchor.unknown");
 
 /**
  * Escribe el error en `status`, con el detalle plegado debajo (`detalle-error.ts`).
@@ -718,7 +733,7 @@ export async function escribirError(status: HTMLElement, e: unknown, paso: "sell
     await (await import("./detalle-error")).mostrarError(status, e, paso);
   } catch {
     limpiarDetalle(status.id);
-    status.textContent = sinConexion();
+    status.textContent = await anchorErrorText(e);
   }
 }
 
