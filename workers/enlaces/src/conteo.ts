@@ -84,6 +84,8 @@ export const EVENTOS = {
   proof_open: { p: { via: ["long", "short", "qr"] }, o: {}, ref: "opcional" },
   /** Verifica: cómo terminó la verificación de un sorteo anclado. */
   proof_verdict: { p: { verdict: ["green", "yellow", "red", "error"] }, o: {}, ref: "siempre" },
+  /** Opinión opcional: una referencia admisible no prueba que el sorteo exista. */
+  proof_trust: { p: { answer: ["yes", "no", "unsure"] }, o: {}, ref: "siempre" },
 } as const satisfies Readonly<Record<string, Regla>>;
 
 type Spec = typeof EVENTOS;
@@ -160,6 +162,28 @@ export function validarRef(x: unknown, oficiales: Readonly<Record<Red, readonly 
 }
 
 /**
+ * Referencia admisible para una opinión, no prueba de existencia ni de verificación.
+ * Conserva la validación de forma y admite anteriores solo con ultimoId válido.
+ * No importa oficiales.ts: su configuración de página depende de Vite.
+ */
+export function validarRefConfianza(x: unknown): Ref | null {
+  const oficiales: Record<Red, string[]> = { mainnet: [], testnet: [] };
+  for (const net of REDES) {
+    const d = deployments[net] as { contractId?: string; anteriores?: { contractId: string; ultimoId?: number }[] } | null;
+    if (d?.contractId) oficiales[net].push(d.contractId);
+    for (const a of d?.anteriores ?? []) {
+      if (Number.isSafeInteger(a.ultimoId) && (a.ultimoId as number) >= 0) oficiales[net].push(a.contractId);
+    }
+  }
+  const ref = validarRef(x, oficiales);
+  if (!ref) return null;
+  const d = deployments[ref.net] as { contractId?: string; anteriores?: { contractId: string; ultimoId?: number }[] } | null;
+  if (d?.contractId === ref.contract) return ref;
+  const anterior = d?.anteriores?.find((a) => a.contractId === ref.contract);
+  return anterior && BigInt(ref.id) <= BigInt(anterior.ultimoId as number) ? ref : null;
+}
+
+/**
  * Valida un conteo ya leído como JSON: `{ e, p?, ref? }`. Rechaza cualquier
  * campo, evento, propiedad o valor que no esté en la lista cerrada, una
  * propiedad que falta, y una referencia donde no va, mal formada o de un
@@ -184,7 +208,7 @@ export function validarConteo(x: unknown, oficiales: Readonly<Record<Red, readon
   let ref: Ref | null = null;
   if (x.ref !== undefined) {
     if (regla.ref === "no") return no("ref");
-    ref = validarRef(x.ref, oficiales);
+    ref = e === "proof_trust" ? validarRefConfianza(x.ref) : validarRef(x.ref, oficiales);
     if (!ref) return no("ref");
   } else if (regla.ref === "siempre") return no("ref");
   return { ok: true, conteo: { e: e as Evento, p, ref } };
