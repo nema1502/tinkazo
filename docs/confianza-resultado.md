@@ -73,4 +73,6 @@ heavy -- node scripts/audit-confianza.mjs
 - Revisión independiente del código y de esa evidencia: sin blockers. Sus ejecuciones adicionales usaron HOME aislado contra el protocolo, por lo que **no se usan como aceptación funcional**; la evidencia ejecutable aceptada es la del padre con HOME normal. No se repitieron esas ejecuciones.
 - Evaluación nativa: medium, `reviewDue=false`/`under_budget`; escalación de riesgo item2 por privacidad y guardas de referencia, cubierta con la revisión independiente indicada. No se inició una transacción de revisión nativa.
 
-CI del PR y revisión de preview siguen pendientes de publicación/acceso. El servicio y el embudo permanecen apagados; la aceptación local no autoriza activación ni despliegue.
+[PR4](https://github.com/nema1502/tinkazo/pull/4) abierto sin integrar. [CI41322680727](https://github.com/nema1502/tinkazo/actions/runs/41322680727) pasó para4f79155, incluidos sitio/Soroban y páginas. El sondeo de preview devuelve HTTP200 con título «Login – Vercel»; job49 registra CI exit0 separado de preview exit2. Falta acceso autorizado para revisar esa preview; no se eludió autenticación ni se cuenta como aceptación visual remota.
+
+El servicio y el embudo permanecen apagados; la aceptación local y de CI no autoriza activación ni despliegue. Nicolás debe confirmar los dos prerrequisitos antes del commit posterior en este mismo PR.
