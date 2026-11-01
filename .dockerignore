@@ -1,0 +1,15 @@
+.git
+**/node_modules
+dist
+.evidence
+.codegraph
+.env
+.env.*
+*.log
+.agents
+.claude
+.codex
+.cursor
+.pi
+odd
+docs/capturas

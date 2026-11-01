@@ -67,4 +67,6 @@ Alturas521–600px y zoom final horizontal siguen fuera de alcance, reservados p
 
 ## Entrega
 
-PR a `main`, con commits en español y autor solicitado. Preview de Vercel y CI se registrarán tras publicar; este informe no los da por aprobados anticipadamente. El equipo integra el PR. Sin merge ni despliegue de producción.
+PR [#2](https://github.com/nema1502/tinkazo/pull/2) abierto desde `guido/celular`, sin integrar. CI de sitio y contrato aprobadas en `af6f4fb`. La preview de Vercel está lista, pero redirige al login: no se pudo revisar visualmente sin acceso.
+
+El usuario autorizó después desplegar esta rama en la instancia **Tinkazo web de la VPS** para revisar allí; **Tinkazo Studio queda explícitamente excluido**. Esa autorización reemplaza la prohibición anterior de despliegue solo para esta instancia. `main` permanece intacto y la integración sigue a cargo del equipo. Empaquetado, aplicación exacta y resultados del despliegue: [vps-celular.md](vps-celular.md).
