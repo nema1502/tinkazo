@@ -15,13 +15,17 @@ S9. “No toques el contrato ni el protocolo Stellar, la selección de ganadores
 S10. “Hacé commits en español, sin notas personales. Abrí un PR a `main`” “Nosotros integraremos el PR.” Author and exact additional constraints are in L1.
 S11. “Por si acaso no lo subiremos a main nuestros cambios todavía, queiro que lo subas a nuestra rama y esa rama que esté desplegada en nuestro vps, sería cambiar la instancia de Tinkazo de nuestro vps la rama que tiene apuntar a eata nueva y ahí yo reviso” “Sip, cuidado con cambiar la de Tinkazo studio, esa es otro software”
 
+S12. “Revisar este cambio” — explicit human selection in the provider consent UI for the current frozen candidate.
+
 ## Tasks
 - T1 | S5,S8,S10 | inline environment/base preparation | done | base e05a802; pnpm install exit 0; Playwright 1.63.0 and cached Chromium 1243 available; author configured; setup logs job-1/job-2; tracking commit 9305eb5
 - T2 | S1,S3,S4,S5,S8,S9 | delegated header writer, independent unit | done | RED 552/100 exit1; GREEN 632/0 exit0; parent spot 104/0 exit0 | commit: 776338effc4739eea2f382ef570320d6a3991172
 - T3 | S2,S3,S4,S5,S6,S7,S8,S9 | delegated error-flow writer, independent unit | done | worker196 tests+81 checks; parent full gates exit0; synchronized browser job-8 PASS81 exit0; commit: 1c6f2cf19e214b81bc37b6274046f772cc06fa9b
 - T4 | S1–S9 | independent verification of shared UI contracts + parent seam checks | done | verifier completed,no product blockers;196 tests/types exit0;38 flow combinations/190 assertions;124 actual-anchor assertions; limits/timeouts/native pages unavailable explicitly reported | commit: final evidence unit
-- T5 | S8,S10 | inline Spanish commits, PR and preview review | in_progress | PR2 open/unmerged; VPS public18checks/0fail and screenshots done; Vercel protected; 61bbf12 site CI failed editorial doc guard; reproducedRED and fixed text only,focused142pass and finalfullsuite3155pass/4opt-inskip exit0; publish corrected docs/evidence and observe new CI; af6f4fb CI green
+- T5 | S8,S10 | inline Spanish commits, PR and preview review | done | 4b4ceee published; PR2 open/unmerged; CI41307744356 site+Soroban passed,exit0; VPS public18/18 and captures done; Vercel protected,not visually accepted; suite3155pass/4opt-inskip
 - T6 | S9-S11 | inline packaging + independent build verification + Dokploy-only VPS deploy | done | 61bbf12 pushed/deployed, Dokploy deploymentBPaD-UdvhpjeW_KlI34On done,exact JS SHA; public18checks/0fail Chromium1440/WebKit320; main unmerged and Studio untouched
+
+- T7 | S12 | native ordinary4R review after explicit consent | done | reviewed4b4ceee; review-1982bd8201b19908 approved and exact acknowledgement completed,authority burned; no product corrections
 
 ## Log
 L1 — Original approved implementation request (verbatim):
@@ -72,3 +76,6 @@ L21 — VPS deploymentBPaD-UdvhpjeW_KlI34On done at61bbf12; public HTTP200 and e
 L22 — CI61bbf12 site failed only src/seo.test.ts editorial scan on docs/vps-celular.md; reproduced exactRED exit1 locally. Corrected operational prose only, retained guard unchanged; whole seo file142pass exit0. Full suite post-correction job19 running. Previous failed CI had3154pass/1fail/4skip and is preserved in .evidence/celular/vps/ci-61bbf12-failure.log. Vercel remains protected, not visually accepted. Ephemeral containers cleaned and own agent image tag removed, no shared/Dokploy images pruned.
 
 L23 — Post-editorial correction suite job19 exit0:157files,3155pass/4existingopt-in testnet skips;100.5s execution,0.0003s queue. Focused seo142pass. Application bytes, Dockerfile/config and lock remain exactly the verified61bbf12 version; only evidence/docs and editorial correction are pending publication. VPS public smoke18/18 remains valid; no physical phones/provider-auth/chain-write claims. T5 now only final publication/CI observation, T6 complete.
+
+L24 — Final CI41307744356 on4b4ceeefad4e26fae464de497c978fece8718a6f completed successfully:Sitio(Vite+TypeScript) and ContratosSoroban,watch exit0. Editorial failure61bbf12 preserved; corrected142SEO+3155suite pass already recorded. PR2 remains OPEN,mergedAt=null; no main integration. VPS branch guido/celular remains confirmed done.
+L25 — Human selected “Revisar este cambio” via exact provider UI; consent admitted once. Native four-lens group reviewed immutable base4e22dce4/candidatebef92b3e,922lines/66paths. Four reviewers prepared/submitted; closure approved. Fresh bound STATUS supplied exact acknowledgement; it completed with authority burned for targetsha256:4d6ace3416a87959dd9a8c90cb463e006821945751aee8cba02fe79a27a13452,consumed revisionsha256:c6e488d938116aa80e10f9016aef2cc3fc01f8afca2bc9cfd4d0c130ebb9c752. No STATUS after burn. refs/rdd/last-approved/guido/celular=4b4ceee. No product correction or redeploy was needed. Full lens findings were not included in the facade closure,so no zero-advisory claim is made; existing proof advisories remain documented. This final edit changes task bookkeeping only, not reviewed product/Docker/lock inputs.
