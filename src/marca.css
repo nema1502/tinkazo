@@ -1,0 +1,36 @@
+.marca { padding-bottom: 32px; }
+.marca section { margin: 32px 0 48px; }
+.marca-intro { padding-top: 20px; }
+.marca h1 { font-size: clamp(32px, 5vw, 60px); font-weight: 900; letter-spacing: -.02em; max-width: 820px; margin: 18px 0; }
+.marca h2 { font-size: clamp(24px, 3vw, 32px); font-weight: 900; letter-spacing: -.02em; }
+.marca h3 { margin: 24px 0 12px; font-size: 20px; }
+.marca p { font-size: 16px; line-height: 1.65; color: var(--ink2); max-width: 760px; margin: 14px 0; }
+.marca p.lead { font-size: 20px; }
+.marca-recursos { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 32px; }
+.marca-recursos > * { min-width: 0; }
+.marca-descargas { display: flex; flex-wrap: wrap; gap: 14px; }
+.marca .mini { display: inline-flex; align-items: center; min-height: 44px; text-decoration: none; margin-top: 8px; }
+.marca-vista { border: var(--bw) solid var(--ink); box-shadow: var(--sh); padding: 20px; }
+.marca-llama { background: var(--card); }
+.marca-sello { background: #fff6e9; }
+.marca-vista img { width: 100%; height: auto; display: block; }
+.marca-llama img { max-height: 270px; object-fit: contain; }
+.marca-paleta { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
+.marca-paleta button { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 10px; min-width: 0; text-align: left; font-weight: 700; font-size: 16px; color: var(--ink); background: var(--card); border: 2px solid var(--ink); cursor: pointer; box-shadow: var(--sh-sm); }
+.marca-color { height: 64px; border: 2px solid var(--ink); }
+.marca code { font: 700 16px ui-monospace, Consolas, monospace; user-select: all; }
+.marca button:focus-visible, .marca a:focus-visible { outline: 3px solid var(--purple); outline-offset: 4px; }
+#marca-estado { min-height: 2em; }
+.marca-tipo { border: var(--bw) solid var(--ink); background: var(--card); box-shadow: var(--sh); padding: 24px; }
+.marca p.marca-titular { color: var(--ink); font-size: 28px; font-weight: 900; letter-spacing: -.02em; }
+.marca p.mono { font-weight: 700; }
+@media (max-width: 760px) {
+  /* La fila de enlaces puede necesitar otra línea a 320 px: no recortar «Más». */
+  .pagina-marca .topnav { flex-wrap: wrap; }
+  .pagina-marca .topnav .mas { margin-left: auto; }
+  .marca-recursos { grid-template-columns: 1fr; gap: 20px; }
+  .marca-paleta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .marca-tipo { padding: 16px; }
+  .marca p.marca-titular { font-size: 22px; }
+  .marca-vista { padding: 12px; }
+}
