@@ -1,0 +1,47 @@
+# Marca — tarea 4
+Página y activos de marca en `guido/marca`, base `6c583e98ee0864be13297297f7521097cc494b53`.
+Entrega: un PR a main sin integrar, commits en español; pnpm/Vitest y navegador real. Previsión: ~500–800 líneas con pruebas y página, estrategia single-pr solicitada; proteger el foco y evitar extras.
+
+## Specs
+S1. “Falta `marca.html`. Debe servir a quien prepara afiches o presentaciones: llama descargable, paleta, tipografía y un sello descargable «Sorteo verificable con Tinkazo».”
+S2. “`docs/marca.md` es la autoridad: Tinkazo se escribe junto; la llama es una silueta pixelada sin cara; la tipografía es `system-ui` y `ui-monospace`; los colores, contrastes, bordes y sombras deben coincidir con esa guía.”
+S3. “`public/icon.svg` contiene la silueta, pero lleva un fondo oscuro: prepará un recurso transparente apto para reutilizar.” “No copies activos de puls3 ni agregues una fuente externa.”
+S4. “Una página de marca en español e inglés, legible en celular y escritorio, con códigos de color copiables, usos de letra claros, descarga de la llama en SVG transparente y PNG transparente de buena resolución, y descarga del sello para afiches al menos en SVG.”
+S5. “Explicá junto al sello que se usa cuando el sorteo tiene un comprobante verificable; no lo presentes como garantía de que toda lista inicial estuvo bien armada.”
+S6. “Los archivos descargados abren, conservan transparencia y coinciden con la marca; la página entra en el build de Vite, es accesible desde el sitio y figura en el mapa del sitio; no hay textos sin traducir ni desborde horizontal a 320 y 390 px.”
+S7. “Revisá visualmente en un navegador real ambos idiomas y temas, escritorio y celular; adjuntá capturas. Ejecutá `pnpm typecheck`, `pnpm test`, `pnpm build` y las comprobaciones de páginas y glosario aplicables.”
+S8. “No modifiques el protocolo, los juegos, el Worker, el logotipo actual ni la paleta del producto.” “hacé commits en español sin notas personales y abrí un PR a `main` con la vista previa revisada en compu y celular. Nosotros integramos.”
+S9. “La página de [puls3](https://puls3-4lw.pages.dev/#/brand) es referencia de **utilidad y organización**, no de colores, imágenes ni identidad de Tinkazo. Inspeccionala en un navegador si podés; si no carga, indicá ese límite y seguí la guía local.”
+
+## Tasks
+- T1 | S1–S6,S8,S9 | implementación aislada de página y descargas | done | commit: 07c8a2369ff577703a84e706df657736f89d0cab; descargas reales y 12 vistas aprobadas
+- T2 | S2–S7 | revisión propia, puertas locales y capturas | done | jobs33/34 exit0; 3149 pruebas/4 opt-in omitidas; navegador12/12, tipos, build y glosario; reporte docs/marca-verificacion.md
+- T3 | S7,S8 | commits de evidencia, PR, CI de páginas y revisión de vista previa | in_progress | commit de producto07c8a23; entrega/CI/preview pendientes, sin integrar
+
+## Log
+
+Corrección S6: job30 falló con `scrollWidth=321` a 320 px; su log y los archivos de identidad/salida originales se conservaron. WebKit midió el botón «Más» con borde derecho 320,765625 px; Historia presenta el mismo defecto, pero no se modificó. Solo Marca recibe `pagina-marca` en el cuerpo y dos reglas móviles locales: permitir otra fila en la navegación y mantener «Más» a la derecha para que su desplegable quede dentro del ancho. No se recorta contenido ni se oculta el desborde. `.evidence/marca/diagnostico-red.log` registra el defecto y `diagnostico-green-r3.log` acredita Marca a 320 px sin desborde, con el menú abierto/cerrado accesible, mientras Historia conserva su medición anterior. Los intentos intermedios también se conservaron. El auditor retiene el umbral estricto de cero y agrega esa regresión del desplegable.
+
+Corrida siguiente, sin sobrescribir el RED: `PLAYWRIGHT_PATH=/home/agent/.npm/_npx/6bcb61ec6d5aea22/node_modules/playwright/index.mjs MARCA_BASE=http://127.0.0.1:5184 MARCA_OUT=.evidence/marca/browser-r2 heavy -- node scripts/audit-marca.mjs > .evidence/marca/browser-r2.log 2>&1`. El job29 aprobó tipos, 154 archivos de pruebas (3149 aprobadas y cuatro omisiones opt-in), build y glosario antes de esta corrección; sigue siendo evidencia de los bytes anteriores, no la puerta final. Después de la corrección: `.evidence/marca/correction-green.log` y `correction-typecheck.log`.
+
+Verificación de implementación: `.evidence/marca/red.log` conserva seis fallos por ausencia de página y activos; `.evidence/marca/green.log` registra las pruebas de marca, i18n y SEO; `.evidence/marca/typecheck.log` registra tipos. El PNG RGBA mide 2048 × 2048: se comparó cada píxel con la silueta original. SVG de llama 512 × 512, sellos ES/EN 960 × 280. El diferencial del hook público de Vite ante `?lang=en&theme=dark` compara nueve páginas previas contra `6c583e9`: `.evidence/marca/diferencial.log`. No se cambiaron pagina.ts, idioma.ts, menú, icono, protocolo ni juegos.
+
+Auditor para el padre sobre el servidor ya existente: `PLAYWRIGHT_PATH=/home/agent/.npm/_npx/6bcb61ec6d5aea22/node_modules/playwright/index.mjs MARCA_BASE=http://127.0.0.1:5184 heavy -- node scripts/audit-marca.mjs > .evidence/marca/browser.log 2>&1`. No admite desborde horizontal positivo; el portapapeles se simula, sin acreditar permisos del sistema. T2 sigue en curso hasta observar el navegador y las puertas completas; job29 pertenece al padre. Descarga, abre y rasteriza los tres archivos visibles por idioma; revisa copia y fallo de permiso, cambio vivo de idioma y 12 vistas. Quedan para el padre las puertas completas `pnpm typecheck`, `pnpm test`, `pnpm build`, páginas y glosario, con sus jobs. No se ejecutó Chromium: su limitación de sandbox fue comunicada por el padre; la referencia externa se visitó con WebKit normal (evidencia en `referencia.json` y `referencia.png`).
+L4 — Padre observó job33 exit0 en21,48s (12/12 vistas, descargas y alpha) y job34 exit0 (suite92,04s más16,27s de cola; build5,52s más19,51s de cola). Inspección visual de cuatro capturas ES/EN y ambos temas. Evaluación nativa: medium,18paths623lines,reviewDuefalse under_budget, sin verificador independiente. Primer assess no pudo declarar archivos nuevos; tras normalizar el índice se obtuvo el plan válido, sin crear autoridad. Producto en07c8a23 (449 inserciones/3 bajas); siguiente unidad agrega auditor/evidencia. CI de páginas y preview permanecen pendientes, no son un pase local.
+
+L1 — Prompt original (verbatim):
+
+Gentle Shell: implementá la tarea 4 de Tinkazo en un worktree propio, rama `guido/marca` creada desde el `main` más reciente.
+
+**Problema.** Falta `marca.html`. Debe servir a quien prepara afiches o presentaciones: llama descargable, paleta, tipografía y un sello descargable «Sorteo verificable con Tinkazo».
+
+**Contexto y decisiones.** `docs/marca.md` es la autoridad: Tinkazo se escribe junto; la llama es una silueta pixelada sin cara; la tipografía es `system-ui` y `ui-monospace`; los colores, contrastes, bordes y sombras deben coincidir con esa guía. `public/icon.svg` contiene la silueta, pero lleva un fondo oscuro: prepará un recurso transparente apto para reutilizar. La página de [puls3](https://puls3-4lw.pages.dev/#/brand) es referencia de **utilidad y organización**, no de colores, imágenes ni identidad de Tinkazo. Inspeccionala en un navegador si podés; si no carga, indicá ese límite y seguí la guía local. El atributo HTML `download` funciona para recursos del mismo origen ([MDN](https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/a#download)).
+
+**Resultado esperado.** Una página de marca en español e inglés, legible en celular y escritorio, con códigos de color copiables, usos de letra claros, descarga de la llama en SVG transparente y PNG transparente de buena resolución, y descarga del sello para afiches al menos en SVG. Explicá junto al sello que se usa cuando el sorteo tiene un comprobante verificable; no lo presentes como garantía de que toda lista inicial estuvo bien armada.
+
+**Criterios de aceptación.** Los archivos descargados abren, conservan transparencia y coinciden con la marca; la página entra en el build de Vite, es accesible desde el sitio y figura en el mapa del sitio; no hay textos sin traducir ni desborde horizontal a 320 y 390 px. Revisá visualmente en un navegador real ambos idiomas y temas, escritorio y celular; adjuntá capturas. Ejecutá `pnpm typecheck`, `pnpm test`, `pnpm build` y las comprobaciones de páginas y glosario aplicables. Configurá el autor `Guido Salazar Vargas <guido.salazar.vargas7@gmail.com>`, hacé commits en español sin notas personales y abrí un PR a `main` con la vista previa revisada en compu y celular. Nosotros integramos.
+
+**Qué no cambiar.** No modifiques el protocolo, los juegos, el Worker, el logotipo actual ni la paleta del producto. No copies activos de puls3 ni agregues una fuente externa.
+
+L2 — Sprint route: user explicitly requests one agent/worktree per task; brand and low-height layout are independent multi-file units, launched concurrently. Parent owns commits/push/PR and native consent; worker edits only its worktree. No production deployment or merge. Preserve existing pagina/idioma/menu behavior and Vite text extraction.
+L3 — Parent will run long/full checks through owned background jobs; worker performs focused deterministic checks and returns commands for duration-unknown browser work. HOME stays unchanged; no sandbox changes. Native assessment follows actual diff, not file count. Reference browser visit delegated to the brand worker; a failed visit must be disclosed, not block local-guide implementation.
