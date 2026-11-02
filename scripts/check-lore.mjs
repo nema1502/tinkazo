@@ -106,10 +106,20 @@ for (const card of cards) {
   }
 }
 
-/** Una fuente que no contesta: aviso si hay copia o si el juego no se ve; si no, falla. */
-async function caida(card, motivo) {
+/**
+ * El sitio contesta, pero no deja pasar a un robot: 401, 403 o 429. Le pasa a
+ * algunos diarios con los servidores de la integración (El Deber, 2 de
+ * noviembre de 2026: 200 desde una casa, 403 desde la integración). La página
+ * existe; lo que se mide acá es que la cita no esté rota, y una página rota es
+ * un 404, un 410 o un dominio que ya no existe.
+ */
+const NO_DEJA_PASAR = new Set([401, 403, 429]);
+
+/** Una fuente que no contesta: aviso si hay copia, si no deja pasar robots o si el juego no se ve; si no, falla. */
+async function caida(card, motivo, estado) {
   const copia = await copiaArchivada(card.href);
   if (copia) avisos.push(`${card.href} ${motivo}; hay copia en ${copia}`);
+  else if (NO_DEJA_PASAR.has(estado)) avisos.push(`${card.href} ${motivo}: el sitio contesta pero no deja pasar robots; se mira a mano`);
   else if (FUERA_DEL_SELECTOR.has(card.juego)) avisos.push(`${card.href} ${motivo}, sin copia; es de ${card.juego}, fuera del selector`);
   else fails.push(`${card.href} ${motivo}`);
 }
@@ -127,7 +137,7 @@ if (!offline) {
       });
       status = String(res.status);
       if (res.ok) ok.push(card.href);
-      else await caida(card, `respondió ${res.status}`);
+      else await caida(card, `respondió ${res.status}`, res.status);
     } catch (e) {
       await caida(card, `no respondió (${e instanceof Error ? e.message : e})`);
     }
