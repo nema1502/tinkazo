@@ -94,6 +94,39 @@ export const CATALOGO = [
     },
   },
   // --- /guajojo
+  // --- toborochi
+  // El Toborochi, el árbol de Santa Cruz en flor y el colibrí. Nace apagado: abre con ?demo=toborochi y entra al selector
+  // después de pasar la batería y con la aprobación de quien mantiene el proyecto (node scripts/nuevo-juego.mjs --encender toborochi).
+  {
+    id: "toborochi",
+    cargar: () => import("../toborochi").then((m) => m.toborochiPixi),
+    selector: false,
+    rango: { minimo: 2, ideal: [8, 40], maximo: 200 },
+    captura: false,
+    historia: {
+      q: "loreToborochiQ",
+      a: "loreToborochiA",
+      href: "https://eldeber.com.bo/santa-cruz/el-toborochi-en-flor-un-simbolo-que-pinta-de-rosa-santa-cruz_515706/",
+      src: "El Deber, El toborochi en flor, un símbolo que pinta de rosa a Santa Cruz",
+      hue: "magenta",
+    },
+    leyenda: {
+      es: [
+        "El toborochi es el árbol de Santa Cruz: entre mayo y junio, sus flores pintan de rosa la ciudad.",
+        "Una leyenda guaraní cuenta que Araverá escapó de los espíritus del mal y se refugió dentro de su tronco.",
+        "De allí, dicen, todavía asoma convertida en flor para que la visiten los colibríes.",
+        "Se cuenta de muchas maneras.",
+      ],
+      en: [
+        "The toborochi is the tree of Santa Cruz, Bolivia: in May and June, its flowers paint the city pink.",
+        "A Guaraní legend tells that Araverá fled from evil spirits and took refuge inside its trunk.",
+        "From there, it is said, she still comes out as a flower for the hummingbirds to visit.",
+        "It is told in many ways.",
+      ],
+      fuente: { titulo: "El Deber: 24 de mayo de 2025", url: "https://eldeber.com.bo/santa-cruz/el-toborochi-en-flor-un-simbolo-que-pinta-de-rosa-santa-cruz_515706/" },
+    },
+  },
+  // --- /toborochi
   // <<< kit:catalogo
 ] as const satisfies readonly EntradaCatalogo[];
 

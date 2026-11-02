@@ -2151,6 +2151,14 @@ export const T: Record<Lang, Dict> = {
     loreGuajojoQ: "¿Qué es el guajojó?",
     loreGuajojoA: "Un ave de la noche. De día se queda erguida e inmóvil en la punta de un palo seco, como si fuera parte de él, y al anochecer canta un silbo largo con notas que bajan.",
     // --- /guajojo
+    // --- toborochi
+    gameToborochi: "El Toborochi", jgToborochiN: "El Toborochi",
+    jgToborochiB: "Borrador de El Toborochi: los nombres llegan a la mesa de a ocho y quedan los finalistas. El ganador ya salió del sorteo y el juego solo lo cuenta.",
+    gcToborochi: "Los nombres llegan a la mesa de a ocho y quedan los finalistas. Gana quien salió del sorteo.",
+    gcToborochiMany: "Los premios quedan en la mesa final: los que ganan se ven al final.",
+    loreToborochiQ: "¿De dónde sale El Toborochi?",
+    loreToborochiA: "Borrador: todavía no tiene su historia ni su fuente, y no sale en ningún sorteo hasta que se escriba.",
+    // --- /toborochi
     // <<< kit:i18n-es
     // Luma a la vista y qué sigue después del resultado (2 de noviembre de 2026): el "?" que enseña a bajar el CSV y la línea de "qué sigue".
     lumaQ: "Cómo bajar tu lista de Luma",
@@ -3920,6 +3928,14 @@ export const T: Record<Lang, Dict> = {
     loreGuajojoQ: "What is the guajojó, the night bird?",
     loreGuajojoA: "A night bird. By day it stays upright and motionless at the tip of a dry stick, as if part of it, and at dusk it sings one long whistle followed by falling notes.",
     // --- /guajojo
+    // --- toborochi
+    gameToborochi: "The Toborochi", jgToborochiN: "The Toborochi",
+    jgToborochiB: "Draft of The Toborochi: names reach the table eight at a time and the finalists remain. The winner already came out of the draw and the game only tells it.",
+    gcToborochi: "Names reach the table eight at a time and the finalists remain. Whoever the draw picked wins.",
+    gcToborochiMany: "The prizes sit at the final table: the winners show at the end.",
+    loreToborochiQ: "Where does The Toborochi come from?",
+    loreToborochiA: "Draft: it has no story or source yet, and it does not show in any draw until one is written.",
+    // --- /toborochi
     // <<< kit:i18n-en
     // Luma in plain sight and what comes after the result (November 2, 2026): the "?" that teaches how to get the CSV, and the "what's next" line.
     lumaQ: "How to get your list from Luma",

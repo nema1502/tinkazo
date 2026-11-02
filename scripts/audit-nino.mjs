@@ -165,8 +165,11 @@ const RELOJ = `(() => {
   RAF(bombear);
 })()`;
 
-/** Sin subtítulo en las dos fotos; sin la barra de arriba en la de sin letras. */
-// `visibility` y no `display`: con `display: none` la caja del relator mide cero y el piso de los nombres (`S.tags`) se va al techo, y los chips desaparecen de la foto con letras.
+/**
+ * Sin subtítulo en las dos fotos; sin la barra de arriba en la de sin letras. El subtítulo se esconde con `visibility`, no con
+ * `display: none`: la guardia de los nombres del estadio mide dónde empieza (`offsetTop`), y con `display: none` vale 0 y
+ * todo chip con nombre se daba por tapado y no se dibujaba (el Toborochi salía sin un solo nombre en la foto con letras).
+ */
 const CSS = "#commentary{visibility:hidden!important} html.nino-sin .st-top, html.nino-sin #stadium button{visibility:hidden!important}";
 
 async function pararEn(page, hora) {

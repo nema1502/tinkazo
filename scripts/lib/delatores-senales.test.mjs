@@ -92,6 +92,15 @@ describe("las líneas del relator que marcan momentos coinciden con src/i18n.ts"
     for (const s of variantes(clave, args)) expect(s).toMatch(re);
   });
 
+  it("las del Toborochi coinciden con lo que dice el juego", async () => {
+    const { TEXTOS } = await import("../../src/games/pixi/toborochi-textos.ts");
+    expect(TEXTOS.es.colibri).toMatch(MARCADORES.tobColibri);
+    expect(TEXTOS.es.hilo("Ana Vargas")).toMatch(MARCADORES.tobHilo);
+    expect(TEXTOS.es.engancha("Ana Vargas")).toMatch(MARCADORES.tobEngancha);
+    expect(TEXTOS.es.conPremio("Ana Vargas")).toMatch(MARCADORES.tobPremio);
+    expect(TEXTOS.es.conPremio("Ana Vargas")).not.toMatch(MARCADORES.tobHilo);
+  });
+
   it("las que llevan un número", () => {
     for (const n of [2, 8, 12]) {
       expect(T.es.cSapCount(n)).toMatch(MARCADORES.cSapCount);

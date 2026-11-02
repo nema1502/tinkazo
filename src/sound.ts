@@ -109,6 +109,93 @@ export function beepFor(
 }
 
 /**
+ * El viento: ruido filtrado que crece y se corre de `hz0` a `hz1`, lo bastante agudo como para oírse en el parlante
+ * de un proyector (de 300 a 1.500 Hz). El ruido se llena con una semilla, no con `Math.random`: la misma ronda suena
+ * igual. La duración va en segundos del juego y se estira sola, como `beepFor`.
+ *
+ * No son osciladores: `audit-sound` no lo ve y lo mide `audit-mezcla`, que graba lo que sale por el parlante.
+ */
+export function wind(gameSeconds: number, vol: number, hz0: number, hz1: number, seed: number): void {
+  if (muted) return;
+  try {
+    const c = chain();
+    if (!c) return;
+    const dur = Math.max(0.2, gameSeconds * paceFactor());
+    const t0 = c.ctx.currentTime;
+    const n = Math.max(1, Math.ceil(c.ctx.sampleRate * dur));
+    const buf = c.ctx.createBuffer(1, n, c.ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    let s = Math.floor(seed) | 0 || 1;
+    for (let i = 0; i < n; i++) {
+      s = (s + 0x6d2b79f5) | 0;
+      let q = Math.imul(s ^ (s >>> 15), 1 | s);
+      q = (q + Math.imul(q ^ (q >>> 7), 61 | q)) ^ q;
+      data[i] = (((q ^ (q >>> 14)) >>> 0) / 4294967296) * 2 - 1;
+    }
+    const src = c.ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = c.ctx.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.Q.value = 0.9;
+    bp.frequency.setValueAtTime(Math.max(120, hz0), t0);
+    bp.frequency.exponentialRampToValueAtTime(Math.max(120, hz1), t0 + dur);
+    const ga = c.ctx.createGain();
+    // La envolvente es una curva (sube el primer tercio y se apaga al final), sin rampas lineales de ganancia.
+    const pasos = 48;
+    const curva = new Float32Array(pasos);
+    for (let i = 0; i < pasos; i++) {
+      const u = i / (pasos - 1);
+      curva[i] = vol * Math.min(1, u / 0.35) * Math.min(1, (1 - u) / 0.25);
+    }
+    ga.gain.setValueCurveAtTime(curva, t0, dur);
+    src.connect(bp);
+    bp.connect(ga);
+    ga.connect(c.out);
+    src.start(t0);
+    src.stop(t0 + dur + 0.02);
+  } catch {
+    /* sin audio */
+  }
+}
+
+/**
+ * El zumbido de un colibrí: una nota de la escala con trémolo rápido, que crece de `vol0` a `vol1`. El trémolo es una
+ * curva de ganancia (no un segundo oscilador), así el único oscilador es la nota, en la escala. Segundos del juego.
+ */
+export function hum(f: number, gameSeconds: number, vol0: number, vol1: number): void {
+  if (muted) return;
+  try {
+    const c = chain();
+    if (!c) return;
+    const dur = Math.max(0.1, gameSeconds * paceFactor());
+    const t0 = c.ctx.currentTime;
+    const o = c.ctx.createOscillator();
+    const ga = c.ctx.createGain();
+    o.type = "triangle";
+    o.frequency.value = f;
+    const atk = Math.min(0.06, dur * 0.2);
+    ga.gain.setValueAtTime(0.0001, t0);
+    ga.gain.linearRampToValueAtTime(vol0, t0 + atk);
+    const largo = Math.max(0.02, dur - atk - 0.03);
+    const pasos = Math.max(16, Math.ceil(largo * 320));
+    const curva = new Float32Array(pasos);
+    for (let i = 0; i < pasos; i++) {
+      const u = i / (pasos - 1);
+      const base = vol0 + (vol1 - vol0) * u;
+      curva[i] = base * (0.62 + 0.38 * Math.sin(2 * Math.PI * 30 * u * largo));
+    }
+    ga.gain.setValueCurveAtTime(curva, t0 + atk, largo);
+    ga.gain.setValueAtTime(0, t0 + dur);
+    o.connect(ga);
+    ga.connect(c.out);
+    o.start(t0);
+    o.stop(t0 + dur + 0.02);
+  } catch {
+    /* sin audio */
+  }
+}
+
+/**
  * Una nota de la escala pentatónica, por grado.
  *
  * Los juegos subían el tono sumando hercios sueltos, y eso suena a aparato,

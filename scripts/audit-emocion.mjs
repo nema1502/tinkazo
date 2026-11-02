@@ -132,6 +132,7 @@ try {
     console.log(`\n${juego}`);
     const arcos = [];
     const aMitad = [];
+    const primeras = [];
     const zooms = [];
     for (let i = 1; i <= (soloZoom ? 0 : N); i++) {
       const page = await abrir();
@@ -154,6 +155,8 @@ try {
         await page.waitFor(mitad, 20_000);
         aMitad.push(Number(await page.eval(`${mitad} || 0`)));
       }
+      // En el Toborochi, si el colibrí visita primero a quien gana (la mitad de las veces).
+      if (juego === "toborochi" && ok.ok) primeras.push(Number(await page.eval("document.getElementById('race-canvas').dataset.primera || '-1'")));
       if (CON_ZOOM.includes(juego) && ok.ok) {
         // El golpe lo anota el juego al salir el cartel, y el pico del zoom lo
         // anota el escenario. Los dos están en la hora de la cámara.
@@ -189,6 +192,12 @@ try {
         zooms.length === N && en === N,
         zooms.map((z) => (z ? `golpe ${z.golpe.toFixed(2)} pico ${z.pico.toFixed(2)}` : "sin golpe")).slice(0, 4).join(" · ") + ` · ${en}/${N}`,
       );
+    }
+    if (primeras.length) {
+      // Si la primera visitada ganara siempre (o casi nunca), la sala aprendería a mirarla: entre 5 y 11 de 16.
+      const gana = primeras.filter((x) => x === 1).length;
+      const lo = Math.round(N * 0.3125), hi = Math.round(N * 0.6875);
+      check("la primera visitada por el colibrí gana la mitad de las veces", primeras.length === N && !primeras.includes(-1) && gana >= lo && gana <= hi, `gana en ${gana} de ${primeras.length} (de ${lo} a ${hi})`);
     }
     if (aMitad.length) {
       const p = cuenta(aMitad);

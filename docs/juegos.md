@@ -581,3 +581,4 @@ Los ocho del selector, en su orden: el de la auditoría de juegos, de las salas 
 | Juego | `?demo=` | Tipo | Hasta | Documento |
 |---|---|---|---|---|
 | Guajojó (1 de noviembre de 2026) | `guajojo` | Kit de juegos (`crearJuego`), motor PixiJS | 200, ideal de 8 a 30 | [guajojo.md](juegos/guajojo.md): el sendero del monte de noche, el palo seco que abre los ojos, el crac y el amanecer |
+| El Toborochi (2 de noviembre de 2026) | `toborochi` | Kit de juegos (`crearJuego`), motor PixiJS | 200, ideal de 8 a 40 | [toborochi.md](juegos/toborochi.md): el árbol de Santa Cruz en flor, el surazo que se lleva flores y el colibrí que se posa en una |

@@ -67,6 +67,7 @@ Los momentos de cámara de cada juego:
 | Constelación (fuera del selector) | Sigue al paquete desde el primer salto, encima en los saltos lentos del final, golpe en el roce y en el engaño, y se abre en la nova para mostrar la constelación; sin desenfoque desde los saltos lentos |
 | De pie | Abierta sobre la sala mientras cada uno revisa su nombre, con un respiro suave; con cuatro o menos de pie, se acerca a los finalistas; la carta que queda sola se acerca como héroe antes del cartel |
 | El Trueque | La feria entera al armarse; en cada intento sigue al encargo (1,25×) hasta el puesto que lo recibe; en la entrega se acerca a quien espera (1,45×); al final encuadra todas las rutas, con el cartel por encima; sin desenfoque |
+| El Toborochi (apagado en el selector) | El árbol entero respirando un 1 % (en celular, la copa arriba y la alfombra abajo); en las ráfagas, sacudón chico en el pico e inclinación leve de la escena, nunca sobre una flor; desde «quedan dos», las dos finalistas juntas (hasta 1,9×, sin desenfoque), nunca la visitada; silencio de 0,4 s y golpe |
 
 ### Volver a la pestaña con el contexto perdido
 

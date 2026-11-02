@@ -48,6 +48,13 @@ export interface Voz {
   fanfarria(): void;
   /** Algo dentro de `ms` milisegundos reales. */
   despues(ms: number, fn: () => void): void;
+  /**
+   * El viento: ruido filtrado que se corre de `hz0` a `hz1`, sembrado con `semilla` (la misma ronda suena igual).
+   * Segundos del juego, que el anfitrión estira solo. Un anfitrión sin viento lo deja sin hacer nada.
+   */
+  viento?(dur: number, vol: number, hz0: number, hz1: number, semilla: number): void;
+  /** El zumbido de un colibrí: una nota con trémolo que crece de `vol0` a `vol1`. Segundos del juego. */
+  zumbido?(hz: number, dur: number, vol0: number, vol1: number): void;
 }
 
 export interface OpcionesTono {
@@ -73,6 +80,13 @@ export interface Sonido {
   salida(): void;
   /** Cuánto va de un tramo, de 0 a 1, en segundos de juego. */
   fase(t: number, desde: number, hasta: number): number;
+  /**
+   * El viento de una ráfaga: ruido de 350 a 1.500 Hz (se oye en un proyector) de 0,04 a 0,05 de volumen, más fuerte
+   * cuanto más `fuerza` (de 0 a 1). `dur` en segundos de juego. `semilla` es un número cualquiera de la ronda.
+   */
+  viento(dur: number, fuerza: number, semilla?: number): void;
+  /** El zumbido de un colibrí: la nota 12 con trémolo, a 0,03, que crece con `cerca` (de 0 a 1). `dur` en segundos de juego. */
+  zumbido(dur: number, cerca?: number): void;
   /** Algo dentro de `ms` milisegundos reales: la segunda nota de un acorde que se arma de a poco. */
   despues(ms: number, fn: () => void): void;
 }
@@ -124,6 +138,14 @@ export function crearSonido(voz: Voz): Sonido {
     },
     salida: () => tono(9, "evento", { dur: 0.08, vol: 0.04 }),
     despues: (ms, fn) => voz.despues(ms, fn),
+    viento(dur, fuerza, semilla = 0) {
+      const f = acotar(fuerza, 0, 1);
+      voz.viento?.(dur, 0.04 + 0.01 * f, 350, 700 + 800 * f, (semilla + 1) * 0x9e3779b1);
+    },
+    zumbido(dur, cerca = 0) {
+      const c = acotar(cerca, 0, 1);
+      voz.zumbido?.(voz.nota(12), dur, 0.02 + 0.005 * c, 0.03);
+    },
     fase: (t, desde, hasta) => (hasta <= desde ? (t >= desde ? 1 : 0) : acotar((t - desde) / (hasta - desde), 0, 1)),
   };
 }
