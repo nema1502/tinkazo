@@ -14,6 +14,9 @@ import { colorDeNombre } from "./foco-vista";
 import { layoutLabels, type LabelItem, type Rect } from "./pinata-labels";
 import { OUT_HOLD, counterText, estimateTagSize, outTreatment, selectTags, tagBudget, tagName, type TagCandidate } from "./oruro-tags";
 import { planEntrada, type Arch, type Frat } from "./entrada-plan";
+import { horaDeCaer, respuestasOruro } from "./oruro-nino";
+import { exponerNino } from "./nino";
+import { lugarDe } from "./kit/respuestas";
 import { DANCE_TOP, Wardrobe, prendaDe, pose, poseMusician, type DancerParts, type Instrument, type MusicianParts, type PoseMode } from "./entrada-bailes";
 
 /**
@@ -901,12 +904,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     }
   }
   /** Cuándo cae sentado el que pierde el contrapunto (-1 sin contrapunto). */
-  const fellAt = ((): number => {
-    const i = P.jumps.findIndex((j) => j.stumble === "fall");
-    if (i < 0) return -1;
-    const a = P.jumps[i] as { t: number }, b = P.jumps[i + 1];
-    return a.t + ((b ? b.t : a.t + 0.8) - a.t) * 0.55;
-  })();
+  const fellAt = horaDeCaer(P.jumps);
   /** Cuánto dura el salto `i` del contrapunto: hasta el siguiente. */
   const jumpLen = (i: number): number => {
     const a = P.jumps[i], b = P.jumps[i + 1];
@@ -1719,6 +1717,32 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     const ex = hx - Math.cos(a) * R * 0.95, ey = hy - Math.sin(a) * R * 0.95 - R * 0.1;
     drumG.moveTo(hx, hy).lineTo(ex, ey).stroke({ width: 3 * k, color: 0x6b4423, cap: "round" }).circle(ex, ey, 5 * k).fill(0xf6efe2).stroke({ width: 1.6 * k, color: INK });
     drumText.position.set(lx + lw / 2, y);
+  }
+
+  // `?auditar=nino`: la prueba del niño (`scripts/audit-nino.mjs`) lee del plan quiénes siguen bailando, cuánto falta y qué pasó. Solo lee.
+  {
+    /** La hora del golpe: cuando termina el silencio del foco y suena la fanfarria. */
+    const golpe = P.T_CROWN + FOCO.golpe / paceFactor();
+    exponerNino({
+      forma: "de-pie",
+      duracion: golpe,
+      t: () => tAll,
+      verdad: () => {
+        // Adónde mirar: dónde caen en la pantalla, con la cámara de ahora, los que siguen bailando. Lo decide la cámara, que el plan no conoce.
+        const r = respuestasOruro({ plan: P, tCartel: golpe }, tAll);
+        const W = S.sw(), H = S.sh();
+        const puntos = r.adelante.quienes.flatMap((i) => {
+          const d = byIdx.get(i);
+          return d ? [cam.toScreen(d.x, d.y, W, H)] : [];
+        });
+        const vistos = puntos.filter((p) => p.x >= 0 && p.x <= W && p.y >= 0 && p.y <= H);
+        const donde = vistos.length ? vistos : puntos;
+        if (!donde.length) return r;
+        const x = donde.reduce((a, p) => a + p.x, 0) / donde.length;
+        const y = donde.reduce((a, p) => a + p.y, 0) / donde.length;
+        return { ...r, adelante: { ...r.adelante, lugar: lugarDe(x, y, W, H) } };
+      },
+    });
   }
 
   // Para el auditor de emoción: el cuerpo de quien gana (de la punta de los cuernos a los pies), en la pantalla. El círculo del

@@ -51,3 +51,28 @@ export function planPalos(caen: number, base: number, remontada: boolean): Palo[
   }
   return out;
 }
+
+/** Un palo con su hora y a quiénes deja caer. */
+export interface PaloConHora {
+  at: number;
+  miss: boolean;
+  drop: number[];
+}
+
+/**
+ * El calendario de palos con sus horas: el primero a los 0,5 s de que termina la
+ * colgada y los demás a `wait` segundos de cada uno. `orden` es el de caída (los
+ * primeros caen con los primeros palos). `fin` es la hora a la que pegaría un
+ * palo más, de donde cuenta la rotura. Es lo que `pinata.ts` hacía en línea.
+ */
+export function calendarioDePalos(orden: readonly number[], base: number, remontada: boolean, colgada: number): { palos: PaloConHora[]; fin: number } {
+  const palos: PaloConHora[] = [];
+  let tH = colgada + 0.5;
+  let dados = 0;
+  for (const p of planPalos(orden.length, base, remontada)) {
+    palos.push({ at: tH, miss: p.miss, drop: p.miss ? [] : orden.slice(dados, dados + p.take) });
+    dados += p.take;
+    tH += p.wait;
+  }
+  return { palos, fin: tH };
+}

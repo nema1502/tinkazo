@@ -7,7 +7,10 @@ import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { capRecent, enVuelo, juntar, layoutLabels, listaCaidos, type LabelItem, type ListaGeo, type Rect } from "./pinata-labels";
 import { createPile, shouldSettle, type Pile } from "./pinata-monton";
-import { planPalos } from "./pinata-plan";
+import { calendarioDePalos } from "./pinata-plan";
+import { ASOMA_DESPUES, respuestasPinata } from "./pinata-nino";
+import { exponerNino } from "./nino";
+import { lugarDe } from "./kit/respuestas";
 import { CHIP_SCALE, medidasContador, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 
 /**
@@ -122,14 +125,9 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   // se apuran (de 1,9 a 0,75 s entre uno y otro): con un palo parejo cada 2,3 s
   // reales la sala no sentía que la piñata estaba por ceder (7 de octubre de 2026).
   const base = clamp(5 + Math.floor(n / 6), 5, 9);
-  const swings: Swing[] = [];
-  let tH = T_HANG + 0.5;
-  let given = 0;
-  for (const p of planPalos(fallOrder.length, base, story.arc === "remontada")) {
-    swings.push({ at: tH, miss: p.miss, drop: p.miss ? [] : fallOrder.slice(given, given + p.take), done: false });
-    given += p.take;
-    tH += p.wait;
-  }
+  const calendario = calendarioDePalos(fallOrder, base, story.arc === "remontada", T_HANG);
+  const swings: Swing[] = calendario.palos.map((p) => ({ ...p, done: false }));
+  const tH = calendario.fin;
   const nHits = swings.filter((s) => !s.miss).length;
   const T_BREAK = tH + (story.arc === "duelo" ? 1.2 : 0.6);
   // Rota la piñata, el cartel llega enseguida: el caramelo ganador cae más
@@ -1243,6 +1241,20 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       ch.position.set(o.x, o.y + d.h / 2);
     }
   }
+
+  // `?auditar=nino`: la prueba del niño (`scripts/audit-nino.mjs`) lee del plan quiénes siguen adentro, cuánto falta y qué pasó. Solo lee.
+  exponerNino({
+    forma: "de-pie",
+    duracion: T_CROWN,
+    t: () => tAll,
+    verdad: () => {
+      // Adónde mirar: la piñata mientras sigue colgada, y el caramelo de quien gana cuando ya cayó. Lo decide la cámara, que el plan no conoce.
+      const q = winC.inside ? pinPos() : { x: winC.x, y: winC.y };
+      const s = cam.toScreen(q.x, q.y, S.sw(), S.sh());
+      const asoma = story.arc === "susto" ? { idx: peekIdx, desde: T_PEEK + ASOMA_DESPUES } : null;
+      return respuestasPinata({ n, ganador: winnerIdx, rival: rivalIdx, palos: swings, tRotura: T_BREAK, tCartel: T_CROWN, asoma }, tAll, lugarDe(s.x, s.y, S.sw(), S.sh()));
+    },
+  });
 
   // Para el auditor de emoción: el caramelo ganador y su nombre, en la pantalla.
   S.ganadorEn(() => {

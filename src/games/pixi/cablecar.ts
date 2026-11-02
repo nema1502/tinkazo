@@ -10,6 +10,9 @@ import { tiemposFoco } from "./foco";
 import { colorDeNombre } from "./foco-vista";
 import { LINES, T_BOARD, T_CROWN, T_DOCK, T_RUN, planCableCar } from "./cablecar-plan";
 import { GRUPOS, grupoDe } from "../grupos";
+import { exponerNino } from "./nino";
+import { lugarDe } from "./kit/respuestas";
+import { planDelTelefericoDe, respuestasTeleferico, sentidoDelTeleferico } from "./cablecar-nino";
 
 /**
  * El Teleférico, en PixiJS, con el director de cámara.
@@ -1473,6 +1476,36 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     const at = Math.min(NS, Math.floor(P.headAt(tAll) + 0.02));
     hudStation.text = tAll >= T_BOARD && tAll < T_RUN ? T[lang].cTelOf(Math.max(1, at), NS) : "";
     if (tAll >= T_CROWN) crown.at(tAll - T_CROWN, true, focoDeLaCabina());
+  }
+
+  // `?auditar=nino`: la prueba del niño (`scripts/audit-nino.mjs`) lee del plan quiénes siguen arriba, cuánto falta y qué pasó. Solo lee.
+  {
+    /** La hora del golpe: cuando termina el silencio del foco y sube la fanfarria. */
+    const golpe = T_CROWN + FOCO.golpe / paceFactor();
+    exponerNino({
+      forma: "de-pie",
+      duracion: golpe,
+      t: () => tAll,
+      verdad: () => {
+        // Adónde mirar: las cabinas que todavía llevan gente, y con el golpe, la de quien gana. Lo decide la cámara, que el plan no conoce.
+        const W = S.sw(), H = S.sh();
+        const cuales = tAll >= golpe ? [winnerCab] : P.pax.map((_, cab) => cab).filter((cab) => P.aboard(cab, tAll).length > 0);
+        const centros = cuales.flatMap((cab) => {
+          const b = cabBox(cab, tAll);
+          return b ? [{ x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 }] : [];
+        });
+        const vistos = centros.filter((c) => c.x >= 0 && c.x <= W && c.y >= 0 && c.y <= H);
+        const donde = vistos.length ? vistos : centros;
+        const x = donde.length ? donde.reduce((a, c) => a + c.x, 0) / donde.length : W / 2;
+        const y = donde.length ? donde.reduce((a, c) => a + c.y, 0) / donde.length : H / 2;
+        return respuestasTeleferico(
+          planDelTelefericoDe(P, winners[0] ?? 0, golpe),
+          tAll,
+          sentidoDelTeleferico(S.portrait()),
+          lugarDe(x, y, W, H),
+        );
+      },
+    });
   }
 
   cam.cut(pt(0).x + 40 * G.k, pt(0).y + 20 * G.k, 1.55);

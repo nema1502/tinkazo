@@ -166,9 +166,9 @@ describe("la pregunta propia de cada forma", () => {
 
   it("la forma de cada juego es la que se decidió", () => {
     expect(FORMA_DECIDIDA).toMatchObject({
-      race: "carrera", teleferico: "carrera", rockets: "carrera",
+      race: "carrera", teleferico: "de-pie", rockets: "carrera",
       guajojo: "de-pie", toborochi: "de-pie", pinata: "de-pie", sapo: "de-pie", quien: "de-pie", trueque: "de-pie",
-      wheel: "rueda", oruro: "rueda",
+      wheel: "rueda", oruro: "de-pie",
       chovena: "de-pie",
       trompo: "de-pie",
     });

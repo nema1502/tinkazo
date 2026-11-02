@@ -80,7 +80,7 @@ export const FORMAS = ["carrera", "de-pie", "rueda", "acumulacion"];
  */
 export const FORMA_DECIDIDA = {
   race: "carrera",
-  teleferico: "carrera",
+  teleferico: "de-pie",
   rockets: "carrera",
   guajojo: "de-pie",
   toborochi: "de-pie",
@@ -90,7 +90,7 @@ export const FORMA_DECIDIDA = {
   trueque: "de-pie",
   wheel: "rueda",
   trompo: "de-pie",
-  oruro: "rueda",
+  oruro: "de-pie",
   chovena: "de-pie",
 };
 
