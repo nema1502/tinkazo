@@ -59,6 +59,8 @@ export interface Borla3D {
   pie: number;
   alto: number;
   radio: number;
+  /** La carrera nueva: en vez de la borla, una manta amarilla sobre el lomo (una tira de color). */
+  manta?: boolean;
 }
 
 /** La cámara del director del 2D en este cuadro. */

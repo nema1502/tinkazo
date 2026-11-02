@@ -32,6 +32,8 @@ const tema = opt("--tema", "dark");
 const motor = opt("--motor", "3d");
 const demo = opt("--demo", "pose");
 const prefijo = opt("--prefijo", "");
+// `--n 18`: la escena fija con esa cantidad de nombres de ejemplo (`?n=`).
+const cuantos = opt("--n", "");
 const midiendo = args.includes("--fps");
 mkdirSync(out, { recursive: true });
 
@@ -67,7 +69,7 @@ const PRELUDIO = (lista) => `(() => {
   RAF(bombear);
 })()`;
 
-const url = (demo === "pose" ? `${base}/?pose=1` : `${base}/?demo=${demo}`) + `&theme=${tema}&motor=${motor}&auditar=3d`;
+const url = (demo === "pose" ? `${base}/?pose=1` : `${base}/?demo=${demo}`) + `&theme=${tema}&motor=${motor}&auditar=3d${cuantos ? `&n=${cuantos}` : ""}`;
 const browser = await launch({ port: Number(process.env.CDP_PORT || 9731), width: w, height: h });
 try {
   const page = await browser.open("about:blank");

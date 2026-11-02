@@ -313,6 +313,7 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
   const grupoLlamas = new Group();
   escena.add(grupoLlamas);
   let borla: Group | null = null;
+  let manta: Group | null = null;
 
   /* -------------------------------------------------------- lo fijo del mundo */
   function armarMundo(g: Geometria3D): void {
@@ -643,8 +644,25 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
       llamas.delete(persona);
     }
 
+    // La manta del líder (carrera nueva): una tira amarilla echada sobre el lomo, con una raya de tinta en cada punta.
+    if (e.borla?.manta) {
+      if (!manta) {
+        manta = new Group();
+        const tira = new Mesh(basura.add(new BoxGeometry(2.4, 0.22, 1.7)), basura.add(new MeshLambertMaterial({ color: 0xffc629, emissive: 0x4a3600 })));
+        const rayaA = new Mesh(basura.add(new BoxGeometry(0.2, 0.26, 1.74)), piezas.tinta);
+        rayaA.position.x = -1;
+        const rayaB = rayaA.clone();
+        rayaB.position.x = 1;
+        manta.add(tira, rayaA, rayaB);
+        escena.add(manta);
+      }
+      manta.visible = true;
+      manta.position.set(e.borla.x * s, e.borla.alto * s * TAM3D, e.borla.pie * s * ZC);
+      manta.scale.setScalar(Math.max(0.5, e.borla.radio * s * TAM3D));
+    } else if (manta) manta.visible = false;
+
     // La borla del líder.
-    if (e.borla) {
+    if (e.borla && !e.borla.manta) {
       if (!borla) {
         borla = new Group();
         const bola = new Mesh(basura.add(new SphereGeometry(1, 12, 9)), basura.add(new MeshLambertMaterial({ color: 0xffc629, emissive: 0x4a3600 })));

@@ -983,9 +983,12 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
     const vz = cam.zoom || 1;
     const medir = params.get("auditar") === "3d";
     const medidas: { persona: number; px: number; alto: number; ancho: number }[] = [];
-    const borla3: Borla3D | null = bp && borla.visible ? { x: bp.x, pie: bp.pie, alto: bp.pie - bp.y, radio: BORLA_RADIO * bp.esc } : null;
+    const borla3: Borla3D | null = bp && borla.visible ? { x: bp.x, pie: bp.pie, alto: bp.pie - bp.y, radio: BORLA_RADIO * bp.esc, manta: d.nueva } : null;
     tres.frame({ t, w: P.w, h: P.h, u: P.u, cam: { x: cam.x, y: cam.y, zoom: vz, rot: cam.rot }, gente, borla: borla3, campeona: d.campeona, corona, horas: HORAS_Q.map((q) => d.tDeQ(q)) });
-    for (const f of fichas) {
+    // Las fichas no se pisan: la que manda (la del primero, después las recientes) se queda donde cae; la que choca con una puesta
+    // se corre hacia arriba o hacia abajo por su alto y, si ni así cabe, no se muestra en ese cuadro.
+    const puestas: { x0: number; y0: number; x1: number; y1: number }[] = [];
+    for (const f of [...fichas].sort((a, b2) => b2.peso - a.peso)) {
       const pan = tres.pantallaDe(f.persona);
       const et = f.et;
       if (!pan) {
@@ -1001,6 +1004,18 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
       et.raiz.position.set(Math.max(mitad, Math.min(P.w - mitad, pan.x)), pan.y - (et.h * e) / 2 - 3 * P.u);
       et.raiz.zIndex = f.peso + pan.y;
       et.raiz.visible = dentro && f.etiquetar && !f.sinLugar;
+      if (et.raiz.visible) {
+        const w = et.w * e, h = et.h * e, y0 = et.raiz.y;
+        const caja = (dy: number): { x0: number; y0: number; x1: number; y1: number } => ({ x0: et.raiz.x - w / 2, y0: y0 + dy - h / 2, x1: et.raiz.x + w / 2, y1: y0 + dy + h / 2 });
+        const choca = (r: { x0: number; y0: number; x1: number; y1: number }): boolean => puestas.some((b2) => r.x0 < b2.x1 - 1 && r.x1 > b2.x0 + 1 && r.y0 < b2.y1 - 1 && r.y1 > b2.y0 + 1);
+        const paso = h + 2 * P.u;
+        const dy = [0, -paso, paso, -2 * paso, 2 * paso].find((v) => !choca(caja(v)) && y0 + v - h / 2 > P.top);
+        if (dy === undefined) et.raiz.visible = false;
+        else {
+          et.raiz.y = y0 + dy;
+          puestas.push(caja(dy));
+        }
+      }
       if (medir && et.raiz.visible) medidas.push({ persona: f.persona, px: et.texto.style.fontSize as number * e, alto: et.h * e, ancho: et.w * e });
     }
     if (medir) (window as unknown as { __fichas3d: unknown }).__fichas3d = medidas;
@@ -1153,15 +1168,16 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
     }
   }
 
-  // Para el auditor de emoción (solo la carrera nueva): dónde queda quien gana en la pantalla. Sin su nombre: desde el golpe la ficha se
-  // va (el cartel ya dice quién gana), y lo que no puede cortar ni tapar el cartel es su cuerpo.
-  if (d.nueva) {
-    S.ganadorEn(() => {
-      const c = cuerpoDe(posicion(d.campeona, d.tCrown));
-      const a = cam.toScreen(c.x, c.y, P.w, P.h), b = cam.toScreen(c.x + c.w, c.y + c.h, P.w, P.h);
-      return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
-    });
-  }
+  // Para el auditor de emoción: dónde queda quien gana en la pantalla. Sin su nombre: desde el golpe la ficha se va (el cartel ya dice
+  // quién gana), y lo que no puede cortar ni tapar el cartel es su cuerpo.
+  S.ganadorEn(() => {
+    // Con el prototipo 3D la llama se ve por su cámara: de la cabeza al pie, con un ancho parecido a su alto.
+    const pan = tres?.pantallaDe(d.campeona);
+    if (tres) return pan ? { x: pan.x - pan.alto * 0.55, y: pan.y, w: pan.alto * 1.1, h: pan.alto } : null;
+    const c = cuerpoDe(posicion(d.campeona, d.tCrown));
+    const a = cam.toScreen(c.x, c.y, P.w, P.h), b = cam.toScreen(c.x + c.w, c.y + c.h, P.w, P.h);
+    return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+  });
 
   const escena: EscenaCarrera & { rebuild(): void; draw(t: number): void } = {
     rebuild: reconstruir,

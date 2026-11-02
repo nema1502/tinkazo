@@ -1,3 +1,4 @@
+import { enStand } from "../../ensayo-modo";
 import type { Textos } from "../pixi/kit";
 
 /**
@@ -14,7 +15,8 @@ import type { Textos } from "../pixi/kit";
  */
 export const TEXTOS_CARRERA: Textos = {
   es: {
-    carMeta: "¡Gana quien llegue a la meta!",
+    // En una ronda de stand nadie gana: sale quien llegue a la meta.
+    carMeta: () => (enStand() ? "¡Sale quien llegue a la meta!" : "¡Gana quien llegue a la meta!"),
     carBusquen: "¡Busquen su nombre!",
     carSalida: "¡Salida!",
     carRotuloMeta: "META",
@@ -44,7 +46,7 @@ export const TEXTOS_CARRERA: Textos = {
     carCierraTanda: "¡Se cierra el portón!",
   },
   en: {
-    carMeta: "Whoever reaches the finish wins!",
+    carMeta: () => (enStand() ? "Whoever reaches the finish gets picked!" : "Whoever reaches the finish wins!"),
     carBusquen: "Find your name!",
     carSalida: "Go!",
     carRotuloMeta: "FINISH",
