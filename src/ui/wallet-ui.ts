@@ -10,7 +10,9 @@ import { enNavegadorDeApp as esDeApp } from "../navegador";
 import { clearSessionKind, loadSessionKind, pickRestore, saveSessionKind } from "../stellar/session-store";
 import { contarEntrada, tomarEntrada } from "../contar";
 import { crearChip } from "./cuenta-chip";
-import { type EstadoCuenta, claveDelAviso, estadoCuenta } from "./cuenta-estado";
+import { MARCA_INGRESAR, type EstadoCuenta, claveDelAviso, estadoCuenta } from "./cuenta-estado";
+import { errorDeCodigo } from "./ingreso-errores";
+import { esDeRed } from "../stellar/errores";
 
 /**
  * Identidad del organizador en la cabecera.
@@ -848,6 +850,15 @@ export async function openPicker(pedido: Pedido = {}): Promise<void> {
   abriendo = true;
   try {
     await abrirPicker(pedido);
+  } catch {
+    // El navegador conserva los import fallidos durante esta carga: repetir el
+    // mismo import no lo recupera aunque vuelva la red. Se usa la vuelta de
+    // ingreso existente, con el borrador guardado y otro gesto para recargar.
+    notice(t("loginAbrirFallo"), true, () => {
+      guardarBorrador();
+      try { sessionStorage.setItem(MARCA_INGRESAR, "1"); } catch { /* sin almacenamiento, el chip sigue ofreciendo entrar */ }
+      location.reload();
+    });
   } finally {
     abriendo = false;
   }
@@ -1074,10 +1085,10 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
       const { pollarWallet } = await import("../stellar/wallet-pollar");
       await pollarWallet.sendEmailCode(mail);
       codeStep(mail);
-    } catch {
+    } catch (e) {
       go.disabled = false;
       go.textContent = label;
-      say(err, t("loginSendFailed"));
+      say(err, errorDeCodigo(e, "enviar"));
     }
   }
 
@@ -1122,13 +1133,9 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
         // ese tipo y se retoma igual al recargar.
         await afterConnect(w, pollarWallet, address, "google", back, shut);
       } catch (e) {
-        const why = e instanceof Error ? e.message : "";
         go.disabled = false;
         go.textContent = t("loginCodeGo");
-        say(
-          err,
-          why === "EMAIL_CODE_INVALID" ? t("loginBadCode") : why === "EMAIL_CODE_EXPIRED" ? t("loginExpired") : t("loginFailed"),
-        );
+        say(err, errorDeCodigo(e, "verificar"));
         input.select();
       }
     }
@@ -1145,8 +1152,8 @@ function showModal(options: Option[], emailOn: boolean, pedido: Pedido = {}): vo
         const { pollarWallet } = await import("../stellar/wallet-pollar");
         await pollarWallet.sendEmailCode(mail);
         say(err, t("loginResent"), true);
-      } catch {
-        say(err, t("loginSendFailed"));
+      } catch (e) {
+        say(err, errorDeCodigo(e, "enviar"));
       }
       again.disabled = false;
     });
@@ -1309,7 +1316,9 @@ async function disconnect(): Promise<void> {
 }
 
 async function walletErrorText(e: unknown): Promise<string> {
-  const { WALLET_ERRORS } = await lite();
+  // El clasificador tampoco puede depender de que la descarga que falló vuelva a funcionar.
+  const WALLET_ERRORS = await lite().then((w) => w.WALLET_ERRORS).catch(() => null);
+  if (!WALLET_ERRORS) return t("walletUnknown");
   const msg = e instanceof Error ? e.message : String(e);
   if (msg === WALLET_ERRORS.notInstalled) return t("freighterInstall");
   if (msg === WALLET_ERRORS.rejected) return t("walletRejected");
@@ -1319,11 +1328,12 @@ async function walletErrorText(e: unknown): Promise<string> {
   if (msg === WALLET_ERRORS.popupBlocked) return t("cuentaBloqueada");
   if (msg === WALLET_ERRORS.popupClosed) return t("cuentaCerrada");
   if (msg === WALLET_ERRORS.popupNoSession) return t("cuentaSinSesion");
-  return t("walletUnknown");
+  return t(esDeRed(e) ? "loginConexion" : "walletUnknown");
 }
 
 /**
- * Un aviso breve. El de un error flota sobre el pie de página y se va solo.
+ * El aviso de error persiste con una acción y un cierre explícito; con un
+ * diálogo abierto usa la ubicación superior que ya define el estilo.
  *
  * El de que algo salió bien ("Cuenta de prueba lista…") va dentro de la página,
  * arriba de la lista, donde estaba el botón para entrar, así que no tapa nada:
@@ -1333,16 +1343,31 @@ async function walletErrorText(e: unknown): Promise<string> {
  * o tecla, después de que el toque llegó a su botón (si la página se moviera
  * antes, el toque caería en otro lado), o a los diez segundos.
  */
-function notice(text: string, bad: boolean): void {
+function notice(text: string, bad: boolean, reintentar?: () => void): void {
   document.querySelector(".wallet-notice")?.remove();
   const el = document.createElement("div");
   el.className = `wallet-notice${bad ? " bad" : " arriba"}`;
   el.textContent = text;
   if (bad) {
-    // Un error se anuncia enseguida a los lectores de pantalla (y se va solo a los siete segundos).
+    // Persiste hasta que la persona elija cómo seguir; no pierde su acción a los siete segundos.
     el.setAttribute("role", "alert");
+    const resolver = button(t(reintentar ? "loginRecargar" : "loginOtraVia"), "ghost", () => {
+      el.remove();
+      if (reintentar) reintentar();
+      else {
+        // Si ya hay selector, las otras vías están ahí: no se abre una segunda ventana.
+        const login = document.querySelector<HTMLElement>(".modal-card.login");
+        if (login) {
+          login.querySelector<HTMLButtonElement>(".login-links button:last-child")?.click();
+          const campo = login.querySelector<HTMLElement>("#login-mail");
+          (campo ?? login).focus();
+        } else void openPicker();
+      }
+    });
+    el.append(" ", resolver);
+    const cerrar = button(t("loginClose"), "ghost", () => el.remove());
+    el.append(" ", cerrar);
     document.body.appendChild(el);
-    setTimeout(() => el.remove(), 7000);
     return;
   }
   el.setAttribute("role", "status");
