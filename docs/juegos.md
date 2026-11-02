@@ -131,6 +131,7 @@ Vale la pena solo si la mecánica visual es distinta de verdad. La prueba: si ha
 5. Enlazar el botón en `src/main.ts` y despachar el juego en `src/ui/draw.ts`.
 6. Escribir `docs/juegos/<nombre>.md` siguiendo el modelo de la Carrera Stellar.
 7. Pasar la auditoría.
+8. Pasar [la boleta](#la-boleta): un juego entra al selector con las nueve filas de la boleta en verde más dos vetos humanos, el cultural (quien funda, con la tarjeta y su fuente) y el del momento (el psicólogo y el evaluador, una vez cada uno, con sus hallazgos verificados).
 
 ## La auditoría
 
@@ -557,6 +558,35 @@ El ritmo, la legibilidad del cartel y el tartamudeo de los subtítulos ya los mi
 - ¿El dato de la tarjeta es verdad? El auditor comprueba que haya un enlace, no que el enlace diga lo que la tarjeta dice. Eso lo comprobás vos, en la fuente primaria, antes de subirlo.
 - ¿Se ve bien con 2 participantes y con 200? Que funcione, fluya y no quede quieto lo mide el auditor exigente; si se entiende quién es quién, lo mirás vos. El protocolo tiene su propia prueba de carga en [`src/protocol/carga.test.ts`](../src/protocol/carga.test.ts): sellar diez mil nombres y sortear treinta y dos ganadores entre ellos pasa desapercibido.
 - ¿El ganador queda claro al final, sin ambigüedad?
+
+## La boleta
+
+Un solo veredicto por juego, con las nueve cosas que un juego tiene que demostrar, armado con lo que los auditores ya dejan en su línea JSON. Un juego entra al selector con las nueve filas en verde más dos vetos humanos: el cultural y el del momento.
+
+```bash
+pnpm audit:todo --boleta <juego>                       # corre lo que alimenta la boleta y la arma
+node scripts/boleta.mjs <juego> --de docs/capturas/auditorias/<fecha>.json   # la arma sola con JSON ya guardados
+```
+
+Escribe `docs/capturas/boletas/<juego>.md` (no se versiona, como las auditorías) y, con `--json`, una línea `{"auditor":"boleta","objetivo":<juego>,"aprobadas":N,"total":9,…}`. Sale con 1 si no aprueba. `--de` acepta varios archivos separados por coma, el informe de la batería o líneas de resumen sueltas (la de `audit-nino --juzgar --json`); `--delatores <archivo>` suma el Bayes máximo del detalle de `audit-delatores --json <archivo>`.
+
+| # | Dimensión | De dónde sale | Verde si |
+|---|---|---|---|
+| 1 | Justicia | `audit-delatores` (aprobado y el Bayes máximo en %), `audit-rigor` (cero `Math.random`), `audit-game` (comprobación 2: el ganador es el del protocolo) | las tres |
+| 2 | Comprensión | `audit-nino` (corridas que pasan sobre el total) | el juego pasa |
+| 3 | Identificación | `audit-identidad` (con 8, con 18 y con 50) | 100 % con 8, 90 % o más con 18 |
+| 4 | Momento | `audit-emocion` y el veto del momento | todas las de emoción y el veto en ok |
+| 5 | Sala y proyector | `audit-legible`, `audit-mezcla` (si corrió), destellos y contorno de `audit-rigor` | todo aprobado; la mezcla sin correr se muestra gris, no roja |
+| 6 | Sin olor a apuesta | `audit-palabras` grupo `apuesta` y la pregunta `olor` de `audit-nino` | cero hallazgos |
+| 7 | Verdad y respeto | `check-lore` para la tarjeta del juego, `audit-palabras` grupo `vocabulario` y el veto cultural | fuente viva, cero hallazgos, veto ok |
+| 8 | Robustez | `audit-rigor` (2, 60 y 200 personas, fugas, saltar), `audit-game` (celular, temas, inglés), `smoke` | todo aprobado |
+| 9 | Ganas de volver | el psicólogo, con la rúbrica de 10 criterios (puntaje sobre 30), leído de `docs/boletas-vetos.json` | 24 o más sobre 30 y sin patrón oscuro; sin entrada, pendiente (gris) |
+
+**Verde, rojo y gris.** Cada fila junta partes. Una parte es verde si pasó, roja si falló y gris si no hay dato: el auditor no corrió, todavía no existe o falta un veto. La fila es roja si alguna parte lo es, gris si no hay rojas pero sí grises, y verde solo si todas lo son. Una fila gris no es verde: la boleta aprueba únicamente con las nueve en verde. Como el resumen de un auditor trae solo lo que falló, «pasó» quiere decir que la corrida existe y ninguna falla le toca al juego (en una corrida de `todos`, las fallas con el prefijo de otro juego no cuentan).
+
+**Los vetos humanos** viven en `docs/boletas-vetos.json` (versionado, chico): `{ "<juego>": { "cultural": { "ok": true, "fecha": "2026-11-02", "nota": "…" }, "momento": { "ok": false }, "volver": { "puntaje": 24, "de": 30, "fecha": "2026-11-02", "patronOscuro": false, "nota": "…" } } }`. Sin entrada, la fila dice «pendiente». Los escribe a mano quien dirige con la palabra de Nicolás; la boleta solo los lee.
+
+**Lo que la boleta no tiene todavía.** La línea JSON de un auditor trae aprobadas, total y fallas, no cada cifra: el Bayes máximo solo está en el detalle de delatores (y solo de la recta de la carrera), los porcentajes de identificación no están en ninguna línea, y la prueba por forma y el auditor de palabras son de otras ramas. Donde falta la cifra, la celda dice «sin cifra» o «sin auditor» y la fila queda gris o verde con esa nota; los auditores no se tocaron para sacar más.
 
 ## Juegos actuales
 
