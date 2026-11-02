@@ -5,6 +5,13 @@ import { getLang, usarTextos, type Lang } from "./idioma";
 export { chooseLang, getLang, initialLang, onLangChange, setLang, type Lang } from "./idioma";
 
 /** Lo que hace falta para escribir las bases de un sorteo sellado. */
+export interface RulesPreParams {
+  prize: string;
+  count: number;
+  winners: number;
+  verifyUrl: string;
+}
+
 export interface RulesParams {
   prize: string;
   count: number;
@@ -202,6 +209,8 @@ export interface Dict {
   cTelDoor: (n: string) => string;
   cTelSlip: (n: string) => string;
   rules: (p: RulesParams) => string;
+  /** Las bases antes de sellar: sin huella, sin fechas y sin número, que todavía no existen. */
+  rulesPre: (p: RulesPreParams) => string;
   cTomCount: (n: number) => string;
   cTomBall: (num: string) => string;
   cTomFake: (num: string) => string;
@@ -958,17 +967,28 @@ export const T: Record<Lang, Dict> = {
       "",
       "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta.",
       `2. Participan las ${p.count} personas de la lista. ${p.winners === 1 ? "Sale un ganador." : `Salen ${p.winners} ganadores.`}`,
-      `3. La lista quedó sellada el ${p.sealedAt} con esta huella SHA-256:`,
+      `3. La lista se cerró el ${p.sealedAt}, antes de que existiera el número que decide. Si alguien la cambia, la huella ya no coincide:`,
       `   ${p.listHash}`,
+      `4. ${p.winners === 1 ? "Quién gana sale" : "Quiénes ganan salen"} de un número al azar que se publica el ${p.roundAt} y que nadie conocía al cerrar la lista. Cualquiera puede rehacer la cuenta y le da lo mismo.`,
       p.raffleId
-        ? `   El sello está en la red Stellar (${p.network}), sorteo #${p.raffleId}. Si alguien cambia la lista, cambia la huella.`
-        : "   El sello se calculó en el navegador de quien organiza: nadie más atestigua cuándo se cerró la lista.",
-      `4. ${p.winners === 1 ? "Quién gana sale" : "Quiénes ganan salen"} de la ronda ${p.round} de drand quicknet, que se publica el ${p.roundAt}. Es un número al azar que nadie conocía cuando se selló la lista.`,
-      "5. La selección sigue el protocolo Tinkazo v2: con la lista y la ronda, cualquiera puede recomputar el resultado.",
+        ? `5. El número de este sorteo es ${p.raffleId}. Con él se comprueba todo en el enlace de abajo.`
+        : "5. Esta lista se cerró en el navegador de quien organiza: nadie más puede atestiguar cuándo.",
       "6. El juego que se ve en pantalla es presentación: no decide nada.",
       "7. Quien organiza responde por el premio. Tinkazo es la herramienta.",
       "",
-      `Cómo se verifica: ${p.verifyUrl}`,
+      `Para comprobarlo: ${p.verifyUrl}`,
+    ].join("\n"),
+    rulesPre: (p) => [
+      `Bases del sorteo${p.prize ? `: ${p.prize}` : ""}`,
+      "",
+      "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta.",
+      `2. Participan las ${p.count} personas de la lista. ${p.winners === 1 ? "Sale un ganador." : `Salen ${p.winners} ganadores.`}`,
+      "3. Cómo se elige: la lista se cierra y se publica antes de que exista el número que decide, y cualquiera puede comprobarlo.",
+      "4. Al cerrar la lista se publica el número de este sorteo. Con él se comprueba todo en el enlace de abajo.",
+      "5. El juego que se ve en pantalla es presentación: no decide nada.",
+      "6. Quien organiza responde por el premio. Tinkazo es la herramienta.",
+      "",
+      `Para comprobarlo: ${p.verifyUrl}`,
     ].join("\n"),
     tellWhatsapp: "Avisarle por WhatsApp", tellEmail: "Avisarle por correo",
     tellSubject: "Ganaste el sorteo 🦙",
@@ -2028,6 +2048,8 @@ export const T: Record<Lang, Dict> = {
     cuentaSalio: "Cerraste tu sesión.",
     // Textos del 26 de octubre de 2026
     masResultado: "Otra lista, copiar el mensaje y más",
+    // Bases antes de sellar (1 de noviembre de 2026)
+    rulesNotePre: "Pegalas en Luma, en WhatsApp o donde avisaste del sorteo antes de empezar. Dicen cómo se elige y cuándo se publica el número del sorteo.",
     // >>> kit:i18n-es (scripts/nuevo-juego.mjs escribe entre estas marcas)
     // <<< kit:i18n-es
   },
@@ -2628,17 +2650,28 @@ export const T: Record<Lang, Dict> = {
       "",
       "1. Entry is free. Nothing to buy and no account needed.",
       `2. The ${p.count} people on the list take part. ${p.winners === 1 ? "One winner is drawn." : `${p.winners} winners are drawn.`}`,
-      `3. The list was sealed on ${p.sealedAt} with this SHA-256 fingerprint:`,
+      `3. The list was closed on ${p.sealedAt}, before the deciding number existed. If anyone changes it, the fingerprint no longer matches:`,
       `   ${p.listHash}`,
+      `4. ${p.winners === 1 ? "The winner comes" : "The winners come"} from a random number published on ${p.roundAt} that nobody knew when the list was closed. Anyone can redo the math and gets the same result.`,
       p.raffleId
-        ? `   The seal is on the Stellar network (${p.network}), draw #${p.raffleId}. Change the list and the fingerprint changes.`
-        : "   The seal was computed in the organizer's browser: nobody else witnesses when the list was closed.",
-      `4. ${p.winners === 1 ? "The winner comes" : "The winners come"} from drand quicknet round ${p.round}, published on ${p.roundAt}. It is a random number nobody knew when the list was sealed.`,
-      "5. Selection follows the Tinkazo v2 protocol: with the list and the round, anyone can recompute the result.",
+        ? `5. This draw's number is ${p.raffleId}. Everything is checked with it at the link below.`
+        : "5. This list was closed in the organizer's browser: nobody else can vouch for when.",
       "6. The game on screen is presentation: it decides nothing.",
       "7. The organizer is responsible for the prize. Tinkazo is the tool.",
       "",
-      `How to verify: ${p.verifyUrl}`,
+      `To check it: ${p.verifyUrl}`,
+    ].join("\n"),
+    rulesPre: (p) => [
+      `Draw rules${p.prize ? `: ${p.prize}` : ""}`,
+      "",
+      "1. Entry is free. Nothing to buy and no account needed.",
+      `2. The ${p.count} people on the list take part. ${p.winners === 1 ? "One winner is drawn." : `${p.winners} winners are drawn.`}`,
+      "3. How it is chosen: the list is closed and published before the deciding number exists, and anyone can check it.",
+      "4. When the list is closed, this draw's number is published. Everything is checked with it at the link below.",
+      "5. The game on screen is presentation: it decides nothing.",
+      "6. The organizer is responsible for the prize. Tinkazo is the tool.",
+      "",
+      `To check it: ${p.verifyUrl}`,
     ].join("\n"),
     tellWhatsapp: "Tell them on WhatsApp", tellEmail: "Tell them by email",
     tellSubject: "You won the draw 🦙",
@@ -3677,6 +3710,8 @@ export const T: Record<Lang, Dict> = {
     cuentaSalio: "You signed out.",
     // Textos del 26 de octubre de 2026
     masResultado: "Another list, copy the message and more",
+    // Rules before sealing (November 1, 2026)
+    rulesNotePre: "Paste them on Luma, WhatsApp or wherever you announce the draw before you start. They say how the winner is chosen and when the draw's number is published.",
     // >>> kit:i18n-en (scripts/nuevo-juego.mjs escribe entre estas marcas)
     // <<< kit:i18n-en
   },

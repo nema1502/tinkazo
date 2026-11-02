@@ -63,6 +63,8 @@ export function renderNames(): void {
   // Un boton apagado sin explicacion es lo que mas frena a quien recien llega.
   $("freeze-hint").style.display = names.length < 2 && !app.frozen ? "block" : "none";
   $("free-rule").style.display = app.frozen ? "none" : "block";
+  // Las bases de antes de sellar: con lista y sin sellar. Después las reemplazan las de siempre.
+  $("rules-pre-row").style.display = names.length >= 2 && !listaCerrada() ? "" : "none";
   const vacia = names.length === 0 && !listaCerrada();
   // Con la lista cerrada, nada la reemplaza: ni el ejemplo ni la selección del archivo.
   // Y "Cargar ejemplo" es para quien llega sin lista: con nombres en el cuadro,

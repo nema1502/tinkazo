@@ -4,7 +4,7 @@ import { chooseLang, initialLang, onLangChange, setLang, t } from "./i18n";
 import { SAMPLE, app, currentPace, paceSeconds, paraCompartir, params, setPace, setParaCompartir, type Game, type Pace } from "./state";
 import { soundLabel, toggleSound, unlockAudioOnGesture } from "./sound";
 import { bindParticipants, loadSample, parseNames, renderNames, reponerBorrador } from "./ui/participants";
-import { GAME_BUTTONS, cambiarJuego, copyRules, elegirJuego, freeze, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
+import { GAME_BUTTONS, cambiarJuego, copyRules, copyRulesPre, elegirJuego, freeze, refreshFreezeLabel, refrescarRecomendacion, secondsToRound, setGame } from "./ui/freeze";
 import { initSiguiente } from "./ui/siguiente";
 import { crearBotonesDelKit } from "./ui/botones-kit";
 import { JUEGOS } from "./games/pixi/kit/catalogo";
@@ -128,6 +128,7 @@ $("btn-proof").addEventListener("pointerdown", adelantarCorto);
 $("winner-cards").addEventListener("click", alTocarGanadores);
 $<HTMLButtonElement>("btn-copy").addEventListener("click", (e) => void copySummary(e.currentTarget as HTMLButtonElement));
 $<HTMLButtonElement>("btn-rules").addEventListener("click", (e) => void copyRules(e.currentTarget as HTMLButtonElement));
+$<HTMLButtonElement>("btn-rules-pre").addEventListener("click", (e) => void copyRulesPre(e.currentTarget as HTMLButtonElement));
 $("btn-proof").addEventListener("click", shareProof);
 // El contador del embudo (src/contar.ts): avisarle al ganador también es compartir.
 $("btn-whatsapp").addEventListener("click", () => contarCompartido("whatsapp"));

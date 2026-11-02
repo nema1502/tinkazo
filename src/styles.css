@@ -1874,6 +1874,9 @@
   #sec-frozen .pick-label { margin-top: 20px; }
   #sec-frozen .ajustes { margin-top: 16px; }
   #sec-frozen .rules-row { margin: 14px 0 6px; }
+  /* Las bases de antes de sellar: abajo de "Sellar la lista", chicas, sin competir con ella. */
+  #sec-participants .rules-pre-row { margin: 8px 0 0; }
+  #sec-participants .rules-pre-row .mini { min-height: 48px; }
   #sec-frozen .kpis { margin-top: 16px; border: 2px solid var(--ink); }
   #sec-frozen .kpis > div { padding: 12px 18px; }
   #sec-frozen .kpis b { font-size: 24px; }

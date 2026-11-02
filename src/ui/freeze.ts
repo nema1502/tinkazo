@@ -1028,3 +1028,29 @@ function renderSealSummary(): void {
   a.textContent = `${network.name} ↗`;
   el.appendChild(a);
 }
+
+/**
+ * Las bases antes de sellar: lo que ya se sabe (premio, cuántos ganan, cuántas
+ * personas) y cómo se elige, sin huella, fechas ni número, que todavía no
+ * existen. Para avisar del sorteo antes de empezar el evento.
+ */
+export async function copyRulesPre(btn: HTMLButtonElement): Promise<void> {
+  const lang = getLang();
+  const count = parseNames().length;
+  if (count < 2) return;
+  const text = T[lang].rulesPre({
+    prize: $<HTMLInputElement>("prize").value.trim().replace(/\s+/g, " "),
+    count,
+    winners: Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, count),
+    verifyUrl: `${location.origin}/como-funciona.html`,
+  });
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.textContent = t("copied");
+    setTimeout(() => { btn.textContent = t("copyRules"); }, 1600);
+  } catch {
+    const pre = $("rules-pre-text");
+    pre.textContent = text;
+    pre.style.display = "block";
+  }
+}
