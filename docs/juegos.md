@@ -436,6 +436,8 @@ Y cuatro obligaciones:
 - **Lo que le habla a una persona va en segundos reales:** la cuenta regresiva y el sostén del cartel del ganador. Lo que tarda alguien en leer un nombre proyectado no cambia porque el organizador elija "épica". El cartel se sostiene 3 segundos reales; menos que eso corta la reacción de la sala por la mitad.
 - **Los adornos del final van después de la fanfarria,** a +520 y +700 ms. Dentro quedan enmascarados por notas que suenan al doble de volumen.
 
+El silencio también es sonido. `audit-sound` marca los huecos de más de 4 s (la escena se siente muerta), pero **el cuarto de segundo sin nada que termina en el golpe es a propósito** y no cuenta como defecto: lo que se le pide (de 0,2 a 0,6 s) lo mide [el ritmo de los hechos](#el-ritmo-de-los-hechos).
+
 ## El director de emoción
 
 Un juego que cuenta el resultado con parámetros se ve como una simulación. La carrera de llamas era eso: cada llama con una velocidad que subía y bajaba sola, todas con el mismo paso, y el ganador remontando siempre desde atrás al 80%. Nadie tropezaba, nadie se plantaba, no había duelos ni llegadas por una nariz, y a los dos sorteos la sala ya sabía mirar a la última.
@@ -513,6 +515,38 @@ Los otros auditores miran un sorteo por vez. Lo que mata la emoción no se ve en
 
 La primera vez que corrió encontró justo eso: con las curvas de cada arco fijas, a la mitad la ganadora iba primera o última en casi todas las carreras, y en los cohetes iba atrás en trece de dieciséis. Ahora el puesto a la mitad se sortea según el arco (el duelo, del 1.º al 4.º; la tapada, del 3.º al 6.º; la remontada, del 5.º al 8.º; el susto, 1.ª o 2.ª si el tropiezo viene después de la mitad y 7.ª u 8.ª si ya tropezó, mitad y mitad) de modo que cada puesto sale una de cada ocho veces (`audit-delatores race` lo mide a nivel del plan con chi cuadrado), y la curva de la ganadora se corrige por bisección hasta ocuparlo, repetida hasta que valen todos los puestos a la vez. La corrección vale cero en la largada y desde el 86%, así que la llegada no cambia.
 
+### El ritmo de los hechos
+
+```bash
+node scripts/audit-emocion.mjs <juego>                 # corre con los demás grupos; informativo
+node scripts/audit-emocion.mjs <juego> --solo-ritmo    # nada más el ritmo
+node scripts/audit-emocion.mjs <juego> --ritmo-estricto  # las cuatro pasan a ser compuertas
+```
+
+Cuatro renglones de «lo que el auditor no puede ver» eran de ojo y ahora se miden, con el plan del juego y no con la pantalla. Un grupo más de `audit-emocion` (se saltea con `--sin-ritmo`; `--semillas-ritmo`, 4 por defecto) corre el show entero con el reloj en turbo y `?auditar=nino`, y en cada cuadro de juego anota los cambios de `window.__nino.verdad().paso` (la línea de tiempo de los hechos: cada cambio de `paso.tipo` distinto de `nada`, en el segundo `desde` que dice el plan), los subtítulos que se ven, los osciladores que suenan (con el enganche de `audit-sound`) y el cuadro del golpe. Se mide:
+
+1. **Un hecho nuevo cada 1,5 a 2,5 s, y nunca más de 4 s sin uno.** La mediana de los huecos entre hechos (contados desde el segundo cero hasta quien gana) tiene que caer en la banda, y ningún hueco pasa de 4 s. Se informan la mediana, el máximo y cuántos huecos pasan de 4 s.
+2. **Los primeros 3 s son llamada de atención, no información.** Ningún hecho `salio`, `adelante`, `freno` ni `casi` antes de los 3 s. `empezo` sí puede estar.
+3. **Silencio antes del golpe.** El último efecto que suena antes del golpe termina entre 0,2 y 0,6 s antes de él. La música no se mide: se agenda con el reloj del audio y no con el del juego, y con el reloj en turbo no coincide con el golpe.
+4. **«Última pasada» saca a alguien.** Si un subtítulo dice «última» (o «last», «final»; «la recta final» no cuenta) y en los 3 s siguientes no hay un hecho `salio` ni `gano`, fue una pasada vacía.
+
+**Es informativo.** Los ocho juegos del selector no se diseñaron con estas cifras, y una medición nueva no pone en rojo la batería: las cuatro se imprimen por juego como tabla y van en el JSON como `datos.ritmo`. Con `--ritmo-estricto` pasan a ser compuertas, y ahí un juego que no deja medir una regla (sin plan a la vista, o sin efectos antes del golpe) no la cumple: una compuerta no deja pasar lo que no ve. Quien dirige decide cuándo se endurece.
+
+**Qué juegos se pueden medir.** Los que dejan `window.__nino`: los del kit (`crearJuego`) y, de los viejos, la carrera y la ruleta. Los otros solo tienen medido el silencio antes del golpe y la cadencia de sus subtítulos; para el resto falta que el juego exponga su plan (`exponerNino`).
+
+**Lo que midió la primera vez** (2 de noviembre de 2026, 4 semillas y 18 personas por juego; huecos entre hechos en mediana y máximo, cuántos huecos pasan de 4 s en las 4 semillas, información antes de los 3 s, silencio antes del golpe en mediana y rango, «última» vacías):
+
+| Juego | Huecos | > 4 s | Info < 3 s | Silencio antes del golpe | «Última» vacías |
+|---|---|---|---|---|---|
+| Carrera de llamas | 2,3 s / 7,8 s | 15 | 0 | 0,0 s | 0 de 0 |
+| Carrera de llamas (aura) | 2,4 s / 8,3 s | 14 | 0 | 0,0 s | 0 de 0 |
+| Ruleta | 1,2 s / 15,6 s | 4 | 0 | 0,8 s (0,0 a 1,3 s) | 0 de 0 |
+| Guajojó | 3,3 s / 10,5 s | 16 | 0 | 0,0 s | 0 de 0 |
+| Toborochi | 4,1 s / 8,1 s | 15 | 0 | 0,0 s | 0 de 0 |
+| Sapo, trompo, chovena, piñata, teleférico, Oruro | sin plan a la vista | | | 0,0 a 0,2 s (la piñata, hasta 0,8 s) | sin medir |
+
+Lo que cuenta la tabla: ningún juego da información en los primeros 3 s, y ningún subtítulo de «última» quedó vacío, pero tampoco hubo ninguno que juzgar (0 de 0: la regla 4 todavía no tuvo a quién mirar; «la recta final» de la carrera no cuenta). La mediana de los huecos cae en la banda solo en las dos carreras (2,3 y 2,4 s); en todos los medibles hay huecos de más de 4 s. El silencio de un cuarto de segundo antes del golpe hoy casi no existe: en la mayoría el último efecto (una nota de tensión) termina pegado al golpe. Y los hechos del plan son más ralos que los subtítulos: en el Guajojó y el Toborochi el plan declara un hecho cada 3 a 4 s y la sala lee un subtítulo cada 1,2 a 1,6 s; la regla pide que el cuerpo del juego, y no solo la frase, tenga algo nuevo que mostrar.
+
 ### El auditor de choques
 
 ```bash
@@ -574,15 +608,15 @@ Las grillas se reparten con la proporción real de la pantalla y no con una cons
 
 ## Lo que el auditor no puede ver
 
-El ritmo, la legibilidad del cartel y el tartamudeo de los subtítulos ya los mide el auditor exigente. Lo que sigue no, y lo revisás vos antes de subirlo:
+El ritmo de la animación, la legibilidad del cartel y el tartamudeo de los subtítulos ya los mide el auditor exigente, y el ritmo de los hechos, el de emoción. Lo que sigue no, y lo revisás vos antes de subirlo (con las marcas de lo que ya se mide):
 
 - ¿Se entiende qué pasa sin leer el relator? Ya no es de ojo: lo mide [`audit-nino`](#la-prueba-del-niño), con la foto, la tira y la verdad del plan.
 - ¿Se lee desde el fondo de la sala, proyectado?
 - ¿Dura lo suficiente para generar tensión y lo bastante poco para no aburrir? La ventana útil en modo normal son 24 a 34 segundos: menos y la sala no llega a girar la cabeza, más y se va.
-- ¿Hay un hecho legible nuevo cada 1,5 a 2,5 segundos, y nunca más de 4 segundos sin novedad?
-- ¿Los primeros 3 segundos son llamada de atención y no información? Entre el clic y "todos mirando" hay gente hablando; lo que se cuente ahí se lo pierde media sala.
-- ¿Hay silencio justo antes del golpe? Un cuarto de segundo sin nada es el efecto más barato que existe.
-- ¿Cada pasada, ronda o fase elimina a alguien de verdad? Hubo una que el narrador anunciaba como "¡última pasada!" y no sacaba a nadie.
+- ¿Hay un hecho legible nuevo cada 1,5 a 2,5 segundos, y nunca más de 4 segundos sin novedad? Ya no es de ojo: lo mide [el ritmo de los hechos](#el-ritmo-de-los-hechos), con la línea de tiempo del plan.
+- ¿Los primeros 3 segundos son llamada de atención y no información? Entre el clic y "todos mirando" hay gente hablando; lo que se cuente ahí se lo pierde media sala. También lo mide el ritmo de los hechos.
+- ¿Hay silencio justo antes del golpe? Un cuarto de segundo sin nada es el efecto más barato que existe. Lo mide el ritmo de los hechos (de 0,2 a 0,6 s, sobre los efectos).
+- ¿Cada pasada, ronda o fase elimina a alguien de verdad? Hubo una que el narrador anunciaba como "¡última pasada!" y no sacaba a nadie. Lo mide el ritmo de los hechos: un subtítulo de «última» sin un hecho `salio` ni `gano` en los 3 s siguientes es una pasada vacía.
 - ¿El dato de la tarjeta es verdad? El auditor comprueba que haya un enlace, no que el enlace diga lo que la tarjeta dice. Eso lo comprobás vos, en la fuente primaria, antes de subirlo.
 - ¿Se ve bien con 2 participantes y con 200? Que funcione, fluya y no quede quieto lo mide el auditor exigente; si se entiende quién es quién, lo mirás vos. El protocolo tiene su propia prueba de carga en [`src/protocol/carga.test.ts`](../src/protocol/carga.test.ts): sellar diez mil nombres y sortear treinta y dos ganadores entre ellos pasa desapercibido.
 - ¿El ganador queda claro al final, sin ambigüedad?

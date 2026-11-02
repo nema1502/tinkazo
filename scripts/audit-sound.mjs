@@ -54,7 +54,11 @@ const F_MIN = 128;
 const F_MAX = 2150;
 /** Por debajo de esto queda bajo el murmullo de cincuenta personas. */
 const VOL_MIN = 0.019;
-/** Más silencio que esto y la escena se siente muerta. */
+/**
+ * Más silencio que esto y la escena se siente muerta. Un hueco más corto no es defecto: el
+ * cuarto de segundo de silencio que termina en el golpe es a propósito, y lo que se pide de él
+ * (de 0,2 a 0,6 s) lo mide el grupo `ritmo` de `audit-emocion` (`scripts/lib/ritmo.mjs`).
+ */
 const HUECO_MAX = 4.0;
 
 /**

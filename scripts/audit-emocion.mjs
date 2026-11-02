@@ -24,6 +24,14 @@
  *   trae `datos.zoom` por juego (mínimo, mediana, máximo y cuántas semillas
  *   tuvieron golpe) y `datos.arcos`.
  *
+ * - **El ritmo de los hechos** (grupo `ritmo`, `scripts/lib/ritmo.mjs`). Con el plan
+ *   del juego (`?auditar=nino`) arma la línea de tiempo de los hechos y la de los
+ *   subtítulos, y mide: un hecho nuevo cada 1,5 a 2,5 s y nunca más de 4 s sin uno,
+ *   nada de información en los primeros 3 s, un cuarto de segundo de silencio antes
+ *   del golpe y que cada «última pasada» saque a alguien. **Es informativo**: se
+ *   imprime como tabla y va en el JSON como `datos.ritmo`. Con `--ritmo-estricto`
+ *   las cuatro son compuertas. `--sin-ritmo` lo saltea; `--semillas-ritmo N` (4).
+ *
  * Para no esperar treinta segundos por semilla, cambia el reloj como el
  * auditor exigente, pero en turbo: cada cuadro real despacha veinte cuadros de
  * juego. La animación es función del tiempo de juego, así que el resultado es
@@ -39,10 +47,13 @@
  * minutos para los diez juegos en lugar de media hora).
  */
 import { createHash } from "node:crypto";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 import { LOS_DIEZ as CON_ZOOM_TODOS, juegosDe, juegosDelKit } from "./lib/juegos.mjs";
 import { ZOOM_MINIMO, fallasDeCuadro, instalarZoom, juntarCuadros, razonDeZoom, resumirZoom, veces } from "./lib/zoom.mjs";
+import { HUECO_BANDA, HUECO_MAXIMO, SILENCIO_BANDA, SOLO_ATENCION, fallasDeRitmo, instalarRitmo, medirSemilla, resumirRitmo, segs, tablaDeRitmo } from "./lib/ritmo.mjs";
 
 /**
  * Los juegos que tienen zoom de emoción (`Camera.golpe` en `docs/motores.md`):
@@ -63,10 +74,17 @@ const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const N = Number(opt("--semillas", "16"));
 // El zoom del golpe necesita correr el show entero (el golpe cae al final) y no
 // depende del arco: se mira en las primeras semillas nada más. 0 lo saltea.
-const zoomSemillas = Number(opt("--semillas-zoom", "2"));
+/** `--solo-ritmo`: sin los arcos ni el zoom, nada más el ritmo de los hechos. */
+const soloRitmo = args.includes("--solo-ritmo");
+const zoomSemillas = soloRitmo ? 0 : Number(opt("--semillas-zoom", "2"));
 const zoomMin = Number(opt("--zoom-min", String(ZOOM_MINIMO)));
 /** `--solo-zoom`: sin las semillas de los arcos ni la carrera a mitad de camino. */
-const soloZoom = args.includes("--solo-zoom");
+const soloZoom = args.includes("--solo-zoom") || soloRitmo;
+/** El ritmo de los hechos: informativo salvo con `--ritmo-estricto`; `--sin-ritmo` y `--solo-zoom` lo saltean. */
+const ritmoEstricto = args.includes("--ritmo-estricto");
+const ritmoSemillas = args.includes("--sin-ritmo") || (soloZoom && !soloRitmo) ? 0 : Number(opt("--semillas-ritmo", "4"));
+const ritmoCrudo = opt("--ritmo-crudo", "");
+const ritmoPersonas = Number(opt("--personas", "18"));
 // El motor nuevo es el de todos desde el 28 de septiembre (docs/motores.md);
 // `--motor clasico` mide los juegos del motor anterior. El nuevo usa la placa de video.
 const motor = opt("--motor", "pixi");
@@ -114,6 +132,18 @@ const TURBO_ZOOM = TURBO.replace("performance.now = () => virt;", () => `perform
 );
 if (!TURBO_ZOOM.includes("__zoom.medir") || !TURBO_ZOOM.includes("window.__zoom = Z")) throw new Error("no pude armar el reloj con zoom");
 
+/**
+ * Lo mismo, y además anota los hechos del plan, los subtítulos, los efectos de sonido y el golpe,
+ * cuadro a cuadro (`scripts/lib/ritmo.mjs`).
+ */
+const TURBO_RITMO = TURBO.replace("performance.now = () => virt;", () => `performance.now = () => virt;
+  (${instalarRitmo.toString()})();`).replace(
+  "for (const cb of lote) { try { cb(virt); } catch (e) {} }",
+  () => `for (const cb of lote) { try { cb(virt); } catch (e) {} }
+      try { window.__rit.muestrear(virt); } catch (e) {}`,
+);
+if (!TURBO_RITMO.includes("__rit.muestrear") || !TURBO_RITMO.includes("window.__rit = R")) throw new Error("no pude armar el reloj del ritmo");
+
 const checks = [];
 const check = (name, ok, detail = "") => {
   checks.push({ name, ok, detail });
@@ -124,7 +154,7 @@ const semilla = (i) => createHash("sha256").update(`semilla-${i}`).digest("hex")
 const cuenta = (xs) => xs.reduce((m, x) => m.set(x, (m.get(x) ?? 0) + 1), new Map());
 
 // Lo que `--json` deja además de las comprobaciones: el zoom del golpe y los arcos, por juego.
-const datos = { zoom: {}, arcos: {} };
+const datos = { zoom: {}, arcos: {}, ritmo: {} };
 
 const browser = await launch({ port: Number(process.env.CDP_PORT || 9401), width: 1280, height: 720 });
 try {
@@ -254,9 +284,44 @@ try {
         fallas.length ? fallas.join(" · ") : `ganador fuera ${Math.round(cuadro.ganadorFuera * 100)} % · tapado por el cartel ${Math.round(cuadro.ganadorTapado * 100)} % · cartel afuera ${Math.round(cuadro.cartelFuera)} px (${cuadro.n} cuadros)`,
       );
     }
+    // El ritmo de los hechos: el show entero con el plan a la vista, y la línea de tiempo medida contra las cuatro reglas.
+    if (ritmoSemillas > 0) {
+      const semillas = [];
+      for (let i = 1; i <= ritmoSemillas; i++) {
+        const page = await abrir();
+        await page.send("Page.addScriptToEvaluateOnNewDocument", { source: TURBO_RITMO });
+        await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&semilla=${semilla(i)}&auditar=nino&n=${ritmoPersonas}${motor ? `&motor=${motor}` : ""}` });
+        // Hasta un segundo y medio después del golpe (lo que hay que oír antes de él ya sonó).
+        await page.waitFor("window.__rit && window.__rit.golpeV !== null && window.__v() > window.__rit.golpeV * 1000 + 1500", 120_000);
+        const rit = JSON.parse((await page.eval("JSON.stringify(window.__rit)")) || "null");
+        semillas.push(medirSemilla(rit));
+        // `--ritmo-crudo carpeta`: lo que anotó la página, tal cual, para mirar por qué una cifra da lo que da.
+        if (ritmoCrudo) { mkdirSync(ritmoCrudo, { recursive: true }); writeFileSync(join(ritmoCrudo, `${juego}-${i}.json`), JSON.stringify(rit)); }
+        try {
+          await page.send("Page.close");
+        } catch {
+          /* ya cerrada */
+        }
+      }
+      const rr = resumirRitmo(semillas);
+      datos.ritmo[juego] = { ...rr, porSemilla: semillas };
+      const fallas = fallasDeRitmo(rr);
+      const cuerpo = rr.conPlan
+        ? `huecos ${segs(rr.medianaHuecos)} de mediana y ${segs(rr.maximoHuecos)} de máximo · ${rr.huecosSobre4} de más de ${HUECO_MAXIMO} s · ${rr.temprana} de información antes de los ${SOLO_ATENCION} s · silencio ${rr.silencios ? `${segs(rr.silencioMin)} a ${segs(rr.silencioMax)}` : "sin medir"} · «última» vacías ${rr.vacias} de ${rr.ultimas}`
+        : `sin plan a la vista (el juego no deja \`window.__nino\`): solo el silencio, ${rr.silencios ? `${segs(rr.silencioMin)} a ${segs(rr.silencioMax)}` : "sin medir"}`;
+      console.log(`  · ritmo (informativo): ${cuerpo}`);
+      for (const f of fallas) console.log(`      ${ritmoEstricto ? "✗" : "~"} ${f}`);
+      if (ritmoEstricto) check("el ritmo de los hechos cumple las cuatro reglas", fallas.length === 0, fallas.join("; "));
+    }
   }
 } finally {
   await browser.close();
+}
+
+if (Object.keys(datos.ritmo).length) {
+  console.log(`
+El ritmo de los hechos (${ritmoSemillas} semillas, ${ritmoPersonas} personas; pide un hecho cada ${segs(HUECO_BANDA[0])} a ${segs(HUECO_BANDA[1])}, silencio de ${segs(SILENCIO_BANDA[0])} a ${segs(SILENCIO_BANDA[1])} antes del golpe)${ritmoEstricto ? "" : ", solo informativo"}`);
+  console.log(tablaDeRitmo(datos.ritmo));
 }
 
 const malos = checks.filter((c) => !c.ok);
