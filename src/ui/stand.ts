@@ -61,9 +61,11 @@ function rotular(): void {
 
 /** La línea que guía, debajo de los pasos (la misma del ensayo): solo antes de empezar la ronda. */
 function guiar(): void {
+  // Fuera del modo stand la línea es del ensayo (`ensayo.ts`).
+  if (!enStand()) return;
   const el = document.getElementById("ensayo-guia");
   if (!el) return;
-  const texto = enStand() && !app.frozen && !app.drawn ? t("standGuia1") : "";
+  const texto = !app.frozen && !app.drawn ? t("standGuia1") : "";
   if (el.textContent !== texto) el.textContent = texto;
   el.hidden = !texto;
 }

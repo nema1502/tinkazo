@@ -1,6 +1,6 @@
 import { $ } from "../dom";
 import { eventoError, type AccionError } from "./error-accion";
-import { enEnsayo } from "../ensayo-modo";
+import { enEnsayo, enStand } from "../ensayo-modo";
 import { onLangChange, t } from "../i18n";
 import { app } from "../state";
 import { mantenerDespierta, soltarDespierta } from "./despierta";
@@ -42,7 +42,7 @@ interface Toca {
 }
 
 /** Los textos que tapan toda la página: con uno abierto la barra se va. */
-const SUPERPUESTOS = ".modal-back, .game-card, .cortina, .espera, .sala";
+const SUPERPUESTOS = ".modal-back, .game-card, .cortina, .espera, .sala, .stand-sala.grande";
 
 let segundos: () => number = () => 0;
 let listo = false;
@@ -82,12 +82,14 @@ const nombres = (): number => document.getElementById("names")?.childElementCoun
 
 /**
  * La barra solo existe en la herramienta, en la pestaña del sorteo nuevo y fuera
- * de la demo, que se hace sola. Tampoco en el modo stand: tiene sus propios
- * botones, y la barra hablaría de sellos, números y comprobantes que ahí no hay.
+ * de la demo, que se hace sola. En el modo stand sale solo antes de empezar la
+ * ronda (con la lista escrita, "Empezar la ronda" queda más abajo en el celular):
+ * después la ronda corre sola y la barra hablaría de sellos, números y
+ * comprobantes que ahí no hay.
  */
 function activa(): boolean {
   const d = document.body.dataset;
-  return d.vista === "app" && d.tab === "nuevo" && d.demo !== "1" && d.stand !== "1";
+  return d.vista === "app" && d.tab === "nuevo" && d.demo !== "1";
 }
 
 /** Estadio, tarjeta del juego, cortina, ventanas y la espera en grande: nada de esto va con la barra encima. */
@@ -146,13 +148,15 @@ function calcular(): Toca {
   const revelado = app.drawn !== null && $("winner-box").style.display === "block";
   const n = nombres();
   const paso = pasoDe({ nombres: n, sellada: app.frozen !== null, revelado });
-  const boton = botonDe(paso);
+  // En el stand la barra es solo para empezar la ronda: ni "Pegar lista" ni nada de después.
+  const boton = enStand() && (paso !== 2 || app.frozen) ? null : botonDe(paso);
   const restan = paso === 3 ? segundos() : 0;
   const clave = claveDelPaso(paso, { segundos: restan, apagado: boton?.disabled ?? false, ganadores: app.drawn?.winners.length ?? 1 });
   let detalle = clave ? t(clave).replace("{n}", String(n)) : "";
   // Antes de sellar, qué se sortea: sellar lo fija, y desde la barra no se ve el campo. En el ensayo no se nombra
   // el premio que falta: nada se sella de verdad.
-  if (clave === "sigLista") detalle = detalleDeLista(detalle, (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "", enEnsayo() ? null : t("sigSinPremio"));
+  // En el stand no hay premio: la línea dice solo cuántas personas hay.
+  if (clave === "sigLista") detalle = enStand() ? detalle : detalleDeLista(detalle, (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "", enEnsayo() ? null : t("sigSinPremio"));
   return { paso, boton, clave, detalle, reloj: restan > 0 ? relojDe(restan) : "" };
 }
 
@@ -191,7 +195,7 @@ function pintarPasos(paso: Paso): void {
 }
 
 /** La línea de la barra: "Paso 3 de 4: esperando el número, 0:25". */
-const linea = (s: Toca): string => lineaDelPaso(t("sigPaso").replace("{n}", String(s.paso)), s.detalle, s.reloj);
+const linea = (s: Toca): string => enStand() ? s.detalle.replace(/^\p{Ll}/u, (c) => c.toUpperCase()) : lineaDelPaso(t("sigPaso").replace("{n}", String(s.paso)), s.detalle, s.reloj);
 
 /**
  * El cambio de paso, dicho con calma (`role="status"`, polite). Solo cuando
@@ -209,6 +213,10 @@ function anunciar(s: Toca): void {
   // de nuevo, o el lector de pantalla no lo repite.
   if (!s.clave) {
     $("sig-aviso").textContent = "";
+    return;
+  }
+  if (enStand()) {
+    $("sig-aviso").textContent = s.detalle;
     return;
   }
   $("sig-aviso").textContent = s.clave === "sigRonda" ? `${t("sigPaso").replace("{n}", String(s.paso))}. ${t("sigAvisoRonda")}` : `${t("sigPaso").replace("{n}", String(s.paso))}. ${s.detalle}.`;
@@ -366,7 +374,7 @@ export function initSiguiente(opciones: { segundos: () => number }): void {
   moBoton = new MutationObserver(render);
   const general = new MutationObserver(render);
   // Ventanas, tarjeta y cortina se agregan al cuerpo; el estadio es fijo y cambia de estilo.
-  general.observe(document.body, { childList: true, attributes: true, attributeFilter: ["data-vista", "data-tab", "data-sesion", "data-ensayo"] });
+  general.observe(document.body, { childList: true, attributes: true, attributeFilter: ["data-vista", "data-tab", "data-sesion", "data-ensayo", "data-stand"] });
   general.observe($("stadium"), { attributes: true, attributeFilter: ["style"] });
   // La lista cambia sin que nadie toque el sello: pasar de 1 a 2 nombres es pasar de paso.
   general.observe($("names"), { childList: true });
