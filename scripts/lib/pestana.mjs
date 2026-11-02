@@ -155,6 +155,19 @@ export function ganadorDicho(comentarios, ganadorPlan) {
 }
 
 /**
+ * El ganador que se ve al coronar. El nombre del cartel se dibuja en el lienzo y no se puede leer como texto, así que
+ * se juzga por lo que sí queda: si la última línea del relator nombra al ganador del plan, pasa; si el relator calló
+ * al coronar (la carrera nueva borra su línea porque el cartel ya dice el nombre), pasa cuando la última línea queda vacía
+ * y el cartel llegó a verse (el relator calla un poco antes de que salga), y que sea el ganador del plan lo asegura la comparación con la corrida de control.
+ */
+export function ganadorEnPantalla(comentarios, cartel, ganadorPlan) {
+  if (ganadorDicho(comentarios, ganadorPlan)) return true;
+  const desde = cartelDesde(cartel);
+  const ultima = comentarios.at(-1);
+  return !!plano(ganadorPlan) && desde !== null && !!ultima && plano(ultima.txt) === "";
+}
+
+/**
  * Juzga una corrida con la pestaña escondida contra la de control (la misma
  * escena sin esconder nada). Devuelve las comprobaciones: `{ name, ok, detail }`.
  *
@@ -184,8 +197,8 @@ export function juzgarPestana({ control, prueba, excepciones = [], etiqueta = ""
   const desde = cartelDesde(prueba.cartel);
   out.push({
     name: `${e}el ganador en pantalla es el del plan`,
-    ok: desde !== null && ganadorDicho(prueba.comentarios, prueba.ganadorPlan) && control.ganadorPlan === prueba.ganadorPlan,
-    detail: desde === null ? "el cartel nunca apareció" : `plan: ${prueba.ganadorPlan || "?"} · último dicho: ${prueba.comentarios.at(-1)?.txt ?? "nada"}`,
+    ok: desde !== null && ganadorEnPantalla(prueba.comentarios, prueba.cartel, prueba.ganadorPlan) && control.ganadorPlan === prueba.ganadorPlan,
+    detail: desde === null ? "el cartel nunca apareció" : `plan: ${prueba.ganadorPlan || "?"} · último dicho: ${prueba.comentarios.at(-1)?.txt || "vacío"}`,
   });
 
   out.push({

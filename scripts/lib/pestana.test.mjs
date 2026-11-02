@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { atrasados, cartelDesde, cartelSeApago, cartelVisibleS, ganadorDicho, juzgarPestana, normalizar, ventanaOculta } from "./pestana.mjs";
+import { atrasados, cartelDesde, cartelSeApago, cartelVisibleS, ganadorDicho, ganadorEnPantalla, juzgarPestana, normalizar, ventanaOculta } from "./pestana.mjs";
 
 /** Una corrida de control: 38 s, el cartel a los 34 y los sonidos a tiempo. */
 const control = () => ({
@@ -211,5 +211,22 @@ describe("el cartel en tiempo de juego", () => {
     const n = normalizar({ t0: 1000, t1: 41000, cuadros: 1, g: 30, gCierre: 30, coment: [], sonidos: [], vis: [], errores: [], cartel: [{ r: 38600, on: true, g: 27.6 }] });
     expect(n.gCierre).toBe(30);
     expect(n.cartel[0].g).toBe(27.6);
+  });
+});
+
+describe("ganadorEnPantalla", () => {
+  const cartel = [{ t: 44, on: true }];
+  it("con el relator callado al coronar y el cartel a la vista, pasa", () => {
+    const cs = [{ t: 2, txt: "¡Arranca!" }, { t: 44, txt: "" }];
+    expect(ganadorEnPantalla(cs, cartel, "Carlos Choque")).toBe(true);
+    const p = escondida({ comentarios: cs });
+    expect(por(juzgarPestana({ control: control(), prueba: p }), "ganador").ok).toBe(true);
+  });
+  it("relator vacío sin cartel no pasa, ni con un plan sin ganador", () => {
+    expect(ganadorEnPantalla([{ t: 44, txt: "" }], [], "Carlos Choque")).toBe(false);
+    expect(ganadorEnPantalla([{ t: 44, txt: "" }], cartel, "")).toBe(false);
+  });
+  it("si el relator dice a otro, no pasa", () => {
+    expect(ganadorEnPantalla([{ t: 44, txt: "¡ES PARA Ana!" }], cartel, "Carlos Choque")).toBe(false);
   });
 });
