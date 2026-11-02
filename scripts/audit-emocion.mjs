@@ -51,7 +51,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
-import { LOS_DIEZ as CON_ZOOM_TODOS, juegosDe, juegosDelKit } from "./lib/juegos.mjs";
+import { LOS_DOCE as CON_ZOOM_TODOS, juegosDe, juegosDelKit } from "./lib/juegos.mjs";
 import { ZOOM_MINIMO, fallasDeCuadro, instalarZoom, juntarCuadros, razonDeZoom, resumirZoom, veces } from "./lib/zoom.mjs";
 import { HUECO_BANDA, HUECO_MAXIMO, SILENCIO_BANDA, SOLO_ATENCION, fallasDeRitmo, instalarRitmo, medirSemilla, resumirRitmo, segs, tablaDeRitmo } from "./lib/ritmo.mjs";
 

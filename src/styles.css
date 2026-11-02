@@ -1303,7 +1303,7 @@
 
   /* Los ocho juegos del selector, cada uno con su miniatura animada: tocarlo
      abre la demo. En cuatro columnas, dos filas parejas; en un celular, dos. */
-  .portada-juegos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+  .portada-juegos { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
   .portada-juegos a {
     display: flex; flex-direction: column; gap: 6px; padding: 8px; background: var(--card); color: var(--ink);
     border: 2px solid var(--ink); box-shadow: var(--sh-sm); text-decoration: none; font-weight: 800; font-size: var(--letra-sec); line-height: 1.15;
@@ -1320,7 +1320,7 @@
   :root[data-theme="dark"] .portada-juegos .pj-osc { display: block; }
   :root[data-theme="dark"] .portada-juegos .pj-cla { display: none; }
   .portada-juegos .pj-ver { font-family: ui-monospace, Consolas, monospace; font-size: 14px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
-  @media (max-width: 640px) { .portada-juegos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 759px) { .portada-juegos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
   /* Tarjetas: por qué confiar y para quién. */
   .cards3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; margin-top: 18px; }

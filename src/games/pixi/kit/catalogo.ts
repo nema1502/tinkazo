@@ -79,7 +79,7 @@ export const CATALOGO = [
     id: "guajojo",
     cargar: () => import("../guajojo").then((m) => m.guajojoPixi),
     forma: "de-pie",
-    selector: false,
+    selector: true,
     rango: { minimo: 2, ideal: [8, 30], maximo: 200 },
     captura: true,
     historia: {
@@ -111,9 +111,9 @@ export const CATALOGO = [
     id: "toborochi",
     cargar: () => import("../toborochi").then((m) => m.toborochiPixi),
     forma: "de-pie",
-    selector: false,
+    selector: true,
     rango: { minimo: 2, ideal: [8, 40], maximo: 200 },
-    captura: false,
+    captura: true,
     historia: {
       q: "loreToborochiQ",
       a: "loreToborochiA",

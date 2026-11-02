@@ -23,10 +23,10 @@ describe("los auditores que entienden `todos`", () => {
     }
   });
 
-  it("el trueque salió del selector el 26 de octubre de 2026 (y De pie): quedan ocho", () => {
+  it("el trueque salió del selector el 26 de octubre de 2026 (y De pie): quedan los ocho de entonces más el Guajojó y El Toborochi, diez", () => {
     expect(SELECTOR).not.toContain("trueque");
     expect(SELECTOR).not.toContain("quien");
-    expect(SELECTOR).toHaveLength(8);
+    expect(SELECTOR).toHaveLength(10);
   });
 });
 
@@ -66,7 +66,7 @@ describe("cuánto se recortó el `todos` (juego × auditor, y arranques de Chrom
   // con el selector de diez de entonces: rigor, identidad, emoción, sonido y
   // mezcla, trece (los diez y tres que nadie puede elegir); pantalla, doce
   // (sin El Trueque); audit-game y delatores, los diez.  Hoy el selector tiene
-  // ocho (SELECTOR.length) y `escenasDespues` los cuenta.
+  // diez (SELECTOR.length) y `escenasDespues` los cuenta.
   const ANTES = { "audit-game": 10, "audit-rigor": 13, "audit-identidad": 13, "audit-pantalla": 12, "audit-delatores": 10, "audit-emocion": 13, "audit-sound": 13, "audit-mezcla": 13 };
   const escenasAntes = (conMezcla) => Object.entries(ANTES).filter(([a]) => conMezcla || a !== "audit-mezcla").reduce((s, [, n]) => s + n, 0);
   const escenasDespues = (plan) => {
@@ -79,18 +79,18 @@ describe("cuánto se recortó el `todos` (juego × auditor, y arranques de Chrom
     return n;
   };
 
-  it("de 84 a 56 escenas de juego sin la mezcla, y de 97 a 64 con ella (con los ocho del selector)", () => {
+  it("de 84 a 70 escenas de juego sin la mezcla, y de 97 a 80 con ella (con los diez del selector)", () => {
     expect(escenasAntes(false)).toBe(84);
     expect(escenasAntes(true)).toBe(97);
-    expect(escenasDespues(planDe())).toBe(56);
-    expect(escenasDespues(planDe({ noche: true }))).toBe(64);
+    expect(escenasDespues(planDe())).toBe(70);
+    expect(escenasDespues(planDe({ noche: true }))).toBe(80);
   });
 
   it("un arranque de Chrome menos por pantalla, y uno más por el auditor de legibilidad (nuevo)", () => {
     // Antes: 10 de audit-game, 6 de los que miran juegos (rigor, identidad,
     // pantalla, delatores, emoción, sonido; la mezcla de noche) y 10 sueltos.
     // Ahora: pantalla ya no tiene el suyo y entra audit-legible.
-    expect(contar(planDe()).chromes).toBe(8 + 5 + 10 + 1);
-    expect(contar(planDe({ noche: true })).chromes).toBe(8 + 6 + 10 + 1);
+    expect(contar(planDe()).chromes).toBe(10 + 5 + 10 + 1);
+    expect(contar(planDe({ noche: true })).chromes).toBe(10 + 6 + 10 + 1);
   });
 });

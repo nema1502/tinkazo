@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
-import { FUERA_DEL_SELECTOR, LOS_DIEZ, SELECTOR, juegosDe, juegosDelKit } from "./juegos.mjs";
+import { FUERA_DEL_SELECTOR, LOS_DOCE, SELECTOR, juegosDe, juegosDelKit } from "./juegos.mjs";
 import { aplicar } from "./nuevo-juego.mjs";
 
 describe("los juegos del kit, para los auditores", () => {
@@ -22,19 +22,19 @@ describe("los juegos del kit, para los auditores", () => {
       writeFileSync(join(raiz, "src/i18n.ts"), "export const T = {\n  es: {\n    // >>> kit:i18n-es (x)\n    // <<< kit:i18n-es\n  },\n  en: {\n    // >>> kit:i18n-en (x)\n    // <<< kit:i18n-en\n  },\n};\n");
       expect(juegosDelKit(pathToFileURL(raiz + "/"))).toEqual([]);
       aplicar({ raiz, id: "prueba" });
-      aplicar({ raiz, id: "guajojo" });
-      expect(juegosDelKit(pathToFileURL(raiz + "/"))).toEqual(["prueba", "guajojo"]);
+      aplicar({ raiz, id: "pajaro" });
+      expect(juegosDelKit(pathToFileURL(raiz + "/"))).toEqual(["prueba", "pajaro"]);
     } finally {
       rmSync(raiz, { recursive: true, force: true });
     }
   });
 
-  it("los del selector y los que salieron no se pisan, y 'todos' son los ocho del selector", () => {
-    expect(SELECTOR).toHaveLength(8);
+  it("los del selector y los que salieron no se pisan, y 'todos' son los diez del selector", () => {
+    expect(SELECTOR).toHaveLength(10);
     for (const j of FUERA_DEL_SELECTOR) expect(SELECTOR).not.toContain(j);
-    expect(LOS_DIEZ).toHaveLength(10);
-    for (const j of LOS_DIEZ.filter((x) => !SELECTOR.includes(x))) expect(FUERA_DEL_SELECTOR).toContain(j);
-    expect(juegosDe("diez")).toEqual(LOS_DIEZ);
+    expect(LOS_DOCE).toHaveLength(12);
+    for (const j of LOS_DOCE.filter((x) => !SELECTOR.includes(x))) expect(FUERA_DEL_SELECTOR).toContain(j);
+    expect(juegosDe("doce")).toEqual(LOS_DOCE);
     expect(juegosDe("todos")).toEqual(SELECTOR);
     expect(juegosDe("quien, sapo")).toEqual(["quien", "sapo"]);
   });

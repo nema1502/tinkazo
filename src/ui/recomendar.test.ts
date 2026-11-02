@@ -43,8 +43,8 @@ describe("el selector y su recomendación hablan de los mismos juegos", () => {
     expect(SELECTOR).not.toContain("tombola");
   });
 
-  it("son los ocho que quedaron el 26 de octubre de 2026 (De pie y El Trueque salieron), de las salas chicas a las grandes", () => {
-    expect([...SELECTOR]).toEqual(["race", "sapo", "trompo", "chovena", "pinata", "wheel", "teleferico", "oruro"]);
+  it("son los ocho del 26 de octubre de 2026 (De pie y El Trueque salieron) y, desde el 2 de noviembre, el Guajojó y El Toborochi, de las salas chicas a las grandes", () => {
+    expect([...SELECTOR]).toEqual(["race", "sapo", "trompo", "chovena", "pinata", "wheel", "teleferico", "oruro", "guajojo", "toborochi"]);
   });
 
   it("el Aguayo y la Constelación salen del selector, y el 26 de octubre de 2026 también De pie y El Trueque", () => {
@@ -85,13 +85,13 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
     expect(grupos(1)).toEqual({
       encajan: [],
       neutral: ["pinata", "wheel"],
-      no: ["race", "sapo", "trompo", "chovena", "teleferico", "oruro"],
+      no: ["race", "sapo", "trompo", "chovena", "teleferico", "oruro", "guajojo", "toborochi"],
     });
   });
 
   it("con 2, la mesa y la carrera y el trompo encajan (ninguno ideal); chovena, De pie, El Trueque, teleférico y La Entrada no llegan", () => {
     expect(grupos(2)).toEqual({
-      encajan: ["sapo", "race", "trompo"],
+      encajan: ["sapo", "race", "trompo", "guajojo", "toborochi"],
       neutral: ["pinata", "wheel"],
       no: ["chovena", "teleferico", "oruro"],
     });
@@ -99,7 +99,7 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
 
   it("con 8, el ideal de la carrera, el sapo y el trompo va primero, y chovena y De pie encajan justo en el mínimo", () => {
     expect(grupos(8)).toEqual({
-      encajan: ["sapo", "race", "trompo", "chovena"],
+      encajan: ["sapo", "race", "trompo", "guajojo", "toborochi", "chovena"],
       neutral: ["pinata", "wheel"],
       no: ["teleferico", "oruro"],
     });
@@ -107,7 +107,7 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
 
   it("con 12, chovena, el sapo, la carrera (el pelotón) y el trompo están en su ideal, y El Trueque entra por su mínimo", () => {
     expect(grupos(12)).toEqual({
-      encajan: ["chovena", "sapo", "race", "trompo"],
+      encajan: ["chovena", "sapo", "race", "trompo", "guajojo", "toborochi"],
       neutral: ["pinata", "wheel"],
       no: ["teleferico", "oruro"],
     });
@@ -115,7 +115,7 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
 
   it("con 16, teleférico entra por su mínimo, y el sapo por la clasificatoria; El Trueque los pasa por puntaje", () => {
     expect(grupos(16)).toEqual({
-      encajan: ["chovena", "race", "sapo", "teleferico"],
+      encajan: ["chovena", "race", "guajojo", "toborochi", "sapo", "teleferico"],
       neutral: ["pinata", "wheel"],
       no: ["trompo", "oruro"],
     });
@@ -123,7 +123,7 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
 
   it("con 30, El Trueque, chovena, teleférico y la carrera (el pelotón entero) están en su ideal; La Entrada entra por su mínimo y va al final; la ruleta sigue, neutral, hasta 200", () => {
     expect(grupos(30)).toEqual({
-      encajan: ["chovena", "teleferico", "race", "sapo", "oruro"],
+      encajan: ["chovena", "teleferico", "race", "guajojo", "toborochi", "sapo", "oruro"],
       neutral: ["pinata", "wheel"],
       no: ["trompo"],
     });
@@ -131,7 +131,7 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
 
   it("con 50, chovena y teleférico están en su ideal, y la carrera y La Entrada también encajan; el sapo pasa de su clasificatoria", () => {
     expect(grupos(50)).toEqual({
-      encajan: ["chovena", "teleferico", "race", "oruro"],
+      encajan: ["chovena", "teleferico", "race", "oruro", "guajojo", "toborochi"],
       neutral: ["pinata", "wheel"],
       no: ["sapo", "trompo"],
     });
@@ -139,7 +139,7 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
 
   it("con 100, teleférico en su ideal; la carrera, con sus tandas, y La Entrada también encajan; chovena ya pasa de sus 80", () => {
     expect(grupos(100)).toEqual({
-      encajan: ["teleferico", "race", "oruro"],
+      encajan: ["teleferico", "race", "oruro", "guajojo", "toborochi"],
       neutral: ["pinata", "wheel"],
       no: ["sapo", "trompo", "chovena"],
     });
@@ -147,7 +147,7 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
 
   it("con 200, teleférico, la carrera y La Entrada llegan justo a su máximo, y la piñata y la ruleta también", () => {
     expect(grupos(200)).toEqual({
-      encajan: ["teleferico", "race", "oruro"],
+      encajan: ["teleferico", "race", "oruro", "guajojo", "toborochi"],
       neutral: ["pinata", "wheel"],
       no: ["sapo", "trompo", "chovena"],
     });
@@ -163,12 +163,14 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
     expect(juego("oruro", 201)).toMatchObject({ fits: false, note: "rec.oruro.largo" });
   });
 
-  it("La Entrada, sin ideal ni puntaje, va al final de los recomendados y nunca es el primero si otro encaja", () => {
+  it("La Entrada, el Guajojó y El Toborochi, sin puntaje, van al final de los recomendados cuando no están en su ideal, y La Entrada nunca es la primera si otra encaja", () => {
+    const sinPuntaje = ["oruro", "guajojo", "toborochi"];
     for (let n = 2; n <= 200; n++) {
-      const encajan = recomendar(n).games.filter((r) => r.fits === true).map((r) => r.game);
-      const finales = encajan.filter((g) => g === "oruro");
+      const rec = recomendar(n).games.filter((r) => r.fits === true);
+      const encajan = rec.map((r) => r.game);
+      const finales = rec.filter((r) => sinPuntaje.includes(r.game) && !r.ideal).map((r) => r.game);
       expect(encajan.slice(encajan.length - finales.length), `n=${n}`).toEqual(finales);
-      if (encajan.length > finales.length) expect(finales, `n=${n}`).not.toContain(encajan[0]);
+      if (encajan.length > 1) expect(encajan[0], `n=${n}`).not.toBe("oruro");
     }
   });
 
@@ -251,7 +253,7 @@ describe("recomendar: qué juegos sirven para cuántas personas (auditoría, sec
 describe("rangoVisible: lo que dice la tarjeta del selector bajo el nombre", () => {
   it("va del mínimo (2 si el juego no tiene) al máximo", () => {
     expect(Object.fromEntries(SELECTOR.map((g) => [g, rangoVisible(g)]))).toEqual({
-      race: "2–200", sapo: "2–40", trompo: "2–14", chovena: "8–80", pinata: "2–200", wheel: "2–200", teleferico: "16–200", oruro: "30–200",
+      race: "2–200", sapo: "2–40", trompo: "2–14", chovena: "8–80", pinata: "2–200", wheel: "2–200", teleferico: "16–200", oruro: "30–200", guajojo: "2–200", toborochi: "2–200",
     });
   });
 

@@ -64,7 +64,7 @@ const opt = (name, def) => {
 const flag = (name) => args.includes(name);
 // Uno o varios juegos, separados por espacio; "todos" son los ocho del selector (El Trueque, que antes se salteaba, salió del selector el 26 de octubre de 2026: se pide por nombre).
 const pedidos = args.filter((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--"));
-const juegos = pedidos.length === 0 || pedidos.includes("todos") ? juegosDe("todos") : pedidos.includes("diez") ? juegosDe("diez") : pedidos;
+const juegos = pedidos.length === 0 || pedidos.includes("todos") ? juegosDe("todos") : pedidos.includes("doce") ? juegosDe("doce") : pedidos;
 const base = opt("--base", "http://localhost:4606").replace(/\/$/, "");
 const outDir = opt("--out", join(tmpdir(), "tinkazo-pantalla"));
 const resoluciones = opt("--res", "1280x720").split(",").map((r) => r.split("x").map(Number));

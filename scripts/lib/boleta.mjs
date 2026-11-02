@@ -116,7 +116,7 @@ export function esDelJuego(falla, juego) {
  */
 export function deAuditor(corridas, auditor, juego) {
   const propias = corridas.filter((c) => c.auditor === auditor && c.objetivo === juego);
-  const generales = corridas.filter((c) => c.auditor === auditor && ["todos", "diez", "todo"].includes(c.objetivo));
+  const generales = corridas.filter((c) => c.auditor === auditor && ["todos", "doce", "diez", "todo"].includes(c.objetivo));
   const usadas = [...propias, ...generales];
   if (!usadas.length) return null;
   const fallas = usadas.flatMap((c) => (c.fallas ?? []).filter((f) => esDelJuego(f, juego)));

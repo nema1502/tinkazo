@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { T } from "../i18n";
 import { NOMBRE, REGLA, VARIOS } from "./gamecard";
 import { SELECTOR } from "./recomendar";
+import { JUEGOS } from "../games/pixi/kit/catalogo";
 
 describe("la tarjeta de cómo se juega", () => {
   it("cada nombre y cada regla existen como texto en los dos idiomas", () => {
@@ -25,7 +26,8 @@ describe("la tarjeta de cómo se juega", () => {
     // Sin captura la tarjeta sale sobre el color liso: se notaba con El Trueque,
     // que entró al selector el 21 de octubre de 2026.
     const fuente = readFileSync(new URL("./gamecard.ts", import.meta.url), "utf8");
-    const conCaptura = [...(/const CAPTURA = new Set<Game>\(\[([^\]]*)\]\)/.exec(fuente)?.[1] ?? "").matchAll(/"([a-z]+)"/g)].map((m) => m[1]);
+    // Los de siempre están en la lista de gamecard.ts; los del kit, en su entrada del catálogo (`captura: true`).
+    const conCaptura = [...[...(/const CAPTURA = new Set<Game>\(\[([^\]]*)\]\)/.exec(fuente)?.[1] ?? "").matchAll(/"([a-z]+)"/g)].map((m) => m[1]), ...JUEGOS.filter((j) => j.captura).map((j) => j.id)];
     for (const juego of SELECTOR) {
       expect(conCaptura, juego).toContain(juego);
       expect(existsSync(new URL(`../../public/juegos/${juego}.webp`, import.meta.url)), `${juego}.webp`).toBe(true);
