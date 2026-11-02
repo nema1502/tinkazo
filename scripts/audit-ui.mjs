@@ -1009,32 +1009,26 @@ async function run() {
           }
           check(`${etiqueta}: la lista se congela`, cong.ok, cong.ok ? "" : `la pantalla decía: "${estado}"`);
           if (cong.ok) {
-            // Primero a la vista y después a medir: las miniaturas sólo se
-            // animan cuando el selector está en pantalla, que es lo que hace
-            // que no gasten batería mientras nadie las mira.
+            // Las miniaturas son capturas reales del juego, una por tema: a la vista
+            // (las de debajo cargan al llegar), cada botón enciende solo la de su tema,
+            // sin imagen rota. Esperar un poco: son perezosas.
             await page.eval(`document.querySelector('.gamepick').scrollIntoView({block:'center'})`);
             await sleep(1500);
-            const t1 = await page.eval(`JSON.stringify([...document.querySelectorAll('.gamepick button')].filter((b) => !${BOTON_APAGADO_JS}(b)).map((b) => b.querySelector('canvas.thumb')).filter(Boolean).map(cv => {
-              const c = cv.getContext('2d');
-              return [...c.getImageData(0, 0, cv.width, cv.height).data].reduce((a, v) => a + v, 0);
-            }))`);
-            await sleep(700);
-            const t2 = await page.eval(`JSON.stringify([...document.querySelectorAll('.gamepick button')].filter((b) => !${BOTON_APAGADO_JS}(b)).map((b) => b.querySelector('canvas.thumb')).filter(Boolean).map(cv => {
-              const c = cv.getContext('2d');
-              return [...c.getImageData(0, 0, cv.width, cv.height).data].reduce((a, v) => a + v, 0);
-            }))`);
-            const a = JSON.parse(t1);
-            const bb = JSON.parse(t2);
+            const mini = JSON.parse(await page.eval(`JSON.stringify([...document.querySelectorAll('.gamepick button')].filter((b) => !${BOTON_APAGADO_JS}(b)).map((b) => {
+              const vis = [...b.querySelectorAll('img.sel-img')].filter((i) => getComputedStyle(i).display !== 'none');
+              const i = vis[0];
+              return { id: b.id, visibles: vis.length, cargada: !!i && i.complete && i.naturalWidth > 0, claro: !!i && /-light\.webp$/.test(i.getAttribute('src') || ''), ancho: i ? Math.round(i.getBoundingClientRect().width) : 0, alto: i ? Math.round(i.getBoundingClientRect().height) : 0 };
+            }))`));
             // Contra los botones del selector, no contra un número escrito a
             // mano: eran seis, y al sumar juegos el auditor fallaba solo.
             const botones = Number(await page.eval(`[...document.querySelectorAll('.gamepick button')].filter((b) => !${BOTON_APAGADO_JS}(b)).length`));
-            check(`${etiqueta}: hay una miniatura por juego`, a.length === botones && botones > 0, `${a.length} de ${botones}`);
-            const quietas = a.filter((v, k) => v === bb[k]).length;
-            check(
-              `${etiqueta}: las miniaturas están animadas`,
-              a.length > 0 && quietas === 0,
-              quietas ? `${quietas} no se mueven` : "",
-            );
+            check(`${etiqueta}: hay una miniatura por juego`, mini.length === botones && botones > 0 && mini.every((m) => m.visibles === 1), `${mini.filter((m) => m.visibles === 1).length} de ${botones}`);
+            const rotas = mini.filter((m) => !m.cargada);
+            check(`${etiqueta}: las miniaturas cargan, ninguna rota`, rotas.length === 0, rotas.map((m) => m.id).join(", "));
+            const deOtroTema = mini.filter((m) => m.claro !== (tema === "light"));
+            check(`${etiqueta}: cada miniatura es la del tema ${tema}`, deOtroTema.length === 0, deOtroTema.map((m) => m.id).join(", "));
+            const sinTamano = mini.filter((m) => m.ancho < 60 || m.alto < 30);
+            check(`${etiqueta}: las miniaturas se ven de un tamaño legible`, sinTamano.length === 0, sinTamano.map((m) => `${m.id} ${m.ancho}x${m.alto}`).join(", "));
             await sleep(200);
             await page.screenshot(join(outDir, `ui-juegos-${etiqueta}.png`));
           }

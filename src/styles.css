@@ -476,7 +476,7 @@
     font-weight: 800; font-size: 16px; cursor: pointer; font-family: inherit;
   }
   .gamepick button.on { background: var(--purple); color: var(--on-purple); box-shadow: var(--sh-sm); transform: rotate(-1deg); }
-  /* La miniatura de cada juego, dentro de su botón.
+  /* La miniatura de cada juego, dentro de su botón: una captura real del juego, una por tema.
      A 54x30 px no hay dibujo que se vea: una llama medía nueve píxeles y un
      cohete eran dos rectángulos. El botón pasa a ser una tarjeta con la escena
      arriba y el nombre abajo, que es lo que hace que dé ganas de tocarlo. */
@@ -485,11 +485,18 @@
     flex-direction: column; gap: 8px; padding: 8px 8px 10px; width: 132px;
     align-items: stretch; text-align: center;
   }
-  .gamepick .thumb {
-    width: 100%; height: 66px; border: 2px solid var(--ink); display: block;
+  .gamepick .sel-img {
+    width: 100%; height: auto; aspect-ratio: 16 / 9; border: 2px solid var(--ink); display: block; background: var(--field);
     transition: transform 120ms;
   }
-  .gamepick button:hover:not(:disabled) .thumb { transform: scale(1.04); }
+  .gamepick .sel-osc { display: none; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .gamepick .sel-osc { display: block; }
+    :root:not([data-theme="light"]) .gamepick .sel-cla { display: none; }
+  }
+  :root[data-theme="dark"] .gamepick .sel-osc { display: block; }
+  :root[data-theme="dark"] .gamepick .sel-cla { display: none; }
+  .gamepick button:hover:not(:disabled) .sel-img { transform: scale(1.04); }
   .gamepick button.on { transform: rotate(-1deg) translate(-1px, -1px); box-shadow: var(--sh); }
   .gamepick button:disabled {
     cursor: not-allowed; background: var(--paper); color: var(--muted);
@@ -505,6 +512,8 @@
   }
   .gamepick .rec-nota { display: block; font-size: 14px; line-height: 1.35; font-weight: 600; color: var(--ink2); }
   .gamepick button.atenuado:not(.on) { color: var(--muted); border-style: dashed; box-shadow: none; }
+  /* Un juego que no encaja con la cantidad de personas se ve apagado también en la captura: con el dibujo a todo color el borde punteado solo no alcanza. */
+  .gamepick button.atenuado:not(.on) .sel-img { opacity: 0.55; filter: saturate(0.7); }
   .gamepick button.atenuado:not(.on) .rec-nota { color: var(--muted); }
   .gamepick button.on .rec-nota { color: var(--on-purple); }
   #rec-head { margin: 4px 0 10px; }
