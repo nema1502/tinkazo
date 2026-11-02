@@ -73,9 +73,14 @@ const PACES = { rapido: 20, normal: 38, epico: 45 };
  * menos, las echadas quedarían a menos de 1 s) y Épico un 18 % más. Con 8 o menos y con más de 30 vale `PACES`.
  */
 const NORMAL_CARRERA = { 9: 39, 10: 41, 11: 44, 12: 48, 13: 51, 14: 53, 15: 55, 16: 57, 17: 61, 18: 63, 19: 65, 20: 66, 21: 68, 22: 69, 23: 72, 24: 73, 25: 74, 26: 75, 27: 76, 28: 76, 29: 77, 30: 78 };
+/**
+ * El Guajojó también promete según la gente (`normalGuajojo` en `src/duraciones.ts`: de 25 a 60 s, con la tarjeta adentro):
+ * con la lista de ejemplo (18) son 44 s. Una prueba (`src/duraciones.test.ts`) compara esta tabla con la función.
+ */
+const NORMAL_GUAJOJO = { 2: 29, 3: 35, 8: 41, 18: 44, 30: 52, 200: 59 };
 /** Lo que promete cada posición del selector con `gente` personas en este juego. */
 function prometido(juego, pace, gente) {
-  const normal = juego === "race" ? NORMAL_CARRERA[gente] : undefined;
+  const normal = juego === "race" ? NORMAL_CARRERA[gente] : juego === "guajojo" ? NORMAL_GUAJOJO[gente] : undefined;
   if (!normal) return PACES[pace];
   return pace === "normal" ? normal : pace === "rapido" ? Math.max(20, Math.round(normal * 0.9)) : Math.round(normal * 1.18);
 }

@@ -166,7 +166,8 @@ const RELOJ = `(() => {
 })()`;
 
 /** Sin subtítulo en las dos fotos; sin la barra de arriba en la de sin letras. */
-const CSS = "#commentary{display:none!important} html.nino-sin .st-top, html.nino-sin #stadium button{visibility:hidden!important}";
+// `visibility` y no `display`: con `display: none` la caja del relator mide cero y el piso de los nombres (`S.tags`) se va al techo, y los chips desaparecen de la foto con letras.
+const CSS = "#commentary{visibility:hidden!important} html.nino-sin .st-top, html.nino-sin #stadium button{visibility:hidden!important}";
 
 async function pararEn(page, hora) {
   await page.eval(`window.__reloj.meta = ${hora}; 0`);

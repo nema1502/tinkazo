@@ -2143,6 +2143,14 @@ export const T: Record<Lang, Dict> = {
     "errAnchor.sponsorEmpty": "Ahora no se pudo sellar, y no es por tu cuenta: el servicio no pudo pagar la comisión de la red. Avisanos en hola@tinkazo.app y probá de nuevo más tarde.",
     redSinSaldoPatrocinio: "Ahora no se pudo sellar, y no es por tu cuenta: el servicio no pudo pagar la comisión. Avisanos en hola@tinkazo.app y probá de nuevo más tarde.",
     // >>> kit:i18n-es (scripts/nuevo-juego.mjs escribe entre estas marcas)
+    // --- guajojo
+    gameGuajojo: "Guajojó", jgGuajojoN: "Guajojó",
+    jgGuajojoB: "Un sendero del monte de noche. Mientras canta el guajojó, todos caminan; cuando calla, quietos: sus ojos amarillos barren el sendero y al que hace crujir una rama lo escucha y se sienta. Gana quien llega de pie al amanecer. Hasta doscientas.",
+    gcGuajojo: "Mientras canta el guajojó, se camina; cuando calla, quietos: al que hace crujir una rama, lo escucha y se sienta.",
+    gcGuajojoMany: "Con varios premios, quien llega de pie al amanecer gana primero, y quien se sienta último también se lleva premio.",
+    loreGuajojoQ: "¿Qué es el guajojó?",
+    loreGuajojoA: "Un ave de la noche. De día se queda erguida e inmóvil en la punta de un palo seco, como si fuera parte de él, y al anochecer canta un silbo largo con notas que bajan.",
+    // --- /guajojo
     // <<< kit:i18n-es
     // Luma a la vista y qué sigue después del resultado (2 de noviembre de 2026): el "?" que enseña a bajar el CSV y la línea de "qué sigue".
     lumaQ: "Cómo bajar tu lista de Luma",
@@ -3904,6 +3912,14 @@ export const T: Record<Lang, Dict> = {
     "errAnchor.sponsorEmpty": "Sealing didn't work just now, and it isn't your account: the service couldn't pay the network fee. Let us know at hola@tinkazo.app and try again later.",
     redSinSaldoPatrocinio: "Sealing didn't work just now, and it isn't your account: the service couldn't pay the fee. Let us know at hola@tinkazo.app and try again later.",
     // >>> kit:i18n-en (scripts/nuevo-juego.mjs escribe entre estas marcas)
+    // --- guajojo
+    gameGuajojo: "Guajojó", jgGuajojoN: "Guajojó",
+    jgGuajojoB: "A forest trail at night. While the guajojó sings, everyone walks; when it goes quiet, freeze: its yellow eyes sweep the trail, and anyone who snaps a twig is heard and sits down. Whoever is still standing at dawn wins. Up to two hundred.",
+    gcGuajojo: "While the guajojó sings, walk; when it goes quiet, freeze. Snap a twig and it hears you: sit down.",
+    gcGuajojoMany: "With several prizes, whoever reaches dawn standing wins first, and whoever sits down last wins a prize too.",
+    loreGuajojoQ: "What is the guajojó, the night bird?",
+    loreGuajojoA: "A night bird. By day it stays upright and motionless at the tip of a dry stick, as if part of it, and at dusk it sings one long whistle followed by falling notes.",
+    // --- /guajojo
     // <<< kit:i18n-en
     // Luma in plain sight and what comes after the result (November 2, 2026): the "?" that teaches how to get the CSV, and the "what's next" line.
     lumaQ: "How to get your list from Luma",

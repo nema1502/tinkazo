@@ -63,6 +63,37 @@ export const CATALOGO = [
     captura: true,
   },
   // >>> kit:catalogo (scripts/nuevo-juego.mjs escribe entre estas marcas)
+  // --- guajojo
+  // El Guajojó, el sendero del monte de noche. Nació apagado: abre con ?demo=guajojo y ?pose=guajojo, y entra al selector
+  // al pasar la batería y con el sí de quien mantiene el proyecto (node scripts/nuevo-juego.mjs --encender guajojo).
+  {
+    id: "guajojo",
+    cargar: () => import("../guajojo").then((m) => m.guajojoPixi),
+    selector: false,
+    rango: { minimo: 2, ideal: [8, 30], maximo: 200 },
+    captura: true,
+    historia: {
+      q: "loreGuajojoQ",
+      a: "loreGuajojoA",
+      href: "https://es.wikipedia.org/wiki/Nyctibius_griseus",
+      src: "es.wikipedia.org, Nyctibius griseus",
+      hue: "teal",
+    },
+    leyenda: {
+      es: [
+        "En el oriente boliviano (Beni, Pando y Santa Cruz) se cuenta que una joven enamorada corrió por el monte y quedó convertida en ave.",
+        "Desde entonces no habla: al caer el sol llama con un lamento, un silbo largo y notas que bajan.",
+        "De día se queda erguida e inmóvil, como la punta de un palo seco.",
+      ],
+      en: [
+        "In eastern Bolivia (Beni, Pando and Santa Cruz) they say a young woman in love ran through the forest and was turned into a bird.",
+        "Since then she cannot speak: at sunset she calls with a lament, one long whistle and falling notes.",
+        "By day she stays upright and still, like the tip of a dry stick.",
+      ],
+      fuente: { titulo: "Los Tiempos: Guajojó, la historia de amor que se hizo ave", url: "https://www.lostiempos.com/doble-click/cultura/20190806/guajojo-historia-amor-que-se-hizo-ave-mal-aguero" },
+    },
+  },
+  // --- /guajojo
   // <<< kit:catalogo
 ] as const satisfies readonly EntradaCatalogo[];
 

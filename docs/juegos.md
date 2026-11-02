@@ -575,3 +575,9 @@ Los ocho del selector, en su orden: el de la auditoría de juegos, de las salas 
 | Constelación Stellar (salió el 21 de octubre de 2026; la reemplaza El Trueque) | `stellar` | [constelacion-stellar.md](juegos/constelacion-stellar.md) |
 | De pie, antes ¿Quién es? (salió el 26 de octubre de 2026) | `quien` | [quien-es.md](juegos/quien-es.md) |
 | El Trueque (salió el 26 de octubre de 2026) | `trueque` | [trueque.md](juegos/trueque.md) |
+
+**En camino al selector** (todavía apagado: abre con `?demo=`, y pasa al selector con `node scripts/nuevo-juego.mjs --encender <juego>` al pasar la batería y con el sí de quien mantiene el proyecto):
+
+| Juego | `?demo=` | Tipo | Hasta | Documento |
+|---|---|---|---|---|
+| Guajojó (1 de noviembre de 2026) | `guajojo` | Kit de juegos (`crearJuego`), motor PixiJS | 200, ideal de 8 a 30 | [guajojo.md](juegos/guajojo.md): el sendero del monte de noche, el palo seco que abre los ojos, el crac y el amanecer |

@@ -1,4 +1,4 @@
-import { normalCarrera, segundosDe } from "./duraciones";
+import { normalCarrera, normalGuajojo, segundosDe } from "./duraciones";
 import type { JuegoKit } from "./games/pixi/kit/catalogo";
 
 /**
@@ -334,7 +334,14 @@ export const currentPace = (): Pace => ritmo();
 export const paceSeconds = (p: Pace): number => {
   // La carrera de hasta 30 promete según cuánta gente corre; el resto, lo de siempre.
   // (El motor anterior, con `?motor=clasico`, no tiene pelotón: ahí vale lo de todos.)
-  const propio = app.game === "race" && app.frozen && params.get("motor") !== "clasico" ? normalCarrera(app.frozen.names.length) : null;
+  const propio =
+    app.frozen && params.get("motor") !== "clasico"
+      ? app.game === "race"
+        ? normalCarrera(app.frozen.names.length)
+        : app.game === "guajojo"
+          ? normalGuajojo(app.frozen.names.length)
+          : null
+      : null;
   return (propio !== null ? segundosDe(p, propio) : PACES[p]) + (conCuenta(p) ? CUENTA_SECONDS : 0);
 };
 
