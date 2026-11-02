@@ -24,8 +24,9 @@
  * porque al 25 % casi nada se mueve. Por eso en cada momento deciden solo las
  * preguntas que ahí se pueden ver, y las demás se informan:
  *   - al 25 %: solo `gano` = no;
- *   - al 60 %: `propia`, `mirar` y, si la verdad dice `progresoVisible`, `falta`
- *     (a 0,2 o menos);
+ *   - al 60 %: `propia`, `mirar` solo en la carrera y la rueda (en de pie y en acumulación
+ *     la acción está arriba y los nombres abajo: no hay un solo lugar adonde mirar, y se
+ *     pregunta y se informa) y, si la verdad dice `progresoVisible`, `falta` (a 0,2 o menos);
  *   - al final: `gano` = si con el nombre bien y `paso` = gano.
  * Un `si` antes del golpe sigue siendo una falla grave: la presentación delata a
  * quien gana. Una corrida de un tamaño (un arco) pasa si pasan sus tres momentos;
@@ -34,11 +35,18 @@
  *
  * `mirar` es siempre una zona de la pantalla (nunca una dirección): la verdad sale
  * de `adelante.lugar` cuando alguien va adelante y, si no, de `zonaAccion`, o `centro`.
+ * Vale la zona vecina (`ZONAS_VECINAS`: el centro toca a las cuatro, y cada borde al
+ * centro y a los dos de los lados): lo que se sigue suele cruzar dos zonas.
  * En la rueda, que gira, «alrededor» también vale: la pregunta lo ofrece para lo que
  * gira, y la segunda medición mostró que quien mira una rueda girando dice eso.
  * `olor` pregunta por cosas (dinero, fichas, cartas, dados, tragamonedas, mesa de
  * apuestas) y no por sensaciones: una rueda que gira «parece» apuesta aunque no haya
  * nada de casino en pantalla.
+ *
+ * **Grupos.** Donde la pantalla muestra grupos y no personas (las cabinas del teleférico, las
+ * comparsas de Oruro), el juego declara en `window.__nino.grupos` el grupo de cada persona y la
+ * pregunta propia de «quiénes siguen» pide también el nombre del grupo. Un chico contesta con lo
+ * que ve, y eso vale (`coincidePropia`) mientras siga en juego alguien de ese grupo.
  *
  * Las tolerancias son las de siempre: nombres sin tildes ni mayúsculas y con las
  * cinco primeras letras de cada palabra; `mirar` igual a la zona, sin decir también
@@ -140,8 +148,11 @@ export const TEXTO_PREGUNTAS = {
   olor: "¿Se ve dinero, billetes, monedas de apuesta, fichas de casino, cartas, dados, una máquina tragamonedas o una mesa de apuestas? Escribí si o no, y en \"vi\" qué viste.",
 };
 
-/** El texto de una pregunta: la propia depende de la forma. */
-export const textoDe = (clave, forma) => (clave === "propia" ? TEXTO_PROPIA[forma] : TEXTO_PREGUNTAS[clave]);
+/** La pregunta propia de «quiénes siguen» cuando la pantalla muestra grupos: acepta también el nombre del grupo. */
+export const TEXTO_PROPIA_GRUPOS = "¿Quiénes siguen en juego? Escribí dos nombres que se lean, separados por una coma; si lo que se ve son grupos, escribí el nombre del grupo.";
+
+/** El texto de una pregunta: la propia depende de la forma y, de pie, de si la pantalla muestra grupos. */
+export const textoDe = (clave, forma, conGrupos = false) => (clave === "propia" ? (conGrupos && forma === "de-pie" ? TEXTO_PROPIA_GRUPOS : TEXTO_PROPIA[forma]) : TEXTO_PREGUNTAS[clave]);
 
 /** Lo que se pregunta de una imagen: `olor` va en todas las fotos (si va solo en una, es la última y se sabe). */
 export const clavesDe = (imagen) => (imagen === "tira" ? CLAVES_TIRA : [...CLAVES_FOTO, "olor"]);
@@ -191,10 +202,27 @@ export function zonaDeMirar(v) {
 
 const OPUESTO = { arriba: "abajo", abajo: "arriba", izquierda: "derecha", derecha: "izquierda" };
 
-/** «Mirar» igual a la zona, o una parte de la diagonal; si dice también el sentido contrario, no. */
+/**
+ * Qué zonas se tocan: el centro toca a las cuatro, y cada borde toca al centro y a los dos
+ * de los lados (la derecha a centro, arriba y abajo; arriba a centro, izquierda y derecha).
+ * Las opuestas no se tocan.
+ */
+export const ZONAS_VECINAS = {
+  centro: ["arriba", "abajo", "izquierda", "derecha"],
+  arriba: ["centro", "izquierda", "derecha"],
+  abajo: ["centro", "izquierda", "derecha"],
+  izquierda: ["centro", "arriba", "abajo"],
+  derecha: ["centro", "arriba", "abajo"],
+};
+
+/**
+ * «Mirar» igual a la zona o a una que la toca (lo que se sigue suele cruzar dos zonas y no tiene
+ * un único lugar); si dice también la zona contraria, no.
+ */
 export function coincideMirar(modelo, verdad) {
   const dichas = DIRECCIONES.filter((d) => palabras(modelo).includes(d));
-  if (!dichas.includes(verdad)) return false;
+  const valen = [verdad, ...(ZONAS_VECINAS[verdad] ?? [])];
+  if (!dichas.some((d) => valen.includes(d))) return false;
   return !(OPUESTO[verdad] && dichas.includes(OPUESTO[verdad]));
 }
 
@@ -264,35 +292,67 @@ export function coincideAdelante(modelo, verdad, nombres) {
 }
 
 /**
+ * Los grupos que siguen en juego: los nombres (sin repetir) de los grupos de quienes siguen. Vacío si el
+ * juego no declara grupos.
+ */
+export function gruposQueSiguen(quienes, grupos) {
+  if (!Array.isArray(grupos)) return [];
+  return [...new Set(quienes.map((q) => grupos[q]).filter((g) => typeof g === "string" && g.trim()))];
+}
+
+/**
  * La pregunta propia, por forma. Carrera, rueda y acumulación: un nombre entre los
  * que están adelante (en la rueda, el señalado; en la carrera, quien va adelante o
  * a un cuerpo). De pie: dos nombres distintos, los dos entre quienes siguen en
  * juego (si sigue uno solo, ese).
+ *
+ * Donde la pantalla muestra grupos (`grupos`: el grupo de cada persona), cada nombre dicho puede
+ * ser el de una persona que sigue o el de un grupo que todavía tiene a alguien en juego, con las
+ * mismas tolerancias de nombres, y tienen que ser dos distintos. Si todos los que siguen son de un
+ * solo grupo, alcanza con decir ese grupo.
  */
-export function coincidePropia(forma, modelo, verdad, nombres) {
+export function coincidePropia(forma, modelo, verdad, nombres, grupos = null) {
   const quienes = verdad.adelante.quienes;
   if (forma !== "de-pie") return coincideAdelante(Array.isArray(modelo) ? modelo[0] : modelo, verdad, nombres);
-  const dichos = nombresDichos(modelo).slice(0, Math.min(2, quienes.length));
-  if (dichos.length < Math.min(2, quienes.length)) return false;
-  const puestos = new Set();
+  const vivos = gruposQueSiguen(quienes, grupos);
+  const pedidos = Math.min(2, quienes.length);
+  // Con grupos, quien ve un solo grupo en pantalla suele agregar «no se ve» al segundo nombre: eso no es un nombre, no resta.
+  const dichos = nombresDichos(modelo)
+    .filter((d) => !(Array.isArray(grupos) && normalizar(d) === "no se ve"))
+    .slice(0, pedidos);
+  const claves = [];
   for (const d of dichos) {
     const i = quienes.find((q) => coincideNombre(d, nombres[q] ?? ""));
-    if (i === undefined) return false;
-    puestos.add(i);
+    if (i !== undefined) {
+      claves.push(`p${i}`);
+      continue;
+    }
+    const g = vivos.find((v) => coincideNombre(d, v));
+    if (g === undefined) return false;
+    claves.push(`g${g}`);
   }
-  return puestos.size === dichos.length;
+  if (new Set(claves).size >= pedidos) return true;
+  // Si todos los que siguen son de un solo grupo, decir ese grupo alcanza.
+  return vivos.length === 1 && claves.some((c) => c.startsWith("g"));
 }
 
 /* ------------------------------------------------------------- el juez */
 
+/** Las formas donde hay un solo lugar adonde mirar: en las demás la acción está arriba y los nombres abajo. */
+export const FORMAS_CON_UN_LUGAR = ["carrera", "rueda"];
+
 /**
  * Qué preguntas deciden en cada punto del arco; las demás se informan. `falta` solo decide
  * donde se ve (`progresoVisible`): en lo que gira, o cuando casi nada se movió, el tiempo no se ve.
+ * `mirar` solo decide en la carrera y la rueda; en de pie y en acumulación se pregunta y se informa.
  */
-export function decideEn(punto, verdad) {
+export function decideEn(punto, verdad, forma) {
   if (punto === "fin") return ["gano", "paso"];
   if (punto === "p25") return ["gano"];
-  return verdad?.progresoVisible ? ["propia", "mirar", "falta"] : ["propia", "mirar"];
+  const decide = ["propia"];
+  if (FORMAS_CON_UN_LUGAR.includes(forma)) decide.push("mirar");
+  if (verdad?.progresoVisible) decide.push("falta");
+  return decide;
 }
 
 /**
@@ -312,11 +372,11 @@ export function juzgarMomento({ foto, tira, c }) {
   const aciertos = {
     gano: final ? dijo === "si" && ganadoresDe(c).some((i) => coincideNombre(quienGana, nombres[i] ?? "")) : dijo === "no",
     falta: coincideFalta(f.falta, v.progreso),
-    propia: coincidePropia(c.forma, f.propia, v, nombres),
+    propia: coincidePropia(c.forma, f.propia, v, nombres, c.grupos ?? null),
     mirar: coincideMirar(t.mirar, zonaDeMirar(v)) || (c.forma === "rueda" && coincideMirar(t.mirar, "alrededor")),
     paso: coincidePaso(t.paso, t.quien, verdadPaso, nombres),
   };
-  const decide = decideEn(c.punto, v);
+  const decide = decideEn(c.punto, v, c.forma);
   // Antes del golpe, decir «ya se sabe» es que la presentación delata a quien gana.
   const grave = !final && dijo === "si";
   const respondida = foto != null && tira != null;
@@ -427,12 +487,12 @@ export function armarPreguntas(capturas) {
     prompt: "prompt-nino.md",
     respuesta: "respuestas-modelo.json",
     capturas: ids.map((id) => {
-      const { imagen, forma } = capturas[id];
+      const { imagen, forma, grupos } = capturas[id];
       return {
         id,
         imagen: `capturas/${id}.png`,
         cuadros: imagen === "tira" ? CUADROS_ATRAS.length : 1,
-        preguntas: clavesDe(imagen).map((clave) => ({ clave, texto: textoDe(clave, forma) })),
+        preguntas: clavesDe(imagen).map((clave) => ({ clave, texto: textoDe(clave, forma, Array.isArray(grupos)) })),
       };
     }),
   };

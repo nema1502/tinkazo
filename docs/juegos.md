@@ -87,13 +87,13 @@ Desde el 26 de octubre de 2026 los juegos se piensan, como la tele, con una sola
 
 | Qué pide la regla | Dónde vive en el kit |
 |---|---|
-| **Un solo contador**, en la misma esquina en todos los juegos, que solo baja y llega a 1 con el golpe; ningún otro número en el relator ni en un cartel | `marcador.ts`: el plan declara `marcador(t)` y `crearJuego` lo dibuja arriba a la izquierda ("QUEDAN 18"), así ningún juego puede tener otro. `problemasDeMarcador` |
+| **Un solo contador**, en la misma esquina en todos los juegos, que solo baja y llega a 1 con el golpe; ningún otro número en el relator ni en un cartel | `marcador.ts`: el plan declara `marcador(t)` y `crearJuego` lo dibuja arriba a la izquierda ("QUEDAN 18"), así ningún juego puede tener otro. En los de quedar de pie el número lleva el total y la misma palabra en todos ("QUEDAN 5 DE 18", `textoMarcador`), y debajo una **fila de marcas**, una por persona (`disposicionDeMarcas` y `pintarMarcas`): encendidas las que siguen, apagadas las que salieron, para que un chico las cuente sin leer. Las marcas miden la letra del contador por 0,8 y nunca menos de 12 px, van en una o dos filas sobre una placa de tinta (igual en los dos temas), y con más de 40 personas se deja el número solo. `problemasDeMarcador` |
 | **El nombre pegado al cuerpo** y, cuando alguien sale, su nombre legible donde pasó; nunca una fila aparte de emblemas | `nombres.ts`: `pegarAlCuerpo`, `estaPegado` (a lo sumo un cuarto del alto del cuerpo), `nombreDeSalida` y `enFilaAparte` |
 | **La persona es una figura con cara y nombre**, no un emblema de 30 px | `figuras.ts`: cada `Figura` lleva su `nombre`; `tamanoMinimoFigura` (56 px de diseño, nunca menos de 40) y `cuantasCaben` (con más gente, por tandas); `Kit.escalaDeFigura()` da la escala del chip del estadio |
 | **Un solo sentido** de avance, **la meta en todo cuadro** y el cartel nunca encima del ganador | `director.ts`: `plan.sentido`; `momentos.meta` y `guardarMeta` no dejan que ninguna toma la suelte; con el golpe la cámara protege a quien gana debajo del cartel (`tapaAlGanador`, `cajaDelFoco`) aunque el plan no lo pida |
 | **El relator, de seis palabras o menos**, un nombre, ningún número | `guion.ts`: `validarGuion(líneas, duración, { nino: true, nombres })` y `problemasDeLinea` |
 | **Cada hecho se ve en el cuerpo a los 0,3 s de su línea**, dos salidas van a 1 s o más, y salir no suena a fracaso | `LineaGuion.hecho`, `POSE_MAX` y `SALIDAS_APARTE` (en `respuestas.ts`); `sonido.salida()`, un solo tono suave igual en todos |
-| **Las respuestas, en cada instante**: lo propio de la forma (`adelante.quienes`), adónde mirar (`adelante.lugar`), cuánto falta y qué acaba de pasar | `plan.respuestas(t)`, obligatorio: sin él `crearJuego` no compila. `problemasDeRespuestas` lo recorre; con `?auditar=nino` el juego deja `window.__nino.forma` y `window.__nino.verdad()` para `audit-nino`, que saca una foto y una tira de tres cuadros sin subtítulo (al 25 %, al 60 % y al final) y las compara con esto |
+| **Las respuestas, en cada instante**: lo propio de la forma (`adelante.quienes`), adónde mirar (`adelante.lugar`), cuánto falta y qué acaba de pasar | `plan.respuestas(t)`, obligatorio: sin él `crearJuego` no compila. `problemasDeRespuestas` lo recorre; con `?auditar=nino` el juego deja `window.__nino.forma` y `window.__nino.verdad()` (y, si su pantalla muestra grupos y no personas, `window.__nino.grupos`) para `audit-nino`, que saca una foto y una tira de tres cuadros sin subtítulo (al 25 %, al 60 % y al final) y las compara con esto |
 
 `nuevo-juego.mjs` deja puestos estos ganchos y sus pruebas (`sentido`, `marcador`, `respuestas`, `hecho`, `meta`, el relator de seis palabras y figuras del tamaño de una figura), y la página de diseño trae la **ficha del niño**, que se aprueba antes del código: su forma, qué es ir adelante, adónde se mira, cómo se ve lo que falta y cada hecho con su tipo y su pose. De pie declara `respuestas`, `marcador` y `sentido`, pero todavía no cumple el resto de la regla (sienta a varios a la vez y su relator pasa de seis palabras): es de los diez que se rediseñan. Todavía no entran las poses de las figuras (correr, frenar, tropezar, echarse, saludar, ganar), que cada capa declare su clase.
 
@@ -281,6 +281,72 @@ La regla del niño (26 de octubre de 2026, con la forma desde el 2 de noviembre;
 
 **La segunda vuelta (2 de noviembre de 2026).** La primera medición real dijo que la prueba no estaba sana: el control positivo, la ruleta, reprobaba 0 de 8. Lo que mostró: `falta` no se ve en algo que gira (el modelo dijo «mucho» con el progreso en 0,60 en 10 de 16), `mirar` al 25 % falla en todas las formas porque casi nada se mueve y nadie va adelante, la verdad de `mirar` se mezclaba con una dirección (la carrera nueva decía «derecha» y el modelo contestaba «abajo», una zona) y `olor` daba «sí, parece casino» en 38 de 48 fotos de la ruleta porque una rueda que gira «parece» apuesta aunque no haya nada de casino en pantalla. Por eso cambió el diseño de la prueba, no el de los juegos: `falta` solo decide donde se ve, el arco pide en cada momento lo que ahí se puede ver, `mirar` es siempre una zona de la pantalla y `olor` pregunta por cosas. Los números de la corrida nueva, en el historial de la rama.
 
+Lo que mostró la segunda medición (18 personas, 8 semillas, 1080 y 390), una línea por cosa:
+
+- La ruleta seguía reprobando por tres defectos de la prueba y no del juego: `falta` decidía con la rueda arrastrándose (16 de 16 mal), «alrededor» nunca valía en una rueda (`mirar` 0 de 48) y la flecha ancha en el borde y una tarjeta con el nombre se leían mal. Con los tres arreglados dio 7 de 8, justo, y la carrera de hoy 0 de 8.
+- El olor a apuesta pasó de 38 «sí» de 48 en la ruleta a 48 de 48 «no» en todos: preguntar por cosas dibujadas funcionó.
+- Guajojó 0 de 8 y Toborochi 0 de 8: fallaba solo `falta` (verdad de 0,76 a 0,82, el modelo decía «mitad»: el contador decía «EN EL MONTE 5» sin el total) y, en el Toborochi, `mirar` 1 de 16 (la verdad es «arriba», donde están las flores, y el modelo mira los nombres de «abajo» o el «centro»).
+- La carrera nueva 0 de 8: `mirar` 6 de 16 (la zona de la llama que va primera no es una sola) y `propia` 8 de 16, casi todo a 390.
+
+**La tercera vuelta (2 de noviembre de 2026).** Tres decisiones, dos en la prueba y una en los juegos:
+
+1. **`mirar` decide solo en la carrera y en la rueda.** En de pie y en acumulación no hay un solo lugar adonde mirar (la acción está arriba y los nombres abajo): se pregunta y se informa, pero no decide. Donde decide, vale la zona vecina (`ZONAS_VECINAS` en `scripts/lib/nino.mjs`): la declarada o una que la toque.
+2. **En de pie, `falta` se ve solo si el contador muestra el total.** El contador de los juegos del kit dice «EN EL MONTE 5 DE 18» (`textoMarcador`), y el del sapo («EN JUEGO 14 DE 18», «AGUJEROS 12 DE 18») y el del teleférico («QUEDAN 4 DE 18») también. Es presentación: el plan no se tocó. Los de «x / 18» ya lo decían.
+3. **`propia` en la carrera nueva a 390 no se afloja en la prueba.** Es un hallazgo real de la carrera: en el celular el modelo no distingue quién va adelante (ver abajo).
+
+Resultado de la tercera medición (carpeta privada `nino-2nov-v3`; los controles con 8 semillas):
+
+| | Semillas que pasan de 8 | La falla típica |
+|---|---|---|
+| Ruleta (control positivo) | 8 | ninguna: `mirar` 16 de 16, `propia` 16 de 16. La prueba aprueba con margen |
+| Carrera de hoy (control negativo) | 4 | solo `propia` a 390 al 60 % (4 de 8): dice un nombre que no es el que va adelante; `mirar` 16 de 16 y `falta` 16 de 16. Reprueba, pero con 4 de 8 y no con 0 de 8: con el cartel y el contador a la vista falla solo lo que de verdad no se ve |
+| Carrera nueva | 1 | `propia` 9 de 16 (a 1080, 7 de 8; a 390, 2 de 8): dice el nombre de la llama de arriba, no el de la que lleva la ficha amarilla. `mirar` 16 de 16 y `falta` 14 de 16 |
+| Guajojó | 0 | `falta` 0 de 16: lee «5 DE 18» y contesta «mitad» o «mucho» con la verdad en 0,76 a 0,82 |
+| Toborochi | 0 | `falta` 1 de 16: igual, «mitad» con «5 DE 18» |
+| El sapo | 8 | ninguna: `falta` no decide (al 60 % todavía no se ve) y `propia` 16 de 16 |
+| El trompo | 3 | `propia` a 390 (3 de 8; a 1080, 8 de 8): nombra a alguien que no sigue |
+| La chovena | 6 | `propia` 12 de 16: nombra a quienes no siguen |
+| La piñata | 0 | `propia` 0 de 16: la lista de la derecha es de quienes ya cayeron y quienes siguen adentro no tienen nombre en pantalla |
+| El teleférico | 0 | `propia` 0 de 16: el cartel de la cabina dice un grupo («Vicuñas ×4») y no los nombres de quienes siguen arriba |
+| Oruro | 3 | `propia` 7 de 16: nombra comparsas («Vicuñas», «Tojos») y no personas |
+
+Lo que dejó la tercera:
+
+- **El total en el contador no alcanzó para `falta`.** Con «EN EL MONTE 5 DE 18» el modelo lee el número y contesta «mitad» o «mucho», no «poco»: parece leer «5 de 18» como lo hecho y no como lo que queda. Con «QUEDAN 5 DE 18» y la fila de marcas, en la cuarta vuelta, el guajojó pasó de 0 a 7 de 8 y el toborochi a 8 de 8.
+- **La ficha de quien va adelante, en la carrera nueva, a 390 px.** En el celular el modelo contesta `propia` bien 2 de 8 al 60 %: la llama con la ficha amarilla va a media pista y la del nombre de arriba parece la de adelante. Queda sin arreglar a propósito.
+- **`propia` en de pie pide nombres.** En la piñata, el teleférico y Oruro lo que se lee son nombres de otras cosas (los que cayeron, grupos, comparsas): quienes siguen no tienen su nombre a la vista.
+- **El olor a apuesta.** 48 de 48 «no» en todos menos el teleférico, 4 de 48 «sí»: las tarjetas de la cabina con tres emblemas y «×3» se leen como un carrete de tragamonedas, y la moneda dorada con el número, como una ficha.
+
+**La cuarta vuelta (2 de noviembre de 2026).** Ahora los hallazgos eran de los juegos y no de la prueba, y se arreglaron en presentación (el plan no se tocó: mismas salidas, tiempos y ganadores):
+
+1. **El contador de los de pie dice cuántos quedan y se ve sin leer.** «EN EL MONTE 5 DE 18» no alcanzó (el modelo contestaba «mitad»). Pasó a «QUEDAN 5 DE 18» en todos (guajojó, toborochi, ¿Quién es?, sapo, teleférico, trompo, chovena, piñata y Oruro) y debajo lleva una fila de marcas, una por persona: encendidas las que siguen, apagadas las que salieron.
+2. **Quienes siguen tienen su nombre a la vista.** La piñata suma la lista «ADENTRO» frente a la de «AFUERA»; en la chovena y en el teleférico el nombre de quien ya salió o se bajó se ve apagado y con una raya roja (se lo tomaba por uno que sigue), y en la chovena quienes siguen en la rueda llevan el suyo durante el corte.
+3. **Grupos.** En el teleférico (cabinas) y en Oruro (comparsas) la pantalla muestra grupos y no personas: el juego declara en `__nino.grupos` el grupo de cada persona y el juez acepta, para «quiénes siguen», el nombre de un grupo que siga en juego, con las mismas tolerancias de nombres. Si todos los que siguen son de un solo grupo alcanza con decirlo, y un «no se ve» de más al lado no resta. `FORMA_DECIDIDA` no se tocó.
+
+Resultado de la cuarta medición (carpeta privada `nino-2nov-v4`; 18 personas, 8 semillas, 1080 y 390; controles con 8 semillas):
+
+| | Semillas que pasan de 8 | La falla típica |
+|---|---|---|
+| Ruleta (control positivo) | 8 | ninguna |
+| Carrera de hoy (control negativo) | 3 | `propia` a 390: reprueba, la prueba está sana |
+| Guajojó | 7 | una semilla: `propia` 14 de 16 (antes 0 de 8 semillas) |
+| Toborochi | 8 | ninguna (antes 0) |
+| La piñata | 8 | ninguna (antes 0) |
+| La chovena | 8 | ninguna (antes 6) |
+| El sapo | 8 | ninguna (antes 8) |
+| Oruro | 8 | con el juez de grupos (antes 3; 5 antes de aceptar el «no se ve» de más) |
+| El teleférico | 6 | a 390, con tres en juego, el modelo nombra a quienes se bajaron (`propia` 14 de 16; antes 0 de 8 semillas) |
+
+### Lo que la prueba encontró en los juegos
+
+Hallazgos que se dejan sin arreglar a propósito, o que quedan abiertos:
+
+- **La carrera nueva a 390 px.** Quien va adelante no se distingue: la ficha amarilla va a media pista y el modelo nombra a la llama de más arriba (`propia` 2 de 8 a 390, contra 7 de 8 a 1080). No se tocó.
+- **El trompo a 390 px.** `propia` 3 de 8 a 390 y 8 de 8 a 1080. No se tocó, ni se repitió la medición en esta vuelta.
+- **El olor a apuesta del teleférico.** 2 a 4 de 48 dicen «sí»: la tarjeta de la cabina con tres emblemas y «×3» se lee como un carrete de tragamonedas, y la moneda dorada con el número como una ficha. No se tocó.
+- **La carrera de hoy como control.** Pasó de 0 a 3 o 4 de 8 y sigue reprobando; si alguna vez aprueba, el arco quedó blando.
+- **El teleférico a 390.** Quedan dos semillas con el nombre de quienes ya se bajaron leído como el de quienes siguen, aun con la raya roja.
+
 Hasta el 1 de noviembre la prueba hacía las mismas cuatro preguntas a todos (quién va ganando, hacia dónde, cuánto falta, qué pasó): eran la forma de una carrera. En un juego de quedar de pie no hay «quién va ganando» al 25 %, porque los que siguen están todos igual, y por eso Guajojó y Toborochi daban 0 de 4 con finales que sí se entendían. La prueba no estaba mal: estaba incompleta. Ahora cada juego declara su **forma** y la pregunta propia sale de ella.
 
 ```bash
@@ -312,7 +378,7 @@ node scripts/audit-nino.mjs --controles --juzgar docs/capturas/nino
 | `gano`: ¿ya se sabe quién ganó? (un nombre señalado o en una tarjeta no alcanza: tiene que verse que ganó) | `no`, o `si` y el nombre tal como se lee | `no` mientras la hora del juego es menor que la duración; después `si` y el nombre de quien gana. Un `si` antes del golpe es una falla grave: la presentación delata |
 | `falta`: ¿cuánto falta? | empieza, mucho, mitad, poco, termino | `progreso` del plan; solo decide donde `progresoVisible` es verdadero (ver abajo) |
 | `paso`: ¿qué acaba de pasar? | empezo, salio, adelante, freno, casi, gano, nada | `paso` del plan |
-| `mirar`: ¿en qué parte de la imagen está pasando lo importante ahora? (en la tira, el cuadro de la derecha) | una zona: arriba, abajo, izquierda, derecha, centro, o alrededor si gira | `adelante.lugar` cuando `adelante.quienes` no está vacío (la zona donde cae en la pantalla quien va adelante, que mide el juego con la cámara); si está vacío, la `zonaAccion` que declara el juego, y sin ella, `centro`. Nunca una dirección. En la rueda, que gira, «alrededor» también vale |
+| `mirar`: ¿en qué parte de la imagen está pasando lo importante ahora? (en la tira, el cuadro de la derecha) | una zona: arriba, abajo, izquierda, derecha, centro, o alrededor si gira. Decide solo en la carrera y la rueda; en de pie y en acumulación se pregunta y se informa | `adelante.lugar` cuando `adelante.quienes` no está vacío (la zona donde cae en la pantalla quien va adelante, que mide el juego con la cámara); si está vacío, la `zonaAccion` que declara el juego, y sin ella, `centro`. Nunca una dirección. En la rueda, que gira, «alrededor» también vale |
 | `propia`, según la forma | carrera: ¿quién va adelante? (un nombre). De pie: ¿quiénes siguen en juego? (dos nombres que se lean). Rueda: ¿qué nombre está señalado ahora? (uno). Acumulación: ¿quién tiene más? (uno) | un nombre entre `adelante.quienes` (dos distintos, entre quienes siguen, de pie) |
 
 `mirar` reemplaza a `hacia`, que era de carrera: el plan lo sigue declarando para las pruebas de la cámara, pero la prueba ya no lo pregunta. Aparte va `olor`, que no entra en el veredicto, y que pregunta por cosas y no por sensaciones: «¿se ve dinero, billetes, monedas de apuesta, fichas de casino, cartas, dados, una máquina tragamonedas o una mesa de apuestas? Escribí si o no, y qué viste». La verdad es `no`. Se pregunta en toda foto y no solo en la final, porque si no la pregunta delataría cuál es la última. Aprueba si todas dicen `no`; sale en el JSON como `olor` y la boleta lo lee de ahí.
@@ -329,14 +395,14 @@ node scripts/audit-nino.mjs --controles --juzgar docs/capturas/nino
 **El veredicto es por arco, no por foto.** Una corrida de un tamaño pasa si:
 
 - al 25 %: solo `gano` = no (la obligatoria: si no, la presentación delata);
-- al 60 %: `propia` bien, `mirar` bien y, si `progresoVisible`, `falta` a 0,2 o menos;
+- al 60 %: `propia` bien, `mirar` bien solo en la carrera y en la rueda y, si `progresoVisible`, `falta` a 0,2 o menos;
 - al final: `gano` = si con el nombre bien y `paso` = gano.
 
 Lo demás se informa pero no decide, y un `si` antes del golpe hace fallar la corrida. Al 25 % casi nada se mueve y nadie va adelante, así que ahí `mirar`, `paso`, `falta` y `propia` se informan. Una semilla pasa si pasan sus dos tamaños, y el juego con 7 de cada 8 semillas (con 2 semillas, las 2).
 
 **`falta` solo cuenta donde se ve.** La verdad suma `progresoVisible` por momento. La carrera lo pone en `true` siempre (la meta está a la vista). De pie y acumulación, desde que salió alguien: lo visible es cuántos quedan, así que la verdad de `falta` es la fracción de quienes tenían que salir que ya salieron, no el tiempo. La rueda, solo desde que casi se traba (`T_HOLD` en la ruleta, el 82 %): antes gira, a fondo o arrastrándose (con `T_CREEP`, el 57 %, el modelo dijo «mucho» o «empieza» en 16 de 16 fotos), y el tiempo no se ve en algo que gira. Donde es `false`, `falta` se informa pero no decide. Los juegos del kit lo reciben por forma (`verdadDelNino`, en `respuestas.ts`) y pueden afinarlo declarando el suyo en `respuestas(t)`.
 
-**El contrato.** Es el del kit (`kit/respuestas.ts`): con `?auditar=nino`, `window.__nino` trae `forma`, `verdad()` (las `Respuestas`: `adelante` con `quienes` y `lugar`, `hacia`, `progreso` de 0 a 1 que solo sube, `progresoVisible`, `zonaAccion` si el juego la declara, y `paso` con tipo, quién y desde cuándo), `t()` (la hora del juego), `duracion` (la hora del golpe, el 100 %). Los juegos del kit lo dejan solos con `crearJuego` (la forma sale de su entrada del catálogo). La ruleta (`wheel-nino.ts`) y la carrera de hoy (`race-nino.ts`) lo exponen desde su plan sin cambiar el show: sin el parámetro no se expone nada. En los juegos de quedar de pie, `adelante.quienes` es el conjunto de quienes siguen en juego.
+**El contrato.** Es el del kit (`kit/respuestas.ts`): con `?auditar=nino`, `window.__nino` trae `forma`, `verdad()` (las `Respuestas`: `adelante` con `quienes` y `lugar`, `hacia`, `progreso` de 0 a 1 que solo sube, `progresoVisible`, `zonaAccion` si el juego la declara, y `paso` con tipo, quién y desde cuándo), `t()` (la hora del juego), `duracion` (la hora del golpe, el 100 %). Los juegos del kit lo dejan solos con `crearJuego` (la forma sale de su entrada del catálogo). La ruleta (`wheel-nino.ts`) y la carrera de hoy (`race-nino.ts`) lo exponen desde su plan sin cambiar el show: sin el parámetro no se expone nada. En los juegos de quedar de pie, `adelante.quienes` es el conjunto de quienes siguen en juego. Donde la pantalla muestra grupos y no personas (las cabinas del teleférico, las comparsas de Oruro), el juego declara además `grupos`: el nombre del grupo de cada persona, por su puesto en la lista (`Grupos` y `problemasDeGrupos` en `kit/respuestas.ts`). Es presentación: no cambia el plan.
 
 **Qué decide la verdad.** Tres cosas las tiene que declarar el juego, y el veredicto depende de ellas (la primera pasada de la ruleta dio 0 de 2 con la zona declarada y una ventana de 4 s; con las de abajo, 2 de 2):
 
@@ -347,7 +413,7 @@ Lo demás se informa pero no decide, y un `si` antes del golpe hace fallar la co
 **Las tolerancias del juez** (`scripts/lib/nino.mjs`, con sus pruebas sin red; no cambiaron):
 
 - Nombres sin tildes ni mayúsculas y con las cinco primeras letras de cada palabra («María Q.» vale por «María Quispe»); donde van adelante varios, vale cualquiera. En «quiénes siguen», dos nombres distintos y los dos entre los que siguen.
-- `mirar`, igual a la zona, y nunca diciendo también la contraria; en la rueda, «alrededor» también vale.
+- `mirar`, igual a la zona declarada o a una que la toque (el centro toca a las cuatro; la derecha, a centro, arriba y abajo; arriba, a centro, izquierda y derecha; y así), y nunca diciendo también la contraria; en la rueda, «alrededor» también vale. Solo decide en la carrera y la rueda (ver abajo).
 - La flecha de la ruleta es ancha: si cae a una quinta parte de un gajo del borde, cuentan los dos gajos como señalados.
 - `falta`: empieza 0, mucho 0,25, mitad 0,5, poco 0,75, termino 1; acierta a 0,2 o menos del progreso.
 - `paso`: el tipo (`empezo`, `salio`, `adelante`, `freno`, `casi`, `gano`, `nada`) y, con letras, el nombre si el hecho dice quién.

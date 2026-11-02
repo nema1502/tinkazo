@@ -34,7 +34,7 @@ Cada entrada trae algunas de estas, con su texto exacto:
 
   En `quien`, el nombre de la persona del hecho, si se lee; si no, vacío.
 - **mirar** (tira): mirá el cuadro de la derecha, el momento, y decí **en qué parte de la imagen** está pasando lo importante ahora. Es una zona de la pantalla, no una dirección de movimiento: una de `arriba`, `abajo`, `izquierda`, `derecha`, `centro`, o `alrededor` si lo importante gira.
-- **propia**: una pregunta sobre los nombres de la pantalla (quién va adelante, quiénes siguen, qué está señalado o quién tiene más). El texto de la entrada dice cuál es y cuántos nombres escribir. Si no se lee, `no se ve`.
+- **propia**: una pregunta sobre los nombres de la pantalla (quién va adelante, quiénes siguen, qué está señalado o quién tiene más). El texto de la entrada dice cuál es y cuántos nombres escribir; si lo que se ve son grupos (cabinas, comparsas) y no personas, el texto lo dice y vale el nombre del grupo. Si no se lee, `no se ve`.
 - **olor**: ¿se ve dinero, billetes, monedas de apuesta, fichas de casino, cartas, dados, una máquina tragamonedas o una mesa de apuestas? Contestá por lo que hay dibujado, no por lo que te parece. `si` o `no`, y en `vi` qué viste.
 
 ## El formato de cada respuesta

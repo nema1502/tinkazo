@@ -308,7 +308,7 @@ async function correr(browser, lienzo, { juego, semilla, tam, dir, clase }) {
         await pararEn(page, hora);
         cuadros.push(await cuadro(page));
       }
-      const estado = JSON.parse(await page.eval("JSON.stringify({ verdad: window.__nino.verdad(), t: window.__nino.t(), nombres: window.__pose.names, ganadores: window.__pose.winners })"));
+      const estado = JSON.parse(await page.eval("JSON.stringify({ verdad: window.__nino.verdad(), t: window.__nino.t(), nombres: window.__pose.names, ganadores: window.__pose.winners, grupos: window.__nino.grupos ?? null })"));
       const tira = await armarTira(lienzo, cuadros);
       for (const [imagen, png] of [["foto", cuadros[cuadros.length - 1]], ["tira", tira]]) {
         const id = idDeCaptura({ juego, semilla, tamano: tam.id, punto: punto.id, imagen });

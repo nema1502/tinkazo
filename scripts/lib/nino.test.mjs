@@ -17,7 +17,10 @@ import {
   coincideNombre,
   coincidePaso,
   coincidePropia,
+  gruposQueSiguen,
   decideEn,
+  FORMAS_CON_UN_LUGAR,
+  ZONAS_VECINAS,
   textoDe,
   zonaDeMirar,
   horaDeParada,
@@ -64,13 +67,36 @@ describe("el lenguaje del juez", () => {
     expect(coincideNombre("Ana Vargas", "Ana Vargas 2")).toBe(true);
   });
 
-  it("«mirar» acepta una parte de la diagonal y rechaza el sentido contrario", () => {
+  it("«mirar» acepta la zona o una vecina y rechaza la contraria", () => {
     expect(coincideMirar("derecha", "derecha")).toBe(true);
     expect(coincideMirar("derecha y arriba", "arriba")).toBe(true);
     expect(coincideMirar("izquierda", "derecha")).toBe(false);
     expect(coincideMirar("izquierda o derecha", "derecha")).toBe(false);
     expect(coincideMirar("no se ve", "derecha")).toBe(false);
     expect(coincideMirar("centro", "centro")).toBe(true);
+  });
+
+  it("«mirar» vale en la zona vecina: el centro toca a las cuatro y cada borde al centro y a los dos de los lados", () => {
+    // Centro toca a las cuatro.
+    for (const z of ["arriba", "abajo", "izquierda", "derecha"]) {
+      expect(coincideMirar("centro", z), `centro con verdad ${z}`).toBe(true);
+      expect(coincideMirar(z, "centro"), `${z} con verdad centro`).toBe(true);
+    }
+    // La derecha toca a centro, arriba y abajo; no a la izquierda.
+    expect(ZONAS_VECINAS.derecha).toEqual(["centro", "arriba", "abajo"]);
+    for (const z of ["centro", "arriba", "abajo"]) expect(coincideMirar(z, "derecha")).toBe(true);
+    expect(coincideMirar("izquierda", "derecha")).toBe(false);
+    // Arriba y abajo tocan a izquierda, derecha y centro; no entre sí.
+    for (const z of ["centro", "izquierda", "derecha"]) {
+      expect(coincideMirar(z, "arriba")).toBe(true);
+      expect(coincideMirar(z, "abajo")).toBe(true);
+    }
+    expect(coincideMirar("abajo", "arriba")).toBe(false);
+    expect(coincideMirar("arriba", "abajo")).toBe(false);
+    // Decir también la zona contraria sigue sin valer, aunque la otra toque.
+    expect(coincideMirar("centro y abajo", "arriba")).toBe(false);
+    // «Alrededor» no es una zona: solo la rueda lo acepta, en el juez.
+    expect(coincideMirar("alrededor", "centro")).toBe(false);
   });
 
   it("«falta» acierta a 0,2 o menos del progreso", () => {
@@ -153,6 +179,74 @@ describe("la pregunta propia de cada forma", () => {
     const uno = { adelante: { quienes: [2], lugar: "centro" } };
     expect(coincidePropia("de-pie", "María Quispe", uno, NOMBRES)).toBe(true);
     expect(coincidePropia("de-pie", "Ana Vargas", uno, NOMBRES)).toBe(false);
+  });
+
+  describe("donde la pantalla muestra grupos, el nombre del grupo vale", () => {
+    // Seis personas en tres grupos, por su puesto en la lista: 0 y 3 son Vicuñas, 1 y 4 Cóndores, 2 y 5 Tojos.
+    const GRUPOS = ["Vicuñas", "Cóndores", "Tojos", "Vicuñas", "Cóndores", "Tojos"];
+    const pie = (...quienes) => ({ adelante: { quienes, lugar: "centro" } });
+
+    it("dos grupos distintos con alguien en juego aprueban, con las tolerancias de los nombres", () => {
+      const v = pie(0, 1, 2);
+      expect(coincidePropia("de-pie", "Vicuñas, Cóndores", v, NOMBRES, GRUPOS)).toBe(true);
+      expect(coincidePropia("de-pie", "vicuñas y tojos", v, NOMBRES, GRUPOS)).toBe(true);
+      expect(coincidePropia("de-pie", "Vicuna, Condor", v, NOMBRES, GRUPOS)).toBe(true);
+    });
+
+    it("un grupo y una persona que siguen son dos distintos; dos veces el mismo grupo, no", () => {
+      const v = pie(0, 1, 2);
+      expect(coincidePropia("de-pie", "Vicuñas, Carlos Choque", v, NOMBRES, GRUPOS)).toBe(true);
+      expect(coincidePropia("de-pie", "Vicuñas, Vicuñas", v, NOMBRES, GRUPOS)).toBe(false);
+    });
+
+    it("un grupo sin nadie en juego no vale, ni uno que no existe", () => {
+      const v = pie(0, 1);
+      expect(coincidePropia("de-pie", "Vicuñas, Tojos", v, NOMBRES, GRUPOS)).toBe(false);
+      expect(coincidePropia("de-pie", "Cóndores, Tatús", v, NOMBRES, GRUPOS)).toBe(false);
+      expect(coincidePropia("de-pie", "no se ve", v, NOMBRES, GRUPOS)).toBe(false);
+    });
+
+    it("si todos los que siguen son de un solo grupo, alcanza con decir ese grupo", () => {
+      const v = pie(0, 3);
+      expect(gruposQueSiguen(v.adelante.quienes, GRUPOS)).toEqual(["Vicuñas"]);
+      expect(coincidePropia("de-pie", "Vicuñas", v, NOMBRES, GRUPOS)).toBe(true);
+      expect(coincidePropia("de-pie", "Cóndores", v, NOMBRES, GRUPOS)).toBe(false);
+      // Con dos grupos en juego, uno solo no alcanza.
+      expect(coincidePropia("de-pie", "Vicuñas", pie(0, 1), NOMBRES, GRUPOS)).toBe(false);
+    });
+
+    it("un «no se ve» de más no resta cuando el juego declara grupos, y sin grupos sigue restando", () => {
+      expect(coincidePropia("de-pie", "Vicuñas, no se ve", pie(0, 3), NOMBRES, GRUPOS)).toBe(true);
+      expect(coincidePropia("de-pie", "Vicuñas, no se ve", pie(0, 1), NOMBRES, GRUPOS)).toBe(false);
+      expect(coincidePropia("de-pie", "Ana Vargas, no se ve", pie(0, 2, 5), NOMBRES)).toBe(false);
+    });
+
+    it("sin grupos declarados, un grupo no vale: el juez de siempre", () => {
+      expect(coincidePropia("de-pie", "Vicuñas, Cóndores", pie(0, 1, 2), NOMBRES)).toBe(false);
+      expect(coincidePropia("de-pie", "Vicuñas, Cóndores", pie(0, 1, 2), NOMBRES, null)).toBe(false);
+      expect(gruposQueSiguen([0, 1], null)).toEqual([]);
+    });
+
+    it("las formas que no son de pie no cambian, tengan grupos o no", () => {
+      expect(coincidePropia("carrera", "Vicuñas", pie(0), NOMBRES, GRUPOS)).toBe(false);
+      expect(coincidePropia("carrera", "Ana Vargas", pie(0), NOMBRES, GRUPOS)).toBe(true);
+    });
+
+    it("el momento que llega con grupos usa los de su captura", () => {
+      const c = { punto: "p60", forma: "de-pie", verdad: { ...pie(0, 1, 2), progreso: 0.5, progresoVisible: true, paso: { tipo: "salio", quien: 3, desde: 1 } }, nombres: NOMBRES, ganadores: [0], grupos: GRUPOS };
+      const foto = { gano: "no", falta: "mitad", propia: "Vicuñas, Cóndores", olor: "no" };
+      const tira = { paso: "salio", quien: "", mirar: "centro" };
+      expect(juzgarMomento({ foto, tira, c }).aciertos.propia).toBe(true);
+      expect(juzgarMomento({ foto, tira, c: { ...c, grupos: undefined } }).aciertos.propia).toBe(false);
+    });
+
+    it("la pregunta pide también el nombre del grupo solo en los juegos que declaran grupos", () => {
+      const con = armarPreguntas({ x: { imagen: "foto", forma: "de-pie", grupos: GRUPOS } }).capturas[0].preguntas.find((q) => q.clave === "propia").texto;
+      const sin = armarPreguntas({ x: { imagen: "foto", forma: "de-pie", grupos: null } }).capturas[0].preguntas.find((q) => q.clave === "propia").texto;
+      expect(con).toMatch(/nombre del grupo/);
+      expect(sin).not.toMatch(/grupo/);
+      expect(con).toMatch(/dos nombres/);
+    });
   });
 
   it("cada forma trae su pregunta, y los juegos decididos usan formas que existen", () => {
@@ -270,22 +364,23 @@ describe("el juez de un momento", () => {
     expect(j.aciertos.falta).toBe(false);
     expect(juzgarMomento({ foto, tira: { ...tira, mirar: "izquierda" }, c }).pasa).toBe(false);
     // Sin la clave (una verdad vieja), tampoco decide.
-    expect(decideEn("p60", {})).toEqual(["propia", "mirar"]);
-    expect(decideEn("p60", { progresoVisible: true })).toEqual(["propia", "mirar", "falta"]);
-    expect(decideEn("p25", { progresoVisible: true })).toEqual(["gano"]);
-    expect(decideEn("fin", { progresoVisible: true })).toEqual(["gano", "paso"]);
+    expect(decideEn("p60", {}, "rueda")).toEqual(["propia", "mirar"]);
+    expect(decideEn("p60", { progresoVisible: true }, "rueda")).toEqual(["propia", "mirar", "falta"]);
+    expect(decideEn("p25", { progresoVisible: true }, "rueda")).toEqual(["gano"]);
+    expect(decideEn("fin", { progresoVisible: true }, "rueda")).toEqual(["gano", "paso"]);
   });
 
   it("«mirar» es una zona de la pantalla: la de quien va adelante o, si nadie, la que declara el juego, o el centro", () => {
     expect(zonaDeMirar({ adelante: { quienes: [3], lugar: "abajo" }, zonaAccion: "arriba" })).toBe("abajo");
     expect(zonaDeMirar({ adelante: { quienes: [], lugar: "abajo" }, zonaAccion: "arriba" })).toBe("arriba");
     expect(zonaDeMirar({ adelante: { quienes: [], lugar: "abajo" } })).toBe("centro");
-    // Una dirección de movimiento no es una zona: el modelo que dice «derecha» donde la verdad es «abajo» falla.
-    expect(coincideMirar("derecha", zonaDeMirar({ adelante: { quienes: [1], lugar: "abajo" }, hacia: "derecha" }))).toBe(false);
+    // Una dirección de movimiento no es una zona: la verdad es la zona, y el que dice la contraria falla (la vecina vale).
+    expect(coincideMirar("arriba", zonaDeMirar({ adelante: { quienes: [1], lugar: "abajo" }, hacia: "derecha" }))).toBe(false);
+    expect(coincideMirar("derecha", zonaDeMirar({ adelante: { quienes: [1], lugar: "abajo" }, hacia: "derecha" }))).toBe(true);
   });
 
   it("en la rueda, que gira, «alrededor» también es mirar bien; en las demás formas no", () => {
-    const rueda = armar(1, "rueda", { adelante: { quienes: [3], lugar: "centro" } });
+    const rueda = armar(1, "rueda", { adelante: { quienes: [3], lugar: "abajo" } });
     const c = de(rueda, "p60", "foto");
     const foto = perfecta(c);
     const tira = perfecta(de(rueda, "p60", "tira"));
@@ -294,6 +389,29 @@ describe("el juez de un momento", () => {
     const carrera = armar(1, "carrera");
     const cc = de(carrera, "p60", "foto");
     expect(juzgarMomento({ foto: perfecta(cc), tira: { ...perfecta(de(carrera, "p60", "tira")), mirar: "alrededor" }, c: cc }).aciertos.mirar).toBe(false);
+  });
+
+  it("«mirar» solo decide en la carrera y en la rueda: en de pie y en acumulación se pregunta y se informa", () => {
+    expect(decideEn("p60", { progresoVisible: true }, "carrera")).toEqual(["propia", "mirar", "falta"]);
+    expect(decideEn("p60", { progresoVisible: true }, "rueda")).toEqual(["propia", "mirar", "falta"]);
+    expect(decideEn("p60", { progresoVisible: true }, "de-pie")).toEqual(["propia", "falta"]);
+    expect(decideEn("p60", { progresoVisible: true }, "acumulacion")).toEqual(["propia", "falta"]);
+    expect(decideEn("p60", {}, "de-pie")).toEqual(["propia"]);
+    expect(decideEn("p25", { progresoVisible: true }, "de-pie")).toEqual(["gano"]);
+    expect(decideEn("fin", {}, "de-pie")).toEqual(["gano", "paso"]);
+    for (const forma of ["carrera", "rueda"]) expect(FORMAS_CON_UN_LUGAR).toContain(forma);
+    const dePie = armar(1, "de-pie");
+    const c = de(dePie, "p60", "foto");
+    const foto = perfecta(c);
+    const tira = perfecta(de(dePie, "p60", "tira"));
+    // Una tira que dice «izquierda» donde la verdad es «derecha» no hace fallar a un juego de pie…
+    const j = juzgarMomento({ foto, tira: { ...tira, mirar: "izquierda" }, c });
+    expect(j).toMatchObject({ pasa: true, decide: ["propia", "falta"] });
+    expect(j.aciertos.mirar).toBe(false);
+    // …y a una carrera, sí.
+    const carrera = armar(1, "carrera");
+    const cc = de(carrera, "p60", "foto");
+    expect(juzgarMomento({ foto: perfecta(cc), tira: { ...perfecta(de(carrera, "p60", "tira")), mirar: "izquierda" }, c: cc }).pasa).toBe(false);
   });
 
   it("las preguntas piden una zona de la imagen, y el olor pregunta por cosas y no por sensaciones", () => {
