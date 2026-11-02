@@ -19,6 +19,7 @@
 
 import { readFile } from "node:fs/promises";
 import { emitirJson } from "./lib/resumen.mjs";
+import { tarjetasDeTextos } from "./lib/tarjetas.mjs";
 
 const offline = process.argv.includes("--offline");
 const fails = [];
@@ -38,11 +39,7 @@ const lore = await readFile("src/games/lore.ts", "utf8");
 const i18n = await readFile("src/i18n.ts", "utf8");
 
 /** Las entradas de `LORE`, sacadas del archivo tal como están escritas. */
-// De qué juego es cada tarjeta: la última clave `juego: [` antes de ella.
-const juegos = [...lore.matchAll(/^ {2}(\w+): \[/gm)].map((m) => ({ at: m.index ?? 0, juego: m[1] }));
-const juegoDe = (at) => juegos.filter((j) => j.at < at).at(-1)?.juego ?? "";
-const cards = [...lore.matchAll(/q:\s*"([^"]+)",\s*\n\s*a:\s*"([^"]+)",\s*\n\s*href:\s*"([^"]+)",\s*\n\s*src:\s*"([^"]+)"/g)]
-  .map((m) => ({ q: m[1], a: m[2], href: m[3], src: m[4], juego: juegoDe(m.index ?? 0) }));
+const cards = tarjetasDeTextos(lore, await readFile("src/games/pixi/kit/catalogo.ts", "utf8").catch(() => ""));
 
 /**
  * Si una fuente no contesta, ¿hay una copia en archive.org? Con copia, la cita

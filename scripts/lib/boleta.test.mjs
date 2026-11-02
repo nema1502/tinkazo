@@ -245,3 +245,23 @@ describe("la salida", () => {
     expect(bayesMaximo({ juegos: { wheel: {} } })).toBeNull();
   });
 });
+
+describe("las tarjetas de los juegos del kit", () => {
+  const CATALOGO = `export const CATALOGO = [
+  {
+    id: "guajojo",
+    historia: {
+      q: "loreGuajojoQ",
+      a: "loreGuajojoA",
+      href: "https://ejemplo.org/ave",
+      src: "Una fuente",
+      hue: "teal",
+    },
+  },
+];`;
+  it("las encuentra en el catálogo y no pisa las de lore.ts", () => {
+    expect(tarjetasDe(LORE, "guajojo", CATALOGO).map((t) => t.href)).toEqual(["https://ejemplo.org/ave"]);
+    expect(tarjetasDe(LORE, "wheel", CATALOGO)).toHaveLength(1);
+    expect(tarjetasDe(LORE, "guajojo")).toHaveLength(0);
+  });
+});

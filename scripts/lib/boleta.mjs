@@ -15,6 +15,7 @@
  * pasaron): "pasó" quiere decir que la corrida existe y ninguna falla le toca.
  */
 import { FUERA_DEL_SELECTOR, SELECTOR } from "./juegos.mjs";
+import { tarjetasDeJuego } from "./tarjetas.mjs";
 
 export const TOTAL = 9;
 export const VERDE = "verde";
@@ -226,13 +227,9 @@ function filaApuesta({ corridas, juego }) {
   return partes;
 }
 
-/** Las tarjetas de un juego, a partir del texto de `src/games/lore.ts`. */
-export function tarjetasDe(loreTs, juego) {
-  const juegos = [...loreTs.matchAll(/^ {2}(\w+): \[/gm)].map((m) => ({ at: m.index ?? 0, juego: m[1] }));
-  const juegoDe = (at) => juegos.filter((j) => j.at < at).at(-1)?.juego ?? "";
-  return [...loreTs.matchAll(/q:\s*"([^"]+)",\s*\n\s*a:\s*"([^"]+)",\s*\n\s*href:\s*"([^"]+)",\s*\n\s*src:\s*"([^"]+)"/g)]
-    .map((m) => ({ q: m[1], a: m[2], href: m[3], src: m[4], juego: juegoDe(m.index ?? 0) }))
-    .filter((t) => t.juego === juego);
+/** Las tarjetas de un juego, a partir del texto de `src/games/lore.ts` y, si se da, el del catálogo del kit. */
+export function tarjetasDe(loreTs, juego, catalogoTs = "") {
+  return tarjetasDeJuego(loreTs, juego, catalogoTs);
 }
 
 function filaVerdad({ corridas, juego, tarjetas, vetos }) {

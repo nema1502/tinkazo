@@ -52,9 +52,11 @@ const rutaNino = opt("--nino", resolve("docs", "capturas", "nino", juego, "vered
 const ninoJson = leerJson(rutaNino);
 const nino = ninoJson ? { pasa: !!ninoJson.pasa, pasan: ninoJson.pasan, semillas: ninoJson.semillas, minimo: ninoJson.minimo } : null;
 const detalle = opt("--delatores", "") ? leerJson(opt("--delatores", "")) : null;
-const lore = existsSync(resolve(raiz, "src/games/lore.ts")) ? readFileSync(resolve(raiz, "src/games/lore.ts"), "utf8") : "";
+const leerTs = (r) => (existsSync(resolve(raiz, r)) ? readFileSync(resolve(raiz, r), "utf8") : "");
+const lore = leerTs("src/games/lore.ts");
+const catalogo = leerTs("src/games/pixi/kit/catalogo.ts");
 
-const boleta = armarBoleta({ juego, corridas, vetos, nino, tarjetas: lore ? tarjetasDe(lore, juego) : null, bayes: bayesMaximo(detalle) });
+const boleta = armarBoleta({ juego, corridas, vetos, nino, tarjetas: lore ? tarjetasDe(lore, juego, catalogo) : null, bayes: bayesMaximo(detalle) });
 const hoy = new Date().toISOString().slice(0, 10);
 const salida = resolve(opt("--out", `docs/capturas/boletas/${juego}.md`));
 mkdirSync(dirname(salida), { recursive: true });
