@@ -40,7 +40,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { agrupar, contar, correrEnPool, duracion, estimarSegundos, formatearResumen, informeDe, planDe, resumenDeBateria } from "./lib/bateria.mjs";
 import { correrTarea, levantarPreview, matarTodos } from "./lib/bateria-proceso.mjs";
-import { AUDITORES_DE_LA_BOLETA, armarBoleta, boletaMd, corridasDe, resumenDeBoleta, tarjetasDe } from "./lib/boleta.mjs";
+import { AUDITORES_DE_LA_BOLETA, corridasDe, resumenDeBoleta } from "./lib/boleta.mjs";
+import { escribirBoleta } from "./lib/boleta-archivo.mjs";
 import { quiereJson } from "./lib/resumen.mjs";
 
 const raiz = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -170,7 +171,14 @@ try {
   const mostrar = salida.startsWith(raiz) ? salida.slice(raiz.length + 1).replace(/\\/g, "/") : salida;
   console.log(formatearResumen(informe, { archivo: mostrar }).join("\n"));
   if (json && !boletaDe) console.log(JSON.stringify(resumenDeBateria(informe)));
-  if (!boletaDe) process.exitCode = informe.fallas.length ? 1 : 0;
+  if (boletaDe) {
+    // La boleta con el informe que se acaba de escribir.
+    const t = Date.now();
+    const { boleta, salida: archivoBoleta } = escribirBoleta({ raiz, juego: boletaDe, corridas: corridasDe(informe) });
+    console.log(`boleta de ${boletaDe}: ${boleta.aprueba ? "aprueba" : "no aprueba"}, escrita en ${archivoBoleta}`);
+    if (json) console.log(JSON.stringify(resumenDeBoleta(boleta, (Date.now() - t) / 1000)));
+    process.exitCode = boleta.aprueba ? 0 : 1;
+  } else process.exitCode = informe.fallas.length ? 1 : 0;
 } finally {
   preview?.parar();
   apagar();

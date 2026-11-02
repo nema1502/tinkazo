@@ -14,10 +14,11 @@
  *   una línea {"auditor":"boleta","objetivo":<juego>,"aprobadas":N,"total":8,…}.
  * - Sale con 1 si la boleta no aprueba (alguna fila roja o gris).
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { armarBoleta, bayesMaximo, boletaMd, corridasDeTexto, resumenDeBoleta, tarjetasDe } from "./lib/boleta.mjs";
+import { corridasDeTexto, resumenDeBoleta } from "./lib/boleta.mjs";
+import { escribirBoleta } from "./lib/boleta-archivo.mjs";
 
 const raiz = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -26,7 +27,6 @@ const opt = (n, d) => {
   const i = args.indexOf(n);
   return i >= 0 && args[i + 1] && !args[i + 1].startsWith("--") ? args[i + 1] : d;
 };
-const leerJson = (ruta) => (existsSync(ruta) ? JSON.parse(readFileSync(ruta, "utf8")) : null);
 
 if (!juego) {
   console.error("uso: node scripts/boleta.mjs <juego> --de <informe.json>[,otro.json]");
@@ -47,22 +47,16 @@ for (const ruta of desde) {
   corridas.push(...corridasDeTexto(readFileSync(ruta, "utf8")));
 }
 
-const vetos = leerJson(resolve(raiz, opt("--vetos", "docs/boletas-vetos.json")))?.[juego] ?? {};
-const rutaNino = opt("--nino", resolve("docs", "capturas", "nino", juego, "veredicto.json"));
-const ninoJson = leerJson(rutaNino);
-const nino = ninoJson ? { pasa: !!ninoJson.pasa, pasan: ninoJson.pasan, semillas: ninoJson.semillas, minimo: ninoJson.minimo } : null;
-const detalle = opt("--delatores", "") ? leerJson(opt("--delatores", "")) : null;
-const leerTs = (r) => (existsSync(resolve(raiz, r)) ? readFileSync(resolve(raiz, r), "utf8") : "");
-const lore = leerTs("src/games/lore.ts");
-const catalogo = leerTs("src/games/pixi/kit/catalogo.ts");
-
-const boleta = armarBoleta({ juego, corridas, vetos, nino, tarjetas: lore ? tarjetasDe(lore, juego, catalogo) : null, bayes: bayesMaximo(detalle) });
-const hoy = new Date().toISOString().slice(0, 10);
-const salida = resolve(opt("--out", `docs/capturas/boletas/${juego}.md`));
-mkdirSync(dirname(salida), { recursive: true });
-writeFileSync(salida, boletaMd(boleta, { fecha: hoy }));
-
-console.log(boletaMd(boleta, { fecha: hoy }));
+const { boleta, md, salida } = escribirBoleta({
+  raiz,
+  juego,
+  corridas,
+  vetos: resolve(raiz, opt("--vetos", "docs/boletas-vetos.json")),
+  nino: opt("--nino", resolve("docs", "capturas", "nino", juego, "veredicto.json")),
+  delatores: opt("--delatores", ""),
+  salida: opt("--out", ""),
+});
+console.log(md);
 console.log(`escrita en ${salida}`);
 if (args.includes("--json")) console.log(JSON.stringify(resumenDeBoleta(boleta, (Date.now() - inicio) / 1000)));
 process.exitCode = boleta.aprueba ? 0 : 1;
