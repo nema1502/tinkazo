@@ -66,11 +66,10 @@ Son los pasos, en este orden:
 
 ```bash
 # 1. El Worker, desde esta carpeta, con la sesión de wrangler login de la cuenta de Tinkazo.
+#    s.tinkazo.app es un dominio propio del Worker: el despliegue crea el registro DNS y el certificado.
 npx wrangler@4 deploy
-# 2. DNS: un registro AAAA «s» a 100:: con el proxy de Cloudflare, como se hizo con «c» el 21 de octubre de 2026.
-# 3. Probarlo contra producción (crea dos salas y las cierra o vencen solas):
+# 2. Probarlo contra producción (crea dos salas y las cierra o vencen solas):
 node probar.mjs https://s.tinkazo.app
 ```
 
-4. Decidir el cupo de pedidos de la cuenta (Workers Paid o regla de límite), como el contador.
-5. Subir el sitio con el modo stand, y en el mismo cambio dejar los términos (`tmMoreSala` en `src/i18n.ts` y `terminos.html`) con su fecha: `tmMore4` dice «Vigentes desde el 22 de octubre de 2026», y lo que dice la sala es nuevo. **Los términos y el aviso del celular los tiene que leer quien mantiene el proyecto antes de subir.**
+Corre en el plan gratis de Workers. Cada dirección puede crear pocas salas por hora (`Cupos`), y si alguna vez hiciera falta cuidar el cupo diario de la cuenta, la regla de límite de Cloudflare delante de `s.tinkazo.app` es lo que sirve.

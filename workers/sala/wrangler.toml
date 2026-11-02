@@ -6,7 +6,8 @@ account_id = "d97c3f7acada21d5ec280704fb34ff17"
 main = "src/index.ts"
 compatibility_date = "2026-09-01"
 workers_dev = false
-routes = [{ pattern = "s.tinkazo.app/*", zone_name = "tinkazo.app" }]
+# Dominio propio: Cloudflare crea el registro DNS y el certificado al desplegar.
+routes = [{ pattern = "s.tinkazo.app", custom_domain = true }]
 
 # Un objeto por sala, con SQLite y una alarma a las 10 h que borra todo.
 [[durable_objects.bindings]]
