@@ -1,7 +1,7 @@
 import { $ } from "../dom";
 import { onLangChange, t } from "../i18n";
 import { app, currentPace, forzarRitmo, params } from "../state";
-import { ENSAYO_ESPERA_S, LISTA_ENSAYO, enEnsayo, marcarEnsayo } from "../ensayo-modo";
+import { ENSAYO_ESPERA_S, LISTA_ENSAYO, enEnsayo, enStand, marcarEnsayo } from "../ensayo-modo";
 import { guardarBorrador, renderNames, setList } from "./participants";
 import { MARCA_INGRESAR, currentSession, refrescarPuerta } from "./wallet-ui";
 import { actualizarPaso } from "./siguiente";
@@ -81,7 +81,8 @@ function guiar(clave = claveDelPaso): void {
   // Sin clave (al cambiar de idioma), la del último paso: la espera sigue siendo la espera.
   claveDelPaso = clave;
   const el = document.getElementById("ensayo-guia");
-  if (!el) return;
+  // En el modo stand la línea es de `stand.ts`.
+  if (!el || enStand()) return;
   let texto = "";
   if (enEnsayo() && !app.drawn) {
     if (!app.frozen) texto = t("ensGuia1");

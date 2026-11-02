@@ -1,0 +1,23 @@
+# La sala de Tinkazo: nombres cifrados de un stand, en s.tinkazo.app (ver README.md).
+# Un script aparte del de los enlaces: un error de despliegue acá no puede tumbar los enlaces de los comprobantes.
+# Se despliega con: npx wrangler@4 deploy   (desde esta carpeta)
+name = "tinkazo-sala"
+account_id = "d97c3f7acada21d5ec280704fb34ff17"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+workers_dev = false
+routes = [{ pattern = "s.tinkazo.app/*", zone_name = "tinkazo.app" }]
+
+# Un objeto por sala, con SQLite y una alarma a las 10 h que borra todo.
+[[durable_objects.bindings]]
+name = "SALA"
+class_name = "Sala"
+
+# Un objeto, "cupos": cuántas salas se crean por dirección y por día.
+[[durable_objects.bindings]]
+name = "CUPOS"
+class_name = "Cupos"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Sala", "Cupos"]

@@ -11,6 +11,7 @@ import { Camera } from "./camera";
 import { Gobernador, ajustesDe, aprender, dibujaPorSoftware, esPorPlaca, nivelInicial, nivelMedido, type Nivel } from "./calidad";
 import { guardiaNombre, meter } from "./encuadre";
 import { GOLPE_GANADOR, vibrar } from "../../vibrar";
+import { enStand } from "../../ensayo-modo";
 import { CHIP_SCALE, LEGIBLE, letraMinima, seLee } from "./letra";
 import { ajustarEnRenglones, formaQueEntra } from "../nombres";
 import { estadoFoco, latidosFoco, tiemposFoco } from "./foco";
@@ -864,7 +865,15 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       plate.removeChildren().forEach((c) => c.destroy({ children: true }));
       flash.clear().rect(0, 0, sw(), sh()).fill(0xffffff);
       const k = u();
-      const title = text(getLang() === "es" ? (all.length > 1 ? "GANAN" : "GANA") : all.length > 1 ? "WINNERS" : "WINNER", {
+      // En una ronda de stand nadie gana nada: «SALIÓ», nunca «GANA».
+      const rotulo = enStand()
+        ? getLang() === "es"
+          ? all.length > 1 ? "SALIERON" : "SALIÓ"
+          : "PICKED"
+        : getLang() === "es"
+          ? all.length > 1 ? "GANAN" : "GANA"
+          : all.length > 1 ? "WINNERS" : "WINNER";
+      const title = text(rotulo, {
         fontFamily: MONO, fontSize: letra(LEGIBLE.prin), fontWeight: "900", fill: INK, letterSpacing: 3 * k,
       });
       // Hasta tres nombres y "y N más", igual que el relator.

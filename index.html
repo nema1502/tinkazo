@@ -210,6 +210,11 @@
     <p data-i="ensBanda">Ensayo: nada de esto se graba.</p>
     <button class="ghost mini" id="ens-salir-banda" type="button" data-i="ensSalirBanda" data-i-aria="ensSalirAria" aria-label="Salir del ensayo">Salir</button>
   </div>
+  <!-- El modo stand (src/ui/stand.ts): solo se ve con body[data-stand="1"]. -->
+  <div class="stand-banda app-only tab-nuevo" id="stand-banda">
+    <p data-i="standBanda">Ronda de ejemplo: no se puede comprobar</p>
+    <button class="ghost mini" id="stand-salir-banda" type="button" data-i="standSalir">Hacer un sorteo de verdad</button>
+  </div>
   <div class="appbar app-only">
     <div class="appbar-t">
       <h2 class="tab-nuevo" data-i="appTitle">Tu sorteo</h2>
@@ -292,6 +297,35 @@
       </aside>
       <!-- Un sorteo sellado en este navegador que quedó sin sortear (una recarga en la espera): se ofrece retomarlo. Lo arma history.ts. -->
       <aside class="again-note pendiente" id="pendiente" role="status" style="display:none"></aside>
+      <!-- La sala por QR del modo stand (src/ui/stand-sala.ts): solo se ve con body[data-stand="1"]. Alimenta rondas de ejemplo, nunca un sorteo sellado. -->
+      <section class="stand-sala" id="stand-sala" aria-labelledby="sala-t">
+        <h3 id="sala-t" data-i="standSalaT">Que se sumen con el celular</h3>
+        <div id="sala-cerrada">
+          <p class="note" data-i="standSalaB">Mostrá un QR: cada persona escribe su nombre en su celular y aparece acá. Si no hay señal, escribilos vos en el cuadro de abajo.</p>
+          <button class="ghost" type="button" id="sala-crear" data-i="standSalaCrear">Que se sumen con un QR</button>
+        </div>
+        <p class="ss-error" id="sala-error" role="status" hidden></p>
+        <div id="sala-abierta" hidden>
+          <p class="ss-titqr" data-i="standSalaTitQr">Escaneá y sumate con tu nombre</p>
+          <div class="ss-qr">
+            <img id="sala-qr-img" alt="" data-i-aria="standSalaQrAlt" aria-label="QR para sumarse a la ronda" />
+            <div class="ss-lado">
+              <p class="ss-estado" id="sala-estado" role="status" aria-live="polite"></p>
+              <p class="ss-cuenta" id="sala-cuenta" aria-live="polite"></p>
+              <div class="row">
+                <button class="ghost" type="button" id="sala-grande" aria-expanded="false" data-i="standSalaGrande">Ver el QR en grande</button>
+                <button class="ghost" type="button" id="sala-cerrar" data-i="standSalaCerrar">Cerrar la sala</button>
+              </div>
+            </div>
+          </div>
+          <ul class="ss-nombres" id="sala-nombres" aria-label="Quiénes se sumaron" data-i-aria="standSalaListaAria"></ul>
+          <div class="ss-revisar" id="sala-revisar" hidden>
+            <h4 data-i="standSalaRevisarT">Para revisar</h4>
+            <p class="note" data-i="standSalaRevisarB">Estos nombres tienen algo que conviene mirar antes de mostrarlos en la pantalla.</p>
+            <ul id="sala-revisar-lista"></ul>
+          </div>
+        </div>
+      </section>
       <div class="row origenes" id="origenes" style="margin: 0 0 14px">
         <button class="chip live" type="button" id="btn-pegar" data-i="srcPaste">Pegar lista</button>
         <!-- Luma a la vista, sin abrir nada, y su "?" que enseña a bajar el CSV (src/ui/luma-ayuda.ts). Es un origen más: no lleva el color de la casa. -->
@@ -320,6 +354,8 @@
       <p class="lista-cuenta" id="lista-cuenta" style="display:none"></p>
       <!-- Con el cuadro vacío y en una red con contrato, en lugar de "Cargar ejemplo": el ensayo, que no graba nada. -->
       <button class="enlace" type="button" id="btn-ensayo" data-entrar-ensayo data-i="ensayoLink" style="display:none">o probá con un ejemplo, sin grabar nada</button>
+      <!-- El modo stand (src/ui/stand.ts): rondas de ejemplo con los nombres de quienes pasan por un stand. No graba nada. -->
+      <button class="enlace" type="button" id="btn-stand" data-i="standLink">Tengo un stand: rondas de ejemplo con quienes pasan</button>
       <!-- Al volver de entrar con una lista lista: lo que sigue, con el foco en "Sellar la lista". Nunca sella solo. -->
       <p class="ya-entraste" id="ya-entraste" role="status" style="display:none"></p>
       <!-- Todo lo que no es pegar ni sellar va plegado (regla de letra, 26 de octubre de 2026): el premio, cuántos ganan, CSV y Luma.
@@ -357,7 +393,7 @@
       </div>
       <div class="row">
         <button class="primary" id="btn-freeze" data-i="freeze" aria-describedby="sellar-sin-cuenta sellar-resumen">Sellar la lista</button>
-        <button class="ghost" id="btn-sala" data-i="salaBtn">Mostrar la lista a la sala</button>
+        <button class="ghost" id="btn-sala" data-i="salaBtn">Mostrar la lista a la pantalla</button>
       </div>
       <!-- La red antes de sellar (src/ui/red.ts): una frase, una acción, el detalle plegado. Nace escondida. Va pegada a los botones: explica la acción que reemplaza a "Sellar la lista". -->
       <aside class="red-estado" id="red-estado" role="status" aria-live="polite" data-i-aria="redRegion" aria-label="Estado de la red" style="display:none"></aside>
@@ -500,6 +536,15 @@
             <button class="primary" id="ens-mio" type="button" data-i="ensFinCta">Sortear con mi lista</button>
             <button class="ghost" id="ens-salir" type="button" data-i="ensSalir">Salir del ensayo</button>
             <button class="enlace" id="ens-como" type="button" data-i="comoBtn">¿Cómo se usa?</button>
+          </div>
+        </div>
+        <!-- El final de una ronda de stand (src/ui/stand.ts): no se sorteó nada de verdad. -->
+        <div class="stand-fin" id="stand-fin">
+          <h3 data-i="standFinT">Fue una ronda de ejemplo: no se puede comprobar y no se entrega nada.</h3>
+          <p data-i="standFinB">Entrar es gratis. El sorteo de cierre sí se puede comprobar, desde cualquier celular.</p>
+          <div class="row">
+            <button class="primary" id="stand-otra" type="button" data-i="standOtra">Otra ronda</button>
+            <button class="ghost" id="stand-salir" type="button" data-i="standSalir">Hacer un sorteo de verdad</button>
           </div>
         </div>
         <div class="row grande-row"><button class="ghost" id="btn-grande" data-i="pantallaBtn">Mostrar en grande</button></div>

@@ -1,6 +1,6 @@
 import { $ } from "../dom";
 import { app, params } from "../state";
-import { enEnsayo } from "../ensayo-modo";
+import { enPractica } from "../ensayo-modo";
 
 /**
  * La primera vez: una línea, "¿Primera vez? Mirá cómo se usa o probalo con un
@@ -50,7 +50,7 @@ const nombres = (): number => document.getElementById("names")?.childElementCoun
 function pintar(): void {
   const box = document.getElementById("primera-vez");
   if (!box) return;
-  const ve = !ofertaVista() && !params.has("demo") && !enEnsayo() && !app.frozen && nombres() === 0;
+  const ve = !ofertaVista() && !params.has("demo") && !enPractica() && !app.frozen && nombres() === 0;
   box.style.display = ve ? "" : "none";
 }
 

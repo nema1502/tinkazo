@@ -29,3 +29,7 @@ Thumbs.db
 # Las imágenes del README sí.
 docs/capturas/*
 !docs/capturas/readme/
+
+# Estado local de wrangler dev
+.wrangler/
+.dev.vars

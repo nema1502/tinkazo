@@ -5,7 +5,7 @@ import { grifoApagado, hayAyudaDeFondos } from "../stellar/grifo";
 import { refreshFreezeLabel } from "./freeze";
 import { precalentarSello } from "./anchor";
 import { guardarBorrador } from "./participants";
-import { enEnsayo, sinGrabar } from "../ensayo-modo";
+import { enPractica, sinGrabar } from "../ensayo-modo";
 import { enNavegadorDeApp as esDeApp } from "../navegador";
 import { clearSessionKind, loadSessionKind, pickRestore, saveSessionKind } from "../stellar/session-store";
 import { contarEntrada, tomarEntrada } from "../contar";
@@ -121,7 +121,7 @@ export const canAnchor = (): boolean => anchoringAvailable && session !== null &
  * En una red con contrato, sin cuenta conectada no se sella: lo dicen la puerta
  * del sorteo y el botón de sellar. En el ensayo sí, porque no se graba nada.
  */
-const sinCuentaParaSellar = (): boolean => anchoringAvailable && session === null && !enEnsayo();
+const sinCuentaParaSellar = (): boolean => anchoringAvailable && session === null && !enPractica();
 
 /**
  * La clave del texto de "Sellar la lista" cuando está en reposo: sin cuenta dice "Entrar para sellar" (tocarlo abre la

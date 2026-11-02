@@ -19,8 +19,10 @@ import { MARCA_INGRESAR, currentSession, entraConGoogle, entrar, estadoDeLaCuent
 import { initOnboarding } from "./ui/onboarding";
 import { initLumaAyuda } from "./ui/luma-ayuda";
 import { initEnsayo, salirDelEnsayo } from "./ui/ensayo";
+import { initStand, salirDelStand } from "./ui/stand";
+import { initStandSala } from "./ui/stand-sala";
 import { abrirTutorial, initTutorial } from "./ui/tutorial";
-import { enEnsayo } from "./ensayo-modo";
+import { cerrarSalidaDelStand, enEnsayo, enPractica, enStand } from "./ensayo-modo";
 import { musicOn, toggleMusic } from "./music";
 import { rotateWords } from "./ui/rotar";
 import { iniciarFeedback, origenDelResultado } from "./feedback";
@@ -189,12 +191,17 @@ iniciarLogo();
 iniciarLogoEnElEstadio();
 bindParticipants();
 montarPremios();
+// Si la página anterior salió del modo stand, se apaga ahora: el borrador que se repone es el de verdad.
+cerrarSalidaDelStand();
 // La lista que se estaba armando en esta pestaña, si se recargó o se volvió de entrar con Google.
 reponerBorrador();
 initVistas();
 initWalletUI();
 // El ensayo, si se recargó en él, después de la cuenta (la puerta) y antes de los pasos.
 initEnsayo();
+// El modo stand, si se recargó en él.
+initStandSala();
+initStand();
 // La red a la vista antes de sellar: "¿La red está bien?" y el aviso cuando algo anda mal.
 iniciarRed({ sellar: (op) => freeze(op) });
 ingresarSiLoPidio();
@@ -277,6 +284,11 @@ function initVistas(): void {
       if (enEnsayo()) {
         e.preventDefault();
         salirDelEnsayo({ conMiLista: true });
+        return;
+      }
+      if (enStand()) {
+        e.preventDefault();
+        void salirDelStand();
         return;
       }
       // Con la cuenta adentro, a la herramienta, como siempre.
@@ -381,7 +393,7 @@ function ingresarSiLoPidio(): void {
   } catch {
     return;
   }
-  if (pidio && location.hash === "#sortear" && !params.has("demo") && !enEnsayo() && !currentSession()) pedirEntrar();
+  if (pidio && location.hash === "#sortear" && !params.has("demo") && !enPractica() && !currentSession()) pedirEntrar();
 }
 
 /**
@@ -392,7 +404,7 @@ function ingresarSiLoPidio(): void {
 function avisarQueYaEntro(): void {
   const n = parseNames().length;
   const linea = document.getElementById("ya-entraste");
-  if (!linea || n < 2 || app.frozen || enEnsayo()) return;
+  if (!linea || n < 2 || app.frozen || enPractica()) return;
   linea.dataset.n = String(n);
   linea.textContent = t("yaEntraste").replace("{n}", String(n));
   linea.style.display = "";

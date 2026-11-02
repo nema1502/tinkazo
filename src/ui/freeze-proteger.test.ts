@@ -52,7 +52,7 @@ vi.mock("./sello-seguro", () => ({
 }));
 vi.mock("./proteger-flujo", () => ({ pideProtegerLaCuenta: (...a: unknown[]) => h.pide(...a), protegerLaCuenta: () => h.proteger() }));
 vi.mock("../contar", () => ({ contar: (...a: unknown[]) => h.contar(...a), errorContable: (c: string) => c }));
-vi.mock("../ensayo-modo", () => ({ ENSAYO_ESPERA_S: 15, enEnsayo: () => false, sinGrabar: () => false }));
+vi.mock("../ensayo-modo", () => ({ ENSAYO_ESPERA_S: 15, STAND_ESPERA_S: 15, enEnsayo: () => false, enStand: () => false, sinGrabar: () => false }));
 vi.mock("./wallet-ui", () => ({ apruebaAMano: () => false, canAnchor: () => true, claveDeSellar: () => "freeze", currentSession: () => ({ address: "GAAA" }) }));
 vi.mock("./participants", () => ({
   cerrarLista: (...a: unknown[]) => void h.orden.push(`cerrarLista:${String(a[0])}`),

@@ -21,7 +21,7 @@ import { claveNombre } from "./gamecard";
 import { JUEGOS } from "../games/pixi/kit/catalogo";
 import { actualizarPaso, barraActiva, verError } from "./siguiente";
 import { ponerPremio, recordarPremio } from "./premios";
-import { ENSAYO_ESPERA_S, enEnsayo, sinGrabar } from "../ensayo-modo";
+import { ENSAYO_ESPERA_S, STAND_ESPERA_S, enEnsayo, enStand, sinGrabar } from "../ensayo-modo";
 import { logoParaSellar } from "../logo-guardado";
 import { contar, errorContable } from "../contar";
 import { type OpcionesDeSellado, chequearAntesDeSellar, hayAccionDeRed, limpiarRed, marcarSellado, mostrarCostoAlto, mostrarSinSaldo, verLaRedTrasFallar, verSinSello } from "./red";
@@ -234,11 +234,15 @@ const CHAIN_MARGIN_SECONDS = 8;
 
 export function secondsToRound(): number {
   if (!app.frozen) return 0;
+  // El modo stand no espera ningún número: la ronda arranca a los 3 s de empezar, sin tocar la red.
+  if (enStand()) return Math.max(0, app.frozen.ts + STAND_ESPERA_S - Math.floor(Date.now() / 1000));
   const margin = app.frozen.raffleId !== undefined ? CHAIN_MARGIN_SECONDS : 0;
   return Math.max(0, roundTime(app.frozen.round) + margin - Math.floor(Date.now() / 1000));
 }
 
 let countdownTimer: number | undefined;
+/** La ronda de stand ya arrancó sola: una sola vez por cuenta regresiva. */
+let arrancoSola = false;
 
 /**
  * Se apretó "Sellar la lista" con la pantalla en grande pedida (`vista-grande.ts`): cuando el sello esté, la
@@ -314,6 +318,7 @@ function abrirEspera(alSellar = false): void {
  * y otra vez cuando la ronda ya nació y el botón se habilita.
  */
 function preconectarDrand(): void {
+  if (enStand()) return;
   const href = QUICKNET.relays[0];
   document.head.querySelector(`link[rel="preconnect"][href="${href}"]`)?.remove();
   const link = document.createElement("link");
@@ -335,6 +340,7 @@ function preconectarDrand(): void {
  * los segundos que le quedan.
  */
 function startCountdown(): void {
+  arrancoSola = false;
   const btn = $<HTMLButtonElement>("btn-draw");
   const box = document.getElementById("wait-box");
   const num = document.getElementById("wait-round");
@@ -359,7 +365,8 @@ function startCountdown(): void {
   // Anclado, también la curva en la página: el contrato pide la firma
   // descomprimida.
   if (app.frozen) preloadGame(app.game, app.frozen.names.length);
-  prepararFirma();
+  // El modo stand no pide ni verifica ningún número: nada que preparar ni conexión que abrir.
+  if (!enStand()) prepararFirma();
   if (app.frozen?.raffleId !== undefined) void import("../protocol/drand").catch(() => undefined);
   let preconectado = false;
   const tick = (): void => {
@@ -372,7 +379,8 @@ function startCountdown(): void {
       btn.disabled = true;
       btn.classList.remove("lista");
       const reloj = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-      btn.textContent = T[getLang()].drawIn(reloj);
+      // El modo stand no espera ningún número: «Arranca en 3».
+      btn.textContent = enStand() ? t("standArranca").replace("{s}", String(s)) : T[getLang()].drawIn(reloj);
       // Sin `block` en línea: el CSS decide cómo se ve la caja de la espera.
       if (box) box.style.display = "";
       if (left) left.textContent = reloj;
@@ -399,7 +407,13 @@ function startCountdown(): void {
       // la barra ya le muestra el botón encendido.
       // Con la espera en grande abierta, en cambio, el sorteo arranca desde
       // ahí y el show ocupa la pantalla sin pasar por la página (espera.ts).
-      if (!app.drawn && espera?.esperaAbierta()) espera.nacioElNumero();
+      if (!app.drawn && enStand()) {
+        // Una ronda de stand arranca sola: quien atiende no tiene que estar sobre el botón.
+        if (!arrancoSola) {
+          arrancoSola = true;
+          btn.click();
+        }
+      } else if (!app.drawn && espera?.esperaAbierta()) espera.nacioElNumero();
       else if (!app.drawn) {
         const r = btn.getBoundingClientRect();
         if (!barraActiva() && (r.top < 0 || r.bottom > innerHeight)) btn.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -422,7 +436,7 @@ export function refreshFreezeLabel(): void {
   // Si la red no deja sellar, el botón lleva la acción del caso (`red.ts`): no se pisa.
   if (hayAccionDeRed()) return;
   const btn = $("btn-freeze");
-  btn.dataset.i = claveDeSellar();
+  btn.dataset.i = enStand() ? "standEmpezar" : claveDeSellar();
   btn.textContent = t(btn.dataset.i);
 }
 
@@ -443,7 +457,7 @@ export async function freeze(opciones: OpcionesDeSellado = {}): Promise<void> {
   // sincrónica y antes de cualquier `await` (la firma con Pollar o con Freighter abre después, y para entonces
   // el gesto ya no vale). Si la niega o no la ofrece (el iPhone), la vista grande se abre igual cuando el sello
   // esté. En el ensayo, lo mismo: se practica como va a ser. Sin gesto (la red volvió sola, la demo), solo la vista.
-  if (puedeSellar() && grandeAlSellar(entornoDeAhora())) {
+  if (puedeSellar() && !enStand() && grandeAlSellar(entornoDeAhora())) {
     pedirPantallaCompleta();
     grandePendiente = true;
   }
@@ -485,9 +499,11 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
     ? Math.max(ANCHOR_LEAD_SECONDS, LEAD_SECONDS)
     : sinSello
       ? SIN_SELLO_LEAD_SECONDS
-      : enEnsayo() && !params.has("lead")
-        ? ENSAYO_ESPERA_S
-        : LEAD_SECONDS;
+      : enStand()
+        ? STAND_ESPERA_S
+        : enEnsayo() && !params.has("lead")
+          ? ENSAYO_ESPERA_S
+          : LEAD_SECONDS;
   let round = targetRound(ts, lead);
   let prize = $<HTMLInputElement>("prize").value.trim();
   let numWinners = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, names.length);
@@ -935,6 +951,12 @@ export function unfreeze(lista: string): void {
 function textosDelSello(): void {
   const sin = sinSelloAhora(app.frozen);
   ponerTextoDelSello(document.querySelector<HTMLElement>("#sec-frozen .head h2 [data-i]"), "titulo", sin);
+  // Una ronda de stand no se sella: el título no dice «sellada».
+  const titulo = document.querySelector<HTMLElement>("#sec-frozen .head h2 [data-i]");
+  if (enStand() && titulo) {
+    titulo.dataset.i = "standListaT";
+    titulo.textContent = t("standListaT");
+  }
   ponerTextoDelSello(document.querySelector<HTMLElement>("#wait-box .wait-line"), "lineaDeLaEspera", sin);
 }
 
@@ -949,7 +971,7 @@ function showFrozen(names: string[], hash: string, raffleId: bigint | undefined)
   olvidarBorrador();
   btn.disabled = true;
   // Sin sello (la red no dejó): no dice "sellada", que es lo que se espera de la cadena.
-  btn.dataset.i = raffleId !== undefined ? "sealed" : f.sinSello ? "redSinSelloBoton" : "frozenOk";
+  btn.dataset.i = raffleId !== undefined ? "sealed" : f.sinSello ? "redSinSelloBoton" : enStand() ? "standEnMarcha" : "frozenOk";
   btn.textContent = t(btn.dataset.i);
   $("freeze-hint").style.display = "none";
   $("free-rule").style.display = "none";

@@ -80,10 +80,14 @@ let reintento = 0;
 /** Cuántos nombres hay en la lista: los que dibuja `renderNames`, sin pedirle nada a `participants.ts`. */
 const nombres = (): number => document.getElementById("names")?.childElementCount ?? 0;
 
-/** La barra solo existe en la herramienta, en la pestaña del sorteo nuevo y fuera de la demo, que se hace sola. */
+/**
+ * La barra solo existe en la herramienta, en la pestaña del sorteo nuevo y fuera
+ * de la demo, que se hace sola. Tampoco en el modo stand: tiene sus propios
+ * botones, y la barra hablaría de sellos, números y comprobantes que ahí no hay.
+ */
 function activa(): boolean {
   const d = document.body.dataset;
-  return d.vista === "app" && d.tab === "nuevo" && d.demo !== "1";
+  return d.vista === "app" && d.tab === "nuevo" && d.demo !== "1" && d.stand !== "1";
 }
 
 /** Estadio, tarjeta del juego, cortina, ventanas y la espera en grande: nada de esto va con la barra encima. */

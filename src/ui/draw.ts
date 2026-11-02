@@ -1,7 +1,7 @@
 import { $, esc } from "../dom";
 import { T, getLang, onLangChange, t } from "../i18n";
 import { CUENTA_SECONDS, LCOLORS, WHEEL_MAX, app, conCuenta, params, playableGame, avatar, forceMotion, setCardSeconds, setShowGate, setYaContaron, skipMotion, skippedForReducedMotion, type Beacon, type Game } from "../state";
-import { enEnsayo, sinGrabar } from "../ensayo-modo";
+import { enEnsayo, enPractica, enStand, faroDeStand, sinGrabar } from "../ensayo-modo";
 import { beep, note } from "../sound";
 import { bytesToHex, fetchRound, hexToBytes, randomnessOf, roundUrl } from "../protocol/quicknet";
 import { verifyRoundAsync } from "../protocol/firma";
@@ -35,6 +35,8 @@ async function resolveBeacon(
   round: number,
   onAttempt: (attempt: number, total: number) => void,
 ): Promise<Beacon> {
+  // El modo stand nunca toca la red para elegir, con o sin internet: no hay dos caminos ni detección de red que falle en vivo.
+  if (enStand()) return faroDeStand(round);
   const { signature } = await fetchRound(round, { onAttempt });
   // En un worker, que la cuenta regresiva levantó: la cortina no se traba.
   if (!(await verifyRoundAsync(round, signature))) throw new Error("bad-signature");
@@ -576,7 +578,11 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   // En el ensayo, lo que sigue es su final (ensayo.ts): "Sortear con mi lista".
   // "Siguiente premio" y compartir no van: no se sorteó nada.
   const siguiente = showAgain();
-  const principal = enEnsayo() ? (document.getElementById("ens-mio") as HTMLButtonElement | null) ?? siguiente : siguiente;
+  const principal = enStand()
+    ? ((document.getElementById("stand-otra") as HTMLButtonElement | null) ?? siguiente)
+    : enEnsayo()
+      ? ((document.getElementById("ens-mio") as HTMLButtonElement | null) ?? siguiente)
+      : siguiente;
   // El final del ensayo: su línea se va, y el contador cuenta que llegó al ganador (main.ts, `contarPractica`).
   if (enEnsayo()) document.dispatchEvent(new CustomEvent("tinkazo:ensayo-fin"));
   confetti();
@@ -594,7 +600,7 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   seguirEnPantallaCompleta(false);
   // En el ensayo el resultado se queda en la página, con su final: en grande
   // mostraría un QR de un sorteo que no existe. Se suelta la pantalla completa.
-  if (final && enEnsayo()) {
+  if (final && enPractica()) {
     soltarPantallaCompleta();
     enfocarDespues(principal);
   } else if (final && (!final.pantalla || document.fullscreenElement)) resultadoEnGrande(enlace, principal);
@@ -857,6 +863,8 @@ alAcortar((ruta, c) => {
 
 /** El resultado en grande para el proyector, con el QR del comprobante (pantalla.ts). */
 export function mostrarGrande(): void {
+  // Una ronda de ejemplo no tiene comprobante que mostrar.
+  if (enStand()) return;
   contarCompartido("qr_big");
   void import("./pantalla").then((m) => m.mostrarResultado(proofLink, { corto: puedeAcortar() }));
 }
@@ -1013,6 +1021,8 @@ async function copiarMensaje(btn: HTMLButtonElement, texto: string, aviso: "copi
  * de quién ganó y el QR, y el mensaje. Intenta el enlace corto, salvo en la demo.
  */
 export function shareProof(): void {
+  // Una ronda de ejemplo no tiene comprobante que compartir: su número no es público.
+  if (enStand()) return;
   const f = app.frozen;
   const d = app.drawn;
   if (!f || !d) return;

@@ -1519,53 +1519,97 @@
      ejemplo, que nunca graba nada. Se ve que es un ensayo: una banda arriba que
      acompaña al bajar, la línea que guía debajo de los pasos, su final en el
      resultado y, en el estadio, "ENSAYO: no se graba" donde va el número. */
-  .ensayo-banda, .ensayo-fin { display: none; }
-  body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda {
+  .ensayo-banda, .ensayo-fin, .stand-banda, .stand-fin { display: none; }
+  body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda, body[data-stand="1"][data-tab="nuevo"] .stand-banda {
     display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px;
     position: sticky; top: 0; z-index: 12; margin: 22px 0 0; padding: 10px 14px;
     background: var(--purple); color: var(--on-purple); border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm);
   }
   /* Con la cabecera fija (más de 1100 px), la banda queda justo debajo de ella.
      Y lo que la página lleva a la vista se para debajo de la banda, no detrás. */
-  body[data-ensayo="1"] section.block { scroll-margin-top: calc(var(--banda-alto, 0px) + 8px); }
+  body[data-ensayo="1"] section.block, body[data-stand="1"] section.block { scroll-margin-top: calc(var(--banda-alto, 0px) + 8px); }
   @media (min-width: 1101px) {
-    body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda { top: var(--cab-alto, 0px); }
-    body[data-ensayo="1"] section.block { scroll-margin-top: calc(var(--cab-alto, 0px) + var(--banda-alto, 0px) + 8px); }
+    body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda, body[data-stand="1"][data-tab="nuevo"] .stand-banda { top: var(--cab-alto, 0px); }
+    body[data-ensayo="1"] section.block, body[data-stand="1"] section.block { scroll-margin-top: calc(var(--cab-alto, 0px) + var(--banda-alto, 0px) + 8px); }
   }
-  .ensayo-banda p { font-weight: 800; font-size: 16px; line-height: 1.35; flex: 1 1 260px; }
-  .ensayo-banda button.ghost { min-height: 44px; }
+  .ensayo-banda p, .stand-banda p { font-weight: 800; font-size: 16px; line-height: 1.35; flex: 1 1 260px; }
+  .ensayo-banda button.ghost, .stand-banda button.ghost { min-height: 44px; }
   /* En el celular, en un renglón y chica: acompaña al bajar y no se come la pantalla (390x664 con Safari). */
   @media (max-width: 760px) {
-    body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda { flex-wrap: nowrap; gap: 8px; padding: 6px 6px 6px 12px; margin-top: 14px; }
-    .ensayo-banda p { font-size: 16px; line-height: 1.3; flex: 1 1 auto; }
-    .ensayo-banda button.ghost { flex: 0 0 auto; padding: 0 10px; font-size: 16px; }
+    body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda, body[data-stand="1"][data-tab="nuevo"] .stand-banda { flex-wrap: nowrap; gap: 8px; padding: 6px 6px 6px 12px; margin-top: 14px; }
+    .ensayo-banda p, .stand-banda p { font-size: 16px; line-height: 1.3; flex: 1 1 auto; }
+    .ensayo-banda button.ghost, .stand-banda button.ghost { flex: 0 0 auto; padding: 0 10px; font-size: 16px; }
+  }
+  /* En un celular angosto el texto llegaba a tres líneas con el botón al lado: el texto arriba y el botón abajo, en una línea cada uno. */
+  @media (max-width: 480px) {
+    body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda, body[data-stand="1"][data-tab="nuevo"] .stand-banda { flex-wrap: wrap; gap: 4px; padding: 6px 8px 8px; }
+    .ensayo-banda p, .stand-banda p { flex: 1 1 100%; font-size: 14px; line-height: 1.25; }
+    .ensayo-banda button.ghost, .stand-banda button.ghost { flex: 1 1 100%; min-height: 44px; }
   }
   .ensayo-guia[hidden] { display: none; }
-  body:not([data-ensayo="1"]) .ensayo-guia { display: none; }
+  body:not([data-ensayo="1"]):not([data-stand="1"]) .ensayo-guia { display: none; }
   /* Texto simple debajo del indicador: sin caja ni bordes, que no compita con el botón. */
-  body[data-ensayo="1"][data-tab="nuevo"] .ensayo-guia:not([hidden]) {
+  body[data-ensayo="1"][data-tab="nuevo"] .ensayo-guia:not([hidden]), body[data-stand="1"][data-tab="nuevo"] .ensayo-guia:not([hidden]) {
     display: block; margin: -8px 0 18px; padding: 0; color: var(--ink); font-weight: 600; font-size: 16px; line-height: 1.45;
   }
-  body[data-ensayo="1"] .ensayo-fin {
+  body[data-ensayo="1"] .ensayo-fin, body[data-stand="1"] .stand-fin {
     display: block; margin-top: 18px; padding: 18px; background: var(--purple); color: var(--on-purple);
     border: 2px solid var(--ink); box-shadow: var(--sh-sm);
   }
-  .ensayo-fin h3 { font-size: 20px; font-weight: 900; margin-bottom: 6px; }
-  .ensayo-fin p { font-size: 16px; line-height: 1.5; }
-  .ensayo-fin .row { margin-top: 14px; }
-  .ensayo-fin button { min-height: 48px; }
-  .ensayo-fin .enlace { color: var(--on-purple); }
+  .ensayo-fin h3, .stand-fin h3 { font-size: 20px; font-weight: 900; margin-bottom: 6px; }
+  .ensayo-fin p, .stand-fin p { font-size: 16px; line-height: 1.5; }
+  .ensayo-fin .row, .stand-fin .row { margin-top: 14px; }
+  .ensayo-fin button, .stand-fin button { min-height: 48px; }
+  .ensayo-fin .enlace, .stand-fin .enlace { color: var(--on-purple); }
   /* Lo que el ensayo no tiene: la cuenta, los orígenes (la lista no se cambia),
      las bases, compartir, el QR, el siguiente premio, el resultado en grande. */
   body[data-ensayo="1"] #gate, body[data-ensayo="1"] #origenes, body[data-ensayo="1"] .mas-origenes, body[data-ensayo="1"] #btn-ensayo, body[data-ensayo="1"] #btn-sample,
   body[data-ensayo="1"] #pendiente, body[data-ensayo="1"] .rules-row, body[data-ensayo="1"] #again-row, body[data-ensayo="1"] .grande-row,
   body[data-ensayo="1"] .verify, body[data-ensayo="1"] #lore-box, body[data-ensayo="1"] .ausente,
-  body[data-ensayo="1"] #primera-vez, body[data-ensayo="1"] #btn-como, body[data-ensayo="1"] #como-panel { display: none !important; }
+  body[data-ensayo="1"] #primera-vez, body[data-ensayo="1"] #btn-como, body[data-ensayo="1"] #como-panel, body[data-ensayo="1"] #btn-stand { display: none !important; }
+  /* El modo stand (src/ui/stand.ts): la lista se escribe, pero no hay premio, cuenta, bases, compartir, QR de comprobación ni foto. */
+  body[data-stand="1"] #gate, body[data-stand="1"] #seed-label, body[data-stand="1"] #btn-ensayo, body[data-stand="1"] #btn-stand, body[data-stand="1"] #btn-sample,
+  body[data-stand="1"] #pendiente, body[data-stand="1"] .rules-row, body[data-stand="1"] #again-row, body[data-stand="1"] .grande-row,
+  body[data-stand="1"] .verify, body[data-stand="1"] #lore-box, body[data-stand="1"] .ausente, body[data-stand="1"] .field:has(#prize),
+  body[data-stand="1"] #primera-vez, body[data-stand="1"] #btn-como, body[data-stand="1"] #como-panel, body[data-stand="1"] #btn-recuperar,
+  body[data-stand="1"] #pasos, body[data-stand="1"] #wait-box, body[data-stand="1"] .wait-line, body[data-stand="1"] #wait-round, body[data-stand="1"] #btn-espera, body[data-stand="1"] #wait-id, body[data-stand="1"] #qr-box, body[data-stand="1"] #leyenda-box { display: none !important; }
+  /* La sala por QR del modo stand (src/ui/stand-sala.ts). */
+  .stand-sala { display: none; }
+  body[data-stand="1"] .stand-sala { display: block; margin: 0 0 18px; padding: 16px; background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
+  .stand-sala h3 { font-size: 20px; font-weight: 900; margin-bottom: 6px; }
+  .stand-sala h4 { font-size: 17px; font-weight: 900; margin: 14px 0 4px; }
+  .stand-sala button { min-height: 48px; }
+  .stand-sala .mini { min-height: 44px; }
+  .stand-sala [hidden] { display: none !important; }
+  .ss-error { margin-top: 10px; font-weight: 700; font-size: 16px; line-height: 1.4; }
+  .ss-qr { display: flex; flex-wrap: wrap; gap: 16px 20px; align-items: flex-start; }
+  .ss-qr img { background: #fff; border: 2px solid var(--ink); max-width: 100%; height: auto; }
+  .ss-lado { flex: 1 1 220px; min-width: 0; }
+  .ss-estado { font-weight: 800; font-size: 16px; }
+  .ss-estado[data-estado="sondeo"] { color: var(--bad, #b3261e); }
+  .ss-cuenta { font-size: 28px; font-weight: 900; margin: 6px 0 12px; line-height: 1.15; }
+  .ss-nombres, .ss-revisar ul { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; max-height: 28vh; overflow: auto; }
+  .ss-nombres li, .ss-revisar li { display: inline-flex; align-items: center; gap: 8px; border: 2px solid var(--ink); background: var(--paper); padding: 2px 4px 2px 10px; font-size: 16px; font-weight: 600; }
+  .ss-nombre { overflow-wrap: anywhere; }
+  /* El QR en toda la pantalla: lo escanean desde el fondo de la sala. */
+  .stand-sala.grande { position: fixed; inset: 0; height: 100vh; height: 100dvh; z-index: 60; margin: 0; overflow: auto; display: flex !important; flex-direction: column; align-items: center; justify-content: center; padding: 16px 20px; background: var(--paper); text-align: center; }
+  .stand-sala.grande #sala-abierta { display: flex; flex-direction: column; align-items: center; }
+  .stand-sala.grande .ss-qr { flex-direction: column; align-items: center; flex-wrap: nowrap; gap: 10px; }
+  .stand-sala.grande .ss-qr img { width: min(560px, 62vh, 90vw) !important; height: min(560px, 62vh, 90vw) !important; }
+  .stand-sala.grande .ss-lado { flex: 0 0 auto; text-align: center; }
+  .stand-sala.grande .ss-lado .row { justify-content: center; }
+  .stand-sala.grande .ss-cuenta { margin: 2px 0 8px; font-size: clamp(22px, 4vh, 28px); }
+  .ss-titqr { display: none; font-weight: 900; font-size: clamp(24px, 4.6vh, 40px); line-height: 1.15; margin: 0 0 10px; }
+  .stand-sala.grande .ss-titqr { display: block; }
+  /* Con el QR en toda la pantalla no hay otra barra de desplazamiento detrás. */
+  html:has(.stand-sala.grande) { overflow: hidden; }
+  .ss-rep { font-style: normal; font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; border: 2px solid currentColor; padding: 0 4px; color: var(--magenta-ink); }
+  .stand-sala.grande .ss-nombres, .stand-sala.grande .ss-revisar, .stand-sala.grande h3, .stand-sala.grande #sala-cerrada { display: none; }
   /* El cuadro se lee, pero no se escribe. */
   body[data-ensayo="1"] #ta { cursor: default; background: var(--field); }
   /* En el estadio, donde va el número público. Grande y en amarillo: se lee desde el fondo. */
-  body[data-ensayo="1"] #st-round { font-size: 0; padding: 0; border: 0; box-shadow: none; background: none; }
-  body[data-ensayo="1"] #st-round::after {
+  body[data-ensayo="1"] #st-round, body[data-stand="1"] #st-round { font-size: 0; padding: 0; border: 0; box-shadow: none; background: none; }
+  body[data-ensayo="1"] #st-round::after, body[data-stand="1"] #st-round::after {
     content: attr(data-ens); display: inline-block; font-size: clamp(14px, 1.9vw, 26px); font-weight: 900; letter-spacing: 0.08em;
     background: var(--yellow); color: #191919; border: 2px solid #191919; box-shadow: 3px 3px 0 #191919; padding: 6px 14px;
   }
@@ -2029,8 +2073,8 @@
   .stadium canvas { touch-action: none; }
   #st-round { display: none; }
   /* "ENSAYO: no se graba" es una etiqueta chica, en la esquina de la marca: lo grande de la pantalla es el juego. */
-  body[data-ensayo="1"] #st-round { display: inline-block; margin-right: auto; margin-left: 10px; }
-  body[data-ensayo="1"] #st-round::after { font-size: clamp(14px, 1vw, 16px); padding: 3px 9px; letter-spacing: 0.05em; }
+  body[data-ensayo="1"] #st-round, body[data-stand="1"] #st-round { display: inline-block; margin-right: auto; margin-left: 10px; }
+  body[data-ensayo="1"] #st-round::after, body[data-stand="1"] #st-round::after { font-size: clamp(14px, 1vw, 16px); padding: 3px 9px; letter-spacing: 0.05em; }
   .st-brand > span:last-child { display: none; }
   .st-brand { padding: 4px 6px; }
   .st-top {
@@ -2051,9 +2095,9 @@
     .st-actions button { padding: 8px 14px; }
     /* El ensayo lleva su rótulo en un renglón propio, centrado, debajo de la marca y los botones: apretado entre los
        dos se partía en cuatro renglones ("ENSAYO: / NO / SE / GRABA") y subía hasta pegarse al cartel del ganador. */
-    body[data-ensayo="1"] .st-top { flex-wrap: nowrap; row-gap: 0; }
-    body[data-ensayo="1"] #st-round { flex: 0 1 auto; order: 0; text-align: left; margin-left: 6px; }
-    body[data-ensayo="1"] #st-round::after { white-space: nowrap; font-size: 14px; padding: 3px 7px; letter-spacing: 0.02em; }
+    body[data-ensayo="1"] .st-top, body[data-stand="1"] .st-top { flex-wrap: nowrap; row-gap: 0; }
+    body[data-ensayo="1"] #st-round, body[data-stand="1"] #st-round { flex: 0 1 auto; order: 0; text-align: left; margin-left: 6px; }
+    body[data-ensayo="1"] #st-round::after, body[data-stand="1"] #st-round::after { white-space: nowrap; font-size: 14px; padding: 3px 7px; letter-spacing: 0.02em; }
   }
 
   /* La tarjeta de "cómo se juega" y la cortina, que también se proyectan. */

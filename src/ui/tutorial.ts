@@ -1,7 +1,7 @@
 import { $ } from "../dom";
 import { onLangChange, t } from "../i18n";
 import { params } from "../state";
-import { enEnsayo } from "../ensayo-modo";
+import { enPractica } from "../ensayo-modo";
 import { contar } from "../contar";
 import { pasoActual } from "./siguiente";
 import { marcarOfertaVista } from "./onboarding";
@@ -47,7 +47,7 @@ const boton = (): HTMLElement => $("btn-como");
 
 /** Los números en los controles de verdad: solo con el tutorial abierto, y nunca en el ensayo ni en la demo. */
 function pintarMapa(): void {
-  const on = !params.has("demo") && !enEnsayo() && abierto;
+  const on = !params.has("demo") && !enPractica() && abierto;
   if (on) document.body.dataset.mapa = "1";
   else delete document.body.dataset.mapa;
 }
@@ -80,7 +80,7 @@ function marcarAca(paso: number): void {
  * oferta de primera vez, el botón, el menú o el final del ensayo o de la demo.
  */
 export function abrirTutorial(desde: "offer" | "button" | "menu" | "end" = "button"): void {
-  if (params.has("demo") || enEnsayo()) return;
+  if (params.has("demo") || enPractica()) return;
   const paso = pasoActual();
   marcarAca(paso);
   viendo = paso;

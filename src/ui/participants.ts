@@ -1,7 +1,7 @@
 import { $, esc } from "../dom";
 import { SAMPLE, app, avatar } from "../state";
 import { anchoringAvailable } from "../stellar/config";
-import { enEnsayo, sinGrabar } from "../ensayo-modo";
+import { enEnsayo, enPractica, sinGrabar } from "../ensayo-modo";
 import { canonicalList } from "../protocol/canonical";
 import { type Dict, T, getLang, onLangChange, t } from "../i18n";
 import { decodeText, dropListHeader, igualesQuitados, parseTable, quitarNumeracion } from "./csv";
@@ -76,7 +76,7 @@ export function renderNames(): void {
   // En su lugar está el ensayo, que no graba nada (`#btn-ensayo`, ensayo.ts).
   $("btn-sample").style.display = anchoringAvailable || !vacia ? "none" : "";
   const ensayo = document.getElementById("btn-ensayo");
-  if (ensayo) ensayo.style.display = anchoringAvailable && vacia && !enEnsayo() ? "" : "none";
+  if (ensayo) ensayo.style.display = anchoringAvailable && vacia && !enPractica() ? "" : "none";
   // Con la lista vacía, lo único de color es "Pegar lista": es lo que toca. Con
   // la lista ya cargada vuelve a ser un origen más y lo de color es "Sellar",
   // que mientras falten nombres queda apagado y sin color (diseño del onboarding).
