@@ -54,16 +54,12 @@ function pintar(): void {
   box.style.display = ve ? "" : "none";
 }
 
-/** Se llama una vez, con la herramienta armada. `abrirTutorial` abre "¿Cómo se usa?". */
-export function initOnboarding(abrirTutorial: () => void): void {
+/** Se llama una vez, con la herramienta armada. */
+export function initOnboarding(): void {
   $("pv-cerrar").addEventListener("click", () => {
     marcarOfertaVista();
     // El foco no queda en el aire: va a lo que toca, "Pegar lista".
     document.getElementById("btn-pegar")?.focus({ preventScroll: true });
-  });
-  $("pv-como").addEventListener("click", () => {
-    marcarOfertaVista();
-    abrirTutorial();
   });
   // "probalo con un ejemplo" entra al ensayo (ensayo.ts, por `data-entrar-ensayo`); acá solo se cierra.
   $("pv-ensayo").addEventListener("click", marcarOfertaVista);

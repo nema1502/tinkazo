@@ -188,7 +188,7 @@ async function sellar(page, v) {
   await sleep(900);
   // Sin cuenta, el botón de sellar queda con aria-disabled detrás de la puerta: el modo libre arma el mismo flujo.
   await page.eval(
-    "document.querySelector('#sec-participants .body').classList.remove('locked'); document.getElementById('btn-freeze').removeAttribute('aria-disabled'); document.getElementById('gate').style.display = 'none'; document.getElementById('primera-vez')?.style.setProperty('display', 'none'); true",
+    "document.querySelector('#sec-participants .body').classList.remove('locked'); (() => { const s = document.getElementById('btn-freeze'); s.removeAttribute('aria-disabled'); s.dataset.i = 'freeze'; s.textContent = new URLSearchParams(location.search).get('lang') === 'en' ? 'Seal the list' : 'Sellar la lista'; })(); document.getElementById('gate').style.display = 'none'; document.getElementById('primera-vez')?.style.setProperty('display', 'none'); true",
   );
   await page.eval("document.getElementById('btn-sample').click(); document.getElementById('btn-freeze').click(); true");
   const ok = await page.waitFor("getComputedStyle(document.getElementById('btn-espera')).display !== 'none' && document.getElementById('btn-draw').disabled", 15000);
@@ -383,7 +383,7 @@ async function abrirSinSellar(browser, v, { modo = "normal", url = "?lead=40&pac
   }
   // Sin cuenta, el botón de sellar queda con aria-disabled detrás de la puerta: el modo libre arma el mismo flujo.
   await page.eval(
-    "document.querySelector('#sec-participants .body').classList.remove('locked'); document.getElementById('btn-freeze').removeAttribute('aria-disabled'); document.getElementById('gate').style.display = 'none'; document.getElementById('primera-vez')?.style.setProperty('display', 'none'); true",
+    "document.querySelector('#sec-participants .body').classList.remove('locked'); (() => { const s = document.getElementById('btn-freeze'); s.removeAttribute('aria-disabled'); s.dataset.i = 'freeze'; s.textContent = new URLSearchParams(location.search).get('lang') === 'en' ? 'Seal the list' : 'Sellar la lista'; })(); document.getElementById('gate').style.display = 'none'; document.getElementById('primera-vez')?.style.setProperty('display', 'none'); true",
   );
   await page.eval("document.getElementById('btn-sample').click(); true");
   await sleep(500);

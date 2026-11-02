@@ -13,7 +13,7 @@ import { juegoPorDefecto, juegoSiguiente, rangoParaLeer, rangoVisible, recomenda
 import { entornoDeAhora, grandeAlSellar } from "./vista-grande";
 import { pedirPantallaCompleta, soltarPantallaCompleta } from "./pantalla-completa";
 import type { OpcionDeJuego } from "./espera";
-import { apruebaAMano, canAnchor, currentSession } from "./wallet-ui";
+import { apruebaAMano, canAnchor, claveDeSellar, currentSession } from "./wallet-ui";
 import { cerrarLista, olvidarBorrador, parseNames, setList } from "./participants";
 import { preloadGame } from "../games/engine";
 import { claveNombre } from "./gamecard";
@@ -420,7 +420,7 @@ export function refreshFreezeLabel(): void {
   // Si la red no deja sellar, el botón lleva la acción del caso (`red.ts`): no se pisa.
   if (hayAccionDeRed()) return;
   const btn = $("btn-freeze");
-  btn.dataset.i = "freeze";
+  btn.dataset.i = claveDeSellar();
   btn.textContent = t(btn.dataset.i);
 }
 
@@ -590,8 +590,8 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       console.warn("[tinkazo] el sello no se pudo grabar", e);
       btn.disabled = false;
       cerrarLista(false);
-      btn.dataset.i = "freeze";
-      btn.textContent = t("freeze");
+      btn.dataset.i = claveDeSellar();
+      btn.textContent = t(btn.dataset.i);
       marcarSellado(false);
       // Para el contador, la clave del motivo (la misma del mensaje), nunca el detalle. Se cuenta
       // antes de cualquier camino de la red: un sello que empezó y no entró es un fallo siempre.

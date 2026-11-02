@@ -30,7 +30,7 @@ export const ENSAYO_ESPERA_S = 15;
  */
 export const LISTA_ENSAYO: readonly string[] = [
   "Llama Lupe", "Cóndor Beto", "Vicuña Vale", "Alpaca Ana", "Puma Pepe", "Zorro Zoe",
-  "Quirquincho Quique", "Jucumari Juana", "Paraba Paula", "Taruca Tere", "Chinchilla Chela", "Picaflor Pía",
+  "Quirquincho Quique", "Oso Olga", "Guacamaya Gaby", "Taruca Tere", "Chinchilla Chela", "Picaflor Pía",
   "Suri Susi", "Vizcacha Vico", "Tunqui Toto", "Parihuana Pili", "Jaguar Jacinto", "Capibara Cata",
 ];
 

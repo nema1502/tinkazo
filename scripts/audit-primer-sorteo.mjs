@@ -328,16 +328,16 @@ async function flujoSinCuenta(browser, vista, tema) {
     await sleep(1800);
     const puerta = await m.foto("herramienta");
     unaPrincipal(puerta, `${nombre} · la herramienta sin cuenta`, /Pegar lista|Paste list/);
-    const gate = await page.eval("JSON.stringify({ alto: Math.round(document.getElementById('gate').getBoundingClientRect().height), boton: !!document.querySelector('#gate button') })");
+    // Desde la segunda vuelta de ux-simple (1 de noviembre de 2026) no hay línea de la cuenta encima de "Pegar lista": la
+    // cuenta se pide con el chip "Entrar" de la cabecera (secundario) y, con la lista armada, con "Entrar para sellar".
+    const gate = await page.eval("JSON.stringify({ alto: Math.round(document.getElementById('gate').getBoundingClientRect().height), visible: getComputedStyle(document.getElementById('gate')).display !== 'none', chip: (() => { const b = document.querySelector('#wallet-box button'); const r = b ? b.getBoundingClientRect() : null; return !!r && r.width > 0 && r.bottom > 0 && !b.classList.contains('primary'); })() })");
     const g = JSON.parse(gate);
-    // Con la letra de 16 px (letra grande, 24 de octubre de 2026) el texto da dos renglones a 390 px y el botón queda
-    // debajo: 124 px. Lo que se vigila es que siga siendo un aviso compacto con su botón secundario, y no un bloque.
-    check(`${nombre} · la cuenta es un aviso compacto con su botón`, g.boton && g.alto <= 140, `${g.alto} px`);
+    check(`${nombre} · nada pide entrar encima de "Pegar lista", y la cabecera ofrece Entrar sin color de la casa`, !g.visible && g.alto === 0 && g.chip, `puerta ${g.visible ? "visible" : "escondida"}, chip ${g.chip}`);
     const oferta = await page.eval("getComputedStyle(document.getElementById('primera-vez')).display !== 'none'");
     check(`${nombre} · la oferta de primera vez está, sin botones de color`, oferta && !(await page.eval("!!document.querySelector('#primera-vez .primary')")));
     await pegar(m, page);
     const pegada = await m.foto("pegada");
-    unaPrincipal(pegada, `${nombre} · lista pegada sin cuenta`, /Sellar|Seal/);
+    unaPrincipal(pegada, `${nombre} · lista pegada sin cuenta`, /Entrar para sellar|Sign in to seal/);
     const via = await m.tocar("#btn-freeze", "Sellar la lista (sin cuenta)", { barra: true });
     await page.waitFor("document.querySelector('.login-opt')", 20000);
     await sleep(600);
@@ -379,8 +379,12 @@ async function flujoEnsayo(browser, vista, tema, conCuenta) {
       await cuentaDePrueba(m, page);
       await sleep(1500);
       historiaAntes = await page.eval("localStorage.getItem('tinkazo.history.testnet') || '[]'");
-      // El ensayo, desde el enlace de debajo del cuadro vacío.
-      await m.tocar("#btn-ensayo", "o probá con un ejemplo");
+      // El ensayo, desde su única puerta a la vista: "Probalo con un ejemplo" de "¿Primera vez?" o, si esa ya se cerró,
+      // el enlace de debajo del cuadro vacío (desde el 1 de noviembre de 2026 nunca se ven los dos a la vez).
+      const puerta = (await page.eval("getComputedStyle(document.getElementById('primera-vez')).display !== 'none'")) ? "#pv-ensayo" : "#btn-ensayo";
+      await m.tocar(puerta, puerta === "#pv-ensayo" ? "Probalo con un ejemplo" : "o probá con un ejemplo");
+      const dos = await page.eval("['pv-ensayo','btn-ensayo'].filter((id) => { const e = document.getElementById(id); return e && e.getClientRects().length && getComputedStyle(e).display !== 'none'; }).length");
+      check(`${nombre} · una sola puerta al ensayo a la vista`, dos <= 1, `${dos} después de tocar`);
     } else {
       await m.tocar(".hero [data-entrar-ensayo]", "Probar con un ejemplo");
     }

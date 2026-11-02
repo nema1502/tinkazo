@@ -170,13 +170,6 @@
     cursor: not-allowed; background: var(--muted); color: var(--paper);
     box-shadow: 2px 2px 0 var(--ink); transform: none;
   }
-  /* Sin cuenta, el botón de sellar se ve apagado pero se lee: aria-disabled (y
-     no `disabled`) para que un lector de pantalla lo encuentre y lo explique la
-     línea de abajo. Gris claro con letra oscura: 7,1 a 1 en claro y 6,6 en oscuro. */
-  button.primary[aria-disabled="true"] {
-    cursor: not-allowed; background: var(--line); color: var(--ink2);
-    box-shadow: 2px 2px 0 var(--ink); transform: none;
-  }
   a.primary.cta { display: inline-block; text-decoration: none; }
   button.ghost, a.ghost {
     background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm);
@@ -771,12 +764,15 @@
     background: var(--card); color: var(--ink);
     border: 2px solid var(--ink); border-left: 8px solid var(--yellow);
   }
+  /* "¿Primera vez?" ya ofrece el ensayo: con ella a la vista, "o probá con un ejemplo" de más abajo sobra. */
+  #primera-vez:not([style*="none"]) ~ #btn-ensayo { display: none !important; }
   .gate p { flex: 1 1 220px; font-size: 16px; font-weight: 700; line-height: 1.45; padding: 4px 0; }
   .gate button { min-height: 44px; }
   .gate.retomando p { color: var(--ink2); }
   /* Sin cuenta, la lista, los premios y sus etiquetas se leen igual: se puede
-     armar la lista antes de conectar. Solo el botón de sellar queda apagado
-     (`aria-disabled`, más arriba) y esta línea dice qué falta. */
+     armar la lista antes de conectar. El botón de sellar sigue con el color de la
+     casa y dice "Entrar para sellar" (`aria-disabled` es la marca de que abre la
+     entrada y no sella); esta línea de abajo tranquiliza: la gente no necesita cuenta. */
   .sellar-sin-cuenta { display: none; margin: 10px 0 0; font-size: 16px; font-weight: 700; color: var(--ink2); }
   .body.locked .sellar-sin-cuenta { display: block; }
 
@@ -963,6 +959,13 @@
     background: none; border: 0; color: var(--ink2); font: inherit; font-size: 18px; font-weight: 800; cursor: pointer;
   }
   .pv-x:hover { color: var(--ink); }
+  /* En un celular entra en una línea: "¿Primera vez? Probalo con un ejemplo" y su X (390 px). */
+  @media (max-width: 480px) {
+    .primera-vez { padding-left: 10px; gap: 0; }
+    .primera-vez p, .primera-vez .enlace { font-size: 14px; }
+    /* La X está centrada en sus 44 px: el texto puede entrar en la parte vacía de su izquierda. */
+    .primera-vez p { margin-right: -20px; }
+  }
   .pegar-ayuda { margin: -4px 0 10px; }
   .lista-cuenta { margin: 8px 0 2px; font-size: 20px; font-weight: 900; color: var(--ink); }
   /* Lo que se va a sellar, debajo del botón; y al volver de entrar, lo que sigue. */
@@ -1337,15 +1340,9 @@
   .portada-fin .hero-ctas { justify-content: center; margin-top: 16px; }
   .portada-fin .ghost { background: var(--card); color: var(--ink); }
 
-  /* La barra de la herramienta: el título y las pestañas. */
+  /* La barra de la herramienta: el título y, debajo, los pasos. */
   .appbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 26px 0 22px; }
   .appbar h2 { font-size: clamp(24px, 3.2vw, 32px); font-weight: 900; }
-  .tabs { display: flex; gap: 8px; flex-wrap: wrap; }
-  .tabs button {
-    min-height: 44px; padding: 0 18px; font-weight: 800; font-size: 16px; background: var(--card); color: var(--ink);
-    border: 2px solid var(--ink); box-shadow: var(--sh-sm); cursor: pointer; font-family: inherit;
-  }
-  .tabs button[aria-selected="true"] { background: var(--yellow); color: #191919; }
   .appbar-links a { display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; font-size: 16px; color: var(--ink2); }
   #hist-vacio { display: none; }
   body[data-tab="historial"] #sec-history[style*="none"] + #hist-vacio { display: block; }
@@ -1516,7 +1513,7 @@
   .ensayo-banda, .ensayo-fin { display: none; }
   body[data-ensayo="1"][data-tab="nuevo"] .ensayo-banda {
     display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px;
-    position: sticky; top: 0; z-index: 9; margin: 22px 0 0; padding: 10px 14px;
+    position: sticky; top: 0; z-index: 12; margin: 22px 0 0; padding: 10px 14px;
     background: var(--purple); color: var(--on-purple); border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm);
   }
   /* Con la cabecera fija (más de 1100 px), la banda queda justo debajo de ella.
@@ -1536,18 +1533,10 @@
   }
   .ensayo-guia[hidden] { display: none; }
   body:not([data-ensayo="1"]) .ensayo-guia { display: none; }
+  /* Texto simple debajo del indicador: sin caja ni bordes, que no compita con el botón. */
   body[data-ensayo="1"][data-tab="nuevo"] .ensayo-guia:not([hidden]) {
-    display: block; margin: -8px 0 18px; padding: 10px 14px; background: var(--card); color: var(--ink);
-    border: 2px solid var(--ink); border-left: 8px solid var(--yellow); font-weight: 700; font-size: 16px; line-height: 1.45;
+    display: block; margin: -8px 0 18px; padding: 0; color: var(--ink); font-weight: 600; font-size: 16px; line-height: 1.45;
   }
-  /* El recordatorio de crear la cuenta: una frase debajo de la línea que guía, solo en el ensayo (aviso-cuenta.ts). */
-  .aviso-cuenta[hidden], body:not([data-ensayo="1"]) .aviso-cuenta { display: none; }
-  body[data-ensayo="1"][data-tab="nuevo"] .aviso-cuenta:not([hidden]) {
-    display: block; margin: -8px 0 18px; padding: 10px 14px; background: var(--card); color: var(--ink);
-    border: 2px solid var(--ink); border-left: 8px solid var(--teal); font-weight: 700; font-size: 16px; line-height: 1.45;
-  }
-  /* En el renglón, pero con su blanco de toque de 44 px. */
-  .aviso-cuenta .enlace { display: inline-flex; align-items: center; min-height: 44px; padding: 0 2px; margin: 0; font-size: 16px; vertical-align: middle; }
   body[data-ensayo="1"] .ensayo-fin {
     display: block; margin-top: 18px; padding: 18px; background: var(--purple); color: var(--on-purple);
     border: 2px solid var(--ink); box-shadow: var(--sh-sm);
@@ -1759,45 +1748,28 @@
   }
   @media (prefers-reduced-motion: reduce) { .acct-x { transition: none; } }
   /* UX 19-oct: siguiente */
-  /* El indicador de pasos, arriba de la herramienta: 1 Lista, 2 Sellar, 3
-     Sortear, 4 Compartir. Discreto: el actual resaltado, los hechos con ✓. Lo
-     arma `src/ui/siguiente.ts`. En la demo no va: se hace sola. */
-  .pasos { list-style: none; margin: 0; padding: 0; display: flex; align-items: center; gap: 6px; order: 2; flex: 1 0 100%; min-width: 0; }
-  .pasos li {
-    display: inline-flex; align-items: center; gap: 7px; white-space: nowrap;
-    font-family: ui-monospace, Consolas, monospace; font-size: 14px; font-weight: 700; letter-spacing: 0.06em;
-    text-transform: uppercase; color: var(--muted);
-  }
-  .pasos li + li::before { content: ""; width: 14px; margin-right: 1px; border-top: 2px dashed var(--muted); }
-  .p-n {
-    display: grid; place-items: center; width: 24px; height: 24px; flex: none;
-    border: 2px solid var(--ink); background: var(--paper); color: var(--ink2); font-weight: 800;
-  }
-  .pasos li.actual { color: var(--ink); }
-  .pasos li.actual .p-n { background: var(--yellow); color: #191919; box-shadow: 2px 2px 0 var(--ink); transform: rotate(-3deg); }
+  /* El indicador de pasos, arriba de la herramienta: una barra de progreso fina partida en cuatro tramos (1 Lista,
+     2 Sellar, 3 Sortear, 4 Compartir), con el nombre debajo de cada uno. No es nada para apretar: sin bordes, sin
+     sombra, sin números ni giro, sin cursor de mano. Se distingue también sin color: el hecho va lleno y con ✓, el
+     actual lleno, más oscuro y con el nombre en negrita, y lo que falta es una línea fina y el nombre apagado.
+     Lo arma `src/ui/siguiente.ts`. En la demo no va: se hace sola. */
+  .pasos { list-style: none; margin: 8px 0 0; padding: 0; display: flex; gap: 6px; flex: 1 0 100%; min-width: 0; cursor: default; }
+  .pasos li { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; font-size: 15px; font-weight: 400; line-height: 1.3; color: var(--muted); }
+  .p-b { display: block; height: 3px; margin: 2.5px 0; background: var(--muted); }
+  .p-nombre { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .p-n { margin-right: 4px; }
+  .p-n:empty { display: none; }
   .pasos li.hecho { color: var(--ink2); }
-  .pasos li.hecho .p-n { background: var(--teal); color: #191919; }
-  .appbar > .tabs { order: 1; }
-  @media (min-width: 960px) {
-    .pasos { order: 0; flex: 0 1 auto; }
-  }
-  @media (max-width: 480px) {
-    .pasos { gap: 4px; justify-content: space-between; }
-    .pasos li { gap: 4px; font-size: 14px; letter-spacing: 0.02em; }
-    .pasos li + li::before { width: 6px; margin-right: 0; }
-    .p-n { width: 20px; height: 20px; font-size: 14px; }
-  }
-  /* Un celular de 400 px o menos: con la letra de 14 px (el piso de docs/ux.md) los guiones entre un paso y otro
-     ya no entran, y el indicador se pasaba del margen derecho (a 375 y a 320). Sin ellos entra dentro de su caja.
-     A 414 px y más siguen. */
-  @media (max-width: 400px) {
-    .pasos li + li::before { display: none; }
-  }
-  /* Y a 320 px, además, la letra sin espaciado y los números un poco más chicos: la letra no baja de 14 px. */
-  @media (max-width: 340px) {
-    .pasos { gap: 2px; }
-    .pasos li { gap: 2px; letter-spacing: 0; }
-    .p-n { width: 16px; height: 16px; }
+  .pasos li.hecho .p-b { height: 8px; margin: 0; background: var(--teal-ink); }
+  .pasos li.actual { color: var(--ink); font-weight: 800; }
+  .pasos li.actual .p-b { height: 8px; margin: 0; background: var(--ink); }
+  /* Un celular de 350 px o menos: no entran los cuatro nombres. Queda el del paso actual, que se ensancha; los
+     otros siguen para el lector de pantalla. */
+  @media (max-width: 350px) {
+    .pasos li.actual { flex-grow: 2; }
+    .pasos li:not(.actual) .p-nombre {
+      position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+    }
   }
   body[data-demo="1"] .pasos { display: none !important; }
 
@@ -1820,7 +1792,7 @@
   .sig-in { max-width: 1060px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px 20px; }
   .sig-paso {
     margin: 0; min-width: 0; min-height: 1.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-    font-size: 14px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2);
+    font-size: 14px; font-weight: 700; color: var(--ink2);
   }
   #sig-btn { flex: 0 0 auto; max-width: 100%; min-height: 52px; }
   /* Aire abajo: el pie y lo último de la página llegan a verse enteros por encima
@@ -2033,7 +2005,7 @@
   /* Para el pulgar: 48 px en las pantallas táctiles. */
   @media (pointer: coarse), (max-width: 760px) {
     button.mini, a.mini, button.ghost, a.ghost, button.primary, a.primary.cta, select, label.chip.live, button.chip.live,
-    .premio-chips button, .tabs button, .enlace, .gate button, .langs button { min-height: 48px; }
+    .premio-chips button, .enlace, .gate button, .langs button { min-height: 48px; }
   }
 
   /* ---------------------------------------------------------------- el proyector
@@ -2099,6 +2071,13 @@
   /* El juego, en la espera en grande: "Juego: Carrera de llamas" y, aparte, "Cambiar de juego" (secundario: la acción
      principal sigue siendo una sola). El selector queda detrás de esta capa y se elige sin salir (26 de octubre de 2026). */
   .espera-top-acc { display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-width: 0; }
+  /* A 320 px la calcomanía de arriba pasaba a tres renglones y, con "Volver a la página", tapaba la etiqueta del ensayo. */
+  @media (max-width: 380px) {
+    .espera-top .sticker { font-size: 14px; letter-spacing: 0.02em; padding: 6px 10px; }
+    .espera-top-acc { gap: 8px; }
+    .espera-top .ghost { padding: 6px 10px; }
+    .espera-ensayo { margin-top: 36px; }
+  }
   .espera-juego { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 16px; }
   .espera-juego.en-flujo { margin-top: clamp(2px, 1vh, 10px); }
   /* En una pantalla ancha va arriba, junto a "Volver a la página", sin gastar alto (en una laptop a 100 %, 632 px, no sobra);

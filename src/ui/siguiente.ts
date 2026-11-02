@@ -1,5 +1,6 @@
 import { $ } from "../dom";
 import { eventoError, type AccionError } from "./error-accion";
+import { enEnsayo } from "../ensayo-modo";
 import { onLangChange, t } from "../i18n";
 import { app } from "../state";
 import { mantenerDespierta, soltarDespierta } from "./despierta";
@@ -16,7 +17,8 @@ import { type Paso, claveDelPaso, detalleDeLista, lineaDelPaso, pasoDe, relojDe 
  * parte; esto es lo demás:
  *
  * - El indicador de pasos de arriba: 1 Lista, 2 Sellar, 3 Sortear, 4
- *   Compartir. El actual resaltado y los hechos con ✓.
+ *   Compartir, como una barra de progreso en cuatro tramos y no como cuatro
+ *   cajitas: no es nada para apretar. El actual resaltado y los hechos con ✓.
  * - Una barra fija abajo con la acción del paso. Es la red de seguridad: sale
  *   solo cuando el botón de verdad queda fuera de la pantalla, así nunca hay
  *   dos botones iguales a la vista, y su clic es un clic en el de verdad, así
@@ -144,8 +146,9 @@ function calcular(): Toca {
   const restan = paso === 3 ? segundos() : 0;
   const clave = claveDelPaso(paso, { segundos: restan, apagado: boton?.disabled ?? false, ganadores: app.drawn?.winners.length ?? 1 });
   let detalle = clave ? t(clave).replace("{n}", String(n)) : "";
-  // Antes de sellar, qué se sortea: sellar lo fija, y desde la barra no se ve el campo.
-  if (clave === "sigLista") detalle = detalleDeLista(detalle, (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "", t("sigSinPremio"));
+  // Antes de sellar, qué se sortea: sellar lo fija, y desde la barra no se ve el campo. En el ensayo no se nombra
+  // el premio que falta: nada se sella de verdad.
+  if (clave === "sigLista") detalle = detalleDeLista(detalle, (document.getElementById("prize") as HTMLInputElement | null)?.value ?? "", enEnsayo() ? null : t("sigSinPremio"));
   return { paso, boton, clave, detalle, reloj: restan > 0 ? relojDe(restan) : "" };
 }
 
@@ -162,23 +165,28 @@ function avisarPaso(s: Toca): void {
   document.dispatchEvent(new CustomEvent("tinkazo:paso", { detail: { paso: s.paso, clave: s.clave } }));
 }
 
-/** El indicador de arriba: hecho con ✓, el actual resaltado y lo que falta con su número. */
+/**
+ * El indicador de arriba: cuatro tramos. El hecho va lleno y con ✓ delante del nombre, el actual lleno de otro color y
+ * con el nombre en negrita, y lo que falta apagado. Sin números: la barra de abajo dice "Paso 2 de 4".
+ */
 function pintarPasos(paso: Paso): void {
+  // Al final del ensayo no queda nada por hacer (no hay qué compartir): los cuatro tramos van hechos.
+  const final = paso === 4 && enEnsayo();
   for (const li of document.querySelectorAll<HTMLElement>("#pasos li")) {
     const n = Number(li.dataset.paso);
-    const estado = n < paso ? "hecho" : n === paso ? "actual" : "falta";
+    const estado = final || n < paso ? "hecho" : n === paso ? "actual" : "falta";
     li.classList.toggle("hecho", estado === "hecho");
     li.classList.toggle("actual", estado === "actual");
     if (estado === "actual") li.setAttribute("aria-current", "step");
     else li.removeAttribute("aria-current");
-    const num = li.querySelector(".p-n");
-    if (num) num.textContent = estado === "hecho" ? "✓" : String(n);
+    const marca = li.querySelector(".p-n");
+    if (marca) marca.textContent = estado === "hecho" ? "✓" : "";
     const e = li.querySelector(".p-e");
     if (e) e.textContent = estado === "hecho" ? t("pasoHecho") : estado === "actual" ? t("pasoActual") : "";
   }
 }
 
-/** La línea de la barra: "Paso 3 de 4: Esperando la ronda, 0:25". */
+/** La línea de la barra: "Paso 3 de 4: esperando el número, 0:25". */
 const linea = (s: Toca): string => lineaDelPaso(t("sigPaso").replace("{n}", String(s.paso)), s.detalle, s.reloj);
 
 /**
@@ -206,10 +214,8 @@ function pintarBarra(s: Toca, mostrar: boolean): void {
   const bar = $("siguiente");
   const btn = $<HTMLButtonElement>("sig-btn");
   if (s.boton) {
-    // Sin cuenta, "Sellar la lista" está apagado (aria-disabled) y tocarlo abre la ventana para entrar: la barra dice lo
-    // que va a pasar y no promete un sello (26 de octubre de 2026).
-    const pideCuenta = s.paso === 2 && s.boton.getAttribute("aria-disabled") === "true";
-    const texto = pideCuenta ? t("sigEntrarSellar") : (s.boton.textContent?.trim() ?? "");
+    // Sin cuenta, el botón de verdad ya dice "Entrar para sellar" (wallet-ui.ts): la barra copia lo que dice.
+    const texto = s.boton.textContent?.trim() ?? "";
     if (btn.textContent !== texto) btn.textContent = texto;
     btn.disabled = s.boton.disabled;
     btn.classList.toggle("lista", s.boton.classList.contains("lista"));

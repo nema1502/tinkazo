@@ -18,7 +18,6 @@ import { usePixi } from "./games/engine";
 import { MARCA_INGRESAR, currentSession, entraConGoogle, entrar, estadoDeLaCuenta, initWalletUI, openPicker, pedirEntrar } from "./ui/wallet-ui";
 import { initOnboarding } from "./ui/onboarding";
 import { initEnsayo, salirDelEnsayo } from "./ui/ensayo";
-import { initAvisoCuenta } from "./ui/aviso-cuenta";
 import { abrirTutorial, initTutorial } from "./ui/tutorial";
 import { enEnsayo } from "./ensayo-modo";
 import { musicOn, toggleMusic } from "./music";
@@ -187,8 +186,6 @@ initVistas();
 initWalletUI();
 // El ensayo, si se recargó en él, después de la cuenta (la puerta) y antes de los pasos.
 initEnsayo();
-// El recordatorio de crear la cuenta, solo en el ensayo y una vez por sesión.
-initAvisoCuenta();
 // La red a la vista antes de sellar: "¿La red está bien?" y el aviso cuando algo anda mal.
 iniciarRed({ sellar: (op) => freeze(op) });
 ingresarSiLoPidio();
@@ -198,7 +195,7 @@ refreshFreezeLabel();
 initSiguiente({ segundos: secondsToRound });
 // "¿Cómo se usa?" y la oferta de la primera vez, que miran en qué paso se está.
 initTutorial();
-initOnboarding(() => abrirTutorial("offer"));
+initOnboarding();
 
 /**
  * Las dos vistas de "/": la portada para quien llega, y la herramienta para
@@ -208,9 +205,9 @@ initOnboarding(() => abrirTutorial("offer"));
  * login. "/" es siempre la portada, también con la cuenta abierta; la
  * herramienta se abre cuando se pide: "Sortear", "Mis sorteos", el botón
  * grande, o volver de elegir una cuenta (que deja una marca en la sesión del
- * navegador y sobrevive al redirect de Google). Tiene dos pestañas: el sorteo
- * nuevo y los sorteos de esa cuenta, que se traen de la cadena en cualquier
- * equipo. `#sortear`, `#mis-sorteos` y `#portada` eligen a mano.
+ * navegador y sobrevive al redirect de Google). Tiene dos vistas, que se
+ * eligen desde la cabecera: el sorteo nuevo y los sorteos de esa cuenta, que se
+ * traen de la cadena en cualquier equipo. `#sortear`, `#mis-sorteos` y `#portada` eligen a mano.
  */
 function initVistas(): void {
   type Tab = "nuevo" | "historial";
@@ -218,8 +215,6 @@ function initVistas(): void {
   const deApp = ["demo", "pose", "instant"].some((k) => params.has(k));
   const marcar = (): void => {
     const hist = body.dataset.tab === "historial";
-    $("tab-nuevo").setAttribute("aria-selected", String(!hist));
-    $("tab-hist").setAttribute("aria-selected", String(hist));
     // En el menú, la página actual: Sortear o Mis sorteos, según la pestaña.
     const app = body.dataset.vista === "app";
     for (const [href, on] of [["/#sortear", app && !hist], ["/#mis-sorteos", app && hist]] as const) {
@@ -256,14 +251,6 @@ function initVistas(): void {
   setVista(deApp ? "app" : "portada");
   porHash();
   addEventListener("hashchange", () => void porHash());
-  $("tab-nuevo").addEventListener("click", () => {
-    history.replaceState(null, "", "#sortear");
-    setVista("app", "nuevo");
-  });
-  $("tab-hist").addEventListener("click", () => {
-    history.replaceState(null, "", "#mis-sorteos");
-    setVista("app", "historial");
-  });
   $("hist-entrar").addEventListener("click", () => {
     void import("./ui/wallet-ui").then((w) => void w.openPicker());
   });

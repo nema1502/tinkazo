@@ -93,7 +93,7 @@ const h = vi.hoisted(() => ({
   puede: true,
 }));
 
-vi.mock("./wallet-ui", () => ({ canAnchor: () => h.puede, currentSession: () => (h.puede ? { address: DIR } : null) }));
+vi.mock("./wallet-ui", () => ({ canAnchor: () => h.puede, claveDeSellar: () => "freeze", currentSession: () => (h.puede ? { address: DIR } : null) }));
 vi.mock("./anchor", () => ({ limpiarDetalle: () => undefined }));
 vi.mock("./detalle-error", () => ({ ponerDetalle: () => undefined }));
 vi.mock("./siguiente", () => ({ verError: () => undefined }));

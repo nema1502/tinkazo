@@ -30,33 +30,10 @@ import { marcarOfertaVista } from "./onboarding";
  *   pantalla sigue siendo la del paso.
  * - **El mapa:** mientras está abierto, los controles de verdad llevan su número
  *   (1 en "Pegar lista", 2 en "Sellar la lista", 3 en "Lanzar el sorteo", 4 en
- *   "Compartir el resultado" y "Siguiente premio"). Hasta el primer sello del
- *   equipo, los números se ven siempre.
+ *   "Compartir el resultado" y "Siguiente premio"). Solo entonces: en el camino
+ *   normal los circulitos eran ruido sobre el botón, y en el ensayo nunca van.
  * - **Nunca se abre solo.**
  */
-
-/** Si en este equipo ya se selló un sorteo de verdad: desde ahí, los números solo con el tutorial abierto. */
-const SELLADO = "tinkazo.sellado.v1";
-let selladoEnMemoria = false;
-
-function yaSello(): boolean {
-  if (selladoEnMemoria) return true;
-  try {
-    return localStorage.getItem(SELLADO) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function marcarSellado(): void {
-  selladoEnMemoria = true;
-  try {
-    localStorage.setItem(SELLADO, "1");
-  } catch {
-    /* sin almacenamiento, dura lo que la página */
-  }
-  pintarMapa();
-}
 
 /** Las tarjetas van de a una en un celular (760 px o menos). */
 const deAUna = (): boolean => typeof matchMedia === "function" && matchMedia("(max-width: 760px)").matches;
@@ -68,9 +45,9 @@ let viendo = 1;
 const panel = (): HTMLElement => $("como-panel");
 const boton = (): HTMLElement => $("btn-como");
 
-/** Los números en los controles de verdad: con el tutorial abierto, y siempre hasta el primer sello. */
+/** Los números en los controles de verdad: solo con el tutorial abierto, y nunca en el ensayo ni en la demo. */
 function pintarMapa(): void {
-  const on = !params.has("demo") && (abierto || !yaSello());
+  const on = !params.has("demo") && !enEnsayo() && abierto;
   if (on) document.body.dataset.mapa = "1";
   else delete document.body.dataset.mapa;
 }
@@ -169,16 +146,14 @@ export function initTutorial(): void {
   document.addEventListener("tinkazo:paso", (e) => {
     if (abierto) marcarAca((e as CustomEvent<{ paso: number }>).detail.paso);
   });
-  // El primer sello de este equipo (o una cuenta que ya tiene sorteos): los números dejan de verse siempre.
-  document.addEventListener("tinkazo:sellado", marcarSellado);
-  document.addEventListener("tinkazo:con-sorteos", marcarSellado);
-  // El ensayo entra sin recargar: el tutorial se cierra (no va en el ensayo).
+  // El ensayo entra sin recargar: el tutorial se cierra (no va en el ensayo) y los números se van con él.
   new MutationObserver(() => {
     if (document.body.dataset.ensayo === "1" && abierto) {
       abierto = false;
       panel().hidden = true;
       boton().setAttribute("aria-expanded", "false");
     }
+    pintarMapa();
   }).observe(document.body, { attributes: true, attributeFilter: ["data-ensayo"] });
   pintarMapa();
 }

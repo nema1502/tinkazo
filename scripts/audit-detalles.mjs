@@ -77,7 +77,7 @@ async function abrir(browser, v, tema, query = "", hash = "#sortear") {
 /** Sin cuenta, el botón de sellar queda detrás de la puerta: el modo libre arma el mismo flujo (como audit-espera). */
 const libre = (page) =>
   page.eval(
-    "document.querySelector('#sec-participants .body').classList.remove('locked'); document.getElementById('btn-freeze').removeAttribute('aria-disabled'); document.getElementById('gate').style.display = 'none'; document.getElementById('primera-vez')?.style.setProperty('display', 'none'); true",
+    "document.querySelector('#sec-participants .body').classList.remove('locked'); (() => { const s = document.getElementById('btn-freeze'); s.removeAttribute('aria-disabled'); s.dataset.i = 'freeze'; s.textContent = new URLSearchParams(location.search).get('lang') === 'en' ? 'Seal the list' : 'Sellar la lista'; })(); document.getElementById('gate').style.display = 'none'; document.getElementById('primera-vez')?.style.setProperty('display', 'none'); true",
   );
 
 /** Escribe en el cuadro como si se tecleara: el evento `input` es el de siempre. */
@@ -129,8 +129,8 @@ async function pegar(page, texto) {
  * nada a la red: alcanza para Mis sorteos, no para sellar.
  */
 async function cuentaDePrueba(page) {
-  await page.waitFor("document.querySelector('#gate button')", 20000);
-  await page.eval("document.querySelector('#gate button').click(); true");
+  await page.waitFor("document.querySelector('#wallet-box button')", 20000);
+  await page.eval("document.querySelector('#wallet-box button').click(); true");
   await page.waitFor("document.querySelector('.login-opt')", 15000);
   await page.eval("[...document.querySelectorAll('.login-opt')].find((e) => /prueba|Test account/.test(e.textContent))?.click(); true");
   const entro = await page.waitFor("!document.querySelector('.modal-back') && document.querySelector('#wallet-box .hello')", 60000);
@@ -520,7 +520,7 @@ const DETALLES = {
         await sleep(900);
         const linea = () => page.eval("document.getElementById('sig-paso').textContent");
         const sin = await linea();
-        check(`${quien} · sin premio, la línea lo dice`, /12 personas · sin premio$/.test(sin), `"${sin}"`);
+        check(`${quien} · sin premio, la línea lo dice`, /12 personas, sin premio$/.test(sin), `"${sin}"`);
         await captura(page, "D19", v, tema, "sin-premio");
         await page.eval("(() => { const p = document.getElementById('prize'); p.value = 'Termo'; p.dispatchEvent(new Event('input', { bubbles: true })); return true; })()");
         await sleep(200);
@@ -528,7 +528,7 @@ const DETALLES = {
         await page.eval("[...document.querySelectorAll('#prize-chips button')].find((b) => /Polera/.test(b.textContent))?.click(); true");
         await sleep(200);
         const chip = await linea();
-        check(`${quien} · al escribir el premio o tocar uno, la línea cambia`, /· Termo$/.test(con) && /· Polera$/.test(chip), `"${con}" → "${chip}"`);
+        check(`${quien} · al escribir el premio o tocar uno, la línea cambia`, /, Termo$/.test(con) && /, Polera$/.test(chip), `"${con}" → "${chip}"`);
         await captura(page, "D19", v, tema, "con-premio");
         if (v.celular) {
           // El ancho más chico que se mira (audit-flujo --solo-anchos): la línea entra entera, con un premio corto.

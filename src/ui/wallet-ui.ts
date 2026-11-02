@@ -123,6 +123,13 @@ export const canAnchor = (): boolean => anchoringAvailable && session !== null &
  */
 const sinCuentaParaSellar = (): boolean => anchoringAvailable && session === null && !enEnsayo();
 
+/**
+ * La clave del texto de "Sellar la lista" cuando está en reposo: sin cuenta dice "Entrar para sellar" (tocarlo abre la
+ * entrada y no sella), y con cuenta o en el ensayo, "Sellar la lista". La usan todos los que le devuelven su texto
+ * (`freeze.ts`, `red.ts`), para que ninguno lo pise.
+ */
+export const claveDeSellar = (): "sigEntrarSellar" | "freeze" => (sinCuentaParaSellar() ? "sigEntrarSellar" : "freeze");
+
 /** Vuelve a pintar la puerta: al entrar al ensayo, que no pide cuenta. */
 export function refrescarPuerta(): void {
   applyGate();
@@ -567,13 +574,18 @@ function applyGate(): void {
   // nadie con una puerta que no tiene llave.
   const locked = sinCuentaParaSellar();
   body?.classList.toggle("locked", locked);
-  // El botón de sellar no se apaga con la clase: queda a la vista y con
-  // aria-disabled, que es lo que lee un lector de pantalla. freeze() no lo
-  // sella sin cuenta, y la línea debajo dice qué falta.
+  // Sin cuenta, el botón de sellar sigue con el color de la casa y dice "Entrar para sellar": tocarlo abre la entrada
+  // con su motivo, y freeze() no sella nada. `aria-disabled` es la marca de que abre la entrada y no sella (main.ts).
   const sellar = document.getElementById("btn-freeze");
-  if (locked) sellar?.setAttribute("aria-disabled", "true");
-  else sellar?.removeAttribute("aria-disabled");
-  if (!locked) {
+  if (sellar) {
+    if (locked) sellar.setAttribute("aria-disabled", "true");
+    else sellar.removeAttribute("aria-disabled");
+    // Apagado es que se está sellando: su texto es el de ese paso, y no se pisa.
+    if (!(sellar as HTMLButtonElement).disabled) refreshFreezeLabel();
+  }
+  // La línea que pedía entrar encima de "Pegar lista" ya no va: el botón de la cabecera y el de sellar lo piden. Queda
+  // solo para lo que pasa ahora: retomar la sesión, conectar, o pedir el toque que el navegador exige.
+  if (!locked || !(retomando || conectando || pidiendoEntrar)) {
     gate.style.display = "none";
     return;
   }
@@ -581,7 +593,7 @@ function applyGate(): void {
   // hablaba de grabar en Stellar y de a quién atribuirlo, y dejaba "Sellar la
   // lista" una pantalla más abajo (diseño del onboarding, 22 de octubre de
   // 2026). La cuenta se resuelve al principio, desde la portada; acá queda la
-  // línea con su botón secundario, que es lo que usan los auditores.
+  // línea con su botón secundario.
   // La puerta se vuelve a armar cada vez que cambia algo de la cuenta (el idioma, entrar, el ensayo): si el botón tenía el
   // foco, el botón nuevo lo recibe. Sin esto, "Entrar" desde una página de lectura dejaba el foco en el aire en cuanto
   // la herramienta terminaba de armarse (pedirEntrar).
@@ -590,11 +602,11 @@ function applyGate(): void {
   const p = document.createElement("p");
   // Retomando o conectando no se ofrece entrar de nuevo; sin un toque (el final de la demo), se pide el toque (`pedirEntrar`).
   const ocupada = retomando || conectando;
-  p.textContent = t(retomando ? "gateRetomando" : conectando ? "connecting" : pidiendoEntrar ? "cuentaPideGoogle" : "gateLinea");
+  p.textContent = t(retomando ? "gateRetomando" : conectando ? "connecting" : "cuentaPideGoogle");
   gate.appendChild(p);
   gate.classList.toggle("retomando", ocupada);
   if (!ocupada) {
-    const b = pidiendoEntrar ? button(t("cuentaPideEntrar"), "ghost", () => void entrar()) : button(t("gateEntrar"), "ghost", () => void openPicker());
+    const b = button(t("cuentaPideEntrar"), "ghost", () => void entrar());
     b.type = "button";
     gate.appendChild(b);
     if (teniaElFoco) b.focus({ preventScroll: true });

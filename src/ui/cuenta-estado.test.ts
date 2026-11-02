@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CLAVES_DE_VIA, MARCA_INGRESAR, claveDelAviso, debeAvisar, esCorreo, estadoCuenta, inicialDe, nombreCorto, ocultarCorreo, tituloDelChip, viaDe, viaDeLaSesionGuardada, type SesionVista } from "./cuenta-estado";
+import { CLAVES_DE_VIA, MARCA_INGRESAR, claveDelAviso, esCorreo, estadoCuenta, inicialDe, nombreCorto, ocultarCorreo, tituloDelChip, viaDe, viaDeLaSesionGuardada, type SesionVista } from "./cuenta-estado";
 
 /**
  * La cuenta, siempre a la vista (26 de octubre de 2026): los tres estados de la cabecera, el nombre sin el correo
@@ -183,39 +183,5 @@ describe("la línea que dice qué pasó al entrar", () => {
     expect(claveDelAviso(dentro({ label: "Email", address: DIR }))).toBe("cuentaAvisoCorreo");
     expect(claveDelAviso(dentro({ label: "Freighter", address: DIR }))).toBe("cuentaAvisoFreighter");
     expect(claveDelAviso(dentro({ label: "Cuenta de prueba", address: DIR }))).toBe("cuentaAvisoPrueba");
-  });
-});
-
-describe("el recordatorio de crear la cuenta, una sola vez y sin molestar", () => {
-  const base = { enEnsayoODemo: true, conSesion: false, yaSeAviso: false, esteAviso: false, sellada: false, ventanaAbierta: false };
-
-  it("en el ensayo o la demo, sin cuenta y con la lista a mano, se avisa", () => {
-    expect(debeAvisar(base)).toBe(true);
-  });
-
-  it("nunca fuera del ensayo y la demo: un sorteo de verdad ya pide la cuenta", () => {
-    expect(debeAvisar({ ...base, enEnsayoODemo: false })).toBe(false);
-  });
-
-  it("nunca con una cuenta abierta", () => {
-    expect(debeAvisar({ ...base, conSesion: true })).toBe(false);
-  });
-
-  it("nunca entre el sello y el último resultado: la sala mira el sorteo", () => {
-    expect(debeAvisar({ ...base, sellada: true })).toBe(false);
-    expect(debeAvisar({ ...base, sellada: true, esteAviso: true })).toBe(false);
-  });
-
-  it("nunca encima de una ventana abierta", () => {
-    expect(debeAvisar({ ...base, ventanaAbierta: true })).toBe(false);
-    expect(debeAvisar({ ...base, ventanaAbierta: true, esteAviso: true })).toBe(false);
-  });
-
-  it("una sola vez por sesión: si ya se mostró en otra visita, no vuelve", () => {
-    expect(debeAvisar({ ...base, yaSeAviso: true })).toBe(false);
-  });
-
-  it("pero mientras se está mostrando, se queda (la vez es la visita entera hasta sellar)", () => {
-    expect(debeAvisar({ ...base, yaSeAviso: true, esteAviso: true })).toBe(true);
   });
 });

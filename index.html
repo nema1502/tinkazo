@@ -74,6 +74,7 @@
     <a class="wordmark" href="/" aria-label="Tinkazo"><span class="wm-llama" aria-hidden="true"><svg viewBox="-1 -3 24 28"><rect x="2" y="11" width="16" height="7"/><rect x="15" y="3" width="4" height="10"/><rect x="14" y="0" width="8" height="4"/><rect x="20" y="-2" width="2" height="3"/><rect x="3" y="18" width="2.5" height="6"/><rect x="8" y="18" width="2.5" height="6"/><rect x="12.5" y="18" width="2.5" height="6"/><rect x="16" y="18" width="2.5" height="6"/><rect x="0" y="9" width="3" height="4"/></svg></span><span class="wm-text">Tinka<b>zo</b></span></a>
     <nav class="topnav" aria-label="páginas">
       <a href="/#sortear" class="nav-app" data-i="navSortear">Sortear</a>
+      <a href="/#mis-sorteos" data-i="navMis">Mis sorteos</a>
       <div class="mas">
         <button type="button" class="mas-btn" aria-expanded="false" aria-controls="mas-lista" data-i="navMas">Más</button>
         <div class="mas-lista" id="mas-lista">
@@ -83,7 +84,6 @@
           <a href="/precios.html" data-i="navPrecios">Precios</a>
         </div>
       </div>
-      <a href="/#mis-sorteos" data-i="navMis">Mis sorteos</a>
     </nav>
     <div class="header-lado">
       <nav class="langs" aria-label="idioma">
@@ -207,26 +207,23 @@
   <p class="demo-banner app-only" data-i="demoBanner">Demo con una lista de ejemplo: no se graba nada en Stellar.</p>
   <!-- El ensayo (src/ui/ensayo.ts): solo se ve con body[data-ensayo="1"]. -->
   <div class="ensayo-banda app-only tab-nuevo" id="ensayo-banda">
-    <p data-i="ensBanda">Ensayo con una lista de ejemplo: nada de esto se graba.</p>
-    <button class="ghost mini" id="ens-salir-banda" type="button" data-i="ensSalir">Salir del ensayo</button>
+    <p data-i="ensBanda">Ensayo: nada de esto se graba.</p>
+    <button class="ghost mini" id="ens-salir-banda" type="button" data-i="ensSalirBanda" data-i-aria="ensSalirAria" aria-label="Salir del ensayo">Salir</button>
   </div>
   <div class="appbar app-only">
     <div class="appbar-t">
-      <h2 data-i="appTitle">Tu sorteo</h2>
+      <h2 class="tab-nuevo" data-i="appTitle">Tu sorteo</h2>
+      <h2 class="tab-hist" data-i="histTitle">Mis sorteos</h2>
       <!-- "¿Cómo se usa?", siempre a mano (src/ui/tutorial.ts): secundario, nunca flotando ni en la barra de abajo. -->
       <button class="ghost mini btn-como tab-nuevo" id="btn-como" type="button" aria-expanded="false" aria-controls="como-panel" aria-label="¿Cómo se usa?" data-i-aria="comoBtn"><span class="como-q" aria-hidden="true">?</span><span class="como-bt" data-i="comoBtn">¿Cómo se usa?</span></button>
     </div>
     <!-- Dónde estás y qué falta: lo arma `src/ui/siguiente.ts`. -->
     <ol class="pasos app-only tab-nuevo" id="pasos" role="list" aria-label="Pasos del sorteo" data-i-aria="pasosAria">
-      <li data-paso="1" class="actual" aria-current="step"><span class="p-n" aria-hidden="true">1</span><span class="p-t" data-i="paso1">Lista</span><span class="sr-only p-e"></span></li>
-      <li data-paso="2"><span class="p-n" aria-hidden="true">2</span><span class="p-t" data-i="paso2">Sellar</span><span class="sr-only p-e"></span></li>
-      <li data-paso="3"><span class="p-n" aria-hidden="true">3</span><span class="p-t" data-i="paso3">Sortear</span><span class="sr-only p-e"></span></li>
-      <li data-paso="4"><span class="p-n" aria-hidden="true">4</span><span class="p-t" data-i="paso4">Compartir</span><span class="sr-only p-e"></span></li>
+      <li data-paso="1" class="actual" aria-current="step"><span class="p-b" aria-hidden="true"></span><span class="p-nombre"><span class="p-n" aria-hidden="true"></span><span class="p-t" data-i="paso1">Lista</span></span><span class="sr-only p-e"></span></li>
+      <li data-paso="2"><span class="p-b" aria-hidden="true"></span><span class="p-nombre"><span class="p-n" aria-hidden="true"></span><span class="p-t" data-i="paso2">Sellar</span></span><span class="sr-only p-e"></span></li>
+      <li data-paso="3"><span class="p-b" aria-hidden="true"></span><span class="p-nombre"><span class="p-n" aria-hidden="true"></span><span class="p-t" data-i="paso3">Sortear</span></span><span class="sr-only p-e"></span></li>
+      <li data-paso="4"><span class="p-b" aria-hidden="true"></span><span class="p-nombre"><span class="p-n" aria-hidden="true"></span><span class="p-t" data-i="paso4">Compartir</span></span><span class="sr-only p-e"></span></li>
     </ol>
-    <div class="tabs" role="tablist">
-      <button role="tab" id="tab-nuevo" aria-selected="true" data-i="tabNuevo">Nuevo sorteo</button>
-      <button role="tab" id="tab-hist" aria-selected="false" data-i="tabHist">Mis sorteos</button>
-    </div>
   </div>
   <!-- "¿Cómo se usa?": un panel en el lugar, que empuja la página y no tapa nada (src/ui/tutorial.ts).
        Las cuatro tarjetas son los cuatro pasos del indicador, con el dibujo del botón de verdad. -->
@@ -280,8 +277,6 @@
   </section>
   <!-- La línea que guía el ensayo, debajo de los pasos. Cambia con el paso y nunca bloquea. -->
   <p class="ensayo-guia app-only tab-nuevo" id="ensayo-guia" role="status" aria-live="polite" hidden></p>
-  <!-- El recordatorio de crear la cuenta: solo en el ensayo, antes de sellar, una sola vez por sesión (src/ui/aviso-cuenta.ts). Sin ventana ni color de la casa. -->
-  <p class="aviso-cuenta app-only tab-nuevo" id="aviso-cuenta" hidden><span data-i="cuentaPideGoogle">Para sortear con tu lista, entrá con Google: es gratis y tu cuenta se crea sola.</span> <button class="enlace" type="button" id="aviso-cuenta-entrar" data-i="cuentaPideEntrar">Entrar con Google</button></p>
 
   <!-- 01 Participantes -->
   <section class="block app-only tab-nuevo" id="sec-participants">
@@ -289,10 +284,10 @@
     <div class="body">
       <!-- La cuenta, en una línea con su botón (wallet-ui.ts, applyGate). -->
       <aside class="gate" id="gate" style="display:none"></aside>
-      <!-- La primera vez, una línea sin botones de color, una sola vez por equipo (onboarding.ts).
-           Reemplaza a la bienvenida de tres pasos, que se veía una vez y no volvía. -->
+      <!-- La primera vez, una línea sin botones de color, una sola vez por equipo (onboarding.ts): una sola puerta al ensayo,
+           y mientras se ve, "o probá con un ejemplo" de más abajo se esconde (styles.css). "¿Cómo se usa?" ya está arriba. -->
       <aside class="primera-vez" id="primera-vez" style="display:none">
-        <p><b data-i="pvPrimera">¿Primera vez?</b> <button class="enlace" type="button" id="pv-como" data-i="pvVer">Mirá cómo se usa</button> <span data-i="pvO">o</span> <button class="enlace" type="button" id="pv-ensayo" data-entrar-ensayo data-i="pvEnsayo">probalo con un ejemplo</button></p>
+        <p><b data-i="pvPrimera">¿Primera vez?</b> <button class="enlace" type="button" id="pv-ensayo" data-entrar-ensayo data-i="pvEnsayo">Probalo con un ejemplo</button></p>
         <button class="pv-x" type="button" id="pv-cerrar" aria-label="No mostrar más" data-i-aria="pvCerrar" data-i-title="pvCerrar" title="No mostrar más">✕</button>
       </aside>
       <!-- Un sorteo sellado en este navegador que quedó sin sortear (una recarga en la espera): se ofrece retomarlo. Lo arma history.ts. -->
@@ -343,7 +338,7 @@
       <aside class="red-estado" id="red-estado" role="status" aria-live="polite" data-i-aria="redRegion" aria-label="Estado de la red" style="display:none"></aside>
       <!-- Lo que se va a sellar, antes de sellar (participants.ts): "20 personas, 1 ganador, Termo. Al sellar, la lista queda cerrada." -->
       <p class="note sellar-resumen" id="sellar-resumen" style="display:none"></p>
-      <p class="note sellar-sin-cuenta" id="sellar-sin-cuenta" data-i="sellarSinCuenta">Entrá con tu cuenta para sellar</p>
+      <p class="note sellar-sin-cuenta" id="sellar-sin-cuenta" data-i="sellarSinCuenta">Tu gente no necesita crear cuenta.</p>
       <p class="note" id="freeze-hint" data-i="freezeHint">Hacen falta al menos dos nombres.</p>
       <p class="note" id="free-rule" data-i-html="freeRule">Participar es gratis, siempre: no es para sorteos con entrada paga ni para apuestas. Al sellar la lista aceptás los <a href="/terminos.html">términos</a>.</p>
       <!-- "¿La red está bien?": un toque antes de empezar un evento; dice verde, amarillo o rojo con la razón. Solo con cuenta. -->
@@ -507,7 +502,7 @@
 
   <!-- Historial -->
   <section class="block app-only tab-hist" id="sec-history" style="display:none">
-    <div class="head"><h2 data-i="histTitle">Tus sorteos</h2><span class="kicker" id="hist-count"></span></div>
+    <div class="head"><span class="kicker" id="hist-count"></span></div>
     <div class="body">
       <!-- Los sorteos primero: volver a mandar un comprobante es lo más común, y en el celular
            el formulario de eventos lo dejaba abajo (evaluación crítica de experiencia, hallazgo 5). -->
@@ -600,7 +595,7 @@
      pantalla anuncia los cambios de una región que ya estaba. -->
 <div class="siguiente" id="siguiente" role="region" aria-label="Lo que sigue" data-i-aria="sigRegion" inert>
   <div class="sig-in">
-    <p class="sig-paso mono" id="sig-paso"></p>
+    <p class="sig-paso" id="sig-paso"></p>
     <button class="primary" id="sig-btn" type="button"></button>
   </div>
 </div>

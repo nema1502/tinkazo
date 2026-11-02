@@ -23,6 +23,9 @@ let cerrada = false;
 /** La lista no se puede tocar: se está sellando o ya está sellada. */
 const listaCerrada = (): boolean => cerrada || !!app.frozen;
 
+/** "Lista de 20 personas", junto al cuadro. */
+const cuentaDeLista = (n: number): string => (n === 1 ? t("listaCuentaUna") : t("listaCuenta").replace("{n}", String(n)));
+
 /**
  * Cierra la lista a los cambios, o la vuelve a abrir.
  *
@@ -85,7 +88,7 @@ export function renderNames(): void {
   // "20 personas", en grande junto al cuadro: que pegó se ve de un vistazo.
   const cuenta = document.getElementById("lista-cuenta");
   if (cuenta) {
-    cuenta.textContent = names.length ? t("sigLista").replace("{n}", String(names.length)) : "";
+    cuenta.textContent = names.length ? cuentaDeLista(names.length) : "";
     cuenta.style.display = names.length ? "" : "none";
   }
   // "Ya entraste. Sellá tu lista…" vale para la lista con que se entró: si cambia, o al sellarla, se va.
@@ -111,7 +114,8 @@ function pintarResumen(n = parseNames().length): void {
   const L = T[getLang()];
   const k = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, n);
   const premio = $<HTMLInputElement>("prize").value.trim().replace(/\s+/g, " ");
-  el.textContent = L.sellarResumen(n, k, premio);
+  // En el ensayo no se nombra el premio que falta: nada se sella de verdad.
+  el.textContent = L.sellarResumen(n, k, enEnsayo() && !premio ? null : premio);
   el.style.display = "";
 }
 
@@ -157,7 +161,7 @@ export function bindParticipants(): void {
     pintarResumen();
     const cuenta = document.getElementById("lista-cuenta");
     const n = parseNames().length;
-    if (cuenta && n) cuenta.textContent = t("sigLista").replace("{n}", String(n));
+    if (cuenta && n) cuenta.textContent = cuentaDeLista(n);
   });
   addEventListener("pagehide", guardarBorrador);
   // Pegar una tabla entera es lo mismo que subirla: abre la ventana de

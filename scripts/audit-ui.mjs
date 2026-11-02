@@ -649,8 +649,9 @@ async function resaltadoTapa(page) {
 
 /**
  * La lista sin cuenta (la puerta cerrada). Lo que se lee tiene que leerse: la
- * carga, los premios y las etiquetas no se apagan. Solo el botón de sellar
- * queda con aria-disabled, y una línea visible dice qué falta.
+ * carga, los premios y las etiquetas no se apagan. El botón de sellar sigue con el
+ * color de la casa y dice "Entrar para sellar" (lleva aria-disabled: abre la
+ * entrada y no sella), y una línea visible dice que la gente no necesita cuenta.
  */
 const SIN_CUENTA = `JSON.stringify((() => {
   const opacidad = (el) => { let o = 1; for (let e = el; e && e.nodeType === 1; e = e.parentElement) o *= parseFloat(getComputedStyle(e).opacity) || 1; return o; };
@@ -661,6 +662,8 @@ const SIN_CUENTA = `JSON.stringify((() => {
   return {
     apagados,
     ariaSellar: sellar ? sellar.getAttribute('aria-disabled') : null,
+    textoSellar: sellar ? sellar.textContent.trim() : '',
+    principalSellar: !!sellar && sellar.classList.contains('primary'),
     lineaVisible: !!linea && getComputedStyle(linea).display !== 'none',
     lineaTexto: linea ? linea.textContent.trim() : '',
   };
@@ -895,7 +898,7 @@ async function run() {
           await sinSesionGuardada(sinCuenta);
           await sinCuenta.send("Page.navigate", { url: `${base}/?theme=${tema}#sortear` });
           await sinCuenta.waitFor("document.readyState === 'complete' && document.fonts && document.fonts.status === 'loaded'", 15000);
-          await sinCuenta.waitFor(`!!document.querySelector('#gate button') && !!document.getElementById('btn-sample')`, 20000);
+          await sinCuenta.waitFor(`!!document.querySelector('#wallet-box button') && !!document.getElementById('btn-sample')`, 20000);
           await sinCuenta.eval(`document.getElementById('btn-sample').click(); true`);
           await sleep(900);
           const f = JSON.parse(await sinCuenta.eval(SIN_CUENTA));
@@ -905,9 +908,9 @@ async function run() {
             f.apagados.join(", "),
           );
           check(
-            `${etiqueta} ${tema}: sin cuenta, el botón de sellar queda aria-disabled y con su línea`,
-            f.ariaSellar === "true" && f.lineaVisible && f.lineaTexto === "Entrá con tu cuenta para sellar",
-            `aria-disabled ${f.ariaSellar} · línea ${f.lineaVisible ? "visible" : "oculta"}: "${f.lineaTexto}"`,
+            `${etiqueta} ${tema}: sin cuenta, "Entrar para sellar" es la acción principal y su línea tranquiliza`,
+            f.ariaSellar === "true" && f.textoSellar === "Entrar para sellar" && f.principalSellar && f.lineaVisible && f.lineaTexto === "Tu gente no necesita crear cuenta.",
+            `aria-disabled ${f.ariaSellar}, "${f.textoSellar}", principal ${f.principalSellar}, línea ${f.lineaVisible ? "visible" : "oculta"}: "${f.lineaTexto}"`,
           );
           const sq = JSON.parse(await sinCuenta.eval(PROBE));
           check(
@@ -919,9 +922,10 @@ async function run() {
           if (p.movil) {
             check(`${etiqueta} ${tema}: sin cuenta, blancos de toque de 44 px`, sq.toques.length === 0, sq.toques.slice(0, 3).map((x) => `"${x.t}" ${x.h}px`).join(" | "));
           }
-          // La cuenta, en una línea con su botón (desde el 22 de octubre de 2026 no es una caja).
-          const g = JSON.parse(await sinCuenta.eval("JSON.stringify({ alto: Math.round(document.getElementById('gate').getBoundingClientRect().height), boton: !!document.querySelector('#gate button:not(.primary)') })"));
-          check(`${etiqueta} ${tema}: sin cuenta, la cuenta es una línea con su botón secundario`, g.boton && g.alto <= (p.w <= 400 ? 130 : 80), `${g.alto} px`);
+          // Nada pide entrar encima de "Pegar lista" (1 de noviembre de 2026): la cuenta se pide con el chip "Entrar" de la
+          // cabecera, que es secundario, y con "Entrar para sellar".
+          const g = JSON.parse(await sinCuenta.eval("JSON.stringify({ visible: getComputedStyle(document.getElementById('gate')).display !== 'none', alto: Math.round(document.getElementById('gate').getBoundingClientRect().height), chip: (() => { const b = document.querySelector('#wallet-box button'); return !!b && b.getBoundingClientRect().width > 0 && !b.classList.contains('primary'); })() })"));
+          check(`${etiqueta} ${tema}: sin cuenta, la puerta no se ve y la cabecera ofrece Entrar sin color de la casa`, !g.visible && g.alto === 0 && g.chip, `puerta ${g.visible ? "visible" : "escondida"}, chip ${g.chip}`);
           // La cuenta, siempre a la vista: "Entrar", "Retomando…" y las páginas de lectura.
           await chipsFueraYRetomando(browser, sinCuenta, p, tema);
           await tutorialEnLaPagina(sinCuenta, etiqueta, tema, p.w <= 760);

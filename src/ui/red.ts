@@ -10,7 +10,7 @@ import { limpiarDetalle } from "./anchor";
 import { ponerDetalle } from "./detalle-error";
 import { type AccionRed, type ContextoDelPanel, NOMBRE_DE_ACCION, type Panel, TEXTO_DE_ACCION, panelDe, respuestaDelBoton } from "./red-acciones";
 import { verError } from "./siguiente";
-import { canAnchor, currentSession } from "./wallet-ui";
+import { canAnchor, claveDeSellar, currentSession } from "./wallet-ui";
 
 /**
  * La red, a la vista antes de sellar.
@@ -182,8 +182,8 @@ function aplicarAlBoton(): void {
   btn.classList.toggle("red-accion", accion !== "sellar");
   if (accion === "sellar") {
     alApretar = null;
-    btn.dataset.i = "freeze";
-    btn.textContent = t("freeze");
+    btn.dataset.i = claveDeSellar();
+    btn.textContent = t(btn.dataset.i);
     btn.disabled = false;
     return;
   }

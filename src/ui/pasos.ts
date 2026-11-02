@@ -52,19 +52,24 @@ export function claveDelPaso(paso: Paso, e: { segundos: number; apagado: boolean
  * sorteos y el mensaje quedaban con "Sorteo" a secas (buscador de detalles,
  * D19). Informa, no obliga: el premio sigue siendo opcional. Un premio largo
  * (hasta 60 letras) se corta con puntos suspensivos, para que la barra entre
- * en un renglón también en un celular de 320 px.
+ * en un renglón también en un celular de 320 px. Con `sinPremio` en `null`
+ * (el ensayo, donde nada se sella de verdad) no se nombra lo que falta: solo
+ * la lista, o la lista y el premio si lo hay.
  */
-export function detalleDeLista(lista: string, premio: string, sinPremio: string, max = 18): string {
+export function detalleDeLista(lista: string, premio: string, sinPremio: string | null, max = 18): string {
   const letras = Array.from(premio.trim().replace(/\s+/g, " "));
   const corto = letras.length > max ? `${letras.slice(0, max - 1).join("").trimEnd()}…` : letras.join("");
-  return `${lista}, ${corto || sinPremio}`;
+  const resto = corto || sinPremio;
+  return resto ? `${lista}, ${resto}` : lista;
 }
 
 /** "0:25", "1:05": la cuenta regresiva tal como la escribe el botón de sortear. */
 export const relojDe = (segundos: number): string => `${Math.floor(segundos / 60)}:${String(segundos % 60).padStart(2, "0")}`;
 
 /**
- * La línea de la barra: "Paso 3 de 4: Esperando la ronda, 0:25". `pasoTexto`
- * ya viene traducido ("Paso 3 de 4"); el reloj va solo mientras corre.
+ * La línea de la barra, como una frase: "Paso 3 de 4: esperando el número, 0:25".
+ * `pasoTexto` ya viene traducido ("Paso 3 de 4"); el detalle sigue a los dos
+ * puntos, así que empieza en minúscula (los números y los premios quedan como
+ * están); el reloj va solo mientras corre.
  */
-export const lineaDelPaso = (pasoTexto: string, detalle: string, reloj = ""): string => `${pasoTexto}: ${detalle}${reloj ? `, ${reloj}` : ""}`;
+export const lineaDelPaso = (pasoTexto: string, detalle: string, reloj = ""): string => `${pasoTexto}: ${detalle.replace(/^\p{Lu}/u, (c) => c.toLowerCase())}${reloj ? `, ${reloj}` : ""}`;
