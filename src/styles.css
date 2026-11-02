@@ -2352,3 +2352,23 @@
     content: ""; display: inline-block; vertical-align: -0.12em; width: 0.8em; height: 0.8em; margin-right: 0.5em; box-sizing: border-box;
     border: 3px solid color-mix(in srgb, currentColor 30%, transparent); border-top-color: currentColor; border-radius: 50%; animation: cc-gira 0.8s linear infinite;
   }
+
+  /* Luma a la vista y su "?" (src/ui/luma-ayuda.ts, 2 de noviembre de 2026): un origen más, sin el color de la casa ni el de la acción del paso. */
+  #origenes label.chip.luma-chip, #origenes button.chip.luma-q {
+    background: var(--paper); color: var(--ink); transform: none; box-shadow: none;
+  }
+  #origenes button.chip.luma-q {
+    min-width: 44px; padding: 5px 0; font-size: 18px; letter-spacing: 0; font-weight: 900; border-radius: 50%;
+  }
+  #origenes button.chip.luma-q[aria-expanded="true"] { background: var(--yellow); color: #191919; }
+  .lista-cerrada #origenes label.chip.luma-chip { color: var(--muted); border-style: dashed; cursor: not-allowed; }
+  .lista-cerrada #origenes button.luma-q, .lista-cerrada .luma-ayuda { display: none; }
+  .luma-ayuda { margin: -4px 0 14px; padding: 12px 16px; background: var(--card); border: 2px dashed var(--ink2); }
+  .luma-ayuda[hidden] { display: none; }
+  .luma-t { font-weight: 800; font-size: 16px; margin: 0 0 6px; }
+  .luma-ayuda ol { margin: 0; padding-left: 22px; font-size: 16px; line-height: 1.45; }
+  .luma-ayuda li + li { margin-top: 6px; }
+  .luma-ayuda .note { margin: 8px 0 0; }
+  body[data-ensayo="1"] .luma-ayuda, body[data-demo="1"] .luma-ayuda { display: none !important; }
+  /* Qué sigue después del resultado: una línea, sin botón. */
+  .again-sigue { margin: 10px 0 0; font-size: 16px; color: var(--ink2); }

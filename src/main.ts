@@ -17,6 +17,7 @@ import { skipGame } from "./games/overlay";
 import { usePixi } from "./games/engine";
 import { MARCA_INGRESAR, currentSession, entraConGoogle, entrar, estadoDeLaCuenta, initWalletUI, openPicker, pedirEntrar } from "./ui/wallet-ui";
 import { initOnboarding } from "./ui/onboarding";
+import { initLumaAyuda } from "./ui/luma-ayuda";
 import { initEnsayo, salirDelEnsayo } from "./ui/ensayo";
 import { abrirTutorial, initTutorial } from "./ui/tutorial";
 import { enEnsayo } from "./ensayo-modo";
@@ -202,6 +203,7 @@ initSiguiente({ segundos: secondsToRound });
 // "¿Cómo se usa?" y la oferta de la primera vez, que miran en qué paso se está.
 initTutorial();
 initOnboarding();
+initLumaAyuda();
 
 /**
  * Las dos vistas de "/": la portada para quien llega, y la herramienta para

@@ -51,5 +51,6 @@ function plegarElResultado(): void {
   botones.className = "row";
   botones.append(otra, copiar, correo);
   det.append(resumen, botones);
-  fila.after(det);
+  // Debajo de la línea de "qué sigue" si está: primero lo que se dice, después lo que se usa poco.
+  (document.getElementById("again-sigue") ?? fila).after(det);
 }

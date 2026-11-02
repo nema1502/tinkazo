@@ -296,6 +296,9 @@ let origenLista: OrigenLista | null = null;
 /** De dónde viene el archivo o la tabla que se está cargando: la ventana de importar no lo sabe. */
 let origenArchivo: "paste" | "csv" | "luma" = "csv";
 let contarLuego = 0;
+/** Si la lista que se está sorteando vino de Luma: el resultado le dice qué sigue en Luma (draw.ts, showAgain). */
+let vinoDeLuma = false;
+export const listaVinoDeLuma = (): boolean => vinoDeLuma;
 
 /**
  * Anota de dónde vino el último cambio de la lista. Una lista pegada o
@@ -304,6 +307,7 @@ let contarLuego = 0;
  */
 function anotarOrigen(origen: OrigenLista, ya: boolean): void {
   origenLista = origen;
+  vinoDeLuma = origen === "luma";
   window.clearTimeout(contarLuego);
   if (ya) contarLista();
   else contarLuego = window.setTimeout(contarLista, 3000);

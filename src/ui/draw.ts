@@ -16,7 +16,7 @@ import { currentSession } from "./wallet-ui";
 import { pintarQrDelComprobante } from "./qr";
 import { usePixi } from "../games/engine";
 import { rotarJuego, secondsToRound, unfreeze } from "./freeze";
-import { setList } from "./participants";
+import { listaVinoDeLuma, setList } from "./participants";
 import { CARD_SECONDS, type GameCard, showGameCard } from "./gamecard";
 import { actualizarPaso, verError } from "./siguiente";
 import { marcarSalio, olvidarSalieron, ponerPremio } from "./premios";
@@ -654,6 +654,10 @@ function showAgain(): HTMLButtonElement {
   titulo.dataset.i = alcanza ? "againTitle" : "againTitleFin";
   titulo.textContent = t(titulo.dataset.i);
   $("again-left").textContent = alcanza ? L.againLeft(quedan) : L.againFew(quedan);
+  // Qué sigue, para la sala y para quien organiza: una línea, sin botón (los botones son los de arriba y el pliegue).
+  const sigue = $("again-sigue");
+  sigue.dataset.i = listaVinoDeLuma() ? "againSigueLuma" : "againSigue";
+  sigue.textContent = t(sigue.dataset.i);
   $("again-row").style.display = "block";
   actualizarPaso();
   return principal;

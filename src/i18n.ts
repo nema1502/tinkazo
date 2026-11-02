@@ -1081,7 +1081,7 @@ export const T: Record<Lang, Dict> = {
     pvCerrar: "No mostrar más",
     gateRetomando: "Retomando tu cuenta…",
     yaEntraste: "Ya entraste. Sellá tu lista de {n} personas.",
-    pegarAyuda: "Copiá la lista en WhatsApp o en tu hoja de cálculo y tocá «Pegar lista».",
+    pegarAyuda: "Pegá los nombres de WhatsApp o de una hoja de cálculo, o traé tu lista de Luma.",
     // Sola, junto al cuadro: va con mayúscula. La de la barra (sigLista) va en medio de la línea.
     listaCuenta: "Lista de {n} personas",
     listaCuentaUna: "Lista de 1 persona",
@@ -2053,6 +2053,15 @@ export const T: Record<Lang, Dict> = {
     ctaGoogleCorto: "Entrar con Google",
     // >>> kit:i18n-es (scripts/nuevo-juego.mjs escribe entre estas marcas)
     // <<< kit:i18n-es
+    // Luma a la vista y qué sigue después del resultado (2 de noviembre de 2026): el "?" que enseña a bajar el CSV y la línea de "qué sigue".
+    lumaQ: "Cómo bajar tu lista de Luma",
+    lumaT: "Tu lista de Luma, en tres pasos",
+    lumaP1: "En Luma, desde la compu o desde el navegador del celular, abrí tu evento, entrá a «Manage» y a la pestaña «Guests».",
+    lumaP2: "Tocá «Download CSV». Si te pregunta, elegí la lista completa. Se guarda en Descargas.",
+    lumaP3: "Volvé acá, tocá «Desde Luma» y elegí ese archivo. Marcás quiénes entran: los que vinieron o los aprobados.",
+    lumaNota: "El archivo se lee en tu navegador y no se sube a ningún lado.",
+    againSigue: "Para la sala: «Mostrar en grande». Para quien no estuvo: «Avisarle por WhatsApp».",
+    againSigueLuma: "Para la sala: «Mostrar en grande». Para tus invitados: copiá el mensaje, acá abajo, y pegalo en Luma.",
   },
   en: {
     badge: 'Draw for your <span class="rotating" data-words="meetup|class|event|workshop|talk|conference">meetup</span>',
@@ -2750,7 +2759,7 @@ export const T: Record<Lang, Dict> = {
     pvCerrar: "Don't show again",
     gateRetomando: "Getting your account back…",
     yaEntraste: "You're in. Seal your list of {n} people.",
-    pegarAyuda: "Copy the list in WhatsApp or your spreadsheet and tap “Paste list”.",
+    pegarAyuda: "Paste names from WhatsApp or a spreadsheet, or bring your Luma list.",
     // On its own, next to the box: capitalized. The bar's one (sigLista) sits mid-line.
     listaCuenta: "List of {n} people",
     listaCuentaUna: "List of 1 person",
@@ -3716,6 +3725,15 @@ export const T: Record<Lang, Dict> = {
     ctaGoogleCorto: "Sign in with Google",
     // >>> kit:i18n-en (scripts/nuevo-juego.mjs escribe entre estas marcas)
     // <<< kit:i18n-en
+    // Luma in plain sight and what comes after the result (November 2, 2026): the "?" that teaches how to get the CSV, and the "what's next" line.
+    lumaQ: "How to get your list from Luma",
+    lumaT: "Your Luma list, in three steps",
+    lumaP1: "In Luma, on your computer or in your phone's browser, open your event, go to “Manage” and then the “Guests” tab.",
+    lumaP2: "Tap “Download CSV”. If it asks, pick the full list. It's saved in Downloads.",
+    lumaP3: "Come back here, tap “From Luma” and pick that file. You choose who's in: those who came or the approved ones.",
+    lumaNota: "The file is read in your browser and isn't uploaded anywhere.",
+    againSigue: "For the room: “Show it big”. For whoever wasn't there: “Tell them on WhatsApp”.",
+    againSigueLuma: "For the room: “Show it big”. For your guests: copy the message, right below, and paste it in Luma.",
   },
 };
 

@@ -294,10 +294,22 @@
       <aside class="again-note pendiente" id="pendiente" role="status" style="display:none"></aside>
       <div class="row origenes" id="origenes" style="margin: 0 0 14px">
         <button class="chip live" type="button" id="btn-pegar" data-i="srcPaste">Pegar lista</button>
+        <!-- Luma a la vista, sin abrir nada, y su "?" que enseña a bajar el CSV (src/ui/luma-ayuda.ts). Es un origen más: no lleva el color de la casa. -->
+        <label class="chip live luma-chip" id="luma-chip"><span data-i="srcLuma">Desde Luma</span><input id="csv-luma" type="file" accept=".csv" class="sr-only" /></label>
+        <button class="chip live luma-q" type="button" id="luma-q" aria-expanded="false" aria-controls="luma-ayuda" aria-label="Cómo bajar tu lista de Luma" data-i-aria="lumaQ" data-i-title="lumaQ" title="Cómo bajar tu lista de Luma">?</button>
         <button class="mini" type="button" id="btn-recuperar" style="display:none" data-i="recuperarLista">Recuperar la lista anterior</button>
       </div>
+      <div class="luma-ayuda" id="luma-ayuda" hidden>
+        <p class="luma-t" data-i="lumaT">Tu lista de Luma, en tres pasos</p>
+        <ol>
+          <li data-i="lumaP1">En Luma, desde la compu o desde el navegador del celular, abrí tu evento, entrá a «Manage» y a la pestaña «Guests».</li>
+          <li data-i="lumaP2">Tocá «Download CSV». Si te pregunta, elegí la lista completa. Se guarda en Descargas.</li>
+          <li data-i="lumaP3">Volvé acá, tocá «Desde Luma» y elegí ese archivo. Marcás quiénes entran: los que vinieron o los aprobados.</li>
+        </ol>
+        <p class="note" data-i="lumaNota">El archivo se lee en tu navegador y no se sube a ningún lado.</p>
+      </div>
       <!-- Con la lista vacía, cómo se hace (participants.ts). -->
-      <p class="note pegar-ayuda" id="pegar-ayuda" data-i="pegarAyuda" style="display:none">Copiá la lista en WhatsApp o en tu hoja de cálculo y tocá «Pegar lista».</p>
+      <p class="note pegar-ayuda" id="pegar-ayuda" data-i="pegarAyuda" style="display:none">Pegá los nombres de WhatsApp o de una hoja de cálculo, o traé tu lista de Luma.</p>
       <div class="row csv-sum" id="csv-pick" style="display:none; margin: 0 0 12px">
         <span class="note" id="csv-note"></span>
         <button class="mini" type="button" id="csv-edit" data-i="impEdit">Editar selección</button>
@@ -316,7 +328,6 @@
         <summary data-i="masOpciones">Premio, cuántos ganan y subir CSV</summary>
         <div class="row mas-origenes">
           <label class="chip live"><span data-i="srcCsv">Subir CSV</span><input id="csv" type="file" accept=".csv,.txt" class="sr-only" /></label>
-          <label class="chip live" title="Exportá la lista de invitados de tu evento en Luma como CSV" data-i-title="srcLumaTip"><span data-i="srcLuma">Desde Luma</span><input id="csv-luma" type="file" accept=".csv" class="sr-only" /></label>
         </div>
       <div class="field">
         <label for="prize" id="prize-etiqueta" data-i="prizeLabel">¿Qué sorteás? (opcional)</label>
@@ -455,6 +466,8 @@
             <button class="ghost" id="btn-proof" data-i="shareProof">Compartir el resultado</button>
             <button class="ghost" id="btn-again-nueva" data-i="againNueva">Usar otra lista</button>
           </div>
+          <!-- Qué sigue para la sala y para quien organiza: una línea, sin botón (draw.ts, showAgain). -->
+          <p class="note again-sigue" id="again-sigue"></p>
         </section>
         <div class="demo-fin">
           <h3 data-i="demoFinT">Así de fácil. ¿Lo hacemos con tu lista?</h3>
