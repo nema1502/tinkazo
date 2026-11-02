@@ -269,16 +269,16 @@ export function parteDeVeto(vetos, cual, rotulo) {
   return v.ok ? verde(`${rotulo}: ok${cuando}${v.nota ? ` (${v.nota})` : ""}`) : rojo(`${rotulo}: no${cuando}${v.nota ? ` (${v.nota})` : ""}`);
 }
 
-/** El veto «volver»: el puntaje del psicólogo sobre 30, verde con 24 o más y sin patrón oscuro. */
+/** El veto «volver»: el puntaje de la rúbrica de ganas de volver sobre 30, verde con 24 o más y sin patrón oscuro. */
 export function parteDeVolver(vetos) {
   const v = vetos?.volver;
-  if (!v || !Number.isFinite(v.puntaje)) return gris("psicólogo: pendiente");
+  if (!v || !Number.isFinite(v.puntaje)) return gris("ganas de volver: pendiente");
   const de = Number.isFinite(v.de) ? v.de : 30;
   const cifra = `${v.puntaje} de ${de}`;
   const nota = v.nota ? ` (${v.nota})` : "";
-  if (v.patronOscuro) return rojo(`psicólogo: ${cifra}, con patrón oscuro${nota}`);
-  if (v.puntaje < 24) return rojo(`psicólogo: ${cifra}, hacen falta 24${nota}`);
-  return verde(`psicólogo: ${cifra}${v.fecha ? ` el ${v.fecha}` : ""}${nota}`);
+  if (v.patronOscuro) return rojo(`ganas de volver: ${cifra}, con patrón oscuro${nota}`);
+  if (v.puntaje < 24) return rojo(`ganas de volver: ${cifra}, hacen falta 24${nota}`);
+  return verde(`ganas de volver: ${cifra}${v.fecha ? ` el ${v.fecha}` : ""}${nota}`);
 }
 
 /** El estado de una fila a partir de sus partes. */

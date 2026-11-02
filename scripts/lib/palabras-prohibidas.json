@@ -2,7 +2,7 @@
   "version": 1,
   "nota": "Lo que Tinkazo no puede decir. Cada patron es una expresion regular (sin bordes: se agregan solos; palabra entera, sin distinguir mayusculas ni tildes). Una palabra de una lengua no cae en la otra, asi que es y en se aplican juntos. No estan a proposito: ficha (la tarjeta con el nombre en la carrera), premio, ruleta (juego del selector). Las excepciones llevan su motivo y su fecha; las marcadas pendiente aprueban pero se listan en el resumen hasta que alguien las arregle.",
   "apuesta": {
-    "motivo": "huele a apuesta o a casino (arriesga el Instaward y el SCF)",
+    "motivo": "huele a apuesta o a casino",
     "es": [
       "apuestas?",
       "apostar",
