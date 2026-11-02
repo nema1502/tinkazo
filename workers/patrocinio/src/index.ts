@@ -26,8 +26,8 @@ import { PorIp } from "./por-ip";
 import { RpcRed } from "./red";
 import { type Firmante, Portero, type Respuesta, firmanteDe } from "./servicio";
 
-/** La bitácora del portero: una línea de JSON por hecho clave. Los `error-…` salen como error. Nunca lleva IP, nombres ni llaves. */
-function bitacora(evento: string, datos: Record<string, string | number> = {}): void {
+/** El registro del portero: una línea de JSON por hecho clave. Los `error-…` salen como error. Nunca lleva IP, nombres ni llaves. */
+function registrar(evento: string, datos: Record<string, string | number> = {}): void {
   (evento.startsWith("error-") ? console.error : console.log)(JSON.stringify({ evento, ...datos }));
 }
 
@@ -64,7 +64,7 @@ export class Patrocinio extends DurableObject<EnvPortero> {
       }
     }
     const cfg = leerConfig(this.env);
-    this.portero = new Portero(cfg, this.cupos, new RpcRed(cfg.rpcUrls), this.firmante, this.env.CUENTA_PATROCINADORA || null, () => Date.now(), () => void this.programar(), bitacora);
+    this.portero = new Portero(cfg, this.cupos, new RpcRed(cfg.rpcUrls), this.firmante, this.env.CUENTA_PATROCINADORA || null, () => Date.now(), () => void this.programar(), registrar);
     const falta = this.portero.faltaDeConfig();
     if (falta.length) console.error(JSON.stringify({ evento: "error-config", falta }));
     // Un objeto que arranca con cosas en el aire (se reinició o se desplegó entre reservar y mandar) vuelve a armar su alarma.
@@ -213,7 +213,7 @@ export default {
         const r = await objeto.pagar(xdr);
         return json(r.cuerpo, r.estado, cabeceras);
       } catch (e) {
-        bitacora("error-interno", { donde: "fetch", error: String(e).slice(0, 120) });
+        registrar("error-interno", { donde: "fetch", error: String(e).slice(0, 120) });
         return json({ motivo: "interno" }, 500, cabeceras);
       }
     }
