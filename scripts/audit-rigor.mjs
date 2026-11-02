@@ -41,6 +41,7 @@ import { launch, sleep } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 import { juegosDe } from "./lib/juegos.mjs";
 import { comprobacionesDePantalla } from "./lib/pantalla-comprobaciones.mjs";
+import { OCULTA_S, cartelDesde, correrPestana, juzgarPestana } from "./lib/pestana.mjs";
 
 const args = process.argv.slice(2);
 const opt = (name, def) => {
@@ -61,6 +62,14 @@ const outDir = opt("--out", "docs/capturas/rigor");
 const conPantalla = !args.includes("--sin-pantalla");
 const pantallaRes = opt("--pantalla-res", "1280x720").split(",").map((r) => r.split("x").map(Number));
 const pantallaTemas = opt("--pantalla-temas", "").split(",").filter(Boolean);
+// El grupo de la pestaña escondida (docs/juegos.md, "La pestaña escondida"): con el reloj de verdad, esconde la pestaña
+// 10 s al 50 % del show y en el golpe. `--sin-pestana` lo saltea; `--solo-pestana` corre solo eso; `--pestana-ritmo normal`
+// lo corre con el ritmo normal en vez del rápido (que dura menos); `--pestana-capturas <carpeta>` guarda
+// las imágenes del momento de volver.
+const conPestana = !args.includes("--sin-pestana");
+const soloPestana = args.includes("--solo-pestana");
+const pestanaRitmo = opt("--pestana-ritmo", "rapido");
+const pestanaCapturas = opt("--pestana-capturas", "");
 
 /** Lo que el selector de duración promete, en segundos. Debe coincidir con `PACES`. */
 const PACES = { rapido: 20, normal: 38, epico: 45 };
@@ -668,6 +677,31 @@ ${juego} · pantalla`);
   }
 }
 
+/**
+ * El grupo de la pestaña escondida. Tres corridas por juego con el reloj de verdad (la escena fija, sin red): una de
+ * control, otra escondiendo la pestaña 10 s al 50 % del show, y otra escondiéndola justo antes del golpe. El juicio
+ * está en `scripts/lib/pestana.mjs`, con sus pruebas.
+ */
+async function pestana(browser, juego) {
+  grupo = `${juego} pestaña`;
+  console.log(`\n${juego} · pestaña escondida`);
+  const url = urlDe(juego, `&theme=dark&pace=${pestanaRitmo}`);
+  const carpeta = pestanaCapturas || null;
+  if (carpeta) await mkdir(carpeta, { recursive: true });
+  const control = await correrPestana(browser, url);
+  const cd = cartelDesde(control.cartel);
+  check("la escena de control cierra y llega al cartel", control.arranco && control.cerro && cd !== null, control.dur === null ? "no cerró" : `${control.dur.toFixed(1)} s, el cartel a los ${cd === null ? "?" : cd.toFixed(1)} s`);
+  if (!control.cerro || cd === null) return;
+  const momentos = [
+    ["al 50 %", control.dur * 0.5, "50"],
+    ["en el golpe", Math.max(1, cd - 1.5), "golpe"],
+  ];
+  for (const [etiqueta, cuando, clave] of momentos) {
+    const x = await correrPestana(browser, url, { escondeEn: cuando, capturas: carpeta, nombre: `${juego}-${clave}` });
+    for (const c of juzgarPestana({ control, prueba: x, excepciones: x.excepciones, etiqueta: `pestaña escondida ${OCULTA_S} s ${etiqueta}` })) check(c.name, c.ok, c.detail);
+  }
+}
+
 const informe = {};
 const browser = await launch({ port: Number(process.env.CDP_PORT || 9361), width: 1280, height: 720 });
 try {
@@ -693,6 +727,8 @@ try {
         `quieto ${rx.peorQuieto.toFixed(1)} s desde los ${rx.dondeQuieto.toFixed(1)} · hueco ${rx.hueco.toFixed(1)} s · ${fx.fps.toFixed(0)} cps`,
       );
     }
+  } else if (soloPestana) {
+    for (const j of juegos) await pestana(browser, j).catch((e) => check("la pestaña escondida corrió sin caerse", false, e.message));
   } else {
     for (const j of juegos) {
       informe[j] = await auditar(browser, j).catch((e) => {
@@ -700,6 +736,7 @@ try {
         return null;
       });
       if (conPantalla) await pantalla(browser, j);
+      if (conPestana) await pestana(browser, j).catch((e) => check("la pestaña escondida corrió sin caerse", false, e.message));
     }
   }
 } finally {

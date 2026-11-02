@@ -453,6 +453,31 @@ Y cuatro obligaciones:
 
 El silencio también es sonido. `audit-sound` marca los huecos de más de 4 s (la escena se siente muerta), pero **el cuarto de segundo sin nada que termina en el golpe es a propósito** y no cuenta como defecto: lo que se le pide (de 0,2 a 0,6 s) lo mide [el ritmo de los hechos](#el-ritmo-de-los-hechos).
 
+## La pestaña escondida
+
+El caso real de un meetup: quien organiza cambia a Zoom o a WhatsApp en el medio del show y vuelve. El navegador frena una pestaña que no se ve: no hay cuadros de animación y los temporizadores pasan a uno por segundo.
+
+**Cómo se porta el show.** Se frena y sigue. El bucle del estadio (`stage.ts`) acota el tiempo de cada cuadro a 0,05 s, así que la hora del juego no corre mientras la pestaña está escondida y, al volver, sigue desde el mismo punto. El golpe no puede caer escondido ni saltarse: el show dura lo de siempre más lo que estuvo escondida (medido, 10 s escondida suman 10,0 a 10,4 s), el cartel se ve entero y el ganador es el del plan. Lo único que corría con el reloj de la página era la música: su secuenciador (`tick` de `src/music.ts`) es un temporizador de 40 ms, y a un tic por segundo programaba de golpe todo lo atrasado, un racimo de unos setenta sonidos por segundo mientras estaba escondida y, según en qué punto del segundo se volviera, otro al volver. Desde el 2 de noviembre de 2026 salta en silencio los pasos que quedaron más de 40 ms en el pasado y retoma en el que corresponde a la hora.
+
+**La comprobación.** El grupo `pestaña` de `audit-rigor`, con el reloj de verdad y sin red (la escena fija). Por juego, tres corridas: una de control, otra que esconde la pestaña 10 s al 50 % del show y otra que la esconde justo antes del golpe. Esconder es abrir una segunda pestaña y pasarla al frente. Exige:
+
+| Comprobación | Qué se mide |
+|---|---|
+| Se esconde, se vuelve y el show cierra solo | `visibilitychange` a escondida y de vuelta, y el estadio se va |
+| El ganador en pantalla es el del plan | El cartel apareció y lo último que dijo el relator nombra al ganador de la escena |
+| Cero excepciones | Las de la página y las no atrapadas |
+| El cartel está a la vista y se queda su tiempo normal | Que no se apague antes de cerrar, y que lo que lo vio la sala (sin contar el rato escondida) sea al menos el 90 % de lo que dura sin esconder nada |
+| Sin ráfaga de sonidos atrasados | A lo sumo 3 sonidos que arranquen más de 250 ms en el pasado de la hora del audio, desde que se esconde hasta medio segundo después de volver. Se cuentan los atrasados y no todos: la música sola mete unos treinta y cinco osciladores por medio segundo. Con 250 ms no cuenta el tirón suelto del hilo (un paso, hasta 0,22 s), y sin el arreglo de la música el racimo sí: de 300 a 550 en 10 s, con atrasos de 0,3 a 1,1 s |
+
+```bash
+node scripts/audit-rigor.mjs <juego> --solo-pestana            # solo este grupo, con el ritmo rápido
+node scripts/audit-rigor.mjs <juego> --solo-pestana --pestana-ritmo normal
+node scripts/audit-rigor.mjs <juego> --pestana-capturas <carpeta>   # tres imágenes por escondida
+node scripts/audit-rigor.mjs todos --sin-pestana                # el resto, sin este grupo
+```
+
+Las pruebas de la lógica de juicio, sin red, están en `scripts/lib/pestana.test.mjs`. Lo que no cubre: el Chrome del auditor va silenciado, y un Chrome de verdad no frena los temporizadores de una pestaña que está sonando; Safari y Firefox sí los frenan. Para el efecto se mide el peor caso. Tampoco mira el celular con la pantalla apagada ni una escondida más larga que 10 s.
+
 ## El director de emoción
 
 Un juego que cuenta el resultado con parámetros se ve como una simulación. La carrera de llamas era eso: cada llama con una velocidad que subía y bajaba sola, todas con el mismo paso, y el ganador remontando siempre desde atrás al 80%. Nadie tropezaba, nadie se plantaba, no había duelos ni llegadas por una nariz, y a los dos sorteos la sala ya sabía mirar a la última.

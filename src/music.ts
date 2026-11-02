@@ -305,6 +305,9 @@ export function musicCue(heat: number): void {
 const beatLength = (s: Session): number =>
   s.style === "chovena" ? 60 / (CHO_BPM * s.tempo) : 60 / ((96 + 36 * s.level) * s.tempo);
 
+/** Cuánto antes de la hora del audio puede quedar un paso y sonar igual: más que eso es un atraso y se salta. */
+const ATRASO_MAXIMO = 0.04;
+
 function tick(): void {
   const s = cur;
   if (!s) return;
@@ -324,6 +327,14 @@ function tick(): void {
   if (s.hold) {
     s.next = Math.max(s.next, s.ctx.currentTime);
     return;
+  }
+
+  // Si el reloj de la página se frenó (la pestaña escondida: el navegador deja los temporizadores en uno por segundo),
+  // los pasos que quedaron atrás no se tocan de golpe al volver, todos encimados: se pasan en silencio, sin perder
+  // el compás, y la música retoma en el paso que corresponde a la hora.
+  while (s.next < s.ctx.currentTime - ATRASO_MAXIMO) {
+    s.next += beatLength(s) / 4;
+    s.step++;
   }
 
   while (s.next < s.ctx.currentTime + 0.22) {
@@ -657,7 +668,9 @@ function finale(s: Session, t: number): void {
   for (let i = 0; i < 20; i++) {
     const at = t + i * 0.07;
     const armar = (): void => {
-      if (cur === s) strum(s, at, AM, i % 2 === 0, 0.55 * (1 - i / 26));
+      // Con la pestaña escondida el navegador deja los temporizadores en uno por segundo y los rasgueos llegarían todos
+      // juntos y atrasados: el que ya pasó no suena.
+      if (cur === s && at > s.ctx.currentTime - ATRASO_MAXIMO) strum(s, at, AM, i % 2 === 0, 0.55 * (1 - i / 26));
     };
     const espera = (at - s.ctx.currentTime - 0.15) * 1000;
     if (espera <= 0) armar();
