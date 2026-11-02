@@ -219,12 +219,14 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
     const fs = estilo === "lider" ? px * 1.25 : px;
     e.texto.style.fontSize = fs;
     e.texto.style.fill = estilo === "lider" ? INK : CREAM;
-    // La ficha amarilla lleva tinta, con un borde de tinta fino: la letra queda firme y el auditor ve el contorno oscuro.
-    // En la carrera nueva el trazo de la ficha amarilla es fino: con un borde grueso de tinta sobre la tinta el nombre quedaba como una mancha.
-    e.texto.style.stroke = estilo === "lider" ? (d.nueva ? { color: INK, width: 2, join: "round" } : { color: INK, width: Math.max(3, fs / 9), join: "round" }) : contorno(fs);
+    // La ficha amarilla lleva letra de tinta sin borde oscuro, en las dos carreras: tinta sobre amarillo ya tiene contraste
+    // de sobra, y un borde de tinta sobre la tinta engorda las letras hasta que el nombre se vuelve una mancha que no se lee.
+    // El trazo amarillo, del color de la ficha, no se ve: deja la letra tal cual.
+    e.texto.style.stroke = estilo === "lider" ? { color: YELLOW, width: 1, join: "round" } : contorno(fs);
     e.texto.text = s;
     const w = e.texto.width + fs * 0.5;
-    const h = fs * 1.28;
+    // La ficha amarilla tiene más aire arriba y abajo: la letra queda rodeada de amarillo y no del borde de tinta.
+    const h = fs * (estilo === "lider" ? 1.6 : 1.28);
     e.w = w;
     e.h = h;
     e.texto.position.set(0, 0);
