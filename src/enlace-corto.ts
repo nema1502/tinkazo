@@ -1,4 +1,5 @@
 import { sha256 } from "@noble/hashes/sha2.js";
+import { huellaLogo, validarLogo, type Logo } from "./logo";
 
 /**
  * El enlace corto de un comprobante: `tinkazo.app/c/<id>#<clave>`.
@@ -19,6 +20,15 @@ import { sha256 } from "@noble/hashes/sha2.js";
  * del enlace largo, sin el dominio. Al abrirlo, `abrir` solo acepta una ruta de
  * `verificar.html` o de `evento.html` de este mismo sitio: un enlace corto no
  * puede llevar a otra página ni a otro dominio.
+ *
+ * Desde el 2 de noviembre de 2026 puede llevar también `"l":{"t":"image/webp","b":"…"}`,
+ * el logo de la comunidad de quien armó el enlace (`logo.ts`). Va solo en el
+ * corto: el enlace largo y el comprobante no cambian, y el logo no es parte de
+ * lo que se comprueba. `v` sigue en 1: `abrir` mira `v` y `u` e ignora el
+ * resto, así que los cortos de antes abren igual y un `l` roto se ignora: un
+ * logo malo nunca rompe la comprobación. Con logo la llave de lo recordado
+ * cambia (si no, cambiar de logo devolvería el corto viejo); sin logo es la
+ * misma de siempre, y los cortos ya recordados siguen sirviendo.
  *
  * Lo que se manda es `[1][IV de 12 bytes][cifrado]`: el 1 es la versión.
  *
@@ -64,7 +74,7 @@ export interface Opciones {
   fetch?: typeof fetch;
 }
 
-export type Abierto = { ruta: string; corto: Corto } | { error: "no-existe" | "red" | "roto" };
+export type Abierto = { ruta: string; corto: Corto; logo?: Logo } | { error: "no-existe" | "red" | "roto" };
 
 /* ------------------------------------------------------------------ formato */
 
@@ -150,6 +160,36 @@ const oyentes: Array<(ruta: string, c: Corto) => void> = [];
 /** La huella de la ruta: el enlace largo de un evento puede pesar cientos de KB y no se guarda dos veces. */
 const llave = (ruta: string): string => b64url(sha256(new TextEncoder().encode(ruta)));
 
+/** El logo que va con cada ruta al acortarla (`ponerLogoDeRuta`). Vive en esta página: no se guarda. */
+const logosDeRuta = new Map<string, Logo>();
+
+/**
+ * Con qué logo se acorta esta ruta. Quienes llaman a `acortar` (el resultado,
+ * compartir, el resultado en grande) no cambian: el logo se registra una vez al
+ * armar el comprobante. Sin logo (o con uno que no pasa `validarLogo`), la ruta
+ * se acorta como siempre.
+ */
+export function ponerLogoDeRuta(ruta: string | null, logo: Logo | null | undefined): void {
+  if (!ruta) return;
+  const ok = logo ? validarLogo(logo) : null;
+  if (ok) logosDeRuta.set(ruta, ok.logo);
+  else logosDeRuta.delete(ruta);
+}
+
+/** El logo registrado para una ruta o para un enlace largo, si hay. */
+export function logoDeRuta(rutaOEnlace: string): Logo | null {
+  return logosDeRuta.get(rutaOEnlace) ?? logosDeRuta.get(rutaDe(rutaOEnlace) ?? "") ?? null;
+}
+
+/**
+ * La clave de lo que se recuerda: la ruta sola si no hay logo (igual que antes
+ * de existir el logo), y la ruta más la huella del logo si lo hay.
+ */
+const clave = (ruta: string): string => {
+  const l = logosDeRuta.get(ruta);
+  return l ? `${ruta}\u0000logo:${huellaLogo(l)}` : ruta;
+};
+
 const ES_CORTO = /\/c\/([0-9A-Za-z]{8})#[A-Za-z0-9_-]{22}$/;
 
 function valido(g: unknown): g is Guardado {
@@ -179,24 +219,24 @@ function escribirGuardados(g: Record<string, Guardado>): void {
 }
 
 function deRuta(ruta: string): Corto | null {
-  const m = memoria.get(ruta);
+  const m = memoria.get(clave(ruta));
   if (m) return m;
-  const g = leerGuardados()[llave(ruta)];
+  const g = leerGuardados()[llave(clave(ruta))];
   if (!valido(g)) return null;
   const c: Corto = { corto: g.c, id: g.i, borrar: g.b };
-  memoria.set(ruta, c);
+  memoria.set(clave(ruta), c);
   return c;
 }
 
-function recordar(ruta: string, c: Corto): void {
+function recordar(ruta: string, c: Corto, claveDeRuta = clave(ruta)): void {
   const g = leerGuardados();
-  const k = llave(ruta);
+  const k = llave(claveDeRuta);
   const antes = g[k];
   // Abrir el propio enlace no le saca el permiso de borrarlo.
   const borrar = c.borrar || (valido(antes) && antes.i === c.id ? antes.b : "");
   const final: Corto = { ...c, borrar };
-  memoria.set(ruta, final);
-  g[k] = { c: final.corto, i: final.id, b: final.borrar, t: Date.now() };
+  memoria.set(claveDeRuta, final);
+  g[k] ={ c: final.corto, i: final.id, b: final.borrar, t: Date.now() };
   escribirGuardados(g);
   for (const fn of oyentes) {
     try {
@@ -208,9 +248,9 @@ function recordar(ruta: string, c: Corto): void {
 }
 
 function olvidar(ruta: string): void {
-  memoria.delete(ruta);
+  memoria.delete(clave(ruta));
   const g = leerGuardados();
-  delete g[llave(ruta)];
+  delete g[llave(clave(ruta))];
   escribirGuardados(g);
 }
 
@@ -245,12 +285,13 @@ export function acortar(enlaceLargo: string, op: Opciones = {}): Promise<Corto |
     /* sin huella, se arma de nuevo */
   }
   if (ya) return Promise.resolve(ya);
-  const pendiente = enCurso.get(ruta);
+  const k = clave(ruta);
+  const pendiente = enCurso.get(k);
   if (pendiente) return pendiente;
   const p = crear(ruta, op)
     .catch(() => null)
-    .finally(() => enCurso.delete(ruta));
-  enCurso.set(ruta, p);
+    .finally(() => enCurso.delete(k));
+  enCurso.set(k, p);
   return p;
 }
 
@@ -288,8 +329,13 @@ export async function enlaceParaElQr(
 async function crear(ruta: string, op: Opciones): Promise<Corto | null> {
   const f = op.fetch ?? fetch;
   const origen = op.origen ?? location.origin;
-  const clave = crypto.getRandomValues(new Uint8Array(16));
-  const cuerpo = await cifrar(JSON.stringify({ v: VERSION, u: ruta }), clave);
+  const secreto = crypto.getRandomValues(new Uint8Array(16));
+  // La clave se fija ahora: si mientras se espera al servicio cambia el logo de la ruta, este corto se recuerda con lo que se mandó.
+  const claveAlEmpezar = clave(ruta);
+  const logo = logosDeRuta.get(ruta);
+  let cuerpo = await cifrar(JSON.stringify(logo ? { v: VERSION, u: ruta, l: logo } : { v: VERSION, u: ruta }), secreto);
+  // Con logo no entra: se reintenta sin él. El logo nunca frena compartir.
+  if (logo && cuerpo.length > MAX_BYTES) cuerpo = await cifrar(JSON.stringify({ v: VERSION, u: ruta }), secreto);
   if (cuerpo.length > MAX_BYTES) return null;
   // Sin Content-Type: así el pedido es "simple" y no hace falta la consulta previa de CORS.
   const j = await conEspera(op.espera ?? ESPERA_CREAR_MS, async (signal) => {
@@ -297,8 +343,8 @@ async function crear(ruta: string, op: Opciones): Promise<Corto | null> {
     return r.status === 201 ? ((await r.json()) as { id?: unknown; borrar?: unknown }) : null;
   });
   if (!j || typeof j.id !== "string" || !ES_ID.test(j.id) || typeof j.borrar !== "string" || !j.borrar) return null;
-  const c: Corto = { corto: `${origen}/c/${j.id}#${b64url(clave)}`, id: j.id, borrar: j.borrar };
-  recordar(ruta, c);
+  const c: Corto = { corto: `${origen}/c/${j.id}#${b64url(secreto)}`, id: j.id, borrar: j.borrar };
+  recordar(ruta, c, claveAlEmpezar);
   return c;
 }
 
@@ -307,8 +353,8 @@ async function crear(ruta: string, op: Opciones): Promise<Corto | null> {
  * fragmento y devuelve la ruta a la que lleva, solo si es un comprobante o un
  * evento de este sitio. Nunca tira: dice qué pasó.
  */
-export async function abrir(id: string, clave: string, op: Opciones = {}): Promise<Abierto> {
-  if (!ES_ID.test(id) || !ES_CLAVE.test(clave)) return { error: "roto" };
+export async function abrir(id: string, secreto: string, op: Opciones = {}): Promise<Abierto> {
+  if (!ES_ID.test(id) || !ES_CLAVE.test(secreto)) return { error: "roto" };
   const f = op.fetch ?? fetch;
   let bytes: Uint8Array<ArrayBuffer> | null;
   try {
@@ -323,15 +369,19 @@ export async function abrir(id: string, clave: string, op: Opciones = {}): Promi
   }
   if (!bytes) return { error: "no-existe" };
   try {
-    const j = JSON.parse(await descifrar(bytes, deB64url(clave))) as { v?: unknown; u?: unknown };
+    const j = JSON.parse(await descifrar(bytes, deB64url(secreto))) as { v?: unknown; u?: unknown; l?: unknown };
     if (j.v !== VERSION || !esRuta(j.u)) return { error: "roto" };
-    const corto: Corto = { corto: `${op.origen ?? location.origin}/c/${id}#${clave}`, id, borrar: "" };
+    // El logo, si viene bien: un `l` roto se ignora y el comprobante abre igual.
+    const logo = j.l === undefined ? null : (validarLogo(j.l)?.logo ?? null);
+    const corto: Corto = { corto: `${op.origen ?? location.origin}/c/${id}#${secreto}`, id, borrar: "" };
     try {
+      // Con el logo registrado, el corto queda recordado con su llave: compartir desde la página de comprobar da este mismo.
+      ponerLogoDeRuta(j.u, logo);
       recordar(j.u, corto);
     } catch {
       /* recordar es para volver a compartirlo; abrirlo no depende de eso */
     }
-    return { ruta: j.u, corto };
+    return { ruta: j.u, corto, ...(logo ? { logo } : {}) };
   } catch {
     return { error: "roto" };
   }
@@ -386,7 +436,7 @@ export async function borrarTodos(op: Opciones = {}): Promise<{ borrados: number
     if (!valido(x) || !x.b) continue;
     if (await borrarId(x.i, x.b, op)) {
       idos.push(k);
-      for (const [ruta, c] of memoria) if (c.id === x.i) memoria.delete(ruta);
+      for (const [k2, c] of memoria) if (c.id === x.i) memoria.delete(k2);
     } else fallaron++;
   }
   // Se vuelve a leer: mientras se borraba pudo nacer otro corto, que se queda.
@@ -400,4 +450,38 @@ export async function borrarTodos(op: Opciones = {}): Promise<{ borrados: number
 export function olvidarMemoria(): void {
   memoria.clear();
   enCurso.clear();
+  logosDeRuta.clear();
+}
+
+/* ------------------------------------------------- de c.html a verificar.html */
+
+const ENTRANTE = "tinkazo.logo-entrante";
+
+/**
+ * `c.ts` hace `location.replace` a la página del comprobante y el logo se
+ * perdería: antes de irse lo deja en `sessionStorage`, junto con la ruta a la
+ * que va. La página lo usa solo si esa ruta es la suya (`pathname + hash`): así
+ * un enlace largo abierto en la misma pestaña no hereda un logo ajeno. Sin
+ * `sessionStorage`, abre sin logo.
+ */
+export function dejarLogoEntrante(ruta: string, logo: Logo | undefined): void {
+  try {
+    if (logo) sessionStorage.setItem(ENTRANTE, JSON.stringify({ r: ruta, l: logo }));
+    else sessionStorage.removeItem(ENTRANTE);
+  } catch {
+    /* sin almacenamiento, se abre sin logo */
+  }
+}
+
+/** El logo que dejó `c.ts` para esta ruta, si es para esta y pasa `validarLogo`. */
+export function tomarLogoEntrante(ruta: string): Logo | null {
+  try {
+    const raw = sessionStorage.getItem(ENTRANTE);
+    if (!raw) return null;
+    const j = JSON.parse(raw) as { r?: unknown; l?: unknown };
+    if (j.r !== ruta) return null;
+    return validarLogo(j.l)?.logo ?? null;
+  } catch {
+    return null;
+  }
 }

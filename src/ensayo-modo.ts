@@ -58,7 +58,7 @@ export function marcarEnsayo(si: boolean): void {
 }
 
 /** La demo: `?demo=` en la dirección. Se mira en cada llamada, sin `state.ts`, que lee la dirección al cargarse. */
-function conDemo(): boolean {
+export function conDemo(): boolean {
   try {
     return typeof location !== "undefined" && new URLSearchParams(location.search).has("demo");
   } catch {

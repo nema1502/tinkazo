@@ -341,6 +341,20 @@
         <button class="ghost" id="btn-sample" data-i="sample">Cargar ejemplo</button>
       </div>
       </details>
+      <!-- El logo de la comunidad (src/ui/logo-ui.ts): dos toques, sin confirmar. No es parte del sorteo. Se esconde con la lista cerrada. -->
+      <div class="logo-fila" id="logo-fila">
+        <label class="chip live" id="logo-poner" for="logo-input"><span data-i="logoPoner">Poner logo</span><input id="logo-input" type="file" accept="image/png,image/jpeg,image/webp" class="sr-only" /></label>
+        <div class="logo-vista" id="logo-vista" hidden>
+          <div class="logo-muestras" id="logo-muestras"></div>
+          <p class="note" data-i="logoVista">Va a salir en el sorteo, en la foto y en el enlace para comprobar. Queda en este navegador: en otro equipo, volvé a subirlo. Usá solo el logo de tu comunidad u organización; el de un sponsor no va en el sorteo.</p>
+          <div class="row logo-acciones">
+            <button class="mini" type="button" id="logo-cambiar" data-i="logoCambiar">Cambiar</button>
+            <button class="mini" type="button" id="logo-quitar" data-i="logoQuitar">Quitar</button>
+            <button class="mini" type="button" id="logo-fondo" data-i="logoFondo" hidden>Cambiar el fondo</button>
+          </div>
+        </div>
+        <p class="note logo-error" id="logo-error" role="alert" hidden></p>
+      </div>
       <div class="row">
         <button class="primary" id="btn-freeze" data-i="freeze" aria-describedby="sellar-sin-cuenta sellar-resumen">Sellar la lista</button>
         <button class="ghost" id="btn-sala" data-i="salaBtn">Mostrar la lista a la sala</button>
@@ -453,6 +467,8 @@
       </div>
       <div class="winner-box" id="winner-box">
         <p class="kicker" data-i="winnerLabel">Lo que salió</p>
+        <!-- El logo de la comunidad, a la derecha del renglón (src/ui/logo-sorteo.ts). Vacío sin logo. -->
+        <span class="winner-logo" id="winner-logo"></span>
         <div id="winner-cards" role="status" aria-live="polite"></div>
         <!-- Se siguió sin sello porque la red no dejaba sellar: este sorteo no se puede comprobar. Lo muestra draw.ts. -->
         <p class="note sin-sello" id="sin-sello-nota" data-i="redSinSelloEtiqueta" style="display:none">Sin sello: no se puede comprobar.</p>

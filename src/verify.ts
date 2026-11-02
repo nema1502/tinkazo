@@ -21,6 +21,8 @@ import { buscar, vecesExacto } from "./buscar";
 import { fechaLarga } from "./ui/agrupar";
 // Estático, no con import(): así las claves de compartir entran en los textos de esta página.
 import { abrirSorteo } from "./ui/compartir";
+import { tomarLogoEntrante } from "./enlace-corto";
+import { pintarFranja } from "./ui/logo-franja";
 import { contarApertura, contarVeredicto, quitarMarca, refDe, viaDe } from "./contar";
 import { type PropsDe, type Ref, contratoOficial } from "../workers/enlaces/src/conteo";
 
@@ -114,6 +116,9 @@ function repintarDetalles(): void {
  * fuera la lista original. Eso es `partial`, y es justo lo que compra anclar.
  */
 function verdict(state: "ok" | "partial" | "bad" | "working", titleKey: string, detail: string): void {
+  // El logo de quien armó el enlace corto, debajo del veredicto y solo en verde o amarillo: nunca decide nada.
+  estadoDelVeredicto = state;
+  pintarFranja(logoDelEnlace, state);
   const box = $("verdict");
   box.className = `verdict ${state}`;
   $("verdict-kicker").textContent = t(
@@ -155,6 +160,13 @@ const DEPENDENCIAS = {
 
 /** El enlace tal como se verificó: compartir manda este, aunque después cambie el fragmento. */
 let enlaceVerificado = "";
+/**
+ * El logo que trajo el enlace corto (`c.ts` lo dejó para esta ruta), si trajo
+ * uno. Un enlace largo, o uno corto sin logo, abre sin él, con el mismo veredicto.
+ */
+const logoDelEnlace = tomarLogoEntrante(location.pathname + location.hash);
+/** El último estado del veredicto: compartir lleva el logo solo en verde o amarillo, como la franja. */
+let estadoDelVeredicto: "ok" | "partial" | "bad" | "working" = "working";
 /** Lo que se está mostrando, para volver a contarlo en otro idioma o cuando llegan los otros sellos. */
 let actual: { proof: Proof; r: Revision } | null = null;
 
@@ -714,6 +726,8 @@ function renderResult(
       ...(extra.numero && extra.red ? { ref: refDe(proof) } : {}),
       // Compartirlo otra vez no lo vuelve verificable: el mensaje y la foto dicen que se hizo sin sello.
       ...(esSinSello(proof) ? { sinSello: true } : {}),
+      // El logo del enlace, para la foto y el mismo corto (src/logo.ts).
+      ...(logoDelEnlace && (estadoDelVeredicto === "ok" || estadoDelVeredicto === "partial") ? { logo: logoDelEnlace } : {}),
     });
   // El contrato, solo si es uno de Tinkazo: el enlace a uno ajeno sería darle crédito.
   if (r.ancla.tipo === "oficial") {

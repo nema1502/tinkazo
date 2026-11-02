@@ -5,6 +5,7 @@ import { app, avatar } from "../state";
 import { acortar, enlaceParaElQr } from "../enlace-corto";
 import { pintarQrDelComprobante } from "./qr";
 import { claveDelSello, sinSelloAhora } from "./sin-sello-textos";
+import { piezaParaLaSala } from "./logo-sorteo";
 
 /**
  * Lo que el QR espera al enlace corto antes de salir con el largo. Si el corto
@@ -85,6 +86,10 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   document.body.appendChild(back);
 
   const ajustar = (): void => encajar(back, n);
+  // El logo de la comunidad, en la barra de arriba después de la calcomanía. Va por DOM y no por `innerHTML`; al abrirse vuelve a medir.
+  // No va en `.pantalla-ganadores`: ahí solo están los nombres.
+  const logo = piezaParaLaSala(() => requestAnimationFrame(ajustar));
+  if (logo) back.querySelector(".sala-top .sticker")?.after(logo);
   ajustar();
   // Al pasar a pantalla completa cambia el tamaño: se vuelve a medir.
   addEventListener("resize", ajustar);

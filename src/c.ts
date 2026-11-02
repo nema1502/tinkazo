@@ -1,7 +1,7 @@
 import "./pagina";
 import { $ } from "./dom";
 import { onLangChange, texto as t } from "./idioma";
-import { abrir, type Abierto } from "./enlace-corto";
+import { abrir, dejarLogoEntrante, type Abierto } from "./enlace-corto";
 
 /**
  * La página de un enlace corto: `tinkazo.app/c/<id>#<clave>`. En Vercel la sirve
@@ -65,6 +65,8 @@ async function intentar(): Promise<void> {
   if ("ruta" in r) {
     // La ruta ya viene revisada: verificar.html o evento.html de este sitio, con su fragmento.
     const corte = r.ruta.indexOf("#");
+    // El logo del enlace (si trae uno) viaja a la otra página, atado a la ruta a la que va.
+    dejarLogoEntrante(r.ruta, r.logo);
     location.replace(`${r.ruta.slice(0, corte)}${preferencias()}${r.ruta.slice(corte)}`);
     return;
   }

@@ -38,6 +38,13 @@ export interface Frozen {
    * esté, el resultado, lo compartido y Mis sorteos lo dicen.
    */
   sinSello?: boolean;
+  /**
+   * La huella del logo de la comunidad de este sorteo (`logo.ts`), leída al
+   * sellar: así volver a compartir un sorteo de septiembre no le pone el logo de
+   * octubre. No es parte del sorteo: no entra en el sello, en la huella de la
+   * lista ni en el comprobante. Si este navegador no tiene ese logo, no hay logo.
+   */
+  logo?: string;
 }
 
 export interface Drawn {

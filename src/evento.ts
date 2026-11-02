@@ -15,6 +15,8 @@ import type { ChainRaffle } from "./stellar/seals";
 import { codigoDelSello, detalleDelHistorial, detalleTecnico, porQueSinHistorial } from "./verificacion-textos";
 import { fechaLarga } from "./ui/agrupar";
 import { contarAperturaDeEvento, quitarMarca, refDe, viaDe } from "./contar";
+import { tomarLogoEntrante } from "./enlace-corto";
+import { pintarFranja } from "./ui/logo-franja";
 
 /**
  * La página de un evento: varios sorteos del mismo día, en un solo enlace.
@@ -319,8 +321,15 @@ function tarjeta(s: SorteoDelEvento, i: number): string {
   );
 }
 
+/**
+ * El logo que trajo el enlace corto del evento, si trajo uno (`c.ts` lo dejó para esta ruta). Sale debajo
+ * del veredicto, solo en verde o amarillo, y nunca decide nada (src/ui/logo-franja.ts).
+ */
+const logoDelEnlace = tomarLogoEntrante(location.pathname + location.hash);
+
 /** El veredicto de arriba: el color, el rótulo chico, el titular y lo que sigue. */
 function veredicto(estado: "ok" | "partial" | "bad" | "working", kicker: string, titulo: string, detalle: string, aviso = ""): void {
+  pintarFranja(logoDelEnlace, estado);
   $("ev-veredicto").className = `verdict ${estado}`;
   $("ev-kicker").textContent = t(kicker);
   $("ev-veredicto-t").textContent = t(titulo);

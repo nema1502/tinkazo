@@ -89,6 +89,23 @@ Sin cuenta, el botón de sellar y la barra de "lo que sigue" dicen "Entrar para 
 
 Lo miden `scripts/audit-ui.mjs` (texto cortado, blancos de toque y scroll horizontal en la cabecera; los tres estados del chip en las cuatro pantallas y los dos temas, también en `juegos.html` con y sin sesión guardada y en inglés; y que la cuenta de prueba se anuncie al entrar) y `scripts/audit-flujo.mjs` (en cada paso, la cuenta de prueba está en la cabecera, y con la cabecera fija a la vista arriba a la derecha; con `--solo-anchos`, de 320 a 414 px). El código está en `src/ui/menu.ts` (la lista de "Más"), `src/ui/cuenta-chip.ts` (el chip) y en `index.html` y las demás páginas (el bloque `nav.topnav`).
 
+## El logo de la comunidad (2 de noviembre de 2026)
+
+Quien organiza toca **Poner logo**, arriba de «Sellar la lista», y elige la imagen: dos toques, sin «Confirmar». Se ve al instante sobre un fondo claro y otro oscuro, con «Hecho con Tinkazo», y se puede **Cambiar**, **Quitar** o **Cambiar el fondo** (si la placa que eligió sola no le gusta). El navegador la redibuja sobre una placa (blanca, o `#171126` si el logo es casi todo claro), sin SVG ni metadatos, de 256 px de ancho y entre 128 y 256 de alto, en WebP de hasta 48 KB, y la guarda en ese navegador: en otro equipo hay que volver a subirla, y la vista previa lo dice. Para un evento, subirla antes en la laptop que proyecta y no usar una ventana de incógnito.
+
+Es gratis para todos y siempre lleva «Hecho con Tinkazo» al lado. Solo va el logo de quien organiza, nunca el de un sponsor. No es parte del sorteo: no cambia lo que se sella, el comprobante ni quién gana, y la demo (`?demo=`) nunca lleva logo, así que los auditores miran lo mismo de siempre (`?logo=prueba` pone uno de prueba, solo para auditores y capturas).
+
+| Pantalla | Dónde |
+| --- | --- |
+| Estadio | A la derecha de la llama, en la banda que el juego ya reserva (`top()`). Hasta 520 px de ancho, la placa junto a la llama y «Hecho con Tinkazo» en un renglón debajo; en el ensayo no va a esa medida, porque manda «ENSAYO, no se graba» |
+| Cartel del ganador | No va: es el momento de quien gana |
+| Resultado | En el renglón de «Lo que salió», a la derecha |
+| Resultado en grande | En la barra de arriba, después de la calcomanía |
+| Foto de 1080 × 1350 | Arriba a la derecha, con «Hecho con / Tinkazo» a su izquierda. Sin logo, la foto es la de siempre, píxel por píxel |
+| Comprobar y evento | Una franja debajo del veredicto, solo en verde o amarillo, con lo que hay que saber: lo agregó quien armó el enlace, Tinkazo no lo revisó y no es parte de lo que se comprueba |
+
+Fuera de esta versión: Mis sorteos mostrando el logo de cada fila (compartir desde ahí sí lo lleva), la espera en grande y la lista a la sala. Un perfil de comunidad atado a la cuenta, que es lo único que cierra la suplantación (`docs/amenazas.md`), queda para más adelante, si lo piden varias comunidades.
+
 ## La espera en grande
 
 Entre sellar y poder sortear pasan unos segundos (45 con cuenta): la lista ya está cerrada y el número que la va a decidir todavía no existe. La espera en grande pone esos segundos en escena para la sala: la cuenta gigante, el premio y los nombres de todos pasando. Vive en `src/ui/espera.ts`.

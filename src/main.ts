@@ -26,6 +26,9 @@ import { rotateWords } from "./ui/rotar";
 import { iniciarFeedback, origenDelResultado } from "./feedback";
 import { initMenuMas } from "./ui/menu";
 import { iniciarControlesDelEstadio } from "./ui/estadio-controles";
+import { logoParaSellar } from "./logo-guardado";
+import { iniciarLogo } from "./ui/logo-ui";
+import { iniciarLogoEnElEstadio } from "./ui/logo-sorteo";
 import { setVibracion, vibracionDisponible, vibracionOn, vibrar } from "./vibrar";
 
 /** La marca que deja "Entrar y sortear" al final de la demo, sin cuenta: la herramienta abre con la ventana de ingreso. */
@@ -181,6 +184,9 @@ if (vibracionDisponible()) {
 $("st-skip").addEventListener("click", skipGame);
 // Los botones del estadio se esconden solos: en el proyector no son parte del juego.
 iniciarControlesDelEstadio();
+// El logo de la comunidad: el botón arriba de sellar y la pieza del estadio (no es parte del sorteo).
+iniciarLogo();
+iniciarLogoEnElEstadio();
 bindParticipants();
 montarPremios();
 // La lista que se estaba armando en esta pestaña, si se recargó o se volvió de entrar con Google.
@@ -471,7 +477,9 @@ async function poseScene(): Promise<void> {
   // fija lo lee; un sorteo de verdad no pasa por acá (src/pose.ts). Se carga
   // aparte: quien entra a sortear no lo descarga.
   const W3 = (await import("./pose")).poseWinners(L, premios, params.get("ganador"));
-  app.frozen = { names: L, listHash: "32e2099c7a8dde7b6892523dc7d3e34ac06a972fd67f142186c58dced51a21ef", ts: 0, at: "-", prize: "", round: 32254977 };
+  // Con `?logo=prueba`, la escena fija lleva el logo de prueba: así se mide el estadio con logo.
+  const logoPose = logoParaSellar();
+  app.frozen = { names: L, listHash: "32e2099c7a8dde7b6892523dc7d3e34ac06a972fd67f142186c58dced51a21ef", ts: 0, at: "-", prize: "", round: 32254977, ...(logoPose ? { logo: logoPose } : {}) };
   app.drawn = { beacon: fakeBeacon, winners: W3 };
   // Para los auditores: la lista y los ganadores de esta escena, tal cual.
   (window as unknown as { __pose?: { names: string[]; winners: number[] } }).__pose = { names: L, winners: W3 };

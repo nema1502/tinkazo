@@ -1,0 +1,95 @@
+/*
+ * El logo de la comunidad (src/logo.ts, src/ui/logo-pieza.ts).
+ *
+ * Es la misma pieza en todas partes: una placa con el logo y su borde, y al lado
+ * "Hecho con Tinkazo". El logo ya viene aplanado sobre su placa (clara u oscura,
+ * se decide al subirlo), así que nada acá mide contraste: sirve en los dos temas
+ * y sobre cualquier escena de un juego. Va en un archivo aparte, después de
+ * styles.css, para no pisarse con lo que se toca ahí.
+ */
+
+.logo-pieza { --logo-alto: 44px; display: inline-flex; align-items: center; gap: 8px; vertical-align: middle; max-width: 100%; }
+.logo-placa {
+  display: inline-flex; flex: none; line-height: 0; background: #fff;
+  border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+}
+/* Con `.logo-pieza` delante: el estadio le da a todo `canvas` (`.stadium canvas`) posición absoluta y pantalla entera. */
+.logo-pieza .logo-placa canvas { position: static; inset: auto; display: block; height: var(--logo-alto); width: auto; max-width: calc(var(--logo-alto) * 2); }
+.logo-hecho { font-size: 14px; font-weight: 800; line-height: 1.15; color: var(--ink); overflow-wrap: anywhere; }
+
+/* ---------- La vista previa, arriba de "Sellar la lista" ---------- */
+.logo-fila { margin: 12px 0 4px; }
+.logo-fila [hidden] { display: none !important; }
+.logo-muestras { display: flex; flex-wrap: wrap; gap: 10px; }
+.logo-muestra { flex: 1 1 150px; max-width: 320px; padding: 8px 10px; border: 2px solid var(--ink); }
+.logo-muestra.claro { background: #f6efe2; color: #191919; }
+.logo-muestra.oscuro { background: #171126; color: #f6efe2; }
+.logo-muestra .logo-pieza { --logo-alto: 40px; }
+.logo-muestra .logo-hecho { color: inherit; font-size: 13px; }
+.logo-vista > .note { margin: 10px 0 0; }
+.logo-acciones { margin-top: 10px; gap: 8px; }
+.logo-error { margin-top: 8px; }
+/* Con la lista cerrada, el logo ya quedó sellado con el sorteo: el cambio es para el próximo. */
+.lista-cerrada .logo-fila { display: none; }
+
+/* ---------- El estadio: a la derecha de la llama ---------- */
+.st-logo { display: inline-flex; margin-left: 10px; margin-right: auto; min-width: 0; }
+body[data-ensayo="1"] .st-logo { margin-right: 0; }
+.st-logo .logo-pieza { --logo-alto: 40px; background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); padding: 3px 10px 3px 3px; }
+.st-logo .logo-placa { border: 0; box-shadow: none; }
+.st-logo .logo-hecho { font-size: clamp(14px, 1.3vw, 20px); letter-spacing: 0.04em; }
+/* De 521 a 700 px: sigue en un solo renglón, con la placa de 28 px y los botones del estadio más compactos, para que todo quede en los 82 px que el juego reserva arriba. */
+@media (min-width: 521px) and (max-width: 700px) {
+  .st-logo .logo-pieza { --logo-alto: 28px; padding: 2px 8px 2px 2px; }
+  .st-logo .logo-hecho { font-size: 14px; letter-spacing: 0.02em; }
+  .st-top.con-logo .st-actions { gap: 8px; }
+  .st-top.con-logo .st-actions button { font-size: 16px; padding: 8px 12px; min-height: 44px; }
+}
+/* Hasta 520 px los botones (hasta 267 px de ancho) no dejan lugar en el primer renglón: la placa y "Hecho con Tinkazo" van juntas en un segundo
+   renglón, debajo de la llama y los botones. La placa baja a 28 px para que todo quede dentro de los 100 px que el juego reserva arriba. */
+@media (max-width: 520px) {
+  .st-top.con-logo { flex-wrap: wrap; row-gap: 6px; }
+  .st-logo { order: 3; flex: 0 0 100%; margin: 0; pointer-events: none; }
+  .st-logo .logo-pieza { --logo-alto: 28px; padding: 2px 8px 2px 2px; }
+  .st-logo .logo-hecho { font-size: 14px; letter-spacing: 0.02em; }
+}
+/* En el ensayo, hasta 700 px de ancho, no va: ahí manda "ENSAYO, no se graba". */
+@media (max-width: 700px) {
+  body[data-ensayo="1"] .st-logo { display: none; }
+}
+
+/* ---------- El resultado, en el renglón de "Lo que salió" ---------- */
+.winner-logo { position: absolute; top: 12px; right: 24px; display: block; }
+.winner-logo:empty { display: none; }
+.winner-box:has(.winner-logo .logo-pieza) > .kicker { min-height: 36px; }
+.logo-resultado { --logo-alto: 36px; }
+.logo-resultado .logo-hecho { font-size: 16px; }
+@media (max-width: 520px) {
+  /* El renglón de "Lo que salió" no da lugar a la placa y a "Hecho con Tinkazo" juntas: en un celular la pieza baja a su propio renglón. */
+  .winner-logo { position: static; margin: 6px 0 10px; }
+  .winner-box:has(.winner-logo .logo-pieza) > .kicker { min-height: 0; }
+}
+@media (max-width: 700px) {
+  .winner-logo { right: 14px; }
+  .logo-resultado .logo-hecho { font-size: 14px; }
+}
+/* Una pantalla baja trae el ganador pegado arriba y sin la etiqueta: el logo se queda para el resultado en grande. */
+@media (max-height: 520px) {
+  .winner-logo { display: none; }
+}
+
+/* ---------- El resultado en grande ---------- */
+.logo-sala { --logo-alto: 48px; }
+.logo-sala .logo-hecho { font-size: clamp(14px, 1.6vw, 24px); }
+@media (max-height: 420px) {
+  .logo-sala { --logo-alto: 32px; }
+}
+
+/* ---------- La página de comprobar y la del evento ---------- */
+.logo-franja {
+  margin: 16px 0 22px; padding: 12px 14px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
+.logo-franja .logo-pieza { --logo-alto: 48px; }
+.logo-franja .logo-hecho { font-size: 16px; }
+.logo-franja > .note { margin: 0; flex: 1 1 260px; }
+.logo-franja[hidden] { display: none; }

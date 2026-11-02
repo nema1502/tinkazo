@@ -21,6 +21,7 @@ import { JUEGOS } from "../games/pixi/kit/catalogo";
 import { actualizarPaso, barraActiva, verError } from "./siguiente";
 import { ponerPremio, recordarPremio } from "./premios";
 import { ENSAYO_ESPERA_S, enEnsayo, sinGrabar } from "../ensayo-modo";
+import { logoParaSellar } from "../logo-guardado";
 import { contar, errorContable } from "../contar";
 import { type OpcionesDeSellado, chequearAntesDeSellar, hayAccionDeRed, limpiarRed, marcarSellado, mostrarCostoAlto, mostrarSinSaldo, verLaRedTrasFallar, verSinSello } from "./red";
 import { type Reintento, reintentarSello } from "./sin-sello";
@@ -639,6 +640,8 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
   // Y lo que cuenta un error del sorteo, si el wifi se cae antes de sortear.
   if (raffleId !== undefined) precargarParaElSorteo();
 
+  // El logo de la comunidad que había al sellar: solo su huella. No es parte del sorteo (logo.ts).
+  const logo = logoParaSellar();
   app.frozen = {
     names,
     listHash: hash,
@@ -649,6 +652,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
     ...(raffleId !== undefined ? { raffleId } : {}),
     ...(sealTx ? { sealTx } : {}),
     ...(sinSello ? { sinSello: true } : {}),
+    ...(logo ? { logo } : {}),
   };
   // Ya está sellada (o se sigue sin sello): el botón y la caja de la red dejan de ser de este paso.
   marcarSellado(false);
@@ -682,6 +686,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
         ...(sealTx ? { sealTx } : {}),
         // Sin sello: Mis sorteos lo dice, y no figura como comprobable.
         ...(sinSello ? { sinSello: true } : {}),
+        ...(logo ? { logo } : {}),
       });
       h.renderHistory(who);
     });
@@ -841,6 +846,8 @@ export function resumeFrozen(e: {
   sealTx?: string;
   /** Se había seguido sin sello (la red no dejó sellar): retomarlo no lo vuelve comprobable. */
   sinSello?: boolean;
+  /** El logo con el que se selló: la huella (`logo.ts`). */
+  logo?: string;
 }): void {
   if (bytesToHex(listHash(e.names)) !== e.listHash || app.drawn) return;
   const ta = $<HTMLTextAreaElement>("ta");
@@ -859,6 +866,7 @@ export function resumeFrozen(e: {
     ...(raffleId !== undefined ? { raffleId } : {}),
     ...(e.sealTx ? { sealTx: e.sealTx } : {}),
     ...(e.sinSello && raffleId === undefined ? { sinSello: true } : {}),
+    ...(e.logo ? { logo: e.logo } : {}),
   };
   history.replaceState(null, "", "#sortear");
   dispatchEvent(new HashChangeEvent("hashchange"));

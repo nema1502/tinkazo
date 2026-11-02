@@ -2,6 +2,7 @@ import { $, esc } from "../dom";
 import { getLang, t } from "../i18n";
 import type { SorteoDelEvento } from "../protocol/evento";
 import { network, txUrl } from "../stellar/config";
+import { logoComun, logoPorHuella } from "../logo-guardado";
 import { contratosOficiales } from "../stellar/oficiales";
 import type { ChainRaffle } from "../stellar/seals";
 import { agrupar, enOrdenDeSalida, fechaLarga, tieneComprobante } from "./agrupar";
@@ -93,6 +94,12 @@ export interface Entry {
    * (salvo que el sello haya entrado a tiempo, y entonces esto se apaga). Mis sorteos lo dice.
    */
   sinSello?: boolean;
+  /**
+   * La huella del logo con el que se selló, si había uno (`logo.ts`). Solo
+   * nombra al logo en este navegador: si no está en el mapa, no hay logo y
+   * nada da error. Los sorteos de antes no la traen.
+   */
+  logo?: string;
 }
 
 /**
@@ -339,6 +346,11 @@ const comoPrincipal = (clave: string): string =>
 /** El título de un evento sin nombre: "Sorteos del 20 de octubre de 2026". */
 const tituloDeGrupo = (g: Entry[]): string => t("histGrupoT").replace("{f}", fechaLarga(g[0]?.sealedAt ?? 0, getLang()));
 
+/** La huella del logo con el que se selló el sorteo de este comprobante, si este equipo lo anotó con logo. */
+function logoDeLaEntrada(enlace: string): string | undefined {
+  return readAll().find((e) => e.proof === enlace)?.logo;
+}
+
 /** El comprobante y los ganadores de cada sorteo de un grupo: lo que pide el enlace de evento. */
 async function sorteosDeEntradas(g: Entry[]): Promise<SorteoDelEvento[]> {
   const out: SorteoDelEvento[] = [];
@@ -438,7 +450,8 @@ function enlazarRearmado(): void {
     const comparte = el.closest<HTMLButtonElement>("[data-evento]");
     if (comparte) {
       const g = eventosPintados[Number(comparte.dataset.evento)];
-      if (g) void sorteosDeEntradas(g).then((sorteos) => compartirEvento(tituloDeGrupo(g), sorteos));
+      // El logo del grupo, si todos sus sorteos se sellaron con el mismo.
+      if (g) void sorteosDeEntradas(g).then((sorteos) => compartirEvento(tituloDeGrupo(g), sorteos, getLang(), logoComun(g.map((e) => e.logo))));
       return;
     }
     const nombra = el.closest<HTMLButtonElement>("[data-nombrar]");
@@ -450,7 +463,7 @@ function enlazarRearmado(): void {
     const compartir = el.closest<HTMLButtonElement>("[data-compartir]");
     if (compartir) {
       const fila = pintadas[Number(compartir.dataset.compartir)];
-      if (fila?.proof && fila.winners?.length) void compartirSorteo(fila.proof, fila.winners);
+      if (fila?.proof && fila.winners?.length) void compartirSorteo(fila.proof, fila.winners, getLang(), logoPorHuella(fila.logo));
       return;
     }
     const b = el.closest<HTMLElement>("[data-rearmar]");
@@ -770,7 +783,7 @@ function enlazarEventos(): void {
     const compartir = el.closest<HTMLButtonElement>("[data-evento-compartir]");
     if (compartir) {
       const ev = leerEventos(network.name).find((x) => x.id === compartir.dataset.eventoCompartir);
-      if (ev) void sorteosDelEvento(ev).then((sorteos) => compartirEvento(ev.nombre, sorteos));
+      if (ev) void sorteosDelEvento(ev).then((sorteos) => compartirEvento(ev.nombre, sorteos, getLang(), logoComun(ev.sorteos.map((s) => logoDeLaEntrada(s.enlace)))));
       return;
     }
     const borrar = el.closest<HTMLButtonElement>("[data-evento-borrar]");
@@ -793,7 +806,7 @@ function enlazarEventos(): void {
     const compartirEnlace = el.closest<HTMLButtonElement>("[data-compartir-enlace]");
     if (compartirEnlace) {
       const r = sorteoDeClave(compartirEnlace.dataset.compartirEnlace ?? "");
-      if (r) void compartirSorteo(r.s.enlace, r.s.ganadores);
+      if (r) void compartirSorteo(r.s.enlace, r.s.ganadores, getLang(), logoPorHuella(logoDeLaEntrada(r.s.enlace)));
     }
   });
   // Al salir del campo con un nombre nuevo, se guarda sin repintar: lo escrito no se pierde aunque no se toque "Guardar".

@@ -20,7 +20,9 @@ import { listaVinoDeLuma, setList } from "./participants";
 import { CARD_SECONDS, type GameCard, showGameCard } from "./gamecard";
 import { actualizarPaso, verError } from "./siguiente";
 import { marcarSalio, olvidarSalieron, ponerPremio } from "./premios";
-import { acortar, alAcortar, cortoGuardado, rutaDe } from "../enlace-corto";
+import { acortar, alAcortar, cortoGuardado, ponerLogoDeRuta, rutaDe } from "../enlace-corto";
+import { logoPorHuella } from "../logo-guardado";
+import { pintarLogoEnElResultado, quitarLogoDelResultado } from "./logo-sorteo";
 import { startMusic, stopMusic } from "../music";
 import { seguirEnPantallaCompleta } from "../games/overlay";
 import { pedirPantallaCompleta, soltarPantallaCompleta } from "./pantalla-completa";
@@ -501,6 +503,8 @@ function renderLore(beacon: Beacon): void {
 
 export function reveal(names: string[], winners: number[], beacon: Beacon, listHash: string): void {
   $("winner-box").style.display = "block";
+  // El logo de la comunidad, en el renglón de "Lo que salió" (src/ui/logo-sorteo.ts). Sin logo, queda como siempre.
+  pintarLogoEnElResultado();
   // La demo llegó al ganador: es lo único que se cuenta de ella (src/contar.ts). El ensayo avisa con `tinkazo:ensayo-fin`.
   if (params.has("demo")) contarPractica("demo");
   // Con el movimiento reducido el juego se salteó: se avisa, para que no parezca roto.
@@ -749,6 +753,7 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   if (masResultado instanceof HTMLDetailsElement) masResultado.open = false;
   limpiarDetalle("draw-status");
   $("winner-cards").innerHTML = "";
+  quitarLogoDelResultado();
   $("sec-participants").scrollIntoView({ behavior: "smooth", block: "start" });
   // El foco va a la acción principal del paso que sigue, como en cada paso (docs/ux.md): con la lista lista
   // (sin los que ya ganaron, o con "No está"), sellar; con otra lista, cargarla. Hasta el 26 de octubre de 2026,
@@ -908,6 +913,8 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
     link = roundLink;
   }
   proofLink = link;
+  // El logo de la comunidad va solo en el enlace corto: se registra una vez, y quienes acortan no cambian.
+  ponerLogoDeRuta(rutaDe(link), logoPorHuella(f.logo));
   // El resultado dice si ese sorteo no se puede comprobar porque se siguió sin sello.
   const nota = document.getElementById("sin-sello-nota");
   if (nota) nota.style.display = sinSello ? "block" : "none";
@@ -931,6 +938,7 @@ async function buildProof(names: string[], winners: number[], roundLink: string)
         sealedAt: f2.ts,
         prize: f2.prize,
         winners: winners.map((i) => names[i] ?? ""),
+        ...(f2.logo ? { logo: f2.logo } : {}),
         proof: link,
         ...(f2.raffleId !== undefined ? { id: String(f2.raffleId) } : {}),
         // El número solo no dice de qué contrato es (cada uno arranca en 1).
@@ -998,6 +1006,8 @@ export function shareProof(): void {
     ...(f.raffleId !== undefined ? { numero: String(f.raffleId), red: network.name } : {}),
     ref: refDelSorteo(),
     ...(f.sinSello && f.raffleId === undefined ? { sinSello: true } : {}),
+    // El logo con el que se selló, no el de ahora (src/logo.ts).
+    ...(logoPorHuella(f.logo) ? { logo: logoPorHuella(f.logo) as NonNullable<ReturnType<typeof logoPorHuella>> } : {}),
   };
   void import("./compartir").then((m) => m.abrirSorteo(datos, getLang(), { corto: puedeAcortar() }));
 }
