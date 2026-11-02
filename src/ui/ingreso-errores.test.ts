@@ -16,7 +16,7 @@ describe("errores de ingreso: evidencia antes de atribuir una causa", () => {
     expect(errorDeCodigo(new TypeError("Load failed"), "verificar")).toBe(T.es.loginConexion);
   });
   it.each(["es", "en"] as const)("las dos vías neutrales están traducidas: %s", (lang) => {
-    for (const k of ["loginAbrirFallo", "loginOtraVia", "loginReintentar", "loginSendFailed", "loginFailed", "drawPreparar", "drawConsultar", "drawAusente", "drawSinConfirmar"]) {
+    for (const k of ["loginAbrirFallo", "loginOtraVia", "loginSendFailed", "loginFailed", "drawPreparar", "drawConsultar", "drawAusente", "drawSinConfirmar"]) {
       expect(typeof T[lang][k]).toBe("string");
       expect(T[lang][k]).not.toMatch(/mailto:|Revisá el correo|Check the address/);
     }

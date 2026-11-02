@@ -451,7 +451,7 @@ function render(): void {
   pintarCuenta();
   // Sin contrato en esta red, el anclaje no se ofrece y la cabecera calla.
   if (!anchoringAvailable || !session) return;
-  if (wrongNetwork) notice(t("wrongNetwork").replace("{red}", network.name), true);
+  if (wrongNetwork) notice(t("wrongNetwork").replace("{red}", network.name), true, undefined, false);
   void refreshFunds();
 }
 
@@ -1332,8 +1332,8 @@ async function walletErrorText(e: unknown): Promise<string> {
 }
 
 /**
- * El aviso de error persiste con una acción y un cierre explícito; con un
- * diálogo abierto usa la ubicación superior que ya define el estilo.
+ * El aviso de error persiste con una acción y un cierre explícito; con la
+ * ventana de ingreso abierta se dibuja dentro de su tarjeta, sin tapar la X.
  *
  * El de que algo salió bien ("Cuenta de prueba lista…") va dentro de la página,
  * arriba de la lista, donde estaba el botón para entrar, así que no tapa nada:
@@ -1343,33 +1343,34 @@ async function walletErrorText(e: unknown): Promise<string> {
  * o tecla, después de que el toque llegó a su botón (si la página se moviera
  * antes, el toque caería en otro lado), o a los diez segundos.
  */
-function notice(text: string, bad: boolean, reintentar?: () => void): void {
+function notice(text: string, bad: boolean, reintentar?: () => void, otraVia = true): void {
   document.querySelector(".wallet-notice")?.remove();
   const el = document.createElement("div");
   el.className = `wallet-notice${bad ? " bad" : " arriba"}`;
-  el.textContent = text;
   if (bad) {
     // Persiste hasta que la persona elija cómo seguir; no pierde su acción a los siete segundos.
     el.setAttribute("role", "alert");
-    const resolver = button(t(reintentar ? "loginRecargar" : "loginOtraVia"), "ghost", () => {
-      el.remove();
-      if (reintentar) reintentar();
-      else {
-        // Si ya hay selector, las otras vías están ahí: no se abre una segunda ventana.
-        const login = document.querySelector<HTMLElement>(".modal-card.login");
-        if (login) {
-          login.querySelector<HTMLButtonElement>(".login-links button:last-child")?.click();
-          const campo = login.querySelector<HTMLElement>("#login-mail");
-          (campo ?? login).focus();
-        } else void openPicker();
-      }
-    });
-    el.append(" ", resolver);
-    const cerrar = button(t("loginClose"), "ghost", () => el.remove());
-    el.append(" ", cerrar);
-    document.body.appendChild(el);
+    const login = document.querySelector<HTMLElement>(".modal-card.login");
+    const frase = document.createElement("p");
+    frase.textContent = text;
+    const acciones = document.createElement("div");
+    acciones.className = "wallet-notice-acciones";
+    if (reintentar) {
+      acciones.append(button(t("loginRecargar"), "ghost", () => { el.remove(); reintentar(); }));
+    } else if (otraVia && !login) {
+      // Con la ventana de ingreso abierta las otras formas ya están ahí, a la vista: el aviso solo se cierra.
+      acciones.append(button(t("loginOtraVia"), "ghost", () => { el.remove(); void openPicker(); }));
+    }
+    acciones.append(button(t("loginClose"), "ghost", () => el.remove()));
+    el.append(frase, acciones);
+    if (login) {
+      // Dentro de la tarjeta y no flotando: arriba tapaba la X para cerrarla, abajo el campo del correo.
+      el.classList.add("en-tarjeta");
+      login.insertBefore(el, login.querySelector(".login-body"));
+    } else document.body.appendChild(el);
     return;
   }
+  el.textContent = text;
   el.setAttribute("role", "status");
   const lista = document.querySelector<HTMLElement>("#sec-participants .body");
   const cabecera = document.querySelector("body > header");
