@@ -38,8 +38,10 @@ export const FRACCION_CARTEL = 0.9;
  * cartel, y cada cambio de visibilidad.
  */
 export const PRELUDIO_PESTANA = `(() => {
-  const ps = window.__ps = { sonidos: [], coment: [], cartel: [], vis: [], errores: [], t0: -1, t1: -1, cuadros: 0 };
+  const ps = window.__ps = { sonidos: [], coment: [], cartel: [], vis: [], errores: [], t0: -1, t1: -1, cuadros: 0, g: 0, gCierre: -1 };
   const ahora = () => performance.now();
+  // La hora de juego: la suma de los cuadros con cada paso acotado a 0,05 s, como hace el motor. Una pestaña escondida no suma.
+  let previo = 0;
   // Un sonido que arranca: «tarde» es cuánto antes de la hora del contexto de audio lo programaron.
   for (const C of [OscillatorNode, AudioBufferSourceNode]) {
     const o = C.prototype.start;
@@ -58,17 +60,20 @@ export const PRELUDIO_PESTANA = `(() => {
   const RAF = window.requestAnimationFrame.bind(window);
   const mirar = () => {
     ps.cuadros++;
+    const n = ahora();
+    if (previo) ps.g += Math.min(0.05, (n - previo) / 1000);
+    previo = n;
     const st = document.getElementById('stadium');
     const visible = !!st && st.style.display === 'block';
     if (visible && ps.t0 < 0) ps.t0 = ahora();
-    if (ps.t0 >= 0 && !visible && ps.t1 < 0) ps.t1 = ahora();
+    if (ps.t0 >= 0 && !visible && ps.t1 < 0) { ps.t1 = ahora(); ps.gCierre = ps.g; }
     if (visible) {
       const c = document.querySelector('.commentary');
       const txt = c ? c.textContent : '';
       if (txt !== ultima) { ultima = txt; ps.coment.push({ r: ahora(), txt }); }
       const cv = st.querySelector('#pixi-canvas') || st.querySelector('canvas');
       const hay = !!(cv && cv.dataset.cartel);
-      if (hay !== cartelAntes) { cartelAntes = hay; ps.cartel.push({ r: ahora(), on: hay }); }
+      if (hay !== cartelAntes) { cartelAntes = hay; ps.cartel.push({ r: ahora(), on: hay, g: ps.g }); }
     }
     RAF(mirar);
   };
@@ -88,7 +93,8 @@ export function normalizar(ps, { ganadorPlan = "", pose = null } = {}) {
     dur: ps.t1 >= 0 ? seg(ps.t1, t0) : null,
     cuadros: ps.cuadros,
     comentarios: ps.coment.map((c) => ({ t: seg(c.r, t0), txt: c.txt })),
-    cartel: ps.cartel.map((c) => ({ t: seg(c.r, t0), on: c.on })),
+    cartel: ps.cartel.map((c) => ({ t: seg(c.r, t0), on: c.on, ...(typeof c.g === "number" ? { g: c.g } : {}) })),
+    ...(typeof ps.gCierre === "number" && ps.gCierre >= 0 ? { gCierre: ps.gCierre } : {}),
     sonidos: ps.sonidos.map((s) => ({ t: seg(s.r, t0), tarde: s.tarde })),
     vis: ps.vis.map((v) => ({ t: seg(v.r, t0), v: v.v })),
     errores: [...ps.errores],
@@ -116,12 +122,15 @@ export function cartelSeApago(cartel) {
 }
 
 /**
- * Cuánto tiempo vio la sala el cartel: desde que apareció hasta que cerró el
- * estadio, sin contar los segundos en que la pestaña estaba escondida.
+ * Cuánto tiempo vio la sala el cartel, en tiempo de juego: los segundos del reloj del show (cuadros con el paso acotado a
+ * 0,05 s) entre que apareció y cerró el estadio. Una corrida lenta por carga no lo estira y los segundos con la pestaña
+ * escondida no cuentan porque no hay cuadros. Sin hora de juego anotada, cae al tiempo real sin los segundos escondidos.
  */
 export function cartelVisibleS(corrida, oculta = null) {
-  const d = cartelDesde(corrida.cartel);
-  if (d === null || corrida.dur === null) return null;
+  const on = corrida.cartel.find((x) => x.on);
+  if (!on || corrida.dur === null) return null;
+  if (typeof on.g === "number" && typeof corrida.gCierre === "number") return corrida.gCierre - on.g;
+  const d = on.t;
   let total = corrida.dur - d;
   if (oculta) {
     const solapa = Math.min(corrida.dur, oculta.hasta) - Math.max(d, oculta.desde);

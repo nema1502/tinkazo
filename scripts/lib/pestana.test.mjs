@@ -193,3 +193,23 @@ describe("normalizar", () => {
     expect(n.dur).toBeNull();
   });
 });
+
+describe("el cartel en tiempo de juego", () => {
+  it("usa el reloj del show: una corrida lenta en tiempo real con el mismo tiempo de juego no cambia nada", () => {
+    const rapida = { dur: 40, gCierre: 30, cartel: [{ t: 37.6, on: true, g: 27.6 }] };
+    const lenta = { dur: 40.7, gCierre: 30, cartel: [{ t: 37.6, on: true, g: 27.6 }] };
+    expect(cartelVisibleS(rapida)).toBeCloseTo(2.4);
+    expect(cartelVisibleS(lenta)).toBeCloseTo(2.4);
+  });
+  it("la escondida se compara con el control en la misma unidad y pasa aunque el control haya sido lento", () => {
+    const ctl = { ...control(), dur: 40.7, gCierre: 30, cartel: [{ t: 37.6, on: true, g: 27.6 }] };
+    const prueba = { ...escondida(), dur: 50, gCierre: 30, cartel: [{ t: 47.6, on: true, g: 27.6 }] };
+    const r = juzgarPestana({ control: ctl, prueba, excepciones: [], etiqueta: "x" });
+    expect(r.find((c) => c.name.includes("se queda su tiempo normal")).ok).toBe(true);
+  });
+  it("normalizar pasa la hora de juego", () => {
+    const n = normalizar({ t0: 1000, t1: 41000, cuadros: 1, g: 30, gCierre: 30, coment: [], sonidos: [], vis: [], errores: [], cartel: [{ r: 38600, on: true, g: 27.6 }] });
+    expect(n.gCierre).toBe(30);
+    expect(n.cartel[0].g).toBe(27.6);
+  });
+});
