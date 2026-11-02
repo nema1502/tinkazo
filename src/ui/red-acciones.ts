@@ -1,4 +1,4 @@
-import { type CasoRed, type Diagnostico, type Nivel, umbralesDe } from "../stellar/chequeo-red";
+import { type CasoRed, type DetalleDelPatrocinio, type Diagnostico, type Nivel, umbralesDe } from "../stellar/chequeo-red";
 import type { NetworkName } from "../stellar/config";
 
 /**
@@ -48,6 +48,8 @@ export interface Panel {
   cargaPrevia: boolean;
   /** Después de un corte, la app vuelve a probar sola cada 15 s (y vuelve a decirlo en la frase). */
   reintentaSola: boolean;
+  /** Con `sin-patrocinio` y el cupo agotado: cuándo vuelve, en ms (la frase lleva el día). */
+  liberaEn?: number;
 }
 
 /** La clave del diccionario del texto de cada acción. */
@@ -81,6 +83,7 @@ const FRASE_AMARILLA: Record<CasoRed, string> = {
   saturada: "redSaturada",
   "sin-saldo": "redSinSaldo",
   protocolo: "redProtocolo",
+  "sin-patrocinio": "errAnchor.porteroFondo",
 };
 
 const FRASE_ROJA: Record<CasoRed, string> = {
@@ -89,7 +92,20 @@ const FRASE_ROJA: Record<CasoRed, string> = {
   saturada: "redSaturada",
   "sin-saldo": "redSinSaldo",
   protocolo: "redProtocolo",
+  "sin-patrocinio": "errAnchor.porteroFondo",
 };
+
+/** La frase de lo que no cubre el portero, según por qué (las mismas claves que `errorKey` da a un no del portero). */
+export function fraseDelPatrocinio(p: DetalleDelPatrocinio | undefined, puedePagar: boolean): string {
+  switch (p?.motivo) {
+    case "cupo-cuenta":
+      return p.que === "sorteos" ? "errAnchor.porteroCupoSorteos" : "errAnchor.porteroCupoSellos";
+    case "ajena":
+      return puedePagar ? "errAnchor.porteroAjenaPropia" : "errAnchor.porteroAjena";
+    default:
+      return "errAnchor.porteroFondo";
+  }
+}
 
 const sinPanel = (): Panel => ({
   nivel: "verde",
@@ -150,6 +166,18 @@ export function panelDe(d: Diagnostico, c: ContextoDelPanel): Panel {
       if (d.pagador === "patrocinado") return { ...base, frase: "redSinSaldoPatrocinio", principal: "reintentar", secundarias: ["seguir-sin-sello"] };
       return { ...base, principal: "seguir-sin-sello" };
     }
+    case "sin-patrocinio": {
+      // La red está bien y la comisión la cubre el portero, que hoy no puede. Una sola acción: si la cuenta tiene con qué
+      // pagar la suya (o en testnet, el grifo), sellar con ella; si no, volver a probar cuando es del servicio (se
+      // repone, vuelve) y seguir sin sello cuando es de la cuenta (el cupo vuelve el mes que viene, o no entra).
+      const frase = fraseDelPatrocinio(d.patrocinio, puedePagar || testnetConGrifo);
+      const conFecha = d.patrocinio?.liberaEn !== undefined ? { liberaEn: d.patrocinio.liberaEn } : {};
+      const propia = { ...base, frase, ...conFecha };
+      if (testnetConGrifo) return { ...propia, principal: "sellar-con-mi-cuenta", secundarias: ["seguir-sin-sello"], cargaPrevia: !puedePagar };
+      if (puedePagar) return { ...propia, principal: "sellar-con-mi-cuenta", secundarias: ["seguir-sin-sello"] };
+      if (d.patrocinio?.motivo === "cupo-cuenta" || d.patrocinio?.motivo === "ajena") return { ...propia, principal: "seguir-sin-sello" };
+      return { ...propia, principal: "reintentar", secundarias: ["seguir-sin-sello"] };
+    }
     case "protocolo":
       // Solo llega a rojo si la simulación falla: sellar no va a andar. Se puede volver a mirar.
       return { ...base, principal: "seguir-sin-sello", secundarias: ["reintentar"] };
@@ -162,7 +190,7 @@ export function panelDe(d: Diagnostico, c: ContextoDelPanel): Panel {
  * Las frases rojas que ya dicen que hoy no se puede sellar: con "Hoy no se puede sellar:" delante quedaban
  * repetidas ("Hoy no se puede sellar: Hoy sellar cuesta más…", "…: Tu cuenta no tiene saldo para sellar.").
  */
-const FRASES_QUE_BASTAN = new Set(["redCostoAlto", "redSinSaldo", "redSinSaldoPatrocinio"]);
+const FRASES_QUE_BASTAN = new Set(["redCostoAlto", "redSinSaldo", "redSinSaldoPatrocinio", "errAnchor.porteroFondo", "errAnchor.porteroCupoSellos", "errAnchor.porteroCupoSorteos", "errAnchor.porteroAjena", "errAnchor.porteroAjenaPropia"]);
 
 /** Lo que dice el botón "¿La red está bien?": la clave, la frase del caso si es rojo y la segunda frase si la hay. */
 export function respuestaDelBoton(d: Diagnostico, p: Panel): { clave: string; motivo?: string; aparte?: string; nivel: Nivel } {

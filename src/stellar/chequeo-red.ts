@@ -29,7 +29,19 @@ import umbralesJson from "./red-umbrales.json";
  */
 
 export type Nivel = "verde" | "amarillo" | "rojo";
-export type CasoRed = "costo-alto" | "rpc-caido" | "saturada" | "sin-saldo" | "protocolo";
+export type CasoRed = "costo-alto" | "rpc-caido" | "saturada" | "sin-saldo" | "protocolo" | "sin-patrocinio";
+
+/**
+ * El caso 6, `sin-patrocinio`: la red está bien, pero lo que cubre la comisión por la persona (el portero de
+ * `patrocinador.ts`) no puede: se acabó el cupo de la cuenta, el servicio no contesta o está apagado, o esta
+ * cuenta no es de las que cubre. No es un caso de la red: lo arma `red.ts` con lo que dice el portero.
+ */
+export interface DetalleDelPatrocinio {
+  motivo: "cupo-cuenta" | "cerrado" | "fondo" | "ajena";
+  que?: "sellos" | "sorteos";
+  /** Cuándo vuelve el cupo, en ms. */
+  liberaEn?: number;
+}
 /** Quién paga la comisión: el patrocinador de la app (Pollar) o la cuenta misma (Freighter, la de prueba). */
 export type Pagador = "patrocinado" | "propio";
 export type MetodoRpc = "getNetwork" | "getLatestLedger" | "getFeeStats";
@@ -131,6 +143,8 @@ export interface Diagnostico {
   motivo: string;
   /** Cuándo se midió (ms). */
   hora: number;
+  /** Solo con el caso `sin-patrocinio`: por qué no cubre. */
+  patrocinio?: DetalleDelPatrocinio;
 }
 
 /** Qué caso manda cuando hay varios del mismo nivel. */

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { validarConteo } from "../workers/enlaces/src/conteo";
+import { ERRORES, ERRORES_DEL_PORTERO, validarConteo } from "../workers/enlaces/src/conteo";
 import { T } from "./i18n";
 import deployments from "./stellar/deployments.json";
 import {
@@ -14,6 +14,7 @@ import {
   cuerpo,
   enPractica,
   errorContable,
+  motivoContableDelPortero,
   marcarEntrada,
   marcarQr,
   probarCon,
@@ -315,6 +316,44 @@ describe("la referencia de un sorteo", () => {
     expect(errorContable("noFunds")).toBe("noFunds");
     expect(errorContable("userRejected")).toBe("userRejected");
     expect(errorContable("algo nuevo")).toBe("unknown");
+  });
+});
+
+describe("los motivos del portero del patrocinio entran al contador", () => {
+  const e = (motivo: string, extra: Record<string, unknown> = {}) => Object.assign(new Error(`portero-${motivo}`), { name: "ErrorPortero", motivo, estado: 503, ...extra });
+
+  it("cada motivo cuenta como su propia clave y no como unknown", () => {
+    for (const m of ["cupo-cuenta", "cupo-ip", "fondo", "apagado", "cuenta-ajena", "no-permitida", "fee-alta"]) expect(errorContable("porteroFondo", e(m)), m).toBe(m);
+    expect(errorContable("rpcDown", e("red"))).toBe("portero-red");
+    expect(errorContable("rpcDown", e("interno"))).toBe("portero-red");
+    // Una comisión pedida de más dentro de "no permitida" se cuenta como comisión.
+    expect(errorContable("busy", e("no-permitida", { razon: "fee-alta" }))).toBe("fee-alta");
+    // El servicio que no se pudo usar: por qué lo dijo, o que no contestó.
+    expect(errorContable("porteroFondo", e("cerrado", { detalle: "config" }))).toBe("config");
+    expect(errorContable("porteroFondo", e("cerrado", { detalle: "apagado" }))).toBe("apagado");
+    expect(errorContable("porteroFondo", e("cerrado", { detalle: "fondo" }))).toBe("fondo");
+    expect(errorContable("porteroFondo", e("cerrado", { detalle: "sin-respuesta" }))).toBe("portero-red");
+  });
+
+  it("lo que no es del portero se cuenta como siempre", () => {
+    expect(errorContable("noFunds", new Error("x"))).toBe("noFunds");
+    expect(errorContable("algo nuevo", new Error("x"))).toBe("unknown");
+    expect(motivoContableDelPortero(e("origen"))).toBeNull();
+    expect(motivoContableDelPortero(null)).toBeNull();
+  });
+
+  it("la lista del sitio y la del Worker son la misma: cada motivo que el sitio da está en el Worker, y cada uno del Worker se da", () => {
+    const motivos = ["cupo-cuenta", "cupo-ip", "fondo", "apagado", "cuenta-ajena", "no-permitida", "fee-alta", "red", "interno", "cerrado", "rechazada", "fallaria", "origen", "desconocido"];
+    const dadas = new Set(motivos.map((m) => motivoContableDelPortero(e(m))).filter((x): x is NonNullable<typeof x> => x !== null));
+    for (const k of dadas) expect(ERRORES, k).toContain(k);
+    for (const k of ERRORES_DEL_PORTERO) {
+      expect(ERRORES, k).toContain(k);
+      // "config" solo sale de un servicio cerrado por configuración.
+      expect(dadas.has(k) || k === "config", k).toBe(true);
+    }
+    expect(motivoContableDelPortero(e("cerrado", { detalle: "config" }))).toBe("config");
+    expect(validarConteo({ e: "seal_failed", p: { network: "testnet", error: "cupo-cuenta" } })).toMatchObject({ ok: true });
+    expect(validarConteo({ e: "draw_failed", p: { network: "mainnet", error: "portero-red" } })).toMatchObject({ ok: true });
   });
 });
 

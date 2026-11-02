@@ -254,6 +254,8 @@ export function textoDelError(e: unknown): string {
 export function esDeRed(e: unknown): boolean {
   // Un sello incierto no se reintenta como un corte cualquiera: primero se averigua.
   if (esIncierto(e)) return false;
+  // El portero que no llegó a la red es un corte más; sus otros no son una respuesta, no un corte.
+  if (esNoDelPortero(e)) return e.motivo === "red" || e.motivo === "interno";
   const texto = textoDelError(e);
   // Lo que se mandó y no se sabe cómo terminó tampoco, aunque la causa sea un corte:
   // quien pregunta esto decide si reintentar como si no se hubiera mandado nada.
@@ -278,12 +280,73 @@ function sinInternet(): boolean {
 }
 
 /**
+ * El portero del patrocinio (`patrocinador.ts`) no pagó. Se reconoce por el nombre y la forma, sin importar ese
+ * archivo: la pantalla clasifica sin bajar nada más.
+ */
+interface NoDelPortero {
+  motivo: string;
+  que?: string;
+  razon?: string;
+}
+export function esNoDelPortero(e: unknown): e is NoDelPortero & Error {
+  const x = e as { name?: unknown; motivo?: unknown; estado?: unknown } | null;
+  return !!x && typeof x === "object" && x.name === "ErrorPortero" && typeof x.motivo === "string" && typeof x.estado === "number";
+}
+
+/**
+ * Los no del portero que la persona tiene que saber, con su pantalla (`errAnchor.portero*`): se acabó lo que se
+ * cubre (el cupo de la cuenta, el fondo, el servicio que no contesta o está apagado) o esta cuenta no entra.
+ * Los demás (la simulación dice que va a fallar, la comisión pedida quedó corta, la ventana venció, la red del
+ * portero) se cuentan como cualquier error de la red: ver `errorKey`.
+ */
+export const MOTIVOS_QUE_BLOQUEAN = new Set(["cupo-cuenta", "cupo-ip", "fondo", "apagado", "cerrado", "no-permitida", "cuenta-ajena"]);
+/** Lo que dice `razon` cuando el problema no es de la cuenta sino de la transacción o del sitio: no es "esta cuenta no puede". */
+const RAZONES_QUE_NO_SON_DE_LA_CUENTA = new Set(["restaurar", "tamano", "xdr"]);
+export const esNoQueBloquea = (e: unknown): boolean =>
+  esNoDelPortero(e) && MOTIVOS_QUE_BLOQUEAN.has(e.motivo) && !(e.razon === "fee-alta" || e.razon === "ventana" || (e.razon !== undefined && RAZONES_QUE_NO_SON_DE_LA_CUENTA.has(e.razon)));
+
+function claveDelPortero(e: NoDelPortero, contexto: { enLinea?: boolean }): string | null {
+  switch (e.motivo) {
+    case "cupo-cuenta":
+      return e.que === "sorteos" ? "porteroCupoSorteos" : "porteroCupoSellos";
+    case "cupo-ip":
+    case "fondo":
+    case "apagado":
+    case "cerrado":
+      return "porteroFondo";
+    case "origen":
+      // Abrir el sitio desde un origen que el servicio no conoce es un problema nuestro, no de la cuenta.
+      return "unknown";
+    case "no-permitida":
+    case "cuenta-ajena":
+      // Una comisión pedida de más o una ventana vencida se arreglan armando de nuevo: es "la red ocupada".
+      if (e.razon === "fee-alta" || e.razon === "ventana") return "busy";
+      // El estado archivado del contrato, una transacción demasiado grande o un XDR que no se lee no son de la cuenta.
+      if (e.razon !== undefined && RAZONES_QUE_NO_SON_DE_LA_CUENTA.has(e.razon)) return "unknown";
+      return "porteroAjena";
+    case "fee-alta":
+    case "rechazada":
+      return "busy";
+    case "red":
+    case "interno":
+      return (contexto.enLinea ?? !sinInternet()) ? "rpcDown" : "offline";
+    default:
+      // `fallaria` trae el error del contrato en el mensaje: lo lee el resto de `errorKey`.
+      return null;
+  }
+}
+
+/**
  * Traduce un error de una invocación a la clave de su mensaje
  * (`errAnchor.<clave>`). `contexto.enLinea` dice si hay internet; si no se
  * pasa, se le pregunta al navegador.
  */
 export function errorKey(e: unknown, contexto: { enLinea?: boolean; patrocinada?: boolean } = {}): string {
   if (esIncierto(e)) return "unconfirmed";
+  if (esNoDelPortero(e)) {
+    const clave = claveDelPortero(e, contexto);
+    if (clave) return clave;
+  }
   const texto = textoDelError(e);
   if (RECUPERACION.test(texto)) return "recoveryRequired";
   if (CONFIRMACION.test(texto)) return "confirmation";

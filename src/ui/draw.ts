@@ -29,6 +29,7 @@ import { seguirEnPantallaCompleta } from "../games/overlay";
 import { pedirPantallaCompleta, soltarPantallaCompleta } from "./pantalla-completa";
 import { contar, contarPractica, errorContable, refDe } from "../contar";
 import { ponerTextoDelSello } from "./sin-sello-textos";
+import { accionDePagarConMiCuenta, elegirPagarConMiCuenta, sePuedeSortearPagando, tomarLaEleccion } from "./sortear-propio";
 
 /** Obtiene la ronda objetivo, verifica su firma y selecciona (protocolo §2, §5). */
 async function resolveBeacon(
@@ -56,6 +57,8 @@ export async function draw(): Promise<void> {
   }
   recuperacion = null;
   if (!app.frozen || app.drawn || secondsToRound() > 0) return;
+  // "Sortear pagando con mi cuenta", si se eligió: vale para este intento y no se hereda al siguiente.
+  const pagarConMiCuenta = tomarLaEleccion();
   // Tiene que correr dentro del clic: los navegadores no dejan hablar a una
   // página que nunca recibió uno, y esa habilitación después queda pegada.
   const btn = $<HTMLButtonElement>("btn-draw");
@@ -149,10 +152,15 @@ export async function draw(): Promise<void> {
       ]);
       const fin = await sortearConReintentos<{ winners: number[]; randomness: string; txHash?: string }>({
         intentar: () =>
-          drawOnChain(raffleId, decompressG1(beacon.signature), (step, detail) => {
-            btn.textContent = stepLabel(step, "sorteo");
-            showTxStatus("draw-status", step, detail);
-          }),
+          drawOnChain(
+            raffleId,
+            decompressG1(beacon.signature),
+            (step, detail) => {
+              btn.textContent = stepLabel(step, "sorteo");
+              showTxStatus("draw-status", step, detail);
+            },
+            { pagarConMiCuenta },
+          ),
         yaEsta: () => readDraw(raffleId),
         reintentable: (e) => SORTEO_REINTENTABLE.has(errorKey(e)),
         alReintentar: (proximo, total, e) => {
@@ -174,6 +182,8 @@ export async function draw(): Promise<void> {
         protegiendoElSorteo = true;
         try {
           if (await protegerLaCuenta()) {
+            // Lo elegido para este intento sigue valiendo para el que se repite.
+            if (pagarConMiCuenta) elegirPagarConMiCuenta();
             await draw();
             return;
           }
@@ -182,7 +192,7 @@ export async function draw(): Promise<void> {
         }
       }
       if (!fin.ok) {
-        contar("draw_failed", { network: network.name, error: errorContable(errorKey(fin.error, { patrocinada: await cuentaPatrocinada() })) });
+        contar("draw_failed", { network: network.name, error: errorContable(errorKey(fin.error, { patrocinada: await cuentaPatrocinada() }), fin.error) });
         tarjeta?.card.hide();
         sinShow();
         // El mensaje de la pantalla es para la sala; el detalle queda plegado
@@ -198,7 +208,13 @@ export async function draw(): Promise<void> {
         const clave = errorKey(fin.error);
         if (clave === "notFound" || clave === "alreadyDrawn") {
           await ofrecerRecuperacion(status, clave, beacon);
-        } else verError(status);
+        } else {
+          // El servicio que cubre la comisión no pudo y la lista ya está sellada: si la cuenta tiene con qué pagar la
+          // suya, esa es la segunda salida (la primera sigue siendo reintentar).
+          const segunda = (await sePuedeSortearPagando(fin.error)) ? accionDePagarConMiCuenta() : undefined;
+          verError(status, undefined, segunda);
+          if (segunda) ponerSegundaAccion(status, segunda);
+        }
         return;
       }
       winners = fin.valor.winners;
@@ -239,7 +255,7 @@ export async function draw(): Promise<void> {
     console.warn("[tinkazo] el sorteo se cortó", e);
     if (!contado) {
       void import("../stellar/errores")
-        .then(async ({ errorKey }) => contar("draw_failed", { network: network.name, error: errorContable(errorKey(e, { patrocinada: await cuentaPatrocinada() })) }))
+        .then(async ({ errorKey }) => contar("draw_failed", { network: network.name, error: errorContable(errorKey(e, { patrocinada: await cuentaPatrocinada() }), e) }))
         .catch(() => undefined);
     }
     btn.disabled = false;
@@ -252,6 +268,27 @@ export async function draw(): Promise<void> {
     await escribirError(status, e, "sorteo");
     verError(status);
   }
+}
+
+/**
+ * "Sortear pagando con mi cuenta", debajo del motivo. Vive dentro del mensaje: cuando el mensaje se reescribe o se
+ * esconde, se va con él. Elige pagar con la propia cuenta y sortea de nuevo, que es seguro: el contrato acepta un solo
+ * sorteo por sello y el ganador no depende de quién paga.
+ */
+function ponerSegundaAccion(status: HTMLElement, segunda: AccionError): void {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.id = "draw-propio";
+  b.className = "ghost mini";
+  b.dataset.i = "sortearPropio";
+  b.textContent = segunda.texto;
+  b.style.display = "block";
+  b.style.marginTop = "10px";
+  b.addEventListener("click", () => {
+    segunda.ejecutar();
+    void draw();
+  });
+  status.append(b);
 }
 
 /** Recupera el paso, no la operación: preparar no sella y consultar no vuelve a sortear. */

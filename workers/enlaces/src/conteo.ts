@@ -21,8 +21,15 @@ import deployments from "../../../src/stellar/deployments.json";
 export const REDES = ["mainnet", "testnet"] as const;
 
 /**
+ * Por qué dijo que no el portero del patrocinio (`src/stellar/patrocinador.ts`): el motivo de su respuesta, para
+ * contar cuántos sellos se frenaron por cupo, por fondo o por otra causa. Una prueba compara esta lista con la
+ * traducción de `src/contar.ts`.
+ */
+export const ERRORES_DEL_PORTERO = ["cupo-cuenta", "cupo-ip", "fondo", "apagado", "config", "cuenta-ajena", "no-permitida", "fee-alta", "portero-red"] as const;
+
+/**
  * Por qué falló un sello o un sorteo: las claves de `errorKey`
- * (`src/stellar/errores.ts`). Una prueba compara esta lista con `errores.ts`.
+ * (`src/stellar/errores.ts`) y los motivos del portero. Una prueba compara esta lista con `errores.ts`.
  */
 export const ERRORES = [
   "unconfirmed",
@@ -48,6 +55,8 @@ export const ERRORES = [
   "sponsorEmpty",
   "rpcDown",
   "offline",
+  /** Los motivos del portero del patrocinio: ver `ERRORES_DEL_PORTERO`. */
+  ...ERRORES_DEL_PORTERO,
   "unknown",
 ] as const;
 

@@ -41,7 +41,7 @@ const sdk = (): Promise<typeof import("./envio-sdk")> => import("./envio-sdk");
  * el botón apenas se aprieta, antes que nada ("Preparando el sello…", ver
  * `clienteListo`).
  */
-export type AnchorStep = "starting" | "simulating" | "signing" | "sending" | "confirmed" | "funding" | "preparing" | "verifying" | "retrying";
+export type AnchorStep = "starting" | "simulating" | "signing" | "sending" | "confirmed" | "funding" | "preparing" | "verifying" | "retrying" | "covering";
 
 /**
  * `detail` lleva el costo estimado en el paso de firma y el hash de la
@@ -526,17 +526,18 @@ export function drawOnChain(
   raffleId: bigint,
   signature96: Uint8Array,
   onStep: OnStep,
+  opciones: OpcionesDeSello = {},
 ): Promise<DrawResult> {
   if (sinGrabar()) return Promise.reject(new Error(SIN_GRABAR));
-  pagaLaPersona = false;
-  return conFondos(() => sortear(raffleId, signature96, onStep), onStep);
+  pagaLaPersona = !!opciones.pagarConMiCuenta;
+  return conFondos(() => sortear(raffleId, signature96, onStep, opciones), onStep);
 }
 
-function sortear(raffleId: bigint, signature96: Uint8Array, onStep: OnStep): Promise<DrawResult> {
-  return conUnSoloRpc(() => sortearEnUnRpc(raffleId, signature96, onStep));
+function sortear(raffleId: bigint, signature96: Uint8Array, onStep: OnStep, opciones: OpcionesDeSello): Promise<DrawResult> {
+  return conUnSoloRpc(() => sortearEnUnRpc(raffleId, signature96, onStep, opciones));
 }
 
-async function sortearEnUnRpc(raffleId: bigint, signature96: Uint8Array, onStep: OnStep): Promise<DrawResult> {
+async function sortearEnUnRpc(raffleId: bigint, signature96: Uint8Array, onStep: OnStep, opciones: OpcionesDeSello): Promise<DrawResult> {
   const [{ getClient }, { armar, submitElsewhere, firmarYConfirmar, valorNativo, errorDelDesenlace }] = await Promise.all([import("../stellar/contract"), sdk()]);
   const client = await armar(() => getClient());
   onStep("simulating");
@@ -552,7 +553,7 @@ async function sortearEnUnRpc(raffleId: bigint, signature96: Uint8Array, onStep:
   );
   onStep("signing", await costoVisible(tx));
 
-  const delegated = await submitElsewhere(tx, onStep, SIN_RED_SORTEO_MS);
+  const delegated = await submitElsewhere(tx, onStep, SIN_RED_SORTEO_MS, undefined, { pagarConMiCuenta: !!opciones.pagarConMiCuenta });
   if (delegated) {
     const d = unwrap<{ winners: number[]; randomness: Uint8Array }>(delegated.value);
     return { winners: [...d.winners], randomness: toHex(d.randomness), txHash: delegated.hash };
@@ -626,6 +627,7 @@ const CLAVE_DEL_PASO: Record<Exclude<AnchorStep, "signing">, string> = {
   preparing: "txPreparing",
   verifying: "txVerifying",
   retrying: "txRetrying",
+  covering: "txCubriendo",
 };
 
 /**
@@ -712,12 +714,23 @@ export function selloSinGrabar(e: unknown): boolean {
  * Stellar (`errores.ts`): si la red se cayó antes de bajarlo, igual se dice qué
  * pasó. Una clave sin texto cae en el mensaje genérico, nunca en la clave cruda.
  */
-export async function anchorErrorText(e: unknown): Promise<string> {
+export async function anchorErrorText(e: unknown, paso?: "sello" | "sorteo"): Promise<string> {
   try {
-    const { errorKey } = await import("../stellar/errores");
-    const clave = "errAnchor." + errorKey(e, { patrocinada: await cuentaPatrocinada() });
-    const texto = t(clave);
-    return texto && texto !== clave ? texto : t("errAnchor.unknown");
+    const { errorKey, esNoDelPortero } = await import("../stellar/errores");
+    let tipo = errorKey(e, { patrocinada: await cuentaPatrocinada() });
+    // Con el sorteo ya sellado la frase cambia: la lista no se pierde y el ganador va a ser el mismo.
+    if (tipo === "porteroFondo" && paso === "sorteo") tipo = "porteroFondoSorteo";
+    const clave = "errAnchor." + tipo;
+    let texto = t(clave);
+    if (!texto || texto === clave) return t("errAnchor.unknown");
+    // El cupo dice cuándo vuelve; si el día no es uno que se pueda decir, "primero del mes que viene".
+    if (esNoDelPortero(e) && texto.includes("{fecha}")) {
+      const { fechaOCercana } = await import("../stellar/patrocinador");
+      texto = texto.replaceAll("{fecha}", fechaOCercana((e as unknown as { liberaEn?: unknown }).liberaEn, getLang(), t("errAnchor.cupoPronto")));
+    }
+    const dicho = texto.replaceAll("{fecha}", t("errAnchor.cupoPronto"));
+    // Con el sorteo sin hacer, no se pierde: queda en Mis sorteos para sortearlo después.
+    return paso === "sorteo" && (tipo === "porteroFondoSorteo" || tipo === "porteroCupoSorteos") ? `${dicho} ${t("sorteoMasTarde")}` : dicho;
   } catch {
     return sinConexion();
   }
@@ -756,7 +769,7 @@ export async function escribirError(status: HTMLElement, e: unknown, paso: "sell
     await (await import("./detalle-error")).mostrarError(status, e, paso);
   } catch {
     limpiarDetalle(status.id);
-    status.textContent = await anchorErrorText(e);
+    status.textContent = await anchorErrorText(e, paso);
   }
 }
 

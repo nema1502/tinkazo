@@ -9,6 +9,7 @@ import { initSiguiente } from "./ui/siguiente";
 import { crearBotonesDelKit } from "./ui/botones-kit";
 import { JUEGOS } from "./games/pixi/kit/catalogo";
 import { initPlegables } from "./ui/plegable";
+import { iniciarCupo } from "./ui/cupo-patrocinio";
 import { alApretarSellar, iniciarRed } from "./ui/red";
 import { montarPremios } from "./ui/premios";
 import { adelantarCorto, alTocarGanadores, contarCompartido, copySummary, draw, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
@@ -204,6 +205,8 @@ initStandSala();
 initStand();
 // La red a la vista antes de sellar: "¿La red está bien?" y el aviso cuando algo anda mal.
 iniciarRed({ sellar: (op) => freeze(op) });
+// Lo que le queda a la cuenta con el patrocinio, junto a "Sellar la lista". Sin el servicio configurado no hace nada.
+iniciarCupo();
 ingresarSiLoPidio();
 initMenuMas();
 iniciarFeedback(

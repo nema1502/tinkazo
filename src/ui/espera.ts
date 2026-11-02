@@ -1,5 +1,5 @@
 import { esc } from "../dom";
-import type { EventoError } from "./error-accion";
+import type { AccionError, EventoError } from "./error-accion";
 import { getLang, t } from "../i18n";
 import { app, avatar } from "../state";
 import { beep, note } from "../sound";
@@ -387,9 +387,16 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   };
 
   /** Una sola acción, grande: lanzar el sorteo o reintentarlo. Con el foco, para seguir con Enter. */
-  const accion = (a: Fase, texto: string, boton: string, hacer = sortear): void => {
-    pasar(a, `<p class="espera-motivo" role="${a === "fallo" ? "alert" : "status"}">${esc(texto)}</p><button class="primary espera-accion" type="button">${esc(boton)}</button>`);
+  const accion = (a: Fase, texto: string, boton: string, hacer = sortear, segunda?: AccionError): void => {
+    pasar(a, `<p class="espera-motivo" role="${a === "fallo" ? "alert" : "status"}">${esc(texto)}</p><button class="primary espera-accion" type="button">${esc(boton)}</button>${segunda ? `<button class="ghost mini espera-accion-2" type="button">${esc(segunda.texto)}</button>` : ""}`);
     const b = sigue?.querySelector<HTMLButtonElement>(".espera-accion");
+    // La segunda salida deja anotado el cambio y sigue por el mismo camino que la principal.
+    if (segunda) {
+      sigue?.querySelector<HTMLButtonElement>(".espera-accion-2")?.addEventListener("click", () => {
+        segunda.ejecutar();
+        hacer();
+      });
+    }
     b?.addEventListener("click", hacer);
     b?.focus({ preventScroll: true });
   };
@@ -403,7 +410,7 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
     if (fase !== "sorteando") return;
     e.preventDefault();
     const evento = e as EventoError;
-    accion("fallo", String(evento.detail ?? ""), evento.accion?.texto ?? t("drawRetry"), evento.accion?.ejecutar ?? sortear);
+    accion("fallo", String(evento.detail ?? ""), evento.accion?.texto ?? t("drawRetry"), evento.accion?.ejecutar ?? sortear, evento.segunda);
   };
   document.addEventListener("tinkazo:error", alError);
   // El sello entró tarde (el reintento de "Seguir sin sello", `freeze.ts`): el pie deja de decir que no se puede comprobar.

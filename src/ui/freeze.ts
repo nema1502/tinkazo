@@ -24,7 +24,7 @@ import { ponerPremio, recordarPremio } from "./premios";
 import { ENSAYO_ESPERA_S, STAND_ESPERA_S, enEnsayo, enStand, sinGrabar } from "../ensayo-modo";
 import { logoParaSellar } from "../logo-guardado";
 import { contar, errorContable } from "../contar";
-import { type OpcionesDeSellado, chequearAntesDeSellar, hayAccionDeRed, limpiarRed, marcarSellado, mostrarCostoAlto, mostrarSinSaldo, verLaRedTrasFallar, verSinSello } from "./red";
+import { type OpcionesDeSellado, chequearAntesDeSellar, hayAccionDeRed, limpiarRed, marcarSellado, mostrarCostoAlto, mostrarSinPatrocinio, mostrarSinSaldo, patrocinioDelError, verLaRedTrasFallar, verSinSello } from "./red";
 import { type Reintento, reintentarSello } from "./sin-sello";
 import { claveDelSello, ponerTextoDelSello, sinSelloAhora } from "./sin-sello-textos";
 
@@ -635,13 +635,20 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       // Para el contador, la clave del motivo (la misma del mensaje), nunca el detalle. Se cuenta
       // antes de cualquier camino de la red: un sello que empezó y no entró es un fallo siempre.
       void import("../stellar/errores")
-        .then(async ({ errorKey }) => contar("seal_failed", { network: network.name, error: errorContable(errorKey(e, { patrocinada: await cuentaPatrocinada() })) }))
+        .then(async ({ errorKey }) => contar("seal_failed", { network: network.name, error: errorContable(errorKey(e, { patrocinada: await cuentaPatrocinada() }), e) }))
         .catch(() => undefined);
       // Dos cosas que la red explica mejor que el error de siempre, con su acción:
       // el sello de verdad cuesta más de lo que el patrocinador paga, o el patrocinador no tiene con qué.
       if (esCostoAlto(e)) {
         hideTxStatus("seal-status");
         await mostrarCostoAlto(e.costoXlm, e.restaurar);
+        return;
+      }
+      // El portero del patrocinio dijo que no (se acabó el cupo, no pagó o no contestó): su pantalla, con su acción.
+      const sinPatrocinio = patrocinioDelError(e);
+      if (sinPatrocinio) {
+        hideTxStatus("seal-status");
+        await mostrarSinPatrocinio(sinPatrocinio);
         return;
       }
       if (await esSinSaldoDelPatrocinador(e)) {

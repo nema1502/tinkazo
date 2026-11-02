@@ -5,10 +5,15 @@ export interface AccionError {
 }
 
 /** `detail` sigue siendo texto para los consumidores anteriores. */
-export type EventoError = CustomEvent<string> & { accion?: AccionError };
+export type EventoError = CustomEvent<string> & { accion?: AccionError; segunda?: AccionError };
 
-export function eventoError(texto: string, accion?: AccionError): EventoError {
+/**
+ * `segunda`: otra salida, menos importante que la principal (por ejemplo "Sortear pagando con mi cuenta"). Quien la
+ * muestra la ejecuta y después hace lo mismo que con la principal: solo deja anotado el cambio.
+ */
+export function eventoError(texto: string, accion?: AccionError, segunda?: AccionError): EventoError {
   const evento: EventoError = new CustomEvent("tinkazo:error", { detail: texto, cancelable: true });
   if (accion) evento.accion = accion;
+  if (segunda) evento.segunda = segunda;
   return evento;
 }

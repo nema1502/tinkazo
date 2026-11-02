@@ -56,7 +56,7 @@ export function guardarError(linea: string): void {
  * que miran los auditores), el detalle es para copiar.
  */
 export async function mostrarError(status: HTMLElement, e: unknown, paso: "sello" | "sorteo"): Promise<void> {
-  const [mensaje, linea] = await Promise.all([anchorErrorText(e), lineaDelError(e, paso)]);
+  const [mensaje, linea] = await Promise.all([anchorErrorText(e, paso), lineaDelError(e, paso)]);
   status.textContent = mensaje;
   guardarError(linea);
   ponerDetalle(status, linea);

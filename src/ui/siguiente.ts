@@ -344,8 +344,8 @@ export function actualizarPaso(): void {
  * ofrece el mensaje primero (`tinkazo:error`), y si lo muestra, con la acción
  * para reintentar, la página de atrás no se mueve (espera.ts).
  */
-export function verError(mensaje: HTMLElement, accion?: AccionError): void {
-  const enGrande = eventoError(mensaje.textContent?.trim() ?? "", accion);
+export function verError(mensaje: HTMLElement, accion?: AccionError, segunda?: AccionError): void {
+  const enGrande = eventoError(mensaje.textContent?.trim() ?? "", accion, segunda);
   if (!document.dispatchEvent(enGrande)) return;
   const r = mensaje.getBoundingClientRect();
   const cab = document.querySelector("header");

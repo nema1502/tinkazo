@@ -878,6 +878,7 @@
   .espera-sigue .cortina-t { font-size: clamp(22px, 3.4vw, 44px); color: var(--ink); max-width: 26ch; }
   .espera-motivo { font-size: clamp(18px, 2.6vw, 34px); font-weight: 800; max-width: 30ch; text-wrap: balance; overflow-wrap: anywhere; }
   button.primary.espera-accion { font-size: clamp(22px, 3.6vw, 44px); padding: 0.4em 1.2em; min-height: 64px; max-width: 100%; }
+  button.espera-accion-2 { font-size: clamp(14px, 1.8vw, 22px); min-height: 44px; max-width: 100%; }
   @keyframes espera-cinta { from { transform: translateX(0); } to { transform: translateX(-50%); } }
   html:has(.espera) { overflow: hidden; }
   @media (prefers-reduced-motion: reduce) {

@@ -66,7 +66,9 @@ vi.mock("./red", () => ({
   limpiarRed: () => undefined,
   marcarSellado: () => undefined,
   mostrarCostoAlto: async () => undefined,
+  mostrarSinPatrocinio: async () => undefined,
   mostrarSinSaldo: async () => undefined,
+  patrocinioDelError: () => null,
   verLaRedTrasFallar: async () => false,
   verSinSello: async () => undefined,
 }));

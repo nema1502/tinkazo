@@ -26,7 +26,7 @@
  * que salir en ese mismo instante. Los términos lo cuentan en "Y además"
  * (`tmMore2`); si esto cambia, cambian ellos.
  */
-import { type ClaveDeError, ERRORES, type Evento, type PropsDe, type Ref } from "../workers/enlaces/src/conteo";
+import { type ClaveDeError, ERRORES, ERRORES_DEL_PORTERO, type Evento, type PropsDe, type Ref } from "../workers/enlaces/src/conteo";
 import { sinGrabar } from "./ensayo-modo";
 
 /**
@@ -181,8 +181,38 @@ export function contarEntrada(kind: PropsDe<"account_connected">["kind"]): boole
 
 /* ------------------------------------------------------------------ el sorteo */
 
-/** La clave de `errorKey` (`src/stellar/errores.ts`) tal cual, o `unknown` si la lista cerrada no la tiene. */
-export function errorContable(clave: string): ClaveDeError {
+/** El motivo del no del portero del patrocinio (`ErrorPortero`, por su forma: este archivo no baja nada más) para la lista cerrada. */
+export function motivoContableDelPortero(e: unknown): (typeof ERRORES_DEL_PORTERO)[number] | null {
+  const x = e as { name?: unknown; motivo?: unknown; estado?: unknown; razon?: unknown; detalle?: unknown } | null;
+  if (!x || typeof x !== "object" || x.name !== "ErrorPortero" || typeof x.motivo !== "string" || typeof x.estado !== "number") return null;
+  if (x.razon === "fee-alta") return "fee-alta";
+  switch (x.motivo) {
+    case "cupo-cuenta":
+    case "cupo-ip":
+    case "fondo":
+    case "apagado":
+    case "cuenta-ajena":
+    case "no-permitida":
+    case "fee-alta":
+      return x.motivo;
+    case "red":
+    case "interno":
+      return "portero-red";
+    case "cerrado":
+      // El servicio no se pudo usar: por qué lo dijo `/cupo`, o que no contestó.
+      return x.detalle === "config" ? "config" : x.detalle === "apagado" ? "apagado" : x.detalle === "fondo" ? "fondo" : "portero-red";
+    default:
+      return null;
+  }
+}
+
+/**
+ * La clave de `errorKey` (`src/stellar/errores.ts`) tal cual, o `unknown` si la lista cerrada no la tiene. Si el error
+ * es un no del portero del patrocinio, se cuenta su motivo: la clave de `errorKey` junta varios en una sola frase.
+ */
+export function errorContable(clave: string, error?: unknown): ClaveDeError {
+  const motivo = error === undefined ? null : motivoContableDelPortero(error);
+  if (motivo) return motivo;
   return (ERRORES as readonly string[]).includes(clave) ? (clave as ClaveDeError) : "unknown";
 }
 
