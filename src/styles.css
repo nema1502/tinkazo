@@ -1301,7 +1301,15 @@
     min-height: 44px; transition: transform 0.12s ease, box-shadow 0.12s ease;
   }
   .portada-juegos a:hover { transform: translate(-2px, -2px); box-shadow: var(--sh); }
-  .portada-juegos canvas.thumb { width: 100%; height: auto; aspect-ratio: 16 / 9; display: block; border: 2px solid var(--ink); }
+  /* La captura de cada juego, una por tema: se ve la del tema efectivo del sitio (el del sistema o el que se elige con data-theme), no solo la del sistema. */
+  .portada-juegos .pj-img { width: 100%; height: auto; aspect-ratio: 16 / 9; display: block; border: 2px solid var(--ink); background: var(--field); }
+  .portada-juegos .pj-osc { display: none; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .portada-juegos .pj-osc { display: block; }
+    :root:not([data-theme="light"]) .portada-juegos .pj-cla { display: none; }
+  }
+  :root[data-theme="dark"] .portada-juegos .pj-osc { display: block; }
+  :root[data-theme="dark"] .portada-juegos .pj-cla { display: none; }
   .portada-juegos .pj-ver { font-family: ui-monospace, Consolas, monospace; font-size: 14px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
   @media (max-width: 640px) { .portada-juegos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 

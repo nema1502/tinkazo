@@ -490,7 +490,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   // (`window.__tinkazo`), para medir el zoom del golpe (`scripts/lib/zoom.mjs`).
   // Sin el parámetro no se expone nada.
   // Los campos «cartel» y «ganador» los llenan la corona y el juego (`ganadorEn`): dónde está el cartel y dónde quien gana.
-  if (params.get("auditar") === "camara") (window as unknown as { __tinkazo: unknown }).__tinkazo = { camara: cam, escena: scene, cartel: null, ganador: null, pantalla: () => ({ w: innerWidth, h: innerHeight, top: top(), bottom: bottom() }) };
+  if (params.get("auditar") === "camara") (window as unknown as { __tinkazo: unknown }).__tinkazo = { camara: cam, escena: scene, hud, cartel: null, ganador: null, pantalla: () => ({ w: innerWidth, h: innerHeight, top: top(), bottom: bottom() }) };
   // `?auditar=nino`: la foto de los cinco años no lleva letras (`scripts/audit-nino.mjs`).
   // Mientras `window.__nino.sinLetras` esté prendido, todo texto del motor queda sin
   // dibujar (`renderable`, no `visible`: los juegos mandan la visibilidad), y al
