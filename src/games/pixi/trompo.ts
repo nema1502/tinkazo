@@ -8,6 +8,7 @@ import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { dentro, unir, type Caja, type Zona } from "./encuadre";
 import { exponerNino } from "./nino";
 import { lugarDe } from "./kit/respuestas";
+import { pintarMarcas } from "./kit/marcador-vista";
 import { FORMA_TROMPO, respuestasTrompo, type PlanDelTrompo } from "./trompo-nino";
 import { medidasContador, CREAM, INK, MONO, YELLOW, contorno, hash, mountPixi, type PixiStage } from "./stage";
 
@@ -994,6 +995,9 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
   let chips!: Container;
   let counter!: ReturnType<PixiStage["text"]>;
   let counterBox!: Graphics;
+  let counterMarcas!: Graphics;
+  /** El contador con su fila de marcas: lo que los nombres no pueden tapar. */
+  let counterRoot!: Container;
   let duelText!: ReturnType<PixiStage["text"]>;
 
   const R = (): number => Math.min(S.sh() * 0.52, S.sw() * 0.34);
@@ -1089,10 +1093,11 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     counterBox = new Graphics();
     counter = S.text("", { fontFamily: MONO, fontSize: medidasContador(k).fuente, fontWeight: "700", fill: S.dark ? CREAM : INK });
     counter.anchor.set(0.5);
-    const box = new Container();
-    box.addChild(counterBox, counter);
-    box.position.set(22 * k, S.top() + 10 * k);
-    S.hud.addChild(box);
+    counterMarcas = new Graphics();
+    counterRoot = new Container();
+    counterRoot.addChild(counterBox, counter, counterMarcas);
+    counterRoot.position.set(22 * k, S.top() + 10 * k);
+    S.hud.addChild(counterRoot);
     chips = new Container();
     S.hud.addChild(chips);
     duelText = S.text("", { fontFamily: MONO, fontSize: Math.max(18, LEGIBLE.sec) * k, fontWeight: "700", fill: S.dark ? CREAM : INK });
@@ -1461,7 +1466,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       if (!q || !q.alive || tAll < q.land) return null;
       const w = toWorld(q.x, q.y);
       return cam.toScreen(w.x, w.y - size * 1.15, S.sw(), S.sh());
-    }, [counterBox.getBounds()]);
+    }, [counterRoot.getBounds()]);
 
     // Los nombres: los que siguen, cuando quedan pocos, y los que acaban de salir.
     const live = alive();
@@ -1505,7 +1510,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       });
       let prev = -Infinity, prevH = 0;
       // El contador: ningún nombre se pone encima, ni el que sale por el borde.
-      const cont = counterBox.getBounds();
+      const cont = counterRoot.getBounds();
       for (const { q, out, p } of at) {
         const nm = names[q.idx] ?? "";
         const chip = out
@@ -1550,10 +1555,11 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
 
     // El contador.
     const inRing = phase === "throw" ? Math.min(landed, n) : live.length;
-    counter.text = `${t("cTroLeft")}  ${inRing} / ${n}`;
+    counter.text = `${t("marcadorQuedan")}  ${inRing} ${t("marcadorDe")} ${n}`;
     const bw = counter.width + medidasContador(k).aire, bh = medidasContador(k).alto;
     counter.position.set(bw / 2, bh / 2);
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 3 * k, color: INK });
+    pintarMarcas(counterMarcas, { total: n, quedan: inRing, k, w: S.sw() });
     duelText.text = phase === "duel" ? `${t("cTroDuelLbl")} ${Math.min(clashHits, clashes.length)}/${clashes.length}` : "";
     if (phase === "crown") crownUI.at(tAll - T_CROWN);
   }

@@ -13,7 +13,6 @@ import type { Textos } from "./kit";
  */
 export const TEXTOS = {
   es: {
-    marcadorQuedan: "EN EL MONTE",
     intro: "¡Cae el sol en el monte!",
     lista: "¡Salen los caminantes!",
     busquen: "¡Busquen su nombre!",
@@ -30,7 +29,6 @@ export const TEXTOS = {
     amanece: "¡Amanece!",
   },
   en: {
-    marcadorQuedan: "IN THE FOREST",
     intro: "The sun sets on the forest!",
     lista: "The walkers step out!",
     busquen: "Find your name!",

@@ -5,12 +5,14 @@ import { paceFactor, setGameLength, type Beacon } from "../../state";
 import { beep, fanfare, note } from "../../sound";
 import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
-import { capRecent, enVuelo, juntar, layoutLabels, listaCaidos, type LabelItem, type ListaGeo, type Rect } from "./pinata-labels";
+import { capRecent, conTitulo, enVuelo, juntar, layoutLabels, listaAdentro, listaCaidos, type LabelItem, type ListaGeo, type Rect } from "./pinata-labels";
 import { createPile, shouldSettle, type Pile } from "./pinata-monton";
 import { calendarioDePalos } from "./pinata-plan";
 import { ASOMA_DESPUES, respuestasPinata } from "./pinata-nino";
 import { exponerNino } from "./nino";
 import { lugarDe } from "./kit/respuestas";
+import { pintarMarcas } from "./kit/marcador-vista";
+import { reservaDeMarcas, textoMarcador } from "./kit/marcador";
 import { CHIP_SCALE, medidasContador, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 
 /**
@@ -542,6 +544,10 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   let pile!: Graphics;
   let counter!: ReturnType<PixiStage["text"]>;
   let counterBox!: Graphics;
+  let counterMarcas!: Graphics;
+  /** El contador con su fila de marcas, y lo que ocupa la fila de alto (con su aire): lo que los nombres no pueden tapar. */
+  let counterRoot!: Container;
+  let marcasH = 0;
   let chipLayer!: Container;
   /**
    * La lista de los caídos: una fila por nombre, la más nueva arriba a la
@@ -555,10 +561,18 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
    */
   let faceLayer!: Container;
   const candyFaces = new Map<number, Sprite>();
+  type Fila = { c: Container; bg: Graphics; sq: Graphics; tx: ReturnType<PixiStage["text"]> };
+  /** Los que cayeron (a la derecha) y los que siguen adentro (a la izquierda, o en el mismo lugar en un celular): cada lista con su título. */
   let lista!: ListaGeo;
-  let listaRows: { c: Container; bg: Graphics; sq: Graphics; tx: ReturnType<PixiStage["text"]> }[] = [];
+  let listaRows: Fila[] = [];
   let listaMore!: ReturnType<PixiStage["text"]>;
-  let listaKey = -1, listaHl = false;
+  let listaTit!: ReturnType<PixiStage["text"]>;
+  let listaKey = "";
+  let listaAd!: ListaGeo;
+  let listaAdRows: Fila[] = [];
+  let listaAdTit!: ReturnType<PixiStage["text"]>;
+  /** Los rectángulos de las listas que se ven, para que los nombres que vuelan no las pisen. */
+  let listasVistas: Rect[] = [];
   /** Cuándo cayó el último caramelo (para resaltarlo en la lista). */
   let lastDropAt = -9;
   const chipOf = new Map<number, Container>();
@@ -690,9 +704,11 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     counterBox = new Graphics();
     counter = S.text("", { fontFamily: MONO, fontSize: medidasContador(k).fuente, fontWeight: "700", fill: S.dark ? CREAM : INK });
     counter.anchor.set(0.5);
-    const box = new Container();
-    box.addChild(counterBox, counter);
-    box.position.set(22 * k, S.top() + 10 * k);
+    counterMarcas = new Graphics();
+    counterRoot = new Container();
+    counterRoot.addChild(counterBox, counter, counterMarcas);
+    counterRoot.position.set(22 * k, S.top() + 10 * k);
+    const box = counterRoot;
     chipLayer = new Container();
     moreBg = new Graphics();
     moreTxt = S.text("", { fontFamily: MONO, fontSize: Math.max(14 * k * (g.w <= 520 ? 1.35 : 1.15), LEGIBLE.sec * k), fontWeight: "800", fill: INK });
@@ -714,27 +730,48 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       anchoLista = Math.max(anchoLista, medida.width);
     }
     medida.destroy();
-    lista = listaCaidos({ w: g.w, k, top: S.top(), floor: g.floor, phone, letra: letraLista, ancho: anchoLista });
+    // En un celular la fila de marcas ocupa casi todo el ancho de arriba y la columna de la derecha empieza debajo de ella.
+    marcasH = reservaDeMarcas(n, k, g.w).alto;
+    lista = conTitulo(listaCaidos({ w: g.w, k, top: S.top() + (phone ? marcasH : 0), floor: g.floor, phone, letra: letraLista, ancho: anchoLista }));
+    // La de los que siguen adentro: en escritorio, del lado contrario, debajo del contador y de su fila de marcas; en un
+    // celular no hay lugar para las dos y va donde la de los caídos (se muestra una u otra).
+    listaAd = phone ? lista : listaAdentro({ w: g.w, k, floor: g.floor, letra: letraLista, ancho: anchoLista, abajoDe: S.top() + 10 * k + medidasContador(k).alto + marcasH });
     const listaCont = new Container();
-    listaRows = [];
-    for (let i = 0; i < lista.cap; i++) {
-      const c = new Container();
-      const bg = new Graphics();
-      const sq = new Graphics();
-      const tx = S.text("", { fontSize: lista.letra, fontWeight: "800", fill: S.dark ? CREAM : INK });
+    const filas = (geo: ListaGeo): Fila[] => {
+      const rows: Fila[] = [];
+      for (let i = 0; i < geo.cap; i++) {
+        const c = new Container();
+        const bg = new Graphics();
+        const sq = new Graphics();
+        const tx = S.text("", { fontSize: geo.letra, fontWeight: "800", fill: S.dark ? CREAM : INK });
+        tx.anchor.set(0, 0.5);
+        tx.position.set(geo.rowH * 0.85, geo.rowH / 2);
+        c.addChild(bg, sq, tx);
+        c.position.set(geo.x + (i % geo.cols) * geo.colW, geo.y + Math.floor(i / geo.cols) * geo.rowH);
+        c.visible = false;
+        listaCont.addChild(c);
+        rows.push({ c, bg, sq, tx });
+      }
+      return rows;
+    };
+    listaRows = filas(lista);
+    listaAdRows = phone ? listaRows : filas(listaAd);
+    const titulo = (geo: ListaGeo): ReturnType<PixiStage["text"]> => {
+      const tx = S.text("", { fontSize: geo.letra, fontWeight: "900", fill: S.dark ? CREAM : INK });
       tx.anchor.set(0, 0.5);
-      tx.position.set(lista.rowH * 0.85, lista.rowH / 2);
-      c.addChild(bg, sq, tx);
-      c.position.set(lista.x + (i % lista.cols) * lista.colW, lista.y + Math.floor(i / lista.cols) * lista.rowH);
-      c.visible = false;
-      listaCont.addChild(c);
-      listaRows.push({ c, bg, sq, tx });
-    }
+      tx.position.set(geo.x + 4 * k, geo.y - geo.rowH / 2);
+      tx.visible = false;
+      listaCont.addChild(tx);
+      return tx;
+    };
+    listaTit = titulo(lista);
+    listaAdTit = phone ? listaTit : titulo(listaAd);
     listaMore = S.text("", { fontFamily: MONO, fontSize: Math.max(18, LEGIBLE.sec) * k, fontWeight: "800", fill: S.dark ? CREAM : INK });
     listaMore.position.set(lista.x + 4 * k, lista.y + lista.h + 4 * k);
     listaCont.addChild(listaMore);
     S.hud.addChild(listaCont);
-    listaKey = -1;
+    listaKey = "";
+    listasVistas = [];
     // El montón se vuelve a armar con la pantalla nueva, en el orden en que se
     // asentaron: cada caramelo queda en el montón de esta pantalla, no donde
     // estaba en la anterior.
@@ -929,12 +966,13 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
    * otros tantos lo empujan; la tira de cinco nombres apagados no alcanzaba.
    */
   function drawLista(): void {
-    // Con el cartel del ganador, la lista se va: el cartel tiene el lugar.
+    // Con el cartel del ganador, las listas se van: el cartel tiene el lugar.
     if (phase === "crown" || phase === "dead") {
-      if (listaKey !== -2) {
-        listaKey = -2;
-        listaRows.forEach((r) => (r.c.visible = false));
-        listaMore.visible = false;
+      if (listaKey !== "oculta") {
+        listaKey = "oculta";
+        for (const r of [...listaRows, ...listaAdRows]) r.c.visible = false;
+        listaMore.visible = listaTit.visible = listaAdTit.visible = false;
+        listasVistas = [];
       }
       return;
     }
@@ -942,20 +980,49 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     // Rota la piñata, sin resaltar: la rival en amarillo mientras baja el caramelo
     // que gana se leía como la ganadora, y el amarillo es del cartel.
     const hl = len > 0 && tAll - lastDropAt < 1.2 && !brokeDone;
-    if (len === listaKey && hl === listaHl) return;
-    listaKey = len;
-    listaHl = hl;
-    const shown = fallen.slice(-lista.cap).reverse();
+    // Quienes siguen adentro, por su puesto en la lista (no se barajan al caer otro). Con uno solo no hay lista:
+    // es la ganadora, y su nombre escrito antes del cartel la delataba.
+    const adentro = inside().map((c) => c.idx).sort((x, y) => x - y);
+    const verAdentro = adentro.length > 1 && adentro.length <= listaAd.cap && !brokeDone;
+    const phone = lista.phone;
+    // En un celular se muestra una de las dos (la de adentro mientras entre); en escritorio, las dos.
+    const verCaidos = !(phone && verAdentro);
+    const clave = `${verAdentro ? adentro.join(",") : "-"}|${verCaidos ? len : "-"}|${hl}`;
+    if (clave === listaKey) return;
+    listaKey = clave;
     const fondo = S.dark ? 0x221a33 : 0xffffff;
-    listaRows.forEach((r, i) => {
-      const id = shown[i];
-      r.c.visible = id !== undefined;
-      if (id === undefined) return;
-      r.tx.text = etiqueta(names[id] ?? "", listaMax(lista.phone));
-      r.bg.clear().roundRect(0, 0, lista.colW - 4, lista.rowH - 3, 4).fill(i === 0 && hl ? YELLOW : fondo).stroke({ width: 2, color: INK });
-      r.sq.clear().rect(4, 4, lista.rowH * 0.3, lista.rowH - 11).fill(S.color(id));
-    });
-    listaMore.text = len > lista.cap ? `+${len - lista.cap}` : "";
+    const pintar = (rows: Fila[], geo: ListaGeo, ids: number[], resalta: boolean, apagada: boolean): void => {
+      rows.forEach((r, i) => {
+        const id = ids[i];
+        r.c.visible = id !== undefined;
+        if (id === undefined) return;
+        r.c.alpha = apagada ? 0.78 : 1;
+        r.tx.text = etiqueta(names[id] ?? "", listaMax(phone));
+        r.bg.clear().roundRect(0, 0, geo.colW - 4, geo.rowH - 3, 4).fill(i === 0 && resalta ? YELLOW : fondo).stroke({ width: 2, color: INK });
+        r.sq.clear().rect(4, 4, geo.rowH * 0.3, geo.rowH - 11).fill(S.color(id));
+      });
+    };
+    // En un celular las dos listas comparten filas: se apagan todas y se pinta la que toca.
+    for (const r of listaRows) r.c.visible = false;
+    for (const r of listaAdRows) r.c.visible = false;
+    const vistas: Rect[] = [];
+    listaTit.visible = listaAdTit.visible = false;
+    listaMore.visible = false;
+    if (verCaidos) {
+      pintar(listaRows, lista, fallen.slice(-lista.cap).reverse(), hl, true);
+      listaTit.text = t("cPinListaOut");
+      listaTit.visible = len > 0;
+      listaMore.text = len > lista.cap ? `+${len - lista.cap}` : "";
+      listaMore.visible = true;
+      if (len > 0) vistas.push({ x: lista.x, y: lista.y - lista.rowH, w: lista.w, h: lista.h + lista.rowH });
+    }
+    if (verAdentro) {
+      pintar(listaAdRows, listaAd, adentro, false, false);
+      listaAdTit.text = t("cPinLeft");
+      listaAdTit.visible = true;
+      vistas.push({ x: listaAd.x, y: listaAd.y - listaAd.rowH, w: listaAd.w, h: (Math.min(adentro.length, listaAd.cap) + 1) * listaAd.rowH });
+    }
+    listasVistas = vistas;
   }
 
   function draw(now: number): void {
@@ -1095,10 +1162,13 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     }
     drawLista();
     drawLabels(p, g, sz);
-    counter.text =`${t("cPinLeft")}  ${inside().length} / ${n}`;
+    // «QUEDAN 8 DE 18» y, debajo, una marca por persona: un chico cuenta las encendidas sin leer.
+    const adentroAhora = inside().length;
+    counter.text = textoMarcador(t("marcadorQuedan"), adentroAhora, { de: t("marcadorDe"), cuantos: n });
     const bw = counter.width + medidasContador(k).aire, bh = medidasContador(k).alto;
     counter.position.set(bw / 2, bh / 2);
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 3 * k, color: INK });
+    pintarMarcas(counterMarcas, { total: n, quedan: adentroAhora, k, w: g.w });
     // Con el cartel, la cuenta se va, como en el sapo: "ADENTRO 0 / 18" ya no
     // dice nada, y en un celular el cartel la tapaba a medias.
     if (counter.parent) counter.parent.visible = phase !== "crown";
@@ -1137,7 +1207,6 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     // Nunca por debajo de la regla de la letra de la sala (28 px en 1080, 16 en un celular): 0,85 y 0,9 daban 15,2 y 25,9.
     const piso = escalaChipLegible(S.u());
     const scaleFly = Math.max(phone ? 1 : 1.15, piso);
-    const scaleSide = Math.max(phone ? 0.85 : 0.9, piso);
     const bounds = { w: g.w, h: g.h, top: S.top(), bottom: S.bottom() };
     items.length = 0;
     alphaOf.clear();
@@ -1146,19 +1215,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       items.push({ id: key, x, y, w: d.w, h: d.h, priority, ignoreBlocked });
       alphaOf.set(key, alpha);
     };
-    // Los que quedan adentro (pocos): una columna al costado, debajo del contador.
-    // Con uno solo no: rota la piñata, la lista con un nombre era el ganador
-    // escrito tres segundos antes del cartel.
-    const adentro = inside();
-    if (adentro.length <= 6 && adentro.length > 1 && !brokeDone && story.arc !== "tapada") {
-      let colTop = S.top() + 62 * k;
-      adentro.forEach((c, i) => {
-        const key = c.idx;
-        chipFor(key, names[c.idx] ?? "", scaleSide);
-        put(key, 10 * k, colTop, 900 - i, 1, true);
-        colTop += (chipDim.get(key) as { h: number }).h + 2 * k;
-      });
-    }
+    // Los que quedan adentro tienen su lista (`drawLista`), con el nombre de cada uno.
     // La ganadora lleva su nombre recién con el golpe del piso: su caramelo toca
     // el suelo y ahí se lee de quién es, un momento antes del cartel. Antes no
     // lo llevaba nunca, y en la tapada con mucha gente su nombre no se leía
@@ -1224,10 +1281,9 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     const k1 = cam.toScreen(kidX + 26 * g.ks, g.ky + 4 * g.ks, g.w, g.h);
     // El chico y la cuenta no se tapan nunca: si no hay lugar, el nombre no sale.
     const kidRect = { x: Math.min(k0.x, k1.x), y: Math.min(k0.y, k1.y), w: Math.abs(k1.x - k0.x), h: Math.abs(k1.y - k0.y) };
-    const counterRect = { x: 22 * k, y: S.top() + 10 * k, w: counter.width + medidasContador(k).aire + 5 * k, h: medidasContador(k).alto + 5 * k };
+    const counterRect = { x: 22 * k, y: S.top() + 10 * k, w: Math.max(counter.width + medidasContador(k).aire, reservaDeMarcas(n, k, g.w).ancho) + 5 * k, h: medidasContador(k).alto + 5 * k + marcasH };
     // La lista de los caídos tampoco se tapa: los nombres en vuelo buscan otro lugar.
-    const listaRect = { x: lista.x, y: lista.y, w: lista.w, h: lista.h };
-    for (const o of layoutLabels(items, bounds, blocked, [counterRect, kidRect, listaRect])) {
+    for (const o of layoutLabels(items, bounds, blocked, [counterRect, kidRect, ...listasVistas])) {
       if (o.id === -100000) {
         moreBadge.visible = true;
         moreBadge.position.set(o.x, o.y);

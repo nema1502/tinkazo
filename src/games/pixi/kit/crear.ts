@@ -135,7 +135,9 @@ export function crearJuego<P, E>(def: DefJuego<P, E>, anf: Anfitrion = anfitrion
 
     /* --------------------------------------------------------------- la escena */
     // El único contador, arriba a la izquierda: lo dibuja el kit, así ningún juego tiene otro.
-    const marcadorUI = crearMarcadorVista(S, () => txt("marcadorQuedan"));
+    // De pie, el número lleva el total («EN EL MONTE 5 DE 18»): es lo que dice cuánto falta. La carrera ya tiene su meta.
+    const deNombres = (entradaDe(def.id)?.forma ?? "de-pie") === "de-pie" ? { de: () => txt("marcadorDe"), cuantos: nombres.length } : undefined;
+    const marcadorUI = crearMarcadorVista(S, () => txt("marcadorQuedan"), deNombres);
     escena = def.arma(k, plan);
     S.onResize(() => {
       escena = def.arma(k, plan, escena);

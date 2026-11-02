@@ -319,8 +319,10 @@ Lo que dejó la tercera:
 
 **La cuarta vuelta (2 de noviembre de 2026).** Ahora los hallazgos eran de los juegos y no de la prueba, y se arreglaron en presentación (el plan no se tocó: mismas salidas, tiempos y ganadores):
 
-1. **El contador de los de pie dice cuántos quedan y se ve sin leer.** «EN EL MONTE 5 DE 18» no alcanzó (el modelo contestaba «mitad»). Pasó a «QUEDAN 5 DE 18» en todos (guajojó, toborochi, ¿Quién es?, sapo, teleférico, trompo, chovena, piñata y Oruro) y debajo lleva una fila de marcas, una por persona: encendidas las que siguen, apagadas las que salieron.
-2. **Quienes siguen tienen su nombre a la vista.** La piñata suma la lista «ADENTRO» frente a la de «AFUERA»; en la chovena y en el teleférico el nombre de quien ya salió o se bajó se ve apagado y con una raya roja (se lo tomaba por uno que sigue), y en la chovena quienes siguen en la rueda llevan el suyo durante el corte.
+1. **El contador de los de pie dice cuántos quedan y se ve sin leer.** «EN EL MONTE 5 DE 18» no alcanzó (el modelo contestaba «mitad»). Pasó a «QUEDAN 5 DE 18» en todos (guajojó, toborochi, ¿Quién es?, sapo, teleférico, trompo, piñata y Oruro) y debajo lleva una fila de marcas, una por persona: encendidas las que siguen, apagadas las que salieron.
+2. **Quienes siguen tienen su nombre a la vista.** La piñata suma la lista «ADENTRO» frente a la de «AFUERA»; en el teleférico el nombre de quien ya se bajó se ve apagado y con una raya roja (se lo tomaba por uno que sigue).
+
+**La chovena se quedó con su presentación anterior.** Con la nueva (el mismo contador, los nombres de quienes siguen durante el corte y la raya roja), la prueba del niño pasaba 8 de 8, pero el auditor de delatores encontró que la cámara se quedaba sobre quien gana el 80 % del tiempo de la recta final con 18 personas (107 de 134 rondas; el azar es 50 %), y con la de antes da 58 %, dentro del azar. Lo que se ve no puede adelantar quién gana: la chovena vuelve a esta versión hasta que la nueva pase los dos auditores.
 3. **Grupos.** En el teleférico (cabinas) y en Oruro (comparsas) la pantalla muestra grupos y no personas: el juego declara en `__nino.grupos` el grupo de cada persona y el juez acepta, para «quiénes siguen», el nombre de un grupo que siga en juego, con las mismas tolerancias de nombres. Si todos los que siguen son de un solo grupo alcanza con decirlo, y un «no se ve» de más al lado no resta. `FORMA_DECIDIDA` no se tocó.
 
 Resultado de la cuarta medición (carpeta privada `nino-2nov-v4`; 18 personas, 8 semillas, 1080 y 390; controles con 8 semillas):
@@ -332,7 +334,7 @@ Resultado de la cuarta medición (carpeta privada `nino-2nov-v4`; 18 personas, 8
 | Guajojó | 7 | una semilla: `propia` 14 de 16 (antes 0 de 8 semillas) |
 | Toborochi | 8 | ninguna (antes 0) |
 | La piñata | 8 | ninguna (antes 0) |
-| La chovena | 8 | ninguna (antes 6) |
+| La chovena | 8 | ninguna (antes 6), con la presentación que se dejó de lado por el delator de la cámara |
 | El sapo | 8 | ninguna (antes 8) |
 | Oruro | 8 | con el juez de grupos (antes 3; 5 antes de aceptar el «no se ve» de más) |
 | El teleférico | 6 | a 390, con tres en juego, el modelo nombra a quienes se bajaron (`propia` 14 de 16; antes 0 de 8 semillas) |

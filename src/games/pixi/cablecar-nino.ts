@@ -1,4 +1,4 @@
-import type { Direccion, Lugar, Respuestas } from "./kit/respuestas";
+import type { Direccion, Grupos, Lugar, Respuestas } from "./kit/respuestas";
 import { T_BOARD, T_RUN, type CableCarPlan } from "./cablecar-plan";
 import { respuestasDeSalidas, type HechoDelPlan, type PlanDeSalidas } from "./salidas-nino";
 
@@ -53,6 +53,19 @@ export function planDelTelefericoDe(P: CableCarPlan, ganador: number, golpe: num
     nombrado: P.nombrado, puerta: P.puerta, puertaA: P.puertaA, mordaza: P.mordaza, mA: P.mA, apagon: P.apagon, quieto: P.quieto,
     tBoard: T_BOARD, tRun: T_RUN, tCartel: golpe,
   };
+}
+
+/**
+ * Los grupos que muestra la pantalla: cada cabina lleva el rótulo de su grupo («Vicuñas ×4»), no a las personas.
+ * El nombre del grupo de cada persona, por su puesto en la lista.
+ */
+export function gruposDelTeleferico(P: Pick<CableCarPlan, "n" | "pax" | "groupOfCab" | "grupos">): Grupos {
+  const out: string[] = Array.from({ length: P.n }, () => "");
+  P.pax.forEach((personas, cab) => {
+    const nombre = P.grupos[P.groupOfCab[cab] ?? 0]?.nombre ?? "";
+    for (const i of personas) if (i >= 0 && i < P.n) out[i] = nombre;
+  });
+  return out;
 }
 
 /** Hacia dónde sube el cable: a la derecha en horizontal, hacia arriba en el celular. */

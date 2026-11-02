@@ -1,7 +1,7 @@
 import { Container, Graphics, Sprite } from "pixi.js";
 import { musicHold } from "../../music";
 import { mediana, nivelQueCabe, type Nivel } from "../nombres";
-import { INK, crearJuego, hashDe, planNombres, type Kit, type PlanNombres } from "./kit";
+import { INK, anchoMarcador, crearJuego, hashDe, planNombres, reservaDeMarcas, textoMarcador, type Kit, type PlanNombres } from "./kit";
 import { anchoAprox, casilla, geoDe, puntoDe, rejillaDe, type Geo, type Lugar, type Rejilla } from "./toborochi-arbol";
 import { T_QUEDAN, T_SILENCIO, T_TRASIEGO, bajaEn, enElArbolEn, faseDe, frenteEn, hiloEn, nubladoEn, planToborochi, tPosa, tiembla, vientoEn, type Datos, type Visita } from "./toborochi-plan";
 import { TEXTOS } from "./toborochi-textos";
@@ -707,7 +707,9 @@ function nombres(k: Kit, d: Datos, e: Escena, g: Geo, t: number, fase: string, p
       .map((x) => x.i);
   } else if ((fase === "quedan" || fase === "colibri") && !d.sinNombres && !k.coronado) quienes = [d.ganador, d.rival];
   // El contador de arriba a la izquierda no se tapa.
-  const contador = { x: 0, y: S.top() - 4 * p.k, width: (chico ? 230 : 300) * p.k, height: 74 * p.k };
+  // El contador lleva el total («QUEDAN  18 DE 18») y debajo la fila de marcas: se reserva lo que miden.
+  const reserva = reservaDeMarcas(d.n, S.u(), p.w);
+  const contador = { x: 0, y: S.top() - 4 * p.k, width: Math.max(anchoMarcador(textoMarcador(k.txt("marcadorQuedan"), d.n, { de: k.txt("marcadorDe"), cuantos: d.n }), S.u()), reserva.ancho), height: 74 * p.k + reserva.alto };
   S.tags(k.nombres as string[], quienes, alto, [contador]);
 
   /* Los nombres de las que caen y los de la alfombra. */

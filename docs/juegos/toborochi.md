@@ -73,7 +73,7 @@ La meta de `audit-identidad` es 8 de 8, 17 de 18 y 27 de 30.
 - **Ir adelante es:** seguir en el árbol. El contador baja de a una cada vez que una flor se desprende y llega a 1 con el golpe.
 - **Hacia dónde:** arriba. Hay que mirar el árbol: las que siguen están en la copa, y las que se van caen a la alfombra, fuera de la mirada. La primera versión decía «abajo» y un describidor a ciegas contestó «arriba» las 27 veces que vio el árbol.
 - **Lo que falta se ve con:** las flores que quedan en la copa y la alfombra que se llena.
-- **El contador:** el del kit, arriba a la izquierda, «EN EL ÁRBOL».
+- **El contador:** el del kit, arriba a la izquierda, «QUEDAN n DE N», con una fila de marcas debajo (una por persona: encendidas las que siguen).
 - **Cada hecho, con su tipo y su pose:** «se va» (`salio`: la flor se desprende y baja aleteando), «cuelga de un hilo» o «se engancha» (`casi`), «visita» (`casi`: el colibrí suspendido frente a la flor) y «gana» (`gano`: la flor se enciende).
 - **Cómo sale quien sale:** cae con su nombre y queda escrita en la alfombra; sin X roja y con el tono suave de siempre.
 - **El relator:** seis palabras o menos, un nombre y ningún número («¡Se va Ana, con premio!»).
@@ -98,7 +98,7 @@ La meta de `audit-identidad` es 8 de 8, 17 de 18 y 27 de 30.
 1. Que el colibrí visite el toborochi del juego: El Deber lo dice de la leyenda («aún asoma convertida en flor para ser visitada por los colibríes»); que lo haga el árbol real no lo dice (habla de «aves, abejas y otros polinizadores»).
 2. El surazo en mayo es una suposición del diseño, no un dato de la fuente.
 3. Que la tarjeta nombre a Araverá (decisión del 1 de noviembre), con la fuente.
-4. «EN EL ÁRBOL» como rótulo del contador, y que las que caen «se van» (no «pierden»).
+4. Que las que caen «se van» (no «pierden»). El rótulo del contador fue «EN EL ÁRBOL» hasta la cuarta vuelta de la prueba del niño; ahora es «QUEDAN», igual en todos los de pie.
 
 ## Batería
 

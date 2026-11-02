@@ -1,5 +1,5 @@
 import type { EntradaPlan } from "./entrada-plan";
-import type { Direccion, Lugar, Respuestas } from "./kit/respuestas";
+import type { Direccion, Grupos, Lugar, Respuestas } from "./kit/respuestas";
 import { respuestasDeSalidas, type HechoDelPlan, type PlanDeSalidas } from "./salidas-nino";
 
 /**
@@ -64,6 +64,16 @@ export function planDeSalidasDeOruro({ plan: P, tCartel }: PlanDeOruro): PlanDeS
   });
   if (P.rival >= 0) hechos.push({ desde: P.T_ARRIVE, tipo: "adelante", quien: P.winner });
   return { n: P.n, salidas, hechos, ganador: P.winner, duracion: tCartel };
+}
+
+/**
+ * Los grupos que muestra la pantalla: las pastillas de arriba son las fraternidades («Vicuñas 4»), no las personas.
+ * El nombre de la fraternidad de cada persona, por su puesto en la lista.
+ */
+export function gruposDeOruro(P: Pick<EntradaPlan, "n" | "frats">): Grupos {
+  const out: string[] = Array.from({ length: P.n }, () => "");
+  for (const f of P.frats) for (const i of f.members) if (i >= 0 && i < P.n) out[i] = f.name;
+  return out;
 }
 
 export function respuestasOruro(p: PlanDeOruro, t: number, lugar: Lugar = "centro", hacia: Direccion = SENTIDO_ORURO): Respuestas {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { listaCaidos } from "./pinata-labels";
+import { conTitulo, listaAdentro, listaCaidos } from "./pinata-labels";
 
 const tamanos = [
   { w: 1280, h: 720, phone: false },
@@ -39,5 +39,34 @@ describe("listaCaidos: la lista de los que cayeron entra en la pantalla", () => 
     expect(g.rowH).toBeGreaterThan(0);
     expect(g.colW * g.cols).toBeLessThanOrEqual(g.w + 1e-9);
     expect(g.y + g.rows * g.rowH).toBeLessThanOrEqual(600);
+  });
+});
+
+describe("las dos listas de la piñata: los que cayeron y los que siguen adentro", () => {
+  for (const { w, h, phone } of tamanos.filter((x) => x.w >= 320)) {
+    it(`con su título, la de los caídos entra en ${w}x${h}`, () => {
+      const k = Math.min(w / 420, h / 900);
+      const floor = h - 106 - 58 * k;
+      const g = conTitulo(listaCaidos({ w, k, top: 82, floor, phone }));
+      expect(g.y - g.rowH).toBeGreaterThanOrEqual(82);
+      expect(g.y + g.h).toBeLessThanOrEqual(floor);
+      expect(g.cap).toBe(g.cols * g.rows);
+      expect(g.rows).toBeGreaterThanOrEqual(2);
+    });
+  }
+
+  it("la de los que siguen va a la izquierda, bajo el contador y sus marcas, y no pasa de la mitad de la pantalla", () => {
+    for (const [w, h] of [[1920, 1080], [1280, 720], [1024, 768]] as const) {
+      const k = h / 720;
+      const floor = h - 106 * k - 58 * k;
+      const abajoDe = 82 + 10 * k + 52 * k + 60 * k;
+      const g = listaAdentro({ w, k, floor, abajoDe });
+      expect(g.x).toBeLessThan(w * 0.1);
+      expect(g.x + g.w).toBeLessThan(w * 0.5);
+      expect(g.y - g.rowH).toBeGreaterThanOrEqual(abajoDe);
+      expect(g.y + g.h).toBeLessThanOrEqual(floor);
+      expect(g.cols).toBe(1);
+      expect(g.cap).toBeGreaterThanOrEqual(10);
+    }
   });
 });

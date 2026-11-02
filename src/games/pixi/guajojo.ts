@@ -1,6 +1,6 @@
 import { Container, Graphics } from "pixi.js";
 import { musicHold } from "../../music";
-import { crearJuego, hashDe, type Kit } from "./kit";
+import { anchoMarcador, crearJuego, hashDe, reservaDeMarcas, textoMarcador, type Kit } from "./kit";
 import {
   T_AMANECER, Z_META, Z_ULTIMOS, cajaDelPalo, cajaDeCuerpo, enPieEn, faseDe, geoDe, miradaDe, planGuajojo, proyectar, sentadaDe, swayDe, tandaDeLista, xDe, zDe,
   type Ciclo, type Datos, type Geo,
@@ -503,9 +503,11 @@ function nombres(k: Kit, d: Datos, e: Escena, g: Geo, t: number, fase: string, c
   const palo = cajaDelPalo(g);
   const zc = k.cam.toScreen(1, 0, p.w, p.h).x - k.cam.toScreen(0, 0, p.w, p.h).x;
   const pa = k.cam.toScreen(palo.x, palo.y, p.w, p.h);
+  const reserva = reservaDeMarcas(k.nombres.length, S.u(), p.w);
   const evitar = [
     { x: pa.x, y: pa.y, width: palo.w * zc, height: palo.h * zc * 0.55 },
-    { x: 0, y: S.top(), width: 270 * p.k, height: 62 * p.k },
+    // El contador lleva el total («QUEDAN  18 DE 18») y debajo la fila de marcas: se reserva lo que miden.
+    { x: 0, y: S.top(), width: Math.max(anchoMarcador(textoMarcador(k.txt("marcadorQuedan"), k.nombres.length, { de: k.txt("marcadorDe"), cuantos: k.nombres.length }), S.u()), reserva.ancho), height: 62 * p.k + reserva.alto },
   ];
   S.tags(k.nombres as string[], quienes, sobreLaCabeza, evitar);
 

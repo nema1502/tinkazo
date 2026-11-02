@@ -12,7 +12,9 @@ import { LINES, T_BOARD, T_CROWN, T_DOCK, T_RUN, planCableCar } from "./cablecar
 import { GRUPOS, grupoDe } from "../grupos";
 import { exponerNino } from "./nino";
 import { lugarDe } from "./kit/respuestas";
-import { planDelTelefericoDe, respuestasTeleferico, sentidoDelTeleferico } from "./cablecar-nino";
+import { pintarMarcas } from "./kit/marcador-vista";
+import { reservaDeMarcas } from "./kit/marcador";
+import { gruposDelTeleferico, planDelTelefericoDe, respuestasTeleferico, sentidoDelTeleferico } from "./cablecar-nino";
 
 /**
  * El Teleférico, en PixiJS, con el director de cámara.
@@ -34,6 +36,8 @@ import { planDelTelefericoDe, respuestasTeleferico, sentidoDelTeleferico } from 
  * cara hasta su renglón en el andén, con su nombre.
  */
 
+/** Dónde empieza, bajo el contador (en unidades de la pantalla), la fila de marcas: debajo de la estación. */
+const HUD_MARCAS_Y = 134;
 const hexOf = (css: string): number => parseInt(css.replace("#", ""), 16);
 
 export async function cableCarPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<void> {
@@ -144,7 +148,10 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   const soloTags = new Map<number, { txt: string; sc: number; chip: Container; side: number }>();
   let hudLabel!: Text;
   let hudNum!: Text;
+  /** El total que acompaña al número de arriba («DE 18»): sin él, «4» no dice si falta mucho o poco. */
+  let hudDe!: Text;
   let hudStation!: Text;
+  let hudMarcas!: Graphics;
 
   function build(): void {
     G = geo();
@@ -360,11 +367,16 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     hudLabel.position.set(22 * hu, top);
     hudNum = S.text("", { fontSize: 52 * hu, fontWeight: "900", fill: YELLOW, stroke: { color: INK, width: 6 * hu } });
     hudNum.position.set(22 * hu, top + 24 * hu);
+    hudDe = S.text("", { fontSize: Math.max(24 * hu, LEGIBLE.secPx), fontWeight: "800", fill: CREAM });
+    hudDe.alpha = 0.95;
     hudStation = S.text("", { fontSize: Math.max(22 * hu, LEGIBLE.secPx), fontWeight: "800", fill: CREAM });
     hudStation.alpha = 0.95;
     hudStation.position.set(22 * hu, top + 92 * hu);
     // La ronda ya está arriba, en la barra del estadio: abajo se encimaba con las cabinas.
-    S.hud.addChild(hudLabel, hudNum, hudStation);
+    // Debajo, una marca por persona: las que cuentan el número, encendidas; un chico las cuenta sin leer.
+    hudMarcas = new Graphics();
+    hudMarcas.position.set(22 * hu, top + HUD_MARCAS_Y * hu);
+    S.hud.addChild(hudLabel, hudNum, hudDe, hudStation, hudMarcas);
     void span;
   }
   build();
@@ -701,7 +713,11 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
    */
   const aLaRegla = (fuente: number): number => Math.max(1, letraMinima(S.u()) / (fuente * Math.max(0.05, zoomNow())));
   /** Los contadores de arriba a la izquierda, en la pantalla: el andén y los nombres no se les encima. */
-  const hudBox = (): Box => ({ x0: 0, y0: S.top(), x1: 200 * S.u(), y1: S.top() + 140 * S.u() });
+  const hudBox = (): Box => {
+    const u = S.u();
+    const marcas = reservaDeMarcas(names.length, u, S.sw());
+    return { x0: 0, y0: S.top(), x1: Math.max(200 * u, 22 * u + marcas.ancho), y1: S.top() + (marcas.alto ? 18 + HUD_MARCAS_Y + 5 : 140) * u + (marcas.alto ? marcas.alto - 8 * u : 0) };
+  };
   /** Dónde cae en pantalla el cuerpo de una cabina, sin el colgante ni la bandera. */
   function cabBox(cab: number, x: number): Box | null {
     const p = cabPoint(cab, x);
@@ -751,6 +767,9 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     const nm = names[idx] ?? "";
     // El co-ganador que se baja antes lleva su estrella: el relator dice que se va con premio.
     const c = S.chip(winners.indexOf(idx) > 0 ? `★ ${nm}` : nm, sc, nm);
+    // Quien se bajó ya no sigue: su nombre lleva una raya roja. Un nombre quieto junto a la estación se leía como «sigue arriba» (prueba del niño, 2 de noviembre de 2026).
+    const lb = c.getLocalBounds();
+    c.addChild(new Graphics().moveTo(lb.x + 3, lb.y + lb.height / 2).lineTo(lb.x + lb.width - 3, lb.y + lb.height / 2).stroke({ width: Math.max(3, lb.height * 0.12), color: 0xd62839, cap: "round" }));
     c.visible = false;
     nameLayer.addChild(c);
     return c;
@@ -912,7 +931,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         const since = tAll - t0 - FLY;
         f.visible = false;
         chip.visible = true;
-        chip.alpha = fade * clamp(since / 0.1, 0, 1);
+        chip.alpha = fade * clamp(since / 0.1, 0, 1) * 0.86;
         chip.scale.set(1 + 0.22 * Math.exp(-since * 14));
         continue;
       }
@@ -1473,7 +1492,10 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     const m = tAll < T_BOARD ? P.pax.reduce((a, _, cab) => a + P.aboard(cab, tAll).length, 0) : P.leftAt(tAll);
     hudLabel.text = tAll < T_BOARD ? t("cTelAboard") : t("cTelLeft");
     hudNum.text = String(m);
+    hudDe.text = `${t("marcadorDe")} ${names.length}`;
+    hudDe.position.set(hudNum.x + hudNum.width + 10 * S.u(), hudNum.y + (hudNum.height - hudDe.height) * 0.62);
     const at = Math.min(NS, Math.floor(P.headAt(tAll) + 0.02));
+    pintarMarcas(hudMarcas, { total: names.length, quedan: m, k: S.u(), w: S.sw(), y: 0 });
     hudStation.text = tAll >= T_BOARD && tAll < T_RUN ? T[lang].cTelOf(Math.max(1, at), NS) : "";
     if (tAll >= T_CROWN) crown.at(tAll - T_CROWN, true, focoDeLaCabina());
   }
@@ -1486,6 +1508,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       forma: "de-pie",
       duracion: golpe,
       t: () => tAll,
+      // La pantalla muestra cabinas con su grupo («Vicuñas ×4»): quien mira contesta con el grupo.
+      grupos: gruposDelTeleferico(P),
       verdad: () => {
         // Adónde mirar: las cabinas que todavía llevan gente, y con el golpe, la de quien gana. Lo decide la cámara, que el plan no conoce.
         const W = S.sw(), H = S.sh();

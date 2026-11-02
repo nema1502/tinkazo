@@ -24,6 +24,12 @@ export interface GanchoNino {
   duracion: number;
   t(): number;
   verdad(): Respuestas;
+  /**
+   * Solo los juegos cuya pantalla muestra grupos y no personas (las cabinas del teleférico, las comparsas de Oruro):
+   * el nombre del grupo de cada persona, por su puesto en la lista. Quien mira contesta «quiénes siguen» con el
+   * nombre del grupo, y eso vale mientras siga en juego alguien de ese grupo. Presentación: no cambia el plan.
+   */
+  grupos?: readonly string[];
 }
 
 export function exponerNino(gancho: Omit<GanchoNino, "sinLetras">): void {

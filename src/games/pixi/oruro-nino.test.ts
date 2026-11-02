@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { planEntrada, type EntradaPlan } from "./entrada-plan";
-import { problemasDeRespuestas, type PlanDeRespuestas } from "./kit/respuestas";
-import { SENTIDO_ORURO, horaDeCaer, respuestasOruro } from "./oruro-nino";
+import { problemasDeGrupos, problemasDeRespuestas, type PlanDeRespuestas } from "./kit/respuestas";
+import { SENTIDO_ORURO, gruposDeOruro, horaDeCaer, respuestasOruro } from "./oruro-nino";
 
 function rngOf(seed: number): () => number {
   let a = seed >>> 0;
@@ -58,6 +58,15 @@ describe("las respuestas de La Entrada", () => {
     expect(fin.adelante.quienes).toEqual([ganador]);
     expect(fin.progreso).toBe(1);
     expect(fin.paso).toMatchObject({ tipo: "gano", quien: ganador });
+  });
+
+  it("declara los grupos que muestra la pantalla: uno por persona, el de su fraternidad", () => {
+    for (const n of [8, 18, 30, 50]) {
+      const { plan } = armar(n, 5);
+      const grupos = gruposDeOruro(plan);
+      expect(problemasDeGrupos(grupos, n), `n=${n}`).toEqual([]);
+      for (const f of plan.frats) for (const i of f.members) expect(grupos[i]).toBe(f.name);
+    }
   });
 
   it("cae el que pierde el contrapunto: queda quien gana antes de la llegada y se dice quién cayó", () => {

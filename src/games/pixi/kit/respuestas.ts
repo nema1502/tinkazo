@@ -64,6 +64,23 @@ export interface Respuestas {
 
 /** Cuánto tarda en verse un hecho en el cuerpo, en segundos de juego. */
 export const POSE_MAX = 0.3;
+
+/**
+ * Los grupos de un juego cuya pantalla los muestra en lugar de las personas: el nombre del grupo de cada
+ * persona, por su puesto en la lista. Va en `window.__nino.grupos`, aparte de las respuestas porque no cambia
+ * con el tiempo. Un chico mira «Vicuñas ×4» y contesta con el grupo; el juez lo acepta (`coincidePropia`) si
+ * todavía sigue en juego alguien de ese grupo.
+ */
+export type Grupos = readonly string[];
+
+/** Lo que está mal en los grupos de un juego, para sus pruebas: uno por persona y ninguno sin nombre. Vacío si cumple. */
+export function problemasDeGrupos(grupos: Grupos, n: number): string[] {
+  const p: string[] = [];
+  if (grupos.length !== n) p.push(`hay ${grupos.length} grupos y ${n} personas: uno por persona`);
+  if (grupos.some((g) => typeof g !== "string" || !g.trim())) p.push("una persona no tiene grupo con nombre");
+  if (new Set(grupos).size < 2) p.push("con un solo grupo no hay grupos que mostrar");
+  return p;
+}
 /** Lo menos que separa dos salidas, en segundos de juego. */
 export const SALIDAS_APARTE = 1;
 

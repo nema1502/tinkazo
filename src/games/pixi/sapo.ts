@@ -17,6 +17,7 @@ import { HAND, MOUTH, SAPO_MAX, holeLayout, optsForArc, planThrows, type Point, 
 import { AFTER_MISS, AFTER_NEAR, BOCA_FLY, BOCA_IN, BOCA_SPIT, HANG_FINAL, HANG_FIRST, HANG_SMALL, Q_FLY, Q_SHOW, Q_WAVE, SINK, WOBBLE, tiemposDeTiros } from "./sapo-tiempos";
 import { exponerNino } from "./nino";
 import { lugarDe } from "./kit/respuestas";
+import { pintarMarcas } from "./kit/marcador-vista";
 import { FORMA_SAPO, respuestasSapo } from "./sapo-nino";
 
 /**
@@ -257,7 +258,8 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   const counter = S.text("", { fontFamily: MONO, fontSize: CONTADOR.fuente, fontWeight: "700", fill: CREAM });
   counter.anchor.set(0.5);
   const counterG = new Container();
-  counterG.addChild(counterBox, counter);
+  const marcasG = new Graphics();
+  counterG.addChild(counterBox, counter, marcasG);
   S.hud.addChild(counterG);
   // "¡Casi!" como calcomanía amarilla, legible desde el fondo.
   const almostBox = new Graphics();
@@ -1174,12 +1176,17 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     for (const o of tosses) if (tAll >= o.start - 0.7) turn = o.th.turn;
     const started = tAll >= (tosses[0] as Toss).start - 0.7;
     const quedan = all - waves.reduce((a, w, wi) => a + (tAll >= Q_SHOW + wi * Q_WAVE + 0.6 ? w.length : 0), 0);
-    counter.text = !started
-      ? (tAll < T_FLY && all > holes ? `${t("cQualIn")}  ${quedan}` : `${t("cSapHoles")}  ${holes}`)
-      : total > 1 ? T[getLang()].cSapTally(premioDe(turn), total).toUpperCase() : `${t("cSapHoles")}  ${holes}`;
+    // «QUEDAN 14 DE 18» (primero los de la clasificatoria, después los de la mesa, que bajan con cada medalla) y,
+    // debajo, una marca por persona: un chico cuenta las encendidas sin leer. Con varios premios el texto es el de la cuenta de premios.
+    const resueltos = tosses.reduce((a, o) => a + (o.th.kind === "hit" && !o.final && tAll >= o.land + SINK ? 1 : 0), 0);
+    const siguen = !started && tAll < T_FLY && all > holes ? quedan : Math.max(1, holes - resueltos);
+    counter.text = started && total > 1
+      ? T[getLang()].cSapTally(premioDe(turn), total).toUpperCase()
+      : `${t("marcadorQuedan")}  ${siguen} ${t("marcadorDe")} ${all}`;
     const bw = counter.width + medidasContador(k).aire, bh = medidasContador(k).alto;
     counter.position.set(bw / 2, bh / 2);
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(0x221a33).stroke({ width: 3 * k, color: INK });
+    pintarMarcas(marcasG, { total: all, quedan: siguen, k, w: g.w });
     counterG.position.set(22 * k, S.top() + 10 * k);
     counterG.visible = !crowned;
     // Con la cámara cerca tapaba nombres de la fila de arriba.

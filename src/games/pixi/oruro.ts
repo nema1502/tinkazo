@@ -12,11 +12,13 @@ import { CHIP_SCALE, medidasContador, CREAM, INK, MONO, YELLOW, hash, mountPixi,
 import { tiemposFoco } from "./foco";
 import { colorDeNombre } from "./foco-vista";
 import { layoutLabels, type LabelItem, type Rect } from "./pinata-labels";
-import { OUT_HOLD, counterText, estimateTagSize, outTreatment, selectTags, tagBudget, tagName, type TagCandidate } from "./oruro-tags";
+import { OUT_HOLD, estimateTagSize, outTreatment, selectTags, tagBudget, tagName, type TagCandidate } from "./oruro-tags";
 import { planEntrada, type Arch, type Frat } from "./entrada-plan";
-import { horaDeCaer, respuestasOruro } from "./oruro-nino";
+import { gruposDeOruro, horaDeCaer, respuestasOruro } from "./oruro-nino";
 import { exponerNino } from "./nino";
 import { lugarDe } from "./kit/respuestas";
+import { textoMarcador } from "./kit/marcador";
+import { pintarMarcas } from "./kit/marcador-vista";
 import { DANCE_TOP, Wardrobe, prendaDe, pose, poseMusician, type DancerParts, type Instrument, type MusicianParts, type PoseMode } from "./entrada-bailes";
 
 /**
@@ -551,6 +553,9 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   let counter!: ReturnType<PixiStage["text"]>;
   let counterBox!: Graphics;
   let counterW = 0;
+  /** La fila de marcas bajo el contador y lo que ocupa de alto (con su aire); 0 mientras no se ve (la presentación). */
+  let counterMarcas!: Graphics;
+  let marcasH = 0;
   let blockText!: ReturnType<PixiStage["text"]>;
   let blockPlate!: Graphics;
   let chips!: Container;
@@ -579,7 +584,8 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     counter = S.text("", { fontFamily: MONO, fontSize: medidasContador(k).fuente, fontWeight: "700", fill: S.dark ? CREAM : INK });
     counter.anchor.set(0.5);
     const box = new Container();
-    box.addChild(counterBox, counter);
+    counterMarcas = new Graphics();
+    box.addChild(counterBox, counter, counterMarcas);
     box.position.set(22 * k, S.top() + 10 * k);
     chips = new Container();
     leaders = new Graphics();
@@ -630,7 +636,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     const right = g.w - 22 * k - drumWidth(g) - 10 * k;
     const startX = 22 * k + (counterW || 230 * k) + 12 * k;
     let x = S.portrait() ? 22 * k : startX;
-    let y = S.portrait() ? S.top() + 10 * k + 50 * k : S.top() + 10 * k;
+    let y = S.portrait() ? S.top() + 10 * k + 50 * k + marcasH : S.top() + 10 * k;
     for (const p of pills) {
       if (x + p.w > (S.portrait() ? g.w - 12 * k : right) && x > 22 * k + 1) {
         x = 22 * k;
@@ -1614,18 +1620,22 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     }
     // La interfaz.
     const live = dancers.filter((d) => d.alive).length;
-    counter.text = counterText(t("cOruLeft"), live, n);
+    counter.text = textoMarcador(t("marcadorQuedan"), live, { de: t("marcadorDe"), cuantos: n });
     const bw = counter.width + medidasContador(k).aire, bh = medidasContador(k).alto;
-    if (Math.abs(bw - counterW) > 0.5) {
-      counterW = bw;
-      placePills(g);
-    }
     counter.position.set(bw / 2, bh / 2);
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 3 * k, color: INK });
+    // Debajo, una marca por persona (no en la presentación, donde el cartel de la comparsa ocupa ese lugar). De costado las pastillas
+    // van al lado del contador: la placa no pasa de su ancho.
+    const hMarcas = phase === "pres" ? (pintarMarcas(counterMarcas, { total: 0, quedan: 0, k, w: g.w }), 0) : pintarMarcas(counterMarcas, { total: n, quedan: live, k, w: g.w, anchoMax: S.portrait() ? undefined : bw });
+    if (Math.abs(bw - counterW) > 0.5 || Math.abs(hMarcas - marcasH) > 0.5) {
+      counterW = bw;
+      marcasH = hMarcas;
+      placePills(g);
+    }
     drawPills(g);
     drawRoster(g);
     drawDrum(g, bph, frozen);
-    drawTags(g, bw, bh);
+    drawTags(g, bw, bh + hMarcas);
     const k0 = exitsDone + (phase === "walk" && exitsDone < P.arches.length ? 1 : 0);
     blockText.text = phase === "walk" && P.arches.length ? T[getLang()].cOruBlock(clamp(k0, 1, P.arches.length), P.arches.length) : "";
     blockPlate.clear();
@@ -1727,6 +1737,8 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       forma: "de-pie",
       duracion: golpe,
       t: () => tAll,
+      // La pantalla muestra las fraternidades en pastillas («Vicuñas 4»): quien mira contesta con la fraternidad.
+      grupos: gruposDeOruro(P),
       verdad: () => {
         // Adónde mirar: dónde caen en la pantalla, con la cámara de ahora, los que siguen bailando. Lo decide la cámara, que el plan no conoce.
         const r = respuestasOruro({ plan: P, tCartel: golpe }, tAll);

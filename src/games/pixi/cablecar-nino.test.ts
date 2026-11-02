@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { problemasDeRespuestas, type PlanDeRespuestas } from "./kit/respuestas";
+import { problemasDeGrupos, problemasDeRespuestas, type PlanDeRespuestas } from "./kit/respuestas";
 
 /** El plan toma `clamp` de overlay.ts, que lee `location` al cargarse, y vitest corre en Node. */
 let planCableCar: typeof import("./cablecar-plan").planCableCar;
@@ -73,6 +73,17 @@ describe("las respuestas del teleférico", () => {
       expect(fin.adelante.quienes).toEqual([ganador]);
       expect(fin.progreso).toBe(1);
       expect(fin.paso).toMatchObject({ tipo: "gano", quien: ganador });
+    }
+  });
+
+  it("declara los grupos que muestra la pantalla: uno por persona, el de su cabina, y quienes van juntos comparten nombre", () => {
+    for (const n of [8, 18, 40]) {
+      const { P } = armar(n, 11, 0.5);
+      const grupos = nino.gruposDelTeleferico(P);
+      expect(problemasDeGrupos(grupos, n), `n=${n}`).toEqual([]);
+      P.pax.forEach((personas, cab) => {
+        for (const i of personas) expect(grupos[i]).toBe(P.grupos[P.groupOfCab[cab] ?? 0]?.nombre);
+      });
     }
   });
 

@@ -60,7 +60,7 @@ La meta de `audit-identidad` es 8 de 8, 17 de 18 y 27 de 30.
 - **Ir adelante es:** seguir de pie en el sendero. El contador baja a medida que la gente se sienta y llega a 1 con el golpe.
 - **Hacia dónde:** arriba, hacia el palo. Un solo sentido de principio a fin: el grupo se achica al acercarse al horizonte.
 - **Lo que falta se ve con:** el palo (la meta, en todo cuadro), la distancia a la que están los que quedan y la hinchada que crece a los costados.
-- **El contador:** el del kit, arriba a la izquierda, «EN EL MONTE n».
+- **El contador:** el del kit, arriba a la izquierda, «QUEDAN n DE N», con una fila de marcas debajo (una por persona: encendidas las que siguen).
 - **Cada hecho, con su tipo y su pose:** «se sienta» (`salio`: el cuerpo se agacha en 0,28 s, con la ramita que se parte y las chispas), «aguanta» (`casi`: en un pie, con los brazos en vilo) y «gana» (`gano`: los brazos arriba junto al palo).
 - **Cómo sale quien sale:** se sienta donde pasó y su nombre crece un segundo ahí mismo; después se desliza a la hinchada. Sin X roja y con el tono suave de siempre (`sonido.salida()`).
 - **El relator:** seis palabras o menos, un nombre y ningún número («¡Crac! Te escuchó, Ana»).
@@ -85,7 +85,7 @@ La meta de `audit-identidad` es 8 de 8, 17 de 18 y 27 de 30.
 1. Que el guajojó sea un **ave de leyenda y no sagrada** (aunque la fuente dice que se la tiene por mal agüero, el juego no lo usa).
 2. Que la leyenda de la tarjeta **omita a los hechiceros y la muerte** y no nombre a un pueblo.
 3. Que sus **ojos sean amarillos**: la fuente de la ficha dice «ojos rojos» de noche, y el brillo de los ojos del nictibio, de cerca y con luz, es rojizo; el diseño pidió amarillo y así quedó.
-4. «EN EL MONTE» como rótulo del contador, y que quien se sienta «escucha» (no «pierde»).
+4. Que quien se sienta «escucha» (no «pierde»). El rótulo del contador fue «EN EL MONTE» hasta la cuarta vuelta de la prueba del niño; ahora es «QUEDAN», igual en todos los de pie, porque «EN EL MONTE 5 DE 18» se leía como lo hecho y no como lo que queda.
 
 ## Batería (2 de noviembre de 2026)
 

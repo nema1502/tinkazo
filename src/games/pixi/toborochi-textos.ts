@@ -14,7 +14,6 @@ import type { Textos } from "./kit";
  */
 export const TEXTOS = {
   es: {
-    marcadorQuedan: "EN EL ÁRBOL",
     intro: "¡Florece el toborochi!",
     busquen: "¡Busquen su flor!",
     ya: "¿Ya viste la tuya?",
@@ -37,7 +36,6 @@ export const TEXTOS = {
     ultimaDos: "Las dos se llevan premio.",
   },
   en: {
-    marcadorQuedan: "ON THE TREE",
     intro: "The toborochi blooms!",
     busquen: "Find your flower!",
     ya: "Did you spot yours?",

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { guardarMeta, tapaAlGanador, cajaDelFoco, crearDirector, type Pantalla } from "./director";
 import { FIGURA, cuantasCaben, figurasDe, tamanoMinimoFigura } from "./figuras";
 import { REGLA_NINO, palabrasDe, problemasDeLinea, validarGuion } from "./guion";
-import { MARCADOR, ESQUINA, marcadorPorSalidas, medidasMarcador, problemasDeMarcador } from "./marcador";
+import { MARCADOR, MARCAS_MAX, ESQUINA, anchoMarcador, disposicionDeMarcas, marcadorPorSalidas, medidasMarcador, problemasDeMarcador, reservaDeMarcas, textoMarcador } from "./marcador";
 import { SEPARACION_MAX, enFilaAparte, estaPegado, huecoAlCuerpo, nombreDeSalida, pegarAlCuerpo, unidadDe, type Rect } from "./nombres";
 import { DIRECCIONES, POSE_MAX, SALIDAS_APARTE, lugarDe, problemasDeRespuestas, verdadDelNino, type Respuestas } from "./respuestas";
 import { crearSonido, type Voz } from "./sonido";
@@ -24,6 +24,19 @@ describe("marcador: un solo contador, arriba a la izquierda", () => {
     expect(problemasDeMarcador(m, { duracion: 10, total: 5 })).toEqual([]);
   });
 
+  it("de pie el número lleva el total («5 DE 18»): sin él no se ve cuánto falta", () => {
+    expect(textoMarcador("EN EL MONTE", 5)).toBe("EN EL MONTE  5");
+    expect(textoMarcador("EN EL MONTE", 5, { de: "DE", cuantos: 18 })).toBe("EN EL MONTE  5 DE 18");
+    expect(textoMarcador("IN THE FOREST", 18, { de: "OF", cuantos: 18 })).toBe("IN THE FOREST  18 OF 18");
+    // La caja crece con el total y su ancho se reserva para que los nombres no la pisen.
+    const solo = anchoMarcador(textoMarcador("EN EL MONTE", 18), 1);
+    const con = anchoMarcador(textoMarcador("EN EL MONTE", 18, { de: "DE", cuantos: 18 }), 1);
+    expect(con).toBeGreaterThan(solo);
+    expect(anchoMarcador("ABCD", 1)).toBeCloseTo(4 * 0.62 * 22 + 44, 9);
+    // En un celular la letra no baja de 15 px y la caja sigue esa letra.
+    expect(anchoMarcador("ABCD", 0.4)).toBeCloseTo(4 * 0.62 * 15 + medidasMarcador(0.4).aire, 9);
+  });
+
   it("no baja de 1 aunque salgan de más", () => {
     expect(marcadorPorSalidas(2, [1, 2, 3], 9)(5)).toBe(1);
   });
@@ -35,6 +48,43 @@ describe("marcador: un solo contador, arriba a la izquierda", () => {
     expect(problemasDeMarcador((t) => (t < 2 ? 5 : 1), { duracion: 5, total: 5, pasoMax: 4 })).toEqual([]);
     expect(problemasDeMarcador((t) => (t < 2 ? 4 : 1), { duracion: 5, total: 5, pasoMax: 9 }).join(" ")).toContain("empieza en 4");
     expect(problemasDeMarcador((t) => (t < 2 ? 2.5 : 1), { duracion: 5, total: 2.5 }).join(" ")).toContain("entero");
+  });
+
+  it("de pie el contador dice «QUEDAN 5 DE 18»: cuántos quedan de cuántos eran", () => {
+    expect(textoMarcador("QUEDAN", 5, { de: "DE", cuantos: 18 })).toBe("QUEDAN  5 DE 18");
+    expect(textoMarcador("LEFT", 5, { de: "OF", cuantos: 18 })).toBe("LEFT  5 OF 18");
+  });
+});
+
+describe("marcador: la fila de marcas, una por persona", () => {
+  it("con 18 personas entra en una fila a 1080 y en dos en un celular, con marcas de 12 px o más", () => {
+    const grande = disposicionDeMarcas(18, 1.5, 1920);
+    expect(grande?.filas).toBe(1);
+    expect(grande?.cols).toBe(18);
+    const celular = disposicionDeMarcas(18, 0.93, 390);
+    expect(celular?.filas).toBe(2);
+    expect(celular?.cols).toBe(9);
+    for (const d of [grande, celular]) expect(d?.d ?? 0).toBeGreaterThanOrEqual(12);
+  });
+
+  it("la placa nunca se sale de la pantalla ni del ancho que se le pide", () => {
+    for (const [total, k, w] of [[18, 0.93, 390], [24, 0.93, 390], [18, 1.5, 1920], [8, 0.64, 320], [40, 1, 1280]] as const) {
+      const d = disposicionDeMarcas(total, k, w);
+      expect(d, `${total} a ${w}`).not.toBeNull();
+      expect((d?.ancho ?? 0) + MARCADOR.x * k).toBeLessThanOrEqual(w);
+      expect(d?.cols).toBeLessThanOrEqual(Math.ceil(total / (d?.filas ?? 1)));
+    }
+    const angosta = disposicionDeMarcas(18, 1.5, 1920, 400);
+    expect(angosta?.ancho ?? 0).toBeLessThanOrEqual(400);
+    expect(angosta?.filas).toBe(2);
+  });
+
+  it("no se dibuja con menos de dos personas ni con más de las que se distinguen", () => {
+    expect(disposicionDeMarcas(1, 1, 1280)).toBeNull();
+    expect(disposicionDeMarcas(MARCAS_MAX + 1, 1, 1280)).toBeNull();
+    expect(disposicionDeMarcas(Number.NaN, 1, 1280)).toBeNull();
+    expect(reservaDeMarcas(200, 1, 1280)).toEqual({ ancho: 0, alto: 0 });
+    expect(reservaDeMarcas(18, 1, 1280).alto).toBeGreaterThan(0);
   });
 });
 
