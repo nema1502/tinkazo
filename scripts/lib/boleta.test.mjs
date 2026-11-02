@@ -183,10 +183,46 @@ describe("la boleta", () => {
   });
 
   it("el auditor de palabras con hallazgos de apuesta pone en rojo la fila 6, y los de vocabulario la 7", () => {
-    const corridas = [...limpias(), c("audit-palabras", "wheel", [f("apuesta: «jackpot» en src/i18n.ts"), f("vocabulario: «eliminado» en el relator")])];
+    // Los nombres son los de verdad: `apuesta: <unidad>` y `vocabulario: <unidad>`; el juego va en el objetivo.
+    const corridas = [...limpias(), c("audit-palabras", "wheel", [f("apuesta: wheel", "src/i18n.ts:10 «jackpot»"), f("vocabulario: wheel", "src/i18n.ts:20 «eliminado»")])];
     const b = armarBoleta({ juego: "wheel", corridas, vetos: vetosOk, tarjetas });
     expect(b.filas[5].estado).toBe(ROJO);
     expect(b.filas[6].estado).toBe(ROJO);
+  });
+
+  it("de una corrida de `todo` de palabras, cada juego toma solo las fallas de su unidad", () => {
+    const todo = c("audit-palabras", "todo", [f("apuesta: race", "src/i18n.ts:10 «jackpot»"), f("vocabulario: sitio", "index.html:3 «drand»")]);
+    expect(esDelJuego(f("apuesta: race"), "race")).toBe(true);
+    expect(esDelJuego(f("apuesta: race"), "wheel")).toBe(false);
+    expect(esDelJuego(f("vocabulario: sitio"), "wheel")).toBe(false);
+    const deLaRuleta = armarBoleta({ juego: "wheel", corridas: [...limpias(), todo], vetos: vetosOk, tarjetas });
+    expect(deLaRuleta.filas[5].estado).toBe(VERDE);
+    expect(deLaRuleta.filas[6].estado).toBe(VERDE);
+    const deLaCarrera = armarBoleta({ juego: "race", corridas: [...limpias().map((x) => ({ ...x, objetivo: x.objetivo === "wheel" ? "race" : x.objetivo })), todo], vetos: vetosOk, tarjetas: [] });
+    expect(deLaCarrera.filas[5].partes[0].estado).toBe(ROJO);
+  });
+
+  it("la pregunta del olor a apuesta es de la fila 6 y no cuenta como falta de comprensión", () => {
+    const olor = f("olor a apuesta: ninguna imagen parece casino ni juego de apuestas", "2 de 3 dicen que sí");
+    const conOlor = [
+      ...limpias().filter((x) => x.auditor !== "audit-nino"),
+      c("audit-nino", "wheel", [olor], { datos: { pasan: 2, semillas: 2, minimo: 2, olor: { aprobada: false, fotos: 3, conOlor: 2 } } }),
+      c("audit-palabras", "wheel"),
+    ];
+    const b = armarBoleta({ juego: "wheel", corridas: conOlor, vetos: vetosOk, tarjetas });
+    expect(b.filas[1].estado).toBe(VERDE);
+    expect(b.filas[1].partes[0].texto).toMatch(/pasa/);
+    expect(b.filas[5].estado).toBe(ROJO);
+    expect(b.filas[5].partes.at(-1).texto).toMatch(/olor/);
+    // Una falla de comprensión de verdad sigue poniendo en rojo la fila 2.
+    const noEntiende = conOlor.map((x) => (x.auditor === "audit-nino" ? { ...x, fallas: [olor, f("N1 · se entiende a los 7 años", "0 semillas pasan")] } : x));
+    expect(armarBoleta({ juego: "wheel", corridas: noEntiende, vetos: vetosOk, tarjetas }).filas[1].estado).toBe(ROJO);
+  });
+
+  it("el olor sin respuestas es gris y con todas en no, verde", () => {
+    const con = (olor) => [...limpias().filter((x) => x.auditor !== "audit-nino"), c("audit-nino", "wheel", [], { datos: { pasan: 2, semillas: 2, minimo: 2, olor } }), c("audit-palabras", "wheel")];
+    expect(armarBoleta({ juego: "wheel", corridas: con({ aprobada: null, fotos: 0, conOlor: 0 }), vetos: vetosOk, tarjetas }).filas[5].estado).toBe(GRIS);
+    expect(armarBoleta({ juego: "wheel", corridas: con({ aprobada: true, fotos: 3, conOlor: 0 }), vetos: vetosOk, tarjetas }).filas[5].estado).toBe(VERDE);
   });
 });
 

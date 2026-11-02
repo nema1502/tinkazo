@@ -77,6 +77,7 @@ try {
     noche: flag("--noche"),
     fisica: flag("--fisica"),
     todosLosJuegos: flag("--todos-los-juegos"),
+    boleta: !!boletaDe,
     base: opt("--base", "http://localhost:4180"),
   });
 } catch (e) {
@@ -129,6 +130,7 @@ try {
     noche: flag("--noche"),
     fisica: flag("--fisica"),
     todosLosJuegos: flag("--todos-los-juegos"),
+    boleta: !!boletaDe,
     base: base || "http://localhost:4180",
   });
 

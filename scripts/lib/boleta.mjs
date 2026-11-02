@@ -21,7 +21,7 @@ export const VERDE = "verde";
 export const ROJO = "rojo";
 export const GRIS = "gris";
 
-/** Los auditores que alimentan la boleta, para `audit:todo --boleta` (sin la prueba del niño ni las palabras: no corren en la batería). */
+/** Los auditores que alimentan la boleta, para `audit:todo --boleta` (sin la prueba del niño: no corre en la batería). `audit-palabras` corre una vez por juego, sin Chrome. */
 export const AUDITORES_DE_LA_BOLETA = [
   "audit-game",
   "audit-rigor",
@@ -30,6 +30,7 @@ export const AUDITORES_DE_LA_BOLETA = [
   "audit-emocion",
   "audit-legible",
   "audit-mezcla",
+  "audit-palabras",
   "check-lore",
   "smoke",
 ];
@@ -92,9 +93,17 @@ export function corridasDeTexto(texto) {
 
 /* ------------------------------------------------------------------ selección */
 
-/** ¿Esta falla es de este juego? Las que llevan el prefijo de otro juego no; las sin prefijo, sí. */
+/** La falla de la pregunta del olor a apuesta de la prueba del niño: informa a la fila 6 y no cuenta como falta de comprensión. */
+export const esOlor = (f) => /^olor\b/i.test(String(f.nombre ?? ""));
+
+/**
+ * ¿Esta falla es de este juego? Las que llevan el prefijo de otro juego no; las sin prefijo, sí.
+ * `audit-palabras` nombra las suyas `apuesta: <unidad>` o `vocabulario: <unidad>`: son del juego que dice la unidad.
+ */
 export function esDelJuego(falla, juego) {
   const n = String(falla.nombre ?? "").toLowerCase();
+  const deUnidad = /^(?:apuesta|vocabulario):\s*(\S+)/.exec(n);
+  if (deUnidad) return deUnidad[1] === juego;
   const propio = new RegExp(`^${juego}(?:[:\\s]|$)`);
   if (propio.test(n)) return true;
   return !TODOS_LOS_JUEGOS.some((j) => new RegExp(`^${j}(?:[:\\s]|$)`).test(n));
@@ -106,7 +115,7 @@ export function esDelJuego(falla, juego) {
  */
 export function deAuditor(corridas, auditor, juego) {
   const propias = corridas.filter((c) => c.auditor === auditor && c.objetivo === juego);
-  const generales = corridas.filter((c) => c.auditor === auditor && ["todos", "diez"].includes(c.objetivo));
+  const generales = corridas.filter((c) => c.auditor === auditor && ["todos", "diez", "todo"].includes(c.objetivo));
   const usadas = [...propias, ...generales];
   if (!usadas.length) return null;
   const fallas = usadas.flatMap((c) => (c.fallas ?? []).filter((f) => esDelJuego(f, juego)));
@@ -166,7 +175,9 @@ function filaComprension({ corridas, juego, nino }) {
   if (c?.conCifra) {
     const d = c.datos;
     const cifra = d && Number.isInteger(d.pasan) && Number.isInteger(d.semillas) ? `${d.pasan} de ${d.semillas} corridas, mínimo ${d.minimo}` : "sin cifra";
-    return [c.fallas.length ? rojo(`prueba del niño: no pasa (${cifra}; ${detalleDe(c.fallas)})`) : verde(`prueba del niño: pasa (${cifra})`)];
+    // El olor a apuesta es de la fila 6: aquí no cuenta.
+    const sinOlor = c.fallas.filter((f) => !esOlor(f));
+    return [sinOlor.length ? rojo(`prueba del niño: no pasa (${cifra}; ${detalleDe(sinOlor)})`) : verde(`prueba del niño: pasa (${cifra})`)];
   }
   if (nino && Number.isInteger(nino.pasan) && Number.isInteger(nino.semillas)) {
     const cifra = `${nino.pasan} de ${nino.semillas} corridas, mínimo ${nino.minimo ?? "?"}`;
@@ -203,9 +214,14 @@ function filaApuesta({ corridas, juego }) {
   const pal = deAuditor(corridas, "audit-palabras", juego);
   const partes = [pal ? parteDeAuditor("palabras (apuesta)", pal, (f) => coincide(f, /^apuesta/i)) : gris("palabras (apuesta): sin auditor")];
   const nino = deAuditor(corridas, "audit-nino", juego);
-  if (nino?.datos?.olor !== undefined || nino?.fallas.some((f) => coincide(f, /olor/i))) {
-    const malas = nino.fallas.filter((f) => coincide(f, /olor/i));
-    partes.push(malas.length ? rojo(`pregunta del olor: ${detalleDe(malas)}`) : verde("pregunta del olor: sin hallazgos"));
+  const olor = nino?.datos?.olor;
+  const malas = nino ? nino.fallas.filter(esOlor) : [];
+  if (malas.length || olor?.aprobada === false) {
+    partes.push(rojo(`pregunta del olor: ${malas.length ? detalleDe(malas) : `${olor.conOlor} de ${olor.fotos} fotos dicen que sí`}`));
+  } else if (olor?.aprobada === true) {
+    partes.push(verde(`pregunta del olor: ${olor.fotos} de ${olor.fotos} fotos dicen que no`));
+  } else if (olor?.aprobada === null) {
+    partes.push(gris("pregunta del olor: sin respuestas"));
   }
   return partes;
 }
