@@ -10,6 +10,8 @@ import { WINNER_HOLD, clamp, ease, shorten, winnersLabel } from "../overlay";
 import { tiemposFoco } from "./foco";
 import { exponerNino } from "./nino";
 import { lugarDe } from "./kit/respuestas";
+import { pintarMarcas } from "./kit/marcador-vista";
+import { reservaDeMarcas } from "./kit/marcador";
 import { FORMA_CHOVENA, respuestasChovena, type PlanDeLaChovena } from "./chovena-nino";
 import { colorDeNombre } from "./foco-vista";
 import { CHIP_SCALE, medidasContador, CREAM, INK, MONO, YELLOW, hash, mountPixi, type FocoAt, type PixiStage } from "./stage";
@@ -916,6 +918,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   let counter!: Text;
   let counterBox!: Graphics;
   let counterRoot!: Container;
+  let counterMarcas!: Graphics;
 
   function makeDancer(d: Dancer): View {
     const root = new Container();
@@ -1151,7 +1154,8 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     counter = S.text("", { fontFamily: MONO, fontSize: medidasContador(k).fuente, fontWeight: "700", fill: S.dark ? CREAM : INK });
     counter.anchor.set(0.5);
     counterRoot = new Container();
-    counterRoot.addChild(counterBox, counter);
+    counterMarcas = new Graphics();
+    counterRoot.addChild(counterBox, counter, counterMarcas);
     counterRoot.position.set(22 * k, S.top() + 10 * k);
     S.hud.addChild(tint, big, leaders, chips, panel, counterRoot, badge);
   }
@@ -1722,6 +1726,8 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
    * este cuadro. `suave` (pasar lista), lo mismo con los otros nombres: mejor
    * uno menos que dos encimados.
    */
+  /** La raya roja sobre el nombre de quien ya salió: se dibuja una vez por chip y se prende o se apaga. */
+  const tachas = new Map<Dancer, Graphics>();
   function placeChip(d: Dancer, x: number, placed: Rect[], scale = 1, suave = false): void {
     const { W, H, k } = G;
     if (!(wNow[d.idx] as ReturnType<typeof where>).alpha) return;
@@ -1799,6 +1805,20 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       return;
     }
     const cx = lugar.a, cy = lugar.b;
+    // Quien ya salió se ve afuera: su nombre, apagado y tachado. Un nombre quieto junto a alguien sentado se leía
+    // como «sigue en la rueda» (prueba del niño, 2 de noviembre de 2026).
+    const salio = d.outAt >= 0 && x >= d.outAt;
+    chip.alpha = salio ? 0.86 : 1;
+    let tacha = tachas.get(d);
+    if (!tacha) {
+      tacha = new Graphics();
+      const lb = chip.getLocalBounds();
+      const y = lb.y + lb.height / 2;
+      tacha.moveTo(lb.x + 3, y).lineTo(lb.x + lb.width - 3, y).stroke({ width: Math.max(3, lb.height * 0.12), color: 0xd62839, cap: "round" });
+      chip.addChild(tacha);
+      tachas.set(d, tacha);
+    }
+    tacha.visible = salio;
     const mio = { x: cx, y: cy, w: cw, h: ch };
     blandos.add(mio);
     placed.push(mio);
@@ -1834,9 +1854,11 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     const top = fs * 1.9;
     const pie = 8 * k;
     // Debajo del contador, que mide más desde la letra grande (CONTADOR) y en un celular girado no escala con `k`.
-    const y0 = S.top() + Math.max((portrait ? 58 : 62) * k, 10 * k + medidasContador(k).alto + 8 * k);
-    const yDer = Math.max(y0, S.top() + 72 * k);
-    const filas = clamp(Math.floor((H - S.bottom() - 10 * k - yDer - top - pie) / rowH), 3, 12);
+    const y0Base = S.top() + Math.max((portrait ? 58 : 62) * k, 10 * k + medidasContador(k).alto + 8 * k);
+    // La de la izquierda baja además lo que ocupa la fila de marcas, que va pegada al contador.
+    const y0 = y0Base + reservaDeMarcas(n, k, W).alto;
+    const yDer = Math.max(portrait ? y0 : y0Base, S.top() + 72 * k);
+    const filas = clamp(Math.floor((H - S.bottom() - 10 * k - Math.max(y0, yDer) - top - pie) / rowH), 3, 12);
     const MAX = 2 * filas;
     const shown = v.length > MAX ? v.slice(0, MAX - 1) : v;
     const extra = v.length - shown.length;
@@ -2093,7 +2115,11 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     let usePanel = false;
     if (x < T_CROWN) {
       if (finalDuo && x >= F0) {
-        for (const d of [win, dancers[rivalIdx] as Dancer]) {
+        // De izquierda a derecha en la pantalla y no «primero la ganadora»: el primero en acomodar su nombre se queda
+        // con el mejor lugar, y con la fila de marcas junto al contador el de la izquierda cede el suyo. Con la ganadora
+        // siempre primera, su nombre quedaba en el medio de la pantalla y el de la rival, corrido (2 de noviembre de 2026).
+        const pareja = [win, dancers[rivalIdx] as Dancer].sort((a, b) => (pNow[a.idx] as { x: number }).x - (pNow[b.idx] as { x: number }).x || a.idx - b.idx);
+        for (const d of pareja) {
           if (d.outAt >= 0 && x >= d.outAt + 0.9) continue;
           // En un celular, la base legible: más grandes ocupaban dos tercios del
           // ancho. En escritorio, 1,25 (24 px de letra en 720, el tamaño de
@@ -2119,16 +2145,24 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
           if (x < d.outAt + EXIT + 0.4) placeChip(d, x, placed, 1.1);
         }
         for (const h of ev.holders) if (x < ev.x0 + 0.6 && !callado(h)) placeChip(dancers[h] as Dancer, x, placed);
+        // Y quienes siguen en la rueda, con su nombre, para que quien mira sepa quiénes quedan y no tome por ellos a los que salen.
+        if (live.length <= 8) {
+          const yaNombrados = new Set<number>([...ev.victims, ...ev.holders]);
+          for (const d of live) if (!yaNombrados.has(d.idx) && !callado(d.idx)) placeChip(d, x, placed, 1, true);
+        }
       } else if (!held) {
         rollCall(x, live, placed);
       }
     }
     panel.visible = usePanel;
 
-    counter.text = `${t("cChoLeft")}  ${remainingAt(x)} / ${n}`;
+    // «QUEDAN 4 DE 18» y, debajo, una marca por persona: un chico cuenta las encendidas sin leer.
+    const quedanAhora = remainingAt(x);
+    counter.text = `${t("marcadorQuedan")}  ${quedanAhora} ${t("marcadorDe")} ${n}`;
     const bw2 = counter.width + medidasContador(k).aire, bh2 = medidasContador(k).alto;
     counter.position.set(bw2 / 2, bh2 / 2);
     counterBox.clear().rect(5 * k, 5 * k, bw2, bh2).fill(INK).rect(0, 0, bw2, bh2).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: 3 * k, color: INK });
+    pintarMarcas(counterMarcas, { total: n, quedan: quedanAhora, k, w: G.W });
   }
 
   /** Dónde está la ganadora en la pantalla, para el foco: el cuerpo entero, de los pies a la cabeza. */
