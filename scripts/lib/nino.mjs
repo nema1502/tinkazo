@@ -89,9 +89,9 @@ export const FORMA_DECIDIDA = {
   quien: "de-pie",
   trueque: "de-pie",
   wheel: "rueda",
-  trompo: "rueda",
+  trompo: "de-pie",
   oruro: "rueda",
-  chovena: "acumulacion",
+  chovena: "de-pie",
 };
 
 /* --------------------------------------------------------- las preguntas */

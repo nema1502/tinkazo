@@ -168,8 +168,9 @@ describe("la pregunta propia de cada forma", () => {
     expect(FORMA_DECIDIDA).toMatchObject({
       race: "carrera", teleferico: "carrera", rockets: "carrera",
       guajojo: "de-pie", toborochi: "de-pie", pinata: "de-pie", sapo: "de-pie", quien: "de-pie", trueque: "de-pie",
-      wheel: "rueda", trompo: "rueda", oruro: "rueda",
-      chovena: "acumulacion",
+      wheel: "rueda", oruro: "rueda",
+      chovena: "de-pie",
+      trompo: "de-pie",
     });
   });
 });

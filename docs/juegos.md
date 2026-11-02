@@ -291,7 +291,13 @@ CDP_PORT=9692 node scripts/audit-nino.mjs --controles --semillas 2 --base http:/
 node scripts/audit-nino.mjs --controles --juzgar docs/capturas/nino
 ```
 
-**Las formas.** Una por juego, en `catalogo.ts` (los del kit) y en el gancho de la ruleta y de la carrera, que la exponen en `window.__nino.forma`. Las de hoy: carrera = la carrera de llamas (con y sin `carrera=nueva`), el teleférico y los cohetes; de pie = Guajojó, Toborochi, la piñata, el sapo, ¿Quién es? y El Trueque; rueda = la ruleta, el trompo y Oruro; acumulación = la chovena. La tabla de referencia es `FORMA_DECIDIDA` (`scripts/lib/nino.mjs`). Hoy exponen `__nino` la ruleta, la carrera y los del kit; los demás declararán su forma cuando lo hagan.
+**Las formas.** Una por juego, en `catalogo.ts` (los del kit) y en el gancho de la ruleta y de la carrera, que la exponen en `window.__nino.forma`. Las de hoy: carrera = la carrera de llamas (con y sin `carrera=nueva`), el teleférico y los cohetes; de pie = Guajojó, Toborochi, la piñata, el sapo, el trompo, la chovena, ¿Quién es? y El Trueque; rueda = la ruleta y Oruro; acumulación = ninguno por ahora. La tabla de referencia es `FORMA_DECIDIDA` (`scripts/lib/nino.mjs`). Hoy exponen `__nino` la ruleta, la carrera, los del kit y los que siguen en esta tabla; los demás declararán su forma cuando lo hagan.
+
+| Juego | Forma | Cómo la expone | Por qué esa forma |
+|---|---|---|---|
+| El sapo | de pie | expone el gancho: `sapo-nino.ts`, desde el plan (la clasificatoria, los tiros y sus horas), sin cambiar el show | Los nombres se tachan en la clasificatoria y, con varios premios, quien gana una medalla deja de seguir: un chico ve gente que sale y quienes quedan. La argolla casi siempre está en la mano o en el aire, no apunta a un nombre: no es una rueda. Adónde mirar lo mide el juego: la grilla, la argolla, el agujero o la mesa |
+| El trompo | de pie | expone el gancho: `trompo-nino.ts`, desde las horas de los golpes que el juego ya planeó, sin cambiar el show | Los trompos se sacan del ruedo uno a uno hasta que baila el último: un chico mira quiénes siguen girando. El trompo no apunta a nadie, así que no es una rueda (la tabla de referencia decía «rueda» y se cambió). Una tanda de salidas a menos de un segundo cuenta como un solo hecho |
+| La chovena | de pie | expone el gancho: `chovena-nino.ts`, desde la línea de tiempo planeada (los cortes de la música y quiénes se sueltan en cada uno), sin cambiar el show | En cada corte se sueltan unos y se van a sentar, y baila hasta el final el último: nadie suma nada, así que no es una acumulación (la tabla de referencia decía «acumulación» y se cambió). El contador de arriba cuenta cuántos quedan en la rueda. Lo común a los juegos de salir de a uno está en `de-pie-nino.ts` |
 
 **Las cinco preguntas.** Cuatro son de todos y una es propia de la forma:
 

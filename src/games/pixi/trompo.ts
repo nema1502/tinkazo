@@ -6,6 +6,9 @@ import { beep, beepFor, fanfare, note } from "../../sound";
 import { enOrden, writeStory } from "../drama";
 import { WINNER_HOLD, clamp, ease, winnersLabel } from "../overlay";
 import { dentro, unir, type Caja, type Zona } from "./encuadre";
+import { exponerNino } from "./nino";
+import { lugarDe } from "./kit/respuestas";
+import { FORMA_TROMPO, respuestasTrompo, type PlanDelTrompo } from "./trompo-nino";
 import { medidasContador, CREAM, INK, MONO, YELLOW, contorno, hash, mountPixi, type PixiStage } from "./stage";
 
 /**
@@ -285,6 +288,10 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     }
   }
 
+  /** Cuándo salió cada uno y cuándo se dio cada choque del mano a mano, en la hora del juego: lo lee la prueba del niño (`?auditar=nino`). */
+  const salioEn = new Map<number, number>();
+  const choqueEn: number[] = [];
+
   // `?auditar=choques` deja anotado cada golpe para el auditor de choques.
   const log = params.get("auditar") === "choques"
     ? {
@@ -442,6 +449,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     v.out = 0;
     v.kind = kind;
     v.groundAt = -1;
+    salioEn.set(v.idx, tAll);
     // Si estaba por pegarle a otro, ese golpe queda sin dueño y se vuelve a elegir quién lo da.
     const own = hitterOf.get(v);
     if (own) {
@@ -568,6 +576,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
   /** Un choque del mano a mano, cuando los dos se tocan. */
   function clash(forced: boolean): void {
     const last = clashIdx === clashes.length - 1;
+    choqueEn.push(tAll);
     clashIdx++;
     clashHits++;
     const casi = casiDe[clashIdx - 1] ?? null;
@@ -1557,6 +1566,39 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     const z = cam.toScreen(1, 0, sw, sh).x - cam.toScreen(0, 0, sw, sh).x;
     const s = cam.toScreen(b.x, b.y, sw, sh);
     return { x: s.x, y: s.y, w: b.w * z, h: b.h * z };
+  });
+
+  // `?auditar=nino`: la prueba del niño (`scripts/audit-nino.mjs`) lee quiénes siguen bailando, adónde mirar, cuánto falta y qué pasó. Solo lee.
+  // Lo que ya pasó, con su hora de verdad; lo que falta, con la hora que el juego planeó (nunca antes de ahora: si todavía no pasó, no pasó).
+  const planNino = (): PlanDelTrompo => {
+    const ahora = tAll + 0.001;
+    const lastClash = T_DUEL + (clashes.at(-1) as number);
+    const salidas = victims.map((v) => ({ persona: v, at: salioEn.get(v) ?? Math.max(outAt.get(v) ?? Infinity, ahora) }));
+    if (duo) salidas.push({ persona: rivalIdx, at: salioEn.get(rivalIdx) ?? Math.max(lastClash + 0.7, ahora) });
+    const hechos: PlanDelTrompo["hechos"][number][] = [{ desde: 0, tipo: "empezo" }, { desde: T_DUEL, tipo: "empezo" }];
+    if (n > 2) hechos.push({ desde: T_FIGHT, tipo: "empezo" });
+    if (edgeHit) hechos.push({ desde: edgeAt >= 0 ? edgeAt : Math.max(T_EDGE, ahora), tipo: "casi", quien: edgeIdx });
+    casiDe.forEach((q, i) => {
+      if (q) hechos.push({ desde: choqueEn[i] ?? Math.max(T_DUEL + (clashes[i] as number), ahora), tipo: "casi", quien: q.idx });
+    });
+    if (sustoTop) hechos.push({ desde: T_DUEL + duelDur * 0.5, tipo: "casi", quien: sustoTop.idx });
+    return { n, salidas, hechos, ganador: winnerIdx, duracion: T_CROWN };
+  };
+  exponerNino({
+    forma: FORMA_TROMPO,
+    duracion: T_CROWN,
+    t: () => tAll,
+    verdad: () => {
+      const r = respuestasTrompo(planNino(), tAll);
+      // Adónde mirar: en pantalla, el medio de los trompos que siguen bailando (y la rival mientras cae).
+      const vivos = tops.filter((q) => q.alive || (q === riv && !riv.gone));
+      const dondeEstan = (vivos.length ? vivos : [win]).map((q) => {
+        const w = toWorld(q.x, q.y);
+        return cam.toScreen(w.x, w.y, S.sw(), S.sh());
+      });
+      const m = dondeEstan.length;
+      return { ...r, adelante: { ...r.adelante, lugar: lugarDe(dondeEstan.reduce((a, b) => a + b.x, 0) / m, dondeEstan.reduce((a, b) => a + b.y, 0) / m, S.sw(), S.sh()) } };
+    },
   });
 
   S.run((dt, now) => {

@@ -13,7 +13,11 @@ import { formasDe } from "../nombres";
 import { escalaChipLegible } from "./letra";
 import { assignSlots } from "./slots";
 import { planQualifier } from "./qualifier";
-import { HAND, MOUTH, SAPO_MAX, holeLayout, optsForArc, planThrows, throwTime, type Point, type Throw } from "./sapo-plan";
+import { HAND, MOUTH, SAPO_MAX, holeLayout, optsForArc, planThrows, type Point, type Throw } from "./sapo-plan";
+import { AFTER_MISS, AFTER_NEAR, BOCA_FLY, BOCA_IN, BOCA_SPIT, HANG_FINAL, HANG_FIRST, HANG_SMALL, Q_FLY, Q_SHOW, Q_WAVE, SINK, WOBBLE, tiemposDeTiros } from "./sapo-tiempos";
+import { exponerNino } from "./nino";
+import { lugarDe } from "./kit/respuestas";
+import { FORMA_SAPO, respuestasSapo } from "./sapo-nino";
 
 /**
  * El sapo.
@@ -41,40 +45,11 @@ import { HAND, MOUTH, SAPO_MAX, holeLayout, optsForArc, planThrows, throwTime, t
  * Todo sale de la hora del juego (`dt`), nunca del reloj de la pared.
  */
 
-/** Lo que tarda cada parte de la entrada. */
-const Q_SHOW = 1.0;
-const Q_WAVE = 1.25;
-const Q_FLY = 1.1;
-const HANG_FIRST = 0.9;
-const HANG_FINAL = 1.8;
-const HANG_SMALL = 0.5;
-/** Después de caer: el rebote y la salida, el baile en el borde, o hundirse en el agujero. */
-const AFTER_MISS = 0.8;
-const AFTER_NEAR = 1.3;
-const AFTER_HIT = 1.0;
-/**
- * No se acorta: "¡ADENTRO!" abre el remate de la música al caer, y el remate
- * rasguea casi dos segundos. Con 1,3 y con 1,6 el cartel llegaba encima del
- * rasgueo y el golpe del ganador sonaba más bajo que lo de antes (auditor de
- * mezcla, 7 de octubre de 2026: −4,6 y −8,1 LU).
- */
-const AFTER_FINAL = 2.0;
-/** La parte de AFTER_NEAR que la argolla baila en el borde antes de salir. */
-const WOBBLE = 0.8;
-const SINK = 0.5;
+/** Lo lento del sapo vive en sapo-tiempos.ts (lo comparte con la prueba del niño). */
 /** Lo que tarda la mano en tomar impulso antes de soltar. */
 const WINDUP = 0.35;
 /** En el susto, qué parte del último vuelo llega hasta el labio de la rana. */
 const LABIO = 0.62;
-/**
- * La boca (un fallo que entra a la rana, una vez por show): cuánto tarda en
- * hundirse la argolla, cuándo sale escupida y cuánto vuela hasta el aro.
- */
-const BOCA_IN = 0.3;
-const BOCA_SPIT = 0.45;
-const BOCA_FLY = 0.5;
-/** Lo que dura la boca entera: tragar, escupir, y rodar afuera como cualquier fallo. */
-const BOCA_AFTER = BOCA_SPIT + BOCA_FLY + AFTER_MISS;
 
 interface Toss {
   th: Throw;
@@ -168,23 +143,12 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   const premioDe = (turn: number): number => total - turn;
 
   /* ---------------------------------------------------------------- el guion */
-  const tosses: Toss[] = [];
-  let tt = T_SEATED;
-  throws.forEach((th, i) => {
-    const final = i === throws.length - 1;
-    const grand = th.turn === last;
-    tt += i === 0 ? HANG_FIRST : final ? HANG_FINAL : HANG_SMALL;
-    const flight = throwTime(th.kind, grand);
-    const after = th.boca ? BOCA_AFTER : th.kind === "miss" ? AFTER_MISS : th.kind === "near" ? AFTER_NEAR : final ? AFTER_FINAL : AFTER_HIT;
-    const start = tt;
-    tosses.push({
-      th, i, name: prizes[th.turn] as number, slot: plan.winnerSlots[th.turn] as number, grand, final,
-      start, land: start + flight, end: start + flight + after, flight,
-      announced: false, thrown: false, landed: false, spat: false,
-    });
-    tt = start + flight + after;
-  });
-  const T_CROWN = tt;
+  const linea = tiemposDeTiros(throws, last, T_SEATED);
+  const tosses: Toss[] = throws.map((th, i) => ({
+    th, i, name: prizes[th.turn] as number, slot: plan.winnerSlots[th.turn] as number, ...(linea.tiros[i] as (typeof linea.tiros)[number]),
+    announced: false, thrown: false, landed: false, spat: false,
+  }));
+  const T_CROWN = linea.corona;
   /** Cuándo cae la última argolla: ahí va el respiro de la música. */
   const T_LAND = (tosses[tosses.length - 1] as Toss).land;
   /** Desde cuándo sube el zoom de emoción: cuando tira la última argolla, hasta la corona. */
@@ -1278,6 +1242,42 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       y1 = Math.max(y1, c.y + c.height / 2);
     }
     return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+  });
+
+  // `?auditar=nino`: la prueba del niño (`scripts/audit-nino.mjs`) lee del plan quiénes siguen, adónde mirar, cuánto falta y qué pasó. Solo lee.
+  const planNino = {
+    n: all,
+    oleadas: waves.map((w) => w.map((persona) => ({ persona, at: goneAt.get(persona) ?? 0 }))),
+    tFly: T_FLY,
+    tiros: tosses.map((o) => ({
+      land: o.land,
+      kind: o.th.kind,
+      final: o.final,
+      ...(o.th.kind === "hit" ? { persona: whoAt(o.slot) } : {}),
+      ...(o.th.kind === "near" && o.th.rimSlot !== undefined ? { borde: whoAt(o.th.rimSlot) } : {}),
+    })),
+    duracion: T_CROWN + FOCO.golpe / paceFactor(),
+  };
+  exponerNino({
+    forma: FORMA_SAPO,
+    duracion: planNino.duracion,
+    t: () => tAll,
+    verdad: () => {
+      const r = respuestasSapo(planNino, tAll);
+      // Adónde mirar es lo que decide la cámara: la grilla de los nombres mientras se tachan, la argolla cuando vuela o baila, el agujero cuando entra, y si no la mesa.
+      let p: Point;
+      const ultimo = tosses[tosses.length - 1] as Toss;
+      const vuela = tosses.find((o) => tAll >= o.start && tAll < o.end);
+      if (tAll < T_FLY) {
+        const q = r.adelante.quienes.map((i) => gridAt[i]).filter((x): x is Point => !!x);
+        const m = Math.max(1, q.length);
+        return { ...r, adelante: { ...r.adelante, lugar: lugarDe(q.reduce((a, b) => a + b.x, 0) / m, q.reduce((a, b) => a + b.y, 0) / m, S.sw(), S.sh()) } };
+      }
+      if (tAll >= ultimo.land) p = S.scene.toGlobal(P(L.holes[ultimo.slot] as Point));
+      else if (vuela) p = S.scene.toGlobal(tokenAt(vuela, tAll));
+      else p = S.scene.toGlobal(P({ x: 0, y: 0 }));
+      return { ...r, adelante: { ...r.adelante, lugar: lugarDe(p.x, p.y, S.sw(), S.sh()) } };
+    },
   });
 
   S.run((dt, now) => {

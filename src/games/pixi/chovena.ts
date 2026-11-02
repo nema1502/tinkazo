@@ -8,6 +8,9 @@ import { enOrden, writeStory } from "../drama";
 import { generoDe } from "../genero";
 import { WINNER_HOLD, clamp, ease, shorten, winnersLabel } from "../overlay";
 import { tiemposFoco } from "./foco";
+import { exponerNino } from "./nino";
+import { lugarDe } from "./kit/respuestas";
+import { FORMA_CHOVENA, respuestasChovena, type PlanDeLaChovena } from "./chovena-nino";
 import { colorDeNombre } from "./foco-vista";
 import { CHIP_SCALE, medidasContador, CREAM, INK, MONO, YELLOW, hash, mountPixi, type FocoAt, type PixiStage } from "./stage";
 
@@ -2187,6 +2190,40 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   S.ganadorEn(() => {
     const f = focoDeLaGanadora();
     return { x: f.x - f.r, y: f.y - f.r, w: 2 * f.r, h: 2 * f.r };
+  });
+
+  // `?auditar=nino`: la prueba del niño (`scripts/audit-nino.mjs`) lee del plan quiénes siguen en la rueda, adónde mirar, cuánto falta y qué pasó. Solo lee.
+  const planNino: PlanDeLaChovena = (() => {
+    const hechos: PlanDeLaChovena["hechos"][number][] = [{ desde: 0, tipo: "empezo" }, { desde: T_INTRO, tipo: "empezo" }];
+    // En cada corte, el que trastabilla o se suelta antes de tiempo y vuelve (`casi`); los que salen están en las salidas.
+    for (const e of evs) {
+      const h = e.holders[0];
+      if (h !== undefined) hechos.push({ desde: e.w0, tipo: "casi", quien: h });
+    }
+    if (finalDuo && story.arc === "susto" && !sustoInStop) hechos.push({ desde: FW0, tipo: "casi", quien: sustoIdx });
+    return {
+      n,
+      salidas: dancers.filter((d) => d.outAt >= 0).map((d) => ({ persona: d.idx, at: d.outAt })),
+      hechos,
+      ganador: winnerIdx,
+      duracion: T_GOLPE,
+    };
+  })();
+  exponerNino({
+    forma: FORMA_CHOVENA,
+    duracion: T_GOLPE,
+    t: () => tAll,
+    verdad: () => {
+      const r = respuestasChovena(planNino, tAll);
+      // Adónde mirar: en pantalla, el medio de los que siguen en la rueda.
+      const siguen = dancers.filter((d) => inRingNow(d, tAll));
+      const donde = (siguen.length ? siguen : [win]).map((d) => {
+        const p = pNow[d.idx] as { x: number; y: number; s: number };
+        return cam.toScreen(p.x, p.y - p.s * 0.55, G.W, G.H);
+      });
+      const m = donde.length;
+      return { ...r, adelante: { ...r.adelante, lugar: lugarDe(donde.reduce((a, b) => a + b.x, 0) / m, donde.reduce((a, b) => a + b.y, 0) / m, G.W, G.H) } };
+    },
   });
 
   S.run((dt, now) => {
