@@ -8,7 +8,8 @@ import { verifyRoundAsync } from "../protocol/firma";
 import { select } from "../protocol/select";
 import { network, txUrl } from "../stellar/config";
 import { PROOF_VERSION, type Proof, proofUrl } from "../protocol/proof";
-import { drawOnChain, escribirError, existenciaDelSorteo, limpiarDetalle, readDraw, showTxStatus, stepLabel } from "./anchor";
+import { pideProtegerLaCuenta, protegerLaCuenta } from "./proteger-flujo";
+import { cuentaPatrocinada, drawOnChain, escribirError, existenciaDelSorteo, limpiarDetalle, readDraw, showTxStatus, stepLabel } from "./anchor";
 import type { AccionError } from "./error-accion";
 import { loreFor } from "../games/lore";
 import { pintarLeyenda } from "./leyenda";
@@ -42,6 +43,9 @@ async function resolveBeacon(
 
 /** La acción corresponde al sello que falló; nunca se hereda al siguiente sorteo. */
 let recuperacion: { sello: NonNullable<typeof app.frozen>; accion: AccionError } | null = null;
+
+/** Ya se abrió "Protegé tu cuenta" en este intento de sortear: si vuelve a pedirla, se dice y no se repite. */
+let protegiendoElSorteo = false;
 
 export async function draw(): Promise<void> {
   if (recuperacion?.sello === app.frozen) {
@@ -159,8 +163,24 @@ export async function draw(): Promise<void> {
         },
       });
       contado = true;
+      // Pollar 0.12 (mainnet): la cuenta pide una forma de recuperarla antes de firmar. Se abre "Protegé tu cuenta" y, si
+      // la protege, se sortea de nuevo, una sola vez por intento (el contrato acepta un solo sorteo por sello, así que
+      // repetirlo es seguro). Si no la protege, se cuenta y se dice como cualquier otro fallo, con el botón para volver.
+      if (!fin.ok && !protegiendoElSorteo && (await pideProtegerLaCuenta(fin.error))) {
+        tarjeta?.card.hide();
+        sinShow();
+        protegiendoElSorteo = true;
+        try {
+          if (await protegerLaCuenta()) {
+            await draw();
+            return;
+          }
+        } finally {
+          protegiendoElSorteo = false;
+        }
+      }
       if (!fin.ok) {
-        contar("draw_failed", { network: network.name, error: errorContable(errorKey(fin.error)) });
+        contar("draw_failed", { network: network.name, error: errorContable(errorKey(fin.error, { patrocinada: await cuentaPatrocinada() })) });
         tarjeta?.card.hide();
         sinShow();
         // El mensaje de la pantalla es para la sala; el detalle queda plegado
@@ -217,7 +237,7 @@ export async function draw(): Promise<void> {
     console.warn("[tinkazo] el sorteo se cortó", e);
     if (!contado) {
       void import("../stellar/errores")
-        .then(({ errorKey }) => contar("draw_failed", { network: network.name, error: errorContable(errorKey(e)) }))
+        .then(async ({ errorKey }) => contar("draw_failed", { network: network.name, error: errorContable(errorKey(e, { patrocinada: await cuentaPatrocinada() })) }))
         .catch(() => undefined);
     }
     btn.disabled = false;

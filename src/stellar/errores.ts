@@ -68,6 +68,25 @@ export const SIN_CUENTA = /account not found|tx_?no_?account/i;
 const CUENTA_NO_LISTA = /account-not-ready/;
 
 /**
+ * Pollar 0.12 (24 de octubre de 2026), tres cosas que antes no existían:
+ *
+ * - `SDK_WALLET_RECOVERY_REQUIRED`: la cuenta de Pollar en mainnet es de Turnkey y, hasta que tenga una forma de
+ *   recuperarla (una llave de acceso, un código por correo u otro aparato), no firma nada. Se arregla en el paso
+ *   "Protegé tu cuenta" (`ui/proteger-cuenta.ts`), no con otro intento.
+ * - `SDK_CONFIRMATION_UNAVAILABLE` y `SDK_CONFIRMATION_DECLINED`: la firma pide confirmación y nadie la atendió, o la
+ *   rechazamos nosotros (`wallet-pollar.ts` solo confirma el sello y el sorteo que la persona acaba de pedir).
+ * - `SDK_CREDITS_INSUFFICIENT`, `SDK_BILLING_OVERDUE` y `FUND_XLM_FAILED`: a quien paga el servicio se le acabó con qué
+ *   pagar. No es de la persona. (Pollar dice "Users see a generic message pointing to app support".)
+ *
+ * Van antes que `CANCELO`: el rechazo del SDK trae "the user declined the transaction" en el detalle.
+ */
+const RECUPERACION = /SDK_WALLET_RECOVERY_REQUIRED/;
+const CONFIRMACION = /SDK_CONFIRMATION_(?:UNAVAILABLE|DECLINED)/;
+const SERVICIO_SIN_FONDOS = /SDK_CREDITS_INSUFFICIENT|SDK_BILLING_OVERDUE|FUND_XLM_FAILED/;
+/** La cuenta de Pollar se está abriendo: el SDK pide esperar, no reintentar en bucle. */
+const CUENTA_ABRIENDOSE = /SDK_WALLET_NOT_READY/;
+
+/**
  * La persona dijo que no. Freighter: "The user rejected this request." (código
  * -4), y antes "User declined access". La espera de la cuenta cancelada porque
  * se cerró la sesión cuenta igual.
@@ -263,9 +282,13 @@ function sinInternet(): boolean {
  * (`errAnchor.<clave>`). `contexto.enLinea` dice si hay internet; si no se
  * pasa, se le pregunta al navegador.
  */
-export function errorKey(e: unknown, contexto: { enLinea?: boolean } = {}): string {
+export function errorKey(e: unknown, contexto: { enLinea?: boolean; patrocinada?: boolean } = {}): string {
   if (esIncierto(e)) return "unconfirmed";
   const texto = textoDelError(e);
+  if (RECUPERACION.test(texto)) return "recoveryRequired";
+  if (CONFIRMACION.test(texto)) return "confirmation";
+  if (SERVICIO_SIN_FONDOS.test(texto)) return "sponsorEmpty";
+  if (CUENTA_ABRIENDOSE.test(texto)) return "accountNotReady";
   const m = /Error\(Contract,\s*#(\d+)\)/.exec(texto);
   if (m?.[1]) {
     const named = CONTRACT_ERRORS[Number(m[1])];
@@ -276,6 +299,9 @@ export function errorKey(e: unknown, contexto: { enLinea?: boolean } = {}): stri
   if (/Error\(Crypto,/.test(texto)) return "invalidSignature";
   if (CUENTA_NO_LISTA.test(texto)) return "accountNotReady";
   if (COMISION_CORTA.test(texto)) return "busy";
+  // Con una cuenta que no paga la comisión por sí misma (Pollar patrocina), quedarse sin saldo es del servicio, no de la
+  // persona: decirle "tu cuenta no tiene saldo" la manda a cargar XLM a una cuenta que nunca los necesitó.
+  if (SIN_SALDO.test(texto) && contexto.patrocinada) return "sponsorEmpty";
   if (SIN_SALDO.test(texto) || SIN_CUENTA.test(texto)) return "noFunds";
   if (CANCELO.test(texto)) return "userRejected";
   if (BILLETERA.test(texto)) return "wallet";

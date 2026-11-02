@@ -628,11 +628,11 @@ describe("en mainnet una cuenta de Pollar nunca ve la caja de fondos", () => {
     expect(eventos).toEqual([]);
   });
 
-  it("la falta de saldo se le dice tal cual, sin mandarla a ningún lado", async () => {
+  it("la falta de saldo se le dice sin culparla y sin mandarla a ningún lado", async () => {
     h.wallet = pollar(vi.fn().mockRejectedValue(new Error("txInsufficientBalance")));
     const { error } = await correr(sellar());
     const { anchorErrorText } = await import("./anchor");
-    expect(await anchorErrorText(error)).toBe("Tu cuenta no tiene saldo para pagar la comisión de la red. Cargale XLM y probá de nuevo.");
+    expect(await anchorErrorText(error)).toBe("Ahora no se pudo sellar, y no es por tu cuenta: el servicio no pudo pagar la comisión de la red. Avisanos en hola@tinkazo.app y probá de nuevo más tarde.");
   });
 });
 
@@ -726,12 +726,12 @@ describe("con ?grifo=0 (testnet, el grifo apagado a propósito)", () => {
     expect(eventos).toEqual([]);
   });
 
-  it("el error que ve la persona es el de falta de saldo, tal cual", async () => {
+  it("el error que ve la persona dice que no es su cuenta, no que le falta saldo", async () => {
     conGrifoApagado();
     h.wallet = pollar(vi.fn().mockRejectedValue(sinSaldo()));
     const { error } = await sellar();
     const { anchorErrorText } = await import("./anchor");
-    expect(await anchorErrorText(error)).toBe("Tu cuenta no tiene saldo para pagar la comisión de la red. Cargale XLM y probá de nuevo.");
+    expect(await anchorErrorText(error)).toBe("Ahora no se pudo sellar, y no es por tu cuenta: el servicio no pudo pagar la comisión de la red. Avisanos en hola@tinkazo.app y probá de nuevo más tarde.");
   });
 
   it("si Pollar paga la comisión, sella igual que siempre: con la cuenta en 0 y sin tocar el grifo", async () => {
@@ -836,7 +836,7 @@ describe("con cualquier otra wallet (Freighter, cuenta de prueba)", () => {
       h.seal.mockRejectedValue(new Error("Account not found: " + DIR));
       const { error } = await sellar();
       const { anchorErrorText } = await import("./anchor");
-      expect(await anchorErrorText(error)).not.toBe("Tu cuenta no tiene saldo para pagar la comisión de la red. Cargale XLM y probá de nuevo.");
+      expect(await anchorErrorText(error)).not.toBe("Ahora no se pudo sellar, y no es por tu cuenta: el servicio no pudo pagar la comisión de la red. Avisanos en hola@tinkazo.app y probá de nuevo más tarde.");
       const { errorKey } = await import("../stellar/errores");
       expect(errorKey(error, { enLinea: true })).toBe("rpcDown");
     });
@@ -1288,6 +1288,24 @@ describe("'Sellar pagando con mi cuenta': Pollar solo firma, sin patrocinio, y s
     const { error } = await sellarPagando();
     expect((error as Error).message).toMatch(/patrocino-no-se-quito/);
     expect(h.send).not.toHaveBeenCalled();
+  });
+
+  it("si la persona paga con su cuenta y le falta saldo, el mensaje es el de siempre: cargale XLM, no 'no es por tu cuenta'", async () => {
+    h.wallet = pollarConPagoPropio();
+    h.send.mockImplementation(async () => ({ status: "ERROR", errorResult: { result: "tx_insufficient_balance" } }));
+    const { error } = await sellarPagando();
+    const { anchorErrorText } = await import("./anchor");
+    expect(await anchorErrorText(error)).toBe("Tu cuenta no tiene saldo para pagar la comisión de la red. Cargale XLM y probá de nuevo.");
+  });
+
+  it("y si después paga el patrocinio (otro sello, sin 'mi cuenta'), vuelve a decir que no es por su cuenta", async () => {
+    h.wallet = pollarConPagoPropio();
+    h.send.mockImplementation(async () => ({ status: "ERROR", errorResult: { result: "tx_insufficient_balance" } }));
+    await sellarPagando();
+    h.wallet = pollar(vi.fn().mockRejectedValue(new Error("txInsufficientBalance")));
+    const { sealOnChain, anchorErrorText } = await import("./anchor");
+    const error = await sealOnChain(argsDeAhora(), () => undefined).catch((x: unknown) => x);
+    expect(await anchorErrorText(error)).toContain("no es por tu cuenta");
   });
 
   it("si la red la rechaza por falta de saldo, es la red diciendo que no (no un sello incierto)", async () => {

@@ -37,6 +37,8 @@ export interface OpcionesDeSellado {
   saltarChequeo?: boolean;
   /** La comisión la paga la cuenta de la persona, no el patrocinador. */
   pagarConMiCuenta?: boolean;
+  /** Es el reintento de después de proteger la cuenta (`proteger-cuenta.ts`): el mismo intento de la persona, no otro. */
+  protegida?: boolean;
 }
 
 let sellarFn: ((o: OpcionesDeSellado) => Promise<void>) | null = null;

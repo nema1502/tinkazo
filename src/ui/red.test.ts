@@ -367,13 +367,14 @@ describe("mainnet: pagar con mi cuenta antes de seguir sin sello", () => {
     expect(caja().botones().map((b) => b.textContent)).toEqual(["Seguir sin sello"]);
   });
 
-  it("caso 4 sin saldo propio: solo 'Seguir sin sello'", async () => {
+  it("caso 4 sin saldo propio: no es su cuenta, se puede volver a probar o seguir sin sello", async () => {
     h.xlmBalance.mockResolvedValue(0);
     red(principal());
     const { r } = await cargar();
     await r.mostrarSinSaldo();
-    expect(boton().textContent).toBe("Seguir sin sello");
-    expect(caja().botones()).toHaveLength(0);
+    expect(frase()).toContain("no es por tu cuenta");
+    expect(boton().textContent).toBe("Probar ahora");
+    expect(caja().botones().map((b) => b.textContent)).toEqual(["Seguir sin sello"]);
   });
 
   it("caso 4 con Freighter y sin saldo: tampoco hay grifo, 'Seguir sin sello'", async () => {

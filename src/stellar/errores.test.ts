@@ -152,6 +152,13 @@ const CORPUS: Fila[] = [
   ["Pollar: rechazo sin motivo", "fuente", () => pollar("TX_SUBMIT_FAILED"), "unknown"],
   ["Pollar: devolvió error sin ningún campo", "fuente", () => pollar("pollar-submit-failed"), "unknown"],
   ["Pollar: billetera externa sin conectar", "fuente", () => pollar("Wallet not connected. Reconnect your wallet to sign."), "wallet"],
+  // Pollar 0.12 (24 de octubre de 2026). Los códigos y sus textos salen de `@pollar/core` 0.12.0 (dist/index.mjs, tabla de errores).
+  ["Pollar 0.12: la cuenta pide una forma de recuperarla antes de firmar", "fuente", () => pollar("SDK_WALLET_RECOVERY_REQUIRED · Set up a way to recover this wallet first: a passkey, a second device or your email."), "recoveryRequired"],
+  ["Pollar 0.12: nadie atiende la confirmación de la firma", "fuente", () => pollar("SDK_CONFIRMATION_UNAVAILABLE · confirmation is 'prompt' but nothing shows the prompt: mount PollarProvider or subscribe with onConfirmationRequest"), "confirmation"],
+  ["Pollar 0.12: la firma se rechazó (la rechazamos nosotros si no era la pedida)", "fuente", () => pollar("SDK_CONFIRMATION_DECLINED · the user declined the transaction"), "confirmation"],
+  ["Pollar 0.12: el servicio se quedó sin créditos", "fuente", () => pollar("SDK_CREDITS_INSUFFICIENT"), "sponsorEmpty"],
+  ["Pollar 0.12: la cuenta del servicio no pudo fondear la cuenta nueva", "fuente", () => pollar("FUND_XLM_FAILED"), "sponsorEmpty"],
+  ["Pollar 0.12: la cuenta se está abriendo", "fuente", () => pollar("SDK_WALLET_NOT_READY"), "accountNotReady"],
 
   // ---------------------------------------------------------------- Freighter
   // El -4 lo arma la extensión, no `@stellar/freighter-api` (que solo trae el -1): por eso es documentado.
@@ -210,6 +217,24 @@ describe("errorKey: el corpus", () => {
       "SDK: el RPC devolvió algo que no es JSON (portal cautivo)",
       "Pollar: malformada (registros de septiembre, bug viejo)",
     ]);
+  });
+});
+
+describe("sin saldo con una cuenta que no paga la comisión (Pollar patrocina)", () => {
+  it("lo dice el servicio y no la persona", () => {
+    for (const msg of ["txInsufficientBalance", "TX_INSUFFICIENT_BALANCE · Insufficient balance to complete this transaction.", "tx-REJECTED tx_insufficient_balance"]) {
+      expect(errorKey(pollar(msg), { enLinea: true })).toBe("noFunds");
+      expect(errorKey(pollar(msg), { enLinea: true, patrocinada: true }), msg).toBe("sponsorEmpty");
+    }
+  });
+
+  it("la comisión corta y la secuencia no se confunden con eso", () => {
+    expect(errorKey(pollar("tx_insufficient_fee"), { patrocinada: true })).toBe("busy");
+    expect(errorKey(pollar("tx_bad_seq"), { patrocinada: true })).toBe("busy");
+  });
+
+  it("sin saber de qué cuenta se trata no cambia nada", () => {
+    expect(errorKey(pollar("txInsufficientBalance"))).toBe("noFunds");
   });
 });
 

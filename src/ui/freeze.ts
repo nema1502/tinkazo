@@ -7,7 +7,8 @@ import { prepararFirma } from "../protocol/firma";
 import { esCostoAlto } from "../stellar/chequeo-red";
 import { contractUrl, network } from "../stellar/config";
 import { anotar } from "../stellar/registro-red";
-import { type AnchorStep, clienteListo, escribirError, hideTxStatus, margenParaAprobar, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
+import { pideProtegerLaCuenta, protegerLaCuenta } from "./proteger-flujo";
+import { type AnchorStep, clienteListo, cuentaPatrocinada, escribirError, hideTxStatus, margenParaAprobar, precargarParaElSorteo, resolverSelloEnLaRed, sealOnChain, selloSinGrabar, showTxStatus, stepLabel } from "./anchor";
 import { precargarQr } from "./qr";
 import { juegoPorDefecto, juegoSiguiente, rangoParaLeer, rangoVisible, recomendar } from "./recomendar";
 import { entornoDeAhora, grandeAlSellar } from "./vista-grande";
@@ -503,6 +504,9 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
     const onStep = (step: AnchorStep, detail?: string): void => {
       btn.textContent = stepLabel(step);
       showTxStatus("seal-status", step, detail);
+      // Recién protegida la cuenta: se dice que se sigue, hasta que el sello queda grabado.
+      const estado = document.getElementById("seal-status");
+      if (opciones.protegida && step !== "confirmed" && estado) estado.textContent = `${t("protSigue")} ${estado.textContent ?? ""}`.trim();
     };
     // Enseguida, antes de cualquier espera: el botón quedaba apagado y diciendo
     // "Sellar en Stellar" mientras se armaba el cliente del contrato, de medio
@@ -522,7 +526,8 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       }
       // El contador del embudo (src/contar.ts): un intento de sellar, y después cómo terminó. La verdad
       // del sello es la cadena. Un toque que la red frenó antes de mandar nada no es un intento.
-      contar("seal_sent", { network: network.name });
+      // El reintento de después de proteger la cuenta es el mismo intento de la persona: no suma otro envío.
+      if (!opciones.protegida) contar("seal_sent", { network: network.name });
       // Nunca dos sellos de la misma lista (`sello-seguro.ts`, D-17 en docs/architecture.md):
       // - Si la red tarda, la ronda elegida al hacer clic llega a la cadena con menos de los
       //   30 s que exige el contrato y el sello falla (3 de 11 sellos con el RPC público de
@@ -589,6 +594,23 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       // La pantalla dice algo que se entiende; el detalle técnico queda plegado
       // debajo y en este navegador (`detalle-error.ts`), y en la consola.
       console.warn("[tinkazo] el sello no se pudo grabar", e);
+      // Pollar 0.12 (mainnet): la cuenta no firma hasta tener una forma de recuperarla. Se abre "Protegé tu cuenta" y,
+      // si la protege, se vuelve solo al sello con la misma lista. Una sola vez por intento: si vuelve a fallar, se dice.
+      // Mientras la ventana está abierta la lista sigue cerrada (no se puede tocar lo que se va a sellar) y el intento
+      // todavía no se cuenta como fallado: se cuenta cómo termina el reintento, o que la persona no la protegió.
+      if (!protegiendoLaCuenta && (await pideProtegerLaCuenta(e))) {
+        hideTxStatus("seal-status");
+        protegiendoLaCuenta = true;
+        try {
+          // Si la lista cambió mientras tanto (no debería: sigue cerrada), no se sella otra distinta sin que la persona lo pida.
+          if ((await protegerLaCuenta()) && bytesToHex(listHash(parseNames())) === hash) {
+            await sellar({ ...opciones, saltarChequeo: true, protegida: true });
+            return;
+          }
+        } finally {
+          protegiendoLaCuenta = false;
+        }
+      }
       btn.disabled = false;
       cerrarLista(false);
       btn.dataset.i = claveDeSellar();
@@ -597,7 +619,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       // Para el contador, la clave del motivo (la misma del mensaje), nunca el detalle. Se cuenta
       // antes de cualquier camino de la red: un sello que empezó y no entró es un fallo siempre.
       void import("../stellar/errores")
-        .then(({ errorKey }) => contar("seal_failed", { network: network.name, error: errorContable(errorKey(e)) }))
+        .then(async ({ errorKey }) => contar("seal_failed", { network: network.name, error: errorContable(errorKey(e, { patrocinada: await cuentaPatrocinada() })) }))
         .catch(() => undefined);
       // Dos cosas que la red explica mejor que el error de siempre, con su acción:
       // el sello de verdad cuesta más de lo que el patrocinador paga, o el patrocinador no tiene con qué.
@@ -816,6 +838,9 @@ async function esCorteDelRpc(e: unknown): Promise<boolean> {
     return false;
   }
 }
+
+/** Ya se abrió "Protegé tu cuenta" en este intento de sellar: si el sello vuelve a pedirla, se dice y no se repite. */
+let protegiendoLaCuenta = false;
 
 /** El sello no entró porque el patrocinador no tiene con qué pagar (mainnet, sin grifo): se explica con su acción. */
 async function esSinSaldoDelPatrocinador(e: unknown): Promise<boolean> {

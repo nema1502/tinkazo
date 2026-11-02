@@ -40,6 +40,12 @@ export const ERRORES = [
   "noFunds",
   "userRejected",
   "wallet",
+  /** Pollar 0.12: la cuenta no firma hasta tener una forma de recuperarla. */
+  "recoveryRequired",
+  /** Pollar 0.12: la firma pidió confirmación y nadie la atendió, o no era la que la persona pidió. */
+  "confirmation",
+  /** Quien paga la comisión por la persona (Pollar) se quedó sin con qué: no es de su cuenta. */
+  "sponsorEmpty",
   "rpcDown",
   "offline",
   "unknown",

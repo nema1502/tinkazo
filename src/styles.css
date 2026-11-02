@@ -266,6 +266,7 @@
   .login-go:disabled { opacity: 1; cursor: default; background: var(--field); color: var(--ink2); border: 1px solid var(--line); }
   .login-err { font-size: 16px; font-weight: 700; color: var(--magenta-ink); text-align: center; }
   .login-err.ok { color: var(--teal-ink); }
+  .login-note { margin: -2px 0 0; font-size: 16px; color: var(--ink2); text-align: center; line-height: 1.4; }
   .login-or { display: flex; align-items: center; gap: 12px; margin: 22px 0 14px; font-size: 16px; font-weight: 600; color: var(--muted); }
   .login-or::before, .login-or::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
   .login-opts { display: flex; flex-direction: column; gap: 10px; }
@@ -276,6 +277,7 @@
     transition: border-color 0.12s, background 0.12s;
   }
   .login-opt:hover { border-color: var(--ink2); background: var(--card); }
+  .login-opt:disabled { opacity: 0.45; cursor: default; }
   .login-opt svg { width: 20px; height: 20px; flex: 0 0 auto; }
   .login-opt small { font-size: 14px; font-weight: 600; color: var(--muted); white-space: nowrap; }
   /* Google primero y grande: es lo que va a tomar casi todo el mundo (diseño del onboarding). */

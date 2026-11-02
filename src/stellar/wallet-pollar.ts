@@ -2,6 +2,7 @@ import type { AuthOpenContext, PollarClient, WalletInfo } from "@pollar/core";
 import { network } from "./config";
 import type { SignedTx, WalletAdapter } from "./wallet";
 import { contarEntrada, marcarEntrada, tomarEntrada } from "../contar";
+import { ceremoniaDelNavegador, hayPasskeys } from "./passkey";
 
 /**
  * Entrar con Google o con un correo, sin instalar nada.
@@ -16,6 +17,13 @@ import { contarEntrada, marcarEntrada, tomarEntrada } from "../contar";
  * esta wallet se marca con `submitsItself` y la capa de anclaje la trata
  * distinto: arma el XDR, se lo entrega, y después lee el resultado de la
  * transacción por RPC.
+ *
+ * Desde Pollar 0.12 (24 de octubre de 2026) cada firma pide confirmación y, sin la interfaz de Pollar, el SDK devuelve
+ * `SDK_CONFIRMATION_UNAVAILABLE` en todas. Acá se atiende en código (`atenderFirmas`): lo único que se confirma es la
+ * firma de `signAndSubmit` y de `signUnsponsored`, que solo salen del sello y del sorteo que la persona acaba de pedir
+ * con su botón. Ese clic es el consentimiento; cualquier otra firma que llegue se rechaza y se anota. El cliente se
+ * arma con `confirmation: "prompt"`: el SDK deja ganar a la política más estricta entre el código y el panel de
+ * Pollar, así que fijarla en `"prompt"` hace que la lista blanca corra siempre, también con el panel en "Never ask".
  *
  * Sin verificar de punta a punta: hace falta una sesión real de Google, y la
  * política de transacciones de la app en el panel de Pollar tiene que permitir
@@ -81,16 +89,81 @@ export interface SubmittingWallet extends WalletAdapter {
 
 export const pollarConfigured = (): boolean => !!import.meta.env.VITE_POLLAR_PUBLISHABLE_KEY;
 
+/**
+ * Una firma que el SDK dejó esperando confirmación (`PendingConfirmation` de `@pollar/core`, lo que usamos).
+ * Es lo mismo que mostraría `<ConfirmModal>` de `@pollar/react`.
+ */
+export interface FirmaPendiente {
+  id: string;
+  kind: string;
+  operation?: string | undefined;
+  unsignedXdr?: string | undefined;
+  confirm: () => void;
+  reject: () => void;
+}
+
+/**
+ * Decide, una por una, las firmas que esperan confirmación.
+ *
+ * Se confirma la que cumple las tres: hay una firma pedida por nosotros en curso (`esperadas`: el XDR que se mandó a
+ * firmar desde el botón de sellar o de sortear), es de las que firman una transacción (`sign` o `sign_and_send`, no
+ * una construida por el SDK como un pago o una línea de confianza), y trae esa transacción y no otra (sin ella, no). Todo lo demás se
+ * rechaza: una firma que la persona no pidió no se firma.
+ *
+ * `atendidas` guarda lo ya resuelto: el SDK repite la lista entera cada vez que cambia, y al resolver una vuelve a avisar.
+ * `alRechazar` recibe solo el tipo y la operación, nunca el XDR ni datos de la cuenta.
+ */
+export function atenderFirmas(
+  pendientes: readonly FirmaPendiente[],
+  esperadas: ReadonlySet<string>,
+  atendidas: Set<string>,
+  alRechazar: (motivo: string, que: { kind: string; operation: string }) => void,
+): void {
+  for (const p of pendientes) {
+    if (atendidas.has(p.id)) continue;
+    atendidas.add(p.id);
+    const que = { kind: p.kind, operation: p.operation ?? "" };
+    if (esperadas.size === 0) {
+      alRechazar("nadie la pidió", que);
+      p.reject();
+    } else if (p.kind !== "sign" && p.kind !== "sign_and_send") {
+      alRechazar("no es la firma de una transacción armada acá", que);
+      p.reject();
+    } else if (p.unsignedXdr === undefined || !esperadas.has(p.unsignedXdr)) {
+      // Sin la transacción a la vista no se puede saber qué se firma: en 0.12.0 `sign` y `sign_and_send` siempre la traen.
+      alRechazar(p.unsignedXdr === undefined ? "no trae la transacción" : "es otra transacción", que);
+      p.reject();
+    } else {
+      p.confirm();
+    }
+  }
+}
+
+/** Cómo está la protección de la cuenta (la recuperación de Turnkey): lo que la pantalla necesita saber. */
+export interface EstadoDeProteccion {
+  /** La cuenta pide una forma de recuperarla para poder firmar. */
+  requerida: boolean;
+  /** Ya tiene al menos una. */
+  lista: boolean;
+}
+
 class PollarWallet implements SubmittingWallet {
   readonly kind = "external" as const;
   readonly submitsItself = true as const;
   address: string | null = null;
   #client: PollarClient | null = null;
+  /** El armado del cliente en curso: dos llamadas a la vez comparten uno solo (y una sola suscripción a las firmas). */
+  #listo: Promise<PollarClient> | null = null;
   #via: Via = "google";
   /** Cómo avisar que la ventana de Google no se abrió o se cerró antes de entrar (lo arma `connect`). */
   #falla: ((e: Error) => void) | null = null;
   /** La ventana de Google, para saber si la persona la cerró sin entrar. */
   #ventana: Window | null = null;
+  /** Las transacciones que la persona acaba de pedir firmar (el XDR, y cuántas veces): lo único que se confirma. */
+  readonly #esperadas = new Map<string, number>();
+  /** Las confirmaciones ya resueltas (`atenderFirmas`). */
+  readonly #atendidas = new Set<string>();
+  #dejarDeAtender: (() => void) | null = null;
 
   /** Lo que muestra el panel de la cuenta: por dónde entró, no un nombre fijo. */
   get label(): string {
@@ -106,18 +179,57 @@ class PollarWallet implements SubmittingWallet {
     }
   }
 
-  async #ensureClient(): Promise<PollarClient> {
-    if (this.#client) return this.#client;
+  #ensureClient(): Promise<PollarClient> {
+    if (this.#client) return Promise.resolve(this.#client);
+    this.#listo ??= this.#armarCliente().catch((e: unknown) => {
+      this.#listo = null;
+      throw e;
+    });
+    return this.#listo;
+  }
+
+  async #armarCliente(): Promise<PollarClient> {
     const apiKey = import.meta.env.VITE_POLLAR_PUBLISHABLE_KEY;
     if (!apiKey) throw new Error("pollar-not-configured");
     const { PollarClient: Ctor } = await import("@pollar/core");
-    this.#client = new Ctor({
+    const client = new Ctor({
       apiKey,
+      // El SDK deja ganar a la política más estricta entre esta y la del panel: fijada en "prompt", la firma siempre
+      // pasa por `atenderFirmas`, que solo confirma lo que la persona acaba de pedir con su botón.
+      confirmation: "prompt",
       stellarNetwork: network.name === "mainnet" ? "mainnet" : "testnet",
       // La misma ventana que abre el SDK, pero que avisa si el navegador la bloqueó (`abrirVentana`).
       openAuthUrl: (ctx) => this.#abrirVentana(ctx),
+      // Para la recuperación de la cuenta (`protegerConPasskey`): el navegador sabe hacerlo, `@pollar/core` solo lo pide.
+      ...(hayPasskeys() ? { recoveryPasskey: ceremoniaDelNavegador } : {}),
     });
-    return this.#client;
+    // Pollar 0.12: sin esto cada firma falla con SDK_CONFIRMATION_UNAVAILABLE. Con `confirmation: "prompt"` toda firma
+    // llega acá, sea cual sea el modo del panel de Pollar (`atenderFirmas`).
+    if (typeof client.onConfirmationRequest === "function") {
+      this.#dejarDeAtender = client.onConfirmationRequest((pendientes) =>
+        atenderFirmas(pendientes, new Set(this.#esperadas.keys()), this.#atendidas, (motivo, que) =>
+          console.warn(`[tinkazo] firma de Pollar rechazada (${motivo}): ${que.kind} ${que.operation}`.trim()),
+        ),
+      );
+    }
+    this.#client = client;
+    return client;
+  }
+
+  /**
+   * Corre una firma que la persona acaba de pedir con su botón: mientras dura, esa transacción (y solo esa) se confirma
+   * sola cuando el SDK lo pide. La persona ya dio su consentimiento al apretar "Sellar" o "Sortear".
+   */
+  async #firmando<T>(xdr: string, firmar: (client: PollarClient) => Promise<T>): Promise<T> {
+    const client = await this.#ensureClient();
+    this.#esperadas.set(xdr, (this.#esperadas.get(xdr) ?? 0) + 1);
+    try {
+      return await firmar(client);
+    } finally {
+      const quedan = (this.#esperadas.get(xdr) ?? 1) - 1;
+      if (quedan > 0) this.#esperadas.set(xdr, quedan);
+      else this.#esperadas.delete(xdr);
+    }
   }
 
   /**
@@ -316,12 +428,16 @@ class PollarWallet implements SubmittingWallet {
       /* ya no está */
     }
     this.address = null;
+    this.#dejarDeAtender?.();
+    this.#dejarDeAtender = null;
+    this.#esperadas.clear();
     try {
       await this.#client?.logout();
     } catch {
       /* la sesión ya podía estar cerrada */
     }
     this.#client = null;
+    this.#listo = null;
   }
 
   async networkPassphrase(): Promise<string | null> {
@@ -336,8 +452,7 @@ class PollarWallet implements SubmittingWallet {
   }
 
   async signAndSubmit(xdr: string): Promise<string> {
-    const client = await this.#ensureClient();
-    const outcome = (await client.signAndSubmitTx(xdr)) as ResultadoDeEnvio;
+    const outcome = (await this.#firmando(xdr, (client) => client.signAndSubmitTx(xdr))) as ResultadoDeEnvio;
     if (outcome.status === "error" || !outcome.hash) {
       throw new Error(mensajeDeRechazo(outcome));
     }
@@ -345,12 +460,49 @@ class PollarWallet implements SubmittingWallet {
   }
 
   async signUnsponsored(xdr: string): Promise<string> {
-    const client = await this.#ensureClient();
-    const outcome = (await client.signTx(xdr, { skipSponsorship: true })) as { status?: string; signedXdr?: string } & ResultadoDeEnvio;
+    const outcome = (await this.#firmando(xdr, (client) => client.signTx(xdr, { skipSponsorship: true }))) as { status?: string; signedXdr?: string } & ResultadoDeEnvio;
     if (outcome.status !== "signed" || !outcome.signedXdr) {
       throw new Error(mensajeDeRechazo(outcome));
     }
     return outcome.signedXdr;
+  }
+
+  /* ------------------------------------------------ proteger la cuenta (la recuperación) */
+
+  /** ¿Se puede usar el desbloqueo del aparato (huella, rostro o PIN) para proteger la cuenta? */
+  get puedeUsarPasskey(): boolean {
+    return hayPasskeys();
+  }
+
+  /** Cómo está la protección de la cuenta. `null` si Pollar no lo dice (sin red, o esta cuenta no usa Turnkey). */
+  async proteccion(): Promise<EstadoDeProteccion | null> {
+    try {
+      const client = await this.#ensureClient();
+      const s = await client.cosign.recovery.status();
+      return { requerida: s.required, lista: s.configured };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Con el desbloqueo del aparato: Pollar guarda la llave. Devuelve si la cuenta ya quedó protegida. */
+  async protegerConPasskey(): Promise<boolean> {
+    const client = await this.#ensureClient();
+    const s = await client.cosign.recovery.addPasskey({ name: "Tinkazo" });
+    return s.configured;
+  }
+
+  /** Con el correo, paso 1: Pollar manda un código de un solo uso a esa dirección. */
+  async mandarCodigoDeProteccion(mail: string): Promise<void> {
+    const client = await this.#ensureClient();
+    await client.cosign.recovery.startEmail(mail);
+  }
+
+  /** Con el correo, paso 2: el código que llegó. Devuelve si la cuenta ya quedó protegida. */
+  async confirmarCodigoDeProteccion(code: string): Promise<boolean> {
+    const client = await this.#ensureClient();
+    const s = await client.cosign.recovery.confirmEmail(code);
+    return s.configured;
   }
 }
 

@@ -101,9 +101,16 @@ export interface OpcionesDeSello {
   pagarConMiCuenta?: boolean;
 }
 
+/**
+ * La última firma salió pagando la persona con su cuenta ("sellar con mi cuenta", `red.ts`) y no el patrocinador. Sirve
+ * para que, si falta saldo, el mensaje sea el de siempre (cargale XLM) y no "no es por tu cuenta" (`cuentaPatrocinada`).
+ */
+let pagaLaPersona = false;
+
 /** Registra el sello en el contrato. Exige la firma del organizador. Nunca en la demo ni en el ensayo. */
 export function sealOnChain(args: SealArgs, onStep: OnStep, opciones: OpcionesDeSello = {}): Promise<SealResult> {
   if (sinGrabar()) return Promise.reject(new Error(SIN_GRABAR));
+  pagaLaPersona = !!opciones.pagarConMiCuenta;
   return conFondos(() => sellar(args, onStep, opciones), onStep);
 }
 
@@ -521,6 +528,7 @@ export function drawOnChain(
   onStep: OnStep,
 ): Promise<DrawResult> {
   if (sinGrabar()) return Promise.reject(new Error(SIN_GRABAR));
+  pagaLaPersona = false;
   return conFondos(() => sortear(raffleId, signature96, onStep), onStep);
 }
 
@@ -707,11 +715,26 @@ export function selloSinGrabar(e: unknown): boolean {
 export async function anchorErrorText(e: unknown): Promise<string> {
   try {
     const { errorKey } = await import("../stellar/errores");
-    const clave = "errAnchor." + errorKey(e);
+    const clave = "errAnchor." + errorKey(e, { patrocinada: await cuentaPatrocinada() });
     const texto = t(clave);
     return texto && texto !== clave ? texto : t("errAnchor.unknown");
   } catch {
     return sinConexion();
+  }
+}
+
+/**
+ * La cuenta que firma no paga la comisión por sí misma: la paga el patrocinador (Pollar). Con ella, quedarse sin saldo es
+ * del servicio y no de la persona, y el mensaje no le puede decir "tu cuenta no tiene saldo" (`errAnchor.sponsorEmpty`).
+ * Si la persona eligió pagar con su cuenta, el saldo que falta es el suyo: el mensaje de siempre, que dice qué hacer.
+ */
+export async function cuentaPatrocinada(): Promise<boolean> {
+  if (pagaLaPersona) return false;
+  try {
+    const [{ activeWallet }, { submitsItself }] = await Promise.all([import("../stellar/wallet-lite"), import("../stellar/wallet-pollar")]);
+    return submitsItself(activeWallet());
+  } catch {
+    return false;
   }
 }
 

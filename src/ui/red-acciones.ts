@@ -144,6 +144,10 @@ export function panelDe(d: Diagnostico, c: ContextoDelPanel): Panel {
     case "sin-saldo": {
       if (testnetConGrifo) return { ...base, principal: "cargar-saldo", secundarias: ["seguir-sin-sello"] };
       if (puedePagar) return { ...base, principal: "sellar-con-mi-cuenta", secundarias: ["seguir-sin-sello"] };
+      // Se quedó sin con qué pagar quien paga la comisión por la persona (Pollar) y ella no tiene cómo pagar: no es su
+      // cuenta, y decirle "tu cuenta no tiene saldo" la manda a cargar XLM a una cuenta que nunca los necesitó. Se puede
+      // volver a probar (quien mantiene el servicio lo repone), o seguir sin sello.
+      if (d.pagador === "patrocinado") return { ...base, frase: "redSinSaldoPatrocinio", principal: "reintentar", secundarias: ["seguir-sin-sello"] };
       return { ...base, principal: "seguir-sin-sello" };
     }
     case "protocolo":
@@ -158,7 +162,7 @@ export function panelDe(d: Diagnostico, c: ContextoDelPanel): Panel {
  * Las frases rojas que ya dicen que hoy no se puede sellar: con "Hoy no se puede sellar:" delante quedaban
  * repetidas ("Hoy no se puede sellar: Hoy sellar cuesta más…", "…: Tu cuenta no tiene saldo para sellar.").
  */
-const FRASES_QUE_BASTAN = new Set(["redCostoAlto", "redSinSaldo"]);
+const FRASES_QUE_BASTAN = new Set(["redCostoAlto", "redSinSaldo", "redSinSaldoPatrocinio"]);
 
 /** Lo que dice el botón "¿La red está bien?": la clave, la frase del caso si es rojo y la segunda frase si la hay. */
 export function respuestaDelBoton(d: Diagnostico, p: Panel): { clave: string; motivo?: string; aparte?: string; nivel: Nivel } {
