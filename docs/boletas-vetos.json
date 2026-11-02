@@ -1,1 +1,8 @@
-{}
+{
+  "guajojo": {
+    "cultural": { "ok": true, "fecha": "2026-11-02", "nota": "tarjeta y fuente leídas; la tarjeta cuenta solo el ave, sin la leyenda de hechiceros ni muerte; nadie es eliminado, quien se sienta escucha" }
+  },
+  "toborochi": {
+    "cultural": { "ok": true, "fecha": "2026-11-02", "nota": "tarjeta y fuente leídas; la leyenda guaraní sin hechiceros ni muerte; nadie es eliminado, las flores se van" }
+  }
+}
