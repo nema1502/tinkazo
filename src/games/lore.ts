@@ -50,13 +50,16 @@ export interface Lore {
 export const LORE: Record<string, Lore[]> = {
   any: [
     {
-      // "tinkazo. I. 1. m. Bo. tinca, presentimiento." y
-      // "tincazo. Golpe que se da haciendo resbalar con violencia, sobre la
-      //  yema del pulgar, el envés de la última falange de otro dedo."
+      // Entrada "tincazo": "I. 1. Golpe que se da haciendo resbalar con
+      //  violencia, sobre la yema del pulgar, el envés de la última falange de
+      //  otro dedo de la misma mano" y "II. 1. m. Bo. tinca, presentimiento".
+      // La entrada "tinkazo" (asale.org/damer/tinkazo) solo trae "Bo. tinca,
+      // presentimiento": el golpecito está únicamente en "tincazo". La tarjeta
+      // admite un solo enlace, así que cita la que sostiene las dos frases.
       q: "loreTinkazoQ",
       a: "loreTinkazoA",
-      href: "https://www.asale.org/damer/tinkazo",
-      src: "Diccionario de americanismos (asale.org)",
+      href: "https://www.asale.org/damer/tincazo",
+      src: "Diccionario de americanismos, tincazo (asale.org)",
       hue: "magenta",
     },
     {
@@ -204,7 +207,11 @@ export const LORE: Record<string, Lore[]> = {
   pinata: [
     {
       // "Acolman: cuatro siglos de posadas y tradicionales piñatas": la piñata
-      //  llegó en 1586 con los agustinos de Acolman y las misas de aguinaldo.
+      //  "En la segunda mitad del siglo XVI, los frailes agustinos llegaron a la
+      //  región de Acolman [...] instauraron las misas de aguinaldo" y la piñata
+      //  "originalmente [era] una olla de barro [...] provista de siete picos";
+      //  "Fue en Acolman, hace más de cuatro siglos, donde estas figuras se
+      //  popularizaron". La página no trae el año 1586.
       q: "lorePinataQ",
       a: "lorePinataA",
       href: "https://www.inah.gob.mx/foto-del-dia/acolman-cuatro-siglos-de-posadas-y-tradicionales-pinatas",

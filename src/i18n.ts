@@ -812,7 +812,7 @@ export const T: Record<Lang, Dict> = {
     loreTitle: "DE PASO",
     leyendaTitulo: "¿De dónde viene este juego?", leyendaFuente: "Fuente", marcadorQuedan: "QUEDAN",
     loreTinkazoQ: "¿Por qué “Tinkazo”?",
-    loreTinkazoA: "El Diccionario de americanismos trae dos: tinkazo, en Bolivia, es un presentimiento. Y tincazo es el golpecito que se da haciendo resbalar el dedo sobre el pulgar. Este sorteo es las dos cosas.",
+    loreTinkazoA: "El Diccionario de americanismos trae dos: tinkazo, en Bolivia, es un presentimiento. Y tincazo es el golpe que se da haciendo resbalar con fuerza un dedo sobre el pulgar. Este sorteo es las dos cosas.",
     loreDrandQ: "¿De dónde sale el número?",
     loreDrandA: "De drand quicknet: una red de organizaciones independientes que firma un número nuevo cada tres segundos. La firma pesa 48 bytes y se comprueba sin conocer ninguna ronda anterior.",
     loreAnchorQ: "¿Por qué los rombos?",
@@ -1470,7 +1470,7 @@ export const T: Record<Lang, Dict> = {
     jgPinN: "Piñata",
     jgPinB: "La estrella de siete picos colgada en el patio, con papel picado. Cada nombre es un caramelo adentro; con cada palo caen algunos, y cuando se rompe, el último que quedaba baja despacio. Hasta doscientas.",
     lorePinataQ: "¿De dónde sale la piñata?",
-    lorePinataA: "Según el INAH de México, llegó en 1586, cuando los frailes agustinos de Acolman celebraron las misas de aguinaldo que después se volvieron las posadas. La de siete picos es la clásica.",
+    lorePinataA: "Según el INAH de México, la piñata se popularizó en Acolman hace más de cuatro siglos. Allí, en la segunda mitad del siglo XVI, los frailes agustinos instauraron las misas de aguinaldo que después se volvieron las posadas. La original era una olla de barro con siete picos.",
     jgLuzN: "Luz roja, luz verde",
     jgLuzB: "El juego de patio, con el Faro de la casa: con luz verde se corre, con luz roja se da vuelta y barre la cancha con su haz. Al que ve moviéndose, se sienta. Gana quien toca el Faro. Hasta doscientas.",
     loreLuzQ: "¿Por qué un faro?",
@@ -2153,11 +2153,11 @@ export const T: Record<Lang, Dict> = {
     // --- /guajojo
     // --- toborochi
     gameToborochi: "El Toborochi", jgToborochiN: "El Toborochi",
-    jgToborochiB: "Borrador de El Toborochi: los nombres llegan a la mesa de a ocho y quedan los finalistas. El ganador ya salió del sorteo y el juego solo lo cuenta.",
+    jgToborochiB: "El toborochi en flor, el árbol de Santa Cruz. Los nombres llegan de a ocho y el surazo se va llevando las flores de a poco, hasta que quedan las finalistas. El colibrí se posa en quien gana. Hasta doscientas.",
     gcToborochi: "Los nombres llegan a la mesa de a ocho y quedan los finalistas. Gana quien salió del sorteo.",
     gcToborochiMany: "Los premios quedan en la mesa final: los que ganan se ven al final.",
     loreToborochiQ: "¿De dónde sale El Toborochi?",
-    loreToborochiA: "Borrador: todavía no tiene su historia ni su fuente, y no sale en ningún sorteo hasta que se escriba.",
+    loreToborochiA: "Es el árbol de Santa Cruz: entre mayo y junio pinta de rosa las calles y las plazas, justo cuando casi todos los demás pierden las hojas. Una leyenda guaraní cuenta que Araverá escapó de los espíritus del mal y se refugió en el tronco de un toborochi, y que todavía asoma convertida en flor para que la visiten los colibríes. Hasta sale en el billete de 20 bolivianos.",
     // --- /toborochi
     // <<< kit:i18n-es
     // Luma a la vista y qué sigue después del resultado (2 de noviembre de 2026): el "?" que enseña a bajar el CSV y la línea de "qué sigue".
@@ -2616,7 +2616,7 @@ export const T: Record<Lang, Dict> = {
     loreTitle: "BY THE WAY",
     leyendaTitulo: "Where does this game come from?", leyendaFuente: "Source", marcadorQuedan: "LEFT",
     loreTinkazoQ: "Why “Tinkazo”?",
-    loreTinkazoA: "The Spanish academies' dictionary of Americanisms has two: in Bolivia a tinkazo is a hunch. Its twin tincazo is the flick you give with a finger off your thumb. This draw is both.",
+    loreTinkazoA: "The Spanish academies' dictionary of Americanisms has two: in Bolivia a tinkazo is a hunch. Its twin tincazo is the sharp flick you give by sliding a finger hard off your thumb. This draw is both.",
     loreDrandQ: "Where does the number come from?",
     loreDrandA: "From drand quicknet: a network of independent organizations that signs a fresh number every three seconds. The signature is 48 bytes and verifies without knowing any previous round.",
     loreAnchorQ: "Why the diamonds?",
@@ -3259,7 +3259,7 @@ export const T: Record<Lang, Dict> = {
     jgPinN: "Piñata",
     jgPinB: "The seven-pointed star hanging in the courtyard, under papel picado. Each name is a candy inside; every swing drops a few, and when it breaks, the last one left comes down slowly. Up to two hundred.",
     lorePinataQ: "Where does the piñata come from?",
-    lorePinataA: "According to Mexico's INAH, it arrived in 1586, when the Augustinian friars of Acolman held the Christmas masses that later became the posadas. The seven-pointed one is the classic.",
+    lorePinataA: "According to Mexico's INAH, the piñata became popular in Acolman over four centuries ago. There, in the second half of the 16th century, the Augustinian friars started the Christmas masses that later became the posadas. The original was a clay pot with seven points.",
     jgOruN: "La Entrada",
     jgOruB: "The Oruro Carnival, group by group: each group on the list dances its own dance (Diablada, Morenada, Caporales, Tinkus or Llamerada) and passes the reviewing stand with everyone's name. A whole group stays behind at every block, and in the last one a few stay at a time, until the face-off in front of the Socavón. Up to two hundred.",
     jgSapoN: "Sapo",
@@ -3930,11 +3930,11 @@ export const T: Record<Lang, Dict> = {
     // --- /guajojo
     // --- toborochi
     gameToborochi: "The Toborochi", jgToborochiN: "The Toborochi",
-    jgToborochiB: "Draft of The Toborochi: names reach the table eight at a time and the finalists remain. The winner already came out of the draw and the game only tells it.",
+    jgToborochiB: "The toborochi in bloom, the tree of Santa Cruz. Names arrive eight at a time and the south wind carries the flowers off little by little, until the finalists remain. The hummingbird lands on whoever wins. Up to two hundred.",
     gcToborochi: "Names reach the table eight at a time and the finalists remain. Whoever the draw picked wins.",
     gcToborochiMany: "The prizes sit at the final table: the winners show at the end.",
     loreToborochiQ: "Where does The Toborochi come from?",
-    loreToborochiA: "Draft: it has no story or source yet, and it does not show in any draw until one is written.",
+    loreToborochiA: "It is the tree of Santa Cruz: in May and June it paints the streets and squares pink, just when most other trees lose their leaves. A Guaraní legend tells that Araverá fled from evil spirits and took refuge in the trunk of a toborochi, and that she still comes out as a flower for the hummingbirds to visit. It is even on the 20-boliviano note.",
     // --- /toborochi
     // <<< kit:i18n-en
     // Luma in plain sight and what comes after the result (November 2, 2026): the "?" that teaches how to get the CSV, and the "what's next" line.
