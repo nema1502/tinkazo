@@ -21,7 +21,7 @@ Hay dos clases de imagen:
 
 Cada entrada trae algunas de estas, con su texto exacto:
 
-- **gano**: ¿ya se sabe quién ganó? Escribí `no`, o `si` y, en `quien`, el nombre tal como se lee. Si dudás, escribí `no`.
+- **gano**: ¿ya se sabe quién ganó? Escribí `no`, o `si` y, en `quien`, el nombre tal como se lee. Un nombre señalado o en una tarjeta no alcanza: tiene que verse que ganó (un cartel de ganador, un festejo). Si dudás, escribí `no`.
 - **falta**: ¿cuánto falta para que termine? Una de `empieza`, `mucho`, `mitad`, `poco` o `termino`.
 - **paso** (tira): ¿qué acaba de pasar? Una de estas palabras, tal cual:
   - `empezo`: acaba de empezar.
@@ -33,9 +33,9 @@ Cada entrada trae algunas de estas, con su texto exacto:
   - `nada`: nada nuevo.
 
   En `quien`, el nombre de la persona del hecho, si se lee; si no, vacío.
-- **mirar** (tira): ¿adónde hay que mirar para seguir lo que pasa? Una de `arriba`, `abajo`, `izquierda`, `derecha`, `centro` o `alrededor`.
+- **mirar** (tira): mirá el cuadro de la derecha, el momento, y decí **en qué parte de la imagen** está pasando lo importante ahora. Es una zona de la pantalla, no una dirección de movimiento: una de `arriba`, `abajo`, `izquierda`, `derecha`, `centro`, o `alrededor` si lo importante gira.
 - **propia**: una pregunta sobre los nombres de la pantalla (quién va adelante, quiénes siguen, qué está señalado o quién tiene más). El texto de la entrada dice cuál es y cuántos nombres escribir. Si no se lee, `no se ve`.
-- **olor**: ¿esto parece un casino, una máquina tragamonedas o un juego de apuestas? `si` o `no`, y en `vi` tres palabras de por qué.
+- **olor**: ¿se ve dinero, billetes, monedas de apuesta, fichas de casino, cartas, dados, una máquina tragamonedas o una mesa de apuestas? Contestá por lo que hay dibujado, no por lo que te parece. `si` o `no`, y en `vi` qué viste.
 
 ## El formato de cada respuesta
 

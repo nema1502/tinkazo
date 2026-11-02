@@ -18,18 +18,31 @@
  * mira movimiento, y una foto quieta no lo muestra.
  *
  * **El arco.** El auditor para al 25 %, al 60 % y un segundo después del golpe, y
- * guarda la verdad del plan (`window.__nino.verdad()`). Una corrida de un tamaño
- * (un arco) pasa si:
- *   - al 25 %: `gano` = no y `mirar` bien;
- *   - al 60 %: `propia` bien y `falta` a 0,2 o menos;
+ * guarda la verdad del plan (`window.__nino.verdad()`). La primera medición (2 de
+ * noviembre de 2026) mostró que no todo se puede exigir en todo momento: la ruleta,
+ * el control positivo, reprobaba 0 de 8 porque el tiempo no se ve en algo que gira y
+ * porque al 25 % casi nada se mueve. Por eso en cada momento deciden solo las
+ * preguntas que ahí se pueden ver, y las demás se informan:
+ *   - al 25 %: solo `gano` = no;
+ *   - al 60 %: `propia`, `mirar` y, si la verdad dice `progresoVisible`, `falta`
+ *     (a 0,2 o menos);
  *   - al final: `gano` = si con el nombre bien y `paso` = gano.
- * Las demás respuestas se informan pero no deciden. Un `si` antes del golpe es
- * una falla grave: la presentación delata a quien gana. Una semilla pasa si pasan
- * sus dos tamaños; un juego pasa con 7 de cada 8 semillas (con 2 semillas, las 2).
+ * Un `si` antes del golpe sigue siendo una falla grave: la presentación delata a
+ * quien gana. Una corrida de un tamaño (un arco) pasa si pasan sus tres momentos;
+ * una semilla pasa si pasan sus dos tamaños; un juego pasa con 7 de cada 8
+ * semillas (con 2 semillas, las 2).
+ *
+ * `mirar` es siempre una zona de la pantalla (nunca una dirección): la verdad sale
+ * de `adelante.lugar` cuando alguien va adelante y, si no, de `zonaAccion`, o `centro`.
+ * En la rueda, que gira, «alrededor» también vale: la pregunta lo ofrece para lo que
+ * gira, y la segunda medición mostró que quien mira una rueda girando dice eso.
+ * `olor` pregunta por cosas (dinero, fichas, cartas, dados, tragamonedas, mesa de
+ * apuestas) y no por sensaciones: una rueda que gira «parece» apuesta aunque no haya
+ * nada de casino en pantalla.
  *
  * Las tolerancias son las de siempre: nombres sin tildes ni mayúsculas y con las
  * cinco primeras letras de cada palabra; `mirar` igual a la zona, sin decir también
- * el sentido contrario; `falta` a 0,2 o menos del progreso; `paso` por tipo, y con
+ * la contraria; `falta` a 0,2 o menos del progreso; `paso` por tipo, y con
  * nombre si lo hay. Acá no se llama a ninguna API.
  */
 import { createHash } from "node:crypto";
@@ -119,12 +132,12 @@ export const TEXTO_PROPIA = {
 
 /** Lo mismo para todos los juegos, menos `propia`. El prompt fijo (`prompt-nino.md`) las repite. */
 export const TEXTO_PREGUNTAS = {
-  gano: "¿Ya se sabe quién ganó? Si no, escribí no. Si sí, escribí si, y en \"quien\" el nombre tal como se lee.",
+  gano: "¿Ya se sabe quién ganó? Si no, escribí no. Si sí, escribí si, y en \"quien\" el nombre tal como se lee. Un nombre señalado o en una tarjeta no alcanza: tiene que verse que ganó (un cartel de ganador, un festejo).",
   falta: "¿Cuánto falta para que termine? Una de: empieza, mucho, mitad, poco, termino.",
   paso: `${AVISO_TIRA} ¿Qué acaba de pasar? Una de: empezo, salio (salió alguien), adelante (alguien pasó adelante), freno (alguien se frenó o tropezó), casi (casi sale y volvió), gano, nada (nada nuevo). En "quien", el nombre de la persona si se lee.`,
-  mirar: `${AVISO_TIRA} ¿Adónde hay que mirar para seguir lo que pasa? Una de: arriba, abajo, izquierda, derecha, centro, alrededor.`,
+  mirar: `${AVISO_TIRA} Mirá el cuadro de la derecha, el momento: ¿en qué parte de la imagen está pasando lo importante ahora? Una de: arriba, abajo, izquierda, derecha, centro, o alrededor si gira.`,
   propia: TEXTO_PROPIA,
-  olor: "¿Esto parece un casino, una máquina tragamonedas o un juego de apuestas? Escribí si o no, y en \"vi\" tres palabras de por qué.",
+  olor: "¿Se ve dinero, billetes, monedas de apuesta, fichas de casino, cartas, dados, una máquina tragamonedas o una mesa de apuestas? Escribí si o no, y en \"vi\" qué viste.",
 };
 
 /** El texto de una pregunta: la propia depende de la forma. */
@@ -164,6 +177,16 @@ export function coincideNombre(modelo, verdadero) {
     if (!(b.startsWith(a) || a.startsWith(b))) return false;
   }
   return true;
+}
+
+/**
+ * Adónde hay que mirar, según la verdad: la zona donde está quien va adelante y, si nadie va
+ * adelante, la `zonaAccion` que declara el juego; sin ella, el centro. Siempre una zona de la
+ * pantalla, nunca una dirección.
+ */
+export function zonaDeMirar(v) {
+  if (v.adelante?.quienes?.length) return v.adelante.lugar;
+  return v.zonaAccion ?? "centro";
 }
 
 const OPUESTO = { arriba: "abajo", abajo: "arriba", izquierda: "derecha", derecha: "izquierda" };
@@ -263,6 +286,16 @@ export function coincidePropia(forma, modelo, verdad, nombres) {
 /* ------------------------------------------------------------- el juez */
 
 /**
+ * Qué preguntas deciden en cada punto del arco; las demás se informan. `falta` solo decide
+ * donde se ve (`progresoVisible`): en lo que gira, o cuando casi nada se movió, el tiempo no se ve.
+ */
+export function decideEn(punto, verdad) {
+  if (punto === "fin") return ["gano", "paso"];
+  if (punto === "p25") return ["gano"];
+  return verdad?.progresoVisible ? ["propia", "mirar", "falta"] : ["propia", "mirar"];
+}
+
+/**
  * Un momento (una parada): lo que contestó el modelo sobre la foto y sobre la tira,
  * contra la verdad. `aciertos` lleva todas las preguntas, para informar; `decide`
  * dice cuáles cuentan en este punto del arco y `pasa` si todas están bien.
@@ -280,20 +313,21 @@ export function juzgarMomento({ foto, tira, c }) {
     gano: final ? dijo === "si" && ganadoresDe(c).some((i) => coincideNombre(quienGana, nombres[i] ?? "")) : dijo === "no",
     falta: coincideFalta(f.falta, v.progreso),
     propia: coincidePropia(c.forma, f.propia, v, nombres),
-    mirar: coincideMirar(t.mirar, v.adelante.lugar),
+    mirar: coincideMirar(t.mirar, zonaDeMirar(v)) || (c.forma === "rueda" && coincideMirar(t.mirar, "alrededor")),
     paso: coincidePaso(t.paso, t.quien, verdadPaso, nombres),
   };
-  const decide = final ? ["gano", "paso"] : c.punto === "p25" ? ["gano", "mirar"] : ["propia", "falta"];
+  const decide = decideEn(c.punto, v);
   // Antes del golpe, decir «ya se sabe» es que la presentación delata a quien gana.
   const grave = !final && dijo === "si";
-  const pasa = decide.every((k) => aciertos[k]) && !grave;
+  const respondida = foto != null && tira != null;
+  const pasa = respondida && decide.every((k) => aciertos[k]) && !grave;
   return {
     aciertos,
     decide,
     pasa,
     grave,
     olor: f.olor === undefined ? null : veredictoGano(f.olor),
-    respondida: foto != null && tira != null,
+    respondida,
   };
 }
 

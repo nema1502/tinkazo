@@ -92,4 +92,20 @@ describe("las respuestas de la carrera de hoy (el caso de control)", () => {
     expect(p.peloton).toBeNull();
     expect(respuestasCarrera(p, relojEn(p, 0.5)).paso.tipo).toBe("empezo");
   });
+
+  it("adónde mirar es la zona donde está la que va adelante, nunca la dirección en que corre", () => {
+    const p = carrera(8, 21);
+    const t = p.pre + p.cuenta + DUR / 2;
+    // El juego mide la zona con la cámara y se la pasa; el plan no la conoce.
+    expect(respuestasCarrera(p, relojEn(p, t), "abajo").adelante.lugar).toBe("abajo");
+    expect(respuestasCarrera(p, relojEn(p, duracionDeLaCarrera(p) + 1), "izquierda").adelante.lugar).toBe("izquierda");
+    // Sin esa medida, el centro: «derecha» es hacia dónde corre, no dónde mirar.
+    expect(respuestasCarrera(p, relojEn(p, t)).adelante.lugar).toBe("centro");
+    expect(respuestasCarrera(p, relojEn(p, t)).hacia).toBe("derecha");
+  });
+
+  it("la meta está a la vista: cuánto falta se ve en todo momento", () => {
+    const p = carrera(18, 4);
+    for (let t = 0; t < duracionDeLaCarrera(p) + 3; t += 0.5) expect(respuestasCarrera(p, relojEn(p, t)).progresoVisible).toBe(true);
+  });
 });

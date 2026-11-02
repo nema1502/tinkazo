@@ -15,8 +15,12 @@ import type { Lugar, Respuestas } from "../pixi/kit/respuestas";
  *   el cartel, la ganadora.
  * - **hacia**: la derecha, hacia la meta. En el pelotón corren en el lugar y el
  *   suelo se corre hacia atrás: es lo que declara el código; si la foto dice
- *   otra cosa, ese es justamente el hallazgo.
+ *   otra cosa, ese es justamente el hallazgo. No es adónde mirar: eso es `lugar`.
+ * - **lugar** (adónde mirar): la zona de la pantalla donde está la que va adelante,
+ *   que mide el juego con la cámara y llega en `zonaDelFrente`; el plan no la
+ *   conoce, y sin ella dice `centro`, nunca la dirección en que corre.
  * - **progreso**: la hora sobre la duración total (pelotón, cuenta y carrera).
+ * - **progresoVisible**: siempre: la meta está a la vista.
  * - **paso**: la última echada, el último momento de la historia o el último
  *   cambio de punta.
  */
@@ -72,17 +76,17 @@ export function horaDeLaCarrera(p: PlanDeLaCarrera, r: RelojDeLaCarrera): number
   return duracionDeLaCarrera(p) + r.tFreeze;
 }
 
-export function respuestasCarrera(p: PlanDeLaCarrera, r: RelojDeLaCarrera): Respuestas {
+export function respuestasCarrera(p: PlanDeLaCarrera, r: RelojDeLaCarrera, zonaDelFrente: Lugar = "centro"): Respuestas {
   const t = horaDeLaCarrera(p, r);
   const total = duracionDeLaCarrera(p);
   const progreso = Math.max(0, Math.min(1, t / total));
   const persona = (k: number): number => p.lanes[k] as number;
   const todas = p.lanes.map((_, k) => persona(k));
   const hacia = "derecha" as const;
-  const respuesta = (quienes: number[], lugar: Lugar, paso: Respuestas["paso"]): Respuestas => ({ adelante: { quienes, lugar }, hacia, progreso, paso });
+  const respuesta = (quienes: number[], lugar: Lugar, paso: Respuestas["paso"]): Respuestas => ({ adelante: { quienes, lugar }, hacia, progreso, progresoVisible: true, paso });
   const reciente = (paso: Respuestas["paso"]): Respuestas["paso"] => (t - paso.desde > VENTANA ? { tipo: "nada", desde: paso.desde } : paso);
 
-  if (r.fase === "done") return respuesta([persona(p.ganador)], "derecha", { tipo: "gano", quien: persona(p.ganador), desde: duracionDeLaCarrera(p) });
+  if (r.fase === "done") return respuesta([persona(p.ganador)], zonaDelFrente, { tipo: "gano", quien: persona(p.ganador), desde: duracionDeLaCarrera(p) });
 
   if (r.fase === "pre") {
     const pelo = p.peloton;
@@ -140,5 +144,5 @@ export function respuestasCarrera(p: PlanDeLaCarrera, r: RelojDeLaCarrera): Resp
     if (desde > paso.desde) paso = { tipo: "adelante", quien: persona(punta), desde };
     break;
   }
-  return respuesta(quienes, "derecha", reciente(paso));
+  return respuesta(quienes, zonaDelFrente, reciente(paso));
 }

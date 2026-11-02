@@ -17,6 +17,9 @@ import {
   coincideNombre,
   coincidePaso,
   coincidePropia,
+  decideEn,
+  textoDe,
+  zonaDeMirar,
   horaDeParada,
   horasDeLosCuadros,
   idDeCaptura,
@@ -180,7 +183,7 @@ describe("la pregunta propia de cada forma", () => {
 const PROGRESO = { p25: 0.25, p60: 0.6, fin: 1 };
 
 /** La verdad de un juego que se mira hacia la derecha, con el ganador `s % 18` en la meta. Con 6 en pie al 60 %. */
-function verdadDe(s, punto, forma) {
+function verdadDe(s, punto, forma, extra = {}) {
   const gana = s % 18;
   const siguen = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => (i + s) % 18);
   const quienes = punto === "fin" ? [gana] : punto === "p60" && forma === "de-pie" ? siguen.slice(0, 4) : [gana];
@@ -188,19 +191,21 @@ function verdadDe(s, punto, forma) {
     adelante: { quienes, lugar: "derecha" },
     hacia: "derecha",
     progreso: PROGRESO[punto],
+    progresoVisible: true,
+    ...extra,
     paso: punto === "fin" ? { tipo: "gano", quien: gana, desde: 20 } : punto === "p25" ? { tipo: "freno", quien: (s + 3) % 18, desde: 5 } : { tipo: "nada", desde: 5 },
   };
 }
 
 /** El `verdad.json` de una corrida con `semillas` semillas, los dos tamaños y las dos imágenes de cada parada. */
-function armar(semillas, forma = "carrera") {
+function armar(semillas, forma = "carrera", extra = {}) {
   const capturas = {};
   for (let s = 1; s <= semillas; s++) {
     for (const tam of TAMANOS) {
       for (const p of PUNTOS) {
         for (const imagen of IMAGENES) {
           const id = idDeCaptura({ juego: "wheel", semilla: s, tamano: tam.id, punto: p.id, imagen });
-          capturas[id] = { semilla: s, tamano: tam.id, punto: p.id, imagen, forma, duracion: 20, nombres: NOMBRES, ganadores: [s % 18], verdad: verdadDe(s, p.id, forma) };
+          capturas[id] = { semilla: s, tamano: tam.id, punto: p.id, imagen, forma, duracion: 20, nombres: NOMBRES, ganadores: [s % 18], verdad: verdadDe(s, p.id, forma, extra) };
         }
       }
     }
@@ -215,7 +220,7 @@ function perfecta(c) {
   const final = c.punto === "fin";
   const nombres = v.adelante.quienes.map((i) => NOMBRES[i]);
   if (c.imagen === "tira") {
-    return { gano: "", falta: "", paso: v.paso.tipo, mirar: v.adelante.lugar, propia: "", olor: "", quien: v.paso.quien !== undefined ? NOMBRES[v.paso.quien] : "", vi: "tres cuadros" };
+    return { gano: "", falta: "", paso: v.paso.tipo, mirar: zonaDeMirar(v), propia: "", olor: "", quien: v.paso.quien !== undefined ? NOMBRES[v.paso.quien] : "", vi: "tres cuadros" };
   }
   return { gano: final ? "si" : "no", falta: cerca, paso: "", mirar: "", propia: c.forma === "de-pie" ? nombres.slice(0, 2).join(", ") : nombres[0], olor: "no", quien: final ? NOMBRES[v.adelante.quienes[0]] : "", vi: "una foto" };
 }
@@ -228,26 +233,79 @@ const contestar = (capturas, f) => Object.fromEntries(Object.entries(capturas).m
 describe("el juez de un momento", () => {
   const de = (capturas, punto, imagen) => Object.values(capturas).find((c) => c.punto === punto && c.imagen === imagen && c.tamano === "1080");
 
-  it("al 25 % decide «gano = no» y «mirar»; lo demás se informa pero no decide", () => {
+  it("al 25 % decide solo «gano = no»; lo demás se informa pero no decide, ni «mirar»", () => {
     const capturas = armar(1);
     const c = de(capturas, "p25", "foto");
     const foto = perfecta(c);
     const tira = perfecta(de(capturas, "p25", "tira"));
-    expect(juzgarMomento({ foto, tira, c })).toMatchObject({ pasa: true, decide: ["gano", "mirar"] });
+    expect(juzgarMomento({ foto, tira, c })).toMatchObject({ pasa: true, decide: ["gano"] });
     expect(juzgarMomento({ foto: { ...foto, falta: "poco", propia: "no se ve" }, tira: { ...tira, paso: "nada" }, c }).pasa).toBe(true);
-    expect(juzgarMomento({ foto, tira: { ...tira, mirar: "izquierda" }, c }).pasa).toBe(false);
+    // Al 25 % casi nada se mueve y nadie va adelante: «mirar» se informa y no decide.
+    const mal = juzgarMomento({ foto, tira: { ...tira, mirar: "izquierda" }, c });
+    expect(mal.pasa).toBe(true);
+    expect(mal.aciertos.mirar).toBe(false);
     expect(juzgarMomento({ foto: { ...foto, gano: "quizás" }, tira, c }).pasa).toBe(false);
   });
 
-  it("al 60 % decide «propia» y «falta» a 0,2 o menos", () => {
+  it("al 60 % deciden «propia», «mirar» y «falta» a 0,2 o menos si se ve cuánto falta", () => {
     const capturas = armar(1);
     const c = de(capturas, "p60", "foto");
     const foto = perfecta(c);
     const tira = perfecta(de(capturas, "p60", "tira"));
-    expect(juzgarMomento({ foto, tira, c })).toMatchObject({ pasa: true, decide: ["propia", "falta"] });
+    expect(juzgarMomento({ foto, tira, c })).toMatchObject({ pasa: true, decide: ["propia", "mirar", "falta"] });
     expect(juzgarMomento({ foto: { ...foto, falta: "mucho" }, tira, c }).pasa).toBe(false);
     expect(juzgarMomento({ foto: { ...foto, propia: "Zorro Zoe" }, tira, c }).pasa).toBe(false);
-    expect(juzgarMomento({ foto, tira: { ...tira, mirar: "izquierda", paso: "salio" }, c }).pasa).toBe(true);
+    expect(juzgarMomento({ foto, tira: { ...tira, mirar: "izquierda" }, c }).pasa).toBe(false);
+    // «paso» se informa, no decide.
+    expect(juzgarMomento({ foto, tira: { ...tira, paso: "salio" }, c }).pasa).toBe(true);
+  });
+
+  it("donde no se ve cuánto falta (progresoVisible falso), «falta» se informa pero no decide", () => {
+    const capturas = armar(1, "rueda", { progresoVisible: false });
+    const c = de(capturas, "p60", "foto");
+    const foto = perfecta(c);
+    const tira = perfecta(de(capturas, "p60", "tira"));
+    const j = juzgarMomento({ foto: { ...foto, falta: "mucho" }, tira, c });
+    expect(j).toMatchObject({ pasa: true, decide: ["propia", "mirar"] });
+    expect(j.aciertos.falta).toBe(false);
+    expect(juzgarMomento({ foto, tira: { ...tira, mirar: "izquierda" }, c }).pasa).toBe(false);
+    // Sin la clave (una verdad vieja), tampoco decide.
+    expect(decideEn("p60", {})).toEqual(["propia", "mirar"]);
+    expect(decideEn("p60", { progresoVisible: true })).toEqual(["propia", "mirar", "falta"]);
+    expect(decideEn("p25", { progresoVisible: true })).toEqual(["gano"]);
+    expect(decideEn("fin", { progresoVisible: true })).toEqual(["gano", "paso"]);
+  });
+
+  it("«mirar» es una zona de la pantalla: la de quien va adelante o, si nadie, la que declara el juego, o el centro", () => {
+    expect(zonaDeMirar({ adelante: { quienes: [3], lugar: "abajo" }, zonaAccion: "arriba" })).toBe("abajo");
+    expect(zonaDeMirar({ adelante: { quienes: [], lugar: "abajo" }, zonaAccion: "arriba" })).toBe("arriba");
+    expect(zonaDeMirar({ adelante: { quienes: [], lugar: "abajo" } })).toBe("centro");
+    // Una dirección de movimiento no es una zona: el modelo que dice «derecha» donde la verdad es «abajo» falla.
+    expect(coincideMirar("derecha", zonaDeMirar({ adelante: { quienes: [1], lugar: "abajo" }, hacia: "derecha" }))).toBe(false);
+  });
+
+  it("en la rueda, que gira, «alrededor» también es mirar bien; en las demás formas no", () => {
+    const rueda = armar(1, "rueda", { adelante: { quienes: [3], lugar: "centro" } });
+    const c = de(rueda, "p60", "foto");
+    const foto = perfecta(c);
+    const tira = perfecta(de(rueda, "p60", "tira"));
+    expect(juzgarMomento({ foto, tira: { ...tira, mirar: "alrededor" }, c }).aciertos.mirar).toBe(true);
+    expect(juzgarMomento({ foto, tira: { ...tira, mirar: "arriba" }, c }).aciertos.mirar).toBe(false);
+    const carrera = armar(1, "carrera");
+    const cc = de(carrera, "p60", "foto");
+    expect(juzgarMomento({ foto: perfecta(cc), tira: { ...perfecta(de(carrera, "p60", "tira")), mirar: "alrededor" }, c: cc }).aciertos.mirar).toBe(false);
+  });
+
+  it("las preguntas piden una zona de la imagen, y el olor pregunta por cosas y no por sensaciones", () => {
+    const mirar = textoDe("mirar", "carrera");
+    expect(mirar).toContain("en qué parte de la imagen");
+    expect(mirar).toContain("alrededor si gira");
+    expect(mirar).not.toContain("adónde hay que mirar");
+    const olor = textoDe("olor", "carrera");
+    for (const cosa of ["dinero", "billetes", "fichas de casino", "cartas", "dados", "tragamonedas", "mesa de apuestas"]) expect(olor).toContain(cosa);
+    expect(olor).not.toContain("parece");
+    // Un nombre señalado en una tarjeta no es un ganador: una rueda que nombra al gajo no delata nada.
+    expect(textoDe("gano", "rueda")).toContain("tiene que verse que ganó");
   });
 
   it("al final decide «gano = si» con el nombre bien y «paso = gano»", () => {
@@ -262,7 +320,7 @@ describe("el juez de un momento", () => {
     expect(juzgarMomento({ foto, tira: { ...tira, paso: "nada" }, c }).pasa).toBe(false);
     // El nombre puede venir pegado al «si».
     expect(juzgarMomento({ foto: { ...foto, gano: `si ${NOMBRES[c.verdad.adelante.quienes[0]]}`, quien: "" }, tira, c }).pasa).toBe(true);
-    // Falta y propia se informan, no deciden.
+    // Falta, propia y mirar se informan, no deciden.
     expect(juzgarMomento({ foto: { ...foto, falta: "mucho", propia: "no se ve" }, tira, c }).pasa).toBe(true);
   });
 

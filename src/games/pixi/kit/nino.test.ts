@@ -4,7 +4,7 @@ import { FIGURA, cuantasCaben, figurasDe, tamanoMinimoFigura } from "./figuras";
 import { REGLA_NINO, palabrasDe, problemasDeLinea, validarGuion } from "./guion";
 import { MARCADOR, ESQUINA, marcadorPorSalidas, medidasMarcador, problemasDeMarcador } from "./marcador";
 import { SEPARACION_MAX, enFilaAparte, estaPegado, huecoAlCuerpo, nombreDeSalida, pegarAlCuerpo, unidadDe, type Rect } from "./nombres";
-import { DIRECCIONES, POSE_MAX, SALIDAS_APARTE, lugarDe, problemasDeRespuestas, type Respuestas } from "./respuestas";
+import { DIRECCIONES, POSE_MAX, SALIDAS_APARTE, lugarDe, problemasDeRespuestas, verdadDelNino, type Respuestas } from "./respuestas";
 import { crearSonido, type Voz } from "./sonido";
 import type { Camara, Kit, Momentos } from "./tipos";
 
@@ -274,5 +274,25 @@ describe("respuestas: la prueba del niño", () => {
     expect(lugarDe(100, 300, 1000, 600)).toBe("izquierda");
     expect(lugarDe(500, 50, 1000, 600)).toBe("arriba");
     expect(lugarDe(500, 560, 1000, 600)).toBe("abajo");
+  });
+
+  it("la verdad de la prueba: cuánto falta solo cuenta donde se ve", () => {
+    const r = (quienes: number[], progreso: number): Respuestas => ({ adelante: { quienes, lugar: "centro" }, hacia: "centro", progreso, paso: { tipo: "nada", desde: 0 } });
+    const todos = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+    // La carrera: la meta está a la vista, siempre.
+    expect(verdadDelNino("carrera", r([1], 0.3), { n: 10, ganadores: 1 })).toMatchObject({ progresoVisible: true, progreso: 0.3 });
+    // La rueda: el tiempo no se ve en algo que gira, salvo que el juego diga lo contrario.
+    expect(verdadDelNino("rueda", r([1], 0.6), { n: 10, ganadores: 1 }).progresoVisible).toBe(false);
+    expect(verdadDelNino("rueda", { ...r([1], 0.6), progresoVisible: true }, { n: 10, ganadores: 1 }).progresoVisible).toBe(true);
+    // De pie y acumulación: lo visible es cuántos quedan. Nadie salió, nada se ve; salieron tres de nueve, un tercio.
+    expect(verdadDelNino("de-pie", r(todos, 0.4), { n: 10, ganadores: 1 })).toMatchObject({ progresoVisible: false, progreso: 0 });
+    const tres = verdadDelNino("de-pie", r(todos.slice(3), 0.4), { n: 10, ganadores: 1 });
+    expect(tres.progresoVisible).toBe(true);
+    expect(tres.progreso).toBeCloseTo(3 / 9, 9);
+    expect(verdadDelNino("acumulacion", r(todos.slice(3), 0.4), { n: 10, ganadores: 1 }).progreso).toBeCloseTo(3 / 9, 9);
+    // Con el ganador solo, salieron todos los demás: 1.
+    expect(verdadDelNino("de-pie", r([4], 1), { n: 10, ganadores: 1 }).progreso).toBe(1);
+    // El juego puede afinarlo: si declara el suyo, se respeta.
+    expect(verdadDelNino("de-pie", { ...r(todos, 0.4), progresoVisible: true }, { n: 10, ganadores: 1 })).toMatchObject({ progresoVisible: true, progreso: 0.4 });
   });
 });

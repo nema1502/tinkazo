@@ -11,6 +11,10 @@ import type { LineaGuion } from "./tipos";
  * auditor (`audit-nino`) saca fotos sin subtítulo (al 25 %, al 60 % y al final) y
  * las compara con esto.
  *
+ * Desde la segunda vuelta (2 de noviembre de 2026) la prueba solo exige lo que se
+ * ve: `progresoVisible` dice si «cuánto falta» se ve en este cuadro, y `mirar` es
+ * siempre una zona de la pantalla (ver `zonaDeMirar` en `scripts/lib/nino.mjs`).
+ *
  * - **adelante**: lo propio de la forma. Quién va ganando (carrera); los que siguen
  *   adentro (de pie: adelante es estar adentro, el líder no es el ganador); el que
  *   está bajo la flecha o el foco (rueda); quién tiene más (acumulación). Y en
@@ -44,7 +48,16 @@ export interface Respuestas {
   /** Puestos de la lista de los que van adelante (los que siguen adentro, en una eliminación) y en qué parte de la pantalla. */
   adelante: { quienes: readonly number[]; lugar: Lugar };
   hacia: Direccion;
+  /** De 0 (empieza) a 1 (terminó), y solo sube. En de pie y acumulación, `verdadDelNino` lo cambia por la fracción que ya salió. */
   progreso: number;
+  /**
+   * ¿Se ve en la pantalla cuánto falta? La carrera siempre (la meta está a la vista); de pie y acumulación, desde que salió
+   * alguien (lo visible es cuántos quedan, no el tiempo); la rueda, solo cuando ya frena de forma visible. Donde es `false`,
+   * la prueba informa `falta` pero no decide con ella. Si el plan no lo dice, lo decide `verdadDelNino` por la forma.
+   */
+  progresoVisible?: boolean;
+  /** Dónde pasa lo que pasa, para `mirar` cuando nadie va adelante (`adelante.quienes` vacío). Sin declarar, `centro`. */
+  zonaAccion?: Lugar;
   /** Lo último que pasó: el tipo, quién, desde qué segundo de juego y dónde. */
   paso: { tipo: TipoPaso; quien?: number; desde: number; lugar?: Lugar };
 }
@@ -117,4 +130,23 @@ export function problemasDeRespuestas(plan: PlanDeRespuestas, o: { n: number; ga
     }
   }
   return [...falla];
+}
+
+/**
+ * La verdad que expone el juego a la prueba del niño (`window.__nino.verdad()`): las respuestas
+ * del plan, completadas por la forma con lo que el plan no dice.
+ *
+ * - `progresoVisible`: el del plan si lo declara; si no, la carrera `true`; de pie y acumulación,
+ *   `true` desde que salió alguien (hay menos nombres que personas); la rueda, `false` (cada juego
+ *   de rueda lo afina: solo ve el frenado quien sabe cuándo empieza).
+ * - `progreso`: en de pie y acumulación lo visible es cuántos quedan, no el tiempo: es la fracción
+ *   de quienes tenían que salir que ya salieron (de 0 a 1), salvo que el plan declare el suyo.
+ */
+export function verdadDelNino(forma: Forma, r: Respuestas, o: { n: number; ganadores: number }): Respuestas {
+  if (r.progresoVisible !== undefined) return r;
+  if (forma === "carrera") return { ...r, progresoVisible: true };
+  if (forma === "rueda") return { ...r, progresoVisible: false };
+  const salieron = Math.max(0, o.n - r.adelante.quienes.length);
+  const hayQueSalgan = Math.max(1, o.n - o.ganadores);
+  return { ...r, progresoVisible: salieron > 0, progreso: Math.max(0, Math.min(1, salieron / hayQueSalgan)) };
 }

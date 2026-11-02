@@ -1024,12 +1024,12 @@ export async function llamasPixi(
       duracion: duracionDeLaCarrera(planNino),
       t: () => horaDeLaCarrera(planNino, reloj()),
       verdad: () => {
-        const r = respuestasCarrera(planNino, reloj());
         // En la pista y con el cartel, en qué parte de la pantalla cae la que va adelante: lo decide la cámara, que el plan no conoce.
-        const corredor = phase === "race" || phase === "done" ? L?.runners[lanes.indexOf(r.adelante.quienes[0] as number)] : undefined;
-        if (!corredor?.root.parent) return r;
+        const r0 = respuestasCarrera(planNino, reloj());
+        const corredor = phase === "race" || phase === "done" ? L?.runners[lanes.indexOf(r0.adelante.quienes[0] as number)] : undefined;
+        if (!corredor?.root.parent) return r0;
         const p = corredor.root.getGlobalPosition();
-        return { ...r, adelante: { ...r.adelante, lugar: lugarDe(p.x, p.y, S.sw(), S.sh()) } };
+        return respuestasCarrera(planNino, reloj(), lugarDe(p.x, p.y, S.sw(), S.sh()));
       },
     });
   }
