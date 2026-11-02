@@ -3,7 +3,7 @@ import { musicHold } from "../../music";
 import { mediana, nivelQueCabe, type Nivel } from "../nombres";
 import { INK, crearJuego, hashDe, planNombres, type Kit, type PlanNombres } from "./kit";
 import { anchoAprox, casilla, geoDe, puntoDe, rejillaDe, type Geo, type Lugar, type Rejilla } from "./toborochi-arbol";
-import { T_SILENCIO, T_TRASIEGO, bajaEn, enElArbolEn, faseDe, frenteEn, hiloEn, nubladoEn, planToborochi, tPosa, tiembla, vientoEn, type Datos, type Visita } from "./toborochi-plan";
+import { T_QUEDAN, T_SILENCIO, T_TRASIEGO, bajaEn, enElArbolEn, faseDe, frenteEn, hiloEn, nubladoEn, planToborochi, tPosa, tiembla, vientoEn, type Datos, type Visita } from "./toborochi-plan";
 import { TEXTOS } from "./toborochi-textos";
 
 /**
@@ -40,6 +40,8 @@ function mezcla(a: number, b: number, k: number): number {
 const ROSAS = [0xff80b8, 0xff97c6, 0xf56aab];
 const ROSA_BORDE = 0xc23a78;
 const CREMA = 0xfff4d6;
+/** La pasada del colibrí al empezar, en segundos de juego: termina cuando entran los primeros nombres. */
+const T_PASADA: [number, number] = [0.5, 2.5];
 
 interface Flor {
   raiz: Container;
@@ -185,7 +187,9 @@ function pintarTronco(raiz: Container, g: Geo, dark: boolean): void {
   const perfil = (y01: number): number => {
     // 0 arriba, 1 abajo: angosto arriba, panza al 60 %, un pie un poco más fino.
     const panza = Math.exp(-Math.pow((y01 - 0.6) / 0.28, 2));
-    return wB * (0.32 + 0.68 * panza) * (y01 > 0.92 ? 0.9 : 1);
+    // Al pie se ensancha en vez de afinarse: el tronco se agarra al suelo con sus raíces, no se apoya como una maceta.
+    const pie = suave((y01 - 0.82) / 0.18);
+    return wB * (0.5 + 0.5 * panza) * (1 + 0.5 * pie);
   };
   const izq: number[] = [];
   const der: number[] = [];
@@ -219,7 +223,30 @@ function pintarTronco(raiz: Container, g: Geo, dark: boolean): void {
       t.poly([x - l * 0.7, y + l * 0.4, x, y - l * 1.6, x + l * 0.7, y + l * 0.4]).fill(dark ? 0xd9d3b8 : 0xe9e1c4).stroke({ width: Math.max(0.8, g.k * 0.9), color: INK });
     }
   }
+  // Las raíces: lomos que salen del pie y se hunden en el pasto, tres a cada lado.
+  const ancho0 = perfil(1);
+  const hueso = Math.max(2, 2.5 * g.k);
+  for (const lado of [-1, 1]) {
+    for (let m = 0; m < 3; m++) {
+      const largo = ancho0 * (0.5 + 0.2 * hashDe(m + (lado > 0 ? 3 : 0), 71) + 0.3 * m);
+      const x0 = g.cx + lado * ancho0 * (0.34 + 0.1 * m);
+      const y0 = base + g.k * 2 - m * 3 * g.k;
+      const alto = Math.max(3, ancho0 * (0.24 - 0.06 * m));
+      t.poly([x0, y0 - alto, x0 + lado * largo * 0.55, y0 - alto * 0.15, x0 + lado * largo, y0 + 2 * g.k, x0, y0 + 2 * g.k])
+        .fill(m === 0 ? piel : sombra)
+        .stroke({ width: Math.max(1.2, hueso * 0.7), color: INK, join: "round" });
+    }
+  }
   raiz.addChild(t);
+  // El pasto que se le sube por delante: unas matas a cada lado del pie, para que el tronco nazca del suelo.
+  const pasto = new Graphics();
+  for (let m = 0; m < 16; m++) {
+    const x = g.cx + (m / 15 - 0.5) * ancho0 * 1.9;
+    const h = (10 + 12 * hashDe(m, 72)) * g.k;
+    const y = base + 1.5 * g.k;
+    pasto.poly([x - 4 * g.k, y, x + (hashDe(m, 73) - 0.5) * 6 * g.k, y - h, x + 4 * g.k, y]).fill(dark ? 0x4c6a3f : 0x73a95f).stroke({ width: Math.max(0.8, g.k * 0.8), color: dark ? 0x3a5430 : 0x5a8a4a });
+  }
+  raiz.addChild(pasto);
 }
 
 /* ------------------------------------------------------------- las posiciones */
@@ -308,9 +335,20 @@ interface PoseColibri {
   visible: boolean;
 }
 
-function poseColibri(d: Datos, g: Geo, t: number, posDe: (i: number) => { x: number; y: number }): PoseColibri {
+/** `ven` es lo que se ve del mundo de la escena en este cuadro, de lado a lado, con la cámara donde esté. */
+function poseColibri(d: Datos, g: Geo, t: number, posDe: (i: number) => { x: number; y: number }, ven: { x0: number; x1: number }): PoseColibri {
   const s = Math.min(40 * g.k, Math.max(7 * g.k, g.r * 0.6));
   const oculto: PoseColibri = { x: 0, y: 0, mira: 1, escala: s, aleteo: 0, visible: false };
+  // La pasada del principio: antes de que lleguen los nombres, el colibrí cruza la copa y se asoma a las flores que se abren. Es el que va
+  // a elegir; no mira a nadie en particular (el mismo vuelo en todas las rondas), así que no delata a nadie.
+  if (t >= T_PASADA[0] && t < T_PASADA[1]) {
+    const u = (t - T_PASADA[0]) / (T_PASADA[1] - T_PASADA[0]);
+    const y0 = g.copa.base - g.copa.alto * 0.62;
+    // Cruza de izquierda a derecha, baja a mirar una flor del medio (se frena ahí) y sigue.
+    const x = lerp(-g.w * 0.06, g.w * 1.06, u + 0.09 * Math.sin(u * Math.PI * 2));
+    const y = y0 + Math.sin(u * Math.PI * 2) * g.copa.alto * 0.1 - Math.sin(u * Math.PI) * g.copa.alto * 0.12;
+    return { x, y, mira: 1, escala: s, aleteo: 1, visible: true };
+  }
   // El colibrí lejano de la primera calma: un punto verde que cruza el horizonte de un lado al otro.
   if (d.lejos && t >= d.lejos[0] && t < d.lejos[1] && t < d.tColibri0) {
     const u = (t - d.lejos[0]) / (d.lejos[1] - d.lejos[0]);
@@ -323,45 +361,59 @@ function poseColibri(d: Datos, g: Geo, t: number, posDe: (i: number) => { x: num
     const afuera = fx + v.lado * (g.r * 0.95 + 4.6 * s);
     return afuera < 0 || afuera > g.w ? { ...v, lado: (v.lado > 0 ? -1 : 1) as 1 | -1 } : v;
   });
-  const punto = (v: Visita, extra = 0): { x: number; y: number } => {
+  // Con la cámara acercada, el borde del cuadro queda más cerca que el de la escena: el colibrí se achica lo justo para que entre
+  // entero del lado de afuera de su flor (cola incluida), y nunca menos de la mitad.
+  const tam = (v: Visita): number => {
+    const fx = posDe(v.quien).x;
+    const lugar = (v.lado > 0 ? ven.x1 - fx : fx - ven.x0) - 5 * g.k;
+    return Math.max(s * 0.5, Math.min(s, (lugar - g.r * 0.95) / 4.05));
+  };
+  const punto = (v: Visita, sv: number, extra = 0): { x: number; y: number } => {
     const f = posDe(v.quien);
-    return { x: f.x + v.lado * (g.r * 0.95 + 2.3 * s + extra), y: f.y - g.r * 0.08 };
+    return { x: f.x + v.lado * (g.r * 0.95 + 2.3 * sv + extra), y: f.y - g.r * 0.08 };
   };
   const primero = vs[0] as Visita;
-  const p0 = punto(primero);
+  const s0 = tam(primero);
+  const p0 = punto(primero, s0);
   // Entra por el costado de afuera de la primera, desde arriba.
   if (t < primero.llega) {
     const u = suave((t - d.tColibri0) / (primero.llega - d.tColibri0));
     const ini = { x: p0.x + primero.lado * g.w * 0.6, y: p0.y - (g.suelo - g.top) * 0.22 };
-    return { x: lerp(ini.x, p0.x, u), y: lerp(ini.y, p0.y, u) - Math.sin(u * Math.PI) * g.r * 0.9, mira: (primero.lado > 0 ? -1 : 1) as 1 | -1, escala: s, aleteo: 1, visible: true };
+    return { x: lerp(ini.x, p0.x, u), y: lerp(ini.y, p0.y, u) - Math.sin(u * Math.PI) * g.r * 0.9, mira: (primero.lado > 0 ? -1 : 1) as 1 | -1, escala: lerp(s, s0, u), aleteo: 1, visible: true };
   }
   for (let m = 0; m < vs.length; m++) {
     const v = vs[m] as Visita;
     const ultima = m === vs.length - 1;
     const miraA = (v.lado > 0 ? -1 : 1) as 1 | -1;
-    const pa = punto(v);
+    const sv = tam(v);
+    const pa = punto(v, sv);
     // Suspendido frente a la flor, con el vaivén de un colibrí.
     if (t < v.sale) {
-      return { x: pa.x + Math.sin(t * 5 + m) * s * 0.06, y: pa.y + Math.sin(t * 11 + m) * s * 0.1, mira: miraA, escala: s, aleteo: 1, visible: true };
+      return { x: pa.x + Math.sin(t * 5 + m) * sv * 0.06, y: pa.y + Math.sin(t * 11 + m) * sv * 0.1, mira: miraA, escala: sv, aleteo: 1, visible: true };
     }
     if (ultima) {
       // Calla el zumbido y mete el pico: se acerca despacio hasta que la punta toca el centro.
       const u = suave((t - v.sale) / T_SILENCIO);
       const f = posDe(v.quien);
-      const dentro = { x: f.x + v.lado * (g.r * 0.2 + 2.3 * s), y: f.y - g.r * 0.02 };
-      return { x: lerp(pa.x, dentro.x, u), y: lerp(pa.y, dentro.y, u), mira: miraA, escala: s, aleteo: t >= d.tPico ? 0.12 : 1 - 0.85 * u, visible: true };
+      const dentro = { x: f.x + v.lado * (g.r * 0.2 + 2.3 * sv), y: f.y - g.r * 0.02 };
+      // Del lado de afuera la cola ocupa 0,2 r + 4,05 s: si no entra, también se achica.
+      const lugar = (v.lado > 0 ? ven.x1 - f.x : f.x - ven.x0) - 5 * g.k;
+      const sf = Math.max(sv * 0.5, Math.min(sv, (lugar - g.r * 0.2) / 4.05));
+      const df = { x: f.x + v.lado * (g.r * 0.2 + 2.3 * sf), y: dentro.y };
+      return { x: lerp(pa.x, df.x, u), y: lerp(pa.y, df.y, u), mira: miraA, escala: lerp(sv, sf, u), aleteo: t >= d.tPico ? 0.12 : 1 - 0.85 * u, visible: true };
     }
     const sig = vs[m + 1] as Visita;
     if (t < sig.llega) {
       // Retrocede (vuela para atrás, mirando a la que deja) y se va a la otra por arriba.
       const u = c01((t - v.sale) / T_TRASIEGO);
-      const pb = punto(sig);
-      const ctrl = { x: pa.x + v.lado * (g.r * 2.4 + 3 * s), y: Math.min(pa.y, pb.y) - g.r * 1.8 - 2 * s };
+      const ss = tam(sig);
+      const pb = punto(sig, ss);
+      const ctrl = { x: pa.x + v.lado * (g.r * 2.4 + 3 * sv), y: Math.min(pa.y, pb.y) - g.r * 1.8 - 2 * sv };
       const a = (1 - u) * (1 - u);
       const b = 2 * u * (1 - u);
       const c = u * u;
       const mira = u < 0.5 ? miraA : ((sig.lado > 0 ? -1 : 1) as 1 | -1);
-      return { x: a * pa.x + b * ctrl.x + c * pb.x, y: a * pa.y + b * ctrl.y + c * pb.y, mira, escala: s, aleteo: 1, visible: true };
+      return { x: a * pa.x + b * ctrl.x + c * pb.x, y: a * pa.y + b * ctrl.y + c * pb.y, mira, escala: lerp(sv, ss, u), aleteo: 1, visible: true };
     }
   }
   return oculto;
@@ -496,7 +548,9 @@ export const toborochiPixi = crearJuego<Datos, Escena>({
     }
 
     // El cielo: se nubla de a poco y se aclara con el golpe. Solo el cielo; las flores no se tocan.
-    const nube = nubladoEn(d, t) * (tau >= 0 ? 1 - suave(tau / 1.2) : 1);
+    // En el silencio del colibrí el cielo se va oscureciendo de a poco: así el golpe no es un salto de claro a oscuro y a claro (un destello), sino un cielo que ya venía apagándose y se aclara.
+    const dimSilencio = 0.85 * suave((t - (d.tQuedan0 + T_QUEDAN)) / Math.max(0.5, d.tPico - d.tQuedan0 - T_QUEDAN));
+    const nube = Math.max(nubladoEn(d, t), dimSilencio) * (tau >= 0 ? 1 - suave((tau - 0.5) / 2.4) : 1);
     e.nubes.clear().rect(0, 0, p.w, g.suelo).fill({ color: S.dark ? 0x2b2542 : 0x6c7893, alpha: nube * 0.7 });
 
     /* ----------------------------------------------------- las flores */
@@ -594,7 +648,9 @@ export const toborochiPixi = crearJuego<Datos, Escena>({
     S.scene.rotation += w * 0.012;
 
     /* -------------------------------------------------------- el colibrí */
-    const pc = poseColibri(d, g, t, posDe);
+    const z0 = k.cam.toScreen(0, 0, p.w, p.h).x;
+    const zz = Math.max(0.05, k.cam.toScreen(1, 0, p.w, p.h).x - z0);
+    const pc = poseColibri(d, g, t, posDe, { x0: -z0 / zz, x1: (p.w - z0) / zz });
     e.colibri.visible = pc.visible;
     if (pc.visible) {
       e.colibri.position.set(pc.x, pc.y);
