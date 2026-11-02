@@ -259,6 +259,21 @@ La nota de la investigación de los auditores encontró tres repeticiones. Esto 
 
 Las mismas comprobaciones por juego, en menos juegos: lo que se pierde son las de `tombola`, `pasanaku` y `stellar`, que se piden por nombre. Los conteos están fijados en `scripts/lib/bateria-recortes.test.mjs`. La tabla es la del 25 de octubre de 2026, con el selector de diez de entonces: desde el 26, con ocho juegos, un `todos` mira 56 escenas sin la mezcla y 64 con ella, y los auditores de rigor, identidad, emoción, sonido y mezcla pasan de diez juegos a ocho.
 
+## El auditor de palabras
+
+```bash
+node scripts/audit-palabras.mjs [juego|todos|sitio] [--json]   # pnpm audit:palabras
+```
+
+Sin Chrome ni red, en dos segundos, y entra en la batería con nivel `siempre`. Lee todo lo que alguien puede leer: el diccionario de `src/i18n.ts` en los dos idiomas (cada clave sabe de qué juego o pantalla es), los textos dentro de `src/games/**` y de las pantallas, las tarjetas de historia y los HTML de lectura. Falla por lo que Tinkazo no puede decir, con dos listas en `scripts/lib/palabras-prohibidas.json`:
+
+- **`apuesta`**: apuesta, apostar, casino, jackpot, plata, dinero en efectivo, tragamonedas, slot, dados, póker, bet, betting, gambling, chips, cash, dice. No están, a propósito, lo que Tinkazo usa: ficha (la tarjeta con el nombre en la carrera), premio y ruleta. Las palabras se aplican por idioma: «dice» es español de todos los días y recién en inglés es una palabra prohibida.
+- **`vocabulario`**: en los juegos de quedar de pie (Guajojó, Toborochi, piñata, sapo, ¿Quién es? y El Trueque) nunca eliminado, perdió o fuera, ni su forma en inglés; en las cadenas del ensayo y del stand nunca gana, ganó o ganador (se dice «sale» o «salió»), y lo mismo para los relatores dentro de `src/games/**`; en nada visible el punto medio; y en las cadenas de los juegos y las tarjetas nada de drand, hash, SHA, bytes, firma, BLS, ledger ni XDR (las tarjetas marcadas `tecnica` en `lore.ts` no salen en el show y no cuentan).
+
+**Calibración del 2 de noviembre de 2026.** La primera corrida dio 77 hallazgos y casi todos eran falsos: «dice» como verbo, «out» en «step out» o «came out of the draw», «slot» en el mensaje de un error de programación, las tarjetas técnicas. Quedó «out» solo cuando eliminar (`knocked out`, `is out`, `out of the game`), el filtro de mensajes de `Error(`, y los textos de cada tarjeta técnica salen del alcance. Dos hallazgos eran reales y se arreglaron con un cambio de palabra: el cierre del ensayo decía «ganador» y la piñata en inglés decía «knocks a few out».
+
+**Las excepciones** viven en el mismo JSON, cada una con su motivo y su fecha: los textos legales que niegan que Tinkazo sea una apuesta («no es para apuestas»), el cartel de quien gana con su rama de stand, y la descripción del juego Ledger, que habla de lo que es. Una excepción que ya no cubre nada hace fallar al auditor completo: la lista se limpia. Las marcadas `pendiente` aprueban pero salen en el resumen con una línea; hoy es una: el relator de la carrera dice «Gana quien llegue a la meta» también en una ronda de stand, y arreglarlo pide una variante por modo en el texto de la carrera.
+
 ## La prueba del niño
 
 La regla del niño (26 de octubre de 2026, [en el kit](#la-regla-del-niño-en-el-kit)) dice que **cualquier cuadro del juego, sin leer el relator, muestra quién va adelante, hacia dónde van, cuánto falta y qué acaba de pasar**. Sin una medida es una opinión: [`scripts/audit-nino.mjs`](../scripts/audit-nino.mjs) la mide. No llama a ninguna API (no hace falta llave ni cuesta): saca las fotos y la verdad del plan, un modelo que solo ve las fotos las describe, y un juez compara.

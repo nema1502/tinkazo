@@ -11,7 +11,7 @@
 
 /**
  * Los textos entre comillas de un archivo de código, con su línea, sin los
- * comentarios ni los nombres de variables. Lo de adentro de `${…}` se saltea.
+ * comentarios ni los nombres de variables. `desde` es dónde empieza la comilla. Lo de adentro de `${…}` se saltea.
  */
 export function literalesDe(fuente) {
   const out = [];
@@ -34,6 +34,7 @@ export function literalesDe(fuente) {
       i += 2;
     } else if (c === '"' || c === "'") {
       const ini = linea;
+      const desde = i;
       let txt = "";
       i++;
       while (i < n && fuente[i] !== c && fuente[i] !== "\n") {
@@ -43,9 +44,10 @@ export function literalesDe(fuente) {
         } else txt += fuente[i++];
       }
       i++;
-      out.push({ texto: txt, linea: ini });
+      out.push({ texto: txt, linea: ini, desde });
     } else if (c === "`") {
       const ini = linea;
+      const desde = i;
       let txt = "";
       i++;
       while (i < n && fuente[i] !== "`") {
@@ -68,7 +70,7 @@ export function literalesDe(fuente) {
         }
       }
       i++;
-      out.push({ texto: txt, linea: ini });
+      out.push({ texto: txt, linea: ini, desde });
     } else i++;
   }
   return out;
