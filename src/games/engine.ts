@@ -1,4 +1,5 @@
-import { params, playableGame, type Game } from "../state";
+import { paraCompartir, params, playableGame, type Game } from "../state";
+import { permite3D } from "./permite3d";
 
 /**
  * Qué motor dibuja los juegos.
@@ -13,6 +14,25 @@ import { params, playableGame, type Game } from "../state";
 export function usePixi(): boolean {
   if (params.get("motor") === "clasico") return false;
   return hasWebGL();
+}
+
+/** `true` si hay que dibujar la carrera en 3D en este equipo. Nunca es lo de siempre: solo con `?motor=3d`. */
+export function usa3D(): boolean {
+  if (params.get("motor") !== "3d") return false;
+  const nav = navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } };
+  let reducido = false;
+  try {
+    reducido = matchMedia("(prefers-reduced-data: reduce)").matches;
+  } catch {
+    reducido = false;
+  }
+  return permite3D({
+    motor: "3d",
+    webgl: hasWebGL(),
+    ahorroDeDatos: reducido || nav.connection?.saveData === true,
+    conexion: nav.connection?.effectiveType ?? null,
+    compartir: paraCompartir(),
+  });
 }
 
 let webgl: boolean | null = null;

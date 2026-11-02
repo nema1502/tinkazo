@@ -1,4 +1,5 @@
 import { playableGame, type Beacon, type Game } from "../../state";
+import { usa3D } from "../engine";
 import { JUEGOS } from "./kit/catalogo";
 import { PixiInitError, warmPixi } from "./stage";
 
@@ -14,6 +15,17 @@ type Launch = (names: string[], winners: readonly number[], beacon: Beacon, done
 const PIXI: Partial<Record<Game, () => Promise<Launch>>> = {
   // Los del kit se cargan desde su catálogo: un juego nuevo no toca este archivo.
   ...Object.fromEntries(JUEGOS.map((j) => [j.id, j.cargar])),
+  // La carrera, y su prototipo en 3D con `?motor=3d` (three.js se trae solo ahí; si no baja, la de siempre).
+  race: async () => {
+    const carrera = await import("../llamas/carrera");
+    if (!usa3D()) return carrera.carreraPixi;
+    try {
+      const v = await import("../llamas/carrera-3d");
+      return carrera.carreraPixi3D(v.crearVista3D);
+    } catch {
+      return carrera.carreraPixi;
+    }
+  },
   wheel: async () => (await import("./wheel")).wheelPixi,
   tombola: async () => (await import("./tombola")).tombolaPixi,
   trompo: async () => (await import("./trompo")).trompoPixi,

@@ -396,6 +396,11 @@ export function leerZonaSegura(): { top: number; right: number; bottom: number; 
 export interface MountOptions {
   /** La música del juego: la andina de siempre, salvo que pida otra. */
   music?: MusicStyle;
+  /**
+   * El fondo del lienzo sin pintar, para que se vea otro dibujo debajo (el prototipo 3D de la
+   * carrera, `?motor=3d`). Hay que pedirlo al crear el lienzo: después no se puede cambiar.
+   */
+  transparente?: boolean;
 }
 
 export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => void, opts: MountOptions = {}): Promise<PixiStage | null> {
@@ -452,6 +457,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       resolution: aj.resolucion,
       autoDensity: true,
       backgroundColor: 0x10101c,
+      backgroundAlpha: opts.transparente ? 0 : 1,
       autoStart: false,
       // Para que los auditores puedan leer el lienzo entre cuadros.
       preserveDrawingBuffer: true,

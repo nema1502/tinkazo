@@ -136,6 +136,9 @@ const PRELUDIO = `(() => {
   // con nueve celdas amarillas seguidas, más de un cuarto del ancho.
   const huella = (cv) => {
     oc.clearRect(0, 0, 32, 18);
+    // Con \`?motor=3d\` el estadio es otro lienzo, debajo del de PixiJS: la huella los junta.
+    const t3 = document.getElementById('tres-canvas');
+    if (t3 && t3.width > 0) oc.drawImage(t3, 0, 0, 32, 18);
     oc.drawImage(cv, 0, 0, 32, 18);
     const d = oc.getImageData(0, 0, 32, 18).data;
     let s = '', banda = false;
@@ -273,7 +276,7 @@ const check = (name, ok, detail = "") => {
 const semillaN = opt("--semilla", "");
 const semilla = semillaN ? createHash("sha256").update(`semilla-${semillaN}`).digest("hex") : "";
 const urlDe = (juego, extra = "") =>
-  `${base}/?pose=${juego === "race" ? "1" : juego}${extra}${semilla ? `&semilla=${semilla}` : ""}${motor ? `&motor=${motor}` : ""}`;
+  `${base}/?pose=${juego === "race" ? "1" : juego}${extra}${semilla ? `&semilla=${semilla}` : ""}${motor ? `&motor=${motor}` : ""}${motor === "3d" ? "&auditar=3d" : ""}`;
 
 /**
  * Corre la escena de un juego con el reloj cambiado y devuelve lo que midió.

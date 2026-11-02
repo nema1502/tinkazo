@@ -1,15 +1,17 @@
 import { Container, Graphics, Sprite, Text } from "pixi.js";
 import { params } from "../../state";
 import { colorDeNombre } from "../pixi/foco-vista";
-import { crearJuego, minimoPx, nivelPorCantidad, planNombres, type Caja, type FocoPunto, type Kit, type Nivel, type Zona } from "../pixi/kit";
-import { CREAM, INK, YELLOW, contorno, hash } from "../pixi/stage";
+import { crearJuego, minimoPx, nivelPorCantidad, planNombres, type Caja, type DefJuego, type FocoPunto, type Kit, type Nivel, type Zona } from "../pixi/kit";
+import { anfitrionTinkazo } from "../pixi/kit/anfitrion";
+import { CREAM, INK, YELLOW, contorno, hash, mountPixi } from "../pixi/stage";
+import type { Borla3D, Corredora3D, Fabrica3D, Geometria3D, Vista3D, ZonaSuelo } from "./carrera-3d-mapa";
 import { ECHADA_DUR, carrilesDe, formaDe, hudDe, type Carriles, type Forma, type Pantalla } from "./carrera-forma";
 import { RECTA, alfabetico, planCarrera, type Datos, type EscenaCarrera } from "./carrera-show";
 import { crearLlamaAguayo } from "./llama-aguayo";
 import { TEXTOS_CARRERA } from "./carrera-textos";
 import type { Tanda } from "./carrera-tandas";
 import type { Terreno } from "./carrera-tiempos";
-import { LLAMA_ALTO, LLAMA_COLA, LLAMA_HOCICO, LLAMA_LARGO, PELAJES, crearBorla, crearLlama, crearManta, type Llama, type Momento } from "./llama";
+import { BORLA_RADIO, LLAMA_ALTO, LLAMA_COLA, LLAMA_HOCICO, LLAMA_LARGO, PELAJES, crearBorla, crearLlama, crearManta, type Llama, type Momento } from "./llama";
 
 /**
  * La carrera de llamas, sobre el kit (`pixi/kit`). El show es puro
@@ -80,7 +82,7 @@ interface Posicion {
   etiquetar?: boolean;
 }
 
-function crearEscena(k: Kit, d: Datos) {
+function crearEscena(k: Kit, d: Datos, fabrica3d: Fabrica3D | null = null) {
   const S = k.S;
   const cam = k.cam;
   // Los nombres se leen siempre: nada de desenfoque en los acercamientos (con 8 la escena quedaba borrosa un segundo).
@@ -117,6 +119,12 @@ function crearEscena(k: Kit, d: Datos) {
   S.scene.addChild(mundo);
   const hud = new Container();
   S.hud.addChild(hud);
+
+  /** Los momentos de la recta que miran el auditor y las fotos del prototipo 3D. */
+const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
+
+/** El prototipo 3D (`?motor=3d`, carrera-3d.ts): si está, dibuja el estadio y las llamas; las fichas, la cinta y el cartel siguen siendo de acá. */
+  let tres: Vista3D | null = null;
 
   /* ------------------------------------------------------------- geometría */
   const nombrePx = (): number => k.letra("nombre");
@@ -795,7 +803,9 @@ function crearEscena(k: Kit, d: Datos) {
 
   function dibujar(t: number): void {
     const vz = cam.zoom || 1;
-    pintarSuelo();
+    if (!tres) pintarSuelo();
+    const gente3: Corredora3D[] = [];
+    const fichas3: { et: Etiqueta; persona: number; comp: number; y: number; etiquetar: boolean; sinLugar: boolean; peso: number }[] = [];
     // El cielo se mueve con la cámara, más despacio.
     const periodo = 1.4 * P.w;
     const desp = -((cam.x * 0.12) % periodo);
@@ -854,6 +864,7 @@ function crearEscena(k: Kit, d: Datos) {
         momento = null;
       }
       post.pose(ph, corona >= 0 && q !== d.campeona ? 0 : p.velocidad, momento);
+      if (tres) gente3.push({ persona: q, x: p.x, y: p.y, salto: p.y - c.raiz.position.y, esc: p.esc, velocidad: corona >= 0 && q !== d.campeona ? 0 : p.velocidad, momento, fase: ph });
       // La marca de la llama ("!", "?!") se lee desde el fondo: en la pantalla nunca mide menos que un nombre.
       if (post.marca.visible) post.marca.scale.set(Math.max(1, minimoPx("nombre", P.w, P.h) / (26 * p.esc * vz)));
       post.zz.scale.set(Math.max(1, Math.min(3, (0.016 * P.h) / (11 * p.esc * vz))));
@@ -869,7 +880,8 @@ function crearEscena(k: Kit, d: Datos) {
       const enCarril = t >= d.tAbre && d.lanes.includes(q);
       const arriba = enCarril ? carr.arriba : forma.arriba;
       const esc = p.esc;
-      ubicarFicha(et, p, arriba, comp, vz);
+      if (tres) fichas3.push({ et, persona: q, comp, y: p.y, etiquetar: false, sinLugar: false, peso: soyLider ? 3e6 : reciente ? 2e6 : 1e6 });
+      else ubicarFicha(et, p, arriba, comp, vz);
       et.raiz.zIndex = soyLider ? 3e6 : reciente ? 2e6 : 1e6;
       // Las que quedaron lejos de la pantalla no se dibujan.
       const dentro = p.x > cam.x - P.w / (2 * vz) - 300 && p.x < cam.x + P.w / (2 * vz) + 300;
@@ -879,9 +891,15 @@ function crearEscena(k: Kit, d: Datos) {
       // Cuando cae el golpe, quien gana ya tiene su cartel: la ficha sobra (el nombre aparecía tres veces).
       const sobra = d.nueva && ((k.coronado && q === d.campeona) || p.x + LLAMA_HOCICO * p.esc < cam.x - P.w / (2 * vz) + 4 * P.u);
       et.raiz.visible = dentro && p.etiquetar !== false && !sinLugar && !sobra;
-      if (d.nueva && et.raiz.visible) fichas.push({ q, c, p, estilo, nv, arriba, comp, esc, soyLider });
+      if (tres) {
+        const f = fichas3[fichas3.length - 1];
+        if (f) {
+          f.etiquetar = p.etiquetar !== false;
+          f.sinLugar = sinLugar || sobra;
+        }
+      } else if (d.nueva && et.raiz.visible) fichas.push({ q, c, p, estilo, nv, arriba, comp, esc, soyLider });
     }
-    if (d.nueva) resolverFichas(fichas, px, vz);
+    if (d.nueva && !tres) resolverFichas(fichas, px, vz);
     pintarPorton(t);
     if (Number.isFinite(rayaMax)) rayaX = rayaMax;
     // La borla: pasa de una a otra (se calculó antes del bucle).
@@ -917,16 +935,55 @@ function crearEscena(k: Kit, d: Datos) {
       // Con 12 o menos, el cartel va a un costado (en el proyector) y no tapa al grupo.
       ponerCartel(d.names.map((_, i) => i), aparece, { lado: !P.retrato && d.gente.length <= 12 ? "izquierda" : "centro" });
     }
+    if (tres) dibujar3D(t, gente3, fichas3, bp, corona);
+  }
+
+  /**
+   * El cuadro del prototipo 3D: le pasa a la vista lo que el 2D ya puso (posiciones, posturas, cámara del director) y,
+   * con la cámara de este cuadro, lleva cada ficha de nombre a donde cae la cabeza de su llama en la pantalla.
+   */
+  function dibujar3D(
+    t: number,
+    gente: Corredora3D[],
+    fichas: { et: Etiqueta; persona: number; comp: number; y: number; etiquetar: boolean; sinLugar: boolean; peso: number }[],
+    bp: { x: number; esc: number; pie: number; y: number } | null,
+    corona: number,
+  ): void {
+    if (!tres) return;
+    const vz = cam.zoom || 1;
+    const medir = params.get("auditar") === "3d";
+    const medidas: { persona: number; px: number; alto: number; ancho: number }[] = [];
+    const borla3: Borla3D | null = bp && borla.visible ? { x: bp.x, pie: bp.pie, alto: bp.pie - bp.y, radio: BORLA_RADIO * bp.esc } : null;
+    tres.frame({ t, w: P.w, h: P.h, u: P.u, cam: { x: cam.x, y: cam.y, zoom: vz, rot: cam.rot }, gente, borla: borla3, campeona: d.campeona, corona, horas: HORAS_Q.map((q) => d.tDeQ(q)) });
+    for (const f of fichas) {
+      const pan = tres.pantallaDe(f.persona);
+      const et = f.et;
+      if (!pan) {
+        et.raiz.visible = false;
+        continue;
+      }
+      const dentro = pan.x > -40 && pan.x < P.w + 40 && pan.y > P.top - 20 && pan.y < P.bottom + 40;
+      // La ficha mide en la pantalla lo mismo que en el 2D (`comp` por el acercamiento) y se apoya sobre la cabeza.
+      const e = f.comp * vz;
+      et.raiz.scale.set(e);
+      // Entera en la pantalla: en el celular los de los bordes se cortaban.
+      const mitad = (et.w * e) / 2 + 4 * P.u;
+      et.raiz.position.set(Math.max(mitad, Math.min(P.w - mitad, pan.x)), pan.y - (et.h * e) / 2 - 3 * P.u);
+      et.raiz.zIndex = f.peso + pan.y;
+      et.raiz.visible = dentro && f.etiquetar && !f.sinLugar;
+      if (medir && et.raiz.visible) medidas.push({ persona: f.persona, px: et.texto.style.fontSize as number * e, alto: et.h * e, ancho: et.w * e });
+    }
+    if (medir) (window as unknown as { __fichas3d: unknown }).__fichas3d = medidas;
   }
 
   /** Dónde va la borla: sobre el lomo de quien va adelante, o volando de una a otra. */
-  function posicionBorla(t: number, lider: number): { x: number; y: number; esc: number; duenia: number } | null {
+  function posicionBorla(t: number, lider: number): { x: number; y: number; esc: number; duenia: number; pie: number } | null {
     if (lider < 0) return null;
-    const sobre = (q: number): { x: number; y: number; esc: number; duenia: number } => {
+    const sobre = (q: number): { x: number; y: number; esc: number; duenia: number; pie: number } => {
       const p = posicion(q, t);
       // La manta se apoya en el lomo, atrás del cuello: no tapa la cara de quien va primera.
-      if (d.nueva) return { x: p.x + 8 * p.esc, y: p.y - 47 * p.esc, esc: p.esc, duenia: q };
-      return { x: p.x - 2 * p.esc, y: p.y - 70 * p.esc, esc: Math.max(p.esc * 1.25, 0.8 * P.u), duenia: q };
+      if (d.nueva) return { x: p.x + 8 * p.esc, y: p.y - 47 * p.esc, esc: p.esc, duenia: q, pie: p.y };
+      return { x: p.x - 2 * p.esc, y: p.y - 70 * p.esc, esc: Math.max(p.esc * 1.25, 0.8 * P.u), duenia: q, pie: p.y };
     };
     const vuelo = d.nueva ? 0.3 : 0.45;
     const antes = estable(t - vuelo);
@@ -939,7 +996,7 @@ function crearEscena(k: Kit, d: Datos) {
     }
     const e = ease((t - b) / vuelo);
     const A = sobre(antes), B = sobre(lider);
-    return { x: lerp(A.x, B.x, e), y: lerp(A.y, B.y, e) - Math.sin(Math.PI * e) * (d.nueva ? 30 : 46) * P.u, esc: lerp(A.esc, B.esc, e), duenia: d.nueva || e >= 0.55 ? lider : antes };
+    return { x: lerp(A.x, B.x, e), y: lerp(A.y, B.y, e) - Math.sin(Math.PI * e) * (d.nueva ? 30 : 46) * P.u, esc: lerp(A.esc, B.esc, e), duenia: d.nueva || e >= 0.55 ? lider : antes, pie: lerp(A.pie, B.pie, e) };
   }
 
   /* ---------------------------------------------------------------- cámara */
@@ -992,6 +1049,8 @@ function crearEscena(k: Kit, d: Datos) {
     return null;
   }
   function foco(): FocoPunto {
+    const pan = tres?.pantallaDe(d.campeona);
+    if (pan) return { x: pan.x, y: pan.y + pan.alto * 0.5, r: pan.alto * 0.62, color: colorDeNombre(names[d.campeona] ?? "") };
     const p = posicion(d.campeona, d.tCrown);
     const c = cuerpoDe(p);
     const s = cam.toScreen(c.x + c.w / 2, c.y + c.h * 0.55, P.w, P.h);
@@ -1023,8 +1082,46 @@ function crearEscena(k: Kit, d: Datos) {
     pintarMarcas();
     pintarCinta();
     cartelClave = "";
+    tres?.reconstruir(geometria3D());
+  }
+
+  /** El mundo 2D que el prototipo 3D tiene que vestir: lo mismo que pinta `pintarSuelo` y `pintarMarcas`. */
+  function geometria3D(): Geometria3D {
+    const zonas: ZonaSuelo[] = [{ desde: -1e9, hasta: 0, tipo: "corral", color: TERRENO_COLOR.corral, acento: TERRENO_ACENTO.corral }];
+    d.tramos.forEach((tr, i) => zonas.push({ desde: i === 0 ? 0 : xDeT(tr.t0), hasta: xDeT(tr.t1), tipo: tr.terreno, color: TERRENO_COLOR[tr.terreno], acento: TERRENO_ACENTO[tr.terreno] }));
+    zonas.push({ desde: d.tramos.length ? Xs : 0, hasta: 1e9, tipo: "recta", color: TERRENO_COLOR.recta, acento: TERRENO_ACENTO.recta });
+    return {
+      w: P.w, h: P.h, u: P.u, F0, Xs, metaX, gateX, y0: forma.y0, y1: forma.y1, carY0: carr.y0, carY1: carr.y1, carN: carr.n, zonas,
+      pasoPostes: 0.2 * P.w, conPorton: d.tandas.length > 0, conPortonesRecta: d.tiempos.echadas.length > 0,
+      corral: d.tandas.length ? -gateX + P.w * 0.7 : forma.profundidad + nombreW + 260 * P.u,
+      rotuloMeta: k.txt("carRotuloMeta"), rotuloSalida: k.txt("carSalida").replace(/[¡!]/g, "").toUpperCase(),
+    };
   }
   reconstruir();
+
+  // El prototipo 3D: si no arranca (sin WebGL, sin memoria), el 2D sigue como siempre y no se entera.
+  if (fabrica3d) {
+    try {
+      tres = fabrica3d({
+        lienzoPixi: S.view,
+        geometria: geometria3D,
+        colores: (persona) => ({ pelaje: PELAJES[persona % PELAJES.length] ?? 0xf3ead8, manta: S.color(persona) }),
+        auditar: params.get("auditar") === "3d",
+      });
+      // El estadio y las llamas del 2D se apagan; las fichas de nombre pasan a la pantalla, sobre el 3D.
+      cielo.visible = false;
+      suelo.visible = false;
+      marcas.visible = false;
+      porton.visible = false;
+      corredoras.visible = false;
+      borlaCapa.visible = false;
+      hud.addChildAt(etiquetas, 0);
+      S.onCleanup(() => tres?.destruir());
+    } catch (err) {
+      console.warn('[3d] no arrancó, sigue el 2D', err);
+      tres = null;
+    }
+  }
 
   const escena: EscenaCarrera & { rebuild(): void; draw(t: number): void } = {
     rebuild: reconstruir,
@@ -1060,17 +1157,28 @@ function partirEn2(nombre: string): string[] {
 
 export type Escena = ReturnType<typeof crearEscena>;
 
-export const carreraPixi = crearJuego<Datos, Escena>({
+const definicion = (fabrica3d: Fabrica3D | null): DefJuego<Datos, Escena> => ({
   id: "race",
   textos: TEXTOS_CARRERA,
   // `?carrera=nueva`: la carrera con aura, hasta que pase las compuertas. Sin la bandera, la de siempre.
   plan: (ctx) => planCarrera(ctx, { nueva: params.get("carrera") === "nueva" }),
   arma(k, plan, previa) {
-    if (!previa) return crearEscena(k, plan.datos);
+    if (!previa) return crearEscena(k, plan.datos, fabrica3d);
     previa.rebuild();
     return previa;
   },
   cuadro(_k, _plan, escena, t) {
     escena.draw(t);
   },
+});
+
+export const carreraPixi = crearJuego<Datos, Escena>(definicion(null));
+
+/**
+ * El prototipo en 3D (`?motor=3d`, docs/motores.md): el mismo juego, con el lienzo de PixiJS transparente y la vista 3D
+ * debajo. `index.ts` la pide solo cuando `engine.ts` lo permite, y trae three.js recién ahí.
+ */
+export const carreraPixi3D = (fabrica: Fabrica3D) => crearJuego<Datos, Escena>(definicion(fabrica), {
+  ...anfitrionTinkazo,
+  montar: (baliza, listo, alSaltar, o) => mountPixi(baliza, listo, alSaltar, { music: o.musica, transparente: true }),
 });
