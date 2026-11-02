@@ -174,7 +174,26 @@ async function cargar() {
   return { r, app, sellar };
 }
 
+/**
+ * Los temporizadores de verdad que dejó cada prueba (el chequeo de fondo a los 900 ms, la vigilancia de
+ * 60 s): el módulo se vuelve a cargar en cada prueba, pero el documento de mentira es el mismo, y un
+ * temporizador viejo que se dispara a mitad de otra prueba le borra la caja. Se cancelan al terminar.
+ */
+const sueltos: Array<{ t: ReturnType<typeof setTimeout>; i: boolean }> = [];
+const setTimeoutReal = globalThis.setTimeout;
+const setIntervalReal = globalThis.setInterval;
+
 beforeEach(() => {
+  vi.stubGlobal("setTimeout", ((...a: Parameters<typeof setTimeout>) => {
+    const t = setTimeoutReal(...a);
+    sueltos.push({ t, i: false });
+    return t;
+  }) as typeof setTimeout);
+  vi.stubGlobal("setInterval", ((...a: Parameters<typeof setInterval>) => {
+    const t = setIntervalReal(...a);
+    sueltos.push({ t, i: true });
+    return t;
+  }) as typeof setInterval);
   montar();
   h.red.name = "testnet";
   h.wallet = pollar();
@@ -186,6 +205,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.useRealTimers();
+  for (const { t, i } of sueltos.splice(0)) (i ? clearInterval : clearTimeout)(t);
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
