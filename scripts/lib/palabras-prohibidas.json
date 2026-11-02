@@ -196,8 +196,7 @@
       "archivo": "src/games/llamas/carrera-textos.ts",
       "regla": "stand-relator",
       "clave": "carMeta",
-      "pendiente": true,
-      "motivo": "PENDIENTE: el relator de la carrera dice «Gana quien llegue a la meta» tambien en una ronda de stand; arreglarlo pide una variante por modo en el texto de la carrera",
+      "motivo": "la rama de stand ya dice «Sale quien llegue a la meta»; «Gana» es la del sorteo de verdad, que solo se dice cuando enStand() es falso",
       "fecha": "2026-11-02"
     }
   ]
