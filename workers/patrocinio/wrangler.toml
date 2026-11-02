@@ -1,0 +1,28 @@
+# El portero: cuenta y paga las comisiones de seal y draw, en p.tinkazo.app (ver README.md).
+# Un script aparte del de los enlaces y del de la sala: un error acá no puede tumbarlos a ellos.
+# NO se despliega todavía: solo wrangler dev y probar.mjs. Desplegar y el DNS piden la palabra de quien mantiene el proyecto.
+# Se probaría con: npx wrangler@4 dev --port 8793   (desde esta carpeta, con .dev.vars)
+name = "tinkazo-patrocinio"
+account_id = "d97c3f7acada21d5ec280704fb34ff17"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+workers_dev = false
+routes = [{ pattern = "p.tinkazo.app/*", zone_name = "tinkazo.app" }]
+
+# La bitácora del portero (console.log de los hechos clave) queda en el panel de Cloudflare y en `wrangler tail`.
+[observability]
+enabled = true
+
+# Un solo objeto por red: el tope de la cuenta y el general se tienen que decidir juntos y de a uno.
+[[durable_objects.bindings]]
+name = "PATROCINIO"
+class_name = "Patrocinio"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Patrocinio"]
+
+# Valores no secretos. Los secretos (CLAVE_PATROCINADOR, ADMIN_TOKEN) van por
+# `wrangler secret put` y, en local, en .dev.vars (que no se versiona).
+[vars]
+RED = "testnet"

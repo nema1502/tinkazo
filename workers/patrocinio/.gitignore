@@ -1,0 +1,4 @@
+# Las llaves de prueba y el estado de wrangler dev no se suben nunca.
+.dev.vars
+.wrangler/
+.prueba.json
