@@ -10,8 +10,9 @@ import { registerSkip, releaseScreen, shorten, takeOverScreen, winnerNames } fro
 import { Camera } from "./camera";
 import { Gobernador, ajustesDe, aprender, dibujaPorSoftware, esPorPlaca, nivelInicial, nivelMedido, type Nivel } from "./calidad";
 import { guardiaNombre, meter } from "./encuadre";
+import { ajusteGanador, ENTRADA_RELATOR, reservaRelator } from "./ganador-altura";
 import { GOLPE_GANADOR, vibrar } from "../../vibrar";
-import { CHIP_SCALE, LEGIBLE, letraMinima, seLee } from "./letra";
+import { CHIP_SCALE, LEGIBLE, escalaChipLegible, letraMinima, seLee } from "./letra";
 import { ajustarEnRenglones, formaQueEntra } from "../nombres";
 import { estadoFoco, latidosFoco, tiemposFoco } from "./foco";
 import { FocoVista, type FocoPunto } from "./foco-vista";
@@ -171,6 +172,8 @@ export interface PixiStage {
   /** Dónde empieza el juego debajo de la barra de arriba, y dónde termina encima del relator. */
   top(): number;
   bottom(): number;
+  /** Encaja el cuerpo entre cartel físico y relator transformado; reduce solo si no cabe por traslación. */
+  despejarGanador(cuerpo: { x: number; y: number; w: number; h: number }): number;
   rng: () => number;
   dark: boolean;
   color(k: number): number;
@@ -236,7 +239,9 @@ export interface PixiStage {
    * sin el cartel encima. El juego da una función que lo calcula con la cámara de ese cuadro; solo se llama con
    * `?auditar=camara`. En el sorteo de verdad no hace nada.
    */
-  ganadorEn(fn: () => { x: number; y: number; w: number; h: number } | null): void;
+  ganadorEn(fn: () => { x: number; y: number; w: number; h: number } | null,
+    cuerpo?: () => { x: number; y: number; w: number; h: number } | null,
+    estado?: () => { activa: boolean; tiempo: number; fase: string }): void;
   run(fn: (dt: number, now: number) => void): void;
   onResize(fn: () => void): void;
   /** Algo que hay que soltar al cerrar: una línea de tiempo, un sonido. */
@@ -262,6 +267,8 @@ export interface Crown {
    * esos segundos más. Sin `foco`, todo sale como siempre.
    */
   at(t: number, placa?: boolean, foco?: FocoAt | null): void;
+  /** Reproyecta únicamente el foco tras un encuadre local, sin repetir eventos ni avanzar tiempo. */
+  enfocar?(foco: FocoAt): void;
   /** Vuelve a armarse para otro tamaño de pantalla. */
   rebuild(): void;
   /** Dibuja el cartel una vez a una textura que se tira: ver `warmUp`. */
@@ -483,7 +490,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   // (`window.__tinkazo`), para medir el zoom del golpe (`scripts/lib/zoom.mjs`).
   // Sin el parámetro no se expone nada.
   // Los campos «cartel» y «ganador» los llenan la corona y el juego (`ganadorEn`): dónde está el cartel y dónde quien gana.
-  if (params.get("auditar") === "camara") (window as unknown as { __tinkazo: unknown }).__tinkazo = { camara: cam, escena: scene, cartel: null, ganador: null, pantalla: () => ({ w: innerWidth, h: innerHeight, top: top(), bottom: bottom() }) };
+  if (params.get("auditar") === "camara") (window as unknown as { __tinkazo: unknown }).__tinkazo = { aplicacion: app, camara: cam, escena: scene, cartel: null, ganador: null, cuerpoGanador: null, pantalla: () => ({ w: innerWidth, h: innerHeight, top: top(), bottom: bottom() }) };
   // `?auditar=nino`: la foto de los cinco años no lleva letras (`scripts/audit-nino.mjs`).
   // Mientras `window.__nino.sinLetras` esté prendido, todo texto del motor queda sin
   // dibujar (`renderable`, no `visible`: los juegos mandan la visibilidad), y al
@@ -651,7 +658,9 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
    * franja dejaba pasar (21 de octubre de 2026). `offsetTop` no mira el
    * acercamiento con que entra cada frase.
    */
-  const piso = (): number => Math.min(sh() - bottom(), commentEl.textContent ? commentEl.offsetTop - 4 : Infinity);
+  let animacionRelator: Animation | null = null;
+  const pisoRelator = (): number => commentEl.textContent ? commentEl.offsetTop - 4 : Infinity;
+  const piso = (): number => Math.min(sh() - bottom(), pisoRelator());
   /** Si el chip se dibuja de verdad: él y todos los de arriba, visibles y colgados de la escena. */
   const seDibuja = (c: Container): boolean => {
     let a = 1;
@@ -698,20 +707,26 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     }
   };
 
-  const chip = (name: string, scale = 1, faceOf = name, textura: Texture | null = null, conCara = true): Container => {
+  const chip = (name: string, scale = 1, faceOf = name, textura: Texture | null = null, conCara = true, completo = false): Container => {
     const k = u() * scale * CHIP_SCALE * (compartir ? 1.2 : 1);
     const c = new Container();
     chipsVivos.add(c);
-    const label = text(shorten(name, 20), { fontSize: 12 * k, fontWeight: "800", fill: INK });
+    const label = text(completo ? name : shorten(name, 20), { fontSize: 12 * k, fontWeight: "800", fill: INK });
+    if (completo) {
+      const a = ajustarEnRenglones(name, sw() - 12 - (conCara ? 32 : 14) * k,
+        s => { label.text = s; return label.width; }, 1);
+      label.text = a.lineas.join("\n"); label.scale.set(a.escala);
+    }
+    const alto = completo ? Math.max(22 * k, label.height + 7 * k) : 22 * k;
     const av = new Sprite(textura ?? face(faceOf));
     av.width = av.height = 16 * k;
     av.position.set(5 * k, 3 * k);
     label.position.set((conCara ? 25 : 7) * k, 3.5 * k);
     const w = label.width + (conCara ? 32 : 14) * k;
     const bgc = new Graphics()
-      .roundRect(3 * k, 3 * k, w, 22 * k, 5 * k)
+      .roundRect(3 * k, 3 * k, w, alto, 5 * k)
       .fill(INK)
-      .roundRect(0, 0, w, 22 * k, 5 * k)
+      .roundRect(0, 0, w, alto, 5 * k)
       .fill(dark ? CREAM : 0xffffff)
       .stroke({ width: (compartir ? 3 : 2) * k, color: INK });
     if (conCara) c.addChild(bgc, av, label);
@@ -719,7 +734,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       av.destroy();
       c.addChild(bgc, label);
     }
-    c.pivot.set(0, 11 * k);
+    c.pivot.set(0, alto / 2);
     return c;
   };
 
@@ -835,6 +850,9 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
 
   /** Lo que mide de alto el cartel de la corona armada, para `placaBajo`. */
   let cartelAlto: { m: number; k: number; ph: number } | null = null;
+  let fondoGanador: () => { x: number; y: number; w: number; h: number } | null = () => null;
+  let nombrePrevio: Container | null = null, textoGanador = "";
+  let nombreListo = () => false;
 
   const crown = (names: string[], winners: readonly number[], conFoco = false, caraPropia?: (persona: number) => Texture | null): Crown => {
     if (identPedida && !ident) {
@@ -857,11 +875,13 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     cleaners.push(() => tl.kill());
     if (vista) cleaners.push(() => vista.soltar());
     const all = winnerNames(names, winners);
+    textoGanador = all.join("\n");
     /** Cuándo entra cada premio después del primero, en segundos de la corona. */
     let entradas: number[] = [];
     const sonados = new Set<number>();
     const build = (): void => {
       plate.removeChildren().forEach((c) => c.destroy({ children: true }));
+      nombrePrevio?.destroy({ children: true }); nombrePrevio = null;
       flash.clear().rect(0, 0, sw(), sh()).fill(0xffffff);
       const k = u();
       const title = text(getLang() === "es" ? (all.length > 1 ? "GANAN" : "GANA") : all.length > 1 ? "WINNERS" : "WINNER", {
@@ -978,6 +998,23 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       tl.fromTo(flash, { alpha: 0.9 }, { alpha: 0, duration: 0.5, ease: "power2.out" }, 0)
         .fromTo(plate.scale, { x: 0, y: 0 }, { x: 1, y: 1, duration: 0.9, ease: "elastic.out(1, 0.55)" }, 0.12)
         .fromTo(plate, { rotation: -0.12 }, { rotation: 0, duration: 0.9, ease: "elastic.out(1, 0.4)" }, 0.12);
+      // Solo lectura para el auditor: el texto realmente dibujado y su caja transformada.
+      const A = (window as unknown as { __tinkazo?: { nombres: unknown; superficieCartel: unknown } }).__tinkazo;
+      fondoGanador = () => {
+        if (!root.visible || !plate.visible || plate.scale.x <= 0) return null;
+        const b = bgp.getBounds();
+        return b.width > 0 && b.height > 0 ? { x: b.x, y: b.y, w: b.width, h: b.height } : null;
+      };
+      nombreListo = () => !!fondoGanador() && nameTexts.every(tx => {
+        const m = tx.getGlobalTransform();
+        return tx.getGlobalAlpha() > 0 && Number(tx.style.fontSize) * Math.hypot(m.c, m.d) >= letraMinima(u(), true);
+      });
+      if (A) A.superficieCartel = fondoGanador;
+      if (A) A.nombres = () => nameTexts.map((tx, i) => {
+        const b = tx.getBounds();
+        return { id: tx.uid, original: all[i], texto: tx.text, caja: { x: b.x, y: b.y, w: b.width, h: b.height },
+          visible: root.visible && plate.visible && tx.getGlobalAlpha() > 0 && b.width > 0 && b.height > 0 };
+      });
       // Con varios premios, el primero aparece con el cartel y los demás
       // llegan después, de a uno: cada premio tiene su momento.
       // En segundos reales: la corona recibe la hora del juego, que el
@@ -1007,6 +1044,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     let lastT = 0;
     let lastPlaca = true;
     let lastFoco: FocoAt | null = null;
+    let tiempoCartel = -1;
+    const A = (window as unknown as { __tinkazo?: { corona: unknown } }).__tinkazo;
+    if (A) A.corona = () => ({ activa: root.visible, placaVisible: !!fondoGanador(),
+      tiempo: lastT, tiempoCartel, nombres: all });
     // El celular vibra una sola vez, en el golpe; y en el silencio, los latidos.
     let vibro = false;
     const latidosSonados = new Set<number>();
@@ -1023,6 +1064,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         const T = vista && foco ? tiemposFoco(foco.arco) : null;
         const tr = tt * pace;
         const tp = T ? tt - T.placa / pace : tt;
+        tiempoCartel = tp;
         const tg = T ? tt - T.golpe / pace : tt;
         const w = window as unknown as { __revelado?: number };
         if (mezclaPedida && w.__revelado === undefined && tg >= 0) w.__revelado = performance.now();
@@ -1090,6 +1132,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
           const tinte = p.reves ? reves(c) : c;
           if (s.tint !== tinte) s.tint = tinte;
         });
+      },
+      enfocar(foco) {
+        if (vista) vista.pintar(estadoFoco(foco.arco, lastT * paceFactor()), foco, sw(), sh(), u());
+        lastFoco = foco;
       },
       rebuild() {
         build();
@@ -1215,6 +1261,39 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
 
   const stage: PixiStage = {
     app, view, bg, scene, hud, cam, sw, sh, u, letra, compartir, portrait, top, bottom, rng, dark,
+    despejarGanador(cuerpo) {
+      // Por encima de la penumbra del foco, pero fuera de la superficie del cartel.
+      nombrePrevio ??= podium.addChild(chip(textoGanador, Math.max(1, escalaChipLegible(u())), textoGanador, null, true, true));
+      nombrePrevio.visible = !nombreListo();
+      const fondo = fondoGanador(), r = view.getBoundingClientRect();
+      const techo = fondo ? Math.max(top(), fondo.y + fondo.h + 4) : top();
+      const relator = commentEl.getBoundingClientRect();
+      const animando = !!animacionRelator && (animacionRelator.pending || animacionRelator.playState === "running");
+      const reservaPop = reservaRelator(relator.height, animando);
+      const pisoReal = commentEl.textContent ? (relator.top - r.top - 4 - reservaPop) * sh() / r.height : sh() - bottom();
+      const A = (window as unknown as { __tinkazo?: { encuadreGanador: unknown } }).__tinkazo;
+      if (A) A.encuadreGanador = { timestamp: performance.now(), frase: commentEl.textContent,
+        relator: { x: relator.x, y: relator.y, w: relator.width, h: relator.height }, reservaPop, pisoReal,
+        animacion: { activa: animando, tiempo: animacionRelator?.currentTime ?? null, estado: animacionRelator?.playState ?? null } };
+      const reserva = nombrePrevio.visible ? nombrePrevio.height + 4 : 0;
+      const zona = { x0: 2 + seguro.left, y0: techo + reserva, x1: sw() - 2 - seguro.right, y1: pisoReal };
+      if (zona.y1 <= zona.y0) return 0; // Banda imposible: el auditor debe informar la restricción.
+      const a = ajusteGanador(cuerpo, zona), cx = cuerpo.x + cuerpo.w / 2, cy = cuerpo.y + cuerpo.h / 2;
+      if (a.s !== 1 || a.dx || a.dy) {
+        scene.position.set(cx + (scene.position.x - cx) * a.s + a.dx, cy + (scene.position.y - cy) * a.s + a.dy);
+        scene.scale.set(scene.scale.x * a.s, scene.scale.y * a.s);
+        const p = cam.snapshot(), z = scene.scale.x;
+        cam.restore({ ...p, zoom: p.zoom * a.s, lastZoom: p.lastZoom * a.s,
+          x: p.x - ((1 - a.s) * (cx - sw() / 2) + a.dx) / z,
+          y: p.y - ((1 - a.s) * (cy - sh() / 2) + a.dy) / z });
+      }
+      if (nombrePrevio.visible) {
+        const b = nombrePrevio.getBounds();
+        nombrePrevio.position.x += Math.max(zona.x0, Math.min(a.caja.x + a.caja.w / 2 - b.width / 2, zona.x1 - b.width)) - b.x;
+        nombrePrevio.position.y += a.caja.y - 4 - b.height - b.y;
+      }
+      return a.dy;
+    },
     placaBajo: (m) => {
       const k = u();
       // El alto de verdad del cartel, si la corona de `m` premios ya se armó; si no, la estimación con las mismas partes.
@@ -1225,17 +1304,25 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         : 18 * k + 1.2 * letra(LEGIBLE.prin) + filasCorona(m, k).reduce((a, h) => a + h, 0) + 20 * k;
       return (portrait() ? sh() * 0.24 : sh() * 0.26) + ph / 2 + 10 * k;
     },
-    ganadorEn(fn) {
-      const T = (window as unknown as { __tinkazo?: { ganador: unknown } }).__tinkazo;
-      if (T) T.ganador = fn;
+    ganadorEn(fn, cuerpo, estado) {
+      const T = (window as unknown as { __tinkazo?: { ganador: unknown; cuerpoGanador: unknown; estadoGanador: unknown } }).__tinkazo;
+      if (T) {
+        T.ganador = fn;
+        // Optativo y solo de auditoría: no sustituye el proxy que usan otros auditores.
+        T.cuerpoGanador = cuerpo ?? null;
+        T.estadoGanador = estado ?? null;
+      }
     },
     color: (k) => P[((k % P.length) + P.length) % P.length] ?? 0xe93d9c,
     say(msg, heat = 0, grito = false) {
-      commentEl.textContent = msg;
+      // Fixture explícito de auditoría: nunca se instala en un sorteo normal.
+      const fixture = params.get("auditar") === "camara"
+        ? (window as unknown as { __auditarGanador?: { relator: (msg: string, heat: number) => string } }).__auditarGanador : null;
+      commentEl.textContent = fixture ? fixture.relator(msg, heat) : msg;
       commentEl.classList.toggle("grito", grito);
-      commentEl.animate(
-        [{ transform: "translateX(-50%) scale(0.92)" }, { transform: "translateX(-50%) scale(1)" }],
-        { duration: 280, easing: "cubic-bezier(.34,1.56,.64,1)" },
+      animacionRelator = commentEl.animate(
+        ENTRADA_RELATOR.escalas.map(s => ({ transform: `translateX(-50%) scale(${s})` })),
+        { duration: ENTRADA_RELATOR.duracion, easing: `cubic-bezier(${ENTRADA_RELATOR.curva.join(",")})` },
       );
       musicCue(heat);
     },
@@ -1246,6 +1333,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       loopFn = fn;
       let prev = 0;
       let start = -1;
+      let cuadroAuditoria = 0;
       /** Lo que se llevó el código del juego en el cuadro anterior: ver `Gobernador`. */
       let codigo = 0;
       const pace = paceFactor();
@@ -1268,6 +1356,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         guardia();
         if (ninoPedido) letrasNino();
         app.renderer.render(app.stage);
+        if (params.get("auditar") === "camara") {
+          (window as unknown as { __auditarGanador?: { frame: (cuadro: number, timestamp: number) => void } })
+            .__auditarGanador?.frame(++cuadroAuditoria, now);
+        }
         codigo = performance.now() - c0;
         if (ident) {
           relojId = (now - start) / 1000;

@@ -366,6 +366,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   }
   build();
   const crown = S.crown(names, winners, true);
+  let corrigeCumbre = false;
   S.onResize(build);
 
   /* ================================================================ estado */
@@ -1347,6 +1348,24 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       }
     }
 
+    if (tAll >= T_CROWN) {
+      crown.at(tAll - T_CROWN, true, focoDeLaCabina());
+      const cuerpo = cabs[winnerCab]!.body.getBounds();
+      const dy = S.despejarGanador({ x: cuerpo.x, y: cuerpo.y, w: cuerpo.width, h: cuerpo.height });
+      crown.enfocar?.(focoDeLaCabina());
+      corrigeCumbre = corrigeCumbre || dy !== 0;
+      // Solo si hubo corrección: no llevar CUMBRE detrás del cartel. El rótulo
+      // ya se acomoda aparte del edificio contra la cabecera; conserva esa guardia.
+      if (corrigeCumbre) {
+        const tag = stations[NS + 1]!.tag;
+        const b = tag.getBounds(), lo = S.placaBajo(winners.length) + 12 * S.u();
+        if (b.y < lo) {
+          const p = tag.getGlobalPosition();
+          tag.position.copyFrom(tag.parent!.toLocal({ x: p.x, y: p.y + lo - b.y }));
+        }
+      }
+    }
+
     // Pasar lista: en el embarque y el primer tramo, los nombres de a tandas
     // encima de su cabina, para que cada uno sepa en cuál va. Los de una misma
     // cabina se apilan.
@@ -1472,14 +1491,20 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     hudNum.text = String(m);
     const at = Math.min(NS, Math.floor(P.headAt(tAll) + 0.02));
     hudStation.text = tAll >= T_BOARD && tAll < T_RUN ? T[lang].cTelOf(Math.max(1, at), NS) : "";
-    if (tAll >= T_CROWN) crown.at(tAll - T_CROWN, true, focoDeLaCabina());
   }
 
   cam.cut(pt(0).x + 40 * G.k, pt(0).y + 20 * G.k, 1.55);
   S.ganadorEn(() => {
     const f = focoDeLaCabina();
     return { x: f.x - f.r, y: f.y - f.r, w: 2 * f.r, h: 2 * f.r };
-  });
+  }, () => {
+    // El dibujo real, incluidos contorno y sombra, con balanceo y cámara aplicados.
+    // Excluye el círculo del foco, el colgante y las etiquetas del nombre.
+    const cabina = cabs[winnerCab];
+    if (!cabina?.root.visible || cabina.root.alpha <= 0 || !cabina.body.visible) return null;
+    const b = cabina.body.getBounds();
+    return { x: b.x, y: b.y, w: b.width, h: b.height };
+  }, () => ({ activa: tAll >= T_CROWN, tiempo: tAll, fase: tHold < FOCO.placa ? "foco" : "corona" }));
 
   S.run((dt, now) => {
     tAll += dt;
