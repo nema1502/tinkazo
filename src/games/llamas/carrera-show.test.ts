@@ -200,6 +200,11 @@ describe("la carrera: el plan es puro y cumple la regla del niño", () => {
     expect(TEXTOS_CARRERA.en.carRotuloMeta).toBe("FINISH");
   });
 
+  it("el rótulo de quien va primera en el celular existe en los dos idiomas y es una sola palabra (ADELANTE / AHEAD)", () => {
+    expect(TEXTOS_CARRERA.es.carRotuloPunta).toBe("ADELANTE");
+    expect(TEXTOS_CARRERA.en.carRotuloPunta).toBe("AHEAD");
+  });
+
   it("tres tiempos por tramo: qué pasó (una echada), qué pasa (quién va adelante) y qué sigue (el terreno)", () => {
     for (const n of [12, 18, 24, 30]) {
       for (let s = 1; s <= 10; s++) {

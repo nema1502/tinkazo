@@ -148,7 +148,8 @@ export function crearJuego<P, E>(def: DefJuego<P, E>, anf: Anfitrion = anfitrion
     const corona = (): void => {
       if (coronado) return;
       coronado = true;
-      S.say(anf.anuncio(nombres, ganadores), 1);
+      // Con `sinAnuncio` y un solo premio, la línea del relator se borra y el cartel dice solo quién gana.
+      S.say(plan.alCoronar?.sinAnuncio && ganadores.length === 1 ? "" : anf.anuncio(nombres, ganadores), 1);
       sonido.fanfarria();
       director.golpe();
     };
@@ -176,6 +177,7 @@ export function crearJuego<P, E>(def: DefJuego<P, E>, anf: Anfitrion = anfitrion
       S.cam.apply(S.scene, S.sw(), S.sh(), ahora);
       def.cuadro(k, plan, escena as E, t);
       marcadorUI.pintar(coronado ? 1 : Math.max(1, Math.round(plan.marcador(t))));
+      marcadorUI.ocultar(coronado && !!plan.alCoronar?.sinMarcador && S.portrait());
       if (t >= plan.duracion) crownUI.at(t - plan.duracion, true, conFoco ? enfoque() : null);
       if (tHold >= anf.espera + F.placa) {
         muerto = true;

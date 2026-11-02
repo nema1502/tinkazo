@@ -12,6 +12,8 @@ export interface MarcadorVista {
   pintar(n: number): void;
   /** Vuelve a medir y a poner todo, para otro tamaño de pantalla. */
   rearmar(): void;
+  /** Lo esconde o lo muestra (el cartel de quien gana, en el celular, cae encima). */
+  ocultar(si: boolean): void;
 }
 
 const MONO = "ui-monospace, Consolas, monospace";
@@ -46,5 +48,8 @@ export function crearMarcadorVista(S: Estadio, rotulo: () => string): MarcadorVi
       poner();
     },
     rearmar: poner,
+    ocultar(si) {
+      raiz.visible = !si;
+    },
   };
 }

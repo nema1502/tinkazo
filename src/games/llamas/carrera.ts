@@ -56,6 +56,12 @@ interface Etiqueta {
   raiz: Container;
   fondo: Graphics;
   texto: Text;
+  /** El rótulo "ADELANTE" pegado a la izquierda de la ficha de quien va primera (celular): una palabra que contesta la pregunta sin mirar la raya. */
+  rotulo: Container;
+  rotuloTexto: Text;
+  rotuloFondo: Graphics;
+  /** Cuánto sobresale el rótulo a la izquierda de la ficha, en el espacio de la ficha (0 si no se muestra). */
+  rotuloW: number;
   w: number;
   h: number;
   clave: string;
@@ -196,12 +202,19 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
     const fondo = new Graphics();
     const texto = S.text("", { fontSize: 20, fontWeight: "800", fill: CREAM, stroke: contorno(20) });
     texto.anchor.set(0.5);
-    raiz.addChild(fondo, texto);
-    return { raiz, fondo, texto, w: 0, h: 0, clave: "" };
+    const rotulo = new Container();
+    const rotuloFondo = new Graphics();
+    const rotuloTexto = S.text("", { fontSize: 12, fontWeight: "900", fill: YELLOW, stroke: { color: INK, width: 2, join: "round" } });
+    rotuloTexto.anchor.set(0.5);
+    rotulo.addChild(rotuloFondo, rotuloTexto);
+    rotulo.visible = false;
+    raiz.addChild(fondo, texto, rotulo);
+    return { raiz, fondo, texto, rotulo, rotuloTexto, rotuloFondo, rotuloW: 0, w: 0, h: 0, clave: "" };
   }
   function ponerEtiqueta(e: Etiqueta, s: string, px: number, estilo: "normal" | "lider" | "echada"): void {
     const clave = `${s}|${px.toFixed(1)}|${estilo}`;
     if (e.clave === clave) return;
+    const conRotulo = d.nueva && P.retrato && estilo === "lider";
     e.clave = clave;
     const fs = estilo === "lider" ? px * 1.25 : px;
     e.texto.style.fontSize = fs;
@@ -218,6 +231,18 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
     e.fondo.clear();
     if (estilo === "lider") e.fondo.roundRect(-w / 2 + 3, -h / 2 + 3, w, h, h * 0.3).fill(INK).roundRect(-w / 2, -h / 2, w, h, h * 0.3).fill(YELLOW).stroke({ width: Math.max(2, fs / 9), color: INK });
     else e.fondo.roundRect(-w / 2, -h / 2, w, h, h * 0.3).fill({ color: estilo === "echada" ? 0x3a3a46 : INK, alpha: estilo === "echada" ? 0.78 : 0.62 });
+    // En el celular las llamas son chicas y las filas se apilan: la de adelante lleva la palabra pegada a su ficha, además de la raya y la manta.
+    e.rotulo.visible = conRotulo;
+    e.rotuloW = 0;
+    if (conRotulo) {
+      const rf = fs * 0.8;
+      e.rotuloTexto.style.fontSize = rf;
+      e.rotuloTexto.text = k.txt("carRotuloPunta");
+      const rw = e.rotuloTexto.width + rf * 0.9, rh = rf * 1.35;
+      e.rotuloFondo.clear().roundRect(-rw / 2, -rh / 2, rw, rh, rh * 0.3).fill(INK);
+      e.rotulo.position.set(-w / 2 - rw / 2 + 3, 0);
+      e.rotuloW = rw - 3;
+    }
   }
 
   /* ------------------------------------------------------------ corredoras */
@@ -749,7 +774,7 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
     soyLider: boolean;
   }
   /** Dónde va la ficha de una: arriba de la cabeza (proyector) o a la izquierda del cuerpo (celular), sin salirse de la pantalla ni meterse bajo la cabecera. */
-  function ubicarFicha(et: Etiqueta, p: Posicion, arriba: boolean, comp: number, vz: number): void {
+  function ubicarFicha(et: Etiqueta, p: Posicion, arriba: boolean, comp: number, vz: number, lider = false): void {
     const esc = p.esc;
     let x: number, y: number;
     if (arriba) {
@@ -758,12 +783,15 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
     } else {
       x = p.x + (LLAMA_COLA * esc - 4 * P.u - (et.w * comp) / 2);
       y = p.y - (LLAMA_ALTO * esc) / 3;
+      // La ficha amarilla es más grande, con sombra y borde, y la manta de quien va adelante flamea por detrás de la cola:
+      // se corre hacia atrás lo que sobra, para que no tape el cuerpo ni se pegue a la manta.
+      if (d.nueva && lider) x -= 8 * esc + 3 * P.u + 5 * comp;
     }
     if (d.nueva) {
       // Ni debajo de la cabecera (la ficha amarilla es más alta que lo que se reservó), ni cortada por el borde izquierdo.
       const arribaMin = cam.y + (hudG.bajo + 3 * P.u - P.h / 2) / vz + (et.h * comp) / 2;
       if (y < arribaMin) y = arribaMin;
-      const izqMin = cam.x - P.w / (2 * vz) + 4 * P.u + (et.w * comp) / 2;
+      const izqMin = cam.x - P.w / (2 * vz) + 4 * P.u + (et.w * comp) / 2 + et.rotuloW * comp;
       if (x < izqMin && p.x > izqMin) x = izqMin;
     }
     et.raiz.position.set(x, y);
@@ -777,7 +805,7 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
     const caja = (f: Ficha): { x0: number; y0: number; x1: number; y1: number } => {
       const et = f.c.etiqueta;
       const w = et.w * f.comp, h = et.h * f.comp;
-      return { x0: et.raiz.x - w / 2, y0: et.raiz.y - h / 2, x1: et.raiz.x + w / 2, y1: et.raiz.y + h / 2 };
+      return { x0: et.raiz.x - w / 2 - et.rotuloW * f.comp, y0: et.raiz.y - h / 2, x1: et.raiz.x + w / 2, y1: et.raiz.y + h / 2 };
     };
     const choca = (a: { x0: number; y0: number; x1: number; y1: number }): boolean => puestas.some((b) => a.x0 < b.x1 - 1 && a.x1 > b.x0 + 1 && a.y0 < b.y1 - 1 && a.y1 > b.y0 + 1);
     const orden = [...fichas].sort((a, b) => Number(b.soyLider) - Number(a.soyLider) || b.p.x - a.p.x);
@@ -788,7 +816,7 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
       while (choca(r) && nv > 2 && !f.soyLider && f.estilo !== "echada") {
         nv = (nv - 1) as Nivel;
         ponerEtiqueta(et, textoDe(f.q, nv), px, f.estilo);
-        ubicarFicha(et, f.p, f.arriba, f.comp, vz);
+        ubicarFicha(et, f.p, f.arriba, f.comp, vz, f.soyLider);
         r = caja(f);
       }
       if (choca(r) && f.arriba && !f.soyLider) {
@@ -881,7 +909,7 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
       const arriba = enCarril ? carr.arriba : forma.arriba;
       const esc = p.esc;
       if (tres) fichas3.push({ et, persona: q, comp, y: p.y, etiquetar: false, sinLugar: false, peso: soyLider ? 3e6 : reciente ? 2e6 : 1e6 });
-      else ubicarFicha(et, p, arriba, comp, vz);
+      else ubicarFicha(et, p, arriba, comp, vz, soyLider);
       et.raiz.zIndex = soyLider ? 3e6 : reciente ? 2e6 : 1e6;
       // Las que quedaron lejos de la pantalla no se dibujan.
       const dentro = p.x > cam.x - P.w / (2 * vz) - 300 && p.x < cam.x + P.w / (2 * vz) + 300;
@@ -910,6 +938,8 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
       if (d.nueva) (borla as Container & { flamea?(hora: number): void }).flamea?.(t);
     }
     if (d.nueva) pintarRaya(t);
+    // En el celular el cartel de quien gana cae justo sobre la cinta: ya no hay nada que medir, y debajo del cartel asomaba a medias.
+    cinta.visible = !(d.nueva && P.retrato && k.coronado);
     // La cinta: el cursor lleva la cara de quien va adelante.
     const c = hudG.cinta;
     const lid = lider >= 0 ? lider : (d.lanes[0] as number);
@@ -1121,6 +1151,16 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
       console.warn('[3d] no arrancó, sigue el 2D', err);
       tres = null;
     }
+  }
+
+  // Para el auditor de emoción (solo la carrera nueva): dónde queda quien gana en la pantalla. Sin su nombre: desde el golpe la ficha se
+  // va (el cartel ya dice quién gana), y lo que no puede cortar ni tapar el cartel es su cuerpo.
+  if (d.nueva) {
+    S.ganadorEn(() => {
+      const c = cuerpoDe(posicion(d.campeona, d.tCrown));
+      const a = cam.toScreen(c.x, c.y, P.w, P.h), b = cam.toScreen(c.x + c.w, c.y + c.h, P.w, P.h);
+      return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+    });
   }
 
   const escena: EscenaCarrera & { rebuild(): void; draw(t: number): void } = {

@@ -507,6 +507,8 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
     arco,
     sentido: "derecha",
     normal: normalDe(n),
+    // El cartel dice quién gana: el relator no lo repite y, en el celular, el contador de arriba se va para dejarle el lugar.
+    ...(nueva ? { alCoronar: { sinAnuncio: true, sinMarcador: true } } : {}),
     marcador,
     respuestas,
     momentos,
