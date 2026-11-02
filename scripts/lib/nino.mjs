@@ -2,19 +2,20 @@
  * La prueba del niño, sin Chrome: qué se pregunta, cómo se arma lo que ve el
  * describidor y cómo juzga el juez. Lo usan `scripts/audit-nino.mjs` y sus pruebas.
  *
- * La regla (la del niño, en `docs/juegos.md`): cualquier cuadro del
- * juego, sin leer, dice quién va adelante, hacia dónde van, cuánto falta y qué
- * acaba de pasar. El auditor saca fotos sin subtítulo al 25 % y al 60 % del show y
- * un segundo después del golpe, con letras (la edad de 9) y sin ninguna (la de 5),
- * y guarda aparte la verdad del plan (`window.__nino.verdad()`). Un modelo que no
- * ve más que la foto las describe; el juez compara. Acá no se llama a ninguna API.
+ * La regla (la del niño, en `docs/juegos.md`): una sola vara, la de alguien de 7
+ * años o más. Cualquier cuadro del juego, sin leer el relator, dice quién va
+ * adelante, hacia dónde van, cuánto falta y qué acaba de pasar. Quien tiene 7 años
+ * lee nombres, así que hay una sola foto por parada: con los nombres y sin
+ * subtítulo. El auditor las saca al 25 % y al 60 % del show y un segundo después del
+ * golpe, y guarda aparte la verdad del plan (`window.__nino.verdad()`). Un modelo
+ * que no ve más que la foto las describe; el juez compara. Acá no se llama a ninguna API.
  *
- * Las tolerancias son las de la regla: nombres sin tildes ni mayúsculas y con las
- * cinco primeras letras de cada palabra; sin letras, por zona; «hacia» igual, sin
- * decir también el sentido contrario; «falta» a 0,2 o menos del progreso; «paso»
- * por tipo, y con nombre si lo hay. Una foto pasa con 3 de 4; en la final no cuenta
- * «hacia» y las otras tres son obligatorias. Una corrida (una semilla) pasa si pasan
- * todas sus fotos en las dos edades; un juego pasa con 7 de cada 8 corridas.
+ * Las tolerancias son las de siempre, sin bajarlas: nombres sin tildes ni mayúsculas
+ * y con las cinco primeras letras de cada palabra; «hacia» igual, sin decir también
+ * el sentido contrario; «falta» a 0,2 o menos del progreso; «paso» por tipo, y con
+ * nombre si lo hay. Una foto pasa con 3 de 4; en la final no cuenta «hacia» y las
+ * otras tres son obligatorias. Una corrida (una semilla) pasa si pasan todas sus
+ * fotos; un juego pasa con 7 de cada 8 corridas.
  */
 import { createHash } from "node:crypto";
 
@@ -33,11 +34,8 @@ export const TAMANOS = [
   { id: "390", ancho: 390, alto: 844, tema: "light", celular: true },
 ];
 
-/** Con letras es la edad de 9 (lee nombres); sin letras, la de 5 (no lee nada). */
-export const VARIANTES = [
-  { id: "letras", edad: 9, sinLetras: false },
-  { id: "sin", edad: 5, sinLetras: true },
-];
+/** Una sola vara: 7 años o más. Lee nombres (no el relator), así que la foto lleva letras. */
+export const VARIANTES = [{ id: "letras", edad: 7, sinLetras: false }];
 
 /** A qué hora del juego se para para cada punto, en segundos. */
 export const horaDeParada = (punto, duracion) => (punto.fraccion !== undefined ? punto.fraccion * duracion : duracion + punto.despues);
@@ -52,26 +50,19 @@ export const semillaDe = (i) => createHash("sha256").update(`semilla-nino-${i}`)
 /* --------------------------------------------------------- las preguntas */
 
 export const CLAVES = ["adelante", "hacia", "falta", "paso"];
-export const LUGARES = ["arriba", "abajo", "izquierda", "derecha", "centro"];
-export const DIRECCIONES = [...LUGARES, "alrededor"];
+export const DIRECCIONES = ["arriba", "abajo", "izquierda", "derecha", "centro", "alrededor"];
 export const TIPOS_PASO = ["empezo", "salio", "adelante", "freno", "casi", "gano", "nada"];
 /** Cuánto falta, en palabras, y a qué progreso (0 a 1) corresponde cada una. */
 export const FALTA = { empieza: 0, mucho: 0.25, mitad: 0.5, poco: 0.75, termino: 1 };
 export const TOLERANCIA_FALTA = 0.2;
 
-/** Lo mismo para los diez juegos, con letras y sin letras. El prompt fijo (`prompt-nino.md`) las repite. */
+/** Lo mismo para todos los juegos. El prompt fijo (`prompt-nino.md`) las repite. */
 export const TEXTO_PREGUNTAS = {
   letras: {
     adelante: "¿Quién va ganando? Escribí su nombre tal como se lee; si no se lee, \"no se ve\".",
     hacia: "¿Hacia dónde van, o adónde hay que mirar para saber quién gana? Una de: derecha, izquierda, arriba, abajo, centro, alrededor.",
     falta: "¿Cuánto falta para que termine? Una de: empieza, mucho, mitad, poco, termino.",
     paso: "¿Qué acaba de pasar? Una de: empezo, salio (salió alguien), adelante (alguien pasó adelante), freno (alguien se frenó o tropezó), casi (casi sale y volvió), gano, nada (nada nuevo). En \"quien\", el nombre de la persona si se lee.",
-  },
-  sin: {
-    adelante: "¿Quién va ganando? No hay letras: decí en qué zona de la pantalla está. Una de: arriba, abajo, izquierda, derecha, centro.",
-    hacia: "¿Hacia dónde van, o adónde hay que mirar para saber quién gana? Una de: derecha, izquierda, arriba, abajo, centro, alrededor.",
-    falta: "¿Cuánto falta para que termine? Una de: empieza, mucho, mitad, poco, termino.",
-    paso: "¿Qué acaba de pasar? Una de: empezo, salio (salió alguien), adelante (alguien pasó adelante), freno (alguien se frenó o tropezó), casi (casi sale y volvió), gano, nada (nada nuevo). \"quien\" va vacío: no hay nombres.",
   },
 };
 
@@ -108,16 +99,6 @@ export function coincideNombre(modelo, verdadero) {
   return true;
 }
 
-/**
- * En qué zona dijo el modelo que está: la exacta. Puede nombrar dos (cuando está
- * en el borde de una y de otra), no más: decir todas las zonas no es contestar.
- * La verdad no sale del plan: la mide el juego donde cae en la pantalla.
- */
-export function coincideLugar(modelo, verdad) {
-  const zonas = LUGARES.filter((z) => palabras(modelo).includes(z));
-  return zonas.length >= 1 && zonas.length <= 2 && zonas.includes(verdad);
-}
-
 const OPUESTO = { arriba: "abajo", abajo: "arriba", izquierda: "derecha", derecha: "izquierda" };
 
 /** «Hacia» igual, o una parte de la diagonal; si dice también el sentido contrario, no. */
@@ -147,16 +128,15 @@ export function tipoDePaso(modelo) {
 }
 
 /** El hecho por su tipo, y con el nombre si la foto lo tiene y la verdad lo pide. */
-export function coincidePaso(modeloPaso, modeloQuien, verdad, nombres, conLetras) {
+export function coincidePaso(modeloPaso, modeloQuien, verdad, nombres) {
   if (tipoDePaso(modeloPaso) !== verdad.tipo) return false;
-  const pideNombre = conLetras && verdad.quien !== undefined && verdad.tipo !== "nada" && verdad.tipo !== "empezo";
+  const pideNombre = verdad.quien !== undefined && verdad.tipo !== "nada" && verdad.tipo !== "empezo";
   return pideNombre ? coincideNombre(modeloQuien, nombres[verdad.quien] ?? "") : true;
 }
 
-/** ¿Está bien lo de «adelante»? Con letras, por el nombre de cualquiera de los que van adelante; sin letras, por la zona. */
-export function coincideAdelante(modelo, verdad, nombres, conLetras) {
-  if (conLetras) return verdad.adelante.quienes.some((i) => coincideNombre(modelo, nombres[i] ?? ""));
-  return coincideLugar(modelo, verdad.adelante.lugar);
+/** ¿Está bien lo de «adelante»? Por el nombre de cualquiera de los que van adelante. */
+export function coincideAdelante(modelo, verdad, nombres) {
+  return verdad.adelante.quienes.some((i) => coincideNombre(modelo, nombres[i] ?? ""));
 }
 
 /* ------------------------------------------------------------- el juez */
@@ -165,13 +145,13 @@ export function coincideAdelante(modelo, verdad, nombres, conLetras) {
  * Una foto: cuántas de las cuatro contestó bien el modelo. Pasa con 3; en la
  * final «hacia» no cuenta y las otras tres son obligatorias.
  */
-export function juzgarFoto({ respuesta, verdad, nombres, conLetras, final }) {
+export function juzgarFoto({ respuesta, verdad, nombres, final }) {
   const r = respuesta ?? {};
   const aciertos = {
-    adelante: coincideAdelante(r.adelante, verdad, nombres, conLetras),
+    adelante: coincideAdelante(r.adelante, verdad, nombres),
     hacia: coincideHacia(r.hacia, verdad.hacia),
     falta: coincideFalta(r.falta, verdad.progreso),
-    paso: coincidePaso(r.paso, r.quien, verdad.paso, nombres, conLetras),
+    paso: coincidePaso(r.paso, r.quien, verdad.paso, nombres),
   };
   const contadas = final ? CLAVES.filter((k) => k !== "hacia") : CLAVES;
   const buenos = contadas.filter((k) => aciertos[k]).length;
@@ -188,9 +168,8 @@ export const minimoDeCorridas = (semillas) => semillas - Math.floor(semillas / 8
  */
 export function juzgar({ capturas, respuestas = {}, desempate = {} }) {
   const fotos = Object.entries(capturas).map(([id, c]) => {
-    const conLetras = c.variante === "letras";
     const final = c.punto === "fin";
-    const base = { verdad: c.verdad, nombres: c.nombres, conLetras, final };
+    const base = { verdad: c.verdad, nombres: c.nombres, final };
     let j = juzgarFoto({ ...base, respuesta: respuestas[id] });
     let desempatada = false;
     if (!j.pasa && desempate[id] != null) {
@@ -200,21 +179,17 @@ export function juzgar({ capturas, respuestas = {}, desempate = {} }) {
     return { id, semilla: c.semilla, tamano: c.tamano, punto: c.punto, variante: c.variante, desempatada, ...j };
   });
   const semillas = [...new Set(fotos.map((f) => f.semilla))].sort((a, b) => a - b);
-  const variantes = [...new Set(fotos.map((f) => f.variante))];
   const corridas = semillas.map((s) => {
     const de = fotos.filter((f) => f.semilla === s);
-    const edades = Object.fromEntries(variantes.map((v) => [v, de.filter((f) => f.variante === v).every((f) => f.pasa)]));
-    return { semilla: s, pasa: Object.values(edades).every(Boolean), edades, fotos: de.length, falla: de.filter((f) => !f.pasa).map((f) => f.id) };
+    return { semilla: s, pasa: de.every((f) => f.pasa), fotos: de.length, falla: de.filter((f) => !f.pasa).map((f) => f.id) };
   });
   const minimo = minimoDeCorridas(semillas.length);
-  const porEdad = Object.fromEntries(variantes.map((v) => [v, corridas.filter((c) => c.edades[v]).length]));
   const pasan = corridas.filter((c) => c.pasa).length;
   return {
     semillas: semillas.length,
     minimo,
     fotos,
     corridas,
-    porEdad,
     pasan,
     sinRespuesta: fotos.filter((f) => !f.respondida).length,
     pasa: semillas.length > 0 && pasan >= minimo,

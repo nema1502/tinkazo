@@ -2,16 +2,15 @@
 /**
  * La prueba del niño: el auditor.
  *
- * La regla (la del niño, en `docs/juegos.md`): cualquier cuadro del juego,
- * sin leer, dice quién va adelante, hacia dónde van, cuánto falta y qué acaba de
+ * La regla (la del niño, en `docs/juegos.md`): una sola vara, la de alguien de 7
+ * años o más. Cualquier cuadro del juego, sin leer el relator, dice quién va adelante, hacia dónde van, cuánto falta y qué acaba de
  * pasar. Sin esta prueba la regla es una opinión. Cómo corre, en tres pasos y sin
  * llamar a ninguna API (no hace falta llave ni cuesta):
  *
  * 1. **Capturar.** Por semilla y por tamaño (proyector 1920x1080 oscuro; celular 390x844
  *    claro), corre el show con el reloj en turbo, lo para al 25 % y al 60 % de su
  *    duración y un segundo después del golpe, esconde el subtítulo, y en cada parada
- *    saca dos fotos: con letras (la edad de 9) y sin ninguna (la de 5: el estadio no
- *    dibuja ningún texto del motor). En cada parada guarda también la verdad del plan,
+ *    saca una foto, con los nombres (quien tiene 7 años los lee). En cada parada guarda también la verdad del plan,
  *    `window.__nino.verdad()` (el contrato del kit, `kit/respuestas.ts`). Deja en la
  *    carpeta `preguntas.json` (ids, fotos y las cuatro preguntas: nada más), el
  *    `prompt-nino.md` fijo y, aparte, en `oculto/verdad.json`, la verdad.
@@ -31,7 +30,7 @@
  *   CDP_PORT=9692 node scripts/audit-nino.mjs --control --semillas 2 --base http://localhost:4192
  *   node scripts/audit-nino.mjs --control --juzgar docs/capturas/nino/control
  *
- * Opciones: `--personas 18`, `--semillas 8`, `--tamanos 1080,390`, `--solo-letras`,
+ * Opciones: `--personas 18`, `--semillas 8`, `--tamanos 1080,390`,
  * `--out <carpeta>` (por defecto `docs/capturas/nino/<juego>`, sin versionar), `--json`.
  */
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -65,7 +64,7 @@ const personas = Number(opt("--personas", "18"));
 const semillas = Number(opt("--semillas", "8"));
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const tamanos = TAMANOS.filter((t) => opt("--tamanos", "1080,390").split(",").includes(t.id));
-const variantes = VARIANTES.filter((v) => !(v.sinLetras && args.includes("--solo-letras")));
+const variantes = VARIANTES;
 
 const checks = [];
 const check = (name, ok, detail = "") => {
@@ -93,7 +92,7 @@ async function juzgarCarpeta(carpeta) {
 
   console.log(`\nprueba del niño · ${verdad.juego}${esControl ? " (control: la carrera de hoy)" : ""} · ${verdad.personas} personas · ${v.semillas} semillas · ${v.fotos.length} fotos`);
   for (const f of v.fotos.filter((x) => !x.pasa)) console.log(`    ${lineaDeFoto(f)}`);
-  for (const c of v.corridas) console.log(`  semilla ${c.semilla}: ${c.pasa ? "pasa" : "no pasa"} (${Object.entries(c.edades).map(([e, ok]) => `${e === "letras" ? "9 años" : "5 años"} ${ok ? "sí" : "no"}`).join(", ")})`);
+  for (const c of v.corridas) console.log(`  semilla ${c.semilla}: ${c.pasa ? "pasa" : "no pasa"} (${c.fotos - c.falla.length} de ${c.fotos} fotos)`);
 
   check("todas las fotos tienen respuesta", v.sinRespuesta === 0, v.sinRespuesta ? `${v.sinRespuesta} sin respuesta` : `${v.fotos.length} de ${v.fotos.length}`);
   if (esControl) {
@@ -103,9 +102,7 @@ async function juzgarCarpeta(carpeta) {
       v.pasa ? `la aprobó (${cuenta(v.pasan)} corridas): la prueba está mal` : `${cuenta(v.pasan)} corridas pasan, hacen falta ${v.minimo}: la prueba ve el problema`,
     );
   } else {
-    if ("letras" in v.porEdad) check("N1 · 9 años, con letras", v.porEdad.letras >= v.minimo, `${cuenta(v.porEdad.letras)} corridas pasan (mínimo ${v.minimo})`);
-    if ("sin" in v.porEdad) check("N2 · 5 años, sin letras", v.porEdad.sin >= v.minimo, `${cuenta(v.porEdad.sin)} corridas pasan (mínimo ${v.minimo})`);
-    check("el juego pasa en las dos edades", v.pasa, `${cuenta(v.pasan)} corridas pasan (mínimo ${v.minimo})`);
+    check("N1 · se entiende a los 7 años", v.pasa, `${cuenta(v.pasan)} corridas pasan (mínimo ${v.minimo})`);
   }
 
   const aciertos = Object.fromEntries(["adelante", "hacia", "falta", "paso"].map((k) => [k, `${v.fotos.filter((f) => f.aciertos[k]).length}/${v.fotos.length}`]));
@@ -121,7 +118,7 @@ async function juzgarCarpeta(carpeta) {
     auditor: "audit-nino",
     objetivo: esControl ? "control" : verdad.juego,
     checks,
-    datos: { personas: verdad.personas, semillas: v.semillas, pasan: v.pasan, minimo: v.minimo, porEdad: v.porEdad, aciertos, fotos: v.fotos.map((f) => ({ id: f.id, semilla: f.semilla, tamano: f.tamano, punto: f.punto, variante: f.variante, buenos: f.buenos, total: f.total })) },
+    datos: { personas: verdad.personas, semillas: v.semillas, pasan: v.pasan, minimo: v.minimo, aciertos, fotos: v.fotos.map((f) => ({ id: f.id, semilla: f.semilla, tamano: f.tamano, punto: f.punto, variante: f.variante, buenos: f.buenos, total: f.total })) },
   });
   process.exit(malos.length ? 1 : 0);
 }

@@ -8,7 +8,6 @@ import {
   armarPreguntas,
   coincideFalta,
   coincideHacia,
-  coincideLugar,
   coincideNombre,
   coincidePaso,
   horaDeParada,
@@ -50,17 +49,6 @@ describe("el lenguaje del juez", () => {
     expect(coincideNombre("Ana Vargas", "Ana Vargas 2")).toBe(true);
   });
 
-  it("las zonas son exactas; se pueden nombrar dos, no todas", () => {
-    expect(coincideLugar("arriba", "arriba")).toBe(true);
-    expect(coincideLugar("más bien arriba", "arriba")).toBe(true);
-    expect(coincideLugar("arriba y centro", "centro")).toBe(true);
-    expect(coincideLugar("izquierda", "derecha")).toBe(false);
-    expect(coincideLugar("centro", "arriba")).toBe(false);
-    expect(coincideLugar("arriba", "centro")).toBe(false);
-    expect(coincideLugar("arriba abajo izquierda derecha centro", "arriba")).toBe(false);
-    expect(coincideLugar("no se ve", "arriba")).toBe(false);
-  });
-
   it("«hacia» acepta una parte de la diagonal y rechaza el sentido contrario", () => {
     expect(coincideHacia("derecha", "derecha")).toBe(true);
     expect(coincideHacia("derecha y arriba", "arriba")).toBe(true);
@@ -91,13 +79,12 @@ describe("el lenguaje del juez", () => {
     expect(tipoDePaso("gano")).toBe("gano");
     expect(tipoDePaso("???")).toBeNull();
     const salio = { tipo: "salio", quien: 0, desde: 4 };
-    expect(coincidePaso("salio", "Ana", salio, NOMBRES, true)).toBe(true);
-    expect(coincidePaso("salio", "Carlos", salio, NOMBRES, true)).toBe(false);
-    expect(coincidePaso("salio", "", salio, NOMBRES, true)).toBe(false);
-    expect(coincidePaso("salio", "", salio, NOMBRES, false)).toBe(true);
-    expect(coincidePaso("freno", "Ana", salio, NOMBRES, true)).toBe(false);
-    expect(coincidePaso("nada", "", { tipo: "nada", desde: 1 }, NOMBRES, true)).toBe(true);
-    expect(coincidePaso("empezo", "", { tipo: "empezo", desde: 0 }, NOMBRES, true)).toBe(true);
+    expect(coincidePaso("salio", "Ana", salio, NOMBRES)).toBe(true);
+    expect(coincidePaso("salio", "Carlos", salio, NOMBRES)).toBe(false);
+    expect(coincidePaso("salio", "", salio, NOMBRES)).toBe(false);
+    expect(coincidePaso("freno", "Ana", salio, NOMBRES)).toBe(false);
+    expect(coincidePaso("nada", "", { tipo: "nada", desde: 1 }, NOMBRES)).toBe(true);
+    expect(coincidePaso("empezo", "", { tipo: "empezo", desde: 0 }, NOMBRES)).toBe(true);
   });
 });
 
@@ -135,14 +122,13 @@ function armar(semillas) {
 /** Lo que contestaría un describidor perfecto. */
 function perfecta(c) {
   const v = c.verdad;
-  const conLetras = c.variante === "letras";
   const cerca = Object.entries(FALTA).sort((a, b) => Math.abs(a[1] - v.progreso) - Math.abs(b[1] - v.progreso))[0][0];
   return {
-    adelante: conLetras ? NOMBRES[v.adelante.quienes[0]] : v.adelante.lugar,
+    adelante: NOMBRES[v.adelante.quienes[0]],
     hacia: v.hacia,
     falta: cerca,
     paso: v.paso.tipo,
-    quien: conLetras && v.paso.quien !== undefined ? NOMBRES[v.paso.quien] : "",
+    quien: v.paso.quien !== undefined ? NOMBRES[v.paso.quien] : "",
     vi: "ve todo",
   };
 }
@@ -157,7 +143,7 @@ describe("el juez de una foto", () => {
   const p = perfecta(c);
 
   it("pasa con 3 de 4 y no con 2", () => {
-    const j = (r) => juzgarFoto({ respuesta: r, verdad: c.verdad, nombres: NOMBRES, conLetras: true, final: false });
+    const j = (r) => juzgarFoto({ respuesta: r, verdad: c.verdad, nombres: NOMBRES, final: false });
     expect(j(p)).toMatchObject({ buenos: 4, total: 4, pasa: true });
     expect(j({ ...p, hacia: "izquierda" })).toMatchObject({ buenos: 3, pasa: true });
     expect(j({ ...p, hacia: "izquierda", falta: "poco" })).toMatchObject({ buenos: 2, pasa: false });
@@ -167,7 +153,7 @@ describe("el juez de una foto", () => {
   it("en la final «hacia» no cuenta y las otras tres son obligatorias", () => {
     const f = Object.values(armar(1)).find((x) => x.punto === "fin" && x.variante === "letras");
     const r = perfecta(f);
-    const j = (x) => juzgarFoto({ respuesta: x, verdad: f.verdad, nombres: NOMBRES, conLetras: true, final: true });
+    const j = (x) => juzgarFoto({ respuesta: x, verdad: f.verdad, nombres: NOMBRES, final: true });
     expect(j(r)).toMatchObject({ buenos: 3, total: 3, pasa: true });
     expect(j({ ...r, hacia: "centro" })).toMatchObject({ buenos: 3, total: 3, pasa: true });
     expect(j({ ...r, adelante: "Ana Vargas 99" })).toMatchObject({ pasa: false });
@@ -176,13 +162,12 @@ describe("el juez de una foto", () => {
 });
 
 describe("el juez de un juego", () => {
-  it("un describidor perfecto lo aprueba, con las dos edades", () => {
+  it("un describidor perfecto lo aprueba", () => {
     const capturas = armar(2);
     const v = juzgar({ capturas, respuestas: contestar(capturas, perfecta) });
-    expect(v.fotos).toHaveLength(2 * 2 * 3 * 2);
+    expect(v.fotos).toHaveLength(2 * 2 * 3);
     expect(v.pasa).toBe(true);
     expect(v.pasan).toBe(2);
-    expect(v.porEdad).toEqual({ letras: 2, sin: 2 });
     expect(v.sinRespuesta).toBe(0);
   });
 
@@ -202,13 +187,14 @@ describe("el juez de un juego", () => {
     expect(rota(2)).toMatchObject({ pasa: false, pasan: 6 });
   });
 
-  it("una corrida falla si falla una sola edad", () => {
+  it("una corrida falla si falla una sola de sus fotos", () => {
     const capturas = armar(2);
     const respuestas = contestar(capturas, perfecta);
-    for (const [id, c] of Object.entries(capturas)) if (c.semilla === 1 && c.variante === "sin" && c.punto === "p60") respuestas[id] = confundida();
+    for (const [id, c] of Object.entries(capturas)) if (c.semilla === 1 && c.tamano === "390" && c.punto === "p60") respuestas[id] = confundida();
     const v = juzgar({ capturas, respuestas });
-    expect(v.corridas[0]).toMatchObject({ semilla: 1, pasa: false, edades: { letras: true, sin: false } });
-    expect(v.porEdad).toEqual({ letras: 2, sin: 1 });
+    expect(v.corridas[0]).toMatchObject({ semilla: 1, pasa: false });
+    expect(v.corridas[0].falla).toHaveLength(1);
+    expect(v.pasan).toBe(1);
     expect(v.pasa).toBe(false);
   });
 
@@ -241,7 +227,6 @@ describe("el caso de control: la carrera que no se entendía", () => {
     const v = juzgar({ capturas, respuestas: contestar(capturas, confundida) });
     expect(v.pasa).toBe(false);
     expect(v.pasan).toBe(0);
-    expect(v.porEdad).toEqual({ letras: 0, sin: 0 });
     // Ni una foto pasa: no ve quién gana, ni el sentido, ni cuánto falta.
     expect(v.fotos.filter((f) => f.pasa)).toHaveLength(0);
   });
@@ -285,11 +270,11 @@ describe("lo que ve el describidor", () => {
     expect(mezclar(Object.keys(capturas))).toEqual(ids);
   });
 
-  it("a la edad de 5 se le pide la zona, no el nombre", () => {
-    const sin = preguntas.capturas.find((c) => c.variante === "sin");
-    expect(sin.preguntas[0].texto).toMatch(/zona/);
-    const con = preguntas.capturas.find((c) => c.variante === "letras");
-    expect(con.preguntas[0].texto).toMatch(/nombre/);
+  it("una sola vara: todas las fotos llevan nombres y se pide el nombre, no la zona", () => {
+    for (const c of preguntas.capturas) {
+      expect(c.variante).toBe("letras");
+      expect(c.preguntas[0].texto).toMatch(/nombre/);
+    }
   });
 
   it("el prompt fijo trae las cuatro preguntas, el formato y los archivos", () => {
@@ -306,9 +291,9 @@ describe("los momentos y los nombres", () => {
     expect(PUNTOS.map((p) => horaDeParada(p, 20))).toEqual([5, 12, 21]);
   });
 
-  it("son dos tamaños y dos edades; el celular va claro y el proyector oscuro", () => {
+  it("son dos tamaños y una sola vara, la de 7 años; el celular va claro y el proyector oscuro", () => {
     expect(TAMANOS.map((t) => [t.ancho, t.alto, t.tema])).toEqual([[1920, 1080, "dark"], [390, 844, "light"]]);
-    expect(VARIANTES.map((v) => v.edad)).toEqual([9, 5]);
+    expect(VARIANTES.map((v) => v.edad)).toEqual([7]);
   });
 
   it("la ruleta y la carrera se piden por su nombre de uso", () => {

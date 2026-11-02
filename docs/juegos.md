@@ -83,7 +83,7 @@ Los parámetros de la URL funcionan solos: `?instant` lo resuelve el estadio, y 
 
 ### La regla del niño, en el kit
 
-Desde el 26 de octubre de 2026 los juegos se piensan, como la tele, para un niño de 5 a 9 años: el de 9 lee nombres pero no el relator, el de 5 no lee nada. La regla: **cualquier cuadro del juego, sin leer, dice quién va adelante, hacia dónde van, cuánto falta y qué acaba de pasar.** El kit la garantiza con piezas que el plan declara y las pruebas de cada juego verifican:
+Desde el 26 de octubre de 2026 los juegos se piensan, como la tele, con una sola vara: lo entiende alguien de 7 años o más. Ese chico lee nombres pero no el relator, y entender no quiere decir infantil: el juego tiene que gustarle a la sala entera. La regla: **cualquier cuadro del juego, sin leer el relator, dice quién va adelante, hacia dónde van, cuánto falta y qué acaba de pasar.** El kit la garantiza con piezas que el plan declara y las pruebas de cada juego verifican:
 
 | Qué pide la regla | Dónde vive en el kit |
 |---|---|
@@ -261,7 +261,7 @@ Las mismas comprobaciones por juego, en menos juegos: lo que se pierde son las d
 
 ## La prueba del niño
 
-La regla del niño (26 de octubre de 2026, [en el kit](#la-regla-del-niño-en-el-kit)) dice que **cualquier cuadro del juego, sin leer, muestra quién va adelante, hacia dónde van, cuánto falta y qué acaba de pasar**. Sin una medida es una opinión: [`scripts/audit-nino.mjs`](../scripts/audit-nino.mjs) la mide. No llama a ninguna API (no hace falta llave ni cuesta): saca las fotos y la verdad del plan, un modelo que solo ve las fotos las describe, y un juez compara.
+La regla del niño (26 de octubre de 2026, [en el kit](#la-regla-del-niño-en-el-kit)) dice que **cualquier cuadro del juego, sin leer el relator, muestra quién va adelante, hacia dónde van, cuánto falta y qué acaba de pasar**. Sin una medida es una opinión: [`scripts/audit-nino.mjs`](../scripts/audit-nino.mjs) la mide. No llama a ninguna API (no hace falta llave ni cuesta): saca las fotos y la verdad del plan, un modelo que solo ve las fotos las describe, y un juez compara.
 
 ```bash
 pnpm preview --port 4192 &
@@ -273,11 +273,11 @@ CDP_PORT=9692 node scripts/audit-nino.mjs --control --semillas 2 --base http://l
 node scripts/audit-nino.mjs --control --juzgar docs/capturas/nino/control
 ```
 
-1. **Capturar.** Por semilla (`?semilla=` y `?ganador=` iguales: cambian la ronda y quién gana) y por tamaño (proyector 1920×1080 oscuro y celular 390×844 claro), corre el show con el reloj en turbo y lo congela al 25 % y al 60 % de su duración y un segundo después del golpe. En cada parada esconde el subtítulo y saca dos fotos: **con letras** (la edad de 9 años, que lee nombres) y **sin letras** (la de 5, que no lee nada: mientras `window.__nino.sinLetras` esté prendido el estadio no dibuja ningún texto del motor, y el auditor esconde la barra de arriba). Son 12 fotos por semilla. Deja en `docs/capturas/nino/<juego>/` (sin versionar) `preguntas.json` (por foto, un id sin sentido, la variante y las cuatro preguntas, en un orden que no es el del show: ni el juego, ni la verdad, ni cuál es la última), `capturas/<id>.png`, el `prompt-nino.md` y, aparte, `oculto/verdad.json`.
+1. **Capturar.** Por semilla (`?semilla=` y `?ganador=` iguales: cambian la ronda y quién gana) y por tamaño (proyector 1920×1080 oscuro y celular 390×844 claro), corre el show con el reloj en turbo y lo congela al 25 % y al 60 % de su duración y un segundo después del golpe. En cada parada esconde el subtítulo y saca una foto **con los nombres** (la vara de 7 años o más, que los lee). Son 6 fotos por semilla. Deja en `docs/capturas/nino/<juego>/` (sin versionar) `preguntas.json` (por foto, un id sin sentido, la variante y las cuatro preguntas, en un orden que no es el del show: ni el juego, ni la verdad, ni cuál es la última), `capturas/<id>.png`, el `prompt-nino.md` y, aparte, `oculto/verdad.json`.
 2. **Describir.** Un modelo que solo ve las fotos (uno barato; si una foto falla la repite otro más fuerte, en `respuestas-desempate.json`, y decide la segunda) las contesta con el [prompt fijo](../scripts/prompt-nino.md): `adelante`, `hacia`, `falta` y `paso`.
 3. **Juzgar.** `--juzgar` compara con la verdad y escribe `veredicto.json` y `repetir.json` (las fotos para el segundo describidor). Con `--json` deja la línea de resumen de los demás auditores.
 
-**El contrato.** Es el del kit (`kit/respuestas.ts`): con `?auditar=nino`, `window.__nino` trae `verdad()` (las `Respuestas`: `adelante` con `quienes` y `lugar`, `hacia`, `progreso` de 0 a 1 que solo sube, y `paso` con tipo, quién y desde cuándo), `t()` (la hora del juego), `duracion` (la hora del golpe, el 100 %) y `sinLetras`. Los juegos del kit lo dejan solos con `crearJuego`. La ruleta (`wheel-nino.ts`) y la carrera de hoy (`race-nino.ts`) lo exponen desde su plan sin cambiar el show: sin el parámetro no se expone nada.
+**El contrato.** Es el del kit (`kit/respuestas.ts`): con `?auditar=nino`, `window.__nino` trae `verdad()` (las `Respuestas`: `adelante` con `quienes` y `lugar`, `hacia`, `progreso` de 0 a 1 que solo sube, y `paso` con tipo, quién y desde cuándo), `t()` (la hora del juego), `duracion` (la hora del golpe, el 100 %). Los juegos del kit lo dejan solos con `crearJuego`. La ruleta (`wheel-nino.ts`) y la carrera de hoy (`race-nino.ts`) lo exponen desde su plan sin cambiar el show: sin el parámetro no se expone nada.
 
 **Qué decide la verdad.** Tres cosas las tiene que declarar el juego, y el veredicto depende de ellas (la primera pasada de la ruleta dio 0 de 2 con la zona declarada, `hacia` «arriba» y una ventana de 4 s; con las de abajo, 2 de 2):
 
@@ -288,14 +288,14 @@ node scripts/audit-nino.mjs --control --juzgar docs/capturas/nino/control
 **Las tolerancias del juez** (`scripts/lib/nino.mjs`, con sus pruebas sin red):
 
 - Nombres sin tildes ni mayúsculas y con las cinco primeras letras de cada palabra («María Q.» vale por «María Quispe»); donde van adelante varios, vale cualquiera.
-- Sin letras, la zona exacta: puede nombrar dos, no más. «Hacia», igual o una parte de la diagonal, y nunca también el sentido contrario.
+- «Hacia», igual o una parte de la diagonal, y nunca también el sentido contrario.
 - «Falta»: empieza 0, mucho 0,25, mitad 0,5, poco 0,75, termino 1; acierta a 0,2 o menos del progreso.
 - «Paso»: el tipo (`empezo`, `salio`, `adelante`, `freno`, `casi`, `gano`, `nada`) y, con letras, el nombre si el hecho dice quién.
-- Una foto pasa con 3 de 4; en la final «hacia» no cuenta y las otras tres son obligatorias. Una corrida (una semilla: los dos tamaños y las dos edades) pasa si pasan todas sus fotos, y el juego con 7 de cada 8 corridas (con 2 semillas, las 2).
+- Una foto pasa con 3 de 4; en la final «hacia» no cuenta y las otras tres son obligatorias. Una corrida (una semilla: los dos tamaños) pasa si pasan todas sus fotos, y el juego con 7 de cada 8 corridas (con 2 semillas, las 2).
 
 **El control.** `--control` corre la carrera de producción de hoy. Si la prueba la aprueba, la prueba está mal: con `--control --juzgar` el éxito es que **no** apruebe.
 
-**Primera corrida (26 de octubre de 2026)**, 18 personas, 2 semillas, los dos tamaños y las dos edades (24 fotos por juego):
+**Primera corrida (26 de octubre de 2026)**, 18 personas, 2 semillas, los dos tamaños y las dos edades de entonces (24 fotos por juego; desde el 1 de noviembre de 2026 es una sola vara y son 12):
 
 | | Ruleta | Carrera de hoy (control) |
 |---|---|---|
@@ -303,7 +303,7 @@ node scripts/audit-nino.mjs --control --juzgar docs/capturas/nino/control
 | Fotos que pasan | 24 de 24 | 12 de 24 |
 | Lo que falla | `falta`: no se ve en ninguna de las 16 fotos del 25 % y del 60 %; pasan con 3 de 4 justos | `paso` (dicen «nada» donde se acaba de echar alguien o de abrir los carriles), `adelante` (el cartel grande va sobre quien ya salió) y `falta`; la final, con su cartel, pasa |
 
-**Comprobaciones.** Con la prueba, las 40 comprobaciones (20 de `audit-game` y 20 de `audit-rigor`) pasan a 42: N1 (9 años, con letras) y N2 (5 años, sin letras). La regla pide 47; las otras cinco (la meta en cada cuadro, el sentido fijo, un solo número fuera del cartel, el hecho en el cuerpo a los 0,3 s, cinco clases y un panel) siguen por hacer, y `problemasDeRespuestas` ya cubre las del plan.
+**Comprobaciones.** Con la prueba, las 40 comprobaciones (20 de `audit-game` y 20 de `audit-rigor`) pasan a 41: N1 (se entiende a los 7 años; la N2, la de 5 años sin letras, se quitó con la vara de 7). La regla pide 46; las otras cinco (la meta en cada cuadro, el sentido fijo, un solo número fuera del cartel, el hecho en el cuerpo a los 0,3 s, cinco clases y un panel) siguen por hacer, y `problemasDeRespuestas` ya cubre las del plan.
 
 ## El auditor de mezcla
 
