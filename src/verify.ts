@@ -226,7 +226,7 @@ function pintarComprobaciones(proof: Proof, r: Revision): void {
   set(
     "vCheckList",
     tiene("lista-deforme", "lista-cambiada", "cantidad") ? "bad" : r.ancla.tipo !== "libre" && !sello && !delHistorial ? "pending" : "ok",
-    `${r.nombres.length} · ${r.huella.slice(0, 16)}…`,
+    `${r.nombres.length}, ${r.huella.slice(0, 16)}…`,
   );
   $("v-hash").textContent = `list_hash = ${r.huella}`;
 
@@ -235,11 +235,11 @@ function pintarComprobaciones(proof: Proof, r: Revision): void {
     const contrato = typeof proof.contract === "string" ? shortAddress(proof.contract) : "—";
     if (r.ancla.tipo === "deforme") set("vCheckOfficial", "bad", () => t("vAnchorBrokenShort"));
     else if (r.ancla.tipo === "ajeno" || tiene("codigo-ajeno", "contrato-ajeno")) {
-      set("vCheckOfficial", "bad", () => `${contrato} · ${t("vNotOfficialShort")}`);
-    } else if (r.registro?.wasm) set("vCheckOfficial", "ok", `${contrato} · ${r.registro.wasm.slice(0, 12)}…`);
+      set("vCheckOfficial", "bad", () => `${contrato}, ${t("vNotOfficialShort")}`);
+    } else if (r.registro?.wasm) set("vCheckOfficial", "ok", `${contrato}, ${r.registro.wasm.slice(0, 12)}…`);
     // Sin el contrato en la cadena no se lee su código: queda la dirección, que es de la lista oficial.
-    else if (delHistorial) set("vCheckOfficial", "ok", () => `${contrato} · ${t("vOfficialAddress")}`);
-    else set("vCheckOfficial", "pending", () => `${contrato} · ${t(r.falta === "sin-cadena" ? "vChainUnreachable" : "vChainMissing")}`);
+    else if (delHistorial) set("vCheckOfficial", "ok", () => `${contrato}, ${t("vOfficialAddress")}`);
+    else set("vCheckOfficial", "pending", () => `${contrato}, ${t(r.falta === "sin-cadena" ? "vChainUnreachable" : "vChainMissing")}`);
 
     if (r.ancla.tipo !== "oficial" || tiene("codigo-ajeno")) set("vCheckChain", "bad", () => t("vNotOfficialShort"));
     else if (r.falta === "sin-cadena") {
@@ -256,9 +256,9 @@ function pintarComprobaciones(proof: Proof, r: Revision): void {
     } else if (tiene("registro-incoherente")) set("vCheckChain", "bad", () => t("vRecordOdd"));
     // El contrato ya no guarda el sorteo y lo respalda su transacción. El número del sorteo no viaja
     // en ella, así que no se afirma: se dice de dónde sale el sello y con qué código se lo reconoce.
-    else if (delHistorial) set("vCheckChain", r.motivos.length ? "bad" : "ok", () => `${t("vChainFromHistory")} · ${codigoDelSello(delHistorial)}`);
+    else if (delHistorial) set("vCheckChain", r.motivos.length ? "bad" : "ok", () => `${t("vChainFromHistory")}, ${codigoDelSello(delHistorial)}`);
     else if (sello && !resultado) set("vCheckChain", "pending", () => t("vNotDrawnYet"));
-    else set("vCheckChain", r.motivos.length ? "bad" : "ok", `#${proof.id} · ${proof.net}`);
+    else set("vCheckChain", r.motivos.length ? "bad" : "ok", `#${proof.id}, ${proof.net}`);
 
     // La ronda tiene que haber nacido después del sello, con la hora de la cadena.
     const alSellar = sello ? { round: sello.round, en: sello.sealedAt } : delHistorial ? { round: delHistorial.round, en: delHistorial.closedAt } : null;
@@ -275,7 +275,7 @@ function pintarComprobaciones(proof: Proof, r: Revision): void {
   if (r.firma === null) set("vCheckRound", "bad", () => t(r.falta === "sin-ronda" ? "vRoundUnreachable" : "vBadSignature"));
   else {
     const rondaBien = r.firmaOk && !tiene("ronda", "firma-registro");
-    set("vCheckRound", rondaBien ? "ok" : "bad", `${proof.round} · ${r.firma.slice(0, 16)}…`);
+    set("vCheckRound", rondaBien ? "ok" : "bad", `${proof.round}, ${r.firma.slice(0, 16)}…`);
   }
 
   // ------------------------------------------------------------ 4. la semilla
@@ -316,7 +316,7 @@ const hora = (s: number): string =>
  */
 function pintarIdentidad(proof: Proof, delHistorial: SelloDelHistorial | null): void {
   if (!delHistorial) return;
-  $("v-net").textContent = `${String(proof.net ?? "")} · ${t("vSelloCodigo").replace("{c}", codigoDelSello(delHistorial))}`;
+  $("v-net").textContent = `${String(proof.net ?? "")}, ${t("vSelloCodigo").replace("{c}", codigoDelSello(delHistorial))}`;
 }
 
 /**
@@ -531,8 +531,8 @@ function pintarSellos(): void {
   const fuera = found.elsewhere ?? [];
   const cerca = found.cercanos ?? [];
   const ajena = (r: ChainRaffle, clave: string, fuerte: boolean): string =>
-    `<p class="entity" style="font-weight:800${fuerte ? ";color:var(--magenta-ink)" : ""}">⚠ #${esc(r.id)} · ${esc(t(clave))} · ` +
-    `${esc(r.organizer.slice(0, 4))}…${esc(r.organizer.slice(-4))} · ${esc(t("vSealsRound"))} ${r.round}</p>`;
+    `<p class="entity" style="font-weight:800${fuerte ? ";color:var(--magenta-ink)" : ""}">⚠ #${esc(r.id)}: ${esc(t(clave))}, ` +
+    `${esc(r.organizer.slice(0, 4))}…${esc(r.organizer.slice(-4))}, ${esc(t("vSealsRound"))} ${r.round}</p>`;
   const fueraHtml = fuera.map((r) => ajena(r, "vSealsElsewhere", true)).join("") + cerca.map((r) => ajena(r, "vSealsNear", false)).join("");
   $("v-seals-list").innerHTML = fueraHtml + shown
     .map((r) => {
@@ -542,12 +542,12 @@ function pintarSellos(): void {
       const when = r.sealedAt
         ? new Date(r.sealedAt * 1000).toLocaleString(getLang() === "es" ? "es-BO" : "en-US")
         : "";
-      const mark = rep ? ` · ⚠ ${esc(t("vSealsAgain"))}` : like ? ` · ${esc(t("vSealsSameCount"))}` : "";
+      const mark = rep ? `, ⚠ ${esc(t("vSealsAgain"))}` : like ? `, ${esc(t("vSealsSameCount"))}` : "";
       return (
         `<p class="entity"${yo || rep ? ' style="font-weight:800"' : ""}>` +
-        `#${esc(r.id)}${yo ? ` · ${esc(t("vSealsThis"))}` : ""}${mark} · ` +
-        `${r.count} ${esc(t("vSealsPeople"))} · ${esc(t("vSealsRound"))} ${r.round} · ` +
-        `${esc(when)} · ${esc(r.listHash.slice(0, 16))}…</p>`
+        `#${esc(r.id)}${yo ? `, ${esc(t("vSealsThis"))}` : ""}${mark}: ` +
+        `${r.count} ${esc(t("vSealsPeople"))}, ${esc(t("vSealsRound"))} ${r.round}, ` +
+        `${esc(when)}, ${esc(r.listHash.slice(0, 16))}…</p>`
       );
     })
     .join("");
@@ -665,7 +665,7 @@ function renderList(proof: Proof): void {
   };
   input.addEventListener("input", buscarAhora);
   // Lo que dice el enlace, tal cual: si no es de Tinkazo, lo dice el veredicto.
-  $("v-net").textContent = anclaDe(proof).tipo !== "libre" ? `${String(proof.net ?? "")} · #${String(proof.id ?? "")}` : t("noAnchor");
+  $("v-net").textContent = anclaDe(proof).tipo !== "libre" ? `${String(proof.net ?? "")}, #${String(proof.id ?? "")}` : t("noAnchor");
 }
 
 function renderResult(
@@ -693,7 +693,7 @@ function renderResult(
     })
     .join(" ");
   $("v-proof").textContent =
-    `round=${r.ronda} · signature=${signature.slice(0, 20)}… · randomness=${randomness.slice(0, 20)}… · winners=[${winners.join(",")}]${extra.fromChain ? " · on-chain ✓" : ""}`;
+    `round=${r.ronda}, signature=${signature.slice(0, 20)}…, randomness=${randomness.slice(0, 20)}…, winners=[${winners.join(",")}]${extra.fromChain ? ", on-chain ✓" : ""}`;
   $<HTMLAnchorElement>("v-drand").href = roundUrl(r.ronda);
   // Compartir otra vez: el enlace de esta página es el comprobante, tal como llegó
   // (sin la consulta: el idioma o el tema de quien lo mira no viajan); el mensaje y

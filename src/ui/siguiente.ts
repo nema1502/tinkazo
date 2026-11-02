@@ -178,7 +178,7 @@ function pintarPasos(paso: Paso): void {
   }
 }
 
-/** La línea de la barra: "Paso 3 de 4 · Esperando la ronda · 0:25". */
+/** La línea de la barra: "Paso 3 de 4: Esperando la ronda, 0:25". */
 const linea = (s: Toca): string => lineaDelPaso(t("sigPaso").replace("{n}", String(s.paso)), s.detalle, s.reloj);
 
 /**

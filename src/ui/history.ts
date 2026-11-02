@@ -389,7 +389,7 @@ function pintarPendiente(list: Entry[]): void {
     caja.textContent = "";
     return;
   }
-  const que = `${e.prize || t("histDraw")} · ${e.count} ${t("histPeople")}`;
+  const que = `${e.prize || t("histDraw")}, ${e.count} ${t("histPeople")}`;
   caja.innerHTML =
     `<span>${esc(t("pendienteT").replace("{que}", que))}</span>` +
     `<button class="mini" type="button" data-retomar-pendiente>${esc(t("pendienteBtn"))}</button>`;
@@ -657,7 +657,7 @@ const marcaSinSello = (e: Entry | undefined): string =>
 function filaParaSumar(ev: EventoGuardado, e: Entry, i: number): string {
   const titulo = e.prize || t("histDraw");
   const ganadores = e.winners ?? [];
-  const quien = `${e.id ? `#${esc(e.id)} · ` : ""}${esc(t(ganadores.length > 1 ? "histWonMany" : "histWon"))} <b>${esc(ganadores.join(", "))}</b>`;
+  const quien = `${e.id ? `#${esc(e.id)}: ` : ""}${esc(t(ganadores.length > 1 ? "histWonMany" : "histWon"))} <b>${esc(ganadores.join(", "))}</b>`;
   const nombre = t("evnSumarA").replace("{s}", titulo).replace("{e}", ev.nombre);
   return (
     `<li class="evn-sorteo"><div><b>${esc(titulo)}</b> <span class="hc-fecha">${esc(fmtDate(e.sealedAt))}</span></div>` +
@@ -882,7 +882,7 @@ function tarjetaDeSorteo(e: Entry, i: number): string {
   const hecho = !!(e.winners?.length || e.winnerIdx?.length || e.drawTx);
   const titulo = e.prize || (e.id ? `${t("histDraw")} #${e.id}` : t("histDraw"));
   const id = e.id ? `#${esc(e.id)}` : t("histLocal");
-  const origen = e.fromChain ? ` · ${esc(t("histFromChain"))}` : "";
+  const origen = e.fromChain ? `, ${esc(t("histFromChain"))}` : "";
   const enCadena = e.drawTx ?? e.sealTx;
   const acciones: string[] = [];
   if (!hecho && e.names?.length) acciones.push(`<button ${comoPrincipal(`retomar:${i}`)} data-retomar="${i}">${esc(t("histResume"))}</button>`);
@@ -911,7 +911,7 @@ function tarjetaDeSorteo(e: Entry, i: number): string {
     `<h3>${esc(titulo)}</h3>` +
     (suEvento ? `<p class="hc-en">${esc(t("evnEn").replace("{e}", suEvento.nombre))}</p>` : "") +
     (e.sinSello && !e.id ? `<p class="hc-en hc-sin-sello">${esc(t("redSinSelloEtiqueta"))}</p>` : "") +
-    `<p class="hc-meta">${esc(id)} · ${e.count} ${esc(t("histPeople"))}${hecho ? ` · ${esc(t((e.winners?.length ?? 0) > 1 ? "histWonMany" : "histWon"))} <b>${esc(winnerLabel(e))}</b>` : ""}${origen}</p>` +
+    `<p class="hc-meta">${esc(id)}, ${e.count} ${esc(t("histPeople"))}${hecho ? `, ${esc(t((e.winners?.length ?? 0) > 1 ? "histWonMany" : "histWon"))} <b>${esc(winnerLabel(e))}</b>` : ""}${origen}</p>` +
     `<div class="hc-acciones">${acciones.join("")}</div>` +
     `</article>`
   );

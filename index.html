@@ -341,7 +341,7 @@
       </div>
       <!-- La red antes de sellar (src/ui/red.ts): una frase, una acción, el detalle plegado. Nace escondida. Va pegada a los botones: explica la acción que reemplaza a "Sellar la lista". -->
       <aside class="red-estado" id="red-estado" role="status" aria-live="polite" data-i-aria="redRegion" aria-label="Estado de la red" style="display:none"></aside>
-      <!-- Lo que se va a sellar, antes de sellar (participants.ts): "20 personas · 1 ganador · Termo. Al sellar, la lista queda cerrada." -->
+      <!-- Lo que se va a sellar, antes de sellar (participants.ts): "20 personas, 1 ganador, Termo. Al sellar, la lista queda cerrada." -->
       <p class="note sellar-resumen" id="sellar-resumen" style="display:none"></p>
       <p class="note sellar-sin-cuenta" id="sellar-sin-cuenta" data-i="sellarSinCuenta">Entrá con tu cuenta para sellar</p>
       <p class="note" id="freeze-hint" data-i="freezeHint">Hacen falta al menos dos nombres.</p>
@@ -368,7 +368,7 @@
         <div class="wait-main">
           <p class="kicker" data-i="waitTitle">El número que va a decidir</p>
           <div class="wait-row">
-            <p class="wait-num mono"><b id="wait-round">·</b><span id="wait-left">0:00</span></p>
+            <p class="wait-num mono"><b id="wait-round">…</b><span id="wait-left">0:00</span></p>
             <p class="wait-id" id="wait-id" style="display:none"></p>
           </div>
           <p class="wait-line" data-i="waitLine">Nadie puede elegir este número, ni quien organiza.</p>
@@ -424,7 +424,7 @@
       </details>
       <div class="kpis solo-verificar">
         <div><b id="k-n">0</b><span data-i="kEntries">participantes</span></div>
-        <div><b id="k-digest" style="font-size:16px" class="mono">···</b><span data-i="kDigest">huella de la lista</span></div>
+        <div><b id="k-digest" style="font-size:16px" class="mono">…</b><span data-i="kDigest">huella de la lista</span></div>
         <div><b id="k-status">frozen</b><span data-i="kStatus">estado del sorteo</span></div>
       </div>
       <details class="tecnico solo-verificar"><summary data-i="tecnicoT">Detalles técnicos</summary><p class="entity" id="entities"></p></details>
@@ -483,8 +483,8 @@
             <details class="tecnico solo-verificar">
               <summary data-i="tecnicoT">Detalles técnicos</summary>
               <p class="entity" id="proof"></p>
-              <p class="note" data-i="verifyPasos">Paso a paso: 1) abrí la ronda de quicknet y verificá su prueba con la clave pública del faro · 2) randomness = sha256(prueba) · 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, salteando repetidos. El protocolo entero está en github.com/nema1502/tinkazo, en docs/protocolo.md.</p>
-              <a id="drand-link" target="_blank" rel="noopener" class="mono" style="font-size:12px"></a>
+              <p class="note" data-i="verifyPasos">Paso a paso: 1) abrí la ronda de quicknet y verificá su prueba con la clave pública del faro; 2) randomness = sha256(prueba); 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, salteando repetidos. El protocolo entero está en github.com/nema1502/tinkazo, en docs/protocolo.md.</p>
+              <a id="drand-link" target="_blank" rel="noopener" class="mono" style="font-size:14px"></a>
             </details>
             <div class="row">
               <button class="ghost solo-verificar" id="btn-reverify" data-i="reverify">Rehacelo acá mismo</button>

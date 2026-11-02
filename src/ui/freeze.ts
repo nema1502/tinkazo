@@ -185,7 +185,7 @@ export function pintarRecomendacion(n: number): void {
 }
 
 /**
- * La línea de arriba del selector: "Para 8 personas · Duración: Normal · 41 s".
+ * La línea de arriba del selector: "Para 8 personas. Duración: Normal, 41 s".
  * La duración es la del show con el ritmo elegido, que hoy es la misma para
  * cualquier cantidad (la de la sección 8.2 no se muestra todavía: ver el informe).
  */
@@ -194,7 +194,7 @@ function pintarCabecera(n: number): void {
   if (!el) return;
   const p = currentPace();
   const nombre = t(p === "rapido" ? "paceFast" : p === "normal" ? "paceNormal" : "paceEpic");
-  el.textContent = `${frase("recHead", [n])} · ${t("paceLabel")}: ${nombre} · ${paceSeconds(p)} s`;
+  el.textContent = `${frase("recHead", [n])}. ${t("paceLabel")}: ${nombre}, ${paceSeconds(p)} s`;
   el.style.display = "";
 }
 
@@ -1010,7 +1010,7 @@ function renderSealSummary(): void {
   if (!f) return;
   const el = $("entities");
   el.textContent =
-    `Seal · list_hash=${f.listHash} · count=${f.names.length} · sealed_at=${f.ts} · target_round=${f.round} · round_time=${roundTime(f.round)}`;
+    `Seal: list_hash=${f.listHash}, count=${f.names.length}, sealed_at=${f.ts}, target_round=${f.round}, round_time=${roundTime(f.round)}`;
   if (f.raffleId === undefined) {
     const tag = document.createElement("span");
     tag.className = "kicker";
@@ -1020,7 +1020,7 @@ function renderSealSummary(): void {
     el.appendChild(tag);
     return;
   }
-  el.append(` · raffle_id=${f.raffleId} · `);
+  el.append(`, raffle_id=${f.raffleId}, `);
   const a = document.createElement("a");
   a.href = contractUrl();
   a.target = "_blank";

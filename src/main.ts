@@ -67,7 +67,7 @@ $("btn-freeze").addEventListener("click", () => {
 const paceSel = $<HTMLSelectElement>("pace");
 paceSel.value = currentPace();
 /**
- * Las etiquetas llevan la duración: "Normal · 30 s".
+ * Las etiquetas llevan la duración: "Normal, 30 s".
  *
  * El selector dejó de ser un multiplicador y pasó a ser un objetivo de
  * segundos, y eso sólo sirve si se ve. El número sale de `PACES`, así que no
@@ -77,7 +77,7 @@ function paceLabels(): void {
   for (const o of paceSel.options) {
     const p = o.value as Pace;
     const base = t(p === "rapido" ? "paceFast" : p === "normal" ? "paceNormal" : "paceEpic");
-    o.textContent = `${base} · ${paceSeconds(p)} s`;
+    o.textContent = `${base}, ${paceSeconds(p)} s`;
   }
 }
 onLangChange(paceLabels);

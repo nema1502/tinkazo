@@ -47,14 +47,23 @@
  *       [--temas dark,light] [--tamanos proyector,celular] [--reglas …]
  *       [--sin-dom] [--sin-estadio] [--demo wheel] [--max-grupos 25]
  *
+ * Con `--paginas` mide otra cosa: la letra real de las once páginas del sitio
+ * (index, juegos, historia, seguridad, precios, terminos, como-funciona, lista,
+ * verificar, evento y c) en las seis pantallas de docs/ux.md más 320 px de
+ * ancho, contra el piso de las páginas (`paginas=14:18`, o lo que diga
+ * `--reglas`). Cada texto que queda abajo es una falla por selector y tamaño,
+ * con su captura. Con `--histograma` imprime además cuántos textos hay de cada
+ * tamaño: es de donde sale la cifra del piso. `--solo-paginas index,juegos` y
+ * `--pantallas celular,escritorio` acotan la corrida.
+ *
  * Sale con código 1 si algún texto queda bajo la regla. Necesita drand para el
  * sorteo de demostración (o `--sin-dom`). Pensado para menos de 4 minutos por tema.
  */
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
 import { juegosDe } from "./lib/juegos.mjs";
-import { FACTOR_MAYUSCULAS, SEGUNDOS_POR_MUESTRA, archivoDe, agruparEstadio, escanearDom, estadoDelSorteo, evaluarDom, evaluarEstadio, llamar, preludioEstadio, reglasDe } from "./lib/legible.mjs";
+import { FACTOR_MAYUSCULAS, PAGINAS, PANTALLAS, SEGUNDOS_POR_MUESTRA, archivoDe, agruparEstadio, escanearDom, estadoDelSorteo, evaluarDom, evaluarEstadio, llamar, preludioEstadio, reglasDe } from "./lib/legible.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
@@ -81,6 +90,10 @@ const tamanos = opt("--tamanos", "proyector,celular")
 const temas = opt("--temas", "dark,light").split(",").filter(Boolean);
 const sinDom = flag("--sin-dom");
 const sinEstadio = flag("--sin-estadio");
+const modoPaginas = flag("--paginas");
+const histograma = flag("--histograma");
+const soloPaginas = opt("--solo-paginas", "").split(",").filter(Boolean);
+const quierenPantallas = opt("--pantallas", "").split(",").filter(Boolean);
 const demo = opt("--demo", "wheel");
 const MAX_GRUPOS = Number(opt("--max-grupos", "25"));
 const MAX_CAPTURAS = 12;
@@ -114,8 +127,8 @@ async function recortar(page, caja, archivo) {
 }
 
 /** Los textos de una pantalla del DOM contra la regla, con una captura por falla. */
-async function juzgarDom(page, textos, pantalla, tamano, tema, { conCaptura = true, herramienta = true, presupuesto = { n: MAX_CAPTURAS } } = {}) {
-  const { medidos, grupos } = evaluarDom(textos, tamano, herramienta ? reglas.herramienta : null);
+async function juzgarDom(page, textos, pantalla, tamano, tema, { conCaptura = true, herramienta = true, regla = reglas.herramienta, factor = FACTOR_MAYUSCULAS, presupuesto = { n: MAX_CAPTURAS } } = {}) {
+  const { medidos, grupos } = evaluarDom(textos, tamano, herramienta ? regla : null, factor);
   const donde = `${tamano.nombre} ${tema} · ${pantalla}`;
   if (!grupos.length) {
     check(`${donde}: ${medidos} textos, ninguno bajo la regla`, medidos > 0, medidos ? "" : "no se midió ningún texto");
@@ -131,17 +144,17 @@ async function juzgarDom(page, textos, pantalla, tamano, tema, { conCaptura = tr
         /* sin captura: la falla se informa igual */
       }
     }
-    check(`${donde}: ${g.ruta} mide ${g.px.toFixed(1)} px y la regla pide ${g.minimo}${g.principal ? " (principal)" : ""}${g.herramienta ? " en la herramienta" : ""}${g.mayusculas ? ` (en mayúsculas vale ×${FACTOR_MAYUSCULAS})` : ""}`, false, `${g.textos.length} texto(s), p. ej. «${g.textos.slice(0, 2).join("», «")}»${captura}`);
+    check(`${donde}: ${g.ruta} mide ${g.px.toFixed(1)} px y la regla pide ${g.minimo}${g.principal ? " (principal)" : ""}${g.herramienta ? " en la herramienta" : ""}${g.mayusculas && factor !== 1 ? ` (en mayúsculas vale ×${factor})` : g.mayusculas ? " (en mayúsculas)" : ""}`, false, `${g.textos.length} texto(s), p. ej. «${g.textos.slice(0, 2).join("», «")}»${captura}`);
   }
   if (grupos.length > MAX_GRUPOS) check(`${donde}: ${grupos.length - MAX_GRUPOS} grupos más bajo la regla`, false, "se corta en --max-grupos");
 }
 
 /** Los pasos del sorteo, con el DOM. */
-async function pasosDom(browser, tamano, tema) {
+async function pasosDom(browser, tamano, tema, opciones = {}) {
   let page = await abrir(browser, tamano, `${base}/?theme=${tema}&lang=es`);
   await page.waitFor("document.readyState === 'complete'", 30_000);
   await sleep(900);
-  await juzgarDom(page, JSON.parse(await page.eval(llamar(escanearDom, ""))), "inicio (la lista)", tamano, tema);
+  await juzgarDom(page, JSON.parse(await page.eval(llamar(escanearDom, ""))), "inicio (la lista)", tamano, tema, opciones);
   await page.send("Page.close").catch(() => {});
 
   page = await abrir(browser, tamano, `${base}/?demo=${demo}&instant=1&lead=3&theme=${tema}&lang=es`);
@@ -153,13 +166,79 @@ async function pasosDom(browser, tamano, tema) {
       if (!est[paso] || hechos.has(paso)) continue;
       await sleep(paso === "resultado" ? 800 : 250);
       hechos.add(paso);
-      await juzgarDom(page, JSON.parse(await page.eval(llamar(escanearDom, ""))), PASOS[paso], tamano, tema);
+      await juzgarDom(page, JSON.parse(await page.eval(llamar(escanearDom, ""))), PASOS[paso], tamano, tema, opciones);
     }
     await sleep(150);
   }
   if (!hechos.has("resultado")) check(`${tamano.nombre} ${tema} · el sorteo de demostración llega al resultado`, false, "no apareció el ganador en 90 s (¿sin drand?)");
   for (const paso of ["esperando", "ronda"]) if (!hechos.has(paso)) console.log(`    · el paso «${PASOS[paso]}» no se alcanzó a ver con ?instant=1`);
   await page.send("Page.close").catch(() => {});
+}
+
+
+/** Un comprobante sin anclar, con la ronda de los vectores: abre verificar.html y evento.html sin red. */
+const EJEMPLO = ["María Quispe", "Jorge Mamani", "Lucía Flores", "Carlos Choque", "Ana Vargas", "Diego Rojas", "Elena Condori", "Pablo Gutiérrez", "Sofía Aguilar", "Rodrigo Peña", "Valeria Torrez", "Miguel Arce"];
+const LIBRE = { v: 2, names: EJEMPLO, round: 32254977, signature: "a77a689daae687c7b16e6f9388d4ebbb7b368d09d7a6c33ad1dfd75d32e4114cfbdcf3e2cc54f4fee659abf2ac7ef9ac" };
+const frag = (obj) => "r" + Buffer.from(JSON.stringify(obj), "utf8").toString("base64url");
+const RELLENOS = {
+  "{LIBRE}": () => frag(LIBRE),
+  "{EVENTO}": () => frag({ v: 1, kind: "evento", titulo: "Evento de prueba", sorteos: [{ ...LIBRE, ganadores: ["Ana Vargas"] }] }),
+};
+const rutaDe = (ruta) => Object.entries(RELLENOS).reduce((r, [k, f]) => r.replace(k, f()), ruta);
+
+/** Cuántos textos hay de cada tamaño, de menor a mayor, con la letra en mayúsculas contada por su equivalente. */
+const porTamano = new Map();
+const cuentaDe = (textos) => {
+  for (const t of textos) {
+    const k = (Math.round(t.px * 2) / 2).toFixed(1);
+    porTamano.set(k, (porTamano.get(k) ?? 0) + 1);
+  }
+};
+
+/** Las páginas, en cada pantalla: el DOM entero contra el piso de las páginas. */
+async function paginas(browser, pantalla, tema) {
+  const [nombre, ancho, alto, celular] = pantalla;
+  const tamano = { nombre, ancho, alto, celular, secundario: reglas.paginas.secundario, principal: reglas.paginas.principal };
+  console.log(`\n${nombre} ${ancho}×${alto} · ${tema} · piso ${tamano.secundario}/${tamano.principal}`);
+  const presupuesto = { n: MAX_CAPTURAS };
+  for (const [pagina, ruta] of PAGINAS) {
+    if (soloPaginas.length && !soloPaginas.includes(pagina)) continue;
+    const [camino, hash] = rutaDe(ruta).split("#");
+    const url = `${base}${camino}?theme=${tema}&lang=es${hash ? `#${hash}` : ""}`;
+    const page = await abrir(browser, tamano, url);
+    try {
+      await page.waitFor("document.readyState === 'complete'", 30_000);
+      await sleep(1200);
+      const textos = JSON.parse(await page.eval(llamar(escanearDom, "")));
+      if (histograma) cuentaDe(textos);
+      await juzgarDom(page, textos, pagina, tamano, tema, { herramienta: true, regla: reglas.paginas, factor: 1, presupuesto });
+    } finally {
+      await page.send("Page.close").catch(() => {});
+    }
+  }
+}
+
+/**
+ * La hoja de estilos y los `<style>` de las páginas, leídos como texto: cada
+ * `font-size` en px o rem (el mínimo de un `clamp`) debajo del piso es una falla,
+ * esté o no a la vista cuando se mide. Es lo que alcanza a lo que el DOM de arriba
+ * no abre: «Mis sorteos», el panel de la cuenta, el importador, los avisos.
+ */
+async function cssChico() {
+  const piso = reglas.paginas.secundario;
+  const archivos = ["src/styles.css", ...(await readdir(".")).filter((f) => f.endsWith(".html"))];
+  const chicos = [];
+  for (const archivo of archivos) {
+    const lineas = (await readFile(archivo, "utf8")).split(/\r?\n/);
+    lineas.forEach((linea, i) => {
+      for (const m of linea.matchAll(/(?:font-size:\s*(?:clamp\(\s*)?|\bfont:\s*[^;}]*?\b)([\d.]+)(px|rem)(?=[/;}, ]|$)/g)) {
+        const px = Number(m[1]) * (m[2] === "rem" ? 16 : 1);
+        if (px > 0 && px < piso) chicos.push({ archivo, linea: i + 1, px, texto: linea.trim().slice(0, 110) });
+      }
+    });
+  }
+  if (!chicos.length) check(`css: ningún font-size por debajo de ${piso} px en ${archivos.length} archivos`, true);
+  for (const c of chicos) check(`css: ${c.archivo}:${c.linea} pide ${c.px} px y el piso es ${piso}`, false, c.texto);
 }
 
 /** El estadio de un juego: lo que dibuja Pixi y lo que le pone encima el DOM. */
@@ -214,6 +293,28 @@ async function estadio(browser, juego, tamano, tema) {
 await mkdir(outDir, { recursive: true });
 const browser = await launch({ port: Number(process.env.CDP_PORT || 9501), width: 1920, height: 1080 });
 try {
+  if (modoPaginas) {
+    if (!soloPaginas.length || soloPaginas.includes("css")) await cssChico();
+    for (const tema of temas) {
+      for (const pantalla of PANTALLAS) {
+        if (quierenPantallas.length && !quierenPantallas.includes(pantalla[0])) continue;
+        if (!soloPaginas.length || soloPaginas.includes("pasos")) {
+          const tamano = { nombre: pantalla[0], ancho: pantalla[1], alto: pantalla[2], celular: pantalla[3], secundario: reglas.paginas.secundario, principal: reglas.paginas.principal };
+          await pasosDom(browser, tamano, tema, { herramienta: true, regla: reglas.paginas, factor: 1 }).catch((e) => check(`${pantalla[0]} ${tema} · los pasos del sorteo corrieron sin caerse`, false, String(e.message ?? e).slice(0, 200)));
+        }
+        await paginas(browser, pantalla, tema).catch((e) => check(`${pantalla[0]} ${tema} · las páginas corrieron sin caerse`, false, String(e.message ?? e).slice(0, 200)));
+      }
+    }
+    if (histograma) {
+      const total = [...porTamano.values()].reduce((a, b) => a + b, 0);
+      console.log("\ntextos por tamaño (px de CSS, de a medio píxel):");
+      let acum = 0;
+      for (const [k, n] of [...porTamano].sort((a, b) => Number(a[0]) - Number(b[0]))) {
+        acum += n;
+        console.log(`  ${k.padStart(5)} px  ${String(n).padStart(6)}  ${((100 * acum) / total).toFixed(1).padStart(5)} % acumulado`);
+      }
+    }
+  } else
   for (const tema of temas) {
     for (const tamano of tamanos) {
       console.log(`\n${tamano.nombre} ${tamano.ancho}×${tamano.alto} · ${tema}`);

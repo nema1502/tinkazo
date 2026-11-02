@@ -24,7 +24,7 @@ import { marcarQr } from "../contar";
  */
 
 export interface Foto {
-  /** Arriba, en versalitas: "Sorteo #278 · 21 de octubre de 2026". */
+  /** Arriba, en versalitas: "Sorteo #278, 21 de octubre de 2026". */
   rotulo: string;
   /** "Ganó", "Ganaron" o el nombre del evento. */
   titulo: string;

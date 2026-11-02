@@ -96,8 +96,8 @@ export function renderNames(): void {
 }
 
 /**
- * Debajo de "Sellar la lista", lo que se va a sellar: "20 personas · 1 ganador
- * · Termo. Al sellar, la lista queda cerrada." Sellar es público y no se
+ * Debajo de "Sellar la lista", lo que se va a sellar: "20 personas, 1 ganador,
+ * Termo. Al sellar, la lista queda cerrada." Sellar es público y no se
  * deshace: que se lea antes (diseño del onboarding, pantalla 3). Lo vuelven a
  * escribir el premio, "Cuántos ganan" y el idioma.
  */
@@ -470,7 +470,7 @@ function showSummary(): void {
   const r = lastResult;
   // Las filas que no se pudieron leer siguen a la vista después de cerrar la ventana.
   $("csv-note").textContent = L.impSummary(r.source === "luma", r.picked, r.total, r.mode, r.hand) +
-    (r.skipped ? ` · ${L.impSkippedShort(r.skipped)}` : "");
+    (r.skipped ? `, ${L.impSkippedShort(r.skipped)}` : "");
   $("csv-pick").style.display = "";
 }
 

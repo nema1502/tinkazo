@@ -518,7 +518,7 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
     .map((i, k) => {
       const name = names[i] ?? "";
       const tag = prize
-        ? `<p class="winner-prize"><span data-i="winsPrize">${esc(t("winsPrize"))}</span> ${esc(prize)}${winners.length > 1 ? ` · #${k + 1}` : ""}</p>`
+        ? `<p class="winner-prize"><span data-i="winsPrize">${esc(t("winsPrize"))}</span> ${esc(prize)}${winners.length > 1 ? ` #${k + 1}` : ""}</p>`
         : winners.length > 1
           ? `<p class="winner-prize">#${k + 1}</p>`
           : "";
@@ -534,10 +534,10 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
     .join(" ");
   const proof = $("proof");
   proof.textContent =
-    `Draw · quicknet round=${beacon.round} · ${t("proofOk")} ✓ · randomness=${beacon.randomness.slice(0, 24)}… · list_hash=${listHash.slice(0, 24)}… · count=${names.length} · winners=[${winners.join(",")}]`;
+    `Draw: quicknet round=${beacon.round}, ${t("proofOk")} ✓, randomness=${beacon.randomness.slice(0, 24)}…, list_hash=${listHash.slice(0, 24)}…, count=${names.length}, winners=[${winners.join(",")}]`;
   const drawTx = app.drawn?.drawTx;
   if (drawTx) {
-    proof.append(" · ");
+    proof.append(", ");
     const a = document.createElement("a");
     a.href = txUrl(drawTx);
     a.target = "_blank";

@@ -670,7 +670,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   /**
    * El ancho que piden el título y la línea de abajo del cartel de una fraternidad a la letra de la regla (el título
    * puede bajar hasta ahí, la línea no). Sin esto, en un celular el cartel era de 185 px y achicaba el título a 15 px
-   * y "Llamerada · 4 bailarines" a 14.
+   * y "Llamerada, 4 bailarines" a 14.
    */
   const anchoCartel = new Map<string, number>();
   function anchoDelCartel(g: Geo, gi: number): number {

@@ -178,7 +178,7 @@ function relevo(): "show" | "resultado" | null {
 }
 
 /**
- * La fila "Juego: Carrera de llamas · Cambiar de juego". Va dos veces y el CSS muestra una: en la barra de arriba
+ * La fila "Juego: Carrera de llamas, Cambiar de juego". Va dos veces y el CSS muestra una: en la barra de arriba
  * cuando la pantalla es ancha (una laptop o un proyector, donde cada renglón de alto cuenta), y abajo del todo cuando no.
  */
 function juegoHtml(juegos: OpcionDeJuego[], lugar: "barra" | "flujo"): string {
@@ -212,7 +212,7 @@ function opcionesHtml(juegos: OpcionDeJuego[]): string {
       (j) =>
         `<button type="button" class="espera-juego-op" data-game="${esc(j.game)}" aria-pressed="${j.elegido}">` +
         `<span class="espera-juego-nombre">${j.recomendado ? `<i aria-hidden="true">★</i> ` : ""}${esc(j.nombre)}</span>` +
-        (j.recomendado ? `<span class="sr-only"> · ${esc(t("recBadge"))}</span>` : "") +
+        (j.recomendado ? `<span class="sr-only">, ${esc(t("recBadge"))}</span>` : "") +
         (j.rango ? `<small>${esc(j.rango)}</small>` : "") +
         `</button>`,
     )

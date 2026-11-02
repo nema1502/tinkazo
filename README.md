@@ -10,7 +10,7 @@
 [![drand quicknet](https://img.shields.io/badge/randomness-drand%20quicknet-14b8a6?style=flat-square)](https://drand.love)
 [![License: MIT](https://img.shields.io/badge/license-MIT-ffc629?style=flat-square)](LICENSE)
 
-**[Try it](https://tinkazo.app)** · [How it works](#how-it-works) · [Security](#security) · [Why Stellar](#why-stellar) · [What is live](#what-is-live-today) · [Next 30 days](#the-next-30-days) · [Español](README.es.md)
+**[Try it](https://tinkazo.app)**, [How it works](#how-it-works), [Security](#security), [Why Stellar](#why-stellar), [What is live](#what-is-live-today), [Next 30 days](#the-next-30-days), [Español](README.es.md)
 
 <img src="docs/capturas/readme/hero.webp" alt="Tinkazo home page: draws anyone can check" width="860">
 
@@ -74,8 +74,8 @@ The full selection algorithm is a normative spec, [Protocol v2](docs/protocolo.m
 
 | Component | Status | Evidence |
 |---|---|---|
-| Soroban contract `tinkazo-raffle` | Deployed on testnet, which Stellar wipes on December 16, 2026 | [`CDNWNY26…YV3A`](https://stellar.expert/explorer/testnet/contract/CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A) · 19 tests, including a real quicknet round · 11.4 KB WASM |
-| Web app | Live | [tinkazo.app](https://tinkazo.app) · Spanish and English · light and dark · no backend for the draw (short links run on a small Cloudflare Worker, [workers/enlaces](workers/enlaces/README.md)) |
+| Soroban contract `tinkazo-raffle` | Deployed on testnet, which Stellar wipes on December 16, 2026 | [`CDNWNY26…YV3A`](https://stellar.expert/explorer/testnet/contract/CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A), 19 tests, including a real quicknet round, 11.4 KB WASM |
+| Web app | Live | [tinkazo.app](https://tinkazo.app), Spanish and English, light and dark, no backend for the draw (short links run on a small Cloudflare Worker, [workers/enlaces](workers/enlaces/README.md)) |
 | Luma import | Live | Drop the guest export and pick who gets in: those who checked in, the approved ones, or by hand |
 | Verification page | Live | Recomputes any draw in the browser from its proof link |
 | History-archive check | Command-line tool | `node scripts/verificar-archivo.mjs <network> <tx hash>` reads the public Stellar history archives of several organizations and confirms that a seal or draw transaction was in a ledger and when it closed. Green only when two organizations return the same ledger header ([protocol §7.2](docs/protocol.en.md)) |
@@ -223,7 +223,7 @@ Useful URL parameters: `?lang=en`, `?theme=light|dark`, `?demo=race|sapo|trompo|
 ## Repository
 
 ```
-index.html · verificar.html     The landing and the tool, and the page that re-runs a draw from its proof
+index.html, verificar.html     The landing and the tool, and the page that re-runs a draw from its proof
 lista.html                      The list to review before sealing, on everyone's phone
 src/protocol/                   Canonical list, selection, drand, proof
 src/stellar/                    Network, wallets and contract client
@@ -233,7 +233,7 @@ docs/                           Protocol, architecture, threats, deployments, le
 scripts/                        Deployment, smoke test and the auditors
 ```
 
-In English: the [protocol](docs/protocol.en.md) and a [threat model summary](docs/threat-model.en.md). The rest of the documentation is in Spanish: [protocol](docs/protocolo.md) · [architecture](docs/architecture.md) · [threats](docs/amenazas.md) · [deployments and costs](docs/deployments.md) · [games](docs/juegos.md) · [legal](docs/legal.md) · [brand](docs/marca.md) · [UX](docs/ux.md).
+In English: the [protocol](docs/protocol.en.md) and a [threat model summary](docs/threat-model.en.md). The rest of the documentation is in Spanish: [protocol](docs/protocolo.md), [architecture](docs/architecture.md), [threats](docs/amenazas.md), [deployments and costs](docs/deployments.md), [games](docs/juegos.md), [legal](docs/legal.md), [brand](docs/marca.md), [UX](docs/ux.md).
 
 ## Team
 

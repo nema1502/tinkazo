@@ -105,7 +105,7 @@ export async function eventoUrl(titulo: string, sorteos: SorteoDelEvento[], base
 export async function eventosUrls(
   titulo: string,
   sorteos: SorteoDelEvento[],
-  parteDe: (i: number, n: number) => string = (i, n) => ` · parte ${i} de ${n}`,
+  parteDe: (i: number, n: number) => string = (i, n) => `: parte ${i} de ${n}`,
   base = location.origin,
 ): Promise<string[]> {
   const partes = await partirEvento(titulo, sorteos);

@@ -58,24 +58,24 @@ describe("la línea de la barra", () => {
   });
 
   it("nombra el paso, de qué se trata y, si corre, la cuenta", () => {
-    expect(lineaDelPaso("Paso 3 de 4", "Esperando la ronda", "0:25")).toBe("Paso 3 de 4 · Esperando la ronda · 0:25");
-    expect(lineaDelPaso("Paso 4 de 4", "Ya salió el ganador")).toBe("Paso 4 de 4 · Ya salió el ganador");
+    expect(lineaDelPaso("Paso 3 de 4", "Esperando la ronda", "0:25")).toBe("Paso 3 de 4: Esperando la ronda, 0:25");
+    expect(lineaDelPaso("Paso 4 de 4", "Ya salió el ganador")).toBe("Paso 4 de 4: Ya salió el ganador");
   });
 
   it("antes de sellar, la línea dice qué se sortea, o que no hay premio (D19)", () => {
-    expect(detalleDeLista("12 personas", "Termo", "sin premio")).toBe("12 personas · Termo");
-    expect(detalleDeLista("12 personas", "   ", "sin premio")).toBe("12 personas · sin premio");
-    expect(detalleDeLista("12 people", "", "no prize")).toBe("12 people · no prize");
+    expect(detalleDeLista("12 personas", "Termo", "sin premio")).toBe("12 personas, Termo");
+    expect(detalleDeLista("12 personas", "   ", "sin premio")).toBe("12 personas, sin premio");
+    expect(detalleDeLista("12 people", "", "no prize")).toBe("12 people, no prize");
     // Los espacios de más no ocupan lugar.
-    expect(detalleDeLista("12 personas", "  Kit   de  bienvenida ", "sin premio")).toBe("12 personas · Kit de bienvenida");
+    expect(detalleDeLista("12 personas", "  Kit   de  bienvenida ", "sin premio")).toBe("12 personas, Kit de bienvenida");
   });
 
   it("un premio largo se corta con puntos suspensivos, sin partir un emoji", () => {
     const largo = "Una notebook con su mochila y el cargador";
     const d = detalleDeLista("12 personas", largo, "sin premio");
-    expect(d).toBe("12 personas · Una notebook con…");
-    expect(Array.from(d.split(" · ")[1] ?? "").length).toBeLessThanOrEqual(18);
-    expect(detalleDeLista("2 personas", "🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁", "-")).toBe(`2 personas · ${"🎁".repeat(17)}…`);
+    expect(d).toBe("12 personas, Una notebook con…");
+    expect(Array.from(d.split(", ")[1] ?? "").length).toBeLessThanOrEqual(18);
+    expect(detalleDeLista("2 personas", "🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁🎁", "-")).toBe(`2 personas, ${"🎁".repeat(17)}…`);
   });
 
   it("la línea del paso 2 entra en un celular de 320 px con un premio corto", () => {

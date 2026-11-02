@@ -238,6 +238,15 @@ Decisión del 25 de octubre de 2026: quitar la letra chica y dejar que el juego 
 CDP_PORT=9811 node scripts/medir-texto.mjs --base http://localhost:4173 [--vistas celular,tablet,escritorio,proyector] [--min 16]
 ```
 
+## La letra, con la cifra medida (1 de noviembre de 2026)
+
+Pedido: "letras chiquitas, horribles, ilegibles; el juego no se lee, se juega". El barrido del 26 de octubre solo midió los juegos; esto mide el resto.
+
+- **Lo medido** (`audit-legible.mjs --paginas --histograma`, once páginas en siete pantallas, tema oscuro, antes de tocar nada): de 4.260 textos, el 2,8 % (119) medía menos de 14 px: 35 a 11 px y 84 a 12 px. El 44,5 % medía justo 14 px y el 81 % llegaba a 16 px. Dieciséis reglas de `styles.css` y un `style` de `index.html` pedían menos de 14 px (en mayúsculas, con tracking de 0,1 em o más, de 10 a 13 px), y un bloque de la página de verificar medía 12 px.
+- **El piso:** **14 px en todo texto y 18 px en títulos y en el botón de la acción**, en cualquier pantalla de las de arriba (más 320 px de ancho) y en los dos temas. Es la cifra que ya cumplía la mayoría de lo que se lee; las mayúsculas no cuentan doble (13 px en mayúsculas son 13 px). Para la sala sigue mandando la regla de la sección anterior (28 y 48 px a 1920).
+- **Aplicado:** se subieron a 14 px las 24 reglas de `styles.css` y los tres `font:` abreviados, y el `style` de `index.html`; la etiqueta repetida junto a los nombres usa `max(14px, 0,72em)`. No se sacó texto: nada de lo que había era redundante para quien lee la pantalla.
+- **Cómo se mide:** `pnpm audit:letra` (o `node scripts/audit-legible.mjs --paginas`) hace tres cosas. Lee `styles.css` y los `<style>` y `style=""` de las páginas y falla por cada `font-size` o `font:` por debajo del piso (alcanza lo que el DOM no abre: Mis sorteos, el panel de la cuenta, el importador). Abre las once páginas y mide la letra real de cada texto visible. Y recorre el sorteo de demostración (la lista, sellada y esperando, ronda lista y resultado) en cada pantalla. `--histograma` imprime cuántos textos hay de cada tamaño; `--reglas paginas=14:18` cambia el piso; `--pantallas`, `--solo-paginas` y `--temas` acotan la corrida (unos 12 minutos por tema y siete pantallas).
+
 ## Cuando la red falla
 
 El 25 de octubre de 2026 el sello de testnet pasó de 0,7 a 69 XLM por el estado de la red (no por Tinkazo), el patrocinador de la comisión tiene un tope, y lo único que veía quien sorteaba era un error genérico, después de esperar. Desde ese día la app mira la red **antes** de que la sala espere (`src/stellar/chequeo-red.ts`, la pantalla en `src/ui/red.ts`) y, cuando algo anda mal, dice **una frase y ofrece una sola acción**. Nada de "RPC", "fee" ni "XLM" en lo que se lee.

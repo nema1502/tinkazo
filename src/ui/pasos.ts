@@ -46,8 +46,8 @@ export function claveDelPaso(paso: Paso, e: { segundos: number; apagado: boolean
 }
 
 /**
- * El detalle del paso 2 dice también qué se sortea: "12 personas · Termo", o
- * "12 personas · sin premio". El premio queda fijado al sellar (va al
+ * El detalle del paso 2 dice también qué se sortea: "12 personas, Termo", o
+ * "12 personas, sin premio". El premio queda fijado al sellar (va al
  * contrato), y desde la barra se sellaba sin ver el campo: el cartel, Mis
  * sorteos y el mensaje quedaban con "Sorteo" a secas (buscador de detalles,
  * D19). Informa, no obliga: el premio sigue siendo opcional. Un premio largo
@@ -57,14 +57,14 @@ export function claveDelPaso(paso: Paso, e: { segundos: number; apagado: boolean
 export function detalleDeLista(lista: string, premio: string, sinPremio: string, max = 18): string {
   const letras = Array.from(premio.trim().replace(/\s+/g, " "));
   const corto = letras.length > max ? `${letras.slice(0, max - 1).join("").trimEnd()}…` : letras.join("");
-  return `${lista} · ${corto || sinPremio}`;
+  return `${lista}, ${corto || sinPremio}`;
 }
 
 /** "0:25", "1:05": la cuenta regresiva tal como la escribe el botón de sortear. */
 export const relojDe = (segundos: number): string => `${Math.floor(segundos / 60)}:${String(segundos % 60).padStart(2, "0")}`;
 
 /**
- * La línea de la barra: "Paso 3 de 4 · Esperando la ronda · 0:25". `pasoTexto`
+ * La línea de la barra: "Paso 3 de 4: Esperando la ronda, 0:25". `pasoTexto`
  * ya viene traducido ("Paso 3 de 4"); el reloj va solo mientras corre.
  */
-export const lineaDelPaso = (pasoTexto: string, detalle: string, reloj = ""): string => `${pasoTexto} · ${detalle}${reloj ? ` · ${reloj}` : ""}`;
+export const lineaDelPaso = (pasoTexto: string, detalle: string, reloj = ""): string => `${pasoTexto}: ${detalle}${reloj ? `, ${reloj}` : ""}`;

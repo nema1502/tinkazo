@@ -497,7 +497,7 @@ function pintarCuenta(): void {
     // las capturas lo digan. (Solo existe en testnet: en mainnet se ignora.)
     if (grifoApagado) {
       net.classList.add("sin-grifo");
-      net.textContent = `${t("netTest")} · ${t("grifoOffTag")}`;
+      net.textContent = `${t("netTest")}, ${t("grifoOffTag")}`;
       net.title = `${t("netTestHint")} ${t("grifoOffHint")}`;
     }
     box.appendChild(net);
@@ -506,7 +506,7 @@ function pintarCuenta(): void {
   const chip = crearChip(e, { tx: t, recien: recienEntro });
   if (e.estado === "dentro" && session) {
     // Tocar la cuenta abre el panel, con todo lo tuyo junto. El `title` termina en la dirección: lo leen los auditores.
-    chip.title = `${session.label} · ${session.address}`;
+    chip.title = `${session.label}: ${session.address}`;
     chip.addEventListener("click", () => void showAccount());
   } else if (e.estado === "fuera") {
     // La ventana de ingreso de siempre (Google primero), con el foco de vuelta en el chip al cerrarla.
@@ -892,7 +892,7 @@ async function abrirPicker(pedido: Pedido): Promise<void> {
   } else {
     options.push({
       label: t("loginWallet"),
-      small: `Freighter · ${t("loginInstall")} ↗`,
+      small: `Freighter, ${t("loginInstall")} ↗`,
       hint: t("freighterInstall"),
       icon: "wallet",
       pick: null,

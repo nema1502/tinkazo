@@ -867,7 +867,7 @@ export function stadiumRace(
       c.font = `800 ${11 * ut}px ui-monospace, Consolas, monospace`;
       c.fillStyle = "rgba(246,239,226,0.75)";
       c.textBaseline = "top";
-      const extra = names.length > runners.length ? ` · ${T[getLang()].cLanes(runners.length, names.length)}` : "";
+      const extra = names.length > runners.length ? `: ${T[getLang()].cLanes(runners.length, names.length)}` : "";
       c.fillText(`${t("cTabla")}${vertical ? "" : extra}`, x0, y0);
       runners.forEach((r) => {
         const y = y0 + 18 * ut + r.row * rowH;

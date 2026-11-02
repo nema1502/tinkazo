@@ -10,7 +10,7 @@
 [![drand quicknet](https://img.shields.io/badge/azar-drand%20quicknet-14b8a6?style=flat-square)](https://drand.love)
 [![Licencia MIT](https://img.shields.io/badge/licencia-MIT-ffc629?style=flat-square)](LICENSE)
 
-**[Probalo](https://tinkazo.app)** · [Cómo funciona](#cómo-funciona) · [Seguridad](#seguridad) · [Por qué Stellar](#por-qué-stellar) · [Qué está andando](#qué-está-andando-hoy) · [Los próximos 30 días](#los-próximos-30-días) · [English](README.md)
+**[Probalo](https://tinkazo.app)**, [Cómo funciona](#cómo-funciona), [Seguridad](#seguridad), [Por qué Stellar](#por-qué-stellar), [Qué está andando](#qué-está-andando-hoy), [Los próximos 30 días](#los-próximos-30-días), [English](README.md)
 
 <img src="docs/capturas/readme/hero.webp" alt="La portada de Tinkazo" width="860">
 
@@ -74,8 +74,8 @@ La selección completa es una especificación normativa, el [protocolo v2](docs/
 
 | Pieza | Estado | Evidencia |
 |---|---|---|
-| Contrato Soroban `tinkazo-raffle` | Desplegado en testnet, que Stellar borra entera el 16 de diciembre de 2026 | [`CDNWNY26…YV3A`](https://stellar.expert/explorer/testnet/contract/CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A) · 19 tests, uno con una ronda real de quicknet · WASM de 11,4 KB |
-| Sitio | En producción | [tinkazo.app](https://tinkazo.app) · español e inglés · tema claro y oscuro · sin servidor para sortear (los enlaces cortos corren en un Worker chico de Cloudflare, [workers/enlaces](workers/enlaces/README.md)) |
+| Contrato Soroban `tinkazo-raffle` | Desplegado en testnet, que Stellar borra entera el 16 de diciembre de 2026 | [`CDNWNY26…YV3A`](https://stellar.expert/explorer/testnet/contract/CDNWNY26VWXM7ISXJD2OFWDUAPIOAJTR5TMAXFFHWWUHZWGCEWDKYV3A), 19 tests, uno con una ronda real de quicknet, WASM de 11,4 KB |
+| Sitio | En producción | [tinkazo.app](https://tinkazo.app), español e inglés, tema claro y oscuro, sin servidor para sortear (los enlaces cortos corren en un Worker chico de Cloudflare, [workers/enlaces](workers/enlaces/README.md)) |
 | Importar de Luma | En producción | Se suelta el export de invitados y se elige quién entra: los que hicieron check-in, los aprobados o a mano |
 | Página de verificación | En producción | Rehace cualquier sorteo en el navegador desde su comprobante |
 | Comprobación por archivos de historial | Herramienta de línea de comandos | `node scripts/verificar-archivo.mjs <red> <hash de la transacción>` lee los archivos públicos de historial de Stellar de varias organizaciones y confirma que una transacción de sello o de sorteo estuvo en un ledger y a qué hora cerró. Verde solo si dos organizaciones devuelven la misma cabecera de ledger ([protocolo §7.2](docs/protocolo.md)) |
@@ -223,7 +223,7 @@ Parámetros de URL útiles: `?lang=en`, `?theme=light|dark`, `?demo=race|sapo|tr
 ## El repositorio
 
 ```
-index.html · verificar.html     La portada y la herramienta, y la página que rehace un sorteo desde su comprobante
+index.html, verificar.html     La portada y la herramienta, y la página que rehace un sorteo desde su comprobante
 lista.html                      La lista para revisar antes de sellar, en el celular de cada uno
 src/protocol/                   Lista canónica, selección, drand, comprobante
 src/stellar/                    Red, billeteras y cliente del contrato
@@ -233,7 +233,7 @@ docs/                           Protocolo, arquitectura, amenazas, despliegues, 
 scripts/                        Despliegue, prueba de humo y los auditores
 ```
 
-Documentación: [protocolo](docs/protocolo.md) · [arquitectura](docs/architecture.md) · [amenazas](docs/amenazas.md) · [despliegues y costos](docs/deployments.md) · [juegos](docs/juegos.md) · [legal](docs/legal.md) · [marca](docs/marca.md) · [UX](docs/ux.md).
+Documentación: [protocolo](docs/protocolo.md), [arquitectura](docs/architecture.md), [amenazas](docs/amenazas.md), [despliegues y costos](docs/deployments.md), [juegos](docs/juegos.md), [legal](docs/legal.md), [marca](docs/marca.md), [UX](docs/ux.md).
 
 ## Quién lo hace
 

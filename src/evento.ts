@@ -258,10 +258,10 @@ function tarjeta(s: SorteoDelEvento, i: number): string {
   // que dice estar anclado y la cadena no lo atestiguó, sería una fecha que nadie respalda.
   const fecha = sello?.sealedAt ?? delHistorial?.closedAt ?? (!f || f.cadena === "libre" ? s.sealedAt : undefined);
   // El número del sorteo, solo si la cadena lo atestiguó: es el que la sala anotó durante la espera.
-  const numero = sello && f && (f.cadena === "ok" || f.cadena === "pendiente") ? ` · #${sello.id}` : "";
+  const numero = sello && f && (f.cadena === "ok" || f.cadena === "pendiente") ? `, #${sello.id}` : "";
   // Con el sello del historial el número no se comprueba: el sorteo se reconoce por la fecha en que cerró
   // y por el código de la transacción del sello. El número del enlace va aparte, en lo técnico.
-  const codigo = delHistorial && f && f.cadena === "ok" ? ` · ${t("evSelloCodigo").replace("{c}", codigoDelSello(delHistorial))}` : "";
+  const codigo = delHistorial && f && f.cadena === "ok" ? `, ${t("evSelloCodigo").replace("{c}", codigoDelSello(delHistorial))}` : "";
   const cuando = (fecha ? t("evSellado").replace("{f}", fechaLarga(fecha, getLang())) : "") + numero + codigo;
   const estado = (e: Estado | undefined): string => (e === "ok" ? t("evOk") : e === "bad" ? t("evMalo") : e === "sin-red" ? t("evSinRedCorto") : "");
   const filasHtml = [
@@ -295,7 +295,7 @@ function tarjeta(s: SorteoDelEvento, i: number): string {
     lineas.push(t("evTechNombres").replace("{a}", s.ganadores.join(", ") || "—").replace("{b}", f.otrosNombres.join(", ") || "—"));
   }
   if (sello && f?.r.ancla.tipo === "oficial") {
-    lineas.unshift(`${f.r.ancla.contrato.red} · ${f.r.ancla.contrato.contractId} · #${sello.id} · ${sello.organizer}`);
+    lineas.unshift(`${f.r.ancla.contrato.red}, ${f.r.ancla.contrato.contractId}, #${sello.id}, ${sello.organizer}`);
   }
   // Lo técnico del verde que salió del historial: la transacción, el ledger y lo que ese camino no revisa.
   if (f?.r.veredicto === "verde") lineas.push(...detalleDelHistorial(f.r, comprobanteDe(s)));

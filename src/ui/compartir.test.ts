@@ -79,7 +79,7 @@ describe("mensaje del evento: dice quién ganó qué (D15), igual que summaryEve
   it("los renglones van entre la cabecera y el enlace", () => {
     const m = mensajeDeEvento("es", { titulo: "Meetup Cochabamba", sorteos: 2, enlaces: enlace, lineas: lineasDeEvento("es", deEvento) });
     expect(m).toBe(
-      `Meetup Cochabamba (2 sorteos), todos verificables.\nPolera: Gabriela Flores\nSorteo: Ana y Beto\nSi querés verificarlos, entrá acá:\n${enlace}\n\nSorteado con Tinkazo · https://tinkazo.app`,
+      `Meetup Cochabamba (2 sorteos), todos verificables.\nPolera: Gabriela Flores\nSorteo: Ana y Beto\nSi querés verificarlos, entrá acá:\n${enlace}\n\nSorteado con Tinkazo: https://tinkazo.app`,
     );
   });
 
@@ -120,7 +120,7 @@ describe("evento en las partes de siempre: títulos, enlaces y mensaje", () => {
     const partes = r?.partes ?? [];
     expect(partes.length).toBeGreaterThan(1);
     partes.forEach((p, i) => {
-      expect(p.titulo).toBe(`Meetup · Parte ${i + 1} de ${partes.length}`);
+      expect(p.titulo).toBe(`Meetup: Parte ${i + 1} de ${partes.length}`);
       expect(p.enlace.startsWith(`${BASE}/evento.html#`)).toBe(true);
       expect(r?.mensaje).toContain(`Parte ${i + 1} de ${partes.length}: ${p.enlace}`);
     });
@@ -134,7 +134,7 @@ describe("evento en las partes de siempre: títulos, enlaces y mensaje", () => {
     const r = await paqueteDeEvento("Meetup", sorteos, "en", BASE);
     const n = r?.partes.length ?? 0;
     expect(n).toBeGreaterThan(1);
-    expect(r?.partes[0]?.titulo).toBe(`Meetup · Part 1 of ${n}`);
+    expect(r?.partes[0]?.titulo).toBe(`Meetup: Part 1 of ${n}`);
     expect(r?.mensaje).toContain(`Part ${n} of ${n}: `);
   }, LENTA);
 
@@ -197,7 +197,7 @@ describe("evento con enlace corto: entero, en un solo enlace y una sola foto", (
     expect(r.corto).toBe(false);
     expect(r.fotos.length).toBeGreaterThan(1);
     expect(r.nota).toContain(`${r.fotos.length} enlaces`);
-    r.fotos.forEach((f, i) => expect(f.titulo).toBe(`Meetup · Parte ${i + 1} de ${r.fotos.length}`));
+    r.fotos.forEach((f, i) => expect(f.titulo).toBe(`Meetup: Parte ${i + 1} de ${r.fotos.length}`));
     expect(r.mensaje).toContain("Parte 1 de");
   }, LENTA);
 
@@ -213,7 +213,7 @@ describe("evento con enlace corto: entero, en un solo enlace y una sola foto", (
 describe("lo que va en la foto", () => {
   it("un sorteo anclado en la red de prueba: número, red y fecha arriba; ganó, el premio y entre cuántos", () => {
     const f = fotoDeSorteo("es", { enlace, ganadores: ["Ana"], total: 18, premio: "Polera", fecha: 1_792_600_000, numero: "278", red: "testnet" }, corto);
-    expect(f.rotulo).toMatch(/^Sorteo #278 · red de prueba · \d{1,2} de [a-z]+ de 2026$/);
+    expect(f.rotulo).toMatch(/^Sorteo #278, red de prueba, \d{1,2} de [a-z]+ de 2026$/);
     expect(f.titulo).toBe("Ganó");
     expect(f.personas).toEqual(["Ana"]);
     expect(f.lineas).toEqual(["Se lleva: Polera", "Salió entre 18 personas"]);
@@ -232,7 +232,7 @@ describe("lo que va en la foto", () => {
 
   it("un sorteo comprobado con el historial de Stellar no trae número, pero en testnet sigue diciendo red de prueba", () => {
     const f = fotoDeSorteo("es", { enlace, ganadores: ["Ana"], total: 18, premio: "", fecha: 1_792_600_000, red: "testnet" }, enlace);
-    expect(f.rotulo).toMatch(/^Resultado del sorteo · red de prueba · \d{1,2} de [a-z]+ de 2026$/);
+    expect(f.rotulo).toMatch(/^Resultado del sorteo, red de prueba, \d{1,2} de [a-z]+ de 2026$/);
     expect(fotoDeSorteo("es", { enlace, ganadores: ["Ana"], total: 18, premio: "", red: "mainnet" }, enlace).rotulo).toBe("Resultado del sorteo");
   });
 
@@ -247,7 +247,7 @@ describe("lo que va en la foto", () => {
     expect(f.sub).toBe("2 sorteos");
     expect(f.filas?.[0]?.premio).toBe("Premio 1");
     expect(f.filas?.[1]?.premio).toBe("Sorteo");
-    expect(f.rotulo.startsWith("Evento · ")).toBe(true);
+    expect(f.rotulo.startsWith("Evento, ")).toBe(true);
   });
 
   it("un evento: si no entran todos los ganadores, la foto tiene los primeros enteros y cuántos más, nunca un nombre a medias", () => {

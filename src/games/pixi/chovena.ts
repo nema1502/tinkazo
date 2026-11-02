@@ -1844,7 +1844,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     const r = fs * 0.36;
     const x0 = 20 * k + 2 * r;
     const headStyle = { fontFamily: MONO, fontSize: fs, fontWeight: "900", fill: INK, letterSpacing: 2 * k } as const;
-    const headText = `${t("cChoOutT")} · ${v.length}`;
+    const headText = `${t("cChoOutT")}: ${v.length}`;
     const labels = cells.map((cell) => S.text(cell.label, { fontSize: fs, fontWeight: "800", fill: INK }));
     const starred = (cell: (typeof cells)[number]): boolean => cell.i >= 0 && prized.has(cell.i);
     const tail = (star: boolean): number => (star ? 2.6 * r + 18 * k : 12 * k);

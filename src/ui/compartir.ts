@@ -108,13 +108,13 @@ type ConMarca = Parameters<typeof esSinSello>[0];
 /**
  * Un renglón por sorteo del evento: el premio (o "Sorteo") y quién ganó.
  * "Polera: Gabriela Flores". En el orden en que salieron (`enOrdenDeSalida`).
- * Un sorteo hecho sin sello lo dice en su renglón: "Polera: Gabriela Flores ·
+ * Un sorteo hecho sin sello lo dice en su renglón: "Polera: Gabriela Flores.
  * Sin sello: no se puede comprobar."
  */
 export function lineasDeEvento(lang: Lang, sorteos: Array<{ prize?: string; ganadores: string[] } & ConOrden & ConMarca>): string[] {
   return enOrdenDeSalida(sorteos).map((s) => {
     const linea = `${s.prize?.trim() || cad(lang, "histDraw")}: ${lista(lang, s.ganadores)}`;
-    return esSinSello(s) ? `${linea} · ${cad(lang, "redSinSelloEtiqueta")}` : linea;
+    return esSinSello(s) ? `${linea}. ${cad(lang, "redSinSelloEtiqueta")}` : linea;
   });
 }
 
@@ -152,7 +152,7 @@ function fechaLarga(lang: Lang, segundos?: number): string {
   );
 }
 
-/** El rótulo de arriba: "Sorteo #278 · red de prueba · 21 de octubre de 2026", o "Resultado del sorteo" si no se ancló. */
+/** El rótulo de arriba: "Sorteo #278, red de prueba, 21 de octubre de 2026", o "Resultado del sorteo" si no se ancló. */
 function rotuloDeSorteo(lang: Lang, d: DatosSorteo): string {
   return [
     d.numero ? rellenar(cad(lang, "fotoNumero"), { n: d.numero }) : cad(lang, "imgKicker"),
@@ -162,7 +162,7 @@ function rotuloDeSorteo(lang: Lang, d: DatosSorteo): string {
     fechaLarga(lang, d.fecha),
   ]
     .filter(Boolean)
-    .join(" · ");
+    .join(", ");
 }
 
 /** Lo que va en la foto de un sorteo, con el enlace que toca (el corto si salió). */
@@ -197,7 +197,7 @@ export function fotoDeEvento(lang: Lang, titulo: string, sorteos: SorteoDelEvent
   const fecha = enOrden.map((s) => s.sealedAt ?? 0).find((x) => x > 0);
   const hayUnoSinSello = cuantosSinSello(sorteos) > 0;
   return {
-    rotulo: [cad(lang, "fotoEvento"), fechaLarga(lang, fecha)].filter(Boolean).join(" · "),
+    rotulo: [cad(lang, "fotoEvento"), fechaLarga(lang, fecha)].filter(Boolean).join(", "),
     titulo,
     sub: rellenar(cad(lang, n === 1 ? "evUnSorteo" : "evNSorteos"), { n }),
     filas: enOrden.map((s) => ({
@@ -530,7 +530,7 @@ export async function paqueteDeEvento(
   const parte = (i: number): string => rellenar(cad(lang, "evParte"), { i, n });
   const partes = await Promise.all(
     grupos.map(async (g, i) => {
-      const tt = n > 1 ? `${titulo} · ${parte(i + 1)}` : titulo;
+      const tt = n > 1 ? `${titulo}: ${parte(i + 1)}` : titulo;
       return { titulo: tt, enlace: await eventoUrl(tt, g, base), sorteos: g };
     }),
   );

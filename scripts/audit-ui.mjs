@@ -263,7 +263,7 @@ const NOMBRES = [
 ];
 async function sembrarHistorial(page) {
   await page.eval(`(async () => {
-    const dir = document.querySelector('#wallet-box .hello').title.split(' · ').pop();
+    const dir = document.querySelector('#wallet-box .hello').title.split(': ').pop();
     const lista = ${JSON.stringify(NOMBRES)}.map((n, i) => ({
       organizer: dir, listHash: 'a'.repeat(64), count: 20 + i, numWinners: 1, round: 100 + i,
       sealedAt: 1760000000 + (10 - i) * 86400, prize: n,
@@ -967,7 +967,7 @@ async function run() {
         if (dentro.hay) {
           check(
             `${etiqueta} ${tema}: con la cuenta adentro, el chip es el de la cuenta (cara con su ✓), sin imagen rota, y su título termina en la dirección`,
-            dentro.estado === "dentro" && dentro.cara && dentro.visto && !dentro.fotoRota && /· G[A-Z0-9]{20,}$/.test(dentro.titulo) && /Cuenta de prueba|Test account/.test(dentro.aria),
+            dentro.estado === "dentro" && dentro.cara && dentro.visto && !dentro.fotoRota && /: G[A-Z0-9]{20,}$/.test(dentro.titulo) && /Cuenta de prueba|Test account/.test(dentro.aria),
             `${dentro.estado} · "${dentro.texto}" · ${dentro.aria}`,
           );
           check(`${etiqueta} ${tema}: al entrar se anuncia a los lectores de pantalla`, !!dentro.avisoVivo && /cuenta de prueba|test account/i.test(dentro.avisoVivo.texto) && dentro.avisoVivo.rol === "status", dentro.avisoVivo ? `"${dentro.avisoVivo.texto}"` : "no hay #cuenta-aviso");

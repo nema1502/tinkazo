@@ -15,7 +15,7 @@ import { actualizarPaso } from "./siguiente";
  * - la lista es de la fauna de Bolivia, no se edita y no pisa la que se estaba
  *   armando (el borrador queda guardado y vuelve al salir);
  * - una banda arriba dice que es un ensayo, con "Salir del ensayo", y en el
- *   estadio, donde va el número público, "ENSAYO · no se graba";
+ *   estadio, donde va el número público, "ENSAYO: no se graba";
  * - una línea debajo de los pasos guía, sin bloquear nada;
  * - el número sale en 15 s (en un sorteo de verdad son unos 45) y el show va en
  *   el ritmo rápido, sin cambiar el que eligió la persona;

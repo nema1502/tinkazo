@@ -354,7 +354,7 @@ export const T: Record<Lang, Dict> = {
     p1: "Participantes", p2: "Lista sellada", p3: "El sorteo",
     // Se siguió sin sello (la red no dejó sellar): ni el título ni la línea de la espera dicen "sellada" (ui/sin-sello-textos.ts).
     p2SinSello: "Lista cerrada, sin sello",
-    srcPaste: "Pegar lista", srcCsv: "Subir CSV", srcLuma: "Desde Luma", srcMeetup: "Meetup · pronto",
+    srcPaste: "Pegar lista", srcCsv: "Subir CSV", srcLuma: "Desde Luma", srcMeetup: "Meetup, pronto",
     srcLumaTip: "Exportá la lista de invitados de tu evento en Luma como CSV",
     csvColumn: "¿Cuál columna tiene los nombres?",
     // --- El grifo. Una cuenta recién creada no tiene con qué pagar la comisión,
@@ -367,7 +367,7 @@ export const T: Record<Lang, Dict> = {
     gateFoot: "Con Google no instalás nada. Tus participantes siguen sin necesitar cuenta ni aplicación: la cuenta es tuya, no de ellos.",
     histTitle: "Tus sorteos",
     histCount: "{n} con tu cuenta",
-    histCountBoth: "{n} en este navegador · {c} traídos de la cadena",
+    histCountBoth: "{n} en este navegador, {c} traídos de la cadena",
     histCountChain: "{c} traídos de la cadena",
     histWhy: "Este navegador se acuerda de los sorteos que hiciste acá, con los nombres. Los que anclaste desde otro equipo se traen de la cadena: ahí están la fecha, el premio y qué puesto de la lista ganó, pero no los nombres, que nunca se publican. Si borrás los datos del sitio se pierde la lista de este navegador, no los sorteos, y con el comprobante la cuenta se puede rehacer siempre. Si compartiste un sorteo o lo mostraste en grande, queda además una copia para su enlace corto, que solo se abre con el enlace: Tinkazo no la puede leer, y no vence, para que el sorteo se pueda volver a comprobar. Si hace falta borrarla, escribinos a hola@tinkazo.app.",
     histFromChain: "traído de la cadena",
@@ -425,7 +425,7 @@ export const T: Record<Lang, Dict> = {
     csvIn: (n) => (n === 1 ? "entra 1" : `entran ${n}`),
     impLuma: "Export de Luma",
     impFile: "Tu archivo",
-    impShape: (r, c) => `${r} ${r === 1 ? "fila" : "filas"} · ${c} columnas`,
+    impShape: (r, c) => `${r} ${r === 1 ? "fila" : "filas"}, ${c} columnas`,
     impClose: "Cerrar",
     impNameCol: "Los nombres están en",
     impWho: "¿Quiénes entran?",
@@ -472,12 +472,12 @@ export const T: Record<Lang, Dict> = {
     impUse: (n) => (n === 1 ? "Usar este nombre" : `Usar estos ${n} nombres`),
     impNeed: "Marcá al menos dos.",
     impEdit: "Editar selección",
-    impGrpCame: (n) => `Vinieron · ${n}`,
-    impGrpNoCame: (n) => `No vinieron · ${n}`,
-    impGrpApproved: (n) => `Aprobados · ${n}`,
-    impGrpRest: (n) => `El resto · ${n}`,
-    impGrpIn: (n) => `Pasan el filtro · ${n}`,
-    impGrpOut: (n) => `No lo pasan · ${n}`,
+    impGrpCame: (n) => `Vinieron: ${n}`,
+    impGrpNoCame: (n) => `No vinieron: ${n}`,
+    impGrpApproved: (n) => `Aprobados: ${n}`,
+    impGrpRest: (n) => `El resto: ${n}`,
+    impGrpIn: (n) => `Pasan el filtro: ${n}`,
+    impGrpOut: (n) => `No lo pasan: ${n}`,
     impSummary: (luma, n, total, mode, hand) =>
       `${luma ? "De Luma" : "Del archivo"}: ${n} de ${total}` +
       (mode === "came" ? ", los que vinieron" : mode === "approved" ? ", los aprobados" : mode === "other" ? ", con un filtro" : "") +
@@ -606,7 +606,7 @@ export const T: Record<Lang, Dict> = {
     cQualLeft: (n) => (n <= 12 ? `¡Quedan ${n}: esos van a la mesa!` : `¡Quedan ${n}!`),
     cQualIn: "EN JUEGO",
     rqTitle: "CLASIFICATORIA",
-    rqSub: (n, k) => `${n} en la salida · ${k} a la final`,
+    rqSub: (n, k) => `${n} en la salida, ${k} a la final`,
     rqStart: (n, k) => `¡${n} en la salida! Solo ${k} corren la final.`,
     rqLeft: (n, k) => (n <= k ? `¡Estos ${n} van a la final!` : `¡Quedan ${n}!`),
     rqIntro: "¡A la salida, carril por carril!",
@@ -749,7 +749,7 @@ export const T: Record<Lang, Dict> = {
     teleLinea7: "Morada",
     teleLinea8: "Café",
     teleLinea9: "Plateada",
-    listaCabina: "{g} · línea {l}",
+    listaCabina: "{g}, línea {l}",
     gameTombola: "Tómbola",
     gameTrompo: "Trompo",
     cTroWobbleAny: ["¡Se tambalea!", "¡Cabecea!", "¡Ojo, se inclina!"],
@@ -781,7 +781,7 @@ export const T: Record<Lang, Dict> = {
     },
     cOruDanza: (d) => ({ diablada: "Diablada", morenada: "Morenada", caporales: "Caporales", tinkus: "Tinkus", llamerada: "Llamerada" })[d] ?? d,
     cOruFratTitle: (art, name) => `${art} ${name}`,
-    cOruRosterSub: (dance, c) => `${dance} · ${c} ${c === 1 ? "bailarín" : "bailarines"}`,
+    cOruRosterSub: (dance, c) => `${dance}, ${c} ${c === 1 ? "bailarín" : "bailarines"}`,
     cOruArriveFrat: (art, name) => {
       const Art = `${art.charAt(0).toUpperCase()}${art.slice(1)}`;
       return pick([`¡${Art} ${name} llegaron al Socavón!`, `¡${Art} ${name}, hasta el Socavón!`, `¡Campanas para ${art} ${name}: llegaron al Socavón!`]);
@@ -839,7 +839,7 @@ export const T: Record<Lang, Dict> = {
     loreTruequeA: "En Pongo K'asa, cada sábado en el kilómetro 94 de la carretera Cochabamba–Oruro, y en Confital los martes, la gente cambia papa, chuño (papa deshidratada) y otros productos. Una nota de Opinión lo llama práctica ancestral: el chhalaku.",
     trFeria: "¡Se abre la feria!",
     trAcepta: "Cada puesto acepta un producto y da otro a cambio",
-    trLeyenda: "Arriba, lo que acepta · abajo, lo que da",
+    trLeyenda: "Arriba, lo que acepta; abajo, lo que da",
     trSale: (p) => `Sale el encargo con ${p}`,
     trBusca: (p) => `¿Quién acepta ${p}?`,
     trCambio: (p) => `¡Cambio! Ahora es ${p}`,
@@ -868,7 +868,7 @@ export const T: Record<Lang, Dict> = {
     cConstDecoy: ["¡NO, SE FUE PARA OTRO LADO!", "¡DIO LA VUELTA!",
       "¡CAMBIÓ DE RUTA!", "¡NOOO, SIGUE DE LARGO!"],
     cHop: "SALTO",
-    cLanes: (k, n) => `EN PISTA ${k} DE ${n} · EL SORTEO FUE ENTRE LOS ${n}`,
+    cLanes: (k, n) => `EN PISTA ${k} DE ${n}. EL SORTEO FUE ENTRE LOS ${n}`,
     // --- Cierre de Libro. Stellar cierra un ledger cada cinco segundos.
     cLedgerSweep: ["¡Empieza el cierre!", "¡Ahí viene la barrida!", "¡Primera pasada!"],
     cLedgerSweep2: ["¡Segunda pasada!", "¡Quedan poquitos!", "¡Se está vaciando la mesa!"],
@@ -946,7 +946,7 @@ export const T: Record<Lang, Dict> = {
     espAprobar: "Tu billetera te va a pedir que lo apruebes.",
     winnerLabel: "Lo que salió", verifyTitle: "Por si alguien duda",
     verifyHow: "Cualquiera puede rehacer este sorteo desde su celular y le tiene que dar el mismo nombre. No hace falta que me creas.",
-    verifyPasos: "Paso a paso: 1) abrí la ronda de quicknet y verificá su prueba con la clave pública del faro · 2) randomness = sha256(prueba) · 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, salteando repetidos. El protocolo entero está en github.com/nema1502/tinkazo, en docs/protocolo.md.",
+    verifyPasos: "Paso a paso: 1) abrí la ronda de quicknet y verificá su prueba con la clave pública del faro; 2) randomness = sha256(prueba); 3) idx = los primeros 8 bytes de sha256(randomness ‖ list_hash ‖ contador) mod entries, salteando repetidos. El protocolo entero está en github.com/nema1502/tinkazo, en docs/protocolo.md.",
     tecnicoT: "Detalles técnicos",
     motionNote: "Tu sistema tiene las animaciones reducidas, por eso el sorteo se muestra directo.", motionReplay: "Ver la animación igual",
     reverify: "Rehacelo acá mismo", reverifyOk: "Lo rehicimos frente a vos y dio el mismo nombre.", reverifyOkMany: "Lo rehicimos frente a vos y dio los mismos nombres.",
@@ -954,7 +954,7 @@ export const T: Record<Lang, Dict> = {
     copyRules: "Copiar las bases",
     rulesNote: "Pegalas en Luma, en WhatsApp o donde avisaste del sorteo. Dicen cómo se elige antes de que se sepa quién gana, y dejan anotado cuál es el sorteo que vale.",
     rules: (p) => [
-      `Bases del sorteo${p.prize ? ` · ${p.prize}` : ""}`,
+      `Bases del sorteo${p.prize ? `: ${p.prize}` : ""}`,
       "",
       "1. Participar es gratis. No hay que comprar nada ni abrir ninguna cuenta.",
       `2. Participan las ${p.count} personas de la lista. ${p.winners === 1 ? "Sale un ganador." : `Salen ${p.winners} ganadores.`}`,
@@ -978,18 +978,18 @@ export const T: Record<Lang, Dict> = {
         ? `${varios ? `¡Ganaron, ${w}! Se llevan` : `¡Ganaste, ${w}! Te llevás`}${prize ? " " + prize : " el sorteo"}.\n\n` +
           `${varios ? "Salieron" : "Saliste"} entre ${n} personas.\n\n` +
           `Sin sello: no se puede comprobar. Si ${varios ? "quieren" : "querés"} ver la lista y la cuenta: ${u}\n\n` +
-          `Sorteado con Tinkazo · https://tinkazo.app`
+          `Sorteado con Tinkazo: https://tinkazo.app`
         : varios
         ? `¡Ganaron, ${w}! Se llevan${prize ? " " + prize : " el sorteo"}.\n\n` +
           `Salieron entre ${n} personas y nadie los eligió a dedo. La lista se cerró antes de que existiera el número que los sacó, ` +
           `y ese número lo publica un faro público que no controlan ni quien organiza ni Tinkazo.\n\n` +
           `Revísenlo ustedes mismos, toma diez segundos: ${u}\n\n` +
-          `Sorteado con Tinkazo · https://tinkazo.app`
+          `Sorteado con Tinkazo: https://tinkazo.app`
         : `¡Ganaste, ${w}! Te llevás${prize ? " " + prize : " el sorteo"}.\n\n` +
           `Saliste entre ${n} personas y nadie te eligió a dedo. La lista se cerró antes de que existiera el número que te sacó, ` +
           `y ese número lo publica un faro público que no controlan ni quien organiza ni Tinkazo.\n\n` +
           `Revisalo vos mismo, te toma diez segundos: ${u}\n\n` +
-          `Sorteado con Tinkazo · https://tinkazo.app`,
+          `Sorteado con Tinkazo: https://tinkazo.app`,
     qrCaption: "Escaneá para comprobar",
     qrCaptionSinSello: "Sin sello: escaneá para ver la lista y la cuenta",
     nextTitle: "Qué pasa por dentro",
@@ -1067,7 +1067,7 @@ export const T: Record<Lang, Dict> = {
     yaEntraste: "Ya entraste. Sellá tu lista de {n} personas.",
     pegarAyuda: "Copiá la lista en WhatsApp o en tu hoja de cálculo y tocá «Pegar lista».",
     sigPegar: "Pegá la lista",
-    sellarResumen: (n, k, premio) => `${n} personas · ${k === 1 ? "1 ganador" : `${k} ganadores`} · ${premio || "sin premio"}. Al sellar, la lista queda cerrada.`,
+    sellarResumen: (n, k, premio) => `${n} personas, ${k === 1 ? "1 ganador" : `${k} ganadores`}, ${premio || "sin premio"}. Al sellar, la lista queda cerrada.`,
     loginCorreoO: "o con tu correo",
     loginGoogle: "Entrar con Google",
     loginMas: "Más formas de entrar",
@@ -1099,7 +1099,7 @@ export const T: Record<Lang, Dict> = {
     ensFinT: "Era un ensayo: el ganador es de mentira y no se grabó nada.",
     ensFinB: "Así se sortea. En vivo, entrá y pegá tu lista antes de proyectar: la espera es de unos 45 segundos.",
     ensFinCta: "Sortear con mi lista",
-    ensEstadio: "ENSAYO · no se graba",
+    ensEstadio: "ENSAYO: no se graba",
     espNadie: "Nadie puede elegir el número: tampoco quien organiza.",
     badSig: "No pudimos confirmar el número del sorteo. Probá de nuevo.",
     drawIn: (mmss) => `Se habilita en ${mmss}`,
@@ -1315,7 +1315,7 @@ export const T: Record<Lang, Dict> = {
     listaHuellaL: "Huella de esta lista:",
     listaPremio: "Se sortea:",
     listaError: "Este enlace no trae una lista.",
-    waitId: "Sorteo #{n} en Stellar · anotalo o sacale una foto",
+    waitId: "Sorteo #{n} en Stellar. Anotalo o sacale una foto",
     // En la página de quien organiza, sin el pedido a la sala (evaluación crítica de experiencia, hallazgo 9).
     waitIdPagina: "Sorteo #{n} en Stellar",
     vSealsElsewhere: "la misma lista, sellada por otra cuenta",
@@ -1831,9 +1831,9 @@ export const T: Record<Lang, Dict> = {
       (sinSello
         ? `Sin sello: no se puede comprobar.\nPara ver la lista y la cuenta, entrá acá: ${enlace}`
         : `Nadie eligió ${varios ? "estos nombres" : "este nombre"}.\nSi querés verificarlo, entrá acá: ${enlace}`) +
-      `\n\nSorteado con Tinkazo · https://tinkazo.app`,
+      `\n\nSorteado con Tinkazo: https://tinkazo.app`,
     summaryEvento: (f, n, enlace, lineas = []) =>
-      `Sorteos del ${f} (${n === 1 ? "1 sorteo), verificable" : `${n} sorteos), todos verificables`}.\n${lineas.map((l) => `${l}\n`).join("")}Si querés ${n === 1 ? "verificarlo" : "verificarlos"}, entrá acá:\n${enlace}\n\nSorteado con Tinkazo · https://tinkazo.app`,
+      `Sorteos del ${f} (${n === 1 ? "1 sorteo), verificable" : `${n} sorteos), todos verificables`}.\n${lineas.map((l) => `${l}\n`).join("")}Si querés ${n === 1 ? "verificarlo" : "verificarlos"}, entrá acá:\n${enlace}\n\nSorteado con Tinkazo: https://tinkazo.app`,
     histGrupoT: "Sorteos del {f}", histGrupoCompartir: "Compartir el evento",
     evAvisoPartes: "El evento va en {n} enlaces, para que ninguno se corte al pegarlo.",
     evParte: "Parte {i} de {n}",
@@ -1846,7 +1846,7 @@ export const T: Record<Lang, Dict> = {
     cmpNadieUno: "Nadie eligió este nombre.", cmpNadieVarios: "Nadie eligió estos nombres.",
     cmpVerificarUno: "Si querés verificarlo, entrá acá: {enlace}",
     cmpVerificarEv: "Si querés verificarlos, entrá acá:\n{enlace}",
-    cmpPie: "Sorteado con Tinkazo · https://tinkazo.app",
+    cmpPie: "Sorteado con Tinkazo: https://tinkazo.app",
     cmpEvUno: "{t} (1 sorteo), verificable.", cmpEvVarios: "{t} ({n} sorteos), todos verificables.",
     // Sin sello (26 de octubre de 2026): si algún sorteo del evento se siguió sin sello, el mensaje no dice
     // "verificable" de ninguno ni "verificarlos", y el renglón de cada uno lleva `redSinSelloEtiqueta`.
@@ -2047,7 +2047,7 @@ export const T: Record<Lang, Dict> = {
     p1: "Participants", p2: "Sealed list", p3: "The draw",
     // Continued without a seal (the network wouldn't let it seal): neither the title nor the wait line say "sealed" (ui/sin-sello-textos.ts).
     p2SinSello: "List closed, no seal",
-    srcPaste: "Paste list", srcCsv: "Upload CSV", srcLuma: "From Luma", srcMeetup: "Meetup · soon",
+    srcPaste: "Paste list", srcCsv: "Upload CSV", srcLuma: "From Luma", srcMeetup: "Meetup, soon",
     srcLumaTip: "Export your Luma event's guest list as CSV",
     csvColumn: "Which column has the names?",
     gateTitle: "Connect your account to run a draw",
@@ -2058,7 +2058,7 @@ export const T: Record<Lang, Dict> = {
     gateFoot: "With Google you install nothing. Your participants still need no account and no app: the account is yours, not theirs.",
     histTitle: "Your draws",
     histCount: "{n} on your account",
-    histCountBoth: "{n} in this browser · {c} from the chain",
+    histCountBoth: "{n} in this browser, {c} from the chain",
     histCountChain: "{c} from the chain",
     histWhy: "This browser remembers the draws you ran here, names included. The ones you anchored from another device come from the chain: the date, the prize and which spot on the list won are there, but not the names, which are never published. Clearing the site data loses this browser's list, not the draws, and with the receipt the math can always be redone. If you shared a draw or showed it big, there is also a copy for its short link, which only opens with the link: Tinkazo can't read it, and it doesn't expire, so the draw can be checked again. If it needs to be deleted, write to hola@tinkazo.app.",
     histFromChain: "from the chain",
@@ -2116,7 +2116,7 @@ export const T: Record<Lang, Dict> = {
     csvIn: (n) => (n === 1 ? "1 gets in" : `${n} get in`),
     impLuma: "Luma export",
     impFile: "Your file",
-    impShape: (r, c) => `${r} ${r === 1 ? "row" : "rows"} · ${c} columns`,
+    impShape: (r, c) => `${r} ${r === 1 ? "row" : "rows"}, ${c} columns`,
     impClose: "Close",
     impNameCol: "Names are in",
     impWho: "Who gets in?",
@@ -2162,12 +2162,12 @@ export const T: Record<Lang, Dict> = {
     impUse: (n) => (n === 1 ? "Use this name" : `Use these ${n} names`),
     impNeed: "Select at least two.",
     impEdit: "Edit selection",
-    impGrpCame: (n) => `Came · ${n}`,
-    impGrpNoCame: (n) => `Didn't come · ${n}`,
-    impGrpApproved: (n) => `Approved · ${n}`,
-    impGrpRest: (n) => `The rest · ${n}`,
-    impGrpIn: (n) => `Pass the filter · ${n}`,
-    impGrpOut: (n) => `Don't pass · ${n}`,
+    impGrpCame: (n) => `Came: ${n}`,
+    impGrpNoCame: (n) => `Didn't come: ${n}`,
+    impGrpApproved: (n) => `Approved: ${n}`,
+    impGrpRest: (n) => `The rest: ${n}`,
+    impGrpIn: (n) => `Pass the filter: ${n}`,
+    impGrpOut: (n) => `Don't pass: ${n}`,
     impSummary: (luma, n, total, mode, hand) =>
       `${luma ? "From Luma" : "From the file"}: ${n} of ${total}` +
       (mode === "came" ? ", those who came" : mode === "approved" ? ", the approved ones" : mode === "other" ? ", with a filter" : "") +
@@ -2289,7 +2289,7 @@ export const T: Record<Lang, Dict> = {
     cQualLeft: (n) => (n <= 12 ? `${n} left: they go to the table!` : `${n} left!`),
     cQualIn: "IN PLAY",
     rqTitle: "QUALIFYING",
-    rqSub: (n, k) => `${n} at the start · ${k} make the final`,
+    rqSub: (n, k) => `${n} at the start, ${k} make the final`,
     rqStart: (n, k) => `${n} at the start! Only ${k} run the final.`,
     rqLeft: (n, k) => (n <= k ? `These ${n} go to the final!` : `${n} left!`),
     rqIntro: "To the start, lane by lane!",
@@ -2426,7 +2426,7 @@ export const T: Record<Lang, Dict> = {
     teleLinea7: "Purple",
     teleLinea8: "Brown",
     teleLinea9: "Silver",
-    listaCabina: "{g} · {l} line",
+    listaCabina: "{g}, {l} line",
     gameTombola: "Ball drum",
     gameTrompo: "Spinning tops",
     cTroWobbleAny: ["It's wobbling!", "It's staggering!", "Careful, it's leaning!"],
@@ -2458,7 +2458,7 @@ export const T: Record<Lang, Dict> = {
     },
     cOruDanza: (d) => ({ diablada: "Diablada", morenada: "Morenada", caporales: "Caporales", tinkus: "Tinkus", llamerada: "Llamerada" })[d] ?? d,
     cOruFratTitle: (_art, name) => `the ${name}`,
-    cOruRosterSub: (dance, c) => `${dance} · ${c} ${c === 1 ? "dancer" : "dancers"}`,
+    cOruRosterSub: (dance, c) => `${dance}, ${c} ${c === 1 ? "dancer" : "dancers"}`,
     cOruArriveFrat: (_art, name) => pick([`The ${name} made it to the Socavón!`, `All the way to the Socavón: the ${name}!`, `Bells for the ${name}: they reached the Socavón!`]),
     gameLuz: "Red light, green light",
     gameCho: "Chovena",
@@ -2513,7 +2513,7 @@ export const T: Record<Lang, Dict> = {
     loreTruequeA: "At Pongo K'asa, every Saturday at kilometer 94 of the Cochabamba–Oruro highway, and at Confital on Tuesdays, people trade potatoes, chuño (freeze-dried potato) and other products. An Opinión article calls it an ancestral practice: the chhalaku.",
     trFeria: "The fair is open!",
     trAcepta: "Each stall takes one product and gives another in return",
-    trLeyenda: "Top: what it takes · bottom: what it gives",
+    trLeyenda: "Top, what it takes; bottom, what it gives",
     trSale: (p) => `The order leaves with ${p}`,
     trBusca: (p) => `Who takes ${p}?`,
     trCambio: (p) => `Change! Now it's ${p}`,
@@ -2540,7 +2540,7 @@ export const T: Record<Lang, Dict> = {
     cConstDecoy: ["NO, IT SWUNG AWAY!", "IT TURNED AROUND!",
       "IT CHANGED PATH!", "NOOO, IT KEEPS GOING!"],
     cHop: "HOP",
-    cLanes: (k, n) => `${k} OF ${n} ON TRACK · THE DRAW WAS AMONG ALL ${n}`,
+    cLanes: (k, n) => `${k} OF ${n} ON TRACK. THE DRAW WAS AMONG ALL ${n}`,
     cLedgerSweep: ["The close begins!", "Here comes the sweep!", "First pass!"],
     cLedgerSweep2: ["Second pass!", "Only a few left!", "The table is emptying!"],
     cLedgerSweep3: ["Last pass!", "This is being decided!", "It stops here!"],
@@ -2615,7 +2615,7 @@ export const T: Record<Lang, Dict> = {
     espAprobar: "Your wallet will ask you to approve it.",
     winnerLabel: "What came out", verifyTitle: "In case anyone doubts it",
     verifyHow: "Anyone can run this draw again from their phone and has to land on the same name. You don't have to take my word for it.",
-    verifyPasos: "Step by step: 1) open the quicknet round and check its proof against the beacon's public key · 2) randomness = sha256(proof) · 3) idx = first 8 bytes of sha256(randomness ‖ list_hash ‖ counter) mod entries, skipping repeats. Whole protocol at github.com/nema1502/tinkazo, in docs/protocolo.md.",
+    verifyPasos: "Step by step: 1) open the quicknet round and check its proof against the beacon's public key; 2) randomness = sha256(proof); 3) idx = first 8 bytes of sha256(randomness ‖ list_hash ‖ counter) mod entries, skipping repeats. Whole protocol at github.com/nema1502/tinkazo, in docs/protocolo.md.",
     tecnicoT: "Technical details",
     motionNote: "Your system has reduced motion turned on, so the draw is shown directly.", motionReplay: "Watch the animation anyway",
     reverify: "Run it again right here", reverifyOk: "Ran it again in front of you. Same name.", reverifyOkMany: "Ran it again in front of you. Same names.",
@@ -2623,7 +2623,7 @@ export const T: Record<Lang, Dict> = {
     copyRules: "Copy the rules",
     rulesNote: "Paste them on Luma, WhatsApp or wherever you announced the draw. They say how the winner is chosen before anyone knows, and put on record which draw counts.",
     rules: (p) => [
-      `Draw rules${p.prize ? ` · ${p.prize}` : ""}`,
+      `Draw rules${p.prize ? `: ${p.prize}` : ""}`,
       "",
       "1. Entry is free. Nothing to buy and no account needed.",
       `2. The ${p.count} people on the list take part. ${p.winners === 1 ? "One winner is drawn." : `${p.winners} winners are drawn.`}`,
@@ -2647,12 +2647,12 @@ export const T: Record<Lang, Dict> = {
           `You won, ${w}! You're taking home${prize ? " " + prize : " the draw"}.\n\n` +
           `You came out of ${n} people.\n\n` +
           `No seal: it can't be checked. To see the list and the math: ${u}\n\n` +
-          `Drawn with Tinkazo · https://tinkazo.app`
+          `Drawn with Tinkazo: https://tinkazo.app`
         : `You won, ${w}! You're taking home${prize ? " " + prize : " the draw"}.\n\n` +
           `You came out of ${n} people and nobody hand-picked you. The list was locked before the number that drew you existed, ` +
           `and that number is published by a public beacon that neither the organizer nor Tinkazo controls.\n\n` +
           `Check it ${varios ? "for yourselves" : "yourself"}, it takes ten seconds: ${u}\n\n` +
-          `Drawn with Tinkazo · https://tinkazo.app`,
+          `Drawn with Tinkazo: https://tinkazo.app`,
     qrCaption: "Scan to check",
     qrCaptionSinSello: "No seal: scan to see the list and the math",
     nextTitle: "What happens inside",
@@ -2721,7 +2721,7 @@ export const T: Record<Lang, Dict> = {
     yaEntraste: "You're in. Seal your list of {n} people.",
     pegarAyuda: "Copy the list in WhatsApp or your spreadsheet and tap “Paste list”.",
     sigPegar: "Paste the list",
-    sellarResumen: (n, k, premio) => `${n} people · ${k === 1 ? "1 winner" : `${k} winners`} · ${premio || "no prize"}. Sealing locks the list.`,
+    sellarResumen: (n, k, premio) => `${n} people, ${k === 1 ? "1 winner" : `${k} winners`}, ${premio || "no prize"}. Sealing locks the list.`,
     loginCorreoO: "or with your email",
     loginGoogle: "Sign in with Google",
     loginMas: "More ways to sign in",
@@ -2753,7 +2753,7 @@ export const T: Record<Lang, Dict> = {
     ensFinT: "That was a rehearsal: the winner is pretend and nothing was recorded.",
     ensFinB: "That's how it goes. Live, sign in and paste your list before you put it on the projector: the wait is about 45 seconds.",
     ensFinCta: "Draw with my list",
-    ensEstadio: "REHEARSAL · not recorded",
+    ensEstadio: "REHEARSAL: not recorded",
     espNadie: "Nobody can pick the number: not even the organizer.",
     badSig: "We couldn't confirm the draw's number. Try again.",
     drawIn: (mmss) => `Unlocks in ${mmss}`,
@@ -2967,7 +2967,7 @@ export const T: Record<Lang, Dict> = {
     listaHuellaL: "This list's fingerprint:",
     listaPremio: "Prize:",
     listaError: "This link doesn't carry a list.",
-    waitId: "Draw #{n} on Stellar · write it down or take a photo",
+    waitId: "Draw #{n} on Stellar. Write it down or take a photo",
     waitIdPagina: "Draw #{n} on Stellar",
     vSealsElsewhere: "the same list, sealed by another account",
     vSealsElsewhereWhy: "Another account also sealed this same list. It may be someone who repeated the draw with another account to publish only the convenient result. Ask for the receipts of all of them.",
@@ -3480,9 +3480,9 @@ export const T: Record<Lang, Dict> = {
       (sinSello
         ? `No seal: it can't be checked.\nTo see the list and the math, open this link: ${enlace}`
         : `Nobody picked ${varios ? "these names" : "this name"}.\nIf you want to verify it, open this link: ${enlace}`) +
-      `\n\nDrawn with Tinkazo · https://tinkazo.app`,
+      `\n\nDrawn with Tinkazo: https://tinkazo.app`,
     summaryEvento: (f, n, enlace, lineas = []) =>
-      `Draws from ${f} (${n === 1 ? "1 draw), verifiable" : `${n} draws), all verifiable`}.\n${lineas.map((l) => `${l}\n`).join("")}If you want to verify ${n === 1 ? "it" : "them"}, open this link:\n${enlace}\n\nDrawn with Tinkazo · https://tinkazo.app`,
+      `Draws from ${f} (${n === 1 ? "1 draw), verifiable" : `${n} draws), all verifiable`}.\n${lineas.map((l) => `${l}\n`).join("")}If you want to verify ${n === 1 ? "it" : "them"}, open this link:\n${enlace}\n\nDrawn with Tinkazo: https://tinkazo.app`,
     histGrupoT: "Draws from {f}", histGrupoCompartir: "Share the event",
     evAvisoPartes: "The event goes in {n} links, so none gets cut when pasted.",
     evParte: "Part {i} of {n}",
@@ -3495,7 +3495,7 @@ export const T: Record<Lang, Dict> = {
     cmpNadieUno: "Nobody picked this name.", cmpNadieVarios: "Nobody picked these names.",
     cmpVerificarUno: "If you want to verify it, open this link: {enlace}",
     cmpVerificarEv: "If you want to verify them, open this link:\n{enlace}",
-    cmpPie: "Drawn with Tinkazo · https://tinkazo.app",
+    cmpPie: "Drawn with Tinkazo: https://tinkazo.app",
     cmpEvUno: "{t} (1 draw), verifiable.", cmpEvVarios: "{t} ({n} draws), all verifiable.",
     // Without a seal (26 October 2026): if any draw of the event went on without a seal, the message says
     // neither "verifiable" of any of them nor "verify them", and each one's line carries `redSinSelloEtiqueta`.

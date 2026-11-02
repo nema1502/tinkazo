@@ -98,7 +98,7 @@ describe("panel de la cuenta: las filas de Tus sorteos", () => {
 
   it("la segunda línea dice cuántas personas y cuándo", () => {
     const r = drawRow({ ...base, winners: ["Ana"] });
-    expect(r.meta).toMatch(/^27 personas · .*oct/i);
+    expect(r.meta).toMatch(/^27 personas, .*oct/i);
     expect(r.meta).not.toContain("sin sortear");
   });
 
