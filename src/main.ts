@@ -22,6 +22,7 @@ import { abrirTutorial, initTutorial } from "./ui/tutorial";
 import { enEnsayo } from "./ensayo-modo";
 import { musicOn, toggleMusic } from "./music";
 import { rotateWords } from "./ui/rotar";
+import { iniciarFeedback, origenDelResultado } from "./feedback";
 import { initMenuMas } from "./ui/menu";
 import { iniciarControlesDelEstadio } from "./ui/estadio-controles";
 import { setVibracion, vibracionDisponible, vibracionOn, vibrar } from "./vibrar";
@@ -190,6 +191,10 @@ initEnsayo();
 iniciarRed({ sellar: (op) => freeze(op) });
 ingresarSiLoPidio();
 initMenuMas();
+iniciarFeedback(
+  () => app.game,
+  () => origenDelResultado(new URLSearchParams(location.search).has("demo"), enEnsayo()),
+);
 refreshFreezeLabel();
 // Los pasos de arriba y la barra de "lo que sigue", con la herramienta ya armada.
 initSiguiente({ segundos: secondsToRound });

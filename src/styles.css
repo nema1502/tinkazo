@@ -431,6 +431,10 @@
     text-decoration: underline; text-underline-offset: 3px; cursor: pointer; text-align: left;
   }
   .enlace:hover { color: var(--ink); }
+  /* Para opinar: lo último del resultado, un enlace como los demás (feedback.ts). Parejo en dos líneas en el
+     celular, sin una palabra sola abajo. */
+  .feedback-fin { margin-top: 18px; font-weight: 500; text-wrap: balance; }
+  .feedback-fin[hidden] { display: none; }
   /* La espera de la ronda.
      Son los diez segundos en que la lista ya está cerrada y el número que la
      va a decidir todavía no existe: es el momento en que este producto es

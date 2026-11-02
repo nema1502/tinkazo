@@ -4,6 +4,7 @@ import { network } from "./stellar/config";
 import { loadSessionKind } from "./stellar/session-store";
 import { crearChip } from "./ui/cuenta-chip";
 import { MARCA_INGRESAR, viaDeLaSesionGuardada } from "./ui/cuenta-estado";
+import { iniciarFeedback } from "./feedback";
 import { initMenuMas } from "./ui/menu";
 
 /**
@@ -79,6 +80,7 @@ function montarLaCuenta(): void {
   lado.appendChild(chip);
 }
 initMenuMas();
+iniciarFeedback();
 setLang(initialLang());
 montarLaCuenta();
 onLangChange(montarLaCuenta);
