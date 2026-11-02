@@ -1,13 +1,15 @@
 import { Container, Graphics, Sprite, Text } from "pixi.js";
+import { params } from "../../state";
 import { colorDeNombre } from "../pixi/foco-vista";
 import { crearJuego, minimoPx, nivelPorCantidad, planNombres, type Caja, type FocoPunto, type Kit, type Nivel, type Zona } from "../pixi/kit";
 import { CREAM, INK, YELLOW, contorno, hash } from "../pixi/stage";
 import { ECHADA_DUR, carrilesDe, formaDe, hudDe, type Carriles, type Forma, type Pantalla } from "./carrera-forma";
 import { RECTA, alfabetico, planCarrera, type Datos, type EscenaCarrera } from "./carrera-show";
+import { crearLlamaAguayo } from "./llama-aguayo";
 import { TEXTOS_CARRERA } from "./carrera-textos";
 import type { Tanda } from "./carrera-tandas";
 import type { Terreno } from "./carrera-tiempos";
-import { LLAMA_ALTO, LLAMA_COLA, LLAMA_HOCICO, LLAMA_LARGO, PELAJES, crearBorla, crearLlama, type Llama, type Momento } from "./llama";
+import { LLAMA_ALTO, LLAMA_COLA, LLAMA_HOCICO, LLAMA_LARGO, PELAJES, crearBorla, crearLlama, crearManta, type Llama, type Momento } from "./llama";
 
 /**
  * La carrera de llamas, sobre el kit (`pixi/kit`). El show es puro
@@ -35,6 +37,8 @@ const TERRENO_ACENTO: Record<Terreno | "corral" | "recta", number> = {
   corral: 0xd9b36b, cuesta: 0x2f9e44, barro: 0xa86f3f, piedras: 0xcfd2dc, viento: 0x7ad0e8, recta: 0xffc629,
 };
 
+/** Dónde va la primera en la pantalla en la carrera nueva, en fracción del ancho (entre 0,62 y 0,82 según corre). */
+const AIRE = 0.72;
 const lerp = (a: number, b: number, k: number): number => a + (b - a) * k;
 const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 const suave = (v: number): number => {
@@ -99,13 +103,17 @@ function crearEscena(k: Kit, d: Datos) {
   const suelo = new Graphics();
   const marcas = new Container();
   const porton = new Graphics();
+  // La raya del frente (carrera nueva): una línea de luz en el hocico de la primera, debajo de las llamas.
+  const raya = new Graphics();
+  // Las estelas (carrera nueva): rayitas de velocidad detrás de cada llama que corre, para que se lea hacia dónde van sin leer.
+  const estelas = new Graphics();
   const corredoras = new Container();
   corredoras.sortableChildren = true;
   const borlaCapa = new Container();
   const etiquetas = new Container();
   // Las fichas se ordenan: la amarilla de quien va adelante arriba de todas, y la de quien se acaba de echar arriba de las comunes.
   etiquetas.sortableChildren = true;
-  mundo.addChild(suelo, marcas, porton, corredoras, borlaCapa, etiquetas);
+  mundo.addChild(suelo, marcas, porton, raya, estelas, corredoras, borlaCapa, etiquetas);
   S.scene.addChild(mundo);
   const hud = new Container();
   S.hud.addChild(hud);
@@ -191,7 +199,8 @@ function crearEscena(k: Kit, d: Datos) {
     e.texto.style.fontSize = fs;
     e.texto.style.fill = estilo === "lider" ? INK : CREAM;
     // La ficha amarilla lleva tinta, con un borde de tinta fino: la letra queda firme y el auditor ve el contorno oscuro.
-    e.texto.style.stroke = estilo === "lider" ? { color: INK, width: Math.max(3, fs / 9), join: "round" } : contorno(fs);
+    // En la carrera nueva el trazo de la ficha amarilla es fino: con un borde grueso de tinta sobre la tinta el nombre quedaba como una mancha.
+    e.texto.style.stroke = estilo === "lider" ? (d.nueva ? { color: INK, width: 2, join: "round" } : { color: INK, width: Math.max(3, fs / 9), join: "round" }) : contorno(fs);
     e.texto.text = s;
     const w = e.texto.width + fs * 0.5;
     const h = fs * 1.28;
@@ -208,7 +217,8 @@ function crearEscena(k: Kit, d: Datos) {
   function tomar(persona: number): Corredora {
     let c = enUso.get(persona);
     if (c) return c;
-    const llama = crearLlama(S, { pelaje: PELAJES[persona % PELAJES.length] ?? 0xf3ead8, manta: S.color(persona) });
+    // La carrera con aura dibuja la llama de aguayo (la B del diseño); la de siempre, la de lana.
+    const llama = (d.nueva ? crearLlamaAguayo : crearLlama)(S, { pelaje: PELAJES[persona % PELAJES.length] ?? 0xf3ead8, manta: S.color(persona) });
     const raiz = new Container();
     raiz.addChild(llama.root);
     const etiqueta = crearEtiqueta();
@@ -230,8 +240,56 @@ function crearEscena(k: Kit, d: Datos) {
   /* ---------------------------------------------------------- posiciones */
   const VENTANA = 6;
   const DT = 0.05;
+  /**
+   * La carrera nueva: la x de cada una es su distancia de verdad (el puntaje de `orden`, en cuerpos) y su fila es la que tiene al salir
+   * y no cambia en toda la carrera. Una se escapa, la alcanzan y la pasan por al lado: nada se salta de un casillero a otro.
+   */
+  const genteSet = new Set(d.gente);
+  /** Cuántos píxeles vale una unidad de puntaje: dos de la misma fila nunca se pisan el nombre, y todo el grupo entra detrás de la primera. */
+  const pxPorPuntaje = (): number => {
+    const sobra = forma.arriba ? nombreW / 2 + forma.largo / 2 : nombreW + forma.largo;
+    const largoGrupo = Math.max(0, d.gente.length - 1) * d.orden.entrePuestos + 3;
+    return Math.min(forma.ancho / (forma.filas * d.orden.entrePuestos), (AIRE * P.w - sobra - 0.04 * P.w) / largoGrupo);
+  };
+  /**
+   * La fila de cada una: la del puesto con que sale, pero con las filas intercaladas (arriba, abajo, arriba...) para que la salida sea un
+   * pelotón y no una escalera. Dos de la misma fila siguen a `filas` puestos una de otra: los nombres no se pisan.
+   */
+  const filaDe = (persona: number): number => {
+    const n = forma.filas;
+    const r = d.orden.rango(persona) % n;
+    const mitad = Math.ceil(n / 2);
+    return r % 2 === 0 ? r / 2 : Math.min(n - 1, mitad + (r - 1) / 2);
+  };
+  /** Dónde está el frente del grupo, en puntaje: la media de la última décima de las que siguen, así que no salta cuando la primera se echa. */
+  const frenteMemo = new Map<number, number>();
+  function sFrente(t: number): number {
+    const clave = Math.round(t * 1000);
+    const dado = frenteMemo.get(clave);
+    if (dado !== undefined) return dado;
+    let suma = 0, cuantas = 0;
+    for (let j = 0; j < 10; j++) {
+      const tt = Math.max(d.tSalida, t - j * 0.1);
+      let mejor = -Infinity;
+      for (const g of d.gente) if ((d.tiempos.cae.get(g) ?? Infinity) > tt) mejor = Math.max(mejor, d.orden.puntaje(g, tt));
+      if (Number.isFinite(mejor)) {
+        suma += mejor;
+        cuantas++;
+      }
+    }
+    const v = cuantas ? suma / cuantas : 0;
+    if (frenteMemo.size > 4000) frenteMemo.clear();
+    frenteMemo.set(clave, v);
+    return v;
+  }
+  function lugarEnGrupoNuevo(persona: number, t: number): { x: number; y: number } | null {
+    if (!genteSet.has(persona)) return null;
+    const tt = Math.max(d.tSalida, t);
+    return { x: xFrente(t) + (d.orden.puntaje(persona, tt) - sFrente(tt)) * pxPorPuntaje(), y: forma.yPie(filaDe(persona)) };
+  }
   /** Dónde va quien está en el grupo en `t`: la media de los últimos instantes, así un cambio de puesto es un deslizamiento. */
   function lugarEnGrupo(persona: number, t: number): { x: number; y: number } | null {
+    if (d.nueva) return lugarEnGrupoNuevo(persona, t);
     let dx = 0, fila = 0, n = 0;
     for (let j = 0; j < VENTANA; j++) {
       const tt = Math.max(d.tSalida, t - j * DT);
@@ -405,15 +463,20 @@ function crearEscena(k: Kit, d: Datos) {
       for (let j = 0; j <= carr.n; j++) {
         const y = carr.y0 + j * carr.altoFila;
         g.rect(Xs - 3 * u, y - 30 * u, 6 * u, 32 * u).fill(INK);
-        g.circle(Xs, y - 34 * u, 7 * u).fill(YELLOW).stroke({ width: 2.5 * u, color: INK });
+        g.circle(Xs, y - 34 * u, 7 * u).fill(d.nueva ? CREAM : YELLOW).stroke({ width: 2.5 * u, color: INK });
       }
     }
-    g.roundRect(pm - 90 * u, y0 - 100 * u, 180 * u, 38 * u, 8 * u).fill(0xffffff).stroke({ width: 3 * u, color: INK });
-    for (let i = 0; i < 9; i++) for (let j = 0; j < 2; j++) if ((i + j) % 2 === 0) g.rect(pm - 90 * u + i * 20 * u, y0 - 100 * u + j * 19 * u, 20 * u, 19 * u).fill(INK);
+    // En la carrera nueva el arco de la meta baja al borde de la pista: arriba quedaba debajo de la cabecera y se cortaba.
+    const bajaMeta = d.nueva ? 88 * u : 0;
+    g.roundRect(pm - 90 * u, y0 - 100 * u + bajaMeta, 180 * u, 38 * u, 8 * u).fill(0xffffff).stroke({ width: 3 * u, color: INK });
+    for (let i = 0; i < 9; i++) for (let j = 0; j < 2; j++) if ((i + j) % 2 === 0) g.rect(pm - 90 * u + i * 20 * u, y0 - 100 * u + bajaMeta + j * 19 * u, 20 * u, 19 * u).fill(INK);
     marcas.addChild(g);
     const meta = S.text(k.txt("carRotuloMeta"), { fontSize: 34 * u, fontWeight: "900", fill: YELLOW, stroke: contorno(34 * u) });
     meta.anchor.set(0.5);
-    meta.position.set(pm, y0 - 118 * u);
+    // En la nueva, la palabra va al costado del arco: debajo quedaba la ganadora cruzando y la tapaba.
+    // En el celular no hay lugar a la derecha del arco: la palabra va a su izquierda.
+    if (d.nueva) meta.anchor.set(P.retrato ? 1 : 0, 0.5);
+    meta.position.set(d.nueva ? pm + (P.retrato ? -98 : 98) * u : pm, d.nueva ? y0 - 100 * u + bajaMeta + 19 * u : y0 - 118 * u);
     const salida = S.text(k.txt("carSalida").replace(/[¡!]/g, "").toUpperCase(), { fontSize: 26 * u, fontWeight: "900", fill: CREAM, stroke: contorno(26 * u) });
     salida.anchor.set(0, 0.5);
     salida.position.set(26 * u, y0 + 30 * u);
@@ -625,8 +688,35 @@ function crearEscena(k: Kit, d: Datos) {
     }
   }
 
+  /** La dueña de la ficha amarilla y de la manta (`Datos.duena`): en la carrera nueva no parpadea en el acordeón. */
+  const estable = (t: number): number => d.duena(t);
+
+  /* ------------------------------------------------------------ la raya del frente */
+  /**
+   * La raya del frente (carrera nueva): una línea de luz amarilla en el hocico de la que va primera, de lado a lado de la pista.
+   * Contesta cuánto le falta a cada una para alcanzarla y el instante en que la pasan. Sigue al hocico más adelantado de las que
+   * corren, así que no salta: cuando dos se cruzan, la raya ya está en las dos.
+   */
+  let rayaX = 0;
+  function pintarRaya(t: number): void {
+    raya.clear();
+    if (t < d.tSalida + 0.3 || t >= d.tCrown) return;
+    const u = P.u;
+    const vz = cam.zoom || 1;
+    const y0 = (t >= d.tAbre ? carr.y0 : forma.y0) - 10 * u, y1 = (t >= d.tAbre ? carr.y1 : forma.y1) + 6 * u;
+    const ancho = Math.max(3 * u, 3.2 / vz);
+    raya.rect(rayaX - ancho * 3, y0, ancho * 6, y1 - y0).fill({ color: YELLOW, alpha: 0.2 });
+    raya.rect(rayaX - ancho / 2, y0, ancho, y1 - y0).fill({ color: YELLOW, alpha: 0.95 });
+    // Tres flechas a la derecha sobre la raya: la línea es vertical, y sin ellas una pantalla alta (el celular) parece correr hacia arriba.
+    for (const f of [0.1, 0.3, 0.5, 0.7, 0.9]) {
+      const y = y0 + (y1 - y0) * f;
+      raya.poly([rayaX - 4 * u, y - 12 * u, rayaX + 18 * u, y, rayaX - 4 * u, y + 12 * u]).fill(YELLOW).stroke({ width: 2 * u, color: INK, join: "round" });
+    }
+  }
+
   /* --------------------------------------------------------------- la borla */
-  const borla = crearBorla();
+  // La carrera nueva cambia la borla por la manta amarilla en el lomo de quien va adelante (no tapa su cara) y la raya del frente.
+  const borla: Container = d.nueva ? crearManta() : crearBorla();
   borlaCapa.addChild(borla);
 
   /* ------------------------------------------------------------- el cuadro */
@@ -638,6 +728,70 @@ function crearEscena(k: Kit, d: Datos) {
     const izq = conNombre && quien !== undefined && p.esc === carr.esc && !carr.arriba ? (ancho(textoDe(quien, 4), nombrePx()) * 1.25 + nombrePx()) * 1.12 : 0;
     return { x: p.x + LLAMA_COLA * p.esc - izq, y: p.y - h, w: w + 6 * p.esc + izq, h };
   };
+
+  interface Ficha {
+    q: number;
+    c: Corredora;
+    p: Posicion;
+    estilo: "normal" | "lider" | "echada";
+    nv: Nivel;
+    arriba: boolean;
+    comp: number;
+    esc: number;
+    soyLider: boolean;
+  }
+  /** Dónde va la ficha de una: arriba de la cabeza (proyector) o a la izquierda del cuerpo (celular), sin salirse de la pantalla ni meterse bajo la cabecera. */
+  function ubicarFicha(et: Etiqueta, p: Posicion, arriba: boolean, comp: number, vz: number): void {
+    const esc = p.esc;
+    let x: number, y: number;
+    if (arriba) {
+      x = p.x + 6 * esc;
+      y = p.y - (LLAMA_ALTO * esc + (et.h * comp) / 2 + 3 * P.u);
+    } else {
+      x = p.x + (LLAMA_COLA * esc - 4 * P.u - (et.w * comp) / 2);
+      y = p.y - (LLAMA_ALTO * esc) / 3;
+    }
+    if (d.nueva) {
+      // Ni debajo de la cabecera (la ficha amarilla es más alta que lo que se reservó), ni cortada por el borde izquierdo.
+      const arribaMin = cam.y + (hudG.bajo + 3 * P.u - P.h / 2) / vz + (et.h * comp) / 2;
+      if (y < arribaMin) y = arribaMin;
+      const izqMin = cam.x - P.w / (2 * vz) + 4 * P.u + (et.w * comp) / 2;
+      if (x < izqMin && p.x > izqMin) x = izqMin;
+    }
+    et.raiz.position.set(x, y);
+  }
+  /**
+   * La carrera nueva no deja que dos fichas se pisen: las que van adelante mandan, y la que choca con una ya puesta pasa a un nombre
+   * más corto; si todavía choca, sube un renglón.
+   */
+  function resolverFichas(fichas: Ficha[], px: number, vz: number): void {
+    const puestas: { x0: number; y0: number; x1: number; y1: number }[] = [];
+    const caja = (f: Ficha): { x0: number; y0: number; x1: number; y1: number } => {
+      const et = f.c.etiqueta;
+      const w = et.w * f.comp, h = et.h * f.comp;
+      return { x0: et.raiz.x - w / 2, y0: et.raiz.y - h / 2, x1: et.raiz.x + w / 2, y1: et.raiz.y + h / 2 };
+    };
+    const choca = (a: { x0: number; y0: number; x1: number; y1: number }): boolean => puestas.some((b) => a.x0 < b.x1 - 1 && a.x1 > b.x0 + 1 && a.y0 < b.y1 - 1 && a.y1 > b.y0 + 1);
+    const orden = [...fichas].sort((a, b) => Number(b.soyLider) - Number(a.soyLider) || b.p.x - a.p.x);
+    for (const f of orden) {
+      const et = f.c.etiqueta;
+      let r = caja(f);
+      let nv = f.nv;
+      while (choca(r) && nv > 2 && !f.soyLider && f.estilo !== "echada") {
+        nv = (nv - 1) as Nivel;
+        ponerEtiqueta(et, textoDe(f.q, nv), px, f.estilo);
+        ubicarFicha(et, f.p, f.arriba, f.comp, vz);
+        r = caja(f);
+      }
+      if (choca(r) && f.arriba && !f.soyLider) {
+        et.raiz.y -= et.h * f.comp * 0.9;
+        const r2 = caja(f);
+        if (!choca(r2)) r = r2;
+        else et.raiz.y += et.h * f.comp * 0.9;
+      }
+      puestas.push(caja(f));
+    }
+  }
 
   function dibujar(t: number): void {
     const vz = cam.zoom || 1;
@@ -656,11 +810,14 @@ function crearEscena(k: Kit, d: Datos) {
     const nVivas = d.tiempos.echadas.length ? d.vivas(t).length : d.lanes.length;
     const nivel = nivelDe(nVivas);
     const px = nombrePx();
-    const lider = d.lider(t);
+    const lider = estable(t);
     const corona = t - d.tCrown;
     // La borla y la ficha grande viajan juntas: la ficha pasa cuando la borla está por aterrizar.
     const bp = posicionBorla(t, lider);
     const duenia = bp?.duenia ?? lider;
+    let rayaMax = -Infinity;
+    estelas.clear();
+    const fichas: Ficha[] = [];
     for (const q of quienes) {
       const c = tomar(q);
       const p = posicion(q, t);
@@ -670,6 +827,17 @@ function crearEscena(k: Kit, d: Datos) {
         continue;
       }
       const post = c.llama;
+      if (d.nueva && p.momento?.kind !== "echada" && (!d.tandas.length || t >= d.tSalida)) {
+        const xh = p.x + LLAMA_HOCICO * p.esc;
+        if (xh > rayaMax) rayaMax = xh;
+      }
+      if (d.nueva && p.velocidad > 0.5 && p.momento?.kind !== "echada" && t >= d.tSalida + 0.3) {
+        // Tres rayitas que se alargan con el paso, a la altura del lomo, del hocico a la cola y más atrás.
+        const largo = (34 + 10 * Math.sin(t * 9 + c.fase)) * p.esc;
+        for (const [a, h] of [[0.0, 52], [0.25, 36], [0.5, 22]] as const) {
+          estelas.moveTo(p.x + (LLAMA_COLA - 4 - a * 30) * p.esc, p.y - h * p.esc).lineTo(p.x + (LLAMA_COLA - 4) * p.esc - largo * (1 - a * 0.5), p.y - h * p.esc).stroke({ width: Math.max(1.6 * P.u, 2.2 * p.esc), color: 0xffffff, alpha: 0.6, cap: "round" });
+        }
+      }
       c.raiz.visible = true;
       c.raiz.position.set(p.x, p.y);
       c.raiz.scale.set(p.esc);
@@ -701,23 +869,29 @@ function crearEscena(k: Kit, d: Datos) {
       const enCarril = t >= d.tAbre && d.lanes.includes(q);
       const arriba = enCarril ? carr.arriba : forma.arriba;
       const esc = p.esc;
-      if (arriba) et.raiz.position.set(p.x + 6 * esc, p.y - (LLAMA_ALTO * esc + (et.h * comp) / 2 + 3 * P.u));
-      else et.raiz.position.set(p.x + (LLAMA_COLA * esc - 4 * P.u - (et.w * comp) / 2), p.y - (LLAMA_ALTO * esc) / 3);
+      ubicarFicha(et, p, arriba, comp, vz);
       et.raiz.zIndex = soyLider ? 3e6 : reciente ? 2e6 : 1e6;
       // Las que quedaron lejos de la pantalla no se dibujan.
       const dentro = p.x > cam.x - P.w / (2 * vz) - 300 && p.x < cam.x + P.w / (2 * vz) + 300;
       c.raiz.visible = dentro;
       // En el celular no hay lugar para que los nombres de todas las que se echaron queden a la vista: a los 2,5 s se va la ficha y queda la llama echada.
       const sinLugar = P.retrato && lying && (p.momento?.p ?? 0) > 5;
-      et.raiz.visible = dentro && p.etiquetar !== false && !sinLugar;
+      // Cuando cae el golpe, quien gana ya tiene su cartel: la ficha sobra (el nombre aparecía tres veces).
+      const sobra = d.nueva && ((k.coronado && q === d.campeona) || p.x + LLAMA_HOCICO * p.esc < cam.x - P.w / (2 * vz) + 4 * P.u);
+      et.raiz.visible = dentro && p.etiquetar !== false && !sinLugar && !sobra;
+      if (d.nueva && et.raiz.visible) fichas.push({ q, c, p, estilo, nv, arriba, comp, esc, soyLider });
     }
+    if (d.nueva) resolverFichas(fichas, px, vz);
     pintarPorton(t);
+    if (Number.isFinite(rayaMax)) rayaX = rayaMax;
     // La borla: pasa de una a otra (se calculó antes del bucle).
     borla.visible = !!bp && t < d.tCrown + 0.01 && (!d.tandas.length || t >= ((d.tandas[0] as Tanda).salidas[0] as number));
     if (bp) {
       borla.position.set(bp.x, bp.y);
       borla.scale.set(bp.esc);
+      if (d.nueva) (borla as Container & { flamea?(hora: number): void }).flamea?.(t);
     }
+    if (d.nueva) pintarRaya(t);
     // La cinta: el cursor lleva la cara de quien va adelante.
     const c = hudG.cinta;
     const lid = lider >= 0 ? lider : (d.lanes[0] as number);
@@ -750,23 +924,28 @@ function crearEscena(k: Kit, d: Datos) {
     if (lider < 0) return null;
     const sobre = (q: number): { x: number; y: number; esc: number; duenia: number } => {
       const p = posicion(q, t);
+      // La manta se apoya en el lomo, atrás del cuello: no tapa la cara de quien va primera.
+      if (d.nueva) return { x: p.x + 8 * p.esc, y: p.y - 47 * p.esc, esc: p.esc, duenia: q };
       return { x: p.x - 2 * p.esc, y: p.y - 70 * p.esc, esc: Math.max(p.esc * 1.25, 0.8 * P.u), duenia: q };
     };
-    const antes = d.lider(t - 0.45);
-    if (antes < 0 || antes === lider || t - 0.45 < d.tSalida) return sobre(lider);
-    let a = t - 0.45, b = t;
+    const vuelo = d.nueva ? 0.3 : 0.45;
+    const antes = estable(t - vuelo);
+    if (antes < 0 || antes === lider || t - vuelo < d.tSalida) return sobre(lider);
+    let a = t - vuelo, b = t;
     for (let i = 0; i < 6; i++) {
       const m = (a + b) / 2;
-      if (d.lider(m) === lider) b = m;
+      if (estable(m) === lider) b = m;
       else a = m;
     }
-    const e = ease((t - b) / 0.45);
+    const e = ease((t - b) / vuelo);
     const A = sobre(antes), B = sobre(lider);
-    return { x: lerp(A.x, B.x, e), y: lerp(A.y, B.y, e) - Math.sin(Math.PI * e) * 46 * P.u, esc: lerp(A.esc, B.esc, e), duenia: e < 0.55 ? antes : lider };
+    return { x: lerp(A.x, B.x, e), y: lerp(A.y, B.y, e) - Math.sin(Math.PI * e) * (d.nueva ? 30 : 46) * P.u, esc: lerp(A.esc, B.esc, e), duenia: d.nueva || e >= 0.55 ? lider : antes };
   }
 
   /* ---------------------------------------------------------------- cámara */
-  const camX = (t: number): number => xFrente(t) - (forma.ancla - P.w / 2);
+  // La carrera nueva deja aire adelante: la primera va a 0,72 del ancho y, cuando acelera o la alcanzan, entre 0,62 y 0,82. La cámara sigue
+  // al promedio de las que van adelante en la última décima (`sFrente`), no a la primera: es función de la hora, saltar da lo mismo.
+  const camX = (t: number): number => xFrente(t) - ((d.nueva ? AIRE : forma.ancla / P.w) - 0.5) * P.w;
   const vistaCorral: () => { x: number; y: number; z: number } = () => ({ x: camX(d.tSalida), y: P.h / 2, z: 1 });
   /** Con tandas: el portón a 0,7 del ancho, la tanda que espera a la izquierda del portón y el corral a la derecha (los nombres, en el costado izquierdo). */
   const vistaTanda = (): { x: number; y: number; z: number } => (P.retrato ? { x: gateX + 0.05 * P.w, y: P.h / 2, z: 0.52 } : { x: gateX - 0.2 * P.w, y: P.h / 2, z: 1 });
@@ -774,7 +953,10 @@ function crearEscena(k: Kit, d: Datos) {
     const v = d.tandas.length ? vistaTanda() : vistaCorral();
     const e = ease(t / d.tVuelo);
     const xA = metaX - 0.3 * P.w;
-    return { x: lerp(xA, v.x, e), y: P.h / 2, z: lerp(0.62, 1, e) };
+    // La carrera nueva no deja la cámara quieta mientras se leen los nombres: un acercamiento lento (6 %) hasta la salida. Con dos personas el
+    // corral era lo único en pantalla y pasaba de 4 s sin que nada cambiara (`audit-rigor`).
+    const respira = d.nueva && !d.tandas.length ? 0.06 * suave((t - d.tVuelo) / Math.max(1, d.tSalida - d.tVuelo)) : 0;
+    return { x: lerp(xA, v.x, e), y: P.h / 2, z: lerp(0.62, 1, e) + respira };
   }
   function vistaGrupo(t: number) {
     return { x: camX(t), y: P.h / 2, z: 1 };
@@ -816,6 +998,14 @@ function crearEscena(k: Kit, d: Datos) {
     const z = cam.zoom || 1;
     return { x: s.x, y: s.y, r: Math.max(c.w, c.h) * 0.6 * z, color: colorDeNombre(names[d.campeona] ?? "") };
   }
+  /** En qué punto de la pantalla está quien va adelante (la que lleva la borla; al final, la campeona): lo lee la prueba del niño. */
+  function puntoDelFrente(t: number): { x: number; y: number } | null {
+    const q = t >= d.tCrown ? d.campeona : d.duena(t);
+    const p = posicion(q, t);
+    if (!p.visible) return null;
+    const c = cuerpoDe(p);
+    return cam.toScreen(c.x + c.w / 2, c.y + c.h * 0.55, P.w, P.h);
+  }
   function protegida(): { caja: Caja; zona: Zona } | null {
     const p = posicion(d.campeona, d.tCrown);
     const c = cuerpoDe(p, true);
@@ -827,6 +1017,7 @@ function crearEscena(k: Kit, d: Datos) {
     medirGeometria();
     cache.clear();
     corralMemo.clear();
+    frenteMemo.clear();
     for (const c of enUso.values()) c.etiqueta.clave = "";
     pintarCielo();
     pintarMarcas();
@@ -847,6 +1038,7 @@ function crearEscena(k: Kit, d: Datos) {
     meta,
     foco,
     protegida,
+    puntoDelFrente,
   };
   return escena;
 }
@@ -871,7 +1063,8 @@ export type Escena = ReturnType<typeof crearEscena>;
 export const carreraPixi = crearJuego<Datos, Escena>({
   id: "race",
   textos: TEXTOS_CARRERA,
-  plan: planCarrera,
+  // `?carrera=nueva`: la carrera con aura, hasta que pase las compuertas. Sin la bandera, la de siempre.
+  plan: (ctx) => planCarrera(ctx, { nueva: params.get("carrera") === "nueva" }),
   arma(k, plan, previa) {
     if (!previa) return crearEscena(k, plan.datos);
     previa.rebuild();

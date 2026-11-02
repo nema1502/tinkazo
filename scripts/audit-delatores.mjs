@@ -47,6 +47,9 @@
  *
  * Uso:
  *   node scripts/audit-delatores.mjs race [--semillas 1500] [--n 18,30,60,100,200] [--json salida.json]
+ *   node scripts/audit-delatores.mjs race --nueva [--n 2,3,5,8,9,18,30,60,100,200] [--bayes 120000,20000]
+ *        la carrera con aura (?carrera=nueva): además de las señales, el adivinador completo de la recta
+ *        (delatores-bayes.mjs) con cada cantidad de carriles (2 a 8); 13,2 % o menos hasta el 88 % con 8
  *   pnpm build && pnpm preview --port 4173 &
  *   node scripts/audit-delatores.mjs [juego|todos|sapo,wheel] [--semillas 200] [--n 8]
  *        [--base http://localhost:4173] [--json salida.json] [--trazas carpeta] [--paralelo 1]
@@ -71,6 +74,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 import { CDP, launch } from "./lib/browser.mjs";
 import { cargarCarrera, observar, rondaDe, semillaDe } from "./lib/delatores-carrera.mjs";
 import { grabador } from "./lib/delatores-grabador.mjs";
+import { medirArcos, medirBayes } from "./lib/delatores-bayes.mjs";
 import { grabarPara, senales } from "./lib/delatores-senales.mjs";
 import { UMBRAL, evaluarMedia, evaluarReparto, evaluarSenal, falsasAlarmas, formatoP, pct } from "./lib/delatores.mjs";
 
@@ -98,6 +102,9 @@ const json = (() => {
   return i >= 0 && args[i + 1] && !args[i + 1].startsWith("--") ? args[i + 1] : "";
 })();
 const trazas = opt("--trazas", "");
+/** La carrera con aura (`?carrera=nueva`): se mide el plan nuevo y, además, el adivinador completo de la recta. */
+const nueva = args.includes("--nueva");
+const [bayesEntrena, bayesPrueba] = opt("--bayes", "120000,20000").split(",").map(Number);
 const releer = opt("--releer", "");
 const paralelo = Math.max(1, Math.min(6, Number(opt("--paralelo", "1"))));
 process.env.TINKAZO_GPU = "1";
@@ -354,6 +361,50 @@ function informar({ clave, etiqueta, filas, malas = 0, distintos = 0, delPlan = 
   salida.juegos[clave] = { ...detalle, ...(delPlan ? {} : { observaciones: filas }) };
 }
 
+/**
+ * El adivinador completo de la recta (`delatores-bayes.mjs`), con cada cantidad de carriles que sale de los tamaños pedidos
+ * (`min(8, n)`): mirando los puestos de la recta hasta el 88 %, no puede acertar más que el azar más tres errores estándar.
+ */
+async function adivinar(ns) {
+  const { runnerImport } = await import("vite");
+  const cargar = async (r) => (await runnerImport(join(process.cwd(), r), { configFile: false, logLevel: "silent" })).module;
+  const [{ planRecta }, { sembrar }] = await Promise.all([cargar("src/games/llamas/carrera-recta.ts"), cargar("src/games/pixi/kit/azar.ts")]);
+  const fila = { juego: "race (adivinador de la recta)", delator: [], mirar: [] };
+  const detalle = {};
+  console.log(`
+race · el adivinador de la recta · ${bayesEntrena} rondas de entrenamiento y ${bayesPrueba} de prueba`);
+  for (const L of [...new Set(ns.map((n) => Math.min(8, n)))].sort((a, b) => a - b)) {
+    const planDe = (i) => {
+      const r = sembrar(i * 7919 + 13);
+      const kw = Math.floor(r() * L);
+      const p = planRecta(Array.from({ length: L }, (_, k) => k), kw, sembrar(i * 104729 + 7));
+      return { L, kw, pos: p.pos };
+    };
+    const m = medirBayes(planDe, { L, entrenar: bayesEntrena, probar: bayesPrueba });
+    const bajos = m.hasta.filter((h) => h.q <= 0.88);
+    const peor = Math.max(...bajos.map((h) => h.acierto));
+    const bien = peor <= m.umbral && Math.abs(m.control - 1 / L) <= 3 * Math.sqrt(((1 / L) * (1 - 1 / L)) / 8000);
+    console.log(`  ${bien ? "✓" : "✗"} ${L} carriles: ${m.hasta.map((h) => `${Math.round(h.q * 100)} % ${coma(100 * h.acierto, 2)}`).join(" · ")} · control ${coma(100 * m.control, 2)} · azar ${coma(100 / L, 1)} · umbral ${coma(100 * m.umbral, 2)} %`);
+    if (!bien) fila.delator.push(`adivinador-${L}-carriles`);
+    detalle[`carriles-${L}`] = { azar: m.azar, umbral: m.umbral, control: m.control, hasta: m.hasta };
+    // El auditor de arco: que los arcos varíen y que ninguno diga, antes del acordeón, quién gana.
+    const planArco = (i) => {
+      const r = sembrar(i * 7919 + 13);
+      const kw = Math.floor(r() * L);
+      const p = planRecta(Array.from({ length: L }, (_, k) => k), kw, sembrar(i * 104729 + 7));
+      return { L, kw, pos: p.pos, arco: p.story.arc };
+    };
+    const a = medirArcos(planArco, { L, rondas: Math.min(bayesPrueba, 20000) });
+    const dep = a.independencia.filter((x) => x.p < UMBRAL.alfa);
+    console.log(`    arcos ${a.varia ? "✓" : "✗"} ${a.reparto.map((x) => `${x.arco} ${coma(100 * x.parte, 1)} %`).join(" · ")} · independencia del puesto ${dep.length ? `✗ (${dep.map((x) => `${Math.round(x.q * 100)} % p ${formatoP(x.p)}`).join(", ")})` : `✓ (p más baja ${formatoP(Math.min(...a.independencia.map((x) => x.p)))})`}`);
+    if (!a.varia) fila.delator.push(`arcos-${L}-carriles-no-varian`);
+    if (dep.length) fila.delator.push(`arco-${L}-carriles-depende-del-puesto`);
+    detalle[`carriles-${L}`].arcos = a;
+  }
+  resumen.push(fila);
+  salida.juegos["race-adivinador"] = detalle;
+}
+
 if (trazas) mkdirSync(trazas, { recursive: true });
 if (releer && !existsSync(releer)) {
   console.error(`no existe ${releer}`);
@@ -373,12 +424,13 @@ try {
         const filas = [];
         for (let i = 1; i <= rondas; i++) {
           const { ctx } = rondaDe(lib, n, i);
-          const o = observar(lib, lib.planCarrera(ctx), ctx);
+          const o = observar(lib, lib.planCarrera(ctx, { nueva }), ctx);
           filas.push({ i, errores: 0, ...o });
         }
         console.log(`  (${((Date.now() - desde) / 1000).toFixed(1).replace(".", ",")} s)`);
         informar({ clave: `${juego}-n${n}`, etiqueta: `${juego} (${n} personas)`, filas, delPlan: true });
       }
+      if (nueva) await adivinar(tamanos);
       continue;
     }
     console.log(`\n${juego} · ${releer ? "trazas guardadas" : `${N} semillas`} · ${gente} personas`);

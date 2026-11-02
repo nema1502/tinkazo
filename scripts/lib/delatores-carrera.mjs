@@ -22,7 +22,10 @@
  * - **la entrada a la recta** (`entrada`) y **la recta** (`recta-25`, `-50`,
  *   `-75`, `recta-90`, `carril`, `duelo-lado`): en qué puesto va la ganadora, en
  *   qué carril corre y de qué lado queda la rival del duelo. La recta es la de
- *   siempre (`planRace`).
+ *   siempre (`planRace`) o, con `nueva`, la intercambiable (`carrera-recta.ts`):
+ *   ahí se mide además `recta-88` (el acordeón) y `suceso-ganadora` (¿le pasan a
+ *   la ganadora tantos sucesos como a cualquiera?), y el camino entero lo mira
+ *   el adivinador (`delatores-bayes.mjs`).
  * - **el relator** (`nombra-*`, `drama`): a quién nombra, con las mismas reglas
  *   que en los otros juegos (`senalesSubtitulos`), sobre las líneas del guion.
  *
@@ -245,19 +248,34 @@ export function observar(lib, plan, ctx) {
       const xs = d.lanes.map((_, j) => d.final.pos(j, q));
       return xs.filter((x, j) => j !== kw && x > xs[kw]).length;
     };
-    for (const q of [0.25, 0.5, 0.75]) {
+    // La carrera nueva se decide al 88 %: ahí se mira el acordeón; el 90 % ya es el ataque y no se juzga como señal limpia.
+    for (const q of d.nueva ? [0.25, 0.5, 0.75, 0.88] : [0.25, 0.5, 0.75]) {
       repartos[`recta-${Math.round(q * 100)}`] = { K: L, k: puestoEn(q) };
       tiempos[`recta-${Math.round(q * 100)}`] = d.tDeQ(q);
     }
-    const al90 = d.lanes.map((g, j) => ({ g, x: d.final.pos(j, 0.9) })).sort((a, b) => b.x - a.x);
-    const [a, b] = [al90[0].g, al90[1].g];
-    senales["recta-90"] = { primera: apuesta([a], [a, b], w), segunda: apuesta([b], [a, b], w) };
-    tiempos["recta-90"] = d.tDeQ(0.9);
+    const qTop = d.nueva ? 0.88 : 0.9;
+    const alTop = d.lanes.map((g, j) => ({ g, x: d.final.pos(j, qTop) })).sort((a, b) => b.x - a.x);
+    const [a, b] = [alTop[0].g, alTop[1].g];
+    senales[`recta-${Math.round(qTop * 100)}`] = { primera: apuesta([a], [a, b], w), segunda: apuesta([b], [a, b], w) };
+    tiempos[`recta-${Math.round(qTop * 100)}`] = d.tDeQ(qTop);
+    if (d.nueva) {
+      // Los sucesos le pasan a cualquiera: la ganadora tiene uno tantas veces como le toca por azar (z de Bernoulli).
+      const tocadas = new Set();
+      for (const bt of d.final.story.beats) {
+        tocadas.add(bt.actor);
+        if (bt.target !== undefined) tocadas.add(bt.target);
+      }
+      const p = tocadas.size / L;
+      if (p > 0 && p < 1) {
+        medias["suceso-ganadora"] = { v: ((tocadas.has(kw) ? 1 : 0) - p) / Math.sqrt(p * (1 - p)), sd: 1 };
+        tiempos["suceso-ganadora"] = d.tDeQ(0.56);
+      }
+    }
     repartos.carril = { K: L, k: kw };
     tiempos.carril = d.tAbre;
     // El duelo: la rival corre arriba o abajo de la ganadora (sorteado).
     const { winner, rival } = d.final.story;
-    if (plan.arco === "duelo" && rival !== winner) {
+    if (!d.nueva && plan.arco === "duelo" && rival !== winner) {
       const [arriba, abajo] = winner < rival ? [w, d.lanes[rival]] : [d.lanes[rival], w];
       senales["duelo-lado"] = { arriba: apuesta([arriba], [arriba, abajo], w), abajo: apuesta([abajo], [arriba, abajo], w) };
       tiempos["duelo-lado"] = d.tAbre;

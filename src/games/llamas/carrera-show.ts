@@ -10,6 +10,7 @@ import { duracionNominal, grupoDe, normalDe, tSalidaDe } from "./carrera-duracio
 
 export { DUR_FINAL, FIJOS, FINALISTAS, PELOTON_MAX, RECTA, TARJETA, T_NOMBRES, T_VUELO, alfabetico, corto, duracionNominal, grupoDe, normalDe, tSalidaDe };
 import { planRace, type Plan as PlanFinal } from "./plan";
+import { carrilesDe, planRecta } from "./carrera-recta";
 
 /**
  * El show de la carrera, puro: la salida, el grupo que se va echando, la recta
@@ -73,9 +74,13 @@ export interface EscenaCarrera {
   meta(): Caja;
   foco(): FocoPunto;
   protegida(): { caja: Caja; zona: Zona } | null;
+  /** Dónde cae en la pantalla quien va adelante (para la prueba del niño; `null` si no se ve). */
+  puntoDelFrente(t: number): { x: number; y: number } | null;
 }
 
 export interface Datos {
+  /** La carrera con aura (`?carrera=nueva`): distancia de verdad, carriles fijos y la recta intercambiable. */
+  nueva: boolean;
   n: number;
   names: string[];
   cortos: string[];
@@ -108,6 +113,11 @@ export interface Datos {
   t80: number;
   /** La primera en `t` (índice en la lista). */
   lider(t: number): number;
+  /**
+   * Quién lleva la ficha amarilla y la manta. En la de siempre es `lider`. En la carrera nueva, la última que llevó la punta al menos 1,4 s
+   * seguidos: cuando dos se pasan y se repasan (el acordeón), la manta no parpadea. La raya sigue al hocico más adelantado.
+   */
+  duena(t: number): number;
   /** Las que siguen en el grupo en `t`, de la primera a la última. */
   vivas(t: number): number[];
   campeona: number;
@@ -124,12 +134,25 @@ export interface Datos {
 
 const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 
-export function planCarrera(ctx: Contexto): Plan<Datos> {
+/** La recta de la carrera nueva: los carriles con el azar de la ronda y el camino con el suyo, aparte del grupo y de la ganadora. */
+function rectaNueva(ctx: Contexto, campeona: number): PlanFinal {
+  const lanes = carrilesDe(ctx.nombres, campeona, ctx.rng, ctx.ganadores.slice(1));
+  return planRecta(lanes, lanes.indexOf(campeona), sembrar(Math.floor(ctx.azar("carrera:recta") * 4294967296)));
+}
+
+export interface OpcionesCarrera {
+  /** La carrera con aura, detrás de `?carrera=nueva`. Sin ella, la de siempre. */
+  nueva?: boolean;
+}
+
+export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos> {
+  const nueva = !!op.nueva;
   const names = ctx.nombres;
   const n = names.length;
   const campeona = ctx.ganadores[0] ?? 0;
-  // La final: la historia del director de emoción, con el azar de la ronda como siempre.
-  const final = planRace(names, campeona, ctx.rng, { sceneryDraws: Math.min(8, n) + 24 * 2 + 18 * 2 + 6 * 4 + 60 * 3, co: ctx.ganadores.slice(1) });
+  // La final. La de siempre: la historia del director de emoción, con el azar de la ronda. La nueva: la recta intercambiable,
+  // que se decide en los últimos metros (`carrera-recta.ts`) y tiene su azar aparte.
+  const final = nueva ? rectaNueva(ctx, campeona) : planRace(names, campeona, ctx.rng, { sceneryDraws: Math.min(8, n) + 24 * 2 + 18 * 2 + 6 * 4 + 60 * 3, co: ctx.ganadores.slice(1) });
   const lanes = final.lanes;
   const arco = final.story.arc;
   const cortos = names.map(corto);
@@ -172,10 +195,14 @@ export function planCarrera(ctx: Contexto): Plan<Datos> {
   const tCrown = tDeQ(1);
 
   /* --------------------------------------------------------------- el orden */
-  const entrada = lanes.map((_, k) => k).sort((a, b) => final.pos(b, 0.067) - final.pos(a, 0.067) || a - b).map((k) => lanes[k] as number);
+  // La carrera nueva entra a la recta en el orden en que sale la recta (q = 0); la de siempre, en el que tiene al 7 %.
+  const qEntrada = nueva ? 0 : 0.067;
+  const entrada = lanes.map((_, k) => k).sort((a, b) => final.pos(b, qEntrada) - final.pos(a, qEntrada) || a - b).map((k) => lanes[k] as number);
   const orden = crearOrden({
     gente, cae: (i) => tiempos.cae.get(i) ?? Infinity, finalistas: lanes, entrada, t0: tSalida, tConv, tAbre,
     rng: sembrar(Math.floor(ctx.azar("carrera:orden") * 4294967296)),
+    // En la nueva, quien toma la punta tarda dos segundos en pasar: el adelantamiento se ve, no se salta.
+    ...(nueva ? { traspaso: 1.8 } : {}),
   });
 
   /* ---------------------------------------------------------------- distancia */
@@ -240,7 +267,41 @@ export function planCarrera(ctx: Contexto): Plan<Datos> {
     const h = tandas.find((x) => t < x.tFin) ?? tandas[0];
     return (h?.miembros[0] ?? lanes[0]) as number;
   };
-  const lider = (t: number): number => (t >= tAbre ? (ranking(t)[0] as number) : t < tSalida && conTandas ? delCorral(t) : (orden.lider(Math.max(t, tSalida)) >= 0 ? orden.lider(Math.max(t, tSalida)) : (lanes[0] as number)));
+  // Sin grupo (hasta ocho personas) no hay carrera antes de la recta: el que va primero en el corral es el primero de la recta.
+  const sinGrupo = nueva && tAbre - tSalida < 0.01;
+  const lider = (t: number): number => (t >= tAbre || sinGrupo ? (ranking(Math.max(t, tAbre))[0] as number) : t < tSalida && conTandas ? delCorral(t) : (orden.lider(Math.max(t, tSalida)) >= 0 ? orden.lider(Math.max(t, tSalida)) : (lanes[0] as number)));
+  // La ficha pasa a quien toma la punta cuando esa punta se sostiene (un segundo, como las que anuncia el relator): mira un poco hacia adelante
+  // en el plan, que es puro, así la manta cambia justo cuando el relator lo dice y no parpadea entre dos casi empatadas.
+  const HISTERESIS = 1;
+  const duenaMemo = new Map<number, number>();
+  const duena = (t: number): number => {
+    const real = lider(t);
+    if (!nueva || t < tSalida + 0.5 || t >= tDeQ(0.97)) return real;
+    // Sobre una grilla de una décima: así el largo de cada tramo de punta se mide siempre igual y la dueña no se pelea con el borde de un tramo.
+    const celda = Math.floor(t * 10 + 1e-9);
+    const dado = duenaMemo.get(celda);
+    if (dado !== undefined) return dado;
+    const tq = celda / 10;
+    let quien = -2, desde = 0, ultima = -1;
+    const cierra = (hasta: number): void => {
+      if (quien >= 0 && desde <= tq + 1e-9 && hasta - desde >= HISTERESIS - 1e-9) ultima = quien;
+    };
+    const tope = tq + HISTERESIS;
+    for (let c = Math.max(Math.ceil(tSalida * 10), celda - 90); c <= Math.round(tope * 10); c++) {
+      const tt = c / 10;
+      const l = lider(tt);
+      if (l !== quien) {
+        cierra(tt);
+        quien = l;
+        desde = tt;
+      }
+    }
+    cierra(tope + 0.1);
+    const v = ultima >= 0 && (tiempos.cae.get(ultima) ?? Infinity) > t ? ultima : real;
+    if (duenaMemo.size > 4000) duenaMemo.clear();
+    duenaMemo.set(celda, v);
+    return v;
+  };
   const tanda = (t: number): number => (conTandas && t >= T_VUELO - 0.3 ? tandas.findIndex((x) => t < x.tFin) : -1);
   const vivas = (t: number): number[] => (t >= tAbre ? ranking(t) : t < tSalida ? orden.en(tSalida) : orden.en(t));
   const fase = (t: number): FaseCarrera => (t < tVuelo ? "vuelo" : t < tNombres ? (conTandas ? "tandas" : "nombres") : t < tAbre ? "grupo" : t < tCrown ? "recta" : "fin");
@@ -332,12 +393,13 @@ export function planCarrera(ctx: Contexto): Plan<Datos> {
     else if (b.kind === "pique") decir(3, t, { texto: () => ctx.txt("carPique"), calor, ...(solo ? { hecho: { tipo: "adelante" as const, quien } } : {}) });
     else if (b.kind === "escupida" && b.target !== undefined) decir(3, t, { texto: () => ctx.txt("carEscupida"), calor });
   }
-  if (arco === "remontada") decir(4, tDeQ(0.74), { texto: () => ctx.txt("carRemonta"), calor: 0.8 });
+  // En la carrera nueva el arco se nombra por cómo termina y la recta se decide al 88 %: las líneas del arco caen después.
+  if (arco === "remontada") decir(4, tDeQ(nueva ? 0.93 : 0.74), { texto: () => ctx.txt("carRemonta"), calor: 0.8 });
   else if (arco === "duelo") {
-    decir(4, tDeQ(0.52), { texto: () => ctx.txt("carDuelo"), calor: 0.7 });
-    decir(3, tDeQ(0.52) + 1.4, { texto: () => ctx.txt("carAprieta"), calor: 0.72 });
+    decir(4, tDeQ(nueva ? 0.9 : 0.52), { texto: () => ctx.txt("carDuelo"), calor: 0.7 });
+    if (!nueva) decir(3, tDeQ(0.52) + 1.4, { texto: () => ctx.txt("carAprieta"), calor: 0.72 });
     decir(5, tDeQ(final.foto), { texto: () => ctx.txt("carFoto"), calor: 0.95, grito: true, prioridad: PRIORIDAD.importante });
-  } else if (arco === "tapada") decir(4, tDeQ(0.88), { texto: () => ctx.txt("carCuela"), calor: 0.9 });
+  } else if (arco === "tapada") decir(4, tDeQ(nueva ? 0.93 : 0.88), { texto: () => ctx.txt("carCuela"), calor: 0.9 });
   // Las patas: un golpe de casco cada medio segundo, parejo.
   for (let t = tSalida + 0.5, j = 0; t < tCrown - 0.4; t += 0.5, j++) sonar(t, (k) => k.sonido.tono(j % 2 ? 3 : 0, "fondo", { dur: 0.05, vol: 0.022 }));
 
@@ -391,7 +453,8 @@ export function planCarrera(ctx: Contexto): Plan<Datos> {
     hinchadas.push(mejor.t);
   }
   hinchadas.sort((x, y) => x - y).forEach((t, k) => {
-    const quien = gritan[k] as number;
+    // En la carrera nueva, antes del 88 % ir adelante no dice nada de quién gana (el acordeón lo reparte): la tribuna grita por quien lleva la raya.
+    const quien = nueva ? duena(t) : (gritan[k] as number);
     decir(2, t, { texto: () => ctx.txt("carHinchada", nom(quien)), calor: Math.min(0.9, 0.5 + 0.35 * clamp01((t - tAbre) / DUR_FINAL)) });
   });
   aceptadas = aceptar(cand);
@@ -428,7 +491,7 @@ export function planCarrera(ctx: Contexto): Plan<Datos> {
   const respuestas = (t: number): Respuestas => {
     const s = ultimoSuceso(t);
     return {
-      adelante: { quienes: [t >= tCrown ? campeona : lider(t)], lugar: "derecha" },
+      adelante: { quienes: [t >= tCrown ? campeona : duena(t)], lugar: "derecha" },
       hacia: "derecha",
       progreso: frac(Math.min(t, tCrown)),
       paso: { tipo: s.tipo, quien: s.quien, desde: s.desde },
@@ -436,8 +499,8 @@ export function planCarrera(ctx: Contexto): Plan<Datos> {
   };
 
   const datos: Datos = {
-    n, names, cortos, final, lanes, gente, tiempos, orden, tVuelo, tNombres, tSalida, tAbre, tCrown, tramos,
-    dist, distAbre: dAbre, total, q, tDeQ, frac, cinta, t80, lider, vivas, campeona, fase, sucesos, cambiosDePunta: cambios, lineasAdelante, tandas, tanda,
+    nueva, n, names, cortos, final, lanes, gente, tiempos, orden, tVuelo, tNombres, tSalida, tAbre, tCrown, tramos,
+    dist, distAbre: dAbre, total, q, tDeQ, frac, cinta, t80, lider, duena, vivas, campeona, fase, sucesos, cambiosDePunta: cambios, lineasAdelante, tandas, tanda,
   };
   return {
     duracion: tCrown,

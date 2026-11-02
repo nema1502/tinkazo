@@ -179,3 +179,39 @@ export function crearBorla(): Container {
   c.addChild(halo, g);
   return c;
 }
+
+/**
+ * La manta amarilla del líder (carrera nueva): una capa que flamea en el lomo, de la nuca hacia atrás, con rombos de aguayo. Vuela de una
+ * llama a otra cuando se pierde la punta. Se apoya en el origen (el lomo, atrás del cuello) y `flamea(t)` la mueve con la hora: sin azar.
+ */
+export function crearManta(): Container & { flamea(t: number): void } {
+  const c = new Container() as Container & { flamea(t: number): void };
+  const g = new Graphics();
+  c.addChild(g);
+  c.flamea = (t: number): void => {
+    g.clear();
+    const ph = t * 11;
+    const N = 6;
+    const arriba: number[] = [];
+    const abajo: number[] = [];
+    for (let i = 0; i <= N; i++) {
+      const f = i / N;
+      arriba.push(-i * 6.5, -5 + Math.sin(ph - i * 0.9) * 2.6 * f);
+    }
+    for (let i = N; i >= 0; i--) {
+      const f = i / N;
+      abajo.push(-i * 6.5 - 3 * f, 12 + 5 * f + Math.sin(ph - i * 0.9 + 1.2) * 4 * f);
+    }
+    g.poly([...arriba, ...abajo]).fill(YELLOW).stroke({ width: 2.2, color: INK, join: "round" });
+    // Los rombos del aguayo: tres, sobre la tela, que siguen su ondulación.
+    for (let k = 0; k < 3; k++) {
+      const f = (k + 0.7) / 3.6;
+      const x = -f * N * 6.5;
+      const y = 3.5 + Math.sin(ph - f * N * 0.9 + 0.6) * 2.4 * f;
+      const r = 3.4 - k * 0.5;
+      g.poly([x, y - r, x + r, y, x, y + r, x - r, y]).fill(k % 2 ? 0x2f9e44 : 0xd94b3b).stroke({ width: 1, color: INK });
+    }
+  };
+  c.flamea(0);
+  return c;
+}

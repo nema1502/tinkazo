@@ -40,6 +40,8 @@ export interface EntradaOrden {
   tAbre: number;
   /** El azar sembrado del grupo, aparte del de la final. */
   rng: () => number;
+  /** Cuánto tardan en cruzarse la que deja la punta y la que la toma (segundos); la carrera nueva lo estira para que se vea el adelantamiento. */
+  traspaso?: number;
 }
 
 export interface Orden {
@@ -47,6 +49,15 @@ export interface Orden {
   en(t: number): number[];
   /** La primera en `t` (-1 si no queda nadie). */
   lider(t: number): number;
+  /**
+   * La distancia de `g` en `t`, en unidades de puntaje (la carrera nueva las dibuja en cuerpos): es lo que ordena a `en`, continua en
+   * el tiempo. El puesto sale de ella, nunca al revés.
+   */
+  puntaje(g: number, t: number): number;
+  /** El puesto con que sale `g`, de 0 (la de adelante) a la última: la carrera nueva le da su fila y se la deja toda la carrera. */
+  rango(g: number): number;
+  /** Cuánto separa un puesto del siguiente al salir, en unidades de puntaje. */
+  entrePuestos: number;
   /** Cuándo y quién toma la punta (sin contar las echadas de quien la llevaba). */
   cambios: { t: number; quien: number }[];
 }
@@ -72,6 +83,7 @@ interface Onda {
 }
 
 export function crearOrden(e: EntradaOrden): Orden {
+  const traspaso = e.traspaso ?? TRASPASO;
   const idx = new Map<number, number>();
   e.gente.forEach((g, j) => idx.set(g, j));
   // El paseo de cada una: tres ondas lentas con amplitudes 0,12 + 0,09 + 0,06 = 0,27.
@@ -84,8 +96,10 @@ export function crearOrden(e: EntradaOrden): Orden {
     const j = Math.floor(e.rng() * (i + 1));
     [reparto[i], reparto[j]] = [reparto[j] as number, reparto[i] as number];
   }
+  const rangoDe: number[] = e.gente.map(() => 0);
   reparto.forEach((j, r) => {
     base[j] = (r - (reparto.length - 1) / 2) * ENTRE_PUESTOS;
+    rangoDe[j] = reparto.length - 1 - r;
   });
   // La punta: cada 4 a 6 s, una de las primeras del paseo (sorteada, sin mirar quién es) toma la delantera.
   const toma: { t: number; quien: number }[] = [];
@@ -98,7 +112,7 @@ export function crearOrden(e: EntradaOrden): Orden {
       const fin = k + 1 < turnos.length ? (turnos[k + 1] as { t: number }).t : e.tConv;
       // La que entra sube antes de su turno y la que sale baja después: siempre una de las dos tiene el empujón entero,
       // y en el traspaso no se cuela una tercera (el paseo pelado) por unos décimos.
-      v += suave((tt - (tk.t - TRASPASO)) / TRASPASO) * (1 - suave((tt - fin) / TRASPASO));
+      v += suave((tt - (tk.t - traspaso)) / traspaso) * (1 - suave((tt - fin) / traspaso));
     }
     return v;
   };
@@ -160,5 +174,6 @@ export function crearOrden(e: EntradaOrden): Orden {
       desde = tt;
     }
   }
-  return { en, lider, cambios };
+  const rango = (g: number): number => rangoDe[idx.get(g) as number] ?? 0;
+  return { en, lider, puntaje, rango, entrePuestos: ENTRE_PUESTOS, cambios };
 }

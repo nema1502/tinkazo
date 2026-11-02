@@ -9,6 +9,7 @@ import { crearGuion, type EjecutorGuion } from "./guion";
 import { anotarMarcas } from "./marcas";
 import { crearMarcadorVista } from "./marcador-vista";
 import { tamanoLetra } from "./nombres";
+import { lugarDe, type Respuestas } from "./respuestas";
 import { crearSonido } from "./sonido";
 import type { Contexto, DefJuego, Kit, Lanzador, Plan } from "./tipos";
 
@@ -97,7 +98,12 @@ export function crearJuego<P, E>(def: DefJuego<P, E>, anf: Anfitrion = anfitrion
     let escena: E | undefined;
     // `?auditar=nino`: la verdad del plan en cada instante, para la prueba del niño (`audit-nino`).
     // `duracion` es la hora del golpe (el 100 %): `audit-nino` para al 25 % y al 60 % de ella.
-    if (anf.auditar() === "nino") (window as unknown as { __nino: unknown }).__nino = { sinLetras: false, duracion: plan.duracion + F.golpe / anf.ritmo(), t: () => t, verdad: () => plan.respuestas(t) };
+    // Si la escena sabe dónde cae en la pantalla quien va adelante (`puntoDelFrente`), la zona de la verdad es esa y no una que declaró el plan.
+    const verdadEnPantalla = (r: Respuestas): Respuestas => {
+      const p = (escena as { puntoDelFrente?: (hora: number) => { x: number; y: number } | null } | undefined)?.puntoDelFrente?.(t);
+      return p ? { ...r, adelante: { ...r.adelante, lugar: lugarDe(p.x, p.y, S.sw(), S.sh()) } } : r;
+    };
+    if (anf.auditar() === "nino") (window as unknown as { __nino: unknown }).__nino = { sinLetras: false, duracion: plan.duracion + F.golpe / anf.ritmo(), t: () => t, verdad: () => verdadEnPantalla(plan.respuestas(t)) };
     const sonido = crearSonido(anf.voz);
     const k: Kit = {
       S, cam: S.cam, nombres, ganadores, ronda: baliza.randomness, idioma,
