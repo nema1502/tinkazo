@@ -262,7 +262,8 @@
     min-height: 48px; border: 0; border-radius: 12px; cursor: pointer;
     background: var(--magenta); color: var(--on-accent); font-family: inherit; font-size: 17px; font-weight: 800;
   }
-  .login-go:disabled { opacity: 0.45; cursor: default; }
+  /* Apagado: gris con letra del color de lo secundario, sin transparencia (rosa a medias con letra oscura quedaba por debajo de 4,5:1). */
+  .login-go:disabled { opacity: 1; cursor: default; background: var(--field); color: var(--ink2); border: 1px solid var(--line); }
   .login-err { font-size: 16px; font-weight: 700; color: var(--magenta-ink); text-align: center; }
   .login-err.ok { color: var(--teal-ink); }
   .login-or { display: flex; align-items: center; gap: 12px; margin: 22px 0 14px; font-size: 16px; font-weight: 600; color: var(--muted); }
@@ -276,7 +277,7 @@
   }
   .login-opt:hover { border-color: var(--ink2); background: var(--card); }
   .login-opt svg { width: 20px; height: 20px; flex: 0 0 auto; }
-  .login-opt small { font-size: 14px; font-weight: 600; color: var(--muted); }
+  .login-opt small { font-size: 14px; font-weight: 600; color: var(--muted); white-space: nowrap; }
   /* Google primero y grande: es lo que va a tomar casi todo el mundo (diseño del onboarding). */
   /* Ancho completo, como las demás filas: un botón no se estira solo y fuera de `.login-opts` quedaba de 218 px, pegado a la izquierda. */
   .login-opt.login-google { width: 100%; box-sizing: border-box; min-height: 56px; font-size: 17px; font-weight: 800; background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
@@ -322,6 +323,7 @@
     margin: 28px 0 16px; box-shadow: none;
   }
   /* Con una ventana abierta (la de ingreso), el aviso de un error va arriba: abajo tapaba el campo del correo y el botón que él mismo recomienda. */
+  .wallet-notice.bad.en-tarjeta.bajo-boton { margin: 10px 0 0; }
   body:has(.modal-back) .wallet-notice:not(.arriba):not(.en-tarjeta) { bottom: auto; top: max(12px, env(safe-area-inset-top, 0px)); }
   /* El que salió bien, dentro de la página (arriba de la lista): no tapa ningún control (wallet-ui.ts). */
   .wallet-notice.arriba {
@@ -947,6 +949,7 @@
   /* Sobre el morado del final de la portada y de la demo, el enlace va del color de la letra de ahí. */
   .demo-fin .hero-ctas .enlace, .portada-fin .enlace, .ensayo-fin .enlace:hover,
   .demo-fin .hero-ctas .enlace:hover, .portada-fin .enlace:hover { color: var(--on-purple); }
+  .demo-fin .cta-entrar { padding-inline: 20px; }
   .portada-fin .hero-otras { margin-top: 10px; }
 
   /* La primera vez, una línea sin botones de color (onboarding.ts). */

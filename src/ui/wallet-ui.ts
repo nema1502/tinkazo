@@ -1378,7 +1378,12 @@ function notice(text: string, bad: boolean, reintentar?: () => void, otraVia = t
     if (login) {
       // Dentro de la tarjeta y no flotando: arriba tapaba la X para cerrarla, abajo el campo del correo.
       el.classList.add("en-tarjeta");
-      login.insertBefore(el, login.querySelector(".login-body"));
+      // Pegado debajo del botón de Google: arriba empujaba la tarjeta y a 320 px había que scrollear para volver al botón.
+      const google = login.querySelector<HTMLElement>(".login-google");
+      if (google) {
+        el.classList.add("bajo-boton");
+        google.after(el);
+      } else login.insertBefore(el, login.querySelector(".login-body"));
     } else document.body.appendChild(el);
     return;
   }

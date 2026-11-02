@@ -327,8 +327,10 @@ function initVistas(): void {
         boton.style.minWidth = `${Math.ceil(r.width)}px`;
         boton.style.minHeight = `${Math.ceil(r.height)}px`;
       }
-      el.dataset.i = clave;
-      el.textContent = t(clave);
+      // En el recuadro del final de la demo (angosto) va la versión corta: "Entrar con Google y sortear" se partía en tres renglones.
+      const k = clave === "ctaGoogle" && boton?.hasAttribute("data-cta-corto") ? "ctaGoogleCorto" : clave;
+      el.dataset.i = k;
+      el.textContent = t(k);
       if (!boton) continue;
       if (ocupado) boton.setAttribute("aria-busy", "true");
       else {

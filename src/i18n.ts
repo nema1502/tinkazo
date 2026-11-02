@@ -2050,6 +2050,7 @@ export const T: Record<Lang, Dict> = {
     masResultado: "Otra lista, copiar el mensaje y más",
     // Bases antes de sellar (1 de noviembre de 2026)
     rulesNotePre: "Pegalas en Luma, en WhatsApp o donde avisaste del sorteo antes de empezar. Dicen cómo se elige y cuándo se publica el número del sorteo.",
+    ctaGoogleCorto: "Entrar con Google",
     // >>> kit:i18n-es (scripts/nuevo-juego.mjs escribe entre estas marcas)
     // <<< kit:i18n-es
   },
@@ -3712,6 +3713,7 @@ export const T: Record<Lang, Dict> = {
     masResultado: "Another list, copy the message and more",
     // Rules before sealing (November 1, 2026)
     rulesNotePre: "Paste them on Luma, WhatsApp or wherever you announce the draw before you start. They say how the winner is chosen and when the draw's number is published.",
+    ctaGoogleCorto: "Sign in with Google",
     // >>> kit:i18n-en (scripts/nuevo-juego.mjs escribe entre estas marcas)
     // <<< kit:i18n-en
   },
