@@ -460,6 +460,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
   let flash = 0, bump = 0, didLock = false, saidPeg = false, saidLast = false, didCrown = false;
   // `?auditar=nino`: la prueba del niño (`scripts/audit-nino.mjs`) lee del plan quién va adelante, hacia dónde, cuánto falta y qué pasó. Solo lee.
   exponerNino({
+    forma: "rueda",
     duracion: T_CROWN,
     t: () => tAll,
     verdad: () => {

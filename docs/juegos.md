@@ -83,7 +83,7 @@ Los parámetros de la URL funcionan solos: `?instant` lo resuelve el estadio, y 
 
 ### La regla del niño, en el kit
 
-Desde el 26 de octubre de 2026 los juegos se piensan, como la tele, con una sola vara: lo entiende alguien de 7 años o más. Ese chico lee nombres pero no el relator, y entender no quiere decir infantil: el juego tiene que gustarle a la sala entera. La regla: **cualquier cuadro del juego, sin leer el relator, dice quién va adelante, hacia dónde van, cuánto falta y qué acaba de pasar.** El kit la garantiza con piezas que el plan declara y las pruebas de cada juego verifican:
+Desde el 26 de octubre de 2026 los juegos se piensan, como la tele, con una sola vara: lo entiende alguien de 7 años o más. Ese chico lee nombres pero no el relator, y entender no quiere decir infantil: el juego tiene que gustarle a la sala entera. La regla: **cualquier cuadro del juego, sin leer el relator, muestra si ya ganó alguien, cuánto falta, qué acaba de pasar, adónde mirar y lo propio de su forma (quién va adelante, quiénes siguen, qué está señalado, quién tiene más).** La forma es una por juego (`carrera`, `de-pie`, `rueda` o `acumulacion`, en `catalogo.ts`) y se elige por la pregunta que contestaría un chico mirando un cuadro. El kit la garantiza con piezas que el plan declara y las pruebas de cada juego verifican:
 
 | Qué pide la regla | Dónde vive en el kit |
 |---|---|
@@ -93,9 +93,9 @@ Desde el 26 de octubre de 2026 los juegos se piensan, como la tele, con una sola
 | **Un solo sentido** de avance, **la meta en todo cuadro** y el cartel nunca encima del ganador | `director.ts`: `plan.sentido`; `momentos.meta` y `guardarMeta` no dejan que ninguna toma la suelte; con el golpe la cámara protege a quien gana debajo del cartel (`tapaAlGanador`, `cajaDelFoco`) aunque el plan no lo pida |
 | **El relator, de seis palabras o menos**, un nombre, ningún número | `guion.ts`: `validarGuion(líneas, duración, { nino: true, nombres })` y `problemasDeLinea` |
 | **Cada hecho se ve en el cuerpo a los 0,3 s de su línea**, dos salidas van a 1 s o más, y salir no suena a fracaso | `LineaGuion.hecho`, `POSE_MAX` y `SALIDAS_APARTE` (en `respuestas.ts`); `sonido.salida()`, un solo tono suave igual en todos |
-| **Las respuestas, en cada instante**: quién va adelante, hacia dónde, cuánto falta y qué acaba de pasar | `plan.respuestas(t)`, obligatorio: sin él `crearJuego` no compila. `problemasDeRespuestas` lo recorre; con `?auditar=nino` el juego deja `window.__nino.verdad()` para `audit-nino`, que saca tres capturas sin subtítulo (al 25 %, al 60 % y al final) y las compara con esto |
+| **Las respuestas, en cada instante**: lo propio de la forma (`adelante.quienes`), adónde mirar (`adelante.lugar`), cuánto falta y qué acaba de pasar | `plan.respuestas(t)`, obligatorio: sin él `crearJuego` no compila. `problemasDeRespuestas` lo recorre; con `?auditar=nino` el juego deja `window.__nino.forma` y `window.__nino.verdad()` para `audit-nino`, que saca una foto y una tira de tres cuadros sin subtítulo (al 25 %, al 60 % y al final) y las compara con esto |
 
-`nuevo-juego.mjs` deja puestos estos ganchos y sus pruebas (`sentido`, `marcador`, `respuestas`, `hecho`, `meta`, el relator de seis palabras y figuras del tamaño de una figura), y la página de diseño trae la **ficha del niño**, que se aprueba antes del código: qué es ir adelante, hacia dónde, cómo se ve lo que falta y cada hecho con su tipo y su pose. De pie declara `respuestas`, `marcador` y `sentido`, pero todavía no cumple el resto de la regla (sienta a varios a la vez y su relator pasa de seis palabras): es de los diez que se rediseñan. Todavía no entran las poses de las figuras (correr, frenar, tropezar, echarse, saludar, ganar), que cada capa declare su clase, ni `audit-nino` mismo.
+`nuevo-juego.mjs` deja puestos estos ganchos y sus pruebas (`sentido`, `marcador`, `respuestas`, `hecho`, `meta`, el relator de seis palabras y figuras del tamaño de una figura), y la página de diseño trae la **ficha del niño**, que se aprueba antes del código: su forma, qué es ir adelante, adónde se mira, cómo se ve lo que falta y cada hecho con su tipo y su pose. De pie declara `respuestas`, `marcador` y `sentido`, pero todavía no cumple el resto de la regla (sienta a varios a la vez y su relator pasa de seis palabras): es de los diez que se rediseñan. Todavía no entran las poses de las figuras (correr, frenar, tropezar, echarse, saludar, ganar), que cada capa declare su clase.
 
 ### Lo que el kit no abstrae
 
@@ -195,7 +195,7 @@ pnpm audit:todo --simular                         # muestra qué correría y cu�
 | Cambió | Corré | Tarda |
 |---|---|---|
 | Un juego | `--solo audit-game,audit-rigor,audit-identidad,audit-delatores --juegos <juego>`, y la revisión visual si el cambio es visual | unos 10 min |
-| Un juego nuevo, rediseñado o pasado al kit | lo de arriba y [`audit-nino <juego>`](#la-prueba-del-niño), con un modelo que describa las fotos (no corre solo: necesita al describidor) | unos minutos de fotos (6 s por corrida en De pie), más la descripción |
+| Un juego nuevo, rediseñado o pasado al kit | lo de arriba y [`audit-nino <juego>`](#la-prueba-del-niño), con un modelo que describa las fotos (no corre solo: necesita al describidor) | unos minutos de imágenes (6 s por corrida en De pie), más la descripción |
 | `stage.ts` o `camera.ts` | `--solo audit-game,audit-identidad,audit-rigor,audit-encuadre` | cerca de 1 h |
 | La interfaz | `--solo audit-ui,check-paginas,check-glosario` | 5 min |
 | Antes de subir | `--solo smoke,audit-ui,audit-flujo` más lo de arriba | 25 min |
@@ -277,41 +277,69 @@ Sin Chrome ni red, en dos segundos, y entra en la batería con nivel `siempre`. 
 
 ## La prueba del niño
 
-La regla del niño (26 de octubre de 2026, [en el kit](#la-regla-del-niño-en-el-kit)) dice que **cualquier cuadro del juego, sin leer el relator, muestra quién va adelante, hacia dónde van, cuánto falta y qué acaba de pasar**. Sin una medida es una opinión: [`scripts/audit-nino.mjs`](../scripts/audit-nino.mjs) la mide. No llama a ninguna API (no hace falta llave ni cuesta): saca las fotos y la verdad del plan, un modelo que solo ve las fotos las describe, y un juez compara.
+La regla del niño (26 de octubre de 2026, con la forma desde el 2 de noviembre; [en el kit](#la-regla-del-niño-en-el-kit)) dice que **cualquier cuadro del juego, sin leer el relator, muestra si ya ganó alguien, cuánto falta, qué acaba de pasar, adónde mirar y lo propio de su forma (quién va adelante, quiénes siguen, qué está señalado, quién tiene más)**. Sin una medida es una opinión: [`scripts/audit-nino.mjs`](../scripts/audit-nino.mjs) la mide. No llama a ninguna API (no hace falta llave ni cuesta): saca las imágenes y la verdad del plan, un modelo que solo ve las imágenes las describe, y un juez compara.
+
+Hasta el 1 de noviembre la prueba hacía las mismas cuatro preguntas a todos (quién va ganando, hacia dónde, cuánto falta, qué pasó): eran la forma de una carrera. En un juego de quedar de pie no hay «quién va ganando» al 25 %, porque los que siguen están todos igual, y por eso Guajojó y Toborochi daban 0 de 4 con finales que sí se entendían. La prueba no estaba mal: estaba incompleta. Ahora cada juego declara su **forma** y la pregunta propia sale de ella.
 
 ```bash
 pnpm preview --port 4192 &
 CDP_PORT=9692 node scripts/audit-nino.mjs <juego|todos> --personas 18 --semillas 8 --base http://localhost:4192
 # el describidor lee preguntas.json con scripts/prompt-nino.md y escribe respuestas-modelo.json
 node scripts/audit-nino.mjs --juzgar docs/capturas/nino/<juego> [--json]
-# el caso de control: la carrera de hoy, la que no se entendía, tiene que reprobar
-CDP_PORT=9692 node scripts/audit-nino.mjs --control --semillas 2 --base http://localhost:4192
-node scripts/audit-nino.mjs --control --juzgar docs/capturas/nino/control
+# los dos controles: la carrera de hoy tiene que reprobar y la ruleta tiene que aprobar
+CDP_PORT=9692 node scripts/audit-nino.mjs --controles --semillas 2 --base http://localhost:4192
+node scripts/audit-nino.mjs --controles --juzgar docs/capturas/nino
 ```
 
-1. **Capturar.** Por semilla (`?semilla=` y `?ganador=` iguales: cambian la ronda y quién gana) y por tamaño (proyector 1920×1080 oscuro y celular 390×844 claro), corre el show con el reloj en turbo y lo congela al 25 % y al 60 % de su duración y un segundo después del golpe. En cada parada esconde el subtítulo y saca una foto **con los nombres** (la vara de 7 años o más, que los lee). Son 6 fotos por semilla. Deja en `docs/capturas/nino/<juego>/` (sin versionar) `preguntas.json` (por foto, un id sin sentido, la variante y las cuatro preguntas, en un orden que no es el del show: ni el juego, ni la verdad, ni cuál es la última), `capturas/<id>.png`, el `prompt-nino.md` y, aparte, `oculto/verdad.json`.
-2. **Describir.** Un modelo que solo ve las fotos (uno barato; si una foto falla la repite otro más fuerte, en `respuestas-desempate.json`, y decide la segunda) las contesta con el [prompt fijo](../scripts/prompt-nino.md): `adelante`, `hacia`, `falta` y `paso`.
-3. **Juzgar.** `--juzgar` compara con la verdad y escribe `veredicto.json` y `repetir.json` (las fotos para el segundo describidor). Con `--json` deja la línea de resumen de los demás auditores.
+**Las formas.** Una por juego, en `catalogo.ts` (los del kit) y en el gancho de la ruleta y de la carrera, que la exponen en `window.__nino.forma`. Las de hoy: carrera = la carrera de llamas (con y sin `carrera=nueva`), el teleférico y los cohetes; de pie = Guajojó, Toborochi, la piñata, el sapo, ¿Quién es? y El Trueque; rueda = la ruleta, el trompo y Oruro; acumulación = la chovena. La tabla de referencia es `FORMA_DECIDIDA` (`scripts/lib/nino.mjs`). Hoy exponen `__nino` la ruleta, la carrera y los del kit; los demás declararán su forma cuando lo hagan.
 
-**El contrato.** Es el del kit (`kit/respuestas.ts`): con `?auditar=nino`, `window.__nino` trae `verdad()` (las `Respuestas`: `adelante` con `quienes` y `lugar`, `hacia`, `progreso` de 0 a 1 que solo sube, y `paso` con tipo, quién y desde cuándo), `t()` (la hora del juego), `duracion` (la hora del golpe, el 100 %). Los juegos del kit lo dejan solos con `crearJuego`. La ruleta (`wheel-nino.ts`) y la carrera de hoy (`race-nino.ts`) lo exponen desde su plan sin cambiar el show: sin el parámetro no se expone nada.
+**Las cinco preguntas.** Cuatro son de todos y una es propia de la forma:
 
-**Qué decide la verdad.** Tres cosas las tiene que declarar el juego, y el veredicto depende de ellas (la primera pasada de la ruleta dio 0 de 2 con la zona declarada, `hacia` «arriba» y una ventana de 4 s; con las de abajo, 2 de 2):
+| Pregunta | Qué se contesta | La verdad |
+|---|---|---|
+| `gano`: ¿ya se sabe quién ganó? | `no`, o `si` y el nombre tal como se lee | `no` mientras la hora del juego es menor que la duración; después `si` y el nombre de quien gana. Un `si` antes del golpe es una falla grave: la presentación delata |
+| `falta`: ¿cuánto falta? | empieza, mucho, mitad, poco, termino | `progreso` del plan |
+| `paso`: ¿qué acaba de pasar? | empezo, salio, adelante, freno, casi, gano, nada | `paso` del plan |
+| `mirar`: ¿adónde hay que mirar para seguir lo que pasa? | arriba, abajo, izquierda, derecha, centro, alrededor | `adelante.lugar`: la zona donde cae en la pantalla lo que se sigue, que mide el juego con la cámara |
+| `propia`, según la forma | carrera: ¿quién va adelante? (un nombre). De pie: ¿quiénes siguen en juego? (dos nombres que se lean). Rueda: ¿qué nombre está señalado ahora? (uno). Acumulación: ¿quién tiene más? (uno) | un nombre entre `adelante.quienes` (dos distintos, entre quienes siguen, de pie) |
 
-- **La zona** en que está quien va adelante no es del plan: depende de la cámara. La mide el juego donde cae en la pantalla (`lugarDe`, con el tercio del medio como centro): la ruleta, el gajo bajo la flecha; la carrera, la llama de la que va primera en la pista y de la ganadora.
-- **`hacia`.** La ruleta gira: «alrededor». La flecha, adónde mirar, es la zona de `adelante`.
+`mirar` reemplaza a `hacia`, que era de carrera: el plan lo sigue declarando para las pruebas de la cámara, pero la prueba ya no lo pregunta. Aparte va `olor`, que no entra en el veredicto: «¿esto parece un casino, una máquina tragamonedas o un juego de apuestas?». Se pregunta en toda foto y no solo en la final, porque si no la pregunta delataría cuál es la última. Aprueba si todas dicen `no`; sale en el JSON como `olor` y la boleta lo lee de ahí.
+
+**Las dos imágenes de cada parada.**
+
+1. **Capturar.** Por semilla (`?semilla=` y `?ganador=` iguales: cambian la ronda y quién gana) y por tamaño (proyector 1920×1080 oscuro y celular 390×844 claro), corre el show con el reloj en turbo y lo congela tres veces en cada parada (al 25 % y al 60 % de su duración, y un segundo después del golpe): 0,6 s antes, 0,3 s antes y en el momento. Esconde el subtítulo y saca los tres cuadros **con los nombres** (la vara de 7 años o más, que los lee).
+   - **La foto** es el cuadro del momento: para `gano`, `falta`, `propia` y `olor`.
+   - **La tira** son los tres cuadros del mismo tamaño, uno al lado del otro de izquierda a derecha: para `paso` y `mirar`. Un chico mira movimiento y una foto quieta no lo muestra. Se arma dentro del mismo Chrome, en una pestaña en blanco con un canvas que dibuja los tres cuadros (de 960 px de ancho, como mucho) y exporta un PNG: sin dependencias.
+   - Son 12 imágenes por semilla y tamaño: 3 paradas, 2 imágenes. Deja en `docs/capturas/nino/<juego>/` (sin versionar) `preguntas.json` (por imagen, un id sin sentido, cuántos cuadros tiene y las preguntas que le tocan, en un orden que no es el del show: ni el juego, ni la forma, ni la verdad, ni cuál es la última), `capturas/<id>.png`, el `prompt-nino.md` y, aparte, `oculto/verdad.json`.
+2. **Describir.** Un modelo que solo ve las imágenes (uno barato; si una falla la repite otro más fuerte, en `respuestas-desempate.json`, y decide la segunda) las contesta con el [prompt fijo](../scripts/prompt-nino.md): `gano`, `falta`, `paso`, `mirar`, `propia`, `olor`, `quien` y `vi`.
+3. **Juzgar.** `--juzgar` compara con la verdad y escribe `veredicto.json` y `repetir.json` (las imágenes para el segundo describidor). Con `--json` deja la línea de resumen de los demás auditores, con `datos.olor`.
+
+**El veredicto es por arco, no por foto.** Una corrida de un tamaño pasa si:
+
+- al 25 %: `gano` = no y `mirar` bien;
+- al 60 %: `propia` bien y `falta` a 0,2 o menos;
+- al final: `gano` = si con el nombre bien y `paso` = gano.
+
+Las demás respuestas se informan pero no deciden, y un `si` antes del golpe hace fallar la corrida. Antes una foto pasaba con 3 de 4 y la corrida con todas: eso castigaba igual a una pregunta que no aplica que a una falla real. Una semilla pasa si pasan sus dos tamaños, y el juego con 7 de cada 8 semillas (con 2 semillas, las 2).
+
+**El contrato.** Es el del kit (`kit/respuestas.ts`): con `?auditar=nino`, `window.__nino` trae `forma`, `verdad()` (las `Respuestas`: `adelante` con `quienes` y `lugar`, `hacia`, `progreso` de 0 a 1 que solo sube, y `paso` con tipo, quién y desde cuándo), `t()` (la hora del juego), `duracion` (la hora del golpe, el 100 %). Los juegos del kit lo dejan solos con `crearJuego` (la forma sale de su entrada del catálogo). La ruleta (`wheel-nino.ts`) y la carrera de hoy (`race-nino.ts`) lo exponen desde su plan sin cambiar el show: sin el parámetro no se expone nada. En los juegos de quedar de pie, `adelante.quienes` es el conjunto de quienes siguen en juego.
+
+**Qué decide la verdad.** Tres cosas las tiene que declarar el juego, y el veredicto depende de ellas (la primera pasada de la ruleta dio 0 de 2 con la zona declarada y una ventana de 4 s; con las de abajo, 2 de 2):
+
+- **La zona** en que está lo que se sigue no es del plan: depende de la cámara. La mide el juego donde cae en la pantalla (`lugarDe`, con el tercio del medio como centro): la ruleta, el gajo bajo la flecha; la carrera, la llama de la que va primera en la pista y de la ganadora. Es lo que contesta `mirar`.
+- **La ruleta gira.** Adónde mirar, la flecha, es la zona de `adelante`; lo que da vueltas es la rueda.
 - **«Qué acaba de pasar»** es de hace 3 s o menos; pasado eso, `nada`. Que la flecha pase de un gajo a otro no es un hecho: es la rueda.
 
-**Las tolerancias del juez** (`scripts/lib/nino.mjs`, con sus pruebas sin red):
+**Las tolerancias del juez** (`scripts/lib/nino.mjs`, con sus pruebas sin red; no cambiaron):
 
-- Nombres sin tildes ni mayúsculas y con las cinco primeras letras de cada palabra («María Q.» vale por «María Quispe»); donde van adelante varios, vale cualquiera.
-- «Hacia», igual o una parte de la diagonal, y nunca también el sentido contrario.
-- «Falta»: empieza 0, mucho 0,25, mitad 0,5, poco 0,75, termino 1; acierta a 0,2 o menos del progreso.
-- «Paso»: el tipo (`empezo`, `salio`, `adelante`, `freno`, `casi`, `gano`, `nada`) y, con letras, el nombre si el hecho dice quién.
-- Una foto pasa con 3 de 4; en la final «hacia» no cuenta y las otras tres son obligatorias. Una corrida (una semilla: los dos tamaños) pasa si pasan todas sus fotos, y el juego con 7 de cada 8 corridas (con 2 semillas, las 2).
+- Nombres sin tildes ni mayúsculas y con las cinco primeras letras de cada palabra («María Q.» vale por «María Quispe»); donde van adelante varios, vale cualquiera. En «quiénes siguen», dos nombres distintos y los dos entre los que siguen.
+- `mirar`, igual a la zona o una parte de la diagonal, y nunca también el sentido contrario.
+- `falta`: empieza 0, mucho 0,25, mitad 0,5, poco 0,75, termino 1; acierta a 0,2 o menos del progreso.
+- `paso`: el tipo (`empezo`, `salio`, `adelante`, `freno`, `casi`, `gano`, `nada`) y, con letras, el nombre si el hecho dice quién.
 
-**El control.** `--control` corre la carrera de producción de hoy. Si la prueba la aprueba, la prueba está mal: con `--control --juzgar` el éxito es que **no** apruebe.
+**Los dos controles.** Para saber que la prueba misma anda. `--control` corre la carrera de producción de hoy, la que no se entendía: tiene que **reprobar**. `--control-positivo` corre la ruleta: tiene que **aprobar**. `--controles` corre los dos y, al juzgar, dice «prueba sana» solo si el negativo reprueba y el positivo aprueba; si alguno se da vuelta, sale con error y lo dice: se rompió la prueba, no el juego.
 
-**Primera corrida (26 de octubre de 2026)**, 18 personas, 2 semillas, los dos tamaños y las dos edades de entonces (24 fotos por juego; desde el 1 de noviembre de 2026 es una sola vara y son 12):
+**Primera corrida (26 de octubre de 2026)**, con las cuatro preguntas de entonces. Queda como historia: 18 personas, 2 semillas, los dos tamaños y las dos edades de entonces (24 fotos por juego; desde el 1 de noviembre de 2026 es una sola vara y son 12):
 
 | | Ruleta | Carrera de hoy (control) |
 |---|---|---|
@@ -548,7 +576,7 @@ Las grillas se reparten con la proporción real de la pantalla y no con una cons
 
 El ritmo, la legibilidad del cartel y el tartamudeo de los subtítulos ya los mide el auditor exigente. Lo que sigue no, y lo revisás vos antes de subirlo:
 
-- ¿Se entiende quién va ganando sin leer texto? Ya no es de ojo: lo mide [`audit-nino`](#la-prueba-del-niño), con la foto sin letras y la verdad del plan.
+- ¿Se entiende qué pasa sin leer el relator? Ya no es de ojo: lo mide [`audit-nino`](#la-prueba-del-niño), con la foto, la tira y la verdad del plan.
 - ¿Se lee desde el fondo de la sala, proyectado?
 - ¿Dura lo suficiente para generar tensión y lo bastante poco para no aburrir? La ventana útil en modo normal son 24 a 34 segundos: menos y la sala no llega a girar la cabeza, más y se va.
 - ¿Hay un hecho legible nuevo cada 1,5 a 2,5 segundos, y nunca más de 4 segundos sin novedad?

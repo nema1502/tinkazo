@@ -1020,6 +1020,7 @@ export async function llamasPixi(
     const planNino: PlanDeLaCarrera = { lanes, ganador: story.winner, pos: plan.pos, beats: story.beats, pre: PRE, cuenta: CUENTA, dur: DUR, peloton };
     const reloj = () => ({ fase: phase, tPre, tPhase, tRace, tFreeze });
     exponerNino({
+      forma: "carrera",
       duracion: duracionDeLaCarrera(planNino),
       t: () => horaDeLaCarrera(planNino, reloj()),
       verdad: () => {

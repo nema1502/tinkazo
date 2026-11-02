@@ -1,4 +1,5 @@
 import type { Leyenda } from "./leyenda";
+import type { Forma } from "./respuestas";
 import type { Lanzador } from "./tipos";
 
 /**
@@ -33,6 +34,12 @@ export interface EntradaCatalogo {
   id: string;
   /** Baja el juego recién cuando se lo pide. */
   cargar: () => Promise<Lanzador>;
+  /**
+   * La forma del juego, para la prueba del niño (`audit-nino`): decide la pregunta propia.
+   * `carrera`: quién va adelante; `de-pie`: quiénes siguen en juego; `rueda`: qué está señalado; `acumulacion`: quién tiene más.
+   * Se elige por la pregunta que contestaría un chico mirando un cuadro.
+   */
+  forma: Forma;
   /** ¿Se puede elegir en el selector? */
   selector: boolean;
   /** Para cuántas personas anda el juego (`ui/recomendar.ts`). */
@@ -50,6 +57,7 @@ export const CATALOGO = [
   {
     id: "quien",
     cargar: () => import("../quien").then((m) => m.quienPixi),
+    forma: "de-pie",
     selector: false,
     rango: { minimo: 8, maximo: 100 },
     captura: true,
@@ -58,6 +66,7 @@ export const CATALOGO = [
   {
     id: "race",
     cargar: () => import("../../llamas/carrera").then((m) => m.carreraPixi),
+    forma: "carrera",
     selector: true,
     rango: { minimo: 2, ideal: [4, 30], maximo: 200 },
     captura: true,
@@ -69,6 +78,7 @@ export const CATALOGO = [
   {
     id: "guajojo",
     cargar: () => import("../guajojo").then((m) => m.guajojoPixi),
+    forma: "de-pie",
     selector: false,
     rango: { minimo: 2, ideal: [8, 30], maximo: 200 },
     captura: true,
@@ -100,6 +110,7 @@ export const CATALOGO = [
   {
     id: "toborochi",
     cargar: () => import("../toborochi").then((m) => m.toborochiPixi),
+    forma: "de-pie",
     selector: false,
     rango: { minimo: 2, ideal: [8, 40], maximo: 200 },
     captura: false,

@@ -3,15 +3,21 @@ import type { LineaGuion } from "./tipos";
 /**
  * Las respuestas de la prueba del niño.
  *
- * La regla (26 de octubre de 2026): **cualquier cuadro del juego, sin leer, dice
- * quién va adelante, hacia dónde van, cuánto falta y qué acaba de pasar.** La
- * semilla sabe la respuesta: cada juego la declara desde su plan, en cada
- * segundo, y un auditor (`audit-nino`) saca tres capturas sin subtítulo (al 25 %,
- * al 60 % y al final) y las compara con esto.
+ * La regla (26 de octubre de 2026, con la forma desde el 2 de noviembre):
+ * **cualquier cuadro del juego, sin leer el relator, muestra si ya ganó alguien,
+ * cuánto falta, qué acaba de pasar, adónde mirar y lo propio de su forma** (quién
+ * va adelante, quiénes siguen, qué está señalado o quién tiene más). La semilla
+ * sabe la respuesta: cada juego la declara desde su plan, en cada segundo, y un
+ * auditor (`audit-nino`) saca fotos sin subtítulo (al 25 %, al 60 % y al final) y
+ * las compara con esto.
  *
- * - **adelante**: quién va ganando; en una eliminación, los que siguen adentro
- *   (adelante es estar adentro: el líder no es el ganador).
+ * - **adelante**: lo propio de la forma. Quién va ganando (carrera); los que siguen
+ *   adentro (de pie: adelante es estar adentro, el líder no es el ganador); el que
+ *   está bajo la flecha o el foco (rueda); quién tiene más (acumulación). Y en
+ *   `lugar`, la zona de la pantalla donde hay que mirar para seguir lo que pasa:
+ *   es la respuesta de «¿adónde hay que mirar?» y la mide el propio juego.
  * - **hacia**: un solo sentido por juego, de principio a fin; la cámara no lo cruza.
+ *   Es del plan y de las pruebas de la cámara: la prueba del niño ya no lo pregunta.
  * - **progreso**: de 0 (empieza) a 1 (terminó), y solo sube.
  * - **paso**: lo último que pasó, y quién. Cada hecho se ve en el cuerpo a 0,3 s
  *   de su línea, y dos salidas van a 1 s o más: si no, ninguna se ve.
@@ -21,6 +27,14 @@ import type { LineaGuion } from "./tipos";
 export type Lugar = "arriba" | "abajo" | "izquierda" | "derecha" | "centro";
 export type Direccion = Lugar | "alrededor";
 export type TipoPaso = "empezo" | "salio" | "adelante" | "freno" | "casi" | "gano" | "nada";
+
+/**
+ * La forma del juego, que decide la pregunta propia de la prueba del niño:
+ * `carrera` («¿quién va adelante?»), `de-pie` («¿quiénes siguen en juego?»),
+ * `rueda` («¿qué nombre está señalado ahora?») y `acumulacion` («¿quién tiene más?»).
+ */
+export type Forma = "carrera" | "de-pie" | "rueda" | "acumulacion";
+export const FORMAS: readonly Forma[] = ["carrera", "de-pie", "rueda", "acumulacion"];
 
 export const LUGARES: readonly Lugar[] = ["arriba", "abajo", "izquierda", "derecha", "centro"];
 export const DIRECCIONES: readonly Direccion[] = [...LUGARES, "alrededor"];

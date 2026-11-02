@@ -116,6 +116,8 @@ export function bloqueCatalogo(v) {
     "{",
     `  id: "${v.id}",`,
     `  cargar: () => import("../${v.id}").then((m) => m.${v.id}Pixi),`,
+    '  // La forma decide la pregunta propia de la prueba del niño: "carrera", "de-pie", "rueda" o "acumulacion".',
+    '  forma: "carrera",',
     "  selector: false,",
     "  rango: { minimo: 2, maximo: 200 },",
     "  captura: false,",

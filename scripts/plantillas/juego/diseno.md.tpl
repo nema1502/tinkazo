@@ -27,7 +27,7 @@ _Con 8 personas leen todos; con 18, nueve de cada diez (`audit-identidad`). Qué
 
 ## La ficha del niño
 
-Se aprueba antes del código. La regla (26 de octubre de 2026): **cualquier cuadro del juego, sin leer, dice quién va adelante, hacia dónde van, cuánto falta y qué acaba de pasar.** El plan lo declara en `respuestas(t)` y `audit-nino` lo compara con tres capturas sin subtítulo.
+Se aprueba antes del código. La regla (26 de octubre de 2026): **cualquier cuadro del juego, sin leer el relator, muestra si ya ganó alguien, cuánto falta, qué acaba de pasar, adónde mirar y lo propio de su forma** (quién va adelante, quiénes siguen, qué está señalado o quién tiene más). La forma va en `catalogo.ts`, el plan lo declara en `respuestas(t)` y `audit-nino` lo compara con una foto y una tira de tres cuadros sin subtítulo.
 
 - **Ir adelante es:** _(estar adentro, estar en la punta, estar bajo la flecha…)_
 - **Hacia dónde:** _un solo sentido de principio a fin (`sentido`)_
@@ -45,7 +45,7 @@ _Nada con cara de casino: ni dados, ni cartas, ni apuestas. Lo cultural, validad
 
 - [ ] `pnpm typecheck` y `pnpm test`
 - [ ] `audit-game` 20/20
-- [ ] `audit-nino` (tres capturas sin subtítulo contra `respuestas(t)`)
+- [ ] `audit-nino` (una foto y una tira de tres cuadros sin subtítulo contra `respuestas(t)`)
 - [ ] `audit-rigor`, `audit-identidad`, `audit-emocion`, `audit-sound`, `audit-mezcla`, `audit-pantalla`, `audit-delatores`
 - [ ] Capturas en escritorio y celular, dos temas, con la revisión visual
 - [ ] `node scripts/nuevo-juego.mjs --encender __ID__`
