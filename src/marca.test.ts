@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { inflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { T } from "./i18n";
@@ -9,7 +10,7 @@ async function textosInyectados(pagina: string): Promise<Record<string, Record<s
   const plugins = config.plugins as Array<{ name: string; transformIndexHtml?: { handler: Function } }>;
   const plugin = plugins.find(p => p.name === "tinkazo:textos-por-pagina")!;
   const archivo = new URL(`../${pagina}`, import.meta.url);
-  const resultado = await plugin.transformIndexHtml!.handler.call({ warn: (s: string) => { throw new Error(s); } }, leer(pagina), { filename: archivo.pathname, path: `/${pagina}` });
+  const resultado = await plugin.transformIndexHtml!.handler.call({ warn: (s: string) => { throw new Error(s); } }, leer(pagina), { filename: fileURLToPath(archivo), path: `/${pagina}` });
   return resultado ? JSON.parse(resultado[0].children) : null;
 }
 const leer = (p: string): string => readFileSync(new URL(`../${p}`, import.meta.url), "utf8");
@@ -17,11 +18,13 @@ describe("recursos públicos de marca", () => {
   it("ofrece la página, entradas y descargas del mismo origen", () => {
     expect(existsSync(new URL("../marca.html", import.meta.url))).toBe(true);
     const html = leer("marca.html");
-    for (const recurso of ["llama.svg", "llama.png", "sello-es.svg", "sello-en.svg"]) {
+    for (const recurso of ["llama.svg", "llama.png", "llama-oscuro.svg", "llama-oscuro.png", "sello-es.svg", "sello-en.svg"]) {
       expect(existsSync(new URL(`../public/marca/${recurso}`, import.meta.url))).toBe(true);
     }
     expect(html).toContain('download="tinkazo-llama.svg"');
     expect(html).toContain('download="tinkazo-llama.png"');
+    expect(html).toContain('download="tinkazo-llama-oscuro.svg"');
+    expect(html).toContain('download="tinkazo-llama-oscuro.png"');
     expect(html).toContain('/src/marca.ts');
     expect(leer("src/marca.ts")).toContain('import "./pagina"');
     expect(leer("vite.config.ts")).toContain('marca: resolve(__dirname, "marca.html")');
@@ -55,6 +58,27 @@ describe("recursos públicos de marca", () => {
     expect(textos?.es?.hiTitle).toBe(T.es.hiTitle);
     expect(textos?.es?.maH1).toBeUndefined();
     expect(await textosInyectados("index.html")).toBeNull();
+  });
+  it("la llama para fondo oscuro es la misma silueta, en el magenta del tema oscuro", () => {
+    const clara = leer("public/marca/llama.svg");
+    const oscura = leer("public/marca/llama-oscuro.svg");
+    expect(oscura.replace(/\r/g, "")).toBe(clara.replace(/\r/g, "").replace("#e93d9c", "#ff5cb3"));
+    const b = readFileSync(new URL("../public/marca/llama-oscuro.png", import.meta.url));
+    expect([b.readUInt32BE(16), b.readUInt32BE(20), b[24], b[25]]).toEqual([2048, 2048, 8, 6]);
+  });
+  it("trae el bloque corto de cómo se escribe Tinkazo, con lo que sí y lo que no, en los dos idiomas", () => {
+    const html = leer("marca.html");
+    expect(html).toContain('data-i="maEscribeT"');
+    for (let i = 1; i <= 5; i++) {
+      expect(html).toContain(`data-i="maSi${i}"`);
+      expect(html).toContain(`data-i="maNo${i}"`);
+      for (const lang of ["es", "en"] as const) {
+        expect(typeof T[lang][`maSi${i}`]).toBe("string");
+        expect(typeof T[lang][`maNo${i}`]).toBe("string");
+      }
+    }
+    expect(T.es.maSi1).toContain("T mayúscula");
+    expect(T.es.maNo2).toContain("sorteo");
   });
   it("la silueta SVG es exactamente la del icono sin su fondo", () => {
     const icono = leer("public/icon.svg");

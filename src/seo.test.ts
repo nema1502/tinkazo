@@ -635,7 +635,8 @@ const NO_SE_DICE = /sin confiar en|without trusting|sin confiar en tinkazo|no ha
 const DE_APUESTA = /rifa|raffle|apuesta|lotería|loteria|casino/i;
 
 /** La portada y los términos dicen en qué no sirve Tinkazo, así que ahí no se mira `DE_APUESTA`. */
-const CON_AVISO = ["index.html", "terminos.html"];
+// marca.html nombra «rifa» y «raffle» solo para pedir que no se usen (el bloque de cómo se escribe Tinkazo).
+const CON_AVISO = ["index.html", "terminos.html", "marca.html"];
 
 /** Lo que una página dice: sus claves en los dos idiomas, el título y las descripciones. */
 const textosDe = (archivo: string): string[] => {

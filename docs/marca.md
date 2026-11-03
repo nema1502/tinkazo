@@ -235,13 +235,13 @@ La página pública `/marca.html` reúne la llama, los colores copiables, los us
 
 - `public/marca/llama.svg`: la silueta exacta de `public/icon.svg`, sin el rectángulo de fondo; lienzo de 512 × 512.
 - `public/marca/llama.png`: la misma silueta, en RGBA de 2048 × 2048 y fondo transparente.
+- `public/marca/llama-oscuro.svg` y `llama-oscuro.png`: la misma llama en el magenta del tema oscuro (`#ff5cb3`), para poner sobre fondos oscuros.
 - `public/marca/sello-es.svg` y `sello-en.svg`: sellos de 960 × 280, transparentes, para fondos claros. La tipografía sigue siendo del sistema: puede variar entre dispositivos. No estirar ni agregar detalles a la llama.
 
 El sello dice «Sorteo verificable con Tinkazo» o «Verifiable draw with Tinkazo». Se usa cuando el sorteo tiene un comprobante verificable y se acompaña con el enlace a ese comprobante. No certifica que la lista inicial estuviera bien armada.
 
-`node scripts/generar-marca.mjs` regenera únicamente estas cuatro descargas, sin modificar el icono ni el logotipo. No usa fuentes externas ni herramientas de imagen adicionales. Los enlaces de descarga son del mismo origen, como requiere el atributo HTML `download`.
+`node scripts/generar-marca.mjs` regenera únicamente estas seis descargas, sin modificar el icono ni el logotipo. No usa fuentes externas ni herramientas de imagen adicionales. Los enlaces de descarga son del mismo origen, como requiere el atributo HTML `download`.
 
-La revisión funcional se ejecuta contra un servidor propio con `MARCA_BASE=http://127.0.0.1:5184 node scripts/audit-marca.mjs`. Usa WebKit con su configuración normal; comprueba ambos idiomas y temas a 320, 390 y 1280 px, abre los archivos descargados, mide su transparencia y guarda capturas y resultados en `.evidence/marca/`. `--reference` visita la referencia externa, sin copiar sus recursos.
 
 ## Los enlaces
 

@@ -86,6 +86,7 @@ export const PAGINAS = [
   ["precios", "/precios.html"],
   ["terminos", "/terminos.html"],
   ["como-funciona", "/como-funciona.html"],
+  ["marca", "/marca.html"],
   ["lista", "/lista.html"],
   ["verificar", "/verificar.html#{LIBRE}"],
   ["evento", "/evento.html#{EVENTO}"],

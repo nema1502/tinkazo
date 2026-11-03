@@ -11,10 +11,12 @@
 .marca-descargas { display: flex; flex-wrap: wrap; gap: 14px; }
 .marca .mini { display: inline-flex; align-items: center; min-height: 44px; text-decoration: none; margin-top: 8px; }
 .marca-vista { border: var(--bw) solid var(--ink); box-shadow: var(--sh); padding: 20px; }
+.marca-vistas { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; min-width: 0; }
 .marca-llama { background: var(--card); }
+.marca-llama-oscura { background: #171126; }
 .marca-sello { background: #fff6e9; }
 .marca-vista img { width: 100%; height: auto; display: block; }
-.marca-llama img { max-height: 270px; object-fit: contain; }
+.marca-llama img, .marca-llama-oscura img { max-height: 270px; object-fit: contain; }
 .marca-paleta { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; }
 .marca-paleta button { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 10px; min-width: 0; text-align: left; font-weight: 700; font-size: 16px; color: var(--ink); background: var(--card); border: 2px solid var(--ink); cursor: pointer; box-shadow: var(--sh-sm); }
 .marca-color { height: 64px; border: 2px solid var(--ink); }
@@ -22,13 +24,15 @@
 .marca button:focus-visible, .marca a:focus-visible { outline: 3px solid var(--purple); outline-offset: 4px; }
 #marca-estado { min-height: 2em; }
 .marca-tipo { border: var(--bw) solid var(--ink); background: var(--card); box-shadow: var(--sh); padding: 24px; }
+.marca-escribe-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.marca-escribe-cols > * { min-width: 0; }
+.marca-escribe ul { margin: 0; padding-left: 22px; }
+.marca-escribe li { font-size: 16px; line-height: 1.65; color: var(--ink2); margin: 6px 0; }
 .marca p.marca-titular { color: var(--ink); font-size: 28px; font-weight: 900; letter-spacing: -.02em; }
 .marca p.mono { font-weight: 700; }
 @media (max-width: 760px) {
-  /* La fila de enlaces puede necesitar otra línea a 320 px: no recortar «Más». */
-  .pagina-marca .topnav { flex-wrap: wrap; }
-  .pagina-marca .topnav .mas { margin-left: auto; }
   .marca-recursos { grid-template-columns: 1fr; gap: 20px; }
+  .marca-escribe-cols { grid-template-columns: 1fr; gap: 8px; }
   .marca-paleta { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .marca-tipo { padding: 16px; }
   .marca p.marca-titular { font-size: 22px; }
