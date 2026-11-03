@@ -581,7 +581,8 @@ export function planGuajojo(ctx: Contexto): Plan<Datos> {
     }
     // Los pasos: se oyen mientras caminan.
     for (let j = 0; ci.t0 + 0.2 + j * 0.5 < ci.tSil0 - 0.15; j++) guion.push({ t: ci.t0 + 0.2 + j * 0.5, hacer: (k) => k.sonido.tono(3 + (j % 2), "fondo", { dur: 0.06, vol: 0.022 }) });
-    decir(ci.tSil0 + 0.02, ci.ultimo ? "ultimos" : "calla", { calor: cal + 0.1, prioridad: PRIORIDAD.importante });
+    // El grito de la sala es «¡Quietos!», no el nombre de quien se sienta después: el cartel grande va aquí.
+    decir(ci.tSil0 + 0.02, ci.ultimo ? "ultimos" : "calla", { calor: cal + 0.1, prioridad: PRIORIDAD.importante, grito: !ci.ultimo });
     guion.push({ t: ci.tSil0 + 0.02, hacer: (k) => { k.sonido.tono(15, "evento", { dur: 0.25, timbre: "sine", vol: 0.05 }); k.sonido.despues(110, () => k.sonido.tono(17, "evento", { dur: 0.25, timbre: "sine", vol: 0.045 })); } });
     // El latido del silencio.
     for (let j = 0; ci.tSil0 + 0.5 + j * 0.75 < ci.tCrac0; j++) guion.push({ t: ci.tSil0 + 0.5 + j * 0.75, hacer: (k) => k.sonido.tono(3, "fondo", { dur: 0.1, timbre: "sine", vol: 0.03 }) });
@@ -604,7 +605,7 @@ export function planGuajojo(ctx: Contexto): Plan<Datos> {
       if (j === 0) {
         const textos = ci.ultimo && ctx.ganadores.length > 1 ? ctx.txt("conPremio") : ci.victimas.length > 3 ? ctx.txt("varios") : ctx.txt("crac", nom(i));
         guion.push({
-          t: tc, texto: textos, calor: cal + 0.3, prioridad: PRIORIDAD.importante, grito: ci.ultimo, hecho: { tipo: "salio", quien: i },
+          t: tc, texto: textos, calor: cal + 0.3, prioridad: PRIORIDAD.importante, hecho: { tipo: "salio", quien: i },
           hacer: (k) => { k.sonido.tono(8, "evento", { dur: 0.05, timbre: "square", vol: 0.055 }); k.sonido.salida(); },
         });
       } else if (j < 4 || j % 3 === 0) {

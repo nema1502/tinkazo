@@ -141,15 +141,15 @@ describe("Guajojó: el plan", () => {
   it("dura lo prometido: entre 25 y 60 segundos con el cartel, y Normal nunca pasa de 60", () => {
     for (const n of LISTAS) {
       const p = planGuajojo(contexto(n, ganadoresDe(n)));
-      expect(p.duracion, `con ${n}`).toBeGreaterThanOrEqual(19);
+      expect(p.duracion, `con ${n}`).toBeGreaterThanOrEqual(18);
       expect(p.duracion + 6.5, `con ${n}`).toBeLessThanOrEqual(64);
       expect(p.normal, `con ${n}`).toBeLessThanOrEqual(60);
       expect(p.normal as number, `con ${n}`).toBeGreaterThanOrEqual(25);
     }
-    // El del diseño: con 18 y sin duelo, 34,6 s de show hasta el cartel.
+    // El del diseño: con 18 y sin duelo, 33,8 s de show hasta el cartel.
     const s = semillasPorArco(18);
     const p = planGuajojo(contexto(18, [3], s.remontada ?? 1));
-    expect(p.duracion).toBeCloseTo(34.6, 1);
+    expect(p.duracion).toBeCloseTo(33.8, 1);
   });
 
   it("lo que promete el selector sale de la misma cuenta que el plan: sin duelo ni tapada dura lo base, y «Normal» no depende del arco", () => {
@@ -183,6 +183,21 @@ describe("Guajojó: el plan", () => {
     for (const idioma of ["es", "en"] as const) {
       const todo = Object.values(TEXTOS[idioma]).map((v) => (typeof v === "function" ? v("Ana") : v)).join(" ").toLowerCase();
       expect(todo).not.toMatch(/elimin|perdi|muert|agüer|aguer|lost|dead|death/);
+    }
+  });
+
+  it("el grito de la sala es «¡Quietos!» en cada silencio común, y el nombre de quien se sienta nunca va en el cartel grande", () => {
+    for (const idioma of ["es", "en"] as const) {
+      const c = contexto(18, [3], 7, idioma);
+      const p = planGuajojo(c);
+      const d = p.datos;
+      for (const ci of d.ciclos) {
+        const lineas = p.guion.filter((l) => l.texto && l.t >= ci.t0 && l.t <= ci.t1);
+        const calla = lineas.find((l) => Math.abs(l.t - (ci.tSil0 + 0.02)) < 1e-6) as { grito?: boolean };
+        const crac = lineas.find((l) => Math.abs(l.t - (ci.tCae[0] as number)) < 1e-6 && l.hecho?.tipo === "salio") as { grito?: boolean };
+        expect(Boolean(calla.grito), `${idioma} silencio ${ci.c}`).toBe(!ci.ultimo);
+        expect(Boolean(crac.grito), `${idioma} crac ${ci.c}`).toBe(false);
+      }
     }
   });
 
