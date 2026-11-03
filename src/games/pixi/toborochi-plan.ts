@@ -448,7 +448,8 @@ export function planToborochi(ctx: Contexto): Plan<Datos> {
     guion.push({ t: v.llega, hacer: (k) => k.sonido.zumbido(T_HOVER, 0.6) });
     if (!ultima) guion.push({ t: v.sale, hacer: (k) => k.sonido.zumbido(T_TRASIEGO, 0.3) });
     const texto = sinNombres ? () => ctx.txt(m % 2 === 0 ? "visitaSin" : "visitaOtra") : () => ctx.txt("visita", pila(v.quien));
-    guion.push({ t: v.llega + 0.05, texto, calor: 0.75 + 0.05 * m, prioridad: PRIORIDAD.importante, hecho: { tipo: "casi", quien: v.quien }, hacer: (k) => k.sonido.una(`tsip:${m}`, () => k.sonido.tono(18, "evento", { dur: 0.06, vol: 0.04 })) });
+    // El rito de decir un nombre es la palabra grande de la sala: cada visita del colibrí va en mayúsculas, la de la ganadora igual que las demás.
+    guion.push({ t: v.llega + 0.05, texto, calor: 0.75 + 0.05 * m, prioridad: PRIORIDAD.importante, grito: true, hecho: { tipo: "casi", quien: v.quien }, hacer: (k) => k.sonido.una(`tsip:${m}`, () => k.sonido.tono(18, "evento", { dur: 0.06, vol: 0.04 })) });
   });
   // La sala nunca espera más de tres segundos sin un sonido: un toque suave cada segundo y medio, también con el viento (que no son osciladores).
   for (let x = 0.9, j = 0; x < tPico - 0.3; x += 1.5, j++) guion.push({ t: x, hacer: (k) => k.sonido.tono(7 + (j % 4), "evento", { dur: 0.08, vol: 0.05 }) });

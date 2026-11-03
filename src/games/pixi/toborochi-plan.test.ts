@@ -207,6 +207,20 @@ describe("El Toborochi: el plan", () => {
     expect(primera / veces).toBeLessThan(0.6);
   });
 
+  it("cada visita del colibrí es palabra grande en el guion (¿SERÁ ELLA?), la de la ganadora igual que las otras", () => {
+    for (const idioma of ["es", "en"] as const) {
+      for (const n of [2, 18]) {
+        const p = planToborochi(contexto(n, [Math.min(n - 1, 3)], 7, idioma));
+        const visitas = p.datos.visitas;
+        for (const v of visitas) {
+          const l = p.guion.find((x) => x.texto && Math.abs(x.t - (v.llega + 0.05)) < 1e-9);
+          expect(l, `${idioma} ${n}: visita a las ${v.llega}`).toBeDefined();
+          expect(l!.grito, `${idioma} ${n}`).toBe(true);
+        }
+      }
+    }
+  });
+
   it("el colibrí dura de 3,5 a 7 s, y el zumbido calla antes de posarse", () => {
     for (let s = 1; s <= 60; s++) {
       const d = plan(18, [s % 18], s).datos;
