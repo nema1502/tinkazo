@@ -376,7 +376,16 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     // Debajo, una marca por persona: las que cuentan el número, encendidas; un chico las cuenta sin leer.
     hudMarcas = new Graphics();
     hudMarcas.position.set(22 * hu, top + HUD_MARCAS_Y * hu);
-    S.hud.addChild(hudLabel, hudNum, hudDe, hudStation, hudMarcas);
+    // En vertical, el contador va sobre una placa de tinta (la misma de la fila de marcas, que la sigue sin hueco): sobre el cielo suelto, la bandera de la cumbre le pasaba por detrás y el «18» quedaba blanco sobre amarillo.
+    const hudPlaca = new Graphics();
+    if (G.vertical) {
+      const m = reservaDeMarcas(names.length, hu, S.sw());
+      const ancho = m.ancho > 0 ? m.ancho - 5 * hu : 190 * hu;
+      const y0 = top - 10 * hu, alto = top + HUD_MARCAS_Y * hu - y0;
+      hudPlaca.rect(27 * hu, y0 + 5 * hu, ancho, alto).fill(INK).rect(22 * hu, y0, ancho, alto).fill(0x221a33).stroke({ width: 3 * hu, color: INK });
+      for (const x of [hudLabel, hudNum, hudDe, hudStation]) x.x += 12 * hu;
+    }
+    S.hud.addChild(hudPlaca, hudLabel, hudNum, hudDe, hudStation, hudMarcas);
     void span;
   }
   build();
@@ -1127,7 +1136,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     // El borde de arriba del letrero (su centro va 74k por encima del cable) y
     // el de abajo de la cabina con su sombra.
     const tagTop = p.y - 92 * k, cabinBottom = p.y + 108 * k;
-    const lo = S.placaBajo(winners.length) + 12 * u;
+    // En vertical, el contador (con su fila de marcas) ocupa la parte de arriba: el letrero y la cabina quedan debajo.
+    const lo = Math.max(S.placaBajo(winners.length), G.vertical ? hudBox().y1 : 0) + 12 * u;
     const hi = S.sh() - S.bottom() - 8 * u;
     const z = Math.max(0.5, Math.min(zoom, (hi - lo) / (cabinBottom - tagTop)));
     return { y: Math.min(p.y + dy, tagTop - (lo - S.sh() / 2) / z), z };
@@ -1162,7 +1172,19 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       cam.lookAt(top.x, c.y, c.z, 3);
     } else if (tAll >= T_RUN) {
       const p = cabPoint(winnerCab, tAll);
-      cam.lookAt(p.x + 60 * k, p.y + 40 * k, 1.35, 3);
+      // En vertical la cabina sube hasta el contador y se metía debajo de su placa: la cámara la mantiene por debajo (el techo de la cabina, a 14 u de la placa)
+      // y, si entra, también el letrero CUMBRE que viene adelante. La cámara llega con retraso (tasa 3): se suma lo que la cabina le adelanta.
+      let ty = p.y + 40 * k;
+      if (G.vertical) {
+        const u = S.u(), z = Math.max(0.5, Math.min(1.35, zoomNow()));
+        const ymin = hudBox().y1 + 14 * u, hi = S.sh() - S.bottom() - 8 * u;
+        const lag = (cabPoint(winnerCab, tAll + 0.1).y - p.y) / 0.1 / 3;
+        const tyCab = p.y + 24 * k - (ymin - S.sh() / 2) / z + lag;
+        const tyTag = pt(P.TOP).y - 92 * k - (ymin - S.sh() / 2) / z;
+        const tyBajo = p.y + 24 * k + G.ch - (hi - S.sh() / 2) / z + lag;
+        ty = Math.min(ty, Math.max(tyBajo, Math.min(tyCab, tyTag)));
+      }
+      cam.lookAt(p.x + 60 * k, ty, 1.35, 3);
     } else if (ult && tAll >= ult.t0 - 0.3 && tAll <= ult.t1) {
       if (puerta && tAll >= P.puertaA - 0.25 && tAll <= P.puertaB + 0.35) {
         const p = cabPoint(winnerCab, tAll);
