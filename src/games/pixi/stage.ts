@@ -1284,6 +1284,19 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
           x = Math.max(8 * k, Math.min(W - cw - 8 * k, x + cw * 0.35));
         }
       }
+      // Si después de todos los intentos sigue encima de otra ficha o de lo que no se tapa, en este cuadro no se muestra:
+      // una ficha tapada del todo no se lee y tapa a la de abajo (el trompo, al pasar lista, dejaba un nombre entero
+      // debajo de otro); vuelve a salir cuando hay lugar o en la tanda siguiente.
+      // Un roce no la esconde: solo si le tapa más de un tercio de su área a otra ficha o a lo que no se tapa.
+      const tapa = placed.some((r) => {
+        const w = Math.min(x + cw, r.x + r.w) - Math.max(x, r.x);
+        const h = Math.min(y + ch / 2, r.y + r.h / 2) - Math.max(y - ch / 2, r.y - r.h / 2);
+        return w > 0 && h > 0 && (w * h) / Math.min(cw * ch, r.w * r.h) > 1 / 3;
+      });
+      if (tapa) {
+        c.visible = false;
+        continue;
+      }
       placed.push({ x, y, w: cw, h: ch });
       c.position.set(x, y);
     }
