@@ -1814,8 +1814,9 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       tacha = new Graphics();
       const lb = chip.getLocalBounds();
       const y = lb.y + lb.height / 2;
-      tacha.moveTo(lb.x + 3, y).lineTo(lb.x + lb.width - 3, y).stroke({ width: Math.max(3, lb.height * 0.12), color: 0xd62839, cap: "round" });
-      chip.addChild(tacha);
+      // Detrás de la cara y la letra (entre el fondo y ellas) y fina: gruesa y encima partía las minúsculas.
+      tacha.moveTo(lb.x + 3, y).lineTo(lb.x + lb.width - 3, y).stroke({ width: Math.max(1.5, lb.height * 0.04), color: 0xd62839, cap: "round" });
+      chip.addChildAt(tacha, 1);
       tachas.set(d, tacha);
     }
     tacha.visible = salio;
