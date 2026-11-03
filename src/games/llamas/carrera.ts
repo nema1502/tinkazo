@@ -7,6 +7,7 @@ import { CREAM, INK, YELLOW, contorno, hash, mountPixi } from "../pixi/stage";
 import type { Borla3D, Corredora3D, Fabrica3D, Geometria3D, Vista3D, ZonaSuelo } from "./carrera-3d-mapa";
 import { ECHADA_DUR, carrilesDe, formaDe, hudDe, type Carriles, type Forma, type Pantalla } from "./carrera-forma";
 import { RECTA, alfabetico, planCarrera, type Datos, type EscenaCarrera } from "./carrera-show";
+import { pisaA, metida, sitioLibre, type CajaF } from "./carrera-fichas";
 import { crearLlamaAguayo } from "./llama-aguayo";
 import { TEXTOS_CARRERA } from "./carrera-textos";
 import type { Tanda } from "./carrera-tandas";
@@ -789,43 +790,87 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
       // se corre hacia atrás lo que sobra, para que no tape el cuerpo ni se pegue a la manta.
       if (d.nueva && lider) x -= 8 * esc + 3 * P.u + 5 * comp;
     }
-    if (d.nueva) {
-      // Ni debajo de la cabecera (la ficha amarilla es más alta que lo que se reservó), ni cortada por el borde izquierdo.
-      const arribaMin = cam.y + (hudG.bajo + 3 * P.u - P.h / 2) / vz + (et.h * comp) / 2;
-      if (y < arribaMin) y = arribaMin;
-      const izqMin = cam.x - P.w / (2 * vz) + 4 * P.u + (et.w * comp) / 2 + et.rotuloW * comp;
-      if (x < izqMin && p.x > izqMin) x = izqMin;
-    }
+    // Ni debajo de la cabecera (la ficha amarilla es más alta que lo que se reservó).
+    const arribaMin = limites().y0 + (et.h * comp) / 2;
+    if (y < arribaMin) y = arribaMin;
     et.raiz.position.set(x, y);
   }
   /**
-   * La carrera nueva no deja que dos fichas se pisen: las que van adelante mandan, y la que choca con una ya puesta pasa a un nombre
-   * más corto; si todavía choca, sube un renglón.
+   * Lo que la pantalla deja ver del mundo, en coordenadas del mundo: debajo de la cabecera y encima del relator, sin pegarse a los bordes.
+   * Se mide con lo que la cámara aplicó de verdad a la escena (`scene`: su acercamiento incluye el golpe y el de la emoción, que
+   * `cam.zoom` no trae), no con la meta de la cámara.
    */
-  function resolverFichas(fichas: Ficha[], px: number, vz: number): void {
-    const puestas: { x0: number; y0: number; x1: number; y1: number }[] = [];
-    const caja = (f: Ficha): { x0: number; y0: number; x1: number; y1: number } => {
+  function limites(): CajaF {
+    const sc = S.scene;
+    const z = sc.scale.x || 1;
+    const x = (px: number): number => sc.pivot.x + (px - sc.position.x) / z;
+    const y = (py: number): number => sc.pivot.y + (py - sc.position.y) / z;
+    return { x0: x(4 * P.u), x1: x(P.w - 4 * P.u), y0: y(hudG.bajo + 3 * P.u), y1: y(P.bottom) };
+  }
+  /** Cuánto dura en pantalla la línea del relator que nombra a una (la echada, el cambio de punta). */
+  const NOMBRADA_DUR = 2.5;
+  /** Las que el relator nombra en `t`: su ficha no puede quedar tapada. */
+  function nombradas(t: number): Set<number> {
+    const s = new Set<number>();
+    for (const e of d.tiempos.echadas) if (t >= e.t && t < e.t + NOMBRADA_DUR) s.add(e.quien);
+    for (const c of d.cambiosDePunta) if (t >= c.t && t < c.t + NOMBRADA_DUR) s.add(c.quien);
+    return s;
+  }
+  /**
+   * Las fichas no se pisan, en las dos carreras. Se ubican de la que más manda a la que menos: la que el relator nombra ahora,
+   * la amarilla, las que se echaron y después el resto, de adelante hacia atrás. La que pisa a una ya puesta (más del 10 % de la
+   * más chica) pasa a un nombre más corto (solo la carrera nueva) y, si todavía pisa, se corre un renglón arriba o abajo, alternando,
+   * sin irse más de dos renglones de su llama. Si no cabe, se calla ese cuadro. Una ficha que no entra entera en la pantalla se
+   * corre hacia adentro, o se calla: nunca sale cortada. Es una función del cuadro, sin azar.
+   */
+  function resolverFichas(fichas: Ficha[], px: number, vz: number, nombrados: ReadonlySet<number>): void {
+    const puestas: CajaF[] = [];
+    const lim = limites();
+    const caja = (f: Ficha): CajaF => {
       const et = f.c.etiqueta;
       const w = et.w * f.comp, h = et.h * f.comp;
       return { x0: et.raiz.x - w / 2 - et.rotuloW * f.comp, y0: et.raiz.y - h / 2, x1: et.raiz.x + w / 2, y1: et.raiz.y + h / 2 };
     };
-    const choca = (a: { x0: number; y0: number; x1: number; y1: number }): boolean => puestas.some((b) => a.x0 < b.x1 - 1 && a.x1 > b.x0 + 1 && a.y0 < b.y1 - 1 && a.y1 > b.y0 + 1);
-    const orden = [...fichas].sort((a, b) => Number(b.soyLider) - Number(a.soyLider) || b.p.x - a.p.x);
-    for (const f of orden) {
+    /** Mete la ficha en la pantalla; falso si no entra entera o habría que irse demasiado lejos de su llama. */
+    const encajar = (f: Ficha): boolean => {
       const et = f.c.etiqueta;
+      const m = metida(caja(f), lim);
+      if (!m) return false;
+      et.raiz.position.set(et.raiz.x + m.dx, et.raiz.y + m.dy);
+      return true;
+    };
+    const manda = (f: Ficha): number => (nombrados.has(f.q) ? 4 : f.soyLider ? 3 : f.estilo === "echada" ? 2 : 1);
+    const orden = [...fichas].sort((a, b) => manda(b) - manda(a) || b.p.x - a.p.x);
+    fichas: for (const f of orden) {
+      const et = f.c.etiqueta;
+      // Dónde cae su ficha sin más (y lo que ya se corrió para entrar en la pantalla): el tope de renglones cuenta desde ahí.
+      let yNatural = et.raiz.y;
+      if (!encajar(f)) {
+        et.raiz.visible = false;
+        continue;
+      }
       let r = caja(f);
       let nv = f.nv;
-      while (choca(r) && nv > 2 && !f.soyLider && f.estilo !== "echada") {
+      while (d.nueva && pisaA(r, puestas) && nv > 2 && !f.soyLider && f.estilo !== "echada") {
         nv = (nv - 1) as Nivel;
         ponerEtiqueta(et, textoDe(f.q, nv), px, f.estilo);
         ubicarFicha(et, f.p, f.arriba, f.comp, vz, f.soyLider);
+        yNatural = et.raiz.y;
+        if (!encajar(f)) {
+          et.raiz.visible = false;
+          continue fichas;
+        }
         r = caja(f);
       }
-      if (choca(r) && f.arriba && !f.soyLider) {
-        et.raiz.y -= et.h * f.comp * 0.9;
-        const r2 = caja(f);
-        if (!choca(r2)) r = r2;
-        else et.raiz.y += et.h * f.comp * 0.9;
+      if (pisaA(r, puestas)) {
+        // Un renglón arriba o abajo, alternando (sobre la cabeza, primero para arriba).
+        const dy = sitioLibre(r, puestas, lim, f.arriba, et.raiz.y - yNatural);
+        // La que el relator nombra se queda donde está y por arriba de todas (nadie más la tapa): quien la pisaba ya se fue.
+        if (dy !== null) et.raiz.y += dy;
+        else if (manda(f) < 4) {
+          et.raiz.visible = false;
+          continue;
+        }
       }
       puestas.push(caja(f));
     }
@@ -858,6 +903,7 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
     let rayaMax = -Infinity;
     estelas.clear();
     const fichas: Ficha[] = [];
+    const nombrados = nombradas(t);
     for (const q of quienes) {
       const c = tomar(q);
       const p = posicion(q, t);
@@ -912,7 +958,7 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
       const esc = p.esc;
       if (tres) fichas3.push({ et, persona: q, comp, y: p.y, etiquetar: false, sinLugar: false, peso: soyLider ? 3e6 : reciente ? 2e6 : 1e6 });
       else ubicarFicha(et, p, arriba, comp, vz, soyLider);
-      et.raiz.zIndex = soyLider ? 3e6 : reciente ? 2e6 : 1e6;
+      et.raiz.zIndex = nombrados.has(q) ? 4e6 : soyLider ? 3e6 : reciente ? 2e6 : 1e6;
       // Las que quedaron lejos de la pantalla no se dibujan.
       const dentro = p.x > cam.x - P.w / (2 * vz) - 300 && p.x < cam.x + P.w / (2 * vz) + 300;
       c.raiz.visible = dentro;
@@ -927,9 +973,9 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
           f.etiquetar = p.etiquetar !== false;
           f.sinLugar = sinLugar || sobra;
         }
-      } else if (d.nueva && et.raiz.visible) fichas.push({ q, c, p, estilo, nv, arriba, comp, esc, soyLider });
+      } else if (et.raiz.visible) fichas.push({ q, c, p, estilo, nv, arriba, comp, esc, soyLider });
     }
-    if (d.nueva && !tres) resolverFichas(fichas, px, vz);
+    if (!tres) resolverFichas(fichas, px, vz, nombrados);
     pintarPorton(t);
     if (Number.isFinite(rayaMax)) rayaX = rayaMax;
     // La borla: pasa de una a otra (se calculó antes del bucle).
