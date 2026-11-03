@@ -1,6 +1,7 @@
 import { Container, Graphics } from "pixi.js";
 import { musicHold } from "../../music";
-import { anchoMarcador, crearJuego, hashDe, reservaDeMarcas, textoMarcador, type Kit } from "./kit";
+import { anchoMarcador, crearJuego, hashDe, medidasMarcador, reservaDeMarcas, textoMarcador, type Kit } from "./kit";
+import { MARCADOR } from "./kit/marcador";
 import {
   T_AMANECER, Z_META, Z_ULTIMOS, cajaDelPalo, cajaDeCuerpo, enPieEn, faseDe, geoDe, miradaDe, planGuajojo, proyectar, sentadaDe, swayDe, tandaDeLista, xDe, zDe,
   type Ciclo, type Datos, type Geo,
@@ -509,8 +510,9 @@ function nombres(k: Kit, d: Datos, e: Escena, g: Geo, t: number, fase: string, c
   const reserva = reservaDeMarcas(k.nombres.length, S.u(), p.w);
   const evitar = [
     { x: pa.x, y: pa.y, width: palo.w * zc, height: palo.h * zc * 0.55 },
-    // El contador lleva el total («QUEDAN  18 DE 18») y debajo la fila de marcas: se reserva lo que miden.
-    { x: 0, y: S.top(), width: Math.max(anchoMarcador(textoMarcador(k.txt("marcadorQuedan"), k.nombres.length, { de: k.txt("marcadorDe"), cuantos: k.nombres.length }), S.u()), reserva.ancho), height: 62 * p.k + reserva.alto },
+    // El contador lleva el total («QUEDAN  18 DE 18») y debajo la fila de marcas: se reserva lo que miden de verdad, desde donde
+    // el kit lo pone (`S.top() + 10u`, con su sombra), y no una altura de ojo.
+    { x: 0, y: S.top() + MARCADOR.y * S.u(), width: MARCADOR.x * S.u() + Math.max(anchoMarcador(textoMarcador(k.txt("marcadorQuedan"), k.nombres.length, { de: k.txt("marcadorDe"), cuantos: k.nombres.length }), S.u()) + 5 * S.u(), reserva.ancho), height: medidasMarcador(S.u()).alto + 5 * S.u() + reserva.alto },
   ];
   // El que acaba de sentarse: su nombre crece un rato donde pasó, sin tapar el contador ni pisar a otro.
   for (const c of e.chips.values()) c.visible = false;
