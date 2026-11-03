@@ -18,6 +18,7 @@ import { AFTER_MISS, AFTER_NEAR, BOCA_FLY, BOCA_IN, BOCA_SPIT, HANG_FINAL, HANG_
 import { exponerNino } from "./nino";
 import { lugarDe } from "./kit/respuestas";
 import { pintarMarcas } from "./kit/marcador-vista";
+import { reservaDeMarcas } from "./kit/marcador";
 import { FORMA_SAPO, respuestasSapo } from "./sapo-nino";
 
 /**
@@ -237,7 +238,12 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     return { x: g.cx - w / 2, y: g.cy - d / 2, w, h: d + 46 * g.k };
   };
   /** Lo que se ve del juego: debajo de la barra de arriba y encima del relator. */
-  const zonaJuego = (): Zona => ({ x0: 4 * g.k, y0: S.top(), x1: g.w - 4 * g.k, y1: g.h - S.bottom() });
+  const zonaJuego = (): Zona => ({ x0: 4 * g.k, y0: Math.max(S.top(), contadorBajo()), x1: g.w - 4 * g.k, y1: g.h - S.bottom() });
+  /**
+   * Hasta dónde llega el contador con su fila de marcas: el encuadre lo reserva, y el tablero (con los nombres de las esquinas)
+   * empieza debajo. Antes el contador se apagaba cuando la cámara se acercaba, y con la cámara lejos tapaba la ficha de arriba.
+   */
+  const contadorBajo = (): number => S.top() + 10 * g.k + medidasContador(g.k).alto + reservaDeMarcas(all, g.k, g.w).alto + 4 * g.k;
   /** Debajo de donde sale el cartel del ganador, encima del relator y sin pegarse a los costados. */
   const zonaFinal = (): Zona => ({ x0: 8 * g.k, y0: S.placaBajo(winners.length) + 4 * g.k, x1: g.w - 8 * g.k, y1: g.h - S.bottom() - 6 * g.k });
 
@@ -276,6 +282,31 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   const badgeOf = new Map<number, Text>();
   S.hud.addChild(badgeLayer);
 
+  /** Dónde está cada ficha de la mesa en la pantalla este cuadro, por agujero: para que la insignia no caiga encima de ninguna. */
+  const fichas = new Map<number, { x0: number; y0: number; x1: number; y1: number }>();
+  const tocaFicha = (x: number, y: number, r: number): boolean => {
+    for (const f of fichas.values()) {
+      const dx = x - Math.max(f.x0, Math.min(x, f.x1)), dy = y - Math.max(f.y0, Math.min(y, f.y1));
+      if (dx * dx + dy * dy < r * r) return true;
+    }
+    return false;
+  };
+  /** El lugar más cercano a `p` donde la insignia (radio `r`) no tapa ninguna ficha: el suyo si ya está libre; si no, arriba, a un costado o abajo de la propia. */
+  const insigniaLibre = (p: { x: number; y: number }, r: number, slot: number): { x: number; y: number } => {
+    if (!tocaFicha(p.x, p.y, r)) return p;
+    const own = fichas.get(slot);
+    if (!own) return p;
+    const m = 2 * g.k;
+    const cand = [
+      { x: own.x1 - r, y: own.y0 - r - m },
+      { x: own.x1 + r + m, y: (own.y0 + own.y1) / 2 },
+      { x: own.x0 + r, y: own.y0 - r - m },
+      { x: own.x0 - r - m, y: (own.y0 + own.y1) / 2 },
+      { x: own.x1 - r, y: own.y1 + r + m },
+    ];
+    const dentro = (c: { x: number; y: number }): boolean => c.x >= r && c.x <= g.w - r && c.y >= S.top() + r && c.y <= g.h - S.bottom() - r;
+    return cand.find((c) => dentro(c) && !tocaFicha(c.x, c.y, r)) ?? cand.find((c) => dentro(c)) ?? p;
+  };
   /** Un chip por nombre de la lista original, con su cara. Los finalistas terminan siendo los nombres de los agujeros. */
   let chips: Container[] = [];
   /** Dónde estaba cada chip en la grilla de la clasificatoria (pantalla). */
@@ -887,7 +918,13 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     // De cerca, la mesa entera si entra; si no, de borde a borde de la
     // pantalla: antes la cámara se pegaba al borde de la pantalla y mostraba
     // piso de un lado mientras dejaba agujeros afuera del otro.
-    const v = encuadrar(mesa(), zonaJuego(), { x, y, z }, g.w, g.h);
+    // Con los nombres ya sentados, el encuadre los cuenta: la ficha de una esquina de arriba no queda bajo el contador.
+    // Con la cámara quieta o a un acercamiento corto (hasta 1,3) la mesa entera con sus nombres entra debajo del contador: si no
+    // entra a ese tamaño, se achica lo que haga falta. Más de cerca (el seguimiento de la argolla, el último tiro) manda
+    // `encuadrar`, que cubre la zona de punta a punta; ahí el contador se aparta solo si una ficha le queda debajo.
+    const conNombres = tAll >= T_SEATED && !crowned;
+    if (conNombres && z <= 1.3) for (let vuelta = 0; vuelta < 3; vuelta++) z = Math.min(z, cabe(mesaConNombres(z), zonaJuego()));
+    const v = encuadrar(conNombres ? mesaConNombres(z) : mesa(), zonaJuego(), { x, y, z }, g.w, g.h);
     cam.lookAt(v.x, v.y, z, rate);
   }
 
@@ -1061,6 +1098,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
 
     // Los nombres: primero en la grilla de la clasificatoria, después volando a su agujero, y ahí se quedan.
     const ls = labelScale();
+    fichas.clear();
     names.forEach((_, i) => {
       const c = chips[i] as Container;
       const slot = slotOfName.get(i);
@@ -1129,6 +1167,9 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       const x = grid.x - cc.width / 2 + (tx - (grid.x - cc.width / 2)) * u, y = grid.y + (ty - grid.y) * u - Math.sin(Math.PI * u) * 40 * k;
       const xx = clamp(x, 4, Math.max(4, g.w - cc.width - 4));
       cc.position.set(xx, y);
+      // La destacada va por encima de las vecinas: una ficha de al lado le tapaba la última letra.
+      if (ganador && cc.parent === chipLayer) chipLayer.addChild(cc);
+      if (cc.visible && cc.alpha > 0) fichas.set(slot, { x0: xx, x1: xx + cc.width, y0: y - cc.height / 2, y1: y + cc.height / 2 });
       // Con la cámara cerca, el nombre que quedaría cortado contra el borde se
       // apaga en vez de arrastrarse encima de los agujeros o de la rana.
       cc.alpha = ganador || u < 1 || (Math.abs(xx - x) < 6 * k && qx > 0 && qx < g.w) ? 1 : 0;
@@ -1189,8 +1230,10 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     pintarMarcas(marcasG, { total: all, quedan: siguen, k, w: g.w });
     counterG.position.set(22 * k, S.top() + 10 * k);
     counterG.visible = !crowned;
-    // Con la cámara cerca tapaba nombres de la fila de arriba.
-    counterG.alpha = clamp((1.15 - cam.zoom) / 0.1, 0, 1);
+    // El encuadre le deja su lugar (`contadorBajo`) y ya no se apaga con el zoom: solo con la cámara muy cerca y solo si una
+    // ficha le queda justo debajo.
+    const cajaContador = { x0: 22 * k, y0: S.top() + 10 * k, x1: 22 * k + Math.max(bw, reservaDeMarcas(all, k, g.w).ancho) + 5 * k, y1: contadorBajo() };
+    counterG.alpha = cam.zoom > 1.3 && [...fichas.values()].some((f) => f.x1 > cajaContador.x0 && f.x0 < cajaContador.x1 && f.y1 > cajaContador.y0 && f.y0 < cajaContador.y1) ? 0 : 1;
 
     // Los agujeros ya ocupados: una medalla con el orden (o una tilde con un solo ganador).
     for (const o of tosses) {
@@ -1198,6 +1241,10 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       const c = P(L.holes[o.slot] as Point);
       const p = cam.toScreen(c.x + L.holeR * g.sc * 0.95, c.y - L.holeR * g.sc * g.tilt * 1.1, g.w, g.h);
       const br = Math.max(9 * k, 12 * k);
+      // La insignia no va sobre ninguna ficha: si cae encima, se corre afuera, junto a la propia.
+      const q = insigniaLibre(p, br, o.slot);
+      p.x = q.x;
+      p.y = q.y;
       strikeG.circle(p.x, p.y, br).fill(YELLOW).stroke({ width: 2 * k, color: INK });
       if (total > 1) {
         let b = badgeOf.get(o.th.turn);
