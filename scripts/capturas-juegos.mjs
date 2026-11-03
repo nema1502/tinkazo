@@ -25,6 +25,7 @@
  * la misma corrida (`<juego>-<segundos>s[-light].webp`), y `--temas dark` solo
  * la oscura.
  *
+ * `--sin-nombres` esconde además la capa de los nombres (para las imágenes chicas).
  * `--limpia` esconde, solo en la foto, lo que el show le pone encima: la franja
  * de arriba (la marca, la ronda, SONIDO y Saltar) y la banda del subtítulo, y el marcador de cuántos quedan. Es
  * la que va en las tarjetas de la portada. Con `--tam 640x360` cambia el
@@ -53,6 +54,7 @@ if (!juego) {
 const ens = opt("--en", "6").split(",").map(Number);
 const varias = ens.length > 1;
 const limpia = args.includes("--limpia");
+const sinNombres = args.includes("--sin-nombres");
 const [anchoOut, altoOut] = opt("--tam", "900x506").split("x").map(Number);
 const [vistaW, vistaH] = opt("--vista", "1600x900").split("x").map(Number);
 const recorte = opt("--recorte", "");
@@ -81,6 +83,24 @@ const PRELUDIO = `(() => {
   const bombear = () => {
     // Con --limpia, la interfaz del juego (el marcador de cuántos quedan y lo que cuelga de ella) no se dibuja.
     if (${limpia}) { const T = window.__tinkazo; if (T && T.hud) T.hud.renderable = false; }
+    // Con --sin-nombres, tampoco la capa de los nombres (para las imágenes chicas, donde serían letra que no se lee).
+    if (${sinNombres}) {
+      const T = window.__tinkazo;
+      if (T && T.hud && T.hud.parent) {
+        const hoja = (c) => !c.children || c.children.length === 0 || typeof c.text === 'string';
+        const recorrer = (n) => {
+          for (const c of n.children || []) {
+            if (typeof c.text === 'string' && c.text.length) {
+              // El texto y, si vive en una etiqueta chica (fondo y letra), la etiqueta entera.
+              const p = c.parent;
+              if (p && p !== T.hud.parent && p.children.length <= 4 && p.children.every((x) => hoja(x) || x.children.length <= 3)) p.renderable = false; else c.renderable = false;
+            }
+            recorrer(c);
+          }
+        };
+        recorrer(T.hud.parent);
+      }
+    }
     const st = document.getElementById('stadium');
     if (v0 < 0 && st && st.style.display === 'block') v0 = virt;
     if (v0 >= 0 && st && st.style.display !== 'block') window.__foto.cerro = true;
@@ -122,7 +142,7 @@ try {
     const page = await browser.open("about:blank");
     await page.send("Emulation.setDeviceMetricsOverride", { width: vistaW, height: vistaH, deviceScaleFactor: 1, mobile: false });
     await page.send("Page.addScriptToEvaluateOnNewDocument", { source: PRELUDIO });
-    await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&theme=${tema}&motor=${motor}${limpia ? "&auditar=camara" : ""}` });
+    await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&theme=${tema}&motor=${motor}${limpia || sinNombres ? "&auditar=camara" : ""}` });
     if (limpia) {
       await page.eval(`(() => { const e = document.createElement("style"); e.textContent = ".st-top, .commentary { visibility: hidden !important; }"; document.head.appendChild(e); })()`);
     }
