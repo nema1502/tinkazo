@@ -695,21 +695,21 @@ function nombres(k: Kit, d: Datos, e: Escena, g: Geo, t: number, fase: string, p
   };
   /* Los de a ocho en la brisa; hasta ocho de las que quedan en cada calma y hasta seis durante las ráfagas (cinco y tres en un celular), para saber quién sigue. */
   let quienes: number[] = [];
-  // En un celular entran menos nombres a la vez: de a cinco en la brisa, hasta seis en las calmas y tres en las ráfagas.
+  // En un celular entran menos nombres a la vez: de a cuatro en la brisa y en las calmas y tres en las ráfagas (con cinco se pisaban entre ellos).
   const chico = p.retrato;
-  if (fase === "tandas" && d.tTandas) quienes = S.batch(d.n, t, d.tTandas[0], d.tTandas[1], undefined, chico ? 5 : 8);
+  if (fase === "tandas" && d.tTandas) quienes = S.batch(d.n, t, d.tTandas[0], d.tTandas[1], undefined, chico ? 4 : 8);
   else if (fase === "calma" || fase === "ola") {
     const vivos = enElArbolEn(d, t).filter((i) => !(k.coronado));
     quienes = vivos
       .map((i) => ({ i, h: hashDe(i, 61) }))
       .sort((a, b) => a.h - b.h || a.i - b.i)
-      .slice(0, fase === "calma" ? (chico ? 5 : 8) : chico ? 3 : 6)
+      .slice(0, fase === "calma" ? (chico ? 4 : 8) : chico ? 3 : 6)
       .map((x) => x.i);
   } else if ((fase === "quedan" || fase === "colibri") && !d.sinNombres && !k.coronado) quienes = [d.ganador, d.rival];
   // El contador de arriba a la izquierda no se tapa.
   // El contador lleva el total («QUEDAN  18 DE 18») y debajo la fila de marcas: se reserva lo que miden.
   const reserva = reservaDeMarcas(d.n, S.u(), p.w);
-  const contador = { x: 0, y: S.top() - 4 * p.k, width: Math.max(anchoMarcador(textoMarcador(k.txt("marcadorQuedan"), d.n, { de: k.txt("marcadorDe"), cuantos: d.n }), S.u()), reserva.ancho), height: 74 * p.k + reserva.alto };
+  const contador = { x: 0, y: S.top() - 4 * p.k, width: Math.max(anchoMarcador(textoMarcador(k.txt("marcadorQuedan"), d.n, { de: k.txt("marcadorDe"), cuantos: d.n }), S.u()), reserva.ancho), height: 74 * p.k + reserva.alto + (chico ? 20 * p.k : 0) };
   S.tags(k.nombres as string[], quienes, alto, [contador]);
 
   /* Los nombres de las que caen y los de la alfombra. */
@@ -727,8 +727,13 @@ function nombres(k: Kit, d: Datos, e: Escena, g: Geo, t: number, fase: string, p
       if ((e.puesto[i] as number) < aterrizadas - e.rejilla.cap) continue;
       const c = chipDe(k, e, i);
       c.visible = true;
-      c.alpha = 1 - suave((t - d.tQuedan0) / 0.5);
-      if (c.alpha < 0.02) c.visible = false;
+      // Al empezar «quedan» las de la alfombra se apagan sin alfa: la ficha sigue opaca (con alfa quedaba gris sobre gris y
+      // con las ramas cruzando la letra) y se oscurece hasta irse.
+      const f = suave((t - d.tQuedan0) / 0.5);
+      c.alpha = 1;
+      const gris = Math.round(255 - 95 * f);
+      c.tint = (gris << 16) | (gris << 8) | gris;
+      if (f > 0.97) c.visible = false;
       c.position.set(slot.x - c.width / 2, slot.y - c.height / 2);
       vivosEnElSuelo.push(i);
     } else if (d.vuelo[i]) {
@@ -740,7 +745,8 @@ function nombres(k: Kit, d: Datos, e: Escena, g: Geo, t: number, fase: string, p
       const x = lerp(s.x - c.width / 2, slot.x - c.width / 2, m);
       const y = lerp(s.y - c.height / 2, slot.y - c.height / 2, m);
       c.visible = true;
-      c.alpha = suave(f * 8);
+      // Opaca desde el primer cuadro: con alfa, sobre las ramas, era gris sobre gris y la letra se cruzaba con ellas.
+      c.alpha = 1;
       c.position.set(Math.max(4 * p.k, Math.min(p.w - c.width - 4 * p.k, x)), Math.max(S.top() + 2 * p.k, y));
     }
   }
