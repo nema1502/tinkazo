@@ -474,6 +474,8 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
   /* --------------------------------------------------- la salida y la meta */
   /** El rótulo META y dónde lo deja la pista: el cuadro lo corre hacia adentro de la pantalla (`acomodarMeta`). */
   let metaTxt: Text | null = null;
+  /** El letrero SALIDA, en el mundo: las fichas de nombre no se le ponen encima mientras esté a la vista. */
+  let salidaTxt: Text | null = null;
   let metaBase = { x: 0, y: 0 };
   function pintarMarcas(): void {
     marcas.removeChildren().forEach((c) => c.destroy({ children: true }));
@@ -521,6 +523,7 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
     const salida = S.text(k.txt("carSalida").replace(/[¡!]/g, "").toUpperCase(), { fontSize: 26 * u, fontWeight: "900", fill: CREAM, stroke: contorno(26 * u) });
     salida.anchor.set(0, 0.5);
     salida.position.set(26 * u, y0 + 30 * u);
+    salidaTxt = salida;
     marcas.addChild(meta, salida);
   }
 
@@ -861,6 +864,13 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
   function resolverFichas(fichas: Ficha[], px: number, vz: number, nombrados: ReadonlySet<number>): void {
     const puestas: CajaF[] = [];
     const lim = limites();
+    // El letrero SALIDA cuenta como una caja ya puesta mientras se ve: las fichas lo pisaban y quedaba «SALI» con un nombre encima.
+    const sal = salidaTxt;
+    if (sal && !sal.destroyed && marcas.visible && sal.visible) {
+      const w = sal.width, h = sal.height;
+      const c = { x0: sal.x - sal.anchor.x * w, y0: sal.y - sal.anchor.y * h, x1: sal.x + (1 - sal.anchor.x) * w, y1: sal.y + (1 - sal.anchor.y) * h };
+      if (c.x1 > lim.x0 && c.x0 < lim.x1 && c.y1 > lim.y0 && c.y0 < lim.y1) puestas.push(c);
+    }
     const caja = (f: Ficha): CajaF => {
       const et = f.c.etiqueta;
       const w = et.w * f.comp, h = et.h * f.comp;
