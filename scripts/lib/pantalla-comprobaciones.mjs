@@ -32,6 +32,31 @@ export const luminosidad = (c) => {
 };
 const distancia = (a, b) => Math.hypot(...canales(a).map((v, i) => v - canales(b)[i]));
 
+/** Un trazo cuenta como contorno si es oscuro (menos de esta luminosidad), de al menos este ancho en pantalla y contrasta con la letra. */
+export const CONTORNO_OSCURO = 0.12;
+export const CONTORNO_ANCHO = 1.5;
+export const CONTORNO_CONTRASTE = 3;
+
+/** El contraste WCAG entre dos colores 0xRRGGBB (de 1 a 21). */
+export const contraste = (a, b) => {
+  const la = luminosidad(a), lb = luminosidad(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+};
+
+/**
+ * ¿El trazo de este texto es un contorno que lo defiende del fondo? Solo si es
+ * oscuro, de al menos 1,5 px en pantalla y contrasta al menos 3:1 con la letra:
+ * una letra de tinta con un borde de tinta no tiene contorno, tiene un borde
+ * que se la come. `t` trae `{ fill, trazoColor, trazoPx }` (el ancho ya
+ * multiplicado por la escala con que se dibuja).
+ */
+export function esContorno(t) {
+  if (!t || t.trazoColor == null || !(t.trazoPx >= CONTORNO_ANCHO)) return false;
+  if (luminosidad(t.trazoColor) >= CONTORNO_OSCURO) return false;
+  // Sin color de letra conocido no se puede comparar: vale como siempre, por oscuro y grueso.
+  return t.fill == null || contraste(t.fill, t.trazoColor) >= CONTORNO_CONTRASTE;
+}
+
 /**
  * ¿El borde de este texto se come la letra? Pasa cuando el borde es del mismo
  * tono que la letra (los dos oscuros, los dos claros, o colores muy parecidos)

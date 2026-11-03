@@ -15,7 +15,8 @@
  *   chico que se ve; después se informa la mediana y el percentil 10 de esos
  *   cuadros, así un texto que aparece un instante no cuenta como el tamaño del
  *   juego. Y el contraste de cada texto contra lo que tiene detrás: tiene que
- *   pasar 4,5 a 1, o llevar un contorno oscuro. Y que el borde del texto no se
+ *   pasar 4,5 a 1, o llevar un contorno: oscuro, de 1,5 px y que contraste 3 a 1
+ *   con la letra (`esContorno`; tinta con borde de tinta no lo es). Y que el borde del texto no se
  *   coma la letra: un borde del mismo tono que la letra, más ancho que el 8 %
  *   de su tamaño en pantalla, la funde en una mancha (`bordeSeCome`).
  * - **Líneas**: el grosor de los trazos, con la misma mediana y el mismo
@@ -49,7 +50,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { launch } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
-import { bordeSeCome, comprobacionesDePantalla, hayHallazgo } from "./lib/pantalla-comprobaciones.mjs";
+import { bordeSeCome, comprobacionesDePantalla, esContorno, hayHallazgo } from "./lib/pantalla-comprobaciones.mjs";
 import { juegosDe } from "./lib/juegos.mjs";
 
 /** Los nombres de la escena fija (`?pose=`), para reconocer los que se ven como nombres. */
@@ -145,11 +146,6 @@ const MEDIR = `(() => {
     return null;
   };
   const textos = [], trazos = [];
-  const oscuro = (c) => {
-    if (c === null) return false;
-    const f = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
-    return 0.2126 * f((c >> 16) & 255) + 0.7152 * f((c >> 8) & 255) + 0.0722 * f(c & 255) < 0.12;
-  };
   const podio = app.stage.children[4];
   const visit = (node, enPodio, alfaPadre) => {
     if (!node.visible || !node.renderable) return;
@@ -164,9 +160,7 @@ const MEDIR = `(() => {
         s: node.text.slice(0, 40), px: (st.fontSize || 0) * escala, a,
         box: [b.x, b.y, b.width, b.height],
         fill: hex(st.fill),
-        // Un contorno cuenta solo si es oscuro: luminosidad relativa por debajo de 0,12.
-        contorno: !!st.stroke && (st.stroke.width || 0) * escala >= 1.5 && oscuro(hex(st.stroke.color ?? st.stroke)),
-        // Para "el borde no se come la letra": el color y el ancho del borde, en pantalla.
+        // Si el trazo es un contorno (esContorno) se decide afuera, con el color y el ancho del borde en pantalla.
         trazoColor: st.stroke ? hex(st.stroke.color ?? st.stroke) : null,
         trazoPx: st.stroke ? (st.stroke.width || 0) * escala : 0,
         plato: enPodio,
@@ -339,7 +333,7 @@ async function recorrer(page, alCartel = null) {
   };
   const contrasteDe = async (m) => {
     const con = JSON.parse(await page.eval(`JSON.stringify(${CONTRASTE(JSON.stringify(m.textos.filter((t) => t.a >= 0.5)))})`));
-    for (const t of con) if (t.ratio !== null && t.ratio !== undefined) contrastes.push({ s: t.s, ratio: +t.ratio.toFixed(2), contorno: t.contorno, px: +t.px.toFixed(1) });
+    for (const t of con) if (t.ratio !== null && t.ratio !== undefined) contrastes.push({ s: t.s, ratio: +t.ratio.toFixed(2), contorno: esContorno(t), px: +t.px.toFixed(1) });
   };
   for (let tramo = 0; tramo < 90 * 4 && !hecho; tramo++) {
     serie.push(...(await page.eval("window.__avanzar(16)")));
