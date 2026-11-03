@@ -23,6 +23,7 @@ import { fechaLarga } from "./ui/agrupar";
 import { abrirSorteo } from "./ui/compartir";
 import { tomarLogoEntrante } from "./enlace-corto";
 import { pintarFranja } from "./ui/logo-franja";
+import { montarConfianza } from "./ui/confianza";
 import { contarApertura, contarVeredicto, quitarMarca, refDe, viaDe } from "./contar";
 import { type PropsDe, type Ref, contratoOficial } from "../workers/enlaces/src/conteo";
 
@@ -217,6 +218,7 @@ async function main(): Promise<void> {
   actual = { proof, r: revision };
   pintarComprobaciones(proof, revision);
   contar(proof, revision);
+  if (ref) montarConfianza($("confianza"), ref);
   // Después del resultado y de las comprobaciones, la leyenda del juego (si el enlace trae `?juego=`).
   pintarLaLeyenda();
 }

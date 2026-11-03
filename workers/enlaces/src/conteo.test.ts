@@ -178,6 +178,33 @@ describe("la lista cerrada del contador", () => {
   });
 });
 
+describe("respuestas de confianza", () => {
+  it("acepta tres respuestas y anteriores solo dentro de ultimoId; no cambia otros eventos", () => {
+    for (const answer of ["yes", "no", "unsure"]) {
+      expect(validarConteo({ e: "proof_trust", p: { answer }, ref: REF }).ok).toBe(true);
+      for (const anterior of deployments.testnet.anteriores) {
+        const ref = { ...REF, contract: anterior.contractId, id: String(anterior.ultimoId) };
+        expect(validarConteo({ e: "proof_trust", p: { answer }, ref }).ok).toBe(true);
+        expect(validarConteo({ e: "proof_trust", p: { answer }, ref: { ...ref, id: String(anterior.ultimoId + 1) } }).ok).toBe(false);
+        for (const [e, p] of [["share", { channel: "copy" }], ["proof_open", { via: "qr" }], ["proof_verdict", { verdict: "red" }]]) {
+          expect(validarConteo({ e, p, ref }).ok).toBe(false);
+          expect(validarConteo({ e, p, ref: REF }).ok).toBe(true);
+        }
+      }
+    }
+  });
+  it("rechaza propiedades, respuestas y referencias inválidas", () => {
+    for (const x of [
+      { e: "proof_trust", p: { answer: "yes" } },
+      { e: "proof_trust", p: { answer: "maybe" }, ref: REF },
+      { e: "proof_trust", p: { answer: "yes", who: "x" }, ref: REF },
+      { e: "proof_trust", p: {}, ref: REF },
+      { e: "proof_trust", p: { answer: "yes" }, ref: { ...REF, id: "0" } },
+      { e: "proof_trust", p: { answer: "yes" }, ref: { ...REF, timestamp: 1 } },
+    ]) expect(validarConteo(x).ok).toBe(false);
+  });
+});
+
 describe("lo que se guarda y lo que se publica", () => {
   it("las propiedades se guardan con las claves en orden", () => {
     expect(claveDeProps({ source: "csv", size: "2-9" })).toBe('{"size":"2-9","source":"csv"}');
