@@ -277,8 +277,18 @@ export function ajustar(texto: string, ancho: number, medir: (s: string) => numb
  * `medir(s)` es el ancho del texto a la letra que se va a dibujar.
  */
 export function envolver(texto: string, ancho: number, medir: (s: string) => number): string[] {
+  return envolverConAviso(texto, ancho, medir).lineas;
+}
+
+/**
+ * Como `envolver`, y además dice si tuvo que partir una palabra por letras (`partioPalabra`): quien elige entre
+ * varias escalas y varios renglones prefiere siempre la que no parte ninguna («Daniel / a Cruz» se lee mal, y a
+ * una letra menos y dos renglones se lee entero).
+ */
+export function envolverConAviso(texto: string, ancho: number, medir: (s: string) => number): { lineas: string[]; partioPalabra: boolean } {
   const t = texto.normalize("NFC").replace(/\s+/gu, " ").trim();
-  if (!t) return [""];
+  if (!t) return { lineas: [""], partioPalabra: false };
+  let partioPalabra = false;
   // Trozos: cada palabra se parte después de un guion o de un guion bajo ("Maximiliano_", "Alexander_"); el primer trozo de
   // cada palabra, menos la primera, va después de un espacio.
   const trozos: { s: string; espacio: boolean }[] = [];
@@ -292,6 +302,7 @@ export function envolver(texto: string, ancho: number, medir: (s: string) => num
     while (medir(resto) > ancho) {
       const gs = grafemas(resto);
       if (gs.length < 2) break;
+      partioPalabra = true;
       let n = gs.length - 1;
       while (n > 1 && medir(gs.slice(0, n).join("")) > ancho) n--;
       lineas.push(gs.slice(0, n).join(""));
@@ -313,14 +324,15 @@ export function envolver(texto: string, ancho: number, medir: (s: string) => num
     }
   }
   lineas.push(actual);
-  return lineas;
+  return { lineas, partioPalabra };
 }
 
 /**
  * Como `ajustar`, para un cartel que puede crecer hacia abajo (el de quien gana): el nombre entero en los renglones que
  * hagan falta, a la letra más grande que se pueda y **nunca bajo `piso`** (la regla de la sala: `letraMinima / talla`).
  * Prefiere, en este orden, a la escala 1 un renglón, uno achicado a 0,85 (apenas se nota), dos renglones, tres, y recién
- * después achica de a poco hasta `piso`; con una palabra más ancha que la caja, la parte por letras enteras. Nunca «…».
+ * después achica de a poco hasta `piso`. Recorre todo eso sin partir una palabra por letras; solo si una palabra es más
+ * ancha que la caja a la escala mínima, la parte por letras enteras. Nunca «…».
  * Con `maxLineas` (por defecto 4) no usa más renglones que esos: si ni a `piso` entra, devuelve lo que sale a `piso`
  * (con más renglones que `maxLineas`) y `partida: true`, para que quien llama elija otra forma (un nombre más corto).
  * `medir(s)` es el ancho del texto a la letra normal (escala 1).
@@ -330,10 +342,14 @@ export function ajustarEnRenglones(texto: string, ancho: number, medir: (s: stri
   const p = Math.min(1, Math.max(0.05, piso));
   const todos: ReadonlyArray<readonly [number, number]> = [[1, 1], [0.85, 1], [1, 2], [0.85, 2], [0.7, 2], [1, 3], [0.7, 3], [p, 3], [p, 4]];
   const orden = [...todos.filter(([, m]) => m < maxLineas), [p, maxLineas] as const];
-  for (const [e0, maximo] of orden) {
-    const e = Math.min(1, Math.max(p, e0));
-    const lineas = envolver(t, ancho / e, medir);
-    if (lineas.length <= maximo) return { lineas, escala: e, partida: false };
+  // Primero todas las combinaciones, sin partir ninguna palabra por letras: una letra menos y dos renglones antes que
+  // «Rodrig / o Peña». Partir por letras es el último recurso: una palabra más ancha que el cartel a la escala mínima.
+  for (const sinPartir of [true, false]) {
+    for (const [e0, maximo] of orden) {
+      const e = Math.min(1, Math.max(p, e0));
+      const { lineas, partioPalabra } = envolverConAviso(t, ancho / e, medir);
+      if (lineas.length <= maximo && !(sinPartir && partioPalabra)) return { lineas, escala: e, partida: false };
+    }
   }
   return { lineas: envolver(t, ancho / p, medir), escala: p, partida: true };
 }

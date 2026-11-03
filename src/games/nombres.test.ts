@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  ajustar, ajustarEnRenglones, envolver, formaQueEntra, formasDe, grafemas, inicialDe, mediana, nivelBase, nivelPorCantidad, nivelQueCabe, nivelesDe, palabras, planNombres,
+  ajustar, ajustarEnRenglones, envolver, envolverConAviso, formaQueEntra, formasDe, grafemas, inicialDe, mediana, nivelBase, nivelPorCantidad, nivelQueCabe, nivelesDe, palabras, planNombres,
   type Nivel,
 } from "./nombres";
 
@@ -320,6 +320,38 @@ describe("ajustarEnRenglones: el nombre del cartel entero, en los renglones que 
     const libre = ajustarEnRenglones("María Fernanda Guadalupe Quispe Mamani Zuleta", 14 * 8, u, 0.8);
     expect(libre.partida).toBe(false);
     expect(libre.lineas).toEqual(["María Fernanda", "Guadalupe Quispe", "Mamani Zuleta"]);
+  });
+
+  it("en un celular de 390 no parte un nombre a mitad de palabra: achica un poco y usa dos renglones", () => {
+    // El cartel a 390 de ancho: la letra de 50 px mide unos 28 px por letra y al nombre le quedan unos 170 px.
+    const medir = (s: string): number => grafemas(s).length * 28;
+    for (const nombre of ["Daniela Cruz", "Rodrigo Peña", "Andrés Villca", "Alejandro Ríos", "Gabriela Paz"]) {
+      for (const piso of [0.5, 0.6]) {
+        const a = ajustarEnRenglones(nombre, 170, medir, piso);
+        expect(a.partida).toBe(false);
+        // Cada renglón es una o más palabras enteras del nombre.
+        const palabras = nombre.split(" ");
+        for (const l of a.lineas) for (const w of l.split(" ")) expect(palabras).toContain(w);
+        expect(a.lineas.join(" ")).toBe(nombre);
+        for (const l of a.lineas) expect(medir(l) * a.escala).toBeLessThanOrEqual(170 + 1e-9);
+      }
+    }
+  });
+
+  it("parte una palabra por letras solo cuando no entra ni a la escala mínima", () => {
+    const medir = (s: string): number => grafemas(s).length * 28;
+    // «Alejandro» (252) a la escala 0,6 mide 151 y entra en 170; «Anticonstitucionalmente» (644) no entra ni a 0,6.
+    expect(ajustarEnRenglones("Alejandro Ríos", 170, medir, 0.6).lineas).toEqual(["Alejandro", "Ríos"]);
+    const largo = ajustarEnRenglones("Anticonstitucionalmente", 170, medir, 0.6);
+    expect(largo.lineas.length).toBeGreaterThan(1);
+    expect(largo.lineas.join("")).toBe("Anticonstitucionalmente");
+    for (const l of largo.lineas) expect(medir(l) * largo.escala).toBeLessThanOrEqual(170 + 1e-9);
+  });
+
+  it("envolverConAviso dice si partió una palabra", () => {
+    const medir = (s: string): number => grafemas(s).length * 8;
+    expect(envolverConAviso("María Quispe", 11 * 8, medir)).toEqual({ lineas: ["María", "Quispe"], partioPalabra: false });
+    expect(envolverConAviso("Anticonstitucionalmente", 8 * 8, medir).partioPalabra).toBe(true);
   });
 
   it("con espacio para unas pocas letras por renglón lo escribe en cuatro renglones a lo sumo mientras el piso lo permita", () => {
