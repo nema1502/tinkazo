@@ -663,6 +663,8 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   /** Los juegos del kit piden la pasada de separación avisando dónde está su contador (`reservarContador`). */
   let separarNombres = false;
   let vedaContador: RectNombre | null = null;
+  /** Lo que el juego pidió no tapar al poner sus nombres en este cuadro (`tags`: el contador, los ojos del palo): la pasada final también lo respeta. */
+  let vedasDelCuadro: RectNombre[] = [];
   /**
    * Hasta dónde llega un nombre por abajo: la franja del relator o, si una frase
    * larga lo hizo crecer más que ella, su borde de arriba de verdad. La ruta del
@@ -732,7 +734,8 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       const nombre = (dueno.get(c) ?? "").toLowerCase();
       return { x: b.x, y: b.y, w: b.width, h: b.height, prioridad: (nombre && habla.includes(nombre) ? 100 : 0) + 10 * c.alpha };
     });
-    const res = separarEtiquetas(cajas, { y0, y1 }, vedaContador ? [vedaContador] : []);
+    const res = separarEtiquetas(cajas, { y0, y1 }, [...(vedaContador ? [vedaContador] : []), ...vedasDelCuadro]);
+    vedasDelCuadro = [];
     vivos.forEach((c, i) => {
       const r = res[i];
       if (!r) return;
@@ -1086,6 +1089,10 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         root.visible = true;
         plate.visible = placa && tp >= 0;
         tl.time(Math.max(0, tp));
+        // En un celular el cartel ocupa casi todo el ancho: el contador y las marcas (la capa `hud`) se van mientras entra,
+        // en el mismo rato (el cartel arranca a los 0,12 s y su rebote llega a su tamaño en unos 0,5), y no asoman
+        // por los costados ni quedan restos al lado de un cartel de dos renglones.
+        hud.alpha = placa && portrait() ? 1 - Math.max(0, Math.min(1, (tp - 0.12) / 0.4)) : 1;
         if (vista) {
           if (foco && T) {
             // Un latido grave por cada marca, si no se saltó el silencio.
@@ -1192,6 +1199,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       tagK = k;
     }
     for (const c of tagChips.values()) c.visible = false;
+    vedasDelCuadro = avoid.filter((r) => r.width > 0 && r.height > 0).map((r) => ({ x: r.x, y: r.y, w: r.width, h: r.height }));
     const placed: { x: number; y: number; w: number; h: number }[] = avoid.map((r) => ({ x: r.x, y: r.y + r.height / 2, w: r.width, h: r.height }));
     const W = sw(), H = sh();
     const pts = who.map((i) => ({ i, p: at(i) })).filter((a): a is { i: number; p: { x: number; y: number } } => !!a.p).sort((a, b) => a.p.y - b.p.y);
