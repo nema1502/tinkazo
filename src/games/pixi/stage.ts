@@ -13,7 +13,7 @@ import { guardiaNombre, meter } from "./encuadre";
 import { GOLPE_GANADOR, vibrar } from "../../vibrar";
 import { enStand } from "../../ensayo-modo";
 import { CHIP_SCALE, LEGIBLE, letraMinima, seLee } from "./letra";
-import { ajustarEnRenglones, formaQueEntra } from "../nombres";
+import { acomodarGanador, ajustarEnRenglones, formaQueEntra } from "../nombres";
 import { separarEtiquetas, type Rect as RectNombre } from "./kit/nombres";
 import { estadoFoco, latidosFoco, tiemposFoco } from "./foco";
 import { FocoVista, type FocoPunto } from "./foco-vista";
@@ -944,9 +944,32 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       // máximo sale de ahí (y no del 86 % de la pantalla de antes), descontando su sombra y lo que da el giro.
       const REBOTE = 1.2;
       const phAprox = 12 * k + title.height + 6 * k + altos.reduce((a, h) => a + h, 0) + 20 * k;
-      const pwMax = Math.min(sw() * 0.86, (sw() - 4 - 12 * k) / REBOTE - 0.12 * phAprox);
+      const pwMaxDe = (ph: number): number => Math.min(sw() * 0.86, (sw() - 4 - 12 * k) / REBOTE - 0.12 * ph);
+      let pwMax = pwMaxDe(phAprox);
+      // Con una cara al costado el nombre tiene ~175 px en un celular de 390 y ~160 en uno de 360: una palabra de diez
+      // letras o más no entra ni a la letra de la regla y se partía a mitad de palabra («Maximilia / no Paz»). Si pasa,
+      // la cara se va arriba, con «GANA», y el nombre usa todo el ancho (unos 100 px más); si aun así no entra, se parte
+      // por sílaba, con guion. Solo en vertical y solo si gana el ancho: con un nombre normal el cartel es el de siempre.
+      const CARA_ARRIBA = 58;
+      let caraArriba = false;
+      if (big && portrait()) {
+        const tx0 = nameTexts[0] as Text;
+        const nombre0 = lines[0] as string;
+        const piso0 = Math.min(1, letraMinima(k, true) / talla(0));
+        const medir0 = (x: string): number => {
+          tx0.text = x;
+          return tx0.width;
+        };
+        const arribaPh = phAprox + (CARA_ARRIBA - 18) * k;
+        const r = acomodarGanador(nombre0, pwMax - 132 * k, pwMaxDe(arribaPh) - 56 * k, medir0, piso0, true);
+        if (r.caraArriba) {
+          caraArriba = true;
+          pwMax = pwMaxDe(arribaPh);
+        }
+        tx0.text = nombre0;
+      }
       for (const [i, tx] of nameTexts.entries()) {
-        const maxW = pwMax - (big ? 132 : 56) * k - hueco(i);
+        const maxW = pwMax - (big && !caraArriba ? 132 : 56) * k - hueco(i);
         const piso = Math.min(1, letraMinima(k, true) / talla(i));
         if (tx.width <= maxW) continue;
         const nombre = lines[i] as string;
@@ -982,10 +1005,12 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       // nombre se salía por el costado y por abajo.
       if (big && nameTexts[0]) altos[0] = Math.max(altos[0] ?? 0, nameTexts[0].height + 6 * k);
       const innerW = Math.max(title.width, ...nameTexts.map((x, i) => x.width + hueco(i)));
-      const pw = innerW + (big ? 132 : 56) * k;
+      const lado0 = CARA_ARRIBA * k;
+      // Con la cara arriba, «GANA» va a su lado y el cartel es tan ancho como lo más ancho de las dos filas.
+      const pw = (caraArriba ? Math.max(innerW, lado0 + 14 * k + title.width) : innerW) + (big && !caraArriba ? 132 : 56) * k;
       const lineH = altos[0] ?? 60 * k;
       // «GANA» es lo principal de la sala (48 px en 1080): los nombres arrancan debajo de él, no encima.
-      const arriba = 12 * k + title.height + 6 * k;
+      const arriba = 12 * k + (caraArriba ? Math.max(title.height, lado0) : title.height) + 6 * k;
       const ph = arriba + altos.reduce((a, h) => a + h, 0) + 20 * k;
       cartelAlto = { m: winners.length, k, ph };
       const dy = arriba / 2 - 18 * k;
@@ -996,18 +1021,22 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
         .fill(YELLOW)
         .stroke({ width: 5 * k, color: INK });
       plate.addChild(bgp);
-      const x0 = -pw / 2 + (big ? 112 : 28) * k;
+      const x0 = -pw / 2 + (big && !caraArriba ? 112 : 28) * k;
       if (big) {
         const propia = caraPropia?.(winners[0] as number) ?? null;
         const av = new Sprite(propia ?? caraGrande(all[0] ?? ""));
-        av.width = av.height = 76 * k;
-        av.position.set(-pw / 2 + 22 * k, -38 * k + dy);
-        const border = new Graphics().rect(-pw / 2 + 20 * k, -40 * k + dy, 80 * k, 80 * k).stroke({ width: 4 * k, color: INK });
+        const lado = caraArriba ? lado0 : 76 * k;
+        const ax = caraArriba ? x0 : -pw / 2 + 22 * k;
+        const ay = caraArriba ? -ph / 2 + 12 * k : -38 * k + dy;
+        av.width = av.height = lado;
+        av.position.set(ax, ay);
+        const border = new Graphics().rect(ax - 2 * k, ay - 2 * k, lado + 4 * k, lado + 4 * k).stroke({ width: 4 * k, color: INK });
         plate.addChild(av);
         // El emblema ya trae su propio borde: el marco de siempre solo va con el glifo cuadrado.
         if (!propia) plate.addChild(border);
       }
-      title.position.set(x0, -ph / 2 + 12 * k);
+      if (caraArriba) title.position.set(x0 + lado0 + 14 * k, -ph / 2 + 12 * k + (lado0 - title.height) / 2);
+      else title.position.set(x0, -ph / 2 + 12 * k);
       plate.addChild(title);
       // Cada renglón en su contenedor, para que con varios premios entren de a uno.
       const renglones: Container[] = [];

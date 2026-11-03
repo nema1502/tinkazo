@@ -185,6 +185,63 @@ export function nivelesDe(plan: PlanNombres, vivos: readonly number[], base: Niv
   return niv;
 }
 
+/* ================================================== sílabas */
+
+/** Los grupos de dos consonantes que en español no se separan: van juntos con la vocal que sigue ("a-bri-go", "Ma-chu"). */
+const GRUPO_INSEPARABLE = new Set(["bl", "br", "cl", "cr", "dr", "fl", "fr", "gl", "gr", "kl", "kr", "pl", "pr", "tr", "ch", "ll", "rr", "sh", "ph", "th"]);
+const SOLO_LETRAS = /^\p{L}+$/u;
+/** Una vocal "fuerte": a, e, o, o una i o u con tilde. Dos fuertes juntas son un hiato y se separan; con una débil (i, u) sin tilde forman diptongo. */
+function vocal(c: string): "fuerte" | "debil" | null {
+  const d = c.normalize("NFD");
+  const b = d[0]?.toLowerCase() ?? "";
+  if (!"aeiou".includes(b)) return null;
+  if ("aeo".includes(b)) return "fuerte";
+  // i o u: débil, salvo con tilde (í, ú). La diéresis (ü) no la vuelve fuerte.
+  return d.includes(String.fromCharCode(0x301)) ? "fuerte" : "debil";
+}
+
+/**
+ * Las sílabas de una palabra con la partición simple del español: una consonante entre dos vocales va con la segunda
+ * ("ma-ri-a"), dos consonantes se reparten ("ban-co") salvo los grupos que no se separan ("a-bri-go", "Ma-chu"), los
+ * diptongos no se rompen ("Ju-lio") y los hiatos sí ("Ma-rí-a"). Una sílaba no queda con una sola letra al principio ni al
+ * final de la palabra ("a-mi-go" se parte "ami-go", no "a-migo"). Devuelve las sílabas con las mismas letras, en orden; una
+ * palabra con algo que no es una letra (un número, un emoji) o sin vocales no se parte: `[palabra]`.
+ */
+export function silabas(palabra: string): string[] {
+  const cs = Array.from(palabra.normalize("NFC"));
+  if (cs.length < 4 || !SOLO_LETRAS.test(palabra)) return [palabra];
+  // Los núcleos: rachas de vocales, separadas donde hay hiato.
+  const nucleos: Array<[number, number]> = [];
+  for (let i = 0; i < cs.length; i++) {
+    const v = vocal(cs[i] as string);
+    if (!v) continue;
+    const ult = nucleos[nucleos.length - 1];
+    const prev = ult && ult[1] === i ? vocal(cs[i - 1] as string) : null;
+    if (ult && prev && !(prev === "fuerte" && v === "fuerte")) ult[1] = i + 1;
+    else nucleos.push([i, i + 1]);
+  }
+  const cortes: number[] = [];
+  for (let n = 1; n < nucleos.length; n++) {
+    const fin = (nucleos[n - 1] as [number, number])[1];
+    const ini = (nucleos[n] as [number, number])[0];
+    const largo = ini - fin;
+    const par = largo >= 2 ? (cs[ini - 2] as string).toLowerCase() + (cs[ini - 1] as string).toLowerCase() : "";
+    // A la derecha del corte va una consonante, o las dos si forman un grupo que no se separa.
+    const derecha = Math.min(largo, GRUPO_INSEPARABLE.has(par) ? 2 : 1);
+    cortes.push(ini - derecha);
+  }
+  // Sin sílabas de una sola letra en las puntas.
+  const validos = cortes.filter((c) => c >= 2 && cs.length - c >= 2);
+  const out: string[] = [];
+  let desde = 0;
+  for (const c of validos) {
+    out.push(cs.slice(desde, c).join(""));
+    desde = c;
+  }
+  out.push(cs.slice(desde).join(""));
+  return out;
+}
+
 /* ================================================== entrar en una caja */
 
 export interface Ajuste {
@@ -270,6 +327,47 @@ export function ajustar(texto: string, ancho: number, medir: (s: string) => numb
 }
 
 /**
+ * Una palabra en renglones de a lo sumo `ancho`, cortada entre sílabas y con un guion al final de cada renglón menos el
+ * último; los renglones salen parejos («Maxi- / miliano», no «Maximilia- / no»). `null` si ni la primera sílaba con su guion
+ * entra. `medir(s)` es el ancho del texto a la letra que se va a dibujar.
+ */
+function partirPorSilabas(sil: readonly string[], ancho: number, medir: (s: string) => number): string[] | null {
+  const n = sil.length;
+  const voraz = (w: number): string[] | null => {
+    const out: string[] = [];
+    let i = 0;
+    while (i < n) {
+      const resto = sil.slice(i).join("");
+      if (medir(resto) <= w) {
+        out.push(resto);
+        return out;
+      }
+      let k = n - 1;
+      while (k > i && medir(`${sil.slice(i, k).join("")}-`) > w) k--;
+      if (k <= i) return null;
+      out.push(`${sil.slice(i, k).join("")}-`);
+      i = k;
+    }
+    return out;
+  };
+  const base = voraz(ancho);
+  if (!base) return null;
+  // La misma cantidad de renglones, lo más angostos que se pueda: así ninguno queda con una sílaba suelta.
+  let mejor = base;
+  let lo = 0;
+  let hi = ancho;
+  for (let v = 0; v < 14; v++) {
+    const mid = (lo + hi) / 2;
+    const r = voraz(mid);
+    if (r && r.length <= base.length) {
+      mejor = r;
+      hi = mid;
+    } else lo = mid;
+  }
+  return mejor;
+}
+
+/**
  * El texto en renglones de a lo sumo `ancho`, partidos donde se puede: en los espacios y después de un guion o un guion
  * bajo. Una palabra más ancha que la caja se parte por letras enteras (nunca por el medio de una letra con tilde o de un
  * emoji) y nunca termina en «…». Es para el cartel de quien gana con un nombre larguísimo, que tiene que leerse entero a
@@ -281,11 +379,17 @@ export function envolver(texto: string, ancho: number, medir: (s: string) => num
 }
 
 /**
- * Como `envolver`, y además dice si tuvo que partir una palabra por letras (`partioPalabra`): quien elige entre
+ * Como `envolver`, y además dice si tuvo que partir una palabra (`partioPalabra`): quien elige entre
  * varias escalas y varios renglones prefiere siempre la que no parte ninguna («Daniel / a Cruz» se lee mal, y a
- * una letra menos y dos renglones se lee entero).
+ * una letra menos y dos renglones se lee entero). Con `conSilabas`, una palabra más ancha que la caja se parte por
+ * sílabas y con guion visible («Maxi- / miliano»); solo si ni una sílaba con su guion entra, por letras enteras.
  */
-export function envolverConAviso(texto: string, ancho: number, medir: (s: string) => number): { lineas: string[]; partioPalabra: boolean } {
+export function envolverConAviso(
+  texto: string,
+  ancho: number,
+  medir: (s: string) => number,
+  conSilabas = false,
+): { lineas: string[]; partioPalabra: boolean } {
   const t = texto.normalize("NFC").replace(/\s+/gu, " ").trim();
   if (!t) return { lineas: [""], partioPalabra: false };
   let partioPalabra = false;
@@ -296,9 +400,17 @@ export function envolverConAviso(texto: string, ancho: number, medir: (s: string
     (p.match(/[^_-]*[_-]|[^_-]+/gu) ?? [p]).forEach((trozo, j) => trozos.push({ s: trozo, espacio: i > 0 && j === 0 }));
   });
   const lineas: string[] = [];
-  /** Una palabra más ancha que la caja se parte por letras enteras; devuelve lo que queda sin partir. */
+  /** Una palabra más ancha que la caja se parte (por sílabas con guion si se pide; si no, o si ni una sílaba entra, por letras enteras); devuelve lo que queda sin partir. */
   const partir = (palabra: string): string => {
     let resto = palabra;
+    if (conSilabas && medir(resto) > ancho) {
+      const ls = partirPorSilabas(silabas(resto), ancho, medir);
+      if (ls) {
+        partioPalabra = true;
+        lineas.push(...ls.slice(0, -1));
+        resto = ls[ls.length - 1] as string;
+      }
+    }
     while (medir(resto) > ancho) {
       const gs = grafemas(resto);
       if (gs.length < 2) break;
@@ -331,8 +443,8 @@ export function envolverConAviso(texto: string, ancho: number, medir: (s: string
  * Como `ajustar`, para un cartel que puede crecer hacia abajo (el de quien gana): el nombre entero en los renglones que
  * hagan falta, a la letra más grande que se pueda y **nunca bajo `piso`** (la regla de la sala: `letraMinima / talla`).
  * Prefiere, en este orden, a la escala 1 un renglón, uno achicado a 0,85 (apenas se nota), dos renglones, tres, y recién
- * después achica de a poco hasta `piso`. Recorre todo eso sin partir una palabra por letras; solo si una palabra es más
- * ancha que la caja a la escala mínima, la parte por letras enteras. Nunca «…».
+ * después achica de a poco hasta `piso`. Recorre todo eso sin partir una palabra; solo si una palabra es más ancha que la
+ * caja a la escala mínima, la parte a esa escala por sílabas y con guion visible («Maxi- / miliano»). Nunca «…».
  * Con `maxLineas` (por defecto 4) no usa más renglones que esos: si ni a `piso` entra, devuelve lo que sale a `piso`
  * (con más renglones que `maxLineas`) y `partida: true`, para que quien llama elija otra forma (un nombre más corto).
  * `medir(s)` es el ancho del texto a la letra normal (escala 1).
@@ -342,16 +454,38 @@ export function ajustarEnRenglones(texto: string, ancho: number, medir: (s: stri
   const p = Math.min(1, Math.max(0.05, piso));
   const todos: ReadonlyArray<readonly [number, number]> = [[1, 1], [0.85, 1], [1, 2], [0.85, 2], [0.7, 2], [1, 3], [0.7, 3], [p, 3], [p, 4]];
   const orden = [...todos.filter(([, m]) => m < maxLineas), [p, maxLineas] as const];
-  // Primero todas las combinaciones, sin partir ninguna palabra por letras: una letra menos y dos renglones antes que
-  // «Rodrig / o Peña». Partir por letras es el último recurso: una palabra más ancha que el cartel a la escala mínima.
-  for (const sinPartir of [true, false]) {
-    for (const [e0, maximo] of orden) {
-      const e = Math.min(1, Math.max(p, e0));
-      const { lineas, partioPalabra } = envolverConAviso(t, ancho / e, medir);
-      if (lineas.length <= maximo && !(sinPartir && partioPalabra)) return { lineas, escala: e, partida: false };
-    }
+  // Primero todas las combinaciones, sin partir ninguna palabra: una letra menos y dos renglones antes que «Rodrig / o Peña».
+  for (const [e0, maximo] of orden) {
+    const e = Math.min(1, Math.max(p, e0));
+    const { lineas, partioPalabra } = envolverConAviso(t, ancho / e, medir);
+    if (lineas.length <= maximo && !partioPalabra) return { lineas, escala: e, partida: false };
   }
-  return { lineas: envolver(t, ancho / p, medir), escala: p, partida: true };
+  // Una palabra no entra ni a la escala del piso: se parte al piso, por sílaba y con guion («Maxi- / miliano Paz»), nunca a
+  // mitad de sílaba ni a una letra más grande que la regla (`partida: true`, para que quien llama pruebe otra forma si puede).
+  return { lineas: envolverConAviso(t, ancho / p, medir, true).lineas, escala: p, partida: true };
+}
+
+/**
+ * Dónde va la cara del cartel de quien gana y cómo se escribe su nombre, en una pantalla angosta (un celular parado). Con la
+ * cara al costado el nombre tiene `alLado` de ancho; con la cara arriba, con «GANA», `arriba` (unos 100 px más). Se queda al
+ * costado, como siempre, si el nombre entra bien (a una letra de 0,7 o más y sin partir una palabra); si no, y solo si arriba
+ * se lee mejor (letra más grande, o ninguna palabra partida), la cara se va arriba. `puedeArriba` es falso en horizontal, donde
+ * sobra ancho. Con `medir(s)` el ancho del texto a la letra normal, igual que `ajustarEnRenglones`.
+ */
+export function acomodarGanador(
+  nombre: string,
+  alLado: number,
+  arriba: number,
+  medir: (s: string) => number,
+  piso: number,
+  puedeArriba: boolean,
+): { caraArriba: boolean; ajuste: Ajuste } {
+  const lateral = ajustarEnRenglones(nombre, alLado, medir, piso);
+  if (puedeArriba && (lateral.partida || lateral.escala < 0.7)) {
+    const alto = ajustarEnRenglones(nombre, arriba, medir, piso);
+    if (alto.escala > lateral.escala + 1e-6 || (lateral.partida && !alto.partida)) return { caraArriba: true, ajuste: alto };
+  }
+  return { caraArriba: false, ajuste: lateral };
 }
 
 /**
