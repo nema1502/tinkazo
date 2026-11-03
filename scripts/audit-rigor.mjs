@@ -86,7 +86,7 @@ const NORMAL_CARRERA = { 9: 39, 10: 41, 11: 44, 12: 48, 13: 51, 14: 53, 15: 55, 
  * El Guajojó también promete según la gente (`normalGuajojo` en `src/duraciones.ts`: de 25 a 60 s, con la tarjeta adentro):
  * con la lista de ejemplo (18) son 44 s. Una prueba (`src/duraciones.test.ts`) compara esta tabla con la función.
  */
-const NORMAL_GUAJOJO = { 2: 29, 3: 35, 8: 41, 18: 44, 30: 52, 200: 59 };
+const NORMAL_GUAJOJO = { 2: 28, 3: 34, 8: 40, 18: 43, 30: 51, 200: 59 };
 /** Lo que promete cada posición del selector con `gente` personas en este juego. */
 function prometido(juego, pace, gente) {
   const normal = juego === "race" ? NORMAL_CARRERA[gente] : juego === "guajojo" ? NORMAL_GUAJOJO[gente] : undefined;

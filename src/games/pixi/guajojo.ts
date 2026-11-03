@@ -489,7 +489,8 @@ function nombres(k: Kit, d: Datos, e: Escena, g: Geo, t: number, fase: string, c
   }
   let quienes: number[] = [];
   if (fase === "llamada" || fase === "lista") quienes = tandaDeLista(d, t);
-  else if (fase === "amanecer") quienes = [];
+  // Al amanecer la ganadora camina sola al palo, con su nombre: la sala no la mira a ciegas.
+  else if (fase === "amanecer") quienes = [d.ganador];
   else {
     // Hasta doce de los que siguen, rotando cada rato para que todos aparezcan.
     const vivos = enPie.filter((i) => !recientes.has(i));

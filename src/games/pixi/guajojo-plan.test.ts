@@ -270,7 +270,7 @@ describe("Guajojó: el movimiento", () => {
         const cerca = Array.from({ length: 80 }, (_, j) => miradaDe(d, ult.tSil0 + j * 0.045)).some((m) => m && Math.abs(m.x - x) < 0.05 && m.abierto > 0.9);
         expect(cerca, `${arco} mira a ${x}`).toBe(true);
       }
-      expect(T_AMANECER).toBe(2.6);
+      expect(T_AMANECER).toBe(1.8);
     }
   });
 

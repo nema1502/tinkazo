@@ -22,7 +22,7 @@ export const T_CANTO = 2.6;
 export const T_CRAC = 0.8;
 /** El último silencio: quedan dos, la mirada va a cada una y cae la rival. */
 export const T_ULTIMO = 3.6;
-export const T_AMANECER = 2.6;
+export const T_AMANECER = 1.8;
 /** Los segundos que no se estiran: el sostén del cartel de quien gana (`FIJOS` de la carrera). */
 export const FIJOS = 6;
 /** La tarjeta de «cómo se juega» que va antes del show y sale del mismo total. */

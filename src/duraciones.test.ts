@@ -86,10 +86,10 @@ describe("normalGuajojo: cuánto dura el Guajojó según la gente", () => {
       expect(normalGuajojo(n) as number, `con ${n}`).toBeGreaterThanOrEqual(25);
     }
   });
-  it("crece con la gente hasta que no hay lista, y con la lista de ejemplo (18) son 44 s", () => {
+  it("crece con la gente hasta que no hay lista, y con la lista de ejemplo (18) son 43 s", () => {
     expect(normalGuajojo(2)).toBeLessThan(normalGuajojo(8) as number);
     expect(normalGuajojo(8)).toBeLessThan(normalGuajojo(30) as number);
-    expect(normalGuajojo(18)).toBe(44);
+    expect(normalGuajojo(18)).toBe(43);
   });
   it("la tabla de audit-rigor dice lo mismo que la función", () => {
     const fuente = readFileSync(new URL("../scripts/audit-rigor.mjs", import.meta.url), "utf8");
