@@ -103,15 +103,15 @@ Para medir el recorrido del organizador sin datos personales: sin nombres y sin 
 
 ### Respuestas de confianza: preparadas y apagadas
 
-El emisor explícito (`src/respuestas-confianza.ts`) reutiliza las guardas del embudo, pero **no usa beacon**: usa fetch CORS legible, sin credenciales ni referente. Solo confirma POST 204; sin confirmación no reintenta solo y advierte que reintentar podría contar dos veces. Una marca de confirmación por referencia vive solo en la pestaña, nunca viaja en la solicitud. No representa una identidad.
+El emisor explícito (`src/respuestas-confianza.ts`) reutiliza las guardas del embudo, pero **no usa beacon**: usa fetch CORS legible, sin credenciales ni referente. Solo confirma POST 204; sin confirmación no reintenta solo y advierte que reintentar podría contar dos veces. Una marca de confirmación por sorteo se guarda en el navegador (`localStorage`), una respuesta por navegador y por sorteo, y nunca viaja en la solicitud. No representa una identidad.
 
 El POST existente espera `Contador.sumar` y devuelve 204 solo con `ok`, sin cambiar SQL ni desactivar output gates. La [documentación de SQLite Durable Objects](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/) describe que las salidas de red esperan las escrituras anteriores; un fallo reinicia el objeto y descarta salidas. No se usa `allowUnconfirmed`. El booleano de beacon no prueba almacenamiento.
 
-`SERVICIO_CONFIANZA` en `src/confianza-activacion.ts` está vacío, independiente de `CONTADOR`, que sigue vacío. Los términos ES/EN describen el servicio en futuro, apagado y sin fecha nueva. La activación en el mismo PR espera la confirmación explícita de Nicolás de protección de cuota **y** despliegue del Worker; esta implementación no autoriza ninguno.
+`SERVICIO_CONFIANZA` en `src/confianza-activacion.ts` está vacío, independiente de `CONTADOR`, que sigue vacío. Los términos ES/EN describen el servicio en futuro, apagado y sin fecha nueva. Activarlo espera la protección de cuota **y** el despliegue del Worker; esta implementación no autoriza ninguno.
 
-Totales de solo lectura: `node scripts/conteos-confianza.mjs --desde AAAA-MM-DD --hasta AAAA-MM-DD` desde la raíz. Ambas fechas son obligatorias, reales e inclusivas UTC. Ventanas disjuntas de hasta 92 días; solo se subdivide 413 `muchas`, sin cambiar el GET de fechas ni el rechazo de más de 5.000 filas. Un error cancela stdout entero (exit 1). Publica red, contrato, número, Sí/No/No sé y respuestas recibidas, nunca personas únicas. El día actual puede retrasarse cinco minutos por caché. Ver `--help` y [diseño y pruebas](../../docs/confianza-resultado.md).
+Totales de solo lectura: `node scripts/conteos-confianza.mjs --desde AAAA-MM-DD --hasta AAAA-MM-DD` desde la raíz. Ambas fechas son obligatorias, reales e inclusivas UTC. Ventanas disjuntas de hasta 92 días; solo se subdivide 413 `muchas`, sin cambiar el GET de fechas ni el rechazo de más de 5.000 filas. Un error cancela stdout entero (exit 1). Publica red, contrato, número, Sí/No/No sé y respuestas recibidas, nunca personas únicas. El día actual puede retrasarse cinco minutos por caché. Ver `--help`. Las pruebas del script corren con `pnpm exec vitest run scripts/lib/conteos-confianza.test.mjs`.
 
-Prueba HTTP nueva, **solo en Wrangler local aislado**, antes de reutilizar sus rangos de caché: `node probar-confianza.mjs http://localhost:8792`. Conserva también `probar.mjs` para la regresión de enlaces cortos. Las capturas del navegador se rotulan simulación, sin opiniones reales.
+Prueba HTTP nueva, **solo en Wrangler local aislado**, antes de reutilizar sus rangos de caché: `node probar-confianza.mjs http://localhost:8792`. Conserva también `probar.mjs` para la regresión de enlaces cortos.
 
 ### Desplegarlo y encenderlo
 

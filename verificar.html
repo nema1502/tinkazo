@@ -64,6 +64,9 @@
     </div>
   </section>
 
+  <!-- La pregunta, justo debajo del veredicto: secundaria y opcional, también si no pudo verificarse (src/ui/confianza.ts). Apagada hasta activar SERVICIO_CONFIANZA. -->
+  <aside id="confianza" hidden></aside>
+
   <!-- El logo que agregó quien armó el enlace corto, debajo del veredicto y solo en verde o amarillo (src/ui/logo-franja.ts). -->
   <aside class="logo-franja" id="logo-franja" role="note" hidden></aside>
 
@@ -106,9 +109,6 @@
       <ul class="checks" id="checks"></ul>
     </div>
   </section>
-
-  <!-- Secundaria y opcional; fuera del resultado, también si no pudo verificarse. -->
-  <aside id="confianza" hidden></aside>
 
   <!-- Los otros sellos del organizador -->
   <section class="block" id="sec-seals" style="display:none">

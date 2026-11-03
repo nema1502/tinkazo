@@ -51,7 +51,7 @@ export async function consultar(desde, hasta, api = 'https://c.tinkazo.app/v1/co
     if (!Number.isSafeInteger(t.total)) throw Error('Total fuera de rango seguro');
     totales.set(key, t);
   }
-  return `Respuestas recibidas · ${desde} a ${hasta} (inclusivo UTC)\n` +
+  return `Respuestas recibidas del ${desde} al ${hasta}, ambos días incluidos\n` +
     'red\tcontrato\tnúmero\tSí\tNo\tNo sé\trecibidas\n' +
     [...totales].sort(([a], [b]) => a.localeCompare(b)).map(([k, t]) => `${k}\t${t.yes}\t${t.no}\t${t.unsure}\t${t.total}\n`).join('') +
     'El día actual puede tener hasta 5 minutos de retraso por caché. Cobertura: solo el período solicitado.\n';

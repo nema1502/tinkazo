@@ -14,7 +14,7 @@ export function crearRespuestas(destino = SERVICIO_CONFIANZA) {
   function confirmada(ref: Ref): boolean {
     const k = clave(ref);
     if (recibidas.has(k)) return true;
-    try { return sessionStorage.getItem(MARCA + k) === "1"; } catch { return false; }
+    try { return localStorage.getItem(MARCA + k) === "1"; } catch { return false; }
   }
   function disponible(ref: Ref): boolean {
     try {
@@ -35,7 +35,7 @@ export function crearRespuestas(destino = SERVICIO_CONFIANZA) {
       });
       if (r.status !== 204) return "incierta";
       recibidas.add(k);
-      try { sessionStorage.setItem(MARCA + k, "1"); } catch { /* memoria de esta página */ }
+      try { localStorage.setItem(MARCA + k, "1"); } catch { /* queda en la memoria de esta página */ }
       return "recibida";
     } catch { return "incierta"; }
     finally { pendientes.delete(k); }

@@ -12,7 +12,7 @@ beforeEach(() => {
   vi.stubGlobal("location", { hostname: "tinkazo.app", search: "" });
   vi.stubGlobal("navigator", { doNotTrack: null });
   vi.stubGlobal("document", { prerendering: false });
-  vi.stubGlobal("sessionStorage", { getItem: () => null, setItem: vi.fn() });
+  vi.stubGlobal("localStorage", { getItem: () => null, setItem: vi.fn() });
 });
 afterEach(() => vi.unstubAllGlobals());
 it("ambos servicios permanecen apagados e independientes", () => {
@@ -30,7 +30,7 @@ it.each(["yes", "no", "unsure"] as const)("solo transmite la respuesta %s y la r
   expect(await sender.enviar(ref, answer)).toBe("recibida");
   expect(fetcher).toHaveBeenCalledTimes(1);
 });
-it("bloquea doble clic mientras espera y recuerda la confirmación en la pestaña", async () => {
+it("bloquea doble clic mientras espera y recuerda la confirmación en este navegador", async () => {
   let resolve!: (x: Response) => void;
   fetcher.mockImplementation(() => new Promise<Response>((r) => { resolve = r; }));
   const sender = crearRespuestas(url);
@@ -38,8 +38,8 @@ it("bloquea doble clic mientras espera y recuerda la confirmación en la pestañ
   expect(await sender.enviar(ref, "no")).toBe("pendiente");
   resolve(new Response(null, { status: 204 }));
   expect(await first).toBe("recibida");
-  const mark = vi.mocked(sessionStorage.setItem).mock.calls[0]!;
-  vi.stubGlobal("sessionStorage", { getItem: () => mark[1], setItem: vi.fn() });
+  const mark = vi.mocked(localStorage.setItem).mock.calls[0]!;
+  vi.stubGlobal("localStorage", { getItem: () => mark[1], setItem: vi.fn() });
   expect(crearRespuestas(url).confirmada(ref)).toBe(true);
   expect(fetcher).toHaveBeenCalledTimes(1);
 });
@@ -55,7 +55,7 @@ it.each([200, 429, 500, "perdida"])("no confirma %s ni reintenta automáticament
   expect(fetcher).toHaveBeenCalledTimes(2);
 });
 it("con almacenamiento inaccesible conserva la confirmación en memoria", async () => {
-  vi.stubGlobal("sessionStorage", { getItem: () => { throw Error(); }, setItem: () => { throw Error(); } });
+  vi.stubGlobal("localStorage", { getItem: () => { throw Error(); }, setItem: () => { throw Error(); } });
   const sender = crearRespuestas(url);
   expect(await sender.enviar(ref, "unsure")).toBe("recibida");
   expect(await sender.enviar(ref, "yes")).toBe("recibida");
