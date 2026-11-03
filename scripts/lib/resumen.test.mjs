@@ -183,9 +183,9 @@ describe("el detalle de la comprobación 7 de audit-game (el botón del selector
 describe("las comprobaciones de pantalla", () => {
   const bien = { juego: "race", res: "1920x1080", tema: "dark", ok: true, destellos: { peorPorSegundo: 1 }, contraste: { sinContorno: [], medidos: 12 } };
 
-  it("un juego sano da dos comprobaciones aprobadas", () => {
+  it("un juego sano da tres comprobaciones aprobadas", () => {
     const c = comprobacionesDePantalla(bien);
-    expect(c).toHaveLength(2);
+    expect(c).toHaveLength(3);
     expect(c.every((x) => x.ok)).toBe(true);
     expect(c[0].name).toContain("race 1920x1080 dark");
     expect(hayHallazgo(bien)).toBe(false);
@@ -194,7 +194,7 @@ describe("las comprobaciones de pantalla", () => {
   it("más de tres destellos por segundo, o un texto sin contorno, fallan", () => {
     const mal = { ...bien, destellos: { peorPorSegundo: MAX_DESTELLOS + 1 }, contraste: { sinContorno: [{}], medidos: 3 } };
     const c = comprobacionesDePantalla(mal);
-    expect(c.map((x) => x.ok)).toEqual([false, false]);
+    expect(c.map((x) => x.ok)).toEqual([false, false, true]);
     expect(hayHallazgo(mal)).toBe(true);
     expect(hayHallazgo({ ...bien, destellos: { peorPorSegundo: MAX_DESTELLOS } })).toBe(false);
   });
