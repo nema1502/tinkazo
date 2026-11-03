@@ -7,7 +7,7 @@ import { CREAM, INK, YELLOW, contorno, hash, mountPixi } from "../pixi/stage";
 import type { Borla3D, Corredora3D, Fabrica3D, Geometria3D, Vista3D, ZonaSuelo } from "./carrera-3d-mapa";
 import { ECHADA_DUR, carrilesDe, formaDe, hudDe, type Carriles, type Forma, type Pantalla } from "./carrera-forma";
 import { RECTA, alfabetico, planCarrera, type Datos, type EscenaCarrera } from "./carrera-show";
-import { pisaA, metida, sitioLibre, type CajaF } from "./carrera-fichas";
+import { pisaA, metida, sitioLibre, RENGLONES_MAX, type CajaF } from "./carrera-fichas";
 import { crearLlamaAguayo } from "./llama-aguayo";
 import { TEXTOS_CARRERA } from "./carrera-textos";
 import type { Tanda } from "./carrera-tandas";
@@ -874,7 +874,8 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
       et.raiz.position.set(et.raiz.x + m.dx, et.raiz.y + m.dy);
       return true;
     };
-    const manda = (f: Ficha): number => (nombrados.has(f.q) ? 4 : f.soyLider ? 3 : f.estilo === "echada" ? 2 : 1);
+    // La amarilla se ubica primero, pegada a su llama; la que el relator nombra busca lugar después, sin empujarla.
+    const manda = (f: Ficha): number => (f.soyLider ? 5 : nombrados.has(f.q) ? 4 : f.estilo === "echada" ? 2 : 1);
     const orden = [...fichas].sort((a, b) => manda(b) - manda(a) || b.p.x - a.p.x);
     fichas: for (const f of orden) {
       const et = f.c.etiqueta;
@@ -898,16 +899,47 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
         r = caja(f);
       }
       if (pisaA(r, puestas)) {
-        // Un renglón arriba o abajo, alternando (sobre la cabeza, primero para arriba).
-        const dy = sitioLibre(r, puestas, lim, f.arriba, et.raiz.y - yNatural);
-        // La que el relator nombra se queda donde está y por arriba de todas (nadie más la tapa): quien la pisaba ya se fue.
-        if (dy !== null) et.raiz.y += dy;
-        else if (manda(f) < 4) {
-          et.raiz.visible = false;
-          continue;
+        if (nombrados.has(f.q) && !f.soyLider) {
+          // La que el relator nombra busca lugar debajo de su llama (justo bajo las patas y, si no, un renglón abajo y después arriba); si no
+          // entra con su nombre, pasa a su nombre de pila. Nunca empuja a la amarilla, y si no hay lugar se queda donde está, por encima de todas.
+          const buscar = (): number | null => {
+            const cab = caja(f);
+            if (f.arriba) {
+              const h = cab.y1 - cab.y0;
+              const dyPies = f.p.y + 3 * P.u + h / 2 - et.raiz.y;
+              const c = { ...cab, y0: cab.y0 + dyPies, y1: cab.y1 + dyPies };
+              if (dyPies > 0 && et.raiz.y + dyPies - yNatural <= LLAMA_ALTO * f.p.esc + RENGLONES_MAX * (h + 1) && c.y0 >= lim.y0 && c.y1 <= lim.y1 && !pisaA(c, puestas)) return dyPies;
+            }
+            return sitioLibre(cab, puestas, lim, false, et.raiz.y - yNatural, true);
+          };
+          let dy = buscar();
+          if (dy === null && nv > 2) {
+            nv = 2;
+            ponerEtiqueta(et, textoDe(f.q, nv), px, f.estilo);
+            ubicarFicha(et, f.p, f.arriba, f.comp, vz, f.soyLider);
+            yNatural = et.raiz.y;
+            if (encajar(f)) {
+              r = caja(f);
+              dy = pisaA(r, puestas) ? buscar() : 0;
+            }
+          }
+          if (dy !== null) et.raiz.y += dy;
+        } else {
+          // Un renglón arriba o abajo, alternando (sobre la cabeza, primero para arriba).
+          const dy = sitioLibre(r, puestas, lim, f.arriba, et.raiz.y - yNatural);
+          if (dy !== null) et.raiz.y += dy;
+          else if (manda(f) < 4) {
+            et.raiz.visible = false;
+            continue;
+          }
         }
       }
       puestas.push(caja(f));
+      // El cuerpo de la amarilla también cuenta: ninguna otra ficha se le pone encima (la que se leía como suya era la de al lado).
+      if (f.soyLider) {
+        const b = cuerpoDe(f.p);
+        puestas.push({ x0: b.x, y0: b.y, x1: b.x + b.w, y1: b.y + b.h });
+      }
     }
   }
 

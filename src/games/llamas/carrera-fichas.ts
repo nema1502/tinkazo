@@ -49,11 +49,12 @@ export function metida(r: CajaF, lim: CajaF): { dx: number; dy: number } | null 
  * Cuánto correr la caja hacia arriba o abajo para que no pise a ninguna de las `puestas`: un renglón arriba, uno abajo (o dos arriba
  * primero, si `primeroArriba`: sobre la cabeza de su llama, abajo taparía a su propia llama) y así hasta `RENGLONES_MAX`, siempre
  * dentro de `lim`. `yaCorrido` es lo que la caja ya se corrió de su lugar natural (por ejemplo al meterla en la pantalla): cuenta
- * para el tope de renglones. `null` si no cabe en ninguno.
+ * para el tope de renglones. `primeroAbajo` busca primero un renglón abajo y después uno arriba (para la ficha que el relator nombra, que
+ * no puede empujar a la amarilla hacia arriba). `null` si no cabe en ninguno.
  */
-export function sitioLibre(r: CajaF, puestas: readonly CajaF[], lim: CajaF, primeroArriba = false, yaCorrido = 0): number | null {
+export function sitioLibre(r: CajaF, puestas: readonly CajaF[], lim: CajaF, primeroArriba = false, yaCorrido = 0, primeroAbajo = false): number | null {
   const paso = (r.y1 - r.y0) * 1.0 + 1;
-  const saltos = primeroArriba ? [-1, -2, 1, 2] : [-1, 1, -2, 2];
+  const saltos = primeroAbajo ? [1, -1, 2, -2] : primeroArriba ? [-1, -2, 1, 2] : [-1, 1, -2, 2];
   for (const j of saltos.slice(0, RENGLONES_MAX * 2)) {
     const c = { ...r, y0: r.y0 + j * paso, y1: r.y1 + j * paso };
     if (Math.abs(yaCorrido + j * paso) > RENGLONES_MAX * paso + 0.01 || c.y0 < lim.y0 || c.y1 > lim.y1 || pisaA(c, puestas)) continue;

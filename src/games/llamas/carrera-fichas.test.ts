@@ -54,6 +54,19 @@ describe("dónde va la que pisa a otra", () => {
     expect(sitioLibre(caja(100, 100), tres, PANTALLA, true)).toBe(-42);
   });
 
+  it("la que el relator nombra busca primero abajo y recién después arriba", () => {
+    expect(sitioLibre(caja(100, 100), [puesta], PANTALLA, false, 0, true)).toBe(21);
+    // Con el renglón de abajo ocupado, sube uno; nunca empuja dos hacia abajo antes de probar arriba.
+    expect(sitioLibre(caja(100, 100), [puesta, caja(100, 121)], PANTALLA, false, 0, true)).toBe(-21);
+    expect(sitioLibre(caja(100, 100), [puesta, caja(100, 121), caja(100, 79)], PANTALLA, false, 0, true)).toBe(42);
+  });
+
+  it("el letrero de salida cuenta como una caja puesta: una ficha que lo pisa se corre", () => {
+    const letrero = { x0: 90, y0: 100, x1: 160, y1: 120 };
+    expect(pisaA(caja(100, 100), [letrero])).toBe(true);
+    expect(sitioLibre(caja(100, 100), [letrero], PANTALLA)).toBe(-21);
+  });
+
   it("no se va más de dos renglones: si no hay sitio, null", () => {
     const todas = [puesta, caja(100, 79), caja(100, 121), caja(100, 58), caja(100, 142)];
     expect(sitioLibre(caja(100, 100), todas, PANTALLA)).toBeNull();
