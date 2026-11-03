@@ -224,6 +224,7 @@ export default defineConfig({
         precios: resolve(__dirname, "precios.html"),
         juegos: resolve(__dirname, "juegos.html"),
         historia: resolve(__dirname, "historia.html"),
+        marca: resolve(__dirname, "marca.html"),
         seguridad: resolve(__dirname, "seguridad.html"),
         "como-funciona": resolve(__dirname, "como-funciona.html"),
         "sorteo-para-meetup": resolve(__dirname, "sorteo-para-meetup.html"),

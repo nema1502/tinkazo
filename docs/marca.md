@@ -229,6 +229,20 @@ Todos medidos, no estimados. Si se actualizan, se actualizan acá también.
 | Dependencias para sortear | 3 (RPC de Stellar, relays de drand, la wallet del organizador) |
 | Servidores propios para sortear | 0. El único servicio propio es el de los enlaces cortos, para compartir: un Worker de Cloudflare que guarda copias cifradas que Tinkazo no puede leer y, si se cae, deja el enlace largo. No decir "0 servidores" a secas |
 
+## Recursos descargables
+
+La página pública `/marca.html` reúne la llama, los colores copiables, los usos de letra y el sello en español e inglés. Se encuentra desde el pie de la portada.
+
+- `public/marca/llama.svg`: la silueta exacta de `public/icon.svg`, sin el rectángulo de fondo; lienzo de 512 × 512.
+- `public/marca/llama.png`: la misma silueta, en RGBA de 2048 × 2048 y fondo transparente.
+- `public/marca/sello-es.svg` y `sello-en.svg`: sellos de 960 × 280, transparentes, para fondos claros. La tipografía sigue siendo del sistema: puede variar entre dispositivos. No estirar ni agregar detalles a la llama.
+
+El sello dice «Sorteo verificable con Tinkazo» o «Verifiable draw with Tinkazo». Se usa cuando el sorteo tiene un comprobante verificable y se acompaña con el enlace a ese comprobante. No certifica que la lista inicial estuviera bien armada.
+
+`node scripts/generar-marca.mjs` regenera únicamente estas cuatro descargas, sin modificar el icono ni el logotipo. No usa fuentes externas ni herramientas de imagen adicionales. Los enlaces de descarga son del mismo origen, como requiere el atributo HTML `download`.
+
+La revisión funcional se ejecuta contra un servidor propio con `MARCA_BASE=http://127.0.0.1:5184 node scripts/audit-marca.mjs`. Usa WebKit con su configuración normal; comprueba ambos idiomas y temas a 320, 390 y 1280 px, abre los archivos descargados, mide su transparencia y guarda capturas y resultados en `.evidence/marca/`. `--reference` visita la referencia externa, sin copiar sus recursos.
+
 ## Los enlaces
 
 | Qué | Dónde |
