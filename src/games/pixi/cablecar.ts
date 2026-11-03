@@ -1397,6 +1397,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     // cabina se apilan.
     const firstStop = stops[0]?.t0 ?? T_RUN;
     const roll = S.batch(n, tAll, 0.3, Math.min(T_BOARD + 1.8, firstStop - 0.3));
+    // Los rótulos de grupo de las cabinas (los del cuadro anterior, que ya están puestos) tampoco se tapan: en celular, al arrancar, los nombres los comían («sos andinos»).
     const hud = hudBox();
     S.tags(names, roll, (i) => {
       const cab = cabinOf.get(i);
@@ -1404,7 +1405,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       const p = cabPoint(cab, tAll);
       if (p.alpha < 0.5) return null;
       return cam.toScreen(p.x, p.y - 22 * G.k, S.sw(), S.sh());
-    }, [...stations.map((s) => s.tag.getBounds()), { x: hud.x0, y: hud.y0, width: hud.x1 - hud.x0, height: hud.y1 - hud.y0 }]);
+    }, [...stations.map((s) => s.tag.getBounds()), { x: hud.x0, y: hud.y0, width: hud.x1 - hud.x0, height: hud.y1 - hud.y0 }, ...soloPlaced.map((b) => ({ x: b.x0, y: b.y0, width: b.x1 - b.x0, height: b.y1 - b.y0 }))]);
 
     // El andén de la parada, en la pantalla, y lo que se mueve suelto en el
     // mundo: los que saltan sin renglón, el embarque, las chispas.
