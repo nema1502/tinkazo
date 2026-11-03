@@ -90,6 +90,76 @@ export function pegarAlCuerpo(cuerpo: Rect, etiqueta: { w: number; h: number }, 
   };
 }
 
+/**
+ * Cuánto se puede correr una etiqueta para despegarla de otra, en alturas de la etiqueta. Dos nombres que se pisan
+ * (Toborochi y Guajojó, 2 de noviembre de 2026) se separan corriendo el de menor prioridad arriba o abajo; con dos
+ * alturas sigue pegado a su cuerpo (el tope de `SEPARACION_MAX` de arriba habla del cuerpo, este del nombre vecino:
+ * una altura despega un nombre de otro, la segunda deja lugar a un tercero) y más lejos ya diría otro nombre.
+ */
+export const SEPARACION_ETIQUETA_MAX = 2;
+
+/** Dos etiquetas se pisan si lo que se montan pasa de esta parte del área de la menor: con menos se lee igual. */
+export const SOLAPE_ETIQUETA_MAX = 0.1;
+
+/** Una etiqueta ya puesta en la pantalla, en píxeles: su caja con la sombra y su prioridad (la mayor se queda donde está). */
+export interface EtiquetaPuesta extends Rect {
+  prioridad: number;
+}
+
+/** Qué hacer con cada etiqueta: correrla `dy` píxeles (positivo, hacia abajo) o callarla en este cuadro si no cabe. */
+export interface Separada {
+  dy: number;
+  callar: boolean;
+}
+
+const montado = (a: Rect, b: Rect): number => {
+  const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+  const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+  return w > 0 && h > 0 ? w * h : 0;
+};
+
+/**
+ * La pasada de separación de los nombres, después de que cada juego puso los suyos: ninguno queda encima de otro.
+ * Va de la mayor prioridad a la menor (a igualdad, en el orden en que vienen: determinista, sin azar); cada una se
+ * queda donde está si no se pisa con las que ya quedaron (más del `SOLAPE_ETIQUETA_MAX` del área de la menor) ni
+ * toca una veda (el contador y sus marcas), y si no se corre arriba o abajo, alternando el lado de partida de una a otra, de a
+ * un cuarto de su altura y hasta `SEPARACION_ETIQUETA_MAX` alturas, sin salirse de `zona`. Para salir de una veda
+ * puede bajar hasta justo debajo de ella. Si en ninguna posición cabe, se calla en ese cuadro, como la carrera en 3D.
+ * Puro: se prueba en Node.
+ */
+export function separarEtiquetas(
+  etiquetas: readonly EtiquetaPuesta[],
+  zona: { y0: number; y1: number },
+  vedas: readonly Rect[] = [],
+): Separada[] {
+  const sal: Separada[] = etiquetas.map(() => ({ dy: 0, callar: false }));
+  const orden = etiquetas.map((_, i) => i).sort((a, b) => (etiquetas[b] as EtiquetaPuesta).prioridad - (etiquetas[a] as EtiquetaPuesta).prioridad || a - b);
+  const puestas: Rect[] = [];
+  const choca = (r: Rect): boolean => {
+    if (vedas.some((v) => montado(r, v) > 0.02 * r.w * r.h)) return true;
+    return puestas.some((o) => montado(r, o) > SOLAPE_ETIQUETA_MAX * Math.min(r.w * r.h, o.w * o.h));
+  };
+  orden.forEach((i, lugar) => {
+    const e = etiquetas[i] as EtiquetaPuesta;
+    const caja = (dy: number): Rect => ({ x: e.x, y: e.y + dy, w: e.w, h: e.h });
+    const cabe = (dy: number): boolean => e.y + dy >= zona.y0 - 1e-6 && e.y + dy + e.h <= zona.y1 + 1e-6;
+    const candidatos: number[] = [0];
+    const paso = e.h / 4;
+    const lado = lugar % 2 === 0 ? 1 : -1;
+    for (let s = 1; s <= SEPARACION_ETIQUETA_MAX * 4; s++) candidatos.push(lado * s * paso, -lado * s * paso);
+    // Para salir de una veda: justo debajo de ella.
+    for (const v of vedas) if (montado(caja(0), v) > 0) candidatos.push(v.y + v.h + 1 - e.y);
+    const dy = candidatos.find((d) => cabe(d) && !choca(caja(d)));
+    if (dy === undefined) {
+      (sal[i] as Separada).callar = true;
+      return;
+    }
+    (sal[i] as Separada).dy = dy;
+    puestas.push(caja(dy));
+  });
+  return sal;
+}
+
 /** El hueco entre la etiqueta y el cuerpo: 0 si se tocan o se montan. */
 export function huecoAlCuerpo(cuerpo: Rect, e: Rect): number {
   const dx = Math.max(0, cuerpo.x - (e.x + e.w), e.x - (cuerpo.x + cuerpo.w));

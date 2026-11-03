@@ -88,6 +88,16 @@ export function crearMarcadorVista(S: Estadio, rotulo: () => string, total?: Tot
     caja.clear().rect(5 * k, 5 * k, bw, m.alto).fill(INK).rect(0, 0, bw, m.alto).fill(0x221a33).stroke({ width: 3 * k, color: INK });
     raiz.position.set(MARCADOR.x * k, S.top() + MARCADOR.y * k);
     if (total) pintarMarcas(marcas, { total: total.cuantos, quedan, k, w: S.sw() });
+    avisar();
+  };
+
+  /** Le dice al estadio dónde está el contador con sus marcas, para que ningún nombre lo tape (`reservarContador`). */
+  const avisar = (): void => {
+    const k = S.u();
+    const m = medidasMarcador(k);
+    const reserva = total ? reservaDeMarcas(total.cuantos, k, S.sw()) : { ancho: 0, alto: 0 };
+    const caja = Math.max(texto.width + m.aire + 5 * k, reserva.ancho);
+    S.reservarContador(raiz.visible ? { x: raiz.x, y: raiz.y, w: caja, h: m.alto + Math.max(5 * k, reserva.alto) } : null);
   };
 
   return {
@@ -100,7 +110,9 @@ export function crearMarcadorVista(S: Estadio, rotulo: () => string, total?: Tot
     },
     rearmar: poner,
     ocultar(si) {
+      if (raiz.visible === !si) return;
       raiz.visible = !si;
+      avisar();
     },
   };
 }
