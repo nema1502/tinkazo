@@ -472,6 +472,9 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
   }
 
   /* --------------------------------------------------- la salida y la meta */
+  /** El rótulo META y dónde lo deja la pista: el cuadro lo corre hacia adentro de la pantalla (`acomodarMeta`). */
+  let metaTxt: Text | null = null;
+  let metaBase = { x: 0, y: 0 };
   function pintarMarcas(): void {
     marcas.removeChildren().forEach((c) => c.destroy({ children: true }));
     const g = new Graphics();
@@ -512,11 +515,43 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
     // En la nueva, la palabra va al costado del arco: debajo quedaba la ganadora cruzando y la tapaba.
     // En el celular no hay lugar a la derecha del arco: la palabra va a su izquierda.
     if (d.nueva) meta.anchor.set(P.retrato ? 1 : 0, 0.5);
-    meta.position.set(d.nueva ? pm + (P.retrato ? -98 : 98) * u : pm, d.nueva ? y0 - 100 * u + bajaMeta + 19 * u : y0 - 118 * u);
+    metaBase = { x: d.nueva ? pm + (P.retrato ? -98 : 98) * u : pm, y: d.nueva ? y0 - 100 * u + bajaMeta + 19 * u : y0 - 118 * u };
+    meta.position.set(metaBase.x, metaBase.y);
+    metaTxt = meta;
     const salida = S.text(k.txt("carSalida").replace(/[¡!]/g, "").toUpperCase(), { fontSize: 26 * u, fontWeight: "900", fill: CREAM, stroke: contorno(26 * u) });
     salida.anchor.set(0, 0.5);
     salida.position.set(26 * u, y0 + 30 * u);
     marcas.addChild(meta, salida);
+  }
+
+  /**
+   * META entera y a la vista: si su lugar en la pista cae debajo de la cabecera (el medallón de la cinta) o pegado a un borde, se corre
+   * hacia adentro de lo que se ve; si habría que correrla más de cuatro veces su alto (la cámara se fue lejos), o ya cayó el golpe (el cartel de quien gana le tapa el lugar), se calla.
+   */
+  function acomodarMeta(t: number): void {
+    const m = metaTxt;
+    if (!m || m.destroyed) return;
+    const lim = limites();
+    // El medallón de la cinta cuelga más abajo que la cinta: META queda debajo de él, no detrás.
+    const c = hudG.cinta;
+    lim.y0 = Math.max(lim.y0, S.scene.pivot.y + (c.y + c.h / 2 + c.h * 0.72 + 5 * P.u - S.scene.position.y) / (S.scene.scale.x || 1));
+    const w = m.width, h = m.height;
+    const ax = m.anchor.x;
+    m.visible = t < d.tCrown;
+    if (!m.visible) return;
+    // Todavía no entró (o ya salió) por el costado: es el mundo que pasa, no hay nada que acomodar.
+    const cx = metaBase.x + (0.5 - ax) * w;
+    if (cx < lim.x0 || cx > lim.x1 || w > lim.x1 - lim.x0) {
+      m.position.set(metaBase.x, metaBase.y);
+      return;
+    }
+    const izq = Math.min(Math.max(metaBase.x - ax * w, lim.x0), lim.x1 - w);
+    const arriba = Math.min(Math.max(metaBase.y - h / 2, lim.y0), lim.y1 - h);
+    if (Math.abs(arriba - (metaBase.y - h / 2)) > 4 * h) {
+      m.visible = false;
+      return;
+    }
+    m.position.set(izq + ax * w, arriba + h / 2);
   }
 
   /* ------------------------------------------------------------- el cielo */
@@ -902,6 +937,7 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
     const duenia = bp?.duenia ?? lider;
     let rayaMax = -Infinity;
     estelas.clear();
+    acomodarMeta(t);
     const fichas: Ficha[] = [];
     const nombrados = nombradas(t);
     for (const q of quienes) {
