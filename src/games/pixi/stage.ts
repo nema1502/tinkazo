@@ -207,7 +207,7 @@ export interface PixiStage {
    * se esconde. Los juegos del kit lo hacen: con eso prendido, la última guardia de los nombres separa los que se pisan
    * y no deja que uno tape el contador (`separarEtiquetas`, en `kit/nombres.ts`).
    */
-  reservarContador(r: { x: number; y: number; w: number; h: number } | null): void;
+  reservarContador(r: readonly { x: number; y: number; w: number; h: number }[] | null): void;
   /**
    * La tanda de la lista que toca en `t`: de a `max` (ocho si no se pide otra
    * cosa), entre `t0` y `t1`, tomando uno de cada tantos de `order` para que la
@@ -662,7 +662,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   const dueno = new WeakMap<Container, string>();
   /** Los juegos del kit piden la pasada de separación avisando dónde está su contador (`reservarContador`). */
   let separarNombres = false;
-  let vedaContador: RectNombre | null = null;
+  let vedaContador: readonly RectNombre[] = [];
   /** Lo que el juego pidió no tapar al poner sus nombres en este cuadro (`tags`: el contador, los ojos del palo): la pasada final también lo respeta. */
   let vedasDelCuadro: RectNombre[] = [];
   /**
@@ -734,7 +734,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       const nombre = (dueno.get(c) ?? "").toLowerCase();
       return { x: b.x, y: b.y, w: b.width, h: b.height, prioridad: (nombre && habla.includes(nombre) ? 100 : 0) + 10 * c.alpha };
     });
-    const res = separarEtiquetas(cajas, { y0, y1 }, [...(vedaContador ? [vedaContador] : []), ...vedasDelCuadro]);
+    const res = separarEtiquetas(cajas, { y0, y1 }, [...vedaContador, ...vedasDelCuadro]);
     vedasDelCuadro = [];
     vivos.forEach((c, i) => {
       const r = res[i];
@@ -1267,9 +1267,9 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       musicBreath();
     }
   };
-  const reservarContador = (r: { x: number; y: number; w: number; h: number } | null): void => {
+  const reservarContador = (r: readonly { x: number; y: number; w: number; h: number }[] | null): void => {
     separarNombres = true;
-    vedaContador = r;
+    vedaContador = r ?? [];
   };
   const batch = (n: number, t: number, t0: number, t1: number, order?: readonly number[], max = 8): number[] => {
     if (n > 64 || n <= 0 || t < t0 || t >= t1) return [];

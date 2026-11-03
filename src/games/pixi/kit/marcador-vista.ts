@@ -91,13 +91,18 @@ export function crearMarcadorVista(S: Estadio, rotulo: () => string, total?: Tot
     avisar();
   };
 
-  /** Le dice al estadio dónde está el contador con sus marcas, para que ningún nombre lo tape (`reservarContador`). */
+  /**
+   * Le dice al estadio dónde está el contador y dónde su fila de marcas, para que ningún nombre las tape
+   * (`reservarContador`). Son dos cajas y no una que las abrace: la caja del contador es angosta y la placa de
+   * marcas, más abajo, es ancha; una sola caja le vedaba a los nombres el hueco de al lado del contador.
+   */
   const avisar = (): void => {
     const k = S.u();
     const m = medidasMarcador(k);
     const reserva = total ? reservaDeMarcas(total.cuantos, k, S.sw()) : { ancho: 0, alto: 0 };
-    const caja = Math.max(texto.width + m.aire + 5 * k, reserva.ancho);
-    S.reservarContador(raiz.visible ? { x: raiz.x, y: raiz.y, w: caja, h: m.alto + Math.max(5 * k, reserva.alto) } : null);
+    const cajas = [{ x: raiz.x, y: raiz.y, w: texto.width + m.aire + 5 * k, h: m.alto + 5 * k }];
+    if (reserva.alto > 0) cajas.push({ x: raiz.x, y: raiz.y + m.alto + 8 * k, w: reserva.ancho, h: reserva.alto - 8 * k });
+    S.reservarContador(raiz.visible ? cajas : null);
   };
 
   return {
