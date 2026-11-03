@@ -636,7 +636,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     const right = g.w - 22 * k - drumWidth(g) - 10 * k;
     const startX = 22 * k + (counterW || 230 * k) + 12 * k;
     let x = S.portrait() ? 22 * k : startX;
-    let y = S.portrait() ? S.top() + 10 * k + 50 * k + marcasH : S.top() + 10 * k;
+    let y = S.portrait() ? S.top() + 10 * k + 50 * k + marcasH + drumRowH(k) : S.top() + 10 * k;
     for (const p of pills) {
       if (x + p.w > (S.portrait() ? g.w - 12 * k : right) && x > 22 * k + 1) {
         x = 22 * k;
@@ -648,6 +648,8 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       x += p.w + 6 * k;
     }
   }
+  /** En vertical el bombo y su rótulo van en una fila propia debajo del contador: a su lado tapaban el total («QUEDAN 2 DE 1»). */
+  const drumRowH = (k: number): number => (S.portrait() ? 46 * k : 0);
   const drumWidth = (g: Geo): number => 100 * g.k + drumText.width;
   /** Hasta dónde bajan las pastillas: lo que tapan arriba. */
   const pillsBottom = (): number => Math.max(...pills.map((p) => p.y + p.h), S.top() + 50 * G().k);
@@ -661,7 +663,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   function rosterGeo(g: Geo, m: number, minW = 0): { x: number; y: number; w: number; cols: number; fs: number; rh: number; top: number; head: number } {
     const k = g.k;
     const cols = m > 10 ? 2 : 1;
-    const top0 = S.portrait() ? S.top() + 54 * k : Math.max(S.top() + 56 * k, pillsBottom() + 10 * k);
+    const top0 = S.portrait() ? S.top() + 60 * k + drumRowH(k) : Math.max(S.top() + 56 * k, pillsBottom() + 10 * k);
     const avail = g.h - S.bottom() - 10 * k - top0;
     const rows = Math.ceil(m / cols);
     // La letra más grande que entre: los renglones y la cabecera en el alto libre.
@@ -1266,9 +1268,10 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     d.tagW = w;
     // La barra del color de su fraternidad, debajo del nombre.
     c.addChild(new Graphics().rect(4 * kc, 17.5 * kc, w - 8 * kc, 4 * kc).fill(d.f.color));
-    const x = new Graphics().moveTo(4 * kc, 11.5 * kc).lineTo(w - 6 * kc, 11.5 * kc).stroke({ width: 2.4 * kc, color: 0xd52b1e, cap: "round" });
+    // La raya va detrás de la letra (el nombre se lee entero) y fina: gruesa y encima partía las minúsculas por la mitad.
+    const x = new Graphics().moveTo(4 * kc, 11.5 * kc).lineTo(w - 6 * kc, 11.5 * kc).stroke({ width: Math.max(1.5, 12 * kc * 0.08), color: 0xd52b1e, cap: "round" });
     x.visible = false;
-    c.addChild(x);
+    c.addChildAt(x, 2);
     d.strike = x;
     // Un co-ganador que se queda no va tachado: lleva un borde amarillo.
     if (winners.includes(d.idx)) {
@@ -1434,7 +1437,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
 
   /** Dónde va el "+N": debajo del contador, o en el celular debajo de las pastillas, que van debajo del contador. */
   function moreTop(k: number, ch: number): number {
-    return S.portrait() && pillsLayer.visible ? pillsBottom() + 6 * k : S.top() + 10 * k + ch + 10 * k;
+    return S.portrait() && pillsLayer.visible ? pillsBottom() + 6 * k : S.top() + 10 * k + ch + 10 * k + drumRowH(k);
   }
 
   /* -------------------------------------------------- saltos del contrapunto */
@@ -1663,14 +1666,18 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       if (state === p.last) continue;
       p.last = state;
       p.count.text = gone ? "✕" : String(alive);
+      // Las que se quedaron: fondo opaco, ✕ y la letra apagada pero legible (4,5 a 1 o más); sin raya ni alfa, que sobre las
+      // fachadas de colores las dejaban casi invisibles.
+      const letra = gone ? (S.dark ? 0xbdb4c8 : 0x6a625c) : S.dark ? CREAM : INK;
+      p.name.style.fill = letra;
+      p.count.style.fill = letra;
       p.name.position.set(p.h * 0.95, p.h / 2);
       p.count.position.set(p.w - p.h * 0.32, p.h / 2);
       p.bg.clear()
         .roundRect(2.5 * k, 2.5 * k, p.w, p.h, 6 * k).fill(INK)
         .roundRect(0, 0, p.w, p.h, 6 * k).fill(S.dark ? 0x221a33 : 0xffffff).stroke({ width: (cur === p.g ? 3.2 : 2) * k, color: cur === p.g ? YELLOW : INK })
         .roundRect(p.h * 0.18, p.h * 0.18, p.h * 0.6, p.h * 0.64, 3 * k).fill(f.color).stroke({ width: 1.2 * k, color: INK });
-      if (gone) p.bg.moveTo(p.h * 0.9, p.h / 2).lineTo(p.w - p.h * 0.75, p.h / 2).stroke({ width: 2 * k, color: 0xd52b1e });
-      p.c.alpha = gone ? 0.55 : presented || phase !== "pres" ? 1 : 0.5;
+      p.c.alpha = gone || presented || phase !== "pres" ? 1 : 0.5;
     }
   }
 
@@ -1710,7 +1717,8 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     // El golpe: un destello corto en el tiempo, que se apaga antes del siguiente.
     const pulse = Math.pow(Math.max(0, Math.cos(bph)), 8);
     const R = 19 * k * (1 + 0.12 * pulse);
-    const x = g.w - 30 * k - 19 * k, y = S.top() + 10 * k + 21 * k;
+    const x = g.w - 30 * k - 19 * k;
+    const y = S.portrait() ? S.top() + 10 * k + 50 * k + marcasH + 23 * k : S.top() + 10 * k + 21 * k;
     const lw = drumText.width + 18 * k, lh = drumText.height + 10 * k;
     const lx = x - 19 * k - 14 * k - lw;
     drumG.clear()
