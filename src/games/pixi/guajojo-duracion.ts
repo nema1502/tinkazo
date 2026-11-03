@@ -11,14 +11,14 @@
  */
 
 /** La llamada: cae el sol, las luciérnagas, el silbo. */
-export const T_LLAMADA = 2.5;
+export const T_LLAMADA = 2.0;
 /** Cada tanda de nombres de la lista. */
-export const T_POR_TANDA = 1.5;
+export const T_POR_TANDA = 1.3;
 /** Cuántos nombres entran en una tanda. */
 export const POR_TANDA = 8;
 /** Hasta cuántas personas hay lista: con más, el primer silencio sienta a casi la mitad. */
 export const LISTA_MAX = 64;
-export const T_CANTO = 2.6;
+export const T_CANTO = 2.3;
 export const T_CRAC = 0.8;
 /** El último silencio: quedan dos, la mirada va a cada una y cae la rival. */
 export const T_ULTIMO = 3.6;
@@ -33,8 +33,8 @@ export const TOPE_NORMAL = 60;
 /** Cuántos silencios hay con `n` personas: 2 con dos, 3 hasta 7, 4 hasta 18, 5 hasta 42, 6 hasta 102 y 7 con más. */
 export const silenciosPara = (n: number): number => (n <= 2 ? 2 : n <= 7 ? 3 : n <= 18 ? 4 : n <= 42 ? 5 : n <= 102 ? 6 : 7);
 
-/** Lo que dura un silencio común: 2,4 s y 0,2 más por cada ciclo. */
-export const silencioDe = (c: number): number => 2.4 + 0.2 * c;
+/** Lo que dura un silencio común: 2,2 s y 0,2 más por cada ciclo. */
+export const silencioDe = (c: number): number => 2.2 + 0.2 * c;
 
 /** Cuánto dura la lista con `n` personas. */
 export const duracionLista = (n: number): number => (n <= LISTA_MAX ? Math.ceil(n / POR_TANDA) * T_POR_TANDA : 0);

@@ -141,15 +141,15 @@ describe("Guajojó: el plan", () => {
   it("dura lo prometido: entre 25 y 60 segundos con el cartel, y Normal nunca pasa de 60", () => {
     for (const n of LISTAS) {
       const p = planGuajojo(contexto(n, ganadoresDe(n)));
-      expect(p.duracion, `con ${n}`).toBeGreaterThanOrEqual(18);
+      expect(p.duracion, `con ${n}`).toBeGreaterThanOrEqual(17);
       expect(p.duracion + 6.5, `con ${n}`).toBeLessThanOrEqual(64);
       expect(p.normal, `con ${n}`).toBeLessThanOrEqual(60);
       expect(p.normal as number, `con ${n}`).toBeGreaterThanOrEqual(25);
     }
-    // El del diseño: con 18 y sin duelo, 33,8 s de show hasta el cartel.
+    // El del diseño: con 18 y sin duelo, 30,9 s de show hasta el cartel.
     const s = semillasPorArco(18);
     const p = planGuajojo(contexto(18, [3], s.remontada ?? 1));
-    expect(p.duracion).toBeCloseTo(33.8, 1);
+    expect(p.duracion).toBeCloseTo(30.9, 1);
   });
 
   it("lo que promete el selector sale de la misma cuenta que el plan: sin duelo ni tapada dura lo base, y «Normal» no depende del arco", () => {
@@ -198,6 +198,20 @@ describe("Guajojó: el plan", () => {
         expect(Boolean(calla.grito), `${idioma} silencio ${ci.c}`).toBe(!ci.ultimo);
         expect(Boolean(crac.grito), `${idioma} crac ${ci.c}`).toBe(false);
       }
+    }
+  });
+
+  it("los silencios comunes no repiten frase: el ciclo 2 dice otra cosa que el 1, en los dos idiomas", () => {
+    for (const idioma of ["es", "en"] as const) {
+      const p = planGuajojo(contexto(18, [3], 7, idioma));
+      const frases = (c: number): string[] => {
+        const ci = p.datos.ciclos[c] as Ciclo;
+        return p.guion.filter((l) => l.texto && l.t >= ci.t0 - 0.01 && l.t <= ci.tSil0 + 0.1).map((l) => l.texto as string);
+      };
+      expect(p.datos.ciclos.length, idioma).toBeGreaterThanOrEqual(4);
+      const uno = frases(1), dos = frases(2);
+      expect(uno.length).toBe(2);
+      for (const f of dos) expect(uno, `${idioma}: «${f}»`).not.toContain(f);
     }
   });
 

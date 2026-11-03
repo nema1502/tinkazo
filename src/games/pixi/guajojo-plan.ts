@@ -571,7 +571,8 @@ export function planGuajojo(ctx: Contexto): Plan<Datos> {
   for (let i = 0; i < tandas; i++) guion.push({ t: tLista0 + i * T_POR_TANDA, hacer: (k) => k.sonido.escalera([7, 8, 9], 70) });
   for (const ci of ciclos) {
     const cal = 0.2 + 0.5 * (ci.c / Math.max(1, NC - 1));
-    decir(ci.t0 + 0.05, ci.c === 0 ? "canta" : "cantaOtra", { calor: cal });
+    // Del tercer canto en adelante cambian las dos frases: el ciclo 2 no repite lo que ya se dijo en el 1.
+    decir(ci.t0 + 0.05, ci.c === 0 ? "canta" : ci.c === 1 ? "cantaOtra" : "cantaMas", { calor: cal });
     // El silbo, y las notas que bajan; la grave es "¡quietos!".
     guion.push({ t: ci.t0 + 0.05, hacer: (k) => k.sonido.tono(14, "evento", { dur: 0.55, timbre: "sine", vol: 0.06 }) });
     for (let j = 0; j < ci.notas; j++) {
@@ -582,7 +583,7 @@ export function planGuajojo(ctx: Contexto): Plan<Datos> {
     // Los pasos: se oyen mientras caminan.
     for (let j = 0; ci.t0 + 0.2 + j * 0.5 < ci.tSil0 - 0.15; j++) guion.push({ t: ci.t0 + 0.2 + j * 0.5, hacer: (k) => k.sonido.tono(3 + (j % 2), "fondo", { dur: 0.06, vol: 0.022 }) });
     // El grito de la sala es «¡Quietos!», no el nombre de quien se sienta después: el cartel grande va aquí.
-    decir(ci.tSil0 + 0.02, ci.ultimo ? "ultimos" : "calla", { calor: cal + 0.1, prioridad: PRIORIDAD.importante, grito: !ci.ultimo });
+    decir(ci.tSil0 + 0.02, ci.ultimo ? "ultimos" : ci.c >= 2 ? "callaOtra" : "calla", { calor: cal + 0.1, prioridad: PRIORIDAD.importante, grito: !ci.ultimo });
     guion.push({ t: ci.tSil0 + 0.02, hacer: (k) => { k.sonido.tono(15, "evento", { dur: 0.25, timbre: "sine", vol: 0.05 }); k.sonido.despues(110, () => k.sonido.tono(17, "evento", { dur: 0.25, timbre: "sine", vol: 0.045 })); } });
     // El latido del silencio.
     for (let j = 0; ci.tSil0 + 0.5 + j * 0.75 < ci.tCrac0; j++) guion.push({ t: ci.tSil0 + 0.5 + j * 0.75, hacer: (k) => k.sonido.tono(3, "fondo", { dur: 0.1, timbre: "sine", vol: 0.03 }) });
