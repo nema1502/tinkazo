@@ -769,7 +769,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     const c = S.chip(winners.indexOf(idx) > 0 ? `★ ${nm}` : nm, sc, nm);
     // Quien se bajó ya no sigue: su nombre lleva una raya roja. Un nombre quieto junto a la estación se leía como «sigue arriba» (prueba del niño, 2 de noviembre de 2026).
     const lb = c.getLocalBounds();
-    c.addChild(new Graphics().moveTo(lb.x + 3, lb.y + lb.height / 2).lineTo(lb.x + lb.width - 3, lb.y + lb.height / 2).stroke({ width: Math.max(3, lb.height * 0.12), color: 0xd62839, cap: "round" }));
+    // Va detrás de la cara y de la letra (entre el fondo y ellas) y fina: gruesa y encima partía las minúsculas y el nombre no se leía.
+    c.addChildAt(new Graphics().moveTo(lb.x + 3, lb.y + lb.height / 2).lineTo(lb.x + lb.width - 3, lb.y + lb.height / 2).stroke({ width: Math.max(1.5, lb.height * 0.04), color: 0xd62839, cap: "round" }), 1);
     c.visible = false;
     nameLayer.addChild(c);
     return c;
