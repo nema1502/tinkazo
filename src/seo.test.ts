@@ -649,10 +649,22 @@ const textosDe = (archivo: string): string[] => {
     ogDescripcion(html),
     ...[...html.matchAll(/"description":\s*"([^"]*)"/g)].map((m) => m[1]),
   ];
-  return [...claves.flatMap((k) => [T.es[k], T.en[k]]), ...declarados].filter((v): v is string => typeof v === "string");
+  // El kit trae el material literal ES/EN en HTML, no como claves: también pasa
+  // por las mismas prohibiciones editoriales, sin dejar un hueco en el control.
+  const materialKit = html.match(/<!-- kit:material:start -->([\s\S]*?)<!-- kit:material:end -->/)?.[1];
+  const estaticos = materialKit ? [espacios(sinEntidades(sinEtiquetas(materialKit)))] : [];
+  return [...claves.flatMap((k) => [T.es[k], T.en[k]]), ...declarados, ...estaticos].filter((v): v is string => typeof v === "string");
 };
 
 describe("la portada y las páginas de lectura no dicen lo que el sitio no puede sostener", () => {
+  it("incluye también el material bilingüe estático del kit en el control editorial", () => {
+    const material = textosDe("sorteo-para-meetup.html").join(" ");
+    expect(material).toContain("Hacé el sorteo de tu evento en 5 pasos");
+    expect(material).toContain("Run your event's draw in 5 steps");
+    expect(material).toContain("Este sorteo se puede comprobar");
+    expect(material).toContain("This draw can be checked");
+  });
+
   it.each(Object.keys(PUBLICAS))("%s", (archivo) => {
     const prohibidas = CON_AVISO.includes(archivo) ? NO_SE_DICE : new RegExp(`${NO_SE_DICE.source}|${DE_APUESTA.source}`, "i");
     expect(textosDe(archivo).filter((t) => prohibidas.test(t))).toEqual([]);
