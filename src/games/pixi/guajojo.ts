@@ -31,6 +31,8 @@ import { TEXTOS } from "./guajojo-textos";
 const INK = 0x1a1330;
 const TINTA_NOCHE = 0x0a0d24;
 const lerp = (a: number, b: number, k: number): number => a + (b - a) * k;
+/** Cuánto dura a la vista el nombre de quien se acaba de sentar (con el fundido al final). */
+const T_NOMBRE = 1.8;
 const c01 = (v: number): number => Math.max(0, Math.min(1, v));
 const suave = (v: number): number => {
   const x = c01(v);
@@ -484,7 +486,7 @@ function nombres(k: Kit, d: Datos, e: Escena, g: Geo, t: number, fase: string, c
   if (ciclo) {
     ciclo.victimas.forEach((i, j) => {
       const dt = t - (ciclo.tCae[j] as number);
-      if (dt >= 0 && dt < 1.1 && recientes.size < (p.retrato ? 3 : 4)) recientes.add(i);
+      if (dt >= 0 && dt < T_NOMBRE && recientes.size < (p.retrato ? 3 : 5)) recientes.add(i);
     });
   }
   let quienes: number[] = [];
@@ -510,10 +512,9 @@ function nombres(k: Kit, d: Datos, e: Escena, g: Geo, t: number, fase: string, c
     // El contador lleva el total («QUEDAN  18 DE 18») y debajo la fila de marcas: se reserva lo que miden.
     { x: 0, y: S.top(), width: Math.max(anchoMarcador(textoMarcador(k.txt("marcadorQuedan"), k.nombres.length, { de: k.txt("marcadorDe"), cuantos: k.nombres.length }), S.u()), reserva.ancho), height: 62 * p.k + reserva.alto },
   ];
-  S.tags(k.nombres as string[], quienes, sobreLaCabeza, evitar);
-
-  // El que acaba de sentarse: su nombre crece un segundo donde pasó.
+  // El que acaba de sentarse: su nombre crece un rato donde pasó, sin tapar el contador ni pisar a otro.
   for (const c of e.chips.values()) c.visible = false;
+  const contador = evitar[1] as { x: number; y: number; width: number; height: number };
   const puestos: { x: number; y: number; w: number; h: number }[] = [];
   for (const i of recientes) {
     let c = e.chips.get(i);
@@ -525,16 +526,28 @@ function nombres(k: Kit, d: Datos, e: Escena, g: Geo, t: number, fase: string, c
     const dt = t - ((ciclo as Ciclo).tCae[(ciclo as Ciclo).victimas.indexOf(i)] as number);
     const pt = sobreLaCabeza(i);
     c.visible = true;
-    c.alpha = 1 - suave((dt - 0.8) / 0.3);
-    const cx = Math.max(8 * p.k, Math.min(p.w - c.width - 8 * p.k, pt.x - c.width / 2));
-    let cy = Math.max(S.top() + 4 * p.k, pt.y - c.height);
-    // Dos nombres que se pisan: el segundo sube.
-    for (let r = 0; r < 4; r++) {
-      const choca = puestos.find((o) => cx < o.x + o.w && cx + c.width > o.x && cy < o.y + o.h && cy + c.height > o.y);
+    c.alpha = 1 - suave((dt - (T_NOMBRE - 0.3)) / 0.3);
+    const margen = 8 * p.k;
+    const cx = Math.max(margen, Math.min(p.w - c.width - margen, pt.x - c.width / 2));
+    const piso = S.top() + 4 * p.k;
+    const sobre = (o: { x: number; y: number; w: number; h: number }, y: number): boolean => cx < o.x + o.w && cx + c.width > o.x && y < o.y + o.h && y + c.height > o.y;
+    const caja = { x: contador.x, y: contador.y, w: contador.width, h: contador.height };
+    let cy = Math.max(piso, pt.y - c.height);
+    // Ni sobre el contador ni sobre otro nombre: si sube y se mete en el contador, baja por debajo de él.
+    for (let r = 0; r < 6; r++) {
+      if (sobre(caja, cy)) {
+        cy = caja.y + caja.h + 4 * p.k;
+        continue;
+      }
+      const choca = puestos.find((o) => sobre(o, cy));
       if (!choca) break;
-      cy = choca.y - c.height - 2 * p.k;
+      const arriba = choca.y - c.height - 2 * p.k;
+      cy = arriba >= piso && !sobre(caja, arriba) ? arriba : choca.y + choca.h + 2 * p.k;
     }
     puestos.push({ x: cx, y: cy, w: c.width, h: c.height });
-    c.position.set(cx, Math.max(S.top() + 4 * p.k, cy));
+    c.position.set(cx, cy);
   }
+  // Las etiquetas de los que siguen tampoco pisan los nombres de los que se sientan.
+  for (const o of puestos) evitar.push({ x: o.x, y: o.y, width: o.w, height: o.h });
+  S.tags(k.nombres as string[], quienes, sobreLaCabeza, evitar);
 }
