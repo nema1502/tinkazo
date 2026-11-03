@@ -570,6 +570,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   let listaKey = "";
   let listaAd!: ListaGeo;
   let listaAdRows: Fila[] = [];
+  const listaPlacas = new Map<ReturnType<PixiStage["text"]>, Graphics>();
   let listaAdTit!: ReturnType<PixiStage["text"]>;
   /** Los rectángulos de las listas que se ven, para que los nombres que vuelan no las pisen. */
   let listasVistas: Rect[] = [];
@@ -761,9 +762,14 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       tx.anchor.set(0, 0.5);
       tx.position.set(geo.x + 4 * k, geo.y - geo.rowH / 2);
       tx.visible = false;
-      listaCont.addChild(tx);
+      // La placa del título: sobre los banderines del celular la letra sola daba 1,9 a 1.
+      const placa = new Graphics();
+      placa.visible = false;
+      listaPlacas.set(tx, placa);
+      listaCont.addChild(placa, tx);
       return tx;
     };
+    listaPlacas.clear();
     listaTit = titulo(lista);
     listaAdTit = phone ? listaTit : titulo(listaAd);
     listaMore = S.text("", { fontFamily: MONO, fontSize: Math.max(18, LEGIBLE.sec) * k, fontWeight: "800", fill: S.dark ? CREAM : INK });
@@ -972,6 +978,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
         listaKey = "oculta";
         for (const r of [...listaRows, ...listaAdRows]) r.c.visible = false;
         listaMore.visible = listaTit.visible = listaAdTit.visible = false;
+        for (const pl of listaPlacas.values()) pl.visible = false;
         listasVistas = [];
       }
       return;
@@ -991,14 +998,27 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     if (clave === listaKey) return;
     listaKey = clave;
     const fondo = S.dark ? 0x221a33 : 0xffffff;
+    const placaDe = (tx: ReturnType<PixiStage["text"]>): void => {
+      const pl = listaPlacas.get(tx);
+      if (!pl) return;
+      // Con aire de sobra: lo que rodea al texto a tres píxeles tiene que ser la placa y no el borde ni el papel picado de atrás.
+      const mx = Math.max(8, 8 * G().k), my = Math.max(6, 6 * G().k);
+      pl.clear().roundRect(tx.x - mx, tx.y - tx.height / 2 - my, tx.width + 2 * mx, tx.height + 2 * my, 4).fill(fondo).stroke({ width: 2, color: INK });
+      pl.visible = tx.visible;
+    };
     const pintar = (rows: Fila[], geo: ListaGeo, ids: number[], resalta: boolean, apagada: boolean): void => {
       rows.forEach((r, i) => {
         const id = ids[i];
         r.c.visible = id !== undefined;
         if (id === undefined) return;
-        r.c.alpha = apagada ? 0.78 : 1;
+        // El fondo de la fila es siempre opaco (en un celular dejaba ver el papel picado) y lo apagado es solo la letra. La fila
+        // resaltada va con tinta sin alfa: crema sobre mostaza daba 1,8 a 1.
+        const marcada = i === 0 && resalta;
+        r.c.alpha = 1;
+        r.tx.alpha = apagada && !marcada ? 0.78 : 1;
+        r.tx.style.fill = marcada || !S.dark ? INK : CREAM;
         r.tx.text = etiqueta(names[id] ?? "", listaMax(phone));
-        r.bg.clear().roundRect(0, 0, geo.colW - 4, geo.rowH - 3, 4).fill(i === 0 && resalta ? YELLOW : fondo).stroke({ width: 2, color: INK });
+        r.bg.clear().roundRect(0, 0, geo.colW - 4, geo.rowH - 3, 4).fill(marcada ? YELLOW : fondo).stroke({ width: 2, color: INK });
         r.sq.clear().rect(4, 4, geo.rowH * 0.3, geo.rowH - 11).fill(S.color(id));
       });
     };
@@ -1007,11 +1027,13 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     for (const r of listaAdRows) r.c.visible = false;
     const vistas: Rect[] = [];
     listaTit.visible = listaAdTit.visible = false;
+    for (const pl of listaPlacas.values()) pl.visible = false;
     listaMore.visible = false;
     if (verCaidos) {
       pintar(listaRows, lista, fallen.slice(-lista.cap).reverse(), hl, true);
       listaTit.text = t("cPinListaOut");
       listaTit.visible = len > 0;
+      placaDe(listaTit);
       listaMore.text = len > lista.cap ? `+${len - lista.cap}` : "";
       listaMore.visible = true;
       if (len > 0) vistas.push({ x: lista.x, y: lista.y - lista.rowH, w: lista.w, h: lista.h + lista.rowH });
@@ -1020,6 +1042,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       pintar(listaAdRows, listaAd, adentro, false, false);
       listaAdTit.text = t("cPinLeft");
       listaAdTit.visible = true;
+      placaDe(listaAdTit);
       vistas.push({ x: listaAd.x, y: listaAd.y - listaAd.rowH, w: listaAd.w, h: (Math.min(adentro.length, listaAd.cap) + 1) * listaAd.rowH });
     }
     listasVistas = vistas;
@@ -1163,7 +1186,8 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     drawLista();
     drawLabels(p, g, sz);
     // «QUEDAN 8 DE 18» y, debajo, una marca por persona: un chico cuenta las encendidas sin leer.
-    const adentroAhora = inside().length;
+    // Queda 1 hasta el golpe: en 0 el cartel aún no llegó y la cuenta decía "0 de 18" delante de quien gana.
+    const adentroAhora = Math.max(1, inside().length);
     counter.text = textoMarcador(t("marcadorQuedan"), adentroAhora, { de: t("marcadorDe"), cuantos: n });
     const bw = counter.width + medidasContador(k).aire, bh = medidasContador(k).alto;
     counter.position.set(bw / 2, bh / 2);
