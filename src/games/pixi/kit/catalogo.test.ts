@@ -79,6 +79,15 @@ describe("el catálogo del kit: cada juego trae lo que el sitio le pide", () => 
       expect(SELECTOR).toContain(j.id);
       expect(j.captura, "una captura para la tarjeta").toBe(true);
       expect(j.historia?.borrador ?? false, "la historia sin borrador").toBe(false);
+      // La regla que lee la sala antes del show no puede ser el texto que deja el generador de juegos nuevos
+      // (le pasó al Toborochi: entró al selector diciendo que los nombres llegaban "a la mesa").
+      const borrador = /mesa de a ocho|mesa final|table eight at a time|final table|^Borrador de|^Draft of/i;
+      for (const clave of [c.regla, c.varios]) {
+        for (const idioma of ["es", "en"] as const) {
+          const texto = T[idioma][clave];
+          if (typeof texto === "string") expect(texto, `${idioma}.${clave} es el texto de borrador`).not.toMatch(borrador);
+        }
+      }
       expect(j.rango.maximo ?? j.rango.minimo, "un rango").toBeDefined();
     });
 

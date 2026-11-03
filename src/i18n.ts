@@ -2153,7 +2153,7 @@ export const T: Record<Lang, Dict> = {
     // --- guajojo
     gameGuajojo: "Guajojó", jgGuajojoN: "Guajojó",
     jgGuajojoB: "Un sendero del monte de noche. Mientras canta el guajojó, todos caminan; cuando calla, quietos: sus ojos amarillos barren el sendero y al que hace crujir una rama lo escucha y se sienta. Gana quien llega de pie al amanecer. Hasta doscientas.",
-    gcGuajojo: "Mientras canta el guajojó, se camina; cuando calla, quietos: al que hace crujir una rama, lo escucha y se sienta.",
+    gcGuajojo: "Si canta, caminen. Si calla, quietos. Gana quien sigue de pie al amanecer.",
     gcGuajojoMany: "Con varios premios, quien llega de pie al amanecer gana primero, y quien se sienta último también se lleva premio.",
     loreGuajojoQ: "¿Qué es el guajojó?",
     loreGuajojoA: "Un ave de la noche. De día se queda erguida e inmóvil en la punta de un palo seco, como si fuera parte de él, y al anochecer canta un silbo largo con notas que bajan.",
@@ -2161,8 +2161,8 @@ export const T: Record<Lang, Dict> = {
     // --- toborochi
     gameToborochi: "El Toborochi", jgToborochiN: "El Toborochi",
     jgToborochiB: "El toborochi en flor, el árbol de Santa Cruz. Los nombres llegan de a ocho y el surazo se va llevando las flores de a poco, hasta que quedan las finalistas. El colibrí se posa en quien gana. Hasta doscientas.",
-    gcToborochi: "Los nombres llegan a la mesa de a ocho y quedan los finalistas. Gana quien salió del sorteo.",
-    gcToborochiMany: "Los premios quedan en la mesa final: los que ganan se ven al final.",
+    gcToborochi: "El viento se lleva las flores de a poco. Gana la flor donde se posa el colibrí.",
+    gcToborochiMany: "Con varios premios, algunas flores caen con premio y el colibrí se posa en la del primero.",
     loreToborochiQ: "¿De dónde sale El Toborochi?",
     loreToborochiA: "Es el árbol de Santa Cruz: entre mayo y junio pinta de rosa las calles y las plazas, justo cuando casi todos los demás pierden las hojas. Una leyenda guaraní cuenta que Araverá escapó de los espíritus del mal y se refugió en el tronco de un toborochi, y que todavía asoma convertida en flor para que la visiten los colibríes. Hasta sale en el billete de 20 bolivianos.",
     // --- /toborochi
@@ -3953,7 +3953,7 @@ export const T: Record<Lang, Dict> = {
     // --- guajojo
     gameGuajojo: "Guajojó", jgGuajojoN: "Guajojó",
     jgGuajojoB: "A forest trail at night. While the guajojó sings, everyone walks; when it goes quiet, freeze: its yellow eyes sweep the trail, and anyone who snaps a twig is heard and sits down. Whoever is still standing at dawn wins. Up to two hundred.",
-    gcGuajojo: "While the guajojó sings, walk; when it goes quiet, freeze. Snap a twig and it hears you: sit down.",
+    gcGuajojo: "It sings: walk. It stops: freeze. Whoever is still standing at dawn wins.",
     gcGuajojoMany: "With several prizes, whoever reaches dawn standing wins first, and whoever sits down last wins a prize too.",
     loreGuajojoQ: "What is the guajojó, the night bird?",
     loreGuajojoA: "A night bird. By day it stays upright and motionless at the tip of a dry stick, as if part of it, and at dusk it sings one long whistle followed by falling notes.",
@@ -3961,8 +3961,8 @@ export const T: Record<Lang, Dict> = {
     // --- toborochi
     gameToborochi: "The Toborochi", jgToborochiN: "The Toborochi",
     jgToborochiB: "The toborochi in bloom, the tree of Santa Cruz. Names arrive eight at a time and the south wind carries the flowers off little by little, until the finalists remain. The hummingbird lands on whoever wins. Up to two hundred.",
-    gcToborochi: "Names reach the table eight at a time and the finalists remain. Whoever the draw picked wins.",
-    gcToborochiMany: "The prizes sit at the final table: the winners show at the end.",
+    gcToborochi: "The wind blows the flowers away, a few at a time. The flower where the hummingbird lands wins.",
+    gcToborochiMany: "With several prizes, some flowers fall with a prize and the hummingbird lands on the first prize's flower.",
     loreToborochiQ: "Where does The Toborochi come from?",
     loreToborochiA: "It is the tree of Santa Cruz: in May and June it paints the streets and squares pink, just when most other trees lose their leaves. A Guaraní legend tells that Araverá fled from evil spirits and took refuge in the trunk of a toborochi, and that she still comes out as a flower for the hummingbirds to visit. It is even on the 20-boliviano note.",
     // --- /toborochi
