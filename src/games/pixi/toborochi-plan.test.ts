@@ -307,6 +307,25 @@ describe("El Toborochi: el plan", () => {
     }
   });
 
+  it("la cámara reparte entre las dos finalistas hasta el golpe: se va sola a la ganadora recién en el pico, después del silencio del colibrí", () => {
+    for (const n of [8, 18, 60]) {
+      for (const s of [3, 7, 11]) {
+        const p = plan(n, [s % n], s);
+        const d = p.datos;
+        for (const pant of PANTALLAS) {
+          const kit = kitFalso(pant);
+          const dos = p.momentos.tension.toma(kit, d.tPico - 0.05) as { caja: { x: number; w: number } };
+          const una = p.momentos.tension.toma(kit, d.tPico) as { caja: { x: number; w: number } };
+          // Con las dos adentro la caja es al menos tan ancha como con una sola, y el ancho no depende de a quién se mira primero.
+          expect(dos.caja.w, `${n}/${s}`).toBeGreaterThanOrEqual(una.caja.w - 1e-9);
+          for (const t of [d.tQuedan0, d.tColibri0, d.tPico - 0.05]) expect(p.momentos.tension.toma(kit, t)).toEqual(dos);
+        }
+        // El silencio del colibrí (la última visita ya no se mueve) cae antes del pico.
+        expect(d.tPico).toBeGreaterThan((d.visitas[d.visitas.length - 1] as { sale: number }).sale);
+      }
+    }
+  });
+
   it("el foco cae dentro de la pantalla, sobre quien gana", () => {
     for (const n of LISTAS) {
       const p = plan(n);
