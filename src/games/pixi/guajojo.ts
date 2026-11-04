@@ -1,7 +1,12 @@
 import { Container, Graphics } from "pixi.js";
 import { musicHold } from "../../music";
-import { anchoMarcador, crearJuego, hashDe, medidasMarcador, reservaDeMarcas, textoMarcador, type Kit } from "./kit";
+import { enchufar3D, entradaBase } from "../tres/enchufe";
+import type { Montaje3D, Vista3D } from "../tres/tipos";
+import { entradaVacia, type EntradaGuajojo, type PersonaG } from "../tres/guajojo-3d-mapa";
+import { anchoMarcador, crearJuego, hashDe, medidasMarcador, reservaDeMarcas, textoMarcador, type DefJuego, type Kit, type Lanzador } from "./kit";
+import { anfitrionTinkazo, type Anfitrion } from "./kit/anfitrion";
 import { MARCADOR } from "./kit/marcador";
+import { mountPixi } from "./stage";
 import {
   T_AMANECER, Z_META, Z_ULTIMOS, cajaDelPalo, cajaDeCuerpo, enPieEn, faseDe, geoDe, miradaDe, planGuajojo, proyectar, sentadaDe, swayDe, tandaDeLista, xDe, zDe,
   type Ciclo, type Datos, type Geo,
@@ -76,6 +81,9 @@ interface Escena {
   /** Los nombres de los que acaban de sentarse, grandes y pegados a donde pasó. */
   chips: Map<number, Container>;
   capaChips: Container;
+  /** La vista 3D de debajo (`src/games/tres/README.md`), o null en el 2D de siempre. */
+  v3: Vista3D<EntradaGuajojo> | null;
+  entrada3: EntradaGuajojo | null;
   tCorona: number | null;
   /** Qué ciclos ya dieron su sacudón de cámara. */
   craqueados: Set<number>;
@@ -137,7 +145,8 @@ function arbol(g: Graphics, x: number, base: number, alto: number, color: number
   g.ellipse(x + alto * 0.24, base - alto * 0.64, alto * 0.2, alto * 0.11).fill(color);
 }
 
-export const guajojoPixi = crearJuego<Datos, Escena>({
+/** La definición del juego. Con `tres` (el 3D) el lienzo queda transparente y el sendero lo dibuja three.js; el 2D sigue decidiendo todo. */
+const definicion = (tres?: Montaje3D<EntradaGuajojo>): DefJuego<Datos, Escena> => ({
   id: "guajojo",
   textos: TEXTOS,
   plan: planGuajojo,
@@ -218,8 +227,16 @@ export const guajojoPixi = crearJuego<Datos, Escena>({
     const capaChips = new Container();
     S.hud.addChild(capaChips);
     k.cam.cut(p.w / 2, (p.top + p.bottom) / 2, 1);
+    // El 3D (si está prendido y arrancó): el fondo y el sendero del 2D se apagan, y la cámara y los nombres siguen siendo los de siempre.
+    const v3 = previa ? previa.v3 : enchufar3D(S, tres);
+    v3?.reconstruir?.();
+    if (v3) {
+      raiz.visible = false;
+      S.bg.visible = false;
+    }
+    const entrada3 = v3 ? previa?.entrada3 ?? entradaVacia(d.n, completa, Array.from({ length: d.n }, (_, i) => S.color(i))) : null;
     const esc: Escena = {
-      raiz, fijo, cielo, sol, palo, ojos, haz, gente, bichos, ramitas, personas, chips: new Map(), capaChips,
+      raiz, fijo, cielo, sol, palo, ojos, haz, gente, bichos, ramitas, personas, chips: new Map(), capaChips, v3, entrada3,
       tCorona: previa?.tCorona ?? null, craqueados: previa?.craqueados ?? new Set(), musica: previa?.musica ?? false,
     };
     if (!previa) S.onCleanup(() => musicHold(false));
@@ -357,6 +374,20 @@ export const guajojoPixi = crearJuego<Datos, Escena>({
         pe.brazoI.rotation = Math.sin(t * 5 + i) * 0.3;
         pe.brazoD.rotation = -Math.sin(t * 5 + i) * 0.3;
       }
+      if (e.entrada3) {
+        // Lo que el 3D viste: las mismas posiciones y los mismos ángulos que ya puso el 2D.
+        const o = e.entrada3.gente[i] as PersonaG;
+        o.x = x;
+        o.z = z;
+        o.piernaI = pe.piernaI.rotation;
+        o.piernaD = pe.piernaD.rotation;
+        o.escPiernaI = pe.piernaI.scale.y;
+        o.torsoRot = pe.torso.rotation;
+        o.torsoDy = pe.torso.y + 0.5;
+        o.brazoI = pe.brazoI.rotation;
+        o.brazoD = pe.brazoD.rotation;
+        o.sentado = sentado;
+      }
       // El farolito de quien gana brilla igual que el de los demás de pie hasta que la ronda se corona: con más brillo desde el arranque, la sala
       // aprendía el final mirando el más claro. En la final de tres, los que siguen en juego brillan igual entre sí.
       pe.luz.alpha = (arriba && ganaEsta) || (hubo.has(i) && enPie.length <= 3) ? 1 : sentado > 0.5 ? 0.55 : 0.8;
@@ -366,6 +397,10 @@ export const guajojoPixi = crearJuego<Datos, Escena>({
 
     /* ----------------------------------------- el palo, los ojos y la mirada */
     const m = miradaDe(d, t);
+    if (e.entrada3) {
+      e.entrada3.cracs.length = 0;
+      e.entrada3.mira = null;
+    }
     // En la llamada el ave abre los ojos un instante: enseña la regla antes de que empiece el canto.
     const guino = t > 0.8 && t < 2.1 ? Math.sin((Math.PI * (t - 0.8)) / 1.3) * 0.9 : 0;
     const ab = tau >= 0 ? 0 : m ? m.abierto : guino;
@@ -375,6 +410,7 @@ export const guajojoPixi = crearJuego<Datos, Escena>({
       // La mirada: un cono desde los ojos hasta el lugar del sendero que mira.
       const zs = enPie.length ? enPie.map((i) => zDe(d, i, t)).sort((a, b) => a - b) : [0.5];
       const zMed = ciclo?.ultimo ? Z_ULTIMOS : Math.max(0.12, Math.min(0.85, zs[Math.floor(zs.length / 2)] as number));
+      if (e.entrada3) e.entrada3.mira = { x: m.x, z: zMed };
       const spot = proyectar(g, m.x, zMed);
       const ancho = g.mitad * spot.s * 0.17;
       const caja = cajaDelPalo(g);
@@ -403,6 +439,7 @@ export const guajojoPixi = crearJuego<Datos, Escena>({
         const dt = t - (ciclo.tCae[j] as number);
         if (dt < 0 || dt > 0.55 || j > 30) continue;
         const i = ciclo.victimas[j] as number;
+        e.entrada3?.cracs.push({ x: xDe(d, i, ciclo.tCae[j] as number), z: zDe(d, i, t), dt, i });
         const q = proyectar(g, xDe(d, i, ciclo.tCae[j] as number), zDe(d, i, t));
         const l = g.cuerpo * q.s * 0.2;
         const f = 1 - dt / 0.55;
@@ -422,9 +459,29 @@ export const guajojoPixi = crearJuego<Datos, Escena>({
     }
 
     /* ------------------------------------------------------------ los nombres */
+    if (e.v3 && e.entrada3) {
+      const en = e.entrada3;
+      Object.assign(en, entradaBase(S, t));
+      en.geo = g;
+      en.alba = alba;
+      en.oscuro = oscuro;
+      en.ultimo = ult;
+      en.tau = tau;
+      // Quién gana se sabe recién con el golpe.
+      en.ganador = tau >= 0 ? d.ganador : -1;
+      en.ojos = ab;
+      en.pupila = m ? m.x : 0;
+      e.v3.frame(en);
+    }
     nombres(k, d, e, g, t, fase, ciclo, enPie);
   },
 });
+
+export const guajojoPixi = crearJuego<Datos, Escena>(definicion());
+
+/** El mismo juego con el 3D debajo: lo lanza `src/games/tres/guajojo-3d.ts`. */
+const anfitrion3D: Anfitrion = { ...anfitrionTinkazo, montar: (baliza, listo, alSaltar, o) => mountPixi(baliza, listo, alSaltar, { music: o.musica, transparente: true }) };
+export const guajojoPixi3D = (tres: Montaje3D<EntradaGuajojo>): Lanzador => crearJuego<Datos, Escena>(definicion(tres), anfitrion3D);
 
 /* --------------------------------------------------------------- el palo seco */
 function dibujarPalo(e: Escena, g: Geo): void {
@@ -484,7 +541,9 @@ function dibujarOjos(e: Escena, g: Geo, abierto: number, mira: number): void {
 function nombres(k: Kit, d: Datos, e: Escena, g: Geo, t: number, fase: string, ciclo: Ciclo | null, enPie: number[]): void {
   const { S } = k;
   const p = k.pantalla();
-  const sobreLaCabeza = (i: number): { x: number; y: number } => {
+  const sobreLaCabeza = (i: number): { x: number; y: number } | null => {
+    // Con el 3D, la cabeza cae donde la dibujó la cámara de three.js (que mira lo mismo que el director).
+    if (e.v3) return e.v3.pantallaDe(i);
     const q = proyectar(g, xDe(d, i, t), zDe(d, i, t));
     return k.cam.toScreen(q.x, q.y - g.cuerpo * q.s * 1.12, p.w, p.h);
   };
@@ -514,7 +573,8 @@ function nombres(k: Kit, d: Datos, e: Escena, g: Geo, t: number, fase: string, c
   const pa = k.cam.toScreen(palo.x, palo.y, p.w, p.h);
   const reserva = reservaDeMarcas(k.nombres.length, S.u(), p.w);
   const evitar = [
-    { x: pa.x, y: pa.y, width: palo.w * zc, height: palo.h * zc * 0.55 },
+    // Con el 3D, desde la corona el palo ya cerró los ojos y la cámara baja: la ficha de quien gana tiene que quedar sobre ella, no escondida por la caja del palo del 2D.
+    { x: pa.x, y: pa.y, width: e.v3 && k.coronado ? 0 : palo.w * zc, height: palo.h * zc * 0.55 },
     // El contador lleva el total («QUEDAN  18 DE 18») y debajo la fila de marcas: se reserva lo que miden de verdad, desde donde
     // el kit lo pone (`S.top() + 10u`, con su sombra), y no una altura de ojo.
     { x: 0, y: S.top() + MARCADOR.y * S.u(), width: MARCADOR.x * S.u() + Math.max(anchoMarcador(textoMarcador(k.txt("marcadorQuedan"), k.nombres.length, { de: k.txt("marcadorDe"), cuantos: k.nombres.length }), S.u()) + 5 * S.u(), reserva.ancho), height: medidasMarcador(S.u()).alto + 5 * S.u() + reserva.alto },
@@ -532,6 +592,7 @@ function nombres(k: Kit, d: Datos, e: Escena, g: Geo, t: number, fase: string, c
     }
     const dt = t - ((ciclo as Ciclo).tCae[(ciclo as Ciclo).victimas.indexOf(i)] as number);
     const pt = sobreLaCabeza(i);
+    if (!pt) continue;
     c.visible = true;
     c.alpha = 1 - suave((dt - (T_NOMBRE - 0.3)) / 0.3);
     const margen = 8 * p.k;
