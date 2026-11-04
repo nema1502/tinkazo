@@ -158,6 +158,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
   let hudDe!: Text;
   let hudStation!: Text;
   let hudMarcas!: Graphics;
+  /** El contador entero (la placa, el número, el total y las marcas): con el 3D se apaga con el golpe y deja la cumbre limpia. */
+  let hudGrupo!: Container;
 
   function build(): void {
     G = geo();
@@ -409,7 +411,9 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       hudPlaca.rect(27 * hu, y0 + 5 * hu, ancho, alto).fill(INK).rect(22 * hu, y0, ancho, alto).fill(0x221a33).stroke({ width: 3 * hu, color: INK });
       for (const x of [hudLabel, hudNum, hudDe, hudStation]) x.x += 12 * hu;
     }
-    S.hud.addChild(hudPlaca, hudLabel, hudNum, hudDe, hudStation, hudMarcas);
+    hudGrupo = new Container();
+    hudGrupo.addChild(hudPlaca, hudLabel, hudNum, hudDe, hudStation, hudMarcas);
+    S.hud.addChild(hudGrupo);
     void span;
   }
   build();
@@ -1174,7 +1178,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     const b = cabBox(winnerCab, tAll);
     const W = S.sw(), H = S.sh();
     const x = b ? (b.x0 + b.x1) / 2 : W / 2, y = b ? (b.y0 + b.y1) / 2 : H * 0.55;
-    const r = b ? Math.max(b.x1 - b.x0, b.y1 - b.y0) * 0.62 : H * 0.12;
+    // Con el 3D el foco es más ajustado: la cabina ya se agranda sola con el golpe y el cuadrado del foco no se sale por abajo, contra el relator.
+    const r = b ? Math.max(b.x1 - b.x0, b.y1 - b.y0) * (v3 ? 0.5 : 0.62) : H * 0.12;
     return { arco: P.story.arc, x, y, r, color: colorDeNombre(names[winners[winners.length - 1] ?? 0] ?? ""), rival: null };
   }
 
@@ -1581,6 +1586,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     hudDe.position.set(hudNum.x + hudNum.width + 10 * S.u(), hudNum.y + (hudNum.height - hudDe.height) * 0.62);
     const at = Math.min(NS, Math.floor(P.headAt(tAll) + 0.02));
     pintarMarcas(hudMarcas, { total: names.length, quedan: m, k: S.u(), w: S.sw(), y: 0 });
+    if (v3) hudGrupo.alpha = 1 - ease.outCubic(clamp((tAll - T_CROWN) / 0.3, 0, 1));
     hudStation.text = tAll >= T_BOARD && tAll < T_RUN ? T[lang].cTelOf(Math.max(1, at), NS) : "";
     if (tAll >= T_CROWN) crown.at(tAll - T_CROWN, true, focoDeLaCabina());
     // El 3D dibuja el mundo y las cabinas con lo que el 2D acaba de decidir. Quién gana lo sabe recién en el golpe.

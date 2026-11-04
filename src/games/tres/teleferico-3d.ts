@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, BufferGeometry, CanvasTexture, Color, CylinderGeometry, DoubleSide, Euler, Float32BufferAttribute, Group, IcosahedronGeometry, InstancedMesh,
+  BackSide, BoxGeometry, BufferGeometry, CanvasTexture, Color, CylinderGeometry, DoubleSide, Euler, Float32BufferAttribute, Group, IcosahedronGeometry, InstancedMesh,
   Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, PlaneGeometry, Points, PointsMaterial, Quaternion, SphereGeometry, SRGBColorSpace,
   Vector3, type Material,
 } from "three";
@@ -131,6 +131,10 @@ const AMARILLO = 0xffc629;
 const MAX_POR_CABINA = 12;
 /** Las personas que caben en total: las de las cabinas y las que saltan. */
 const MAX_GENTE = 300;
+/** Cuántas personas llevan contorno a la vez, y cuánto más gruesa es cada parte con él (en píxeles del dibujo de la persona). */
+const CONTORNOS = 24;
+const GROSOR = 3.6;
+const TEMPG = new Color();
 
 /* ===================================================================== geometrías a mano */
 
@@ -232,6 +236,10 @@ interface PosturaGente {
   saludo: number;
   /** La hora, para que los brazos se agiten. */
   t: number;
+  /** Cuánto más claros se dibujan los colores (1 es lo normal): con el mundo oscuro, quien gana conserva su color pleno. */
+  brillo?: number;
+  /** Con contorno de tinta: solo las figuras del foco del momento. */
+  contorno?: boolean;
 }
 
 /**
@@ -246,7 +254,10 @@ class Gente {
   private readonly brazos: InstancedMesh;
   private readonly piernas: InstancedMesh;
   private readonly materiales: MeshLambertMaterial[];
+  /** El contorno de tinta: cada parte vuelta a dibujar por el revés y un poco más grande (el casco invertido del estilo). */
+  private readonly contornos: InstancedMesh[];
   private n = 0;
+  private nCont = 0;
   private readonly c = new Color();
   private readonly colores = new Map<number, { camisa: Color; piel: Color; pelo: Color }>();
 
@@ -271,10 +282,13 @@ class Gente {
     this.torsos = mk(cub, mTorso, max);
     this.brazos = mk(cub, mBrazo, max * 2);
     this.piernas = mk(cub, mPierna, max);
+    const tinta = basura.add(new MeshBasicMaterial({ color: INK, side: BackSide, fog: false }));
+    this.contornos = [mk(esf, tinta, CONTORNOS), mk(ico, tinta, CONTORNOS), mk(cub, tinta, CONTORNOS), mk(cub, tinta, CONTORNOS * 2), mk(cub, tinta, CONTORNOS)];
   }
 
   inicio(): void {
     this.n = 0;
+    this.nCont = 0;
   }
 
   private de(id: number, nombre: string): { camisa: Color; piel: Color; pelo: Color } {
@@ -301,11 +315,24 @@ class Gente {
     const e = p.esc;
     compon(m2, p.x, p.y, p.z, p.inclina, e);
     const cuerpo = TEMP.m3.multiplyMatrices(base, m2);
+    const brillo = p.brillo ?? 1;
     const parte = (im: InstancedMesh, idx: number, x: number, y: number, z: number, rz: number, sx: number, sy: number, sz: number, color: Color): void => {
       compon(m, x, y, z, rz, sx, sy, sz);
       im.setMatrixAt(idx, m2.multiplyMatrices(cuerpo, m));
-      im.setColorAt(idx, color);
+      im.setColorAt(idx, brillo === 1 ? color : TEMPG.copy(color).multiplyScalar(brillo));
     };
+    // El contorno: la misma parte, un poco más gruesa, que se ve solo por el revés.
+    const hay = !!p.contorno && this.nCont < CONTORNOS;
+    const borde = (im: InstancedMesh, idx: number, x: number, y: number, z: number, rz: number, sx: number, sy: number, sz: number): void => {
+      if (!hay) return;
+      compon(m, x, y, z, rz, sx + GROSOR, sy + GROSOR, sz + GROSOR);
+      im.setMatrixAt(idx, m2.multiplyMatrices(cuerpo, m));
+    };
+    const ic = this.nCont;
+    borde(this.contornos[0] as InstancedMesh, ic, 0, 90, 0, 0, 10.5, 11, 10);
+    borde(this.contornos[1] as InstancedMesh, ic, 0, 96, -2.2, 0, 11.4, 8.4, 11.4);
+    borde(this.contornos[2] as InstancedMesh, ic, 0, 63, 0, 0, 24, 34, 15);
+    borde(this.contornos[4] as InstancedMesh, ic, 0, 23, 0, 0, 17, 46, 11);
     parte(this.cabezas, i, 0, 90, 0, 0, 10.5, 11, 10, col.piel);
     parte(this.pelos, i, 0, 96, -2.2, 0, 11.4, 8.4, 11.4, col.pelo);
     parte(this.torsos, i, 0, 63, 0, 0, 24, 34, 15, col.camisa);
@@ -324,7 +351,9 @@ class Gente {
       const long = 30;
       const cx = x + Math.sin(rz) * (long / 2), cy = 75 - Math.cos(rz) * (long / 2);
       parte(this.brazos, 2 * i + k, cx, cy, 0, rz, 6.4, long, 6.4, col.camisa);
+      borde(this.contornos[3] as InstancedMesh, 2 * ic + k, cx, cy, 0, rz, 6.4, long, 6.4);
     }
+    if (hay) this.nCont++;
   }
 
   fin(): void {
@@ -336,6 +365,15 @@ class Gente {
       im.instanceMatrix.needsUpdate = true;
       if (im.instanceColor) im.instanceColor.needsUpdate = true;
     }
+    this.contornos.forEach((im, k) => {
+      im.count = k === 3 ? this.nCont * 2 : this.nCont;
+      im.instanceMatrix.needsUpdate = true;
+    });
+  }
+
+  /** Las mallas de las personas, para la medición de `?auditar=3d`. */
+  mallas(): InstancedMesh[] {
+    return [this.cabezas, this.pelos, this.ojos, this.torsos, this.brazos, this.piernas, ...this.contornos];
   }
 
   /** En el apagón las personas siguen viéndose: un poco de luz propia. */
@@ -840,7 +878,8 @@ const fabrica: Fabrica3D<EntradaTeleferico> = (motor, o) => {
   const basura = motor.basura;
   const matCascara = basura.add(new MeshLambertMaterial({ flatShading: true }));
   const matHerraje = basura.add(new MeshLambertMaterial({ color: TINTA_CLARA, flatShading: true }));
-  const matFondo = basura.add(new MeshLambertMaterial({ color: VIDRIO, flatShading: true }));
+  // El fondo de la cabina es su interior: de día un vidrio oscuro, y cuando hay que mirarla (el apagón, la cumbre) se enciende cálido. Con luz propia, no la de la escena.
+  const matFondo = basura.add(new MeshBasicMaterial({ color: 0xffffff, fog: false }));
   const matMarco = basura.add(new MeshLambertMaterial({ flatShading: true }));
   const matVidrio = basura.add(new MeshBasicMaterial({ color: 0x9fb4d8, transparent: true, opacity: 0.18, depthWrite: false, side: DoubleSide }));
   const matLampara = basura.add(new MeshBasicMaterial({ color: 0xff3b30, fog: false }));
@@ -854,6 +893,8 @@ const fabrica: Fabrica3D<EntradaTeleferico> = (motor, o) => {
     return im;
   };
   const cascara = mk(geometriaCascara(), matCascara, MAX_CAB);
+  // El contorno de tinta de la cabina de quien gana: la misma cáscara, por el revés y un poco más grande.
+  const contornoCab = mk(geometriaCascara(), basura.add(new MeshBasicMaterial({ color: INK, side: BackSide, fog: false })), 1);
   const herraje = mk(geometriaHerraje(), matHerraje, MAX_CAB);
   const fondo = mk(geometriaFondo(), matFondo, MAX_CAB);
   const marcos = mk(geometriaMarco(), matMarco, MAX_CAB * 2);
@@ -872,6 +913,7 @@ const fabrica: Fabrica3D<EntradaTeleferico> = (motor, o) => {
   let ultimoGolpe = -1;
   let ultimoChispa = -1;
   let agarro = false;
+  let ultimaLuz = 1;
 
   const reponer = (e: EntradaTeleferico): void => {
     const c = e.cable;
@@ -890,20 +932,76 @@ const fabrica: Fabrica3D<EntradaTeleferico> = (motor, o) => {
     mundo.add(banderas.malla);
   };
 
-  const luzDe = (luz: number): void => {
-    const f = 0.1 + 0.9 * luz;
+  /**
+   * La luz del mundo. `luz` es la del plan (el apagón la baja) y `foco` de 0 a 1 es el golpe: la escena se oscurece alrededor de
+   * la cabina de quien gana (que se enciende), así el contraste sube y la cabina queda como lo más claro del cuadro.
+   */
+  const luzDe = (luz: number, foco: number): { apagon: number; gana: number } => {
+    const mundo = luz * (1 - FOCO_OSCURO * foco);
+    const f = 0.1 + 0.9 * mundo;
     amb.sol.intensity = luzSol * f;
-    if (hemi) hemi.intensity = luzHemi * f;
-    if (motor.escena.fog) (motor.escena.fog as { color: Color }).color.setHex(oscuro ? 0xb3553f : 0xf2b27a).multiplyScalar(0.12 + 0.88 * luz);
-    const extra = (1 - luz) * 0.5;
-    matCascara.emissive.setScalar(extra * 0.6);
-    matFondo.emissive.setScalar(extra * 0.5);
-    matMarco.emissive.setScalar(extra * 0.5);
-    gente.alumbrar(extra * 0.55);
+    // Con el golpe la luz se va al dorado del amanecer: la ladera queda cálida y no violeta apagada.
+    amb.sol.color.setHex(oscuro ? 0xffc89a : 0xffe3bf).lerp(DORADO, 0.55 * foco);
+    if (hemi) {
+      hemi.intensity = luzHemi * f;
+      hemi.color.setHex(oscuro ? 0xb9a6e0 : 0xfff1dc).lerp(DORADO, 0.4 * foco);
+    }
+    if (motor.escena.fog) (motor.escena.fog as { color: Color }).color.setHex(oscuro ? 0xb3553f : 0xf2b27a).lerp(DORADO, 0.5 * foco).multiplyScalar(0.12 + 0.88 * mundo);
+    // Las cabinas no se apagan con el mundo: con el apagón se dibujan más claras (con su color, no más blancas), y quien gana, con el golpe, también.
+    return { apagon: Math.min(BRILLO_MAX, 1 / (0.1 + 0.9 * luz)), gana: Math.min(BRILLO_MAX, 1 / f) };
   };
+
+  // Con `?auditar=3d`: cuánta luz tienen las cabinas frente al resto de la imagen. Dibuja el cuadro de ahora dos veces (con las
+  // cabinas y sin ellas), y lo que cambia es la cabina con su gente; lo demás, el resto. Solo mide, no cambia nada de lo que se ve.
+  if (motor.auditoria) {
+    (motor.auditoria as unknown as { medirCabinas: () => unknown }).medirCabinas = () => {
+      const lienzo = motor.canvas;
+      const cv = document.createElement("canvas");
+      cv.width = lienzo.width;
+      cv.height = lienzo.height;
+      const cx = cv.getContext("2d", { willReadFrequently: true }) as CanvasRenderingContext2D;
+      const leer = (): Uint8ClampedArray => {
+        motor.renderer.render(motor.escena, motor.camara);
+        cx.clearRect(0, 0, cv.width, cv.height);
+        cx.drawImage(lienzo, 0, 0);
+        return cx.getImageData(0, 0, cv.width, cv.height).data;
+      };
+      const A = leer();
+      const mallas = [cascara, herraje, fondo, marcos, vidrios, lamparas, ...gente.mallas()];
+      const cuentas = mallas.map((m) => m.count);
+      for (const m of mallas) m.count = 0;
+      const B = leer();
+      mallas.forEach((m, i) => (m.count = cuentas[i] as number));
+      const lin = (v: number): number => {
+        const c = v / 255;
+        return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      };
+      const Y = (d: Uint8ClampedArray, i: number): number => 0.2126 * lin(d[i] as number) + 0.7152 * lin(d[i + 1] as number) + 0.0722 * lin(d[i + 2] as number);
+      let sc = 0, sr = 0, nc = 0, nr = 0, x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1;
+      for (let i = 0; i < A.length; i += 4) {
+        const cambia = Math.abs((A[i] as number) - (B[i] as number)) + Math.abs((A[i + 1] as number) - (B[i + 1] as number)) + Math.abs((A[i + 2] as number) - (B[i + 2] as number)) > 18;
+        if (cambia) {
+          sc += Y(A, i);
+          nc++;
+          const px = (i / 4) % cv.width, py = Math.floor(i / 4 / cv.width);
+          if (px < x0) x0 = px;
+          if (px > x1) x1 = px;
+          if (py < y0) y0 = py;
+          if (py > y1) y1 = py;
+        } else {
+          sr += Y(B, i);
+          nr++;
+        }
+      }
+      const cab = nc ? sc / nc : 0, resto = nr ? sr / nr : 0;
+      return { cabina: cab, resto, razon: resto > 0 ? cab / resto : null, pxCabina: nc, pxResto: nr, caja: [x0, y0, x1, y1], luz: ultimaLuz };
+    };
+  }
 
   return {
     frame(e) {
+      ultimaLuz = e.luz;
+      if (motor.auditoria) (motor.auditoria as unknown as { luz: number }).luz = e.luz;
       motor.cuadro(e, PERFIL_TELEFERICO, (mapa, pose) => {
         const s = mapa.s;
         reponer(e);
@@ -928,13 +1026,15 @@ const fabrica: Fabrica3D<EntradaTeleferico> = (motor, o) => {
 
         /* ---- el mundo: cielo, luces, luces de la ciudad */
         const alba = e.golpe > 0 ? 0.6 * (1 - (1 - clamp(e.golpe / 1.2, 0, 1)) ** 3) : 0;
-        cielo.actualizar(alba, e.luz, e.w, e.h, p.fov, p.corrimiento);
-        luzDe(e.luz);
+        // El mundo se apaga durante el silencio del foco y queda oscuro al golpe: así el contraste ya está puesto cuando llega el destello.
+        const foco = suave((e.golpe + 0.5) / 0.5);
+        cielo.actualizar(alba, e.luz * (1 - FOCO_OSCURO * foco), e.w, e.h, p.fov, p.corrimiento);
+        const brillos = luzDe(e.luz, foco);
         amb.seguir(pose);
         amb.sol.castShadow = false;
         if (fj.luces.ma && fj.luces.mb) {
-          fj.luces.ma.opacity = (0.55 + 0.35 * Math.sin(e.t * 2)) * (0.06 + 0.94 * e.luz);
-          fj.luces.mb.opacity = (0.55 + 0.35 * Math.sin(e.t * 2 + 2.2)) * (0.06 + 0.94 * e.luz);
+          fj.luces.ma.opacity = (0.55 + 0.35 * Math.sin(e.t * 2)) * (0.06 + 0.94 * e.luz) * (1 - 0.7 * foco);
+          fj.luces.mb.opacity = (0.55 + 0.35 * Math.sin(e.t * 2 + 2.2)) * (0.06 + 0.94 * e.luz) * (1 - 0.7 * foco);
         }
         const fiesta = Math.max(e.golpe > 0 ? Math.exp(-e.golpe * 0.9) : 0, 0);
         banderas?.actualizar(e.t, e.viento, fiesta);
@@ -942,20 +1042,44 @@ const fabrica: Fabrica3D<EntradaTeleferico> = (motor, o) => {
         /* ---- las cabinas y su gente */
         const k = e.cable.k;
         gente.inicio();
+        contornoCab.count = 0;
         posiciones.clear();
         let nc = 0, nm = 0;
         const topeGente = motor.ajustes.nivel === "baja" ? 8 : MAX_POR_CABINA;
+        // La cabina de la cumbre es la que abre sus puertas al llegar: es la de los dos últimos, así que se puede agrandar y encender antes del golpe sin delatar a nadie.
+        let cumbreIdx = -1, abierta = 0.02;
+        e.cabinas.forEach((cb, i) => {
+          if (cb.puertaIzq > abierta) {
+            abierta = cb.puertaIzq;
+            cumbreIdx = i;
+          }
+        });
         const cabinaGanadora = e.ganadores.length ? e.cabinas.findIndex((cb) => e.ganadores.some((g) => cb.quienes.includes(g))) : -1;
         e.cabinas.forEach((cb, idx) => {
           if (cb.alpha <= 0 || nc >= MAX_CAB) return;
           const w = alMundo(mapa, cb.x, cb.y);
           const sc = k * (0.45 + 0.55 * clamp(cb.alpha, 0, 1));
           // La cabina entera cuelga del cable y gira sobre el colgador: el 2D gira hacia la derecha de la pantalla.
-          const Mc = compon(new Matrix4(), w[0] / s, w[1] / s, 0, -cb.giro, sc);
+          const Mh = compon(new Matrix4(), w[0] / s, w[1] / s, 0, -cb.giro, sc);
+          // La cabina de la cumbre crece mientras abre las puertas (llega al golpe ya grande): el colgador queda en el cable y el cuerpo se agranda hacia abajo.
+          const gana = idx === cumbreIdx;
+          const pc = gana ? suave(cb.puertaIzq) : 0;
+          const crece = 1 + (e.h > e.w ? CRECE_GANADORA_ALTA : CRECE_GANADORA) * pc;
+          const Mc = crece === 1 ? Mh : new Matrix4().multiplyMatrices(Mh, compon(TEMP.m, 0, -CAB.colgador * (1 - crece), 0, 0, crece));
+          herraje.setMatrixAt(nc, Mh);
           cascara.setMatrixAt(nc, Mc);
-          herraje.setMatrixAt(nc, Mc);
           fondo.setMatrixAt(nc, Mc);
-          cascara.setColorAt(nc, TEMPC.setHex(cb.vacia ? 0x77727f : cb.color).multiplyScalar(0.9));
+          // El interior se enciende: un poco siempre, del todo en el apagón y con el golpe en la cabina de quien gana.
+          const emerg = e.luz < 1 ? 1 - e.luz : 0;
+          const lit = Math.max(0.12, emerg, gana ? Math.max(0.6 * pc, foco) : 0);
+          fondo.setColorAt(nc, TEMPC.copy(INTERIOR).lerp(CALIDO, lit));
+          const brillo = gana ? brillos.gana : brillos.apagon;
+          cascara.setColorAt(nc, TEMPC.setHex(cb.vacia ? 0x77727f : cb.color).multiplyScalar((gana ? 1 : 0.9) * brillo));
+          if (gana) {
+            contornoCab.setMatrixAt(0, TEMP.m3.multiplyMatrices(Mc, TEMP.m2.compose(TEMP.v.set(0, -CAB.colgador - CAB.h / 2, 0), TEMP.q.identity(), TEMP.s.setScalar(1.045)).multiply(TEMP.m.makeTranslation(0, CAB.colgador + CAB.h / 2, 0))));
+            contornoCab.count = 1;
+            contornoCab.instanceMatrix.needsUpdate = true;
+          }
           // Las dos hojas de la puerta: cerradas en el medio, abiertas hacia los costados.
           for (const [lado, abierta] of [[-1, cb.puertaIzq], [1, cb.puertaDer]] as const) {
             const x = lado * (10 + 30 * clamp(abierta, 0, 1));
@@ -963,7 +1087,7 @@ const fabrica: Fabrica3D<EntradaTeleferico> = (motor, o) => {
             const yP = -(CAB.colgador + CAB.h - 14) + (CAB.h - 24) / 2;
             const Md = TEMP.m2.multiplyMatrices(Mc, compon(TEMP.m, x, yP, z, 0, 1));
             marcos.setMatrixAt(nm, Md);
-            marcos.setColorAt(nm, TEMPC.setHex(cb.vacia ? 0x77727f : cb.color).multiplyScalar(0.9));
+            marcos.setColorAt(nm, TEMPC.setHex(cb.vacia ? 0x77727f : cb.color).multiplyScalar((gana ? 1 : 0.9) * brillo));
             vidrios.setMatrixAt(nm, Md);
             nm++;
           }
@@ -974,7 +1098,8 @@ const fabrica: Fabrica3D<EntradaTeleferico> = (motor, o) => {
           // Las personas, de pie en dos filas, de frente a la sala.
           const m = Math.min(cb.quienes.length, topeGente);
           const filas = m <= 2 ? 1 : 2;
-          const esc = m <= 2 ? 0.56 : m <= 6 ? 0.5 : 0.46;
+          // Entran bajo el techo con la cabeza y los brazos arriba: el interior mide 54 de alto.
+          const esc = m <= 2 ? 0.46 : m <= 6 ? 0.46 : 0.42;
           for (let j = 0; j < m; j++) {
             const id = cb.quienes[j] as number;
             const fila = filas === 1 ? 0 : j % 2;
@@ -990,18 +1115,18 @@ const fabrica: Fabrica3D<EntradaTeleferico> = (motor, o) => {
             if (e.ganadores.includes(id) && e.golpe > 0) {
               const f = suave(e.golpe / 0.4);
               festejo = f;
-              xx = lerp(x, 30, f);
-              salto = Math.abs(Math.sin(e.golpe * 6.5)) * 9 * f * Math.exp(-e.golpe * 0.35);
+              xx = lerp(x, e.ganadores.length > 1 ? (e.ganadores.indexOf(id) - (e.ganadores.length - 1) / 2) * 24 : 15, f);
+              salto = Math.abs(Math.sin(e.golpe * 6.5)) * 4 * f * Math.exp(-e.golpe * 0.35);
             } else if (idx === cabinaGanadora && e.golpe > 0) {
               saludo = suave(e.golpe / 0.6);
-              xx = lerp(x, -22, saludo);
+              xx = lerp(x, -17, saludo);
             }
             if (id === e.nombrado && cb.asoma > 0.01) {
               xx = lerp(x, 40, cb.asoma);
               inclina = -cb.asoma * 0.3;
               saludo = Math.max(saludo, cb.asoma * 0.8);
             }
-            gente.poner(Mc, id, e.nombres[id] ?? "", { x: xx, y: y + salto, z, esc: esc * (0.96 + 0.08 * hash(id, 9)), inclina, festejo, saludo, t: e.t });
+            gente.poner(Mc, id, e.nombres[id] ?? "", { x: xx, y: y + salto, z, esc: esc * (0.96 + 0.08 * hash(id, 9)), inclina, festejo, saludo, t: e.t, brillo, contorno: gana && pc > 0.5 });
             posiciones.set(id, [w[0], w[1] + 1.3 * s, 0]);
           }
           nc++;
@@ -1068,6 +1193,17 @@ const fabrica: Fabrica3D<EntradaTeleferico> = (motor, o) => {
 };
 
 const TEMPC = new Color();
+const INTERIOR = new Color(VIDRIO);
+const CALIDO = new Color(0xf2a640);
+/** Cuánto más grande queda la cabina de quien gana cuando golpea (el cuerpo; el colgador no). */
+const CRECE_GANADORA = 0.6;
+/** Y en un celular parado, donde sobra lugar a los costados y la cabina se ve chica, más. */
+const CRECE_GANADORA_ALTA = 0.95;
+/** Cuánta luz pierde el mundo con el golpe (la cabina de quien gana, no). */
+const FOCO_OSCURO = 0.55;
+const DORADO = new Color(0xffb45c);
+/** Hasta cuánto se aclaran los colores de una cabina para compensar la luz que pierde el mundo. */
+const BRILLO_MAX = 3.2;
 
 export const montaje = definir3D(fabrica);
 
