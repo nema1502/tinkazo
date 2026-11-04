@@ -15,6 +15,10 @@ import { lugarDe } from "./kit/respuestas";
 import { pintarMarcas } from "./kit/marcador-vista";
 import { reservaDeMarcas } from "./kit/marcador";
 import { gruposDelTeleferico, planDelTelefericoDe, respuestasTeleferico, sentidoDelTeleferico } from "./cablecar-nino";
+import { enchufar3D, entradaBase } from "../tres/enchufe";
+import type { Montaje3D } from "../tres/tipos";
+import type { CabinaE, EntradaTeleferico, SaltarinE } from "../tres/teleferico-3d";
+import type { FaseCamara } from "../tres/teleferico-mapa";
 
 /**
  * El Teleférico, en PixiJS, con el director de cámara.
@@ -40,15 +44,17 @@ import { gruposDelTeleferico, planDelTelefericoDe, respuestasTeleferico, sentido
 const HUD_MARCAS_Y = 134;
 const hexOf = (css: string): number => parseInt(css.replace("#", ""), 16);
 
-export async function cableCarPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<void> {
+export async function cableCarPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void, tres?: Montaje3D<EntradaTeleferico>): Promise<void> {
   let skipFn = (): void => {};
-  const st = await mountPixi(beacon, done, () => skipFn());
+  const st = await mountPixi(beacon, done, () => skipFn(), { transparente: !!tres });
   if (!st) {
     done();
     return;
   }
   const S: PixiStage = st;
   const { rng, cam } = S;
+  /** El 3D (`src/games/tres/teleferico-3d.ts`): si arranca, dibuja el mundo y las cabinas debajo; si no, el 2D sigue como siempre. */
+  const v3 = enchufar3D(S, tres);
   const P = planCableCar(names, winners, rng);
   /** El foco de la coronación: cuándo golpea y cuándo sale el cartel (`foco.ts`). */
   const FOCO = tiemposFoco(P.story.arc);
@@ -106,7 +112,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     root: Container; hang: Container; body: Graphics; win: Graphics; faces: Sprite[]; count: Text;
     door: Graphics; flag: Graphics; doors: Graphics; ring: Graphics; lastKey: string; empty: boolean;
   }
-  interface Station { root: Container; flag: Graphics; bunting: Graphics | null; tag: Container; minus: Text }
+  interface Station { root: Container; bld: Graphics; flag: Graphics; bunting: Graphics | null; tag: Container; minus: Text }
   /** El amanecer de la coronación: un resplandor del horizonte que se enciende con el golpe. */
   let alba!: Sprite;
   let far!: Container;
@@ -243,9 +249,10 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     }
     world.addChild(towers);
     const a = pt(-1.5), b = pt(NS + 2.5);
-    world.addChild(new Graphics()
+    const cableG = new Graphics()
       .moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: 4 * k, color: 0x0d0b16 })
-      .moveTo(a.x, a.y + 14 * k).lineTo(b.x, b.y + 14 * k).stroke({ width: 3 * k, color: 0x0d0b16, alpha: 0.7 }));
+      .moveTo(a.x, a.y + 14 * k).lineTo(b.x, b.y + 14 * k).stroke({ width: 3 * k, color: 0x0d0b16, alpha: 0.7 });
+    world.addChild(cableG);
 
     // Las estaciones, con su bandera, y los banderines en la cumbre.
     stations = [];
@@ -286,7 +293,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       minus.position.set(p.x - 40 * k, ty);
       root.addChild(tag, minus);
       world.addChild(root);
-      stations.push({ root, flag, bunting, tag, minus });
+      stations.push({ root, bld, flag, bunting, tag, minus });
     }
 
     // El velo del apagón tapa el cielo, la cordillera, la ciudad, las torres y
@@ -329,6 +336,22 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     }
     fx = new Graphics();
     world.addChild(fx);
+    // Con el 3D, el cielo, la cordillera, la ciudad, las torres, el cable, los edificios, las banderas y las cabinas los dibuja él.
+    // Quedan en PixiJS los rótulos de las estaciones, los nombres, el andén y los contadores.
+    if (v3) {
+      S.bg.visible = false;
+      far.visible = false;
+      cities.visible = false;
+      towers.visible = false;
+      cableG.visible = false;
+      blackout.visible = false;
+      for (const stn of stations) {
+        stn.bld.visible = false;
+        stn.flag.visible = false;
+        if (stn.bunting) stn.bunting.visible = false;
+      }
+      for (const cb of cabs) cb.root.visible = false;
+    }
 
     // La interfaz: los bordes del apagón, vetas del viento, los nombres y los
     // contadores.
@@ -376,9 +399,10 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     // Debajo, una marca por persona: las que cuentan el número, encendidas; un chico las cuenta sin leer.
     hudMarcas = new Graphics();
     hudMarcas.position.set(22 * hu, top + HUD_MARCAS_Y * hu);
+    // Con el 3D, acostado también: el cielo del tema claro es de día y la letra crema sobre él no se lee.
     // En vertical, el contador va sobre una placa de tinta (la misma de la fila de marcas, que la sigue sin hueco): sobre el cielo suelto, la bandera de la cumbre le pasaba por detrás y el «18» quedaba blanco sobre amarillo.
     const hudPlaca = new Graphics();
-    if (G.vertical) {
+    if (G.vertical || v3) {
       const m = reservaDeMarcas(names.length, hu, S.sw());
       const ancho = m.ancho > 0 ? m.ancho - 5 * hu : 190 * hu;
       const y0 = top - 10 * hu, alto = top + HUD_MARCAS_Y * hu - y0;
@@ -1012,7 +1036,9 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     if (cab === winnerCab && who.length === 2 && tAll > T_RUN) {
       return [names[who[0] as number] ?? "", names[who[1] as number] ?? ""];
     }
-    return [GRUPOS[P.groupOfCab[cab] ?? 0]?.nombre ?? ""];
+    const grupo = GRUPOS[P.groupOfCab[cab] ?? 0]?.nombre ?? "";
+    // En 3D la cabina no lleva el «×N» en la esquina: la cuenta va con el nombre del grupo.
+    return [v3 && grupo ? `${grupo} (${who.length})` : grupo];
   }
 
   function placeSoloTags(few: boolean): void {
@@ -1152,6 +1178,9 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     return { arco: P.story.arc, x, y, r, color: colorDeNombre(names[winners[winners.length - 1] ?? 0] ?? ""), rival: null };
   }
 
+  /** Para qué es el encuadre de ahora: el 3D levanta la cámara distinto en cada fase (solo lo lee el 3D). */
+  let fase3: FaseCamara = "arranque";
+
   function direct(): void {
     const k = G.k;
     const head = P.headAt(tAll);
@@ -1161,6 +1190,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     const wind = P.windAt(tAll) - 0.2;
     const rot = wind > 0 ? Math.sin(tAll * 2.6) * 0.035 * wind : 0;
     if (wind > 0.3) cam.shake(1.2 * k * wind);
+    fase3 = tAll < T_BOARD ? "arranque" : tAll >= T_DOCK ? "cumbre" : tAll >= T_RUN || (ult && tAll >= ult.t0 - 0.3 && tAll <= ult.t1) ? "tension" : inStop ? "estacion" : "viaje";
     if (tAll < T_BOARD) {
       const b = pt(0);
       cam.lookAt(b.x + 40 * k, b.y + 20 * k, 1.55 - 0.3 * (tAll / T_BOARD), 3);
@@ -1239,8 +1269,28 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     g.poly(pts).fill(col).stroke({ width: 2 * G.k, color: INK });
   }
 
+  /** Cuánto se hamaca una cabina: lo del convoy entero, la ráfaga, la puerta y la mordaza. Lo usan el 2D y el 3D. */
+  function giroDe(cab: number, swing: number): number {
+    const slot = P.slotAt(cab, tAll);
+    let sacude = cab === winnerCab ? P.puertaAt(tAll) * 0.07 * Math.sin(tAll * 22) : 0;
+    sacude += (P.windAt(tAll) - 0.2) * 0.12 * Math.sin(tAll * 6.3 + cab * 1.7);
+    if (mordaza && cab === slipCab) {
+      // Mientras resbala, la cabina se queda atrás de su mordaza y se inclina
+      // cuesta arriba; al agarrarla, el tirón la manda para el otro lado.
+      if (tAll > P.mA && tAll <= P.mB) sacude -= 0.26 * Math.sin((Math.PI / 2) * clamp((tAll - P.mA) / (P.mB - P.mA), 0, 1));
+      if (tAll > P.mB && tAll < P.mB + 3) sacude += -0.26 * Math.exp(-(tAll - P.mB) * 9) + 0.3 * Math.exp(-(tAll - P.mB) * 2.4) * Math.sin((tAll - P.mB) * 9);
+    }
+    return swing * (1 - slot * 0.06) + sacude;
+  }
+
+  /** Lo que el 3D dibuja de las cabinas y de quienes saltan en este cuadro (se llena en `draw`). */
+  const cabinas3: CabinaE[] = [];
+  const saltarines3: SaltarinE[] = [];
+
   function draw(now: number): void {
     const { k, cw, ch, gap } = G;
+    cabinas3.length = 0;
+    saltarines3.length = 0;
     const luz = P.luzAt(tAll);
     // Con el golpe de la coronación amanece y los banderines se sacuden.
     const sinGolpe = tAll - T_CROWN - FOCO.golpe / paceFactor();
@@ -1260,10 +1310,12 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       const y0 = p.y - 40 * k;
       // El número, BASE y CUMBRE se agrandan en el mundo lo justo para no bajar de la regla cuando la cámara se aleja.
       stn.tag.scale.set(aLaRegla((top || s === 0 ? 24 : 30) * k));
-      stn.flag.clear();
-      drawFlag(stn.flag, p.x - bw / 2 + 14 * k, y0 - 134 * k, 88 * k, 46 * k, top ? YELLOW : hexOf(LINES[(s + 2) % LINES.length] as string), s * 1.9, false);
-      // La banderita de la cumbre no asoma detrás del cartel del ganador.
-      stn.flag.visible = !(top && tAll >= T_CROWN);
+      if (!v3) {
+        stn.flag.clear();
+        drawFlag(stn.flag, p.x - bw / 2 + 14 * k, y0 - 134 * k, 88 * k, 46 * k, top ? YELLOW : hexOf(LINES[(s + 2) % LINES.length] as string), s * 1.9, false);
+        // La banderita de la cumbre no asoma detrás del cartel del ganador.
+        stn.flag.visible = !(top && tAll >= T_CROWN);
+      }
       if (top) {
         // El rótulo CUMBRE no se mete debajo de la barra de arriba (SONIDO, Saltar):
         // en 4:3 quedaba con las últimas letras tapadas. Baja solo si hace falta.
@@ -1271,7 +1323,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         const sy = cam.toScreen(p.x, ty, S.sw(), S.sh()).y;
         stn.tag.position.set(p.x, sy < S.top() ? ty + (S.top() - sy) / zoomNow() : ty);
       }
-      if (stn.bunting) {
+      if (stn.bunting && !v3) {
         const g = stn.bunting;
         g.clear();
         const x0 = p.x - bw / 2, x1 = p.x + bw / 2;
@@ -1308,20 +1360,27 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     for (let cab = 0; cab < C; cab++) {
       const cb = cabs[cab] as Cab;
       const p = cabPoint(cab, tAll);
+      if (v3) {
+        // Con el 3D la cabina no se dibuja acá: se le pasa dónde cuelga, cuánto se hamaca y quiénes van adentro.
+        if (p.alpha > 0) {
+          const enDuelo = mordaza && cab === slipCab && tAll > P.mA && tAll < P.mB + 0.25;
+          const llegada = cab === winnerCab && tAll > T_DOCK ? ease.outCubic(clamp((tAll - T_DOCK - 0.2) / 0.5, 0, 1)) : 0;
+          const susto = cab === winnerCab ? P.puertaAt(tAll) : 0;
+          const quienes = P.aboard(cab, tAll);
+          cabinas3.push({
+            x: p.x, y: p.y, alpha: p.alpha, giro: giroDe(cab, sw), color: hexOf(LINES[P.groupOfCab[cab] ?? 0] as string), quienes,
+            vacia: !(quienes.length || tAll < T_BOARD),
+            duelo: enDuelo ? (tAll < P.mB ? 1 : clamp(1 - (tAll - P.mB) / 0.25, 0, 1)) : 0,
+            puertaIzq: llegada, puertaDer: Math.max(llegada, susto), asoma: susto,
+          });
+        }
+        continue;
+      }
       cb.root.visible = p.alpha > 0;
       if (!cb.root.visible) continue;
       cb.root.alpha = p.alpha;
       cb.root.position.set(p.x, p.y);
-      const slot = P.slotAt(cab, tAll);
-      let sacude = cab === winnerCab ? P.puertaAt(tAll) * 0.07 * Math.sin(tAll * 22) : 0;
-      sacude += (P.windAt(tAll) - 0.2) * 0.12 * Math.sin(tAll * 6.3 + cab * 1.7);
-      if (mordaza && cab === slipCab) {
-        // Mientras resbala, la cabina se queda atrás de su mordaza y se inclina
-        // cuesta arriba; al agarrarla, el tirón la manda para el otro lado.
-        if (tAll > P.mA && tAll <= P.mB) sacude -= 0.26 * Math.sin((Math.PI / 2) * clamp((tAll - P.mA) / (P.mB - P.mA), 0, 1));
-        if (tAll > P.mB && tAll < P.mB + 3) sacude += -0.26 * Math.exp(-(tAll - P.mB) * 9) + 0.3 * Math.exp(-(tAll - P.mB) * 2.4) * Math.sin((tAll - P.mB) * 9);
-      }
-      cb.hang.rotation = sw * (1 - slot * 0.06) + sacude;
+      cb.hang.rotation = giroDe(cab, sw);
       const who = P.aboard(cab, tAll);
       const empty = !(who.length || tAll < T_BOARD);
       const col = hexOf(LINES[P.groupOfCab[cab] ?? 0] as string);
@@ -1431,7 +1490,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
         const x = from.x + (tx - from.x) * q;
         const y = from.y + 60 * k + (ty - from.y - 60 * k) * q - Math.sin(q * Math.PI) * 80 * k;
         const a = pr > 1 ? clamp(1.6 - pr, 0, 1) / 0.6 : 1;
-        fx.rect(x - 7 * k, y - 7 * k, 14 * k, 14 * k).fill({ color: INK, alpha: a }).rect(x - 5 * k, y - 5 * k, 10 * k, 10 * k).fill({ color: S.color(idx), alpha: a });
+        if (v3) saltarines3.push({ id: idx, x, y, a, aterrizo: pr >= 1 });
+        else fx.rect(x - 7 * k, y - 7 * k, 14 * k, 14 * k).fill({ color: INK, alpha: a }).rect(x - 5 * k, y - 5 * k, 10 * k, 10 * k).fill({ color: S.color(idx), alpha: a });
       }
     }
     if (tAll < T_BOARD) {
@@ -1449,7 +1509,8 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
           const fx0 = b.x - 105 * k + 20 * k + (i % 5) * 16 * k, fy = b.y - 40 * k + 160 * k - 30 * k;
           const x = fx0 + (to.x - fx0) * q;
           const y = fy + (to.y + 60 * k - fy) * q - Math.sin(q * Math.PI) * 90 * k;
-          fx.rect(x - 7 * k, y - 7 * k, 14 * k, 14 * k).fill(INK).rect(x - 5 * k, y - 5 * k, 10 * k, 10 * k).fill(S.color(P.pax[cab]?.[slot] ?? 0));
+          if (v3) saltarines3.push({ id: P.pax[cab]?.[slot] ?? 0, x, y, a: 1, aterrizo: false });
+          else fx.rect(x - 7 * k, y - 7 * k, 14 * k, 14 * k).fill(INK).rect(x - 5 * k, y - 5 * k, 10 * k, 10 * k).fill(S.color(P.pax[cab]?.[slot] ?? 0));
         }
       }
     }
@@ -1457,7 +1518,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     // cuesta arriba, más largas cuanto más rápido resbala, y chispitas en la
     // mordaza; al agarrarla, un fogonazo y la lluvia de chispas. Antes había
     // solo la lluvia, de cuadraditos de 5 px durante medio segundo.
-    if (mordaza && tAll > P.mA && tAll < P.mB + 0.8) {
+    if (mordaza && !v3 && tAll > P.mA && tAll < P.mB + 0.8) {
       const p = cabPoint(slipCab, tAll);
       if (tAll < P.mB) {
         const v = clamp((P.slipAt(tAll + 0.02) - P.slipAt(tAll)) / 0.02, 0, 4);
@@ -1509,7 +1570,7 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
       }
       wind.stroke({ width: 2.5 * k, color: CREAM, alpha: Math.min(0.55, wv * 0.6), cap: "round" });
     }
-    blackout.alpha = (1 - luz) * 0.86;
+    blackout.alpha = v3 ? 0 : (1 - luz) * 0.86;
     vignette.alpha = 1 - luz;
 
     // Los contadores.
@@ -1522,6 +1583,21 @@ export async function cableCarPixi(names: string[], winners: readonly number[], 
     pintarMarcas(hudMarcas, { total: names.length, quedan: m, k: S.u(), w: S.sw(), y: 0 });
     hudStation.text = tAll >= T_BOARD && tAll < T_RUN ? T[lang].cTelOf(Math.max(1, at), NS) : "";
     if (tAll >= T_CROWN) crown.at(tAll - T_CROWN, true, focoDeLaCabina());
+    // El 3D dibuja el mundo y las cabinas con lo que el 2D acaba de decidir. Quién gana lo sabe recién en el golpe.
+    v3?.frame({
+      ...entradaBase(S, tAll),
+      cable: { k, dx: G.dir.x, dy: G.dir.y, span: G.span, ns: NS, cw, ch, gap },
+      nombres: names,
+      cabinas: cabinas3,
+      saltarines: saltarines3,
+      luz,
+      viento: P.windAt(tAll),
+      fase: fase3,
+      golpe: sinGolpe,
+      ganadores: sinGolpe > 0 ? winners : [],
+      nombrado: P.nombrado,
+      mordaza: { a: mordaza ? P.mA : Infinity, b: mordaza ? P.mB : Infinity },
+    });
   }
 
   // `?auditar=nino`: la prueba del niño (`scripts/audit-nino.mjs`) lee del plan quiénes siguen arriba, cuánto falta y qué pasó. Solo lee.
