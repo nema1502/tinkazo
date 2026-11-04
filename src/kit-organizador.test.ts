@@ -36,7 +36,7 @@ describe("organizer kit public navigation and paper contract", () => {
     expect(css).toContain(".kit-template, .kit-table, .kit-table tr { break-inside: avoid;");
     expect(css).toContain("grid-template-rows: repeat(2, 135mm)");
     expect(css).toContain("width: 35mm; height: 35mm");
-    expect(css).toContain("font-size: 17pt");
+    expect(css).toContain("font-size: 16pt");
     expect(css).not.toMatch(/overflow:\s*hidden/);
   });
   it("independently decodes the shipped SVG and verifies four white modules on all four sides", () => {

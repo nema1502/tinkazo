@@ -6,7 +6,7 @@ La guía para quien organiza un sorteo en su evento vive en `/sorteo-para-meetup
 
 - **Imprimir guía A4** imprime los cinco pasos con la marca arriba. La tabla de "Si algo falla" y las bases no se cortan, los enlaces se leen impresos, y los botones y los detalles técnicos de la página no salen en el papel.
 - **Imprimir dos tarjetas A4** imprime solo las tarjetas: dos por hoja, cada una con los dos idiomas y el QR. Elegir papel A4 vertical, escala 100 %, márgenes de 10 mm y sin encabezado ni pie del navegador. Al cerrar la impresión la página vuelve al modo normal.
-- Cada tarjeta mide 190 x 135 mm, con la frase principal a 24 pt, el texto a 17 pt y el QR de 35 mm. Falta comprobar la lectura a un metro con papel de verdad.
+- Cada tarjeta mide 190 x 135 mm, con la frase principal a 22 pt, el texto a 16 pt y el QR de 35 mm en una columna a la derecha. Falta comprobar la lectura a un metro con papel de verdad.
 
 ## El QR
 
