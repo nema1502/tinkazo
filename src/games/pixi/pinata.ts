@@ -14,6 +14,9 @@ import { lugarDe } from "./kit/respuestas";
 import { pintarMarcas } from "./kit/marcador-vista";
 import { reservaDeMarcas, textoMarcador } from "./kit/marcador";
 import { CHIP_SCALE, medidasContador, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
+import { enchufar3D, entradaBase } from "../tres/enchufe";
+import type { Montaje3D, Vista3D } from "../tres/tipos";
+import type { Caramelo3D, EntradaPinata } from "../tres/pinata-3d-tipos";
 
 /**
  * Piñata.
@@ -98,10 +101,10 @@ interface Candy {
 const SLIDE = 0.18;
 interface Swing { at: number; miss: boolean; drop: number[]; done: boolean }
 
-export async function pinataPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<void> {
+export async function pinataPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void, tres?: Montaje3D<EntradaPinata>): Promise<void> {
   const winnerIdx = winners[0] ?? 0;
   let skipFn = (): void => {};
-  const st = await mountPixi(beacon, done, () => skipFn());
+  const st = await mountPixi(beacon, done, () => skipFn(), { transparente: !!tres });
   if (!st) {
     done();
     return;
@@ -221,6 +224,11 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   };
   /** Dónde está parado el chico (x del mundo), cuánto caminó y qué tan rápido va: las piernas se mueven con eso. */
   let kidX = NaN, kidWalk = 0, kidSpeed = 0;
+  /** Lo que `drawKid` puso en el cuadro (el ángulo del palo, el mareo, el paso): el 3D lo dibuja tal cual. */
+  const kidPose = { a: 0, dizzy: 0, gait: 0, amp: 0 };
+  /** La vista 3D, si está prendida y arrancó. Con ella, el 2D apaga su fondo, su piso y sus figuras (`apagar2D`). */
+  let v3: Vista3D<EntradaPinata> | null = null;
+  let winBig = 0;
   /**
    * Dónde se para el chico para pegarle: a la izquierda de la piñata, a la
    * distancia justa para que el palo la alcance. `py` es la altura de la
@@ -796,10 +804,19 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       c.y = g.floor - sz * 0.62 - spot.base;
     }
     for (const c of candies) c.drawn = false;
+    apagar2D();
+  }
+  /** Con el 3D, el fondo, el patio, la piñata, el chico y los caramelos los dibuja el 3D; quedan en el 2D las caras, la estrella del golpe, las listas y los nombres. */
+  function apagar2D(): void {
+    if (!v3) return;
+    S.bg.visible = false;
+    for (const x of [wall, garland, rope, pin, pieces, candyG, pile, glow, kid]) x.renderable = false;
   }
   build();
   const crownUI = S.crown(names, winners);
   S.onResize(build);
+  v3 = enchufar3D(S, tres);
+  apagar2D();
   /**
    * La toma de la colgada: la piñata que sube y el chico al que le dan
    * vueltas, los dos en cuadro; al final se arrima a la piñata, que es donde
@@ -915,6 +932,10 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     const up = -Math.PI / 2 + 0.3;
     const ready = ease.inOutCubic(clamp((tAll - (T_HANG - 0.2)) / 0.45, 0, 1));
     const a = broken ? -1.25 : up + (angle(f) - up) * ready;
+    kidPose.a = a;
+    kidPose.dizzy = dizzy;
+    kidPose.gait = gait;
+    kidPose.amp = amp;
     kidStick.clear();
     kidFx.clear();
     // La estela: dos palos fantasma un poco atrás en el arco, solo al pegar.
@@ -1173,12 +1194,15 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       placeFace(c, sz, 1);
     }
     // El caramelo del susto se asoma por la rajadura y vuelve a entrar.
+    asoma3D.ver = false;
     if (story.arc === "susto" && peekC.inside && tAll >= T_PEEK && tAll < T_PEEK + 1.2) {
       const f = Math.sin(Math.PI * ((tAll - T_PEEK) / 1.2));
       drawCandy(candyG, p.x + g.R * 0.2, p.y + g.R * (0.7 + 0.5 * f), sz * 1.4, 0.3 * Math.sin(now * 12), S.color(peekIdx), 1);
+      Object.assign(asoma3D, { ver: true, x: p.x + g.R * 0.2, y: p.y + g.R * (0.7 + 0.5 * f), tam: sz * 1.4, rot: 0.3 * Math.sin(tAll * 12), color: S.color(peekIdx) });
     }
     if (!winC.inside) {
       const big = sz * (1.8 + (phase === "crown" ? 0.6 * ease.outBack(clamp((tAll - T_CROWN) * 2, 0, 1)) : 0));
+      winBig = big;
       glow.circle(winC.x, winC.y, big * 2.4).fill({ color: YELLOW, alpha: 0.28 }).circle(winC.x, winC.y, big * 1.6).fill({ color: YELLOW, alpha: 0.3 });
       drawCandy(candyG, winC.x, winC.y, big, winC.rot, S.color(winnerIdx), 1);
       placeFace(winC, big, 1);
@@ -1354,6 +1378,49 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
   });
 
+  /* ---------------------------------------------------------------- el 3D */
+  // Lo que se le pasa a la vista en cada cuadro (`src/games/tres/pinata-3d.ts`): lo que este archivo ya calculó, en píxeles
+  // del mundo 2D. No lleva quién gana: la ganadora es un caramelo más hasta que se dibuja grande, después de la rotura.
+  const car3D: Caramelo3D[] = candies.map((_, i) => ({ dentro: true, x: 0, y: 0, rot: 0, color: S.color(i), tam: 0, ganadora: false }));
+  const asoma3D = { ver: false, x: 0, y: 0, tam: 0, rot: 0, color: 0 };
+  const mundo3D = { piso: 0, R: 0, k: 1, ks: 1, ky: 0, top: 0, restY: 0 };
+  const olla3D = { x: 0, y: 0, rot: 0, escX: 1, escY: 1, ver: true, grietas: 0 };
+  const cuerda3D = { x: 0, y: 0 };
+  const chico3D = { x: 0, vueltas: 0, inclina: 0, paso: 0, amp: 0, palo: 0, mareo: 0, remera: S.color(3) };
+  function frame3D(): void {
+    if (!v3) return;
+    const g = G();
+    const p = pinPos();
+    const sz = candySize();
+    Object.assign(mundo3D, { piso: g.floor, R: g.R, k: g.k, ks: g.ks, ky: g.ky, top: S.top(), restY: g.restY });
+    Object.assign(olla3D, { x: p.x, y: p.y, rot: pin.rotation, escX: pin.scale.x, escY: pin.scale.y, ver: !brokeDone, grietas: crackLevel });
+    cuerda3D.x = g.ax;
+    cuerda3D.y = g.ay - 200 * g.k;
+    Object.assign(chico3D, { x: kidX, vueltas: tAll < SPIN_T0 ? 0 : spinAt(tAll), inclina: kid.rotation, paso: kidPose.gait, amp: kidPose.amp, palo: kidPose.a, mareo: kidPose.dizzy });
+    for (const c of candies) {
+      const o = car3D[c.idx] as Caramelo3D;
+      o.dentro = c.inside;
+      if (c.inside) continue;
+      o.x = c.x;
+      o.y = c.y;
+      o.rot = c.rot;
+      o.ganadora = c === winC;
+      o.tam = c === winC ? winBig : sz;
+    }
+    v3.frame({
+      ...entradaBase(S, tAll),
+      fase: phase === "dead" ? "crown" : phase,
+      mundo: mundo3D,
+      olla: olla3D,
+      cuerda: cuerda3D,
+      chico: chico3D,
+      car: car3D,
+      asoma: asoma3D,
+      rotura: brokeDone ? tAll - T_BREAK : -1,
+      corona: tAll - T_CROWN,
+    });
+  }
+
   S.run((dt, now) => {
     tAll += dt;
     phase = tAll < T_HANG ? "hang" : tAll < T_BREAK ? "hits" : tAll < T_CROWN ? "break" : "crown";
@@ -1376,6 +1443,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     cam.update(dt);
     cam.apply(S.scene, S.sw(), S.sh(), now);
     draw(now);
+    frame3D();
     if (tHold >= WINNER_HOLD) {
       phase = "dead";
       S.cleanup();
