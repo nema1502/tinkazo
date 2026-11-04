@@ -14,6 +14,9 @@ import { pintarMarcas } from "./kit/marcador-vista";
 import { reservaDeMarcas } from "./kit/marcador";
 import { FORMA_CHOVENA, respuestasChovena, type PlanDeLaChovena } from "./chovena-nino";
 import { colorDeNombre } from "./foco-vista";
+import { enchufar3D, entradaBase } from "../tres/enchufe";
+import type { Montaje3D } from "../tres/tipos";
+import type { BailarinEntrada, EntradaChovena, ModoBailarin } from "../tres/chovena-3d-tipos";
 import { CHIP_SCALE, medidasContador, CREAM, INK, MONO, YELLOW, hash, mountPixi, type FocoAt, type PixiStage } from "./stage";
 
 /**
@@ -154,15 +157,22 @@ interface View {
 
 interface Band { root: Container; flute: Graphics; sticks: Graphics; mallet: Container; drum: Graphics; bodies: Container[] }
 
-export async function chovenaPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<void> {
+/**
+ * `tres`: la vista en 3D (`?motor=3d`, src/games/tres/README.md). Si está, el lienzo queda transparente y debajo se
+ * dibuja la plaza con la gente; todo lo que decide el juego sigue acá, y los nombres, el relator, el cartel, el foco y
+ * el «¡!» siguen siendo de PixiJS. Sin `tres`, la chovena es la de siempre.
+ */
+export async function chovenaPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void, tres?: Montaje3D<EntradaChovena>): Promise<void> {
   let skipFn = (): void => {};
-  const st = await mountPixi(beacon, done, () => skipFn(), { music: "chovena" });
+  const st = await mountPixi(beacon, done, () => skipFn(), { music: "chovena", transparente: !!tres });
   if (!st) {
     done();
     return;
   }
   const S: PixiStage = st;
   const { rng, cam } = S;
+  // El 3D, si hay y arranca: apaga el cielo, el suelo, las casas y la gente del 2D (en `build`) y dibuja debajo.
+  const v3 = enchufar3D(S, tres);
   // Sin el desenfoque de los acercamientos: la cámara se acerca a la pareja
   // final y a la ganadora, y ahí los nombres tienen que verse nítidos.
   cam.noBlur();
@@ -597,6 +607,14 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   const dancers: Dancer[] = names.map((_, i) => ({
     idx: i, tipoy: genero[i] === "f", col: colOf(i), outAt: -1, from: { rho: 0, th: 0 }, fromM: 0, seat: { rho: 0, th: 0 }, away: false, row: rowOf(i),
   }));
+  // Lo que el 3D recibe de cada uno en cada cuadro, y los pares que van de la mano (se llenan en `drawPeople` y `drawChain`).
+  const ent: BailarinEntrada[] = v3
+    ? dancers.map((d) => ({
+      id: d.idx, visible: true, tipoy: d.tipoy, color: d.col, x: 0, y: 0, alto: 0, modo: "rueda" as ModoBailarin, cx: 0, cy: 0, sentido: 0, haciaSala: 0,
+      pareja: -1, inclinacion: 0, paso: 0, sentado: 0, filas: 0, salida: -1, alerta: false, tinte: 0 as 0 | 1 | 2,
+    }))
+    : [];
+  const eslabones: number[] = [];
   // Dónde termina cada uno que se suelta: sentado al borde de la plaza, o
   // yéndose hacia la sala si bailaba adelante. Lejos del conjunto.
   const leave = (d: Dancer, at: number, e: Epoch): void => {
@@ -910,6 +928,9 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   let badge!: Graphics;
   let big!: Text;
   let chips!: Container;
+  /** El «¡!» de los que trastabillan, con el 3D: se dibuja sobre su cabeza proyectada. */
+  let alertas!: Container;
+  const alertaDe = new Map<number, Graphics>();
   let leaders!: Graphics;
   let panel!: Container;
   let panelFor = -1;
@@ -1132,6 +1153,13 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     band = { root: bandRoot, flute, sticks, mallet, drum, bodies: [b1, b2, b3] };
 
     S.scene.addChild(back, flags, ground, bandRoot, notes, chain, people);
+    if (v3) {
+      // Con el 3D, el cielo, la plaza, las casas, el conjunto y la gente los dibuja él. El conjunto se queda en el árbol (sin
+      // dibujarse) porque su caja sirve para que ningún nombre ni el cartel lo tapen.
+      S.bg.visible = false;
+      for (const c of [back, flags, ground, notes, chain, people]) c.visible = false;
+      bandRoot.renderable = false;
+    }
     for (const d of dancers) {
       d.view?.root.destroy({ children: true });
       d.view = makeDancer(d);
@@ -1157,7 +1185,9 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     counterMarcas = new Graphics();
     counterRoot.addChild(counterBox, counter, counterMarcas);
     counterRoot.position.set(22 * k, S.top() + 10 * k);
-    S.hud.addChild(tint, big, leaders, chips, panel, counterRoot, badge);
+    alertas = new Container();
+    alertaDe.clear();
+    S.hud.addChild(tint, big, leaders, alertas, chips, panel, counterRoot, badge);
   }
   build();
   const crownUI = S.crown(names, winners, true);
@@ -1279,12 +1309,16 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   /** En la rueda, de la mano, en este momento. */
   const inRingNow = (d: Dancer, x: number): boolean => (d.outAt < 0 || x < d.outAt) && !(d === win && x >= T_CROWN);
 
+  /** El aplauso de los sentados y las palmadas de las filas en este cuadro, para el 3D. */
+  let clapNow = 0, ritmoNow = 0;
   function drawPeople(x: number): void {
     const beat = beatAt(x);
     const sb = Math.sin(Math.PI * beat);
     const playing = dancingAt(x) && x < T_CROWN;
     // Los que miran la rueda desde el borde aplauden con la música.
     const clap = playing || x >= T_CROWN ? Math.abs(Math.sin(Math.PI * (x >= T_CROWN ? x * 4.2 : beat))) : 0.3;
+    clapNow = clap;
+    ritmoNow = sb;
     // Primero, dónde está cada uno.
     dancers.forEach((d, i) => {
       wNow[i] = where(d, x);
@@ -1298,6 +1332,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       const w = wNow[d.idx] as ReturnType<typeof where>;
       const pr = pNow[d.idx] as { x: number; y: number; s: number };
       v.root.visible = w.alpha > 0.02;
+      if (v3) (ent[d.idx] as BailarinEntrada).visible = v.root.visible;
       if (!v.root.visible) continue;
       v.root.alpha = w.alpha;
       // Los que ya salieron se ven apagados, para que nadie los confunda con
@@ -1328,7 +1363,9 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       v.alert.visible = wob > 0.05;
       /** De la mano con los vecinos: el tambaleo ya está puesto en el cuerpo y en los brazos. */
       let tomadas = false;
+      let modo: ModoBailarin = "rueda", paso = 0;
       if (d === win && x >= T_CROWN) {
+        modo = "salta";
         // La ganadora salta con los brazos arriba.
         y -= Math.abs(Math.sin(x * 7)) * 0.3 * pr.s;
         v.armL.rotation = 2.7;
@@ -1338,17 +1375,20 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
         v.back.visible = false;
       } else if (fuera && x >= T_GOLPE) {
         // De pie, con los brazos arriba: festejan a la ganadora.
+        modo = "festeja";
         v.armL.rotation = 2.5 + 0.35 * clap;
         v.armR.rotation = -2.5 - 0.35 * clap;
         v.body.rotation = Math.sin(x * 6 + d.idx) * 0.04;
         y -= Math.abs(Math.sin(x * 6 + d.idx * 1.7)) * 0.07 * pr.s;
       } else if (fuera && seated > 0.5) {
         // Sentados al borde: aplauden arriba de la cabeza.
+        modo = "sentado";
         v.armL.rotation = 2.5 + 0.35 * clap;
         v.armR.rotation = -2.5 - 0.35 * clap;
         v.body.rotation = 0;
       } else if (fuera) {
         // Se soltó: los brazos caen y camina hacia afuera.
+        modo = "camina";
         const ph = (x - d.outAt) * 14;
         v.armL.rotation = 0.25 + Math.sin(ph) * 0.3;
         v.armR.rotation = -0.25 + Math.sin(ph) * 0.3;
@@ -1363,6 +1403,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
         v.legL.y = -Math.max(0, sb) * lift;
         v.legR.y = -Math.max(0, -sb) * lift;
         y -= Math.abs(sb) * 0.03 * pr.s;
+        paso = sb;
         v.body.rotation = 0.06 * sb;
         // Los brazos apuntan a los vecinos: así se ve que van de la mano.
         let aL = 1.15, aR = -1.15;
@@ -1466,6 +1507,34 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
       reach(v.armL, rL);
       reach(v.armR, rR);
       v.root.position.set(pr.x, y);
+      if (v3) {
+        // Lo que el 3D dibuja de este bailarín: lo que el 2D ya decidió, en píxeles del mundo 2D.
+        const e3 = ent[d.idx] as BailarinEntrada;
+        const ep3 = epochs[epochAt(x)] as Epoch;
+        const sl3 = ep3.slot.get(d.idx);
+        const sg3 = segAt(x);
+        e3.x = pr.x;
+        e3.y = pr.y;
+        e3.alto = pr.y - y;
+        e3.modo = modo;
+        e3.cx = G.cx;
+        e3.cy = G.cy + cvOf(w.p) * G.ry;
+        e3.sentido = !fuera && ep3.members.length > 2 && sl3 && sg3 ? Math.sign(sl3.dir * sg3.spin) : 0;
+        e3.haciaSala = Math.max(
+          w.rows,
+          final ? (n === 2 ? 1 : clamp((x - F0) / 0.5, 0, 1)) : 0,
+          d === win && x >= T_CROWN ? clamp((x - T_CROWN) / 0.4, 0, 1) : 0,
+          fuera && d.away ? clamp((x - d.outAt) / 0.3, 0, 1) : 0,
+        );
+        e3.pareja = final && !fuera ? (d.idx === winnerIdx ? rivalIdx : winnerIdx) : -1;
+        e3.inclinacion = v.body.rotation;
+        e3.paso = paso;
+        e3.sentado = seated;
+        e3.filas = w.rows;
+        e3.salida = fuera ? x - d.outAt : -1;
+        e3.alerta = wob > 0.05;
+        e3.tinte = fuera ? (prized.has(d.idx) ? 2 : 1) : 0;
+      }
       // Dónde quedaron las manos, para la cadena.
       // El hombro gira con el cuerpo alrededor de la cadera: si no, en el
       // tambaleo fuerte la cadena quedaba flotando lejos de las manos.
@@ -1524,6 +1593,7 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   /** Las manos: de la mano de cada uno a la del vecino, mientras siguen en la rueda. */
   function drawChain(x: number): void {
     chain.clear();
+    eslabones.length = 0;
     if (x >= T_CROWN || x < T_JOIN + JOIN * 0.7) return;
     const ei = epochAt(x);
     const ep = epochs[ei] as Epoch;
@@ -1573,6 +1643,12 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
         // como un palo de hasta dos cuerpos.
         const nuevo = x < T_JOIN + JOIN || (cerrando && !nbPrev?.get(ia)?.includes(ib));
         if (nuevo && Math.hypot(a.x - b.x, a.y - b.y) > 0.5 * Math.min(pa.s, pb.s)) continue;
+        // Con el 3D no hay cadena: las manos se tocan de verdad. Solo se dice quién va de la mano de quién (la pareja de la final, de las dos manos).
+        if (v3) {
+          eslabones.push(ia, ib);
+          if (m === 2) eslabones.push(ia, ib);
+          continue;
+        }
         const wdt = 0.05 * Math.min(pa.s, pb.s);
         chain.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: wdt + 2 * G.k, color: INK, cap: "round" });
         chain.moveTo(a.x, a.y).lineTo(b.x, b.y).stroke({ width: wdt, color: 0xc68a5c, cap: "round" });
@@ -1735,14 +1811,19 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     // En las filas del arranque, los hombres de adelante llevan el nombre a
     // los pies: arriba tapaba el ruedo de color de las mujeres de atrás.
     const abajo = !d.tipoy && d.row.v >= frontV - 1e-6 && (wNow[d.idx] as ReturnType<typeof where>).rows > 0.5;
-    const cabeza = cam.toScreen(p.x, p.y - p.s * 1.08, W, H), pies = cam.toScreen(p.x, p.y + p.s * 0.05, W, H);
+    // Al que se tambalea, el nombre un poco más arriba: si no, el "¡!" lo pinchaba.
+    const alto = wobbleOf(d, x) > 0.05 ? 1.54 : 1.22;
+    // Con el 3D, la cabeza y los pies salen de donde el 3D los proyecta; el resto de la búsqueda es la de siempre.
+    const P3 = v3 ? v3.pantallaDe(d.idx) : null;
+    if (v3 && !P3) return;
+    const u3 = P3 ? P3.alto / 1.08 : 0;
+    const cabeza = P3 ? { x: P3.x, y: P3.y } : cam.toScreen(p.x, p.y - p.s * 1.08, W, H);
+    const pies = P3 ? { x: P3.x, y: P3.y + P3.alto } : cam.toScreen(p.x, p.y + p.s * 0.05, W, H);
     const head = abajo ? pies : cabeza;
     // Si su dueño quedó fuera de cuadro (los que se van, con la cámara cerca),
     // el nombre no va: pegado al borde de la pantalla engañaba.
     if (head.x < -10 * k || head.x > W + 10 * k || head.y < S.top() - 30 * k || head.y > H - S.bottom() + 40 * k) return;
-    // Al que se tambalea, el nombre un poco más arriba: si no, el "¡!" lo pinchaba.
-    const alto = wobbleOf(d, x) > 0.05 ? 1.54 : 1.22;
-    const arriba = cam.toScreen(p.x, p.y - p.s * alto, W, H);
+    const arriba = P3 ? { x: P3.x, y: P3.y - (alto - 1.08) * u3 } : cam.toScreen(p.x, p.y - p.s * alto, W, H);
     const chip = (d.chip ??= chips.addChild(S.chip(nm(d.idx), G.portrait ? 0.9 : 1)));
     chip.scale.set(scale);
     chip.visible = true;
@@ -2006,7 +2087,20 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
           const p = pNow[d.idx] as { x: number; y: number; s: number };
           const sc = inRingNow(d, x) ? conNombre.get(d.idx) : undefined;
           // Los que van a tambalearse llevan el nombre más arriba (por el "¡!").
-          enMundo(p.x - 0.3 * p.s, p.y - 1.2 * p.s, p.x + 0.3 * p.s, p.y, p.y - (sc ? 1.56 : 1.2) * p.s, sc ? (26 * CHIP_SCALE * (G.portrait ? 0.9 : 1) * sc + 4) * k : 0);
+          const holgura = v3 ? 0.4 : 0.3;
+          enMundo(p.x - holgura * p.s, p.y - (v3 ? 1.3 : 1.2) * p.s, p.x + holgura * p.s, p.y, p.y - (sc ? 1.56 : v3 ? 1.3 : 1.2) * p.s, sc ? (26 * CHIP_SCALE * (G.portrait ? 0.9 : 1) * sc + 4) * k : 0);
+        }
+        // Con el 3D, las cabezas están donde el 3D las proyecta (con perspectiva, no donde las puso el 2D): el cartel tampoco las tapa.
+        if (v3) {
+          for (const d of dancers) {
+            if (!((wNow[d.idx] as ReturnType<typeof where>).alpha > 0.02)) continue;
+            const P3 = v3.pantallaDe(d.idx);
+            if (!P3) continue;
+            const u3 = P3.alto / 1.08;
+            const r3 = { x: P3.x - 0.5 * u3, y: P3.y - 0.12 * u3, w: 1.0 * u3, h: 0.7 * u3 };
+            obst.push(r3);
+            base.push(r3);
+          }
         }
         // El conjunto (el cajero con los palillos arriba es una señal del corte),
         // el contador, el aviso y, si este corte la tiene, la lista de los que salen.
@@ -2170,15 +2264,83 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
   function focoDeLaGanadora(): FocoAt {
     const { W, H } = G;
     const p = pNow[win.idx] as { x: number; y: number; s: number };
-    const c = cam.toScreen(p.x, p.y - p.s * 0.55, W, H);
     const z = cam.toScreen(1, 0, W, H).x - cam.toScreen(0, 0, W, H).x;
+    // Con el 3D, el cuerpo entero de la ganadora, de los pies a la cabeza, donde el 3D lo proyecta.
+    const aqui = (i: number, q: { x: number; y: number; s: number }): { x: number; y: number; u: number } => {
+      const P3 = v3 ? v3.pantallaDe(i) : null;
+      if (P3) {
+        const u = P3.alto / 1.08;
+        return { x: P3.x, y: P3.y + P3.alto - 0.55 * u, u };
+      }
+      const c0 = cam.toScreen(q.x, q.y - q.s * 0.55, W, H);
+      return { x: c0.x, y: c0.y, u: q.s * z };
+    };
+    const c = aqui(win.idx, p);
     let rival: FocoAt["rival"] = null;
     if (finalDuo) {
       const q = pNow[rivalIdx] as { x: number; y: number; s: number };
-      const rc = cam.toScreen(q.x, q.y - q.s * 0.55, W, H);
-      rival = { x: rc.x, y: rc.y, r: q.s * z * 0.6 };
+      const rc = aqui(rivalIdx, q);
+      rival = { x: rc.x, y: rc.y, r: rc.u * 0.6 };
     }
-    return { arco: story.arc, x: c.x, y: c.y, r: p.s * z * 0.62, color: colorDeNombre(nm(winnerIdx)), rival };
+    return { arco: story.arc, x: c.x, y: c.y, r: c.u * 0.62, color: colorDeNombre(nm(winnerIdx)), rival };
+  }
+
+  /** Con el 3D: de 0 a 1, cuánto es chica la rueda (de tres a seis). Cambia de a poco, en un segundo y medio, cuando se cierra la rueda. */
+  function chicaAt(x: number): number {
+    const chica = (ep: Epoch): number => (ep.members.length >= 3 && ep.members.length <= 6 ? 1 : 0);
+    const ei = epochAt(x);
+    const cur = chica(epochs[ei] as Epoch);
+    if (ei === 0) return cur;
+    const prev = chica(epochs[ei - 1] as Epoch);
+    const k = clamp((x - (epochs[ei] as Epoch).at) / 1.4, 0, 1);
+    return prev + (cur - prev) * (k * k * (3 - 2 * k));
+  }
+
+  /** Con el 3D: le pasa al dibujo en 3D lo que el 2D acaba de calcular en este cuadro (después de la cámara). */
+  function enviar3D(): void {
+    if (!v3) return;
+    const x = tAll;
+    const toca = (dancingAt(x) && x < T_CROWN) || x >= T_CROWN;
+    const entrada: EntradaChovena = {
+      ...entradaBase(S, x),
+      plaza: { cx: G.cx, cy: G.cy, rx: G.rx, ry: G.ry, dh: G.dh, yB: G.yB, hs: G.hs },
+      bailarines: ent,
+      eslabones,
+      banda: { toca, pulso: x >= T_CROWN ? x * 3.4 : beatAt(x) },
+      aplauso: clapNow,
+      ritmo: ritmoNow,
+      quieto: !dancingAt(x) && x >= T_INTRO && x < T_CROWN,
+      chica: chicaAt(x),
+      cartel: big.visible ? ((b) => ({ x: b.x, y: b.y, w: b.width, h: b.height }))(big.getBounds()) : null,
+      corona: x >= T_CROWN ? x - T_CROWN : -1,
+      golpe: x >= T_GOLPE ? x - T_GOLPE : -1,
+      tension: finalDuo && x >= FD0 ? clamp((x - FD0) / (FS0 - FD0), 0, 1) : 0,
+    };
+    v3.frame(entrada);
+  }
+
+  /** El «¡!» de quien trastabilla, sobre su cabeza en el 3D (con el 2D va pegado a su dibujo). */
+  function dibujarAlertas(): void {
+    if (!v3) return;
+    for (const g of alertaDe.values()) g.visible = false;
+    for (const b of ent) {
+      if (!b.alerta || !b.visible) continue;
+      const P3 = v3.pantallaDe(b.id);
+      if (!P3) continue;
+      let g = alertaDe.get(b.id);
+      if (!g) {
+        g = new Graphics()
+          .roundRect(-0.028, -0.32, 0.056, 0.14, 0.02).fill(YELLOW).stroke({ width: 0.016, color: INK })
+          .circle(0, -0.14, 0.028).fill(YELLOW).stroke({ width: 0.016, color: INK });
+        alertas.addChild(g);
+        alertaDe.set(b.id, g);
+      }
+      const u = P3.alto / 1.08;
+      g.visible = true;
+      g.scale.set(u);
+      // El centro de su cabeza, un 0,2 de su alto debajo de la punta del sombrero.
+      g.position.set(P3.x, P3.y + 0.2 * u);
+    }
   }
 
   /* ---------------------------------------------------------------- dibujo */
@@ -2218,7 +2380,9 @@ export async function chovenaPixi(names: string[], winners: readonly number[], b
     drawBand(tAll, now);
     drawPeople(tAll);
     drawChain(tAll);
+    enviar3D();
     drawHud(tAll);
+    dibujarAlertas();
     if (tAll >= T_CROWN) crownUI.at(tAll - T_CROWN, true, focoDeLaGanadora());
   }
 

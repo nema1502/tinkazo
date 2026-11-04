@@ -114,6 +114,16 @@ Vive en [`src/games/pixi/chovena.ts`](../../src/games/pixi/chovena.ts) y usa el 
 
 Todo es función del tiempo del juego, sin física acumulada: la vuelta de la rueda sale de sumar los tramos con música, el paso de cada uno del número de golpes por minuto de la música (contado en tiempo de juego, así que la misma ronda dibuja los mismos cuadros aunque la música no suene), y cada vez que sale gente se arma una rueda nueva que arranca donde quedó la vieja. Saltar es correr el reloj.
 
+## En 3D
+
+Con `?motor=3d` la plaza y la gente se dibujan en 3D debajo del mismo juego (`src/games/tres/chovena-3d.ts`, sobre el kit común de `src/games/tres/`); el 2D sigue decidiendo todo (los cortes, quién se tambalea, quién sale, la rueda, el orden) y le pasa al 3D, cuadro a cuadro, dónde está cada uno y qué hace. El relator, el contador, el cartel «¡QUIETOS!», la lista de los que salen, los nombres, el «¡!» del que trastabilla y el foco de la corona siguen siendo de PixiJS, encima.
+
+La cámara baja a la altura que da el aplastado de la plaza del 2D (21 grados acostado, 51 en el celular parado), así cada pie cae donde el 2D lo pone y los nombres y el cartel caen donde corresponde; el crecimiento por profundidad que el 2D simula (`dk`) lo da la perspectiva. Al arrancar entra desde más arriba y baja en dos segundos y medio, en la última vuelta de la final baja unos grados, y con el golpe hace un contrapicado leve mientras la luz del mundo baja con la corona.
+
+Lo que gana el 3D: las manos se tocan de verdad (los dos de un eslabón llevan la mano al mismo punto, entre los dos, y el brazo se estira hasta el doble como en el 2D), cada uno mira al medio de su rueda con un giro de 20 grados hacia donde gira, el trote levanta un pie y el otro y el cuerpo se inclina sobre la cadera, los sentados al borde aplauden con la música, y con la corona los que salieron se paran con los brazos arriba y la ganadora salta en el medio. El conjunto toca en su tarima y, en el corte, el cajero levanta los palillos. Los banderines son lo único que sigue moviéndose cuando se corta la música: así se ve que paró la música y no la imagen. La ropa es la del 2D: tipoy blanco de los tobillos al cuello con las cintas del color de cada uno, o camisa blanca y sombrero de saó con su cinta; nada religioso, ni plumas, ni tipoy corto.
+
+Con más de sesenta personas se apagan el contorno de tinta y las partes más chicas (ojos, trenzas, flor) y la cabeza baja de 8 por 6 caras a 6 por 4: las llamadas de dibujo no crecen con la gente. Sin WebGL, con ahorro de datos o sin `?motor=3d`, la chovena es la de siempre. La prueba de igualdad de posiciones, la de que las manos se tocan y la de que nada del 3D nombra a quien gana están en `src/games/tres/chovena-3d.test.ts`.
+
 ## Cómo auditarlo
 
 ```bash
