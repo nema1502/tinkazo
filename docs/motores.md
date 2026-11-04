@@ -147,6 +147,20 @@ Un prototipo de la carrera de llamas en 3D con three.js, para ver si vale la pen
 - La cámara es la del 2D mapeada: el director decide con cajas planas y la perspectiva compone distinto (en la recta final, la ficha de quien va primera tapa un poco su cabeza). Una cámara pensada en 3D, con el mismo reloj y los mismos cinco arcos, mejoraría eso.
 - Sin probar en un celular de gama media ni con la CPU lenta; dos contextos WebGL abiertos a la vez (PixiJS y three.js) es lo que más preocupa en un celular. Los 139 cuadros son de una laptop con placa.
 
+## 3D, kit común
+
+Desde el 4 de noviembre de 2026 todos los juegos del selector se pueden portar al 3D sobre un kit común, `src/games/tres/` (la guía de cómo portar un juego, en diez pasos, está en su `README.md`). La idea es la de la carrera y no cambia: **el 3D no decide nada**. El juego corre entero en el 2D y, con `?motor=3d`, el lienzo de PixiJS queda transparente encima mientras three.js dibuja debajo lo que el 2D ya puso.
+
+- **Un solo three.js.** Viaja en un trozo con nombre propio (`three`, unos 126 kB comprimidos) que comparten todos los juegos en 3D y que solo baja quien prende el 3D. El archivo de cada juego en 2D no importa three.js: solo tipos (`tipos.ts`) y el enchufe (`enchufe.ts`, unas pocas líneas).
+- **Un módulo por juego, sin editar nada compartido.** `tres/<id>-3d.ts` exporta `lanzador3D`; `registro.ts` lo encuentra solo (`import.meta.glob`) y `pixi/index.ts` lo pide cuando el 3D está prendido. Si no existe o no baja, el juego sigue en 2D.
+- **La cámara del director, en perspectiva** (`camara.ts`): el acercamiento de emoción, el golpe, el "pum" de un choque, el sacudón y la guardia del ganador se leen de la escena de PixiJS ya aplicada, y un perfil por juego dice cómo se mira (`perfilFiel` conserva las proporciones del piso del 2D). `crearMapa` es la única cuenta entre el mundo 2D (píxeles) y el 3D (unidades): la usa la vista y la prueba de igualdad (`prueba.ts`).
+- **Lo común del mundo** (`escena.ts`, `figuras.ts`): cielo con degradé por tema (día en el claro, atardecer en el oscuro, con la paleta de `docs/marca.md`), luces, niebla, suelo con piedras y matas esparcidas por hash, sombra de contacto, polvo y chispas y papel picado que dependen solo de la hora, piezas low-poly de sombreado plano, mallas instanciadas para doscientas figuras y una persona genérica con el color de su nombre.
+- **Los nombres** (`etiquetas.ts`): siguen siendo las fichas de PixiJS, y se reparten para que no se pisen entre sí ni tapen la cara de otra figura (manda quien tiene más prioridad, después la más cercana).
+- **La calidad por equipo** (`calidad.ts`): alta, media y baja bajan las sombras de verdad, las partículas y la densidad de píxeles (1,5 en celular y 2 en PC como tope); si los cuadros tardan, baja sola y no vuelve a subir en el mismo show.
+- **Sin azar.** `Math.random` no aparece en ningún archivo del kit salvo en `ids.ts`, que lo presta como contador mientras three.js arma sus objetos y lo devuelve. Lo que parece azar sale de `hash`.
+
+El trompo (`tres/trompo-3d.ts` sobre `pixi/trompo.ts`) es el primer juego portado y el que validó el kit.
+
 ## Auditarlo
 
 Con `--motor 3d` miran la carrera en 3D `audit-rigor`, `audit-game`, `audit-emocion`, `audit-pantalla`, `audit-legible`, `audit-identidad`, `audit-delatores` y `audit-nino` (los cinco últimos tenían el motor fijo y no lo aceptaban). `capturas-3d.mjs --fps --cpu 4 --tamano 390x844 --n 18` mide los cuadros por segundo con la CPU frenada cuatro veces (con `--motor pixi`, el 2D).

@@ -11,6 +11,9 @@ import { lugarDe } from "./kit/respuestas";
 import { pintarMarcas } from "./kit/marcador-vista";
 import { FORMA_TROMPO, respuestasTrompo, type PlanDelTrompo } from "./trompo-nino";
 import { medidasContador, CREAM, INK, MONO, YELLOW, contorno, hash, mountPixi, type PixiStage } from "./stage";
+import { enchufar3D, entradaBase } from "../tres/enchufe";
+import type { Montaje3D } from "../tres/tipos";
+import type { EntradaTrompo, ImpactoEntrada, PolvoEntrada, TrompoEntrada } from "../tres/trompo-3d";
 
 /**
  * Trompo.
@@ -127,16 +130,23 @@ function lighten(c: number, f: number): number {
   return (m(r) << 16) | (m(g) << 8) | m(b);
 }
 
-export async function trompoPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<void> {
+/**
+ * `tres`: la vista en 3D (`?motor=3d`, src/games/tres/README.md). Si está, el lienzo queda transparente y debajo se
+ * dibuja el ruedo y los trompos; todo lo que decide el juego sigue acá, y los nombres, el relator, el cartel y el
+ * foco siguen siendo de PixiJS. Sin `tres`, el trompo es el de siempre.
+ */
+export async function trompoPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void, tres?: Montaje3D<EntradaTrompo>): Promise<void> {
   const winnerIdx = winners[0] ?? 0;
   let skipFn = (): void => {};
-  const st = await mountPixi(beacon, done, () => skipFn());
+  const st = await mountPixi(beacon, done, () => skipFn(), { transparente: !!tres });
   if (!st) {
     done();
     return;
   }
   const S: PixiStage = st;
   const { rng, cam } = S;
+  // El 3D, si hay y arranca: apaga el fondo, el suelo y los trompos del 2D (en `build`) y dibuja debajo.
+  const v3 = enchufar3D(S, tres);
   const n = names.length;
   const story = writeStory(rng, Math.max(2, n), winnerIdx % Math.max(2, n));
   S.mark("arco", story.arc);
@@ -1055,6 +1065,10 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     topsLayer.sortableChildren = true;
     fxG = new Graphics();
     S.scene.addChild(ground, chalk, dustG, shadows, trailG, topsLayer, fxG);
+    if (v3) {
+      S.bg.visible = false;
+      for (const c of [ground, chalk, dustG, shadows, trailG, topsLayer, fxG]) c.visible = false;
+    }
     for (const q of tops) {
       q.view?.destroy({ children: true });
       q.view = makeTop(q);
@@ -1082,6 +1096,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       num.alpha = 0.5;
       num.anchor.set(0.5);
       num.position.set(hx + cx * hs + hs / 2, hy - cy * hs * 0.6 + hs * 0.3);
+      if (v3) num.visible = false;
       S.scene.addChildAt(num, 1);
     });
     // Las líneas de velocidad y el destello van debajo de la interfaz, que siempre se lee.
@@ -1240,19 +1255,21 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
   function draw(): void {
     const k = S.u();
     const c = center(), r = R();
-    // La tiza del ruedo, apenas temblada, y la cruz del medio.
-    chalk.clear();
-    const chalkCol = S.dark ? 0xf1ece2 : 0xffffff;
-    const pts: number[] = [];
-    for (let i = 0; i <= 64; i++) {
-      const a = (i / 64) * Math.PI * 2;
-      const j = 1 + (hash(i % 64, 5) - 0.5) * 0.02;
-      pts.push(c.x + Math.cos(a) * r * LIM * j, c.y + Math.sin(a) * r * LIM * SQUASH * j);
+    // La tiza del ruedo, apenas temblada, y la cruz del medio (con el 3D, la dibuja él).
+    if (!v3) {
+      chalk.clear();
+      const chalkCol = S.dark ? 0xf1ece2 : 0xffffff;
+      const pts: number[] = [];
+      for (let i = 0; i <= 64; i++) {
+        const a = (i / 64) * Math.PI * 2;
+        const j = 1 + (hash(i % 64, 5) - 0.5) * 0.02;
+        pts.push(c.x + Math.cos(a) * r * LIM * j, c.y + Math.sin(a) * r * LIM * SQUASH * j);
+      }
+      // Adentro del ruedo la tierra está barrida: un poco más clara.
+      chalk.ellipse(c.x, c.y, r * LIM, r * LIM * SQUASH).fill({ color: 0xffffff, alpha: S.dark ? 0.05 : 0.14 });
+      chalk.poly(pts).stroke({ width: 5 * k, color: chalkCol, alpha: 0.85 });
+      chalk.moveTo(c.x - 10 * k, c.y - 6 * k).lineTo(c.x + 10 * k, c.y + 6 * k).moveTo(c.x + 10 * k, c.y - 6 * k).lineTo(c.x - 10 * k, c.y + 6 * k).stroke({ width: 3 * k, color: chalkCol, alpha: 0.6 });
     }
-    // Adentro del ruedo la tierra está barrida: un poco más clara.
-    chalk.ellipse(c.x, c.y, r * LIM, r * LIM * SQUASH).fill({ color: 0xffffff, alpha: S.dark ? 0.05 : 0.14 });
-    chalk.poly(pts).stroke({ width: 5 * k, color: chalkCol, alpha: 0.85 });
-    chalk.moveTo(c.x - 10 * k, c.y - 6 * k).lineTo(c.x + 10 * k, c.y + 6 * k).moveTo(c.x + 10 * k, c.y - 6 * k).lineTo(c.x - 10 * k, c.y + 6 * k).stroke({ width: 3 * k, color: chalkCol, alpha: 0.6 });
 
     const size = rn * r * 1.55;
     shadows.clear();
@@ -1262,7 +1279,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
 
     // El polvo, en el piso.
     const dustCol = S.dark ? 0x9a846c : 0xb08e68;
-    for (const p of dusts) {
+    for (const p of v3 ? [] : dusts) {
       const a = tFx - p.at;
       if (a < 0 || a > 0.7) continue;
       const w = toWorld(p.x, p.y);
@@ -1279,7 +1296,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     let ghosts = 0;
     for (const q of tops) {
       const m = q.trail.length / 3;
-      if (!m || q.gone) continue;
+      if (v3 || !m || q.gone) continue;
       const col = S.color(q.idx);
       for (let i = 0; i < m && ghosts < 160; i++, ghosts++) {
         const a = (i + 1) / (m + 1);
@@ -1345,11 +1362,11 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
             mk.rect(mx - 0.025, -0.83, 0.05, 0.2).fill({ color: INK, alpha: 0.55 });
           }
         }
-        shadows.ellipse(w.x, w.y + 2 * k, size * 0.42, size * 0.13).fill({ color: 0x000000, alpha: 0.28 });
+        if (!v3) shadows.ellipse(w.x, w.y + 2 * k, size * 0.42, size * 0.13).fill({ color: 0x000000, alpha: 0.28 });
         // La ganadora, en la coronación: crece un poco y brilla desde abajo.
         if (phase === "crown" && q === win) {
           const g = ease.outBack(clamp((tAll - T_CROWN) * 2, 0, 1));
-          shadows.ellipse(w.x, w.y + 2 * k, size * (0.8 + 0.5 * g), size * (0.26 + 0.16 * g)).fill({ color: YELLOW, alpha: 0.35 });
+          if (!v3) shadows.ellipse(w.x, w.y + 2 * k, size * (0.8 + 0.5 * g), size * (0.26 + 0.16 * g)).fill({ color: YELLOW, alpha: 0.35 });
         }
       } else if (q.kind === "kick") {
         // Sacado: vuela girando, pica en el piso y queda acostado. La sombra
@@ -1359,7 +1376,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
         v.position.set(w.x, w.y - q.z * r);
         (q.marks as Graphics).clear();
         const s = 1 / (1 + q.z * 6);
-        shadows.ellipse(w.x, w.y + 2 * k, size * 0.5 * s, size * 0.14 * s).fill({ color: 0x000000, alpha: 0.22 * s * clamp((2 - q.out) / 0.6, 0, 1) });
+        if (!v3) shadows.ellipse(w.x, w.y + 2 * k, size * 0.5 * s, size * 0.14 * s).fill({ color: 0x000000, alpha: 0.22 * s * clamp((2 - q.out) / 0.6, 0, 1) });
       } else {
         // Sin cuerda: se viene abajo acelerando, como cae de verdad, y rebota un poco.
         const p = clamp((q.out - WOBBLE_T) / 0.28, 0, 1);
@@ -1368,7 +1385,7 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
         v.rotation = q.tilt * (1 - p) + q.fallDir * (1.45 * p * p - b);
         v.position.set(w.x, w.y);
         (q.marks as Graphics).clear();
-        shadows.ellipse(w.x + q.fallDir * size * 0.45 * p, w.y + 2 * k, size * (0.42 + 0.13 * p), size * 0.13).fill({ color: 0x000000, alpha: 0.2 * clamp((2 - q.out) / 0.6, 0, 1) });
+        if (!v3) shadows.ellipse(w.x + q.fallDir * size * 0.45 * p, w.y + 2 * k, size * (0.42 + 0.13 * p), size * 0.13).fill({ color: 0x000000, alpha: 0.2 * clamp((2 - q.out) / 0.6, 0, 1) });
       }
       // Los que salieron se apagan antes de los dos segundos: si quedaran
       // tirados, en el mano a mano taparían a los dos que importan.
@@ -1380,8 +1397,44 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       }
     }
 
+    // Con el 3D: lo que el 2D ya puso en este cuadro, para que lo vista (src/games/tres/trompo-3d.ts).
+    if (v3) {
+      const trompos: TrompoEntrada[] = tops.map((q) => {
+        const v = q.view as Container;
+        const w = toWorld(q.x, q.y);
+        const dy = v.position.y - w.y;
+        return {
+          id: q.idx,
+          visible: v.visible && !q.gone,
+          x: w.x,
+          y: w.y,
+          alto: Math.max(0, -dy),
+          adelante: Math.max(0, dy),
+          inclinacion: v.rotation,
+          sx: v.scale.x / size,
+          sy: v.scale.y / size,
+          opacidad: v.alpha,
+          destello: (q.flash as Graphics).alpha,
+          giro: q.ph + q.rate * tAll,
+          color: S.color(q.idx),
+        };
+      });
+      const impactos: ImpactoEntrada[] = impacts.map((im) => ({ x: im.x, y: im.y, edad: tFx - im.at, pow: im.pow, tier: im.tier, seed: im.seed, nx: im.nx, ny: im.ny }));
+      const polvos: PolvoEntrada[] = dusts.map((p) => ({ x: p.x, y: p.y, edad: tFx - p.at, pow: p.pow, seed: p.seed }));
+      v3.frame({
+        ...entradaBase(S, tFx),
+        ruedo: { cx: c.x, cy: c.y, r },
+        radio: rn * r,
+        trompos,
+        impactos: impactos.filter((i) => i.edad >= 0 && i.edad <= 0.6),
+        polvos: polvos.filter((p) => p.edad >= 0 && p.edad <= 0.7),
+        ganadora: winnerIdx,
+        corona: phase === "crown" ? clamp((tAll - T_CROWN) * 2, 0, 1) : 0,
+      });
+    }
+
     // Los golpes: la estrella, la onda en el piso y las chispas.
-    for (const im of impacts) {
+    for (const im of v3 ? [] : impacts) {
       const a = tFx - im.at;
       if (a < 0 || a > 0.6) continue;
       const w = toWorld(im.x, im.y);
@@ -1464,6 +1517,11 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     S.tags(names, roll, (i) => {
       const q = byIdx.get(i);
       if (!q || !q.alive || tAll < q.land) return null;
+      // Con el 3D, encima de la cabeza del trompo tal como la ve su cámara.
+      if (v3) {
+        const pan = v3.pantallaDe(i);
+        return pan ? { x: pan.x, y: pan.y - pan.alto * 0.12 } : null;
+      }
       const w = toWorld(q.x, q.y);
       return cam.toScreen(w.x, w.y - size * 1.15, S.sw(), S.sh());
     }, [counterRoot.getBounds()]);
@@ -1494,6 +1552,10 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       const W = S.sw(), H = S.sh();
       const at = [...vivos.map((q) => ({ q, out: false })), ...salen.map((q) => ({ q, out: true }))]
         .map(({ q, out }) => {
+          if (v3) {
+            const pan = v3.pantallaDe(q.idx);
+            return { q, out, p: pan ? { x: pan.x + pan.alto * 0.35, y: pan.y - pan.alto * 0.1 } : { x: -9999, y: -9999 } };
+          }
           const w = toWorld(q.x, q.y);
           const up = out && q.kind === "kick" ? q.z * r : 0;
           return { q, out, p: cam.toScreen(w.x + size * 0.35, w.y - up - size * 1.1, W, H) };
@@ -1504,6 +1566,10 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       // Dónde está el cuerpo de cada uno de los que siguen, en pantalla: un
       // nombre grande no va encima del trompo del otro.
       const cuerpos = vivos.map((q) => {
+        if (v3) {
+          const pan = v3.pantallaDe(q.idx);
+          return pan ? { q, x0: pan.x - pan.alto * 0.5, y0: pan.y, x1: pan.x + pan.alto * 0.5, y1: pan.y + pan.alto } : { q, x0: -9999, y0: -9999, x1: -9998, y1: -9998 };
+        }
         const w = toWorld(q.x, q.y);
         const a = cam.toScreen(w.x - size * 0.5, w.y - size * 1.05, W, H), b = cam.toScreen(w.x + size * 0.5, w.y, W, H);
         return { q, x0: a.x, y0: a.y, x1: b.x, y1: b.y };
@@ -1537,7 +1603,8 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
           let x = Math.min(p.x + 4 * k, W - cw - 10 * k);
           // Si a la derecha tapa al otro trompo, a la izquierda del suyo.
           if (tapa(x)) {
-            const izq = Math.max(10 * k, cam.toScreen(toWorld(q.x, q.y).x - size * 0.35, 0, W, H).x - 4 * k - cw);
+            const pan3 = v3?.pantallaDe(q.idx);
+            const izq = Math.max(10 * k, (pan3 ? pan3.x - pan3.alto * 0.35 : cam.toScreen(toWorld(q.x, q.y).x - size * 0.35, 0, W, H).x) - 4 * k - cw);
             if (!tapa(izq)) x = izq;
           }
           return { x, y: cy, ch, libre: !tapa(x) };
@@ -1567,6 +1634,10 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
   let duelSaid = false;
   // Para el auditor de emoción: el trompo ganador, en la pantalla.
   S.ganadorEn(() => {
+    if (v3) {
+      const pan = v3.pantallaDe(winnerIdx);
+      return pan ? { x: pan.x - pan.alto * 0.55, y: pan.y, w: pan.alto * 1.1, h: pan.alto } : null;
+    }
     const sw = S.sw(), sh = S.sh();
     const b = cajaGanador();
     const z = cam.toScreen(1, 0, sw, sh).x - cam.toScreen(0, 0, sw, sh).x;
@@ -1599,6 +1670,8 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
       // Adónde mirar: en pantalla, el medio de los trompos que siguen bailando (y la rival mientras cae).
       const vivos = tops.filter((q) => q.alive || (q === riv && !riv.gone));
       const dondeEstan = (vivos.length ? vivos : [win]).map((q) => {
+        const pan = v3?.pantallaDe(q.idx);
+        if (pan) return { x: pan.x, y: pan.y + pan.alto * 0.5 };
         const w = toWorld(q.x, q.y);
         return cam.toScreen(w.x, w.y, S.sw(), S.sh());
       });

@@ -194,10 +194,14 @@ function avisoDeTrozosGrandes(limiteKb = 500): Plugin {
         if (kb <= limiteKb) continue;
         const ids = Object.keys(trozo.modules);
         const soloSdk = ids.length > 0 && ids.every((id) => delSdk.test(id));
-        if (soloSdk && !alAbrir.has(trozo.fileName)) continue;
+        // three.js (el 3D de src/games/tres/) pesa unos 505 kB y se baja solo con el 3D prendido: mientras ninguna página lo pida al abrirse, no se avisa.
+        const soloTres = ids.length > 0 && ids.every((id) => /[\\/]node_modules[\\/]three[\\/]/.test(id));
+        if ((soloSdk || soloTres) && !alAbrir.has(trozo.fileName)) continue;
         this.warn(
-          soloSdk
-            ? `${trozo.fileName} es el SDK de Stellar (${kb.toFixed(0)} kB) y una página lo baja al abrirse: tiene que pedirse con import() recién cuando se use.`
+          soloSdk || soloTres
+            ? soloTres
+              ? `${trozo.fileName} es three.js (${kb.toFixed(0)} kB) y una página lo baja al abrirse: tiene que pedirse con import() recién cuando se use el 3D.`
+              : `${trozo.fileName} es el SDK de Stellar (${kb.toFixed(0)} kB) y una página lo baja al abrirse: tiene que pedirse con import() recién cuando se use.`
             : `${trozo.fileName} pesa ${kb.toFixed(0)} kB minificado, más de ${limiteKb} kB: si no hace falta al abrir la página, que se baje con import() cuando se use.`,
         );
       }
@@ -218,6 +222,8 @@ export default defineConfig({
     // El de 500 kB lo da `avisoDeTrozosGrandes`, que sabe cuál es el SDK de Stellar.
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
+      // three.js en un trozo con nombre propio: todos los juegos en 3D (src/games/tres/) comparten el mismo y se baja una sola vez.
+      output: { manualChunks: (id: string) => (/[\\/]node_modules[\\/]three[\\/]/.test(id) ? "three" : undefined) },
       input: {
         index: resolve(__dirname, "index.html"),
         verificar: resolve(__dirname, "verificar.html"),

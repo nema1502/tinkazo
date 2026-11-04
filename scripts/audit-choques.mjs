@@ -46,6 +46,8 @@ const opt = (name, def) => {
 };
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const SEMILLAS = Number(opt("--semillas", "8"));
+// `--motor 3d` corre el mismo auditor con el trompo en 3D: la física es la del 2D, que no cambia.
+const motor = opt("--motor", "pixi");
 process.env.TINKAZO_GPU = "1";
 
 const TURBO = `(() => {
@@ -72,7 +74,7 @@ const semilla = (i) => createHash("sha256").update(`semilla-${i}`).digest("hex")
 async function correr(browser, { seed, gente = 0 }) {
   const page = await browser.open("about:blank");
   await page.send("Page.addScriptToEvaluateOnNewDocument", { source: TURBO });
-  const url = `${base}/?pose=trompo&motor=pixi&pace=normal&auditar=choques&semilla=${semilla(seed)}${gente ? `&n=${gente}` : ""}`;
+  const url = `${base}/?pose=trompo&motor=${motor}&pace=normal&auditar=choques&semilla=${semilla(seed)}${gente ? `&n=${gente}` : ""}`;
   await page.send("Page.navigate", { url });
   const ok = await page.waitFor("window.__choques && window.__choques.done", 90_000);
   const log = ok.ok ? JSON.parse(await page.eval("JSON.stringify(window.__choques)")) : null;

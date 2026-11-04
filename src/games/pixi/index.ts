@@ -54,7 +54,9 @@ const PIXI: Partial<Record<Game, () => Promise<Launch>>> = {
  * Ver `preloadGame` en `../engine.ts`.
  */
 export async function preloadPixi(game: Game): Promise<void> {
-  await Promise.all([PIXI[game]?.(), warmPixi()]);
+  // Con el 3D prendido, también baja su módulo (three.js viaja en un trozo propio que se comparte entre juegos).
+  const tres = usa3D() && game !== "race" ? import("../tres/registro").then((m) => m.precargar3D(game)).catch(() => undefined) : undefined;
+  await Promise.all([PIXI[game]?.(), warmPixi(), tres]);
 }
 
 /** `true` si el juego tiene versión en PixiJS. */
@@ -81,7 +83,9 @@ export async function playPixi(game: Game, names: string[], winners: readonly nu
   // y no aparecía ni el juego ni el ganador.
   let launch: Awaited<ReturnType<typeof load>>;
   try {
-    launch = await load();
+    // El 3D (src/games/tres/README.md): si está prendido y el juego tiene versión, esa; si no baja, el 2D de siempre.
+    const en3D = usa3D() && game !== "race" ? await import("../tres/registro").then((m) => m.lanzador3D(game)).catch(() => null) : null;
+    launch = en3D ?? (await load());
   } catch {
     return false;
   }
