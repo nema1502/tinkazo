@@ -51,6 +51,10 @@ Con el foco (docs/motores.md, "El foco del ganador"), apenas corona la escena se
 
 Cualquier cantidad: con más de doce juega la clasificatoria. Solo con más de doce **ganadores** el sorteo pasa a la carrera de llamas (`playableGame` en `src/state.ts`). Sin WebGL o con `?motor=clasico` no hay versión del motor anterior y cuenta la carrera.
 
+## En 3D
+
+Con `?motor=3d` el cajón, la rana, la mano y las argollas se dibujan en 3D debajo del mismo juego (`src/games/tres/sapo-3d.ts`, sobre el kit común de `src/games/tres/`); el 2D sigue decidiendo todo y le pasa al 3D, cuadro a cuadro, dónde está cada cosa. Las fichas de nombre, las medallas, el contador, el relator, el foco y el cartel siguen siendo de PixiJS, encima, y se anclan al aro que ve la cámara 3D. Lo que gana el 3D es la altura de verdad: la argolla vuela con su sombra sobre la tapa, se inclina y baila apoyada en el aro del vecino sin bajar nunca de la madera, y el último tiro baja por el agujero. Sin WebGL, con ahorro de datos o sin `?motor=3d`, el sapo es el de siempre. La prueba de igualdad de posiciones y la de que ninguna argolla ajena se mete bajo la tapa están en `src/games/tres/sapo-3d.test.ts`.
+
 ## Auditoría
 
 ```bash
