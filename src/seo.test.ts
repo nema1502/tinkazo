@@ -27,6 +27,8 @@ const PUBLICAS: Record<string, string> = {
   "sorteo-para-meetup.html": `${BASE}/sorteo-para-meetup.html`,
   "sorteo-en-clase.html": `${BASE}/sorteo-en-clase.html`,
   "sorteo-verificable.html": `${BASE}/sorteo-verificable.html`,
+  "ruleta-de-nombres.html": `${BASE}/ruleta-de-nombres.html`,
+  "sorteo-para-eventos.html": `${BASE}/sorteo-para-eventos.html`,
 };
 
 /** Las de uso interno: no van al mapa del sitio y llevan noindex. */
@@ -39,12 +41,20 @@ const NUEVAS: Record<string, { titulo: string; h1: string }> = {
     h1: "Sorteo para tu meetup, en pantalla grande",
   },
   "sorteo-en-clase.html": {
-    titulo: "Sorteo en clase: elegí quién pasa, de forma justa",
+    titulo: "Sorteo en clase: elegí quién pasa a exponer, con justicia",
     h1: "Sorteo en clase, justo y comprobable",
   },
   "sorteo-verificable.html": {
-    titulo: "Sorteo verificable: cómo comprobar el resultado",
+    titulo: "Sorteo verificable: cómo comprobar un resultado paso a paso",
     h1: "Sorteo verificable: cualquiera puede rehacer el resultado",
+  },
+  "ruleta-de-nombres.html": {
+    titulo: "Ruleta de nombres gratis y verificable para sortear",
+    h1: "Ruleta de nombres, gratis y verificable",
+  },
+  "sorteo-para-eventos.html": {
+    titulo: "Sorteo para eventos y stands: pantalla grande y QR",
+    h1: "Sorteo para eventos y stands, en pantalla grande",
   },
 };
 
@@ -58,15 +68,24 @@ const datosEstructurados = (html: string): Array<Record<string, unknown>> =>
     (m) => JSON.parse(m[1] ?? "{}") as Record<string, unknown>,
   );
 
-describe("portada: canonical, sin hreflang y datos estructurados", () => {
+/** Los nodos de los datos estructurados de una página, con los de `@graph` a la par de los sueltos. */
+const nodosDe = (html: string): Array<Record<string, unknown>> =>
+  datosEstructurados(html).flatMap((b) => (Array.isArray(b["@graph"]) ? (b["@graph"] as Array<Record<string, unknown>>) : [b]));
+
+describe("portada: canonical, hreflang y datos estructurados", () => {
   const html = leer("index.html");
 
   it("tiene canonical a la portada", () => {
     expect(canonical(html)).toBe(`${BASE}/`);
   });
 
-  it("no declara hreflang: la portada se indexa en una sola URL, la canónica", () => {
-    expect(html).not.toMatch(/hreflang/);
+  it("declara hreflang es, en y x-default, y la canónica sigue siendo la dirección limpia", () => {
+    expect([...html.matchAll(/<link rel="alternate" hreflang="([^"]+)" href="([^"]+)"/g)].map((m) => [m[1], m[2]])).toEqual([
+      ["es", `${BASE}/`],
+      ["en", `${BASE}/?lang=en`],
+      ["x-default", `${BASE}/`],
+    ]);
+    expect(canonical(html)).toBe(`${BASE}/`);
   });
 
   it("el bloque ld+json se parsea y trae WebSite, Organization y SoftwareApplication", () => {
@@ -79,6 +98,7 @@ describe("portada: canonical, sin hreflang y datos estructurados", () => {
       url: `${BASE}/`,
       sameAs: ["https://github.com/nema1502/tinkazo"],
     });
+    expect(grafo.find((n) => n["@type"] === "WebSite")).toMatchObject({ name: "Tinkazo", alternateName: ["tinkazo.app"] });
     expect(grafo.find((n) => n["@type"] === "SoftwareApplication")).toMatchObject({
       name: "Tinkazo",
       url: `${BASE}/`,
@@ -179,14 +199,15 @@ describe("ícono y tarjeta de compartir de la portada", () => {
     expect(iconos.filter((href) => href.startsWith("data:"))).toEqual([]);
   });
 
-  it("cada rel=\"icon\" apunta a un archivo de public/, en el orden ico, png y svg", () => {
-    expect(iconos).toEqual(["/favicon.ico", "/icon-192.png", "/icon.svg"]);
+  it("cada rel=\"icon\" apunta a un archivo de public/, en el orden ico, png de 96 y svg: la llama sola, sin el fondo oscuro de la app", () => {
+    expect(iconos).toEqual(["/favicon.ico", "/icon-96.png", "/favicon.svg"]);
     for (const ruta of iconos) {
       expect(esArchivoPublico(ruta), ruta).toBe(true);
     }
   });
 
-  it("icon-192.png e icon-512.png son PNG de 192 y 512 px, según su IHDR", () => {
+  it("icon-96.png, icon-192.png e icon-512.png son PNG de 96, 192 y 512 px, según su IHDR", () => {
+    expect(dimensionesPng(leerPublico("icon-96.png"))).toEqual({ ancho: 96, alto: 96 });
     expect(dimensionesPng(leerPublico("icon-192.png"))).toEqual({ ancho: 192, alto: 192 });
     expect(dimensionesPng(leerPublico("icon-512.png"))).toEqual({ ancho: 512, alto: 512 });
   });
@@ -213,7 +234,7 @@ describe("ícono y tarjeta de compartir de la portada", () => {
 
   it("el título es el de la portada, tiene de 30 a 60 caracteres, empieza con Tinkazo, y og:title lo repite", () => {
     const titulo = html.match(/<title>([^<]*)<\/title>/)?.[1] ?? "";
-    expect(titulo).toBe("Tinkazo, sorteos verificables para eventos y clases");
+    expect(titulo).toBe("Tinkazo: sorteo verificable y gratis para eventos y clases");
     expect([...titulo].length).toBeGreaterThanOrEqual(30);
     expect([...titulo].length).toBeLessThanOrEqual(60);
     expect(titulo.startsWith("Tinkazo")).toBe(true);
@@ -243,10 +264,9 @@ describe("ícono y tarjeta de compartir de la portada", () => {
     expect(JSON.stringify(grafo)).not.toMatch(/aggregateRating|"review"/);
   });
 
-  // La portada no pide su título ni su descripción por clave. Si el <html> los pidiera, el idioma cambiaría también
-  // la etiqueta <title> y la meta description: el buscador renderiza con JavaScript y podría leer el inglés, mientras
-  // og:title y el JSON-LD quedan en español. Las claves titPortada y descPortada siguen en el diccionario, con su
-  // versión en inglés, por si el autor decide otra cosa.
+  // La portada pide su título y su descripción por clave, como las demás. El buscador renderiza con JavaScript y su
+  // navegador está en inglés: por eso `initialLang` le da siempre el español a un rastreador (ver `idioma.test.ts`),
+  // y el inglés se pide con `?lang=en`.
   const claveTitulo = "titPortada";
   const claveDesc = "descPortada";
   const textoEn = (clave: string): string => {
@@ -254,9 +274,10 @@ describe("ícono y tarjeta de compartir de la portada", () => {
     return typeof valor === "string" ? valor : "";
   };
 
-  it("la etiqueta html de la portada no pide título ni descripción por clave: el buscador lee los de la etiqueta y la meta", () => {
+  it("la etiqueta html de la portada pide título y descripción por clave, titPortada y descPortada", () => {
     const etiquetaHtml = html.match(/<html\b[^>]*>/)?.[0] ?? "";
-    expect(etiquetaHtml).not.toMatch(/\sdata-(titulo|desc)-clave=/);
+    expect(etiquetaHtml).toMatch(/\sdata-titulo-clave="titPortada"/);
+    expect(etiquetaHtml).toMatch(/\sdata-desc-clave="descPortada"/);
   });
 
   it("titPortada y descPortada existen en es y en en: en español son el título y la meta de la portada", () => {
@@ -307,7 +328,7 @@ describe("cada página pública", () => {
   });
 
   it.each(Object.keys(NUEVAS))("%s lleva un WebPage con name, description, url e inLanguage es", (archivo) => {
-    const pagina = datosEstructurados(leer(archivo)).find((b) => b["@type"] === "WebPage");
+    const pagina = nodosDe(leer(archivo)).find((b) => b["@type"] === "WebPage");
     expect(pagina).toMatchObject({
       "@type": "WebPage",
       name: NUEVAS[archivo]?.titulo,
@@ -432,7 +453,7 @@ const sinEntidades = (s: string): string =>
     .replace(/&amp;/g, "&");
 const espacios = (s: string): string => s.replace(/\s+/g, " ").trim();
 
-type Copia = { clave: string; tipo: "texto" | "html" | "placeholder" | "title" | "aria-label"; valor: string };
+type Copia = { clave: string; tipo: "texto" | "html" | "placeholder" | "title" | "aria-label" | "alt"; valor: string };
 
 /** Todas las copias estáticas de una página: cada `data-i`, `data-i-html` y atributo `data-i-ph`, `-title` o `-aria`. */
 /** Desde `desde` (justo después de la apertura de `tag`), dónde cierra ese mismo elemento: un span dentro de un span no corta el de afuera. */
@@ -465,6 +486,7 @@ const copiasDe = (html: string): Copia[] => {
     ["data-i-ph", "placeholder"],
     ["data-i-title", "title"],
     ["data-i-aria", "aria-label"],
+    ["data-i-alt", "alt"],
   ] as const;
   for (const [dataAttr, atributo] of atributos) {
     for (const m of html.matchAll(new RegExp(`<[a-z][a-z0-9]*\\b[^>]*?\\s${dataAttr}="([^"]+)"[^>]*>`, "g"))) {
@@ -476,7 +498,7 @@ const copiasDe = (html: string): Copia[] => {
 };
 
 /** Cuántos atributos `data-i*` tiene el HTML: la extracción de `copiasDe` tiene que encontrarlos todos. */
-const atributosDataI = (html: string): number => (html.match(/\sdata-i(?:-html|-ph|-title|-aria)?="/g) ?? []).length;
+const atributosDataI = (html: string): number => (html.match(/\sdata-i(?:-html|-ph|-title|-aria|-alt)?="/g) ?? []).length;
 
 /** Cuánto se aparta una copia de lo que dice T.es; null si coincide. Los textos se comparan con los espacios normalizados; los atributos, tal cual. */
 const diferencia = (c: Copia): string | null => {
@@ -611,7 +633,7 @@ describe("enlaces a las páginas nuevas", () => {
     ...Object.keys(NUEVAS),
   ];
 
-  it.each(conPie)("%s enlaza a las tres páginas nuevas desde el pie", (archivo) => {
+  it.each(conPie)("%s enlaza a las cinco páginas de aterrizaje desde el pie", (archivo) => {
     const pie = leer(archivo).match(/<nav class="pies"[\s\S]*?<\/nav>/)?.[0] ?? "";
     for (const nueva of Object.keys(NUEVAS)) {
       expect(pie).toContain(`href="/${nueva}"`);

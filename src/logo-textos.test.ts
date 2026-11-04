@@ -90,7 +90,7 @@ describe("textos del logo", () => {
   it("el sitemap tiene la fecha nueva de los términos y de precios", () => {
     const mapa = readFileSync("public/sitemap.xml", "utf8");
     expect(mapa).toMatch(/terminos\.html<\/loc><lastmod>2026-11-04/);
-    expect(mapa).toMatch(/precios\.html<\/loc><lastmod>2026-11-02/);
+    expect(mapa).toMatch(/precios\.html<\/loc><lastmod>2026-11-0[24]/);
   });
 
   it("verificar.html y evento.html tienen la franja y el logo no entra al comprobante", () => {

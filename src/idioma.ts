@@ -58,6 +58,11 @@ export function onLangChange(fn: (l: Lang) => void): void {
 
 const LANG_KEY = "tinkazo.lang";
 
+/** Si quien abre la página es un rastreador de buscador o de vista previa (por el nombre con que se presenta el navegador). */
+export function esRastreador(ua: string = typeof navigator === "undefined" ? "" : navigator.userAgent): boolean {
+  return /googlebot|bingbot|bingpreview|duckduckbot|slurp|baiduspider|yandex(bot|images)?|applebot|facebookexternalhit|twitterbot|linkedinbot|slackbot|telegrambot|chrome-lighthouse|petalbot|semrushbot|ahrefsbot/i.test(ua);
+}
+
 /**
  * El idioma con que arranca cualquier página: el de la URL (`?lang=`), si no
  * el que la persona eligió antes, y si no el del navegador. Antes "/" solo
@@ -67,6 +72,10 @@ const LANG_KEY = "tinkazo.lang";
 export function initialLang(): Lang {
   const q = new URLSearchParams(location.search).get("lang");
   if (q === "en" || q === "es") return q;
+  // Quien rastrea el sitio para el buscador abre con un navegador en inglés: sin esto, la portada y las páginas de
+  // lectura le saldrían en inglés en la misma dirección en que las personas la leen en español. Los rastreadores
+  // reciben el español, que es el idioma de la dirección limpia; el inglés lo piden con `?lang=en`.
+  if (esRastreador()) return "es";
   try {
     const s = localStorage.getItem(LANG_KEY);
     if (s === "en" || s === "es") return s;
@@ -133,6 +142,13 @@ export function setLang(l: Lang): void {
     const v = dict[el.dataset.iAria ?? ""];
     if (typeof v === "string") el.setAttribute("aria-label", v);
   });
+  document.querySelectorAll<HTMLImageElement>("[data-i-alt]").forEach((el) => {
+    const v = dict[el.dataset.iAlt ?? ""];
+    if (typeof v === "string") el.alt = v;
+  });
+  // El idioma de lo que se comparte: la etiqueta og:locale dice el de la página y la alternativa, el otro.
+  fijarMeta('meta[property="og:locale"]', l === "en" ? "en_US" : "es_BO");
+  fijarMeta('meta[property="og:locale:alternate"]', l === "en" ? "es_BO" : "en_US");
   // Las páginas de sorteo dicen su título y su descripción en el idioma de la
   // página, y lo mismo en las etiquetas og: lo que se comparte sale en el
   // idioma que se lee.

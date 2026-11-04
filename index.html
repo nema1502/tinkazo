@@ -1,18 +1,20 @@
 <!doctype html>
-<html lang="es">
+<html lang="es" data-titulo-clave="titPortada" data-desc-clave="descPortada">
 <head>
 <meta charset="utf-8" />
 <!-- viewport-fit=cover: el estadio ocupa la pantalla entera, también detrás de la muesca; la zona segura (env(safe-area-inset-*)) se respeta en la cabecera y en lo que se proyecta. interactive-widget: el teclado achica la página en vez de tapar el botón (Chrome de Android). -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
-<title>Tinkazo, sorteos verificables para eventos y clases</title>
-<meta name="description" content="Sorteos verificables para tu meetup, clase o evento. El ganador sale de un número público que nadie puede elegir. Participar es gratis." />
+<title>Tinkazo: sorteo verificable y gratis para eventos y clases</title>
+<meta name="description" content="Sorteá en tu evento o clase con ruleta de nombres y otros juegos en pantalla grande. Cualquiera comprueba el resultado, que sale de un número público. Gratis." />
 <link rel="canonical" href="https://tinkazo.app/" />
-<meta property="og:title" content="Tinkazo, sorteos verificables para eventos y clases" />
-<meta property="og:description" content="Sorteos verificables para tu meetup, clase o evento. El ganador sale de un número público que nadie puede elegir. Participar es gratis." />
+<link rel="alternate" hreflang="es" href="https://tinkazo.app/" />
+<link rel="alternate" hreflang="en" href="https://tinkazo.app/?lang=en" />
+<link rel="alternate" hreflang="x-default" href="https://tinkazo.app/" />
+<meta property="og:title" content="Tinkazo: sorteo verificable y gratis para eventos y clases" />
+<meta property="og:description" content="Sorteá en tu evento o clase con ruleta de nombres y otros juegos en pantalla grande. Cualquiera comprueba el resultado, que sale de un número público. Gratis." />
 <meta property="og:type" content="website" />
-<link rel="icon" href="/favicon.ico" sizes="48x48" />
-<link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
-<link rel="icon" type="image/svg+xml" href="/icon.svg" />
+<meta property="og:locale" content="es_BO" />
+<meta property="og:locale:alternate" content="en_US" />
 <meta property="og:site_name" content="Tinkazo" />
 <meta property="og:url" content="https://tinkazo.app/" />
 <meta property="og:image" content="https://tinkazo.app/og.jpg" />
@@ -22,50 +24,17 @@
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fff6e9" />
 <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#171126" />
-<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <!-- Añadido a la pantalla de inicio, abre sin la barra del navegador: la forma de tener pantalla completa en un iPhone, que no ofrece la API. -->
 <link rel="manifest" href="/manifest.webmanifest" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-title" content="Tinkazo" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@graph": [
-    {
-      "@type": "WebSite",
-      "@id": "https://tinkazo.app/#website",
-      "name": "Tinkazo",
-      "url": "https://tinkazo.app/",
-      "inLanguage": ["es", "en"],
-      "image": "https://tinkazo.app/og.jpg",
-      "publisher": { "@id": "https://tinkazo.app/#organization" }
-    },
-    {
-      "@type": "Organization",
-      "@id": "https://tinkazo.app/#organization",
-      "name": "Tinkazo",
-      "url": "https://tinkazo.app/",
-      "logo": "https://tinkazo.app/icon-512.png",
-      "sameAs": ["https://github.com/nema1502/tinkazo"]
-    },
-    {
-      "@type": "SoftwareApplication",
-      "@id": "https://tinkazo.app/#app",
-      "name": "Tinkazo",
-      "url": "https://tinkazo.app/",
-      "applicationCategory": "UtilitiesApplication",
-      "operatingSystem": "Web",
-      "inLanguage": ["es", "en"],
-      "isAccessibleForFree": true,
-      "image": "https://tinkazo.app/og.jpg",
-      "description": "Sorteos verificables para tu meetup, clase o evento. El ganador sale de un número público que nadie puede elegir. Participar es gratis.",
-      "publisher": { "@id": "https://tinkazo.app/#organization" }
-    }
-  ]
-}
-</script>
+<link rel="icon" href="/favicon.ico" sizes="48x48" />
+<link rel="icon" type="image/png" href="/icon-96.png" sizes="96x96" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" sizes="any" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://tinkazo.app/#website","name":"Tinkazo","alternateName":["tinkazo.app"],"url":"https://tinkazo.app/","inLanguage":["es","en"],"image":"https://tinkazo.app/og.jpg","publisher":{"@id":"https://tinkazo.app/#organization"}},{"@type":"Organization","@id":"https://tinkazo.app/#organization","name":"Tinkazo","alternateName":["tinkazo.app"],"url":"https://tinkazo.app/","logo":"https://tinkazo.app/icon-512.png","description":"Sorteos verificables para eventos, clases y comunidades. Participar es gratis.","disambiguatingDescription":"Herramienta gratuita para elegir con justicia en eventos y clases. No vende participaciones ni paquetes de sorteos.","sameAs":["https://github.com/nema1502/tinkazo"]},{"@type":"WebPage","@id":"https://tinkazo.app/#webpage","url":"https://tinkazo.app/","name":"Tinkazo: sorteo verificable y gratis para eventos y clases","description":"Sorteá en tu evento o clase con ruleta de nombres y otros juegos en pantalla grande. Cualquiera comprueba el resultado, que sale de un número público. Gratis.","inLanguage":"es","isPartOf":{"@id":"https://tinkazo.app/#website"},"about":{"@id":"https://tinkazo.app/#app"}},{"@type":"SoftwareApplication","@id":"https://tinkazo.app/#app","name":"Tinkazo","url":"https://tinkazo.app/","applicationCategory":"UtilitiesApplication","operatingSystem":"Web","inLanguage":["es","en"],"isAccessibleForFree":true,"image":"https://tinkazo.app/og.jpg","description":"Sorteá en tu evento o clase con ruleta de nombres y otros juegos en pantalla grande. Cualquiera comprueba el resultado, que sale de un número público. Gratis.","disambiguatingDescription":"Herramienta gratuita para elegir con justicia en eventos y clases. No vende participaciones ni paquetes de sorteos.","publisher":{"@id":"https://tinkazo.app/#organization"}}]}</script>
 </head>
 <body>
 <header>
@@ -655,6 +624,14 @@
         <h3 data-i="masVerifT">Sorteo verificable</h3>
         <p data-i="masVerifB">Cómo rehacer un resultado con tus propias herramientas, y qué no promete: la lista la arma quien sortea.</p>
       </a>
+      <a class="nota" href="/ruleta-de-nombres.html" style="text-decoration:none;color:inherit">
+        <h3 data-i="masRuletaT">Ruleta de nombres</h3>
+        <p data-i="masRuletaB">Pegá los nombres y mirá girar la ruleta. Es gratis, y después cualquiera comprueba que nadie la empujó.</p>
+      </a>
+      <a class="nota" href="/sorteo-para-eventos.html" style="text-decoration:none;color:inherit">
+        <h3 data-i="masEventosT">Sorteo para eventos y stands</h3>
+        <p data-i="masEventosB">Pantalla grande, QR y lista de Luma. El resultado queda en un enlace para compartir.</p>
+      </a>
       <a class="nota" href="/terminos.html" style="text-decoration:none;color:inherit">
         <h3 data-i="masTermT">Términos y privacidad</h3>
         <p data-i="masTermB">Participar es gratis, y quien organiza responde por su sorteo.</p>
@@ -677,6 +654,8 @@
     <a href="/sorteo-para-meetup.html" data-i="navMeetup">Sorteo para meetup</a>
     <a href="/sorteo-en-clase.html" data-i="navClase">Sorteo en clase</a>
     <a href="/sorteo-verificable.html" data-i="navVerif">Sorteo verificable</a>
+    <a href="/ruleta-de-nombres.html" data-i="navRuleta">Ruleta de nombres</a>
+    <a href="/sorteo-para-eventos.html" data-i="navEventos">Sorteo para eventos</a>
     <a href="https://github.com/nema1502/tinkazo" target="_blank" rel="noopener" data-i="navCodigo">Código</a>
     <a href="https://tally.so/r/KpzoAA" target="_blank" rel="noopener" data-feedback="pie" data-i="navFeedback">Contanos qué mejorar</a>
   </nav>

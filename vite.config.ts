@@ -80,7 +80,7 @@ function textosPorPagina(): Plugin {
 
         const T = await diccionario();
         const claves = new Set<string>();
-        const delHtml = [...fuente.matchAll(/\bdata-(?:i|i-html|i-ph|i-title|i-aria|label-i|titulo-clave|desc-clave)="([^"]+)"/g)].map((m) => m[1] as string);
+        const delHtml = [...fuente.matchAll(/\bdata-(?:i|i-html|i-ph|i-title|i-aria|i-alt|label-i|titulo-clave|desc-clave)="([^"]+)"/g)].map((m) => m[1] as string);
         for (const k of delHtml) {
           if (typeof T.es[k] !== "string" || typeof T.en[k] !== "string") {
             this.warn(`${ctx.path}: la clave "${k}" no es una cadena en los dos idiomas de src/i18n.ts`);
@@ -106,14 +106,14 @@ function textosPorPagina(): Plugin {
 /**
  * Las páginas de lectura se adelantan: cuando el mouse se posa 200 ms sobre un
  * enlace a otra (o al tocarlo, en el celular), Chrome la prerenderiza y al
- * hacer clic se muestra al instante. Solo esas nueve: son livianas y no tienen
+ * hacer clic se muestra al instante. Solo esas once: son livianas y no tienen
  * efectos. Las tres de sorteo (meetup, clase y verificable) son de lectura como
  * las demás. La herramienta no, que arranca audio, sesiones y miniaturas, y el
  * contador de visitas espera a que la página se muestre (`analytics.ts`). Los
  * navegadores sin speculation rules ignoran el bloque.
  */
 function adelantarLectura(): Plugin {
-  const paginas = ["juegos", "como-funciona", "historia", "seguridad", "precios", "terminos", "sorteo-para-meetup", "sorteo-en-clase", "sorteo-verificable"];
+  const paginas = ["juegos", "como-funciona", "historia", "seguridad", "precios", "terminos", "sorteo-para-meetup", "sorteo-en-clase", "sorteo-verificable", "ruleta-de-nombres", "sorteo-para-eventos"];
   const reglas = {
     prerender: [{ where: { href_matches: paginas.map((p) => `/${p}.html`) }, eagerness: "moderate" }],
   };
@@ -236,6 +236,8 @@ export default defineConfig({
         "sorteo-para-meetup": resolve(__dirname, "sorteo-para-meetup.html"),
         "sorteo-en-clase": resolve(__dirname, "sorteo-en-clase.html"),
         "sorteo-verificable": resolve(__dirname, "sorteo-verificable.html"),
+        "ruleta-de-nombres": resolve(__dirname, "ruleta-de-nombres.html"),
+        "sorteo-para-eventos": resolve(__dirname, "sorteo-para-eventos.html"),
         lista: resolve(__dirname, "lista.html"),
         evento: resolve(__dirname, "evento.html"),
         c: resolve(__dirname, "c.html"),
