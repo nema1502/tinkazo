@@ -77,7 +77,7 @@ const urlDe = (motor, tema, extra = "") =>
 
 async function capturas() {
   mkdirSync(out, { recursive: true });
-  const bitacora = [];
+  const registro = [];
   const browser = await launch({ port, width: 1366, height: 768 });
   try {
     for (const [w, h] of soloTamanos.map((x) => x.split("x").map(Number))) {
@@ -95,7 +95,7 @@ async function capturas() {
             const archivo = join(out, `${motor}-${MOMENTOS[i][0]}-${w}x${h}-${tema}.png`);
             await page.screenshot(archivo);
             const canvas3d = await page.eval("!!document.getElementById('tres-canvas')");
-            bitacora.push({ archivo, t: Number(t.toFixed(3)), canvas3d });
+            registro.push({ archivo, t: Number(t.toFixed(3)), canvas3d });
             console.log(`  ${archivo} (t=${t.toFixed(2)} s, lienzo 3D: ${canvas3d})`);
             await page.eval("window.__sigue()");
           }
@@ -108,7 +108,7 @@ async function capturas() {
   } finally {
     await browser.close();
   }
-  writeFileSync(join(out, "momentos.json"), JSON.stringify(bitacora, null, 2));
+  writeFileSync(join(out, "momentos.json"), JSON.stringify(registro, null, 2));
 }
 
 async function fps() {

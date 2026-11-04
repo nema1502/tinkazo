@@ -66,7 +66,7 @@ Ejemplo con el trompo (`pixi/trompo.ts`, `tres/trompo-3d.ts`); cambiá el nombre
 
 ### 1. Rama y worktree propios
 
-Desde la rama que trae el kit, con `pnpm install`. No toques `src/i18n.ts`, `index.html`, `src/styles.css`, `src/main.ts`, `src/state.ts`, `src/games/engine.ts`, `src/games/pixi/stage.ts`, `src/games/pixi/index.ts` ni `vite.config.ts` salvo que tu TAREA lo diga: el kit ya no los necesita.
+Desde la rama que trae el kit, con `pnpm install`. No toques `src/i18n.ts`, `index.html`, `src/styles.css`, `src/main.ts`, `src/state.ts`, `src/games/engine.ts`, `src/games/pixi/stage.ts`, `src/games/pixi/index.ts` ni `vite.config.ts`: el kit ya no los necesita.
 
 ### 2. Leé qué decide el 2D y qué dibuja
 
