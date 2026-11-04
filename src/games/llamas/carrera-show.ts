@@ -428,6 +428,9 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
     if (!nueva) decir(3, tDeQ(0.52) + 1.4, { texto: () => ctx.txt("carAprieta"), calor: 0.72 });
     decir(5, tDeQ(final.foto), { texto: () => ctx.txt("carFoto"), calor: 0.95, grito: true, prioridad: PRIORIDAD.importante });
   } else if (arco === "tapada") decir(4, tDeQ(nueva ? 0.93 : 0.88), { texto: () => ctx.txt("carCuela"), calor: 0.9 });
+  // Antes de la largada, mientras se lee la lista: un pulso suave de la sala que espera, cada 0,8 s, sin melodía. Sin esto
+  // la carrera quedaba cuatro segundos en silencio entre el cartel de la meta y la salida.
+  for (let t = 1.2, j = 0; t < tSalida; t += 0.8, j++) sonar(t, (k) => k.sonido.tono(j % 2 ? 5 : 3, "fondo", { dur: 0.06, vol: 0.022 }));
   // Las patas: un golpe de casco cada medio segundo, parejo.
   for (let t = tSalida + 0.5, j = 0; t < tCrown - 0.4; t += 0.5, j++) sonar(t, (k) => k.sonido.tono(j % 2 ? 3 : 0, "fondo", { dur: 0.05, vol: 0.022 }));
 
