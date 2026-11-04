@@ -25,7 +25,9 @@
  *   siempre (`planRace`) o, con `nueva`, la intercambiable (`carrera-recta.ts`):
  *   ahí se mide además `recta-88` (el acordeón) y `suceso-ganadora` (¿le pasan a
  *   la ganadora tantos sucesos como a cualquiera?), y el camino entero lo mira
- *   el adivinador (`delatores-bayes.mjs`).
+ *   el adivinador (`delatores-bayes.mjs`). En las dos se mide a quién le tocan
+ *   los obstáculos (`obstaculo-piedras`, `obstaculo-viento`, `obstaculo-salta-mal`):
+ *   la ganadora tiene que recibir tantos como cualquiera.
  * - **el relator** (`nombra-*`, `drama`): a quién nombra, con las mismas reglas
  *   que en los otros juegos (`senalesSubtitulos`), sobre las líneas del guion.
  *
@@ -270,6 +272,16 @@ export function observar(lib, plan, ctx) {
         medias["suceso-ganadora"] = { v: ((tocadas.has(kw) ? 1 : 0) - p) / Math.sqrt(p * (1 - p)), sd: 1 };
         tiempos["suceso-ganadora"] = d.tDeQ(0.56);
       }
+    }
+    // Los obstáculos (`carrera-obstaculos.ts`) le tocan a cualquiera: a quién le caen las piedras, a quién le toca la ráfaga y quién salta mal.
+    // La ganadora tiene uno tantas veces como le toca por azar (z de Bernoulli), igual que los sucesos de la recta nueva.
+    for (const o of d.final.obstaculos ?? []) {
+      const tocadas = o.tipo === "salto" ? o.malas : o.carriles;
+      const p = tocadas.length / L;
+      if (!(p > 0 && p < 1)) continue;
+      const clave = o.tipo === "piedras" ? "obstaculo-piedras" : o.tipo === "salto" ? "obstaculo-salta-mal" : "obstaculo-viento";
+      medias[clave] = { v: ((tocadas.includes(kw) ? 1 : 0) - p) / Math.sqrt(p * (1 - p)), sd: 1 };
+      tiempos[clave] = d.tDeQ(o.q);
     }
     repartos.carril = { K: L, k: kw };
     tiempos.carril = d.tAbre;

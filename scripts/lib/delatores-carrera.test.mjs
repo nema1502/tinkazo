@@ -51,7 +51,8 @@ describe("lo que ve la sala en una ronda", () => {
       expect(o.senales, s).toHaveProperty(s);
     }
     expect(Object.keys(o.repartos).sort()).toEqual(["carril", "entrada", "recta-25", "recta-50", "recta-75"]);
-    expect(Object.keys(o.medias).sort()).toEqual(["echa-orden-lista", "tiempo-dif"]);
+    // Los obstáculos le tocan a cualquiera: sus medias dependen de cuáles tiene la ronda.
+    expect(Object.keys(o.medias).filter((k) => !k.startsWith("obstaculo-")).sort()).toEqual(["echa-orden-lista", "tiempo-dif"]);
     // Sin tandas: ni tanda, ni portón, ni "la última en pasar".
     expect(o.repartos.tanda).toBeUndefined();
     expect(o.senales["punta-corral"]).toBeUndefined();
@@ -82,7 +83,7 @@ describe("lo que ve la sala en una ronda", () => {
     expect(o.repartos.tanda.K).toBe(8);
     expect(o.repartos.porton).toBeUndefined();
     expect(o.senales["punta-50"]).toBeUndefined();
-    expect(Object.keys(o.medias)).toEqual([]);
+    expect(Object.keys(o.medias).filter((k) => !k.startsWith("obstaculo-"))).toEqual([]);
     expect(o.repartos.entrada.K).toBe(8);
   });
 

@@ -9,8 +9,10 @@ import {
   type Entrada3D, type Fabrica3D, type Geometria3D, type OpcionesFabrica3D, type Pantalla3D, type Vista3D,
 } from "./carrera-3d-mapa";
 import { sinAzarDeTres } from "./carrera-3d-ids";
+import { crearEfectos3D } from "./carrera-3d-obstaculos";
 import { crearLider3D, modoLider } from "./carrera-3d-lider";
 import type { Momento } from "./llama";
+import { posturaObstaculo } from "./llama-obstaculos";
 
 /**
  * La carrera de llamas en 3D, con three.js. Prototipo detrás de `?motor=3d`
@@ -242,13 +244,20 @@ function poner(r: LlamaRig, P: Piezas, ph: number, speed: number, m: Momento): v
   else if (m?.kind === "escupido") {
     lean = -0.12 * Math.sin(Math.PI * m.p * 3);
     aviso = "?!";
+  } else if (posturaObstaculo(m)) {
+    const o = posturaObstaculo(m);
+    // El 3D usa los ángulos del 2D de siempre (patas hacia atrás positivas): se invierten.
+    if (o?.patas) legA = o.patas.map((a) => -a);
+    lean = o?.lean ?? lean;
+    cuelloRot = o?.cuelloRot ?? cuelloRot;
+    if (o?.aviso) aviso = o.aviso;
   } else if (m?.kind === "echada") {
     plegada = Math.min(1, m.p);
     cuelloRot = -0.1;
     if (m.p >= 1) aviso = "zZ";
   }
   const fases = [ph, ph + 0.9, ph + Math.PI, ph + Math.PI + 0.9];
-  const rigida = m?.kind === "plantada" || speed < 0.1;
+  const rigida = m?.kind === "plantada" || posturaObstaculo(m)?.rigida === true || speed < 0.1;
   r.patas.forEach((l, i) => {
     const a = plegada ? lerp(legA[i] ?? 0, i % 2 ? 1.25 : -1.25, plegada) : (legA[i] ?? 0);
     const k = plegada ? plegada * (i % 2 ? -1.9 : 1.9) : rigida ? 0 : Math.max(0, -Math.cos(fases[i] ?? 0)) * (i % 2 === 0 ? 1.05 : 0.8);
@@ -315,6 +324,8 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
   const llamas = new Map<number, Colocada>();
   const grupoLlamas = new Group();
   escena.add(grupoLlamas);
+  // Los obstáculos de la recta que se mueven: piedras, polvo, rayas de viento y pasto (`carrera-3d-obstaculos.ts`).
+  const efectos3D = crearEfectos3D(escena, basura);
 
   /* -------------------------------------------------------- lo fijo del mundo */
   function armarMundo(g: Geometria3D): void {
@@ -444,6 +455,18 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
       for (let j = 0; j <= g.carN; j++) {
         const z = Z(g.carY0 + j * alto);
         caja(0xf4efe6, aR, bR, 0, 0.1, z - 0.13, z + 0.13);
+      }
+    }
+
+    // Las vallas del salto: dos largueros de lado a lado de los carriles y un poste en cada raya. Más bajas que el salto de la llama.
+    for (const v of g.vallas) {
+      const x = X(v.x), z0 = Z(v.y0), z1 = Z(v.y1), h = v.alto * s;
+      caja(0x8a6238, x - 0.13, x + 0.13, h * 0.42, h * 0.58, z0, z1);
+      caja(0xe8e2d4, x - 0.13, x + 0.13, h * 0.84, h, z0, z1);
+      const alto = (v.y1 - v.y0) / Math.max(1, g.carN);
+      for (let j = 0; j <= g.carN; j++) {
+        const z = Z(v.y0 + j * alto);
+        caja(0x6b4a2c, x - 0.17, x + 0.17, 0, h * 1.15, z - 0.17, z + 0.17);
       }
     }
 
@@ -667,6 +690,8 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
       });
       tribuna.malla.instanceMatrix.needsUpdate = true;
     }
+
+    efectos3D.frame(e.efectos, e.u);
 
     // La cámara: la del director del 2D, con perspectiva.
     const esc = e.gente.length ? escSum / e.gente.length : 0.5;

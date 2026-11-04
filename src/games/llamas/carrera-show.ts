@@ -11,6 +11,8 @@ import { duracionNominal, grupoDe, normalDe, tSalidaDe } from "./carrera-duracio
 export { DUR_FINAL, FIJOS, FINALISTAS, PELOTON_MAX, RECTA, TARJETA, T_NOMBRES, T_VUELO, alfabetico, corto, duracionNominal, grupoDe, normalDe, tSalidaDe };
 import { planRace, type Plan as PlanFinal } from "./plan";
 import { carrilesDe, planRecta } from "./carrera-recta";
+import { conCierre } from "./carrera-cierre";
+import { conObstaculos } from "./carrera-obstaculos";
 
 /**
  * El show de la carrera, puro: la salida, el grupo que se va echando, la recta
@@ -152,7 +154,12 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
   const campeona = ctx.ganadores[0] ?? 0;
   // La final. La de siempre: la historia del director de emoción, con el azar de la ronda. La nueva: la recta intercambiable,
   // que se decide en los últimos metros (`carrera-recta.ts`) y tiene su azar aparte.
-  const final = nueva ? rectaNueva(ctx, campeona) : planRace(names, campeona, ctx.rng, { sceneryDraws: Math.min(8, n) + 24 * 2 + 18 * 2 + 6 * 4 + 60 * 3, co: ctx.ganadores.slice(1) });
+  // La de siempre lleva además el cierre (`carrera-cierre.ts`): cómo se decide el último tramo, con su azar aparte.
+  // Y, en las dos, los obstáculos (`carrera-obstaculos.ts`): piedras, valla y ráfaga, con su azar aparte.
+  const sinObstaculos = nueva
+    ? rectaNueva(ctx, campeona)
+    : conCierre(planRace(names, campeona, ctx.rng, { sceneryDraws: Math.min(8, n) + 24 * 2 + 18 * 2 + 6 * 4 + 60 * 3, co: ctx.ganadores.slice(1) }), sembrar(Math.floor(ctx.azar("carrera:cierre") * 4294967296)));
+  const final = conObstaculos(sinObstaculos, sembrar(Math.floor(ctx.azar("carrera:obstaculos") * 4294967296)));
   const lanes = final.lanes;
   const arco = final.story.arc;
   const cortos = names.map(corto);
@@ -322,6 +329,13 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
     else if (b.kind === "tropiezo" || b.kind === "plantada") sucesos.push({ desde: t, tipo: "freno", quien: lanes[b.actor] });
     else if (b.kind === "escupida" && b.target !== undefined) sucesos.push({ desde: t, tipo: "freno", quien: lanes[b.target] });
   }
+  // Los obstáculos (`carrera-obstaculos.ts`): a quien le cae la piedra, a quien le toca el viento y a quien le sale mal el salto, también frenan.
+  const obstaculos = final.obstaculos ?? [];
+  for (const o of obstaculos) {
+    if (o.tipo === "piedras") sucesos.push({ desde: tDeQ(o.q + 0.004), tipo: "freno", quien: lanes[o.carriles[0] as number] });
+    else if (o.tipo === "salto") for (const m of o.malas) sucesos.push({ desde: tDeQ(o.llegan[m] as number), tipo: "freno", quien: lanes[m] });
+    else sucesos.push({ desde: tDeQ(o.q + 0.02), tipo: "freno", quien: lanes[o.carriles[0] as number] });
+  }
   sucesos.push({ desde: tCrown, tipo: "gano", quien: campeona });
   sucesos.sort((a, b) => a.desde - b.desde);
   const ultimoSuceso = (t: number): Suceso => {
@@ -393,6 +407,24 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
     else if (b.kind === "pique") decir(3, t, { texto: () => ctx.txt("carPique"), calor, ...(solo ? { hecho: { tipo: "adelante" as const, quien } } : {}) });
     else if (b.kind === "escupida" && b.target !== undefined) decir(3, t, { texto: () => ctx.txt("carEscupida"), calor });
   }
+  // Los obstáculos: el relator avisa antes de que pasen y no nombra a nadie (le tocan a cualquiera, y nombrarla no dice quién gana).
+  const semillaObst = Math.floor(ctx.azar("carrera:obstaculos:sonido") * 4294967296);
+  for (const o of obstaculos) {
+    if (o.tipo === "piedras") {
+      decir(5, tDeQ(o.q - 0.03), { texto: () => ctx.txt("carAlud"), calor: 0.5 + 0.3 * o.q });
+      sonar(tDeQ(o.q + 0.004), (k) => k.sonido.tono(0, "climax", { dur: 0.5, timbre: "sine", vol: 0.085 }));
+    } else if (o.tipo === "salto") {
+      decir(5, tDeQ(o.q - 0.03), { texto: () => ctx.txt("carValla"), calor: 0.5 + 0.3 * o.q });
+      for (const m of o.malas) {
+        decir(4, tDeQ((o.llegan[m] as number) + 0.012), { texto: () => ctx.txt("carSaltoMal"), calor: 0.55 + 0.3 * o.q });
+        sonar(tDeQ(o.llegan[m] as number), (k) => k.sonido.tono(1, "evento", { dur: 0.12, vol: 0.05 }));
+      }
+      sonar(tDeQ(o.q), (k) => k.sonido.tono(9, "evento", { dur: 0.08, vol: 0.05 }));
+    } else {
+      decir(5, tDeQ(o.q - 0.01), { texto: () => ctx.txt("carRafaga"), calor: 0.5 + 0.3 * o.q });
+      sonar(tDeQ(o.q - 0.01), (k) => k.sonido.viento(1.6, 0.8, semillaObst));
+    }
+  }
   // En la carrera nueva el arco se nombra por cómo termina y la recta se decide al 88 %: las líneas del arco caen después.
   if (arco === "remontada") decir(4, tDeQ(nueva ? 0.93 : 0.74), { texto: () => ctx.txt("carRemonta"), calor: 0.8 });
   else if (arco === "duelo") {
@@ -458,6 +490,21 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
     decir(2, t, { texto: () => ctx.txt("carHinchada", nom(quien)), calor: Math.min(0.9, 0.5 + 0.35 * clamp01((t - tAbre) / DUR_FINAL)) });
   });
   aceptadas = aceptar(cand);
+  // Ninguna frase se repite más de dos veces seguidas: la tercera igual se tira.
+  const ordenadas = aceptadas.slice().sort((a, b) => a.linea.t - b.linea.t);
+  let ultimo = "", seguidas = 0;
+  const sinRepetir = ordenadas.filter((c) => {
+    if (c.linea.texto === undefined) return true;
+    const x = typeof c.linea.texto === "function" ? c.linea.texto() : c.linea.texto;
+    seguidas = x === ultimo ? seguidas + 1 : 1;
+    ultimo = x;
+    if (seguidas > 2) {
+      seguidas = 2;
+      return false;
+    }
+    return true;
+  });
+  aceptadas = sinRepetir;
   const guion = aceptadas.map((c) => c.linea).sort((a, b) => a.t - b.t);
   const lineasAdelante = aceptadas.filter((a) => a.tipo === "adelante").map((a) => a.linea.t).sort((x, y) => x - y);
 

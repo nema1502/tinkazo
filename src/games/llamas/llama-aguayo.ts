@@ -1,3 +1,4 @@
+import { posturaObstaculo } from "./llama-obstaculos";
 import { Container, Graphics } from "pixi.js";
 import type { Estadio } from "../pixi/kit/anfitrion";
 import { CREAM, INK, YELLOW } from "../pixi/stage";
@@ -179,6 +180,15 @@ export function crearLlamaAguayo(S: Estadio, o: { pelaje: number; manta: number 
         lean = -0.12 * Math.sin(Math.PI * m.p * 3);
         marca.visible = true;
         marca.text = "?!";
+      } else if (posturaObstaculo(m)) {
+        const o = posturaObstaculo(m);
+        if (o?.patas) ang = o.patas;
+        lean = o?.lean ?? lean;
+        cuelloRot = o?.cuelloRot ?? cuelloRot;
+        if (o?.aviso) {
+          marca.visible = true;
+          marca.text = o.aviso;
+        }
       } else if (m?.kind === "echada") {
         // Se echa: baja el cuerpo, pliega las patas, se pone gris y levanta polvo. Queda así, con los ojos cerrados y las "zZ".
         plegada = Math.min(1, m.p);
@@ -195,7 +205,7 @@ export function crearLlamaAguayo(S: Estadio, o: { pelaje: number; manta: number 
           for (let i = 0; i < 5; i++) polvo.circle(-26 + i * 14, -3 - m.p * 10 * (i % 2 + 1), 5 + m.p * 9 + i).fill({ color: 0xd9cdb4, alpha: a });
         }
       }
-      const rigida = m?.kind === "plantada" || speed < 0.1;
+      const rigida = m?.kind === "plantada" || posturaObstaculo(m)?.rigida === true || speed < 0.1;
       patas.forEach((l, i) => {
         // La pierna va hacia adelante con ángulo positivo del boceto; en pantalla (y hacia abajo) es una rotación negativa.
         const a = ang[i] ?? 0;

@@ -2,6 +2,7 @@ import { Container, Graphics, type Text } from "pixi.js";
 import type { Estadio } from "../pixi/kit/anfitrion";
 import { CREAM, INK, YELLOW } from "../pixi/stage";
 import { BORLA_RADIO } from "./carrera-forma";
+import { posturaObstaculo } from "./llama-obstaculos";
 
 export { BORLA_RADIO, LLAMA_ALTO, LLAMA_COLA, LLAMA_HOCICO, LLAMA_LARGO } from "./carrera-forma";
 
@@ -128,6 +129,15 @@ export function crearLlama(S: Estadio, o: { pelaje: number; manta: number }): Ll
         lean = -0.12 * Math.sin(Math.PI * m.p * 3);
         marca.visible = true;
         marca.text = "?!";
+      } else if (posturaObstaculo(m)) {
+        const o = posturaObstaculo(m);
+        if (o?.patas) legA = o.patas.map((a) => -a);
+        lean = o?.lean ?? lean;
+        cuelloRot = o?.cuelloRot ?? cuelloRot;
+        if (o?.aviso) {
+          marca.visible = true;
+          marca.text = o.aviso;
+        }
       } else if (m?.kind === "echada") {
         // Se echa: baja el cuerpo, pliega las patas, se pone gris y levanta polvo. Queda así.
         plegada = Math.min(1, m.p);
@@ -145,7 +155,7 @@ export function crearLlama(S: Estadio, o: { pelaje: number; manta: number }): Ll
         }
       }
       const fases = [ph, ph + 0.9, ph + Math.PI, ph + Math.PI + 0.9];
-      const rigida = m?.kind === "plantada" || speed < 0.1;
+      const rigida = m?.kind === "plantada" || posturaObstaculo(m)?.rigida === true || speed < 0.1;
       patas.forEach((l, i) => {
         l.hip.rotation = plegada ? lerp(legA[i] ?? 0, i % 2 ? 1.25 : -1.25, plegada) : (legA[i] ?? 0);
         l.knee.rotation = plegada ? plegada * (i % 2 ? -1.9 : 1.9) : rigida ? 0 : Math.max(0, -Math.cos(fases[i] ?? 0)) * (i % 2 === 0 ? 1.05 : 0.8);

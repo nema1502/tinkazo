@@ -1,3 +1,4 @@
+import { ENSANCHE as ENSANCHE_PLAN } from "./carrera-obstaculos";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { permite3D, type Entorno3D } from "../permite3d";
@@ -12,7 +13,7 @@ import { RECTA, planCarrera } from "./carrera-show";
  */
 
 /** El 2D pone a quien corre la recta en `Xs + (q + (pq - q) · ENSANCHE) · RECTA · ancho` (`posicion` en carrera.ts). */
-const ENSANCHE = 1.7;
+const ENSANCHE = ENSANCHE_PLAN;
 const xDelDosD = (pq: number, q: number, Xs: number, w: number): number => Xs + (q + (pq - q) * ENSANCHE) * RECTA * w;
 
 const QS = [0.25, 0.5, 0.7, 0.88, 1];
@@ -21,7 +22,8 @@ describe("el 3D dibuja las posiciones del plan 2D", () => {
   it("la cuenta del 2D que usa el 3D es la que está escrita en carrera.ts", () => {
     const fuente = readFileSync(new URL("./carrera.ts", import.meta.url), "utf8");
     expect(fuente).toContain("const pq = d.final.pos(carril, qq);");
-    expect(fuente).toContain("const xl = Xs + (qq + (pq - qq) * 1.7) * RECTA * P.w;");
+    expect(fuente).toContain("const xl = Xs + (qq + (pq - qq) * ENSANCHE) * RECTA * P.w;");
+    expect(ENSANCHE_PLAN).toBe(1.7);
   });
 
   for (const n of [5, 8, 18, 30]) {

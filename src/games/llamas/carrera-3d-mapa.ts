@@ -73,6 +73,34 @@ export interface Camara2D {
   rot: number;
 }
 
+/**
+ * Un obstáculo en marcha (`carrera-obstaculos.ts`), tal como la escena 2D lo ve en este cuadro, en píxeles del mundo 2D. El plan decide
+ * cuándo y a quién; el 3D solo lo dibuja: las piedras que caen y ruedan, el polvo y el pasto de la ráfaga.
+ */
+export interface Efecto3D {
+  tipo: "piedras" | "viento";
+  /** Cuánto lleva la animación, de 0 a 1. */
+  s: number;
+  /** Piedras: donde cae la principal (x) y el piso del carril (y). Viento: el centro del grupo (x) y el piso del primer carril (y). */
+  x: number;
+  y: number;
+  /** Viento: el piso del último carril, y cuánto mide el grupo a lo ancho. */
+  y1: number;
+  ancho: number;
+  /** Viento: hacia dónde corre (-1 hacia arriba de la pantalla, 1 hacia abajo). */
+  lado: number;
+  /** Cuál de los obstáculos de la recta es (para repartir lo que parece azar con un hash). */
+  id: number;
+}
+
+/** La valla del salto: cruza los carriles de la final en `x`, con `alto` píxeles de altura. */
+export interface Valla3D {
+  x: number;
+  y0: number;
+  y1: number;
+  alto: number;
+}
+
 /** Lo que la escena le da a la vista 3D en cada cuadro. */
 export interface Entrada3D {
   t: number;
@@ -85,6 +113,8 @@ export interface Entrada3D {
   campeona: number;
   /** Segundos desde que la ganadora cruza la meta (negativo antes). */
   corona: number;
+  /** Los obstáculos que están pasando en este cuadro. */
+  efectos: Efecto3D[];
   /** Para los auditores: la hora de juego en que la recta está al 25, 50, 70, 88 y 100 % (`d.tDeQ`). */
   horas: number[];
 }
@@ -125,6 +155,8 @@ export interface Geometria3D {
   corral: number;
   rotuloMeta: string;
   rotuloSalida: string;
+  /** Las vallas del salto, si la carrera las tiene. */
+  vallas: Valla3D[];
 }
 
 export interface Pantalla3D {

@@ -4,8 +4,9 @@ import { colorDeNombre } from "../pixi/foco-vista";
 import { crearJuego, minimoPx, nivelPorCantidad, planNombres, type Caja, type DefJuego, type FocoPunto, type Kit, type Nivel, type Zona } from "../pixi/kit";
 import { anfitrionTinkazo } from "../pixi/kit/anfitrion";
 import { CREAM, INK, YELLOW, contorno, hash, mountPixi } from "../pixi/stage";
-import type { Borla3D, Corredora3D, Fabrica3D, Geometria3D, Vista3D, ZonaSuelo } from "./carrera-3d-mapa";
+import type { Borla3D, Corredora3D, Efecto3D, Fabrica3D, Geometria3D, Valla3D, Vista3D, ZonaSuelo } from "./carrera-3d-mapa";
 import { ECHADA_DUR, carrilesDe, formaDe, hudDe, type Carriles, type Forma, type Pantalla } from "./carrera-forma";
+import { ENSANCHE, SALTO_MEDIO } from "./carrera-obstaculos";
 import { RECTA, alfabetico, planCarrera, type Datos, type EscenaCarrera } from "./carrera-show";
 import { pisaA, metida, sitioLibre, RENGLONES_MAX, type CajaF } from "./carrera-fichas";
 import { crearLlamaAguayo } from "./llama-aguayo";
@@ -87,6 +88,8 @@ interface Posicion {
   visible: boolean;
   /** Falso: todavía no tiene su nombre en la pista (el de las tandas está en el cartel). */
   etiquetar?: boolean;
+  /** Cuánto se levanta del piso (el salto de la valla), en píxeles. */
+  alza?: number;
 }
 
 function crearEscena(k: Kit, d: Datos, fabrica3d: Fabrica3D | null = null) {
@@ -116,13 +119,15 @@ function crearEscena(k: Kit, d: Datos, fabrica3d: Fabrica3D | null = null) {
   const raya = new Graphics();
   // Las estelas (carrera nueva): rayitas de velocidad detrás de cada llama que corre, para que se lea hacia dónde van sin leer.
   const estelas = new Graphics();
+  // Los obstáculos de la recta (`carrera-obstaculos.ts`): piedras que caen y viento, debajo de las llamas. La valla es fija y va en las marcas.
+  const obstaculosG = new Graphics();
   const corredoras = new Container();
   corredoras.sortableChildren = true;
   const borlaCapa = new Container();
   const etiquetas = new Container();
   // Las fichas se ordenan: la amarilla de quien va adelante arriba de todas, y la de quien se acaba de echar arriba de las comunes.
   etiquetas.sortableChildren = true;
-  mundo.addChild(suelo, marcas, porton, raya, estelas, corredoras, borlaCapa, etiquetas);
+  mundo.addChild(suelo, marcas, porton, raya, estelas, obstaculosG, corredoras, borlaCapa, etiquetas);
   S.scene.addChild(mundo);
   const hud = new Container();
   S.hud.addChild(hud);
@@ -407,14 +412,117 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
     const qq = d.q(t);
     // Las diferencias entre carriles se ensanchan un 70 % en la pantalla: así los adelantamientos se ven (el orden y la llegada son los del plan).
     const pq = d.final.pos(carril, qq);
-    const xl = Xs + (qq + (pq - qq) * 1.7) * RECTA * P.w;
-    const yl = carr.yPie(carril);
+    const xl = Xs + (qq + (pq - qq) * ENSANCHE) * RECTA * P.w;
+    // La ráfaga corre a un grupo de carriles hacia un costado; la valla levanta a quien la salta (ambas del plan, `carrera-obstaculos.ts`).
+    const yl = carr.yPie(carril) + (d.final.lateral?.(carril, qq) ?? 0) * carr.altoFila;
+    const alza = (d.final.salto?.(carril, qq) ?? 0) * carr.altoFila;
     const e = fraccionMovida(t);
     const m = d.final.beatOf(carril, qq);
-    if (e >= 1) return { x: xl, y: yl, esc: carr.esc, velocidad: m?.kind === "plantada" ? 0 : 1.2, momento: m, visible: true };
+    if (e >= 1) return { x: xl, y: yl, esc: carr.esc, velocidad: m?.kind === "plantada" ? 0 : 1.2, momento: m, visible: true, alza };
     const lg = lugarEnGrupo(persona, d.tAbre - 0.001) ?? { x: Xs, y: yl };
     const xg = lg.x + RECTA * P.w * qq;
     return { x: lerp(xg, xl, e), y: lerp(lg.y, yl, e), esc: lerp(forma.esc, carr.esc, e), velocidad: 1.1, momento: m, visible: true };
+  }
+
+  /* ------------------------------------------------------------ los obstáculos */
+  /** Dónde está en el mundo el carril `kk` cuando la recta va en `q` (la misma cuenta que `posicion`). */
+  const xCarril = (kk: number, q: number): number => Xs + (q + (d.final.pos(kk, q) - q) * ENSANCHE) * RECTA * P.w;
+  /** Las vallas del plan, en el mundo: cruzan los carriles de la final. */
+  function vallasDelPlan(): Valla3D[] {
+    return (d.final.obstaculos ?? []).filter((o) => o.tipo === "salto").map((o) => ({ x: Xs + o.valla * RECTA * P.w, y0: carr.y0, y1: carr.y1, alto: 0.34 * carr.altoFila }));
+  }
+  /** Las piedras y la ráfaga que están pasando en `t`, tal como las ve el 2D y las dibuja el 3D. */
+  function efectosEn(t: number): Efecto3D[] {
+    const obs = d.final.obstaculos;
+    if (!obs?.length || t < d.tAbre || t > d.tCrown) return [];
+    const qq = d.q(t);
+    const out: Efecto3D[] = [];
+    obs.forEach((o, id) => {
+      if (o.tipo === "piedras") {
+        const qa = o.q - 0.05, qf = o.q + 0.1;
+        if (qq < qa || qq > qf) return;
+        const kk = o.carriles[0] as number;
+        out.push({ tipo: "piedras", s: (qq - qa) / (qf - qa), x: xCarril(kk, o.q + 0.004) + (LLAMA_HOCICO + 30) * carr.esc, y: carr.yPie(kk), y1: 0, ancho: 0, lado: 0, id });
+      } else if (o.tipo === "viento") {
+        const qa = o.q - 0.02, qf = o.q + o.dur * 1.7;
+        if (qq < qa || qq > qf) return;
+        const xs = o.carriles.map((kk) => xCarril(kk, qq));
+        out.push({ tipo: "viento", s: (qq - qa) / (qf - qa), x: xs.reduce((a, b) => a + b, 0) / xs.length, y: carr.yPie(Math.min(...o.carriles)), y1: carr.yPie(Math.max(...o.carriles)), ancho: 0.55 * P.w, lado: o.lado, id });
+      }
+    });
+    return out;
+  }
+  /** Las personas a las que les está pasando algo en `t` (la piedra, la que salta mal, el grupo de la ráfaga): el director las incluye en el plano. */
+  function enApuros(t: number): number[] {
+    const obs = d.final.obstaculos;
+    if (!obs?.length) return [];
+    const qq = d.q(Math.max(t, d.tAbre));
+    const out = new Set<number>();
+    for (const o of obs) {
+      if (o.tipo === "piedras") {
+        if (qq > o.q - 0.03 && qq < o.q + 0.09) out.add(d.lanes[o.carriles[0] as number] as number);
+      } else if (o.tipo === "salto") {
+        for (const m of o.malas) if (qq > (o.llegan[m] as number) - 0.02 && qq < (o.llegan[m] as number) + 0.08) out.add(d.lanes[m] as number);
+      } else if (qq > o.q - 0.01 && qq < o.q + o.dur * 1.4) for (const kk of o.carriles) out.add(d.lanes[kk] as number);
+    }
+    return [...out];
+  }
+  /** Una roca de seis puntas, irregular según `h`, centrada en (x, y). */
+  const roca = (x: number, y: number, r: number, h: number, giro: number): number[] => {
+    const pts: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const a = giro + (i / 6) * Math.PI * 2;
+      const rr = r * (0.72 + 0.4 * hash(i + 3, Math.floor(h * 97)));
+      pts.push(x + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.82);
+    }
+    return pts;
+  };
+  function pintarObstaculos(t: number): void {
+    obstaculosG.clear();
+    const ef = efectosEn(t);
+    if (!ef.length) return;
+    const u = P.u;
+    for (const f of ef) {
+      const env = Math.sin(Math.PI * Math.min(1, f.s));
+      if (f.tipo === "piedras") {
+        for (let j = 0; j < 5; j++) {
+          const dx = j === 0 ? 0 : (hash(f.id * 7 + j, 3) - 0.5) * 150 * u;
+          const dy = j === 0 ? 0 : (hash(f.id * 5 + j, 9) - 0.5) * carr.altoFila * 0.7;
+          const retraso = j === 0 ? 0 : hash(f.id * 3 + j, 1) * 0.06;
+          const w = (f.s - retraso) / 0.3;
+          if (w < 0) continue;
+          const gx = f.x + dx, gy = f.y + dy;
+          const r = (j === 0 ? 17 : 9 + 6 * hash(f.id + j, 2)) * u;
+          if (w < 1) {
+            // Cae del cerro: viene de arriba y de atrás, con su sombra creciendo en el piso.
+            obstaculosG.ellipse(gx, gy, r * (0.5 + w), r * 0.3 * (0.5 + w)).fill({ color: 0x000000, alpha: 0.3 * w });
+            obstaculosG.poly(roca(gx - (1 - w * w) * 70 * u, gy - (1 - w * w) * 430 * u, r, hash(f.id, j), w * 9)).fill(0x8d8478).stroke({ width: 2 * u, color: INK });
+          } else {
+            const v = (f.s - retraso - 0.3) / 0.45;
+            if (v > 1) continue;
+            const rebote = Math.abs(Math.sin(v * Math.PI * 2.6)) * Math.exp(-v * 3.2) * 36 * u;
+            obstaculosG.ellipse(gx + v * 46 * u, gy, r, r * 0.3).fill({ color: 0x000000, alpha: 0.25 * (1 - v) });
+            obstaculosG.poly(roca(gx + v * 46 * u, gy - rebote - r * 0.3, r, hash(f.id, j), v * 12)).fill(0x8d8478).stroke({ width: 2 * u, color: INK });
+            if (v < 0.5) for (let i = 0; i < 4; i++) obstaculosG.circle(gx + (i - 1.5) * 18 * u, gy - 8 * u - v * 30 * u * (1 + (i % 2)), (9 + 36 * v) * u).fill({ color: 0xd9cdb4, alpha: 0.5 * (1 - v * 2) });
+          }
+        }
+      } else {
+        const yTop = f.y - carr.altoFila * 0.85, yBot = f.y1 + carr.altoFila * 0.15;
+        for (let i = 0; i < 16; i++) {
+          const yy = yTop + hash(f.id * 11 + i, 4) * (yBot - yTop);
+          const fase = (hash(f.id * 13 + i, 6) + f.s * 2.6) % 1;
+          const xx = f.x - f.ancho / 2 + fase * f.ancho;
+          const largo = (60 + 90 * hash(f.id + i, 8)) * u;
+          obstaculosG.moveTo(xx, yy + f.lado * fase * 14 * u).lineTo(xx + largo, yy + f.lado * (fase * 14 + 6) * u).stroke({ width: 2.4 * u, color: 0xffffff, alpha: 0.65 * env, cap: "round" });
+        }
+        for (let i = 0; i < 10; i++) {
+          const yy = yTop + hash(f.id * 17 + i, 5) * (yBot - yTop);
+          const fase = (hash(f.id * 19 + i, 7) + f.s * 1.8) % 1;
+          const xx = f.x - f.ancho / 2 + fase * f.ancho;
+          obstaculosG.poly(roca(xx, yy - Math.sin(fase * Math.PI) * 40 * u, 5 * u, hash(i, f.id), fase * 14)).fill({ color: i % 3 ? 0x6fae4a : 0xc9b27a, alpha: 0.85 * env });
+        }
+      }
+    }
   }
 
   /* --------------------------------------------------------------- el suelo */
@@ -506,6 +614,14 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
         g.rect(Xs - 3 * u, y - 30 * u, 6 * u, 32 * u).fill(INK);
         g.circle(Xs, y - 34 * u, 7 * u).fill(d.nueva ? CREAM : YELLOW).stroke({ width: 2.5 * u, color: INK });
       }
+    }
+    // Las vallas del salto: una cerca baja de lado a lado de los carriles, con rayas, y un poste en cada raya de carril.
+    for (const v of vallasDelPlan()) {
+      const largo = v.y1 - v.y0;
+      g.roundRect(v.x - 5 * u, v.y0, 10 * u, largo, 4 * u).fill(0x8a6238).stroke({ width: 2 * u, color: INK });
+      for (let y = v.y0, i = 0; y < v.y1; y += 20 * u, i++) if (i % 2) g.rect(v.x - 5 * u, y, 10 * u, Math.min(20 * u, v.y1 - y)).fill(0xe8e2d4);
+      for (let j = 0; j <= carr.n; j++) g.circle(v.x, v.y0 + j * carr.altoFila, 9 * u).fill(0x6b4a2c).stroke({ width: 2 * u, color: INK });
+      g.rect(v.x - SALTO_MEDIO * RECTA * P.w, v.y0, 2 * SALTO_MEDIO * RECTA * P.w, largo).fill({ color: 0xffffff, alpha: 0.07 });
     }
     // En la carrera nueva el arco de la meta baja al borde de la pista: arriba quedaba debajo de la cabecera y se cortaba.
     const bajaMeta = d.nueva ? 88 * u : 0;
@@ -1003,7 +1119,7 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
         }
       }
       c.raiz.visible = true;
-      c.raiz.position.set(p.x, p.y);
+      c.raiz.position.set(p.x, p.y - (p.alza ?? 0));
       c.raiz.scale.set(p.esc);
       const lying = p.momento?.kind === "echada";
       // La que se acaba de echar queda por encima de las que pasan: la echada no se tapa.
@@ -1055,6 +1171,7 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
     }
     if (!tres) resolverFichas(fichas, px, vz, nombrados);
     pintarPorton(t);
+    pintarObstaculos(t);
     if (Number.isFinite(rayaMax)) rayaX = rayaMax;
     // La borla: pasa de una a otra (se calculó antes del bucle).
     borla.visible = !!bp && t < d.tCrown + 0.01 && (!d.tandas.length || t >= ((d.tandas[0] as Tanda).salidas[0] as number));
@@ -1110,7 +1227,7 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
     const medir = params.get("auditar") === "3d";
     const medidas: { persona: number; px: number; alto: number; ancho: number }[] = [];
     const borla3: Borla3D | null = bp && borla.visible ? { x: bp.x, pie: bp.pie, alto: bp.pie - bp.y, radio: BORLA_RADIO * bp.esc, duenia: bp.duenia, manta: d.nueva } : null;
-    tres.frame({ t, w: P.w, h: P.h, u: P.u, cam: { x: cam.x, y: cam.y, zoom: vz, rot: cam.rot }, gente, borla: borla3, campeona: d.campeona, corona, horas: HORAS_Q.map((q) => d.tDeQ(q)) });
+    tres.frame({ t, w: P.w, h: P.h, u: P.u, cam: { x: cam.x, y: cam.y, zoom: vz, rot: cam.rot }, gente, borla: borla3, campeona: d.campeona, corona, horas: HORAS_Q.map((q) => d.tDeQ(q)), efectos: efectosEn(t) });
     // Las fichas no se pisan: la que manda (la del primero, después las recientes) se queda donde cae; la que choca con una puesta
     // se corre hacia arriba o hacia abajo por su alto y, si ni así cabe, no se muestra en ese cuadro.
     // Y ninguna ficha tapa la cabeza de otra llama (la perspectiva apila las filas, y la ficha de la de adelante caía sobre la de atrás).
@@ -1241,7 +1358,7 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
   function cajasDelFrente(t: number): Caja[] {
     const t2 = Math.max(t, d.tAbre);
     // En el celular entran las ocho: con el nombre a la izquierda, las de atrás se cortaban contra el borde.
-    const orden = P.retrato ? d.lanes : d.vivas(t2).slice(0, 3);
+    const orden = P.retrato ? d.lanes : [...new Set([...d.vivas(t2).slice(0, 3), ...enApuros(t2)])];
     const cajas = cajaDeLasOcho(t2, orden);
     const m = { x: metaX - 30 * P.u, y: carr.y0 - 40 * P.u, w: 60 * P.u, h: carr.y1 - carr.y0 + 50 * P.u };
     return metaCerca(t2) ? [...cajas, m] : cajas;
@@ -1303,6 +1420,7 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
       pasoPostes: 0.2 * P.w, conPorton: d.tandas.length > 0, conPortonesRecta: d.tiempos.echadas.length > 0,
       corral: d.tandas.length ? -gateX + P.w * 0.7 : forma.profundidad + nombreW + 260 * P.u,
       rotuloMeta: k.txt("carRotuloMeta"), rotuloSalida: k.txt("carSalida").replace(/[¡!]/g, "").toUpperCase(),
+      vallas: vallasDelPlan(),
     };
   }
   reconstruir();

@@ -155,7 +155,8 @@ describe("la carrera: el plan es puro y cumple la regla del niño", () => {
     const sd = Math.sqrt(hayPrimera * (1 / 8) * (7 / 8));
     expect(Math.abs(primeraEsGanadora - hayPrimera / 8)).toBeLessThan(4 * sd);
     expect(Math.abs(ultimaEsGanadora - hayPrimera / 8)).toBeLessThan(4 * sd);
-    expect(hayPrimera).toBeGreaterThan(RONDAS * 0.95);
+    // Las líneas de los obstáculos ocupan algunos huecos de la recta: la tribuna grita en el 93 % de las rondas o más.
+    expect(hayPrimera).toBeGreaterThan(RONDAS * 0.93);
   });
 
   it("\"Busquen su nombre\" se dice con todas las cantidades (también con hasta 30) y \"Ya se ve la meta\" solo cuando la meta entra", () => {

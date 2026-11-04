@@ -1,4 +1,6 @@
 import { writeStory, type Arc, type Story } from "../drama";
+import type { InfoCierre } from "./carrera-cierre";
+import type { Obstaculo } from "./carrera-obstaculos";
 
 /**
  * El plan de la carrera, sin dibujo.
@@ -54,6 +56,14 @@ export interface Plan {
   foco: number;
   /** Los puestos que se sortearon para la ganadora, a la altura `q` de la pista (y que `pos` cumple). */
   puestos: { q: number; r: number }[];
+  /** El cierre de la carrera (`carrera-cierre.ts`): quién pelea en el último tramo y quién lleva la punta. Sin él, la recta es la de siempre. */
+  cierre?: InfoCierre;
+  /** Los obstáculos de la recta (`carrera-obstaculos.ts`): piedras, valla y ráfaga. Sin ellos, la recta es la de siempre. */
+  obstaculos?: Obstaculo[];
+  /** Cuánto se corre `k` hacia un costado en `q`, en filas de carril (la ráfaga). */
+  lateral?(k: number, q: number): number;
+  /** Cuánto sube `k` en `q`, en filas de carril (el salto de la valla). */
+  salto?(k: number, q: number): number;
   /** Dónde va el actor `k` a la altura `q`, en fracción de pista. */
   pos(k: number, q: number): number;
   /** En qué momento de la historia está un actor, para la postura. */
