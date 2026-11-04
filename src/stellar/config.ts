@@ -62,6 +62,9 @@ export interface NetworkConfig {
   friendbotUrl: string | null;
 }
 
+/** Mainnet en la lista oficial. Hoy es `null`: el tipo del JSON no deja leerle campos, así que se lee como lo que será. */
+const mainnetEnLista = (deployments as unknown as { mainnet?: { contractId?: string; rpcUrl?: string } | null }).mainnet;
+
 const NETWORKS: Record<NetworkName, NetworkConfig> = {
   testnet: {
     name: "testnet",
@@ -73,9 +76,9 @@ const NETWORKS: Record<NetworkName, NetworkConfig> = {
   },
   mainnet: {
     name: "mainnet",
-    rpcUrl: RPC_URLS.mainnet,
+    rpcUrl: mainnetEnLista?.rpcUrl ?? RPC_URLS.mainnet,
     networkPassphrase: "Public Global Stellar Network ; September 2015",
-    contractId: null,
+    contractId: mainnetEnLista?.contractId ?? null,
     explorerBase: "https://stellar.expert/explorer/public",
     friendbotUrl: null,
   },
