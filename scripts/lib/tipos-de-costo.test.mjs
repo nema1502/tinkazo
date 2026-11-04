@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import { COST_TYPE_NAMES, costTypeName } from "./tipos-de-costo.mjs";
 
 describe("los nombres de los tipos de costo de Soroban", () => {
-  it("son los 86 del protocolo 29, sin repetir", () => {
-    expect(COST_TYPE_NAMES).toHaveLength(86);
-    expect(new Set(COST_TYPE_NAMES).size).toBe(86);
+  it("son los 95 del protocolo 30 (86 del 29 más las 9 firmas ML-DSA), sin repetir", () => {
+    expect(COST_TYPE_NAMES).toHaveLength(95);
+    expect(new Set(COST_TYPE_NAMES).size).toBe(95);
     for (const name of COST_TYPE_NAMES) expect(name).toMatch(/^[a-z][A-Za-z0-9]+$/);
   });
 
@@ -32,7 +32,8 @@ describe("los nombres de los tipos de costo de Soroban", () => {
   it("una posición que la lista no conoce no tiene nombre", () => {
     expect(costTypeName(0)).toBe("wasmInsnExec");
     expect(costTypeName(85)).toBe("bn254G1Msm");
-    expect(costTypeName(86)).toBeUndefined();
+    expect(costTypeName(94)).toBe("verifyMlDsa87Sig");
+    expect(costTypeName(95)).toBeUndefined();
     expect(costTypeName(-1)).toBeUndefined();
     expect(costTypeName(1.5)).toBeUndefined();
   });

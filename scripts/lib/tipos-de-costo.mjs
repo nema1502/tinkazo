@@ -3,14 +3,14 @@
 // `contract_cost_params_cpu_instructions` y `contract_cost_params_memory_bytes` son listas con un
 // elemento por tipo de costo, y el aviso del detector las nombra por posición: `[9]` es
 // `computeEd25519PubKey`. El runner de GitHub no tiene node_modules, así que la lista va fija acá.
-// El protocolo 29 tiene 86 tipos (del 0 al 85); un índice que no está en la lista se
-// imprime como número, igual que antes de que existiera.
+// El protocolo 29 tiene 86 tipos (del 0 al 85) y el 30 suma 9 (del 86 al 94, las firmas ML-DSA);
+// un índice que no está en la lista se imprime como número, igual que antes de que existiera.
 //
 // Para regenerarla con el SDK instalado (hace falta cuando la red suma tipos, por ejemplo con un
 // protocolo nuevo; `tipos-de-costo.test.mjs` compara cada nombre con el SDK y avisa si no coincide):
 //   node -e "const {xdr}=require('@stellar/stellar-sdk'); for(let i=0;i<200;i++){try{console.log(i, xdr.ContractCostType.fromValue(i).name)}catch{break}}"
-// Esta salió de @stellar/stellar-sdk 17.3.0, que ya conoce 9 tipos más (del 86 al 94: los `mlDsa…` y los
-// `verifyMlDsa…`) que la red todavía no tiene.
+// Esta salió de @stellar/stellar-sdk 17.3.0. Los 9 del protocolo 30 (`mlDsa…` y `verifyMlDsa…`) entraron
+// a la red de prueba el 3 de noviembre de 2026; la red principal vota ese protocolo el 23 de noviembre.
 
 export const COST_TYPE_NAMES = [
   "wasmInsnExec", "memAlloc", "memCpy", "memCmp", "dispatchHostFunction", // 0-4
@@ -31,6 +31,9 @@ export const COST_TYPE_NAMES = [
   "bn254G1ProjectiveToAffine", "bn254G1Add", "bn254G1Mul", "bn254Pairing", "bn254FrFromU256", // 75-79
   "bn254FrToU256", "bn254FrAddSub", "bn254FrMul", "bn254FrPow", "bn254FrInv", // 80-84
   "bn254G1Msm", // 85
+  "mlDsa44DecodeVerifyingKey", "mlDsa65DecodeVerifyingKey", "mlDsa87DecodeVerifyingKey", // 86-88 (protocolo 30)
+  "mlDsa44DecodeSignature", "mlDsa65DecodeSignature", "mlDsa87DecodeSignature", // 89-91
+  "verifyMlDsa44Sig", "verifyMlDsa65Sig", "verifyMlDsa87Sig", // 92-94
 ];
 
 /** El nombre del tipo de costo en esa posición, o `undefined` si la lista no lo conoce. */
