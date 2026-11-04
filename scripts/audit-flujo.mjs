@@ -542,6 +542,13 @@ const metodoRpc = (request) => {
   }
 };
 
+/**
+ * Los dos RPC de testnet que usa el sitio (`RPC_LISTAS.testnet`). El sitio mira la red con el primero y, si tarda más de 4 s,
+ * contesta con un ledger viejo o falla, sigue con el segundo (medido el 4-nov-2026: el de la SDF agotó los 4 s en 35 de 40
+ * chequeos seguidos). Un caso que simula el costo tiene que cortar los dos, o el segundo contesta lo de verdad y el aviso no sale.
+ */
+const RPC_DE_TESTNET = ["*soroban-testnet.stellar.org*", "*rpc.ankr.com*"];
+
 const fixture = (nombre) => readFileSync(new URL(`../src/stellar/fixtures/${nombre}`, import.meta.url), "utf8");
 
 /** Una pantalla lista para probar la red: la cuenta de prueba conectada, el ejemplo cargado y la tarjeta arriba. */
@@ -777,7 +784,7 @@ async function costoAlto(browser, vista, tema, completo = false) {
   const ctx = { etiqueta, tema, celular };
   let quien = `${etiqueta} ${tema} · costo alto (pide restaurar)`;
   let page = await abrirParaLaRed(browser, vista, tema, (p) =>
-    interceptar(p, ["*soroban-testnet.stellar.org*"], (r) => {
+    interceptar(p, RPC_DE_TESTNET, (r) => {
       const metodo = metodoRpc(r);
       if (metodo === "simulateTransaction") return { cuerpo: fixture("rpc-simulate-sello-restaurar.json") };
       return metodo === "sendTransaction" ? "fallar" : "seguir";
@@ -817,7 +824,7 @@ async function costoAlto(browser, vista, tema, completo = false) {
   quien = `${etiqueta} ${tema} · costo alto con la cuenta de prueba`;
   let mandadas = 0;
   page = await abrirParaLaRed(browser, vista, tema, (p) =>
-    interceptar(p, ["*soroban-testnet.stellar.org*"], (r) => {
+    interceptar(p, RPC_DE_TESTNET, (r) => {
       const metodo = metodoRpc(r);
       if (metodo === "simulateTransaction") return { cuerpo: fixture("rpc-simulate-sello-caro.json") };
       if (metodo === "sendTransaction") {

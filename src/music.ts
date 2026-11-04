@@ -64,8 +64,26 @@ export function toggleMusic(): void {
  * reglas: un bombo que se repite es un ritmo, no un error. Con la marca, el
  * auditor la cuenta aparte en vez de mezclarla con los efectos.
  */
-function tag<T extends AudioScheduledSourceNode>(n: T): T {
+export function tag<T extends AudioScheduledSourceNode>(n: T): T {
   (n as T & { __musica?: boolean }).__musica = true;
+  // Una nota que ya quedó más de `NOTA_ATRASADA_S` en el pasado no suena: sería un tropezón fuera de compás. Pasa cuando
+  // al hilo de la página le falta CPU en medio de un paso (la pestaña escondida con la máquina cargada): el salto de
+  // `tick` mira cada paso, pero un paso arma cientos de nodos y el reloj del audio sigue corriendo mientras tanto.
+  let omitida = false;
+  const arrancar = n.start.bind(n) as (...a: unknown[]) => void;
+  const parar = n.stop.bind(n);
+  (n as { start: unknown }).start = (when?: number, ...resto: unknown[]): void => {
+    // `when` en 0 es "ahora" (la cama de archivo): no es una hora en el pasado.
+    if (typeof when === "number" && when > 0 && n.context.currentTime - when > NOTA_ATRASADA_S) {
+      omitida = true;
+      return;
+    }
+    arrancar(when, ...resto);
+  };
+  // Un nodo que no arrancó no se puede parar (lanzaría InvalidStateError).
+  n.stop = (when?: number): void => {
+    if (!omitida) parar(when);
+  };
   return n;
 }
 
@@ -423,6 +441,8 @@ const beatLength = (s: Session): number =>
 
 /** Cuánto antes de la hora del audio puede quedar un paso y sonar igual: más que eso es un atraso y se salta. */
 const ATRASO_MAXIMO = 0.04;
+/** Cuánto en el pasado puede quedar una nota ya armada antes de que no suene (segundos del reloj del audio). */
+const NOTA_ATRASADA_S = 0.15;
 
 function tick(): void {
   const s = cur;
