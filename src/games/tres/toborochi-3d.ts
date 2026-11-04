@@ -1,7 +1,7 @@
 import {
   BackSide, BufferAttribute, BufferGeometry, CircleGeometry, Color, ConeGeometry, DirectionalLight, DoubleSide, Euler, Float32BufferAttribute,
-  Fog, Group, HemisphereLight, LatheGeometry, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, PlaneGeometry, Quaternion, SphereGeometry,
-  Object3D, Vector2, Vector3, type Material,
+  Fog, Group, HemisphereLight, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, PlaneGeometry, Quaternion, SphereGeometry,
+  Object3D, Vector3, type Material,
 } from "three";
 import { hashDe } from "../pixi/kit/azar";
 import type { Geo } from "../pixi/toborochi-arbol";
@@ -11,6 +11,7 @@ import { hash, sinAzarDeTres } from "./ids";
 import { definir3D } from "./motor";
 import type { Motor3D } from "./motor";
 import { aMundo, camaraParaMotor, distanciaDe, perfilEn, profMax, profundidadDe, suave, type EntradaToborochi, type PantallaFlor } from "./toborochi-3d-mapa";
+import { geoFlor, geoTronco, radioDelTronco, type MedidasTronco } from "./toborochi-3d-piezas";
 import type { Fabrica3D, Lanzador } from "./tipos";
 
 export type { EntradaToborochi, FlorE, PantallaFlor } from "./toborochi-3d-mapa";
@@ -82,7 +83,7 @@ const mezcla = (a: number, b: number, k: number): number => {
 
 /** Cuántos tramos tiene cada rama y cuántos lados. */
 const TRAMOS = 8;
-const LADOS = 5;
+const LADOS = 6;
 const RAMAS_MAX = 8;
 /** Cuántos pétalos suben en el remolino del golpe, y cuántas rayas de viento y pétalos en el aire hay. */
 const REMOLINO_MAX = 48;
@@ -240,6 +241,7 @@ function armar(motor: Motor3D, o: { tema: "claro" | "oscuro" }, P: Paleta, e0: E
     motor.basura.add(x);
     return x;
   };
+  const cRama = mezcla(P.piel, noche ? 0x3f3626 : 0x5a4a34, 0.24);
   const lambert = (color: number, extra: object = {}): MeshLambertMaterial => reg(new MeshLambertMaterial({ color, flatShading: true, ...extra }));
   const basico = (color: number, extra: object = {}): MeshBasicMaterial => reg(new MeshBasicMaterial({ color, ...extra }));
   const agregar = (m: Object3D): void => void mundo.add(m);
@@ -307,89 +309,68 @@ function armar(motor: Motor3D, o: { tema: "claro" | "oscuro" }, P: Paleta, e0: E
   }
 
   /* --------------------------------------------------------------------- el tronco */
-  const base = g.suelo - g.troncoBase;
-  const cima = g.suelo - g.troncoCima;
-  const H = cima - base;
-  const perfilTronco = (y01: number): number => {
-    // 0 arriba, 1 abajo: angosto arriba, panza al 60 %, y un pie que se agarra al suelo (el mismo perfil del 2D).
-    const panza = Math.exp(-Math.pow((y01 - 0.6) / 0.28, 2));
-    const pie = suave((y01 - 0.82) / 0.18);
-    return g.troncoAncho * (0.5 + 0.5 * panza) * (1 + 0.5 * pie);
-  };
+  // El tronco de botella: la panza abajo, el cuello que sube y se cierra entre las ramas, y el pie que se agarra al suelo.
+  // Queda un poco atrás del plano de las flores (`zT`), así ninguna flor del centro queda tapada por el cuello.
+  const zT = -1.2 * DZ;
+  const W3 = Math.min(g.troncoAncho * (g.retrato ? 1.2 : 0.9), g.w * (g.retrato ? 0.3 : 0.22));
+  const medidas: MedidasTronco = { y0: g.suelo - g.troncoBase, y1: g.suelo - g.copa.base + 0.2 * g.copa.alto, ancho: W3 };
+  const alturaTronco = medidas.y1 - medidas.y0;
+  const troncoG = new Group();
+  troncoG.position.set(g.cx, 0, zT);
   {
-    const pts: Vector2[] = [];
-    for (let i = 16; i >= 0; i--) {
-      const y01 = i / 16;
-      pts.push(new Vector2(perfilTronco(y01) / 2, base + H * (1 - y01)));
-    }
-    const lathe = reg(new LatheGeometry(pts, 8));
-    const tronco = new Mesh(lathe, lambert(P.piel, { side: DoubleSide }));
-    tronco.position.set(g.cx, 0, 0);
-    agregar(tronco);
+    const geoT = reg(geoTronco(medidas, P.piel, P.sombra));
+    const tronco = new Mesh(geoT, lambert(BLANCO, { side: DoubleSide, vertexColors: true }));
+    troncoG.add(tronco);
     // El contorno de tinta: la misma forma por dentro, un poco más ancha.
-    const borde = new Mesh(lathe, basico(P.tinta, { side: BackSide }));
-    borde.scale.set(1.045, 1.01, 1.045);
-    borde.position.set(g.cx, -0.5, 0);
-    agregar(borde);
-    // Las espinas: conos en hileras sobre el frente y los costados.
+    const borde = new Mesh(geoT, basico(P.tinta, { side: BackSide }));
+    borde.scale.set(1.06, 1.015, 1.06);
+    borde.position.set(0, -0.5, 0);
+    troncoG.add(borde);
+    // Las espinas: conos de cuatro lados en hileras escalonadas por el frente y los costados, cada una mirando hacia afuera y un poco arriba.
     const cono4 = reg(new ConeGeometry(1, 1, 4, 1));
     cono4.translate(0, 0.5, 0);
-    const espinas = new Instancias(cono4, lambert(P.espina), 80, motor.basura);
+    const espinas = new Instancias(cono4, lambert(P.espina), 96, motor.basura);
     const m = new Matrix4(), q = new Quaternion(), vS = new Vector3(), vP = new Vector3(), arriba = new Vector3(0, 1, 0), dir = new Vector3();
     let c = 0;
-    for (let fila = 0; fila < 9; fila++) {
-      const y01 = 0.12 + (fila / 8) * 0.8;
-      const rad = perfilTronco(y01) / 2;
-      for (let j = 0; j < 7; j++) {
-        if ((fila + j) % 2) continue;
-        const ang = (j / 6 - 0.5) * 2.5 + (hash(fila, j) - 0.5) * 0.25;
-        const l = Math.max(3, rad * 0.11);
-        dir.set(Math.sin(ang), 0.45, Math.cos(ang)).normalize();
+    const FILAS = 8;
+    for (let fila = 0; fila < FILAS; fila++) {
+      const y = medidas.y0 + alturaTronco * (0.1 + 0.5 * (fila / (FILAS - 1)));
+      const rad = radioDelTronco(medidas, y);
+      const cuantas = 7;
+      for (let j = 0; j < cuantas; j++) {
+        const ang = ((j + (fila % 2) * 0.5) / (cuantas - 1) - 0.5) * 3.0 + (hash(fila, j) - 0.5) * 0.18;
+        if (Math.abs(ang) > 1.5) continue;
+        const l = Math.max(2.4, rad * 0.075) * (0.85 + 0.3 * hash(j, fila + 5));
+        dir.set(Math.sin(ang), 0.38, Math.cos(ang)).normalize();
         q.setFromUnitVectors(arriba, dir);
-        vP.set(g.cx + Math.sin(ang) * rad * 0.97, base + H * (1 - y01), Math.cos(ang) * rad * 0.97);
-        vS.set(l * 0.8, l * 2.6, l * 0.8);
+        vP.set(Math.sin(ang) * rad * 0.98, y + (hash(fila, j + 9) - 0.5) * 0.02 * alturaTronco, Math.cos(ang) * rad * 0.98);
+        vS.set(l * 0.9, l * 2.3, l * 0.9);
         m.compose(vP, q, vS);
         espinas.ponerMatriz(c++, m);
       }
     }
     espinas.usar(c);
     espinas.fin();
-    agregar(espinas.malla);
-    // Las raíces: lomos que salen del pie y se hunden en el pasto, tres a cada lado.
-    const ancho0 = perfilTronco(1);
-    const cono6 = reg(new ConeGeometry(1, 1, 5, 1));
-    cono6.translate(0, 0.5, 0);
-    const raices = new Instancias(cono6, lambert(P.piel), 8, motor.basura);
-    let r = 0;
-    for (const lado of [-1, 1]) {
-      for (let k = 0; k < 3; k++) {
-        const largo = ancho0 * (0.5 + 0.2 * hashDe(k + (lado > 0 ? 3 : 0), 71) + 0.3 * k);
-        const alto = Math.max(3, ancho0 * (0.24 - 0.06 * k));
-        const z = (k - 1) * ancho0 * 0.32;
-        dir.set(lado, -0.08, (k - 1) * 0.35).normalize();
-        q.setFromUnitVectors(arriba, dir);
-        vP.set(g.cx + lado * ancho0 * (0.3 + 0.08 * k), alto * 0.35, z);
-        vS.set(alto * 0.95, largo * 0.8, alto * 0.95);
-        m.compose(vP, q, vS);
-        raices.ponerMatriz(r++, m);
-      }
-    }
-    raices.usar(r);
-    raices.fin();
-    agregar(raices.malla);
+    troncoG.add(espinas.malla);
+    agregar(troncoG);
     // La sombra del tronco en el piso.
     const sombra = new SombrasDeContacto(motor, 1, 0.3);
     sombra.usar(1);
-    sombra.poner(0, g.cx + g.troncoAncho * 0.18, 0, g.troncoAncho * 0.95, g.troncoAncho * 0.42, 0.4);
+    sombra.poner(0, g.cx + W3 * 0.2, 0, W3 * 1.0, W3 * 0.44, 0.4);
     sombra.fin();
     mundo.add(sombra.malla);
   }
 
   /* ------------------------------------------------------------------ las ramas */
-  const matRama = lambert(P.rama, { side: DoubleSide });
+  // Ramas gruesas que nacen del cuello y se abren hacia arriba, con contorno de tinta, y de cada una las ramitas que sostienen las flores.
+  const matRama = lambert(cRama, { side: DoubleSide });
+  const nVert = RAMAS_MAX * (TRAMOS + 1) * LADOS;
+  const rPos = new Float32Array(nVert * 3);
+  const rPosB = new Float32Array(nVert * 3);
   const ramasGeo = new BufferGeometry();
-  const rPos = new Float32Array(RAMAS_MAX * (TRAMOS + 1) * LADOS * 3);
+  const ramasBordeGeo = new BufferGeometry();
   ramasGeo.setAttribute("position", new BufferAttribute(rPos, 3));
+  ramasBordeGeo.setAttribute("position", new BufferAttribute(rPosB, 3));
   {
     const idx: number[] = [];
     for (let r = 0; r < RAMAS_MAX; r++) {
@@ -398,16 +379,24 @@ function armar(motor: Motor3D, o: { tema: "claro" | "oscuro" }, P: Paleta, e0: E
           const a = (r * (TRAMOS + 1) + j) * LADOS + l;
           const b = (r * (TRAMOS + 1) + j) * LADOS + ((l + 1) % LADOS);
           const a2 = a + LADOS, b2 = b + LADOS;
-          idx.push(a, a2, b, b, a2, b2);
+          idx.push(a, b, a2, b, b2, a2);
         }
       }
     }
     ramasGeo.setIndex(idx);
+    ramasBordeGeo.setIndex(idx);
   }
+  const ramasBorde = mesh(ramasBordeGeo, basico(P.tinta, { side: BackSide }));
+  ramasBorde.frustumCulled = false;
+  agregar(ramasBorde);
   const ramasMesh = mesh(ramasGeo, matRama);
   ramasMesh.frustumCulled = false;
   agregar(ramasMesh);
-  // Las ramitas: de la rama a cada flor, dos cintas cruzadas.
+  // La línea del centro de cada rama (en el mundo), para que las ramitas nazcan de ella.
+  const cl = new Float32Array(RAMAS_MAX * (TRAMOS + 1) * 3);
+  const clViva = new Uint8Array(RAMAS_MAX);
+  const clR = new Float32Array(RAMAS_MAX * (TRAMOS + 1));
+  // Las ramitas: de la rama a cada flor, dos cintas cruzadas que se afinan hacia la flor.
   const tPos = new Float32Array(n * 8 * 3);
   const tGeo = new BufferGeometry();
   tGeo.setAttribute("position", new BufferAttribute(tPos, 3));
@@ -419,48 +408,29 @@ function armar(motor: Motor3D, o: { tema: "claro" | "oscuro" }, P: Paleta, e0: E
     }
     tGeo.setIndex(idx);
   }
-  const ramitas = mesh(tGeo, lambert(P.rama, { side: DoubleSide }));
+  const ramitas = mesh(tGeo, lambert(cRama, { side: DoubleSide }));
   ramitas.frustumCulled = false;
   agregar(ramitas);
 
   /* ----------------------------------------------------------------- las flores */
-  const petaloGeo = reg(new SphereGeometry(1, 6, 3));
-  // El centro: una esfera chata, con la cara de PixiJS encima.
+  // Una malla por flor: cinco pétalos con su lomo y la punta levantada (ver `geoFlor`). El contorno es la misma flor un poco más ancha y apenas atrás.
+  const florGeo = reg(geoFlor());
   const centroGeo = reg(new SphereGeometry(1, 8, 4));
-  const matPetalo = lambert(BLANCO);
-  const petalos = new Instancias(petaloGeo, matPetalo, n * 5, motor.basura);
-  const matBorde = basico(BLANCO, { side: BackSide });
-  const contornos = new Instancias(petaloGeo, matBorde, n <= CONTORNO_TODAS ? n * 5 : 5 * 12, motor.basura);
+  const matPetalo = lambert(BLANCO, { vertexColors: true, side: DoubleSide });
+  const petalos = new Instancias(florGeo, matPetalo, n, motor.basura);
+  const matBorde = basico(BLANCO, { side: DoubleSide });
+  const contornos = new Instancias(florGeo, matBorde, n <= CONTORNO_TODAS ? n : 12, motor.basura);
   const centros = new Instancias(centroGeo, lambert(CREMA), n, motor.basura);
   const estambres = new Instancias(centroGeo, lambert(ESTAMBRE), n, motor.basura);
-  [petalos, contornos, centros, estambres].forEach((x) => agregar(x.malla));
+  [contornos, petalos, centros, estambres].forEach((x) => agregar(x.malla));
   const oro = noche ? ORO_NOCHE : ORO;
 
-  // Lo de cada pétalo, en la flor de radio 1: cinco en círculo, un poco levantados hacia afuera (una copita).
+  // Lo de cada pieza, en la flor de radio 1.
   const O = new Object3D();
-  const locPetalo: Matrix4[] = [];
-  const locBorde: Matrix4[] = [];
-  const locBordeOro: Matrix4[] = [];
-  const mkPetalo = (esc: number, escZ: number, p: number): Matrix4 => {
-    O.position.set(0, 0, 0);
-    O.rotation.set(0, 0, 0);
-    O.scale.set(1, 1, 1);
-    O.rotation.z = Math.PI / 2 + (p * Math.PI * 2) / 5;
-    O.updateMatrix();
-    const mz = O.matrix.clone();
-    O.rotation.set(0, -0.3, 0);
-    O.position.set(0.58, 0, 0.05);
-    O.scale.set(0.47 * esc, 0.47 * esc, 0.2 * escZ);
-    O.updateMatrix();
-    return mz.multiply(O.matrix);
-  };
-  for (let p = 0; p < 5; p++) {
-    locPetalo.push(mkPetalo(1, 1, p));
-    locBorde.push(mkPetalo(1.14, 1.9, p));
-    locBordeOro.push(mkPetalo(1.3, 2.4, p));
-  }
-  const locCentro = new Matrix4().compose(new Vector3(0, 0, 0.1), new Quaternion(), new Vector3(0.52, 0.52, 0.2));
-  const locEstambre = new Matrix4().compose(new Vector3(0, 0, 0.26), new Quaternion(), new Vector3(0.3, 0.3, 0.1));
+  const locBorde = new Matrix4().compose(new Vector3(0, 0, -0.05), new Quaternion(), new Vector3(1.12, 1.12, 1));
+  const locBordeOro = new Matrix4().compose(new Vector3(0, 0, -0.06), new Quaternion(), new Vector3(1.2, 1.2, 1));
+  const locCentro = new Matrix4().compose(new Vector3(0, 0, 0.06), new Quaternion(), new Vector3(0.5, 0.5, 0.15));
+  const locEstambre = new Matrix4().compose(new Vector3(0, 0, 0.2), new Quaternion(), new Vector3(0.3, 0.3, 0.1));
 
   // El color de cada flor, como en el 2D.
   const rosaDe = (i: number): number => mezcla(ROSAS[Math.floor(hashDe(i, 5) * 3)] as number, 0xffffff, P.rosaMezcla);
@@ -543,7 +513,7 @@ function armar(motor: Motor3D, o: { tema: "claro" | "oscuro" }, P: Paleta, e0: E
   rayas.frustumCulled = false;
   rayas.renderOrder = 3;
   agregar(rayas);
-  const petaloMenor = new Instancias(petaloGeo, basico(0xff97c6, { fog: false }), AIRE + REMOLINO_MAX, motor.basura);
+  const petaloMenor = new Instancias(reg(new SphereGeometry(1, 6, 3)), basico(0xff97c6, { fog: false }), AIRE + REMOLINO_MAX, motor.basura);
   petaloMenor.malla.renderOrder = 3;
   agregar(petaloMenor.malla);
 
@@ -559,14 +529,14 @@ function armar(motor: Motor3D, o: { tema: "claro" | "oscuro" }, P: Paleta, e0: E
 
     /* ------------------------------------------------------------- las flores */
     let nh = 0;
-    petalos.usar(n * 5);
+    petalos.usar(n);
     centros.usar(n);
     estambres.usar(e.conCara ? 0 : n);
     for (let i = 0; i < n; i++) {
       const f = e.flores[i];
       if (!f || f.escala < 0.015) {
         visible[i] = 0;
-        for (let p = 0; p < 5; p++) petalos.ponerMatriz(i * 5 + p, cero);
+        petalos.ponerMatriz(i, cero);
         centros.ponerMatriz(i, cero);
         estambres.ponerMatriz(i, cero);
         continue;
@@ -600,26 +570,18 @@ function armar(motor: Motor3D, o: { tema: "claro" | "oscuro" }, P: Paleta, e0: E
       mF.compose(vP.set(M.X, Y, M.Z), qF, vS.setScalar(rW));
       const brilla = f.brillo > 0.02;
       const k10 = Math.round(f.brillo * 10);
-      const nuevaClave = k10;
-      if (clave[i] !== nuevaClave) {
-        clave[i] = nuevaClave;
-        const rosa = rosaDe(i);
-        const cuerpo = mezcla(rosa, 0xfff1b8, 0.4 * c01(f.brillo));
-        for (let p = 0; p < 5; p++) petalos.malla.setColorAt(i * 5 + p, colorTmp.setHex(cuerpo));
+      if (clave[i] !== k10) {
+        clave[i] = k10;
+        const cuerpo = mezcla(rosaDe(i), 0xfff1b8, 0.4 * c01(f.brillo));
+        // Los vértices de la flor van de 0,7 a 1: el color de la instancia se levanta un poco para que la punta quede en el rosa de la casa.
+        petalos.malla.setColorAt(i, colorTmp.setHex(cuerpo).multiplyScalar(1.12));
         if (petalos.malla.instanceColor) petalos.malla.instanceColor.needsUpdate = true;
         centros.malla.setColorAt(i, colorTmp.setHex(CREMA));
         if (centros.malla.instanceColor) centros.malla.instanceColor.needsUpdate = true;
         estambres.malla.setColorAt(i, colorTmp.setHex(ESTAMBRE));
         if (estambres.malla.instanceColor) estambres.malla.instanceColor.needsUpdate = true;
-        if (n <= CONTORNO_TODAS) {
-          for (let p = 0; p < 5; p++) contornos.malla.setColorAt(i * 5 + p, colorTmp.setHex(k10 > 0 ? oro : ROSA_BORDE));
-          if (contornos.malla.instanceColor) contornos.malla.instanceColor.needsUpdate = true;
-        }
       }
-      for (let p = 0; p < 5; p++) {
-        mP.multiplyMatrices(mF, locPetalo[p] as Matrix4);
-        petalos.ponerMatriz(i * 5 + p, mP);
-      }
+      petalos.ponerMatriz(i, mF);
       mP.multiplyMatrices(mF, locCentro);
       centros.ponerMatriz(i, mP);
       if (!e.conCara) {
@@ -627,22 +589,17 @@ function armar(motor: Motor3D, o: { tema: "claro" | "oscuro" }, P: Paleta, e0: E
         estambres.ponerMatriz(i, mP);
       }
       if (n <= CONTORNO_TODAS) {
-        const lista = brilla ? locBordeOro : locBorde;
-        for (let p = 0; p < 5; p++) {
-          mP.multiplyMatrices(mF, lista[p] as Matrix4);
-          contornos.ponerMatriz(i * 5 + p, mP);
-        }
-        nh = n * 5;
-      } else if (brilla && nh + 5 <= contornos.max) {
-        for (let p = 0; p < 5; p++) {
-          mP.multiplyMatrices(mF, locBordeOro[p] as Matrix4);
-          contornos.ponerMatriz(nh, mP, oro);
-          nh++;
-        }
+        mP.multiplyMatrices(mF, brilla ? locBordeOro : locBorde);
+        contornos.ponerMatriz(i, mP, brilla ? oro : ROSA_BORDE);
+        nh = n;
+      } else if (brilla && nh < contornos.max) {
+        mP.multiplyMatrices(mF, locBordeOro);
+        contornos.ponerMatriz(nh, mP, oro);
+        nh++;
       }
     }
     if (n <= CONTORNO_TODAS) {
-      for (let i = 0; i < n; i++) if (!visible[i]) for (let p = 0; p < 5; p++) contornos.ponerMatriz(i * 5 + p, cero);
+      for (let i = 0; i < n; i++) if (!visible[i]) contornos.ponerMatriz(i, cero);
     }
     contornos.usar(nh);
     petalos.fin();
@@ -652,60 +609,94 @@ function armar(motor: Motor3D, o: { tema: "claro" | "oscuro" }, P: Paleta, e0: E
 
     /* --------------------------------------------------------------- las ramas */
     {
-      const ancho = Math.max(2, g.troncoAncho * 0.12);
+      const r0 = W3 * 0.15;
       const x0 = g.cx, y0 = g.copa.base;
       rPos.fill(0);
+      rPosB.fill(0);
+      clViva.fill(0);
       for (let r = 0; r < Math.min(RAMAS_MAX, e.ramas.length); r++) {
         const ra = e.ramas[r] as { x1: number; y1: number; alfa: number };
         if (ra.alfa <= 0.01) continue;
+        clViva[r] = 1;
+        const dx = ra.x1 - x0, dy = ra.y1 - y0;
+        const zr = (hash(r, 77) - 0.5) * 0.5 * DZ * c01(plano);
+        // La línea del centro: mitad recta, mitad la curva del 2D (sube y después se abre).
         for (let j = 0; j <= TRAMOS; j++) {
           const sj = j / TRAMOS;
-          const cx2 = x0 + (ra.x1 - x0) * 0.15, cy2 = lerp(y0, ra.y1, 0.55);
-          const px = (1 - sj) * (1 - sj) * x0 + 2 * sj * (1 - sj) * cx2 + sj * sj * ra.x1;
-          const py = (1 - sj) * (1 - sj) * y0 + 2 * sj * (1 - sj) * cy2 + sj * sj * ra.y1;
-          const s2 = Math.min(1, sj + 0.05);
-          const qx = (1 - s2) * (1 - s2) * x0 + 2 * s2 * (1 - s2) * cx2 + s2 * s2 * ra.x1;
-          const qy = (1 - s2) * (1 - s2) * y0 + 2 * s2 * (1 - s2) * cy2 + s2 * s2 * ra.y1;
-          vT.set(qx - px, -(qy - py), 0);
+          const cx2 = x0 + dx * 0.15, cy2 = lerp(y0, ra.y1, 0.55);
+          const qx = (1 - sj) * (1 - sj) * x0 + 2 * sj * (1 - sj) * cx2 + sj * sj * ra.x1;
+          const qy = (1 - sj) * (1 - sj) * y0 + 2 * sj * (1 - sj) * cy2 + sj * sj * ra.y1;
+          const px = lerp(x0 + dx * sj, qx, 0.55), py = lerp(y0 + dy * sj, qy, 0.55);
+          const M = mundoAD(px, py, 0);
+          const k = (r * (TRAMOS + 1) + j) * 3;
+          cl[k] = M.X;
+          cl[k + 1] = M.Y;
+          cl[k + 2] = lerp(zT, cZ(px) * c01(plano), suave(sj / 0.5)) + zr * sj;
+          clR[r * (TRAMOS + 1) + j] = r0 * (1 - 0.8 * sj) * ra.alfa;
+        }
+        for (let j = 0; j <= TRAMOS; j++) {
+          const j0 = Math.max(0, j - 1), j1 = Math.min(TRAMOS, j + 1);
+          const k0 = (r * (TRAMOS + 1) + j0) * 3, k1 = (r * (TRAMOS + 1) + j1) * 3, kc = (r * (TRAMOS + 1) + j) * 3;
+          vT.set((cl[k1] as number) - (cl[k0] as number), (cl[k1 + 1] as number) - (cl[k0 + 1] as number), 0);
           if (vT.lengthSq() < 1e-6) vT.set(0, 1, 0);
           vT.normalize();
           vN1.set(-vT.y, vT.x, 0);
           vN2.set(0, 0, 1);
-          const radio = ancho * 0.6 * (1 - 0.45 * sj) * ra.alfa;
-          const M = mundoAD(px, py, 0);
-          const zc = cZ(px) * (c01(plano));
+          const radio = clR[r * (TRAMOS + 1) + j] as number;
+          const radioB = radio * 1.1 + (radio > 0.01 ? 0.7 * g.k : 0);
           for (let l = 0; l < LADOS; l++) {
             const a = (l / LADOS) * Math.PI * 2;
-            vC.copy(vN1).multiplyScalar(Math.cos(a) * radio).addScaledVector(vN2, Math.sin(a) * radio);
+            const ca = Math.cos(a), sa = Math.sin(a);
             const k = ((r * (TRAMOS + 1) + j) * LADOS + l) * 3;
-            rPos[k] = M.X + vC.x;
-            rPos[k + 1] = M.Y + vC.y;
-            rPos[k + 2] = zc + vC.z;
+            rPos[k] = (cl[kc] as number) + (vN1.x * ca + vN2.x * sa) * radio;
+            rPos[k + 1] = (cl[kc + 1] as number) + (vN1.y * ca + vN2.y * sa) * radio;
+            rPos[k + 2] = (cl[kc + 2] as number) + (vN1.z * ca + vN2.z * sa) * radio;
+            rPosB[k] = (cl[kc] as number) + (vN1.x * ca + vN2.x * sa) * radioB;
+            rPosB[k + 1] = (cl[kc + 1] as number) + (vN1.y * ca + vN2.y * sa) * radioB;
+            rPosB[k + 2] = (cl[kc + 2] as number) + (vN1.z * ca + vN2.z * sa) * radioB;
           }
         }
       }
       ramasGeo.attributes.position!.needsUpdate = true;
-      // Las ramitas.
+      ramasBordeGeo.attributes.position!.needsUpdate = true;
+      // Las ramitas: nacen del punto de la rama más cercano al lugar que el 2D les dio y llegan a la flor.
       tPos.fill(0);
-      const w2 = Math.max(1.2, ancho * 0.25);
+      const wB = Math.max(1.6, r0 * 0.3);
       for (let i = 0; i < n; i++) {
         const f = e.flores[i];
         if (!f || !visible[i] || f.cae > 0 || Number.isNaN(f.rx)) continue;
-        vA.set(f.rx, g.suelo - f.ry, cZ(f.rx) * c01(plano));
+        const ax = f.rx, ay = g.suelo - f.ry;
+        let mejor = Infinity;
+        for (let r = 0; r < RAMAS_MAX; r++) {
+          if (!clViva[r]) continue;
+          for (let j = 0; j < TRAMOS; j++) {
+            const k0 = (r * (TRAMOS + 1) + j) * 3, k1 = k0 + 3;
+            const sx = (cl[k1] as number) - (cl[k0] as number), sy = (cl[k1 + 1] as number) - (cl[k0 + 1] as number);
+            const l2 = sx * sx + sy * sy;
+            const u = l2 > 1e-6 ? c01(((ax - (cl[k0] as number)) * sx + (ay - (cl[k0 + 1] as number)) * sy) / l2) : 0;
+            const qx = (cl[k0] as number) + sx * u, qy = (cl[k0 + 1] as number) + sy * u;
+            const d = (qx - ax) * (qx - ax) + (qy - ay) * (qy - ay);
+            if (d < mejor) {
+              mejor = d;
+              vA.set(qx, qy, lerp(cl[k0 + 2] as number, cl[k1 + 2] as number, u));
+            }
+          }
+        }
+        if (mejor === Infinity) continue;
         vB.set(posF[i * 3] as number, posF[i * 3 + 1] as number, posF[i * 3 + 2] as number);
         vT.subVectors(vB, vA);
         if (vT.lengthSq() < 1e-6) continue;
         vT.normalize();
-        vN1.set(-vT.y, vT.x, 0).multiplyScalar(w2);
-        vN2.set(0, 0, w2);
+        const wT = wB * 0.55;
         const b = i * 8 * 3;
-        const poner = (k: number, p: Vector3, d: Vector3, sg: number): void => {
-          tPos[b + k * 3] = p.x + d.x * sg;
-          tPos[b + k * 3 + 1] = p.y + d.y * sg;
-          tPos[b + k * 3 + 2] = p.z + d.z * sg;
+        const poner = (k: number, p: Vector3, dx: number, dy: number, dz: number): void => {
+          tPos[b + k * 3] = p.x + dx;
+          tPos[b + k * 3 + 1] = p.y + dy;
+          tPos[b + k * 3 + 2] = p.z + dz;
         };
-        poner(0, vA, vN1, -1); poner(1, vA, vN1, 1); poner(2, vB, vN1, -1); poner(3, vB, vN1, 1);
-        poner(4, vA, vN2, -1); poner(5, vA, vN2, 1); poner(6, vB, vN2, -1); poner(7, vB, vN2, 1);
+        const nx = -vT.y, ny = vT.x;
+        poner(0, vA, -nx * wB, -ny * wB, 0); poner(1, vA, nx * wB, ny * wB, 0); poner(2, vB, -nx * wT, -ny * wT, 0); poner(3, vB, nx * wT, ny * wT, 0);
+        poner(4, vA, 0, 0, -wB); poner(5, vA, 0, 0, wB); poner(6, vB, 0, 0, -wT); poner(7, vB, 0, 0, wT);
       }
       tGeo.attributes.position!.needsUpdate = true;
     }
@@ -825,7 +816,7 @@ function armar(motor: Motor3D, o: { tema: "claro" | "oscuro" }, P: Paleta, e0: E
     pa.set(cam.x - cx, cam.y - cy, cam.z - cz).normalize();
     const mira = en.dot(pa);
     // La cara, en el disco del centro (un poco hacia quien mira), a medio radio de lado.
-    const cf = vC.set(cx, cy, cz).addScaledVector(en, 0.12 * r);
+    const cf = vC.set(cx, cy, cz).addScaledVector(en, 0.2 * r);
     const media = 0.49 * r;
     const P0 = motor.proyectar(cf.x, cf.y, cf.z);
     const Px1 = motor.proyectar(cf.x + ex.x * media, cf.y + ex.y * media, cf.z + ex.z * media);
