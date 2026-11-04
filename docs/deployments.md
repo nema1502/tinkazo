@@ -34,7 +34,7 @@ Transacciones del despliegue del 16 de septiembre (`CD2SSHBU…`, testnet, explo
 El contrato es el mismo del 16 de septiembre. Lo que cambió es la renta de testnet: casi todo el fee es alquiler de almacenamiento, y la tarifa la pone la red. Lo de abajo es la medición original, que queda como historia; la proyección a mainnet usa los parámetros de esa fecha y hay que rehacerla al desplegar.
 
 
-Testnet y mainnet comparten hoy los parámetros de renta (`fee_write1_kb` 875, `persistent_rent_rate_denominator` 1215). La diferencia es el TTL mínimo de una entrada persistente: **7 días en testnet, 120 días en mainnet** (`min_persistent_ttl` 120 960 vs 2 073 600 ledgers). Por eso en mainnet la subida del WASM paga de entrada la renta de 120 días.
+Testnet y mainnet comparten los parámetros de renta (al 4 de noviembre de 2026, `fee_write1_kb` 437, `persistent_rent_rate_denominator` 1215). La diferencia es el TTL mínimo de una entrada persistente: **7 días en testnet, 120 días en mainnet** (`min_persistent_ttl` 120 960 vs 2 073 600 ledgers). Por eso en mainnet la subida del WASM paga de entrada la renta de 120 días.
 
 | Concepto | Medido en testnet | Proyección mainnet | En US$ (XLM a 0,196) |
 |---|---|---|---|
@@ -89,6 +89,8 @@ git add scripts/vigilar-red.base.json && git commit
 ```
 
 Mientras no se actualice, solo la corrida diaria sigue fallando; las demás pasan, porque el cambio ya se avisó. Cuando testnet se reinicia (cada tres meses) casi todo cambia: se actualiza su línea base con `--actualizar-base --red testnet`. GitHub desactiva los workflows programados de un repositorio público tras 60 días sin actividad, y las corridas programadas pueden demorarse cuando la plataforma está cargada.
+
+**Mainnet recibió esa recalibración el 4 de noviembre de 2026** (ledger 65.305.114, protocolo 29 todavía): los mismos nueve valores que testnet, ahora iguales en las dos redes; la línea base de mainnet la tomó ese día. Ninguno es de `draw`, y la simulación del `draw` en testnet da 28,6 millones de instrucciones, un 7 % del límite de 400 millones por transacción.
 
 **El camino cuando mainnet cambie** es el que se siguió con testnet el 26 de octubre de 2026. Según la SDF (anuncio en el canal #announcements del Discord de Stellar Developers, 26 de octubre de 2026), fue una recalibración menor del costo de instrucciones de algunas funciones del host, sobre todo criptográficas, y mainnet la recibe en un par de semanas. En la cadena (ledger 5.402.084) cambiaron diez valores de `contract_cost_params_cpu_instructions`. El protocolo 30 llega a testnet el 3 de noviembre y a mainnet el 23, y con él cambia `protocol_version`; no es solo eso, ver el paso 2. Siempre igual:
 
