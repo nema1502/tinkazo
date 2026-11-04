@@ -130,24 +130,31 @@ export function setParaCompartir(on: boolean): void {
 if (params.get("compartir") === "1") setParaCompartir(true);
 
 /**
- * "Ver en 3D": quien organiza elige la carrera de llamas en 3D desde el sorteo, sin tocar la dirección. Apagado por
- * defecto, y recordado en este navegador (`localStorage`). Sin almacenamiento no se recuerda y no pasa nada más.
- * Solo es un pedido: que se use o no lo decide `usa3D` (`games/engine.ts`), según lo que aguanta el equipo.
+ * "En 3D": en los juegos que ganaron la comparación a ciegas, el 3D es lo que la sala ve sin tocar nada, y quien organiza
+ * puede volver al 2D con el interruptor del selector. La preferencia se recuerda en este navegador (`localStorage`) y
+ * distingue tres casos: nunca lo tocó (`null`: manda la regla por defecto), lo prendió (`true`) y lo apagó (`false`).
+ * Sin almacenamiento no se recuerda y no pasa nada más. Solo es un pedido: que se use o no lo decide `usa3D`
+ * (`games/engine.ts`), según el juego y lo que aguanta el equipo.
  */
 const VER3D_KEY = "tinkazo.ver3d";
 
-export function ver3D(): boolean {
+/** Lo que se eligió en esta página cuando el navegador no deja guardar: vale hasta recargar. */
+let ver3DEnMemoria: boolean | null = null;
+
+export function ver3DGuardado(): boolean | null {
+  if (ver3DEnMemoria !== null) return ver3DEnMemoria;
   try {
-    return localStorage.getItem(VER3D_KEY) === "1";
+    const v = localStorage.getItem(VER3D_KEY);
+    return v === "1" ? true : v === "0" ? false : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
 export function setVer3D(on: boolean): void {
+  ver3DEnMemoria = on;
   try {
-    if (on) localStorage.setItem(VER3D_KEY, "1");
-    else localStorage.removeItem(VER3D_KEY);
+    localStorage.setItem(VER3D_KEY, on ? "1" : "0");
   } catch {
     /* sin almacenamiento, vale hasta recargar */
   }

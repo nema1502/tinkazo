@@ -51,7 +51,7 @@ const opt = (name, def) => {
 const cual = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--")) ?? "todos";
 // El motor nuevo es el de todos desde el 28 de septiembre (docs/motores.md);
 // `--motor clasico` audita los juegos en el motor anterior. El nuevo usa la placa de video.
-const motor = opt("--motor", "pixi");
+const motor = opt("--motor", "");
 if (motor !== "clasico") process.env.TINKAZO_GPU = "1";
 const juegos = juegosDe(cual);
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");

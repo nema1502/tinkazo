@@ -38,7 +38,7 @@ const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const pedido = args[0] && !args[0].startsWith("--") ? args[0] : "todos";
 // El motor nuevo es el de todos desde el 28 de septiembre (docs/motores.md);
 // `--motor clasico` escucha los juegos del motor anterior. El nuevo usa la placa de video.
-const motor = opt("--motor", "pixi");
+const motor = opt("--motor", "");
 // Con `--con-banco`, cada juego tiene que haber sonado con archivos (no solo con osciladores).
 const conBanco = args.includes("--con-banco");
 if (motor !== "clasico") process.env.TINKAZO_GPU = "1";

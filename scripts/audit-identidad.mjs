@@ -64,7 +64,7 @@ const cual = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith
 const juegos = juegosDe(cual);
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 // `--motor 3d` mira la carrera en 3D (docs/motores.md); por defecto, el motor de todos.
-const motor = opt("--motor", "pixi");
+const motor = opt("--motor", "");
 const EXTREMOS = args.includes("--extremos");
 /** `--vista 390x844`: la pantalla en que se mide (por defecto 1280x720): celular, tablet, girado. */
 const VISTA = (opt("--vista", "1280x720").match(/^(\d+)x(\d+)$/) ?? [, "1280", "720"]).slice(1).map(Number);
@@ -94,7 +94,7 @@ async function correr(browser, juego, gente) {
   const page = await browser.open("about:blank");
   await page.send("Page.addScriptToEvaluateOnNewDocument", { source: TURBO });
   await page.send("Emulation.setDeviceMetricsOverride", { width: VISTA[0], height: VISTA[1], deviceScaleFactor: 1, mobile: VISTA[0] < 600 });
-  await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}&motor=${motor}&pace=normal&auditar=identidad&n=${gente}${EXTREMOS ? "&extremos=1" : ""}` });
+  await page.send("Page.navigate", { url: `${base}/?pose=${juego === "race" ? "1" : juego}${motor ? `&motor=${motor}` : ""}&pace=normal&auditar=identidad&n=${gente}${EXTREMOS ? "&extremos=1" : ""}` });
   const ok = await page.waitFor("window.__identidad && window.__identidad.revelado !== null", 120_000);
   const est = ok.ok ? JSON.parse(await page.eval("JSON.stringify(window.__identidad)")) : null;
   const errores = Number(await page.eval("window.__errores || 0").catch(() => 0));

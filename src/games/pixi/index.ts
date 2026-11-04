@@ -16,10 +16,10 @@ type Launch = (names: string[], winners: readonly number[], beacon: Beacon, done
 const PIXI: Partial<Record<Game, () => Promise<Launch>>> = {
   // Los del kit se cargan desde su catálogo: un juego nuevo no toca este archivo.
   ...Object.fromEntries(JUEGOS.map((j) => [j.id, j.cargar])),
-  // La carrera, y su prototipo en 3D con `?motor=3d` (three.js se trae solo ahí; si no baja, la de siempre).
+  // La carrera, y su 3D (three.js se trae solo ahí; si no baja, la de siempre).
   race: async () => {
     const carrera = await import("../llamas/carrera");
-    if (!usa3D()) return carrera.carreraPixi;
+    if (!usa3D("race")) return carrera.carreraPixi;
     try {
       const v = await import("../llamas/carrera-3d");
       return carrera.carreraPixi3D(v.crearVista3D);
@@ -55,8 +55,8 @@ const PIXI: Partial<Record<Game, () => Promise<Launch>>> = {
  * Ver `preloadGame` en `../engine.ts`.
  */
 export async function preloadPixi(game: Game): Promise<void> {
-  // Con el 3D prendido, también baja su módulo (three.js viaja en un trozo propio que se comparte entre juegos).
-  const tres = usa3D() && game !== "race" ? import("../tres/registro").then((m) => m.precargar3D(game)).catch(() => undefined) : undefined;
+  // Si el juego va a verse en 3D, también baja su módulo (three.js viaja en un trozo propio que se comparte entre juegos).
+  const tres = usa3D(game) && game !== "race" ? import("../tres/registro").then((m) => m.precargar3D(game)).catch(() => undefined) : undefined;
   await Promise.all([PIXI[game]?.(), warmPixi(), tres]);
 }
 
@@ -86,8 +86,8 @@ export async function playPixi(game: Game, names: string[], winners: readonly nu
   // y no aparecía ni el juego ni el ganador.
   let launch: Awaited<ReturnType<typeof load>>;
   try {
-    // El 3D (src/games/tres/README.md): si está prendido y el juego tiene versión, esa; si no baja, el 2D de siempre.
-    const en3D = usa3D() && game !== "race" ? await import("../tres/registro").then((m) => m.lanzador3D(game)).catch(() => null) : null;
+    // El 3D (src/games/tres/README.md): si le toca al juego y tiene versión, esa; si no baja, el 2D de siempre.
+    const en3D = usa3D(game) && game !== "race" ? await import("../tres/registro").then((m) => m.lanzador3D(game)).catch(() => null) : null;
     launch = en3D ?? (await load());
   } catch {
     return false;

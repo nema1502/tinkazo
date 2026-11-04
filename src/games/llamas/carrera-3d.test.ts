@@ -108,20 +108,14 @@ describe("la cámara del 3D mira lo que mira el director", () => {
 });
 
 describe("el 3D se apaga solo", () => {
-  const bueno: Entorno3D = { motor: "3d", webgl: true, ahorroDeDatos: false, conexion: null, compartir: false };
+  const bueno: Entorno3D = { webgl: true, ahorroDeDatos: false, conexion: null, compartir: false };
 
-  it("corre con la bandera y buenas condiciones", () => {
+  it("corre con buenas condiciones", () => {
     expect(permite3D(bueno)).toBe(true);
     expect(permite3D({ ...bueno, conexion: "4g" })).toBe(true);
   });
 
-  it("nunca por defecto: sin la bandera, o con otra, no corre", () => {
-    expect(permite3D({ ...bueno, motor: null })).toBe(false);
-    expect(permite3D({ ...bueno, motor: "clasico" })).toBe(false);
-    expect(permite3D({ ...bueno, motor: "pixi" })).toBe(false);
-  });
-
-  it("sin WebGL, con ahorro de datos, con datos lentos o con el modo para compartir, la bandera se ignora", () => {
+  it("sin WebGL, con ahorro de datos, con datos lentos o con el modo para compartir, el 3D se ignora", () => {
     expect(permite3D({ ...bueno, webgl: false })).toBe(false);
     expect(permite3D({ ...bueno, ahorroDeDatos: true })).toBe(false);
     expect(permite3D({ ...bueno, compartir: true })).toBe(false);

@@ -1029,6 +1029,31 @@ async function run() {
             check(`${etiqueta}: cada miniatura es la del tema ${tema}`, deOtroTema.length === 0, deOtroTema.map((m) => m.id).join(", "));
             const sinTamano = mini.filter((m) => m.ancho < 60 || m.alto < 30);
             check(`${etiqueta}: las miniaturas se ven de un tamaño legible`, sinTamano.length === 0, sinTamano.map((m) => `${m.id} ${m.ancho}x${m.alto}`).join(", "));
+            // El interruptor «En 3D / En 2D»: con la carrera elegida, los equipos que pueden lo muestran prendido (el 3D es lo que
+            // se ve por defecto), tocarlo pasa a 2D y lo guarda como apagado, y volver a tocarlo lo prende. Dos capturas.
+            await sleep(200);
+            // Al sellar se abre la espera en grande, que tapa la página: «Volver a la página» la cierra y deja ver el selector.
+            await page.eval(`document.querySelector('[data-volver]')?.click()`);
+            await sleep(500);
+            await page.eval(`(() => { const c = document.getElementById('btn-cambiar'); if (c && c.getBoundingClientRect().width > 0) c.click(); })()`);
+            await sleep(300);
+            await page.eval(`document.getElementById('g-race').click(); document.getElementById('ver3d-row').scrollIntoView({block:'center'})`);
+            await sleep(400);
+            const sw = async () => JSON.parse(await page.eval(`JSON.stringify((() => { const f = document.getElementById('ver3d-row'), b = document.getElementById('btn-3d'); const r = b.getBoundingClientRect(); return { visible: !f.hidden && f.getBoundingClientRect().width > 0 && f.getBoundingClientRect().height > 0, texto: b.textContent.trim(), pulsado: b.getAttribute('aria-pressed'), etiqueta: b.getAttribute('aria-label'), guardado: localStorage.getItem('tinkazo.ver3d'), ancho: Math.round(r.width), alto: Math.round(r.height), scrollY: Math.round(scrollY), arriba: Math.round(f.getBoundingClientRect().top), alto_ventana: innerHeight, encima: (() => { const e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return e ? (e.closest('[id]') || e).id : null; })() }; })())`));
+            const a0 = await sw();
+            check(`${etiqueta}: el interruptor de 3D aparece prendido por defecto y a la vista (nada lo tapa)`, a0.visible && (a0.encima === "btn-3d" || a0.encima === "ver3d-row") && a0.pulsado === "true" && a0.guardado === null && /^(En 3D|In 3D)$/.test(a0.texto), JSON.stringify(a0));
+            await page.screenshot(join(outDir, `ui-3d-prendido-${etiqueta}-${tema}.png`));
+            await page.eval(`document.getElementById('btn-3d').click()`);
+            await sleep(300);
+            const a1 = await sw();
+            check(`${etiqueta}: apagar el 3D lo deja en 2D y guardado`, a1.pulsado === "false" && a1.guardado === "0" && /^(En 2D|In 2D)$/.test(a1.texto), JSON.stringify(a1));
+            await page.screenshot(join(outDir, `ui-3d-apagado-${etiqueta}-${tema}.png`));
+            await page.eval(`document.getElementById('btn-3d').click()`);
+            await sleep(300);
+            const a2 = await sw();
+            check(`${etiqueta}: volver a prenderlo lo guarda prendido`, a2.pulsado === "true" && a2.guardado === "1", JSON.stringify(a2));
+            await page.eval(`localStorage.removeItem('tinkazo.ver3d')`);
+            await page.eval(`document.getElementById('g-race').click()`);
             await sleep(200);
             await page.screenshot(join(outDir, `ui-juegos-${etiqueta}.png`));
           }

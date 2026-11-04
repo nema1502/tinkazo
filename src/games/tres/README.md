@@ -221,4 +221,4 @@ Y una prueba de que tu vista usa el mapa de la casa (que `mapa.a3D` es lo que se
 
 ## Cómo se prueba a mano
 
-`pnpm dev` y `http://localhost:5173/?demo=trompo&motor=3d` (o `?pose=trompo&motor=3d&auditar=3d` para la escena fija). Sin `motor=3d`, el 2D de siempre. El 3D se ignora, sin aviso, si no hay WebGL, con ahorro de datos, con conexión de 3G o menos, en el modo para compartir y en los equipos más justos (`permite3d.ts`).
+`pnpm dev` y `http://localhost:5173/?demo=trompo&motor=3d` (o `?pose=trompo&motor=3d&auditar=3d` para la escena fija). Sin `motor=3d`, un juego se ve en 3D solo si está en la lista de `ofrecidos.ts` (los que ganaron la comparación a ciegas: ahí es el de siempre, y quien organiza vuelve al 2D con el interruptor «En 3D / En 2D» o con `?motor=clasico`); los demás, el 2D. Para que tu juego entre a la lista, hace falta que gane la comparación a ciegas y que pase la medida de rendimiento (`scripts/medir-3d.mjs`). El 3D se ignora, sin aviso, si no hay WebGL, con ahorro de datos, con conexión de 3G o menos, en el modo para compartir y en los equipos más justos (`permite3d.ts`).
