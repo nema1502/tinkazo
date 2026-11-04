@@ -2,6 +2,7 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { inflateRawSync, inflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
+import jsQR from "jsqr";
 import { T } from "./i18n";
 import config from "../vite.config";
 
@@ -212,7 +213,7 @@ describe("kit de marca para patrocinios y eventos", () => {
       "sello/tinkazo-sello-es.svg", "sello/tinkazo-sello-en.svg",
       ...STICKERS.flatMap(n => ["svg", "pdf"].map(e => `stickers/tinkazo-${n}.${e}`)),
     ].map(n => `tinkazo-kit-marca/${n}`);
-    expect([...zip.keys()].sort()).toEqual(esperados.sort());
+    for (const e of esperados) expect(zip.has(e), e).toBe(true); // la lista completa, con lo nuevo, la mide el bloque de la segunda vuelta
     // Los archivos del zip son los mismos de public/marca.
     expect(zip.get("tinkazo-kit-marca/logos/tinkazo-logo-apilado.png")!.equals(publico("logo-apilado.png"))).toBe(true);
     expect(zip.get("tinkazo-kit-marca/stickers/tinkazo-sticker-cuadrado-7cm.pdf")!.equals(publico("sticker-cuadrado-7cm.pdf"))).toBe(true);
@@ -291,4 +292,229 @@ describe("kit de marca para patrocinios y eventos", () => {
       for (const [n, bytes] of original) writeFileSync(new URL(n, dir), bytes);
     }
   }, 300_000);
+});
+
+// Segunda vuelta del kit: logos con la dirección, más stickers, hojas A4, redes, afiches, cartel y portada.
+const TEMAS_K = ["claro", "oscuro"] as const;
+const LANGS_K = ["es", "en"] as const;
+const WEB_LOGOS = ["logo-web-horizontal", "logo-web-horizontal-oscuro", "logo-web-apilado", "logo-web-apilado-oscuro"];
+const STICKERS_NUEVOS = [
+  "sticker-llama-recortada", "sticker-web", "sticker-web-oscuro",
+  ...["verificable", "gratis", "escanea", "evento"].flatMap(n => LANGS_K.map(l => `sticker-${n}-${l}`)),
+].flatMap(n => [5, 7].map(cm => `${n}-${cm}cm`));
+const HOJAS = LANGS_K.flatMap(l => [`stickers-hoja-a4-${l}`, `stickers-hoja-a4-7cm-${l}`]);
+const REDES = [["portada", 1200, 630], ["cuadrada", 1080, 1080], ["historia", 1080, 1920], ["cabecera", 1500, 500], ["linkedin", 1584, 396], ["patrocinio-cuadrada", 1080, 1080], ["patrocinio-ancha", 1920, 1080]] as const;
+const REDES_ARCHIVOS = REDES.flatMap(([id]) => TEMAS_K.flatMap(t => LANGS_K.map(l => `redes-${id}-${t}-${l}`)));
+const AFICHES = TEMAS_K.flatMap(t => LANGS_K.flatMap(l => ["afiche-evento-a4", "afiche-evento-a3", "cartel-mesa-a5"].map(n => `${n}-${t}-${l}`)));
+const PORTADAS = ["kit-portada", "kit-portada-en"];
+const svgsDe = (dir: string): string[] => readdirSync(new URL(dir, import.meta.url)).filter(n => n.endsWith(".svg")).sort();
+
+/** Dibuja los módulos del QR que trae un SVG (los trazos con class="qr") y los decodifica con jsQR. */
+function decodificarQrs(svg: string): string[] {
+  const salida: string[] = [];
+  for (const m of svg.matchAll(/<path class="qr" d="([^"]+)"/g)) {
+    const rects = m[1]!.split("M").slice(1).map(sub => {
+      const nums = [...sub.matchAll(/-?\d+(?:\.\d+)?/g)].map(Number);
+      const xs = nums.filter((_, i) => i % 2 === 0), ys = nums.filter((_, i) => i % 2 === 1);
+      return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] as const;
+    });
+    const x0 = Math.min(...rects.map(r => r[0])), y0 = Math.min(...rects.map(r => r[1]));
+    const x1 = Math.max(...rects.map(r => r[2])), y1 = Math.max(...rects.map(r => r[3]));
+    const modulo = Math.min(...rects.map(r => r[3] - r[1])) / 1.03; // los módulos solapan un 3 %
+    const px = 6 / modulo, margen = 4 * modulo;
+    const w = Math.ceil((x1 - x0 + 2 * margen) * px), h = Math.ceil((y1 - y0 + 2 * margen) * px);
+    const img = new Uint8ClampedArray(w * h * 4).fill(255);
+    for (const [a, b, c, d] of rects) {
+      for (let y = Math.round((b - y0 + margen) * px); y < Math.round((d - y0 + margen) * px); y++) {
+        for (let x = Math.round((a - x0 + margen) * px); x < Math.round((c - x0 + margen) * px); x++) img.set([0, 0, 0, 255], (y * w + x) * 4);
+      }
+    }
+    const r = jsQR(img, w, h);
+    salida.push(r?.data ?? "(no se pudo leer)");
+  }
+  return salida;
+}
+const comoZip = (n: string): string[] => [`tinkazo-kit-marca/${n}`];
+
+describe("kit de marca, segunda vuelta", () => {
+  it("existen todos los archivos nuevos: logos con la dirección, stickers, hojas, redes, afiches y portadas", () => {
+    for (const n of WEB_LOGOS) for (const e of ["svg", "png"]) expect(existsSync(new URL(`../public/marca/${n}.${e}`, import.meta.url)), `${n}.${e}`).toBe(true);
+    for (const n of [...STICKERS_NUEVOS, ...HOJAS, ...AFICHES]) for (const e of n.startsWith("sticker") && !n.startsWith("stickers-hoja") ? ["svg", "pdf"] : ["svg", "pdf"]) expect(existsSync(new URL(`../public/marca/${n}.${e}`, import.meta.url)), `${n}.${e}`).toBe(true);
+    for (const n of [...REDES_ARCHIVOS, ...PORTADAS]) expect(existsSync(new URL(`../public/marca/${n}.png`, import.meta.url)), n).toBe(true);
+  });
+  it("el ZIP trae exactamente la lista nueva, con las mismas bytes que public/marca", () => {
+    const zip = leerZip(publico("tinkazo-kit-marca.zip"));
+    const nuevos: Array<[string, string]> = [
+      ...WEB_LOGOS.flatMap(n => ["svg", "png"].map(e => [`logos/tinkazo-${n}.${e}`, `${n}.${e}`] as [string, string])),
+      ...STICKERS_NUEVOS.flatMap(n => ["svg", "pdf"].map(e => [`stickers/tinkazo-${n}.${e}`, `${n}.${e}`] as [string, string])),
+      ...HOJAS.flatMap(n => ["svg", "pdf"].map(e => [`stickers/hojas/tinkazo-${n}.${e}`, `${n}.${e}`] as [string, string])),
+      ...REDES_ARCHIVOS.map(n => [`redes/tinkazo-${n}.png`, `${n}.png`] as [string, string]),
+      ...AFICHES.flatMap(n => ["svg", "pdf"].map(e => [`afiches/tinkazo-${n}.${e}`, `${n}.${e}`] as [string, string])),
+      ["tinkazo-kit-portada.png", "kit-portada.png"], ["tinkazo-kit-portada-en.png", "kit-portada-en.png"],
+    ];
+    expect(nuevos.length).toBe(114);
+    for (const [ruta, archivo] of nuevos) {
+      const dentro = zip.get(comoZip(ruta)[0]!);
+      expect(dentro, ruta).toBeTruthy();
+      expect(dentro!.equals(publico(archivo)), ruta).toBe(true);
+    }
+    expect(zip.size).toBe(27 + 114);
+    const leeme = zip.get("tinkazo-kit-marca/LEEME.txt")!.toString("utf8");
+    for (const frag of ["tinkazo-kit-portada.png", "stickers/hojas/", "redes/", "afiches/", "Escaneá y comprobá", "Scan and check", "1200x630", "1584x396", "A3", "https://tinkazo.app/sorteo-para-meetup.html#comprobacion"]) expect(leeme, frag).toContain(frag);
+  });
+  it("ningún SVG de public/marca trae texto: todo son trazos", () => {
+    const todos = svgsDe("../public/marca/");
+    expect(todos.length).toBe(56);
+    for (const n of todos) {
+      const svg = publico(n).toString("utf8");
+      expect(svg, n).not.toMatch(/<text|<tspan|font-family|font-size|@font-face|<image|<script|<foreignObject/);
+      expect(svg, n).toMatch(/<path|<rect/);
+    }
+  });
+  it("los PNG de redes miden lo que dicen, la portada 1600 por 900 y los logos con dirección 2048 de ancho", () => {
+    for (const [id, w, h] of REDES) for (const t of TEMAS_K) for (const l of LANGS_K) {
+      const b = publico(`redes-${id}-${t}-${l}.png`);
+      expect([b.readUInt32BE(16), b.readUInt32BE(20), b[24], b[25]], `${id} ${t} ${l}`).toEqual([w, h, 8, 6]);
+    }
+    for (const n of PORTADAS) expect([publico(`${n}.png`).readUInt32BE(16), publico(`${n}.png`).readUInt32BE(20)]).toEqual([1600, 900]);
+    for (const n of WEB_LOGOS) { const b = publico(`${n}.png`); expect(b.readUInt32BE(16), n).toBe(2048); expect(b.readUInt32BE(20)).toBeGreaterThan(300); }
+  });
+  it("las imágenes en claro y en oscuro, y en español y en inglés, son distintas entre sí", () => {
+    for (const [id] of REDES) {
+      const c = publico(`redes-${id}-claro-es.png`), o = publico(`redes-${id}-oscuro-es.png`), e = publico(`redes-${id}-claro-en.png`);
+      expect(c.equals(o), `${id} claro/oscuro`).toBe(false);
+      expect(c.equals(e), `${id} es/en`).toBe(false);
+    }
+  });
+  it("los QR decodifican a su dirección: stickers, afiches, cartel y hojas", () => {
+    const SITIO = "https://tinkazo.app", COMPROBACION = "https://tinkazo.app/sorteo-para-meetup.html#comprobacion";
+    for (const l of LANGS_K) for (const cm of [5, 7]) expect(decodificarQrs(publico(`sticker-escanea-${l}-${cm}cm.svg`).toString("utf8")), `escanea ${l} ${cm}`).toEqual([SITIO]);
+    for (const t of TEMAS_K) for (const l of LANGS_K) {
+      for (const tam of ["a4", "a3"]) expect(decodificarQrs(publico(`afiche-evento-${tam}-${t}-${l}.svg`).toString("utf8")), `afiche ${tam} ${t} ${l}`).toEqual([SITIO]);
+      expect(decodificarQrs(publico(`cartel-mesa-a5-${t}-${l}.svg`).toString("utf8")), `cartel ${t} ${l}`).toEqual([COMPROBACION]);
+    }
+    for (const n of HOJAS) {
+      const qrs = decodificarQrs(publico(`${n}.svg`).toString("utf8"));
+      expect(qrs.length, n).toBeGreaterThanOrEqual(1);
+      for (const q of qrs) expect(q, n).toBe(SITIO);
+    }
+  });
+  it("las hojas y los afiches miden lo que dicen en SVG y en PDF, y las hojas traen la capa de corte de cada sticker", () => {
+    const mm = (v: number): string => (v * 72 / 25.4).toFixed(3);
+    for (const n of HOJAS) {
+      const svg = publico(`${n}.svg`).toString("utf8");
+      expect(svg, n).toContain('width="210mm" height="297mm" viewBox="0 0 210 297"');
+      expect(svg).toContain('<g id="corte" fill="none" stroke="#ff00ff" stroke-width="0.25">');
+      const cortes = (svg.split('<g id="corte"')[1]!.match(/<path /g) ?? []).length;
+      expect(cortes, n).toBeGreaterThanOrEqual(n.includes("7cm") ? 8 : 18);
+      const pdf = publico(`${n}.pdf`).toString("latin1");
+      expect(pdf).toContain(`/MediaBox [0 0 ${mm(210)} ${mm(297)}]`);
+      expect(pdf).toContain("/OCG");
+    }
+    const cabe = (n: string, w: number, h: number): void => {
+      expect(publico(`${n}.svg`).toString("utf8"), n).toContain(`width="${w}mm" height="${h}mm" viewBox="0 0 ${w} ${h}"`);
+      expect(publico(`${n}.pdf`).toString("latin1"), n).toContain(`/MediaBox [0 0 ${mm(w)} ${mm(h)}]`);
+    };
+    for (const t of TEMAS_K) for (const l of LANGS_K) { cabe(`afiche-evento-a4-${t}-${l}`, 210, 297); cabe(`afiche-evento-a3-${t}-${l}`, 297, 420); cabe(`cartel-mesa-a5-${t}-${l}`, 148, 210); }
+  });
+  it("entre sticker y sticker de una hoja hay 5 mm de aire", () => {
+    // En las filas de tres cuadrados, los recortes (capa corte) arrancan cada 55 mm: 50 de sticker más 5 de aire.
+    const svg = publico("stickers-hoja-a4-es.svg").toString("utf8");
+    const cortes = [...svg.split('<g id="corte"')[1]!.matchAll(/<path d="M([\d.]+) ([\d.]+)/g)].map(m => [Number(m[1]), Number(m[2])] as const);
+    const filas = new Map<number, number[]>();
+    for (const [x, y] of cortes) filas.set(Math.round(y), [...(filas.get(Math.round(y)) ?? []), x]);
+    const conPaso = [...filas.values()].filter(xs => xs.length === 3).map(xs => xs.sort((p, q) => p - q)).filter(xs => Math.abs(xs[1]! - xs[0]! - 55) < 0.01 && Math.abs(xs[2]! - xs[1]! - 55) < 0.01);
+    expect(conPaso.length).toBeGreaterThanOrEqual(2);
+    expect(filas.size).toBeGreaterThanOrEqual(6);
+  });
+  it("los stickers nuevos: tamaño real con sangrado, capa de corte y PDF válido", () => {
+    for (const n of STICKERS_NUEVOS) {
+      const svg = publico(`${n}.svg`).toString("utf8");
+      const cm = Number(n.match(/(\d)cm/)![1]);
+      expect(svg, n).toMatch(new RegExp(`width="[\\d.]+mm" height="[\\d.]+mm" viewBox="0 0 [\\d.]+ [\\d.]+"`));
+      expect(svg).toContain('<g id="arte">');
+      expect(svg).toMatch(/<g id="corte" fill="none" stroke="#ff00ff" stroke-width="0\.25">/);
+      const ancho = Number(svg.match(/width="([\d.]+)mm"/)![1]);
+      if (!n.includes("llama-recortada") && !n.includes("web")) expect(ancho, n).toBeCloseTo(cm * 10 + 6, 3);
+      if (n.includes("web")) expect(ancho, n).toBeCloseTo(cm * 10 + 6, 3);
+      const pdf = publico(`${n}.pdf`).toString("latin1");
+      expect(pdf.startsWith("%PDF-1.5")).toBe(true);
+      expect(pdf).toContain("/TrimBox [8.504 8.504");
+      expect(pdf.trimEnd().endsWith("%%EOF")).toBe(true);
+      const xref = Number(pdf.match(/startxref\n(\d+)/)![1]);
+      expect(pdf.slice(xref, xref + 4)).toBe("xref");
+      const offs = [...pdf.slice(xref).matchAll(/(\d{10}) 00000 n/g)].map(m => Number(m[1]));
+      offs.forEach((o, i) => expect(pdf.slice(o, o + 7)).toBe(`${i + 1} 0 obj`));
+    }
+  });
+  it("la llama recortada: el corte sigue el contorno con 2 mm de borde y el PDF trae el dibujo comprimido", () => {
+    const svg = publico("sticker-llama-recortada-5cm.svg").toString("utf8");
+    const corte = svg.split('<g id="corte"')[1]!;
+    expect(corte).toMatch(/<path d="M[\d. L]+Z"\/>/);
+    const pdf = publico("sticker-llama-recortada-5cm.pdf");
+    expect(pdf.toString("latin1")).toContain("/FlateDecode");
+    const ini = pdf.indexOf("stream\n") + 7, fin = pdf.indexOf("\nendstream");
+    const contenido = inflateSync(pdf.subarray(ini, fin)).toString("latin1");
+    expect(contenido).toContain("/OC /corte BDC");
+    expect(contenido).toContain("EMC");
+  });
+  it("el logo con la dirección lleva tinkazo.app en trazos y el .app en magenta, claro y oscuro", () => {
+    const l = publico("logo-web-horizontal.svg").toString("utf8");
+    expect(l).toContain("<title id=\"titulo\">Tinkazo, tinkazo.app</title>");
+    expect((l.match(/<path /g) ?? []).length).toBeGreaterThanOrEqual(5); // llama, TINKA, ZO, tinkazo, .app
+    expect(l).toMatch(/fill="#e93d9c"/);
+    const o = publico("logo-web-apilado-oscuro.svg").toString("utf8");
+    expect(o).toMatch(/fill="#ff5cb3"/);
+    expect(o).toMatch(/fill="#f6efe2"/);
+    // El apilado es más alto que el horizontal en proporción.
+    const dim = (s: string): number => { const m = s.match(/width="([\d.]+)" height="([\d.]+)"/)!; return Number(m[1]) / Number(m[2]); };
+    expect(dim(l)).toBeGreaterThan(3.5);
+    expect(dim(publico("logo-web-apilado.svg").toString("utf8"))).toBeLessThan(1.5);
+  });
+  it("la página ofrece cada archivo nuevo, todo existe y los que cambian con el idioma tienen su versión en inglés", () => {
+    const html = leer("marca.html");
+    const raiz = fileURLToPath(new URL("../public", import.meta.url));
+    for (const m of html.matchAll(/(?:href|src|data-href|data-src)="(\/marca\/[^"]+)"/g)) {
+      const ruta = m[1]!;
+      const variantes = ruta.includes("{l}") ? LANGS_K.map(l => ruta.replaceAll("{l}", l)) : ruta.includes("{en}") ? [ruta.replaceAll("{en}", ""), ruta.replaceAll("{en}", "-en")] : [ruta];
+      for (const v of variantes) expect(existsSync(`${raiz}${v}`), v).toBe(true);
+    }
+    for (const n of [...WEB_LOGOS, ...STICKERS_NUEVOS.filter(n => !/-(es|en)-/.test(n)), "kit-portada"]) expect(html, n).toContain(`/marca/${n}`);
+    for (const [id] of REDES) expect(html, id).toContain(`/marca/redes-${id}-claro-es.png`);
+    for (const t of TEMAS_K) { expect(html).toContain(`/marca/afiche-evento-a4-${t}-es.pdf`); expect(html).toContain(`/marca/cartel-mesa-a5-${t}-es.svg`); }
+    for (const n of ["stickers-hoja-a4-es", "stickers-hoja-a4-7cm-es"]) for (const e of ["pdf", "svg"]) expect(html).toContain(`/marca/${n}.${e}`);
+    expect(leer("src/marca.ts")).toContain("data-src");
+    expect(leer("src/marca.ts")).toContain("onLangChange(actualizarTodo)");
+  });
+  it("cada texto nuevo de la página está en español y en inglés, sin punto medio ni tecnicismos", () => {
+    const claves = Object.keys(T.es).filter(k => /^ma(Web|StNota|StLlama|StWeb|StVer|StGra|StEsc|StEve|Hoj|Red|Af|Ca|Portada|Uso7)/.test(k));
+    expect(claves.length).toBeGreaterThanOrEqual(40);
+    const html = leer("marca.html");
+    for (const k of claves) {
+      expect(html, k).toContain(`data-i="${k}"`);
+      for (const lang of ["es", "en"] as const) {
+        expect(T[lang][k], `${lang}.${k}`).toBeTruthy();
+        expect(T[lang][k], `${lang}.${k}`).not.toMatch(/·|drand|hash|WebGL|Worker|bytes/i);
+      }
+      if (!/^ma(Red[1-7]|StVer|StGra)$/.test(k)) expect(T.en[k], k).not.toBe(T.es[k]);
+    }
+    expect(T.es.maRedT).toBe("Para redes y marketing");
+    expect(T.en.maRedT).toBe("For social media and marketing");
+    expect(T.es.maWebT).toBe("Logo con la dirección");
+    expect(T.en.maAfT).toBe("Posters and table sign");
+  });
+  it("los textos que van en las imágenes están en los dos idiomas", () => {
+    const frases = [["Sorteos que cualquiera puede comprobar", "Draws anyone can check"], ["Participar es gratis", "Entry is free"], ["Tinkazo patrocina este evento", "Tinkazo sponsors this event"], ["logo del evento", "event logo"]];
+    const fuente = leer("scripts/marca/redes.mjs");
+    for (const [es, en] of frases) {
+      const palabras = (s: string): string[] => s.split(" ");
+      for (const p of [es!, en!]) {
+        if (p.startsWith("Sorteos") || p.startsWith("Draws")) continue; // el titular va partido en líneas
+        if (p.startsWith("Tinkazo")) continue;
+        expect(fuente, p).toContain(`"${p}"`);
+      }
+      void palabras;
+    }
+    for (const frag of ["Sorteos que", "cualquiera puede", "comprobar", "Draws anyone", "can check", "Tinkazo", "patrocina", "este evento", "sponsors", "this event", "tinkazo.app"]) expect(fuente, frag).toContain(frag);
+  });
 });

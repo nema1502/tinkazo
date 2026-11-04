@@ -175,20 +175,25 @@ export function pdf(anchoMm, altoMm, sangreMm, formas) {
   const contenido = `${arte}/OC /corte BDC\n${corte}EMC\n`;
   const A = pt(anchoMm).toFixed(3), B = pt(altoMm).toFixed(3), s = pt(sangreMm).toFixed(3);
   const trim = `[${s} ${s} ${(pt(anchoMm) - pt(sangreMm)).toFixed(3)} ${(pt(altoMm) - pt(sangreMm)).toFixed(3)}]`;
+  const flujo = deflateSync(Buffer.from(contenido, "latin1"), { level: 9 }); // el dibujo va comprimido (Flate)
   const objetos = [
-    "<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [5 0 R] /D << /ON [5 0 R] /Order [5 0 R] >> >> >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${A} ${B}] /BleedBox [0 0 ${A} ${B}] /TrimBox ${trim} /Resources << /Properties << /corte 5 0 R >> >> /Contents 4 0 R >>`,
-    `<< /Length ${Buffer.byteLength(contenido, "latin1")} >>\nstream\n${contenido}endstream`,
-    "<< /Type /OCG /Name (corte) >>",
-    "<< /Title (Tinkazo) /Producer (generar-marca.mjs) >>",
+    Buffer.from("<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [5 0 R] /D << /ON [5 0 R] /Order [5 0 R] >> >> >>", "latin1"),
+    Buffer.from("<< /Type /Pages /Kids [3 0 R] /Count 1 >>", "latin1"),
+    Buffer.from(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${A} ${B}] /BleedBox [0 0 ${A} ${B}] /TrimBox ${trim} /Resources << /Properties << /corte 5 0 R >> >> /Contents 4 0 R >>`, "latin1"),
+    Buffer.concat([Buffer.from(`<< /Length ${flujo.length} /Filter /FlateDecode >>\nstream\n`, "latin1"), flujo, Buffer.from("\nendstream", "latin1")]),
+    Buffer.from("<< /Type /OCG /Name (corte) >>", "latin1"),
+    Buffer.from("<< /Title (Tinkazo) /Producer (generar-marca.mjs) >>", "latin1"),
   ];
-  let salida = "%PDF-1.5\n";
+  const partes = [Buffer.from("%PDF-1.5\n", "latin1")];
+  let pos = partes[0].length;
   const desplazamientos = [];
-  objetos.forEach((o, i) => { desplazamientos.push(Buffer.byteLength(salida, "latin1")); salida += `${i + 1} 0 obj\n${o}\nendobj\n`; });
-  const xref = Buffer.byteLength(salida, "latin1");
-  salida += `xref\n0 ${objetos.length + 1}\n0000000000 65535 f \n${desplazamientos.map((d) => `${String(d).padStart(10, "0")} 00000 n \n`).join("")}trailer\n<< /Size ${objetos.length + 1} /Root 1 0 R /Info 6 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-  return Buffer.from(salida, "latin1");
+  objetos.forEach((o, i) => {
+    desplazamientos.push(pos);
+    const p = Buffer.concat([Buffer.from(`${i + 1} 0 obj\n`, "latin1"), o, Buffer.from("\nendobj\n", "latin1")]);
+    partes.push(p); pos += p.length;
+  });
+  partes.push(Buffer.from(`xref\n0 ${objetos.length + 1}\n0000000000 65535 f \n${desplazamientos.map((d) => `${String(d).padStart(10, "0")} 00000 n \n`).join("")}trailer\n<< /Size ${objetos.length + 1} /Root 1 0 R /Info 6 0 R >>\nstartxref\n${pos}\n%%EOF\n`, "latin1"));
+  return Buffer.concat(partes);
 }
 
 export const tabla = new Uint32Array(256).map((_, n) => { for (let k = 0; k < 8; k++) n = n & 1 ? 0xedb88320 ^ (n >>> 1) : n >>> 1; return n >>> 0; });
