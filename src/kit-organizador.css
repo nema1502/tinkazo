@@ -1,7 +1,7 @@
 /* Only this reading page imports the organizer kit styles. */
 .kit-language, .kit-back-es, .kit-back-en { display: none; }
 html:lang(es) .kit-language[lang="es"], html:lang(en) .kit-language[lang="en"] { display: block; }
-html:lang(es) .kit-back-es, html:lang(en) .kit-back-en { display: inline; }
+html:lang(es) .kit-back-es, html:lang(en) .kit-back-en { display: inline-flex; }
 .kit-guide { max-width: 850px; padding: 24px 0; }
 .kit-guide h2 { font-size: clamp(26px, 4vw, 36px); margin: 24px 0 12px; }
 .kit-guide h3 { font-size: 24px; margin: 32px 0 14px; }
@@ -13,6 +13,9 @@ html:lang(es) .kit-back-es, html:lang(en) .kit-back-en { display: inline; }
 .kit-guide a, .kit-controls a { text-decoration: underline; text-underline-offset: 3px; }
 .kit-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; margin: 16px 0; }
 .kit-controls h2, .kit-controls p { flex-basis: 100%; }
+/* Los enlaces de la barra se tocan con el dedo: 44 px de alto, como los botones. Los de volver a la guía siguen mostrándose solo en su idioma. */
+.kit-controls a { align-items: center; min-height: 44px; }
+.kit-controls a:not(.kit-back-es):not(.kit-back-en) { display: inline-flex; }
 .kit-controls button { border: 2px solid currentColor; border-radius: 8px; background: var(--paper, white); color: var(--ink); font: inherit; padding: 12px 16px; cursor: pointer; }
 .kit-controls button:focus-visible, .kit-guide a:focus-visible, .kit-cards-section a:focus-visible { outline: 3px solid var(--magenta); outline-offset: 4px; }
 .kit-index { border: 1px solid currentColor; border-radius: 10px; padding: 8px 16px; }

@@ -8,11 +8,16 @@
 .marca p.lead { font-size: 20px; }
 .marca-recursos { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 32px; }
 .marca-recursos > * { min-width: 0; }
-.marca-descargas { display: flex; flex-wrap: wrap; gap: 14px; }
 .marca .mini { display: inline-flex; align-items: center; min-height: 44px; text-decoration: none; margin-top: 8px; }
 .marca-vista { border: var(--bw) solid var(--ink); box-shadow: var(--sh); padding: 20px; }
-.marca-vistas { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; min-width: 0; }
-.marca-llama { background: var(--card); }
+.marca-vistas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; min-width: 0; align-items: start; }
+/* Cada llama con sus descargas debajo: la de la izquierda va sobre claro y la de la derecha sobre oscuro, en los dos temas.
+   La subgrilla alinea las dos columnas aunque un rótulo ocupe dos líneas y el otro una. */
+.marca-par { margin: 0; min-width: 0; display: grid; gap: 10px; grid-row: span 3; grid-template-rows: subgrid; }
+.marca-par figcaption { margin-top: 6px; font-weight: 800; font-size: 16px; color: var(--ink); }
+.marca-descargas { display: grid; gap: 10px; }
+.marca-descargas .mini { justify-content: center; text-align: center; margin-top: 0; }
+.marca-llama { background: #fff6e9; }
 .marca-llama-oscura { background: #171126; }
 .marca-sello { background: #fff6e9; }
 .marca-vista img { width: 100%; height: auto; display: block; }
@@ -37,4 +42,5 @@
   .marca-tipo { padding: 16px; }
   .marca p.marca-titular { font-size: 22px; }
   .marca-vista { padding: 12px; }
+  .marca-descargas .mini { font-size: 15px; padding: 5px 8px; }
 }

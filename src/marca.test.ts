@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { inflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
@@ -30,6 +30,18 @@ describe("recursos públicos de marca", () => {
     expect(leer("vite.config.ts")).toContain('marca: resolve(__dirname, "marca.html")');
     expect(leer("public/sitemap.xml")).toContain('https://tinkazo.app/marca.html');
     expect(leer("index.html")).toContain('href="/marca.html"');
+  });
+  it("todo pie común lleva a Marca, también el de verificar y los de los enlaces", () => {
+    const raiz = fileURLToPath(new URL("../", import.meta.url));
+    const conPie = readdirSync(raiz).filter(p => p.endsWith(".html")).filter(p => {
+      const pie = leer(p).split("<footer")[1] ?? "";
+      return pie.includes('href="/historia.html"');
+    });
+    expect(conPie).toContain("verificar.html");
+    for (const pagina of conPie) {
+      const pie = leer(pagina).split("<footer")[1]!;
+      expect(pie, `${pagina} no lleva a Marca en el pie`).toMatch(/<a href="\/marca\.html"[^>]*data-i="navMarca">/);
+    }
   });
   it("cada texto y atributo traducible existe en ambos idiomas y el español coincide", () => {
     const html = leer("marca.html");
