@@ -666,7 +666,7 @@ Cuatro renglones de «lo que el auditor no puede ver» eran de ojo y ahora se mi
 | Juego | Huecos | > 4 s | Info < 3 s | Silencio antes del golpe | «Última» vacías |
 |---|---|---|---|---|---|
 | Carrera de llamas | 2,3 s / 7,8 s | 15 | 0 | 0,0 s | 0 de 0 |
-| Carrera de llamas (aura) | 2,4 s / 8,3 s | 14 | 0 | 0,0 s | 0 de 0 |
+| Carrera de llamas (nueva) | 2,4 s / 8,3 s | 14 | 0 | 0,0 s | 0 de 0 |
 | Ruleta | 1,2 s / 15,6 s | 4 | 0 | 0,8 s (0,0 a 1,3 s) | 0 de 0 |
 | Guajojó | 3,3 s / 10,5 s | 16 | 0 | 0,0 s | 0 de 0 |
 | Toborochi | 4,1 s / 8,1 s | 15 | 0 | 0,0 s | 0 de 0 |

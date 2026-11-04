@@ -260,7 +260,7 @@ const PROTEGE_DETRAS = 1;
   function tomar(persona: number): Corredora {
     let c = enUso.get(persona);
     if (c) return c;
-    // La carrera con aura dibuja la llama de aguayo (la B del diseño); la de siempre, la de lana.
+    // La carrera nueva dibuja la llama de aguayo (la B del diseño); la de siempre, la de lana.
     const llama = (d.nueva ? crearLlamaAguayo : crearLlama)(S, { pelaje: PELAJES[persona % PELAJES.length] ?? 0xf3ead8, manta: S.color(persona) });
     const raiz = new Container();
     raiz.addChild(llama.root);
@@ -1521,7 +1521,7 @@ export type Escena = ReturnType<typeof crearEscena>;
 const definicion = (fabrica3d: Fabrica3D | null): DefJuego<Datos, Escena> => ({
   id: "race",
   textos: TEXTOS_CARRERA,
-  // `?carrera=nueva`: la carrera con aura, hasta que pase las compuertas. Sin la bandera, la de siempre.
+  // `?carrera=nueva`: la carrera nueva, hasta que pase las compuertas. Sin la bandera, la de siempre.
   plan: (ctx) => planCarrera(ctx, { nueva: params.get("carrera") === "nueva" }),
   arma(k, plan, previa) {
     if (!previa) return crearEscena(k, plan.datos, fabrica3d);

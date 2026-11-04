@@ -255,7 +255,7 @@ La misma página tiene la sección «Para patrocinios y eventos», pensada para 
 `node scripts/generar-marca.mjs` regenera todo esto (llama, logos, sellos, stickers y el ZIP) sin modificar el icono ni el logotipo. Es reproducible: dos corridas dejan los mismos bytes (el ZIP lleva siempre la fecha 1-1-1980). Rasteriza los PNG y arma los PDF y el ZIP sin herramientas de imagen adicionales. Los enlaces de descarga son del mismo origen, como requiere el atributo HTML `download`.
 
 
-### Más aura: dirección, stickers, redes, afiches y portada
+### Segunda versión: dirección, stickers, redes, afiches y portada
 
 La segunda vuelta del kit suma, todo generado por el mismo script y también dentro del ZIP (114 archivos nuevos):
 

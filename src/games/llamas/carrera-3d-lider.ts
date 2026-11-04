@@ -11,7 +11,7 @@ import { TAM3D, ZC, type Entrada3D } from "./carrera-3d-mapa";
  * Era una bola amarilla con un halo (la borla del 2D), que se leía como una pelota sobre el lomo y tapaba a la llama.
  * Ahora hay tres marcas pensadas para el 3D, que se eligen con `?lider=` para compararlas:
  *
- * - `aro` (por defecto): un aro dorado en el piso, bajo la llama, con su aura y unos tramos que giran. No tapa a nadie, se
+ * - `aro` (por defecto): un aro dorado en el piso, bajo la llama, con su halo y unos tramos que giran. No tapa a nadie, se
  *   lee desde el fondo de la sala y desde un celular, y la perspectiva lo hace más grande cuanto más cerca está.
  * - `banderin`: un mástil sobre el lomo con un banderín dorado que flamea, más alto que la ficha del nombre.
  * - `manta`: la manta de quien va adelante brilla, con una aureola y unas chispas que suben.
@@ -96,9 +96,9 @@ function aro(c: Contexto3D): Lider3D {
   };
   const oro = B.add(new MeshBasicMaterial({ color: ORO, transparent: true, opacity: 0.96, depthWrite: false, fog: false, side: DoubleSide }));
   const pale = B.add(new MeshBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0.9, depthWrite: false, fog: false, side: DoubleSide }));
-  const aura = B.add(new MeshBasicMaterial({ color: ORO, transparent: true, opacity: 0.2, depthWrite: false, fog: false, side: DoubleSide }));
+  const resplandor = B.add(new MeshBasicMaterial({ color: ORO, transparent: true, opacity: 0.2, depthWrite: false, fog: false, side: DoubleSide }));
   const tinta = B.add(new MeshBasicMaterial({ color: 0x16161f, transparent: true, opacity: 0.5, depthWrite: false, fog: false, side: DoubleSide }));
-  // De adentro para afuera: el aura, el borde de tinta, el aro, su filo claro y los tramos que giran.
+  // De adentro para afuera: el resplandor, el borde de tinta, el aro, su filo claro y los tramos que giran.
   const mk = (g: BufferGeometry, m: MeshBasicMaterial, y: number, orden: number): Mesh => {
     const me = new Mesh(B.add(plano(g)), m);
     me.position.y = y;
@@ -106,7 +106,7 @@ function aro(c: Contexto3D): Lider3D {
     raiz.add(me);
     return me;
   };
-  mk(new RingGeometry(0, 1, 40, 1), aura, 0, 1);
+  mk(new RingGeometry(0, 1, 40, 1), resplandor, 0, 1);
   mk(new RingGeometry(0.6, 1.0, 56, 1), tinta, 0.002, 2);
   mk(new RingGeometry(0.66, 0.95, 56, 1), oro, 0.004, 3);
   mk(new RingGeometry(0.66, 0.74, 56, 1), pale, 0.006, 4);

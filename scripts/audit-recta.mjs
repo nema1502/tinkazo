@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * El auditor de la recta de la carrera con aura (`?carrera=nueva`), a nivel del plan y sin Chrome.
+ * El auditor de la recta de la carrera nueva (`?carrera=nueva`), a nivel del plan y sin Chrome.
  *
  * Es `audit-delatores race --nueva` con las cantidades de la batería (de 2 a 200 personas): el adivinador del camino entero (con
  * ocho carriles, 13,2 % o menos hasta el 88 % de la recta; con menos, el azar más tres errores estándar), las señales del acordeón y

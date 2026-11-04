@@ -81,7 +81,7 @@ export interface EscenaCarrera {
 }
 
 export interface Datos {
-  /** La carrera con aura (`?carrera=nueva`): distancia de verdad, carriles fijos y la recta intercambiable. */
+  /** La carrera nueva (`?carrera=nueva`): distancia de verdad, carriles fijos y la recta intercambiable. */
   nueva: boolean;
   n: number;
   names: string[];
@@ -143,7 +143,7 @@ function rectaNueva(ctx: Contexto, campeona: number): PlanFinal {
 }
 
 export interface OpcionesCarrera {
-  /** La carrera con aura, detrás de `?carrera=nueva`. Sin ella, la de siempre. */
+  /** La carrera nueva, detrás de `?carrera=nueva`. Sin ella, la de siempre. */
   nueva?: boolean;
 }
 

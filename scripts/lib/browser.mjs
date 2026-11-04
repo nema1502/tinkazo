@@ -64,7 +64,7 @@ export class CDP {
    * emoción se quedó hora y media esperando una respuesta que nunca llegó.
    */
   send(method, params = {}, ms = 300_000) {
-    // `TINKAZO_EXTRA=carrera=nueva`: parámetros que se suman a cada página que abre un auditor (para medir la carrera con aura sin tocar cada script).
+    // `TINKAZO_EXTRA=carrera=nueva`: parámetros que se suman a cada página que abre un auditor (para medir la carrera nueva sin tocar cada script).
     if (method === "Page.navigate" && process.env.TINKAZO_EXTRA && typeof params.url === "string" && params.url.includes("?")) params = { ...params, url: `${params.url}&${process.env.TINKAZO_EXTRA}` };
     const id = ++this.id;
     this.ws.send(JSON.stringify({ id, method, params }));

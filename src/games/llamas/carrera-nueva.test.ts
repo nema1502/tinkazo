@@ -9,7 +9,7 @@ import { ctxDe } from "./carrera-prueba";
 import { FINALISTAS, planCarrera, type Datos } from "./carrera-show";
 
 /**
- * La carrera con aura (`?carrera=nueva`): distancia de verdad, carriles fijos
+ * La carrera nueva (`?carrera=nueva`): distancia de verdad, carriles fijos
  * y una recta que se decide al final. Todo a nivel del plan, sin navegador; el
  * adivinador completo es del auditor de delatores (`scripts/lib/delatores-bayes.mjs`).
  */

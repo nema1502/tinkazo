@@ -5,7 +5,7 @@ import { CREAM, INK, YELLOW } from "../pixi/stage";
 import { oscurecer, type Llama, type Momento } from "./llama";
 
 /**
- * La llama de la carrera con aura (`?carrera=nueva`): la B del diseño, "hecha de tejido".
+ * La llama de la carrera nueva (`?carrera=nueva`): la B del diseño, "hecha de tejido".
  *
  * Bordes en escalón, como una tela tejida, y la manta con rombos de aguayo que ninguna otra carrera tiene. La cara lleva un ojo grande con
  * brillo y una sonrisa, para que no quede fría. Mide lo mismo que la de siempre (`LLAMA_ALTO`, `LLAMA_LARGO`): se dibuja en unidades de boceto

@@ -88,7 +88,7 @@ export interface EntradaTrompo extends EntradaBase {
   trompos: TrompoEntrada[];
   impactos: ImpactoEntrada[];
   polvos: PolvoEntrada[];
-  /** Quién gana (para su aura en la coronación) y qué tanto va la coronación, de 0 a 1. */
+  /** Quién gana (para su halo en la coronación) y qué tanto va la coronación, de 0 a 1. */
   ganadora: number;
   corona: number;
 }
@@ -143,7 +143,7 @@ const fabrica: Fabrica3D<EntradaTrompo> = (motor, o) => {
   const vistos = new Set<string>();
   const ondas: Mesh[] = [];
   const estrellas: Sprite[] = [];
-  let aura: Mesh | null = null;
+  let halo: Mesh | null = null;
   let chicos: { rig: PersonaRig; ang: number; fase: number }[] = [];
   let hijosFx: Group | null = null;
   const cabezas = new Map<number, { cabeza: [number, number, number]; pie: [number, number, number] }>();
@@ -330,11 +330,11 @@ const fabrica: Fabrica3D<EntradaTrompo> = (motor, o) => {
       G.add(sp);
       estrellas.push(sp);
     }
-    aura = new Mesh(B.add(new CircleGeometry(1, 32)), B.add(new MeshBasicMaterial({ color: 0xffc629, transparent: true, opacity: 0.35, depthWrite: false })));
-    aura.rotation.x = -Math.PI / 2;
-    aura.position.y = 0.014;
-    aura.visible = false;
-    G.add(aura);
+    halo = new Mesh(B.add(new CircleGeometry(1, 32)), B.add(new MeshBasicMaterial({ color: 0xffc629, transparent: true, opacity: 0.35, depthWrite: false })));
+    halo.rotation.x = -Math.PI / 2;
+    halo.position.y = 0.014;
+    halo.visible = false;
+    G.add(halo);
   };
 
   const inicio = (e: EntradaTrompo): void => {
@@ -432,15 +432,15 @@ const fabrica: Fabrica3D<EntradaTrompo> = (motor, o) => {
         }
         sombras.fin();
 
-        // El aura de la ganadora en la coronación.
-        if (aura) {
+        // El halo de la ganadora en la coronación.
+        if (halo) {
           const gan = e.trompos.find((t) => t.id === e.ganadora);
           const gk = e.corona > 0 && gan ? outBack(clamp(e.corona, 0, 1)) : 0;
-          aura.visible = gk > 0 && !!gan;
-          if (aura.visible && gan) {
+          halo.visible = gk > 0 && !!gan;
+          if (halo.visible && gan) {
             const dx = (gan.x - e.ruedo.cx) / e.ruedo.r, dz = (gan.y - e.ruedo.cy) / (e.ruedo.r * APLASTADO_2D);
-            aura.position.set(dx, 0.014, dz);
-            aura.scale.setScalar(((e.radio * 0.95) / e.ruedo.r) * (0.9 + 0.7 * gk) * 1.15);
+            halo.position.set(dx, 0.014, dz);
+            halo.scale.setScalar(((e.radio * 0.95) / e.ruedo.r) * (0.9 + 0.7 * gk) * 1.15);
           }
         }
 

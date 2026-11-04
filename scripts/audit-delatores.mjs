@@ -48,7 +48,7 @@
  * Uso:
  *   node scripts/audit-delatores.mjs race [--semillas 1500] [--n 18,30,60,100,200] [--json salida.json]
  *   node scripts/audit-delatores.mjs race --nueva [--n 2,3,5,8,9,18,30,60,100,200] [--bayes 120000,20000]
- *        la carrera con aura (?carrera=nueva): además de las señales, el adivinador completo de la recta
+ *        La carrera nueva (?carrera=nueva): además de las señales, el adivinador completo de la recta
  *        (delatores-bayes.mjs) con cada cantidad de carriles (2 a 8); 13,2 % o menos hasta el 88 % con 8
  *   pnpm build && pnpm preview --port 4173 &
  *   node scripts/audit-delatores.mjs [juego|todos|sapo,wheel] [--semillas 200] [--n 8]
@@ -104,7 +104,7 @@ const json = (() => {
   return i >= 0 && args[i + 1] && !args[i + 1].startsWith("--") ? args[i + 1] : "";
 })();
 const trazas = opt("--trazas", "");
-/** La carrera con aura (`?carrera=nueva`): se mide el plan nuevo y, además, el adivinador completo de la recta. */
+/** La carrera nueva (`?carrera=nueva`): se mide el plan nuevo y, además, el adivinador completo de la recta. */
 const nueva = args.includes("--nueva");
 const [bayesEntrena, bayesPrueba] = opt("--bayes", "120000,20000").split(",").map(Number);
 const releer = opt("--releer", "");

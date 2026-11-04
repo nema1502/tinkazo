@@ -53,7 +53,7 @@ export const AUDITORES = [
   { id: "audit-identidad", script: "audit-identidad.mjs", chrome: true, nivel: "siempre", juegos: "todos", estimado: 120, args: conBase, fuera: TRES_FUERA },
   { id: "audit-pantalla", script: "audit-pantalla.mjs", chrome: true, nivel: "aparte", juegos: "todos", estimado: 73, args: conBase, fuera: TRES_FUERA },
   { id: "audit-delatores", script: "audit-delatores.mjs", chrome: true, nivel: "siempre", juegos: "todos", estimado: 102, args: conBase, fuera: TRES_FUERA },
-  // La recta de la carrera con aura (`?carrera=nueva`), a nivel del plan y sin Chrome (`audit-delatores race --nueva`): el adivinador del camino entero (13,2 % o menos hasta el 88 %
+  // La recta de la carrera nueva (`?carrera=nueva`), a nivel del plan y sin Chrome (`audit-delatores race --nueva`): el adivinador del camino entero (13,2 % o menos hasta el 88 %
   // con ocho carriles), las señales del acordeón y de los sucesos, y el auditor de arco (variedad e independencia). De 2 a 200 personas.
   { id: "audit-recta", script: "audit-recta.mjs", chrome: false, nivel: "siempre", juegos: null, estimado: 150 },
   { id: "audit-emocion", script: "audit-emocion.mjs", chrome: true, nivel: "siempre", juegos: "todos", estimado: 60, args: conBase, fuera: TRES_FUERA },
