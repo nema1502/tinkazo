@@ -1115,7 +1115,11 @@ export async function trompoPixi(names: string[], winners: readonly number[], be
     S.hud.addChild(counterRoot);
     chips = new Container();
     S.hud.addChild(chips);
-    duelText = S.text("", { fontFamily: MONO, fontSize: Math.max(18, LEGIBLE.sec) * k, fontWeight: "700", fill: S.dark ? CREAM : INK });
+    // Con el 3D el rótulo va suelto sobre la tierra del patio, que no es ni clara ni oscura: letra crema con contorno de tinta (4,5 a 1 en los dos temas).
+    const duelSize = Math.max(18, LEGIBLE.sec) * k;
+    duelText = S.text("", tres
+      ? { fontFamily: MONO, fontSize: duelSize, fontWeight: "700", fill: CREAM, stroke: contorno(duelSize) }
+      : { fontFamily: MONO, fontSize: duelSize, fontWeight: "700", fill: S.dark ? CREAM : INK });
     duelText.anchor.set(1, 1);
     duelText.alpha = 0.9;
     duelText.position.set(W - 22 * k, H - S.bottom() - 18 * k);
