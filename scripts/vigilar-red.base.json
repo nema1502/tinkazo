@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-11-03T23:08:15.599Z",
+  "updated": "2026-11-04T00:34:37.847Z",
   "note": "Línea base de los parámetros de costo de Soroban y del protocolo, por red. La compara scripts/vigilar-red.mjs; si la red cambia alguno, la primera corrida que lo ve falla y avisa, y el recordatorio diario sigue fallando mientras la base esté vieja. Cuando el cambio es legítimo: node scripts/vigilar-red.mjs --actualizar-base --red <red>, y se commitea. Explicación en docs/deployments.md, Vigilancia de la red.",
   "networks": {
     "mainnet": {
@@ -19,7 +19,7 @@
         "contract_max_size_bytes": 131072,
         "contract_parallel_compute_v0": {"ledger_max_dependent_tx_clusters":3},
         "freeze_bypass_txs": {"tx_hashes":[]},
-        "frozen_ledger_keys": {"keys":["000000000000000026382ffefe59a4c26121b81876ca741a601ad91d1bc3627aa21af253719ea806","00000000000000005dfad17a9b94fb141650268b7d5b8601fb43dba8f1d1009e01694bf827c85c2d","000000000000000092e7ca0d48e9865aa9dd3ebc5ac7671bf6becd2ee3371c3ff3c1efb4fe1aece1"]},
+        "frozen_ledger_keys": {"keys":["000000000000000026382ffefe59a4c26121b81876ca741a601ad91d1bc3627aa21af253719ea806","00000000000000005dfad17a9b94fb141650268b7d5b8601fb43dba8f1d1009e01694bf827c85c2d","000000000000000092e7ca0d48e9865aa9dd3ebc5ac7671bf6becd2ee3371c3ff3c1efb4fe1aece1","0000000000000000ef88a3c873600ee2668ae1e76ca64e836bbd339c1f4b95f225e515072b2a9999"]},
         "protocol_version": 29,
         "scp_timing": {"ledger_target_close_time_milliseconds":5000,"nomination_timeout_initial_milliseconds":1000,"nomination_timeout_increment_milliseconds":1000,"ballot_timeout_initial_milliseconds":1000,"ballot_timeout_increment_milliseconds":1000},
         "state_archival": {"max_entry_ttl":3110400,"min_temporary_ttl":17280,"min_persistent_ttl":2073600,"persistent_rent_rate_denominator":"1215","temp_rent_rate_denominator":"2430","max_entries_to_archive":1000,"live_soroban_state_size_window_sample_size":30,"live_soroban_state_size_window_sample_period":64,"eviction_scan_size":500000,"starting_eviction_scan_level":7}
