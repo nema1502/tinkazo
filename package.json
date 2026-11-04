@@ -37,6 +37,7 @@
     "@types/three": "0.180.0",
     "jsdom": "^26.1.0",
     "jsqr": "^1.4.0",
+    "opentype.js": "^2.0.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.0",
     "vitest": "^5.0.1"

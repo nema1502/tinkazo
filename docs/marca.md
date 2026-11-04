@@ -236,11 +236,23 @@ La página pública `/marca.html` reúne la llama, los colores copiables, los us
 - `public/marca/llama.svg`: la silueta exacta de `public/icon.svg`, sin el rectángulo de fondo; lienzo de 512 × 512.
 - `public/marca/llama.png`: la misma silueta, en RGBA de 2048 × 2048 y fondo transparente.
 - `public/marca/llama-oscuro.svg` y `llama-oscuro.png`: la misma llama en el magenta del tema oscuro (`#ff5cb3`), para poner sobre fondos oscuros.
-- `public/marca/sello-es.svg` y `sello-en.svg`: sellos de 960 × 280, transparentes, para fondos claros. La tipografía sigue siendo del sistema: puede variar entre dispositivos. No estirar ni agregar detalles a la llama.
+- `public/marca/sello-es.svg` y `sello-en.svg`: sellos de 960 × 280, transparentes, para fondos claros, con las letras convertidas en trazos. No estirar ni agregar detalles a la llama.
 
 El sello dice «Sorteo verificable con Tinkazo» o «Verifiable draw with Tinkazo». Se usa cuando el sorteo tiene un comprobante verificable y se acompaña con el enlace a ese comprobante. No certifica que la lista inicial estuviera bien armada.
 
-`node scripts/generar-marca.mjs` regenera únicamente estas seis descargas, sin modificar el icono ni el logotipo. No usa fuentes externas ni herramientas de imagen adicionales. Los enlaces de descarga son del mismo origen, como requiere el atributo HTML `download`.
+### El kit para patrocinios y eventos
+
+La misma página tiene la sección «Para patrocinios y eventos», pensada para que quien organiza un evento con Tinkazo baje todo solo:
+
+- Logo completo en `logo-horizontal` (llama a la izquierda, TINKAZO a la derecha) y `logo-apilado` (llama arriba), cada uno claro y `-oscuro`, en SVG y en PNG de 2048 px de ancho, con fondo transparente. La llama y el «ZO» van en magenta del tema; el resto en tinta (`#191919` en claro, `#f6efe2` en oscuro).
+- Stickers `sticker-redondo`, `sticker-redondo-oscuro` y `sticker-cuadrado`, de 5 y de 7 cm, en SVG y PDF a tamaño real (1 unidad del SVG = 1 mm) con 3 mm de sangrado. La línea de corte va en una capa aparte (`id="corte"` en el SVG y una capa apagable en el PDF), con trazo de 0,25 mm. Fondo crema `#fff6e9` con borde de tinta, o tinta `#191919` con la llama en `#ff5cb3`. Los colores son RGB: la imprenta los convierte.
+- `tinkazo-kit-marca.zip`: todo lo anterior más la llama, el sello y un `LEEME.txt` en español e inglés con la descripción, la paleta, las reglas de uso, la dirección y el contacto.
+
+**La letra de los archivos.** El sitio usa la letra del sistema en grosor 900, que cambia de un equipo a otro, y un archivo de logo no puede depender de eso. Para los archivos se eligió **Montserrat Black** (SIL Open Font License 1.1; el .ttf oficial y su `OFL.txt` están en `scripts/marca/fuentes/`): es una geométrica de trazo grueso y mayúsculas anchas, la más cercana al 900 que ve la gente en el sitio, y es libre. La frase del sello usa Montserrat Bold. El texto se convierte en trazos con `opentype.js` (dependencia de desarrollo), con el kerning de la fuente y el espaciado de 0,06 em de la cabecera, así que nada depende de la letra del equipo ni de la impresora.
+
+**Reglas de uso.** Espacio libre alrededor igual a la altura de la llama; tamaño mínimo de 24 px de alto en pantalla y 8 mm impreso; no estirar; no cambiar los colores; no ponerlo sobre fondos que no contrasten; se escribe «Tinkazo».
+
+`node scripts/generar-marca.mjs` regenera todo esto (llama, logos, sellos, stickers y el ZIP) sin modificar el icono ni el logotipo. Es reproducible: dos corridas dejan los mismos bytes (el ZIP lleva siempre la fecha 1-1-1980). Rasteriza los PNG y arma los PDF y el ZIP sin herramientas de imagen adicionales. Los enlaces de descarga son del mismo origen, como requiere el atributo HTML `download`.
 
 
 ## Los enlaces

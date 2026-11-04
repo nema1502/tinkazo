@@ -39,3 +39,5 @@ public/sonidos/*/musica*.mp3
 
 # La música de los juegos nunca se versiona (workers/musica/README.md)
 workers/musica/camas/
+# El kit de marca se versiona aunque sea zip: lo bajan los organizadores desde marca.html
+!public/marca/tinkazo-kit-marca.zip

@@ -44,3 +44,30 @@
   .marca-vista { padding: 12px; }
   .marca-descargas .mini { font-size: 15px; padding: 5px 8px; }
 }
+
+/* Kit para patrocinios y eventos: el ZIP grande, los cuatro logos, los stickers, el texto y las reglas. */
+.marca-zip { display: flex; align-items: center; gap: 12px 20px; flex-wrap: wrap; margin: 18px 0 8px; }
+.marca-zip p { margin: 0; }
+.marca .marca-zip-btn { font-size: 20px; min-height: 56px; padding: 10px 22px; margin-top: 0; justify-content: center; text-align: center; }
+.marca-logos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; margin-top: 20px; align-items: start; }
+.marca-stickers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 16px; align-items: start; }
+.marca-logos .marca-par, .marca-stickers .marca-par { grid-row: auto; grid-template-rows: none; align-content: start; }
+.marca-logos .marca-vista { display: grid; place-items: center; min-height: 220px; }
+.marca-logos .marca-llama img, .marca-logos .marca-llama-oscura img { max-height: 210px; }
+.marca-stickers .marca-descargas { grid-template-columns: 1fr 1fr; }
+.marca-sticker { background: #e9e2d4; display: grid; place-items: center; }
+.marca-sticker img { max-width: 280px; margin: 0 auto; }
+.marca-texto { border: 2px solid var(--ink); background: var(--card); padding: 16px 20px; max-width: 820px; }
+.marca p.marca-linea { color: var(--ink); font-size: 22px; font-weight: 900; letter-spacing: -.02em; margin-top: 0; }
+.marca-texto p:last-child { margin-bottom: 0; }
+.marca-reglas { margin: 0; padding-left: 24px; max-width: 760px; }
+.marca-reglas li { font-size: 16px; line-height: 1.65; color: var(--ink2); margin: 6px 0; }
+.marca p.marca-dir { color: var(--ink); font-weight: 700; }
+.marca-dir a { color: var(--ink); }
+.marca-nota { font-size: 15px; }
+@media (max-width: 760px) {
+  .marca-logos, .marca-stickers { grid-template-columns: 1fr; }
+  .marca-logos .marca-vista { min-height: 0; }
+  .marca-sticker img { max-width: 220px; }
+  .marca .marca-zip-btn { width: 100%; font-size: 18px; }
+}

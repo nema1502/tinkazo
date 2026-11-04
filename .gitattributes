@@ -1,0 +1,5 @@
+# Los archivos del kit de marca se versionan tal cual: el PDF, el ZIP y los SVG dependen de sus bytes.
+# Las llamas siguen como texto: una prueba las compara con icon.svg.
+public/marca/* -text
+public/marca/llama.svg text
+public/marca/llama-oscuro.svg text
