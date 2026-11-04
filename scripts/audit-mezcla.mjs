@@ -27,7 +27,13 @@
  *
  * Uso (con `pnpm preview` corriendo):
  *   node scripts/audit-mezcla.mjs [juego|todos] [--base http://localhost:4173] [--sin-musica]
+ *
+ * Con `--grabar <carpeta> [--etiqueta antes|despues] [--segundos 20]` guarda también, de cada
+ * juego, los segundos que terminan 4 s después del cartel del ganador (o los primeros, si no se vio), de lo que salió por el parlante en `<juego>-<etiqueta>.wav`
+ * (16 bits, estéreo), para escuchar lo mismo antes y después de un cambio de sonido.
  */
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { launch, sleep } from "./lib/browser.mjs";
 import { emitirJson } from "./lib/resumen.mjs";
 import { juegosDe } from "./lib/juegos.mjs";
@@ -40,6 +46,23 @@ const opt = (name, def) => {
 const cual = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--")) ?? "todos";
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
 const sinMusica = args.includes("--sin-musica");
+const carpetaWav = opt("--grabar", "");
+const etiquetaWav = opt("--etiqueta", "despues");
+const segundosWav = Number(opt("--segundos", "20"));
+/** Un WAV de 16 bits y dos canales con el comienzo de la mezcla. */
+function escribirWav(ruta, L, R, sr, seg) {
+  const n = Math.min(L.length, Math.round(seg * sr));
+  const buf = Buffer.alloc(44 + n * 4);
+  buf.write("RIFF", 0); buf.writeUInt32LE(36 + n * 4, 4); buf.write("WAVEfmt ", 8);
+  buf.writeUInt32LE(16, 16); buf.writeUInt16LE(1, 20); buf.writeUInt16LE(2, 22);
+  buf.writeUInt32LE(sr, 24); buf.writeUInt32LE(sr * 4, 28); buf.writeUInt16LE(4, 32); buf.writeUInt16LE(16, 34);
+  buf.write("data", 36); buf.writeUInt32LE(n * 4, 40);
+  for (let i = 0; i < n; i++) {
+    buf.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(L[i] * 32767))), 44 + i * 4);
+    buf.writeInt16LE(Math.max(-32768, Math.min(32767, Math.round(R[i] * 32767))), 46 + i * 4);
+  }
+  writeFileSync(ruta, buf);
+}
 const lista = juegosDe(cual);
 
 /** Los umbrales. */
@@ -219,6 +242,26 @@ async function medir(browser, juego) {
     await sleep(400);
     const r = await page.eval("window.__mezcla && window.__mezcla.L.length ? window.__mezcla.medir() : null");
     if (!r) return { error: "no sonó nada (¿el contexto de audio quedó suspendido?)" };
+    if (carpetaWav) {
+      // Se trae el comienzo de la mezcla en trozos chicos: el canal de DevTools no aguanta un mensaje de varios MB.
+      const sr = Number(await page.eval("window.__mezcla.sr"));
+      const total = Math.round(segundosWav * sr);
+      const L = new Float32Array(total), R = new Float32Array(total);
+      // Los segundos que terminan cuatro después del cartel del ganador (con el cartel adentro), o los primeros si no se vio.
+      const desde = r.cartel > 0 ? Math.max(0, Math.round((r.cartel / 1000 + 4) * sr) - total) : 0;
+      let puesto = 0, bloque = Math.floor(desde / 4096);
+      let saltar = desde - bloque * 4096;
+      while (puesto < total) {
+        const par = JSON.parse(await page.eval(`(() => { const b = window.__mezcla; const i = ${bloque}; if (!b.L[i]) return "null"; return JSON.stringify([Array.from(b.L[i], (v) => Math.round(v * 32767)), Array.from(b.R[i], (v) => Math.round(v * 32767))]); })()`));
+        if (!par) break;
+        const ini = saltar; saltar = 0;
+        const n = Math.min(par[0].length - ini, total - puesto);
+        for (let k = 0; k < n; k++) { L[puesto + k] = par[0][ini + k] / 32767; R[puesto + k] = par[1][ini + k] / 32767; }
+        puesto += n; bloque++;
+      }
+      mkdirSync(carpetaWav, { recursive: true });
+      escribirWav(join(carpetaWav, `${juego}-${etiquetaWav}.wav`), L, R, sr, segundosWav);
+    }
     return r;
   } finally {
     try {

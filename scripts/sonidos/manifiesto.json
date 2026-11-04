@@ -1,0 +1,461 @@
+[
+ {
+  "juego": "chovena",
+  "id": "corte",
+  "prompt": "A sharp loud wooden drum slap, one tight hit, dry, then silence",
+  "dur": 0.6,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "chovena",
+  "id": "ganador",
+  "prompt": "A festive crowd cheer with a baroque violin flourish and a big drum hit, celebration climax",
+  "dur": 3.0,
+  "variantes": 4,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "chovena",
+  "id": "pisada",
+  "prompt": "A single dance stomp of a boot on a wooden floor, dry soft thump",
+  "dur": 0.5,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "comun",
+  "id": "campana-hi",
+  "prompt": "A single soft glass bell chime note, high register, around C5, gentle ring, dry, no reverb, nothing else",
+  "dur": 1.5,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.6
+ },
+ {
+  "juego": "comun",
+  "id": "campana-lo",
+  "prompt": "A single low pitched soft bell chime note, pitch G3 about 196 Hz, deep gentle ring, dry, nothing else",
+  "dur": 1.5,
+  "variantes": 5,
+  "loop": false,
+  "influencia": 0.7
+ },
+ {
+  "juego": "comun",
+  "id": "impacto",
+  "prompt": "A cinematic impact hit with a sharp mid-range snap and a punchy boom, bright crack on top of the thud, single hit, short decay, nothing else",
+  "dur": 1.3,
+  "variantes": 5,
+  "loop": false,
+  "influencia": 0.6
+ },
+ {
+  "juego": "comun",
+  "id": "kalimba-hi",
+  "prompt": "A single kalimba thumb piano note, high register, around C5, clean soft pluck, dry close-mic recording, no reverb, no other sounds",
+  "dur": 1.2,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.6
+ },
+ {
+  "juego": "comun",
+  "id": "kalimba-lo",
+  "prompt": "A single kalimba thumb piano note, low register, around C3, clean soft pluck, dry close-mic recording, no reverb, no other sounds",
+  "dur": 1.2,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.6
+ },
+ {
+  "juego": "comun",
+  "id": "madera-hi",
+  "prompt": "A single very high pitched tuned wooden xylophone block note, pitch C6 about 1046 Hz, short dry bright tonal tick, nothing else",
+  "dur": 0.8,
+  "variantes": 5,
+  "loop": false,
+  "influencia": 0.7
+ },
+ {
+  "juego": "comun",
+  "id": "madera-lo",
+  "prompt": "A single deep low pitched tuned wooden log drum marimba note, pitch G3 about 196 Hz, short dry tonal knock, nothing else",
+  "dur": 0.8,
+  "variantes": 5,
+  "loop": false,
+  "influencia": 0.7
+ },
+ {
+  "juego": "comun",
+  "id": "zampona-hi",
+  "prompt": "A single sustained very high pitched Andean panpipe zampona note, pitch C6 about 1046 Hz, bright breathy tone, steady, nothing else",
+  "dur": 1.2,
+  "variantes": 5,
+  "loop": false,
+  "influencia": 0.7
+ },
+ {
+  "juego": "comun",
+  "id": "zampona-lo",
+  "prompt": "A single sustained bass Andean panpipe toyo note, very low pitch G2 about 98 Hz to G3 196 Hz, deep hollow wooden flute tone, steady, nothing else",
+  "dur": 1.2,
+  "variantes": 10,
+  "loop": false,
+  "influencia": 0.75
+ },
+ {
+  "juego": "guajojo",
+  "id": "ganador",
+  "prompt": "Night forest at dawn: a night bird call then birds waking up and a cheering crowd, celebration climax",
+  "dur": 3.0,
+  "variantes": 4,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "guajojo",
+  "id": "grillo",
+  "prompt": "A single cricket chirp at night, short and soft",
+  "dur": 0.5,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "oruro",
+  "id": "bombo",
+  "prompt": "A single bass drum hit from a carnival band with a punchy beater click and a short boom, dry",
+  "dur": 0.6,
+  "variantes": 4,
+  "loop": false,
+  "influencia": 0.6
+ },
+ {
+  "juego": "oruro",
+  "id": "bronce-hi",
+  "prompt": "A single sustained trumpet note, pitch C5 about 523 Hz, bold and bright, short, dry, nothing else",
+  "dur": 1.0,
+  "variantes": 4,
+  "loop": false,
+  "influencia": 0.7
+ },
+ {
+  "juego": "oruro",
+  "id": "bronce-lo",
+  "prompt": "A single sustained low brass note on a euphonium, pitch G3 about 196 Hz, bold, short, dry, nothing else",
+  "dur": 1.0,
+  "variantes": 4,
+  "loop": false,
+  "influencia": 0.7
+ },
+ {
+  "juego": "oruro",
+  "id": "campana",
+  "prompt": "A large festive bell chiming, a rich ring",
+  "dur": 2.5,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "oruro",
+  "id": "ganador",
+  "prompt": "A carnival brass band triumphant fanfare with a bass drum and a crowd cheering, celebration climax",
+  "dur": 3.0,
+  "variantes": 4,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "oruro",
+  "id": "paso",
+  "prompt": "A dancer's boot stomp with a small jingle of bells, short",
+  "dur": 0.5,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "oruro",
+  "id": "redoblante",
+  "prompt": "A single snare drum hit from a marching carnival band, tight and dry",
+  "dur": 0.5,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "pinata",
+  "id": "caramelos",
+  "prompt": "Hard candies falling and bouncing on a tile floor, a short pattering shower",
+  "dur": 1.0,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "pinata",
+  "id": "ganador",
+  "prompt": "Children cheering and laughing with a party horn and a confetti pop, celebration climax",
+  "dur": 3.0,
+  "variantes": 4,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "pinata",
+  "id": "palo",
+  "prompt": "A wooden stick whacking a papier-mache pinata, a dull paper thud with a rattle of candy inside",
+  "dur": 0.7,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "pinata",
+  "id": "rotura",
+  "prompt": "A pinata smashing open: loud crack, candies pouring and scattering on the floor, confetti paper rustle, kids cheering",
+  "dur": 2.2,
+  "variantes": 4,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "pinata",
+  "id": "soga",
+  "prompt": "A rope creaking while holding a hanging weight, a short creak",
+  "dur": 0.6,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "pinata",
+  "id": "traqueteo",
+  "prompt": "Candies rattling inside a cardboard pinata being shaken, short",
+  "dur": 0.8,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "race",
+  "id": "casco",
+  "prompt": "A single llama hoof thud on dry dirt ground, soft and short, close, no music",
+  "dur": 0.5,
+  "variantes": 4,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "race",
+  "id": "ganador",
+  "prompt": "A stadium crowd erupting in a joyful roar and cheer with a bright brass fanfare hit and clapping, celebration climax",
+  "dur": 3.0,
+  "variantes": 4,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "race",
+  "id": "redoble",
+  "prompt": "A short rising snare drum roll lasting half a second ending on a soft hit, dry",
+  "dur": 0.8,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "race",
+  "id": "resoplido",
+  "prompt": "A single short llama snort and grunt, comedic, close-mic, nothing else",
+  "dur": 0.8,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "race",
+  "id": "tropiezo",
+  "prompt": "A cartoon stumble: a quick scuff slide on dirt and a soft thud with a tiny crowd 'oooh', short",
+  "dur": 1.0,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "sapo",
+  "id": "boca",
+  "prompt": "A metal coin dropping into a hollow wooden mouth: a bright metallic clink then a hollow glup",
+  "dur": 1.2,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "sapo",
+  "id": "ficha",
+  "prompt": "A single metal coin token bouncing and clinking on wood, short and bright, dry",
+  "dur": 0.6,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "sapo",
+  "id": "ganador",
+  "prompt": "A big frog croak followed by a cheering crowd and a metallic coin jackpot clink, celebration climax",
+  "dur": 3.0,
+  "variantes": 4,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "teleferico",
+  "id": "apagon",
+  "prompt": "An electric power-down: a quick descending whirr and a clunk as the lights go out, short",
+  "dur": 1.0,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "teleferico",
+  "id": "cable",
+  "prompt": "Steel cable humming and creaking under tension from a cable car, a low smooth whirr",
+  "dur": 1.0,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "teleferico",
+  "id": "ganador",
+  "prompt": "A cable car station bell ringing and a crowd cheering with applause, high mountain celebration climax",
+  "dur": 3.0,
+  "variantes": 4,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "teleferico",
+  "id": "llegada",
+  "prompt": "A cable car arriving at the station: an arrival bell ding and a gentle mechanical settle",
+  "dur": 1.5,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "teleferico",
+  "id": "torre",
+  "prompt": "A cable car passing over a pylon tower: a metallic clunk and rattle, short",
+  "dur": 0.8,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "toborochi",
+  "id": "colibri",
+  "prompt": "A hummingbird hovering, a fast steady wing buzz, no music",
+  "dur": 1.5,
+  "variantes": 3,
+  "loop": true,
+  "influencia": 0.5
+ },
+ {
+  "juego": "toborochi",
+  "id": "ganador",
+  "prompt": "Wind chimes and wooden flutes with a crowd cheering, a majestic flowering tree celebration climax",
+  "dur": 3.0,
+  "variantes": 4,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "toborochi",
+  "id": "viento",
+  "prompt": "A gust of wind through trees, a whooshing breeze, no music",
+  "dur": 3.0,
+  "variantes": 3,
+  "loop": true,
+  "influencia": 0.5
+ },
+ {
+  "juego": "trompo",
+  "id": "cae",
+  "prompt": "A wooden spinning top wobbling and falling over with a rolling clatter on dirt, short",
+  "dur": 1.2,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "trompo",
+  "id": "choque",
+  "prompt": "Two wooden spinning tops colliding with a sharp wood clack and a short buzz, close",
+  "dur": 0.9,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "trompo",
+  "id": "ganador",
+  "prompt": "A crowd cheering with a wooden top spinning down and wood clacks, triumphant celebration climax",
+  "dur": 3.0,
+  "variantes": 4,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "trompo",
+  "id": "roce",
+  "prompt": "A light wooden tick of two spinning tops grazing each other, tiny and short",
+  "dur": 0.5,
+  "variantes": 3,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "trompo",
+  "id": "zumbido",
+  "prompt": "A wooden spinning top whirring, a steady smooth buzzing whirr, no music",
+  "dur": 1.5,
+  "variantes": 3,
+  "loop": true,
+  "influencia": 0.5
+ },
+ {
+  "juego": "wheel",
+  "id": "clavija",
+  "prompt": "A single plastic flapper clicking against a wooden wheel peg, a crisp short tick, dry",
+  "dur": 0.5,
+  "variantes": 4,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "wheel",
+  "id": "ganador",
+  "prompt": "A carnival wheel stopping with a ratchet slowdown and a bell ding then a crowd cheering, jackpot celebration",
+  "dur": 3.0,
+  "variantes": 4,
+  "loop": false,
+  "influencia": 0.5
+ },
+ {
+  "juego": "wheel",
+  "id": "tum",
+  "prompt": "A single soft mid-range drum thump like a conga or tom drum with woody body around 250 Hz, short, dry",
+  "dur": 0.7,
+  "variantes": 4,
+  "loop": false,
+  "influencia": 0.6
+ }
+]

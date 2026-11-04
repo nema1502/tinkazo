@@ -505,7 +505,7 @@ Cuando el selector tenía doce juegos, el auditor exigente midió treinta segund
 
 ## El sonido
 
-Todo el sonido sale de [`src/sound.ts`](../src/sound.ts) y no hay archivos de audio: son osciladores. Eso trae tres reglas que no son gusto sino límite del aparato y del oído, y que existen porque durante un tiempo no estuvieron escritas y los seis juegos se degradaron a la vez.
+Todo el sonido sale de [`src/sound.ts`](../src/sound.ts). Los juegos disparan osciladores (`beep`, `beepFor`, `hum`, `wind`, `fanfare`) y, desde el 4 de noviembre de 2026, el banco de [`src/sonidos/banco.ts`](../src/sonidos/banco.ts) hace sonar un archivo en lugar del oscilador cuando el disparo se parece a uno que tiene archivo ([abajo](#los-sonidos-de-archivo)). La partitura sigue siendo de osciladores y de la escala: lo que sigue vale para las dos cosas. Eso trae tres reglas que no son gusto sino límite del aparato y del oído, y que existen porque durante un tiempo no estuvieron escritas y los seis juegos se degradaron a la vez.
 
 **Registro.** El parlante de un proyector, de un portátil o de una barra de sala chica se cae por debajo de unos 120 Hz y se vuelve un silbido fino por encima de unos 3 kHz. El rango útil son los **grados 0 a 20 de `note()`**, o sea 131 Hz a 2093 Hz. Lo que está fuera de ahí está escrito y no se oye: hubo golpes de clímax a 70 y a 90 Hz que nadie escuchó nunca.
 
@@ -521,6 +521,22 @@ Y cuatro obligaciones:
 - **Los adornos del final van después de la fanfarria,** a +520 y +700 ms. Dentro quedan enmascarados por notas que suenan al doble de volumen.
 
 El silencio también es sonido. `audit-sound` marca los huecos de más de 4 s (la escena se siente muerta), pero **el cuarto de segundo sin nada que termina en el golpe es a propósito** y no cuenta como defecto: lo que se le pide (de 0,2 a 0,6 s) lo mide [el ritmo de los hechos](#el-ritmo-de-los-hechos).
+
+### Los sonidos de archivo
+
+Los juegos no se tocaron: ninguno dice qué está pasando, todos disparan `beep(frecuencia, duración, onda, volumen)`. El banco mira esos cuatro datos (más el grado de la escala) y decide, en tres capas:
+
+1. **Las reglas del juego** (`JUEGOS_CON_BANCO` en `banco.ts`): una firma (onda, rango de volumen, de duración y de grado) que identifica un momento de un juego y apunta a su efecto: el casco de la llama, el palo contra la piñata, el choque de los trompos, la ficha que cae en la boca del sapo, la clavija de la ruleta, el bombo de Oruro, el cable del teleférico, el grillo del Guajojó. Una regla puede apagar los disparos vecinos que ya van dentro del archivo (la rotura de la piñata trae la lluvia de caramelos). Cada juego tiene además el efecto de su ganador, que reemplaza el acorde de `fanfare()`.
+2. **El golpe**: todo remate grave y fuerte suena a impacto.
+3. **Las voces**: lo demás suena con un instrumento de verdad en lugar de la onda (kalimba por el triángulo, madera por el cuadrado, campana por el seno, zampoña por el diente de sierra), afinado con la velocidad de reproducción para que la nota siga siendo la de la escala. Cada instrumento tiene una nota grave y una aguda (`-lo` y `-hi`), con su altura medida en `src/sonidos/archivos.ts`.
+
+Lo que no cambia: el reloj del juego manda y no hay azar (la variante de un efecto sale de un contador que se reinicia con cada sorteo, así que la misma ronda suena igual); los archivos pasan por el mismo bus que los osciladores, así que el silenciador, el techo y el paso bajo valen igual; con `?instant=1`, movimiento reducido o la demo todo se comporta como antes. **Si el archivo no llegó** (sin red, todavía bajando, ahorro de datos o `prefers-reduced-data`) suena el oscilador de siempre, sin error ni hueco. Los archivos de un juego se piden cuando se sabe qué juego es (`sonidoDelJuego` en `draw.ts`), antes de la tarjeta de "cómo se juega", y pesan menos de 450 KB por juego, voces comunes incluidas (mp3 mono a 64 kbps, efectos de 3 s o menos).
+
+**La música de archivo es opcional y no viaja con el repositorio** (`public/sonidos/LICENCIA.md`). Si existe `public/sonidos/<juego>/musica.mp3` y la dirección trae `?musicaarchivo=1`, el bucle reemplaza las capas del charango, el beat y la zampoña (la tensión le abre el brillo y le sube el volumen; el silencio de antes del ganador, el corte de las sorpresas y el remate siguen siendo los de siempre; al volver a la pestaña retoma en el punto que toca). En tinkazo.app (y www.tinkazo.app) la cama baja de nuestro servicio (`src/sonidos/musica-remota.ts`, m.tinkazo.app), que solo la entrega al sitio; en cualquier otro host, o con ahorro de datos, no se pide. Sin el archivo, suena la música de osciladores. La chovena nunca la usa: sus bailarines pisan en el tiempo de su propia música.
+
+Cómo se regeneran los sonidos: [`public/sonidos/PROMPTS.md`](../public/sonidos/PROMPTS.md) y `scripts/sonidos/` (`generar.mjs` baja las variantes del servicio, `procesar.py` elige, normaliza, codifica y escribe `archivos.ts`). `pnpm test` mira que todo lo que el banco nombra exista, que los pesos entren y que no haya música en el índice.
+
+**Los auditores** miran lo mismo con archivos: `audit-sound` engancha también `AudioBufferSourceNode`, y un archivo lleva anotada la nota que reemplaza (`__beep`), así que la afinación, el registro, el volumen, los huecos y los golpes repetidos se miden igual; cuenta cuántos disparos sonaron con archivo y, con `--con-banco`, exige que haya sonado el banco. `audit-mezcla` no cambia (mide la señal), y con `--grabar <carpeta> --etiqueta antes|despues` guarda en un WAV los 20 segundos que terminan 4 s después del cartel del ganador, para escuchar lo mismo antes y después de un cambio de sonido.
 
 ## La pestaña escondida
 

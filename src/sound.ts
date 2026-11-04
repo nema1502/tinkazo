@@ -1,7 +1,8 @@
 import { getLang } from "./i18n";
-import { paceFactor } from "./state";
+import { paceFactor, type Game } from "./state";
+import { ambiente, decidir, elegirJuego, ganador as ganadorDeArchivo, type Disparo, type Jugada } from "./sonidos/banco";
 
-/* Sonido con WebAudio, sin assets. */
+/* Sonido con WebAudio: osciladores, y archivos cuando el banco (`src/sonidos/banco.ts`) los tiene. */
 
 let audioCtx: AudioContext | null = null;
 
@@ -16,6 +17,9 @@ function initialMute(): boolean {
 }
 
 let muted = initialMute();
+
+/** Los archivos de viento y de colibrí vienen a la sonoridad de todos: este factor los baja al nivel del ruido y del zumbido de siempre. */
+const AMBIENTE_K = 4;
 
 let master: GainNode | null = null;
 
@@ -60,7 +64,78 @@ function chain(): { ctx: AudioContext; out: GainNode } | null {
   return c;
 }
 
+/**
+ * Hace sonar un archivo del banco por el mismo bus que los osciladores (el techo, el paso bajo y el silenciador
+ * de siempre). Anota en el nodo qué disparo reemplaza, para los auditores. `false` si no pudo.
+ */
+function sonar(j: Jugada, o: Disparo): boolean {
+  try {
+    const c = chain();
+    if (!c) return false;
+    const t0 = c.ctx.currentTime;
+    const src = c.ctx.createBufferSource();
+    src.buffer = j.buffer;
+    src.playbackRate.value = j.rate;
+    const ga = c.ctx.createGain();
+    ga.gain.setValueAtTime(j.gan, t0);
+    let fin = j.buffer.duration / j.rate;
+    if (j.corta > 0 && j.corta < fin) {
+      ga.gain.setValueAtTime(j.gan, t0 + j.corta);
+      ga.gain.linearRampToValueAtTime(0, t0 + j.corta + 0.05);
+      fin = j.corta + 0.05;
+    }
+    src.connect(ga);
+    ga.connect(c.out);
+    (src as AudioBufferSourceNode & { __beep?: unknown }).__beep = { ...o, id: j.id };
+    src.start(t0);
+    src.stop(t0 + fin + 0.02);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Un sonido de fondo que dura lo que pide el juego (el viento, el colibrí): el archivo se repite hasta cubrir `dur`
+ * y el volumen sigue la curva que le pasa el llamador.
+ */
+function sonarAmbiente(buffer: AudioBuffer, id: string, dur: number, curva: Float32Array, o: Disparo): boolean {
+  try {
+    const c = chain();
+    if (!c) return false;
+    const t0 = c.ctx.currentTime;
+    const src = c.ctx.createBufferSource();
+    src.buffer = buffer;
+    src.loop = true;
+    const ga = c.ctx.createGain();
+    ga.gain.setValueCurveAtTime(curva, t0, dur);
+    src.connect(ga);
+    ga.connect(c.out);
+    (src as AudioBufferSourceNode & { __beep?: unknown }).__beep = { ...o, id, amb: true };
+    src.start(t0);
+    src.stop(t0 + dur + 0.02);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Una nota. Si el banco tiene un archivo para este disparo suena el archivo; si el disparo ya va adentro de otro
+ * archivo que acaba de sonar, no suena; si no, el oscilador de siempre.
+ */
 export function beep(f: number, d = 0.09, type: OscillatorType = "square", g = 0.05): void {
+  if (muted) return;
+  if (type !== "custom") {
+    const o: Disparo = { f, d, tipo: type, g };
+    const j = decidir(o, performance.now());
+    if (j === "silencio") return;
+    if (j && sonar(j, o)) return;
+  }
+  oscilador(f, d, type, g);
+}
+
+function oscilador(f: number, d: number, type: OscillatorType, g: number): void {
   if (muted) return;
   try {
     const c = chain();
@@ -121,6 +196,16 @@ export function wind(gameSeconds: number, vol: number, hz0: number, hz1: number,
     const c = chain();
     if (!c) return;
     const dur = Math.max(0.2, gameSeconds * paceFactor());
+    const amb = ambiente("viento");
+    if (amb) {
+      const pasos = 48;
+      const curva = new Float32Array(pasos);
+      for (let i = 0; i < pasos; i++) {
+        const u = i / (pasos - 1);
+        curva[i] = vol * AMBIENTE_K * Math.min(1, u / 0.35) * Math.min(1, (1 - u) / 0.25);
+      }
+      if (sonarAmbiente(amb.buffer, amb.id, dur, curva, { f: hz0, d: dur, tipo: "sine", g: vol })) return;
+    }
     const t0 = c.ctx.currentTime;
     const n = Math.max(1, Math.ceil(c.ctx.sampleRate * dur));
     const buf = c.ctx.createBuffer(1, n, c.ctx.sampleRate);
@@ -168,6 +253,16 @@ export function hum(f: number, gameSeconds: number, vol0: number, vol1: number):
     const c = chain();
     if (!c) return;
     const dur = Math.max(0.1, gameSeconds * paceFactor());
+    const amb = ambiente("colibri");
+    if (amb) {
+      const pasos = Math.max(16, Math.ceil(dur * 40));
+      const curva = new Float32Array(pasos);
+      for (let i = 0; i < pasos; i++) {
+        const u = i / (pasos - 1);
+        curva[i] = (vol0 + (vol1 - vol0) * u) * AMBIENTE_K * Math.min(1, u / 0.1) * Math.min(1, (1 - u) / 0.1);
+      }
+      if (sonarAmbiente(amb.buffer, amb.id, dur, curva, { f, d: dur, tipo: "triangle", g: vol1 })) return;
+    }
     const t0 = c.ctx.currentTime;
     const o = c.ctx.createOscillator();
     const ga = c.ctx.createGain();
@@ -214,15 +309,20 @@ export function note(degree: number, octaveShift = 0): number {
 }
 
 export function fanfare(): void {
+  // Con archivo, el remate del ganador es uno solo (la tribuna, el golpe): el acorde de osciladores no suena encima.
+  if (!muted) {
+    const j = ganadorDeArchivo();
+    if (j && sonar(j, { f: 130.81, d: 1.2, tipo: "triangle", g: 0.075 })) return;
+  }
   // Cuatro notas de 0,22 s en triángulo es una flautita: en una sala de
   // cincuenta personas no llega al fondo. Un final se oye por tres cosas que no
   // tenía: cuerpo (una nota grave sostenida), acorde (tres notas a la vez, no
   // una detrás de otra) y remate (el arpegio arriba). La pentatónica garantiza
   // que cualquier par suene bien, así que las tres juntas no pueden desafinar.
-  beep(note(0), 1.2, "triangle", 0.075);
-  [10, 12, 13].forEach((d) => beep(note(d), 0.95, "triangle", 0.042));
+  oscilador(note(0), 1.2, "triangle", 0.075);
+  [10, 12, 13].forEach((d) => oscilador(note(d), 0.95, "triangle", 0.042));
   [13, 15, 17, 18].forEach((d, i) =>
-    setTimeout(() => beep(note(d), 0.26, "triangle", 0.05), 90 + i * 110),
+    setTimeout(() => oscilador(note(d), 0.26, "triangle", 0.05), 90 + i * 110),
   );
 }
 
@@ -249,6 +349,19 @@ export function toggleSound(): void {
   }
   // La voz del narrador es parte del sonido: un solo botón las apaga a las dos.
   soundLabel();
+}
+
+/**
+ * Avisa qué juego va a sonar, para que el banco baje sus archivos mientras la sala lee la tarjeta de "cómo se
+ * juega". Sin audio, con ahorro de datos o sin los archivos, suena lo de siempre. `reinicia` es `false` cuando el
+ * juego ya fue elegido por el sorteo y solo se asegura que esté (el motor de los juegos lo llama otra vez al arrancar).
+ */
+export function sonidoDelJuego(game: Game, reinicia = true): void {
+  try {
+    elegirJuego(game, audioCtx ?? contexto()?.ctx ?? null, reinicia);
+  } catch {
+    /* sin audio: suenan los osciladores */
+  }
 }
 
 /** `true` si el estadio está en silencio. */

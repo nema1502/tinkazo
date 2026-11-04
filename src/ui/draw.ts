@@ -2,7 +2,7 @@ import { $, esc } from "../dom";
 import { T, getLang, onLangChange, t } from "../i18n";
 import { CUENTA_SECONDS, LCOLORS, WHEEL_MAX, app, conCuenta, params, playableGame, avatar, forceMotion, setCardSeconds, setShowGate, setYaContaron, skipMotion, skippedForReducedMotion, type Beacon, type Game } from "../state";
 import { enEnsayo, enPractica, enStand, faroDeStand, sinGrabar } from "../ensayo-modo";
-import { beep, note } from "../sound";
+import { beep, note, sonidoDelJuego } from "../sound";
 import { bytesToHex, fetchRound, hexToBytes, randomnessOf, roundUrl } from "../protocol/quicknet";
 import { verifyRoundAsync } from "../protocol/firma";
 import { select } from "../protocol/select";
@@ -440,6 +440,8 @@ function abrirTarjeta(game: Game, people: number, prizes: number, espera?: Promi
 function playGame(names: string[], winners: number[], beacon: Beacon, finish: () => void, previa: Previa | null = null): void {
   const pixi = usePixi();
   const game = juegoDe(names.length, winners.length, names, winners);
+  // Los archivos de sonido del juego bajan mientras la sala lee la tarjeta de "cómo se juega".
+  sonidoDelJuego(game);
   const cuenta = conCuenta() ? CUENTA_SECONDS : 0;
   if (previa && previa.game !== game) previa.card.update(game);
   const card = previa ? previa.card : abrirTarjeta(game, names.length, winners.length);

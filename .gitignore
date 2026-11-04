@@ -33,3 +33,6 @@ docs/capturas/*
 # Estado local de wrangler dev
 .wrangler/
 .dev.vars
+
+# La música de archivo no viaja con el repositorio (ver public/sonidos/LICENCIA.md)
+public/sonidos/*/musica*.mp3

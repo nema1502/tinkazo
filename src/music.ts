@@ -1,4 +1,5 @@
 import { audio, isMuted } from "./sound";
+import { camaDeMusica } from "./sonidos/banco";
 
 /**
  * La música del estadio: andina con beat.
@@ -21,6 +22,11 @@ import { audio, isMuted } from "./sound";
  *   (la ruleta que se para en otro nombre, el apagón del teleférico), la
  *   música se corta un tiempo entero y vuelve con un platillo. Y cuando sale
  *   el ganador, remata: bombo, platillo y el charango en trémolo.
+ *
+ * Si el juego tiene una cama de música de archivo (`src/sonidos/banco.ts`, opcional: los archivos de
+ * música no viajan con el repo), el bucle del archivo reemplaza a las capas del charango, el beat y la
+ * zampoña, y la tensión mueve su brillo y su volumen. El silencio de antes del ganador, el corte de las
+ * sorpresas y el remate siguen siendo los de siempre. Sin el archivo, nada cambia.
  *
  * Es música de fondo: arranca prendida, más baja que los efectos, y el botón
  * de la página la apaga (y se acuerda). El sonido apagado también la apaga.
@@ -133,7 +139,27 @@ interface Session {
   tempo: number;
   /** La chovena entera, escrita al arrancar: la melodía y los acordes de toda la forma. */
   cho: Cho | null;
+  /** La cama de archivo, si el juego la tiene. */
+  cama: Cama | null;
 }
+
+/** El bucle de un archivo, con el filtro y el volumen que le pone la tensión. */
+interface Cama {
+  buffer: AudioBuffer;
+  src: AudioBufferSourceNode;
+  filtro: BiquadFilterNode;
+  gain: GainNode;
+  /** La hora del contexto y la del reloj de la página en que empezó el bucle, y desde qué punto del archivo. */
+  t0: number;
+  wall: number;
+  desde: number;
+  /** Hasta cuándo dura el corte de una sorpresa, en hora del contexto. */
+  corteHasta: number;
+  onVisible: () => void;
+}
+
+/** Cuánto sube el volumen de la cama: los archivos vienen a la sonoridad de todos y el bus de la música es bajo. */
+const CAMA_K = 1.5;
 
 /** El andino de siempre, o la chovena, la música chiquitana del juego de la rueda. */
 export type MusicStyle = "andino" | "chovena";
@@ -211,7 +237,11 @@ export function startMusic(seed: number, style: MusicStyle = "andino"): void {
     // La melodía sale del mismo azar, después de lo del andino: los otros
     // juegos suenan igual que antes de que existiera la chovena.
     cho: style === "chovena" ? writeChovena(rng) : null,
+    cama: null,
   };
+  // La chovena no: sus bailarines pisan en el tiempo de la música y la cama no lo conoce.
+  const archivo = style === "andino" ? camaDeMusica() : null;
+  if (archivo) cur.cama = armarCama(cur, archivo);
   cur.timer = window.setInterval(tick, 40);
   tick();
 }
@@ -226,6 +256,7 @@ export function stopMusic(): void {
   s.bus.gain.cancelScheduledValues(t);
   s.bus.gain.setValueAtTime(s.bus.gain.value, t);
   s.bus.gain.linearRampToValueAtTime(0, t + 0.35);
+  if (s.cama) soltarCama(s.cama);
   setTimeout(() => s.bus.disconnect(), 600);
 }
 
@@ -285,6 +316,12 @@ export function musicCue(heat: number): void {
       s.bus.gain.cancelScheduledValues(s.ctx.currentTime);
       s.bus.gain.setValueAtTime(0.3, s.ctx.currentTime);
     }
+    if (s.cama) {
+      // El remate lo hace el sintetizador: la cama se apaga rápido para dejarle lugar.
+      s.cama.gain.gain.cancelScheduledValues(s.ctx.currentTime);
+      s.cama.gain.gain.setValueAtTime(s.cama.gain.gain.value, s.ctx.currentTime);
+      s.cama.gain.gain.linearRampToValueAtTime(0, Math.max(at, s.ctx.currentTime) + 0.25);
+    }
     if (s.style === "chovena") finaleChovena(s, at);
     else finale(s, at);
     return;
@@ -293,8 +330,87 @@ export function musicCue(heat: number): void {
     const beat = beatLength(s);
     s.breakUntil = s.next + beat;
     s.crashAt = s.breakUntil;
+    if (s.cama) cortarCama(s.cama, s.ctx.currentTime, s.breakUntil);
   }
   s.target = Math.max(heat, s.target * 0.5);
+}
+
+/* ------------------------------------------------------------- la cama de archivo */
+
+/** Arranca el bucle en el punto del archivo que corresponde a la hora, con la tensión de ahora. */
+function armarCama(s: Session, buffer: AudioBuffer): Cama {
+  const filtro = s.ctx.createBiquadFilter();
+  filtro.type = "lowpass";
+  filtro.frequency.value = 1400 + 9000 * s.level;
+  filtro.Q.value = 0.5;
+  const gain = s.ctx.createGain();
+  gain.gain.value = CAMA_K * (0.6 + 0.4 * s.level);
+  filtro.connect(gain);
+  gain.connect(s.bus);
+  const cama: Cama = { buffer, src: s.ctx.createBufferSource(), filtro, gain, t0: s.ctx.currentTime, wall: performance.now(), desde: 0, corteHasta: 0, onVisible: () => undefined };
+  arrancarFuente(s, cama, 0);
+  // Al volver a la pestaña, el bucle retoma en el punto que toca por el reloj de la página, no desde el principio.
+  cama.onVisible = (): void => {
+    if (cur !== s || document.visibilityState !== "visible") return;
+    const largo = buffer.duration;
+    const toca = (((performance.now() - cama.wall) / 1000) % largo + largo) % largo;
+    const suena = ((s.ctx.currentTime - cama.t0 + cama.desde) % largo + largo) % largo;
+    const dif = Math.min(Math.abs(toca - suena), largo - Math.abs(toca - suena));
+    if (dif < 0.35) return;
+    const vieja = cama.src;
+    const g = s.ctx.createGain();
+    vieja.disconnect();
+    vieja.connect(g);
+    g.connect(cama.filtro);
+    const t = s.ctx.currentTime;
+    g.gain.setValueAtTime(1, t);
+    g.gain.linearRampToValueAtTime(0, t + 0.08);
+    vieja.stop(t + 0.1);
+    arrancarFuente(s, cama, toca);
+  };
+  document.addEventListener("visibilitychange", cama.onVisible);
+  return cama;
+}
+
+function arrancarFuente(s: Session, cama: Cama, desde: number): void {
+  const src = tag(s.ctx.createBufferSource());
+  src.buffer = cama.buffer;
+  src.loop = true;
+  src.connect(cama.filtro);
+  src.start(0, desde % cama.buffer.duration);
+  cama.src = src;
+  cama.t0 = s.ctx.currentTime;
+  cama.desde = desde;
+}
+
+/** La tensión abre el brillo y sube el volumen de la cama, de a poco. */
+function moverCama(s: Session): void {
+  const c = s.cama;
+  if (!c || s.won) return;
+  const t = s.ctx.currentTime;
+  c.filtro.frequency.setTargetAtTime(1400 + 9000 * s.level, t, 0.25);
+  if (t >= c.corteHasta) c.gain.gain.setTargetAtTime(CAMA_K * (0.6 + 0.4 * s.level), t, 0.25);
+}
+
+/** El silencio de una sorpresa: la cama se corta hasta `hasta` y vuelve. */
+function cortarCama(c: Cama, ahora: number, hasta: number): void {
+  c.corteHasta = hasta + 0.05;
+  const g = c.gain.gain;
+  g.cancelScheduledValues(ahora);
+  g.setValueAtTime(g.value, ahora);
+  g.linearRampToValueAtTime(0.0001, ahora + 0.03);
+  g.setValueAtTime(0.0001, Math.max(hasta - 0.02, ahora + 0.03));
+}
+
+function soltarCama(c: Cama): void {
+  document.removeEventListener("visibilitychange", c.onVisible);
+  setTimeout(() => {
+    try {
+      c.src.stop();
+    } catch {
+      /* ya parada */
+    }
+  }, 600);
 }
 
 /* ---------------------------------------------------------- el secuenciador */
@@ -322,6 +438,7 @@ function tick(): void {
   const want = Math.max(s.target, floor);
   s.level += (want - s.level) * 0.06;
   s.target = Math.max(floor, s.target - 0.004);
+  if (s.cama) moverCama(s);
   if (s.won) return;
   // Cortada por el juego: no se arma nada, y al volver arranca desde ahora.
   if (s.hold) {
@@ -341,7 +458,7 @@ function tick(): void {
     const sixteenth = beatLength(s) / 4;
     // Durante el corte de una sorpresa no suena nada.
     if (s.style === "chovena") playStepChovena(s, s.next, s.step);
-    else if (s.next >= s.breakUntil) playStep(s, s.next, s.step);
+    else if (!s.cama && s.next >= s.breakUntil) playStep(s, s.next, s.step);
     if (s.crashAt > 0 && s.next >= s.crashAt) {
       crash(s, s.next, 0.5);
       bombo(s, s.next, 1);

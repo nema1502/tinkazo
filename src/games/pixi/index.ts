@@ -1,4 +1,5 @@
 import { playableGame, type Beacon, type Game } from "../../state";
+import { sonidoDelJuego } from "../../sound";
 import { usa3D } from "../engine";
 import { JUEGOS } from "./kit/catalogo";
 import { PixiInitError, warmPixi } from "./stage";
@@ -73,6 +74,8 @@ export async function playPixi(game: Game, names: string[], winners: readonly nu
   game = playableGame(game, names.length, names, winners);
   const load = PIXI[game];
   if (!load) return false;
+  // Los sonidos de archivo del juego: si el sorteo ya los pidió, no hace nada (la escena fija y las repeticiones no pasan por la tarjeta).
+  sonidoDelJuego(game, false);
   // Lo que PixiJS pide recién al arrancar baja a la par del trozo del juego, no
   // después. Con el juego precargado ya está (ver `preloadPixi`); en frío (la
   // escena fija, o un sorteo que no alcanzó a precargarlo) era un viaje más a la
