@@ -66,7 +66,7 @@ Ejemplo con el trompo (`pixi/trompo.ts`, `tres/trompo-3d.ts`); cambiá el nombre
 
 ### 1. Rama y worktree propios
 
-Desde la rama del kit (`tres-d-kit`) o desde lo que la integró: un worktree propio y `pnpm install`. Checkout solo en tu worktree. No toques `src/i18n.ts`, `index.html`, `src/styles.css`, `src/main.ts`, `src/state.ts`, `src/games/engine.ts`, `src/games/pixi/stage.ts`, `src/games/pixi/index.ts` ni `vite.config.ts` salvo que tu TAREA lo diga: el kit ya no los necesita.
+Desde la rama que trae el kit, con `pnpm install`. No toques `src/i18n.ts`, `index.html`, `src/styles.css`, `src/main.ts`, `src/state.ts`, `src/games/engine.ts`, `src/games/pixi/stage.ts`, `src/games/pixi/index.ts` ni `vite.config.ts` salvo que tu TAREA lo diga: el kit ya no los necesita.
 
 ### 2. Leé qué decide el 2D y qué dibuja
 
@@ -202,7 +202,7 @@ Y una prueba de que tu vista usa el mapa de la casa (que `mapa.a3D` es lo que se
 ### 10. Auditores, rendimiento y capturas
 
 - `pnpm typecheck`, `pnpm exec vitest run --maxWorkers=3`, `pnpm build` (miren el peso: el trozo de tu juego, no más de 20 kB comprimidos sin contar `three`).
-- Con un lugar de Chrome (turnos de a dos, como pide tu TAREA): `node scripts/audit-rigor.mjs <juego> --motor 3d` (misma ronda, mismos cuadros; sin `Math.random`; fluido; saltar; duración; 2 y 200 personas; celular; tema claro). Con `--auditar=3d` queda `window.__tres` con cuadros por segundo y p95. Los demás auditores aceptan `--motor 3d` donde ya lo dicen.
+- Con Chrome: `node scripts/audit-rigor.mjs <juego> --motor 3d` (misma ronda, mismos cuadros; sin `Math.random`; fluido; saltar; duración; 2 y 200 personas; celular; tema claro). Con `--auditar=3d` queda `window.__tres` con cuadros por segundo y p95. Los demás auditores aceptan `--motor 3d` donde ya lo dicen.
 - **Rendimiento**: a 390 por 844 con la CPU frenada cuatro veces (`Emulation.setCPUThrottlingRate` con `rate: 4`; el ejemplo está en `scripts/capturas-3d.mjs`) y a 1366 por 768 sin frenar, con 2, 18 y 200 personas: cuadros por segundo y p95 de ms por cuadro. **Vara: 30 cuadros por segundo o más y p95 menor a 50 ms en celular.** Si no llega, bajá la calidad del juego (menos polígonos, `Instancias` en vez de objetos sueltos, sin partículas) y recién después tocá `calidad.ts`.
 - **Capturas** a tamaño real del 2D y del 3D, misma semilla y mismos momentos (arranque, el golpe, el último, el ganador), a 1366 por 768 y 390 por 844, en los dos temas. Mirá cada una con tus ojos: se tiene que ver mejor que el 2D, no solo distinto.
 
