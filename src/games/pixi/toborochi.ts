@@ -1,7 +1,14 @@
-import { Container, Graphics, Sprite } from "pixi.js";
+import { Container, Graphics, Matrix, Sprite } from "pixi.js";
 import { musicHold } from "../../music";
 import { mediana, nivelQueCabe, type Nivel } from "../nombres";
-import { INK, anchoMarcador, crearJuego, hashDe, planNombres, reservaDeMarcas, textoMarcador, type Kit, type PlanNombres } from "./kit";
+import { INK, anchoMarcador, crearJuego, hashDe, planNombres, reservaDeMarcas, textoMarcador, type DefJuego, type Kit, type Lanzador, type PlanNombres } from "./kit";
+import { enchufar3D, entradaBase } from "../tres/enchufe";
+import { PRIORIDAD_SIEMPRE } from "../tres/etiquetas";
+import { Etiquetas3D } from "../tres/etiquetas-pixi";
+import type { Montaje3D, Pantalla3D, Vista3D } from "../tres/tipos";
+import { entradaVacia, type EntradaToborochi, type FlorE, type PantallaFlor } from "../tres/toborochi-3d-mapa";
+import { anfitrionTinkazo, type Anfitrion } from "./kit/anfitrion";
+import { mountPixi } from "./stage";
 import { anchoAprox, casilla, geoDe, puntoDe, rejillaDe, type Geo, type Lugar, type Rejilla } from "./toborochi-arbol";
 import { T_QUEDAN, T_SILENCIO, T_TRASIEGO, bajaEn, enElArbolEn, faseDe, frenteEn, hiloEn, nubladoEn, planToborochi, tPosa, tiembla, vientoEn, type Datos, type Visita } from "./toborochi-plan";
 import { TEXTOS } from "./toborochi-textos";
@@ -78,6 +85,13 @@ interface Escena {
   /** Por persona, el puesto en que llegó a la alfombra. */
   puesto: number[];
   nubes: Graphics;
+  /** La vista 3D de debajo (`src/games/tres/README.md`), o null en el 2D de siempre; lo que se le pasa en cada cuadro; las caras de PixiJS encima de las flores en 3D. */
+  v3: Vista3D<EntradaToborochi> | null;
+  entrada3: EntradaToborochi | null;
+  capaCaras: Container | null;
+  caras: Container[];
+  /** Con el 3D, los nombres de las flores los reparte el kit (que no se pisen ni tapen la cara de otra flor). */
+  et3: Etiquetas3D | null;
 }
 
 /* ---------------------------------------------------------------- la flor */
@@ -333,12 +347,14 @@ interface PoseColibri {
   /** 0 quieto, 1 aleteo a pleno. */
   aleteo: number;
   visible: boolean;
+  /** Cuánto adelante de la flor vuela, en radios de flor (para el 3D; igual para las dos visitas). */
+  prof: number;
 }
 
 /** `ven` es lo que se ve del mundo de la escena en este cuadro, de lado a lado, con la cámara donde esté. */
 function poseColibri(d: Datos, g: Geo, t: number, posDe: (i: number) => { x: number; y: number }, ven: { x0: number; x1: number }): PoseColibri {
   const s = Math.min(40 * g.k, Math.max(7 * g.k, g.r * 0.6));
-  const oculto: PoseColibri = { x: 0, y: 0, mira: 1, escala: s, aleteo: 0, visible: false };
+  const oculto: PoseColibri = { x: 0, y: 0, mira: 1, escala: s, aleteo: 0, visible: false, prof: 0 };
   // La pasada del principio: antes de que lleguen los nombres, el colibrí cruza la copa y se asoma a las flores que se abren. Es el que va
   // a elegir; no mira a nadie en particular (el mismo vuelo en todas las rondas), así que no delata a nadie.
   if (t >= T_PASADA[0] && t < T_PASADA[1]) {
@@ -347,12 +363,12 @@ function poseColibri(d: Datos, g: Geo, t: number, posDe: (i: number) => { x: num
     // Cruza de izquierda a derecha, baja a mirar una flor del medio (se frena ahí) y sigue.
     const x = lerp(-g.w * 0.06, g.w * 1.06, u + 0.09 * Math.sin(u * Math.PI * 2));
     const y = y0 + Math.sin(u * Math.PI * 2) * g.copa.alto * 0.1 - Math.sin(u * Math.PI) * g.copa.alto * 0.12;
-    return { x, y, mira: 1, escala: s, aleteo: 1, visible: true };
+    return { x, y, mira: 1, escala: s, aleteo: 1, visible: true, prof: 2 };
   }
   // El colibrí lejano de la primera calma: un punto verde que cruza el horizonte de un lado al otro.
   if (d.lejos && t >= d.lejos[0] && t < d.lejos[1] && t < d.tColibri0) {
     const u = (t - d.lejos[0]) / (d.lejos[1] - d.lejos[0]);
-    return { x: lerp(-g.w * 0.05, g.w * 1.05, u), y: g.top + (g.suelo - g.top) * (0.14 + 0.05 * Math.sin(u * 9)), mira: 1, escala: s * 0.45, aleteo: 1, visible: true };
+    return { x: lerp(-g.w * 0.05, g.w * 1.05, u), y: g.top + (g.suelo - g.top) * (0.14 + 0.05 * Math.sin(u * 9)), mira: 1, escala: s * 0.45, aleteo: 1, visible: true, prof: -7 };
   }
   if (t < d.tColibri0) return oculto;
   // Si el lado de afuera no tiene lugar (un celular, una flor pegada al borde), se suspende del otro: nunca se corta.
@@ -379,7 +395,7 @@ function poseColibri(d: Datos, g: Geo, t: number, posDe: (i: number) => { x: num
   if (t < primero.llega) {
     const u = suave((t - d.tColibri0) / (primero.llega - d.tColibri0));
     const ini = { x: p0.x + primero.lado * g.w * 0.6, y: p0.y - (g.suelo - g.top) * 0.22 };
-    return { x: lerp(ini.x, p0.x, u), y: lerp(ini.y, p0.y, u) - Math.sin(u * Math.PI) * g.r * 0.9, mira: (primero.lado > 0 ? -1 : 1) as 1 | -1, escala: lerp(s, s0, u), aleteo: 1, visible: true };
+    return { x: lerp(ini.x, p0.x, u), y: lerp(ini.y, p0.y, u) - Math.sin(u * Math.PI) * g.r * 0.9, mira: (primero.lado > 0 ? -1 : 1) as 1 | -1, escala: lerp(s, s0, u), aleteo: 1, visible: true, prof: lerp(-5, 1.2, u) };
   }
   for (let m = 0; m < vs.length; m++) {
     const v = vs[m] as Visita;
@@ -389,7 +405,7 @@ function poseColibri(d: Datos, g: Geo, t: number, posDe: (i: number) => { x: num
     const pa = punto(v, sv);
     // Suspendido frente a la flor, con el vaivén de un colibrí.
     if (t < v.sale) {
-      return { x: pa.x + Math.sin(t * 5 + m) * sv * 0.06, y: pa.y + Math.sin(t * 11 + m) * sv * 0.1, mira: miraA, escala: sv, aleteo: 1, visible: true };
+      return { x: pa.x + Math.sin(t * 5 + m) * sv * 0.06, y: pa.y + Math.sin(t * 11 + m) * sv * 0.1, mira: miraA, escala: sv, aleteo: 1, visible: true, prof: 1.2 };
     }
     if (ultima) {
       // Calla el zumbido y mete el pico: se acerca despacio hasta que la punta toca el centro.
@@ -400,7 +416,7 @@ function poseColibri(d: Datos, g: Geo, t: number, posDe: (i: number) => { x: num
       const lugar = (v.lado > 0 ? ven.x1 - f.x : f.x - ven.x0) - 5 * g.k;
       const sf = Math.max(sv * 0.5, Math.min(sv, (lugar - g.r * 0.2) / 4.05));
       const df = { x: f.x + v.lado * (g.r * 0.2 + 2.3 * sf), y: dentro.y };
-      return { x: lerp(pa.x, df.x, u), y: lerp(pa.y, df.y, u), mira: miraA, escala: lerp(sv, sf, u), aleteo: t >= d.tPico ? 0.12 : 1 - 0.85 * u, visible: true };
+      return { x: lerp(pa.x, df.x, u), y: lerp(pa.y, df.y, u), mira: miraA, escala: lerp(sv, sf, u), aleteo: t >= d.tPico ? 0.12 : 1 - 0.85 * u, visible: true, prof: lerp(1.2, 0, u) };
     }
     const sig = vs[m + 1] as Visita;
     if (t < sig.llega) {
@@ -413,7 +429,7 @@ function poseColibri(d: Datos, g: Geo, t: number, posDe: (i: number) => { x: num
       const b = 2 * u * (1 - u);
       const c = u * u;
       const mira = u < 0.5 ? miraA : ((sig.lado > 0 ? -1 : 1) as 1 | -1);
-      return { x: a * pa.x + b * ctrl.x + c * pb.x, y: a * pa.y + b * ctrl.y + c * pb.y, mira, escala: lerp(sv, ss, u), aleteo: 1, visible: true };
+      return { x: a * pa.x + b * ctrl.x + c * pb.x, y: a * pa.y + b * ctrl.y + c * pb.y, mira, escala: lerp(sv, ss, u), aleteo: 1, visible: true, prof: a * 1.2 + b * -1.6 + c * 1.2 };
     }
   }
   return oculto;
@@ -451,7 +467,8 @@ function chipDe(k: Kit, e: Escena, i: number): Container {
   return c;
 }
 
-export const toborochiPixi = crearJuego<Datos, Escena>({
+/** La definición del juego. Con `tres` (el 3D) el lienzo queda transparente y el árbol lo dibuja three.js; el 2D sigue decidiendo todo. */
+const definicion = (tres?: Montaje3D<EntradaToborochi>): DefJuego<Datos, Escena> => ({
   id: "toborochi",
   textos: TEXTOS,
   plan: planToborochi,
@@ -466,6 +483,8 @@ export const toborochiPixi = crearJuego<Datos, Escena>({
     raiz.removeChildren().forEach((c) => c.destroy({ children: true }));
     for (const c of previa?.chips.values() ?? []) c.destroy({ children: true });
     previa?.capaChips.destroy({ children: true });
+    previa?.capaCaras?.destroy({ children: true });
+    previa?.et3?.destruir();
     pintarCielo(S.bg, p.w, p.h, g, S.dark);
     const nubes = new Graphics();
     S.bg.addChild(nubes);
@@ -483,18 +502,48 @@ export const toborochiPixi = crearJuego<Datos, Escena>({
       raiz, g, suelo, ramas, flores: [], aire, remolino, colibri, alas, capaChips: new Container(), chips: new Map(),
       tCorona: previa?.tCorona ?? null, sacudidas: previa?.sacudidas ?? new Set(), musica: previa?.musica ?? false, ramaFin: [], sinBlur: previa?.sinBlur ?? false,
       formas: planNombres(k.nombres as string[]), nivel: 4, rejilla: { cols: 1, rows: 1, cap: 1, colW: 100, rowH: 30, x: 0, y: 0 }, puesto: [], nubes,
+      v3: null, entrada3: null, capaCaras: null, caras: [], et3: null,
     };
     esc.ramaFin = Array.from({ length: d.dis.ramas }, (_, r) => Math.max(...d.lugar.map((l, i) => (l.rama === r ? (d.tCae[i] as number) : -Infinity))));
     pintarSuelo(esc, S.dark);
     pintarTronco(raiz, g, S.dark);
     raiz.addChild(ramas, florRaiz, aire, colibri, remolino);
 
+    // El 3D (si está prendido y arrancó): el fondo y el árbol del 2D se apagan; las caras pasan a una capa propia que sigue a cada flor.
+    const v3 = previa ? previa.v3 : enchufar3D(S, tres);
+    v3?.reconstruir?.();
+    if (v3) {
+      raiz.visible = false;
+      S.bg.visible = false;
+    }
     // Las flores: con cara hasta sesenta y cuatro; con más, solo la flor.
     const conCara = d.n <= 64;
     for (let i = 0; i < d.n; i++) {
-      const f = hacerFlor(i, g.r, conCara ? k.figura(i) : null, S.dark);
+      const f = hacerFlor(i, g.r, conCara && !v3 ? k.figura(i) : null, S.dark);
       florRaiz.addChild(f.raiz);
       esc.flores.push(f);
+    }
+    esc.v3 = v3;
+    esc.et3 = v3 ? new Etiquetas3D(S) : null;
+    // Las fichas viven en el HUD, como las del 2D: ahí las miran los auditores de identidad y de letra.
+    if (esc.et3) S.hud.addChild((esc.et3 as unknown as { capa: Container }).capa);
+    esc.entrada3 = v3 ? previa?.entrada3 ?? entradaVacia(d.n, g, conCara) : null;
+    if (v3 && conCara) {
+      const capa = new Container();
+      const i0 = S.app.stage.children.indexOf(S.scene);
+      S.app.stage.addChildAt(capa, i0 >= 0 ? i0 + 1 : S.app.stage.children.length);
+      for (let i = 0; i < d.n; i++) {
+        const c = new Container();
+        const sp = new Sprite(k.figura(i));
+        sp.anchor.set(0.5);
+        sp.width = 1;
+        sp.height = 1;
+        c.addChild(sp);
+        c.visible = false;
+        capa.addChild(c);
+        esc.caras.push(c);
+      }
+      esc.capaCaras = capa;
     }
     // La alfombra: el nombre que entra en la casilla, y cuántas casillas hay.
     const letra = k.letra("nombre");
@@ -512,6 +561,10 @@ export const toborochiPixi = crearJuego<Datos, Escena>({
     for (const i of orden) chipDe(k, esc, i).visible = false;
     // Para el auditor de emoción: la flor de quien gana, entera, en la pantalla de ese cuadro.
     S.ganadorEn(() => {
+      if (esc.v3) {
+        const q = esc.v3.pantallaDe(d.ganador);
+        return q ? { x: q.x - q.alto / 2, y: q.y, w: q.alto, h: q.alto } : null;
+      }
       const f = esc.flores[d.ganador];
       if (!f) return null;
       const z = k.cam.toScreen(1, 0, p.w, p.h).x - k.cam.toScreen(0, 0, p.w, p.h).x;
@@ -533,6 +586,9 @@ export const toborochiPixi = crearJuego<Datos, Escena>({
     const tau = e.tCorona === null ? -1 : t - e.tCorona;
     const { fase, ola } = faseDe(d, t);
     const w = vientoEn(d, t);
+    // El 3D, si hay: la cámara tal como quedó aplicada (antes de que nada la toque) y lo que se le pasa en este cuadro.
+    const en = e.entrada3;
+    if (en) Object.assign(en, entradaBase(S, t));
 
     // Desde «quedan dos» la cámara se acerca a las dos: sin desenfoque, que los nombres se lean.
     if (t >= d.tQuedan0 && !e.sinBlur) {
@@ -551,7 +607,8 @@ export const toborochiPixi = crearJuego<Datos, Escena>({
     // En el silencio del colibrí el cielo se va oscureciendo de a poco: así el golpe no es un salto de claro a oscuro y a claro (un destello), sino un cielo que ya venía apagándose y se aclara.
     const dimSilencio = 0.85 * suave((t - (d.tQuedan0 + T_QUEDAN)) / Math.max(0.5, d.tPico - d.tQuedan0 - T_QUEDAN));
     const nube = Math.max(nubladoEn(d, t), dimSilencio) * (tau >= 0 ? 1 - suave((tau - 0.5) / 2.4) : 1);
-    e.nubes.clear().rect(0, 0, p.w, g.suelo).fill({ color: S.dark ? 0x2b2542 : 0x6c7893, alpha: nube * 0.7 });
+    if (en) en.nube = nube;
+    if (!e.v3) e.nubes.clear().rect(0, 0, p.w, g.suelo).fill({ color: S.dark ? 0x2b2542 : 0x6c7893, alpha: nube * 0.7 });
 
     /* ----------------------------------------------------- las flores */
     const pos = new Array<ReturnType<typeof dondeEsta>>(d.n);
@@ -565,11 +622,13 @@ export const toborochiPixi = crearJuego<Datos, Escena>({
       f.raiz.position.set(q.x, q.y);
       let esc = q.escala;
       let rot = q.rot;
+      let luz = 0;
       f.brillo.clear();
       const gana = i === d.ganador;
       if (tau >= 0 && (gana || (d.rivalGana && i === d.rival))) {
         // La flor se enciende: crece, late y suelta luz dorada.
         const u = suave(tau / 0.4);
+        luz = u * (gana ? 1 : 0.55);
         const pulso = 1 + 0.06 * Math.sin(tau * 7) * u;
         esc *= (1 + (gana ? 0.4 : 0.22) * u) * pulso;
         const alfa = (gana ? 0.22 : 0.16) * u;
@@ -577,6 +636,7 @@ export const toborochiPixi = crearJuego<Datos, Escena>({
         rot += Math.sin(tau * 5) * 0.05;
       } else if (d.causa[i] === "premio" && q.cae > 0 && q.cae < 1) {
         // Se va con premio: un brillo dorado que la acompaña hasta el suelo.
+        luz = 0.7 * (1 - q.cae);
         f.brillo.circle(0, 0, g.r * 1.9).fill({ color: 0xffd36a, alpha: 0.4 * (1 - q.cae) });
       }
       f.raiz.scale.set(esc);
@@ -585,6 +645,21 @@ export const toborochiPixi = crearJuego<Datos, Escena>({
       if (q.suelo) f.raiz.scale.set(esc, esc * 0.5);
       f.raiz.alpha = q.suelo ? 0.92 : 1;
       f.raiz.zIndex = q.suelo ? 0 : 1;
+      if (en) {
+        const o = en.flores[i] as FlorE;
+        const lg = d.lugar[i] as Lugar;
+        o.x = q.x;
+        o.y = q.y;
+        o.rot = q.rot;
+        o.escala = esc;
+        o.suelo = q.suelo;
+        o.cae = q.cae;
+        o.brillo = luz;
+        o.u = lg.u;
+        o.v = lg.v;
+        o.rx = Number.NaN;
+        o.ry = Number.NaN;
+      }
     }
 
     /* ---------------------------------------- las ramas y el viento en el aire */
@@ -602,8 +677,14 @@ export const toborochiPixi = crearJuego<Datos, Escena>({
       // Una rama que se quedó sin flores se desvanece: no queda un palo pelado ocupando la pantalla.
       const sinFlores = e.ramaFin[r] as number;
       const alfaRama = Number.isFinite(sinFlores) ? 1 - suave((t - tPosa0(sinFlores)) / 0.7) : 1;
+      if (en) {
+        const ra = (en.ramas[r] ??= { x1, y1, alfa: 0 });
+        ra.x1 = x1;
+        ra.y1 = y1;
+        ra.alfa = Math.max(0, alfaRama);
+      }
       if (alfaRama <= 0.01) continue;
-      e.ramas.moveTo(pie.x, pie.y).quadraticCurveTo(pie.x + (x1 - pie.x) * 0.15, lerp(pie.y, y1, 0.55), x1, y1).stroke({ width: ancho, color: S.dark ? 0x6f6a58 : 0x7d6e58, cap: "round", alpha: alfaRama });
+      if (!e.v3) e.ramas.moveTo(pie.x, pie.y).quadraticCurveTo(pie.x + (x1 - pie.x) * 0.15, lerp(pie.y, y1, 0.55), x1, y1).stroke({ width: ancho, color: S.dark ? 0x6f6a58 : 0x7d6e58, cap: "round", alpha: alfaRama });
     }
     // Las ramitas: de cada flor que sigue en el árbol a la rama de su abanico.
     for (let i = 0; i < d.n; i++) {
@@ -617,11 +698,21 @@ export const toborochiPixi = crearJuego<Datos, Escena>({
       const pr = puntoDe(g, { u: dir.u * tp, v: dir.v * tp - 0.04 });
       const px = pr.x + doblaDe(dir.v * tp - 0.04);
       const f = pos[i] as ReturnType<typeof dondeEsta>;
-      e.ramas.moveTo(px, pr.y).lineTo(f.x, f.y).stroke({ width: Math.max(1, ancho * 0.5), color: S.dark ? 0x6f6a58 : 0x7d6e58, cap: "round" });
+      if (en) {
+        const o = en.flores[i] as FlorE;
+        o.rx = px;
+        o.ry = pr.y;
+      }
+      if (!e.v3) e.ramas.moveTo(px, pr.y).lineTo(f.x, f.y).stroke({ width: Math.max(1, ancho * 0.5), color: S.dark ? 0x6f6a58 : 0x7d6e58, cap: "round" });
     }
     // El viento: unas rayas largas que cruzan de izquierda a derecha, y pétalos que se lleva.
     e.aire.clear();
-    if (w > 0.04 && ola) {
+    if (en) {
+      en.viento = w;
+      en.frente = ola ? frenteEn(d, t) : -1;
+      en.olaJ = ola ? ola.j : -1;
+    }
+    if (!e.v3 && w > 0.04 && ola) {
       const fr = frenteEn(d, t);
       for (let m = 0; m < 14; m++) {
         const y = g.top + (g.suelo - g.top) * (0.05 + 0.85 * hashDe(m, 31 + ola.j));
@@ -645,12 +736,23 @@ export const toborochiPixi = crearJuego<Datos, Escena>({
       e.sacudidas.add(ola.j);
       k.cam.shake(2.6 * p.k).punch(0.01);
     }
-    S.scene.rotation += w * 0.012;
+    // Con el 3D el horizonte queda quieto: la inclinación la hacen las ramas.
+    if (!e.v3) S.scene.rotation += w * 0.012;
 
     /* -------------------------------------------------------- el colibrí */
     const z0 = k.cam.toScreen(0, 0, p.w, p.h).x;
     const zz = Math.max(0.05, k.cam.toScreen(1, 0, p.w, p.h).x - z0);
     const pc = poseColibri(d, g, t, posDe, { x0: -z0 / zz, x1: (p.w - z0) / zz });
+    if (en) {
+      const cb = en.colibri;
+      cb.visible = pc.visible;
+      cb.x = pc.x;
+      cb.y = pc.y;
+      cb.mira = pc.mira;
+      cb.escala = pc.escala;
+      cb.aleteo = pc.aleteo;
+      cb.prof = pc.prof;
+    }
     e.colibri.visible = pc.visible;
     if (pc.visible) {
       e.colibri.position.set(pc.x, pc.y);
@@ -662,7 +764,7 @@ export const toborochiPixi = crearJuego<Datos, Escena>({
 
     /* ------------------------------------ el golpe: los pétalos suben en remolino */
     e.remolino.clear();
-    if (tau >= 0 && tau < 3.2) {
+    if (!e.v3 && tau >= 0 && tau < 3.2) {
       const q = pos[d.ganador] as ReturnType<typeof dondeEsta>;
       const suelo = Array.from({ length: d.n }, (_, i) => i).filter((i) => (pos[i] as ReturnType<typeof dondeEsta>).suelo).slice(0, 48);
       suelo.forEach((i, m) => {
@@ -680,16 +782,57 @@ export const toborochiPixi = crearJuego<Datos, Escena>({
     }
 
     /* ------------------------------------------------------------ los nombres */
+    // El 3D dibuja el cuadro con lo que el 2D acaba de poner; quién gana se sabe recién con el golpe.
+    if (e.v3 && en) {
+      en.geo = g;
+      en.n = d.n;
+      en.conCara = d.n <= 64;
+      en.tau = tau;
+      en.tQuedan0 = d.tQuedan0;
+      en.tPico = d.tPico;
+      en.ganador = tau >= 0 ? d.ganador : -1;
+      e.v3.frame(en);
+      ponerCaras(e, d.n);
+    }
     nombres(k, d, e, g, t, fase, pos);
   },
 });
+
+export const toborochiPixi = crearJuego<Datos, Escena>(definicion());
+
+/** El mismo juego con el 3D debajo: lo lanza `src/games/tres/toborochi-3d.ts`. */
+const anfitrion3D: Anfitrion = { ...anfitrionTinkazo, montar: (baliza, listo, alSaltar, o) => mountPixi(baliza, listo, alSaltar, { music: o.musica, transparente: true }) };
+export const toborochiPixi3D = (tres: Montaje3D<EntradaToborochi>): Lanzador => crearJuego<Datos, Escena>(definicion(tres), anfitrion3D);
+
+/** Las caras de las flores, de PixiJS, sobre el centro de cada flor del 3D: como la flor, se achican y giran con ella, y se apagan de espaldas. */
+const mCara = new Matrix();
+function ponerCaras(e: Escena, n: number): void {
+  if (!e.v3 || !e.caras.length) return;
+  for (let i = 0; i < n; i++) {
+    const c = e.caras[i] as Container;
+    const p = e.v3.pantallaDe(i) as PantallaFlor | null;
+    if (!p || p.mira < 0.1 || p.alto < 4) {
+      c.visible = false;
+      continue;
+    }
+    c.visible = true;
+    c.alpha = suave((p.mira - 0.1) / 0.3);
+    mCara.set(p.m.a, p.m.b, p.m.c, p.m.d, p.m.tx, p.m.ty);
+    c.setFromMatrix(mCara);
+  }
+}
 
 /* ------------------------------------------------------------------------ los nombres */
 
 function nombres(k: Kit, d: Datos, e: Escena, g: Geo, t: number, fase: string, pos: ReturnType<typeof dondeEsta>[]): void {
   const { S } = k;
   const p = k.pantalla();
-  const alto = (i: number): { x: number; y: number } => {
+  const alto = (i: number): { x: number; y: number } | null => {
+    // Con el 3D, la flor cae donde la dibujó la cámara de three.js (que mira lo mismo que el director).
+    if (e.v3) {
+      const pf = e.v3.pantallaDe(i);
+      return pf ? { x: pf.x, y: pf.y + pf.alto * 0.07 } : null;
+    }
     const q = pos[i] as ReturnType<typeof dondeEsta>;
     return k.cam.toScreen(q.x, q.y - g.r * 0.9, p.w, p.h);
   };
@@ -710,7 +853,23 @@ function nombres(k: Kit, d: Datos, e: Escena, g: Geo, t: number, fase: string, p
   // El contador lleva el total («QUEDAN  18 DE 18») y debajo la fila de marcas: se reserva lo que miden.
   const reserva = reservaDeMarcas(d.n, S.u(), p.w);
   const contador = { x: 0, y: S.top() - 4 * p.k, width: Math.max(anchoMarcador(textoMarcador(k.txt("marcadorQuedan"), d.n, { de: k.txt("marcadorDe"), cuantos: d.n }), S.u()), reserva.ancho), height: 74 * p.k + reserva.alto + (chico ? 20 * p.k : 0) };
-  S.tags(k.nombres as string[], quienes, alto, [contador]);
+  if (e.v3 && e.et3) {
+    // Con el 3D: el kit reparte las fichas. La cara de cada flor (el centro, un poco más ancho) y el contador son lugares que ninguna ficha tapa.
+    const vp = e.v3;
+    const FALSA = 100000;
+    const cuadro = contador.height / 0.32;
+    const tramos = Math.max(1, Math.ceil(contador.width / (0.56 * cuadro * 0.8)));
+    const falsas: Pantalla3D[] = Array.from({ length: tramos }, (_, j) => ({ x: contador.x + ((j + 0.5) * contador.width) / tramos, y: contador.y + 0.02 * cuadro, alto: cuadro }));
+    const pantallaChip = (id: number): Pantalla3D | null => {
+      if (id >= FALSA) return falsas[id - FALSA] ?? null;
+      const pf = vp.pantallaDe(id);
+      return pf ? { x: pf.x, y: pf.y + 0.26 * pf.alto, alto: 1.5 * pf.alto } : null;
+    };
+    const finales = fase === "quedan" || fase === "colibri";
+    const caras: number[] = d.n <= 64 ? Array.from({ length: d.n }, (_, i) => i).filter((i) => (d.tCae[i] as number) > t) : [];
+    for (let j = 0; j < falsas.length; j++) caras.push(FALSA + j);
+    e.et3.poner(quienes.map((i) => ({ id: i, nombre: k.nombres[i] ?? "", prioridad: finales ? PRIORIDAD_SIEMPRE : 0 })), pantallaChip, caras);
+  } else S.tags(k.nombres as string[], quienes, alto, [contador]);
 
   /* Los nombres de las que caen y los de la alfombra. */
   const vivosEnElSuelo: number[] = [];
@@ -739,7 +898,8 @@ function nombres(k: Kit, d: Datos, e: Escena, g: Geo, t: number, fase: string, p
     } else if (d.vuelo[i]) {
       const c = chipDe(k, e, i);
       const f = q.cae;
-      const s = k.cam.toScreen(q.x, q.y - g.r * 1.1, p.w, p.h);
+      const pf = e.v3 ? e.v3.pantallaDe(i) : null;
+      const s = pf ? { x: pf.x, y: pf.y - pf.alto * 0.05 } : k.cam.toScreen(q.x, q.y - g.r * 1.1, p.w, p.h);
       // Va con la flor y, al final de la caída, se acomoda en su casilla.
       const m = suave((f - 0.7) / 0.3);
       const x = lerp(s.x - c.width / 2, slot.x - c.width / 2, m);
