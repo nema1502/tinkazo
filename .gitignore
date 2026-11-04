@@ -36,3 +36,6 @@ docs/capturas/*
 
 # La música de archivo no viaja con el repositorio (ver public/sonidos/LICENCIA.md)
 public/sonidos/*/musica*.mp3
+
+# La música de los juegos nunca se versiona (workers/musica/README.md)
+workers/musica/camas/

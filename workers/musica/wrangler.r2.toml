@@ -1,0 +1,16 @@
+# La música de los juegos desde un bucket de R2 (camino A, cuando R2 esté habilitado en la cuenta).
+# Mientras no, se usa wrangler.toml (archivos propios). Los dos desplegan el mismo Worker: el último gana.
+# Un script aparte de los otros: un error de despliegue acá no puede tumbar enlaces, sala ni portero.
+# Antes de desplegar tiene que existir el bucket:  npx wrangler@4 r2 bucket create tinkazo-musica
+# Se despliega con: npx wrangler@4 deploy -c wrangler.r2.toml   (desde esta carpeta)
+name = "tinkazo-musica"
+account_id = "d97c3f7acada21d5ec280704fb34ff17"
+main = "src/index.ts"
+compatibility_date = "2026-09-01"
+workers_dev = false
+# Dominio propio: Cloudflare crea el registro DNS y el certificado al desplegar.
+routes = [{ pattern = "m.tinkazo.app", custom_domain = true }]
+
+[[r2_buckets]]
+binding = "MUSICA"
+bucket_name = "tinkazo-musica"
