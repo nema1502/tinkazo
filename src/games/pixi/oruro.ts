@@ -20,6 +20,10 @@ import { lugarDe } from "./kit/respuestas";
 import { textoMarcador } from "./kit/marcador";
 import { pintarMarcas } from "./kit/marcador-vista";
 import { DANCE_TOP, Wardrobe, prendaDe, pose, poseMusician, type DancerParts, type Instrument, type MusicianParts, type PoseMode } from "./entrada-bailes";
+import { enchufar3D, entradaBase } from "../tres/enchufe";
+import type { Montaje3D } from "../tres/tipos";
+import type { EntradaOruro } from "../tres/oruro-3d";
+import { ANCLA_FRAT, CUERPO_ENTERO, type AnclaFrat, type BailarinOruro, type MundoOruro, type MusicoOruro, type PancartaOruro, type RepartoOruro } from "../tres/oruro-3d-tipos";
 
 /**
  * La Entrada (id `oruro`): el Carnaval de Oruro, por fraternidades. Sección
@@ -137,15 +141,23 @@ interface Geo {
   speed: number;
 }
 
-export async function oruroPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<void> {
+/**
+ * `tres`: la vista en 3D (`?motor=3d`, src/games/tres/README.md). Si está, el lienzo queda transparente y debajo se
+ * dibuja la calle con los bailarines de cartón; el relator, el cartel, el foco, los nombres y los cohetillos siguen
+ * siendo de PixiJS. Sin `tres`, La Entrada es la de siempre.
+ */
+export async function oruroPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void, tres?: Montaje3D<EntradaOruro>): Promise<void> {
   let skipFn = (): void => {};
-  const st = await mountPixi(beacon, done, () => skipFn());
+  const st = await mountPixi(beacon, done, () => skipFn(), { transparente: !!tres });
   if (!st) {
     done();
     return;
   }
   const S: PixiStage = st;
   const { rng, cam } = S;
+  // El 3D, si hay y arranca: apaga el cielo, la calle y los bailarines del 2D (en `build`) y dibuja debajo.
+  const v3 = enchufar3D(S, tres);
+  let en3 = !!v3;
   // Sin el desenfoque de los acercamientos: la cámara va y viene entre la
   // comparsa y los que se quedan, y los nombres tienen que leerse en el viaje.
   cam.noBlur();
@@ -180,6 +192,17 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       byIdx.set(idx, d);
     });
   }
+  /** Lo que el 3D necesita saber una sola vez: qué trajes hay y con qué se dibujan. */
+  const reparto: RepartoOruro = {
+    n,
+    frats: P.frats.map((f) => ({ g: f.g, dance: f.dance, color: f.color })),
+    heroe: P.winG,
+    clases: P.frats.flatMap((f) => [false, true].filter((w) => dancers.some((d) => d.f === f && d.woman === w)).map((mujer) => ({ g: f.g, mujer }))),
+    banda: [...BAND],
+    caras: names.map((nm) => S.face(nm)),
+    pixi: { renderer: S.app.renderer, wardrobe },
+  };
+  let mundo: MundoOruro = { k: 1, streetTop: 0, streetBot: 0, x0: 0, x1: 0, doorX: 0, socX: 0, archX: [], escala: 1, oscuro: S.dark };
   const win = byIdx.get(winnerIdx) as Dancer;
   const riv = rivalIdx >= 0 ? (byIdx.get(rivalIdx) as Dancer) : null;
   const band: Musician[] = BAND.map((_, i) => ({ i, x: 0, y: 0, parts: null }));
@@ -346,6 +369,8 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   let beatT = 0;
   let beatsDone = 0;
   let crowned = false;
+  /** La hora en que golpea la coronación (para el 3D: la luz baja con ella). */
+  let tGolpe = -1;
   const said = new Set<string>();
   const once = (key: string, cond: boolean, fn: () => void): void => {
     if (!cond || said.has(key)) return;
@@ -425,6 +450,16 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   const crowdPool: Sprite[] = [];
   const lightPool: Sprite[] = [];
 
+  /** Los recortes del 3D no se armaron: el 2D vuelve a dibujar todo él, como si el 3D nunca hubiera estado. */
+  function reponer2D(): void {
+    if (!en3) return;
+    en3 = false;
+    S.app.renderer.background.alpha = 1;
+    S.bg.visible = true;
+    S.scene.removeChildren();
+    S.scene.addChild(facades, church, lights, crowdLayer, street, arches, banners, dancerLayer, fx);
+  }
+
   function makeViews(): void {
     for (const d of dancers) {
       d.parts?.root.destroy({ children: true });
@@ -467,7 +502,12 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     dancerLayer.sortableChildren = true;
     fx = new Graphics();
     banners = new Graphics();
-    S.scene.addChild(facades, church, lights, crowdLayer, street, arches, banners, dancerLayer, fx);
+    // Con el 3D, el cielo, la calle y los bailarines del 2D no van a la escena (ni se actualizan): solo los cohetillos.
+    if (en3) {
+      S.bg.visible = false;
+      S.scene.addChild(fx);
+    } else S.scene.addChild(facades, church, lights, crowdLayer, street, arches, banners, dancerLayer, fx);
+    mundo = { k, streetTop: g.streetTop, streetBot: g.streetBot, x0, x1, doorX: doorX(g), socX, archX: [...archX], escala: g.scale, oscuro: S.dark };
     // Las fachadas coloniales, con balcones y ventanas encendidas.
     const pastel = [0xe9b8a5, 0xa9d1c4, 0xf3d37c, 0xb9a6e0, 0xf0a3b6, 0x9ec3e6];
     for (let x = x0, i = 0; x < x1; i++) {
@@ -922,6 +962,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   function crown(): void {
     if (crowned) return;
     crowned = true;
+    tGolpe = tAll;
     S.say(T[getLang()].cWin(winnersLabel(names, winners), winners.length > 1), 1);
     fanfare();
     // Las campanas del Socavón, después de la fanfarria: adentro quedaban
@@ -972,18 +1013,21 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
 
   /** Dónde está quien gana en la pantalla, para el foco: el cuerpo entero con su traje. */
   function focoDelGanador(g: Geo): FocoAt {
-    const alto = DANCE_TOP[win.f.dance] * g.scale * cam.zoom;
-    const cuerpo = (d: Dancer): { x: number; y: number; pies: number } => {
+    const alto2 = DANCE_TOP[win.f.dance] * g.scale * cam.zoom;
+    const cuerpo = (d: Dancer): { x: number; y: number; pies: number; alto: number } => {
+      // Con el 3D, el cuerpo entero tal como lo ve su cámara.
+      const q = en3 && v3 ? v3.pantallaDe(CUERPO_ENTERO + d.idx) : null;
+      if (q) return { x: q.x, y: q.y + q.alto * 0.5, pies: q.y + q.alto + 3 * g.k, alto: q.alto };
       const s = cam.toScreen(d.x, d.y, g.w, g.h);
-      return { x: s.x, y: s.y - alto * 0.5, pies: s.y + 3 * g.k };
+      return { x: s.x, y: s.y - alto2 * 0.5, pies: s.y + 3 * g.k, alto: alto2 };
     };
     const c = cuerpo(win);
     let rival: FocoAt["rival"] = null;
     if (riv) {
       const q = cuerpo(riv);
-      rival = { x: q.x, y: q.y, r: alto * 0.55 };
+      rival = { x: q.x, y: q.y, r: c.alto * 0.55 };
     }
-    return { arco: P.arc, x: c.x, y: c.y, r: alto * 0.6, pies: c.pies, color: colorDeNombre(names[winnerIdx] ?? ""), rival };
+    return { arco: P.arc, x: c.x, y: c.y, r: c.alto * 0.6, pies: c.pies, color: colorDeNombre(names[winnerIdx] ?? ""), rival };
   }
 
   S.onResize(build);
@@ -1102,6 +1146,13 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     }
     const s = presShot(g);
     cam.cut(s.x, s.y, s.z);
+  }
+
+  /** Lo que el 3D copia de la cámara del 2D: el primer plano de los que se quedan, de 0 a 1 (sube y baja suave). */
+  function primerPlano(): number {
+    const a = exitsDone > 0 ? (P.arches[exitsDone - 1] as Arch) : null;
+    if (!a || phase !== "walk" || tAll < a.tExit || tAll - a.tExit >= CLOSE_UP) return 0;
+    return clamp((tAll - a.tExit) / 0.3, 0, 1) * clamp((a.tExit + CLOSE_UP - tAll) / 0.4, 0, 1);
   }
 
   /** La cámara: el palco en la presentación, la comparsa en el recorrido, los que se quedan de cerca, el Socavón y el contrapunto. */
@@ -1345,7 +1396,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
         if (!inColumn.has(gi)) continue;
         const l = fratLabel(gi, k);
         const fx0 = (off.front.get(gi) ?? 0) + hx;
-        const p = cam.toScreen(fx0 - g.dx * 0.5, g.streetTop + (g.streetBot - g.streetTop) * 0.1 - 120 * g.scale, g.w, g.h);
+        const p = (en3 && v3 ? v3.pantallaDe(ANCLA_FRAT + gi) : null) ?? cam.toScreen(fx0 - g.dx * 0.5, g.streetTop + (g.streetBot - g.streetTop) * 0.1 - 120 * g.scale, g.w, g.h);
         items.push({ id: gi, x: fino(p.x - l.w / 2), y: fino(p.y - l.h), w: fino(l.w), h: fino(l.h), priority: 1 });
       }
       for (const pl of layoutLabels(items, bounds, [], blocked)) {
@@ -1378,7 +1429,8 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       const lift = duel ? Math.max(0, jumpHeight(d)) : 0;
       // El que se cayó lleva su nombre cerca del piso, no flotando donde tenía la cabeza.
       const tall = d === riv && fellAt >= 0 && tAll >= fellAt ? 50 : DANCE_TOP[d.f.dance] - 26;
-      const p = cam.toScreen(d.x, d.y - (tall + lift) * g.scale, g.w, g.h);
+      const p = en3 && v3 ? v3.pantallaDe(d.idx) : cam.toScreen(d.x, d.y - (tall + lift) * g.scale, g.w, g.h);
+      if (!p) continue;
       c.sx = fino(p.x);
       c.sy = fino(p.y);
       c.depth = fino(d.y);
@@ -1476,6 +1528,11 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
   }
 
   /* ---------------------------------------------------------------- dibujo */
+  /** Lo que se le pasa al 3D en cada cuadro (se reusan las listas). */
+  const entB: BailarinOruro[] = [];
+  const entM: MusicoOruro[] = [];
+  const entP: PancartaOruro[] = [];
+  const entA: AnclaFrat[] = [];
   /**
    * El público que salta en las graderías y las guirnaldas de focos, solo donde
    * mira la cámara: cada uno sale de su número de lugar (`hash`), así que la
@@ -1533,7 +1590,11 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
     const g = G();
     const k = g.k;
     const frozen = !!fz && tAll >= fz.t0 && tAll < fz.t1;
-    drawCrowd(g, now, frozen);
+    if (!en3) drawCrowd(g, now, frozen);
+    entB.length = 0;
+    entM.length = 0;
+    entP.length = 0;
+    entA.length = 0;
     // Los bailarines. Lo que mide uno en la pantalla, para saber si se ve.
     const zNow = cam.zoom;
     const halfW = (BODY_HALF_W + 50) * g.scale * zNow + 8;
@@ -1546,7 +1607,7 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       if (!p) continue;
       const s = cam.toScreen(d.x, d.y, sw, sh);
       // Fuera de cuadro no se dibuja: con doscientos y la vereda llena, ahorra.
-      const vis = s.x > -halfW && s.x < sw + halfW && s.y > -halfW * 0.5 && s.y < sh + tallW;
+      const vis = en3 || (s.x > -halfW && s.x < sw + halfW && s.y > -halfW * 0.5 && s.y < sh + tallW);
       p.root.visible = vis;
       if (!vis) continue;
       let mode: PoseMode = d.alive ? "dance" : tAll - d.left < 0.5 ? "dance" : "salute";
@@ -1578,16 +1639,28 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
       pose(p, { mode, b: bph + d.seed * 0.2, e: frozen ? 1 : e, t: pt, f, dir }, d.x, d.y, g.scale * sx, g.scale);
       p.root.zIndex = d.y;
       p.root.alpha = d.alive || d === riv ? 1 : 0.9;
+      if (en3) {
+        // Lo que el 2D ya puso: el 3D elige el cuadro del recorte y lo coloca.
+        const duelo = phase === "duel";
+        const tall = d === riv && fellAt >= 0 && tAll >= fellAt ? 50 : DANCE_TOP[d.f.dance] - 26;
+        entB.push({
+          id: d.idx, g: d.f.g, mujer: d.woman, x: d.x, y: d.y, modo: mode, fase: bph + d.seed * 0.2 + p.seed * 0.35, f, dir, t: pt, semilla: p.seed,
+          alto: (d.y - p.root.position.y) / g.scale, inclina: p.root.rotation, ex: g.scale * sx, ey: g.scale, nombre: tall + (duelo ? Math.max(0, jumpHeight(d)) : 0),
+          tope: DANCE_TOP[d.f.dance], cdx: p.head.x, cdy: p.head.y + 86, crot: p.head.rotation,
+        });
+      }
     }
     for (const m of band) {
       const p = m.parts;
       if (!p) continue;
       const s = cam.toScreen(m.x, m.y, sw, sh);
-      const vis = s.x > -halfW * 1.6 && s.x < sw + halfW * 1.6;
+      const vis = en3 || (s.x > -halfW * 1.6 && s.x < sw + halfW * 1.6);
       p.root.visible = vis;
       if (!vis) continue;
-      poseMusician(p, bph, frozen || phase === "crown" ? 0 : 1, m.x, m.y, g.scale);
+      const toca = frozen || phase === "crown" ? 0 : 1;
+      poseMusician(p, bph, toca, m.x, m.y, g.scale);
       p.root.zIndex = m.y;
+      if (en3) entM.push({ i: m.i, kind: BAND[m.i] as Instrument, x: m.x, y: m.y, fase: bph, e: toca, alto: (m.y - p.root.position.y) / g.scale, inclina: p.root.rotation, ey: g.scale });
     }
     // Las pancartas de cada fraternidad, adelante de su bloque.
     banners.clear();
@@ -1603,6 +1676,14 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
         banners.moveTo(bx, by).lineTo(bx, by - 150 * s).stroke({ width: 3 * s, color: 0x6b4423 });
         banners.rect(bx - 30 * s, by - 150 * s, 30 * s, 40 * s).fill(f.color).stroke({ width: 2.4 * s, color: INK });
         banners.star(bx - 15 * s, by - 130 * s, 5, 8 * s, 3.5 * s).fill(0xffffff);
+        if (en3) entP.push({ g: gi, x: bx, y: by, color: f.color });
+      }
+    }
+    if (en3 && phase === "walk" && !(tAll >= lastFratExit || P.fratArches === 0)) {
+      const off = frontOffsets(g);
+      const hx = headX(tAll);
+      for (const gi of P.order) {
+        if (inColumn.has(gi)) entA.push({ g: gi, x: (off.front.get(gi) ?? 0) + hx - g.dx * 0.5, y: rowY(0, g.depth, g), alto: 150 * g.scale });
       }
     }
     // Los cohetillos, en la coronación.
@@ -1620,6 +1701,26 @@ export async function oruroPixi(names: string[], winners: readonly number[], bea
           fx.circle(bx + Math.cos(a) * dd, by + Math.sin(a) * dd + age * age * 40 * k, (3.5 - age * 2) * k).fill({ color: [0xffc629, 0xe93d9c, 0x00a896, 0xffffff][(b + i) % 4] as number, alpha: 1 - age / 1.4 });
         }
       }
+    }
+    // El 3D dibuja la calle con lo que el 2D ya puso; los nombres y el foco, que van después, se apoyan en lo que él proyecta.
+    if (en3 && v3) {
+      v3.frame({
+        ...entradaBase(S, tAll),
+        mundo,
+        reparto,
+        tramo: phase === "dead" ? "crown" : phase,
+        horas: { go: P.T_GO, socavon: P.T_SOCAVON, llegada: P.T_ARRIVE },
+        cerca: clamp((tAll - (P.T_SOCAVON - 1.2)) / 1.2, 0, 1),
+        primerPlano: primerPlano(),
+        silencio: frozen,
+        golpe: crowned ? tAll - tGolpe : -1,
+        ganador: crowned ? winnerIdx : -1,
+        bailarines: entB,
+        banda: entM,
+        pancartas: entP,
+        anclas: entA,
+        reponer2D,
+      });
     }
     // La interfaz.
     const live = dancers.filter((d) => d.alive).length;
