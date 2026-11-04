@@ -1102,18 +1102,24 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
     t: number,
     gente: Corredora3D[],
     fichas: { et: Etiqueta; persona: number; comp: number; y: number; etiquetar: boolean; sinLugar: boolean; peso: number }[],
-    bp: { x: number; esc: number; pie: number; y: number } | null,
+    bp: { x: number; esc: number; pie: number; y: number; duenia: number } | null,
     corona: number,
   ): void {
     if (!tres) return;
     const vz = cam.zoom || 1;
     const medir = params.get("auditar") === "3d";
     const medidas: { persona: number; px: number; alto: number; ancho: number }[] = [];
-    const borla3: Borla3D | null = bp && borla.visible ? { x: bp.x, pie: bp.pie, alto: bp.pie - bp.y, radio: BORLA_RADIO * bp.esc, manta: d.nueva } : null;
+    const borla3: Borla3D | null = bp && borla.visible ? { x: bp.x, pie: bp.pie, alto: bp.pie - bp.y, radio: BORLA_RADIO * bp.esc, duenia: bp.duenia, manta: d.nueva } : null;
     tres.frame({ t, w: P.w, h: P.h, u: P.u, cam: { x: cam.x, y: cam.y, zoom: vz, rot: cam.rot }, gente, borla: borla3, campeona: d.campeona, corona, horas: HORAS_Q.map((q) => d.tDeQ(q)) });
     // Las fichas no se pisan: la que manda (la del primero, después las recientes) se queda donde cae; la que choca con una puesta
     // se corre hacia arriba o hacia abajo por su alto y, si ni así cabe, no se muestra en ese cuadro.
-    const puestas: { x0: number; y0: number; x1: number; y1: number }[] = [];
+    // Y ninguna ficha tapa la cabeza de otra llama (la perspectiva apila las filas, y la ficha de la de adelante caía sobre la de atrás).
+    const puestas: { x0: number; y0: number; x1: number; y1: number; de?: number; cabeza?: boolean }[] = [];
+    for (const f of fichas) {
+      const pc = tres.pantallaDe(f.persona);
+      if (!pc || pc.x < 0 || pc.x > P.w || pc.y < P.top || pc.y > P.bottom) continue;
+      puestas.push({ de: f.persona, cabeza: true, x0: pc.x - pc.alto * 0.28, x1: pc.x + pc.alto * 0.28, y0: pc.y - pc.alto * 0.1, y1: pc.y + pc.alto * 0.3 });
+    }
     for (const f of [...fichas].sort((a, b2) => b2.peso - a.peso)) {
       const pan = tres.pantallaDe(f.persona);
       const et = f.et;
@@ -1132,19 +1138,50 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
       et.raiz.visible = dentro && f.etiquetar && !f.sinLugar;
       if (et.raiz.visible) {
         const w = et.w * e, h = et.h * e, y0 = et.raiz.y;
-        const caja = (dy: number): { x0: number; y0: number; x1: number; y1: number } => ({ x0: et.raiz.x - w / 2, y0: y0 + dy - h / 2, x1: et.raiz.x + w / 2, y1: y0 + dy + h / 2 });
-        const choca = (r: { x0: number; y0: number; x1: number; y1: number }): boolean => puestas.some((b2) => r.x0 < b2.x1 - 1 && r.x1 > b2.x0 + 1 && r.y0 < b2.y1 - 1 && r.y1 > b2.y0 + 1);
+        const caja = (dx: number, dy: number): { x0: number; y0: number; x1: number; y1: number; de: number } => ({ x0: et.raiz.x + dx - w / 2, y0: y0 + dy - h / 2, x1: et.raiz.x + dx + w / 2, y1: y0 + dy + h / 2, de: f.persona });
+        const choca = (r: { x0: number; y0: number; x1: number; y1: number }): boolean => puestas.some((b2) => b2.de !== f.persona && !(f.peso >= 3e6 && b2.cabeza) && r.x0 < b2.x1 - 1 && r.x1 > b2.x0 + 1 && r.y0 < b2.y1 - 1 && r.y1 > b2.y0 + 1);
         const paso = h + 2 * P.u;
-        const dy = [0, -paso, paso, -2 * paso, 2 * paso].find((v) => !choca(caja(v)) && y0 + v - h / 2 > P.top);
-        if (dy === undefined) et.raiz.visible = false;
+        // Primero arriba de su cabeza; si ahí no cabe, un escalón más arriba o abajo, y después corrida medio ancho a un lado.
+        let lugar: { dx: number; dy: number } | undefined;
+        for (const dy of [0, -paso, -2 * paso, paso]) {
+          for (const dx of [0, -w * 0.5, w * 0.5]) {
+            if (!lugar && !choca(caja(dx, dy)) && y0 + dy - h / 2 > P.top && et.raiz.x + dx - w / 2 > 0 && et.raiz.x + dx + w / 2 < P.w) lugar = { dx, dy };
+          }
+        }
+        if (!lugar && f.peso >= 3e6) lugar = { dx: 0, dy: 0 };
+        if (!lugar) et.raiz.visible = false;
         else {
-          et.raiz.y = y0 + dy;
-          puestas.push(caja(dy));
+          et.raiz.x += lugar.dx;
+          et.raiz.y = y0 + lugar.dy;
+          puestas.push(caja(0, lugar.dy));
         }
       }
       if (medir && et.raiz.visible) medidas.push({ persona: f.persona, px: et.texto.style.fontSize as number * e, alto: et.h * e, ancho: et.w * e });
     }
-    if (medir) (window as unknown as { __fichas3d: unknown }).__fichas3d = medidas;
+    if (medir) {
+      (window as unknown as { __fichas3d: unknown }).__fichas3d = medidas;
+      // Para el auditor de nombres: cuántas fichas se pisan entre sí, cuántas tapan la cabeza de otra llama y cuántas llamas con nombre se quedaron sin ficha.
+      const rects = medidas.map((m) => {
+        const et = fichas.find((f) => f.persona === m.persona)!.et;
+        return { persona: m.persona, x0: et.raiz.x - m.ancho / 2, x1: et.raiz.x + m.ancho / 2, y0: et.raiz.y - m.alto / 2, y1: et.raiz.y + m.alto / 2 };
+      });
+      let entreSi = 0, sobreCabeza = 0;
+      rects.forEach((a, i) => {
+        for (let j = i + 1; j < rects.length; j++) {
+          const b2 = rects[j]!;
+          if (a.x0 < b2.x1 - 1 && a.x1 > b2.x0 + 1 && a.y0 < b2.y1 - 1 && a.y1 > b2.y0 + 1) entreSi++;
+        }
+        for (const f of fichas) {
+          if (f.persona === a.persona) continue;
+          const pan = tres?.pantallaDe(f.persona);
+          if (!pan || pan.x < 0 || pan.x > P.w) continue;
+          const h = pan.alto * 0.3;
+          if (a.x0 < pan.x + h && a.x1 > pan.x - h && a.y0 < pan.y + h && a.y1 > pan.y - h * 0.3) sobreCabeza++;
+        }
+      });
+      const sinFicha = fichas.filter((f) => f.etiquetar && !f.sinLugar && !f.et.raiz.visible && (tres?.pantallaDe(f.persona)?.x ?? -1) > 0 && (tres?.pantallaDe(f.persona)?.x ?? -1) < P.w).length;
+      (window as unknown as { __solapes3d: unknown }).__solapes3d = { fichas: rects.length, entreSi, sobreCabeza, sinFicha };
+    }
   }
 
   /** Dónde va la borla: sobre el lomo de quien va adelante, o volando de una a otra. */

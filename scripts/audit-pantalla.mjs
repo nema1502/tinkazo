@@ -69,6 +69,8 @@ const flag = (name) => args.includes(name);
 const pedidos = args.filter((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--"));
 const juegos = pedidos.length === 0 || pedidos.includes("todos") ? juegosDe("todos") : pedidos.includes("doce") ? juegosDe("doce") : pedidos;
 const base = opt("--base", "http://localhost:4606").replace(/\/$/, "");
+// `--motor 3d` mira la carrera en 3D (docs/motores.md); por defecto, el motor de todos.
+const motor = opt("--motor", "pixi");
 const outDir = opt("--out", join(tmpdir(), "tinkazo-pantalla"));
 const resoluciones = opt("--res", "1280x720").split(",").map((r) => r.split("x").map(Number));
 const clip = flag("--clip");
@@ -278,7 +280,7 @@ async function abrir(browser, juego, [W, H], tema = "") {
   await page.send("Emulation.setDeviceMetricsOverride", { width: W, height: H, deviceScaleFactor: 1, mobile: false, screenWidth: W, screenHeight: H });
   const previo = compartir ? "try { sessionStorage.setItem('tinkazo.compartir', '1'); } catch (e) {}" : "";
   await page.send("Page.addScriptToEvaluateOnNewDocument", { source: PRELUDIO + ";" + previo });
-  await page.send("Page.navigate", { url: `${base}/?pose=${juego}&semilla=${semilla}&motor=pixi${tema ? `&theme=${tema}` : ""}` });
+  await page.send("Page.navigate", { url: `${base}/?pose=${juego}&semilla=${semilla}&motor=${motor}${tema ? `&theme=${tema}` : ""}` });
   const listo = await page.waitFor("window.__app && getComputedStyle(document.getElementById('stadium')).display === 'block'", 60_000);
   return listo.ok ? page : null;
 }

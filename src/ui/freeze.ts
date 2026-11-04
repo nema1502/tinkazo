@@ -27,6 +27,7 @@ import { contar, errorContable } from "../contar";
 import { type OpcionesDeSellado, chequearAntesDeSellar, hayAccionDeRed, limpiarRed, marcarSellado, mostrarCostoAlto, mostrarSinPatrocinio, mostrarSinSaldo, patrocinioDelError, verLaRedTrasFallar, verSinSello } from "./red";
 import { type Reintento, reintentarSello } from "./sin-sello";
 import { claveDelSello, ponerTextoDelSello, sinSelloAhora } from "./sin-sello-textos";
+import { pintarVer3D } from "./ver3d";
 
 /**
  * Los botones del selector, en el orden en que se muestran. Hasta el 29 de
@@ -107,6 +108,7 @@ export function pintarJuego(): void {
   const nombre = document.querySelector(`#g-${app.game} span`)?.textContent || t(claveNombre(app.game));
   if (el.textContent !== nombre) el.textContent = nombre;
   pintarNotaElegida();
+  pintarVer3D();
 }
 
 /**

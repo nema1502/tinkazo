@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { permite3D, type Entorno3D } from "../permite3d";
-import { ACERCA, TAM3D, camara3D, colocar, escala3D, ZC, type Corredora3D } from "./carrera-3d-mapa";
+import { ACERCA, AIRE_LIDER, HOLGURA_LIDER, TAM3D, camara3D, colocar, corrimientoLider, escala3D, ZC, type Corredora3D } from "./carrera-3d-mapa";
 import { ctxDe } from "./carrera-prueba";
 import { RECTA, planCarrera } from "./carrera-show";
 
@@ -124,6 +124,11 @@ describe("el 3D se apaga solo", () => {
     expect(permite3D({ ...bueno, ahorroDeDatos: true })).toBe(false);
     expect(permite3D({ ...bueno, compartir: true })).toBe(false);
     for (const c of ["slow-2g", "2g", "3g"]) expect(permite3D({ ...bueno, conexion: c })).toBe(false);
+    // Los equipos más justos: 2 GB o 2 núcleos o menos. Donde el navegador no lo dice, se confía.
+    expect(permite3D({ ...bueno, memoriaGB: 2 })).toBe(false);
+    expect(permite3D({ ...bueno, nucleos: 2 })).toBe(false);
+    expect(permite3D({ ...bueno, memoriaGB: 4, nucleos: 8 })).toBe(true);
+    expect(permite3D({ ...bueno, memoriaGB: null, nucleos: null })).toBe(true);
   });
 });
 
@@ -149,5 +154,24 @@ describe("el 3D no tiene azar ni reloj propio", () => {
       // El archivo del 3D solo se pide con import dinámico.
       expect(fuente).not.toMatch(/^import\s+[^;]*["'][^"']*carrera-3d["']/m);
     }
+  });
+});
+
+describe("la cámara del 3D en un celular deja entera a la llama que va adelante", () => {
+  it("en pantalla parada, corre lo justo para dejarle aire; en apaisada, no corre", () => {
+    expect(corrimientoLider(100, 150, 390, 844)).toBe(0);
+    // Pasada del borde derecho: la cámara se corre a la derecha hasta dejar `AIRE_LIDER` más la holgura.
+    expect(corrimientoLider(340, 410, 390, 844)).toBeCloseTo(410 - (390 - (AIRE_LIDER + HOLGURA_LIDER)), 9);
+    // Pegada al borde izquierdo: se corre a la izquierda.
+    expect(corrimientoLider(5, 60, 390, 844)).toBeCloseTo(5 - (AIRE_LIDER + HOLGURA_LIDER), 9);
+    // Después del corrimiento queda con el aire pedido.
+    const c = corrimientoLider(340, 410, 390, 844);
+    expect(390 - (410 - c)).toBeGreaterThanOrEqual(AIRE_LIDER);
+    expect(corrimientoLider(340, 410, 1366, 768)).toBe(0);
+  });
+
+  it("si no entra con aire, la centra", () => {
+    expect(corrimientoLider(-20, 420, 390, 844)).toBeCloseTo(5, 9);
+    expect(corrimientoLider(100, 500, 390, 844)).toBeCloseTo(300 - 195, 9);
   });
 });

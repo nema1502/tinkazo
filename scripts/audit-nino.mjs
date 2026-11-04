@@ -66,7 +66,7 @@ import {
 import { emitirJson } from "./lib/resumen.mjs";
 
 const args = process.argv.slice(2);
-const CON_VALOR = new Set(["--personas", "--semillas", "--base", "--out", "--juzgar", "--tamanos"]);
+const CON_VALOR = new Set(["--personas", "--semillas", "--base", "--out", "--juzgar", "--tamanos", "--motor"]);
 const opt = (name, def) => {
   const i = args.indexOf(name);
   return i >= 0 && args[i + 1] && !args[i + 1].startsWith("--") ? args[i + 1] : def;
@@ -79,6 +79,8 @@ const dirJuzgar = opt("--juzgar", null);
 const personas = Number(opt("--personas", "18"));
 const semillas = Number(opt("--semillas", "8"));
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
+// `--motor 3d`: la carrera en 3D (docs/motores.md); por defecto el motor de todos.
+const motor = opt("--motor", "pixi");
 const tamanos = TAMANOS.filter((t) => opt("--tamanos", "1080,390").split(",").includes(t.id));
 
 const OLOR = "olor a apuesta: ninguna imagen parece casino ni juego de apuestas";
@@ -293,7 +295,7 @@ async function correr(browser, lienzo, { juego, semilla, tam, dir, clase }) {
   try {
     await page.send("Emulation.setDeviceMetricsOverride", { width: tam.ancho, height: tam.alto, deviceScaleFactor: 1, mobile: tam.celular });
     await page.send("Page.addScriptToEvaluateOnNewDocument", { source: RELOJ });
-    const url = `${base}/?pose=${juego === "race" ? "1" : juego}&motor=pixi&pace=normal&auditar=nino&n=${personas}&theme=${tam.tema}&semilla=${hex}&ganador=${hex}`;
+    const url = `${base}/?pose=${juego === "race" ? "1" : juego}&motor=${motor}&pace=normal&auditar=nino&n=${personas}&theme=${tam.tema}&semilla=${hex}&ganador=${hex}`;
     await page.send("Page.navigate", { url });
     const ok = await page.waitFor("window.__nino && window.__nino.duracion > 0 && window.__pose", 90_000);
     if (!ok.ok) throw new Error(`el juego no dejó window.__nino (¿se pidió ?auditar=nino? ¿el juego expone el gancho?)`);

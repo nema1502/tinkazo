@@ -87,6 +87,8 @@ const opt = (name, def) => {
 const cual = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--")) ?? "todos";
 const juegos = juegosDe(cual);
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
+// `--motor 3d` mira la carrera en 3D (docs/motores.md); por defecto, el motor de todos.
+const motor = opt("--motor", "pixi");
 /** Los juegos que se juzgan a nivel del plan (puro, sin navegador). `--navegador` los mide en la página como a los otros. */
 const DEL_PLAN = new Set(["race"]);
 const delPlan = (juego) => DEL_PLAN.has(juego) && !args.includes("--navegador");
@@ -170,7 +172,7 @@ async function grabar(juego, seed) {
   try {
     page = await ventana();
     await page.send("Page.addScriptToEvaluateOnNewDocument", { source: grabador(grabarPara(juego)) });
-    const url = `${base}/?pose=${juego}&semilla=${seed}&n=${gente}&ganador=${seed}&pace=normal&motor=pixi&lang=es&auditar=marcas`;
+    const url = `${base}/?pose=${juego}&semilla=${seed}&n=${gente}&ganador=${seed}&pace=normal&motor=${motor}&lang=es&auditar=marcas`;
     await page.send("Page.navigate", { url });
     const ok = await page.waitFor("window.__delator && window.__delator.fin !== null", 120_000);
     const tr = JSON.parse(await page.eval("JSON.stringify({ ...(window.__delator || {}), pose: window.__pose || null })"));

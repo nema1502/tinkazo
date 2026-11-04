@@ -1,4 +1,4 @@
-import { paraCompartir, params, playableGame, type Game } from "../state";
+import { paraCompartir, params, playableGame, ver3D, type Game } from "../state";
 import { permite3D } from "./permite3d";
 
 /**
@@ -16,10 +16,18 @@ export function usePixi(): boolean {
   return hasWebGL();
 }
 
-/** `true` si hay que dibujar la carrera en 3D en este equipo. Nunca es lo de siempre: solo con `?motor=3d`. */
+/**
+ * `true` si hay que dibujar la carrera en 3D en este equipo. Nunca es lo de siempre: solo si se pide, con `?motor=3d` o con
+ * el interruptor "Ver en 3D" del selector (`ver3D`), y solo donde `permite3D` lo deja.
+ */
 export function usa3D(): boolean {
-  if (params.get("motor") !== "3d") return false;
-  const nav = navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } };
+  const pedido = params.get("motor") === "3d" || (params.get("motor") !== "clasico" && ver3D());
+  return pedido && puede3D();
+}
+
+/** `true` si este equipo y esta conexión aguantan la carrera en 3D: lo que decide si el selector ofrece el interruptor. */
+export function puede3D(): boolean {
+  const nav = navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string }; deviceMemory?: number };
   let reducido = false;
   try {
     reducido = matchMedia("(prefers-reduced-data: reduce)").matches;
@@ -32,6 +40,8 @@ export function usa3D(): boolean {
     ahorroDeDatos: reducido || nav.connection?.saveData === true,
     conexion: nav.connection?.effectiveType ?? null,
     compartir: paraCompartir(),
+    memoriaGB: nav.deviceMemory ?? null,
+    nucleos: nav.hardwareConcurrency ?? null,
   });
 }
 

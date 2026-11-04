@@ -32,6 +32,7 @@ import { iniciarControlesDelEstadio } from "./ui/estadio-controles";
 import { logoParaSellar } from "./logo-guardado";
 import { iniciarLogo } from "./ui/logo-ui";
 import { iniciarLogoEnElEstadio } from "./ui/logo-sorteo";
+import { iniciarVer3D } from "./ui/ver3d";
 import { setVibracion, vibracionDisponible, vibracionOn, vibrar } from "./vibrar";
 
 /** La marca que deja "Entrar y sortear" al final de la demo, sin cuenta: la herramienta abre con la ventana de ingreso. */
@@ -168,6 +169,7 @@ $("btn-compartir").addEventListener("click", () => {
 });
 compartirLabel();
 onLangChange(compartirLabel);
+iniciarVer3D();
 /** La vibración, solo donde el celular la ofrece: prendida por defecto, apagable. */
 const vibrarLabel = (): void => {
   const b = $("btn-vibrar");

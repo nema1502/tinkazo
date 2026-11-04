@@ -59,6 +59,8 @@ export interface Borla3D {
   pie: number;
   alto: number;
   radio: number;
+  /** Quién la lleva en este cuadro (la que va adelante en el momento). */
+  duenia: number;
   /** La carrera nueva: en vez de la borla, una manta amarilla sobre el lomo (una tira de color). */
   manta?: boolean;
 }
@@ -209,3 +211,26 @@ export function camara3D(cam: Camara2D, w: number, h: number, u: number, escRef:
     giro: cam.rot || 0,
   };
 }
+
+/** El aire mínimo, en píxeles, entre la llama que va adelante y el borde de la pantalla (con una holgura para que no roce). */
+export const AIRE_LIDER = 24;
+export const HOLGURA_LIDER = 14;
+
+/**
+ * Cuántos píxeles hay que correr la cámara hacia la derecha (positivo) o la izquierda (negativo) para que la llama que va
+ * adelante, que ocupa de `x0` a `x1` en una pantalla de ancho `w`, quede entera con `aire` píxeles de margen. Cero si ya
+ * está adentro. Solo en pantallas más altas que anchas: en un celular parado, la perspectiva empuja el carril de afuera
+ * fuera del encuadre que decidió el director del 2D. Si no entra ni centrada, la centra.
+ */
+export function corrimientoLider(x0: number, x1: number, w: number, h: number, aire = AIRE_LIDER + HOLGURA_LIDER): number {
+  if (w >= h) return 0;
+  if (x1 - x0 > w - 2 * aire) return (x0 + x1) / 2 - w / 2;
+  if (x1 > w - aire) return x1 - (w - aire);
+  if (x0 < aire) return x0 - aire;
+  return 0;
+}
+
+/** Las puntas de una llama, en unidades del dibujo y desde su origen (pies, centro): nariz, cola, cabeza arriba y los costados del cuerpo. */
+export const PUNTOS_LLAMA: ReadonlyArray<readonly [number, number, number]> = [
+  [38, 36, 0], [-36, 40, 0], [14, 100, 0], [0, 30, 13], [0, 30, -13], [14, 0, 0], [-14, 0, 0],
+];

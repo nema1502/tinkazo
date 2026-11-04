@@ -75,6 +75,8 @@ const flag = (n) => args.includes(n);
 const cual = args.find((a, i) => !a.startsWith("--") && !args[i - 1]?.startsWith("--")) ?? "todos";
 const juegos = juegosDe(cual);
 const base = opt("--base", "http://localhost:4173").replace(/\/$/, "");
+// `--motor 3d` mira la carrera en 3D (docs/motores.md); por defecto, el motor de todos.
+const motor = opt("--motor", "pixi");
 const outDir = opt("--out", "docs/capturas/legible");
 const reglas = reglasDe(opt("--reglas", ""));
 const tamanos = opt("--tamanos", "proyector,celular")
@@ -244,7 +246,7 @@ async function cssChico() {
 /** El estadio de un juego: lo que dibuja Pixi y lo que le pone encima el DOM. */
 async function estadio(browser, juego, tamano, tema) {
   const donde = `${tamano.nombre} ${tema} · ${juego}`;
-  const page = await abrir(browser, tamano, `${base}/?pose=${juego}&motor=pixi&theme=${tema}&lang=es`, preludioEstadio({ principal: tamano.principal, secundario: tamano.secundario }));
+  const page = await abrir(browser, tamano, `${base}/?pose=${juego}&motor=${motor}&theme=${tema}&lang=es`, preludioEstadio({ principal: tamano.principal, secundario: tamano.secundario }));
   try {
     const listo = await page.waitFor("window.__app && getComputedStyle(document.getElementById('stadium')).display === 'block'", 60_000);
     if (!listo.ok) {

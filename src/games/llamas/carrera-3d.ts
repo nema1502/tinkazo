@@ -5,10 +5,11 @@ import {
 } from "three";
 import { LLAMA_ALTO } from "./carrera-forma";
 import {
-  TAM3D, ZC, camara3D, colocar, escala3D,
+  TAM3D, ZC, camara3D, colocar, corrimientoLider, escala3D, PUNTOS_LLAMA,
   type Entrada3D, type Fabrica3D, type Geometria3D, type OpcionesFabrica3D, type Pantalla3D, type Vista3D,
 } from "./carrera-3d-mapa";
 import { sinAzarDeTres } from "./carrera-3d-ids";
+import { crearLider3D, modoLider } from "./carrera-3d-lider";
 import type { Momento } from "./llama";
 
 /**
@@ -80,6 +81,8 @@ interface LlamaRig {
   patas: PataRig[];
   pelaje: MeshLambertMaterial;
   pelajeLejos: MeshLambertMaterial;
+  mantaMat: MeshLambertMaterial;
+  mantaBase: Color;
   base: Color;
   baseLejos: Color;
   aviso: Sprite;
@@ -218,7 +221,7 @@ function crearLlama3D(P: Piezas, b: Basura, color: { pelaje: number; manta: numb
   aviso.visible = false;
   raiz.add(aviso);
 
-  return { raiz, cuerpo, cuello, orejas, cola, patas, pelaje, pelajeLejos, base, baseLejos, aviso, avisoMat, cabeza: LLAMA_ALTO };
+  return { raiz, cuerpo, cuello, orejas, cola, patas, pelaje, pelajeLejos, mantaMat: manta, mantaBase: new Color(color.manta), base, baseLejos, aviso, avisoMat, cabeza: LLAMA_ALTO };
 }
 
 /** La postura: la de `llama.ts` (la misma cuenta, con los ángulos espejados porque acá y es para arriba). */
@@ -312,8 +315,6 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
   const llamas = new Map<number, Colocada>();
   const grupoLlamas = new Group();
   escena.add(grupoLlamas);
-  let borla: Group | null = null;
-  let manta: Group | null = null;
 
   /* -------------------------------------------------------- lo fijo del mundo */
   function armarMundo(g: Geometria3D): void {
@@ -594,11 +595,18 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
     }
   }
   armarMundo(o.geometria());
+  const lider = crearLider3D(modoLider(), {
+    escena, basura, tinta: piezas.tinta,
+    duenia: (persona) => llamas.get(persona)?.rig,
+  });
 
   /* ------------------------------------------------------------- el cuadro */
   const v = new Vector3();
-  const auditoria = o.auditar ? { cuadros: 0, intervalos: [] as number[], cpu: [] as number[], ultima: 0, t: 0, horas: [] as number[], puestos: [] as { persona: number; x: number; z: number }[] } : null;
+  const auditoria = o.auditar ? { cuadros: 0, intervalos: [] as number[], cpu: [] as number[], ultima: 0, t: 0, horas: [] as number[], puestos: [] as { persona: number; x: number; z: number }[], lider: null as null | { persona: number; pie: { x: number; y: number }; aro: { x: number; y: number } | null; caja: { x0: number; x1: number; y0: number; y1: number }; w: number; h: number } } : null;
   if (auditoria) (window as unknown as { __tres: typeof auditoria }).__tres = auditoria;
+
+  let desvio = 0;
+  let tPrevio = 0;
 
   function frame(e: Entrada3D): void {
     sinAzarDeTres(() => cuadro(e));
@@ -644,38 +652,8 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
       llamas.delete(persona);
     }
 
-    // La manta del líder (carrera nueva): una tira amarilla echada sobre el lomo, con una raya de tinta en cada punta.
-    if (e.borla?.manta) {
-      if (!manta) {
-        manta = new Group();
-        const tira = new Mesh(basura.add(new BoxGeometry(2.4, 0.22, 1.7)), basura.add(new MeshLambertMaterial({ color: 0xffc629, emissive: 0x4a3600 })));
-        const rayaA = new Mesh(basura.add(new BoxGeometry(0.2, 0.26, 1.74)), piezas.tinta);
-        rayaA.position.x = -1;
-        const rayaB = rayaA.clone();
-        rayaB.position.x = 1;
-        manta.add(tira, rayaA, rayaB);
-        escena.add(manta);
-      }
-      manta.visible = true;
-      manta.position.set(e.borla.x * s, e.borla.alto * s * TAM3D, e.borla.pie * s * ZC);
-      manta.scale.setScalar(Math.max(0.5, e.borla.radio * s * TAM3D));
-    } else if (manta) manta.visible = false;
-
-    // La borla del líder.
-    if (e.borla && !e.borla.manta) {
-      if (!borla) {
-        borla = new Group();
-        const bola = new Mesh(basura.add(new SphereGeometry(1, 12, 9)), basura.add(new MeshLambertMaterial({ color: 0xffc629, emissive: 0x4a3600 })));
-        const palo = new Mesh(basura.add(new CylinderGeometry(0.1, 0.1, 1, 6)), piezas.tinta);
-        palo.position.y = -0.6;
-        const halo = new Mesh(basura.add(new SphereGeometry(1.9, 10, 8)), basura.add(new MeshBasicMaterial({ color: 0xffc629, transparent: true, opacity: 0.25, depthWrite: false })));
-        borla.add(bola, palo, halo);
-        escena.add(borla);
-      }
-      borla.visible = true;
-      borla.position.set(e.borla.x * s, e.borla.alto * s * TAM3D, e.borla.pie * s * ZC);
-      borla.scale.setScalar(Math.max(0.5, e.borla.radio * s * TAM3D));
-    } else if (borla) borla.visible = false;
+    // Quien va adelante en este momento: la marca que se eligió con `?lider=` (por defecto, el aro dorado).
+    lider.frame(e, s);
 
     // La tribuna salta con la hora: más cuando termina.
     if (tribuna) {
@@ -699,6 +677,32 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
     camara.lookAt(pose.mira[0], pose.mira[1], pose.mira[2]);
     camara.updateProjectionMatrix();
     camara.updateMatrixWorld();
+    // En un celular parado la perspectiva empuja el carril de afuera fuera del encuadre del director: la cámara se corre de lado
+    // lo justo para que la llama que va adelante quede entera, con aire hasta el borde. Función de la hora, sin azar.
+    let objetivo = 0;
+    const duenia = e.borla ? llamas.get(e.borla.duenia) : undefined;
+    if (W < H && duenia) {
+      const r = duenia.rig.raiz, k = r.scale.x;
+      const xs = PUNTOS_LLAMA.map(([dx, dy, dz]) => {
+        v.set(r.position.x + dx * k, r.position.y + dy * k, r.position.z + dz * k).project(camara);
+        return ((v.x + 1) / 2) * W;
+      });
+      const px = corrimientoLider(Math.min(...xs), Math.max(...xs), W, H);
+      // Píxeles a unidades del mundo a la distancia de la llama.
+      const dist = camara.position.distanceTo(r.position);
+      objetivo = (px * 2 * dist * Math.tan((camara.fov * Math.PI) / 360)) / H;
+    }
+    const dt = Math.max(0, Math.min(0.25, e.t - tPrevio));
+    tPrevio = e.t;
+    // Si la llama se sale del aire, la cámara llega de una vez (nunca queda cortada); cuando sobra lugar, vuelve despacio.
+    if (Math.abs(objetivo) > Math.abs(desvio) && Math.sign(objetivo) === Math.sign(desvio || objetivo)) desvio = objetivo;
+    else desvio += (objetivo - desvio) * (1 - Math.exp(-dt * 4));
+    if (Math.abs(desvio) > 1e-6) {
+      v.set(camara.matrixWorld.elements[0] ?? 1, camara.matrixWorld.elements[1] ?? 0, camara.matrixWorld.elements[2] ?? 0).multiplyScalar(desvio);
+      camara.position.add(v);
+      camara.lookAt(pose.mira[0] + v.x, pose.mira[1] + v.y, pose.mira[2] + v.z);
+      camara.updateMatrixWorld();
+    }
     cielo?.position.copy(camara.position);
     sol.target.position.set(pose.mira[0], 0, pose.mira[2]);
     sol.position.set(pose.mira[0] - 60, 90, pose.mira[2] + 70);
@@ -713,6 +717,20 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
       auditoria.cuadros++;
       auditoria.horas = e.horas;
       auditoria.t = e.t;
+      if (e.borla) {
+        // Dónde caen en la pantalla los pies de la llama líder, el centro del aro y la llama entera (nariz, cola, cabeza y pies).
+        const l = llamas.get(e.borla.duenia);
+        const px = (p: Vector3): { x: number; y: number } => {
+          const q = p.clone().project(camara);
+          return { x: ((q.x + 1) / 2) * W, y: ((1 - q.y) / 2) * H };
+        };
+        if (l) {
+          const r = l.rig.raiz, k = r.scale.x;
+          const pts = PUNTOS_LLAMA.map(([dx, dy, dz]) => px(new Vector3(r.position.x + dx * k, r.position.y + dy * k, r.position.z + dz * k)));
+          const c = lider.centro?.();
+          auditoria.lider = { persona: e.borla.duenia, pie: px(r.position), aro: c ? px(c) : null, caja: { x0: Math.min(...pts.map((q) => q.x)), x1: Math.max(...pts.map((q) => q.x)), y0: Math.min(...pts.map((q) => q.y)), y1: Math.max(...pts.map((q) => q.y)) }, w: W, h: H };
+        }
+      }
       auditoria.puestos = e.gente.map((c) => ({ persona: c.persona, x: colocar(c, e.u).x, z: colocar(c, e.u).z }));
     }
   }
@@ -741,6 +759,7 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
         l.rig.avisoMat.dispose();
       }
       llamas.clear();
+      lider.destruir();
       fijoBasura.vaciar();
       basura.vaciar();
       renderer.dispose();

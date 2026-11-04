@@ -129,6 +129,30 @@ export function setParaCompartir(on: boolean): void {
 
 if (params.get("compartir") === "1") setParaCompartir(true);
 
+/**
+ * "Ver en 3D": quien organiza elige la carrera de llamas en 3D desde el sorteo, sin tocar la dirección. Apagado por
+ * defecto, y recordado en este navegador (`localStorage`). Sin almacenamiento no se recuerda y no pasa nada más.
+ * Solo es un pedido: que se use o no lo decide `usa3D` (`games/engine.ts`), según lo que aguanta el equipo.
+ */
+const VER3D_KEY = "tinkazo.ver3d";
+
+export function ver3D(): boolean {
+  try {
+    return localStorage.getItem(VER3D_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setVer3D(on: boolean): void {
+  try {
+    if (on) localStorage.setItem(VER3D_KEY, "1");
+    else localStorage.removeItem(VER3D_KEY);
+  } catch {
+    /* sin almacenamiento, vale hasta recargar */
+  }
+}
+
 /** `true` si el sistema pide menos movimiento. Seguro sin `matchMedia`. */
 export function motionReduced(): boolean {
   return typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;

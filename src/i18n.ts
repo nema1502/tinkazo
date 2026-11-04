@@ -2111,6 +2111,9 @@ export const T: Record<Lang, Dict> = {
     // Bloque pantalla
     vibOn: "Vibración: sí",
     vibOff: "Vibración: no",
+    ver3dOn: "Ver en 3D: sí",
+    ver3dOff: "Ver en 3D: no",
+    ver3dNota: "La carrera con cámara y relieve de verdad, para equipos con buena conexión. El sorteo y quién gana son los mismos.",
     compartirOn: "Para compartir: sí",
     compartirOff: "Para compartir: no",
     compartirTip: "Más contraste, nombres más grandes y menos partículas, para que se lea en Zoom o en una pantalla compartida. Vale para esta pestaña.",
@@ -3960,6 +3963,9 @@ export const T: Record<Lang, Dict> = {
     // Bloque pantalla
     vibOn: "Vibration: on",
     vibOff: "Vibration: off",
+    ver3dOn: "View in 3D: on",
+    ver3dOff: "View in 3D: off",
+    ver3dNota: "The race with a real camera and depth, for devices with a good connection. The draw and who wins are the same.",
     compartirOn: "For sharing: on",
     compartirOff: "For sharing: off",
     compartirTip: "More contrast, bigger names and fewer particles, so it reads on Zoom or a shared screen. Lasts for this tab.",
