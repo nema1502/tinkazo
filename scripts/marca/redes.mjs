@@ -88,8 +88,8 @@ export function escenaRed(id, tema, lang) {
     const lg = LOGO({ x: 80, y: 150, alto: 60, disp: "horizontal" });
     const ti = titular(l, { lineas: es ? t.frase : ["Draws anyone", "can check"], x: 80, y: 250, ancho: 920, altoMax: 400 });
     const hy = ti.y1 + 46;
-    const hb = heroLlama(l, { x: 80, y: hy, w: 920, h: 230 });
-    const pl = pastillas(l, t, { x: 80, y: hy + 230 + 44, tam: 30 });
+    const hb = heroLlama(l, { x: 80, y: hy, w: 920, h: 270 });
+    const pl = pastillas(l, t, { x: 80, y: hy + 270 + 40, tam: 30 });
     confeti(l, { rng, n: 22, area: [20, 130, 1040, 920], evitar: [caja2(lg), caja2(ti), hb, caja2(pl)], tam: [12, 26] });
   } else if (id === "historia") {
     franja(l, { h: 30 });

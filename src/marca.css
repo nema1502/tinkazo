@@ -99,3 +99,7 @@
   .marca-red img { max-height: 240px; }
   .marca-hoja img { max-height: 320px; }
 }
+.marca-red { height: 290px; box-sizing: border-box; }
+.marca-sticker img { max-height: 270px; width: auto; max-width: 100%; }
+.marca-hoja { height: auto; }
+@media (max-width: 760px) { .marca-red { height: auto; min-height: 120px; } }
