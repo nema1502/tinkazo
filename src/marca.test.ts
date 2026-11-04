@@ -263,12 +263,32 @@ describe("kit de marca para patrocinios y eventos", () => {
       }
     }
   });
-  it("generar-marca es reproducible: dos corridas dejan los mismos bytes", async () => {
+  it("generar-marca es reproducible: dos corridas en el mismo equipo dejan los mismos bytes, y los SVG coinciden con los del commit", async () => {
     const { execFileSync } = await import("node:child_process");
-    const nombres = ["tinkazo-kit-marca.zip", "logo-horizontal.png", "sticker-redondo-5cm.pdf", "sello-es.svg"];
-    const antes = nombres.map(n => publico(n));
-    execFileSync(process.execPath, [fileURLToPath(new URL("../scripts/generar-marca.mjs", import.meta.url))], { stdio: "pipe" });
-    const despues = nombres.map(n => publico(n));
-    antes.forEach((b, i) => expect(despues[i]!.equals(b), nombres[i]).toBe(true));
-  }, 60_000);
+    const { writeFileSync, rmSync } = await import("node:fs");
+    const dir = new URL("../public/marca/", import.meta.url);
+    const listar = (): string[] => readdirSync(dir).sort();
+    const foto = (): Map<string, Buffer> => new Map(listar().map(n => [n, readFileSync(new URL(n, dir))]));
+    const generar = (): void => { execFileSync(process.execPath, [fileURLToPath(new URL("../scripts/generar-marca.mjs", import.meta.url))], { stdio: "pipe" }); };
+    const original = foto();
+    try {
+      // Lo binario (zip, png, pdf) depende de la versión de zlib de cada equipo: se compara una corrida contra otra, no contra el commit.
+      generar();
+      const uno = foto();
+      generar();
+      const dos = foto();
+      expect([...dos.keys()]).toEqual([...uno.keys()]);
+      for (const [n, bytes] of uno) if (/\.(zip|png|pdf)$/.test(n)) expect(dos.get(n)!.equals(bytes), n).toBe(true);
+      // El texto (SVG) es determinista en cualquier equipo: tiene que coincidir con lo commiteado.
+      const lf = (b: Buffer): string => b.toString("utf8").split("\r\n").join("\n");
+      for (const [n, bytes] of uno) if (n.endsWith(".svg")) {
+        expect(original.has(n), `${n} falta en el commit`).toBe(true);
+        expect(lf(bytes), n).toBe(lf(original.get(n)!));
+      }
+    } finally {
+      // Deja public/marca/ exactamente como estaba: los mismos archivos con los mismos bytes.
+      for (const n of listar()) if (!original.has(n)) rmSync(new URL(n, dir));
+      for (const [n, bytes] of original) writeFileSync(new URL(n, dir), bytes);
+    }
+  }, 300_000);
 });
