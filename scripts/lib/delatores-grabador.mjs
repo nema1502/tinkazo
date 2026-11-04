@@ -43,9 +43,12 @@ import { crearReconocedor } from "./delatores-nombres.mjs";
  *   pantalla (dónde cae su origen y sus dos ejes), para pasar lo que se ve a la
  *   escena: en el trueque, de qué puesto es cada aro aunque su nombre no esté
  *   a la vista.
+ * - `faroles`: si se graba, en cada cuadro, el brillo del farolito de cada
+ *   persona (`window.__faroles()`, que el Guajojó deja con `?auditar=`): si el
+ *   más brillante es el de quien gana, la sala la adivina antes del cartel.
  */
 export function grabador(cfg = {}) {
-  const c = { turbo: 20, cada: 4, dibujar: false, numeros: false, marcas: [], trazos: [], escena: false, ...cfg };
+  const c = { turbo: 20, cada: 4, dibujar: false, numeros: false, marcas: [], trazos: [], escena: false, faroles: false, ...cfg };
   return `(() => {
   const CFG = ${JSON.stringify(c)};
   const crearReconocedor = ${crearReconocedor.toString()};
@@ -56,7 +59,7 @@ export function grabador(cfg = {}) {
   window.requestAnimationFrame = (cb) => { cbs.set(++id, cb); return id; };
   window.cancelAnimationFrame = (x) => { cbs.delete(x); };
   performance.now = () => virt;
-  const rec = { t0: null, W: innerWidth, H: innerHeight, frames: [], nums: [], marcas: [], trazos: [], escena: [], subs: [], marks: [], revelado: null, fin: null, fallas: 0, errores: 0, apps: 0 };
+  const rec = { t0: null, W: innerWidth, H: innerHeight, frames: [], nums: [], marcas: [], trazos: [], escena: [], faroles: [], subs: [], marks: [], revelado: null, fin: null, fallas: 0, errores: 0, apps: 0 };
   window.__delator = rec;
   let app = null;
   globalThis.__PIXI_APP_INIT__ = (a) => {
@@ -143,6 +146,7 @@ export function grabador(cfg = {}) {
       const o = escena.toGlobal({ x: 0, y: 0 }), a = escena.toGlobal({ x: 1, y: 0 }), b = escena.toGlobal({ x: 0, y: 1 });
       rec.escena.push([r3(t), r1(o.x), r1(o.y), r4(a.x - o.x), r4(a.y - o.y), r4(b.x - o.x), r4(b.y - o.y)]);
     }
+    if (CFG.faroles && typeof window.__faroles === "function") rec.faroles.push([r3(t), ...window.__faroles().map(r3)]);
     if (CFG.numeros) rec.nums.push([r3(t), ...[...nums.values()].flat()]);
     if (marcas.length) rec.marcas.push([r3(t), ...marcas]);
     if (contornos && contornos.length) rec.trazos.push([r3(t), ...contornos]);

@@ -87,6 +87,7 @@ const CABELLOS = [0x2b1d14, 0x3d2817, 0x151515, 0x5a3a22];
 
 function hacerPersona(i: number, color: number, completa: boolean): Persona {
   const raiz = new Container();
+  raiz.label = `persona-${i}`;
   const sombra = new Graphics().ellipse(0, 0, 0.3, 0.07).fill({ color: 0x000000, alpha: 0.35 });
   const luz = new Graphics().circle(0, 0, 0.55).fill({ color: 0xffc65a, alpha: 0.2 }).circle(0, 0, 0.3).fill({ color: 0xffe3a0, alpha: 0.22 });
   luz.blendMode = "add";
@@ -222,6 +223,8 @@ export const guajojoPixi = crearJuego<Datos, Escena>({
       tCorona: previa?.tCorona ?? null, craqueados: previa?.craqueados ?? new Set(), musica: previa?.musica ?? false,
     };
     if (!previa) S.onCleanup(() => musicHold(false));
+    // Para el auditor de delatores (`?auditar=`): el brillo del farolito de cada persona. Si el de quien gana se distingue, la delata.
+    if (new URLSearchParams(location.search).get("auditar")) (window as unknown as { __faroles: () => number[] }).__faroles = () => esc.personas.map((pe) => pe.luz.alpha);
     dibujarPalo(esc, g);
     // Para el auditor de emoción: dónde queda quien gana en la pantalla, a los pies del palo.
     S.ganadorEn(() => {
@@ -354,7 +357,9 @@ export const guajojoPixi = crearJuego<Datos, Escena>({
         pe.brazoI.rotation = Math.sin(t * 5 + i) * 0.3;
         pe.brazoD.rotation = -Math.sin(t * 5 + i) * 0.3;
       }
-      pe.luz.alpha = i === d.ganador || (hubo.has(i) && enPie.length <= 3) ? 1 : sentado > 0.5 ? 0.55 : 0.8;
+      // El farolito de quien gana brilla igual que el de los demás de pie hasta que la ronda se corona: con más brillo desde el arranque, la sala
+      // aprendía el final mirando el más claro. En la final de tres, los que siguen en juego brillan igual entre sí.
+      pe.luz.alpha = (arriba && ganaEsta) || (hubo.has(i) && enPie.length <= 3) ? 1 : sentado > 0.5 ? 0.55 : 0.8;
       pe.luz.position.set(0.2, -0.42 + 0.3 * sentado - salto);
       pe.sombra.alpha = 1 - 0.3 * sentado;
     }
