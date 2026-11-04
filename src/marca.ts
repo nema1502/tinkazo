@@ -46,5 +46,21 @@ function actualizarSello(): void {
   }
   if (estado) estado.textContent = "";
 }
-actualizarSello();
-onLangChange(actualizarSello);
+/** Los archivos que cambian con el idioma (stickers con texto, imágenes de redes, afiches, portada): {l} es es o en, y {en} es "-en" o nada. */
+function actualizarArchivos(): void {
+  const lang = getLang();
+  const f = (v: string): string => v.replaceAll("{l}", lang).replaceAll("{en}", lang === "en" ? "-en" : "");
+  for (const el of document.querySelectorAll<HTMLElement>("[data-src], [data-href], [data-download]")) {
+    if (el instanceof HTMLImageElement && el.dataset.src) el.src = f(el.dataset.src);
+    if (el instanceof HTMLAnchorElement) {
+      if (el.dataset.href) el.href = f(el.dataset.href);
+      if (el.dataset.download) el.download = f(el.dataset.download);
+    }
+  }
+}
+function actualizarTodo(): void {
+  actualizarSello();
+  actualizarArchivos();
+}
+actualizarTodo();
+onLangChange(actualizarTodo);

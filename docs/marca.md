@@ -255,6 +255,21 @@ La misma página tiene la sección «Para patrocinios y eventos», pensada para 
 `node scripts/generar-marca.mjs` regenera todo esto (llama, logos, sellos, stickers y el ZIP) sin modificar el icono ni el logotipo. Es reproducible: dos corridas dejan los mismos bytes (el ZIP lleva siempre la fecha 1-1-1980). Rasteriza los PNG y arma los PDF y el ZIP sin herramientas de imagen adicionales. Los enlaces de descarga son del mismo origen, como requiere el atributo HTML `download`.
 
 
+### Más aura: dirección, stickers, redes, afiches y portada
+
+La segunda vuelta del kit suma, todo generado por el mismo script y también dentro del ZIP (114 archivos nuevos):
+
+- **Logo con la dirección** (`logo-web-horizontal`, `logo-web-apilado`, cada uno claro y `-oscuro`, SVG y PNG de 2048 px): el logo con `tinkazo.app` debajo en Montserrat Bold, a la mitad del tamaño de la palabra y con el «.app» en magenta. Mínimo 24 px de alto el horizontal y 48 px el apilado (10 mm y 20 mm impresos).
+- **Stickers nuevos**, de 5 y 7 cm, SVG y PDF, con sangrado y capa `corte`: `sticker-llama-recortada` (la silueta con filete de tinta y borde blanco de 2 mm; la línea de corte sigue el contorno, calculado como la unión de los píxeles de la llama), `sticker-web` y `sticker-web-oscuro` (la pastilla tinkazo.app), y en español y en inglés `sticker-verificable-es|en`, `sticker-gratis-…`, `sticker-escanea-…` (QR a https://tinkazo.app) y `sticker-evento-…` (con una franja para escribir el premio).
+- **Hojas A4** `stickers-hoja-a4-es|en` (5 cm) y `stickers-hoja-a4-7cm-es|en`: los stickers acomodados con 5 mm de aire entre sí, con la capa `corte` para una cortadora de vinilo.
+- **Imágenes para redes** `redes-<formato>-<claro|oscuro>-<es|en>.png`: portada abierta 1200×630, cuadrada 1080×1080, historia 1080×1920, cabecera 1500×500, cabecera de LinkedIn 1584×396 y las de patrocinio 1080×1080 y 1920×1080 con un recuadro para el logo del evento.
+- **Afiches y cartel**: `afiche-evento-a4-…` y `afiche-evento-a3-…` («Hoy sorteamos con Tinkazo», QR grande a https://tinkazo.app, tres líneas de qué es y una franja para escribir el premio) y `cartel-mesa-a5-…` (QR a https://tinkazo.app/sorteo-para-meetup.html#comprobacion), en SVG y PDF.
+- **Portada del kit** `kit-portada.png` (español) y `kit-portada-en.png`, 1600×900, con miniaturas de las piezas, para mandar junto al enlace.
+
+**Cómo se dibuja.** Todo son formas planas (sin degradados, brillos ni desenfoque) en los cinco acentos de la paleta, con bordes gruesos de tinta, sombras duras, la franja de cinco colores de la cabecera, banderines de papel picado, confeti y rayas de velocidad. El código está en `scripts/marca/`: `base.mjs` (letras en trazos, geometría, rasterizador de PNG, PDF y ZIP), `dibujo.mjs` (el lienzo y sus piezas), `qr.mjs` (el QR con `qrcode-generator`, nivel Q y zona tranquila de 4 módulos), `logos.mjs`, `stickers.mjs`, `redes.mjs`, `afiches.mjs`, `portada.mjs` y `piezas.mjs`, que las junta. El confeti usa un generador con semilla fija: el mismo dibujo en cada corrida. Las pruebas decodifican los QR de los SVG con `jsqr`.
+
+El PNG y el ZIP dependen de la versión de zlib de cada equipo: la prueba de reproducibilidad compara una corrida con otra en el mismo equipo, y los SVG (texto) contra los del commit.
+
 ## Los enlaces
 
 | Qué | Dónde |

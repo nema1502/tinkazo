@@ -71,3 +71,35 @@
   .marca-sticker img { max-width: 220px; }
   .marca .marca-zip-btn { width: 100%; font-size: 18px; }
 }
+
+/* Segunda vuelta del kit: la portada junto al ZIP, el logo con la dirección, más stickers, hojas, redes y afiches. */
+.marca-inicio { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 24px; align-items: center; margin: 18px 0 8px; }
+.marca-portada { margin: 0; }
+.marca-portada-vista { padding: 0; background: #fff6e9; }
+.marca-inicio .marca-zip { display: grid; gap: 10px; margin: 0; align-content: center; justify-items: start; }
+.marca-inicio .marca-zip .mini { justify-content: center; }
+.marca-hojas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; align-items: start; }
+.marca-redes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 16px; align-items: start; }
+.marca-afiches { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 16px; align-items: start; }
+.marca-hojas .marca-par, .marca-redes .marca-par, .marca-afiches .marca-par { grid-row: auto; grid-template-rows: none; align-content: start; }
+.marca-red { background: #e9e2d4; display: grid; place-items: center; padding: 10px; }
+.marca-red img { width: auto; max-width: 100%; max-height: 260px; object-fit: contain; }
+.marca-afiche img { max-height: 340px; }
+.marca-hoja { padding: 14px; }
+.marca-hoja img { width: auto; max-width: 100%; max-height: 400px; margin: 0 auto; }
+.marca-redes .marca-descargas, .marca-afiches .marca-descargas { grid-template-columns: 1fr 1fr; }
+.marca-hojas .marca-descargas { grid-template-columns: 1fr 1fr; }
+@media (max-width: 1000px) {
+  .marca-redes, .marca-afiches { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .marca-inicio { grid-template-columns: 1fr; }
+  .marca-redes, .marca-hojas { grid-template-columns: 1fr; }
+  .marca-afiches { grid-template-columns: 1fr; }
+  .marca-red img { max-height: 240px; }
+  .marca-hoja img { max-height: 320px; }
+}
+.marca-red { height: 290px; box-sizing: border-box; }
+.marca-sticker img { max-height: 270px; width: auto; max-width: 100%; }
+.marca-hoja { height: auto; }
+@media (max-width: 760px) { .marca-red { height: auto; min-height: 120px; } }
