@@ -13,7 +13,7 @@ describe("ofrece3D: cuándo el selector muestra Ver en 3D", () => {
   });
 
   it("el trompo está aprobado: en la lista y con módulo, lo ofrece", () => {
-    expect(JUEGOS_CON_3D).toEqual(["race", "trompo", "pinata", "toborochi", "sapo"]);
+    expect(JUEGOS_CON_3D).toEqual(["race", "trompo", "pinata", "toborochi", "sapo", "guajojo"]);
     expect(tiene3D("trompo")).toBe(true);
     expect(ofrece3D("trompo")).toBe(true);
   });
@@ -34,6 +34,12 @@ describe("ofrece3D: cuándo el selector muestra Ver en 3D", () => {
     expect(tiene3D("sapo")).toBe(true);
     expect(ofrece3D("sapo")).toBe(true);
     expect(ofrece3D("sapo", tiene3D, ["race", "trompo", "pinata", "toborochi"])).toBe(false);
+  });
+
+  it("el Guajojó está aprobado: en la lista y con módulo, lo ofrece", () => {
+    expect(tiene3D("guajojo")).toBe(true);
+    expect(ofrece3D("guajojo")).toBe(true);
+    expect(ofrece3D("guajojo", tiene3D, ["race", "trompo", "pinata", "toborochi", "sapo"])).toBe(false);
   });
 
   it("con módulo pero fuera de la lista: no (queda detrás de ?motor=3d)", () => {

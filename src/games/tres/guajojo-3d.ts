@@ -1,6 +1,6 @@
 import {
   BackSide, BoxGeometry, BufferGeometry, CircleGeometry, Color, ConeGeometry, CylinderGeometry, DirectionalLight, DoubleSide, Euler, Float32BufferAttribute,
-  Fog, Group, HemisphereLight, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Points, PointsMaterial, Quaternion,
+  Fog, Group, HemisphereLight, PointLight, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial, Points, PointsMaterial, Quaternion,
   SphereGeometry, Vector3,
 } from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
@@ -98,7 +98,9 @@ const fabrica: Fabrica3D<EntradaGuajojo> = (motor, o) => {
   escena.fog = niebla;
   const hemi = new HemisphereLight(P.hemiCielo, P.hemiSuelo, P.hemiFuerza);
   const luz = new DirectionalLight(P.luz, P.luzFuerza);
-  escena.add(hemi, luz, luz.target);
+  // El foco de quien gana: una luz cálida delante de ella desde el golpe (apagada, en intensidad 0, hasta entonces; existe desde el arranque para no recompilar).
+  const focoGana = new PointLight(0xffe0a0, 0, 14 * K, 2);
+  escena.add(hemi, luz, luz.target, focoGana);
   const lunaDir = new Vector3(-0.45, 0.85, 0.55).normalize();
   const solDir = new Vector3(0.06, 0.1, -1).normalize();
   const dir = new Vector3();
@@ -120,6 +122,7 @@ const fabrica: Fabrica3D<EntradaGuajojo> = (motor, o) => {
   domo.frustumCulled = false;
   escena.add(domo);
   const cTmp = new Color();
+  const cBlanco = new Color(0xffffff);
   const vZ = new Vector3(0, 0, 1);
   const cBanda = P.bandas.map(() => new Color());
   let albaPintada = -1;
@@ -417,9 +420,10 @@ const fabrica: Fabrica3D<EntradaGuajojo> = (motor, o) => {
     conoChullo.translate(0, 0.11, 0);
     const chullos = inst(conoChullo, blanco, nch);
     const faroles = inst(caja(0.09, 0.11, 0.09), B.add(new MeshBasicMaterial({ color: FAROL })), n);
-    const haloGeo = B.add(new CircleGeometry(completa ? 0.85 : 0.7, 20));
+    const haloGeo = B.add(new CircleGeometry(completa ? 1.0 : 0.7, 20));
     haloGeo.rotateX(-Math.PI / 2);
-    const halos = inst(haloGeo, B.add(new MeshBasicMaterial({ color: FAROL, transparent: true, opacity: 0.3, depthWrite: false, fog: false })), n);
+    // Con más de 60 personas los discos de luz se pueden amontonar de a decenas y pesan en el celular: ahí solo hay uno, el de quien gana.
+    const halos = inst(haloGeo, B.add(new MeshBasicMaterial({ color: FAROL, transparent: true, opacity: 0.42, depthWrite: false, fog: false })), completa ? n : 1);
     halos.malla.renderOrder = 1;
     const cascos = [
       casco(piernas, caja(0.185, 0.56, 0.185, 0, -0.265, 0)),
@@ -469,7 +473,7 @@ const fabrica: Fabrica3D<EntradaGuajojo> = (motor, o) => {
   const bichos = new Instancias(B.add(new SphereGeometry(1, 6, 4)), B.add(new MeshBasicMaterial({ color: 0xeaff9a })), bichosMax, B);
   bichos.usar(bichosMax);
   // El resplandor de cada luciérnaga: una esfera más grande y translúcida en el mismo lugar.
-  const bichosHalo = new Instancias(B.add(new SphereGeometry(1, 6, 4)), B.add(new MeshBasicMaterial({ color: 0xc8ff5a, transparent: true, opacity: 0.16, depthWrite: false })), bichosMax, B);
+  const bichosHalo = new Instancias(B.add(new SphereGeometry(1, 6, 4)), B.add(new MeshBasicMaterial({ color: 0xc8ff5a, transparent: true, opacity: 0.22, depthWrite: false })), bichosMax, B);
   bichosHalo.usar(bichosMax);
   bichosHalo.malla.renderOrder = 1;
   escena.add(bichos.malla, bichosHalo.malla);
@@ -578,12 +582,19 @@ const fabrica: Fabrica3D<EntradaGuajojo> = (motor, o) => {
         const nGente = Math.min(n, e.gente.length);
         const conContorno = nGente <= 60 && motor.ajustes.nivel !== "baja";
         const estira = 1 + 5.5 * suave((alba - 0.5) / 0.5);
+        let haloGanador = false;
+        focoGana.intensity = 0;
         for (let i = 0; i < nGente; i++) {
           const p = e.gente[i]!;
           const [X, , Z] = colocar(mapa, g, p.x, p.z);
           // Con el golpe, quien gana crece casi la mitad y su disco de luz se agranda: la sala la tiene que encontrar sin buscarla.
           const gana = e.tau >= 0 && i === e.ganador ? suave(e.tau / 0.6) : 0;
-          mBase.compose(vp.set(X, 0, Z), qID, vs.setScalar(K * (1 + 0.45 * gana)));
+          const esc = (completa ? 1.1 : 1) * (1 + 0.45 * gana);
+          mBase.compose(vp.set(X, 0, Z), qID, vs.setScalar(K * esc));
+          if (gana > 0) {
+            focoGana.position.set(X, 1.7 * K * esc, Z + 1.3 * K);
+            focoGana.intensity = 6 * K * K * gana;
+          }
           const dy = -p.torsoDy;
           const sit = p.sentado;
           const hipY = 0.5 + dy;
@@ -614,17 +625,22 @@ const fabrica: Fabrica3D<EntradaGuajojo> = (motor, o) => {
           const kc = G.chulloDe[i] as number;
           if (kc >= 0) parte(G.chullos, kc, mBase, mAux, 0, 1.1 + dy, 0.01, 0, 0, -p.torsoRot * 0.5);
           // El disco de luz del farolito en el piso: igual para todos los que siguen de pie.
-          parte(G.halos, i, mBase, mAux, 0.12, 0.02, 0, 0, 0, 0, 1 + 1.6 * gana, 1, 1 + 1.6 * gana);
+          if (completa) parte(G.halos, i, mBase, mAux, 0.12, 0.02, 0, 0, 0, 0, 1 + 1.6 * gana, 1, 1 + 1.6 * gana);
+          else if (gana > 0) {
+            parte(G.halos, 0, mBase, mAux, 0.12, 0.02, 0, 0, 0, 0, 1 + 1.6 * gana, 1, 1 + 1.6 * gana);
+            haloGanador = true;
+          }
           // La sombra: un óvalo duro que con el sol bajo se estira hacia la sala.
-          G.sombras.poner(i, X, Z + 0.07 * K * (estira - 1) * 0.9, 0.3 * K, 0.07 * K * estira);
+          G.sombras.poner(i, X, Z + 0.07 * K * (estira - 1) * 0.9, 0.3 * K * (completa ? 1.1 : 1), 0.07 * K * estira);
           const c = cabezas[i]!;
           c.x = X;
           // La ficha va sobre la coronilla (con el crecimiento de quien gana), nunca encima de la cara.
-          c.y = (1.2 + dy) * K * (1 + 0.45 * gana);
+          c.y = (1.2 + dy) * K * esc;
           c.z = Z;
         }
         G.sombras.usar(nGente);
         G.sombras.fin();
+        if (!completa) G.halos.usar(haloGanador ? 1 : 0);
         for (const inst of [G.piernas, G.torsos, G.brazos, G.manos, G.cabezas, G.pelos, G.chullos, G.faroles, G.halos]) inst.fin();
         // El contorno de tinta de las figuras, mientras no sean demasiadas.
         G.cascos[0]!.count = conContorno ? (completa ? 2 : 1) * nGente : 0;
@@ -635,7 +651,7 @@ const fabrica: Fabrica3D<EntradaGuajojo> = (motor, o) => {
         if (e.ganador !== ganadorMarcado) {
           const w = e.ganador;
           if (w >= 0 && w < n) {
-            cTmp.setHex(G.colores[w] ?? AMARILLO).multiplyScalar(1.3);
+            cTmp.setHex(G.colores[w] ?? AMARILLO).lerp(cBlanco, 0.1).multiplyScalar(1.25);
             G.torsos.malla.setColorAt(w, cTmp);
             G.brazos.malla.setColorAt(2 * w, cTmp);
             G.brazos.malla.setColorAt(2 * w + 1, cTmp);
@@ -690,7 +706,7 @@ const fabrica: Fabrica3D<EntradaGuajojo> = (motor, o) => {
         /* ----- las luciérnagas */
         const nb = n > 64 ? 14 : bichosMax;
         bichos.usar(nb);
-        bichosHalo.usar(nb);
+        bichosHalo.usar(n > 64 ? 0 : nb);
         for (let i = 0; i < nb; i++) {
           const z = hashDe(i, 61) * 0.9;
           const x = (hashDe(i, 62) - 0.5) * 3 * hw + Math.sin(e.t * 0.7 + i * 2) * 0.12;
