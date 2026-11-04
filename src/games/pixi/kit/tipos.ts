@@ -221,4 +221,6 @@ export interface DefJuego<P, E> {
   arma(k: Kit, plan: Plan<P>, previa?: E): E;
   /** Una función de `t`: pone la escena como va en ese segundo. */
   cuadro(k: Kit, plan: Plan<P>, escena: E, t: number): void;
+  /** Optional game-local clearance, after the crown has its current-frame pose. */
+  trasCorona?(k: Kit, plan: Plan<P>, escena: E, t: number): void;
 }

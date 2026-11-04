@@ -11,6 +11,7 @@ import { FALSA, T_BRAKE, T_CREEP, T_CROWN, T_HOLD, T_LOCK, T_SETTLE, T_SPIN, T_W
 import { lugarDe } from "./kit/respuestas";
 import { exponerNino } from "./nino";
 import { W0, planWheelMotion } from "./wheel-motion";
+import { wheelFinalView, wheelInBox, wheelSelectedBody } from "./wheel-zoom-final";
 import { respuestasRuleta } from "./wheel-nino";
 import { CREAM, INK, YELLOW, contorno, mountPixi, type PixiStage } from "./stage";
 
@@ -26,7 +27,8 @@ import { CREAM, INK, YELLOW, contorno, mountPixi, type PixiStage } from "./stage
  * Cómo se mira: la cámara arranca pegada al cubo, se abre mientras se arma la
  * rueda, y cuando la rueda frena se va acercando al puntero hasta quedar
  * encima en el amague. Con el ganador se abre para que se vean sus gajos
- * encendidos.
+ * encendidos, salvo en pantalla baja apaisada: ahí encuadra el gajo elegido y
+ * la flecha debajo del nombre completo.
  */
 
 const SEGS = 24;
@@ -662,18 +664,14 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
    * de la pantalla y el acercamiento, como los pide `cam.lookAt`.
    */
   function enCaja(yTop: number, yBot: number, zMax: number, conPoste: boolean): { x: number; y: number; z: number } {
-    const u = G.u, R = G.R, sw = S.sw(), sh = S.sh();
-    const arriba = conPoste ? R + 54 * u : R;
-    // El aro y su sombra, corrida 10 a la derecha y 12 hacia abajo.
-    const abajo = R + 12 * u;
-    const z = Math.max(0.3, Math.min(zMax, (yBot - yTop) / (arriba + abajo), (sw - 16 * u) / (2 * R + 10 * u)));
-    const cy = yTop + (yBot - yTop - z * (arriba + abajo)) / 2 + z * arriba;
-    // A lo ancho, donde la deja la disposición, acercada hacia el centro como
-    // la acerca la cámara, y sin cortarse contra los bordes.
-    const media = z * R;
-    const cx = Math.min(Math.max(sw / 2 + (G.cx - sw / 2) * z, media + 8 * u), sw - media - 18 * u);
-    return { x: (sw / 2 - cx) / z, y: (sh / 2 - cy) / z, z };
+    return wheelInBox({ ...G, sw: S.sw(), sh: S.sh() }, yTop, yBot, zMax, conPoste);
   }
+
+  // La pantalla baja apaisada conserva las tomas anteriores hasta coronar.
+  const finalApaisado = (): boolean => !G.alto && S.sh() < 500 && tAll >= T_CROWN;
+
+  /** Solo el gajo donde aterrizó la flecha y la flecha física, sin aro ni halo. */
+  const selectedBody = (world: boolean) => wheelSelectedBody(segG[winSeg]!, pointer, world ? S.scene : undefined);
 
   /** La cámara: pegada al cubo al armar, abierta al girar, encima del puntero al frenar. */
   function direct(): void {
@@ -710,13 +708,16 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
         cam.lookAt(ptr.x, Math.min(ptr.y, underPlate(z)), z, 3.5);
       }
     } else {
-      // Con el ganador, la rueda entera entre el cartel, que sale arriba al
+      // Salvo en pantalla baja apaisada, la rueda entera entre el cartel, que sale arriba al
       // centro, y la caja del relator: el gajo ganador queda arriba, bajo la
       // flecha, y no lo tapa el cartel. Antes bajaba un 17 % de la pantalla y
       // la caja le tapaba la parte de abajo (revisión visual, 21 de octubre de
       // 2026). Llega en un segundo: el cartel dura tres, y al ritmo de antes la
       // rueda recién terminaba de abrirse cuando el estadio se cerraba.
-      const c = enCaja(S.placaBajo(winners.length) + 10 * u, cajaArriba, G.alto ? 0.96 : 0.84, false);
+      const body = finalApaisado() ? selectedBody(true) : { x: -0.2 * R, y: -1.02 * R, w: 0.4 * R, h: 0.62 * R };
+      const safe = { x0: 8 * u, y0: S.placaBajo(winners.length) + 10 * u, x1: S.sw() - 8 * u, y1: cajaArriba };
+      const c = wheelFinalView({ ...G, sw: S.sw(), sh: S.sh() }, G.alto, body, safe);
+      if (finalApaisado()) cam.proteger(body, safe);
       cam.lookAt(c.x, c.y, c.z, 6);
     }
   }
@@ -811,7 +812,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     const a = cam.toScreen(0, -G.R * 0.95, sw, sh), b = cam.toScreen(0, -G.R * 0.4, sw, sh);
     const ancho = G.R * 0.34 * z;
     return { x: a.x - ancho / 2, y: a.y, w: ancho, h: b.y - a.y };
-  });
+  }, () => selectedBody(false), () => ({ activa: didCrown, tiempo: tAll - T_CROWN, fase: "wheel-final" }));
 
   S.run((dt, now) => {
     tAll += dt;
@@ -858,10 +859,17 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     else cur = personOf(segUnder());
     tickAudio(w);
     sayIfDue(w);
+    // En la nueva toma se mide el gajo después de aplicar el giro, su salida
+    // del disco y la flexión de la flecha de ESTE cuadro, no del anterior.
+    if (finalApaisado()) draw(w, now, dt);
     direct();
     cam.update(dt);
     cam.apply(S.scene, S.sw(), S.sh(), now);
-    draw(w, now, dt);
+    if (finalApaisado()) {
+      // Reusa el cartel y relator transformados, el margen de 4 px y el puente
+      // de nombre legible del estadio. No toca sus guardias globales.
+      S.despejarGanador(selectedBody(false));
+    } else draw(w, now, dt);
     if (tAll >= T_CROWN) tHold += dt * paceFactor();
     if (tHold >= WINNER_HOLD) S.cleanup();
   });

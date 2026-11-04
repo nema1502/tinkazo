@@ -1,7 +1,7 @@
 import { sembrar } from "../pixi/kit/azar";
 import { planoSobre } from "../pixi/kit/director";
 import { PRIORIDAD } from "../pixi/kit/guion";
-import type { Caja, Contexto, FocoPunto, Kit, LineaGuion, Momentos, Plan, Respuestas, TipoPaso, Toma, Vista, Zona } from "../pixi/kit/tipos";
+import type { Caja, Contexto, FocoPunto, Kit, LineaGuion, Momentos, Plan, PlanoToma, Respuestas, TipoPaso, Toma, Vista, Zona } from "../pixi/kit/tipos";
 import { crearOrden, type Orden } from "./carrera-orden";
 import { DUR_FINAL, FIJOS, FINALISTAS, PELOTON_MAX, RECTA, TARJETA, T_NOMBRES, T_VUELO, alfabetico, barajar, corto } from "./carrera-base";
 import { CIERRE_TRAMO, ESP_MIN, armarTiempos, duracionGrupo, type Terreno, type Tiempos, type Tramo } from "./carrera-tiempos";
@@ -67,6 +67,8 @@ export interface EscenaCarrera {
   vistaGrupo(t: number): Vista;
   cajaCarriles(t: number): Caja;
   cajasDelFrente(t: number): Caja[];
+  /** Optativa: solo al terminar, cuando la pantalla pide el primer plano. */
+  tomaGanadora?(t: number): PlanoToma | null;
   caja(t: number): Caja | null;
   /** Donde se ve la carrera: debajo del marcador y de la cinta, encima del relator. */
   zona(): Zona;
@@ -406,6 +408,8 @@ export function planCarrera(ctx: Contexto): Plan<Datos> {
   const sobreLasDeAdelante = planoSobre((k, t) => escenaDe(k).cajasDelFrente(t), { margen: 40, ritmo: 3, respira: 0.01 });
   // La cámara no mete la carrera debajo de la cinta: la zona empieza donde termina el marcador.
   const tomaFinal: Toma = (k, t) => {
+    const ganadora = t >= tCrown ? escenaDe(k).tomaGanadora?.(t) : null;
+    if (ganadora) return ganadora;
     const p = sobreLasDeAdelante(k, t);
     return "caja" in p ? { ...p, zona: escenaDe(k).zona() } : p;
   };
@@ -415,7 +419,7 @@ export function planCarrera(ctx: Contexto): Plan<Datos> {
     tomas: [{ desde: tSalida, toma: tomaGrupo }, { desde: tAbre, toma: tomaRecta }],
     // El acercamiento de la tensión es del 15 %: con el golpe del 20 % el plano llega a 1,6 veces el general (`audit-emocion`).
     tension: { desde: tTension, toma: tomaFinal, empuje: 0.15 },
-    meta: (k, t) => (t >= t80 ? escenaDe(k).meta() : null),
+    meta: (k, t) => (t >= tCrown && escenaDe(k).tomaGanadora?.(t) ? null : t >= t80 ? escenaDe(k).meta() : null),
     foco: (k) => escenaDe(k).foco(),
     protegido: (k) => escenaDe(k).protegida(),
   };

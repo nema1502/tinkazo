@@ -45,6 +45,13 @@ export const miJuegoPixi = crearJuego<Datos, Escena>({
 });
 ```
 
+La definición puede agregar `trasCorona(k, plan, escena, t)` para una separación
+geométrica propia del juego. Se llama sólo desde el inicio de la corona, después
+de actualizar el cartel al cuadro actual y antes del cierre. No vuelve a dibujar
+la escena ni cambia relojes, duración o selección. Si falta, el orden anterior
+se conserva. Carrera lo usa para separar su cuerpo y nombre del cartel entrante;
+no instala una corrección global ni modifica el director o el estadio.
+
 La lista y la ronda llegan con cada sorteo, y los momentos dependen de las dos: por eso salen del **plan**, no de la definición. El plan recibe la ronda (`ctx.ronda`), el azar sembrado (`ctx.rng`), los textos (`ctx.txt`) y la historia del director de emoción (`ctx.historia`, que gasta `rng` cuando se la pide). **El kit nunca llama a `rng`**: si el plan lo gasta en otro orden, la misma ronda cuenta otra historia.
 
 ### Los cinco pasos

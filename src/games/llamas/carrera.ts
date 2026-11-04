@@ -1,5 +1,6 @@
 import { Container, Graphics, Sprite, Text } from "pixi.js";
 import { colorDeNombre } from "../pixi/foco-vista";
+import { cajaVisible, cajaVisual, primerPlanoHorizontal } from "./carrera-zoom-final";
 import { crearJuego, minimoPx, nivelPorCantidad, planNombres, type Caja, type FocoPunto, type Kit, type Nivel, type Zona } from "../pixi/kit";
 import { CREAM, INK, YELLOW, contorno, hash } from "../pixi/stage";
 import { ECHADA_DUR, carrilesDe, formaDe, hudDe, type Carriles, type Forma, type Pantalla } from "./carrera-forma";
@@ -639,8 +640,61 @@ function crearEscena(k: Kit, d: Datos) {
     return { x: p.x + LLAMA_COLA * p.esc - izq, y: p.y - h, w: w + 6 * p.esc + izq, h };
   };
 
-  function dibujar(t: number): void {
+  /** La misma postura y ficha para dibujar y medir: sin cajas de carril ni de meta. */
+  function pintarCorredora(q: number, t: number, duenia: number, nivel: Nivel): void {
     const vz = cam.zoom || 1;
+    const px = nombrePx();
+    const corona = t - d.tCrown;
+    const c = tomar(q);
+    const p = posicion(q, t);
+    if (!p.visible) {
+      c.raiz.visible = false;
+      c.etiqueta.raiz.visible = false;
+      return;
+    }
+    const post = c.llama;
+    c.raiz.visible = true;
+    c.raiz.position.set(p.x, p.y);
+    c.raiz.scale.set(p.esc);
+    const lying = p.momento?.kind === "echada";
+    // La que se acaba de echar queda por encima de las que pasan: la echada no se tapa.
+    const reciente = lying && (p.momento?.p ?? 9) < 4;
+    c.raiz.zIndex = p.y + (reciente ? 1e5 : 0);
+    const ph = t * (p.velocidad > 0.5 ? 13 : 5) + c.fase;
+    let momento = p.momento;
+    if (corona >= 0 && q === d.campeona) {
+      // Festeja: salta.
+      c.raiz.position.y = p.y - Math.abs(Math.sin(corona * 7)) * 20 * P.u * Math.max(0, 1 - corona / 3);
+      momento = null;
+    }
+    post.pose(ph, corona >= 0 && q !== d.campeona ? 0 : p.velocidad, momento);
+    // La marca de la llama ("!", "?!") se lee desde el fondo: en la pantalla nunca mide menos que un nombre.
+    if (post.marca.visible) post.marca.scale.set(Math.max(1, minimoPx("nombre", P.w, P.h) / (26 * p.esc * vz)));
+    post.zz.scale.set(Math.max(1, Math.min(3, (0.016 * P.h) / (11 * p.esc * vz))));
+    // La etiqueta: pegada al cuerpo.
+    const et = c.etiqueta;
+    const soyLider = q === duenia && !lying && t < d.tCrown + 99;
+    const estilo = lying ? "echada" : soyLider ? "lider" : "normal";
+    const nv: Nivel = lying ? 3 : nivel;
+    ponerEtiqueta(et, textoDe(q, nv), px, estilo);
+    // La ficha nunca se ve más chica que el piso del kit (16 px en el celular, el 2,6 % del alto en el proyector).
+    const comp = Math.max(1, Math.min(2.2, minimoPx("nombre", P.w, P.h) / (px * vz)));
+    et.raiz.scale.set(comp);
+    const enCarril = t >= d.tAbre && d.lanes.includes(q);
+    const arriba = enCarril ? carr.arriba : forma.arriba;
+    const esc = p.esc;
+    if (arriba) et.raiz.position.set(p.x + 6 * esc, p.y - (LLAMA_ALTO * esc + (et.h * comp) / 2 + 3 * P.u));
+    else et.raiz.position.set(p.x + (LLAMA_COLA * esc - 4 * P.u - (et.w * comp) / 2), p.y - (LLAMA_ALTO * esc) / 3);
+    et.raiz.zIndex = soyLider ? 3e6 : reciente ? 2e6 : 1e6;
+    // Las que quedaron lejos de la pantalla no se dibujan.
+    const dentro = p.x > cam.x - P.w / (2 * vz) - 300 && p.x < cam.x + P.w / (2 * vz) + 300;
+    c.raiz.visible = dentro;
+    // En el celular no hay lugar para que los nombres de todas las que se echaron queden a la vista: a los 2,5 s se va la ficha y queda la llama echada.
+    const sinLugar = P.retrato && lying && (p.momento?.p ?? 0) > 5;
+    et.raiz.visible = dentro && p.etiquetar !== false && !sinLugar;
+  }
+
+  function dibujar(t: number): void {
     pintarSuelo();
     // El cielo se mueve con la cámara, más despacio.
     const periodo = 1.4 * P.w;
@@ -655,62 +709,11 @@ function crearEscena(k: Kit, d: Datos) {
     for (const q of [...enUso.keys()]) if (!quienes.has(q)) soltar(q);
     const nVivas = d.tiempos.echadas.length ? d.vivas(t).length : d.lanes.length;
     const nivel = nivelDe(nVivas);
-    const px = nombrePx();
     const lider = d.lider(t);
-    const corona = t - d.tCrown;
     // La borla y la ficha grande viajan juntas: la ficha pasa cuando la borla está por aterrizar.
     const bp = posicionBorla(t, lider);
     const duenia = bp?.duenia ?? lider;
-    for (const q of quienes) {
-      const c = tomar(q);
-      const p = posicion(q, t);
-      if (!p.visible) {
-        c.raiz.visible = false;
-        c.etiqueta.raiz.visible = false;
-        continue;
-      }
-      const post = c.llama;
-      c.raiz.visible = true;
-      c.raiz.position.set(p.x, p.y);
-      c.raiz.scale.set(p.esc);
-      const lying = p.momento?.kind === "echada";
-      // La que se acaba de echar queda por encima de las que pasan: la echada no se tapa.
-      const reciente = lying && (p.momento?.p ?? 9) < 4;
-      c.raiz.zIndex = p.y + (reciente ? 1e5 : 0);
-      const ph = t * (p.velocidad > 0.5 ? 13 : 5) + c.fase;
-      let momento = p.momento;
-      if (corona >= 0 && q === d.campeona) {
-        // Festeja: salta.
-        const s = corona;
-        c.raiz.position.y = p.y - Math.abs(Math.sin(s * 7)) * 20 * P.u * Math.max(0, 1 - s / 3);
-        momento = null;
-      }
-      post.pose(ph, corona >= 0 && q !== d.campeona ? 0 : p.velocidad, momento);
-      // La marca de la llama ("!", "?!") se lee desde el fondo: en la pantalla nunca mide menos que un nombre.
-      if (post.marca.visible) post.marca.scale.set(Math.max(1, minimoPx("nombre", P.w, P.h) / (26 * p.esc * vz)));
-      post.zz.scale.set(Math.max(1, Math.min(3, (0.016 * P.h) / (11 * p.esc * vz))));
-      // La etiqueta: pegada al cuerpo.
-      const et = c.etiqueta;
-      const soyLider = q === duenia && !lying && t < d.tCrown + 99;
-      const estilo = lying ? "echada" : soyLider ? "lider" : "normal";
-      const nv: Nivel = lying ? 3 : nivel;
-      ponerEtiqueta(et, textoDe(q, nv), px, estilo);
-      // La ficha nunca se ve más chica que el piso del kit (16 px en el celular, el 2,6 % del alto en el proyector).
-      const comp = Math.max(1, Math.min(2.2, minimoPx("nombre", P.w, P.h) / (px * vz)));
-      et.raiz.scale.set(comp);
-      const enCarril = t >= d.tAbre && d.lanes.includes(q);
-      const arriba = enCarril ? carr.arriba : forma.arriba;
-      const esc = p.esc;
-      if (arriba) et.raiz.position.set(p.x + 6 * esc, p.y - (LLAMA_ALTO * esc + (et.h * comp) / 2 + 3 * P.u));
-      else et.raiz.position.set(p.x + (LLAMA_COLA * esc - 4 * P.u - (et.w * comp) / 2), p.y - (LLAMA_ALTO * esc) / 3);
-      et.raiz.zIndex = soyLider ? 3e6 : reciente ? 2e6 : 1e6;
-      // Las que quedaron lejos de la pantalla no se dibujan.
-      const dentro = p.x > cam.x - P.w / (2 * vz) - 300 && p.x < cam.x + P.w / (2 * vz) + 300;
-      c.raiz.visible = dentro;
-      // En el celular no hay lugar para que los nombres de todas las que se echaron queden a la vista: a los 2,5 s se va la ficha y queda la llama echada.
-      const sinLugar = P.retrato && lying && (p.momento?.p ?? 0) > 5;
-      et.raiz.visible = dentro && p.etiquetar !== false && !sinLugar;
-    }
+    for (const q of quienes) pintarCorredora(q, t, duenia, nivel);
     pintarPorton(t);
     // La borla: pasa de una a otra (se calculó antes del bucle).
     borla.visible = !!bp && t < d.tCrown + 0.01 && (!d.tandas.length || t >= ((d.tandas[0] as Tanda).salidas[0] as number));
@@ -742,6 +745,13 @@ function crearEscena(k: Kit, d: Datos) {
       const aparece = suave((t - (d.tVuelo - 0.3)) / 0.4) * (1 - suave((t - (d.tSalida - 0.15)) / 0.3));
       // Con 12 o menos, el cartel va a un costado (en el proyector) y no tapa al grupo.
       ponerCartel(d.names.map((_, i) => i), aparece, { lado: !P.retrato && d.gente.length <= 12 ? "izquierda" : "centro" });
+    }
+  }
+
+  function despejarGanadora(t: number): void {
+    if (t >= d.tCrown && primerPlanoHorizontal(P)) {
+      const c = tomar(d.campeona);
+      S.despejarGanador(cajaVisible([c.llama.root, c.etiqueta.raiz]));
     }
   }
 
@@ -816,7 +826,18 @@ function crearEscena(k: Kit, d: Datos) {
     const z = cam.zoom || 1;
     return { x: s.x, y: s.y, r: Math.max(c.w, c.h) * 0.6 * z, color: colorDeNombre(names[d.campeona] ?? "") };
   }
+  function zonaGanadora(): Zona {
+    return { x0: 4, y0: Math.max(hudG.bajo, S.placaBajo(k.ganadores.length)) + 4, x1: P.w - 4, y1: P.bottom - 4 };
+  }
+  function tomaGanadora(t: number) {
+    if (t < d.tCrown || !primerPlanoHorizontal(P)) return null;
+    pintarCorredora(d.campeona, t, d.campeona, 4);
+    const c = tomar(d.campeona);
+    return { caja: cajaVisual([c.llama.root, c.etiqueta.raiz], S.scene), zona: zonaGanadora(), ritmo: 3 };
+  }
   function protegida(): { caja: Caja; zona: Zona } | null {
+    const final = tomaGanadora(k.t);
+    if (final) return { caja: final.caja, zona: final.zona };
     const p = posicion(d.campeona, d.tCrown);
     const c = cuerpoDe(p, true);
     return { caja: { x: c.x, y: c.y + c.h * 0.2, w: c.w, h: c.h * 0.8 }, zona: { x0: 8 * P.u, y0: S.placaBajo(k.ganadores.length) + 4 * P.u, x1: P.w - 8 * P.u, y1: P.bottom } };
@@ -834,14 +855,27 @@ function crearEscena(k: Kit, d: Datos) {
     cartelClave = "";
   }
   reconstruir();
+  S.ganadorEn(
+    () => {
+      const c = enUso.get(d.campeona);
+      return c ? cajaVisible([c.llama.root, c.etiqueta.raiz]) : null;
+    },
+    () => {
+      const c = enUso.get(d.campeona);
+      return c ? cajaVisible([c.llama.root]) : null;
+    },
+    () => ({ activa: k.t >= d.tCrown, tiempo: k.t - d.tCrown, fase: k.t >= d.tCrown ? "final" : "race" }),
+  );
 
-  const escena: EscenaCarrera & { rebuild(): void; draw(t: number): void } = {
+  const escena: EscenaCarrera & { rebuild(): void; draw(t: number): void; despejar(t: number): void } = {
     rebuild: reconstruir,
     draw: dibujar,
+    despejar: despejarGanadora,
     vistaPresentacion,
     vistaGrupo,
     cajaCarriles,
     cajasDelFrente,
+    tomaGanadora,
     caja,
     zona,
     meta,
@@ -879,5 +913,8 @@ export const carreraPixi = crearJuego<Datos, Escena>({
   },
   cuadro(_k, _plan, escena, t) {
     escena.draw(t);
+  },
+  trasCorona(_k, _plan, escena, t) {
+    escena.despejar(t);
   },
 });
