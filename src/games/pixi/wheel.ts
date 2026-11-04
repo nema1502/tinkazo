@@ -13,6 +13,9 @@ import { exponerNino } from "./nino";
 import { W0, planWheelMotion } from "./wheel-motion";
 import { respuestasRuleta } from "./wheel-nino";
 import { CREAM, INK, YELLOW, contorno, mountPixi, type PixiStage } from "./stage";
+import { enchufar3D, entradaBase } from "../tres/enchufe";
+import type { Montaje3D, Vista3D } from "../tres/tipos";
+import type { EntradaRueda, GajoEntrada } from "../tres/wheel-3d"; // solo el tipo: no trae three.js
 
 /**
  * La ruleta, en PixiJS, con el director de cámara.
@@ -65,10 +68,15 @@ interface PanelRow {
   idx: number;
 }
 
-export async function wheelPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void): Promise<void> {
+/**
+ * `tres`: la vista en 3D (`?motor=3d`, src/games/tres/README.md). Si está, el lienzo queda transparente y debajo se
+ * dibuja la rueda; el relator, el cartel, el foco y las placas de nombres siguen siendo de PixiJS. Sin `tres`, la
+ * ruleta es la de siempre.
+ */
+export async function wheelPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void, tres?: Montaje3D<EntradaRueda>): Promise<void> {
   const winnerIdx = winners[0] ?? 0;
   let skipFn = (): void => {};
-  const st = await mountPixi(beacon, done, () => skipFn());
+  const st = await mountPixi(beacon, done, () => skipFn(), { transparente: !!tres });
   if (!st) {
     done();
     return;
@@ -440,8 +448,25 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     bigPlate.visible = rows.length === 0 && !grupos;
     S.hud.addChild(bigPlate);
     buildPanel();
+    if (v3) apagar2D();
+    refrescarGajos();
   }
+  /** Con el 3D, el fondo, la rueda y la flecha del 2D se apagan (el 3D los dibuja); quedan las placas y el cartel. */
+  function apagar2D(): void {
+    S.bg.visible = false;
+    for (const c of S.scene.children) c.visible = false;
+  }
+  /** Lo que el 3D pinta en el disco: el color de cada gajo y el nombre que el 2D escribió en él. */
+  let gajos3D: GajoEntrada[] = [];
+  let version3D = 0;
+  function refrescarGajos(): void {
+    gajos3D = Array.from({ length: segs }, (_, j) => ({ color: S.color(personOf(j)), nombre: segNames[j]?.text ?? "" }));
+    version3D++;
+  }
+  let v3: Vista3D<EntradaRueda> | null = null;
   build();
+  v3 = enchufar3D(S, tres);
+  if (v3) apagar2D();
   const crown = S.crown(names, winners);
   S.onResize(build);
 
@@ -728,7 +753,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     wheel.rotation = rot;
     ghosts.forEach((g, i) => {
       g.rotation = rot - w * A * 0.012 * (i + 1);
-      g.visible = w > 6;
+      g.visible = !v3 && w > 6;
     });
     const shown = Math.min(64, Math.floor(Math.max(0, Math.min(1, tAll / 0.7)) * 64));
     const R = G.R;
@@ -738,7 +763,7 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
     // Con el ganador, los foquitos se prenden en amarillo, de a uno sí y uno no.
     const lit = tAll >= T_CROWN ? 1 + (Math.floor((tAll - T_CROWN) * 5) % 2) : 0;
     const key = shown * 3 + lit;
-    if (bulbs.visible && key !== bulbKey) {
+    if (!v3 && bulbs.visible && key !== bulbKey) {
       bulbKey = key;
       bulbs.clear();
       for (let i = 0; i < shown; i++) {
@@ -801,8 +826,19 @@ export async function wheelPixi(names: string[], winners: readonly number[], bea
       if (bigName.width > maxW) bigName.scale.set(maxW / bigName.width);
       bigBar.clear().rect(0, 0, 26 * u, plateBox.h).fill(S.color(cur));
     }
+    // Con el 3D: lo que el 2D ya puso en este cuadro (src/games/tres/wheel-3d.ts). Los gajos que ganan, solo desde el golpe.
+    if (v3) {
+      if (tAll >= T_CROWN && !gananJ) gananJ = Array.from({ length: segs }, (_, j) => j).filter((j) => personOf(j) === ganUnit);
+      v3.frame({
+        ...entradaBase(S, tAll),
+        R, version: version3D, gajos: gajos3D, letra: gajos3D.length ? letraMinima(u) : 0,
+        angulo: rot, velocidad: w, paleta: flapA, golpePaleta: 1 + (flash + bump) * 2.5, cubo: hub.rotation,
+        foquitos: shown, encendidos: lit as 0 | 1 | 2, ganan: tAll >= T_CROWN ? gananJ : null,
+      });
+    }
     if (tAll >= T_CROWN) crown.at(tAll - T_CROWN);
   }
+  let gananJ: number[] | null = null;
 
   // Para el auditor de emoción: el gajo ganador, debajo de la flecha, en la pantalla.
   S.ganadorEn(() => {
