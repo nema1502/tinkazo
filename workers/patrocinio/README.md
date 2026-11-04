@@ -6,7 +6,7 @@ Es un script aparte del de los enlaces (`tinkazo-enlaces`) y del de la sala (`ti
 
 **Comprobar un sorteo no depende de este servicio.** `verificar.html` no lo llama. Si se cae, no se puede sellar con patrocinio, pero todo lo ya hecho se sigue comprobando, y quien paga su comisión (Freighter, una cuenta con saldo) no pasa por acá.
 
-**Estado:** probado con `wrangler dev` y testnet. No está desplegado, no tiene DNS, y el navegador todavía no lo usa (`src/stellar/patrocinador.ts` y las pantallas son la parte 2). Desplegar y el DNS piden la palabra de quien mantiene el proyecto.
+**Estado:** desplegado en testnet en `p.tinkazo.app`. El sitio lo usa en `tinkazo.app` y `www.tinkazo.app` cuando el build no trae `VITE_PATROCINIO_URL` (`src/stellar/patrocinio-config.ts`): nunca en localhost ni en vistas previas, y solo en testnet. Con esa dirección por defecto el portero no es condición para sellar: si no contesta o no entiende `/cupo`, el sitio paga como antes con Pollar; si contesta que está apagado, sin fondo o sin configuración, se respeta. Con la variable puesta a mano sigue cerrado ante la duda.
 
 ## Cómo funciona
 

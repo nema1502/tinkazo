@@ -325,3 +325,78 @@ describe("las bajas del cliente del portero", () => {
     expect((await elegirPatrocinador("", billetera, { url: null, fetch: f as unknown as typeof fetch })).nombre).toBe("pollar");
   });
 });
+
+describe("la dirección por defecto (tinkazo.app, testnet)", () => {
+  const billetera = { signAndSubmit: vi.fn(async () => HASH) };
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+    vi.stubEnv("VITE_PATROCINIO_URL", "");
+    vi.stubGlobal("location", { hostname: "tinkazo.app" });
+  });
+
+  it("pregunta a p.tinkazo.app y, si rige el portero, lo usa", async () => {
+    const f = vi.fn(async (_u: string, _i?: RequestInit) => responder(200, cupo()));
+    const p = await elegirPatrocinador(CUENTA, billetera, { fetch: f as unknown as typeof fetch });
+    expect(p.nombre).toBe("portero");
+    expect(f.mock.calls[0]?.[0]).toBe(`https://p.tinkazo.app/v1/patrocinio/cupo?cuenta=${CUENTA}`);
+  });
+  it("si el portero no contesta, rige Pollar y no hay error", async () => {
+    const caido = async (): Promise<Response> => {
+      throw new TypeError("Failed to fetch");
+    };
+    expect(await estadoDelPatrocinio(CUENTA, { fetch: caido as unknown as typeof fetch })).toEqual({ rige: "pollar", configurado: false });
+    const p = await elegirPatrocinador(CUENTA, billetera, { fetch: caido as unknown as typeof fetch });
+    expect(p.nombre).toBe("pollar");
+    expect(await p.mandar("XDR")).toEqual({ status: "PENDING", hash: HASH });
+  });
+  it("si contesta algo que no se entiende (500, 429, no JSON), rige Pollar", async () => {
+    for (const r of [() => responder(500, { motivo: "interno" }), () => responder(429, { motivo: "cupo-ip" }), () => new Response("<html>1102</html>", { status: 503 })]) {
+      olvidarElEstado();
+      const p = await elegirPatrocinador(CUENTA, billetera, { fetch: (async () => r()) as unknown as typeof fetch });
+      expect(p.nombre).toBe("pollar");
+    }
+  });
+  it("si no contesta a tiempo, espera lo de siempre y sigue con Pollar", async () => {
+    vi.useFakeTimers();
+    try {
+      const colgado = ((_u: string, i?: RequestInit) => new Promise<Response>((_ok, no) => i?.signal?.addEventListener("abort", () => no(new DOMException("abort", "AbortError"))))) as unknown as typeof fetch;
+      let listo = false;
+      const e = estadoDelPatrocinio(CUENTA, { fetch: colgado }).then((x) => ((listo = true), x));
+      await vi.advanceTimersByTimeAsync(TOPE_CUPO_MS - 1);
+      expect(listo).toBe(false);
+      await vi.advanceTimersByTimeAsync(2);
+      expect(await e).toEqual({ rige: "pollar", configurado: false });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("rige pollar según el servicio: Pollar", async () => {
+    const f = async () => responder(200, { rige: "pollar", prendido: false, motivo: "pollar" });
+    expect((await elegirPatrocinador(CUENTA, billetera, { fetch: f as unknown as typeof fetch })).nombre).toBe("pollar");
+  });
+  it("si el servicio dice que está apagado, sin fondo o sin configuración, cerrado: es su palabra", async () => {
+    for (const motivo of ["apagado", "config", "fondo"]) {
+      olvidarElEstado();
+      const f = async () => responder(200, cupo({ prendido: false, motivo }));
+      await expect(elegirPatrocinador(CUENTA, billetera, { fetch: f as unknown as typeof fetch })).rejects.toMatchObject({ name: "ErrorPortero", motivo: "cerrado" });
+    }
+  });
+  it("sin la dirección de la cuenta no se pregunta nada y rige Pollar", async () => {
+    const f = vi.fn();
+    expect((await elegirPatrocinador("", billetera, { fetch: f as unknown as typeof fetch })).nombre).toBe("pollar");
+    expect(f).not.toHaveBeenCalled();
+  });
+  it("con la variable puesta a mano se mantiene lo de antes: sin respuesta, cerrado", async () => {
+    vi.stubEnv("VITE_PATROCINIO_URL", URL);
+    const caido = async (): Promise<Response> => {
+      throw new TypeError("Failed to fetch");
+    };
+    await expect(elegirPatrocinador(CUENTA, billetera, { fetch: caido as unknown as typeof fetch })).rejects.toMatchObject({ motivo: "cerrado" });
+  });
+  it("en localhost no hay portero y no se consulta nada", async () => {
+    vi.stubGlobal("location", { hostname: "localhost" });
+    const f = vi.fn();
+    expect(await estadoDelPatrocinio(CUENTA, { fetch: f as unknown as typeof fetch })).toEqual({ rige: "pollar", configurado: false });
+    expect(f).not.toHaveBeenCalled();
+  });
+});

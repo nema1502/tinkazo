@@ -82,13 +82,14 @@ describe("textos del logo", () => {
     expect(terminos).toContain(`data-i="tmLogoB">${T.es.tmLogoB as string}</p>`);
     expect(terminos).toContain(`data-i="tmLogoT">${T.es.tmLogoT as string}</h3>`);
     expect(terminos).toContain(T.es.tmMore4 as string);
+    expect(terminos).toContain(T.es.tmMore1 as string);
     expect(terminos).toContain("tu logo, si subiste uno; y la llave");
     expect(precios).toContain(`data-i="prLogoNota">${T.es.prLogoNota as string}</p>`);
   });
 
   it("el sitemap tiene la fecha nueva de los términos y de precios", () => {
     const mapa = readFileSync("public/sitemap.xml", "utf8");
-    expect(mapa).toMatch(/terminos\.html<\/loc><lastmod>2026-11-02/);
+    expect(mapa).toMatch(/terminos\.html<\/loc><lastmod>2026-11-04/);
     expect(mapa).toMatch(/precios\.html<\/loc><lastmod>2026-11-02/);
   });
 

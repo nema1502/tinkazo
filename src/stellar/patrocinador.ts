@@ -1,4 +1,5 @@
 import type { RespuestaEnvio } from "./envio";
+import { configDelPortero } from "./patrocinio-config";
 
 /**
  * Quién paga la comisión de la red al sellar y al sortear, y cómo se le manda la transacción.
@@ -13,9 +14,13 @@ import type { RespuestaEnvio } from "./envio";
  *   manda a la red. El hash que devuelve es el de la transacción interna, el mismo que ya consulta
  *   `envio.ts`.
  *
- * **Sin `VITE_PATROCINIO_URL`, nada cambia:** no hay ninguna consulta y rige Pollar, como hoy.
- * **Con ella y sin respuesta, cerrado ante la duda:** no se paga con nadie y la pantalla lo dice. Un
+ * **Sin portero configurado, nada cambia:** no hay ninguna consulta y rige Pollar, como hoy. La dirección sale de
+ * `VITE_PATROCINIO_URL` o, en `tinkazo.app` y en testnet, de la de por defecto (`patrocinio-config.ts`).
+ * **Con la variable puesta y sin respuesta, cerrado ante la duda:** no se paga con nadie y la pantalla lo dice. Un
  * portero que contesta que está apagado, o que le falta algo de su configuración, es lo mismo.
+ * **Con la dirección por defecto y sin respuesta, rige Pollar:** el portero no es condición para sellar. Si
+ * contesta y dice que está apagado, que no tiene fondo o que le falta configuración, también es cerrado: es la
+ * palabra del servicio.
  *
  * Este archivo no toca la página: `fetch` entra inyectado, así se prueba con uno de mentira.
  */
@@ -41,9 +46,7 @@ type Fetch = typeof fetch;
 
 /** La dirección del portero, sin barra al final, o `null` si no está puesta (entonces rige Pollar y no se consulta nada). */
 export function urlDelPortero(): string | null {
-  const crudo = (import.meta.env.VITE_PATROCINIO_URL ?? "") as string;
-  const url = String(crudo).trim().replace(/\/+$/, "");
-  return url ? url : null;
+  return configDelPortero().url;
 }
 
 /**
@@ -213,6 +216,13 @@ export interface OpcionesDeEstado {
   ahora?: () => number;
   /** Dirección del portero, si no es la del entorno (las pruebas). */
   url?: string | null;
+  /** La dirección es la de por defecto (`patrocinio-config.ts`): sin respuesta, rige Pollar. Solo con `url`. */
+  porDefecto?: boolean;
+}
+
+/** La dirección del portero y si es la de por defecto, según lo que se pasó o el entorno. */
+function configDe(o: OpcionesDeEstado): { url: string | null; porDefecto: boolean } {
+  return o.url === undefined ? configDelPortero() : { url: o.url, porDefecto: o.porDefecto === true };
 }
 
 /** Vuelve a esperar el tope entero la próxima vez que se pregunte (las pruebas; en la página, una respuesta lo hace sola). */
@@ -230,7 +240,8 @@ export function olvidarElEstado(): void {
  * Lo último que se supo vale `VIGENCIA_MS` (`forzar` no lo usa); las preguntas en curso se comparten, también con `forzar`.
  */
 export async function estadoDelPatrocinio(g: string | null | undefined, o: OpcionesDeEstado = {}): Promise<EstadoDelPatrocinio> {
-  const url = o.url === undefined ? urlDelPortero() : o.url;
+  const config = configDe(o);
+  const url = config.url;
   if (!url) return { rige: "pollar", configurado: false };
   const quien = g || CUENTA_DE_CONSULTA;
   const ahora = (o.ahora ?? Date.now)();
@@ -244,8 +255,10 @@ export async function estadoDelPatrocinio(g: string | null | undefined, o: Opcio
       // Un "cerrado" por no contestar no se guarda: la próxima pregunta vuelve a intentar.
       guardado = estado.rige === "cerrado" && estado.motivo === "sin-respuesta" ? null : { g: quien, hasta: ahora + VIGENCIA_MS, estado };
       if (enCurso?.p === p) enCurso = null;
-      avisar(quien, estado);
-      return estado;
+      // Con la dirección por defecto, un portero que no contesta no frena a nadie: rige Pollar, sin error a la vista.
+      const rige: EstadoDelPatrocinio = config.porDefecto && estado.rige === "cerrado" && estado.motivo === "sin-respuesta" ? { rige: "pollar", configurado: false } : estado;
+      avisar(quien, rige);
+      return rige;
     });
   enCurso = { g: quien, p };
   return p;
@@ -382,11 +395,14 @@ export function crearPortero(url: string, o: OpcionesDeEstado = {}): Patrocinado
  * pedirle a la persona que firme nada.
  */
 export async function elegirPatrocinador(g: string, wallet: BilleteraQueManda, o: OpcionesDeEstado = {}): Promise<Patrocinador> {
-  const url = o.url === undefined ? urlDelPortero() : o.url;
+  const { url, porDefecto } = configDe(o);
   // Con portero y sin dirección de la cuenta no se pregunta nada: el cupo sería el de una cuenta que no es de la persona.
+  // Con la dirección por defecto el portero no es condición: sin cuenta que contar, rige Pollar, como antes de que existiera.
+  if (url && !g && porDefecto) return crearPollar(wallet, { ...o, url, porDefecto });
   if (url && !g) throw new ErrorPortero("cerrado", 0, { detalle: "sin-cuenta" });
-  const estado = await estadoDelPatrocinio(g, { ...o, url });
-  if (estado.rige === "pollar") return crearPollar(wallet, { ...o, url });
+  const opciones = { ...o, url, porDefecto };
+  const estado = await estadoDelPatrocinio(g, opciones);
+  if (estado.rige === "pollar") return crearPollar(wallet, opciones);
   if (estado.rige === "cerrado" || !url) throw new ErrorPortero("cerrado", 0, { detalle: estado.rige === "cerrado" ? estado.motivo : "sin-url" });
-  return crearPortero(url, o);
+  return crearPortero(url, opciones);
 }

@@ -79,6 +79,29 @@ describe("submitElsewhere con el portero", () => {
     expect(f).not.toHaveBeenCalled();
   });
 
+  it("en tinkazo.app, sin la variable, se usa el portero por defecto", async () => {
+    vi.stubEnv("VITE_PATROCINIO_URL", "");
+    vi.stubGlobal("location", { hostname: "tinkazo.app" });
+    const f = portero(cupo(), () => responder(200, { hash: HASH, status: "PENDING", quedan: 18, quedanSorteos: 38 }));
+    const { submitElsewhere } = await import("./envio-sdk");
+    const r = await submitElsewhere(tx as never, () => undefined, 5000, intento);
+    expect(r?.hash).toBe(HASH);
+    expect(signUnsponsored).toHaveBeenCalled();
+    expect(signAndSubmit).not.toHaveBeenCalled();
+    expect(f.mock.calls.some((c) => String(c[0]) === "https://p.tinkazo.app/v1/patrocinio")).toBe(true);
+  });
+
+  it("en tinkazo.app, sin la variable y con el portero caído, Pollar firma y manda como siempre, sin error", async () => {
+    vi.stubEnv("VITE_PATROCINIO_URL", "");
+    vi.stubGlobal("location", { hostname: "tinkazo.app" });
+    vi.stubGlobal("fetch", vi.fn(async () => Promise.reject(new TypeError("Failed to fetch"))));
+    const { submitElsewhere } = await import("./envio-sdk");
+    const r = await submitElsewhere(tx as never, () => undefined, 5000, intento);
+    expect(r?.hash).toBe(HASH);
+    expect(signAndSubmit).toHaveBeenCalledWith("XDR_SIN_FIRMAR");
+    expect(signUnsponsored).not.toHaveBeenCalled();
+  });
+
   it("si el portero dice que rige Pollar, el camino de Pollar", async () => {
     portero({ rige: "pollar", prendido: false, motivo: "pollar" }, () => responder(500, {}));
     const { submitElsewhere } = await import("./envio-sdk");
