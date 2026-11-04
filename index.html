@@ -453,6 +453,8 @@
       <p class="kicker pick-label" id="pick-label" data-i="gameLabel">Juego</p>
       <p class="note" id="rec-head" style="display:none"></p>
       <p class="note rec-sel-nota" id="rec-sel-nota" aria-live="polite"></p>
+      <!-- Cuando el selector no es el de siempre: mientras corre el show no se cambia, y con el resultado puesto sirve para verlo de nuevo con otro juego (freeze.ts, pintarNotaDelJuego). -->
+      <p class="note juego-nota" id="juego-nota" aria-live="polite" hidden></p>
       <div class="gamepick" id="gamepick">
         <button id="g-race" class="on"><img class="sel-img sel-osc" src="/juegos/selector/race.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><img class="sel-img sel-cla" src="/juegos/selector/race-light.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><span data-i="gameRace">Carrera de llamas</span></button>
         <button id="g-sapo"><img class="sel-img sel-osc" src="/juegos/selector/sapo.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><img class="sel-img sel-cla" src="/juegos/selector/sapo-light.webp" width="320" height="180" alt="" loading="lazy" decoding="async" /><span data-i="gameSapo">Sapo</span></button>
@@ -543,7 +545,8 @@
           <h3 data-i="ensFinT">Era un ensayo: quien salió es de mentira y no se grabó nada.</h3>
           <p data-i="ensFinB">Así se sortea. En vivo, entrá y pegá tu lista antes de proyectar: la espera es de unos 45 segundos.</p>
           <div class="row">
-            <button class="primary" id="ens-mio" type="button" data-i="ensFinCta">Sortear con mi lista</button>
+            <button class="primary" id="ens-otro" type="button" data-i="ensOtroJuego">Probar otro juego</button>
+            <button class="ghost" id="ens-mio" type="button" data-i="ensFinCta">Sortear con mi lista</button>
             <button class="ghost" id="ens-salir" type="button" data-i="ensSalir">Salir del ensayo</button>
             <button class="enlace" id="ens-como" type="button" data-i="comoBtn">¿Cómo se usa?</button>
           </div>
@@ -557,7 +560,7 @@
             <button class="ghost" id="stand-salir" type="button" data-i="standSalir">Hacer un sorteo de verdad</button>
           </div>
         </div>
-        <div class="row grande-row"><button class="ghost" id="btn-grande" data-i="pantallaBtn">Mostrar en grande</button></div>
+        <div class="row grande-row"><button class="ghost" id="btn-grande" data-i="pantallaBtn">Mostrar en grande</button><button class="ghost" id="btn-otro-juego" type="button" data-i="otroJuegoBtn">Ver de nuevo con otro juego</button></div>
         <p class="note" id="motion-note" style="display:none"><span data-i="motionNote">Tu sistema tiene las animaciones reducidas, por eso el sorteo se muestra directo.</span> <button class="ghost" id="btn-replay" data-i="motionReplay">Ver la animación igual</button></p>
         <div class="verify">
           <div>

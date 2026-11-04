@@ -26,7 +26,7 @@ describe("index.html, la herramienta", () => {
       "pasos", "siguiente", "sig-paso", "sig-btn", "sig-aviso", "juego-actual", "btn-cambiar", "gamepick", "again-acciones",
       // El primer sorteo (22 de octubre de 2026): la cuenta, la oferta, el tutorial y el ensayo.
       "gate", "btn-pegar", "primera-vez", "pegar-ayuda", "sellar-resumen", "ya-entraste", "btn-como", "como-panel",
-      "btn-ensayo", "ensayo-banda", "ensayo-guia", "ensayo-fin", "ens-mio", "ens-salir",
+      "btn-ensayo", "ensayo-banda", "ensayo-guia", "ensayo-fin", "ens-mio", "ens-otro", "ens-salir", "btn-otro-juego", "juego-nota",
       // La red antes de sellar (red.ts): la caja, "¿La red está bien?" y la nota de un sorteo sin sello.
       "red-estado", "red-fila", "btn-red", "btn-red-txt", "sin-sello-nota",
     ];

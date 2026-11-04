@@ -16,7 +16,7 @@ import { pintarLeyenda } from "./leyenda";
 import { currentSession } from "./wallet-ui";
 import { pintarQrDelComprobante } from "./qr";
 import { usePixi } from "../games/engine";
-import { rotarJuego, secondsToRound, unfreeze } from "./freeze";
+import { alElegirDespuesDelResultado, irAlSelectorParaOtro, juegoParaVerDeNuevo, marcarShow, pintarNotaDelJuego, rotarJuego, secondsToRound, unfreeze } from "./freeze";
 import { listaVinoDeLuma, setList } from "./participants";
 import { CARD_SECONDS, type GameCard, showGameCard } from "./gamecard";
 import { actualizarPaso, verError } from "./siguiente";
@@ -453,9 +453,12 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   // segundos, y el estadio aparece recién cuando la tarjeta termina.
   if (card) pedirPantallaCompleta();
   let cerrado = false;
+  // Mientras corre, el selector de juegos se apaga y dice por qué (freeze.ts, `marcarShow`).
+  marcarShow(true);
   const fin = (): void => {
     if (cerrado) return;
     cerrado = true;
+    marcarShow(false);
     card?.hide();
     setCardSeconds(0);
     setShowGate(null);
@@ -574,6 +577,8 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   // La leyenda del juego, si trae una: plegada y después del resultado, nunca durante el show.
   pintarLeyenda($("leyenda-box"), app.game, getLang(), { titulo: t("leyendaTitulo"), fuente: t("leyendaFuente") });
   const prize = app.frozen?.prize ?? "";
+  // Con el resultado puesto, el selector dice que sirve para verlo de nuevo con otro juego.
+  pintarNotaDelJuego();
   // Este premio ya salió: en el próximo sorteo queda marcado entre las opciones.
   marcarSalio(prize);
   // "No está" solo si queda con quién volver a sortear: dos personas, como
@@ -614,13 +619,13 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   const dl = $<HTMLAnchorElement>("drand-link");
   dl.href = url;
   dl.textContent = t("drandLink");
-  // En el ensayo, lo que sigue es su final (ensayo.ts): "Sortear con mi lista".
+  // En el ensayo, lo que sigue es su final (ensayo.ts): "Probar otro juego", y después "Sortear con mi lista".
   // "Siguiente premio" y compartir no van: no se sorteó nada.
   const siguiente = showAgain();
   const principal = enStand()
     ? ((document.getElementById("stand-otra") as HTMLButtonElement | null) ?? siguiente)
     : enEnsayo()
-      ? ((document.getElementById("ens-mio") as HTMLButtonElement | null) ?? siguiente)
+      ? ((document.getElementById("ens-otro") as HTMLButtonElement | null) ?? siguiente)
       : siguiente;
   // El final del ensayo: su línea se va, y el contador cuenta que llegó al ganador (main.ts, `contarPractica`).
   if (enEnsayo()) document.dispatchEvent(new CustomEvent("tinkazo:ensayo-fin"));
@@ -671,9 +676,27 @@ function resultadoEnGrande(enlace: Promise<string>, volverA: HTMLButtonElement):
  */
 let replaying = false;
 export function replayAnimation(): void {
+  verDeNuevo();
+}
+
+/**
+ * "Ver de nuevo con otro juego" (y "Probar otro juego" en el ensayo): el mismo resultado, mismo ganador y misma
+ * ronda, contado por otro juego. Solo recibe lo que ya está decidido (`app.drawn`): no sortea, no graba, no toca
+ * el historial, el comprobante ni la cadena, y no revela nada otra vez. Sin `juego`, con el de ahora (es la
+ * repetición de "Ver la animación igual"). Un show a la vez (`replaying`); al terminar, el foco vuelve a quien lo pidió.
+ */
+export function verDeNuevo(juego?: Game): void {
   const { frozen, drawn } = app;
   if (!frozen || !drawn || replaying) return;
   replaying = true;
+  const activo = document.activeElement;
+  const volverA = activo instanceof HTMLElement && activo !== document.body ? activo : null;
+  if (juego) {
+    juegoParaVerDeNuevo(juego);
+    // Lo que va con el juego (su historia y su leyenda) pasa a ser el del juego que se ve.
+    renderLore(drawn.beacon);
+    pintarLeyenda($("leyenda-box"), app.game, getLang(), { titulo: t("leyendaTitulo"), fuente: t("leyendaFuente") });
+  }
   const btn = document.getElementById("btn-replay") as HTMLButtonElement | null;
   if (btn) btn.disabled = true;
   forceMotion(true);
@@ -681,8 +704,18 @@ export function replayAnimation(): void {
     replaying = false;
     if (btn) btn.disabled = false;
     forceMotion(false);
+    if (volverA && volverA.isConnected && volverA.offsetParent !== null) volverA.focus({ preventScroll: true });
   });
 }
+
+/** Un toque en "Probar otro juego" o en "Ver de nuevo con otro juego": al selector, con el foco en otro juego. */
+export function elegirOtroJuegoParaVer(): void {
+  if (!app.drawn || replaying) return;
+  irAlSelectorParaOtro();
+}
+
+// Después del resultado, un toque en el selector lo vuelve a mostrar con ese juego (freeze.ts, `elegirJuego`).
+alElegirDespuesDelResultado((g) => verDeNuevo(g));
 
 /** Quiénes quedan en la lista sellada si se sacan los que ya salieron. */
 function sinGanadores(): string[] {

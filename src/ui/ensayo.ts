@@ -5,6 +5,7 @@ import { ENSAYO_ESPERA_S, LISTA_ENSAYO, enEnsayo, enStand, marcarEnsayo } from "
 import { guardarBorrador, renderNames, setList } from "./participants";
 import { MARCA_INGRESAR, currentSession, refrescarPuerta } from "./wallet-ui";
 import { actualizarPaso } from "./siguiente";
+import { elegirOtroJuegoParaVer } from "./draw";
 
 /**
  * El ensayo, en la página: probar Tinkazo con una lista de ejemplo, haciendo y
@@ -20,7 +21,8 @@ import { actualizarPaso } from "./siguiente";
  * - el número sale en 15 s (en un sorteo de verdad son unos 45) y el show va en
  *   el ritmo rápido, sin cambiar el que eligió la persona;
  * - al final no hay QR, ni compartir, ni siguiente premio, ni en grande: "Así se
- *   sortea", con "Sortear con mi lista".
+ *   sortea", con "Probar otro juego" (el mismo resultado, contado por otro juego, sin
+ *   sellar otra vez) y, después, "Sortear con mi lista".
  *
  * Se entra por botón (la portada, la oferta de primera vez, el pie del
  * tutorial y el enlace de debajo del cuadro vacío) y nunca con un sorteo
@@ -135,6 +137,8 @@ export function initEnsayo(): void {
       entrarAlEnsayo();
     });
   }
+  // "Probar otro juego": el mismo resultado de ejemplo, contado por otro juego, sin sellar de nuevo ni esperar.
+  document.getElementById("ens-otro")?.addEventListener("click", elegirOtroJuegoParaVer);
   document.getElementById("ens-mio")?.addEventListener("click", () => salirDelEnsayo({ conMiLista: true }));
   for (const id of ["ens-salir", "ens-salir-banda"]) document.getElementById(id)?.addEventListener("click", () => salirDelEnsayo());
   document.getElementById("ens-como")?.addEventListener("click", () => salirDelEnsayo({ aTutorial: true }));

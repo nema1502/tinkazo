@@ -40,7 +40,7 @@
  *    se abre igual y no cuenta como que la persona la soltó;
  *  - lo que la persona suelta (Escape, salir de la pantalla completa, "Volver a la página") no se vuelve a forzar en la
  *    sesión, y "Mostrar la espera en grande" lo vuelve a permitir;
- *  - el ensayo hace lo mismo que el sorteo de verdad, y sus chips de CSV y Luma no quedan a la vista (no hacen nada);
+ *  - el ensayo NO abre la espera en grande ni pide la pantalla completa al sellar (se prueba en la página, con el selector a mano), y sus chips de CSV y Luma no quedan a la vista (no hacen nada);
  *  - un enlace de prueba (`?lead=`) no fuerza nada.
  *
  * Y dos casos más, en la primera pantalla:
@@ -505,7 +505,7 @@ async function loQueSeSuelta(browser, v) {
   }
 }
 
-/** El ensayo hace lo mismo que el sorteo de verdad (así se practica como va a ser), y sus chips de CSV y Luma no quedan a la vista. */
+/** El ensayo se prueba en la página (4 de noviembre de 2026): sellar no abre la espera en grande ni pide la pantalla completa, y el selector sigue a mano. Sus chips de CSV y Luma no quedan a la vista. */
 async function enElEnsayo(browser, v) {
   const quien = `${v.etiqueta} ${tema}`;
   console.log(`\n  ${quien} · el ensayo`);
@@ -514,16 +514,14 @@ async function enElEnsayo(browser, v) {
     const o = JSON.parse(await page.eval("JSON.stringify({ fila: (() => { const e = document.querySelector('.mas-origenes'); return !!e && getComputedStyle(e).display !== 'none' && e.getClientRects().length > 0; })(), csvOff: document.getElementById('csv').disabled, lumaOff: document.getElementById('csv-luma').disabled })"));
     check(`${quien} · en el ensayo la lista es de ejemplo: los chips de CSV y Luma no están a la vista`, !o.fila && o.csvOff && o.lumaOff, JSON.stringify(o));
     await clicReal(page, "#btn-freeze");
-    const abrio = await page.waitFor("document.querySelector('.espera')", 15000);
-    check(`${quien} · en el ensayo la espera en grande también se abre sola`, abrio.ok);
-    if (!abrio.ok) return;
-    await sleep(500);
-    const r = JSON.parse(await page.eval("JSON.stringify({ fs: window.__fs, ensayo: (document.querySelector('.espera-ensayo') || {}).textContent || '', juego: !!document.querySelector('[data-juego]') })"));
-    check(`${quien} · pidió la pantalla completa dentro del clic, una sola vez`, r.fs.length === 1 && r.fs[0].evento === "click", JSON.stringify(r.fs));
-    check(`${quien} · dice que es un ensayo y que no se graba, y "Cambiar de juego" está`, /ENSAYO|REHEARSAL/i.test(r.ensayo) && r.juego, r.ensayo);
+    const sellada = await page.waitFor("getComputedStyle(document.getElementById('sec-frozen')).display !== 'none'", 15000);
+    check(`${quien} · en el ensayo la lista queda sellada`, sellada.ok);
+    if (!sellada.ok) return;
+    await sleep(2500);
+    const r = JSON.parse(await page.eval("JSON.stringify({ fs: window.__fs, espera: !!document.querySelector('.espera'), pantalla: !!document.fullscreenElement, selector: !document.getElementById('gamepick').hasAttribute('inert') && !document.getElementById('g-sapo').disabled, aMano: (() => { const b = document.getElementById('btn-espera'); return !!b && getComputedStyle(b).display !== 'none'; })() })"));
+    check(`${quien} · en el ensayo sellar no abre la espera en grande ni pide la pantalla completa`, !r.espera && !r.pantalla && r.fs.length === 0, JSON.stringify(r));
+    check(`${quien} · y el selector de juegos está a mano, con "Mostrar la espera en grande" como opción`, r.selector && r.aMano, JSON.stringify(r));
     await page.screenshot(join(outDir, `espera-${v.etiqueta}-${tema}-ensayo.png`));
-    const show = await page.waitFor("document.querySelector('.game-card') || document.getElementById('stadium').style.display === 'block'", 40000);
-    check(`${quien} · y nace el número y el show arranca solo desde la espera`, show.ok);
   } finally {
     await page.send("Page.close").catch(() => undefined);
   }

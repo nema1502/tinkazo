@@ -103,8 +103,8 @@ export const barraActiva = (): boolean => listo && activa();
 /**
  * El botón de verdad que hace avanzar cada paso. En el 1, "Pegar lista". En el
  * 4, "Siguiente premio" si queda con quién sortear y, si no, el del comprobante
- * (`draw.ts` esconde uno y muestra el otro); en el ensayo, "Sortear con mi
- * lista", que es su final.
+ * (`draw.ts` esconde uno y muestra el otro); en el ensayo, "Probar otro juego",
+ * que es su final.
  *
  * Sin cuenta también: "Sellar la lista" abre la ventana para entrar, con su
  * motivo (`main.ts`), y eso es lo que sigue. Hasta el 22 de octubre de 2026 la
@@ -114,7 +114,7 @@ export const barraActiva = (): boolean => listo && activa();
 function botonDe(paso: Paso): HTMLButtonElement | null {
   switch (paso) {
     case 4: {
-      const fin = document.body.dataset.ensayo === "1" ? document.getElementById("ens-mio") : null;
+      const fin = document.body.dataset.ensayo === "1" ? document.getElementById("ens-otro") : null;
       if (fin instanceof HTMLButtonElement) return fin;
       const sin = $<HTMLButtonElement>("btn-again-sin");
       const sigue = $("again-row").style.display !== "none" && sin.style.display !== "none";

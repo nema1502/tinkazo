@@ -81,19 +81,91 @@ export function rotarJuego(): void {
   juegoAMano = false;
 }
 
+/**
+ * Después del resultado, un toque en el selector vuelve a mostrar ese mismo resultado con el juego tocado
+ * (`draw.ts`, `verDeNuevo`). Se registra desde `draw.ts`: este archivo no lo importa.
+ */
+let alElegirConResultado: ((g: Game) => void) | null = null;
+export function alElegirDespuesDelResultado(f: (g: Game) => void): void {
+  alElegirConResultado = f;
+}
+
 /** Un toque en el selector: el juego que se eligió, y que ya no se cambia solo. */
 export function elegirJuego(g: Game): void {
+  // Ya hay resultado: el juego no cambia lo que salió, solo cómo se ve. Se vuelve a ver con el juego tocado,
+  // salvo mientras corre el show (el selector está apagado y dice por qué: `marcarShow`).
+  if (app.drawn) {
+    if (!enShow) alElegirConResultado?.(g);
+    return;
+  }
   juegoAMano = true;
   setGame(g);
 }
 
-export function setGame(g: Game): void {
-  if (app.drawn) return;
+/** Pone el juego en el selector y en el rótulo de junto al botón, sin mirar si ya hay resultado. */
+function marcarJuego(g: Game): void {
   app.game = g;
   for (const [id, key] of GAME_BUTTONS) $(id).classList.toggle("on", g === key);
   pintarJuego();
+}
+
+export function setGame(g: Game): void {
+  if (app.drawn) return;
+  marcarJuego(g);
   // Si ya está congelada, la cuenta regresiva corre: se baja el juego nuevo.
   if (app.frozen) preloadGame(g, app.frozen.names.length);
+}
+
+/**
+ * "Ver de nuevo con otro juego": el resultado ya está, y el juego elegido cambia solo cómo se vuelve a ver. No
+ * toca `juegoAMano`: el próximo sorteo sigue sugiriendo el juego que encaje.
+ */
+export function juegoParaVerDeNuevo(g: Game): void {
+  marcarJuego(g);
+  if (app.frozen) preloadGame(g, app.frozen.names.length);
+}
+
+/** El show está corriendo: el selector no se toca (es un show) y dice por qué. */
+let enShow = false;
+
+/**
+ * Se llama al arrancar el show y al terminar. Mientras corre, el selector se apaga (`inert`: ni el ratón ni el
+ * teclado) y la nota de arriba lo explica; al terminar se enciende, y si ya hay resultado dice cómo verlo de nuevo.
+ */
+export function marcarShow(en: boolean): void {
+  enShow = en;
+  document.body.toggleAttribute("data-show", en);
+  document.getElementById("gamepick")?.toggleAttribute("inert", en);
+  pintarNotaDelJuego();
+}
+
+/**
+ * La nota de arriba del selector, solo cuando el selector no es el de siempre: mientras corre el show ("no se
+ * cambia") y con el resultado puesto ("tocá un juego y lo ves de nuevo"). Antes del sorteo no dice nada: elegir es
+ * lo normal.
+ */
+export function pintarNotaDelJuego(): void {
+  const el = document.getElementById("juego-nota");
+  if (!el) return;
+  const clave = enShow ? "juegoEnShow" : app.drawn ? "juegoVerDeNuevo" : "";
+  const texto = clave ? t(clave) : "";
+  if (el.textContent !== texto) el.textContent = texto;
+  el.hidden = !texto;
+}
+
+/**
+ * Lleva al selector y deja el foco en el primer juego que no es el de ahora, para verlo de nuevo con otro: "Probar
+ * otro juego" y "Ver de nuevo con otro juego".
+ */
+export function irAlSelectorParaOtro(): void {
+  const nota = document.getElementById("juego-nota");
+  // Con la nota puesta ("tocá un juego…"), se lleva ella a la vista y el selector queda debajo, entero; si no, como "Cambiar de juego".
+  if (nota && !nota.hidden) {
+    const reducido = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    nota.scrollIntoView({ behavior: reducido ? "auto" : "smooth", block: "start" });
+  } else cambiarJuego();
+  const otro = GAME_BUTTONS.map(([id]) => document.getElementById(id) as HTMLButtonElement | null).find((b) => b && !b.hidden && !b.classList.contains("on"));
+  otro?.focus({ preventScroll: true });
 }
 
 /**
@@ -108,6 +180,7 @@ export function pintarJuego(): void {
   const nombre = document.querySelector(`#g-${app.game} span`)?.textContent || t(claveNombre(app.game));
   if (el.textContent !== nombre) el.textContent = nombre;
   pintarNotaElegida();
+  pintarNotaDelJuego();
   pintarVer3D();
 }
 
@@ -458,8 +531,9 @@ export async function freeze(opciones: OpcionesDeSellado = {}): Promise<void> {
   // El clic de "Sellar la lista" es el gesto que el navegador exige para la pantalla completa: se pide acá,
   // sincrónica y antes de cualquier `await` (la firma con Pollar o con Freighter abre después, y para entonces
   // el gesto ya no vale). Si la niega o no la ofrece (el iPhone), la vista grande se abre igual cuando el sello
-  // esté. En el ensayo, lo mismo: se practica como va a ser. Sin gesto (la red volvió sola, la demo), solo la vista.
-  if (puedeSellar() && !enStand() && grandeAlSellar(entornoDeAhora())) {
+  // esté. En el ensayo no (4 de noviembre de 2026): ahí se prueba, y la página hace falta para elegir y cambiar de
+  // juego mientras llega el número; "Mostrar la espera en grande" queda a mano. Sin gesto (la red volvió sola, la demo), solo la vista.
+  if (puedeSellar() && !enStand() && !enEnsayo() && grandeAlSellar(entornoDeAhora())) {
     pedirPantallaCompleta();
     grandePendiente = true;
   }

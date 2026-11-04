@@ -12,7 +12,7 @@ import { initPlegables } from "./ui/plegable";
 import { iniciarCupo } from "./ui/cupo-patrocinio";
 import { alApretarSellar, iniciarRed } from "./ui/red";
 import { montarPremios } from "./ui/premios";
-import { adelantarCorto, alTocarGanadores, contarCompartido, copySummary, draw, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
+import { adelantarCorto, alTocarGanadores, contarCompartido, copySummary, draw, elegirOtroJuegoParaVer, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
 import { contarPractica } from "./contar";
 import { skipGame } from "./games/overlay";
 import { usePixi } from "./games/engine";
@@ -126,6 +126,7 @@ $("btn-sala").addEventListener("click", () => void import("./ui/sala").then((m) 
 setTimeout(() => void import("./ui/sala").catch(() => undefined), 4000);
 $("btn-reverify").addEventListener("click", () => void reverify());
 $("btn-replay").addEventListener("click", replayAnimation);
+$("btn-otro-juego").addEventListener("click", elegirOtroJuegoParaVer);
 $("btn-again-sin").addEventListener("click", () => newDraw("sinGanadores"));
 $("btn-again-nueva").addEventListener("click", () => newDraw("otraLista"));
 $("btn-recuperar").addEventListener("click", recuperarLista);

@@ -2075,6 +2075,17 @@
   }
   .rec-sel-nota { font-size: 16px; font-weight: 700; color: var(--ink2); margin: 8px 0 0; }
   .rec-sel-nota:empty { display: none; }
+  /* Mientras corre el show el selector no se toca: apagado (inert) y con su motivo arriba. Con el resultado puesto sirve para verlo de nuevo con otro juego. */
+  .juego-nota { font-size: 16px; font-weight: 700; color: var(--ink); margin: 8px 0 10px; }
+  .juego-nota[hidden] { display: none; }
+  /* Al ir al selector, la nota queda arriba y a la vista, no detrás de la cabecera fija ni de la banda del ensayo. */
+  .juego-nota { scroll-margin-top: 12px; }
+  body[data-ensayo="1"] .juego-nota { scroll-margin-top: calc(var(--banda-alto, 0px) + 12px); }
+  @media (min-width: 1101px) {
+    .juego-nota { scroll-margin-top: 109px; }
+    body[data-ensayo="1"] .juego-nota { scroll-margin-top: calc(var(--cab-alto, 0px) + var(--banda-alto, 0px) + 12px); }
+  }
+  .gamepick[inert] { opacity: 0.55; cursor: not-allowed; }
   #rec-head { font-size: 16px; }
   .ajustes button, .ajustes select { font-size: 16px; }
 

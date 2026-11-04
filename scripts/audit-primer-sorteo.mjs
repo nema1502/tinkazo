@@ -416,7 +416,7 @@ async function flujoEnsayo(browser, vista, tema, conCuenta) {
     if (!fin.ok) throw new Error("no llegó al ganador");
     await sleep(1500);
     const res = await m.foto("ensayo-final");
-    unaPrincipal(res, `${nombre} · el final del ensayo`, /Sortear con mi lista|Draw with my list/);
+    unaPrincipal(res, `${nombre} · el final del ensayo`, /Probar otro juego|Try another game/);
     const final = JSON.parse(await page.eval("JSON.stringify(['#again-row', '#btn-grande', '#qr-box', '#btn-proof', '#btn-whatsapp'].filter((s) => { const e = document.querySelector(s); return e && e.getClientRects().length && getComputedStyle(e).display !== 'none'; }))"));
     check(`${nombre} · al final no hay siguiente premio, en grande, QR ni compartir`, final.length === 0, JSON.stringify(final));
     const cadena = aLaCadena(red);

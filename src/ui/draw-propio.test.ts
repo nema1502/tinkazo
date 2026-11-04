@@ -47,7 +47,7 @@ vi.mock("../protocol/quicknet", async (orig) => ({
   fetchRound: async () => ({ signature: "01".repeat(48) }),
 }));
 vi.mock("../protocol/firma", () => ({ verifyRoundAsync: async () => true }));
-vi.mock("./freeze", () => ({ rotarJuego: () => undefined, secondsToRound: () => 0, unfreeze: () => undefined }));
+vi.mock("./freeze", () => ({ rotarJuego: () => undefined, secondsToRound: () => 0, unfreeze: () => undefined, alElegirDespuesDelResultado: () => undefined, irAlSelectorParaOtro: () => undefined, juegoParaVerDeNuevo: () => undefined, marcarShow: () => undefined, pintarNotaDelJuego: () => undefined }));
 vi.mock("./pantalla-completa", () => ({ pedirPantallaCompleta: () => undefined, soltarPantallaCompleta: () => undefined }));
 vi.mock("./gamecard", () => ({ CARD_SECONDS: 5, showGameCard: () => null }));
 vi.mock("./wallet-ui", () => ({ currentSession: () => ({ address: "GAAA" }) }));

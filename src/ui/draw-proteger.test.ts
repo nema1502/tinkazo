@@ -49,7 +49,7 @@ vi.mock("../protocol/quicknet", async (orig) => ({
 vi.mock("../protocol/firma", () => ({ verifyRoundAsync: async () => true }));
 vi.mock("./proteger-flujo", () => ({ pideProtegerLaCuenta: (...a: unknown[]) => h.pide(...a), protegerLaCuenta: () => h.proteger() }));
 vi.mock("../contar", () => ({ contar: (...a: unknown[]) => h.contar(...a), contarPractica: () => undefined, errorContable: (c: string) => c, refDe: () => ({}) }));
-vi.mock("./freeze", () => ({ rotarJuego: () => undefined, secondsToRound: () => 0, unfreeze: () => undefined }));
+vi.mock("./freeze", () => ({ rotarJuego: () => undefined, secondsToRound: () => 0, unfreeze: () => undefined, alElegirDespuesDelResultado: () => undefined, irAlSelectorParaOtro: () => undefined, juegoParaVerDeNuevo: () => undefined, marcarShow: () => undefined, pintarNotaDelJuego: () => undefined }));
 vi.mock("./siguiente", () => ({ actualizarPaso: () => undefined, verError: () => undefined }));
 vi.mock("./pantalla-completa", () => ({ pedirPantallaCompleta: () => undefined, soltarPantallaCompleta: () => undefined }));
 vi.mock("./gamecard", () => ({ CARD_SECONDS: 5, showGameCard: () => null }));
