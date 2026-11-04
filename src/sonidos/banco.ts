@@ -350,13 +350,39 @@ function ahorraDatos(): boolean {
 }
 
 /**
+ * Desde el 4 de noviembre los archivos están apagados: se subieron sin que nadie
+ * los escuchara y, escuchados, no estaban a la altura (la carrera sonaba a otro
+ * animal). Hasta que haya un banco elegido con oídos, todo suena con los
+ * instrumentos de siempre y la música de archivo ni se pide. `?sonidoarchivo=1`
+ * los prende para escucharlos y para los auditores; las pruebas usan `prender`.
+ */
+export const ARCHIVOS_PRENDIDOS = false;
+let forzado: boolean | null = null;
+
+/** Para las pruebas y la escucha: `true` prende, `false` apaga, `null` vuelve a lo de siempre. */
+export function prender(v: boolean | null): void {
+  forzado = v;
+}
+
+/** ¿Hoy suenan los archivos? */
+export function archivosPrendidos(): boolean {
+  if (forzado !== null) return forzado;
+  if (ARCHIVOS_PRENDIDOS) return true;
+  try {
+    return new URLSearchParams(location.search).has("sonidoarchivo");
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Elige el juego que va a sonar y baja sus archivos. Se llama cuando se sabe qué
  * juego se juega, antes de la tarjeta de "cómo se juega", así llegan mientras la
  * sala la lee. Sin contexto de audio o con ahorro de datos, no baja nada y suena
- * lo de siempre.
+ * lo de siempre. Con los archivos apagados no elige nada: suena todo de siempre.
  */
 export function elegirJuego(g: Game, ctx: BaseAudioContext | null, reinicia = true): void {
-  const nuevo = JUEGOS_CON_BANCO[g] ? g : null;
+  const nuevo = JUEGOS_CON_BANCO[g] && archivosPrendidos() ? g : null;
   // Si el juego ya estaba elegido y solo se asegura, los contadores siguen donde iban: la misma ronda suena igual.
   if (reinicia || juego !== nuevo) {
     contador.clear();

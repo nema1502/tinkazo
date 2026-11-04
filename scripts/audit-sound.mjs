@@ -180,7 +180,8 @@ async function correr(browser, juego) {
   const page = await browser.open("about:blank");
   await page.send("Page.addScriptToEvaluateOnNewDocument", { source: HOOK });
   await page.send("Page.addScriptToEvaluateOnNewDocument", { source: HOOK_VOZ });
-  await page.send("Page.navigate", { url: `${base}/?demo=${juego}&lead=3&pace=normal${motor ? `&motor=${motor}` : ""}` });
+  // Los archivos están apagados en el sitio (`banco.ts`): con `--con-banco` se prenden por la dirección.
+  await page.send("Page.navigate", { url: `${base}/?demo=${juego}&lead=3&pace=normal${motor ? `&motor=${motor}` : ""}${conBanco ? "&sonidoarchivo=1" : ""}` });
 
   const arranco = await page.waitFor(
     `document.getElementById('stadium').style.display === 'block'`,

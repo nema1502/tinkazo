@@ -524,6 +524,8 @@ El silencio también es sonido. `audit-sound` marca los huecos de más de 4 s (l
 
 ### Los sonidos de archivo
 
+**Apagados desde el 4 de noviembre de 2026** (`ARCHIVOS_PRENDIDOS` en `banco.ts`): la primera tanda se subió sin que nadie la escuchara y, escuchada, no estaba a la altura. Mientras no haya un banco elegido con oídos, los juegos suenan con los instrumentos de siempre y la música de archivo ni se pide. `?sonidoarchivo=1` los prende para escucharlos; `audit-sound --con-banco` lo agrega solo.
+
 Los juegos no se tocaron: ninguno dice qué está pasando, todos disparan `beep(frecuencia, duración, onda, volumen)`. El banco mira esos cuatro datos (más el grado de la escala) y decide, en tres capas:
 
 1. **Las reglas del juego** (`JUEGOS_CON_BANCO` en `banco.ts`): una firma (onda, rango de volumen, de duración y de grado) que identifica un momento de un juego y apunta a su efecto: el casco de la llama, el palo contra la piñata, el choque de los trompos, la ficha que cae en la boca del sapo, la clavija de la ruleta, el bombo de Oruro, el cable del teleférico, el grillo del Guajojó. Una regla puede apagar los disparos vecinos que ya van dentro del archivo (la rotura de la piñata trae la lluvia de caramelos). Cada juego tiene además el efecto de su ganador, que reemplaza el acorde de `fanfare()`.

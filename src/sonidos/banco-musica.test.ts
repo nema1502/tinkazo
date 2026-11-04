@@ -5,7 +5,7 @@ import { ARCHIVOS } from "./archivos";
 const remota = vi.hoisted(() => ({ url: null as string | null }));
 vi.mock("./musica-remota", () => ({ urlMusica: (): string | null => remota.url }));
 
-import { elegirJuego, reiniciar } from "./banco";
+import { elegirJuego, prender, reiniciar } from "./banco";
 
 const ctx = { decodeAudioData: vi.fn(async () => ({ duration: 24 }) as AudioBuffer) } as unknown as BaseAudioContext;
 
@@ -14,10 +14,15 @@ describe("el banco pide la cama de música", () => {
 
   beforeEach(() => {
     reiniciar();
+    // Los archivos están apagados en el sitio (4-nov); acá se prueba el banco prendido.
+    prender(true);
     fetchFalso = vi.fn(async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) }));
     vi.stubGlobal("fetch", fetchFalso);
   });
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    prender(null);
+    vi.unstubAllGlobals();
+  });
 
   const pedidos = (): string[] => fetchFalso.mock.calls.map((c) => String(c[0]));
 
