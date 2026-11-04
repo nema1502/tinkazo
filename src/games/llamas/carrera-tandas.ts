@@ -1,4 +1,5 @@
-import { DUR_FINAL, FIJOS, FINALISTAS, PELOTON_MAX, TARJETA, TOPE_NORMAL, T_VUELO, alfabetico, barajar } from "./carrera-base";
+import { FIJOS, FINALISTAS, PELOTON_MAX, TARJETA, TOPE_NORMAL, T_VUELO, alfabetico, barajar } from "./carrera-base";
+import { RECTA_MEDIA } from "./carrera-ritmo";
 import { duracionGrupo } from "./carrera-tiempos";
 
 /**
@@ -52,7 +53,7 @@ function plazasQueEntran(T: number): number {
   for (let p = 7; p >= 1; p--) {
     const g = T * p;
     if (g > 16 || g < FINALISTAS) continue;
-    const total = T_VUELO + T * durTanda(p) + duracionGrupo(g - FINALISTAS) + DUR_FINAL * 1.014 + FIJOS + TARJETA;
+    const total = T_VUELO + T * durTanda(p) + duracionGrupo(g - FINALISTAS) + RECTA_MEDIA + FIJOS + TARJETA;
     if (total <= TOPE_NORMAL - 4) return p;
   }
   return 0;

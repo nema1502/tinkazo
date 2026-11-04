@@ -134,6 +134,8 @@ function crearEscena(k: Kit, d: Datos, fabrica3d: Fabrica3D | null = null) {
 
   /** Los momentos de la recta que miran el auditor y las fotos del prototipo 3D. */
 const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
+/** Cuántas de las que cruzan detrás de quien gana protege la cámara debajo del cartel, además de ella: con más, el golpe no llega a su acercamiento (`audit-emocion`). */
+const PROTEGE_DETRAS = 1;
 
 /** El prototipo 3D (`?motor=3d`, carrera-3d.ts): si está, dibuja el estadio y las llamas; las fichas, la cinta y el cartel siguen siendo de acá. */
   let tres: Vista3D | null = null;
@@ -954,12 +956,16 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
    * Se mide con lo que la cámara aplicó de verdad a la escena (`scene`: su acercamiento incluye el golpe y el de la emoción, que
    * `cam.zoom` no trae), no con la meta de la cámara.
    */
+  /** Desde que cae el golpe las fichas no pasan de la parte de abajo del cartel de quien gana: los nombres de las que llegan detrás no quedan debajo de él. */
+  function pisoDeFichas(): number {
+    return k.coronado ? S.placaBajo(k.ganadores.length) + 4 * P.u : 0;
+  }
   function limites(): CajaF {
     const sc = S.scene;
     const z = sc.scale.x || 1;
     const x = (px: number): number => sc.pivot.x + (px - sc.position.x) / z;
     const y = (py: number): number => sc.pivot.y + (py - sc.position.y) / z;
-    return { x0: x(4 * P.u), x1: x(P.w - 4 * P.u), y0: y(hudG.bajo + 3 * P.u), y1: y(P.bottom) };
+    return { x0: x(4 * P.u), x1: x(P.w - 4 * P.u), y0: y(Math.max(hudG.bajo + 3 * P.u, pisoDeFichas())), y1: y(P.bottom) };
   }
   /** Cuánto dura en pantalla la línea del relator que nombra a una (la echada, el cambio de punta). */
   const NOMBRADA_DUR = 2.5;
@@ -1225,7 +1231,7 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
     if (!tres) return;
     const vz = cam.zoom || 1;
     const medir = params.get("auditar") === "3d";
-    const medidas: { persona: number; px: number; alto: number; ancho: number }[] = [];
+    const medidas: { persona: number; px: number; alto: number; ancho: number; x: number; y: number }[] = [];
     const borla3: Borla3D | null = bp && borla.visible ? { x: bp.x, pie: bp.pie, alto: bp.pie - bp.y, radio: BORLA_RADIO * bp.esc, duenia: bp.duenia, manta: d.nueva } : null;
     tres.frame({ t, w: P.w, h: P.h, u: P.u, cam: { x: cam.x, y: cam.y, zoom: vz, rot: cam.rot }, gente, borla: borla3, campeona: d.campeona, corona, horas: HORAS_Q.map((q) => d.tDeQ(q)), efectos: efectosEn(t) });
     // Las fichas no se pisan: la que manda (la del primero, después las recientes) se queda donde cae; la que choca con una puesta
@@ -1250,7 +1256,8 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
       et.raiz.scale.set(e);
       // Entera en la pantalla: en el celular los de los bordes se cortaban.
       const mitad = (et.w * e) / 2 + 4 * P.u;
-      et.raiz.position.set(Math.max(mitad, Math.min(P.w - mitad, pan.x)), pan.y - (et.h * e) / 2 - 3 * P.u);
+      const piso = Math.max(P.top, pisoDeFichas());
+      et.raiz.position.set(Math.max(mitad, Math.min(P.w - mitad, pan.x)), Math.max(piso + (et.h * e) / 2, pan.y - (et.h * e) / 2 - 3 * P.u));
       et.raiz.zIndex = f.peso + pan.y;
       et.raiz.visible = dentro && f.etiquetar && !f.sinLugar;
       if (et.raiz.visible) {
@@ -1260,9 +1267,9 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
         const paso = h + 2 * P.u;
         // Primero arriba de su cabeza; si ahí no cabe, un escalón más arriba o abajo, y después corrida medio ancho a un lado.
         let lugar: { dx: number; dy: number } | undefined;
-        for (const dy of [0, -paso, -2 * paso, paso]) {
+        for (const dy of [0, -paso, -2 * paso, paso, 2 * paso]) {
           for (const dx of [0, -w * 0.5, w * 0.5]) {
-            if (!lugar && !choca(caja(dx, dy)) && y0 + dy - h / 2 > P.top && et.raiz.x + dx - w / 2 > 0 && et.raiz.x + dx + w / 2 < P.w) lugar = { dx, dy };
+            if (!lugar && !choca(caja(dx, dy)) && y0 + dy - h / 2 > piso - 1 && et.raiz.x + dx - w / 2 > 0 && et.raiz.x + dx + w / 2 < P.w) lugar = { dx, dy };
           }
         }
         if (!lugar && f.peso >= 3e6) lugar = { dx: 0, dy: 0 };
@@ -1273,7 +1280,7 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
           puestas.push(caja(0, lugar.dy));
         }
       }
-      if (medir && et.raiz.visible) medidas.push({ persona: f.persona, px: et.texto.style.fontSize as number * e, alto: et.h * e, ancho: et.w * e });
+      if (medir && et.raiz.visible) medidas.push({ persona: f.persona, px: et.texto.style.fontSize as number * e, alto: et.h * e, ancho: et.w * e, x: et.raiz.x, y: et.raiz.y });
     }
     if (medir) {
       (window as unknown as { __fichas3d: unknown }).__fichas3d = medidas;
@@ -1301,7 +1308,7 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
     }
   }
 
-  /** Dónde va la borla: sobre el lomo de quien va adelante, o volando de una a otra. */
+  /** Dónde va la borla: sobre el lomo de quien va adelante, o volando de una a otra. En el 3D no hay borla que vuele: la ficha y el aro pasan a la nueva dueña apenas cambia quién va adelante. */
   function posicionBorla(t: number, lider: number): { x: number; y: number; esc: number; duenia: number; pie: number } | null {
     if (lider < 0) return null;
     const sobre = (q: number): { x: number; y: number; esc: number; duenia: number; pie: number } => {
@@ -1321,7 +1328,7 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
     }
     const e = ease((t - b) / vuelo);
     const A = sobre(antes), B = sobre(lider);
-    return { x: lerp(A.x, B.x, e), y: lerp(A.y, B.y, e) - Math.sin(Math.PI * e) * (d.nueva ? 30 : 46) * P.u, esc: lerp(A.esc, B.esc, e), duenia: d.nueva || e >= 0.55 ? lider : antes, pie: lerp(A.pie, B.pie, e) };
+    return { x: lerp(A.x, B.x, e), y: lerp(A.y, B.y, e) - Math.sin(Math.PI * e) * (d.nueva ? 30 : 46) * P.u, esc: lerp(A.esc, B.esc, e), duenia: d.nueva || tres || e >= 0.55 ? lider : antes, pie: lerp(A.pie, B.pie, e) };
   }
 
   /* ---------------------------------------------------------------- cámara */
@@ -1393,7 +1400,18 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
   function protegida(): { caja: Caja; zona: Zona } | null {
     const p = posicion(d.campeona, d.tCrown);
     const c = cuerpoDe(p, true);
-    return { caja: { x: c.x, y: c.y + c.h * 0.2, w: c.w, h: c.h * 0.8 }, zona: { x0: 8 * P.u, y0: S.placaBajo(k.ganadores.length) + 4 * P.u, x1: P.w - 8 * P.u, y1: P.bottom } };
+    // Con el pelotón apretado en la línea, la que llega pegada a la ganadora tiene que quedar debajo del cartel, con su nombre entero:
+    // la caja suma a la que cruza justo detrás, con el nombre. Las fichas de las demás no bajan del cartel (`pisoDeFichas`).
+    const todas = d.lanes
+      .filter((q) => q !== d.campeona)
+      .map((q) => ({ q, p: posicion(q, d.tCrown) }))
+      .sort((a, b) => b.p.x - a.p.x)
+      .slice(0, PROTEGE_DETRAS)
+      .map((o) => cuerpoDe(o.p, true, o.q));
+    const cajas = [{ x: c.x, y: c.y + c.h * 0.2, w: c.w, h: c.h * 0.8 }, ...todas];
+    const x0 = Math.min(...cajas.map((b) => b.x)), y0 = Math.min(...cajas.map((b) => b.y));
+    const x1 = Math.max(...cajas.map((b) => b.x + b.w)), y1 = Math.max(...cajas.map((b) => b.y + b.h));
+    return { caja: { x: x0, y: y0, w: x1 - x0, h: y1 - y0 }, zona: { x0: 8 * P.u, y0: S.placaBajo(k.ganadores.length) + 4 * P.u, x1: P.w - 8 * P.u, y1: P.bottom } };
   }
 
   /* -------------------------------------------------------------- reconstruir */
@@ -1441,8 +1459,14 @@ const HORAS_Q = [0.25, 0.5, 0.7, 0.88, 1];
       porton.visible = false;
       corredoras.visible = false;
       borlaCapa.visible = false;
-      hud.addChildAt(etiquetas, 0);
-      S.onCleanup(() => tres?.destruir());
+      // Las fichas van sobre el 3D y debajo de la capa `hud` del andamiaje: así no se van con ella cuando, en el celular, entra el cartel de quien
+      // gana (la capa se desvanece), y los nombres de las que llegan detrás se siguen leyendo.
+      const raiz = S.app.stage;
+      raiz.addChildAt(etiquetas, Math.max(0, raiz.getChildIndex(S.hud)));
+      S.onCleanup(() => {
+        etiquetas.parent?.removeChild(etiquetas);
+        tres?.destruir();
+      });
     } catch (err) {
       console.warn('[3d] no arrancó, sigue el 2D', err);
       tres = null;

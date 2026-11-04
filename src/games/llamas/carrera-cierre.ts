@@ -1,3 +1,4 @@
+import { qDeSegundos, segundosDeQ } from "./carrera-ritmo";
 import type { Plan as PlanFinal } from "./plan";
 
 /**
@@ -39,6 +40,15 @@ const BAJA = 0.975;
 const HASTA = 0.995;
 /** El ancho de un cruce (de una a otra en la punta), en fracción de la recta: medio segundo con la recta de 15 s. */
 const CRUCE = 0.04;
+/** Desde dónde manda el final por casilleros, y cuánto del tramo se tardan en juntarse hacia la línea. */
+const FINAL = 0.9;
+const JUNTAN = 0.62;
+/** Lo menos que lleva la punta la ganadora antes de cruzar, en segundos; y lo menos que separa dos de sus pases. */
+const LIDERA_MIN = 1.05;
+const SEPARA = 0.21;
+/** Lo que se tarda en empalmar con la velocidad que traía la llama al 90 %, y lo que ocupan los dos cruces de la rival que se la vuelve a pasar. */
+const EMPALME = 0.8;
+const CONTRA = 1.7;
 /** Cuántos cuerpos sobre la línea queda la que va primera, y cuántos las que van atrás (cada una el suyo). */
 const ADELANTE = 0.8;
 
@@ -63,14 +73,26 @@ export interface Relevo {
   q: number;
 }
 
+/** Un pase del final: la ganadora (`sube`) pasa a quien tiene delante, o quien tenía detrás se la vuelve a pasar. */
+export interface Pase {
+  /** El carril de la otra que cambia de lugar con la ganadora. */
+  con: number;
+  /** Dónde de la recta (0 a 1) se cruzan. */
+  q: number;
+  /** La ganadora pasa adelante (true) o la pasan (false). */
+  sube: boolean;
+}
+
 export interface InfoCierre {
   forma: FormaCierre;
   /** Los carriles que pelean adelante: la ganadora y dos o tres más. */
   contendientes: number[];
-  /** Quién lleva la punta en cada tramo, de la que está al abrirse el cierre en adelante. */
+  /** Quién lleva la punta en cada tramo hasta el 90 %, de la que está al abrirse el cierre en adelante. */
   relevos: Relevo[];
   /** Para `aguanta`: la que se le pega a la ganadora. */
   acosa?: number;
+  /** Desde el 90 %, los cambios de lugar de la ganadora, en orden (ver `final`). */
+  pases: Pase[];
 }
 
 /**
@@ -194,7 +216,7 @@ export function conCierre(base: PlanFinal, rng: () => number): PlanFinal {
     for (const [a, z, cuerpos] of COMPENSA) if (q > a && q < z) return cuerpos * Math.sin((Math.PI * (q - a)) / (z - a)) ** 2;
     return 0;
   };
-  const pos = (k: number, q: number): number => {
+  const pos0 = (k: number, q: number): number => {
     const b = base.pos(k, q);
     if (k === w && q < DESDE) {
       const c = compensa(q);
@@ -212,6 +234,116 @@ export function conCierre(base: PlanFinal, rng: () => number): PlanFinal {
     return b + e * (meta - b);
   };
 
-  const info: InfoCierre = { forma, contendientes, relevos, ...(acosa !== undefined ? { acosa } : {}) };
+  /* ---------------------------------------------------------- el final, desde el 90 % */
+  // Hasta el 90 % vale lo de arriba (los puestos que se sortean y el puesto de la ganadora al 90 % no cambian). De ahí a la meta
+  // el pelotón corre por casilleros: en cada instante hay ocho lugares ordenados, de la punta al fondo, que se van juntando hacia
+  // la línea, y cada llama ocupa uno. La ganadora, que sale del 90 % en el puesto que ya tenía, sube de casillero en casillero,
+  // de a uno, cada pase con su subida suave (la velocidad no da saltos), y en algunas carreras la rival más cercana se la
+  // vuelve a pasar antes de que la ganadora se la quede. El orden en que cruzan las demás es el del plan base.
+  const foto = base.foto;
+  const t0 = segundosDeQ(FINAL, foto);
+  const T = segundosDeQ(1, foto) - t0;
+  const sDe = (q: number): number => Math.max(0, Math.min(T, segundosDeQ(q, foto) - t0));
+  const carriles = Array.from({ length: L }, (_, k) => k);
+  const salida = (k: number): number => (pos0(k, FINAL) - FINAL) / CUERPO;
+  const ordenSalida = carriles.slice().sort((a, b) => pos0(b, FINAL) - pos0(a, FINAL));
+  const casilla0 = new Map<number, number>(ordenSalida.map((k, i) => [k, i]));
+  const rangoGanadora = casilla0.get(w) as number; // 0 es la primera
+  // Cómo llegan: la ganadora donde la deja el plan base (sobre la línea); la segunda, a menos de medio cuerpo casi siempre, y las demás apretadas detrás.
+  // El orden en que cruzan las que no ganan no lo decide nada del protocolo: es el que traen del 90 %.
+  const fin: number[] = [(base.pos(w, 1) - 1) / CUERPO];
+  const estrecha = rng() < 0.78;
+  fin.push((fin[0] as number) - (estrecha ? entre(rng, 0.14, 0.44) : entre(rng, 0.5, 0.9)));
+  for (let i = 2; i < L; i++) fin.push((fin[i - 1] as number) - (i === 2 ? entre(rng, 0.12, 0.4) : entre(rng, 0.2, 0.55)));
+  const inicio = ordenSalida.map(salida);
+  const juntan = (s: number): number => suave(s / (JUNTAN * T));
+  const casillero = (i: number, s: number): number => (inicio[i] as number) + ((fin[i] as number) - (inicio[i] as number)) * juntan(s);
+
+  // Los cambios de lugar de la ganadora. Cada uno es una subida (o bajada) entre dos casilleros vecinos: se cruza en `t`.
+  interface Cambio { b: number; sube: boolean; t: number }
+  const cambios: Cambio[] = [];
+  const DURA = 0.5;
+  const tope = T - LIDERA_MIN;
+  const ups = rangoGanadora; // cuántas tiene delante
+  if (ups === 0) {
+    // Ya iba primera: a veces la rival más cercana se la pasa y la ganadora se la vuelve a quedar.
+    if (rng() < 0.45) {
+      const tb = entre(rng, 0.45, 0.85);
+      cambios.push({ b: 0, sube: false, t: tb }, { b: 0, sube: true, t: Math.min(tope, tb + entre(rng, 0.7, 0.9)) });
+    }
+  } else {
+    const paso = ups > 1 ? Math.min(SEPARA, Math.max(0.2, (tope - 0.35) / (ups - 1))) : SEPARA;
+    const sortea = rng() < 0.35;
+    // Con la rival que se la vuelve a pasar hace falta lugar para dos cruces más: solo si entran en el tramo.
+    const contra = sortea && 0.3 + paso * (ups - 1) + CONTRA <= tope;
+    const minimo = 0.3 + paso * (ups - 1) + (contra ? CONTRA : 0);
+    const final = Math.min(tope, minimo + Math.pow(rng(), 3) * Math.max(0, tope - minimo));
+    // El último pase y los que lo preceden, de atrás para adelante, cada uno `paso` antes.
+    let t = final;
+    if (contra) {
+      cambios.push({ b: 0, sube: true, t });
+      const tb = t - entre(rng, 0.65, 0.85);
+      cambios.push({ b: 0, sube: false, t: tb });
+      t = tb - entre(rng, 0.6, 0.8);
+      cambios.push({ b: 0, sube: true, t });
+      for (let b = 1; b < ups; b++) {
+        t -= paso;
+        cambios.push({ b, sube: true, t });
+      }
+    } else {
+      cambios.push({ b: 0, sube: true, t });
+      for (let b = 1; b < ups; b++) {
+        t -= paso;
+        cambios.push({ b, sube: true, t });
+      }
+    }
+    cambios.sort((x, y) => x.t - y.t);
+  }
+  // Quién cambia con la ganadora en cada uno: la que tiene el casillero al que se acerca (o del que baja) en ese momento.
+  const ocupa = ordenSalida.slice(); // casillero -> carril, a medida que pasan los cambios
+  const qCambio: Pase[] = [];
+  interface Efecto { b: number; con: number; signo: 1 | -1; t: number }
+  const efectos: Efecto[] = [];
+  for (const c of cambios) {
+    const arriba = c.b, abajo = c.b + 1;
+    if (c.sube) {
+      // La ganadora está en `abajo`; el carril de `arriba` baja.
+      const otra = ocupa[arriba] as number;
+      efectos.push({ b: c.b, con: otra, signo: 1, t: c.t });
+      ocupa[arriba] = w;
+      ocupa[abajo] = otra;
+      qCambio.push({ con: otra, q: qDeSegundos(t0 + c.t, foto), sube: true });
+    } else {
+      const otra = ocupa[abajo] as number;
+      efectos.push({ b: c.b, con: otra, signo: -1, t: c.t });
+      ocupa[abajo] = w;
+      ocupa[arriba] = otra;
+      qCambio.push({ con: otra, q: qDeSegundos(t0 + c.t, foto), sube: false });
+    }
+  }
+  // La ganadora empezó en su casillero; las demás, en el suyo. Cada cambio mueve a las dos entre casilleros vecinos.
+  const pendienteAlSalir = (k: number): number => {
+    const h = 0.012;
+    const q0 = Math.max(0.5, FINAL - h);
+    return ((pos0(k, FINAL + h) - (FINAL + h)) - (pos0(k, q0) - q0)) / CUERPO / (segundosDeQ(FINAL + h, foto) - segundosDeQ(q0, foto));
+  };
+  const velocidad0 = carriles.map(pendienteAlSalir);
+  const ajuste = (s: number): number => (s < EMPALME ? s * (1 - s / EMPALME) ** 2 : 0);
+  const lugar = (k: number, s: number): number => {
+    let o = casillero(casilla0.get(k) as number, s);
+    for (const e of efectos) {
+      if (k !== w && k !== e.con) continue;
+      const paso = suave((s - (e.t - DURA / 2)) / DURA);
+      if (paso <= 0) continue;
+      const salto = casillero(e.b, s) - casillero(e.b + 1, s);
+      o += (k === w ? e.signo : -e.signo) * salto * paso;
+    }
+    return o + (velocidad0[k] as number) * ajuste(s);
+  };
+  const posNueva = (k: number, q: number): number => q + lugar(k, sDe(q)) * CUERPO;
+
+  const pos = (k: number, q: number): number => (q <= FINAL ? pos0(k, q) : posNueva(k, q));
+
+  const info: InfoCierre = { forma, contendientes, relevos: relevos.filter((r) => r.q <= FINAL), ...(acosa !== undefined ? { acosa } : {}), pases: qCambio };
   return { ...base, pos, cierre: info, puestos: base.puestos.filter((p) => p.q <= 0.75) };
 }

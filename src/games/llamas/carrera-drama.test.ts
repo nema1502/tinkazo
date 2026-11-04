@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { sembrar } from "../pixi/kit/azar";
 import { conCierre, type FormaCierre } from "./carrera-cierre";
+import { qDeSegundos, segundosDeQ } from "./carrera-ritmo";
 import { conObstaculos, type TipoObstaculo } from "./carrera-obstaculos";
 import { planRace, type Plan } from "./plan";
 
@@ -16,22 +17,19 @@ const puesto = (p: Plan, k: number, q: number): number => {
   const xs = p.lanes.map((_, j) => p.pos(j, q));
   return 1 + xs.filter((x, j) => j !== k && x > (xs[k] as number)).length;
 };
+const qDe = (p: Plan, s: number): number => qDeSegundos(s, p.foto);
 const RONDAS = 1200;
 const planes = Array.from({ length: RONDAS }, (_, i) => completo(i));
 
 describe("el cierre de la recta", () => {
-  it("no cambia quién gana ni cómo llega: la ganadora cruza primera, y la meta y la foto son las del plan base", () => {
+  it("no cambia quién gana ni cómo llega: la ganadora cruza primera donde la deja el plan base, y la foto es la del plan base", () => {
     for (let i = 0; i < RONDAS; i++) {
       const b = base(i), p = planes[i] as Plan;
       const w = p.story.winner;
       expect(w).toBe(b.story.winner);
       expect(p.foto).toBe(b.foto);
-      for (let k = 0; k < p.lanes.length; k++) {
-        expect(p.pos(k, 1)).toBe(b.pos(k, 1));
-        if (k !== w) expect(p.pos(k, 1)).toBeLessThan(p.pos(w, 1));
-      }
-      // Desde el 99,5 % hasta la meta vale el plan base: la llegada no cambia.
-      for (const q of [0.995, 0.998, 1]) for (let k = 0; k < p.lanes.length; k++) expect(p.pos(k, q), `${i} ${k} ${q}`).toBeCloseTo(b.pos(k, q), 9);
+      expect(p.pos(w, 1)).toBeCloseTo(b.pos(w, 1), 9);
+      for (let k = 0; k < p.lanes.length; k++) if (k !== w) expect(p.pos(k, 1)).toBeLessThan(p.pos(w, 1));
     }
   });
 
@@ -79,15 +77,76 @@ describe("el cierre de la recta", () => {
     expect(total / n).toBeLessThan(5.5);
   });
 
-  it("la que aguanta se ve acosada: alguien llega a menos de un cuerpo sin pasarla", () => {
-    // Sin obstáculos: una piedra en el momento justo la frenaría y no se vería la pelea.
-    const sin = Array.from({ length: 400 }, (_, i) => conCierre(base(i), sembrar(i * 104729 + 11)));
-    for (const p of sin.filter((x) => (x.cierre as { forma: FormaCierre }).forma === "aguanta").slice(0, 100)) {
-      const c = p.cierre as { acosa: number };
-      let minimo = Infinity;
-      for (let q = 0.84; q <= 0.97; q += 0.002) minimo = Math.min(minimo, p.pos(p.story.winner, q) - p.pos(c.acosa, q));
-      expect(minimo).toBeLessThan(0.0115 * 1.2);
+  it("hasta el 90 % el cierre no cambia nada de lo ya medido, y de ahí en adelante empalma sin saltos de posición ni de velocidad", () => {
+    for (let i = 0; i < 300; i++) {
+      const p = conCierre(base(i), sembrar(i * 104729 + 11));
+      for (let k = 0; k < p.lanes.length; k++) {
+        const h = 0.0004;
+        // Posición continua al cruzar el 90 %.
+        expect(Math.abs(p.pos(k, 0.9 + 1e-9) - p.pos(k, 0.9 - 1e-9))).toBeLessThan(1e-6);
+        // Y la velocidad también: la pendiente a un lado y al otro es casi la misma (en cuerpos por 0,5 % de la recta).
+        const antes = (p.pos(k, 0.9) - p.pos(k, 0.9 - h)) / h, despues = (p.pos(k, 0.9 + h) - p.pos(k, 0.9)) / h;
+        expect(Math.abs(antes - despues), `ronda ${i} carril ${k}`).toBeLessThan(0.9);
+      }
     }
+  });
+
+  it("el final se reparte en segundos: la ganadora lleva la punta entre uno y medio y dos y medio, nunca menos de uno", () => {
+    const xs: number[] = [];
+    for (const p of planes) {
+      const w = p.story.winner;
+      const fin = segundosDeQ(1, p.foto);
+      let ultima = 0.7;
+      for (let q = 0.7; q <= 1; q += 0.0005) if (puesto(p, w, q) !== 1) ultima = q;
+      xs.push(fin - segundosDeQ(ultima, p.foto));
+    }
+    xs.sort((a, b) => a - b);
+    const mediana = xs[Math.floor(xs.length / 2)] as number, p10 = xs[Math.floor(xs.length / 10)] as number;
+    expect(mediana, `mediana ${mediana.toFixed(2)}`).toBeGreaterThan(1.5);
+    expect(mediana).toBeLessThan(2.5);
+    expect(p10, `p10 ${p10.toFixed(2)}`).toBeGreaterThanOrEqual(1);
+  });
+
+  it("del 88 % a la meta pasan tres segundos o más, y el pelotón se aprieta: al 95 % las tres primeras dentro de un cuerpo y en la meta la segunda a medio cuerpo", () => {
+    let apretadas = 0, fotos = 0;
+    for (const p of planes) {
+      expect(segundosDeQ(1, p.foto) - segundosDeQ(0.88, p.foto)).toBeGreaterThan(3);
+      const o95 = p.lanes.map((_, k) => p.pos(k, 0.95)).sort((a, b) => b - a);
+      if (((o95[0] as number) - (o95[2] as number)) / 0.0115 <= 1) apretadas++;
+      const o1 = p.lanes.map((_, k) => p.pos(k, 1)).sort((a, b) => b - a);
+      if (((o1[0] as number) - (o1[1] as number)) / 0.0115 <= 0.5) fotos++;
+    }
+    expect(apretadas / RONDAS).toBeGreaterThan(0.85);
+    expect(fotos / RONDAS).toBeGreaterThan(0.7);
+  });
+
+  it("la ganadora pasa de a una: sube de puesto con varios décimos entre un pase y el siguiente, y sin saltos de velocidad", () => {
+    let juntos = 0, pases = 0, salto = 0;
+    for (const p of planes.slice(0, 400)) {
+      const w = p.story.winner;
+      let previo = puesto(p, w, 0.9), tPrevio = -9;
+      const T0 = segundosDeQ(0.9, p.foto);
+      for (let q = 0.9; q <= 1; q += 0.0005) {
+        const pu = puesto(p, w, q), t = segundosDeQ(q, p.foto) - T0;
+        if (pu < previo) {
+          pases++;
+          if (t - tPrevio < 0.12) juntos++;
+          tPrevio = t;
+        }
+        previo = pu;
+      }
+      // El cambio de velocidad de la ganadora entre dos pasos de 0,02 s (en cuerpos por segundo): nada de saltos.
+      let vPrev: number | null = null;
+      for (let t = 0; t < 2.9; t += 0.04) {
+        const q1 = qDe(p, T0 + t), q2 = qDe(p, T0 + t + 0.04);
+        const v = (p.pos(w, q2) - q2 - (p.pos(w, q1) - q1)) / 0.0115 / 0.04;
+        if (vPrev !== null) salto = Math.max(salto, Math.abs(v - vPrev));
+        vPrev = v;
+      }
+    }
+    expect(pases).toBeGreaterThan(400);
+    expect(juntos / pases, "pases a menos de 0,12 s del anterior").toBeLessThan(0.1);
+    expect(salto, `mayor salto de velocidad ${salto.toFixed(2)} cuerpos/s en 0,04 s`).toBeLessThan(3);
   });
 
   it("es una función de la ronda: la misma da lo mismo, y nada usa Math.random", () => {

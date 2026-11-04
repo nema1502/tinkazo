@@ -50,7 +50,7 @@ export interface Obstaculo {
 }
 
 /** Las ventanas: entre los puntos de control del plan base. Cada efecto vale cero antes de `a` y 0,025 después de `b`. */
-const VENTANAS: [number, number][] = [[0.09, 0.205], [0.28, 0.445], [0.53, 0.695], [0.78, 0.92]];
+const VENTANAS: [number, number][] = [[0.09, 0.205], [0.28, 0.445], [0.53, 0.695], [0.77, 0.875]];
 const BORDE = 0.025;
 /** Media anchura de la valla en la pista visual (cuánto antes empieza el salto y cuánto después termina). */
 export const SALTO_MEDIO = 0.022;

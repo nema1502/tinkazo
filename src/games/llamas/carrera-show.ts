@@ -12,6 +12,7 @@ export { DUR_FINAL, FIJOS, FINALISTAS, PELOTON_MAX, RECTA, TARJETA, T_NOMBRES, T
 import { planRace, type Plan as PlanFinal } from "./plan";
 import { carrilesDe, planRecta } from "./carrera-recta";
 import { conCierre } from "./carrera-cierre";
+import { qDeSegundos, segundosDeQ } from "./carrera-ritmo";
 import { conObstaculos } from "./carrera-obstaculos";
 
 /**
@@ -33,7 +34,6 @@ import { conObstaculos } from "./carrera-obstaculos";
 
 /** Cuánto se mueve el frente del grupo en cada terreno, en anchos de pantalla por segundo. */
 export const VELOCIDAD: Record<Terreno, number> = { cuesta: 0.085, barro: 0.07, piedras: 0.095, viento: 0.105 };
-const LENTO = 0.4;
 /** Desde qué fracción de la cinta la meta entra entera en el plano. */
 export const META_ENTERA = 0.8;
 /** Desde qué fracción de la final se mira a las de adelante. */
@@ -192,13 +192,9 @@ export function planCarrera(ctx: Contexto, op: OpcionesCarrera = {}): Plan<Datos
 
   // La recta: nominalmente DUR_FINAL; en el duelo, la llegada en cámara lenta desde la foto.
   const foto = Math.min(1, final.foto);
-  const tDeQ = (q: number): number => (q <= foto ? tAbre + q * DUR_FINAL : tAbre + foto * DUR_FINAL + ((q - foto) * DUR_FINAL) / LENTO);
-  const q = (t: number): number => {
-    const s = t - tAbre;
-    if (s <= 0) return 0;
-    const sf = foto * DUR_FINAL;
-    return Math.min(1, s <= sf ? s / DUR_FINAL : foto + ((s - sf) * LENTO) / DUR_FINAL);
-  };
+  // El reloj de la recta (`carrera-ritmo.ts`): pareja y, desde el 78 %, cada vez más lenta, así el final se ve más tiempo.
+  const tDeQ = (q: number): number => tAbre + segundosDeQ(q, foto);
+  const q = (t: number): number => qDeSegundos(t - tAbre, foto);
   const tCrown = tDeQ(1);
 
   /* --------------------------------------------------------------- el orden */

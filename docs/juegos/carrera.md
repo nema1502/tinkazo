@@ -16,7 +16,8 @@ Está hecha sobre el kit de juegos (`src/games/pixi/kit/`, "Cómo nace un juego"
 | `src/games/llamas/carrera.ts` | La escena de PixiJS y `crearJuego` |
 | `src/games/llamas/llama.ts` | La llama, la postura de echarse y la borla del líder |
 | `src/games/llamas/plan.ts` | La recta final: la historia del director de emoción (`planRace`), sin tocar |
-| `src/games/llamas/carrera-cierre.ts` | Cómo se decide el último tramo de la recta: remontada, disputa o la que aguanta |
+| `src/games/llamas/carrera-cierre.ts` | Cómo se decide el último tramo de la recta: remontada, disputa o la que aguanta, y desde el 90 % el pase de la ganadora casillero por casillero |
+| `src/games/llamas/carrera-ritmo.ts` | El reloj de la recta: la pista frena sin saltos al acercarse a la meta, así el final se ve más tiempo |
 | `src/games/llamas/carrera-obstaculos.ts` | Las piedras del cerro, la valla y la ráfaga de viento, como eventos del plan |
 | `src/games/llamas/carrera-3d-obstaculos.ts` | Las piedras que ruedan, el polvo, las rayas de viento y el pasto, en 3D |
 
@@ -50,13 +51,23 @@ Seis palabras o menos, un nombre por línea como mucho, ningún número (los nú
 
 ## El último tramo: tres formas de cerrar
 
-Se midió sobre el plan (`node scripts/medir-drama-carrera.mjs`, 1.500 rondas con 8, 18 y 60 personas): en la recta de siempre la ganadora iba a la mitad de atrás casi todo el camino y, al 90 %, estaba en el podio el 100 % de las veces (primera o segunda, mitad y mitad). Quien miraba ese punto sabía quién ganaba, aunque el puesto a la mitad fuera parejo. `carrera-cierre.ts` cambia solo el tramo que va del 75 al 99,5 % de la recta; todo lo anterior y la llegada son los del plan base, con lo que los puestos que se sortean (al largar, al 25, al 50 y al 75 %) siguen exactos.
+Se midió sobre el plan (`node scripts/medir-drama-carrera.mjs`, 1.500 rondas con 8, 18 y 60 personas): en la recta de siempre la ganadora iba a la mitad de atrás casi todo el camino y, al 90 %, estaba en el podio el 100 % de las veces (primera o segunda, mitad y mitad). Quien miraba ese punto sabía quién ganaba, aunque el puesto a la mitad fuera parejo. `carrera-cierre.ts` cambia solo el tramo que va del 75 % a la meta; todo lo anterior y la ganadora en la línea son los del plan base, con lo que los puestos que se sortean (al largar, al 25, al 50 y al 75 %) siguen exactos.
 
 - **La remontada** (la mitad de la tapada y la remontada del director): la ganadora viene atrás hasta el 93 o el 96 %, después de que otras una o dos veces se pasen la punta.
 - **La disputa** (el duelo y la otra mitad de la tapada): dos o tres cambios de mano en la recta final, y la ganadora la toma y la pierde antes de quedársela.
 - **La que aguanta** (el susto): la ganadora toma la punta entre el 90 y el 96 % y alguien se le pega a menos de un cuerpo sin pasarla.
 
-La que abre el cierre es la que va primera en el plan base al 75 %, sea quien sea. Medido: al 90 % la ganadora va 1.ª, 2.ª... 8.ª en 13, 13, 10, 14, 14, 18, 14 y 6 % de las rondas (antes, 50 % y 50 % y nada más), primera en el 13 % (azar: 12,5 %), y antes del 80 % lleva la punta lo mismo que cada una de las otras (la compensación de `COMPENSA` frena a la que iba primera en los tramos entre puntos de control y vuelve a cero en cada uno).
+La que abre el cierre es la que va primera en el plan base al 75 %, sea quien sea. Hasta el 90 % valen estas tres formas; desde ahí manda el pase de abajo. Medido: al 90 % la ganadora va 1.ª, 2.ª... 8.ª en 13, 13, 10, 14, 14, 18, 14 y 6 % de las rondas (antes, 50 % y 50 % y nada más), primera en el 13 % (azar: 12,5 %), y antes del 80 % lleva la punta lo mismo que cada una de las otras (la compensación de `COMPENSA` frena a la que iba primera en los tramos entre puntos de control y vuelve a cero en cada uno).
+
+### El pase de la ganadora: del 90 % a la meta
+
+Antes la ganadora pasaba en el último segundo y aparecía en punta de un cuadro al siguiente. Ahora el final dura más y el pase se reparte:
+
+- **El reloj de la recta** (`carrera-ritmo.ts`): la pista pasa pareja hasta el 78 % y de ahí frena sin saltos hasta cerca de la mitad de la velocidad. La recta dura casi lo mismo (15,2 s de promedio, la misma que antes: `normalCarrera` no cambia con ninguna cantidad de personas), pero del 90 % a la meta pasan 3 s y del 88 %, 3,5 s (antes 1,7 y 2). El duelo suma su llegada en cámara lenta desde la foto.
+- **El pase**: desde el 90 % el pelotón corre por casilleros (ocho lugares ordenados que se van juntando hacia la línea). La ganadora sale del 90 % en el puesto que ya tenía (el que mide el auditor) y sube de casillero en casillero, de a uno, cada pase con su subida suave (la velocidad no da saltos). En algunas carreras la rival más cercana se la vuelve a pasar antes de que se la quede. Lleva la punta de 1,2 a 2,6 s antes de cruzar (p10 y p90; mediana 1,7 s; nunca menos de 1 s).
+- **El pelotón en la línea**: al 95 % las tres primeras van dentro de un cuerpo (88 % de las carreras) y en la meta la segunda llega a menos de medio cuerpo (78 %; antes, 26 %). El orden en que cruzan las que no ganan no lo decide el protocolo: es el que traen del 90 %.
+- **Lo que no cambia**: quién gana, el puesto sorteado al 7, 25, 50 y 75 %, el puesto al 90 % y la ganadora primera en la línea. Los obstáculos de la última ventana terminan antes del 90 %.
+- **Lo que sí se afloja**: después del 90 %, que ya no es un punto de control, la ganadora va primera al 95 % en el 70 % de las carreras (antes, 60 %): con una mediana de 1,7 s en punta y el 95 % a 1,5 s de la meta, no puede ser menos. Se mide con `node scripts/medir-final-carrera.mjs`.
 
 ## Los obstáculos
 
@@ -78,4 +89,4 @@ El plan decide, el 2D y el 3D dibujan lo mismo: la llama se frena, salta (`salto
 
 ## Pruebas
 
-`carrera-drama.test.ts` (el cierre y los obstáculos: la llegada y los puestos sorteados no cambian, los obstáculos le tocan a cualquiera), `carrera-show.test.ts` (guion de seis palabras, un nombre y sin números; momentos; marcador; respuestas; tres tiempos por tramo), `carrera-orden.test.ts` (la punta y que no delata), `carrera-tiempos.test.ts` (el presupuesto), `carrera-tandas.test.ts` (las tandas y que no delatan), `carrera-forma.test.ts` (cuatro pantallas) y `src/duraciones.test.ts` (90 s). Los delatores, sin navegador: `scripts/lib/delatores-carrera.test.mjs` y `node scripts/audit-delatores.mjs race`. En el navegador: `audit-game race`, `audit-rigor race`, `audit-identidad race`, `audit-delatores`, `audit-emocion` y la revisión visual.
+`carrera-drama.test.ts` (el cierre, el pase del final y los obstáculos: la ganadora cruza primera, los puestos sorteados no cambian, el pase es de a uno y sin saltos de velocidad, los obstáculos le tocan a cualquiera), `carrera-show.test.ts` (guion de seis palabras, un nombre y sin números; momentos; marcador; respuestas; tres tiempos por tramo), `carrera-orden.test.ts` (la punta y que no delata), `carrera-tiempos.test.ts` (el presupuesto), `carrera-tandas.test.ts` (las tandas y que no delatan), `carrera-forma.test.ts` (cuatro pantallas) y `src/duraciones.test.ts` (90 s). Los delatores, sin navegador: `scripts/lib/delatores-carrera.test.mjs` y `node scripts/audit-delatores.mjs race`. En el navegador: `audit-game race`, `audit-rigor race`, `audit-identidad race`, `audit-delatores`, `audit-emocion` y la revisión visual.

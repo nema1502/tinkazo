@@ -68,12 +68,12 @@ describe("la portada no baja el show de la carrera", () => {
   it("guajojo-duracion.ts no importa nada: ni Pixi, ni el kit, ni el DOM", () => {
     expect(importes("./games/pixi/guajojo-duracion.ts")).toEqual([]);
   });
-  it("carrera-duracion.ts solo importa las medidas, las tandas y los tiempos", () => {
-    expect(importes("./games/llamas/carrera-duracion.ts").sort()).toEqual(["./carrera-base", "./carrera-tandas", "./carrera-tiempos"]);
+  it("carrera-duracion.ts solo importa las medidas, el reloj de la recta, las tandas y los tiempos", () => {
+    expect(importes("./games/llamas/carrera-duracion.ts").sort()).toEqual(["./carrera-base", "./carrera-ritmo", "./carrera-tandas", "./carrera-tiempos"]);
   });
-  it("y esos tres no traen el plan ni la cámara", () => {
-    for (const f of ["carrera-base", "carrera-tandas", "carrera-tiempos"]) {
-      for (const dep of importes(`./games/llamas/${f}.ts`)) expect(["./carrera-base", "./carrera-tiempos", "../nombres"], `${f} importa ${dep}`).toContain(dep);
+  it("y esos cuatro no traen el plan ni la cámara", () => {
+    for (const f of ["carrera-base", "carrera-ritmo", "carrera-tandas", "carrera-tiempos"]) {
+      for (const dep of importes(`./games/llamas/${f}.ts`)) expect(["./carrera-base", "./carrera-ritmo", "./carrera-tiempos", "../nombres"], `${f} importa ${dep}`).toContain(dep);
     }
   });
 });
