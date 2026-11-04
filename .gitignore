@@ -33,3 +33,6 @@ docs/capturas/*
 # Estado local de wrangler dev
 .wrangler/
 .dev.vars
+
+# El kit de marca se versiona aunque sea zip: lo bajan los organizadores desde marca.html
+!public/marca/tinkazo-kit-marca.zip

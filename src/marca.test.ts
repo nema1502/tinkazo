@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { inflateSync } from "node:zlib";
+import { inflateRawSync, inflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { T } from "./i18n";
 import config from "../vite.config";
@@ -61,7 +61,7 @@ describe("recursos públicos de marca", () => {
       for (const clave of ["maCopiado", "maError", "maFondo", "maMorado", "maH1", "navComoUsa"]) {
         expect(textos?.[lang]?.[clave]).toBe(T[lang][clave]);
       }
-      expect(Object.keys(textos![lang]!).length).toBeLessThan(100);
+      expect(Object.keys(textos![lang]!).length).toBeLessThan(200);
     }
   });
   it("PRESERVE: Historia conserva su diccionario reducido y la herramienta no recibe uno duplicado", async () => {
@@ -127,11 +127,148 @@ describe("recursos públicos de marca", () => {
     expect(opacos).toBeGreaterThan(0);
     expect(opacos).toBeLessThan(2048 * 2048);
   });
-  it.each([['es', 'Sorteo verificable con'], ['en', 'Verifiable draw with']])("sello %s: transparente, legible y sin fuentes remotas", (lang, frase) => {
+  it.each([['es', 'Sorteo verificable con'], ['en', 'Verifiable draw with']])("sello %s: transparente, con las letras en trazos y sin fuentes remotas", (lang, frase) => {
     const svg = leer(`public/marca/sello-${lang}.svg`);
-    expect(svg).toContain(frase);
-    expect(svg).toContain('Tinkazo');
-    expect(svg).toContain('system-ui');
+    expect(svg).toContain(`<title id="titulo">${frase} Tinkazo</title>`);
+    expect(svg).not.toMatch(/<text|<tspan|font-family|system-ui/); // las letras van en trazos
+    expect(svg.match(/<path /g)!.length).toBeGreaterThanOrEqual(4);
     expect(svg).not.toMatch(/<image|@import|https?:\/\/(?!www.w3.org)/);
   });
+});
+
+// El kit para patrocinios y eventos: logos, stickers y el ZIP.
+const LOGOS = ["logo-horizontal", "logo-horizontal-oscuro", "logo-apilado", "logo-apilado-oscuro"];
+const STICKERS = ["sticker-redondo", "sticker-redondo-oscuro", "sticker-cuadrado"].flatMap(n => [5, 7].map(cm => `${n}-${cm}cm`));
+const publico = (n: string): Buffer => readFileSync(new URL(`../public/marca/${n}`, import.meta.url));
+/** Lee el directorio central de un ZIP: nombre → bytes ya descomprimidos. */
+function leerZip(b: Buffer): Map<string, Buffer> {
+  const fin = b.lastIndexOf(Buffer.from("504b0506", "hex"));
+  const n = b.readUInt16LE(fin + 10);
+  let pos = b.readUInt32LE(fin + 16);
+  const salida = new Map<string, Buffer>();
+  for (let i = 0; i < n; i++) {
+    const metodo = b.readUInt16LE(pos + 10), tam = b.readUInt32LE(pos + 20), largo = b.readUInt32LE(pos + 24);
+    const nombre = b.toString("utf8", pos + 46, pos + 46 + b.readUInt16LE(pos + 28));
+    const local = b.readUInt32LE(pos + 42);
+    const ini = local + 30 + b.readUInt16LE(local + 26) + b.readUInt16LE(local + 28);
+    const datos = b.subarray(ini, ini + tam);
+    const plano = metodo === 8 ? inflateRawSync(datos) : datos;
+    expect(plano.length, nombre).toBe(largo);
+    salida.set(nombre, plano);
+    pos += 46 + b.readUInt16LE(pos + 28) + b.readUInt16LE(pos + 30) + b.readUInt16LE(pos + 32);
+  }
+  return salida;
+}
+describe("kit de marca para patrocinios y eventos", () => {
+  it("existen los cuatro logos en SVG y en PNG de 2048 de ancho, con fondo transparente", () => {
+    for (const n of LOGOS) {
+      expect(existsSync(new URL(`../public/marca/${n}.svg`, import.meta.url)), n).toBe(true);
+      const b = publico(`${n}.png`);
+      expect([b.readUInt32BE(16), b[24], b[25]], n).toEqual([2048, 8, 6]);
+      expect(b.readUInt32BE(20)).toBeGreaterThan(300);
+    }
+  });
+  it("las letras de logos, sello y stickers van en trazos: ningún SVG trae texto", () => {
+    for (const n of [...LOGOS, ...STICKERS, "sello-es", "sello-en"]) {
+      const svg = publico(`${n}.svg`).toString("utf8");
+      expect(svg, n).not.toMatch(/<text|<tspan|font-family|font-size|@font-face|<image|<script/);
+      expect(svg, n).toContain("<path");
+    }
+  });
+  it("el logo lleva el ZO y la llama en el magenta del tema, claro y oscuro", () => {
+    expect(publico("logo-horizontal.svg").toString("utf8")).toMatch(/fill="#e93d9c"/);
+    expect(publico("logo-horizontal.svg").toString("utf8")).toMatch(/fill="#191919"/);
+    expect(publico("logo-horizontal-oscuro.svg").toString("utf8")).toMatch(/fill="#ff5cb3"/);
+    expect(publico("logo-horizontal-oscuro.svg").toString("utf8")).toMatch(/fill="#f6efe2"/);
+  });
+  it.each(STICKERS)("sticker %s: a tamaño real en mm, con sangrado y la capa corte aparte", (n) => {
+    const cm = Number(n.match(/(\d)cm/)![1]);
+    const svg = publico(`${n}.svg`).toString("utf8");
+    const lado = cm * 10 + 6; // 3 mm de sangrado por lado
+    expect(svg).toContain(`width="${lado}mm" height="${lado}mm" viewBox="0 0 ${lado} ${lado}"`);
+    expect(svg).toContain('<g id="arte">');
+    expect(svg).toMatch(/<g id="corte" fill="none" stroke="#ff00ff" stroke-width="0\.25">/);
+    expect(svg.indexOf('id="arte"')).toBeLessThan(svg.indexOf('id="corte"'));
+    const pdf = publico(`${n}.pdf`).toString("latin1");
+    const pt = (lado * 72 / 25.4).toFixed(3);
+    expect(pdf.startsWith("%PDF-1.5")).toBe(true);
+    expect(pdf).toContain(`/MediaBox [0 0 ${pt} ${pt}]`);
+    expect(pdf).toContain("/TrimBox [8.504 8.504");
+    expect(pdf).toContain("/OCG");
+    expect(pdf.trimEnd().endsWith("%%EOF")).toBe(true);
+    // El xref apunta a cada objeto de verdad.
+    const xref = Number(pdf.match(/startxref\n(\d+)/)![1]);
+    expect(pdf.slice(xref, xref + 4)).toBe("xref");
+    const offs = [...pdf.slice(xref).matchAll(/(\d{10}) 00000 n/g)].map(m => Number(m[1]));
+    offs.forEach((o, i) => expect(pdf.slice(o, o + 7)).toBe(`${i + 1} 0 obj`));
+  });
+  it("el ZIP trae la lista esperada, sin fechas que cambien, con el LEEME en los dos idiomas", () => {
+    const bytes = publico("tinkazo-kit-marca.zip");
+    const zip = leerZip(bytes);
+    const esperados = [
+      "LEEME.txt",
+      ...LOGOS.flatMap(n => ["svg", "png"].map(e => `logos/tinkazo-${n}.${e}`)),
+      ...["llama", "llama-oscuro"].flatMap(n => ["svg", "png"].map(e => `llama/tinkazo-${n}.${e}`)),
+      "sello/tinkazo-sello-es.svg", "sello/tinkazo-sello-en.svg",
+      ...STICKERS.flatMap(n => ["svg", "pdf"].map(e => `stickers/tinkazo-${n}.${e}`)),
+    ].map(n => `tinkazo-kit-marca/${n}`);
+    expect([...zip.keys()].sort()).toEqual(esperados.sort());
+    // Los archivos del zip son los mismos de public/marca.
+    expect(zip.get("tinkazo-kit-marca/logos/tinkazo-logo-apilado.png")!.equals(publico("logo-apilado.png"))).toBe(true);
+    expect(zip.get("tinkazo-kit-marca/stickers/tinkazo-sticker-cuadrado-7cm.pdf")!.equals(publico("sticker-cuadrado-7cm.pdf"))).toBe(true);
+    // La fecha de cada entrada es siempre la misma (1 de enero de 1980).
+    const fin = bytes.lastIndexOf(Buffer.from("504b0506", "hex"));
+    let i = bytes.readUInt32LE(fin + 16);
+    for (let k = 0; k < zip.size; k++) {
+      expect(bytes.readUInt32LE(i)).toBe(0x02014b50);
+      expect([bytes.readUInt16LE(i + 12), bytes.readUInt16LE(i + 14)]).toEqual([0, 0x21]);
+      i += 46 + bytes.readUInt16LE(i + 28) + bytes.readUInt16LE(i + 30) + bytes.readUInt16LE(i + 32);
+    }
+    const leeme = zip.get("tinkazo-kit-marca/LEEME.txt")!.toString("utf8");
+    for (const lang of ["es", "en"] as const) expect(leeme).toContain(`${T[lang].maDescL}\r\n${T[lang].maDescP}`);
+    expect(leeme).toContain("https://tinkazo.app");
+    expect(leeme).toContain("hola@tinkazo.app");
+    expect(leeme).toContain("Stickers: archivos a tamaño real con 3 mm de sangrado; la capa 'corte' es la línea de corte; imprimir en vinilo mate; los colores son RGB, la imprenta los convierte");
+    expect(leeme).toContain("Stickers: true-size files with 3 mm bleed; the 'corte' layer is the cut line; print on matte vinyl; colors are RGB, the printer converts them");
+    expect(leeme).toContain("#fff6e9");
+    expect(leeme).toContain("24 px");
+    expect(leeme).toContain("8 mm");
+  });
+  it("la fuente y su licencia están versionadas junto al script", () => {
+    for (const f of ["Montserrat-Black.ttf", "Montserrat-Bold.ttf", "OFL.txt"]) expect(existsSync(new URL(`../scripts/marca/fuentes/${f}`, import.meta.url)), f).toBe(true);
+    expect(leer("scripts/marca/fuentes/OFL.txt")).toContain("SIL OPEN FONT LICENSE Version 1.1");
+  });
+  it("la sección de marca ofrece los logos, los stickers, el ZIP, el texto y las reglas, y todo está en es y en", () => {
+    const html = leer("marca.html");
+    expect(html).toContain('href="/marca/tinkazo-kit-marca.zip"');
+    for (const n of [...LOGOS, ...STICKERS]) for (const e of n.startsWith("logo") ? ["svg", "png"] : ["svg", "pdf"]) {
+      expect(html, `${n}.${e}`).toContain(`href="/marca/${n}.${e}"`);
+    }
+    expect(html).toContain("https://tinkazo.app");
+    expect(html).toContain("mailto:hola@tinkazo.app");
+    for (const clave of ["maKitT", "maKitB", "maKitZip", "maStT", "maStB", "maDescT", "maDescL", "maDescP", "maUsoT", "maUso1", "maUso2", "maUso3", "maUso4", "maUso5", "maUso6", "maDirT", "maLetraLogo"]) {
+      expect(html, clave).toContain(`data-i="${clave}"`);
+      expect(T.es[clave], clave).toBeTruthy();
+      expect(T.en[clave], clave).toBeTruthy();
+      if (clave !== "maStT") expect(T.en[clave], clave).not.toBe(T.es[clave]);
+    }
+    expect(T.es.maKitT).toBe("Para patrocinios y eventos");
+    expect(T.en.maKitT).toBe("For sponsorships and events");
+    expect(T.es.maDescL).toBe("Tinkazo: sorteos que cualquiera puede comprobar");
+    expect(T.es.maUso2).toContain("24 px");
+    expect(T.es.maUso2).toContain("8 mm");
+    for (const k of Object.keys(T.es).filter(k => /^ma(Kit|St|Desc|Uso|Dir|Logo|Dl|LetraLogo)/.test(k))) {
+      for (const lang of ["es", "en"] as const) {
+        expect(T[lang][k], `${lang}.${k}`).not.toMatch(/·|drand|hash|WebGL|Worker|bytes/i);
+      }
+    }
+  });
+  it("generar-marca es reproducible: dos corridas dejan los mismos bytes", async () => {
+    const { execFileSync } = await import("node:child_process");
+    const nombres = ["tinkazo-kit-marca.zip", "logo-horizontal.png", "sticker-redondo-5cm.pdf", "sello-es.svg"];
+    const antes = nombres.map(n => publico(n));
+    execFileSync(process.execPath, [fileURLToPath(new URL("../scripts/generar-marca.mjs", import.meta.url))], { stdio: "pipe" });
+    const despues = nombres.map(n => publico(n));
+    antes.forEach((b, i) => expect(despues[i]!.equals(b), nombres[i]).toBe(true));
+  }, 60_000);
 });
