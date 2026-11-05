@@ -1,5 +1,6 @@
 import { audio, isMuted } from "./sound";
 import { camaDeMusica } from "./sonidos/banco";
+import { MARGEN_BASE, margenMusica } from "./music-margen";
 
 /**
  * La música del estadio: andina con beat.
@@ -147,6 +148,10 @@ interface Session {
   crashAt: number;
   won: boolean;
   timer: number;
+  /** Cuánto por delante se programa: crece si los ticks llegan tarde (`music-margen.ts`). */
+  margen: number;
+  /** La hora de la página (`performance.now`) del último tick. */
+  ultimoTick: number;
   /** La semilla con que arrancó: pedirla otra vez con la misma no la reinicia. */
   seed: number;
   /** Qué toca: el andino de siempre, o la chovena del juego cruceño. */
@@ -248,6 +253,8 @@ export function startMusic(seed: number, style: MusicStyle = "andino"): void {
     crashAt: -1,
     won: false,
     timer: 0,
+    margen: MARGEN_BASE,
+    ultimoTick: performance.now(),
     seed,
     style,
     hold: false,
@@ -451,6 +458,11 @@ function tick(): void {
     stopMusic();
     return;
   }
+  const ahora = performance.now();
+  // Con la pestaña escondida el show está frenado: la música sigue saltando en silencio como desde el 2 de noviembre,
+  // sin agrandar el margen por los temporizadores de uno por segundo.
+  s.margen = document.hidden ? MARGEN_BASE : margenMusica(s.margen, ahora - s.ultimoTick);
+  s.ultimoTick = ahora;
   // La tensión sube de a poco aunque el relator no diga nada: el piso crece
   // con el tiempo, así que la música siempre va de menos a más.
   const elapsed = s.ctx.currentTime - s.started;
@@ -474,7 +486,7 @@ function tick(): void {
     s.step++;
   }
 
-  while (s.next < s.ctx.currentTime + 0.22) {
+  while (s.next < s.ctx.currentTime + s.margen) {
     const sixteenth = beatLength(s) / 4;
     // Durante el corte de una sorpresa no suena nada.
     if (s.style === "chovena") playStepChovena(s, s.next, s.step);
@@ -809,7 +821,7 @@ function finale(s: Session, t: number): void {
       // juntos y atrasados: el que ya pasó no suena.
       if (cur === s && at > s.ctx.currentTime - ATRASO_MAXIMO) strum(s, at, AM, i % 2 === 0, 0.55 * (1 - i / 26));
     };
-    const espera = (at - s.ctx.currentTime - 0.15) * 1000;
+    const espera = (at - s.ctx.currentTime - Math.max(0.15, s.margen)) * 1000;
     if (espera <= 0) armar();
     else setTimeout(armar, espera);
   }
