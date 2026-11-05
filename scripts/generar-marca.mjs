@@ -8,6 +8,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 import { grupo, rects, chunk, texto, negra, seminegra, mover, rect, circulo, redondeado, llamaCmds, anchoLlama, TEMAS, num, aD, rutaSvg, rasterizar, pngRgba, pdf, zip } from "./marca/base.mjs";
 import { generarPiezas } from "./marca/piezas.mjs";
+import { generarColeccion } from "./marca/coleccion.mjs";
 const destino = new URL("../public/marca/", import.meta.url);
 mkdirSync(destino, { recursive: true });
 writeFileSync(new URL("llama.svg", destino), `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">\n  ${grupo}\n</svg>\n`);
@@ -155,6 +156,8 @@ QUÉ HAY ADENTRO
   redes/     Imágenes para redes y marketing en PNG, en claro y oscuro, en es y en: portada abierta 1200x630, cuadrada 1080x1080, historia 1080x1920, cabecera 1500x500, cabecera de LinkedIn 1584x396 y las de patrocinio ("Tinkazo patrocina este evento") en 1080x1080 y 1920x1080, con un recuadro para el logo del evento.
   afiches/   Afiche del evento "Hoy sorteamos con Tinkazo" en A4 y A3, con el QR a https://tinkazo.app y una franja para escribir el premio, y el cartel de mesa A5 con el QR a https://tinkazo.app/sorteo-para-meetup.html#comprobacion (SVG y PDF, claro y oscuro, es y en).
   tinkazo-kit-portada.png  Una imagen de 1600x900 que resume todo lo que trae el kit, para mandarla junto al enlace (la versión en inglés termina en -en).
+  Aparte, en https://tinkazo.app/marca.html: los impresos del stand, también en tinkazo-kit-impresos.zip con las fotos que enlazan los SVG (roll-up de 85x200 y de 100x200 cm, y banner para el frente de la mesa de 120x40 cm, con fotos de seis juegos, personajes de los stickers, el QR grande e Instagram @tinkazo.app; PDF para la imprenta y SVG para editar, con 5 mm de sangrado y los 15 cm de abajo libres para la base), el kit para quien nos pone de sponsor (tinkazo-kit-sponsor.zip: logos para la pared en SVG, PNG, PNG de 2400 px y PDF, seis imágenes para anunciarlo, los textos y cinco preguntas para coordinar) y la colección de stickers con personaje (tinkazo-stickers.zip). Pedile a la imprenta su plantilla: algunas piden 3 o 10 mm de sangrado.
+Instagram: @tinkazo.app (https://www.instagram.com/tinkazo.app/)
 Las letras de los logos, el sello, los stickers, los afiches y las imágenes están convertidas en trazos: se ven igual en cualquier equipo e impresora.
 
 COLORES
@@ -195,6 +198,8 @@ WHAT IS INSIDE
   redes/     Images for social media and marketing as PNG, light and dark, in es and en: open graph cover 1200x630, square 1080x1080, story 1080x1920, wide header 1500x500, LinkedIn header 1584x396 and the sponsorship ones ("Tinkazo sponsors this event") at 1080x1080 and 1920x1080, with a box for the event logo.
   afiches/   Event poster "Today we draw with Tinkazo" in A4 and A3, with the QR code to https://tinkazo.app and a strip to write the prize, and the A5 table sign with the QR code to https://tinkazo.app/sorteo-para-meetup.html#comprobacion (SVG and PDF, light and dark, es and en).
   tinkazo-kit-portada.png  A 1600x900 image that sums up everything in the kit, to send along with the link (the English version ends in -en).
+  Separately, at https://tinkazo.app/marca.html: the booth prints, also in tinkazo-kit-impresos.zip with the pictures the SVGs link (85x200 cm and 100x200 cm roll-ups and the 120x40 cm banner for the front of the table, with pictures of six games, sticker characters, the large QR code and Instagram @tinkazo.app; PDF for the printer and SVG to edit, with 5 mm bleed and the bottom 15 cm empty for the base), the kit for organizers who list us as a sponsor (tinkazo-kit-sponsor.zip: wall logos as SVG, PNG, 2400 px PNG and PDF, six announcement images, the texts and five questions to coordinate) and the character sticker collection (tinkazo-stickers.zip). Ask your printer for their template: some want 3 or 10 mm bleed.
+Instagram: @tinkazo.app (https://www.instagram.com/tinkazo.app/)
 The lettering of the logos, the seal, the stickers, the posters and the images is converted to outlines: it looks the same on any computer or printer.
 
 COLORS
@@ -216,7 +221,8 @@ STICKERS
 The lettering is drawn from Montserrat (SIL Open Font License 1.1, https://openfontlicense.org).
 `.replace(/\n/g, "\r\n");
 
-const piezas = generarPiezas(escribir); // logos con la dirección, stickers nuevos, hojas, redes, afiches y portada
+// Logos con la dirección, stickers nuevos, hojas, redes, afiches, portada, impresos y lo de sponsors.
+const { zip: piezas, sponsor } = generarPiezas(escribir);
 const leerPublico = (n) => archivos.get(n) ?? readFileSync(new URL(n, destino));
 const raiz = "tinkazo-kit-marca";
 const entradas = [[`${raiz}/LEEME.txt`, Buffer.from(LEEME, "utf8")]];
@@ -224,7 +230,18 @@ for (const nombre of ["logo-horizontal", "logo-horizontal-oscuro", "logo-apilado
 for (const nombre of ["llama", "llama-oscuro"]) for (const ext of ["svg", "png"]) entradas.push([`${raiz}/llama/tinkazo-${nombre}.${ext}`, leerPublico(`${nombre}.${ext}`)]);
 for (const lang of ["es", "en"]) entradas.push([`${raiz}/sello/tinkazo-sello-${lang}.svg`, leerPublico(`sello-${lang}.svg`)]);
 for (const [forma, tema] of STICKERS) for (const cm of [5, 7]) for (const ext of ["svg", "pdf"]) entradas.push([`${raiz}/stickers/tinkazo-${nombreSt(forma, tema, cm)}.${ext}`, leerPublico(`${nombreSt(forma, tema, cm)}.${ext}`)]);
-for (const [ruta, nombre] of piezas) entradas.push([`${raiz}/${ruta}`, leerPublico(nombre)]);
+// Los impresos y lo de sponsors no van en el ZIP completo: con ellos pasaba de los 4 MB que tolera el repo. Se bajan sueltos
+// (los PDF) o en tinkazo-kit-sponsor.zip.
+for (const [ruta, nombre] of piezas) if (!/^(impresos|sponsor)\//.test(ruta)) entradas.push([`${raiz}/${ruta}`, leerPublico(nombre)]);
 writeFileSync(new URL("tinkazo-kit-marca.zip", destino), zip(entradas));
+// Los SVG de los impresos con las fotos que enlazan, juntos para que el archivo abra completo en el editor.
+const entradasImpresos = piezas.filter(([ruta]) => ruta.startsWith("impresos/")).map(([ruta, nombre]) => [`tinkazo-kit-impresos/${ruta.slice(9)}`, leerPublico(nombre)]);
+writeFileSync(new URL("tinkazo-kit-impresos.zip", destino), zip(entradasImpresos));
+// El kit liviano para quien nos pone de sponsor: lo que necesita en un minuto, sin los impresos ni los stickers.
+const entradasSponsor = sponsor.map(([ruta, nombre]) => [`tinkazo-kit-sponsor/${ruta}`, leerPublico(nombre)]);
+writeFileSync(new URL("tinkazo-kit-sponsor.zip", destino), zip(entradasSponsor));
 
-console.log(`Marca: llama, 4 logos (SVG y PNG de 2048), 2 sellos en trazos, 6 stickers (SVG y PDF), ${piezas.length} piezas nuevas (logos con dirección, stickers, hojas, redes, afiches, portada) y tinkazo-kit-marca.zip con ${entradas.length} archivos.`);
+// La colección de stickers con personaje va aparte, con su propio ZIP: public/marca/coleccion/.
+const coleccion = generarColeccion(new URL("coleccion/", destino));
+console.log(`Colección: ${coleccion.stickers} stickers y tinkazo-stickers.zip con ${coleccion.archivosZip} archivos; la letra más chica a 5 cm mide ${coleccion.capMin[1].toFixed(2)} mm (${coleccion.capMin[0]}).`);
+console.log(`Marca: llama, 4 logos (SVG y PNG de 2048), 2 sellos en trazos, 6 stickers (SVG y PDF), ${piezas.length} piezas nuevas (logos con dirección, stickers, hojas, redes, afiches, portada, impresos y sponsors), tinkazo-kit-marca.zip con ${entradas.length} archivos y tinkazo-kit-sponsor.zip con ${entradasSponsor.length} y tinkazo-kit-impresos.zip con ${entradasImpresos.length}.`);

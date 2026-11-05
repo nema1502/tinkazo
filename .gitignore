@@ -41,3 +41,6 @@ public/sonidos/*/musica*.mp3
 workers/musica/camas/
 # El kit de marca se versiona aunque sea zip: lo bajan los organizadores desde marca.html
 !public/marca/tinkazo-kit-marca.zip
+!public/marca/coleccion/tinkazo-stickers.zip
+!public/marca/tinkazo-kit-sponsor.zip
+!public/marca/tinkazo-kit-impresos.zip

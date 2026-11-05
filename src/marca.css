@@ -82,6 +82,7 @@
 .marca-redes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 16px; align-items: start; }
 .marca-afiches { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 16px; align-items: start; }
 .marca-hojas .marca-par, .marca-redes .marca-par, .marca-afiches .marca-par { grid-row: auto; grid-template-rows: none; align-content: start; }
+.marca-afiches .marca-red { height: auto; }
 .marca-red { background: #e9e2d4; display: grid; place-items: center; padding: 10px; }
 .marca-red img { width: auto; max-width: 100%; max-height: 260px; object-fit: contain; }
 .marca-afiche img { max-height: 340px; }
@@ -103,3 +104,157 @@
 .marca-sticker img { max-height: 270px; width: auto; max-width: 100%; }
 .marca-hoja { height: auto; }
 @media (max-width: 760px) { .marca-red { height: auto; min-height: 120px; } }
+
+/* La colección de stickers con personaje: cuatro por fila, cada uno con su PNG; las tres hojas para la imprenta. */
+.marca h4 { margin: 26px 0 10px; font-size: 18px; font-weight: 900; color: var(--ink); }
+.marca-coleccion { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 16px; align-items: start; }
+.marca-col { margin: 0; min-width: 0; display: grid; gap: 8px; align-content: start; }
+.marca-col figcaption { font-weight: 800; font-size: 16px; color: var(--ink); }
+/* El cuadro es siempre cuadrado y la imagen se acomoda adentro, sea ancha o alta. */
+.marca-col .marca-vista { position: relative; padding: 0; aspect-ratio: 1 / 1; box-sizing: border-box; min-width: 0; }
+.marca-col .marca-sticker img { position: absolute; inset: 10px; width: calc(100% - 20px); height: calc(100% - 20px); max-width: none; max-height: none; margin: 0; object-fit: contain; }
+.marca-col .mini { justify-content: center; margin-top: 0; }
+.marca-hojas-col { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 1000px) {
+  .marca-coleccion { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .marca-coleccion { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+  .marca-col .marca-sticker img { inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); }
+  .marca-col .mini { font-size: 15px; padding: 5px 8px; }
+  .marca-hojas-col { grid-template-columns: 1fr; }
+}
+/* Si nos ponés de sponsor, y los impresos del stand */
+.marca-sp { border: var(--bw) solid var(--ink); background: var(--card); box-shadow: var(--sh); padding: 20px 24px; margin: 22px 0 32px; }
+.marca-sp > h3:first-child, .marca-imp > h3:first-child { margin-top: 0; font-size: 24px; }
+.marca h4 { margin: 26px 0 8px; font-size: 18px; color: var(--ink); }
+.marca-sp-inicio { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px 28px; align-items: start; margin: 12px 0 4px; }
+.marca-sp-zip { display: grid; gap: 10px; justify-items: start; }
+.marca-sp-zip p { margin: 0; }
+.marca-sp-datos { margin: 0; display: grid; gap: 8px; }
+.marca-sp-datos > div { display: grid; grid-template-columns: 9.5em minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.marca-sp-datos dt { font-weight: 800; color: var(--ink); }
+.marca-sp-datos dd { margin: 0; color: var(--ink2); line-height: 1.5; overflow-wrap: anywhere; }
+.marca-sp-datos a { color: var(--ink); font-weight: 700; display: inline-block; min-height: 24px; }
+.marca-pared { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; align-items: start; }
+.marca-pared .marca-par { grid-row: auto; grid-template-rows: none; align-content: start; }
+.marca-pared .marca-vista { padding: 8px; height: 230px; box-sizing: border-box; display: grid; place-items: center; }
+.marca-pared .marca-vista img { width: auto; max-width: 100%; max-height: 210px; }
+.marca-pared .marca-descargas { grid-template-columns: 1fr 1fr; }
+.marca-sp-mono { display: flex; flex-wrap: wrap; gap: 8px 10px; }
+.marca-sp-mono .mini { margin-top: 0; }
+.marca-copias { display: grid; gap: 12px; }
+.marca-copia { border: 2px solid var(--ink); background: var(--paper); padding: 12px 16px; max-width: 860px; }
+.marca-copia-cab { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; font-weight: 800; color: var(--ink); }
+.marca-copia-cab .mini { margin-top: 0; }
+.marca-copia p { margin: 8px 0 0; }
+.marca-sp-redes { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.marca-sp-redes .marca-red { height: 420px; }
+.marca-sp-redes .marca-red img { max-height: 396px; }
+.marca-sp-redes .marca-red-ancha { height: auto; }
+.marca-sp-redes .marca-red-ancha img { max-height: none; width: 100%; }
+.marca-imp { margin: 44px 0 32px; }
+#coleccion { margin-top: 44px; font-size: 24px; }
+.marca-imp-piezas { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 10px 20px; align-items: start; }
+.marca-imp-piezas .marca-par { grid-row: auto; grid-template-rows: none; align-content: start; }
+.marca-imp-roll .marca-red { height: 480px; }
+.marca-imp-roll .marca-red img { max-height: 456px; }
+.marca-imp-mesa .marca-red { height: auto; }
+.marca-imp-mesa .marca-red img { max-height: none; width: 100%; }
+.marca-imp .marca-descargas { grid-template-columns: 1fr 1fr; }
+.marca-imp-roll .marca-descargas { grid-template-columns: 1fr; }
+@media (max-width: 1000px) {
+}
+@media (max-width: 760px) {
+  .marca-sp { padding: 14px; }
+  .marca-sp-inicio, .marca-imp-piezas { grid-template-columns: 1fr; }
+  .marca-sp-datos > div { grid-template-columns: 1fr; gap: 0; }
+  .marca-sp-redes, .marca-pared { grid-template-columns: 1fr; }
+  .marca-sp-redes .marca-red { height: auto; }
+  .marca-sp-redes .marca-red img { max-height: 380px; }
+  .marca-pared .marca-vista { height: 180px; }
+  .marca-pared .marca-vista img { max-height: 160px; }
+  .marca-pared .marca-descargas, .marca-imp .marca-descargas { grid-template-columns: 1fr; }
+  .marca-imp-roll .marca-red { height: 420px; }
+  .marca-imp-roll .marca-red img { max-height: 396px; }
+}
+/* Para creadores: los clips verticales, el logo animado, la guía de CapCut y los diez guiones. */
+.cr-clips { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px 16px; align-items: start; margin-top: 12px; }
+.cr-clips .marca-par { grid-row: auto; grid-template-rows: none; align-content: start; }
+.cr-poster { background: #171126; padding: 8px; display: grid; place-items: center; }
+.cr-poster img { width: auto; max-width: 100%; max-height: 300px; margin: 0 auto; }
+.cr-logos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 24px; margin-top: 8px; }
+.cr-logo-links { grid-template-columns: 1fr 1fr; }
+.cr-pasos li strong { color: var(--ink); }
+.cr-guiones { display: grid; gap: 12px; margin-top: 12px; }
+.cr-guion { border: 2px solid var(--ink); background: var(--card); box-shadow: var(--sh-sm); }
+.cr-guion > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; min-height: 44px; padding: 10px 16px; cursor: pointer; list-style-position: inside; }
+.cr-guion > summary:focus-visible { outline: 3px solid var(--purple); outline-offset: 4px; }
+.cr-nombre { font-weight: 900; font-size: 18px; color: var(--ink); }
+.cr-titulo { font-size: 16px; color: var(--ink2); }
+.cr-cuerpo { padding: 4px 16px 16px; border-top: 2px solid var(--ink); display: grid; gap: 4px; }
+.cr-bloque h4 { margin: 14px 0 4px; font-size: 15px; font-weight: 900; text-transform: uppercase; letter-spacing: .04em; color: var(--ink); }
+.cr-bloque p { margin: 4px 0; max-width: 760px; }
+.marca .cr-gancho { color: var(--ink); font-size: 20px; font-weight: 900; letter-spacing: -.01em; }
+.cr-lista { margin: 4px 0; padding-left: 22px; }
+.cr-lista li { font-size: 16px; line-height: 1.6; color: var(--ink2); margin: 4px 0; }
+.cr-acciones { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-top: 14px; }
+.cr-acciones .mini { margin-top: 0; }
+.cr-hashtags { font-weight: 700; overflow-wrap: anywhere; }
+@media (max-width: 1000px) {
+  .cr-clips { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .cr-clips { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cr-logos { grid-template-columns: 1fr; }
+  .cr-guion > summary { padding: 10px 12px; }
+  .cr-cuerpo { padding: 4px 12px 14px; }
+}
+.cr-guion > summary::after { content: "+"; margin-left: auto; font-weight: 900; font-size: 22px; line-height: 1; color: var(--ink); }
+.cr-guion[open] > summary::after { content: "\2212"; }
+
+/* La entrada de la página: el título, los dos ZIP que más se buscan y la portada del kit, y debajo los atajos a cada parte. */
+.marca-hero { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px 32px; align-items: center; }
+.marca-hero-texto .lead { margin-bottom: 14px; }
+.marca-hero-acciones { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; }
+.marca-hero-acciones .mini { margin-top: 0; min-height: 48px; }
+.marca-hero-img img { display: block; width: 100%; height: auto; border: 3px solid var(--ink); box-shadow: var(--sh); background: #fff6e9; }
+.marca-ir { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 16px; }
+.marca-ir a { display: inline-flex; align-items: center; min-height: 44px; padding: 6px 11px; border: 2px solid var(--ink); background: var(--card); color: var(--ink); font-weight: 800; text-decoration: none; box-shadow: var(--sh-sm); }
+.marca-ir a:hover { background: var(--yellow, #ffc83d); color: #191919; }
+.marca-ir a:focus-visible { outline: 3px solid var(--purple); outline-offset: 3px; }
+#sponsors, #coleccion, #impresos, #creadores, #mas { scroll-margin-top: 16px; }
+/* Las imágenes anchas (cabeceras y banners) ocupan toda la fila: a media columna no se leía lo que dicen. */
+.marca-redes .marca-ancha { grid-column: 1 / -1; }
+.marca .marca-red-ancha { height: auto; }
+.marca .marca-red-ancha img { width: 100%; max-height: none; }
+/* Las hojas A4 llenan su cuadro, en vertical. */
+.marca .marca-hoja { aspect-ratio: 210 / 297; padding: 10px; }
+.marca .marca-hoja img { max-height: 100%; height: 100%; width: auto; }
+/* Los diez stickers de una serie, en dos filas justas. */
+.marca-coleccion { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+@media (max-width: 1000px) {
+  .marca-coleccion { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .marca-hero { grid-template-columns: 1fr; }
+  .marca-hero-img { order: 2; }
+  .marca-hero-acciones .mini { width: 100%; justify-content: center; }
+  .marca-coleccion { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .marca .marca-hoja { aspect-ratio: auto; }
+  .marca .marca-hoja img { height: auto; max-height: 360px; }
+}
+/* La llama trae seis: en una sola fila en pantallas anchas, en dos de tres en las medianas. */
+@media (min-width: 1001px) { .marca-coleccion-seis { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+/* Los dos estilos de las imágenes para anunciar el patrocinio, cada uno con su rótulo. */
+.marca h5.marca-estilo { display: inline-block; margin: 18px 0 10px; padding: 4px 12px; font-size: 16px; font-weight: 900; background: #ffc83d; color: #191919; border: 2px solid var(--ink); box-shadow: var(--sh-sm); }
+/* Las panorámicas ocupan la fila, sin pasar del ancho en que se leen. */
+.marca-sp-redes .marca-pano img { max-width: 860px; margin: 0 auto; }
+/* Los logos de un solo color, chicos y sobre el fondo en que se usan: el negro sobre claro y el blanco sobre oscuro. */
+.marca-mono { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.marca .marca-mono .marca-vista { height: 150px; }
+.marca .marca-mono .marca-vista img { max-height: 130px; }
+.marca-mono .marca-descargas { grid-template-columns: 1fr; }
+.marca-mono-claro { background: #fff6e9; }
+.marca-mono-oscuro { background: #191919; }
+@media (max-width: 1000px) { .marca-mono { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

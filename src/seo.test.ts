@@ -96,7 +96,7 @@ describe("portada: canonical, hreflang y datos estructurados", () => {
     expect(grafo.find((n) => n["@type"] === "Organization")).toMatchObject({
       name: "Tinkazo",
       url: `${BASE}/`,
-      sameAs: ["https://github.com/nema1502/tinkazo"],
+      sameAs: ["https://github.com/nema1502/tinkazo", "https://www.instagram.com/tinkazo.app/"],
     });
     expect(grafo.find((n) => n["@type"] === "WebSite")).toMatchObject({ name: "Tinkazo", alternateName: ["tinkazo.app"] });
     expect(grafo.find((n) => n["@type"] === "SoftwareApplication")).toMatchObject({

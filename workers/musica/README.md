@@ -114,3 +114,43 @@ La lógica está en `src/logica.ts` y no importa nada de Cloudflare: recibe una 
 ## Del lado del sitio
 
 `src/sonidos/musica-remota.ts` devuelve `https://m.tinkazo.app/<juego>.mp3` solo cuando el sitio corre en `tinkazo.app` o `www.tinkazo.app` y el navegador no pide ahorrar datos. En cualquier otro lado (localhost, las vistas de Vercel, una copia del sitio) devuelve `null` y el sonido sigue con los osciladores.
+
+## El kit para creadores (`/kit/`)
+
+El mismo Worker entrega, **sin puerta por `Origin`**, el kit para quien quiera hacer videos de Tinkazo (TikTok, Reels, Shorts): los clips verticales de cada juego (cada uno con su versión `-bucle`), el logo animado de entrada y de salida, las placas, los guiones y los subtítulos. Es público a propósito: hecho para bajarlo.
+
+| Pedido | Respuesta |
+| --- | --- |
+| `GET /kit/<archivo>` (nombre simple: minúsculas, números, guiones y puntos; `mp4`, `webm`, `mov`, `png`, `jpg`, `webp`, `svg`, `srt`, `txt`, `zip` o `json`) | `200` (o `206` con `Range`), con `Content-Disposition: attachment`, `Access-Control-Allow-Origin: *` y `Cache-Control: public, max-age=3600` |
+| `HEAD /kit/<archivo>` | Las mismas cabeceras, sin cuerpo |
+| `GET /kit/lista.json` | Lo que hay: nombre, tamaño y tipo de cada archivo (lo arma `subir-kit.mjs`) |
+| Un archivo que no está, o una ruta que no es de un archivo del kit | `404` |
+| Cualquier otro método | `405` |
+
+La lógica está en `src/kit.ts` (se prueba en `src/kit.test.ts`). Los videos **no se versionan**: se graban con `scripts/marca/videos/` en una carpeta privada y se suben con `subir-kit.mjs`. Hasta que quien mantiene el proyecto los apruebe no se sube nada, y la página `marca.html` no muestra los enlaces (`KIT_PUBLICADO` en `src/marca-creadores.ts` está en `false`).
+
+**Camino B (hoy, sin R2):** los archivos van a `camas/kit/` (ignorada por git, cada uno hasta 25 MiB) y se despliegan con el Worker.
+
+```bash
+node subir-kit.mjs --desde <carpeta con el kit> --copiar --seco   # revisa y muestra, no copia nada
+node subir-kit.mjs --desde <carpeta con el kit> --copiar          # copia a camas/kit/ y arma lista.json
+npx wrangler@4 deploy
+```
+
+**Camino A (con R2):** un bucket aparte, `tinkazo-kit`, con los archivos en la raíz.
+
+```bash
+npx wrangler@4 r2 bucket create tinkazo-kit
+node subir-kit.mjs --desde <carpeta con el kit>                   # sube de verdad (--seco para revisar)
+npx wrangler@4 deploy -c wrangler.r2.toml
+```
+
+**Revisar contra producción:**
+
+```bash
+curl -sI https://m.tinkazo.app/kit/tinkazo-ruleta-9x16.mp4          # 200, video/mp4, attachment, sin Origin
+curl -s  https://m.tinkazo.app/kit/lista.json
+curl -s -o /dev/null -w "%{http_code}\n" https://m.tinkazo.app/kit/  # 404: no hay listado
+```
+
+Un archivo del kit que cambia conviene que cambie de nombre (`-v2`): el caché de una hora basta para correcciones, no para reemplazos grandes.

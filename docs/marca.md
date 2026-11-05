@@ -179,7 +179,7 @@ El sitio está en español boliviano con voseo, y en inglés neutro. No hay un t
 - "Revoluciona", "disrumpe", "la próxima generación de", "impulsado por blockchain".
 - Prometer lo que no está hecho. Si algo está en testnet, se dice testnet.
 - Explicar la criptografía antes de explicar para qué sirve.
-- Signos de exclamación en el texto del producto. En los subtítulos de los juegos sí, porque ahí se escribe como un relator.
+- Signos de exclamación en los botones y mensajes del producto. En los subtítulos de los juegos, en los stickers y en los videos sí, porque ahí se escribe como un relator.
 
 ## Los subtítulos son otro registro
 
@@ -270,6 +270,41 @@ La segunda vuelta del kit suma, todo generado por el mismo script y también den
 
 El PNG y el ZIP dependen de la versión de zlib de cada equipo: la prueba de reproducibilidad compara una corrida con otra en el mismo equipo, y los SVG (texto) contra los del commit.
 
+### Cómo se ordena /marca.html y qué pesa
+
+De arriba abajo, lo más pedido primero: el kit para quien nos pone de sponsor, la colección de stickers con personaje, los impresos del stand, la sección para creadores de contenido y, al final, «Logos, redes y reglas de uso» (los logos con y sin dirección, los stickers sueltos, las hojas, las redes, los afiches, cómo describirnos y las reglas de uso).
+
+El repo no admite archivos de más de 4 MB, así que los ZIP van en cuatro: `tinkazo-kit-marca.zip` (el kit original: logos, stickers, hojas, redes, afiches y portada, 4,16 MB, con muy poco margen), `tinkazo-kit-sponsor.zip` (1 MB), `tinkazo-kit-impresos.zip` (los SVG del roll-up y del banner con las fotos que enlazan, 1,5 MB) y `coleccion/tinkazo-stickers.zip`. Los PDF del roll-up y del banner (1,6 MB cada uno) se bajan sueltos. Si el kit completo vuelve a crecer, hay que sacar algo antes de agregar.
+
+Instagram (`@tinkazo.app`, con k) está en el pie de todas las páginas, en el `sameAs` de la portada y en «Dirección y contacto».
+
+### La colección de stickers con personaje
+
+Veintiséis stickers para pegar en la laptop o regalar en un evento, en `public/marca/coleccion/` y en la sección «Stickers con personaje» de `/marca.html#coleccion`. Los genera `scripts/marca/coleccion.mjs` (los dibujos y las salidas) con `scripts/marca/silueta.mjs` (el troquel), desde el mismo `generar-marca.mjs`.
+
+- **Los diez juegos, numerados del 1 al 10** para completar la serie: carrera («A toda llama»), ruleta («Vuelta y vuelta»), piñata («Dale, dale, dale»), trompo («Mano a mano»), sapo («¡Adentro!»), guajojó («Te estoy viendo»), toborochi («Panza llena, corazón contento»), chovena («Nadie se suelta»), La Entrada («Con mi comparsa») y teleférico («Todos arriba»).
+- **La llama**: «Llama de mi corazón», «Despertame cuando salga mi nombre», «¡Salió mi nombre!», la caravana de cinco llamas («Nadie se queda afuera»), «Hecho en Bolivia» y «Con K de Tinkazo».
+- **Frases**: «Verificalo vos», «Apthapi: cada uno trae algo», «Hasta la cacharpaya», «Todos adentro» y «Sin trampa, con cariño».
+- **Para devs**: «Funciona en mi llama», «404, llama no encontrada», `git commit -m "llama"`, «Mi sorteo tiene tests» y «Hola, mundo». Un chiste técnico por sticker, y solo en esta tanda.
+
+**Reglas que siguen.** Coleccionable sin azar: cada uno se elige, nunca sobres sorpresa, piezas raras ni rarezas. La llama sigue sin cara ni poncho: lo tierno sale de la pose (echada, saltando, en caravana) y de lo que la acompaña (un corazón, confeti, una «z»). La llama echada es la del logo con las patas dobladas, para que se reconozca de un vistazo. Los de devs llevan `tinkazo.app` chico: es el sticker que se fotografía. Si algún día la colección suma una llama con carita (la pide la ternura), es decisión de quien dirige: el logo no cambia. Los otros personajes sí tienen ojos, como en los juegos. Nada de dados, cartas ni fichas; nada sobre dinero ni suerte. No se diseña por género: hay una línea tierna, una con humor, una orgullosa y una de grupo, y cada persona elige. La palabra «yapa» queda afuera porque el glosario neutral del sitio la evita.
+
+**Cómo se dibuja.** Pixel art de rectángulos como el logo, unas pocas formas limpias (la ruleta, la piñata, los cerros) y las letras de Montserrat en trazos, en la paleta de la marca más los colores de los personajes de los juegos. Cada frase va en una cinta con borde de tinta y sombra dura, girada tres grados. La letra más chica mide 2,85 mm de alto a 5 cm (la prueba exige 2,8).
+
+**El troquel.** La silueta es la unión de todo lo dibujado agrandada 2,6 mm con esquinas redondas y sin huecos: se calcula con un campo de distancias sobre una grilla de 0,25 mm y se traza como un polígono suave. El sangrado es la misma silueta 3 mm más grande (2 mm en las hojas). La línea de corte va en la capa `corte`, con trazo de 0,25 mm.
+
+**Los archivos.** En `public/marca/coleccion/`: un PNG transparente de 512 px por sticker y por idioma (`<id>-es.png`, `<id>-en.png`; `dev-commit.png` es uno solo), las hojas en PDF y su vista previa en PNG (`hoja-a4-juegos`, `hoja-a4-frases` sin repetidos y `hoja-a3` con los 26 más cuatro sin número de los más pedidos, todos de 5 cm, en es y en), `frases.txt` con todas las frases en los dos idiomas y lo que quieren decir las palabras bolivianas, y `tinkazo-stickers.zip` (cada sticker en PDF de 5 y 7 cm y en SVG de 5 cm, los PNG, las hojas, las frases y un LEEME). El ZIP tiene que quedar por debajo de 4 MB: por eso el SVG va en una sola medida.
+
+### Para el stand y para quien nos pone de sponsor
+
+- **Roll-up** `rollup-85x200-es|en` y `rollup-100x200-es|en` (PDF y SVG) y **banner para el frente de la mesa** `banner-mesa-120x40-es|en` (lona; «Escaneá y probá» arriba del QR y todo a 6 cm de los bordes, por el dobladillo y los ojales; para algo chico arriba de la mesa están el cartel A5 y el afiche A3), en el tema claro y con 5 mm de sangrado. De arriba abajo: banderines, el logo (17 cm de llama en el de 85), la frase en tres líneas (letra de unos 6 cm: se lee a más de 6 m), la tarjeta amarilla del ancho del contenido con el QR a https://tinkazo.app (el código mide 32,5 cm de lado, 43,5 con su margen blanco, entre 0,9 y 1,3 m del piso: se escanea desde unos 3 m), tinkazo.app e Instagram, seis juegos en una grilla de tres columnas del mismo ancho que la tarjeta («Juegos de Bolivia», sin número: se ven seis) y cuatro personajes de los stickers (sapo, guajojó, toborochi y la llama del corazón). Los 15 cm de abajo quedan libres porque los tapa la base; solo baja hasta ahí el fondo y el remate de colores de los últimos 3 cm. Cada imprenta pide su sangrado (3, 5 o 10 mm): hay que pedirle la plantilla.
+- **Las fotos de los juegos** salen de la escena fija (`?pose=<juego>&semilla=…`) dibujada a 3840×2160 con `scripts/marca/fotos-juegos.mjs` y quedan en `scripts/marca/fotos/` en tres tamaños: 2560 px para el roll-up (unos 180 ppp en el de 85), 1280 px para el banner de mesa y 640 px para las vistas de la página. El generador no abre un navegador: el PDF mete el JPEG tal cual, el SVG para editar enlaza `juego-<juego>.jpg` (que viaja al lado, en `public/marca/` y en `impresos/` del ZIP) y la vista de la página (`vista-…svg`) lleva las chicas adentro.
+- **Logos para la pared de sponsors** `logo-pared-horizontal` (1200×600) y `logo-pared-cuadrado` (800×800), en claro, `-oscuro`, `-negro` y `-blanco`, SVG, PNG transparente, PNG de 2400 px (`-2400.png`) y PDF vectorial (30 y 20 cm de ancho), en una caja fija con aire alrededor para que queden del mismo tamaño que los demás.
+- **Imágenes para anunciarlo** `redes-sponsor-post|historia|linkedin|x|panoramica|banner-<tema>-<idioma>.png` («Somos sponsor del DevFest Tarija», el 28 de noviembre de 2026), con los personajes de los stickers; la panorámica mide 1200×675 y el banner para la web del evento 1980×400. La publicación, la historia y la panorámica salen además en un segundo estilo, `redes-sponsor-<formato>-juegos-<tema>-<idioma>.png`, con capturas de seis juegos y su nombre: se bajan de a una desde la página y no van en el ZIP, porque con fotos pesan más. Las capturas son `scripts/marca/fotos/<juego>-red.png` (800 por 450, PNG) y las pinta el rasterizador propio. Los tres textos para redes van rotulados como sugeridos para que los publiquen los organizadores, y ninguno dice que Tinkazo hace los sorteos del evento ni que tiene stand. En las cabeceras todo arranca después de los 430 px de la izquierda, donde va la foto de perfil. El evento se nombra en texto: nunca su logo.
+- **Textos** en `scripts/marca/textos-sponsor.mjs` (los mismos que las claves `maSp*` de la página, y la prueba lo exige): la descripción en 25, 50 y 100 palabras (50 y 100 exactas: la prueba lo exige), tres publicaciones (cuando se anuncia, el día del evento y para agradecer; ninguna dice que hacemos los sorteos del evento ni que tenemos stand, porque eso lo confirma quien organiza), cómo se escribe el nombre y dónde encontrarnos (Instagram @tinkazo.app). Salen en `textos-sponsor.txt`.
+- **Cinco preguntas para coordinar** (`preguntas-organizadores.txt` y la página): formato del logo y fecha, largo de la descripción, cómo nombrar el evento, si hay lugar para nosotros y si quieren algún sorteo con Tinkazo.
+- **`tinkazo-kit-sponsor.zip`** (2,6 MB) junta los logos de pared, las imágenes, los textos y las preguntas para el organizador; el kit completo los trae en `sponsor/` y los impresos en `impresos/`.
+
 ## Los enlaces
 
 | Qué | Dónde |
@@ -292,3 +327,20 @@ El orden que funciona, probado contra las objeciones que aparecen:
 7. **La honestidad.** Mostrar el veredicto amarillo: cuando el sorteo no está anclado, la herramienta lo dice en vez de dar un verde fácil. Esta diapositiva convence más que las seis anteriores.
 
 Lo que no conviene mostrar en una presentación: el código del contrato, el diagrama de arquitectura, ni la explicación de BLS12-381. Si alguien pregunta, está en la documentación.
+
+## Kit para creadores de contenido
+
+`marca.html#creadores` ofrece a quien hace videos (TikTok, Reels, Shorts) un clip vertical de cada juego, un logo animado para abrir y cerrar y diez guiones con su guía de CapCut, en español y en inglés. Los datos viven en `src/marca-creadores.ts` (guiones, clips, pasos) y `src/marca-creadores-textos.ts` (títulos y notas); la página los pinta con `src/marca-creadores-ui.ts`.
+
+**Los videos no van al repositorio** (el auditor privado lo bloquea): se graban en una carpeta privada y se sirven desde Cloudflare, en `https://m.tinkazo.app/kit/<archivo>` (ruta pública del Worker `workers/musica`, ver su README). Mientras `KIT_PUBLICADO` en `src/marca-creadores.ts` sea `false`, la página muestra los guiones y la guía, pero ningún enlace de descarga: la bajada dice que los clips llegan pronto, el primer paso es grabar la pantalla con el ejemplo del juego (`?demo=<juego>`, el enlace va en cada guion) y nada promete un clip. Con `true`, la bajada pasa a `crBListo` y el primer paso a bajar el clip. Los guiones `.txt` se vuelven a generar después de cambiar la bandera.
+
+| Pieza | Cómo se hace | Medidas |
+|---|---|---|
+| Clips (`tinkazo-<juego>-9x16.mp4`) | `scripts/marca/videos/grabar-clips.mjs`: el show determinista se dibuja cuadro por cuadro con un reloj cambiado y se codifica con ffmpeg. La ventana de cada juego está en `ventanas.json`; el mismo ganador de ejemplo en todos | 1080 por 1920, 30 cuadros por segundo, sin música, de unos 13 s, H.264. Terminan con un segundo quieto en el cartel del ganador, sin fundido: el último cuadro es siempre el ganador. Aparte sale `tinkazo-<juego>-9x16-bucle.mp4`, con el final fundido en el principio, para repetirlo sin salto |
+| Logo animado | `scripts/marca/videos/logo-animado.mjs`: la misma llama y las mismas letras (Montserrat, OFL) que el resto de la marca | Entrada de 2,5 s y cierre de 3,2 s (con tinkazo.app y @tinkazo.app) en fondo oscuro, claro, verde `#00ff00` para recortar y transparente (WebM VP9) |
+| Guiones y subtítulos | `scripts/marca/videos/guiones.mjs`: `.txt` y `.srt` por juego y por idioma, de los mismos datos que la página, la placa del gancho en PNG transparente (`tinkazo-placa-<juego>-<idioma>.png`) y la letra en `tinkazo-letra-montserrat.zip`. El texto en pantalla termina antes del cartel del ganador (`cartel` en `CLIPS`, medido en los cuadros): la pregunta no tapa la respuesta | El texto en pantalla va en la zona segura: entre el 15 % y el 65 % de la altura y a más del 11 % de cada costado. No hay una zona oficial única; se prueba con un borrador subido |
+| Miniaturas | `scripts/marca/videos/posters.mjs` deja `public/kit-clips/<juego>.webp` (capturas de nuestros juegos, sí van al repositorio) | 270 por 480 |
+
+Publicar: copiar o subir la carpeta con `workers/musica/subir-kit.mjs` (`--seco` revisa sin tocar nada), desplegar el Worker, comprobar con `curl -sI https://m.tinkazo.app/kit/<archivo>` y recién ahí pasar `KIT_PUBLICADO` a `true`. Cada cambio de un archivo del kit conviene que cambie su nombre (`-v2`).
+
+Instagram es `@tinkazo.app`, con k (https://www.instagram.com/tinkazo.app/). No se pueden usar logos de terceros en los videos.

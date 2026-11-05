@@ -3,7 +3,7 @@
  * propio de PNG, el PDF a mano y el ZIP. Sin dependencias nativas y sin fechas: dos corridas, los mismos bytes.
  */
 import { readFileSync } from "node:fs";
-import { deflateSync, deflateRawSync } from "node:zlib";
+import { deflateSync, deflateRawSync, inflateSync } from "node:zlib";
 import opentype from "opentype.js";
 
 const icono = readFileSync(new URL("../../public/icon.svg", import.meta.url), "utf8");
@@ -107,6 +107,10 @@ export function rasterizar(formas, ancho, alto) {
   const acc = new Float64Array(ancho * alto * 4); // premultiplicado
   const SS = 5;
   for (const f of formas) {
+    if (f.imagen) {
+      if (f.imagen.pix) pintarFoto(acc, ancho, alto, f);
+      continue;
+    }
     const aristas = [];
     for (const poli of aplanar(f.cmds)) for (let i = 0; i < poli.length; i++) {
       const a = poli[i], b = poli[(i + 1) % poli.length];
@@ -149,6 +153,74 @@ export function rasterizar(formas, ancho, alto) {
   }
   return raw;
 }
+/**
+ * Pinta una foto (RGB, ya leída con leerPng) en el rectángulo de la forma, sin rotar. Cada píxel de salida promedia los
+ * píxeles de la foto que caen debajo (con su fracción), así una foto que se achica no se ve granulada; los bordes del
+ * rectángulo se suavizan con la parte del píxel que cubren.
+ */
+function pintarFoto(acc, ancho, alto, f) {
+  const { w: iw, h: ih, pix } = f.imagen.pix;
+  const x0 = f.x, y0 = f.y, x1 = f.x + f.ancho, y1 = f.y + f.alto;
+  const ex = iw / f.ancho, ey = ih / f.alto;
+  const tramos = (a, b, n) => { // los píxeles de la foto entre a y b (en píxeles de la foto), con su peso
+    const out = [];
+    for (let i = Math.max(0, Math.floor(a)); i < Math.min(n, Math.ceil(b)); i++) { const p = Math.min(b, i + 1) - Math.max(a, i); if (p > 0) out.push([i, p]); }
+    return out;
+  };
+  for (let py = Math.max(0, Math.floor(y0)); py < Math.min(alto, Math.ceil(y1)); py++) {
+    const cy = Math.min(py + 1, y1) - Math.max(py, y0);
+    if (cy <= 0) continue;
+    const fy = tramos((Math.max(py, y0) - y0) * ey, (Math.min(py + 1, y1) - y0) * ey, ih);
+    for (let px = Math.max(0, Math.floor(x0)); px < Math.min(ancho, Math.ceil(x1)); px++) {
+      const cx = Math.min(px + 1, x1) - Math.max(px, x0);
+      if (cx <= 0) continue;
+      const fx = tramos((Math.max(px, x0) - x0) * ex, (Math.min(px + 1, x1) - x0) * ex, iw);
+      let r = 0, g = 0, b = 0, w = 0;
+      for (const [sy, wy] of fy) for (const [sx, wx] of fx) {
+        const k = wy * wx, j = (sy * iw + sx) * 3;
+        r += pix[j] * k; g += pix[j + 1] * k; b += pix[j + 2] * k; w += k;
+      }
+      if (!w) continue;
+      const c = Math.min(1, cx * cy), i = (py * ancho + px) * 4, q = 1 - c;
+      acc[i] = acc[i] * q + (r / w) * c; acc[i + 1] = acc[i + 1] * q + (g / w) * c; acc[i + 2] = acc[i + 2] * q + (b / w) * c; acc[i + 3] = acc[i + 3] * q + c;
+    }
+  }
+}
+
+/** Lee un PNG de 8 bits RGB o RGBA sin entrelazar (las fotos de los juegos) y devuelve { w, h, pix } en RGB. */
+export function leerPng(buf) {
+  if (buf.toString("hex", 0, 8) !== "89504e470d0a1a0a") throw new Error("no es un PNG");
+  let o = 8, w = 0, h = 0, tipo = 0;
+  const idat = [];
+  while (o < buf.length) {
+    const n = buf.readUInt32BE(o), t = buf.toString("latin1", o + 4, o + 8), d = buf.subarray(o + 8, o + 8 + n);
+    if (t === "IHDR") {
+      w = d.readUInt32BE(0); h = d.readUInt32BE(4); tipo = d[9];
+      if (d[8] !== 8 || (tipo !== 2 && tipo !== 6) || d[12] !== 0) throw new Error("PNG no soportado: hace falta RGB o RGBA de 8 bits, sin entrelazar");
+    } else if (t === "IDAT") idat.push(d);
+    else if (t === "IEND") break;
+    o += n + 12;
+  }
+  const bpp = tipo === 6 ? 4 : 3, fila = w * bpp, raw = inflateSync(Buffer.concat(idat));
+  const px = new Uint8Array(h * fila);
+  for (let y = 0; y < h; y++) {
+    const filtro = raw[y * (fila + 1)], src = y * (fila + 1) + 1, dst = y * fila;
+    for (let x = 0; x < fila; x++) {
+      const a = x >= bpp ? px[dst + x - bpp] : 0, b = y ? px[dst - fila + x] : 0, c = x >= bpp && y ? px[dst - fila + x - bpp] : 0;
+      let v = raw[src + x];
+      if (filtro === 1) v += a;
+      else if (filtro === 2) v += b;
+      else if (filtro === 3) v += (a + b) >> 1;
+      else if (filtro === 4) { const p = a + b - c, pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c); v += pa <= pb && pa <= pc ? a : pb <= pc ? b : c; }
+      px[dst + x] = v & 255;
+    }
+  }
+  if (bpp === 3) return { w, h, pix: px };
+  const rgb = new Uint8Array(w * h * 3);
+  for (let i = 0, j = 0; i < px.length; i += 4, j += 3) { rgb[j] = px[i]; rgb[j + 1] = px[i + 1]; rgb[j + 2] = px[i + 2]; }
+  return { w, h, pix: rgb };
+}
+
 export function pngRgba(ancho, alto, raw) {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(ancho); ihdr.writeUInt32BE(alto, 4); ihdr[8] = 8; ihdr[9] = 6;
@@ -170,7 +242,14 @@ export function pdf(anchoMm, altoMm, sangreMm, formas) {
     if (f.trazo) s += `${hexRgb(f.trazo).map(c).join(" ")} RG\n${num(pt(f.grosor))} w\n`;
     return `${s}${ruta(f.cmds)}\n${f.fill && f.trazo ? "B" : f.fill ? "f" : "S"}\n`;
   };
-  const arte = formas.filter((f) => f.capa !== "corte").map(dibujo).join("");
+  // Las fotos (JPEG) van como imágenes aparte, en el orden en que se dibujan; sin fotos, el PDF es el de siempre.
+  const fotos = [];
+  const foto = (f) => {
+    let i = fotos.indexOf(f.imagen);
+    if (i < 0) { fotos.push(f.imagen); i = fotos.length - 1; }
+    return `q\n${num(pt(f.ancho))} 0 0 ${num(pt(f.alto))} ${num(pt(f.x))} ${num(pt(H - f.y - f.alto))} cm\n/Im${i} Do\nQ\n`;
+  };
+  const arte = formas.filter((f) => f.capa !== "corte").map((f) => (f.imagen ? foto(f) : dibujo(f))).join("");
   const corte = formas.filter((f) => f.capa === "corte").map(dibujo).join("");
   const contenido = `${arte}/OC /corte BDC\n${corte}EMC\n`;
   const A = pt(anchoMm).toFixed(3), B = pt(altoMm).toFixed(3), s = pt(sangreMm).toFixed(3);
@@ -179,10 +258,12 @@ export function pdf(anchoMm, altoMm, sangreMm, formas) {
   const objetos = [
     Buffer.from("<< /Type /Catalog /Pages 2 0 R /OCProperties << /OCGs [5 0 R] /D << /ON [5 0 R] /Order [5 0 R] >> >> >>", "latin1"),
     Buffer.from("<< /Type /Pages /Kids [3 0 R] /Count 1 >>", "latin1"),
-    Buffer.from(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${A} ${B}] /BleedBox [0 0 ${A} ${B}] /TrimBox ${trim} /Resources << /Properties << /corte 5 0 R >> >> /Contents 4 0 R >>`, "latin1"),
+    Buffer.from(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${A} ${B}] /BleedBox [0 0 ${A} ${B}] /TrimBox ${trim} /Resources << /Properties << /corte 5 0 R >>${fotos.length ? ` /XObject << ${fotos.map((_, i) => `/Im${i} ${7 + i} 0 R`).join(" ")} >>` : ""} >> /Contents 4 0 R >>`, "latin1"),
     Buffer.concat([Buffer.from(`<< /Length ${flujo.length} /Filter /FlateDecode >>\nstream\n`, "latin1"), flujo, Buffer.from("\nendstream", "latin1")]),
     Buffer.from("<< /Type /OCG /Name (corte) >>", "latin1"),
     Buffer.from("<< /Title (Tinkazo) /Producer (generar-marca.mjs) >>", "latin1"),
+    // El JPEG entra tal cual (DCTDecode): sin volver a comprimirlo, la foto es la misma que salió del juego.
+    ...fotos.map((im) => Buffer.concat([Buffer.from(`<< /Type /XObject /Subtype /Image /Width ${im.w} /Height ${im.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${im.datos.length} >>\nstream\n`, "latin1"), im.datos, Buffer.from("\nendstream", "latin1")])),
   ];
   const partes = [Buffer.from("%PDF-1.5\n", "latin1")];
   let pos = partes[0].length;
@@ -325,7 +406,7 @@ export function pngNivel(ancho, alto, raw, nivel = 9) {
 /** SVG a tamaño real en mm (1 unidad = 1 mm), con el arte y la capa de corte aparte. */
 export function svgMm(anchoMm, altoMm, formas, titulo) {
   const arte = formas.filter((f) => f.capa !== "corte"), corte = formas.filter((f) => f.capa === "corte");
-  const ruta = (f) => `<path${f.clase ? ` class="${f.clase}"` : ""} d="${aD(f.cmds)}"${f.fill ? ` fill="${f.fill}"` : ' fill="none"'}${f.trazo ? ` stroke="${f.trazo}" stroke-width="${num(f.grosor)}"` : ""}/>`;
+  const ruta = (f) => f.imagen ? `<image href="${f.href ?? f.imagen.href}" x="${num(f.x)}" y="${num(f.y)}" width="${num(f.ancho)}" height="${num(f.alto)}" preserveAspectRatio="none"/>` : `<path${f.clase ? ` class="${f.clase}"` : ""} d="${aD(f.cmds)}"${f.fill ? ` fill="${f.fill}"` : ' fill="none"'}${f.trazo ? ` stroke="${f.trazo}" stroke-width="${num(f.grosor)}"` : ""}/>`;
   const capaCorte = corte.length ? `<g id="corte" fill="none" stroke="#ff00ff" stroke-width="0.25">\n${corte.map((f) => `<path d="${aD(f.cmds)}"/>`).join("\n")}\n</g>\n` : "";
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${num(anchoMm)}mm" height="${num(altoMm)}mm" viewBox="0 0 ${num(anchoMm)} ${num(altoMm)}" role="img" aria-labelledby="titulo">
 <title id="titulo">${titulo}</title>
@@ -334,4 +415,16 @@ ${arte.map(ruta).join("\n")}
 </g>
 ${capaCorte}</svg>
 `;
+}
+
+/** Ancho, alto y componentes de un JPEG (lee el primer marcador SOF). */
+export function medidasJpg(b) {
+  if (b[0] !== 0xff || b[1] !== 0xd8) throw new Error("no es un JPEG");
+  for (let i = 2; i < b.length;) {
+    if (b[i] !== 0xff) { i++; continue; }
+    const m = b[i + 1], largo = b.readUInt16BE(i + 2);
+    if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return { h: b.readUInt16BE(i + 5), w: b.readUInt16BE(i + 7), comp: b[i + 9], progresivo: m === 0xc2 };
+    i += 2 + largo;
+  }
+  throw new Error("JPEG sin medidas");
 }

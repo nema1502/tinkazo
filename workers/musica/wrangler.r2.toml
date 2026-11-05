@@ -14,3 +14,9 @@ routes = [{ pattern = "m.tinkazo.app", custom_domain = true }]
 [[r2_buckets]]
 binding = "MUSICA"
 bucket_name = "tinkazo-musica"
+
+# El kit para creadores (clips, logo animado), público en m.tinkazo.app/kit/<archivo>. Su propio bucket:
+#   npx wrangler@4 r2 bucket create tinkazo-kit   y   node subir-kit.mjs --desde <carpeta>
+[[r2_buckets]]
+binding = "KIT"
+bucket_name = "tinkazo-kit"

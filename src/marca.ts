@@ -1,6 +1,7 @@
 import "./pagina";
 import "./marca.css";
 import { getLang, onLangChange, texto } from "./idioma";
+import { iniciarCreadores } from "./marca-creadores-ui";
 
 const claves = ["maFondo", "maTarjeta", "maTinta", "maTinta2", "maApagado", "maMagenta", "maNaranja", "maTurquesa", "maAmarillo", "maMorado"];
 const paletas = [
@@ -35,6 +36,21 @@ for (const [id, colores] of paletas) {
     contenedor?.append(boton);
   });
 }
+// Los textos para sponsors: cada botón copia el párrafo que nombra y dice «Copiado» un momento.
+for (const boton of document.querySelectorAll<HTMLButtonElement>("[data-copiar]")) {
+  boton.addEventListener("click", async () => {
+    const parrafo = document.getElementById(boton.dataset.copiar ?? "");
+    const contenido = parrafo?.textContent?.trim() ?? "";
+    try {
+      await navigator.clipboard.writeText(contenido);
+      boton.textContent = texto("maCopiadoBtn");
+      if (estado) estado.textContent = texto("maCopiadoBtn");
+      setTimeout(() => { boton.textContent = texto("maCopiar"); }, 1800);
+    } catch {
+      if (estado) estado.textContent = texto("maError");
+    }
+  });
+}
 function actualizarSello(): void {
   const lang = getLang();
   const img = document.querySelector<HTMLImageElement>("#sello-vista");
@@ -64,3 +80,4 @@ function actualizarTodo(): void {
 }
 actualizarTodo();
 onLangChange(actualizarTodo);
+iniciarCreadores();

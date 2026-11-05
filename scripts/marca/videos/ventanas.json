@@ -1,0 +1,15 @@
+{
+  "nota": "Las ventanas de cada clip, en segundos desde que abre el estadio, elegidas mirando la hoja de contacto de `mapa` (el cierre y el cartel del ganador adentro). `semilla` fija quién gana y la historia que cuenta el show (64 hex; la misma para todos, para que el ganador de ejemplo sea siempre el mismo). Cada clip termina con un segundo quieto del cartel del ganador, sin fundido; aparte sale la versión -bucle, con el final fundido en el principio durante `mezcla` segundos (0,7 si no se dice).",
+  "juegos": {
+    "race":       { "archivo": "carrera",    "desde": 50.5, "hasta": 62.5, "semilla": "7a1c0de5b3f9482a96e1d04c5b7f8a23c9d6e01b4a7f5832d9c0e6b1a48f3d75" },
+    "wheel":      { "archivo": "ruleta",     "desde": 26.0, "hasta": 37.8, "semilla": "7a1c0de5b3f9482a96e1d04c5b7f8a23c9d6e01b4a7f5832d9c0e6b1a48f3d75" },
+    "pinata":     { "archivo": "pinata",     "desde": 26.0, "hasta": 37.8, "semilla": "7a1c0de5b3f9482a96e1d04c5b7f8a23c9d6e01b4a7f5832d9c0e6b1a48f3d75" },
+    "trompo":     { "archivo": "trompo",     "desde": 25.0, "hasta": 37.0, "semilla": "7a1c0de5b3f9482a96e1d04c5b7f8a23c9d6e01b4a7f5832d9c0e6b1a48f3d75" },
+    "sapo":       { "archivo": "sapo",       "desde": 26.0, "hasta": 37.8, "semilla": "7a1c0de5b3f9482a96e1d04c5b7f8a23c9d6e01b4a7f5832d9c0e6b1a48f3d75" },
+    "guajojo":    { "archivo": "guajojo",    "desde": 28.0, "hasta": 39.8, "semilla": "7a1c0de5b3f9482a96e1d04c5b7f8a23c9d6e01b4a7f5832d9c0e6b1a48f3d75" },
+    "toborochi":  { "archivo": "toborochi",  "desde": 26.5, "hasta": 38.0, "semilla": "7a1c0de5b3f9482a96e1d04c5b7f8a23c9d6e01b4a7f5832d9c0e6b1a48f3d75" },
+    "chovena":    { "archivo": "chovena",    "desde": 25.0, "hasta": 37.0, "semilla": "7a1c0de5b3f9482a96e1d04c5b7f8a23c9d6e01b4a7f5832d9c0e6b1a48f3d75" },
+    "oruro":      { "archivo": "la-entrada", "desde": 26.0, "hasta": 38.0, "semilla": "7a1c0de5b3f9482a96e1d04c5b7f8a23c9d6e01b4a7f5832d9c0e6b1a48f3d75" },
+    "teleferico": { "archivo": "teleferico", "desde": 26.0, "hasta": 37.8, "semilla": "7a1c0de5b3f9482a96e1d04c5b7f8a23c9d6e01b4a7f5832d9c0e6b1a48f3d75" }
+  }
+}
