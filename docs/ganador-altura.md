@@ -56,6 +56,17 @@ Pixi lo dibuja. Con `--comprobar`, cada cuadro tiene que cumplir:
 - el cuerpo fuera del cartel, y los nombres de afuera también;
 - un nombre completo, sin recortar y a la letra mínima o más (el del cartel o
   el chip puente);
+- las comprobaciones de nombre (`nombre N completo`, `nombre N separado del
+  relator`, `nombre completo legible`) solo miran las superficies del nombre
+  final: el nombre del cartel, el chip puente y los chips con nombre que el
+  juego le pone a quien gana. Cada comprobación `nombre N completo` dice de cuál
+  se trata (`rol`: `cartel`, `puente` o `chip`);
+- quién es quien gana sale de la identidad que marca el estadio (el nombre
+  entero de la persona dueña de cada chip), no del texto dibujado: «Ana María…»
+  no cuenta como «María Fernanda…»;
+- las inscripciones abreviadas de los gajos de la Ruleta («María Z.») y otros
+  textos sin marca, como las listas, son decorado: no se les exige nombre
+  completo ni distancia al relator. El nombre completo lo exige el cartel;
 - la secuencia de cuadros sin huecos y con el cartel sostenido;
 - el resultado final sin quedar tapado por la barra fija, y acceso al
   comprobante público por el enlace real de WhatsApp hasta `verificar.html`.
@@ -69,7 +80,7 @@ node scripts/audit-ganador-altura.mjs --help
 heavy -- node scripts/audit-ganador-altura.mjs --base http://127.0.0.1:5187 \
   --fase estadio-lista --juegos pinata,teleferico --vistas 1024x560 \
   --comprobar --relator original --nombres largos --lang es --movimiento normal \
-  --out .evidence/ganador-altura
+  --motor 2d --out .evidence/arreglos-sorteos/ganador-altura
 ```
 
 Necesita un servidor Vite (el auditor importa módulos de `src/`) y Playwright
@@ -84,6 +95,31 @@ viewport, no teléfonos físicos.
 | `--relator` | `original`, `natural` |
 | `--movimiento` | `normal`, `reduce` |
 | `--dispositivo` | `viewport`, `iphone13` |
+| `--motor` | `2d` (por defecto), `3d` |
+
+`--motor 2d` abre la página con `?motor=pixi` y `--motor 3d` con `?motor=3d`.
+Sin la opción se usa `2d`: el auditor ya no queda librado a lo que el equipo
+elige solo (desde el 4 de noviembre la Carrera, la Piñata y el Sapo arrancan
+en 3D por defecto). Pedir el 3D no garantiza que corra: el campo `motor` del
+JSON guarda lo pedido (`pedido`, `parametro`), los canvas que se vieron
+(`vistos`) y el motor efectivo (`efectivo`: `2d`, `3d`, `mixto` o `sin-show`
+si no hubo show, como con `--movimiento reduce`). El 3D se reconoce por su
+canvas `#tres-canvas` visible. `--fase estadio` siempre usa `motor=pixi` y no
+acepta `--motor 3d`. Los archivos de cada corrida llevan el motor en el nombre
+(`transicion-…-original-2d.json`), así una corrida en 2D y otra en 3D no se
+pisan.
+
+### Las esperas de 40 s
+
+Los límites siguen en 40 s. Cada espera (`estadio visible`, `placa`,
+`estadio oculto`, `nombre del resultado`, `resultado estable`, …) queda en
+`esperas` del JSON, también en el de fallo: hora de inicio y de fin, duración,
+si terminó bien o el error, y lo que había en la página al empezar y al
+terminar (`paginaInicio`, `paginaFin`): su reloj, el último cuadro dibujado,
+cuántas muestras y la última, cuántas veces se sondeó la condición y cuándo
+fue el último sondeo, y el motor visible. Si al vencer la espera los cuadros
+siguieron avanzando, el juego estaba lento, no colgado. Si la página no
+contesta en 2 s, se anota `sinRespuesta`.
 
 Con `--movimiento reduce`, el auditor pide que el resultado se lea y que el
 comprobante se pueda abrir, sin exigir animación. Si se pierden cuadros, eso no
@@ -91,6 +127,10 @@ cuenta como movimiento reducido.
 
 Las comprobaciones puras están en `scripts/lib/ganador-altura-comprobaciones.mjs`
 y `scripts/lib/ganador-altura-transicion.mjs`, con sus pruebas en
-`src/games/pixi/ganador-altura.test.ts`. `ganador-altura-legible.test.ts` lee la
+`src/games/pixi/ganador-altura.test.ts`. Las opciones (`--motor`, `--help`)
+están en `scripts/lib/ganador-altura-opciones.mjs` y la telemetría de las
+esperas en `scripts/lib/ganador-altura-esperas.mjs`, probadas en
+`src/games/pixi/ganador-altura-auditor.test.ts`. La marca de rol e identidad
+de cada chip (`window.__tinkazo.rotuloDe`) solo existe con `?auditar=camara`. `ganador-altura-legible.test.ts` lee la
 escala del chip puente en `stage.ts` y comprueba que no queda bajo la letra
 mínima.

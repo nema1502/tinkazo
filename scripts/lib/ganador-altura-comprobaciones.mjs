@@ -25,7 +25,7 @@ export function comprobarMuestra(m) {
   add('nombre presente', m.nombres.length > 0);
   const normal = s => s.replace(/\s+/g, ' ').trim();
   m.nombres.forEach((n, i) => {
-    add(`nombre ${i} completo`, !!normal(n.original) && normal(n.texto).includes(normal(n.original)));
+    add(`nombre ${i} completo`, !!normal(n.original) && normal(n.texto).includes(normal(n.original)), n.rol ? { rol: n.rol } : {});
     if (n.enCartel) add(`nombre ${i} contenido en su cartel`, dentro(n.caja, m.cartel));
     else if (m.placaVisible && medible(n.caja) && medible(m.cartel)) {
       const b = n.caja, r = m.cartel;
@@ -57,6 +57,20 @@ export function comprobarSecuencia({ muestras: ms, fallos, ultimoCuadro }, reduc
 }
 
 export function esNombreDelCartel(id, propietarios) { return propietarios.includes(id); }
+
+/**
+ * Si un texto dibujado fuera del cartel es una superficie del nombre final y de quién. Sin dependencias: corre en WebKit.
+ * Solo cuentan los rótulos que el estadio marca (`rotuloDe`, con `?auditar=camara`): el chip puente (`puente`) y los
+ * chips con nombre de los juegos (`chip`), y solo si su identidad (el nombre entero de la persona) es la de quien gana.
+ * Un texto sin marca (las inscripciones de los gajos de la ruleta, la lista) es decorado: no se le exige nombre completo.
+ * El texto dibujado no decide la identidad: «Ana María…» no es «María Fernanda…».
+ */
+export function nombreFinalDe(_texto, rotulo, esperados) {
+  const normal = s => String(s ?? '').replace(/\s+/g, ' ').trim();
+  if (!rotulo || !['puente', 'chip'].includes(rotulo.rol)) return null;
+  const original = esperados.find(o => normal(o) !== '' && normal(o) === normal(rotulo.original));
+  return original === undefined ? null : { original, rol: rotulo.rol };
+}
 export function comprobarAccesoPublico({ accesible, visible, proof, resultado, lista, pasos }) {
   return [
     { nombre: 'acción pública accesible', ok: !!accesible },
