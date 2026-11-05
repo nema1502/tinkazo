@@ -1,18 +1,20 @@
 import { readFileSync } from "node:fs";
-import { Group, MeshBasicMaterial } from "three";
+import { Group, Mesh, MeshBasicMaterial, PerspectiveCamera, Scene, Vector3, type Object3D } from "three";
 import { describe, expect, it } from "vitest";
 import { createPile } from "../pixi/pinata-monton";
 import { calendarioDePalos } from "../pixi/pinata-plan";
-import { perfilFiel, escala3D } from "./camara";
+import { aplicarPose, camaraDeEscena, perfilFiel, escala3D, type Pose3D } from "./camara";
 import { hash } from "./ids";
 import { Materiales } from "./figuras";
 import type { Motor3D } from "./motor";
 import { Basura } from "./motor";
-import { luzDeCorona } from "./pinata-3d";
+import { fabricaPinata, luzDeCorona } from "./pinata-3d";
 import { crearChico, PALO, MANO_X, MANO_Y } from "./pinata-3d-chico";
-import { ELEVACION, Proyector, aPantalla, azimutDe, elevacionDe, poseFrontal, proyectar } from "./pinata-3d-mapa";
+import { ELEVACION, Proyector, aPantalla, azimutDe, cajaEnPantalla, elevacionDe, poseFrontal, primerPlano, proyectar, type Caja } from "./pinata-3d-mapa";
 import type { Ctx } from "./pinata-3d-piezas";
-import { INK } from "./pinata-3d-piezas";
+import { INK, contorno, geometriaCaramelo } from "./pinata-3d-piezas";
+import type { EntradaPinata } from "./pinata-3d-tipos";
+import { ajusteGanador } from "../pixi/ganador-altura";
 import { compararPuestos, type Puesto2D } from "./prueba";
 import type { Camara2D } from "./tipos";
 
@@ -309,5 +311,220 @@ describe("el 3D no decide nada ni delata a nadie", () => {
     expect(src.indexOf("cam.apply(S.scene")).toBeGreaterThan(0);
     expect(src).toMatch(/draw\(now\);\s*frame3D\(\);/);
     expect(src.indexOf("cam.apply(S.scene")).toBeLessThan(src.search(/draw\(now\);\s*frame3D\(\);/));
+  });
+});
+
+/* ------------------------------------------------- el primer plano del final, medido sobre lo que dibuja el 3D */
+
+const ctxDePrueba = (escena?: Scene): Ctx => {
+  const B = new Basura();
+  return { motor: {} as Motor3D, B, tema: "claro", mat: new Materiales(B), escenario: escena ? (escena as unknown as Group) : new Group(), tinta: new MeshBasicMaterial(), inkHex: INK.claro };
+};
+
+/** La caja en pantalla de lo que three.js dibuja de `raiz` (cada vértice de cada malla visible, con su matriz), con `camara`. */
+function cajaDeThree(raiz: Object3D, camara: PerspectiveCamera, w: number, h: number): Caja {
+  let arriba: Object3D = raiz;
+  while (arriba.parent) arriba = arriba.parent;
+  arriba.updateMatrixWorld(true);
+  camara.updateMatrixWorld();
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  const v = new Vector3();
+  raiz.traverse((o) => {
+    const m = o as Mesh;
+    if (!m.isMesh || !m.visible) return;
+    const pos = m.geometry.getAttribute("position");
+    for (let i = 0; i < pos.count; i++) {
+      v.set(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(m.matrixWorld).project(camara);
+      const x = ((v.x + 1) / 2) * w, y = ((1 - v.y) / 2) * h;
+      x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+    }
+  });
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
+const cerca = (a: Caja | null, b: Caja, tol: number): void => {
+  expect(a).not.toBeNull();
+  for (const k of ["x", "y", "w", "h"] as const) expect(Math.abs((a as Caja)[k] - b[k]), k).toBeLessThan(tol);
+};
+
+/** Un motor sin WebGL: la misma cámara de three.js que usa el de verdad (`aplicarPose`), sin renderizar. */
+function motorDePrueba(): Motor3D {
+  const escena = new Scene();
+  const camara = new PerspectiveCamera();
+  return {
+    escena, camara, basura: new Basura(), tema: "claro", auditoria: null,
+    ajustes: { nivel: "baja", pixelRatio: 1, sombras: "no", particulas: 0.25, antialias: false },
+    renderer: { capabilities: { getMaxAnisotropy: () => 1 }, info: { render: { calls: 0, triangles: 0 } } },
+    alCambiarNivel: () => {},
+    cuadro(e: { w: number; h: number }, _perfil: unknown, dibujar: (mapa: never, pose: Pose3D) => void) {
+      const pose: Pose3D = { pos: [0, 0, 10], mira: [0, 0, 0], fov: 0.6, giro: 0 };
+      dibujar({} as never, pose);
+      aplicarPose(camara, pose, e.w / Math.max(1, e.h));
+    },
+  } as unknown as Motor3D;
+}
+
+/** La entrada del último cuadro con la pieza destacada en el piso, como la arma `pixi/pinata.ts` con el cartel puesto. */
+function entradaFinal(w: number, h: number, corona: number, cam?: Partial<ReturnType<typeof camaraDeEscena>>): EntradaPinata {
+  const g = geometria(w, h);
+  const sz = Math.max(12 * g.k, Math.min(26 * g.k, Math.sqrt(1 / 6) * 70 * g.k));
+  const big = sz * 2.4;
+  const yC = g.piso - sz * 0.62;
+  const car = Array.from({ length: 6 }, (_, i) => ({ dentro: false, x: w * (0.2 + 0.12 * i), y: yC, rot: 0.2 * i, color: 0x3366cc + i, tam: sz, ganadora: false }));
+  Object.assign(car[2]!, { x: w * 0.55, rot: 0.15, color: 0xe93d9c, tam: big, ganadora: true });
+  return {
+    t: 20, w, h, u: g.k,
+    cam: { x: w * 0.55, y: yC - (h * 0.14) / 1.3, zoom: 1.3, rot: 0, sacudonX: 0, sacudonY: 0, ...cam },
+    fase: "crown",
+    mundo: { piso: g.piso, R: g.R, k: g.k, ks: g.k * 1.2, ky: g.piso + 24 * g.k, top: 40 * g.k, restY: h * 0.4 },
+    olla: { x: w / 2, y: h * 0.4, rot: 0, escX: 1, escY: 1, ver: false, grietas: 4 },
+    cuerda: { x: w / 2, y: -200 * g.k },
+    chico: { x: w * 0.3, vueltas: 3, inclina: 0, paso: 0, amp: 0, palo: -1.25, mareo: 0, remera: 0xe93d9c },
+    car,
+    asoma: { ver: false, x: 0, y: 0, tam: 0, rot: 0, color: 0 },
+    rotura: 3,
+    corona,
+  };
+}
+
+/** La malla destacada que dibujó la vista: la del color pleno que brilla con su propio color. */
+function mallaDestacada(escena: Scene, color: number): Mesh {
+  let hallada: Mesh | null = null;
+  escena.traverse((o) => {
+    const m = o as Mesh & { material: { emissive?: { getHex(): number } } };
+    if (m.isMesh && m.visible && m.material?.emissive?.getHex() === color && m.children.length === 1) hallada = m;
+  });
+  expect(hallada).not.toBeNull();
+  return hallada as unknown as Mesh;
+}
+
+describe("el primer plano del final en 3D se mide sobre lo que dibuja el 3D", () => {
+  it("el despeje en 3D es del celular apaisado, como el acercamiento del 2D; en retrato y en la pantalla grande queda el de antes", () => {
+    for (const [w, h] of [[844, 390], [740, 360], [667, 375], [1000, 520], [932, 430]] as const) expect(primerPlano(w, h), `${w}x${h}`).toBe(true);
+    for (const [w, h] of [[390, 844], [360, 740], [1366, 768], [1920, 1080], [1000, 521], [520, 520]] as const) expect(primerPlano(w, h), `${w}x${h}`).toBe(false);
+  });
+
+  it("la caja proyectada con la cuenta pura es la que three.js dibuja de la pieza y su contorno, gire como gire", () => {
+    const geo = geometriaCaramelo(new Basura());
+    const puntos = geo.getAttribute("position").array as ArrayLike<number>;
+    for (const [w, h] of [[844, 390], [1366, 768], [390, 844]] as const) {
+      const g = geometria(w, h);
+      const s = escala3D(g.u);
+      for (const [giroY, giroZ, zoom] of [[0, 0, 1.3], [0.9, -0.3, 1.3], [2.1, 0.7, 1.6], [3.3, -1.2, 1]] as const) {
+        const cam = camaraTipica(g, zoom, 0.01, 2);
+        const pose = poseFrontal(cam, w, h, g.u, g.piso, elevacionDe(zoom, 3, 1), azimutDe(20));
+        const camara = new PerspectiveCamera();
+        aplicarPose(camara, pose, w / h);
+        const yBase = 1.7;
+        const escenario = new Group();
+        escenario.position.set(0, yBase, 0);
+        escenario.scale.setScalar(s);
+        const pieza = { x: (w * 0.55), y: 40, z: 0, giroY, giroZ, tam: 30 * g.k };
+        const m = new Mesh(geo, new MeshBasicMaterial());
+        contorno(ctxDePrueba(), m, 1.1);
+        m.position.set(pieza.x, pieza.y, pieza.z);
+        m.rotation.set(0, giroY, giroZ);
+        m.scale.setScalar(pieza.tam);
+        escenario.add(m);
+        cerca(cajaEnPantalla(pose, w, h, { y: yBase, s }, pieza, puntos, 1.1), cajaDeThree(escenario, camara, w, h), 1e-3);
+      }
+    }
+  });
+
+  it("detrás de la cámara no hay caja", () => {
+    const g = geometria(844, 390);
+    const pose = poseFrontal(camaraTipica(g, 1.3), g.w, g.h, g.u, g.piso, 0, 0);
+    expect(cajaEnPantalla(pose, g.w, g.h, { y: 0, s: 1 }, { x: 0, y: 0, z: pose.pos[2] + 50, giroY: 0, giroZ: 0, tam: 1 }, [1, 0, 0, -1, 0, 0], 1.1)).toBeNull();
+  });
+
+  it("lo que se despeja antes de dibujar es lo que el cuadro dibuja, con la cámara de three.js", () => {
+    for (const [w, h] of [[844, 390], [740, 360]] as const) {
+      for (const corona of [0, 0.4, 1.5]) {
+        const motor = motorDePrueba();
+        const vista = fabricaPinata(motor, { tema: "claro", auditar: false });
+        const e = entradaFinal(w, h, corona);
+        const antes = vista.cajaParaDespejar(e);
+        vista.frame(e);
+        const dibujada = cajaDeThree(mallaDestacada(motor.escena, 0xe93d9c), motor.camara, w, h);
+        cerca(antes, dibujada, 1e-3);
+        // Y lo que ve el auditor es lo dibujado, no el caramelo escondido del 2D.
+        cerca(vista.cajaDestacada(), dibujada, 1e-3);
+      }
+    }
+  });
+
+  it("la pieza del 3D, con su contorno, es más grande que el caramelo escondido del 2D: medir el 2D la dejaba corta", () => {
+    const e = entradaFinal(844, 390, 0);
+    const vista = fabricaPinata(motorDePrueba(), { tema: "claro", auditar: false });
+    vista.frame(e);
+    const c3 = vista.cajaDestacada()!;
+    const big = e.car[2]!.tam, z = e.cam.zoom;
+    // El 2D (`drawCandy`): de punta a punta 3,2 tamaños, de alto 1,44, más el trazo.
+    expect(c3.w).toBeGreaterThan(3.2 * big * z * 1.05);
+    expect(c3.h).toBeGreaterThan(1.44 * big * z * 1.05);
+  });
+
+  it("cuando el despeje corre y achica la escena, la cámara que dibuja la pieza la deja entre el cartel y el relator", () => {
+    const [w, h] = [844, 390];
+    let achicadas = 0;
+    // Bandas holgadas, angostas y, mientras gira, las más angostas: con una sola medida se pasaba hasta 0,6 px.
+    const casos: (readonly [number, number, number])[] = [[0, 150, 330], [0.5, 205, 335], [1.5, 230, 320], [0.5, 60, 300], [0.5, 250, 300], [1.2, 240, 280]];
+    for (let i = 0; i < 40; i++) casos.push([i * 0.06, 240 + (i % 3) * 5, 280 + (i % 4) * 4]);
+    for (const [corona, y0, y1] of casos) {
+      const vista = fabricaPinata(motorDePrueba(), { tema: "claro", auditar: false });
+      const e = entradaFinal(w, h, corona, { sacudonX: 3, sacudonY: -2 });
+      const zona = { x0: 2, y0, x1: w - 2, y1 };
+      // La escena de PixiJS y lo que le hace `despejarGanador` (stage.ts): escala alrededor del centro del cuerpo y corre.
+      const escena = { pivot: { x: e.cam.x, y: e.cam.y }, position: { x: w / 2 + e.cam.sacudonX, y: h / 2 + e.cam.sacudonY }, scale: { x: e.cam.zoom }, rotation: 0 };
+      const despejar = (c: Caja): void => {
+        const a = ajusteGanador(c, zona), cx = c.x + c.w / 2, cy = c.y + c.h / 2;
+        escena.position = { x: cx + (escena.position.x - cx) * a.s + a.dx, y: cy + (escena.position.y - cy) * a.s + a.dy };
+        escena.scale.x *= a.s;
+      };
+      // Lo mismo que `frame3D` de pixi/pinata.ts: dos medidas antes de dibujar, cada una con la cámara despejada.
+      for (let paso = 0; paso < 2; paso++) {
+        despejar(vista.cajaParaDespejar(e)!);
+        e.cam = camaraDeEscena(escena, w, h);
+      }
+      if (escena.scale.x < 1.3 * 0.99) achicadas++;
+      vista.frame(e);
+      const c = vista.cajaDestacada()!;
+      expect(c.y, `corona ${corona}`).toBeGreaterThanOrEqual(zona.y0 - 0.1);
+      expect(c.y + c.h, `corona ${corona}`).toBeLessThanOrEqual(zona.y1 + 0.1);
+      expect(c.x).toBeGreaterThanOrEqual(zona.x0 - 0.1);
+      expect(c.x + c.w).toBeLessThanOrEqual(zona.x1 + 0.1);
+    }
+    // Las bandas angostas no alcanzan con correrla: la escena se achica, y ahí la perspectiva del 3D no se achica igual.
+    expect(achicadas).toBeGreaterThanOrEqual(2);
+  });
+
+  it("sin pieza destacada no hay nada que despejar", () => {
+    const e = entradaFinal(844, 390, -1);
+    e.car[2]!.ganadora = false;
+    const vista = fabricaPinata(motorDePrueba(), { tema: "claro", auditar: false });
+    expect(vista.cajaParaDespejar(e)).toBeNull();
+    vista.frame(e);
+    expect(vista.cajaDestacada()).toBeNull();
+    expect(vista.despejaDestacada(844, 390)).toBe(true);
+    expect(vista.despejaDestacada(1366, 768)).toBe(false);
+  });
+
+  it("en el 2D de la piñata con 3D, el despeje se mide en el 3D antes de dibujar, y el auditor lee la caja del 3D", () => {
+    const src = sinComentarios(pinataPixi);
+    const f3 = src.slice(src.indexOf("function frame3D(): void {"), src.indexOf("S.run("));
+    // Se mide con la entrada del cuadro, se despeja, la cámara despejada pasa a la entrada, y recién ahí se dibuja.
+    // Si el 3D no la ve, queda el caramelo del 2D, como antes.
+    const despeje = /S\.despejarGanador\(v3\.cajaParaDespejar\(e\) \?\? caja2D\(\)\);\s*e\.cam = entradaBase\(S, tAll\)\.cam;/;
+    expect(f3).toMatch(despeje);
+    expect(f3.search(despeje)).toBeGreaterThan(f3.indexOf("const e: EntradaPinata = {"));
+    expect(f3.lastIndexOf("v3.frame(e);")).toBeGreaterThan(f3.search(despeje));
+    expect(f3.match(/v3\.frame\(/g)).toHaveLength(1);
+    // Dos medidas, cada una con la cámara ya despejada: la perspectiva del caramelo que gira no se achica como la escena.
+    expect(f3).toMatch(/for \(let paso = 0; paso < 2; paso\+\+\) \{\s*S\.despejarGanador\(v3\.cajaParaDespejar/);
+    // En el cuadro del 2D, el despeje con el caramelo escondido solo cuando el 3D no lo mide.
+    expect(src).toMatch(/if \(!despejaEl3D\(\)\) S\.despejarGanador\(caja2D\(\)\);/);
+    expect(src).toContain("const despejaEl3D = (): boolean => !!v3 && v3.despejaDestacada(S.sw(), S.sh());");
+    // El cuerpo para el auditor: con 3D, la caja que dibujó el 3D.
+    expect(src).toMatch(/if \(v3\) return v3\.cajaDestacada\(\);\s*return caja2D\(\);/);
   });
 });
