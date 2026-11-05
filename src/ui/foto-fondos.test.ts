@@ -71,7 +71,7 @@ function puntos(l: Llamada): Array<[number, number, number]> {
 
 describe("pintarFondoJuego", () => {
   it("un juego sin fondo dibujado devuelve false y no toca el lienzo", () => {
-    for (const juego of ["trompo", "chovena", "pinata", "wheel", "cablecar", "oruro", "guajojo", "toborochi", "", "Race", "SAPO", "nope", "__proto__", "constructor", "toString", "hasOwnProperty"]) {
+    for (const juego of ["cablecar", "tombola", "quien", "trueque", "luz", "", "Race", "SAPO", "nope", "__proto__", "constructor", "toString", "hasOwnProperty"]) {
       const { pinto, log } = pintar(juego);
       expect(pinto, juego).toBe(false);
       expect(log, juego).toEqual([]);
@@ -269,5 +269,15 @@ describe("el motivo de cada juego cabe en la ventana sin paneles", () => {
     for (const b of bronce) expect(enVentana(b), `bronce y ${b.y0.toFixed(0)}–${b.y1.toFixed(0)}`).toBe(true);
     const argollas = fs.filter((f) => f.como === "stroke" && f.color === "#ffc629" && f.elipse && enVentana(f));
     expect(argollas.length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("los diez juegos del selector tienen fondo", () => {
+  it("cada juego visible pinta su ilustración y devuelve true", () => {
+    for (const juego of ["race", "sapo", "trompo", "chovena", "pinata", "wheel", "teleferico", "oruro", "guajojo", "toborochi"]) {
+      const llamadas: Llamada[] = [];
+      expect(pintarFondoJuego(lienzoFalso(llamadas), juego, 1080, 1350), juego).toBe(true);
+      expect(llamadas.length, juego).toBeGreaterThan(40);
+    }
   });
 });
