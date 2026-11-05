@@ -258,3 +258,18 @@
 .marca-mono-claro { background: #fff6e9; }
 .marca-mono-oscuro { background: #191919; }
 @media (max-width: 1000px) { .marca-mono { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* DevFest Tarija 2026: el evento donde Tinkazo es sponsor, con el afiche oficial y el botón para reservar lugar. */
+.marca-devfest { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 22px 28px; align-items: center; margin: 8px 0 28px; padding: 20px 24px; border: var(--bw) solid var(--ink); background: var(--card); box-shadow: var(--sh); border-top: 8px solid var(--yellow); }
+.marca-df-afiche { display: block; line-height: 0; border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm); background: #fff; }
+.marca-df-afiche img { width: 100%; height: auto; display: block; }
+.marca-df-texto h2 { margin: 10px 0 8px; }
+.marca-df-texto p { margin: 0 0 14px; max-width: 62ch; }
+.marca-df-org { display: inline-flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 16px; padding: 8px 14px; background: #fff; color: #191919; border: var(--bw) solid var(--ink); font-weight: 700; }
+.marca-df-org img { height: 22px; width: auto; }
+.marca-df-rsvp { font-size: 18px; }
+@media (max-width: 760px) {
+  .marca-devfest { grid-template-columns: 1fr; padding: 16px; }
+  .marca-df-afiche { max-width: 260px; }
+  .marca-df-org img { height: 18px; }
+}
