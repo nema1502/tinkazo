@@ -4,7 +4,7 @@ import { acortar, ponerLogoDeRuta, rutaDe } from "../enlace-corto";
 import type { Logo } from "../logo";
 import { decodeProof, esSinSello, type Proof } from "../protocol/proof";
 import { eventoUrl, partirEvento, type SorteoDelEvento } from "../protocol/evento";
-import { fotoPng, type Foto } from "./foto";
+import { fotoDelJuegoPng, fotoPng, type Foto } from "./foto";
 import { type ConOrden, enOrdenDeSalida } from "./agrupar";
 import { contar, refDe } from "../contar";
 import type { PropsDe, Ref } from "../../workers/enlaces/src/conteo";
@@ -19,6 +19,12 @@ import type { PropsDe, Ref } from "../../workers/enlaces/src/conteo";
  * frena compartir: si el servicio no contesta en unos segundos, sigue con el
  * largo. Un evento va primero entero en un solo enlace corto, con una sola
  * foto; si no sale, en las partes de siempre, cada una con su enlace largo.
+ *
+ * Justo después del sorteo (`draw.ts`, con el juego que se jugó), si ese juego
+ * tiene ilustración (`foto-fondos.ts`), van dos fotos lado a lado: la del
+ * juego, elegida, y la de siempre. Tocar una la elige, y se comparte, se
+ * descarga o se copia solo esa. Mis sorteos, la página de verificación y los
+ * eventos no saben el juego: la foto de siempre, sola.
  *
  * Lo usan el resultado del sorteo (`draw.ts`), Mis sorteos (con la lista del
  * historial) y la página de verificación (con lo que ella misma rehizo). Por
@@ -84,6 +90,12 @@ export interface DatosSorteo {
    * cifrado, en el enlace corto. No cambia el mensaje ni el comprobante.
    */
   logo?: Logo;
+  /**
+   * El juego que contó el resultado, solo desde la pantalla del sorteo: suma
+   * la foto con su fondo, si tiene ilustración. No cambia el mensaje, la foto
+   * de siempre ni el comprobante.
+   */
+  juego?: string;
 }
 
 /**
@@ -230,6 +242,11 @@ export interface Listo {
   mensaje: string;
   /** Una foto por enlace: una sola, o una por parte del evento. */
   fotos: Foto[];
+  /**
+   * La foto con el fondo del juego, para elegir entre ella (primero, elegida) y
+   * la de siempre. Si el juego no tiene ilustración, no se ofrece.
+   */
+  juego?: Foto;
   /** Una nota arriba, por ejemplo que el evento va en varios enlaces. */
   nota?: string;
   /** El nombre de los archivos, sin la extensión. */
@@ -354,6 +371,11 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
   const urls: string[] = [];
   let archivos: File[] = [];
   let mensaje = "";
+  /** Dos fotos para elegir (la del juego y la de siempre): se comparte solo la elegida. */
+  let elegir = false;
+  let elegida = 0;
+  /** Lo que se comparte, se descarga o se copia: la elegida, o todas si no hay que elegir. */
+  const elegidos = (): File[] => (elegir ? archivos.slice(elegida, elegida + 1) : archivos);
 
   const avisar: Aviso = (texto) => {
     aviso.textContent = texto;
@@ -368,7 +390,10 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
       if (dlg.isConnected) fotos.innerHTML = `<p class="note">${esc(cad(lang, "cmpSinFoto"))}</p>`;
       return;
     }
-    const pngs = await Promise.all(listo.fotos.map((f) => fotoPng(f)));
+    const [pngs, delJuego] = await Promise.all([
+      Promise.all(listo.fotos.map((f) => fotoPng(f))),
+      listo.juego ? fotoDelJuegoPng(listo.juego) : Promise.resolve(null),
+    ]);
     // Si se cerró mientras tanto, no hay nada que pintar.
     if (!dlg.isConnected) return;
     mensaje = listo.mensaje;
@@ -377,17 +402,46 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
     archivos = pngs.flatMap((png, i) =>
       png ? [new File([png], `${listo.archivo}${ext ? `-${i + 1}` : ""}.png`, { type: "image/png" })] : [],
     );
+    // La del juego y la de siempre, para elegir: solo con una foto de siempre (un sorteo, nunca las partes de un evento).
+    elegir = !!delJuego && archivos.length === 1;
+    if (delJuego && elegir) archivos = [new File([delJuego], `${listo.archivo}-juego.png`, { type: "image/png" }), ...archivos];
+    elegida = 0;
     fotos.innerHTML = "";
     fotos.removeAttribute("aria-busy");
     fotos.classList.toggle("varias", archivos.length > 1);
-    for (const f of archivos) {
+    const opciones: HTMLButtonElement[] = [];
+    archivos.forEach((f, i) => {
       const url = URL.createObjectURL(f);
       urls.push(url);
       const img = document.createElement("img");
       img.src = url;
       img.alt = cad(lang, "cmpFotoAlt");
       img.className = "cmp-png";
-      fotos.appendChild(img);
+      if (!elegir) {
+        fotos.appendChild(img);
+        return;
+      }
+      // Cada foto es un botón: se elige con un toque, con Enter o con espacio, y dice cuál está elegida.
+      const op = document.createElement("button");
+      op.type = "button";
+      op.className = "cmp-elegir";
+      op.setAttribute("aria-label", cad(lang, i === 0 ? "cmpFotoJuego" : "cmpFotoClasica"));
+      op.setAttribute("aria-pressed", String(i === elegida));
+      img.alt = "";
+      op.appendChild(img);
+      op.addEventListener("click", () => {
+        elegida = i;
+        opciones.forEach((o, k) => o.setAttribute("aria-pressed", String(k === elegida)));
+        avisar("");
+      });
+      opciones.push(op);
+      fotos.appendChild(op);
+    });
+    if (elegir) {
+      const guia = document.createElement("p");
+      guia.className = "note cmp-elige";
+      guia.textContent = cad(lang, "cmpElegirFoto");
+      fotos.appendChild(guia);
     }
     if (!archivos.length) fotos.innerHTML = `<p class="note">${esc(cad(lang, "cmpSinFoto"))}</p>`;
     if (listo.nota) {
@@ -407,7 +461,7 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
     wa.textContent = cad(lang, "cmpWa");
     wa.disabled = false;
     bajar.disabled = !archivos.length;
-    bajar.textContent = cad(lang, archivos.length > 1 ? "cmpBajarFotos" : "cmpBajarFoto");
+    bajar.textContent = cad(lang, elegidos().length > 1 ? "cmpBajarFotos" : "cmpBajarFoto");
     copiar.disabled = false;
     // Si nadie movió el foco, va a la acción principal.
     const a = document.activeElement;
@@ -420,7 +474,7 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
   wa.addEventListener("click", () => {
     if (compartiendo) return;
     compartiendo = true;
-    void compartirPorWhatsapp(archivos, mensaje, avisar, lang)
+    void compartirPorWhatsapp(elegidos(), mensaje, avisar, lang)
       .then((canal) => {
         if (canal) contarCompartido(p, canal);
       })
@@ -429,7 +483,7 @@ export function abrirCompartir(p: Paquete, lang: Lang = getLang()): void {
       });
   });
   bajar.addEventListener("click", () => {
-    archivos.forEach(descargar);
+    elegidos().forEach(descargar);
     avisar("");
   });
   copiar.addEventListener("click", async () => {
@@ -481,9 +535,12 @@ export function abrirSorteo(d: DatosSorteo, lang: Lang = getLang(), op: { corto?
         ponerLogoDeRuta(rutaDe(d.enlace), d.logo);
         const c = op.corto === false ? null : await acortar(d.enlace);
         const enlace = c?.corto ?? d.enlace;
+        const foto = fotoDeSorteo(lang, d, enlace);
         return {
           mensaje: mensajeDeSorteo(lang, { ...d, enlace }),
-          fotos: [fotoDeSorteo(lang, d, enlace)],
+          fotos: [foto],
+          // La misma foto sobre el fondo del juego que se jugó: se ofrece si ese juego tiene ilustración.
+          ...(d.juego ? { juego: { ...foto, fondo: d.juego } } : {}),
           archivo: archivoDe(d.numero, d.fecha),
           corto: !!c,
         };
