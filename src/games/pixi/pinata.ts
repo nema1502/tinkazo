@@ -16,6 +16,7 @@ import { reservaDeMarcas, textoMarcador } from "./kit/marcador";
 import { CHIP_SCALE, medidasContador, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 import { enchufar3D, entradaBase } from "../tres/enchufe";
 import type { Caja, Caramelo3D, EntradaPinata, MontajePinata3D, VistaPinata3D } from "../tres/pinata-3d-tipos";
+import { HOLGURA_3D } from "./ganador-altura";
 
 /**
  * Piñata.
@@ -1443,7 +1444,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       // despeje achica la escena, la perspectiva del caramelo que gira no se achica igual, y la segunda medida lo
       // termina de acomodar (si ya cabe, no mueve nada). Medir no dibuja: el cuadro se dibuja una sola vez.
       for (let paso = 0; paso < 2; paso++) {
-        S.despejarGanador(v3.cajaParaDespejar(e) ?? caja2D());
+        S.despejarGanador(v3.cajaParaDespejar(e) ?? caja2D(), HOLGURA_3D);
         e.cam = entradaBase(S, tAll).cam;
       }
     }

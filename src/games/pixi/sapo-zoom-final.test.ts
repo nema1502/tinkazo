@@ -130,7 +130,7 @@ describe("Sapo final close-up in 3D", () => {
     expect(loop.indexOf("if (!cerca3D && tAll >= T_CROWN) crownUI.at(")).toBeGreaterThan(drawAt);
     expect(loop).toMatch(/if \(!v3\) S\.despejarGanador\(cuerpo\);/);
     const enc = src.slice(src.indexOf("const encajar3D = "), src.indexOf("const encajar3D = ") + 600);
-    expect(enc).toContain("S.despejarGanador(caja);");
+    expect(enc).toContain("S.despejarGanador(caja, HOLGURA_3D);");
     expect(enc).toContain("entradaBase(S, tAll).cam");
   });
 });

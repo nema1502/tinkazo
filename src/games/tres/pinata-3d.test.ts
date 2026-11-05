@@ -514,7 +514,7 @@ describe("el primer plano del final en 3D se mide sobre lo que dibuja el 3D", ()
     const f3 = src.slice(src.indexOf("function frame3D(): void {"), src.indexOf("S.run("));
     // Se mide con la entrada del cuadro, se despeja, la cámara despejada pasa a la entrada, y recién ahí se dibuja.
     // Si el 3D no la ve, queda el caramelo del 2D, como antes.
-    const despeje = /S\.despejarGanador\(v3\.cajaParaDespejar\(e\) \?\? caja2D\(\)\);\s*e\.cam = entradaBase\(S, tAll\)\.cam;/;
+    const despeje = /S\.despejarGanador\(v3\.cajaParaDespejar\(e\) \?\? caja2D\(\), HOLGURA_3D\);\s*e\.cam = entradaBase\(S, tAll\)\.cam;/;
     expect(f3).toMatch(despeje);
     expect(f3.search(despeje)).toBeGreaterThan(f3.indexOf("const e: EntradaPinata = {"));
     expect(f3.lastIndexOf("v3.frame(e);")).toBeGreaterThan(f3.search(despeje));

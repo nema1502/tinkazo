@@ -24,6 +24,7 @@ import { FORMA_SAPO, respuestasSapo } from "./sapo-nino";
 import { enchufar3D, entradaBase } from "../tres/enchufe";
 import type { Camara2D, Montaje3D } from "../tres/tipos";
 import type { AgujeroSapo, ArgollaSapo, EntradaSapo, EstadoArgolla, Puente } from "../tres/sapo-3d";
+import { HOLGURA_3D } from "./ganador-altura";
 
 /**
  * El sapo.
@@ -1153,7 +1154,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
    */
   const encajar3D = (caja: Caja): Camara2D | null => {
     const x = S.scene.position.x, y = S.scene.position.y, z = S.scene.scale.x;
-    S.despejarGanador(caja);
+    S.despejarGanador(caja, HOLGURA_3D);
     if (S.scene.position.x === x && S.scene.position.y === y && S.scene.scale.x === z) return null;
     return entradaBase(S, tAll).cam;
   };

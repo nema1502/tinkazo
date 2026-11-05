@@ -15,6 +15,7 @@ import { crearLlamaAguayo } from "./llama-aguayo";
 import { TEXTOS_CARRERA } from "./carrera-textos";
 import type { Tanda } from "./carrera-tandas";
 import type { Terreno } from "./carrera-tiempos";
+import { HOLGURA_3D } from "../pixi/ganador-altura";
 import { BORLA_RADIO, LLAMA_ALTO, LLAMA_COLA, LLAMA_HOCICO, LLAMA_LARGO, PELAJES, crearBorla, crearLlama, crearManta, type Llama, type Momento } from "./llama";
 
 /**
@@ -1483,7 +1484,7 @@ const PROTEGE_DETRAS = 1;
     if (!tres || !primerPlanoFinal(P, t, d.tCrown)) return;
     const movida = despejarVisto({
       medir: cajaVista3D,
-      despejar: (c) => S.despejarGanador(c),
+      despejar: (c) => S.despejarGanador(c, HOLGURA_3D),
       pose: () => [cam.x, cam.y, cam.zoom],
       reencuadrar: () => encuadrar3D(false),
     });
