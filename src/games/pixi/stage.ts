@@ -18,6 +18,7 @@ import { estadoFoco, latidosFoco, tiemposFoco } from "./foco";
 import { FocoVista, type FocoPunto } from "./foco-vista";
 import type { Arc } from "../drama";
 import { reves, tira } from "./papel-picado";
+import { pasosDelCuadro } from "../reloj-cuadro";
 import { watchRecovery } from "./recover";
 
 /**
@@ -1339,12 +1340,18 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
       const pace = paceFactor();
       const loop = (now: number): void => {
         if (dead) return;
-        const dt = prev ? Math.min(0.05, (now - prev) / 1000) / pace : 0;
+        // Un cuadro largo se reparte en pasos de 50 ms: ver `reloj-cuadro.ts`.
+        const pasos = prev ? pasosDelCuadro((now - prev) / 1000) : [];
         if (prev) gobernador.cuadro(now - prev, codigo);
         const c0 = performance.now();
         prev = now;
         if (start < 0) start = now;
-        loopFn?.(dt, (now - start) / 1000);
+        const t = (now - start) / 1000;
+        if (pasos.length === 0) loopFn?.(0, t);
+        for (const paso of pasos) {
+          loopFn?.(paso / pace, t);
+          if (dead) return;
+        }
         if (dead) return;
         // El pico del zoom de emoción, en la hora de la cámara, para el auditor
         // de emoción: si no hubo zoom de emoción, no se anota nada.

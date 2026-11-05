@@ -4,6 +4,7 @@ import { nameList, setPickSeed, t } from "../i18n";
 import { musicCue, startMusic, stopMusic } from "../music";
 import { mantenerDespierta, soltarDespierta } from "../ui/despierta";
 import { entornoDeAhora, grandeRechazada } from "../ui/vista-grande";
+import { pasosDelCuadro } from "./reloj-cuadro";
 
 /**
  * Lo que comparten todos los juegos.
@@ -232,16 +233,22 @@ export function mount(beacon: Beacon, done: () => void, onSkip: () => void): Sta
       const pace = paceFactor();
       const loop = (now: number): void => {
         if (dead) return;
-        // Se acota el delta para que volver de una pestaña en segundo plano no
-        // salte media animación de golpe.
-        const dt = prev ? Math.min(0.05, (now - prev) / 1000) / pace : 0;
+        // Un cuadro largo se reparte en pasos de 50 ms y el cuadro entero se
+        // acota, para que volver de una pestaña en segundo plano no salte media
+        // animación de golpe: ver `reloj-cuadro.ts`.
+        const pasos = prev ? pasosDelCuadro((now - prev) / 1000) : [];
         prev = now;
         // El reloj de los adornos cuenta desde que arrancó el juego, no desde
         // que se abrió la página. Si no, el sol de la ruleta y los brillos
         // salían en otra posición según cuánto rato estuvo abierta la pestaña
         // antes de sortear, y la misma ronda no se dibujaba igual dos veces.
         if (start < 0) start = now;
-        fn(dt, (now - start) / 1000);
+        const t = (now - start) / 1000;
+        if (pasos.length === 0) fn(0, t);
+        for (const paso of pasos) {
+          if (dead) return;
+          fn(paso / pace, t);
+        }
         if (!dead) rafId = requestAnimationFrame(loop);
       };
       rafId = requestAnimationFrame(loop);

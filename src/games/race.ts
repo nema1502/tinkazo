@@ -6,6 +6,7 @@ import { NO_POSE, THEMES, type Pose, type ThemeId } from "./themes";
 import { enOrden, tension, writeStory, type Arc, type Story } from "./drama";
 import { registerSkip, WINNER_HOLD, chrome, drawWinnerPlate, flashScreen, shorten, winnerNames, winnersLabel } from "./overlay";
 import { musicCue, startMusic, stopMusic } from "../music";
+import { pasosDelCuadro } from "./reloj-cuadro";
 
 /* Modo estadio: carrera de llamas a pantalla completa, sembrada con el número del sorteo. */
 
@@ -962,9 +963,14 @@ export function stadiumRace(
   const pace = paceFactor();
   function loop(now: number): void {
     // El mismo factor de ritmo que los demás juegos: estira todo junto.
-    const dt = Math.min(0.05, (now - tPrev) / 1000) / pace;
+    // Un cuadro largo se reparte en pasos de 50 ms: ver `reloj-cuadro.ts`.
+    const pasos = pasosDelCuadro((now - tPrev) / 1000);
     tPrev = now;
-    update(dt);
+    if (pasos.length === 0) update(0);
+    for (const paso of pasos) {
+      if (phase === "dead") return;
+      update(paso / pace);
+    }
     drawScene();
     if (phase !== "dead") rafId = requestAnimationFrame(loop);
   }
