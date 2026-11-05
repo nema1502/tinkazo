@@ -82,8 +82,8 @@ function conSangre(l, S) {
   return out;
 }
 
-/** Los personajes de la colección de stickers que van en los impresos: los que más se quieren. */
-export const PERSONAJES = ["sapo", "guajojo", "toborochi", "llama-corazon"];
+/** Los stickers de la colección que van en los impresos y en las imágenes para redes: los que más se quieren, y uno de código para los encuentros de desarrolladores. */
+export const PERSONAJES = ["dev-mi-llama", "guajojo", "toborochi", "llama-corazon"];
 /**
  * Una fila de stickers de la colección, con su borde blanco, centrada en la caja [x, y, w, h]. Cada uno mide lo mismo de
  * alto (o de ancho, si no entra) y quedan separados por `g`.
