@@ -15,8 +15,8 @@ import { pintarMarcas } from "./kit/marcador-vista";
 import { reservaDeMarcas, textoMarcador } from "./kit/marcador";
 import { CHIP_SCALE, medidasContador, CREAM, INK, MONO, YELLOW, hash, mountPixi, type PixiStage } from "./stage";
 import { enchufar3D, entradaBase } from "../tres/enchufe";
-import type { Montaje3D, Vista3D } from "../tres/tipos";
-import type { Caramelo3D, EntradaPinata } from "../tres/pinata-3d-tipos";
+import type { Caja, Caramelo3D, EntradaPinata, MontajePinata3D, VistaPinata3D } from "../tres/pinata-3d-tipos";
+import { HOLGURA_3D } from "./ganador-altura";
 
 /**
  * Piñata.
@@ -101,7 +101,7 @@ interface Candy {
 const SLIDE = 0.18;
 interface Swing { at: number; miss: boolean; drop: number[]; done: boolean }
 
-export async function pinataPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void, tres?: Montaje3D<EntradaPinata>): Promise<void> {
+export async function pinataPixi(names: string[], winners: readonly number[], beacon: Beacon, done: () => void, tres?: MontajePinata3D): Promise<void> {
   const winnerIdx = winners[0] ?? 0;
   let skipFn = (): void => {};
   const st = await mountPixi(beacon, done, () => skipFn(), { transparente: !!tres });
@@ -227,8 +227,18 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   /** Lo que `drawKid` puso en el cuadro (el ángulo del palo, el mareo, el paso): el 3D lo dibuja tal cual. */
   const kidPose = { a: 0, dizzy: 0, gait: 0, amp: 0 };
   /** La vista 3D, si está prendida y arrancó. Con ella, el 2D apaga su fondo, su piso y sus figuras (`apagar2D`). */
-  let v3: Vista3D<EntradaPinata> | null = null;
+  let v3: VistaPinata3D | null = null;
   let winBig = 0;
+  /** El caramelo ganador del 2D (escondido con el 3D) en la pantalla: solo el caramelo y su contorno, sin halo ni chips. */
+  const caja2D = (): Caja => {
+    const b = winnerCandy.getBounds();
+    return { x: b.x, y: b.y, w: b.width, h: b.height };
+  };
+  /**
+   * Con el 3D en el celular apaisado, el despeje del cartel y del relator se mide sobre el caramelo que dibuja el 3D, con
+   * su cámara (`frame3D`). En el 2D, en retrato y en la pantalla grande, sobre el caramelo del 2D, como antes.
+   */
+  const despejaEl3D = (): boolean => !!v3 && v3.despejaDestacada(S.sw(), S.sh());
   /**
    * Dónde se para el chico para pegarle: a la izquierda de la piñata, a la
    * distancia justa para que el palo la alcance. `py` es la altura de la
@@ -819,7 +829,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   build();
   const crownUI = S.crown(names, winners);
   S.onResize(build);
-  v3 = enchufar3D(S, tres);
+  v3 = enchufar3D(S, tres) as VistaPinata3D | null;
   apagar2D();
   /**
    * La toma de la colgada: la piñata que sube y el chico al que le dan
@@ -1214,8 +1224,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       // El cartel primero, en este mismo cuadro: el caramelo se separa de donde el cartel está ahora, no del anterior.
       if (phase === "crown") crownUI.at(tAll - T_CROWN);
       if (winC.touch >= 0 || phase === "crown") {
-        const cuerpo = winnerCandy.getBounds();
-        S.despejarGanador({ x: cuerpo.x, y: cuerpo.y, w: cuerpo.width, h: cuerpo.height });
+        if (!despejaEl3D()) S.despejarGanador(caja2D());
       }
     } else if (phase === "crown") crownUI.at(tAll - T_CROWN);
     drawLista();
@@ -1383,9 +1392,9 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
   }, () => {
     if (winC.inside) return null;
-    // Solo el caramelo dibujado y su contorno: sin halo, chips ni otros caramelos.
-    const b = winnerCandy.getBounds();
-    return { x: b.x, y: b.y, w: b.width, h: b.height };
+    // Solo el caramelo dibujado y su contorno: sin halo, chips ni otros caramelos. Con el 3D, el que se ve es el del 3D.
+    if (v3) return v3.cajaDestacada();
+    return caja2D();
   }, () => ({ activa: winC.touch >= 0 || phase === "crown", tiempo: tAll, fase: phase }));
 
   /* ---------------------------------------------------------------- el 3D */
@@ -1417,7 +1426,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       o.ganadora = c === winC;
       o.tam = c === winC ? winBig : sz;
     }
-    v3.frame({
+    const e: EntradaPinata = {
       ...entradaBase(S, tAll),
       fase: phase === "dead" ? "crown" : phase,
       mundo: mundo3D,
@@ -1428,7 +1437,18 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       asoma: asoma3D,
       rotura: brokeDone ? tAll - T_BREAK : -1,
       corona: tAll - T_CROWN,
-    });
+    };
+    if (!winC.inside && (winC.touch >= 0 || phase === "crown") && despejaEl3D()) {
+      // El cartel ya está puesto (`draw`): se mide el caramelo como lo va a dibujar el 3D con esta cámara, se despeja, y
+      // el cuadro se dibuja con la cámara despejada. Si el 3D no lo ve, el caramelo del 2D, como antes. Dos veces: si el
+      // despeje achica la escena, la perspectiva del caramelo que gira no se achica igual, y la segunda medida lo
+      // termina de acomodar (si ya cabe, no mueve nada). Medir no dibuja: el cuadro se dibuja una sola vez.
+      for (let paso = 0; paso < 2; paso++) {
+        S.despejarGanador(v3.cajaParaDespejar(e) ?? caja2D(), HOLGURA_3D);
+        e.cam = entradaBase(S, tAll).cam;
+      }
+    }
+    v3.frame(e);
   }
 
   S.run((dt, now) => {

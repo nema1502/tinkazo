@@ -5,8 +5,8 @@ import {
 } from "three";
 import { LLAMA_ALTO } from "./carrera-forma";
 import {
-  TAM3D, ZC, camara3D, colocar, corrimientoLider, escala3D, PUNTOS_LLAMA,
-  type Entrada3D, type Fabrica3D, type Geometria3D, type OpcionesFabrica3D, type Pantalla3D, type Vista3D,
+  TAM3D, ZC, cajaProyectada, camara3D, colocar, corrimientoLider, escala3D, PUNTOS_LLAMA, puntasDe,
+  type CajaPantalla, type Camara2D, type Entrada3D, type Fabrica3D, type Geometria3D, type OpcionesFabrica3D, type Pantalla3D, type Pose3D, type Vista3D,
 } from "./carrera-3d-mapa";
 import { sinAzarDeTres } from "./carrera-3d-ids";
 import { crearEfectos3D } from "./carrera-3d-obstaculos";
@@ -630,6 +630,8 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
 
   let desvio = 0;
   let tPrevio = 0;
+  /** El último cuadro y el tamaño de las llamas que miró la cámara: `encuadrar` vuelve a poner la cámara sobre él. */
+  let ultimo: { e: Entrada3D; esc: number } | null = null;
 
   function frame(e: Entrada3D): void {
     sinAzarDeTres(() => cuadro(e));
@@ -695,13 +697,8 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
 
     // La cámara: la del director del 2D, con perspectiva.
     const esc = e.gente.length ? escSum / e.gente.length : 0.5;
-    const pose = camara3D(e.cam, e.w, e.h, e.u, esc);
-    camara.fov = (pose.fov * 180) / Math.PI;
-    camara.position.set(...pose.pos);
-    camara.up.set(Math.sin(pose.giro), Math.cos(pose.giro), 0);
-    camara.lookAt(pose.mira[0], pose.mira[1], pose.mira[2]);
-    camara.updateProjectionMatrix();
-    camara.updateMatrixWorld();
+    ultimo = { e, esc };
+    const pose = posarCamara(e.cam, e, esc);
     // En un celular parado la perspectiva empuja el carril de afuera fuera del encuadre del director: la cámara se corre de lado
     // lo justo para que la llama que va adelante quede entera, con aire hasta el borde. Función de la hora, sin azar.
     let objetivo = 0;
@@ -722,15 +719,7 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
     // Si la llama se sale del aire, la cámara llega de una vez (nunca queda cortada); cuando sobra lugar, vuelve despacio.
     if (Math.abs(objetivo) > Math.abs(desvio) && Math.sign(objetivo) === Math.sign(desvio || objetivo)) desvio = objetivo;
     else desvio += (objetivo - desvio) * (1 - Math.exp(-dt * 4));
-    if (Math.abs(desvio) > 1e-6) {
-      v.set(camara.matrixWorld.elements[0] ?? 1, camara.matrixWorld.elements[1] ?? 0, camara.matrixWorld.elements[2] ?? 0).multiplyScalar(desvio);
-      camara.position.add(v);
-      camara.lookAt(pose.mira[0] + v.x, pose.mira[1] + v.y, pose.mira[2] + v.z);
-      camara.updateMatrixWorld();
-    }
-    cielo?.position.copy(camara.position);
-    sol.target.position.set(pose.mira[0], 0, pose.mira[2]);
-    sol.position.set(pose.mira[0] - 60, 90, pose.mira[2] + 70);
+    correrCamara(pose);
 
     renderer.render(escena, camara);
 
@@ -742,22 +731,73 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
       auditoria.cuadros++;
       auditoria.horas = e.horas;
       auditoria.t = e.t;
-      if (e.borla) {
-        // Dónde caen en la pantalla los pies de la llama líder, el centro del aro y la llama entera (nariz, cola, cabeza y pies).
-        const l = llamas.get(e.borla.duenia);
-        const px = (p: Vector3): { x: number; y: number } => {
-          const q = p.clone().project(camara);
-          return { x: ((q.x + 1) / 2) * W, y: ((1 - q.y) / 2) * H };
-        };
-        if (l) {
-          const r = l.rig.raiz, k = r.scale.x;
-          const pts = PUNTOS_LLAMA.map(([dx, dy, dz]) => px(new Vector3(r.position.x + dx * k, r.position.y + dy * k, r.position.z + dz * k)));
-          const c = lider.centro?.();
-          auditoria.lider = { persona: e.borla.duenia, pie: px(r.position), aro: c ? px(c) : null, caja: { x0: Math.min(...pts.map((q) => q.x)), x1: Math.max(...pts.map((q) => q.x)), y0: Math.min(...pts.map((q) => q.y)), y1: Math.max(...pts.map((q) => q.y)) }, w: W, h: H };
-        }
-      }
+      anotarLider(e);
       auditoria.puestos = e.gente.map((c) => ({ persona: c.persona, x: colocar(c, e.u).x, z: colocar(c, e.u).z }));
     }
+  }
+
+  /** Para los auditores: dónde caen en la pantalla los pies de la llama líder, el centro del aro y la llama entera (nariz, cola, cabeza y pies). */
+  function anotarLider(e: Entrada3D): void {
+    if (!auditoria || !e.borla) return;
+    const l = llamas.get(e.borla.duenia);
+    const px = (p: Vector3): { x: number; y: number } => {
+      const q = p.clone().project(camara);
+      return { x: ((q.x + 1) / 2) * W, y: ((1 - q.y) / 2) * H };
+    };
+    if (l) {
+      const r = l.rig.raiz, k = r.scale.x;
+      const pts = PUNTOS_LLAMA.map(([dx, dy, dz]) => px(new Vector3(r.position.x + dx * k, r.position.y + dy * k, r.position.z + dz * k)));
+      const c = lider.centro?.();
+      auditoria.lider = { persona: e.borla.duenia, pie: px(r.position), aro: c ? px(c) : null, caja: { x0: Math.min(...pts.map((q) => q.x)), x1: Math.max(...pts.map((q) => q.x)), y0: Math.min(...pts.map((q) => q.y)), y1: Math.max(...pts.map((q) => q.y)) }, w: W, h: H };
+    }
+  }
+
+  /** Pone la cámara de three.js donde la pone `camara3D` para la cámara `cam` del 2D (sin el corrimiento de lado). */
+  function posarCamara(cam: Camara2D, e: Entrada3D, esc: number): Pose3D {
+    const pose = camara3D(cam, e.w, e.h, e.u, esc);
+    camara.fov = (pose.fov * 180) / Math.PI;
+    camara.position.set(...pose.pos);
+    camara.up.set(Math.sin(pose.giro), Math.cos(pose.giro), 0);
+    camara.lookAt(pose.mira[0], pose.mira[1], pose.mira[2]);
+    camara.updateProjectionMatrix();
+    camara.updateMatrixWorld();
+    return pose;
+  }
+
+  /** El corrimiento de lado del celular parado (`desvio`), y el cielo y el sol que siguen a la cámara. */
+  function correrCamara(pose: Pose3D): void {
+    if (Math.abs(desvio) > 1e-6) {
+      v.set(camara.matrixWorld.elements[0] ?? 1, camara.matrixWorld.elements[1] ?? 0, camara.matrixWorld.elements[2] ?? 0).multiplyScalar(desvio);
+      camara.position.add(v);
+      camara.lookAt(pose.mira[0] + v.x, pose.mira[1] + v.y, pose.mira[2] + v.z);
+      camara.updateMatrixWorld();
+    }
+    cielo?.position.copy(camara.position);
+    sol.target.position.set(pose.mira[0], 0, pose.mira[2]);
+    sol.position.set(pose.mira[0] - 60, 90, pose.mira[2] + 70);
+  }
+
+  /** Otra cámara del 2D sobre el último cuadro: las llamas, el corrimiento y la hora quedan como estaban. */
+  function encuadrar(cam: Camara2D, dibujar: boolean): void {
+    const u = ultimo;
+    if (!u) return;
+    sinAzarDeTres(() => {
+      correrCamara(posarCamara(cam, u.e, u.esc));
+      if (dibujar) {
+        renderer.render(escena, camara);
+        anotarLider(u.e);
+      }
+    });
+  }
+
+  function cajaDe(persona: number): CajaPantalla | null {
+    const l = llamas.get(persona);
+    if (!l || W === 0) return null;
+    const r = l.rig.raiz;
+    return cajaProyectada(puntasDe([r.position.x, r.position.y, r.position.z], r.scale.x).map(([x, y, z]) => {
+      v.set(x, y, z).project(camara);
+      return { x: v.x, y: v.y, z: v.z };
+    }), W, H);
   }
 
   function pantallaDe(persona: number): Pantalla3D | null {
@@ -774,6 +814,8 @@ function armarVista3D(o: OpcionesFabrica3D): Vista3D {
   return {
     frame,
     pantallaDe,
+    cajaDe,
+    encuadrar,
     reconstruir(g: Geometria3D) {
       sinAzarDeTres(() => armarMundo(g));
     },

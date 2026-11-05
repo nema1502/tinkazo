@@ -1,8 +1,16 @@
 import { ENSANCHE as ENSANCHE_PLAN } from "./carrera-obstaculos";
 import { readFileSync } from "node:fs";
+import { PerspectiveCamera, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 import { permite3D, type Entorno3D } from "../permite3d";
-import { ACERCA, AIRE_LIDER, HOLGURA_LIDER, TAM3D, camara3D, colocar, corrimientoLider, escala3D, ZC, type Corredora3D } from "./carrera-3d-mapa";
+import { ajusteGanador } from "../pixi/ganador-altura";
+import { resolverToma } from "../pixi/kit/director";
+import { LLAMA_ALTO } from "./carrera-forma";
+import {
+  ACERCA, AIRE_LIDER, FRACCION_TOPE, HOLGURA_LIDER, PUNTOS_LLAMA, TAM3D, cajaProyectada, camara3D, colocar, corrimientoLider, escala3D, puntasDe,
+  topeAcercamiento, ZC, type Camara2D, type Corredora3D,
+} from "./carrera-3d-mapa";
+import { despejarVisto, tomaPrimerPlano3D } from "./carrera-zoom-final";
 import { ctxDe } from "./carrera-prueba";
 import { RECTA, planCarrera } from "./carrera-show";
 
@@ -169,5 +177,140 @@ describe("la cámara del 3D en un celular deja entera a la llama que va adelante
   it("si no entra con aire, la centra", () => {
     expect(corrimientoLider(-20, 420, 390, 844)).toBeCloseTo(5, 9);
     expect(corrimientoLider(100, 500, 390, 844)).toBeCloseTo(300 - 195, 9);
+  });
+});
+
+describe("el primer plano final del 3D mide lo que dibuja la cámara 3D", () => {
+  // Un celular apaisado. La cámara de three.js se arma igual que en la vista (`posarCamara`, carrera-3d.ts), sin WebGL.
+  const w = 844, h = 390, u = 0.55, esc = 0.6;
+  const zona = { x0: 4, y0: 184, x1: 840, y1: 340 };
+  const llama: Corredora3D = { persona: 2, x: 5000, y: 300, salto: 0, esc, velocidad: 0, momento: null, fase: 0 };
+  const posar = (cam: Camara2D): PerspectiveCamera => {
+    const pose = camara3D(cam, w, h, u, esc);
+    const c = new PerspectiveCamera(36, w / h, 0.5, 4000);
+    c.fov = (pose.fov * 180) / Math.PI;
+    c.position.set(...pose.pos);
+    c.up.set(Math.sin(pose.giro), Math.cos(pose.giro), 0);
+    c.lookAt(pose.mira[0], pose.mira[1], pose.mira[2]);
+    c.updateProjectionMatrix();
+    c.updateMatrixWorld();
+    return c;
+  };
+  const vista = (cam: Camara2D) => {
+    const c = posar(cam), p = colocar(llama, u);
+    return cajaProyectada(puntasDe([p.x, p.y, p.z], p.escala).map(([x, y, z]) => new Vector3(x, y, z).project(c)), w, h);
+  };
+
+  it("la caja es la de las puntas de la llama proyectadas, en píxeles de la pantalla", () => {
+    const cam = { x: 4980, y: 280, zoom: 1.2, rot: 0 };
+    const c = posar(cam), p = colocar(llama, u);
+    const caja = vista(cam)!;
+    expect(caja).not.toBeNull();
+    const pts = PUNTOS_LLAMA.map(([dx, dy, dz]) => new Vector3(p.x + dx * p.escala, p.y + dy * p.escala, p.z + dz * p.escala).project(c))
+      .map((q) => ({ x: ((q.x + 1) / 2) * w, y: ((1 - q.y) / 2) * h }));
+    expect(caja.x).toBeCloseTo(Math.min(...pts.map((q) => q.x)), 6);
+    expect(caja.y).toBeCloseTo(Math.min(...pts.map((q) => q.y)), 6);
+    expect(caja.x + caja.w).toBeCloseTo(Math.max(...pts.map((q) => q.x)), 6);
+    expect(caja.y + caja.h).toBeCloseTo(Math.max(...pts.map((q) => q.y)), 6);
+    // Los pies quedan abajo y la cabeza arriba, adentro de la caja.
+    const pie = new Vector3(p.x, p.y, p.z).project(c);
+    expect(((1 - pie.y) / 2) * h).toBeLessThanOrEqual(caja.y + caja.h + 1e-6);
+    expect(caja.h).toBeGreaterThan(10);
+  });
+
+  it("si una punta queda detrás de la cámara, no hay caja (no se inventa)", () => {
+    expect(cajaProyectada([{ x: 0, y: 0, z: 0.5 }, { x: 0.2, y: 0.1, z: 1.2 }], w, h)).toBeNull();
+    expect(cajaProyectada([], w, h)).toBeNull();
+    expect(cajaProyectada([{ x: -1, y: 1, z: 0.3 }, { x: 1, y: -1, z: 0.9 }], w, h)).toEqual({ x: 0, y: 0, w, h });
+  });
+
+  it("el tope del acercamiento deja la llama en la fracción pedida del alto, y es menor para una llama más grande", () => {
+    const tope = topeAcercamiento(h, esc);
+    const pose = camara3D({ x: 0, y: 300, zoom: tope, rot: 0 }, w, h, u, esc);
+    const dist = Math.hypot(pose.pos[0] - pose.mira[0], pose.pos[1] - pose.mira[1], pose.pos[2] - pose.mira[2]);
+    const altoVisto = 2 * dist * Math.tan(pose.fov / 2);
+    expect((LLAMA_ALTO * esc * escala3D(u) * TAM3D) / altoVisto).toBeCloseTo(FRACCION_TOPE, 9);
+    expect(topeAcercamiento(h, esc * 2)).toBeLessThan(tope);
+    expect(topeAcercamiento(h * 2, esc)).toBeGreaterThan(tope);
+  });
+
+  it("el director, con la caja vista vuelta al mundo del 2D, llega al primer plano: la llama dibujada llena la zona", () => {
+    let cam: Camara2D = { x: 4700, y: 260, zoom: 0.8, rot: 0 };
+    const tope = topeAcercamiento(h, esc);
+    for (let i = 0; i < 12; i++) {
+      const visto = vista(cam)!;
+      const v = resolverToma(tomaPrimerPlano3D(visto, cam, w, h, zona, tope), { w, h, zona });
+      cam = { x: v.x, y: v.y, zoom: v.z, rot: 0 };
+    }
+    const c = vista(cam)!;
+    expect(c.x).toBeGreaterThanOrEqual(zona.x0 - 1);
+    expect(c.y).toBeGreaterThanOrEqual(zona.y0 - 1);
+    expect(c.x + c.w).toBeLessThanOrEqual(zona.x1 + 1);
+    expect(c.y + c.h).toBeLessThanOrEqual(zona.y1 + 1);
+    // Es un primer plano: llena el alto de la zona (o el tope lo frena).
+    expect(cam.zoom >= tope - 1e-6 || c.h >= (zona.y1 - zona.y0) * 0.97).toBe(true);
+  });
+
+  it("el despeje corre la cámara que dibuja la llama, vuelve a medir lo dibujado y la deja entre el cartel y el relator", () => {
+    // El cartel baja hasta y = 200 y el relator empieza en y = 330. La llama arranca tapada por el cartel.
+    const banda = { x0: 2, y0: 200, x1: w - 2, y1: 330 };
+    let cam: Camara2D = { x: 5010, y: 330, zoom: 1.6, rot: 0 };
+    const orden: string[] = [];
+    const antes = vista(cam)!;
+    expect(antes.y).toBeLessThan(banda.y0);
+    const movida = despejarVisto({
+      medir: () => {
+        orden.push("medir");
+        return vista(cam);
+      },
+      // Lo que hace el estadio (`despejarGanador`): la cuenta lineal del 2D sobre la cámara del director.
+      despejar: (cuerpo) => {
+        orden.push("despejar");
+        const a = ajusteGanador(cuerpo, banda), cx = cuerpo.x + cuerpo.w / 2, cy = cuerpo.y + cuerpo.h / 2, z = cam.zoom * a.s;
+        cam = { ...cam, zoom: z, x: cam.x - ((1 - a.s) * (cx - w / 2) + a.dx) / z, y: cam.y - ((1 - a.s) * (cy - h / 2) + a.dy) / z };
+      },
+      pose: () => [cam.x, cam.y, cam.zoom],
+      reencuadrar: () => orden.push("reencuadrar"),
+    });
+    expect(movida).toBe(true);
+    // Cada despeje que mueve la cámara se vuelve a encuadrar antes de medir de nuevo.
+    expect(orden.slice(0, 4)).toEqual(["medir", "despejar", "reencuadrar", "medir"]);
+    const c = vista(cam)!;
+    expect(c.y).toBeGreaterThanOrEqual(banda.y0 - 1);
+    expect(c.y + c.h).toBeLessThanOrEqual(banda.y1 + 1);
+  });
+
+  it("si nada tapa, el despeje no mueve la cámara ni pide dibujar de nuevo", () => {
+    const orden: string[] = [];
+    const quieta = despejarVisto({
+      medir: () => (orden.push("medir"), { x: 100, y: 220, w: 50, h: 60 }),
+      despejar: () => orden.push("despejar"),
+      pose: () => [1, 2, 3],
+      reencuadrar: () => orden.push("reencuadrar"),
+    });
+    expect(quieta).toBe(false);
+    expect(orden).toEqual(["medir", "despejar"]);
+    expect(despejarVisto({ medir: () => null, despejar: () => orden.push("x"), pose: () => [0], reencuadrar: () => orden.push("x") })).toBe(false);
+  });
+
+  it("los archivos del 3D no nombran a quien gana: la vista solo mide una persona y mueve la cámara", () => {
+    const vista3d = readFileSync(new URL("./carrera-3d.ts", import.meta.url), "utf8");
+    expect(vista3d).not.toMatch(/ganador|ganadora|campeona|winner/i);
+    const mapa = readFileSync(new URL("./carrera-3d-mapa.ts", import.meta.url), "utf8");
+    const enchufe = mapa.slice(mapa.indexOf("export interface Vista3D"), mapa.indexOf("export interface OpcionesFabrica3D"));
+    expect(enchufe).toContain("cajaDe(");
+    expect(enchufe).toContain("encuadrar(");
+    expect(enchufe).not.toMatch(/ganador|ganadora|campeona|winner/i);
+  });
+
+  it("en carrera.ts el despeje del 3D va después del cuadro, mide lo dibujado y vuelve a dibujar el 3D", () => {
+    const fuente = readFileSync(new URL("./carrera.ts", import.meta.url), "utf8");
+    const cuerpo = fuente.slice(fuente.indexOf("function despejar3D("), fuente.indexOf("function protegida("));
+    expect(cuerpo).toContain("primerPlanoFinal(P, t, d.tCrown)");
+    expect(cuerpo).toContain("medir: cajaVista3D");
+    expect(cuerpo).toContain("S.despejarGanador(");
+    expect(cuerpo.indexOf("despejarVisto(")).toBeLessThan(cuerpo.indexOf("encuadrar3D(true)"));
+    // La auditoría del cuerpo, en 3D, es la caja proyectada.
+    expect(fuente).toMatch(/if \(tres\) return tres\.cajaDe\(d\.campeona\);/);
   });
 });

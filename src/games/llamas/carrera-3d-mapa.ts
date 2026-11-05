@@ -172,6 +172,13 @@ export interface Vista3D {
   frame(e: Entrada3D): void;
   /** Dónde cae en la pantalla la cabeza de `persona` en el último cuadro, o null si no se ve. */
   pantallaDe(persona: number): Pantalla3D | null;
+  /** La caja que ocupa `persona` en la pantalla con la cámara de ahora (sus puntas, `PUNTOS_LLAMA`), o null si no se ve entera. */
+  cajaDe(persona: number): CajaPantalla | null;
+  /**
+   * Vuelve a poner la cámara con otra cámara del 2D, con el resto del último cuadro igual (las llamas no se mueven). Con
+   * `dibujar`, renderiza; sin él solo mueve la cámara, para volver a medir con `cajaDe`.
+   */
+  encuadrar(cam: Camara2D, dibujar: boolean): void;
   /** El mundo cambió (otro tamaño de pantalla): rearma lo fijo. */
   reconstruir(g: Geometria3D): void;
   destruir(): void;
@@ -266,3 +273,40 @@ export function corrimientoLider(x0: number, x1: number, w: number, h: number, a
 export const PUNTOS_LLAMA: ReadonlyArray<readonly [number, number, number]> = [
   [38, 36, 0], [-36, 40, 0], [14, 100, 0], [0, 30, 13], [0, 30, -13], [14, 0, 0], [-14, 0, 0],
 ];
+
+/** Una caja de la pantalla, en píxeles. */
+export interface CajaPantalla {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Las puntas (`PUNTOS_LLAMA`) de una llama puesta en `pos` con la escala del modelo `k`, en unidades del mundo 3D. */
+export function puntasDe(pos: readonly [number, number, number], k: number): [number, number, number][] {
+  return PUNTOS_LLAMA.map(([dx, dy, dz]) => [pos[0] + dx * k, pos[1] + dy * k, pos[2] + dz * k]);
+}
+
+/**
+ * La caja en una pantalla de `w` por `h` de unos puntos ya proyectados (las coordenadas normalizadas de three.js: de -1 a 1,
+ * con y hacia arriba; `z` mayor que 1 es detrás de la cámara). Null si no hay puntos o si alguno queda detrás: no se inventa.
+ */
+export function cajaProyectada(ndc: readonly { x: number; y: number; z: number }[], w: number, h: number): CajaPantalla | null {
+  if (!ndc.length || ndc.some((q) => q.z > 1)) return null;
+  const xs = ndc.map((q) => ((q.x + 1) / 2) * w), ys = ndc.map((q) => ((1 - q.y) / 2) * h);
+  const x = Math.min(...xs), y = Math.min(...ys);
+  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+}
+
+/** Cuánto del alto de la pantalla puede ocupar una llama en el acercamiento más cerrado del 3D. */
+export const FRACCION_TOPE = 0.6;
+
+/**
+ * El tope del acercamiento (el `zoom` de la cámara del 2D) para el 3D: con él, una llama de tamaño `esc` ocupa
+ * `FRACCION_TOPE` del alto de lo que se ve a la distancia a la que mira la cámara (`camara3D`). Más cerca, la perspectiva
+ * deforma y la cámara se mete en la llama.
+ */
+export function topeAcercamiento(h: number, esc: number): number {
+  return (FRACCION_TOPE * h * ACERCA) / (LLAMA_ALTO * Math.max(0.05, esc) * TAM3D);
+}
+

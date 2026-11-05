@@ -37,3 +37,10 @@ export function sapoFinalFrame(p: SapoFinalFrame): Vista {
 export function sapoEstadoGanador(tAll: number, tCrown: number): { activa: boolean; tiempo: number; fase: string } {
   return { activa: tAll >= tCrown, tiempo: tAll - tCrown, fase: "sapo-final" };
 }
+
+/** Cuánto se suelta el tope del acercamiento 3D (0 a 1), desde que cae la última argolla, solo con el primer plano: en 0,6 s y sin saltos. */
+export function sapoPrimerPlano3D(closeUp: boolean, desdeQueCae: number): number {
+  if (!closeUp) return 0;
+  const k = Math.min(1, Math.max(0, desdeQueCae / 0.6));
+  return k * k * (3 - 2 * k);
+}

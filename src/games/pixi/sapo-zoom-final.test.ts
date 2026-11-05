@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { cabe, enPantalla } from "./encuadre";
-import { sapoEstadoGanador, sapoFinalCloseUp, sapoFinalFrame, type SapoFinalFrame } from "./sapo-zoom-final";
+import { sapoEstadoGanador, sapoFinalCloseUp, sapoFinalFrame, sapoPrimerPlano3D, type SapoFinalFrame } from "./sapo-zoom-final";
 
 const frame = (overrides: Partial<SapoFinalFrame> = {}): SapoFinalFrame => ({
   table: { x: 180, y: 90, w: 400, h: 230 },
@@ -88,5 +88,49 @@ describe("Sapo winner state for the clearance auditor", () => {
     const src = readFileSync(new URL("./sapo.ts", import.meta.url), "utf8");
     const call = src.slice(src.indexOf("S.ganadorEn("), src.indexOf("S.ganadorEn(") + 1200);
     expect(call).toMatch(/selectedTargetOnScreen,\s*\(\) => sapoEstadoGanador\(tAll, T_CROWN\)\)/);
+  });
+});
+
+describe("Sapo final close-up in 3D", () => {
+  const src = readFileSync(new URL("./sapo.ts", import.meta.url), "utf8");
+
+  it("lifts the 3D zoom cap smoothly after landing, only with the close-up", () => {
+    expect(sapoPrimerPlano3D(false, 5)).toBe(0);
+    expect(sapoPrimerPlano3D(true, -0.1)).toBe(0);
+    expect(sapoPrimerPlano3D(true, 0)).toBe(0);
+    expect(sapoPrimerPlano3D(true, 0.6)).toBe(1);
+    expect(sapoPrimerPlano3D(true, 9)).toBe(1);
+    let antes = 0;
+    for (let i = 1; i <= 60; i++) {
+      const p = sapoPrimerPlano3D(true, i / 100);
+      expect(p).toBeGreaterThanOrEqual(antes);
+      expect(p - antes).toBeLessThan(0.05);
+      antes = p;
+    }
+  });
+
+  it("uses the same landscape-phone gate in 2D and 3D", () => {
+    expect(src).toMatch(/const finalCloseUp = \(\): boolean => sapoFinalCloseUp\(g\.w, g\.h, S\.portrait\(\), tAll >= T_LAND\);/);
+  });
+
+  it("measures the selected target in 3D on what the 3D camera drew, not on the hidden 2D outline", () => {
+    const fn = src.slice(src.indexOf("const selectedTargetOnScreen = "), src.indexOf("function aim()"));
+    expect(fn).toMatch(/if \(v3\) return puente\.destacada\?\.\(\) \?\? null;/);
+  });
+
+  it("hands the clearance to the 3D frame before it renders, with the crown already posed, and does not clear twice", () => {
+    const f3 = src.slice(src.indexOf("function frame3D("), src.indexOf("function rayos3D("));
+    expect(f3).toContain("primerPlano: sapoPrimerPlano3D(finalCloseUp(), tAll - T_LAND),");
+    expect(f3).toContain("encajar: finalCloseUp() ? encajar3D : undefined,");
+    const loop = src.slice(src.indexOf("S.run((dt, now) => {"));
+    const crownBefore = loop.indexOf("if (cerca3D && tAll >= T_CROWN) crownUI.at(");
+    const drawAt = loop.indexOf("    draw();");
+    expect(crownBefore).toBeGreaterThan(0);
+    expect(crownBefore).toBeLessThan(drawAt);
+    expect(loop.indexOf("if (!cerca3D && tAll >= T_CROWN) crownUI.at(")).toBeGreaterThan(drawAt);
+    expect(loop).toMatch(/if \(!v3\) S\.despejarGanador\(cuerpo\);/);
+    const enc = src.slice(src.indexOf("const encajar3D = "), src.indexOf("const encajar3D = ") + 600);
+    expect(enc).toContain("S.despejarGanador(caja, HOLGURA_3D);");
+    expect(enc).toContain("entradaBase(S, tAll).cam");
   });
 });

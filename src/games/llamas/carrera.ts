@@ -1,11 +1,12 @@
 import { Container, Graphics, Sprite, Text } from "pixi.js";
 import { params } from "../../state";
 import { colorDeNombre } from "../pixi/foco-vista";
-import { cajaVisible, cajaVisual, primerPlanoHorizontal } from "./carrera-zoom-final";
+import { cajaVisible, cajaVisual, despejarVisto, primerPlanoFinal, tomaPrimerPlano3D } from "./carrera-zoom-final";
+import { unir } from "../pixi/encuadre";
 import { crearJuego, minimoPx, nivelPorCantidad, planNombres, type Caja, type DefJuego, type FocoPunto, type Kit, type Nivel, type PlanoToma, type Zona } from "../pixi/kit";
 import { anfitrionTinkazo } from "../pixi/kit/anfitrion";
 import { CREAM, INK, YELLOW, contorno, hash, mountPixi } from "../pixi/stage";
-import type { Borla3D, Corredora3D, Efecto3D, Fabrica3D, Geometria3D, Valla3D, Vista3D, ZonaSuelo } from "./carrera-3d-mapa";
+import { topeAcercamiento, type Borla3D, type Camara2D, type Corredora3D, type Efecto3D, type Fabrica3D, type Geometria3D, type Valla3D, type Vista3D, type ZonaSuelo } from "./carrera-3d-mapa";
 import { ECHADA_DUR, carrilesDe, formaDe, hudDe, type Carriles, type Forma, type Pantalla } from "./carrera-forma";
 import { ENSANCHE, SALTO_MEDIO } from "./carrera-obstaculos";
 import { RECTA, alfabetico, planCarrera, type Datos, type EscenaCarrera } from "./carrera-show";
@@ -14,6 +15,7 @@ import { crearLlamaAguayo } from "./llama-aguayo";
 import { TEXTOS_CARRERA } from "./carrera-textos";
 import type { Tanda } from "./carrera-tandas";
 import type { Terreno } from "./carrera-tiempos";
+import { HOLGURA_3D } from "../pixi/ganador-altura";
 import { BORLA_RADIO, LLAMA_ALTO, LLAMA_COLA, LLAMA_HOCICO, LLAMA_LARGO, PELAJES, crearBorla, crearLlama, crearManta, type Llama, type Momento } from "./llama";
 
 /**
@@ -68,6 +70,17 @@ interface Etiqueta {
   w: number;
   h: number;
   clave: string;
+}
+
+/** Una ficha de nombre del 3D en este cuadro: va a la pantalla, sobre la cabeza que proyecta la cámara 3D. */
+interface Ficha3D {
+  et: Etiqueta;
+  persona: number;
+  comp: number;
+  y: number;
+  etiquetar: boolean;
+  sinLugar: boolean;
+  peso: number;
 }
 
 interface Corredora {
@@ -140,6 +153,9 @@ const PROTEGE_DETRAS = 1;
 
 /** El prototipo 3D (`?motor=3d`, carrera-3d.ts): si está, dibuja el estadio y las llamas; las fichas, la cinta y el cartel siguen siendo de acá. */
   let tres: Vista3D | null = null;
+  /** La cámara del 2D con la que quedó puesta la del 3D, y las fichas del último cuadro: el despeje del final las vuelve a usar. */
+  let camDibujada: Camara2D | null = null;
+  let fichasDibujadas: { lista: Ficha3D[]; vz: number } = { lista: [], vz: 1 };
 
   /* ------------------------------------------------------------- geometría */
   const nombrePx = (): number => k.letra("nombre");
@@ -1088,7 +1104,7 @@ const PROTEGE_DETRAS = 1;
     const vz = cam.zoom || 1;
     if (!tres) pintarSuelo();
     const gente3: Corredora3D[] = [];
-    const fichas3: { et: Etiqueta; persona: number; comp: number; y: number; etiquetar: boolean; sinLugar: boolean; peso: number }[] = [];
+    const fichas3: Ficha3D[] = [];
     // El cielo se mueve con la cámara, más despacio.
     const periodo = 1.4 * P.w;
     const desp = -((cam.x * 0.12) % periodo);
@@ -1228,16 +1244,27 @@ const PROTEGE_DETRAS = 1;
   function dibujar3D(
     t: number,
     gente: Corredora3D[],
-    fichas: { et: Etiqueta; persona: number; comp: number; y: number; etiquetar: boolean; sinLugar: boolean; peso: number }[],
+    fichas: Ficha3D[],
     bp: { x: number; esc: number; pie: number; y: number; duenia: number } | null,
     corona: number,
   ): void {
     if (!tres) return;
     const vz = cam.zoom || 1;
+    const borla3: Borla3D | null = bp && borla.visible ? { x: bp.x, pie: bp.pie, alto: bp.pie - bp.y, radio: BORLA_RADIO * bp.esc, duenia: bp.duenia, manta: d.nueva } : null;
+    camDibujada = { x: cam.x, y: cam.y, zoom: vz, rot: cam.rot };
+    tres.frame({ t, w: P.w, h: P.h, u: P.u, cam: camDibujada, gente, borla: borla3, campeona: d.campeona, corona, horas: HORAS_Q.map((q) => d.tDeQ(q)), efectos: efectosEn(t) });
+    fichasDibujadas = { lista: fichas, vz };
+    ponerFichas3D(fichas, vz);
+  }
+
+  /**
+   * Con la cámara del 3D de ahora, lleva cada ficha de nombre a donde cae la cabeza de su llama en la pantalla. `vz` es el
+   * acercamiento con que se midieron las fichas en este cuadro: si el despeje mueve la cámara, las fichas no cambian de tamaño.
+   */
+  function ponerFichas3D(fichas: Ficha3D[], vz: number): void {
+    if (!tres) return;
     const medir = params.get("auditar") === "3d";
     const medidas: { persona: number; px: number; alto: number; ancho: number; x: number; y: number }[] = [];
-    const borla3: Borla3D | null = bp && borla.visible ? { x: bp.x, pie: bp.pie, alto: bp.pie - bp.y, radio: BORLA_RADIO * bp.esc, duenia: bp.duenia, manta: d.nueva } : null;
-    tres.frame({ t, w: P.w, h: P.h, u: P.u, cam: { x: cam.x, y: cam.y, zoom: vz, rot: cam.rot }, gente, borla: borla3, campeona: d.campeona, corona, horas: HORAS_Q.map((q) => d.tDeQ(q)), efectos: efectosEn(t) });
     // Las fichas no se pisan: la que manda (la del primero, después las recientes) se queda donde cae; la que choca con una puesta
     // se corre hacia arriba o hacia abajo por su alto y, si ni así cabe, no se muestra en ese cuadro.
     // Y ninguna ficha tapa la cabeza de otra llama (la perspectiva apila las filas, y la ficha de la de adelante caía sobre la de atrás).
@@ -1408,7 +1435,7 @@ const PROTEGE_DETRAS = 1;
    * (`despejarGanador`, desde `trasCorona`). En el 3D la llama la dibuja otra cámara: ahí sigue la toma de antes.
    */
   function elementosGanadora(t: number): Container[] | null {
-    if (tres || t < d.tCrown || !primerPlanoHorizontal(P)) return null;
+    if (tres || !primerPlanoFinal(P, t, d.tCrown)) return null;
     const c = enUso.get(d.campeona);
     if (!c) return null;
     const p = posicion(d.campeona, t);
@@ -1421,13 +1448,47 @@ const PROTEGE_DETRAS = 1;
     return { x0: 4, y0: Math.max(hudG.bajo, S.placaBajo(k.ganadores.length)) + 4, x1: P.w - 4, y1: P.bottom - 4 };
   }
   function tomaGanadora(t: number): PlanoToma | null {
+    if (tres) {
+      // En el 3D, lo que dibujó la cámara 3D en el último cuadro, vuelto al mundo con la cámara que lo dibujó.
+      const visto = primerPlanoFinal(P, t, d.tCrown) && camDibujada ? cajaVista3D() : null;
+      return visto && camDibujada ? tomaPrimerPlano3D(visto, camDibujada, P.w, P.h, zonaGanadora(), topeAcercamiento(P.h, posicion(d.campeona, t).esc)) : null;
+    }
     const el = elementosGanadora(t);
     return el ? { caja: cajaVisual(el, S.scene), zona: zonaGanadora(), ritmo: 3 } : null;
   }
   /** Con el cartel ya puesto en este cuadro, la campeona (cuerpo y ficha, como se ven) queda entre el cartel y el relator. */
   function despejarGanadora(t: number): void {
+    if (tres) return despejar3D(t);
     const el = elementosGanadora(t);
     if (el) S.despejarGanador(cajaVisible(el));
+  }
+  /** En el 3D, lo que se ve de la campeona: su cuerpo como lo proyecta la cámara 3D y, si está, su ficha en la pantalla. */
+  function cajaVista3D(): Caja | null {
+    const cuerpo = tres?.cajaDe(d.campeona);
+    if (!cuerpo) return null;
+    const et = enUso.get(d.campeona)?.etiqueta.raiz;
+    return et?.visible ? unir([cuerpo, cajaVisible([et])]) : cuerpo;
+  }
+  /** La cámara del 3D vuelve a ponerse con la del director (la que movió el despeje), y las fichas van con ella. */
+  function encuadrar3D(dibujar: boolean): void {
+    if (!tres) return;
+    camDibujada = { x: cam.x, y: cam.y, zoom: cam.zoom || 1, rot: cam.rot };
+    tres.encuadrar(camDibujada, dibujar);
+    ponerFichas3D(fichasDibujadas.lista, fichasDibujadas.vz);
+  }
+  /**
+   * El despeje del 3D, después del cuadro (`trasCorona`): el estadio mueve la cámara del director según lo que la cámara 3D
+   * dibujó, la del 3D se vuelve a poner con ella y se mide otra vez; al final se vuelve a dibujar el 3D con la cámara movida.
+   */
+  function despejar3D(t: number): void {
+    if (!tres || !primerPlanoFinal(P, t, d.tCrown)) return;
+    const movida = despejarVisto({
+      medir: cajaVista3D,
+      despejar: (c) => S.despejarGanador(c, HOLGURA_3D),
+      pose: () => [cam.x, cam.y, cam.zoom],
+      reencuadrar: () => encuadrar3D(false),
+    });
+    if (movida) encuadrar3D(true);
   }
   function protegida(): { caja: Caja; zona: Zona } | null {
     const final = tomaGanadora(k.t);
@@ -1517,9 +1578,10 @@ const PROTEGE_DETRAS = 1;
     const a = cam.toScreen(c.x, c.y, P.w, P.h), b = cam.toScreen(c.x + c.w, c.y + c.h, P.w, P.h);
     return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
   }, () => {
-    // Solo de auditoría (2D): el cuerpo de la campeona tal como quedó dibujado en este cuadro.
+    // Solo de auditoría: el cuerpo de la campeona tal como quedó dibujado en este cuadro (en el 3D, proyectado por su cámara).
+    if (tres) return tres.cajaDe(d.campeona);
     const c = enUso.get(d.campeona);
-    return c && !tres ? cajaVisible([c.llama.root]) : null;
+    return c ? cajaVisible([c.llama.root]) : null;
   }, () => ({ activa: k.t >= d.tCrown, tiempo: k.t - d.tCrown, fase: k.t >= d.tCrown ? "final" : "race" }));
 
   const escena: EscenaCarrera & { rebuild(): void; draw(t: number): void; despejar(t: number): void } = {
