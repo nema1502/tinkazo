@@ -13,7 +13,7 @@ import { iniciarCupo } from "./ui/cupo-patrocinio";
 import { alApretarSellar, iniciarRed } from "./ui/red";
 import { montarPremios } from "./ui/premios";
 import { adelantarCorto, alTocarGanadores, contarCompartido, copySummary, draw, elegirOtroJuegoParaVer, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
-import { contarPractica } from "./contar";
+import { contarPractica, recordarOrigen } from "./contar";
 import { skipGame } from "./games/overlay";
 import { usePixi } from "./games/engine";
 import { MARCA_INGRESAR, currentSession, entraConGoogle, entrar, estadoDeLaCuenta, initWalletUI, openPicker, pedirEntrar } from "./ui/wallet-ui";
@@ -41,6 +41,9 @@ const INGRESAR = MARCA_INGRESAR;
 // `?theme=light|dark` fuerza el tema (capturas).
 const themeParam = params.get("theme");
 if (themeParam === "light" || themeParam === "dark") document.documentElement.dataset.theme = themeParam;
+
+// De qué enlace se llegó (`?o=aula`, `?o=video`…), para el contador del embudo (src/contar.ts).
+recordarOrigen();
 
 // Textos que no viven en atributos data-i.
 onLangChange(() => {

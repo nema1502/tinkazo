@@ -23,7 +23,7 @@ import { actualizarPaso, barraActiva, verError } from "./siguiente";
 import { ponerPremio, recordarPremio } from "./premios";
 import { ENSAYO_ESPERA_S, STAND_ESPERA_S, enEnsayo, enStand, sinGrabar } from "../ensayo-modo";
 import { logoParaSellar } from "../logo-guardado";
-import { contar, errorContable } from "../contar";
+import { contar, errorContable, origenActual } from "../contar";
 import { type OpcionesDeSellado, chequearAntesDeSellar, hayAccionDeRed, limpiarRed, marcarSellado, mostrarCostoAlto, mostrarSinPatrocinio, mostrarSinSaldo, patrocinioDelError, verLaRedTrasFallar, verSinSello } from "./red";
 import { type Reintento, reintentarSello } from "./sin-sello";
 import { claveDelSello, ponerTextoDelSello, sinSelloAhora } from "./sin-sello-textos";
@@ -681,7 +681,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
       }
       // Si se supo por la red (se cortó y se averiguó), la línea todavía decía "Revisando…".
       showTxStatus("seal-status", "confirmed", sealTx);
-      contar("seal_confirmed", { network: network.name });
+      contar("seal_confirmed", { network: network.name, from: origenActual() });
     } catch (e) {
       // La pantalla dice algo que se entiende; el detalle técnico queda plegado
       // debajo y en este navegador (`detalle-error.ts`), y en la consola.

@@ -1,3 +1,4 @@
+import { readFileSync, readdirSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ERRORES, ERRORES_DEL_PORTERO, validarConteo } from "../workers/enlaces/src/conteo";
 import { T } from "./i18n";
@@ -8,6 +9,7 @@ import {
   contarApertura,
   contarAperturaDeEvento,
   contarEntrada,
+  conOrigen,
   contarPractica,
   contarUnaVez,
   contarVeredicto,
@@ -15,6 +17,10 @@ import {
   enPractica,
   errorContable,
   motivoContableDelPortero,
+  olvidarOrigen,
+  origenActual,
+  origenDe,
+  recordarOrigen,
   marcarEntrada,
   marcarQr,
   probarCon,
@@ -74,6 +80,7 @@ function pestaña(op: { host?: string; search?: string; nav?: Record<string, unk
 const leidos = (): unknown[] => enviados.map((x) => JSON.parse(String(x.texto)));
 
 beforeEach(() => {
+  olvidarOrigen();
   probarCon(DESTINO);
   pestaña();
 });
@@ -96,6 +103,8 @@ describe("lo que manda el sitio", () => {
       cuerpo("list_shown", {}),
       cuerpo("seal_sent", { network: "testnet" }),
       cuerpo("seal_confirmed", { network: "mainnet" }),
+      cuerpo("seal_confirmed", { network: "mainnet", from: "aula" }),
+      cuerpo("account_connected", { kind: "google", from: "home" }),
       cuerpo("seal_failed", { network: "testnet", error: errorContable("noFunds") }),
       cuerpo("draw_confirmed", { network: "testnet" }),
       cuerpo("draw_failed", { network: "testnet", error: "rpcDown" }),
@@ -111,6 +120,15 @@ describe("lo que manda el sitio", () => {
       cuerpo("practice_done", { kind: "demo" }),
       cuerpo("tutorial_open", { step: "2", from: "button" }),
       cuerpo("tutorial_open", { step: "1" }),
+      cuerpo("reveal_next", {}),
+      cuerpo("absent_marked", {}),
+      cuerpo("list_saved", {}),
+      cuerpo("list_reused", { age: "week" }),
+      cuerpo("preview_own_list", {}),
+      cuerpo("video_made", { format: "mp4", result: "unsupported" }),
+      cuerpo("video_shared", { channel: "download" }),
+      cuerpo("proof_cta", { from: "video" }),
+      cuerpo("proof_open", { via: "video" }, REF),
     ];
     for (const c of cuerpos) expect(validarConteo(JSON.parse(c)), c).toMatchObject({ ok: true });
   });
@@ -218,7 +236,7 @@ describe("una sola vez por pestaña", () => {
   it("la primera cuenta conectada, por la vía que sea", () => {
     expect(contarEntrada("google")).toBe(true);
     expect(contarEntrada("email")).toBe(false);
-    expect(leidos()).toEqual([{ e: "account_connected", p: { kind: "google" } }]);
+    expect(leidos()).toEqual([{ e: "account_connected", p: { kind: "google", from: "home" } }]);
   });
 
   it("la apertura de un comprobante, una vez por sorteo; el veredicto, una vez por sorteo y por veredicto", () => {
@@ -301,6 +319,75 @@ describe("por dónde se abrió un comprobante", () => {
   });
 });
 
+describe("de dónde se llegó", () => {
+  it("la marca ?o= es una palabra de la lista; qr y short no son un origen", () => {
+    expect(origenDe("?o=aula")).toBe("aula");
+    expect(origenDe("?lang=en&o=meetup&theme=dark")).toBe("meetup");
+    for (const o of ["home", "aula", "meetup", "ruleta", "eventos", "proof", "video"]) expect(origenDe(`?o=${o}`), o).toBe(o);
+    for (const nada of ["", "?o=qr", "?o=short", "?o=otra", "?o=", "?o=AULA", "?lang=es"]) expect(origenDe(nada), nada).toBeNull();
+  });
+
+  it("sin marca, es la portada; con marca, la recuerda la pestaña", () => {
+    expect(origenActual()).toBe("home");
+    expect(recordarOrigen("?o=ruleta")).toBe("ruleta");
+    expect(origenActual()).toBe("ruleta");
+    expect(almacen.getItem("tinkazo.origen")).toBe("ruleta");
+    // Entrar sin marca a otra página de la misma pestaña no borra de dónde se llegó.
+    expect(recordarOrigen("")).toBeNull();
+    expect(origenActual()).toBe("ruleta");
+    // Una marca nueva reemplaza a la anterior.
+    recordarOrigen("?o=eventos");
+    expect(origenActual()).toBe("eventos");
+  });
+
+  it("sin almacenamiento, vale la memoria de la página", () => {
+    const bloqueado = (): never => {
+      throw new Error("bloqueado");
+    };
+    vi.stubGlobal("sessionStorage", { getItem: bloqueado, setItem: bloqueado, removeItem: bloqueado });
+    olvidarOrigen();
+    expect(origenActual()).toBe("home");
+    recordarOrigen("?o=aula");
+    expect(origenActual()).toBe("aula");
+  });
+
+  it("la entrada lleva el origen de la pestaña", () => {
+    recordarOrigen("?o=aula");
+    contarEntrada("google");
+    expect(leidos()).toEqual([{ e: "account_connected", p: { kind: "google", from: "aula" } }]);
+    olvidarOrigen();
+    pestaña();
+    contarEntrada("test");
+    expect(leidos()).toEqual([{ e: "account_connected", p: { kind: "test", from: "home" } }]);
+  });
+
+  it("los enlaces que cambian de navegador o de página llevan la marca antes del #", () => {
+    expect(conOrigen("https://tinkazo.app/?lang=es", "aula")).toBe("https://tinkazo.app/?lang=es&o=aula");
+    expect(conOrigen("https://tinkazo.app/", "meetup")).toBe("https://tinkazo.app/?o=meetup");
+    expect(conOrigen("https://tinkazo.app/?o=aula&lang=en", "video")).toBe("https://tinkazo.app/?lang=en&o=video");
+    expect(conOrigen("https://tinkazo.app/?x=1#borrador", "proof")).toBe("https://tinkazo.app/?x=1&o=proof#borrador");
+    // Sin origen explícito, el de la pestaña; la portada es lo que se asume sin marca y no se agrega.
+    expect(conOrigen("https://tinkazo.app/?lang=en")).toBe("https://tinkazo.app/?lang=en");
+    recordarOrigen("?o=eventos");
+    expect(conOrigen("https://tinkazo.app/?lang=en")).toBe("https://tinkazo.app/?lang=en&o=eventos");
+    expect(conOrigen("https://tinkazo.app/?o=aula", "home")).toBe("https://tinkazo.app/");
+  });
+
+  it("de la práctica sale, además, probar con la lista propia", () => {
+    pestaña({ search: "?demo=wheel" });
+    contar("preview_own_list", {});
+    contar("reveal_next", {});
+    expect(leidos()).toEqual([{ e: "preview_own_list" }]);
+  });
+
+  it("el video de otro sorteo es una vía más de abrir un comprobante", () => {
+    expect(viaDe("?o=video")).toBe("video");
+    pestaña({ search: "?o=video" });
+    expect(contarApertura(viaDe(location.search), REF)).toBe(true);
+    expect(leidos()).toEqual([{ e: "proof_open", p: { via: "video" }, ref: REF }]);
+  });
+});
+
 describe("la referencia de un sorteo", () => {
   it("solo si está entera y en una red del contrato", () => {
     expect(refDe({ net: "testnet", contract: CONTRATO, id: 278n })).toEqual(REF);
@@ -363,5 +450,35 @@ describe("los términos dicen lo que hace el contador", () => {
     const apagado = CONTADOR === "";
     expect(/todavía no se cuenta nada/.test(String(T.es.tmMore2)), "es").toBe(apagado);
     expect(/None of this is counted yet/.test(String(T.en.tmMore2)), "en").toBe(apagado);
+  });
+
+  it("terminos.html lleva las mismas dos notas que el diccionario en español", () => {
+    const html = readFileSync("terminos.html", "utf8");
+    for (const k of ["tmMore2", "tmMore4"] as const) {
+      const li = html.match(new RegExp(`<li data-i="${k}">([\\s\\S]*?)</li>`));
+      expect(li, k).not.toBeNull();
+      expect((li?.[1] ?? "").replace(/\s+/g, " ").trim(), k).toBe(String(T.es[k]).replace(/\s+/g, " ").trim());
+    }
+  });
+
+  it("cada paso que los términos nombran tiene quien lo cuente en el sitio", () => {
+    // Si una frase de los términos nombra un paso, alguno de sus eventos tiene que salir de un archivo del sitio que no
+    // sea contar.ts ni una prueba. Al sumar el paso a los términos, se suma su llamada en el mismo cambio.
+    const pasos: [RegExp, RegExp, string[]][] = [
+      [/sacar a otra persona/, /picking someone else/, ["reveal_next", "absent_marked"]],
+      [/guardar o volver a usar una lista/, /saving or reusing a list/, ["list_saved", "list_reused"]],
+      [/probar con tu lista|con una lista propia/, /with your own list/, ["preview_own_list"]],
+      [/hacer o mandar un video/, /making or sending a video/, ["video_made", "video_shared"]],
+    ];
+    const fuentes = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((d) =>
+        d.isDirectory() ? fuentes(`${dir}/${d.name}`) : /\.ts$/.test(d.name) && !/\.test\.ts$/.test(d.name) && d.name !== "contar.ts" ? [readFileSync(`${dir}/${d.name}`, "utf8")] : [],
+      );
+    const codigo = fuentes("src").join("\n");
+    for (const [es, en, eventos] of pasos) {
+      const nombrado = es.test(String(T.es.tmMore2)) || en.test(String(T.en.tmMore2));
+      if (!nombrado) continue;
+      expect(eventos.some((e) => codigo.includes(`"${e}"`)), `${eventos.join(" o ")}: los términos lo nombran y nadie lo cuenta`).toBe(true);
+    }
   });
 });

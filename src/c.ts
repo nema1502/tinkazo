@@ -45,7 +45,7 @@ function pintar(): void {
  * Lo que la persona eligió en la dirección (idioma y tema) sigue en la página
  * del comprobante. Y por dónde llegó, para el contador del embudo
  * (src/contar.ts): desde el QR (`o=qr`, que trae el enlace corto del QR) o
- * desde el enlace corto (`o=short`). La página la saca de la dirección al abrir.
+ * desde el enlace corto (`o=short`) o desde el cartel de un video (`o=video`). La página la saca de la dirección al abrir.
  */
 function preferencias(): string {
   const q = new URLSearchParams(location.search);
@@ -54,7 +54,8 @@ function preferencias(): string {
   const tema = q.get("theme");
   if (lang === "es" || lang === "en") sigue.set("lang", lang);
   if (tema === "light" || tema === "dark") sigue.set("theme", tema);
-  sigue.set("o", q.get("o") === "qr" ? "qr" : "short");
+  const o = q.get("o");
+  sigue.set("o", o === "qr" || o === "video" ? o : "short");
   return `?${sigue.toString()}`;
 }
 

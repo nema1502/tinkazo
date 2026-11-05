@@ -15,8 +15,9 @@ beforeEach(() => {
   vi.stubGlobal("localStorage", { getItem: () => null, setItem: vi.fn() });
 });
 afterEach(() => vi.unstubAllGlobals());
-it("ambos servicios permanecen apagados e independientes", () => {
-  expect(CONTADOR).toBe(""); expect(SERVICIO_CONFIANZA).toBe("");
+it("el servicio de respuestas sigue apagado y no depende del contador del embudo", () => {
+  // El contador se prende aparte (src/contar.ts); este servicio no se prende con él.
+  expect(typeof CONTADOR).toBe("string"); expect(SERVICIO_CONFIANZA).toBe("");
   expect(crearRespuestas().disponible(ref)).toBe(false);
 });
 it.each(["yes", "no", "unsure"] as const)("solo transmite la respuesta %s y la referencia, con CORS legible", async (answer) => {
