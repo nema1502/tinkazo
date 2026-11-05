@@ -273,3 +273,5 @@
   .marca-df-afiche { max-width: 260px; }
   .marca-df-org img { height: 18px; }
 }
+.marca-df-wa { font-size: 18px; margin-left: 10px; }
+@media (max-width: 760px) { .marca-df-wa { margin: 10px 0 0; } }

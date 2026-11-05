@@ -74,9 +74,15 @@ function actualizarArchivos(): void {
     }
   }
 }
+/** El botón de WhatsApp del DevFest abre el mensaje ya escrito, en el idioma de la página. */
+function actualizarWhatsApp(): void {
+  const wa = document.querySelector<HTMLAnchorElement>("#df-wa");
+  if (wa) wa.href = `https://wa.me/?text=${encodeURIComponent(texto("maDfWaMsg"))}`;
+}
 function actualizarTodo(): void {
   actualizarSello();
   actualizarArchivos();
+  actualizarWhatsApp();
 }
 actualizarTodo();
 onLangChange(actualizarTodo);
