@@ -718,8 +718,10 @@ export async function anchorErrorText(e: unknown, paso?: "sello" | "sorteo"): Pr
   try {
     const { errorKey, esNoDelPortero } = await import("../stellar/errores");
     let tipo = errorKey(e, { patrocinada: await cuentaPatrocinada() });
-    // Con el sorteo ya sellado la frase cambia: la lista no se pierde y el ganador va a ser el mismo.
-    if (tipo === "porteroFondo" && paso === "sorteo") tipo = "porteroFondoSorteo";
+    // Con el sorteo ya sellado la frase cambia: la lista no se pierde y el ganador va a ser el mismo. Vale igual cuando el
+    // que no puede pagar es el portero (`porteroFondo`) que cuando es el patrocinio de Pollar (`sponsorEmpty`, cuyo texto
+    // habla de "sellar" y al sortear confundía).
+    if ((tipo === "porteroFondo" || tipo === "sponsorEmpty") && paso === "sorteo") tipo = "porteroFondoSorteo";
     const clave = "errAnchor." + tipo;
     let texto = t(clave);
     if (!texto || texto === clave) return t("errAnchor.unknown");

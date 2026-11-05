@@ -267,6 +267,8 @@
   .login-err { font-size: 16px; font-weight: 700; color: var(--magenta-ink); text-align: center; }
   .login-err.ok { color: var(--teal-ink); }
   .login-note { margin: -2px 0 0; font-size: 16px; color: var(--ink2); text-align: center; line-height: 1.4; }
+  /* Una nota que avisa, no una falla en rojo: en su caja, apartada del texto de ayuda para que no parezcan un solo párrafo. */
+  .login-note.login-aviso { margin: 12px 0 0; padding: 10px 12px; color: var(--ink); background: var(--field); border: 1px solid var(--line); border-radius: 12px; }
   .login-or { display: flex; align-items: center; gap: 12px; margin: 22px 0 14px; font-size: 16px; font-weight: 600; color: var(--muted); }
   .login-or::before, .login-or::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
   .login-opts { display: flex; flex-direction: column; gap: 10px; }

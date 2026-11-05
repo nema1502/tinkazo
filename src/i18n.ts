@@ -2487,7 +2487,7 @@ export const T: Record<Lang, Dict> = {
     prLogoNota: "El logo de tu comunidad en el sorteo es gratis, para todos, y siempre lleva «Hecho con Tinkazo» al lado. Lo previsto para los planes pagos es otra cosa: sacar ese «Hecho con Tinkazo», los colores propios, el acta y el informe del evento. Todavía no existen, y te avisamos antes de cobrarlos.",
     // Pollar 0.12: proteger la cuenta antes de sellar, y tres errores nuevos (1 de noviembre de 2026)
     protTitulo: "Protegé tu cuenta",
-    protLead: "Para sellar, tu cuenta necesita una forma de recuperarla si perdés este aparato. Se hace una sola vez y lleva un minuto.",
+    protLead: "Para seguir, tu cuenta necesita una forma de recuperarla si perdés este aparato. Se hace una sola vez y lleva un minuto.",
     protPasskey: "Usar el desbloqueo de este aparato",
     protPasskeyAyuda: "Huella, rostro o PIN, como cuando desbloqueás el celular o la compu.",
     protO: "o con tu correo",
@@ -2507,11 +2507,14 @@ export const T: Record<Lang, Dict> = {
     protBadCode: "Ese código no es. Fijate en el último correo.",
     protFalla: "No pudimos proteger tu cuenta. Probá de nuevo.",
     protPasskeyFalla: "No se pudo usar el desbloqueo de este aparato. Probá de nuevo o elegí el correo.",
+    protPasskeyBloqueada: "¿No se abrió? Puede que este navegador no lo permita (pasa dentro de TikTok, Instagram, Facebook o WhatsApp). Usá el código por correo, o abrí el enlace en Chrome o Safari.",
+    protTarda: "Esto está tardando más de lo normal. Probá de nuevo.",
     protNoQuedo: "La cuenta todavía no quedó protegida. Probá de nuevo.",
     protSigue: "Cuenta protegida. Sigo con el sello…",
     "errAnchor.recoveryRequired": "Falta proteger tu cuenta para seguir. Cuando quieras, volvé a apretar el botón y seguí los pasos.",
     "errAnchor.confirmation": "Tu cuenta no pudo confirmar la operación. Recargá la página y probá de nuevo; si sigue igual, escribinos a hola@tinkazo.app.",
     "errAnchor.sponsorEmpty": "Ahora no se pudo sellar, y no es por tu cuenta: el servicio no pudo pagar la comisión de la red. Avisanos en hola@tinkazo.app y probá de nuevo más tarde.",
+    "errAnchor.cosignRejected": "Tu cuenta no aprobó esta operación y no se hizo nada. Volvé a apretar el botón; si sigue igual, escribinos a hola@tinkazo.app.",
     redSinSaldoPatrocinio: "Ahora no se pudo sellar, y no es por tu cuenta: el servicio no pudo pagar la comisión. Avisanos en hola@tinkazo.app y probá de nuevo más tarde.",
     // >>> kit:i18n-es (scripts/nuevo-juego.mjs escribe entre estas marcas)
     // --- guajojo
@@ -4650,7 +4653,7 @@ export const T: Record<Lang, Dict> = {
     prLogoNota: "Your community's logo in the draw is free, for everyone, and always carries \"Made with Tinkazo\" beside it. What's planned for the paid plans is something else: removing that \"Made with Tinkazo\", your own colors, the record and the event report. None of that exists yet, and we'll tell you before charging for it.",
     // Pollar 0.12: protect the account before sealing, and three new errors (November 1, 2026)
     protTitulo: "Protect your account",
-    protLead: "To seal, your account needs a way to be recovered if you lose this device. You only do it once and it takes a minute.",
+    protLead: "To go on, your account needs a way to be recovered if you lose this device. You only do it once and it takes a minute.",
     protPasskey: "Use this device's unlock",
     protPasskeyAyuda: "Fingerprint, face or PIN, the same way you unlock your phone or computer.",
     protO: "or with your email",
@@ -4670,11 +4673,14 @@ export const T: Record<Lang, Dict> = {
     protBadCode: "That code isn't right. Check the latest email.",
     protFalla: "We couldn't protect your account. Try again.",
     protPasskeyFalla: "We couldn't use this device's unlock. Try again or pick the email.",
+    protPasskeyBloqueada: "Didn't it open? This browser may not allow it (it happens inside TikTok, Instagram, Facebook or WhatsApp). Use the email code, or open the link in Chrome or Safari.",
+    protTarda: "This is taking longer than usual. Try again.",
     protNoQuedo: "Your account isn't protected yet. Try again.",
     protSigue: "Account protected. Going on with the seal…",
     "errAnchor.recoveryRequired": "Your account needs protecting to go on. Whenever you're ready, press the button again and follow the steps.",
     "errAnchor.confirmation": "Your account couldn't confirm the operation. Reload the page and try again; if it keeps happening, write to hola@tinkazo.app.",
     "errAnchor.sponsorEmpty": "Sealing didn't work just now, and it isn't your account: the service couldn't pay the network fee. Let us know at hola@tinkazo.app and try again later.",
+    "errAnchor.cosignRejected": "Your account didn't approve this operation, so nothing was done. Press the button again; if it keeps happening, write to hola@tinkazo.app.",
     redSinSaldoPatrocinio: "Sealing didn't work just now, and it isn't your account: the service couldn't pay the fee. Let us know at hola@tinkazo.app and try again later.",
     // >>> kit:i18n-en (scripts/nuevo-juego.mjs escribe entre estas marcas)
     // --- guajojo

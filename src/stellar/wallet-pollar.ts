@@ -20,8 +20,10 @@ import { ceremoniaDelNavegador, hayPasskeys } from "./passkey";
  *
  * Desde Pollar 0.12 (24 de octubre de 2026) cada firma pide confirmación y, sin la interfaz de Pollar, el SDK devuelve
  * `SDK_CONFIRMATION_UNAVAILABLE` en todas. Acá se atiende en código (`atenderFirmas`): lo único que se confirma es la
- * firma de `signAndSubmit` y de `signUnsponsored`, que solo salen del sello y del sorteo que la persona acaba de pedir
- * con su botón. Ese clic es el consentimiento; cualquier otra firma que llegue se rechaza y se anota. El cliente se
+ * firma de `signAndSubmit` y de `signUnsponsored`, que solo salen del sello y del sorteo de la persona. El clic en
+ * "Sellar la lista" es el consentimiento y cubre también el sorteo de esa lista: con Pollar el sorteo se lanza solo
+ * cuando nace la ronda (`espera.ts`, sin otro clic, como pasa con la cuenta de prueba), mientras que con Freighter la
+ * persona lo aprueba en su ventana. Cualquier otra firma que llegue se rechaza y se anota. El cliente se
  * arma con `confirmation: "prompt"`: el SDK deja ganar a la política más estricta entre el código y el panel de
  * Pollar, así que fijarla en `"prompt"` hace que la lista blanca corra siempre, también con el panel en "Never ask".
  *
@@ -195,7 +197,7 @@ class PollarWallet implements SubmittingWallet {
     const client = new Ctor({
       apiKey,
       // El SDK deja ganar a la política más estricta entre esta y la del panel: fijada en "prompt", la firma siempre
-      // pasa por `atenderFirmas`, que solo confirma lo que la persona acaba de pedir con su botón.
+      // pasa por `atenderFirmas`, que solo confirma el sello y el sorteo de la lista que la persona selló con su botón.
       confirmation: "prompt",
       stellarNetwork: network.name === "mainnet" ? "mainnet" : "testnet",
       // La misma ventana que abre el SDK, pero que avisa si el navegador la bloqueó (`abrirVentana`).
@@ -453,6 +455,10 @@ class PollarWallet implements SubmittingWallet {
 
   async signAndSubmit(xdr: string): Promise<string> {
     const outcome = (await this.#firmando(xdr, (client) => client.signAndSubmitTx(xdr))) as ResultadoDeEnvio;
+    // Una co-firma pendiente sigue viva en el SDK: la transacción puede entrar después. No es un fallo ni se reintenta a ciegas.
+    if (outcome.status === "cosign_pending") {
+      throw new Error("pollar-pending");
+    }
     if (outcome.status === "error" || !outcome.hash) {
       throw new Error(mensajeDeRechazo(outcome));
     }
@@ -461,6 +467,12 @@ class PollarWallet implements SubmittingWallet {
 
   async signUnsponsored(xdr: string): Promise<string> {
     const outcome = (await this.#firmando(xdr, (client) => client.signTx(xdr, { skipSponsorship: true }))) as { status?: string; signedXdr?: string } & ResultadoDeEnvio;
+    // Con la cuenta de Turnkey en mainnet, firmar sin enviar también puede quedar en co-firma pendiente. Es lo mismo que
+    // en `signAndSubmit`: sigue viva en el SDK, no es un fallo cualquiera ni se reintenta a ciegas (cada reintento apilaría
+    // otra solicitud sin atender).
+    if (outcome.status === "cosign_pending") {
+      throw new Error("pollar-pending");
+    }
     if (outcome.status !== "signed" || !outcome.signedXdr) {
       throw new Error(mensajeDeRechazo(outcome));
     }

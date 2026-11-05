@@ -695,7 +695,7 @@ async function sellar(opciones: OpcionesDeSellado): Promise<void> {
         protegiendoLaCuenta = true;
         try {
           // Si la lista cambió mientras tanto (no debería: sigue cerrada), no se sella otra distinta sin que la persona lo pida.
-          if ((await protegerLaCuenta()) && bytesToHex(listHash(parseNames())) === hash) {
+          if ((await protegerLaCuenta(btn, "seal-status")) && bytesToHex(listHash(parseNames())) === hash) {
             await sellar({ ...opciones, saltarChequeo: true, protegida: true });
             return;
           }

@@ -38,7 +38,7 @@ vi.mock("./anchor", () => ({
 }));
 vi.mock("./sorteo-seguro", () => ({
   sortearConReintentos: (...a: unknown[]) => h.sortear(...a),
-  SORTEO_REINTENTABLE: new Set<string>(),
+  sorteoReintentable: () => false,
   avisoDelReintento: () => "drawTry",
 }));
 vi.mock("../protocol/drand", () => ({ decompressG1: (s: string) => s }));
@@ -47,7 +47,7 @@ vi.mock("../protocol/quicknet", async (orig) => ({
   fetchRound: async () => ({ signature: "01".repeat(48) }),
 }));
 vi.mock("../protocol/firma", () => ({ verifyRoundAsync: async () => true }));
-vi.mock("./proteger-flujo", () => ({ pideProtegerLaCuenta: (...a: unknown[]) => h.pide(...a), protegerLaCuenta: () => h.proteger() }));
+vi.mock("./proteger-flujo", () => ({ pideProtegerLaCuenta: (...a: unknown[]) => h.pide(...a), protegerLaCuenta: (...a: unknown[]) => h.proteger(...a) }));
 vi.mock("../contar", () => ({ contar: (...a: unknown[]) => h.contar(...a), contarPractica: () => undefined, errorContable: (c: string) => c, refDe: () => ({}) }));
 vi.mock("./freeze", () => ({ rotarJuego: () => undefined, secondsToRound: () => 0, unfreeze: () => undefined, alElegirDespuesDelResultado: () => undefined, irAlSelectorParaOtro: () => undefined, juegoParaVerDeNuevo: () => undefined, marcarShow: () => undefined, pintarNotaDelJuego: () => undefined }));
 vi.mock("./siguiente", () => ({ actualizarPaso: () => undefined, verError: () => undefined }));
@@ -97,6 +97,15 @@ describe("sortear cuando la cuenta pide protección", () => {
     // Un solo fallo contado: el del final, no el que abrió la ventana.
     expect(cuentas("draw_failed")).toBe(1);
     expect(document.getElementById("btn-draw")?.textContent).toBe(t("drawRetry"));
+  });
+
+  it("a la ventana le dice a dónde devolver el foco: el botón de sortear, apagado, y su línea de estado", async () => {
+    h.sortear.mockResolvedValue({ ok: false, error: recuperacion() });
+    h.proteger.mockResolvedValue(false);
+    await prepararEstado();
+    const { draw } = await import("./draw");
+    await draw();
+    expect(h.proteger).toHaveBeenCalledWith(document.getElementById("btn-draw"), "draw-status");
   });
 
   it("no protegida: queda el botón para volver a intentar, el mensaje, y un solo fallo contado", async () => {

@@ -33,7 +33,7 @@ vi.mock("./sorteo-seguro", () => ({
       return { ok: false, error };
     }
   },
-  SORTEO_REINTENTABLE: new Set<string>(),
+  sorteoReintentable: () => false,
   avisoDelReintento: () => "drawTry",
 }));
 vi.mock("./proteger-flujo", () => ({ pideProtegerLaCuenta: async () => false, protegerLaCuenta: async () => false }));

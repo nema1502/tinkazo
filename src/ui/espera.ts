@@ -423,6 +423,8 @@ export function mostrarEspera(segundos: () => number, sorteo: Sorteo): boolean {
   const yo = {
     nacio: (): void => {
       if (fase !== "cuenta") return;
+      // Con Freighter la persona aprueba el sorteo en su ventana. Con Pollar (o la cuenta de prueba) no hay otra
+      // aprobación: el clic en "Sellar la lista" ya cubre el sorteo de esa lista y se lanza solo cuando nace la ronda.
       if (sorteo.aMano()) accion("lanzar", t("espAprobar"), t("draw"));
       else sortear();
     },

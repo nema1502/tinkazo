@@ -286,6 +286,9 @@ describe("con una cuenta de Pollar", () => {
     ["el tope de 30 s de Pollar", "Request timed out after 30000ms"],
     ["un rechazo sin motivo", "pollar-submit-failed"],
     ["la red ocupada, que también contesta así cuando ya entró", "TRY_AGAIN_LATER"],
+    // `RATE_LIMITED` se cuenta como red ocupada, pero puede llegar al preguntar por una transacción que ya se mandó.
+    ["demasiados pedidos a Pollar, que pudo contestarlo ya con la transacción mandada", "RATE_LIMITED"],
+    ["se mandó y todavía no se confirmó", "TX_SUBMIT_UNCONFIRMED"],
   ])("Pollar no pudo y no se sabe si mandó (%s): sello incierto", async (_nombre, mensaje) => {
     h.wallet = pollar(vi.fn().mockRejectedValue(new Error(mensaje)));
     const { error } = await sellar();
@@ -296,6 +299,8 @@ describe("con una cuenta de Pollar", () => {
     ["sin saldo", "txInsufficientBalance"],
     ["entró y falló", "txFailed"],
     ["la secuencia", "txBadSeq"],
+    // Sin aprobación no hay firma ni envío: no hay nada en el aire que averiguar.
+    ["la co-firma se rechazó", "SDK_COSIGN_REJECTED"],
   ])("Pollar contestó con el resultado de la red (%s): eso no es incierto, es la red diciendo que no", async (_nombre, mensaje) => {
     h.wallet = pollar(vi.fn().mockRejectedValue(new Error(mensaje)));
     h.red.name = "mainnet";
@@ -633,6 +638,21 @@ describe("en mainnet una cuenta de Pollar nunca ve la caja de fondos", () => {
     const { error } = await correr(sellar());
     const { anchorErrorText } = await import("./anchor");
     expect(await anchorErrorText(error)).toBe("Ahora no se pudo sellar, y no es por tu cuenta: el servicio no pudo pagar la comisión de la red. Avisanos en hola@tinkazo.app y probá de nuevo más tarde.");
+  });
+
+  it("al sortear, con la lista ya sellada, el patrocinio vacío habla de sortear y no culpa a la cuenta", async () => {
+    const { anchorErrorText } = await import("./anchor");
+    const alSortear =
+      "Tu lista está sellada y nadie la puede cambiar. Ahora no pudimos cubrir lo que cobra la red para sortear. Probá de nuevo en unos minutos: el ganador va a ser el mismo. Tu sorteo queda en Mis sorteos: podés retomarlo desde ahí más tarde.";
+    h.wallet = pollar();
+    // Las dos formas en que se queda sin con qué pagar el patrocinio de Pollar, y la del portero de Tinkazo.
+    for (const e of [new Error("txInsufficientBalance"), new Error("SDK_CREDITS_INSUFFICIENT"), { name: "ErrorPortero", motivo: "fondo", estado: 503 }]) {
+      const texto = await anchorErrorText(e, "sorteo");
+      expect(texto, String((e as Error).message ?? (e as { motivo: string }).motivo)).toBe(alSortear);
+      expect(texto).not.toContain("sellar");
+    }
+    // Al sellar sigue diciendo "sellar", que es lo que pasa en ese paso.
+    expect(await anchorErrorText(new Error("SDK_CREDITS_INSUFFICIENT"), "sello")).toContain("no se pudo sellar");
   });
 });
 

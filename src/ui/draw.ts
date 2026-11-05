@@ -145,7 +145,7 @@ export async function draw(): Promise<void> {
       // acepta uno solo por sello.
       // La curva, para pasar la firma al formato del contrato. La cuenta
       // regresiva ya la bajó (ver `freeze`).
-      const [{ decompressG1 }, { sortearConReintentos, SORTEO_REINTENTABLE, avisoDelReintento }, { errorKey }] = await Promise.all([
+      const [{ decompressG1 }, { sortearConReintentos, sorteoReintentable, avisoDelReintento }, { errorKey }] = await Promise.all([
         import("../protocol/drand"),
         import("./sorteo-seguro"),
         import("../stellar/errores"),
@@ -162,7 +162,7 @@ export async function draw(): Promise<void> {
             { pagarConMiCuenta },
           ),
         yaEsta: () => readDraw(raffleId),
-        reintentable: (e) => SORTEO_REINTENTABLE.has(errorKey(e)),
+        reintentable: sorteoReintentable,
         alReintentar: (proximo, total, e) => {
           // Dice lo que pasó: la red no contestó, estaba ocupada, la cadena todavía no ve la ronda u otra cosa.
           const aviso = avisoDelReintento(errorKey(e));
@@ -181,7 +181,7 @@ export async function draw(): Promise<void> {
         sinShow();
         protegiendoElSorteo = true;
         try {
-          if (await protegerLaCuenta()) {
+          if (await protegerLaCuenta(btn, "draw-status")) {
             // Lo elegido para este intento sigue valiendo para el que se repite.
             if (pagarConMiCuenta) elegirPagarConMiCuenta();
             await draw();

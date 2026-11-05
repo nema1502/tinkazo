@@ -159,6 +159,13 @@ const CORPUS: Fila[] = [
   ["Pollar 0.12: el servicio se quedó sin créditos", "fuente", () => pollar("SDK_CREDITS_INSUFFICIENT"), "sponsorEmpty"],
   ["Pollar 0.12: la cuenta del servicio no pudo fondear la cuenta nueva", "fuente", () => pollar("FUND_XLM_FAILED"), "sponsorEmpty"],
   ["Pollar 0.12: la cuenta se está abriendo", "fuente", () => pollar("SDK_WALLET_NOT_READY"), "accountNotReady"],
+  // La co-firma de la cuenta de Turnkey (mainnet): `_outcomeOfCosign` arma `SDK_COSIGN_<ESTADO>` con el detalle en minúscula, y la
+  // verificación falla con el texto de su tabla de errores. Repetir no cambia nada, y cada intento pediría otra aprobación.
+  ["Pollar 0.12: la co-firma se rechazó", "fuente", () => pollar("co-sign request rejected · SDK_COSIGN_REJECTED"), "cosignRejected"],
+  ["Pollar 0.12: la transacción no coincidía con lo que se iba a firmar", "fuente", () => pollar("SDK_COSIGN_VERIFICATION_FAILED · The transaction didn't match what would be signed, so it was not approved."), "cosignRejected"],
+  // Lo de Pollar que no tenía clave propia: una transacción mandada que todavía no se confirmó, y demasiados pedidos seguidos.
+  ["Pollar: se mandó y todavía no se confirmó", "fuente", () => pollar("TX_SUBMIT_UNCONFIRMED · The transaction was sent but isn't confirmed yet. Check its status before sending again."), "unconfirmed"],
+  ["Pollar: demasiados pedidos seguidos", "documentado", () => pollar("RATE_LIMITED"), "busy"],
 
   // ---------------------------------------------------------------- Freighter
   // El -4 lo arma la extensión, no `@stellar/freighter-api` (que solo trae el -1): por eso es documentado.
@@ -217,6 +224,19 @@ describe("errorKey: el corpus", () => {
       "SDK: el RPC devolvió algo que no es JSON (portal cautivo)",
       "Pollar: malformada (registros de septiembre, bug viejo)",
     ]);
+  });
+});
+
+describe("la co-firma que no se aprobó es una respuesta de Pollar, no un corte", () => {
+  it("aunque su detalle hable de tiempo o de red, no es un corte y no se reintenta como tal", () => {
+    for (const msg of ["SDK_COSIGN_REJECTED · approval timed out", "SDK_COSIGN_VERIFICATION_FAILED · Failed to fetch the policy"]) {
+      expect(errorKey(pollar(msg), { enLinea: true }), msg).toBe("cosignRejected");
+      expect(esDeRed(pollar(msg)), msg).toBe(false);
+    }
+  });
+
+  it("y las otras co-firmas que fallan siguen donde estaban: el proveedor que dice 'probá en un momento' no es esta clave", () => {
+    expect(errorKey(pollar("SDK_COSIGN_TURNKEY_REJECTED · The wallet provider refused the request. Please try again in a moment."), { enLinea: true })).toBe("unknown");
   });
 });
 

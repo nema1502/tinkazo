@@ -1,4 +1,5 @@
 import { t } from "../i18n";
+import { esDeRed } from "../stellar/errores";
 
 /**
  * "Protegé tu cuenta": el paso que falta antes del primer sello en mainnet.
@@ -13,7 +14,16 @@ import { t } from "../i18n";
  *
  * Una sola acción principal por paso (`docs/ux.md`): el desbloqueo del aparato si el navegador lo tiene, y si no, el
  * código por correo. En los dos pasos hay "Ahora no". Mientras un desbloqueo o una confirmación de código están en
- * marcha no hay salida: si se cerrara y después se completara, la cuenta quedaría protegida y el sello no seguiría.
+ * marcha no hay salida: si se cerrara y después se completara, la cuenta quedaría protegida y el sello no seguiría. Esa
+ * espera tiene tope (`TOPE_DE_ESPERA_MS`): si Pollar o el navegador no contestan, la ventana lo dice, vuelve a dar la salida
+ * y deja reintentar.
+ *
+ * Si el navegador no deja abrir el desbloqueo (el que se abre dentro de TikTok, Instagram, Facebook o WhatsApp, o una página
+ * dentro de otra), el botón antes no hacía nada ni decía nada: ahora aparece un aviso con las dos salidas, el código por
+ * correo o abrir el enlace en Chrome o Safari. Para el navegador, cerrar el cuadro es lo mismo (`NotAllowedError`), así que
+ * el aviso sale también entonces: es una nota que no acusa a nadie, no una falla en rojo.
+ *
+ * Al cerrar, el foco vuelve a donde estaba la persona (`volverA`), o a la línea de estado de lo que sigue (`estadoId`).
  *
  * En testnet, con la custodia de Pollar, no se dispara: no hay nada que recuperar. La ventana se probó con un cliente
  * simulado (`proteger-cuenta.test.ts`), no contra Turnkey.
@@ -29,27 +39,90 @@ export interface Proteccion {
 
 const mailOk = (s: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s.trim());
 
+type Visto = { name?: unknown; message?: unknown; cause?: unknown };
+
+/** Mira el error y sus causas (el SDK envuelve lo del navegador), hasta cuatro niveles: una causa que se apunta a sí misma no cuelga nada. */
+function algunoDe(e: unknown, mira: (x: Visto | string) => boolean): boolean {
+  let x: unknown = e;
+  for (let nivel = 0; nivel < 4; nivel++) {
+    if (typeof x === "string") return mira(x);
+    if (!x || typeof x !== "object") return false;
+    if (mira(x as Visto)) return true;
+    x = (x as Visto).cause;
+  }
+  return false;
+}
+
 /**
- * La persona cerró el cuadro del navegador (o dijo que no): no es una falla. El navegador lo llama `NotAllowedError`
- * y `AbortError`; el SDK puede envolverlo, así que se mira también la causa.
+ * El navegador no siguió con el desbloqueo: la persona cerró el cuadro, se acabó el tiempo o no se permite abrirlo acá
+ * (un navegador que va dentro de otra aplicación, una página dentro de otra). Para WebAuthn las tres son lo mismo, un
+ * `NotAllowedError`: no se puede saber cuál fue.
+ */
+export function noPermitido(e: unknown): boolean {
+  return algunoDe(e, (x) => typeof x !== "string" && x.name === "NotAllowedError");
+}
+
+/**
+ * La persona dijo que no al desbloqueo: no es una falla. Es un `NotAllowedError` del navegador, o el aviso de la ceremonia
+ * propia cuando el navegador no devolvió nada (`passkey-cancelada`). El SDK puede envolverlo, así que se mira también la causa.
+ *
+ * No entra cualquier "abort" ni "cancel": Pollar cuenta así un pedido de la red cortado a mitad ("Aborted") y Safari dice
+ * "cancelled" cuando el navegador corta uno, y eso no es la persona. Un `AbortError` vale solo si lo lanzó el navegador y su
+ * texto no es el de un corte de la red (`esDeRed`, sin mirar el nombre, que ya diría "abort"): ahí se dice que falló.
  */
 export function cancelo(e: unknown): boolean {
-  const mira = (x: unknown): boolean => {
-    if (!x || typeof x !== "object") return typeof x === "string" && /NotAllowed|Abort|cancel/i.test(x);
-    const { name, message, cause } = x as { name?: unknown; message?: unknown; cause?: unknown };
-    return /NotAllowed|Abort|cancel/i.test(`${typeof name === "string" ? name : ""} ${typeof message === "string" ? message : ""}`) || (cause !== undefined && cause !== x && mira(cause));
-  };
-  return mira(e);
+  return algunoDe(e, (x) => {
+    if (typeof x === "string") return x === "passkey-cancelada";
+    if (x.name === "NotAllowedError" || x.message === "passkey-cancelada") return true;
+    return x.name === "AbortError" && typeof DOMException !== "undefined" && x instanceof DOMException && !esDeRed(new Error(typeof x.message === "string" ? x.message : ""));
+  });
 }
 
 /** El motivo por el que Pollar no aceptó un código, si lo dice con su código de error. */
 const codigoMalo = (e: unknown): boolean => /OTP|CODE|INVALID|EXPIRED/i.test(e instanceof Error ? e.message : String(e));
 
+/** Cuánto se espera a Pollar o al navegador: pasado esto la ventana avisa, vuelve a dar la salida y deja reintentar. */
+export const TOPE_DE_ESPERA_MS = 60_000;
+/** Al cerrar, cuántas veces y cada cuánto se mira si ya hay a dónde devolver el foco (un segundo y medio en total). */
+const VECES_QUE_MIRA = 15;
+const CADA_CUANTO_MIRA_MS = 100;
+const SIN_RESPUESTA = new Error("proteccion-sin-respuesta");
+
+/**
+ * Espera una llamada que puede no contestar nunca (Pollar sin red a mitad de camino, un cuadro del navegador que no
+ * aparece). Pasado el tope rechaza con `SIN_RESPUESTA`. Si la llamada contesta después, `tarde` recibe lo que dijo: una
+ * cuenta que quedó protegida cuenta, con tope o sin él.
+ */
+function conTope<T>(llamada: Promise<T>, tarde: (valor: T) => void): Promise<T> {
+  return new Promise<T>((resolver, rechazar) => {
+    let vencio = false;
+    const reloj = setTimeout(() => {
+      vencio = true;
+      rechazar(SIN_RESPUESTA);
+    }, TOPE_DE_ESPERA_MS);
+    llamada.then(
+      (valor) => {
+        clearTimeout(reloj);
+        if (vencio) tarde(valor);
+        else resolver(valor);
+      },
+      (e: unknown) => {
+        clearTimeout(reloj);
+        if (!vencio) rechazar(e);
+      },
+    );
+  });
+}
+
 /**
  * Abre la ventana y espera. Devuelve `true` si la cuenta quedó protegida, `false` si la persona la cerró.
  * Nunca lanza.
+ *
+ * `volverA` es el botón desde donde se abrió (el que sella o sortea: ya está apagado, así que el foco ya cayó en la página y
+ * `document.activeElement` no sirve); `estadoId`, la línea de estado de ese paso. Al cerrar, el foco vuelve al botón en
+ * cuanto el flujo lo prende, y si sigue apagado porque el sello o el sorteo continúan, va a la línea de estado.
  */
-export function protegerCuenta(cuenta: Proteccion, volverA: Element | null = document.activeElement): Promise<boolean> {
+export function protegerCuenta(cuenta: Proteccion, volverA: Element | null = document.activeElement, estadoId?: string): Promise<boolean> {
   return new Promise<boolean>((resolver) => {
     const fondo = document.createElement("div");
     fondo.className = "modal-back";
@@ -68,12 +141,31 @@ export function protegerCuenta(cuenta: Proteccion, volverA: Element | null = doc
     /**
      * Hay un desbloqueo o una confirmación de código en marcha: si se cerrara ahora y después se completara, la cuenta
      * quedaría protegida con la ventana ya resuelta en "no" y el sello no seguiría. Mientras dura, no hay salida;
-     * termina siempre (el navegador y la red tienen su propio límite) y se vuelve a poder salir.
+     * termina siempre, porque la espera tiene tope (`TOPE_DE_ESPERA_MS`), y se vuelve a poder salir.
      */
     let ocupada = false;
     const ocupar = (si: boolean): void => {
       ocupada = si;
       for (const b of tarjeta.querySelectorAll<HTMLButtonElement>("[data-salida]")) b.disabled = si;
+    };
+    /**
+     * Devuelve el foco cuando quien esperaba la ventana ya siguió: el sello prende de nuevo su botón (si la persona no
+     * protegió la cuenta) o vuelve a empezar y muestra su línea de estado (si la protegió). Eso pasa en el mismo instante
+     * o un momento después (cargar un módulo puede costar un turno), así que se mira unas pocas veces, y se deja de mirar
+     * apenas el foco ya está en algo: la persona o el flujo lo pusieron, y no se lo quita.
+     */
+    const devolverElFoco = (vez = 0): void => {
+      if (typeof document === "undefined") return;
+      const en = document.activeElement;
+      if (en && en !== document.body && en !== document.documentElement) return;
+      const boton = volverA instanceof HTMLElement && volverA !== document.body && volverA !== document.documentElement && volverA.isConnected ? volverA : null;
+      if (boton && !(boton as { disabled?: boolean }).disabled) return boton.focus({ preventScroll: true });
+      const estado = estadoId ? document.getElementById(estadoId) : null;
+      if (estado && !estado.hidden && getComputedStyle(estado).display !== "none") {
+        if (!estado.hasAttribute("tabindex")) estado.setAttribute("tabindex", "-1");
+        return estado.focus({ preventScroll: true });
+      }
+      if (vez < VECES_QUE_MIRA) setTimeout(() => devolverElFoco(vez + 1), CADA_CUANTO_MIRA_MS);
     };
     const cerrar = (protegida: boolean): void => {
       if (cerrada) return;
@@ -81,8 +173,8 @@ export function protegerCuenta(cuenta: Proteccion, volverA: Element | null = doc
       cerrada = true;
       document.removeEventListener("keydown", alTeclear, true);
       fondo.remove();
-      if (volverA instanceof HTMLElement && volverA.isConnected) volverA.focus();
       resolver(protegida);
+      if (volverA instanceof HTMLElement || estadoId) setTimeout(devolverElFoco, 0);
     };
 
     const encabezado = (titulo: string, ...texto: (string | Node)[]): void => {
@@ -133,12 +225,24 @@ export function protegerCuenta(cuenta: Proteccion, volverA: Element | null = doc
         const ayuda = document.createElement("p");
         ayuda.className = "login-note";
         ayuda.textContent = t("protPasskeyAyuda");
+        // Si el navegador no deja abrir el desbloqueo (cerrar el cuadro llega igual), esta nota dice qué hacer. No es una
+        // falla en rojo. Se escribe al mostrarla: una región de estado que cambia de texto es la que anuncian los lectores
+        // de pantalla.
+        const bloqueado = document.createElement("p");
+        bloqueado.className = "login-note login-aviso";
+        bloqueado.setAttribute("role", "status");
+        bloqueado.hidden = true;
         pk.addEventListener("click", () => {
           pk.disabled = true;
           pk.textContent = t("protHaciendo");
           err.hidden = true;
+          bloqueado.hidden = true;
+          bloqueado.textContent = "";
+          ayuda.hidden = false;
           ocupar(true);
-          cuenta.protegerConPasskey().then(
+          conTope(cuenta.protegerConPasskey(), (lista) => {
+            if (lista) cerrar(true);
+          }).then(
             (lista) => {
               if (lista) {
                 ocupar(false);
@@ -146,21 +250,28 @@ export function protegerCuenta(cuenta: Proteccion, volverA: Element | null = doc
               }
               sinTerminar(pk, "no-quedo");
             },
-            // Cerrar el cuadro del navegador no es fallar: se vuelve al paso, sin aviso rojo.
-            (e: unknown) => sinTerminar(pk, cancelo(e) ? "cancelo" : "fallo"),
+            // Cerrar el cuadro del navegador no es fallar: se vuelve al paso, sin aviso rojo. Si el navegador no lo deja
+            // abrir, se dice qué hacer. Un corte de la red de Pollar o el tope de espera sí se dicen como falla.
+            (e: unknown) => sinTerminar(pk, e === SIN_RESPUESTA ? "tarda" : noPermitido(e) ? "no-permitido" : cancelo(e) ? "cancelo" : "fallo"),
           );
         });
-        const sinTerminar = (b: HTMLButtonElement, que: "no-quedo" | "cancelo" | "fallo"): void => {
+        const sinTerminar = (b: HTMLButtonElement, que: "no-quedo" | "cancelo" | "no-permitido" | "tarda" | "fallo"): void => {
           ocupar(false);
           b.disabled = false;
           b.textContent = t("protPasskey");
-          if (que === "cancelo") return b.focus({ preventScroll: true });
-          decir(err, t(que === "fallo" ? "protPasskeyFalla" : "protNoQuedo"));
+          if (que === "no-permitido") {
+            // El texto de ayuda explica un desbloqueo que acá no se abre: mientras la nota está, sobra (y ocupa lugar en un celular chico).
+            ayuda.hidden = true;
+            bloqueado.textContent = t("protPasskeyBloqueada");
+            bloqueado.hidden = false;
+          }
+          if (que === "cancelo" || que === "no-permitido") return b.focus({ preventScroll: true });
+          decir(err, t(que === "fallo" ? "protPasskeyFalla" : que === "tarda" ? "protTarda" : "protNoQuedo"));
         };
         const o = document.createElement("p");
         o.className = "login-or";
         o.textContent = t("protO");
-        cuerpo.append(pk, ayuda, o);
+        cuerpo.append(pk, ayuda, bloqueado, o);
       }
 
       const form = document.createElement("form");
@@ -229,7 +340,9 @@ export function protegerCuenta(cuenta: Proteccion, volverA: Element | null = doc
         ir.disabled = true;
         ir.textContent = t("protHaciendo");
         ocupar(true);
-        cuenta.confirmarCodigoDeProteccion(limpio()).then(
+        conTope(cuenta.confirmarCodigoDeProteccion(limpio()), (lista) => {
+          if (lista) cerrar(true);
+        }).then(
           (lista) => {
             if (lista) {
               ocupar(false);
@@ -244,7 +357,7 @@ export function protegerCuenta(cuenta: Proteccion, volverA: Element | null = doc
             ocupar(false);
             ir.disabled = false;
             ir.textContent = t("protCodeGo");
-            decir(err, t(codigoMalo(e) ? "protBadCode" : "protFalla"));
+            decir(err, t(e === SIN_RESPUESTA ? "protTarda" : codigoMalo(e) ? "protBadCode" : "protFalla"));
             campo.select();
           },
         );

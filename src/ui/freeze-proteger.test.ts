@@ -50,7 +50,7 @@ vi.mock("./sello-seguro", () => ({
     return { raffleId: 1n, txHash: "H", round: inicial.round, ts: inicial.ts };
   },
 }));
-vi.mock("./proteger-flujo", () => ({ pideProtegerLaCuenta: (...a: unknown[]) => h.pide(...a), protegerLaCuenta: () => h.proteger() }));
+vi.mock("./proteger-flujo", () => ({ pideProtegerLaCuenta: (...a: unknown[]) => h.pide(...a), protegerLaCuenta: (...a: unknown[]) => h.proteger(...a) }));
 vi.mock("../contar", () => ({ contar: (...a: unknown[]) => h.contar(...a), errorContable: (c: string) => c }));
 vi.mock("../ensayo-modo", () => ({ ENSAYO_ESPERA_S: 15, STAND_ESPERA_S: 15, enEnsayo: () => false, enStand: () => false, sinGrabar: () => false }));
 vi.mock("./wallet-ui", () => ({ apruebaAMano: () => false, canAnchor: () => true, claveDeSellar: () => "freeze", currentSession: () => ({ address: "GAAA" }) }));
@@ -126,6 +126,15 @@ describe("sellar cuando la cuenta pide protección", () => {
     // El primer intento no se cuenta como fallado: se cuenta cómo termina el reintento.
     expect(cuentas("seal_failed")).toBe(1);
     expect(document.getElementById("seal-status")?.textContent ?? "").not.toContain("RECOVERY");
+  });
+
+  it("a la ventana le dice a dónde devolver el foco: el botón de sellar, apagado, y su línea de estado", async () => {
+    h.sealOnChain.mockRejectedValueOnce(recuperacion()).mockRejectedValue(new Error("boom"));
+    h.proteger.mockResolvedValue(true);
+    const { freeze } = await import("./freeze");
+    await freeze();
+    // Cuando se abre la ventana el botón ya está apagado y el foco cayó en la página: `document.activeElement` no sirve.
+    expect(h.proteger).toHaveBeenCalledWith(document.getElementById("btn-freeze"), "seal-status");
   });
 
   it("el reintento le dice a la persona que la cuenta quedó protegida", async () => {
