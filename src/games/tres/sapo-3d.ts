@@ -1,12 +1,12 @@
 import {
   BackSide, BoxGeometry, BufferGeometry, CanvasTexture, CircleGeometry, DoubleSide, Float32BufferAttribute, Group, HemisphereLight,
-  InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PlaneGeometry, Quaternion, RepeatWrapping, SRGBColorSpace,
+  InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PlaneGeometry, Quaternion, RepeatWrapping, SRGBColorSpace,
   TorusGeometry, Vector3,
 } from "three";
 import { crearAmbiente } from "./escena";
 import { crearGeometrias, Instancias, Materiales, pieza } from "./figuras";
 import { hash } from "./ids";
-import { perfilFiel, type Mapa, type PerfilMapa } from "./camara";
+import { aplicarPose, perfilFiel, poseCamara, type Mapa, type PerfilMapa } from "./camara";
 import { definir3D } from "./motor";
 import type { Camara2D, EntradaBase, Fabrica3D, Lanzador } from "./tipos";
 
@@ -30,6 +30,16 @@ export interface PuntoMesa {
 /** El 3D le devuelve al 2D cómo llevar un punto de la mesa a la pantalla (el 2D lo usa para anclar nombres, medallas y el foco). */
 export interface Puente {
   aPantalla?: (p: PuntoMesa, alto?: number) => { x: number; y: number } | null;
+  /** La caja en la pantalla del aro destacado (el agujero encendido del todo) tal como lo dibujó la cámara del último cuadro, o null. */
+  destacada?: () => CajaPantalla | null;
+}
+
+/** Una caja en píxeles de la pantalla (los mismos del estadio de PixiJS). */
+export interface CajaPantalla {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 export type EstadoArgolla = "mano" | "vuelo" | "rueda" | "baile" | "hunde" | "boca-entra" | "boca-sale" | "oculta";
@@ -95,6 +105,13 @@ export interface EntradaSapo extends EntradaBase {
   golpe: number;
   /** La hora en que cayó la última argolla en su agujero, o -1. */
   adentro: number;
+  /** De 0 a 1: cuánto se suelta el tope del acercamiento para el primer plano del final (lo pide el 2D en el celular apaisado). */
+  primerPlano?: number;
+  /**
+   * Con el primer plano, antes de dibujar: recibe la caja del aro destacado tal como lo vería la cámara de este cuadro, la
+   * encaja entre el cartel y el relator y devuelve la cámara del 2D corregida (o null si ya cabía). Ver `encajarAntes`.
+   */
+  encajar?: (caja: CajaPantalla) => Camara2D | null;
 }
 
 /* ===================================================================== las cuentas puras (se prueban en Node) */
@@ -265,10 +282,15 @@ export const perfilSapo = (tilt: number, delta = 0): PerfilMapa => {
  * `ZOOM_MAX` la cámara es la del director. Depende solo de la cámara del 2D, nunca de quién gana.
  */
 export const ZOOM_MAX = 1.1;
-export function camaraDelSapo(cam: Camara2D, w: number, h: number, tope = ZOOM_MAX): Camara2D {
+export function camaraDelSapo(cam: Camara2D, w: number, h: number, tope = ZOOM_MAX, primerPlano = 0): Camara2D {
   if (cam.zoom <= tope) return cam;
   const k = (tope - 1) / (cam.zoom - 1);
-  return { ...cam, zoom: tope, x: w / 2 + (cam.x - w / 2) * k, y: h / 2 + (cam.y - h / 2) * k };
+  const recortada = { ...cam, zoom: tope, x: w / 2 + (cam.x - w / 2) * k, y: h / 2 + (cam.y - h / 2) * k };
+  // El primer plano del final suelta el tope de a poco: de la cámara recortada a la del director, sin saltos.
+  const p = Math.min(1, Math.max(0, primerPlano));
+  if (p <= 0) return recortada;
+  if (p >= 1) return cam;
+  return { ...cam, zoom: tope + (cam.zoom - tope) * p, x: recortada.x + (cam.x - recortada.x) * p, y: recortada.y + (cam.y - recortada.y) * p };
 }
 
 /** Cuánto baja o sube la cámara: entra más alta y baja en 2,5 s; con el empuje de emoción baja 4 grados más; en el golpe, 3 más. */
@@ -285,6 +307,100 @@ export function luzDelGolpe(t: number, golpe: number): number {
   const a = t - golpe;
   const baja = 1 - 0.5 * suave(a / 0.25);
   return a < 0.25 ? baja : baja + 0.18 * suave((a - 0.25) / 1.2);
+}
+
+/** La tapa salta un 2 % de su alto cuando cae la última argolla (en unidades de la mesa). */
+export const saltoTapa = (t: number, adentro: number): number =>
+  adentro >= 0 && t - adentro < 0.25 ? 0.03 * Math.sin((Math.PI * (t - adentro)) / 0.25) : 0;
+
+/** Cuánto crece el anillo amarillo del agujero encendido del todo desde el golpe: un 15 % en 0,3 s. */
+export const crecidaAnillo = (t: number, golpe: number): number => 1 + 0.15 * suave((t - golpe) / 0.3);
+
+/** Lo que se dibuja del aro destacado, en unidades de la mesa: su centro, su radio exterior y de qué altura a qué altura. */
+export interface AroDestacado {
+  x: number;
+  z: number;
+  radio: number;
+  bajo: number;
+  alto: number;
+}
+
+/**
+ * El aro del agujero encendido del todo (`lit >= 1`) con lo que el cuadro le dibuja: el aro de color (radio 1,08 del
+ * agujero, tubo de 0,13, alto 1,5) y, desde el golpe, el anillo amarillo que crece (1,1 del agujero, tubo de 0,2). Con el
+ * salto de la tapa. Null si ningún agujero está encendido del todo.
+ */
+export function aroDestacado(e: Pick<EntradaSapo, "trazo" | "agujeros" | "t" | "golpe" | "adentro">): AroDestacado | null {
+  const s = e.agujeros.findIndex((a) => a.lit >= 1);
+  const h = e.trazo.holes[s];
+  if (s < 0 || !h) return null;
+  const R = e.trazo.holeR;
+  const sube = saltoTapa(e.t, e.adentro);
+  const r = R * 1.08 * Math.max(0.0001, (e.agujeros[s] as AgujeroSapo).nace);
+  const yAro = 0.0155 * R / 0.145;
+  let radio = r * 1.13, bajo = yAro - 0.13 * r * 1.5, alto = yAro + 0.13 * r * 1.5;
+  if (e.golpe >= 0) {
+    radio = Math.max(radio, R * 1.1 * crecidaAnillo(e.t, e.golpe) * 1.2);
+    bajo = Math.min(bajo, 0.02 - 0.2 * R * 1.3);
+    alto = Math.max(alto, 0.02 + 0.2 * R * 1.3);
+  }
+  return { x: h.x, z: h.y, radio, bajo: bajo + sube, alto: alto + sube };
+}
+
+/** La caja en la pantalla del contorno de un aro, por la proyección dada y con el lugar del grupo de la mesa (`lugarDelMundo`). */
+export function cajaDeAro(aro: AroDestacado, lugar: { px: number; pz: number; K: number; Kz: number },
+  proyectar: (x: number, y: number, z: number) => { x: number; y: number } | null): CajaPantalla | null {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  const N = 32;
+  for (let i = 0; i < N; i++) {
+    const a = (i / N) * Math.PI * 2;
+    const x = lugar.px + lugar.K * (aro.x + aro.radio * Math.cos(a)), z = lugar.pz + lugar.Kz * (aro.z + aro.radio * Math.sin(a));
+    for (const y of [aro.bajo, aro.alto]) {
+      const p = proyectar(x, lugar.K * y, z);
+      if (!p) continue;
+      x0 = Math.min(x0, p.x);
+      y0 = Math.min(y0, p.y);
+      x1 = Math.max(x1, p.x);
+      y1 = Math.max(y1, p.y);
+    }
+  }
+  return x1 >= x0 && y1 >= y0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
+}
+
+const camaraPrevia = new PerspectiveCamera(36, 1, 0.5, 4000);
+const puntoPrevio = new Vector3();
+
+/**
+ * Dónde caería un punto 3D en la pantalla con la cámara que `motor.cuadro` pondría para esta cámara del 2D (la misma
+ * `poseCamara` y la misma `aplicarPose`), sin dibujar: para despejar antes del cuadro y no dibujarlo dos veces.
+ */
+export function proyectorDe(cam: Camara2D, w: number, h: number, u: number, perfil: PerfilMapa): (x: number, y: number, z: number) => { x: number; y: number } | null {
+  const pose = poseCamara(cam, h, u, perfil);
+  return (x, y, z) => {
+    aplicarPose(camaraPrevia, pose, w / Math.max(1, h));
+    puntoPrevio.set(x, y, z).project(camaraPrevia);
+    if (puntoPrevio.z > 1) return null;
+    return { x: ((puntoPrevio.x + 1) / 2) * w, y: ((1 - puntoPrevio.y) / 2) * h };
+  };
+}
+
+/**
+ * El despeje antes de dibujar: mide la caja con la cámara de ahora, se la da a `encajar` (el 2D la encaja entre el cartel
+ * y el relator y mueve su cámara), y con la cámara corregida (pasada por `ajustar`, el tope del sapo) vuelve a medir. Con
+ * perspectiva el corrimiento del 2D no es exacto en el 3D: dos o tres vueltas lo cierran. Para cuando ya cabe.
+ */
+export function encajarAntes(cam: Camara2D, medir: (c: Camara2D) => CajaPantalla | null,
+  encajar: ((caja: CajaPantalla) => Camara2D | null) | undefined, ajustar: (c: Camara2D) => Camara2D, vueltas = 3): Camara2D {
+  if (!encajar) return cam;
+  let c = cam;
+  for (let i = 0; i < vueltas; i++) {
+    const caja = medir(c);
+    if (!caja) break;
+    const nueva = encajar(caja);
+    if (!nueva) break;
+    c = ajustar(nueva);
+  }
+  return c;
 }
 
 /* ===================================================================== el cajón */
@@ -709,8 +825,14 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
     frame(e) {
       const m = e.mesa;
       const perfil = perfilSapo(m.tilt, deltaCamara(e.t, e.tension, e.golpe));
+      const ajustar = (c: Camara2D): Camara2D => camaraDelSapo(c, e.w, e.h, ZOOM_MAX, e.primerPlano ?? 0);
+      // El aro destacado, con lo que este cuadro le dibuja, y dónde queda el grupo de la mesa: lo que mide el despeje.
+      const aro = aroDestacado(e);
+      const lugar = lugarDelMundo(motor.mapa(e.u, perfil), m);
+      // Con el primer plano, el despeje del cartel y el relator va antes de dibujar: la cámara que dibuja es la despejada.
+      const cam = encajarAntes(ajustar(e.cam), (c) => (aro ? cajaDeAro(aro, lugar, proyectorDe(c, e.w, e.h, e.u, perfil)) : null), e.encajar, ajustar);
       // La cuenta de la casa fija el lugar del mundo 2D en el 3D; la elevación base mantiene el piso con las proporciones del 2D.
-      motor.cuadro({ ...e, cam: camaraDelSapo(e.cam, e.w, e.h) }, perfil, (mapa, pose) => {
+      motor.cuadro({ ...e, cam }, perfil, (mapa, pose) => {
         ({ px, pz, K, Kz } = lugarDelMundo(mapa, m));
         mundo.position.set(px, 0, pz);
         mundo.scale.set(K, K, Kz);
@@ -722,8 +844,7 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
         amb.sol.intensity = sol0 * (0.35 + 0.65 * luz);
 
         // La tapa salta un 2 % de su alto cuando cae la última argolla.
-        const salto = e.adentro >= 0 && e.t - e.adentro < 0.25 ? 0.03 * Math.sin((Math.PI * (e.t - e.adentro)) / 0.25) : 0;
-        tapa.position.y = salto;
+        tapa.position.y = saltoTapa(e.t, e.adentro);
 
         // Los agujeros.
         discos.usar(tz.holes.length);
@@ -739,7 +860,7 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
           aros.poner(s, h.x, 0.0155 * tz.holeR / 0.145, h.y, r, r * (lit ? 1.5 : 1), r, 0, lit ? AMARILLO : ag.aro);
           if (ag.lit >= 1 && e.golpe >= 0) {
             anilloGanador.visible = true;
-            const k = 1 + 0.15 * suave((e.t - e.golpe) / 0.3);
+            const k = crecidaAnillo(e.t, e.golpe);
             anilloGanador.position.set(h.x, 0.02, h.y);
             anilloGanador.scale.set(tz.holeR * 1.1 * k, tz.holeR * 1.3, tz.holeR * 1.1 * k);
           }
@@ -824,6 +945,8 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
       });
       // Lo que el 2D usa para anclar sus nombres, medallas y el foco a lo que la cámara 3D ve.
       e.puente.aPantalla = (p, alto = 0) => motor.proyectar(px + K * p.x, K * alto, pz + Kz * p.y);
+      // Y la caja del aro destacado medida con la cámara que lo dibujó de verdad (no con el contorno 2D, que no se ve).
+      e.puente.destacada = () => (aro ? cajaDeAro(aro, lugar, (x, y, z) => motor.proyectar(x, y, z)) : null);
     },
     pantallaDe(id) {
       // El agujero `id`: el centro de su aro en la pantalla y lo que mide de ancho.

@@ -5,10 +5,11 @@ import { planQualifier } from "../pixi/qualifier";
 import { HAND, MOUTH, SAPO_MAX, holeLayout, optsForArc, planThrows, type Point } from "../pixi/sapo-plan";
 import { Q_FLY, Q_SHOW, Q_WAVE, WOBBLE, tiemposDeTiros } from "../pixi/sapo-tiempos";
 import { assignSlots } from "../pixi/slots";
-import { crearMapa } from "./camara";
+import { crearMapa, poseCamara } from "./camara";
 import { compararPuestos, type Puesto2D } from "./prueba";
 import {
-  TAPA_Y, ZOOM_MAX, alturaRana, camaraDelSapo, deltaCamara, elevacionDe, lugarDelMundo, luzDelGolpe, perfilSapo, poseArgolla, type ArgollaSapo, type EstadoArgolla,
+  TAPA_Y, ZOOM_MAX, alturaRana, aroDestacado, cajaDeAro, camaraDelSapo, deltaCamara, elevacionDe, encajarAntes, lugarDelMundo, luzDelGolpe, perfilSapo,
+  poseArgolla, proyectorDe, type AgujeroSapo, type ArgollaSapo, type AroDestacado, type EstadoArgolla,
 } from "./sapo-3d";
 
 /**
@@ -267,5 +268,121 @@ describe("el sapo en 3D usa la casa y no cambia lo que pasa", () => {
     expect(dos).toContain('for (const o of tosses) if (o.th.kind === "hit" && tAll >= o.land) lit.set(');
     // La mirada de la rana al agujero ganador es solo después de la corona.
     expect(dos).toContain("mira: crowned ?");
+  });
+});
+
+describe("el primer plano del final en 3D: lo que se ve de cerca y despejado", () => {
+  const w = 844, h = 390;
+  const base = { x: w / 2, y: h / 2, zoom: 1, rot: 0, sacudonX: 0, sacudonY: 0 };
+
+  it("sin primer plano, el tope de siempre; con el primer plano entero, la cámara del director tal cual, y sin saltos entre medio", () => {
+    const dir = { ...base, zoom: 3.2, x: 520, y: 150 };
+    expect(camaraDelSapo(dir, w, h, ZOOM_MAX, 0)).toEqual(camaraDelSapo(dir, w, h));
+    expect(camaraDelSapo(dir, w, h, ZOOM_MAX, 1)).toEqual(dir);
+    let antes = camaraDelSapo(dir, w, h, ZOOM_MAX, 0);
+    for (let i = 1; i <= 100; i++) {
+      const c = camaraDelSapo(dir, w, h, ZOOM_MAX, i / 100);
+      // Cada centésimo de avance mueve poco y siempre hacia la del director.
+      expect(c.zoom).toBeGreaterThanOrEqual(antes.zoom);
+      expect(Math.abs(c.zoom - antes.zoom)).toBeLessThan(0.05);
+      expect(Math.abs(c.x - antes.x)).toBeLessThan(3);
+      expect(Math.abs(c.y - antes.y)).toBeLessThan(3);
+      antes = c;
+    }
+    // Por debajo del tope no cambia nada.
+    expect(camaraDelSapo({ ...base, zoom: 1.05 }, w, h, ZOOM_MAX, 0.5)).toEqual({ ...base, zoom: 1.05 });
+  });
+
+  const trazo = { holes: [{ x: -0.6, y: 0.2 }, { x: 0.5, y: -0.3 }, { x: 0.1, y: 0.6 }], holeR: 0.145, frogR: 0.34, tableR: 1.55 };
+  const ag = (lits: number[]): AgujeroSapo[] => lits.map((lit) => ({ nace: 1, aro: 0xff0000, lit }));
+
+  it("el aro destacado es el del agujero encendido del todo, con lo que dibuja: el aro y, desde el golpe, el anillo que crece", () => {
+    expect(aroDestacado({ trazo, agujeros: ag([0, 0.6, 0]), t: 9, golpe: -1, adentro: -1 })).toBeNull();
+    const antes = aroDestacado({ trazo, agujeros: ag([0.6, 1, 0]), t: 9, golpe: -1, adentro: 5 });
+    expect(antes).not.toBeNull();
+    const a = antes as AroDestacado;
+    expect(a.x).toBe(0.5);
+    expect(a.z).toBe(-0.3);
+    // El aro: radio 1,08 del agujero y su tubo de 0,13.
+    expect(a.radio).toBeCloseTo(0.145 * 1.08 * 1.13, 9);
+    expect(a.alto).toBeGreaterThan(a.bajo);
+    const golpe = aroDestacado({ trazo, agujeros: ag([0.6, 1, 0]), t: 10.5, golpe: 10, adentro: 5 }) as AroDestacado;
+    // El anillo amarillo: 1,1 del agujero, crecido 15 % a los 0,3 s, con su tubo de 0,2.
+    expect(golpe.radio).toBeCloseTo(0.145 * 1.1 * 1.15 * 1.2, 9);
+    // Con el salto de la tapa al caer la última argolla, el aro sube.
+    const salta = aroDestacado({ trazo, agujeros: ag([0, 1, 0]), t: 5.125, golpe: -1, adentro: 5 }) as AroDestacado;
+    expect(salta.bajo).toBeGreaterThan(a.bajo);
+  });
+
+  it("la caja del aro en la pantalla es la de su contorno proyectado, con la escala de la mesa", () => {
+    const aro: AroDestacado = { x: 0.5, z: -0.3, radio: 0.2, bajo: 0, alto: 0.05 };
+    const lugar = { px: 10, pz: 20, K: 2, Kz: 3 };
+    // Una proyección lineal: x a la derecha, z hacia abajo, la altura hacia arriba.
+    const caja = cajaDeAro(aro, lugar, (x, y, z) => ({ x: 100 + 10 * x, y: 50 + 10 * z - 10 * y })) as { x: number; y: number; w: number; h: number };
+    expect(caja.x).toBeCloseTo(100 + 10 * (10 + 2 * (0.5 - 0.2)), 6);
+    expect(caja.w).toBeCloseTo(10 * 2 * 2 * 0.2, 6);
+    expect(caja.y).toBeCloseTo(50 + 10 * (20 + 3 * (-0.3 - 0.2)) - 10 * 2 * 0.05, 6);
+    expect(caja.h).toBeCloseTo(10 * 3 * 2 * 0.2 + 10 * 2 * 0.05, 6);
+    expect(cajaDeAro(aro, lugar, () => null)).toBeNull();
+  });
+
+  it("la proyección antes de dibujar es la de la cámara 3D: el punto mirado cae en el centro y el acercamiento agranda la caja", () => {
+    const perfil = perfilSapo(0.62);
+    const u = 0.54;
+    const mapa = crearMapa(perfil, u);
+    const mesa = { cx: 422, cy: 200, sc: 120, tilt: 0.62 };
+    const lugar = lugarDelMundo(mapa, mesa);
+    const cam = { ...base, x: 430, y: 190, zoom: 1.6 };
+    const pose = poseCamara(cam, h, u, perfil);
+    const c = proyectorDe(cam, w, h, u, perfil)(...pose.mira) as { x: number; y: number };
+    expect(c.x).toBeCloseTo(w / 2, 6);
+    expect(c.y).toBeCloseTo(h / 2, 6);
+    const aro: AroDestacado = { x: 0.06, z: -0.08, radio: 0.19, bajo: 0, alto: 0.03 };
+    const b1 = cajaDeAro(aro, lugar, proyectorDe(cam, w, h, u, perfil)) as { w: number; h: number };
+    const b2 = cajaDeAro(aro, lugar, proyectorDe({ ...cam, zoom: 3.2 }, w, h, u, perfil)) as { w: number; h: number };
+    expect(b2.w / b1.w).toBeGreaterThan(1.8);
+    expect(b2.w / b1.w).toBeLessThan(2.2);
+  });
+
+  it("el despeje va antes de dibujar: mide con la cámara de ahora, despeja esa caja, vuelve a medir con la corregida y para cuando ya cabe", () => {
+    const pasos: string[] = [];
+    const cam0 = { ...base, zoom: 2 };
+    // Una caja que baja 40 px por cada píxel que la cámara mira más arriba; el despeje la quiere con su borde de arriba en 100.
+    const medir = (c: typeof cam0) => {
+      pasos.push(`medir ${c.y.toFixed(1)}`);
+      return { x: 300, y: 60 + (h / 2 - c.y) * 0.9, w: 80, h: 50 };
+    };
+    const encajar = (caja: { y: number }) => {
+      pasos.push(`encajar ${caja.y.toFixed(1)}`);
+      if (caja.y >= 100 - 1e-6) return null;
+      return { ...cam0, y: h / 2 - (100 - 60) / 0.8 };
+    };
+    const fin = encajarAntes(cam0, medir, encajar, (c) => c);
+    expect(pasos[0]).toBe(`medir ${(h / 2).toFixed(1)}`);
+    expect(pasos[1]).toBe("encajar 60.0");
+    expect(pasos[2]).toBe(`medir ${(h / 2 - 50).toFixed(1)}`);
+    expect(fin.y).toBeCloseTo(h / 2 - 50, 9);
+    // Nunca más de tres vueltas, aunque el despeje no termine de cerrar.
+    let n = 0;
+    encajarAntes(cam0, () => ({ x: 0, y: 0, w: 1, h: 1 }), () => (n++, { ...cam0 }), (c) => c);
+    expect(n).toBe(3);
+    // Sin despeje pedido, la cámara queda como estaba y no se mide nada.
+    const solo: string[] = [];
+    expect(encajarAntes(cam0, () => (solo.push("x"), null), undefined, (c) => c)).toBe(cam0);
+  });
+
+  it("el cuadro 3D despeja antes de dibujar y dibuja con la cámara despejada, sin nombrar a quien gana", () => {
+    const src = fuente("sapo-3d.ts");
+    const cuadro = src.slice(src.indexOf("    frame(e) {"), src.indexOf("    pantallaDe(id) {"));
+    expect(cuadro.indexOf("encajarAntes(")).toBeGreaterThan(0);
+    expect(cuadro.indexOf("encajarAntes(")).toBeLessThan(cuadro.indexOf("motor.cuadro("));
+    expect(cuadro).toMatch(/motor\.cuadro\(\{ \.\.\.e, cam \}/);
+    expect(cuadro).toContain("e.puente.destacada =");
+    for (const [desde, hasta] of [["export function aroDestacado", "export function cajaDeAro"], ["export function cajaDeAro", "export function proyectorDe"],
+      ["export function proyectorDe", "export function encajarAntes"], ["export function encajarAntes", "/* ====="]] as const) {
+      const i = src.indexOf(desde);
+      expect(i, desde).toBeGreaterThan(0);
+      expect(src.slice(i, src.indexOf(hasta, i + 1))).not.toMatch(/ganador|winner|slot/i);
+    }
   });
 });

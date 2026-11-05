@@ -8,7 +8,7 @@ import { CONTADOR, medidasContador, CREAM, INK, MONO, YELLOW, mountPixi, type Fo
 import { tiemposFoco } from "./foco";
 import { colorDeNombre } from "./foco-vista";
 import { cabe, encuadrar, unir, type Caja, type Zona } from "./encuadre";
-import { sapoEstadoGanador, sapoFinalCloseUp, sapoFinalFrame } from "./sapo-zoom-final";
+import { sapoEstadoGanador, sapoFinalCloseUp, sapoFinalFrame, sapoPrimerPlano3D } from "./sapo-zoom-final";
 import { avatarColor } from "../../avatar";
 import { formasDe } from "../nombres";
 import { escalaChipLegible } from "./letra";
@@ -22,7 +22,7 @@ import { pintarMarcas } from "./kit/marcador-vista";
 import { reservaDeMarcas } from "./kit/marcador";
 import { FORMA_SAPO, respuestasSapo } from "./sapo-nino";
 import { enchufar3D, entradaBase } from "../tres/enchufe";
-import type { Montaje3D } from "../tres/tipos";
+import type { Camara2D, Montaje3D } from "../tres/tipos";
 import type { AgujeroSapo, ArgollaSapo, EntradaSapo, EstadoArgolla, Puente } from "../tres/sapo-3d";
 
 /**
@@ -859,8 +859,11 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   /** Con la corona: debajo de donde sale el cartel y encima del relator. */
   const zonaGanador = (): Zona => ({ x0: 4 * g.k, y0: S.placaBajo(winners.length) + 6 * g.k, x1: g.w - 4 * g.k, y1: g.h - S.bottom() });
 
-  /** El celular apaisado, desde que cae la última argolla y solo en el 2D (en el 3D la mesa la mira otra cámara). */
-  const finalCloseUp = (): boolean => !v3 && sapoFinalCloseUp(g.w, g.h, S.portrait(), tAll >= T_LAND);
+  /**
+   * El celular apaisado, desde que cae la última argolla, en el 2D y en el 3D. En el 3D la cámara suelta su tope
+   * (`primerPlano`) y el despeje se mide sobre el aro que dibuja la cámara 3D, antes de dibujarlo (`encajar3D`).
+   */
+  const finalCloseUp = (): boolean => sapoFinalCloseUp(g.w, g.h, S.portrait(), tAll >= T_LAND);
   /** El contorno pintado del aro elegido: la elipse exterior de 1,2 y la mitad del trazo amarillo de 6k. */
   const selectedTarget = (): Caja => {
     const slot = (tosses[tosses.length - 1] as Toss).slot;
@@ -872,6 +875,8 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   /** `getBounds` trae la transformación real de la escena, con el sacudón y el encuadre local. */
   const selectedTargetOnScreen = (): Caja | null => {
     if (!finalCloseUp()) return null;
+    // En el 3D, el aro tal como lo dibujó la cámara 3D en este cuadro: el contorno 2D no se pinta.
+    if (v3) return puente.destacada?.() ?? null;
     const b = winnerTargetG.getBounds();
     return b.width > 0 && b.height > 0 ? { x: b.x, y: b.y, w: b.width, h: b.height } : null;
   };
@@ -1142,6 +1147,17 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     return out;
   }
 
+  /**
+   * El despeje del primer plano en el 3D: el estadio encaja la caja del aro (proyectada con la cámara 3D que va a dibujar)
+   * entre el cartel y el relator moviendo la escena; la cámara del 3D sale de la escena, así que se devuelve la nueva.
+   */
+  const encajar3D = (caja: Caja): Camara2D | null => {
+    const x = S.scene.position.x, y = S.scene.position.y, z = S.scene.scale.x;
+    S.despejarGanador(caja);
+    if (S.scene.position.x === x && S.scene.position.y === y && S.scene.scale.x === z) return null;
+    return entradaBase(S, tAll).cam;
+  };
+
   /** Pasa el cuadro al 3D: lo que el 2D ya puso, sin recalcular nada. */
   function frame3D(agujeros: AgujeroSapo[]): void {
     if (!v3) return;
@@ -1171,6 +1187,8 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       tension: empujeDado ? clamp((tAll - T_EMPUJE) / Math.max(0.5, T_CROWN - T_EMPUJE), 0, 1) : 0,
       golpe: tGolpe,
       adentro: tAll >= ultimo.land ? ultimo.land : -1,
+      primerPlano: sapoPrimerPlano3D(finalCloseUp(), tAll - T_LAND),
+      encajar: finalCloseUp() ? encajar3D : undefined,
     });
   }
 
@@ -1512,12 +1530,16 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     aim();
     cam.update(dt);
     cam.apply(S.scene, S.sw(), S.sh(), now);
+    // En el 3D el despeje del primer plano va dentro del cuadro 3D, antes de dibujar: el cartel ya tiene que tener la pose
+    // de este cuadro (el foco se vuelve a apuntar abajo, con lo que dibujó la cámara 3D).
+    const cerca3D = !!v3 && finalCloseUp();
+    if (cerca3D && tAll >= T_CROWN) crownUI.at(tAll - T_CROWN, true, focoDelAgujero());
     draw();
-    if (tAll >= T_CROWN) crownUI.at(tAll - T_CROWN, true, focoDelAgujero());
+    if (!cerca3D && tAll >= T_CROWN) crownUI.at(tAll - T_CROWN, true, focoDelAgujero());
     const cuerpo = selectedTargetOnScreen();
     if (cuerpo) {
       // El cartel y el relator ya tienen la pose de este cuadro: el estadio reserva el nombre completo y solo achica si no cabe.
-      S.despejarGanador(cuerpo);
+      if (!v3) S.despejarGanador(cuerpo);
       if (tAll >= T_CROWN) crownUI.enfocar?.(focoDelAgujero());
     }
     if (tHold >= WINNER_HOLD + FOCO.placa) {
