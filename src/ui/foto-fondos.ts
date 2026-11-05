@@ -47,6 +47,14 @@ import {
   banderines,
   papelPicado,
 } from "./fondos/lapiz";
+import { fondoChovena } from "./fondos/chovena";
+import { fondoGuajojo } from "./fondos/guajojo";
+import { fondoOruro } from "./fondos/oruro";
+import { fondoPinata } from "./fondos/pinata";
+import { fondoTeleferico } from "./fondos/teleferico";
+import { fondoToborochi } from "./fondos/toborochi";
+import { fondoTrompo } from "./fondos/trompo";
+import { fondoRuleta } from "./fondos/wheel";
 
 function pata(p: Pincel, at: (x: number, y: number) => Punto, u: number, hx: number, a: number, b: number, color: string): void {
   const barra = (x0: number, y0: number, ang: number, largo: number, g: number): Punto => {
@@ -338,6 +346,14 @@ function fondoSapo(p: Pincel): void {
 const FONDOS = new Map<string, (p: Pincel) => void>([
   ["race", fondoCarrera],
   ["sapo", fondoSapo],
+  ["trompo", fondoTrompo],
+  ["chovena", fondoChovena],
+  ["pinata", fondoPinata],
+  ["wheel", fondoRuleta],
+  ["teleferico", fondoTeleferico],
+  ["oruro", fondoOruro],
+  ["guajojo", fondoGuajojo],
+  ["toborochi", fondoToborochi],
 ]);
 
 /**
