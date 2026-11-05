@@ -107,6 +107,14 @@ Es gratis para todos y siempre lleva «Hecho con Tinkazo» al lado. Solo va el l
 
 Fuera de esta versión: Mis sorteos mostrando el logo de cada fila (compartir desde ahí sí lo lleva), la espera en grande y la lista a la sala. Un perfil de comunidad atado a la cuenta, que es lo único que cierra la suplantación (`docs/amenazas.md`), queda para más adelante, si lo piden varias comunidades.
 
+## La foto con el fondo del juego (5 de noviembre de 2026)
+
+Al compartir justo después del sorteo, la ventana de compartir muestra **dos fotos lado a lado** (unos 150 px cada una en el celular, la misma grilla de dos columnas de los eventos en partes): primero la del juego, sobre la ilustración plana del juego que se jugó (`src/ui/foto-fondos.ts`), y después la de siempre. **Por defecto va elegida la del juego.** Cada foto es un botón («Foto con el juego», «Foto clásica», con `aria-pressed`): tocarla, o Enter o espacio, la elige, y la elegida lleva el borde grueso y ✓. Debajo dice «Tocá una foto para elegir cuál compartir.». «Compartir por WhatsApp» manda solo la elegida con el mismo mensaje, «Descargar la foto» baja solo esa, y en la computadora se copia esa.
+
+- **El juego es el que de verdad se jugó** (`app.drawn.juego`, que pone `playGame` en `src/ui/draw.ts`): el elegido, o el que lo reemplazó por la cantidad de gente o por el motor de respaldo. Si se vuelve a ver con otro juego, vale el último. No entra en el sello, el comprobante ni el historial.
+- **Sin juego, la foto de siempre, sola**: Mis sorteos, la página de verificación y los eventos no saben qué juego se jugó. Un juego sin ilustración tampoco suma la segunda foto.
+- **La foto del juego** (`fondo` en `src/ui/foto.ts`) lleva paneles planos de tinta (`#171126`, borde grueso y sombra dura, sin degradados ni desenfoque) detrás de la marca y el rótulo, del medio y de «Escaneá para comprobarlo»; la franja de cinco colores arriba y abajo. El QR va en su tarjeta blanca, derecho, en el mismo lugar y del mismo tamaño, con módulos de 5 px o más. La foto de siempre no cambia ni en una llamada (`src/ui/foto-logo.test.ts`).
+
 ## La espera en grande
 
 Entre sellar y poder sortear pasan unos segundos (45 con cuenta): la lista ya está cerrada y el número que la va a decidir todavía no existe. La espera en grande pone esos segundos en escena para la sala: la cuenta gigante, el premio y los nombres de todos pasando. Vive en `src/ui/espera.ts`.

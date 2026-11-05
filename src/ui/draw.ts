@@ -539,6 +539,8 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   ponerNombresEnteros(hayEtiquetas() ? nombresDeLosEquipos() : []);
   const pixi = usePixi();
   const game = juegoDe(names.length, winners.length, names, winners);
+  // El juego que cuenta este resultado: la foto para compartir lleva su fondo (y el último, si se ve de nuevo con otro).
+  if (app.drawn) app.drawn.juego = game;
   // Los archivos de sonido del juego bajan mientras la sala lee la tarjeta de "cómo se juega".
   sonidoDelJuego(game);
   const cuenta = conCuenta() ? CUENTA_SECONDS : 0;
@@ -572,6 +574,7 @@ function playGame(names: string[], winners: number[], beacon: Beacon, finish: ()
   const respaldo = (): void => {
     setShowGate(null);
     const real = classicPlayable(app.game, names.length);
+    if (app.drawn) app.drawn.juego = real;
     if (card && real !== game) card.update(real);
     const carga = classicModule(real);
     carga.catch(() => undefined);
@@ -1242,6 +1245,8 @@ export function shareProof(): void {
     ...(f.sinSello && f.raffleId === undefined ? { sinSello: true } : {}),
     // El logo con el que se selló, no el de ahora (src/logo.ts).
     ...(logoPorHuella(f.logo) ? { logo: logoPorHuella(f.logo) as NonNullable<ReturnType<typeof logoPorHuella>> } : {}),
+    // El juego que contó el resultado (el último, si se vio de nuevo con otro): la segunda foto lleva su fondo.
+    ...(d.juego ? { juego: d.juego } : {}),
   };
   void import("./compartir").then((m) => m.abrirSorteo(datos, getLang(), { corto: puedeAcortar() }));
 }

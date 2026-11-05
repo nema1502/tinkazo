@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { aBase64, deBase64 } from "../logo";
 import { LOGO_DE_PRUEBA } from "../logo-guardado";
@@ -128,5 +129,28 @@ describe("foto con logo", () => {
     const base = await llamadas(foto());
     const malo = await llamadas(foto({ logo: { t: "image/svg+xml" as never, b: "PHN2Zz4=" }, hecho: "Hecho con Tinkazo" }));
     expect(malo).toEqual(base);
+  });
+});
+
+/**
+ * La foto de siempre, llamada por llamada, fijada con la huella de su registro
+ * tomada antes de existir el fondo del juego (5 de noviembre de 2026). Sin
+ * `fondo`, la foto no puede cambiar ni en una llamada.
+ */
+describe("foto sin fondo del juego: la de siempre, llamada por llamada", () => {
+  const huella = async (f: Foto): Promise<string> => createHash("sha256").update((await llamadas(f)).join("\n")).digest("hex");
+  // El logo no va acá: la imagen ya abierta queda en memoria y el registro depende del orden de las pruebas.
+  const casos: Array<[string, Foto, string]> = [
+    ["un ganador", foto(), "bf47e58965ee7bdd227f4207c8256085016e2ef557f0f9941942ac236d4d1951"],
+    ["tres ganadores", foto({ titulo: "Ganaron", personas: ["Ana", "Beto", "Carla"] }), "e173a3fad8f9f48722425d3acd6283bd50bd337ff6794ddec4ba743614ddc1e1"],
+    [
+      "un evento",
+      foto({ personas: undefined, titulo: "Meetup", sub: "2 sorteos", filas: [{ premio: "Polera", ganadores: "Ana" }, { premio: "Libro", ganadores: "Beto y Carla", nota: "Sin sello" }] }),
+      "79e8f77325c3d167ddee347d8f51520010917b21ed8512067eb7286562dbd6b0",
+    ],
+  ];
+  it.each(casos)("%s", async (_n, f, esperada) => {
+    expect(await huella(f)).toBe(esperada);
+    expect(await huella({ ...f, fondo: undefined })).toBe(await huella(f));
   });
 });

@@ -1666,6 +1666,11 @@
   .cmp-fotos > .note { margin: 0; }
   .cmp-espera { aspect-ratio: 4 / 5; display: grid; place-content: center; justify-items: center; gap: 12px; padding: 12px; border: var(--bw) dashed var(--ink2); background: var(--card); color: var(--ink2); font-weight: 700; font-size: 14px; text-align: center; }
   .cmp-png { display: block; width: 100%; height: auto; border: var(--bw) solid var(--ink); box-shadow: var(--sh-sm); }
+  /* Dos fotos para elegir (la del juego y la de siempre): cada una es un botón; la elegida, con el borde grueso y ✓. */
+  .cmp-elegir { position: relative; display: block; padding: 0; border: 0; background: none; color: inherit; cursor: pointer; min-width: 0; }
+  .cmp-elegir[aria-pressed="true"] .cmp-png { outline: 5px solid var(--magenta-ink); outline-offset: 3px; }
+  .cmp-elegir[aria-pressed="true"]::after { content: "✓"; position: absolute; top: 6px; right: 6px; display: grid; place-items: center; width: 30px; height: 30px; border: var(--bw) solid var(--ink); background: var(--yellow); color: #191919; font-weight: 900; font-size: 18px; line-height: 1; }
+  .cmp-fotos .cmp-elige { grid-column: 1 / -1; margin: 0; font-weight: 700; }
   .cmp-lado { display: grid; gap: 12px; align-content: start; min-width: 0; }
   .cmp-nota { font-weight: 700; margin: 0; }
   .cmp-wa { min-height: 52px; font-size: 17px; justify-content: center; text-align: center; }
