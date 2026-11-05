@@ -29,3 +29,9 @@ export function ajusteGanador(cuerpo: Caja, zona: Zona) {
 export function desplazamientoParaPiso(cuerpo: Pick<Caja, "y" | "h">, piso: number): number {
   return Math.min(0, piso - cuerpo.y - cuerpo.h);
 }
+
+/**
+ * Holgura extra, en píxeles, que pide el despeje en 3D. La perspectiva no es lineal y el despeje llega a los 4 px desde
+ * abajo: en la matriz quedaba entre 3,97 y 3,9998 px del relator en la piñata y la carrera en 3D. En 2D no hace falta.
+ */
+export const HOLGURA_3D = 1;

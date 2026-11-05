@@ -176,7 +176,7 @@ export interface PixiStage {
   top(): number;
   bottom(): number;
   /** Encaja el cuerpo entre cartel físico y relator transformado; reduce solo si no cabe por traslación. */
-  despejarGanador(cuerpo: { x: number; y: number; w: number; h: number }): number;
+  despejarGanador(cuerpo: { x: number; y: number; w: number; h: number }, holgura?: number): number;
   rng: () => number;
   dark: boolean;
   color(k: number): number;
@@ -1414,16 +1414,16 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
 
   const stage: PixiStage = {
     app, view, bg, scene, hud, cam, sw, sh, u, letra, compartir, portrait, top, bottom, rng, dark, reservarContador,
-    despejarGanador(cuerpo) {
+    despejarGanador(cuerpo, holgura = 0) {
       // Por encima de la penumbra del foco, pero fuera de la superficie del cartel.
       nombrePrevio ??= podium.addChild(chip(textoGanador, Math.max(1, escalaChipLegible(u())), textoGanador, null, true, true));
       nombrePrevio.visible = !nombreListo();
       const fondo = fondoGanador(), r = view.getBoundingClientRect();
-      const techo = fondo ? Math.max(top(), fondo.y + fondo.h + 4) : top();
+      const techo = fondo ? Math.max(top(), fondo.y + fondo.h + 4 + holgura) : top();
       const relator = commentEl.getBoundingClientRect();
       const animando = !!animacionRelator && (animacionRelator.pending || animacionRelator.playState === "running");
       const reservaPop = reservaRelator(relator.height, animando);
-      const pisoReal = commentEl.textContent ? (relator.top - r.top - 4 - reservaPop) * sh() / r.height : sh() - bottom();
+      const pisoReal = commentEl.textContent ? (relator.top - r.top - 4 - holgura - reservaPop) * sh() / r.height : sh() - bottom();
       const A = (window as unknown as { __tinkazo?: { encuadreGanador: unknown } }).__tinkazo;
       if (A) A.encuadreGanador = { timestamp: performance.now(), frase: commentEl.textContent,
         relator: { x: relator.x, y: relator.y, w: relator.width, h: relator.height }, reservaPop, pisoReal,
