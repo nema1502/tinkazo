@@ -20,7 +20,7 @@ Sorteos del 20 de octubre de 2026 (4 sorteos), todos verificables.
 Si querés verificarlos, entrá acá:
 https://tinkazo.app/evento.html#…
 
-Sorteado con Tinkazo · https://tinkazo.app
+Sorteado con Tinkazo: https://tinkazo.app
 ```
 
 Cuando el evento se reparte en varios enlaces, el botón dice cuántos (**Compartir el evento (3 partes)**), y el mensaje trae un enlace por parte.

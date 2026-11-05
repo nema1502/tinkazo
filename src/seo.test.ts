@@ -61,6 +61,30 @@ const NUEVAS: Record<string, { titulo: string; h1: string }> = {
 const canonical = (html: string): string | null => html.match(/<link rel="canonical" href="([^"]+)"/)?.[1] ?? null;
 const descripcion = (html: string): string => html.match(/<meta name="description" content="([^"]*)"/)?.[1] ?? "";
 const ogDescripcion = (html: string): string => html.match(/<meta property="og:description" content="([^"]*)"/)?.[1] ?? "";
+const ogTituloDe = (html: string): string => html.match(/<meta property="og:title" content="([^"]*)"/)?.[1] ?? "";
+const twitterTitulo = (html: string): string => html.match(/<meta name="twitter:title" content="([^"]*)"/)?.[1] ?? "";
+const twitterDescripcion = (html: string): string => html.match(/<meta name="twitter:description" content="([^"]*)"/)?.[1] ?? "";
+
+/**
+ * La vista previa al compartir es una versión corta en los dos idiomas: el
+ * título en inglés (el que lee un foro o un chat de afuera) y la descripción con
+ * una frase en inglés y otra en español. El `<title>` y la meta description
+ * siguen en español, que es lo que lee el buscador en Bolivia.
+ */
+const vistaPreviaBilingue = (html: string): void => {
+  const t = ogTituloDe(html);
+  const d = ogDescripcion(html);
+  expect(t, "og:title").not.toBe("");
+  expect([...t].length, `og:title: ${t}`).toBeLessThanOrEqual(60);
+  expect(t.startsWith("Tinkazo") || /Tinkazo/.test(t), "nombra a Tinkazo").toBe(true);
+  expect(t, "el título corto va en inglés").not.toMatch(/\b(sorteo|sorteos|cómo|cualquiera|gratis)\b/i);
+  expect([...d].length, `og:description: ${d}`).toBeLessThanOrEqual(200);
+  expect(d, "lleva una frase en español").toMatch(/[áéíóúñ]|\b(sorteo|gratis|participar|cinco|diez|qué|cómo|términos|marca|de dónde)\b/i);
+  expect(d, "lleva una frase en inglés").toMatch(/\b(the|free|and|of|a)\b/);
+  expect(twitterTitulo(html), "twitter:title").toBe(t);
+  expect(twitterDescripcion(html), "twitter:description").toBe(d);
+  expect(`${t} ${d}`).not.toContain("·");
+};
 
 /** Todos los bloques `application/ld+json` de una página, ya parseados. */
 const datosEstructurados = (html: string): Array<Record<string, unknown>> =>
@@ -116,9 +140,10 @@ describe("portada: canonical, hreflang y datos estructurados", () => {
     expect(JSON.stringify(grafo)).not.toMatch(/"(offers|price|priceCurrency)"/);
   });
 
-  it("og:description es la misma que la meta description, y las dos caben en 160 caracteres", () => {
-    expect(ogDescripcion(html)).toBe(descripcion(html));
+  it("la meta description cabe en 160 caracteres, y la vista previa al compartir es la versión corta bilingüe", () => {
     expect([...descripcion(html)].length).toBeLessThanOrEqual(160);
+    vistaPreviaBilingue(html);
+    expect(ogTituloDe(html)).toBe("Tinkazo: verifiable winner selection on Stellar");
   });
 });
 
@@ -232,13 +257,12 @@ describe("ícono y tarjeta de compartir de la portada", () => {
     expect(dimensionesJpeg(leerPublico("og.jpg"))).toEqual({ ancho: 1200, alto: 630 });
   });
 
-  it("el título es el de la portada, tiene de 30 a 60 caracteres, empieza con Tinkazo, y og:title lo repite", () => {
+  it("el título es el de la portada, en español, tiene de 30 a 60 caracteres y empieza con Tinkazo", () => {
     const titulo = html.match(/<title>([^<]*)<\/title>/)?.[1] ?? "";
     expect(titulo).toBe("Tinkazo: sorteo verificable y gratis para eventos y clases");
     expect([...titulo].length).toBeGreaterThanOrEqual(30);
     expect([...titulo].length).toBeLessThanOrEqual(60);
     expect(titulo.startsWith("Tinkazo")).toBe(true);
-    expect(html.match(/<meta property="og:title" content="([^"]*)"/)?.[1]).toBe(titulo);
   });
 
   it("la meta description tiene de 120 a 160 caracteres", () => {
@@ -321,10 +345,10 @@ describe("cada página pública", () => {
     expect(largo).toBeLessThanOrEqual(160);
   });
 
-  it.each(Object.keys(NUEVAS))("%s: og:description igual a la meta, y de 160 caracteres o menos", (archivo) => {
+  it.each(Object.keys(NUEVAS))("%s: la meta description cabe en 160 caracteres y la vista previa es la versión corta bilingüe", (archivo) => {
     const html = leer(archivo);
-    expect(ogDescripcion(html)).toBe(descripcion(html));
     expect([...descripcion(html)].length).toBeLessThanOrEqual(160);
+    vistaPreviaBilingue(html);
   });
 
   it.each(Object.keys(NUEVAS))("%s lleva un WebPage con name, description, url e inLanguage es", (archivo) => {
@@ -407,7 +431,7 @@ describe("título y descripción de las páginas nuevas, en el idioma de la pág
   });
 });
 
-describe("og:title y og:description, en el idioma de la página", () => {
+describe("título y descripción en el idioma de la página, vista previa en los dos", () => {
   /** Las claves de título y descripción que pide el `<html>` de una página. */
   const clavesOg = (html: string): { tituloClave: string; descClave: string } => {
     const etiqueta = html.match(/<html\b[^>]*>/)?.[0] ?? "";
@@ -416,20 +440,21 @@ describe("og:title y og:description, en el idioma de la página", () => {
       descClave: etiqueta.match(/\sdata-desc-clave="([^"]+)"/)?.[1] ?? "",
     };
   };
-  const ogTitulo = (html: string): string => html.match(/<meta property="og:title" content="([^"]*)"/)?.[1] ?? "";
 
-  it.each(Object.keys(NUEVAS))("%s: sin JavaScript, las etiquetas og están en español, como el título", (archivo) => {
+  it.each(Object.keys(NUEVAS))("%s: sin JavaScript, el título y la descripción están en español y la vista previa en los dos idiomas", (archivo) => {
     const html = leer(archivo);
     const { tituloClave, descClave } = clavesOg(html);
-    expect(ogTitulo(html)).toBe(T.es[tituloClave]);
-    expect(ogDescripcion(html)).toBe(T.es[descClave]);
+    expect(html.match(/<title>([^<]*)<\/title>/)?.[1]).toBe(T.es[tituloClave]);
+    expect(descripcion(html)).toBe(T.es[descClave]);
+    expect(ogTituloDe(html)).not.toBe(T.es[tituloClave]);
+    expect(ogDescripcion(html)).not.toBe(T.es[descClave]);
   });
 
-  it.each(Object.keys(NUEVAS))("%s: en inglés, las mismas claves dan el og:title y el og:description en inglés", (archivo) => {
+  it.each(Object.keys(NUEVAS))("%s: en inglés, las mismas claves dan el título y la descripción en inglés", (archivo) => {
     const { tituloClave, descClave } = clavesOg(leer(archivo));
     const en = metasDePagina(T.en, { tituloClave, descClave });
-    expect(en.titulo, "og:title en en").toBeTruthy();
-    expect(en.desc, "og:description en en").toBeTruthy();
+    expect(en.titulo, "título en en").toBeTruthy();
+    expect(en.desc, "descripción en en").toBeTruthy();
     expect(en.titulo).not.toBe(T.es[tituloClave]);
     expect(en.desc).not.toBe(T.es[descClave]);
   });
