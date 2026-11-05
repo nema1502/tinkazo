@@ -2,7 +2,7 @@ import { Container, Graphics } from "pixi.js";
 import { describe, expect, it } from "vitest";
 import { enPantalla } from "../pixi/encuadre";
 import { resolverToma } from "../pixi/kit/director";
-import { cajaVisible, cajaVisual, primerPlanoHorizontal } from "./carrera-zoom-final";
+import { alMundo, cajaVisible, cajaVisual, primerPlanoFinal, primerPlanoHorizontal, tomaPrimerPlano3D } from "./carrera-zoom-final";
 
 // Real Pixi transforms/bounds; these are not browser/font/rendering assertions.
 describe("race winner visual measurements", () => {
@@ -62,4 +62,35 @@ describe("race winner visual measurements", () => {
     expect(cajaVisible([runner])).toEqual({ x: -321, y: 121, w: 72, h: 96 });
     scene.destroy({ children: true });
   });
+
+  it("the final close-up is the same gate in 2D and 3D: landscape phone, from the crown on", () => {
+    const telefono = { w: 844, h: 390, retrato: false };
+    expect(primerPlanoFinal(telefono, 20, 20)).toBe(true);
+    expect(primerPlanoFinal(telefono, 19.99, 20)).toBe(false);
+    expect(primerPlanoFinal({ w: 390, h: 844, retrato: true }, 25, 20)).toBe(false);
+    expect(primerPlanoFinal({ w: 1280, h: 720, retrato: false }, 25, 20)).toBe(false);
+  });
+
+  it("turns what the 3D drew on screen back into the director's world with the camera that drew it", () => {
+    const cam = { x: 5000, y: 300, zoom: 1.6, rot: 0.01 };
+    const visto = { x: 300, y: 210, w: 90, h: 70 };
+    const mundo = alMundo(visto, cam, 844, 390);
+    const vuelta = enPantalla(mundo, { x: cam.x, y: cam.y, z: cam.zoom }, 844, 390);
+    expect(vuelta.x).toBeCloseTo(visto.x, 9);
+    expect(vuelta.y).toBeCloseTo(visto.y, 9);
+    expect(vuelta.w).toBeCloseTo(visto.w, 9);
+    expect(vuelta.h).toBeCloseTo(visto.h, 9);
+  });
+
+  it("the 3D close-up shot keeps the 2D close-up shape (zone, pace) and caps the zoom", () => {
+    const cam = { x: 5000, y: 300, zoom: 1, rot: 0 };
+    const zona = { x0: 4, y0: 184, x1: 840, y1: 340 };
+    const toma = tomaPrimerPlano3D({ x: 400, y: 250, w: 20, h: 16 }, cam, 844, 390, zona, 2.5);
+    expect(toma).toEqual({ caja: alMundo({ x: 400, y: 250, w: 20, h: 16 }, cam, 844, 390), zona, ritmo: 3, zoomMax: 2.5 });
+    // A tiny box would ask for ~10x: the cap holds it.
+    expect(resolverToma(toma, { w: 844, h: 390, zona }).z).toBe(2.5);
+    const amplia = tomaPrimerPlano3D({ x: 300, y: 200, w: 200, h: 100 }, cam, 844, 390, zona, 2.5);
+    expect(resolverToma(amplia, { w: 844, h: 390, zona }).z).toBeCloseTo(Math.min(836 / 200, 156 / 100), 9);
+  });
 });
+
