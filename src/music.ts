@@ -1,6 +1,7 @@
 import { audio, isMuted } from "./sound";
 import { camaDeMusica } from "./sonidos/banco";
 import { MARGEN_BASE, margenMusica } from "./music-margen";
+import { diagAudio } from "./diag-audio";
 
 /**
  * La música del estadio: andina con beat.
@@ -77,8 +78,10 @@ export function tag<T extends AudioScheduledSourceNode>(n: T): T {
     // `when` en 0 es "ahora" (la cama de archivo): no es una hora en el pasado.
     if (typeof when === "number" && when > 0 && n.context.currentTime - when > NOTA_ATRASADA_S) {
       omitida = true;
+      diagAudio?.nota(true);
       return;
     }
+    diagAudio?.nota(false);
     arrancar(when, ...resto);
   };
   // Un nodo que no arrancó no se puede parar (lanzaría InvalidStateError).
@@ -267,6 +270,7 @@ export function startMusic(seed: number, style: MusicStyle = "andino"): void {
   // La chovena no: sus bailarines pisan en el tiempo de la música y la cama no lo conoce.
   const archivo = style === "andino" ? camaDeMusica() : null;
   if (archivo) cur.cama = armarCama(cur, archivo);
+  diagAudio?.inicio(ctx);
   cur.timer = window.setInterval(tick, 40);
   tick();
 }
@@ -459,9 +463,10 @@ function tick(): void {
     return;
   }
   const ahora = performance.now();
+  const intervalo = ahora - s.ultimoTick;
   // Con la pestaña escondida el show está frenado: la música sigue saltando en silencio como desde el 2 de noviembre,
   // sin agrandar el margen por los temporizadores de uno por segundo.
-  s.margen = document.hidden ? MARGEN_BASE : margenMusica(s.margen, ahora - s.ultimoTick);
+  s.margen = document.hidden ? MARGEN_BASE : margenMusica(s.margen, intervalo);
   s.ultimoTick = ahora;
   // La tensión sube de a poco aunque el relator no diga nada: el piso crece
   // con el tiempo, así que la música siempre va de menos a más.
@@ -481,6 +486,8 @@ function tick(): void {
   // Si el reloj de la página se frenó (la pestaña escondida: el navegador deja los temporizadores en uno por segundo),
   // los pasos que quedaron atrás no se tocan de golpe al volver, todos encimados: se pasan en silencio, sin perder
   // el compás, y la música retoma en el paso que corresponde a la hora.
+  // Solo con ?diag=audio (rama de prueba de la VPS): si `next` quedó atrás de la hora, la música estuvo sin notas.
+  diagAudio?.tick(s.ctx, intervalo, s.margen, s.next);
   while (s.next < s.ctx.currentTime - ATRASO_MAXIMO) {
     s.next += beatLength(s) / 4;
     s.step++;

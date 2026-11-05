@@ -65,7 +65,7 @@ describe("music.ts usa el margen", () => {
     const { readFileSync } = await import("node:fs");
     const src = readFileSync(new URL("./music.ts", import.meta.url), "utf8");
     expect(src).not.toMatch(/s\.ctx\.currentTime \+ 0\.22/);
-    expect(src).toMatch(/s\.margen = document\.hidden \? MARGEN_BASE : margenMusica\(s\.margen, ahora - s\.ultimoTick\);/);
+    expect(src).toMatch(/s\.margen = document\.hidden \? MARGEN_BASE : margenMusica\(s\.margen, intervalo\);/);
     expect(src).toMatch(/while \(s\.next < s\.ctx\.currentTime \+ s\.margen\)/);
     expect(src).toMatch(/const espera = \(at - s\.ctx\.currentTime - Math\.max\(0\.15, s\.margen\)\) \* 1000;/);
   });
