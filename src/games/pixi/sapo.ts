@@ -7,7 +7,8 @@ import { WINNER_HOLD, clamp, ease, shorten, winnersLabel } from "../overlay";
 import { CONTADOR, medidasContador, CREAM, INK, MONO, YELLOW, mountPixi, type FocoAt, type PixiStage } from "./stage";
 import { tiemposFoco } from "./foco";
 import { colorDeNombre } from "./foco-vista";
-import { cabe, centrar, encuadrar, unir, type Caja, type Zona } from "./encuadre";
+import { cabe, encuadrar, unir, type Caja, type Zona } from "./encuadre";
+import { sapoEstadoGanador, sapoFinalCloseUp, sapoFinalFrame } from "./sapo-zoom-final";
 import { avatarColor } from "../../avatar";
 import { formasDe } from "../nombres";
 import { escalaChipLegible } from "./letra";
@@ -254,11 +255,13 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   const floor = new Graphics();
   S.bg.addChild(floor);
   const boxG = new Graphics();
+  // Solo el aro físico elegido, sin mesa, resplandor ni estallido: lo que mide el primer plano final.
+  const winnerTargetG = new Graphics();
   const frogG = new Graphics();
   const fx = new Graphics();
   const tokG = new Graphics();
   const handG = new Graphics();
-  S.scene.addChild(boxG, frogG, fx, tokG, handG);
+  S.scene.addChild(boxG, winnerTargetG, frogG, fx, tokG, handG);
   const strikeG = new Graphics();
   const chipLayer = new Container();
   S.hud.addChild(chipLayer, strikeG);
@@ -856,6 +859,23 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   /** Con la corona: debajo de donde sale el cartel y encima del relator. */
   const zonaGanador = (): Zona => ({ x0: 4 * g.k, y0: S.placaBajo(winners.length) + 6 * g.k, x1: g.w - 4 * g.k, y1: g.h - S.bottom() });
 
+  /** El celular apaisado, desde que cae la última argolla y solo en el 2D (en el 3D la mesa la mira otra cámara). */
+  const finalCloseUp = (): boolean => !v3 && sapoFinalCloseUp(g.w, g.h, S.portrait(), tAll >= T_LAND);
+  /** El contorno pintado del aro elegido: la elipse exterior de 1,2 y la mitad del trazo amarillo de 6k. */
+  const selectedTarget = (): Caja => {
+    const slot = (tosses[tosses.length - 1] as Toss).slot;
+    const p = P(L.holes[slot] as Point);
+    const rx = L.holeR * g.sc * 1.2 + 3 * g.k;
+    const ry = L.holeR * g.sc * g.tilt * 1.2 + 3 * g.k;
+    return { x: p.x - rx, y: p.y - ry, w: 2 * rx, h: 2 * ry };
+  };
+  /** `getBounds` trae la transformación real de la escena, con el sacudón y el encuadre local. */
+  const selectedTargetOnScreen = (): Caja | null => {
+    if (!finalCloseUp()) return null;
+    const b = winnerTargetG.getBounds();
+    return b.width > 0 && b.height > 0 ? { x: b.x, y: b.y, w: b.width, h: b.height } : null;
+  };
+
   function aim(): void {
     const ultimo = tosses[tosses.length - 1] as Toss;
     // En un celular la mesa ocupa el ancho con los nombres de los costados
@@ -872,8 +892,11 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     const tope = S.portrait() ? topeConNombres() : Infinity;
     const cuidar = S.portrait() && !crowned && tAll >= T_SEATED;
     const zEfectivo = Math.max(0.3, cam.toScreen(1, 0, g.w, g.h).x - cam.toScreen(0, 0, g.w, g.h).x);
-    cam.proteger(cuidar ? mesaConNombres(zEfectivo) : crowned ? cajaGanador() : null, crowned ? zonaGanador() : zonaJuego());
+    const primerPlano = finalCloseUp();
+    cam.proteger(primerPlano ? selectedTarget() : cuidar ? mesaConNombres(zEfectivo) : crowned ? cajaGanador() : null,
+      primerPlano ? zonaFinal() : crowned ? zonaGanador() : zonaJuego());
     if (tAll >= ultimo.land) {
+      // En el celular apaisado, el aro elegido de cerca (`sapo-zoom-final.ts`); en las demás pantallas, la mesa entera.
       // Desde que cae la última argolla, la mesa entera debajo de donde sale el
       // cartel y encima del relator: el agujero ganador se ve, los demás también,
       // y el cartel no tapa ninguno. Hasta el 21 de octubre de 2026 la cámara se
@@ -882,8 +905,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       // el celular no se acerca más que la mesa de todo el juego: ahí la mesa
       // se mide para que los nombres de los costados entren justo.
       const zona = zonaFinal();
-      let caja = mesa();
-      let z = Math.min(S.portrait() ? Math.min(1, tope) : 1.5, cabe(caja, zona));
+      let chip: Parameters<typeof sapoFinalFrame>[0]["chip"];
       // En la pantalla ancha el chip grande del ganador sale de su agujero hacia
       // afuera de la mesa (hacia arriba en la fila de arriba): entra en el
       // encuadre también, así el cartel no lo pisa ni el relator lo tapa. Con
@@ -895,14 +917,11 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
         const lp = P(labelAt(ultimo.slot));
         const sc = 1.45 * 1.3;
         const w = (anchoNombre[quien] ?? 0) * g.k * sc + 14 * g.k, h = (ch.height / Math.max(1e-6, ch.scale.y)) * sc + 14 * g.k;
-        const base = mesa();
-        for (let vuelta = 0; vuelta < 2; vuelta++) {
-          caja = unir([base, { x: lp.x - (w * an.ax) / z, y: lp.y + (h * (0.5 - an.ay)) / z - h / 2 / z, w: w / z, h: h / z }]);
-          z = Math.min(1.5, cabe(caja, zona));
-        }
+        chip = { x: lp.x, y: lp.y, w, h, ax: an.ax, ay: an.ay };
       }
-      const v = centrar(caja, zona, g.w, g.h, z);
-      cam.lookAt(v.x, v.y, z, 3);
+      const v = sapoFinalFrame({ table: mesa(), zone: zona, width: g.w, height: g.h,
+        portrait: S.portrait(), portraitLimit: tope, chip, target: selectedTarget(), closeUp: primerPlano });
+      cam.lookAt(v.x, v.y, v.z, 3);
       return;
     }
     const cur = current();
@@ -1181,6 +1200,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       drawFrog();
       drawHand();
     }
+    winnerTargetG.clear();
     fx.clear();
     fxS.clear();
     tokG.clear();
@@ -1198,8 +1218,9 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       const rx = L.holeR * g.sc * ease.outBack(f), ry = rx * g.tilt;
       const glow = lit.get(s);
       const aro = glow !== undefined ? YELLOW : colorDe(whoAt(s));
-      boxG.ellipse(c.x, c.y, Math.max(0.01, rx * 1.2), Math.max(0.01, ry * 1.2)).fill(aro).stroke({ width: (glow !== undefined ? 6 : 2) * k, color: glow !== undefined ? YELLOW : INK });
-      boxG.ellipse(c.x, c.y, Math.max(0.01, rx), Math.max(0.01, ry)).fill(0x140f0a);
+      const targetG = glow === 1 && finalCloseUp() ? winnerTargetG : boxG;
+      targetG.ellipse(c.x, c.y, Math.max(0.01, rx * 1.2), Math.max(0.01, ry * 1.2)).fill(aro).stroke({ width: (glow !== undefined ? 6 : 2) * k, color: glow !== undefined ? YELLOW : INK });
+      targetG.ellipse(c.x, c.y, Math.max(0.01, rx), Math.max(0.01, ry)).fill(0x140f0a);
       if (glow === 1) {
         // El estallido del agujero ganador, como el del trompo.
         const fin = tosses[tosses.length - 1] as Toss;
@@ -1249,7 +1270,9 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       }
       const ganador = lit.get(slot) === 1;
       const sit = S.portrait() ? sentados[i] : undefined;
-      if (crowned && !ganador) {
+      // En el primer plano el nombre completo lo pone el estadio (`despejarGanador`) hasta que se lee el cartel: el chip
+      // abreviado de la mesa no lo reemplaza.
+      if (finalCloseUp() || (crowned && !ganador)) {
         c.visible = false;
         if (sit) sit.visible = false;
         return;
@@ -1362,7 +1385,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     counterBox.clear().rect(5 * k, 5 * k, bw, bh).fill(INK).rect(0, 0, bw, bh).fill(0x221a33).stroke({ width: 3 * k, color: INK });
     pintarMarcas(marcasG, { total: all, quedan: siguen, k, w: g.w });
     counterG.position.set(22 * k, S.top() + 10 * k);
-    counterG.visible = !crowned;
+    counterG.visible = !crowned && !finalCloseUp();
     // El encuadre le deja su lugar (`contadorBajo`) y ya no se apaga con el zoom: solo con la cámara muy cerca y solo si una
     // ficha le queda justo debajo.
     const cajaContador = { x0: 22 * k, y0: S.top() + 10 * k, x1: 22 * k + Math.max(bw, reservaDeMarcas(all, k, g.w).ancho) + 5 * k, y1: contadorBajo() };
@@ -1428,7 +1451,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
       y1 = Math.max(y1, c.y + c.height / 2);
     }
     return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
-  });
+  }, selectedTargetOnScreen, () => sapoEstadoGanador(tAll, T_CROWN));
 
   // `?auditar=nino`: la prueba del niño (`scripts/audit-nino.mjs`) lee del plan quiénes siguen, adónde mirar, cuánto falta y qué pasó. Solo lee.
   const planNino = {
@@ -1491,6 +1514,12 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     cam.apply(S.scene, S.sw(), S.sh(), now);
     draw();
     if (tAll >= T_CROWN) crownUI.at(tAll - T_CROWN, true, focoDelAgujero());
+    const cuerpo = selectedTargetOnScreen();
+    if (cuerpo) {
+      // El cartel y el relator ya tienen la pose de este cuadro: el estadio reserva el nombre completo y solo achica si no cabe.
+      S.despejarGanador(cuerpo);
+      if (tAll >= T_CROWN) crownUI.enfocar?.(focoDelAgujero());
+    }
     if (tHold >= WINNER_HOLD + FOCO.placa) {
       dead = true;
       S.cleanup();

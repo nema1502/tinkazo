@@ -180,7 +180,10 @@ export function crearJuego<P, E>(def: DefJuego<P, E>, anf: Anfitrion = anfitrion
       def.cuadro(k, plan, escena as E, t);
       marcadorUI.pintar(coronado ? 1 : Math.max(1, Math.round(plan.marcador(t))));
       marcadorUI.ocultar(coronado && !!plan.alCoronar?.sinMarcador && S.portrait());
-      if (t >= plan.duracion) crownUI.at(t - plan.duracion, true, conFoco ? enfoque() : null);
+      if (t >= plan.duracion) {
+        crownUI.at(t - plan.duracion, true, conFoco ? enfoque() : null);
+        def.trasCorona?.(k, plan, escena as E, t);
+      }
       if (tHold >= anf.espera + F.placa) {
         muerto = true;
         S.cleanup();

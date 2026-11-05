@@ -227,4 +227,6 @@ export interface DefJuego<P, E> {
   arma(k: Kit, plan: Plan<P>, previa?: E): E;
   /** Una función de `t`: pone la escena como va en ese segundo. */
   cuadro(k: Kit, plan: Plan<P>, escena: E, t: number): void;
+  /** Optativa: la separación propia del juego, desde la corona y con el cartel ya puesto en este cuadro (`docs/juegos.md`). */
+  trasCorona?(k: Kit, plan: Plan<P>, escena: E, t: number): void;
 }

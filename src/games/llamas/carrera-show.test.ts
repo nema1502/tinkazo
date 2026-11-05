@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { problemasDeMomentos } from "../pixi/kit/director";
+import { crearDirector, problemasDeMomentos, resolverToma } from "../pixi/kit/director";
+import type { Caja, Kit, PlanoToma } from "../pixi/kit/tipos";
 import { validarGuion } from "../pixi/kit/guion";
 import { problemasDeMarcador } from "../pixi/kit/marcador";
 import { problemasDeRespuestas } from "../pixi/kit/respuestas";
@@ -11,6 +12,59 @@ import { TEXTOS_CARRERA } from "./carrera-textos";
 import { ESP_MIN } from "./carrera-tiempos";
 
 const TAMANOS = [2, 3, 5, 8, 9, 12, 18, 25, 30, 31, 50, 100, 200];
+
+describe("race final winner framing", () => {
+  function fixture(closeUp: boolean) {
+    const plan = planCarrera(ctxDe(8, 3));
+    const winner = { x: 500, y: 200, w: 90, h: 40 };
+    const zone = { x0: 4, y0: 180, x1: 840, y1: 280 };
+    const group = [{ x: 0, y: 0, w: 700, h: 250 }];
+    const scene = {
+      cajasDelFrente: () => group,
+      zona: () => zone,
+      meta: () => ({ x: 800, y: 0, w: 100, h: 300 }),
+      tomaGanadora: () => closeUp ? { caja: winner, zona: zone, ritmo: 3 } : null,
+      foco: () => ({ x: 500, y: 220, r: 20 }),
+      protegida: () => ({ caja: winner, zona: zone }),
+    };
+    return { plan, winner, zone, kit: { escena: scene } as unknown as Kit };
+  }
+
+  it("fits only the winner after coronation, without retaining the finish goal", () => {
+    const { plan, winner, zone, kit } = fixture(true);
+    const t = plan.duracion + 8;
+    const shot = plan.momentos.tension.toma(kit, t) as Extract<PlanoToma, { caja: Caja }>;
+    expect(shot.caja).toEqual(winner);
+    expect(shot.zona).toEqual(zone);
+    expect(plan.momentos.meta?.(kit, t)).toBeNull();
+    const views: number[][] = [];
+    const cam = { x: 0, y: 0, zoom: 1, lookAt: (...v: number[]) => views.push(v), proteger: () => {}, tension: () => {} };
+    const pant = { w: 844, h: 390, k: 390 / 720, zona: zone };
+    const director = crearDirector(plan, { kit, cam: cam as unknown as Kit["cam"], pantalla: () => pant, marcar: () => {}, ritmo: () => 1 });
+    director.cuadro(t);
+    const fitted = resolverToma({ caja: winner, zona: zone }, pant);
+    expect(views).toEqual([[fitted.x, fitted.y, fitted.z, 3]]);
+  });
+
+  it("releases the full finish structure only for the final winner close-up", () => {
+    const { plan, kit } = fixture(true);
+    expect(plan.momentos.meta?.(kit, plan.duracion + 8)).toBeNull();
+  });
+
+  it("keeps the front-group tension shot and finish goal before coronation", () => {
+    const { plan, kit } = fixture(true);
+    const t = plan.duracion - 0.01;
+    expect(plan.momentos.tension.toma(kit, t)).toEqual({ caja: { x: -40, y: -40, w: 780, h: 330 }, zona: { x0: 4, y0: 180, x1: 840, y1: 280 }, zoomMax: undefined, ritmo: 3, respira: 0.01 });
+    expect(plan.momentos.meta?.(kit, t)).not.toBeNull();
+  });
+
+  it("keeps the old group composition when the scene does not opt into the close-up", () => {
+    const { plan, kit } = fixture(false);
+    const shot = plan.momentos.tension.toma(kit, plan.duracion + 8);
+    expect("caja" in shot && shot.caja.w).toBe(780);
+    expect(plan.momentos.meta?.(kit, plan.duracion + 8)).not.toBeNull();
+  });
+});
 
 describe("la carrera: el plan es puro y cumple la regla del niño", () => {
   for (const n of TAMANOS) {
