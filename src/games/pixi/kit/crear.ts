@@ -201,7 +201,10 @@ export function crearJuego<P, E>(def: DefJuego<P, E>, anf: Anfitrion = anfitrion
         const rampa = (v: number): number => Math.max(0, Math.min(1, v / 0.3));
         marcadorUI.alfa(coronado ? rampa(tHold - F.golpe) : 1 - rampa(t - plan.marcadorApagado));
       }
-      if (t >= plan.duracion) crownUI.at(t - plan.duracion, true, conFoco ? enfoque() : null);
+      if (t >= plan.duracion) {
+        crownUI.at(t - plan.duracion, true, conFoco ? enfoque() : null);
+        def.trasCorona?.(k, plan, escena as E, t);
+      }
       if (tHold >= anf.espera + F.placa) {
         muerto = true;
         S.cleanup();
