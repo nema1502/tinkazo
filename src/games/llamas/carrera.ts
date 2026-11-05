@@ -1,7 +1,8 @@
 import { Container, Graphics, Sprite, Text } from "pixi.js";
 import { params } from "../../state";
 import { colorDeNombre } from "../pixi/foco-vista";
-import { crearJuego, minimoPx, nivelPorCantidad, planNombres, type Caja, type DefJuego, type FocoPunto, type Kit, type Nivel, type Zona } from "../pixi/kit";
+import { cajaVisible, cajaVisual, primerPlanoHorizontal } from "./carrera-zoom-final";
+import { crearJuego, minimoPx, nivelPorCantidad, planNombres, type Caja, type DefJuego, type FocoPunto, type Kit, type Nivel, type PlanoToma, type Zona } from "../pixi/kit";
 import { anfitrionTinkazo } from "../pixi/kit/anfitrion";
 import { CREAM, INK, YELLOW, contorno, hash, mountPixi } from "../pixi/stage";
 import type { Borla3D, Corredora3D, Efecto3D, Fabrica3D, Geometria3D, Valla3D, Vista3D, ZonaSuelo } from "./carrera-3d-mapa";
@@ -1075,6 +1076,14 @@ const PROTEGE_DETRAS = 1;
     }
   }
 
+  /** Dónde va el cuerpo de una corredora en `t`: su lugar, lo que se alza en la valla y, desde la corona, el salto de la campeona. */
+  function ponerCuerpo(c: Corredora, q: number, p: Posicion, t: number): void {
+    c.raiz.position.set(p.x, p.y - (p.alza ?? 0));
+    c.raiz.scale.set(p.esc);
+    const corona = t - d.tCrown;
+    if (corona >= 0 && q === d.campeona) c.raiz.position.y = p.y - Math.abs(Math.sin(corona * 7)) * 20 * P.u * Math.max(0, 1 - corona / 3);
+  }
+
   function dibujar(t: number): void {
     const vz = cam.zoom || 1;
     if (!tres) pintarSuelo();
@@ -1125,20 +1134,15 @@ const PROTEGE_DETRAS = 1;
         }
       }
       c.raiz.visible = true;
-      c.raiz.position.set(p.x, p.y - (p.alza ?? 0));
-      c.raiz.scale.set(p.esc);
+      ponerCuerpo(c, q, p, t);
       const lying = p.momento?.kind === "echada";
       // La que se acaba de echar queda por encima de las que pasan: la echada no se tapa.
       const reciente = lying && (p.momento?.p ?? 9) < 4;
       c.raiz.zIndex = p.y + (reciente ? 1e5 : 0);
       const ph = t * (p.velocidad > 0.5 ? 13 : 5) + c.fase;
       let momento = p.momento;
-      if (corona >= 0 && q === d.campeona) {
-        // Festeja: salta.
-        const s = corona;
-        c.raiz.position.y = p.y - Math.abs(Math.sin(s * 7)) * 20 * P.u * Math.max(0, 1 - s / 3);
-        momento = null;
-      }
+      // Festeja (el salto lo pone `ponerCuerpo`).
+      if (corona >= 0 && q === d.campeona) momento = null;
       post.pose(ph, corona >= 0 && q !== d.campeona ? 0 : p.velocidad, momento);
       if (tres) gente3.push({ persona: q, x: p.x, y: p.y, salto: p.y - c.raiz.position.y, esc: p.esc, velocidad: corona >= 0 && q !== d.campeona ? 0 : p.velocidad, momento, fase: ph });
       // La marca de la llama ("!", "?!") se lee desde el fondo: en la pantalla nunca mide menos que un nombre.
@@ -1397,7 +1401,37 @@ const PROTEGE_DETRAS = 1;
     const c = cuerpoDe(p);
     return cam.toScreen(c.x + c.w / 2, c.y + c.h * 0.55, P.w, P.h);
   }
+  /**
+   * El primer plano final, solo en el celular apaisado y en el 2D: lo que se ve de la campeona (su cuerpo y, si todavía se ve,
+   * su ficha; en la carrera nueva la ficha se va con el golpe), sin las demás ni la meta. El cuerpo se pone en la postura de
+   * este cuadro antes de medirlo: el director pide la toma antes de que se dibuje. El nombre completo lo cuida el estadio
+   * (`despejarGanador`, desde `trasCorona`). En el 3D la llama la dibuja otra cámara: ahí sigue la toma de antes.
+   */
+  function elementosGanadora(t: number): Container[] | null {
+    if (tres || t < d.tCrown || !primerPlanoHorizontal(P)) return null;
+    const c = enUso.get(d.campeona);
+    if (!c) return null;
+    const p = posicion(d.campeona, t);
+    if (!p.visible) return null;
+    ponerCuerpo(c, d.campeona, p, t);
+    c.raiz.visible = true;
+    return c.etiqueta.raiz.visible ? [c.llama.root, c.etiqueta.raiz] : [c.llama.root];
+  }
+  function zonaGanadora(): Zona {
+    return { x0: 4, y0: Math.max(hudG.bajo, S.placaBajo(k.ganadores.length)) + 4, x1: P.w - 4, y1: P.bottom - 4 };
+  }
+  function tomaGanadora(t: number): PlanoToma | null {
+    const el = elementosGanadora(t);
+    return el ? { caja: cajaVisual(el, S.scene), zona: zonaGanadora(), ritmo: 3 } : null;
+  }
+  /** Con el cartel ya puesto en este cuadro, la campeona (cuerpo y ficha, como se ven) queda entre el cartel y el relator. */
+  function despejarGanadora(t: number): void {
+    const el = elementosGanadora(t);
+    if (el) S.despejarGanador(cajaVisible(el));
+  }
   function protegida(): { caja: Caja; zona: Zona } | null {
+    const final = tomaGanadora(k.t);
+    if (final && "caja" in final) return { caja: final.caja, zona: final.zona ?? zonaGanadora() };
     const p = posicion(d.campeona, d.tCrown);
     const c = cuerpoDe(p, true);
     // Con el pelotón apretado en la línea, la que llega pegada a la ganadora tiene que quedar debajo del cartel, con su nombre entero:
@@ -1482,15 +1516,21 @@ const PROTEGE_DETRAS = 1;
     const c = cuerpoDe(posicion(d.campeona, d.tCrown));
     const a = cam.toScreen(c.x, c.y, P.w, P.h), b = cam.toScreen(c.x + c.w, c.y + c.h, P.w, P.h);
     return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
-  });
+  }, () => {
+    // Solo de auditoría (2D): el cuerpo de la campeona tal como quedó dibujado en este cuadro.
+    const c = enUso.get(d.campeona);
+    return c && !tres ? cajaVisible([c.llama.root]) : null;
+  }, () => ({ activa: k.t >= d.tCrown, tiempo: k.t - d.tCrown, fase: k.t >= d.tCrown ? "final" : "race" }));
 
-  const escena: EscenaCarrera & { rebuild(): void; draw(t: number): void } = {
+  const escena: EscenaCarrera & { rebuild(): void; draw(t: number): void; despejar(t: number): void } = {
     rebuild: reconstruir,
     draw: dibujar,
+    despejar: despejarGanadora,
     vistaPresentacion,
     vistaGrupo,
     cajaCarriles,
     cajasDelFrente,
+    tomaGanadora,
     caja,
     zona,
     meta,
@@ -1530,6 +1570,9 @@ const definicion = (fabrica3d: Fabrica3D | null): DefJuego<Datos, Escena> => ({
   },
   cuadro(_k, _plan, escena, t) {
     escena.draw(t);
+  },
+  trasCorona(_k, _plan, escena, t) {
+    escena.despejar(t);
   },
 });
 

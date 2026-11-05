@@ -548,6 +548,8 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   let kidStick!: Graphics;
   let kidFx!: Graphics;
   let candyG!: Graphics;
+  /** El caramelo de quien gana, aparte: su contorno es lo que `despejarGanador` separa del cartel y del relator. */
+  let winnerCandy!: Graphics;
   let glow!: Graphics;
   let pile!: Graphics;
   let counter!: ReturnType<PixiStage["text"]>;
@@ -661,6 +663,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     rope = new Graphics();
     pieces = new Graphics();
     candyG = new Graphics();
+    winnerCandy = new Graphics();
     pile = new Graphics();
     // El montón crece caramelo a caramelo y nunca se borra: en "auto", PixiJS
     // lo deja de dibujar en lote al pasar los 400 vértices, y en el cuadro de ese
@@ -676,7 +679,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     fx = new Graphics();
     faceLayer = new Container();
     candyFaces.clear();
-    S.scene.addChild(wall, garland, pile, glow, rope, pin, pieces, candyG, faceLayer, kid, fx);
+    S.scene.addChild(wall, garland, pile, glow, rope, pin, pieces, candyG, winnerCandy, faceLayer, kid, fx);
     flash = new Graphics().rect(0, 0, g.w, g.h).fill(0xffffff);
     flash.alpha = 0;
     // El papel picado: tres guirnaldas de banderitas caladas, justo arriba de
@@ -810,7 +813,8 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
   function apagar2D(): void {
     if (!v3) return;
     S.bg.visible = false;
-    for (const x of [wall, garland, rope, pin, pieces, candyG, pile, glow, kid]) x.renderable = false;
+    // El caramelo ganador tampoco se dibuja, pero se sigue midiendo (`getBounds` no mira `renderable`): el 3D lo pone en el mismo lugar y tamaño.
+    for (const x of [wall, garland, rope, pin, pieces, candyG, winnerCandy, pile, glow, kid]) x.renderable = false;
   }
   build();
   const crownUI = S.crown(names, winners);
@@ -1177,6 +1181,7 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     flash.alpha = broken && fa >= 0 && fa < 0.18 ? 0.35 * (1 - fa / 0.18) : 0;
     // Los caramelos: los de afuera, cada uno con su color.
     candyG.clear();
+    winnerCandy.clear();
     glow.clear();
     const sz = candySize();
     for (const c of candies) {
@@ -1204,9 +1209,15 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       const big = sz * (1.8 + (phase === "crown" ? 0.6 * ease.outBack(clamp((tAll - T_CROWN) * 2, 0, 1)) : 0));
       winBig = big;
       glow.circle(winC.x, winC.y, big * 2.4).fill({ color: YELLOW, alpha: 0.28 }).circle(winC.x, winC.y, big * 1.6).fill({ color: YELLOW, alpha: 0.3 });
-      drawCandy(candyG, winC.x, winC.y, big, winC.rot, S.color(winnerIdx), 1);
+      drawCandy(winnerCandy, winC.x, winC.y, big, winC.rot, S.color(winnerIdx), 1);
       placeFace(winC, big, 1);
-    }
+      // El cartel primero, en este mismo cuadro: el caramelo se separa de donde el cartel está ahora, no del anterior.
+      if (phase === "crown") crownUI.at(tAll - T_CROWN);
+      if (winC.touch >= 0 || phase === "crown") {
+        const cuerpo = winnerCandy.getBounds();
+        S.despejarGanador({ x: cuerpo.x, y: cuerpo.y, w: cuerpo.width, h: cuerpo.height });
+      }
+    } else if (phase === "crown") crownUI.at(tAll - T_CROWN);
     drawLista();
     drawLabels(p, g, sz);
     // «QUEDAN 8 DE 18» y, debajo, una marca por persona: un chico cuenta las encendidas sin leer.
@@ -1220,7 +1231,6 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     // Con el cartel, la cuenta se va, como en el sapo: "ADENTRO 0 / 18" ya no
     // dice nada, y en un celular el cartel la tapaba a medias.
     if (counter.parent) counter.parent.visible = phase !== "crown";
-    if (phase === "crown") crownUI.at(tAll - T_CROWN);
   }
 
   /**
@@ -1270,13 +1280,8 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
     // hasta el cartel (auditor de identificación, 22 de octubre de 2026). Antes
     // del golpe, no: mientras baja nadie la nombra, y la tapada sigue tapada
     // hasta que se rompe la piñata.
-    if (!winC.inside && winC.touch >= 0) {
-      const key = FLIGHT_KEY(winnerIdx);
-      chipFor(key, names[winnerIdx] ?? "", scaleFly);
-      const d = chipDim.get(key) as { w: number; h: number };
-      const q = cam.toScreen(winC.x, winC.y - sz * 1.7, g.w, g.h);
-      put(key, q.x - d.w / 2, q.y - d.h, 1000, clamp((tAll - winC.touch) / 0.12, 0, 1), true);
-    }
+    // Desde el contacto, `despejarGanador` presenta el nombre completo y reserva
+    // su espacio hasta que sea legible en el cartel. No duplica el chip abreviado.
     // Los que van cayendo (o acaban de quedarse quietos), cada uno con su nombre.
     // Rota la piñata, ninguno hasta el cartel (`enVuelo`): el único nombre en la
     // escena es el de la ganadora, desde el golpe del piso.
@@ -1376,7 +1381,12 @@ export async function pinataPixi(names: string[], winners: readonly number[], be
       y0 = Math.min(y0, ch.y - d.h / 2);
     }
     return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
-  });
+  }, () => {
+    if (winC.inside) return null;
+    // Solo el caramelo dibujado y su contorno: sin halo, chips ni otros caramelos.
+    const b = winnerCandy.getBounds();
+    return { x: b.x, y: b.y, w: b.width, h: b.height };
+  }, () => ({ activa: winC.touch >= 0 || phase === "crown", tiempo: tAll, fase: phase }));
 
   /* ---------------------------------------------------------------- el 3D */
   // Lo que se le pasa a la vista en cada cuadro (`src/games/tres/pinata-3d.ts`): lo que este archivo ya calculó, en píxeles
