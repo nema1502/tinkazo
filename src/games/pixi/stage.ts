@@ -505,7 +505,12 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
   // (`window.__tinkazo`), para medir el zoom del golpe (`scripts/lib/zoom.mjs`).
   // Sin el parámetro no se expone nada.
   // Los campos «cartel» y «ganador» los llenan la corona y el juego (`ganadorEn`): dónde está el cartel y dónde quien gana.
-  if (params.get("auditar") === "camara") (window as unknown as { __tinkazo: unknown }).__tinkazo = { aplicacion: app, camara: cam, escena: scene, hud, cartel: null, ganador: null, cuerpoGanador: null, pantalla: () => ({ w: innerWidth, h: innerHeight, top: top(), bottom: bottom() }) };
+  // `rotuloDe`: de quién es el texto de cada chip y si es el puente con el nombre entero, para que el auditor
+  // (`scripts/audit-ganador-altura.mjs`) cuente solo los nombres finales y no confunda «Ana María» con «María».
+  // Sin el parámetro no se crea el registro: `chip()` no anota nada.
+  const rotulos = params.get("auditar") === "camara" ? new WeakMap<Text, { rol: "puente" | "chip"; original: string }>() : null;
+  if (params.get("auditar") === "camara") (window as unknown as { __tinkazo: unknown }).__tinkazo = { aplicacion: app, camara: cam, escena: scene, hud, cartel: null, ganador: null, cuerpoGanador: null, pantalla: () => ({ w: innerWidth, h: innerHeight, top: top(), bottom: bottom() }),
+    rotuloDe: (n: unknown) => rotulos?.get(n as Text) ?? null };
   // `?auditar=nino`: la foto de los cinco años no lleva letras (`scripts/audit-nino.mjs`).
   // Mientras `window.__nino.sinLetras` esté prendido, todo texto del motor queda sin
   // dibujar (`renderable`, no `visible`: los juegos mandan la visibilidad), y al
@@ -762,6 +767,7 @@ export async function mountPixi(beacon: Beacon, done: () => void, onSkip: () => 
     chipsVivos.add(c);
     dueno.set(c, faceOf);
     const label = text(completo ? name : shorten(name, 20), { fontSize: 12 * k, fontWeight: "800", fill: INK });
+    rotulos?.set(label, { rol: completo ? "puente" : "chip", original: faceOf });
     // El nombre completo (el puente hasta el cartel): en los renglones que haga falta, sin achicar.
     if (completo) {
       const a = ajustarEnRenglones(name, sw() - 12 - (conCara ? 32 : 14) * k,

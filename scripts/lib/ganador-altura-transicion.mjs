@@ -1,6 +1,8 @@
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { comprobarMuestra, comprobarSecuencia, esNombreDelCartel, comprobarAccesoPublico, RELATOR_ORIGINAL, PROVENIENCIA, comprobarNombreFinal } from './ganador-altura-comprobaciones.mjs';
+import { comprobarMuestra, comprobarSecuencia, esNombreDelCartel, nombreFinalDe, comprobarAccesoPublico, RELATOR_ORIGINAL, PROVENIENCIA, comprobarNombreFinal } from './ganador-altura-comprobaciones.mjs';
+import { conMotor, motorEfectivo, motorEnPagina } from './ganador-altura-opciones.mjs';
+import { LIMITE_MS, crearEsperas, progresoEnPagina, sondeo } from './ganador-altura-esperas.mjs';
 
 // Primer sostén estable seleccionado, no último cuadro. Las muestras siguen hasta el cierre.
 export function valorCapturaFinal(corona, _timestamp) {
@@ -8,8 +10,8 @@ export function valorCapturaFinal(corona, _timestamp) {
 }
 
 /** Se serializa con addInitScript. Solo observa; el fixture afecta únicamente al relator. */
-function instalar(opciones, comprobar, delCartel, capturaFinal) {
-  const muestras = [], fallos = [], peores = new Map();
+function instalar(opciones, comprobar, delCartel, capturaFinal, nombreFinal, motorVisible) {
+  const muestras = [], fallos = [], peores = new Map(), motores = new Set();
   let resultadoInicial = null, ultimoCuadro = 0, render = null;
   const fixture = { solicitado: opciones.relator, texto: opciones.frase, aplicado: false };
   const rect = e => {
@@ -22,10 +24,15 @@ function instalar(opciones, comprobar, delCartel, capturaFinal) {
     return { id, caja: r, accesible: !!r && r.w > 0 && r.h > 0 && r.x >= 0 && r.y >= 0
       && r.x + r.w <= innerWidth && r.y + r.h <= innerHeight && !e.disabled && !!p && e.contains(p) };
   };
-  const datos = () => ({ muestras, fallos, fixture, resultadoInicial, ultimoCuadro, render,
+  const datos = () => ({ muestras, fallos, fixture, resultadoInicial, ultimoCuadro, render, motores: [...motores],
     seleccionFinal: 'Primer cartel visible con tiempoCartel >= 1.7; no es el último cuadro',
     peores: [...peores].map(([nombre, p]) => ({ nombre, muestra: p.muestra, imagen: p.canvas.toDataURL('image/png') })) });
-  window.__altura = { datos, accesible, leerCuadro: () => ultimoCuadro, hayPlaca: () => muestras.some(m => m.placaVisible) };
+  // `ultima`: lectura liviana para la telemetría de las esperas (sin copiar canvas).
+  const ultima = () => {
+    const m = muestras.at(-1);
+    return { muestras: muestras.length, ultimaMuestra: m ? { cuadro: m.cuadro, timestamp: m.timestamp, tiempo: m.tiempo, placaVisible: m.placaVisible } : null };
+  };
+  window.__altura = { datos, accesible, ultima, leerCuadro: () => ultimoCuadro, hayPlaca: () => muestras.some(m => m.placaVisible) };
   window.__auditarGanador = {
     relator(msg, heat) {
       const nombres = window.__tinkazo?.corona?.().nombres ?? [];
@@ -39,6 +46,7 @@ function instalar(opciones, comprobar, delCartel, capturaFinal) {
       ultimoCuadro = cuadro;
       const inicioObservador = performance.now();
       try {
+        motores.add(motorVisible());
         const aud = window.__tinkazo, estado = aud?.estadoGanador?.();
         if (!estado?.activa) return;
         const cv = document.getElementById('pixi-canvas'), css = rect(cv), app = aud.aplicacion;
@@ -63,7 +71,8 @@ function instalar(opciones, comprobar, delCartel, capturaFinal) {
         };
         const identidades = aud.nombres?.() ?? [], propietarios = identidades.map(n => n.id);
         const nombres = identidades.filter(n => n.visible)
-          .map(n => ({ ...n, caja: cliente(n.caja), enCartel: true }));
+          .map(n => ({ rol: 'cartel', ...n, caja: cliente(n.caja), enCartel: true }));
+        const rotuloDe = aud.rotuloDe ?? (() => null);
         const esperados = corona?.nombres ?? [];
         const visitar = n => {
           if (!n.visible || !n.renderable || n.getGlobalAlpha() <= 0) return;
@@ -71,11 +80,13 @@ function instalar(opciones, comprobar, delCartel, capturaFinal) {
             const propio = nombres.find(t => t.id === n.uid);
             if (propio) Object.assign(propio, tipografia(n));
           }
-          if (typeof n.text === 'string' && !delCartel(n.uid, propietarios)) for (const original of esperados) {
-            if (!n.text.includes(original.split(' ')[0])) continue;
+          // Identidad explícita del estadio (`rotuloDe`): el chip puente o el chip con nombre de quien gana.
+          // Ni la primera palabra ni un texto sin marca (los gajos de la ruleta) cuentan como nombre final.
+          const final = typeof n.text === 'string' && !delCartel(n.uid, propietarios) ? nombreFinal(n.text, rotuloDe(n), esperados) : null;
+          if (final) {
             const b = n.getBounds(), caja = cliente({ x: b.x, y: b.y, w: b.width, h: b.height });
             if (!nombres.some(t => t.texto === n.text && Math.abs(t.caja.x - caja.x) < .01 && Math.abs(t.caja.y - caja.y) < .01))
-              nombres.push({ original, texto: n.text, caja, enCartel: false, ...tipografia(n) });
+              nombres.push({ ...final, texto: n.text, caja, enCartel: false, ...tipografia(n) });
           }
           for (const h of n.children ?? []) visitar(h);
         };
@@ -147,9 +158,16 @@ function interfazResultadoEstable() {
   });
 }
 
-export async function auditarTransicion(page, { base, out, juego, vista, relator, nombres, lang, movimiento }) {
-  const prefijo = `transicion-${juego}-${vista}-${lang}-${movimiento}-${nombres}-${relator}`;
-  await page.addInitScript({ content: `(${instalar})(${JSON.stringify({ relator, frase: RELATOR_ORIGINAL })}, ${comprobarMuestra}, ${esNombreDelCartel}, ${valorCapturaFinal});` });
+export async function auditarTransicion(page, { base, out, juego, vista, relator, nombres, lang, movimiento, motor = '2d' }) {
+  const prefijo = `transicion-${juego}-${vista}-${lang}-${movimiento}-${nombres}-${relator}-${motor}`;
+  await page.addInitScript({ content: `(${instalar})(${JSON.stringify({ relator, frase: RELATOR_ORIGINAL })}, ${comprobarMuestra}, ${esNombreDelCartel}, ${valorCapturaFinal}, ${nombreFinalDe}, ${motorEnPagina});` });
+  // Cada espera de 40 s deja inicio/fin, sondeos y el último cuadro: un timeout se distingue de un cuelgue.
+  const esperas = crearEsperas();
+  const pagina = nombre => () => page.evaluate(progresoEnPagina, nombre);
+  const motorDe = traza => {
+    const vistos = [...(traza?.motores ?? []), ...esperas.registros.flatMap(r => [r.paginaInicio?.motor, r.paginaFin?.motor])];
+    return { pedido: motor, parametro: motor === '3d' ? '3d' : 'pixi', vistos: [...new Set(vistos)], efectivo: motorEfectivo(vistos) };
+  };
   let traza;
   const capturas = [];
   const capturar = async etapa => {
@@ -160,7 +178,7 @@ export async function auditarTransicion(page, { base, out, juego, vista, relator
     capturas.push({ archivo, antes, despues });
   };
   try {
-    await page.goto(`${base}/?lead=3&pace=rapido&grande=0&auditar=camara&lang=${lang}#sortear`);
+    await page.goto(conMotor(`${base}/?lead=3&pace=rapido&grande=0&auditar=camara&lang=${lang}#sortear`, motor));
     // Lectura del estado de la UI real, solo en el servidor Vite de auditoría.
     // No se reemplazan beacon, selección, nombres finales, sello ni comprobante.
     await page.evaluate(async () => {
@@ -180,19 +198,24 @@ export async function auditarTransicion(page, { base, out, juego, vista, relator
     await page.waitForFunction(() => !document.querySelector('#btn-draw').disabled, undefined, { timeout: 20000 });
     await page.locator('#btn-draw').evaluate(b => { if (b.disabled) throw new Error('Lanzar no habilitado'); b.click(); });
     if (movimiento !== 'reduce') {
-      await page.waitForSelector('#stadium', { state: 'visible', timeout: 40000 });
+      await esperas.esperar('estadio visible', LIMITE_MS,
+        ms => page.waitForSelector('#stadium', { state: 'visible', timeout: ms }), pagina('estadio visible'));
       // Interacción real de teclado: la regla existente mantiene accesibles los
       // controles con foco. No se cambian clases ni se pulsa Sonido/Saltar.
       await page.locator('#st-sound').focus();
-      await page.waitForFunction(() => window.__altura.hayPlaca(), undefined, { timeout: 40000, polling: 100 });
+      await esperas.esperar('placa', LIMITE_MS, ms => page.waitForFunction(sondeo('placa', () => window.__altura.hayPlaca()),
+        undefined, { timeout: ms, polling: 100 }), pagina('placa'));
       await capturar('entrada-pagina');
-      await page.waitForSelector('#stadium', { state: 'hidden', timeout: 40000 });
+      await esperas.esperar('estadio oculto', LIMITE_MS,
+        ms => page.waitForSelector('#stadium', { state: 'hidden', timeout: ms }), pagina('estadio oculto'));
     }
-    await page.waitForSelector('.winner-name', { state: 'visible', timeout: 40000 });
+    await esperas.esperar('nombre del resultado', LIMITE_MS,
+      ms => page.waitForSelector('.winner-name', { state: 'visible', timeout: ms }), pagina('nombre del resultado'));
     // El resultado es una página desplazable: ubicamos el nombre mediante scroll
     // normal antes de medirlo, sin modificar estilos, contenido ni predicados.
     await page.locator('.winner-name').scrollIntoViewIfNeeded();
-    await page.waitForFunction(interfazResultadoEstable, undefined, { timeout: 40000, polling: 100 });
+    await esperas.esperar('resultado estable', LIMITE_MS, ms => page.waitForFunction(sondeo('resultado estable', interfazResultadoEstable),
+      undefined, { timeout: ms, polling: 100 }), pagina('resultado estable'));
     const ubicacionResultado = await page.evaluate(() => {
       const n = document.querySelector('.winner-name').getBoundingClientRect();
       const barra = document.querySelector('#siguiente.on')?.getBoundingClientRect();
@@ -202,7 +225,9 @@ export async function auditarTransicion(page, { base, out, juego, vista, relator
       if (desplazamiento) scrollBy({ top: desplazamiento, behavior: 'instant' });
       return { desplazamiento, antes, despues: scrollY };
     });
-    await page.waitForFunction(interfazResultadoEstable, undefined, { timeout: 40000, polling: 100 });
+    await esperas.esperar('resultado estable tras scroll', LIMITE_MS, ms => page.waitForFunction(
+      sondeo('resultado estable tras scroll', interfazResultadoEstable), undefined, { timeout: ms, polling: 100 }),
+    pagina('resultado estable tras scroll'));
     await capturar('resultado');
     traza = await page.evaluate(() => window.__altura.datos());
     const final = await page.evaluate(async () => {
@@ -273,15 +298,21 @@ export async function auditarTransicion(page, { base, out, juego, vista, relator
     for (const m of ms) for (const c of m.comprobaciones) if (c.coinciden && Number.isFinite(c.distancia)
       && (!minimos[c.nombre] || c.distancia < minimos[c.nombre].distancia))
       minimos[c.nombre] = { distancia: c.distancia, cuadro: m.cuadro, tiempo: m.tiempo, timestamp: m.timestamp };
-    return { juego, vista, fase: 'estadio-lista', final, ubicacionResultado, accesos, prueba, ronda, proveniencia: PROVENIENCIA, minimos,
+    return { juego, vista, fase: 'estadio-lista', motor: motorDe(traza), esperas: esperas.registros, final, ubicacionResultado, accesos, prueba, ronda, proveniencia: PROVENIENCIA, minimos,
       comprobaciones: [...comprobaciones, ...ms.flatMap(m => m.comprobaciones.filter(c => !c.ok).map(c => ({ ...c, cuadro: m.cuadro, tiempo: m.tiempo })))],
       medidas: { render: traza.render }, movimiento, controlesProbe: 'foco de teclado en st-sound',
       muestras: ms.length, fixture: traza.fixture, evidencia: `${prefijo}.json` };
+  } catch (error) {
+    // Un fallo fuera de una espera también lleva la telemetría al JSON de fallo.
+    if (error && typeof error === 'object' && !error.esperas) error.esperas = esperas.registros;
+    throw error;
   } finally {
     traza = await page.evaluate(() => window.__altura?.datos()).catch(e => ({ error: String(e) }));
     if (traza) {
       traza.capturasPagina = capturas;
-      traza.configuracion = { juego, vista, relator, nombres, lang, movimiento };
+      traza.configuracion = { juego, vista, relator, nombres, lang, movimiento, motor };
+      traza.esperas = esperas.registros;
+      traza.motor = motorDe(traza);
     }
     if (traza?.peores) {
       for (const p of traza.peores) {

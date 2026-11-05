@@ -4,63 +4,22 @@
  *   [--juegos race,sapo,trompo,chovena,pinata,wheel,teleferico,oruro]
  *   [--vistas 1024x521,1024x560,1024x600,390x560] [--fase estadio|estadio-lista|resultado]
  *   [--comprobar] [--relator original|natural] [--nombres largos|cortos]
- *   [--lang es|en] [--movimiento normal|reduce] [--dispositivo viewport|iphone13] [--help]
+ *   [--lang es|en] [--movimiento normal|reduce] [--dispositivo viewport|iphone13] [--motor 2d|3d] [--help]
  * PLAYWRIGHT_PATH permite indicar el módulo instalado; por defecto importa 'playwright'.
  * --help imprime estas opciones y sale sin importar Playwright ni abrir el navegador.
  * Las capturas son emulación de viewport, no dispositivos físicos.
  */
 import { mkdir, writeFile } from 'node:fs/promises';
-import { join, resolve, sep } from 'node:path';
+import { join } from 'node:path';
 import { auditarTransicion } from './lib/ganador-altura-transicion.mjs';
-import { SELECTOR } from './lib/juegos.mjs';
-const args = process.argv.slice(2);
-if (args.includes('--help')) {
-  console.log(`Uso: node scripts/audit-ganador-altura.mjs [opciones]
-  --base URL        Servidor propio (http://127.0.0.1:5185)
-  --out DIR         Evidencia (.evidence/arreglos-sorteos/antes)
-  --juegos LISTA    Juegos separados por comas (${SELECTOR.join(',')})
-  --vistas LISTA    Viewports (1024x521,1024x560,1024x600,390x560)
-  --fase FASE       estadio, estadio-lista o resultado (estadio)
-                    estadio-lista: UI libre simulada con nombres largos;
-                    espera el cartel real sin saltar el juego
-  --comprobar       Cada render: cuerpo/cartel/nombre vs relator y viewport,
-                    cuerpo/nombre vs cartel y un nombre completo legible;
-                    mide letra CSS transformada y resultado sin oclusión por barra fija;
-                    usa scroll normal y conserva el acceso a comprobante.
-                    Acceso público: mensaje real de WhatsApp → verificar.html;
-                    distingue modo libre/sin sello de un ancla oficial.
-                    Requiere --fase estadio-lista y servidor Vite (fuentes).
-  --relator MODO    original|natural (original): frase histórica exacta, solo
-                    fixture de narración; no sustituye al ganador del protocolo.
-  --nombres MODO    largos|cortos (largos)
-  --lang IDIOMA     es|en (es); el fixture original exige es.
-  --movimiento M   normal|reduce (normal); reduce comprueba resultado sin show.
-  --dispositivo D  viewport|iphone13 (viewport); descriptor iPhone 13 con
-                    viewport sobrescrito; viewport no afirma ser Android.
-  --help            Mostrar ayuda sin abrir navegador
-Entorno: PLAYWRIGHT_PATH indica el módulo Playwright; por defecto 'playwright'.
-Capturas: emulación de viewport, no dispositivos físicos.`);
+import { AYUDA, conMotor, leerOpciones, motorEfectivo, motorEnPagina } from './lib/ganador-altura-opciones.mjs';
+import { LIMITE_MS, crearEsperas, progresoEnPagina, sondeo } from './lib/ganador-altura-esperas.mjs';
+const opciones = leerOpciones(process.argv.slice(2));
+if (opciones.ayuda) {
+  console.log(AYUDA);
   process.exit(0);
 }
-const opt = (k, d) => args.includes(k) ? args[args.indexOf(k) + 1] : d;
-const base = opt('--base', 'http://127.0.0.1:5185');
-const out = opt('--out', '.evidence/arreglos-sorteos/antes');
-const juegos = opt('--juegos', SELECTOR.join(',')).split(',');
-const vistas = opt('--vistas', '1024x521,1024x560,1024x600,390x560').split(',');
-const fase = opt('--fase', 'estadio');
-const comprobar = args.includes('--comprobar');
-if (comprobar && fase !== 'estadio-lista') throw new Error('--comprobar requiere --fase estadio-lista');
-const relator = opt('--relator', 'original'), nombres = opt('--nombres', 'largos');
-const lang = opt('--lang', 'es'), movimiento = opt('--movimiento', 'normal'), dispositivo = opt('--dispositivo', 'viewport');
-for (const [k, v, permitidos] of [['--relator', relator, ['original', 'natural']], ['--nombres', nombres, ['largos', 'cortos']],
-  ['--lang', lang, ['es', 'en']], ['--movimiento', movimiento, ['normal', 'reduce']], ['--dispositivo', dispositivo, ['viewport', 'iphone13']]])
-  if (!permitidos.includes(v)) throw new Error(`${k}: valor no válido ${v}`);
-if (comprobar && relator === 'original' && lang !== 'es') throw new Error('--relator original requiere --lang es');
-if (!comprobar && ['--relator', '--nombres', '--lang', '--movimiento', '--dispositivo'].some(k => args.includes(k)))
-  throw new Error('Los controles de matriz requieren --comprobar');
-if (!vistas.every(v => /^[1-9]\d*x[1-9]\d*$/.test(v)) || !juegos.every(j => SELECTOR.includes(j))) throw new Error('Juego o viewport no válido');
-const raiz = resolve('.evidence/arreglos-sorteos');
-if (resolve(out) !== raiz && !resolve(out).startsWith(raiz + sep)) throw new Error('--out debe estar dentro de .evidence/arreglos-sorteos');
+const { base, out, juegos, vistas, fase, comprobar, relator, nombres, lang, movimiento, dispositivo, motor } = opciones;
 const { webkit, devices } = await import(process.env.PLAYWRIGHT_PATH || 'playwright');
 
 await mkdir(out, { recursive: true });
@@ -77,11 +36,11 @@ try {
     const page = await context.newPage();
     page.setDefaultTimeout(20000);
     page.setDefaultNavigationTimeout(20000);
-    const errores = [];
+    const errores = [], esperas = crearEsperas(), motores = [];
     page.on('pageerror', e => errores.push(String(e)));
     try {
       if (comprobar) {
-        const r = await auditarTransicion(page, { base, out, juego, vista, relator, nombres, lang, movimiento });
+        const r = await auditarTransicion(page, { base, out, juego, vista, relator, nombres, lang, movimiento, motor });
         r.emulacion = { dispositivo, lang, navegador: 'WebKit',
           tipo: dispositivo === 'viewport' ? 'viewport responsive, no dispositivo Android' : 'descriptor iPhone 13, no teléfono físico',
           ...await page.evaluate(() => ({ userAgent: navigator.userAgent, dpr: devicePixelRatio, hasTouch: navigator.maxTouchPoints > 0 })) };
@@ -123,7 +82,7 @@ try {
         if (fase === 'estadio-lista') await page.addInitScript(() => {
           window.__PIXI_APP_INIT__ = app => { window.__app = app; };
         });
-        await page.goto(`${base}/?lead=3&pace=rapido&grande=0&auditar=camara#sortear`);
+        await page.goto(conMotor(`${base}/?lead=3&pace=rapido&grande=0&auditar=camara#sortear`, motor));
         await page.waitForSelector('#ta');
         await page.locator('#ta').fill('María Fernanda Guadalupe Quispe Mamani Zu\nMaximiliano Alexander Constantino Rosario\nAna María de los Ángeles Condori Flores\nCarlos Alberto Gutiérrez Fernández\nLucía Alejandra Mendoza Vargas\nRodrigo Sebastián Flores Mamani');
         await page.evaluate(j => {
@@ -142,10 +101,15 @@ try {
           if (boton.disabled) throw new Error('Lanzar el sorteo no está habilitado');
           boton.click();
         });
-        await page.waitForSelector('#stadium', { state: 'visible', timeout: 40000 });
+        const pagina = nombre => () => page.evaluate(progresoEnPagina, nombre);
+        await esperas.esperar('estadio visible', LIMITE_MS,
+          ms => page.waitForSelector('#stadium', { state: 'visible', timeout: ms }), pagina('estadio visible'));
+        motores.push((await pagina('estadio visible')().catch(() => null))?.motor ?? null);
         if (fase === 'estadio-lista') {
-          await page.waitForFunction(() => !!document.querySelector('#pixi-canvas')?.dataset.cartel,
-            undefined, { timeout: 40000, polling: 100 });
+          await esperas.esperar('cartel', LIMITE_MS, ms => page.waitForFunction(
+            sondeo('cartel', () => !!document.querySelector('#pixi-canvas')?.dataset.cartel),
+            undefined, { timeout: ms, polling: 100 }), pagina('cartel'));
+          motores.push((await pagina('cartel')().catch(() => null))?.motor ?? null);
         } else {
           await page.evaluate(() => document.querySelector('#st-skip').click());
           await page.waitForSelector('#winner-box', { state: 'visible', timeout: 15000 });
@@ -183,10 +147,13 @@ try {
           barra: box(document.querySelector('#siguiente.on')), accion: box(document.querySelector('#btn-again-sin')),
           saltar: box(document.querySelector('#st-skip')), scroll: scrollY };
       });
+      motores.push(await page.evaluate(motorEnPagina));
       await page.screenshot({ path: join(out, `${fase}-${juego}-${vista}.png`) });
-      const r = { juego, vista, fase, medidas, errores };
+      const r = { juego, vista, fase, medidas, errores, esperas: esperas.registros,
+        motor: { pedido: fase === 'estadio' ? '2d' : motor, vistos: motores, efectivo: motorEfectivo(motores) } };
       resultados.push(r); console.log(JSON.stringify(r));
     } catch (error) {
+      motores.push(await page.evaluate(motorEnPagina).catch(() => null));
       const diagnostico = await page.evaluate(() => {
         const aud = window.__tinkazo, cv = document.querySelector('#pixi-canvas');
         return { tiempo: aud?.camara.tiempo, golpeEn: aud?.camara.golpeEn,
@@ -195,7 +162,9 @@ try {
       }).catch(e => ({ errorDiagnostico: String(e) }));
       await page.screenshot({ path: join(out, `${fase}-${juego}-${vista}-fallo.png`), timeout: 5000 })
         .catch(e => { diagnostico.errorCaptura = String(e); });
-      const r = { juego, vista, fase, error: String(error), errores, diagnostico };
+      const r = { juego, vista, fase, error: String(error), errores, diagnostico,
+        esperas: error?.esperas ?? esperas.registros,
+        motor: { pedido: fase === 'estadio' ? '2d' : motor, vistos: motores, efectivo: motorEfectivo(motores) } };
       await writeFile(join(out, `${fase}-${juego}-${vista}-fallo.json`), JSON.stringify(r, null, 2));
       resultados.push(r); console.error(JSON.stringify(r));
     } finally { await context.close(); }
