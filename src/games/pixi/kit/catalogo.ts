@@ -138,6 +138,18 @@ export const CATALOGO = [
     },
   },
   // --- /toborochi
+  // --- autos
+  {
+    id: "autos",
+    cargar: () => import("../autos").then((m) => m.autosPixi),
+    // La forma decide la pregunta propia de la prueba del niño: "carrera", "de-pie", "rueda" o "acumulacion".
+    forma: "carrera",
+    selector: false,
+    rango: { minimo: 2, maximo: 200 },
+    captura: false,
+    historia: { q: "loreAutosQ", a: "loreAutosA", href: "https://github.com/nema1502/tinkazo/blob/main/docs/juegos.md", src: "tinkazo · docs/juegos.md", hue: "teal", borrador: true },
+  },
+  // --- /autos
   // <<< kit:catalogo
 ] as const satisfies readonly EntradaCatalogo[];
 
