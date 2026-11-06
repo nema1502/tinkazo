@@ -1,0 +1,379 @@
+import { describe, expect, it } from "vitest";
+import { writeStory } from "../drama";
+import { azarDe, sembrar } from "./kit/azar";
+import { problemasDeMomentos } from "./kit/director";
+import { validarGuion } from "./kit/guion";
+import { problemasDeMarcador } from "./kit/marcador";
+import { DIRECCIONES, problemasDeRespuestas } from "./kit/respuestas";
+import type { Contexto, Kit } from "./kit/tipos";
+import {
+  CANICA_R,
+  CANICAS_MAX,
+  CIRCULO_R,
+  PEGADORA_DIST,
+  aMundo,
+  adentro,
+  mapeoDe,
+  planBolillas,
+  salidaDe,
+  trayectoriaDe,
+  type Datos,
+  type Oleada,
+  type Pant,
+  type Pun,
+} from "./bolillas-plan";
+import { TEXTOS } from "./bolillas-textos";
+
+const RONDA = "6e049991d7e23bdc566d3adfff08cd81798c644bc54dd5daa18eb0a8938b2829";
+
+/** El contexto que arma el kit, con un azar sembrado y los textos del juego. */
+function contexto(n: number, ganadores: number[], semilla = 7, idioma: "es" | "en" = "es"): Contexto {
+  const rng = sembrar(semilla);
+  return {
+    nombres: Array.from({ length: n }, (_, i) => `Persona ${i + 1}`),
+    ganadores,
+    ronda: RONDA,
+    rng,
+    idioma,
+    txt: (clave, ...args) => {
+      const v = (TEXTOS[idioma] as Record<string, string | ((...a: unknown[]) => string)>)[clave];
+      return typeof v === "function" ? v(...args) : (v ?? clave);
+    },
+    azar: (etiqueta) => azarDe(RONDA, etiqueta),
+    historia: (actores, ganador) => writeStory(rng, actores, ganador),
+  };
+}
+
+const LISTAS = [2, 3, 8, 12, 13, 18, 60, 200];
+const ganadoresDe = (n: number): number[] => [Math.min(n - 1, 3)];
+const PANTALLAS: Pant[] = [
+  { w: 1920, h: 1080, k: 1.5, top: 82, bottom: 974 },
+  { w: 1280, h: 720, k: 1, top: 82, bottom: 614 },
+  { w: 390, h: 844, k: 0.93, top: 100, bottom: 726 },
+];
+
+/** Un kit de mentira con lo que usan las tomas y el foco. */
+const kitFalso = (p: Pant): Kit =>
+  ({
+    pantalla: () => ({ ...p, retrato: p.h > p.w * 1.1 }),
+    cam: { toScreen: (x: number, y: number) => ({ x, y }) },
+  }) as unknown as Kit;
+
+/** La distancia de un punto al tramo `a`-`b`: la geometría que miran los choques. */
+function distSeg(p: Pun, a: Pun, b: Pun): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const f = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / (dx * dx + dy * dy || 1)));
+  return Math.hypot(p.x - (a.x + f * dx), p.y - (a.y + f * dy));
+}
+
+const escalar = (v: Pun, k: number): Pun => ({ x: v.x * k, y: v.y * k });
+const restar = (a: Pun, b: Pun): Pun => ({ x: a.x - b.x, y: a.y - b.y });
+const modulo = (p: Pun): number => Math.hypot(p.x, p.y);
+const HOLGURA = CANICA_R * 2 + 0.02;
+
+/** Quién puede chocar a una canica que viaja de `a` a `b`: las adentro en ese segundo, menos ella misma. */
+function adentroEn(d: Datos, t: number, menos?: number): { persona: number; p: Pun }[] {
+  return adentro(d, t)
+    .filter((i) => i !== menos)
+    .map((i) => {
+      const s = d.canicas.indexOf(i);
+      return { persona: i, p: d.posiciones[s] as Pun };
+    });
+}
+
+describe("Bolillas: el plan", () => {
+  it("la misma ronda cuenta lo mismo: el plan es una función de la lista y la semilla", () => {
+    for (const n of LISTAS) {
+      const resumir = (): string => {
+        const p = planBolillas(contexto(n, ganadoresDe(n)));
+        return JSON.stringify({ d: p.duracion, a: p.arco, x: p.datos, g: p.guion.map((l) => [l.t, l.texto, l.prioridad, l.hecho]), r: p.respuestas(p.duracion / 2) });
+      };
+      expect(resumir(), `con ${n}`).toBe(resumir());
+    }
+  });
+
+  it("otras semillas cuentan otras historias", () => {
+    const arcos = new Set(Array.from({ length: 24 }, (_, s) => planBolillas(contexto(18, [3], s + 1)).arco));
+    expect(arcos.size).toBeGreaterThan(1);
+  });
+
+  it("el juego no decide nada: quien gana sale dado, y su canica es la última que queda adentro", () => {
+    for (const n of LISTAS) {
+      for (const gs of [ganadoresDe(n), [0, Math.min(n - 1, 1)].filter((x) => x < n)]) {
+        const { datos: d, duracion } = planBolillas(contexto(n, gs));
+        expect(d.ganador).toBe(gs[0]);
+        // Las canicas dentro del círculo: los premios, y nunca más que el cap del círculo.
+        expect(d.canicas.length).toBeLessThanOrEqual(CANICAS_MAX);
+        for (const g of gs) expect(d.canicas, `con ${n}`).toContain(g);
+        // Todos los que no ganan salen una sola vez: por oleada (la tanda previa) o por un tiro en la troya.
+        const afuera = Array.from({ length: n }, (_, i) => i).filter((i) => !gs.includes(i));
+        const tiempos = afuera.map((i) => salidaDe(d, i));
+        for (const i of afuera) {
+          const s = salidaDe(d, i);
+          expect(s, `con ${n}: quien sale salió de a una ola o de un tiro`).toBeLessThanOrEqual(duracion);
+        }
+        // Nadie está en dos oleadas, ni en una oleada y un tiro.
+        const oleadaDe = new Map<number, number>();
+        d.oleadas.forEach((o, wi) => {
+          for (const i of o.gente) expect(oleadaDe.has(i), `con ${n}`).toBe(false);
+          for (const i of o.gente) oleadaDe.set(i, wi);
+        });
+        for (const t of d.tiros) expect(oleadaDe.has(t.diana), `con ${n}: el tiro saca a quien ya cruzó`).toBe(false);
+        const cruzados = [...oleadaDe.keys(), ...d.tiros.map((t) => t.diana)].sort((a, b) => a - b);
+        expect(cruzados, `con ${n}`).toEqual(afuera);
+        expect(tiempos.every((s) => s !== null && s !== undefined && s >= 0 && s <= duracion), `con ${n}`).toBe(true);
+        // Quien gana no sale nunca, y al final solo quedan los premios adentro.
+        for (const g of gs) expect(salidaDe(d, g)).toBeNull();
+        expect(adentro(d, duracion).sort((a, b) => a - b), `con ${n}`).toEqual([...gs].sort((a, b) => a - b));
+      }
+    }
+  });
+
+  it("los tiros sacan de a una, en orden sembrado, con la rival al final", () => {
+    for (const n of LISTAS) {
+      const { datos: d } = planBolillas(contexto(n, ganadoresDe(n)));
+      const dianas = d.tiros.map((t) => t.diana);
+      expect(new Set(dianas).size).toBe(dianas.length);
+      for (const t of d.tiros) expect(d.ganadores, `con ${n}: el tiro saca a un premio`).not.toContain(t.diana);
+      // Los tiros van un segundo o más aparte y en orden creciente.
+      for (let i = 1; i < d.tiros.length; i++) expect((d.tiros[i]?.t ?? 0) - (d.tiros[i - 1]?.t ?? 0)).toBeGreaterThanOrEqual(1);
+      // La rival de la historia sale en el último tiro de la troya (cuando su canica juega).
+      if (d.rival >= 0 && d.canicas.includes(d.rival)) expect(dianas.at(-1)).toBe(d.rival);
+    }
+  });
+
+  it("dura lo que un show: ni un parpadeo ni una eternidad", () => {
+    for (const n of LISTAS) {
+      const { duracion } = planBolillas(contexto(n, ganadoresDe(n)));
+      expect(duracion).toBeGreaterThanOrEqual(10);
+      expect(duracion).toBeLessThanOrEqual(40);
+    }
+  });
+
+  it("los momentos de la cámara están en orden", () => {
+    for (const n of LISTAS) expect(problemasDeMomentos(planBolillas(contexto(n, ganadoresDe(n)))), `con ${n}`).toEqual([]);
+  });
+
+  it("el guion no deja huecos de cuatro segundos, y cumple la regla del niño: six words, a name at most, no numbers", () => {
+    for (const n of LISTAS) {
+      const c = contexto(n, ganadoresDe(n));
+      const p = planBolillas(c);
+      const r = validarGuion(p.guion, p.duracion, { nino: true, nombres: c.nombres });
+      expect(r.problemas, `con ${n}`).toEqual([]);
+      expect(r.huecoMax, `con ${n}`).toBeLessThanOrEqual(4);
+    }
+  });
+});
+
+describe("Bolillas: la geometría de los choques", () => {
+  it("cada tiro larga de afuera del círculo, pega en la canica que saca y la manda cruzando la tiza", () => {
+    for (const n of LISTAS) {
+      const { datos: d } = planBolillas(contexto(n, ganadoresDe(n)));
+      for (const t of d.tiros) {
+        expect(modulo(t.desde), `el tiro de ${t.diana} larga afuera`).toBeGreaterThan(CIRCULO_R);
+        const pos = d.posiciones[t.slot] as Pun;
+        expect(t.impacto.x).toBeCloseTo(pos.x, 9);
+        expect(t.impacto.y).toBeCloseTo(pos.y, 9);
+        // La canica golpeada sale con dirección hacia afuera y cruza el círculo: la tiza queda en su camino.
+        const radial = escalar(pos, 1 / (modulo(pos) || 1));
+        expect(t.salida.dir.x * radial.x + t.salida.dir.y * radial.y, `salida de ${t.diana}`).toBeGreaterThan(0);
+        expect(modulo(t.salida.tiza)).toBeCloseTo(CIRCULO_R, 6);
+        expect(t.salida.fuerza).toBeGreaterThan(0);
+        // La deflectación del tiro termina en un punto libre: fuera del círculo o donde ya no hay canica.
+        expect(t.deflexion.dir.x * t.deflexion.dir.x + t.deflexion.dir.y * t.deflexion.dir.y).toBeCloseTo(1, 6);
+      }
+    }
+  });
+
+  it("ningún tramo de tiro roza a una canica que sigue adentro, y a quien gana nunca lo toca el juego", () => {
+    const HOLGURA = CANICA_R * 2 + 0.02;
+    for (const n of LISTAS) {
+      for (let s = 1; s <= 6; s++) {
+        const { datos: d } = planBolillas(contexto(n, ganadoresDe(n), s));
+        for (const t of d.tiros) {
+          for (const c of adentroEn(d, t.t, t.diana)) {
+            const h = HOLGURA;
+            const deIda = distSeg(c.p, t.desde, t.impacto);
+            const deSalida = distSeg(c.p, t.impacto, t.salida.tiza);
+            expect(deIda, `tiro de ${t.diana} a los ${t.t.toFixed(1)}: la canica de ${c.persona} queda a ${deIda.toFixed(3)}`).toBeGreaterThanOrEqual(h - 1e-9);
+            expect(deSalida, `salida de ${t.diana}: la canica de ${c.persona} queda a ${deSalida.toFixed(3)}`).toBeGreaterThanOrEqual(h - 1e-9);
+          }
+        }
+        // La deflectación tampoco termina sobre nadie.
+        for (const t of d.tiros) {
+          for (const c of adentroEn(d, t.t, t.diana)) {
+            expect(modulo(restar(c.p, t.deflexion.hasta)), `deflex del tiro de ${t.diana} contra ${c.persona}`).toBeGreaterThanOrEqual(CANICA_R * 2 - 1e-9);
+          }
+        }
+      }
+    }
+  });
+
+  it("el casi final: la canica que gana titila sobre la tiza y no cruza nunca", () => {
+    for (const n of LISTAS) {
+      for (let s = 1; s <= 6; s++) {
+        const { datos: d } = planBolillas(contexto(n, ganadoresDe(n), s));
+        expect(modulo(d.casi.titila), `con ${n}`).toBeLessThanOrEqual(CIRCULO_R - CANICA_R * 1.05 + 1e-9);
+        const slotG = d.canicas.indexOf(d.ganador);
+        // Antes del casi está en su lugar de la siembra; con el golpe quedó en el punto de la orilla, adentro.
+        const inicio = trayectoriaDe(d, slotG, d.casi.t - 0.01);
+        expect(inicio.p.x).toBeCloseTo(d.posiciones[slotG]?.x ?? 0, 9);
+        const fin = trayectoriaDe(d, slotG, d.duracion);
+        expect(fin.p.x).toBeCloseTo(d.casi.titila.x, 9);
+        expect(fin.p.y).toBeCloseTo(d.casi.titila.y, 9);
+        // En todo el tramo, la canica que gana queda adentro del círculo.
+        for (let t = d.casi.t; t <= d.duracion + 0.01; t += 0.05) {
+          const q = trayectoriaDe(d, slotG, t).p;
+          expect(modulo(q)).toBeLessThanOrEqual(CIRCULO_R + 1e-9);
+        }
+      }
+    }
+  });
+
+  it("la canica golpeada vuela desde su lugar hasta la tiza y después queda afuera", () => {
+    for (const n of LISTAS) {
+      const { datos: d } = planBolillas(contexto(n, ganadoresDe(n)));
+      const t = d.tiros[Math.floor(d.tiros.length / 2)];
+      if (!t) continue;
+      const pos = d.posiciones[t.slot] as Pun;
+      const antes = trayectoriaDe(d, t.slot, t.t - 0.01);
+      expect(antes.p.x).toBeCloseTo(pos.x, 9);
+      const medio = trayectoriaDe(d, t.slot, t.t + (t.salida.vuelo / 2));
+      expect(modulo(medio.p)).toBeGreaterThan(modulo(pos));
+      expect(modulo(medio.p)).toBeLessThanOrEqual(CIRCULO_R + 1e-9);
+      const despues = trayectoriaDe(d, t.slot, t.t + t.salida.vuelo + 5);
+      expect(modulo(despues.p)).toBeCloseTo(modulo(t.salida.tiza), 6);
+      expect(antes.p.x).not.toBeCloseTo(despues.p.x, 6);
+    }
+  });
+});
+
+describe("Bolillas: el círculo y las tandas", () => {
+  it("las canicas siembran adentro del círculo, separadas entre sí y lejos de la tiza", () => {
+    for (const n of LISTAS) {
+      for (let s = 1; s <= 6; s++) {
+        const { datos: d } = planBolillas(contexto(n, ganadoresDe(n), s));
+        const sep = CANICA_R * 2 + 0.1;
+        for (const pos of d.posiciones) {
+          expect(modulo(pos), `con ${n} semilla ${s}`).toBeLessThanOrEqual(CIRCULO_R - CANICA_R * 1.05 + 1e-9);
+          expect(modulo(pos)).toBeGreaterThan(0);
+        }
+        for (let i = 0; i < d.posiciones.length; i++) {
+          for (let j = i + 1; j < d.posiciones.length; j++) {
+            expect(modulo(restar(d.posiciones[i] as Pun, d.posiciones[j] as Pun)), `canicas ${i} y ${j} con ${n}`).toBeGreaterThan(sep - 0.06);
+          }
+        }
+      }
+    }
+  });
+
+  it("con pocas personas todas juegan la troya; con muchas hay una tanda previa que deja el círculo completo", () => {
+    for (const n of [2, 3, 12]) {
+      const { datos: d } = planBolillas(contexto(n, ganadoresDe(n)));
+      expect(d.oleadas, `con ${n}`).toHaveLength(0);
+      expect(d.canicas.length).toBe(n);
+    }
+    for (const n of LISTAS.filter((x) => x > CANICAS_MAX)) {
+      const { datos: d } = planBolillas(contexto(n, ganadoresDe(n)));
+      expect(d.oleadas.length, `con ${n}`).toBeGreaterThanOrEqual(1);
+      expect(d.oleadas.length).toBeLessThanOrEqual(3);
+      expect(d.canicas.length).toBe(CANICAS_MAX);
+      // Las oleadas cruzan a todos los que no juegan la troya, y ninguna canica del círculo se cruzó.
+      const cruzados = d.oleadas.flatMap((o) => o.gente);
+      expect(new Set(cruzados).size).toBe(cruzados.length);
+      for (const i of d.canicas) expect(cruzados, `con ${n}`).not.toContain(i);
+      for (let i = 1; i < d.oleadas.length; i++) expect((d.oleadas[i]?.t ?? 0) - (d.oleadas[i - 1]?.t ?? 0)).toBeGreaterThanOrEqual(1);
+    }
+  });
+});
+
+describe("Bolillas: para las escenas", () => {
+  it("mapear la tierra deja el círculo entero dentro de la franja libre, en todas las pantallas", () => {
+    for (const pant of PANTALLAS) {
+      const m = mapeoDe(pant);
+      const c = aMundo(m, { x: 0, y: 0 });
+      expect(c.x).toBeGreaterThan(0);
+      expect(c.x).toBeLessThan(pant.w);
+      expect(c.y).toBeGreaterThan(pant.top);
+      expect(c.y).toBeLessThan(pant.bottom);
+      expect(m.e * CIRCULO_R).toBeLessThan(Math.min(pant.w / 2, (pant.bottom - pant.top) / 2));
+    }
+  });
+
+  it("la mano de la pegadora queda fuera del círculo y el tiro viaja más de lo que mide el radio", () => {
+    expect(PEGADORA_DIST).toBeGreaterThan(CIRCULO_R + 0.1);
+    for (const n of LISTAS) {
+      const { datos: d } = planBolillas(contexto(n, ganadoresDe(n)));
+      for (const t of d.tiros) {
+        const largo = modulo(restar(t.salida.tiza, t.impacto));
+        expect(largo, `con ${n}`).toBeGreaterThan(0);
+        expect(t.salida.vuelo).toBeGreaterThan(0);
+      }
+    }
+  });
+});
+
+describe("Bolillas: la regla del niño", () => {
+  it("un solo sentido de avance, y es uno de los que existen", () => {
+    for (const n of LISTAS) expect(DIRECCIONES).toContain(planBolillas(contexto(n, ganadoresDe(n))).sentido);
+  });
+
+  it("el marcador es el único contador: arranca en todos, baja con las oleadas y con cada canica, y llega a 1", () => {
+    for (const n of LISTAS) {
+      const p = planBolillas(contexto(n, ganadoresDe(n)));
+      const pasoMax = Math.max(1, ...p.datos.oleadas.map((o) => o.gente.length));
+      expect(problemasDeMarcador(p.marcador, { duracion: p.duracion, total: n, pasoMax }), `con ${n}`).toEqual([]);
+      if (n <= CANICAS_MAX) expect(pasoMax).toBe(1);
+    }
+  });
+
+  it("las respuestas dicen quién va adelante, hacia dónde, cuánto falta y qué pasó, en todo cuadro", () => {
+    for (const n of LISTAS) {
+      for (const gs of [ganadoresDe(n), [0, Math.min(n - 1, 1)].filter((x) => x < n)]) {
+        const p = planBolillas(contexto(n, gs));
+        expect(problemasDeRespuestas(p, { n, ganadores: gs, paso: 0.05 }), `con ${n}`).toEqual([]);
+        const r = p.respuestas(p.datos.casi.t + 0.3);
+        expect(r.paso, `con ${n}`).toMatchObject({ tipo: "casi", quien: p.datos.ganador });
+      }
+    }
+  });
+
+  it("la meta (el círculo de tiza) cae dentro de la pantalla en todas las pantallas", () => {
+    for (const n of LISTAS) {
+      const p = planBolillas(contexto(n, ganadoresDe(n)));
+      for (const pant of PANTALLAS) {
+        for (const t of [0, p.duracion / 2, p.duracion - 0.01]) {
+          const m = p.momentos.meta?.(kitFalso(pant), t);
+          expect(m, `con ${n}`).toBeTruthy();
+          if (m) {
+            expect(m.x).toBeGreaterThanOrEqual(-1);
+            expect(m.x + m.w).toBeLessThanOrEqual(pant.w + 1);
+            expect(m.y).toBeGreaterThanOrEqual(pant.top - 1);
+            expect(m.y + m.h).toBeLessThanOrEqual(pant.bottom + 1);
+          }
+        }
+      }
+    }
+  });
+});
+
+describe("Bolillas: los textos", () => {
+  it("están en español y en inglés, con las mismas claves y del mismo tipo", () => {
+    const es = Object.keys(TEXTOS.es).sort();
+    expect(Object.keys(TEXTOS.en).sort()).toEqual(es);
+    for (const clave of es) {
+      const a = (TEXTOS.es as Record<string, unknown>)[clave];
+      const b = (TEXTOS.en as Record<string, unknown>)[clave];
+      expect(typeof a).toBe(typeof b);
+    }
+  });
+
+  it("ninguna frase queda vacía ni rompe la regla del niño en ninguno de los dos idiomas", () => {
+    for (const idioma of ["es", "en"] as const) {
+      const c = contexto(18, [3], 7, idioma);
+      const p = planBolillas(c);
+      expect(validarGuion(p.guion, p.duracion, { nino: true, nombres: c.nombres }).problemas, idioma).toEqual([]);
+    }
+  });
+});
