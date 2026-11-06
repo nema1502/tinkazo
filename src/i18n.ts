@@ -2304,6 +2304,9 @@ export const T: Record<Lang, Dict> = {
     cmpAdjuntaLasFotos: "Las fotos se descargaron: adjuntalas en el chat de WhatsApp.",
     cmpNoAparece: "¿No estaba WhatsApp? Descargá la foto y copiá el mensaje para pegarlos en el chat.",
     cmpFotoAlt: "La foto con quién ganó y el QR para comprobarlo",
+    // --- La foto con el fondo del juego, junto a la de siempre (5 de noviembre de 2026).
+    cmpFotoJuego: "Foto con el juego", cmpFotoClasica: "Foto clásica",
+    cmpElegirFoto: "Tocá una foto para elegir cuál compartir.",
     cmpSinFoto: "No se pudo armar la foto: el mensaje trae el enlace igual.",
     cmpPrivLista: "Quien tenga la foto o el enlace puede ver la lista entera.",
     cmpPrivCorto: "El enlace corto guarda una copia que solo se abre con el enlace, para que el sorteo se pueda volver a comprobar. Tinkazo no la puede leer.",
@@ -4468,6 +4471,8 @@ export const T: Record<Lang, Dict> = {
     cmpAdjuntaLasFotos: "The photos were downloaded: attach them in the WhatsApp chat.",
     cmpNoAparece: "WhatsApp wasn't there? Download the photo and copy the message to paste them in the chat.",
     cmpFotoAlt: "The photo with who won and the QR code to check it",
+    cmpFotoJuego: "Photo with the game", cmpFotoClasica: "Classic photo",
+    cmpElegirFoto: "Tap a photo to choose which one to share.",
     cmpSinFoto: "The photo couldn't be made: the message still has the link.",
     cmpPrivLista: "Anyone with the photo or the link can see the whole list.",
     cmpPrivCorto: "The short link keeps a copy that only opens with the link, so the draw can be checked again. Tinkazo can't read it.",
