@@ -411,7 +411,7 @@ const PULSO_VIDA = 0.8;
  * su casi es un rodado, no un golpe (queda garantizado por doble llave: el plan jamás la anuncia,
  * y acá la guarda aparte). Toda la geometría sale del plan y del hash del tiro; sin `Math.random`.
  */
-export function anuncioDeDiana(d: Pick<Datos, "tiros" | "ganador">, t: number): AnuncioDiana | null {
+export function anuncioDeDiana(d: Pick<Datos, "tiros"> & { ganador: number }, t: number): AnuncioDiana | null {
   for (const tiro of d.tiros) {
     if (t < tiro.t - ANUNCIO_DIANA || t >= tiro.t) continue;
     // El casi es un rodado, no un golpe: la ganadora no se anuncia, también acá.
