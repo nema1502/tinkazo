@@ -95,7 +95,7 @@ El Organizador puede subir un archivo CSV y la primera columna se toma como nomb
 - Consecuencias: mismo resultado que FR-1 tras la normalización; archivos sin nombres válidos dejan el botón de sellar deshabilitado.
 
 #### FR-3: Umbral mínimo
-El Sello solo se habilita con `count >= 2` y `1 <= ganadores <= min(count, 100)` (el tope es `MAX_WINNERS`).
+El Sello solo se habilita con `count >= 2` y `1 <= ganadores <= min(count, 300)` (el tope es `MAX_WINNERS`).
 
 ### 4.2 Sello en Stellar
 

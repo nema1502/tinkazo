@@ -837,7 +837,7 @@ fn costo_segun_ganadores() {
 #[test]
 fn peor_semilla_de_la_seleccion_con_el_tope_de_ganadores() {
     // Con tantos ganadores como entradas, el recorrido es el del coleccionista
-    // de cupones: en promedio `k · H(k)` hashes (unos 519 con 100), y a veces el
+    // de cupones: en promedio `k · H(k)` hashes (unos 519 con 100 y 1.885 con 300), y a veces el
     // doble. Se prueban muchas semillas para ver el peor caso y que `draw` entero
     // quede bajo el límite también con la peor. La firma real de una sola ronda no
     // permite variar la semilla en `draw`, así que se mide `select` con cada

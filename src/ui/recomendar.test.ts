@@ -480,7 +480,7 @@ describe("muchos ganadores: hasta cien, con los juegos que los cuentan", () => {
   });
 
   it("con el máximo de ganadores y todos en la lista (el modo orden), la ruleta sigue siendo una opción", () => {
-    const ruleta = recomendar(100, MAX_WINNERS).games.find((r) => r.game === "wheel") as Recomendacion;
+    const ruleta = recomendar(200, MAX_WINNERS).games.find((r) => r.game === "wheel") as Recomendacion;
     expect(ruleta.fits).not.toBe(false);
   });
 });

@@ -4,7 +4,7 @@ import { MAX_WINNERS } from "../protocol/select";
 import { network, topeDeGanadores, topeDeLaRed } from "./config";
 
 /**
- * Cuántos ganadores ofrece el sitio en cada red. El protocolo permite `MAX_WINNERS` (100), pero cada contrato desplegado
+ * Cuántos ganadores ofrece el sitio en cada red. El protocolo permite `MAX_WINNERS` (300), pero cada contrato desplegado
  * trae el tope de su versión: el de testnet de hoy admite 32, y el sitio no promete en producción lo que la red todavía
  * no tiene (se actualiza `maxWinners` en `deployments.json` junto con el contrato nuevo).
  */
@@ -18,10 +18,10 @@ describe("el tope de ganadores de una red", () => {
     expect(network.maxWinners).toBe(32);
   });
 
-  it("un despliegue nuevo sin declararlo admite lo del protocolo: es el contrato de este repositorio, con 100", () => {
-    expect(MAX_WINNERS).toBe(100);
+  it("un despliegue nuevo sin declararlo admite lo del protocolo: es el contrato de este repositorio, con 300", () => {
+    expect(MAX_WINNERS).toBe(300);
     expect(topeDeLaRed({})).toBe(MAX_WINNERS);
-    expect(topeDeLaRed({ maxWinners: 100 })).toBe(100);
+    expect(topeDeLaRed({ maxWinners: 300 })).toBe(300);
     expect(topeDeLaRed(null)).toBe(MAX_WINNERS);
     expect(topeDeLaRed(undefined)).toBe(MAX_WINNERS);
   });

@@ -6,11 +6,11 @@ import { MAX_WINNERS } from "../protocol/select";
 
 /**
  * «Cuántos ganan» con el resto de la lista (`participants.ts`): el resumen de «Sellar la lista», el borrador de la
- * pestaña y el bloqueo al sellar, con el markup de verdad de `index.html` y el tope de la red en 100 (el de una red con
+ * pestaña y el bloqueo al sellar, con el markup de verdad de `index.html` y el tope de la red en 300 (el de una red con
  * el contrato nuevo). Con el de testnet de hoy (32) ver `ganadores.test.ts` y `config-tope.test.ts`.
  */
 
-const h = vi.hoisted(() => ({ tope: 100 }));
+const h = vi.hoisted(() => ({ tope: 300 }));
 vi.mock("../stellar/config", async (orig) => ({ ...(await orig<typeof import("../stellar/config")>()), topeDeGanadores: () => h.tope }));
 
 const pagina = readFileSync(join(process.cwd(), "index.html"), "utf8");
@@ -26,7 +26,7 @@ const escribir = (valor: string): void => {
 
 async function montar(n: number): Promise<typeof import("./participants")> {
   vi.resetModules();
-  h.tope = 100;
+  h.tope = 300;
   sessionStorage.clear();
   document.body.innerHTML = new DOMParser().parseFromString(pagina, "text/html").body.innerHTML;
   const p = await import("./participants");

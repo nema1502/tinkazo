@@ -12,11 +12,11 @@ import { SAPO_MAX } from "./sapo-plan";
 import { MAX_WINNERS } from "../../protocol/select";
 
 /**
- * Los juegos con eliminación frente a muchos premios (el contrato admite hasta `MAX_WINNERS`, 100).
+ * Los juegos con eliminación frente a muchos premios (el contrato admite hasta `MAX_WINNERS`, 300).
  *
  * La carrera (ocho) y el sapo (doce) tienen un tope duro y el recomendador los saca (`Rango.premios`, `recomendar.ts`).
  * Los demás no tienen ninguno, y esta prueba lo sostiene en lo que se puede probar sin navegador: que el plan de cada uno
- * se arme, con 50 y con 100 premios, sin tirar un error ni dar tiempos que no sean números. Cómo se ve el show con tantos
+ * se arme, con 50, con 100 y con 200 premios, sin tirar un error ni dar tiempos que no sean números. Cómo se ve el show con tantos
  * premiados no lo mide ninguna prueba de acá: se mira con un navegador.
  */
 
@@ -51,7 +51,7 @@ function rngDe(semilla: number): () => number {
 }
 
 /** Pares (personas, premios): pocos, la mitad, casi todos y todos (el modo orden), hasta el tope. */
-const PARES: ReadonlyArray<readonly [number, number]> = [[33, 33], [40, 33], [60, 50], [64, 64], [100, 50], [100, MAX_WINNERS], [150, MAX_WINNERS], [200, MAX_WINNERS]];
+const PARES: ReadonlyArray<readonly [number, number]> = [[33, 33], [40, 33], [60, 50], [64, 64], [100, 50], [100, 100], [150, 150], [200, 200]];
 /** Quiénes ganan: repartidos por la lista, distintos y en un orden fijo. */
 const ganadoresDe = (n: number, k: number): number[] => Array.from({ length: k }, (_, i) => (3 + i * 7) % n).filter((v, i, a) => a.indexOf(v) === i);
 

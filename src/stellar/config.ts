@@ -68,11 +68,11 @@ export interface NetworkConfig {
 /**
  * Cuántos ganadores por sorteo admite el contrato vigente de una red.
  *
- * El protocolo permite hasta `MAX_WINNERS` (100), pero cada contrato desplegado es inmutable y trae el tope de su
+ * El protocolo permite hasta `MAX_WINNERS` (300), pero cada contrato desplegado es inmutable y trae el tope de su
  * versión: el de testnet de hoy admite 32 y devolvería el error 4 con 33. Lo que cada red admite se declara en
  * `deployments.json` (`maxWinners`, en la entrada vigente), y el sitio no ofrece más que eso: así no se promete en
  * producción un tope que la red todavía no tiene. Sin el dato, vale el del protocolo, que es el del contrato que sale de
- * este repositorio: un despliegue nuevo con `MAX_WINNERS` = 100 no necesita declararlo. Nunca pasa de `MAX_WINNERS`
+ * este repositorio: un despliegue nuevo con `MAX_WINNERS` = 300 no necesita declararlo. Nunca pasa de `MAX_WINNERS`
  * ni baja de 1.
  */
 export function topeDeLaRed(despliegue: { maxWinners?: unknown } | null | undefined): number {

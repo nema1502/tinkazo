@@ -23,9 +23,9 @@ Transacciones del despliegue del 16 de septiembre (`CD2SSHBU…`, testnet, explo
 
 ## Versión 0.2.0, la de mainnet
 
-La versión 0.2.0 del paquete (`contracts/raffle/Cargo.toml`) cambia dos cosas respecto del tag `v0.1.0`: el tope de ganadores sube de 32 a 100 (`MAX_WINNERS`) y las entradas del sorteo (`Raffle`, `Draw`) se renuevan con su propio umbral: cuando les quedan menos de 30 días, `seal`, `draw` y `extend` las dejan en 120 (`TTL_ENTRADA_THRESHOLD` y `TTL_ENTRADA_EXTEND_TO`; el `v0.1.0` usaba 60 y 120, y la variante de testnet del 25 de octubre, 2 y 7). El umbral de 30 es lo que queda de los 120 después de los 90 días que el contrato de premios lee un sorteo desde su `draw`: hasta ahí nadie tiene que renovar nada. Una prueba (`las_entradas_del_sorteo_viven_120_dias_y_extend_las_renueva_bajo_los_30`) comprueba que nacen con 120, que a los 89 días `extend` no las toca y que a los 91 las vuelve a dejar en 120.
+La versión 0.2.0 del paquete (`contracts/raffle/Cargo.toml`) cambia dos cosas respecto del tag `v0.1.0`: el tope de ganadores sube de 32 a 300 (`MAX_WINNERS`) y las entradas del sorteo (`Raffle`, `Draw`) se renuevan con su propio umbral: cuando les quedan menos de 30 días, `seal`, `draw` y `extend` las dejan en 120 (`TTL_ENTRADA_THRESHOLD` y `TTL_ENTRADA_EXTEND_TO`; el `v0.1.0` usaba 60 y 120, y la variante de testnet del 25 de octubre, 2 y 7). El umbral de 30 es lo que queda de los 120 después de los 90 días que el contrato de premios lee un sorteo desde su `draw`: hasta ahí nadie tiene que renovar nada. Una prueba (`las_entradas_del_sorteo_viven_120_dias_y_extend_las_renueva_bajo_los_30`) comprueba que nacen con 120, que a los 89 días `extend` no las toca y que a los 91 las vuelve a dejar en 120.
 
-La 0.2.0 renueva las entradas a 120 días en cualquier red. **En mainnet el costo medido no cambia**: la red crea toda entrada persistente nueva con su mínimo, que ya son 120 días (`min_persistent_ttl` de 2.073.600 ledgers, en `scripts/vigilar-red.base.json`), así que `seal` y `draw` ya pagaban la renta de 120 días, y el pedido de la 0.2.0 no hace nada al nacer la entrada (le quedan 120, sobre el umbral de 30). Las proyecciones de abajo (0,178 XLM por un sorteo de tres ganadores, 0,331 con 100) salen de esa renta y siguen valiendo. En testnet sí cambiaría: el mínimo es de 7 días, y el mismo pedido subiría cada entrada a 120 y pagaría unas 17 veces más renta, que es justo lo que la variante del 25 de octubre evitaba.
+La 0.2.0 renueva las entradas a 120 días en cualquier red. **En mainnet el costo medido no cambia**: la red crea toda entrada persistente nueva con su mínimo, que ya son 120 días (`min_persistent_ttl` de 2.073.600 ledgers, en `scripts/vigilar-red.base.json`), así que `seal` y `draw` ya pagaban la renta de 120 días, y el pedido de la 0.2.0 no hace nada al nacer la entrada (le quedan 120, sobre el umbral de 30). Las proyecciones de abajo (0,178 XLM por un sorteo de tres ganadores, 0,331 con 100 y 0,647 con 300) salen de esa renta y siguen valiendo. En testnet sí cambiaría: el mínimo es de 7 días, y el mismo pedido subiría cada entrada a 120 y pagaría unas 17 veces más renta, que es justo lo que la variante del 25 de octubre evitaba.
 
 El paquete está en 0.2.0 porque el workflow de StellarExpert nombra el `.wasm` y el release con la versión del paquete: con el tag `v0.2.0` salen el release `v0.2.0_tinkazo-raffle_cli28.1.0` y el archivo `tinkazo-raffle_v0.2.0.wasm`. Con un tag que no coincida con la versión del paquete, el nombre del release agrega `_pkg<versión>`.
 
@@ -60,9 +60,9 @@ Notas:
 
 ## Costo según la cantidad de ganadores
 
-**Medido y proyectado el 6 de noviembre de 2026**, para subir `MAX_WINNERS` de 32 a 100 en la versión que vaya a mainnet (rama `sorteo-100-ganadores`). Nada se envió a ninguna red: lo de testnet y de mainnet son simulaciones de solo lectura. La selección, la serialización y el hash no cambian; es solo el tope.
+**Medido y proyectado el 6 de noviembre de 2026**, para subir `MAX_WINNERS` de 32 a 300 en la versión que vaya a mainnet. Las filas de 3, 32, 50 y 100 se midieron con el tope en 100 (rama `sorteo-100-ganadores`); el tope quedó en 300 y las filas de 300 se midieron y proyectaron después con el mismo método. Nada se envió a ninguna red: lo de testnet y de mainnet son simulaciones de solo lectura. La selección, la serialización y el hash no cambian; es solo el tope.
 
-**Qué crece con los ganadores y qué no.** El sello (`seal`) cuesta lo mismo con 3 que con 100 ganadores: la entrada `Raffle` guarda la cantidad, no la lista. El sorteo (`draw`) crece por dos cosas: la entrada `Draw` guarda la lista de ganadores (8 bytes por ganador) y su renta por 120 días, y el evento `Drawn` la repite. La cantidad de participantes casi no pesa: en la cadena solo va la huella de la lista. Lo único que depende de los participantes es cuántos hashes hace la selección: con muchos más participantes que ganadores son pocos más que `k`, y con `k = participantes` (el «modo orden», una permutación completa) son unos `k · H(k)`: unos 519 con 100 (en 3.000 pruebas con semillas al azar, de unos 290 a 1.200).
+**Qué crece con los ganadores y qué no.** El sello (`seal`) cuesta lo mismo con 3 que con 300 ganadores: la entrada `Raffle` guarda la cantidad, no la lista. El sorteo (`draw`) crece por dos cosas: la entrada `Draw` guarda la lista de ganadores (8 bytes por ganador) y su renta por 120 días, y el evento `Drawn` la repite. La cantidad de participantes casi no pesa: en la cadena solo va la huella de la lista. Lo único que depende de los participantes es cuántos hashes hace la selección: con muchos más participantes que ganadores son pocos más que `k`, y con `k = participantes` (el «modo orden», una permutación completa) son unos `k · H(k)`: unos 519 con 100 y unos 1.885 con 300 (con 100, en 3.000 pruebas con semillas al azar, de unos 290 a 1.200).
 
 **1. En local, con el presupuesto de Soroban** (`cargo test -p tinkazo-raffle costo -- --nocapture`; con `TINKAZO_WASM=<archivo.wasm>` el contrato corre en la máquina virtual, que es lo que paga la red; el `.wasm` es el de `stellar contract build --optimize`, 11.687 bytes, los mismos que el desplegado, con otra constante). El límite de la red es de 400 millones de instrucciones y 40 MiB de memoria por transacción; la prueba exige quedar bajo la cuarta parte de los dos.
 
@@ -73,12 +73,15 @@ Notas:
 | 32 | 1.000 | 27.889.872 | 7,0 % | 1,41 MB | 548 | 1.120 | 464 |
 | 50 | 50 | 30.061.432 | 7,5 % | 1,47 MB | 692 | 1.264 | 608 |
 | 50 | 1.000 | 28.233.015 | 7,1 % | 1,42 MB | 692 | 1.264 | 608 |
-| **100** | **100** | **34.609.484** | **8,7 %** | 1,60 MB | **1.092** | 1.664 | 1.008 |
+| 100 | 100 | 34.609.484 | 8,7 % | 1,60 MB | 1.092 | 1.664 | 1.008 |
 | 100 | 1.000 | 29.152.733 | 7,3 % | 1,48 MB | 1.092 | 1.664 | 1.008 |
+| **300** | **300** | **58.254.896** | **14,6 %** | 2,24 MB | **2.692** | 3.264 | 2.608 |
+| 300 | 1.000 | 36.733.236 | 9,2 % | 1,93 MB | 2.692 | 3.264 | 2.608 |
 
-`seal` en la máquina virtual: 524.529 instrucciones y 700 bytes escritos, con 3 o con 100 ganadores. Con 100 de 100, la peor de 300 semillas (`peor_semilla_de_la_seleccion_con_el_tope_de_ganadores`) hace la selección en 10,4 millones de instrucciones, contra 4,8 de la semilla real: el sorteo entero queda en unos 40 millones (10 % del límite), todavía bajo la cuarta parte.
+Las filas de 300 se midieron con el `.wasm` de esta versión (20.656 bytes, optimizado con `stellar contract optimize`), que en las filas que se pueden comparar (3, 32 y 50 ganadores) da entre 0,2 y 4,9 % más instrucciones que el de 11.687 bytes de las filas de arriba.
+`seal` en la máquina virtual: 524.529 instrucciones y 700 bytes escritos, con 3 o con 100 ganadores (537.032 y los mismos 700 bytes, con 3 o con 300, en el `.wasm` de las filas de 300). Con 100 de 100, la peor de 300 semillas (`peor_semilla_de_la_seleccion_con_el_tope_de_ganadores`) hace la selección en 10,4 millones de instrucciones, contra 4,8 de la semilla real: el sorteo entero queda en unos 40 millones (10 % del límite), todavía bajo la cuarta parte. Con 300 de 300 y el contrato como Rust nativo, la semilla real hace la selección en 13,5 millones y la peor de las 300 semillas en 33,2: el sorteo entero queda en 40,3 millones con la real y en 60,0 con la peor (15 % del límite), todavía bajo la cuarta parte. La peor semilla no se midió en la máquina virtual.
 
-**2. Simulación en testnet con el contrato vigente** (`CDNWNY26…KYV3A`, tope 32, ledger 5.587.025 a 5.587.032, protocolo 30). Para `seal` con 3 y con 32 ganadores el fee es el mismo; con 33, 50 y 100 el contrato responde `Error(Contract, #4)` (`BadWinnerCount`), que prueba que el tope viejo vive en la red. Para `draw` se simuló sobre cuatro sorteos de ese contrato que seguían sin sortear, con su ronda de drand ya publicada (la firma salió de `api.drand.sh`). Con 50 y 100 ganadores no hay forma de simular en la red hasta desplegar la versión nueva, así que esos dos salen del ajuste de abajo.
+**2. Simulación en testnet con el contrato vigente** (`CDNWNY26…KYV3A`, tope 32, ledger 5.587.025 a 5.587.032, protocolo 30). Para `seal` con 3 y con 32 ganadores el fee es el mismo; con 33, 50 y 100 el contrato responde `Error(Contract, #4)` (`BadWinnerCount`), que prueba que el tope viejo vive en la red. Para `draw` se simuló sobre cuatro sorteos de ese contrato que seguían sin sortear, con su ronda de drand ya publicada (la firma salió de `api.drand.sh`). Con 50, 100 y 300 ganadores no hay forma de simular en la red hasta desplegar la versión nueva, así que esos salen del ajuste de abajo.
 
 | Paso | Ganadores (participantes) | Fee simulado (stroops) | En XLM | Instrucciones | Bytes escritos | Renta y escritura del TTL |
 |---|---|---|---|---|---|---|
@@ -97,21 +100,22 @@ Esta es la renta de 7 días de testnet, y el fee de `draw` queda en una recta ex
 | 3 (18) | 0,0067 | 0,0824 | **0,178 XLM** | ≈ 0,035 |
 | 32 (32) | 0,0095 (medido) | 0,1282 | **0,224 XLM** | ≈ 0,044 |
 | 50 (50) | 0,0112 | 0,1566 | **0,252 XLM** | ≈ 0,049 |
-| 100 (100) | 0,0161 | 0,2356 | **0,331 XLM** | ≈ 0,065 |
+| 100 (100) | 0,0161 | 0,2356 | 0,331 XLM | ≈ 0,065 |
 | 100 (1.000) | 0,0159 | 0,2355 | 0,331 XLM | ≈ 0,065 |
+| 300 (300) | 0,0355 | 0,5515 | **0,647 XLM** | ≈ 0,127 |
 
-`seal` vale 0,0066 XLM en testnet (medido) y 0,0954 en mainnet (proyectado). Con 100 ganadores el sorteo cuesta cerca de 2,9 veces el de tres y el par completo 1,9 veces; de los 0,2356 XLM del `draw`, 0,2338 son renta de la entrada `Draw` por 120 días. Instrucciones y memoria casi no cuentan en el fee (36 millones de instrucciones son 0,0011 XLM).
+`seal` vale 0,0066 XLM en testnet (medido) y 0,0954 en mainnet (proyectado). Con 100 ganadores el sorteo cuesta cerca de 2,9 veces el de tres y el par completo 1,9 veces; de los 0,2356 XLM del `draw`, 0,2338 son renta de la entrada `Draw` por 120 días. Las filas de 300 salen de seguir esa recta (el `draw` crece 0,00158 XLM por ganador en mainnet y 0,000097 en testnet, la misma pendiente entre 3, 32, 50 y 100): con 300 ganadores el par completo cuesta 3,6 veces el de tres. Instrucciones y memoria casi no cuentan en el fee (36 millones de instrucciones son 0,0011 XLM).
 
-**Si el estado de mainnet sube, el costo se multiplica, y con 100 ganadores se nota antes.** La renta por KB sale del piso al pasar 2/3 del objetivo (2.000 MB) y llega a ×10 en el objetivo (3.000 MB). Mismos datos que arriba, con la renta de cada nivel:
+**Si el estado de mainnet sube, el costo se multiplica, y con muchos ganadores se nota antes.** La renta por KB sale del piso al pasar 2/3 del objetivo (2.000 MB) y llega a ×10 en el objetivo (3.000 MB). Mismos datos que arriba, con la renta de cada nivel:
 
-| Estado de mainnet | Renta por KB | 3 ganadores, `seal` + `draw` | 100 ganadores, solo `draw` | 100 ganadores, `seal` + `draw` |
-|---|---|---|---|---|
-| hoy, 1.672 MB (hasta 2.000) | ×1,0 | 0,178 XLM | 0,236 XLM | 0,331 XLM |
-| 2.250 MB | ×3,25 | 0,571 | 0,760 | 1,068 |
-| 2.500 MB (naranja) | ×5,5 | 0,963 | 1,285 | 1,804 |
-| 3.000 MB (el objetivo) | ×10 | 1,749 | 2,334 | 3,278 |
+| Estado de mainnet | Renta por KB | 3 ganadores, `seal` + `draw` | 100 ganadores, solo `draw` | 100 ganadores, `seal` + `draw` | 300 ganadores, solo `draw` | 300 ganadores, `seal` + `draw` |
+|---|---|---|---|---|---|---|
+| hoy, 1.672 MB (hasta 2.000) | ×1,0 | 0,178 XLM | 0,236 XLM | 0,331 XLM | 0,551 XLM | 0,647 XLM |
+| 2.250 MB | ×3,25 | 0,571 | 0,760 | 1,068 | 1,786 | 2,094 |
+| 2.500 MB (naranja) | ×5,5 | 0,963 | 1,285 | 1,804 | 3,020 | 3,539 |
+| 3.000 MB (el objetivo) | ×10 | 1,749 | 2,334 | 3,278 | 5,489 | 6,433 |
 
-El `draw` de 100 ganadores pasa de 1 XLM (el tope de comisión de Pollar en mainnet) hacia los 2.360 MB, unos seis días al ritmo de hoy (+4,4 MB/h); con tres ganadores ese tope no se toca antes del objetivo. Vale para cualquier cantidad grande de ganadores, y está en el detector (`pnpm check:red`, niveles de arriba).
+El `draw` de 100 ganadores pasa de 1 XLM (el tope de comisión de Pollar en mainnet) hacia los 2.360 MB, unos seis días al ritmo de hoy (+4,4 MB/h); el de 300 ganadores, hacia los 2.090 MB, unos cuatro días; con tres ganadores ese tope no se toca antes del objetivo. Vale para cualquier cantidad grande de ganadores, y está en el detector (`pnpm check:red`, niveles de arriba).
 
 ## Vigilancia de la red
 

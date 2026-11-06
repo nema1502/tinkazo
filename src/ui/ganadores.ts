@@ -5,8 +5,8 @@ import { topeDeGanadores } from "../stellar/config";
 /**
  * «Cuántos ganan»: un campo numérico (`#nw`) con atajos para lo común.
  *
- * Hasta el 6 de noviembre de 2026 era un desplegable con las opciones de 1 a 32 escritas a mano. Con un tope de 100 ya
- * no sirve: son cien renglones para bajar con el dedo. Ahora es un número que se escribe (o se sube y se baja) y, al
+ * Hasta el 6 de noviembre de 2026 era un desplegable con las opciones de 1 a 32 escritas a mano. Con un tope de 300 ya
+ * no sirve: son trescientos renglones para bajar con el dedo. Ahora es un número que se escribe (o se sube y se baja) y, al
  * lado, los cinco valores que casi todo el mundo usa: 1, 2, 3, 5 y 10. Tocar uno es la acción; el campo está para
  * cuando hace falta otro número.
  *
@@ -77,7 +77,7 @@ export function bloquearGanadores(si: boolean): void {
   for (const b of atajos()) b.disabled = si;
 }
 
-/** «Hasta 100 ganadores por sorteo», solo cuando se pidió de más y se bajó al tope. */
+/** «Hasta 300 ganadores por sorteo», solo cuando se pidió de más y se bajó al tope. */
 function avisarTope(si: boolean): void {
   const nota = document.getElementById("nw-nota");
   if (!nota) return;

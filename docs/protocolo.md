@@ -48,7 +48,7 @@ El organizador elige una **ronda objetivo** `R` y registra en el contrato:
 El contrato exige, con `now = env.ledger().timestamp()`:
 
 - `count ≥ 2`
-- `1 ≤ winners ≤ min(count, 100)` (`MAX_WINNERS`; los contratos de testnet anteriores a noviembre de 2026 tienen 32)
+- `1 ≤ winners ≤ min(count, 300)` (`MAX_WINNERS`; los contratos de testnet anteriores a noviembre de 2026 tienen 32)
 - `round_time(R) ≥ now + 30` (la semilla todavía no existe cuando se sella)
 - `round_time(R) ≤ now + 30 · 86400` (a lo sumo 30 días)
 - `len(meta) ≤ 160` caracteres

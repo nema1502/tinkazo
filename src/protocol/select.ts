@@ -10,7 +10,7 @@ import { sha256 } from "@noble/hashes/sha2.js";
  * `src/stellar/deployments.json` (ver `topeDeGanadores` en `stellar/config.ts`).
  * Esta constante es lo que el protocolo permite; la de la red, lo que se ofrece.
  */
-export const MAX_WINNERS = 100;
+export const MAX_WINNERS = 300;
 
 /**
  * Selección determinista (docs/protocolo.md §5). Idéntica a

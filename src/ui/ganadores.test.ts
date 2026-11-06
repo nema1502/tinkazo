@@ -12,7 +12,7 @@ import { ATAJOS, acotar, atajosHasta } from "./ganadores";
  * El markup es el de verdad: se saca de `index.html` el pliegue de las opciones y se prueba sobre él, sin navegador.
  */
 
-const h = vi.hoisted(() => ({ tope: 100 }));
+const h = vi.hoisted(() => ({ tope: 300 }));
 vi.mock("../stellar/config", async (orig) => ({ ...(await orig<typeof import("../stellar/config")>()), topeDeGanadores: () => h.tope }));
 
 // La raíz del proyecto: con jsdom `import.meta.url` no es una URL de archivo.
@@ -81,7 +81,7 @@ describe("acotar: el número que queda", () => {
     expect(acotar("7")).toBe(7);
     expect(acotar(" 12 ")).toBe(12);
     expect(acotar("100")).toBe(100);
-    expect(acotar("101")).toBe(MAX_WINNERS);
+    expect(acotar("301")).toBe(MAX_WINNERS);
     expect(acotar("5000")).toBe(MAX_WINNERS);
     expect(acotar("1e2")).toBe(100);
     expect(acotar("3.7")).toBe(3);
@@ -104,7 +104,7 @@ describe("acotar: el número que queda", () => {
   });
 
   it("los atajos que caben en un tope", () => {
-    expect(atajosHasta(100)).toEqual([1, 2, 3, 5, 10]);
+    expect(atajosHasta(300)).toEqual([1, 2, 3, 5, 10]);
     expect(atajosHasta(32)).toEqual([1, 2, 3, 5, 10]);
     expect(atajosHasta(4)).toEqual([1, 2, 3]);
     expect(atajosHasta(1)).toEqual([1]);
@@ -115,7 +115,7 @@ describe("montado en la página", () => {
   beforeEach(() => {
     vi.resetModules();
     document.body.innerHTML = pliegue();
-    h.tope = 100;
+    h.tope = 300;
   });
 
   const montar = async (): Promise<typeof import("./ganadores")> => {
@@ -131,15 +131,15 @@ describe("montado en la página", () => {
     expect(campo().max).toBe("32");
   });
 
-  it("con el tope de 100: 100 se queda, 101 baja a 100 y dice por qué", async () => {
+  it("con el tope de 300: 300 se queda, 301 baja a 300 y dice por qué", async () => {
     await montar();
-    escribir("100");
-    expect(campo().value).toBe("100");
+    escribir("300");
+    expect(campo().value).toBe("300");
     expect(nota().hidden).toBe(true);
-    escribir("101");
-    expect(campo().value).toBe("100");
+    escribir("301");
+    expect(campo().value).toBe("300");
     expect(nota().hidden).toBe(false);
-    expect(nota().textContent).toBe("Hasta 100 ganadores por sorteo.");
+    expect(nota().textContent).toBe("Hasta 300 ganadores por sorteo.");
     // Y en cuanto vuelve a un número que entra, el aviso se va.
     escribir("40");
     expect(campo().value).toBe("40");

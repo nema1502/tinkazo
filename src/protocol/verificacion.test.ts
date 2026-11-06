@@ -376,7 +376,7 @@ describe("un sorteo con el máximo de ganadores", () => {
   };
 
   it("el tope de la verificación es el del protocolo, no el de un contrato viejo", () => {
-    expect(MAX_WINNERS).toBe(100);
+    expect(MAX_WINNERS).toBe(300);
   });
 
   it("cien ganadores de cien dan verde, y los rehace en el mismo orden que el registro", async () => {
@@ -399,8 +399,19 @@ describe("un sorteo con el máximo de ganadores", () => {
     expect(new Set(r.ganadores).size).toBe(100);
   });
 
-  it("ciento uno no existe: un registro que lo dice es incoherente, aunque haya gente de sobra", async () => {
-    const { names, huella } = sorteo(1000, 100);
+  it("trescientos ganadores de trescientos dan verde, y los rehace en el mismo orden que el registro", async () => {
+    const { names, huella, ganadores } = sorteo(300, 300);
+    const reg = registro({ sello: { listHash: huella, count: 300, numWinners: 300 }, resultado: { winners: ganadores } });
+    const r = await revisarComprobante(comprobante({ names }), deps(reg));
+    expect(r.motivos).toEqual([]);
+    expect(r.veredicto).toBe("verde");
+    expect(r.k).toBe(300);
+    expect(r.ganadores).toEqual(ganadores);
+    expect([...ganadores].sort((a, b) => a - b)).toEqual(names.map((_, i) => i));
+  });
+
+  it("trescientos uno no existe: un registro que lo dice es incoherente, aunque haya gente de sobra", async () => {
+    const { names, huella } = sorteo(1000, MAX_WINNERS);
     const reg = registro({ sello: { listHash: huella, count: 1000, numWinners: MAX_WINNERS + 1 } });
     const r = await revisarComprobante(comprobante({ names }), deps(reg));
     expect(r.veredicto).toBe("mal");

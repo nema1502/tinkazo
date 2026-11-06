@@ -5,8 +5,8 @@ import { t } from "../i18n";
  * Los ganadores en la página del resultado (`#winner-cards`).
  *
  * Hasta seis, una tarjeta amarilla cada uno, con su cara, como siempre: es lo que se lee desde el fondo y lo que
- * recorren los auditores. Con más (el contrato admite hasta 100) las tarjetas no sirven: cien tarjetas de 130 px son una
- * página de 13.000 px, y la gente que busca su nombre no la recorre. Entonces el primero queda en su tarjeta grande (es
+ * recorren los auditores. Con más (el contrato admite hasta 300) las tarjetas no sirven: trescientas tarjetas de 130 px son una
+ * página de 39.000 px, y la gente que busca su nombre no la recorre. Entonces el primero queda en su tarjeta grande (es
  * el primer premio, como en el cartel del juego) y los demás van en una lista numerada de renglones cortos, en columnas
  * donde hay lugar (el proyector) y de a uno en el celular, cada uno con su «No está» al lado.
  *

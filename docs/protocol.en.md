@@ -50,7 +50,7 @@ The organizer picks a **target round** `R` and records on the contract:
 With `now = env.ledger().timestamp()`, the contract requires:
 
 - `count ≥ 2`
-- `1 ≤ winners ≤ min(count, 100)` (`MAX_WINNERS`; the testnet contracts from before November 2026 have 32)
+- `1 ≤ winners ≤ min(count, 300)` (`MAX_WINNERS`; the testnet contracts from before November 2026 have 32)
 - `round_time(R) ≥ now + 30` (the seed does not exist yet when the list is sealed)
 - `round_time(R) ≤ now + 30 · 86400` (at most 30 days ahead)
 - `len(meta) ≤ 160` characters

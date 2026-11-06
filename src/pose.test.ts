@@ -72,7 +72,8 @@ describe("con ?ganador=<semilla>", () => {
   });
 
   it("varios premios: distintos, tantos como se piden y hasta el tope, como en un sorteo de verdad", () => {
-    const L = nombres(200);
+    // Más nombres que el tope: no se puede pedir más ganadores que personas.
+    const L = nombres(MAX_WINNERS + 100);
     for (const nw of [1, 3, 8, 32, 40, MAX_WINNERS, MAX_WINNERS + 20]) {
       const w = poseWinners(L, nw, "semilla");
       expect(w).toHaveLength(Math.min(nw, MAX_WINNERS));

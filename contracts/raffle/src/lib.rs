@@ -37,17 +37,18 @@ pub const MIN_LEAD_SECS: u64 = 30;
 pub const MAX_LEAD_SECS: u64 = 30 * 86_400;
 /// Cota superior de ganadores por sorteo (acota el bucle de selección).
 ///
-/// Son 100 para dos usos: sorteos con muchos premios en orden, y el «modo
+/// Son 300 para dos usos: sorteos con muchos premios en orden, y el «modo
 /// orden» (ganadores = participantes: con `k = count` y el salteo de repetidos
 /// de `select` sale una permutación completa, para turnos, pasanakus o grupos de
-/// hasta 100). El costo crece con los ganadores, no con los participantes: en la
+/// hasta 300). El costo crece con los ganadores, no con los participantes: en la
 /// cadena solo va la huella de la lista, y por ganador se paga un hash en la
 /// selección (≈ `k · H(k)` en el peor caso, `k = count`) y 8 bytes en la entrada
-/// `Draw` (cada `u32` de la lista va como un valor XDR de 8 bytes). Medido en
-/// `test.rs` (`costo_segun_ganadores`) y en `docs/deployments.md`. Hasta el
-/// despliegue de mainnet el tope era 32; el contrato es inmutable, así que
+/// `Draw` (cada `u32` de la lista va como un valor XDR de 8 bytes). Con 300 de 300
+/// `draw` gasta unos 40 millones de instrucciones y la entrada `Draw` pesa 2.692
+/// bytes. Medido en `test.rs` (`costo_segun_ganadores`) y en `docs/deployments.md`.
+/// Hasta el despliegue de mainnet el tope era 32; el contrato es inmutable, así que
 /// subirlo después exige otro despliegue.
-pub const MAX_WINNERS: u32 = 100;
+pub const MAX_WINNERS: u32 = 300;
 /// Largo máximo del texto libre (premio o título).
 pub const MAX_META_LEN: u32 = 160;
 

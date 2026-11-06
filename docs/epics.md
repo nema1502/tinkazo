@@ -88,7 +88,7 @@ para que nadie (ni yo) pueda cambiar la lista después de conocer la semilla.
 **Criterios de aceptación:**
 
 **Dado** un organizador que autoriza la llamada
-**Cuando** llama `seal` con `count ≥ 2`, `1 ≤ num_winners ≤ min(count, 100)`, `meta ≤ 160` y una ronda cuyo `round_time` está entre 30 s y 30 días después del ledger
+**Cuando** llama `seal` con `count ≥ 2`, `1 ≤ num_winners ≤ min(count, 300)`, `meta ≤ 160` y una ronda cuyo `round_time` está entre 30 s y 30 días después del ledger
 **Entonces** el contrato guarda el `Raffle` con `status = Sealed`, `sealed_at` y `sealed_ledger`, devuelve un `id` secuencial desde 1 y emite `sealed`
 **Y** rechaza con `TooFewEntries`, `BadWinnerCount`, `MetaTooLong`, `RoundTooSoon` o `RoundTooFar` cada violación
 **Y** la autorización del organizador es obligatoria.

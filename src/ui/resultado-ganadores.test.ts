@@ -6,7 +6,7 @@ import { MAX_TARJETAS, alTocarAusente, enLista, htmlDeGanadores } from "./result
 
 /**
  * Los ganadores en la página del resultado: tarjetas hasta seis, y con más la del primero y una lista numerada de
- * renglones cortos (hasta 100). Se prueba el markup y el cambio de «No está» a su pregunta; cómo se acomoda en un celular
+ * renglones cortos (hasta 300). Se prueba el markup y el cambio de «No está» a su pregunta; cómo se acomoda en un celular
  * o en un proyector se mira con un navegador.
  */
 

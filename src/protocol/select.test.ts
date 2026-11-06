@@ -24,8 +24,8 @@ describe("selección determinista (protocolo §5)", () => {
     }
   });
 
-  it("el tope es el del contrato: cien ganadores", () => {
-    expect(MAX_WINNERS).toBe(100);
+  it("el tope es el del contrato: trescientos ganadores", () => {
+    expect(MAX_WINNERS).toBe(300);
   });
 
   it("cien de cien: una permutación completa, la misma que calcula el contrato", () => {
@@ -48,6 +48,28 @@ describe("selección determinista (protocolo §5)", () => {
     for (const i of out) expect(i >= 0 && i < 1000).toBe(true);
     expect(huella(out)).toBe("90fe82cc7071d4906c3032c89e6fa172bf5ed8f0b001d1dcb7a748d3a76055b4");
     expect(out.slice(0, 5)).toEqual(vectors.extra.find((e) => e.count === 1000 && e.k === 5)?.winners);
+  });
+
+  it("trescientos de trescientos: una permutación completa, la misma que calcula el contrato", () => {
+    const vector = vectors.extra.find((e) => e.count === 300 && e.k === 300);
+    expect(vector, "falta el vector 300 de 300 en docs/vectors.json").toBeDefined();
+    const out = select(randomness, listHash, 300, 300);
+    expect(out).toEqual(vector?.winners);
+    expect([...out].sort((a, b) => a - b)).toEqual(Array.from({ length: 300 }, (_, i) => i));
+    // Las mismas huellas y puntas que el contrato fija en `contracts/raffle/src/test.rs` (calculadas aparte, con node:crypto).
+    expect(huella(out)).toBe("aeff37e289741168ba66ed60ee7dd5e94d63c7ebcdc180483ee6d7e10d8f913e");
+    expect([out[0], out[4], out[299]]).toEqual([112, 66, 1]);
+  });
+
+  it("trescientos de mil: sin repetidos, en rango, y los cinco primeros son los del vector de cinco", () => {
+    const vector = vectors.extra.find((e) => e.count === 1000 && e.k === 300);
+    expect(vector, "falta el vector 300 de 1.000 en docs/vectors.json").toBeDefined();
+    const out = select(randomness, listHash, 1000, 300);
+    expect(out).toEqual(vector?.winners);
+    expect(new Set(out).size).toBe(300);
+    for (const i of out) expect(i >= 0 && i < 1000).toBe(true);
+    expect(huella(out)).toBe("8382aa628d4e87ac8aa2ed81bed868dd98f94dbf1aa6ee82ef50f6f4fe3a8c7a");
+    expect(out.slice(0, 100)).toEqual(vectors.extra.find((e) => e.count === 1000 && e.k === 100)?.winners);
   });
 
   it("pedir más ganadores no cambia a los primeros: es el mismo recorrido, y por eso el orden de los premios es estable", () => {
