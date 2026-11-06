@@ -1,4 +1,5 @@
 import { hashDe, sembrar } from "./kit/azar";
+import { escalaChipLegible } from "./letra";
 import { CANICA_R, type Datos, type Pun, type Tiro, unitarioDe } from "./bolillas-plan";
 
 /**
@@ -130,6 +131,35 @@ export function coloresCanica(slot: number): ArteCanica {
   const llama = LLAMAS[i % LLAMAS.length] as number;
   const llama2 = LLAMAS[(i + 1 + Math.floor(hashDe(slot, 23) * (LLAMAS.length - 1))) % LLAMAS.length] as number;
   return { base, llama, llama2, oscuro: oscurece(base, 0.42) };
+}
+
+/* ------------------------------------------------- el chip del nombre */
+
+/** La fracción del diámetro del círculo que como mucho mide de alto la ficha del nombre: una etiqueta, no un cartel. */
+export const CHIP_ALTO_FRACCION = 0.12;
+/** Con poca gente la ficha puede crecer hasta este cociente de cuántos juegan; debajo de cuatro, manda el piso. */
+export const CHIP_GENTE = 3;
+
+/**
+ * La escala de la ficha del nombre junto a una canica, para `S.chip(nombre, escala)`.
+ *
+ * La ficha es la etiqueta de una canica de vidrio, no la figura de una presentación: el kit la pidió
+ * al tamaño de la cara y tapaba el círculo entero. Acá manda la regla de la sala —la letra más chica
+ * que se lee (`escalaChipLegible`), que ya crece con la pantalla: móvil primero, la ficha más chica
+ * que se puede leer—. Por encima solo crece con poca gente, hasta un cuarto más (no tapan cuando son
+ * pocas), y nunca desproporcionada con el juego: el alto de la ficha (22 * u * escala * 1.6 px) no
+ * pasa de `CHIP_ALTO_FRACCION` del diámetro del círculo `e`. Si ese techo quedara debajo del piso,
+ * manda la letra: se lee primero, tapa después. La cantidad entra por `viven` (los que juegan, `n`):
+ * a más gente, menos ficha — y en el celular, donde el piso de la letra ya manda, la cantidad se ve
+ * en el despeje de la casa (la pasada de `separarEtiquetas` del estadio), no en el tamaño.
+ *
+ * Pura: mismo argumento, misma escala, en la 2D, en la 3D y en la prueba.
+ */
+export function escalaChipDe(u: number, e: number, viven: number): number {
+  const piso = escalaChipLegible(u);
+  const techoAlto = (2 * e * CHIP_ALTO_FRACCION) / (22 * u * 1.6);
+  const porGente = Math.min(piso * 1.25, CHIP_GENTE / Math.max(1, viven));
+  return Math.max(piso, Math.min(porGente, techoAlto));
 }
 
 /* ------------------------------------------------------- el golpe y el polvo */
