@@ -1,0 +1,554 @@
+import {
+  BufferGeometry, CircleGeometry, DoubleSide, Group, InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PlaneGeometry,
+  Quaternion, RingGeometry, SphereGeometry, Vector3,
+} from "three";
+import type { Basura } from "./motor";
+import { definir3D } from "./motor";
+import { crearAmbiente } from "./escena";
+import { crearGeometrias, Materiales, pieza } from "./figuras";
+import { hash } from "./ids";
+import { perfilFiel, type Mapa, type PerfilMapa } from "./camara";
+import type { Camara2D, EntradaBase, Fabrica3D, Lanzador, Montaje3D } from "./tipos";
+import {
+  CANICA_R, CIRCULO_R, PEGADORA_DIST, trayectoriaDe, unitarioDe,
+  type Datos, type Mapeo, type Pun, type Tiro,
+} from "../pixi/bolillas-plan";
+import { beep } from "../../sound";
+
+/**
+ * Bolillas en 3D: la troya de verdad — la tierra con su relieve, el círculo de yeso, las canicas de vidrio y la mano
+ * con el agarre ñati que suelta cada tiro. El plan puro (`pixi/bolillas-plan.ts`) decide todo: esta vista solo dibuja
+ * lo que el plan ya puso, cuadro a cuadro, y suena cuando las canicas chocan (el clic de la casa, mudo incluido).
+ * No guarda nada que cambie lo que pasa: cada cuadro es función de la hora `t` y del plan que le pasa el 2D.
+ *
+ * Todo el mundo vive en un grupo (`mundo`) medido en **unidades del círculo** (la tiza queda a `CIRCULO_R`): el grupo
+ * se apoya donde el 2D puso el círculo con la cuenta de la casa (`lugarDelMundo`, `mapa.a3D`), así las canicas caen
+ * donde el plan las sembró y los nombres, que siguen siendo de PixiJS, se apoyan encima con la misma proyección.
+ *
+ * El cableado es el de la casa (`src/games/tres/README.md`): este archivo se registra solo (el registro de
+ * `registro.ts` descubre todo `*-3d.ts` que exporte `lanzador3D`), Bolillas **no** entra a `JUEGOS_CON_3D` (D3: nace
+ * apagada; el 3D se prueba con `?motor=3d`). Falta el enchufe del otro lado: la escena 2D (`pixi/bolillas.ts`, tarea
+ * paralela) tiene que seguir el patrón de `guajojo`/`toborochi` — `anfitrion3D` con lienzo transparente,
+ * `definicion(tres?)` y `export const bolillasPixi3D = (tres) => crearJuego(definicion(tres), anfitrion3D)` — y pasar
+ * la `EntradaBolillas` de cada cuadro con `enchufar3D` + `entradaBase`. Mientras ese enchufe no exista, `lanzador3D`
+ * devuelve el juego en 2D y nada se rompe.
+ */
+
+/* ===================================================================== lo que el 2D le pasa */
+
+/**
+ * La entrada de cada cuadro: lo de siempre (`EntradaBase`) más el plan y el mapeo del círculo. El 2D la arma una vez
+ * y la va llenando (`Object.assign(en, entradaBase(S, t))`, como el guajojo), sin crear objetos nuevos por cuadro.
+ */
+export interface EntradaBolillas extends EntradaBase {
+  /** El plan de la ronda (los `datos` del plan), o null mientras no esté. */
+  plan: Datos | null;
+  /** Cómo cae el círculo en el mundo del 2D: el `mapeo` de la escena (centro y píxeles por unidad del círculo). */
+  mapeo: Mapeo;
+}
+
+/** La entrada vacía, para armar la escena antes del primer plan (la llena el 2D cuadro a cuadro). */
+export function entradaBolillasVacia(): EntradaBolillas {
+  return {
+    t: 0, w: 0, h: 0, u: 1,
+    cam: { x: 0, y: 0, zoom: 1, rot: 0, sacudonX: 0, sacudonY: 0 },
+    plan: null,
+    mapeo: { cx: 0, cy: 0, e: 100 },
+  };
+}
+
+/* ===================================================================== las cuentas puras (se prueban en Node) */
+
+/** Lo que dura el vuelo de la canica de la pegadora antes del impacto (igual que el 2D): cosmética, no el reloj. */
+export const TIRADOR = 0.55;
+/** Lo que tarda el tiro en frenar después del golpe (igual que el 2D). */
+export const T_DESVIO = 0.45;
+/** Lo que la canica que gana tarda en llegar a la orilla desde el roce (el `2` de `trayectoriaDe`). */
+export const LLEGADA_TITILA = 2;
+/** Cuánto titila, en radianes: se ve, no decide. */
+export const TEETER_ALTO = 0.25;
+/** El vaivén del titileo, en radianes por segundo. */
+export const TEETER_FRECUENCIA = 12;
+/** La elevación de la cámara: desde arriba, para que el círculo se lea como círculo. */
+export const ELEVACION = 0.93;
+const FOV = (32 * Math.PI) / 180;
+const ACERCA = 1.08;
+/** Lo más que se acerca la cámara 3D, para que el círculo entero siga en cuadro (con perspectiva, de cerca se sale). */
+export const ZOOM_MAX = 1.25;
+
+/**
+ * Dónde queda el grupo del mundo en el espacio 3D: la cuenta de la casa lleva el centro del círculo del 2D, y la
+ * escala pasa de unidades del círculo a unidades del mundo (en profundidad, estirada por `zc` como en todo el 3D).
+ */
+export function lugarDelMundo(mapa: Mapa, m: Mapeo): { px: number; pz: number; K: number; Kz: number } {
+  const [px, , pz] = mapa.a3D(m.cx, m.cy, 0);
+  return { px, pz, K: m.e * mapa.s, Kz: m.e * mapa.s * mapa.perfil.zc };
+}
+
+/**
+ * Cuánto se acerca o se aleja la cámara respecto de lo que encuadra el 2D: hasta el tope es la del director; más
+ * allá, el zoom queda en el tope y el centro vuelve hacia el de la pantalla, sin saltos. Depende solo de la cámara
+ * del 2D, nunca de quién gana.
+ */
+export function camaraBolillas(cam: Camara2D, w: number, h: number, tope = ZOOM_MAX): Camara2D {
+  if (cam.zoom <= tope) return cam;
+  const k = (tope - 1) / (cam.zoom - 1);
+  return { ...cam, zoom: tope, x: w / 2 + (cam.x - w / 2) * k, y: h / 2 + (cam.y - h / 2) * k };
+}
+
+/** El perfil de cámara de Bolillas: desde arriba, fiel a las proporciones del piso del 2D. */
+export const perfilBolillas = (delta = 0): PerfilMapa =>
+  perfilFiel(ELEVACION + delta, { fov: FOV, acerca: ACERCA, tam: 1, altoMira: 0, pieMira: 0 });
+
+export type EstadoTiro = "ida" | "desvio";
+
+/** Dónde está la canica de la pegadora durante su tiro: la ida hasta el impacto y el desvío hasta su freno. */
+export interface PoseTiro {
+  x: number;
+  y: number;
+  estado: EstadoTiro;
+  /** El avance en el tramo (0 a 1). */
+  f: number;
+}
+
+/**
+ * La pose del tiro en el segundo `t`, puntada por puntada del plan: en la largada está en `desde`, en `tiro.t` está
+ * en `impacto`, y al final del desvío queda en `deflexion.hasta`. Fuera de la ventana no hay tiro (null). Sin azar:
+ * todo sale de `t` y de los datos del plan.
+ */
+export function poseTiro(tiro: Tiro, t: number, vuelo = TIRADOR, desvio = T_DESVIO): PoseTiro | null {
+  if (t < tiro.t - vuelo || t > tiro.t + desvio) return null;
+  if (t <= tiro.t) {
+    const f = Math.min(1, Math.max(0, (t - (tiro.t - vuelo)) / vuelo));
+    return {
+      x: tiro.desde.x + (tiro.impacto.x - tiro.desde.x) * f,
+      y: tiro.desde.y + (tiro.impacto.y - tiro.desde.y) * f,
+      estado: "ida",
+      f,
+    };
+  }
+  const f = Math.min(1, (t - tiro.t) / desvio);
+  return {
+    x: tiro.impacto.x + (tiro.deflexion.hasta.x - tiro.impacto.x) * f,
+    y: tiro.impacto.y + (tiro.deflexion.hasta.y - tiro.impacto.y) * f,
+    estado: "desvio",
+    f,
+  };
+}
+
+/**
+ * Cuánto titila una canica apoyada en la tiza, en radianes: el vaivén de la lección del sapo — un envolvente de seno
+ * que nace y muere en cero, así no hay salto ni de entrada ni de salida, y dentro titila de verdad. Sin azar.
+ */
+export function titileo(t: number, t0: number, t1: number, alto = TEETER_ALTO, frec = TEETER_FRECUENCIA): number {
+  if (!(t1 > t0)) return 0;
+  const u = (t - t0) / (t1 - t0);
+  if (u <= 0 || u >= 1) return 0;
+  return alto * Math.sin(Math.PI * u) * Math.sin((t - t0) * frec);
+}
+
+/**
+ * El titileo de la canica que gana: empieza cuando llega a la orilla (`casi.t + LLEGADA_TITILA`, el mismo tramo que
+ * anima `trayectoriaDe`) y muere exactamente con el golpe del cartel. Determinista, cero en los dos bordes.
+ */
+export function teeterDelCasi(d: Pick<Datos, "casi" | "duracion">, t: number): number {
+  return titileo(t, d.casi.t + LLEGADA_TITILA, d.duracion);
+}
+
+/* ===================================================================== la paleta */
+
+const PIEL = 0xc68a5c;
+const MANGA = 0xe93d9c;
+const CHALK: Record<"claro" | "oscuro", number> = { claro: 0xf6f2e8, oscuro: 0xd8d2c4 };
+const TIERRA: Record<"claro" | "oscuro", number> = { claro: 0xc9a877, oscuro: 0x4a3624 };
+const TIERRA_BARRIDA: Record<"claro" | "oscuro", number> = { claro: 0xbfa070, oscuro: 0x403020 };
+const PIEDRA: Record<"claro" | "oscuro", number> = { claro: 0x8a7a64, oscuro: 0x544438 };
+const POLVO: Record<"claro" | "oscuro", number> = { claro: 0xd8c09a, oscuro: 0x6a5442 };
+/** Los vidrios de las canicas: el celeste de la 2D y los acentos de la casa. */
+const VIDRIOS = [0x8fd0c8, 0xe93d9c, 0xffc629, 0x00a896, 0x6c4ce0, 0xff7a1a];
+
+const suave = (x: number): number => {
+  const k = Math.min(1, Math.max(0, x));
+  return k * k * (3 - 2 * k);
+};
+
+/* ===================================================================== el polvo de la tierra */
+
+/**
+ * El polvo del choque: ráfagas de piedritas de tierra que saltan del punto del golpe. Cada partícula es función de
+ * `t - t0` y de un hash de su número (la misma ronda levanta el mismo polvo). Vive dentro del grupo del mundo, así
+ * que habla en unidades del círculo.
+ */
+class Polvo {
+  private readonly malla: InstancedMesh;
+  private readonly d = new Object3D();
+  private readonly eventos: { t0: number; x: number; z: number; fuerza: number; serie: number }[] = [];
+  private serie = 0;
+  private readonly vistos = new Set<number>();
+  static readonly POR = 9;
+  static readonly MAX = 6;
+  static readonly VIDA = 0.65;
+
+  constructor(padre: Object3D, geo: BufferGeometry, mat: MeshLambertMaterial, basura: Basura) {
+    this.malla = new InstancedMesh(geo, mat, Polvo.POR * Polvo.MAX);
+    this.malla.count = 0;
+    this.malla.frustumCulled = false;
+    basura.add({ dispose: () => this.malla.dispose() });
+    padre.add(this.malla);
+  }
+
+  /** Registra una ráfaga una sola vez (por su hora). */
+  nuevo(t: number, x: number, z: number, fuerza: number): void {
+    const clave = Math.round(t * 1000);
+    if (this.vistos.has(clave)) return;
+    this.vistos.add(clave);
+    this.eventos.push({ t0: t, x, z, fuerza, serie: this.serie++ });
+    if (this.eventos.length > Polvo.MAX) this.eventos.shift();
+  }
+
+  actualizar(t: number): void {
+    const d = this.d;
+    let n = 0;
+    for (const e of this.eventos) {
+      const edad = t - e.t0;
+      if (edad < 0 || edad > Polvo.VIDA) continue;
+      for (let j = 0; j < Polvo.POR; j++) {
+        const a = hash(e.serie * 17 + j, 31) * Math.PI * 2;
+        const v = (0.1 + 0.25 * hash(e.serie * 17 + j, 32)) * e.fuerza;
+        const vy = (0.25 + 0.4 * hash(e.serie * 17 + j, 33)) * e.fuerza;
+        const avance = (1 - Math.exp(-5 * edad)) / 5;
+        d.position.set(e.x + Math.cos(a) * v * avance * 3, Math.max(0.004, 0.012 + vy * edad - 2.2 * edad * edad), e.z + Math.sin(a) * v * avance * 3);
+        d.scale.setScalar(0.012 * (1 - edad / Polvo.VIDA) + 0.002);
+        d.updateMatrix();
+        this.malla.setMatrixAt(n++, d.matrix);
+      }
+    }
+    this.malla.count = n;
+    this.malla.instanceMatrix.needsUpdate = true;
+  }
+}
+
+/* ===================================================================== la fábrica */
+
+const SUBE = new Vector3(0, 1, 0);
+
+const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
+  const tema = o.tema;
+  const B = motor.basura;
+  const g = crearGeometrias(B);
+  const mat = new Materiales(B);
+  // El sol de la tarde sobre la tierra: ni el cielo ni la niebla se tapan, la tierra se pierde en el horizonte.
+  const amb = crearAmbiente(motor, { solDesde: [-40, 80, 60], nieblaCerca: 45, nieblaLejos: 230 });
+
+  const mundo = new Group();
+  motor.escena.add(mundo);
+
+  /* ------------------------------------------------------------- la tierra con su relieve */
+  // Un campo de tierra facetado: bajas y molinos que salen de un hash, barridos parejos dentro del círculo
+  // (la troya se barre antes de jugar). Pocos polígonos, sombreado plano: el estilo de la casa.
+  const geoTierra = B.add(new PlaneGeometry(11, 11, 26, 26));
+  geoTierra.rotateX(-Math.PI / 2);
+  {
+    const pos = geoTierra.attributes.position!;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), z = pos.getZ(i);
+      const r = Math.hypot(x, z);
+      const fuera = Math.min(1, Math.max(0, (r - CIRCULO_R - CANICA_R * 2) / 1.4));
+      const bache = (0.008 + 0.06 * hash(i, 11) * hash(i, 11)) * fuera + 0.003 * hash(i, 12) * (1 - fuera);
+      pos.setY(i, bache - 0.012 * (1 - fuera));
+    }
+  }
+  const tierra = new Mesh(geoTierra, B.add(new MeshLambertMaterial({ color: TIERRA[tema], flatShading: true })));
+  tierra.receiveShadow = true;
+  mundo.add(tierra);
+
+  // El piso barrido de la troya, apenas más claro que la tierra de alrededor.
+  const barrida = new Mesh(
+    B.add(new CircleGeometry(CIRCULO_R * 0.96, 40).rotateX(-Math.PI / 2)),
+    B.add(new MeshLambertMaterial({ color: TIERRA_BARRIDA[tema], flatShading: true })),
+  );
+  barrida.position.y = 0.006;
+  mundo.add(barrida);
+
+  // La tiza: el círculo que decide, dibujado en la tierra.
+  const tiza = new Mesh(
+    B.add(new RingGeometry(CIRCULO_R * 0.93, CIRCULO_R * 1.03, 48).rotateX(-Math.PI / 2)),
+    B.add(new MeshLambertMaterial({ color: CHALK[tema], flatShading: true, side: DoubleSide })),
+  );
+  tiza.position.y = 0.012;
+  mundo.add(tiza);
+
+  // Piedritas alrededor (nunca adentro del ruedo): el mismo reparto por hash de siempre.
+  {
+    const nP = 70;
+    const piedras = new InstancedMesh(g.esfera, B.add(new MeshLambertMaterial({ color: PIEDRA[tema], flatShading: true })), nP);
+    piedras.frustumCulled = false;
+    const d = new Object3D();
+    let puestos = 0;
+    for (let i = 0; i < nP * 2 && puestos < nP; i++) {
+      const a = hash(i, 21) * Math.PI * 2;
+      const r = CIRCULO_R * 1.15 + hash(i, 22) * 3.6;
+      const s = 0.012 + 0.024 * hash(i, 23);
+      d.position.set(r * Math.cos(a), s * 0.5 + 0.01, r * Math.sin(a));
+      d.scale.set(s, s * 0.7, s);
+      d.rotation.set(0, hash(i, 24) * Math.PI, 0);
+      d.updateMatrix();
+      piedras.setMatrixAt(puestos++, d.matrix);
+    }
+    piedras.count = puestos;
+    piedras.instanceMatrix.needsUpdate = true;
+    B.add({ dispose: () => piedras.dispose() });
+    mundo.add(piedras);
+  }
+
+  /* ------------------------------------------------------------- las canicas de vidrio */
+  // Una canica: la piel de vidrio (transparente), el remolino de color adentro y el brillo en la parte de arriba.
+  const geoVidrio = B.add(new SphereGeometry(1, 10, 8));
+  const matVidrio = new Map<number, MeshLambertMaterial>();
+  const vidrioDe = (color: number): MeshLambertMaterial => {
+    let m = matVidrio.get(color);
+    if (!m) {
+      m = B.add(new MeshLambertMaterial({ color, transparent: true, opacity: 0.55, flatShading: true, depthWrite: false }));
+      matVidrio.set(color, m);
+    }
+    return m;
+  };
+  const armarCanica = (color: number, esc: number): { grupo: Group; vidrio: Mesh; centro: Mesh; brillo: Mesh } => {
+    const grupo = new Group();
+    const vidrio = new Mesh(geoVidrio, vidrioDe(color));
+    vidrio.scale.setScalar(esc);
+    vidrio.renderOrder = 2;
+    const centro = new Mesh(geoVidrio, mat.plano(color));
+    centro.scale.setScalar(esc * 0.45);
+    centro.renderOrder = 1;
+    const brillo = new Mesh(geoVidrio, B.add(new MeshBasicMaterial({ color: 0xffffff })));
+    brillo.scale.setScalar(esc * 0.2);
+    brillo.position.set(-esc * 0.34, esc * 0.42, -esc * 0.28);
+    brillo.renderOrder = 3;
+    grupo.add(centro, vidrio, brillo);
+    grupo.visible = false;
+    mundo.add(grupo);
+    return { grupo, vidrio, centro, brillo };
+  };
+  const canicas = new Map<number, ReturnType<typeof armarCanica>>();
+  const canicaDe = (slot: number, d: Datos): ReturnType<typeof armarCanica> => {
+    let c = canicas.get(slot);
+    if (!c) {
+      const persona = d.canicas[slot] ?? slot;
+      c = armarCanica(VIDRIOS[persona % VIDRIOS.length] as number, CANICA_R);
+      canicas.set(slot, c);
+    }
+    return c;
+  };
+
+  // La canica de la pegadora: un pelo más chica, como en el 2D.
+  const tiradorCanica = armarCanica(VIDRIOS[0] as number, CANICA_R * 0.85);
+  const R_TIRADOR = CANICA_R * 0.85;
+
+  // El destello del golpe: un puntito de luz sobre la canica golpeada, una décima de segundo. No es el flash de
+  // la cámara: es el vidrio que la devuelve.
+  const destello = new Mesh(geoVidrio, B.add(new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false })));
+  destello.visible = false;
+  destello.renderOrder = 4;
+  mundo.add(destello);
+
+  /* ------------------------------------------------------------- la mano con el agarre ñati */
+  const mano = new Group();
+  mundo.add(mano);
+  const piel = mat.plano(PIEL);
+  const palma = pieza(g.esfera, piel, 0, 0.055, 0, 0.075, 0.05, 0.07);
+  mano.add(palma);
+  // El ñati: los nudillos doblados alrededor de la canica y el pulgar encima.
+  for (const [dx, dz] of [[-0.033, -0.052], [0.008, -0.062], [0.048, -0.05]] as const) {
+    mano.add(pieza(g.esfera, piel, dx, 0.022, dz, 0.022, 0.022, 0.022));
+  }
+  mano.add(pieza(g.esfera, piel, 0.008, 0.075, -0.012, 0.02, 0.028, 0.02));
+  // El brazo entra desde abajo, atrás de la mano, con la manga de la casa.
+  const muneca = pieza(g.cilindro, piel, 0, 0.02, -0.1, 0.026, 0.16, 0.026);
+  muneca.rotation.x = 1.1;
+  mano.add(muneca);
+  const manga = pieza(g.cilindro, mat.plano(MANGA), 0, -0.045, -0.36, 0.042, 0.5, 0.042);
+  manga.rotation.x = 1.1;
+  mano.add(manga);
+  mano.visible = false;
+
+  /* ------------------------------------------------------------- el polvo y las sombras */
+  const polvo = new Polvo(mundo, g.esfera, B.add(new MeshLambertMaterial({ color: POLVO[tema], flatShading: true })), B);
+
+  /* ------------------------------------------------------------- el sonido de la casa */
+  // El clic de canica contra canica: dos notas de vidrio, un poco más fuerte cuando el tiro pega con más fuerza.
+  // `beep` ya respeta el mudo y el banco de sonidos de la casa.
+  const clink = (fuerza: number): void => {
+    beep(2093, 0.05, "sine", 0.028 + 0.016 * fuerza);
+    beep(3136, 0.035, "sine", 0.014 + 0.012 * fuerza);
+  };
+
+  /* ------------------------------------------------------------- por cuadro */
+  let px = 0, pz = 0, K = 1, Kz = 1;
+  const puestos = new Map<number, Pun>();
+  const clinks = new Set<number>();
+  const polvos = new Set<string>();
+  let casiSonado = false;
+  const eje = new Vector3();
+  const qTilt = new Quaternion();
+  const qRoll = new Quaternion();
+
+  return {
+    frame(e) {
+      const d = e.plan;
+      motor.cuadro({ ...e, cam: camaraBolillas(e.cam, e.w, e.h) }, perfilBolillas(), (mapa, pose) => {
+        // La cuenta de la casa fija el lugar del círculo del 2D en el 3D.
+        ({ px, pz, K, Kz } = lugarDelMundo(mapa, e.mapeo));
+        mundo.position.set(px, 0, pz);
+        mundo.scale.set(K, K, Kz);
+        if (!d || !d.posiciones.length) {
+          mano.visible = false;
+          tiradorCanica.grupo.visible = false;
+          destello.visible = false;
+          polvo.actualizar(e.t);
+          return;
+        }
+
+        /* -------- las canicas: el plan dice dónde está cada una y qué le pasa */
+        for (let slot = 0; slot < d.posiciones.length; slot++) {
+          const c = canicaDe(slot, d);
+          const tray = trayectoriaDe(d, slot, e.t);
+          c.grupo.visible = true;
+          c.grupo.position.set(tray.p.x, CANICA_R, tray.p.y);
+          puestos.set(slot, tray.p);
+          // El rodado: la golpeada rueda lo que el plan dice que vuela; la que está quieta, no gira.
+          qTilt.identity();
+          const tiro = d.tiros.find((x) => x.slot === slot);
+          if (tiro && e.t >= tiro.t) {
+            const f = Math.min(1, (e.t - tiro.t) / tiro.salida.vuelo);
+            const largo = Math.hypot(tiro.salida.tiza.x - tiro.impacto.x, tiro.salida.tiza.y - tiro.impacto.y);
+            eje.set(tiro.salida.dir.y, 0, -tiro.salida.dir.x);
+            qRoll.setFromAxisAngle(eje, (f * largo) / CANICA_R);
+            qTilt.multiply(qRoll);
+          }
+          // El titileo de la que gana: vaivén sobre la tiza, cero en los dos bordes (la lección del sapo).
+          if (tray.estado === "titila") {
+            const radial = unitarioDe({ x: tray.p.x, y: tray.p.y });
+            eje.set(radial.y, 0, -radial.x);
+            qRoll.setFromAxisAngle(eje, teeterDelCasi(d, e.t));
+            qTilt.multiply(qRoll);
+          }
+          c.grupo.quaternion.copy(qTilt);
+        }
+
+        /* -------- los choques: polvo, destello y el clic de la casa */
+        let tiroVivo: Tiro | undefined;
+        d.tiros.forEach((tiro, i) => {
+          if (e.t >= tiro.t && !clinks.has(i)) {
+            clinks.add(i);
+            clink(tiro.salida.fuerza);
+          }
+          const claveIda = `${i}:golpe`;
+          if (e.t >= tiro.t && !polvos.has(claveIda)) {
+            polvos.add(claveIda);
+            polvo.nuevo(e.t, tiro.impacto.x, tiro.impacto.y, 0.9 + 0.3 * hash(i, 41));
+          }
+          const claveTiza = `${i}:tiza`;
+          if (e.t >= tiro.t + tiro.salida.vuelo && !polvos.has(claveTiza)) {
+            polvos.add(claveTiza);
+            polvo.nuevo(e.t, tiro.salida.tiza.x, tiro.salida.tiza.y, 0.45);
+          }
+          if (e.t >= tiro.t && e.t < tiro.t + 0.2) tiroVivo = tiro;
+        });
+        if (tiroVivo) {
+          // El destello sobre la canica golpeada: sube y apaga en 0,2 s.
+          const u = (e.t - tiroVivo.t) / 0.2;
+          destello.visible = true;
+          destello.position.set(tiroVivo.impacto.x, CANICA_R * (1 + 0.4 * Math.sin(Math.PI * u)), tiroVivo.impacto.y);
+          destello.scale.setScalar(CANICA_R * (1.4 + 1.4 * Math.sin(Math.PI * u)));
+          (destello.material as MeshBasicMaterial).opacity = 0.85 * (1 - u);
+        } else destello.visible = false;
+
+        // El roce del casi: la canica que gana derrapa hacia la tiza y levanta un poco de polvo.
+        const claveCasi = "casi";
+        if (e.t >= d.casi.t && !polvos.has(claveCasi)) {
+          polvos.add(claveCasi);
+          polvo.nuevo(d.casi.t, d.casi.desde.x, d.casi.desde.y, 0.5);
+        }
+        if (e.t >= d.casi.t && !casiSonado) {
+          casiSonado = true;
+          clink(0.6);
+        }
+        polvo.actualizar(e.t);
+
+        /* -------- la mano y la canica de la pegadora */
+        let manoViva: Tiro | undefined;
+        for (const tiro of d.tiros) {
+          if (e.t >= tiro.t - TIRADOR - 0.45 && e.t <= tiro.t + T_DESVIO + 0.25) {
+            manoViva = tiro;
+            break;
+          }
+        }
+        mano.visible = manoViva !== undefined;
+        if (manoViva) {
+          const tiro = manoViva;
+          const dir = unitarioDe({ x: tiro.impacto.x - tiro.desde.x, y: tiro.impacto.y - tiro.desde.y });
+          const suelte = tiro.t - TIRADOR;
+          let atras: number;
+          if (e.t < suelte - 0.15) atras = 0.16 - 0.07 * suave((e.t - (suelte - 0.45)) / 0.3);
+          else if (e.t < suelte) atras = 0.09 + 0.05 * suave((e.t - (suelte - 0.15)) / 0.15);
+          else atras = 0.14 + 0.06 * suave((e.t - suelte) / 0.2);
+          const hx = tiro.desde.x - dir.x * atras;
+          const hz = tiro.desde.y - dir.y * atras;
+          mano.position.set(hx, 0.002, hz);
+          mano.rotation.y = Math.atan2(dir.x, dir.y);
+          // La canica de la pegadora: en la mano hasta el suelte, después el plan la lleva.
+          const enVuelo = poseTiro(tiro, e.t);
+          if (enVuelo) {
+            tiradorCanica.grupo.visible = true;
+            tiradorCanica.grupo.position.set(enVuelo.x, R_TIRADOR, enVuelo.y);
+            const tramo = enVuelo.estado === "ida" ? { de: tiro.desde, a: tiro.impacto } : { de: tiro.impacto, a: tiro.deflexion.hasta };
+            eje.set(tramo.a.y - tramo.de.y, 0, -(tramo.a.x - tramo.de.x));
+            const dist = Math.hypot(tramo.a.x - tramo.de.x, tramo.a.y - tramo.de.y);
+            qRoll.setFromAxisAngle(eje, (enVuelo.f * dist) / R_TIRADOR);
+            tiradorCanica.grupo.quaternion.copy(qRoll);
+          } else {
+            // En el agarre ñati: bajo la palma, entre los nudillos y el pulgar.
+            tiradorCanica.grupo.visible = true;
+            tiradorCanica.grupo.position.set(hx + dir.x * 0.05, R_TIRADOR, hz + dir.y * 0.05);
+            tiradorCanica.grupo.quaternion.identity();
+          }
+          puestos.set(-1, { x: tiradorCanica.grupo.position.x, y: tiradorCanica.grupo.position.z });
+        } else {
+          tiradorCanica.grupo.visible = false;
+          puestos.delete(-1);
+        }
+
+        amb.seguir(pose);
+      });
+    },
+
+    pantallaDe(id) {
+      // La canica del asiento `id` (o la de la pegadora, en -1): su centro en la pantalla y lo que mide de alto.
+      const p = puestos.get(id);
+      if (!p) return null;
+      const c = motor.proyectar(px + K * p.x, K * CANICA_R, pz + Kz * p.y);
+      const t = motor.proyectar(px + K * p.x, K * CANICA_R * 2.2, pz + Kz * p.y);
+      return c && t ? { x: c.x, y: c.y, alto: Math.abs(t.y - c.y) * 2 } : null;
+    },
+
+    destruir() {
+      motor.escena.remove(mundo);
+    },
+  };
+};
+
+export const montaje = definir3D(fabrica);
+
+/** Lo que `registro.ts` busca: el módulo se registra solo por llamarse `bolillas-3d.ts` y exportar esto. */
+export const lanzador3D = async (): Promise<Lanzador> => {
+  const m = await import("../pixi/bolillas");
+  // El enchufe del 2D (patrón guajojo): cuando `bolillasPixi3D` exista, el 3D arranca con el lienzo transparente.
+  const con3D = m as typeof m & { bolillasPixi3D?: (tres: Montaje3D<EntradaBolillas>) => Lanzador };
+  if (con3D.bolillasPixi3D) {
+    const lanza = con3D.bolillasPixi3D(montaje);
+    return (nombres, ganadores, baliza, listo) => lanza(nombres, ganadores, baliza, listo);
+  }
+  // Todavía sin el enchufe (la tarea paralela dueña de pixi/bolillas*): el juego corre en 2D, como siempre.
+  return m.bolillasPixi;
+};
