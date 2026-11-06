@@ -6,7 +6,9 @@ import {
 import { crearAmbiente } from "./escena";
 import { crearGeometrias, Instancias, Materiales, pieza } from "./figuras";
 import { hash } from "./ids";
-import { perfilFiel, type Mapa, type PerfilMapa } from "./camara";
+import { MOMENTOS_MONEDA, type Toma } from "../pixi/sapo-plan";
+import { AFTER_FINAL } from "../pixi/sapo-tiempos";
+import { perfilFiel, type Mapa, type PerfilMapa, type Pose3D } from "./camara";
 import { definir3D } from "./motor";
 import type { Camara2D, EntradaBase, Fabrica3D, Lanzador } from "./tipos";
 
@@ -287,6 +289,151 @@ export function luzDelGolpe(t: number, golpe: number): number {
   return a < 0.25 ? baja : baja + 0.18 * suave((a - 0.25) / 1.2);
 }
 
+/* ===================================================================== las tomas de los tiros */
+
+/**
+ * Las tomas de los tiros (`tomasDeTiros` en el plan): la cámara es cosmética, nunca cambia dónde cae una argolla ni
+ * quién gana; solo cambia desde dónde se mira lo que el 2D ya puso. Cada cuadro sigue siendo función de lo que llega.
+ *
+ * - `seguir`: mientras la argolla vuela la cámara baja, gira hacia el lado de la mano (se ve el tiro desde quien tira)
+ *   y se arrima a la argolla; con el golpe vuelve a la del director. Antes la cámara no se movía con el tiro y no
+ *   emocionaba (pedido del 6 de noviembre de 2026).
+ * - `moneda`: la última argolla. La cámara se va detrás de ella desde la suelta, la sigue con zoom y la ve entrar.
+ *
+ * El 2D marca la última argolla con `ultima` (es `final` en `tiemposDeTiros`, el último tiro del plan): por las
+ * pruebas del plan, ese tiro es siempre el acierto del último premio, así que es la misma marca que `tomasDeTiros`.
+ */
+export const tomaDeArgolla = (a: ArgollaSapo): Toma => (a.ultima ? "moneda" : "seguir");
+
+/**
+ * Cuánto se mueve la cámara con la toma `seguir`, en el punto más cercano: cuánto baja y cuánto gira hacia la mano
+ * (radianes), qué parte del camino hacia la argolla corre el centro y cuánto más se acerca sobre el tope de `ZOOM_MAX`.
+ * En el celular la mesa ya ocupa casi todo el ancho: gira y se acerca menos, para que los agujeros de los costados no
+ * salgan de cuadro (lo cuida la prueba con una cámara de three.js).
+ */
+export const SEGUIR = {
+  ancho: { baja: 0.16, gira: 0.2, sigue: 0.3, acerca: 0.1 },
+  celular: { baja: 0.18, gira: 0.1, sigue: 0.15, acerca: 0.04 },
+} as const;
+/** La parte del vuelo en que la cámara entra al tiro, y los segundos que tarda en volver después del golpe (el 2D lo suelta a los 0,8). */
+const ENTRA_TIRO = 0.3;
+const VUELVE = 0.7;
+const esCelular = (tilt: number): boolean => tilt > 0.8;
+
+/**
+ * Qué tan metida está la cámara en el tiro de ahora (de 0 a 1) y hacia dónde mira (un punto de la mesa, o null). Sube
+ * con el vuelo, sigue igual en el golpe y baja en `VUELVE` segundos; la boca de la rana también la suelta de a poco, y
+ * la argolla que escupe no la vuelve a acercar. Con la última argolla en juego no hace nada: esa tiene su propia toma.
+ */
+export function cercaniaDelTiro(argollas: readonly ArgollaSapo[], golpes: readonly { t: number; punto: PuntoMesa }[], t: number): { cerca: number; foco: PuntoMesa | null } {
+  if (argollas.some((a) => tomaDeArgolla(a) === "moneda")) return { cerca: 0, foco: null };
+  let cerca = 0;
+  let foco: PuntoMesa | null = null;
+  const tomar = (c: number, p: PuntoMesa): void => {
+    if (c > cerca) {
+      cerca = c;
+      foco = p;
+    }
+  };
+  for (const a of argollas) {
+    if (a.estado === "vuelo") tomar(suave(a.u / ENTRA_TIRO), a.suelo);
+    else if (a.estado === "boca-entra" || a.estado === "oculta" || a.estado === "boca-sale") tomar(1 - suave(a.edad / VUELVE), a.suelo);
+  }
+  for (const g of golpes) if (t >= g.t) tomar(1 - suave((t - g.t) / VUELVE), g.punto);
+  return { cerca, foco };
+}
+
+/** La cámara del 2D con la toma `seguir`: el centro corre hacia la argolla y el zoom sube un poco, sobre lo que dejó `camaraDelSapo`. */
+export function camaraDelTiro(cam: Camara2D, cerca: number, foco: PuntoMesa | null, mesa: { cx: number; cy: number; sc: number; tilt: number }): Camara2D {
+  if (cerca <= 0) return cam;
+  const k = esCelular(mesa.tilt) ? SEGUIR.celular : SEGUIR.ancho;
+  const zoom = cam.zoom * (1 + k.acerca * cerca);
+  if (!foco) return { ...cam, zoom };
+  const fx = mesa.cx + foco.x * mesa.sc, fy = mesa.cy + foco.y * mesa.sc * mesa.tilt;
+  const s = k.sigue * cerca;
+  return { ...cam, zoom, x: cam.x + (fx - cam.x) * s, y: cam.y + (fy - cam.y) * s };
+}
+
+/** El perfil con la toma `seguir`: más baja y girada hacia la mano. La cuenta de la casa (`zc`) no cambia: los agujeros quedan donde estaban. */
+export function perfilDelTiro(p: PerfilMapa, cerca: number, tilt: number): PerfilMapa {
+  if (cerca <= 0) return p;
+  const k = esCelular(tilt) ? SEGUIR.celular : SEGUIR.ancho;
+  return { ...p, elevacion: p.elevacion - k.baja * cerca, azimut: p.azimut + k.gira * cerca };
+}
+
+/** Cuánto se queda la cámara de la moneda sobre el agujero después de que la argolla cae, y lo que tarda en volver a la del director (antes de la corona). */
+const SOSTIENE = 0.8;
+const SUELTA = AFTER_FINAL - SOSTIENE - 0.3;
+
+/**
+ * La toma `moneda`: cuánto manda (0, la del director; 1, la de la argolla), qué argolla sigue y por qué parte del vuelo
+ * va (`s`, 1 cuando ya cayó). Entra en la suelta (`MOMENTOS_MONEDA.vuela`), se queda mientras se hunde y suelta antes
+ * de la corona. La mano todavía no es la toma: el 2D la manda sin `ultima`.
+ */
+export function pesoMoneda(argollas: readonly ArgollaSapo[]): { peso: number; argolla: ArgollaSapo | null; s: number } {
+  const a = argollas.find((x) => tomaDeArgolla(x) === "moneda" && (x.estado === "vuelo" || x.estado === "hunde"));
+  if (!a) return { peso: 0, argolla: null, s: 0 };
+  if (a.estado === "vuelo") return { peso: suave(a.u / MOMENTOS_MONEDA.vuela), argolla: a, s: a.u };
+  return { peso: 1 - suave((a.edad - SOSTIENE) / SUELTA), argolla: a, s: 1 };
+}
+
+/**
+ * La cámara de la última argolla, en el mundo 3D: detrás de ella (del lado de la mano), un poco arriba y al costado
+ * contrario del brazo, mirando adelante y abajo, hacia donde va. Con el vuelo se acerca y cierra el campo; en `entra`
+ * baja la mirada hasta el agujero y lo ve de arriba mientras la argolla se hunde. Nunca baja de la tapa ni atraviesa
+ * la rana. `p` es la pose de la argolla (`poseArgolla`), `mano` dónde está la mano en la mesa y `aspecto` el de la
+ * pantalla: en un celular angosto se aleja un poco más para que el agujero entre de costado a costado.
+ */
+export function poseMoneda(
+  a: ArgollaSapo, s: number, p: { x: number; y: number; z: number }, mano: PuntoMesa, fr: number, lugar: { px: number; pz: number; K: number; Kz: number }, aspecto: number,
+): Pose3D {
+  const vuela = suave(s / MOMENTOS_MONEDA.entra);
+  const entra = suave((s - MOMENTOS_MONEDA.entra) / (1 - MOMENTOS_MONEDA.entra));
+  // El rumbo: de la mano a la argolla sobre la tapa. Un empujón chico hacia la rana le da rumbo en la suelta, cuando
+  // la argolla todavía está en la mano; después no se nota. Con el rebote en el labio el rumbo gira sin saltar.
+  const lm = Math.hypot(mano.x, mano.y) || 1;
+  let dx = a.suelo.x - mano.x - (mano.x / lm) * 0.05, dz = a.suelo.y - mano.y - (mano.y / lm) * 0.05;
+  const ld = Math.hypot(dx, dz) || 1;
+  dx /= ld;
+  dz /= ld;
+  // Al costado contrario del brazo, que entra desde la derecha.
+  let ox = dz, oz = -dx;
+  if (ox > 0) {
+    ox = -ox;
+    oz = -oz;
+  }
+  const lejos = Math.min(1.7, Math.max(1, 1 / Math.sqrt(Math.max(0.2, aspecto))));
+  const y = Math.max(TAPA_Y, p.y);
+  const atras = (1.25 - 0.1 * vuela - 0.35 * entra) * lejos;
+  const sube = (0.42 + 0.33 * entra) * lejos;
+  const costado = 0.14 * (1 - entra) * lejos;
+  const adelante = 0.6 * (1 - entra) * lejos;
+  const bajaMira = 0.2 * (1 - entra) * lejos;
+  const cx = p.x - dx * atras + ox * costado, cz = p.z - dz * atras + oz * costado;
+  const cy = Math.max(y + sube, 0.25, alturaRana(cx, cz, fr) + 0.2);
+  const mx = p.x + dx * adelante, mz = p.z + dz * adelante, my = Math.max(0, y - bajaMira);
+  const { px, pz, K, Kz } = lugar;
+  return {
+    pos: [px + K * cx, K * cy, pz + Kz * cz],
+    mira: [px + K * mx, K * my, pz + Kz * mz],
+    fov: ((46 - 4 * vuela - 8 * entra) * Math.PI) / 180,
+    giro: 0,
+  };
+}
+
+/** De la cámara `a` a la `b` con peso `w` (0: `a`; 1: `b`), en línea recta: sin saltos. */
+export function mezclarPose(a: Pose3D, b: Pose3D, w: number): Pose3D {
+  if (w <= 0) return a;
+  if (w >= 1) return b;
+  const l = (x: number, y: number): number => x + (y - x) * w;
+  return {
+    pos: [l(a.pos[0], b.pos[0]), l(a.pos[1], b.pos[1]), l(a.pos[2], b.pos[2])],
+    mira: [l(a.mira[0], b.mira[0]), l(a.mira[1], b.mira[1]), l(a.mira[2], b.mira[2])],
+    fov: l(a.fov, b.fov),
+    giro: l(a.giro, b.giro),
+  };
+}
+
 /* ===================================================================== el cajón */
 
 const INK: Record<"claro" | "oscuro", number> = { claro: 0x191919, oscuro: 0x16161f };
@@ -465,6 +612,8 @@ class Astillas {
 }
 
 const SUBE = new Vector3(0, 1, 0);
+/** Un punto fuera de toda pantalla: donde va el nombre de un agujero que la cámara de la moneda deja detrás. */
+const FUERA = { x: -1e4, y: -1e4 };
 
 const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
   const tema = o.tema;
@@ -708,9 +857,14 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
   return {
     frame(e) {
       const m = e.mesa;
-      const perfil = perfilSapo(m.tilt, deltaCamara(e.t, e.tension, e.golpe));
+      // La toma `seguir` de cada tiro: baja, gira hacia la mano y se arrima a la argolla, sobre la cámara del director.
+      const tiro = cercaniaDelTiro(e.argollas, e.golpes, e.t);
+      const perfil = perfilDelTiro(perfilSapo(m.tilt, deltaCamara(e.t, e.tension, e.golpe)), tiro.cerca, m.tilt);
+      const cam = camaraDelTiro(camaraDelSapo(e.cam, e.w, e.h), tiro.cerca, tiro.foco, m);
+      // La toma `moneda` de la última argolla: reemplaza la pose al final del cuadro, mezclada con la del director.
+      const moneda = pesoMoneda(e.argollas);
       // La cuenta de la casa fija el lugar del mundo 2D en el 3D; la elevación base mantiene el piso con las proporciones del 2D.
-      motor.cuadro({ ...e, cam: camaraDelSapo(e.cam, e.w, e.h) }, perfil, (mapa, pose) => {
+      motor.cuadro({ ...e, cam }, perfil, (mapa, pose) => {
         ({ px, pz, K, Kz } = lugarDelMundo(mapa, m));
         mundo.position.set(px, 0, pz);
         mundo.scale.set(K, K, Kz);
@@ -820,10 +974,17 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
         for (const gp of e.golpes) astillas.nuevo(gp.t, gp.punto.x, gp.punto.y, gp.fuerza);
         astillas.actualizar(e.t, motor.ajustes.particulas);
 
+        // La cámara de la última argolla: el motor aplica la pose después de este dibujo (como en el guajojo).
+        if (moneda.peso > 0 && moneda.argolla) {
+          const pa = poseArgolla(moneda.argolla, brArgolla, fr, manoMundo, bocaMundo);
+          Object.assign(pose, mezclarPose(pose, poseMoneda(moneda.argolla, moneda.s, pa, mn.punto, fr, { px, pz, K, Kz }, e.w / Math.max(1, e.h)), moneda.peso));
+        }
         amb.seguir(pose);
       });
-      // Lo que el 2D usa para anclar sus nombres, medallas y el foco a lo que la cámara 3D ve.
-      e.puente.aPantalla = (p, alto = 0) => motor.proyectar(px + K * p.x, K * alto, pz + Kz * p.y);
+      // Lo que el 2D usa para anclar sus nombres, medallas y el foco a lo que la cámara 3D ve. Con la cámara de la moneda
+      // un agujero puede quedar detrás de ella: su nombre va fuera de la pantalla y no vuelve al lugar de la cámara 2D.
+      const enMoneda = moneda.peso > 0;
+      e.puente.aPantalla = (p, alto = 0) => motor.proyectar(px + K * p.x, K * alto, pz + Kz * p.y) ?? (enMoneda ? FUERA : null);
     },
     pantallaDe(id) {
       // El agujero `id`: el centro de su aro en la pantalla y lo que mide de ancho.
