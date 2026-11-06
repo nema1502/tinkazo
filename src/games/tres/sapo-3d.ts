@@ -1,12 +1,14 @@
 import {
-  BackSide, BoxGeometry, BufferGeometry, CanvasTexture, CircleGeometry, DoubleSide, Float32BufferAttribute, Group, HemisphereLight,
-  InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PlaneGeometry, Quaternion, RepeatWrapping, SRGBColorSpace,
-  TorusGeometry, Vector3,
+  BackSide, BoxGeometry, BufferGeometry, CanvasTexture, CircleGeometry, Color, CylinderGeometry, DoubleSide, Float32BufferAttribute, Group, HemisphereLight,
+  InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PerspectiveCamera, PlaneGeometry, Quaternion, RepeatWrapping, SphereGeometry,
+  SRGBColorSpace, TorusGeometry, Vector3,
 } from "three";
 import { crearAmbiente } from "./escena";
 import { crearGeometrias, Instancias, Materiales, pieza } from "./figuras";
 import { hash } from "./ids";
-import { aplicarPose, perfilFiel, poseCamara, type Mapa, type PerfilMapa } from "./camara";
+import { MOMENTOS_MONEDA, type Toma } from "../pixi/sapo-plan";
+import { AFTER_FINAL } from "../pixi/sapo-tiempos";
+import { aplicarPose, perfilFiel, poseCamara, type Mapa, type PerfilMapa, type Pose3D } from "./camara";
 import { definir3D } from "./motor";
 import type { Camara2D, EntradaBase, Fabrica3D, Lanzador } from "./tipos";
 
@@ -123,6 +125,37 @@ export const TORO_R = 0.7;
 export const TORO_T = 0.3;
 /** La inclinación con que queda montada sobre el aro. */
 const MONTADA = 0.22;
+
+/** Los colores de la bandera de Bolivia, de arriba abajo: rojo, amarillo y verde. Las argollas que tira la mano los llevan. */
+export const BANDERA = [0xd52b1e, 0xf9e300, 0x007934] as const;
+
+/**
+ * La franja de la bandera que le toca a un punto de la argolla por su lugar de atrás hacia adelante (`z` de `-r` a `r`):
+ * tres franjas de igual alto, como la bandera acostada sobre la moneda. Atrás el rojo, al medio el amarillo, adelante el verde.
+ */
+export const franjaBandera = (z: number, r: number): number =>
+  z < -r / 3 ? BANDERA[0] : z > r / 3 ? BANDERA[2] : BANDERA[1];
+
+/**
+ * Pinta el aro de la argolla (un toro acostado en el plano `xz`) con las tres franjas: cada cara toma el color de la franja
+ * donde cae su centro alrededor del aro, así los bordes quedan netos con el sombreado plano. No mueve ningún vértice: la
+ * forma, y con ella la pose y la física, es la misma. Devuelve la geometría sin índice (cada cara con sus tres vértices).
+ */
+export function pintarArgolla(geo: BufferGeometry): BufferGeometry {
+  const suelta = geo.index ? geo.toNonIndexed() : geo;
+  if (suelta !== geo) geo.dispose();
+  const pos = suelta.getAttribute("position");
+  const colores = new Float32Array(pos.count * 3);
+  const c = new Color();
+  for (let t = 0; t + 2 < pos.count; t += 3) {
+    const cx = (pos.getX(t) + pos.getX(t + 1) + pos.getX(t + 2)) / 3;
+    const cz = (pos.getZ(t) + pos.getZ(t + 1) + pos.getZ(t + 2)) / 3;
+    c.setHex(franjaBandera(cz / Math.max(1e-9, Math.hypot(cx, cz)), 1));
+    for (let k = 0; k < 3; k++) c.toArray(colores, (t + k) * 3);
+  }
+  suelta.setAttribute("color", new Float32BufferAttribute(colores, 3));
+  return suelta;
+}
 /** La cámara, en radianes. */
 const FOV = (32 * Math.PI) / 180;
 
@@ -403,6 +436,151 @@ export function encajarAntes(cam: Camara2D, medir: (c: Camara2D) => CajaPantalla
   return c;
 }
 
+/* ===================================================================== las tomas de los tiros */
+
+/**
+ * Las tomas de los tiros (`tomasDeTiros` en el plan): la cámara es cosmética, nunca cambia dónde cae una argolla ni
+ * quién gana; solo cambia desde dónde se mira lo que el 2D ya puso. Cada cuadro sigue siendo función de lo que llega.
+ *
+ * - `seguir`: mientras la argolla vuela la cámara baja, gira hacia el lado de la mano (se ve el tiro desde quien tira)
+ *   y se arrima a la argolla; con el golpe vuelve a la del director. Antes la cámara no se movía con el tiro y no
+ *   emocionaba (pedido del 6 de noviembre de 2026).
+ * - `moneda`: la última argolla. La cámara se va detrás de ella desde la suelta, la sigue con zoom y la ve entrar.
+ *
+ * El 2D marca la última argolla con `ultima` (es `final` en `tiemposDeTiros`, el último tiro del plan): por las
+ * pruebas del plan, ese tiro es siempre el acierto del último premio, así que es la misma marca que `tomasDeTiros`.
+ */
+export const tomaDeArgolla = (a: ArgollaSapo): Toma => (a.ultima ? "moneda" : "seguir");
+
+/**
+ * Cuánto se mueve la cámara con la toma `seguir`, en el punto más cercano: cuánto baja y cuánto gira hacia la mano
+ * (radianes), qué parte del camino hacia la argolla corre el centro y cuánto más se acerca sobre el tope de `ZOOM_MAX`.
+ * En el celular la mesa ya ocupa casi todo el ancho: gira y se acerca menos, para que los agujeros de los costados no
+ * salgan de cuadro (lo cuida la prueba con una cámara de three.js).
+ */
+export const SEGUIR = {
+  ancho: { baja: 0.16, gira: 0.2, sigue: 0.3, acerca: 0.1 },
+  celular: { baja: 0.18, gira: 0.1, sigue: 0.15, acerca: 0.04 },
+} as const;
+/** La parte del vuelo en que la cámara entra al tiro, y los segundos que tarda en volver después del golpe (el 2D lo suelta a los 0,8). */
+const ENTRA_TIRO = 0.3;
+const VUELVE = 0.7;
+const esCelular = (tilt: number): boolean => tilt > 0.8;
+
+/**
+ * Qué tan metida está la cámara en el tiro de ahora (de 0 a 1) y hacia dónde mira (un punto de la mesa, o null). Sube
+ * con el vuelo, sigue igual en el golpe y baja en `VUELVE` segundos; la boca de la rana también la suelta de a poco, y
+ * la argolla que escupe no la vuelve a acercar. Con la última argolla en juego no hace nada: esa tiene su propia toma.
+ */
+export function cercaniaDelTiro(argollas: readonly ArgollaSapo[], golpes: readonly { t: number; punto: PuntoMesa }[], t: number): { cerca: number; foco: PuntoMesa | null } {
+  if (argollas.some((a) => tomaDeArgolla(a) === "moneda")) return { cerca: 0, foco: null };
+  let cerca = 0;
+  let foco: PuntoMesa | null = null;
+  const tomar = (c: number, p: PuntoMesa): void => {
+    if (c > cerca) {
+      cerca = c;
+      foco = p;
+    }
+  };
+  for (const a of argollas) {
+    if (a.estado === "vuelo") tomar(suave(a.u / ENTRA_TIRO), a.suelo);
+    else if (a.estado === "boca-entra" || a.estado === "oculta" || a.estado === "boca-sale") tomar(1 - suave(a.edad / VUELVE), a.suelo);
+  }
+  for (const g of golpes) if (t >= g.t) tomar(1 - suave((t - g.t) / VUELVE), g.punto);
+  return { cerca, foco };
+}
+
+/** La cámara del 2D con la toma `seguir`: el centro corre hacia la argolla y el zoom sube un poco, sobre lo que dejó `camaraDelSapo`. */
+export function camaraDelTiro(cam: Camara2D, cerca: number, foco: PuntoMesa | null, mesa: { cx: number; cy: number; sc: number; tilt: number }): Camara2D {
+  if (cerca <= 0) return cam;
+  const k = esCelular(mesa.tilt) ? SEGUIR.celular : SEGUIR.ancho;
+  const zoom = cam.zoom * (1 + k.acerca * cerca);
+  if (!foco) return { ...cam, zoom };
+  const fx = mesa.cx + foco.x * mesa.sc, fy = mesa.cy + foco.y * mesa.sc * mesa.tilt;
+  const s = k.sigue * cerca;
+  return { ...cam, zoom, x: cam.x + (fx - cam.x) * s, y: cam.y + (fy - cam.y) * s };
+}
+
+/** El perfil con la toma `seguir`: más baja y girada hacia la mano. La cuenta de la casa (`zc`) no cambia: los agujeros quedan donde estaban. */
+export function perfilDelTiro(p: PerfilMapa, cerca: number, tilt: number): PerfilMapa {
+  if (cerca <= 0) return p;
+  const k = esCelular(tilt) ? SEGUIR.celular : SEGUIR.ancho;
+  return { ...p, elevacion: p.elevacion - k.baja * cerca, azimut: p.azimut + k.gira * cerca };
+}
+
+/** Cuánto se queda la cámara de la moneda sobre el agujero después de que la argolla cae, y lo que tarda en volver a la del director (antes de la corona). */
+const SOSTIENE = 0.8;
+const SUELTA = AFTER_FINAL - SOSTIENE - 0.3;
+
+/**
+ * La toma `moneda`: cuánto manda (0, la del director; 1, la de la argolla), qué argolla sigue y por qué parte del vuelo
+ * va (`s`, 1 cuando ya cayó). Entra en la suelta (`MOMENTOS_MONEDA.vuela`), se queda mientras se hunde y suelta antes
+ * de la corona. La mano todavía no es la toma: el 2D la manda sin `ultima`.
+ */
+export function pesoMoneda(argollas: readonly ArgollaSapo[]): { peso: number; argolla: ArgollaSapo | null; s: number } {
+  const a = argollas.find((x) => tomaDeArgolla(x) === "moneda" && (x.estado === "vuelo" || x.estado === "hunde"));
+  if (!a) return { peso: 0, argolla: null, s: 0 };
+  if (a.estado === "vuelo") return { peso: suave(a.u / MOMENTOS_MONEDA.vuela), argolla: a, s: a.u };
+  return { peso: 1 - suave((a.edad - SOSTIENE) / SUELTA), argolla: a, s: 1 };
+}
+
+/**
+ * La cámara de la última argolla, en el mundo 3D: detrás de ella (del lado de la mano), un poco arriba y al costado
+ * contrario del brazo, mirando adelante y abajo, hacia donde va. Con el vuelo se acerca y cierra el campo; en `entra`
+ * baja la mirada hasta el agujero y lo ve de arriba mientras la argolla se hunde. Nunca baja de la tapa ni atraviesa
+ * la rana. `p` es la pose de la argolla (`poseArgolla`), `mano` dónde está la mano en la mesa y `aspecto` el de la
+ * pantalla: en un celular angosto se aleja un poco más para que el agujero entre de costado a costado.
+ */
+export function poseMoneda(
+  a: ArgollaSapo, s: number, p: { x: number; y: number; z: number }, mano: PuntoMesa, fr: number, lugar: { px: number; pz: number; K: number; Kz: number }, aspecto: number,
+): Pose3D {
+  const vuela = suave(s / MOMENTOS_MONEDA.entra);
+  const entra = suave((s - MOMENTOS_MONEDA.entra) / (1 - MOMENTOS_MONEDA.entra));
+  // El rumbo: de la mano a la argolla sobre la tapa. Un empujón chico hacia la rana le da rumbo en la suelta, cuando
+  // la argolla todavía está en la mano; después no se nota. Con el rebote en el labio el rumbo gira sin saltar.
+  const lm = Math.hypot(mano.x, mano.y) || 1;
+  let dx = a.suelo.x - mano.x - (mano.x / lm) * 0.05, dz = a.suelo.y - mano.y - (mano.y / lm) * 0.05;
+  const ld = Math.hypot(dx, dz) || 1;
+  dx /= ld;
+  dz /= ld;
+  // Al costado contrario del brazo, que entra desde la derecha.
+  let ox = dz, oz = -dx;
+  if (ox > 0) {
+    ox = -ox;
+    oz = -oz;
+  }
+  const lejos = Math.min(1.7, Math.max(1, 1 / Math.sqrt(Math.max(0.2, aspecto))));
+  const y = Math.max(TAPA_Y, p.y);
+  const atras = (1.25 - 0.1 * vuela - 0.35 * entra) * lejos;
+  const sube = (0.42 + 0.33 * entra) * lejos;
+  const costado = 0.14 * (1 - entra) * lejos;
+  const adelante = 0.6 * (1 - entra) * lejos;
+  const bajaMira = 0.2 * (1 - entra) * lejos;
+  const cx = p.x - dx * atras + ox * costado, cz = p.z - dz * atras + oz * costado;
+  const cy = Math.max(y + sube, 0.25, alturaRana(cx, cz, fr) + 0.2);
+  const mx = p.x + dx * adelante, mz = p.z + dz * adelante, my = Math.max(0, y - bajaMira);
+  const { px, pz, K, Kz } = lugar;
+  return {
+    pos: [px + K * cx, K * cy, pz + Kz * cz],
+    mira: [px + K * mx, K * my, pz + Kz * mz],
+    fov: ((46 - 4 * vuela - 8 * entra) * Math.PI) / 180,
+    giro: 0,
+  };
+}
+
+/** De la cámara `a` a la `b` con peso `w` (0: `a`; 1: `b`), en línea recta: sin saltos. */
+export function mezclarPose(a: Pose3D, b: Pose3D, w: number): Pose3D {
+  if (w <= 0) return a;
+  if (w >= 1) return b;
+  const l = (x: number, y: number): number => x + (y - x) * w;
+  return {
+    pos: [l(a.pos[0], b.pos[0]), l(a.pos[1], b.pos[1]), l(a.pos[2], b.pos[2])],
+    mira: [l(a.mira[0], b.mira[0]), l(a.mira[1], b.mira[1]), l(a.mira[2], b.mira[2])],
+    fov: l(a.fov, b.fov),
+    giro: l(a.giro, b.giro),
+  };
+}
+
 /* ===================================================================== el cajón */
 
 const INK: Record<"claro" | "oscuro", number> = { claro: 0x191919, oscuro: 0x16161f };
@@ -423,7 +601,13 @@ const BRONCE_OSC = 0xa8771f;
 const GARGANTA = 0xf6dc96;
 const MARFIL = 0xfff3cf;
 const LENGUA = 0xe0707a;
+/** Las manchas del lomo y el labio, el brillo de la cabeza, el iris, los cachetes. */
+const BRONCE_CLARO = 0xf8d77e;
+const IRIS = 0x4f9d3a;
+const RUBOR = 0xf08c84;
 const PIEL = 0xc68a5c;
+const PIEL_OSC = 0xb07a4e;
+const PUNIO = 0xf6efe2;
 
 const hex = (n: number): string => `#${n.toString(16).padStart(6, "0")}`;
 
@@ -475,6 +659,23 @@ function texturaTapa(tema: "claro" | "oscuro", ancho: number, fondo: number): Ca
   const t = new CanvasTexture(cx.canvas);
   t.colorSpace = SRGBColorSpace;
   t.anisotropy = 4;
+  return t;
+}
+
+/**
+ * La cara de la moneda: la bandera de Bolivia en tres franjas de igual alto (rojo arriba, verde abajo). Va en el disco que
+ * llena el aro de la argolla; arriba de la textura es `-z` del disco acostado, igual que en `franjaBandera`.
+ */
+function texturaBandera(): CanvasTexture | null {
+  const cx = lienzo(64, 64);
+  if (!cx) return null;
+  BANDERA.forEach((color, i) => {
+    const y0 = Math.round((i * 64) / 3), y1 = Math.round(((i + 1) * 64) / 3);
+    cx.fillStyle = hex(color);
+    cx.fillRect(0, y0, 64, y1 - y0);
+  });
+  const t = new CanvasTexture(cx.canvas);
+  t.colorSpace = SRGBColorSpace;
   return t;
 }
 
@@ -581,6 +782,8 @@ class Astillas {
 }
 
 const SUBE = new Vector3(0, 1, 0);
+/** Un punto fuera de toda pantalla: donde va el nombre de un agujero que la cámara de la moneda deja detrás. */
+const FUERA = { x: -1e4, y: -1e4 };
 
 const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
   const tema = o.tema;
@@ -728,6 +931,21 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
   const cuerpoR = pieza(g.esfera, mat.plano(BRONCE), 0, 0.62 * fr, -0.25 * fr, 0.95 * fr, 0.62 * fr, 0.8 * fr);
   rana.add(cuerpoR);
   contorno(cuerpoR, 1.06);
+  // Las manchas del lomo y el brillo de la cabeza van apoyadas en el cuerpo (la misma cuenta que `alturaRana`): no lo cambian.
+  const manchas = new Instancias(g.esfera, mat.plano(BRONCE_OSC), 5, B);
+  const MANCHAS = [[0, -0.6, 0.15], [-0.34, -0.78, 0.12], [0.34, -0.78, 0.12], [-0.78, -0.6, 0.09], [0.78, -0.6, 0.09]] as const;
+  MANCHAS.forEach(([x, z, r], i) => manchas.poner(i, x * fr, alturaRana(x * fr, z * fr, fr) - 0.025 * fr, z * fr, r * fr, 0.06 * fr, r * 0.85 * fr));
+  manchas.usar(MANCHAS.length);
+  manchas.fin();
+  rana.add(manchas.malla);
+  const brillo = pieza(g.esfera, mat.plano(BRONCE_CLARO), -0.32 * fr, alturaRana(-0.32 * fr, 0.12 * fr, fr) - 0.02 * fr, 0.12 * fr, 0.2 * fr, 0.05 * fr, 0.12 * fr);
+  rana.add(brillo);
+  // Los dedos de las patas de adelante, tres por pata, con su tinta.
+  const dedosRana = new Instancias(g.esfera, mat.plano(BRONCE_OSC), 6, B);
+  const dedosTinta = new Instancias(g.esfera, tintaBack, 6, B);
+  // El párpado: media esfera de bronce que baja sobre el ojo cuando parpadea.
+  const mediaEsfera = B.add(new SphereGeometry(1, 10, 4, 0, Math.PI * 2, 0, Math.PI / 2));
+  const parpados: Mesh[] = [];
   for (const sx of [-1, 1]) {
     const pata = pieza(g.esfera, mat.plano(BRONCE_OSC), sx * 0.8 * fr, 0.28 * fr, -0.3 * fr, 0.42 * fr, 0.3 * fr, 0.55 * fr);
     rana.add(pata);
@@ -735,18 +953,56 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
     const delantera = pieza(g.esfera, mat.plano(BRONCE_OSC), sx * 0.5 * fr, 0.17 * fr, 0.42 * fr, 0.2 * fr, 0.17 * fr, 0.3 * fr);
     rana.add(delantera);
     contorno(delantera, 1.1);
+    for (let d = -1; d <= 1; d++) {
+      const i = (sx < 0 ? 0 : 3) + d + 1;
+      const x = (sx * 0.5 + d * 0.12) * fr, z = (0.68 - Math.abs(d) * 0.04) * fr;
+      dedosRana.poner(i, x, 0.06 * fr, z, 0.075 * fr, 0.06 * fr, 0.09 * fr, d * 0.35);
+      dedosTinta.poner(i, x, 0.06 * fr, z, 0.075 * fr * 1.25, 0.06 * fr * 1.25, 0.09 * fr * 1.2, d * 0.35);
+    }
+    // El zócalo del ojo: bronce, para que el ojo nazca de la cabeza y no parezca pegado encima.
+    const zocalo = pieza(g.esfera, mat.plano(BRONCE), sx * 0.5 * fr, 0.92 * fr, -0.3 * fr, 0.36 * fr, 0.26 * fr, 0.36 * fr);
+    rana.add(zocalo);
+    contorno(zocalo, 1.08);
     // Los ojos: grandes, claros y sobre la cabeza, para que la rana mire a la cámara (con el color del cuerpo parecía una tortuga).
     const ojo = pieza(g.esfera, mat.plano(MARFIL), sx * 0.5 * fr, 1.08 * fr, -0.28 * fr, 0.33 * fr, 0.33 * fr, 0.33 * fr);
     rana.add(ojo);
     contorno(ojo, 1.1);
+    const parpado = pieza(mediaEsfera, mat.plano(BRONCE), sx * 0.5 * fr, 1.08 * fr, -0.28 * fr, 0.345 * fr, 0.345 * fr, 0.345 * fr);
+    rana.add(parpado);
+    parpados.push(parpado);
+    // Los cachetes, al costado de la boca.
+    const cachete = pieza(g.esfera, mat.plano(RUBOR), sx * 0.6 * fr, 0.8 * fr, 0.3 * fr, 0.12 * fr, 0.08 * fr, 0.08 * fr);
+    rana.add(cachete);
+    // Las narinas, dos puntos de tinta arriba de la boca.
+    rana.add(pieza(g.esfera, tintaPlana, sx * 0.13 * fr, 1.0 * fr, 0.36 * fr, 0.04 * fr, 0.03 * fr, 0.03 * fr));
   }
+  dedosRana.usar(6);
+  dedosTinta.usar(6);
+  dedosRana.fin();
+  dedosTinta.fin();
+  rana.add(dedosTinta.malla, dedosRana.malla);
+  // El iris verde, la pupila y el brillo del ojo: los tres se cierran con el parpadeo.
+  const irises = [-1, 1].map((sx) => {
+    const p = pieza(g.esfera, mat.plano(IRIS), sx * 0.5 * fr, 1.26 * fr, -0.06 * fr, 0.23 * fr, 0.23 * fr, 0.12 * fr);
+    rana.add(p);
+    return p;
+  });
   const pupilas = [-1, 1].map((sx) => {
     const p = pieza(g.esfera, tintaPlana, sx * 0.5 * fr, 1.27 * fr, -0.03 * fr, 0.17 * fr, 0.17 * fr, 0.13 * fr);
     rana.add(p);
     return p;
   });
+  const blanco = B.add(new MeshBasicMaterial({ color: 0xffffff }));
+  const destellos = [-1, 1].map((sx) => {
+    const p = pieza(g.esfera, blanco, (sx * 0.5 - 0.06) * fr, 1.34 * fr, 0.08 * fr, 0.05 * fr, 0.05 * fr, 0.03 * fr);
+    rana.add(p);
+    return p;
+  });
   const garganta = pieza(g.esfera, mat.plano(GARGANTA), 0, 0.42 * fr, 0.33 * fr, 0.55 * fr, 0.34 * fr, 0.36 * fr);
   rana.add(garganta);
+  // El labio: un borde de bronce oscuro detrás de la boca, que la acompaña cuando se abre.
+  const labio = pieza(g.esfera, mat.plano(BRONCE_OSC), 0, 0.72 * fr, 0.48 * fr, 0.6 * fr, 0.1 * fr, 0.16 * fr);
+  rana.add(labio);
   const boca = pieza(g.esfera, tintaPlana, 0, 0.72 * fr, 0.5 * fr, 0.55 * fr, 0.06 * fr, 0.16 * fr);
   rana.add(boca);
   const lengua = pieza(g.esfera, mat.plano(LENGUA), 0, 0.7 * fr, 0.5 * fr, 0.27 * fr, 0.12 * fr, 0.12 * fr);
@@ -759,46 +1015,79 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
   tapa.add(sombraRana);
 
   /* ---------------------------------------------------------------- la mano */
+  // Una mano derecha, palma abajo, que pellizca la argolla: el dorso, cuatro dedos que se curvan hacia la mesa y el pulgar
+  // por debajo del lado de adentro. Solo es dibujo: dónde está y cómo se mueve lo decide el cuadro con lo que manda el 2D.
   const mano = new Group();
   tapa.add(mano);
   const piel = mat.plano(PIEL);
-  const palma = pieza(g.esfera, piel, 0, 0, 0, 0.075, 0.06, 0.075);
+  const pielOsc = mat.plano(PIEL_OSC);
+  const palma = pieza(g.esfera, piel, 0, 0.012, 0.005, 0.08, 0.045, 0.085);
   mano.add(palma);
   contorno(palma, 1.1);
-  for (const [dx, dz] of [[-0.06, -0.05], [-0.02, -0.08], [0.03, -0.08]] as const) {
-    const dedo = pieza(g.esfera, piel, dx, 0.01, dz, 0.028, 0.026, 0.028);
+  // Índice, medio, anular y meñique: el del medio es el más largo; las puntas bajan hacia la mesa.
+  for (const [dx, largo, gira] of [[-0.05, 0.036, 0.12], [-0.017, 0.044, 0.03], [0.017, 0.041, -0.04], [0.05, 0.031, -0.14]] as const) {
+    const dedo = pieza(g.esfera, piel, dx, -0.004, -0.062 - largo * 0.75, 0.019, 0.018, largo);
+    dedo.rotation.set(-0.55, gira, 0);
     mano.add(dedo);
     contorno(dedo, 1.15);
+    // El nudillo, apenas más oscuro, donde el dedo sale del dorso.
+    mano.add(pieza(g.esfera, pielOsc, dx, 0.03, -0.055, 0.017, 0.012, 0.015));
   }
+  const pulgar = pieza(g.esfera, piel, -0.072, -0.01, -0.03, 0.02, 0.019, 0.042);
+  pulgar.rotation.set(-0.35, -0.65, 0);
+  mano.add(pulgar);
+  contorno(pulgar, 1.15);
   // El brazo entra desde abajo a la derecha de la pantalla (hacia la cámara y a la derecha).
   const dirBrazo = new Vector3(0.55, 0.04, 0.83).normalize();
   const antebrazo = new Group();
   mano.add(antebrazo);
   const qBrazo = new Quaternion().setFromUnitVectors(SUBE, dirBrazo);
   antebrazo.quaternion.copy(qBrazo);
-  const muneca = pieza(g.cilindro, piel, 0, 0.12, 0, 0.042, 0.24, 0.042);
+  // La muñeca y el antebrazo, que se ensancha hacia el codo (un cono truncado: más fino en la mano).
+  const conoBrazo = B.add(new CylinderGeometry(1.3, 1, 1, 8, 1));
+  const muneca = pieza(conoBrazo, piel, 0, 0.13, 0, 0.038, 0.26, 0.038);
   antebrazo.add(muneca);
+  contorno(muneca, 1.1);
+  antebrazo.add(pieza(g.esfera, piel, 0, 0.02, 0, 0.044, 0.04, 0.044));
   const matManga = new MeshLambertMaterial({ color: 0xe93d9c, flatShading: true });
   B.add(matManga);
+  // Los pliegues de la manga, del mismo color un poco más oscuro.
+  const matPliegue = B.add(new MeshLambertMaterial({ color: 0xa82a70, flatShading: true }));
   const manga = pieza(g.cilindro, matManga, 0, 1.9, 0, 0.065, 3.4, 0.065);
   antebrazo.add(manga);
   const mangaHull = pieza(g.cilindro, tintaBack, 0, 1.9, 0, 0.074, 3.42, 0.074);
   antebrazo.add(mangaHull);
-  // El puño crema de la manga, para que la mano se separe del brazo turquesa.
-  const punio = pieza(g.cilindro, mat.plano(0xf6efe2), 0, 0.27, 0, 0.078, 0.07, 0.078);
+  for (const y of [0.42, 0.6]) antebrazo.add(pieza(g.cilindro, matPliegue, 0, y, 0, 0.069, 0.03, 0.069));
+  // El puño crema de la manga, para que la mano se separe del brazo turquesa; ensanchado hacia la mano y con un botón arriba.
+  const punio = pieza(B.add(new CylinderGeometry(1, 1.12, 1, 8, 1)), mat.plano(PUNIO), 0, 0.27, 0, 0.074, 0.08, 0.074);
   antebrazo.add(punio);
   contorno(punio, 1.12);
+  // Lo que en el antebrazo mira hacia arriba (el brazo está acostado): ahí va el botón, a la vista de la cámara.
+  const arribaBrazo = SUBE.clone().applyQuaternion(qBrazo.clone().invert());
+  const boton = pieza(g.esfera, mat.plano(AMARILLO), arribaBrazo.x * 0.085, 0.27, arribaBrazo.z * 0.085, 0.014, 0.014, 0.014);
+  antebrazo.add(boton);
+  contorno(boton, 1.3);
 
   /* ---------------------------------------------------------------- las argollas */
-  const toroArgolla = B.add(new TorusGeometry(TORO_R, TORO_T, 5, 12).rotateX(Math.PI / 2));
-  const matArgolla = mat.plano(AMARILLO);
+  // La moneda de la bandera: el canto con las tres franjas (colores por cara) y el disco de adentro con la bandera
+  // pintada. Dieciocho tramos en el canto: los límites caen en ±20°, donde las franjas de la cara cortan el canto.
+  const toroArgolla = B.add(pintarArgolla(new TorusGeometry(TORO_R, TORO_T, 5, 18).rotateX(Math.PI / 2)));
+  const matArgolla = B.add(new MeshLambertMaterial({ vertexColors: true, flatShading: true }));
+  const texCara = texturaBandera();
+  if (texCara) B.add(texCara);
+  // El disco no pasa del eje del canto: la argolla ocupa lo mismo que antes y `poseArgolla` vale igual.
+  const discoArgolla = B.add(new CircleGeometry(TORO_R, 18).rotateX(-Math.PI / 2));
+  const matCara = B.add(new MeshLambertMaterial(texCara ? { map: texCara, side: DoubleSide } : { color: BANDERA[1], side: DoubleSide }));
+  const matAnillo = mat.plano(AMARILLO);
   const toroAnillo = B.add(new TorusGeometry(1, 0.05, 4, 22).rotateX(Math.PI / 2));
   const ellas = Array.from({ length: 4 }, () => {
     const grupo = new Group();
     const toro = new Mesh(toroArgolla, matArgolla);
+    // La cara gira con el canto (`toro.rotation.y`).
+    toro.add(new Mesh(discoArgolla, matCara));
     const casco = new Mesh(toroArgolla, tintaBack);
     casco.scale.setScalar(1.13);
-    const anillo = new Mesh(toroAnillo, matArgolla);
+    const anillo = new Mesh(toroAnillo, matAnillo);
     const anilloTinta = new Mesh(toroAnillo, tintaBack);
     anillo.visible = anilloTinta.visible = false;
     grupo.add(casco, toro, anillo, anilloTinta);
@@ -824,13 +1113,18 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
   return {
     frame(e) {
       const m = e.mesa;
-      const perfil = perfilSapo(m.tilt, deltaCamara(e.t, e.tension, e.golpe));
+      // La toma `seguir` de cada tiro: baja, gira hacia la mano y se arrima a la argolla, sobre la cámara del director.
+      const tiro = cercaniaDelTiro(e.argollas, e.golpes, e.t);
+      const perfil = perfilDelTiro(perfilSapo(m.tilt, deltaCamara(e.t, e.tension, e.golpe)), tiro.cerca, m.tilt);
       const ajustar = (c: Camara2D): Camara2D => camaraDelSapo(c, e.w, e.h, ZOOM_MAX, e.primerPlano ?? 0);
       // El aro destacado, con lo que este cuadro le dibuja, y dónde queda el grupo de la mesa: lo que mide el despeje.
       const aro = aroDestacado(e);
       const lugar = lugarDelMundo(motor.mapa(e.u, perfil), m);
-      // Con el primer plano, el despeje del cartel y el relator va antes de dibujar: la cámara que dibuja es la despejada.
-      const cam = encajarAntes(ajustar(e.cam), (c) => (aro ? cajaDeAro(aro, lugar, proyectorDe(c, e.w, e.h, e.u, perfil)) : null), e.encajar, ajustar);
+      // La toma manda sobre la cámara del director; con el primer plano, el despeje del cartel y el relator va antes de
+      // dibujar: la cámara que dibuja es la despejada.
+      const cam = encajarAntes(camaraDelTiro(ajustar(e.cam), tiro.cerca, tiro.foco, m), (c) => (aro ? cajaDeAro(aro, lugar, proyectorDe(c, e.w, e.h, e.u, perfil)) : null), e.encajar, ajustar);
+      // La toma `moneda` de la última argolla: reemplaza la pose al final del cuadro, mezclada con la del director.
+      const moneda = pesoMoneda(e.argollas);
       // La cuenta de la casa fija el lugar del mundo 2D en el 3D; la elevación base mantiene el piso con las proporciones del 2D.
       motor.cuadro({ ...e, cam }, perfil, (mapa, pose) => {
         ({ px, pz, K, Kz } = lugarDelMundo(mapa, m));
@@ -877,6 +1171,13 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
         lengua.scale.set(0.27 * fr, 0.12 * fr * abre, 0.12 * fr);
         garganta.scale.set(0.55 * fr * r.garganta, 0.34 * fr * r.garganta, 0.36 * fr * r.garganta);
         for (const p of pupilas) p.scale.y = 0.17 * fr * Math.max(0.15, r.ojo);
+        for (const p of irises) p.scale.y = 0.23 * fr * Math.max(0.15, r.ojo);
+        for (const p of destellos) p.visible = r.ojo > 0.5;
+        // El párpado: abierto queda echado atrás sobre la coronilla del ojo; al parpadear baja y tapa la pupila.
+        const cierra = Math.min(1, Math.max(0, (1 - r.ojo) / 0.85));
+        for (const p of parpados) p.rotation.x = -1.35 + 1.85 * cierra;
+        labio.scale.set(boca.scale.x * 1.1, boca.scale.y + 0.05 * fr, 0.16 * fr);
+        labio.position.y = boca.position.y;
         const atras = r.labio >= 0 && r.labio < 0.6 ? -0.14 * Math.sin((Math.PI * r.labio) / 0.6) : 0;
         let giro = 0;
         if (r.mira && e.golpe >= 0) {
@@ -894,6 +1195,7 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
         // En el celular la mesa mide menos píxeles por unidad y la mano y el brazo se perdían: se agrandan lo que hace falta.
         mano.scale.setScalar(Math.max(1, Math.min(1.9, 190 / m.sc)));
         matManga.color.setHex(mn.manga);
+        matPliegue.color.setHex(mn.manga).multiplyScalar(0.72);
 
         // Las argollas.
         const manoMundo: [number, number, number] = [mn.punto.x, hy, mn.punto.y + 0.09 * mn.swing];
@@ -941,10 +1243,17 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
         for (const gp of e.golpes) astillas.nuevo(gp.t, gp.punto.x, gp.punto.y, gp.fuerza);
         astillas.actualizar(e.t, motor.ajustes.particulas);
 
+        // La cámara de la última argolla: el motor aplica la pose después de este dibujo (como en el guajojo).
+        if (moneda.peso > 0 && moneda.argolla) {
+          const pa = poseArgolla(moneda.argolla, brArgolla, fr, manoMundo, bocaMundo);
+          Object.assign(pose, mezclarPose(pose, poseMoneda(moneda.argolla, moneda.s, pa, mn.punto, fr, { px, pz, K, Kz }, e.w / Math.max(1, e.h)), moneda.peso));
+        }
         amb.seguir(pose);
       });
-      // Lo que el 2D usa para anclar sus nombres, medallas y el foco a lo que la cámara 3D ve.
-      e.puente.aPantalla = (p, alto = 0) => motor.proyectar(px + K * p.x, K * alto, pz + Kz * p.y);
+      // Lo que el 2D usa para anclar sus nombres, medallas y el foco a lo que la cámara 3D ve. Con la cámara de la moneda
+      // un agujero puede quedar detrás de ella: su nombre va fuera de la pantalla y no vuelve al lugar de la cámara 2D.
+      const enMoneda = moneda.peso > 0;
+      e.puente.aPantalla = (p, alto = 0) => motor.proyectar(px + K * p.x, K * alto, pz + Kz * p.y) ?? (enMoneda ? FUERA : null);
       // Y la caja del aro destacado medida con la cámara que lo dibujó de verdad (no con el contorno 2D, que no se ve).
       e.puente.destacada = () => (aro ? cajaDeAro(aro, lugar, (x, y, z) => motor.proyectar(x, y, z)) : null);
     },
