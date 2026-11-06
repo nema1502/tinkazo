@@ -15,25 +15,25 @@ import {
   mapeoDe,
   planBolillas,
   trayectoriaDe,
-  unitarioDe,
   type Datos,
   type Mapeo,
 } from "./bolillas-plan";
 import { TEXTOS } from "./bolillas-textos";
 import {
+  AGUAYO,
   CANICA_ESCALA,
   CHISPA_VIDA,
-  COLA_GOLPE,
+  SCUFF_VIDA,
   SEMILLA_FIJA,
-  T_DESVIO,
-  TIRADOR,
   anuncioDeDiana,
+  canicaDeManoDe,
   cercaDe,
   chispasDe,
   coloresCanica,
-  efectosDe,
   escalaChipDe,
+  golpesDe,
   manoDe,
+  palpitoDe,
   polvoDe,
   punteadoDe,
   tierraManchas,
@@ -55,10 +55,15 @@ import { eventosDe } from "./bolillas-sonido";
  * el exterior del pulgar—: la mano entra, agarra con la pinza cerrada y suelta
  * con el flick exactamente en la largada del plan.
  *
- * Los choques se ven y se escuchan: en el impacto la golpeada sale despedida
- * por donde el plan dijo (con el polvo y el scuff en la tierra, la palpitación
- * del golpe y el destello) mientras el tiro retrocede y se desvía; el clic de
- * cristal y su eco, y el golpe seco de la caída, salen por la voz del kit.
+ * Cada turno es la cadena de la troya (S23) y la escena la anima tal cual la
+ * contó el plan: la mano de quien tira larga su canica de mano desde afuera y
+ * pega en **mi** canica (el primer golpe, blando: polvo, vidrio y un destello
+ * corto); mi canica rueda y empuja a la del enemigo (el segundo golpe, fuerte:
+ * encima de las mismas chispas de vidrio de S13, el estallido de pelea de S22
+ * —estrella, líneas de velocidad y micro-sacudón—), y la del enemigo sale
+ * adelante hasta cruzar la tiza (S21). Los dos golpes se oyen, el blando más
+ * bajo que el clic de cristal del fuerte, y el golpe seco de la caída, todo por
+ * la voz del kit.
  * Al cierre, la canica que gana rueda hasta la orilla y titila en la tiza —
  * empujones cada vez más chicos que mueren en cero exacto— y se queda: ese es
  * el grito de la sala. Nada decide por su cuenta: la misma ronda dibuja lo
@@ -84,8 +89,10 @@ interface Escena {
   escala: number;
   /** El anuncio de la diana del próximo tiro (el anillo con rayas, S19). */
   anuncio: Graphics;
-  /** Los dibujos de las canicas, por su asiento (y la canica de la pegadora en el -1). */
+  /** Los dibujos de las canicas, por su asiento (y la canica de la mano en el -1). */
   bol: Map<number, Graphics>;
+  /** Los estallidos que ya sacudieron la escena (S22): el sacudón se pide una sola vez por golpe. */
+  sacudidas: Set<string>;
   m: Mapeo;
   /** La vista 3D enchufada (solo con `?motor=3d`) y su entrada, que esta escena llena cuadro a cuadro. */
   v3: Vista3D<EntradaBolillas> | null;
@@ -101,9 +108,6 @@ function entrada3Vacia(): EntradaBolillas {
     mapeo: { cx: 0, cy: 0, e: 100 },
   };
 }
-
-/** Cuánto dura la marca del scuff de un impacto en la tierra. */
-const SCUFF = 1.6;
 
 const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> => ({
   id: "bolillas",
@@ -178,14 +182,16 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
       S.bg.visible = false;
     }
     const entrada3 = v3 ? previa?.entrada3 ?? entrada3Vacia() : null;
-    return { fondo, mundo, sombra, fx, mano, anuncio, chips: new Map(), bol: new Map(), m, escala, v3, entrada3 };
+    const sacudidas = previa?.sacudidas ?? new Set<string>();
+    return { fondo, mundo, sombra, fx, mano, anuncio, chips: new Map(), bol: new Map(), sacudidas, m, escala, v3, entrada3 };
   },
 
   cuadro(k, plan, e, t) {
     const d = plan.datos;
     const S = k.S;
     const en3d = e.v3 != null;
-    const golpe = efectosDe(d, t);
+    // Los dos golpes de la cadena (S23) vivos en este cuadro: la mano sobre mi canica y la mía sobre la del enemigo.
+    const golpes = golpesDe(d, t);
     const mano = manoDe(d, t);
     const uTitila = (t - d.casi.t) / Math.max(0.001, d.duracion - d.casi.t);
     // Los finalistas del segundo (S15) envueltos en la puerta de la intro (S18): las fichas se ven durante el
@@ -232,8 +238,8 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
         // El titileo: la canica que gana quiero cruzar y no cruza; empujones cada vez más chicos que mueren en cero.
         const tilta = tray.estado === "titila" ? titilazo(uTitila) : tray.estado === "afuera" ? 0.35 : 0;
         g.rotation = tilta;
-        // La palpitación del golpe: solo a la canica que acaba de salir golpeada.
-        g.scale.set(golpe && golpe.tiro.slot === slot ? 1 + 0.22 * golpe.squash : 1);
+        // La palpitación del golpe: la canica que acaba de recibir uno —la mía con la mano, la del enemigo con la mía.
+        g.scale.set(1 + 0.22 * palpitoDe(d, slot, t));
         g.position.set(w.x, w.y - rr * 1.08);
         g.visible = seVe;
         if (g.visible) g.alpha = tray.estado === "afuera" ? 0.35 : 1;
@@ -268,72 +274,56 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
       for (const chip of e.chips.values()) chip.alpha = velo;
     }
 
-    // La canica de la pegadora: vuela del punto de largada al impacto y después se desvía hasta su freno.
-    // Con el 3D enchufado la dibuja three.js.
+    // La canica de la mano (S23): sale de la largada del plan, pega en mi canica a la hora `tMano` (el primer impacto
+    // de la cadena) y después deriva hasta `mano.hasta` y se apaga. Su vuelo y su deriva son de `canicaDeManoDe`: la
+    // escena no tiene reloj propio para la mano. Con el 3D enchufado la dibuja three.js.
     if (!en3d) {
-      let tiroVivo: (typeof d.tiros)[number] | undefined;
-      for (const tiro of d.tiros) {
-        if (t >= tiro.t - TIRADOR && t <= tiro.t + T_DESVIO) {
-          tiroVivo = tiro;
-          break;
-        }
-      }
-      const tirador = e.bol.get(-1) ?? canica(0.42 * e.m.e * CANICA_R * CANICA_ESCALA, coloresCanica(-1));
-      if (!e.bol.has(-1)) {
+      const rr = 0.42 * e.m.e * CANICA_R * CANICA_ESCALA;
+      let tirador = e.bol.get(-1);
+      if (!tirador) {
+        tirador = canica(rr, coloresCanica(-1));
         e.bol.set(-1, tirador);
         e.mundo.addChild(tirador);
       }
-      if (tiroVivo) {
-        const f = t > tiroVivo.t ? Math.min(1, (t - tiroVivo.t) / T_DESVIO) : Math.max(0, (t - (tiroVivo.t - TIRADOR)) / TIRADOR);
-        const despues = t > tiroVivo.t;
-        const de = despues ? tiroVivo.impacto : tiroVivo.desde;
-        const hasta = despues ? tiroVivo.deflexion.hasta : tiroVivo.impacto;
-        const dir = unitarioDe({ x: hasta.x - de.x, y: hasta.y - de.y });
-        const rr = 0.42 * e.m.e * CANICA_R * CANICA_ESCALA;
-        const w = aMundo(e.m, {
-          x: de.x + dir.x * f * Math.hypot(hasta.x - de.x, hasta.y - de.y),
-          y: de.y + dir.y * f * Math.hypot(hasta.x - de.x, hasta.y - de.y),
-        });
-        // El retroceso del golpe: el tiro se corre para atrás del impacto, y el empujón muere con la cola.
-        if (golpe && golpe.tiro === tiroVivo) {
-          w.x += golpe.retro.x * e.m.e;
-          w.y += golpe.retro.y * e.m.e;
-        }
+      const enMano = canicaDeManoDe(d, t);
+      if (enMano) {
+        const w = aMundo(e.m, enMano.p);
         tirador.position.set(w.x, w.y - rr * 1.08);
         tirador.rotation = 0;
         tirador.scale.set(1);
+        tirador.alpha = enMano.velo;
         tirador.visible = true;
         e.sombra
           .ellipse(w.x + rr * 0.15, w.y + rr * 0.45, rr * 0.9, rr * 0.5)
-          .fill({ color: 0x000000, alpha: 0.2 });
+          .fill({ color: 0x000000, alpha: 0.2 * enMano.velo });
       } else {
         tirador.visible = false;
       }
     }
 
-    // El polvo, el scuff y el destello de los choques, encima de todo: cada uno con el reloj del plan.
+    // Los golpes de la cadena, encima de todo y con el reloj del plan: el de la mano en `choque` (polvo, vidrio y un
+    // destello blando) y el de mi canica en `empuje.donde` (lo mismo, más el estallido de pelea de S22).
     // Con el 3D enchufado los dibuja three.js.
     if (!en3d) {
       e.fx.clear();
       e.mundo.addChild(e.fx);
-      d.tiros.forEach((tiro, i) => {
-        const edad = t - tiro.t;
-        if (edad < 0 || edad >= SCUFF) return;
-        const w = aMundo(e.m, tiro.impacto);
+      for (const golpe of golpes) {
+        const edad = golpe.edad;
+        const w = aMundo(e.m, golpe.punto);
         // El scuff: la marca oscura donde rozó la tierra, que se desvanece.
         e.fx
           .ellipse(w.x, w.y + 1.5 * e.m.e * CANICA_R, CANICA_R * e.m.e * 1.05, CANICA_R * e.m.e * 0.5)
-          .fill({ color: S.dark ? 0x241a10 : 0xa98a5c, alpha: 0.22 * (1 - edad / SCUFF) });
-        // El destello del impacto: sube de golpe y se muere con la palpitación.
-        if (edad < COLA_GOLPE) {
-          const flash = 1 - edad / COLA_GOLPE;
+          .fill({ color: S.dark ? 0x241a10 : 0xa98a5c, alpha: 0.22 * (1 - edad / SCUFF_VIDA) });
+        // El destello del impacto: sube de golpe y se muere con la palpitación. El de la mano es más blando (`brillo`).
+        if (golpe.flash > 0) {
+          const flash = golpe.flash;
           e.fx
             .circle(w.x, w.y, CANICA_R * e.m.e * CANICA_ESCALA * (1.2 + 0.9 * flash))
-            .fill({ color: 0xfff6dd, alpha: 0.5 * flash });
+            .fill({ color: 0xfff6dd, alpha: 0.5 * flash * golpe.brillo });
         }
         // La nube de polvo, corrida para donde viaja la canica golpeada.
         if (edad < 0.6) {
-          for (const grano of polvoDe(i, tiro.impacto, tiro.salida.dir)) {
+          for (const grano of polvoDe(golpe.semilla, golpe.punto, golpe.dir)) {
             if (edad >= grano.vida) continue;
             const uv = edad / grano.vida;
             e.fx
@@ -348,7 +338,7 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
         // Las chispas del vidrio (S13), punteadas (S19): rayitos que saltan más vivos y mueren antes que el polvo —
         // cada uno viaja con su rumbo del plan, en tramos de tiza (nada de líneas de una pieza).
         if (edad < CHISPA_VIDA) {
-          for (const chispa of chispasDe(i, tiro.impacto, tiro.salida.dir)) {
+          for (const chispa of chispasDe(golpe.semilla, golpe.punto, golpe.dir)) {
             if (edad >= chispa.vida) continue;
             const uv = edad / chispa.vida;
             const hx = w.x + chispa.dx * edad * e.m.e;
@@ -361,7 +351,40 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
             }
           }
         }
-      });
+        // El estallido de pelea (S22) del segundo golpe: la estrella del destello, las líneas de velocidad que radian
+        // del impacto y el micro-sacudón de la escena. Todo de `golpesDe`; acá solo se dibuja.
+        const est = golpe.estallo;
+        if (est && edad < est.vida) {
+          const uv = edad / est.vida;
+          const crece = 0.55 + 0.45 * (1 - uv);
+          const estrella = (f: number): number[] =>
+            est.estrella.flatMap((q) => [w.x + q.x * e.m.e * crece * f, w.y + q.y * e.m.e * crece * f]);
+          // Un borde de la paleta de la casa y el corazón blanco: el destello del golpe de manga, doble.
+          e.fx.poly(estrella(1)).fill({ color: AGUAYO[1], alpha: 0.55 * (1 - uv) });
+          e.fx.poly(estrella(0.6)).fill({ color: 0xfffdf2, alpha: 0.9 * (1 - uv) });
+          // Las líneas de velocidad: cada una corre hacia afuera del impacto y se apaga con su vida.
+          for (const linea of est.lineas) {
+            const v = Math.min(1, edad / linea.vida);
+            const cab = linea.de + linea.largo * v;
+            const cola = cab - linea.largo * 0.55;
+            const ca = Math.cos(linea.a);
+            const sa = Math.sin(linea.a);
+            const x0 = w.x + ca * cola * e.m.e;
+            const y0 = w.y + sa * cola * e.m.e;
+            const x1 = w.x + ca * cab * e.m.e;
+            const y1 = w.y + sa * cab * e.m.e;
+            const grosor = Math.max(1, linea.ancho * e.m.e);
+            e.fx.moveTo(x0, y0).lineTo(x1, y1).stroke({ width: grosor, color: AGUAYO[1], alpha: 0.6 * (1 - v), cap: "round" });
+            e.fx.moveTo(x0, y0).lineTo(x1, y1).stroke({ width: grosor * 0.45, color: 0xffffff, alpha: 0.85 * (1 - v), cap: "round" });
+          }
+          // El micro-sacudón (S22): una vez por golpe, con la fuerza del arte puro (el kit lo tiembla y lo apaga solo).
+          const clave = `sacudon:${golpe.i}`;
+          if (!e.sacudidas.has(clave)) {
+            e.sacudidas.add(clave);
+            k.cam.shake(est.sacudida * e.m.e);
+          }
+        }
+      }
     }
 
     // La pegadora de ñati: entra, agarra por atrás con la pinza cerrada, suelta con el flick y se retira.
