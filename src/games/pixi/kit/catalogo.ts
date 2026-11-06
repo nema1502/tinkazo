@@ -161,7 +161,7 @@ export const CATALOGO = [
     forma: "de-pie",
     selector: false,
     rango: { minimo: 2, ideal: [5, 12], maximo: 200 },
-    captura: false,
+    captura: true,
     historia: { q: "loreBolillasQ", a: "loreBolillasA", href: "https://es.wikipedia.org/wiki/Canica", src: "es.wikipedia.org, Canica", hue: "teal", borrador: true },
   },
   // --- /bolillas
