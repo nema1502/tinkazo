@@ -1380,17 +1380,6 @@
   body:not([data-vista="app"]) main :is(p, li) { text-wrap: pretty; }
   .sec-link { display: inline-flex; align-items: center; min-height: 44px; margin-top: 14px; font-weight: 800; color: var(--ink); }
 
-  /* Los números, medidos. */
-  .cifras { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); border: var(--bw) solid var(--ink); background: var(--card); box-shadow: var(--sh); margin-top: 18px; }
-  .cifras > div { padding: 18px 20px; border-right: 2px dashed var(--ink); }
-  .cifras > div:last-child { border-right: 0; }
-  .cifras b { display: block; font-size: 30px; font-weight: 900; line-height: 1; }
-  .cifras span { display: block; margin-top: 6px; font-size: var(--letra-sec); color: var(--ink2); }
-  @media (max-width: 560px) {
-    .cifras > div { border-right: 0; border-bottom: 2px dashed var(--ink); }
-    .cifras > div:last-child { border-bottom: 0; }
-  }
-
   /* Preguntas frecuentes. */
   .faq { margin-top: 18px; display: grid; gap: 10px; max-width: 820px; }
   .faq details { background: var(--card); border: 2px solid var(--ink); box-shadow: var(--sh-sm); }

@@ -46,13 +46,19 @@ describe("sin jerga a la vista (portada, precios, términos y sorteo verificable
 
   it("la portada dice diez juegos, que es lo que hay en el selector", () => {
     const html = readFileSync("index.html", "utf8");
-    const cifra = /<div><b>(\d+)<\/b><span data-i="cif1">/.exec(html)?.[1];
     const enSelector = new Set([...html.matchAll(/href="\/\?demo=([a-z]+)&amp;lead=3"/g)].map((m) => m[1])).size;
-    expect(Number(cifra)).toBe(enSelector);
+    expect(enSelector).toBe(10);
+    expect(String(T.es.pjT)).toMatch(/^Diez juegos/);
+    expect(String(T.en.pjT)).toMatch(/^Ten /);
+  });
+
+  it("la portada no trae el bloque de números: ni cifras sueltas ni la licencia como ficha", () => {
+    const html = readFileSync("index.html", "utf8");
+    expect(html).not.toMatch(/id="numeros"|class="cifras"|data-i="cif/);
   });
 
   it("el costo de la red no se dice en cifras ni en las preguntas de la portada ni en la tarjeta «Qué cuesta»", () => {
-    for (const clave of ["faq3a", "masPreciosB", "cif2v", "cif2"]) {
+    for (const clave of ["faq3a", "masPreciosB"]) {
       for (const idioma of ["es", "en"] as const) expect(String(T[idioma][clave]), `${idioma}.${clave}`).not.toMatch(/\d+[,.]\d+\s*XLM|centavos|US cents|testnet/i);
     }
   });
