@@ -13,7 +13,7 @@ import {
   CANICA_R, CIRCULO_R, PEGADORA_DIST, trayectoriaDe, unitarioDe,
   type Datos, type Mapeo, type Pun, type Tiro,
 } from "../pixi/bolillas-plan";
-import { cercaDe } from "../pixi/bolillas-arte";
+import { cercaDe, CANICA_ESCALA } from "../pixi/bolillas-arte";
 /**
  * Bolillas en 3D: la troya de verdad — la tierra con su relieve, el círculo de yeso, las canicas de vidrio y la mano
  * con el agarre ñati que suelta cada tiro. El plan puro (`pixi/bolillas-plan.ts`) decide todo: esta vista solo dibuja
@@ -70,6 +70,8 @@ export const TEETER_ALTO = 0.25;
 export const TEETER_FRECUENCIA = 12;
 /** La elevación de la cámara: desde arriba, para que el círculo se lea como círculo. */
 export const ELEVACION = 0.93;
+/** El radio dibujado de una canica (S17): el del plan, agrandado por el multiplicador de la casa. */
+const R_DIBUJO = CANICA_R * CANICA_ESCALA;
 const FOV = (32 * Math.PI) / 180;
 const ACERCA = 1.08;
 /** Lo más que se acerca la cámara 3D, para que el círculo entero siga en cuadro (con perspectiva, de cerca se sale). */
@@ -164,8 +166,8 @@ export const GIRO_FRECUENCIA = 3.2;
 const CERCA_ATRAS = 0.5;
 /** Cuánto se corre de costado: tres cuartos, para que la canica se lea con volumen. */
 const CERCA_CUSTADO = 0.16;
-/** A qué altura vuela la cámara de cerca (una canica mide 0,1 de alto). */
-const CERCA_ALTO = 0.17;
+/** A qué altura vuela la cámara de cerca (una canica mide 0,16 de alto con el dibujo agrandado, S17). */
+const CERCA_ALTO = 0.2;
 /** El campo de la toma de cerca: apenas más abierto que el del director. */
 const CERCA_FOV = (40 * Math.PI) / 180;
 
@@ -199,7 +201,7 @@ export function poseDelCerca(
   const { px, pz, K, Kz } = lugar;
   return {
     pos: [px + K * cx, K * CERCA_ALTO * lejos, pz + Kz * cz],
-    mira: [px + K * p.x, K * CANICA_R * 0.9, pz + Kz * p.y],
+    mira: [px + K * p.x, K * R_DIBUJO * 0.9, pz + Kz * p.y],
     fov: CERCA_FOV,
     giro: 0,
   };
@@ -344,10 +346,10 @@ class Chispas {
         const avance = (1 - Math.exp(-7 * edad)) / 7;
         d.position.set(
           e.x + Math.cos(a) * v * avance,
-          Math.max(0.004, CANICA_R * 0.9 + vy * edad - 3.2 * edad * edad),
+          Math.max(0.004, R_DIBUJO * 0.9 + vy * edad - 3.2 * edad * edad),
           e.z + Math.sin(a) * v * avance,
         );
-        d.scale.setScalar(Math.max(0.001, 0.011 * (1 - edad / Chispas.VIDA)));
+        d.scale.setScalar(Math.max(0.001, 0.011 * CANICA_ESCALA * (1 - edad / Chispas.VIDA)));
         d.updateMatrix();
         this.malla.setMatrixAt(n++, d.matrix);
       }
@@ -471,7 +473,7 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
     let c = canicas.get(slot);
     if (!c) {
       const persona = d.canicas[slot] ?? slot;
-      c = armarCanica(VIDRIOS[persona % VIDRIOS.length] as number, CANICA_R);
+      c = armarCanica(VIDRIOS[persona % VIDRIOS.length] as number, R_DIBUJO);
       canicas.set(slot, c);
     }
     return c;
@@ -482,8 +484,8 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
   const matSombra = B.add(new MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.24, depthWrite: false }));
 
   // La canica de la pegadora: un pelo más chica, como en el 2D.
-  const tiradorCanica = armarCanica(VIDRIOS[0] as number, CANICA_R * 0.85);
-  const R_TIRADOR = CANICA_R * 0.85;
+  const tiradorCanica = armarCanica(VIDRIOS[0] as number, R_DIBUJO * 0.85);
+  const R_TIRADOR = R_DIBUJO * 0.85;
 
   // El destello del golpe: un puntito de luz sobre la canica golpeada, una décima de segundo. No es el flash de
   // la cámara: es el vidrio que la devuelve.
@@ -552,7 +554,7 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
           const c = canicaDe(slot, d);
           const tray = trayectoriaDe(d, slot, e.t);
           c.grupo.visible = true;
-          c.grupo.position.set(tray.p.x, CANICA_R, tray.p.y);
+          c.grupo.position.set(tray.p.x, R_DIBUJO, tray.p.y);
           puestos.set(slot, tray.p);
           // El rodado: la golpeada rueda lo que el plan dice que vuela; la que está quieta, no gira.
           qTilt.identity();
@@ -561,7 +563,7 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
             const f = Math.min(1, (e.t - tiro.t) / tiro.salida.vuelo);
             const largo = Math.hypot(tiro.salida.tiza.x - tiro.impacto.x, tiro.salida.tiza.y - tiro.impacto.y);
             eje.set(tiro.salida.dir.y, 0, -tiro.salida.dir.x);
-            qRoll.setFromAxisAngle(eje, (f * largo) / CANICA_R);
+            qRoll.setFromAxisAngle(eje, (f * largo) / R_DIBUJO);
             qTilt.multiply(qRoll);
           }
           // El titileo de la que gana: vaivén sobre la tiza, cero en los dos bordes (la lección del sapo).
@@ -594,8 +596,8 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
           // El destello sobre la canica golpeada: sube y apaga en 0,2 s.
           const u = (e.t - tiroVivo.t) / 0.2;
           destello.visible = true;
-          destello.position.set(tiroVivo.impacto.x, CANICA_R * (1 + 0.4 * Math.sin(Math.PI * u)), tiroVivo.impacto.y);
-          destello.scale.setScalar(CANICA_R * (1.4 + 1.4 * Math.sin(Math.PI * u)));
+          destello.position.set(tiroVivo.impacto.x, R_DIBUJO * (1 + 0.4 * Math.sin(Math.PI * u)), tiroVivo.impacto.y);
+          destello.scale.setScalar(R_DIBUJO * (1.4 + 1.4 * Math.sin(Math.PI * u)));
           (destello.material as MeshBasicMaterial).opacity = 0.85 * (1 - u);
         } else destello.visible = false;
 
@@ -669,8 +671,8 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
       // La canica del asiento `id` (o la de la pegadora, en -1): su centro en la pantalla y lo que mide de alto.
       const p = puestos.get(id);
       if (!p) return null;
-      const c = motor.proyectar(px + K * p.x, K * CANICA_R, pz + Kz * p.y);
-      const t = motor.proyectar(px + K * p.x, K * CANICA_R * 2.2, pz + Kz * p.y);
+      const c = motor.proyectar(px + K * p.x, K * R_DIBUJO, pz + Kz * p.y);
+      const t = motor.proyectar(px + K * p.x, K * R_DIBUJO * 2.2, pz + Kz * p.y);
       return c && t ? { x: c.x, y: c.y, alto: Math.abs(t.y - c.y) * 2 } : null;
     },
 

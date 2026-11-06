@@ -15,6 +15,7 @@ import {
 } from "./bolillas-plan";
 import { TEXTOS } from "./bolillas-textos";
 import {
+  CANICA_ESCALA,
   COLA_GOLPE,
   MANO_COBRA,
   MANO_PREPARA,
@@ -22,6 +23,7 @@ import {
   MANCHAS_N,
   POLVO_N,
   SEMILLA_FIJA,
+  SIEMBRA_AIRE,
   TIRADOR,
   TIZA_ONDA,
   TIZA_PUNTOS,
@@ -223,6 +225,38 @@ describe("bolillas: el choque", () => {
     expect(f).toMatch(/= \(t - d\.casi\.t\) \/ Math\.max/);
     expect(f).toMatch(/titilazo\(uTitila\)/);
     expect(f).not.toMatch(/Math\.sin\(\(t - d\.casi\.t\) \* 9\)/);
+  });
+});
+
+describe("bolillas: las canicas más grandes (S17)", () => {
+  it("el dibujo de la canica se agranda sobre su radio del plan, sujetado por el aire de la siembra", () => {
+    // Se ve más grande que antes, pero el tope de la siembra manda: nunca pasa de ahí.
+    expect(CANICA_ESCALA).toBeGreaterThan(1.15);
+    expect(CANICA_ESCALA).toBe(Math.min(1.6, SIEMBRA_AIRE / (2 * CANICA_R)));
+  });
+
+  it("el tope respeta la siembra: dos canicas vecinas del plan jamás se tocan (n hasta 200)", () => {
+    const par = 2 * CANICA_R * CANICA_ESCALA;
+    for (const n of [12, 13, 18, 30, 60, 200]) {
+      for (let s = 1; s <= 12; s++) {
+        const d = datosDe(n, [Math.min(n - 1, 3)], s);
+        for (let i = 0; i < d.posiciones.length; i++) {
+          for (let j = i + 1; j < d.posiciones.length; j++) {
+            const dist = Math.hypot(
+              (d.posiciones[i] as Pun).x - (d.posiciones[j] as Pun).x,
+              (d.posiciones[i] as Pun).y - (d.posiciones[j] as Pun).y,
+            );
+            expect(dist, `canicas ${i}/${j} con ${n} semilla ${s}`).toBeGreaterThanOrEqual(par - 1e-9);
+          }
+        }
+      }
+    }
+  });
+
+  it("la escena 2D dibuja con el multiplicador, y las chispas y el destello crecen con él", () => {
+    const f = codigo("bolillas.ts");
+    expect(f).toMatch(/CANICA_R \* CANICA_ESCALA/);
+    expect(f).toMatch(/CANICA_R \* e\.m\.e \* CANICA_ESCALA/);
   });
 });
 

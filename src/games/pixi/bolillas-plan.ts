@@ -157,10 +157,15 @@ export interface Mapeo {
   e: number;
 }
 
-/** La tierra cabe entera en la franja libre, centrada: ni la tiza se corta con la barra ni con el relator. */
+/** Cuánto del ancho de la pantalla mide de radio el círculo (S16): el encuadre de cerca que pidió la sala. */
+const ENCUADRE_ANCHO = 0.47;
+/** Cuánto de la franja libre, en alto: siempre inscripto, con aire, móvil primero. */
+const ENCUADRE_ALTO = 0.45;
+
+/** La tierra cabe entera en la franja libre, centrada, y de cerca: el círculo llena la pantalla sin tocarse los bordes (S16). */
 export function mapeoDe(p: Pant): Mapeo {
   const zona = p.bottom - p.top;
-  return { cx: p.w / 2, cy: (p.top + p.bottom) / 2, e: Math.min(p.w * 0.42, zona * 0.44) };
+  return { cx: p.w / 2, cy: (p.top + p.bottom) / 2, e: Math.min(p.w * ENCUADRE_ANCHO, zona * ENCUADRE_ALTO) };
 }
 
 /** De unidades del círculo a mundo. */
@@ -558,6 +563,16 @@ export function adentro(d: Pick<Datos, "n" | "oleadas" | "tiros">, t: number): n
     const s = salidaDe(d, i);
     return s === null || t < s;
   });
+}
+
+/**
+ * Los finalistas del segundo `t` (S15): los que siguen adentro cuando ya quedan tres o menos — los
+ * nombres solo se muestran para ellos, con la ganadora incluida. Antes de ese momento, nadie: la
+ * troya se juega sin fichas sobre el círculo.
+ */
+export function finalistasDe(d: Pick<Datos, "n" | "oleadas" | "tiros">, t: number): number[] {
+  const dentro = adentro(d, t);
+  return dentro.length <= 3 ? dentro : [];
 }
 
 export type EstadoCanica = "dentro" | "vuela" | "afuera" | "titila";

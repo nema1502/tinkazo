@@ -10,6 +10,7 @@ import {
   CANICA_R,
   CIRCULO_R,
   aMundo,
+  finalistasDe,
   mapeoDe,
   planBolillas,
   trayectoriaDe,
@@ -19,6 +20,7 @@ import {
 } from "./bolillas-plan";
 import { TEXTOS } from "./bolillas-textos";
 import {
+  CANICA_ESCALA,
   CHISPA_VIDA,
   COLA_GOLPE,
   SEMILLA_FIJA,
@@ -177,6 +179,8 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
     const golpe = efectosDe(d, t);
     const mano = manoDe(d, t);
     const uTitila = (t - d.casi.t) / Math.max(0.001, d.duracion - d.casi.t);
+    // Los finalistas del segundo (S15): los nombres solo se muestran cuando ya quedan tres o menos adentro.
+    const final = finalistasDe(d, t);
 
     // Las sombras, abajo de todo: alguna canica nueva se agrega encima y las tapa bien.
     if (!en3d) e.sombra.clear();
@@ -186,12 +190,13 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
     d.canicas.forEach((persona, slot) => {
       const tray = trayectoriaDe(d, slot, t);
       const seVe = tray.estado !== "afuera" || t < d.duracion + 2;
-      const rr = 0.5 * e.m.e * CANICA_R;
+      // El dibujo de la canica: su radio del plan, agrandado por el multiplicador de la casa (S17).
+      const rr = 0.5 * e.m.e * CANICA_R * CANICA_ESCALA;
       const w = aMundo(e.m, tray.p);
       if (!en3d) {
         let g = e.bol.get(slot);
         if (!g) {
-          g = canica(0.5 * e.m.e * CANICA_R, coloresCanica(slot));
+          g = canica(0.5 * e.m.e * CANICA_R * CANICA_ESCALA, coloresCanica(slot));
           e.bol.set(slot, g);
           e.mundo.addChild(g);
         }
@@ -218,8 +223,9 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
         e.mundo.addChild(chip);
       }
       // La coronación: el cartel del kit dice el nombre del ganador, y la ficha se retira — el nombre
-      // aparece una sola vez (S12), no el cartel y la ficha superpuestos.
-      chip.visible = seVe && tray.estado !== "afuera" && !(k.coronado && persona === d.ganador);
+      // aparece una sola vez (S12), no el cartel y la ficha superpuestos. Y las fichas solo muestran a
+      // los finalistas (S15): durante la troya, el círculo queda sin nombres.
+      chip.visible = final.includes(persona) && seVe && tray.estado !== "afuera" && !(k.coronado && persona === d.ganador);
       chip.scale.set(1);
       chip.position.set(w.x - chip.width / 2, w.y - rr * 1.08 - chip.height * 0.85);
     });
@@ -243,7 +249,7 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
           break;
         }
       }
-      const tirador = e.bol.get(-1) ?? canica(0.42 * e.m.e * CANICA_R, coloresCanica(-1));
+      const tirador = e.bol.get(-1) ?? canica(0.42 * e.m.e * CANICA_R * CANICA_ESCALA, coloresCanica(-1));
       if (!e.bol.has(-1)) {
         e.bol.set(-1, tirador);
         e.mundo.addChild(tirador);
@@ -254,7 +260,7 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
         const de = despues ? tiroVivo.impacto : tiroVivo.desde;
         const hasta = despues ? tiroVivo.deflexion.hasta : tiroVivo.impacto;
         const dir = unitarioDe({ x: hasta.x - de.x, y: hasta.y - de.y });
-        const rr = 0.42 * e.m.e * CANICA_R;
+        const rr = 0.42 * e.m.e * CANICA_R * CANICA_ESCALA;
         const w = aMundo(e.m, {
           x: de.x + dir.x * f * Math.hypot(hasta.x - de.x, hasta.y - de.y),
           y: de.y + dir.y * f * Math.hypot(hasta.x - de.x, hasta.y - de.y),
@@ -293,7 +299,7 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
         if (edad < COLA_GOLPE) {
           const flash = 1 - edad / COLA_GOLPE;
           e.fx
-            .circle(w.x, w.y, CANICA_R * e.m.e * (1.2 + 0.9 * flash))
+            .circle(w.x, w.y, CANICA_R * e.m.e * CANICA_ESCALA * (1.2 + 0.9 * flash))
             .fill({ color: 0xfff6dd, alpha: 0.5 * flash });
         }
         // La nube de polvo, corrida para donde viaja la canica golpeada.
@@ -320,8 +326,8 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
             const hy = w.y + chispa.dy * edad * e.m.e;
             const tx = hx - chispa.dx * chispa.largo * e.m.e;
             const ty = hy - chispa.dy * chispa.largo * e.m.e;
-            e.fx.moveTo(tx, ty).lineTo(hx, hy).stroke({ width: Math.max(1.5, 0.3 * CANICA_R * e.m.e), color: 0xfff2bd, alpha: (1 - uv) * 0.8, cap: "round" });
-            e.fx.moveTo(tx, ty).lineTo(hx, hy).stroke({ width: Math.max(0.8, 0.15 * CANICA_R * e.m.e), color: 0xffffff, alpha: 1 - uv, cap: "round" });
+            e.fx.moveTo(tx, ty).lineTo(hx, hy).stroke({ width: Math.max(1.5, 0.3 * CANICA_R * e.m.e * CANICA_ESCALA), color: 0xfff2bd, alpha: (1 - uv) * 0.8, cap: "round" });
+            e.fx.moveTo(tx, ty).lineTo(hx, hy).stroke({ width: Math.max(0.8, 0.15 * CANICA_R * e.m.e * CANICA_ESCALA), color: 0xffffff, alpha: 1 - uv, cap: "round" });
           }
         }
       });
@@ -335,7 +341,7 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
       if (mano) {
         e.mano.alpha = mano.velo;
         const w = aMundo(e.m, mano.en);
-        const rr = 0.42 * e.m.e * CANICA_R;
+        const rr = 0.42 * e.m.e * CANICA_R * CANICA_ESCALA;
         const rh = 3.4 * rr; // la mano mide contra la canica que agarra
         // El brazo entra por el radial, desde afuera del círculo.
         const px = w.x + mano.radial.x * rh * 1.25;

@@ -133,6 +133,19 @@ export function coloresCanica(slot: number): ArteCanica {
   return { base, llama, llama2, oscuro: oscurece(base, 0.42) };
 }
 
+/* ------------------------------------------- el tamaño del dibujo de una canica (S17) */
+
+/** El aire que la siembra del plan deja como mínimo entre dos canicas vecinas (lo verifica la prueba del S17). */
+export const SIEMBRA_AIRE = 0.28;
+
+/**
+ * Cuánto se agranda el dibujo de una canica sobre su radio del plan (S17): se lee sin esfuerzo en el
+ * celular, en proporción al círculo. El tope lo pone la siembra: dos canicas vecinas, con sus radios
+ * dibujados, jamás se tocan (`2 * CANICA_R * CANICA_ESCALA <= SIEMBRA_AIRE`, y la prueba mide que el
+ * plan deja más aire que ese piso). La geometría del plan no cambia: solo el dibujo, en las dos escenas.
+ */
+export const CANICA_ESCALA = Math.min(1.6, SIEMBRA_AIRE / (2 * CANICA_R));
+
 /* ------------------------------------------------- el chip del nombre */
 
 /** La fracción del diámetro del círculo que como mucho mide de alto la ficha del nombre: una etiqueta, no un cartel. */
