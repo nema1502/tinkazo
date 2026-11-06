@@ -27,9 +27,15 @@ const fuente = (f: string): string => readFileSync(resolve(process.cwd(), "src/g
 
 /** Un tiro de ejemplo, con sus datos tal como el plan los trae (unidades del círculo). */
 const TIRO: Tiro = {
+  tirador: 1,
+  mio: 1,
   diana: 3,
   slot: 2,
   t: 10,
+  tMano: 9.6,
+  choque: { x: 0.1, y: 0.2 },
+  empuje: { dir: { x: 0.8, y: -0.6 }, donde: { x: 0.5, y: -0.2 }, hasta: { x: 0.42, y: -0.14 }, vuelo: 0.4 },
+  mano: { hasta: { x: 0.14, y: 0.07 } },
   desde: { x: 1.4, y: 0.3 },
   impacto: { x: 0.5, y: -0.2 },
   salida: { dir: { x: 0.6, y: 0.8 }, tiza: { x: 0.86, y: 0.48 }, fuerza: 1.1, vuelo: 0.4 },
