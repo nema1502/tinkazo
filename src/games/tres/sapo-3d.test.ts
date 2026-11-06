@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Color, TorusGeometry } from "three";
 import { describe, expect, it } from "vitest";
 import { writeStory } from "../drama";
 import { planQualifier } from "../pixi/qualifier";
@@ -8,7 +9,8 @@ import { assignSlots } from "../pixi/slots";
 import { crearMapa } from "./camara";
 import { compararPuestos, type Puesto2D } from "./prueba";
 import {
-  TAPA_Y, ZOOM_MAX, alturaRana, camaraDelSapo, deltaCamara, elevacionDe, lugarDelMundo, luzDelGolpe, perfilSapo, poseArgolla, type ArgollaSapo, type EstadoArgolla,
+  BANDERA, TAPA_Y, TORO_R, TORO_T, ZOOM_MAX, alturaRana, camaraDelSapo, deltaCamara, elevacionDe, franjaBandera, lugarDelMundo, luzDelGolpe, pintarArgolla,
+  perfilSapo, poseArgolla, type ArgollaSapo, type EstadoArgolla,
 } from "./sapo-3d";
 
 /**
@@ -247,6 +249,65 @@ describe("la cámara 3D sigue al director y no sabe quién gana", () => {
     expect(luzDelGolpe(6.25, 6)).toBeCloseTo(0.5, 2);
     expect(luzDelGolpe(8, 6)).toBeGreaterThan(0.6);
     expect(luzDelGolpe(8, 6)).toBeLessThan(0.75);
+  });
+});
+
+describe("las argollas llevan los colores de la bandera de Bolivia", () => {
+  it("la bandera es rojo, amarillo y verde, de arriba abajo", () => {
+    expect(BANDERA).toEqual([0xd52b1e, 0xf9e300, 0x007934]);
+  });
+
+  it("cada franja ocupa un tercio de la argolla, de atrás (rojo) hacia adelante (verde)", () => {
+    const [rojo, amarillo, verde] = BANDERA;
+    expect(franjaBandera(-1, 1)).toBe(rojo);
+    expect(franjaBandera(-0.34, 1)).toBe(rojo);
+    expect(franjaBandera(-0.33, 1)).toBe(amarillo);
+    expect(franjaBandera(0, 1)).toBe(amarillo);
+    expect(franjaBandera(0.33, 1)).toBe(amarillo);
+    expect(franjaBandera(0.34, 1)).toBe(verde);
+    expect(franjaBandera(1, 1)).toBe(verde);
+    // La medida es relativa al radio: lo mismo a cualquier tamaño.
+    expect(franjaBandera(-0.5, 0.7)).toBe(rojo);
+    expect(franjaBandera(0.5, 0.7)).toBe(verde);
+  });
+
+  it("el aro pintado tiene las tres franjas netas: cada cara de un solo color y las tres presentes", () => {
+    const geo = pintarArgolla(new TorusGeometry(TORO_R, TORO_T, 5, 18).rotateX(Math.PI / 2));
+    const pos = geo.getAttribute("position");
+    const col = geo.getAttribute("color");
+    expect(geo.index).toBeNull();
+    expect(col.count).toBe(pos.count);
+    const lineales = BANDERA.map((h) => new Color(h));
+    const cuantas = [0, 0, 0];
+    for (let t = 0; t < pos.count; t += 3) {
+      const cual = lineales.findIndex((c) => Math.abs(c.r - col.getX(t)) < 1e-6 && Math.abs(c.g - col.getY(t)) < 1e-6 && Math.abs(c.b - col.getZ(t)) < 1e-6);
+      expect(cual).toBeGreaterThanOrEqual(0);
+      for (let k = 1; k < 3; k++) {
+        expect(col.getX(t + k)).toBe(col.getX(t));
+        expect(col.getY(t + k)).toBe(col.getY(t));
+        expect(col.getZ(t + k)).toBe(col.getZ(t));
+      }
+      // La franja sale del lugar de la cara alrededor del aro: atrás rojo, adelante verde.
+      const cz = (pos.getZ(t) + pos.getZ(t + 1) + pos.getZ(t + 2)) / 3;
+      const cx = (pos.getX(t) + pos.getX(t + 1) + pos.getX(t + 2)) / 3;
+      const zn = cz / Math.hypot(cx, cz);
+      if (zn < -0.4) expect(cual).toBe(0);
+      if (Math.abs(zn) < 0.3) expect(cual).toBe(1);
+      if (zn > 0.4) expect(cual).toBe(2);
+      cuantas[cual] = (cuantas[cual] as number) + 1;
+    }
+    for (const c of cuantas) expect(c).toBeGreaterThan(0);
+    // Rojo y verde, simétricos.
+    expect(cuantas[0]).toBe(cuantas[2]);
+  });
+
+  it("pintar la argolla no cambia su forma: la pose y la física siguen con el mismo toro", () => {
+    const base = new TorusGeometry(TORO_R, TORO_T, 5, 18).rotateX(Math.PI / 2);
+    base.computeBoundingBox();
+    const pintada = pintarArgolla(base.clone());
+    pintada.computeBoundingBox();
+    expect(pintada.boundingBox!.min.toArray()).toEqual(base.boundingBox!.min.toArray());
+    expect(pintada.boundingBox!.max.toArray()).toEqual(base.boundingBox!.max.toArray());
   });
 });
 
