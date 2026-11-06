@@ -198,11 +198,12 @@ describe("el cableado: registrado en el 3D, apagado en el selector (D3)", () => 
     expect(src).not.toContain("Math.random");
   });
 
-  it("el sonido del choque viene de la casa y respeta el mudo (solo `../../sound`)", () => {
+  it("el 3D no emite sonido propio: la voz única es la del kit, que el cuadro del 2D corre en ambos modos", () => {
     const src = fuente("bolillas-3d.ts");
-    const importes = src.split("\n").filter((l) => /^\s*import\s/.test(l) && l.includes("sound"));
-    expect(importes.length).toBe(1);
-    expect(importes[0]).toContain('"../../sound"');
+    // El clic, su eco, el golpe seco de la caída y los ticks del titileo salen de `bolillas-sonido.ts` por la voz
+    // del kit (`k.sonido`); si esta vista también sonara, cada choque se oiría doble.
+    expect(src.split("\n").some((l) => /^\s*import\s.*\bsound\b/.test(l))).toBe(false);
+    expect(src).not.toContain("beep(");
   });
 
   it("la entrada que el 2D le pasa es el plan y su mapeo, sin nada del ganador", () => {

@@ -13,8 +13,6 @@ import {
   CANICA_R, CIRCULO_R, PEGADORA_DIST, trayectoriaDe, unitarioDe,
   type Datos, type Mapeo, type Pun, type Tiro,
 } from "../pixi/bolillas-plan";
-import { beep } from "../../sound";
-
 /**
  * Bolillas en 3D: la troya de verdad — la tierra con su relieve, el círculo de yeso, las canicas de vidrio y la mano
  * con el agarre ñati que suelta cada tiro. El plan puro (`pixi/bolillas-plan.ts`) decide todo: esta vista solo dibuja
@@ -376,19 +374,14 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
   const polvo = new Polvo(mundo, g.esfera, B.add(new MeshLambertMaterial({ color: POLVO[tema], flatShading: true })), B);
 
   /* ------------------------------------------------------------- el sonido de la casa */
-  // El clic de canica contra canica: dos notas de vidrio, un poco más fuerte cuando el tiro pega con más fuerza.
-  // `beep` ya respeta el mudo y el banco de sonidos de la casa.
-  const clink = (fuerza: number): void => {
-    beep(2093, 0.05, "sine", 0.028 + 0.016 * fuerza);
-    beep(3136, 0.035, "sine", 0.014 + 0.012 * fuerza);
-  };
+  // El clic de canica contra canica NO suena acá: lo emite el 2D por la voz del kit (`k.sonido`, eventosDe de
+  // `bolillas-sonido.ts`, con el eco, el golpe seco de la caída y los ticks del titileo), y el cuadro del 2D corre
+  // también cuando esta vista está enchufada. Una sola voz, mudo incluido.
 
   /* ------------------------------------------------------------- por cuadro */
   let px = 0, pz = 0, K = 1, Kz = 1;
   const puestos = new Map<number, Pun>();
-  const clinks = new Set<number>();
   const polvos = new Set<string>();
-  let casiSonado = false;
   const eje = new Vector3();
   const qTilt = new Quaternion();
   const qRoll = new Quaternion();
@@ -439,10 +432,6 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
         /* -------- los choques: polvo, destello y el clic de la casa */
         let tiroVivo: Tiro | undefined;
         d.tiros.forEach((tiro, i) => {
-          if (e.t >= tiro.t && !clinks.has(i)) {
-            clinks.add(i);
-            clink(tiro.salida.fuerza);
-          }
           const claveIda = `${i}:golpe`;
           if (e.t >= tiro.t && !polvos.has(claveIda)) {
             polvos.add(claveIda);
@@ -469,10 +458,6 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
         if (e.t >= d.casi.t && !polvos.has(claveCasi)) {
           polvos.add(claveCasi);
           polvo.nuevo(d.casi.t, d.casi.desde.x, d.casi.desde.y, 0.5);
-        }
-        if (e.t >= d.casi.t && !casiSonado) {
-          casiSonado = true;
-          clink(0.6);
         }
         polvo.actualizar(e.t);
 
