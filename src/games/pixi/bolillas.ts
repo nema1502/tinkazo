@@ -19,10 +19,13 @@ import {
 } from "./bolillas-plan";
 import { TEXTOS } from "./bolillas-textos";
 import {
+  CHISPA_VIDA,
   COLA_GOLPE,
   SEMILLA_FIJA,
   T_DESVIO,
   TIRADOR,
+  cercaDe,
+  chispasDe,
   coloresCanica,
   efectosDe,
   escalaChipDe,
@@ -223,6 +226,12 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
     for (const [persona, chip] of e.chips) {
       if (!d.canicas.includes(persona)) chip.visible = false;
     }
+    // El velo del acercamiento (S14): con la cámara del 3D de cerca de la ganadora, los chips —que el 2D proyecta
+    // con la cámara del director— quedan mirando otra toma: se desvanecen mientras dura y vuelven al volver.
+    if (en3d) {
+      const velo = 1 - cercaDe(d, t);
+      for (const chip of e.chips.values()) chip.alpha = velo;
+    }
 
     // La canica de la pegadora: vuela del punto de largada al impacto y después se desvía hasta su freno.
     // Con el 3D enchufado la dibuja three.js.
@@ -299,6 +308,20 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
                 grano.r * e.m.e * (1 + uv * 2.2),
               )
               .fill({ color: S.dark ? 0x6b5230 : 0xd9c9a8, alpha: (1 - uv) * 0.55 });
+          }
+        }
+        // Las chispas del vidrio (S13): rayitos de luz que saltan más vivos y mueren antes que el polvo —
+        // cada uno viaja con su rumbo del plan y apaga con su vida, como un destello de cristal.
+        if (edad < CHISPA_VIDA) {
+          for (const chispa of chispasDe(i, tiro.impacto, tiro.salida.dir)) {
+            if (edad >= chispa.vida) continue;
+            const uv = edad / chispa.vida;
+            const hx = w.x + chispa.dx * edad * e.m.e;
+            const hy = w.y + chispa.dy * edad * e.m.e;
+            const tx = hx - chispa.dx * chispa.largo * e.m.e;
+            const ty = hy - chispa.dy * chispa.largo * e.m.e;
+            e.fx.moveTo(tx, ty).lineTo(hx, hy).stroke({ width: Math.max(1.5, 0.3 * CANICA_R * e.m.e), color: 0xfff2bd, alpha: (1 - uv) * 0.8, cap: "round" });
+            e.fx.moveTo(tx, ty).lineTo(hx, hy).stroke({ width: Math.max(0.8, 0.15 * CANICA_R * e.m.e), color: 0xffffff, alpha: 1 - uv, cap: "round" });
           }
         }
       });

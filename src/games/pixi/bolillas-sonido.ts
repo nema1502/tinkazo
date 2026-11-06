@@ -5,7 +5,7 @@ import type { Categoria, Timbre } from "./kit/sonido";
  * Bolillas: el sonido de los choques, puro.
  *
  * La escena pregunta, en cada cuadro, qué toca sonar a esta hora del plan: el
- * clic de canica contra canica en cada impacto (un cristal con su eco), el
+ * clic de canica contra canica en cada impacto (un cristal fuerte con su brillo y su eco), el
  * golpe seco del polvo cuando la golpeada cae en la tierra, y los tonos chicos
  * que suben mientras la canica que gana titila en la tiza. Todo es cosmético:
  * nada de esto decide nada del sorteo, y la escena lo pasa por la voz del kit
@@ -32,9 +32,12 @@ export interface EventoSonoro {
   retrasoMs?: number;
 }
 
-/** El clic de cristal del impacto: agudo, corto, y su eco apenas más bajo. */
-const CLINK = { grado: 18, cat: "evento" as const, timbre: "square" as const, vol: 0.05, dur: 0.05 };
-const ECO = { grado: 13, cat: "evento" as const, timbre: "square" as const, vol: 0.04, dur: 0.05, retrasoMs: 45 };
+/** El clic de cristal del impacto: agudo, corto, y se oye de verdad en un teléfono (clímax: la casa le da 0,08 a 0,12). */
+const CLINK = { grado: 18, cat: "climax" as const, timbre: "square" as const, vol: 0.11, dur: 0.05 };
+/** El brillo de la chispa: el vidrio que se raspa, apenas después del clic, aún más agudo y más corto. */
+const BRILLO = { grado: 20, cat: "climax" as const, timbre: "sawtooth" as const, vol: 0.09, dur: 0.04, retrasoMs: 22 };
+/** El eco del clic, apenas más bajo y después: suena a sala, no a tick de reloj. */
+const ECO = { grado: 13, cat: "evento" as const, timbre: "square" as const, vol: 0.05, dur: 0.05, retrasoMs: 55 };
 
 /** El golpe seco de la canica cayendo en la tierra: bajo, blando, de fondo. */
 const CAE = { grado: 2, cat: "fondo" as const, timbre: "sine" as const, vol: 0.03, dur: 0.09 };
@@ -57,6 +60,7 @@ export function eventosDe(d: Datos, t: number, suena: boolean): EventoSonoro[] {
   d.tiros.forEach((tiro, i) => {
     if (t >= tiro.t && t < tiro.t + VENTANA) {
       out.push({ clave: `choque:${i}`, ...CLINK });
+      out.push({ clave: `brillo:${i}`, ...BRILLO });
       out.push({ clave: `eco:${i}`, ...ECO });
     }
     // La caída, cuando la canica golpeada termina su vuelo en la tierra.
