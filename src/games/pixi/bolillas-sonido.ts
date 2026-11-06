@@ -4,12 +4,12 @@ import type { Categoria, Timbre } from "./kit/sonido";
 /**
  * Bolillas: el sonido de los choques, puro.
  *
- * La escena pregunta, en cada cuadro, qué toca sonar a esta hora del plan: el
- * clic de canica contra canica en cada impacto (un cristal fuerte con su brillo y su eco), el
- * golpe seco del polvo cuando la golpeada cae en la tierra, y los tonos chicos
- * que suben mientras la canica que gana titila en la tiza. Todo es cosmético:
- * nada de esto decide nada del sorteo, y la escena lo pasa por la voz del kit
- * (`k.sonido`), que nace muda cuando el estadio está en silencio (`isMuted`).
+ * La escena pregunta, en cada cuadro, qué toca sonar a esta hora del plan. Cada turno de la cadena (S23) tiene
+ * **dos golpes**: el toque blando de la mano de quien tira sobre **su** canica (un cristal suave, de evento) a la hora
+ * `tMano`, y el clic fuerte de mi canica contra la del enemigo (clímax, con su brillo y su eco) a la hora `t`, más el
+ * golpe seco del polvo cuando la golpeada cae en la tierra. Después, los tonos chicos que suben mientras la canica que
+ * gana titila en la tiza. Todo es cosmético: nada de esto decide nada del sorteo, y la escena lo pasa por la voz del
+ * kit (`k.sonido`), que nace muda cuando el estadio está en silencio (`isMuted`).
  *
  * Puro: sin audio y sin DOM, se prueba en Node (`bolillas-arte.test.ts`). Cada
  * evento lleva su clave única (la escena la suena una sola vez con
@@ -34,6 +34,11 @@ export interface EventoSonoro {
 
 /** El clic de cristal del impacto: agudo, corto, y se oye de verdad en un teléfono (clímax: la casa le da 0,08 a 0,12). */
 const CLINK = { grado: 18, cat: "climax" as const, timbre: "square" as const, vol: 0.11, dur: 0.05 };
+/**
+ * El toque de la mano sobre mi canica (S23): el primer golpe de la cadena, más blando —de evento, no de clímax—, para
+ * que el turno se oiga como lo que es: primero la mano, después el choque de verdad.
+ */
+const TOQUE = { grado: 15, cat: "evento" as const, timbre: "triangle" as const, vol: 0.055, dur: 0.05 };
 /** El brillo de la chispa: el vidrio que se raspa, apenas después del clic, aún más agudo y más corto. */
 const BRILLO = { grado: 20, cat: "climax" as const, timbre: "sawtooth" as const, vol: 0.09, dur: 0.04, retrasoMs: 22 };
 /** El eco del clic, apenas más bajo y después: suena a sala, no a tick de reloj. */
@@ -58,6 +63,8 @@ export function eventosDe(d: Datos, t: number, suena: boolean): EventoSonoro[] {
   if (!suena) return [];
   const out: EventoSonoro[] = [];
   d.tiros.forEach((tiro, i) => {
+    // La cadena tiene dos golpes (S23): el blando de la mano, antes, y el fuerte del vidrio contra vidrio.
+    if (t >= tiro.tMano && t < tiro.tMano + VENTANA) out.push({ clave: `mano:${i}`, ...TOQUE });
     if (t >= tiro.t && t < tiro.t + VENTANA) {
       out.push({ clave: `choque:${i}`, ...CLINK });
       out.push({ clave: `brillo:${i}`, ...BRILLO });
