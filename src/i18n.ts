@@ -2533,6 +2533,14 @@ export const T: Record<Lang, Dict> = {
     loreToborochiQ: "¿De dónde sale El Toborochi?",
     loreToborochiA: "Es el árbol de Santa Cruz: entre mayo y junio pinta de rosa las calles y las plazas, justo cuando casi todos los demás pierden las hojas. Una leyenda guaraní cuenta que Araverá escapó de los espíritus del mal y se refugió en el tronco de un toborochi, y que todavía asoma convertida en flor para que la visiten los colibríes. Hasta sale en el billete de 20 bolivianos.",
     // --- /toborochi
+    // --- autos
+    gameAutos: "Carrera de autos", jgAutosN: "Carrera de autos",
+    jgAutosB: "Una carrera de autos por la cordillera, de costado, con la cara de cada uno en la ventanilla. Ola tras ola se abren hoyos y caen rocas gigantes, y los autos se van quedando en el camino hasta que uno solo cruza la meta. El ganador ya salió del sorteo y el juego solo lo cuenta.",
+    gcAutos: "Los autos caen en hoyos o quedan bajo rocas. Gana el único que cruza la meta.",
+    gcAutosMany: "Con varios premios, el auto que cruza la meta se lleva el primero; los demás premios salen en el cartel del final.",
+    loreAutosQ: "¿De dónde sale Carrera de autos?",
+    loreAutosA: "Borrador: todavía no tiene su historia ni su fuente, y no sale en ningún sorteo hasta que se escriba.",
+    // --- /autos
     // <<< kit:i18n-es
     // Luma a la vista y qué sigue después del resultado (2 de noviembre de 2026): el "?" que enseña a bajar el CSV y la línea de "qué sigue".
     lumaQ: "Cómo bajar tu lista de Luma",
@@ -4698,6 +4706,14 @@ export const T: Record<Lang, Dict> = {
     loreToborochiQ: "Where does The Toborochi come from?",
     loreToborochiA: "It is the tree of Santa Cruz: in May and June it paints the streets and squares pink, just when most other trees lose their leaves. A Guaraní legend tells that Araverá fled from evil spirits and took refuge in the trunk of a toborochi, and that she still comes out as a flower for the hummingbirds to visit. It is even on the 20-boliviano note.",
     // --- /toborochi
+    // --- autos
+    gameAutos: "Car race", jgAutosN: "Car race",
+    jgAutosB: "A side-view car race through the mountains, with each face in a car window. Wave after wave, holes open and giant rocks fall, and the cars drop out one by one until only one crosses the finish line. The winner already came out of the draw and the game only tells it.",
+    gcAutos: "Cars fall into holes or end up under rocks. The only one to cross the finish line wins.",
+    gcAutosMany: "With several prizes, the car that crosses the finish line takes the first; the other prizes show on the final banner.",
+    loreAutosQ: "Where does Car race come from?",
+    loreAutosA: "Draft: it has no story or source yet, and it does not show in any draw until one is written.",
+    // --- /autos
     // <<< kit:i18n-en
     // Luma in plain sight and what comes after the result (November 2, 2026): the "?" that teaches how to get the CSV, and the "what's next" line.
     lumaQ: "How to get your list from Luma",
