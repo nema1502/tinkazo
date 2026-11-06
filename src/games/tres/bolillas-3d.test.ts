@@ -3,13 +3,16 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Mapeo, Tiro } from "../pixi/bolillas-plan";
+import { trayectoriaDe } from "../pixi/bolillas-plan";
 import { crearMapa } from "./camara";
 import { JUEGOS_CON_3D, ofrece3D } from "./ofrecidos";
 import { tiene3D } from "./registro";
 import {
-  LLEGADA_TITILA, TEETER_ALTO, TEETER_FRECUENCIA, ZOOM_MAX, camaraBolillas, lugarDelMundo, perfilBolillas,
-  poseTiro, teeterDelCasi, titileo, type EntradaBolillas,
+  LLEGADA_TITILA, TEETER_ALTO, TEETER_FRECUENCIA, ZOOM_MAX, camaraBolillas, giroDelCasi, GIRO_ALTO,
+  lugarDelMundo, mezclarPose, perfilBolillas, poseDelCerca, poseTiro, teeterDelCasi, titileo,
+  type EntradaBolillas,
 } from "./bolillas-3d";
+import { cercaDe } from "../pixi/bolillas-arte";
 
 /**
  * Bolillas en 3D no decide nada: dibuja lo que el plan puro (`pixi/bolillas-plan.ts`) ya puso. Estas pruebas cuidan
@@ -177,6 +180,78 @@ describe("la cámara 3D sigue al director y no sabe quién gana", () => {
     const firma = src.slice(src.indexOf("export function camaraBolillas"), src.indexOf("export const perfilBolillas"));
     expect(firma).toContain("(cam: Camara2D, w: number, h: number");
     expect(firma).not.toMatch(/ganador|winner|slot/i);
+  });
+});
+
+describe("el acercamiento a la ganadora: la bolilla gira, la cámara llega (S14)", () => {
+  /** El casi de ejemplo: la canica 1 gana y rueda de (0,5, 0,5) hasta la tiza en (0,5, 0,94). */
+  const CASI_D = {
+    casi: { t: 20, ganador: 0, slot: 1, desde: { x: 0.5, y: 0.5 }, dir: { x: 0, y: 1 }, titila: { x: 0.5, y: 0.94 } },
+    duracion: 23.4,
+    posiciones: [{ x: 0.5, y: 0.5 }, { x: 0.3, y: 0.4 }],
+    tiros: [] as Tiro[],
+  };
+
+  it("el giro sobre la tiza nace y muere en cero exacto (la misma envolvente del titileo)", () => {
+    expect(giroDelCasi(CASI_D, CASI_D.casi.t)).toBe(0);
+    expect(giroDelCasi(CASI_D, CASI_D.casi.t + LLEGADA_TITILA)).toBe(0);
+    expect(giroDelCasi(CASI_D, CASI_D.duracion)).toBe(0);
+    expect(giroDelCasi(CASI_D, CASI_D.duracion + 3)).toBe(0);
+    // En el medio gira de verdad: dos ejes (el vaivén del otro lado + el giro acá), y nunca más alto que su amplitud.
+    const medio = Math.max(...Array.from({ length: 60 }, (_, i) => Math.abs(giroDelCasi(CASI_D, CASI_D.casi.t + LLEGADA_TITILA + ((i + 1) / 61) * (CASI_D.duracion - CASI_D.casi.t - LLEGADA_TITILA)))));
+    expect(medio).toBeGreaterThan(0.3);
+    expect(medio).toBeLessThanOrEqual(GIRO_ALTO + 1e-9);
+    expect(giroDelCasi(CASI_D, 22.2)).toBe(giroDelCasi(CASI_D, 22.2));
+  });
+
+  it("la pose de cerca mira a la canica por su lugar del plan, y queda a tiro de foto sin atravesarla", () => {
+    const pant = PANTALLAS[0] as { nombre: string; u: number; mapeo: Mapeo };
+    const mapa = crearMapa(perfilBolillas(), pant.u);
+    const lugar = lugarDelMundo(mapa, pant.mapeo);
+    for (const t of [20.2, 20.9, 21.6, 22.3, 23.1]) {
+      const pose = poseDelCerca(CASI_D, t, lugar, 1.3);
+      // La mira cae sobre la canica (dónde la pone `trayectoriaDe`, que es la cuenta que dibuja la vista).
+      const p = trayectoriaDe(CASI_D, 1, t).p;
+      expect(pose.mira[0]).toBeCloseTo(lugar.px + lugar.K * p.x, 4);
+      expect(pose.mira[2]).toBeCloseTo(lugar.pz + lugar.Kz * p.y, 4);
+      expect(pose.mira[1]).toBeGreaterThan(0);
+      // Cerca, pero nunca adentro del vidrio: a entre media y una canica y media de largo.
+      const lejos = Math.hypot(pose.pos[0] - pose.mira[0], pose.pos[2] - pose.mira[2]) / lugar.K;
+      expect(lejos).toBeGreaterThan(0.2);
+      expect(lejos).toBeLessThan(1.1);
+      expect(pose.fov).toBeGreaterThan(0);
+      expect(pose.mira).toEqual(pose.mira);
+    }
+    // Determinista: la misma hora, la misma pose.
+    expect(poseDelCerca(CASI_D, 21.4, lugar, 1.3)).toEqual(poseDelCerca(CASI_D, 21.4, lugar, 1.3));
+  });
+
+  it("la mezcla de poses es la de la casa: peso 0 devuelve la del director, peso 1 la de cerca, y en el medio no salta", () => {
+    const a = { pos: [0, 0, 10] as [number, number, number], mira: [0, 0, 0] as [number, number, number], fov: 0.5, giro: 0 };
+    const b = { pos: [4, 3, 0] as [number, number, number], mira: [2, 2, 2] as [number, number, number], fov: 0.8, giro: 0.2 };
+    expect(mezclarPose(a, b, 0)).toEqual(a);
+    expect(mezclarPose(a, b, 1)).toEqual(b);
+    const m = mezclarPose(a, b, 0.5);
+    expect(m.pos[0]).toBeCloseTo(2, 9);
+    expect(m.pos[2]).toBeCloseTo(5, 9);
+    expect(m.fov).toBeCloseTo(0.65, 9);
+    // Y el peso del acercamiento es la misma cuenta del 2D: una sola, para las dos escenas.
+    expect(cercaDe(CASI_D, CASI_D.casi.t + 1.3)).toBeGreaterThan(0);
+    expect(cercaDe(CASI_D, CASI_D.casi.t + 1.3)).toBeLessThan(1);
+    expect(cercaDe(CASI_D, CASI_D.duracion)).toBe(0);
+  });
+});
+
+describe("S13 en 3D: sombras de contacto y chispas de vidrio", () => {
+  it("las canicas se ven apoyadas en la tierra y cada choque echa su brillo, dibujados por la vista", () => {
+    const src = fuente("bolillas-3d.ts");
+    // Sombra de contacto: un plano chico debajo de cada canica (estilo de la casa, pocos polígonos).
+    expect(src).toMatch(/sombra/i);
+    expect(src).toMatch(/CircleGeometry/);
+    // Chispas: brillo breve en el impacto, determinista por hash (sin azar propio).
+    expect(src).toMatch(/Chispas/);
+    expect(src).toMatch(/chispo\.nuevo/);
+    expect(src).not.toContain("Math.random");
   });
 });
 
