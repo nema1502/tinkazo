@@ -4,7 +4,7 @@ extern crate std;
 use super::*;
 use soroban_sdk::{
     bytesn,
-    testutils::{Address as _, Events as _, Ledger as _},
+    testutils::{storage::Persistent as _, Address as _, Events as _, Ledger as _},
     Address, Bytes, BytesN, Env, Event as _, String,
 };
 
@@ -350,6 +350,62 @@ fn extend_works_for_existing_raffles_only() {
     env.ledger().set_timestamp(ROUND_TIME + 3);
     client.draw(&1, &sig_uncompressed(&env));
     client.extend(&1);
+}
+
+/// TTL restante, en ledgers, de la entrada `clave` del sorteo.
+fn ttl_de(env: &Env, contract_id: &Address, clave: DataKey) -> u32 {
+    env.as_contract(contract_id, || env.storage().persistent().get_ttl(&clave))
+}
+
+#[test]
+fn las_entradas_del_sorteo_viven_120_dias_y_extend_las_renueva_bajo_los_30() {
+    let (env, contract_id, organizer) = setup();
+    let client = TinkazoRaffleClient::new(&env, &contract_id);
+    client.seal(&organizer, &list_hash(&env), &SAMPLE_COUNT, &1, &ROUND, &meta(&env));
+    // La red de pruebas las crea con un mínimo bajo; el contrato las deja en 120 días.
+    assert_eq!(
+        ttl_de(&env, &contract_id, DataKey::Raffle(1)),
+        TTL_ENTRADA_EXTEND_TO
+    );
+    assert_eq!(TTL_ENTRADA_EXTEND_TO, 120 * DAY_LEDGERS);
+    assert_eq!(TTL_ENTRADA_THRESHOLD, 30 * DAY_LEDGERS);
+
+    env.ledger().set_timestamp(ROUND_TIME + 3);
+    client.draw(&1, &sig_uncompressed(&env));
+    assert_eq!(
+        ttl_de(&env, &contract_id, DataKey::Draw(1)),
+        TTL_ENTRADA_EXTEND_TO
+    );
+
+    // A los 89 días (de los 90 que el contrato de premios lee el sorteo) quedan 31:
+    // `extend` no toca nada, porque todavía está sobre el umbral.
+    let seq = env.ledger().sequence();
+    env.ledger().set_sequence_number(seq + 89 * DAY_LEDGERS);
+    client.extend(&1);
+    assert_eq!(
+        ttl_de(&env, &contract_id, DataKey::Raffle(1)),
+        31 * DAY_LEDGERS
+    );
+    assert_eq!(
+        ttl_de(&env, &contract_id, DataKey::Draw(1)),
+        31 * DAY_LEDGERS
+    );
+
+    // A los 91 días quedan 29, bajo el umbral: `extend` las deja otra vez en 120.
+    env.ledger().set_sequence_number(seq + 91 * DAY_LEDGERS);
+    assert_eq!(
+        ttl_de(&env, &contract_id, DataKey::Raffle(1)),
+        29 * DAY_LEDGERS
+    );
+    client.extend(&1);
+    assert_eq!(
+        ttl_de(&env, &contract_id, DataKey::Raffle(1)),
+        TTL_ENTRADA_EXTEND_TO
+    );
+    assert_eq!(
+        ttl_de(&env, &contract_id, DataKey::Draw(1)),
+        TTL_ENTRADA_EXTEND_TO
+    );
 }
 
 // ---------------------------------------------------------------- drand

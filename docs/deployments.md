@@ -21,6 +21,14 @@ Transacciones del despliegue del 16 de septiembre (`CD2SSHBU…`, testnet, explo
 | `draw` (verificación BLS + selección) | `39c4fad01488269e…` | 827 191 stroops = **0,083 XLM** |
 | `extend` (renta de instancia y código, 7 → 120 días) | `67e9b763fc86706a…` | 151 530 187 stroops = **15,15 XLM** |
 
+## Versión 0.2.0, la de mainnet
+
+La versión 0.2.0 del paquete (`contracts/raffle/Cargo.toml`) cambia dos cosas respecto del tag `v0.1.0`: el tope de ganadores sube de 32 a 100 (`MAX_WINNERS`) y las entradas del sorteo (`Raffle`, `Draw`) se renuevan con su propio umbral: cuando les quedan menos de 30 días, `seal`, `draw` y `extend` las dejan en 120 (`TTL_ENTRADA_THRESHOLD` y `TTL_ENTRADA_EXTEND_TO`; el `v0.1.0` usaba 60 y 120, y la variante de testnet del 25 de octubre, 2 y 7). El umbral de 30 es lo que queda de los 120 después de los 90 días que el contrato de premios lee un sorteo desde su `draw`: hasta ahí nadie tiene que renovar nada. Una prueba (`las_entradas_del_sorteo_viven_120_dias_y_extend_las_renueva_bajo_los_30`) comprueba que nacen con 120, que a los 89 días `extend` no las toca y que a los 91 las vuelve a dejar en 120.
+
+La 0.2.0 renueva las entradas a 120 días en cualquier red. **En mainnet el costo medido no cambia**: la red crea toda entrada persistente nueva con su mínimo, que ya son 120 días (`min_persistent_ttl` de 2.073.600 ledgers, en `scripts/vigilar-red.base.json`), así que `seal` y `draw` ya pagaban la renta de 120 días, y el pedido de la 0.2.0 no hace nada al nacer la entrada (le quedan 120, sobre el umbral de 30). Las proyecciones de abajo (0,178 XLM por un sorteo de tres ganadores, 0,331 con 100) salen de esa renta y siguen valiendo. En testnet sí cambiaría: el mínimo es de 7 días, y el mismo pedido subiría cada entrada a 120 y pagaría unas 17 veces más renta, que es justo lo que la variante del 25 de octubre evitaba.
+
+El paquete está en 0.2.0 porque el workflow de StellarExpert nombra el `.wasm` y el release con la versión del paquete: con el tag `v0.2.0` salen el release `v0.2.0_tinkazo-raffle_cli28.1.0` y el archivo `tinkazo-raffle_v0.2.0.wasm`. Con un tag que no coincida con la versión del paquete, el nombre del release agrega `_pkg<versión>`.
+
 ## Costos medidos y proyección a mainnet
 
 **Medición del 3 de octubre de 2026 (vigente).** Lo que cobró la red según Horizon, en los sorteos 151, 152, 159 y 160:
@@ -82,7 +90,7 @@ Notas:
 
 Esta es la renta de 7 días de testnet, y el fee de `draw` queda en una recta exacta de la forma `5.934 + 114,98 · S` stroops de renta (con `S` los bytes de la entrada `Draw`, 392 con un ganador y 8 más por cada uno), que pasa por los cuatro puntos sin error. El resto del fee es fijo o casi: instrucciones (≈ 3 stroops cada 10.000), 2.500 por las dos entradas escritas, 1.831 + 124 por el tamaño de la transacción (624 bytes) y 2.500 por KB de eventos.
 
-**3. Testnet y mainnet comparten los parámetros de fee y de renta** (testnet ya está en el protocolo 30 y mainnet sigue en el 29; el detector no registra cambios al 6 de noviembre desde la línea base del 4): la diferencia es el TTL mínimo de una entrada persistente, 7 días contra 120. La razón de las rentas se midió simulando la subida del mismo `.wasm` (11.687 bytes) en los dos RPC: 0,959 XLM en testnet y **16,373 XLM en mainnet** (la renta, sin la parte fija, sale 17,129 veces mayor; 120 sobre 7 da 17,143, menos de 0,1 % de diferencia). Y la renta por KB es la misma en las dos, el piso de 1.000 stroops, porque el estado vivo está bajo 2/3 del objetivo (testnet 4.417 de 7.000 MB, 63 %; mainnet 1.672 de 3.000 MB, 56 %). Con eso, mainnet = lo fijo + 17,129 veces lo que depende del tamaño de la entrada. Como control, la misma cuenta da para tres ganadores 0,0954 de `seal` y 0,0824 de `draw`, que coinciden con los 0,10 y 0,08 de la proyección del 16 de septiembre. En mainnet las entradas nacen con 120 días por el mínimo de la red, aunque el código pida 7 (`TTL_ENTRADA_*`): ese pedido no hace nada allá.
+**3. Testnet y mainnet comparten los parámetros de fee y de renta** (testnet ya está en el protocolo 30 y mainnet sigue en el 29; el detector no registra cambios al 6 de noviembre desde la línea base del 4): la diferencia es el TTL mínimo de una entrada persistente, 7 días contra 120. La razón de las rentas se midió simulando la subida del mismo `.wasm` (11.687 bytes) en los dos RPC: 0,959 XLM en testnet y **16,373 XLM en mainnet** (la renta, sin la parte fija, sale 17,129 veces mayor; 120 sobre 7 da 17,143, menos de 0,1 % de diferencia). Y la renta por KB es la misma en las dos, el piso de 1.000 stroops, porque el estado vivo está bajo 2/3 del objetivo (testnet 4.417 de 7.000 MB, 63 %; mainnet 1.672 de 3.000 MB, 56 %). Con eso, mainnet = lo fijo + 17,129 veces lo que depende del tamaño de la entrada. Como control, la misma cuenta da para tres ganadores 0,0954 de `seal` y 0,0824 de `draw`, que coinciden con los 0,10 y 0,08 de la proyección del 16 de septiembre. En mainnet las entradas nacen con 120 días por el mínimo de la red, y la 0.2.0 también pide 120 (`TTL_ENTRADA_*`): el pedido no agrega costo allá.
 
 | Ganadores (participantes) | `draw` testnet (7 días) | `draw` mainnet (120 días) | `seal` + `draw` mainnet | En US$ (XLM a 0,196) |
 |---|---|---|---|---|
@@ -179,11 +187,11 @@ En mainnet no se compila acá: se despliega el `.wasm` del release que arma GitH
 
 ```bash
 # 1. Un tag dispara .github/workflows/release.yml: pruebas, compilación, release y atestación
-git tag v0.1.0 && git push origin v0.1.0
+git tag v0.2.0 && git push origin v0.2.0
 
 # 2. Bajar el .wasm del release (el nombre exacto del release sale en el resumen del workflow)
-gh release download v0.1.0_tinkazo-raffle_cli28.1.0 --repo nema1502/tinkazo --pattern '*.wasm'
-gh attestation verify tinkazo-raffle_v0.1.0.wasm --repo nema1502/tinkazo \
+gh release download v0.2.0_tinkazo-raffle_cli28.1.0 --repo nema1502/tinkazo --pattern '*.wasm'
+gh attestation verify tinkazo-raffle_v0.2.0.wasm --repo nema1502/tinkazo \
   --signer-repo stellar-expert/soroban-build-workflow
 
 # 3. Desplegarlo. El script no despliega en mainnet un .wasm sin atestación de GitHub,
@@ -192,7 +200,7 @@ gh attestation verify tinkazo-raffle_v0.1.0.wasm --repo nema1502/tinkazo \
 #    sin eso, la verificación no cree en el contrato nuevo.
 stellar network add mainnet --rpc-url https://mainnet.sorobanrpc.com \
   --network-passphrase "Public Global Stellar Network ; September 2015"
-scripts/deploy.sh mainnet --wasm tinkazo-raffle_v0.1.0.wasm
+scripts/deploy.sh mainnet --wasm tinkazo-raffle_v0.2.0.wasm
 ```
 
 Si el despliegue reemplaza a otro contrato, el anterior pasa a `anteriores` en el mismo commit, con los dos topes que lo cierran (sin ellos, `oficiales.ts` no lo acepta, o no lo acepta por historial): `ultimoId` es `next_id − 1` y `ultimoLedger` es el `sealed_ledger` de ese sorteo. Los dos salen por simulación de solo lectura, sin firmar nada:

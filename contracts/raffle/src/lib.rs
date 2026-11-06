@@ -15,9 +15,10 @@
 //! cada versión es un despliegue nuevo y los comprobantes llevan la dirección.
 //!
 //! Renta: cada sorteo paga la renta de sus dos entradas (`Raffle`, `Draw`) por
-//! 7 días en esta variante de testnet (mainnet: 120, ver `TTL_ENTRADA_EXTEND_TO`).
-//! La renta de la instancia y del código del contrato se renueva con
-//! `extend`, nunca dentro de `seal` o `draw`.
+//! 120 días, que es lo que mainnet ya da a toda entrada persistente nueva; si
+//! les quedan menos de 30, `extend` las vuelve a dejar en 120 (ver
+//! `TTL_ENTRADA_THRESHOLD`). La renta de la instancia y del código del
+//! contrato se renueva con `extend`, nunca dentro de `seal` o `draw`.
 
 mod drand;
 mod select;
@@ -53,15 +54,17 @@ pub const MAX_META_LEN: u32 = 160;
 const DAY_LEDGERS: u32 = 17_280;
 const TTL_THRESHOLD: u32 = 60 * DAY_LEDGERS;
 const TTL_EXTEND_TO: u32 = 120 * DAY_LEDGERS;
-// Solo testnet: las entradas del sorteo (`Raffle`, `Draw`) guardan 7 días, no 120.
-// El alquiler de una entrada escala con el tiempo que queda guardada, y en testnet
-// el precio sube cuando el estado de la red pasa su objetivo: un sorteo de prueba
-// no debe pagar 120 días por cada sello. Siete días es el TTL mínimo de una entrada
-// persistente en testnet (docs/deployments.md). Consecuencia: si nadie llama a
-// `extend` antes de que venza, la entrada se archiva y el sorteo deja de leerse
-// hasta restaurarla. Esta variante no se despliega en mainnet.
-const TTL_ENTRADA_THRESHOLD: u32 = 2 * DAY_LEDGERS;
-const TTL_ENTRADA_EXTEND_TO: u32 = 7 * DAY_LEDGERS;
+// Renta de las entradas del sorteo (`Raffle`, `Draw`): 120 días, y se renuevan cuando
+// les quedan menos de 30. Los 120 son el TTL mínimo de una entrada persistente nueva
+// en mainnet (`min_persistent_ttl` de 2.073.600 ledgers): la red ya las crea con eso,
+// así que pedirlo en `seal` y `draw` no agrega costo allá. Y 30 es lo que sobra de
+// 120 después de los 90 días que el contrato de premios lee un sorteo (90 desde el
+// `draw`): hasta ahí nadie tiene que renovar nada, y `extend` (la llama cualquiera)
+// las renueva cuando bajan de 30. Un umbral por debajo del mínimo de la red nunca se
+// cumpliría y `extend` no haría nada. En testnet el mínimo es de 7 días, y el mismo
+// pedido sube la entrada a 120 y paga esa renta.
+const TTL_ENTRADA_THRESHOLD: u32 = 30 * DAY_LEDGERS;
+const TTL_ENTRADA_EXTEND_TO: u32 = 120 * DAY_LEDGERS;
 
 #[contracttype]
 #[derive(Clone)]
