@@ -118,7 +118,10 @@ export function formaDe(p: Pantalla, vivos: number, nombrePx: number, nombreW: n
   /** Las medidas con `columnas` por `filas`, y si el grupo entra en el plano sin salirse por atrás. */
   const armar = (columnas: number, filas: number) => {
     const altoFila = banda / filas;
-    const alto = arriba ? Math.max(30 * k, Math.min(altoFila - altoNombre - 2 * k, 0.17 * p.h)) : Math.max(22 * k, Math.min(altoFila * 0.94, 0.12 * p.h));
+    // En el proyector (`arriba`) el nombre va arriba de la cabeza: la fila le deja lugar. En el celular va al costado, así que
+    // la fila es para la llama sola: el alto sale del paso de la fila (si hay más filas de las que alcanzan, la llama se
+    // achica, nunca se enciman las filas).
+    const alto = arriba ? Math.max(30 * k, Math.min(altoFila - altoNombre - 2 * k, 0.17 * p.h)) : Math.min(altoFila * 0.94, 0.12 * p.h);
     const esc = alto / LLAMA_ALTO;
     const largo = LLAMA_LARGO * esc;
     const ancho = arriba ? Math.max(nombreW + 22 * k, largo + 26 * k) : largo + nombreW + 14 * k;
@@ -132,8 +135,9 @@ export function formaDe(p: Pantalla, vivos: number, nombrePx: number, nombreW: n
   };
   let filas: number;
   let columnas: number;
+  let rMax: number;
   if (arriba) {
-    const rMax = Math.max(2, Math.floor(banda / (altoNombre + 44 * k)));
+    rMax = Math.max(2, Math.floor(banda / (altoNombre + 44 * k)));
     filas = Math.min(rMax, m, Math.max(3, Math.round(Math.sqrt(m * 1.7))));
     columnas = Math.ceil(m / filas);
     while (columnas > 1 && !armar(columnas, filas).cabe) {
@@ -141,15 +145,26 @@ export function formaDe(p: Pantalla, vivos: number, nombrePx: number, nombreW: n
       columnas = Math.ceil(m / filas);
     }
   } else {
-    const rMax = Math.max(2, Math.floor(banda / (altoNombre * 1.05)));
+    // La flecha angosta (pocas columnas) es la que era: con muchas llamas arranca por ahí. Pero el tope inviolable ahora es
+    // otro: en el celular el nombre va al costado, así que lo que pone el límite es la llama legible (el piso `22k` con una
+    // fila del `94 %`). Más filas que eso, y el dibujo se achica sin remedio.
+    const rPrefer = Math.max(2, Math.floor(banda / (altoNombre * 1.05)));
+    rMax = Math.max(2, Math.floor((banda * 0.94) / (22 * k)));
     const colMin = nombreW + 36 * k + 8 * k;
     const cMax = Math.max(1, Math.floor((p.w * 0.94) / colMin));
-    columnas = Math.min(cMax, Math.max(1, Math.ceil(m / rMax)));
+    columnas = Math.min(cMax, Math.max(1, Math.ceil(m / rPrefer)));
     filas = Math.ceil(m / columnas);
     while (columnas > 1 && !armar(columnas, filas).cabe) {
       columnas--;
       filas = Math.ceil(m / columnas);
     }
+  }
+  // Nunca encimar filas: si a pesar de todo hay más filas que las que la banda deja (muchas llamas y un nombre que no deja
+  // partir en columnas), se ensancha la flecha con más columnas antes que encimar. Puede salirse por atrás (con un nombre
+  // más ancho que la pantalla ya se salía de todos modos): el encimado no se perdona, el borde sí.
+  while (filas > rMax && columnas < Math.ceil(m / rMax)) {
+    columnas++;
+    filas = Math.ceil(m / columnas);
   }
   const f = armar(columnas, filas);
   const orden = ordenDeFilas(filas);
@@ -164,6 +179,22 @@ export function formaDe(p: Pantalla, vivos: number, nombrePx: number, nombreW: n
     },
     yPie: (fila) => y0 + (fila + 1) * f.altoFila - 2 * k,
   };
+}
+
+/**
+ * El hombro de la pista: la franja de suelo que se ve debajo de la banda del grupo. Las que se echan ruedan hasta ahí, fuera de
+ * las filas: su casillero queda libre y las que siguen no les pasan por encima. `turno` (la n-ésima echada del plan) las despeza
+ * a lo largo y en profundidad, así dos caídas juntas no se enciman entre ellas. Función pura del plan, sin azar, y siempre
+ * dentro del suelo que se ve (`p.h`), sin bajar de la franja de abajo.
+ */
+export function hombroDe(p: Pantalla, y1: number, altoFila: number, turno: number): { dx: number; y: number } {
+  const franja = Math.max(16 * p.u, Math.min(p.h - y1, 0.16 * p.h));
+  const paso = Math.max(30 * p.u, altoFila * 0.9);
+  const y = Math.min(
+    y1 + Math.min(Math.max(12 * p.u, altoFila * 0.55), franja * 0.7) + (turno % 2) * Math.max(6 * p.u, franja * 0.22),
+    p.h - 6 * p.u,
+  );
+  return { dx: ((turno % 3) - 1) * paso, y };
 }
 
 export interface Carriles {
