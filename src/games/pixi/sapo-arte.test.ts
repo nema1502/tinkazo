@@ -89,3 +89,78 @@ describe("la mesa rústica de madera con colores de Bolivia (S7)", () => {
     expect(caja).toContain("AGUAYO");
   });
 });
+
+describe("la mano que tira hace el movimiento real y flexiona los dedos (S9)", () => {
+  const senal = (): string => entre("const impulsoMano", "/** Las argollas que se ven");
+  const mano = (): string => entre("function drawHand", "/** La argolla");
+
+  it("los dedos son falanges articuladas (dos tramos), curvadas por la flexión, no círculos estáticos", () => {
+    expect(mano()).toContain("flexMano()");
+    expect(mano()).toContain("curva");
+    // Dos tramos por dedo: de la base al nudillo y del nudillo a la punta.
+    expect(mano()).toMatch(/\.lineTo\([A-Za-z]+\d*\.x, [A-Za-z]+\d*\.y\)\.lineTo\([A-Za-z]+\d*\.x, [A-Za-z]+\d*\.y\)/);
+    // Los puntitos estáticos de antes ya no están: en la mano solo queda el círculo de la palma.
+    const circulos = mano().match(/\.circle\(/g) ?? [];
+    expect(circulos.length).toBe(1);
+    // Cada falange lleva su trazo de tinta y su piel, como la casa.
+    expect(mano()).toContain("join");
+  });
+
+  it("la mano se echa atrás al tomar impulso y látiga al soltar, y la moneda la sigue", () => {
+    expect(src).toContain("const rotar");
+    // El latigazo dura lo que ya duraba el golpe del suelte: 0,3 s. Sin cambiar el reloj del plan.
+    expect(numero("const LATIGO")).toBeCloseTo(0.3);
+    // drawHand ya no repite el cálculo del impulso: lo toma de la única fuente.
+    expect(mano()).toContain("impulsoMano()");
+    expect(mano()).toContain("gestoMano()");
+    expect(mano()).not.toContain("1 - u / WINDUP");
+    // La moneda en la mano viaja con el gesto, para que no se le despegue.
+    const dibujo = entre("function draw(): void", "/** Dónde está el agujero de quien gana");
+    expect(dibujo).toContain("gestoMano()");
+  });
+
+  it("la flexión y la fase salen del guion de tiros, sin azar nuevo", () => {
+    const s = senal();
+    expect(s).toContain("const flexMano");
+    expect(s).toContain("const faseLanzamiento");
+    expect(s).toContain("const gestoMano");
+    expect(s).toContain("WINDUP");
+    expect(s).not.toContain("Math.random");
+    expect(s).not.toContain("rng");
+  });
+
+  it("el puente `mano` exporta flex y fase, y tipos.ts los recibe como opcionales compatibles", () => {
+    const puente = entre("function frame3D", "/** Los rayos");
+    expect(puente).toContain("flex: flexMano()");
+    expect(puente).toContain("fase: faseLanzamiento()");
+    const tipos = readFileSync(new URL("../tres/tipos.ts", aqui), "utf8");
+    expect(tipos).toContain("SenalMano");
+    expect(tipos).toMatch(/flex\?:/);
+    expect(tipos).toMatch(/fase\?:/);
+  });
+});
+
+describe("el suspenso del borde: la moneda rueda al aro (S10)", () => {
+  const token = (): string => entre("const tokenAt", "el guion hablado");
+
+  it("algunas casi-entran dan la vuelta al aro del agujero, siempre la misma decisión y nunca la ganadora", () => {
+    expect(src).toContain("const ruedaEnElAro");
+    // La decisión la fija el tiro, no el azar: hash del índice, del agujero del borde y del turno.
+    const rueda = entre("const ruedaEnElAro", "/** Dónde está la argolla en el momento");
+    expect(rueda).not.toContain("rng");
+    expect(rueda).not.toContain("Math.random");
+    expect(rueda).toContain("o.final");
+    // La vuelta es alrededor del aro del agujero que ya decidió el plan, y una vuelta completa.
+    expect(token()).toContain("ruedaEnElAro");
+    expect(token()).toContain("L.holes[o.th.rimSlot]");
+    expect(token()).toContain("Math.atan2");
+    expect(token()).toContain("Math.PI * 2");
+  });
+
+  it("el beat es el mismo de siempre: WOBBLE manda el momento y la salida de después no se toca", () => {
+    const token = entre("const tokenAt", "el guion hablado");
+    expect(token).toContain("age < WOBBLE");
+    expect(token).toContain("(o.th.kind === \"near\" ? WOBBLE");
+    expect(token).toContain("o.th.landing.x + (o.th.exit.x - o.th.landing.x) * e");
+  });
+});

@@ -22,7 +22,7 @@ import { pintarMarcas } from "./kit/marcador-vista";
 import { reservaDeMarcas } from "./kit/marcador";
 import { FORMA_SAPO, respuestasSapo } from "./sapo-nino";
 import { enchufar3D, entradaBase } from "../tres/enchufe";
-import type { Camara2D, Montaje3D } from "../tres/tipos";
+import type { Camara2D, Montaje3D, SenalMano } from "../tres/tipos";
 import type { AgujeroSapo, ArgollaSapo, EntradaSapo, EstadoArgolla, Puente } from "../tres/sapo-3d";
 import { HOLGURA_3D } from "./ganador-altura";
 
@@ -55,6 +55,8 @@ import { HOLGURA_3D } from "./ganador-altura";
 /** Lo lento del sapo vive en sapo-tiempos.ts (lo comparte con la prueba del niño). */
 /** Lo que tarda la mano en tomar impulso antes de soltar. */
 const WINDUP = 0.35;
+/** Lo que dura el látigo de soltar: la mano vuelve de su impulso y los dedos se relajan (S9). */
+const LATIGO = 0.3;
 /** En el susto, qué parte del último vuelo llega hasta el labio de la rana. */
 const LABIO = 0.62;
 
@@ -81,6 +83,9 @@ export const MESA_ANCHO = 2.24;
 export const MESA_FONDO = 2.16;
 export const MESA_ANCHO_CHICO = 2.1;
 export const MESA_FONDO_CHICO = 2.05;
+
+/** Gira un vector, en coordenadas de pantalla (el ángulo crece hacia abajo): para curvar las falanges de los dedos (S9). */
+const rotar = (v: Point, a: number): Point => ({ x: v.x * Math.cos(a) - v.y * Math.sin(a), y: v.x * Math.sin(a) + v.y * Math.cos(a) });
 
 interface Toss {
   th: Throw;
@@ -582,6 +587,15 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     y: a.y + (b.y - a.y) * f - 4 * apex * f * (1 - f),
   });
 
+  /** El suspenso del aro (S10): qué casi-tiros ruedan una vuelta del borde antes de salir, y hacia qué lado. La decisión
+   * la fija el tiro — su índice, el agujero del borde y el turno — con un hash, sin tirar dado nuevo. La ganadora nunca
+   * entra a este juego: su caída queda limpia. */
+  const ruedaEnElAro = (o: Toss): number => {
+    if (o.final) return 0;
+    const r = (o.i * 2654435761 + (o.th.rimSlot ?? 0) * 40503 + o.th.turn * 7919) % 1000;
+    return r < 420 ? (r % 2 === 0 ? 1 : -1) : 0;
+  };
+
   /** Dónde está la argolla en el momento `t`, en pantalla, con su punto sobre la tapa. */
   const tokenAt = (o: Toss, t: number): Tok => {
     const hp = handPoint();
@@ -639,9 +653,23 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     let hop: number;
     if (o.th.kind === "near" && age < WOBBLE) {
       const u = age / WOBBLE;
-      const w = 0.03 * (1 - u);
-      gp = { x: o.th.landing.x + w * Math.sin(age * 26), y: o.th.landing.y + w * Math.cos(age * 19) };
-      hop = g.br * 0.9 * (1 - u) * Math.abs(Math.sin(age * 15));
+      // El suspenso del borde (S10): algunas casi-entran ruedan una vuelta al aro del agujero, como si se fueran a caer.
+      // El radio va del punto donde pegó hacia el labio del agujero y vuelve, así el baile empieza y termina donde
+      // siempre: la salida de después no cambia ni un punto, y el reloj (WOBBLE) es el mismo.
+      const centro = o.th.rimSlot !== undefined ? (L.holes[o.th.rimSlot] as Point) : null;
+      const giro = centro ? ruedaEnElAro(o) : 0;
+      if (centro && giro !== 0) {
+        const a0 = Math.atan2(o.th.landing.y - centro.y, o.th.landing.x - centro.x);
+        const d0 = Math.hypot(o.th.landing.x - centro.x, o.th.landing.y - centro.y);
+        const ang = a0 + giro * Math.PI * 2 * u;
+        const r = d0 + (L.holeR * 1.12 - d0) * Math.sin(u * Math.PI) + 0.012 * Math.sin(u * Math.PI * 8);
+        gp = { x: centro.x + Math.cos(ang) * r, y: centro.y + Math.sin(ang) * r };
+        hop = g.br * 0.35 * (1 - u) * Math.abs(Math.sin(u * Math.PI * 3));
+      } else {
+        const w = 0.03 * (1 - u);
+        gp = { x: o.th.landing.x + w * Math.sin(age * 26), y: o.th.landing.y + w * Math.cos(age * 19) };
+        hop = g.br * 0.9 * (1 - u) * Math.abs(Math.sin(age * 15));
+      }
     } else {
       const base = o.th.kind === "near" ? WOBBLE : 0;
       const span = (o.th.kind === "near" ? AFTER_NEAR : AFTER_MISS) - base;
@@ -1142,21 +1170,17 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   /** Dónde está la mano, en la escena. */
   const handAt = (): Point => P(handPoint());
 
-  /** La mano que tira: toma impulso hacia atrás y suelta. */
+  /** La mano que tira: se echa atrás al tomar impulso, látiga al soltar, y los dedos la siguen (S9). */
   function drawHand(): void {
     handG.clear();
     if (crowned) return;
     const k = g.k;
     const h = handAt();
-    // Antes del tiro la mano baja (toma impulso); al soltar sube de golpe y vuelve.
-    const next = tosses.find((o) => tAll < o.start + 0.3);
-    let swing = 0;
-    if (next) {
-      const u = next.start - tAll;
-      if (u >= 0) swing = u < WINDUP ? 1 - u / WINDUP : 0;
-      else swing = -0.8 * Math.sin(Math.PI * clamp(-u / 0.3, 0, 1));
-    }
-    const hx = h.x, hy = h.y + swing * 22 * k;
+    // El impulso de siempre: baja al tomar impulso, sube de golpe al soltar.
+    const swing = impulsoMano();
+    // S9: además, la mano se echa atrás por el eje del antebrazo durante el impulso, y látiga por el mismo eje al soltar.
+    const gesto = gestoMano();
+    const hx = h.x + gesto.x, hy = h.y + swing * 22 * k + gesto.y;
     // El brazo entra desde fuera de la pantalla, abajo a la derecha.
     const ax = hx + 70 * 8 * k, ay = hy + 96 * 8 * k;
     const mx = hx + 32 * k, my = hy + 44 * k;
@@ -1168,11 +1192,32 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     // La sombra del antebrazo, por debajo, para que no se vea tan plano.
     handG.moveTo(mx, my + 6 * k).lineTo(hx + 3 * k, hy + 6 * k).stroke({ width: 5 * k, color: PIEL_OSC, cap: "round" });
     handG.circle(hx, hy, 15 * k).fill(PIEL).stroke({ width: 2.5 * k, color: INK });
-    // El pulgar, del lado de la argolla, y los dedos de arriba que la agarran.
-    handG.circle(hx + 9 * k, hy + 7 * k, 6 * k).fill(PIEL).stroke({ width: 2 * k, color: INK });
+    // Los dedos, articulados (S9): dos falanges cada uno, curvadas por la flexión. Cerrados (flex 0) agarran la moneda,
+    // que va un poco arriba a la izquierda de la palma; abiertos (flex 1) se estiran y la sueltan.
+    const falange = (de: Point, hacia: Point, largo: number): Point => ({ x: de.x + hacia.x * largo * k, y: de.y + hacia.y * largo * k });
+    const digito = (b: Point, m: Point, punta: Point, w: number, color: number): void => {
+      handG.moveTo(b.x, b.y).lineTo(m.x, m.y).lineTo(punta.x, punta.y).stroke({ width: w * k, color, cap: "round", join: "round" });
+    };
+    const flex = flexMano();
+    const curva = (1 - flex) * 1.9;
     for (const [dx, dy] of [[-13, -6], [-9, -13], [-1, -16]]) {
-      handG.circle(hx + (dx as number) * k, hy + (dy as number) * k, 5 * k).fill(PIEL).stroke({ width: 2 * k, color: INK });
+      const dd = Math.hypot(dx as number, dy as number);
+      const dir = { x: (dx as number) / dd, y: (dy as number) / dd };
+      const b = falange({ x: hx, y: hy }, dir, 8);
+      const d1 = rotar(dir, -curva * 0.45);
+      const d2 = rotar(dir, -curva);
+      const m = falange(b, d1, 8);
+      const punta = falange(m, d2, 7.5);
+      digito(b, m, punta, 7, INK);
+      digito(b, m, punta, 4.5, PIEL);
     }
+    // El pulgar, del lado de la argolla: curva del lado de adentro, al revés que los dedos.
+    const baseT = { x: hx + 9 * k, y: hy + 7 * k };
+    const dirT = rotar({ x: -0.65, y: -0.76 }, curva * 0.9);
+    const mT = falange(baseT, dirT, 7);
+    const puntaT = falange(mT, rotar(dirT, curva * 0.9), 6);
+    digito(baseT, mT, puntaT, 8, INK);
+    digito(baseT, mT, puntaT, 5.5, PIEL);
   }
 
   /** La argolla de la bandera: tres franjas concéntricas, rojo por fuera y verde por dentro, con agujero para que no se lea como moneda. */
@@ -1198,11 +1243,40 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
   const ojoAbierto = (): number => ((Math.floor(tAll * 0.7) % 5 === 0 && (tAll * 0.7) % 1 < 0.12) ? 0.15 : 1);
   /** El impulso de la mano que tira: de 0 a 1 hacia atrás, y de 0 a -0,8 al soltar. */
   const impulsoMano = (): number => {
-    const next = tosses.find((o) => tAll < o.start + 0.3);
+    const next = tosses.find((o) => tAll < o.start + LATIGO);
     if (!next) return 0;
     const u = next.start - tAll;
     if (u >= 0) return u < WINDUP ? 1 - u / WINDUP : 0;
-    return -0.8 * Math.sin(Math.PI * clamp(-u / 0.3, 0, 1));
+    return -0.8 * Math.sin(Math.PI * clamp(-u / LATIGO, 0, 1));
+  };
+  /** Cuánto están abiertos los dedos (S9): 0,4 en reposo; curvados hasta 0 agarrando la moneda al final del impulso,
+   * abiertos de golpe hasta 1 al soltar, y después se relajan. */
+  const FLEX_RELAJADA = 0.4;
+  const flexMano = (): number => {
+    const next = tosses.find((o) => tAll < o.start + LATIGO);
+    if (!next) return FLEX_RELAJADA;
+    const u = next.start - tAll;
+    if (u >= 0) return u >= WINDUP ? FLEX_RELAJADA : FLEX_RELAJADA * (u / WINDUP);
+    const f = clamp(-u / LATIGO, 0, 1);
+    if (f < 0.35) return f / 0.35;
+    return FLEX_RELAJADA + (1 - FLEX_RELAJADA) * (1 - (f - 0.35) / 0.65);
+  };
+  /** La fase del lanzamiento (S9), para el puente con la 3D: de 0 a 1 va tomando impulso; de 0 a -1 látiga tras soltar. */
+  const faseLanzamiento = (): number => {
+    const next = tosses.find((o) => tAll < o.start + LATIGO);
+    if (!next) return 0;
+    const u = next.start - tAll;
+    if (u >= 0) return clamp(1 - u / WINDUP, 0, 1);
+    return -clamp(-u / LATIGO, 0, 1);
+  };
+  /** El gesto del brazo (S9): la mano se echa atrás por el eje del antebrazo al tomar impulso y látiga por el mismo eje
+   * al soltar. El retoque de arriba (+22·swing) es el de siempre; esto es lo que faltaba para que el lanzamiento se lea. */
+  const gestoMano = (): Point => {
+    const s = impulsoMano();
+    if (s === 0) return { x: 0, y: 0 };
+    const d = Math.hypot(32, 44);
+    const q = s * 18 * g.k;
+    return { x: (q * 32) / d, y: (q * 44) / d };
   };
 
   /** Las argollas que se ven este cuadro, tal como las puso el 2D, para vestirlas en 3D. */
@@ -1241,6 +1315,11 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
     if (!v3) return;
     const ultimo = tosses[tosses.length - 1] as Toss;
     const hand = handPoint();
+    // La señal de la mano (S9): flex y fase viajan con el puente, así la 3D lanza con la misma hora que el 2D.
+    // Se sale del literal para que el tipo opcional (`SenalMano`) no pelee con la forma actual de `EntradaSapo`.
+    const mn: { visible: boolean; punto: Point; swing: number; manga: number } & SenalMano = {
+      visible: !crowned, punto: hand, swing: impulsoMano(), manga: S.color(2), flex: flexMano(), fase: faseLanzamiento(),
+    };
     const golpes = tosses
       .filter((o) => !o.th.boca && tAll >= o.land && tAll - o.land < 0.8)
       .map((o) => ({ t: o.land, punto: o.th.landing, fuerza: o.th.kind === "near" ? 0.6 : o.final ? 1 : 0.85 }));
@@ -1259,7 +1338,7 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
         mira: crowned ? (L.holes[ultimo.slot] as Point) : null,
         quieta: tAll >= T_LAND - 0.4 && tAll < T_LAND,
       },
-      mano: { visible: !crowned, punto: hand, swing: impulsoMano(), manga: S.color(2) },
+      mano: mn,
       argollas: argollas3(),
       golpes,
       tension: empujeDado ? clamp((tAll - T_EMPUJE) / Math.max(0.5, T_CROWN - T_EMPUJE), 0, 1) : 0,
@@ -1430,7 +1509,9 @@ export async function sapoPixi(names: string[], winners: readonly number[], beac
           const hp = handAt();
           const u = o.start - tAll;
           const sw = u < WINDUP ? 1 - u / WINDUP : 0;
-          drawToken(hp.x - 4 * k, hp.y - 8 * k + sw * 22 * k, 1, false);
+          // La moneda viaja con la mano: el gesto de echarse atrás también la lleva (S9).
+          const gesto = gestoMano();
+          drawToken(hp.x - 4 * k + gesto.x, hp.y - 8 * k + sw * 22 * k + gesto.y, 1, false);
         }
         continue;
       }
