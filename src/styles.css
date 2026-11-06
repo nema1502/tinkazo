@@ -2481,7 +2481,11 @@
   }
   .espera-juegos::before, .espera-juegos::after { content: ""; flex: 1 0 0; }
   .espera-juegos-t { font-size: var(--letra-sala-prin); font-weight: 900; }
-  .espera-juegos-lista { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 10px; width: min(100%, 760px); }
+  /* Grilla compacta: dos columnas en un teléfono (la lista de botones de texto se comía la pantalla entera) y más
+     en pantallas anchas. */
+  .espera-juegos-lista { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: min(100%, 760px); }
+  @media (min-width: 640px) { .espera-juegos-lista { grid-template-columns: repeat(3, 1fr); } }
+  @media (min-width: 720px) { .espera-juegos-lista { grid-template-columns: repeat(4, 1fr); } }
   .espera-juego-op {
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 64px; padding: 8px 12px;
     background: var(--card); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--sh-sm); font-weight: 800; font-size: var(--letra-sec); cursor: pointer;
@@ -2490,6 +2494,22 @@
   .espera-juego-op small { font-family: ui-monospace, Consolas, monospace; font-size: var(--letra-sec); font-weight: 800; color: var(--ink2); }
   .espera-juego-op[aria-pressed="true"] { background: var(--purple); color: var(--on-purple); }
   .espera-juego-op[aria-pressed="true"] small, .espera-juego-op[aria-pressed="true"] i { color: inherit; }
+  /* La captura del juego manda: la escena a todo lo ancho del botón, el nombre y el rango chicos debajo, como en el
+     selector de la página (`botones-kit.ts`): la misma pareja de archivos y la misma selección por tema. */
+  .espera-juego-op.con-captura { padding: 0 0 8px; gap: 3px; }
+  .espera-juego-op.con-captura .sel-img {
+    display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover;
+    border: 0; border-bottom: 2px solid var(--ink); background: var(--field);
+  }
+  .espera-juego-op.con-captura .espera-juego-nombre { font-size: 14px; line-height: 1.25; padding: 0 6px; }
+  .espera-juego-op.con-captura small { font-size: 12px; }
+  .espera-juego-op .sel-osc { display: none; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .espera-juego-op .sel-osc { display: block; }
+    :root:not([data-theme="light"]) .espera-juego-op .sel-cla { display: none; }
+  }
+  :root[data-theme="dark"] .espera-juego-op .sel-osc { display: block; }
+  :root[data-theme="dark"] .espera-juego-op .sel-cla { display: none; }
   .espera-juegos .ghost { min-height: 48px; font-size: 16px; }
 
   /* Una pantalla baja (una laptop chica a 200 % de zoom, un celular acostado): la espera se aprieta para que entre, y si
