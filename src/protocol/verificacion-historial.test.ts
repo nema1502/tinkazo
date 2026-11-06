@@ -202,6 +202,83 @@ describe("verde por el historial, cuando el estado del contrato ya no tiene el s
   });
 });
 
+describe("el estado vivo no es condición del verde: de uno al otro sin que la persona haga nada", () => {
+  const escenas: Array<[string, Registro | Error]> = [
+    ["el estado vivo, con su resultado", estado()],
+    ["la entrada archivada (instancia viva)", archivado()],
+    ["la instancia archivada también", sinInstancia()],
+    ["el RPC que no contesta", new Error("sin red")],
+  ];
+
+  it("el mismo comprobante da verde, los mismos ganadores y la misma ronda en las cuatro escenas; cambia solo la fuente", async () => {
+    const vistos = [];
+    for (const [nombre, reg] of escenas) {
+      const d = deps(reg, lectura());
+      const r = await revisarComprobante(comprobante(), d);
+      expect(r.veredicto, nombre).toBe("verde");
+      expect(r.motivos, nombre).toEqual([]);
+      expect(r.falta, nombre).toBeNull();
+      expect(r.ganadores, nombre).toEqual(GANADORES);
+      expect(r.ronda, nombre).toBe(R);
+      expect(r.k, nombre).toBe(3);
+      // Siempre se intentó el estado primero, y el historial se pidió con el hash del sello.
+      expect(d.leidas, nombre).toEqual([`testnet:${TESTNET}:4`]);
+      expect(d.historias, nombre).toEqual([["testnet", STX]]);
+      vistos.push(r.fuente);
+    }
+    expect(vistos).toEqual(["estado", "historial", "historial", "historial"]);
+  });
+
+  it("si el estado no se pudo leer, el verde por historial no tiene registro, y por eso se dice que no se pudo leer", async () => {
+    const r = await revisarComprobante(comprobante(), deps(new Error("sin red"), lectura()));
+    expect(r.registro).toBeNull();
+    expect(r.fuente).toBe("historial");
+    // Archivado: la instancia contestó y el sorteo no está. Sin leer: no hubo respuesta.
+    const archivada = await revisarComprobante(comprobante(), deps(archivado(), lectura()));
+    expect(archivada.registro).not.toBeNull();
+  });
+
+  it("sin el estado, la transacción pasa por todas las comprobaciones: un rojo del historial sigue siendo rojo", async () => {
+    // Cambiada la lista, la ronda, la hora o el contrato: nada de esto depende de que el estado esté.
+    const cambios: Array<[string, Partial<SelloDelHistorial>, string]> = [
+      ["la lista", { listHash: "00".repeat(32) }, "lista-cambiada"],
+      ["la cantidad", { count: vectors.count + 1 }, "cantidad"],
+      ["la ronda", { round: R + 1 }, "ronda"],
+      ["la hora: la ronda salió antes de tiempo", { closedAt: roundTime(R) - 5 }, "ronda-temprana"],
+      ["el contrato", { contractId: ANTERIOR }, "historial-distinto"],
+    ];
+    for (const [que, c, motivo] of cambios) {
+      for (const reg of [sinInstancia(), archivado(), new Error("sin red")]) {
+        const r = await revisarComprobante(comprobante(), deps(reg, lectura(c)));
+        expect(r.veredicto, que).toBe("mal");
+        expect(r.motivos, que).toContain(motivo);
+      }
+    }
+    const falsa = await revisarComprobante(comprobante(), deps(new Error("sin red"), { ok: false, error: "fallida" }));
+    expect(falsa.veredicto).toBe("mal");
+    expect(falsa.motivos).toEqual(["sello-invalido"]);
+  });
+
+  it("con el estado vivo, un historial caído, que no conoce la transacción o fuera de su ventana no cambia el verde", async () => {
+    for (const e of [{ ok: false, error: "red-caida" }, { ok: false, error: "no-encontrada" }, { ok: false, error: "fuera-de-ventana" }] as LecturaDelHistorial[]) {
+      const r = await revisarComprobante(comprobante(), deps(estado(), e));
+      expect(r.veredicto, JSON.stringify(e)).toBe("verde");
+      expect(r.fuente).toBe("estado");
+    }
+  });
+
+  it("sin estado y sin historial (la ventana de la fuente pasó, o no la conoce) el resultado es 'no confirmado', nunca 'no está' ni rojo, en cualquiera de las dos formas de no tener estado", async () => {
+    for (const reg of [sinInstancia(), archivado(), new Error("sin red")]) {
+      for (const error of ["fuera-de-ventana", "no-encontrada"] as const) {
+        const r = await revisarComprobante(comprobante(), deps(reg, { ok: false, error }));
+        expect(r.veredicto).toBe("sin-red");
+        expect(r.motivos).toEqual([]);
+        expect(["sin-historial", "sin-cadena"]).toContain(r.falta);
+      }
+    }
+  });
+});
+
 describe("el historial pasa por las mismas comprobaciones que el estado", () => {
   const rojo = async (cambios: Partial<SelloDelHistorial>, p: Proof = comprobante()) => revisarComprobante(p, deps(sinInstancia(), lectura(cambios)));
 
@@ -342,13 +419,20 @@ describe("sin el testigo del historial, el resultado es el de siempre y nunca ve
     expect(sinTope.motivos).toEqual([]);
   });
 
-  it("si no se pudo leer el estado, el historial no lo reemplaza: queda 'sin red'", async () => {
-    const d = deps(new Error("sin red"), lectura());
-    const r = await revisarComprobante(comprobante(), d);
-    expect(r.veredicto).toBe("sin-red");
-    expect(r.falta).toBe("sin-cadena");
-    expect(r.fuente).toBe("estado");
-    expect(r.historial).toBeNull();
+  it("si no se pudo leer el estado y tampoco el historial, queda 'sin red': ningún testigo contestó", async () => {
+    for (const historial of [{ ok: false, error: "red-caida" }, { ok: false, error: "no-encontrada" }, { ok: false, error: "fuera-de-ventana" }, new Error("boom")] as Historial[]) {
+      const r = await revisarComprobante(comprobante(), deps(new Error("sin red"), historial));
+      expect(r.veredicto).toBe("sin-red");
+      expect(r.falta).toBe("sin-cadena");
+      expect(r.fuente).toBe("estado");
+      expect(r.motivos).toEqual([]);
+    }
+    // Sin el hash del sello no hay a quién más preguntar: es lo de siempre.
+    const { stx: _s, ...sinHash } = comprobante();
+    const sin = await revisarComprobante(sinHash as Proof, deps(new Error("sin red"), lectura()));
+    expect(sin.veredicto).toBe("sin-red");
+    expect(sin.falta).toBe("sin-cadena");
+    expect(sin.historial).toBeNull();
   });
 
   it("un código ajeno o un número que el contrato nunca dio es rojo, y el historial no lo arregla", async () => {
