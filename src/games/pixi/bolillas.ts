@@ -33,6 +33,7 @@ import {
   escalaChipDe,
   golpesDe,
   manoDe,
+  persecucionDe,
   palpitoDe,
   polvoDe,
   punteadoDe,
@@ -383,6 +384,24 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
             e.sacudidas.add(clave);
             k.cam.shake(est.sacudida * e.m.e);
           }
+        }
+      }
+
+      // La persecución de la ganadora (S24): en una escena plana no hay punto de vista, así que la escena le pone
+      // la velocidad —rayitas que se estiran para atrás mientras su canica rueda hacia la rival—. La cámara la
+      // acerca el plan (la toma de `momentos`); acá solo se dibuja lo que el arte puro ya decidió.
+      const persigue = persecucionDe(d, t);
+      if (persigue && persigue.peso > 0) {
+        const w = aMundo(e.m, persigue.p);
+        const lado = { x: -persigue.dir.y, y: persigue.dir.x };
+        for (const estela of persigue.estelas) {
+          const base = {
+            x: w.x - persigue.dir.x * estela.atras * e.m.e + lado.x * estela.lado * e.m.e,
+            y: w.y - persigue.dir.y * estela.atras * e.m.e + lado.y * estela.lado * e.m.e,
+          };
+          const cola = { x: base.x - persigue.dir.x * estela.largo * e.m.e, y: base.y - persigue.dir.y * estela.largo * e.m.e };
+          const vivo = 0.5 * persigue.peso * Math.max(0, 1 - estela.atras / 0.6);
+          e.fx.moveTo(base.x, base.y).lineTo(cola.x, cola.y).stroke({ width: Math.max(1, 1.6 * e.m.e), color: 0xfff6dd, alpha: vivo, cap: "round" });
         }
       }
     }

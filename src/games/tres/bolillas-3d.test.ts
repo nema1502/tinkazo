@@ -13,7 +13,7 @@ import {
   ESTALLIDO_ENEMIGO, ESTALLIDO_MANO, ESTRELLA_PUNTAS, LINEAS_N, SACUDIDA_MAX, T_DESVIO, TIRADOR,
   LLEGADA_TITILA, TEETER_ALTO, TEETER_FRECUENCIA, ZOOM_MAX, camaraBolillas, giroDelCasi, GIRO_ALTO,
   estallidoDe, estallidosDe, lugarDelMundo, mezclarPose, perfilBolillas, poseDelCerca, poseSacudida,
-  poseTiro, rodadoDe, rodadoDelTurno, sacudidaDe, teeterDelCasi, titileo, ventanaCadena,
+  posePersecucion, poseTiro, rodadoDe, rodadoDelTurno, sacudidaDe, teeterDelCasi, titileo, ventanaCadena,
   type EntradaBolillas, type Estallido,
 } from "./bolillas-3d";
 import { cercaDe } from "../pixi/bolillas-arte";
@@ -572,5 +572,27 @@ describe("el cableado: registrado en el 3D, apagado en el selector (D3)", () => 
     expect(contrato).toContain("plan: Datos | null");
     expect(contrato).toContain("mapeo: Mapeo");
     expect(contrato).not.toMatch(/ganador/);
+  });
+});
+
+describe("la persecución de la ganadora (S24)", () => {
+  it("la cámara se mete detrás de su canica, baja y mirando por delante del empuje", () => {
+    const lugar = { px: 100, pz: 200, K: 300, Kz: 260 };
+    const pers = { peso: 1, p: { x: 0.2, y: -0.1 }, dir: { x: 0.8, y: -0.6 }, estelas: [] };
+    const pose = posePersecucion(pers, lugar);
+    const dx = (pose.pos[0] - lugar.px) / lugar.K;
+    const dz = (pose.pos[2] - lugar.pz) / lugar.Kz;
+    // Detrás: el punto de la cámara queda del lado contrario al rumbo del empuje.
+    expect((dx - pers.p.x) * pers.dir.x + (dz - pers.p.y) * pers.dir.y).toBeLessThan(0);
+    // Baja y afuera de la canica: el ojo queda por debajo del lomo del vidrio dibujado, no mirando desde arriba.
+    expect(pose.pos[1]).toBeLessThan(lugar.K * CANICA_R * 2 * CANICA_ESCALA);
+    expect(Math.hypot(dx - pers.p.x, dz - pers.p.y)).toBeGreaterThan(CANICA_R);
+    // Mira adelante del empuje: el golpe viene de frente.
+    const mx = (pose.mira[0] - lugar.px) / lugar.K;
+    const mz = (pose.mira[2] - lugar.pz) / lugar.Kz;
+    expect((mx - pers.p.x) * pers.dir.x + (mz - pers.p.y) * pers.dir.y).toBeGreaterThan(0);
+    // Más abierto que la mirada del director, para que la persecución se sienta.
+    expect(pose.fov).toBeGreaterThan(0.9);
+    expect(pose.giro).toBe(0);
   });
 });

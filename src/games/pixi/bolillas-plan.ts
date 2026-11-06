@@ -617,6 +617,23 @@ export function planBolillas(ctx: Contexto): Plan<Datos> {
           { margen: 46, zoomMax: 1.5 },
         ),
       },
+      // La persecución de la ganadora (S24): en el último turno —cuando adentro solo quedan ella y la rival— la
+      // toma se pega a su canica y la acompaña hasta el golpe, con un punto adelantado para ver a quién le pega.
+      // La tensión del cierre toma el relevo cuando arranca el casi.
+      {
+        desde: tiros.at(-1)?.tMano ?? tTroya,
+        toma: planoSobre(
+          (k, tt) => {
+            const p = k.pantalla();
+            const ultimo = tiros.at(-1);
+            if (!ultimo) return [cajaDelCirculo(p)];
+            const c = trayectoriaDe({ posiciones, tiros, casi, duracion }, ultimo.mio, tt).p;
+            const adelante = { x: c.x + ultimo.empuje.dir.x * 0.35, y: c.y + ultimo.empuje.dir.y * 0.35 };
+            return [cajaDeCanica(p, c), cajaDeCanica(p, adelante)];
+          },
+          { margen: 70, zoomMax: 1.9 },
+        ),
+      },
     ],
     // La tensión mira al círculo entero: la última canica titila sobre la tiza y la sala lo ve sin leer nada.
     tension: {
