@@ -21,6 +21,7 @@ import {
   type Oleada,
   type Pant,
   type Pun,
+  type Tiro,
 } from "./bolillas-plan";
 import { TEXTOS } from "./bolillas-textos";
 
@@ -74,14 +75,11 @@ const restar = (a: Pun, b: Pun): Pun => ({ x: a.x - b.x, y: a.y - b.y });
 const modulo = (p: Pun): number => Math.hypot(p.x, p.y);
 const HOLGURA = CANICA_R * 2 + 0.02;
 
-/** Quién puede chocar a una canica que viaja de `a` a `b`: las adentro en ese segundo, menos ella misma. */
+/** Quién puede chocar a una canica que viaja de `a` a `b`: las adentro en ese segundo, menos ella misma, dónde están de verdad (una canica que ya tiró se movió de su siembra, S23). */
 function adentroEn(d: Datos, t: number, menos?: number): { persona: number; p: Pun }[] {
   return adentro(d, t)
     .filter((i) => i !== menos)
-    .map((i) => {
-      const s = d.canicas.indexOf(i);
-      return { persona: i, p: d.posiciones[s] as Pun };
-    });
+    .map((i) => ({ persona: i, p: trayectoriaDe(d, d.canicas.indexOf(i), t).p }));
 }
 
 describe("Bolillas: el plan", () => {
@@ -169,20 +167,25 @@ describe("Bolillas: el plan", () => {
 });
 
 describe("Bolillas: la geometría de los choques", () => {
-  it("cada tiro larga de afuera del círculo, pega en la canica que saca y la manda cruzando la tiza", () => {
+  it("cada tiro es la cadena de tres cuerpos y la golpeada cruza la tiza por delante (S21/S23)", () => {
     for (const n of LISTAS) {
       const { datos: d } = planBolillas(contexto(n, ganadoresDe(n)));
       for (const t of d.tiros) {
-        expect(modulo(t.desde), `el tiro de ${t.diana} larga afuera`).toBeGreaterThan(CIRCULO_R);
-        const pos = d.posiciones[t.slot] as Pun;
-        expect(t.impacto.x).toBeCloseTo(pos.x, 9);
-        expect(t.impacto.y).toBeCloseTo(pos.y, 9);
-        // La canica golpeada sale con dirección hacia afuera y cruza el círculo: la tiza queda en su camino.
-        const radial = escalar(pos, 1 / (modulo(pos) || 1));
-        expect(t.salida.dir.x * radial.x + t.salida.dir.y * radial.y, `salida de ${t.diana}`).toBeGreaterThan(0);
+        // La mano larga de afuera y pega en MI canica, donde está de verdad cuando la toca.
+        expect(modulo(t.desde), `la mano de ${t.tirador} larga afuera`).toBeGreaterThan(CIRCULO_R);
+        const enChoque = trayectoriaDe(d, t.mio, t.tMano - 1e-6).p;
+        expect(t.choque.x, `choque de ${t.tirador}`).toBeCloseTo(enChoque.x, 6);
+        expect(t.choque.y, `choque de ${t.tirador}`).toBeCloseTo(enChoque.y, 6);
+        // Mi canica rueda y golpea a la del enemigo donde ella está; el impacto es ese punto.
+        const enEmpuje = trayectoriaDe(d, t.slot, t.t - 1e-6).p;
+        expect(t.empuje.donde.x, `empuje de ${t.tirador} a ${t.diana}`).toBeCloseTo(enEmpuje.x, 6);
+        expect(t.impacto.x).toBeCloseTo(t.empuje.donde.x, 9);
+        expect(t.impacto.y).toBeCloseTo(t.empuje.donde.y, 9);
+        // La salida sigue adelante sobre la línea del empuje y cruza la tiza de ese lado (S21): nunca vuelve.
+        expect(t.salida.dir.x * t.empuje.dir.x + t.salida.dir.y * t.empuje.dir.y, `salida de ${t.diana} contra el empuje`).toBeGreaterThan(0.9);
         expect(modulo(t.salida.tiza)).toBeCloseTo(CIRCULO_R, 6);
+        expect((t.salida.tiza.x - t.empuje.donde.x) * t.empuje.dir.x + (t.salida.tiza.y - t.empuje.donde.y) * t.empuje.dir.y).toBeGreaterThan(0);
         expect(t.salida.fuerza).toBeGreaterThan(0);
-        // La deflectación del tiro termina en un punto libre: fuera del círculo o donde ya no hay canica.
         expect(t.deflexion.dir.x * t.deflexion.dir.x + t.deflexion.dir.y * t.deflexion.dir.y).toBeCloseTo(1, 6);
       }
     }
@@ -194,17 +197,25 @@ describe("Bolillas: la geometría de los choques", () => {
       for (let s = 1; s <= 6; s++) {
         const { datos: d } = planBolillas(contexto(n, ganadoresDe(n), s));
         for (const t of d.tiros) {
-          for (const c of adentroEn(d, t.t, t.diana)) {
-            const h = HOLGURA;
-            const deIda = distSeg(c.p, t.desde, t.impacto);
-            const deSalida = distSeg(c.p, t.impacto, t.salida.tiza);
-            expect(deIda, `tiro de ${t.diana} a los ${t.t.toFixed(1)}: la canica de ${c.persona} queda a ${deIda.toFixed(3)}`).toBeGreaterThanOrEqual(h - 1e-9);
-            expect(deSalida, `salida de ${t.diana}: la canica de ${c.persona} queda a ${deSalida.toFixed(3)}`).toBeGreaterThanOrEqual(h - 1e-9);
+          const h = HOLGURA;
+          // La mano entra y el empuje rueda: ninguno roza a quien sigue adentro (mi canica va en la cadena y la del
+          // enemigo es la que sale, así que no cuentan).
+          for (const c of adentroEn(d, t.tMano, t.diana).filter((x) => x.persona !== t.tirador)) {
+            const deMano = distSeg(c.p, t.desde, t.choque);
+            expect(deMano, `la mano del tiro de ${t.diana} a los ${t.t.toFixed(1)}: la canica de ${c.persona} queda a ${deMano.toFixed(3)}`).toBeGreaterThanOrEqual(h - 1e-9);
+          }
+          // El empuje y la salida buscan la holgura completa; cuando el círculo está lleno y la salida tiene que ir
+          // adelante (S21), el plan se queda con el mejor aire: lo que garantiza siempre es no pisar a nadie.
+          for (const c of adentroEn(d, t.t, t.diana).filter((x) => x.persona !== t.tirador)) {
+            const deEmpuje = distSeg(c.p, t.choque, t.empuje.hasta);
+            const deSalida = distSeg(c.p, t.empuje.donde, t.salida.tiza);
+            expect(deEmpuje, `el empuje del tiro de ${t.diana}: la canica de ${c.persona} queda a ${deEmpuje.toFixed(3)}`).toBeGreaterThanOrEqual(CANICA_R * 2 - 1e-9);
+            expect(deSalida, `salida de ${t.diana}: la canica de ${c.persona} queda a ${deSalida.toFixed(3)}`).toBeGreaterThanOrEqual(CANICA_R * 2 - 1e-9);
           }
         }
-        // La deflectación tampoco termina sobre nadie.
+        // La deflectación tampoco termina sobre nadie: la mano rebota contra mi canica, que ya rueda, y se frena libre.
         for (const t of d.tiros) {
-          for (const c of adentroEn(d, t.t, t.diana)) {
+          for (const c of adentroEn(d, t.t, t.diana).filter((x) => x.persona !== t.tirador)) {
             expect(modulo(restar(c.p, t.deflexion.hasta)), `deflex del tiro de ${t.diana} contra ${c.persona}`).toBeGreaterThanOrEqual(CANICA_R * 2 - 1e-9);
           }
         }
@@ -220,7 +231,7 @@ describe("Bolillas: la geometría de los choques", () => {
         const slotG = d.canicas.indexOf(d.ganador);
         // Antes del casi está en su lugar de la siembra; con el golpe quedó en el punto de la orilla, adentro.
         const inicio = trayectoriaDe(d, slotG, d.casi.t - 0.01);
-        expect(inicio.p.x).toBeCloseTo(d.posiciones[slotG]?.x ?? 0, 9);
+        expect(inicio.p.x, `con ${n}: el casi arranca donde quedó la ganadora`).toBeCloseTo(d.casi.desde.x, 6);
         const fin = trayectoriaDe(d, slotG, d.duracion);
         expect(fin.p.x).toBeCloseTo(d.casi.titila.x, 9);
         expect(fin.p.y).toBeCloseTo(d.casi.titila.y, 9);
@@ -238,16 +249,97 @@ describe("Bolillas: la geometría de los choques", () => {
       const { datos: d } = planBolillas(contexto(n, ganadoresDe(n)));
       const t = d.tiros[Math.floor(d.tiros.length / 2)];
       if (!t) continue;
-      const pos = d.posiciones[t.slot] as Pun;
       const antes = trayectoriaDe(d, t.slot, t.t - 0.01);
-      expect(antes.p.x).toBeCloseTo(pos.x, 9);
+      expect(antes.p.x).toBeCloseTo(t.empuje.donde.x, 6);
       const medio = trayectoriaDe(d, t.slot, t.t + (t.salida.vuelo / 2));
-      expect(modulo(medio.p)).toBeGreaterThan(modulo(pos));
+      // Sale adelante sobre el rumbo del empuje: se aleja del punto del golpe, nunca vuelve hacia la mano.
+      const avance = (medio.p.x - t.empuje.donde.x) * t.salida.dir.x + (medio.p.y - t.empuje.donde.y) * t.salida.dir.y;
+      expect(avance).toBeGreaterThan(0);
       expect(modulo(medio.p)).toBeLessThanOrEqual(CIRCULO_R + 1e-9);
       const despues = trayectoriaDe(d, t.slot, t.t + t.salida.vuelo + 5);
       expect(modulo(despues.p)).toBeCloseTo(modulo(t.salida.tiza), 6);
       expect(antes.p.x).not.toBeCloseTo(despues.p.x, 6);
     }
+  });
+});
+
+describe("Bolillas: la cadena del turno (S23)", () => {
+  it("el que tira está adentro, no se saca a sí mismo, y los turnos rotan", () => {
+    for (const n of LISTAS) {
+      for (let s = 1; s <= 6; s++) {
+        const { datos: d } = planBolillas(contexto(n, ganadoresDe(n), s));
+        for (const t of d.tiros) {
+          expect(adentro(d, t.t), `con ${n} semilla ${s}: tira ${t.tirador}`).toContain(t.tirador);
+          expect(t.tirador, `con ${n}: nadie se saca a sí mismo`).not.toBe(t.diana);
+          expect(t.mio, `con ${n}: la canica que empuja es la mía`).toBe(d.canicas.indexOf(t.tirador));
+          expect(t.mio).not.toBe(t.slot);
+          expect(t.tMano).toBeGreaterThan(0);
+          expect(t.tMano).toBeLessThan(t.t);
+        }
+        // Los turnos rotan (S23): nadie tira dos veces seguidas, salvo el cierre (lo tira quien gana) y el caso en
+        // que ningún otro puede empujar sin pisar una canica: ahí manda el empuje limpio, y a lo sumo pasa una vez.
+        const repetidos = d.tiros.filter((t, i) => i > 0 && i < d.tiros.length - 1 && t.tirador === d.tiros[i - 1]?.tirador);
+        expect(repetidos.length, `con ${n}: los turnos dejan de rotar`).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it("el último turno lo tira quien gana y saca a la rival; el casi arranca donde quedó su canica", () => {
+    for (const n of LISTAS) {
+      for (let s = 1; s <= 6; s++) {
+        const { datos: d } = planBolillas(contexto(n, ganadoresDe(n), s));
+        const ultimo = d.tiros.at(-1);
+        expect(ultimo, `con ${n}`).toBeDefined();
+        if (!ultimo) continue;
+        expect(ultimo.tirador, `con ${n} semilla ${s}: el cierre lo tira quien gana`).toBe(d.ganador);
+        expect(ultimo.mio).toBe(d.canicas.indexOf(d.ganador));
+        expect(ultimo.diana).toBe(d.rival);
+        // Su canica quedó adentro, empujada, y el casi sigue desde ahí.
+        expect(modulo(ultimo.empuje.hasta) + CANICA_R).toBeLessThanOrEqual(CIRCULO_R + 1e-9);
+        expect(d.casi.desde.x).toBeCloseTo(ultimo.empuje.hasta.x, 6);
+        expect(d.casi.desde.y).toBeCloseTo(ultimo.empuje.hasta.y, 6);
+        const fin = trayectoriaDe(d, d.casi.slot, ultimo.t + 1e-4);
+        expect(fin.p.x).toBeCloseTo(ultimo.empuje.hasta.x, 6);
+      }
+    }
+  });
+
+  it("mi canica se frena adentro y a dos radios del enemigo (nunca se va con él)", () => {
+    for (const n of LISTAS) {
+      for (let s = 1; s <= 6; s++) {
+        const { datos: d } = planBolillas(contexto(n, ganadoresDe(n), s));
+        for (const t of d.tiros) {
+          expect(modulo(t.empuje.hasta) + CANICA_R, `con ${n}: mi canica se queda adentro`).toBeLessThanOrEqual(CIRCULO_R + 1e-9);
+          const separacion = modulo(restar(t.empuje.donde, t.empuje.hasta));
+          expect(separacion, `con ${n}: mi canica no pisa a la del enemigo`).toBeGreaterThanOrEqual(CANICA_R * 2 - 1e-9);
+          expect(t.empuje.vuelo).toBeGreaterThan(0);
+          expect(t.empuje.vuelo).toBeLessThanOrEqual(t.t - t.tMano + 1e-9);
+          // El rumbo del empuje apunta a la canica del enemigo desde la mía.
+          const alEnemigo = restar(t.empuje.donde, t.choque);
+          const largo = modulo(alEnemigo) || 1;
+          // Apunta al enemigo: se abre apenas para no rozar a nadie, nunca más de lo que deja ver la cadena.
+          expect((alEnemigo.x * t.empuje.dir.x + alEnemigo.y * t.empuje.dir.y) / largo, `con ${n}: el empuje apunta al enemigo`).toBeGreaterThan(0.9);
+        }
+      }
+    }
+  });
+
+  it("quien tira dos veces arranca el segundo empuje donde quedó el primero", () => {
+    let visto = 0;
+    for (const n of LISTAS) {
+      for (let s = 1; s <= 6; s++) {
+        const { datos: d } = planBolillas(contexto(n, ganadoresDe(n), s));
+        for (let i = 0; i < d.tiros.length; i++) {
+          const t = d.tiros[i] as Tiro;
+          const previo = d.tiros.slice(0, i).filter((x) => x.tirador === t.tirador).at(-1);
+          if (!previo) continue;
+          visto++;
+          expect(t.choque.x, `con ${n} semilla ${s}: ${t.tirador} tira desde donde quedó`).toBeCloseTo(previo.empuje.hasta.x, 6);
+          expect(t.choque.y).toBeCloseTo(previo.empuje.hasta.y, 6);
+        }
+      }
+    }
+    expect(visto, "hay listas donde alguien tira dos veces").toBeGreaterThan(0);
   });
 });
 
