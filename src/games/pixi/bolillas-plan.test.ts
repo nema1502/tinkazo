@@ -50,6 +50,8 @@ const PANTALLAS: Pant[] = [
   { w: 1920, h: 1080, k: 1.5, top: 82, bottom: 974 },
   { w: 1280, h: 720, k: 1, top: 82, bottom: 614 },
   { w: 390, h: 844, k: 0.93, top: 100, bottom: 726 },
+  // El mismo celular de la denuncia, acostado: el encuadre también se mira en landscape (S16).
+  { w: 844, h: 390, k: 1, top: 40, bottom: 350 },
 ];
 
 /** Un kit de mentira con lo que usan las tomas y el foco. */
@@ -298,6 +300,21 @@ describe("Bolillas: para las escenas", () => {
       expect(c.y).toBeGreaterThan(pant.top);
       expect(c.y).toBeLessThan(pant.bottom);
       expect(m.e * CIRCULO_R).toBeLessThan(Math.min(pant.w / 2, (pant.bottom - pant.top) / 2));
+    }
+  });
+
+  it("el encuadre de cerca (S16): el círculo mide más que antes y sigue entrando entero, también en landscape", () => {
+    for (const p of PANTALLAS) {
+      const zona = p.bottom - p.top;
+      // El encuadre de antes: la cuenta vieja de `mapeoDe`, para exigir que el nuevo se vea más cerca.
+      const antes = Math.min(p.w * 0.42, zona * 0.44);
+      const m = mapeoDe(p);
+      expect(m.e, `más cerca en ${p.w}x${p.h}`).toBeGreaterThan(antes);
+      // Sigue inscripto en la franja libre, con aire: la tiza no toca ningún borde.
+      expect(m.cx - m.e, `borde izquierdo en ${p.w}x${p.h}`).toBeGreaterThanOrEqual(4);
+      expect(m.cx + m.e, `borde derecho en ${p.w}x${p.h}`).toBeLessThanOrEqual(p.w - 4);
+      expect(m.cy - m.e, `borde de arriba en ${p.w}x${p.h}`).toBeGreaterThanOrEqual(p.top + 4);
+      expect(m.cy + m.e, `borde de abajo en ${p.w}x${p.h}`).toBeLessThanOrEqual(p.bottom - 4);
     }
   });
 

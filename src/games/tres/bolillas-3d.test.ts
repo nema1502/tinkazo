@@ -2,11 +2,13 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { CANICA_R } from "../pixi/bolillas-plan";
 import type { Mapeo, Tiro } from "../pixi/bolillas-plan";
 import { trayectoriaDe } from "../pixi/bolillas-plan";
 import { crearMapa } from "./camara";
 import { JUEGOS_CON_3D, ofrece3D } from "./ofrecidos";
 import { tiene3D } from "./registro";
+import { CANICA_ESCALA } from "../pixi/bolillas-arte";
 import {
   LLEGADA_TITILA, TEETER_ALTO, TEETER_FRECUENCIA, ZOOM_MAX, camaraBolillas, giroDelCasi, GIRO_ALTO,
   lugarDelMundo, mezclarPose, perfilBolillas, poseDelCerca, poseTiro, teeterDelCasi, titileo,
@@ -252,6 +254,35 @@ describe("S13 en 3D: sombras de contacto y chispas de vidrio", () => {
     expect(src).toMatch(/Chispas/);
     expect(src).toMatch(/chispo\.nuevo/);
     expect(src).not.toContain("Math.random");
+  });
+});
+
+describe("S17 en 3D: las canicas se dibujan más grandes", () => {
+  it("el vidrio, el rodado, el pivote y la sombra usan el radio dibujado (radio del plan × escala)", () => {
+    const src = fuente("bolillas-3d.ts");
+    expect(src).toMatch(/CANICA_ESCALA/);
+    // La malla de la canica se arma con el radio dibujado, y el rodado y el pivote también lo usan.
+    expect(src).toMatch(/CANICA_R \* CANICA_ESCALA/);
+    expect(src).toMatch(/R_DIBUJO/);
+    expect(src).not.toContain("Math.random");
+  });
+
+  it("la pose de cerca mira a la canica a la altura del vidrio agrandado, sin meterse en él", () => {
+    const CASI_D = {
+      casi: { t: 20, ganador: 0, slot: 1, desde: { x: 0.5, y: 0.5 }, dir: { x: 0, y: 1 }, titila: { x: 0.5, y: 0.94 } },
+      duracion: 23.4,
+      posiciones: [{ x: 0.5, y: 0.5 }, { x: 0.3, y: 0.4 }],
+      tiros: [] as Tiro[],
+    };
+    const pant = PANTALLAS[0] as { nombre: string; u: number; mapeo: Mapeo };
+    const mapa = crearMapa(perfilBolillas(), pant.u);
+    const lugar = lugarDelMundo(mapa, pant.mapeo);
+    const pose = poseDelCerca(CASI_D, 21.4, lugar, 1.3);
+    // La mira cae a la altura del centro de la canica agrandada.
+    expect(pose.mira[1]).toBeCloseTo(lugar.K * CANICA_R * CANICA_ESCALA * 0.9, 4);
+    // Y la cámara queda fuera del vidrio: a más de un radio dibujado de la superficie.
+    const lejos = Math.hypot(pose.pos[0] - pose.mira[0], pose.pos[2] - pose.mira[2]) / lugar.K;
+    expect(lejos).toBeGreaterThan(2 * CANICA_R * CANICA_ESCALA);
   });
 });
 
