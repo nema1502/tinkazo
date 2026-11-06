@@ -9,10 +9,10 @@ import { assignSlots } from "../pixi/slots";
 import { aplicarPose, crearMapa, poseCamara, type Pose3D } from "./camara";
 import { compararPuestos, type Puesto2D } from "./prueba";
 import {
-  AGUAYO, BANDERA, CAJON_MESA, MADERA_RUSTICA, SEGUIR, SOBRE_TAPA, TAPA_Y, TORO_R, TORO_T, ZOOM_MAX, alturaRana, anchoCajon, aroDestacado, cajaDeAro,
+  AGUAYO, BANDERA, CAJON_MESA, MADERA_RUSTICA, SEGUIR, SOBRE_TAPA, TAPA_Y, TORO_R, TORO_T, ZOOM_MAX, agarraDe, alturaRana, anchoCajon, aroDestacado, cajaDeAro,
   camaraDelSapo, camaraDelTiro, cercaniaDelTiro, colorTabla, deltaCamara, elevacionDe, encajarAntes, fondoCajon, franjaAguayo, franjaBandera, lugarDelMundo,
-  luzDelGolpe, mezclarPose, perfilDelTiro, perfilSapo, pesoMoneda, pintarArgolla, poseArgolla, poseMoneda, proyectorDe, tomaDeArgolla, type AgujeroSapo,
-  type ArgollaSapo, type AroDestacado, type EstadoArgolla,
+  luzDelGolpe, mezclarPose, munecaDe, perfilDelTiro, perfilSapo, pesoMoneda, pintarArgolla, poseArgolla, poseMoneda, proyectorDe, suspensoDe, teeterSapo,
+  tomaDeArgolla, type AgujeroSapo, type ArgollaSapo, type AroDestacado, type EstadoArgolla, type PoseArgolla,
 } from "./sapo-3d";
 
 /**
@@ -770,4 +770,155 @@ describe("la última argolla, desde la argolla: del lanzamiento con zoom hasta v
       }
     });
   }
+});
+
+/* ===================================================================== la mano articulada y el suspenso del borde (S9, S10) */
+
+describe("la mano articulada: los dedos y la muñeca siguen la señal del 2D (S9)", () => {
+  it("sin señal, el agarre se reconstruye del impulso: recogiendo cierra, en el látigo abre, y descansa a medio encoger (0,4)", () => {
+    expect(agarraDe(undefined, undefined, 0)).toBeCloseTo(0.6, 9); // reposo: la flexión 0,4 del puente
+    expect(agarraDe(undefined, undefined, 1)).toBeCloseTo(1, 9); // al final del impulso agarra la moneda
+    expect(agarraDe(undefined, undefined, -0.8)).toBeCloseTo(0, 6); // en el látigo abre de golpe
+    let antes = 0.6;
+    for (let i = 0; i <= 20; i++) {
+      const s = agarraDe(undefined, undefined, i / 20);
+      expect(s).toBeGreaterThanOrEqual(antes - 1e-9);
+      expect(s).toBeLessThanOrEqual(1);
+      antes = s;
+    }
+  });
+
+  it("con `flex`, el 2D manda: 0 agarra la moneda, 1 abre de golpe, 0,4 es el reposo, y fuera de rango se amarra", () => {
+    for (const [fase, swing] of [[undefined, 0], [1, 0], [-1, 0], [-0.5, 0.4]] as const) {
+      expect(agarraDe(1, fase, swing)).toBe(0);
+      expect(agarraDe(0, fase, swing)).toBe(1);
+      expect(agarraDe(0.4, fase, swing)).toBeCloseTo(0.6, 9);
+      expect(agarraDe(0.5, fase, swing)).toBeCloseTo(0.5, 9);
+      expect(agarraDe(2, fase, swing)).toBe(0);
+      expect(agarraDe(-1, fase, swing)).toBe(1);
+    }
+    // Una flexión rota se cae a la fase: con ella se reconstruye la misma curva del 2D.
+    expect(agarraDe(Number.NaN, 1, 0)).toBe(1);
+    expect(agarraDe(Number.NaN, 0.5, 0)).toBeCloseTo(0.8, 9);
+    expect(agarraDe(Number.NaN, -0.1, 0)).toBeCloseTo(1 - 0.1 / 0.35, 9);
+    expect(agarraDe(Number.NaN, -0.5, 0)).toBeCloseTo(0.6 * (0.15 / 0.65), 9);
+    expect(agarraDe(Number.NaN, -1, 0)).toBeCloseTo(0.6, 9);
+    expect(agarraDe(Number.NaN, 0, 0)).toBeCloseTo(0.6, 9);
+  });
+
+  it("la muñeca sigue la fase: recogiendo se echa atrás y látiga adelante, y vuelve quieta al acabar el latigazo", () => {
+    expect(munecaDe(0, 0)).toBe(0);
+    expect(munecaDe(1, 0)).toBeCloseTo(0.38, 9);
+    expect(munecaDe(0.5, 0)).toBeCloseTo(0.19, 9);
+    // El látigo: pega hacia adelante a mitad del latigazo y vuelve a 0 al terminar, sin quedar torcida.
+    const latigos: number[] = [];
+    for (let w = 0; w <= 1.0001; w += 0.05) latigos.push(munecaDe(-w, 1));
+    expect(latigos[0]).toBe(0);
+    expect(Math.min(...latigos)).toBeLessThan(-0.6);
+    expect(latigos[latigos.length - 1]).toBeCloseTo(0, 9);
+    // Sin saltos cuando la señal avanza a paso de cuadro.
+    let mayor = 0;
+    for (let i = 1; i < latigos.length; i++) mayor = Math.max(mayor, Math.abs((latigos[i] as number) - (latigos[i - 1] as number)));
+    expect(mayor).toBeLessThan(0.12);
+    // La fase se amarra, y una fase rota se cae al impulso.
+    expect(munecaDe(2, 0)).toBe(munecaDe(1, 0));
+    expect(munecaDe(-2, 0)).toBe(munecaDe(-1, 0));
+    expect(munecaDe(Number.NaN, 1)).toBe(munecaDe(undefined, 1));
+    expect(munecaDe(Number.POSITIVE_INFINITY, -0.5)).toBe(munecaDe(undefined, -0.5));
+  });
+
+  it("sin señal de fase, el impulso basta: recogiendo atrás, látigo adelante, y nunca más de 60 grados", () => {
+    expect(munecaDe(undefined, 0)).toBe(0);
+    expect(munecaDe(undefined, 1)).toBeGreaterThan(0.2);
+    let minimo = 0;
+    for (let w = 0; w <= 1.0001; w += 0.05) minimo = Math.min(minimo, munecaDe(undefined, -0.8 * w));
+    expect(minimo).toBeLessThan(-0.3);
+    // Nunca mareante: menos de 60 grados, para cualquier señal.
+    for (const f of [undefined, 0, 0.5, 1, -0.5, -1] as const) for (const s of [-5, -1, -0.8, 0, 0.5, 1, 9]) expect(Math.abs(munecaDe(f, s)), `fase ${f} swing ${s}`).toBeLessThan(Math.PI / 3);
+  });
+
+  it("el cuadro consume la señal y la poses no cambian: los dedos giran desde grupos en el nudillo y la muñeca lleva al antebrazo", () => {
+    const src = fuente("sapo-3d.ts");
+    // La señal vive en el puente compartido (`SenalMano`, tipos.ts) y el 3D se la apuesta a su mano.
+    expect(fuente("tipos.ts")).toMatch(/flex\?: number/);
+    expect(fuente("tipos.ts")).toMatch(/fase\?: number/);
+    expect(src).toContain("& SenalMano");
+    expect(src).toContain("mn.flex");
+    expect(src).toContain("mn.fase");
+    expect(src).toContain("const dedoG = new Group()");
+    expect(src).toContain("const pulgarG = new Group()");
+    const iMuneca = src.indexOf("const munecaG = new Group()");
+    expect(iMuneca).toBeGreaterThan(src.indexOf("const pulgarG = new Group()"));
+    expect(iMuneca).toBeLessThan(src.indexOf("const antebrazo = new Group()"));
+  });
+});
+
+describe("el suspenso del borde: teeter en el aro y caer donde el plan puso (S10)", () => {
+  const borde = { x: 0.5, y: -0.2 };
+  const enBaile = (resto: Partial<ArgollaSapo> = {}): ArgollaSapo => arg("baile", { borde, ...resto });
+  const enVueloDelBaile = { suelo: { x: 0.62, y: -0.2 }, edad: 0.4, u: 0.5 };
+
+  it("sin la marca de la 2D el 3D no inventa nada: la pose es la del plan tal cual", () => {
+    const p = poseArgolla(enBaile(enVueloDelBaile), BR, FR, MANO, BOCA);
+    expect(teeterSapo(p, enBaile(enVueloDelBaile), BR)).toEqual(p); // sin la marca
+    expect(teeterSapo(p, enBaile({ ...enVueloDelBaile, suspenso: false }), BR)).toEqual(p);
+    expect(teeterSapo(p, enBaile({ ...enVueloDelBaile, suspenso: true, borde: null }), BR)).toEqual(p);
+    // La ganadora jamás la lleva, aunque alguien la marcara por error; y fuera del baile tampoco.
+    expect(teeterSapo(p, enBaile({ ...enVueloDelBaile, suspenso: true, ultima: true }), BR)).toEqual(p);
+    expect(teeterSapo(p, arg("rueda", { suspenso: true }), BR)).toEqual(p);
+  });
+
+  it("con la marca: da vueltas alrededor del borde, se ladea más y no se mete en la tapa", () => {
+    const a = enBaile({ ...enVueloDelBaile, suspenso: true });
+    const p = poseArgolla(a, BR, FR, MANO, BOCA);
+    const t = teeterSapo(p, a, BR);
+    // Gira alrededor del borde: no se corre de su radio ni del plan.
+    expect(Math.hypot(t.x - borde.x, t.z - borde.y)).toBeCloseTo(Math.hypot(p.x - borde.x, p.z - borde.y), 6);
+    expect(t.x === p.x && t.z === p.z).toBe(false);
+    expect(t.inclina).toBeGreaterThan(p.inclina);
+    expect(t.bajo).toBeGreaterThanOrEqual(TAPA_Y - 1e-9);
+    expect(t.visible).toBe(true);
+    expect(t.esc).toBe(p.esc);
+  });
+
+  it("al llegar (u 0) y al terminar (u 1) queda exactamente donde el plan la puso", () => {
+    for (const u of [0, 1]) {
+      const a = enBaile({ suspenso: true, suelo: { x: 0.62, y: -0.2 }, edad: u * WOBBLE, u });
+      const p = poseArgolla(a, BR, FR, MANO, BOCA);
+      expect(teeterSapo(p, a, BR)).toEqual(p);
+    }
+  });
+
+  it("el suspenso es continuo cuadro a cuadro (sin saltos) y se apaga solo al final", () => {
+    let previa = poseArgolla(enBaile({ suspenso: true, suelo: { x: 0.62, y: -0.2 } }), BR, FR, MANO, BOCA);
+    for (let i = 1; i <= 24; i++) {
+      const u = i / 24, edad = u * WOBBLE;
+      const a = enBaile({ suspenso: true, suelo: { x: 0.62, y: -0.2 }, edad, u });
+      const t = teeterSapo(poseArgolla(a, BR, FR, MANO, BOCA), a, BR);
+      expect(Math.hypot(t.x - previa.x, t.z - previa.z)).toBeLessThan(0.02);
+      expect(Math.abs(t.inclina - previa.inclina)).toBeLessThan(0.09);
+      previa = t;
+    }
+  });
+
+  it("la marca se fija de forma determinista con el índice del tiro (sin azar nuevo) y toca a algunos, no a todos", () => {
+    const marcas = new Set<boolean>();
+    for (let i = 0; i < 64; i++) {
+      expect(suspensoDe(i)).toBe(suspensoDe(i));
+      marcas.add(suspensoDe(i));
+    }
+    expect(marcas.size).toBe(2);
+    const si = Array.from({ length: 64 }, (_, i) => suspensoDe(i)).filter(Boolean).length;
+    expect(si).toBeGreaterThan(8);
+    expect(si).toBeLessThan(56);
+    expect(fuente("sapo-3d.ts")).not.toMatch(/Math\.random/);
+  });
+
+  it("el cuadro viste la marca: envuelve la pose del plan con `teeterSapo`, y la ganadora queda protegida en la función", () => {
+    const src = fuente("sapo-3d.ts");
+    const cuadro = src.slice(src.indexOf("ellas.forEach"), src.indexOf("// Las astillas"));
+    expect(cuadro).toMatch(/teeterSapo\(poseArgolla\(/);
+    // La guarda de la ganadora (y de la marca) vive dentro de `teeterSapo`, probada arriba.
+    expect(src).toContain('a.ultima || a.estado !== "baile"');
+  });
 });

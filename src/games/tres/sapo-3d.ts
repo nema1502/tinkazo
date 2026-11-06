@@ -10,7 +10,7 @@ import { MOMENTOS_MONEDA, type Toma } from "../pixi/sapo-plan";
 import { AFTER_FINAL } from "../pixi/sapo-tiempos";
 import { aplicarPose, perfilFiel, poseCamara, type Mapa, type PerfilMapa, type Pose3D } from "./camara";
 import { definir3D } from "./motor";
-import type { Camara2D, EntradaBase, Fabrica3D, Lanzador } from "./tipos";
+import type { Camara2D, EntradaBase, Fabrica3D, Lanzador, SenalMano } from "./tipos";
 
 /**
  * El sapo en 3D. El 2D (`pixi/sapo.ts`) decide todo: los tiros, dónde cae cada argolla y cuándo, quién gana. Esta vista
@@ -63,6 +63,11 @@ export interface ArgollaSapo {
   ultima: boolean;
   /** El centro del agujero en cuyo borde baila, o null. */
   borde: PuntoMesa | null;
+  /**
+   * El suspenso del borde (S10): la 2D lo marca (`suspensoDe`) cuando esta argolla hace el momento de rodar en el
+   * borde del agujero. Opcional: sin la marca el 3D no inventa nada, y la ganadora jamás lo lleva.
+   */
+  suspenso?: boolean;
 }
 
 export interface AgujeroSapo {
@@ -97,7 +102,9 @@ export interface EntradaSapo extends EntradaBase {
     /** Quieta del todo: el silencio de antes de que caiga la última argolla. */
     quieta: boolean;
   };
-  mano: { visible: boolean; punto: PuntoMesa; /** de -0,8 a 1: el impulso hacia atrás y el suelte */ swing: number; manga: number };
+  /** Lo que la mano lleva lanzando: visible, dónde está y el impulso de siempre, más la señal de la mano (S9,
+   * `SenalMano` en `tipos.ts`): la flexión de los dedos y la fase del lanzamiento que calcula el 2D. */
+  mano: { visible: boolean; punto: PuntoMesa; /** de -0,8 a 1: el impulso hacia atrás y el suelte */ swing: number; manga: number } & SenalMano;
   argollas: readonly ArgollaSapo[];
   /** Cada golpe de una argolla contra la tapa, para las astillas: hora de juego y lugar. */
   golpes: readonly { t: number; punto: PuntoMesa; fuerza: number }[];
@@ -280,6 +287,78 @@ export function poseArgolla(a: ArgollaSapo, br: number, fr: number, mano: readon
   }
   const bajo = y - br * esc * (TORO_R * Math.sin(inc) + TORO_T);
   return { x, y, z, inclina: inc, rumbo, gira, esc, visible, bajo: piso < 0 ? Math.min(bajo, 0) : bajo };
+}
+
+/**
+ * Cuánto agarra la mano (S9), de 0 abierta a 1 cerrada. Con la flexión del 2D (`flex`: 0 curvada agarrando la
+ * moneda, 1 abierta de golpe tras soltar, 0,4 en reposo) ella manda; sin la señal se reconstruye la misma curva de
+ * la fase (`fase`: recogida de 0 a 1 y látigo de 0 a −1) y, sin fase, del impulso: recogiendo cierra y en el látigo
+ * abre. Fuera de rango se amarra, y una señal rota (no finita) no se usa.
+ */
+export function agarraDe(flex: number | undefined, fase: number | undefined, swing: number): number {
+  if (typeof flex === "number" && Number.isFinite(flex)) return 1 - Math.min(1, Math.max(0, flex));
+  const f = typeof fase === "number" && Number.isFinite(fase) ? Math.min(1, Math.max(-1, fase)) : 0;
+  if (f <= -0.0005) {
+    // El látigo: en el primer tramo sigue cerrada de la suelta y abre de golpe; después relaja a reposo (flex 0,4).
+    const w = -f;
+    return w < 0.35 ? 1 - w / 0.35 : 0.6 * ((w - 0.35) / 0.65);
+  }
+  if (f > 0) return 1 - 0.4 * (1 - f); // recogiendo: de reposo (0,6) a la mano llena (1)
+  const s = Number.isFinite(swing) ? swing : 0; // sin fase útil, el impulso basta
+  if (s > 0) return 0.6 + 0.4 * Math.min(1, s);
+  return 0.6 - 0.6 * Math.min(1, Math.max(0, -s / 0.8));
+}
+
+/**
+ * La muñeca (S9), en radianes alrededor del eje del dorso: positiva se echa atrás recogiendo el impulso (la fase de
+ * 0 a 1 del 2D), negativa es el látigo adelante de la suelta (la fase de 0 a −1, que sube y vuelve con el propio
+ * latigazo). Opcional la fase: sin ella, el impulso solo basta. Nunca pasa de 60 grados: no marear.
+ */
+export function munecaDe(fase: number | undefined, swing: number): number {
+  const s = Number.isFinite(swing) ? Math.min(1, Math.max(-1, swing)) : 0;
+  if (typeof fase === "number" && Number.isFinite(fase)) {
+    const f = Math.min(1, Math.max(-1, fase));
+    if (f > 0) return 0.38 * f;
+    if (f < 0) return -0.68 * Math.sin(Math.PI * -f);
+    return 0;
+  }
+  return 0.38 * Math.max(0, s) - 0.68 * (s < 0 ? Math.sin(Math.PI * -s) : 0);
+}
+
+/**
+ * El suspenso del borde (S10): qué tiros hacen el momento de rodar en el borde, elegido de forma determinista con el
+ * índice del tiro y el hash de la casa, sin consumir aleatoriedad nueva. La 2D lo usa para marcar
+ * `ArgollaSapo.suspenso`; el 3D solo viste la marca, nunca la inventa, y la ganadora jamás la lleva.
+ */
+export const SAL_SUSPENSO = 121;
+export const suspensoDe = (i: number): boolean => hash(i, SAL_SUSPENSO) >= 0.45;
+
+/**
+ * La pose del suspenso (S10): la argolla marcada da vueltas sobre el borde del agujero (`a.borde`) como si se fuera
+ * a caer, y termina exactamente donde el plan la puso (la onda muere en `u` 0 y 1). Sin la marca, sin borde, en la
+ * ganadora o fuera del baile, devuelve la pose del plan tal cual. Nunca baja de la tapa: si al ladearse su punto más
+ * bajo quedara debajo, se levanta lo justo.
+ */
+export function teeterSapo(p: PoseArgolla, a: ArgollaSapo, br: number): PoseArgolla {
+  if (a.suspenso !== true || !a.borde || a.ultima || a.estado !== "baile" || !p.visible) return p;
+  const onda = Math.sin(Math.PI * Math.min(1, Math.max(0, a.u)));
+  if (onda <= 1e-9) return p;
+  const dx = p.x - a.borde.x, dz = p.z - a.borde.y;
+  const d = Math.hypot(dx, dz);
+  if (d <= 1e-9) return p;
+  // Un arco corto alrededor del borde, a lo sumo del radio de la argolla.
+  const teta = Math.min(1.1, (0.9 * br * p.esc * onda) / d);
+  const cos = Math.cos(teta), sin = Math.sin(teta);
+  const x = a.borde.x + dx * cos - dz * sin;
+  const z = a.borde.y + dx * sin + dz * cos;
+  // El bamboleo: se ladea más, como si fuera a caerse, y el canto gira con la vuelta.
+  const inc = p.inclina + 0.22 * onda * (0.55 + 0.45 * Math.sin(a.edad * 9));
+  const r = br * p.esc;
+  const piso = TAPA_Y + r * (TORO_R * Math.sin(inc) + TORO_T);
+  // Si la pose del plan ya iba cayéndose del canto (se desvanece fuera de la mesa), no se la levanta: sigue igual.
+  const y = p.bajo >= TAPA_Y - 1e-9 ? Math.max(p.y, piso) : p.y;
+  const bajo = y - r * (TORO_R * Math.sin(inc) + TORO_T);
+  return { ...p, x, z, y, inclina: inc, rumbo: p.rumbo + teta * 1.5, gira: p.gira + 2.5 * onda, bajo };
 }
 
 /**
@@ -1112,23 +1191,38 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
   const palma = pieza(g.esfera, piel, 0, 0.012, 0.005, 0.08, 0.045, 0.085);
   mano.add(palma);
   contorno(palma, 1.1);
-  // Índice, medio, anular y meñique: el del medio es el más largo; las puntas bajan hacia la mesa.
+  // Índice, medio, anular y meñique: el del medio es el más largo; las puntas bajan hacia la mesa. Cada dedo vive en
+  // un grupo con su pivote en el nudillo (S9): así se curva con la flexión que manda el 2D, y en reposo (rotación 0)
+  // la pose es la de siempre.
+  const dedos: { g: Group; peso: number }[] = [];
+  const PESO_DEDO = [1.05, 1, 0.95, 0.85]; // el meñique cierra menos
+  let idDedo = 0;
   for (const [dx, largo, gira] of [[-0.05, 0.036, 0.12], [-0.017, 0.044, 0.03], [0.017, 0.041, -0.04], [0.05, 0.031, -0.14]] as const) {
-    const dedo = pieza(g.esfera, piel, dx, -0.004, -0.062 - largo * 0.75, 0.019, 0.018, largo);
+    const dedoG = new Group();
+    dedoG.position.set(dx, -0.004, -0.055);
+    const dedo = pieza(g.esfera, piel, 0, 0, -0.007 - largo * 0.75, 0.019, 0.018, largo);
     dedo.rotation.set(-0.55, gira, 0);
-    mano.add(dedo);
+    dedoG.add(dedo);
     contorno(dedo, 1.15);
-    // El nudillo, apenas más oscuro, donde el dedo sale del dorso.
+    mano.add(dedoG);
+    dedos.push({ g: dedoG, peso: PESO_DEDO[idDedo++] ?? 1 });
+    // El nudillo, apenas más oscuro, donde el dedo sale del dorso: él no gira, gira el dedo.
     mano.add(pieza(g.esfera, pielOsc, dx, 0.03, -0.055, 0.017, 0.012, 0.015));
   }
-  const pulgar = pieza(g.esfera, piel, -0.072, -0.01, -0.03, 0.02, 0.019, 0.042);
+  const pulgarG = new Group();
+  pulgarG.position.set(-0.072, -0.01, -0.03);
+  mano.add(pulgarG);
+  const pulgar = pieza(g.esfera, piel, 0, 0, 0, 0.02, 0.019, 0.042);
   pulgar.rotation.set(-0.35, -0.65, 0);
-  mano.add(pulgar);
+  pulgarG.add(pulgar);
   contorno(pulgar, 1.15);
-  // El brazo entra desde abajo a la derecha de la pantalla (hacia la cámara y a la derecha).
+  // El brazo entra desde abajo a la derecha de la pantalla (hacia la cámara y a la derecha). La muñeca (S9) va entre
+  // la palma y el antebrazo: se echa atrás recogiendo el impulso y arrea el látigo adelante en la suelta.
+  const munecaG = new Group();
+  mano.add(munecaG);
   const dirBrazo = new Vector3(0.55, 0.04, 0.83).normalize();
   const antebrazo = new Group();
-  mano.add(antebrazo);
+  munecaG.add(antebrazo);
   const qBrazo = new Quaternion().setFromUnitVectors(SUBE, dirBrazo);
   antebrazo.quaternion.copy(qBrazo);
   // La muñeca y el antebrazo, que se ensancha hacia el codo (un cono truncado: más fino en la mano).
@@ -1284,6 +1378,12 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
         mano.scale.setScalar(Math.max(1, Math.min(1.9, 190 / m.sc)));
         matManga.color.setHex(mn.manga);
         matPliegue.color.setHex(mn.manga).multiplyScalar(0.72);
+        // S9: los dedos se curvan con la flexión que manda el 2D (o con el impulso, si no hay señal) y la muñeca
+        // arrea el látigo en la suelta. Con las señales en reposo las rotaciones quedan en 0: la pose de siempre.
+        const agarra = agarraDe(mn.flex, mn.fase, mn.swing);
+        for (const d of dedos) d.g.rotation.x = -1.05 * agarra * d.peso;
+        pulgarG.rotation.x = -0.75 * agarra;
+        munecaG.rotation.x = munecaDe(mn.fase, mn.swing);
 
         // Las argollas.
         const manoMundo: [number, number, number] = [mn.punto.x, hy, mn.punto.y + 0.09 * mn.swing];
@@ -1296,7 +1396,7 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
             el.sombra.visible = false;
             return;
           }
-          const p = poseArgolla(a, brArgolla, fr, manoMundo, bocaMundo);
+          const p = teeterSapo(poseArgolla(a, brArgolla, fr, manoMundo, bocaMundo), a, brArgolla);
           el.grupo.visible = p.visible;
           if (!p.visible) {
             el.sombra.visible = false;
