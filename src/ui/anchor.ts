@@ -673,7 +673,8 @@ export function showTxStatus(containerId: string, step: AnchorStep, detail?: str
     const net = document.createElement("span");
     net.className = "kicker";
     net.style.marginLeft = "8px";
-    net.textContent = network.name;
+    // En la red de prueba dice "Modo prueba", como la cabecera: "testnet" no le dice nada a quien sortea.
+    net.textContent = network.name === "testnet" ? t("netTest") : network.name;
     host.appendChild(net);
   }
 }

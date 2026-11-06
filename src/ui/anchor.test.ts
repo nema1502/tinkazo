@@ -448,7 +448,7 @@ describe("una cuenta de Pollar que todavía no existe en la red", () => {
     h.wallet = pollar();
     const { error } = await correr(sellar());
     const { anchorErrorText } = await import("./anchor");
-    expect(await anchorErrorText(error)).toBe("No pude conectarme con la red de Stellar. Revisá tu conexión y probá de nuevo.");
+    expect(await anchorErrorText(error)).toBe("No hay conexión con el registro. Revisá tu internet y probá de nuevo.");
     expect(h.fundWithFriendbot).not.toHaveBeenCalled();
     expect(eventos).toEqual([]);
   });
@@ -468,7 +468,7 @@ describe("una cuenta de Pollar que todavía no existe en la red", () => {
       // Lo que hace freeze.ts: lo reconoce y reintenta con otra ronda, sin que haya quedado nada en la cadena.
       const { selloSinGrabar, anchorErrorText } = await import("./anchor");
       expect(selloSinGrabar(error)).toBe(true);
-      expect(await anchorErrorText(error)).toBe("Esa ronda está demasiado cerca. Probá de nuevo.");
+      expect(await anchorErrorText(error)).toBe("Ese momento está demasiado cerca. Probá de nuevo.");
       // Ni simuló, ni firmó, ni mandó nada.
       expect(pasos.map(([p]) => p)).toEqual(["preparing"]);
       expect(h.seal).not.toHaveBeenCalled();
@@ -637,7 +637,7 @@ describe("en mainnet una cuenta de Pollar nunca ve la caja de fondos", () => {
     h.wallet = pollar(vi.fn().mockRejectedValue(new Error("txInsufficientBalance")));
     const { error } = await correr(sellar());
     const { anchorErrorText } = await import("./anchor");
-    expect(await anchorErrorText(error)).toBe("Ahora no se pudo sellar, y no es por tu cuenta: el servicio no pudo pagar la comisión de la red. Avisanos en hola@tinkazo.app y probá de nuevo más tarde.");
+    expect(await anchorErrorText(error)).toBe("Ahora no se pudo sellar, y no es por tu cuenta: no pudimos cubrir el costo de la red. Avisanos en hola@tinkazo.app y probá de nuevo más tarde.");
   });
 
   it("al sortear, con la lista ya sellada, el patrocinio vacío habla de sortear y no culpa a la cuenta", async () => {
@@ -666,7 +666,7 @@ describe("una comisión corta no es falta de saldo", () => {
     expect(eventos).toEqual([]);
     const { anchorErrorText } = await import("./anchor");
     // "La red estaba ocupada": hay que probar de nuevo, no conseguir XLM.
-    expect(await anchorErrorText(error)).toBe("La red estaba ocupada y no tomó la transacción. Probá de nuevo en unos segundos.");
+    expect(await anchorErrorText(error)).toBe("El registro estaba ocupado. Probá de nuevo en unos segundos.");
   });
 
   it("y la secuencia corrida (tx_bad_seq) tampoco", async () => {
@@ -721,7 +721,7 @@ describe("el margen de la ronda al empezar a armar el sello", () => {
     const { error } = await sellar(conMargen(10));
     const { selloSinGrabar, anchorErrorText } = await import("./anchor");
     expect(selloSinGrabar(error)).toBe(true);
-    expect(await anchorErrorText(error)).toBe("Esa ronda está demasiado cerca. Probá de nuevo.");
+    expect(await anchorErrorText(error)).toBe("Ese momento está demasiado cerca. Probá de nuevo.");
   });
 });
 
@@ -751,7 +751,7 @@ describe("con ?grifo=0 (testnet, el grifo apagado a propósito)", () => {
     h.wallet = pollar(vi.fn().mockRejectedValue(sinSaldo()));
     const { error } = await sellar();
     const { anchorErrorText } = await import("./anchor");
-    expect(await anchorErrorText(error)).toBe("Ahora no se pudo sellar, y no es por tu cuenta: el servicio no pudo pagar la comisión de la red. Avisanos en hola@tinkazo.app y probá de nuevo más tarde.");
+    expect(await anchorErrorText(error)).toBe("Ahora no se pudo sellar, y no es por tu cuenta: no pudimos cubrir el costo de la red. Avisanos en hola@tinkazo.app y probá de nuevo más tarde.");
   });
 
   it("si Pollar paga la comisión, sella igual que siempre: con la cuenta en 0 y sin tocar el grifo", async () => {
@@ -856,7 +856,7 @@ describe("con cualquier otra wallet (Freighter, cuenta de prueba)", () => {
       h.seal.mockRejectedValue(new Error("Account not found: " + DIR));
       const { error } = await sellar();
       const { anchorErrorText } = await import("./anchor");
-      expect(await anchorErrorText(error)).not.toBe("Ahora no se pudo sellar, y no es por tu cuenta: el servicio no pudo pagar la comisión de la red. Avisanos en hola@tinkazo.app y probá de nuevo más tarde.");
+      expect(await anchorErrorText(error)).not.toBe("Ahora no se pudo sellar, y no es por tu cuenta: no pudimos cubrir el costo de la red. Avisanos en hola@tinkazo.app y probá de nuevo más tarde.");
       const { errorKey } = await import("../stellar/errores");
       expect(errorKey(error, { enLinea: true })).toBe("rpcDown");
     });
@@ -1141,7 +1141,7 @@ describe("escribirError: sin conexión, igual dice algo", () => {
     expect(status.textContent).toBe("Estás sin internet. Conectate y probá de nuevo.");
     vi.stubGlobal("navigator", { onLine: true });
     await escribirError(status, new TypeError("Failed to fetch"), "sorteo");
-    expect(status.textContent).toBe("No pude conectarme con la red de Stellar. Revisá tu conexión y probá de nuevo.");
+    expect(status.textContent).toBe("No hay conexión con el registro. Revisá tu internet y probá de nuevo.");
   });
 });
 

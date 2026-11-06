@@ -211,9 +211,9 @@ describe("evento con enlace corto: entero, en un solo enlace y una sola foto", (
 });
 
 describe("lo que va en la foto", () => {
-  it("un sorteo anclado en la red de prueba: número, red y fecha arriba; ganó, el premio y entre cuántos", () => {
+  it("un sorteo anclado en modo prueba: número, red y fecha arriba; ganó, el premio y entre cuántos", () => {
     const f = fotoDeSorteo("es", { enlace, ganadores: ["Ana"], total: 18, premio: "Polera", fecha: 1_792_600_000, numero: "278", red: "testnet" }, corto);
-    expect(f.rotulo).toMatch(/^Sorteo #278, red de prueba, \d{1,2} de [a-z]+ de 2026$/);
+    expect(f.rotulo).toMatch(/^Sorteo #278, modo prueba, \d{1,2} de [a-z]+ de 2026$/);
     expect(f.titulo).toBe("Ganó");
     expect(f.personas).toEqual(["Ana"]);
     expect(f.lineas).toEqual(["Se lleva: Polera", "Salió entre 18 personas"]);
@@ -230,13 +230,13 @@ describe("lo que va en la foto", () => {
     expect(f.mas).toBe("and {n} more");
   });
 
-  it("un sorteo comprobado con el historial de Stellar no trae número, pero en testnet sigue diciendo red de prueba", () => {
+  it("un sorteo comprobado con el historial de Stellar no trae número, pero en testnet sigue diciendo modo prueba", () => {
     const f = fotoDeSorteo("es", { enlace, ganadores: ["Ana"], total: 18, premio: "", fecha: 1_792_600_000, red: "testnet" }, enlace);
-    expect(f.rotulo).toMatch(/^Resultado del sorteo, red de prueba, \d{1,2} de [a-z]+ de 2026$/);
+    expect(f.rotulo).toMatch(/^Resultado del sorteo, modo prueba, \d{1,2} de [a-z]+ de 2026$/);
     expect(fotoDeSorteo("es", { enlace, ganadores: ["Ana"], total: 18, premio: "", red: "mainnet" }, enlace).rotulo).toBe("Resultado del sorteo");
   });
 
-  it("en la red principal no dice red de prueba", () => {
+  it("en la red principal no dice modo prueba", () => {
     const f = fotoDeSorteo("es", { enlace, ganadores: ["Ana"], total: 5, premio: "", numero: "9", red: "mainnet" }, enlace);
     expect(f.rotulo).toBe("Sorteo #9");
   });

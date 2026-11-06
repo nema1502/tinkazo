@@ -180,13 +180,6 @@
       "fecha": "2026-11-02"
     },
     {
-      "archivo": "src/*",
-      "juego": "ledger",
-      "regla": "tecnicismos",
-      "motivo": "el juego Libro mayor (ledger) fue de la tecnologia y salio del selector: su descripcion nombra lo que es",
-      "fecha": "2026-11-02"
-    },
-    {
       "archivo": "src/games/pixi/stage.ts",
       "regla": "stand-relator",
       "motivo": "el cartel de quien gana ya tiene su rama de stand (SALIO / PICKED); estas son las del sorteo de verdad",
