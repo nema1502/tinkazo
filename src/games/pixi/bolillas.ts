@@ -25,6 +25,7 @@ import {
   TIRADOR,
   coloresCanica,
   efectosDe,
+  escalaChipDe,
   manoDe,
   polvoDe,
   tierraManchas,
@@ -71,6 +72,8 @@ interface Escena {
   mano: Graphics;
   /** Un chip por canica (la figura con cara y nombre), creado cuando se ve por primera vez. */
   chips: Map<number, Container>;
+  /** La escala de esos chips: la etiqueta más chica que se lee, en proporción al círculo (`escalaChipDe`). */
+  escala: number;
   /** Los dibujos de las canicas, por su asiento (y la canica de la pegadora en el -1). */
   bol: Map<number, Graphics>;
   m: Mapeo;
@@ -110,6 +113,9 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
     // Al cambiar de tamaño se tira lo viejo: el círculo y las canicas se piden de nuevo.
     mundo.removeChildren().forEach((c) => c.destroy({ children: true }));
     const m: Mapeo = mapeoDe(p);
+    // La escala de las fichas del nombre: la etiqueta más chica que se lee, en proporción al círculo y
+    // a la cantidad de gente (S11); antes salían al tamaño de la figura del kit y tapaban el círculo entero.
+    const escala = escalaChipDe(p.k, m.e, plan.datos.n);
     // La tierra sembrada: manchas de tono, siempre las mismas (la semilla del show).
     const tierraOscura = S.dark ? 0x2c2013 : 0xc2a273;
     const tierraClara = S.dark ? 0x49361f : 0xe3c69b;
@@ -158,7 +164,7 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
       S.bg.visible = false;
     }
     const entrada3 = v3 ? previa?.entrada3 ?? entrada3Vacia() : null;
-    return { fondo, mundo, sombra, fx, mano, chips: new Map(), bol: new Map(), m, v3, entrada3 };
+    return { fondo, mundo, sombra, fx, mano, chips: new Map(), bol: new Map(), m, escala, v3, entrada3 };
   },
 
   cuadro(k, plan, e, t) {
@@ -204,13 +210,14 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
 
       let chip = e.chips.get(persona);
       if (!chip) {
-        chip = k.S.chip(k.nombres[persona] ?? "", k.escalaDeFigura());
+        chip = k.S.chip(k.nombres[persona] ?? "", e.escala);
         e.chips.set(persona, chip);
         e.mundo.addChild(chip);
       }
-      chip.visible = seVe && tray.estado !== "afuera";
-      if (k.coronado && persona === d.ganador) chip.scale.set(1.2);
-      else chip.scale.set(1);
+      // La coronación: el cartel del kit dice el nombre del ganador, y la ficha se retira — el nombre
+      // aparece una sola vez (S12), no el cartel y la ficha superpuestos.
+      chip.visible = seVe && tray.estado !== "afuera" && !(k.coronado && persona === d.ganador);
+      chip.scale.set(1);
       chip.position.set(w.x - chip.width / 2, w.y - rr * 1.08 - chip.height * 0.85);
     });
     for (const [persona, chip] of e.chips) {
