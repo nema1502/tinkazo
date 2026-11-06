@@ -50,7 +50,7 @@ The organizer picks a **target round** `R` and records on the contract:
 With `now = env.ledger().timestamp()`, the contract requires:
 
 - `count ≥ 2`
-- `1 ≤ winners ≤ min(count, 32)`
+- `1 ≤ winners ≤ min(count, 100)` (`MAX_WINNERS`; the testnet contracts from before November 2026 have 32)
 - `round_time(R) ≥ now + 30` (the seed does not exist yet when the list is sealed)
 - `round_time(R) ≤ now + 30 · 86400` (at most 30 days ahead)
 - `len(meta) ≤ 160` characters
@@ -83,7 +83,7 @@ while len(chosen) < k:
     ctr = ctr + 1
 ```
 
-`BE32` and `BE64` are 4- and 8-byte unsigned big-endian integers. The `j`-th winner is entry `e_{chosen[j]}` of the canonical list, and the order of `chosen` is the order of the prizes.
+`BE32` and `BE64` are 4- and 8-byte unsigned big-endian integers. The `j`-th winner is entry `e_{chosen[j]}` of the canonical list, and the order of `chosen` is the order of the prizes. With `k = n` the skipping of repeats walks the whole list and `chosen` is a complete permutation (the "order mode": turns, rotating savings circles, groups); the walk costs about `n · H(n)` hashes, about 519 with 100 entries.
 
 The modulo bias with 64 bits of entropy over `n ≤ 2^32` is below `2^-32` and is considered negligible.
 
@@ -119,7 +119,7 @@ When the contract's state doesn't have the draw (the instance is gone or the ent
 
 1. Fetch the transaction from the history of the receipt's network (Horizon, `GET /transactions/{stx}`) and decode its envelope with that network's passphrase. If a fee-bump wraps it, read the inner transaction. The envelope's hash, the transaction's or the inner one's, must be `stx`.
 2. The transaction must have succeeded, have a single operation and be a call to `seal` on the receipt's contract, which must be one of the official contracts of that network (`src/stellar/deployments.json`). A previous contract only counts up to its last official seal: the transaction's ledger cannot exceed its `ultimoLedger` (the `sealed_ledger` of draw `ultimoId`). The draw number is not in the transaction (the contract returns it), so the cap by number cannot be applied here and this one replaces it. A previous contract without `ultimoLedger` is not accepted through history.
-3. `organizer`, `list_hash`, `count`, `winners`, `R` and `meta` come from `seal`'s arguments; the transaction's ledger and the time that ledger closed (the `sealed_at` the contract would have stored) come from Horizon's record. The same checks apply as with the state: `list_hash` and `count` against the receipt's canonical list, `R` against the receipt's round, `1 ≤ winners ≤ min(count, 32)` and `round_time(R) ≥ close time + 30`.
+3. `organizer`, `list_hash`, `count`, `winners`, `R` and `meta` come from `seal`'s arguments; the transaction's ledger and the time that ledger closed (the `sealed_at` the contract would have stored) come from Horizon's record. The same checks apply as with the state: `list_hash` and `count` against the receipt's canonical list, `R` against the receipt's round, `1 ≤ winners ≤ min(count, 100)` and `round_time(R) ≥ close time + 30`.
 4. Continue with steps 3, 4 and 5 above, with `winners` as the number of winners.
 
 If the state does have the draw, the state governs and the transaction is only cross-checked against it: if they disagree about the seal, the result is red. A transaction the receipt cites that failed, or isn't a `seal` on an official contract, is red too. If the state doesn't have the draw and the transaction can't be read (no network, rate limit, an answer that makes no sense, that source no longer keeps operations that old (HTTP 410) or doesn't know the transaction (HTTP 404)), the result is **not confirmed** (`sin-red`): not green, not "not there", not red. With a 404 "it never existed" can't be told from "this source no longer keeps it", so an absence is not claimed either. "Not there" (`falta`) is for what has nobody to ask: a receipt without `stx`, or one for a previous contract without `ultimoLedger`. Red is only for a contradiction: the history that was read doesn't match the receipt or the state, or the transaction isn't an official seal. With the state at hand, a history that couldn't be read changes nothing.

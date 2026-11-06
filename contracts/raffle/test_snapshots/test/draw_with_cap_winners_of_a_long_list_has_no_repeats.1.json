@@ -1,0 +1,975 @@
+{
+  "generators": {
+    "address": 2,
+    "nonce": 0,
+    "mux_id": 0
+  },
+  "auth": [
+    [],
+    [
+      [
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
+        {
+          "function": {
+            "contract_fn": {
+              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "function_name": "seal",
+              "args": [
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                },
+                {
+                  "bytes": "32e2099c7a8dde7b6892523dc7d3e34ac06a972fd67f142186c58dced51a21ef"
+                },
+                {
+                  "u32": 1000
+                },
+                {
+                  "u32": 100
+                },
+                {
+                  "u64": "32254977"
+                },
+                {
+                  "string": "Licencia JetBrains"
+                }
+              ]
+            }
+          },
+          "sub_invocations": []
+        }
+      ]
+    ],
+    []
+  ],
+  "ledger": {
+    "protocol_version": 27,
+    "sequence_number": 1000,
+    "timestamp": 1789568300,
+    "network_id": "0000000000000000000000000000000000000000000000000000000000000000",
+    "base_reserve": 0,
+    "min_persistent_entry_ttl": 4096,
+    "min_temp_entry_ttl": 16,
+    "max_entry_ttl": 6312000,
+    "ledger_entries": [
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "Draw"
+                  },
+                  {
+                    "u64": "1"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "map": [
+                  {
+                    "key": {
+                      "symbol": "drawn_at"
+                    },
+                    "val": {
+                      "u64": "1789568300"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "drawn_ledger"
+                    },
+                    "val": {
+                      "u32": 1000
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "raffle_id"
+                    },
+                    "val": {
+                      "u64": "1"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "randomness"
+                    },
+                    "val": {
+                      "bytes": "6e049991d7e23bdc566d3adfff08cd81798c644bc54dd5daa18eb0a8938b2829"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "round"
+                    },
+                    "val": {
+                      "u64": "32254977"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "signature"
+                    },
+                    "val": {
+                      "bytes": "a77a689daae687c7b16e6f9388d4ebbb7b368d09d7a6c33ad1dfd75d32e4114cfbdcf3e2cc54f4fee659abf2ac7ef9ac"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "winners"
+                    },
+                    "val": {
+                      "vec": [
+                        {
+                          "u32": 312
+                        },
+                        {
+                          "u32": 247
+                        },
+                        {
+                          "u32": 521
+                        },
+                        {
+                          "u32": 649
+                        },
+                        {
+                          "u32": 166
+                        },
+                        {
+                          "u32": 514
+                        },
+                        {
+                          "u32": 607
+                        },
+                        {
+                          "u32": 589
+                        },
+                        {
+                          "u32": 443
+                        },
+                        {
+                          "u32": 250
+                        },
+                        {
+                          "u32": 877
+                        },
+                        {
+                          "u32": 585
+                        },
+                        {
+                          "u32": 626
+                        },
+                        {
+                          "u32": 471
+                        },
+                        {
+                          "u32": 110
+                        },
+                        {
+                          "u32": 191
+                        },
+                        {
+                          "u32": 899
+                        },
+                        {
+                          "u32": 346
+                        },
+                        {
+                          "u32": 920
+                        },
+                        {
+                          "u32": 385
+                        },
+                        {
+                          "u32": 261
+                        },
+                        {
+                          "u32": 447
+                        },
+                        {
+                          "u32": 254
+                        },
+                        {
+                          "u32": 276
+                        },
+                        {
+                          "u32": 258
+                        },
+                        {
+                          "u32": 994
+                        },
+                        {
+                          "u32": 967
+                        },
+                        {
+                          "u32": 785
+                        },
+                        {
+                          "u32": 151
+                        },
+                        {
+                          "u32": 876
+                        },
+                        {
+                          "u32": 782
+                        },
+                        {
+                          "u32": 319
+                        },
+                        {
+                          "u32": 222
+                        },
+                        {
+                          "u32": 134
+                        },
+                        {
+                          "u32": 189
+                        },
+                        {
+                          "u32": 42
+                        },
+                        {
+                          "u32": 414
+                        },
+                        {
+                          "u32": 885
+                        },
+                        {
+                          "u32": 422
+                        },
+                        {
+                          "u32": 769
+                        },
+                        {
+                          "u32": 341
+                        },
+                        {
+                          "u32": 25
+                        },
+                        {
+                          "u32": 998
+                        },
+                        {
+                          "u32": 963
+                        },
+                        {
+                          "u32": 553
+                        },
+                        {
+                          "u32": 356
+                        },
+                        {
+                          "u32": 212
+                        },
+                        {
+                          "u32": 223
+                        },
+                        {
+                          "u32": 575
+                        },
+                        {
+                          "u32": 860
+                        },
+                        {
+                          "u32": 933
+                        },
+                        {
+                          "u32": 435
+                        },
+                        {
+                          "u32": 3
+                        },
+                        {
+                          "u32": 295
+                        },
+                        {
+                          "u32": 641
+                        },
+                        {
+                          "u32": 744
+                        },
+                        {
+                          "u32": 523
+                        },
+                        {
+                          "u32": 412
+                        },
+                        {
+                          "u32": 746
+                        },
+                        {
+                          "u32": 373
+                        },
+                        {
+                          "u32": 367
+                        },
+                        {
+                          "u32": 74
+                        },
+                        {
+                          "u32": 78
+                        },
+                        {
+                          "u32": 196
+                        },
+                        {
+                          "u32": 557
+                        },
+                        {
+                          "u32": 72
+                        },
+                        {
+                          "u32": 742
+                        },
+                        {
+                          "u32": 218
+                        },
+                        {
+                          "u32": 108
+                        },
+                        {
+                          "u32": 18
+                        },
+                        {
+                          "u32": 913
+                        },
+                        {
+                          "u32": 804
+                        },
+                        {
+                          "u32": 77
+                        },
+                        {
+                          "u32": 444
+                        },
+                        {
+                          "u32": 898
+                        },
+                        {
+                          "u32": 278
+                        },
+                        {
+                          "u32": 361
+                        },
+                        {
+                          "u32": 310
+                        },
+                        {
+                          "u32": 174
+                        },
+                        {
+                          "u32": 749
+                        },
+                        {
+                          "u32": 811
+                        },
+                        {
+                          "u32": 615
+                        },
+                        {
+                          "u32": 506
+                        },
+                        {
+                          "u32": 883
+                        },
+                        {
+                          "u32": 432
+                        },
+                        {
+                          "u32": 395
+                        },
+                        {
+                          "u32": 82
+                        },
+                        {
+                          "u32": 322
+                        },
+                        {
+                          "u32": 427
+                        },
+                        {
+                          "u32": 216
+                        },
+                        {
+                          "u32": 486
+                        },
+                        {
+                          "u32": 826
+                        },
+                        {
+                          "u32": 966
+                        },
+                        {
+                          "u32": 407
+                        },
+                        {
+                          "u32": 552
+                        },
+                        {
+                          "u32": 961
+                        },
+                        {
+                          "u32": 783
+                        },
+                        {
+                          "u32": 503
+                        },
+                        {
+                          "u32": 495
+                        },
+                        {
+                          "u32": 464
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 121960
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "key": {
+                "vec": [
+                  {
+                    "symbol": "Raffle"
+                  },
+                  {
+                    "u64": "1"
+                  }
+                ]
+              },
+              "durability": "persistent",
+              "val": {
+                "map": [
+                  {
+                    "key": {
+                      "symbol": "count"
+                    },
+                    "val": {
+                      "u32": 1000
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "id"
+                    },
+                    "val": {
+                      "u64": "1"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "list_hash"
+                    },
+                    "val": {
+                      "bytes": "32e2099c7a8dde7b6892523dc7d3e34ac06a972fd67f142186c58dced51a21ef"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "meta"
+                    },
+                    "val": {
+                      "string": "Licencia JetBrains"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "num_winners"
+                    },
+                    "val": {
+                      "u32": 100
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "organizer"
+                    },
+                    "val": {
+                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "round"
+                    },
+                    "val": {
+                      "u64": "32254977"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "sealed_at"
+                    },
+                    "val": {
+                      "u64": "1789568175"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "sealed_ledger"
+                    },
+                    "val": {
+                      "u32": 1000
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "status"
+                    },
+                    "val": {
+                      "vec": [
+                        {
+                          "symbol": "Drawn"
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 121960
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "key": "ledger_key_contract_instance",
+              "durability": "persistent",
+              "val": {
+                "contract_instance": {
+                  "executable": {
+                    "wasm": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+                  },
+                  "storage": [
+                    {
+                      "key": {
+                        "vec": [
+                          {
+                            "symbol": "NextId"
+                          }
+                        ]
+                      },
+                      "val": {
+                        "u64": "2"
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 5095
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_data": {
+              "ext": "v0",
+              "contract": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4",
+              "key": {
+                "ledger_key_nonce": {
+                  "nonce": "801925984706572462"
+                }
+              },
+              "durability": "temporary",
+              "val": "void"
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 6312999
+      },
+      {
+        "entry": {
+          "last_modified_ledger_seq": 0,
+          "data": {
+            "contract_code": {
+              "ext": "v0",
+              "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+              "code": ""
+            }
+          },
+          "ext": "v0"
+        },
+        "live_until": 5095
+      }
+    ]
+  },
+  "events": [
+    {
+      "event": {
+        "ext": "v0",
+        "contract_id": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+        "type_": "contract",
+        "body": {
+          "v0": {
+            "topics": [
+              {
+                "symbol": "drawn"
+              },
+              {
+                "u64": "1"
+              }
+            ],
+            "data": {
+              "map": [
+                {
+                  "key": {
+                    "symbol": "randomness"
+                  },
+                  "val": {
+                    "bytes": "6e049991d7e23bdc566d3adfff08cd81798c644bc54dd5daa18eb0a8938b2829"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "round"
+                  },
+                  "val": {
+                    "u64": "32254977"
+                  }
+                },
+                {
+                  "key": {
+                    "symbol": "winners"
+                  },
+                  "val": {
+                    "vec": [
+                      {
+                        "u32": 312
+                      },
+                      {
+                        "u32": 247
+                      },
+                      {
+                        "u32": 521
+                      },
+                      {
+                        "u32": 649
+                      },
+                      {
+                        "u32": 166
+                      },
+                      {
+                        "u32": 514
+                      },
+                      {
+                        "u32": 607
+                      },
+                      {
+                        "u32": 589
+                      },
+                      {
+                        "u32": 443
+                      },
+                      {
+                        "u32": 250
+                      },
+                      {
+                        "u32": 877
+                      },
+                      {
+                        "u32": 585
+                      },
+                      {
+                        "u32": 626
+                      },
+                      {
+                        "u32": 471
+                      },
+                      {
+                        "u32": 110
+                      },
+                      {
+                        "u32": 191
+                      },
+                      {
+                        "u32": 899
+                      },
+                      {
+                        "u32": 346
+                      },
+                      {
+                        "u32": 920
+                      },
+                      {
+                        "u32": 385
+                      },
+                      {
+                        "u32": 261
+                      },
+                      {
+                        "u32": 447
+                      },
+                      {
+                        "u32": 254
+                      },
+                      {
+                        "u32": 276
+                      },
+                      {
+                        "u32": 258
+                      },
+                      {
+                        "u32": 994
+                      },
+                      {
+                        "u32": 967
+                      },
+                      {
+                        "u32": 785
+                      },
+                      {
+                        "u32": 151
+                      },
+                      {
+                        "u32": 876
+                      },
+                      {
+                        "u32": 782
+                      },
+                      {
+                        "u32": 319
+                      },
+                      {
+                        "u32": 222
+                      },
+                      {
+                        "u32": 134
+                      },
+                      {
+                        "u32": 189
+                      },
+                      {
+                        "u32": 42
+                      },
+                      {
+                        "u32": 414
+                      },
+                      {
+                        "u32": 885
+                      },
+                      {
+                        "u32": 422
+                      },
+                      {
+                        "u32": 769
+                      },
+                      {
+                        "u32": 341
+                      },
+                      {
+                        "u32": 25
+                      },
+                      {
+                        "u32": 998
+                      },
+                      {
+                        "u32": 963
+                      },
+                      {
+                        "u32": 553
+                      },
+                      {
+                        "u32": 356
+                      },
+                      {
+                        "u32": 212
+                      },
+                      {
+                        "u32": 223
+                      },
+                      {
+                        "u32": 575
+                      },
+                      {
+                        "u32": 860
+                      },
+                      {
+                        "u32": 933
+                      },
+                      {
+                        "u32": 435
+                      },
+                      {
+                        "u32": 3
+                      },
+                      {
+                        "u32": 295
+                      },
+                      {
+                        "u32": 641
+                      },
+                      {
+                        "u32": 744
+                      },
+                      {
+                        "u32": 523
+                      },
+                      {
+                        "u32": 412
+                      },
+                      {
+                        "u32": 746
+                      },
+                      {
+                        "u32": 373
+                      },
+                      {
+                        "u32": 367
+                      },
+                      {
+                        "u32": 74
+                      },
+                      {
+                        "u32": 78
+                      },
+                      {
+                        "u32": 196
+                      },
+                      {
+                        "u32": 557
+                      },
+                      {
+                        "u32": 72
+                      },
+                      {
+                        "u32": 742
+                      },
+                      {
+                        "u32": 218
+                      },
+                      {
+                        "u32": 108
+                      },
+                      {
+                        "u32": 18
+                      },
+                      {
+                        "u32": 913
+                      },
+                      {
+                        "u32": 804
+                      },
+                      {
+                        "u32": 77
+                      },
+                      {
+                        "u32": 444
+                      },
+                      {
+                        "u32": 898
+                      },
+                      {
+                        "u32": 278
+                      },
+                      {
+                        "u32": 361
+                      },
+                      {
+                        "u32": 310
+                      },
+                      {
+                        "u32": 174
+                      },
+                      {
+                        "u32": 749
+                      },
+                      {
+                        "u32": 811
+                      },
+                      {
+                        "u32": 615
+                      },
+                      {
+                        "u32": 506
+                      },
+                      {
+                        "u32": 883
+                      },
+                      {
+                        "u32": 432
+                      },
+                      {
+                        "u32": 395
+                      },
+                      {
+                        "u32": 82
+                      },
+                      {
+                        "u32": 322
+                      },
+                      {
+                        "u32": 427
+                      },
+                      {
+                        "u32": 216
+                      },
+                      {
+                        "u32": 486
+                      },
+                      {
+                        "u32": 826
+                      },
+                      {
+                        "u32": 966
+                      },
+                      {
+                        "u32": 407
+                      },
+                      {
+                        "u32": 552
+                      },
+                      {
+                        "u32": 961
+                      },
+                      {
+                        "u32": 783
+                      },
+                      {
+                        "u32": 503
+                      },
+                      {
+                        "u32": 495
+                      },
+                      {
+                        "u32": 464
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "failed_call": false
+    }
+  ]
+}

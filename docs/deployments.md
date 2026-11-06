@@ -50,6 +50,61 @@ Notas:
 - La renta del código depende del tamaño del módulo compilado, no del WASM crudo: un contrato de 11,4 KB paga como si ocupara unos 110 KB. Mantenerlo chico importa.
 - `extend` puede llamarlo cualquiera; el mantenedor lo corre cuando el TTL baja de 60 días. Si nadie lo hace y las entradas se archivan, la siguiente transacción las restaura pagando la renta (protocolo 23+).
 
+## Costo según la cantidad de ganadores
+
+**Medido y proyectado el 6 de noviembre de 2026**, para subir `MAX_WINNERS` de 32 a 100 en la versión que vaya a mainnet (rama `sorteo-100-ganadores`). Nada se envió a ninguna red: lo de testnet y de mainnet son simulaciones de solo lectura. La selección, la serialización y el hash no cambian; es solo el tope.
+
+**Qué crece con los ganadores y qué no.** El sello (`seal`) cuesta lo mismo con 3 que con 100 ganadores: la entrada `Raffle` guarda la cantidad, no la lista. El sorteo (`draw`) crece por dos cosas: la entrada `Draw` guarda la lista de ganadores (8 bytes por ganador) y su renta por 120 días, y el evento `Drawn` la repite. La cantidad de participantes casi no pesa: en la cadena solo va la huella de la lista. Lo único que depende de los participantes es cuántos hashes hace la selección: con muchos más participantes que ganadores son pocos más que `k`, y con `k = participantes` (el «modo orden», una permutación completa) son unos `k · H(k)`: unos 519 con 100 (en 3.000 pruebas con semillas al azar, de unos 290 a 1.200).
+
+**1. En local, con el presupuesto de Soroban** (`cargo test -p tinkazo-raffle costo -- --nocapture`; con `TINKAZO_WASM=<archivo.wasm>` el contrato corre en la máquina virtual, que es lo que paga la red; el `.wasm` es el de `stellar contract build --optimize`, 11.687 bytes, los mismos que el desplegado, con otra constante). El límite de la red es de 400 millones de instrucciones y 40 MiB de memoria por transacción; la prueba exige quedar bajo la cuarta parte de los dos.
+
+| Ganadores | Participantes | Instrucciones | % del límite | Memoria | Entrada `Draw` (bytes XDR) | Bytes escritos | Evento (bytes) |
+|---|---|---|---|---|---|---|---|
+| 3 | 18 o 1.000 | 27.387.766 | 6,8 % | 1,39 MB | 316 | 888 | 232 |
+| 32 | 32 | 29.142.805 | 7,3 % | 1,44 MB | 548 | 1.120 | 464 |
+| 32 | 1.000 | 27.889.872 | 7,0 % | 1,41 MB | 548 | 1.120 | 464 |
+| 50 | 50 | 30.061.432 | 7,5 % | 1,47 MB | 692 | 1.264 | 608 |
+| 50 | 1.000 | 28.233.015 | 7,1 % | 1,42 MB | 692 | 1.264 | 608 |
+| **100** | **100** | **34.609.484** | **8,7 %** | 1,60 MB | **1.092** | 1.664 | 1.008 |
+| 100 | 1.000 | 29.152.733 | 7,3 % | 1,48 MB | 1.092 | 1.664 | 1.008 |
+
+`seal` en la máquina virtual: 524.529 instrucciones y 700 bytes escritos, con 3 o con 100 ganadores. Con 100 de 100, la peor de 300 semillas (`peor_semilla_de_la_seleccion_con_el_tope_de_ganadores`) hace la selección en 10,4 millones de instrucciones, contra 4,8 de la semilla real: el sorteo entero queda en unos 40 millones (10 % del límite), todavía bajo la cuarta parte.
+
+**2. Simulación en testnet con el contrato vigente** (`CDNWNY26…KYV3A`, tope 32, ledger 5.587.025 a 5.587.032, protocolo 30). Para `seal` con 3 y con 32 ganadores el fee es el mismo; con 33, 50 y 100 el contrato responde `Error(Contract, #4)` (`BadWinnerCount`), que prueba que el tope viejo vive en la red. Para `draw` se simuló sobre cuatro sorteos de ese contrato que seguían sin sortear, con su ronda de drand ya publicada (la firma salió de `api.drand.sh`). Con 50 y 100 ganadores no hay forma de simular en la red hasta desplegar la versión nueva, así que esos dos salen del ajuste de abajo.
+
+| Paso | Ganadores (participantes) | Fee simulado (stroops) | En XLM | Instrucciones | Bytes escritos | Renta y escritura del TTL |
+|---|---|---|---|---|---|---|
+| `seal` | 3 o 32 | 66.429 | 0,0066 | 695.647 | 632 | 60.943 |
+| `draw` | 1 (18) | 64.953 | 0,0065 | 28.626.865 | 876 | 51.007 |
+| `draw` | 2 (18) | 65.900 | 0,0066 | 28.646.046 | 884 | 51.926 |
+| `draw` | 12 (40) | 75.391 | 0,0075 | 28.883.296 | 944 | 61.125 |
+| `draw` | 32 (40) | 94.530 | 0,0095 | 29.826.379 | 1.104 | 79.522 |
+
+Esta es la renta de 7 días de testnet, y el fee de `draw` queda en una recta exacta de la forma `5.934 + 114,98 · S` stroops de renta (con `S` los bytes de la entrada `Draw`, 392 con un ganador y 8 más por cada uno), que pasa por los cuatro puntos sin error. El resto del fee es fijo o casi: instrucciones (≈ 3 stroops cada 10.000), 2.500 por las dos entradas escritas, 1.831 + 124 por el tamaño de la transacción (624 bytes) y 2.500 por KB de eventos.
+
+**3. Testnet y mainnet comparten los parámetros de fee y de renta** (testnet ya está en el protocolo 30 y mainnet sigue en el 29; el detector no registra cambios al 6 de noviembre desde la línea base del 4): la diferencia es el TTL mínimo de una entrada persistente, 7 días contra 120. La razón de las rentas se midió simulando la subida del mismo `.wasm` (11.687 bytes) en los dos RPC: 0,959 XLM en testnet y **16,373 XLM en mainnet** (la renta, sin la parte fija, sale 17,129 veces mayor; 120 sobre 7 da 17,143, menos de 0,1 % de diferencia). Y la renta por KB es la misma en las dos, el piso de 1.000 stroops, porque el estado vivo está bajo 2/3 del objetivo (testnet 4.417 de 7.000 MB, 63 %; mainnet 1.672 de 3.000 MB, 56 %). Con eso, mainnet = lo fijo + 17,129 veces lo que depende del tamaño de la entrada. Como control, la misma cuenta da para tres ganadores 0,0954 de `seal` y 0,0824 de `draw`, que coinciden con los 0,10 y 0,08 de la proyección del 16 de septiembre. En mainnet las entradas nacen con 120 días por el mínimo de la red, aunque el código pida 7 (`TTL_ENTRADA_*`): ese pedido no hace nada allá.
+
+| Ganadores (participantes) | `draw` testnet (7 días) | `draw` mainnet (120 días) | `seal` + `draw` mainnet | En US$ (XLM a 0,196) |
+|---|---|---|---|---|
+| 3 (18) | 0,0067 | 0,0824 | **0,178 XLM** | ≈ 0,035 |
+| 32 (32) | 0,0095 (medido) | 0,1282 | **0,224 XLM** | ≈ 0,044 |
+| 50 (50) | 0,0112 | 0,1566 | **0,252 XLM** | ≈ 0,049 |
+| 100 (100) | 0,0161 | 0,2356 | **0,331 XLM** | ≈ 0,065 |
+| 100 (1.000) | 0,0159 | 0,2355 | 0,331 XLM | ≈ 0,065 |
+
+`seal` vale 0,0066 XLM en testnet (medido) y 0,0954 en mainnet (proyectado). Con 100 ganadores el sorteo cuesta cerca de 2,9 veces el de tres y el par completo 1,9 veces; de los 0,2356 XLM del `draw`, 0,2338 son renta de la entrada `Draw` por 120 días. Instrucciones y memoria casi no cuentan en el fee (36 millones de instrucciones son 0,0011 XLM).
+
+**Si el estado de mainnet sube, el costo se multiplica, y con 100 ganadores se nota antes.** La renta por KB sale del piso al pasar 2/3 del objetivo (2.000 MB) y llega a ×10 en el objetivo (3.000 MB). Mismos datos que arriba, con la renta de cada nivel:
+
+| Estado de mainnet | Renta por KB | 3 ganadores, `seal` + `draw` | 100 ganadores, solo `draw` | 100 ganadores, `seal` + `draw` |
+|---|---|---|---|---|
+| hoy, 1.672 MB (hasta 2.000) | ×1,0 | 0,178 XLM | 0,236 XLM | 0,331 XLM |
+| 2.250 MB | ×3,25 | 0,571 | 0,760 | 1,068 |
+| 2.500 MB (naranja) | ×5,5 | 0,963 | 1,285 | 1,804 |
+| 3.000 MB (el objetivo) | ×10 | 1,749 | 2,334 | 3,278 |
+
+El `draw` de 100 ganadores pasa de 1 XLM (el tope de comisión de Pollar en mainnet) hacia los 2.360 MB, unos seis días al ritmo de hoy (+4,4 MB/h); con tres ganadores ese tope no se toca antes del objetivo. Vale para cualquier cantidad grande de ganadores, y está en el detector (`pnpm check:red`, niveles de arriba).
+
 ## Vigilancia de la red
 
 El costo de guardar datos en Soroban lo pone la red, y la red lo cambia sin avisar. El 25 de octubre de 2026 el sello de testnet pasó de 0,7 a 69 XLM porque el estado vivo cruzó su objetivo (`soroban_state_target_size_bytes`, 4.000 MB), y a las 13:34 la SDF subió ese objetivo a 7.000 MB sin anunciarlo en ningún lado. La renta por KB depende del promedio del estado frente al objetivo: piso hasta 2/3 del objetivo, ×10 al 100 %, ×1.360 al 101 %.

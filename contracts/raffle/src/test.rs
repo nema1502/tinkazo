@@ -130,7 +130,7 @@ fn seal_rejects_invalid_inputs() {
         Err(Ok(Error::BadWinnerCount))
     );
     assert_eq!(
-        client.try_seal(&organizer, &h, &100, &33, &ROUND, &m),
+        client.try_seal(&organizer, &h, &200, &(MAX_WINNERS + 1), &ROUND, &m),
         Err(Ok(Error::BadWinnerCount))
     );
     let long = "x".repeat(161);
@@ -442,4 +442,384 @@ fn select_depends_on_list_hash() {
     let a = select::select(&env, &r, &h1, 1_000, 5);
     let b = select::select(&env, &r, &h2, 1_000, 5);
     assert_ne!(a, b);
+}
+
+// ---------------------------------------------------------------- tope de ganadores
+
+/// Huella de una lista de ganadores: `sha256` de los índices en `be32`, uno
+/// detrás de otro. Se compara contra la misma cuenta hecha fuera del contrato,
+/// con `node:crypto` y el algoritmo de `docs/protocolo.md` §5.
+fn winners_digest(env: &Env, winners: &Vec<u32>) -> BytesN<32> {
+    let mut bytes = Bytes::new(env);
+    for w in winners.iter() {
+        bytes.extend_from_slice(&w.to_be_bytes());
+    }
+    env.crypto().sha256(&bytes).into()
+}
+
+/// Sella y sortea con la ronda y la firma reales de quicknet.
+fn sorteo_con(count: u32, k: u32) -> (Env, Draw) {
+    let (env, contract_id, organizer) = setup();
+    let client = TinkazoRaffleClient::new(&env, &contract_id);
+    client.seal(&organizer, &list_hash(&env), &count, &k, &ROUND, &meta(&env));
+    env.ledger().set_timestamp(ROUND_TIME + 5);
+    let draw = client.draw(&1, &sig_uncompressed(&env));
+    (env, draw)
+}
+
+/// Todos distintos y todos dentro del rango.
+fn assert_distinct_in_range(winners: &Vec<u32>, count: u32) {
+    let mut seen = std::vec![false; count as usize];
+    for w in winners.iter() {
+        assert!(w < count, "{w} fuera de rango (count {count})");
+        assert!(!seen[w as usize], "{w} repetido");
+        seen[w as usize] = true;
+    }
+}
+
+/// Entradas de la lista larga de las pruebas del tope (siempre más que el tope).
+const ENTRADAS_LARGAS: u32 = 1_000;
+
+/// Lo que da la referencia independiente (Node, `node:crypto`, `docs/protocolo.md` §5)
+/// con la ronda real y la lista de estas pruebas, para un tope en particular.
+struct ReferenciaDelTope {
+    /// Huella de los ganadores de `MAX_WINNERS` de `MAX_WINNERS` entradas.
+    permutacion: &'static str,
+    /// El primero, el quinto y el último de esa permutación.
+    extremos: (u32, u32, u32),
+    /// Huella de los ganadores de `MAX_WINNERS` de `ENTRADAS_LARGAS` entradas.
+    de_mil: &'static str,
+}
+
+/// La referencia del tope vigente. Cambiar `MAX_WINNERS` es cambiar esa constante: si el
+/// valor nuevo ya tiene fila acá, las pruebas del tope siguen solas. Un tope sin fila hace
+/// fallar las pruebas diciéndolo, en lugar de comparar contra los números de otro.
+fn referencia_del_tope() -> ReferenciaDelTope {
+    match MAX_WINNERS {
+        100 => ReferenciaDelTope {
+            permutacion: "dbc1fe6ab52d7c555c8b49b42a7b88d22cf97f9c3f01a737c7eb71283457af68",
+            extremos: (12, 66, 87),
+            de_mil: "90fe82cc7071d4906c3032c89e6fa172bf5ed8f0b001d1dcb7a748d3a76055b4",
+        },
+        300 => ReferenciaDelTope {
+            permutacion: "aeff37e289741168ba66ed60ee7dd5e94d63c7ebcdc180483ee6d7e10d8f913e",
+            extremos: (112, 66, 1),
+            de_mil: "8382aa628d4e87ac8aa2ed81bed868dd98f94dbf1aa6ee82ef50f6f4fe3a8c7a",
+        },
+        otro => panic!(
+            "no hay referencia independiente para MAX_WINNERS = {otro}: calcularla con la \
+             selección de docs/protocolo.md §5 (node:crypto) y sumar su fila a referencia_del_tope"
+        ),
+    }
+}
+
+fn huella_hex(env: &Env, hex: &str) -> BytesN<32> {
+    let mut bytes = [0u8; 32];
+    for (i, b) in bytes.iter_mut().enumerate() {
+        *b = u8::from_str_radix(&hex[2 * i..2 * i + 2], 16).unwrap();
+    }
+    BytesN::from_array(env, &bytes)
+}
+
+#[test]
+fn seal_accepts_the_cap_and_rejects_one_more() {
+    let (env, contract_id, organizer) = setup();
+    let client = TinkazoRaffleClient::new(&env, &contract_id);
+    let h = list_hash(&env);
+    let m = meta(&env);
+
+    // El tope exacto, con tantas entradas como ganadores y con muchas más.
+    assert!(client
+        .try_seal(&organizer, &h, &MAX_WINNERS, &MAX_WINNERS, &ROUND, &m)
+        .is_ok());
+    assert!(client
+        .try_seal(&organizer, &h, &ENTRADAS_LARGAS, &MAX_WINNERS, &ROUND, &m)
+        .is_ok());
+    assert_eq!(client.get_raffle(&1).unwrap().num_winners, MAX_WINNERS);
+    assert_eq!(client.get_raffle(&2).unwrap().num_winners, MAX_WINNERS);
+
+    // Uno más: por el tope, aunque las entradas alcancen.
+    assert_eq!(
+        client.try_seal(&organizer, &h, &ENTRADAS_LARGAS, &(MAX_WINNERS + 1), &ROUND, &m),
+        Err(Ok(Error::BadWinnerCount))
+    );
+    // Y por las entradas, aunque el tope alcance.
+    assert_eq!(
+        client.try_seal(&organizer, &h, &MAX_WINNERS, &(MAX_WINNERS + 1), &ROUND, &m),
+        Err(Ok(Error::BadWinnerCount))
+    );
+    // Los rechazados no consumen número de sorteo.
+    assert_eq!(client.next_id(), 3);
+}
+
+#[test]
+fn draw_with_cap_winners_of_cap_entries_is_a_full_permutation() {
+    let referencia = referencia_del_tope();
+    let (env, draw) = sorteo_con(MAX_WINNERS, MAX_WINNERS);
+    assert_eq!(draw.winners.len(), MAX_WINNERS);
+    assert_distinct_in_range(&draw.winners, MAX_WINNERS);
+    // Distintos y en rango con tantos ganadores como entradas: está cada índice una vez.
+    let mut sorted: std::vec::Vec<u32> = draw.winners.iter().collect();
+    sorted.sort_unstable();
+    assert_eq!(sorted, (0..MAX_WINNERS).collect::<std::vec::Vec<u32>>());
+    // El orden es el que calcula la referencia independiente (Node, node:crypto).
+    assert_eq!(
+        winners_digest(&env, &draw.winners),
+        huella_hex(&env, referencia.permutacion)
+    );
+    // El primero, el quinto y el último, como en la referencia.
+    let (primero, quinto, ultimo) = referencia.extremos;
+    assert_eq!(draw.winners.get(0).unwrap(), primero);
+    assert_eq!(draw.winners.get(4).unwrap(), quinto);
+    assert_eq!(draw.winners.get(MAX_WINNERS - 1).unwrap(), ultimo);
+}
+
+#[test]
+fn draw_with_cap_winners_of_a_long_list_has_no_repeats() {
+    let referencia = referencia_del_tope();
+    let (env, draw) = sorteo_con(ENTRADAS_LARGAS, MAX_WINNERS);
+    assert_eq!(draw.winners.len(), MAX_WINNERS);
+    assert_distinct_in_range(&draw.winners, ENTRADAS_LARGAS);
+    assert_eq!(
+        winners_digest(&env, &draw.winners),
+        huella_hex(&env, referencia.de_mil)
+    );
+    // Los cinco primeros son los del vector de `docs/vectors.json` con 1.000 entradas:
+    // no dependen de cuántos ganadores se pidan.
+    assert_eq!(
+        draw.winners.iter().take(5).collect::<std::vec::Vec<u32>>(),
+        std::vec![312, 247, 521, 649, 166]
+    );
+}
+
+#[test]
+fn the_first_winners_do_not_depend_on_how_many_are_asked_for() {
+    // Pedir más ganadores no cambia a los primeros: es el mismo recorrido. Eso
+    // es lo que hace estable el orden de los premios.
+    let env = Env::default();
+    let r = expected_randomness(&env);
+    let h = list_hash(&env);
+    let todos = select::select(&env, &r, &h, MAX_WINNERS, MAX_WINNERS);
+    for k in [1u32, 3, 32, 50, MAX_WINNERS - 1] {
+        let corto = select::select(&env, &r, &h, MAX_WINNERS, k);
+        assert_eq!(corto.len(), k);
+        for i in 0..k {
+            assert_eq!(corto.get(i).unwrap(), todos.get(i).unwrap());
+        }
+    }
+}
+
+// ---------------------------------------------------------------- costo
+
+/// Una cuarta parte del máximo por transacción de la red (400 millones de
+/// instrucciones, `tx_max_instructions` en `scripts/vigilar-red.base.json`).
+const CUARTA_PARTE_INSTRUCCIONES: i64 = 100_000_000;
+/// Una cuarta parte de `tx_memory_limit` (40 MiB).
+const CUARTA_PARTE_MEMORIA: i64 = 10_485_760;
+
+struct Costo {
+    instrucciones: i64,
+    memoria: i64,
+    bytes_escritos: u32,
+    bytes_draw: u32,
+    renta_ledger_bytes: i64,
+    evento_bytes: u32,
+}
+
+/// Entorno de medición: no escribe el archivo de captura al terminar (las
+/// pruebas de costo corren decenas de sorteos y no hay nada que comparar).
+fn entorno_de_medicion() -> Env {
+    Env::new_with_config(soroban_sdk::testutils::EnvTestConfig {
+        capture_snapshot_at_drop: false,
+    })
+}
+
+fn registrar(env: &Env, wasm: Option<&[u8]>) -> Address {
+    match wasm {
+        Some(bytes) => env.register(bytes, ()),
+        None => env.register(TinkazoRaffle, ()),
+    }
+}
+
+/// Costo de `draw` con el presupuesto de Soroban. Si `wasm` trae el `.wasm`
+/// compilado, el contrato corre en la máquina virtual (lo que paga la red); si
+/// no, corre como Rust nativo, que no cuenta la ejecución del WASM.
+fn medir_draw(count: u32, k: u32, wasm: Option<&[u8]>) -> Costo {
+    use soroban_sdk::xdr::ToXdr;
+    let env = entorno_de_medicion();
+    env.mock_all_auths();
+    env.ledger().set_timestamp(ROUND_TIME - 120);
+    env.ledger().set_sequence_number(1_000);
+    let contract_id = registrar(&env, wasm);
+    let organizer = Address::generate(&env);
+    let client = TinkazoRaffleClient::new(&env, &contract_id);
+    client.seal(&organizer, &list_hash(&env), &count, &k, &ROUND, &meta(&env));
+    env.ledger().set_timestamp(ROUND_TIME + 5);
+    let draw = client.draw(&1, &sig_uncompressed(&env));
+    let r = env.cost_estimate().resources();
+    Costo {
+        instrucciones: r.instructions,
+        memoria: r.mem_bytes,
+        bytes_escritos: r.write_bytes,
+        bytes_draw: draw.to_xdr(&env).len(),
+        renta_ledger_bytes: r.persistent_rent_ledger_bytes,
+        evento_bytes: r.contract_events_size_bytes,
+    }
+}
+
+/// Costo de `seal` (la entrada `Raffle` guarda la cantidad de ganadores, no la lista).
+fn medir_seal(count: u32, k: u32, wasm: Option<&[u8]>) -> Costo {
+    let env = entorno_de_medicion();
+    env.mock_all_auths();
+    env.ledger().set_timestamp(ROUND_TIME - 120);
+    env.ledger().set_sequence_number(1_000);
+    let contract_id = registrar(&env, wasm);
+    let organizer = Address::generate(&env);
+    let client = TinkazoRaffleClient::new(&env, &contract_id);
+    client.seal(&organizer, &list_hash(&env), &count, &k, &ROUND, &meta(&env));
+    let r = env.cost_estimate().resources();
+    Costo {
+        instrucciones: r.instructions,
+        memoria: r.mem_bytes,
+        bytes_escritos: r.write_bytes,
+        bytes_draw: 0,
+        renta_ledger_bytes: r.persistent_rent_ledger_bytes,
+        evento_bytes: r.contract_events_size_bytes,
+    }
+}
+
+/// `.wasm` compilado, si `TINKAZO_WASM` apunta a uno:
+/// `TINKAZO_WASM=target/wasm32v1-none/release/tinkazo_raffle.wasm cargo test costo -- --nocapture`.
+fn wasm_compilado() -> Option<std::vec::Vec<u8>> {
+    std::env::var("TINKAZO_WASM")
+        .ok()
+        .and_then(|p| std::fs::read(p).ok())
+}
+
+fn imprimir_tabla(titulo: &str, wasm: Option<&[u8]>) -> std::vec::Vec<(u32, u32, Costo)> {
+    std::println!("\n{titulo}");
+    std::println!(
+        "{:>9} {:>13} | {:>13} {:>10} | {:>8} {:>12} {:>16} {:>10}",
+        "ganadores", "participantes", "instrucciones", "memoria", "Draw (B)", "escritos (B)", "renta (ledger-B)", "evento (B)"
+    );
+    let mut filas = std::vec::Vec::new();
+    for (k, count) in [
+        (3u32, 18u32),
+        (3, 1_000),
+        (32, 32),
+        (32, 1_000),
+        (50, 50),
+        (50, 1_000),
+        (MAX_WINNERS, MAX_WINNERS),
+        (MAX_WINNERS, 1_000),
+    ] {
+        let c = medir_draw(count, k, wasm);
+        std::println!(
+            "{:>9} {:>13} | {:>13} {:>10} | {:>8} {:>12} {:>16} {:>10}",
+            k, count, c.instrucciones, c.memoria, c.bytes_draw, c.bytes_escritos, c.renta_ledger_bytes, c.evento_bytes
+        );
+        filas.push((k, count, c));
+    }
+    filas
+}
+
+fn exigir_bajo_la_cuarta_parte(filas: &[(u32, u32, Costo)], donde: &str) {
+    for (k, count, c) in filas {
+        assert!(
+            c.instrucciones < CUARTA_PARTE_INSTRUCCIONES,
+            "{donde}: {k} ganadores de {count}: {} instrucciones, tiene que quedar bajo {CUARTA_PARTE_INSTRUCCIONES}",
+            c.instrucciones
+        );
+        assert!(
+            c.memoria < CUARTA_PARTE_MEMORIA,
+            "{donde}: {k} ganadores de {count}: {} bytes de memoria, tiene que quedar bajo {CUARTA_PARTE_MEMORIA}",
+            c.memoria
+        );
+    }
+}
+
+#[test]
+fn costo_segun_ganadores() {
+    // Nativo (siempre) y, si hay `.wasm`, en la máquina virtual de Soroban.
+    let nativo = imprimir_tabla(
+        "draw, contrato como Rust nativo (no cuenta la ejecución del WASM)",
+        None,
+    );
+
+    let s3 = medir_seal(18, 3, None);
+    let s_tope = medir_seal(1_000, MAX_WINNERS, None);
+    std::println!(
+        "\nseal nativo: {} instrucciones con 3 ganadores y {} con {MAX_WINNERS}; escritos {} B y {} B (iguales: la entrada Raffle guarda la cantidad, no la lista)",
+        s3.instrucciones, s_tope.instrucciones, s3.bytes_escritos, s_tope.bytes_escritos
+    );
+    assert_eq!(s3.bytes_escritos, s_tope.bytes_escritos);
+
+    if let Some(bytes) = wasm_compilado() {
+        let vm = imprimir_tabla(
+            "draw, WASM en la máquina virtual de Soroban (lo que paga la red)",
+            Some(&bytes),
+        );
+        let v3 = medir_seal(18, 3, Some(&bytes));
+        let v_tope = medir_seal(1_000, MAX_WINNERS, Some(&bytes));
+        std::println!(
+            "\nseal WASM: {} instrucciones con 3 ganadores y {} con {MAX_WINNERS}; memoria {} B; escritos {} B y {} B",
+            v3.instrucciones, v_tope.instrucciones, v3.memoria, v3.bytes_escritos, v_tope.bytes_escritos
+        );
+        exigir_bajo_la_cuarta_parte(&vm, "WASM");
+    } else {
+        std::println!("\n(sin TINKAZO_WASM: solo se midió el contrato nativo)");
+    }
+
+    // La exigencia: el tope de ganadores queda bajo la cuarta parte del límite de la red.
+    exigir_bajo_la_cuarta_parte(&nativo, "nativo");
+    // El costo crece con los ganadores, y la entrada Draw también.
+    let por = |k: u32, n: u32| &nativo.iter().find(|f| f.0 == k && f.1 == n).unwrap().2;
+    assert!(por(MAX_WINNERS, MAX_WINNERS).bytes_draw > por(3, 18).bytes_draw);
+    assert!(por(MAX_WINNERS, MAX_WINNERS).instrucciones > por(3, 18).instrucciones);
+}
+
+#[test]
+fn peor_semilla_de_la_seleccion_con_el_tope_de_ganadores() {
+    // Con tantos ganadores como entradas, el recorrido es el del coleccionista
+    // de cupones: en promedio `k · H(k)` hashes (unos 519 con 100), y a veces el
+    // doble. Se prueban muchas semillas para ver el peor caso y que `draw` entero
+    // quede bajo el límite también con la peor. La firma real de una sola ronda no
+    // permite variar la semilla en `draw`, así que se mide `select` con cada
+    // semilla y se le suma el resto de `draw` (firma BLS, almacenamiento, evento).
+    let env = entorno_de_medicion();
+    let h = list_hash(&env);
+    let mut budget = env.cost_estimate().budget();
+
+    budget.reset_unlimited();
+    let _ = select::select(&env, &expected_randomness(&env), &h, MAX_WINNERS, MAX_WINNERS);
+    let real = budget.cpu_instruction_cost() as i64;
+
+    let mut peor = 0i64;
+    let mut peor_i = 0u32;
+    let mut suma = 0i64;
+    const SEMILLAS: u32 = 300;
+    for i in 0..SEMILLAS {
+        let semilla: BytesN<32> = env
+            .crypto()
+            .sha256(&Bytes::from_array(&env, &i.to_be_bytes()))
+            .into();
+        budget.reset_unlimited();
+        let sel = select::select(&env, &semilla, &h, MAX_WINNERS, MAX_WINNERS);
+        let c = budget.cpu_instruction_cost() as i64;
+        assert_eq!(sel.len(), MAX_WINNERS);
+        assert_distinct_in_range(&sel, MAX_WINNERS);
+        suma += c;
+        if c > peor {
+            peor = c;
+            peor_i = i;
+        }
+    }
+    let draw_real = medir_draw(MAX_WINNERS, MAX_WINNERS, None).instrucciones;
+    let resto = draw_real - real;
+    std::println!(
+        "\nselect {MAX_WINNERS} de {MAX_WINNERS}, nativo, {SEMILLAS} semillas: la real {real}, promedio {}, la peor (semilla {peor_i}) {peor}; resto de draw {resto}; draw con la peor semilla {}",
+        suma / SEMILLAS as i64,
+        resto + peor
+    );
+    assert!(resto + peor < CUARTA_PARTE_INSTRUCCIONES);
 }
