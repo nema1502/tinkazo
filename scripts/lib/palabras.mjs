@@ -34,6 +34,7 @@ export const ARCHIVOS_DE_JUEGO = {
   luz: /^src\/games\/pixi\/luz/,
   ledger: /^src\/games\/(?:pixi\/)?ledger/,
   autos: /^src\/games\/pixi\/autos/,
+  bolillas: /^src\/games\/pixi\/bolillas/,
 };
 
 /** El juego al que pertenece una clave de `src/i18n.ts` (por su nombre). */
@@ -56,6 +57,7 @@ export const CLAVES_DE_JUEGO = {
   luz: /^(?:gameLuz|jgLuz[A-Z])/,
   ledger: /^(?:gameLedger|jgLedger)/,
   autos: /^(?:gameAutos|jgAutos|gcAutos|loreAutos)/,
+  bolillas: /^(?:gameBolillas|jgBolillas|gcBolillas|loreBolillas)/,
 };
 
 /** Los juegos donde nadie «sale»: se queda de pie quien aguanta. */

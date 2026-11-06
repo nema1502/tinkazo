@@ -1,0 +1,72 @@
+import type { Datos } from "./bolillas-plan";
+import type { Categoria, Timbre } from "./kit/sonido";
+
+/**
+ * Bolillas: el sonido de los choques, puro.
+ *
+ * La escena pregunta, en cada cuadro, qué toca sonar a esta hora del plan: el
+ * clic de canica contra canica en cada impacto (un cristal con su eco), el
+ * golpe seco del polvo cuando la golpeada cae en la tierra, y los tonos chicos
+ * que suben mientras la canica que gana titila en la tiza. Todo es cosmético:
+ * nada de esto decide nada del sorteo, y la escena lo pasa por la voz del kit
+ * (`k.sonido`), que nace muda cuando el estadio está en silencio (`isMuted`).
+ *
+ * Puro: sin audio y sin DOM, se prueba en Node (`bolillas-arte.test.ts`). Cada
+ * evento lleva su clave única (la escena la suena una sola vez con
+ * `sonido.una`) y sale con los grados y volúmenes de la casa
+ * (`problemasDeTono` garantiza que la voz no los rechace).
+ */
+
+/** Cuánto vive un evento: la escena lo suena una sola vez, la primera vez que lo ve. */
+export const VENTANA = 0.4;
+
+/** Un sonido que la escena pasa a la voz del estadio. */
+export interface EventoSonoro {
+  clave: string;
+  grado: number;
+  cat: Categoria;
+  timbre?: Timbre;
+  vol?: number;
+  dur?: number;
+  /** Cuánto esperarlo, en milisegundos reales: el eco del cristal llega apenas después. */
+  retrasoMs?: number;
+}
+
+/** El clic de cristal del impacto: agudo, corto, y su eco apenas más bajo. */
+const CLINK = { grado: 18, cat: "evento" as const, timbre: "square" as const, vol: 0.05, dur: 0.05 };
+const ECO = { grado: 13, cat: "evento" as const, timbre: "square" as const, vol: 0.04, dur: 0.05, retrasoMs: 45 };
+
+/** El golpe seco de la canica cayendo en la tierra: bajo, blando, de fondo. */
+const CAE = { grado: 2, cat: "fondo" as const, timbre: "sine" as const, vol: 0.03, dur: 0.09 };
+
+/** El ritmo del titileo: un tono chico cada tanto, subiendo hasta que la canica se queda quieta. */
+const TITILA_PASO = 0.3;
+const TITILA_ARRANQUE = 0.15;
+
+/** Cuánto rueda la canica que gana hasta su titileo: lo que fija `trayectoriaDe` en el plan. */
+const RODADO = 2;
+
+/**
+ * Lo que toca sonar en el segundo `t`, a partir de la lista del plan y del
+ * interruptor del estadio (con el mudo puesto, no suena nada). Determinista:
+ * la misma hora del mismo plan pide siempre los mismos sonidos.
+ */
+export function eventosDe(d: Datos, t: number, suena: boolean): EventoSonoro[] {
+  if (!suena) return [];
+  const out: EventoSonoro[] = [];
+  d.tiros.forEach((tiro, i) => {
+    if (t >= tiro.t && t < tiro.t + VENTANA) {
+      out.push({ clave: `choque:${i}`, ...CLINK });
+      out.push({ clave: `eco:${i}`, ...ECO });
+    }
+    // La caída, cuando la canica golpeada termina su vuelo en la tierra.
+    const cae = tiro.t + tiro.salida.vuelo;
+    if (t >= cae && t < cae + VENTANA) out.push({ clave: `cae:${i}`, ...CAE });
+  });
+  for (let j = 0; ; j++) {
+    const tt = d.casi.t + TITILA_ARRANQUE + j * TITILA_PASO;
+    if (tt >= Math.min(d.duracion, d.casi.t + RODADO)) break;
+    if (t >= tt && t < tt + TITILA_PASO) out.push({ clave: `titila:${j}`, grado: 8 + j, cat: "evento", timbre: "triangle", vol: 0.045, dur: 0.04 });
+  }
+  return out;
+}
