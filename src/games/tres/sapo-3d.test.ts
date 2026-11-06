@@ -9,9 +9,10 @@ import { assignSlots } from "../pixi/slots";
 import { aplicarPose, crearMapa, poseCamara, type Pose3D } from "./camara";
 import { compararPuestos, type Puesto2D } from "./prueba";
 import {
-  BANDERA, SEGUIR, TAPA_Y, TORO_R, TORO_T, ZOOM_MAX, alturaRana, aroDestacado, cajaDeAro, camaraDelSapo, camaraDelTiro, cercaniaDelTiro, deltaCamara,
-  elevacionDe, encajarAntes, franjaBandera, lugarDelMundo, luzDelGolpe, mezclarPose, perfilDelTiro, perfilSapo, pesoMoneda, pintarArgolla, poseArgolla,
-  poseMoneda, proyectorDe, tomaDeArgolla, type AgujeroSapo, type ArgollaSapo, type AroDestacado, type EstadoArgolla,
+  AGUAYO, BANDERA, CAJON_MESA, MADERA_RUSTICA, SEGUIR, SOBRE_TAPA, TAPA_Y, TORO_R, TORO_T, ZOOM_MAX, alturaRana, anchoCajon, aroDestacado, cajaDeAro,
+  camaraDelSapo, camaraDelTiro, cercaniaDelTiro, colorTabla, deltaCamara, elevacionDe, encajarAntes, fondoCajon, franjaAguayo, franjaBandera, lugarDelMundo,
+  luzDelGolpe, mezclarPose, perfilDelTiro, perfilSapo, pesoMoneda, pintarArgolla, poseArgolla, poseMoneda, proyectorDe, tomaDeArgolla, type AgujeroSapo,
+  type ArgollaSapo, type AroDestacado, type EstadoArgolla,
 } from "./sapo-3d";
 
 /**
@@ -309,6 +310,67 @@ describe("las argollas llevan los colores de la bandera de Bolivia", () => {
     pintada.computeBoundingBox();
     expect(pintada.boundingBox!.min.toArray()).toEqual(base.boundingBox!.min.toArray());
     expect(pintada.boundingBox!.max.toArray()).toEqual(base.boundingBox!.max.toArray());
+  });
+});
+
+describe("la mesa rústica más grande, de madera y con los colores de Bolivia (S7)", () => {
+  it("es más grande: tapa más ancha que antes, tablón más grueso, patas más altas y marco rústico", () => {
+    // Antes: tapa tableR*2.1 / tableR*2.05, losa 0,14, cuerpo 0,55.
+    expect(anchoCajon(1.55)).toBeGreaterThan(1.55 * 2.1);
+    expect(fondoCajon(1.55)).toBeGreaterThan(1.55 * 2.05);
+    expect(CAJON_MESA.losa).toBeGreaterThan(0.14);
+    expect(CAJON_MESA.cuerpoAlto).toBeGreaterThan(0.55);
+    expect(CAJON_MESA.pataGrosor).toBeGreaterThan(0.1);
+    expect(CAJON_MESA.bordeGrosor).toBeGreaterThan(0.09);
+  });
+
+  it("el sobresalir de la tapa deja los agujeros donde estaban, lejos del borde", () => {
+    const L = holeLayout(SAPO_MAX);
+    const fuera = Math.max(...L.holes.map((h) => Math.hypot(h.x, h.y))) + L.holeR;
+    expect(fuera).toBeLessThanOrEqual(1.55); // los agujeros caben en la mesa del 2D
+    for (const s of [SOBRE_TAPA.x, SOBRE_TAPA.z]) {
+      expect(s).toBeGreaterThan(0.1);
+      expect(s).toBeLessThan(0.3);
+    }
+    // El marco rústico nunca llega a los agujeros.
+    expect(fondoCajon(1.55) / 2 - CAJON_MESA.bordeGrosor).toBeGreaterThan(fuera);
+    expect(anchoCajon(1.55) / 2 - CAJON_MESA.bordeGrosor).toBeGreaterThan(fuera);
+  });
+
+  it("la madera: varios tonos de marrón ricos, distintos entre sí, con variación de tabla a tabla y sin azar", () => {
+    const marron = (c: number): boolean => {
+      const r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
+      return r > g && g > b && r > 60 && b < 140;
+    };
+    for (const tema of ["claro", "oscuro"] as const) {
+      const tonos = MADERA_RUSTICA[tema];
+      expect(tonos.length).toBeGreaterThanOrEqual(3);
+      expect(new Set(tonos).size).toBe(tonos.length);
+      for (const c of tonos) expect(marron(c), `0x${c.toString(16)} en ${tema}`).toBe(true);
+    }
+    // El tono de cada tabla es siempre el mismo (función del índice, no del azar) y cicla.
+    for (const tema of ["claro", "oscuro"] as const) {
+      const n = MADERA_RUSTICA[tema].length;
+      for (let i = 0; i < n * 2; i++) expect(colorTabla(tema, i)).toBe(MADERA_RUSTICA[tema][i % n]);
+      for (let i = 0; i < n - 1; i++) expect(colorTabla(tema, i)).not.toBe(colorTabla(tema, i + 1));
+    }
+    expect(fuente("sapo-3d.ts")).not.toMatch(/Math\.random/);
+  });
+
+  it("el aguayo: la bandera primero (rojo, amarillo, verde) y más colores de la casa, en rayas que ciclan", () => {
+    expect(AGUAYO.slice(0, 3)).toEqual([BANDERA[0], BANDERA[1], BANDERA[2]]);
+    expect(AGUAYO.length).toBeGreaterThanOrEqual(5);
+    expect(new Set(AGUAYO).size).toBe(AGUAYO.length);
+    const n = AGUAYO.length;
+    for (let i = 0; i < n * 2; i++) expect(franjaAguayo(i)).toBe(AGUAYO[i % n]);
+  });
+
+  it("los adornos están en el cajón: banderines con la bandera, faja de aguayo y marco de tablas", () => {
+    const tres = fuente("sapo-3d.ts");
+    expect(tres).toContain("BANDERA[i % 3]");
+    expect(tres).toContain("texturaAguayo(");
+    expect(tres).toContain("CAJON_MESA.losa");
+    expect(tres).toContain("CAJON_MESA.cuerpoAlto");
   });
 });
 

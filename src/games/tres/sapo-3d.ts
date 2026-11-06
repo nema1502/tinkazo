@@ -584,13 +584,49 @@ export function mezclarPose(a: Pose3D, b: Pose3D, w: number): Pose3D {
 /* ===================================================================== el cajón */
 
 const INK: Record<"claro" | "oscuro", number> = { claro: 0x191919, oscuro: 0x16161f };
-const ACENTOS: Record<"claro" | "oscuro", readonly number[]> = {
-  claro: [0xe93d9c, 0xff7a1a, 0x00a896, 0xffc629, 0x6c4ce0],
-  oscuro: [0xff5cb3, 0xff8b3d, 0x17c3b2, 0xffd24d, 0x9b7bff],
-};
 const MADERA: Record<"claro" | "oscuro", number> = { claro: 0xd29a5c, oscuro: 0x9a6a3c };
-const FRENTE: Record<"claro" | "oscuro", number> = { claro: 0xb4462a, oscuro: 0x7a2e1c };
 const CAJON: Record<"claro" | "oscuro", number> = { claro: 0x8f3520, oscuro: 0x5a2014 };
+
+/* ---------------------------------------------------------------- la mesa rústica (S7) */
+
+/**
+ * Las medidas del cajón rústico, en unidades de la mesa. La mesa manda más en la escena: la tapa sobresale más del radio
+ * del 2D (`SOBRE_TAPA` por lado), la losa es un tablón más grueso y el cuerpo patas más altas. Los agujeros no se mueven:
+ * siguen saliendo del trazo del 2D, que vive en la cara de arriba; todo lo grande crece hacia afuera y hacia abajo.
+ */
+export const CAJON_MESA = {
+  losa: 0.18,
+  cuerpoAlto: 0.8,
+  pataGrosor: 0.16,
+  bordeGrosor: 0.13,
+} as const;
+/** Cuánto sobresale la tapa del radio de la mesa del 2D, por lado: un canto ancho que se ve de madera. */
+export const SOBRE_TAPA = { x: 0.2, z: 0.17 } as const;
+/** El ancho y el fondo de la tapa para el radio de la mesa del 2D. */
+export const anchoCajon = (tableR: number): number => tableR * 2 + SOBRE_TAPA.x * 2;
+export const fondoCajon = (tableR: number): number => tableR * 2 + SOBRE_TAPA.z * 2;
+
+/**
+ * La madera rústica: tablones de tonos más ricos que el plano de antes, con variación de tabla a tabla (más rojiza,
+ * más clara, más tostada), para que la mesa parezca de madera de verdad y no de un solo color.
+ */
+export const MADERA_RUSTICA: Record<"claro" | "oscuro", readonly number[]> = {
+  claro: [0xa87238, 0x96622f, 0xbc8a4e, 0x82541f],
+  oscuro: [0x6e4520, 0x5c3818, 0x825428, 0x4c2d12],
+};
+/** El tono de la tabla `i`: siempre el mismo para la misma tabla (sale del índice, no del azar), ciclando la paleta. */
+export const colorTabla = (tema: "claro" | "oscuro", i: number): number => {
+  const tonos = MADERA_RUSTICA[tema];
+  return tonos[((i % tonos.length) + tonos.length) % tonos.length] as number;
+};
+
+/**
+ * El aguayo: la bandera primero (rojo, amarillo, verde) y después los colores de la chalina de la casa. Con estas rayas
+ * va la faja del canto de la mesa, la banda del frente del cajón y la guarda de la tapa, estilo wiphala.
+ */
+export const AGUAYO = [BANDERA[0], BANDERA[1], BANDERA[2], 0xe07a2e, 0xf2ead8, 0x2b6cd5] as const;
+/** El color de la raya `i` del aguayo: cicla por la paleta. */
+export const franjaAguayo = (i: number): number => AGUAYO[((i % AGUAYO.length) + AGUAYO.length) % AGUAYO.length] as number;
 const PISO: Record<"claro" | "oscuro", [number, number]> = { claro: [0xe8d6b8, 0xdcc6a0], oscuro: [0x3b2a3a, 0x4a3849] };
 /** La pared de ladrillos de atrás, la del 2D, en el tono del tema (ladrillo, junta). */
 const PARED: Record<"claro" | "oscuro", [number, number]> = { claro: [0xecdcb9, 0xd7c196], oscuro: [0x2c2147, 0x1b1432] };
@@ -598,7 +634,7 @@ const AMARILLO = 0xffc629;
 /** La rana: más clara que la madera para que sea lo primero que se ve (el 2D la separa con su brillo). */
 const RANA = 0x5cb746;
 const RANA_OSC = 0x3d7a24;
-const GARGANTA = 0xf6dc96;
+const GARGANTA = 0xc9e8a0;
 const MARFIL = 0xfff3cf;
 const LENGUA = 0xe0707a;
 /** Las manchas del lomo y el labio, el brillo de la cabeza, el iris, los cachetes. */
@@ -626,6 +662,12 @@ function texturaTapa(tema: "claro" | "oscuro", ancho: number, fondo: number): Ca
   const W = 512, H = 512;
   cx.fillStyle = hex(MADERA[tema]);
   cx.fillRect(0, 0, W, H);
+  // Las tablas: bandas horizontales con el tono de cada una (la misma madera siempre, con su variación de tono).
+  const filas = 6;
+  for (let f = 0; f < filas; f++) {
+    cx.fillStyle = hex(colorTabla(tema, f));
+    cx.fillRect(0, (f * H) / filas, W, H / filas);
+  }
   // Las vetas: líneas a lo ancho, con una ondulación que sale de un hash (la misma madera siempre).
   for (let i = 1; i < 14; i++) {
     const y = (i * H) / 14;
@@ -636,9 +678,9 @@ function texturaTapa(tema: "claro" | "oscuro", ancho: number, fondo: number): Ca
     for (let x = 6; x <= W - 6; x += 32) cx.lineTo(x, y + (hash(i, x) - 0.5) * 5);
     cx.stroke();
   }
-  // La guarda: triángulos de los cinco acentos, mirando hacia adentro, en el borde de adelante y el de atrás.
+  // La guarda: rayas del aguayo, mirando hacia adentro, en el borde de adelante y el de atrás.
   const banda = 30, paso = banda * 1.7;
-  const col = ACENTOS[tema];
+  const col = AGUAYO;
   const aspecto = ancho / fondo;
   for (let x = 6, k = 0; x < W - 8; x += paso, k++) {
     cx.fillStyle = hex(col[k % col.length] as number);
@@ -676,6 +718,24 @@ function texturaBandera(): CanvasTexture | null {
   });
   const t = new CanvasTexture(cx.canvas);
   t.colorSpace = SRGBColorSpace;
+  return t;
+}
+
+/**
+ * La tela del aguayo: rayas verticales de los colores de la wiphala, para la faja del canto de la mesa y la banda del
+ * frente del cajón. La misma tela para las dos, un solo dibujo más en el presupuesto.
+ */
+function texturaAguayo(): CanvasTexture | null {
+  const cx = lienzo(AGUAYO.length * 8, 16);
+  if (!cx) return null;
+  (AGUAYO as readonly number[]).forEach((color, i) => {
+    cx.fillStyle = hex(color);
+    cx.fillRect(i * 8, 0, 8, 16);
+  });
+  const t = new CanvasTexture(cx.canvas);
+  t.colorSpace = SRGBColorSpace;
+  t.wrapS = RepeatWrapping;
+  t.repeat.set(3, 1);
   return t;
 }
 
@@ -820,8 +880,8 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
 
   /* ---------------------------------------------------------------- el patio y el cajón */
   const tableR = 1.55;
-  const ancho = tableR * 2.1, fondo = tableR * 2.05;
-  const losa = 0.14, cuerpoAlto = 0.55;
+  const ancho = anchoCajon(tableR), fondo = fondoCajon(tableR);
+  const losa = CAJON_MESA.losa, cuerpoAlto = CAJON_MESA.cuerpoAlto;
   const texPiso = texturaPiso(tema);
   if (texPiso) B.add(texPiso);
   const piso = new Mesh(B.add(new PlaneGeometry(60, 60)), B.add(new MeshLambertMaterial({ map: texPiso ?? undefined, color: texPiso ? 0xffffff : PISO[tema][0] })));
@@ -853,7 +913,7 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
   const ladoBanderin = 0.26;
   for (let i = 0; i < NB; i++) {
     const u = (i + 0.5) / NB;
-    banderines.poner(i, xG0 + (xG1 - xG0) * u, yCuerda(u) - 0.01, zPared + 0.04, ladoBanderin, ladoBanderin * 1.15, 1, 0, ACENTOS[tema][i % 5]);
+    banderines.poner(i, xG0 + (xG1 - xG0) * u, yCuerda(u) - 0.01, zPared + 0.04, ladoBanderin, ladoBanderin * 1.15, 1, 0, BANDERA[i % 3]);
   }
   for (let i = 0; i < NC; i++) {
     const ua = i / NC, ub = (i + 1) / NC;
@@ -878,10 +938,20 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
   sombraCajon.position.set(0.22, -losa - cuerpoAlto + 0.004, 0.2);
   mundo.add(sombraCajon);
 
-  const cuerpoMat = mat.plano(FRENTE[tema]);
+  // El cuerpo, de madera rústica como la tapa, y las cuatro patas gruesas del canto que bajan hasta el piso.
+  const cuerpoMat = mat.plano(colorTabla(tema, 0));
   const cuerpo = pieza(g.caja, cuerpoMat, 0, -losa - cuerpoAlto / 2, 0, ancho * 0.97, cuerpoAlto, fondo * 0.97);
   mundo.add(cuerpo);
   contorno(cuerpo, 1.012);
+  const patas = new Instancias(g.caja, mat.plano(colorTabla(tema, 3)), 4, B);
+  const gp = CAJON_MESA.pataGrosor;
+  let iPata = 0;
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+    patas.poner(iPata++, sx * (ancho / 2 - gp / 2), -losa - cuerpoAlto / 2, sz * (fondo / 2 - gp / 2), gp, cuerpoAlto + losa, gp);
+  }
+  patas.usar(4);
+  patas.fin();
+  mundo.add(patas.malla);
   // Los cinco cajoncitos del frente, con sus pomos amarillos.
   const cajones = new Instancias(g.caja, mat.plano(CAJON[tema]), 5, B);
   const pomos = new Instancias(g.esfera, mat.plano(AMARILLO), 5, B);
@@ -900,7 +970,7 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
   // La tapa: la losa de madera y, arriba, la cara pintada con las vetas y la guarda.
   const tapa = new Group();
   mundo.add(tapa);
-  const losaMesh = pieza(g.caja, mat.plano(tema === "oscuro" ? 0x7e5530 : 0xb98249), 0, -losa / 2, 0, ancho, losa, fondo);
+  const losaMesh = pieza(g.caja, mat.plano(colorTabla(tema, 2)), 0, -losa / 2, 0, ancho, losa, fondo);
   tapa.add(losaMesh);
   contorno(losaMesh, 1.01);
   const texTapa = texturaTapa(tema, ancho, fondo);
@@ -912,6 +982,24 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
   cara.rotation.x = -Math.PI / 2;
   cara.position.y = 0.0015;
   tapa.add(cara);
+  // El marco rústico: cuatro vigas gruesas alrededor del canto, un pelo más altas que el tablón y colgando por debajo.
+  const marco = new Instancias(g.caja, mat.plano(colorTabla(tema, 1)), 4, B);
+  const gb = CAJON_MESA.bordeGrosor, bh = losa + 0.012;
+  marco.poner(0, 0, -losa / 2 + 0.006, fondo / 2 - gb / 2, ancho, bh, gb);
+  marco.poner(1, 0, -losa / 2 + 0.006, -fondo / 2 + gb / 2, ancho, bh, gb);
+  marco.poner(2, -ancho / 2 + gb / 2, -losa / 2 + 0.006, 0, gb, bh, fondo - gb * 2);
+  marco.poner(3, ancho / 2 - gb / 2, -losa / 2 + 0.006, 0, gb, bh, fondo - gb * 2);
+  marco.usar(4);
+  marco.fin();
+  tapa.add(marco.malla);
+  // La faja del aguayo colgada del canto de adelante: rayas de la wiphala sobre la madera (y un recodo de la misma tela
+  // pintado en el borde de arriba del frente del cajón). Una sola tela, dos piezas.
+  const texAguayo = texturaAguayo();
+  if (texAguayo) B.add(texAguayo);
+  const matFaja = B.add(new MeshLambertMaterial(texAguayo ? { map: texAguayo } : { color: franjaAguayo(1) }));
+  const fajaAlto = cuerpoAlto * 0.34;
+  tapa.add(pieza(g.caja, matFaja, 0, 0.012 - (fajaAlto + 0.012) / 2, fondo / 2 + 0.006, ancho * 0.46, fajaAlto + 0.012, 0.03));
+  mundo.add(pieza(g.caja, matFaja, 0, -losa - 0.045, (fondo * 0.97) / 2 + 0.012, ancho * 0.97, 0.07, 0.02));
 
   /* ---------------------------------------------------------------- los agujeros */
   const MAX_AG = 12;
