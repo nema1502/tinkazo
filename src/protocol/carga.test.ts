@@ -29,7 +29,7 @@ describe("el protocolo con listas grandes", () => {
     expect(ms).toBeLessThan(1000);
   });
 
-  it("elige treinta y dos ganadores entre diez mil, sin repetir", () => {
+  it("elige el máximo de ganadores (cien) entre diez mil, sin repetir", () => {
     const lista = nombres(10_000);
     const h = listHash(lista);
     const semilla = new Uint8Array(32).fill(7);

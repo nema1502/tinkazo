@@ -12,6 +12,8 @@ import { initPlegables } from "./ui/plegable";
 import { iniciarCupo } from "./ui/cupo-patrocinio";
 import { alApretarSellar, iniciarRed } from "./ui/red";
 import { montarPremios } from "./ui/premios";
+import { montarGanadores, ponerGanadores } from "./ui/ganadores";
+import { MAX_WINNERS } from "./protocol/select";
 import { adelantarCorto, alTocarGanadores, contarCompartido, copySummary, draw, elegirOtroJuegoParaVer, mostrarGrande, newDraw, recuperarLista, replayAnimation, reverify, shareProof } from "./ui/draw";
 import { contarPractica, recordarOrigen } from "./contar";
 import { skipGame } from "./games/overlay";
@@ -198,6 +200,7 @@ iniciarLogo();
 iniciarLogoEnElEstadio();
 bindParticipants();
 montarPremios();
+montarGanadores();
 // Si la página anterior salió del modo stand, se apaga ahora: el borrador que se repone es el de verdad.
 cerrarSalidaDelStand();
 // La lista que se estaba armando en esta pestaña, si se recargó o se volvió de entrar con Google.
@@ -446,7 +449,7 @@ async function autoDemo(mode: string): Promise<void> {
   // ganadores: hubo un sorteo de dos en el que el juego anunciaba uno solo.
   const nw = Number(params.get("nw"));
   const sel = document.getElementById("nw");
-  if (nw >= 1 && nw <= 32 && sel instanceof HTMLSelectElement) sel.value = String(nw);
+  if (Number.isInteger(nw) && nw >= 1 && nw <= MAX_WINNERS && sel instanceof HTMLInputElement) ponerGanadores(nw);
   await freeze();
   setGame((GAMES.find((g) => g === mode) ?? "race") as Game);
   // La ronda objetivo todavía no existe: esperar la cuenta regresiva.
@@ -491,7 +494,7 @@ async function poseScene(): Promise<void> {
     : base;
   // `?nw=N` también acá: la escena fija con varios premios, sin red, para
   // auditar cómo anuncia cada juego a cada ganador.
-  const premios = Math.max(1, Math.min(L.length, Math.floor(Number(params.get("nw")) || 1)));
+  const premios = Math.max(1, Math.min(L.length, MAX_WINNERS, Math.floor(Number(params.get("nw")) || 1)));
   // Quiénes ganan: los de siempre, repartidos por la lista, o con
   // `?ganador=<semilla>` los que daría el protocolo con esa semilla, para que
   // el auditor de delatores vea al ganador en cualquier puesto. Solo la escena

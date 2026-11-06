@@ -1,14 +1,16 @@
 import { $, esc } from "../dom";
 import { SAMPLE, app, avatar } from "../state";
-import { anchoringAvailable } from "../stellar/config";
+import { anchoringAvailable, topeDeGanadores } from "../stellar/config";
 import { enEnsayo, enPractica, sinGrabar } from "../ensayo-modo";
 import { canonicalList } from "../protocol/canonical";
+import { MAX_WINNERS } from "../protocol/select";
 import { type Dict, T, getLang, onLangChange, t } from "../i18n";
 import { decodeText, dropListHeader, igualesQuitados, parseTable, quitarNumeracion } from "./csv";
 import { type ImportResult, type ImportState, initialState, openImporter } from "./importer";
 import { stripInvisibles, stripInvisiblesByLine } from "../invisibles";
 import { parecidos } from "../buscar";
 import { ponerPremio, sincronizarPremios } from "./premios";
+import { bloquearGanadores, ganadoresPedidos, ponerGanadores } from "./ganadores";
 import { contarUnaVez } from "../contar";
 import { tamanoDe } from "../../workers/enlaces/src/conteo";
 
@@ -44,7 +46,7 @@ export function cerrarLista(si: boolean): void {
   cerrada = si;
   $<HTMLTextAreaElement>("ta").disabled = si;
   $<HTMLInputElement>("prize").disabled = si;
-  $<HTMLSelectElement>("nw").disabled = si;
+  bloquearGanadores(si);
   for (const id of ["csv", "csv-luma", "btn-pegar"]) $<HTMLInputElement>(id).disabled = si;
   $<HTMLButtonElement>("btn-recuperar").disabled = si;
   // Los orígenes se ven apagados: ya no cargan nada (styles.css).
@@ -114,7 +116,7 @@ function pintarResumen(n = parseNames().length): void {
     return;
   }
   const L = T[getLang()];
-  const k = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10) || 1, n);
+  const k = Math.min(ganadoresPedidos(), n);
   const premio = $<HTMLInputElement>("prize").value.trim().replace(/\s+/g, " ");
   // En el ensayo no se nombra el premio que falta: nada se sella de verdad.
   el.textContent = L.sellarResumen(n, k, enEnsayo() && !premio ? null : premio);
@@ -153,12 +155,13 @@ export function bindParticipants(): void {
   // todo al irse de la página: una recarga, o el viaje a Google para entrar.
   $("prize").addEventListener("input", guardarPronto);
   $("prize-chips").addEventListener("click", guardarPronto);
-  $("nw").addEventListener("change", guardarPronto);
+  // El campo es un número: se escribe (`input`) y se confirma al salir (`change`). Los atajos mandan `change`.
+  for (const evento of ["input", "change"]) $("nw").addEventListener(evento, guardarPronto);
   // El resumen de debajo de "Sellar la lista" sigue al premio y a la cantidad de ganadores.
   $("prize").addEventListener("input", () => pintarResumen());
   $("prize").addEventListener("tinkazo:premio", () => pintarResumen());
   $("prize-chips").addEventListener("click", () => queueMicrotask(() => pintarResumen()));
-  $("nw").addEventListener("change", () => pintarResumen());
+  for (const evento of ["input", "change"]) $("nw").addEventListener(evento, () => pintarResumen());
   onLangChange(() => {
     pintarResumen();
     const cuenta = document.getElementById("lista-cuenta");
@@ -562,7 +565,7 @@ export function guardarBorrador(): void {
     const texto = $<HTMLTextAreaElement>("ta").value;
     const premio = $<HTMLInputElement>("prize").value;
     if (!texto.trim() && !premio.trim()) sessionStorage.removeItem(BORRADOR);
-    else sessionStorage.setItem(BORRADOR, JSON.stringify({ texto, premio, nw: $<HTMLSelectElement>("nw").value }));
+    else sessionStorage.setItem(BORRADOR, JSON.stringify({ texto, premio, nw: ganadoresPedidos() }));
   } catch {
     /* sin almacenamiento, no se recupera: nada más */
   }
@@ -602,7 +605,8 @@ export function reponerBorrador(): void {
   setList(b.texto);
   if (typeof b.premio === "string" && b.premio.trim()) ponerPremio(b.premio);
   const nw = Number(b.nw);
-  if (Number.isInteger(nw) && nw >= 1 && nw <= 32) $<HTMLSelectElement>("nw").value = String(nw);
+  // Un borrador torcido (más que el protocolo) no se repone; y uno de más que lo que esta red admite baja a lo que admite.
+  if (Number.isInteger(nw) && nw >= 1 && nw <= MAX_WINNERS) ponerGanadores(Math.min(nw, topeDeGanadores()));
   if (canonicalList(b.texto).length) avisar(() => t("borradorRepuesto"));
 }
 

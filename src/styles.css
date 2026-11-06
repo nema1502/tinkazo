@@ -588,6 +588,26 @@
   #winner-cards > .winner-card:only-child .ausente { width: auto; min-width: 0; }
   .ausente-btn { text-wrap: balance; }
   .ausente-btn:focus-visible { outline: 3px solid #191919; outline-offset: 2px; }
+  /* Con más de seis ganadores (src/ui/resultado-ganadores.ts): el primero en su tarjeta y los demás en una lista de
+     renglones cortos, número, nombre y «No está». En columnas donde hay lugar (el proyector) y de a uno en el celular. */
+  .winner-lista-t { margin-top: 22px; font-size: var(--letra-prin); font-weight: 800; }
+  .winner-lista-premio { margin-top: 4px; font-size: var(--letra-sec); }
+  .winner-lista-premio span { color: var(--ink2); }
+  .winner-lista {
+    list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  }
+  .winner-fila {
+    display: flex; align-items: center; gap: 4px 10px; min-width: 0; padding: 6px 10px;
+    background: var(--yellow); color: #191919; border: 2px solid var(--ink); box-shadow: var(--sh-sm);
+  }
+  .winner-num { flex: 0 0 auto; min-width: 3.2ch; font: 800 16px/1.2 ui-monospace, Consolas, monospace; }
+  .winner-fila .winner-name { flex: 1 1 0; min-width: 0; font-size: clamp(20px, 2.2vw, 30px); font-weight: 900; line-height: 1.15; }
+  .winner-fila .ausente { flex: 0 0 auto; width: auto; min-width: 0; margin: 0; }
+  /* La pregunta de confirmar ocupa el renglón entero, debajo del nombre. */
+  .winner-fila:has(.ausente-q) { grid-column: 1 / -1; flex-wrap: wrap; }
+  .winner-fila:has(.ausente-q) .ausente { flex: 1 1 100%; }
+  @media (max-width: 460px) { .winner-fila { padding: 6px 8px; } .winner-fila .winner-name { font-size: 20px; } }
   .verify { margin-top: 22px; border: 2px solid var(--ink); padding: 16px; background: var(--paper); display: grid; grid-template-columns: 1fr auto; gap: 16px; }
   .verify a { color: var(--ink); font-weight: 700; }
   .qr { text-align: center; }
@@ -1679,6 +1699,15 @@
   .pantalla-llevan b { font-weight: 900; }
   .pantalla.muchos .pantalla-llevan { grid-column: 1 / -1; }
   .pantalla.muchos .pantalla-ganadores { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: max(6px, 0.2em) max(10px, 0.4em); align-items: stretch; }
+  /* Con más de doce ganadores: una lista de renglones cortos, número y nombre, en tantas columnas como entren. pantalla.ts
+     baja la letra (--letra) hasta que entren todos; si ni a la letra mínima caben, la lista se desplaza. */
+  .pantalla.lista .pantalla-body { align-items: start; overflow-y: auto; }
+  .pantalla.lista .pantalla-ganadores { display: block; }
+  .pantalla.lista .pantalla-llevan { margin-bottom: 0.4em; }
+  .pantalla-lista { list-style: none; margin: 0; padding: 0; columns: 11em; column-gap: 0.9em; }
+  .pantalla-fila { display: flex; align-items: baseline; gap: 0.35em; break-inside: avoid; padding: 0.08em 0; border-bottom: 2px solid var(--ink); }
+  .pantalla-num { flex: 0 0 auto; min-width: 3.1ch; font: 800 0.55em/1.2 ui-monospace, Consolas, monospace; color: var(--ink2); }
+  .pantalla-fila .pantalla-nombre { display: block; flex: 1 1 0; min-width: 0; font-size: 1em; line-height: 1.12; }
   .pantalla-qr { display: flex; flex-direction: column; align-items: center; gap: 8px; background: var(--card); border: var(--bw) solid var(--ink); box-shadow: var(--sh); padding: 16px; }
   /* El tamaño lo fija pantalla.ts al dibujarlo, con módulos enteros: estirado por CSS se rompía. */
   .pantalla-qr img { max-width: 100%; height: auto; image-rendering: pixelated; background: #fff; }
@@ -2035,6 +2064,20 @@
     .premio-chips button { padding: 0 10px; font-size: 16px; }
   }
 
+  /* «Cuántos ganan» (src/ui/ganadores.ts): el rótulo, un número y los atajos de lo común (1, 2, 3, 5 y 10), pegados.
+     Si no entran en un renglón (320 px) pasan al de abajo todos juntos: el campo nunca queda cortado. Los atajos son
+     los chips de los premios, con el mismo blanco de toque. */
+  .nw-grupo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .nw-grupo > label { margin: 0; }
+  #nw {
+    box-sizing: border-box; width: 84px; min-height: 44px; padding: 9px 8px; text-align: center;
+    background: var(--card); color: var(--ink); border: 2px solid var(--ink); font-weight: 800; font-size: 16px;
+  }
+  #nw:disabled { cursor: not-allowed; color: var(--muted); }
+  .nw-atajos { margin: 0; gap: 6px; }
+  .nw-atajos button { min-width: 44px; padding: 0 12px; }
+  .nw-nota { margin-top: 8px; }
+
   /* ================================================================ La letra grande
      24 de octubre de 2026. La gente lo ve en un proyector gigante
      y se pregunta qué es esa letra chica. Los umbrales y su
@@ -2094,7 +2137,7 @@
   /* Para el pulgar: 48 px en las pantallas táctiles. */
   @media (pointer: coarse), (max-width: 760px) {
     button.mini, a.mini, button.ghost, a.ghost, button.primary, a.primary.cta, select, label.chip.live, button.chip.live,
-    .premio-chips button, .enlace, .gate button, .langs button { min-height: 48px; }
+    .premio-chips button, .enlace, .gate button, .langs button, #nw { min-height: 48px; }
   }
 
   /* ---------------------------------------------------------------- el proyector

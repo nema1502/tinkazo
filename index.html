@@ -345,10 +345,19 @@
         <input id="prize" type="text" maxlength="60" autocomplete="off" placeholder="O escribí el tuyo…" data-i-ph="prizePh" />
       </div>
       <div class="row mas-fila">
-        <label class="kicker" for="nw" data-i="winners">Cuántos ganan</label>
-        <select id="nw" class="mono"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option><option>8</option><option>9</option><option>10</option><option>11</option><option>12</option><option>13</option><option>14</option><option>15</option><option>16</option><option>17</option><option>18</option><option>19</option><option>20</option><option>21</option><option>22</option><option>23</option><option>24</option><option>25</option><option>26</option><option>27</option><option>28</option><option>29</option><option>30</option><option>31</option><option>32</option></select>
+        <!-- Cuántos ganan (src/ui/ganadores.ts): un número y los atajos de lo común. El tope de la red lo pone el código al cargar
+             (el contrato de cada red admite lo suyo, ver topeDeGanadores en stellar/config.ts); el del HTML es el del protocolo,
+             MAX_WINNERS, y una prueba (ganadores.test.ts) lo compara. -->
+        <div class="nw-grupo">
+          <label class="kicker" for="nw" data-i="winners">Cuántos ganan</label>
+          <input id="nw" class="mono" type="number" inputmode="numeric" min="1" max="100" step="1" value="1" autocomplete="off" aria-describedby="nw-nota" />
+          <div class="premio-chips nw-atajos" id="nw-atajos" role="group" data-i-aria="winnersAtajos" aria-label="Atajos para cuántos ganan">
+            <button type="button" data-n="1" aria-pressed="true">1</button><button type="button" data-n="2" aria-pressed="false">2</button><button type="button" data-n="3" aria-pressed="false">3</button><button type="button" data-n="5" aria-pressed="false">5</button><button type="button" data-n="10" aria-pressed="false">10</button>
+          </div>
+        </div>
         <button class="ghost" id="btn-sample" data-i="sample">Cargar ejemplo</button>
       </div>
+      <p class="note nw-nota" id="nw-nota" role="status" hidden></p>
       </details>
       <!-- El logo de la comunidad (src/ui/logo-ui.ts): dos toques, sin confirmar. No es parte del sorteo. Se esconde con la lista cerrada. -->
       <div class="logo-fila" id="logo-fila">

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import vectors from "../docs/vectors.json";
 import { poseSeed, poseWinners } from "./pose";
 import { listHash } from "./protocol/canonical";
-import { select } from "./protocol/select";
+import { MAX_WINNERS, select } from "./protocol/select";
 
 /** Lo que hacía la escena fija antes de `?ganador=`, copiado tal cual de src/main.ts. */
 function comoAntes(n: number, premios: number): number[] {
@@ -25,7 +25,7 @@ const texto = (s: string): Uint8Array => sha256(new TextEncoder().encode(s));
 describe("la escena fija sin ?ganador= queda como hoy", () => {
   it("el ganador sigue en el puesto 3 y los demás premios donde estaban, con cualquier largo", () => {
     for (const n of [1, 2, 3, 4, 5, 8, 18, 60, 200]) {
-      for (const nw of [1, 2, 3, 5, 8, 32]) {
+      for (const nw of [1, 2, 3, 5, 8, 32, MAX_WINNERS]) {
         // Como lo calcula poseScene con `?nw=`.
         const premios = Math.max(1, Math.min(n, nw));
         expect(poseWinners(nombres(n), premios, null)).toEqual(comoAntes(n, premios));
@@ -71,11 +71,11 @@ describe("con ?ganador=<semilla>", () => {
     expect(veces[3]).toBeLessThan(30);
   });
 
-  it("varios premios: distintos, tantos como se piden y hasta 32, como en un sorteo de verdad", () => {
-    const L = nombres(60);
-    for (const nw of [1, 3, 8, 32, 40]) {
+  it("varios premios: distintos, tantos como se piden y hasta el tope, como en un sorteo de verdad", () => {
+    const L = nombres(200);
+    for (const nw of [1, 3, 8, 32, 40, MAX_WINNERS, MAX_WINNERS + 20]) {
       const w = poseWinners(L, nw, "semilla");
-      expect(w).toHaveLength(Math.min(nw, 32));
+      expect(w).toHaveLength(Math.min(nw, MAX_WINNERS));
       expect(new Set(w).size).toBe(w.length);
       expect(w.every((i) => i >= 0 && i < L.length)).toBe(true);
     }

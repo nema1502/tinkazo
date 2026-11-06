@@ -12,12 +12,13 @@ export function initPlegables(): void {
   const mas = document.getElementById("mas-opciones") as HTMLDetailsElement | null;
   if (!mas) return;
   const prize = document.getElementById("prize") as HTMLInputElement | null;
-  const nw = document.getElementById("nw") as HTMLSelectElement | null;
+  const nw = document.getElementById("nw") as HTMLInputElement | null;
   const revisar = (): void => {
     if ((prize?.value.trim() ?? "") !== "" || (nw !== null && nw.value !== "1")) mas.open = true;
   };
   prize?.addEventListener("input", revisar);
   nw?.addEventListener("change", revisar);
+  nw?.addEventListener("input", revisar);
   // Un premio que se pone por código (los chips, "Siguiente premio") no avisa con un evento: se mira al tocar.
   mas.parentElement?.addEventListener("click", () => setTimeout(revisar, 0));
   window.addEventListener("pageshow", revisar);

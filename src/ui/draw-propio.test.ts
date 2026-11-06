@@ -73,7 +73,7 @@ beforeEach(() => {
   h.drawOnChain.mockReset();
   h.verError.mockReset();
   h.contar.mockReset();
-  document.body.innerHTML = `<button id="btn-draw"></button><div id="draw-status"></div><select id="nw"><option value="1">1</option></select>`;
+  document.body.innerHTML = `<button id="btn-draw"></button><div id="draw-status"></div><input id="nw" type="number" value="1">`;
 });
 
 describe("sortear con el servicio que paga caído", () => {

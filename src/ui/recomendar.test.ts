@@ -1,15 +1,17 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { CARRILES_CARRERA, JUEGO_DE_SIEMPRE, SELECTOR, juegoPorDefecto, juegoSiguiente, rangoParaLeer, rangoVisible, recomendar, type Recomendacion } from "./recomendar";
+import { AGUJEROS_SAPO, CARRILES_CARRERA, JUEGO_DE_SIEMPRE, SELECTOR, cabenLosPremios, juegoPorDefecto, juegoSiguiente, rangoParaLeer, rangoVisible, recomendar, type Recomendacion } from "./recomendar";
 import { T } from "../i18n";
 import { JUEGOS } from "../games/pixi/kit/catalogo";
 import { FINALISTAS } from "../games/llamas/carrera-base";
+import { SAPO_MAX } from "../games/pixi/sapo-plan";
+import { MAX_WINNERS } from "../protocol/select";
 import type { Game } from "../state";
 
 describe("los textos de la recomendación, en es y en en", () => {
   it("cada nota que puede salir tiene su frase en los dos idiomas", () => {
     const claves = new Set<string>(["recBadge", "recHead"]);
-    for (let n = 1; n <= 210; n++) for (const premios of [1, 9]) for (const r of recomendar(n, premios).games) if (r.note) claves.add(r.note);
+    for (let n = 1; n <= 210; n++) for (const premios of [1, 9, 13, MAX_WINNERS]) for (const r of recomendar(n, premios).games) if (r.note) claves.add(r.note);
     for (const l of ["es", "en"] as const) {
       const faltan = [...claves].filter((k) => {
         const v = T[l][k];
@@ -382,7 +384,7 @@ describe("la carrera y los premios: cada premio es un carril de la recta", () =>
   it("con ocho premios o menos la carrera encaja como siempre; con nueve o más, no, y dice por qué", () => {
     for (const n of [12, 20, 60, 200]) {
       for (const premios of [undefined, 1, 4, 8]) expect(carrera(n, premios).fits, `${n} personas, ${premios} premios`).toBe(true);
-      for (const premios of [9, 12, 32]) {
+      for (const premios of [9, 12, 32, 50, MAX_WINNERS]) {
         const r = carrera(n, premios);
         expect(r.fits, `${n} personas, ${premios} premios`).toBe(false);
         expect(r.note).toBe("rec.race.premios");
@@ -411,5 +413,74 @@ describe("la carrera y los premios: cada premio es un carril de la recta", () =>
     // Con uno, como siempre.
     expect(juegoPorDefecto(20)).toBe("race");
     expect(juegoPorDefecto(20, 8)).toBe("race");
+  });
+});
+
+describe("el sapo y los premios: cada premio es un agujero de la final", () => {
+  const sapo = (n: number, premios?: number): Recomendacion => recomendar(n, premios).games.find((r) => r.game === "sapo") as Recomendacion;
+
+  it("los agujeros de acá son los del sapo (este módulo no puede importar su medida: viaja con la portada)", () => {
+    expect(AGUJEROS_SAPO).toBe(SAPO_MAX);
+  });
+
+  it("hasta doce premios el sapo encaja como siempre; con trece o más, no, y dice por qué", () => {
+    for (const n of [12, 20, 40]) {
+      for (const premios of [undefined, 1, 3, 12]) expect(sapo(n, premios).fits, `${n} personas, ${premios} premios`).toBe(true);
+      for (const premios of [13, 20, 32, 40]) {
+        if (premios > n) continue;
+        const r = sapo(n, premios);
+        expect(r.fits, `${n} personas, ${premios} premios`).toBe(false);
+        expect(r.note).toBe("rec.sapo.premios");
+        expect(r.args).toEqual([n, premios, 12]);
+      }
+    }
+    expect((T.es["rec.sapo.premios"] as (...a: number[]) => string)(20, 13, 12)).toBe("Con 13 premios no entra: la mesa del sapo tiene 12 agujeros.");
+    expect((T.en["rec.sapo.premios"] as (...a: number[]) => string)(20, 13, 12)).toContain("13 prizes");
+  });
+
+  it("con trece premios o más no queda elegido el sapo, ni de siempre ni de siguiente", () => {
+    for (const n of [13, 20, 30, 40]) {
+      expect(juegoPorDefecto(n, 13), `${n} personas`).not.toBe("sapo");
+      for (const actual of SELECTOR) expect(juegoSiguiente(n, actual, 13), `${n} personas, después de ${actual}`).not.toBe("sapo");
+    }
+  });
+});
+
+describe("muchos ganadores: hasta cien, con los juegos que los cuentan", () => {
+  it("cabenLosPremios: la carrera hasta ocho, el sapo hasta doce, el resto cualquier cantidad", () => {
+    expect(cabenLosPremios("race", 8)).toBe(true);
+    expect(cabenLosPremios("race", 9)).toBe(false);
+    expect(cabenLosPremios("sapo", 12)).toBe(true);
+    expect(cabenLosPremios("sapo", 13)).toBe(false);
+    for (const g of SELECTOR) {
+      if (g === "race" || g === "sapo") continue;
+      expect(cabenLosPremios(g, MAX_WINNERS), g).toBe(true);
+    }
+  });
+
+  it("con 33, 50 y 100 ganadores: la carrera y el sapo salen, y siempre queda algo que encaja", () => {
+    for (const [n, premios] of [[33, 33], [50, 33], [60, 50], [100, 50], [100, 100], [150, 100], [200, 100]] as const) {
+      const r = recomendar(n, premios).games;
+      for (const g of ["race", "sapo"] as const) {
+        const x = r.find((y) => y.game === g) as Recomendacion;
+        expect(x.fits, `${g}: ${n} personas, ${premios} ganadores`).toBe(false);
+      }
+      const buenos = r.filter((x) => x.fits === true);
+      expect(buenos.length, `${n} personas, ${premios} ganadores`).toBeGreaterThan(0);
+      for (const x of buenos) expect(cabenLosPremios(x.game, premios), `${x.game} con ${premios}`).toBe(true);
+      // Lo que queda elegido y lo que sigue cuentan todos los premios.
+      expect(cabenLosPremios(juegoPorDefecto(n, premios), premios), `por defecto con ${n}/${premios}`).toBe(true);
+      for (const actual of SELECTOR) expect(cabenLosPremios(juegoSiguiente(n, actual, premios), premios), `después de ${actual}, ${n}/${premios}`).toBe(true);
+    }
+  });
+
+  it("si ningún juego encaja con la cantidad de personas, igual no queda uno que no cuente los premios", () => {
+    for (const premios of [9, 13, MAX_WINNERS]) expect(cabenLosPremios(juegoPorDefecto(500, premios), premios), `${premios} premios`).toBe(true);
+    expect(juegoPorDefecto(500, 1)).toBe(JUEGO_DE_SIEMPRE);
+  });
+
+  it("con el máximo de ganadores y todos en la lista (el modo orden), la ruleta sigue siendo una opción", () => {
+    const ruleta = recomendar(100, MAX_WINNERS).games.find((r) => r.game === "wheel") as Recomendacion;
+    expect(ruleta.fits).not.toBe(false);
   });
 });

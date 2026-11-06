@@ -61,7 +61,7 @@ const JUEGOS = ["race", "sapo", "trompo", "chovena", "pinata", "wheel", "quien",
 
 function armarPagina(): void {
   document.body.innerHTML =
-    `<button id="btn-freeze"></button><input id="prize" value=""><select id="nw"><option value="1">1</option></select><div id="seal-status"></div>` +
+    `<button id="btn-freeze"></button><input id="prize" value=""><input id="nw" type="number" value="1"><div id="seal-status"></div>` +
     ["freeze-hint", "free-rule", "sec-frozen", "k-n", "k-digest", "k-status", "frozen-ts", "wheel-cap", "juego-actual", "rec-sel-nota"].map((id) => `<div id="${id}"></div>`).join("") +
     `<p id="juego-nota" hidden></p><div id="gamepick">${JUEGOS.map((g) => `<button id="g-${g}"><span>${g}</span></button>`).join("")}</div>`;
   Element.prototype.scrollIntoView = () => undefined;

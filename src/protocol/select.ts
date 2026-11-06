@@ -1,7 +1,16 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 
-/** Cota superior de ganadores, igual que `MAX_WINNERS` en el contrato. */
-export const MAX_WINNERS = 32;
+/**
+ * Cota superior de ganadores por sorteo, igual que `MAX_WINNERS` en el contrato
+ * (`contracts/raffle/src/lib.rs`). Es la única que hay en el sitio: la selección,
+ * el verificador y el campo de «Cuántos ganan» la leen de acá.
+ *
+ * Hasta el despliegue de mainnet el contrato tenía 32, y el que sigue en testnet
+ * lo tiene todavía: lo que cada red admite hoy está en `maxWinners` de
+ * `src/stellar/deployments.json` (ver `topeDeGanadores` en `stellar/config.ts`).
+ * Esta constante es lo que el protocolo permite; la de la red, lo que se ofrece.
+ */
+export const MAX_WINNERS = 100;
 
 /**
  * Selección determinista (docs/protocolo.md §5). Idéntica a

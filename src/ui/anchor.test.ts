@@ -1336,3 +1336,21 @@ describe("'Sellar pagando con mi cuenta': Pollar solo firma, sin patrocinio, y s
     expect((error as Error).message).toMatch(/tx-REJECTED/);
   });
 });
+
+describe("más ganadores de los que admite el contrato de la red", () => {
+  const simulacionFallida = (): Error =>
+    new Error('Transaction simulation failed: "HostError: Error(Contract, #4)\n\nEvent log (newest first):\n   0: [Diagnostic Event] topics:[error, Error(Contract, #4)]"');
+
+  it("si se pidieron más de 32, dice que esa red todavía admite hasta 32 (y no que sobran ganadores)", async () => {
+    h.wallet = pollar();
+    const { anchorErrorText } = await import("./anchor");
+    expect(await anchorErrorText(simulacionFallida(), "sello", 50)).toBe("Esta red todavía admite hasta 32 ganadores por sorteo. Elegí 32 o menos y probá de nuevo.");
+  });
+
+  it("con 32 o menos es el mensaje de siempre", async () => {
+    h.wallet = pollar();
+    const { anchorErrorText } = await import("./anchor");
+    expect(await anchorErrorText(simulacionFallida(), "sello", 32)).toBe("Esa cantidad de ganadores no va. Elegí menos que las personas de la lista.");
+    expect(await anchorErrorText(simulacionFallida(), "sello")).toBe("Esa cantidad de ganadores no va. Elegí menos que las personas de la lista.");
+  });
+});

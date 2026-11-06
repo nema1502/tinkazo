@@ -21,6 +21,8 @@ import { listaVinoDeLuma, setList } from "./participants";
 import { CARD_SECONDS, type GameCard, showGameCard } from "./gamecard";
 import { actualizarPaso, verError } from "./siguiente";
 import { marcarSalio, olvidarSalieron, ponerPremio } from "./premios";
+import { ganadoresPedidos, ponerGanadores } from "./ganadores";
+import { alTocarAusente, htmlDeGanadores } from "./resultado-ganadores";
 import { acortar, alAcortar, cortoGuardado, ponerLogoDeRuta, rutaDe } from "../enlace-corto";
 import { logoPorHuella } from "../logo-guardado";
 import { pintarLogoEnElResultado, quitarLogoDelResultado } from "./logo-sorteo";
@@ -116,7 +118,7 @@ export async function draw(): Promise<void> {
     }
 
     const { names, listHash, raffleId } = app.frozen;
-    const nWinners = Math.min(parseInt($<HTMLSelectElement>("nw").value, 10), names.length);
+    const nWinners = Math.min(ganadoresPedidos(), names.length);
     let winners: number[] = [];
     let drawTx: string | undefined;
 
@@ -311,13 +313,13 @@ async function ofrecerRecuperacion(status: HTMLElement, causa: "notFound" | "alr
     ejecutar: () => {
       if (app.frozen !== sello) return;
       if (!ausencia) { location.assign(enlace); return; }
-      const cantidad = $<HTMLSelectElement>("nw").value;
+      const cantidad = ganadoresPedidos();
       recuperacion = null;
       // Usa el camino existente: cancela esperas/reintentos, abre los campos y
       // activa la guarda contra doble toque. No toca la sesión ni la red.
       unfreeze(sello.names.join("\n"));
       ponerPremio(sello.prize);
-      $<HTMLSelectElement>("nw").value = cantidad;
+      ponerGanadores(cantidad);
       status.style.display = "none";
       $<HTMLButtonElement>("btn-draw").dataset.i = "draw";
       $("sec-participants").scrollIntoView({ block: "start" });
@@ -584,24 +586,8 @@ export function reveal(names: string[], winners: number[], beacon: Beacon, listH
   // "No está" solo si queda con quién volver a sortear: dos personas, como
   // en "Otro premio".
   const reemplazo = names.length - winners.length >= 2;
-  $("winner-cards").innerHTML = winners
-    .map((i, k) => {
-      const name = names[i] ?? "";
-      const tag = prize
-        ? `<p class="winner-prize"><span data-i="winsPrize">${esc(t("winsPrize"))}</span> ${esc(prize)}${winners.length > 1 ? ` #${k + 1}` : ""}</p>`
-        : winners.length > 1
-          ? `<p class="winner-prize">#${k + 1}</p>`
-          : "";
-      return `<div class="winner-card" style="transform: rotate(${k % 2 ? 1.5 : -1.5}deg)">
-        <img src="${avatar(name, 128)}" alt="" />
-        <div>
-          <p class="winner-name" id="wn-${k}">${esc(name)}</p>
-          ${tag}
-          ${reemplazo ? `<div class="ausente" data-k="${k}">${botonAusente(k)}</div>` : ""}
-        </div>
-      </div>`;
-    })
-    .join(" ");
+  // Hasta seis, una tarjeta cada uno; con más, el primero en tarjeta y los demás en una lista (`resultado-ganadores.ts`).
+  $("winner-cards").innerHTML = htmlDeGanadores({ names, winners, prize, reemplazo, avatar });
   const proof = $("proof");
   proof.textContent =
     `Draw: quicknet round=${beacon.round}, ${t("proofOk")} ✓, randomness=${beacon.randomness.slice(0, 24)}…, list_hash=${listHash.slice(0, 24)}…, count=${names.length}, winners=[${winners.join(",")}]`;
@@ -822,14 +808,13 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   if (modo === "otraLista") olvidarSalieron();
   // "Premios" no puede quedar en más que los que quedan: con 2 personas y 3
   // premios, el próximo sorteo los premiaba a todos sin avisar.
-  const nw = $<HTMLSelectElement>("nw");
   if (modo === "ausente") {
     // El reemplazo es uno solo y se lleva lo mismo que se iba a llevar quien
     // no estaba. Los otros ganadores, si los hubo, se quedan con lo suyo y no
     // entran a este sorteo.
-    nw.value = "1";
+    ponerGanadores(1);
     ponerPremio(premio);
-  } else if (quedan.length) nw.value = String(Math.max(1, Math.min(parseInt(nw.value, 10) || 1, quedan.length - 1)));
+  } else if (quedan.length) ponerGanadores(Math.min(ganadoresPedidos(), Math.max(1, quedan.length - 1)));
   // Arriba del cuadro, qué cambió: quién salió de la lista, o cómo volver.
   const L = T[getLang()];
   const nota = $("again-note");
@@ -864,15 +849,6 @@ export function newDraw(modo: "sinGanadores" | "otraLista" | "ausente", k = -1):
   actualizarPaso();
 }
 
-/** El botón "No está" de una tarjeta; describe a quién se refiere con el nombre de la tarjeta. */
-const botonAusente = (k: number): string =>
-  `<button class="ausente-btn" type="button" data-ausente aria-describedby="wn-${k}" data-i="ausenteBtn">${esc(t("ausenteBtn"))}</button>`;
-
-const preguntaAusente = (): string =>
-  `<p class="ausente-q" data-i="ausenteQ">${esc(t("ausenteQ"))}</p>` +
-  `<button class="ausente-btn si" type="button" data-ausente-si data-i="ausenteSi">${esc(t("ausenteSi"))}</button>` +
-  `<button class="ausente-btn" type="button" data-ausente-no data-i="ausenteNo">${esc(t("ausenteNo"))}</button>`;
-
 /**
  * "No está": quien ganó ya se fue, cosa que pasa en casi todo evento. Su
  * premio vuelve a sortearse entre los que quedan, con un sello nuevo: el
@@ -881,18 +857,7 @@ const preguntaAusente = (): string =>
  * clic de más frente a la sala no puede borrar al ganador de la pantalla.
  */
 export function alTocarGanadores(e: Event): void {
-  const b = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>("button");
-  const caja = b?.closest<HTMLElement>(".ausente");
-  if (!b || !caja) return;
-  const k = Number(caja.dataset.k);
-  if (b.dataset.ausenteSi !== undefined) {
-    newDraw("ausente", k);
-    return;
-  }
-  const preguntar = b.dataset.ausente !== undefined;
-  caja.innerHTML = preguntar ? preguntaAusente() : botonAusente(k);
-  // El foco va a "Cancelar": con él en "Sí", dos Enter seguidos borraban al ganador.
-  caja.querySelector<HTMLButtonElement>(preguntar ? "[data-ausente-no]" : "[data-ausente]")?.focus({ preventScroll: true });
+  alTocarAusente(e, (k) => newDraw("ausente", k));
 }
 
 /** La lista del sorteo anterior, para "Recuperar la lista anterior". */

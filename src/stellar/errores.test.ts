@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { codigoTecnico, errorKey, esDeRed, textoDelError } from "./errores";
+import { TOPE_DE_LOS_CONTRATOS_VIEJOS, codigoTecnico, errorKey, esDeRed, textoDelError } from "./errores";
 
 /**
  * El corpus: los errores de verdad de cada fuente, con lo que tiene que decir la
@@ -258,8 +258,23 @@ describe("sin saldo con una cuenta que no paga la comisión (Pollar patrocina)",
   });
 });
 
+describe("más ganadores de los que admite la red (el contrato de testnet de hoy tiene tope 32)", () => {
+  it("el error 4 sigue siendo badWinnerCount aunque se pidan más de 32: el contador cuenta el error del contrato", () => {
+    expect(TOPE_DE_LOS_CONTRATOS_VIEJOS).toBe(32);
+    expect(errorKey(simulacion("Error(Contract, #4)"))).toBe("badWinnerCount");
+  });
+
+  it("el mensaje para ese caso dice cuánto admite la red, en español y en inglés (ver anchor.test.ts)", async () => {
+    const { T } = await import("../i18n");
+    expect(T.es["errAnchor.badWinnerCountViejo"]).toMatch(/{tope}/);
+    expect(T.en["errAnchor.badWinnerCountViejo"]).toMatch(/{tope}/);
+    expect(T.es["errAnchor.badWinnerCountViejo"]).toMatch(/todavía admite/);
+    expect(T.en["errAnchor.badWinnerCountViejo"]).toMatch(/still allows/);
+  });
+});
+
 describe("cada clave tiene su mensaje: qué pasó y qué hacer, sin tecnicismos", () => {
-  const claves = [...new Set([...CORPUS.map(([, , , clave]) => clave), "offline", "unconfirmed", "accountNotReady", "wallet", "unknown"])];
+  const claves = [...new Set([...CORPUS.map(([, , , clave]) => clave), "offline", "unconfirmed", "accountNotReady", "wallet", "unknown", "badWinnerCountViejo"])];
 
   it.each(claves)("errAnchor.%s", async (clave) => {
     const { T } = await import("../i18n");

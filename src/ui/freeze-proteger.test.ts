@@ -85,7 +85,7 @@ vi.mock("./sin-sello", () => ({ reintentarSello: async () => undefined }));
 vi.mock("./sin-sello-textos", () => ({ claveDelSello: () => "", ponerTextoDelSello: () => undefined, sinSelloAhora: () => false }));
 
 function armarPagina(): void {
-  document.body.innerHTML = `<button id="btn-freeze"></button><input id="prize" value="Una pizza"><select id="nw"><option value="1">1</option></select><div id="seal-status"></div>${["freeze-hint", "free-rule", "sec-frozen", "k-n", "k-digest", "k-status", "frozen-ts", "wheel-cap"].map((id) => `<div id="${id}"></div>`).join("")}<button id="g-wheel"></button>`;
+  document.body.innerHTML = `<button id="btn-freeze"></button><input id="prize" value="Una pizza"><input id="nw" type="number" value="1"><div id="seal-status"></div>${["freeze-hint", "free-rule", "sec-frozen", "k-n", "k-digest", "k-status", "frozen-ts", "wheel-cap"].map((id) => `<div id="${id}"></div>`).join("")}<button id="g-wheel"></button>`;
   // jsdom no trae scrollIntoView.
   Element.prototype.scrollIntoView = () => undefined;
 }

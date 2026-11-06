@@ -43,6 +43,14 @@ export const CONTRACT_ERRORS: Record<number, string> = {
 };
 
 /**
+ * Cuántos ganadores admitían los contratos hasta el que sube el tope a 100 (el de testnet del 25 de octubre de 2026
+ * todavía lo tiene). Con más pedidos, el contrato devuelve el error 4 aunque la lista alcance: no es que sobren
+ * ganadores, es que esa red todavía no llega. La clave sigue siendo `badWinnerCount` (el contador de errores la cuenta
+ * como lo que es, el error 4); quien muestra el mensaje (`anchorErrorText`) lo cambia si sabe cuántos se pidieron.
+ */
+export const TOPE_DE_LOS_CONTRATOS_VIEJOS = 32;
+
+/**
  * La cuenta existe y no tiene con qué pagar la comisión. Cada quien lo cuenta a
  * su manera: la red dice `tx_insufficient_balance` (o `txINSUFFICIENT_BALANCE`),
  * Pollar lo guarda como `txInsufficientBalance` y le agrega "Insufficient XLM to

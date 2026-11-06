@@ -512,6 +512,8 @@ export const T: Record<Lang, Dict> = {
     impMailSame: "mismo correo",
     impMailOther: "otro correo",
     sample: "Cargar ejemplo", freeze: "Sellar la lista", draw: "Lanzar el sorteo", winners: "Cuántos ganan",
+    // El campo de «Cuántos ganan» (src/ui/ganadores.ts): los atajos y el aviso cuando se pidió de más.
+    winnersAtajos: "Atajos para cuántos ganan", winnersTope: "Hasta {n} ganadores por sorteo.",
     // --- Tarjetas de "¿por qué se llama así?". Cada dato tiene su fuente
     //     primaria anotada en src/games/lore.ts. Ninguno se inventa.
     // --- Ruleta. Cada persona se lleva varios gajos intercalados, así que con
@@ -896,6 +898,7 @@ export const T: Record<Lang, Dict> = {
     "rec.race.largo": (n: number, _min: number, max: number) => `Con ${n}, pasa de las ${max} que aguanta la carrera.`,
     "rec.race.corto": "Con una sola persona no hay carrera.",
     "rec.race.premios": (_n: number, premios: number, carriles: number) => `Con ${premios} premios no entra: la carrera tiene ${carriles} carriles.`,
+    "rec.sapo.premios": (_n: number, premios: number, agujeros: number) => `Con ${premios} premios no entra: la mesa del sapo tiene ${agujeros} agujeros.`,
     "rec.sapo.ideal": "Un agujero por persona en la mesa: cada tiro se siente.",
     "rec.sapo.bajo": "Con pocos, la mesa tiene pocos agujeros y pocos tiros.",
     "rec.sapo.alto": "Más de 12 pasan por una clasificatoria, y los que salen miran.",
@@ -1057,6 +1060,9 @@ export const T: Record<Lang, Dict> = {
     cortinaNumero: "Está llegando el número que decide…",
     // Suelto, "No está" se leía en el proyector como que la persona no estaba (evaluación crítica de experiencia, hallazgo 8).
     ausenteBtn: "¿No está? Sortear de nuevo",
+    ausenteBtnCorto: "No está",
+    // Con más de seis ganadores (src/ui/resultado-ganadores.ts): el primero en su tarjeta y los demás en una lista.
+    winnersOtros: "Los otros {n} ganadores, en orden", winnersCadaUno: "Cada quien se lleva:",
     ausenteQ: "¿Sorteamos de nuevo su premio?",
     ausenteSi: "Sí, sortear de nuevo",
     ausenteNo: "Cancelar",
@@ -2000,6 +2006,7 @@ export const T: Record<Lang, Dict> = {
     "errAnchor.alreadyDrawn": "Ese sorteo ya tiene ganador. Mirá el resultado registrado: se abre en otra página.",
     "errAnchor.tooFewEntries": "Con uno solo no hay sorteo. Agregá al menos dos.",
     "errAnchor.badWinnerCount": "Esa cantidad de ganadores no va. Elegí menos que las personas de la lista.",
+    "errAnchor.badWinnerCountViejo": "Esta red todavía admite hasta {tope} ganadores por sorteo. Elegí {tope} o menos y probá de nuevo.",
     "errAnchor.roundTooSoon": "Esa ronda está demasiado cerca. Probá de nuevo.",
     "errAnchor.roundTooFar": "La hora de tu equipo está corrida y la ronda quedó a más de 30 días. Corregila y probá de nuevo.",
     "errAnchor.roundNotReady": "Esa ronda todavía no se publica. Esperá unos segundos y probá de nuevo.",
@@ -2720,6 +2727,7 @@ export const T: Record<Lang, Dict> = {
     impMailSame: "same email",
     impMailOther: "different email",
     sample: "Load sample", freeze: "Seal the list", draw: "Run the draw", winners: "How many win",
+    winnersAtajos: "Shortcuts for how many win", winnersTope: "Up to {n} winners per draw.",
     cWheelBuild: ["Building the wheel!", "Slices lining up!", "Here comes the wheel!"],
     cWheelSplit: (segs, rep) => (rep > 1 ? `${segs} slices, ${rep} each!` : `${segs} slices, one apiece!`),
     cWheelCharge: ["Ready?", "It's winding up!", "Hold on!"],
@@ -3086,6 +3094,7 @@ export const T: Record<Lang, Dict> = {
     "rec.race.largo": (n: number, _min: number, max: number) => `With ${n}, it is over the ${max} the race can take.`,
     "rec.race.corto": "With just one person, there's no race.",
     "rec.race.premios": (_n: number, premios: number, carriles: number) => `With ${premios} prizes it doesn't fit: the race has ${carriles} lanes.`,
+    "rec.sapo.premios": (_n: number, premios: number, agujeros: number) => `With ${premios} prizes it doesn't fit: the frog's table has ${agujeros} holes.`,
     "rec.sapo.ideal": "One hole per person on the table: every throw counts.",
     "rec.sapo.bajo": "With few people, the table has few holes and few throws.",
     "rec.sapo.alto": "Over 12 go through a qualifier, and those who drop out watch.",
@@ -3233,6 +3242,8 @@ export const T: Record<Lang, Dict> = {
     cortinaGraba: "Recording the draw so nobody can change it…",
     cortinaNumero: "The number that decides is on its way…",
     ausenteBtn: "Not here? Draw again",
+    ausenteBtnCorto: "Not here",
+    winnersOtros: "The other {n} winners, in order", winnersCadaUno: "Each one takes home:",
     ausenteQ: "Draw this prize again?",
     ausenteSi: "Yes, draw again",
     ausenteNo: "Cancel",
@@ -4169,6 +4180,7 @@ export const T: Record<Lang, Dict> = {
     "errAnchor.alreadyDrawn": "That draw already has a winner. See the recorded result: it opens on another page.",
     "errAnchor.tooFewEntries": "One name is not a draw. Add at least two.",
     "errAnchor.badWinnerCount": "That number of winners doesn't work. Pick fewer than the people on the list.",
+    "errAnchor.badWinnerCountViejo": "This network still allows up to {tope} winners per draw. Pick {tope} or fewer and try again.",
     "errAnchor.roundTooSoon": "That round is too close. Try again.",
     "errAnchor.roundTooFar": "Your device's clock is off and the round ended up more than 30 days away. Fix it and try again.",
     "errAnchor.roundNotReady": "That round isn't published yet. Wait a few seconds and try again.",

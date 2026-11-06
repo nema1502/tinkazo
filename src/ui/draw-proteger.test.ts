@@ -78,7 +78,7 @@ beforeEach(() => {
   h.pide.mockReset();
   h.proteger.mockReset();
   h.contar.mockReset();
-  document.body.innerHTML = `<button id="btn-draw"></button><div id="draw-status"></div><select id="nw"><option value="1">1</option></select>`;
+  document.body.innerHTML = `<button id="btn-draw"></button><div id="draw-status"></div><input id="nw" type="number" value="1">`;
   h.pide.mockImplementation(async (e: unknown) => e instanceof Error && /RECOVERY_REQUIRED/.test(e.message));
 });
 

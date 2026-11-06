@@ -713,15 +713,20 @@ export function selloSinGrabar(e: unknown): boolean {
  * Mensaje de error de una invocación, ya traducido. Clasifica sin el SDK de
  * Stellar (`errores.ts`): si la red se cayó antes de bajarlo, igual se dice qué
  * pasó. Una clave sin texto cae en el mensaje genérico, nunca en la clave cruda.
+ * `ganadores`, si se sabe, es cuántos se pidieron al sellar: con el error de cantidad
+ * de ganadores dice si la red todavía admite menos de lo pedido (`errores.ts`).
  */
-export async function anchorErrorText(e: unknown, paso?: "sello" | "sorteo"): Promise<string> {
+export async function anchorErrorText(e: unknown, paso?: "sello" | "sorteo", ganadores?: number): Promise<string> {
   try {
-    const { errorKey, esNoDelPortero } = await import("../stellar/errores");
+    const { errorKey, esNoDelPortero, TOPE_DE_LOS_CONTRATOS_VIEJOS } = await import("../stellar/errores");
     let tipo = errorKey(e, { patrocinada: await cuentaPatrocinada() });
     // Con el sorteo ya sellado la frase cambia: la lista no se pierde y el ganador va a ser el mismo. Vale igual cuando el
     // que no puede pagar es el portero (`porteroFondo`) que cuando es el patrocinio de Pollar (`sponsorEmpty`, cuyo texto
     // habla de "sellar" y al sortear confundía).
     if ((tipo === "porteroFondo" || tipo === "sponsorEmpty") && paso === "sorteo") tipo = "porteroFondoSorteo";
+    // El error de cantidad con más ganadores de los que admitían los contratos viejos: no sobran ganadores, la red todavía no llega.
+    // La clave del error (para el contador y el detalle) sigue siendo la del contrato; solo cambia lo que se lee.
+    if (tipo === "badWinnerCount" && (ganadores ?? 0) > TOPE_DE_LOS_CONTRATOS_VIEJOS) tipo = "badWinnerCountViejo";
     const clave = "errAnchor." + tipo;
     let texto = t(clave);
     if (!texto || texto === clave) return t("errAnchor.unknown");
@@ -730,7 +735,7 @@ export async function anchorErrorText(e: unknown, paso?: "sello" | "sorteo"): Pr
       const { fechaOCercana } = await import("../stellar/patrocinador");
       texto = texto.replaceAll("{fecha}", fechaOCercana((e as unknown as { liberaEn?: unknown }).liberaEn, getLang(), t("errAnchor.cupoPronto")));
     }
-    const dicho = texto.replaceAll("{fecha}", t("errAnchor.cupoPronto"));
+    const dicho = texto.replaceAll("{fecha}", t("errAnchor.cupoPronto")).replaceAll("{tope}", String(TOPE_DE_LOS_CONTRATOS_VIEJOS));
     // Con el sorteo sin hacer, no se pierde: queda en Mis sorteos para sortearlo después.
     return paso === "sorteo" && (tipo === "porteroFondoSorteo" || tipo === "porteroCupoSorteos") ? `${dicho} ${t("sorteoMasTarde")}` : dicho;
   } catch {
@@ -766,12 +771,12 @@ const sinConexion = (): string =>
  * igual queda el mensaje: medido el 21 de octubre de 2026 con DevTools sin red,
  * sin esto el sellado terminaba sin decir nada.
  */
-export async function escribirError(status: HTMLElement, e: unknown, paso: "sello" | "sorteo"): Promise<void> {
+export async function escribirError(status: HTMLElement, e: unknown, paso: "sello" | "sorteo", ganadores?: number): Promise<void> {
   try {
-    await (await import("./detalle-error")).mostrarError(status, e, paso);
+    await (await import("./detalle-error")).mostrarError(status, e, paso, ganadores);
   } catch {
     limpiarDetalle(status.id);
-    status.textContent = await anchorErrorText(e, paso);
+    status.textContent = await anchorErrorText(e, paso, ganadores);
   }
 }
 

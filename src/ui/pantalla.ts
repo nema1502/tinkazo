@@ -13,6 +13,9 @@ import { piezaParaLaSala } from "./logo-sorteo";
  */
 const ESPERA_CORTO_MS = 2_000;
 
+/** Hasta cuántos ganadores salen cada uno con su cara; con más, una lista de renglones cortos (ver `mostrarResultado`). */
+export const MAX_CON_CARA = 12;
+
 /**
  * El resultado en grande, para el proyector: quién salió, qué se lleva, y el
  * QR del comprobante para que la sala lo compruebe desde el celular. Sin el
@@ -49,6 +52,9 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   // nombres pero no qué se llevaban (evaluación de la subida 2, hallazgo 7):
   // ahora va en su propia línea, "Se llevan: …", con la letra de los nombres.
   const muchos = n > 5;
+  // Con más de doce, las tarjetas con cara no entran ni en dos columnas (cien tarjetas son diez pantallas): una lista
+  // de renglones cortos, número y nombre, en tantas columnas como entren, con la letra más grande que deje todos a la vista.
+  const lista = n > MAX_CON_CARA;
   // Un sorteo que se siguió sin sello no promete lo que no se puede comprobar: ni "comprobalo vos" ni "nadie eligió".
   const sinSello = sinSelloAhora(frozen);
 
@@ -57,7 +63,7 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
   const siguiente = sig ? (sig.textContent ?? "").replace(/\s+/g, " ").trim() : "";
 
   const back = document.createElement("div");
-  back.className = `sala pantalla${varios ? " varios" : ""}${muchos ? " muchos" : ""}`;
+  back.className = `sala pantalla${varios ? " varios" : ""}${muchos ? " muchos" : ""}${lista ? " lista" : ""}`;
   back.setAttribute("role", "dialog");
   back.setAttribute("aria-modal", "true");
   back.setAttribute("aria-label", t("pantallaT"));
@@ -69,16 +75,20 @@ export async function mostrarResultado(enlace: string | Promise<string>, op: { c
     `<div class="pantalla-body">` +
     `<div class="pantalla-ganadores">` +
     (varios && premio ? `<p class="pantalla-llevan">${esc(t("pantallaLlevan"))} <b>${esc(premio)}</b></p>` : "") +
-    drawn.winners
-      .map((i, k) => {
-        const nombre = frozen.names[i] ?? "";
-        const pie = varios ? `#${k + 1}` : premio ? `${esc(t("winsPrize"))} ${esc(premio)}` : "";
-        return (
-          `<div class="pantalla-ganador"><img src="${avatar(nombre, 160)}" alt="" />` +
-          `<div><p class="pantalla-nombre">${esc(nombre)}</p>${pie ? `<p class="pantalla-premio">${pie}</p>` : ""}</div></div>`
-        );
-      })
-      .join("") +
+    (lista
+      ? `<ol class="pantalla-lista">${drawn.winners
+          .map((i, k) => `<li class="pantalla-fila"><span class="pantalla-num" aria-hidden="true">#${k + 1}</span><span class="pantalla-nombre">${esc(frozen.names[i] ?? "")}</span></li>`)
+          .join("")}</ol>`
+      : drawn.winners
+          .map((i, k) => {
+            const nombre = frozen.names[i] ?? "";
+            const pie = varios ? `#${k + 1}` : premio ? `${esc(t("winsPrize"))} ${esc(premio)}` : "";
+            return (
+              `<div class="pantalla-ganador"><img src="${avatar(nombre, 160)}" alt="" />` +
+              `<div><p class="pantalla-nombre">${esc(nombre)}</p>${pie ? `<p class="pantalla-premio">${pie}</p>` : ""}</div></div>`
+            );
+          })
+          .join("")) +
     `</div>` +
     `<aside class="pantalla-qr"><img alt="" /><p>${esc(t(claveDelSello("qrEnGrande", sinSello)))}</p><p class="mono">tinkazo.app</p></aside>` +
     `</div>` +
@@ -172,7 +182,7 @@ function encajar(back: HTMLElement, n: number): void {
     (celular || cuerpo.scrollHeight <= cuerpo.clientHeight + 1);
   // Los nombres no bajan de la letra secundaria de la sala (2,6 % del alto) mientras entren; en el celular, que se desplaza, vale el 14 de siempre.
   let chico = celular ? 14 : Math.max(14, Math.round(innerHeight * LEGIBLE.fraccionSec));
-  let grande = n === 1 ? 132 : n <= 5 ? 84 : 52;
+  let grande = n === 1 ? 132 : n <= 5 ? 84 : back.classList.contains("lista") ? 40 : 52;
   caja.style.setProperty("--letra", `${grande}px`);
   if (entra()) return;
   while (grande - chico > 1) {
