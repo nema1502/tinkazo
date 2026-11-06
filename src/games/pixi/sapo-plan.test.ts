@@ -1,15 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   CAPTURE_CLEAR,
+  MOMENTOS_MONEDA,
   NEAR_MAX,
   NEAR_MIN,
   SAPO_MAX,
   arcPoint,
   fitsSapo,
   holeLayout,
+  momentoMoneda,
   optsForArc,
   planThrows,
   throwTime,
+  tomasDeTiros,
   type Throw,
 } from "./sapo-plan";
 
@@ -259,5 +262,62 @@ describe("sapo: motion helpers", () => {
       expect(throwTime(k, true)).toBeGreaterThanOrEqual(throwTime(k, false));
     }
     expect(throwTime("hit", true)).toBeGreaterThan(throwTime("miss", false) * 2);
+  });
+});
+
+describe("sapo: la toma de la moneda ganadora (cámara 3D)", () => {
+  it("marca un solo tiro, el último: el que entra en el agujero del último ganador (todas las n, 1..k ganadores, 64 semillas)", () => {
+    for (const seed of SEEDS) {
+      for (let n = 2; n <= SAPO_MAX; n++) {
+        for (const k of [1, Math.min(n, 2), Math.min(n, 4)]) {
+          const ws = winnersFor(n, k, seed);
+          const arc = (["susto", "duelo", "remontada", "tapada"] as const)[seed % 4] as "susto";
+          const th = planThrows(n, ws, rngOf(seed), optsForArc(arc), seed % 2 === 0);
+          const tomas = tomasDeTiros(th);
+          expect(tomas).toHaveLength(th.length);
+          expect(tomas.filter((t) => t === "moneda")).toHaveLength(1);
+          expect(tomas[tomas.length - 1]).toBe("moneda");
+          const ultimo = th[th.length - 1] as Throw;
+          expect(ultimo.kind).toBe("hit");
+          expect(ultimo.turn).toBe(k - 1);
+          expect(ultimo.targetSlot).toBe(ws[k - 1]);
+          // Los demás tiros, también los aciertos de los otros ganadores, siguen con la toma de siempre.
+          for (const t of tomas.slice(0, -1)) expect(t).toBe("seguir");
+        }
+      }
+    }
+  }, SWEEP_MS);
+
+  it("no toca el plan: misma ronda, mismo plan, mismas tomas, y el ganador intacto", () => {
+    for (const seed of SEEDS.slice(0, 20)) {
+      const a = planThrows(9, [3, 5], rngOf(seed), optsForArc("susto"), true);
+      const copia = JSON.parse(JSON.stringify(a)) as Throw[];
+      const tomas = tomasDeTiros(a);
+      expect(a).toEqual(copia);
+      expect(a).toEqual(planThrows(9, [3, 5], rngOf(seed), optsForArc("susto"), true));
+      expect(tomasDeTiros(planThrows(9, [3, 5], rngOf(seed), optsForArc("susto"), true))).toEqual(tomas);
+      expect((a[a.length - 1] as Throw).targetSlot).toBe(5);
+    }
+    expect(tomasDeTiros([])).toEqual([]);
+  });
+
+  it("los momentos de la toma van en orden: suelta, vuela y entra, dentro del vuelo", () => {
+    expect(MOMENTOS_MONEDA.suelta).toBe(0);
+    expect(MOMENTOS_MONEDA.vuela).toBeGreaterThan(MOMENTOS_MONEDA.suelta);
+    expect(MOMENTOS_MONEDA.entra).toBeGreaterThan(MOMENTOS_MONEDA.vuela);
+    expect(MOMENTOS_MONEDA.entra).toBeLessThan(1);
+    const orden = ["suelta", "vuela", "entra"];
+    let antes = 0;
+    for (let i = 0; i <= 100; i++) {
+      const m = orden.indexOf(momentoMoneda(i / 100));
+      expect(m).toBeGreaterThanOrEqual(antes);
+      antes = m;
+    }
+    expect(momentoMoneda(0)).toBe("suelta");
+    expect(momentoMoneda(0.5)).toBe("vuela");
+    expect(momentoMoneda(1)).toBe("entra");
+    // Fuera del vuelo no inventa nada: antes es la suelta, después ya entró.
+    expect(momentoMoneda(-1)).toBe("suelta");
+    expect(momentoMoneda(2)).toBe("entra");
   });
 });

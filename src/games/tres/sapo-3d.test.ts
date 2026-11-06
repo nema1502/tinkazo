@@ -1,15 +1,18 @@
 import { readFileSync } from "node:fs";
+import { Color, PerspectiveCamera, TorusGeometry, Vector3 } from "three";
 import { describe, expect, it } from "vitest";
 import { writeStory } from "../drama";
 import { planQualifier } from "../pixi/qualifier";
-import { HAND, MOUTH, SAPO_MAX, holeLayout, optsForArc, planThrows, type Point } from "../pixi/sapo-plan";
-import { Q_FLY, Q_SHOW, Q_WAVE, WOBBLE, tiemposDeTiros } from "../pixi/sapo-tiempos";
+import { HAND, MOMENTOS_MONEDA, MOUTH, SAPO_MAX, holeLayout, optsForArc, planThrows, tomasDeTiros, type Point } from "../pixi/sapo-plan";
+import { AFTER_FINAL, Q_FLY, Q_SHOW, Q_WAVE, SINK, WOBBLE, tiemposDeTiros } from "../pixi/sapo-tiempos";
 import { assignSlots } from "../pixi/slots";
-import { crearMapa, poseCamara } from "./camara";
+import { aplicarPose, crearMapa, poseCamara, type Pose3D } from "./camara";
 import { compararPuestos, type Puesto2D } from "./prueba";
 import {
-  TAPA_Y, ZOOM_MAX, alturaRana, aroDestacado, cajaDeAro, camaraDelSapo, deltaCamara, elevacionDe, encajarAntes, lugarDelMundo, luzDelGolpe, perfilSapo,
-  poseArgolla, proyectorDe, type AgujeroSapo, type ArgollaSapo, type AroDestacado, type EstadoArgolla,
+  AGUAYO, BANDERA, CAJON_MESA, MADERA_RUSTICA, SEGUIR, SOBRE_TAPA, TAPA_Y, TORO_R, TORO_T, ZOOM_MAX, agarraDe, alturaRana, anchoCajon, aroDestacado, cajaDeAro,
+  camaraDelSapo, camaraDelTiro, cercaniaDelTiro, colorTabla, deltaCamara, elevacionDe, encajarAntes, fondoCajon, franjaAguayo, franjaBandera, lugarDelMundo,
+  luzDelGolpe, mezclarPose, munecaDe, perfilDelTiro, perfilSapo, pesoMoneda, pintarArgolla, poseArgolla, poseMoneda, proyectorDe, suspensoDe, teeterSapo,
+  tomaDeArgolla, type AgujeroSapo, type ArgollaSapo, type AroDestacado, type EstadoArgolla, type PoseArgolla,
 } from "./sapo-3d";
 
 /**
@@ -251,6 +254,126 @@ describe("la cámara 3D sigue al director y no sabe quién gana", () => {
   });
 });
 
+describe("las argollas llevan los colores de la bandera de Bolivia", () => {
+  it("la bandera es rojo, amarillo y verde, de arriba abajo", () => {
+    expect(BANDERA).toEqual([0xd52b1e, 0xf9e300, 0x007934]);
+  });
+
+  it("cada franja ocupa un tercio de la argolla, de atrás (rojo) hacia adelante (verde)", () => {
+    const [rojo, amarillo, verde] = BANDERA;
+    expect(franjaBandera(-1, 1)).toBe(rojo);
+    expect(franjaBandera(-0.34, 1)).toBe(rojo);
+    expect(franjaBandera(-0.33, 1)).toBe(amarillo);
+    expect(franjaBandera(0, 1)).toBe(amarillo);
+    expect(franjaBandera(0.33, 1)).toBe(amarillo);
+    expect(franjaBandera(0.34, 1)).toBe(verde);
+    expect(franjaBandera(1, 1)).toBe(verde);
+    // La medida es relativa al radio: lo mismo a cualquier tamaño.
+    expect(franjaBandera(-0.5, 0.7)).toBe(rojo);
+    expect(franjaBandera(0.5, 0.7)).toBe(verde);
+  });
+
+  it("el aro pintado tiene las tres franjas netas: cada cara de un solo color y las tres presentes", () => {
+    const geo = pintarArgolla(new TorusGeometry(TORO_R, TORO_T, 5, 18).rotateX(Math.PI / 2));
+    const pos = geo.getAttribute("position");
+    const col = geo.getAttribute("color");
+    expect(geo.index).toBeNull();
+    expect(col.count).toBe(pos.count);
+    const lineales = BANDERA.map((h) => new Color(h));
+    const cuantas = [0, 0, 0];
+    for (let t = 0; t < pos.count; t += 3) {
+      const cual = lineales.findIndex((c) => Math.abs(c.r - col.getX(t)) < 1e-6 && Math.abs(c.g - col.getY(t)) < 1e-6 && Math.abs(c.b - col.getZ(t)) < 1e-6);
+      expect(cual).toBeGreaterThanOrEqual(0);
+      for (let k = 1; k < 3; k++) {
+        expect(col.getX(t + k)).toBe(col.getX(t));
+        expect(col.getY(t + k)).toBe(col.getY(t));
+        expect(col.getZ(t + k)).toBe(col.getZ(t));
+      }
+      // La franja sale del lugar de la cara alrededor del aro: atrás rojo, adelante verde.
+      const cz = (pos.getZ(t) + pos.getZ(t + 1) + pos.getZ(t + 2)) / 3;
+      const cx = (pos.getX(t) + pos.getX(t + 1) + pos.getX(t + 2)) / 3;
+      const zn = cz / Math.hypot(cx, cz);
+      if (zn < -0.4) expect(cual).toBe(0);
+      if (Math.abs(zn) < 0.3) expect(cual).toBe(1);
+      if (zn > 0.4) expect(cual).toBe(2);
+      cuantas[cual] = (cuantas[cual] as number) + 1;
+    }
+    for (const c of cuantas) expect(c).toBeGreaterThan(0);
+    // Rojo y verde, simétricos.
+    expect(cuantas[0]).toBe(cuantas[2]);
+  });
+
+  it("pintar la argolla no cambia su forma: la pose y la física siguen con el mismo toro", () => {
+    const base = new TorusGeometry(TORO_R, TORO_T, 5, 18).rotateX(Math.PI / 2);
+    base.computeBoundingBox();
+    const pintada = pintarArgolla(base.clone());
+    pintada.computeBoundingBox();
+    expect(pintada.boundingBox!.min.toArray()).toEqual(base.boundingBox!.min.toArray());
+    expect(pintada.boundingBox!.max.toArray()).toEqual(base.boundingBox!.max.toArray());
+  });
+});
+
+describe("la mesa rústica más grande, de madera y con los colores de Bolivia (S7)", () => {
+  it("es más grande: tapa más ancha que antes, tablón más grueso, patas más altas y marco rústico", () => {
+    // Antes: tapa tableR*2.1 / tableR*2.05, losa 0,14, cuerpo 0,55.
+    expect(anchoCajon(1.55)).toBeGreaterThan(1.55 * 2.1);
+    expect(fondoCajon(1.55)).toBeGreaterThan(1.55 * 2.05);
+    expect(CAJON_MESA.losa).toBeGreaterThan(0.14);
+    expect(CAJON_MESA.cuerpoAlto).toBeGreaterThan(0.55);
+    expect(CAJON_MESA.pataGrosor).toBeGreaterThan(0.1);
+    expect(CAJON_MESA.bordeGrosor).toBeGreaterThan(0.09);
+  });
+
+  it("el sobresalir de la tapa deja los agujeros donde estaban, lejos del borde", () => {
+    const L = holeLayout(SAPO_MAX);
+    const fuera = Math.max(...L.holes.map((h) => Math.hypot(h.x, h.y))) + L.holeR;
+    expect(fuera).toBeLessThanOrEqual(1.55); // los agujeros caben en la mesa del 2D
+    for (const s of [SOBRE_TAPA.x, SOBRE_TAPA.z]) {
+      expect(s).toBeGreaterThan(0.1);
+      expect(s).toBeLessThan(0.3);
+    }
+    // El marco rústico nunca llega a los agujeros.
+    expect(fondoCajon(1.55) / 2 - CAJON_MESA.bordeGrosor).toBeGreaterThan(fuera);
+    expect(anchoCajon(1.55) / 2 - CAJON_MESA.bordeGrosor).toBeGreaterThan(fuera);
+  });
+
+  it("la madera: varios tonos de marrón ricos, distintos entre sí, con variación de tabla a tabla y sin azar", () => {
+    const marron = (c: number): boolean => {
+      const r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
+      return r > g && g > b && r > 60 && b < 140;
+    };
+    for (const tema of ["claro", "oscuro"] as const) {
+      const tonos = MADERA_RUSTICA[tema];
+      expect(tonos.length).toBeGreaterThanOrEqual(3);
+      expect(new Set(tonos).size).toBe(tonos.length);
+      for (const c of tonos) expect(marron(c), `0x${c.toString(16)} en ${tema}`).toBe(true);
+    }
+    // El tono de cada tabla es siempre el mismo (función del índice, no del azar) y cicla.
+    for (const tema of ["claro", "oscuro"] as const) {
+      const n = MADERA_RUSTICA[tema].length;
+      for (let i = 0; i < n * 2; i++) expect(colorTabla(tema, i)).toBe(MADERA_RUSTICA[tema][i % n]);
+      for (let i = 0; i < n - 1; i++) expect(colorTabla(tema, i)).not.toBe(colorTabla(tema, i + 1));
+    }
+    expect(fuente("sapo-3d.ts")).not.toMatch(/Math\.random/);
+  });
+
+  it("el aguayo: la bandera primero (rojo, amarillo, verde) y más colores de la casa, en rayas que ciclan", () => {
+    expect(AGUAYO.slice(0, 3)).toEqual([BANDERA[0], BANDERA[1], BANDERA[2]]);
+    expect(AGUAYO.length).toBeGreaterThanOrEqual(5);
+    expect(new Set(AGUAYO).size).toBe(AGUAYO.length);
+    const n = AGUAYO.length;
+    for (let i = 0; i < n * 2; i++) expect(franjaAguayo(i)).toBe(AGUAYO[i % n]);
+  });
+
+  it("los adornos están en el cajón: banderines con la bandera, faja de aguayo y marco de tablas", () => {
+    const tres = fuente("sapo-3d.ts");
+    expect(tres).toContain("BANDERA[i % 3]");
+    expect(tres).toContain("texturaAguayo(");
+    expect(tres).toContain("CAJON_MESA.losa");
+    expect(tres).toContain("CAJON_MESA.cuerpoAlto");
+  });
+});
+
 describe("el sapo en 3D usa la casa y no cambia lo que pasa", () => {
   it("coloca con el mapa de la casa, sin azar y sin importar el motor desde el 2D", () => {
     const tres = fuente("sapo-3d.ts");
@@ -384,5 +507,418 @@ describe("el primer plano del final en 3D: lo que se ve de cerca y despejado", (
       expect(i, desde).toBeGreaterThan(0);
       expect(src.slice(i, src.indexOf(hasta, i + 1))).not.toMatch(/ganador|winner|slot/i);
     }
+  });
+});
+/* ===================================================================== la cámara de los tiros (S4) y la de la moneda (S5) */
+
+/** Las pantallas de ejemplo con su tamaño, para proyectar con una cámara de three.js de verdad. */
+const PANTALLAS_WH = [
+  { ...(PANTALLAS[0] as (typeof PANTALLAS)[number]), w: 1366, h: 768, mano: { x: HAND.x * 0.86, y: HAND.y * 0.82 } },
+  { ...(PANTALLAS[1] as (typeof PANTALLAS)[number]), w: 390, h: 844, mano: { x: 0.9, y: 1.55 + 0.5 } },
+];
+const DEG = Math.PI / 180;
+
+/** Proyecta puntos del mundo 3D con la pose dada, en píxeles de la pantalla (z mayor que 1: detrás de la cámara). */
+function proyectar(pose: Pose3D, w: number, h: number, pts: readonly (readonly [number, number, number])[]): { x: number; y: number; z: number }[] {
+  const c = new PerspectiveCamera(36, w / h, 0.5, 4000);
+  aplicarPose(c, pose, w / h);
+  const v = new Vector3();
+  return pts.map((p) => {
+    v.set(p[0], p[1], p[2]).project(c);
+    return { x: ((v.x + 1) / 2) * w, y: ((1 - v.y) / 2) * h, z: v.z };
+  });
+}
+const adentro = (q: { x: number; y: number; z: number }, w: number, h: number, margen = 0): boolean =>
+  q.z < 1 && q.x >= margen && q.x <= w - margen && q.y >= margen && q.y <= h - margen;
+
+describe("la cámara de cada tiro: baja, gira hacia la mano y sigue a la argolla, y vuelve al golpe (S4)", () => {
+  const golpe = (t: number, punto: Point = { x: 0.5, y: 0.5 }) => ({ t, punto, fuerza: 0.85 });
+
+  it("quieta sin tiro en el aire; sube con el vuelo y baja en menos de 0,8 s después del golpe, sin saltos", () => {
+    expect(cercaniaDelTiro([], [], 3).cerca).toBe(0);
+    expect(cercaniaDelTiro([arg("mano")], [], 3).cerca).toBe(0);
+    // En el vuelo sube desde 0 y nunca baja hasta caer.
+    let antes = -1;
+    for (let i = 0; i <= 40; i++) {
+      const c = cercaniaDelTiro([arg("vuelo", { u: i / 40, suelo: { x: 1 - i / 40, y: 1 - i / 40 } })], [], 5).cerca;
+      expect(c).toBeGreaterThanOrEqual(antes);
+      expect(c).toBeLessThanOrEqual(1);
+      antes = c;
+    }
+    expect(cercaniaDelTiro([arg("vuelo", { u: 0 })], [], 5).cerca).toBe(0);
+    expect(antes).toBe(1);
+    // Al golpe sigue igual (sin salto) y se aleja: a los 0,8 s ya está quieta, cuando el 2D suelta el golpe.
+    const t0 = 5;
+    expect(cercaniaDelTiro([arg("rueda", { edad: 0 })], [golpe(t0)], t0).cerca).toBeCloseTo(1, 6);
+    let previo = 1;
+    for (let k = 1; k <= 16; k++) {
+      const t = t0 + k * 0.05;
+      const c = cercaniaDelTiro([arg("rueda", { edad: t - t0 })], [golpe(t0)], t).cerca;
+      expect(c).toBeLessThanOrEqual(previo + 1e-9);
+      expect(previo - c).toBeLessThan(0.2);
+      previo = c;
+    }
+    expect(previo).toBeCloseTo(0, 6);
+    // El foco es la argolla en el aire, y al caer el lugar del golpe.
+    expect(cercaniaDelTiro([arg("vuelo", { u: 0.5, suelo: { x: 0.4, y: -0.3 } })], [], 5).foco).toEqual({ x: 0.4, y: -0.3 });
+    expect(cercaniaDelTiro([arg("rueda")], [golpe(5, { x: -0.7, y: 0.2 })], 5.1).foco).toEqual({ x: -0.7, y: 0.2 });
+  });
+
+  it("la boca de la rana: al tragar se aleja de a poco y la argolla escupida no la vuelve a acercar", () => {
+    let previo = 1;
+    for (const [estado, edad] of [["boca-entra", 0], ["boca-entra", 0.2], ["oculta", 0.35], ["boca-sale", 0.5], ["boca-sale", 0.9]] as const) {
+      const c = cercaniaDelTiro([arg(estado, { edad, suelo: MOUTH })], [], 9).cerca;
+      expect(c).toBeLessThanOrEqual(previo + 1e-9);
+      previo = c;
+    }
+    expect(previo).toBeCloseTo(0, 6);
+    // Sin golpe (la boca no deja astillas), la argolla que rueda después ya no mueve la cámara.
+    expect(cercaniaDelTiro([arg("rueda", { edad: 0, suelo: { x: 0.6, y: 0.1 } })], [], 9.5).cerca).toBe(0);
+  });
+
+  it("la última argolla no usa esta cámara: tiene la suya (la de la moneda)", () => {
+    expect(cercaniaDelTiro([arg("vuelo", { u: 0.5, ultima: true })], [], 5).cerca).toBe(0);
+    expect(cercaniaDelTiro([arg("hunde", { u: 0.2, edad: 0.1, ultima: true })], [golpe(5)], 5.1).cerca).toBe(0);
+  });
+
+  it("el ángulo del tiro: más baja y del lado de la mano, sin marear y sin pasar el tope de acercamiento", () => {
+    for (const pant of PANTALLAS_WH) {
+      const base = perfilSapo(pant.mesa.tilt);
+      const p0 = perfilDelTiro(base, 0, pant.mesa.tilt);
+      expect(p0).toEqual(base);
+      const p1 = perfilDelTiro(base, 1, pant.mesa.tilt);
+      // Baja y gira hacia la mano (a la derecha de la pantalla): se ve el tiro desde quien tira.
+      expect(p1.elevacion).toBeLessThan(base.elevacion - 6 * DEG);
+      expect(p1.azimut).toBeGreaterThan(base.azimut + 4 * DEG);
+      expect(Math.abs(p1.elevacion - base.elevacion)).toBeLessThan(14 * DEG);
+      expect(Math.abs(p1.azimut - base.azimut)).toBeLessThan(15 * DEG);
+      // La cuenta de la casa no cambia: los agujeros caen en el mismo lugar del 3D.
+      expect(p1.zc).toBe(base.zc);
+      expect(p1.acerca).toBe(base.acerca);
+      const cam = { x: pant.w / 2, y: pant.h / 2, zoom: ZOOM_MAX, rot: 0, sacudonX: 0, sacudonY: 0 };
+      const c1 = camaraDelTiro(cam, 1, { x: 0.8, y: -0.6 }, pant.mesa);
+      const tira = pant.mesa.tilt > 0.8 ? SEGUIR.celular : SEGUIR.ancho;
+      expect(c1.zoom).toBeCloseTo(ZOOM_MAX * (1 + tira.acerca), 9);
+      expect(c1.zoom).toBeLessThan(1.25);
+      // Va hacia la argolla, sin llegar: la mesa sigue siendo lo que se ve.
+      const fx = pant.mesa.cx + 0.8 * pant.mesa.sc, fy = pant.mesa.cy - 0.6 * pant.mesa.sc * pant.mesa.tilt;
+      expect(Math.abs(c1.x - fx)).toBeLessThan(Math.abs(cam.x - fx));
+      expect(Math.abs(c1.y - fy)).toBeLessThan(Math.abs(cam.y - fy));
+      expect(camaraDelTiro(cam, 0, { x: 0.8, y: -0.6 }, pant.mesa)).toEqual(cam);
+      expect(camaraDelTiro(cam, 1, null, pant.mesa).x).toBe(cam.x);
+    }
+  });
+
+  it("con la cámara del tiro todos los agujeros siguen en cuadro, en la pantalla ancha y en el celular", () => {
+    const L = holeLayout(SAPO_MAX);
+    for (const pant of PANTALLAS_WH) {
+      const focos: Point[] = [pant.mano, MOUTH, ...L.holes];
+      for (const cerca of [0, 0.5, 1]) {
+        for (const foco of focos) {
+          const perfil = perfilDelTiro(perfilSapo(pant.mesa.tilt, deltaCamara(10, 0, -1)), cerca, pant.mesa.tilt);
+          const cam = camaraDelTiro(camaraDelSapo({ x: pant.w / 2, y: pant.h / 2, zoom: 1, rot: 0, sacudonX: 0, sacudonY: 0 }, pant.w, pant.h), cerca, foco, pant.mesa);
+          const mapa = crearMapa(perfil, pant.u);
+          const { px, pz, K, Kz } = lugarDelMundo(mapa, pant.mesa);
+          const pose = poseCamara(cam, pant.h, pant.u, perfil);
+          const pts = L.holes.flatMap((h) => [-1, 1].flatMap((sx) => [[px + K * (h.x + sx * L.holeR), 0, pz + Kz * h.y], [px + K * h.x, 0, pz + Kz * (h.y + sx * L.holeR)]] as const));
+          for (const q of proyectar(pose, pant.w, pant.h, pts)) expect(adentro(q, pant.w, pant.h), `${pant.nombre} cerca ${cerca} foco ${foco.x},${foco.y}: ${q.x},${q.y}`).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("depende solo de las argollas, los golpes y el reloj: no recibe quién gana", () => {
+    const src = fuente("sapo-3d.ts");
+    for (const [desde, hasta] of [["export function cercaniaDelTiro", "export function camaraDelTiro"], ["export function camaraDelTiro", "export function perfilDelTiro"], ["export function pesoMoneda", "export function poseMoneda"]] as const) {
+      const firma = src.slice(src.indexOf(desde), src.indexOf(hasta));
+      expect(firma.length).toBeGreaterThan(40);
+      expect(firma).not.toMatch(/ganador|winner|slot/i);
+    }
+  });
+});
+
+describe("la última argolla, desde la argolla: del lanzamiento con zoom hasta verla entrar (S5)", () => {
+  it("la toma de cada argolla es la del plan: la del último tiro (el acierto del último ganador) es la de la moneda", () => {
+    for (const personas of [5, 18, 30]) {
+      for (const semilla of [1, 2, 3, 4, 5, 6]) {
+        const ganadores = [semilla % personas, (semilla + 2) % personas].slice(0, semilla % 2 ? 1 : 2);
+        const { throws, linea, plan, last } = planSapo(personas, ganadores, semilla);
+        const tomas = tomasDeTiros(throws);
+        // El 2D le pasa `ultima: o.final` (sapo.ts, argollas3): el 3D elige la toma con eso.
+        throws.forEach((_, i) => {
+          const final = (linea.tiros[i] as { final: boolean }).final;
+          expect(tomaDeArgolla(arg("vuelo", { ultima: final }))).toBe(tomas[i]);
+        });
+        expect(throws[tomas.indexOf("moneda")]?.targetSlot).toBe(plan.winnerSlots[last]);
+      }
+    }
+    // La mano todavía no es la toma de la moneda: el 2D la manda sin `ultima`.
+    expect(tomaDeArgolla(arg("mano"))).toBe("seguir");
+  });
+
+  it("entra con la suelta, sigue todo el vuelo y la caída, y suelta la cámara antes de la corona", () => {
+    expect(pesoMoneda([]).peso).toBe(0);
+    expect(pesoMoneda([arg("mano")]).peso).toBe(0);
+    expect(pesoMoneda([arg("vuelo", { u: 0.5 })]).peso).toBe(0);
+    expect(pesoMoneda([arg("vuelo", { u: 0, ultima: true })]).peso).toBe(0);
+    expect(pesoMoneda([arg("vuelo", { u: MOMENTOS_MONEDA.vuela, ultima: true })]).peso).toBeCloseTo(1, 9);
+    let antes = 0;
+    for (let i = 0; i <= 50; i++) {
+      const u = i / 50;
+      const m = pesoMoneda([arg("rueda"), arg("vuelo", { u, ultima: true })]);
+      expect(m.peso).toBeGreaterThanOrEqual(antes - 1e-9);
+      expect(m.peso - antes).toBeLessThan(0.25);
+      expect(m.s).toBeCloseTo(u, 9);
+      antes = m.peso;
+    }
+    // Mientras se hunde (y un rato después), la cámara sigue en el agujero; antes de la corona vuelve la del director.
+    for (let edad = 0; edad <= SINK + 0.25; edad += 0.05) expect(pesoMoneda([arg("hunde", { u: Math.min(1, edad / SINK), edad, ultima: true })]).peso).toBeCloseTo(1, 9);
+    let previo = 1;
+    for (let edad = SINK; edad <= AFTER_FINAL; edad += 0.05) {
+      const p = pesoMoneda([arg("hunde", { u: 1, edad, ultima: true })]).peso;
+      expect(p).toBeLessThanOrEqual(previo + 1e-9);
+      expect(previo - p).toBeLessThan(0.12);
+      previo = p;
+    }
+    expect(pesoMoneda([arg("hunde", { u: 1, edad: AFTER_FINAL - 0.05, ultima: true })]).peso).toBe(0);
+    // Las otras argollas que se hunden (los premios de antes) no la usan.
+    expect(pesoMoneda([arg("hunde", { u: 0.5, edad: 0.2 })]).peso).toBe(0);
+  });
+
+  it("mezclar es continuo: con peso 0 es la del director, con 1 la de la moneda", () => {
+    const a: Pose3D = { pos: [0, 10, 20], mira: [0, 0, 0], fov: 0.5, giro: 0.1 };
+    const b: Pose3D = { pos: [4, 2, 6], mira: [2, 0, -3], fov: 0.7, giro: 0 };
+    expect(mezclarPose(a, b, 0)).toEqual(a);
+    expect(mezclarPose(a, b, 1)).toEqual(b);
+    const m = mezclarPose(a, b, 0.5);
+    expect(m.pos).toEqual([2, 6, 13]);
+    expect(m.fov).toBeCloseTo(0.6, 9);
+  });
+
+  /** Las dos maneras en que vuela la última argolla en el 2D (`tokenAt`): derecho al agujero, o al labio de la rana y de ahí al agujero. */
+  const LABIO = 0.62;
+  function vuelo(mano: Point, landing: Point, u: number, labio: boolean): { suelo: Point; alto: number } {
+    if (!labio) return { suelo: { x: mano.x + (landing.x - mano.x) * u, y: mano.y + (landing.y - mano.y) * u }, alto: 4 * 0.95 * u * (1 - u) };
+    if (u < LABIO) {
+      const k = u / LABIO;
+      return { suelo: { x: mano.x + (MOUTH.x - mano.x) * k, y: mano.y + (MOUTH.y - mano.y) * k }, alto: 4 * 0.95 * k * (1 - k) };
+    }
+    const k = (u - LABIO) / (1 - LABIO);
+    return { suelo: { x: MOUTH.x + (landing.x - MOUTH.x) * k, y: MOUTH.y + (landing.y - MOUTH.y) * k }, alto: 4 * 0.95 * 0.35 * k * (1 - k) };
+  }
+
+  for (const pant of PANTALLAS_WH) {
+    it(`${pant.nombre}: la argolla siempre en cuadro, la cámara sobre la mesa y la rana, se acerca, sin saltos, y al final se ve el agujero`, () => {
+      for (const personas of [5, 12, 30]) {
+        for (const semilla of [1, 2, 3, 4, 5, 6, 7, 8]) {
+          const { throws, L } = planSapo(personas, [semilla % personas], semilla);
+          const fin = throws[throws.length - 1] as (typeof throws)[number];
+          const perfil = perfilSapo(pant.mesa.tilt);
+          const mapa = crearMapa(perfil, pant.u);
+          const lugar = lugarDelMundo(mapa, pant.mesa);
+          const director = poseCamara({ x: pant.w / 2, y: pant.h / 2, zoom: ZOOM_MAX, rot: 0, sacudonX: 0, sacudonY: 0 }, pant.h, pant.u, perfil);
+          const manoMundo = [pant.mano.x, 0.13, pant.mano.y] as const;
+          for (const labio of [false, true]) {
+            let previa: Pose3D | null = null;
+            let distPrevia = Infinity;
+            const muestras: { u: number; estado: EstadoArgolla; edad: number }[] = [];
+            for (let i = 0; i <= 60; i++) muestras.push({ u: i / 60, estado: "vuelo", edad: 0 });
+            for (let i = 1; i <= 10; i++) muestras.push({ u: Math.min(1, (i * 0.05) / SINK), estado: "hunde", edad: i * 0.05 });
+            for (const mu of muestras) {
+              const v = mu.estado === "vuelo" ? vuelo(pant.mano, fin.landing, mu.u, labio) : { suelo: fin.landing, alto: 0 };
+              const a = arg(mu.estado, { u: mu.u, edad: mu.edad, suelo: v.suelo, alto: v.alto, ultima: true });
+              const m = pesoMoneda([a]);
+              const p = poseArgolla(a, BR, FR, manoMundo, BOCA);
+              const moneda = poseMoneda(a, m.s, p, pant.mano, FR, lugar, pant.w / pant.h);
+              const pose = mezclarPose(director, moneda, m.peso);
+              // La cámara de la moneda va por encima de la tapa y de la rana (en unidades de la mesa).
+              const camX = (moneda.pos[0] - lugar.px) / lugar.K, camY = moneda.pos[1] / lugar.K, camZ = (moneda.pos[2] - lugar.pz) / lugar.Kz;
+              expect(camY).toBeGreaterThan(0.2);
+              expect(camY).toBeGreaterThan(alturaRana(camX, camZ, FR) + 0.1);
+              // La argolla se ve: en la pantalla, con margen.
+              const coin = [lugar.px + lugar.K * p.x, lugar.K * Math.max(p.y, 0), lugar.pz + lugar.Kz * p.z] as const;
+              const [q] = proyectar(pose, pant.w, pant.h, [coin]);
+              expect(adentro(q as { x: number; y: number; z: number }, pant.w, pant.h, Math.min(pant.w, pant.h) * 0.08), `${personas}/${semilla} labio ${labio} u ${mu.u} ${mu.estado}: ${q?.x},${q?.y}`).toBe(true);
+              // Se acerca: la cámara de la moneda nunca se aleja de la argolla mientras vuela, y termina mucho más cerca que el director.
+              // (En unidades de la mesa: el mundo estira la profundidad por `Kz`, y medida en el 3D la distancia cambiaría con el rumbo.)
+              const d = Math.hypot((moneda.pos[0] - coin[0]) / lugar.K, (moneda.pos[1] - coin[1]) / lugar.K, (moneda.pos[2] - coin[2]) / lugar.Kz);
+              if (mu.estado === "vuelo" && mu.u > 0) expect(d, `${personas}/${semilla} labio ${labio} u ${mu.u}`).toBeLessThanOrEqual(distPrevia + 1e-6);
+              if (mu.estado === "vuelo") distPrevia = d;
+              // Sin saltos: entre una muestra y la siguiente (unos 2 cuadros), la cámara se mueve poco. En la suelta viaja
+              // desde la del director, y ese viaje se reparte: ningún paso lleva más de un sexto del camino que falta.
+              if (previa) {
+                const lejos = Math.hypot(director.pos[0] - moneda.pos[0], director.pos[1] - moneda.pos[1], director.pos[2] - moneda.pos[2]) / lugar.K;
+                const paso = Math.hypot(pose.pos[0] - previa.pos[0], pose.pos[1] - previa.pos[1], pose.pos[2] - previa.pos[2]) / lugar.K;
+                const pasoMira = Math.hypot(pose.mira[0] - previa.mira[0], pose.mira[1] - previa.mira[1], pose.mira[2] - previa.mira[2]) / lugar.K;
+                expect(paso, `${personas}/${semilla} labio ${labio} u ${mu.u}`).toBeLessThan(0.35 + lejos / 6);
+                expect(pasoMira, `${personas}/${semilla} labio ${labio} u ${mu.u}`).toBeLessThan(0.35 + lejos / 6);
+              }
+              previa = pose;
+            }
+            // Al final, de cerca: el agujero del ganador ocupa una buena parte de la pantalla.
+            const hoyo = L.holes.reduce((m, h) => (Math.hypot(h.x - fin.landing.x, h.y - fin.landing.y) < Math.hypot(m.x - fin.landing.x, m.y - fin.landing.y) ? h : m));
+            const final = poseMoneda(arg("hunde", { u: 0.5, edad: 0.25, suelo: fin.landing, ultima: true }), 1, poseArgolla(arg("hunde", { u: 0.5, suelo: fin.landing }), BR, FR, manoMundo, BOCA), pant.mano, FR, lugar, pant.w / pant.h);
+            const [c, b] = proyectar(final, pant.w, pant.h, [[lugar.px + lugar.K * hoyo.x, 0, lugar.pz + lugar.Kz * hoyo.y], [lugar.px + lugar.K * (hoyo.x + L.holeR), 0, lugar.pz + lugar.Kz * hoyo.y]]);
+            expect(adentro(c as { x: number; y: number; z: number }, pant.w, pant.h, Math.min(pant.w, pant.h) * 0.15)).toBe(true);
+            const [cd] = proyectar(director, pant.w, pant.h, [[lugar.px + lugar.K * hoyo.x, 0, lugar.pz + lugar.Kz * hoyo.y]]);
+            const [bd] = proyectar(director, pant.w, pant.h, [[lugar.px + lugar.K * (hoyo.x + L.holeR), 0, lugar.pz + lugar.Kz * hoyo.y]]);
+            const radioMoneda = Math.hypot((b?.x ?? 0) - (c?.x ?? 0), (b?.y ?? 0) - (c?.y ?? 0));
+            const radioDirector = Math.hypot((bd?.x ?? 0) - (cd?.x ?? 0), (bd?.y ?? 0) - (cd?.y ?? 0));
+            expect(radioMoneda).toBeGreaterThan(radioDirector * 2.5);
+          }
+        }
+      }
+    });
+  }
+});
+
+/* ===================================================================== la mano articulada y el suspenso del borde (S9, S10) */
+
+describe("la mano articulada: los dedos y la muñeca siguen la señal del 2D (S9)", () => {
+  it("sin señal, el agarre se reconstruye del impulso: recogiendo cierra, en el látigo abre, y descansa a medio encoger (0,4)", () => {
+    expect(agarraDe(undefined, undefined, 0)).toBeCloseTo(0.6, 9); // reposo: la flexión 0,4 del puente
+    expect(agarraDe(undefined, undefined, 1)).toBeCloseTo(1, 9); // al final del impulso agarra la moneda
+    expect(agarraDe(undefined, undefined, -0.8)).toBeCloseTo(0, 6); // en el látigo abre de golpe
+    let antes = 0.6;
+    for (let i = 0; i <= 20; i++) {
+      const s = agarraDe(undefined, undefined, i / 20);
+      expect(s).toBeGreaterThanOrEqual(antes - 1e-9);
+      expect(s).toBeLessThanOrEqual(1);
+      antes = s;
+    }
+  });
+
+  it("con `flex`, el 2D manda: 0 agarra la moneda, 1 abre de golpe, 0,4 es el reposo, y fuera de rango se amarra", () => {
+    for (const [fase, swing] of [[undefined, 0], [1, 0], [-1, 0], [-0.5, 0.4]] as const) {
+      expect(agarraDe(1, fase, swing)).toBe(0);
+      expect(agarraDe(0, fase, swing)).toBe(1);
+      expect(agarraDe(0.4, fase, swing)).toBeCloseTo(0.6, 9);
+      expect(agarraDe(0.5, fase, swing)).toBeCloseTo(0.5, 9);
+      expect(agarraDe(2, fase, swing)).toBe(0);
+      expect(agarraDe(-1, fase, swing)).toBe(1);
+    }
+    // Una flexión rota se cae a la fase: con ella se reconstruye la misma curva del 2D.
+    expect(agarraDe(Number.NaN, 1, 0)).toBe(1);
+    expect(agarraDe(Number.NaN, 0.5, 0)).toBeCloseTo(0.8, 9);
+    expect(agarraDe(Number.NaN, -0.1, 0)).toBeCloseTo(1 - 0.1 / 0.35, 9);
+    expect(agarraDe(Number.NaN, -0.5, 0)).toBeCloseTo(0.6 * (0.15 / 0.65), 9);
+    expect(agarraDe(Number.NaN, -1, 0)).toBeCloseTo(0.6, 9);
+    expect(agarraDe(Number.NaN, 0, 0)).toBeCloseTo(0.6, 9);
+  });
+
+  it("la muñeca sigue la fase: recogiendo se echa atrás y látiga adelante, y vuelve quieta al acabar el latigazo", () => {
+    expect(munecaDe(0, 0)).toBe(0);
+    expect(munecaDe(1, 0)).toBeCloseTo(0.38, 9);
+    expect(munecaDe(0.5, 0)).toBeCloseTo(0.19, 9);
+    // El látigo: pega hacia adelante a mitad del latigazo y vuelve a 0 al terminar, sin quedar torcida.
+    const latigos: number[] = [];
+    for (let w = 0; w <= 1.0001; w += 0.05) latigos.push(munecaDe(-w, 1));
+    expect(latigos[0]).toBe(0);
+    expect(Math.min(...latigos)).toBeLessThan(-0.6);
+    expect(latigos[latigos.length - 1]).toBeCloseTo(0, 9);
+    // Sin saltos cuando la señal avanza a paso de cuadro.
+    let mayor = 0;
+    for (let i = 1; i < latigos.length; i++) mayor = Math.max(mayor, Math.abs((latigos[i] as number) - (latigos[i - 1] as number)));
+    expect(mayor).toBeLessThan(0.12);
+    // La fase se amarra, y una fase rota se cae al impulso.
+    expect(munecaDe(2, 0)).toBe(munecaDe(1, 0));
+    expect(munecaDe(-2, 0)).toBe(munecaDe(-1, 0));
+    expect(munecaDe(Number.NaN, 1)).toBe(munecaDe(undefined, 1));
+    expect(munecaDe(Number.POSITIVE_INFINITY, -0.5)).toBe(munecaDe(undefined, -0.5));
+  });
+
+  it("sin señal de fase, el impulso basta: recogiendo atrás, látigo adelante, y nunca más de 60 grados", () => {
+    expect(munecaDe(undefined, 0)).toBe(0);
+    expect(munecaDe(undefined, 1)).toBeGreaterThan(0.2);
+    let minimo = 0;
+    for (let w = 0; w <= 1.0001; w += 0.05) minimo = Math.min(minimo, munecaDe(undefined, -0.8 * w));
+    expect(minimo).toBeLessThan(-0.3);
+    // Nunca mareante: menos de 60 grados, para cualquier señal.
+    for (const f of [undefined, 0, 0.5, 1, -0.5, -1] as const) for (const s of [-5, -1, -0.8, 0, 0.5, 1, 9]) expect(Math.abs(munecaDe(f, s)), `fase ${f} swing ${s}`).toBeLessThan(Math.PI / 3);
+  });
+
+  it("el cuadro consume la señal y la poses no cambian: los dedos giran desde grupos en el nudillo y la muñeca lleva al antebrazo", () => {
+    const src = fuente("sapo-3d.ts");
+    // La señal vive en el puente compartido (`SenalMano`, tipos.ts) y el 3D se la apuesta a su mano.
+    expect(fuente("tipos.ts")).toMatch(/flex\?: number/);
+    expect(fuente("tipos.ts")).toMatch(/fase\?: number/);
+    expect(src).toContain("& SenalMano");
+    expect(src).toContain("mn.flex");
+    expect(src).toContain("mn.fase");
+    expect(src).toContain("const dedoG = new Group()");
+    expect(src).toContain("const pulgarG = new Group()");
+    const iMuneca = src.indexOf("const munecaG = new Group()");
+    expect(iMuneca).toBeGreaterThan(src.indexOf("const pulgarG = new Group()"));
+    expect(iMuneca).toBeLessThan(src.indexOf("const antebrazo = new Group()"));
+  });
+});
+
+describe("el suspenso del borde: teeter en el aro y caer donde el plan puso (S10)", () => {
+  const borde = { x: 0.5, y: -0.2 };
+  const enBaile = (resto: Partial<ArgollaSapo> = {}): ArgollaSapo => arg("baile", { borde, ...resto });
+  const enVueloDelBaile = { suelo: { x: 0.62, y: -0.2 }, edad: 0.4, u: 0.5 };
+
+  it("sin la marca de la 2D el 3D no inventa nada: la pose es la del plan tal cual", () => {
+    const p = poseArgolla(enBaile(enVueloDelBaile), BR, FR, MANO, BOCA);
+    expect(teeterSapo(p, enBaile(enVueloDelBaile), BR)).toEqual(p); // sin la marca
+    expect(teeterSapo(p, enBaile({ ...enVueloDelBaile, suspenso: false }), BR)).toEqual(p);
+    expect(teeterSapo(p, enBaile({ ...enVueloDelBaile, suspenso: true, borde: null }), BR)).toEqual(p);
+    // La ganadora jamás la lleva, aunque alguien la marcara por error; y fuera del baile tampoco.
+    expect(teeterSapo(p, enBaile({ ...enVueloDelBaile, suspenso: true, ultima: true }), BR)).toEqual(p);
+    expect(teeterSapo(p, arg("rueda", { suspenso: true }), BR)).toEqual(p);
+  });
+
+  it("con la marca: da vueltas alrededor del borde, se ladea más y no se mete en la tapa", () => {
+    const a = enBaile({ ...enVueloDelBaile, suspenso: true });
+    const p = poseArgolla(a, BR, FR, MANO, BOCA);
+    const t = teeterSapo(p, a, BR);
+    // Gira alrededor del borde: no se corre de su radio ni del plan.
+    expect(Math.hypot(t.x - borde.x, t.z - borde.y)).toBeCloseTo(Math.hypot(p.x - borde.x, p.z - borde.y), 6);
+    expect(t.x === p.x && t.z === p.z).toBe(false);
+    expect(t.inclina).toBeGreaterThan(p.inclina);
+    expect(t.bajo).toBeGreaterThanOrEqual(TAPA_Y - 1e-9);
+    expect(t.visible).toBe(true);
+    expect(t.esc).toBe(p.esc);
+  });
+
+  it("al llegar (u 0) y al terminar (u 1) queda exactamente donde el plan la puso", () => {
+    for (const u of [0, 1]) {
+      const a = enBaile({ suspenso: true, suelo: { x: 0.62, y: -0.2 }, edad: u * WOBBLE, u });
+      const p = poseArgolla(a, BR, FR, MANO, BOCA);
+      expect(teeterSapo(p, a, BR)).toEqual(p);
+    }
+  });
+
+  it("el suspenso es continuo cuadro a cuadro (sin saltos) y se apaga solo al final", () => {
+    let previa = poseArgolla(enBaile({ suspenso: true, suelo: { x: 0.62, y: -0.2 } }), BR, FR, MANO, BOCA);
+    for (let i = 1; i <= 24; i++) {
+      const u = i / 24, edad = u * WOBBLE;
+      const a = enBaile({ suspenso: true, suelo: { x: 0.62, y: -0.2 }, edad, u });
+      const t = teeterSapo(poseArgolla(a, BR, FR, MANO, BOCA), a, BR);
+      expect(Math.hypot(t.x - previa.x, t.z - previa.z)).toBeLessThan(0.02);
+      expect(Math.abs(t.inclina - previa.inclina)).toBeLessThan(0.09);
+      previa = t;
+    }
+  });
+
+  it("la marca se fija de forma determinista con el índice del tiro (sin azar nuevo) y toca a algunos, no a todos", () => {
+    const marcas = new Set<boolean>();
+    for (let i = 0; i < 64; i++) {
+      expect(suspensoDe(i)).toBe(suspensoDe(i));
+      marcas.add(suspensoDe(i));
+    }
+    expect(marcas.size).toBe(2);
+    const si = Array.from({ length: 64 }, (_, i) => suspensoDe(i)).filter(Boolean).length;
+    expect(si).toBeGreaterThan(8);
+    expect(si).toBeLessThan(56);
+    expect(fuente("sapo-3d.ts")).not.toMatch(/Math\.random/);
+  });
+
+  it("el cuadro viste la marca: envuelve la pose del plan con `teeterSapo`, y la ganadora queda protegida en la función", () => {
+    const src = fuente("sapo-3d.ts");
+    const cuadro = src.slice(src.indexOf("ellas.forEach"), src.indexOf("// Las astillas"));
+    expect(cuadro).toMatch(/teeterSapo\(poseArgolla\(/);
+    // La guarda de la ganadora (y de la marca) vive dentro de `teeterSapo`, probada arriba.
+    expect(src).toContain('a.ultima || a.estado !== "baile"');
   });
 });
