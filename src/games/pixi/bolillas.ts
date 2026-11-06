@@ -11,6 +11,7 @@ import {
   CIRCULO_R,
   aMundo,
   finalistasDe,
+  fichasDe,
   mapeoDe,
   planBolillas,
   trayectoriaDe,
@@ -26,6 +27,7 @@ import {
   SEMILLA_FIJA,
   T_DESVIO,
   TIRADOR,
+  anuncioDeDiana,
   cercaDe,
   chispasDe,
   coloresCanica,
@@ -33,6 +35,7 @@ import {
   escalaChipDe,
   manoDe,
   polvoDe,
+  punteadoDe,
   tierraManchas,
   titilazo,
   tizaCirculo,
@@ -79,6 +82,8 @@ interface Escena {
   chips: Map<number, Container>;
   /** La escala de esos chips: la etiqueta más chica que se lee, en proporción al círculo (`escalaChipDe`). */
   escala: number;
+  /** El anuncio de la diana del próximo tiro (el anillo con rayas, S19). */
+  anuncio: Graphics;
   /** Los dibujos de las canicas, por su asiento (y la canica de la pegadora en el -1). */
   bol: Map<number, Graphics>;
   m: Mapeo;
@@ -153,12 +158,16 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
       vistas.add(clave);
       const w = aMundo(m, tiro.desde);
       fondo.circle(w.x, w.y, 3.6 * p.k).stroke({ width: Math.max(1, 1.6 * p.k), color: 0xf6f2e8, alpha: 0.55 });
-      fondo.moveTo(w.x - 2.6 * p.k, w.y).lineTo(w.x + 2.6 * p.k, w.y).stroke({ width: Math.max(1, 1.4 * p.k), color: 0xf6f2e8, alpha: 0.45 });
+      // La marca del pie, punteada (S19): los puntos de la casa, no una línea de una pieza.
+      for (const [q, r] of punteadoDe({ x: w.x - 2.6 * p.k, y: w.y }, { x: w.x + 2.6 * p.k, y: w.y }, 2.2 * p.k)) {
+        fondo.moveTo(q.x, q.y).lineTo(r.x, r.y).stroke({ width: Math.max(1, 1.4 * p.k), color: 0xf6f2e8, alpha: 0.45 });
+      }
     }
     const sombra = new Graphics();
     const fx = new Graphics();
     const mano = new Graphics();
-    mundo.addChild(sombra, fx, mano);
+    const anuncio = new Graphics();
+    mundo.addChild(sombra, anuncio, fx, mano);
     k.cam.cut(m.cx, m.cy, 1);
     // El 3D (si está prendido y arrancó): el fondo y la tierra del 2D se apagan — las canicas las dibuja
     // three.js y los nombres siguen siendo chips de PixiJS proyectados sobre el mismo círculo.
@@ -169,7 +178,7 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
       S.bg.visible = false;
     }
     const entrada3 = v3 ? previa?.entrada3 ?? entrada3Vacia() : null;
-    return { fondo, mundo, sombra, fx, mano, chips: new Map(), bol: new Map(), m, escala, v3, entrada3 };
+    return { fondo, mundo, sombra, fx, mano, anuncio, chips: new Map(), bol: new Map(), m, escala, v3, entrada3 };
   },
 
   cuadro(k, plan, e, t) {
@@ -179,8 +188,28 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
     const golpe = efectosDe(d, t);
     const mano = manoDe(d, t);
     const uTitila = (t - d.casi.t) / Math.max(0.001, d.duracion - d.casi.t);
-    // Los finalistas del segundo (S15): los nombres solo se muestran cuando ya quedan tres o menos adentro.
-    const final = finalistasDe(d, t);
+    // Los finalistas del segundo (S15) envueltos en la puerta de la intro (S18): las fichas se ven durante el
+    // arranque (quiénes juegan), desaparecen toda la troya y vuelven solo para los últimos tres.
+    const fichas = fichasDe(d, t);
+    // El anuncio de la diana (S19): el anillo con rayas alrededor de la canica que le va a tocar a la
+    // pegadora, con su pulso que muere antes del golpe. La cuenta es la del arte puro; acá solo se dibuja.
+    const digo = en3d ? null : anuncioDeDiana(d, t);
+    e.anuncio.clear();
+    if (digo) {
+      const wa = aMundo(e.m, digo.tiro.impacto);
+      const rA = digo.anillo * e.m.e * (1 + 0.22 * digo.pulso);
+      e.anuncio
+        .circle(wa.x, wa.y, rA)
+        .stroke({ width: Math.max(1.5, 0.2 * CANICA_R * e.m.e * CANICA_ESCALA), color: 0xf6f2e8, alpha: (0.4 + 0.55 * digo.pulso) * (S.dark ? 0.9 : 1) });
+      for (const ray of digo.rayas) {
+        const caja = Math.cos(ray.a);
+        const saba = Math.sin(ray.a);
+        e.anuncio
+          .moveTo(wa.x + caja * ray.de * e.m.e, wa.y + saba * ray.de * e.m.e)
+          .lineTo(wa.x + caja * ray.hasta * e.m.e, wa.y + saba * ray.hasta * e.m.e)
+          .stroke({ width: Math.max(2, 0.3 * CANICA_R * e.m.e * CANICA_ESCALA), color: ray.color, alpha: 0.55 + 0.4 * digo.pulso, cap: "round" });
+      }
+    }
 
     // Las sombras, abajo de todo: alguna canica nueva se agrega encima y las tapa bien.
     if (!en3d) e.sombra.clear();
@@ -225,7 +254,7 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
       // La coronación: el cartel del kit dice el nombre del ganador, y la ficha se retira — el nombre
       // aparece una sola vez (S12), no el cartel y la ficha superpuestos. Y las fichas solo muestran a
       // los finalistas (S15): durante la troya, el círculo queda sin nombres.
-      chip.visible = final.includes(persona) && seVe && tray.estado !== "afuera" && !(k.coronado && persona === d.ganador);
+      chip.visible = fichas.includes(persona) && seVe && tray.estado !== "afuera" && !(k.coronado && persona === d.ganador);
       chip.scale.set(1);
       chip.position.set(w.x - chip.width / 2, w.y - rr * 1.08 - chip.height * 0.85);
     });
@@ -316,8 +345,8 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
               .fill({ color: S.dark ? 0x6b5230 : 0xd9c9a8, alpha: (1 - uv) * 0.55 });
           }
         }
-        // Las chispas del vidrio (S13): rayitos de luz que saltan más vivos y mueren antes que el polvo —
-        // cada uno viaja con su rumbo del plan y apaga con su vida, como un destello de cristal.
+        // Las chispas del vidrio (S13), punteadas (S19): rayitos que saltan más vivos y mueren antes que el polvo —
+        // cada uno viaja con su rumbo del plan, en tramos de tiza (nada de líneas de una pieza).
         if (edad < CHISPA_VIDA) {
           for (const chispa of chispasDe(i, tiro.impacto, tiro.salida.dir)) {
             if (edad >= chispa.vida) continue;
@@ -326,8 +355,10 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
             const hy = w.y + chispa.dy * edad * e.m.e;
             const tx = hx - chispa.dx * chispa.largo * e.m.e;
             const ty = hy - chispa.dy * chispa.largo * e.m.e;
-            e.fx.moveTo(tx, ty).lineTo(hx, hy).stroke({ width: Math.max(1.5, 0.3 * CANICA_R * e.m.e * CANICA_ESCALA), color: 0xfff2bd, alpha: (1 - uv) * 0.8, cap: "round" });
-            e.fx.moveTo(tx, ty).lineTo(hx, hy).stroke({ width: Math.max(0.8, 0.15 * CANICA_R * e.m.e * CANICA_ESCALA), color: 0xffffff, alpha: 1 - uv, cap: "round" });
+            for (const [q, r] of punteadoDe({ x: tx, y: ty }, { x: hx, y: hy }, Math.max(1, chispa.largo * e.m.e * 0.3))) {
+              e.fx.moveTo(q.x, q.y).lineTo(r.x, r.y).stroke({ width: Math.max(1.5, 0.3 * CANICA_R * e.m.e * CANICA_ESCALA), color: 0xfff2bd, alpha: (1 - uv) * 0.8, cap: "round" });
+              e.fx.moveTo(q.x, q.y).lineTo(r.x, r.y).stroke({ width: Math.max(0.8, 0.15 * CANICA_R * e.m.e * CANICA_ESCALA), color: 0xffffff, alpha: 1 - uv, cap: "round" });
+            }
           }
         }
       });

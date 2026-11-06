@@ -286,6 +286,31 @@ describe("S17 en 3D: las canicas se dibujan más grandes", () => {
   });
 });
 
+describe("S19 en 3D: el anillo del anuncio alrededor de la diana", () => {
+  it("la vista dibuja el anillo con rayas de la cuenta pura (anuncioDeDiana), con el pulso del plan, sin azar", () => {
+    const src = fuente("bolillas-3d.ts");
+    // La cuenta vive en el arte puro (`anuncioDeDiana`); la vista solo la dibuja, con pocos polígonos.
+    expect(src).toMatch(/anuncioDeDiana/);
+    expect(src).toMatch(/RingGeometry/);
+    expect(src).not.toContain("Math.random");
+  });
+
+  it("la pose de cerca de la ganadora queda a altura del vidrio doblado (S20 retunea la toma)", () => {
+    const CASI_D = {
+      casi: { t: 20, ganador: 0, slot: 1, desde: { x: 0.5, y: 0.5 }, dir: { x: 0, y: 1 }, titila: { x: 0.5, y: 0.94 } },
+      duracion: 23.4,
+      posiciones: [{ x: 0.5, y: 0.5 }, { x: 0.3, y: 0.4 }],
+      tiros: [] as Tiro[],
+    };
+    const pant = PANTALLAS[0] as { nombre: string; u: number; mapeo: Mapeo };
+    const mapa = crearMapa(perfilBolillas(), pant.u);
+    const lugar = lugarDelMundo(mapa, pant.mapeo);
+    const pose = poseDelCerca(CASI_D, 21.4, lugar, 1.3);
+    const top = 2 * CANICA_R * CANICA_ESCALA; // lo alto que queda el vidrio doblado, con el ojo de la cámara por encima
+    expect(pose.pos[1] / lugar.K, "ojo por encima del vidrio doblado").toBeGreaterThanOrEqual(top * 1.1);
+  });
+});
+
 describe("el cableado: registrado en el 3D, apagado en el selector (D3)", () => {
   it("el módulo de Bolillas está en el registro del 3D", () => {
     expect(tiene3D("bolillas")).toBe(true);

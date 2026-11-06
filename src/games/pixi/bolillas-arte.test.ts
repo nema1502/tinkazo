@@ -15,6 +15,8 @@ import {
 } from "./bolillas-plan";
 import { TEXTOS } from "./bolillas-textos";
 import {
+  ANUNCIO_DIANA,
+  AGUAYO,
   CANICA_ESCALA,
   COLA_GOLPE,
   MANO_COBRA,
@@ -27,13 +29,16 @@ import {
   TIRADOR,
   TIZA_ONDA,
   TIZA_PUNTOS,
+  anuncioDeDiana,
   coloresCanica,
   efectosDe,
   manoDe,
   polvoDe,
+  punteadoDe,
   tierraManchas,
   titilazo,
   tizaCirculo,
+  type AnuncioDiana,
 } from "./bolillas-arte";
 import { VENTANA, eventosDe } from "./bolillas-sonido";
 
@@ -229,10 +234,12 @@ describe("bolillas: el choque", () => {
 });
 
 describe("bolillas: las canicas más grandes (S17)", () => {
-  it("el dibujo de la canica se agranda sobre su radio del plan, sujetado por el aire de la siembra", () => {
-    // Se ve más grande que antes, pero el tope de la siembra manda: nunca pasa de ahí.
-    expect(CANICA_ESCALA).toBeGreaterThan(1.15);
-    expect(CANICA_ESCALA).toBe(Math.min(1.6, SIEMBRA_AIRE / (2 * CANICA_R)));
+  it("el dibujo de la canica va al doble (S20), sujetado por el aire de la siembra", () => {
+    // El doble que pidió la sala: la cuenta da entera, sin tocar la siembra.
+    expect(CANICA_ESCALA).toBe(2.0);
+    expect(CANICA_ESCALA).toBe(Math.min(2.0, SIEMBRA_AIRE / (2 * CANICA_R)));
+    // El aire de la siembra aguanta el doble: dos canicas vecinas con sus radios dibujados jamás se funden.
+    expect(2 * CANICA_R * CANICA_ESCALA).toBeLessThanOrEqual(SIEMBRA_AIRE);
   });
 
   it("el tope respeta la siembra: dos canicas vecinas del plan jamás se tocan (n hasta 200)", () => {
@@ -257,6 +264,104 @@ describe("bolillas: las canicas más grandes (S17)", () => {
     const f = codigo("bolillas.ts");
     expect(f).toMatch(/CANICA_R \* CANICA_ESCALA/);
     expect(f).toMatch(/CANICA_R \* e\.m\.e \* CANICA_ESCALA/);
+  });
+});
+
+describe("bolillas: el trazo punteado (S19)", () => {
+  const a = { x: 0.2, y: -0.4 };
+  const b = { x: 0.9, y: 0.1 };
+
+  it("divide el trazo en tramos sobre la misma recta, con igual aire entre ellos", () => {
+    const tramos = punteadoDe(a, b, 0.06);
+    expect(tramos.length).toBeGreaterThanOrEqual(2);
+    let anterior: readonly [Pun, Pun] | null = null;
+    const largo = Math.hypot(b.x - a.x, b.y - a.y);
+    for (const [p, q] of tramos) {
+      // Cada tramo vive sobre el trazo: la proyección radial cae dentro del tramo, y el tramo entero adentro del trazo.
+      const t1 = ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / (largo * largo);
+      const t2 = ((q.x - a.x) * (b.x - a.x) + (q.y - a.y) * (b.y - a.y)) / (largo * largo);
+      expect(t1).toBeGreaterThanOrEqual(0);
+      expect(t2).toBeLessThanOrEqual(1);
+      expect(Math.hypot(q.x - p.x, q.y - p.y)).toBeLessThanOrEqual(0.06 + 1e-9);
+      if (anterior) expect(p.x).toBeGreaterThan(anterior[1].x - 1e-9); // sin encimar ni ir para atrás
+      anterior = [p, q];
+    }
+    // Punteado: la mitad del trazo queda pintada y la otra mitad, aire.
+    const pintado = tramos.reduce((s, [p, q]) => s + Math.hypot(q.x - p.x, q.y - p.y), 0);
+    expect(pintado).toBeCloseTo(largo / 2, 9);
+  });
+
+  it("es determinista, y en un tramo corto queda al menos un tramo", () => {
+    expect(punteadoDe(a, b, 0.06)).toEqual(punteadoDe(a, b, 0.06));
+    expect(punteadoDe({ x: 0, y: 0 }, { x: 0.05, y: 0 }, 0.5).length).toBe(1);
+  });
+
+  it("en la escena no queda trazo sólido de las líneas que salen: el rayito del vidrio y la marca de largada van punteados", () => {
+    const f = codigo("bolillas.ts");
+    expect(f).toMatch(/punteadoDe\(/);
+    // El rayito del vidrio ya no dibuja su línea de una pieza...
+    expect(f).not.toMatch(/moveTo\(tx, ty\)\.lineTo\(hx, hy\)\.stroke/);
+    // ...ni la marca de largada su tramo sólido.
+    expect(f).not.toMatch(/moveTo\(w\.x - 2\.6 \* p\.k, w\.y\)\.lineTo\(w\.x \+ 2\.6 \* p\.k, w\.y\)/);
+  });
+});
+
+describe("bolillas: el anuncio de la diana (S19)", () => {
+  const d = datosDe(8, [3]);
+
+  it("anuncia la diana del próximo tiro en su ventana, y solo ahí", () => {
+    const t0 = (d.tiros[0] as { t: number }).t;
+    expect(anuncioDeDiana(d, 0)).toBeNull();
+    expect(anuncioDeDiana(d, t0 - ANUNCIO_DIANA - 0.01)).toBeNull();
+    expect(anuncioDeDiana(d, t0 - ANUNCIO_DIANA + 0.01)?.tiro.t).toBe(t0);
+    expect(anuncioDeDiana(d, t0 - 0.01)?.tiro.t).toBe(t0);
+    // En el impacto ya no hay anuncio: la canica está siendo golpeada.
+    expect(anuncioDeDiana(d, t0)).toBeNull();
+    // El próximo tiro toma el relevo, en orden de `tiros`...
+    const t1 = (d.tiros[1] as { t: number }).t;
+    expect(anuncioDeDiana(d, t1 - ANUNCIO_DIANA * 0.5)?.tiro.t).toBe(t1);
+    // ...y después de la última tirada no hay anuncio: el casi es un rodado, no un golpe.
+    const ult = (d.tiros[d.tiros.length - 1] as { t: number }).t;
+    expect(anuncioDeDiana(d, ult + 0.01)).toBeNull();
+    expect(anuncioDeDiana(d, d.casi.t + 0.01)).toBeNull();
+  });
+
+  it("nunca anuncia a la canica que gana (el casi es un rodado, no un golpe)", () => {
+    for (let t = 0; t < d.duracion; t += 0.05) {
+      const a = anuncioDeDiana(d, t);
+      if (a) expect(a.tiro.diana, `a los ${t.toFixed(2)}`).not.toBe(d.ganador);
+    }
+    // En todos los planes de la casa (60 personas, distintas semillas) tampoco.
+    for (const n of [12, 18, 60]) {
+      const ronda = datosDe(n, [3]);
+      for (const tiro of ronda.tiros) expect(tiro.diana).not.toBe(ronda.ganador);
+    }
+  });
+
+  it("el pulso muere antes de que el tiro aterrice, y nace en cero", () => {
+    const t0 = (d.tiros[0] as { t: number }).t;
+    expect(anuncioDeDiana(d, t0 - ANUNCIO_DIANA)?.pulso).toBe(0);
+    const medio = anuncioDeDiana(d, t0 - ANUNCIO_DIANA * 0.4)?.pulso as number;
+    expect(medio).toBeGreaterThan(0.2);
+    // El tramo final de la ventana está sin pulso: muere antes del aterrizaje.
+    expect(anuncioDeDiana(d, t0 - ANUNCIO_DIANA * 0.15)?.pulso).toBe(0);
+    expect(anuncioDeDiana(d, t0 - 0.001)?.pulso).toBe(0);
+  });
+
+  it("el anillo rodea a la canica sin tocarla, con rayas de la paleta de la casa, determinista y con su reparto por tiro", () => {
+    const a = anuncioDeDiana(d, (d.tiros[0] as { t: number }).t - ANUNCIO_DIANA * 0.3) as AnuncioDiana;
+    expect(a.anillo).toBeGreaterThan(CANICA_R * CANICA_ESCALA);
+    expect(a.rayas.length).toBeGreaterThan(0);
+    for (const r of a.rayas) {
+      // Cada raya nace en el anillo (o fuera) y crece hacia afuera, sin meterse en la canica.
+      expect(r.de).toBeGreaterThanOrEqual(a.anillo - 1e-9);
+      expect(r.hasta).toBeGreaterThan(r.de);
+      expect(AGUAYO).toContain(r.color);
+    }
+    expect(anuncioDeDiana(d, (d.tiros[0] as { t: number }).t - ANUNCIO_DIANA * 0.3)).toEqual(a);
+    // Cada diana lleva su reparto: la fase de las rayas cambia de un tiro al otro.
+    const b = anuncioDeDiana(d, (d.tiros[1] as { t: number }).t - ANUNCIO_DIANA * 0.3) as AnuncioDiana;
+    expect(b.rayas[0]?.a).not.toBe(a.rayas[0]?.a);
   });
 });
 

@@ -13,7 +13,7 @@ import {
   CANICA_R, CIRCULO_R, PEGADORA_DIST, trayectoriaDe, unitarioDe,
   type Datos, type Mapeo, type Pun, type Tiro,
 } from "../pixi/bolillas-plan";
-import { cercaDe, CANICA_ESCALA } from "../pixi/bolillas-arte";
+import { cercaDe, anuncioDeDiana, AGUAYO, CANICA_ESCALA } from "../pixi/bolillas-arte";
 /**
  * Bolillas en 3D: la troya de verdad — la tierra con su relieve, el círculo de yeso, las canicas de vidrio y la mano
  * con el agarre ñati que suelta cada tiro. El plan puro (`pixi/bolillas-plan.ts`) decide todo: esta vista solo dibuja
@@ -166,8 +166,8 @@ export const GIRO_FRECUENCIA = 3.2;
 const CERCA_ATRAS = 0.5;
 /** Cuánto se corre de costado: tres cuartos, para que la canica se lea con volumen. */
 const CERCA_CUSTADO = 0.16;
-/** A qué altura vuela la cámara de cerca (una canica mide 0,16 de alto con el dibujo agrandado, S17). */
-const CERCA_ALTO = 0.2;
+/** A qué altura vuela la cámara de cerca (una canica mide 0,20 de alto con el dibujo al doble, S20): el ojo queda por encima del vidrio. */
+const CERCA_ALTO = 0.25;
 /** El campo de la toma de cerca: apenas más abierto que el del director. */
 const CERCA_FOV = (40 * Math.PI) / 180;
 
@@ -518,6 +518,26 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
   const polvo = new Polvo(mundo, g.esfera, B.add(new MeshLambertMaterial({ color: POLVO[tema], flatShading: true })), B);
   const chispo = new Chispas(mundo, g.esfera, B);
 
+  /* --------------------------------------------------------- el anuncio de la diana (S19) */
+  // El anillo con rayas que le dice a la sala a cuál canica le va a pegar la pegadora: pocos polígonos,
+  // la cuenta pura (`anuncioDeDiana` de `bolillas-arte.ts`) decide qué tiro, el pulso y el reparto de rayas;
+  // esta vista solo lo dibuja. Los colores son los del aguayo de la casa.
+  const grupoAnuncio = new Group();
+  mundo.add(grupoAnuncio);
+  const matAnillo = B.add(new MeshBasicMaterial({ color: CHALK[tema], transparent: true, opacity: 0.6, side: DoubleSide, depthWrite: false }));
+  const anillo = new Mesh(B.add(new RingGeometry(0.94, 1.06, 40).rotateX(-Math.PI / 2)), matAnillo);
+  anillo.renderOrder = 1;
+  grupoAnuncio.add(anillo);
+  const matsAguayo = AGUAYO.map((c) => B.add(new MeshBasicMaterial({ color: c, transparent: true, opacity: 0.8, side: DoubleSide, depthWrite: false })));
+  const geoRaya = B.add(new PlaneGeometry(1, 1).rotateX(-Math.PI / 2));
+  const rayas = Array.from({ length: 12 }, () => {
+    const raya = new Mesh(geoRaya, matsAguayo[0] as MeshBasicMaterial);
+    raya.renderOrder = 2;
+    grupoAnuncio.add(raya);
+    return raya;
+  });
+  grupoAnuncio.visible = false;
+
   /* ------------------------------------------------------------- el sonido de la casa */
   // El clic de canica contra canica NO suena acá: lo emite el 2D por la voz del kit (`k.sonido`, eventosDe de
   // `bolillas-sonido.ts`, con el eco, el golpe seco de la caída y los ticks del titileo), y el cuadro del 2D corre
@@ -544,6 +564,7 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
           tiradorCanica.grupo.visible = false;
           tiradorCanica.sombra.visible = false;
           destello.visible = false;
+          grupoAnuncio.visible = false;
           polvo.actualizar(e.t);
           chispo.actualizar(e.t);
           return;
@@ -609,6 +630,26 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
         }
         polvo.actualizar(e.t);
         chispo.actualizar(e.t);
+
+        /* -------- el anuncio de la diana: el anillo con rayas alrededor de la canica que viene */
+        const digo = anuncioDeDiana(d, e.t);
+        grupoAnuncio.visible = digo != null;
+        if (digo) {
+          grupoAnuncio.position.set(digo.tiro.impacto.x, 0.012, digo.tiro.impacto.y);
+          grupoAnuncio.scale.setScalar(1 + 0.22 * digo.pulso);
+          matAnillo.opacity = 0.35 + 0.5 * digo.pulso;
+          anillo.scale.setScalar(digo.anillo);
+          for (let j = 0; j < rayas.length; j++) {
+            const raya = digo.rayas[j] as { a: number; de: number; hasta: number; color: number };
+            const malla = rayas[j] as Mesh;
+            malla.material = matsAguayo[AGUAYO.indexOf(raya.color as (typeof AGUAYO)[number]) % matsAguayo.length] as MeshBasicMaterial;
+            const mid = (raya.de + raya.hasta) / 2;
+            malla.position.set(Math.cos(raya.a) * mid, 0.002, Math.sin(raya.a) * mid);
+            malla.rotation.y = -raya.a;
+            malla.scale.set(raya.hasta - raya.de, 1, CANICA_R * CANICA_ESCALA * 0.3);
+          }
+          for (const m of matsAguayo) m.opacity = 0.65 + 0.3 * digo.pulso;
+        }
 
         /* -------- la mano y la canica de la pegadora */
         let manoViva: Tiro | undefined;
