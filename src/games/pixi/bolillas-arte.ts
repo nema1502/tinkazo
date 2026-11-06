@@ -1,6 +1,6 @@
 import { hashDe, sembrar } from "./kit/azar";
 import { escalaChipLegible } from "./letra";
-import { CANICA_R, type Datos, type Pun, type Tiro, unitarioDe } from "./bolillas-plan";
+import { CANICA_R, trayectoriaDe, type Datos, type Pun, type Tiro, unitarioDe } from "./bolillas-plan";
 
 /**
  * Bolillas: el arte, puro.
@@ -741,4 +741,68 @@ export function cercaDe(d: Pick<Datos, "casi" | "duracion">, t: number): number 
   const s1 = Math.max(t1, d.duracion - vuelve);
   if (t < s1) return 1;
   return t >= d.duracion ? 0 : 1 - suave((t - s1) / Math.max(0.001, d.duracion - s1));
+}
+
+/* ------------------------------------- la persecución de la ganadora (S24) */
+
+/** Cuánto tarda la toma en meterse detrás de la canica, y en soltarla después del golpe. */
+export const PERSEC_ENTRA = 0.28;
+export const PERSEC_SALE = 0.6;
+/** Las rayitas de velocidad que el 2D dibuja detrás de la canica: cuántas, y cuánto vive la más larga. */
+export const PERSEC_ESTELAS = 9;
+export const PERSEC_ESTELA_VIDA = 0.22;
+
+/** Una rayita de velocidad del 2D: dónde nace detrás de la canica, para dónde corre y cuánto vive. */
+export interface Estela {
+  /** Qué tan atrás de la canica arranca, en unidades del círculo. */
+  atras: number;
+  /** Cuánto se corre de costado. */
+  lado: number;
+  /** Lo que mide la rayita, hacia atrás. */
+  largo: number;
+  /** Cuánto vive, en segundos. */
+  vida: number;
+}
+
+/** La toma de la ganadora: su canica, el rumbo del empuje y, para el 2D, las rayitas de la velocidad. */
+export interface Persecucion {
+  /** El peso de la toma: 0 fuera de la ventana, 1 durante el rodado. */
+  peso: number;
+  /** Dónde está la canica de la ganadora en este segundo. */
+  p: Pun;
+  /** El rumbo del empuje: hacia la canica del enemigo. */
+  dir: Pun;
+  /** Las rayitas de velocidad, para el 2D (el 3D pone la cámara en su lugar). */
+  estelas: Estela[];
+}
+
+/**
+ * La persecución de la ganadora (S24): el último turno —cuando adentro solo quedan ella y la rival— se mira desde
+ * su lado. La ventana va de un suspiro antes de que la mano toque su canica (`tMano`) hasta un rato después del
+ * golpe; el peso entra y sale suave, así la cámara no salta y el cierre del `casi` (S14) toma el relevo limpio.
+ * Pura y determinista: la canica sale de `trayectoriaDe` y los números de las rayitas de la semilla fija.
+ */
+export function persecucionDe(
+  d: Pick<Datos, "posiciones" | "tiros" | "casi" | "duracion">,
+  t: number,
+): Persecucion | null {
+  const ultimo = d.tiros.at(-1);
+  if (!ultimo) return null;
+  const desde = ultimo.tMano - PERSEC_ENTRA;
+  const hasta = ultimo.t + PERSEC_SALE;
+  if (t < desde || t > hasta) return null;
+  const suave = (x: number): number => {
+    const k = Math.min(1, Math.max(0, x));
+    return k * k * (3 - 2 * k);
+  };
+  const peso =
+    t < ultimo.tMano ? suave((t - desde) / PERSEC_ENTRA) : t <= ultimo.t ? 1 : 1 - suave((t - ultimo.t) / PERSEC_SALE);
+  const r = sembrar(0x9e3779b9);
+  const estelas = Array.from({ length: PERSEC_ESTELAS }, () => ({
+    atras: 0.06 + r() * 0.42,
+    lado: (r() - 0.5) * 0.34,
+    largo: 0.14 + r() * 0.26,
+    vida: 0.1 + r() * (PERSEC_ESTELA_VIDA - 0.1),
+  }));
+  return { peso, p: trayectoriaDe(d, ultimo.mio, t).p, dir: { ...ultimo.empuje.dir }, estelas };
 }

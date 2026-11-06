@@ -29,6 +29,9 @@ import {
   MANO_COBRA,
   MANO_PREPARA,
   MANO_SUELTA,
+  PERSEC_ENTRA,
+  PERSEC_SALE,
+  persecucionDe,
   MANCHAS_N,
   POLVO_N,
   SEMILLA_FIJA,
@@ -729,6 +732,44 @@ describe("bolillas: dos golpes por turno por la voz única (S23)", () => {
     for (const tiro of d.tiros) {
       expect(eventosDe(d, tiro.tMano + 0.01, false)).toEqual([]);
       expect(eventosDe(d, tiro.t + 0.01, false)).toEqual([]);
+    }
+  });
+});
+
+describe("la persecución de la ganadora (S24)", () => {
+  it("cubre solo el último turno, y su peso nace y muere en cero", () => {
+    for (const n of [2, 8, 12, 18]) {
+      const d = datosDe(n, [Math.min(n - 1, 3)]);
+      const ultimo = d.tiros.at(-1);
+      if (!ultimo) continue;
+      expect(persecucionDe(d, ultimo.tMano - PERSEC_ENTRA - 0.01), `con ${n}: antes`).toBeNull();
+      expect(persecucionDe(d, ultimo.t + PERSEC_SALE + 0.01), `con ${n}: después`).toBeNull();
+      expect(persecucionDe(d, ultimo.tMano - PERSEC_ENTRA + 0.001)?.peso ?? 1, `con ${n}: al entrar`).toBeLessThan(0.05);
+      const medio = (ultimo.tMano + ultimo.t) / 2;
+      expect(persecucionDe(d, medio)?.peso, `con ${n}: en el rodado`).toBeCloseTo(1, 6);
+      expect(persecucionDe(d, ultimo.t + PERSEC_SALE - 0.001)?.peso ?? 1, `con ${n}: al soltar`).toBeLessThan(0.05);
+      // La canica es la de la ganadora: la que empuja en el último turno, y su rumbo el del empuje.
+      expect(ultimo.mio, `con ${n}: empuja la ganadora`).toBe(d.canicas.indexOf(d.ganador));
+      expect(persecucionDe(d, medio)?.p.x).toBeCloseTo(trayectoriaDe(d, ultimo.mio, medio).p.x, 9);
+      expect(persecucionDe(d, medio)?.p.y).toBeCloseTo(trayectoriaDe(d, ultimo.mio, medio).p.y, 9);
+      expect(persecucionDe(d, medio)?.dir.x).toBeCloseTo(ultimo.empuje.dir.x, 9);
+      expect(persecucionDe(d, medio)?.dir.y).toBeCloseTo(ultimo.empuje.dir.y, 9);
+    }
+  });
+
+  it("las rayitas de velocidad salen del azar fijo: la misma ronda da las mismas", () => {
+    const d = datosDe(12, [3]);
+    const ultimo = d.tiros.at(-1);
+    expect(ultimo).toBeDefined();
+    if (!ultimo) return;
+    const a = persecucionDe(d, ultimo.t);
+    const b = persecucionDe(datosDe(12, [3]), ultimo.t);
+    expect(a?.estelas).toEqual(b?.estelas);
+    expect(a?.estelas.length).toBeGreaterThan(0);
+    for (const estela of a?.estelas ?? []) {
+      expect(estela.atras).toBeGreaterThan(0);
+      expect(estela.largo).toBeGreaterThan(0);
+      expect(estela.vida).toBeGreaterThan(0);
     }
   });
 });
