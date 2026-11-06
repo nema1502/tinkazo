@@ -589,13 +589,15 @@
   .ausente-btn { text-wrap: balance; }
   .ausente-btn:focus-visible { outline: 3px solid #191919; outline-offset: 2px; }
   /* Con más de seis ganadores (src/ui/resultado-ganadores.ts): el primero en su tarjeta y los demás en una lista de
-     renglones cortos, número, nombre y «No está». En columnas donde hay lugar (el proyector) y de a uno en el celular. */
+     renglones cortos, número, nombre y «No está». En columnas donde hay lugar y de a uno en el celular. Cada columna
+     mide 380 px o más: con 300 px (tres columnas a 1366 y a 1920) "Valeria Vargas" se partía en dos renglones en casi
+     todos los nombres, y 100 ganadores eran 4.500 px de página. */
   .winner-lista-t { margin-top: 22px; font-size: var(--letra-prin); font-weight: 800; }
   .winner-lista-premio { margin-top: 4px; font-size: var(--letra-sec); }
   .winner-lista-premio span { color: var(--ink2); }
   .winner-lista {
     list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 380px), 1fr));
   }
   .winner-fila {
     display: flex; align-items: center; gap: 4px 10px; min-width: 0; padding: 6px 10px;
@@ -2052,6 +2054,8 @@
   }
   .premio-chips button:hover:not(:disabled) { background: var(--card); color: var(--ink); }
   .premio-chips button[aria-pressed="true"] { background: var(--yellow); color: var(--on-accent); box-shadow: var(--sh-sm); transform: rotate(-1deg); }
+  /* El elegido sigue amarillo con el mouse encima: sin esto, apenas se lo tocaba el amarillo se iba y parecía no elegido. */
+  .premio-chips button[aria-pressed="true"]:hover:not(:disabled) { background: var(--yellow); color: var(--on-accent); }
   /* Ya salió en esta sentada: sigue disponible (puede haber dos libros), pero se nota. */
   .premio-chips button.salio:not([aria-pressed="true"]) { border-style: dashed; color: var(--muted); }
   .premio-chips button:disabled { cursor: default; color: var(--muted); }
