@@ -1,4 +1,5 @@
 import { Container, Graphics } from "pixi.js";
+import { isMuted } from "../../sound";
 import { INK, crearJuego } from "./kit";
 import {
   CANICA_R,
@@ -12,24 +13,57 @@ import {
   type Mapeo,
 } from "./bolillas-plan";
 import { TEXTOS } from "./bolillas-textos";
+import {
+  COLA_GOLPE,
+  SEMILLA_FIJA,
+  T_DESVIO,
+  TIRADOR,
+  coloresCanica,
+  efectosDe,
+  manoDe,
+  polvoDe,
+  tierraManchas,
+  titilazo,
+  tizaCirculo,
+  type ArteCanica,
+} from "./bolillas-arte";
+import { eventosDe } from "./bolillas-sonido";
 
 /**
  * Bolillas: la escena.
  *
- * La tierra, el círculo de tiza y las canicas que el plan sembró (`bolillas-plan.ts`), que trae
- * también la geometría de cada tiro: la canica de la pegadora vuela del punto de largada al impacto,
- * la golpeada sale cruzando la tiza por donde el plan dijo, y el tiro se desvía hasta donde él dijo.
- * Al cierre, la canica que gana rueda hasta la orilla y titila en la tiza. Nada decide por su cuenta:
- * la misma ronda dibuja lo mismo cuadro por cuadro, y saltar el show a cualquier segundo da lo mismo
+ * La tierra sembrada de manchas, el círculo de tiza dibujado a mano alzada (el
+ * trazo que decide, con su eco de doble línea) y la marca de tiza afuera, donde
+ * se para la pegadora según el plan. Las canicas son de vidrio: cada asiento
+ * lleva su color con la llama remolinando adentro, el brillo arriba y su sombra
+ * blanda en la tierra, con el chip de la casa (la cara y el nombre) al lado para
+ * la revelación. La pegadora tira con el agarre ñati —el interior del índice y
+ * el exterior del pulgar—: la mano entra, agarra con la pinza cerrada y suelta
+ * con el flick exactamente en la largada del plan.
+ *
+ * Los choques se ven y se escuchan: en el impacto la golpeada sale despedida
+ * por donde el plan dijo (con el polvo y el scuff en la tierra, la palpitación
+ * del golpe y el destello) mientras el tiro retrocede y se desvía; el clic de
+ * cristal y su eco, y el golpe seco de la caída, salen por la voz del kit.
+ * Al cierre, la canica que gana rueda hasta la orilla y titila en la tiza —
+ * empujones cada vez más chicos que mueren en cero exacto— y se queda: ese es
+ * el grito de la sala. Nada decide por su cuenta: la misma ronda dibuja lo
+ * mismo cuadro por cuadro, y saltar el show a cualquier segundo da lo mismo
  * que llegar mirando.
  *
- * Todo lo demás (el montaje, la cámara, el foco, los subtítulos, el contador y el cierre) lo hace el
- * kit (`./kit`). El polvo, el scuff de la tierra y el clic de canica contra canica se suman en la
- * escena del juego (T2); acá no hay ningún sonido que decida nada.
+ * Todo lo demás (el montaje, la cámara, el foco, los subtítulos, el contador y
+ * el cierre) lo hace el kit (`./kit`). El arte determinista vive en
+ * `bolillas-arte.ts` y el sonido cosmético en `bolillas-sonido.ts`.
  */
 interface Escena {
   fondo: Graphics;
   mundo: Container;
+  /** Las sombras de las canicas en la tierra, debajo de todas. */
+  sombra: Graphics;
+  /** El polvo, el scuff y el destello de los choques, encima de todo. */
+  fx: Graphics;
+  /** La mano de la pegadora, encima de todo. */
+  mano: Graphics;
   /** Un chip por canica (la figura con cara y nombre), creado cuando se ve por primera vez. */
   chips: Map<number, Container>;
   /** Los dibujos de las canicas, por su asiento (y la canica de la pegadora en el -1). */
@@ -37,16 +71,15 @@ interface Escena {
   m: Mapeo;
 }
 
-/** Lo que dura el vuelo de la canica de la pegadora antes del impacto (y su resbalón después). */
-const TIRADOR = 0.55;
-const T_DESVIO = 0.45;
+/** Cuánto dura la marca del scuff de un impacto en la tierra. */
+const SCUFF = 1.6;
 
 export const bolillasPixi = crearJuego<Datos, Escena>({
   id: "bolillas",
   textos: TEXTOS,
   plan: planBolillas,
 
-  arma(k, _plan, previa) {
+  arma(k, plan, previa) {
     const { S } = k;
     const p = k.pantalla();
     const fondo = previa?.fondo ?? new Graphics();
@@ -59,32 +92,83 @@ export const bolillasPixi = crearJuego<Datos, Escena>({
     // Al cambiar de tamaño se tira lo viejo: el círculo y las canicas se piden de nuevo.
     mundo.removeChildren().forEach((c) => c.destroy({ children: true }));
     const m: Mapeo = mapeoDe(p);
-    // La tiza: el círculo que decide, dibujado en el fondo para que ninguna toma lo pierda.
-    fondo.circle(m.cx, m.cy, CIRCULO_R * m.e).stroke({ width: Math.max(2, 5 * p.k), color: 0xf6f2e8, alpha: S.dark ? 0.85 : 0.95 });
+    // La tierra sembrada: manchas de tono, siempre las mismas (la semilla del show).
+    const tierraOscura = S.dark ? 0x2c2013 : 0xc2a273;
+    const tierraClara = S.dark ? 0x49361f : 0xe3c69b;
+    for (const mancha of tierraManchas(SEMILLA_FIJA)) {
+      fondo
+        .circle(m.cx + mancha.x * m.e, m.cy + mancha.y * m.e, Math.max(1, mancha.r * m.e))
+        .fill({ color: mancha.oscuro ? tierraOscura : tierraClara, alpha: mancha.a });
+    }
+    // El suelo pisado: adentro de la tiza la tierra queda más lisa (y más clara).
     fondo.circle(m.cx, m.cy, CIRCULO_R * m.e * 0.995).fill({ color: S.dark ? 0x4a3624 : 0xc9a877, alpha: 0.35 });
+    // La tiza dibujada a mano alzada: un trazo con sus ondas, y el eco de la doble línea.
+    const tiza = tizaCirculo(SEMILLA_FIJA);
+    for (const eco of [1, 1.014]) {
+      tiza.forEach((q, j) => {
+        const w = aMundo(m, { x: q.x * eco, y: q.y * eco });
+        if (j === 0) fondo.moveTo(w.x, w.y);
+        else fondo.lineTo(w.x, w.y);
+      });
+      fondo.stroke({
+        width: Math.max(2, (eco === 1 ? 5 : 2.4) * p.k),
+        color: 0xf6f2e8,
+        alpha: S.dark ? (eco === 1 ? 0.85 : 0.35) : eco === 1 ? 0.95 : 0.4,
+      });
+    }
+    // Las marcas de la pegadora: los lugares donde se para a tirar, del plan (sin azar propio).
+    const vistas = new Set<string>();
+    for (const tiro of plan.datos.tiros) {
+      const clave = `${Math.round(tiro.desde.x * 512)},${Math.round(tiro.desde.y * 512)}`;
+      if (vistas.has(clave)) continue;
+      vistas.add(clave);
+      const w = aMundo(m, tiro.desde);
+      fondo.circle(w.x, w.y, 3.6 * p.k).stroke({ width: Math.max(1, 1.6 * p.k), color: 0xf6f2e8, alpha: 0.55 });
+      fondo.moveTo(w.x - 2.6 * p.k, w.y).lineTo(w.x + 2.6 * p.k, w.y).stroke({ width: Math.max(1, 1.4 * p.k), color: 0xf6f2e8, alpha: 0.45 });
+    }
+    const sombra = new Graphics();
+    const fx = new Graphics();
+    const mano = new Graphics();
+    mundo.addChild(sombra, fx, mano);
     k.cam.cut(m.cx, m.cy, 1);
-    return { fondo, mundo, chips: new Map(), bol: new Map(), m };
+    return { fondo, mundo, sombra, fx, mano, chips: new Map(), bol: new Map(), m };
   },
 
   cuadro(k, plan, e, t) {
     const d = plan.datos;
+    const S = k.S;
+    const golpe = efectosDe(d, t);
+    const mano = manoDe(d, t);
+    const uTitila = (t - d.casi.t) / Math.max(0.001, d.duracion - d.casi.t);
+
+    // Las sombras, abajo de todo: alguna canica nueva se agrega encima y las tapa bien.
+    e.sombra.clear();
 
     // Las canicas de los que juegan: adentro en su lugar, la golpeada volando hasta la tiza, la ganadora titilando.
     d.canicas.forEach((persona, slot) => {
       const tray = trayectoriaDe(d, slot, t);
       let g = e.bol.get(slot);
       if (!g) {
-        g = canica(0.5 * e.m.e * CANICA_R);
+        g = canica(0.5 * e.m.e * CANICA_R, coloresCanica(slot));
         e.bol.set(slot, g);
         e.mundo.addChild(g);
       }
+      const rr = 0.5 * e.m.e * CANICA_R;
       const w = aMundo(e.m, tray.p);
-      // El titileo: la canica que gana quiero cruzar y no cruza; la escena la menea sobre la orilla.
-      const tilta = tray.estado === "titila" && t < d.duracion ? Math.sin((t - d.casi.t) * 9) * 0.14 : tray.estado === "afuera" ? 0.35 : 0;
-      g.position.set(w.x, w.y - g.height * 0.4);
+      // El titileo: la canica que gana quiero cruzar y no cruza; empujones cada vez más chicos que mueren en cero.
+      const tilta = tray.estado === "titila" ? titilazo(uTitila) : tray.estado === "afuera" ? 0.35 : 0;
       g.rotation = tilta;
+      // La palpitación del golpe: solo a la canica que acaba de salir golpeada.
+      g.scale.set(golpe && golpe.tiro.slot === slot ? 1 + 0.22 * golpe.squash : 1);
+      g.position.set(w.x, w.y - rr * 1.08);
       g.visible = tray.estado !== "afuera" || t < d.duracion + 2;
       if (g.visible) g.alpha = tray.estado === "afuera" ? 0.35 : 1;
+      // La sombra blanda en la tierra.
+      if (g.visible) {
+        e.sombra
+          .ellipse(w.x + rr * 0.15, w.y + rr * 0.45, rr * 0.95, rr * 0.5)
+          .fill({ color: 0x000000, alpha: tray.estado === "afuera" ? 0.08 : 0.2 });
+      }
 
       let chip = e.chips.get(persona);
       if (!chip) {
@@ -93,8 +177,9 @@ export const bolillasPixi = crearJuego<Datos, Escena>({
         e.mundo.addChild(chip);
       }
       chip.visible = g.visible && tray.estado !== "afuera";
-      chip.position.set(w.x - chip.width / 2, w.y - g.height - chip.height * 0.85);
       if (k.coronado && persona === d.ganador) chip.scale.set(1.2);
+      else chip.scale.set(1);
+      chip.position.set(w.x - chip.width / 2, w.y - rr * 1.08 - chip.height * 0.85);
     });
     for (const [persona, chip] of e.chips) {
       if (!d.canicas.includes(persona)) chip.visible = false;
@@ -108,7 +193,7 @@ export const bolillasPixi = crearJuego<Datos, Escena>({
         break;
       }
     }
-    const tirador = e.bol.get(-1) ?? canica(0.42 * e.m.e * CANICA_R);
+    const tirador = e.bol.get(-1) ?? canica(0.42 * e.m.e * CANICA_R, coloresCanica(-1));
     if (!e.bol.has(-1)) {
       e.bol.set(-1, tirador);
       e.mundo.addChild(tirador);
@@ -118,22 +203,116 @@ export const bolillasPixi = crearJuego<Datos, Escena>({
       const despues = t > tiroVivo.t;
       const de = despues ? tiroVivo.impacto : tiroVivo.desde;
       const hasta = despues ? tiroVivo.deflexion.hasta : tiroVivo.impacto;
-      const dir = unitarioDe(despues ? { x: hasta.x - de.x, y: hasta.y - de.y } : { x: hasta.x - de.x, y: hasta.y - de.y });
-      const w = aMundo(e.m, { x: de.x + dir.x * f * Math.hypot(hasta.x - de.x, hasta.y - de.y), y: de.y + dir.y * f * Math.hypot(hasta.x - de.x, hasta.y - de.y) });
-      tirador.position.set(w.x, w.y - tirador.height * 0.4);
+      const dir = unitarioDe({ x: hasta.x - de.x, y: hasta.y - de.y });
+      const rr = 0.42 * e.m.e * CANICA_R;
+      const w = aMundo(e.m, {
+        x: de.x + dir.x * f * Math.hypot(hasta.x - de.x, hasta.y - de.y),
+        y: de.y + dir.y * f * Math.hypot(hasta.x - de.x, hasta.y - de.y),
+      });
+      // El retroceso del golpe: el tiro se corre para atrás del impacto, y el empujón muere con la cola.
+      if (golpe && golpe.tiro === tiroVivo) {
+        w.x += golpe.retro.x * e.m.e;
+        w.y += golpe.retro.y * e.m.e;
+      }
+      tirador.position.set(w.x, w.y - rr * 1.08);
+      tirador.rotation = 0;
+      tirador.scale.set(1);
       tirador.visible = true;
+      e.sombra
+        .ellipse(w.x + rr * 0.15, w.y + rr * 0.45, rr * 0.9, rr * 0.5)
+        .fill({ color: 0x000000, alpha: 0.2 });
     } else {
       tirador.visible = false;
+    }
+
+    // El polvo, el scuff y el destello de los choques, encima de todo: cada uno con el reloj del plan.
+    e.fx.clear();
+    e.mundo.addChild(e.fx);
+    d.tiros.forEach((tiro, i) => {
+      const edad = t - tiro.t;
+      if (edad < 0 || edad >= SCUFF) return;
+      const w = aMundo(e.m, tiro.impacto);
+      // El scuff: la marca oscura donde rozó la tierra, que se desvanece.
+      e.fx
+        .ellipse(w.x, w.y + 1.5 * e.m.e * CANICA_R, CANICA_R * e.m.e * 1.05, CANICA_R * e.m.e * 0.5)
+        .fill({ color: S.dark ? 0x241a10 : 0xa98a5c, alpha: 0.22 * (1 - edad / SCUFF) });
+      // El destello del impacto: sube de golpe y se muere con la palpitación.
+      if (edad < COLA_GOLPE) {
+        const flash = 1 - edad / COLA_GOLPE;
+        e.fx
+          .circle(w.x, w.y, CANICA_R * e.m.e * (1.2 + 0.9 * flash))
+          .fill({ color: 0xfff6dd, alpha: 0.5 * flash });
+      }
+      // La nube de polvo, corrida para donde viaja la canica golpeada.
+      if (edad < 0.6) {
+        for (const grano of polvoDe(i, tiro.impacto, tiro.salida.dir)) {
+          if (edad >= grano.vida) continue;
+          const uv = edad / grano.vida;
+          e.fx
+            .circle(
+              w.x + grano.dx * edad * e.m.e,
+              w.y + grano.dy * edad * e.m.e,
+              grano.r * e.m.e * (1 + uv * 2.2),
+            )
+            .fill({ color: S.dark ? 0x6b5230 : 0xd9c9a8, alpha: (1 - uv) * 0.55 });
+        }
+      }
+    });
+
+    // La pegadora de ñati: entra, agarra por atrás con la pinza cerrada, suelta con el flick y se retira.
+    e.mano.clear();
+    e.mundo.addChild(e.mano);
+    if (mano) {
+      e.mano.alpha = mano.velo;
+      const w = aMundo(e.m, mano.en);
+      const rr = 0.42 * e.m.e * CANICA_R;
+      const rh = 3.4 * rr; // la mano mide contra la canica que agarra
+      // El brazo entra por el radial, desde afuera del círculo.
+      const px = w.x + mano.radial.x * rh * 1.25;
+      const py = w.y + mano.radial.y * rh * 1.25;
+      const ax = w.x + mano.radial.x * rh * 6.5;
+      const ay = w.y + mano.radial.y * rh * 6.5;
+      e.mano.moveTo(ax, ay).lineTo(px, py).stroke({ width: rh * 0.7, color: INK, cap: "round" });
+      e.mano.moveTo(ax, ay).lineTo(px, py).stroke({ width: rh * 0.52, color: S.color(2), cap: "round" });
+      // La palma, detrás de la canica: el ñati agarra por atrás.
+      e.mano.circle(px, py, rh * 0.62).fill(0xc68a5c).stroke({ width: Math.max(1, rh * 0.08), color: INK });
+      // Índice y pulgar: casi juntos con la pinza cerrada, abiertos de golpe con el flick.
+      const aparte = 0.32 + 0.85 * mano.pinza;
+      const hacia = Math.atan2(-mano.radial.y, -mano.radial.x);
+      for (const lado of [-1, 1]) {
+        const a = hacia + lado * aparte;
+        const tx = px + Math.cos(a) * rh * 1.05;
+        const ty = py + Math.sin(a) * rh * 1.05;
+        e.mano.moveTo(px, py).lineTo(tx, ty).stroke({ width: rh * 0.24, color: INK, cap: "round" });
+        e.mano.moveTo(px, py).lineTo(tx, ty).stroke({ width: rh * 0.17, color: 0xc68a5c, cap: "round" });
+      }
+    } else {
+      e.mano.alpha = 0;
+    }
+
+    // El sonido de los choques, cosmético: por la voz del kit (muda con el estadio en silencio), una sola vez por evento.
+    for (const ev of eventosDe(d, t, !isMuted())) {
+      k.sonido.una(ev.clave, () => {
+        const tocar = (): void => k.sonido.tono(ev.grado, ev.cat, { dur: ev.dur, timbre: ev.timbre, vol: ev.vol });
+        if (ev.retrasoMs) k.sonido.despues(ev.retrasoMs, tocar);
+        else tocar();
+      });
     }
   },
 });
 
-/** Una canica de vidrio, en píxeles de mundo: el cuerpo con el brillo arriba. */
-function canica(r: number): Graphics {
-  return new Graphics()
-    .circle(0, r, r)
-    .fill(0x8fd0c8)
-    .stroke({ width: Math.max(1, r * 0.35), color: INK })
-    .circle(-r * 0.3, r - r * 0.35, r * 0.28)
-    .fill({ color: 0xffffff, alpha: 0.5 });
+/** Una canica de vidrio, en píxeles de mundo: el cuerpo translúcido, la llama adentro y el brillo arriba. */
+function canica(r: number, arte: ArteCanica): Graphics {
+  const g = new Graphics();
+  // El vidrio: cuerpo y borde que refracta (un anillo más oscuro por dentro).
+  g.circle(0, r, r).fill(arte.base);
+  g.circle(0, r, r * 0.78).stroke({ width: Math.max(1, r * 0.2), color: arte.oscuro, alpha: 0.35 });
+  // La llama remolinando adentro: dos vueltas del color del fuego.
+  g.arc(0, r, r * 0.56, 0.4, 2.6).stroke({ width: Math.max(1, r * 0.3), color: arte.llama, alpha: 0.7, cap: "round" });
+  g.arc(0, r, r * 0.3, 2.9, 5.2).stroke({ width: Math.max(1, r * 0.24), color: arte.llama2, alpha: 0.6, cap: "round" });
+  // El brillo del vidrio, arriba a la izquierda.
+  g.circle(-r * 0.3, r - r * 0.35, r * 0.28).fill({ color: 0xffffff, alpha: 0.5 });
+  // El contorno de la casa.
+  g.circle(0, r, r).stroke({ width: Math.max(1, r * 0.3), color: INK });
+  return g;
 }
