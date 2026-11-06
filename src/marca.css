@@ -279,8 +279,9 @@
 /* La frase: el nombre, la dirección y el lema, como van en un afiche o en la pared de sponsors. */
 .marca-frase { margin-top: 36px; }
 .marca-frase-caja { margin: 10px 0 14px; padding: 26px 28px; border: 3px solid var(--ink); box-shadow: var(--sh); background: var(--amarillo, #ffd23f); color: #1b1b1f; }
-.marca-frase-url { margin: 0 0 6px; font-size: 20px; font-weight: 700; letter-spacing: 0.02em; }
-.marca-frase-titulo { margin: 0; font-size: clamp(30px, 5vw, 56px); line-height: 1.05; letter-spacing: -0.01em; text-wrap: balance; }
-.marca-frase-gratis { margin: 12px 0 0; font-size: 22px; font-weight: 700; }
+/* Todo lo que va sobre el amarillo lleva la tinta oscura fija: el tema oscuro pinta el texto claro y no se leía. */
+.marca-frase-caja .marca-frase-url { margin: 0 0 8px; font-size: 22px; font-weight: 700; letter-spacing: 0.02em; color: #1b1b1f; opacity: 1; }
+.marca-frase-caja .marca-frase-titulo { margin: 0; font-size: clamp(30px, 5vw, 56px); line-height: 1.05; letter-spacing: -0.01em; text-wrap: balance; color: #1b1b1f; }
+.marca-frase-caja .marca-frase-gratis { margin: 14px 0 0; font-size: 22px; font-weight: 800; color: #1b1b1f; opacity: 1; }
 .marca-frase-copia { margin: 0 0 10px; padding: 12px 14px; border: 2px solid var(--line); border-radius: 12px; background: var(--field); font-size: 17px; line-height: 1.45; text-wrap: pretty; }
 @media (max-width: 760px) { .marca-frase-caja { padding: 20px 18px; } .marca-frase-gratis { font-size: 19px; } }
