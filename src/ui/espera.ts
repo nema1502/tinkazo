@@ -205,17 +205,37 @@ function panelDeJuegosHtml(juegos: OpcionDeJuego[]): string {
   );
 }
 
-/** Los botones de la lista de juegos: el elegido marcado, la estrella en los que encajan con esta cantidad de gente. */
-function opcionesHtml(juegos: OpcionDeJuego[]): string {
+/** La pareja de capturas de un juego, la misma del selector (`botones-kit.ts`): una por tema, oscura y clara. */
+const capturasDe = (game: string): string[] => [`/juegos/selector/${game}.webp`, `/juegos/selector/${game}-light.webp`];
+
+/** ¿Hay captura del juego? La fuente de verdad es el selector de la página: su botón trae las dos imágenes cuando la hay. */
+function tieneCaptura(game: string): boolean {
+  return !!document.querySelector(`#g-${game} img.sel-img`);
+}
+
+/** Las opciones de la lista de juegos: la captura del juego en su tema cuando hay (elige la lista el juego, y su
+ * tarjeta se ve como la del selector de la página), y el juego sin captura queda como el botón de texto de siempre.
+ * El elegido va marcado y la estrella avisa qué encaja con esta cantidad de gente. */
+export function opcionesHtml(juegos: OpcionDeJuego[]): string {
   return juegos
-    .map(
-      (j) =>
-        `<button type="button" class="espera-juego-op" data-game="${esc(j.game)}" aria-pressed="${j.elegido}">` +
+    .map((j) => {
+      const imgs = tieneCaptura(j.game)
+        ? capturasDe(j.game)
+            .map(
+              (src, k) =>
+                `<img class="sel-img ${k ? "sel-cla" : "sel-osc"}" src="${src}" width="320" height="180" alt="" loading="lazy" decoding="async" />`,
+            )
+            .join("")
+        : "";
+      return (
+        `<button type="button" class="espera-juego-op${imgs ? " con-captura" : ""}" data-game="${esc(j.game)}" aria-pressed="${j.elegido}">` +
+        imgs +
         `<span class="espera-juego-nombre">${j.recomendado ? `<i aria-hidden="true">★</i> ` : ""}${esc(j.nombre)}</span>` +
         (j.recomendado ? `<span class="sr-only">, ${esc(t("recBadge"))}</span>` : "") +
         (j.rango ? `<small>${esc(j.rango)}</small>` : "") +
-        `</button>`,
-    )
+        `</button>`
+      );
+    })
     .join("");
 }
 
