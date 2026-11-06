@@ -1,6 +1,11 @@
 import { Container, Graphics } from "pixi.js";
 import { isMuted } from "../../sound";
-import { INK, crearJuego } from "./kit";
+import { enchufar3D, entradaBase } from "../tres/enchufe";
+import type { EntradaBolillas } from "../tres/bolillas-3d";
+import type { Montaje3D, Vista3D } from "../tres/tipos";
+import { INK, crearJuego, type DefJuego, type Lanzador } from "./kit";
+import { anfitrionTinkazo, type Anfitrion } from "./kit/anfitrion";
+import { mountPixi } from "./stage";
 import {
   CANICA_R,
   CIRCULO_R,
@@ -69,12 +74,25 @@ interface Escena {
   /** Los dibujos de las canicas, por su asiento (y la canica de la pegadora en el -1). */
   bol: Map<number, Graphics>;
   m: Mapeo;
+  /** La vista 3D enchufada (solo con `?motor=3d`) y su entrada, que esta escena llena cuadro a cuadro. */
+  v3: Vista3D<EntradaBolillas> | null;
+  entrada3: EntradaBolillas | null;
+}
+
+/** La entrada vacía del 3D, armada acá: importa el tipo, no el módulo de three.js. */
+function entrada3Vacia(): EntradaBolillas {
+  return {
+    t: 0, w: 0, h: 0, u: 1,
+    cam: { x: 0, y: 0, zoom: 1, rot: 0, sacudonX: 0, sacudonY: 0 },
+    plan: null,
+    mapeo: { cx: 0, cy: 0, e: 100 },
+  };
 }
 
 /** Cuánto dura la marca del scuff de un impacto en la tierra. */
 const SCUFF = 1.6;
 
-export const bolillasPixi = crearJuego<Datos, Escena>({
+const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> => ({
   id: "bolillas",
   textos: TEXTOS,
   plan: planBolillas,
@@ -131,43 +149,57 @@ export const bolillasPixi = crearJuego<Datos, Escena>({
     const mano = new Graphics();
     mundo.addChild(sombra, fx, mano);
     k.cam.cut(m.cx, m.cy, 1);
-    return { fondo, mundo, sombra, fx, mano, chips: new Map(), bol: new Map(), m };
+    // El 3D (si está prendido y arrancó): el fondo y la tierra del 2D se apagan — las canicas las dibuja
+    // three.js y los nombres siguen siendo chips de PixiJS proyectados sobre el mismo círculo.
+    const v3 = previa ? previa.v3 : enchufar3D(S, tres);
+    v3?.reconstruir?.();
+    if (v3) {
+      fondo.visible = false;
+      S.bg.visible = false;
+    }
+    const entrada3 = v3 ? previa?.entrada3 ?? entrada3Vacia() : null;
+    return { fondo, mundo, sombra, fx, mano, chips: new Map(), bol: new Map(), m, v3, entrada3 };
   },
 
   cuadro(k, plan, e, t) {
     const d = plan.datos;
     const S = k.S;
+    const en3d = e.v3 != null;
     const golpe = efectosDe(d, t);
     const mano = manoDe(d, t);
     const uTitila = (t - d.casi.t) / Math.max(0.001, d.duracion - d.casi.t);
 
     // Las sombras, abajo de todo: alguna canica nueva se agrega encima y las tapa bien.
-    e.sombra.clear();
+    if (!en3d) e.sombra.clear();
 
     // Las canicas de los que juegan: adentro en su lugar, la golpeada volando hasta la tiza, la ganadora titilando.
+    // Con el 3D enchufado las dibuja three.js; acá quedan los chips con cara y nombre, sobre la misma proyección.
     d.canicas.forEach((persona, slot) => {
       const tray = trayectoriaDe(d, slot, t);
-      let g = e.bol.get(slot);
-      if (!g) {
-        g = canica(0.5 * e.m.e * CANICA_R, coloresCanica(slot));
-        e.bol.set(slot, g);
-        e.mundo.addChild(g);
-      }
+      const seVe = tray.estado !== "afuera" || t < d.duracion + 2;
       const rr = 0.5 * e.m.e * CANICA_R;
       const w = aMundo(e.m, tray.p);
-      // El titileo: la canica que gana quiero cruzar y no cruza; empujones cada vez más chicos que mueren en cero.
-      const tilta = tray.estado === "titila" ? titilazo(uTitila) : tray.estado === "afuera" ? 0.35 : 0;
-      g.rotation = tilta;
-      // La palpitación del golpe: solo a la canica que acaba de salir golpeada.
-      g.scale.set(golpe && golpe.tiro.slot === slot ? 1 + 0.22 * golpe.squash : 1);
-      g.position.set(w.x, w.y - rr * 1.08);
-      g.visible = tray.estado !== "afuera" || t < d.duracion + 2;
-      if (g.visible) g.alpha = tray.estado === "afuera" ? 0.35 : 1;
-      // La sombra blanda en la tierra.
-      if (g.visible) {
-        e.sombra
-          .ellipse(w.x + rr * 0.15, w.y + rr * 0.45, rr * 0.95, rr * 0.5)
-          .fill({ color: 0x000000, alpha: tray.estado === "afuera" ? 0.08 : 0.2 });
+      if (!en3d) {
+        let g = e.bol.get(slot);
+        if (!g) {
+          g = canica(0.5 * e.m.e * CANICA_R, coloresCanica(slot));
+          e.bol.set(slot, g);
+          e.mundo.addChild(g);
+        }
+        // El titileo: la canica que gana quiero cruzar y no cruza; empujones cada vez más chicos que mueren en cero.
+        const tilta = tray.estado === "titila" ? titilazo(uTitila) : tray.estado === "afuera" ? 0.35 : 0;
+        g.rotation = tilta;
+        // La palpitación del golpe: solo a la canica que acaba de salir golpeada.
+        g.scale.set(golpe && golpe.tiro.slot === slot ? 1 + 0.22 * golpe.squash : 1);
+        g.position.set(w.x, w.y - rr * 1.08);
+        g.visible = seVe;
+        if (g.visible) g.alpha = tray.estado === "afuera" ? 0.35 : 1;
+        // La sombra blanda en la tierra.
+        if (g.visible) {
+          e.sombra
+            .ellipse(w.x + rr * 0.15, w.y + rr * 0.45, rr * 0.95, rr * 0.5)
+            .fill({ color: 0x000000, alpha: tray.estado === "afuera" ? 0.08 : 0.2 });
+        }
       }
 
       let chip = e.chips.get(persona);
@@ -176,7 +208,7 @@ export const bolillasPixi = crearJuego<Datos, Escena>({
         e.chips.set(persona, chip);
         e.mundo.addChild(chip);
       }
-      chip.visible = g.visible && tray.estado !== "afuera";
+      chip.visible = seVe && tray.estado !== "afuera";
       if (k.coronado && persona === d.ganador) chip.scale.set(1.2);
       else chip.scale.set(1);
       chip.position.set(w.x - chip.width / 2, w.y - rr * 1.08 - chip.height * 0.85);
@@ -186,111 +218,121 @@ export const bolillasPixi = crearJuego<Datos, Escena>({
     }
 
     // La canica de la pegadora: vuela del punto de largada al impacto y después se desvía hasta su freno.
-    let tiroVivo: (typeof d.tiros)[number] | undefined;
-    for (const tiro of d.tiros) {
-      if (t >= tiro.t - TIRADOR && t <= tiro.t + T_DESVIO) {
-        tiroVivo = tiro;
-        break;
+    // Con el 3D enchufado la dibuja three.js.
+    if (!en3d) {
+      let tiroVivo: (typeof d.tiros)[number] | undefined;
+      for (const tiro of d.tiros) {
+        if (t >= tiro.t - TIRADOR && t <= tiro.t + T_DESVIO) {
+          tiroVivo = tiro;
+          break;
+        }
       }
-    }
-    const tirador = e.bol.get(-1) ?? canica(0.42 * e.m.e * CANICA_R, coloresCanica(-1));
-    if (!e.bol.has(-1)) {
-      e.bol.set(-1, tirador);
-      e.mundo.addChild(tirador);
-    }
-    if (tiroVivo) {
-      const f = t > tiroVivo.t ? Math.min(1, (t - tiroVivo.t) / T_DESVIO) : Math.max(0, (t - (tiroVivo.t - TIRADOR)) / TIRADOR);
-      const despues = t > tiroVivo.t;
-      const de = despues ? tiroVivo.impacto : tiroVivo.desde;
-      const hasta = despues ? tiroVivo.deflexion.hasta : tiroVivo.impacto;
-      const dir = unitarioDe({ x: hasta.x - de.x, y: hasta.y - de.y });
-      const rr = 0.42 * e.m.e * CANICA_R;
-      const w = aMundo(e.m, {
-        x: de.x + dir.x * f * Math.hypot(hasta.x - de.x, hasta.y - de.y),
-        y: de.y + dir.y * f * Math.hypot(hasta.x - de.x, hasta.y - de.y),
-      });
-      // El retroceso del golpe: el tiro se corre para atrás del impacto, y el empujón muere con la cola.
-      if (golpe && golpe.tiro === tiroVivo) {
-        w.x += golpe.retro.x * e.m.e;
-        w.y += golpe.retro.y * e.m.e;
+      const tirador = e.bol.get(-1) ?? canica(0.42 * e.m.e * CANICA_R, coloresCanica(-1));
+      if (!e.bol.has(-1)) {
+        e.bol.set(-1, tirador);
+        e.mundo.addChild(tirador);
       }
-      tirador.position.set(w.x, w.y - rr * 1.08);
-      tirador.rotation = 0;
-      tirador.scale.set(1);
-      tirador.visible = true;
-      e.sombra
-        .ellipse(w.x + rr * 0.15, w.y + rr * 0.45, rr * 0.9, rr * 0.5)
-        .fill({ color: 0x000000, alpha: 0.2 });
-    } else {
-      tirador.visible = false;
+      if (tiroVivo) {
+        const f = t > tiroVivo.t ? Math.min(1, (t - tiroVivo.t) / T_DESVIO) : Math.max(0, (t - (tiroVivo.t - TIRADOR)) / TIRADOR);
+        const despues = t > tiroVivo.t;
+        const de = despues ? tiroVivo.impacto : tiroVivo.desde;
+        const hasta = despues ? tiroVivo.deflexion.hasta : tiroVivo.impacto;
+        const dir = unitarioDe({ x: hasta.x - de.x, y: hasta.y - de.y });
+        const rr = 0.42 * e.m.e * CANICA_R;
+        const w = aMundo(e.m, {
+          x: de.x + dir.x * f * Math.hypot(hasta.x - de.x, hasta.y - de.y),
+          y: de.y + dir.y * f * Math.hypot(hasta.x - de.x, hasta.y - de.y),
+        });
+        // El retroceso del golpe: el tiro se corre para atrás del impacto, y el empujón muere con la cola.
+        if (golpe && golpe.tiro === tiroVivo) {
+          w.x += golpe.retro.x * e.m.e;
+          w.y += golpe.retro.y * e.m.e;
+        }
+        tirador.position.set(w.x, w.y - rr * 1.08);
+        tirador.rotation = 0;
+        tirador.scale.set(1);
+        tirador.visible = true;
+        e.sombra
+          .ellipse(w.x + rr * 0.15, w.y + rr * 0.45, rr * 0.9, rr * 0.5)
+          .fill({ color: 0x000000, alpha: 0.2 });
+      } else {
+        tirador.visible = false;
+      }
     }
 
     // El polvo, el scuff y el destello de los choques, encima de todo: cada uno con el reloj del plan.
-    e.fx.clear();
-    e.mundo.addChild(e.fx);
-    d.tiros.forEach((tiro, i) => {
-      const edad = t - tiro.t;
-      if (edad < 0 || edad >= SCUFF) return;
-      const w = aMundo(e.m, tiro.impacto);
-      // El scuff: la marca oscura donde rozó la tierra, que se desvanece.
-      e.fx
-        .ellipse(w.x, w.y + 1.5 * e.m.e * CANICA_R, CANICA_R * e.m.e * 1.05, CANICA_R * e.m.e * 0.5)
-        .fill({ color: S.dark ? 0x241a10 : 0xa98a5c, alpha: 0.22 * (1 - edad / SCUFF) });
-      // El destello del impacto: sube de golpe y se muere con la palpitación.
-      if (edad < COLA_GOLPE) {
-        const flash = 1 - edad / COLA_GOLPE;
+    // Con el 3D enchufado los dibuja three.js.
+    if (!en3d) {
+      e.fx.clear();
+      e.mundo.addChild(e.fx);
+      d.tiros.forEach((tiro, i) => {
+        const edad = t - tiro.t;
+        if (edad < 0 || edad >= SCUFF) return;
+        const w = aMundo(e.m, tiro.impacto);
+        // El scuff: la marca oscura donde rozó la tierra, que se desvanece.
         e.fx
-          .circle(w.x, w.y, CANICA_R * e.m.e * (1.2 + 0.9 * flash))
-          .fill({ color: 0xfff6dd, alpha: 0.5 * flash });
-      }
-      // La nube de polvo, corrida para donde viaja la canica golpeada.
-      if (edad < 0.6) {
-        for (const grano of polvoDe(i, tiro.impacto, tiro.salida.dir)) {
-          if (edad >= grano.vida) continue;
-          const uv = edad / grano.vida;
+          .ellipse(w.x, w.y + 1.5 * e.m.e * CANICA_R, CANICA_R * e.m.e * 1.05, CANICA_R * e.m.e * 0.5)
+          .fill({ color: S.dark ? 0x241a10 : 0xa98a5c, alpha: 0.22 * (1 - edad / SCUFF) });
+        // El destello del impacto: sube de golpe y se muere con la palpitación.
+        if (edad < COLA_GOLPE) {
+          const flash = 1 - edad / COLA_GOLPE;
           e.fx
-            .circle(
-              w.x + grano.dx * edad * e.m.e,
-              w.y + grano.dy * edad * e.m.e,
-              grano.r * e.m.e * (1 + uv * 2.2),
-            )
-            .fill({ color: S.dark ? 0x6b5230 : 0xd9c9a8, alpha: (1 - uv) * 0.55 });
+            .circle(w.x, w.y, CANICA_R * e.m.e * (1.2 + 0.9 * flash))
+            .fill({ color: 0xfff6dd, alpha: 0.5 * flash });
         }
-      }
-    });
+        // La nube de polvo, corrida para donde viaja la canica golpeada.
+        if (edad < 0.6) {
+          for (const grano of polvoDe(i, tiro.impacto, tiro.salida.dir)) {
+            if (edad >= grano.vida) continue;
+            const uv = edad / grano.vida;
+            e.fx
+              .circle(
+                w.x + grano.dx * edad * e.m.e,
+                w.y + grano.dy * edad * e.m.e,
+                grano.r * e.m.e * (1 + uv * 2.2),
+              )
+              .fill({ color: S.dark ? 0x6b5230 : 0xd9c9a8, alpha: (1 - uv) * 0.55 });
+          }
+        }
+      });
+    }
 
     // La pegadora de ñati: entra, agarra por atrás con la pinza cerrada, suelta con el flick y se retira.
-    e.mano.clear();
-    e.mundo.addChild(e.mano);
-    if (mano) {
-      e.mano.alpha = mano.velo;
-      const w = aMundo(e.m, mano.en);
-      const rr = 0.42 * e.m.e * CANICA_R;
-      const rh = 3.4 * rr; // la mano mide contra la canica que agarra
-      // El brazo entra por el radial, desde afuera del círculo.
-      const px = w.x + mano.radial.x * rh * 1.25;
-      const py = w.y + mano.radial.y * rh * 1.25;
-      const ax = w.x + mano.radial.x * rh * 6.5;
-      const ay = w.y + mano.radial.y * rh * 6.5;
-      e.mano.moveTo(ax, ay).lineTo(px, py).stroke({ width: rh * 0.7, color: INK, cap: "round" });
-      e.mano.moveTo(ax, ay).lineTo(px, py).stroke({ width: rh * 0.52, color: S.color(2), cap: "round" });
-      // La palma, detrás de la canica: el ñati agarra por atrás.
-      e.mano.circle(px, py, rh * 0.62).fill(0xc68a5c).stroke({ width: Math.max(1, rh * 0.08), color: INK });
-      // Índice y pulgar: casi juntos con la pinza cerrada, abiertos de golpe con el flick.
-      const aparte = 0.32 + 0.85 * mano.pinza;
-      const hacia = Math.atan2(-mano.radial.y, -mano.radial.x);
-      for (const lado of [-1, 1]) {
-        const a = hacia + lado * aparte;
-        const tx = px + Math.cos(a) * rh * 1.05;
-        const ty = py + Math.sin(a) * rh * 1.05;
-        e.mano.moveTo(px, py).lineTo(tx, ty).stroke({ width: rh * 0.24, color: INK, cap: "round" });
-        e.mano.moveTo(px, py).lineTo(tx, ty).stroke({ width: rh * 0.17, color: 0xc68a5c, cap: "round" });
+    // Con el 3D enchufado la dibuja three.js.
+    if (!en3d) {
+      e.mano.clear();
+      e.mundo.addChild(e.mano);
+      if (mano) {
+        e.mano.alpha = mano.velo;
+        const w = aMundo(e.m, mano.en);
+        const rr = 0.42 * e.m.e * CANICA_R;
+        const rh = 3.4 * rr; // la mano mide contra la canica que agarra
+        // El brazo entra por el radial, desde afuera del círculo.
+        const px = w.x + mano.radial.x * rh * 1.25;
+        const py = w.y + mano.radial.y * rh * 1.25;
+        const ax = w.x + mano.radial.x * rh * 6.5;
+        const ay = w.y + mano.radial.y * rh * 6.5;
+        e.mano.moveTo(ax, ay).lineTo(px, py).stroke({ width: rh * 0.7, color: INK, cap: "round" });
+        e.mano.moveTo(ax, ay).lineTo(px, py).stroke({ width: rh * 0.52, color: S.color(2), cap: "round" });
+        // La palma, detrás de la canica: el ñati agarra por atrás.
+        e.mano.circle(px, py, rh * 0.62).fill(0xc68a5c).stroke({ width: Math.max(1, rh * 0.08), color: INK });
+        // Índice y pulgar: casi juntos con la pinza cerrada, abiertos de golpe con el flick.
+        const aparte = 0.32 + 0.85 * mano.pinza;
+        const hacia = Math.atan2(-mano.radial.y, -mano.radial.x);
+        for (const lado of [-1, 1]) {
+          const a = hacia + lado * aparte;
+          const tx = px + Math.cos(a) * rh * 1.05;
+          const ty = py + Math.sin(a) * rh * 1.05;
+          e.mano.moveTo(px, py).lineTo(tx, ty).stroke({ width: rh * 0.24, color: INK, cap: "round" });
+          e.mano.moveTo(px, py).lineTo(tx, ty).stroke({ width: rh * 0.17, color: 0xc68a5c, cap: "round" });
+        }
+      } else {
+        e.mano.alpha = 0;
       }
-    } else {
-      e.mano.alpha = 0;
     }
 
     // El sonido de los choques, cosmético: por la voz del kit (muda con el estadio en silencio), una sola vez por evento.
+    // Corre también con el 3D enchufado: es la única voz de sonido del juego.
     for (const ev of eventosDe(d, t, !isMuted())) {
       k.sonido.una(ev.clave, () => {
         const tocar = (): void => k.sonido.tono(ev.grado, ev.cat, { dur: ev.dur, timbre: ev.timbre, vol: ev.vol });
@@ -298,8 +340,23 @@ export const bolillasPixi = crearJuego<Datos, Escena>({
         else tocar();
       });
     }
+
+    // La entrada del 3D: el plan y el mapeo de este cuadro, sin crear objetos nuevos.
+    if (e.v3 && e.entrada3) {
+      const en = e.entrada3;
+      Object.assign(en, entradaBase(S, t));
+      en.plan = d;
+      en.mapeo = e.m;
+      e.v3.frame(en);
+    }
   },
 });
+
+export const bolillasPixi = crearJuego<Datos, Escena>(definicion());
+
+/** El mismo juego con el 3D debajo: lo lanza `src/games/tres/bolillas-3d.ts` (con `?motor=3d`; Bolillas nace apagada). */
+const anfitrion3D: Anfitrion = { ...anfitrionTinkazo, montar: (baliza, listo, alSaltar, o) => mountPixi(baliza, listo, alSaltar, { music: o.musica, transparente: true }) };
+export const bolillasPixi3D = (tres: Montaje3D<EntradaBolillas>): Lanzador => crearJuego<Datos, Escena>(definicion(tres), anfitrion3D);
 
 /** Una canica de vidrio, en píxeles de mundo: el cuerpo translúcido, la llama adentro y el brillo arriba. */
 function canica(r: number, arte: ArteCanica): Graphics {
