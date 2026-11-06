@@ -48,8 +48,8 @@ export const PEGADORA_DIST = 1.55;
 /** Siembra la canica que gana a esta distancia de la tiza: tan cerca que titila. */
 const TITILA_R = CIRCULO_R - CANICA_R * 1.1;
 
-/** Los segundos del show: la presentación, las oleadas de la tanda previa y el pulso de los tiros. */
-const T_INTRO = 3.2;
+/** Los segundos del show: la presentación, las oleadas de la tanda previa y el pulso de los tiros. Publicado para las escenas: es el beat de la intro que ve la sala (S18). */
+export const T_INTRO = 3.2;
 const Q_WAVE = 2.8;
 const CIERRA_CLAS = 1.1;
 const ENTRA_CIRC = 0.8;
@@ -61,6 +61,14 @@ const GOLPE_EN = 3.4;
 /** Lo que mide la fuerza de una salida, en unidades del círculo por segundo. */
 const FUERZA_MIN = 0.9;
 const FUERZA_BANDA = 0.5;
+/** Lo que rueda mi canica al empujar: ni instantáneo, ni una siesta. */
+const RODADA_MIN = 0.16;
+const RODADA_MAX = 0.46;
+const RODADA_VEL = 1.9;
+/** Cuánto se abre la salida alrededor del rumbo del empuje, y cuánto de frente tiene que ir (S21: nunca vuelve). */
+const PASO_SALIDA = (5 * Math.PI) / 180;
+const ABANICO_SALIDA = 4;
+const SALIDA_AL_FRENTE = 0.9;
 
 export interface Pun {
   x: number;
@@ -77,26 +85,38 @@ export interface Pant {
 }
 
 /**
- * Un tiro de la pegadora: todo lo que las escenas necesitan para animarlo, en
- * unidades del círculo. El impacto cae sobre la canica que sale; su salida va
- * hasta la tiza (`tiza`, donde la cruza); el tiro se desvía y se frena en
- * `deflexion.hasta`.
+ * Un turno de la troya (S23): la cadena de tres cuerpos, en unidades del círculo. La mano de quien tira larga de
+ * afuera y pega en **su** canica (`choque`); su canica rueda y empuja a la del enemigo (`empuje.donde`), y la del
+ * enemigo sale **adelante** sobre la línea del empuje hasta cruzar la tiza (S21). Todo lo que las escenas necesitan
+ * para animarlo viene de acá: el reloj y la geometría son del plan.
  */
 export interface Tiro {
-  /** La persona que saca, por su puesto en la lista. */
+  /** Quién tira este turno, por su puesto en la lista: rota entre los que siguen adentro (S23). */
+  tirador: number;
+  /** Su canica, por su asiento: la que la mano empuja y la que nunca sale en este tiro. */
+  mio: number;
+  /** La persona de la canica que sale, por su puesto en la lista. */
   diana: number;
   /** La canica que sale, por su asiento en `posiciones` y en `canicas`. */
   slot: number;
-  /** El segundo de juego del impacto. */
+  /** El segundo del segundo impacto: mi canica golpea a la del enemigo y la manda a cruzar. */
   t: number;
-  /** Dónde larga la pegadora su canica: siempre afuera de la tiza. */
+  /** El segundo en que la mano toca mi canica: desde ahí rueda hasta `empuje.hasta`. */
+  tMano: number;
+  /** Dónde larga la mano: siempre afuera de la tiza. */
   desde: Pun;
-  /** El impacto: cayo sobre la canica que saca (su lugar de la siembra). */
+  /** Dónde está mi canica cuando la mano la toca: el primer impacto de la cadena. */
+  choque: Pun;
+  /** El empuje: mi canica rueda en `dir` hasta `hasta` y golpea a la del enemigo, que espera en `donde`. */
+  empuje: { dir: Pun; donde: Pun; hasta: Pun; vuelo: number };
+  /** El impacto sobre la canica que sale: el mismo punto que `empuje.donde`. */
   impacto: Pun;
-  /** La salida de la canica golpeada: rumbo unitario, dónde cruza la tiza, la fuerza y lo que vuela. */
+  /** La salida del enemigo: sigue adelante sobre la línea del empuje (S21) y cruza la tiza en `tiza`. */
   salida: { dir: Pun; tiza: Pun; fuerza: number; vuelo: number };
-  /** La deflectación del tiro: su rumbo nuevo y dónde queda frenado. */
+  /** La mano después del choque: se corre y se frena. */
   deflexion: { dir: Pun; hasta: Pun };
+  /** Dónde queda la mano: el mismo punto que `deflexion.hasta`. */
+  mano: { hasta: Pun };
 }
 
 /** El casi del cierre: la última tirada roza a la canica que gana, que titila en la tiza y se queda. */
@@ -157,10 +177,15 @@ export interface Mapeo {
   e: number;
 }
 
-/** La tierra cabe entera en la franja libre, centrada: ni la tiza se corta con la barra ni con el relator. */
+/** Cuánto del ancho de la pantalla mide de radio el círculo (S16): el encuadre de cerca que pidió la sala. */
+const ENCUADRE_ANCHO = 0.47;
+/** Cuánto de la franja libre, en alto: siempre inscripto, con aire, móvil primero. */
+const ENCUADRE_ALTO = 0.45;
+
+/** La tierra cabe entera en la franja libre, centrada, y de cerca: el círculo llena la pantalla sin tocarse los bordes (S16). */
 export function mapeoDe(p: Pant): Mapeo {
   const zona = p.bottom - p.top;
-  return { cx: p.w / 2, cy: (p.top + p.bottom) / 2, e: Math.min(p.w * 0.42, zona * 0.44) };
+  return { cx: p.w / 2, cy: (p.top + p.bottom) / 2, e: Math.min(p.w * ENCUADRE_ANCHO, zona * ENCUADRE_ALTO) };
 }
 
 /** De unidades del círculo a mundo. */
@@ -236,26 +261,78 @@ function largadaDe(impacto: Pun, quieta: readonly Pun[], rng: () => number): Pun
 }
 
 /**
- * El rumbo de salida de una canica golpeada: hacia afuera, barriendo alrededor del radial. El tramo desde
- * su lugar hasta la tiza tiene que quedar libre para las canicas que siguen adentro (las de los premios
- * incluidas, que son las que el plan más cuida): si ninguna dirección sale libre, gana la que más aire
- * dejo, siempre sin rozar a un premio.
+ * El empuje de mi canica: el rumbo hasta la del enemigo —se abre apenas para no rozar a quien sigue adentro— y
+ * dónde se frena, a dos radios largos de ella. Devuelve también el aire que deja para elegir quién tira.
  */
-function rumboSalida(d: Pun, quieta: readonly Pun[], rng: () => number): { dir: Pun; tiza: Pun; holgura: number } {
-  const base = Math.atan2(d.y, d.x) + (rng() - 0.5) * 0.5;
-  const radial = unitario(d);
-  let mejor: { dir: Pun; tiza: Pun; holgura: number } | null = null;
-  for (let i = 0; i < 36; i++) {
-    const a = barrido(base, (2 * Math.PI) / 36, i);
+function empujeDe(choque: Pun, donde: Pun, quieta: readonly Pun[]): { dir: Pun; hasta: Pun; aire: number } {
+  const recto = unitario(restar(donde, choque));
+  const base = Math.atan2(recto.y, recto.x);
+  let mejor: { dir: Pun; hasta: Pun; aire: number } | null = null;
+  for (let i = 0; i <= ABANICO_SALIDA * 2; i++) {
+    const lado = i % 2 === 1 ? 1 : -1;
+    const a = base + lado * Math.ceil(i / 2) * PASO_SALIDA;
     const dir = { x: Math.cos(a), y: Math.sin(a) };
-    if (dir.x * radial.x + dir.y * radial.y < 0.06) continue;
-    const tiza = mover(d, dir, cruceDe(d, dir, CIRCULO_R));
-    const h = Math.min(...quieta.map((q) => distSeg(q, d, tiza)), 9);
-    if (!mejor || h > mejor.holgura) mejor = { dir, tiza, holgura: h };
-    if (mejor && mejor.holgura >= HOLGURA) return mejor;
+    if (dir.x * recto.x + dir.y * recto.y < SALIDA_AL_FRENTE) continue;
+    const hasta = sumar(donde, escalar(dir, -CANICA_R * 2.2));
+    // Mi canica tiene que quedarse adentro, y a dos radios de la del enemigo.
+    if (modulo(hasta) + CANICA_R > CIRCULO_R - CANICA_R * 0.05) continue;
+    const aire = Math.min(...quieta.map((q) => distSeg(q, choque, hasta)), 9);
+    if (!mejor || aire > mejor.aire) mejor = { dir, hasta, aire };
+    if (aire >= HOLGURA) break;
   }
-  // Sin salida libre, la que más aire dejó: la narración respeta el plan, y el plan a quien gana.
-  return (mejor ?? { dir: radial, tiza: mover(d, radial, cruceDe(d, radial, CIRCULO_R)), holgura: 0 }) as { dir: Pun; tiza: Pun; holgura: number };
+  return mejor ?? { dir: recto, hasta: sumar(donde, escalar(recto, -CANICA_R * 2.2)), aire: 0 };
+}
+
+/**
+ * Quién tira este turno (S23): los turnos rotan alrededor del círculo, y se prefiere a quien tiene el empuje más
+ * libre; si nadie lo tiene limpio, el primero de la rotación que al menos no se pisa, y si no el que más aire deja.
+ * Nunca tira quien está por salir en el mismo turno.
+ */
+function elegirTirador(
+  asientos: number,
+  pueden: readonly number[],
+  vivo: readonly Pun[],
+  dentro: readonly number[],
+  enemigo: number,
+  giro: number,
+): { s: number; empuje: { dir: Pun; hasta: Pun; aire: number } } {
+  let primero: { s: number; empuje: { dir: Pun; hasta: Pun; aire: number } } | null = null;
+  let sinPisar: { s: number; empuje: { dir: Pun; hasta: Pun; aire: number } } | null = null;
+  let mejor: { s: number; empuje: { dir: Pun; hasta: Pun; aire: number } } | null = null;
+  for (let paso = 0; paso < asientos; paso++) {
+    const s = (giro + paso) % asientos;
+    if (!pueden.includes(s)) continue;
+    const quieta = dentro.filter((x) => x !== s && x !== enemigo).map((x) => vivo[x] as Pun);
+    const empuje = empujeDe(vivo[s] as Pun, vivo[enemigo] as Pun, quieta);
+    const opcion = { s, empuje };
+    if (!primero) primero = opcion;
+    if (!sinPisar && empuje.aire >= CANICA_R * 2) sinPisar = opcion;
+    if (!mejor || empuje.aire > mejor.empuje.aire) mejor = opcion;
+    if (empuje.aire >= HOLGURA) return opcion;
+  }
+  // Sin empuje limpio: el primero de la rotación que al menos no se pisa, para que los turnos sigan rotando.
+  return sinPisar ?? primero ?? (mejor as { s: number; empuje: { dir: Pun; hasta: Pun; aire: number } });
+}
+
+/**
+ * La salida de la canica golpeada (S21): sigue **adelante** sobre la línea del empuje —nunca vuelve hacia la
+ * mano— y cruza la tiza de ese lado. Se abre apenas para no rozar a quien sigue adentro; si nada queda limpio,
+ * va derechito por delante.
+ */
+function salidaAdelante(donde: Pun, dirEmpuje: Pun, quieta: readonly Pun[]): { dir: Pun; tiza: Pun } {
+  const base = Math.atan2(dirEmpuje.y, dirEmpuje.x);
+  let mejor: { dir: Pun; tiza: Pun; holgura: number } | null = null;
+  for (let i = 0; i <= ABANICO_SALIDA * 2; i++) {
+    const lado = i % 2 === 1 ? 1 : -1;
+    const a = base + lado * Math.ceil(i / 2) * PASO_SALIDA;
+    const dir = { x: Math.cos(a), y: Math.sin(a) };
+    if (dir.x * dirEmpuje.x + dir.y * dirEmpuje.y < SALIDA_AL_FRENTE) continue;
+    const tiza = mover(donde, dir, cruceDe(donde, dir, CIRCULO_R));
+    const holgura = Math.min(...quieta.map((q) => distSeg(q, donde, tiza)), 9);
+    if (!mejor || holgura > mejor.holgura) mejor = { dir, tiza, holgura };
+    if (holgura >= HOLGURA) break;
+  }
+  return mejor ?? { dir: { ...dirEmpuje }, tiza: mover(donde, dirEmpuje, cruceDe(donde, dirEmpuje, CIRCULO_R)) };
 }
 
 /** La deflectación del tiro: se corre del rumbo de ida y se frena en el primer lugar libre que encuentra. */
@@ -376,36 +453,68 @@ export function planBolillas(ctx: Contexto): Plan<Datos> {
   const tUltimaOleada = oleadas.length ? (oleadas.at(-1) as Oleada).t : T_INTRO - Q_WAVE;
   const tTroya = n <= CANICAS_MAX ? T_INTRO : tUltimaOleada + CIERRA_CLAS + ENTRA_CIRC;
 
+  // La troya, turno por turno (S23): la mano de quien tira empuja SU canica, y su canica saca a la del enemigo.
+  // Las canicas se mueven: cada tirada arranca donde quedó la anterior, y nunca vuelve a su siembra.
+  const vivo: Pun[] = posiciones.map((p) => ({ ...p }));
+  const dentroDe = (k: number): number[] =>
+    canicas
+      .map((i, s) => ({ i, s }))
+      .filter(({ i }) => !orden.slice(0, k).includes(i))
+      .map(({ s }) => s);
+  let giro = 0;
   const tiros: Tiro[] = orden.map((quien, k) => {
     const slot = asientoDe(quien);
-    const impacto = posiciones[slot] as Pun;
+    const donde = { ...(vivo[slot] as Pun) };
     const t = tTroya + PRIMER_TIRO + k * ENTRE_TIROS;
-    // Quieta: cada canica que sigue adentro a partir de este tiro, la de la persona que gana incluida.
-    const fueraHasta = new Set(orden.slice(0, k));
-    const quieta = canicas
-      .map((i, s) => ({ i, s }))
-      .filter(({ i }) => !fueraHasta.has(i) && i !== quien)
-      .map(({ s }) => posiciones[s] as Pun);
-    const desde = largadaDe(impacto, quieta, ctx.rng);
-    const sal = rumboSalida(impacto, quieta, ctx.rng);
+    // Quiénes siguen adentro en este turno, y quiénes pueden tirar: todos menos a quien le toca salir.
+    const dentro = dentroDe(k);
+    const pueden = dentro.filter((s) => s !== slot);
+    // El último turno lo tira quien gana: su canica empuja a la de la rival, y de ahí sale el casi (S23).
+    const ultimo = k === orden.length - 1;
+    const quietaEmpuje = (mio: number): Pun[] =>
+      dentro.filter((s) => s !== mio && s !== slot).map((s) => vivo[s] as Pun);
+    // El último turno lo tira quien gana: su canica empuja a la de la rival, y de ahí sale el casi (S23).
+    const elegido = ultimo
+      ? (pueden.includes(asientoDe(ganador)) ? asientoDe(ganador) : (pueden[0] as number))
+      : elegirTirador(canicas.length, pueden, vivo, dentro, slot, giro).s;
+    giro = (elegido + 1) % canicas.length;
+    const mio = elegido;
+    const choque = { ...(vivo[mio] as Pun) };
+    const emp = empujeDe(choque, donde, quietaEmpuje(mio));
+    const vueloEmpuje = acotar(modulo(restar(emp.hasta, choque)) / RODADA_VEL, RODADA_MIN, RODADA_MAX);
+    const tMano = t - vueloEmpuje;
+    // La mano entra desde afuera sin rozar a nadie: ni a mi canica (es a la que apunta) ni a quien ya salió.
+    const quietaMano = dentro.filter((s) => s !== mio).map((s) => vivo[s] as Pun);
+    const desde = largadaDe(choque, quietaMano, ctx.rng);
+    // La salida sigue adelante sobre la línea del empuje, y tampoco roza a quien sigue adentro (S21).
+    const quietaSalida = dentro.filter((s) => s !== mio && s !== slot).map((s) => vivo[s] as Pun);
+    const sal = salidaAdelante(donde, emp.dir, quietaSalida);
     const fuerza = FUERZA_MIN + ctx.rng() * FUERZA_BANDA;
-    const defo = deflexionDe(desde, impacto, quieta, ctx.rng);
+    const defo = deflexionDe(desde, choque, quietaMano, ctx.rng);
+    vivo[mio] = { ...emp.hasta };
     return {
+      tirador: canicas[mio] as number,
+      mio,
       diana: quien,
       slot,
       t,
+      tMano,
       desde,
-      impacto,
-      salida: { dir: sal.dir, tiza: sal.tiza, fuerza, vuelo: modulo(restar(sal.tiza, impacto)) / fuerza },
+      choque,
+      empuje: { dir: emp.dir, donde, hasta: emp.hasta, vuelo: vueloEmpuje },
+      impacto: donde,
+      salida: { dir: sal.dir, tiza: sal.tiza, fuerza, vuelo: modulo(restar(sal.tiza, donde)) / fuerza },
       deflexion: defo,
+      mano: { hasta: { ...defo.hasta } },
     };
   });
 
   // El casi del cierre: sobre la canica que gana, cuando ya solo quedan los premios adentro.
   const casi: Casi = (() => {
     const slot = asientoDe(ganador);
-    const desde = posiciones[slot] as Pun;
-    const premios = canicas.filter((i) => ganados.has(i) && i !== ganador).map((i) => posiciones[asientoDe(i)] as Pun);
+    // La ganadora tiró el último turno: su canica quedó empujada, y de ahí arranca el casi (S23).
+    const desde = { ...(vivo[slot] as Pun) };
+    const premios = canicas.filter((i) => ganados.has(i) && i !== ganador).map((i) => vivo[asientoDe(i)] as Pun);
     const r = titilaDe(desde, premios, ctx.rng);
     return { t: (tiros.at(-1)?.t ?? tTroya + PRIMER_TIRO - ENTRE_TIROS) + ANTES_CASI, ganador, slot, desde, dir: r.dir, titila: r.titila };
   })();
@@ -498,7 +607,7 @@ export function planBolillas(ctx: Contexto): Plan<Datos> {
             // El tramo del tiro en curso: el impacto y la salida de la canica que se va.
             const tiro = tiros.find((x) => tt >= x.t - 0.6 && tt < x.t + ENTRE_TIROS * 0.6) ?? tiros.find((x) => tt < x.t);
             if (!tiro) return [cajaDelCirculo(p)];
-            const cajas = [cajaDeCanica(p, tiro.impacto), cajaDeCanica(p, tiro.salida.tiza)];
+            const cajas = [cajaDeCanica(p, tiro.choque), cajaDeCanica(p, tiro.salida.tiza)];
             const x0 = Math.min(...cajas.map((c) => c.x));
             const y0 = Math.min(...cajas.map((c) => c.y));
             return [
@@ -560,6 +669,28 @@ export function adentro(d: Pick<Datos, "n" | "oleadas" | "tiros">, t: number): n
   });
 }
 
+/**
+ * Los finalistas del segundo `t` (S15): los que siguen adentro cuando ya quedan tres o menos — los
+ * nombres solo se muestran para ellos, con la ganadora incluida. Antes de ese momento, nadie: la
+ * troya se juega sin fichas sobre el círculo.
+ */
+export function finalistasDe(d: Pick<Datos, "n" | "oleadas" | "tiros">, t: number): number[] {
+  const dentro = adentro(d, t);
+  return dentro.length <= 3 ? dentro : [];
+}
+
+/**
+ * Quiénes llevan ficha de nombre en el segundo `t` (S18): durante la beat de la intro (`T_INTRO`, el
+ * mismo tiempo que dura la presentación del kit), todas las canicas del círculo — así la sala ve quiénes
+ * juegan apenas arranca—; a partir de ahí, solo los finalistas de S15 (`finalistasDe`), siempre cortado
+ * a los que tienen canica en el círculo (los de la tanda previa no llevan ficha sobre la troya).
+ * Pura: misma hora, mismos nombres, en la 2D y en la 3D (que consume el mismo chip del 2D).
+ */
+export function fichasDe(d: Pick<Datos, "canicas" | "n" | "oleadas" | "tiros">, t: number): number[] {
+  if (t < T_INTRO) return [...d.canicas];
+  return finalistasDe(d, t).filter((i) => d.canicas.includes(i));
+}
+
 export type EstadoCanica = "dentro" | "vuela" | "afuera" | "titila";
 
 /** Dónde está la canica de un asiento en el segundo `t`, y qué le pasa: para la 2D y la 3D por igual. */
@@ -568,18 +699,34 @@ export function trayectoriaDe(
   slot: number,
   t: number,
 ): { p: Pun; estado: EstadoCanica } {
-  const pos = d.posiciones[slot] ?? { x: 0, y: 0 };
-  const tiro = d.tiros.find((x) => x.slot === slot);
-  if (tiro) {
-    if (t < tiro.t) return { p: pos, estado: "dentro" };
-    const f = tiro.salida.vuelo > 1e-9 ? Math.min(1, (t - tiro.t) / tiro.salida.vuelo) : 1;
-    const largo = modulo(restar(tiro.salida.tiza, tiro.impacto));
-    return { p: mover(tiro.impacto, tiro.salida.dir, f * largo), estado: f >= 1 ? "afuera" : "vuela" };
+  // Primero lo que le pasa a la canica: si ya salió, vuela; si le toca salir, espera donde quedó.
+  const salida = d.tiros.find((x) => x.slot === slot);
+  if (salida && t >= salida.t) {
+    const f = salida.salida.vuelo > 1e-9 ? Math.min(1, (t - salida.t) / salida.salida.vuelo) : 1;
+    const largo = modulo(restar(salida.salida.tiza, salida.empuje.donde));
+    return { p: mover(salida.empuje.donde, salida.salida.dir, f * largo), estado: f >= 1 ? "afuera" : "vuela" };
+  }
+  // Las canicas se mueven (S23): cada turno en que esta canica empuja la deja en otro lado, y el siguiente arranca
+  // de ahí. Antes de su primer empuje está en su lugar de la siembra.
+  let p = d.posiciones[slot] ?? { x: 0, y: 0 };
+  for (const tiro of d.tiros) {
+    if (tiro.mio !== slot) continue;
+    if (t < tiro.tMano) break;
+    if (t >= tiro.t) {
+      p = tiro.empuje.hasta;
+      continue;
+    }
+    const f = tiro.t > tiro.tMano ? (t - tiro.tMano) / (tiro.t - tiro.tMano) : 1;
+    const suave = f * f * (3 - 2 * f);
+    return {
+      p: { x: tiro.choque.x + (tiro.empuje.hasta.x - tiro.choque.x) * suave, y: tiro.choque.y + (tiro.empuje.hasta.y - tiro.choque.y) * suave },
+      estado: "vuela",
+    };
   }
   if (d.casi.slot === slot && t >= d.casi.t) {
     const f = acotar((t - d.casi.t) / 2, 0, 1);
     const suave = f * f * (3 - 2 * f);
     return { p: { x: d.casi.desde.x + (d.casi.titila.x - d.casi.desde.x) * suave, y: d.casi.desde.y + (d.casi.titila.y - d.casi.desde.y) * suave }, estado: "titila" };
   }
-  return { p: pos, estado: "dentro" };
+  return { p, estado: "dentro" };
 }

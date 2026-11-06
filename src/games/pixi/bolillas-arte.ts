@@ -13,13 +13,26 @@ import { CANICA_R, type Datos, type Pun, type Tiro, unitarioDe } from "./bolilla
  * la 2D y la 3D. Sin PixiJS y sin `Math.random`: se prueba en Node
  * (`bolillas-arte.test.ts`), como el plan.
  *
+ * La mecánica de cada tirada es la cadena de S23: la mano de quien tira larga su
+ * **canica de mano** desde `desde`, pega en **mi** canica en `choque` (a la hora
+ * `tMano`), mi canica rueda y empuja a la del enemigo en `empuje.donde` (a la
+ * hora `t`), y la del enemigo sale adelante hasta cruzar la tiza (S21). Las
+ * horas de esa cadena (`cadenaDe`), la canica de la mano (`canicaDeManoDe`) y
+ * los dos golpes (`golpesDe`) viven acá; la escena los dibuja y no vuelve a
+ * animar por su cuenta. El segundo golpe trae el estallido de pelea (S22):
+ * estrella, líneas de velocidad y micro-sacudida, más dramático que las chispas
+ * de vidrio de S13, que siguen en el mismo golpe.
+ *
  * Todo lo que dibuja (el cómo) vive en la escena; esto dice cuánto y dónde.
  */
 
 /** La semilla fija del show: la misma tierra y la misma tiza en cualquier equipo. */
 export const SEMILLA_FIJA = 0xb01a51a5;
 
-/** Lo que tarda el vuelo de la canica de la pegadora antes del impacto (y su resbalón después). */
+/**
+ * Lo que tarda la canica de la mano desde la largada hasta el primer impacto de la cadena (`tiro.tMano`), y su
+ * deriva después hasta `tiro.mano.hasta` (S23): la mano de ñati suelta justo al principio de ese vuelo.
+ */
 export const TIRADOR = 0.55;
 export const T_DESVIO = 0.45;
 
@@ -133,6 +146,22 @@ export function coloresCanica(slot: number): ArteCanica {
   return { base, llama, llama2, oscuro: oscurece(base, 0.42) };
 }
 
+/* ------------------------------------------- el tamaño del dibujo de una canica (S17) */
+
+/** El aire que la siembra del plan deja como mínimo entre dos canicas vecinas (lo verifica la prueba del S17). */
+export const SIEMBRA_AIRE = 0.28;
+
+/**
+ * Cuánto se agranda el dibujo de una canica sobre su radio del plan (S17, S20): va al doble de lo que
+ * medía hasta ahora — es lo que pidió la sala después de verla en el celular —, y el tope lo pone la
+ * siembra: dos canicas vecinas, con sus radios dibujados, jamás se tocan (`2 * CANICA_R * CANICA_ESCALA
+ * <= SIEMBRA_AIRE`, y la prueba mide que el plan deja más aire que ese piso; con `SIEMBRA_AIRE = 0.28`
+ * el tope de la siembra da 2.8, así el doble no obliga a achicar la siembra visual ni a robarle aire:
+ * S20 se cumple entero sin tocar la geometría del plan). La geometría del plan no cambia: solo el
+ * dibujo, en las dos escenas.
+ */
+export const CANICA_ESCALA = Math.min(2, SIEMBRA_AIRE / (2 * CANICA_R));
+
 /* ------------------------------------------------- el chip del nombre */
 
 /** La fracción del diámetro del círculo que como mucho mide de alto la ficha del nombre: una etiqueta, no un cartel. */
@@ -166,6 +195,18 @@ export function escalaChipDe(u: number, e: number, viven: number): number {
 
 /** Cuánto sigue vibrando la canica golpeada después del impacto. */
 export const COLA_GOLPE = 0.35;
+
+/** Cuánto vive la marca del scuff que cada golpe deja en la tierra: se desvanece despacio. */
+export const SCUFF_VIDA = 1.6;
+
+/** Cuánto destella el golpe blando de la mano sobre el del vidrio contra vidrio (S23): menos de la mitad. */
+export const GOLPE_MANO = 0.45;
+
+/**
+ * El canal de la semilla del golpe de la mano: el polvo y las chispas del primer impacto salen con otra semilla
+ * que las del vidrio contra vidrio, así la misma tirada no repite dos veces la misma nube.
+ */
+export const CANAL_MANO = 0x1000;
 
 /** Cuántos granos de polvo levanta cada choque. */
 export const POLVO_N = 10;
@@ -235,6 +276,72 @@ export function chispasDe(i: number, impacto: Pun, dir: Pun): Chispa[] {
   });
 }
 
+/* --------------------------------------------- el estallido de pelea (S22) */
+
+/** Cuánto vive el estallido: más que las chispas de vidrio —el golpe de pelea se siente— y menos que el scuff. */
+export const ESTALLO_VIDA = 0.34;
+/** Las puntas de la estrella del destello: manga, no un sol de jardín. */
+export const ESTALLO_PUNTAS = 10;
+/** Cuántas líneas de velocidad radian del impacto. */
+export const ESTALLO_LINEAS = 9;
+
+/** Una línea de velocidad del estallido: su ángulo, dónde nace, cuánto mide, su ancho y su vida (unidades del círculo). */
+export interface LineaVelocidad {
+  a: number;
+  de: number;
+  largo: number;
+  ancho: number;
+  vida: number;
+}
+
+/**
+ * El estallido de pelea de un golpe (S22): la estrella del destello, las líneas de velocidad que radian del impacto
+ * y el micro-sacudón de la escena. Todo alrededor del impacto —el punto queda en (0,0)— y en unidades del círculo.
+ */
+export interface Estallido {
+  /** Los vértices de la estrella, alternando punta y hueco, alrededor del impacto. */
+  estrella: Pun[];
+  /** El radio de la punta y el del hueco de la estrella. */
+  punta: number;
+  nucleo: number;
+  /** Las líneas de velocidad: nacen junto a la estrella y corren hacia afuera. */
+  lineas: LineaVelocidad[];
+  /** Cuánto vive el destello. */
+  vida: number;
+  /** Lo que corre la escena con el golpe, en unidades del círculo (micro: menos que media canica). */
+  sacudida: number;
+}
+
+/**
+ * El estallido de pelea de un golpe (S22): la ráfaga de estrella, las líneas de velocidad y el micro-sacudón, más
+ * dramáticos que las chispas de vidrio de S13 (que siguen, ahí mismo, aparte). Determinista y sembrado por el lugar del
+ * tiro en la lista: la misma tirada estalla igual en cualquier equipo, y el golpe de la mano no lleva estallido (es el
+ * blando). `dir` es el rumbo de la canica golpeada: el abanico de las líneas mira hacia adelante, por donde sale.
+ */
+export function estalloDe(i: number, punto: Pun, dir: Pun): Estallido {
+  // La geometría sale relativa al impacto (que la escena dibuja en `punto`): acá solo la semilla y el rumbo.
+  const r = sembrar(Math.imul(i + 1, 0x7feb352d));
+  const fase = r() * Math.PI * 2;
+  const base = Math.atan2(dir.y, dir.x);
+  const vidrio = CANICA_R * CANICA_ESCALA;
+  const nucleo = vidrio * 0.9;
+  const punta = nucleo + vidrio * (1.6 + r() * 0.6);
+  const estrella = Array.from({ length: ESTALLO_PUNTAS * 2 }, (_, k) => {
+    const a = fase + (k * Math.PI) / ESTALLO_PUNTAS;
+    const radio = k % 2 === 0 ? punta : nucleo;
+    return { x: Math.cos(a) * radio, y: Math.sin(a) * radio };
+  });
+  const lineas = Array.from({ length: ESTALLO_LINEAS }, () => ({
+    // El abanico se abre alrededor del rumbo del golpe: nada de líneas para cualquier lado.
+    a: base + (r() - 0.5) * 2.4,
+    de: punta * (0.7 + r() * 0.5),
+    largo: vidrio * (1.4 + r() * 2.4),
+    ancho: vidrio * (0.08 + r() * 0.1),
+    vida: 0.22 + r() * (ESTALLO_VIDA - 0.22),
+  }));
+  return { estrella, punta, nucleo, lineas, vida: ESTALLO_VIDA, sacudida: vidrio * (0.16 + r() * 0.08) };
+}
+
 /** Lo que pasa en el instante del choque: el tiro en curso, la palpitación de la golpeada, el destello y el retroceso del tiro. */
 export interface EfectosDeGolpe {
   tiro: Tiro;
@@ -249,21 +356,114 @@ export interface EfectosDeGolpe {
 /**
  * Los efectos del golpe en el segundo `t`: valen en la ventana de la cola
  * (`COLA_GOLPE`) y solo para el tiro que acaba de pegar. Toda la geometría sale
- * del plan; `null` fuera de la ventana.
+ * del plan; `null` fuera de la ventana. (Es la vista del segundo golpe de la
+ * cadena —mi canica sobre la del enemigo—; la cadena entera está en `golpesDe`.)
  */
 export function efectosDe(d: Pick<Datos, "tiros">, t: number): EfectosDeGolpe | null {
   const tiro = d.tiros.find((x) => t >= x.t && t < x.t + COLA_GOLPE);
   if (!tiro) return null;
-  const u = (t - tiro.t) / COLA_GOLPE;
-  const pulso = Math.sin(Math.PI * u);
+  const cola = colaDe(t, tiro.t);
   const ida = unitarioDe({ x: tiro.impacto.x - tiro.desde.x, y: tiro.impacto.y - tiro.desde.y });
-  const retro = 0.07 * (1 - u);
+  const retro = 0.07 * (1 - cola.u);
   return {
     tiro,
-    squash: pulso,
-    flash: 1 - u,
+    squash: cola.pulso,
+    flash: cola.flash,
     retro: { x: -ida.x * retro, y: -ida.y * retro },
   };
+}
+
+/** La cola de un golpe: la palpitación y el destello que se mueren, juntos, con `COLA_GOLPE`. */
+function colaDe(t: number, t0: number): { u: number; pulso: number; flash: number } {
+  const edad = t - t0;
+  const vivo = edad >= 0 && edad < COLA_GOLPE;
+  const u = Math.min(1, Math.max(0, edad / COLA_GOLPE));
+  return { u, pulso: vivo ? Math.sin(Math.PI * u) : 0, flash: vivo ? 1 - u : 0 };
+}
+
+/** Los dos tipos de golpe de la cadena (S23): el de la mano sobre mi canica y el de mi canica sobre la del enemigo. */
+export type TipoGolpe = "mano" | "canica";
+
+/** Un golpe de la cadena en su segundo: dónde pega, para dónde sigue y qué efectos levanta. */
+export interface Golpe {
+  tipo: TipoGolpe;
+  tiro: Tiro;
+  /** El lugar del turno en la lista: la semilla de sus efectos. */
+  i: number;
+  /** El segundo del golpe, de la cadena del plan. */
+  t: number;
+  /** Dónde pega. */
+  punto: Pun;
+  /** Para dónde siguen el polvo, las chispas y el estallido. */
+  dir: Pun;
+  /** La canica que se lleva el golpe, por su asiento. */
+  slot: number;
+  /** Cuánto hace que pegó, en segundos. */
+  edad: number;
+  /** La palpitación de la canica golpeada (0 a 1). */
+  pulso: number;
+  /** El destello del impacto (1 al instante, se muere con la cola). */
+  flash: number;
+  /** Cuánto destella ese golpe: el de la mano es más blando (`GOLPE_MANO`). */
+  brillo: number;
+  /** La semilla de su polvo y sus chispas: cada golpe la suya (la mano no repite la nube del vidrio contra vidrio). */
+  semilla: number;
+  /** El estallido de pelea (S22): solo en el golpe de mi canica sobre la del enemigo. */
+  estallo: Estallido | null;
+}
+
+/**
+ * Los golpes de la cadena (S23) que están vivos en el segundo `t`: el de la mano en `choque` (a la hora `tMano`) y el de
+ * mi canica en `empuje.donde` (a la hora `t`), cada uno con su tiempo, su rumbo y sus efectos. El de la mano es el
+ * blando —polvo, chispas de vidrio, un destello corto—; el de mi canica lleva encima el estallido de pelea (S22). Todo
+ * sale del plan: la escena dibuja lo que esta cuenta dice, en el orden que dice.
+ */
+export function golpesDe(d: Pick<Datos, "tiros">, t: number): Golpe[] {
+  const out: Golpe[] = [];
+  d.tiros.forEach((tiro, i) => {
+    const dos: { tipo: TipoGolpe; t: number; punto: Pun; dir: Pun; slot: number }[] = [
+      // La mano pega en mi canica, y mi canica rueda por el rumbo del empuje: el polvo vuela para adelante.
+      { tipo: "mano", t: tiro.tMano, punto: tiro.choque, dir: tiro.empuje.dir, slot: tiro.mio },
+      // Mi canica pega en la del enemigo, que sale por el rumbo de la salida (S21).
+      { tipo: "canica", t: tiro.t, punto: tiro.empuje.donde, dir: tiro.salida.dir, slot: tiro.slot },
+    ];
+    for (const g of dos) {
+      const edad = t - g.t;
+      if (edad < 0 || edad >= SCUFF_VIDA) continue;
+      const cola = colaDe(t, g.t);
+      // Cada golpe siembra su propio polvo y sus chispas: el de la mano no repite la nube del vidrio contra vidrio.
+      const semilla = g.tipo === "mano" ? CANAL_MANO + i : i;
+      out.push({
+        tipo: g.tipo,
+        tiro,
+        i,
+        t: g.t,
+        punto: g.punto,
+        dir: g.dir,
+        slot: g.slot,
+        edad,
+        pulso: cola.pulso,
+        flash: cola.flash,
+        brillo: g.tipo === "mano" ? GOLPE_MANO : 1,
+        semilla,
+        estallo: g.tipo === "canica" ? estalloDe(i, g.punto, g.dir) : null,
+      });
+    }
+  });
+  return out;
+}
+
+/**
+ * La palpitación de una canica en el segundo `t` (0 a 1): late la que acaba de recibir un golpe —mi canica cuando la
+ * toca la mano, la del enemigo cuando la empuja la mía—, y muere en cero con la cola del golpe. Pura: la escena la
+ * usa para el squash del vidrio y no inventa pulsos propios.
+ */
+export function palpitoDe(d: Pick<Datos, "tiros">, slot: number, t: number): number {
+  for (const tiro of d.tiros) {
+    if (tiro.mio === slot && t >= tiro.tMano && t < tiro.tMano + COLA_GOLPE) return colaDe(t, tiro.tMano).pulso;
+    if (tiro.slot === slot && t >= tiro.t && t < tiro.t + COLA_GOLPE) return colaDe(t, tiro.t).pulso;
+  }
+  return 0;
 }
 
 /* ------------------------------------------------- la pegadora de ñati */
@@ -288,15 +488,15 @@ export interface Mano {
 }
 
 /**
- * La mano que tira, en la hora del plan. Entra antes de la largada
- * (`tiro.t - TIRADOR`), agarra la canica con la pinza cerrada (el interior del
- * índice y el exterior del pulgar, como se agarra para dar con ñati), suelta
- * con el flick exactamente cuando la canica parte, y se retira. Toda hora y
- * lugar salen del plan: la escena no vuelve a tirar por su cuenta.
+ * La mano que tira, en la hora del plan. Entra antes de la largada de su canica de mano
+ * (`largadaDe(tiro) - MANO_PREPARA`), agarra la canica con la pinza cerrada (el interior del índice y el exterior del
+ * pulgar, como se agarra para dar con ñati), suelta con el flick exactamente cuando la canica parte, y se retira antes
+ * de que esa canica toque mi bolilla. Toda hora y lugar salen de la cadena del plan: la escena no vuelve a tirar por su
+ * cuenta.
  */
 export function manoDe(d: Pick<Datos, "tiros">, t: number): Mano | null {
   for (const tiro of d.tiros) {
-    const r0 = tiro.t - TIRADOR;
+    const r0 = largadaDe(tiro);
     if (t < r0 - MANO_PREPARA || t >= r0 + MANO_SUELTA + MANO_COBRA) continue;
     const pinza = t < r0 ? 0 : Math.min(1, (t - r0) / MANO_SUELTA);
     const cobra = t < r0 + MANO_SUELTA ? 0 : (t - r0 - MANO_SUELTA) / MANO_COBRA;
@@ -310,6 +510,98 @@ export function manoDe(d: Pick<Datos, "tiros">, t: number): Mano | null {
     };
   }
   return null;
+}
+
+/* --------------------------------------------- la cadena del turno (S21, S23) */
+
+/**
+ * La cadena de un turno, con sus horas en segundos del plan: la mano larga su canica, la canica de la mano toca mi
+ * canica, mi canica empuja a la del enemigo, y la del enemigo cruza la tiza (S21). La escena dibuja estas horas.
+ */
+export interface Cadena {
+  tiro: Tiro;
+  /** La mano larga su canica desde `tiro.desde`. */
+  larga: number;
+  /** La canica de la mano pega en mi canica (`tiro.choque`): el primer impacto, el blando. */
+  toca: number;
+  /** Mi canica golpea a la del enemigo (`tiro.empuje.donde`): el segundo impacto, el fuerte. */
+  empuja: number;
+  /** La canica del enemigo termina de cruzar la tiza. */
+  cruza: number;
+  /** La canica de la mano se frena en `tiro.mano.hasta` y se retira. */
+  frena: number;
+}
+
+/** La hora en que la mano de quien tira suelta su canica: `TIRADOR` antes de tocar mi canica. */
+export function largadaDe(tiro: Tiro): number {
+  return tiro.tMano - TIRADOR;
+}
+
+/** Las horas de una tirada de la cadena (S23), todas del plan: la escena no las recalcula. */
+export function cadenaDeTiro(tiro: Tiro): Cadena {
+  return {
+    tiro,
+    larga: largadaDe(tiro),
+    toca: tiro.tMano,
+    empuja: tiro.t,
+    cruza: tiro.t + tiro.salida.vuelo,
+    frena: tiro.tMano + T_DESVIO,
+  };
+}
+
+/**
+ * La tirada cuya **canica de mano** está en escena en el segundo `t` —de la largada a que se frena, S23—, o `null`
+ * fuera de eso. Hay una sola a la vez (los turnos están a `ENTRE_TIROS` de distancia y la ventana mide menos), así la
+ * escena nunca dibuja dos canicas de mano. El resto de la cadena (`empuja`, `cruza`) viaja en el resultado: la canica
+ * del enemigo la mueve `trayectoriaDe`, no esta cuenta.
+ */
+export function cadenaDe(d: Pick<Datos, "tiros">, t: number): Cadena | null {
+  for (const tiro of d.tiros) {
+    const c = cadenaDeTiro(tiro);
+    if (t >= c.larga && t < c.frena) return c;
+  }
+  return null;
+}
+
+/** La canica de la mano en el segundo `t` de su cadena: dónde va, en qué tramo y cuánto se ve. */
+export interface CanicaDeMano {
+  tiro: Tiro;
+  /** Dónde está, en unidades del círculo. */
+  p: Pun;
+  /** "vuela": de la largada a `choque`; "deriva": del primer golpe a `mano.hasta`. */
+  fase: "vuela" | "deriva";
+  /** Cuánto va del tramo, de 0 a 1. */
+  u: number;
+  /** Cuánto se ve: entera hasta el freno, y se apaga al final. */
+  velo: number;
+}
+
+const entre = (a: Pun, b: Pun, u: number): Pun => ({ x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u });
+/** La curva suave de la casa (0 y 1 quietos, sin saltos en las puntas). */
+const alisar = (u: number): number => u * u * (3 - 2 * u);
+
+/**
+ * La canica de la mano (S23), en el segundo `t`: sale de `tiro.desde` y llega a `tiro.choque` a la hora `tiro.tMano`
+ * (el primer impacto de la cadena), y después deriva hasta `tiro.mano.hasta` y se apaga. Fuera de su ventana,
+ * `null`: la escena no tiene reloj propio para la mano. Determinista: función del plan y de `t`, nada más.
+ */
+export function canicaDeManoDe(d: Pick<Datos, "tiros">, t: number): CanicaDeMano | null {
+  const c = cadenaDe(d, t);
+  if (!c) return null;
+  const { tiro } = c;
+  if (t < c.toca) {
+    const u = c.toca > c.larga ? (t - c.larga) / (c.toca - c.larga) : 1;
+    return { tiro, p: entre(tiro.desde, tiro.choque, u), fase: "vuela", u, velo: 1 };
+  }
+  const u = c.frena > c.toca ? (t - c.toca) / (c.frena - c.toca) : 1;
+  return {
+    tiro,
+    p: entre(tiro.choque, tiro.mano.hasta, alisar(u)),
+    fase: "deriva",
+    u,
+    // Se apaga en el último tramo de la deriva: se frena y se retira, sin saltar.
+    velo: u < 0.6 ? 1 : Math.max(0, 1 - (u - 0.6) / 0.4),
+  };
 }
 
 /* --------------------------------------------------- el titileo del cierre */
@@ -328,6 +620,96 @@ export const TITILA_AMPLE = 0.3;
 export function titilazo(u: number): number {
   if (u <= 0 || u >= 1) return 0;
   return Math.sin(u * Math.PI * TITILA_OLAS) * (1 - u) * TITILA_AMPLE;
+}
+
+/* --------------------------------------------------- el trazo punteado (S19) */
+
+/**
+ * Un trazo recto en tramos punteados: corta la recta `a`-`b` en tramos de a lo
+ * sumo `paso`, con el mismo aire de hueco entre uno y otro, de modo que la
+ * mitad del trazo queda pintada y la otra mitad, aire. Pura y sin azar: la
+ * escena dibuja cada tramo como una tirada de tiza. En un tramo más corto que
+ * `paso` queda un solo tramo: el guión nuevo nunca borra una línea vieja.
+ */
+export function punteadoDe(a: Pun, b: Pun, paso: number): [Pun, Pun][] {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const largo = Math.hypot(dx, dy);
+  if (!(largo > 0)) return [];
+  const n = Math.max(1, Math.min(64, Math.ceil(largo / (2 * paso))));
+  const tramo = largo / (2 * n);
+  return Array.from({ length: n }, (_, i) => {
+    const t0 = (2 * i) / (2 * n);
+    const t1 = t0 + tramo / largo;
+    return [
+      { x: a.x + dx * t0, y: a.y + dy * t0 },
+      { x: a.x + dx * t1, y: a.y + dy * t1 },
+    ];
+  }) as [Pun, Pun][];
+}
+
+/* ----------------------------------------------- el anuncio de la diana (S19) */
+
+/** Los colores del aguayo que ya usa la casa, para las rayas del anillo. */
+export const AGUAYO = [0xe93d9c, 0xffc629, 0x00a896] as const;
+
+/** Cuánto dura el anuncio de la diana antes del impacto: la entrada de la mano del plan (`TIRADOR + MANO_PREPARA`) con un aire más. */
+export const ANUNCIO_DIANA = 1.2;
+
+/** Una raya del anillo: su ángulo, el radio donde nace y donde termina, y su color del aguayo (unidades del círculo). */
+export interface Rayita {
+  a: number;
+  de: number;
+  hasta: number;
+  color: number;
+}
+
+/** Lo que se anuncia a la sala antes de un tiro: qué tiro viene, su pulso (0 a 1, muerto antes del golpe) y el anillo de rayas alrededor de la diana. */
+export interface AnuncioDiana {
+  tiro: Tiro;
+  /** El pulso del anuncio: nace en cero, sube y muere antes de que el tiro aterrice. */
+  pulso: number;
+  /** El radio del anillo, en unidades del círculo: rodea a la canica sin tocarla. */
+  anillo: number;
+  /** Las rayas del anillo, alrededor de la diana. */
+  rayas: Rayita[];
+}
+
+/** El tramo del pulso que vive antes del aterrizaje: lo demás de la ventana queda sin pulso, sin salto (el anuncio muere antes del golpe). */
+const PULSO_VIDA = 0.8;
+
+/**
+ * El anuncio de la canica que le va a tocar a la tirada: el plan ya fijó la diana de cada tiro
+ * (`tiros[].diana`, en orden), así que la sala puede ver a cuál le va a pegar la pegadora. En la
+ * ventana de la largada de ese tiro (`tiro.t - ANUNCIO_DIANA` a `tiro.t`), alrededor de la canica
+ * golpeada se lee un anillo con rayas al aguayo que late con su pulso; al momento del impacto la
+ * ventana cierra: la canica ya está siendo golpeada y el anillo sobra. Nunca la canica que gana:
+ * su casi es un rodado, no un golpe (queda garantizado por doble llave: el plan jamás la anuncia,
+ * y acá la guarda aparte). Toda la geometría sale del plan y del hash del tiro; sin `Math.random`.
+ */
+export function anuncioDeDiana(d: Pick<Datos, "tiros"> & { ganador: number }, t: number): AnuncioDiana | null {
+  for (const tiro of d.tiros) {
+    if (t < tiro.t - ANUNCIO_DIANA || t >= tiro.t) continue;
+    // El casi es un rodado, no un golpe: la ganadora no se anuncia, también acá.
+    if (tiro.diana === d.ganador) return null;
+    const u = (t - (tiro.t - ANUNCIO_DIANA)) / ANUNCIO_DIANA;
+    const i = d.tiros.indexOf(tiro);
+    const fase = hashDe(i, 71) * Math.PI * 2;
+    const anillo = CANICA_R * CANICA_ESCALA * 1.5;
+    const largo = anillo * 0.3;
+    return {
+      tiro,
+      pulso: u < PULSO_VIDA ? Math.sin((Math.PI * u) / PULSO_VIDA) : 0,
+      anillo,
+      rayas: Array.from({ length: 12 }, (_, j) => ({
+        a: fase + (j * Math.PI * 2) / 12,
+        de: anillo,
+        hasta: anillo + largo,
+        color: AGUAYO[j % AGUAYO.length] as number,
+      })),
+    };
+  }
+  return null;
 }
 
 /* --------------------------------------------------- el acercamiento a la ganadora */
