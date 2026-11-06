@@ -486,3 +486,17 @@ describe("Bolillas: los textos", () => {
     }
   });
 });
+
+describe("Bolillas: la toma de la persecución (S24)", () => {
+  it("la persecución de la ganadora tiene su toma, después del tiro y antes de la tensión", () => {
+    for (const n of LISTAS) {
+      const plan = planBolillas(contexto(n, ganadoresDe(n)));
+      const ultimo = plan.datos.tiros.at(-1);
+      if (!ultimo) continue;
+      const tomas = (plan.momentos.tomas ?? []).map((toma) => toma.desde);
+      expect(tomas, `con ${n}: la toma de la persecución`).toContain(ultimo.tMano);
+      expect(Math.max(...tomas), `con ${n}: es la última toma`).toBe(ultimo.tMano);
+      expect(plan.momentos.tension?.desde ?? Infinity, `con ${n}: la tensión llega después`).toBeGreaterThan(ultimo.tMano);
+    }
+  });
+});

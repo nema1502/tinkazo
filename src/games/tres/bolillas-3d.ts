@@ -13,7 +13,7 @@ import {
   CANICA_R, CIRCULO_R, PEGADORA_DIST, trayectoriaDe, unitarioDe,
   type Datos, type Mapeo, type Pun, type Tiro,
 } from "../pixi/bolillas-plan";
-import { cercaDe, anuncioDeDiana, AGUAYO, CANICA_ESCALA } from "../pixi/bolillas-arte";
+import { cercaDe, anuncioDeDiana, persecucionDe, AGUAYO, CANICA_ESCALA, type Persecucion } from "../pixi/bolillas-arte";
 /**
  * Bolillas en 3D: la troya de verdad — la tierra con su relieve, el círculo de yeso, las canicas de vidrio y la mano
  * con el agarre ñati que suelta cada tiro. El plan puro (`pixi/bolillas-plan.ts`) decide todo: esta vista solo dibuja
@@ -272,6 +272,34 @@ export function poseDelCerca(
     pos: [px + K * cx, K * CERCA_ALTO * lejos, pz + Kz * cz],
     mira: [px + K * p.x, K * R_DIBUJO * 0.9, pz + Kz * p.y],
     fov: CERCA_FOV,
+    giro: 0,
+  };
+}
+
+/** La persecución de la ganadora (S24): detrás de su canica y bajo, mirando por delante del empuje. */
+const PERSEC_ATRAS = 0.5;
+const PERSEC_ALTO = 0.14;
+const PERSEC_MIRA = 0.62;
+const PERSEC_FOV = (55 * Math.PI) / 180;
+
+/**
+ * La toma de la persecución (S24), en el mundo 3D: la cámara se mete detrás de la canica de la ganadora y mira por
+ * delante del empuje, así la sala ve el lanzamiento y el choque contra la rival desde su lado. El peso que la mezcla
+ * con la del director es `persecucionDe(d, t).peso` (en `bolillas-arte.ts`), la misma cuenta que el 2D; acá solo la
+ * pose. Determinista y cosmética: no cambia el plan, ni el orden, ni el ganador.
+ */
+export function posePersecucion(pers: Persecucion, lugar: { px: number; pz: number; K: number; Kz: number }): Pose3D {
+  const { px, pz, K, Kz } = lugar;
+  const cx = pers.p.x - pers.dir.x * PERSEC_ATRAS;
+  const cz = pers.p.y - pers.dir.y * PERSEC_ATRAS;
+  return {
+    pos: [px + K * cx, K * PERSEC_ALTO, pz + Kz * cz],
+    mira: [
+      px + K * (pers.p.x + pers.dir.x * PERSEC_MIRA),
+      K * R_DIBUJO * 0.6,
+      pz + Kz * (pers.p.y + pers.dir.y * PERSEC_MIRA),
+    ],
+    fov: PERSEC_FOV,
     giro: 0,
   };
 }
@@ -1008,6 +1036,13 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
         // La toma de cerca de la ganadora (S14): el peso sale del plan (`cercaDe`), la pose sigue a la canica
         // (`poseDelCerca`), y el motor aplica la pose ya mezclada después de este dibujo (la manera de la casa).
         // Cosmética: el ganador y el plan no cambian; la cámara solo lee el casi.
+        // La persecución de la ganadora (S24): en el último turno la cámara se mete detrás de su canica y la
+        // acompaña hasta el golpe contra la rival. Mismo idioma que la toma de cerca: la pose se mezcla acá y el
+        // motor la aplica después de este dibujo.
+        const persigue = persecucionDe(d, e.t);
+        if (persigue && persigue.peso > 0) {
+          Object.assign(pose, mezclarPose(pose, posePersecucion(persigue, { px, pz, K, Kz }), persigue.peso));
+        }
         const cerca = cercaDe(d, e.t);
         if (cerca > 0) {
           Object.assign(pose, mezclarPose(pose, poseDelCerca(d, e.t, { px, pz, K, Kz }, e.w / Math.max(1, e.h)), cerca));
