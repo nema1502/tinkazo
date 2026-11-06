@@ -202,6 +202,19 @@ export type Fabrica3D = (o: OpcionesFabrica3D) => Vista3D;
  */
 export const TAM3D = 1.45;
 
+/**
+ * El techo del agrandamiento del 3D: la llama proyectada por la cámara (que mira desde `ELEVACION`) no tiene que
+ * entrar en la fila de al lado. La fila se ve `altoFila·ZC·sin(E)` más arriba, y la llama sube
+ * `LLAMA_ALTO·esc·tam·cos(E)`: el `tam` que cumple la desigualdad es `altoFila·ZC·tan(E) / (LLAMA_ALTO·esc)`, y
+ * nunca más que `TAM3D` (con pocas filas el agrandamiento de siempre sigue entero). El que llama lo aplica
+ * escalando el `esc` que pasa en `Corredora3D`, así la cámara (que mira al centro del cuerpo con ese mismo `esc`)
+ * queda en lo suyo sin cambio alguno.
+ */
+export function tam3DDe(altoFila: number, esc: number): number {
+  const e = Math.max(1e-6, esc);
+  return Math.min(TAM3D, (altoFila * ZC * Math.tan(ELEVACION)) / (LLAMA_ALTO * e));
+}
+
 /** Dónde pisa una persona en el mundo 3D, y de qué tamaño. */
 export interface Puesto3D {
   persona: number;

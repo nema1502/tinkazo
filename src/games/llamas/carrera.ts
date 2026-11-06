@@ -6,8 +6,8 @@ import { unir } from "../pixi/encuadre";
 import { crearJuego, minimoPx, nivelPorCantidad, planNombres, type Caja, type DefJuego, type FocoPunto, type Kit, type Nivel, type PlanoToma, type Zona } from "../pixi/kit";
 import { anfitrionTinkazo } from "../pixi/kit/anfitrion";
 import { CREAM, INK, YELLOW, contorno, hash, mountPixi } from "../pixi/stage";
-import { topeAcercamiento, type Borla3D, type Camara2D, type Corredora3D, type Efecto3D, type Fabrica3D, type Geometria3D, type Valla3D, type Vista3D, type ZonaSuelo } from "./carrera-3d-mapa";
-import { ECHADA_DUR, carrilesDe, formaDe, hudDe, type Carriles, type Forma, type Pantalla } from "./carrera-forma";
+import { TAM3D, topeAcercamiento, tam3DDe, type Borla3D, type Camara2D, type Corredora3D, type Efecto3D, type Fabrica3D, type Geometria3D, type Valla3D, type Vista3D, type ZonaSuelo } from "./carrera-3d-mapa";
+import { ECHADA_DUR, carrilesDe, formaDe, hombroDe, hudDe, type Carriles, type Forma, type Pantalla } from "./carrera-forma";
 import { ENSANCHE, SALTO_MEDIO } from "./carrera-obstaculos";
 import { RECTA, alfabetico, planCarrera, type Datos, type EscenaCarrera } from "./carrera-show";
 import { pisaA, metida, sitioLibre, RENGLONES_MAX, type CajaF } from "./carrera-fichas";
@@ -416,12 +416,15 @@ const PROTEGE_DETRAS = 1;
       const lg = corralDe(persona) ?? { x: F0, y: forma.yPie(0) };
       return { x: lg.x, y: lg.y, esc: forma.esc, velocidad: 0.35, momento: corriendo, visible: true };
     }
-    // Echada: se queda donde pasó, con un deslizón corto.
+    // Echada: se desliza un poco hacia adelante y rueda al hombro de la pista, fuera de la banda del grupo (`hombroDe`): su
+    // casillero queda libre y las que siguen no le pasan por encima, ni ella pisa a otra echada. Función del plan, sin azar.
     if (t >= cae) {
       const lg = lugarEnGrupo(persona, cae) ?? { x: F0, y: forma.yPie(0) };
       const s = t - cae;
-      const desliza = 0.5 * (1 - (1 - clamp01(s / 0.6)) ** 2) * 0.6 * P.w * 0.1;
-      return { x: lg.x + desliza, y: lg.y, esc: forma.esc, velocidad: 0, momento: { kind: "echada", p: s / ECHADA_DUR }, visible: true };
+      const rueda = 0.5 * (1 - (1 - clamp01(s / 0.6)) ** 2);
+      const turno = Math.max(0, d.tiempos.echadas.findIndex((h) => h.quien === persona));
+      const hombro = hombroDe(P, forma.y1, forma.altoFila, turno);
+      return { x: lg.x + rueda * (0.06 * P.w + hombro.dx), y: lerp(lg.y, hombro.y, rueda), esc: forma.esc, velocidad: 0, momento: { kind: "echada", p: s / ECHADA_DUR }, visible: true };
     }
     if (t < d.tAbre || carril < 0) {
       const lg = lugarEnGrupo(persona, t) ?? { x: F0, y: forma.yPie(0) };
@@ -1160,7 +1163,13 @@ const PROTEGE_DETRAS = 1;
       // Festeja (el salto lo pone `ponerCuerpo`).
       if (corona >= 0 && q === d.campeona) momento = null;
       post.pose(ph, corona >= 0 && q !== d.campeona ? 0 : p.velocidad, momento);
-      if (tres) gente3.push({ persona: q, x: p.x, y: p.y, salto: p.y - c.raiz.position.y, esc: p.esc, velocidad: corona >= 0 && q !== d.campeona ? 0 : p.velocidad, momento, fase: ph });
+      if (tres) {
+        // El 3D achica la llama lo que hace falta para que la fila de al lado se vea entera (`tam3DDe`): el `esc` que viaja
+        // es el del 3D, y la cámara, que mira al centro del cuerpo con ese mismo `esc`, queda en lo suyo.
+        const band = t >= d.tAbre && d.lanes.includes(q) ? carr : forma;
+        const esc3 = p.esc * (tam3DDe(band.altoFila, p.esc) / TAM3D);
+        gente3.push({ persona: q, x: p.x, y: p.y, salto: p.y - c.raiz.position.y, esc: esc3, velocidad: corona >= 0 && q !== d.campeona ? 0 : p.velocidad, momento, fase: ph });
+      }
       // La marca de la llama ("!", "?!") se lee desde el fondo: en la pantalla nunca mide menos que un nombre.
       if (post.marca.visible) post.marca.scale.set(Math.max(1, minimoPx("nombre", P.w, P.h) / (26 * p.esc * vz)));
       post.zz.scale.set(Math.max(1, Math.min(3, (0.016 * P.h) / (11 * p.esc * vz))));
