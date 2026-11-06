@@ -48,8 +48,8 @@ export const PEGADORA_DIST = 1.55;
 /** Siembra la canica que gana a esta distancia de la tiza: tan cerca que titila. */
 const TITILA_R = CIRCULO_R - CANICA_R * 1.1;
 
-/** Los segundos del show: la presentación, las oleadas de la tanda previa y el pulso de los tiros. */
-const T_INTRO = 3.2;
+/** Los segundos del show: la presentación, las oleadas de la tanda previa y el pulso de los tiros. Publicado para las escenas: es el beat de la intro que ve la sala (S18). */
+export const T_INTRO = 3.2;
 const Q_WAVE = 2.8;
 const CIERRA_CLAS = 1.1;
 const ENTRA_CIRC = 0.8;
@@ -573,6 +573,18 @@ export function adentro(d: Pick<Datos, "n" | "oleadas" | "tiros">, t: number): n
 export function finalistasDe(d: Pick<Datos, "n" | "oleadas" | "tiros">, t: number): number[] {
   const dentro = adentro(d, t);
   return dentro.length <= 3 ? dentro : [];
+}
+
+/**
+ * Quiénes llevan ficha de nombre en el segundo `t` (S18): durante la beat de la intro (`T_INTRO`, el
+ * mismo tiempo que dura la presentación del kit), todas las canicas del círculo — así la sala ve quiénes
+ * juegan apenas arranca—; a partir de ahí, solo los finalistas de S15 (`finalistasDe`), siempre cortado
+ * a los que tienen canica en el círculo (los de la tanda previa no llevan ficha sobre la troya).
+ * Pura: misma hora, mismos nombres, en la 2D y en la 3D (que consume el mismo chip del 2D).
+ */
+export function fichasDe(d: Pick<Datos, "canicas" | "n" | "oleadas" | "tiros">, t: number): number[] {
+  if (t < T_INTRO) return [...d.canicas];
+  return finalistasDe(d, t).filter((i) => d.canicas.includes(i));
 }
 
 export type EstadoCanica = "dentro" | "vuela" | "afuera" | "titila";

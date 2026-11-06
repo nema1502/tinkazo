@@ -139,12 +139,15 @@ export function coloresCanica(slot: number): ArteCanica {
 export const SIEMBRA_AIRE = 0.28;
 
 /**
- * Cuánto se agranda el dibujo de una canica sobre su radio del plan (S17): se lee sin esfuerzo en el
- * celular, en proporción al círculo. El tope lo pone la siembra: dos canicas vecinas, con sus radios
- * dibujados, jamás se tocan (`2 * CANICA_R * CANICA_ESCALA <= SIEMBRA_AIRE`, y la prueba mide que el
- * plan deja más aire que ese piso). La geometría del plan no cambia: solo el dibujo, en las dos escenas.
+ * Cuánto se agranda el dibujo de una canica sobre su radio del plan (S17, S20): va al doble de lo que
+ * medía hasta ahora — es lo que pidió la sala después de verla en el celular —, y el tope lo pone la
+ * siembra: dos canicas vecinas, con sus radios dibujados, jamás se tocan (`2 * CANICA_R * CANICA_ESCALA
+ * <= SIEMBRA_AIRE`, y la prueba mide que el plan deja más aire que ese piso; con `SIEMBRA_AIRE = 0.28`
+ * el tope de la siembra da 2.8, así el doble no obliga a achicar la siembra visual ni a robarle aire:
+ * S20 se cumple entero sin tocar la geometría del plan). La geometría del plan no cambia: solo el
+ * dibujo, en las dos escenas.
  */
-export const CANICA_ESCALA = Math.min(1.6, SIEMBRA_AIRE / (2 * CANICA_R));
+export const CANICA_ESCALA = Math.min(2, SIEMBRA_AIRE / (2 * CANICA_R));
 
 /* ------------------------------------------------- el chip del nombre */
 
@@ -341,6 +344,96 @@ export const TITILA_AMPLE = 0.3;
 export function titilazo(u: number): number {
   if (u <= 0 || u >= 1) return 0;
   return Math.sin(u * Math.PI * TITILA_OLAS) * (1 - u) * TITILA_AMPLE;
+}
+
+/* --------------------------------------------------- el trazo punteado (S19) */
+
+/**
+ * Un trazo recto en tramos punteados: corta la recta `a`-`b` en tramos de a lo
+ * sumo `paso`, con el mismo aire de hueco entre uno y otro, de modo que la
+ * mitad del trazo queda pintada y la otra mitad, aire. Pura y sin azar: la
+ * escena dibuja cada tramo como una tirada de tiza. En un tramo más corto que
+ * `paso` queda un solo tramo: el guión nuevo nunca borra una línea vieja.
+ */
+export function punteadoDe(a: Pun, b: Pun, paso: number): [Pun, Pun][] {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const largo = Math.hypot(dx, dy);
+  if (!(largo > 0)) return [];
+  const n = Math.max(1, Math.min(64, Math.ceil(largo / (2 * paso))));
+  const tramo = largo / (2 * n);
+  return Array.from({ length: n }, (_, i) => {
+    const t0 = (2 * i) / (2 * n);
+    const t1 = t0 + tramo / largo;
+    return [
+      { x: a.x + dx * t0, y: a.y + dy * t0 },
+      { x: a.x + dx * t1, y: a.y + dy * t1 },
+    ];
+  }) as [Pun, Pun][];
+}
+
+/* ----------------------------------------------- el anuncio de la diana (S19) */
+
+/** Los colores del aguayo que ya usa la casa, para las rayas del anillo. */
+export const AGUAYO = [0xe93d9c, 0xffc629, 0x00a896] as const;
+
+/** Cuánto dura el anuncio de la diana antes del impacto: la entrada de la mano del plan (`TIRADOR + MANO_PREPARA`) con un aire más. */
+export const ANUNCIO_DIANA = 1.2;
+
+/** Una raya del anillo: su ángulo, el radio donde nace y donde termina, y su color del aguayo (unidades del círculo). */
+export interface Rayita {
+  a: number;
+  de: number;
+  hasta: number;
+  color: number;
+}
+
+/** Lo que se anuncia a la sala antes de un tiro: qué tiro viene, su pulso (0 a 1, muerto antes del golpe) y el anillo de rayas alrededor de la diana. */
+export interface AnuncioDiana {
+  tiro: Tiro;
+  /** El pulso del anuncio: nace en cero, sube y muere antes de que el tiro aterrice. */
+  pulso: number;
+  /** El radio del anillo, en unidades del círculo: rodea a la canica sin tocarla. */
+  anillo: number;
+  /** Las rayas del anillo, alrededor de la diana. */
+  rayas: Rayita[];
+}
+
+/** El tramo del pulso que vive antes del aterrizaje: lo demás de la ventana queda sin pulso, sin salto (el anuncio muere antes del golpe). */
+const PULSO_VIDA = 0.8;
+
+/**
+ * El anuncio de la canica que le va a tocar a la tirada: el plan ya fijó la diana de cada tiro
+ * (`tiros[].diana`, en orden), así que la sala puede ver a cuál le va a pegar la pegadora. En la
+ * ventana de la largada de ese tiro (`tiro.t - ANUNCIO_DIANA` a `tiro.t`), alrededor de la canica
+ * golpeada se lee un anillo con rayas al aguayo que late con su pulso; al momento del impacto la
+ * ventana cierra: la canica ya está siendo golpeada y el anillo sobra. Nunca la canica que gana:
+ * su casi es un rodado, no un golpe (queda garantizado por doble llave: el plan jamás la anuncia,
+ * y acá la guarda aparte). Toda la geometría sale del plan y del hash del tiro; sin `Math.random`.
+ */
+export function anuncioDeDiana(d: Pick<Datos, "tiros" | "ganador">, t: number): AnuncioDiana | null {
+  for (const tiro of d.tiros) {
+    if (t < tiro.t - ANUNCIO_DIANA || t >= tiro.t) continue;
+    // El casi es un rodado, no un golpe: la ganadora no se anuncia, también acá.
+    if (tiro.diana === d.ganador) return null;
+    const u = (t - (tiro.t - ANUNCIO_DIANA)) / ANUNCIO_DIANA;
+    const i = d.tiros.indexOf(tiro);
+    const fase = hashDe(i, 71) * Math.PI * 2;
+    const anillo = CANICA_R * CANICA_ESCALA * 1.5;
+    const largo = anillo * 0.3;
+    return {
+      tiro,
+      pulso: u < PULSO_VIDA ? Math.sin((Math.PI * u) / PULSO_VIDA) : 0,
+      anillo,
+      rayas: Array.from({ length: 12 }, (_, j) => ({
+        a: fase + (j * Math.PI * 2) / 12,
+        de: anillo,
+        hasta: anillo + largo,
+        color: AGUAYO[j % AGUAYO.length] as number,
+      })),
+    };
+  }
+  return null;
 }
 
 /* --------------------------------------------------- el acercamiento a la ganadora */
