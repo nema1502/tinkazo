@@ -596,17 +596,17 @@ const PISO: Record<"claro" | "oscuro", [number, number]> = { claro: [0xe8d6b8, 0
 const PARED: Record<"claro" | "oscuro", [number, number]> = { claro: [0xecdcb9, 0xd7c196], oscuro: [0x2c2147, 0x1b1432] };
 const AMARILLO = 0xffc629;
 /** La rana: más clara que la madera para que sea lo primero que se ve (el 2D la separa con su brillo). */
-const BRONCE = 0xe0b04a;
-const BRONCE_OSC = 0xa8771f;
+const RANA = 0x5cb746;
+const RANA_OSC = 0x3d7a24;
 const GARGANTA = 0xf6dc96;
 const MARFIL = 0xfff3cf;
 const LENGUA = 0xe0707a;
 /** Las manchas del lomo y el labio, el brillo de la cabeza, el iris, los cachetes. */
-const BRONCE_CLARO = 0xf8d77e;
+const RANA_CLARO = 0x9ade6b;
 const IRIS = 0x4f9d3a;
 const RUBOR = 0xf08c84;
-const PIEL = 0xc68a5c;
-const PIEL_OSC = 0xb07a4e;
+const PIEL = 0xdba27f;
+const PIEL_OSC = 0xc08a68;
 const PUNIO = 0xf6efe2;
 
 const hex = (n: number): string => `#${n.toString(16).padStart(6, "0")}`;
@@ -928,29 +928,29 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
   const rana = new Group();
   tapa.add(rana);
   const fr = 0.34;
-  const cuerpoR = pieza(g.esfera, mat.plano(BRONCE), 0, 0.62 * fr, -0.25 * fr, 0.95 * fr, 0.62 * fr, 0.8 * fr);
+  const cuerpoR = pieza(g.esfera, mat.plano(RANA), 0, 0.62 * fr, -0.25 * fr, 0.95 * fr, 0.62 * fr, 0.8 * fr);
   rana.add(cuerpoR);
   contorno(cuerpoR, 1.06);
   // Las manchas del lomo y el brillo de la cabeza van apoyadas en el cuerpo (la misma cuenta que `alturaRana`): no lo cambian.
-  const manchas = new Instancias(g.esfera, mat.plano(BRONCE_OSC), 5, B);
+  const manchas = new Instancias(g.esfera, mat.plano(RANA_OSC), 5, B);
   const MANCHAS = [[0, -0.6, 0.15], [-0.34, -0.78, 0.12], [0.34, -0.78, 0.12], [-0.78, -0.6, 0.09], [0.78, -0.6, 0.09]] as const;
   MANCHAS.forEach(([x, z, r], i) => manchas.poner(i, x * fr, alturaRana(x * fr, z * fr, fr) - 0.025 * fr, z * fr, r * fr, 0.06 * fr, r * 0.85 * fr));
   manchas.usar(MANCHAS.length);
   manchas.fin();
   rana.add(manchas.malla);
-  const brillo = pieza(g.esfera, mat.plano(BRONCE_CLARO), -0.32 * fr, alturaRana(-0.32 * fr, 0.12 * fr, fr) - 0.02 * fr, 0.12 * fr, 0.2 * fr, 0.05 * fr, 0.12 * fr);
+  const brillo = pieza(g.esfera, mat.plano(RANA_CLARO), -0.32 * fr, alturaRana(-0.32 * fr, 0.12 * fr, fr) - 0.02 * fr, 0.12 * fr, 0.2 * fr, 0.05 * fr, 0.12 * fr);
   rana.add(brillo);
   // Los dedos de las patas de adelante, tres por pata, con su tinta.
-  const dedosRana = new Instancias(g.esfera, mat.plano(BRONCE_OSC), 6, B);
+  const dedosRana = new Instancias(g.esfera, mat.plano(RANA_OSC), 6, B);
   const dedosTinta = new Instancias(g.esfera, tintaBack, 6, B);
   // El párpado: media esfera de bronce que baja sobre el ojo cuando parpadea.
   const mediaEsfera = B.add(new SphereGeometry(1, 10, 4, 0, Math.PI * 2, 0, Math.PI / 2));
   const parpados: Mesh[] = [];
   for (const sx of [-1, 1]) {
-    const pata = pieza(g.esfera, mat.plano(BRONCE_OSC), sx * 0.8 * fr, 0.28 * fr, -0.3 * fr, 0.42 * fr, 0.3 * fr, 0.55 * fr);
+    const pata = pieza(g.esfera, mat.plano(RANA_OSC), sx * 0.8 * fr, 0.28 * fr, -0.3 * fr, 0.42 * fr, 0.3 * fr, 0.55 * fr);
     rana.add(pata);
     contorno(pata, 1.08);
-    const delantera = pieza(g.esfera, mat.plano(BRONCE_OSC), sx * 0.5 * fr, 0.17 * fr, 0.42 * fr, 0.2 * fr, 0.17 * fr, 0.3 * fr);
+    const delantera = pieza(g.esfera, mat.plano(RANA_OSC), sx * 0.5 * fr, 0.17 * fr, 0.42 * fr, 0.2 * fr, 0.17 * fr, 0.3 * fr);
     rana.add(delantera);
     contorno(delantera, 1.1);
     for (let d = -1; d <= 1; d++) {
@@ -960,14 +960,14 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
       dedosTinta.poner(i, x, 0.06 * fr, z, 0.075 * fr * 1.25, 0.06 * fr * 1.25, 0.09 * fr * 1.2, d * 0.35);
     }
     // El zócalo del ojo: bronce, para que el ojo nazca de la cabeza y no parezca pegado encima.
-    const zocalo = pieza(g.esfera, mat.plano(BRONCE), sx * 0.5 * fr, 0.92 * fr, -0.3 * fr, 0.36 * fr, 0.26 * fr, 0.36 * fr);
+    const zocalo = pieza(g.esfera, mat.plano(RANA), sx * 0.5 * fr, 0.92 * fr, -0.3 * fr, 0.36 * fr, 0.26 * fr, 0.36 * fr);
     rana.add(zocalo);
     contorno(zocalo, 1.08);
     // Los ojos: grandes, claros y sobre la cabeza, para que la rana mire a la cámara (con el color del cuerpo parecía una tortuga).
     const ojo = pieza(g.esfera, mat.plano(MARFIL), sx * 0.5 * fr, 1.08 * fr, -0.28 * fr, 0.33 * fr, 0.33 * fr, 0.33 * fr);
     rana.add(ojo);
     contorno(ojo, 1.1);
-    const parpado = pieza(mediaEsfera, mat.plano(BRONCE), sx * 0.5 * fr, 1.08 * fr, -0.28 * fr, 0.345 * fr, 0.345 * fr, 0.345 * fr);
+    const parpado = pieza(mediaEsfera, mat.plano(RANA), sx * 0.5 * fr, 1.08 * fr, -0.28 * fr, 0.345 * fr, 0.345 * fr, 0.345 * fr);
     rana.add(parpado);
     parpados.push(parpado);
     // Los cachetes, al costado de la boca.
@@ -1001,7 +1001,7 @@ const fabrica: Fabrica3D<EntradaSapo> = (motor, o) => {
   const garganta = pieza(g.esfera, mat.plano(GARGANTA), 0, 0.42 * fr, 0.33 * fr, 0.55 * fr, 0.34 * fr, 0.36 * fr);
   rana.add(garganta);
   // El labio: un borde de bronce oscuro detrás de la boca, que la acompaña cuando se abre.
-  const labio = pieza(g.esfera, mat.plano(BRONCE_OSC), 0, 0.72 * fr, 0.48 * fr, 0.6 * fr, 0.1 * fr, 0.16 * fr);
+  const labio = pieza(g.esfera, mat.plano(RANA_OSC), 0, 0.72 * fr, 0.48 * fr, 0.6 * fr, 0.1 * fr, 0.16 * fr);
   rana.add(labio);
   const boca = pieza(g.esfera, tintaPlana, 0, 0.72 * fr, 0.5 * fr, 0.55 * fr, 0.06 * fr, 0.16 * fr);
   rana.add(boca);
