@@ -1,13 +1,14 @@
 # El portero: cuenta y paga las comisiones de seal y draw, en p.tinkazo.app (ver README.md).
 # Un script aparte del de los enlaces y del de la sala: un error acá no puede tumbarlos a ellos.
-# NO se despliega todavía: solo wrangler dev y probar.mjs. Desplegar y el DNS piden la palabra de quien mantiene el proyecto.
-# Se probaría con: npx wrangler@4 dev --port 8793   (desde esta carpeta, con .dev.vars)
+# En testnet está desplegado desde el 4 de noviembre de 2026, con la palabra de quien mantiene el proyecto, como
+# dominio propio (p.tinkazo.app): el despliegue crea el registro y el certificado, en el plan gratis, igual que la sala.
+# Mainnet pide su palabra otra vez (README, "Desplegar y encender"). En local: npx wrangler@4 dev --port 8793 (con .dev.vars).
 name = "tinkazo-patrocinio"
 account_id = "d97c3f7acada21d5ec280704fb34ff17"
 main = "src/index.ts"
 compatibility_date = "2026-09-01"
 workers_dev = false
-routes = [{ pattern = "p.tinkazo.app/*", zone_name = "tinkazo.app" }]
+routes = [{ pattern = "p.tinkazo.app", custom_domain = true }]
 
 # La bitácora del portero (console.log de los hechos clave) queda en el panel de Cloudflare y en `wrangler tail`.
 [observability]
@@ -26,3 +27,7 @@ new_sqlite_classes = ["Patrocinio"]
 # `wrangler secret put` y, en local, en .dev.vars (que no se versiona).
 [vars]
 RED = "testnet"
+# Las cuentas de testnet (públicas) que creó preparar-testnet.mjs el 2 de noviembre de 2026: la patrocinadora, cuya
+# llave del Worker va como secreto, y las billeteras de fondos que abren las cuentas de la app. En mainnet se reemplazan.
+CUENTA_PATROCINADORA = "GALXYDWHICOPBU5PYAVKNFOT7EDSHUAKJPQPPV5OUAVRDTCVHXBPIPOH"
+PATROCINADORES_APP = "GAYWGZ4P5NHJU2UL7TGWSP6ZF5BYEBZ4WP7TZDBDZ3FXUN5DHGAMDGKU,GBTRBMOZGP362SI2IV6X4GYHDWPQCCVGM4IXJBQ7D6M7HSNINIC5NS5M"
