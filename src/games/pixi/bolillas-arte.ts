@@ -1,4 +1,5 @@
 import { hashDe, sembrar } from "./kit/azar";
+import { escalaChipLegible } from "./letra";
 import { CANICA_R, type Datos, type Pun, type Tiro, unitarioDe } from "./bolillas-plan";
 
 /**
@@ -132,6 +133,35 @@ export function coloresCanica(slot: number): ArteCanica {
   return { base, llama, llama2, oscuro: oscurece(base, 0.42) };
 }
 
+/* ------------------------------------------------- el chip del nombre */
+
+/** La fracción del diámetro del círculo que como mucho mide de alto la ficha del nombre: una etiqueta, no un cartel. */
+export const CHIP_ALTO_FRACCION = 0.12;
+/** Con poca gente la ficha puede crecer hasta este cociente de cuántos juegan; debajo de cuatro, manda el piso. */
+export const CHIP_GENTE = 3;
+
+/**
+ * La escala de la ficha del nombre junto a una canica, para `S.chip(nombre, escala)`.
+ *
+ * La ficha es la etiqueta de una canica de vidrio, no la figura de una presentación: el kit la pidió
+ * al tamaño de la cara y tapaba el círculo entero. Acá manda la regla de la sala —la letra más chica
+ * que se lee (`escalaChipLegible`), que ya crece con la pantalla: móvil primero, la ficha más chica
+ * que se puede leer—. Por encima solo crece con poca gente, hasta un cuarto más (no tapan cuando son
+ * pocas), y nunca desproporcionada con el juego: el alto de la ficha (22 * u * escala * 1.6 px) no
+ * pasa de `CHIP_ALTO_FRACCION` del diámetro del círculo `e`. Si ese techo quedara debajo del piso,
+ * manda la letra: se lee primero, tapa después. La cantidad entra por `viven` (los que juegan, `n`):
+ * a más gente, menos ficha — y en el celular, donde el piso de la letra ya manda, la cantidad se ve
+ * en el despeje de la casa (la pasada de `separarEtiquetas` del estadio), no en el tamaño.
+ *
+ * Pura: mismo argumento, misma escala, en la 2D, en la 3D y en la prueba.
+ */
+export function escalaChipDe(u: number, e: number, viven: number): number {
+  const piso = escalaChipLegible(u);
+  const techoAlto = (2 * e * CHIP_ALTO_FRACCION) / (22 * u * 1.6);
+  const porGente = Math.min(piso * 1.25, CHIP_GENTE / Math.max(1, viven));
+  return Math.max(piso, Math.min(porGente, techoAlto));
+}
+
 /* ------------------------------------------------------- el golpe y el polvo */
 
 /** Cuánto sigue vibrando la canica golpeada después del impacto. */
@@ -164,6 +194,43 @@ export function polvoDe(i: number, impacto: Pun, dir: Pun): Grano[] {
       dy: dir.y * largo + perp.y * ancho,
       vida: 0.25 + r() * 0.35,
       r: 0.015 + r() * 0.03,
+    };
+  });
+}
+
+/* ---------------------------------------------------- las chispas del vidrio */
+
+/** Cuántas chispas de vidrio saltan por cada choque. */
+export const CHISPAS_N = 7;
+/** Cuánto vive la chispa más longevo: todas mueren antes (el brillo es un instante). */
+export const CHISPA_VIDA = 0.3;
+
+/** Una chispa de vidrio: su rumbo (por segundo, en unidades del círculo), su vida corta y el largo del rayo que deja. */
+export interface Chispa {
+  dx: number;
+  dy: number;
+  vida: number;
+  largo: number;
+}
+
+/**
+ * Las chispas de un impacto: el destello del vidrio que se roza, más vivas y
+ * más cortas que el polvo. Salen por donde viaja la canica golpeada, abiertas
+ * en un cono, cada una con su velocidad; determinista por tiro, con la semilla
+ * aparte del polvo (`polvoDe`), así la misma tirada echa las mismas chispas.
+ * En unidades del círculo por segundo.
+ */
+export function chispasDe(i: number, impacto: Pun, dir: Pun): Chispa[] {
+  const r = sembrar(Math.imul(i + 1, 0x5bd1e9f5));
+  return Array.from({ length: CHISPAS_N }, () => {
+    const a = (r() - 0.5) * 1.5;
+    const c = Math.cos(a), s = Math.sin(a);
+    const v = 0.45 + r() * 0.65;
+    return {
+      dx: (dir.x * c - dir.y * s) * v,
+      dy: (dir.y * c + dir.x * s) * v,
+      vida: 0.12 + r() * (CHISPA_VIDA - 0.12),
+      largo: 0.018 + r() * 0.03,
     };
   });
 }
@@ -261,4 +328,35 @@ export const TITILA_AMPLE = 0.3;
 export function titilazo(u: number): number {
   if (u <= 0 || u >= 1) return 0;
   return Math.sin(u * Math.PI * TITILA_OLAS) * (1 - u) * TITILA_AMPLE;
+}
+
+/* --------------------------------------------------- el acercamiento a la ganadora */
+
+/** Cuánto tarda la cámara en llegar de cerca: el mismo tramo del rodado del casi (en el 3D es `LLEGADA_TITILA`). */
+export const CERCA_ENTRA = 2;
+/** Cuánto tarda la cámara en soltar la toma de cerca antes del golpe. */
+export const CERCA_VUELVE = 1.1;
+
+/**
+ * Cuánto manda el acercamiento a la canica que gana en el segundo `t` (0: la
+ * cámara del director; 1: la toma de cerca). Entra con el rodado del casi —
+ * la canica va hacia la tiza y la cámara la va a buscar y se queda con ella
+ * mientras titila y gira—, y suelta apenas a tiempo para que la coronación
+ * caiga sobre el encuadre de siempre. Es la cuenta que comparten la cámara
+ * del 3D y el velo de los chips del 2D: una sola, para las dos escenas.
+ * Continua en los cuatro bordes, determinista, cosmética.
+ */
+export function cercaDe(d: Pick<Datos, "casi" | "duracion">, t: number): number {
+  const t0 = d.casi.t;
+  const t1 = t0 + CERCA_ENTRA;
+  const suave = (x: number): number => {
+    const k = Math.min(1, Math.max(0, x));
+    return k * k * (3 - 2 * k);
+  };
+  if (t <= t0) return 0;
+  if (t < t1) return suave((t - t0) / CERCA_ENTRA);
+  const vuelve = Math.max(0.3, CERCA_VUELVE);
+  const s1 = Math.max(t1, d.duracion - vuelve);
+  if (t < s1) return 1;
+  return t >= d.duracion ? 0 : 1 - suave((t - s1) / Math.max(0.001, d.duracion - s1));
 }

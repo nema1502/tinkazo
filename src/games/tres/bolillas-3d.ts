@@ -1,5 +1,5 @@
 import {
-  BufferGeometry, CircleGeometry, DoubleSide, Group, InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PlaneGeometry,
+  AdditiveBlending, BufferGeometry, CircleGeometry, DoubleSide, Group, InstancedMesh, Mesh, MeshBasicMaterial, MeshLambertMaterial, Object3D, PlaneGeometry,
   Quaternion, RingGeometry, SphereGeometry, Vector3,
 } from "three";
 import type { Basura } from "./motor";
@@ -7,12 +7,13 @@ import { definir3D } from "./motor";
 import { crearAmbiente } from "./escena";
 import { crearGeometrias, Materiales, pieza } from "./figuras";
 import { hash } from "./ids";
-import { perfilFiel, type Mapa, type PerfilMapa } from "./camara";
+import { perfilFiel, type Mapa, type PerfilMapa, type Pose3D } from "./camara";
 import type { Camara2D, EntradaBase, Fabrica3D, Lanzador, Montaje3D } from "./tipos";
 import {
   CANICA_R, CIRCULO_R, PEGADORA_DIST, trayectoriaDe, unitarioDe,
   type Datos, type Mapeo, type Pun, type Tiro,
 } from "../pixi/bolillas-plan";
+import { cercaDe } from "../pixi/bolillas-arte";
 /**
  * Bolillas en 3D: la troya de verdad — la tierra con su relieve, el círculo de yeso, las canicas de vidrio y la mano
  * con el agarre ñati que suelta cada tiro. El plan puro (`pixi/bolillas-plan.ts`) decide todo: esta vista solo dibuja
@@ -153,6 +154,70 @@ export function teeterDelCasi(d: Pick<Datos, "casi" | "duracion">, t: number): n
   return titileo(t, d.casi.t + LLEGADA_TITILA, d.duracion);
 }
 
+/* -------------------------------------------------- el acercamiento a la ganadora */
+
+/** El giro de la canica que gana, en radianes: se ve girar, no vibra. */
+export const GIRO_ALTO = 2.4;
+/** El vaivén del giro, en radianes por segundo: más lento que el titileo, así se lee como giro y no como temblor. */
+export const GIRO_FRECUENCIA = 3.2;
+/** Cuánto se aparta la cámara de cerca, por detrás de la canica, en unidades del círculo. */
+const CERCA_ATRAS = 0.5;
+/** Cuánto se corre de costado: tres cuartos, para que la canica se lea con volumen. */
+const CERCA_CUSTADO = 0.16;
+/** A qué altura vuela la cámara de cerca (una canica mide 0,1 de alto). */
+const CERCA_ALTO = 0.17;
+/** El campo de la toma de cerca: apenas más abierto que el del director. */
+const CERCA_FOV = (40 * Math.PI) / 180;
+
+/**
+ * El giro de la canica que gana sobre la tiza, en radianes: el segundo eje del titileo. Con el vaivén del costado
+ * (`teeterDelCasi`), girar sobre la vertical hace que la canica se lea girando — y se queda quieta igual: nace y
+ * muere en cero exacto con la misma envolvente del sapo. Sin azar: función de `t` y de las horas del plan.
+ */
+export function giroDelCasi(d: Pick<Datos, "casi" | "duracion">, t: number): number {
+  return titileo(t, d.casi.t + LLEGADA_TITILA, d.duracion, GIRO_ALTO, GIRO_FRECUENCIA);
+}
+
+/**
+ * La toma de cerca de la canica que gana, en el mundo 3D: por detrás y a un costado del lugar donde está la canica
+ * (el plan la lleva con `trayectoriaDe`, así la cámara la sigue mientras rueda), apenas más arriba del vidrio,
+ * mirándola de frente. El peso que la mezcla con la del director es `cercaDe` (en `bolillas-arte.ts`: la misma
+ * cuenta del 2D, para el velo de los chips); acá solo la pose. Determinista, cosmética.
+ */
+export function poseDelCerca(
+  d: Pick<Datos, "posiciones" | "tiros" | "casi" | "duracion">,
+  t: number,
+  lugar: { px: number; pz: number; K: number; Kz: number },
+  aspecto: number,
+): Pose3D {
+  const p = trayectoriaDe(d, d.casi.slot, t).p;
+  const radial = unitarioDe(p);
+  // Tres cuartos, del lado del giro: en un celular angosto se aleja un paso para que la canica entre entera.
+  const lejos = Math.min(1.35, Math.max(1, 1 / Math.sqrt(Math.max(0.2, aspecto))));
+  const cx = p.x + radial.x * CERCA_ATRAS * lejos - radial.y * CERCA_CUSTADO * lejos;
+  const cz = p.y + radial.y * CERCA_ATRAS * lejos + radial.x * CERCA_CUSTADO * lejos;
+  const { px, pz, K, Kz } = lugar;
+  return {
+    pos: [px + K * cx, K * CERCA_ALTO * lejos, pz + Kz * cz],
+    mira: [px + K * p.x, K * CANICA_R * 0.9, pz + Kz * p.y],
+    fov: CERCA_FOV,
+    giro: 0,
+  };
+}
+
+/** De la cámara `a` a la `b` con peso `w` (0: `a`; 1: `b`), en línea recta: sin saltos (la lección de la moneda del sapo). */
+export function mezclarPose(a: Pose3D, b: Pose3D, w: number): Pose3D {
+  if (w <= 0) return a;
+  if (w >= 1) return b;
+  const l = (x: number, y: number): number => x + (y - x) * w;
+  return {
+    pos: [l(a.pos[0], b.pos[0]), l(a.pos[1], b.pos[1]), l(a.pos[2], b.pos[2])],
+    mira: [l(a.mira[0], b.mira[0]), l(a.mira[1], b.mira[1]), l(a.mira[2], b.mira[2])],
+    fov: l(a.fov, b.fov),
+    giro: l(a.giro, b.giro),
+  };
+}
+
 /* ===================================================================== la paleta */
 
 const PIEL = 0xc68a5c;
@@ -217,6 +282,72 @@ class Polvo {
         const avance = (1 - Math.exp(-5 * edad)) / 5;
         d.position.set(e.x + Math.cos(a) * v * avance * 3, Math.max(0.004, 0.012 + vy * edad - 2.2 * edad * edad), e.z + Math.sin(a) * v * avance * 3);
         d.scale.setScalar(0.012 * (1 - edad / Polvo.VIDA) + 0.002);
+        d.updateMatrix();
+        this.malla.setMatrixAt(n++, d.matrix);
+      }
+    }
+    this.malla.count = n;
+    this.malla.instanceMatrix.needsUpdate = true;
+  }
+}
+
+/* ============================================================== las chispas del vidrio */
+
+/**
+ * Las chispas del choque: rayitos de brillo que saltan del impacto, más rápidos y más cortos que el polvo — el
+ * destello del vidrio que se roza. Cada chispa es función de `t - t0` y de un hash de su número (la misma tirada
+ * suelta las mismas chispas), y sale por el rumbo de la canica golpeada que trae el plan. Vive dentro del grupo del
+ * mundo (unidades del círculo), igual que el polvo.
+ */
+class Chispas {
+  private readonly malla: InstancedMesh;
+  private readonly d = new Object3D();
+  private readonly eventos: { t0: number; x: number; z: number; dx: number; dz: number; serie: number }[] = [];
+  private serie = 0;
+  private readonly vistos = new Set<number>();
+  static readonly POR = 7;
+  static readonly MAX = 5;
+  static readonly VIDA = 0.38;
+
+  constructor(padre: Object3D, geo: BufferGeometry, basura: Basura) {
+    this.malla = new InstancedMesh(
+      geo,
+      basura.add(new MeshBasicMaterial({ color: 0xffefb8, transparent: true, opacity: 0.95, blending: AdditiveBlending, depthWrite: false })),
+      Chispas.POR * Chispas.MAX,
+    );
+    this.malla.count = 0;
+    this.malla.frustumCulled = false;
+    basura.add({ dispose: () => this.malla.dispose() });
+    padre.add(this.malla);
+  }
+
+  /** Registra una ráfaga una sola vez (por su hora), con el rumbo de la canica golpeada. */
+  nuevo(t: number, x: number, z: number, dx: number, dz: number): void {
+    const clave = Math.round(t * 1000);
+    if (this.vistos.has(clave)) return;
+    this.vistos.add(clave);
+    this.eventos.push({ t0: t, x, z, dx, dz, serie: this.serie++ });
+    if (this.eventos.length > Chispas.MAX) this.eventos.shift();
+  }
+
+  actualizar(t: number): void {
+    const d = this.d;
+    let n = 0;
+    for (const e of this.eventos) {
+      const edad = t - e.t0;
+      if (edad < 0 || edad > Chispas.VIDA) continue;
+      const base = Math.atan2(e.dz, e.dx);
+      for (let j = 0; j < Chispas.POR; j++) {
+        const a = base + (hash(e.serie * 29 + j, 51) - 0.5) * 1.9;
+        const v = 0.35 + 0.55 * hash(e.serie * 29 + j, 52);
+        const vy = 0.3 + 0.5 * hash(e.serie * 29 + j, 53);
+        const avance = (1 - Math.exp(-7 * edad)) / 7;
+        d.position.set(
+          e.x + Math.cos(a) * v * avance,
+          Math.max(0.004, CANICA_R * 0.9 + vy * edad - 3.2 * edad * edad),
+          e.z + Math.sin(a) * v * avance,
+        );
+        d.scale.setScalar(Math.max(0.001, 0.011 * (1 - edad / Chispas.VIDA)));
         d.updateMatrix();
         this.malla.setMatrixAt(n++, d.matrix);
       }
@@ -311,7 +442,7 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
     }
     return m;
   };
-  const armarCanica = (color: number, esc: number): { grupo: Group; vidrio: Mesh; centro: Mesh; brillo: Mesh } => {
+  const armarCanica = (color: number, esc: number): { grupo: Group; vidrio: Mesh; centro: Mesh; brillo: Mesh; sombra: Mesh } => {
     const grupo = new Group();
     const vidrio = new Mesh(geoVidrio, vidrioDe(color));
     vidrio.scale.setScalar(esc);
@@ -326,7 +457,14 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
     grupo.add(centro, vidrio, brillo);
     grupo.visible = false;
     mundo.add(grupo);
-    return { grupo, vidrio, centro, brillo };
+    // La sombra de contacto (S13): un plano chico debajo de la canica, apoyado en la tierra. Va al mundo, no al
+    // grupo: la canica rueda (gira su grupo) y la sombra queda plana en el piso, como la de la casa.
+    const sombra = new Mesh(geoSombra, matSombra);
+    const ss = esc / CANICA_R;
+    sombra.scale.set(ss, 1, ss * 0.6);
+    sombra.visible = false;
+    mundo.add(sombra);
+    return { grupo, vidrio, centro, brillo, sombra };
   };
   const canicas = new Map<number, ReturnType<typeof armarCanica>>();
   const canicaDe = (slot: number, d: Datos): ReturnType<typeof armarCanica> => {
@@ -338,6 +476,10 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
     }
     return c;
   };
+
+  // La sombra de contacto: el plano chico que comparten todas las canicas (estilo de la casa: pocos polígonos).
+  const geoSombra = B.add(new CircleGeometry(CANICA_R * 1.35, 14).rotateX(-Math.PI / 2));
+  const matSombra = B.add(new MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.24, depthWrite: false }));
 
   // La canica de la pegadora: un pelo más chica, como en el 2D.
   const tiradorCanica = armarCanica(VIDRIOS[0] as number, CANICA_R * 0.85);
@@ -372,6 +514,7 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
 
   /* ------------------------------------------------------------- el polvo y las sombras */
   const polvo = new Polvo(mundo, g.esfera, B.add(new MeshLambertMaterial({ color: POLVO[tema], flatShading: true })), B);
+  const chispo = new Chispas(mundo, g.esfera, B);
 
   /* ------------------------------------------------------------- el sonido de la casa */
   // El clic de canica contra canica NO suena acá: lo emite el 2D por la voz del kit (`k.sonido`, eventosDe de
@@ -397,8 +540,10 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
         if (!d || !d.posiciones.length) {
           mano.visible = false;
           tiradorCanica.grupo.visible = false;
+          tiradorCanica.sombra.visible = false;
           destello.visible = false;
           polvo.actualizar(e.t);
+          chispo.actualizar(e.t);
           return;
         }
 
@@ -436,6 +581,7 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
           if (e.t >= tiro.t && !polvos.has(claveIda)) {
             polvos.add(claveIda);
             polvo.nuevo(e.t, tiro.impacto.x, tiro.impacto.y, 0.9 + 0.3 * hash(i, 41));
+            chispo.nuevo(e.t, tiro.impacto.x, tiro.impacto.y, tiro.salida.dir.x, tiro.salida.dir.y);
           }
           const claveTiza = `${i}:tiza`;
           if (e.t >= tiro.t + tiro.salida.vuelo && !polvos.has(claveTiza)) {
@@ -460,6 +606,7 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
           polvo.nuevo(d.casi.t, d.casi.desde.x, d.casi.desde.y, 0.5);
         }
         polvo.actualizar(e.t);
+        chispo.actualizar(e.t);
 
         /* -------- la mano y la canica de la pegadora */
         let manoViva: Tiro | undefined;
@@ -498,12 +645,22 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
             tiradorCanica.grupo.position.set(hx + dir.x * 0.05, R_TIRADOR, hz + dir.y * 0.05);
             tiradorCanica.grupo.quaternion.identity();
           }
+          tiradorCanica.sombra.visible = true;
+          tiradorCanica.sombra.position.set(tiradorCanica.grupo.position.x + 0.01, 0.016, tiradorCanica.grupo.position.z - 0.015);
           puestos.set(-1, { x: tiradorCanica.grupo.position.x, y: tiradorCanica.grupo.position.z });
         } else {
           tiradorCanica.grupo.visible = false;
+          tiradorCanica.sombra.visible = false;
           puestos.delete(-1);
         }
 
+        // La toma de cerca de la ganadora (S14): el peso sale del plan (`cercaDe`), la pose sigue a la canica
+        // (`poseDelCerca`), y el motor aplica la pose ya mezclada después de este dibujo (la manera de la casa).
+        // Cosmética: el ganador y el plan no cambian; la cámara solo lee el casi.
+        const cerca = cercaDe(d, e.t);
+        if (cerca > 0) {
+          Object.assign(pose, mezclarPose(pose, poseDelCerca(d, e.t, { px, pz, K, Kz }, e.w / Math.max(1, e.h)), cerca));
+        }
         amb.seguir(pose);
       });
     },

@@ -19,12 +19,16 @@ import {
 } from "./bolillas-plan";
 import { TEXTOS } from "./bolillas-textos";
 import {
+  CHISPA_VIDA,
   COLA_GOLPE,
   SEMILLA_FIJA,
   T_DESVIO,
   TIRADOR,
+  cercaDe,
+  chispasDe,
   coloresCanica,
   efectosDe,
+  escalaChipDe,
   manoDe,
   polvoDe,
   tierraManchas,
@@ -71,6 +75,8 @@ interface Escena {
   mano: Graphics;
   /** Un chip por canica (la figura con cara y nombre), creado cuando se ve por primera vez. */
   chips: Map<number, Container>;
+  /** La escala de esos chips: la etiqueta más chica que se lee, en proporción al círculo (`escalaChipDe`). */
+  escala: number;
   /** Los dibujos de las canicas, por su asiento (y la canica de la pegadora en el -1). */
   bol: Map<number, Graphics>;
   m: Mapeo;
@@ -110,6 +116,9 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
     // Al cambiar de tamaño se tira lo viejo: el círculo y las canicas se piden de nuevo.
     mundo.removeChildren().forEach((c) => c.destroy({ children: true }));
     const m: Mapeo = mapeoDe(p);
+    // La escala de las fichas del nombre: la etiqueta más chica que se lee, en proporción al círculo y
+    // a la cantidad de gente (S11); antes salían al tamaño de la figura del kit y tapaban el círculo entero.
+    const escala = escalaChipDe(p.k, m.e, plan.datos.n);
     // La tierra sembrada: manchas de tono, siempre las mismas (la semilla del show).
     const tierraOscura = S.dark ? 0x2c2013 : 0xc2a273;
     const tierraClara = S.dark ? 0x49361f : 0xe3c69b;
@@ -158,7 +167,7 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
       S.bg.visible = false;
     }
     const entrada3 = v3 ? previa?.entrada3 ?? entrada3Vacia() : null;
-    return { fondo, mundo, sombra, fx, mano, chips: new Map(), bol: new Map(), m, v3, entrada3 };
+    return { fondo, mundo, sombra, fx, mano, chips: new Map(), bol: new Map(), m, escala, v3, entrada3 };
   },
 
   cuadro(k, plan, e, t) {
@@ -204,17 +213,24 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
 
       let chip = e.chips.get(persona);
       if (!chip) {
-        chip = k.S.chip(k.nombres[persona] ?? "", k.escalaDeFigura());
+        chip = k.S.chip(k.nombres[persona] ?? "", e.escala);
         e.chips.set(persona, chip);
         e.mundo.addChild(chip);
       }
-      chip.visible = seVe && tray.estado !== "afuera";
-      if (k.coronado && persona === d.ganador) chip.scale.set(1.2);
-      else chip.scale.set(1);
+      // La coronación: el cartel del kit dice el nombre del ganador, y la ficha se retira — el nombre
+      // aparece una sola vez (S12), no el cartel y la ficha superpuestos.
+      chip.visible = seVe && tray.estado !== "afuera" && !(k.coronado && persona === d.ganador);
+      chip.scale.set(1);
       chip.position.set(w.x - chip.width / 2, w.y - rr * 1.08 - chip.height * 0.85);
     });
     for (const [persona, chip] of e.chips) {
       if (!d.canicas.includes(persona)) chip.visible = false;
+    }
+    // El velo del acercamiento (S14): con la cámara del 3D de cerca de la ganadora, los chips —que el 2D proyecta
+    // con la cámara del director— quedan mirando otra toma: se desvanecen mientras dura y vuelven al volver.
+    if (en3d) {
+      const velo = 1 - cercaDe(d, t);
+      for (const chip of e.chips.values()) chip.alpha = velo;
     }
 
     // La canica de la pegadora: vuela del punto de largada al impacto y después se desvía hasta su freno.
@@ -292,6 +308,20 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
                 grano.r * e.m.e * (1 + uv * 2.2),
               )
               .fill({ color: S.dark ? 0x6b5230 : 0xd9c9a8, alpha: (1 - uv) * 0.55 });
+          }
+        }
+        // Las chispas del vidrio (S13): rayitos de luz que saltan más vivos y mueren antes que el polvo —
+        // cada uno viaja con su rumbo del plan y apaga con su vida, como un destello de cristal.
+        if (edad < CHISPA_VIDA) {
+          for (const chispa of chispasDe(i, tiro.impacto, tiro.salida.dir)) {
+            if (edad >= chispa.vida) continue;
+            const uv = edad / chispa.vida;
+            const hx = w.x + chispa.dx * edad * e.m.e;
+            const hy = w.y + chispa.dy * edad * e.m.e;
+            const tx = hx - chispa.dx * chispa.largo * e.m.e;
+            const ty = hy - chispa.dy * chispa.largo * e.m.e;
+            e.fx.moveTo(tx, ty).lineTo(hx, hy).stroke({ width: Math.max(1.5, 0.3 * CANICA_R * e.m.e), color: 0xfff2bd, alpha: (1 - uv) * 0.8, cap: "round" });
+            e.fx.moveTo(tx, ty).lineTo(hx, hy).stroke({ width: Math.max(0.8, 0.15 * CANICA_R * e.m.e), color: 0xffffff, alpha: 1 - uv, cap: "round" });
           }
         }
       });
