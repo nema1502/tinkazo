@@ -5,10 +5,11 @@ import { describe, expect, it } from "vitest";
 import { permite3D, type Entorno3D } from "../permite3d";
 import { ajusteGanador } from "../pixi/ganador-altura";
 import { resolverToma } from "../pixi/kit/director";
-import { LLAMA_ALTO } from "./carrera-forma";
+import { LLAMA_ALTO, formaDe, type Pantalla } from "./carrera-forma";
+import { unidadDe } from "../pixi/kit/nombres";
 import {
-  ACERCA, AIRE_LIDER, FRACCION_TOPE, HOLGURA_LIDER, PUNTOS_LLAMA, TAM3D, cajaProyectada, camara3D, colocar, corrimientoLider, escala3D, puntasDe,
-  topeAcercamiento, ZC, type Camara2D, type Corredora3D,
+  ACERCA, AIRE_LIDER, ELEVACION, FRACCION_TOPE, HOLGURA_LIDER, PUNTOS_LLAMA, TAM3D, cajaProyectada, camara3D, colocar, corrimientoLider, escala3D, puntasDe,
+  tam3DDe, topeAcercamiento, ZC, type Camara2D, type Corredora3D,
 } from "./carrera-3d-mapa";
 import { despejarVisto, tomaPrimerPlano3D } from "./carrera-zoom-final";
 import { ctxDe } from "./carrera-prueba";
@@ -112,6 +113,26 @@ describe("la cámara del 3D mira lo que mira el director", () => {
     const b = camara3D({ x: 1234, y: 321, zoom: 1.4, rot: 0.02 }, w, h, u, 0.55);
     expect(b).toEqual(a);
     expect(a.giro).toBe(0.02);
+  });
+});
+
+describe("el 3D no encima las filas", () => {
+  const pantallas: [string, number, number][] = [["proyector", 1920, 1080], ["celular", 390, 844], ["celular de lado", 844, 390]];
+  const pantalla = (w: number, h: number) => ({ w, h, u: unidadDe(w, h), retrato: h > w * 1.1, top: Math.round(0.06 * h), bottom: Math.round(h - Math.max(110, 0.14 * h)) });
+
+  it("la llama proyectada no entra en la fila de al lado, con `tam3DDe` y con las filas peores de cada formato", () => {
+    for (const [nombre, w, h] of pantallas) {
+      const p = pantalla(w, h);
+      for (let m = 2; m <= 30; m++) {
+        const f = formaDe(p, m, Math.max(p.h * 0.026, 16, 19 * Math.min(2, p.u)), 120 * p.u);
+        const esc = f.alto / LLAMA_ALTO;
+        const tam = tam3DDe(f.altoFila, esc);
+        // La cabeza de una fila sube `LLAMA_ALTO·esc·tam·cos(E)` desde el piso; la fila de al lado se ve a `altoFila·ZC·sin(E)`.
+        expect(LLAMA_ALTO * esc * tam * Math.cos(ELEVACION), `m=${m} en ${nombre}`).toBeLessThanOrEqual(f.altoFila * ZC * Math.sin(ELEVACION) + 1e-6);
+        // La inflación de antes (TAM3D pelado) encimaba en el celular parado: con el tope nuevo es más chica que eso.
+        if (p.retrato && m >= 10) expect(tam, `m=${m} en ${nombre}`).toBeLessThan(TAM3D);
+      }
+    }
   });
 });
 
