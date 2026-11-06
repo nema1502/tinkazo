@@ -856,3 +856,28 @@ describe("kit de marca: impresos y sponsors", () => {
     expect(leer("src/marca.ts")).toContain("data-copiar");
   });
 });
+
+describe("la frase de la marca en marca.html", () => {
+  const html = leer("marca.html");
+  it("está arriba, con la dirección, el lema, la línea de gratis y el botón de copiar", () => {
+    expect(html).toContain('id="frase"');
+    expect(html.indexOf('id="frase"')).toBeLessThan(html.indexOf('id="devfest"'));
+    expect(html).toContain("tinkazo.app</p>");
+    expect(html).toContain('data-i="maFrTitulo"');
+    expect(html).toContain('data-i="maFrGratis"');
+    expect(html).toContain('data-copiar="fr-copia"');
+    expect(html).toContain('href="#frase"');
+  });
+  it("dice lo mismo en los dos idiomas y lo copiable trae el nombre, la dirección y la frase", () => {
+    for (const l of ["es", "en"] as const) {
+      const copia = T[l].maFrCopia as string;
+      expect(copia).toContain("Tinkazo");
+      expect(copia).toContain("tinkazo.app");
+      expect(copia.toLowerCase()).toContain((T[l].maFrTitulo as string).toLowerCase().replace(/\.$/, ""));
+      expect(copia).toContain(T[l].maFrGratis as string);
+      expect(copia).not.toContain("·");
+    }
+    expect(T.es.maFrTitulo).toBe("Sorteos que cualquiera puede comprobar.");
+    expect(T.en.maFrTitulo).toBe("Draws anyone can check.");
+  });
+});
