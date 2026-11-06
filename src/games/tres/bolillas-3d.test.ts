@@ -10,9 +10,11 @@ import { JUEGOS_CON_3D, ofrece3D } from "./ofrecidos";
 import { tiene3D } from "./registro";
 import { CANICA_ESCALA } from "../pixi/bolillas-arte";
 import {
+  ESTALLIDO_ENEMIGO, ESTALLIDO_MANO, ESTRELLA_PUNTAS, LINEAS_N, SACUDIDA_MAX, T_DESVIO, TIRADOR,
   LLEGADA_TITILA, TEETER_ALTO, TEETER_FRECUENCIA, ZOOM_MAX, camaraBolillas, giroDelCasi, GIRO_ALTO,
-  lugarDelMundo, mezclarPose, perfilBolillas, poseDelCerca, poseTiro, teeterDelCasi, titileo,
-  type EntradaBolillas,
+  estallidoDe, estallidosDe, lugarDelMundo, mezclarPose, perfilBolillas, poseDelCerca, poseSacudida,
+  poseTiro, rodadoDe, rodadoDelTurno, sacudidaDe, teeterDelCasi, titileo, ventanaCadena,
+  type EntradaBolillas, type Estallido,
 } from "./bolillas-3d";
 import { cercaDe } from "../pixi/bolillas-arte";
 
@@ -72,47 +74,219 @@ describe("el mundo 3D se apoya donde el 2D puso el círculo", () => {
   }
 });
 
-describe("el tiro de la pegadora sigue el plan, de punta a punta", () => {
-  it("en la largada está en `desde`, en el impacto en `impacto`, y al frenar en `deflexion.hasta`", () => {
-    const largada = poseTiro(TIRO, TIRO.t - 0.55);
+/** Un plan mínimo para mirar la cadena del tiro: las canicas donde el fixture las deja y un casi que no se usa acá. */
+const PLAN_CADENA = {
+  posiciones: [{ x: 1, y: 1 }, { x: 1, y: 1 }, { x: 0.5, y: -0.2 }, { x: -0.4, y: 0.6 }],
+  tiros: [TIRO],
+  casi: { t: 20, ganador: 0, slot: 0, desde: { x: 0, y: 0 }, dir: { x: 0, y: 1 }, titila: { x: 0, y: 0.94 } },
+  duracion: 23.4,
+};
+
+describe("la cadena del turno en 3D (S23): mano → mi canica → la del enemigo (S21)", () => {
+  it("las ventanas del turno salen del plan y van en orden: suelte, toque, empuje, salida", () => {
+    const v = ventanaCadena(TIRO);
+    expect(v.suelte).toBeCloseTo(TIRO.tMano - TIRADOR, 9);
+    expect(v.tMano).toBe(TIRO.tMano);
+    expect(v.t).toBe(TIRO.t);
+    expect(v.finMano).toBeCloseTo(TIRO.tMano + T_DESVIO, 9);
+    expect(v.tiza).toBeCloseTo(TIRO.t + TIRO.salida.vuelo, 9);
+    expect(v.suelte).toBeLessThan(v.tMano);
+    expect(v.tMano).toBeLessThan(v.t);
+    expect(ventanaCadena(TIRO)).toEqual(ventanaCadena(TIRO));
+  });
+
+  it("la mano larga de `desde`, pega en mi canica (`choque`) a la hora `tMano` y de ahí deriva a `mano.hasta`", () => {
+    const largada = poseTiro(TIRO, TIRO.tMano - TIRADOR);
     expect(largada?.estado).toBe("ida");
     expect(largada?.x).toBeCloseTo(TIRO.desde.x, 9);
     expect(largada?.y).toBeCloseTo(TIRO.desde.y, 9);
-
-    const golpe = poseTiro(TIRO, TIRO.t);
-    // En el segundo del impacto llega al punto del plan (el desvío arranca ahí mismo, como en el 2D).
-    expect(golpe?.estado).toBe("ida");
-    expect(golpe?.x).toBeCloseTo(TIRO.impacto.x, 9);
-    expect(golpe?.y).toBeCloseTo(TIRO.impacto.y, 9);
-    expect(golpe?.f).toBeCloseTo(1, 9);
-
-    const desvio = poseTiro(TIRO, TIRO.t + 0.001);
-    expect(desvio?.estado).toBe("desvio");
-
-    const freno = poseTiro(TIRO, TIRO.t + 0.45);
-    expect(freno?.estado).toBe("desvio");
-    expect(freno?.x).toBeCloseTo(TIRO.deflexion.hasta.x, 9);
-    expect(freno?.y).toBeCloseTo(TIRO.deflexion.hasta.y, 9);
-  });
-
-  it("la canica golpeada llega exactamente a la tiza que el plan dijo, en su vuelo", () => {
-    // La salida la anima `trayectoriaDe` del plan; acá se prueba que el tramo de la ida de la pegadora
-    // pasa por el impacto y que ningún estado inventado aparece fuera de la ventana del tiro.
-    expect(poseTiro(TIRO, TIRO.t - 0.55 - 0.001)).toBeNull();
-    expect(poseTiro(TIRO, TIRO.t + 0.45 + 0.001)).toBeNull();
-    // En el medio de la ida, va por la recta desde → impacto.
-    const medio = poseTiro(TIRO, TIRO.t - 0.275) as { x: number; y: number; estado: string; f: number };
-    expect(medio.estado).toBe("ida");
+    const medio = poseTiro(TIRO, TIRO.tMano - TIRADOR / 2) as { x: number; y: number; estado: string; f: number };
     expect(medio.f).toBeCloseTo(0.5, 9);
-    expect(medio.x).toBeCloseTo((TIRO.desde.x + TIRO.impacto.x) / 2, 9);
-    expect(medio.y).toBeCloseTo((TIRO.desde.y + TIRO.impacto.y) / 2, 9);
-  });
-
-  it("es función de `t` sola: dos llamadas con el mismo tiro y hora dan lo mismo (sin azar)", () => {
+    expect(medio.x).toBeCloseTo((TIRO.desde.x + TIRO.choque.x) / 2, 9);
+    expect(medio.y).toBeCloseTo((TIRO.desde.y + TIRO.choque.y) / 2, 9);
+    const toque = poseTiro(TIRO, TIRO.tMano);
+    expect(toque?.estado).toBe("ida");
+    expect(toque?.f).toBeCloseTo(1, 9);
+    expect(toque?.x).toBeCloseTo(TIRO.choque.x, 9);
+    expect(toque?.y).toBeCloseTo(TIRO.choque.y, 9);
+    // La mano ya no va contra la canica del enemigo: el primer choque es con la mía.
+    expect(Math.hypot((toque?.x ?? 0) - TIRO.impacto.x, (toque?.y ?? 0) - TIRO.impacto.y)).toBeGreaterThan(CANICA_R);
+    const desvio = poseTiro(TIRO, TIRO.tMano + 0.001);
+    expect(desvio?.estado).toBe("desvio");
+    const freno = poseTiro(TIRO, TIRO.tMano + T_DESVIO);
+    expect(freno?.x).toBeCloseTo(TIRO.mano.hasta.x, 9);
+    expect(freno?.y).toBeCloseTo(TIRO.mano.hasta.y, 9);
+    expect(poseTiro(TIRO, TIRO.tMano - TIRADOR - 0.001)).toBeNull();
+    expect(poseTiro(TIRO, TIRO.tMano + T_DESVIO + 0.001)).toBeNull();
     for (let i = 0; i < 20; i++) {
-      const t = TIRO.t - 0.6 + (i / 19) * 1.1;
+      const t = TIRO.tMano - TIRADOR + (i / 19) * (TIRADOR + T_DESVIO);
       expect(poseTiro(TIRO, t)).toEqual(poseTiro(TIRO, t));
     }
+  });
+
+  it("mi canica rueda de `choque` a `empuje.hasta` entre tMano y t, y la del enemigo cruza la tiza en su vuelo", () => {
+    const antes = trayectoriaDe(PLAN_CADENA, TIRO.mio, TIRO.tMano - 0.01);
+    expect(antes.estado).toBe("dentro");
+    const arranque = trayectoriaDe(PLAN_CADENA, TIRO.mio, TIRO.tMano);
+    expect(arranque.estado).toBe("vuela");
+    expect(arranque.p.x).toBeCloseTo(TIRO.choque.x, 9);
+    const medio = trayectoriaDe(PLAN_CADENA, TIRO.mio, (TIRO.tMano + TIRO.t) / 2);
+    expect(medio.estado).toBe("vuela");
+    expect(Math.hypot(medio.p.x - TIRO.choque.x, medio.p.y - TIRO.choque.y)).toBeGreaterThan(0);
+    const freno = trayectoriaDe(PLAN_CADENA, TIRO.mio, TIRO.t);
+    expect(freno.estado).toBe("dentro");
+    expect(freno.p.x).toBeCloseTo(TIRO.empuje.hasta.x, 9);
+    expect(freno.p.y).toBeCloseTo(TIRO.empuje.hasta.y, 9);
+
+    const enemigo = trayectoriaDe(PLAN_CADENA, TIRO.slot, TIRO.t);
+    expect(enemigo.estado).toBe("vuela");
+    expect(enemigo.p.x).toBeCloseTo(TIRO.empuje.donde.x, 9);
+    const aMitad = trayectoriaDe(PLAN_CADENA, TIRO.slot, TIRO.t + TIRO.salida.vuelo / 2);
+    expect(aMitad.estado).toBe("vuela");
+    const afuera = trayectoriaDe(PLAN_CADENA, TIRO.slot, TIRO.t + TIRO.salida.vuelo);
+    expect(afuera.estado).toBe("afuera");
+    // Cruza a lo largo de `salida.dir` desde el empuje, nunca de vuelta (S21): la distancia que vuela es
+    // la que el plan mide entre `empuje.donde` y su `salida.tiza`.
+    const largo = Math.hypot(TIRO.salida.tiza.x - TIRO.empuje.donde.x, TIRO.salida.tiza.y - TIRO.empuje.donde.y);
+    expect(afuera.p.x).toBeCloseTo(TIRO.empuje.donde.x + TIRO.salida.dir.x * largo, 9);
+    expect(afuera.p.y).toBeCloseTo(TIRO.empuje.donde.y + TIRO.salida.dir.y * largo, 9);
+    // S21: cruza la tiza hacia afuera (el fixture no trae la salida alineada al empuje; la alineación del
+    // plan se prueba en su propia suite, acá solo se cuida que la vista la saque hacia afuera).
+    expect(Math.hypot(TIRO.salida.tiza.x, TIRO.salida.tiza.y)).toBeGreaterThan(Math.hypot(TIRO.empuje.donde.x, TIRO.empuje.donde.y));
+  });
+});
+
+describe("el rodado de la cadena: mi canica gira mientras empuja", () => {
+  it("el eje es perpendicular al viaje y los radianes son la distancia rodada sobre el radio", () => {
+    const r = rodadoDe({ x: 0, y: 0 }, { x: 0, y: 2 }, 0.5, 2);
+    expect(Math.hypot(r.eje.x, r.eje.y)).toBeCloseTo(1, 9);
+    expect(r.eje.x * 0 + r.eje.y * 2).toBeCloseTo(0, 9);
+    expect(r.giro).toBeCloseTo(0.5, 9);
+    expect(rodadoDe({ x: 0, y: 0 }, { x: 1, y: 0 }, -1, 1).giro).toBe(0);
+    expect(rodadoDe({ x: 0, y: 0 }, { x: 1, y: 0 }, 5, 1).giro).toBeCloseTo(1, 9);
+    expect(rodadoDe({ x: 0, y: 0 }, { x: 0, y: 0 }, 0.5, 1).giro).toBe(0);
+    expect(rodadoDe({ x: 0.2, y: -0.1 }, { x: 0.2, y: -0.1 }, 0.5, 1)).toEqual(rodadoDe({ x: 0.2, y: -0.1 }, { x: 0.2, y: -0.1 }, 0.5, 1));
+  });
+
+  it("mi canica gira solo mientras rueda el empuje; en la hora `t` se frena; la del enemigo gira al salir", () => {
+    expect(rodadoDelTurno(PLAN_CADENA, TIRO.mio, TIRO.tMano - 0.01, 1)).toBeNull();
+    const medio = rodadoDelTurno(PLAN_CADENA, TIRO.mio, TIRO.tMano + (TIRO.t - TIRO.tMano) / 2, 1) as { giro: number };
+    expect(medio.giro).toBeGreaterThan(0);
+    // Rueda lo que el plan dice que se movió: los radianes son la distancia viva sobre el radio.
+    const medioTray = trayectoriaDe(PLAN_CADENA, TIRO.mio, TIRO.tMano + (TIRO.t - TIRO.tMano) / 2);
+    const rodado = Math.hypot(medioTray.p.x - TIRO.choque.x, medioTray.p.y - TIRO.choque.y);
+    expect(medio.giro).toBeCloseTo(rodado, 9);
+    const antes = rodadoDelTurno(PLAN_CADENA, TIRO.mio, TIRO.tMano + 0.05, 1) as { giro: number };
+    const despues = rodadoDelTurno(PLAN_CADENA, TIRO.mio, TIRO.tMano + 0.15, 1) as { giro: number };
+    expect(despues.giro).toBeGreaterThan(antes.giro);
+    expect(rodadoDelTurno(PLAN_CADENA, TIRO.mio, TIRO.t, 1)).toBeNull();
+    const salida = rodadoDelTurno(PLAN_CADENA, TIRO.slot, TIRO.t + TIRO.salida.vuelo / 2, 1) as { giro: number };
+    expect(salida.giro).toBeGreaterThan(0);
+    expect(rodadoDelTurno(PLAN_CADENA, TIRO.slot, TIRO.t - 0.01, 1)).toBeNull();
+    expect(rodadoDelTurno(PLAN_CADENA, TIRO.mio, TIRO.tMano + 0.1, 1)).toEqual(rodadoDelTurno(PLAN_CADENA, TIRO.mio, TIRO.tMano + 0.1, 1));
+  });
+
+  it("si la misma canica empuja en dos turnos (la rotación puede repetir), gira en el que está rodando", () => {
+    const segundo: Tiro = {
+      ...TIRO,
+      tMano: 12,
+      t: 12.4,
+      desde: { x: -1.4, y: 0.5 },
+      choque: { x: -0.2, y: 0.1 },
+      empuje: { dir: { x: 0.9, y: 0.2 }, donde: { x: 0.7, y: 0.3 }, hasta: { x: 0.55, y: 0.28 }, vuelo: 0.4 },
+      mano: { hasta: { x: -0.15, y: 0.3 } },
+    };
+    const d = { tiros: [TIRO, segundo] };
+    expect(rodadoDelTurno(d, TIRO.mio, 11, 1)).toBeNull();
+    const r = rodadoDelTurno(d, TIRO.mio, 12.2, 1) as { giro: number };
+    expect(r.giro).toBeGreaterThan(0);
+    expect(rodadoDelTurno(d, TIRO.mio, 12.4, 1)).toBeNull();
+  });
+});
+
+describe("el estallido de pelea en los dos choques del turno (S22)", () => {
+  it("hay uno en cada impacto: el de la mano en `choque`/`tMano` y el grande en `empuje.donde`/`t`", () => {
+    const mano = estallidoDe(TIRO, "mano", TIRO.tMano) as Estallido;
+    expect(mano.golpe).toBe("mano");
+    expect(mano.t0).toBe(TIRO.tMano);
+    expect(mano.x).toBeCloseTo(TIRO.choque.x, 9);
+    expect(mano.y).toBeCloseTo(TIRO.choque.y, 9);
+    expect(mano.vida).toBe(ESTALLIDO_MANO);
+    const enemigo = estallidoDe(TIRO, "enemigo", TIRO.t) as Estallido;
+    expect(enemigo.golpe).toBe("enemigo");
+    expect(enemigo.t0).toBe(TIRO.t);
+    expect(enemigo.x).toBeCloseTo(TIRO.empuje.donde.x, 9);
+    expect(enemigo.y).toBeCloseTo(TIRO.empuje.donde.y, 9);
+    expect(enemigo.vida).toBe(ESTALLIDO_ENEMIGO);
+    // La ventana de cada estallido: antes no hay, y muere exacto al final.
+    expect(estallidoDe(TIRO, "mano", TIRO.tMano - 0.001)).toBeNull();
+    expect(estallidoDe(TIRO, "mano", TIRO.tMano + ESTALLIDO_MANO + 1e-6)).toBeNull();
+    expect(estallidoDe(TIRO, "enemigo", TIRO.t + ESTALLIDO_ENEMIGO + 1e-6)).toBeNull();
+  });
+
+  it("la estrella y las líneas de velocidad radian del impacto, y el golpe grande es más grande y más largo", () => {
+    const medioMano = estallidoDe(TIRO, "mano", TIRO.tMano + ESTALLIDO_MANO * 0.45) as Estallido;
+    const medioEnemigo = estallidoDe(TIRO, "enemigo", TIRO.t + ESTALLIDO_ENEMIGO * 0.45) as Estallido;
+    expect(medioMano.puntas).toHaveLength(ESTRELLA_PUNTAS);
+    expect(medioMano.lineas).toHaveLength(LINEAS_N);
+    expect(medioEnemigo.puntas).toHaveLength(ESTRELLA_PUNTAS);
+    expect(medioEnemigo.lineas).toHaveLength(LINEAS_N);
+    for (const p of medioMano.puntas) {
+      expect(Number.isFinite(p.a)).toBe(true);
+      expect(p.largo).toBeGreaterThan(0);
+    }
+    for (const l of medioEnemigo.lineas) {
+      expect(l.de).toBeGreaterThan(0);
+      expect(l.hasta).toBeGreaterThan(l.de);
+    }
+    expect(medioEnemigo.radio).toBeGreaterThan(medioMano.radio);
+    expect(ESTALLIDO_ENEMIGO).toBeGreaterThan(ESTALLIDO_MANO);
+    expect(medioMano.velo).toBeGreaterThan(0);
+    expect(medioMano.velo).toBeLessThanOrEqual(1);
+  });
+
+  it("es determinista y cosmético: es función de `t` y del plan, sin azar ni al ganador", () => {
+    for (const t of [TIRO.tMano, TIRO.tMano + 0.1, TIRO.t, TIRO.t + 0.2, TIRO.t + 0.5]) {
+      expect(estallidosDe(PLAN_CADENA, t)).toEqual(estallidosDe(PLAN_CADENA, t));
+    }
+    const src = fuente("bolillas-3d.ts");
+    const tramo = src.slice(src.indexOf("export interface Estallido"), src.indexOf("export function poseSacudida"));
+    expect(tramo).not.toMatch(/Math\.random|ganador/);
+  });
+
+  it("los dos choques se solapan cuando el empuje es corto, sin perder ninguno", () => {
+    const corto: Tiro = { ...TIRO, t: TIRO.tMano + 0.16 };
+    const est = estallidosDe({ tiros: [corto] }, corto.t);
+    expect(est.map((e) => e.golpe).sort()).toEqual(["enemigo", "mano"]);
+    expect(est.every((e) => e.u >= 0 && e.u < 1)).toBe(true);
+  });
+});
+
+describe("la micro-sacudida de la vista en el choque (S22)", () => {
+  it("es chica, sale del impacto y muere sin sacar el encuadre", () => {
+    expect(sacudidaDe([])).toEqual({ x: 0, y: 0 });
+    const golpe = sacudidaDe([estallidoDe(TIRO, "enemigo", TIRO.t) as Estallido]);
+    const largo = Math.hypot(golpe.x, golpe.y);
+    expect(largo).toBeGreaterThan(0);
+    expect(largo).toBeLessThanOrEqual(SACUDIDA_MAX + 1e-9);
+    const casiFinal = sacudidaDe([estallidoDe(TIRO, "enemigo", TIRO.t + ESTALLIDO_ENEMIGO - 1e-6) as Estallido]);
+    expect(Math.hypot(casiFinal.x, casiFinal.y)).toBeLessThan(1e-3);
+    // Dos choques solapados siguen acotados por la receta del más fuerte.
+    const corto: Tiro = { ...TIRO, t: TIRO.tMano + 0.16 };
+    const solape = sacudidaDe(estallidosDe({ tiros: [corto] }, corto.t));
+    expect(Math.hypot(solape.x, solape.y)).toBeLessThanOrEqual(SACUDIDA_MAX * 1.6);
+  });
+
+  it("la pose sacudida mueve la cámara un pelo (el encuadre del director manda) y sin golpe no toca nada", () => {
+    const pose = { pos: [0, 10, 20] as [number, number, number], mira: [0, 0, 0] as [number, number, number], fov: 0.5, giro: 0 };
+    expect(poseSacudida(pose, { x: 0, y: 0 }, 100, 100)).toEqual(pose);
+    const movida = poseSacudida(pose, { x: 0.02, y: -0.01 }, 100, 120);
+    expect(movida.pos[0]).toBeCloseTo(2, 9);
+    expect(movida.pos[1]).toBe(10);
+    expect(movida.pos[2]).toBeCloseTo(18.8, 9);
+    expect(movida.mira).toEqual(pose.mira);
+    expect(movida.fov).toBe(pose.fov);
+    expect(poseSacudida(pose, { x: 0.02, y: -0.01 }, 100, 120)).toEqual(movida);
   });
 });
 
@@ -314,6 +488,48 @@ describe("S19 en 3D: el anillo del anuncio alrededor de la diana", () => {
     const pose = poseDelCerca(CASI_D, 21.4, lugar, 1.3);
     const top = 2 * CANICA_R * CANICA_ESCALA; // lo alto que queda el vidrio doblado, con el ojo de la cámara por encima
     expect(pose.pos[1] / lugar.K, "ojo por encima del vidrio doblado").toBeGreaterThanOrEqual(top * 1.1);
+  });
+});
+
+describe("el acercamiento a la ganadora con la cadena nueva (S14/S23)", () => {
+  /** La ganadora ya fue empujada: su casi arranca donde la dejó el empuje, no en su siembra. */
+  const CASI_EMPUJADA = {
+    casi: { t: 20, ganador: 0, slot: 1, desde: { x: 0.62, y: -0.21 }, dir: { x: 0.36, y: 0.93 }, titila: { x: 0, y: 0.945 } },
+    duracion: 23.4,
+    posiciones: [{ x: 0.1, y: 0.1 }, { x: 0.2, y: 0.3 }],
+    tiros: [] as Tiro[],
+  };
+
+  it("arranca en `casi.desde` (el `hasta` del empuje, no la siembra) y aterriza en el titileo de la tiza", () => {
+    const pant = PANTALLAS[0] as { nombre: string; u: number; mapeo: Mapeo };
+    const mapa = crearMapa(perfilBolillas(), pant.u);
+    const lugar = lugarDelMundo(mapa, pant.mapeo);
+    const arranque = poseDelCerca(CASI_EMPUJADA, CASI_EMPUJADA.casi.t, lugar, 1.3);
+    expect(arranque.mira[0]).toBeCloseTo(lugar.px + lugar.K * CASI_EMPUJADA.casi.desde.x, 4);
+    expect(arranque.mira[2]).toBeCloseTo(lugar.pz + lugar.Kz * CASI_EMPUJADA.casi.desde.y, 4);
+    const llegada = poseDelCerca(CASI_EMPUJADA, CASI_EMPUJADA.casi.t + LLEGADA_TITILA, lugar, 1.3);
+    expect(llegada.mira[0]).toBeCloseTo(lugar.px + lugar.K * CASI_EMPUJADA.casi.titila.x, 4);
+    expect(llegada.mira[2]).toBeCloseTo(lugar.pz + lugar.Kz * CASI_EMPUJADA.casi.titila.y, 4);
+    // El `casi.desde` no es la siembra: la cadena la dejó en otro lado.
+    const siembra = CASI_EMPUJADA.posiciones[1] as { x: number; y: number };
+    expect(Math.hypot(CASI_EMPUJADA.casi.desde.x - siembra.x, CASI_EMPUJADA.casi.desde.y - siembra.y)).toBeGreaterThan(0.1);
+    // Al aterrizar, el titileo ya arrancó en la tiza y la cámara de cerca lo está mirando.
+    expect(teeterDelCasi(CASI_EMPUJADA, CASI_EMPUJADA.casi.t + LLEGADA_TITILA)).toBe(0);
+    expect(Math.abs(teeterDelCasi(CASI_EMPUJADA, CASI_EMPUJADA.casi.t + LLEGADA_TITILA + 0.3))).toBeGreaterThan(0);
+    expect(cercaDe(CASI_EMPUJADA, CASI_EMPUJADA.casi.t + LLEGADA_TITILA)).toBe(1);
+  });
+});
+
+describe("la escena dibuja la cadena y el estallido (S21/S22/S23)", () => {
+  it("el cuadro consume las cuentas nuevas: la mano en `tMano`/`choque`, el rodado de la cadena y los dos estallidos", () => {
+    const src = fuente("bolillas-3d.ts");
+    expect(src).toMatch(/tiro\.tMano/);
+    expect(src).toMatch(/tiro\.mano\.hasta/);
+    expect(src).toMatch(/rodadoDelTurno\(/);
+    expect(src).toMatch(/estallidosDe\(/);
+    expect(src).toMatch(/poseSacudida\(/);
+    expect(src).toMatch(/chispo\.nuevo\(e\.t, tiro\.choque/);
+    expect(src).not.toContain("Math.random");
   });
 });
 

@@ -58,7 +58,7 @@ export function entradaBolillasVacia(): EntradaBolillas {
 
 /* ===================================================================== las cuentas puras (se prueban en Node) */
 
-/** Lo que dura el vuelo de la canica de la pegadora antes del impacto (igual que el 2D): cosmética, no el reloj. */
+/** Lo que dura el vuelo de la mano de afuera antes de tocar mi canica (igual que el 2D): cosmética, no el reloj. */
 export const TIRADOR = 0.55;
 /** Lo que tarda el tiro en frenar después del golpe (igual que el 2D). */
 export const T_DESVIO = 0.45;
@@ -103,7 +103,7 @@ export const perfilBolillas = (delta = 0): PerfilMapa =>
 
 export type EstadoTiro = "ida" | "desvio";
 
-/** Dónde está la canica de la pegadora durante su tiro: la ida hasta el impacto y el desvío hasta su freno. */
+/** Dónde está la canica de la mano durante su tiro: la ida hasta el primer choque y el desvío hasta su freno. */
 export interface PoseTiro {
   x: number;
   y: number;
@@ -113,28 +113,97 @@ export interface PoseTiro {
 }
 
 /**
- * La pose del tiro en el segundo `t`, puntada por puntada del plan: en la largada está en `desde`, en `tiro.t` está
- * en `impacto`, y al final del desvío queda en `deflexion.hasta`. Fuera de la ventana no hay tiro (null). Sin azar:
- * todo sale de `t` y de los datos del plan.
+ * La pose de la mano en el segundo `t`, puntada por puntada del plan (S23): en la largada está en `desde`, en
+ * `tiro.tMano` toca **mi** canica en `choque` (el primer choque de la cadena, no la del enemigo), y al final del
+ * desvío queda en `mano.hasta`. Fuera de la ventana no hay tiro (null). Sin azar: todo sale de `t` y del plan.
  */
 export function poseTiro(tiro: Tiro, t: number, vuelo = TIRADOR, desvio = T_DESVIO): PoseTiro | null {
-  if (t < tiro.t - vuelo || t > tiro.t + desvio) return null;
-  if (t <= tiro.t) {
-    const f = Math.min(1, Math.max(0, (t - (tiro.t - vuelo)) / vuelo));
+  if (t < tiro.tMano - vuelo || t > tiro.tMano + desvio) return null;
+  if (t <= tiro.tMano) {
+    const f = Math.min(1, Math.max(0, (t - (tiro.tMano - vuelo)) / vuelo));
     return {
-      x: tiro.desde.x + (tiro.impacto.x - tiro.desde.x) * f,
-      y: tiro.desde.y + (tiro.impacto.y - tiro.desde.y) * f,
+      x: tiro.desde.x + (tiro.choque.x - tiro.desde.x) * f,
+      y: tiro.desde.y + (tiro.choque.y - tiro.desde.y) * f,
       estado: "ida",
       f,
     };
   }
-  const f = Math.min(1, (t - tiro.t) / desvio);
+  const f = Math.min(1, (t - tiro.tMano) / desvio);
   return {
-    x: tiro.impacto.x + (tiro.deflexion.hasta.x - tiro.impacto.x) * f,
-    y: tiro.impacto.y + (tiro.deflexion.hasta.y - tiro.impacto.y) * f,
+    x: tiro.choque.x + (tiro.mano.hasta.x - tiro.choque.x) * f,
+    y: tiro.choque.y + (tiro.mano.hasta.y - tiro.choque.y) * f,
     estado: "desvio",
     f,
   };
+}
+
+/** Las ventanas del turno (S23), en los segundos del plan: cuándo la mano suelta, toca mi canica y la cadena sigue. */
+export interface VentanaCadena {
+  /** La mano suelta la canica de afuera (`tiro.tMano - TIRADOR`). */
+  suelte: number;
+  /** La mano toca mi canica: el primer choque. */
+  tMano: number;
+  /** Mi canica golpea a la del enemigo: el segundo choque, y la salida. */
+  t: number;
+  /** La mano se frena después del primer choque. */
+  finMano: number;
+  /** La canica del enemigo cruza la tiza. */
+  tiza: number;
+}
+
+/** Las horas del turno, todas del plan: la escena no vuelve a medir la cadena por su cuenta. */
+export function ventanaCadena(tiro: Tiro): VentanaCadena {
+  return {
+    suelte: tiro.tMano - TIRADOR,
+    tMano: tiro.tMano,
+    t: tiro.t,
+    finMano: tiro.tMano + T_DESVIO,
+    tiza: tiro.t + tiro.salida.vuelo,
+  };
+}
+
+/** Lo que rueda una canica: sobre qué eje del piso (`y` es la profundidad) y cuántos radianes. */
+export interface Rodado {
+  eje: Pun;
+  giro: number;
+}
+
+/**
+ * El rodado de una canica que va de `de` a `a`: el eje perpendicular al viaje —en el plano del piso— y los radianes
+ * que rueda, la distancia recorrida sobre su radio, sin patinar. `f` es el avance del tramo (0 a 1, recortado);
+ * sin viaje no hay giro. Puro y determinista: la escena solo lo aplica al quaternion.
+ */
+export function rodadoDe(de: Pun, a: Pun, f: number, radio = R_DIBUJO): Rodado {
+  const dx = a.x - de.x;
+  const dy = a.y - de.y;
+  const largo = Math.hypot(dx, dy);
+  const eje = largo > 1e-9 ? { x: dy / largo, y: -dx / largo } : { x: 0, y: 1 };
+  const k = Math.min(1, Math.max(0, f));
+  return { eje, giro: (k * largo) / Math.max(1e-9, radio) };
+}
+
+/**
+ * El rodado de la canica del asiento `slot` en el segundo `t` (S21/S23): la del enemigo gira al cruzar la tiza y
+ * mi canica gira mientras el empuje la lleva de `choque` a `empuje.hasta`; en la hora del segundo choque se frena
+ * y se queda quieta (null). La misma ley de `trayectoriaDe` (el plan), aplicada al dibujo.
+ */
+export function rodadoDelTurno(d: Pick<Datos, "tiros">, slot: number, t: number, radio = R_DIBUJO): Rodado | null {
+  const salida = d.tiros.find((x) => x.slot === slot);
+  if (salida && t >= salida.t) {
+    const f = salida.salida.vuelo > 1e-9 ? Math.min(1, (t - salida.t) / salida.salida.vuelo) : 1;
+    return rodadoDe(salida.empuje.donde, salida.salida.tiza, f, radio);
+  }
+  // El último empuje de esta canica que ya empezó (los turnos pueden repetir): el mismo que dibuja `trayectoriaDe`.
+  let empuje: Tiro | undefined;
+  for (const tiro of d.tiros) {
+    if (tiro.mio !== slot) continue;
+    if (t < tiro.tMano) break;
+    empuje = tiro;
+  }
+  if (!empuje || t >= empuje.t) return null;
+  const f = empuje.t > empuje.tMano ? (t - empuje.tMano) / (empuje.t - empuje.tMano) : 1;
+  const suaveRodado = f * f * (3 - 2 * f);
+  return rodadoDe(empuje.choque, empuje.empuje.hasta, suaveRodado, radio);
 }
 
 /**
@@ -218,6 +287,159 @@ export function mezclarPose(a: Pose3D, b: Pose3D, w: number): Pose3D {
     fov: l(a.fov, b.fov),
     giro: l(a.giro, b.giro),
   };
+}
+
+/* --------------------------------------------------- el estallido de pelea (S22) */
+
+/** Los dos choques de la cadena: la mano contra mi canica (el suave) y mi canica contra la del enemigo (el grande). */
+export type GolpeCadena = "mano" | "enemigo";
+/** Cuánto vive el estallido de pelea de cada choque, en segundos: el grande dura más. */
+export const ESTALLIDO_MANO = 0.36;
+export const ESTALLIDO_ENEMIGO = 0.62;
+/** Las puntas de la estrella del destello y las líneas de velocidad que radian del impacto. */
+export const ESTRELLA_PUNTAS = 8;
+export const LINEAS_N = 14;
+/** Lo más que se sacude la vista, en unidades del círculo: un temblor de pelea, no un salto de encuadre. */
+export const SACUDIDA_MAX = 0.035;
+
+/** Una punta de la estrella: su ángulo y su largo (unidades del círculo). */
+export interface PuntoEstrella {
+  a: number;
+  largo: number;
+}
+
+/** Una línea de velocidad: su ángulo, dónde nace y dónde muere (unidades del círculo). */
+export interface LineaVelocidad {
+  a: number;
+  de: number;
+  hasta: number;
+}
+
+/** Lo que se dibuja en un choque (S22): estrella, líneas de velocidad y micro-sacudida, todo del plan y del hash. */
+export interface Estallido {
+  golpe: GolpeCadena;
+  tiro: Tiro;
+  /** La hora del choque. */
+  t0: number;
+  /** El punto del choque, en unidades del círculo. */
+  x: number;
+  y: number;
+  edad: number;
+  vida: number;
+  /** El avance del estallido (0 en el choque, tiende a 1 al morir). */
+  u: number;
+  /** El rumbo del choque: para donde sale lo golpeado. */
+  dir: Pun;
+  /** El radio de la estrella ya crecida. */
+  radio: number;
+  /** El velo de la estrella y las líneas (1 al choque, 0 al morir). */
+  velo: number;
+  puntas: PuntoEstrella[];
+  lineas: LineaVelocidad[];
+  /** La micro-sacudida de la vista en este instante. */
+  sacudida: Pun;
+}
+
+/** La receta de cada choque: cuánto vive, cuánto mide su estrella y cuánto sacude (el grande manda). */
+const RECETA: Record<GolpeCadena, { vida: number; sacudida: number; semilla: number; radio: (tiro: Tiro) => number }> = {
+  mano: {
+    vida: ESTALLIDO_MANO,
+    sacudida: SACUDIDA_MAX * 0.4,
+    semilla: 0x51a3,
+    radio: () => R_DIBUJO * 1.05,
+  },
+  enemigo: {
+    vida: ESTALLIDO_ENEMIGO,
+    sacudida: SACUDIDA_MAX,
+    semilla: 0x2e17,
+    radio: (tiro) => R_DIBUJO * (1.5 + 0.7 * tiro.salida.fuerza),
+  },
+};
+
+/**
+ * El estallido de pelea de un choque de la cadena en el segundo `t` (S22): el de la mano pega suave en `choque` a
+ * la hora `tMano`; el grande pega en `empuje.donde` a la hora `t`, con la estrella más grande y la vida más larga.
+ * Las puntas, las líneas y el temblor salen del hash de la hora del choque y de la geometría del plan: la misma
+ * tirada estalla igual en cualquier equipo, y nada decide nada. Null fuera de la ventana del choque.
+ */
+export function estallidoDe(tiro: Tiro, golpe: GolpeCadena, t: number): Estallido | null {
+  const rec = RECETA[golpe];
+  const t0 = golpe === "mano" ? tiro.tMano : tiro.t;
+  const edad = t - t0;
+  if (edad < 0 || edad >= rec.vida) return null;
+  const u = edad / rec.vida;
+  const clave = Math.round(t0 * 1000) + rec.semilla;
+  const crece = suave(Math.min(1, edad / (rec.vida * 0.35)));
+  const base = rec.radio(tiro) * (0.45 + 0.75 * crece);
+  const dir = golpe === "mano"
+    ? unitarioDe({ x: tiro.choque.x - tiro.desde.x, y: tiro.choque.y - tiro.desde.y })
+    : tiro.salida.dir;
+  const x = golpe === "mano" ? tiro.choque.x : tiro.empuje.donde.x;
+  const y = golpe === "mano" ? tiro.choque.y : tiro.empuje.donde.y;
+  const fase = hash(clave, 61) * Math.PI * 2;
+  const amp = rec.sacudida * Math.pow(1 - u, 3) * (0.35 + 0.65 * crece) * 0.5;
+  return {
+    golpe,
+    tiro,
+    t0,
+    x,
+    y,
+    edad,
+    vida: rec.vida,
+    u,
+    dir,
+    radio: base,
+    velo: (1 - u) * (1 - u),
+    puntas: Array.from({ length: ESTRELLA_PUNTAS }, (_, j) => ({
+      a: fase + (j * Math.PI * 2) / ESTRELLA_PUNTAS + (hash(clave + j, 62) - 0.5) * 0.16,
+      largo: base * (0.85 + 0.5 * hash(clave + j, 63)),
+    })),
+    lineas: Array.from({ length: LINEAS_N }, (_, j) => {
+      const de = base * (0.55 + 0.9 * u);
+      return {
+        a: (j * Math.PI * 2) / LINEAS_N + (hash(clave + j, 64) - 0.5) * 0.22,
+        de,
+        hasta: de + base * (0.55 + 0.8 * hash(clave + j, 65)) * (0.35 + 0.65 * u),
+      };
+    }),
+    sacudida: {
+      x: amp * Math.sin(edad * 118 + fase),
+      y: amp * Math.sin(edad * 97 + fase * 1.7),
+    },
+  };
+}
+
+/** Los estallidos vivos en el segundo `t`: los de cada tiro, en el orden del plan (los dos choques pueden solaparse). */
+export function estallidosDe(d: Pick<Datos, "tiros">, t: number): Estallido[] {
+  const vivos: Estallido[] = [];
+  for (const tiro of d.tiros) {
+    const mano = estallidoDe(tiro, "mano", t);
+    if (mano) vivos.push(mano);
+    const enemigo = estallidoDe(tiro, "enemigo", t);
+    if (enemigo) vivos.push(enemigo);
+  }
+  return vivos;
+}
+
+/** La micro-sacudida sumada de los estallidos vivos, en unidades del círculo. */
+export function sacudidaDe(vivos: readonly Estallido[]): Pun {
+  let x = 0, y = 0;
+  for (const e of vivos) {
+    x += e.sacudida.x;
+    y += e.sacudida.y;
+  }
+  return { x, y };
+}
+
+/**
+ * La pose con la micro-sacudida del choque: corre la cámara un pelo hacia donde tiembla el impacto, con la mezcla
+ * de la casa (la misma del acercamiento), sin tocar la mira, el campo ni el giro. Chica a propósito: el encuadre
+ * del director manda, y esto es un temblor de pelea, no un cambio de toma.
+ */
+export function poseSacudida(pose: Pose3D, sac: Pun, K: number, Kz: number, peso = 1): Pose3D {
+  if (!sac.x && !sac.y) return pose;
+  const movida: Pose3D = { ...pose, pos: [pose.pos[0] + K * sac.x, pose.pos[1], pose.pos[2] + Kz * sac.y] };
+  return mezclarPose(pose, movida, Math.min(1, Math.max(0, peso)));
 }
 
 /* ===================================================================== la paleta */
@@ -356,6 +578,78 @@ class Chispas {
     }
     this.malla.count = n;
     this.malla.instanceMatrix.needsUpdate = true;
+  }
+}
+
+/* ================================================== el estallido de pelea en la tierra */
+
+/**
+ * El dibujo del estallido de pelea (S22): la estrella de destello y las líneas de velocidad que radian del impacto,
+ * planas en la tierra, aditivas y de pocos polígonos (el estilo de la casa). La geometría y el velo salen de la
+ * cuenta pura (`estallidoDe`, `estallidosDe`); esta clase solo los pone en el mundo, en unidades del círculo.
+ */
+class Estallidos {
+  private readonly unidades: { grupo: Group; centro: Mesh; puntas: Mesh[]; lineas: Mesh[] }[] = [];
+  static readonly MAX = 3;
+
+  constructor(padre: Object3D, geo: BufferGeometry, basura: Basura) {
+    for (let i = 0; i < Estallidos.MAX; i++) {
+      const grupo = new Group();
+      const matCentro = basura.add(new MeshBasicMaterial({ color: 0xfff4c2, transparent: true, blending: AdditiveBlending, depthWrite: false }));
+      const matPunta = basura.add(new MeshBasicMaterial({ color: 0xffd24a, transparent: true, blending: AdditiveBlending, depthWrite: false }));
+      const matLinea = basura.add(new MeshBasicMaterial({ color: 0xffffff, transparent: true, blending: AdditiveBlending, depthWrite: false }));
+      const centro = new Mesh(geo, matCentro);
+      centro.renderOrder = 5;
+      grupo.add(centro);
+      const puntas = Array.from({ length: ESTRELLA_PUNTAS }, () => {
+        const malla = new Mesh(geo, matPunta);
+        malla.renderOrder = 6;
+        grupo.add(malla);
+        return malla;
+      });
+      const lineas = Array.from({ length: LINEAS_N }, () => {
+        const malla = new Mesh(geo, matLinea);
+        malla.renderOrder = 6;
+        grupo.add(malla);
+        return malla;
+      });
+      grupo.visible = false;
+      padre.add(grupo);
+      this.unidades.push({ grupo, centro, puntas, lineas });
+    }
+  }
+
+  actualizar(vivos: readonly Estallido[]): void {
+    for (let i = 0; i < this.unidades.length; i++) {
+      const u = this.unidades[i] as { grupo: Group; centro: Mesh; puntas: Mesh[]; lineas: Mesh[] };
+      const est = vivos[i];
+      u.grupo.visible = est !== undefined;
+      if (!est) continue;
+      u.grupo.position.set(est.x, 0.02, est.y);
+      // El destello del centro: un plato aditivo que late con el velo de la estrella.
+      u.centro.scale.set(est.radio * 1.1, 1, est.radio * 1.1);
+      (u.centro.material as MeshBasicMaterial).opacity = 0.85 * est.velo;
+      // Las puntas de la estrella: radian del impacto, cada una con su largo del hash.
+      for (let j = 0; j < u.puntas.length; j++) {
+        const p = est.puntas[j] as PuntoEstrella;
+        const malla = u.puntas[j] as Mesh;
+        const mid = p.largo / 2;
+        malla.position.set(Math.cos(p.a) * mid, 0.001 + j * 0.0004, Math.sin(p.a) * mid);
+        malla.rotation.y = -p.a;
+        malla.scale.set(p.largo, 1, est.radio * 0.16);
+        (malla.material as MeshBasicMaterial).opacity = est.velo;
+      }
+      // Las líneas de velocidad: más afuera que la estrella, y corren hacia afuera mientras el golpe vive.
+      for (let j = 0; j < u.lineas.length; j++) {
+        const l = est.lineas[j] as LineaVelocidad;
+        const malla = u.lineas[j] as Mesh;
+        const mid = (l.de + l.hasta) / 2;
+        malla.position.set(Math.cos(l.a) * mid, 0.002 + j * 0.0004, Math.sin(l.a) * mid);
+        malla.rotation.y = -l.a;
+        malla.scale.set(l.hasta - l.de, 1, est.radio * 0.07);
+        (malla.material as MeshBasicMaterial).opacity = est.velo;
+      }
+    }
   }
 }
 
@@ -538,6 +832,9 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
   });
   grupoAnuncio.visible = false;
 
+  // El estallido de pelea de los dos choques (S22): la estrella y las líneas, planas en la tierra.
+  const estallidos3d = new Estallidos(mundo, geoRaya, B);
+
   /* ------------------------------------------------------------- el sonido de la casa */
   // El clic de canica contra canica NO suena acá: lo emite el 2D por la voz del kit (`k.sonido`, eventosDe de
   // `bolillas-sonido.ts`, con el eco, el golpe seco de la caída y los ticks del titileo), y el cuadro del 2D corre
@@ -565,6 +862,7 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
           tiradorCanica.sombra.visible = false;
           destello.visible = false;
           grupoAnuncio.visible = false;
+          estallidos3d.actualizar([]);
           polvo.actualizar(e.t);
           chispo.actualizar(e.t);
           return;
@@ -577,14 +875,13 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
           c.grupo.visible = true;
           c.grupo.position.set(tray.p.x, R_DIBUJO, tray.p.y);
           puestos.set(slot, tray.p);
-          // El rodado: la golpeada rueda lo que el plan dice que vuela; la que está quieta, no gira.
+          // El rodado de la cadena (S21/S23): la del enemigo gira al cruzar la tiza y mi canica gira mientras el
+          // empuje la lleva de `choque` a `empuje.hasta`; la que está quieta, no gira. La cuenta es una sola.
           qTilt.identity();
-          const tiro = d.tiros.find((x) => x.slot === slot);
-          if (tiro && e.t >= tiro.t) {
-            const f = Math.min(1, (e.t - tiro.t) / tiro.salida.vuelo);
-            const largo = Math.hypot(tiro.salida.tiza.x - tiro.impacto.x, tiro.salida.tiza.y - tiro.impacto.y);
-            eje.set(tiro.salida.dir.y, 0, -tiro.salida.dir.x);
-            qRoll.setFromAxisAngle(eje, (f * largo) / R_DIBUJO);
+          const rod = rodadoDelTurno(d, slot, e.t);
+          if (rod) {
+            eje.set(rod.eje.x, 0, rod.eje.y);
+            qRoll.setFromAxisAngle(eje, rod.giro);
             qTilt.multiply(qRoll);
           }
           // El titileo de la que gana: vaivén sobre la tiza, cero en los dos bordes (la lección del sapo).
@@ -600,6 +897,14 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
         /* -------- los choques: polvo, destello y el clic de la casa */
         let tiroVivo: Tiro | undefined;
         d.tiros.forEach((tiro, i) => {
+          // El primer choque de la cadena (S23): la mano toca mi canica. Más suave que el segundo: menos tierra.
+          const claveMano = `${i}:mano`;
+          if (e.t >= tiro.tMano && !polvos.has(claveMano)) {
+            polvos.add(claveMano);
+            const dirMano = unitarioDe({ x: tiro.choque.x - tiro.desde.x, y: tiro.choque.y - tiro.desde.y });
+            polvo.nuevo(e.t, tiro.choque.x, tiro.choque.y, 0.5);
+            chispo.nuevo(e.t, tiro.choque.x, tiro.choque.y, dirMano.x, dirMano.y);
+          }
           const claveIda = `${i}:golpe`;
           if (e.t >= tiro.t && !polvos.has(claveIda)) {
             polvos.add(claveIda);
@@ -630,6 +935,9 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
         }
         polvo.actualizar(e.t);
         chispo.actualizar(e.t);
+        // El estallido de pelea (S22): estrella, líneas de velocidad y el temblor, en los dos choques del turno.
+        const estallidos = estallidosDe(d, e.t);
+        estallidos3d.actualizar(estallidos);
 
         /* -------- el anuncio de la diana: el anillo con rayas alrededor de la canica que viene */
         const digo = anuncioDeDiana(d, e.t);
@@ -651,10 +959,10 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
           for (const m of matsAguayo) m.opacity = 0.65 + 0.3 * digo.pulso;
         }
 
-        /* -------- la mano y la canica de la pegadora */
+        /* -------- la mano y la canica de la mano */
         let manoViva: Tiro | undefined;
         for (const tiro of d.tiros) {
-          if (e.t >= tiro.t - TIRADOR - 0.45 && e.t <= tiro.t + T_DESVIO + 0.25) {
+          if (e.t >= tiro.tMano - TIRADOR - 0.45 && e.t <= tiro.tMano + T_DESVIO + 0.25) {
             manoViva = tiro;
             break;
           }
@@ -662,8 +970,8 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
         mano.visible = manoViva !== undefined;
         if (manoViva) {
           const tiro = manoViva;
-          const dir = unitarioDe({ x: tiro.impacto.x - tiro.desde.x, y: tiro.impacto.y - tiro.desde.y });
-          const suelte = tiro.t - TIRADOR;
+          const dir = unitarioDe({ x: tiro.choque.x - tiro.desde.x, y: tiro.choque.y - tiro.desde.y });
+          const suelte = tiro.tMano - TIRADOR;
           let atras: number;
           if (e.t < suelte - 0.15) atras = 0.16 - 0.07 * suave((e.t - (suelte - 0.45)) / 0.3);
           else if (e.t < suelte) atras = 0.09 + 0.05 * suave((e.t - (suelte - 0.15)) / 0.15);
@@ -672,15 +980,15 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
           const hz = tiro.desde.y - dir.y * atras;
           mano.position.set(hx, 0.002, hz);
           mano.rotation.y = Math.atan2(dir.x, dir.y);
-          // La canica de la pegadora: en la mano hasta el suelte, después el plan la lleva.
+          // La canica de la mano: en el agarre hasta el suelte, después el plan la lleva a mi canica (`choque`).
           const enVuelo = poseTiro(tiro, e.t);
           if (enVuelo) {
             tiradorCanica.grupo.visible = true;
             tiradorCanica.grupo.position.set(enVuelo.x, R_TIRADOR, enVuelo.y);
-            const tramo = enVuelo.estado === "ida" ? { de: tiro.desde, a: tiro.impacto } : { de: tiro.impacto, a: tiro.deflexion.hasta };
-            eje.set(tramo.a.y - tramo.de.y, 0, -(tramo.a.x - tramo.de.x));
-            const dist = Math.hypot(tramo.a.x - tramo.de.x, tramo.a.y - tramo.de.y);
-            qRoll.setFromAxisAngle(eje, (enVuelo.f * dist) / R_TIRADOR);
+            const tramo = enVuelo.estado === "ida" ? { de: tiro.desde, a: tiro.choque } : { de: tiro.choque, a: tiro.mano.hasta };
+            const rodVuelo = rodadoDe(tramo.de, tramo.a, enVuelo.f, R_TIRADOR);
+            eje.set(rodVuelo.eje.x, 0, rodVuelo.eje.y);
+            qRoll.setFromAxisAngle(eje, rodVuelo.giro);
             tiradorCanica.grupo.quaternion.copy(qRoll);
           } else {
             // En el agarre ñati: bajo la palma, entre los nudillos y el pulgar.
@@ -704,6 +1012,10 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
         if (cerca > 0) {
           Object.assign(pose, mezclarPose(pose, poseDelCerca(d, e.t, { px, pz, K, Kz }, e.w / Math.max(1, e.h)), cerca));
         }
+        // La micro-sacudida del choque (S22): chica y determinista, encima de la pose que eligió el director
+        // (y de la toma de cerca, si está). Es el idioma de la casa para un beat de cámara de esta vista.
+        const sac = sacudidaDe(estallidos);
+        Object.assign(pose, poseSacudida(pose, sac, K, Kz));
         amb.seguir(pose);
       });
     },
