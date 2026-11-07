@@ -1084,10 +1084,10 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
             const largo = Math.hypot(dx, dz);
             const giro = -Math.atan2(dz, dx);
             const medio = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-            par.halo.position.set(medio.x, 0.004, medio.y);
+            par.halo.position.set(medio.x, 0.014, medio.y);
             par.halo.rotation.y = giro;
             par.halo.scale.set(largo, 1, CANICA_R * CANICA_ESCALA * 0.34);
-            par.malla.position.set(medio.x, 0.005, medio.y);
+            par.malla.position.set(medio.x, 0.015, medio.y);
             par.malla.rotation.y = giro;
             par.malla.scale.set(largo, 1, CANICA_R * CANICA_ESCALA * 0.2);
           }

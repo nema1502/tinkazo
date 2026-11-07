@@ -61,8 +61,8 @@ const GOLPE_EN = 3.4;
  * El choque del cierre se juega en cámara lenta (S31): el rodado de mi canica se estira `LENTO_FINAL` y la salida
  * del enemigo `LENTO_SALIDA`, y el casi espera a que el golpe se vea. Todo lo demás queda igual.
  */
-export const LENTO_FINAL = 3;
-export const LENTO_SALIDA = 2.2;
+export const LENTO_FINAL = 3.5;
+export const LENTO_SALIDA = 2.6;
 
 /** Lo que mide la fuerza de una salida, en unidades del círculo por segundo. */
 const FUERZA_MIN = 0.9;
@@ -473,12 +473,15 @@ export function planBolillas(ctx: Contexto): Plan<Datos> {
   const tiros: Tiro[] = orden.map((quien, k) => {
     const slot = asientoDe(quien);
     const donde = { ...(vivo[slot] as Pun) };
-    const t = tTroya + PRIMER_TIRO + k * ENTRE_TIROS;
+    // El cierre tiene su aire: como su rodado se estira, el tiro arranca más tarde para no pisar el turno anterior.
+    const ultimoTurno = k === orden.length - 1;
+    const aire = ultimoTurno ? (LENTO_FINAL - 1) * RODADA_MAX * 0.6 : 0;
+    const t = tTroya + PRIMER_TIRO + k * ENTRE_TIROS + aire;
     // Quiénes siguen adentro en este turno, y quiénes pueden tirar: todos menos a quien le toca salir.
     const dentro = dentroDe(k);
     const pueden = dentro.filter((s) => s !== slot);
     // El último turno lo tira quien gana: su canica empuja a la de la rival, y de ahí sale el casi (S23).
-    const ultimo = k === orden.length - 1;
+    const ultimo = ultimoTurno;
     const quietaEmpuje = (mio: number): Pun[] =>
       dentro.filter((s) => s !== mio && s !== slot).map((s) => vivo[s] as Pun);
     // El último turno lo tira quien gana: su canica empuja a la de la rival, y de ahí sale el casi (S23).
@@ -528,7 +531,8 @@ export function planBolillas(ctx: Contexto): Plan<Datos> {
     const r = titilaDe(desde, premios, ctx.rng);
     const ultimoTiro = tiros.at(-1);
     // El casi arranca cuando el golpe ya se vio: si la salida del enemigo se estiró, se espera a que cruce.
-    const espera = Math.max(ANTES_CASI, (ultimoTiro?.salida.vuelo ?? 0) + 1.2);
+    // Tope de 3.6 s: más que eso y el relator se queda cuatro segundos callado (regla del niño).
+    const espera = Math.max(ANTES_CASI, Math.min(3.6, (ultimoTiro?.salida.vuelo ?? 0) + 1.2));
     return { t: (ultimoTiro?.t ?? tTroya + PRIMER_TIRO - ENTRE_TIROS) + espera, ganador, slot, desde, dir: r.dir, titila: r.titila };
   })();
   const duracion = casi.t + GOLPE_EN;

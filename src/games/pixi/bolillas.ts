@@ -339,7 +339,8 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
     // con la cámara del director— quedan mirando otra toma: se desvanecen mientras dura y vuelven al volver.
     if (en3d) {
       const velo = 1 - cercaDe(d, t);
-      for (const chip of e.chips.values()) chip.alpha = velo;
+      // El ganador no se desvanece: en el plano del cierre la sala tiene que ver a quién está mirando (S14).
+      for (const [persona, chip] of e.chips) chip.alpha = persona === d.ganador ? Math.max(velo, 0.92) : velo;
     }
 
     // La canica de la mano (S23): sale de la largada del plan, pega en mi canica a la hora `tMano` (el primer impacto

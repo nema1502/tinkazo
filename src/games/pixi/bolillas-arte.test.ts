@@ -214,31 +214,19 @@ describe("bolillas: el vidrio se dibuja centrado en la canica (S13)", () => {
     for (const forma of formas) {
       const [x, y] = forma.args as [number, number];
       expect(Number.isFinite(x) && Number.isFinite(y)).toBe(true);
-      // El brillo es la única forma descentrada (va arriba a la izquierda) y se mide en radios del vidrio.
-      const esBrillo = Math.abs(x - r * BRILLO_VIDRIO.x) < 1e-9 && Math.abs(y - r * BRILLO_VIDRIO.y) < 1e-9;
-      if (!esBrillo) {
-        expect(x, "una forma descentrada del vidrio").toBe(0);
-        expect(y, "una forma descentrada del vidrio: el nodo ya va en la canica").toBe(0);
-      }
+      // La regla: ninguna forma puede salirse del vidrio. Las que no son el cuerpo (el aro, las manchas de la llama y
+      // el brillo) van dentro, a menos de un radio del centro; y ninguna se mide desde (0, r) o más allá.
+      const centro = Math.hypot(x, y);
+      expect(centro, "una forma más allá del vidrio").toBeLessThan(r);
+      expect(centro + (forma.args[2] as number), "una forma que se sale del vidrio").toBeLessThanOrEqual(r * 1.05);
     }
   });
 
-  it("cada arco del vidrio arranca en su propio punto: ningún trazo se une con la forma anterior", () => {
-    trazos.forEach((trazo, i) => {
-      if (trazo.op !== "arc") return;
-      const [x, y, radio, de] = trazo.args as [number, number, number, number];
-      const antes = trazos[i - 1] as Trazo;
-      const arranque = arranqueDeArco(radio, de);
-      // El PixiJS arranca el subcamino en el último punto de la forma anterior: el `moveTo` se lo da el arte.
-      expect(antes?.op, "un arco sin su moveTo delante").toBe("moveTo");
-      expect(antes?.args[0]).toBeCloseTo(arranque.x, 9);
-      expect(antes?.args[1]).toBeCloseTo(arranque.y, 9);
-      expect(x).toBe(0);
-      expect(y).toBe(0);
-      // Y el arco se cierra con su trazo, antes de la forma siguiente.
-      expect((trazos[i + 1] as Trazo)?.op).toBe("stroke");
-      expect((trazos[i + 2] as Trazo | undefined)?.op).not.toBe("stroke");
-    });
+  it("el vidrio no dibuja ningún arco: la llama son manchas rellenas (S13)", () => {
+    // En algunas placas de video el `arc` salía como una línea larga desde el origen del gráfico: los rayos de
+    // color que reportó la sala. El vidrio no usa arcos, así que esa clase de defecto no puede volver.
+    expect(trazos.filter((t) => t.op === "arc")).toEqual([]);
+    expect(trazos.filter((t) => t.op === "moveTo")).toEqual([]);
   });
 
   it("no hay números no finitos: la geometría del vidrio es toda dibujable", () => {
