@@ -33,19 +33,22 @@ export interface EventoSonoro {
 }
 
 /** El clic de cristal del impacto: agudo, corto, y se oye de verdad en un teléfono (clímax: la casa le da 0,08 a 0,12). */
-const CLINK = { grado: 18, cat: "climax" as const, timbre: "square" as const, vol: 0.11, dur: 0.05 };
+const CLINK = { grado: 18, cat: "climax" as const, timbre: "square" as const, vol: 0.12, dur: 0.06 };
 /**
  * El toque de la mano sobre mi canica (S23): el primer golpe de la cadena, más blando —de evento, no de clímax—, para
  * que el turno se oiga como lo que es: primero la mano, después el choque de verdad.
  */
-const TOQUE = { grado: 15, cat: "evento" as const, timbre: "triangle" as const, vol: 0.055, dur: 0.05 };
+const TOQUE = { grado: 15, cat: "evento" as const, timbre: "triangle" as const, vol: 0.06, dur: 0.05 };
 /** El brillo de la chispa: el vidrio que se raspa, apenas después del clic, aún más agudo y más corto. */
-const BRILLO = { grado: 20, cat: "climax" as const, timbre: "sawtooth" as const, vol: 0.09, dur: 0.04, retrasoMs: 22 };
+const BRILLO = { grado: 20, cat: "climax" as const, timbre: "sawtooth" as const, vol: 0.12, dur: 0.045, retrasoMs: 22 };
 /** El eco del clic, apenas más bajo y después: suena a sala, no a tick de reloj. */
 const ECO = { grado: 13, cat: "evento" as const, timbre: "square" as const, vol: 0.05, dur: 0.05, retrasoMs: 55 };
 
 /** El golpe seco de la canica cayendo en la tierra: bajo, blando, de fondo. */
 const CAE = { grado: 2, cat: "fondo" as const, timbre: "sine" as const, vol: 0.03, dur: 0.09 };
+
+/** El golpe grave del choque: lo que hace sentir el impacto en el cuerpo, no solo en el oído. */
+const GOLPE = { grado: 2, cat: "climax" as const, timbre: "sine" as const, vol: 0.12, dur: 0.14 };
 
 /** El ritmo del titileo: un tono chico cada tanto, subiendo hasta que la canica se queda quieta. */
 const TITILA_PASO = 0.3;
@@ -67,6 +70,8 @@ export function eventosDe(d: Datos, t: number, suena: boolean): EventoSonoro[] {
     if (t >= tiro.tMano && t < tiro.tMano + VENTANA) out.push({ clave: `mano:${i}`, ...TOQUE });
     if (t >= tiro.t && t < tiro.t + VENTANA) {
       out.push({ clave: `choque:${i}`, ...CLINK });
+      // El peso del choque: un golpe grave debajo del clic, para que se sienta el impacto.
+      out.push({ clave: `golpe:${i}`, ...GOLPE });
       out.push({ clave: `brillo:${i}`, ...BRILLO });
       out.push({ clave: `eco:${i}`, ...ECO });
     }

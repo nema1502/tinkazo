@@ -229,18 +229,14 @@ export function dibujarCanica(pincel: Pincel, r: number, arte: ArteCanica, tinta
   pincel.fill(arte.base);
   pincel.circle(0, 0, r * ARO_VIDRIO.r);
   pincel.stroke({ width: Math.max(1, r * ARO_VIDRIO.ancho), color: arte.oscuro, alpha: ARO_VIDRIO.alfa });
-  // La llama remolinando adentro: cada vuelta con su subcamino, concéntrica con el vidrio.
+  // La llama adentro: dos manchas del color del fuego, rellenas. Sin trazos curvos (`arc`): en algunas placas de
+  // video el arco del vidrio se dibujaba como una línea larga que salía del origen del gráfico —los rayos de color
+  // que reportó la sala—, y una mancha rellena no puede hacer eso.
   for (const vuelta of VUELTAS) {
     const radio = r * vuelta.r;
-    const arranque = arranqueDeArco(radio, vuelta.de);
-    pincel.moveTo(arranque.x, arranque.y);
-    pincel.arc(0, 0, radio, vuelta.de, vuelta.hasta);
-    pincel.stroke({
-      width: Math.max(1, r * vuelta.ancho),
-      color: vuelta.cual === "llama" ? arte.llama : arte.llama2,
-      alpha: vuelta.alfa,
-      cap: "round",
-    });
+    const medio = (vuelta.de + vuelta.hasta) / 2;
+    pincel.circle(Math.cos(medio) * radio * 0.5, Math.sin(medio) * radio * 0.5, radio * 0.55);
+    pincel.fill({ color: vuelta.cual === "llama" ? arte.llama : arte.llama2, alpha: vuelta.alfa });
   }
   // El brillo del vidrio, arriba a la izquierda.
   pincel.circle(r * BRILLO_VIDRIO.x, r * BRILLO_VIDRIO.y, r * BRILLO_VIDRIO.r);
@@ -454,7 +450,7 @@ export function chispasDe(i: number, impacto: Pun, dir: Pun): Chispa[] {
 /** Cuánto vive el estallido: más que las chispas de vidrio —el golpe de pelea se siente— y menos que el scuff (S26 lo acorta). */
 export const ESTALLO_VIDA = 0.32;
 /** Lo que se estira el estallido del último golpe: la cámara lenta del cierre (S31). */
-export const ESTALLO_LENTO = 2.6;
+export const ESTALLO_LENTO = 3.4;
 /** Las puntas de la estrella del destello: manga, no un sol de jardín. */
 export const ESTALLO_PUNTAS = 10;
 /** Cuántas líneas de velocidad radian del impacto. */
