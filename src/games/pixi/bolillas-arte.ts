@@ -352,7 +352,7 @@ export function chispasDe(i: number, impacto: Pun, dir: Pun): Chispa[] {
 /** Cuánto vive el estallido: más que las chispas de vidrio —el golpe de pelea se siente— y menos que el scuff (S26 lo acorta). */
 export const ESTALLO_VIDA = 0.32;
 /** Lo que se estira el estallido del último golpe: la cámara lenta del cierre (S31). */
-export const ESTALLO_LENTO = 1.8;
+export const ESTALLO_LENTO = 2.6;
 /** Las puntas de la estrella del destello: manga, no un sol de jardín. */
 export const ESTALLO_PUNTAS = 10;
 /** Cuántas líneas de velocidad radian del impacto. */
