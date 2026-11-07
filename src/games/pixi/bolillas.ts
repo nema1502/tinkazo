@@ -224,6 +224,11 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
     const en3d = e.v3 != null;
     // Los dos golpes de la cadena (S23) vivos en este cuadro: la mano sobre mi canica y la mía sobre la del enemigo.
     const golpes = golpesDe(d, t);
+    // El zoom de la toma en este cuadro: el cierre se pega a la canica, y el estallido no puede crecer con la cámara
+    // —en el teléfono se veía como una mancha blanca gigante (S26/S32)—. Se dibuja achicado por el mismo factor.
+    const pantalla = k.pantalla();
+    const zoomCam = Math.max(1, k.cam.toScreen(1, 0, pantalla.w, pantalla.h).x - k.cam.toScreen(0, 0, pantalla.w, pantalla.h).x);
+    const achica = Math.min(1, 1 / zoomCam);
     const mano = manoDe(d, t);
     const uTitila = (t - d.casi.t) / Math.max(0.001, d.duracion - d.casi.t);
     // Los finalistas del segundo (S15) envueltos en la puerta de la intro (S18): las fichas se ven durante el
@@ -428,22 +433,22 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
           const uv = edad / est.vida;
           const crece = 0.55 + 0.45 * (1 - uv);
           const estrella = (f: number): number[] =>
-            est.estrella.flatMap((q) => [w.x + q.x * e.m.e * crece * f, w.y + q.y * e.m.e * crece * f]);
+            est.estrella.flatMap((q) => [w.x + q.x * e.m.e * crece * f * achica, w.y + q.y * e.m.e * crece * f * achica]);
           // Un borde de la paleta de la casa y el corazón blanco: el destello del golpe de manga, doble y suave (S26).
           e.fx.poly(estrella(1)).fill({ color: AGUAYO[1], alpha: ESTALLO_ALFA_BORDE * (1 - uv) });
           e.fx.poly(estrella(0.6)).fill({ color: 0xfffdf2, alpha: ESTALLO_ALFA_CORAZON * (1 - uv) });
           // Las líneas de velocidad: cada una corre hacia afuera del impacto y se apaga con su vida.
           for (const linea of est.lineas) {
             const v = Math.min(1, edad / linea.vida);
-            const cab = linea.de + linea.largo * v;
-            const cola = cab - linea.largo * 0.55;
+            const cab = (linea.de + linea.largo * v) * achica;
+            const cola = cab - linea.largo * 0.55 * achica;
             const ca = Math.cos(linea.a);
             const sa = Math.sin(linea.a);
             const x0 = w.x + ca * cola * e.m.e;
             const y0 = w.y + sa * cola * e.m.e;
             const x1 = w.x + ca * cab * e.m.e;
             const y1 = w.y + sa * cab * e.m.e;
-            const grosor = Math.max(1, linea.ancho * e.m.e);
+            const grosor = Math.max(1, linea.ancho * e.m.e * achica);
             e.fx.moveTo(x0, y0).lineTo(x1, y1).stroke({ width: grosor, color: AGUAYO[1], alpha: ESTALLO_ALFA_LINEA * 0.7 * (1 - v), cap: "round" });
             e.fx.moveTo(x0, y0).lineTo(x1, y1).stroke({ width: grosor * 0.45, color: 0xffffff, alpha: ESTALLO_ALFA_LINEA * (1 - v), cap: "round" });
           }

@@ -137,7 +137,7 @@ describe("bolillas-emocion (S13): el choque se oye de verdad", () => {
 describe("bolillas-emocion (S14): el peso del acercamiento a la ganadora", () => {
   const d = datosDe(8, [3]);
 
-  it("la cámara entra con el rodado del casi, se queda, y vuelve antes del golpe", () => {
+  it("la cámara entra con el rodado del casi y se queda hasta el final (S32)", () => {
     // Antes del casi, la cámara del director; al llegar la canica a la tiza, la toma de cerca; con el golpe, otra vez la del director.
     expect(cercaDe(d, d.casi.t - 0.01)).toBe(0);
     expect(cercaDe(d, d.casi.t)).toBeGreaterThanOrEqual(0);
@@ -146,9 +146,9 @@ describe("bolillas-emocion (S14): el peso del acercamiento a la ganadora", () =>
     const medio = cercaDe(d, d.casi.t + CERCA_ENTRA / 2);
     expect(medio).toBeGreaterThan(0);
     expect(medio).toBeLessThan(1);
-    // La vuelta termina exactamente en la coronación: sin salto y sin toma de cerca después.
-    expect(cercaDe(d, d.duracion)).toBe(0);
-    expect(cercaDe(d, d.duracion + 2)).toBe(0);
+    // Se queda en grande hasta la coronación: el show termina con la canica que gana ocupando la pantalla (S32).
+    expect(cercaDe(d, d.duracion - 0.05)).toBe(1);
+    expect(cercaDe(d, d.duracion)).toBe(1);
   });
 
   it("es continua y determinista: función de `t` y del plan, nunca un salto ni una tirada de moneda", () => {
