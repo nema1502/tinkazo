@@ -361,7 +361,9 @@ function titilaDe(d: Pun, quieta: readonly Pun[], rng: () => number): { dir: Pun
     const a = barrido(base, Math.PI / 32, i);
     const dir = { x: Math.cos(a), y: Math.sin(a) };
     if (dir.x * radial.x + dir.y * radial.y < 0.1) continue;
-    const titila = mover(d, dir, Math.max(0.01, cruceDe(d, dir, TITILA_R) - r));
+    // `cruceDe` ya mide desde `d` hasta la tiza de radio TITILA_R: no se le resta nada (el casi tiene que
+    // terminar sobre el aro, no a mitad de camino).
+    const titila = mover(d, dir, Math.max(0.01, cruceDe(d, dir, TITILA_R)));
     const h = Math.min(...quieta.map((q) => distSeg(q, d, titila)), 9);
     if (!mejor || h > mejor.holgura) {
       mejor = { dir, titila, holgura: h };

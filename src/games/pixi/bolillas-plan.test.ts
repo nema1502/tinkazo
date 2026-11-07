@@ -228,6 +228,8 @@ describe("Bolillas: la geometría de los choques", () => {
       for (let s = 1; s <= 6; s++) {
         const { datos: d } = planBolillas(contexto(n, ganadoresDe(n), s));
         expect(modulo(d.casi.titila), `con ${n}`).toBeLessThanOrEqual(CIRCULO_R - CANICA_R * 1.05 + 1e-9);
+        // La ganadora titila SOBRE la tiza, no a mitad de camino (T16): su centro queda a TITILA_R del centro.
+        expect(modulo(d.casi.titila), `con ${n}: el casi llega al aro`).toBeCloseTo(CIRCULO_R - CANICA_R * 1.1, 6);
         const slotG = d.canicas.indexOf(d.ganador);
         // Antes del casi está en su lugar de la siembra; con el golpe quedó en el punto de la orilla, adentro.
         const inicio = trayectoriaDe(d, slotG, d.casi.t - 0.01);
