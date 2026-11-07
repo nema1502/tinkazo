@@ -6,6 +6,7 @@ import { problemasDeTono } from "./kit/sonido";
 import type { Contexto } from "./kit/tipos";
 import {
   CANICA_R,
+  CIRCULO_R,
   mapeoDe,
   planBolillas,
   trayectoriaDe,
@@ -17,15 +18,23 @@ import {
 } from "./bolillas-plan";
 import { TEXTOS } from "./bolillas-textos";
 import {
+  AIRE_TIZA,
   ANUNCIO_DIANA,
   AGUAYO,
   CANICA_ESCALA,
   CHISPAS_N,
   CHISPA_VIDA,
   COLA_GOLPE,
+  ESTALLO_ALFA_BORDE,
+  ESTALLO_ALFA_CORAZON,
+  ESTALLO_ALFA_LINEA,
   ESTALLO_LINEAS,
   ESTALLO_PUNTAS,
   ESTALLO_VIDA,
+  FLASH_ALFA,
+  LIMITE_EN_JUEGO,
+  RADIO_DIBUJO,
+  SALIDA_VELO,
   MANO_COBRA,
   MANO_PREPARA,
   MANO_SUELTA,
@@ -45,9 +54,11 @@ import {
   cadenaDeTiro,
   canicaDeManoDe,
   coloresCanica,
+  dibujoDe,
   efectosDe,
   chispasDe,
   estalloDe,
+  flashDe,
   golpesDe,
   largadaDe,
   manoDe,
@@ -232,6 +243,8 @@ describe("bolillas: el choque", () => {
     const f = codigo("bolillas.ts");
     expect(f).not.toMatch(/Math\.random/);
     expect(f).toMatch(/trayectoriaDe\(/);
+    // El dibujo de cada canica sale de la cuenta pura de la salida (`dibujoDe`, que lee `trayectoriaDe`: S25).
+    expect(f).toMatch(/dibujoDe\(/);
     // La canica de la mano y los dos golpes salen de los helpers puros (`canicaDeManoDe`, `golpesDe`).
     expect(f).toMatch(/canicaDeManoDe\(/);
     expect(f).toMatch(/golpesDe\(/);
@@ -641,9 +654,9 @@ describe("bolillas: el estallido de pelea (S22)", () => {
     expect(estalloDe(0, tiro.empuje.donde, tiro.salida.dir)).toEqual(est);
     expect(estalloDe(1, tiro.empuje.donde, tiro.salida.dir)).not.toEqual(est);
     expect(est.vida).toBe(ESTALLO_VIDA);
-    // Más largo y más grande que las chispas de vidrio de S13, que siguen en el mismo golpe.
+    // Más largo que las chispas de vidrio de S13, que siguen en el mismo golpe (y corto, S26).
     expect(ESTALLO_VIDA).toBeGreaterThan(CHISPA_VIDA);
-    expect(est.punta).toBeGreaterThan(CANICA_R * CANICA_ESCALA * 2);
+    expect(est.punta).toBeGreaterThan(CANICA_R * CANICA_ESCALA);
     expect(est.estrella.length + est.lineas.length).toBeGreaterThan(CHISPAS_N);
   });
 
@@ -669,12 +682,12 @@ describe("bolillas: el estallido de pelea (S22)", () => {
     expect(total).toBeCloseTo(Math.PI * 2, 9);
   });
 
-  it("las líneas de velocidad radian del impacto, más largas que el vidrio y abiertas alrededor del rumbo del golpe", () => {
+  it("las líneas de velocidad radian del impacto, cortas (S26) y abiertas alrededor del rumbo del golpe", () => {
     const base = Math.atan2(tiro.salida.dir.y, tiro.salida.dir.x);
     let hacia = 0;
     for (const l of est.lineas) {
       expect(l.de).toBeGreaterThan(0);
-      expect(l.largo).toBeGreaterThan(CANICA_R * CANICA_ESCALA);
+      expect(l.largo).toBeGreaterThan(0);
       expect(l.ancho).toBeGreaterThan(0);
       expect(l.vida).toBeGreaterThan(0);
       expect(l.vida).toBeLessThanOrEqual(ESTALLO_VIDA);
@@ -689,6 +702,133 @@ describe("bolillas: el estallido de pelea (S22)", () => {
     expect(est.sacudida).toBeLessThanOrEqual(0.04);
     // Menos que media canica dibujada: un golpe, no un temblor de tierra.
     expect(est.sacudida).toBeLessThan(CANICA_R * CANICA_ESCALA);
+  });
+});
+
+describe("bolillas: el estallido chico y legible (S26)", () => {
+  it("la estrella no pasa de dos canicas de ancho, y sigue leyéndose como estrella", () => {
+    const R = CANICA_R * CANICA_ESCALA;
+    for (const n of [8, 12, 18]) {
+      for (const semilla of [1, 7]) {
+        const d = datosDe(n, [Math.min(n - 1, 3)], semilla);
+        d.tiros.forEach((tiro, i) => {
+          const est = estalloDe(i, tiro.empuje.donde, tiro.salida.dir);
+          // Dos canicas dibujadas de ancho = dos diámetros = cuatro radios: el tope es un radio de dos canicas.
+          expect(est.punta, `n ${n} semilla ${semilla} tiro ${i}`).toBeLessThanOrEqual(2 * R);
+          expect(est.punta).toBeGreaterThan(R);
+          expect(est.nucleo).toBeLessThan(est.punta);
+          for (const q of est.estrella) expect(Math.hypot(q.x, q.y)).toBeLessThanOrEqual(2 * R + 1e-9);
+        });
+      }
+    }
+  });
+
+  it("las líneas de velocidad son cortas y no se van del golpe, y el estallido dura un parpadeo", () => {
+    const R = CANICA_R * CANICA_ESCALA;
+    for (const n of [8, 18]) {
+      const d = datosDe(n, [3]);
+      d.tiros.forEach((tiro, i) => {
+        const est = estalloDe(i, tiro.empuje.donde, tiro.salida.dir);
+        for (const l of est.lineas) {
+          expect(l.largo).toBeLessThanOrEqual(R);
+          expect(l.de + l.largo).toBeLessThanOrEqual(2.4 * R);
+        }
+        expect(est.vida).toBeLessThanOrEqual(0.35);
+        expect(est.vida).toBeGreaterThan(CHISPA_VIDA);
+        // El sacudón sigue siendo micro: menos que media canica dibujada.
+        expect(est.sacudida).toBeLessThan(R / 2);
+      });
+    }
+  });
+
+  it("el destello del impacto es más chico y más suave, y el de la mano lo es más todavía", () => {
+    const R = CANICA_R * CANICA_ESCALA;
+    const fuerte = flashDe({ flash: 1, brillo: 1 });
+    expect(fuerte.r).toBeLessThanOrEqual(1.5 * R);
+    expect(fuerte.r).toBeGreaterThan(R * 0.8);
+    expect(fuerte.alfa).toBeLessThanOrEqual(0.35);
+    expect(fuerte.alfa).toBeGreaterThan(0);
+    // El de la mano es el blando: menos alpha, y se apaga con el flash.
+    const mano = flashDe({ flash: 1, brillo: 0.45 });
+    expect(mano.alfa).toBeLessThan(fuerte.alfa);
+    expect(flashDe({ flash: 0, brillo: 1 }).alfa).toBe(0);
+    expect(flashDe({ flash: 0.5, brillo: 1 }).alfa).toBeCloseTo(FLASH_ALFA * 0.5, 9);
+    // Determinista y sin azar.
+    expect(flashDe({ flash: 0.3, brillo: 1 })).toEqual(flashDe({ flash: 0.3, brillo: 1 }));
+  });
+
+  it("los velos del estallido son suaves: ni el borde amarillo ni el corazón blanco tapan la escena", () => {
+    expect(ESTALLO_ALFA_BORDE).toBeGreaterThan(0);
+    expect(ESTALLO_ALFA_BORDE).toBeLessThanOrEqual(0.35);
+    expect(ESTALLO_ALFA_CORAZON).toBeGreaterThan(ESTALLO_ALFA_BORDE);
+    expect(ESTALLO_ALFA_CORAZON).toBeLessThanOrEqual(0.55);
+    expect(ESTALLO_ALFA_LINEA).toBeLessThanOrEqual(0.5);
+  });
+});
+
+describe("bolillas: la canica que sale del juego (S25)", () => {
+  const d = datosDe(8, [3]);
+  const tiro = d.tiros[0] as Tiro;
+  const cruza = tiro.t + tiro.salida.vuelo;
+
+  it("la canica que cruza la tiza se desvanece en menos de un segundo y no se vuelve a dibujar", () => {
+    expect(SALIDA_VELO).toBeGreaterThan(0);
+    expect(SALIDA_VELO).toBeLessThan(1);
+    // Volando hacia afuera: se ve entera, ya no juega.
+    const vuela = dibujoDe(d, tiro.slot, tiro.t + tiro.salida.vuelo * 0.5) as NonNullable<ReturnType<typeof dibujoDe>>;
+    expect(vuela.enJuego).toBe(false);
+    expect(vuela.velo).toBe(1);
+    // Cruzó: se desvanece de a poco.
+    const medio = dibujoDe(d, tiro.slot, cruza + SALIDA_VELO / 2) as NonNullable<ReturnType<typeof dibujoDe>>;
+    expect(medio.velo).toBeGreaterThan(0.3);
+    expect(medio.velo).toBeLessThan(0.7);
+    // Y no vuelve nunca más: ni el cuerpo, ni la sombra, ni la ficha.
+    expect(dibujoDe(d, tiro.slot, cruza + SALIDA_VELO)).toBeNull();
+    for (let t = cruza + SALIDA_VELO; t < d.duracion + 3; t += 0.1) {
+      expect(dibujoDe(d, tiro.slot, t), `a los ${t.toFixed(2)}`).toBeNull();
+    }
+    // Determinista: la misma hora, el mismo dibujo.
+    expect(dibujoDe(d, tiro.slot, cruza + 0.1)).toEqual(dibujoDe(d, tiro.slot, cruza + 0.1));
+  });
+
+  it("mientras juega se dibuja entera, y ninguna canica en juego se dibuja cruzando la tiza", () => {
+    expect(RADIO_DIBUJO).toBeCloseTo(CANICA_R * CANICA_ESCALA, 12);
+    expect(AIRE_TIZA).toBeGreaterThan(0);
+    expect(LIMITE_EN_JUEGO).toBeLessThan(CIRCULO_R - RADIO_DIBUJO);
+    for (const n of [8, 12, 18]) {
+      for (let semilla = 1; semilla <= 3; semilla++) {
+        const ronda = datosDe(n, [Math.min(n - 1, 3)], semilla);
+        for (let t = 0; t <= ronda.duracion; t += 0.07) {
+          ronda.canicas.forEach((_, slot) => {
+            const dib = dibujoDe(ronda, slot, t);
+            if (!dib || !dib.enJuego) return;
+            // El cuerpo dibujado, con el radio doblado de S20, siempre adentro de la tiza.
+            expect(Math.hypot(dib.p.x, dib.p.y) + RADIO_DIBUJO, `n ${n} semilla ${semilla} canica ${slot} a los ${t.toFixed(2)}`).toBeLessThanOrEqual(
+              CIRCULO_R + 1e-9,
+            );
+            // La que juega se ve entera; solo la que sale se apaga.
+            expect(dib.velo).toBe(1);
+          });
+        }
+      }
+    }
+    // La ganadora titila al final: también se dibuja adentro, con aire para su cuerpo (y entera, nunca apagándose).
+    const fin = dibujoDe(d, d.casi.slot, d.duracion - 0.01) as NonNullable<ReturnType<typeof dibujoDe>>;
+    expect(fin.enJuego).toBe(true);
+    expect(fin.velo).toBe(1);
+    expect(Math.hypot(fin.p.x, fin.p.y)).toBeLessThanOrEqual(LIMITE_EN_JUEGO + 1e-9);
+  });
+
+  it("la escena 2D dibuja con la cuenta de la salida: sin velo perpetuo, sin sombra ni ficha de la eliminada", () => {
+    const f = codigo("bolillas.ts");
+    expect(f).toMatch(/dibujoDe\(/);
+    // Se fue el velo de siempre sobre la tiza (S25).
+    expect(f).not.toMatch(/t < d\.duracion \+ 2/);
+    expect(f).not.toMatch(/0\.35 : 1/);
+    // La sombra y la ficha siguen al dibujo: sin dibujo, no hay ninguna de las dos.
+    expect(f).toMatch(/dib\.velo/);
+    expect(f).toMatch(/const seVe = dib != null/);
+    expect(f).toMatch(/chip\.visible = [^;]*seVe/);
   });
 });
 
@@ -771,5 +911,39 @@ describe("la persecución de la ganadora (S24)", () => {
       expect(estela.largo).toBeGreaterThan(0);
       expect(estela.vida).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("el anuncio de la diana (S19, S28)", () => {
+  it("la línea punteada negra va del choque a la canica que sale, y es la del plan", () => {
+    const d = datosDe(12, [3]);
+    let visto = 0;
+    for (const tiro of d.tiros) {
+      const anuncio = anuncioDeDiana(d, tiro.t - ANUNCIO_DIANA / 2);
+      if (!anuncio) continue;
+      visto++;
+      expect(anuncio.tiro).toBe(tiro);
+      expect(anuncio.linea.length).toBeGreaterThan(0);
+      // Los tramos existen y están sobre la recta choque → diana (nada de líneas por cualquier lado).
+      const dx = tiro.empuje.donde.x - tiro.choque.x;
+      const dy = tiro.empuje.donde.y - tiro.choque.y;
+      const largo = Math.hypot(dx, dy) || 1;
+      for (const [a, b] of anuncio.linea) {
+        const desvio = Math.abs((a.x - tiro.choque.x) * dy - (a.y - tiro.choque.y) * dx) / largo;
+        expect(desvio, "el tramo se va de la recta").toBeLessThan(1e-9);
+        const alFinal = (a.x - tiro.choque.x) * dx + (a.y - tiro.choque.y) * dy;
+        expect(alFinal).toBeGreaterThanOrEqual(-1e-9);
+        expect(alFinal).toBeLessThanOrEqual(dx * dx + dy * dy + 1e-9);
+        expect(b.x === a.x && b.y === a.y).toBe(false);
+      }
+    }
+    expect(visto).toBeGreaterThan(0);
+  });
+
+  it("la misma hora da la misma línea (sin azar nuevo)", () => {
+    const d = datosDe(18, [3]);
+    const tiro = d.tiros[2] as Tiro;
+    const t = tiro.t - ANUNCIO_DIANA / 3;
+    expect(anuncioDeDiana(d, t)?.linea).toEqual(anuncioDeDiana(datosDe(18, [3]), t)?.linea);
   });
 });
