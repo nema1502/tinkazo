@@ -223,13 +223,18 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
       }
       // La línea punteada negra (S28): qué canica va a golpear la que sale. Tramos del idioma de la casa (mitad
       // pintura, mitad aire), finos y negros para que se lean sobre la tierra sin tapar la escena.
+      // Un halo claro debajo y el trazo negro encima: sobre la tierra oscura el negro solo no se lee (S30).
       for (const [de, hasta] of digo.linea) {
         const wd = aMundo(e.m, de);
         const wh = aMundo(e.m, hasta);
         e.anuncio
           .moveTo(wd.x, wd.y)
           .lineTo(wh.x, wh.y)
-          .stroke({ width: Math.max(1, 0.12 * CANICA_R * e.m.e * CANICA_ESCALA), color: 0x14100c, alpha: 0.35 + 0.45 * digo.pulso, cap: "round" });
+          .stroke({ width: Math.max(3, 0.46 * CANICA_R * e.m.e * CANICA_ESCALA), color: 0xf6f2e8, alpha: 0.3 + 0.3 * digo.pulso, cap: "round" });
+        e.anuncio
+          .moveTo(wd.x, wd.y)
+          .lineTo(wh.x, wh.y)
+          .stroke({ width: Math.max(2, 0.26 * CANICA_R * e.m.e * CANICA_ESCALA), color: 0x14100c, alpha: 0.65 + 0.35 * digo.pulso, cap: "round" });
       }
     }
 

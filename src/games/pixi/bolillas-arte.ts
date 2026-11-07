@@ -819,7 +819,7 @@ export function anuncioDeDiana(d: Pick<Datos, "tiros"> & { ganador: number }, t:
         hasta: anillo + largo,
         color: AGUAYO[j % AGUAYO.length] as number,
       })),
-      linea: punteadoDe(tiro.choque, tiro.empuje.donde, CANICA_R * CANICA_ESCALA * 0.9),
+      linea: punteadoDe(tiro.choque, tiro.empuje.donde, CANICA_R * CANICA_ESCALA * 1.6),
     };
   }
   return null;
