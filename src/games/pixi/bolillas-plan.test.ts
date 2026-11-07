@@ -9,6 +9,7 @@ import type { Contexto, Kit } from "./kit/tipos";
 import {
   CANICA_R,
   CANICAS_MAX,
+  LENTO_FINAL,
   CIRCULO_R,
   PEGADORA_DIST,
   T_INTRO,
@@ -510,6 +511,28 @@ describe("Bolillas: la cámara quieta de la troya (S29)", () => {
       const plan = planBolillas(contexto(n, ganadoresDe(n)));
       const ultimo = plan.datos.tiros.at(-1);
       expect((plan.momentos.tomas ?? []).map((toma) => toma.desde), `con ${n}`).toEqual([T_INTRO, ultimo?.tMano]);
+    }
+  });
+});
+
+describe("Bolillas: el cierre en cámara lenta (S31)", () => {
+  it("el último tiro estira su rodado y su salida, y el casi arranca después", () => {
+    for (const n of LISTAS) {
+      const { datos: d } = planBolillas(contexto(n, ganadoresDe(n)));
+      const ultimo = d.tiros.at(-1);
+      if (!ultimo) continue;
+      // El rodado del cierre es el de siempre, estirado por el factor de la cámara lenta.
+      // El rodado del cierre es el de siempre (entre 0.16 y 0.46 s), estirado por la cámara lenta.
+      const normal = ultimo.empuje.vuelo / LENTO_FINAL;
+      expect(normal, `con ${n}: el rodado sin la lentitud`).toBeGreaterThanOrEqual(0.16 - 1e-9);
+      expect(normal, `con ${n}: el rodado sin la lentitud`).toBeLessThanOrEqual(0.46 + 1e-9);
+      // La salida del enemigo, igual: la geometría del plan dividida por la fuerza y multiplicada por la lentitud.
+      const largo = modulo(restar(ultimo.salida.tiza, ultimo.empuje.donde));
+      expect(ultimo.salida.vuelo, `con ${n}: la salida estirada`).toBeCloseTo((largo / ultimo.salida.fuerza) * LENTO_FINAL, 6);
+      // Y el casi espera a que el golpe se vea.
+      const espera = d.casi.t - ultimo.t;
+      expect(espera, `con ${n}: el casi arranca después del golpe`).toBeGreaterThanOrEqual(ultimo.salida.vuelo + 0.8);
+      expect(espera).toBeGreaterThan(3);
     }
   });
 });

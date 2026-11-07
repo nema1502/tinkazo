@@ -351,6 +351,8 @@ export function chispasDe(i: number, impacto: Pun, dir: Pun): Chispa[] {
 
 /** Cuánto vive el estallido: más que las chispas de vidrio —el golpe de pelea se siente— y menos que el scuff (S26 lo acorta). */
 export const ESTALLO_VIDA = 0.32;
+/** Lo que se estira el estallido del último golpe: la cámara lenta del cierre (S31). */
+export const ESTALLO_LENTO = 1.8;
 /** Las puntas de la estrella del destello: manga, no un sol de jardín. */
 export const ESTALLO_PUNTAS = 10;
 /** Cuántas líneas de velocidad radian del impacto. */
@@ -524,6 +526,15 @@ export interface Golpe {
  * blando —polvo, chispas de vidrio, un destello corto—; el de mi canica lleva encima el estallido de pelea (S22). Todo
  * sale del plan: la escena dibuja lo que esta cuenta dice, en el orden que dice.
  */
+/**
+ * El estallido del último golpe dura más y sus líneas también: la cámara lenta del cierre (S31). La geometría no
+ * cambia —lo que se estira es el tiempo—, así que el golpe se ve igual de chico, pero la sala llega a verlo.
+ */
+export function estallidoLento(e: Estallido, ultimo: boolean): Estallido {
+  if (!ultimo) return e;
+  return { ...e, vida: e.vida * ESTALLO_LENTO, lineas: e.lineas.map((l) => ({ ...l, vida: l.vida * ESTALLO_LENTO })) };
+}
+
 export function golpesDe(d: Pick<Datos, "tiros">, t: number): Golpe[] {
   const out: Golpe[] = [];
   d.tiros.forEach((tiro, i) => {
@@ -552,7 +563,7 @@ export function golpesDe(d: Pick<Datos, "tiros">, t: number): Golpe[] {
         flash: cola.flash,
         brillo: g.tipo === "mano" ? GOLPE_MANO : 1,
         semilla,
-        estallo: g.tipo === "canica" ? estalloDe(i, g.punto, g.dir) : null,
+        estallo: g.tipo === "canica" ? estallidoLento(estalloDe(i, g.punto, g.dir), i === d.tiros.length - 1) : null,
       });
     }
   });
