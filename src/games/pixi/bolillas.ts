@@ -384,7 +384,7 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
         const w = aMundo(e.m, golpe.punto);
         // El scuff: la marca oscura donde rozó la tierra, que se desvanece.
         e.fx
-          .ellipse(w.x, w.y + 1.5 * e.m.e * CANICA_R, CANICA_R * e.m.e * 1.05, CANICA_R * e.m.e * 0.5)
+          .ellipse(w.x, w.y + 1.5 * e.m.e * CANICA_R * achica, CANICA_R * e.m.e * 1.05 * achica, CANICA_R * e.m.e * 0.5 * achica)
           .fill({ color: S.dark ? 0x241a10 : 0xa98a5c, alpha: 0.22 * (1 - edad / SCUFF_VIDA) });
         // El destello del impacto (S22, afinado en S26): un círculo chico y suave pegado a la canica golpeada —el de la
         // mano, más blando todavía (`brillo`)—, no la nube blanca que tapaba la escena.
@@ -399,9 +399,9 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
             const uv = edad / grano.vida;
             e.fx
               .circle(
-                w.x + grano.dx * edad * e.m.e,
-                w.y + grano.dy * edad * e.m.e,
-                grano.r * e.m.e * (1 + uv * 2.2),
+                w.x + grano.dx * edad * e.m.e * achica,
+                w.y + grano.dy * edad * e.m.e * achica,
+                grano.r * e.m.e * (1 + uv * 2.2) * achica,
               )
               .fill({ color: S.dark ? 0x6b5230 : 0xd9c9a8, alpha: (1 - uv) * 0.55 });
           }
@@ -412,10 +412,10 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
           for (const chispa of chispasDe(golpe.semilla, golpe.punto, golpe.dir)) {
             if (edad >= chispa.vida) continue;
             const uv = edad / chispa.vida;
-            const hx = w.x + chispa.dx * edad * e.m.e;
-            const hy = w.y + chispa.dy * edad * e.m.e;
-            const tx = hx - chispa.dx * chispa.largo * e.m.e;
-            const ty = hy - chispa.dy * chispa.largo * e.m.e;
+            const hx = w.x + chispa.dx * edad * e.m.e * achica;
+            const hy = w.y + chispa.dy * edad * e.m.e * achica;
+            const tx = hx - chispa.dx * chispa.largo * e.m.e * achica;
+            const ty = hy - chispa.dy * chispa.largo * e.m.e * achica;
             for (const [q, r] of punteadoDe({ x: tx, y: ty }, { x: hx, y: hy }, Math.max(1, chispa.largo * e.m.e * 0.3))) {
               e.fx.moveTo(q.x, q.y).lineTo(r.x, r.y).stroke({ width: Math.max(1.5, 0.3 * CANICA_R * e.m.e * CANICA_ESCALA), color: 0xfff2bd, alpha: (1 - uv) * 0.8, cap: "round" });
               e.fx.moveTo(q.x, q.y).lineTo(r.x, r.y).stroke({ width: Math.max(0.8, 0.15 * CANICA_R * e.m.e * CANICA_ESCALA), color: 0xffffff, alpha: 1 - uv, cap: "round" });
@@ -466,10 +466,10 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
         const lado = { x: -persigue.dir.y, y: persigue.dir.x };
         for (const estela of persigue.estelas) {
           const base = {
-            x: w.x - persigue.dir.x * estela.atras * e.m.e + lado.x * estela.lado * e.m.e,
-            y: w.y - persigue.dir.y * estela.atras * e.m.e + lado.y * estela.lado * e.m.e,
+            x: w.x - persigue.dir.x * estela.atras * e.m.e * achica + lado.x * estela.lado * e.m.e * achica,
+            y: w.y - persigue.dir.y * estela.atras * e.m.e * achica + lado.y * estela.lado * e.m.e * achica,
           };
-          const cola = { x: base.x - persigue.dir.x * estela.largo * e.m.e, y: base.y - persigue.dir.y * estela.largo * e.m.e };
+          const cola = { x: base.x - persigue.dir.x * estela.largo * e.m.e * achica, y: base.y - persigue.dir.y * estela.largo * e.m.e * achica };
           const vivo = 0.5 * persigue.peso * Math.max(0, 1 - estela.atras / 0.6);
           e.fx.moveTo(base.x, base.y).lineTo(cola.x, cola.y).stroke({ width: Math.max(1, 1.6 * e.m.e), color: 0xfff6dd, alpha: vivo, cap: "round" });
         }
