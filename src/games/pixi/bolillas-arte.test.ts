@@ -39,6 +39,7 @@ import {
   SALIDA_VELO,
   MANO_COBRA,
   MANO_PREPARA,
+  nombreCorto,
   MANO_SUELTA,
   PERSEC_ENTRA,
   PERSEC_SALE,
@@ -1115,5 +1116,16 @@ describe("el estallido del cierre en cámara lenta (S31)", () => {
     if (anterior?.estallo) expect(final.estallo.vida).toBeGreaterThan(anterior.estallo.vida);
     // La lentitud es de tiempo, no de tamaño: la punta sigue dentro del tope de dos canicas.
     expect(final.estallo.punta).toBeLessThanOrEqual(ESTALLO_PUNTA_TOPE + 1e-9);
+  });
+});
+
+describe("el nombre corto de la ficha (S33)", () => {
+  it("queda el primer nombre y las iniciales del resto", () => {
+    expect(nombreCorto("Guido Saavedra Vega")).toBe("Guido SV");
+    expect(nombreCorto("María Quispe")).toBe("María Q");
+    expect(nombreCorto("Ana")).toBe("Ana");
+    expect(nombreCorto("  Elena   Condori  ")).toBe("Elena C");
+    expect(nombreCorto("")).toBe("");
+    expect(nombreCorto("   ")).toBe("");
   });
 });

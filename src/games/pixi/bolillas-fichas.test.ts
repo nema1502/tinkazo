@@ -164,6 +164,6 @@ describe("bolillas: la coronación sin nombre duplicado (S12)", () => {
     const f = codigo("bolillas.ts");
     expect(f).not.toMatch(/escalaDeFigura/);
     expect(f).toMatch(/escalaChipDe\(/);
-    expect(f).toMatch(/S\.chip\(k\.nombres\[persona\] \?\? "", e\.escala\)/);
+    expect(f).toMatch(/S\.chip\(nombreCorto\(k\.nombres\[persona\] \?\? ""/);
   });
 });
