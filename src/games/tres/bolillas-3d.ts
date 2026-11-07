@@ -1062,7 +1062,7 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
           for (const m of matsAguayo) m.opacity = 0.65 + 0.3 * digo.pulso;
           // La línea punteada negra (S28): del choque a la diana, con el pulso del anuncio.
           grupoLinea.visible = true;
-          matLinea.opacity = 0.35 + 0.45 * digo.pulso;
+          matLinea.opacity = 0.7 + 0.3 * digo.pulso;
           for (let j = 0; j < tramos.length; j++) {
             const tramo = digo.linea[j];
             const malla = tramos[j] as Mesh;
@@ -1073,7 +1073,7 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
             const dz = b.y - a.y;
             malla.position.set((a.x + b.x) / 2, 0.004, (a.y + b.y) / 2);
             malla.rotation.y = -Math.atan2(dz, dx);
-            malla.scale.set(Math.hypot(dx, dz), 1, CANICA_R * CANICA_ESCALA * 0.22);
+            malla.scale.set(Math.hypot(dx, dz), 1, CANICA_R * CANICA_ESCALA * 0.42);
           }
         } else {
           grupoLinea.visible = false;

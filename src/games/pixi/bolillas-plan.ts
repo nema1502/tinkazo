@@ -598,27 +598,11 @@ export function planBolillas(ctx: Contexto): Plan<Datos> {
       const p = k.pantalla();
       return { x: 0, y: p.top, w: p.w, h: p.bottom - p.top };
     }) },
-    // Desde que hay juego: el círculo de tiza entero a la vista, y de cerca el tramo del tiro en curso.
+    // Desde que hay juego el círculo entero queda a la vista, y **quieto**: la cámara no persigue cada tiro, porque
+    // cuando la toma se corría con cada choque la sala veía moverse a todas las canicas de la escena (S29). El único
+    // movimiento de cámara de la troya es la persecución del cierre (S24), y después la tensión.
     tomas: [
       { desde: T_INTRO, toma: planoSobre((k) => [cajaDelCirculo(k.pantalla())], { margen: 30, zoomMax: 1.35 }) },
-      {
-        desde: tTroya,
-        toma: planoSobre(
-          (k, tt) => {
-            const p = k.pantalla();
-            // El tramo del tiro en curso: el impacto y la salida de la canica que se va.
-            const tiro = tiros.find((x) => tt >= x.t - 0.6 && tt < x.t + ENTRE_TIROS * 0.6) ?? tiros.find((x) => tt < x.t);
-            if (!tiro) return [cajaDelCirculo(p)];
-            const cajas = [cajaDeCanica(p, tiro.choque), cajaDeCanica(p, tiro.salida.tiza)];
-            const x0 = Math.min(...cajas.map((c) => c.x));
-            const y0 = Math.min(...cajas.map((c) => c.y));
-            return [
-              { x: x0, y: y0, w: Math.max(...cajas.map((c) => c.x + c.w)) - x0, h: Math.max(...cajas.map((c) => c.y + c.h)) - y0 },
-            ];
-          },
-          { margen: 46, zoomMax: 1.5 },
-        ),
-      },
       // La persecución de la ganadora (S24): en el último turno —cuando adentro solo quedan ella y la rival— la
       // toma se pega a su canica y la acompaña hasta el golpe, con un punto adelantado para ver a quién le pega.
       // La tensión del cierre toma el relevo cuando arranca el casi.
