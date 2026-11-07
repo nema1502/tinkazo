@@ -23,6 +23,9 @@ import {
   AGUAYO,
   CANICA_ESCALA,
   CHISPA_VIDA,
+  ESTALLO_ALFA_BORDE,
+  ESTALLO_ALFA_CORAZON,
+  ESTALLO_ALFA_LINEA,
   SCUFF_VIDA,
   SEMILLA_FIJA,
   anuncioDeDiana,
@@ -30,7 +33,9 @@ import {
   cercaDe,
   chispasDe,
   coloresCanica,
+  dibujoDe,
   escalaChipDe,
+  flashDe,
   golpesDe,
   manoDe,
   persecucionDe,
@@ -216,6 +221,16 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
           .lineTo(wa.x + caja * ray.hasta * e.m.e, wa.y + saba * ray.hasta * e.m.e)
           .stroke({ width: Math.max(2, 0.3 * CANICA_R * e.m.e * CANICA_ESCALA), color: ray.color, alpha: 0.55 + 0.4 * digo.pulso, cap: "round" });
       }
+      // La línea punteada negra (S28): qué canica va a golpear la que sale. Tramos del idioma de la casa (mitad
+      // pintura, mitad aire), finos y negros para que se lean sobre la tierra sin tapar la escena.
+      for (const [de, hasta] of digo.linea) {
+        const wd = aMundo(e.m, de);
+        const wh = aMundo(e.m, hasta);
+        e.anuncio
+          .moveTo(wd.x, wd.y)
+          .lineTo(wh.x, wh.y)
+          .stroke({ width: Math.max(1, 0.12 * CANICA_R * e.m.e * CANICA_ESCALA), color: 0x14100c, alpha: 0.35 + 0.45 * digo.pulso, cap: "round" });
+      }
     }
 
     // Las sombras, abajo de todo: alguna canica nueva se agrega encima y las tapa bien.
@@ -224,11 +239,16 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
     // Las canicas de los que juegan: adentro en su lugar, la golpeada volando hasta la tiza, la ganadora titilando.
     // Con el 3D enchufado las dibuja three.js; acá quedan los chips con cara y nombre, sobre la misma proyección.
     d.canicas.forEach((persona, slot) => {
+      // El dibujo de la canica (S25): entera mientras juega —adentro de la tiza, con aire para su cuerpo doblado
+      // (S20)—, apagándose apenas cruza, y nada después: ni cuerpo, ni sombra, ni ficha. La cuenta es la misma que
+      // usa el 3D (`dibujoDe`).
       const tray = trayectoriaDe(d, slot, t);
-      const seVe = tray.estado !== "afuera" || t < d.duracion + 2;
+      const dib = dibujoDe(d, slot, t);
+      // La canica que ya salió del dibujo no se ve más: sin cuerpo tampoco hay ficha (S25).
+      const seVe = dib != null;
       // El dibujo de la canica: su radio del plan, agrandado por el multiplicador de la casa (S17).
       const rr = 0.5 * e.m.e * CANICA_R * CANICA_ESCALA;
-      const w = aMundo(e.m, tray.p);
+      const w = dib ? aMundo(e.m, dib.p) : null;
       if (!en3d) {
         let g = e.bol.get(slot);
         if (!g) {
@@ -236,19 +256,19 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
           e.bol.set(slot, g);
           e.mundo.addChild(g);
         }
-        // El titileo: la canica que gana quiero cruzar y no cruza; empujones cada vez más chicos que mueren en cero.
-        const tilta = tray.estado === "titila" ? titilazo(uTitila) : tray.estado === "afuera" ? 0.35 : 0;
-        g.rotation = tilta;
-        // La palpitación del golpe: la canica que acaba de recibir uno —la mía con la mano, la del enemigo con la mía.
-        g.scale.set(1 + 0.22 * palpitoDe(d, slot, t));
-        g.position.set(w.x, w.y - rr * 1.08);
-        g.visible = seVe;
-        if (g.visible) g.alpha = tray.estado === "afuera" ? 0.35 : 1;
-        // La sombra blanda en la tierra.
-        if (g.visible) {
+        g.visible = dib != null;
+        if (dib && w) {
+          // El titileo: la canica que gana quiero cruzar y no cruza; empujones cada vez más chicos que mueren en cero.
+          g.rotation = dib.estado === "titila" ? titilazo(uTitila) : 0;
+          // La palpitación del golpe: la canica que acaba de recibir uno —la mía con la mano, la del enemigo con la mía.
+          g.scale.set(1 + 0.22 * palpitoDe(d, slot, t));
+          g.position.set(w.x, w.y - rr * 1.08);
+          // El velo de la salida: la que cruza la tiza se apaga en un parpadeo y no se vuelve a ver (S25).
+          g.alpha = dib.velo;
+          // La sombra blanda en la tierra: se va con su canica (S25).
           e.sombra
             .ellipse(w.x + rr * 0.15, w.y + rr * 0.45, rr * 0.95, rr * 0.5)
-            .fill({ color: 0x000000, alpha: tray.estado === "afuera" ? 0.08 : 0.2 });
+            .fill({ color: 0x000000, alpha: 0.2 * dib.velo });
         }
       }
 
@@ -260,10 +280,11 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
       }
       // La coronación: el cartel del kit dice el nombre del ganador, y la ficha se retira — el nombre
       // aparece una sola vez (S12), no el cartel y la ficha superpuestos. Y las fichas solo muestran a
-      // los finalistas (S15): durante la troya, el círculo queda sin nombres.
+      // los finalistas (S15): durante la troya, el círculo queda sin nombres. La eliminada no deja rastro: si ya
+      // salió del dibujo (S25), `seVe` la apaga y su ficha tampoco se ve.
       chip.visible = fichas.includes(persona) && seVe && tray.estado !== "afuera" && !(k.coronado && persona === d.ganador);
       chip.scale.set(1);
-      chip.position.set(w.x - chip.width / 2, w.y - rr * 1.08 - chip.height * 0.85);
+      if (w) chip.position.set(w.x - chip.width / 2, w.y - rr * 1.08 - chip.height * 0.85);
     });
     for (const [persona, chip] of e.chips) {
       if (!d.canicas.includes(persona)) chip.visible = false;
@@ -315,12 +336,11 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
         e.fx
           .ellipse(w.x, w.y + 1.5 * e.m.e * CANICA_R, CANICA_R * e.m.e * 1.05, CANICA_R * e.m.e * 0.5)
           .fill({ color: S.dark ? 0x241a10 : 0xa98a5c, alpha: 0.22 * (1 - edad / SCUFF_VIDA) });
-        // El destello del impacto: sube de golpe y se muere con la palpitación. El de la mano es más blando (`brillo`).
+        // El destello del impacto (S22, afinado en S26): un círculo chico y suave pegado a la canica golpeada —el de la
+        // mano, más blando todavía (`brillo`)—, no la nube blanca que tapaba la escena.
         if (golpe.flash > 0) {
-          const flash = golpe.flash;
-          e.fx
-            .circle(w.x, w.y, CANICA_R * e.m.e * CANICA_ESCALA * (1.2 + 0.9 * flash))
-            .fill({ color: 0xfff6dd, alpha: 0.5 * flash * golpe.brillo });
+          const fl = flashDe(golpe);
+          e.fx.circle(w.x, w.y, fl.r * e.m.e).fill({ color: 0xfff6dd, alpha: fl.alfa });
         }
         // La nube de polvo, corrida para donde viaja la canica golpeada.
         if (edad < 0.6) {
@@ -360,9 +380,9 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
           const crece = 0.55 + 0.45 * (1 - uv);
           const estrella = (f: number): number[] =>
             est.estrella.flatMap((q) => [w.x + q.x * e.m.e * crece * f, w.y + q.y * e.m.e * crece * f]);
-          // Un borde de la paleta de la casa y el corazón blanco: el destello del golpe de manga, doble.
-          e.fx.poly(estrella(1)).fill({ color: AGUAYO[1], alpha: 0.55 * (1 - uv) });
-          e.fx.poly(estrella(0.6)).fill({ color: 0xfffdf2, alpha: 0.9 * (1 - uv) });
+          // Un borde de la paleta de la casa y el corazón blanco: el destello del golpe de manga, doble y suave (S26).
+          e.fx.poly(estrella(1)).fill({ color: AGUAYO[1], alpha: ESTALLO_ALFA_BORDE * (1 - uv) });
+          e.fx.poly(estrella(0.6)).fill({ color: 0xfffdf2, alpha: ESTALLO_ALFA_CORAZON * (1 - uv) });
           // Las líneas de velocidad: cada una corre hacia afuera del impacto y se apaga con su vida.
           for (const linea of est.lineas) {
             const v = Math.min(1, edad / linea.vida);
@@ -375,8 +395,8 @@ const definicion = (tres?: Montaje3D<EntradaBolillas>): DefJuego<Datos, Escena> 
             const x1 = w.x + ca * cab * e.m.e;
             const y1 = w.y + sa * cab * e.m.e;
             const grosor = Math.max(1, linea.ancho * e.m.e);
-            e.fx.moveTo(x0, y0).lineTo(x1, y1).stroke({ width: grosor, color: AGUAYO[1], alpha: 0.6 * (1 - v), cap: "round" });
-            e.fx.moveTo(x0, y0).lineTo(x1, y1).stroke({ width: grosor * 0.45, color: 0xffffff, alpha: 0.85 * (1 - v), cap: "round" });
+            e.fx.moveTo(x0, y0).lineTo(x1, y1).stroke({ width: grosor, color: AGUAYO[1], alpha: ESTALLO_ALFA_LINEA * 0.7 * (1 - v), cap: "round" });
+            e.fx.moveTo(x0, y0).lineTo(x1, y1).stroke({ width: grosor * 0.45, color: 0xffffff, alpha: ESTALLO_ALFA_LINEA * (1 - v), cap: "round" });
           }
           // El micro-sacudón (S22): una vez por golpe, con la fuerza del arte puro (el kit lo tiembla y lo apaga solo).
           const clave = `sacudon:${golpe.i}`;

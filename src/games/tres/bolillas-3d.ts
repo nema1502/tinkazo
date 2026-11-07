@@ -13,7 +13,7 @@ import {
   CANICA_R, CIRCULO_R, PEGADORA_DIST, trayectoriaDe, unitarioDe,
   type Datos, type Mapeo, type Pun, type Tiro,
 } from "../pixi/bolillas-plan";
-import { cercaDe, anuncioDeDiana, persecucionDe, AGUAYO, CANICA_ESCALA, type Persecucion } from "../pixi/bolillas-arte";
+import { cercaDe, dibujoDe, anuncioDeDiana, persecucionDe, AGUAYO, CANICA_ESCALA, type Persecucion } from "../pixi/bolillas-arte";
 /**
  * Bolillas en 3D: la troya de verdad — la tierra con su relieve, el círculo de yeso, las canicas de vidrio y la mano
  * con el agarre ñati que suelta cada tiro. El plan puro (`pixi/bolillas-plan.ts`) decide todo: esta vista solo dibuja
@@ -261,7 +261,8 @@ export function poseDelCerca(
   lugar: { px: number; pz: number; K: number; Kz: number },
   aspecto: number,
 ): Pose3D {
-  const p = trayectoriaDe(d, d.casi.slot, t).p;
+  // La canica, tal como se dibuja (S25): el mismo punto que la malla, adentro de la tiza con aire para su cuerpo.
+  const p = dibujoDe(d, d.casi.slot, t)?.p ?? trayectoriaDe(d, d.casi.slot, t).p;
   const radial = unitarioDe(p);
   // Tres cuartos, del lado del giro: en un celular angosto se aleja un paso para que la canica entre entera.
   const lejos = Math.min(1.35, Math.max(1, 1 / Math.sqrt(Math.max(0.2, aspecto))));
@@ -321,14 +322,45 @@ export function mezclarPose(a: Pose3D, b: Pose3D, w: number): Pose3D {
 
 /** Los dos choques de la cadena: la mano contra mi canica (el suave) y mi canica contra la del enemigo (el grande). */
 export type GolpeCadena = "mano" | "enemigo";
-/** Cuánto vive el estallido de pelea de cada choque, en segundos: el grande dura más. */
-export const ESTALLIDO_MANO = 0.36;
-export const ESTALLIDO_ENEMIGO = 0.62;
+/** Cuánto vive el estallido de pelea de cada choque, en segundos: el grande dura más (y los dos son un parpadeo, S26). */
+export const ESTALLIDO_MANO = 0.28;
+export const ESTALLIDO_ENEMIGO = 0.42;
 /** Las puntas de la estrella del destello y las líneas de velocidad que radian del impacto. */
 export const ESTRELLA_PUNTAS = 8;
-export const LINEAS_N = 14;
+export const LINEAS_N = 12;
 /** Lo más que se sacude la vista, en unidades del círculo: un temblor de pelea, no un salto de encuadre. */
 export const SACUDIDA_MAX = 0.035;
+/**
+ * El tamaño del estallido 3D (S26), medido en canicas dibujadas (`R_DIBUJO`): la estrella no pasa de dos canicas de
+ * ancho y ninguna línea se va más allá del alcance — el golpe se lee alrededor de la canica golpeada, no encima del
+ * círculo ni del cartel. Los topes valen aunque la receta se retoque.
+ */
+export const ESTALLIDO_RADIO_TOPE = 2;
+export const ESTALLIDO_ALCANCE_TOPE = 2.2;
+/** Los velos del estallido (S26: suaves, no una nube blanca): el plato del centro, las puntas y las líneas. */
+export const ESTALLO_VELO_CENTRO = 0.5;
+export const ESTALLO_VELO_PUNTA = 0.7;
+export const ESTALLO_VELO_LINEA = 0.6;
+/** Cuánto vive el destello del vidrio sobre la canica golpeada (S13): un parpadeo corto (S26). */
+export const DESTELLO_VIDA = 0.2;
+/** Lo más que crece el destello del vidrio, en radios dibujados: el gemelo del `flashDe` del 2D (S26). */
+export const DESTELLO_RADIO_TOPE = 1.5;
+export const DESTELLO_ALFA = 0.5;
+
+/**
+ * El destello del vidrio sobre la canica golpeada (S13) en su avance `u` (0 al golpe, 1 ya apagado): dónde flota, cuánto
+ * mide y cuánto se ve. S26 lo achicó y lo aclaró — antes era un globo blanco de casi tres canicas de radio encima del
+ * círculo—, así que ahora el golpe se lee alrededor de la canica y no encima de la escena. Puro y determinista.
+ */
+export function destelloDe(u: number, radio = R_DIBUJO): { alto: number; r: number; alfa: number } {
+  const k = Math.min(1, Math.max(0, u));
+  const s = Math.sin(Math.PI * k);
+  return {
+    alto: radio * (1 + 0.4 * s),
+    r: Math.min(radio * DESTELLO_RADIO_TOPE, radio * (1 + 0.45 * s)),
+    alfa: DESTELLO_ALFA * (1 - k),
+  };
+}
 
 /** Una punta de la estrella: su ángulo y su largo (unidades del círculo). */
 export interface PuntoEstrella {
@@ -368,19 +400,19 @@ export interface Estallido {
   sacudida: Pun;
 }
 
-/** La receta de cada choque: cuánto vive, cuánto mide su estrella y cuánto sacude (el grande manda). */
+/** La receta de cada choque: cuánto vive, cuánto mide su estrella y cuánto sacude (el grande manda, S26 los achicó). */
 const RECETA: Record<GolpeCadena, { vida: number; sacudida: number; semilla: number; radio: (tiro: Tiro) => number }> = {
   mano: {
     vida: ESTALLIDO_MANO,
     sacudida: SACUDIDA_MAX * 0.4,
     semilla: 0x51a3,
-    radio: () => R_DIBUJO * 1.05,
+    radio: () => R_DIBUJO * 0.75,
   },
   enemigo: {
     vida: ESTALLIDO_ENEMIGO,
     sacudida: SACUDIDA_MAX,
     semilla: 0x2e17,
-    radio: (tiro) => R_DIBUJO * (1.5 + 0.7 * tiro.salida.fuerza),
+    radio: (tiro) => R_DIBUJO * (1.1 + 0.3 * tiro.salida.fuerza),
   },
 };
 
@@ -398,7 +430,8 @@ export function estallidoDe(tiro: Tiro, golpe: GolpeCadena, t: number): Estallid
   const u = edad / rec.vida;
   const clave = Math.round(t0 * 1000) + rec.semilla;
   const crece = suave(Math.min(1, edad / (rec.vida * 0.35)));
-  const base = rec.radio(tiro) * (0.45 + 0.75 * crece);
+  // El tope de S26 vale aunque la receta se retoque: la estrella nunca pasa de dos canicas de ancho.
+  const base = Math.min(R_DIBUJO * ESTALLIDO_RADIO_TOPE, rec.radio(tiro) * (0.45 + 0.75 * crece));
   const dir = golpe === "mano"
     ? unitarioDe({ x: tiro.choque.x - tiro.desde.x, y: tiro.choque.y - tiro.desde.y })
     : tiro.salida.dir;
@@ -420,14 +453,15 @@ export function estallidoDe(tiro: Tiro, golpe: GolpeCadena, t: number): Estallid
     velo: (1 - u) * (1 - u),
     puntas: Array.from({ length: ESTRELLA_PUNTAS }, (_, j) => ({
       a: fase + (j * Math.PI * 2) / ESTRELLA_PUNTAS + (hash(clave + j, 62) - 0.5) * 0.16,
-      largo: base * (0.85 + 0.5 * hash(clave + j, 63)),
+      largo: base * (0.55 + 0.45 * hash(clave + j, 63)),
     })),
     lineas: Array.from({ length: LINEAS_N }, (_, j) => {
-      const de = base * (0.55 + 0.9 * u);
+      const de = base * (0.5 + 0.35 * u);
       return {
         a: (j * Math.PI * 2) / LINEAS_N + (hash(clave + j, 64) - 0.5) * 0.22,
         de,
-        hasta: de + base * (0.55 + 0.8 * hash(clave + j, 65)) * (0.35 + 0.65 * u),
+        // Cortas (S26), y nunca más allá del alcance del golpe: el tope vale aunque se retoque el largo.
+        hasta: de + Math.min(base * (0.35 + 0.4 * hash(clave + j, 65)) * (0.3 + 0.7 * u), R_DIBUJO * ESTALLIDO_ALCANCE_TOPE - de),
       };
     }),
     sacudida: {
@@ -479,6 +513,10 @@ const TIERRA: Record<"claro" | "oscuro", number> = { claro: 0xc9a877, oscuro: 0x
 const TIERRA_BARRIDA: Record<"claro" | "oscuro", number> = { claro: 0xbfa070, oscuro: 0x403020 };
 const PIEDRA: Record<"claro" | "oscuro", number> = { claro: 0x8a7a64, oscuro: 0x544438 };
 const POLVO: Record<"claro" | "oscuro", number> = { claro: 0xd8c09a, oscuro: 0x6a5442 };
+/** La opacidad del vidrio de una canica: translúcida, y se apaga entera cuando la canica sale del juego (S25). */
+const VIDRIO_OPACIDAD = 0.55;
+/** La opacidad de la sombra de contacto de cada canica (S13): se va con su canica (S25). */
+const SOMBRA_OPACIDAD = 0.24;
 /** Los vidrios de las canicas: el celeste de la 2D y los acentos de la casa. */
 const VIDRIOS = [0x8fd0c8, 0xe93d9c, 0xffc629, 0x00a896, 0x6c4ce0, 0xff7a1a];
 
@@ -656,7 +694,7 @@ class Estallidos {
       u.grupo.position.set(est.x, 0.02, est.y);
       // El destello del centro: un plato aditivo que late con el velo de la estrella.
       u.centro.scale.set(est.radio * 1.1, 1, est.radio * 1.1);
-      (u.centro.material as MeshBasicMaterial).opacity = 0.85 * est.velo;
+      (u.centro.material as MeshBasicMaterial).opacity = ESTALLO_VELO_CENTRO * est.velo;
       // Las puntas de la estrella: radian del impacto, cada una con su largo del hash.
       for (let j = 0; j < u.puntas.length; j++) {
         const p = est.puntas[j] as PuntoEstrella;
@@ -665,7 +703,7 @@ class Estallidos {
         malla.position.set(Math.cos(p.a) * mid, 0.001 + j * 0.0004, Math.sin(p.a) * mid);
         malla.rotation.y = -p.a;
         malla.scale.set(p.largo, 1, est.radio * 0.16);
-        (malla.material as MeshBasicMaterial).opacity = est.velo;
+        (malla.material as MeshBasicMaterial).opacity = ESTALLO_VELO_PUNTA * est.velo;
       }
       // Las líneas de velocidad: más afuera que la estrella, y corren hacia afuera mientras el golpe vive.
       for (let j = 0; j < u.lineas.length; j++) {
@@ -675,7 +713,7 @@ class Estallidos {
         malla.position.set(Math.cos(l.a) * mid, 0.002 + j * 0.0004, Math.sin(l.a) * mid);
         malla.rotation.y = -l.a;
         malla.scale.set(l.hasta - l.de, 1, est.radio * 0.07);
-        (malla.material as MeshBasicMaterial).opacity = est.velo;
+        (malla.material as MeshBasicMaterial).opacity = ESTALLO_VELO_LINEA * est.velo;
       }
     }
   }
@@ -757,24 +795,25 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
   /* ------------------------------------------------------------- las canicas de vidrio */
   // Una canica: la piel de vidrio (transparente), el remolino de color adentro y el brillo en la parte de arriba.
   const geoVidrio = B.add(new SphereGeometry(1, 10, 8));
-  const matVidrio = new Map<number, MeshLambertMaterial>();
-  const vidrioDe = (color: number): MeshLambertMaterial => {
-    let m = matVidrio.get(color);
-    if (!m) {
-      m = B.add(new MeshLambertMaterial({ color, transparent: true, opacity: 0.55, flatShading: true, depthWrite: false }));
-      matVidrio.set(color, m);
-    }
-    return m;
-  };
-  const armarCanica = (color: number, esc: number): { grupo: Group; vidrio: Mesh; centro: Mesh; brillo: Mesh; sombra: Mesh } => {
+  /**
+   * Una canica con **sus** materiales: la que cruza la tiza baja su opacidad hasta desaparecer sin apagar a las demás
+   * (S25), que comparten la geometría pero no el vidrio. La sombra de contacto va con ella.
+   */
+  const armarCanica = (
+    color: number,
+    esc: number,
+  ): { grupo: Group; vidrio: Mesh; centro: Mesh; brillo: Mesh; sombra: Mesh; velo: (v: number) => void } => {
     const grupo = new Group();
-    const vidrio = new Mesh(geoVidrio, vidrioDe(color));
+    const mallaVidrio = B.add(new MeshLambertMaterial({ color, transparent: true, opacity: VIDRIO_OPACIDAD, flatShading: true, depthWrite: false }));
+    const vidrio = new Mesh(geoVidrio, mallaVidrio);
     vidrio.scale.setScalar(esc);
     vidrio.renderOrder = 2;
-    const centro = new Mesh(geoVidrio, mat.plano(color));
+    const mallaCentro = B.add(new MeshLambertMaterial({ color, flatShading: true, transparent: true }));
+    const centro = new Mesh(geoVidrio, mallaCentro);
     centro.scale.setScalar(esc * 0.45);
     centro.renderOrder = 1;
-    const brillo = new Mesh(geoVidrio, B.add(new MeshBasicMaterial({ color: 0xffffff })));
+    const mallaBrillo = B.add(new MeshBasicMaterial({ color: 0xffffff, transparent: true }));
+    const brillo = new Mesh(geoVidrio, mallaBrillo);
     brillo.scale.setScalar(esc * 0.2);
     brillo.position.set(-esc * 0.34, esc * 0.42, -esc * 0.28);
     brillo.renderOrder = 3;
@@ -783,12 +822,20 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
     mundo.add(grupo);
     // La sombra de contacto (S13): un plano chico debajo de la canica, apoyado en la tierra. Va al mundo, no al
     // grupo: la canica rueda (gira su grupo) y la sombra queda plana en el piso, como la de la casa.
-    const sombra = new Mesh(geoSombra, matSombra);
+    const mallaSombra = B.add(new MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: SOMBRA_OPACIDAD, depthWrite: false }));
+    const sombra = new Mesh(geoSombra, mallaSombra);
     const ss = esc / CANICA_R;
     sombra.scale.set(ss, 1, ss * 0.6);
     sombra.visible = false;
     mundo.add(sombra);
-    return { grupo, vidrio, centro, brillo, sombra };
+    // El velo de la salida (S25): 1 entera, 0 ida del todo, en los cuatro materiales de esta canica.
+    const velo = (v: number): void => {
+      mallaVidrio.opacity = VIDRIO_OPACIDAD * v;
+      mallaCentro.opacity = v;
+      mallaBrillo.opacity = v;
+      mallaSombra.opacity = SOMBRA_OPACIDAD * v;
+    };
+    return { grupo, vidrio, centro, brillo, sombra, velo };
   };
   const canicas = new Map<number, ReturnType<typeof armarCanica>>();
   const canicaDe = (slot: number, d: Datos): ReturnType<typeof armarCanica> => {
@@ -803,15 +850,14 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
 
   // La sombra de contacto: el plano chico que comparten todas las canicas (estilo de la casa: pocos polígonos).
   const geoSombra = B.add(new CircleGeometry(CANICA_R * 1.35, 14).rotateX(-Math.PI / 2));
-  const matSombra = B.add(new MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.24, depthWrite: false }));
 
   // La canica de la pegadora: un pelo más chica, como en el 2D.
   const tiradorCanica = armarCanica(VIDRIOS[0] as number, R_DIBUJO * 0.85);
   const R_TIRADOR = R_DIBUJO * 0.85;
 
-  // El destello del golpe: un puntito de luz sobre la canica golpeada, una décima de segundo. No es el flash de
-  // la cámara: es el vidrio que la devuelve.
-  const destello = new Mesh(geoVidrio, B.add(new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false })));
+  // El destello del golpe: un puntito de luz sobre la canica golpeada, un parpadeo. No es el flash de la cámara: es
+  // el vidrio que la devuelve (y desde S26 es chico: lo mide `destelloDe`).
+  const destello = new Mesh(geoVidrio, B.add(new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: DESTELLO_ALFA, depthWrite: false })));
   destello.visible = false;
   destello.renderOrder = 4;
   mundo.add(destello);
@@ -860,6 +906,21 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
   });
   grupoAnuncio.visible = false;
 
+  // La línea punteada negra del anuncio (S28): del choque a la diana, tramo por tramo. Vive en su propio grupo
+  // porque los tramos van en unidades del mundo (el del anillo se mueve y escala con la canica).
+  const grupoLinea = new Group();
+  mundo.add(grupoLinea);
+  const matLinea = B.add(new MeshBasicMaterial({ color: 0x14100c, transparent: true, opacity: 0.7, side: DoubleSide, depthWrite: false }));
+  const TRAMOS_MAX = 24;
+  const tramos = Array.from({ length: TRAMOS_MAX }, () => {
+    const malla = new Mesh(geoRaya, matLinea);
+    malla.renderOrder = 2;
+    malla.visible = false;
+    grupoLinea.add(malla);
+    return malla;
+  });
+  grupoLinea.visible = false;
+
   // El estallido de pelea de los dos choques (S22): la estrella y las líneas, planas en la tierra.
   const estallidos3d = new Estallidos(mundo, geoRaya, B);
 
@@ -899,10 +960,24 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
         /* -------- las canicas: el plan dice dónde está cada una y qué le pasa */
         for (let slot = 0; slot < d.posiciones.length; slot++) {
           const c = canicaDe(slot, d);
-          const tray = trayectoriaDe(d, slot, e.t);
+          // El dibujo de la canica (S25), la misma cuenta pura que la 2D: entera mientras juega —adentro de la tiza,
+          // con aire para su cuerpo doblado (S20)—, apagándose apenas cruza, y nada después: ni la malla, ni su sombra.
+          const dib = dibujoDe(d, slot, e.t);
+          if (!dib) {
+            c.grupo.visible = false;
+            c.sombra.visible = false;
+            // Sin lugar no hay ficha: el chip del 2D se apoya en lo que esta vista proyecta.
+            puestos.delete(slot);
+            continue;
+          }
           c.grupo.visible = true;
-          c.grupo.position.set(tray.p.x, R_DIBUJO, tray.p.y);
-          puestos.set(slot, tray.p);
+          c.grupo.position.set(dib.p.x, R_DIBUJO, dib.p.y);
+          // El velo de la salida: la que cruza la tiza se apaga en un parpadeo (S25).
+          c.velo(dib.velo);
+          // La sombra de contacto, apoyada en la tierra junto a su canica (S13) y apagada con ella (S25).
+          c.sombra.visible = true;
+          c.sombra.position.set(dib.p.x + R_DIBUJO * 0.15, 0.016, dib.p.y - R_DIBUJO * 0.18);
+          puestos.set(slot, dib.p);
           // El rodado de la cadena (S21/S23): la del enemigo gira al cruzar la tiza y mi canica gira mientras el
           // empuje la lleva de `choque` a `empuje.hasta`; la que está quieta, no gira. La cuenta es una sola.
           qTilt.identity();
@@ -913,8 +988,8 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
             qTilt.multiply(qRoll);
           }
           // El titileo de la que gana: vaivén sobre la tiza, cero en los dos bordes (la lección del sapo).
-          if (tray.estado === "titila") {
-            const radial = unitarioDe({ x: tray.p.x, y: tray.p.y });
+          if (dib.estado === "titila") {
+            const radial = unitarioDe({ x: dib.p.x, y: dib.p.y });
             eje.set(radial.y, 0, -radial.x);
             qRoll.setFromAxisAngle(eje, teeterDelCasi(d, e.t));
             qTilt.multiply(qRoll);
@@ -944,15 +1019,15 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
             polvos.add(claveTiza);
             polvo.nuevo(e.t, tiro.salida.tiza.x, tiro.salida.tiza.y, 0.45);
           }
-          if (e.t >= tiro.t && e.t < tiro.t + 0.2) tiroVivo = tiro;
+          if (e.t >= tiro.t && e.t < tiro.t + DESTELLO_VIDA) tiroVivo = tiro;
         });
         if (tiroVivo) {
-          // El destello sobre la canica golpeada: sube y apaga en 0,2 s.
-          const u = (e.t - tiroVivo.t) / 0.2;
+          // El destello sobre la canica golpeada: sube y se apaga en `DESTELLO_VIDA`, chico y suave (S26).
+          const de = destelloDe((e.t - tiroVivo.t) / DESTELLO_VIDA);
           destello.visible = true;
-          destello.position.set(tiroVivo.impacto.x, R_DIBUJO * (1 + 0.4 * Math.sin(Math.PI * u)), tiroVivo.impacto.y);
-          destello.scale.setScalar(R_DIBUJO * (1.4 + 1.4 * Math.sin(Math.PI * u)));
-          (destello.material as MeshBasicMaterial).opacity = 0.85 * (1 - u);
+          destello.position.set(tiroVivo.impacto.x, de.alto, tiroVivo.impacto.y);
+          destello.scale.setScalar(de.r);
+          (destello.material as MeshBasicMaterial).opacity = de.alfa;
         } else destello.visible = false;
 
         // El roce del casi: la canica que gana derrapa hacia la tiza y levanta un poco de polvo.
@@ -985,6 +1060,23 @@ const fabrica: Fabrica3D<EntradaBolillas> = (motor, o) => {
             malla.scale.set(raya.hasta - raya.de, 1, CANICA_R * CANICA_ESCALA * 0.3);
           }
           for (const m of matsAguayo) m.opacity = 0.65 + 0.3 * digo.pulso;
+          // La línea punteada negra (S28): del choque a la diana, con el pulso del anuncio.
+          grupoLinea.visible = true;
+          matLinea.opacity = 0.35 + 0.45 * digo.pulso;
+          for (let j = 0; j < tramos.length; j++) {
+            const tramo = digo.linea[j];
+            const malla = tramos[j] as Mesh;
+            malla.visible = tramo != null;
+            if (!tramo) continue;
+            const [a, b] = tramo;
+            const dx = b.x - a.x;
+            const dz = b.y - a.y;
+            malla.position.set((a.x + b.x) / 2, 0.004, (a.y + b.y) / 2);
+            malla.rotation.y = -Math.atan2(dz, dx);
+            malla.scale.set(Math.hypot(dx, dz), 1, CANICA_R * CANICA_ESCALA * 0.22);
+          }
+        } else {
+          grupoLinea.visible = false;
         }
 
         /* -------- la mano y la canica de la mano */

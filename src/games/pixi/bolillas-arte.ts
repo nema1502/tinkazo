@@ -1,6 +1,15 @@
 import { hashDe, sembrar } from "./kit/azar";
 import { escalaChipLegible } from "./letra";
-import { CANICA_R, trayectoriaDe, type Datos, type Pun, type Tiro, unitarioDe } from "./bolillas-plan";
+import {
+  CANICA_R,
+  CIRCULO_R,
+  trayectoriaDe,
+  type Datos,
+  type EstadoCanica,
+  type Pun,
+  type Tiro,
+  unitarioDe,
+} from "./bolillas-plan";
 
 /**
  * Bolillas: el arte, puro.
@@ -162,6 +171,68 @@ export const SIEMBRA_AIRE = 0.28;
  */
 export const CANICA_ESCALA = Math.min(2, SIEMBRA_AIRE / (2 * CANICA_R));
 
+/** El radio con que se dibuja una canica, en unidades del círculo: su radio del plan, agrandado por la casa (S17, S20). */
+export const RADIO_DIBUJO = CANICA_R * CANICA_ESCALA;
+
+/* ------------------------------------- la canica que sale del juego (S25) */
+
+/**
+ * Cuánto tarda en desvanecerse la canica que cruza la tiza (S25): un parpadeo, muy por debajo del segundo. La sala
+ * leyó «todas las bolillas se salen del círculo» porque las eliminadas se quedaban dibujadas al 35% sobre el aro para
+ * siempre; ahora la que cruza se apaga en este rato y no vuelve a dibujarse (ni su sombra, ni su ficha).
+ */
+export const SALIDA_VELO = 0.4;
+
+/** El aire que el dibujo deja entre el borde de una canica en juego y la tiza (S25), con el radio ya doblado (S20). */
+export const AIRE_TIZA = 0.03;
+
+/** Hasta dónde llega el centro de una canica que sigue jugando: la tiza menos su cuerpo dibujado y el aire (S25). */
+export const LIMITE_EN_JUEGO = CIRCULO_R - RADIO_DIBUJO - AIRE_TIZA;
+
+/** Lo que la escena dibuja de una canica en el segundo `t`: dónde, entera o apagándose, y si sigue en juego. */
+export interface DibujoCanica {
+  /** El punto dibujado, en unidades del círculo: adentro de la tiza con aire mientras la canica juega (S25). */
+  p: Pun;
+  /** Lo mismo que dice `trayectoriaDe` del plan. */
+  estado: EstadoCanica;
+  /** Cuánto se ve: 1 entera; baja a 0 con la salida, en `SALIDA_VELO` segundos (S25). */
+  velo: number;
+  /** Si sigue jugando: se dibuja entera, con su sombra y su ficha. La que sale, no (S25). */
+  enJuego: boolean;
+}
+
+/** El punto del plan apretado adentro de la tiza: conserva el rumbo y deja aire para el cuerpo dibujado (S25). */
+function adentroDeLaTiza(p: Pun): Pun {
+  const r = Math.hypot(p.x, p.y);
+  if (!(r > LIMITE_EN_JUEGO)) return p;
+  const k = LIMITE_EN_JUEGO / r;
+  return { x: p.x * k, y: p.y * k };
+}
+
+/**
+ * El dibujo de una canica en el segundo `t` (S25), el mismo que ven la 2D y la 3D: `null` cuando ya no se dibuja —la
+ * canica cruzó la tiza y se desvaneció—, o el punto y el velo con que la escena la pinta. La que sigue jugando se
+ * dibuja entera y **nunca cruzando la tiza**: el plan la siembra con el radio del plan, pero el dibujo va al doble
+ * (S20), así que el centro se aprieta al `LIMITE_EN_JUEGO` y su cuerpo queda adentro con aire (la ganadora que titila
+ * sobre la tiza incluida). La que sale se ve entera hasta cruzar —la sala la ve irse (S21)— y se apaga en
+ * `SALIDA_VELO` segundos: después, ni cuerpo ni sombra ni ficha. Determinista: la misma hora, el mismo dibujo.
+ */
+export function dibujoDe(
+  d: Pick<Datos, "posiciones" | "tiros" | "casi" | "duracion">,
+  slot: number,
+  t: number,
+): DibujoCanica | null {
+  const tray = trayectoriaDe(d, slot, t);
+  const salida = d.tiros.find((x) => x.slot === slot);
+  if (salida && t >= salida.t) {
+    // Ya está saliendo: no juega más, y desde que cruza la tiza se apaga y se va del show.
+    const cruza = salida.t + salida.salida.vuelo;
+    if (t >= cruza + SALIDA_VELO) return null;
+    return { p: tray.p, estado: tray.estado, velo: t <= cruza ? 1 : 1 - (t - cruza) / SALIDA_VELO, enJuego: false };
+  }
+  return { p: adentroDeLaTiza(tray.p), estado: tray.estado, velo: 1, enJuego: true };
+}
+
 /* ------------------------------------------------- el chip del nombre */
 
 /** La fracción del diámetro del círculo que como mucho mide de alto la ficha del nombre: una etiqueta, no un cartel. */
@@ -278,12 +349,28 @@ export function chispasDe(i: number, impacto: Pun, dir: Pun): Chispa[] {
 
 /* --------------------------------------------- el estallido de pelea (S22) */
 
-/** Cuánto vive el estallido: más que las chispas de vidrio —el golpe de pelea se siente— y menos que el scuff. */
-export const ESTALLO_VIDA = 0.34;
+/** Cuánto vive el estallido: más que las chispas de vidrio —el golpe de pelea se siente— y menos que el scuff (S26 lo acorta). */
+export const ESTALLO_VIDA = 0.32;
 /** Las puntas de la estrella del destello: manga, no un sol de jardín. */
 export const ESTALLO_PUNTAS = 10;
 /** Cuántas líneas de velocidad radian del impacto. */
 export const ESTALLO_LINEAS = 9;
+/**
+ * El tamaño del estallido (S26), medido en canicas dibujadas (`RADIO_DIBUJO`): la estrella llega a 1,35–1,65 radios
+ * dibujados, o sea mide a lo ancho 1,35–1,65 canicas — cómoda debajo de las dos canicas que pidió la sala —, el hueco
+ * queda a poco menos de la mitad, y las líneas de velocidad son cortas y no se van del golpe.
+ */
+export const ESTALLO_NUCLEO = 0.45;
+export const ESTALLO_PUNTA_MIN = 1.35;
+export const ESTALLO_PUNTA_VARIA = 0.3;
+/** El tope del radio de la estrella: dos radios dibujados —su ancho, cuatro radios, es el de dos canicas— (S26). */
+export const ESTALLO_PUNTA_TOPE = 2;
+/** Lo que más corre una línea de velocidad desde el centro del golpe, en radios dibujados (S26). */
+export const ESTALLO_ALCANCE = 2.4;
+/** Los velos del estallido (S26: suaves, no una nube): el borde de la paleta, el corazón blanco y las líneas. */
+export const ESTALLO_ALFA_BORDE = 0.28;
+export const ESTALLO_ALFA_CORAZON = 0.5;
+export const ESTALLO_ALFA_LINEA = 0.45;
 
 /** Una línea de velocidad del estallido: su ángulo, dónde nace, cuánto mide, su ancho y su vida (unidades del círculo). */
 export interface LineaVelocidad {
@@ -317,29 +404,48 @@ export interface Estallido {
  * dramáticos que las chispas de vidrio de S13 (que siguen, ahí mismo, aparte). Determinista y sembrado por el lugar del
  * tiro en la lista: la misma tirada estalla igual en cualquier equipo, y el golpe de la mano no lleva estallido (es el
  * blando). `dir` es el rumbo de la canica golpeada: el abanico de las líneas mira hacia adelante, por donde sale.
+ * S26 lo afinó: el golpe mide canicas, no escenario — estrella de no más de dos canicas de ancho (tope
+ * `ESTALLO_PUNTA_TOPE`), destello suave y corto, y líneas de velocidad que no se van del impacto (`ESTALLO_ALCANCE`).
  */
 export function estalloDe(i: number, punto: Pun, dir: Pun): Estallido {
   // La geometría sale relativa al impacto (que la escena dibuja en `punto`): acá solo la semilla y el rumbo.
   const r = sembrar(Math.imul(i + 1, 0x7feb352d));
   const fase = r() * Math.PI * 2;
   const base = Math.atan2(dir.y, dir.x);
-  const vidrio = CANICA_R * CANICA_ESCALA;
-  const nucleo = vidrio * 0.9;
-  const punta = nucleo + vidrio * (1.6 + r() * 0.6);
+  const vidrio = RADIO_DIBUJO;
+  // S26: el golpe es del tamaño de la canica golpeada, no del escenario.
+  const nucleo = vidrio * ESTALLO_NUCLEO;
+  const punta = Math.min(vidrio * ESTALLO_PUNTA_TOPE, vidrio * (ESTALLO_PUNTA_MIN + r() * ESTALLO_PUNTA_VARIA));
   const estrella = Array.from({ length: ESTALLO_PUNTAS * 2 }, (_, k) => {
     const a = fase + (k * Math.PI) / ESTALLO_PUNTAS;
     const radio = k % 2 === 0 ? punta : nucleo;
     return { x: Math.cos(a) * radio, y: Math.sin(a) * radio };
   });
-  const lineas = Array.from({ length: ESTALLO_LINEAS }, () => ({
-    // El abanico se abre alrededor del rumbo del golpe: nada de líneas para cualquier lado.
-    a: base + (r() - 0.5) * 2.4,
-    de: punta * (0.7 + r() * 0.5),
-    largo: vidrio * (1.4 + r() * 2.4),
-    ancho: vidrio * (0.08 + r() * 0.1),
-    vida: 0.22 + r() * (ESTALLO_VIDA - 0.22),
-  }));
-  return { estrella, punta, nucleo, lineas, vida: ESTALLO_VIDA, sacudida: vidrio * (0.16 + r() * 0.08) };
+  const lineas = Array.from({ length: ESTALLO_LINEAS }, () => {
+    const de = punta * (0.6 + r() * 0.4);
+    return {
+      // El abanico se abre alrededor del rumbo del golpe: nada de líneas para cualquier lado.
+      a: base + (r() - 0.5) * 2.4,
+      de,
+      // Cortas, y nunca más allá del alcance del golpe: el tope vale aunque la sala retoque el largo.
+      largo: Math.min(vidrio * (0.3 + r() * 0.45), vidrio * ESTALLO_ALCANCE - de),
+      ancho: vidrio * (0.08 + r() * 0.1),
+      vida: 0.2 + r() * (ESTALLO_VIDA - 0.2),
+    };
+  });
+  return { estrella, punta, nucleo, lineas, vida: ESTALLO_VIDA, sacudida: vidrio * (0.12 + r() * 0.06) };
+}
+
+/** El alpha máximo del destello del impacto (S26: antes el velo blanco tapaba la escena). */
+export const FLASH_ALFA = 0.32;
+
+/**
+ * El destello del impacto (S22) en el punto del choque: un círculo de poco más de una canica dibujada, que nace con el
+ * golpe y se apaga con la cola. El de la mano es más blando por su `brillo` (`GOLPE_MANO`). S26 lo achicó y lo
+ * aclaró: el golpe se lee alrededor de la canica golpeada, no encima del círculo ni del cartel.
+ */
+export function flashDe(golpe: { flash: number; brillo: number }, radio: number = RADIO_DIBUJO): { r: number; alfa: number } {
+  return { r: radio * (0.95 + 0.5 * golpe.flash), alfa: FLASH_ALFA * golpe.flash * golpe.brillo };
 }
 
 /** Lo que pasa en el instante del choque: el tiro en curso, la palpitación de la golpeada, el destello y el retroceso del tiro. */
@@ -673,6 +779,12 @@ export interface AnuncioDiana {
   anillo: number;
   /** Las rayas del anillo, alrededor de la diana. */
   rayas: Rayita[];
+  /**
+   * La línea punteada que dice QUÉ canica va a golpear (S28): los tramos pintados del idioma de la casa, desde la
+   * canica de quien tira (`choque`) hasta la del enemigo que va a salir (`empuje.donde`). Negra y fina: se lee sobre
+   * la tierra y no tapa la escena.
+   */
+  linea: [Pun, Pun][];
 }
 
 /** El tramo del pulso que vive antes del aterrizaje: lo demás de la ventana queda sin pulso, sin salto (el anuncio muere antes del golpe). */
@@ -707,6 +819,7 @@ export function anuncioDeDiana(d: Pick<Datos, "tiros"> & { ganador: number }, t:
         hasta: anillo + largo,
         color: AGUAYO[j % AGUAYO.length] as number,
       })),
+      linea: punteadoDe(tiro.choque, tiro.empuje.donde, CANICA_R * CANICA_ESCALA * 0.9),
     };
   }
   return null;
